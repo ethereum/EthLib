@@ -2,7 +2,7 @@
 
 import pytest
 
-from eth_cryptography_specs import kzg
+from ethlib.cryptography import kzg
 
 from . import fixtures as F
 from dumper import hex_list, hex_str, write_case

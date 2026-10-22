@@ -1,5 +1,5 @@
 """
-Build the `eth_cryptography_specs._native` CPython extension.
+Build the `ethlib.cryptography._native` CPython extension.
 
 Strategy: compile every Lean-generated `.c.o.export` object into the
 extension, dynamically link against Lean's `libleanshared`, and statically
@@ -113,7 +113,7 @@ def _make_extension() -> Extension:
     # in `LakeThenBuild.run`. We don't resolve them here so that
     # metadata-only invocations (sdist) work without elan installed.
     return Extension(
-        name="eth_cryptography_specs._native",
+        name="ethlib.cryptography._native",
         sources=[
             "bindings/python/module.c",
             "bindings/python/kzg.c",
@@ -128,7 +128,7 @@ def _make_extension() -> Extension:
 
 setup(
     package_dir={"": "bindings/python"},
-    packages=["eth_cryptography_specs", "eth_cryptography_specs.kzg", "eth_cryptography_specs.bls"],
+    packages=["ethlib", "ethlib.cryptography", "ethlib.cryptography.kzg", "ethlib.cryptography.bls"],
     ext_modules=[_make_extension()],
     cmdclass={"build_ext": LakeThenBuild},
 )

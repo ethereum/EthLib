@@ -2,7 +2,7 @@ import Lake
 open Lake DSL System
 
 /-!
-Lake build for `EthCryptographySpecs`.
+Lake build for `EthLib`.
 
 The package is pure Lean — no external C dependencies. Lake produces:
 
@@ -15,20 +15,23 @@ toolchain's static archives and statically links them all into a single
 self-contained Python extension.
 -/
 
-package «EthCryptographySpecs» where
+package «EthLib» where
   moreLeancArgs := #["-fPIC"]
 
 require "leanprover-community" / "mathlib" @ git "v4.29.1"
 
 @[default_target]
-lean_lib «EthCryptographySpecs» where
+lean_lib «EthLib» where
   precompileModules := true
 
 /-- Proofs about the specification. A separate library (rooted at
-`EthCryptographySpecs/Proofs.lean`) so the executable spec never depends
+`EthLib/Proofs.lean`) so the executable spec never depends
 on it. `precompileModules` is off: theorems produce no code, and this
-keeps proof object files out of the Python extension link. -/
+keeps proof object files out of the Python extension link.
+
+Each domain's proof tree is also a root, so that its modules belong to
+this library rather than to `EthLib`. -/
 @[default_target]
 lean_lib «Proofs» where
-  roots := #[`EthCryptographySpecs.Proofs]
+  roots := #[`EthLib.Proofs, `EthLib.Cryptography.Proofs]
   precompileModules := false

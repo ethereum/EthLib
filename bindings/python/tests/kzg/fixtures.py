@@ -8,7 +8,7 @@ from functools import lru_cache
 from py_ecc import optimized_bls12_381 as bls
 from py_ecc.bls.g2_primitives import G1_to_pubkey, pubkey_to_G1
 
-from eth_cryptography_specs import kzg
+from ethlib.cryptography import kzg
 
 
 # ---- Memoized spec calls --------------------------------------------------

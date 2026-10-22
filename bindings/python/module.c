@@ -77,18 +77,18 @@ extern void
 lean_initialize_runtime_module(void);
 
 /* We boot the two sub-umbrellas directly rather than the top-level
- * `EthCryptographySpecs` module: Lake produces a `.c` file for the
+ * `EthLib.Cryptography` module: Lake produces a `.c` file for the
  * library root but does *not* compile it to a `.c.o.export`, so its
  * init symbol would never get linked in. Each sub-umbrella's init
  * idempotently calls `initialize_Init` for the Lean stdlib, so this
  * covers everything the dropped umbrella init did. */
 extern lean_object*
-initialize_EthCryptographySpecs_EthCryptographySpecs_Bls(
+initialize_EthLib_EthLib_Cryptography_Bls(
   uint8_t builtin
 );
 
 extern lean_object*
-initialize_EthCryptographySpecs_EthCryptographySpecs_Kzg(
+initialize_EthLib_EthLib_Cryptography_Kzg(
   uint8_t builtin
 );
 
@@ -99,7 +99,7 @@ initialize_EthCryptographySpecs_EthCryptographySpecs_Kzg(
  *   would drag in the 224MB `libLean.a`. We avoid them by calling only
  *   `lean_initialize_runtime_module()` (from libleanrt.a, which is the
  *   minimal runtime: GC, allocator, IO primitives) plus our package's
- *   per-module init `initialize_EthCryptographySpecs_*`. Together that's
+ *   per-module init `initialize_EthLib_*`. Together that's
  *   enough to run any code we'd actually call from Python.
  */
 
@@ -259,10 +259,10 @@ PyInit__native(void) {
     lean_initialize_runtime_module();
     /* Initialize each sub-umbrella; report the first failure if either
      * step errors out. */
-    lean_object* res = initialize_EthCryptographySpecs_EthCryptographySpecs_Bls(1);
+    lean_object* res = initialize_EthLib_EthLib_Cryptography_Bls(1);
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
-      res = initialize_EthCryptographySpecs_EthCryptographySpecs_Kzg(1);
+      res = initialize_EthLib_EthLib_Cryptography_Kzg(1);
     }
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);

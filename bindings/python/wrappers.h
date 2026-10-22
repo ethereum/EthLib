@@ -1,5 +1,5 @@
 /*
- * Shared declarations for the EthCryptographySpecs CPython extension.
+ * Shared declarations for the EthLib.Cryptography CPython extension.
  *
  * `module.c` defines `PyInit__native`, the method table, the spec-size
  * globals, and the marshalling helpers.

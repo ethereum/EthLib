@@ -7,8 +7,8 @@ include lake-manifest.json
 include lean-toolchain
 include bindings/python/wrappers.h
 
-recursive-include EthCryptographySpecs *.lean
-include EthCryptographySpecs.lean
+recursive-include EthLib *.lean
+include EthLib.lean
 
 # Don't ship caches or local-only state.
 prune .lake

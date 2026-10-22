@@ -3,7 +3,7 @@ YAML emission and on-disk layout shared across spec test-vector
 generators.
 
 `write_case(spec, handler, case, data)` writes
-`tests/<spec>/<handler>/<case>/data.yaml`. Emission uses `ruamel.yaml`
+`tests/cryptography/<spec>/<handler>/<case>/data.yaml`. Emission uses `ruamel.yaml`
 with `default_flow_style=None` and a `0x…`-string representer forcing
 single-quotes.
 """
@@ -47,7 +47,7 @@ def hex_list(bs) -> list[str]:
 
 # Output goes to the repo's top-level `tests/` directory.
 _REPO = Path(__file__).resolve().parents[3]
-ROOT  = _REPO / "tests"
+ROOT  = _REPO / "tests" / "cryptography"
 
 
 def _dump(yaml: YAML, data) -> str:

@@ -3,14 +3,14 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "eth-cryptography-specs"
+name = "ethlib"
 version = "0.1.0"
-description = "Cryptography specifications for Ethereum"
+description = "Ethereum specifications, written in Lean"
 readme = { file = "README.md", content-type = "text/markdown" }
 license = "CC0-1.0"
 requires-python = ">=3.10"
 authors = [{ name = "ethereum" }]
-urls = { homepage = "https://github.com/ethereum/cryptography-specs" }
+urls = { homepage = "https://github.com/ethereum/ethlib" }
 
 [project.optional-dependencies]
 test = [

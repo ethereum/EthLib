@@ -2,7 +2,7 @@
 
 import pytest
 
-from eth_cryptography_specs import bls
+from ethlib.cryptography import bls
 
 from . import fixtures as F
 from dumper import hex_str, hex_list, write_case

@@ -1,16 +1,17 @@
-# cryptography-specs
+# EthLib
 
-Specifications for cryptography in Ethereum, written in Lean.
+Ethereum specifications, written in Lean. Each domain has its own folder
+under `EthLib/`; cryptography lives in `EthLib/Cryptography/`.
 
 ## Specs
 
-- `EthCryptographySpecs/Bls/`, BLS12-381 curve arithmetic, hash-to-curve, and signatures.
-- `EthCryptographySpecs/Kzg/`, KZG polynomial commitments.
+- `EthLib/Cryptography/Bls/`, BLS12-381 curve arithmetic, hash-to-curve, and signatures.
+- `EthLib/Cryptography/Kzg/`, KZG polynomial commitments.
 
 ## Proofs
 
 Formal proofs of properties of the specs exist in
-`EthCryptographySpecs/Proofs/`, mirroring the layout above.
+`EthLib/Cryptography/Proofs/`, mirroring the layout above.
 
 ## Prerequisites
 
