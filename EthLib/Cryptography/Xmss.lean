@@ -10,6 +10,7 @@ import EthLib.Cryptography.Xmss.Serialization
 import EthLib.Cryptography.Xmss.KeyGen
 import EthLib.Cryptography.Xmss.Sign
 import EthLib.Cryptography.Xmss.Blake2s
+import EthLib.Cryptography.Xmss.Exports
 
 /-!
 # `EthLib.Cryptography.Xmss`
