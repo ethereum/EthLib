@@ -6,6 +6,7 @@ import EthLib.Cryptography.Xmss.Encoding
 import EthLib.Cryptography.Xmss.Ots
 import EthLib.Cryptography.Xmss.Merkle
 import EthLib.Cryptography.Xmss.Verify
+import EthLib.Cryptography.Xmss.Serialization
 import EthLib.Cryptography.Xmss.KeyGen
 import EthLib.Cryptography.Xmss.Sign
 import EthLib.Cryptography.Xmss.Blake2s
