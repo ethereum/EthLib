@@ -116,7 +116,6 @@ An `opaque` one is an opaque constant, such as the global reference that holds t
 A `reaches-opaque` one unfolds to an opaque constant, such as `Loop.forIn`, which `while` compiles to, or the `IO` that reads that reference.
 
 <!-- generated: unfoldable -->
-- `EthLib.Cryptography.Bls.millerLoop`, `reaches-opaque`
 - `EthLib.Cryptography.Kzg.KzgM`, `reaches-opaque`
 - `EthLib.Cryptography.Kzg.TrustedSetup.get!`, `reaches-opaque`
 - `EthLib.Cryptography.Kzg.TrustedSetup.globalRef`, `opaque`

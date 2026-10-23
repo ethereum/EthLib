@@ -126,26 +126,21 @@ def millerAdd (T R₀ : Embedded.Point) (P : Embedded.Point) (f : Fp12)
     let line := Line.evalAt T.x T.y m P.x P.y
     ({ x := nx, y := ny, inf := false }, f * line)
 
-/-- Walk the bits of `s` from the most-significant down. -/
-partial def millerLoop (s : Nat) (R₀ P : Embedded.Point) : Fp12 := Id.run do
-  if s = 0 then return Fp12.one
-  -- Find the position of the leading bit.
-  let mut highBit := 0
-  let mut x := s
-  while x > 0 do highBit := highBit + 1; x := x / 2
-  -- Iterate from highBit-2 down to 0 (the leading bit is consumed by
-  -- the initial T = R₀ and f = 1).
-  let mut T := R₀
-  let mut f := Fp12.one
-  let mut i : Int := (highBit : Int) - 2
-  while i ≥ 0 do
-    let (T', f') := millerDouble T P f
-    T := T'; f := f'
-    if (s >>> i.toNat) &&& 1 = 1 then
-      let (T'', f'') := millerAdd T R₀ P f
-      T := T''; f := f''
-    i := i - 1
-  return f
+/-- Walk bits `n - 1` down to `0` of `s` from `(T, f)`: double at every
+bit, then add `R₀` where the bit is set. -/
+def millerSteps (s : Nat) (R₀ P : Embedded.Point) :
+    Nat → Embedded.Point → Fp12 → Fp12
+  | 0, _, f => f
+  | n + 1, T, f =>
+    let (T, f) := millerDouble T P f
+    let (T, f) := if (s >>> n) &&& 1 = 1 then millerAdd T R₀ P f else (T, f)
+    millerSteps s R₀ P n T f
+
+/-- Walk the bits of `s` from the most-significant down. The leading bit
+is consumed by the initial `T = R₀` and `f = 1`, so the steps start one
+bit below it. `Nat.log2 0 = 0`, so `s = 0` takes no steps. -/
+def millerLoop (s : Nat) (R₀ P : Embedded.Point) : Fp12 :=
+  millerSteps s R₀ P s.log2 R₀ Fp12.one
 
 /-! ## Final exponentiation -/
 
