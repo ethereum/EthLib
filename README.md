@@ -1,34 +1,47 @@
 # EthLib
 
-Ethereum specifications, written in Lean. Each domain has its own folder
-under `EthLib/`; cryptography lives in `EthLib/Cryptography/`.
+Formally verified Ethereum primitives, written in Lean. EthLib is intended to be
+the shared home for Ethereum definitions and proofs, so that Lean projects can
+build on one version instead of each maintaining its own. These primitives can
+also be used by Ethereum clients via bindings. Clients may use the bindings
+temporarily until a native implementation exists, or permanently if the
+performance of this library is sufficient.
 
-## Specs
+## Primitives
 
-- `EthLib/Cryptography/Bls/`, BLS12-381 curve arithmetic, hash-to-curve, and signatures.
-- `EthLib/Cryptography/Kzg/`, KZG polynomial commitments.
+### Cryptography
 
-## Proofs
+- [BLS12-381 signatures](EthLib/Cryptography/Bls/)
+- [KZG polynomial commitments](EthLib/Cryptography/Kzg/)
+- [XMSS signatures](EthLib/Cryptography/Xmss/)
 
-Formal proofs of properties of the specs exist in
-`EthLib/Cryptography/Proofs/`, mirroring the layout above.
+## Contributing
 
-## Prerequisites
+### Prerequisites
 
-- [`elan`](https://github.com/leanprover/elan), for `lean` and `lake`.
+Install [`elan`](https://github.com/leanprover/elan):
 
-## Building
+```bash
+curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
+```
+
+Download [Mathlib](https://github.com/leanprover-community/mathlib4):
 
 ```bash
 lake exe cache get
+```
+
+### Building
+
+Compile the primitives and check every proof:
+
+```bash
 lake build
 ```
 
-Note: `lake exe cache get` is only needed after
-the initial clone or after `lake update`; otherwise, `lake build is sufficient`.
+### Testing
 
-
-## Tests
+Run the test suite:
 
 ```bash
 python3 -m venv .venv
@@ -36,7 +49,3 @@ source .venv/bin/activate
 pip install -e '.[test]'
 pytest
 ```
-
-*Note*: Pre-generated reference tests are written to `tests/` at the project
-root. These tests are intended for use across implementations and may be pinned
-by downstream consumers.
