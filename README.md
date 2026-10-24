@@ -2,10 +2,10 @@
 
 Formally verified Ethereum primitives, written in Lean. EthLib is intended to be
 the shared home for Ethereum definitions and proofs, so that Lean projects can
-build on one version instead of each maintaining its own. Some of these
-primitives can also be used by Ethereum clients via bindings. Clients may use
-the bindings temporarily until a native implementation exists, or permanently if
-the performance of this library is sufficient.
+build on a common implementation instead of each maintaining its own. Some of
+these primitives can also be used by Ethereum clients via bindings. Clients may
+use the bindings temporarily until a native implementation exists, or
+permanently if the performance of this library is sufficient.
 
 ## Primitives
 
