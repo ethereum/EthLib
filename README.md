@@ -19,7 +19,7 @@ performance of this library is sufficient.
 
 ### Prerequisites
 
-Install [`elan`](https://github.com/leanprover/elan):
+Install [elan](https://github.com/leanprover/elan):
 
 ```bash
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
