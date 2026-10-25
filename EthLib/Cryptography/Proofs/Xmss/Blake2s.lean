@@ -1,6 +1,5 @@
 import EthLib.Cryptography.Xmss.Blake2s
 import Mathlib.Tactic
-import Std.Tactic.BVDecide
 
 /-!
 # Proofs: `Xmss.Blake2s`
@@ -54,17 +53,61 @@ theorem finalBlock_counter_toNat (length : Nat) (h : length < 2 ^ 64) :
 theorem counter_words_recombine (counter : UInt64) :
     (Internal.counterLow counter).toUInt64
       ||| ((Internal.counterHigh counter).toUInt64 <<< 32) = counter := by
-  -- Expose the two bit-vector slices to the decision procedure.
+  -- Expose the two bit-vector slices.
   simp only [Internal.counterLow, Internal.counterHigh]
-  bv_decide
+  -- A `UInt64` is determined by its bit vector.
+  apply UInt64.eq_of_toBitVec_eq
+  -- Truncation becomes a modulus and the shifts move to the bit vector.
+  simp only [UInt64.toUInt64_toUInt32, UInt64.toBitVec_or, UInt64.toBitVec_mod,
+    UInt64.toBitVec_ofNat, UInt64.toBitVec_shiftLeft, UInt64.toBitVec_shiftRight,
+    BitVec.ofNat_eq_ofNat, BitVec.reduceMod, BitVec.ushiftRight_eq', BitVec.toNat_ofNat,
+    Nat.reducePow, Nat.reduceMod, BitVec.shiftLeft_eq']
+  -- Two bit vectors agree when they agree at every index.
+  ext i hi
+  -- Each index reads through to a `Nat.testBit` of the underlying numeral.
+  simp only [BitVec.getElem_eq_testBit_toNat, BitVec.toNat_or, BitVec.toNat_umod,
+    BitVec.toNat_ushiftRight, BitVec.toNat_shiftLeft, BitVec.toNat_ofNat, Nat.testBit_or,
+    Nat.reducePow, Nat.reduceMod]
+  -- Name the two moduli as powers of two, which is what the bit lemmas expect.
+  rw [show (4294967296 : Nat) = 2 ^ 32 from by norm_num,
+      show (18446744073709551616 : Nat) = 2 ^ 64 from by norm_num]
+  -- A masked, shifted bit is the source bit, guarded by the index range it covers.
+  simp only [Nat.testBit_mod_two_pow, Nat.testBit_shiftRight, Nat.testBit_shiftLeft]
+  rcases Nat.lt_or_ge i 32 with h | h
+  -- The low word supplies bits 0 through 31 and the high word contributes nothing.
+  · simp [h, Nat.not_le.mpr h]
+  -- Above bit 31 only the shifted high word remains, and it reads bit `i` of the counter.
+  · have hid : 32 + (i - 32) = i := by omega
+    have hlt : i - 32 < 32 := by omega
+    simp [Nat.not_lt.mpr h, h, hid, hlt, hi]
 
 /-- Little-endian serialization followed by parsing returns the original word. -/
 theorem little32_wordBytes (word : UInt32) :
     Internal.little32 ⟨(Internal.wordBytes word).toArray⟩ 0 = word := by
   -- Reduce the four in-bounds array reads to their corresponding byte slices.
   simp [Internal.little32, Internal.wordBytes, Array.getD]
-  -- The four disjoint eight-bit slices cover the complete 32-bit word.
-  bv_decide
+  -- A `UInt32` is determined by its bit vector, index by index.
+  apply UInt32.eq_of_toBitVec_eq
+  ext i hi
+  -- Each index reads through to a `Nat.testBit` of the underlying numeral.
+  simp [BitVec.getElem_eq_testBit_toNat, BitVec.toNat_or, BitVec.toNat_umod,
+    BitVec.toNat_ushiftRight, BitVec.toNat_shiftLeft, BitVec.toNat_ofNat, Nat.testBit_or]
+  -- Name the byte mask and the word modulus as powers of two.
+  rw [show (256 : Nat) = 2 ^ 8 from by norm_num,
+      show (4294967296 : Nat) = 2 ^ 32 from by norm_num]
+  -- A masked, shifted bit is the source bit, guarded by the byte it belongs to.
+  simp only [Nat.testBit_mod_two_pow, Nat.testBit_shiftRight, Nat.testBit_shiftLeft]
+  -- Each of the four bytes covers one eight-bit window, and the windows tile the word.
+  rcases Nat.lt_or_ge i 8 with h | h
+  · simp [h, show ¬ (8 ≤ i) by omega, show ¬ (16 ≤ i) by omega, show ¬ (24 ≤ i) by omega]
+  rcases Nat.lt_or_ge i 16 with h2 | h2
+  · simp [show ¬ (i < 8) by omega, h, show 8 + (i - 8) = i by omega, hi,
+      show i - 8 < 8 by omega, show ¬ (16 ≤ i) by omega, show ¬ (24 ≤ i) by omega]
+  rcases Nat.lt_or_ge i 24 with h3 | h3
+  · simp [show ¬ (i < 8) by omega, h2, show 16 + (i - 16) = i by omega, hi,
+      show i - 16 < 8 by omega, show ¬ (i - 8 < 8) by omega, show ¬ (24 ≤ i) by omega]
+  · simp [show ¬ (i < 8) by omega, h3, show 24 + (i - 24) = i by omega, hi,
+      show i - 24 < 8 by omega, show ¬ (i - 8 < 8) by omega, show ¬ (i - 16 < 8) by omega]
 
 /-- A word is recoverable from its little-endian bytes. -/
 theorem wordBytes_injective : Function.Injective Internal.wordBytes := by
