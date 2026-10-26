@@ -287,10 +287,52 @@ docs: add AGENTS.md
 
 ### Bodies
 
-- The commit body wraps at 72 columns and says why, when the subject cannot.
-- The pull request body is a few sentences of prose.
-  It says why, and the one thing a reviewer could miss.
-- Say what implementers must change, if anything.
+The commit body wraps at 72 columns and says why, when the subject cannot.
+
+The pull request body is written for a human who has never seen the change.
+
+Its length follows the change.
+
+- A typo or a dependency bump needs one line, or none.
+- An ordinary fix needs a few sentences.
+- A new module, a wire-format change or a subtle proof needs more.
+  Then explain it the way a good teacher would.
+
+A longer body follows this order:
+
+1. The problem.
+   What is wrong or missing, and why it matters, in plain words.
+2. The idea.
+   The one insight the change rests on.
+3. One concrete example.
+   Real values traced step by step: bytes, a slot, an epoch, a gas cost.
+   A short `text` block often says it best.
+4. What reviewers and implementers must know.
+   The case a reviewer could miss, and what consumers must change, if anything.
+
+For example, a body for a wire-format change:
+
+````markdown
+A signature is 1208 bytes, and the order of its three fields is part of the wire format.
+
+The paper writes a signature as (randomizer, chain values, path).
+The verifier also needs the randomizer first, to recompute the encoding.
+So the encoding now follows that order:
+
+```text
+before:  [ 42 chain values: 672 | randomizer: 24 | 32 siblings: 512 ]
+after:   [ randomizer: 24 | 42 chain values: 672 | 32 siblings: 512 ]
+```
+
+The sizes are unchanged, so a length check cannot catch the old layout.
+Every implementation that encodes or decodes signatures must switch.
+````
+
+Rules for every body:
+
+- Plain words and short sentences.
+  Define a term the first time it appears.
+- Use a heading only when the body has several distinct parts.
 - Leave out what the diff already shows: file lists, renamed symbols, the code retold.
 - No checklists, no "this PR", no tables of unchanged values.
 - Link the issue it closes: `Closes #22.`
