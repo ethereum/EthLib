@@ -4,13 +4,13 @@ Rules for any agent, human or AI, that changes this repository.
 
 EthLib holds formally verified Ethereum specifications, written in Lean.
 
-It covers any part of Ethereum worth specifying precisely.
-
-Cryptography, consensus, execution, the EVM, networking, the mempool and storage are all in scope.
+Each one is an Ethereum primitive, from whichever part of the protocol it comes.
 
 Clients and other Lean projects build on it.
 
-A wrong constant, a swapped field or a reordered check here becomes a bug downstream.
+EthLib is meant to be their source of truth.
+
+A bug here spreads to everything built on top of it.
 
 So every line must be correct, justified and readable by a specialist of its domain.
 
@@ -19,7 +19,7 @@ So every line must be correct, justified and readable by a specialist of its dom
 Work the way the author of a standard would.
 
 - Read the specification, the surrounding code and the existing proofs before writing anything.
-- Every constant, byte order, field order, fork rule and size limit has a source.
+- Every definition, value and rule has a source.
   You have read that source.
 - If a source is ambiguous or two sources disagree, stop and say so.
   Do not pick one silently.
@@ -38,30 +38,13 @@ A plausible guess merged into a specification costs far more.
 
 Each module implements a published specification.
 
+It can be an EIP, an RFC, an ePrint paper, an ethresear.ch post, a specification repository such as `ethereum/consensus-specs`, or any other primary source.
+
+When several exist, use the most authoritative one.
+
 That specification is normative.
 
 When the code and the specification disagree, the code is wrong until shown otherwise.
-
-By domain:
-
-- Cryptography.
-  BLS12-381 signatures: `draft-irtf-cfrg-bls-signature-04`.
-  Hashing to the curve: RFC 9380.
-  The Ethereum BLS wrappers: `ethereum/consensus-specs`.
-  KZG commitments: EIP-4844 and EIP-7594, as written in `ethereum/consensus-specs`.
-  XMSS signatures: ePrint 2025/055, by Drake, Khovratovich, Kudinov and Wagner.
-  BLAKE2s: RFC 7693.
-  SHA-256: FIPS 180-4.
-- Serialization.
-  SSZ: `ethereum/ssz-specs`, pinned in `lakefile.lean`.
-- Consensus.
-  `ethereum/consensus-specs`, fork by fork, and the EIPs it implements.
-- Execution and the EVM.
-  `ethereum/execution-specs`, and the EIPs it implements.
-- Networking.
-  The `p2p-interface.md` of each fork in `ethereum/consensus-specs`, and `ethereum/devp2p`.
-
-A pull request that adds a module or a domain adds its sources to this list.
 
 Cite the exact document and section in the code that implements it.
 
@@ -73,25 +56,19 @@ Do not cite another implementation as the authority for a behaviour.
 
 Matching a client byte for byte is a useful test, not a justification.
 
-## What precision means in each domain
+## Work as a specialist
 
-The same discipline, seen from a few domains.
+Each task belongs to a domain, and each domain has its experts.
 
-- Cryptography.
-  Byte orders, domain separators and parameters match the standard exactly.
-  A security claim, such as bits of security, comes from the paper or from a proof here.
-- Consensus.
-  Each rule belongs to a fork, and the code says which.
-  State changes happen in the order the specification makes them.
-- Serialization.
-  Every encoding is canonical, and every input the specification calls invalid is rejected.
-- Execution and the EVM.
-  Opcode semantics, gas costs and the fork that activates them follow the specification.
-- Networking.
-  Message limits, encodings and validation outcomes follow the specification.
-  A message to reject is not a message to ignore.
+Before starting, take the role of the specialist the task needs.
 
-A new domain adds its own line here.
+That specialist knows both the theory of the domain and Lean 4.
+
+A cryptographer for a signature scheme, a consensus researcher for a fork-choice rule, a compiler engineer for the EVM.
+
+Adapt the role to each task.
+
+Hold the work to the standard that specialist would accept.
 
 ## Layout
 
