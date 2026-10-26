@@ -135,7 +135,8 @@ theorem wordBytes_injective : Function.Injective Internal.wordBytes := by
 theorem sigma_row_permutation (round : Fin 10) :
     (Internal.sigma[round.val]!).toList.Perm (List.range 16) := by
   -- Ten finite cases check the literal rows without trusting array indexing.
-  fin_cases round <;> native_decide
+  -- The kernel decides each row directly: `List.Perm` over sixteen numerals is small.
+  fin_cases round <;> decide
 
 /-! ## Known answers -/
 
