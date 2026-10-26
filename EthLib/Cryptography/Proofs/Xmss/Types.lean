@@ -119,6 +119,6 @@ theorem unpackBytes?_append_packBytes {n : Nat} (p : ByteArray)
     (by rw [ByteArray.size_append, size_packBytes]; exact Nat.le_refl _)]
   -- Then skip the prefix and read the field now at the front.
   rw [show p.size = p.size + 0 from rfl, unpackBytes?_append_add]
-  simpa using unpackBytes?_packBytes v
+  simp
 
 end EthLib.Cryptography.Xmss
