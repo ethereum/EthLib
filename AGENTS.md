@@ -4,11 +4,9 @@ Rules for any agent, human or AI, that changes this repository.
 
 EthLib holds formally verified Ethereum specifications, written in Lean.
 
-It starts with cryptography.
+It covers any part of Ethereum worth specifying precisely.
 
-It is meant to cover any part of Ethereum worth specifying precisely.
-
-Consensus, execution, the EVM, networking, the mempool and storage are all in scope.
+Cryptography, consensus, execution, the EVM, networking, the mempool and storage are all in scope.
 
 Clients and other Lean projects build on it.
 
@@ -44,30 +42,26 @@ That specification is normative.
 
 When the code and the specification disagree, the code is wrong until shown otherwise.
 
-Cryptography:
+By domain:
 
-- BLS12-381 signatures: `draft-irtf-cfrg-bls-signature-04`.
-  Hash to curve: RFC 9380.
-  The Ethereum wrappers: `ethereum/consensus-specs`.
-- KZG commitments: EIP-4844 and EIP-7594, as written in `ethereum/consensus-specs`.
-- XMSS signatures: ePrint 2025/055, by Drake, Khovratovich, Kudinov and Wagner.
-- BLAKE2s: RFC 7693.
-- SHA-256: FIPS 180-4.
+- Cryptography.
+  BLS12-381 signatures: `draft-irtf-cfrg-bls-signature-04`.
+  Hashing to the curve: RFC 9380.
+  The Ethereum BLS wrappers: `ethereum/consensus-specs`.
+  KZG commitments: EIP-4844 and EIP-7594, as written in `ethereum/consensus-specs`.
+  XMSS signatures: ePrint 2025/055, by Drake, Khovratovich, Kudinov and Wagner.
+  BLAKE2s: RFC 7693.
+  SHA-256: FIPS 180-4.
+- Serialization.
+  SSZ: `ethereum/ssz-specs`, pinned in `lakefile.lean`.
+- Consensus.
+  `ethereum/consensus-specs`, fork by fork, and the EIPs it implements.
+- Execution and the EVM.
+  `ethereum/execution-specs`, and the EIPs it implements.
+- Networking.
+  The `p2p-interface.md` of each fork in `ethereum/consensus-specs`, and `ethereum/devp2p`.
 
-Serialization:
-
-- SSZ: `ethereum/ssz-specs`, pinned in `lakefile.lean`.
-
-Other domains, as they arrive:
-
-- Consensus: `ethereum/consensus-specs`, fork by fork, and the EIPs it implements.
-- Execution and the EVM: `ethereum/execution-specs`, and the EIPs it implements.
-- Networking: the `p2p-interface.md` of each fork in `ethereum/consensus-specs`.
-  On the execution side, `ethereum/devp2p`.
-
-These are starting points, not a closed list.
-
-A pull request that starts a new domain or module adds its sources here.
+A pull request that adds a module or a domain adds its sources to this list.
 
 Cite the exact document and section in the code that implements it.
 
@@ -107,8 +101,6 @@ EthLib/<Domain>/Proofs/<Module>/     theorems about it
 bindings/python/                     C exports and the Python package
 tests/<domain>/<module>/             generated test vectors
 ```
-
-The only domain today is `Cryptography`.
 
 A new domain adds its proof root to the `Proofs` library in `lakefile.lean`.
 
@@ -202,9 +194,7 @@ def signatureSsz : Ssz.Desc :=
       .byteVector (LOG_LIFETIME * DIGEST_LEN)]
 ````
 
-Older modules do not all follow these rules yet.
-
-Apply them to what you change.
+When a module does not follow these rules, apply them to what you change.
 
 Do not reformat untouched code in an unrelated pull request.
 
