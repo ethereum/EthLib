@@ -234,9 +234,61 @@ If you skipped a check, say so.
 
 A reviewer should know in fifteen seconds what the change does and where to look.
 
-- The title is a plain imperative sentence, such as "Add verification".
-  No prefix such as `feat:`, no trailing period.
-- The body is a few sentences of prose.
+### Titles
+
+Titles follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
+
+That holds for commit subjects and pull request titles alike.
+
+A squash merge turns the pull request title into the commit on `master`.
+
+```text
+<type>(<scope>): <summary>
+```
+
+The type says what kind of change it is:
+
+- `feat`: new behaviour, such as a new function, module or export.
+- `fix`: behaviour that disagreed with the specification now agrees.
+- `proof`: new or changed theorems, with no change to the specification code.
+- `perf`: the same results, computed faster.
+- `refactor`: the same behaviour, with the code restructured.
+- `test`: test vectors, known answers or the Python suite.
+- `docs`: documentation only.
+- `build`: Lake, the Lean toolchain, dependencies or packaging.
+- `ci`: the GitHub workflows.
+- `chore`: anything else that touches no specification, proof or test.
+
+Conventional Commits only fixes `feat` and `fix`.
+
+The other types are the common ones, plus `proof`, which this repository needs.
+
+The scope names the domain or module, in lowercase: `xmss`, `kzg`, `bls`, `ssz`, `bindings`.
+
+Leave the scope out when the change spans the repository.
+
+The summary is in the imperative mood, starts lowercase and has no trailing period.
+
+The whole title fits in 72 characters.
+
+A change that breaks consumers adds `!` before the colon.
+
+That covers a new wire format, a renamed or removed export, or a new test-vector layout.
+
+Its commit body then ends with a `BREAKING CHANGE:` footer that says what to change.
+
+```text
+feat(xmss): add SSZ encoding for the public key and the signature
+fix(xmss)!: put the randomizer first in the signature encoding
+proof(xmss): prove that the tweak encoding is injective
+build: pin ssz-specs to a23a239
+docs: add AGENTS.md
+```
+
+### Bodies
+
+- The commit body wraps at 72 columns and says why, when the subject cannot.
+- The pull request body is a few sentences of prose.
   It says why, and the one thing a reviewer could miss.
 - Say what implementers must change, if anything.
 - Leave out what the diff already shows: file lists, renamed symbols, the code retold.
