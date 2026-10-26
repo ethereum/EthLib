@@ -4,7 +4,11 @@ Rules for any agent, human or AI, that changes this repository.
 
 EthLib holds formally verified Ethereum specifications, written in Lean.
 
-It covers cryptography today, and consensus, serialization and networking next.
+It starts with cryptography.
+
+It is meant to cover any part of Ethereum worth specifying precisely.
+
+Consensus, execution, the EVM, networking, the mempool and storage are all in scope.
 
 Clients and other Lean projects build on it.
 
@@ -54,13 +58,16 @@ Serialization:
 
 - SSZ: `ethereum/ssz-specs`, pinned in `lakefile.lean`.
 
-Consensus, execution and networking:
+Other domains, as they arrive:
 
-- The consensus layer: `ethereum/consensus-specs`, fork by fork, and the EIPs it implements.
-- Its peer-to-peer layer: the `p2p-interface.md` of each fork in `ethereum/consensus-specs`.
-- The execution layer: `ethereum/execution-specs` and `ethereum/devp2p`.
+- Consensus: `ethereum/consensus-specs`, fork by fork, and the EIPs it implements.
+- Execution and the EVM: `ethereum/execution-specs`, and the EIPs it implements.
+- Networking: the `p2p-interface.md` of each fork in `ethereum/consensus-specs`.
+  On the execution side, `ethereum/devp2p`.
 
-A pull request that starts a new domain or module adds its sources to this list.
+These are starting points, not a closed list.
+
+A pull request that starts a new domain or module adds its sources here.
 
 Cite the exact document and section in the code that implements it.
 
@@ -74,6 +81,8 @@ Matching a client byte for byte is a useful test, not a justification.
 
 ## What precision means in each domain
 
+The same discipline, seen from a few domains.
+
 - Cryptography.
   Byte orders, domain separators and parameters match the standard exactly.
   A security claim, such as bits of security, comes from the paper or from a proof here.
@@ -82,9 +91,13 @@ Matching a client byte for byte is a useful test, not a justification.
   State changes happen in the order the specification makes them.
 - Serialization.
   Every encoding is canonical, and every input the specification calls invalid is rejected.
+- Execution and the EVM.
+  Opcode semantics, gas costs and the fork that activates them follow the specification.
 - Networking.
   Message limits, encodings and validation outcomes follow the specification.
   A message to reject is not a message to ignore.
+
+A new domain adds its own line here.
 
 ## Layout
 
