@@ -52,10 +52,10 @@ theorem encodePublicKey_eq (pk : PublicKey) :
   apply ByteArray.ext
   simp only [ByteArray.data_append]
 
-/-- A signature encodes as its chain values, then its randomizer, then its siblings. -/
+/-- A signature encodes as its randomizer, then its chain values, then its siblings. -/
 theorem encodeSignature_eq (sig : Signature) :
-    encodeSignature sig = packBytes sig.chainElements.flatten ++
-      (packBytes sig.randomness ++ packBytes sig.merklePath.flatten) := by
+    encodeSignature sig = packBytes sig.randomness ++
+      (packBytes sig.chainElements.flatten ++ packBytes sig.merklePath.flatten) := by
   simp [encodeSignature, signatureSsz, signatureSszValue, Ssz.serialize,
     Ssz.serializeStruct, Ssz.serializeFields, Ssz.assemble,
     Ssz.Desc.isFixed, Ssz.Desc.fixedSize, Ssz.headWidth, Ssz.bodyWidth,
@@ -99,7 +99,7 @@ private theorem deserialize_publicKey_value (pk : PublicKey) :
 
 private theorem deserialize_signature_value (sig : Signature) :
     Ssz.deserialize signatureSsz (encodeSignature sig).data = .ok (signatureSszValue sig) := by
-  -- The codec checks the 1208-byte length, then cuts out 672, 24 and 512 bytes.
+  -- The codec checks the 1208-byte length, then cuts out 24, 672 and 512 bytes.
   rw [encodeSignature_eq]
   simp [signatureSsz, signatureSszValue, packBytes, ByteArray.data_append,
     Ssz.deserialize, Ssz.structSlices, Ssz.structBudget,
@@ -138,11 +138,11 @@ theorem encodeSignature_surjective {bytes : ByteArray} (sized : bytes.size = SIG
   have size : bytes.data.size = 1208 := sized.trans sig_size_eq
   -- Cut at the field seams:
   --
-  --     [ 0, 672) chain values
-  --     [672, 696) randomizer
+  --     [ 0, 24) randomizer
+  --     [24, 696) chain values
   --     [696, 1208) siblings
-  refine ⟨⟨splitDigests ⟨bytes.data.extract 0 672, by simp [size, V, DIGEST_LEN]⟩,
-    ⟨bytes.data.extract 672 696, by simp [size, RANDOMNESS_LEN]⟩,
+  refine ⟨⟨splitDigests ⟨bytes.data.extract 24 696, by simp [size, V, DIGEST_LEN]⟩,
+    ⟨bytes.data.extract 0 24, by simp [size, RANDOMNESS_LEN]⟩,
     splitDigests ⟨bytes.data.extract 696 1208, by simp [size, LOG_LIFETIME, DIGEST_LEN]⟩⟩, ?_⟩
   -- Re-joining the three adjacent slices gives the whole string.
   rw [encodeSignature_eq]

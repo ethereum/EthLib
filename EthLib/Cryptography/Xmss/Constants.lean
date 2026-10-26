@@ -107,8 +107,8 @@ def LIFETIME : Nat := 2 ^ LOG_LIFETIME
 /-- Bytes in a serialized public key: root, then public parameter. -/
 def PUB_KEY_SIZE : Nat := DIGEST_LEN + PUBLIC_PARAM_LEN
 
-/-- Bytes in the one-time part of a signature: chain values, then randomizer. -/
-def WOTS_SIG_SIZE : Nat := V * DIGEST_LEN + RANDOMNESS_LEN
+/-- Bytes in the one-time part of a signature: randomizer, then chain values. -/
+def WOTS_SIG_SIZE : Nat := RANDOMNESS_LEN + V * DIGEST_LEN
 
 /-- Bytes in a serialized signature: one-time part, then authentication path. -/
 def SIG_SIZE : Nat := WOTS_SIG_SIZE + LOG_LIFETIME * DIGEST_LEN

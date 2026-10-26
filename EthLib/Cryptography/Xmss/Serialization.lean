@@ -28,16 +28,16 @@ def publicKeySsz : Ssz.Desc :=
 /-- The signature layout, 1208 bytes.
 
 ```text
-    [ 42 chain values: 672 | randomizer: 24 | 32 siblings: 512 ]
+    [ randomizer: 24 | 42 chain values: 672 | 32 siblings: 512 ]
 ```
 
+- The randomizer comes first, as in the paper's signature tuple.
 - Chain values are in chain order.
 - Siblings run from the leaf up to the root.
-- The randomizer sits after the chains, not first as in the paper's signature tuple.
 -/
 def signatureSsz : Ssz.Desc :=
-  .container ["chain_values", "randomness", "merkle_path"]
-    [.byteVector (V * DIGEST_LEN), .byteVector RANDOMNESS_LEN,
+  .container ["randomness", "chain_values", "merkle_path"]
+    [.byteVector RANDOMNESS_LEN, .byteVector (V * DIGEST_LEN),
       .byteVector (LOG_LIFETIME * DIGEST_LEN)]
 
 /-- The public key as the codec's untyped value. -/
@@ -48,7 +48,7 @@ def publicKeySszValue (pk : PublicKey) : Ssz.Value :=
 /-- The signature as the codec's untyped value. -/
 def signatureSszValue (sig : Signature) : Ssz.Value :=
   -- Each digest list becomes one byte field, digests kept in order.
-  .seq [.bytes sig.chainElements.flatten.toArray, .bytes sig.randomness.toArray,
+  .seq [.bytes sig.randomness.toArray, .bytes sig.chainElements.flatten.toArray,
     .bytes sig.merklePath.flatten.toArray]
 
 /-- Encode a public key as 32 bytes. -/
@@ -86,10 +86,10 @@ def publicKeyFromSsz? : Ssz.Value → Option PublicKey
 
 /-- The signature held by a decoded codec value, if it has the right shape. -/
 def signatureFromSsz? : Ssz.Value → Option Signature
-  | .seq [.bytes chains, .bytes randomizer, .bytes siblings] => do
+  | .seq [.bytes randomizer, .bytes chains, .bytes siblings] => do
     -- Recover each field's length in its type, then cut the digest lists apart.
-    let chains ← unpackBytes? (V * DIGEST_LEN) ⟨chains⟩
     let randomizer ← unpackBytes? RANDOMNESS_LEN ⟨randomizer⟩
+    let chains ← unpackBytes? (V * DIGEST_LEN) ⟨chains⟩
     let siblings ← unpackBytes? (LOG_LIFETIME * DIGEST_LEN) ⟨siblings⟩
     return ⟨splitDigests chains, randomizer, splitDigests siblings⟩
   | _ => none
