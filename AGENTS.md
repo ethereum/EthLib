@@ -2,20 +2,22 @@
 
 Rules for any agent, human or AI, that changes this repository.
 
-EthLib holds formally verified Ethereum primitives, written in Lean.
+EthLib holds formally verified Ethereum specifications, written in Lean.
+
+It covers cryptography today, and consensus, serialization and networking next.
 
 Clients and other Lean projects build on it.
 
-A wrong constant, a swapped field or a missing check here becomes a bug downstream.
+A wrong constant, a swapped field or a reordered check here becomes a bug downstream.
 
-So every line must be correct, justified and readable by a specialist.
+So every line must be correct, justified and readable by a specialist of its domain.
 
 ## The bar
 
-Work the way a cryptographer writing a paper would.
+Work the way the author of a standard would.
 
-- Read the standard, the surrounding code and the existing proofs before writing anything.
-- Every constant, byte order, domain separator and field order has a source.
+- Read the specification, the surrounding code and the existing proofs before writing anything.
+- Every constant, byte order, field order, fork rule and size limit has a source.
   You have read that source.
 - If a source is ambiguous or two sources disagree, stop and say so.
   Do not pick one silently.
@@ -32,11 +34,13 @@ A plausible guess merged into a specification costs far more.
 
 ## Sources of truth
 
-Each primitive implements a published standard.
+Each module implements a published specification.
 
-The standard is normative.
+That specification is normative.
 
-When the code and the standard disagree, the code is wrong until shown otherwise.
+When the code and the specification disagree, the code is wrong until shown otherwise.
+
+Cryptography:
 
 - BLS12-381 signatures: `draft-irtf-cfrg-bls-signature-04`.
   Hash to curve: RFC 9380.
@@ -45,11 +49,22 @@ When the code and the standard disagree, the code is wrong until shown otherwise
 - XMSS signatures: ePrint 2025/055, by Drake, Khovratovich, Kudinov and Wagner.
 - BLAKE2s: RFC 7693.
 - SHA-256: FIPS 180-4.
+
+Serialization:
+
 - SSZ: `ethereum/ssz-specs`, pinned in `lakefile.lean`.
+
+Consensus, execution and networking:
+
+- The consensus layer: `ethereum/consensus-specs`, fork by fork, and the EIPs it implements.
+- Its peer-to-peer layer: the `p2p-interface.md` of each fork in `ethereum/consensus-specs`.
+- The execution layer: `ethereum/execution-specs` and `ethereum/devp2p`.
+
+A pull request that starts a new domain or module adds its sources to this list.
 
 Cite the exact document and section in the code that implements it.
 
-For example: `RFC 9380 §5.3.1`.
+For example: `RFC 9380 §5.3.1`, or the fork and function name in `consensus-specs`.
 
 This repository is the reference.
 
@@ -57,18 +72,36 @@ Do not cite another implementation as the authority for a behaviour.
 
 Matching a client byte for byte is a useful test, not a justification.
 
+## What precision means in each domain
+
+- Cryptography.
+  Byte orders, domain separators and parameters match the standard exactly.
+  A security claim, such as bits of security, comes from the paper or from a proof here.
+- Consensus.
+  Each rule belongs to a fork, and the code says which.
+  State changes happen in the order the specification makes them.
+- Serialization.
+  Every encoding is canonical, and every input the specification calls invalid is rejected.
+- Networking.
+  Message limits, encodings and validation outcomes follow the specification.
+  A message to reject is not a message to ignore.
+
 ## Layout
 
 ```text
-EthLib/Cryptography/<Primitive>/          the specification, executable
-EthLib/Cryptography/Proofs/<Primitive>/   theorems about it
-bindings/python/                          C exports and the Python package
-tests/cryptography/<primitive>/           generated test vectors
+EthLib/<Domain>/<Module>/            the specification, executable
+EthLib/<Domain>/Proofs/<Module>/     theorems about it
+bindings/python/                     C exports and the Python package
+tests/<domain>/<module>/             generated test vectors
 ```
+
+The only domain today is `Cryptography`.
+
+A new domain adds its proof root to the `Proofs` library in `lakefile.lean`.
 
 The specification never imports the proofs.
 
-Proofs live in their own library, so the spec builds and links without them.
+Proofs live in their own library, so the specification builds and links without them.
 
 ## Lean
 
@@ -76,8 +109,9 @@ Proofs live in their own library, so the spec builds and links without them.
 
 - Write the specification to be read first and run second.
   Clarity wins over speed unless speed is the point of the change.
-- Name things after the standard.
+- Name things after the specification.
   If the paper calls it the randomizer, the code does too.
+  If `consensus-specs` calls it `process_slots`, so does the code, in Lean's casing.
 - Reject malformed input at the boundary with a typed error.
   No truncation, no padding, no silent fallback.
 - Put invariants in types, such as `Vector` lengths and `Fin` bounds.
@@ -95,15 +129,18 @@ Proofs live in their own library, so the spec builds and links without them.
 - After a proof change, check its axioms with `#print axioms`.
   The goal is `propext`, `Classical.choice` and `Quot.sound`, nothing else.
 - Prove what a reader cares about.
-  Round trips, injectivity, rejection of bad input, agreement with the standard.
+  Round trips, injectivity, rejection of bad input, invariants of a state transition.
+  Above all, agreement with the specification.
 
 ### Known answers
 
 A known answer pins one input to one output, byte for byte.
 
-Take it from the standard's own test vectors when they exist.
+Take it from the specification's own test vectors when they exist.
 
-Otherwise, describe what it pins, such as "one honest signature at epoch 7".
+Otherwise, describe what it pins.
+
+For example: "one honest signature at epoch 7", or "one empty slot processed".
 
 Never regenerate an expected value from the code under test and call it a check.
 
@@ -162,8 +199,8 @@ Do not reformat untouched code in an unrelated pull request.
 
 The C exports and the Python package are the public surface for clients.
 
-- Export the operations a client calls, under the standard's names, and the object sizes.
-  Keep internal steps, such as one hash or one encoding layer, inside Lean.
+- Export the operations a client calls, under the specification's names, and the object sizes.
+  Keep internal steps, such as one hash or one helper of a state transition, inside Lean.
 - Read every size from Lean at load time.
   Never hard-code a length in C or Python.
 - The generated C frees each argument itself.
