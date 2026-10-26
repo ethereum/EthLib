@@ -51,4 +51,74 @@ theorem packBytes_unpackBytes? {n : Nat} {b : ByteArray} (hb : b.size = n) :
   refine congrArg some ?_
   exact congrArg ByteArray.mk Array.ofFn_getElem
 
+/-! ## Reading one field out of a concatenation
+
+A signature is a concatenation of fixed-size fields, so every field read is a
+read at an offset inside a longer buffer. Three lemmas reduce such a read to
+the single-object case already proved above: trailing bytes do not disturb a
+read that already fitted, and skipping a prefix is reading the remainder at the
+remaining offset. Since `++` is right associative, the second is the one that
+peels a record one field at a time.
+-/
+
+/-- Appending bytes on the right leaves a read that already fitted unchanged.
+
+So a field keeps its value as later fields are appended after it. -/
+theorem unpackBytes?_append_of_fits {n : Nat} (b c : ByteArray) (offset : Nat)
+    (h : offset + n ≤ b.size) :
+    unpackBytes? n (b ++ c) offset = unpackBytes? n b offset := by
+  -- Appending only grows the buffer, so the longer read passes the same guard.
+  have hbc : offset + n ≤ (b ++ c).size := by
+    rw [ByteArray.size_append]; omega
+  rw [unpackBytes?, unpackBytes?, dif_pos hbc, dif_pos h]
+  -- Both reads tabulate the same indices, so comparing entrywise suffices.
+  refine congrArg some (Vector.ext ?_)
+  intro i hi
+  simp only [Vector.getElem_ofFn, ByteArray.data_append]
+  -- Every index the read touches lies in the left operand, which is unchanged.
+  exact Array.getElem_append_left (by simp only [ByteArray.size] at h; omega)
+
+/-- Skipping a prefix is reading the remainder at the remaining offset.
+
+Both directions matter: a read past the prefix succeeds exactly when the
+remainder has room, so this rewrites acceptance as well as the value. -/
+theorem unpackBytes?_append_add {n : Nat} (b c : ByteArray) (k : Nat) :
+    unpackBytes? n (b ++ c) (b.size + k) = unpackBytes? n c k := by
+  have hsz : (b ++ c).size = b.size + c.size := ByteArray.size_append
+  rw [unpackBytes?, unpackBytes?]
+  by_cases h : k + n ≤ c.size
+  · rw [dif_pos (by omega : b.size + k + n ≤ (b ++ c).size), dif_pos h]
+    refine congrArg some (Vector.ext ?_)
+    intro i hi
+    have hb : b.data.size = b.size := rfl
+    -- Every index the read touches starts at or after the prefix.
+    have hp : b.data.size ≤ b.size + k + i := by omega
+    simp only [Vector.getElem_ofFn, ByteArray.data_append]
+    rw [Array.getElem_append_right hp]
+    -- Dropping the prefix from the index recovers the remainder's own index.
+    have hidx : b.size + k + i - b.data.size = k + i := by omega
+    simp only [hidx]
+  · -- Without room in the remainder neither read passes its guard.
+    rw [dif_neg (by omega : ¬ b.size + k + n ≤ (b ++ c).size), dif_neg h]
+
+/-- A field at the front of a buffer is read back unchanged. -/
+theorem unpackBytes?_append_packBytes_left {n : Nat} (v : Vector UInt8 n)
+    (c : ByteArray) : unpackBytes? n (packBytes v ++ c) 0 = some v := by
+  -- The field fills the left operand exactly, so the trailing bytes are inert.
+  rw [unpackBytes?_append_of_fits _ _ _ (by simp), unpackBytes?_packBytes]
+
+/-- Reading immediately after a prefix returns the object appended to it.
+
+Stated for the buffer shape a record has: `++` is left associative, so the
+fields after the one wanted sit outside the parenthesis. -/
+theorem unpackBytes?_append_packBytes {n : Nat} (p : ByteArray)
+    (v : Vector UInt8 n) (c : ByteArray) :
+    unpackBytes? n ((p ++ packBytes v) ++ c) p.size = some v := by
+  -- Frame away the trailing fields, which the read never touches.
+  rw [unpackBytes?_append_of_fits _ _ _
+    (by rw [ByteArray.size_append, size_packBytes]; exact Nat.le_refl _)]
+  -- Then skip the prefix and read the field now at the front.
+  rw [show p.size = p.size + 0 from rfl, unpackBytes?_append_add]
+  simpa using unpackBytes?_packBytes v
+
 end EthLib.Cryptography.Xmss
