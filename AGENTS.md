@@ -287,7 +287,7 @@ docs: add AGENTS.md
 
 ### Bodies
 
-The commit body wraps at 72 columns and says why, when the subject cannot.
+The commit body says why, when the subject cannot.
 
 The pull request body is written for a human who has never seen the change.
 
