@@ -1,5 +1,5 @@
 import EthLib.Cryptography.Bls.Errors
-import EthLib.Cryptography.Bls.Sha256
+import EthLib.Cryptography.Hash.Sha256
 
 /-!
 # `Fr`
@@ -104,7 +104,7 @@ def toBytesBE (a : Fr) : ByteArray :=
 /-- Hash `data` and convert the output to a BLS scalar field element.
 The output is not uniform over the BLS field. -/
 def hashToBlsField (data : ByteArray) : Fr :=
-  let hashedData := sha256 data
+  let hashedData := Hash.sha256 data
   Fr.ofNat (bytesBEToNat hashedData)
 
 end Fr

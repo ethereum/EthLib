@@ -1,5 +1,5 @@
 import EthLib.Cryptography.Bls.Compress
-import EthLib.Cryptography.Bls.Sha256
+import EthLib.Cryptography.Hash.Sha256
 
 /-!
 # `HashToCurve`
@@ -42,20 +42,20 @@ def expandMessageXmd
     throw (.expandMessageTooManyBlocks ell)
   let dst :=
     if dst.size > 255 then
-      Sha256.hash (oversizeDstPrefix ++ dst)
+      Hash.Sha256.hash (oversizeDstPrefix ++ dst)
     else
       dst
   let zPad := ByteArray.mk (Array.replicate sha256BlockSize 0)
   let dstPrime := dst ++ i2osp dst.size 1
   let lIbStr := i2osp lenInBytes 2
   let msgPrime := zPad ++ msg ++ lIbStr ++ i2osp 0 1 ++ dstPrime
-  let b0 := Sha256.hash msgPrime
+  let b0 := Hash.Sha256.hash msgPrime
   let mut bs : Array ByteArray := Array.mkEmpty ell
-  let b1 := Sha256.hash (b0 ++ i2osp 1 1 ++ dstPrime)
+  let b1 := Hash.Sha256.hash (b0 ++ i2osp 1 1 ++ dstPrime)
   bs := bs.push b1
   for i in [2:ell+1] do
     let prev := bs[bs.size - 1]!
-    let bi := Sha256.hash (strxor b0 prev ++ i2osp i 1 ++ dstPrime)
+    let bi := Hash.Sha256.hash (strxor b0 prev ++ i2osp i 1 ++ dstPrime)
     bs := bs.push bi
   let mut out := bs.foldl (· ++ ·) ByteArray.empty
   return out.extract 0 lenInBytes

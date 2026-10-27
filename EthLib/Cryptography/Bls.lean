@@ -7,7 +7,6 @@ import EthLib.Cryptography.Bls.Fp12
 import EthLib.Cryptography.Bls.G1
 import EthLib.Cryptography.Bls.G2
 import EthLib.Cryptography.Bls.Compress
-import EthLib.Cryptography.Bls.Sha256
 import EthLib.Cryptography.Bls.Pairing
 import EthLib.Cryptography.Bls.HashToCurve
 import EthLib.Cryptography.Bls.Signatures

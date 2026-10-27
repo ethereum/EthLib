@@ -6,7 +6,7 @@ hash-to-curve (`expand_message_xmd`) and KZG's Fiat-Shamir challenges;
 neither needs constant-time, so this is written for clarity.
 -/
 
-namespace EthLib.Cryptography.Bls.Sha256
+namespace EthLib.Cryptography.Hash.Sha256
 
 /-! ## 32-bit primitives -/
 
@@ -105,11 +105,11 @@ def hash (msg : ByteArray) : ByteArray := Id.run do
     out := out.set! (4*i + 3) (UInt8.ofNat (h.toNat &&& 0xff))
   return out
 
-end EthLib.Cryptography.Bls.Sha256
+end EthLib.Cryptography.Hash.Sha256
 
-namespace EthLib.Cryptography.Bls
+namespace EthLib.Cryptography.Hash
 
 /-- SHA-256 of an arbitrary-length `ByteArray`. -/
 @[inline] def sha256 (data : ByteArray) : ByteArray := Sha256.hash data
 
-end EthLib.Cryptography.Bls
+end EthLib.Cryptography.Hash
