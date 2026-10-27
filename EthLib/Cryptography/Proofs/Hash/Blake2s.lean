@@ -1,4 +1,5 @@
 import EthLib.Cryptography.Hash.Blake2s
+import EthLib.Cryptography.Proofs.IdLoops
 
 /-!
 # Proofs: `Hash.Blake2s`
@@ -136,6 +137,45 @@ theorem sigma_row_permutation (round : Fin 10) :
   -- The kernel decides each row directly: `List.Perm` over sixteen numerals is small.
   revert round
   decide
+
+/-! ## Hashing as a fold over blocks
+
+A hash runs one compression per 64-byte block, threading the chaining value through.
+
+```text
+    h_0 = IV with the parameter block       h_(k+1) = compress(h_k, block k)
+    hash = little-endian bytes of h_n
+```
+
+Stating this as a fold lets a proof evaluate one block at a time.
+
+The kernel then checks many small evaluations instead of one large one, which bounds its memory.
+-/
+
+open private compress blockWords stateBytes IV from EthLib.Cryptography.Hash.Blake2s
+
+/-- The chaining value before the first block, for an unkeyed 32-byte digest. -/
+def initialState : Array UInt32 := IV.set! 0 (IV[0]! ^^^ 0x01010020)
+
+/-- One compression: the chaining value after block `block` of `input`. -/
+def blockStep (input : ByteArray) (chaining : Array UInt32) (block : Nat) : Array UInt32 :=
+  compress chaining (blockWords input (Internal.blockOffset block))
+    (UInt64.ofNat (Internal.blockCounter input.size block))
+    (block + 1 == Internal.blockCount input.size)
+
+/-- The digest bytes of a final chaining value. -/
+def finalBytes (state : Array UInt32) : Vector UInt8 32 := stateBytes state
+
+open EthLib.Cryptography.IdLoops in
+/-- A hash is the fold of one compression per block, from the initial chaining value. -/
+theorem hash_eq_foldl (input : ByteArray) :
+    hash input = finalBytes
+      ((List.range' 0 (Internal.blockCount input.size)).foldl (blockStep input) initialState) := by
+  unfold hash
+  -- The block loop yields at every step, so it is a fold over the block indices.
+  dsimp only [Id.run, id_pure, id_bind]
+  rw [forIn_range_yield]
+  rfl
 
 /-! ## Known answers
 
