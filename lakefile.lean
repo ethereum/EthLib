@@ -37,5 +37,5 @@ Each domain's proof tree is also a root, so that its modules belong to
 this library rather than to `EthLib`. -/
 @[default_target]
 lean_lib «Proofs» where
-  roots := #[`EthLib.Proofs, `EthLib.Cryptography.Proofs]
+  roots := #[`EthLib.Proofs, `EthLib.Cryptography.Proofs, `EthLib.Networking.Proofs]
   precompileModules := false
