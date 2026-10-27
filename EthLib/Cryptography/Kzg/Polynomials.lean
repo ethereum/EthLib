@@ -221,6 +221,18 @@ def barycentricSumAux (polynomial domain : Array Fr) (z : Fr) :
     let b := z - domain[i]!
     barycentricSumAux polynomial domain z (acc + a / b) (i + 1) count
 
+/-- The barycentric sum of `barycentricSumAux`, with the inverses of `z - D[i]` given.
+
+`inverses[i]` must be the inverse of `z - domain[i]` for every visited `i`.
+
+Then each term `a / b` is `a * inverses[i]`, and the two sums agree. -/
+def barycentricSumInvAux (polynomial domain inverses : Array Fr) :
+    Fr → Nat → Nat → Fr
+  | acc, _, 0 => acc
+  | acc, i, count + 1 =>
+    barycentricSumInvAux polynomial domain inverses
+      (acc + polynomial[i]! * domain[i]! * inverses[i]!) (i + 1) count
+
 /-- `evaluatePolynomialInEvaluationForm` over an explicit evaluation
 domain. -/
 def evaluatePolynomialInEvaluationFormAux
@@ -234,7 +246,9 @@ def evaluatePolynomialInEvaluationFormAux
     -- Barycentric formula. On this path `z ∉ domain`, and the domain (roots
     -- of unity) has no duplicates, so every `z - domain[i]` inside the sum is
     -- nonzero — otherwise the division would silently contribute 0.
-    let acc := barycentricSumAux polynomial domain z Fr.zero 0 width
+    -- One batch inversion gives every `1 / (z - D[i])`.
+    let inverses := Fr.batchInverse (Array.ofFn (n := width) fun i => z - domain[i.val]!)
+    let acc := barycentricSumInvAux polynomial domain inverses Fr.zero 0 width
     let r := z ^ (Fr.ofNat width) - Fr.one
     acc * r * inverseWidth
 

@@ -75,6 +75,41 @@ that one up would be wrong for a field element, so this instance must
 shadow it. -/
 instance (priority := high) : Div Fr := ⟨fun a b => a * b.inverse⟩
 
+/-- The inverses of `xs`, from a single inversion.
+
+`pre` is the product of the nonzero elements before `xs`.
+
+The result pairs the inverses of `xs` with `pre⁻¹`.
+
+```text
+    go pre []       = ([], pre⁻¹)
+    go pre (x :: t) = let (is, s) := go (pre * x) t      s = (pre * x)⁻¹
+                      (pre * s :: is, s * x)             x⁻¹ = pre * s,  pre⁻¹ = s * x
+```
+
+A zero is skipped and maps to zero, as `inverse` maps it. -/
+def batchInverseAux : Fr → List Fr → List Fr × Fr
+  | pre, [] => ([], pre.inverse)
+  | pre, x :: xs =>
+    if x.isZero then
+      let (inverses, s) := batchInverseAux pre xs
+      (zero :: inverses, s)
+    else
+      let (inverses, s) := batchInverseAux (pre * x) xs
+      (pre * s :: inverses, s * x)
+
+/-- The inverse of every element of `xs`, equal to `xs.map inverse`.
+
+It is Montgomery's simultaneous inversion.
+
+One inversion costs about 380 multiplications.
+
+This takes one inversion in total, and three multiplications per element.
+
+See Montgomery, "Speeding the Pollard and elliptic curve methods of factorization", Math. Comp. 48 (1987). -/
+def batchInverse (xs : Array Fr) : Array Fr :=
+  (batchInverseAux one xs.toList).1.toArray
+
 /-- `a ^ b` raises `a` to `b.val`, treating the exponent as an integer. -/
 instance : HPow Fr Fr Fr := ⟨fun a b => powNat a b.val⟩
 

@@ -112,9 +112,11 @@ def recoverPolynomialcoeff
   -- Convert Z(x) to evaluation form over a coset of the FFT domain.
   let zOverCoset  := cosetFftField zeroPolyCoeff       rouExt
   -- Compute P(x) = (P*Z)(x) / Z(x) in evaluation form over a coset of the FFT domain.
+  -- One batch inversion gives every `1 / Z(x)`.
+  let zInverses := Fr.batchInverse zOverCoset
   let pOverCoset : Array Fr :=
     Array.ofFn (n := FIELD_ELEMENTS_PER_EXT_BLOB) fun i =>
-      pzOverCoset[i.val]! / zOverCoset[i.val]!
+      pzOverCoset[i.val]! * zInverses[i.val]!
   -- Convert P(x) to coefficient form.
   let pCoeff := cosetFftField pOverCoset rouExt (inv := true)
 

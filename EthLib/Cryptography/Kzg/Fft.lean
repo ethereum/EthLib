@@ -65,6 +65,39 @@ def fftField
   if vals.size.isPowerOfTwo then out
   else panicWith out s!"fftField: input length {vals.size} is not a power of two"
 
+/-- Every other point of `xs`, starting at index `start`. -/
+def fftHalveG1 (xs : Array Bls.G1) (start : Nat) : Array Bls.G1 :=
+  Array.ofFn (n := xs.size / 2) fun i => xs[start + 2 * i.val]!
+
+/-- Cooley-Tukey radix-2 FFT whose coefficients are points of G1.
+
+```text
+    out[i] = sum_j [rootsOfUnity[i]^j] vals[j]
+```
+
+The butterflies are those of `fftFieldAux`.
+
+Each product by a root is a scalar multiplication.
+
+`rootsOfUnity` has the length of `vals`, a power of two. -/
+def fftG1 (vals : Array Bls.G1) (rootsOfUnity : Array Fr) : Array Bls.G1 :=
+  if vals.size ≤ 1 then
+    vals
+  else
+    let halfRoots := fftHalve rootsOfUnity 0
+    let l := fftG1 (fftHalveG1 vals 0) halfRoots
+    let r := fftG1 (fftHalveG1 vals 1) halfRoots
+    let half := l.size
+    -- Each product [root_i] r_i serves two outputs, so it is computed once.
+    -- The products are independent, so each runs as its own task.
+    let tasks := Array.ofFn (n := half) fun i => Task.spawn fun _ => Bls.G1.mul r[i.val]! rootsOfUnity[i.val]!
+    let t := tasks.map Task.get
+    Array.ofFn (n := vals.size) fun i =>
+      if i.val < half then Bls.G1.add l[i.val]! t[i.val]!
+      else Bls.G1.add l[i.val - half]! (Bls.G1.neg t[i.val - half]!)
+termination_by vals.size
+decreasing_by all_goals (simp [fftHalveG1]; omega)
+
 /-- Multiply successive elements of `vals` by successive powers of
 `factor`, starting at `shift`. -/
 def shiftValsAux (factor : Fr) : Fr → List Fr → List Fr

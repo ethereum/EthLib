@@ -117,6 +117,9 @@ private def computeQuotientEvalWithinDomain
     (z : Fr) (polynomial : Polynomial) (y : Fr)
     : Fr :=
   let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB
+  -- One batch inversion gives every `1 / (z * (z - omega_i))`.
+  -- The skipped term has denominator zero, which inverts to zero and is never read.
+  let inverses := Fr.batchInverse (domain.map fun omega_i => z * (z - omega_i))
   (Array.range domain.size).foldl (init := Fr.zero) fun result i =>
     let omega_i := domain[i]!
     if omega_i == z then
@@ -127,8 +130,7 @@ private def computeQuotientEvalWithinDomain
       -- `z` is a root of unity here (the caller only reaches this function
       -- when `z` is in the domain), so `z ≠ 0`; and `omega_i ≠ z` by the
       -- skip above — the denominator is nonzero.
-      let denominator := z * (z - omega_i)
-      result + (numerator / denominator)
+      result + numerator * inverses[i]!
 
 /-- Returns the KZG proof at `z` and the evaluation `y = p(z)`. -/
 private def computeKzgProofImpl
@@ -141,8 +143,9 @@ private def computeKzgProofImpl
   let y ← evaluatePolynomialInEvaluationForm polynomial z
   let polynomialShifted := polynomial.map (· - y)
 
-  -- For all x_i, compute (x_i - z).
+  -- For all x_i, compute (x_i - z), and all their inverses with one inversion.
   let denominatorPoly := domain.map (· - z)
+  let inverses := Fr.batchInverse denominatorPoly
 
   -- Quotient polynomial directly in evaluation form.
   let quotient : Array Fr := Array.ofFn (n := FIELD_ELEMENTS_PER_BLOB) fun i =>
@@ -152,7 +155,7 @@ private def computeKzgProofImpl
       -- z lands on a root of unity; use the special-case formula.
       computeQuotientEvalWithinDomain domain[i.val]! polynomial y
     else
-      a / b
+      a * inverses[i.val]!
 
   let proofG1 ← g1LincombPoints g1LagrangeBrp quotient
   return (Bls.G1.compress proofG1, y)

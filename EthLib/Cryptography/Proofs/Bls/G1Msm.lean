@@ -6,11 +6,9 @@ import EthLib.Cryptography.Proofs.IdLoops
 
 Two layers:
 
-1. **Mechanical**: `G1.msm` (an `Id.run do` program with counted
-   `for` loops and mutable state) equals a pure `List.foldl` model
-   (`msmModel`), by converting each loop with
-   `Std.Legacy.Range.forIn_eq_forIn_range'` and an `Id`-specialized
-   fold lemma. No group theory here.
+1. **Mechanical**: `G1.msm` (a fold whose window sums run as tasks)
+   equals a pure `List.foldl` model (`msmModel`). Reading a spawned
+   task gives its value by definition. No group theory here.
 2. **Mathematical**: the model computes
    `Σ i ∈ range n, [scalars[i]]points[i]` in the curve group, via the
    bucket-partition and running-sum identities and the base-`2^w`
@@ -27,39 +25,9 @@ set_option maxRecDepth 4000
 
 /-! ## The pure model of `msm` -/
 
-/-- Window `k` of a scalar: bits `[8k, 8k + 8)` of its value. -/
-def windowVal (s : Fr) (k : Nat) : Nat := (s.val >>> (k * 8)) &&& (1 <<< 8 - 1)
+/-- One window step of `msm`, with the window sum computed in place.
 
-/-- The `maxBits` fold: maximal bit length among the first `n`
-scalars. -/
-def msmMaxBits (scalars : Array Fr) (n : Nat) : Nat :=
-  (List.range' 0 n).foldl (fun m j =>
-    if scalars[j]!.val ≠ 0 then
-      if scalars[j]!.val.log2 + 1 > m then scalars[j]!.val.log2 + 1 else m
-    else m) 0
-
-/-- The bucket-accumulation fold for window `k`. -/
-def msmBuckets (points : Array G1) (scalars : Array Fr) (n k : Nat) :
-    Array G1 :=
-  (List.range' 0 n).foldl (fun bs j =>
-    if windowVal scalars[j]! k ≠ 0 then
-      bs.set! (windowVal scalars[j]! k)
-        (add bs[windowVal scalars[j]! k]! points[j]!)
-    else bs) (Array.replicate (1 <<< 8) zero)
-
-/-- The running-sum fold, walking `v` from `255` down to `1`. The
-state is `⟨partialSum, running⟩` — the `do`-elaborator packs the two
-mutable variables in *reverse* declaration order — so the first
-component accumulates `Σ_{v>0} v·b_v` and the second `Σ_{v>0} b_v`. -/
-def msmRunning (bs : Array G1) : MProd G1 G1 :=
-  (List.range' 0 (1 <<< 8 - 1)).foldl (fun rp vv =>
-    ⟨add rp.1 (add rp.2 bs[1 <<< 8 - 1 - vv]!),
-     add rp.2 bs[1 <<< 8 - 1 - vv]!⟩) ⟨zero, zero⟩
-
-/-- One window iteration of the Pippenger loop. The conditional
-doubling is distributed over the final addition exactly as in the
-`do`-notation desugaring of `msm`, so the mechanical equality below is
-definitional at this node. -/
+It is `msmCombine` with that sum filled in, so the mechanical equality below is definitional at this node. -/
 def msmWindowStep (points : Array G1) (scalars : Array Fr) (n nW : Nat)
     (acc : G1) (kk : Nat) : G1 :=
   if nW - 1 - kk + 1 < nW then
@@ -80,40 +48,27 @@ def msmModel (points : Array G1) (scalars : Array Fr) : G1 :=
 
 /-! ## `msm` equals its model (mechanical layer) -/
 
-/-- The `maxBits` loop, converted and folded into `msmMaxBits` in one
-step, so the (large) fold expression never gets duplicated into later
-goals. -/
-private theorem maxBits_forIn_eq (scalars : Array Fr) (N : Nat) :
-    (forIn (m := Id) [:N] 0 (fun j m =>
-        if scalars[j]!.val ≠ 0 then
-          if scalars[j]!.val.log2 + 1 > m then
-            ForInStep.yield (scalars[j]!.val.log2 + 1)
-          else ForInStep.yield m
-        else ForInStep.yield m))
-      = msmMaxBits scalars N :=
-  (forIn_range_yield_ite₂ N 0 _ _ _).trans rfl
+/-- Reading a spawned task gives its value, so the fold over tasks is the fold over values. -/
+private theorem foldl_zip_spawn (l : List Nat) (F : G1 → Nat → G1 → G1) (G : Nat → G1) (init : G1) :
+    (l.zip (l.map fun x => Task.spawn fun _ => G x)).foldl (fun acc w => F acc w.1 w.2.get) init =
+      l.foldl (fun acc x => F acc x (G x)) init := by
+  induction l generalizing init with
+  | nil => rfl
+  | cons x l ih => exact ih (F init x (G x))
 
-set_option maxHeartbeats 1600000 in
-private theorem foldl_congr_fun {α β : Type} {f g : β → α → β}
-    (h : f = g) (init : β) (l : List α) :
-    l.foldl f init = l.foldl g init := by rw [h]
-
+/-- `msm` computes its model's coordinates: its tasks hold exactly the model's window sums. -/
 theorem msm_eq_msmModel (points : Array G1) (scalars : Array Fr) :
     msm points scalars = msmModel points scalars := by
   unfold msm msmModel
-  dsimp only [Id.run, id_pure, id_bind]
-  by_cases h0 : (if points.size ≤ scalars.size then points.size
-    else scalars.size) = 0
+  dsimp only
+  generalize (if points.size ≤ scalars.size then points.size else scalars.size) = n
+  by_cases h0 : n = 0
   · rw [if_pos h0, if_pos h0]
-  · rw [if_neg h0, if_neg h0, maxBits_forIn_eq]
-    by_cases h1 : msmMaxBits scalars (if points.size ≤ scalars.size
-      then points.size else scalars.size) = 0
-    · rw [if_pos h1, if_pos h1]
-    · rw [if_neg h1, if_neg h1, forIn_range_yield_ite]
-      refine foldl_congr_fun ?_ _ _
-      funext acc kk
-      unfold msmWindowStep msmBuckets msmRunning windowVal
-      rw [forIn_range_yield, forIn_range_yield_ite, forIn_range_yield]
+  rw [if_neg h0, if_neg h0]
+  by_cases h1 : msmMaxBits scalars n = 0
+  · rw [if_pos h1, if_pos h1]
+  rw [if_neg h1, if_neg h1]
+  exact foldl_zip_spawn _ _ _ _
 
 /-! ## The math layer: `msmModel` computes `Σ [sᵢ]Pᵢ` -/
 

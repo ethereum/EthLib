@@ -42,6 +42,111 @@ theorem mulNat_def (p : G1) (k : Nat) :
       else mulNat (double p) (k / 2) := by
   rw [mulNat]
 
+/-! ## The formulas as printed
+
+The library writes its formulas for speed.
+
+A product by 2, 3 or 8 is written as additions, and a point with `z = 1` takes shorter formulas.
+
+The proofs below follow the explicit-formulas database as printed, stated here as `doubleSpec` and `addSpec`.
+
+`double_eq_doubleSpec` and `add_eq_addSpec` prove that both compute the same coordinates. -/
+
+/-- Doubling, as `dbl-2009-l` prints it. -/
+def doubleSpec (p : G1) : G1 :=
+  if p.z.isZero then p else
+    let A := p.x * p.x
+    let B := p.y * p.y
+    let C := B * B
+    let D := Fp.ofNat 2 * ((p.x + B) * (p.x + B) - A - C)
+    let E := Fp.ofNat 3 * A
+    let F := E * E
+    let x' := F - Fp.ofNat 2 * D
+    let y' := E * (D - x') - Fp.ofNat 8 * C
+    let z' := Fp.ofNat 2 * p.y * p.z
+    ⟨x', y', z'⟩
+
+/-- Addition, as `add-2007-bl` prints it, with the special cases first. -/
+def addSpec (p q : G1) : G1 :=
+  if p.z.isZero then q else
+  if q.z.isZero then p else
+    let z1z1 := p.z * p.z
+    let z2z2 := q.z * q.z
+    let u1   := p.x * z2z2
+    let u2   := q.x * z1z1
+    let s1   := p.y * q.z * z2z2
+    let s2   := q.y * p.z * z1z1
+    if u1.beq u2 then
+      if s1.beq s2 then double p else zero
+    else
+      let h := u2 - u1
+      let i := (Fp.ofNat 2 * h) * (Fp.ofNat 2 * h)
+      let j := h * i
+      let r := Fp.ofNat 2 * (s2 - s1)
+      let v := u1 * i
+      let x' := r * r - j - Fp.ofNat 2 * v
+      let y' := r * (v - x') - Fp.ofNat 2 * s1 * j
+      let z' := ((p.z + q.z) * (p.z + q.z) - z1z1 - z2z2) * h
+      ⟨x', y', z'⟩
+
+/-- `2`, `3` and `8` in `Fp`, as sums of ones, so `grind` can normalize them. -/
+private theorem fp_two : Fp.ofNat 2 = 1 + 1 := by decide
+private theorem fp_three : Fp.ofNat 3 = 1 + 1 + 1 := by decide
+private theorem fp_eight : Fp.ofNat 8 = 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 := by decide
+
+/-- The library's doubling gives the printed coordinates. -/
+theorem double_eq_doubleSpec : @double = @doubleSpec := by
+  funext p
+  unfold double doubleSpec
+  split
+  · rfl
+  · simp only [fp_two, fp_three, fp_eight, G1.mk.injEq]
+    refine ⟨?_, ?_, ?_⟩ <;> grind
+
+/-- For `q` with `z = 1`, the printed addition gives the mixed coordinates. -/
+private theorem addSpec_eq_addMixed (p : G1) (qx qy : Fp)
+    (hp : ¬p.z.isZero = true) (hq : ¬(1 : Fp).isZero = true) :
+    addSpec p ⟨qx, qy, 1⟩ = addMixed p ⟨qx, qy, 1⟩ := by
+  unfold addSpec addMixed
+  rw [if_neg hp, if_neg hq]
+  -- With z2 = 1, u1 and s1 reduce to x1 and y1.
+  have hu : p.x * (1 * 1) = p.x := by grind
+  have hs : p.y * 1 * (1 * 1) = p.y := by grind
+  simp only [hu, hs]
+  split
+  · rfl
+  · simp only [fp_two, G1.mk.injEq]
+    refine ⟨?_, ?_, ?_⟩ <;> grind
+
+/-- For finite `p` and `q`, the printed addition gives the general coordinates. -/
+private theorem addSpec_eq_addGeneral (p q : G1) (hp : ¬p.z.isZero = true) (hq : ¬q.z.isZero = true) :
+    addSpec p q = addGeneral p q := by
+  unfold addSpec addGeneral
+  rw [if_neg hp, if_neg hq]
+  dsimp only
+  split
+  · rfl
+  · simp only [fp_two, G1.mk.injEq]
+    refine ⟨?_, ?_, ?_⟩ <;> grind
+
+/-- The library's addition gives the printed coordinates. -/
+theorem add_eq_addSpec : @add = @addSpec := by
+  funext p q
+  unfold add
+  by_cases hp : p.z.isZero = true
+  · rw [if_pos hp, addSpec, if_pos hp]
+  by_cases hq : q.z.isZero = true
+  · rw [if_neg hp, if_pos hq, addSpec, if_neg hp, if_pos hq]
+  rw [if_neg hp, if_neg hq]
+  split
+  -- `q` has `z = 1`: rebuild it with a literal one, then compare with the mixed formulas.
+  · rename_i h1
+    obtain ⟨qx, qy, qz⟩ := q
+    have hz : qz = 1 := Fin.ext (by simpa [Fp.beq, Fp.one] using h1)
+    subst hz
+    exact (addSpec_eq_addMixed p qx qy hp hq).symm
+  · exact (addSpec_eq_addGeneral p q hp hq).symm
+
 /-- The BLS12-381 curve `y² = x³ + 4`, as a Mathlib Weierstrass curve
 in Jacobian coordinates over `ZMod Fp.modulus`. -/
 def curve : Jacobian (ZMod Fp.modulus) :=
@@ -161,13 +266,13 @@ theorem rep_double {P : G1} (hz : ¬P.z.isZero = true) :
   funext i
   fin_cases i
   · show (double P).x = curve.dblX (rep P)
-    rw [double, if_neg hz]
+    rw [double_eq_doubleSpec, doubleSpec, if_neg hz]
     exact dblX_eq P.x P.y P.z
   · show (double P).y = curve.dblY (rep P)
-    rw [double, if_neg hz]
+    rw [double_eq_doubleSpec, doubleSpec, if_neg hz]
     exact dblY_eq P.x P.y P.z
   · show (double P).z = curve.dblZ (rep P)
-    rw [double, if_neg hz]
+    rw [double_eq_doubleSpec, doubleSpec, if_neg hz]
     exact dblZ_eq P.x P.y P.z
 
 theorem valid_double {P : G1} (h : Valid P) : Valid (double P) := by
@@ -182,7 +287,7 @@ theorem toPoint_double {P : G1} (h : Valid P) :
   by_cases hz : P.z.isZero = true
   · have h0 : toPoint P = 0 :=
       Point.toAffine_of_Z_eq_zero (isZero_iff.mp hz)
-    rw [double, show (if P.z.isZero = true then P else _) = P from if_pos hz]
+    rw [double_eq_doubleSpec, doubleSpec, show (if P.z.isZero = true then P else _) = P from if_pos hz]
     rw [h0, add_zero]
   · rw [toPoint, rep_double hz, ← add_of_equiv (Setoid.refl (rep P))]
     exact Point.toAffine_add h h
@@ -260,12 +365,12 @@ private theorem spec_add_components
 
 private theorem add_of_left_zero {P Q : G1} (hz1 : P.z.isZero = true) :
     add P Q = Q := by
-  rw [add]
+  rw [add_eq_addSpec, addSpec]
   exact if_pos hz1
 
 private theorem add_of_right_zero {P Q : G1} (hz1 : ¬P.z.isZero = true)
     (hz2 : Q.z.isZero = true) : add P Q = P := by
-  rw [add, if_neg hz1]
+  rw [add_eq_addSpec, addSpec, if_neg hz1]
   exact if_pos hz2
 
 private theorem add_of_dbl {P Q : G1} (hz1 : ¬P.z.isZero = true)
@@ -273,7 +378,7 @@ private theorem add_of_dbl {P Q : G1} (hz1 : ¬P.z.isZero = true)
     (hu : (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true)
     (hs : (P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true) :
     add P Q = double P := by
-  rw [add, if_neg hz1, if_neg hz2]
+  rw [add_eq_addSpec, addSpec, if_neg hz1, if_neg hz2]
   exact (if_pos hu).trans (if_pos hs)
 
 private theorem add_of_opp {P Q : G1} (hz1 : ¬P.z.isZero = true)
@@ -281,7 +386,7 @@ private theorem add_of_opp {P Q : G1} (hz1 : ¬P.z.isZero = true)
     (hu : (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true)
     (hs : ¬(P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true) :
     add P Q = zero := by
-  rw [add, if_neg hz1, if_neg hz2]
+  rw [add_eq_addSpec, addSpec, if_neg hz1, if_neg hz2]
   exact (if_pos hu).trans (if_neg hs)
 
 private theorem rep_add_general {P Q : G1} (hP : Valid P) (hQ : Valid Q)
@@ -304,7 +409,7 @@ private theorem rep_add_general {P Q : G1} (hP : Valid P) (hQ : Valid Q)
       ((Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) * (Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) - ((Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))) - Fp.ofNat 2 * ((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))))
       ((Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) * (((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))) - ((Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) * (Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) - ((Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))) - Fp.ofNat 2 * ((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))))) - Fp.ofNat 2 * (P.y * Q.z * (Q.z * Q.z)) * ((Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))))
       (((P.z + Q.z) * (P.z + Q.z) - (P.z * P.z) - (Q.z * Q.z)) * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))) := by
-    rw [add, if_neg hz1, if_neg hz2]
+    rw [add_eq_addSpec, addSpec, if_neg hz1, if_neg hz2]
     exact if_neg hu
   rw [hbranch]
   funext k

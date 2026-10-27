@@ -1326,34 +1326,18 @@ theorem barycentricSumAux_zero_eq_refSum
     rw [ih]
     rfl
 
-/-- When `z` is not in the domain, evaluation follows the barycentric
-formula the docstring describes. Mirror of
-`evaluatePolynomialInEvaluationFormAux_fastPath`. -/
-theorem evaluatePolynomialInEvaluationFormAux_slowPath
-    (polynomial domain : Array Fr) (z : Fr)
-    (h : domain.idxOf? z = none) :
-    evaluatePolynomialInEvaluationFormAux polynomial domain z =
-      barycentricRefSum polynomial domain z polynomial.size *
-      (z ^ (Fr.ofNat polynomial.size) - Fr.one) *
-      (Fr.ofNat polynomial.size).inverse := by
-  rw [evaluatePolynomialInEvaluationFormAux]
-  simp only [h]
-  rw [barycentricSumAux_zero_eq_refSum]
+/-- Given the inverse of every visited `z - domain[k]`, the sum with inverses is the barycentric sum.
 
-/-- When `z` is not in the evaluation domain, evaluating the polynomial
-at `z` follows the barycentric formula. -/
-theorem evaluatePolynomialInEvaluationForm_slowPath
-    (polynomial : Polynomial) (z : Fr)
-    (hsize : polynomial.size = FIELD_ELEMENTS_PER_BLOB)
-    (h : (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB).idxOf? z = none) :
-    evaluatePolynomialInEvaluationForm polynomial z =
-      .ok (barycentricRefSum polynomial (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB)
-        z polynomial.size *
-      (z ^ (Fr.ofNat polynomial.size) - Fr.one) *
-      (Fr.ofNat polynomial.size).inverse) := by
-  rw [evaluatePolynomialInEvaluationForm, if_neg (by simp [hsize])]
-  exact congrArg Except.ok
-    (evaluatePolynomialInEvaluationFormAux_slowPath polynomial _ z h)
-
+Each term `a / b` is `a * b.inverse` by definition, so the two folds take the same steps. -/
+theorem barycentricSumInvAux_eq (polynomial domain inverses : Array Fr) (z acc : Fr) (i count : Nat)
+    (h : ∀ k, i ≤ k → k < i + count → inverses[k]! = (z - domain[k]!).inverse) :
+    barycentricSumInvAux polynomial domain inverses acc i count =
+      barycentricSumAux polynomial domain z acc i count := by
+  induction count generalizing acc i with
+  | zero => rfl
+  | succ n ih =>
+    simp only [barycentricSumInvAux, barycentricSumAux]
+    rw [h i (Nat.le_refl i) (by omega)]
+    exact ih _ _ (fun k hk1 hk2 => h k (by omega) (by omega))
 
 end EthLib.Cryptography.Kzg

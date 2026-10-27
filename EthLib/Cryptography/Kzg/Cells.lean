@@ -50,18 +50,6 @@ def cosetEvalsToCell (cosetEvals : CosetEvals) : Cell :=
 
 /-! ## Cell cosets -/
 
-/-- Get the shift that determines the coset for a given `cellIndex`.
-Precisely, consider the group of roots of unity of order
-`FIELD_ELEMENTS_PER_CELL * CELLS_PER_EXT_BLOB`.
-Let `G = {1, g, g^2, ...}` denote its subgroup of order `FIELD_ELEMENTS_PER_CELL`.
-Then, the coset is defined as `h * G = {h, hg, hg^2, ...}` for an element `h`.
-This function returns `h`. -/
-private def cosetShiftForCell (cellIndex : CellIndex) : Except KzgError Fr := do
-  if cellIndex ≥ CELLS_PER_EXT_BLOB then
-    throw .cellIndexOutOfBounds
-  let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_EXT_BLOB
-  return domain[FIELD_ELEMENTS_PER_CELL * cellIndex]!
-
 /-- Get the coset for a given `cellIndex`.
 Precisely, consider the group of roots of unity of order
 `FIELD_ELEMENTS_PER_CELL * CELLS_PER_EXT_BLOB`.
@@ -75,47 +63,124 @@ def cosetForCell (cellIndex : CellIndex) : Except KzgError Coset := do
   let start := FIELD_ELEMENTS_PER_CELL * cellIndex
   return Array.ofFn (n := FIELD_ELEMENTS_PER_CELL) fun i => domain[start + i.val]!
 
-/-- Compute a KZG multi-evaluation proof for a set of `k` points.
+/-- Interpolate one cell: the polynomial of degree below 64 with the values `evals` on the coset of shift `h`.
 
-This is done by committing to the following quotient polynomial:
-`Q(X) = f(X) - I(X) / Z(X)`
-Where:
-- `I(X)` is the degree `k-1` polynomial that agrees with `f(x)` at all `k` points
-- `Z(X)` is the degree `k` polynomial that evaluates to zero on all `k` points
+The coset is a shifted FFT domain, in bit-reversed order.
 
-We further note that since the degree of `I(X)` is less than the degree of
-`Z(X)`, the computation can be simplified in monomial form to
-`Q(X) = f(X) / Z(X)`. -/
-private def computeKzgProofMultiImpl
-    (polynomialCoeff : PolynomialCoeff) (zs : Coset) : KzgM (KZGProof × CosetEvals) := do
-  let setup ← TrustedSetup.get!
-  -- For all points, compute the evaluation of those points.
-  let ys : CosetEvals := zs.map (evaluatePolynomialcoeff polynomialCoeff)
-  -- Compute Z(X).
-  let denominator ← vanishingPolynomialcoeff zs
-  -- Compute the quotient polynomial directly in monomial form.
-  let quotient ← dividePolynomialcoeff polynomialCoeff denominator
-  let monomial := setup.g1Monomial
-  let proofG1 ← g1LincombPoints (monomial.extract 0 quotient.size) quotient
-  return (Bls.G1.compress proofG1, ys)
+```text
+    point j    : h * v^(rev(j))          v a 64-th root of unity, rev the 6-bit reversal
+    J(Y)       : I(h * Y)                so J takes the values evals on the 64-th roots
+    J          : IFFT(brp(evals))
+    I_i        : J_i * h^(-i)
+```
+
+It returns the same polynomial as Lagrange interpolation.
+
+Lagrange needs `64 * 63` field inversions.
+
+This needs one inverse FFT and one inversion. -/
+def interpolateCosetEvals (h : Fr) (evals : CosetEvals) : Except KzgError PolynomialCoeff := do
+  if evals.size ≠ FIELD_ELEMENTS_PER_CELL then
+    throw (.inputLengthMismatch "ys" FIELD_ELEMENTS_PER_CELL evals.size)
+  let j := fftField (bitReversalPermutation evals) (computeRootsOfUnity FIELD_ELEMENTS_PER_CELL) (inv := true)
+  return shiftVals j h.inverse
+
+/-- The values of a polynomial on the extended domain, in bit-reversed order.
+
+Cell `i` holds the values at `cosetForCell i`.
+
+That coset is the `i`-th block of 64 points of the bit-reversed domain.
+
+```text
+    values : [ cell 0: 64 | cell 1: 64 | ... | cell 127: 64 ]
+```
+
+One FFT of size 8192 gives every value, in `O(n log n)` field operations.
+
+Horner's rule at each point would take `O(n^2)`.
+
+The polynomial has at most 8192 coefficients. -/
+def extendedEvaluations (polynomialCoeff : PolynomialCoeff) : Array Fr :=
+  let padded := polynomialCoeff ++
+    Array.replicate (FIELD_ELEMENTS_PER_EXT_BLOB - polynomialCoeff.size) Fr.zero
+  bitReversalPermutation (fftField padded (computeRootsOfUnity FIELD_ELEMENTS_PER_EXT_BLOB))
+
+/-- The cells of the extended blob, cut from its values in bit-reversed order. -/
+def cellsOfExtendedEvaluations (evals : Array Fr) : Array Cell :=
+  (Array.range CELLS_PER_EXT_BLOB).map fun i =>
+    cosetEvalsToCell (evals.extract (i * FIELD_ELEMENTS_PER_CELL) ((i + 1) * FIELD_ELEMENTS_PER_CELL))
 
 /-- Reed-Solomon-extend `blob` and return its cells. -/
 def computeCells (blob : Blob) : KzgM (Array Cell) := do
   if blob.size ≠ BYTES_PER_BLOB then
     throw (.badBlobSize blob.size)
   let polynomial ← blobToPolynomial blob
-  let polynomialCoeff := polynomialEvalToCoeff polynomial
-  (Array.range CELLS_PER_EXT_BLOB).mapM fun i => do
-    let coset ← cosetForCell i
-    pure (cosetEvalsToCell (coset.map (evaluatePolynomialcoeff polynomialCoeff)))
+  return cellsOfExtendedEvaluations (extendedEvaluations (polynomialEvalToCoeff polynomial))
 
-/-- Compute cells and proofs for a polynomial in coefficient form. -/
+/-- Compute cells and proofs for a polynomial in coefficient form.
+
+The specification proves each cell on its own.
+
+It divides `f` by the cell's vanishing polynomial, then commits to the quotient.
+
+That costs one multi-scalar multiplication of 4032 points per cell.
+
+The 128 quotients share their structure, so this computes them together.
+
+```text
+    cell k   : the coset h_k * mu_64
+    Z_k      : X^64 - c_k,   with c_k = h_k^64
+    q_k      : f / Z_k = sum_{d >= 1} c_k^(d - 1) * (f >> 64 d)
+    proof_k  : [q_k(s)] = sum_{d = 1}^{63} c_k^(d - 1) * H_d
+    H_d      : sum_i f_(i + 64 d) * [s^i]
+
+    (f >> m)_i = f_(i + m)
+```
+
+The points `H_d` do not depend on the cell.
+
+So 63 multi-scalar multiplications serve all 128 proofs.
+
+Each `c_k` is a 128-th root of unity, taken in bit-reversed order.
+
+So the proofs are the values of `sum_d H_d * Y^(d - 1)` at those roots.
+
+One FFT in G1 computes them all.
+
+This is the Toeplitz structure of FK20.
+
+See Feist and Khovratovich, "Fast amortized KZG proofs", ePrint 2023/033.
+
+The polynomial has at most 4096 coefficients, the size of the monomial setup. -/
 def computeCellsAndKzgProofsPolynomialcoeff
     (polynomialCoeff : PolynomialCoeff) : KzgM (Array Cell × Array KZGProof) := do
-  let pairs ← (Array.range CELLS_PER_EXT_BLOB).mapM fun i => do
-    let (proof, ys) ← computeKzgProofMultiImpl polynomialCoeff (← cosetForCell i)
-    pure (cosetEvalsToCell ys, proof)
-  return (pairs.map (·.1), pairs.map (·.2))
+  let setup ← TrustedSetup.get!
+  let n := FIELD_ELEMENTS_PER_CELL
+  let size := polynomialCoeff.size
+  let cells := cellsOfExtendedEvaluations (extendedEvaluations polynomialCoeff)
+
+  -- Phase 1: H_d for each shift d that leaves a coefficient.
+  --
+  --     4096 coefficients → d = 1, ..., 63 → H_d sums 4096 - 64 d points
+  --
+  -- The sums are independent, so each runs as its own task.
+  -- Both slices have `size - n * d` entries, so the multi-scalar multiplication sees no length mismatch.
+  --
+  -- Both phases run inside one task.
+  -- Lean's pool starts a new worker only when no worker is idle.
+  -- Spawned from a busy worker, the inner tasks then grow the pool.
+  let shifts := (size + n - 1) / n - 1
+  let proofs := (Task.spawn fun _ =>
+    let tasks := (Array.range shifts).map fun e => Task.spawn fun _ =>
+      let d := e + 1
+      Bls.G1.msm (setup.g1Monomial.extract 0 (size - n * d)) (polynomialCoeff.extract (n * d) size)
+    let hs := tasks.map Task.get
+
+    -- Phase 2: evaluate sum_d H_d * Y^(d - 1) at the 128-th roots of unity.
+    -- The bit reversal puts the proofs in cell order.
+    let padded := hs ++ Array.replicate (CELLS_PER_EXT_BLOB - hs.size) Bls.G1.zero
+    bitReversalPermutation (fftG1 padded (computeRootsOfUnity CELLS_PER_EXT_BLOB))).get
+  return (cells, proofs.map Bls.G1.compress)
 
 /-- Compute all cell proofs for an extended blob. Naive O(n²);
 optimal implementations use FK20. -/
@@ -224,22 +289,28 @@ def verifyCellKzgProofBatchImpl
   -- Step 4.1b: RLC = Σ_i weights[i] commitments[i].
   let rlc : G1 ← uncompressG1 (← g1Lincomb commitments weights)
 
+  -- The coset shift h_k of every cell.
+  -- The domain is computed once, not once per cell.
+  let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_EXT_BLOB
+  let shifts : Array Fr ← cellIndices.mapM fun cellIndex => do
+    if cellIndex ≥ CELLS_PER_EXT_BLOB then
+      throw .cellIndexOutOfBounds
+    pure domain[n * cellIndex]!
+
   -- Step 4.2: RLI = [Σ_k r^k I_k(s)].
-  -- Note: an efficient implementation would use the IDFT based method
-  -- explained in the blog post linked in `verifyCellKzgProofBatch`.
+  -- Each I_k comes from one inverse FFT over its coset.
+  -- It is the IDFT method of the blog post linked in `verifyCellKzgProofBatch`.
   let sumInterp : PolynomialCoeff ← (Array.range numCells).foldlM
     (init := Array.replicate n Fr.zero)
     fun sumInterp k => do
-      let interp ← interpolatePolynomialcoeff
-        (← cosetForCell cellIndices[k]!) cosetsEvals[k]!
+      let interp ← interpolateCosetEvals shifts[k]! cosetsEvals[k]!
       let scaled ← multiplyPolynomialcoeff #[rPowers[k]!] interp
       pure (addPolynomialcoeff sumInterp scaled)
   let rli : G1 ← g1LincombPoints (setup.g1Monomial.extract 0 n) sumInterp
 
   -- Step 4.3: RLP = Σ_k (r^k * h_k^n) proofs[k].
-  let weightedRPowers : Array Fr ← (Array.range numCells).mapM fun k => do
-    let h_k ← cosetShiftForCell cellIndices[k]!
-    pure (rPowers[k]! * (h_k ^ (Fr.ofNat n)))
+  let weightedRPowers : Array Fr := (Array.range numCells).map fun k =>
+    rPowers[k]! * (shifts[k]! ^ (Fr.ofNat n))
   let rlp : G1 ← uncompressG1 (← g1Lincomb proofs weightedRPowers)
 
   -- Step 4.4: RL = RLC - RLI + RLP.

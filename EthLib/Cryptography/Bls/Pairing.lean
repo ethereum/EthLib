@@ -153,9 +153,33 @@ partial def millerLoop (s : Nat) (R₀ P : Embedded.Point) : Fp12 := Id.run do
 def finalExpExponent : Nat :=
   (Fp.modulus ^ 12 - 1) / Fr.modulus
 
-/-- Raise `f` to `(p¹² − 1) / r`. -/
-@[inline] def finalExponentiation (f : Fp12) : Fp12 :=
-  Fp12.powNat f finalExpExponent
+/-- The hard part of the final exponent, `(p⁴ − p² + 1) / r`.
+
+`r` divides `p⁴ − p² + 1`, the twelfth cyclotomic polynomial at `p`, so the division is exact. -/
+def finalExpHard : Nat :=
+  (Fp.modulus ^ 4 - Fp.modulus ^ 2 + 1) / Fr.modulus
+
+/-- Raise `f` to `(p¹² − 1) / r`.
+
+The exponent factors into three parts.
+
+```text
+    (p¹² − 1) / r = (p⁶ − 1) · (p² + 1) · (p⁴ − p² + 1) / r
+```
+
+In this tower, `f^(p⁶)` is the conjugate of `f`.
+
+That power is the automorphism of `Fp12` over `Fp6`.
+
+It maps `w` to `−w`, because `v` is not a square in `Fp6`.
+
+So the first part costs one inversion: `f^(p⁶ − 1) = conj(f) · f⁻¹`.
+
+The two remaining powers have exponents of 762 and 1268 bits, instead of one of 4314 bits. -/
+def finalExponentiation (f : Fp12) : Fp12 :=
+  let easy := f.conjugate * f.inverse
+  let middle := Fp12.powNat easy (Fp.modulus ^ 2) * easy
+  Fp12.powNat middle finalExpHard
 
 /-! ## The pairing -/
 

@@ -1,9 +1,8 @@
-# Build the specs and their proofs, check their compiled declarations, and
-# check the pinned test vectors.
+# Build the specs and their proofs, check their compiled declarations, run the
+# test-vector suites, and check the pinned test vectors.
 #
-# The Python test-vector suites are too slow to run on every change, so
-# they stay a local step for now. Checking the vectors' digests needs no
-# build, so it runs on every change.
+# The suites need only the library, so they run before the proofs, in the same job.
+# Checking the vectors' digests needs no build, so it has a job of its own.
 
 name: ci
 
@@ -22,29 +21,56 @@ permissions:
   contents: read
 
 jobs:
-  lean:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      # Installs elan, fetches the mathlib cache, then builds both libraries.
+      # Installs elan and fetches the mathlib cache.
+      # The builds run as named steps below, so the log shows which part failed.
       - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
         with:
-          # An unfinished proof only warns, so warnings have to be fatal.
-          build-args: "--wfail"
+          auto-config: false
+          use-mathlib-cache: true
 
           # Caching `.lake` is pointless: mathlib alone exceeds the 10 GB limit.
           use-github-cache: false
 
+      # The library alone comes first, so the vector suites run before the proofs.
+      # An unfinished proof only warns, so warnings have to be fatal.
+      - name: library
+        run: lake build --wfail EthLib
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version-file: pyproject.toml
+      - name: vector suites
+        run: |
+          pip install -e '.[test]'
+          pytest
+
+      # The generators rewrite every case, so a changed vector shows up as a diff.
+      - name: unchanged vectors
+        run: git diff --exit-code -- tests/cryptography
+
+      # The steps below run even after a failed suite, so every result is reported.
+      - name: proofs
+        if: ${{ !cancelled() }}
+        run: lake build --wfail
+
       # Every compiled declaration: its axioms, and anything the kernel cannot
       # unfold or the compiler runs differently. Only the findings that exist
       # today, listed in scripts/check_decls_baseline.txt, pass.
-      - run: lake exe check-decls
+      - name: declarations
+        if: ${{ !cancelled() }}
+        run: lake exe check-decls
 
       # The check must report exactly what its fixtures plant.
-      - run: scripts/test_check_decls.sh
+      - name: declaration check fixtures
+        if: ${{ !cancelled() }}
+        run: scripts/test_check_decls.sh
 
   vectors:
     runs-on: ubuntu-latest
