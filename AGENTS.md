@@ -72,7 +72,10 @@ Hold the work to the standard that specialist would accept.
 EthLib/<Domain>/<Module>/            the library code
 EthLib/<Domain>/Proofs/<Module>/     theorems about it
 bindings/python/                     C exports and the Python package
+bindings/rust/                       the Rust crate over the same exports
 tests/<domain>/<module>/             generated test vectors
+tests/generators/                    the Rust generators of those vectors
+tests/vectors/                       the vector format and the pin check
 ```
 
 A new domain adds its proof root to the `Proofs` library in `lakefile.lean`.
@@ -173,12 +176,12 @@ Do not reformat untouched code in an unrelated pull request.
 
 ## Bindings
 
-The C exports and the Python package are the public surface for clients.
+The C exports, the Python package and the Rust crate are the public surface for clients.
 
 - Export the operations a client calls, under the specification's names, and the object sizes.
   Keep internal steps, such as one hash or one helper of a state transition, inside Lean.
 - Read every size from Lean at load time.
-  Never hard-code a length in C or Python.
+  Never hard-code a length in C, Python or Rust.
 - The generated C frees each argument itself.
   A wrapper must not free what it passes to an export.
 
@@ -210,18 +213,18 @@ A new finding is fixed, never added to the list.
 
 When you change the check, also run `scripts/test_check_decls.sh`.
 
-When you touch bindings or test vectors, also run the Python suite:
+When you touch bindings or test vectors, also run the generators and the pin check:
 
 ```bash
-pip install -e '.[test]'
-pytest
+cargo test -p ethlib-generators --release --test vectors
+cargo run -p ethlib-vectors --bin check-vectors
 ```
 
-The suite rewrites the vectors, so then check that the pinned ones are unchanged:
+The generators compare each case with its committed file and never write one.
 
-```bash
-python3 tests/cryptography/check_vectors.py
-```
+`ETHLIB_BLESS=1` writes the files, and the pin check then catches any pinned case that changed.
+
+Rust code also passes `cargo fmt --all --check` and `cargo clippy --workspace --all-targets`, with no warning.
 
 Report what you ran and what it printed.
 
@@ -250,7 +253,7 @@ The type says what kind of change it is:
 - `proof`: new or changed theorems, with no change to the library code.
 - `perf`: the same results, computed faster.
 - `refactor`: the same behaviour, with the code restructured.
-- `test`: test vectors, known answers or the Python suite.
+- `test`: test vectors, known answers or their generators.
 - `docs`: documentation only.
 - `build`: Lake, the Lean toolchain, dependencies or packaging.
 - `ci`: the GitHub workflows.

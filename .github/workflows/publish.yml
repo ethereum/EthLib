@@ -65,7 +65,6 @@ jobs:
           CIBW_BEFORE_BUILD: lake clean
 
           # Sanity check.
-          CIBW_TEST_EXTRAS: test
           CIBW_TEST_COMMAND: >-
             python -c "from ethlib.cryptography import bls, kzg, xmss;
             print(kzg.BYTES_PER_BLOB, bls.BYTES_PER_PUBKEY, xmss.SIG_SIZE)"

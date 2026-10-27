@@ -1,0 +1,17 @@
+[package]
+name = "ethlib"
+description = "Rust bindings to EthLib, formally verified Ethereum primitives written in Lean"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+# One crate links the Lean runtime, and dependents read its location from this key.
+links = "ethlib"
+
+[build-dependencies]
+cc.workspace = true
+
+[lints]
+workspace = true

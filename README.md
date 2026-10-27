@@ -45,11 +45,17 @@ When refreshing dependencies, use `lake --keep-toolchain update` to retain the t
 
 ### Testing
 
-Run the test suite:
+Run the test-vector generators against the committed vectors:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e '.[test]'
-pytest
+lake build EthLib
+cargo test -p ethlib-generators --release --test vectors
 ```
+
+Check the pinned vectors, which needs no Lean:
+
+```bash
+cargo run -p ethlib-vectors --bin check-vectors
+```
+
+[`tests/cryptography/README.md`](tests/cryptography/README.md) explains both.

@@ -1,0 +1,37 @@
+[workspace]
+resolver = "3"
+members = ["bindings/rust", "tests/vectors", "tests/generators"]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.88"
+license = "CC0-1.0"
+repository = "https://github.com/ethereum/ethlib"
+publish = false
+
+[workspace.dependencies]
+ethlib = { path = "bindings/rust" }
+ethlib-vectors = { path = "tests/vectors" }
+
+bls12_381 = { version = "0.9", default-features = false, features = ["groups", "alloc", "experimental"] }
+cc = "1.2"
+flate2 = "1.1"
+hex = "0.4"
+libtest-mimic = "0.8"
+saphyr = "0.0.6"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+sha2 = "0.10"
+tar = "0.4"
+tempfile = "3.20"
+
+[workspace.lints.rust]
+missing_docs = "warn"
+unreachable_pub = "warn"
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "warn"

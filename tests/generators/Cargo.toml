@@ -1,0 +1,28 @@
+[package]
+name = "ethlib-generators"
+description = "The EthLib test-vector generators, run as a test suite against the committed vectors"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+bls12_381.workspace = true
+ethlib.workspace = true
+ethlib-vectors.workspace = true
+hex.workspace = true
+serde.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+libtest-mimic.workspace = true
+
+# One trial per vector, so the vectors are filtered and listed like ordinary tests.
+[[test]]
+name = "vectors"
+harness = false
+
+[lints]
+workspace = true
