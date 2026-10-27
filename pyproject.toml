@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ethlib"
 version = "0.2.0"
-description = "Ethereum specifications, written in Lean"
+description = "Formally verified Ethereum primitives, written in Lean"
 readme = { file = "README.md", content-type = "text/markdown" }
 license = "CC0-1.0"
 requires-python = ">=3.10"

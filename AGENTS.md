@@ -2,17 +2,15 @@
 
 Rules for any agent, human or AI, that changes this repository.
 
-EthLib holds formally verified Ethereum specifications, written in Lean.
+EthLib is a library of formally verified Ethereum primitives, written in Lean.
 
-Each one is an Ethereum primitive, from whichever part of the protocol it comes.
+Each primitive implements a published specification, from whichever part of the protocol it comes.
 
 Clients and other Lean projects build on it.
 
-EthLib is meant to be their source of truth.
-
 A bug here spreads to everything built on top of it.
 
-So every line must be correct, justified and readable by a specialist of its domain.
+So every line must be correct and justified by its source.
 
 ## The bar
 
@@ -32,7 +30,7 @@ When you are not sure, ask.
 
 A question costs minutes.
 
-A plausible guess merged into a specification costs far more.
+A plausible guess merged into this library costs far more.
 
 ## Sources of truth
 
@@ -49,8 +47,6 @@ When the code and the specification disagree, the code is wrong until shown othe
 Cite the exact document and section in the code that implements it.
 
 For example: `RFC 9380 §5.3.1`, or the fork and function name in `consensus-specs`.
-
-This repository is the reference.
 
 Do not cite another implementation as the authority for a behaviour.
 
@@ -73,7 +69,7 @@ Hold the work to the standard that specialist would accept.
 ## Layout
 
 ```text
-EthLib/<Domain>/<Module>/            the specification, executable
+EthLib/<Domain>/<Module>/            the library code
 EthLib/<Domain>/Proofs/<Module>/     theorems about it
 bindings/python/                     C exports and the Python package
 tests/<domain>/<module>/             generated test vectors
@@ -81,15 +77,15 @@ tests/<domain>/<module>/             generated test vectors
 
 A new domain adds its proof root to the `Proofs` library in `lakefile.lean`.
 
-The specification never imports the proofs.
+The library code never imports the proofs.
 
-Proofs live in their own library, so the specification builds and links without them.
+Proofs live in their own Lake library, so the library code builds and links without them.
 
 ## Lean
 
-### Specification code
+### Library code
 
-- Write the specification to be read first and run second.
+- Write the code to be read first and run second.
   Clarity wins over speed unless speed is the point of the change.
 - Name things after the specification.
   If the paper calls it the randomizer, the code does too.
@@ -194,7 +190,7 @@ Run these before opening a pull request:
 lake build
 ```
 
-It builds the specification and every proof, with warnings treated as errors in CI.
+It builds the library and every proof, with warnings treated as errors in CI.
 
 When you touch bindings or test vectors, also run the Python suite:
 
@@ -227,14 +223,14 @@ The type says what kind of change it is:
 
 - `feat`: new behaviour, such as a new function, module or export.
 - `fix`: behaviour that disagreed with the specification now agrees.
-- `proof`: new or changed theorems, with no change to the specification code.
+- `proof`: new or changed theorems, with no change to the library code.
 - `perf`: the same results, computed faster.
 - `refactor`: the same behaviour, with the code restructured.
 - `test`: test vectors, known answers or the Python suite.
 - `docs`: documentation only.
 - `build`: Lake, the Lean toolchain, dependencies or packaging.
 - `ci`: the GitHub workflows.
-- `chore`: anything else that touches no specification, proof or test.
+- `chore`: anything else that touches no library code, proof or test.
 
 Conventional Commits only fixes `feat` and `fix`.
 
