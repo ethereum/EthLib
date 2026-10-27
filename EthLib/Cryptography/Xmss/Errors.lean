@@ -55,14 +55,4 @@ def XmssError.message : XmssError → String
   | .badMessageSize actual =>
       s!"bad message size: {actual}, expected {MESSAGE_LEN}"
 
-/-- Run a fallible XMSS computation down to `IO`.
-
-The C-ABI layer surfaces failures to Python as exceptions. -/
-def runXmss {α : Type} (act : Except XmssError α) : IO α :=
-  match act with
-  -- Success passes straight through.
-  | .ok a    => pure a
-  -- Failure becomes the user error the Python bindings expect.
-  | .error e => throw (IO.userError e.message)
-
 end EthLib.Cryptography.Xmss

@@ -40,7 +40,20 @@ lean_lib «Proofs» where
   roots := #[`EthLib.Proofs, `EthLib.Cryptography.Proofs, `EthLib.Networking.Proofs]
   precompileModules := false
 
-/-- Checks the compiled declarations of both libraries: their axioms, and any
+/-- The C exports the Python extension calls, and nothing else. A separate
+library (rooted at `EthLib/Exports.lean`), so that the specification never
+imports an `@[export]` symbol or the `IO` that turns a typed error into a
+Python exception. `precompileModules` is on: these objects are the ones
+`setup.py` links.
+
+Each domain's export tree is also a root, so that its modules belong to
+this library rather than to `EthLib`. -/
+@[default_target]
+lean_lib «Exports» where
+  roots := #[`EthLib.Exports, `EthLib.Cryptography.Exports]
+  precompileModules := true
+
+/-- Checks the compiled declarations of every library: their axioms, and any
 construct the kernel cannot unfold or the compiler runs differently. Run it
 after `lake build` with `lake exe check-decls`. -/
 lean_exe «check-decls» where

@@ -8,7 +8,7 @@ import EthLib.Cryptography.Kzg.TrustedSetup
 import EthLib.Cryptography.Kzg.Errors
 
 /-!
-# `Exports`
+# `Exports.Kzg`
 
 C-ABI exports for the Python bindings.
 
@@ -31,28 +31,62 @@ Two notes:
 namespace EthLib.Cryptography.Kzg.Exports
 
 open EthLib.Cryptography.Kzg
+open EthLib.Cryptography.Kzg.Constants
 
-/-- Decode a buffer of packed indices.
+/-- Run a `KzgM` action down to `IO`.
 
-Each index is 8 bytes, big-endian:
+A `KzgError` becomes the `IO.userError` that the C extension surfaces to callers. -/
+def runKzg {α : Type} (act : KzgM α) : IO α := do
+  match ← act.run with
+  | .ok a    => pure a
+  | .error e => throw (IO.userError e.message)
+
+/-! ## Sizes
+
+The Python C extension reads every size through these at module-init time, so the wrapper hardcodes no constant of its own.
+
+Each accessor takes a unit argument, so its C signature is fixed:
 
 ```text
-    [ index_0: 8 | index_1: 8 | ... | index_(n-1): 8 ]
+    uint64_t f(lean_object* unit)
 ```
 
-The Python wrapper packs index arrays this way, so the C exports take only byte arrays.
-
-A length that is not a multiple of 8 is rejected, never truncated.
+The accessor ignores its argument.
 -/
-def unpackIndicesBE (b : ByteArray) : Except KzgError (Array Nat) := do
-  -- A partial last index means a malformed buffer.
-  if b.size % 8 != 0 then
-    throw (.badIndicesBytesSize b.size)
-  let n := b.size / 8
-  let mut out : Array Nat := Array.mkEmpty n
-  for i in [:n] do
-    out := out.push (bytesBEToNat (b.extract (i*8) ((i+1)*8)))
-  return out
+
+@[export eth_kzg_const_bytes_per_field_element]
+def constBytesPerFieldElement (_ : Unit) : UInt64 :=
+  UInt64.ofNat BYTES_PER_FIELD_ELEMENT
+
+@[export eth_kzg_const_bytes_per_commitment]
+def constBytesPerCommitment (_ : Unit) : UInt64 :=
+  UInt64.ofNat BYTES_PER_COMMITMENT
+
+@[export eth_kzg_const_bytes_per_proof]
+def constBytesPerProof (_ : Unit) : UInt64 :=
+  UInt64.ofNat BYTES_PER_PROOF
+
+@[export eth_kzg_const_field_elements_per_blob]
+def constFieldElementsPerBlob (_ : Unit) : UInt64 :=
+  UInt64.ofNat FIELD_ELEMENTS_PER_BLOB
+
+@[export eth_kzg_const_bytes_per_blob]
+def constBytesPerBlob (_ : Unit) : UInt64 :=
+  UInt64.ofNat BYTES_PER_BLOB
+
+@[export eth_kzg_const_field_elements_per_cell]
+def constFieldElementsPerCell (_ : Unit) : UInt64 :=
+  UInt64.ofNat FIELD_ELEMENTS_PER_CELL
+
+@[export eth_kzg_const_bytes_per_cell]
+def constBytesPerCell (_ : Unit) : UInt64 :=
+  UInt64.ofNat BYTES_PER_CELL
+
+@[export eth_kzg_const_cells_per_ext_blob]
+def constCellsPerExtBlob (_ : Unit) : UInt64 :=
+  UInt64.ofNat CELLS_PER_EXT_BLOB
+
+/-! ## Operations -/
 
 @[export eth_kzg_blob_to_kzg_commitment]
 def blobToKzgCommitmentExport (blob : ByteArray) : IO ByteArray :=

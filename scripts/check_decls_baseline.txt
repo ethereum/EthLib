@@ -23,7 +23,3 @@ reaches-opaque EthLib.Cryptography.Bls.millerLoop
 opaque EthLib.Cryptography.Kzg.TrustedSetup.globalRef
 reaches-opaque EthLib.Cryptography.Kzg.TrustedSetup.get!
 reaches-opaque EthLib.Cryptography.Kzg.KzgM
-
-# Turn a typed error into an `IO` error for the C exports, outside the export modules.
-reaches-opaque EthLib.Cryptography.Bls.runBls
-reaches-opaque EthLib.Cryptography.Xmss.runXmss

@@ -71,7 +71,8 @@ Hold the work to the standard that specialist would accept.
 ```text
 EthLib/<Domain>/<Module>/            the library code
 EthLib/<Domain>/Proofs/<Module>/     theorems about it
-bindings/python/                     C exports and the Python package
+EthLib/<Domain>/Exports/             the C exports the bindings call
+bindings/python/                     the C extension and the Python package
 tests/<domain>/<module>/             generated test vectors
 ```
 
@@ -80,6 +81,10 @@ A new domain adds its proof root to the `Proofs` library in `lakefile.lean`.
 The library code never imports the proofs.
 
 Proofs live in their own Lake library, so the library code builds and links without them.
+
+The C exports live in a third library, `Exports`, so a Lean project that imports the specification gets no `@[export]` symbol.
+
+A new domain with exports adds its export root to the `Exports` library.
 
 ## Lean
 

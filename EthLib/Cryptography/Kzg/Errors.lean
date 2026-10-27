@@ -9,8 +9,8 @@ setup) while reporting domain failures as structured `KzgError` values
 rather than stringly-typed `IO.userError`s. Pure helpers that cannot do
 I/O return `Except KzgError` and lift transparently into `KzgM`.
 
-The C-ABI layer in `Exports` runs a `KzgM` action back down to `IO` with
-`runKzg`, translating any `KzgError` into the `IO.userError` that the
+The C exports in `EthLib.Cryptography.Exports.Kzg` run a `KzgM` action
+back down to `IO`, turning a `KzgError` into the `IO.userError` that the
 Python bindings expect.
 -/
 
@@ -106,12 +106,5 @@ def KzgError.message : KzgError → String
 /-- The KZG implementation monad: `IO` (for the trusted setup) with
 typed `KzgError` domain failures. -/
 abbrev KzgM := ExceptT KzgError IO
-
-/-- Run a `KzgM` action down to `IO`, turning a `KzgError` into the
-`IO.userError` the C-ABI layer surfaces to callers. -/
-def runKzg {α : Type} (act : KzgM α) : IO α := do
-  match ← act.run with
-  | .ok a    => pure a
-  | .error e => throw (IO.userError e.message)
 
 end EthLib.Cryptography.Kzg

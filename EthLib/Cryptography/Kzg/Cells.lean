@@ -315,4 +315,27 @@ def verifyCellKzgProofBatch
 
   verifyCellKzgProofBatchImpl deduped commitmentIndices cellIndices cosetsEvals proofs
 
+/-- Decode a buffer of packed indices.
+
+Each index is 8 bytes, big-endian:
+
+```text
+    [ index_0: 8 | index_1: 8 | ... | index_(n-1): 8 ]
+```
+
+The Python wrapper packs index arrays this way, so the C exports take only byte arrays.
+It is pure parsing, so it lives in the specification, where the proofs can reach it, and the exports call it.
+
+A length that is not a multiple of 8 is rejected, never truncated.
+-/
+def unpackIndicesBE (b : ByteArray) : Except KzgError (Array Nat) := do
+  -- A partial last index means a malformed buffer.
+  if b.size % 8 != 0 then
+    throw (.badIndicesBytesSize b.size)
+  let n := b.size / 8
+  let mut out : Array Nat := Array.mkEmpty n
+  for i in [:n] do
+    out := out.push (bytesBEToNat (b.extract (i*8) ((i+1)*8)))
+  return out
+
 end EthLib.Cryptography.Kzg

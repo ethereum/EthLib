@@ -70,9 +70,9 @@ def inScope (env : Environment) (scope : Name) (n : Name) : Bool :=
 def inProofs (env : Environment) (n : Name) : Bool :=
   (moduleOf? env n).any (·.components.contains `Proofs)
 
-/-- Whether `n` is defined in a C export module, one named `Exports`. -/
+/-- Whether `n` is defined in a C export module, one under an `Exports` component. -/
 def inExports (env : Environment) (n : Name) : Bool :=
-  (moduleOf? env n).any (·.components.getLast? == some `Exports)
+  (moduleOf? env n).any (·.components.contains `Exports)
 
 /-- A compiler auxiliary of a `partial` definition, reported through its parent.
 The name is only a claim, so the parent must exist and be the opaque constant a `partial` definition becomes. -/
@@ -296,7 +296,7 @@ unsafe def run (args : List String) : IO UInt32 := do
     | .error e => do
       IO.eprintln s!"check-decls: {e}\n{usage}"
       return 2
-  let mods := if mods.isEmpty then [`EthLib, `EthLib.Proofs] else mods
+  let mods := if mods.isEmpty then [`EthLib, `EthLib.Proofs, `EthLib.Exports] else mods
   initSearchPath (← findSysroot)
   -- `loadExts := true` is essential: without it the `@[csimp]` table, among others, stays empty.
   enableInitializersExecution

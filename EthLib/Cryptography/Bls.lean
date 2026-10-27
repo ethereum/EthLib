@@ -10,7 +10,6 @@ import EthLib.Cryptography.Bls.Compress
 import EthLib.Cryptography.Bls.Pairing
 import EthLib.Cryptography.Bls.HashToCurve
 import EthLib.Cryptography.Bls.Signatures
-import EthLib.Cryptography.Bls.Exports
 
 /-!
 # `EthLib.Cryptography.Bls`

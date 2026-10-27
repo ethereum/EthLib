@@ -101,24 +101,13 @@ eth_xmss_const_sig_size(
 extern void
 lean_initialize_runtime_module(void);
 
-/* We boot the sub-umbrellas directly rather than the top-level
- * `EthLib.Cryptography` module: Lake produces a `.c` file for the
+/* We boot `EthLib.Cryptography.Exports` rather than the root of the
+ * `Exports` library, `EthLib.Exports`: Lake produces a `.c` file for the
  * library root but does *not* compile it to a `.c.o.export`, so its
- * init symbol would never get linked in. Each sub-umbrella's init
- * idempotently calls `initialize_Init` for the Lean stdlib, so this
- * covers everything the dropped umbrella init did. */
+ * init symbol would never get linked in. The init of a module runs the
+ * init of everything it imports, so this boots the specification too. */
 extern lean_object*
-initialize_EthLib_EthLib_Cryptography_Bls(
-  uint8_t builtin
-);
-
-extern lean_object*
-initialize_EthLib_EthLib_Cryptography_Kzg(
-  uint8_t builtin
-);
-
-extern lean_object*
-initialize_EthLib_EthLib_Cryptography_Xmss(
+initialize_EthLib_EthLib_Cryptography_Exports(
   uint8_t builtin
 );
 
@@ -290,17 +279,7 @@ PyInit__native(void) {
   static int initialized = 0;
   if (!initialized) {
     lean_initialize_runtime_module();
-    /* Initialize each sub-umbrella; report the first failure if any
-     * step errors out. */
-    lean_object* res = initialize_EthLib_EthLib_Cryptography_Bls(1);
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Cryptography_Kzg(1);
-    }
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Cryptography_Xmss(1);
-    }
+    lean_object* res = initialize_EthLib_EthLib_Cryptography_Exports(1);
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
     } else {

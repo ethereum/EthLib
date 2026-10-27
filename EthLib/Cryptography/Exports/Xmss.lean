@@ -1,13 +1,15 @@
+import EthLib.Cryptography.Xmss.Constants
+import EthLib.Cryptography.Xmss.Errors
 import EthLib.Cryptography.Xmss.KeyGen
 import EthLib.Cryptography.Xmss.Sign
 import EthLib.Cryptography.Xmss.Serialization
 
 /-!
-# `Xmss.Exports`
+# `Exports.Xmss`
 
-C-ABI exports for the Python bindings.
+C-ABI exports for XMSS, callable from the Python C extension.
 
-Only key generation, signing and verification cross the boundary.
+Only key generation, signing and verification cross the boundary, with the sizes.
 The scheme is a black box to callers: no hash or encoding layer is exported.
 -/
 
@@ -15,6 +17,60 @@ namespace EthLib.Cryptography.Xmss.Exports
 
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
+
+/-- Run a fallible XMSS computation down to `IO`.
+
+The C-ABI layer surfaces failures to Python as exceptions. -/
+def runXmss {α : Type} (act : Except XmssError α) : IO α :=
+  match act with
+  -- Success passes straight through.
+  | .ok a    => pure a
+  -- Failure becomes the user error the Python bindings expect.
+  | .error e => throw (IO.userError e.message)
+
+/-! ## Sizes
+
+The Python C extension reads every size through these at module-init time, so the wrapper hardcodes no constant of its own.
+
+Each takes a `Unit` to keep the C-ABI signature predictable. -/
+
+@[export eth_xmss_const_digest_len]
+def constDigestLen (_ : Unit) : UInt64 :=
+  UInt64.ofNat DIGEST_LEN
+
+@[export eth_xmss_const_public_param_len]
+def constPublicParamLen (_ : Unit) : UInt64 :=
+  UInt64.ofNat PUBLIC_PARAM_LEN
+
+@[export eth_xmss_const_message_len]
+def constMessageLen (_ : Unit) : UInt64 :=
+  UInt64.ofNat MESSAGE_LEN
+
+@[export eth_xmss_const_randomness_len]
+def constRandomnessLen (_ : Unit) : UInt64 :=
+  UInt64.ofNat RANDOMNESS_LEN
+
+@[export eth_xmss_const_seed_len]
+def constSeedLen (_ : Unit) : UInt64 :=
+  UInt64.ofNat SEED_LEN
+
+@[export eth_xmss_const_code_length]
+def constCodeLength (_ : Unit) : UInt64 :=
+  UInt64.ofNat V
+
+@[export eth_xmss_const_log_lifetime]
+def constLogLifetime (_ : Unit) : UInt64 :=
+  UInt64.ofNat LOG_LIFETIME
+
+@[export eth_xmss_const_pub_key_size]
+def constPubKeySize (_ : Unit) : UInt64 :=
+  UInt64.ofNat PUB_KEY_SIZE
+
+@[export eth_xmss_const_sig_size]
+def constSigSize (_ : Unit) : UInt64 :=
+  UInt64.ofNat SIG_SIZE
+
+/-! ## Operations -/
 
 /-- Read a fixed-size input, rejecting any other length with the given error. -/
 private def readExact (n : Nat) (bytes : ByteArray) (bad : Nat → XmssError) :

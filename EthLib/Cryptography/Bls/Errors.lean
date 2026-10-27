@@ -5,9 +5,9 @@ Typed errors for the BLS surface.
 
 The BLS spec functions do no I/O, so the fallible ones return
 `Except BlsError` and report structured failures rather than
-stringly-typed `IO.userError`s. The C-ABI layer in `Exports` runs such a
-computation down to `IO` with `runBls`, translating any `BlsError` into
-the `IO.userError` the Python bindings expect.
+stringly-typed `IO.userError`s. The C exports in
+`EthLib.Cryptography.Exports.Bls` turn a `BlsError` into the
+`IO.userError` the Python bindings expect.
 -/
 
 namespace EthLib.Cryptography.Bls
@@ -55,13 +55,6 @@ def BlsError.message : BlsError → String
       s!"expand_message_xmd output too long: {len}"
   | .expandMessageTooManyBlocks ell =>
       s!"expand_message_xmd too many blocks: {ell}"
-
-/-- Run a fallible BLS computation down to `IO`, turning a `BlsError`
-into the `IO.userError` the C-ABI layer surfaces to callers. -/
-def runBls {α : Type} (act : Except BlsError α) : IO α :=
-  match act with
-  | .ok a    => pure a
-  | .error e => throw (IO.userError e.message)
 
 end EthLib.Cryptography.Bls
 

@@ -1,5 +1,4 @@
 import EthLib.Cryptography.Kzg.Cells
-import EthLib.Cryptography.Kzg.Exports
 import EthLib.Cryptography.Proofs.Kzg.Polynomials
 
 /-!
@@ -452,18 +451,18 @@ theorem verifyCellKzgProofBatch_badProofSize
   simp [hcells, hproofs, hcidx]
   rfl
 
-/-- `Exports.unpackIndicesBE` rejects any byte buffer whose length is not a multiple of 8. -/
+/-- `unpackIndicesBE` rejects any byte buffer whose length is not a multiple of 8. -/
 theorem unpackIndicesBE_bad_size {b : ByteArray} (h : b.size % 8 ≠ 0) :
-    Exports.unpackIndicesBE b = throw (.badIndicesBytesSize b.size) := by
-  unfold Exports.unpackIndicesBE
+    unpackIndicesBE b = throw (.badIndicesBytesSize b.size) := by
+  unfold unpackIndicesBE
   simp [h]
   rfl
 
-/-- `Exports.unpackIndicesBE` decodes the empty buffer to `#[]`. -/
+/-- `unpackIndicesBE` decodes the empty buffer to `#[]`. -/
 @[simp] theorem unpackIndicesBE_empty :
-    Exports.unpackIndicesBE ByteArray.empty = .ok #[] := by
+    unpackIndicesBE ByteArray.empty = .ok #[] := by
   have hsz : ByteArray.empty.size = 0 := rfl
-  unfold Exports.unpackIndicesBE
+  unfold unpackIndicesBE
   simp [hsz]
   rfl
 

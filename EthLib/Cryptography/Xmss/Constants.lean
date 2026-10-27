@@ -143,47 +143,4 @@ theorem pub_key_size_eq : PUB_KEY_SIZE = 32 := by decide
 /-- The advertised signature size. -/
 theorem sig_size_eq : SIG_SIZE = 1208 := by decide
 
-/-! ## C-callable size accessors
-
-The Python C extension reads every size through these at module-init time,
-so the wrapper hardcodes no constant of its own.
-
-Each takes a `Unit` to keep the C-ABI signature predictable. -/
-
-@[export eth_xmss_const_digest_len]
-def constDigestLen (_ : Unit) : UInt64 :=
-  UInt64.ofNat DIGEST_LEN
-
-@[export eth_xmss_const_public_param_len]
-def constPublicParamLen (_ : Unit) : UInt64 :=
-  UInt64.ofNat PUBLIC_PARAM_LEN
-
-@[export eth_xmss_const_message_len]
-def constMessageLen (_ : Unit) : UInt64 :=
-  UInt64.ofNat MESSAGE_LEN
-
-@[export eth_xmss_const_randomness_len]
-def constRandomnessLen (_ : Unit) : UInt64 :=
-  UInt64.ofNat RANDOMNESS_LEN
-
-@[export eth_xmss_const_seed_len]
-def constSeedLen (_ : Unit) : UInt64 :=
-  UInt64.ofNat SEED_LEN
-
-@[export eth_xmss_const_code_length]
-def constCodeLength (_ : Unit) : UInt64 :=
-  UInt64.ofNat V
-
-@[export eth_xmss_const_log_lifetime]
-def constLogLifetime (_ : Unit) : UInt64 :=
-  UInt64.ofNat LOG_LIFETIME
-
-@[export eth_xmss_const_pub_key_size]
-def constPubKeySize (_ : Unit) : UInt64 :=
-  UInt64.ofNat PUB_KEY_SIZE
-
-@[export eth_xmss_const_sig_size]
-def constSigSize (_ : Unit) : UInt64 :=
-  UInt64.ofNat SIG_SIZE
-
 end EthLib.Cryptography.Xmss.Constants
