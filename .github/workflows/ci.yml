@@ -1,4 +1,5 @@
-# Build the specs and their proofs, and check the pinned test vectors.
+# Build the specs and their proofs, check their compiled declarations, and
+# check the pinned test vectors.
 #
 # The Python test-vector suites are too slow to run on every change, so
 # they stay a local step for now. Checking the vectors' digests needs no
@@ -36,6 +37,14 @@ jobs:
 
           # Caching `.lake` is pointless: mathlib alone exceeds the 10 GB limit.
           use-github-cache: false
+
+      # Every compiled declaration: its axioms, and anything the kernel cannot
+      # unfold or the compiler runs differently. Only the findings that exist
+      # today, listed in scripts/check_decls_baseline.txt, pass.
+      - run: lake exe check-decls
+
+      # The check must report exactly what its fixtures plant.
+      - run: scripts/test_check_decls.sh
 
   vectors:
     runs-on: ubuntu-latest

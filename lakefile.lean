@@ -39,3 +39,17 @@ this library rather than to `EthLib`. -/
 lean_lib «Proofs» where
   roots := #[`EthLib.Proofs, `EthLib.Cryptography.Proofs, `EthLib.Networking.Proofs]
   precompileModules := false
+
+/-- Checks the compiled declarations of both libraries: their axioms, and any
+construct the kernel cannot unfold or the compiler runs differently. Run it
+after `lake build` with `lake exe check-decls`. -/
+lean_exe «check-decls» where
+  srcDir := "scripts"
+  root := `CheckDecls
+  supportInterpreter := true
+
+/-- Declarations the check must catch, and one module it must pass. Not a
+default target: `scripts/test_check_decls.sh` builds and checks it. -/
+lean_lib «CheckDeclsTest» where
+  srcDir := "scripts"
+  roots := #[`CheckDeclsTest, `CheckDeclsForeign]

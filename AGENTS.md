@@ -101,10 +101,10 @@ Proofs live in their own Lake library, so the library code builds and links with
 - No `sorry`, `admit` or new `axiom`.
   CI builds with `--wfail`, so an unfinished proof fails the build.
 - Prefer proofs the kernel checks on its own.
-- `native_decide` and `bv_decide` add a generated axiom.
-  Use them only for closed known-answer checks the kernel cannot evaluate.
-  Say why in a comment next to the tactic.
-- After a proof change, check its axioms with `#print axioms`.
+- Do not use `native_decide` or `bv_decide`.
+  Each adds a generated axiom that trusts the compiler, so the kernel no longer checks the proof.
+  The theorems that still use them are listed in `scripts/check_decls_baseline.txt`, to be removed.
+- After a proof change, check its axioms with `lake exe check-decls`.
   The goal is `propext`, `Classical.choice` and `Quot.sound`, nothing else.
 - Prove what a reader cares about.
   Round trips, injectivity, rejection of bad input, invariants of a state transition.
@@ -191,6 +191,24 @@ lake build
 ```
 
 It builds the library and every proof, with warnings treated as errors in CI.
+
+Then check the compiled declarations:
+
+```bash
+lake exe check-decls
+```
+
+It reports any axiom beyond the standard three, and any `partial`, `opaque`, `unsafe`, `@[extern]`, `@[implemented_by]` or `@[csimp]`.
+
+It also reports a definition of the specification that cannot unfold in the kernel, for example because it uses `while` or `IO`.
+
+`scripts/check_decls_baseline.txt` lists the findings that exist today, each one to be removed.
+
+A pull request that removes a finding removes its line, or the check fails on the stale entry.
+
+A new finding is fixed, never added to the list.
+
+When you change the check, also run `scripts/test_check_decls.sh`.
 
 When you touch bindings or test vectors, also run the Python suite:
 

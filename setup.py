@@ -41,8 +41,12 @@ def _lean_sysroot() -> Path | None:
 
 
 def _collect_lean_objects() -> list[str]:
-    """Every `.c.o.export` Lake produced for the package and the SSZ codec."""
-    objects = glob(str(LAKE_IR / "**" / "*.c.o.export"), recursive=True)
+    """Every `.c.o.export` Lake produced for the package and the SSZ codec.
+
+    Only objects under `EthLib/` are the package's modules. The top level
+    of `LAKE_IR` also holds tools such as `lake exe check-decls`, whose
+    object defines `main` and must not be linked into the extension."""
+    objects = glob(str(LAKE_IR / "EthLib" / "**" / "*.c.o.export"), recursive=True)
     objects += glob(str(SSZ_IR / "**" / "*.c.o.export"), recursive=True)
     return sorted(objects)
 

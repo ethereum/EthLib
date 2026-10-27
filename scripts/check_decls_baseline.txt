@@ -1,0 +1,29 @@
+# Findings of `lake exe check-decls` that exist today, each one to be removed.
+#
+# One finding per line: its kind, then the declaration it is reported at.
+# A finding not listed here fails the check.
+# A line that no longer matches a finding fails the check too, so this file is
+# always the exact list of findings that exist.
+# Remove an entry in the pull request that removes its finding.
+# Never add one: a new finding is fixed, not listed.
+
+# Known answers decided by compiled code rather than by the kernel.
+# `native_decide` and `bv_decide` trust the compiler and every `@[extern]` it calls.
+native EthLib.Cryptography.Xmss.keyGen_known_answer
+native EthLib.Cryptography.Xmss.sign_known_answer
+
+# Exponentiation by `partial` recursion, which the kernel cannot unfold.
+partial EthLib.Cryptography.Bls.Fp2.powNat
+partial EthLib.Cryptography.Bls.Fp12.powNat
+
+# The Miller loop's `while` loops compile to `Loop.forIn`, which Lean core defines with `partial`.
+reaches-opaque EthLib.Cryptography.Bls.millerLoop
+
+# The KZG trusted setup is read through `IO`, from a reference set at initialization.
+opaque EthLib.Cryptography.Kzg.TrustedSetup.globalRef
+reaches-opaque EthLib.Cryptography.Kzg.TrustedSetup.get!
+reaches-opaque EthLib.Cryptography.Kzg.KzgM
+
+# Turn a typed error into an `IO` error for the C exports, outside the export modules.
+reaches-opaque EthLib.Cryptography.Bls.runBls
+reaches-opaque EthLib.Cryptography.Xmss.runXmss
