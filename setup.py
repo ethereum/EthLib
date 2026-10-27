@@ -8,7 +8,7 @@ link the small native dependencies available in the active Lean toolchain
 Lean shared library for distribution, while local source builds find it via
 the runtime library path configured below.
 
-The build runs `lake build` first to (re-)generate the Lean object
+The build runs `lake build EthLib` first to (re-)generate the Lean object
 files, then hands the full list to setuptools.Extension.
 """
 import platform
@@ -68,11 +68,12 @@ def _lean_runtime_link(sysroot: Path) -> tuple[list[str], list[str], list[str]]:
 
 
 class LakeThenBuild(build_ext):
-    """Run `lake build` to (re-)generate the Lean object files before
-    handing things to setuptools."""
+    """Run `lake build EthLib` to (re-)generate the Lean object files before
+    handing things to setuptools. Only the specification is built: the
+    extension links no proof code, and the proofs pull in Mathlib."""
 
     def run(self):
-        subprocess.check_call(["lake", "build"], cwd=str(REPO_ROOT))
+        subprocess.check_call(["lake", "build", "EthLib"], cwd=str(REPO_ROOT))
         sysroot = _lean_sysroot()
         if sysroot is None:
             raise RuntimeError(
