@@ -203,6 +203,12 @@ pip install -e '.[test]'
 pytest
 ```
 
+The suite rewrites the vectors, so then check that the pinned ones are unchanged:
+
+```bash
+python3 tests/cryptography/check_vectors.py
+```
+
 Report what you ran and what it printed.
 
 If you skipped a check, say so.

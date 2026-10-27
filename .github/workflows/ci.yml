@@ -1,7 +1,8 @@
-# Build the specs and their proofs.
+# Build the specs and their proofs, and check the pinned test vectors.
 #
 # The Python test-vector suites are too slow to run on every change, so
-# they stay a local step for now.
+# they stay a local step for now. Checking the vectors' digests needs no
+# build, so it runs on every change.
 
 name: ci
 
@@ -35,3 +36,18 @@ jobs:
 
           # Caching `.lake` is pointless: mathlib alone exceeds the 10 GB limit.
           use-github-cache: false
+
+  vectors:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Every pinned vector must match its recorded digest.
+      # Only the standard library is used, so the runner's Python is enough.
+      - run: python3 tests/cryptography/check_vectors.py
+
+      # The check must fail on a missing manifest and on a changed, unlisted
+      # or deleted case.
+      - run: python3 -m unittest tests/cryptography/test_check_vectors.py
