@@ -41,46 +41,91 @@ def zero : G1 := ⟨Fp.one, Fp.one, Fp.zero⟩
 
 @[inline] def isInfinity (p : G1) : Bool := p.z.isZero
 
-/-- Jacobian point doubling for `a = 0` curves. -/
+/-- Jacobian point doubling for `a = 0` curves.
+
+These are the `dbl-2009-l` formulas of the explicit-formulas database.
+
+Each product by 2, 3 or 8 is written as additions, which are cheaper than a multiplication. -/
 def double (p : G1) : G1 :=
   if p.z.isZero then p else
     let A := p.x * p.x
     let B := p.y * p.y
     let C := B * B
-    let D := Fp.ofNat 2 * ((p.x + B) * (p.x + B) - A - C)
-    let E := Fp.ofNat 3 * A
+    let t := (p.x + B) * (p.x + B) - A - C
+    let D := t + t
+    let E := A + A + A
     let F := E * E
-    let x' := F - Fp.ofNat 2 * D
-    let y' := E * (D - x') - Fp.ofNat 8 * C
-    let z' := Fp.ofNat 2 * p.y * p.z
+    let x' := F - (D + D)
+    -- 8 C as three doublings.
+    let C2 := C + C
+    let C4 := C2 + C2
+    let y' := E * (D - x') - (C4 + C4)
+    let z' := (p.y + p.y) * p.z
     ⟨x', y', z'⟩
 
 /-- Negation: `(x, y, z) ↦ (x, −y, z)`. -/
 @[inline] def neg (p : G1) : G1 := ⟨p.x, -p.y, p.z⟩
 
-/-- Jacobian addition (Bernstein–Lange 2007). Handles all special
-cases (infinity, doubling, opposite-sign points). -/
+/-- `p + q` for two finite points, by the `add-2007-bl` formulas of the explicit-formulas database.
+
+Each product by 2 is written as an addition.
+
+Equal points double, and opposite points sum to the point at infinity. -/
+def addGeneral (p q : G1) : G1 :=
+  let z1z1 := p.z * p.z
+  let z2z2 := q.z * q.z
+  let u1 := p.x * z2z2
+  let u2 := q.x * z1z1
+  let s1 := p.y * q.z * z2z2
+  let s2 := q.y * p.z * z1z1
+  if u1.beq u2 then
+    if s1.beq s2 then double p else zero
+  else
+    let h := u2 - u1
+    let h2 := h + h
+    let i := h2 * h2
+    let j := h * i
+    let r := (s2 - s1) + (s2 - s1)
+    let v := u1 * i
+    let x' := r * r - j - (v + v)
+    let y' := r * (v - x') - (s1 + s1) * j
+    let z' := ((p.z + q.z) * (p.z + q.z) - z1z1 - z2z2) * h
+    ⟨x', y', z'⟩
+
+/-- `p + q` for finite points where `q` has `z = 1`, by the `madd-2007-bl` formulas.
+
+These are the general formulas with `z2 = 1`, so `u1 = x1` and `s1 = y1`.
+
+The last coordinate `((z1 + 1)^2 - z1^2 - 1) * h` simplifies to `2 * z1 * h`.
+
+They take 11 multiplications instead of 20, and give the same coordinates. -/
+def addMixed (p q : G1) : G1 :=
+  let z1z1 := p.z * p.z
+  let u2 := q.x * z1z1
+  let s2 := q.y * p.z * z1z1
+  if p.x.beq u2 then
+    if p.y.beq s2 then double p else zero
+  else
+    let h := u2 - p.x
+    let h2 := h + h
+    let i := h2 * h2
+    let j := h * i
+    let r := (s2 - p.y) + (s2 - p.y)
+    let v := p.x * i
+    let x' := r * r - j - (v + v)
+    let y' := r * (v - x') - (p.y + p.y) * j
+    let z' := (p.z + p.z) * h
+    ⟨x', y', z'⟩
+
+/-- Jacobian addition. Handles all special cases (infinity, doubling, opposite-sign points).
+
+Every point decompressed from bytes has `z = 1`, and then the mixed formulas apply.
+
+So most additions in a multi-scalar multiplication take that shorter path. -/
 def add (p q : G1) : G1 :=
   if p.z.isZero then q else
   if q.z.isZero then p else
-    let z1z1 := p.z * p.z
-    let z2z2 := q.z * q.z
-    let u1   := p.x * z2z2
-    let u2   := q.x * z1z1
-    let s1   := p.y * q.z * z2z2
-    let s2   := q.y * p.z * z1z1
-    if u1.beq u2 then
-      if s1.beq s2 then double p else zero
-    else
-      let h := u2 - u1
-      let i := (Fp.ofNat 2 * h) * (Fp.ofNat 2 * h)
-      let j := h * i
-      let r := Fp.ofNat 2 * (s2 - s1)
-      let v := u1 * i
-      let x' := r * r - j - Fp.ofNat 2 * v
-      let y' := r * (v - x') - Fp.ofNat 2 * s1 * j
-      let z' := ((p.z + q.z) * (p.z + q.z) - z1z1 - z2z2) * h
-      ⟨x', y', z'⟩
+  if q.z.beq Fp.one then addMixed p q else addGeneral p q
 
 instance : Add G1 := ⟨add⟩
 instance : Neg G1 := ⟨neg⟩
@@ -105,66 +150,80 @@ decreasing_by omega
 
 @[inline] def mul (p : G1) (s : Fr) : G1 := mulNat p s.val
 
-/-- Multi-scalar multiplication via windowed Pippenger.
+/-! ## Multi-scalar multiplication
 
-Scalars are split into `w`-bit windows; per window we bucket points by
-their window value, sum each bucket once via a running-sum trick, then
-combine. Roughly linear in the number of points instead of quadratic. -/
-def msm (points : Array G1) (scalars : Array Fr) : G1 := Id.run do
+Pippenger's algorithm splits each scalar into 8-bit windows.
+
+```text
+    window k   : sum_v v * B_v,  B_v = the sum of the points whose digit k is v     independent of other windows
+    combine    : acc = 2^8 * acc + S_k, from the top window down
+```
+
+Each window's sum needs only the points and the scalars, so each one runs as its own task.
+-/
+
+/-- Window `k` of a scalar: bits `[8k, 8k + 8)` of its value. -/
+def windowVal (s : Fr) (k : Nat) : Nat := (s.val >>> (k * 8)) &&& (1 <<< 8 - 1)
+
+/-- The largest bit length among the first `n` scalars.
+
+Windows above it are all zero, so they are skipped. -/
+def msmMaxBits (scalars : Array Fr) (n : Nat) : Nat :=
+  (List.range' 0 n).foldl (fun m j =>
+    if scalars[j]!.val ≠ 0 then
+      if scalars[j]!.val.log2 + 1 > m then scalars[j]!.val.log2 + 1 else m
+    else m) 0
+
+/-- The buckets of window `k`: bucket `v` sums the points whose digit `k` is `v`.
+
+Bucket 0 stays empty, since those points contribute nothing. -/
+def msmBuckets (points : Array G1) (scalars : Array Fr) (n k : Nat) : Array G1 :=
+  (List.range' 0 n).foldl (fun bs j =>
+    if windowVal scalars[j]! k ≠ 0 then
+      bs.set! (windowVal scalars[j]! k)
+        (add bs[windowVal scalars[j]! k]! points[j]!)
+    else bs) (Array.replicate (1 <<< 8) zero)
+
+/-- `sum_v v * B_v`, by the running-sum trick, walking `v` from 255 down to 1.
+
+The state is `(partialSum, running)`.
+
+`running` holds `sum_{u >= v} B_u`, and adding it at each step counts bucket `u` exactly `u` times. -/
+def msmRunning (bs : Array G1) : MProd G1 G1 :=
+  (List.range' 0 (1 <<< 8 - 1)).foldl (fun rp vv =>
+    ⟨add rp.1 (add rp.2 bs[1 <<< 8 - 1 - vv]!),
+     add rp.2 bs[1 <<< 8 - 1 - vv]!⟩) ⟨zero, zero⟩
+
+/-- One step of the window fold: shift `acc` up by 8 bits, then add the window sum `S`.
+
+The first step starts from zero and skips the doublings. -/
+def msmCombine (nW : Nat) (acc : G1) (kk : Nat) (S : G1) : G1 :=
+  if nW - 1 - kk + 1 < nW then
+    add ((List.range' 0 8).foldl (fun a _ => double a) acc) S
+  else
+    add acc S
+
+/-- Multi-scalar multiplication `sum_j [scalars[j]] points[j]`, by Pippenger's algorithm.
+
+The window sums are independent, so each runs as its own task.
+
+The fold then combines them in order, from the top window down. -/
+def msm (points : Array G1) (scalars : Array Fr) : G1 :=
   let n := if points.size ≤ scalars.size then points.size else scalars.size
-  if n = 0 then return zero
-
-  -- Window width: 8 bits is a reasonable default for n in the low thousands.
-  -- For very small n a smaller window would be slightly faster, but the
-  -- difference is small and we keep the algorithm un-tuned for clarity.
-  let w := 8
-  let bucketCount := 1 <<< w  -- 2^w
-  let mask : Nat := bucketCount - 1
-
-  -- Bit-length we have to process (the largest scalar's). BLS Fr is at
-  -- most 255 bits but skipping leading zeros saves doublings on early
-  -- windows.
-  let mut maxBits : Nat := 0
-  for j in [:n] do
-    let v := scalars[j]!.val
-    if v ≠ 0 then
-      let bits := v.log2 + 1
-      if bits > maxBits then maxBits := bits
-  if maxBits = 0 then return zero
-
-  let nWindows := (maxBits + w - 1) / w
-  let mut acc : G1 := zero
-
-  -- Walk windows from most-significant (k = nWindows − 1) to least
-  -- (k = 0).
-  for kk in [:nWindows] do
-    let k := nWindows - 1 - kk
-    -- Shift `acc` up by `w` bits (i.e. multiply by 2^w) — except on the
-    -- very first iteration, where `acc = 0` and doubling is a no-op.
-    if k + 1 < nWindows then
-      for _ in [:w] do
-        acc := double acc
-
-    -- Bucket the points: `buckets[v]` accumulates points whose window
-    -- value is `v`. Bucket 0 is unused (points with `v = 0` contribute
-    -- nothing).
-    let mut buckets : Array G1 := Array.replicate bucketCount zero
-    for j in [:n] do
-      let v := (scalars[j]!.val >>> (k * w)) &&& mask
-      if v ≠ 0 then
-        buckets := buckets.set! v (add buckets[v]! points[j]!)
-
-    -- Compute Σ_{v=1}^{2^w − 1} v · buckets[v] via the running-sum
-    -- trick, walking v from 2^w − 1 down to 1.
-    let mut running : G1 := zero
-    let mut partialSum : G1 := zero
-    for vv in [:bucketCount - 1] do
-      let v := bucketCount - 1 - vv
-      running := add running buckets[v]!
-      partialSum := add partialSum running
-    acc := add acc partialSum
-
-  return acc
+  if n = 0 then zero
+  else if msmMaxBits scalars n = 0 then zero
+  else
+    let nW := (msmMaxBits scalars n + 8 - 1) / 8
+    let windows := List.range' 0 nW
+    -- The windows are spawned from a task of their own.
+    -- Lean's pool starts a new worker only when no worker is idle.
+    -- From outside the pool, a burst of windows can all land on one idle worker.
+    -- From a busy worker, each window finds no idle worker, and the pool grows.
+    (Task.spawn fun _ =>
+      -- Spawn every window first, then wait for them in fold order.
+      let sums := windows.map fun kk => Task.spawn fun _ =>
+        (msmRunning (msmBuckets points scalars n (nW - 1 - kk))).1
+      (windows.zip sums).foldl (fun acc w => msmCombine nW acc w.1 w.2.get) zero).get
 
 end G1
 

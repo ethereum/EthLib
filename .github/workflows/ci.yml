@@ -1,9 +1,8 @@
-# Build the specs and their proofs, check their compiled declarations, and
-# check the pinned test vectors.
+# Build the specs and their proofs, check their compiled declarations, run the
+# test-vector suites, and check the pinned test vectors.
 #
-# The Python test-vector suites are too slow to run on every change, so
-# they stay a local step for now. Checking the vectors' digests needs no
-# build, so it runs on every change.
+# The suites need the built library, so they run in the Lean job.
+# Checking the vectors' digests needs no build, so it has a job of its own.
 
 name: ci
 
@@ -45,6 +44,16 @@ jobs:
 
       # The check must report exactly what its fixtures plant.
       - run: scripts/test_check_decls.sh
+
+      # The test-vector suites run the generators against the library built above.
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version-file: pyproject.toml
+      - run: pip install -e '.[test]'
+      - run: pytest
+
+      # The generators rewrite every case, so a changed vector shows up as a diff.
+      - run: git diff --exit-code -- tests/cryptography
 
   vectors:
     runs-on: ubuntu-latest

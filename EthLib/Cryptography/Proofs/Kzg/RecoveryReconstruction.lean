@@ -2,6 +2,7 @@ import EthLib.Cryptography.Proofs.Kzg.RecoveryMasked
 import EthLib.Cryptography.Proofs.Kzg.CoefficientPadding
 import EthLib.Cryptography.Proofs.Kzg.ExtendedFft
 import EthLib.Cryptography.Proofs.Kzg.RecoveryCapacity
+import EthLib.Cryptography.Proofs.Bls.FrBatchInverse
 
 /-!
 # Proofs: recovery returns the source polynomial
@@ -124,6 +125,17 @@ theorem recoveryQuotient_inverse_extract
     cosetFftField_extended_roundtrip _ (size_padCoefficients _ _), ← hp]
   exact extract_padCoefficients _ p (by rw [hp]; decide)
 
+/-- Multiplying by batch inverses is dividing, entry by entry. -/
+private theorem ofFn_mul_batchInverse (a b : Array Fr) (n : Nat) (hb : b.size = n) :
+    (Array.ofFn (n := n) fun i => a[i.val]! * (Fr.batchInverse b)[i.val]!) =
+      Array.ofFn (n := n) fun i => a[i.val]! / b[i.val]! := by
+  congr 1
+  funext i
+  have hi : i.val < b.size := hb ▸ i.isLt
+  rw [Fr.batchInverse_eq_map, getElem!_pos (b.map Fr.inverse) i.val (by simpa using hi), Array.getElem_map,
+    ← getElem!_pos b i.val hi]
+  rfl
+
 /-- Unfolding the actual implementation yields exactly the verified numerator/quotient pipeline. -/
 theorem recoverPolynomialcoeff_eq_pipeline
     {indices : Array CellIndex} {cells : Array CosetEvals} {z : PolynomialCoeff}
@@ -140,6 +152,7 @@ theorem recoverPolynomialcoeff_eq_pipeline
   unfold recoverPolynomialcoeff
   rw [if_neg (by omega : ¬ cells.size ≠ indices.size)]
   simp only [Bind.bind, Except.bind, hz, pure, Except.pure]
+  rw [ofFn_mul_batchInverse _ _ _ (by rw [size_cosetFftField, size_constructVanishingPolynomial hz])]
 
 /-- Exact executable recovery correctness: consistent samples with at most half the cells
 missing reconstruct the original 4096-coefficient polynomial. All FFT/product/division

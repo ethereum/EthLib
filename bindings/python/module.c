@@ -312,6 +312,10 @@ PyInit__native(void) {
     }
     lean_io_mark_end_initialization();
 
+    /* Start the worker threads that run Lean tasks.
+     * Without them, a task runs on the calling thread, and independent work runs in sequence. */
+    lean_init_task_manager();
+
     /* Pull the spec-preset sizes out of the linked Lean static archive */
     BYTES_PER_PUBKEY        = (size_t) eth_bls_const_bytes_per_pubkey(0);
     BYTES_PER_SIGNATURE     = (size_t) eth_bls_const_bytes_per_signature(0);

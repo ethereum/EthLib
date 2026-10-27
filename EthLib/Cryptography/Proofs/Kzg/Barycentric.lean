@@ -1,5 +1,6 @@
 import EthLib.Cryptography.Proofs.Kzg.Polynomials
 import EthLib.Cryptography.Proofs.Bls.FrZMod
+import EthLib.Cryptography.Proofs.Bls.FrBatchInverse
 import Mathlib.Algebra.BigOperators.Intervals
 
 /-!
@@ -28,6 +29,45 @@ open scoped EthLib.Cryptography.Bls.Fr
 -- `rw` with Mathlib `pow` lemmas. File-local, so repeated here.
 attribute [-instance] Lean.Grind.Fin.instHPowFinNatOfNeZero
 attribute [-instance] Lean.Grind.Fin.instPowFinNatOfNeZero
+
+/-- The batch inverses of the barycentric denominators are their inverses. -/
+theorem getElem!_batchInverse_denominators (domain : Array Fr) (z : Fr) (width k : Nat)
+    (hk : k < width) :
+    (Fr.batchInverse (Array.ofFn (n := width) fun i => z - domain[i.val]!))[k]! =
+      (z - domain[k]!).inverse := by
+  rw [Fr.batchInverse_eq_map, getElem!_pos _ k (by simpa using hk)]
+  simp
+
+/-- When `z` is not in the domain, evaluation follows the barycentric
+formula the docstring describes. Mirror of
+`evaluatePolynomialInEvaluationFormAux_fastPath`. -/
+theorem evaluatePolynomialInEvaluationFormAux_slowPath
+    (polynomial domain : Array Fr) (z : Fr)
+    (h : domain.idxOf? z = none) :
+    evaluatePolynomialInEvaluationFormAux polynomial domain z =
+      barycentricRefSum polynomial domain z polynomial.size *
+      (z ^ (Fr.ofNat polynomial.size) - Fr.one) *
+      (Fr.ofNat polynomial.size).inverse := by
+  rw [evaluatePolynomialInEvaluationFormAux]
+  simp only [h]
+  rw [barycentricSumInvAux_eq _ _ _ z _ 0 _
+      (fun k _ hk => getElem!_batchInverse_denominators domain z _ k (by omega)),
+    barycentricSumAux_zero_eq_refSum]
+
+/-- When `z` is not in the evaluation domain, evaluating the polynomial
+at `z` follows the barycentric formula. -/
+theorem evaluatePolynomialInEvaluationForm_slowPath
+    (polynomial : Polynomial) (z : Fr)
+    (hsize : polynomial.size = FIELD_ELEMENTS_PER_BLOB)
+    (h : (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB).idxOf? z = none) :
+    evaluatePolynomialInEvaluationForm polynomial z =
+      .ok (barycentricRefSum polynomial (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB)
+        z polynomial.size *
+      (z ^ (Fr.ofNat polynomial.size) - Fr.one) *
+      (Fr.ofNat polynomial.size).inverse) := by
+  rw [evaluatePolynomialInEvaluationForm, if_neg (by simp [hsize])]
+  exact congrArg Except.ok
+    (evaluatePolynomialInEvaluationFormAux_slowPath polynomial _ z h)
 
 /-- The barycentric sum as a `Finset.sum`, with the spec's division. -/
 theorem barycentricRefSum_eq_sum_div (p D : Array Fr) (z : Fr) (n : Nat) :

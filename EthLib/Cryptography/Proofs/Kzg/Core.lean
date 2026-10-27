@@ -130,8 +130,7 @@ theorem g1LincombPoints_eq_msm {points : Array Bls.G1} {scalars : Array Fr}
   · rw [if_pos h0]
     have hm : Bls.G1.msm points scalars = Bls.G1.zero := by
       unfold Bls.G1.msm
-      simp [Id.run, h0]
-      rfl
+      simp [h0]
     rw [hm]
     rfl
   · rw [if_neg h0]
