@@ -2,7 +2,7 @@
 # test-vector suites, and check the pinned test vectors.
 #
 # The suites need only the library, so they run before the proofs, in the same job.
-# Checking the vectors' digests needs no build, so it has a job of its own.
+# Checking the vectors' digests and encoding needs no Lean, so it has a job of its own.
 
 name: ci
 
@@ -43,17 +43,9 @@ jobs:
       - name: library
         run: lake build --wfail EthLib
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version-file: pyproject.toml
+      # Each case must reproduce its committed file byte for byte.
       - name: vector suites
-        run: |
-          pip install -e '.[test]'
-          pytest
-
-      # The generators rewrite every case, so a changed vector shows up as a diff.
-      - name: unchanged vectors
-        run: git diff --exit-code -- tests/cryptography
+        run: cargo test --locked -p ethlib-generators --release --test vectors
 
       # The steps below run even after a failed suite, so every result is reported.
       - name: proofs
@@ -80,9 +72,9 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       # Every pinned vector must match its recorded digest.
-      # Only the standard library is used, so the runner's Python is enough.
-      - run: python3 tests/cryptography/check_vectors.py
+      # The crate does not link Lean, so the runner's Rust toolchain is enough.
+      - run: cargo run --locked -p ethlib-vectors --bin check-vectors
 
-      # The check must fail on a missing manifest and on a changed, unlisted
-      # or deleted case.
-      - run: python3 -m unittest tests/cryptography/test_check_vectors.py
+      # The check must fail on a missing manifest and on a changed, unlisted or deleted case.
+      # Every committed vector must also re-encode to the same bytes.
+      - run: cargo test --locked -p ethlib-vectors

@@ -1,0 +1,2 @@
+# Proper nouns that Clippy would otherwise want in backticks; `..` keeps the defaults.
+doc-valid-idents = ["EthLib", "CPython", "MT19937", "BLS12", ".."]
