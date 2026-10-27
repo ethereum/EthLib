@@ -1,5 +1,28 @@
-/-
-Embedded KZG trusted setup, hex-encoded.
+/-!
+# `TrustedSetupData`
+
+The KZG trusted setup, as the compressed points the ceremony published.
+
+The source is consensus-specs `presets/mainnet/trusted_setups/trusted_setup_4096.json`.
+
+It last changed in ethereum/consensus-specs#3583, at commit `39d22849d1034e50eae45200700d94052de539ae`, which took it from the final output of the KZG ceremony.
+
+At that commit the file has sha256 `f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f`.
+
+The arrays below hold its three lists, point for point, without the `0x` prefix:
+
+```text
+g1_lagrange  ->  g1LagrangeHex   4096 points of 48 bytes
+g1_monomial  ->  g1MonomialHex   4096 points of 48 bytes
+g2_monomial  ->  g2MonomialHex     65 points of 96 bytes
+```
+
+The setup is trusted, not proved.
+
+KZG binding relies on the ceremony secret remaining unknown.
+Parsing and honest-proof correctness do not require this secrecy assumption.
+
+`TrustedSetup.lean` decodes the points when it loads them, and no theorem states that they are valid.
 -/
 
 set_option maxRecDepth 65536
