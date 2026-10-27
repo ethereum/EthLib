@@ -15,6 +15,8 @@ permanently if the performance of this library is sufficient.
 - [KZG polynomial commitments](EthLib/Cryptography/Kzg/)
 - [XMSS signatures](EthLib/Cryptography/Xmss/)
 
+[`SOUNDNESS.md`](SOUNDNESS.md) says what the proofs establish, and what each use of EthLib trusts on top of them.
+
 ## Contributing
 
 ### Prerequisites

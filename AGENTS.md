@@ -215,6 +215,20 @@ A new finding is fixed, never added to the list.
 
 When you change the check, also run `scripts/test_check_decls.sh`.
 
+Then check that `SOUNDNESS.md` still holds:
+
+```bash
+python3 scripts/soundness_facts.py --check
+```
+
+It fails when a fact it generates, such as the theorems that still use `native_decide`, no longer matches the repository.
+Run it without `--check` to regenerate them.
+
+It also fails when `pyproject.toml` declares a package version other than the one `SOUNDNESS.md` describes.
+Then review the whole document for the new version, and update its version line by hand.
+
+It needs Python 3.10 or later, and only the standard library.
+
 When you touch bindings or test vectors, also run the Python suite:
 
 ```bash
