@@ -1,5 +1,5 @@
 import EthLib.Cryptography.Xmss.TweakHash
-import EthLib.Cryptography.Proofs.Xmss.Blake2s
+import EthLib.Cryptography.Proofs.Hash.Blake2s
 import EthLib.Cryptography.Proofs.Xmss.Types
 
 /-!
@@ -30,8 +30,8 @@ theorem makeTweak_injective {t₁ t₂ : TweakType} {p₁ p₂ j₁ j₂ : UInt3
   obtain ⟨hInner, hIndex⟩ := Vector.append_inj h
   obtain ⟨hOuter, _⟩ := Vector.append_inj hInner
   obtain ⟨hHead, hSub⟩ := Vector.append_inj hOuter
-  refine ⟨?_, Blake2s.wordBytes_injective hSub,
-    Blake2s.wordBytes_injective hIndex⟩
+  refine ⟨?_, Hash.Blake2s.wordBytes_injective hSub,
+    Hash.Blake2s.wordBytes_injective hIndex⟩
   -- Byte one of the head is the call site.
   have hByte := congrArg (fun v : Vector UInt8 4 => v[1]) hHead
   simp only at hByte

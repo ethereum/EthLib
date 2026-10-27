@@ -9,7 +9,6 @@ import EthLib.Cryptography.Proofs.Xmss.Serialization
 import EthLib.Cryptography.Proofs.Xmss.KeyGen
 import EthLib.Cryptography.Proofs.Xmss.Sign
 import EthLib.Cryptography.Proofs.Xmss.Correctness
-import EthLib.Cryptography.Proofs.Xmss.Blake2s
 
 /-!
 # `EthLib.Cryptography.Proofs.Xmss`

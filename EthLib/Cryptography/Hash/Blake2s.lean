@@ -1,5 +1,5 @@
 /-!
-# `Xmss.Blake2s`
+# `Hash.Blake2s`
 
 BLAKE2s-256 as specified by RFC 7693.
 
@@ -14,7 +14,7 @@ It is written as a direct transcription for reviewability.
 It is not intended to be constant-time.
 -/
 
-namespace EthLib.Cryptography.Xmss.Blake2s
+namespace EthLib.Cryptography.Hash.Blake2s
 
 /-! ## Proof-facing definitions
 
@@ -206,4 +206,4 @@ def hash (input : ByteArray) : Vector UInt8 32 := Id.run do
   -- RFC 7693 returns the little-endian byte encoding of the final state.
   return stateBytes chaining
 
-end EthLib.Cryptography.Xmss.Blake2s
+end EthLib.Cryptography.Hash.Blake2s

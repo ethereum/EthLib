@@ -1,12 +1,12 @@
-import EthLib.Cryptography.Xmss.Blake2s
+import EthLib.Cryptography.Hash.Blake2s
 
 /-!
-# Proofs: `Xmss.Blake2s`
+# Proofs: `Hash.Blake2s`
 
 Machine-checked known answers for the BLAKE2s-256 specification.
 -/
 
-namespace EthLib.Cryptography.Xmss.Blake2s
+namespace EthLib.Cryptography.Hash.Blake2s
 
 /-! ## Structural properties -/
 
@@ -226,4 +226,4 @@ theorem hash_selfTest_1024 : (hash (selfTestInput 1024 1024)).toArray = #[
   -- Kernel evaluation covers sixteen full blocks with the final flag on block 16.
   decide +kernel
 
-end EthLib.Cryptography.Xmss.Blake2s
+end EthLib.Cryptography.Hash.Blake2s

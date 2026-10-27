@@ -1,4 +1,4 @@
-import EthLib.Cryptography.Xmss.Blake2s
+import EthLib.Cryptography.Hash.Blake2s
 import EthLib.Cryptography.Xmss.Types
 
 /-!
@@ -107,9 +107,9 @@ Every other byte is zero.
 def makeTweak (tweakType : TweakType) (subPosition index : UInt32) : Tweak :=
   -- Reuses the little-endian serializer BLAKE2s already defines.
   #v[PROTOCOL_DOMAIN_SEP, tweakType.toByte, 0, 0]
-    ++ Blake2s.Internal.wordBytes subPosition
+    ++ Hash.Blake2s.Internal.wordBytes subPosition
     ++ (#v[0, 0, 0, 0] : Vector UInt8 4)
-    ++ Blake2s.Internal.wordBytes index
+    ++ Hash.Blake2s.Internal.wordBytes index
 
 /-! ## The tweakable hash -/
 
@@ -124,7 +124,7 @@ def tweakInput (pp : PublicParam) (tweakType : TweakType)
 Most callers keep a prefix: a digest, or a randomizer. -/
 def tweakHashFull (pp : PublicParam) (tweakType : TweakType)
     (subPosition index : UInt32) (payload : ByteArray) : Vector UInt8 32 :=
-  Blake2s.hash (tweakInput pp tweakType subPosition index payload)
+  Hash.Blake2s.hash (tweakInput pp tweakType subPosition index payload)
 
 /-- Hash a payload under one call site of one key.
 
