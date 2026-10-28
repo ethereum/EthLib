@@ -102,3 +102,21 @@ jobs:
       # The generator must count exports however they are written, count
       # calls rather than declarations, and fail on each kind of drift.
       - run: python3 -m unittest scripts/test_soundness_facts.py
+
+  readmes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Each primitive's README must exist, match the facts generated from the
+      # repository, cite only names that exist, and have been checked again
+      # since the code, proofs, exports or cited files it describes last
+      # changed. Only the standard library is used, so the runner's Python is
+      # enough.
+      - run: python3 scripts/readme_facts.py --check
+
+      # The check must catch each kind of drift, and record a review only when
+      # asked to.
+      - run: python3 -m unittest scripts/test_readme_facts.py

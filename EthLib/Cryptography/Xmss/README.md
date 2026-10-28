@@ -23,7 +23,8 @@ So a key signs at `2^32` leaf indices, each one at most once, ever.
 A public key is 32 bytes and a signature 2404 bytes.
 
 This page was checked against EthLib commit `6390c73`.
-Check it again when a definition it names changes.
+`scripts/readme_facts.py --check` fails when the code, proofs or exports it describes change, or a file it cites, until someone checks it again.
+<!-- reviewed: 31a65a4681bc38ca -->
 
 ## Source
 
@@ -83,7 +84,16 @@ Nothing in EthLib records which leaf indices a key has signed, so the caller mus
 
 ## Test vectors
 
-`tests/cryptography/xmss/` has cases for `key_gen`, `sign` and `verify`.
+<!-- generated: vectors -->
+`tests/cryptography/xmss/` holds 30 cases:
+
+```text
+handler     cases
+key_gen         4
+sign            6
+verify         20
+```
+<!-- end generated -->
 
 The proofs also pin one public key and one signature (`Proofs/Xmss/KnownAnswer*.lean`).
 
@@ -162,6 +172,10 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
 This is a limit on computing results inside Lean, separate from the missing theorems above.
 
 The kernel checks every known answer itself, with no `native_decide`.
+
+<!-- generated: baseline -->
+`scripts/check_decls_baseline.txt` lists no finding in this module.
+<!-- end generated -->
 
 A whole verification is too large for one kernel check, so the known answer checks it in pieces: each layer's codeword, a few chains at a time, the leaf and the path.
 

@@ -226,6 +226,27 @@ Then review the whole document for the new version, and update its version line 
 
 It needs Python 3.10 or later, and only the standard library.
 
+Then check the README of each primitive, such as `EthLib/Cryptography/Kzg/README.md`:
+
+```bash
+python3 scripts/readme_facts.py --check
+```
+
+It fails when a fact it generates, such as the module's baseline findings or its vector counts, no longer matches the repository.
+Run it without `--check` to regenerate them.
+
+It fails when a page cites a theorem or a file that no longer exists.
+
+It also fails when the code, proofs or exports that a page describes change, or a local file that it cites.
+Then read the page again against them, and fix every sentence that no longer holds, including the hypotheses of each theorem it cites.
+Then record that review, for example for KZG:
+
+```bash
+python3 scripts/readme_facts.py --reviewed Kzg
+```
+
+When you change the check, also run `python3 -m unittest scripts/test_readme_facts.py`.
+
 When you touch bindings or test vectors, also run the Python suite:
 
 ```bash

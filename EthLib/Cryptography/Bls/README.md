@@ -7,7 +7,8 @@ Public keys are points of G1, in 48 bytes, and signatures are points of G2, in 9
 Many signatures over one message aggregate into one signature, which the aggregate of the signers' public keys verifies.
 
 This page was checked against EthLib commit `6390c73`.
-Check it again when a definition it names changes.
+`scripts/readme_facts.py --check` fails when the code, proofs or exports it describes change, or a file it cites, until someone checks it again.
+<!-- reviewed: 9e537a947ac3a3cc -->
 
 ## Source
 
@@ -56,6 +57,7 @@ consensus-specs types the message as `Bytes32`, and nothing in EthLib checks tha
 
 ## Test vectors
 
+<!-- generated: vectors -->
 `tests/cryptography/bls/` holds 20 cases:
 
 ```text
@@ -63,6 +65,7 @@ handler                       cases
 eth_aggregate_pubkeys             8
 eth_fast_aggregate_verify        12
 ```
+<!-- end generated -->
 
 They match the consensus-specs `v1.7.0-alpha.12` general vectors byte for byte.
 Their expected values come from the Python specification, not from EthLib.
@@ -120,7 +123,14 @@ This is a limit on computing results inside Lean, separate from the missing theo
 
 `millerLoop` is declared `partial`, but it does not call itself, so Lean makes it an ordinary definition.
 Its `while` loops reach `Loop.forIn`, which Lean core defines with `partial`.
-`scripts/check_decls_baseline.txt` lists it as `reaches-opaque`: it reaches an opaque constant when unfolded, but is not opaque itself.
+
+<!-- generated: baseline -->
+`scripts/check_decls_baseline.txt` lists these findings in this module:
+
+- `EthLib.Cryptography.Bls.millerLoop`, `reaches-opaque`
+<!-- end generated -->
+
+A `reaches-opaque` definition reaches an opaque constant when unfolded, but is not opaque itself.
 
 The pairing check runs `millerLoop`.
 So the kernel cannot compute the result of `ethFastAggregateVerify` once its input reaches the pairing check.
