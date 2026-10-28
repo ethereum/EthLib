@@ -291,4 +291,22 @@ theorem hash_eq_hashFast (input : ByteArray) : hash input = hashFast input := by
       exact ih _ (by simp [blockStepFast, compressFast])
   exact hfold _ _ rfl
 
+/-! ## A long known answer
+
+The 1024-byte input of RFC 7693 Appendix E runs 16 compressions.
+
+On the specification's arrays that costs the kernel about 14 GB, on the record a few. -/
+
+set_option maxRecDepth 200000 in
+/-- The 1024-byte Appendix E input matches an independent BLAKE2s-256 digest. -/
+theorem hash_selfTest_1024 : (hash (selfTestInput 1024 1024)).toArray = #[
+    0xc7, 0x95, 0xe9, 0xac, 0x66, 0xad, 0x49, 0x54,
+    0x0e, 0x9c, 0xe4, 0x3e, 0xfc, 0xc6, 0xda, 0x14,
+    0x2c, 0x61, 0xc1, 0xe6, 0x05, 0x1f, 0x06, 0x08,
+    0xbb, 0x10, 0x9c, 0x14, 0xd2, 0x4e, 0x4e, 0xbb
+  ] := by
+  -- Sixteen full blocks, the final flag on block 16, evaluated on the record.
+  rw [hash_eq_hashFast]
+  decide +kernel
+
 end EthLib.Cryptography.Hash.Blake2s

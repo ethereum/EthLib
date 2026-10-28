@@ -229,7 +229,7 @@ theorem hash_block_and_tail : (hash ⟨Array.replicate 65 0x61⟩).toArray = #[
   decide +kernel
 
 /-- Generate the deterministic pseudorandom byte list used by RFC 7693 Appendix E. -/
-private def selfTestInputList : Nat → UInt32 → UInt32 → List UInt8
+def selfTestInputList : Nat → UInt32 → UInt32 → List UInt8
   -- No bytes left to produce.
   | 0, _, _ => []
   | n + 1, previous, current =>
@@ -240,7 +240,7 @@ private def selfTestInputList : Nat → UInt32 → UInt32 → List UInt8
     (next >>> 24).toUInt8 :: selfTestInputList n current next
 
 /-- Generate the deterministic pseudorandom input used by RFC 7693 Appendix E. -/
-private def selfTestInput (length seed : Nat) : ByteArray :=
+def selfTestInput (length seed : Nat) : ByteArray :=
   -- The seed selects the first state word, and the second state word starts at one.
   ⟨(selfTestInputList length (0xDEAD4BAD * UInt32.ofNat seed) 1).toArray⟩
 
@@ -253,17 +253,6 @@ theorem hash_selfTest_255 : (hash (selfTestInput 255 255)).toArray = #[
     0xdb, 0x79, 0x75, 0xba, 0x7f, 0x74, 0x08, 0xa1
   ] := by
   -- Kernel evaluation covers four blocks and a 63-byte final tail.
-  decide +kernel
-
-set_option maxRecDepth 200000 in
-/-- The 1024-byte Appendix E input matches an independent BLAKE2s-256 digest. -/
-theorem hash_selfTest_1024 : (hash (selfTestInput 1024 1024)).toArray = #[
-    0xc7, 0x95, 0xe9, 0xac, 0x66, 0xad, 0x49, 0x54,
-    0x0e, 0x9c, 0xe4, 0x3e, 0xfc, 0xc6, 0xda, 0x14,
-    0x2c, 0x61, 0xc1, 0xe6, 0x05, 0x1f, 0x06, 0x08,
-    0xbb, 0x10, 0x9c, 0x14, 0xd2, 0x4e, 0x4e, 0xbb
-  ] := by
-  -- Kernel evaluation covers sixteen full blocks with the final flag on block 16.
   decide +kernel
 
 end EthLib.Cryptography.Hash.Blake2s
