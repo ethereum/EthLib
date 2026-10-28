@@ -3,7 +3,9 @@ import EthLib.Cryptography.Hash.Keccak
 /-!
 # Proofs: `Hash.Keccak`
 
-The constants of Keccak-f[1600] agree with the algorithms that define them, and the permutation agrees with the Keccak team's reference values.
+The constants of Keccak-f[1600] agree with the algorithms that define them.
+
+The permutation agrees with the Keccak team's reference values.
 -/
 
 namespace EthLib.Cryptography.Hash.Keccak

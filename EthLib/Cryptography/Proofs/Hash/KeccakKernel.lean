@@ -15,11 +15,12 @@ This file states the same permutation with one record field per lane.
     vector of 25 lanes   -->   record with fields a0 .. a24
     each step mapping     =    the same step mapping, lane by lane
     Keccak-f[1600]        =    the record permutation, for every state
+    Keccak-256            =    the sponge over the record permutation, for every input
 ```
 
 The equalities are proved once, for every state.
 
-A known answer rewrites its permutation to the fast form, then lets the kernel evaluate it.
+A known answer rewrites its permutation or its hash to the fast form, then lets the kernel evaluate it.
 -/
 
 namespace EthLib.Cryptography.Hash.Keccak
@@ -481,6 +482,16 @@ theorem keccakF_eq (A : State) : Keccak.keccakF A = (keccakF (Lanes.ofVector A))
     intro A
     -- One round on each side, then the rest by induction.
     rw [List.foldl_cons, List.foldl_cons, round_eq, ih, ofVector_toVector]
+
+/-! ## Keccak-256 -/
+
+/-- Keccak-256 over the record permutation. -/
+def keccak256 (msg : ByteArray) : Vector UInt8 DIGEST_LEN :=
+  sponge (fun A => (keccakF (Lanes.ofVector A)).toVector) msg
+
+/-- Keccak-256 is the sponge over the record permutation, for every input. -/
+theorem keccak256_eq (msg : ByteArray) : Keccak.keccak256 msg = keccak256 msg := by
+  simp only [Keccak.keccak256, keccak256, ← keccakF_eq]
 
 end Kernel
 

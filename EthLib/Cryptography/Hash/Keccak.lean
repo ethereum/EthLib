@@ -1,9 +1,13 @@
 /-!
 # `Hash.Keccak`
 
-The Keccak-f[1600] permutation, as specified by FIPS 202.
+The Keccak-f[1600] permutation and the Keccak-256 hash, as specified by FIPS 202.
 
 FIPS 202 §3.4 defines Keccak-f[1600] as Keccak-p[1600, 24]: 24 rounds over a 1600-bit state.
+
+Keccak-256 is the sponge over that permutation with capacity 512 bits and Keccak's original padding.
+
+It is Ethereum's hash, the function `KEC` of the Yellow Paper.
 
 It is written as a direct transcription of the standard, to be read against it.
 
@@ -138,7 +142,7 @@ end Internal
 
 Each equals the constant FIPS 202 §3.2.5, Algorithm 6 derives for its round.
 
-The theorem saying so is `roundConstants_eq` in `Proofs/Hash/Keccak.lean`. -/
+The kernel checks this in `Proofs/Hash/Keccak.lean`. -/
 def RC : Vector UInt64 ROUNDS := #v[
   0x0000000000000001, 0x0000000000008082, 0x800000000000808A, 0x8000000080008000,
   0x000000000000808B, 0x0000000080000001, 0x8000000080008081, 0x8000000000008009,
@@ -151,7 +155,7 @@ def RC : Vector UInt64 ROUNDS := #v[
 
 Each equals the offset FIPS 202 §3.2.2, Algorithm 2 assigns to its lane.
 
-The theorem saying so is `rhoOffsets_eq` in `Proofs/Hash/Keccak.lean`.
+The kernel checks this in `Proofs/Hash/Keccak.lean`.
 
 ```text
             x = 0   1   2   3   4
@@ -237,5 +241,127 @@ def round (ir : Fin ROUNDS) (A : State) : State :=
 With `n_r = 24 = 12 + 2l` the rounds run from `12 + 2l - n_r = 0` to `23` (§3.3, Algorithm 7). -/
 def keccakF (A : State) : State :=
   (List.finRange ROUNDS).foldl (fun A ir => round ir A) A
+
+/-! ## The sponge
+
+FIPS 202 §5.2 defines the Keccak family on byte strings `M` and output lengths `d`:
+
+```text
+    Keccak[c](M, d) = SPONGE[Keccak-p[1600, 24], pad10*1, 1600 - c](M, d)
+```
+
+Keccak-256 is `Keccak[512](M, 256)`.
+
+SHA3-256 is `Keccak[512](M || 01, 256)` (§6.1), so the two differ only in the two suffix bits.
+
+In bytes, the first padding byte is `0x01` for Keccak-256 and `0x06` for SHA3-256.
+
+The Keccak reference, version 3.0, calls the same function Keccak[r = 1088, c = 512]. -/
+
+/-- The rate in bytes: `r = 1600 - c = 1088` bits.
+
+Each permutation absorbs this many message bytes. -/
+def RATE : Nat := 136
+
+/-- The digest length in bytes: `d = 256` bits. -/
+def DIGEST_LEN : Nat := 32
+
+/-- Byte `i` of the padding of a message of `len` bytes.
+
+- The first 1 bit of pad10*1 is bit 0 of the first padding byte.
+- The final 1 bit is bit 7 of the last padding byte, and may share the first one's byte. -/
+def paddingByte (len i : Nat) : UInt8 :=
+  (if i = 0 then 0x01 else 0) ||| (if i + 1 = RATE - len % RATE then 0x80 else 0)
+
+/-- The padding appended to a message of `len` bytes: pad10*1 of FIPS 202 §5.1, in bytes.
+
+The rule appends a 1 bit, then zeros, then a final 1 bit, so the total is a multiple of the rate.
+
+At least two bits are appended, so a whole block of padding is added when `len` is a multiple of 136.
+
+On byte strings the bits become bytes, least significant bit first (Appendix B.1):
+
+```text
+    k = 136 - len mod 136 bytes of padding, 1 <= k <= 136
+
+    k = 1:   0x81                       the two 1 bits share one byte
+    k >= 2:  0x01 0x00 ... 0x00 0x80    first bit 0 of the first byte, last bit 7 of the last
+```
+-/
+def padding (len : Nat) : ByteArray :=
+  -- The padding fills the block the message ends in, and a whole block when it ends exactly.
+  ⟨Array.ofFn fun i : Fin (RATE - len % RATE) => paddingByte len i⟩
+
+/-- The message followed by its padding: the string `P` of FIPS 202 §4, Algorithm 8, step 1. -/
+def pad (msg : ByteArray) : ByteArray :=
+  msg ++ padding msg.size
+
+/-- The number of rate-sized blocks the padded message splits into: `n = len(P) / r`. -/
+def blockCount (len : Nat) : Nat :=
+  -- The padding brings the length up to the next multiple of 136, strictly above `len`.
+  len / RATE + 1
+
+namespace Internal
+
+/-- The 64-bit lane that 8 bytes spell, the first byte least significant.
+
+So byte `j` carries bits `8j` to `8j + 7` of the lane, as in FIPS 202 §3.1.2. -/
+def laneOfBytes (bytes : List UInt8) : UInt64 :=
+  -- Horner's rule from the last byte: each earlier byte sits 8 bits lower.
+  bytes.foldr (fun byte acc => byte.toUInt64 ||| (acc <<< 8)) 0
+
+/-- Cut a string into `n` consecutive pieces of `k` bytes. -/
+def chunks (k : Nat) : Nat → List UInt8 → List (List UInt8)
+  | 0, _ => []
+  | n + 1, bytes => bytes.take k :: chunks k n (bytes.drop k)
+
+/-- XOR one 136-byte block into the rate part of the state.
+
+This is `S ^ (P_i || 0^c)` of FIPS 202 §4, Algorithm 8, step 6.
+
+The block's 17 lanes cover lanes 0 to 16, and the 8 capacity lanes are left alone. -/
+def absorbBlock (S : State) (block : List UInt8) : State :=
+  -- Lane `i` of the block is its bytes `8i` to `8i + 7`.
+  let lanes := (chunks 8 (RATE / 8) block).map laneOfBytes
+  -- Past lane 16 the block has no lane, and XOR with zero leaves the capacity alone.
+  Vector.ofFn fun i => S[i] ^^^ lanes.getD i.val 0
+
+/-- The first `d = 256` bits of the state: `Trunc_d(S)` of FIPS 202 §4, Algorithm 8, step 9.
+
+The digest fits in the first block of output, so no further permutation is needed. -/
+def squeeze (S : State) : Vector UInt8 DIGEST_LEN :=
+  -- Byte k of the state string is byte k mod 8 of lane k / 8.
+  Vector.ofFn fun k =>
+    (S[k.val / 8]'(by simp only [LANES, DIGEST_LEN] at *; omega) >>> UInt64.ofNat (8 * (k.val % 8))).toUInt8
+
+end Internal
+
+/-- The sponge of FIPS 202 §4, Algorithm 8, at rate 136 bytes and output 256 bits.
+
+```text
+    P = M || pad10*1(1088, len(M))           pad
+    P = P_0 || ... || P_{n-1}                cut into 136-byte blocks
+    S = 0^1600                               start from the zero state
+    for each block P_i:
+        S = f(S ^ (P_i || 0^512))            absorb
+    return Trunc_256(S)                      squeeze
+```
+
+The permutation `f` is an argument, so a proof can run the same sponge over an equal permutation. -/
+def sponge (f : State → State) (msg : ByteArray) : Vector UInt8 DIGEST_LEN :=
+  -- Step 1: append the padding, so the length is a multiple of the rate.
+  let padded := (pad msg).data.toList
+  -- Steps 2 and 3: the blocks, in order.
+  let blocks := Internal.chunks RATE (blockCount msg.size) padded
+  -- Steps 5 and 6: absorb the blocks in order, one permutation each.
+  let S := blocks.foldl (fun S block => f (Internal.absorbBlock S block)) State.zero
+  -- Steps 7 to 10: one block of output already holds the 32 digest bytes.
+  Internal.squeeze S
+
+/-- Keccak-256 of a byte string: `Keccak[512](M, 256)` of FIPS 202 §5.2.
+
+It is the sponge over Keccak-f[1600]. -/
+def keccak256 (msg : ByteArray) : Vector UInt8 DIGEST_LEN :=
+  sponge keccakF msg
 
 end EthLib.Cryptography.Hash.Keccak
