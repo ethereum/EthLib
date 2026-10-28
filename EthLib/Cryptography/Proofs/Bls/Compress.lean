@@ -63,7 +63,7 @@ theorem sqrt_complete {a b : Fp} (h : (b : ZMod Fp.modulus) * b = a) :
       * Fp.powNat a ((Fp.modulus + 1) / 4) = a := by
     rw [powNat_eq_zmod_pow a ((Fp.modulus + 1) / 4)]
     exact pow_sqrt_exponent h
-  rw [Fp.sqrt, if_pos (beq_iff'.mpr hcand)]
+  rw [Fp.sqrt, ite_eq_left (beq_iff'.mpr hcand)]
 
 /-! ## Big-endian byte recovery
 
@@ -150,8 +150,8 @@ theorem toBytesBE_head_lt (x : Fp) : ((Fp.toBytesBE x).get! 0).toNat < 0x20 := b
   omega
 
 theorem fromBytesBE_toBytesBE (x : Fp) : Fp.fromBytesBE x.toBytesBE = .ok x := by
-  rw [Fp.fromBytesBE, if_neg (by rw [size_toBytesBE]; decide),
-    dif_pos (by rw [bytesBEToNat_toBytesBE]; exact x.isLt)]
+  rw [Fp.fromBytesBE, ite_eq_right (by rw [size_toBytesBE]; decide),
+    dite_eq_left (by rw [bytesBEToNat_toBytesBE]; exact x.isLt)]
   congr 1
   apply Fin.ext
   exact bytesBEToNat_toBytesBE x
@@ -218,7 +218,7 @@ theorem affine_sqrt_witness {p : G1} (h : Valid p) (hz : ¬ p.z.isZero = true) :
   have heq := valid_equation h
   rw [rep_x, rep_y, rep_z] at heq
   have hw := z_mul_inverse hz
-  simp only [G1.toAffine, if_neg hz]
+  simp only [G1.toAffine, ite_eq_right hz]
   exact curve_eq_aux p.x p.y p.z p.z.inverse hw heq
 
 /-! ## Sign-bit recovery -/
@@ -228,7 +228,7 @@ theorem affine_sqrt_witness {p : G1} (h : Valid p) (hz : ¬ p.z.isZero = true) :
 theorem signBit_neg {y : Fp} (hy : y ≠ 0) :
     Fp.signBit (-y) = !Fp.signBit y := by
   have hv : (-y).val = Fp.modulus - y.val := by
-    rw [Fin.val_neg, if_neg hy]
+    rw [Fin.val_neg, ite_eq_right hy]
   have hy0 : 0 < y.val := Nat.pos_of_ne_zero (fun hh => hy (Fin.ext hh))
   have hylt : y.val < Fp.modulus := y.isLt
   have hodd : Fp.modulus % 2 = 1 := by decide
@@ -258,12 +258,12 @@ private theorem sign_recovery {ya yPos : Fp}
     (hsq : (yPos : ZMod Fp.modulus) * yPos = (ya : ZMod Fp.modulus) * ya) :
     (if Fp.signBit yPos = Fp.signBit ya then yPos else -yPos) = ya := by
   rcases sqrt_pm hsq with h | h
-  · rw [show yPos = ya from h, if_pos rfl]
+  · rw [show yPos = ya from h, ite_eq_left rfl]
   · rw [show yPos = -ya from h]
     by_cases hya : ya = 0
     · subst hya
       simp
-    · rw [signBit_neg hya, if_neg (Bool.not_ne_self _), neg_neg]
+    · rw [signBit_neg hya, ite_eq_right (Bool.not_ne_self _), neg_neg]
 
 /-! ## `ByteArray` `get!`/`set!` plumbing -/
 
@@ -321,18 +321,16 @@ theorem toPoint_affine_normalize {p : G1} (hz : ¬ p.z.isZero = true) :
   have hw := z_mul_inverse hz
   refine Point.toAffine_of_equiv (equiv_of_X_eq_of_Y_eq one_ne_zero hzne ?_ ?_)
   · -- rep q 0 * rep p 2 ^ 2 = rep p 0 * rep q 2 ^ 2
-    simp only [rep, G1.toAffine, if_neg hz, Matrix.cons_val_zero,
-      Matrix.cons_val_two, Matrix.head_cons, Matrix.tail_cons]
+    simp only [rep, G1.toAffine, ite_eq_right hz]
     exact xeq_aux p.x p.z p.z.inverse Fp.one hw rfl
-  · simp only [rep, G1.toAffine, if_neg hz, Matrix.cons_val_zero, Matrix.cons_val_one,
-      Matrix.cons_val_two, Matrix.head_cons, Matrix.tail_cons]
+  · simp only [rep, G1.toAffine, ite_eq_right hz]
     exact yeq_aux p.y p.z p.z.inverse Fp.one hw rfl
 
 /-! ## Compress → uncompress round-trip -/
 
 private theorem compress_inf {p : G1} (hinf : p.isInfinity = true) :
     compress p = infinityBytes := by
-  unfold compress; simp only [Id.run, hinf, if_true]; rfl
+  unfold compress; simp only [Id.run, hinf, ite_true]; rfl
 
 private theorem compress_noninf {p : G1} (hinf : ¬ p.isInfinity = true)
     {xa ya : Fp} (hpa : p.toAffine = (xa, ya)) :
@@ -372,9 +370,9 @@ private theorem uncompress_of_facts {xa ya yPos : Fp} {cb : ByteArray}
     (hsqrt : Fp.sqrt (xa * xa * xa + Fp.ofNat 4) = .ok yPos)
     (hysq : (yPos : ZMod Fp.modulus) * yPos = (ya : ZMod Fp.modulus) * ya) :
     uncompress cb = .ok ⟨xa, ya, Fp.one⟩ := by
-  rw [uncompress, if_neg (by rw [hsize]; decide)]
+  rw [uncompress, ite_eq_right (by rw [hsize]; decide)]
   simp only
-  rw [if_neg (by rw [decide_eq_true hc]; decide), if_neg (by rw [hi]; decide),
+  rw [ite_eq_right (by rw [decide_eq_true hc]; decide), ite_eq_right (by rw [hi]; decide),
     hmaskeq, Fp.fromBytesBE_toBytesBE]
   simp only [hsqrt]
   rw [sign_recovery' hysq hsg]
@@ -476,18 +474,18 @@ theorem uncompress_compress {p : G1} (h : Valid p) :
       intro i hi0
       rw [hcp]; dsimp only
       by_cases hs : Fp.signBit ya
-      · rw [if_pos hs, ba_get!_set!_ne _ _ hi0, ba_get!_set!_ne _ _ hi0]
-      · rw [if_neg hs, ba_get!_set!_ne _ _ hi0]
+      · rw [ite_eq_left hs, ba_get!_set!_ne _ _ hi0, ba_get!_set!_ne _ _ hi0]
+      · rw [ite_eq_right hs, ba_get!_set!_ne _ _ hi0]
     have hsize : (compress p).size = 48 := by
       rw [hcp]; dsimp only
       by_cases hs : Fp.signBit ya
-      · rw [if_pos hs, ba_size_set!, ba_size_set!, hsz48]
-      · rw [if_neg hs, ba_size_set!, hsz48]
+      · rw [ite_eq_left hs, ba_size_set!, ba_size_set!, hsz48]
+      · rw [ite_eq_right hs, ba_size_set!, hsz48]
     refine ⟨⟨xa, ya, Fp.one⟩, ?_, ?_⟩
     · by_cases hs : Fp.signBit ya
       · have hhead : (compress p).get! 0 = B0 ||| 0x80 ||| 0x20 := by
           rw [hcp]; dsimp only
-          rw [if_pos hs, ba_get!_set!_self _ _ (by rw [ba_size_set!, hsz48]; decide),
+          rw [ite_eq_left hs, ba_get!_set!_self _ _ (by rw [ba_size_set!, hsz48]; decide),
             ba_get!_set!_self _ _ (by rw [hsz48]; decide)]
         refine uncompress_of_facts hsize (by rw [hhead]; exact b0_pos_c B0)
           (by rw [hhead]; exact b0_pos_i B0 hb0) ?_ ?_ hsqrt hysq
@@ -502,7 +500,7 @@ theorem uncompress_compress {p : G1} (h : Valid p) :
           · rw [ba_get!_set!_ne _ _ hi0, hother i hi0]
       · have hhead : (compress p).get! 0 = B0 ||| 0x80 := by
           rw [hcp]; dsimp only
-          rw [if_neg hs, ba_get!_set!_self _ _ (by rw [hsz48]; decide)]
+          rw [ite_eq_right hs, ba_get!_set!_self _ _ (by rw [hsz48]; decide)]
         refine uncompress_of_facts hsize (by rw [hhead]; exact b0_neg_c B0)
           (by rw [hhead]; exact b0_neg_i B0 hb0) ?_ ?_ hsqrt hysq
         · rw [hhead]
@@ -678,14 +676,14 @@ private theorem signBit_select {yPos : Fp} (hypos : yPos ≠ 0)
   -- Four cases: the requested sign, times the sign of the computed root.
   by_cases hP : P <;> by_cases hs : Fp.signBit yPos = true
   -- Signs agree: keep the root.
-  · rw [if_pos (by simp [hP, hs]), hs, decide_eq_true hP]
+  · rw [ite_eq_left (by simp [hP, hs]), hs, decide_eq_true hP]
   -- Signs differ: negate the root, which flips its sign bit.
-  · rw [if_neg (by simp [hP, hs]), signBit_neg hypos,
+  · rw [ite_eq_right (by simp [hP, hs]), signBit_neg hypos,
       Bool.eq_false_iff.mpr hs, Bool.not_false, decide_eq_true hP]
-  · rw [if_neg (by simp [hP, hs]), signBit_neg hypos, hs,
+  · rw [ite_eq_right (by simp [hP, hs]), signBit_neg hypos, hs,
       Bool.not_true, decide_eq_false hP]
   -- Signs agree: keep the root.
-  · rw [if_pos (by simp [hP, hs]), Bool.eq_false_iff.mpr hs, decide_eq_false hP]
+  · rw [ite_eq_left (by simp [hP, hs]), Bool.eq_false_iff.mpr hs, decide_eq_false hP]
 
 /-- A compressed header byte is rebuilt from its five low bits and its sign flag.
 
@@ -736,7 +734,7 @@ private theorem toAffine_of_z_one (x y : Fp) :
     (⟨x, y, Fp.one⟩ : G1).toAffine = (x, y) := by
   unfold toAffine
   -- z = 1 is not zero, so the point is not at infinity.
-  rw [if_neg (by decide : ¬ Fp.one.isZero = true)]
+  rw [ite_eq_right (by decide : ¬ Fp.one.isZero = true)]
   -- The inverse of 1 is 1, read off from the identity z * z^(-1) = 1.
   have hinv : Fp.one.inverse = (1 : Fp) := by
     have h := z_mul_inverse (p := ⟨Fp.zero, Fp.zero, Fp.one⟩) (by decide)
@@ -763,10 +761,10 @@ private theorem foldl_allZero (b : ByteArray) (s n : Nat) (init : Bool)
     -- A nonzero byte at s would clear the flag, and nothing sets it again.
     have hs : b.get! s = 0 := by
       by_contra hne
-      rw [if_pos hne] at hinit
+      rw [ite_eq_left hne] at hinit
       cases hinit
     -- Position s is zero, and the flag passed through it unchanged.
-    refine ⟨by rwa [if_neg (not_not.mpr hs)] at hinit, fun i h1 h2 => ?_⟩
+    refine ⟨by rwa [ite_eq_right (not_not.mpr hs)] at hinit, fun i h1 h2 => ?_⟩
     rcases Nat.eq_or_lt_of_le h1 with rfl | hlt
     · exact hs
     · exact hrest i hlt (by omega)
@@ -859,7 +857,7 @@ theorem compress_uncompress {b : ByteArray} {q : G1}
           obtain ⟨⟨_, hhead⟩, htail⟩ := hflags
           have hhead0 : b.get! 0 = 0xc0 := Classical.not_not.mp (of_decide_eq_false hhead)
           have htail0 : ∀ i, 1 ≤ i → i < b.size → b.get! i = 0 :=
-            tailAllZero_ok b (by simpa only [Bool.not_eq_false'] using htail)
+            tailAllZero_ok b (by simp only [Bool.not_eq_false'] at htail; exact htail)
           -- Compare with the infinity encoding byte by byte.
           refine ba_ext (by rw [hsz48]; decide) (fun i hi => ?_)
           have hi48 : i < 48 := by simpa [show infinityBytes.size = 48 by decide] using hi
@@ -916,14 +914,14 @@ theorem compress_uncompress {b : ByteArray} {q : G1}
             -- Sign flag set: compression also sets 0x20, which rebuilds the header byte.
             · have hsy : Fp.signBit y = true := by rw [hsign, decide_eq_true hs]
               have hrec := head_reconstruct (b.get! 0) hc hi
-              rw [if_pos hs] at hrec
-              rw [if_pos hsy, hbase, ba_get!_set!_self b _ h0lt,
+              rw [ite_eq_left hs] at hrec
+              rw [ite_eq_left hsy, hbase, ba_get!_set!_self b _ h0lt,
                 ba_set!_set!_same, hrec, ba_set!_get!_self b h0lt]
             -- Sign flag clear: compression leaves 0x20 clear, which is the header byte.
             · have hsy : ¬ Fp.signBit y = true := by rw [hsign, decide_eq_false hs]; decide
               have hrec := head_reconstruct (b.get! 0) hc hi
-              rw [if_neg hs] at hrec
-              rw [if_neg hsy, hbase, hrec, ba_set!_get!_self b h0lt]
+              rw [ite_eq_right hs] at hrec
+              rw [ite_eq_right hsy, hbase, hrec, ba_set!_get!_self b h0lt]
 
 /-- **Non-malleability.** Two byte strings that decompress to the same point are equal.
 

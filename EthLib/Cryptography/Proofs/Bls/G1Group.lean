@@ -108,7 +108,7 @@ private theorem addSpec_eq_addMixed (p : G1) (qx qy : Fp)
     (hp : ¬p.z.isZero = true) (hq : ¬(1 : Fp).isZero = true) :
     addSpec p ⟨qx, qy, 1⟩ = addMixed p ⟨qx, qy, 1⟩ := by
   unfold addSpec addMixed
-  rw [if_neg hp, if_neg hq]
+  rw [ite_eq_right hp, ite_eq_right hq]
   -- With z2 = 1, u1 and s1 reduce to x1 and y1.
   have hu : p.x * (1 * 1) = p.x := by grind
   have hs : p.y * 1 * (1 * 1) = p.y := by grind
@@ -122,7 +122,7 @@ private theorem addSpec_eq_addMixed (p : G1) (qx qy : Fp)
 private theorem addSpec_eq_addGeneral (p q : G1) (hp : ¬p.z.isZero = true) (hq : ¬q.z.isZero = true) :
     addSpec p q = addGeneral p q := by
   unfold addSpec addGeneral
-  rw [if_neg hp, if_neg hq]
+  rw [ite_eq_right hp, ite_eq_right hq]
   dsimp only
   split
   · rfl
@@ -134,15 +134,17 @@ theorem add_eq_addSpec : @add = @addSpec := by
   funext p q
   unfold add
   by_cases hp : p.z.isZero = true
-  · rw [if_pos hp, addSpec, if_pos hp]
+  · rw [ite_eq_left hp, addSpec, ite_eq_left hp]
   by_cases hq : q.z.isZero = true
-  · rw [if_neg hp, if_pos hq, addSpec, if_neg hp, if_pos hq]
-  rw [if_neg hp, if_neg hq]
+  · rw [ite_eq_right hp, ite_eq_left hq, addSpec, ite_eq_right hp, ite_eq_left hq]
+  rw [ite_eq_right hp, ite_eq_right hq]
   split
   -- `q` has `z = 1`: rebuild it with a literal one, then compare with the mixed formulas.
   · rename_i h1
     obtain ⟨qx, qy, qz⟩ := q
-    have hz : qz = 1 := Fin.ext (by simpa [Fp.beq, Fp.one] using h1)
+    -- `simp` reads `h1` as `qz.val = 1`, and the value of `(1 : Fp)` is `1 % modulus`.
+    have hv : qz.val = 1 := by simpa [Fp.beq, Fp.one] using h1
+    have hz : qz = 1 := Fin.ext (hv.trans (Nat.mod_eq_of_lt (by decide)).symm)
     subst hz
     exact (addSpec_eq_addMixed p qx qy hp hq).symm
   · exact (addSpec_eq_addGeneral p q hp hq).symm
@@ -266,18 +268,18 @@ theorem rep_double {P : G1} (hz : ¬P.z.isZero = true) :
   funext i
   fin_cases i
   · show (double P).x = curve.dblX (rep P)
-    rw [double_eq_doubleSpec, doubleSpec, if_neg hz]
+    rw [double_eq_doubleSpec, doubleSpec, ite_eq_right hz]
     exact dblX_eq P.x P.y P.z
   · show (double P).y = curve.dblY (rep P)
-    rw [double_eq_doubleSpec, doubleSpec, if_neg hz]
+    rw [double_eq_doubleSpec, doubleSpec, ite_eq_right hz]
     exact dblY_eq P.x P.y P.z
   · show (double P).z = curve.dblZ (rep P)
-    rw [double_eq_doubleSpec, doubleSpec, if_neg hz]
+    rw [double_eq_doubleSpec, doubleSpec, ite_eq_right hz]
     exact dblZ_eq P.x P.y P.z
 
 theorem valid_double {P : G1} (h : Valid P) : Valid (double P) := by
   by_cases hz : P.z.isZero = true
-  · rw [Valid, double, if_pos hz]
+  · rw [Valid, double, ite_eq_left hz]
     exact h
   · rw [Valid, rep_double hz, ← add_of_equiv (Setoid.refl (rep P))]
     exact nonsingular_add h h
@@ -287,7 +289,7 @@ theorem toPoint_double {P : G1} (h : Valid P) :
   by_cases hz : P.z.isZero = true
   · have h0 : toPoint P = 0 :=
       Point.toAffine_of_Z_eq_zero (isZero_iff.mp hz)
-    rw [double_eq_doubleSpec, doubleSpec, show (if P.z.isZero = true then P else _) = P from if_pos hz]
+    rw [double_eq_doubleSpec, doubleSpec, show (if P.z.isZero = true then P else _) = P from ite_eq_left hz]
     rw [h0, add_zero]
   · rw [toPoint, rep_double hz, ← add_of_equiv (Setoid.refl (rep P))]
     exact Point.toAffine_add h h
@@ -366,28 +368,28 @@ private theorem spec_add_components
 private theorem add_of_left_zero {P Q : G1} (hz1 : P.z.isZero = true) :
     add P Q = Q := by
   rw [add_eq_addSpec, addSpec]
-  exact if_pos hz1
+  exact ite_eq_left hz1
 
 private theorem add_of_right_zero {P Q : G1} (hz1 : ¬P.z.isZero = true)
     (hz2 : Q.z.isZero = true) : add P Q = P := by
-  rw [add_eq_addSpec, addSpec, if_neg hz1]
-  exact if_pos hz2
+  rw [add_eq_addSpec, addSpec, ite_eq_right hz1]
+  exact ite_eq_left hz2
 
 private theorem add_of_dbl {P Q : G1} (hz1 : ¬P.z.isZero = true)
     (hz2 : ¬Q.z.isZero = true)
     (hu : (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true)
     (hs : (P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true) :
     add P Q = double P := by
-  rw [add_eq_addSpec, addSpec, if_neg hz1, if_neg hz2]
-  exact (if_pos hu).trans (if_pos hs)
+  rw [add_eq_addSpec, addSpec, ite_eq_right hz1, ite_eq_right hz2]
+  exact (ite_eq_left hu).trans (ite_eq_left hs)
 
 private theorem add_of_opp {P Q : G1} (hz1 : ¬P.z.isZero = true)
     (hz2 : ¬Q.z.isZero = true)
     (hu : (P.x * (Q.z * Q.z)).beq (Q.x * (P.z * P.z)) = true)
     (hs : ¬(P.y * Q.z * (Q.z * Q.z)).beq (Q.y * P.z * (P.z * P.z)) = true) :
     add P Q = zero := by
-  rw [add_eq_addSpec, addSpec, if_neg hz1, if_neg hz2]
-  exact (if_pos hu).trans (if_neg hs)
+  rw [add_eq_addSpec, addSpec, ite_eq_right hz1, ite_eq_right hz2]
+  exact (ite_eq_left hu).trans (ite_eq_right hs)
 
 private theorem rep_add_general {P Q : G1} (hP : Valid P) (hQ : Valid Q)
     (hz1 : ¬P.z.isZero = true) (hz2 : ¬Q.z.isZero = true)
@@ -409,8 +411,8 @@ private theorem rep_add_general {P Q : G1} (hP : Valid P) (hQ : Valid Q)
       ((Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) * (Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) - ((Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))) - Fp.ofNat 2 * ((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))))
       ((Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) * (((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))) - ((Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) * (Fp.ofNat 2 * ((Q.y * P.z * (P.z * P.z)) - (P.y * Q.z * (Q.z * Q.z)))) - ((Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))) - Fp.ofNat 2 * ((P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))))) - Fp.ofNat 2 * (P.y * Q.z * (Q.z * Q.z)) * ((Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z)) * (Fp.ofNat 2 * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))))))
       (((P.z + Q.z) * (P.z + Q.z) - (P.z * P.z) - (Q.z * Q.z)) * (Q.x * (P.z * P.z) - P.x * (Q.z * Q.z))) := by
-    rw [add_eq_addSpec, addSpec, if_neg hz1, if_neg hz2]
-    exact if_neg hu
+    rw [add_eq_addSpec, addSpec, ite_eq_right hz1, ite_eq_right hz2]
+    exact ite_eq_right hu
   rw [hbranch]
   funext k
   fin_cases k
@@ -531,9 +533,9 @@ theorem valid_mulNat {P : G1} (h : Valid P) (k : Nat) : Valid (mulNat P k) := by
       show Valid (if k % 2 = 1 then add P (mulNat (double P) (k / 2))
         else mulNat (double P) (k / 2))
       by_cases h2 : k % 2 = 1
-      · rw [if_pos h2]
+      · rw [ite_eq_left h2]
         exact valid_add h (ih (k / 2) (by omega) (valid_double h))
-      · rw [if_neg h2]
+      · rw [ite_eq_right h2]
         exact ih (k / 2) (by omega) (valid_double h)
 
 /-- The spec's double-and-add scalar multiplication is Mathlib's `ℕ`
@@ -554,12 +556,12 @@ theorem toPoint_mulNat {P : G1} (h : Valid P) (k : Nat) :
       by_cases h2 : k % 2 = 1
       · obtain ⟨m, rfl⟩ : ∃ m, k = 2 * m + 1 := ⟨k / 2, by omega⟩
         have hm : (2 * m + 1) / 2 = m := by omega
-        rw [if_pos h2, toPoint_add h (valid_mulNat (valid_double h) _), hm,
+        rw [ite_eq_left h2, toPoint_add h (valid_mulNat (valid_double h) _), hm,
             ih m (by omega) (valid_double h), toPoint_double h]
         module
       · obtain ⟨m, rfl⟩ : ∃ m, k = 2 * m := ⟨k / 2, by omega⟩
         have hm : 2 * m / 2 = m := by omega
-        rw [if_neg h2, hm, ih m (by omega) (valid_double h), toPoint_double h]
+        rw [ite_eq_right h2, hm, ih m (by omega) (valid_double h), toPoint_double h]
         module
 
 /-- The spec's `Fr`-scalar multiplication acts through the scalar's

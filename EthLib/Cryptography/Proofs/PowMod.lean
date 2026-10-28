@@ -44,10 +44,10 @@ theorem powModAux_eq (fuel m b e : Nat) (he : e < 2 ^ fuel) :
         rw [Nat.pow_succ] at he; omega
       have hrec := ih (b * b % m) (e / 2) h2
       by_cases h1 : e % 2 = 1
-      · rw [powModAux, if_neg h0, if_pos h1, hrec, ← Nat.pow_mod, ← Nat.pow_two,
+      · rw [powModAux, ite_eq_right h0, ite_eq_left h1, hrec, ← Nat.pow_mod, ← Nat.pow_two,
             ← Nat.pow_mul, Nat.mod_mul_mod, ← Nat.pow_succ,
             show (2 * (e / 2)).succ = e by omega]
-      · rw [powModAux, if_neg h0, if_neg h1, hrec, ← Nat.pow_mod, ← Nat.pow_two,
+      · rw [powModAux, ite_eq_right h0, ite_eq_right h1, hrec, ← Nat.pow_mod, ← Nat.pow_two,
             ← Nat.pow_mul, show 2 * (e / 2) = e by omega]
 
 /-- `(b : ZMod m) ^ e = 1` is decided by one `powModAux` computation. -/

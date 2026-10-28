@@ -289,14 +289,9 @@ theorem mul_inverse_cancel {a : Fp2} (h : a ≠ 0) : a * a.inverse = 1 :=
 theorem inverse_mul_cancel {a : Fp2} (h : a ≠ 0) : a.inverse * a = 1 := by
   rw [Fp2.mul_comm, mul_inverse_cancel h]
 
-open scoped EthLib.Cryptography.Bls.Fp in
-private theorem fp_inverse_zero : (0 : Fp).inverse = 0 := by
-  rw [Fp.inverse_eq_inv]
-  exact inv_zero
-
 @[simp]
 theorem inverse_zero : (0 : Fp2).inverse = 0 := by
-  apply ext <;> simp [inverse, fp_inverse_zero]
+  apply ext <;> simp [inverse, Fin.zero_mul]
 
 instance : Field Fp2 where
   inv := inverse
@@ -322,10 +317,10 @@ theorem powNat_eq_pow (a : Fp2) (e : Nat) : powNat a e = a ^ e := by
     · rename_i h
       rw [ih (e / 2) (by omega)]
       by_cases h2 : e % 2 = 1
-      · rw [if_pos h2, ← pow_two, ← pow_mul, ← pow_succ']
+      · rw [ite_eq_left h2, ← pow_two, ← pow_mul, ← pow_succ']
         congr 1
         omega
-      · rw [if_neg h2, ← pow_two, ← pow_mul]
+      · rw [ite_eq_right h2, ← pow_two, ← pow_mul]
         congr 1
         omega
 
@@ -411,6 +406,9 @@ private theorem c0_ne_zero_sub_zmod {a0 a1 s' c0 inv2 : ZMod Fp.modulus}
     exact ha1 (mul_self_eq_zero.mp ha1_sq)
   exact mul_ne_zero h2ne hc0_ne
 
+-- `sqrt.match_1` is the matcher of the library's `Fp2.sqrt`, named on purpose so the
+-- statement matches that definition's unfolding.
+set_option linter.auxLemma false in
 private theorem c0Opt_eq_ok {s a0 twoInv c0Fp : Fp}
     (h : sqrt.match_1 (fun _ => Except BlsError Fp) (Fp.sqrt ((a0 + s) * twoInv))
           (fun _ => Fp.sqrt ((a0 + s) * twoInv))
@@ -461,6 +459,8 @@ private theorem sqrt_branch_sub_gen_aux {invFn : Fp → Fp}
     hinv (Fp.ofNat 2 * c0) h2c0_ne
   exact ext (sqrt_c0_sub_zmod hs h2inv hc0 h2c0_inv) (sqrt_c1_zmod h2c0_inv)
 
+-- The body names the library's generated matchers on purpose, as its docstring explains.
+set_option linter.auxLemma false in
 /-- The square root in `Fp2`, with the inverse function and the inverse of `2` as parameters.
 
 Unfolding the square root directly makes the kernel recurse too deeply.

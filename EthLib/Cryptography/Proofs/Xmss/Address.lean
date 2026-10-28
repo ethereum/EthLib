@@ -174,12 +174,15 @@ theorem addrMsg_inj {layer layer' : Layer} {e e' : UInt32} :
 theorem encodeAddress_known_answer :
     encodeAddress 19 5 ⟨0x123456, by decide⟩ 0x89abcdef =
       #v[0xef, 0xcd, 0xab, 0x89, 0x56, 0x34, 0x12, 0xb3, 0, 0, 0, 0, 0, 0, 0, 0] := by
-  decide +kernel
+  -- `decide` cannot find the instance: the literal has length `16` and `Address` has
+  -- length `ADDRESS_LEN`, which instance search does not unfold. Both sides reduce to the
+  -- same vector, so `rfl` closes it.
+  rfl
 
 /-- The top layer sets bit 23 of `hi`, the top bit of byte 6. -/
 theorem addrLeaf_top_known_answer :
     addrLeaf .top 0x0102 =
       #v[0x02, 0x01, 0, 0, 0, 0, 0x80, 0x02, 0, 0, 0, 0, 0, 0, 0, 0] := by
-  decide +kernel
+  rfl
 
 end EthLib.Cryptography.Xmss

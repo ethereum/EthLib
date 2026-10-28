@@ -97,7 +97,7 @@ theorem foldl_range'_getElem! {α β : Type} [Inhabited α] (arr : Array α)
   | zero => intro _; rfl
   | succ t ih =>
     intro ht
-    have htl : t < arr.toList.length := by simpa using ht
+    have htl : t < arr.toList.length := by rw [Array.length_toList]; omega
     rw [List.range'_1_concat, List.foldl_append, List.foldl_cons,
       List.foldl_nil, ih (by omega), List.take_add_one,
       List.getElem?_eq_getElem htl, Option.toList_some, List.foldl_append,

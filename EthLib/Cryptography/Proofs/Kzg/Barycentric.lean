@@ -24,11 +24,10 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 
--- See the note in `Proofs.Bls.FrZMod`: core's grind-tactic `HPow`
--- instance on `Fin` shadows Mathlib's monoid power on `Fr` and breaks
+-- See the note in `Proofs.Bls.FrZMod`: core's `NatPow` instance on `Fin`
+-- shadows Mathlib's monoid power on `Fr` and breaks
 -- `rw` with Mathlib `pow` lemmas. File-local, so repeated here.
-attribute [-instance] Lean.Grind.Fin.instHPowFinNatOfNeZero
-attribute [-instance] Lean.Grind.Fin.instPowFinNatOfNeZero
+attribute [-instance] Fin.instNatPow
 
 /-- The batch inverses of the barycentric denominators are their inverses. -/
 theorem getElem!_batchInverse_denominators (domain : Array Fr) (z : Fr) (width k : Nat)
@@ -65,7 +64,7 @@ theorem evaluatePolynomialInEvaluationForm_slowPath
         z polynomial.size *
       (z ^ (Fr.ofNat polynomial.size) - Fr.one) *
       (Fr.ofNat polynomial.size).inverse) := by
-  rw [evaluatePolynomialInEvaluationForm, if_neg (by simp [hsize])]
+  rw [evaluatePolynomialInEvaluationForm, ite_eq_right (by simp [hsize])]
   exact congrArg Except.ok
     (evaluatePolynomialInEvaluationFormAux_slowPath polynomial _ z h)
 
@@ -123,7 +122,7 @@ theorem evaluatePolynomialInEvaluationForm_slowPath_sum
             * (z - (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB)[i]!)⁻¹)
         * (z ^ FIELD_ELEMENTS_PER_BLOB - 1)
         * ((FIELD_ELEMENTS_PER_BLOB : Nat) : Fr)⁻¹) := by
-  rw [evaluatePolynomialInEvaluationForm, if_neg (by simp [hsize])]
+  rw [evaluatePolynomialInEvaluationForm, ite_eq_right (by simp [hsize])]
   have hw : p.size < Fr.modulus := by rw [hsize]; decide
   have := evaluatePolynomialInEvaluationFormAux_slowPath_sum p
     (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB) z hw h

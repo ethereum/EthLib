@@ -96,14 +96,14 @@ theorem readNat_zero_size (data : ByteArray) (start : Nat) : readNat data start 
 /-- Past the end of the call data every byte reads as zero. -/
 theorem byteAt_of_size_le {data : ByteArray} {i : Nat} (h : data.size ≤ i) :
     byteAt data i = 0 := by
-  simp [byteAt, Array.getD_eq_getD_getElem?, Array.getElem?_eq_none (by simpa using h)]
+  simp [byteAt, Array.getD_eq_getD_getElem?, Array.getElem?_eq_none h]
 
 /-- Padding the call data with zero bytes on the right changes no byte. -/
 theorem byteAt_append_zeros (data : ByteArray) (n i : Nat) :
     byteAt (data ++ ByteArray.mk (Array.replicate n 0)) i = byteAt data i := by
   by_cases h : i < data.size
   · simp [byteAt, ByteArray.data_append, Array.getD_eq_getD_getElem?,
-      Array.getElem?_append_left (by simpa using h)]
+      Array.getElem?_append_left h]
   · have h' : data.size ≤ i := Nat.le_of_not_lt h
     rw [byteAt_of_size_le h']
     -- Past the end of the data, the padding is zeros and beyond it nothing.

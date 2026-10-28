@@ -41,12 +41,12 @@ def constBytesPerSignature (_ : Unit) : UInt64 :=
 
 @[export eth_bls_aggregate_pubkeys]
 def ethAggregatePubkeysExport
-    (pubkeys : @& Array ByteArray) : IO ByteArray :=
+    (pubkeys : Array ByteArray) : IO ByteArray :=
   runBls (ethAggregatePubkeys pubkeys)
 
 @[export eth_bls_fast_aggregate_verify]
 def ethFastAggregateVerifyExport
-    (pubkeys : @& Array ByteArray) (msg : @& ByteArray) (sig : @& ByteArray)
+    (pubkeys : Array ByteArray) (msg : ByteArray) (sig : ByteArray)
     : IO UInt8 := do
   return if ethFastAggregateVerify pubkeys msg sig then 1 else 0
 

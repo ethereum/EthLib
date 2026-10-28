@@ -40,7 +40,7 @@ theorem constructVanishingPolynomial_tooManyMissingCells
     (h : missingCellIndices.size ≥ CELLS_PER_EXT_BLOB) :
     constructVanishingPolynomial missingCellIndices =
       .error .tooManyMissingCells := by
-  simp [constructVanishingPolynomial, h, Bind.bind, Except.bind]
+  simp [constructVanishingPolynomial, h, Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- The extended vanishing polynomial spans the full extended domain. -/
 theorem size_constructVanishingPolynomial
@@ -48,7 +48,7 @@ theorem size_constructVanishingPolynomial
     (h : constructVanishingPolynomial missingCellIndices = .ok p) :
     p.size = FIELD_ELEMENTS_PER_EXT_BLOB := by
   simp only [constructVanishingPolynomial,
-    bind, Except.bind, pure, Except.pure] at h
+    bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at h
   repeat' split at h
   all_goals cases h
   rw [size_foldl_of_size_step]
@@ -116,7 +116,7 @@ theorem leadingCoeff_constructVanishingPolynomial
       p[missingCellIndices.size * FIELD_ELEMENTS_PER_CELL]! = Fr.one ∧
       p[missingCellIndices.size * FIELD_ELEMENTS_PER_CELL]!.isZero = false := by
   simp only [constructVanishingPolynomial,
-    bind, Except.bind, pure, Except.pure] at h
+    bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at h
   split at h
   · cases h
   · rename_i hlt
@@ -171,7 +171,7 @@ theorem constructVanishingPolynomial_ok_of_lt
       zeroPoly.set! (i * FIELD_ELEMENTS_PER_CELL) shortZeroPoly[i]!
   have hp : constructVanishingPolynomial missingCellIndices = .ok p := by
     unfold constructVanishingPolynomial
-    rw [if_neg (by omega)]
+    rw [ite_eq_right (by omega)]
     simp only [Bind.bind, Except.bind, xs, rouReduced, hshort, pure, Except.pure, p]
   exact ⟨p, hp, size_constructVanishingPolynomial hp,
     (leadingCoeff_constructVanishingPolynomial hp).2.1⟩
@@ -220,7 +220,7 @@ private theorem foldl_vanishing_extend_getElem!_all
         Nat.mul_mod_left k FIELD_ELEMENTS_PER_CELL
       have hdiv : (k * FIELD_ELEMENTS_PER_CELL) / FIELD_ELEMENTS_PER_CELL = k :=
         Nat.mul_div_cancel k (by rw [hcell]; decide)
-      rw [if_pos ⟨hmod, by omega⟩, hdiv]
+      rw [ite_eq_left ⟨hmod, by omega⟩, hdiv]
     · by_cases hm : m < FIELD_ELEMENTS_PER_EXT_BLOB
       · rw [getElem!_set!_ne prev shortZeroPoly[k]! (Ne.symm hmk) (by rw [hprev_sz]; exact hm),
             ih (by omega)]
@@ -233,15 +233,15 @@ private theorem foldl_vanishing_extend_getElem!_all
             rw [hcell] at h1 h2 hmk ⊢
             omega
         by_cases hc : m % FIELD_ELEMENTS_PER_CELL = 0 ∧ m / FIELD_ELEMENTS_PER_CELL < k
-        · rw [if_pos hc, if_pos (heq_cond.mp hc)]
-        · rw [if_neg hc, if_neg (fun hc' => hc (heq_cond.mpr hc'))]
+        · rw [ite_eq_left hc, ite_eq_left (heq_cond.mp hc)]
+        · rw [ite_eq_right hc, ite_eq_right (fun hc' => hc (heq_cond.mpr hc'))]
       · rw [getElem!_neg _ m (by rw [size_set!, hprev_sz]; exact hm)]
         have hnot : ¬ (m % FIELD_ELEMENTS_PER_CELL = 0 ∧ m / FIELD_ELEMENTS_PER_CELL < k + 1) := by
           rintro ⟨_, hlt⟩
           rw [hcell] at hlt
           rw [hext] at hm
           omega
-        rw [if_neg hnot]
+        rw [ite_eq_right hnot]
         rfl
 
 private theorem fr_powNat_mul (x : Fr) (c i : Nat) :
@@ -283,7 +283,7 @@ private theorem evalCoeffPolyAux_extend_block
       Nat.mul_mod_left i FIELD_ELEMENTS_PER_CELL
     have hdiv : (i * FIELD_ELEMENTS_PER_CELL) / FIELD_ELEMENTS_PER_CELL = i :=
       Nat.mul_div_cancel i (by rw [hcell]; decide)
-    rw [if_pos ⟨hmod, by omega⟩, hdiv] at hget
+    rw [ite_eq_left ⟨hmod, by omega⟩, hdiv] at hget
     rw [hget, fr_powNat_mul]
   | succ d ih =>
     have hstep : i * FIELD_ELEMENTS_PER_CELL + (d + 1 + 1) =
@@ -294,7 +294,7 @@ private theorem evalCoeffPolyAux_extend_block
     have hmod : (i * FIELD_ELEMENTS_PER_CELL + (d + 1)) % FIELD_ELEMENTS_PER_CELL ≠ 0 := by
       rw [hcell] at hr2 ⊢
       omega
-    rw [if_neg (fun h => hmod h.1)] at hget
+    rw [ite_eq_right (fun h => hmod h.1)] at hget
     have h0mul (y : Fr) : Fr.zero * y = Fr.zero := Fin.zero_mul y
     have hadd0 (y : Fr) : y + Fr.zero = y := Fin.add_zero y
     change evalCoeffPolyAux p x (i * FIELD_ELEMENTS_PER_CELL) +
@@ -344,7 +344,7 @@ private theorem evalCoeffPolyAux_extend_tail
       rintro ⟨_, hlt⟩
       rw [hcell] at hlt
       omega
-    rw [if_neg hnot] at hget
+    rw [ite_eq_right hnot] at hget
     have h0mul (y : Fr) : Fr.zero * y = Fr.zero := Fin.zero_mul y
     have hadd0 (y : Fr) : y + Fr.zero = y := Fin.add_zero y
     change evalCoeffPolyAux p x (k * FIELD_ELEMENTS_PER_CELL) +
@@ -432,7 +432,7 @@ theorem recoverPolynomialcoeff_length_mismatch
     (h : cosetsEvals.size ≠ cellIndices.size) :
     recoverPolynomialcoeff cellIndices cosetsEvals =
       .error (.inputLengthMismatch "cosetsEvals" cellIndices.size cosetsEvals.size) := by
-  simp [recoverPolynomialcoeff, h, Bind.bind, Except.bind]
+  simp [recoverPolynomialcoeff, h, Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 set_option maxRecDepth 4096 in
 /-- On success, the recovered polynomial has exactly
@@ -446,7 +446,6 @@ theorem size_recoverPolynomialcoeff
   split at h
   · exact absurd h (by simp [Bind.bind, Except.bind])
   · obtain ⟨u, hu, h⟩ := except_bind_eq_ok h
-    obtain ⟨z, hz, h⟩ := except_bind_eq_ok h
     simp only [pure, Except.pure, Except.ok.injEq] at h
     subst h
     simp [FIELD_ELEMENTS_PER_EXT_BLOB]
@@ -459,11 +458,11 @@ private theorem list_length_filter_lt_iff {α : Type _} (l : List α) (f : α �
   | cons a as ih =>
     simp only [List.filter_cons, List.length_cons, List.mem_cons, exists_eq_or_imp]
     by_cases hfa : f a = true
-    · rw [if_pos hfa, List.length_cons]
+    · rw [ite_eq_left hfa, List.length_cons]
       have hne : f a ≠ false := by rw [hfa]; decide
       simp [hne, ih]
     · have hfa' : f a = false := Bool.eq_false_iff.mpr hfa
-      rw [if_neg hfa, hfa']
+      rw [ite_eq_right hfa, hfa']
       have hle : (as.filter f).length ≤ as.length := List.length_filter_le f as
       exact ⟨fun _ => Or.inl rfl, fun _ => by omega⟩
 
@@ -494,7 +493,7 @@ theorem recoverPolynomialcoeff_ok_of_contains
   obtain ⟨z, hz, _, _⟩ := constructVanishingPolynomial_ok_of_lt hmissing
   have hok : ∃ p, recoverPolynomialcoeff cellIndices cosetsEvals = .ok p := by
     unfold recoverPolynomialcoeff
-    rw [if_neg (by omega)]
+    rw [ite_eq_right (by omega)]
     simp only [Bind.bind, Except.bind, pure, Except.pure, hz]
     exact ⟨_, rfl⟩
   rcases hok with ⟨p, hp⟩
@@ -512,11 +511,10 @@ theorem recoverPolynomialcoeff_ok_iff
   · rintro ⟨p, h⟩
     rw [recoverPolynomialcoeff] at h
     by_cases hne : cosetsEvals.size ≠ cellIndices.size
-    · rw [if_pos hne] at h
+    · rw [ite_eq_left hne] at h
       exact absurd h (by simp [Bind.bind, Except.bind])
     · have hlen : cosetsEvals.size = cellIndices.size := Decidable.of_not_not hne
-      rw [if_neg hne] at h
-      obtain ⟨_, _, h⟩ := except_bind_eq_ok h
+      rw [ite_eq_right hne] at h
       obtain ⟨z, hz, _⟩ := except_bind_eq_ok h
       have hlt := (leadingCoeff_constructVanishingPolynomial hz).1
       exact ⟨hlen, (missing_size_lt_iff cellIndices).mp hlt⟩
@@ -616,7 +614,7 @@ theorem constructVanishingPolynomial_high_zero
       simp only [Array.size_map] at hsz
       rw [← Array.foldl_toList, Array.toList_range,
         foldl_vanishing_extend_getElem!_all q q.size (by omega)]
-      rw [if_neg]
+      rw [ite_eq_right]
       rintro ⟨hmod, hdiv⟩
       have hc : FIELD_ELEMENTS_PER_CELL = 64 := rfl
       rw [hc] at hi hmod hdiv

@@ -318,10 +318,10 @@ theorem powNat_eq_pow (a : Fp12) (e : Nat) : powNat a e = a ^ e := by
     · rename_i h
       rw [ih (e / 2) (by omega)]
       by_cases h2 : e % 2 = 1
-      · rw [if_pos h2, ← pow_two, ← pow_mul, ← pow_succ']
+      · rw [ite_eq_left h2, ← pow_two, ← pow_mul, ← pow_succ']
         congr 1
         omega
-      · rw [if_neg h2, ← pow_two, ← pow_mul]
+      · rw [ite_eq_right h2, ← pow_two, ← pow_mul]
         congr 1
         omega
 

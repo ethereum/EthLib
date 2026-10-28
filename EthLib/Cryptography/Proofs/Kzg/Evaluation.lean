@@ -38,11 +38,10 @@ open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial
 
--- See the note in `Proofs.Bls.FrZMod`: core's grind-tactic `HPow`
--- instance on `Fin` shadows Mathlib's monoid power on `Fr` and breaks
+-- See the note in `Proofs.Bls.FrZMod`: core's `NatPow` instance on `Fin`
+-- shadows Mathlib's monoid power on `Fr` and breaks
 -- `rw` with Mathlib `pow` lemmas. File-local, so repeated here.
-attribute [-instance] Lean.Grind.Fin.instHPowFinNatOfNeZero
-attribute [-instance] Lean.Grind.Fin.instPowFinNatOfNeZero
+attribute [-instance] Fin.instNatPow
 
 -- A few unification problems below (e.g. seeing through
 -- `Lagrange.nodal` to its `Finset.prod`) exceed the default depth.

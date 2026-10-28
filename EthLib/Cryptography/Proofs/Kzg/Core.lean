@@ -117,7 +117,6 @@ theorem g1LincombPoints_length_mismatch {points : Array Bls.G1}
 theorem g1LincombPoints_empty :
     g1LincombPoints #[] #[] = pure Bls.G1.zero := by
   simp [g1LincombPoints]
-  rfl
 
 /-- On equal-length inputs, `g1LincombPoints` computes `Bls.G1.msm`. -/
 theorem g1LincombPoints_eq_msm {points : Array Bls.G1} {scalars : Array Fr}
@@ -125,16 +124,14 @@ theorem g1LincombPoints_eq_msm {points : Array Bls.G1} {scalars : Array Fr}
     g1LincombPoints points scalars = pure (Bls.G1.msm points scalars) := by
   have hne : ¬ (points.size ≠ scalars.size) := fun hcontra => hcontra h
   unfold g1LincombPoints
-  rw [if_neg hne]
+  rw [ite_eq_right hne]
   by_cases h0 : points.size = 0
-  · rw [if_pos h0]
+  · rw [ite_eq_left h0]
     have hm : Bls.G1.msm points scalars = Bls.G1.zero := by
       unfold Bls.G1.msm
       simp [h0]
     rw [hm]
-    rfl
-  · rw [if_neg h0]
-    rfl
+  · rw [ite_eq_right h0]
 
 /-- `g1Lincomb` rejects mismatched input lengths. -/
 theorem g1Lincomb_length_mismatch {points : Array KZGCommitment}
@@ -148,7 +145,6 @@ theorem g1Lincomb_length_mismatch {points : Array KZGCommitment}
 theorem g1Lincomb_empty :
     g1Lincomb #[] #[] = pure (Bls.G1.compress Bls.G1.zero) := by
   simp [g1Lincomb]
-  rfl
 
 /-- When every commitment in `pointsBytes` decompresses via `uncompressG1` to
 `pointsG1` (`pointsG1.size = pointsBytes.size`), `g1Lincomb pointsBytes scalars`
@@ -163,10 +159,10 @@ theorem g1LincombPoints_of_uncompress {pointsBytes : Array KZGCommitment}
   rw [hsz]
   by_cases hne : pointsBytes.size ≠ scalars.size
   · simp [hne]; rfl
-  · rw [if_neg hne, if_neg hne]
+  · rw [ite_eq_right hne, ite_eq_right hne]
     by_cases h0 : pointsBytes.size = 0
     · simp [h0]; rfl
-    · rw [if_neg h0, if_neg h0, h]
+    · rw [ite_eq_right h0, ite_eq_right h0, h]
       rfl
 
 /-- `computeKzgProof` rejects a wrongly-sized blob. -/

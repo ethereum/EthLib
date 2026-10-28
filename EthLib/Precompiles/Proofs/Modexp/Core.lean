@@ -77,7 +77,7 @@ theorem compute_modulus_zero (data : ByteArray) (l : Lengths)
     | zero => rfl
     | succ len ih => simp [natToBytes, ih, List.replicate_succ']
   have := compute_data data l
-  rw [if_pos h, h1] at this
+  rw [ite_eq_left h, h1] at this
   exact Array.toList_inj.mp (by simpa using this)
 
 /-- An empty modulus gives an empty output, even with an empty base.
@@ -165,7 +165,7 @@ theorem modexp_append_excess (data extra : ByteArray) (gas : Nat)
   -- Every covered byte lies inside the original data, before the excess.
   have hi' : i < data.size := Nat.lt_of_lt_of_le hi h
   simp [byteAt, ByteArray.data_append, Array.getD_eq_getD_getElem?,
-    Array.getElem?_append_left (by simpa using hi')]
+    Array.getElem?_append_left hi']
 
 /-! ## Bounds and gas -/
 

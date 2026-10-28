@@ -21,8 +21,7 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Lean.Grind.Fin.instHPowFinNatOfNeZero
-attribute [-instance] Lean.Grind.Fin.instPowFinNatOfNeZero
+attribute [-instance] Fin.instNatPow
 
 /-- The exact zero-filled, bit-reversed-order evaluation array used in recovery. -/
 def recoveryFlatten (indices : Array CellIndex) (cells : Array CosetEvals) : Array Fr :=
@@ -73,7 +72,7 @@ theorem recoveryFlatten_known
       (fun m => evalPolyAt p (domainRoot FIELD_ELEMENTS_PER_EXT_BLOB ^ reverseBits m FIELD_ELEMENTS_PER_EXT_BLOB))
       hmatch indices.size (Nat.le_refl _) _ (by
         rw [Array.size_replicate]
-        exact reverseBits_lt_two_pow i 13), if_pos hknown]
+        exact reverseBits_lt_two_pow i 13), ite_eq_left hknown]
   have hback : reverseBits (reverseBits i FIELD_ELEMENTS_PER_EXT_BLOB) FIELD_ELEMENTS_PER_EXT_BLOB = i :=
     reverseBits_reverseBits (k := 13) hi
   rw [hback]

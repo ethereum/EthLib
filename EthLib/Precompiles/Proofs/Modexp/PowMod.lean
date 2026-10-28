@@ -23,7 +23,7 @@ theorem powMod_eq (b e m : Nat) : powMod b e m = b ^ e % m := by
     · -- `b ^ 0 % m = 1 % m`.
       subst h0
       simp
-    · rw [dif_neg h0]
+    · rw [dite_eq_right h0]
       -- The loop on the squared base and the halved exponent.
       have hrec := ih (e / 2) (Nat.div_lt_self (Nat.pos_of_ne_zero h0) (by decide)) (b * b % m)
       -- Squaring modulo `m` first changes nothing, so the half is `b ^ (2 * (e / 2)) % m`.
@@ -32,9 +32,9 @@ theorem powMod_eq (b e m : Nat) : powMod b e m = b ^ e % m := by
       rw [hrec, hhalf]
       by_cases h1 : e % 2 = 1
       · -- An odd exponent: `e = 2 * (e / 2) + 1`.
-        rw [if_pos h1, Nat.mod_mul_mod, ← Nat.pow_succ, show (2 * (e / 2)).succ = e by omega]
+        rw [ite_eq_left h1, Nat.mod_mul_mod, ← Nat.pow_succ, show (2 * (e / 2)).succ = e by omega]
       · -- An even exponent: `e = 2 * (e / 2)`.
-        rw [if_neg h1, show 2 * (e / 2) = e by omega]
+        rw [ite_eq_right h1, show 2 * (e / 2) = e by omega]
 
 /-! ## Known answers
 

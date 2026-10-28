@@ -122,10 +122,10 @@ theorem paddingByte_mod_two (len i : Nat) :
   unfold paddingByte
   by_cases first : i = 0
   -- The first byte is 0x01 or 0x81: bit 0 set.
-  · simp only [first, if_true]
+  · simp only [first, ite_true]
     split <;> decide
   -- Any later byte is 0x00 or 0x80: bit 0 clear.
-  · simp only [first, if_false]
+  · simp only [first, ite_false]
     split <;> decide
 
 /-- Byte `j` of a padded message: a message byte, then padding bytes counted from 0. -/
@@ -166,8 +166,8 @@ private theorem pad_ne_of_lt {a b : ByteArray} (shorter : a.size < b.size)
   have bit0 : ((pad a).data[b.size]'ha).toNat % 2 = ((pad b).data[b.size]'hb).toNat % 2 := by
     simp only [same]
   -- For `a` it is padding byte `len(b) - len(a) >= 1`, for `b` padding byte 0.
-  rw [getElem_pad_data, getElem_pad_data, dif_neg (by omega), dif_neg (Nat.lt_irrefl _),
-    paddingByte_mod_two, paddingByte_mod_two, if_neg (by omega), Nat.sub_self, if_pos rfl]
+  rw [getElem_pad_data, getElem_pad_data, dite_eq_right (by omega), dite_eq_right (Nat.lt_irrefl _),
+    paddingByte_mod_two, paddingByte_mod_two, ite_eq_right (by omega), Nat.sub_self, ite_eq_left rfl]
     at bit0
   -- So 0 = 1.
   exact absurd bit0 (by decide)

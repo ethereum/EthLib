@@ -17,8 +17,12 @@ self-contained Python extension.
 
 package «EthLib» where
   moreLeancArgs := #["-fPIC"]
+  -- Mathlib asks importers to use the module system, and Lake warns on each
+  -- file that imports it without a `module` header. EthLib files are not
+  -- modules yet, so the warning is off until they move.
+  allowNonModules := true
 
-require "leanprover-community" / "mathlib" @ git "v4.29.1"
+require "leanprover-community" / "mathlib" @ git "v4.35.0"
 
 @[default_target]
 lean_lib «EthLib» where

@@ -23,13 +23,13 @@ theorem testBit_reverseBitsAux (bits x r i : Nat) :
   | succ b ih =>
     rw [reverseBitsAux, ih]
     rcases Nat.lt_trichotomy i b with h | h | h
-    · rw [if_pos h, if_pos (by omega), Nat.testBit_shiftRight]
+    · rw [ite_eq_left h, ite_eq_left (by omega), Nat.testBit_shiftRight]
       exact congrArg x.testBit (by omega)
     · subst h
-      rw [if_neg (Nat.lt_irrefl i), if_pos (Nat.lt_succ_self i),
+      rw [ite_eq_right (Nat.lt_irrefl i), ite_eq_left (Nat.lt_succ_self i),
         Nat.sub_self, show i + 1 - 1 - i = 0 by omega]
       simp
-    · rw [if_neg (by omega), if_neg (by omega),
+    · rw [ite_eq_right (by omega), ite_eq_right (by omega),
         show i - b = (i - (b + 1)) + 1 by omega]
       have hand : x &&& 1 < 2 ^ (i - (b + 1) + 1) :=
         Nat.lt_of_le_of_lt Nat.and_le_right
@@ -52,7 +52,7 @@ theorem reverseBits_lt_two_pow (n k : Nat) :
   rcases Nat.lt_or_ge (reverseBits n (2 ^ k)) (2 ^ k) with h | h
   · exact h
   · obtain ⟨i, hi, hbit⟩ := Nat.exists_ge_and_testBit_of_ge_two_pow h
-    rw [testBit_reverseBits, if_neg (by omega)] at hbit
+    rw [testBit_reverseBits, ite_eq_right (by omega)] at hbit
     exact absurd hbit Bool.false_ne_true
 
 /-- `reverseBits _ order` is an involution on `[0, order)` for
@@ -63,9 +63,9 @@ theorem reverseBits_reverseBits {n k : Nat} (h : n < 2 ^ k) :
   intro i
   rw [testBit_reverseBits]
   by_cases hi : i < k
-  · rw [if_pos hi, testBit_reverseBits, if_pos (by omega)]
+  · rw [ite_eq_left hi, testBit_reverseBits, ite_eq_left (by omega)]
     exact congrArg n.testBit (by omega)
-  · rw [if_neg hi]
+  · rw [ite_eq_right hi]
     exact (Nat.testBit_lt_two_pow (Nat.lt_of_lt_of_le h
       (Nat.pow_le_pow_right (by omega) (Nat.le_of_not_lt hi)))).symm
 

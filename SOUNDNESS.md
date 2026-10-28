@@ -279,8 +279,8 @@ The Lean and Python docstrings of `sign` both say so.
 
 <!-- generated: pins -->
 The specification requires no package.
-The package requires Mathlib, at `v4.29.1`, commit `5e932f9`, which only the proofs import.
-The Lean toolchain is `leanprover/lean4:v4.29.1`.
+The package requires Mathlib, at `v4.35.0`, commit `56a0058`, which only the proofs import.
+The Lean toolchain is `leanprover/lean4:v4.35.0`.
 <!-- end generated -->
 
 ### D3. The KZG trusted setup

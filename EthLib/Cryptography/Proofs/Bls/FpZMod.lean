@@ -463,26 +463,28 @@ theorem powNat_eq_zmod_pow (a : ZMod modulus) (n : Nat) :
     Fp.powNat a n = a ^ n := by
   induction n using Nat.strongRecOn generalizing a with
   | _ n ih =>
-    rw [Fp.powNat]
+    -- `a` is a `ZMod` element passed where `powNat` takes an `Fp`.
+    -- `rw` checks the rewritten goal at `implicit` transparency, where that
+    -- is ill-typed, so the equation and the recursive call go in by
+    -- `trans` and `erw`.
+    refine (Fp.powNat.eq_1 a n).trans ?_
     split
     · rename_i h
       subst h
       rw [pow_zero]
       rfl
     · rename_i h
-      rw [ih (n / 2) (by omega)]
-      by_cases h2 : n % 2 = 1
+      dsimp only
+      erw [ih (n / 2) (by omega)]
       -- `show` re-elaborates the goal with uniform `ZMod` instance
       -- paths (the `*` inherited from `powNat`'s body is the spec's
       -- `Fin` one), so the `pow` rewrites below can match.
-      · rw [if_pos h2]
-        show a * (a * a) ^ (n / 2) = a ^ n
-        rw [← pow_two, ← pow_mul, ← pow_succ']
+      show (if n % 2 = 1 then a * (a * a) ^ (n / 2) else (a * a) ^ (n / 2)) = a ^ n
+      by_cases h2 : n % 2 = 1
+      · rw [ite_eq_left h2, ← pow_two, ← pow_mul, ← pow_succ']
         congr 1
         omega
-      · rw [if_neg h2]
-        show (a * a) ^ (n / 2) = a ^ n
-        rw [← pow_two, ← pow_mul]
+      · rw [ite_eq_right h2, ← pow_two, ← pow_mul]
         congr 1
         omega
 
@@ -491,7 +493,9 @@ of `ZMod Fp.modulus` (both send `0` to `0`). Public `Fp`-facing
 version: `inverse_eq_inv`. -/
 private theorem inverse_eq_zmod_inv (a : ZMod modulus) :
     Fp.inverse a = a⁻¹ := by
-  rw [inverse, powNat_eq_zmod_pow]
+  -- Unfold `inverse` by `show`, for the reason given in `powNat_eq_zmod_pow`.
+  show Fp.powNat a (modulus - 2) = a⁻¹
+  rw [powNat_eq_zmod_pow]
   by_cases h : a = 0
   · subst h
     rw [zero_pow (by decide : modulus - 2 ≠ 0), inv_zero]

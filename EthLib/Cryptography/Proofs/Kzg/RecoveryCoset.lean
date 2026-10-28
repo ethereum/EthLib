@@ -17,8 +17,7 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Lean.Grind.Fin.instHPowFinNatOfNeZero
-attribute [-instance] Lean.Grind.Fin.instPowFinNatOfNeZero
+attribute [-instance] Fin.instNatPow
 
 private theorem fr_mul_pow (a b : Fr) (n : Nat) : (a * b) ^ n = a ^ n * b ^ n := mul_pow a b n
 private theorem fr_pow_mul (a : Fr) (m n : Nat) : a ^ (m * n) = (a ^ m) ^ n := pow_mul a m n
@@ -30,7 +29,8 @@ theorem isPrimitiveRoot_recoveryShift :
     IsPrimitiveRoot (Fr.ofNat PRIMITIVE_ROOT_OF_UNITY) (BLS_MODULUS - 1) := by
   have h := Bls.Fr.isPrimitiveRoot_ofNat_seven_pow (dvd_refl (Fr.modulus - 1))
   rw [Nat.div_self (by decide : 0 < Fr.modulus - 1), Bls.Fr.hpow_eq_pow] at h
-  simpa using h
+  -- The generator and the group order differ from `h` only by closed arithmetic.
+  convert h using 2 <;> decide
 
 /-- Every point on the recovery coset lies outside the extended roots-of-unity domain. -/
 theorem recoveryCoset_pow_ne_one (i : Nat) :
@@ -53,7 +53,6 @@ theorem recoveryCoset_cellPower_ne_root (i j : Nat) :
   have hp := congrArg (fun x : Fr => x ^ CELLS_PER_EXT_BLOB) h
   have hω : domainRoot CELLS_PER_EXT_BLOB ^ CELLS_PER_EXT_BLOB = (1 : Fr) := (isPrimitiveRoot_domainRoot
     (Nat.dvd_of_mod_eq_zero (by decide) : CELLS_PER_EXT_BLOB ∣ BLS_MODULUS - 1)).pow_eq_one
-  dsimp only at hp
   rw [← fr_pow_mul, ← fr_pow_mul, Nat.mul_comm j CELLS_PER_EXT_BLOB, fr_pow_mul (domainRoot CELLS_PER_EXT_BLOB), hω, fr_one_pow] at hp
   exact recoveryCoset_pow_ne_one i hp
 

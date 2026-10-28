@@ -56,7 +56,7 @@ theorem evalPolyAt_set (a : PolynomialCoeff) (x v : Fr) (i : Nat)
     evalPolyAt (a.set! i v) x = evalPolyAt a x +
       (v - a[i]!) * Fr.powNat x i := by
   unfold evalPolyAt evalCoeffPoly
-  rw [show (a.set! i v).size = a.size by simp [Array.set!], evalAux_set a x v i a.size hi (Nat.le_refl _), if_pos hi]
+  rw [show (a.set! i v).size = a.size by simp [Array.set!], evalAux_set a x v i a.size hi (Nat.le_refl _), ite_eq_left hi]
 
 
 private def divisionSubtract (a b : PolynomialCoeff) (shift : Nat) (quot : Fr)
@@ -91,7 +91,7 @@ private theorem eval_divisionSubtract (a b : PolynomialCoeff) (x quot : Fr)
   | zero =>
     change evalPolyAt a x = evalPolyAt a x - Fr.zero * quot * Fr.powNat x shift
     exact (sub_zero _).symm.trans (congrArg (fun z => evalPolyAt a x - z)
-      (by simp only [Fr.zero_def, zero_mul])).symm
+      (by simp only [Fr.zero_def, Fin.zero_mul])).symm
   | succ n ih =>
     rw [divisionSubtract_succ, evalPolyAt_set _ _ _ _ (by rw [size_divisionSubtract]; omega),
       ih (by omega), Fr.powNat_add, evalCoeffPolyAux]
@@ -119,9 +119,9 @@ private theorem divisionSubtract_get (a b : PolynomialCoeff) (quot : Fr)
       (by rw [size_divisionSubtract]; exact hj)]
     by_cases heq : shift + n = j
     · subst j
-      rw [if_pos rfl, ih, if_neg (by omega), if_pos (by omega)]
+      rw [ite_eq_left rfl, ih, ite_eq_right (by omega), ite_eq_left (by omega)]
       simp
-    · rw [if_neg heq, ih]
+    · rw [ite_eq_right heq, ih]
       have hc : (shift ≤ j ∧ j < shift + (n + 1)) ↔ (shift ≤ j ∧ j < shift + n) := by omega
       simp only [hc]
 
@@ -141,7 +141,7 @@ theorem dividePolynomialcoeff_inner_leading_zero (a b : PolynomialCoeff)
   dsimp only
   rw [← Array.foldl_toList, Array.toList_range]
   change (divisionSubtract a b shift (a[shift + b.size - 1]! * b[b.size - 1]!.inverse) b.size)[shift + b.size - 1]! = 0
-  rw [divisionSubtract_get a b _ shift b.size _ (by omega), if_pos (by omega)]
+  rw [divisionSubtract_get a b _ shift b.size _ (by omega), ite_eq_left (by omega)]
   have hindex : shift + b.size - 1 - shift = b.size - 1 := by omega
   rw [hindex, Fr.inverse_eq_inv]
   exact cancel_leading_identity _ _ hlead
@@ -252,7 +252,7 @@ private theorem dividePolynomialcoeff_eq_loop (a b : PolynomialCoeff)
   have hnotlt : ¬ a.size < b.size := by omega
   have hmax : max b.size 1 = b.size := by omega
   simp only [dividePolynomialcoeff, hb0, hnotlt, hlead, ↓reduceIte,
-    Bool.false_eq_true, Bind.bind, Except.bind, pure, Except.pure,
+    Bool.false_eq_true, pure, Except.pure,
     hmax, divisionLoopState, divisionSubtract,
     ← Array.foldl_toList, Array.toList_range]
   rfl
@@ -322,7 +322,7 @@ theorem dividePolynomialcoeff_loop_high_zero (a b : PolynomialCoeff)
     · change (divisionSubtract (divisionLoopState a b n).1 b shift
         ((divisionLoopState a b n).1[a.size-1-n]! * b[b.size-1]!.inverse) b.size)[j]! = 0
       rw [divisionSubtract_get _ _ _ _ _ _ (by rw [divisionLoopState_size]; exact hj)]
-      rw [if_neg (by dsimp [shift]; omega)]
+      rw [ite_eq_right (by dsimp [shift]; omega)]
       exact ih (by omega) j hj (by omega)
 
 /-- The final mutable dividend has no coefficients at or above the divisor's

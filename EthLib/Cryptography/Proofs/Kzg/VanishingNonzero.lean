@@ -15,8 +15,7 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Lean.Grind.Fin.instHPowFinNatOfNeZero
-attribute [-instance] Lean.Grind.Fin.instPowFinNatOfNeZero
+attribute [-instance] Fin.instNatPow
 
 private theorem field_mul_ne_zero {F : Type*} [Field F] {a b : F}
     (ha : a ≠ 0) (hb : b ≠ 0) : a * b ≠ 0 := mul_ne_zero ha hb
@@ -56,6 +55,6 @@ theorem vanishingPolynomialcoeff_eval_ne_zero {zs : Array Fr} {v : PolynomialCoe
   change Fr.zero + Fr.one * Fr.powNat z 0 ≠ 0
   rw [Bls.Fr.powNat_zero]
   change (0 : Fr) + 1 * 1 ≠ 0
-  simp
+  decide
 
 end EthLib.Cryptography.Kzg

@@ -208,13 +208,13 @@ theorem bytesToBlsField_ok {b : Bytes32} {f : Fr}
     unfold Bls.Fr.fromBytesBE
     have hsz : ¬ (blsFieldToBytes x).size ≠ 32 := by
       simp [size_blsFieldToBytes, BYTES_PER_FIELD_ELEMENT]
-    rw [if_neg hsz]
+    rw [ite_eq_right hsz]
     dsimp only []
-    simp only [hdec, dite_eq_ite, if_pos x.isLt, Fin.eta]
+    simp only [hdec, dite_eq_ite, ite_eq_left x.isLt, Fin.eta]
   unfold bytesToBlsField
   have hsz : ¬ (blsFieldToBytes x).size ≠ BYTES_PER_FIELD_ELEMENT := by
     simp [size_blsFieldToBytes]
-  rw [if_neg hsz, hfrom]
+  rw [ite_eq_right hsz, hfrom]
 
 /-- Drop trailing zero coefficients from a list of field elements. -/
 def stripTrailingZerosList : List Fr → List Fr
@@ -241,17 +241,17 @@ private theorem stripTrailingZerosList_eq_nil_iff (l : List Fr) :
       · intro h
         by_cases hx : x.isZero = true
         · exact ⟨hx, hxs'⟩
-        · rw [if_neg hx] at h; cases h
+        · rw [ite_eq_right hx] at h; cases h
       · rintro ⟨hx, _⟩
-        rw [if_pos hx]
+        rw [ite_eq_left hx]
     | cons y ys =>
       have hne : stripTrailingZerosList xs ≠ [] := by simp [hxs]
       have hnot : ¬ (∀ a ∈ xs, a.isZero = true) := fun hall => hne (ih.mpr hall)
       constructor
       · intro h
         by_cases hx : x.isZero = true
-        · rw [if_pos hx] at h; cases h
-        · rw [if_neg hx] at h; cases h
+        · rw [ite_eq_left hx] at h; cases h
+        · rw [ite_eq_right hx] at h; cases h
       · intro h
         exact absurd h.2 hnot
 
@@ -275,7 +275,7 @@ private theorem stripTrailingZerosList_last_ne_zero (l : List Fr)
     | nil =>
       by_cases hx : x.isZero = true
       · simp [hx]
-      · rw [if_neg hx]
+      · rw [ite_eq_right hx]
         intro _
         simpa [Bool.not_eq_true] using hx
     | cons y ys =>
@@ -305,10 +305,10 @@ private theorem stripTrailingZerosList_idempotent (l : List Fr) :
     cases hxs : stripTrailingZerosList xs with
     | nil =>
       by_cases hx : x.isZero = true
-      · rw [if_pos hx]; rfl
-      · rw [if_neg hx]
+      · rw [ite_eq_left hx]; rfl
+      · rw [ite_eq_right hx]
         show (if x.isZero = true then [] else [x]) = [x]
-        rw [if_neg hx]
+        rw [ite_eq_right hx]
     | cons y ys =>
       dsimp only
       rw [stripTrailingZerosList, ← hxs, hih, hxs]
@@ -323,10 +323,10 @@ private theorem stripTrailingZerosList_idempotent (l : List Fr) :
     (addPolynomialcoeff a b).size = max a.size b.size := by
   rw [addPolynomialcoeff]
   by_cases h : a.size ≥ b.size
-  · rw [if_pos h]
+  · rw [ite_eq_left h]
     simp only [Array.size_ofFn]
     exact (Nat.max_eq_left h).symm
-  · rw [if_neg h]
+  · rw [ite_eq_right h]
     simp only [Array.size_ofFn]
     exact (Nat.max_eq_right (Nat.le_of_not_le h)).symm
 
@@ -338,8 +338,8 @@ private theorem getElem!_of_ge_size (p : PolynomialCoeff) {i : Nat}
 private theorem ite_lt_size_getElem! (p : PolynomialCoeff) (i : Nat) :
     (if i < p.size then p[i]! else Fr.zero) = p[i]! := by
   by_cases h : i < p.size
-  · rw [if_pos h]
-  · rw [if_neg h, getElem!_of_ge_size p h]
+  · rw [ite_eq_left h]
+  · rw [ite_eq_right h, getElem!_of_ge_size p h]
 
 /-- Coefficient `i` of `addPolynomialcoeff a b` is `a[i]! + b[i]!` for all `i`
 (since out-of-bounds accesses default to `Fr.zero`). -/
@@ -347,7 +347,7 @@ private theorem ite_lt_size_getElem! (p : PolynomialCoeff) (i : Nat) :
     (addPolynomialcoeff a b)[i]! = a[i]! + b[i]! := by
   rw [addPolynomialcoeff]
   by_cases hab : a.size ≥ b.size
-  · rw [if_pos hab]
+  · rw [ite_eq_left hab]
     dsimp only []
     by_cases hi : i < a.size
     · rw [getElem!_pos _ i (by simp [hi]), Array.getElem_ofFn,
@@ -356,7 +356,7 @@ private theorem ite_lt_size_getElem! (p : PolynomialCoeff) (i : Nat) :
       rw [getElem!_of_ge_size _ (by simp [hi]),
           getElem!_of_ge_size a hi, getElem!_of_ge_size b hib]
       rfl
-  · rw [if_neg hab]
+  · rw [ite_eq_right hab]
     dsimp only []
     by_cases hi : i < b.size
     · rw [getElem!_pos _ i (by simp [hi]), Array.getElem_ofFn,
@@ -447,7 +447,7 @@ theorem evalPolyAt_addPoly (a b : PolynomialCoeff) (x : Fr) :
   have hnot : ¬ ((#[] : PolynomialCoeff).size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB) := by
     simp
     omega
-  rw [multiplyPolynomialcoeff, if_neg hnot]
+  rw [multiplyPolynomialcoeff, ite_eq_right hnot]
   rfl
 
 private theorem addPolynomialcoeff_replicate_zero (m n : Nat) :
@@ -477,7 +477,7 @@ theorem multiplyPolynomialcoeff_too_large {a b : PolynomialCoeff}
     multiplyPolynomialcoeff a b =
       .error (.polynomialProductTooLong a.size b.size) := by
   unfold multiplyPolynomialcoeff
-  rw [if_pos h]
+  rw [ite_eq_left h]
   rfl
 
 private def mulFoldStep (a b : PolynomialCoeff) (r : PolynomialCoeff)
@@ -509,7 +509,7 @@ private theorem foldl_mulFoldStep_empty_right (a : PolynomialCoeff) (k : Nat) :
   have hnot : ¬ (a.size + (#[] : PolynomialCoeff).size > FIELD_ELEMENTS_PER_EXT_BLOB) := by
     simp
     omega
-  rw [multiplyPolynomialcoeff, if_neg hnot]
+  rw [multiplyPolynomialcoeff, ite_eq_right hnot]
   change Except.ok ((Array.range a.size).foldl (mulFoldStep a #[]) #[Fr.zero]) = _
   rw [← Array.foldl_toList, Array.toList_range, foldl_mulFoldStep_empty_right]
 
@@ -524,12 +524,12 @@ private theorem size_foldl_mulFoldStep (a b : PolynomialCoeff) (k : Nat) :
   | zero => rfl
   | succ k ih =>
     rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
-        size_mulFoldStep, ih, if_neg (Nat.succ_ne_zero k)]
+        size_mulFoldStep, ih, ite_eq_right (Nat.succ_ne_zero k)]
     by_cases hk : k = 0
     · subst hk
-      rw [if_pos rfl]
+      rw [ite_eq_left rfl]
       omega
-    · rw [if_neg hk]
+    · rw [ite_eq_right hk]
       omega
 
 /-- A successful `multiplyPolynomialcoeff` returns `#[Fr.zero]` (size `1`) when
@@ -539,9 +539,9 @@ theorem size_multiplyPolynomialcoeff {a b p : PolynomialCoeff}
     p.size = if a.isEmpty then 1 else max (a.size + b.size - 1) 1 := by
   rw [multiplyPolynomialcoeff] at h
   by_cases hgt : a.size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB
-  · rw [if_pos hgt] at h
+  · rw [ite_eq_left hgt] at h
     cases h
-  · rw [if_neg hgt] at h
+  · rw [ite_eq_right hgt] at h
     change Except.ok _ = Except.ok p at h
     injection h with hp
     subst hp
@@ -573,7 +573,7 @@ private theorem getElem!_foldl_mulFoldStep_before_top (a b : PolynomialCoeff)
   · subst hk
     exact getElem!_zero_singleton (0 + b.size - 1)
   · apply getElem!_of_ge_size
-    rw [size_foldl_mulFoldStep a b k, if_neg hk]
+    rw [size_foldl_mulFoldStep a b k, ite_eq_right hk]
     omega
 
 /-- For non-empty inputs `a` and `b`, the leading coefficient of
@@ -588,9 +588,9 @@ theorem leadingCoeff_multiplyPolynomialcoeff {a b p : PolynomialCoeff}
     simpa [Array.isEmpty_iff_size_eq_zero, Nat.pos_iff_ne_zero] using hb
   rw [multiplyPolynomialcoeff] at h
   by_cases hgt : a.size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB
-  · rw [if_pos hgt] at h
+  · rw [ite_eq_left hgt] at h
     cases h
-  · rw [if_neg hgt] at h
+  · rw [ite_eq_right hgt] at h
     change Except.ok _ = Except.ok p at h
     injection h with hp
     subst hp
@@ -636,7 +636,7 @@ private theorem foldlM_vanishing_size_and_lead (xs : List Fr)
       have hbin_ne : (#[-x, Fr.one] : PolynomialCoeff).isEmpty = false := rfl
       have hq_sz : q.size = init.size + 1 := by
         have := size_multiplyPolynomialcoeff hq
-        rw [if_neg (by simp [hq_ne])] at this
+        rw [ite_eq_right (by simp [hq_ne])] at this
         simpa using this
       have hq_lead : q[q.size - 1]! = Fr.one := by
         have hlead := leadingCoeff_multiplyPolynomialcoeff hq_ne hbin_ne hq
@@ -678,7 +678,7 @@ theorem multiplyPolynomialcoeff_ok_of_le {a b : PolynomialCoeff}
       p.size = (if a.isEmpty then 1 else max (a.size + b.size - 1) 1) := by
   have hok : ∃ p, multiplyPolynomialcoeff a b = .ok p := by
     unfold multiplyPolynomialcoeff
-    rw [if_neg (by omega)]
+    rw [ite_eq_right (by omega)]
     exact ⟨_, rfl⟩
   rcases hok with ⟨p, hp⟩
   exact ⟨p, hp, size_multiplyPolynomialcoeff hp⟩
@@ -702,7 +702,7 @@ private theorem foldlM_vanishing_bound (xs : List Fr)
         simpa [Array.isEmpty_iff_size_eq_zero] using Nat.ne_of_gt hinit_pos
       have hq_sz : q.size = init.size + 1 := by
         have := size_multiplyPolynomialcoeff hq
-        rw [if_neg (by simp [hq_ne])] at this
+        rw [ite_eq_right (by simp [hq_ne])] at this
         simpa using this
       rcases ih q (by omega) h with rfl | hlt
       · simp only [List.length_cons, List.length_nil]
@@ -726,7 +726,7 @@ private theorem foldlM_vanishing_ok (xs : List Fr)
       obtain ⟨q, hq, hq_sz⟩ := multiplyPolynomialcoeff_ok_of_le hle
       have hq_ne : init.isEmpty = false := by
         simpa [Array.isEmpty_iff_size_eq_zero] using Nat.ne_of_gt hinit_pos
-      rw [if_neg (by simp [hq_ne])] at hq_sz
+      rw [ite_eq_right (by simp [hq_ne])] at hq_sz
       have hq_sz' : q.size = init.size + 1 := by simpa using hq_sz
       obtain ⟨p, hp⟩ := ih q (by omega) (by right; omega)
       refine ⟨p, ?_⟩
@@ -874,9 +874,9 @@ theorem evalPolyAt_mulPoly {a b p : PolynomialCoeff} (x : Fr)
     evalPolyAt p x = evalPolyAt a x * evalPolyAt b x := by
   rw [multiplyPolynomialcoeff] at h
   by_cases hgt : a.size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB
-  · rw [if_pos hgt] at h
+  · rw [ite_eq_left hgt] at h
     cases h
-  · rw [if_neg hgt] at h
+  · rw [ite_eq_right hgt] at h
     change Except.ok _ = Except.ok p at h
     injection h with hp
     subst hp
@@ -901,7 +901,7 @@ private theorem evalPolyAt_linear_factor_self (z : Fr) :
   simp only [Fin.val_add, Fin.val_neg]
   by_cases hz : z = 0
   · subst hz; rfl
-  · rw [if_neg hz]
+  · rw [ite_eq_right hz]
     show (Fr.modulus - z.val + z.val) % Fr.modulus = 0
     rw [Nat.sub_add_cancel (Nat.le_of_lt hzlt), Nat.mod_self]
 
@@ -953,12 +953,14 @@ theorem dividePolynomialcoeff_zero_divisor (a b : PolynomialCoeff)
     (h : b.size = 0 ∨ (b.size ≤ a.size ∧ b[b.size - 1]!.isZero = true)) :
     dividePolynomialcoeff a b = .error .zeroDivisorPolynomial := by
   rcases h with h | ⟨hle, hzero⟩
-  · simp [dividePolynomialcoeff, h, Bind.bind, Except.bind]
+  · simp [dividePolynomialcoeff, h, Bind.bind, Except.bind,
+      throw, throwThe, MonadExceptOf.throw]
   · have hnotlt : ¬ a.size < b.size := by omega
     by_cases hb0 : b.size = 0
-    · simp [dividePolynomialcoeff, hb0, Bind.bind, Except.bind]
+    · simp [dividePolynomialcoeff, hb0, Bind.bind, Except.bind,
+        throw, throwThe, MonadExceptOf.throw]
     · simp [dividePolynomialcoeff, hb0, hnotlt, hzero, Bind.bind, Except.bind,
-        pure, Except.pure]
+        throw, throwThe, MonadExceptOf.throw]
 
 /-- When the dividend has strictly fewer coefficients than the divisor,
 `dividePolynomialcoeff` returns the empty quotient `#[]`. -/
@@ -966,8 +968,7 @@ theorem dividePolynomialcoeff_lt_size {a b : PolynomialCoeff}
     (hlt : a.size < b.size) :
     dividePolynomialcoeff a b = .ok #[] := by
   have hb0 : b.size ≠ 0 := by omega
-  simp [dividePolynomialcoeff, hb0, hlt, Bind.bind, Except.bind,
-    pure, Except.pure]
+  simp [dividePolynomialcoeff, hb0, hlt, pure, Except.pure]
 
 /-- `interpolatePolynomialcoeff` rejects mismatched node and value array lengths. -/
 theorem interpolatePolynomialcoeff_size_mismatch {xs ys : Array Fr}
@@ -975,7 +976,7 @@ theorem interpolatePolynomialcoeff_size_mismatch {xs ys : Array Fr}
     interpolatePolynomialcoeff xs ys =
       .error (.inputLengthMismatch "ys" xs.size ys.size) := by
   unfold interpolatePolynomialcoeff
-  rw [if_pos h]
+  rw [ite_eq_left h]
   rfl
 
 @[simp] theorem length_computePowersAux (x current : Fr) (n : Nat) :
@@ -1005,10 +1006,10 @@ theorem getElem_computePowersAux (x current : Fr) (n i : Nat)
       rw [ih]
       cases i with
       | zero =>
-        rw [if_pos rfl, if_neg (Nat.succ_ne_zero 0), Fr.powNat_succ,
+        rw [ite_eq_left rfl, ite_eq_right (Nat.succ_ne_zero 0), Fr.powNat_succ,
           Fr.powNat_zero, Fr.mul_mul_one]
       | succ i =>
-        rw [if_neg (Nat.succ_ne_zero i), if_neg (Nat.succ_ne_zero (i + 1)),
+        rw [ite_eq_right (Nat.succ_ne_zero i), ite_eq_right (Nat.succ_ne_zero (i + 1)),
           Fr.powNat_succ x (i + 1), ← Fr.mul_assoc]
 
 /-- `computePowers x n` is `[x^0, x^1, ..., x^(n-1)]`, as its docstring
@@ -1021,9 +1022,9 @@ theorem getElem_computePowers (x : Fr) (n i : Nat)
   show (computePowersAux x Fr.one n).toArray[i] = _
   rw [List.getElem_toArray, getElem_computePowersAux x Fr.one n i hl]
   cases i with
-  | zero => rw [if_pos rfl, Fr.powNat_zero]
+  | zero => rw [ite_eq_left rfl, Fr.powNat_zero]
   | succ i =>
-    rw [if_neg (Nat.succ_ne_zero i), Fr.powNat_succ, Fr.one_mul_mul,
+    rw [ite_eq_right (Nat.succ_ne_zero i), Fr.powNat_succ, Fr.one_mul_mul,
       ← Fr.powNat_succ]
 
 /-- The divisibility guard in `computeRootsOfUnity` is logically the
@@ -1256,7 +1257,7 @@ theorem evaluatePolynomialInEvaluationForm_fastPath
     (hsize : polynomial.size = FIELD_ELEMENTS_PER_BLOB)
     (h : (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB).idxOf? z = some i) :
     evaluatePolynomialInEvaluationForm polynomial z = .ok polynomial[i]! := by
-  rw [evaluatePolynomialInEvaluationForm, if_neg (by simp [hsize])]
+  rw [evaluatePolynomialInEvaluationForm, ite_eq_right (by simp [hsize])]
   exact congrArg Except.ok
     (evaluatePolynomialInEvaluationFormAux_fastPath polynomial _ z i h)
 

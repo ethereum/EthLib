@@ -17,8 +17,7 @@ So facts about degree and roots from Mathlib apply to the arrays the code comput
 namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Lean.Grind.Fin.instHPowFinNatOfNeZero
-attribute [-instance] Lean.Grind.Fin.instPowFinNatOfNeZero
+attribute [-instance] Fin.instNatPow
 
 /-- Mathematical polynomial denoted by an executable coefficient array. -/
 noncomputable def coefficientPolynomial (p : PolynomialCoeff) : _root_.Polynomial Fr :=
@@ -38,7 +37,7 @@ theorem coeff_coefficientPolynomial (p : PolynomialCoeff) (i : Nat) :
 theorem eval_coefficientPolynomial (p : PolynomialCoeff) (x : Fr) :
     (coefficientPolynomial p).eval x = evalPolyAt p x := by
   rw [coefficientPolynomial, Polynomial.ofFn_eq_sum_monomial,
-    Polynomial.eval_finset_sum]
+    Polynomial.eval_finsetSum]
   simp only [Polynomial.eval_monomial]
   rw [evalPolyAt, evalCoeffPoly, evalCoeffPolyAux_eq_sum, ← Fin.sum_univ_eq_sum_range]
   apply Finset.sum_congr rfl

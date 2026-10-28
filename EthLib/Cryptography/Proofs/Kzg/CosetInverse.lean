@@ -20,8 +20,7 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Lean.Grind.Fin.instHPowFinNatOfNeZero
-attribute [-instance] Lean.Grind.Fin.instPowFinNatOfNeZero
+attribute [-instance] Fin.instNatPow
 
 /-- Cancelling the coefficient shifts used by coset FFTs. -/
 theorem shiftVals_shiftVals_inverse (vals : Array Fr) (factor : Fr)

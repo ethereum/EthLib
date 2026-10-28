@@ -15,8 +15,7 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Lean.Grind.Fin.instHPowFinNatOfNeZero
-attribute [-instance] Lean.Grind.Fin.instPowFinNatOfNeZero
+attribute [-instance] Fin.instNatPow
 
 /-- Cell-level bit reversal selects the low seven bits of the natural FFT index. -/
 theorem reverseBits_cellOfRoot (j : Nat) :
@@ -27,12 +26,12 @@ theorem reverseBits_cellOfRoot (j : Nat) :
   intro t
   rw [testBit_reverseBits, Nat.testBit_mod_two_pow]
   by_cases ht : t < 7
-  · rw [if_pos ht, Nat.testBit_div_two_pow, testBit_reverseBits,
-      if_pos (by omega)]
+  · rw [ite_eq_left ht, Nat.testBit_div_two_pow, testBit_reverseBits,
+      ite_eq_left (by omega)]
     simp only [decide_eq_true ht, Bool.true_and]
     congr 1
     omega
-  · rw [if_neg ht]
+  · rw [ite_eq_right ht]
     simp [ht]
 
 /-- The extended-domain generator maps to the cell-domain generator by a 64th power. -/

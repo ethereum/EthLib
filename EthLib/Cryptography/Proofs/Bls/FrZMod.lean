@@ -62,17 +62,16 @@ namespace EthLib.Cryptography.Bls.Fr
 -- default `maxRecDepth` of the `decide` calls below.
 set_option maxRecDepth 4000
 
--- Core registers a global `HPow (Fin n) Nat (Fin n)` (and its `Pow`)
--- for the `grind` tactic. Because `Fr` is an abbrev of `Fin modulus`,
+-- Core registers a global `NatPow (Fin n)` instance, `Fin.instNatPow`.
+-- Because `Fr` is an abbrev of `Fin modulus`,
 -- `a ^ n` with a `Nat` exponent elaborates through that instance
 -- instead of Mathlib's `Monoid.toPow` — the two are definitionally but
 -- not syntactically equal, so `rw` with Mathlib's `pow` lemmas fails
--- against statements phrased with the grind instance. Remove them for
+-- against statements phrased with the core instance. Remove it for
 -- this file so every `Fr ^ Nat` below is Mathlib's monoid power.
 -- NOTE: `attribute [-instance]` is file-local; proof files that state
--- `Fr ^ Nat` lemmas must repeat these two lines.
-attribute [-instance] Lean.Grind.Fin.instHPowFinNatOfNeZero
-attribute [-instance] Lean.Grind.Fin.instPowFinNatOfNeZero
+-- `Fr ^ Nat` lemmas must repeat this line.
+attribute [-instance] Fin.instNatPow
 
 /-- Fuel-based modular square-and-multiply: `powModAux fuel m b e` is
 `b ^ e % m` provided `e < 2 ^ fuel`. Structural recursion on `fuel`
@@ -101,10 +100,10 @@ private theorem powModAux_eq (fuel m b e : Nat) (he : e < 2 ^ fuel) :
         rw [Nat.pow_succ] at he; omega
       have hrec := ih (b * b % m) (e / 2) h2
       by_cases h1 : e % 2 = 1
-      · rw [powModAux, if_neg h0, if_pos h1, hrec, ← Nat.pow_mod, ← Nat.pow_two,
+      · rw [powModAux, ite_eq_right h0, ite_eq_left h1, hrec, ← Nat.pow_mod, ← Nat.pow_two,
             ← Nat.pow_mul, Nat.mod_mul_mod, ← Nat.pow_succ,
             show (2 * (e / 2)).succ = e by omega]
-      · rw [powModAux, if_neg h0, if_neg h1, hrec, ← Nat.pow_mod, ← Nat.pow_two,
+      · rw [powModAux, ite_eq_right h0, ite_eq_right h1, hrec, ← Nat.pow_mod, ← Nat.pow_two,
             ← Nat.pow_mul, show 2 * (e / 2) = e by omega]
 
 private theorem natCast_pow_eq_one_iff (b e : Nat) (he : e < 2 ^ 256) :
@@ -216,9 +215,12 @@ theorem isPrimitiveRoot_seven_pow {n : Nat} (hn : n ∣ modulus - 1) :
 `Field` instance below. Public `Fr`-facing version: `powNat_eq_pow`. -/
 private theorem powNat_eq_zmod_pow (a : ZMod modulus) (n : Nat) :
     Fr.powNat a n = a ^ n := by
+  -- `a` is a `ZMod` element passed where `powNat` takes an `Fr`.
+  -- `rw` checks the rewritten goal at `implicit` transparency, where that
+  -- is ill-typed, so the `powNat` equations go in by `trans`.
   induction n with
-  | zero => rw [powNat_zero, pow_zero]; rfl
-  | succ n ih => rw [powNat_succ, ih, pow_succ']; rfl
+  | zero => exact (powNat_zero a).trans (pow_zero a).symm
+  | succ n ih => exact (powNat_succ a n).trans (by rw [ih, pow_succ']; rfl)
 
 /-- The spec's Fermat-little-theorem `Fr.inverse` is the field inverse
 of `ZMod Fr.modulus` (both send `0` to `0`), phrased over
@@ -226,7 +228,9 @@ of `ZMod Fr.modulus` (both send `0` to `0`), phrased over
 `Fr`-facing version: `inverse_eq_inv`. -/
 private theorem inverse_eq_zmod_inv (a : ZMod modulus) :
     Fr.inverse a = a⁻¹ := by
-  rw [inverse, powNat_eq_zmod_pow]
+  -- Unfold `inverse` by `show`, for the reason given in `powNat_eq_zmod_pow`.
+  show Fr.powNat a (modulus - 2) = a⁻¹
+  rw [powNat_eq_zmod_pow]
   by_cases h : a = 0
   · subst h
     rw [zero_pow (by decide : modulus - 2 ≠ 0), inv_zero]

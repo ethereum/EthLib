@@ -60,7 +60,7 @@ private theorem mulNatAux_eq (fuel : Nat) (p : G1) (k : Nat)
     · have h2 : k / 2 < 2 ^ fuel := by
         rw [Nat.pow_succ] at hk
         omega
-      rw [if_neg h0, if_neg h0, ih (double p) (k / 2) h2]
+      rw [ite_eq_right h0, ite_eq_right h0, ih (double p) (k / 2) h2]
 
 /-- `[r]g₁` is the point at infinity, checked by the kernel through
 the fuel-based ladder: 255 doublings/additions of 381-bit arithmetic. -/

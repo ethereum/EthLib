@@ -83,11 +83,17 @@ def isUnsafeRec (env : Environment) (n : Name) : Bool :=
 
 /-! ## Axioms, followed through every dependency -/
 
-/-- Every axiom that some declaration of `decls` depends on.
-This is `Lean.collectAxioms` with one set of visited constants shared by all of them, so each dependency is read once. -/
+/-- Read-only access to one environment, which is all `Lean.collectAxioms` needs. -/
+instance : MonadEnv (ReaderT Environment Id) where
+  getEnv := read
+  modifyEnv _ := pure ()
+
+/-- Every axiom that some declaration of `decls` depends on, by `Lean.collectAxioms`.
+Each module records the axioms of its own constants when it is compiled, so an imported dependency is looked up, not walked again. -/
 def axiomsOfAll (env : Environment) (decls : List Name) : Array Name :=
-  let (_, s) := ((decls.forM CollectAxioms.collect).run env).run {}
-  s.axioms
+  let all := decls.foldl (init := ({} : NameSet)) fun acc n =>
+    (collectAxioms (m := ReaderT Environment Id) n |>.run env).foldl (·.insert ·) acc
+  all.toArray
 
 
 /-- The constants whose axioms `c` inherits.

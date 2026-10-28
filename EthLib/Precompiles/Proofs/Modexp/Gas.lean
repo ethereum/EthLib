@@ -51,7 +51,7 @@ theorem iterations_long {expLen : Nat} (expHead : Nat) (h : EXPONENT_HEAD_BYTES 
     have : 0 < expLen - EXPONENT_HEAD_BYTES := Nat.sub_pos_of_lt h
     unfold ITERATIONS_PER_EXTRA_EXPONENT_BYTE
     omega
-  simp only [iterations, if_neg h1]
+  simp only [iterations, ite_eq_right h1]
   exact Nat.max_eq_left (by omega)
 
 /-- A long exponent whose first 32 bytes are zero is charged exactly 16 per byte beyond 32.

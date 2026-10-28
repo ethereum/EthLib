@@ -41,14 +41,15 @@ theorem batchInverseAux_eq (pre : Fr) (hpre : pre ≠ 0) (xs : List Fr) :
     by_cases hx : x.isZero = true
     -- A zero is skipped, and its inverse is zero.
     · have hx0 : x = 0 := (isZero_iff' x).mp hx
-      rw [batchInverseAux, if_pos hx, ih pre hpre, List.map_cons, hx0]
+      rw [batchInverseAux, ite_eq_left hx, ih pre hpre, List.map_cons, hx0]
       simp only [inverse_eq_inv]
-      rfl
+      -- `0⁻¹` sits under an instance path `rw` does not match, so `inv_zero` goes in by `congrArg`.
+      exact congrArg (fun z => (z :: List.map inverse xs, pre⁻¹)) (inv_zero (G₀ := Fr)).symm
     -- A nonzero x moves into the prefix product.
     --
     --     s = (pre * x)⁻¹   →   pre * s = x⁻¹   and   s * x = pre⁻¹
     · have hx0 : x ≠ 0 := fun h => hx ((isZero_iff' x).mpr h)
-      rw [batchInverseAux, if_neg hx, ih (pre * x) (field_mul_ne_zero (F := Fr) hpre hx0), List.map_cons]
+      rw [batchInverseAux, ite_eq_right hx, ih (pre * x) (field_mul_ne_zero (F := Fr) hpre hx0), List.map_cons]
       obtain ⟨h1, h2⟩ := step_inverses (F := Fr) hpre hx0
       simp only [inverse_eq_inv, Prod.mk.injEq, List.cons.injEq]
       exact ⟨⟨h1, trivial⟩, h2⟩

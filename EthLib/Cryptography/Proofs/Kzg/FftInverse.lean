@@ -39,11 +39,10 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 
--- See the note in `Proofs.Bls.FrZMod`: core's grind-tactic `HPow`
--- instance on `Fin` shadows Mathlib's monoid power on `Fr` and breaks
+-- See the note in `Proofs.Bls.FrZMod`: core's `NatPow` instance on `Fin`
+-- shadows Mathlib's monoid power on `Fr` and breaks
 -- `rw` with Mathlib `pow` lemmas. File-local, so repeated here.
-attribute [-instance] Lean.Grind.Fin.instHPowFinNatOfNeZero
-attribute [-instance] Lean.Grind.Fin.instPowFinNatOfNeZero
+attribute [-instance] Fin.instNatPow
 
 /-! ## Even/odd splitting of a range sum -/
 
@@ -102,11 +101,11 @@ theorem sum_pow_orthogonal {ω : F} {n : Nat} (hω : IsPrimitiveRoot ω n)
   have hinv : (ω⁻¹) ^ n = 1 := by rw [inv_pow, hω.pow_eq_one, inv_one]
   by_cases hab : a = b
   · subst hab
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
     have hc1 : ω ^ a * (ω⁻¹) ^ a = 1 := by
       rw [inv_pow, mul_inv_cancel₀ hane]
     rw [hc1, geom_sum_one]
-  · rw [if_neg hab]
+  · rw [ite_eq_right hab]
     have hcn : (ω ^ a * (ω⁻¹) ^ b) ^ n = 1 := by
       rw [mul_pow, ← pow_mul, ← pow_mul, Nat.mul_comm a n,
           Nat.mul_comm b n, pow_mul, pow_mul, hω.pow_eq_one, hinv,
@@ -161,7 +160,7 @@ theorem getElem_fftFieldAux_step (vals roots : Array Fr)
   -- application; `rw [fftFieldAux]` then unambiguously unfolds the LHS.
   set l := fftFieldAux (fftHalve vals 0) (fftHalve roots 0) with hl
   set r := fftFieldAux (fftHalve vals 1) (fftHalve roots 0) with hr
-  rw [fftFieldAux, if_neg (by omega : ¬ vals.size ≤ 1)]
+  rw [fftFieldAux, ite_eq_right (by omega : ¬ vals.size ≤ 1)]
   rw [getElem!_pos _ p (by simpa using hp)]
   -- reduce the `let`s, apply `Array.getElem_ofFn`, and refold the
   -- sub-transforms
@@ -216,7 +215,7 @@ theorem getElem!_fftFieldAux_dft {k : Nat} {ω : Fr}
   induction k generalizing ω vals roots j with
   | zero =>
     simp only [pow_zero] at hn hj hroots ⊢
-    rw [fftFieldAux, if_pos (by omega : vals.size ≤ 1)]
+    rw [fftFieldAux, ite_eq_left (by omega : vals.size ≤ 1)]
     have hj0 : j = 0 := by omega
     subst hj0
     rw [Finset.sum_range_one, Nat.zero_mul, fr_pow_zero, fr_mul_one]
@@ -263,14 +262,14 @@ theorem getElem!_fftFieldAux_dft {k : Nat} {ω : Fr}
         sum_range_split_even_odd (2 ^ k) (fun i => vals[i]! * ω ^ (i * j))]
     by_cases hjk : j < 2 ^ k
     · -- top half: output = l[j] + r[j] * ω ^ j
-      rw [if_pos hjk, hl j hjk, hr j hjk, hroots j (by rw [h2]; omega)]
+      rw [ite_eq_left hjk, hl j hjk, hr j hjk, hroots j (by rw [h2]; omega)]
       congr 1
       rw [Finset.sum_mul]
       refine Finset.sum_congr rfl (fun i hi => ?_)
       rw [Bls.Fr.mul_assoc, ← fr_pow_add,
           show (2 * i + 1) * j = 2 * i * j + j by ring]
     · -- bottom half: output = l[q] - r[q] * ω ^ q with q = j - 2 ^ k
-      rw [if_neg hjk]
+      rw [ite_eq_right hjk]
       set q := j - 2 ^ k with hqdef
       have hjq : j = q + 2 ^ k := by omega
       have hq2 : q < 2 ^ k := by omega
@@ -320,7 +319,7 @@ private theorem getElem!_reversedRoots {k : Nat} {ω : Fr}
   by_cases hi0 : i = 0
   · subst hi0
     simp [hroots 0 (Nat.two_pow_pos k)]
-  · rw [if_neg (by simpa using hi0),
+  · rw [ite_eq_right (by simpa using hi0),
         hroots (roots.size - i) (by rw [hrs]; omega), inv_pow]
     refine eq_inv_of_mul_eq_one_left ?_
     rw [← pow_add, Nat.sub_add_cancel (by rw [hrs]; omega : i ≤ roots.size), hrs]
@@ -372,7 +371,7 @@ theorem fftField_fftField_inv {k : Nat} {ω : Fr}
     -- unfold the inverse transform
     rw [hy] at hysize ⊢
     conv_lhs => rw [fftField_def]
-    simp only [if_pos]
+    simp only [ite_eq_left]
     rw [getElem!_map_mul _ _ m (by rw [size_fftFieldAux, ← hy, hysize]; exact hm)]
     -- DFT of the inverse direction over the reversed (ω⁻¹) roots
     rw [getElem!_fftFieldAux_dft hωinv (fftField vals roots false) _ (by
@@ -399,10 +398,11 @@ theorem fftField_fftField_inv {k : Nat} {ω : Fr}
       simp_rw [Bls.Fr.mul_assoc, ← Finset.mul_sum]
       rw [Finset.sum_congr rfl (fun i hi => by
         rw [hinner i (Finset.mem_range.mp hi)])]
-      simp_rw [mul_ite, mul_zero]
+      -- This `0` is `Fin`'s, which core's `Fin.mul_zero` matches and Mathlib's `mul_zero` does not.
+      simp_rw [mul_ite, Fin.mul_zero]
       rw [Finset.sum_ite_eq' (Finset.range (2 ^ k)) m
             (fun i => vals[i]! * ((2 ^ k : Nat) : Fr)),
-          if_pos (Finset.mem_range.mpr hm)]
+          ite_eq_left (Finset.mem_range.mpr hm)]
     rw [hcollapse]
     -- cancel the `1 / n` normalisation: `n * n⁻¹ = 1`
     have hn0 : ((2 ^ k : Nat) : Fr) ≠ 0 := by
@@ -438,7 +438,7 @@ theorem fftField_inv_fftField {k : Nat} {ω : Fr}
             * (Fr.ofNat vals.size).inverse := by
     intro j hj
     conv_lhs => rw [fftField_def]
-    simp only [if_pos]
+    simp only [ite_eq_left]
     rw [getElem!_map_mul _ _ j (by rw [size_fftFieldAux, hn]; exact hj),
         getElem!_fftFieldAux_dft hωinv vals _ hn (by rw [Array.size_ofFn]; exact hrs)
           (getElem!_reversedRoots hω roots hrs hroots) j hj]
@@ -476,10 +476,11 @@ theorem fftField_inv_fftField {k : Nat} {ω : Fr}
       simp_rw [Bls.Fr.mul_assoc, ← Finset.mul_sum]
       rw [Finset.sum_congr rfl (fun i hi => by
         rw [hinner i (Finset.mem_range.mp hi)])]
-      simp_rw [mul_ite, mul_zero]
+      -- This `0` is `Fin`'s, which core's `Fin.mul_zero` matches and Mathlib's `mul_zero` does not.
+      simp_rw [mul_ite, Fin.mul_zero]
       rw [Finset.sum_ite_eq (Finset.range (2 ^ k)) m
             (fun i => vals[i]! * ((2 ^ k : Nat) : Fr)),
-          if_pos (Finset.mem_range.mpr hm)]
+          ite_eq_left (Finset.mem_range.mpr hm)]
     -- factor the `1 / n` out of the sum, collapse, then cancel
     have hrw :
         (∑ j ∈ Finset.range (2 ^ k),

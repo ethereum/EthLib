@@ -44,13 +44,13 @@ private theorem getElem!_write_prefix (acc cell : Array Fr) (start n m : Nat)
     simp only [List.foldl_cons, List.foldl_nil]
     rw [getElem!_set! _ _ _ _ (by rw [size_write_prefix]; exact hm), ih]
     by_cases he : start + n = m
-    · rw [if_pos he, if_pos (by omega)]
+    · rw [ite_eq_left he, ite_eq_left (by omega)]
       congr 1
       omega
-    · rw [if_neg he]
+    · rw [ite_eq_right he]
       by_cases hin : start ≤ m ∧ m < start + n
-      · rw [if_pos hin, if_pos (by omega)]
-      · rw [if_neg hin, if_neg (by omega)]
+      · rw [ite_eq_left hin, ite_eq_left (by omega)]
+      · rw [ite_eq_right hin, ite_eq_right (by omega)]
 
 /-- One exact cell write in the recovery flattening loop. -/
 def writeRecoveryCell (acc : Array Fr) (ci : CellIndex) (cell : CosetEvals) : Array Fr :=
@@ -72,10 +72,10 @@ theorem getElem!_writeRecoveryCell (acc : Array Fr) (ci : CellIndex) (cell : Cos
   have hc : FIELD_ELEMENTS_PER_CELL = 64 := rfl
   rw [hc]
   by_cases he : m / 64 = ci
-  · rw [if_pos he, if_pos (by omega)]
+  · rw [ite_eq_left he, ite_eq_left (by omega)]
     congr 1
     omega
-  · rw [if_neg he, if_neg (by omega)]
+  · rw [ite_eq_right he, ite_eq_right (by omega)]
 
 private theorem size_flatten_prefix (indices : Array CellIndex) (cells : Array CosetEvals)
     (init : Array Fr) (n : Nat) :
@@ -103,12 +103,12 @@ theorem getElem!_flatten_prefix (indices : Array CellIndex) (cells : Array Coset
     simp only [List.foldl_cons, List.foldl_nil]
     rw [getElem!_writeRecoveryCell _ _ _ m (by rw [size_flatten_prefix]; exact hm), ih (by omega)]
     by_cases he : m / FIELD_ELEMENTS_PER_CELL = indices[n]!
-    · rw [if_pos he, if_pos ⟨n, by omega, he.symm⟩,
+    · rw [ite_eq_left he, ite_eq_left ⟨n, by omega, he.symm⟩,
         hvals n (by omega) (m % FIELD_ELEMENTS_PER_CELL) (Nat.mod_lt _ (by decide)), ← he]
       congr 1
       rw [Nat.mul_comm]
       exact Nat.div_add_mod m FIELD_ELEMENTS_PER_CELL
-    · rw [if_neg he]
+    · rw [ite_eq_right he]
       have hex : (∃ k < n + 1, indices[k]! = m / FIELD_ELEMENTS_PER_CELL) ↔
           ∃ k < n, indices[k]! = m / FIELD_ELEMENTS_PER_CELL := by
         constructor
@@ -121,7 +121,7 @@ theorem getElem!_flatten_prefix (indices : Array CellIndex) (cells : Array Coset
         · rintro ⟨k, hk, hv⟩
           exact ⟨k, by omega, hv⟩
       by_cases hE : ∃ k < n, indices[k]! = m / FIELD_ELEMENTS_PER_CELL
-      · rw [if_pos hE, if_pos (hex.mpr hE)]
-      · rw [if_neg hE, if_neg (fun h => hE (hex.mp h))]
+      · rw [ite_eq_left hE, ite_eq_left (hex.mpr hE)]
+      · rw [ite_eq_right hE, ite_eq_right (fun h => hE (hex.mp h))]
 
 end EthLib.Cryptography.Kzg

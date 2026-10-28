@@ -21,7 +21,8 @@ open EthLib.Cryptography.Kzg.Constants
 theorem size_cosetForCell {cellIndex : CellIndex} {c : Coset}
     (h : cosetForCell cellIndex = .ok c) :
     c.size = FIELD_ELEMENTS_PER_CELL := by
-  simp only [cosetForCell, bind, Except.bind, pure, Except.pure] at h
+  simp only [cosetForCell, bind, Except.bind, pure, Except.pure,
+    throw, throwThe, MonadExceptOf.throw] at h
   repeat' split at h
   · cases h
   · injection h with h
@@ -32,7 +33,7 @@ theorem size_cosetForCell {cellIndex : CellIndex} {c : Coset}
 theorem cosetForCell_cellIndexOutOfBounds {cellIndex : CellIndex}
     (h : cellIndex ≥ CELLS_PER_EXT_BLOB) :
     cosetForCell cellIndex = .error .cellIndexOutOfBounds := by
-  simp [cosetForCell, h, Bind.bind, Except.bind]
+  simp [cosetForCell, h, Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- `cosetForCell` succeeds for every `cellIndex < CELLS_PER_EXT_BLOB`,
 returning a coset of size `FIELD_ELEMENTS_PER_CELL`. -/
@@ -47,7 +48,7 @@ theorem cosetForCell_ok_of_lt {cellIndex : CellIndex}
   let c : Coset := Array.ofFn (n := FIELD_ELEMENTS_PER_CELL) fun i => domain[start + i.val]!
   have hc : cosetForCell cellIndex = .ok c := by
     unfold cosetForCell
-    rw [if_neg (Nat.not_le.mpr h)]
+    rw [ite_eq_right (Nat.not_le.mpr h)]
     rfl
   refine ⟨c, hc, size_cosetForCell hc, fun i hi => ?_⟩
   rw [getElem!_pos c i (by simp [c, hi])]
@@ -170,7 +171,8 @@ theorem cellToCosetEvals_cosetEvalsToCell
     cellToCosetEvals (cosetEvalsToCell ys) = .ok ys := by
   unfold cellToCosetEvals
   -- The encoding has the cell size, so the size check passes.
-  rw [if_neg (by simp), pure_bind]
+  rw [ite_eq_right (by simp)]
+  dsimp only
   -- Each 32-byte chunk decodes to its element.
   refine mapM_range_eq_ok _ hsize fun i hi => ?_
   simp only [bytesToBlsField_extract_cosetEvalsToCell ys hi]

@@ -16,8 +16,7 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Lean.Grind.Fin.instHPowFinNatOfNeZero
-attribute [-instance] Lean.Grind.Fin.instPowFinNatOfNeZero
+attribute [-instance] Fin.instNatPow
 
 private theorem extended_roots (i : Nat) (hi : i < 2 ^ 13) :
     (computeRootsOfUnity FIELD_ELEMENTS_PER_EXT_BLOB)[i]! =

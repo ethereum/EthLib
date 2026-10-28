@@ -31,8 +31,7 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Lean.Grind.Fin.instHPowFinNatOfNeZero
-attribute [-instance] Lean.Grind.Fin.instPowFinNatOfNeZero
+attribute [-instance] Fin.instNatPow
 
 private theorem array_ext_bang {a b : Array Fr} (hs : a.size = b.size)
     (h : ∀ i, i < a.size → a[i]! = b[i]!) : a = b := by
@@ -150,7 +149,7 @@ theorem recoverPolynomialcoeff_eq_pipeline
   unfold recoveryQuotient recoveryNumerator recoveryFlatten writeRecoveryCell
   unfold recoveryMissing at hz
   unfold recoverPolynomialcoeff
-  rw [if_neg (by omega : ¬ cells.size ≠ indices.size)]
+  rw [ite_eq_right (by omega : ¬ cells.size ≠ indices.size)]
   simp only [Bind.bind, Except.bind, hz, pure, Except.pure]
   rw [ofFn_mul_batchInverse _ _ _ (by rw [size_cosetFftField, size_constructVanishingPolynomial hz])]
 

@@ -63,11 +63,11 @@ theorem msm_eq_msmModel (points : Array G1) (scalars : Array Fr) :
   dsimp only
   generalize (if points.size ≤ scalars.size then points.size else scalars.size) = n
   by_cases h0 : n = 0
-  · rw [if_pos h0, if_pos h0]
-  rw [if_neg h0, if_neg h0]
+  · rw [ite_eq_left h0, ite_eq_left h0]
+  rw [ite_eq_right h0, ite_eq_right h0]
   by_cases h1 : msmMaxBits scalars n = 0
-  · rw [if_pos h1, if_pos h1]
-  rw [if_neg h1, if_neg h1]
+  · rw [ite_eq_left h1, ite_eq_left h1]
+  rw [ite_eq_right h1, ite_eq_right h1]
   exact foldl_zip_spawn _ _ _ _
 
 /-! ## The math layer: `msmModel` computes `Σ [sᵢ]Pᵢ` -/
@@ -110,7 +110,7 @@ private theorem maxBitsF_bound (scalars : Array Fr) (l : List Nat) :
       · rw [h0]
         exact Nat.two_pow_pos _
       · have hstep : scalars[j]!.val.log2 + 1 ≤ maxBitsF scalars init j := by
-          rw [maxBitsF, if_pos h0]
+          rw [maxBitsF, ite_eq_left h0]
           split
           · exact Nat.le_refl _
           · omega
@@ -204,7 +204,7 @@ private theorem msmBuckets_spec (points : Array G1) (scalars : Array Fr)
       rw [windowVal]
       omega
     by_cases hw : windowVal scalars[n]! k ≠ 0
-    · rw [hstep, if_pos hw]
+    · rw [hstep, ite_eq_left hw]
       set bs := msmBuckets points scalars n k with hbs
       set w := windowVal scalars[n]! k with hwdef
       have hsz : (bs.setIfInBounds w (add bs[w]! points[n]!)).size
@@ -228,41 +228,41 @@ private theorem msmBuckets_spec (points : Array G1) (scalars : Array Fr)
         rw [getElem!_pos (bs.setIfInBounds w (add bs[w]! points[n]!)) v hv']
         by_cases hv0 : v = 0
         · subst hv0
-          rw [if_pos rfl, Array.getElem_setIfInBounds_ne
+          rw [ite_eq_left rfl, Array.getElem_setIfInBounds_ne
             (by omega : (0 : Nat) < bs.size) hw,
             show bs[(0 : Nat)] = bs[(0 : Nat)]! from
               (getElem!_pos bs 0 (by omega)).symm]
           have := ihn.2.2 0 (by omega)
-          rw [if_pos rfl] at this
+          rw [ite_eq_left rfl] at this
           exact this
-        · rw [if_neg hv0, Finset.range_add_one, Finset.filter_insert]
+        · rw [ite_eq_right hv0, Finset.range_add_one, Finset.filter_insert]
           by_cases hveq : w = v
           · subst hveq
-            rw [Array.getElem_setIfInBounds_self, if_pos rfl,
+            rw [Array.getElem_setIfInBounds_self, ite_eq_left rfl,
               Finset.sum_insert (by simp),
               toPoint_add (ihn.2.1 w hwlt) (hval n (by omega))]
             have hprev := ihn.2.2 w hwlt
-            rw [if_neg hw] at hprev
+            rw [ite_eq_right hw] at hprev
             rw [hprev]
             exact add_comm _ _
-          · rw [Array.getElem_setIfInBounds_ne (by omega : v < bs.size) hveq, if_neg hveq,
+          · rw [Array.getElem_setIfInBounds_ne (by omega : v < bs.size) hveq, ite_eq_right hveq,
               show bs[v] = bs[v]! from (getElem!_pos bs v (by omega)).symm]
             have := ihn.2.2 v hv
-            rw [if_neg hv0] at this
+            rw [ite_eq_right hv0] at this
             exact this
-    · rw [hstep, if_neg hw]
+    · rw [hstep, ite_eq_right hw]
       replace hw : windowVal scalars[n]! k = 0 := not_ne_iff.mp hw
       refine ⟨ihn.1, ihn.2.1, fun v hv => ?_⟩
       by_cases hv0 : v = 0
       · subst hv0
-        rw [if_pos rfl]
+        rw [ite_eq_left rfl]
         have := ihn.2.2 0 hv
-        rw [if_pos rfl] at this
+        rw [ite_eq_left rfl] at this
         exact this
-      · rw [if_neg hv0, Finset.range_add_one, Finset.filter_insert,
-          if_neg (fun h => hv0 (by rw [← h, hw]))]
+      · rw [ite_eq_right hv0, Finset.range_add_one, Finset.filter_insert,
+          ite_eq_right (fun h => hv0 (by rw [← h, hw]))]
         have := ihn.2.2 v hv
-        rw [if_neg hv0] at this
+        rw [ite_eq_right hv0] at this
         exact this
 
 /-- Prefix of the running-sum fold, for the suffix-sum induction. -/
@@ -394,10 +394,10 @@ private theorem window_sum (points : Array G1) (scalars : Array Fr)
     rw [hbsum v (Finset.mem_range.mp hv)]
     by_cases hv0 : v = 0
     · subst hv0
-      rw [if_pos rfl, zero_nsmul]
+      rw [ite_eq_left rfl, zero_nsmul]
       exact (Finset.sum_eq_zero fun j hj => by
         rw [(Finset.mem_filter.mp hj).2, zero_nsmul]).symm
-    · rw [if_neg hv0, Finset.smul_sum]
+    · rw [ite_eq_right hv0, Finset.smul_sum]
       exact Finset.sum_congr rfl fun j hj => by
         rw [(Finset.mem_filter.mp hj).2]
   have h2 := Finset.sum_congr rfl h1
@@ -459,12 +459,12 @@ private theorem msmAcc_spec (points : Array G1) (scalars : Array Fr)
       omega
     rw [hstep, msmWindowStep]
     by_cases hd : nW - 1 - t + 1 < nW
-    · rw [if_pos hd]
+    · rw [ite_eq_left hd]
       obtain ⟨hdv, hdsum⟩ := doubleFold_spec ihv 8
       refine ⟨valid_add hdv hwv, ?_⟩
       rw [toPoint_add hdv hwv, hdsum, ihsum, hwsum]
       exact hmerge
-    · rw [if_neg hd]
+    · rw [ite_eq_right hd]
       have ht0 : t = 0 := by omega
       subst ht0
       refine ⟨valid_add ihv hwv, ?_⟩
@@ -499,20 +499,20 @@ theorem toPoint_msm (points : Array G1) (scalars : Array Fr)
   unfold msmModel
   by_cases h0 : (if points.size ≤ scalars.size then points.size
       else scalars.size) = 0
-  · rw [if_pos h0, h0]
+  · rw [ite_eq_left h0, h0]
     exact ⟨valid_zero, by rw [toPoint_zero, Finset.range_zero,
       Finset.sum_empty]⟩
-  · rw [if_neg h0]
+  · rw [ite_eq_right h0]
     by_cases h1 : msmMaxBits scalars (if points.size ≤ scalars.size
         then points.size else scalars.size) = 0
-    · rw [if_pos h1]
+    · rw [ite_eq_left h1]
       refine ⟨valid_zero, ?_⟩
       rw [toPoint_zero]
       refine (Finset.sum_eq_zero fun j hj => ?_).symm
       have hb := msmMaxBits_bound scalars _ j (Finset.mem_range.mp hj)
       rw [h1, pow_zero] at hb
       rw [show (scalars[j]!).val = 0 from by omega, zero_nsmul]
-    · rw [if_neg h1]
+    · rw [ite_eq_right h1]
       have hbound : ∀ j, j < (if points.size ≤ scalars.size
           then points.size else scalars.size) →
           scalars[j]!.val < 2 ^ (((msmMaxBits scalars

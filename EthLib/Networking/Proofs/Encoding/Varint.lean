@@ -121,7 +121,7 @@ theorem groups_encodeAux {n fuel : Nat} (hfuel : 0 < fuel) (hf : n < groupSize ^
       split
       -- A last byte with nothing after it is accepted as it is.
       · rename_i hlt
-        rw [groups, if_pos]
+        rw [groups, ite_eq_left]
         rw [toNat_terminator_byte hlt, continuation_eq]
         rw [groupSize_eq] at hlt
         omega
@@ -139,7 +139,7 @@ theorem groups_encodeAux {n fuel : Nat} (hfuel : 0 < fuel) (hf : n < groupSize ^
         have hbit : ¬ (UInt8.ofNat (n % groupSize + continuation)).toNat < continuation := by
           rw [toNat_continued_byte, continuation_eq]; omega
         -- So it is kept, and the rest passes by induction.
-        simp only [groups, if_neg hbit, ih hfuel' hdiv]
+        simp only [groups, ite_eq_right hbit, ih hfuel' hdiv]
         rfl
 
 /-! ## Minimality
@@ -219,8 +219,8 @@ theorem decode_encode (v : UInt64) : decode (encode v) = .ok v := by
   rw [decode, hg]
   dsimp only
   -- Minimal, and inside the 64-bit range.
-  rw [if_neg (by simp [nonMinimal_encode]),
-    if_neg (by rw [hv]; have := v.toNat_lt_size; simp only [UInt64.size] at *; omega), hv]
+  rw [ite_eq_right (by simp [nonMinimal_encode]),
+    ite_eq_right (by rw [hv]; have := v.toNat_lt_size; simp only [UInt64.size] at *; omega), hv]
   rw [UInt64.ofNat_toNat]
 
 /-! ## Known answers

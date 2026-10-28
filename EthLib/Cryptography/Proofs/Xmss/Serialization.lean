@@ -104,9 +104,9 @@ theorem decodeLayerSignature_middle {b a c : ByteArray} {sig : LayerSignature} {
   -- Each field starts where the previous one ends.
   have r := readBytes_middle hr ho (by simp only [LAYER_SIG_SIZE] at h; omega)
   have c' := readBytes_middle hc (offset := offset + RANDOMIZER_LEN)
-    (by simp [ho, RANDOMIZER_LEN]) (by simp only [LAYER_SIG_SIZE] at h; omega)
+    (by simp [ho]) (by simp only [LAYER_SIG_SIZE] at h; omega)
   have p := readBytes_middle hp (offset := offset + RANDOMIZER_LEN + V * DIGEST_LEN)
-    (by simp [ho, RANDOMIZER_LEN, V, DIGEST_LEN]) (by simp only [LAYER_SIG_SIZE] at h; omega)
+    (by simp [ho]) (by simp only [LAYER_SIG_SIZE] at h; omega)
   simp only [decodeLayerSignature, r, c', p, splitDigests_flatten]
 
 /-! ## Round trips -/
@@ -114,7 +114,7 @@ theorem decodeLayerSignature_middle {b a c : ByteArray} {sig : LayerSignature} {
 /-- Decoding an encoded public key returns it. -/
 @[simp] theorem decodePublicKey_encodePublicKey (pk : PublicKey) :
     decodePublicKey (encodePublicKey pk) = .ok pk := by
-  rw [decodePublicKey, dif_pos (size_encodePublicKey pk)]
+  rw [decodePublicKey, dite_eq_left (size_encodePublicKey pk)]
   -- The root is the first field, the public parameter the one after it.
   have root := readBytes_middle (b := encodePublicKey pk) (a := ByteArray.empty)
     (c := packBytes pk.publicParam) (v := pk.root) (offset := 0)
@@ -128,7 +128,7 @@ theorem decodeLayerSignature_middle {b a c : ByteArray} {sig : LayerSignature} {
 /-- Decoding an encoded signature returns it. -/
 @[simp] theorem decodeSignature_encodeSignature (sig : Signature) :
     decodeSignature (encodeSignature sig) = .ok sig := by
-  rw [decodeSignature, dif_pos (size_encodeSignature sig)]
+  rw [decodeSignature, dite_eq_left (size_encodeSignature sig)]
   -- The leaf index is the first four bytes, as a little-endian word.
   have idx := readBytes_middle (b := encodeSignature sig) (a := ByteArray.empty)
     (v := littleEndian LEAF_INDEX_SIZE sig.leafIndex.toNat)
@@ -185,7 +185,7 @@ theorem encodeLayerSignature_decodeLayerSignature (b : ByteArray) (offset : Nat)
 /-- Every 32-byte string is the encoding of a public key. -/
 theorem encodePublicKey_decodePublicKey {bytes : ByteArray} (sized : bytes.size = PUB_KEY_SIZE) :
     (decodePublicKey bytes).map encodePublicKey = .ok bytes := by
-  rw [decodePublicKey, dif_pos sized]
+  rw [decodePublicKey, dite_eq_left sized]
   simp only [Except.map, encodePublicKey, packBytes_readBytes, Nat.zero_add]
   rw [slice_append _ (by omega) (by omega)]
   -- The slice from 0 to the end is the whole buffer.
@@ -197,7 +197,7 @@ theorem encodePublicKey_decodePublicKey {bytes : ByteArray} (sized : bytes.size 
 /-- Every 2404-byte string is the encoding of a signature. -/
 theorem encodeSignature_decodeSignature {bytes : ByteArray} (sized : bytes.size = SIG_SIZE) :
     (decodeSignature bytes).map encodeSignature = .ok bytes := by
-  rw [decodeSignature, dif_pos sized]
+  rw [decodeSignature, dite_eq_left sized]
   simp only [Except.map, encodeSignature, encodeLayerSignature_decodeLayerSignature]
   -- Four bytes read as a word, and written back, are the same four bytes.
   have hword : fromLittleEndian (readBytes bytes 0 LEAF_INDEX_SIZE
@@ -229,12 +229,12 @@ theorem encodeSignature_injective : Function.Injective encodeSignature := by
 /-- A public key string of any other length than 32 bytes is rejected. -/
 theorem decodePublicKey_badSize {bytes : ByteArray} (wrong : bytes.size ≠ PUB_KEY_SIZE) :
     decodePublicKey bytes = .error (.badPublicKeySize bytes.size) := by
-  rw [decodePublicKey, dif_neg wrong]
+  rw [decodePublicKey, dite_eq_right wrong]
 
 /-- A signature string of any other length than 2404 bytes is rejected. -/
 theorem decodeSignature_badSize {bytes : ByteArray} (wrong : bytes.size ≠ SIG_SIZE) :
     decodeSignature bytes = .error (.badSignatureSize bytes.size) := by
-  rw [decodeSignature, dif_neg wrong]
+  rw [decodeSignature, dite_eq_right wrong]
 
 /-- Public key decoding succeeds exactly on 32-byte strings. -/
 theorem decodePublicKey_success_iff (bytes : ByteArray) :
@@ -243,7 +243,7 @@ theorem decodePublicKey_success_iff (bytes : ByteArray) :
   · rintro ⟨pk, read⟩
     exact Decidable.byContradiction fun wrong => by simp [decodePublicKey_badSize wrong] at read
   · intro sized
-    rw [decodePublicKey, dif_pos sized]
+    rw [decodePublicKey, dite_eq_left sized]
     exact ⟨_, rfl⟩
 
 /-- Signature decoding succeeds exactly on 2404-byte strings. -/
@@ -253,7 +253,7 @@ theorem decodeSignature_success_iff (bytes : ByteArray) :
   · rintro ⟨sig, read⟩
     exact Decidable.byContradiction fun wrong => by simp [decodeSignature_badSize wrong] at read
   · intro sized
-    rw [decodeSignature, dif_pos sized]
+    rw [decodeSignature, dite_eq_left sized]
     exact ⟨_, rfl⟩
 
 end EthLib.Cryptography.Xmss

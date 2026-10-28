@@ -53,14 +53,14 @@ private theorem inner_eval (xs : Array Fr) (i : Nat) (js : List Nat)
       congr 1
       by_cases hji : j ≠ i
       · unfold interpolationStep at hn
-        rw [if_pos hji] at hn
+        rw [ite_eq_left hji] at hn
         rw [evalPolyAt_mulPoly x hn, eval_linear]
         unfold weight
-        rw [if_pos hji]
+        rw [ite_eq_left hji]
       · simp only [interpolationStep, hji, ↓reduceIte, pure, Except.pure] at hn
         cases hn
         unfold weight
-        rw [if_neg hji]
+        rw [ite_eq_right hji]
         exact (mul_one _).symm
 
 private theorem weight_self (xs : Array Fr) (i j : Nat)
@@ -74,7 +74,7 @@ private theorem weight_self (xs : Array Fr) (i j : Nat)
 
 private theorem weight_other (xs : Array Fr) (i k : Nat) (hik : i ≠ k) :
     weight xs i k xs[k]! = 0 := by
-  simp [weight, Ne.symm hik]
+  simp [weight, Ne.symm hik, Fin.mul_zero]
 
 private theorem inner_at_node (xs ys : Array Fr) (i k : Nat)
     (hi : i < xs.size) (hk : k < xs.size)
@@ -85,7 +85,7 @@ private theorem inner_at_node (xs ys : Array Fr) (i k : Nat)
   rw [inner_eval xs i _ _ out _ h, eval_singleton]
   by_cases hik : i = k
   · subst k
-    rw [if_pos rfl]
+    rw [ite_eq_left rfl]
     have hp : ((List.range xs.size).map (fun j => weight xs i j xs[i]!)).prod = 1 := by
       apply List.prod_eq_one
       intro v hv
@@ -93,11 +93,12 @@ private theorem inner_at_node (xs ys : Array Fr) (i k : Nat)
       exact weight_self xs i j (hdistinct i j hi (List.mem_range.mp hj))
     rw [hp]
     exact mul_one _
-  · rw [if_neg hik]
+  · rw [ite_eq_right hik]
     have hp : ((List.range xs.size).map (fun j => weight xs i j xs[k]!)).prod = 0 := by
       apply List.prod_eq_zero
       exact List.mem_map.mpr ⟨k,List.mem_range.mpr hk,weight_other xs i k hik⟩
-    rw [hp, mul_zero]
+    -- The `0` is `Fin`'s, which core's `Fin.mul_zero` matches and Mathlib's `mul_zero` does not.
+    rw [hp, Fin.mul_zero]
 
 private def outerStep (xs ys : Array Fr) (r : PolynomialCoeff) (i : Nat) :
     Except KzgError PolynomialCoeff := do
@@ -166,12 +167,14 @@ theorem interpolatePolynomialcoeff_eval_at_of_distinct
     evalPolyAt out xs[k]! = ys[k]! := by
   have hfold : (List.range xs.size).foldlM (outerStep xs ys) #[Fr.zero] = .ok out := by
     unfold interpolatePolynomialcoeff at h
-    rw [if_neg (by omega)] at h
+    rw [ite_eq_right (by omega)] at h
     change (Array.range xs.size).foldlM (outerStep xs ys) #[Fr.zero] = .ok out at h
     simpa only [← Array.foldlM_toList, Array.toList_range] using h
   rw [outer_eval xs ys k hk hsz hdistinct (List.range xs.size) #[Fr.zero] out
-    (fun i hi => List.mem_range.mp hi) hfold, eval_singleton,
-    sum_delta _ k _ List.nodup_range, if_pos (List.mem_range.mpr hk)]
+    (fun i hi => List.mem_range.mp hi) hfold, eval_singleton]
+  -- The `0` in this sum is `Fin`'s, not the monoid's, so `sum_delta` goes in by `erw`.
+  erw [sum_delta _ k _ List.nodup_range]
+  rw [ite_eq_left (List.mem_range.mpr hk)]
   exact Fin.zero_add _
 
 private theorem except_bind_eq_ok_interp {ε α β : Type _} {x : Except ε α}
@@ -202,13 +205,13 @@ private theorem inner_range_size_and_bound (xs : Array Fr) (i : Nat)
     obtain ⟨hq_sz, hq_bd⟩ := ih q hq
     by_cases hki : k ≠ i
     · unfold interpolationStep at hstep
-      rw [if_pos hki] at hstep
+      rw [ite_eq_left hki] at hstep
       have hle := multiplyPolynomialcoeff_le_of_ok hstep
       have hsz := size_multiplyPolynomialcoeff hstep
       have hq_ne : q.isEmpty = false := by
         rw [Bool.eq_false_iff, ne_eq, Array.isEmpty_iff_size_eq_zero, hq_sz]
         split <;> omega
-      rw [if_neg (by simp [hq_ne])] at hsz
+      rw [ite_eq_right (by simp [hq_ne])] at hsz
       have hbin : (#[-((xs[i]! - xs[k]!).inverse) * xs[k]!, (xs[i]! - xs[k]!).inverse] :
           PolynomialCoeff).size = 2 := rfl
       refine ⟨?_, fun j hj hji => ?_⟩
@@ -257,9 +260,9 @@ private theorem inner_range_ok (xs : Array Fr) (i : Nat) (hi : i < xs.size)
       have hq_ne : q.isEmpty = false := by
         rw [Bool.eq_false_iff, ne_eq, Array.isEmpty_iff_size_eq_zero, hq_sz]
         split <;> omega
-      rw [if_neg (by simp [hq_ne])] at hout_sz
+      rw [ite_eq_right (by simp [hq_ne])] at hout_sz
       refine ⟨out, ?_, ?_⟩
-      · simp only [Bind.bind, Except.bind, hq, interpolationStep, if_pos hki, hout]
+      · simp only [Bind.bind, Except.bind, hq, interpolationStep, ite_eq_left hki, hout]
       · have hbin : (#[-((xs[i]! - xs[k]!).inverse) * xs[k]!, (xs[i]! - xs[k]!).inverse] :
             PolynomialCoeff).size = 2 := rfl
         rw [hout_sz, hq_sz, hbin]
@@ -297,7 +300,7 @@ private theorem outer_range_size_and_bound (xs ys : Array Fr)
     subst hadd
     rw [← Array.foldlM_toList, Array.toList_range, ← hsz] at hs
     obtain ⟨hs_sz, hs_bd⟩ := inner_range_size_and_bound xs k #[ys[k]!] rfl xs.size summand hs
-    rw [if_pos (by omega)] at hs_sz
+    rw [ite_eq_left (by omega)] at hs_sz
     refine ⟨?_, fun _ => ?_⟩
     · rw [size_addPolynomialcoeff, hq_sz, hs_sz]
       by_cases hk0 : k = 0
@@ -307,10 +310,10 @@ private theorem outer_range_size_and_bound (xs ys : Array Fr)
       · by_cases hk0 : k = 0
         · subst hk0
           have hbd := hs_bd (xs.size - 1) (by omega) (by omega)
-          rw [if_pos (by omega)] at hbd
+          rw [ite_eq_left (by omega)] at hbd
           omega
         · have hbd := hs_bd 0 (by omega) (by omega)
-          rw [if_neg (by omega)] at hbd
+          rw [ite_eq_right (by omega)] at hbd
           have : Constants.FIELD_ELEMENTS_PER_EXT_BLOB = 8192 := rfl
           omega
       · have : Constants.FIELD_ELEMENTS_PER_EXT_BLOB = 8192 := rfl
@@ -332,7 +335,7 @@ private theorem outer_range_ok (xs ys : Array Fr)
     obtain ⟨q, hq, hq_sz⟩ := ih (by omega)
     obtain ⟨summand, hs, hs_sz⟩ :=
       inner_range_ok xs k (by omega) hbound #[ys[k]!] rfl xs.size (Nat.le_refl _)
-    rw [if_pos (by omega)] at hs_sz
+    rw [ite_eq_left (by omega)] at hs_sz
     have hs_arr : (Array.range ys.size).foldlM (interpolationStep xs k) #[ys[k]!] = .ok summand := by
       rw [← Array.foldlM_toList, Array.toList_range, ← hsz]
       exact hs
@@ -357,10 +360,10 @@ theorem size_interpolatePolynomialcoeff {xs ys out : Array Fr}
       out.size = max xs.size 1 := by
   unfold interpolatePolynomialcoeff at h
   by_cases hne : xs.size ≠ ys.size
-  · rw [if_pos hne] at h
+  · rw [ite_eq_left hne] at h
     cases h
   · have hsz : xs.size = ys.size := Decidable.of_not_not hne
-    rw [if_neg hne] at h
+    rw [ite_eq_right hne] at h
     change (Array.range xs.size).foldlM (outerStep xs ys) #[Fr.zero] = .ok out at h
     rw [← Array.foldlM_toList, Array.toList_range] at h
     obtain ⟨hout_sz, hbd⟩ := outer_range_size_and_bound xs ys hsz xs.size (Nat.le_refl _) out h
@@ -382,7 +385,7 @@ theorem interpolatePolynomialcoeff_ok_of_lt {xs ys : Array Fr}
   obtain ⟨out, hout, hout_sz⟩ := outer_range_ok xs ys hsz hbound xs.size (Nat.le_refl _)
   refine ⟨out, ?_, ?_⟩
   · unfold interpolatePolynomialcoeff
-    rw [if_neg (by omega)]
+    rw [ite_eq_right (by omega)]
     change (Array.range xs.size).foldlM (outerStep xs ys) #[Fr.zero] = .ok out
     rw [← Array.foldlM_toList, Array.toList_range]
     exact hout

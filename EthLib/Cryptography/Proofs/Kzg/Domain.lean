@@ -27,11 +27,10 @@ open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
 
--- See the note in `Proofs.Bls.FrZMod`: core's grind-tactic `HPow`
--- instance on `Fin` shadows Mathlib's monoid power on `Fr` and breaks
+-- See the note in `Proofs.Bls.FrZMod`: core's `NatPow` instance on `Fin`
+-- shadows Mathlib's monoid power on `Fr` and breaks
 -- `rw` with Mathlib `pow` lemmas. File-local, so repeated here.
-attribute [-instance] Lean.Grind.Fin.instHPowFinNatOfNeZero
-attribute [-instance] Lean.Grind.Fin.instPowFinNatOfNeZero
+attribute [-instance] Fin.instNatPow
 
 /-- The blob width is the power of two the bit-reversal lemmas expect. -/
 theorem field_elements_per_blob_eq_two_pow :

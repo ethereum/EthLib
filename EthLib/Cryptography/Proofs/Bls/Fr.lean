@@ -88,10 +88,10 @@ theorem powNat_eq_powNatModel (a : Fr) (e : Nat) :
     · rename_i h
       simp only [ih (e / 2) (by omega), powNatModel_sq]
       by_cases h2 : e % 2 = 1
-      · rw [if_pos h2]
+      · rw [ite_eq_left h2]
         generalize hk : e / 2 = k
         rw [show e = 2 * k + 1 by omega, powNatModel]
-      · rw [if_neg h2]
+      · rw [ite_eq_right h2]
         generalize hk : e / 2 = k
         rw [show e = 2 * k by omega]
 
