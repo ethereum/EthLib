@@ -80,15 +80,17 @@ Nothing in EthLib records which leaf indices a key has signed, so the caller mus
 
 ## Test vectors
 
-`tests/cryptography/` has no leanXMSS vectors yet.
+`tests/cryptography/xmss/` has cases for `key_gen`, `sign` and `verify`.
 
-The proofs pin one full key and one signature instead (`Proofs/Xmss/KnownAnswer*.lean`).
+The proofs also pin one full key and one signature (`Proofs/Xmss/KnownAnswer*.lean`).
 
 The key grows from the seed `S_0[i] = 37 i + 11 mod 256`, and the signature signs `m[i] = 7 i + 3` at leaf index `0xA5C37E19`.
 
 The public key and the signature bytes were computed outside EthLib, by an independent implementation of the note.
 
-The compiled `keyGen` and `sign` reproduce both, byte for byte.
+The `key_gen_known_answer` and `sign_known_answer` cases hold the same bytes.
+
+The other cases are EthLib's own: nothing outside EthLib has checked them yet.
 
 ## What is proved
 

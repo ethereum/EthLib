@@ -29,6 +29,24 @@ upstream:  tests/general/<fork>/<kind>/<handler>/<suite>/<case>/data.yaml
 here:      tests/cryptography/<kind>/<handler>/<case>/data.yaml
 ```
 
+## leanXMSS
+
+The `xmss/` cases are pinned too.
+
+Key generation and signing build `2^16` one-time keys per tree, which takes the compiled specification minutes per case.
+
+So the generators rewrite the `key_gen` and `sign` cases only on request:
+
+```bash
+ETHLIB_SLOW_VECTORS=1 pytest bindings/python/tests/xmss
+```
+
+Every other run writes the `verify` cases and the rejections, and reads the slow cases back.
+
+`key_gen_known_answer` and `sign_known_answer` hold the bytes the proofs pin, which an independent implementation computed.
+
+The other cases come from the code under test.
+
 ## Checks
 
 ```bash
