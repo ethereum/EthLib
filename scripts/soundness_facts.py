@@ -211,8 +211,8 @@ def pins(root: Path) -> str:
         rev, requested = p["rev"][:7], p.get("inputRev")
         return f"`{requested}`, commit `{rev}`" if requested and not p["rev"].startswith(requested) else f"`{rev}`"
 
-    return (f"The specification requires ssz-specs, at {pin('ssz')}, for XMSS.\n"
-            f"The package also requires Mathlib, at {pin('mathlib')}, which only the proofs import.\n"
+    return (f"The specification requires no package.\n"
+            f"The package requires Mathlib, at {pin('mathlib')}, which only the proofs import.\n"
             f"The Lean toolchain is `{toolchain}`.\n")
 
 

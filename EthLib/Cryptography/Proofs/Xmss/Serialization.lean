@@ -11,8 +11,6 @@ namespace EthLib.Cryptography.Xmss
 
 open Constants
 
-set_option maxRecDepth 2048
-
 /-- Cutting a field into digests and joining them back gives the field. -/
 @[simp] theorem flatten_splitDigests {n : Nat} (bytes : Vector UInt8 (n * DIGEST_LEN)) :
     (splitDigests bytes).flatten = bytes := by
@@ -41,83 +39,68 @@ set_option maxRecDepth 2048
     omega
   simp [quotient, remainder]
 
-/-- A public key encodes as its root, then its public parameter. -/
-theorem encodePublicKey_eq (pk : PublicKey) :
-    encodePublicKey pk = packBytes pk.merkleRoot ++ packBytes pk.publicParam := by
-  simp [encodePublicKey, publicKeySsz, publicKeySszValue, Ssz.serialize,
-    Ssz.serializeStruct, Ssz.serializeFields, Ssz.assemble,
-    Ssz.Desc.isFixed, Ssz.Desc.fixedSize, Ssz.headWidth, Ssz.bodyWidth,
-    Ssz.headOf, Ssz.bodiesOf, Ssz.bytesPerOffset, Bind.bind, Except.bind,
-    pure, Except.pure, DIGEST_LEN, PUBLIC_PARAM_LEN, packBytes]
-  apply ByteArray.ext
-  simp only [ByteArray.data_append]
-
-/-- A signature encodes as its randomizer, then its chain values, then its siblings. -/
-theorem encodeSignature_eq (sig : Signature) :
-    encodeSignature sig = packBytes sig.randomness ++
-      (packBytes sig.chainElements.flatten ++ packBytes sig.merklePath.flatten) := by
-  simp [encodeSignature, signatureSsz, signatureSszValue, Ssz.serialize,
-    Ssz.serializeStruct, Ssz.serializeFields, Ssz.assemble,
-    Ssz.Desc.isFixed, Ssz.Desc.fixedSize, Ssz.headWidth, Ssz.bodyWidth,
-    Ssz.headOf, Ssz.bodiesOf, Ssz.bytesPerOffset, Bind.bind, Except.bind,
-    pure, Except.pure, V, LOG_LIFETIME, DIGEST_LEN, RANDOMNESS_LEN,
-    packBytes]
-  apply ByteArray.ext
-  simp only [ByteArray.data_append]
+/-! ## Sizes -/
 
 /-- A public key encodes to 32 bytes. -/
 @[simp] theorem size_encodePublicKey (pk : PublicKey) :
     (encodePublicKey pk).size = PUB_KEY_SIZE := by
-  simp [encodePublicKey_eq, PUB_KEY_SIZE]
+  simp [encodePublicKey, PUB_KEY_SIZE]
 
 /-- A signature encodes to 1208 bytes. -/
 @[simp] theorem size_encodeSignature (sig : Signature) :
     (encodeSignature sig).size = SIG_SIZE := by
-  simp [encodeSignature_eq, SIG_SIZE, WOTS_SIG_SIZE, Nat.add_assoc]
+  simp [encodeSignature, SIG_SIZE, WOTS_SIG_SIZE]
 
-/-- Converting a public key to a codec value and back returns it. -/
-@[simp] theorem publicKeyFromSsz?_value (pk : PublicKey) :
-    publicKeyFromSsz? (publicKeySszValue pk) = some pk := by
-  simp [publicKeySszValue, publicKeyFromSsz?]
-
-/-- Converting a signature to a codec value and back returns it. -/
-@[simp] theorem signatureFromSsz?_value (sig : Signature) :
-    signatureFromSsz? (signatureSszValue sig) = some sig := by
-  simp [signatureSszValue, signatureFromSsz?]
-
-private theorem deserialize_publicKey_value (pk : PublicKey) :
-    Ssz.deserialize publicKeySsz (encodePublicKey pk).data = .ok (publicKeySszValue pk) := by
-  -- The codec checks the 32-byte length, then cuts out the two 16-byte fields.
-  rw [encodePublicKey_eq]
-  simp [publicKeySsz, publicKeySszValue, packBytes, ByteArray.data_append,
-    Ssz.deserialize, Ssz.structSlices, Ssz.structBudget,
-    Ssz.readSlots, Ssz.bodyStarts, Ssz.Slot.held, Ssz.deserializeFields,
-    Ssz.Desc.fieldsFixedSize, Ssz.Desc.fixedSize, Ssz.bytesPerOffset,
-    Bind.bind, Except.bind, pure, Except.pure, DIGEST_LEN, PUBLIC_PARAM_LEN]
-  -- Slicing a concatenation at its seams returns the original pieces.
-  simp [Array.extract_empty_of_stop_le_start]
-
-private theorem deserialize_signature_value (sig : Signature) :
-    Ssz.deserialize signatureSsz (encodeSignature sig).data = .ok (signatureSszValue sig) := by
-  -- The codec checks the 1208-byte length, then cuts out 24, 672 and 512 bytes.
-  rw [encodeSignature_eq]
-  simp [signatureSsz, signatureSszValue, packBytes, ByteArray.data_append,
-    Ssz.deserialize, Ssz.structSlices, Ssz.structBudget,
-    Ssz.readSlots, Ssz.bodyStarts, Ssz.Slot.held, Ssz.deserializeFields,
-    Ssz.Desc.fieldsFixedSize, Ssz.Desc.fixedSize, Ssz.bytesPerOffset,
-    Bind.bind, Except.bind, pure, Except.pure, V, LOG_LIFETIME, DIGEST_LEN, RANDOMNESS_LEN]
-  -- Slicing a concatenation at its seams returns the original pieces.
-  simp [Array.extract_empty_of_stop_le_start]
+/-! ## Round trips -/
 
 /-- Decoding an encoded public key returns it. -/
 @[simp] theorem decodePublicKey_encodePublicKey (pk : PublicKey) :
     decodePublicKey (encodePublicKey pk) = .ok pk := by
-  simp [decodePublicKey, deserialize_publicKey_value]
+  rw [decodePublicKey, dif_pos (size_encodePublicKey pk)]
+  -- The root is the first field, the public parameter the one after it.
+  have root := readBytes_append_left (a := packBytes pk.merkleRoot)
+    (b := packBytes pk.publicParam) (offset := 0) (n := DIGEST_LEN)
+    (by simp [DIGEST_LEN, PUBLIC_PARAM_LEN]) (by simp)
+  have param := readBytes_append_right (a := packBytes pk.merkleRoot)
+    (b := packBytes pk.publicParam) (offset := 0) (n := PUBLIC_PARAM_LEN)
+    (by simp [DIGEST_LEN, PUBLIC_PARAM_LEN])
+  simp only [size_packBytes, Nat.add_zero] at param
+  simp only [encodePublicKey, root, param, readBytes_packBytes]
 
 /-- Decoding an encoded signature returns it. -/
 @[simp] theorem decodeSignature_encodeSignature (sig : Signature) :
     decodeSignature (encodeSignature sig) = .ok sig := by
-  simp [decodeSignature, deserialize_signature_value]
+  rw [decodeSignature, dif_pos (size_encodeSignature sig)]
+  -- The encoding is three parts: randomizer, chain values, siblings.
+  have hr : (packBytes sig.randomness).size = RANDOMNESS_LEN := size_packBytes _
+  have hc : (packBytes sig.chainElements.flatten).size = V * DIGEST_LEN := size_packBytes _
+  -- The randomizer is the start of the first two parts, and of the first.
+  have randomizer : readBytes (encodeSignature sig) 0 RANDOMNESS_LEN
+      (by simp [SIG_SIZE, WOTS_SIG_SIZE]; omega) = sig.randomness := by
+    -- The encoding unfolds to the concatenation by definition.
+    show readBytes (packBytes _ ++ packBytes _ ++ packBytes _) 0 _ _ = _
+    rw [readBytes_append_left _ (by simp [hr, hc]),
+      readBytes_append_left _ (by simp [hr]), readBytes_packBytes]
+  -- The chain values start where the randomizer ends.
+  have chains : readBytes (encodeSignature sig) RANDOMNESS_LEN (V * DIGEST_LEN)
+      (by simp [SIG_SIZE, WOTS_SIG_SIZE]) = sig.chainElements.flatten := by
+    show readBytes (packBytes _ ++ packBytes _ ++ packBytes _) _ _ _ = _
+    rw [readBytes_append_left _ (by simp [hr, hc])]
+    have past := readBytes_append_right (a := packBytes sig.randomness)
+      (b := packBytes sig.chainElements.flatten) (offset := 0) (n := V * DIGEST_LEN)
+      (by simp [hr, hc])
+    simp only [hr, Nat.add_zero] at past
+    rw [past, readBytes_packBytes]
+  -- The siblings start where the first two parts end.
+  have siblings : readBytes (encodeSignature sig) WOTS_SIG_SIZE (LOG_LIFETIME * DIGEST_LEN)
+      (by simp [SIG_SIZE]) = sig.merklePath.flatten := by
+    have past := readBytes_append_right
+      (a := packBytes sig.randomness ++ packBytes sig.chainElements.flatten)
+      (b := packBytes sig.merklePath.flatten) (offset := 0)
+      (n := LOG_LIFETIME * DIGEST_LEN) (by simp [hr, hc])
+    simp only [ByteArray.size_append, hr, hc, Nat.add_zero] at past
+    exact past.trans (readBytes_packBytes _ _)
+  simp only [randomizer, chains, siblings, splitDigests_flatten]
 
 /-- Every 32-byte string is the encoding of a public key. -/
 theorem encodePublicKey_surjective {bytes : ByteArray} (sized : bytes.size = PUB_KEY_SIZE) :
@@ -127,9 +110,8 @@ theorem encodePublicKey_surjective {bytes : ByteArray} (sized : bytes.size = PUB
   refine ⟨⟨⟨bytes.data.extract 0 16, by simp [size, DIGEST_LEN]⟩,
     ⟨bytes.data.extract 16 32, by simp [size, PUBLIC_PARAM_LEN]⟩⟩, ?_⟩
   -- Re-joining the two adjacent slices gives the whole string.
-  rw [encodePublicKey_eq]
   apply ByteArray.ext
-  simp [packBytes, Array.extract_append_extract, ← size]
+  simp [encodePublicKey, packBytes, Array.extract_append_extract, ← size]
   omega
 
 /-- Every 1208-byte string is the encoding of a signature. -/
@@ -145,9 +127,8 @@ theorem encodeSignature_surjective {bytes : ByteArray} (sized : bytes.size = SIG
     ⟨bytes.data.extract 0 24, by simp [size, RANDOMNESS_LEN]⟩,
     splitDigests ⟨bytes.data.extract 696 1208, by simp [size, LOG_LIFETIME, DIGEST_LEN]⟩⟩, ?_⟩
   -- Re-joining the three adjacent slices gives the whole string.
-  rw [encodeSignature_eq]
   apply ByteArray.ext
-  simp [packBytes, Array.extract_append_extract, ← size]
+  simp [encodeSignature, packBytes, Array.extract_append_extract, ← size]
   omega
 
 /-- Decoding then re-encoding a 32-byte string returns it. -/
@@ -172,27 +153,17 @@ theorem encodeSignature_injective : Function.Injective encodeSignature := by
   intro left right same
   simpa using congrArg decodeSignature same
 
+/-! ## Rejection -/
+
 /-- A public key string of any other length than 32 bytes is rejected. -/
 theorem decodePublicKey_badSize {bytes : ByteArray} (wrong : bytes.size ≠ PUB_KEY_SIZE) :
     decodePublicKey bytes = .error (.badPublicKeySize bytes.size) := by
-  rw [pub_key_size_eq] at wrong
-  -- The codec rejects strings of 2^32 bytes or more before it checks the exact length.
-  by_cases large : 2 ^ 32 ≤ bytes.size <;>
-    simp [decodePublicKey, publicKeySsz, Ssz.deserialize, Ssz.structSlices,
-      Ssz.structBudget, Ssz.Desc.fieldsFixedSize, Ssz.Desc.fixedSize,
-      Ssz.bytesPerOffset, DIGEST_LEN, PUBLIC_PARAM_LEN, wrong, large,
-      Bind.bind, Except.bind, pure, Except.pure]
+  rw [decodePublicKey, dif_neg wrong]
 
 /-- A signature string of any other length than 1208 bytes is rejected. -/
 theorem decodeSignature_badSize {bytes : ByteArray} (wrong : bytes.size ≠ SIG_SIZE) :
     decodeSignature bytes = .error (.badSignatureSize bytes.size) := by
-  rw [sig_size_eq] at wrong
-  -- The codec rejects strings of 2^32 bytes or more before it checks the exact length.
-  by_cases large : 2 ^ 32 ≤ bytes.size <;>
-    simp [decodeSignature, signatureSsz, Ssz.deserialize, Ssz.structSlices,
-      Ssz.structBudget, Ssz.Desc.fieldsFixedSize, Ssz.Desc.fixedSize,
-      Ssz.bytesPerOffset, V, LOG_LIFETIME, DIGEST_LEN, RANDOMNESS_LEN, wrong, large,
-      Bind.bind, Except.bind, pure, Except.pure]
+  rw [decodeSignature, dif_neg wrong]
 
 /-- Public key decoding succeeds exactly on 32-byte strings. -/
 theorem decodePublicKey_success_iff (bytes : ByteArray) :

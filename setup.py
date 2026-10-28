@@ -23,9 +23,6 @@ from setuptools.command.build_ext import build_ext
 REPO_ROOT = Path(__file__).parent.resolve()
 BINDINGS  = REPO_ROOT / "bindings" / "python"
 LAKE_IR   = REPO_ROOT / ".lake" / "build" / "ir"
-# The shared SSZ package builds outside the root package's object directory.
-SSZ_SRC   = REPO_ROOT / ".lake" / "packages" / "ssz" / "lean"
-SSZ_IR    = SSZ_SRC / ".lake" / "build" / "ir"
 
 
 def _lean_sysroot() -> Path | None:
@@ -57,14 +54,12 @@ def _current_objects(ir: Path, src: Path, sub: str = "") -> list[str]:
 
 
 def _collect_lean_objects() -> list[str]:
-    """Every current `.c.o.export` Lake produced for the package and the SSZ codec.
+    """Every current `.c.o.export` Lake produced for the package.
 
     Only objects under `EthLib/` are the package's modules. The top level
     of `LAKE_IR` also holds tools such as `lake exe check-decls`, whose
     object defines `main` and must not be linked into the extension."""
-    objects = _current_objects(LAKE_IR, REPO_ROOT, "EthLib")
-    objects += _current_objects(SSZ_IR, SSZ_SRC)
-    return sorted(objects)
+    return sorted(_current_objects(LAKE_IR, REPO_ROOT, "EthLib"))
 
 
 def _lean_runtime_link(sysroot: Path) -> tuple[list[str], list[str], list[str]]:

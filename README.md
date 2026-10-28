@@ -44,8 +44,6 @@ Compile the primitives and check every proof:
 lake build
 ```
 
-XMSS serialization uses the pinned Lean codec from [ethereum/ssz-specs](https://github.com/ethereum/ssz-specs).
-The codec builds with this project's Lean 4.29.1 toolchain.
 When refreshing dependencies, use `lake --keep-toolchain update` to retain the toolchain matching Mathlib.
 
 ### Testing

@@ -51,7 +51,7 @@ The code cites two more sources:
 - the WOTS+C encoding, [ePrint 2022/778](https://eprint.iacr.org/2022/778) (`Encoding.lean`);
 - BLAKE2s-256, [RFC 7693](https://www.rfc-editor.org/rfc/rfc7693) (`EthLib/Cryptography/Hash/Blake2s.lean`).
 
-The SSZ encodings of keys and signatures use `ethereum/ssz-specs`, at the commit `lakefile.lean` pins.
+Keys and signatures encode as their fields concatenated, each at a fixed offset (`Serialization.lean`).
 
 ## Operations
 

@@ -82,8 +82,6 @@ class SoundnessFacts(unittest.TestCase):
 
     def write_manifest(self, mathlib_rev: str) -> None:
         (self.root / "lake-manifest.json").write_text(json.dumps({"packages": [
-            {"name": "ssz", "rev": "a23a2392ffffdd72caefb12f57b7ebd0c9a49de5",
-             "inputRev": "a23a2392ffffdd72caefb12f57b7ebd0c9a49de5"},
             {"name": "mathlib", "rev": mathlib_rev, "inputRev": "v4.29.1"},
         ]}))
 

@@ -69,6 +69,20 @@ def packBytes {n : Nat} (v : Vector UInt8 n) : ByteArray :=
   -- The length invariant is discarded, not checked: every object has one.
   ⟨v.toArray⟩
 
+/-- Read the `n` bytes of a buffer that start at an offset.
+
+The caller proves the buffer has room, so the read needs no fallback byte.
+
+Example, with `b = ByteArray.mk #[10, 20, 30, 40]`:
+* `readBytes b 1 2 _ = #v[20, 30]`
+-/
+def readBytes (b : ByteArray) (offset n : Nat) (h : offset + n ≤ b.size) :
+    Vector UInt8 n :=
+  -- Every index below the object's length lands inside the buffer.
+  Vector.ofFn fun i => b.data[offset + i.val]'(by
+    simp only [ByteArray.size] at h
+    omega)
+
 /-- Read a fixed-size object out of a buffer at an offset.
 
 Returns nothing when the buffer has no room for the object.
@@ -83,13 +97,6 @@ Examples, with `b = ByteArray.mk #[10, 20, 30, 40]`:
 def unpackBytes? (n : Nat) (b : ByteArray) (offset : Nat := 0) :
     Option (Vector UInt8 n) :=
   -- The guard is the whole validation: a buffer without room is rejected.
-  if h : offset + n ≤ b.size then
-    -- Invariant: every index below the object's length lands inside the buffer.
-    -- So reading is total and needs no fallback byte.
-    some (Vector.ofFn fun i => b.data[offset + i.val]'(by
-      simp only [ByteArray.size] at h
-      omega))
-  else
-    none
+  if h : offset + n ≤ b.size then some (readBytes b offset n h) else none
 
 end EthLib.Cryptography.Xmss

@@ -270,8 +270,8 @@ The Lean docstring of `sign` says so, but the Python `sign` docstring does not y
 `lake-manifest.json` pins every dependency.
 
 <!-- generated: pins -->
-The specification requires ssz-specs, at `a23a239`, for XMSS.
-The package also requires Mathlib, at `v4.29.1`, commit `5e932f9`, which only the proofs import.
+The specification requires no package.
+The package requires Mathlib, at `v4.29.1`, commit `5e932f9`, which only the proofs import.
 The Lean toolchain is `leanprover/lean4:v4.29.1`.
 <!-- end generated -->
 

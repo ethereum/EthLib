@@ -166,10 +166,9 @@ Example, from the XMSS signature layout:
 - Chain values are in chain order.
 - Siblings run from the leaf up to the root.
 -/
-def signatureSsz : Ssz.Desc :=
-  .container ["randomness", "chain_values", "merkle_path"]
-    [.byteVector RANDOMNESS_LEN, .byteVector (V * DIGEST_LEN),
-      .byteVector (LOG_LIFETIME * DIGEST_LEN)]
+def encodeSignature (sig : Signature) : ByteArray :=
+  packBytes sig.randomness ++ packBytes sig.chainElements.flatten
+    ++ packBytes sig.merklePath.flatten
 ````
 
 When a module does not follow these rules, apply them to what you change.
