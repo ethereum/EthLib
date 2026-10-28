@@ -15,14 +15,16 @@ Signature verification.
 
 # Cost
 
-A constant 201 BLAKE2s compressions, whatever the message.
+A constant 186 permutations of Keccak-f[1600], whatever the message.
 
-Per layer, for a `k`-byte input costing `ceil(k / 64)` compressions:
+Per layer, for a `k`-byte input costing `floor(k / 136) + 1` permutations:
 
-- Digest: 2 on the bottom layer, 80 bytes, and 1 on the top, 64 bytes.
-- Chains: `3v - T = 68`, one compression each.
-- Leaf: 15, for the 960 bytes of 58 chain ends.
+- Digest: 1, for 80 bytes on the bottom layer and 64 on the top.
+- Chains: `3v - T = 68`, one permutation each.
+- Leaf: 8, for the 960 bytes of 58 chain ends.
 - Path: 16, one per level.
+
+That is 93 per layer.
 
 A fixed count is what keeps the aggregation circuit a fixed size.
 

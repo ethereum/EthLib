@@ -1,5 +1,4 @@
 import EthLib.Cryptography.Hash.Sha256
-import EthLib.Cryptography.Hash.Blake2s
 import EthLib.Cryptography.Hash.Keccak
 
 /-!

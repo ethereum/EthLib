@@ -24,9 +24,9 @@ A public key is 32 bytes and a signature 2404 bytes.
 
 ## Source
 
-The specification is the note "leanXMSS for Ethereum PQ-Consensus, specification draft", [`doc/lean_xmss/main.tex`](https://github.com/leanEthereum/leanVM/blob/55f8b0389c6cceab02dee82a003e40f7d80d0699/doc/lean_xmss/main.tex) at commit `55f8b0389c6cceab02dee82a003e40f7d80d0699`.
+The specification is the note "leanXMSS for Ethereum PQ-Consensus, specification draft", [`doc/lean_xmss/main.tex`](https://github.com/leanEthereum/leanVM/blob/4af2cdddd7cd41b9df2cc7e123e314a91b0b4462/doc/lean_xmss/main.tex) at commit `4af2cdddd7cd41b9df2cc7e123e314a91b0b4462`.
 
-Its hash `H` is BLAKE2s-256 (RFC 7693) at that commit.
+Its hash `H` is Keccak-256, Ethereum's hash.
 
 Each module cites the section it implements:
 
@@ -48,7 +48,7 @@ The names follow the note: `Th` is `th`, `Ots.sign` is `otsSign`, `Tree.fold` is
 The code cites two more sources:
 
 - the target-sum code of WOTS+C, [ePrint 2022/778](https://eprint.iacr.org/2022/778) (`Encoding.lean`);
-- BLAKE2s-256, [RFC 7693](https://www.rfc-editor.org/rfc/rfc7693) (`EthLib/Cryptography/Hash/Blake2s.lean`).
+- Keccak-256, [FIPS 202](https://csrc.nist.gov/pubs/fips/202/final) with Keccak's original padding (`EthLib/Cryptography/Hash/Keccak.lean`).
 
 One step computes a value of the note another way.
 
@@ -139,7 +139,7 @@ The kernel checks every known answer itself, with no `native_decide`.
 
 A whole verification is too large for one kernel check, so the known answer checks it in pieces: each layer's codeword, a few chains at a time, the leaf and the path.
 
-The pieces run over the fast form of BLAKE2s, with its hash inputs as lists, which the kernel evaluates far faster than the specification's arrays.
-`Proofs/Xmss/Kernel.lean` proves each rewrite equal to the specification.
+The pieces run over a record form of Keccak-f, with the hash inputs as lists, which the kernel evaluates far faster than the specification's vectors and arrays.
+`Proofs/Hash/KeccakKernel.lean` proves the record form equal to Keccak-f for every state, and `Proofs/Xmss/Kernel.lean` carries that through the chains and the paths.
 
 The public key from the seed needs the whole top tree, `2^16` one-time keys, which is beyond the kernel.

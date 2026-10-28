@@ -1,4 +1,4 @@
-import EthLib.Cryptography.Hash.Blake2s
+import EthLib.Cryptography.Hash.Keccak
 import EthLib.Cryptography.Xmss.Address
 
 /-!
@@ -10,7 +10,7 @@ The hash every other definition is built from.
     Th(P, A, M) = H_0(P | A | M)
 ```
 
-- `H` is unkeyed BLAKE2s-256 (RFC 7693).
+- `H` is Keccak-256, Ethereum's hash: FIPS 202's 256-bit hash with Keccak's original padding.
 - `H_0` and `H_1` are the first and last 16 bytes of its output.
 - `P` and `A` are 16 bytes each, so the payload `M` always starts at byte 32.
 
@@ -23,7 +23,7 @@ open EthLib.Cryptography.Xmss.Constants
 
 /-- `H`: the scheme's 32-byte hash. -/
 def hash (input : ByteArray) : Vector UInt8 32 :=
-  Hash.Blake2s.hash input
+  Hash.Keccak.keccak256 input
 
 /-- The first or the last 16 bytes of a 32-byte hash value. -/
 def halfOf (half : Fin 2) (full : Vector UInt8 32) : Digest :=
