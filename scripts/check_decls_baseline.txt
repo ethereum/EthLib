@@ -7,10 +7,6 @@
 # Remove an entry in the pull request that removes its finding.
 # Never add one: a new finding is fixed, not listed.
 
-# Known answers decided by compiled code rather than by the kernel.
-# `native_decide` and `bv_decide` trust the compiler and every `@[extern]` it calls.
-native EthLib.Cryptography.Xmss.sign_known_answer
-
 # The Miller loop's `while` loops compile to `Loop.forIn`, which Lean core defines with `partial`.
 reaches-opaque EthLib.Cryptography.Bls.millerLoop
 

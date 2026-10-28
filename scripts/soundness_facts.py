@@ -59,6 +59,8 @@ def readable(decl: str) -> str:
 
 def native(root: Path) -> str:
     names = sorted((d for k, d in baseline(root) if k == "native"), key=readable)
+    if not names:
+        return "No theorem uses them.\n"
     return (f"{len(names)} theorems still use them, and "
             "`scripts/check_decls_baseline.txt` lists each one:\n\n"
             + "".join(f"- {readable(n)}\n" for n in names))

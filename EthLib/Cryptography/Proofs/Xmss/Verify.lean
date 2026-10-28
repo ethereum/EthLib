@@ -1,6 +1,4 @@
 import EthLib.Cryptography.Xmss.Verify
-import EthLib.Cryptography.Proofs.Xmss.VerifyLeaf
-import EthLib.Cryptography.Proofs.Xmss.VerifyRoots
 
 /-!
 # Proofs: `Xmss.Verify`
@@ -12,79 +10,69 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
-variable {pk : PublicKey} {msg : Message} {sig : Signature} {epoch : Epoch}
-
-/-- An inadmissible digest rejects, whatever the rest of the signature. -/
-theorem verify_of_wotsEncode_none
-    (h : wotsEncode pk.publicParam msg sig.randomness epoch = none) :
-    verify pk msg sig epoch = false := by
-  simp only [verify, h]
-
 /-- Acceptance, unfolded.
 
-The message encodes, and the leaf its chains claim reaches the root. -/
-theorem verify_iff :
-    verify pk msg sig epoch = true ↔
-      ∃ x, wotsEncode pk.publicParam msg sig.randomness epoch = some x ∧
-        computeRoot pk.publicParam epoch sig.merklePath
-          (otsLeaf pk.publicParam epoch
-            (otsRecover pk.publicParam epoch sig.chainElements x))
-          = pk.merkleRoot := by
-  -- Split on the encoding: the rejecting branch has no witness to offer.
-  cases h : wotsEncode pk.publicParam msg sig.randomness epoch <;>
-    simp only [verify, h, reduceCtorEq, false_and, exists_false,
-      Option.some.injEq, exists_eq_left', decide_eq_true_eq]
+The bottom layer leads to some root, the top layer signs that root, and its path reaches the key's root. -/
+theorem verify_iff {pk : PublicKey} {m : Message} {sig : Signature} :
+    verify pk m sig = true ↔
+      ∃ bottomRoot,
+        layerRoot pk.publicParam .bottom sig.leafIndex.toNat (packBytes m) sig.bottom
+          = some bottomRoot ∧
+        layerRoot pk.publicParam .top (bottomTree sig.leafIndex) (packBytes bottomRoot) sig.top
+          = some pk.root := by
+  simp only [verify, decide_eq_true_eq, Option.bind_eq_bind, Option.bind_eq_some_iff]
 
-/-! ## Known answer
+/-- A signature whose bottom digest is not a codeword rejects, whatever the rest. -/
+theorem verify_of_layerRoot_none {pk : PublicKey} {m : Message} {sig : Signature}
+    (h : layerRoot pk.publicParam .bottom sig.leafIndex.toNat (packBytes m) sig.bottom = none) :
+    verify pk m sig = false := by
+  simp [verify, h]
 
-One honest signature, pinned byte for byte.
+/-! ## Verifying in pieces
 
-It fixes every hash the verifier makes, not just its accept or reject. -/
+A known answer evaluates the verifier hash by hash.
 
+These lemmas let each piece be checked on its own, with its value stated. -/
 
-/-- The reference signature verifies. -/
-theorem verify_known_answer :
-    verify examplePublicKey exampleMessage exampleSignature 7 = true := by
-  dsimp only [verify]
-  rw [katEncode]
-  dsimp only
-  rw [katRecover, katLeaf_eq]
-  change decide (Internal.climbUpto _ 7 _ 32 _ katLeaf = _) = true
-  rw [katRoot32]
-  decide +kernel
+/-- Chain `i` walked from the position its digit names to position 3. -/
+def chainEnd (pp : PublicParam) (layer : Layer) (e : UInt32) (x : Vector (Fin CHAIN_LENGTH) V)
+    (y : Vector Digest V) (i : Fin V) : Digest :=
+  chain pp layer e i x[i] (CHAIN_LENGTH - 1 - x[i]) (by have := x[i].isLt; omega) y[i]
 
-/-- The same signature at the neighbouring epoch rejects.
+/-- A layer's root, from its codeword, its chain ends, its leaf and its path. -/
+theorem layerRoot_eq {pp : PublicParam} {layer : Layer} {e : Nat} {msg : ByteArray}
+    {sig : LayerSignature} {x : Vector (Fin CHAIN_LENGTH) V} {ends : Vector Digest V}
+    {leaf root : Digest}
+    (hx : codeword? (messageDigest pp layer (UInt32.ofNat e) msg sig.randomizer) = some x)
+    (hends : ∀ i : Fin V, chainEnd pp layer (UInt32.ofNat e) x sig.chainValues i = ends[i])
+    (hleaf : otsLeafHash pp layer (UInt32.ofNat e) ends = leaf)
+    (hroot : fold pp layer e leaf sig.path = root) :
+    layerRoot pp layer e msg sig = some root := by
+  -- The recovered ends are the stated ones, chain by chain.
+  have hv : (Vector.ofFn fun i => chain pp layer (UInt32.ofNat e) i x[i]
+      (CHAIN_LENGTH - 1 - x[i]) (by have := x[i].isLt; omega) sig.chainValues[i]) = ends :=
+    Vector.ext fun i hi => by simpa [chainEnd] using hends ⟨i, hi⟩
+  simp only [layerRoot, otsLeaf, hx, Option.bind_eq_bind, Option.bind_some, Option.pure_def,
+    hv, hleaf, hroot]
 
-The epoch enters the encoding hash, so the digest there is inadmissible. -/
-theorem verify_wrong_epoch :
-    verify examplePublicKey exampleMessage exampleSignature 6 = false := by
-  -- Rejection stops after the encoding hash, which the kernel can evaluate.
-  decide +kernel
+/-- Acceptance, from the two layers' roots. -/
+theorem verify_of_layerRoot {pk : PublicKey} {m : Message} {sig : Signature} {bottomRoot : Digest}
+    (hb : layerRoot pk.publicParam .bottom sig.leafIndex.toNat (packBytes m) sig.bottom
+      = some bottomRoot)
+    (ht : layerRoot pk.publicParam .top (bottomTree sig.leafIndex) (packBytes bottomRoot) sig.top
+      = some pk.root) :
+    verify pk m sig = true :=
+  verify_iff.mpr ⟨bottomRoot, hb, ht⟩
 
-/-- Changing the topmost sibling rejects.
-
-A root computation that ignored one side of a node would still accept. -/
-theorem verify_tampered_path :
-    verify examplePublicKey exampleMessage
-      { exampleSignature with
-        merklePath := exampleSignature.merklePath.set 31 (Vector.replicate 16 0) }
-      7 = false := by
-  dsimp only [verify]
-  rw [katEncode]
-  dsimp only
-  rw [katRecover, katLeaf_eq]
-  change decide (Internal.climbUpto examplePublicKey.publicParam 7
-    (exampleSignature.merklePath.set 31 (Vector.replicate 16 0)) 32 (by decide) katLeaf =
-    examplePublicKey.merkleRoot) = false
-  rw [Internal.climbUpto]
-  have hprefix : Internal.climbUpto examplePublicKey.publicParam 7
-      (exampleSignature.merklePath.set 31 (Vector.replicate 16 0)) 31 (by decide) katLeaf =
-      Internal.climbUpto examplePublicKey.publicParam 7 exampleSignature.merklePath 31 (by decide) katLeaf := by
-    apply Internal.climbUpto_congr_path
-    intro i hi
-    simp [show 31 ≠ i by omega]
-  rw [hprefix, katRoot31]
-  simp only [Internal.climbStep, merkleNode_eq_tweakHashList]
-  decide +kernel
+/-- Rejection, when the top layer leads to some other root. -/
+theorem verify_of_layerRoot_ne {pk : PublicKey} {m : Message} {sig : Signature}
+    {bottomRoot root : Digest}
+    (hb : layerRoot pk.publicParam .bottom sig.leafIndex.toNat (packBytes m) sig.bottom
+      = some bottomRoot)
+    (ht : layerRoot pk.publicParam .top (bottomTree sig.leafIndex) (packBytes bottomRoot) sig.top
+      = some root)
+    (hne : root ≠ pk.root) :
+    verify pk m sig = false := by
+  simp [verify, hb, ht, hne]
 
 end EthLib.Cryptography.Xmss

@@ -156,19 +156,17 @@ Write for a smart reader who has never seen this file.
 Example, from the XMSS signature layout:
 
 ````lean
-/-- The signature layout, 1208 bytes.
+/-- Encode one layer's signature as 1200 bytes.
 
 ```text
-    [ randomizer: 24 | 42 chain values: 672 | 32 siblings: 512 ]
+    [ randomizer: 16 | 58 chain values: 928 | 16 siblings: 256 ]
 ```
 
-- The randomizer comes first, as in the paper's signature tuple.
 - Chain values are in chain order.
 - Siblings run from the leaf up to the root.
 -/
-def encodeSignature (sig : Signature) : ByteArray :=
-  packBytes sig.randomness ++ packBytes sig.chainElements.flatten
-    ++ packBytes sig.merklePath.flatten
+def encodeLayerSignature (sig : LayerSignature) : ByteArray :=
+  packBytes sig.randomizer ++ packDigests sig.chainValues ++ packDigests sig.path
 ````
 
 When a module does not follow these rules, apply them to what you change.

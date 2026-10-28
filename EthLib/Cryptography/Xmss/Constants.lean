@@ -1,146 +1,140 @@
 /-!
 # `Xmss.Constants`
 
-The XMSS parameter set.
+The leanXMSS parameter set.
+
+Source: the leanXMSS specification draft, section "Hashing and parameters".
 -/
 
 namespace EthLib.Cryptography.Xmss.Constants
 
 /-! ## Hash and object sizes -/
 
-/-- The hash value and Merkle node length in bytes.
+/-- The hash value and Merkle node length in bytes, `n` in the specification.
 
-128 bits, following SLH-DSA at NIST level 1. -/
+128 bits, the digest size of the SLH-DSA parameter sets at NIST level 1. -/
 def DIGEST_LEN : Nat := 16
 
 /-- The public parameter length in bytes.
 
-Hashed into every call, which separates one key's hashes from another's. -/
+It is hashed into every call, which separates one key's hashes from another's. -/
 def PUBLIC_PARAM_LEN : Nat := 16
 
-/-- The tweak length in bytes.
+/-- The address length in bytes.
 
-The tweak separates call sites within one key.
-
-A chain step, a Merkle node and a leaf never share a hash input. -/
-def TWEAK_LEN : Nat := 16
+An address separates the call sites of one key. -/
+def ADDRESS_LEN : Nat := 16
 
 /-- The message length in bytes.
 
-XMSS signs a digest, so the caller hashes the real message first.
+leanXMSS signs a 256-bit message hash, so the caller hashes the real message first.
 
-The caller's hash must be collision resistant.
-
-Two messages sharing a digest share a signature. -/
+Two messages that share a hash share a signature. -/
 def MESSAGE_LEN : Nat := 32
 
 /-- The randomizer length in bytes.
 
-The signer grinds this value until the message encodes into the code. -/
-def RANDOMNESS_LEN : Nat := 24
+The signer grinds it until the message digest is a codeword. -/
+def RANDOMIZER_LEN : Nat := 16
 
-/-- Length of the master secret in bytes.
+/-- The secret key length in bytes.
 
-It is the PRF key held in the secret key.
-
-Every initial chain value is expanded from it during signing. -/
+The secret key is one uniform seed, and every other secret derives from it. -/
 def SEED_LEN : Nat := 32
 
-/-! ## Winternitz one-time signature -/
+/-- The scheme's name, hashed in front of the seed.
 
-/-- The chunk size in bits.
+No other scheme derives its secrets from the same bytes.
 
-One encoding digit selects a position along a hash chain.
+It is the 8-byte ASCII string `leanXMSS`, one byte per character. -/
+def SEED_TAG : List UInt8 := "leanXMSS".toList.map fun c => UInt8.ofNat c.toNat
 
-Hash chains have length `2^W`. -/
-def W : Nat := 3
+/-! ## WOTS+C -/
 
-/-- The code length: the number of hash chains in one one-time key. -/
-def V : Nat := 42
+/-- The positions of one hash chain, `0` to `3`.
 
-/-- The number of values a hash chain takes.
+A digit of 2 bits names one of them. -/
+def CHAIN_LENGTH : Nat := 4
 
-The first position holds the secret key, the last one the public key. -/
-def CHAIN_LENGTH : Nat := 2 ^ W
+/-- The digits a 16-byte digest carries: 128 bits, 2 bits each. -/
+def DIGITS : Nat := 64
 
-/-- The sum a valid encoding's digits must hit.
+/-- The chains of one one-time key, `v` in the specification.
 
-Fixing the sum removes the checksum chains: the signer grinds instead.
+The last `64 - 58 = 6` digits of a codeword are zero, so they have no chain. -/
+def V : Nat := 58
 
-`195` sits above the mean of `147`, so the verifier walks fewer steps.
+/-- The sum of a codeword's digits, `T` in the specification.
 
-The cost is about 15 bits of grinding per signature. -/
-def TARGET_SUM : Nat := 195
+It replaces the Winternitz checksum.
 
-/-- Chain steps a verifier walks, summed over all chains.
+`106` is above the mean digit sum `87`, so the verifier walks fewer steps. -/
+def TARGET_SUM : Nat := 106
 
-Constant because the digit sum is fixed.
+/-- Chain steps one verification walks on one layer, `3v - T`.
 
-That is what makes verification a fixed-size circuit. -/
-def NUM_CHAIN_HASHES : Nat := 99
+The digit sum is fixed, so the count is fixed. -/
+def CHAIN_HASHES : Nat := 68
 
-/-- The randomizer trials allowed per signature.
+/-- The randomizer trials allowed per one-time signature, `A_max`.
 
-A trial succeeds with probability about `2^-14.85`, so `2^15` are expected.
+A digest is a codeword with probability about `2^-20`.
 
-Exhausting all of them has probability below `2^-256` for one signature.
+So all `2^32` trials fail with probability below `exp(-2^11)`. -/
+def MAX_RANDOMIZER_TRIALS : Nat := 2 ^ 32
 
-Each trial is a random-oracle query, so the cap enters the security bound.
+/-! ## Trees -/
 
-It is therefore kept as small as completeness allows. -/
-def MAX_RANDOMIZER_TRIALS : Nat := 2 ^ 23
+/-- The height of each layer's trees, `h` in the specification. -/
+def LAYER_HEIGHT : Nat := 16
 
-/-! ## Merkle tree -/
-
-/-- The Merkle tree height. -/
-def LOG_LIFETIME : Nat := 32
-
-/-- The number of epochs one key covers.
-
-Each epoch indexes one one-time key.
-
-Signing two different messages at one epoch breaks the scheme. -/
-def LIFETIME : Nat := 2 ^ LOG_LIFETIME
+/-- The bits of a leaf index: one layer's height for each of the two layers. -/
+def LOG_LIFETIME : Nat := 2 * LAYER_HEIGHT
 
 /-! ## Serialized sizes -/
 
-/-- Bytes in a serialized public key: root, then public parameter. -/
+/-- Bytes in a serialized public key: the root, then the public parameter. -/
 def PUB_KEY_SIZE : Nat := DIGEST_LEN + PUBLIC_PARAM_LEN
 
-/-- Bytes in the one-time part of a signature: randomizer, then chain values. -/
-def WOTS_SIG_SIZE : Nat := RANDOMNESS_LEN + V * DIGEST_LEN
+/-- Bytes in a serialized leaf index, a little-endian 32-bit word. -/
+def LEAF_INDEX_SIZE : Nat := 4
 
-/-- Bytes in a serialized signature: one-time part, then authentication path. -/
-def SIG_SIZE : Nat := WOTS_SIG_SIZE + LOG_LIFETIME * DIGEST_LEN
+/-- Bytes in one layer's signature: randomizer, chain values, path. -/
+def LAYER_SIG_SIZE : Nat := RANDOMIZER_LEN + V * DIGEST_LEN + LAYER_HEIGHT * DIGEST_LEN
+
+/-- Bytes in a serialized signature: the leaf index, then the bottom and top layers. -/
+def SIG_SIZE : Nat := LEAF_INDEX_SIZE + 2 * LAYER_SIG_SIZE
 
 /-! ## Identities the parameter set must satisfy -/
 
-/-- The encoding consumes 126 of the digest's 128 bits.
+/-- A digest is exactly 64 digits of 2 bits. -/
+theorem digits_fill_digest : 2 * DIGITS = 8 * DIGEST_LEN := by decide
 
-The signer grinds the two leftover bits to zero.
+/-- The 58 chains leave 6 digits that every codeword sets to zero. -/
+theorem zero_digits : DIGITS - V = 6 := by decide
 
-That is what makes the digest decompose into digits with no slack term. -/
-theorem encoding_fills_digest : V * W + 2 = DIGEST_LEN * 8 := by decide
-
-/-- Each 64-bit digest half carries 21 digits in its low 63 bits.
-
-Bit 63 is the padding bit ground to zero. -/
-theorem digits_fill_word : W * (V / 2) + 1 = 64 := by decide
-
-/-- The code length is even, so digits split evenly across the two halves. -/
-theorem code_length_even : 2 * (V / 2) = V := by decide
+/-- The chain secrets come in pairs, one hash for two chains. -/
+theorem chains_even : 2 * (V / 2) = V := by decide
 
 /-- The target sum is reachable: it does not exceed the maximum digit sum. -/
 theorem target_sum_le_max : TARGET_SUM ≤ V * (CHAIN_LENGTH - 1) := by decide
 
 /-- The verifier's step count is what the target sum leaves unwalked. -/
-theorem num_chain_hashes_eq :
-    V * (CHAIN_LENGTH - 1) - TARGET_SUM = NUM_CHAIN_HASHES := by decide
+theorem chain_hashes_eq : V * (CHAIN_LENGTH - 1) - TARGET_SUM = CHAIN_HASHES := by decide
+
+/-- A leaf index is the two layers' indices side by side. -/
+theorem log_lifetime_eq : LOG_LIFETIME = 8 * LEAF_INDEX_SIZE := by decide
+
+/-- The scheme's name, byte by byte. -/
+theorem seed_tag_eq : SEED_TAG = [0x6c, 0x65, 0x61, 0x6e, 0x58, 0x4d, 0x53, 0x53] := by decide
 
 /-- The advertised public key size. -/
 theorem pub_key_size_eq : PUB_KEY_SIZE = 32 := by decide
 
+/-- The advertised layer signature size. -/
+theorem layer_sig_size_eq : LAYER_SIG_SIZE = 1200 := by decide
+
 /-- The advertised signature size. -/
-theorem sig_size_eq : SIG_SIZE = 1208 := by decide
+theorem sig_size_eq : SIG_SIZE = 2404 := by decide
 
 end EthLib.Cryptography.Xmss.Constants

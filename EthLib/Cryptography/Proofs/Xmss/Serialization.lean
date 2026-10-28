@@ -5,11 +5,17 @@ import EthLib.Cryptography.Proofs.Xmss.Types
 # Proofs: `Xmss.Serialization`
 
 The encodings are bijections between objects and byte strings of the declared length.
+
+- Decoding an encoding returns the object.
+- Every string of the declared length is an encoding.
+- Every string of another length is rejected.
 -/
 
 namespace EthLib.Cryptography.Xmss
 
 open Constants
+
+/-! ## Digests and their bytes -/
 
 /-- Cutting a field into digests and joining them back gives the field. -/
 @[simp] theorem flatten_splitDigests {n : Nat} (bytes : Vector UInt8 (n * DIGEST_LEN)) :
@@ -39,6 +45,11 @@ open Constants
     omega
   simp [quotient, remainder]
 
+/-- A list of `n` digests packs to `16 n` bytes. -/
+@[simp] theorem size_packDigests {n : Nat} (ds : Vector Digest n) :
+    (packDigests ds).size = n * DIGEST_LEN := by
+  simp [packDigests]
+
 /-! ## Sizes -/
 
 /-- A public key encodes to 32 bytes. -/
@@ -46,10 +57,57 @@ open Constants
     (encodePublicKey pk).size = PUB_KEY_SIZE := by
   simp [encodePublicKey, PUB_KEY_SIZE]
 
-/-- A signature encodes to 1208 bytes. -/
+/-- A layer's signature encodes to 1200 bytes. -/
+@[simp] theorem size_encodeLayerSignature (sig : LayerSignature) :
+    (encodeLayerSignature sig).size = LAYER_SIG_SIZE := by
+  simp [encodeLayerSignature, LAYER_SIG_SIZE]
+
+/-- A signature encodes to 2404 bytes. -/
 @[simp] theorem size_encodeSignature (sig : Signature) :
     (encodeSignature sig).size = SIG_SIZE := by
-  simp [encodeSignature, SIG_SIZE, WOTS_SIG_SIZE]
+  simp only [encodeSignature, ByteArray.size_append, size_packBytes,
+    size_encodeLayerSignature, SIG_SIZE]
+  omega
+
+/-! ## Reading a field out of a concatenation -/
+
+/-- A read that covers exactly the middle part of a concatenation returns that part. -/
+theorem readBytes_middle {b a c : ByteArray} {n : Nat} {v : Vector UInt8 n} {offset : Nat}
+    (hb : b = a ++ packBytes v ++ c) (ho : offset = a.size) (h : offset + n ≤ b.size) :
+    readBytes b offset n h = v := by
+  subst hb ho
+  -- Strip the last part, then the first, leaving the object itself.
+  rw [readBytes_append_left _ (by simp)]
+  have past := readBytes_append_right (a := a) (b := packBytes v) (offset := 0) (n := n)
+    (by simp)
+  simp only [Nat.add_zero] at past
+  rw [past, readBytes_packBytes]
+
+/-- A layer's signature reads back from its place in a concatenation. -/
+theorem decodeLayerSignature_middle {b a c : ByteArray} {sig : LayerSignature} {offset : Nat}
+    (hb : b = a ++ encodeLayerSignature sig ++ c) (ho : offset = a.size)
+    (h : offset + LAYER_SIG_SIZE ≤ b.size) :
+    decodeLayerSignature b offset h = sig := by
+  -- Regroup so each field is the middle of its own concatenation.
+  have hr : b = a ++ packBytes sig.randomizer
+      ++ (packDigests sig.chainValues ++ packDigests sig.path ++ c) := by
+    rw [hb, encodeLayerSignature]
+    simp only [ByteArray.append_assoc]
+  have hc : b = (a ++ packBytes sig.randomizer) ++ packBytes sig.chainValues.flatten
+      ++ (packDigests sig.path ++ c) := by
+    rw [hb, encodeLayerSignature]
+    simp only [ByteArray.append_assoc, packDigests]
+  have hp : b = (a ++ packBytes sig.randomizer ++ packDigests sig.chainValues)
+      ++ packBytes sig.path.flatten ++ c := by
+    rw [hb, encodeLayerSignature]
+    simp only [ByteArray.append_assoc, packDigests]
+  -- Each field starts where the previous one ends.
+  have r := readBytes_middle hr ho (by simp only [LAYER_SIG_SIZE] at h; omega)
+  have c' := readBytes_middle hc (offset := offset + RANDOMIZER_LEN)
+    (by simp [ho, RANDOMIZER_LEN]) (by simp only [LAYER_SIG_SIZE] at h; omega)
+  have p := readBytes_middle hp (offset := offset + RANDOMIZER_LEN + V * DIGEST_LEN)
+    (by simp [ho, RANDOMIZER_LEN, V, DIGEST_LEN]) (by simp only [LAYER_SIG_SIZE] at h; omega)
+  simp only [decodeLayerSignature, r, c', p, splitDigests_flatten]
 
 /-! ## Round trips -/
 
@@ -58,90 +116,103 @@ open Constants
     decodePublicKey (encodePublicKey pk) = .ok pk := by
   rw [decodePublicKey, dif_pos (size_encodePublicKey pk)]
   -- The root is the first field, the public parameter the one after it.
-  have root := readBytes_append_left (a := packBytes pk.merkleRoot)
-    (b := packBytes pk.publicParam) (offset := 0) (n := DIGEST_LEN)
-    (by simp [DIGEST_LEN, PUBLIC_PARAM_LEN]) (by simp)
-  have param := readBytes_append_right (a := packBytes pk.merkleRoot)
-    (b := packBytes pk.publicParam) (offset := 0) (n := PUBLIC_PARAM_LEN)
-    (by simp [DIGEST_LEN, PUBLIC_PARAM_LEN])
-  simp only [size_packBytes, Nat.add_zero] at param
-  simp only [encodePublicKey, root, param, readBytes_packBytes]
+  have root := readBytes_middle (b := encodePublicKey pk) (a := ByteArray.empty)
+    (c := packBytes pk.publicParam) (v := pk.root) (offset := 0)
+    (by simp [encodePublicKey, ByteArray.empty_append]) (by simp)
+    (by simp [PUB_KEY_SIZE])
+  have param := readBytes_middle (b := encodePublicKey pk) (a := packBytes pk.root)
+    (c := ByteArray.empty) (v := pk.publicParam) (offset := DIGEST_LEN)
+    (by simp [encodePublicKey, ByteArray.append_empty]) (by simp) (by simp [PUB_KEY_SIZE])
+  simp only [root, param]
 
 /-- Decoding an encoded signature returns it. -/
 @[simp] theorem decodeSignature_encodeSignature (sig : Signature) :
     decodeSignature (encodeSignature sig) = .ok sig := by
   rw [decodeSignature, dif_pos (size_encodeSignature sig)]
-  -- The encoding is three parts: randomizer, chain values, siblings.
-  have hr : (packBytes sig.randomness).size = RANDOMNESS_LEN := size_packBytes _
-  have hc : (packBytes sig.chainElements.flatten).size = V * DIGEST_LEN := size_packBytes _
-  -- The randomizer is the start of the first two parts, and of the first.
-  have randomizer : readBytes (encodeSignature sig) 0 RANDOMNESS_LEN
-      (by simp [SIG_SIZE, WOTS_SIG_SIZE]; omega) = sig.randomness := by
-    -- The encoding unfolds to the concatenation by definition.
-    show readBytes (packBytes _ ++ packBytes _ ++ packBytes _) 0 _ _ = _
-    rw [readBytes_append_left _ (by simp [hr, hc]),
-      readBytes_append_left _ (by simp [hr]), readBytes_packBytes]
-  -- The chain values start where the randomizer ends.
-  have chains : readBytes (encodeSignature sig) RANDOMNESS_LEN (V * DIGEST_LEN)
-      (by simp [SIG_SIZE, WOTS_SIG_SIZE]) = sig.chainElements.flatten := by
-    show readBytes (packBytes _ ++ packBytes _ ++ packBytes _) _ _ _ = _
-    rw [readBytes_append_left _ (by simp [hr, hc])]
-    have past := readBytes_append_right (a := packBytes sig.randomness)
-      (b := packBytes sig.chainElements.flatten) (offset := 0) (n := V * DIGEST_LEN)
-      (by simp [hr, hc])
-    simp only [hr, Nat.add_zero] at past
-    rw [past, readBytes_packBytes]
-  -- The siblings start where the first two parts end.
-  have siblings : readBytes (encodeSignature sig) WOTS_SIG_SIZE (LOG_LIFETIME * DIGEST_LEN)
-      (by simp [SIG_SIZE]) = sig.merklePath.flatten := by
-    have past := readBytes_append_right
-      (a := packBytes sig.randomness ++ packBytes sig.chainElements.flatten)
-      (b := packBytes sig.merklePath.flatten) (offset := 0)
-      (n := LOG_LIFETIME * DIGEST_LEN) (by simp [hr, hc])
-    simp only [ByteArray.size_append, hr, hc, Nat.add_zero] at past
-    exact past.trans (readBytes_packBytes _ _)
-  simp only [randomizer, chains, siblings, splitDigests_flatten]
+  -- The leaf index is the first four bytes, as a little-endian word.
+  have idx := readBytes_middle (b := encodeSignature sig) (a := ByteArray.empty)
+    (v := littleEndian LEAF_INDEX_SIZE sig.leafIndex.toNat)
+    (c := encodeLayerSignature sig.bottom ++ encodeLayerSignature sig.top) (offset := 0)
+    (by simp [encodeSignature, ByteArray.append_assoc, ByteArray.empty_append]) (by simp)
+    (by simp [SIG_SIZE])
+  -- The bottom layer follows the index, and the top layer follows the bottom.
+  have bottom := decodeLayerSignature_middle (b := encodeSignature sig) (sig := sig.bottom)
+    (a := packBytes (littleEndian LEAF_INDEX_SIZE sig.leafIndex.toNat))
+    (c := encodeLayerSignature sig.top) (offset := LEAF_INDEX_SIZE) (by simp [encodeSignature])
+    (by simp) (by simp [SIG_SIZE]; omega)
+  have top := decodeLayerSignature_middle (b := encodeSignature sig) (sig := sig.top)
+    (a := packBytes (littleEndian LEAF_INDEX_SIZE sig.leafIndex.toNat)
+      ++ encodeLayerSignature sig.bottom)
+    (c := ByteArray.empty) (offset := LEAF_INDEX_SIZE + LAYER_SIG_SIZE)
+    (by simp [encodeSignature, ByteArray.append_empty]) (by simp) (by simp [SIG_SIZE]; omega)
+  -- A 32-bit word survives its four bytes.
+  have word : UInt32.ofNat (fromLittleEndian (littleEndian LEAF_INDEX_SIZE sig.leafIndex.toNat))
+      = sig.leafIndex := by
+    rw [fromLittleEndian_littleEndian, Nat.mod_eq_of_lt (by
+      have := sig.leafIndex.toNat_lt_size
+      simpa [LEAF_INDEX_SIZE, UInt32.size] using this), UInt32.ofNat_toNat]
+  simp only [idx, bottom, top, word]
+
+/-! ## Every string of the right length is an encoding -/
+
+/-- The bytes of a read are the slice of the buffer it covers. -/
+theorem packBytes_readBytes (b : ByteArray) (offset n : Nat) (h) :
+    packBytes (readBytes b offset n h) = ⟨b.data.extract offset (offset + n)⟩ := by
+  apply ByteArray.ext
+  apply Array.ext
+  · simp only [ByteArray.size] at h
+    simp only [packBytes, readBytes, Vector.toArray_ofFn, Array.size_ofFn, Array.size_extract]
+    omega
+  · intro i h₁ h₂
+    simp [packBytes, readBytes]
+
+/-- Two adjacent slices of a buffer join into one. -/
+private theorem slice_append (b : ByteArray) {i j k : Nat} (hij : i ≤ j) (hjk : j ≤ k) :
+    (⟨b.data.extract i j⟩ : ByteArray) ++ ⟨b.data.extract j k⟩ = ⟨b.data.extract i k⟩ := by
+  apply ByteArray.ext
+  simp only [ByteArray.data_append, Array.extract_append_extract, Nat.min_eq_left hij,
+    Nat.max_eq_right hjk]
+
+/-- A layer's signature re-encodes to the 1200 bytes it was read from. -/
+theorem encodeLayerSignature_decodeLayerSignature (b : ByteArray) (offset : Nat) (h) :
+    encodeLayerSignature (decodeLayerSignature b offset h)
+      = ⟨b.data.extract offset (offset + LAYER_SIG_SIZE)⟩ := by
+  simp only [encodeLayerSignature, decodeLayerSignature, packDigests, flatten_splitDigests,
+    packBytes_readBytes]
+  rw [slice_append _ (by omega) (by omega), slice_append _ (by omega) (by omega)]
+  simp only [LAYER_SIG_SIZE, Nat.add_assoc]
 
 /-- Every 32-byte string is the encoding of a public key. -/
-theorem encodePublicKey_surjective {bytes : ByteArray} (sized : bytes.size = PUB_KEY_SIZE) :
-    ∃ pk, encodePublicKey pk = bytes := by
-  have size : bytes.data.size = 32 := sized.trans pub_key_size_eq
-  -- Bytes 0..15 are the root and bytes 16..31 the public parameter.
-  refine ⟨⟨⟨bytes.data.extract 0 16, by simp [size, DIGEST_LEN]⟩,
-    ⟨bytes.data.extract 16 32, by simp [size, PUBLIC_PARAM_LEN]⟩⟩, ?_⟩
-  -- Re-joining the two adjacent slices gives the whole string.
-  apply ByteArray.ext
-  simp [encodePublicKey, packBytes, Array.extract_append_extract, ← size]
-  omega
-
-/-- Every 1208-byte string is the encoding of a signature. -/
-theorem encodeSignature_surjective {bytes : ByteArray} (sized : bytes.size = SIG_SIZE) :
-    ∃ sig, encodeSignature sig = bytes := by
-  have size : bytes.data.size = 1208 := sized.trans sig_size_eq
-  -- Cut at the field seams:
-  --
-  --     [ 0, 24) randomizer
-  --     [24, 696) chain values
-  --     [696, 1208) siblings
-  refine ⟨⟨splitDigests ⟨bytes.data.extract 24 696, by simp [size, V, DIGEST_LEN]⟩,
-    ⟨bytes.data.extract 0 24, by simp [size, RANDOMNESS_LEN]⟩,
-    splitDigests ⟨bytes.data.extract 696 1208, by simp [size, LOG_LIFETIME, DIGEST_LEN]⟩⟩, ?_⟩
-  -- Re-joining the three adjacent slices gives the whole string.
-  apply ByteArray.ext
-  simp [encodeSignature, packBytes, Array.extract_append_extract, ← size]
-  omega
-
-/-- Decoding then re-encoding a 32-byte string returns it. -/
 theorem encodePublicKey_decodePublicKey {bytes : ByteArray} (sized : bytes.size = PUB_KEY_SIZE) :
     (decodePublicKey bytes).map encodePublicKey = .ok bytes := by
-  obtain ⟨pk, rfl⟩ := encodePublicKey_surjective sized
-  simp [Except.map]
+  rw [decodePublicKey, dif_pos sized]
+  simp only [Except.map, encodePublicKey, packBytes_readBytes, Nat.zero_add]
+  rw [slice_append _ (by omega) (by omega)]
+  -- The slice from 0 to the end is the whole buffer.
+  congr 1
+  apply ByteArray.ext
+  simp only [ByteArray.size] at sized
+  simp [sized, PUB_KEY_SIZE, DIGEST_LEN, PUBLIC_PARAM_LEN]
 
-/-- Decoding then re-encoding a 1208-byte string returns it. -/
+/-- Every 2404-byte string is the encoding of a signature. -/
 theorem encodeSignature_decodeSignature {bytes : ByteArray} (sized : bytes.size = SIG_SIZE) :
     (decodeSignature bytes).map encodeSignature = .ok bytes := by
-  obtain ⟨sig, rfl⟩ := encodeSignature_surjective sized
-  simp [Except.map]
+  rw [decodeSignature, dif_pos sized]
+  simp only [Except.map, encodeSignature, encodeLayerSignature_decodeLayerSignature]
+  -- Four bytes read as a word, and written back, are the same four bytes.
+  have hword : fromLittleEndian (readBytes bytes 0 LEAF_INDEX_SIZE
+      (by simp only [sized, SIG_SIZE]; omega)) < 2 ^ 32 := by
+    have := fromLittleEndian_lt (readBytes bytes 0 LEAF_INDEX_SIZE
+      (by simp only [sized, SIG_SIZE]; omega))
+    simpa [LEAF_INDEX_SIZE] using this
+  rw [UInt32.toNat_ofNat_of_lt' hword, littleEndian_fromLittleEndian, packBytes_readBytes,
+    Nat.zero_add, slice_append _ (by omega) (by omega), slice_append _ (by omega) (by omega)]
+  -- The slice from 0 to the end is the whole buffer.
+  congr 1
+  apply ByteArray.ext
+  simp only [ByteArray.size] at sized
+  simp [sized, SIG_SIZE, LAYER_SIG_SIZE, LEAF_INDEX_SIZE]
+  omega
 
 /-- Distinct public keys have distinct encodings. -/
 theorem encodePublicKey_injective : Function.Injective encodePublicKey := by
@@ -160,7 +231,7 @@ theorem decodePublicKey_badSize {bytes : ByteArray} (wrong : bytes.size ≠ PUB_
     decodePublicKey bytes = .error (.badPublicKeySize bytes.size) := by
   rw [decodePublicKey, dif_neg wrong]
 
-/-- A signature string of any other length than 1208 bytes is rejected. -/
+/-- A signature string of any other length than 2404 bytes is rejected. -/
 theorem decodeSignature_badSize {bytes : ByteArray} (wrong : bytes.size ≠ SIG_SIZE) :
     decodeSignature bytes = .error (.badSignatureSize bytes.size) := by
   rw [decodeSignature, dif_neg wrong]
@@ -172,17 +243,17 @@ theorem decodePublicKey_success_iff (bytes : ByteArray) :
   · rintro ⟨pk, read⟩
     exact Decidable.byContradiction fun wrong => by simp [decodePublicKey_badSize wrong] at read
   · intro sized
-    obtain ⟨pk, rfl⟩ := encodePublicKey_surjective sized
-    exact ⟨pk, by simp⟩
+    rw [decodePublicKey, dif_pos sized]
+    exact ⟨_, rfl⟩
 
-/-- Signature decoding succeeds exactly on 1208-byte strings. -/
+/-- Signature decoding succeeds exactly on 2404-byte strings. -/
 theorem decodeSignature_success_iff (bytes : ByteArray) :
     (∃ sig, decodeSignature bytes = .ok sig) ↔ bytes.size = SIG_SIZE := by
   constructor
   · rintro ⟨sig, read⟩
     exact Decidable.byContradiction fun wrong => by simp [decodeSignature_badSize wrong] at read
   · intro sized
-    obtain ⟨sig, rfl⟩ := encodeSignature_surjective sized
-    exact ⟨sig, by simp⟩
+    rw [decodeSignature, dif_pos sized]
+    exact ⟨_, rfl⟩
 
 end EthLib.Cryptography.Xmss

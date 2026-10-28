@@ -11,6 +11,8 @@ Every field has a fixed size.
 So an encoding is the fields concatenated, with no offsets and no length prefixes.
 
 Decoding checks the total length, then reads each field at its fixed offset.
+
+Source: the leanXMSS specification draft, section "The scheme", paragraph "Serialization".
 -/
 
 namespace EthLib.Cryptography.Xmss
@@ -22,37 +24,37 @@ open Constants
 /-- Encode a public key as 32 bytes.
 
 ```text
-    [ Merkle root: 16 | public parameter: 16 ]
+    [ root: 16 | public parameter: 16 ]
 ```
 -/
 def encodePublicKey (pk : PublicKey) : ByteArray :=
-  packBytes pk.merkleRoot ++ packBytes pk.publicParam
+  packBytes pk.root ++ packBytes pk.publicParam
 
-/-- Encode a signature as 1208 bytes.
+/-- Encode one layer's signature as 1200 bytes.
 
 ```text
-    [ randomizer: 24 | 42 chain values: 672 | 32 siblings: 512 ]
+    [ randomizer: 16 | 58 chain values: 928 | 16 siblings: 256 ]
 ```
 
-- The randomizer comes first, as in the paper's signature tuple.
 - Chain values are in chain order.
 - Siblings run from the leaf up to the root.
 -/
+def encodeLayerSignature (sig : LayerSignature) : ByteArray :=
+  packBytes sig.randomizer ++ packDigests sig.chainValues ++ packDigests sig.path
+
+/-- Encode a signature as 2404 bytes.
+
+```text
+    [ leaf index: 4 | bottom layer: 1200 | top layer: 1200 ]
+```
+
+The leaf index is a little-endian 32-bit word.
+-/
 def encodeSignature (sig : Signature) : ByteArray :=
-  packBytes sig.randomness ++ packBytes sig.chainElements.flatten
-    ++ packBytes sig.merklePath.flatten
+  packBytes (littleEndian LEAF_INDEX_SIZE sig.leafIndex.toNat)
+    ++ encodeLayerSignature sig.bottom ++ encodeLayerSignature sig.top
 
 /-! ## Decoding -/
-
-/-- Cut a byte field into consecutive 16-byte digests. -/
-def splitDigests {n : Nat} (bytes : Vector UInt8 (n * DIGEST_LEN)) : Vector Digest n :=
-  -- Byte j of digest i sits at position 16 i + j of the field.
-  Vector.ofFn fun i => Vector.ofFn fun j => bytes[i.val * DIGEST_LEN + j.val]'(by
-    -- With i < n and j < 16, that position is below 16 n.
-    have hi := i.isLt
-    have hj := j.isLt
-    simp only [DIGEST_LEN] at *
-    omega)
 
 /-- Decode a public key from 32 bytes.
 
@@ -61,29 +63,39 @@ Length is the only check: every 32-byte string is a public key.
 def decodePublicKey (bytes : ByteArray) : Except XmssError PublicKey :=
   if h : bytes.size = PUB_KEY_SIZE then
     -- The two fields sit at offsets 0 and 16.
-    .ok { merkleRoot := readBytes bytes 0 DIGEST_LEN (by simp only [h, PUB_KEY_SIZE]; omega)
+    .ok { root := readBytes bytes 0 DIGEST_LEN (by simp only [h, PUB_KEY_SIZE]; omega)
           publicParam := readBytes bytes DIGEST_LEN PUBLIC_PARAM_LEN
             (by simp only [h, PUB_KEY_SIZE]; omega) }
   else
     .error (.badPublicKeySize bytes.size)
 
-/-- Decode a signature from 1208 bytes.
+/-- Read one layer's signature from the 1200 bytes at an offset. -/
+def decodeLayerSignature (bytes : ByteArray) (offset : Nat)
+    (h : offset + LAYER_SIG_SIZE ≤ bytes.size) : LayerSignature where
+  -- The randomizer, then the chain values at 16, then the siblings at 944.
+  randomizer := readBytes bytes offset RANDOMIZER_LEN
+    (by simp only [LAYER_SIG_SIZE] at h; omega)
+  chainValues := splitDigests (readBytes bytes (offset + RANDOMIZER_LEN) (V * DIGEST_LEN)
+    (by simp only [LAYER_SIG_SIZE] at h; omega))
+  path := splitDigests
+    (readBytes bytes (offset + RANDOMIZER_LEN + V * DIGEST_LEN) (LAYER_HEIGHT * DIGEST_LEN)
+      (by simp only [LAYER_SIG_SIZE] at h; omega))
 
-Length is the only check: every 1208-byte string decodes.
+/-- Decode a signature from 2404 bytes.
+
+Length is the only check: every 2404-byte string decodes.
 
 Decoding does not verify the signature.
 -/
 def decodeSignature (bytes : ByteArray) : Except XmssError Signature :=
   if h : bytes.size = SIG_SIZE then
-    -- The three fields sit at offsets 0, 24 and 696.
-    .ok { randomness := readBytes bytes 0 RANDOMNESS_LEN
-            (by simp only [h, SIG_SIZE, WOTS_SIG_SIZE]; omega)
-          chainElements := splitDigests
-            (readBytes bytes RANDOMNESS_LEN (V * DIGEST_LEN)
-              (by simp only [h, SIG_SIZE, WOTS_SIG_SIZE]; omega))
-          merklePath := splitDigests
-            (readBytes bytes WOTS_SIG_SIZE (LOG_LIFETIME * DIGEST_LEN)
-              (by simp only [h, SIG_SIZE]; omega)) }
+    -- The leaf index, then the bottom layer at 4, then the top layer at 1204.
+    .ok { leafIndex := UInt32.ofNat (fromLittleEndian
+            (readBytes bytes 0 LEAF_INDEX_SIZE (by simp only [h, SIG_SIZE]; omega)))
+          bottom := decodeLayerSignature bytes LEAF_INDEX_SIZE
+            (by simp only [h, SIG_SIZE]; omega)
+          top := decodeLayerSignature bytes (LEAF_INDEX_SIZE + LAYER_SIG_SIZE)
+            (by simp only [h, SIG_SIZE]; omega) }
   else
     .error (.badSignatureSize bytes.size)
 

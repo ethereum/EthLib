@@ -1,4 +1,3 @@
-import EthLib.Cryptography.Xmss.Errors
 import EthLib.Cryptography.Xmss.Verify
 
 /-!
@@ -6,88 +5,62 @@ import EthLib.Cryptography.Xmss.Verify
 
 Key generation.
 
-The secret key is a seed and an epoch range, nothing more.
+The secret key is a 32-byte seed `S_0`, nothing more.
 
-Everything else is recomputed from them: parameter, chain values, nodes.
+Every secret derives from the scheme's seed `S = H("leanXMSS" | S_0)`.
+
+So the seed alone regenerates every chain, every node and the public key.
+
+Source: the leanXMSS specification draft, sections "Hashing and parameters" and "The scheme".
 -/
 
 namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
-/-! ## The secret key -/
+/-! ## Derivations from the seed -/
 
-/-- A seed, and the epochs it signs at. -/
-structure SecretKey where
-  /-- The master secret every other secret is derived from. -/
-  seed : Seed
-  /-- The first epoch the key signs at. -/
-  epochStart : Epoch
-  /-- The last epoch the key signs at. -/
-  epochEnd : Epoch
-  /-- The range holds at least one epoch. -/
-  epochStart_le_epochEnd : epochStart ≤ epochEnd
+/-- `S = H("leanXMSS" | S_0)`: the seed every secret derives from.
 
-/-! ## Derivations from the seed
+The scheme's name comes first, so no other scheme derives from the same bytes. -/
+def schemeSeed (seed : Seed) : Seed :=
+  hash (ByteArray.mk SEED_TAG.toArray ++ packBytes seed)
 
-The construction paper samples these values at random.
-
-Here they are derived from the seed, so the seed alone regenerates the key. -/
-
-/-- The public parameter: `Th(0^16, tweak(parameter, 0, 0), seed)`.
+/-- `P = Th(0^128, A_param, S)`: the public parameter.
 
 The all-zero parameter stands in for the one being derived. -/
+def publicParamOf (s : Seed) : PublicParam :=
+  th (Vector.replicate PUBLIC_PARAM_LEN 0) addrParam (packBytes s)
+
+/-! ## Keys -/
+
+/-- A secret key: the seed `S_0`. -/
+structure SecretKey where
+  /-- The 32 uniform bytes every secret derives from. -/
+  seed : Seed
+
+/-- The secret key's scheme seed `S`. -/
+def SecretKey.schemeSeed (sk : SecretKey) : Seed :=
+  Xmss.schemeSeed sk.seed
+
+/-- The secret key's public parameter `P`. -/
 def SecretKey.publicParam (sk : SecretKey) : PublicParam :=
-  tweakHash (Vector.replicate PUBLIC_PARAM_LEN 0) .parameter 0 0
-    (packBytes sk.seed)
+  publicParamOf sk.schemeSeed
 
-/-- The starting value of each chain at an epoch.
+/-- The public key: the root of the top tree, with the public parameter.
 
-Chain `i` starts at `Th(P, tweak(prf, i, epoch), seed)`. -/
-def otsSecretKey (pp : PublicParam) (seed : Seed) (epoch : Epoch) :
-    Vector Digest V :=
-  Vector.ofFn fun i =>
-    tweakHash pp .prf (UInt32.ofNat i.val) epoch (packBytes seed)
-
-/-- The Merkle leaf of each epoch: its one-time public key, hashed. -/
-def SecretKey.leaves (sk : SecretKey) (epoch : Nat) : Digest :=
-  let pp := sk.publicParam
-  -- Leaf indices are epochs, so the conversion never wraps.
-  let ep := UInt32.ofNat epoch
-  otsLeaf pp ep (otsPublicKey pp ep (otsSecretKey pp sk.seed ep))
-
-/-- The Merkle tree the key signs under. -/
-def SecretKey.tree (sk : SecretKey) : TreeParams where
-  publicParam := sk.publicParam
-  seed := sk.seed
-  epochStart := sk.epochStart
-  epochEnd := sk.epochEnd
-  epochStart_le_epochEnd := sk.epochStart_le_epochEnd
-
-/-- The public key: the root over the key's leaves, with its parameter. -/
+Computing it builds the whole top tree: `2^16` one-time keys. -/
 def SecretKey.publicKey (sk : SecretKey) : PublicKey where
-  merkleRoot := sk.tree.root sk.leaves
+  root := node sk.publicParam sk.schemeSeed .top LAYER_HEIGHT (Nat.le_refl _) 0
   publicParam := sk.publicParam
 
 /-! ## Key generation -/
 
-/-- The secret key grown from a seed, signing at the epochs of a range.
+/-- The key pair grown from a seed.
 
-Rejects an empty range.
-
-Builds no tree: a signer needs only this, not the public key. -/
-def SecretKey.ofSeed (seed : Seed) (epochStart epochEnd : Epoch) :
-    Except XmssError SecretKey :=
-  if h : epochStart ≤ epochEnd then
-    .ok ⟨seed, epochStart, epochEnd, h⟩
-  else
-    .error (.invalidEpochRange epochStart epochEnd)
-
-/-- The key pair grown from a seed, signing at the epochs of a range.
-
-Rejects an empty range. -/
-def keyGen (seed : Seed) (epochStart epochEnd : Epoch) :
-    Except XmssError (SecretKey × PublicKey) :=
-  (SecretKey.ofSeed seed epochStart epochEnd).map fun sk => (sk, sk.publicKey)
+The seed must be 32 uniform bytes, kept secret. -/
+def keyGen (seed : Seed) : SecretKey × PublicKey :=
+  let sk : SecretKey := ⟨seed⟩
+  (sk, sk.publicKey)
 
 end EthLib.Cryptography.Xmss

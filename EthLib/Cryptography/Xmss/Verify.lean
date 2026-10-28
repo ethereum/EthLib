@@ -1,25 +1,34 @@
-import EthLib.Cryptography.Xmss.Encoding
-import EthLib.Cryptography.Xmss.Merkle
+import EthLib.Cryptography.Xmss.Tree
 
 /-!
 # `Xmss.Verify`
 
 Signature verification.
 
+```text
+    X  = Tree.fold(0, idx, Ots.leaf(0, idx, m, rho^0, y^0), pi^0)
+    X' = Tree.fold(1, b,   Ots.leaf(1, b,   X, rho^1, y^1), pi^1)
+    accept  iff  neither Ots.leaf fails and X' = root
+```
+
+`b = floor(idx / 2^16)` is the bottom tree of leaf index `idx`.
+
 # Cost
 
-A constant 133 hashes, whatever the message:
+A constant 201 BLAKE2s compressions, whatever the message.
 
-- Encoding: 1 hash of the message and the randomizer.
-- Chains: 99 hashes.
-  - Chain `i` walks `7 - x_i` steps, and the 42 digits always sum to 195.
-  - So the steps total 42 * 7 - 195 = 99.
-- Leaf: 1 hash of the 42 recovered public values.
-- Root: 32 hashes, one parent per level from the leaf up.
+Per layer, for a `k`-byte input costing `ceil(k / 64)` compressions:
+
+- Digest: 2 on the bottom layer, 80 bytes, and 1 on the top, 64 bytes.
+- Chains: `3v - T = 68`, one compression each.
+- Leaf: 15, for the 960 bytes of 58 chain ends.
+- Path: 16, one per level.
 
 A fixed count is what keeps the aggregation circuit a fixed size.
 
 Nothing here needs to be constant time: every value it reads is public.
+
+Source: the leanXMSS specification draft, section "The scheme".
 -/
 
 namespace EthLib.Cryptography.Xmss
@@ -30,43 +39,70 @@ open EthLib.Cryptography.Xmss.Constants
 
 /-- What a verifier knows about a signer. -/
 structure PublicKey where
-  /-- The root of the Merkle tree over the signer's one-time keys. -/
-  merkleRoot : Digest
-  /-- The call site every hash of this key is made under. -/
+  /-- `X^1_{16,0}`: the root of the top tree. -/
+  root : Digest
+  /-- The public parameter every hash of this key is made under. -/
   publicParam : PublicParam
   deriving DecidableEq
 
-/-- A one-time signature, plus the path from its leaf to the root. -/
-structure Signature where
-  /-- One element per chain, revealed at the height its digit names. -/
-  chainElements : Vector Digest V
-  /-- The randomizer under which the message encodes. -/
-  randomness : Randomness
-  /-- The leaf's co-path, from the leaf upward. -/
-  merklePath : Vector Digest LOG_LIFETIME
+/-- One layer's signature: a one-time signature and the path of its key. -/
+structure LayerSignature where
+  /-- The randomizer under which the signed digest is a codeword. -/
+  randomizer : Randomizer
+  /-- One value per chain, revealed at the position its digit names. -/
+  chainValues : Vector Digest V
+  /-- The key's path, from the leaf up. -/
+  path : Vector Digest LAYER_HEIGHT
   deriving DecidableEq
+
+/-- A signature: its leaf index, and one signature per layer.
+
+The top layer's signature is the same for every leaf index of one bottom tree. -/
+structure Signature where
+  /-- The leaf index the signature was made at. -/
+  leafIndex : LeafIndex
+  /-- The bottom key's signature of the message. -/
+  bottom : LayerSignature
+  /-- The top key's signature of the bottom tree's root. -/
+  top : LayerSignature
+  deriving DecidableEq
+
+/-- The bottom tree a leaf index is in: `b = floor(idx / 2^16)`.
+
+It is also the index of the top key that signs that tree's root. -/
+def bottomTree (idx : LeafIndex) : Nat :=
+  idx.toNat / 2 ^ LAYER_HEIGHT
 
 /-! ## Verification -/
 
-/-- Whether a signature signs a message at an epoch under a public key.
+/-- The root one layer's signature leads to, from the message it signs.
+
+Returns nothing when the signed digest is not a codeword.
+
+# Arguments
+
+- `e`: the signing key's index on its layer.
+- `msg`: the 32-byte message on the bottom layer, a 16-byte root on the top. -/
+def layerRoot (pp : PublicParam) (layer : Layer) (e : Nat) (msg : ByteArray)
+    (sig : LayerSignature) : Option Digest := do
+  -- Recover the key's leaf from the one-time signature.
+  let leaf ← otsLeaf pp layer (UInt32.ofNat e) msg sig.randomizer sig.chainValues
+  -- Climb the key's path to its tree's root.
+  return fold pp layer e leaf sig.path
+
+/-- `Ver(pk, m, sigma)`: whether a signature signs a message under a public key.
 
 A yes or a no, never a reason.
 
 Which step rejected a well-formed signature carries no consensus meaning. -/
-def verify (pk : PublicKey) (msg : Message) (sig : Signature) (epoch : Epoch) :
-    Bool :=
+def verify (pk : PublicKey) (msg : Message) (sig : Signature) : Bool :=
   let pp := pk.publicParam
-  -- Step 1: recompute the digits.
-  -- An inadmissible digest has no digits, so nothing below can accept.
-  match wotsEncode pp msg sig.randomness epoch with
-  | none => false
-  | some x =>
-    -- Step 2: walk chain `i` for `7 - x_i` steps, to its claimed public value.
-    let publicValues := otsRecover pp epoch sig.chainElements x
-    -- Step 3: hash the 42 claimed public values into the claimed leaf.
-    let leaf := otsLeaf pp epoch publicValues
-    -- Step 4: hash up the 32 levels, the epoch's bits choosing left or right.
-    -- Step 5: the claimed leaf must reach the committed root.
-    decide (computeRoot pp epoch sig.merklePath leaf = pk.merkleRoot)
+  let root? : Option Digest := do
+    -- Step 1: the bottom key signs the message, so its path reaches bottom tree `b`'s root.
+    let bottomRoot ← layerRoot pp .bottom sig.leafIndex.toNat (packBytes msg) sig.bottom
+    -- Step 2: the top key `b` signs that root, so its path reaches the top root.
+    layerRoot pp .top (bottomTree sig.leafIndex) (packBytes bottomRoot) sig.top
+  -- Step 3: neither layer failed, and the top root is the key's.
+  decide (root? = some pk.root)
 
 end EthLib.Cryptography.Xmss

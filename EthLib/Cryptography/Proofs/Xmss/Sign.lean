@@ -1,162 +1,77 @@
 import EthLib.Cryptography.Xmss.Sign
-import EthLib.Cryptography.Proofs.Xmss.KeyGen
-import EthLib.Cryptography.Proofs.Xmss.TweakHash
+import EthLib.Cryptography.Proofs.Xmss.Ots
 
 /-!
 # Proofs: `Xmss.Sign`
+
+What a successful signature holds, and how signing can fail.
 -/
 
 namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
-variable {pp : PublicParam} {seed : Seed} {msg : Message} {epoch : Epoch}
-  {rnd : Randomness} {x : Vector (Fin CHAIN_LENGTH) V}
+variable {pp : PublicParam} {s : Seed} {layer : Layer} {e : Nat} {msg : ByteArray}
+  {sig : LayerSignature}
 
-/-! ## Grinding -/
+/-- A layer's signature is a one-time signature from the seed, with the key's honest path. -/
+theorem signLayer_eq_ok (h : signLayer pp s layer e msg = .ok sig) :
+    otsSign pp s layer (UInt32.ofNat e) msg = some (sig.randomizer, sig.chainValues) ∧
+      sig.path = path pp s layer e := by
+  -- Name the one-time signature, so the match reduces without evaluating it.
+  cases hots : otsSign pp s layer (UInt32.ofNat e) msg with
+  | none => simp [signLayer, hots] at h
+  | some found =>
+    simp only [signLayer, hots, Option.elim_some] at h
+    -- The accepting branch packs the one-time signature with the path.
+    obtain rfl := (Except.ok.inj h).symm
+    exact ⟨rfl, rfl⟩
 
-/-- Grinding only ever returns an admissible randomizer, with its digits. -/
-theorem findRandomness_wotsEncode :
-    ∀ {trial fuel : Nat},
-      Internal.findRandomness pp seed msg epoch trial fuel = some (rnd, x) →
-        wotsEncode pp msg rnd epoch = some x := by
-  intro trial fuel
-  induction fuel generalizing trial with
-  | zero => simp [Internal.findRandomness]
-  | succ fuel ih =>
-    intro hs
-    simp only [Internal.findRandomness] at hs
-    split at hs
-    -- The attempt that stopped the search is the one returned.
-    · rename_i h
-      obtain ⟨rfl, rfl⟩ := Prod.mk.inj (Option.some.inj hs)
-      exact h
-    -- A rejected attempt hands the search to the next one.
-    · exact ih hs
+/-- A layer fails only when no randomizer trial gives a codeword. -/
+theorem signLayer_error {err : XmssError} (h : signLayer pp s layer e msg = .error err) :
+    otsSign pp s layer (UInt32.ofNat e) msg = none ∧ err = .noAdmissibleEncoding layer e := by
+  cases hots : otsSign pp s layer (UInt32.ofNat e) msg with
+  | none =>
+    simp only [signLayer, hots, Option.elim_none] at h
+    exact ⟨rfl, (Except.error.inj h).symm⟩
+  | some found => simp [signLayer, hots] at h
 
-/-- Grinding returns the first admissible attempt within its budget.
+/-- A signature holds one honest signature per layer.
 
-So the randomizer is a function of the key, message and epoch alone. -/
-theorem findRandomness_first :
-    ∀ {trial fuel : Nat},
-      Internal.findRandomness pp seed msg epoch trial fuel = some (rnd, x) →
-        ∃ t, trial ≤ t ∧ t < trial + fuel ∧
-          rnd = randomizer pp seed msg epoch t ∧
-          ∀ t', trial ≤ t' → t' < t →
-            wotsEncode pp msg (randomizer pp seed msg epoch t') epoch
-              = none := by
-  intro trial fuel
-  induction fuel generalizing trial with
-  | zero => simp [Internal.findRandomness]
-  | succ fuel ih =>
-    intro hs
-    simp only [Internal.findRandomness] at hs
-    split at hs
-    -- The current attempt is admissible: nothing before it was tried.
-    · obtain ⟨rfl, rfl⟩ := Prod.mk.inj (Option.some.inj hs)
-      exact ⟨trial, Nat.le_refl _, by omega, rfl, fun _ _ _ => by omega⟩
-    -- The current attempt failed: the search resumes one attempt later.
-    · rename_i hnone
-      obtain ⟨t, h₁, h₂, hr, hfirst⟩ := ih hs
-      refine ⟨t, by omega, by omega, hr, fun t' h₁' h₂' => ?_⟩
-      rcases Nat.eq_or_lt_of_le h₁' with rfl | hlt
-      · exact hnone
-      · exact hfirst t' (by omega) h₂'
-
-/-! ## Fresh randomizer queries
-
-The construction paper samples each randomizer at random.
-
-Here each attempt derives its randomizer from its own hash input instead.
-
-So every randomizer is a fresh oracle output, independent of the others. -/
-
-/-- Every attempt number fits the tweak's 32-bit field. -/
-theorem max_trials_lt_size : MAX_RANDOMIZER_TRIALS < 2 ^ 32 := by decide
-
-/-- Distinct attempts hash distinct inputs. -/
-theorem randomizerQuery_injective {t₁ t₂ : Nat}
-    (h₁ : t₁ < 2 ^ 32) (h₂ : t₂ < 2 ^ 32)
-    (h : tweakInput pp .randomizer (UInt32.ofNat t₁) epoch
-        (packBytes seed ++ packBytes msg)
-      = tweakInput pp .randomizer (UInt32.ofNat t₂) epoch
-        (packBytes seed ++ packBytes msg)) :
-    t₁ = t₂ := by
-  -- The attempt number is the tweak's sub-position.
-  have hp := congrArg UInt32.toNat (tweakInput_injective h).2.1
-  -- Below `2^32` the conversion keeps the number whole.
-  simp only [UInt32.toNat_ofNat'] at hp
-  omega
-
-/-- A randomizer query is never an encoding query. -/
-theorem randomizerQuery_ne_encodingQuery {pp' : PublicParam} {p j : UInt32}
-    {payload payload' : ByteArray} {epoch' : Epoch} :
-    tweakInput pp .randomizer p j payload
-      ≠ tweakInput pp' .encoding 0 epoch' payload' :=
-  -- Distinct call sites, so distinct inputs.
-  tweakInput_ne_of_type_ne (by decide)
-
-/-! ## Signing -/
-
-variable {sk : SecretKey} {σ : Signature}
-
-/-- Signing rejects the epoch exactly when it is outside the key's range. -/
-theorem sign_eq_error_epochOutOfRange :
-    sign sk msg epoch
-        = .error (.epochOutOfRange epoch sk.epochStart sk.epochEnd)
-      ↔ epoch < sk.epochStart ∨ sk.epochEnd < epoch := by
-  unfold sign
-  split
-  · rename_i h
-    simp only [Bool.or_eq_true, decide_eq_true_eq] at h
-    simp [h]
-  · rename_i h
-    constructor
-    -- In range, the only failure left is grinding, a different error.
-    · intro he
-      dsimp only at he
-      split at he <;> simp at he
-    · intro h'
-      simp only [Bool.or_eq_true, decide_eq_true_eq] at h
-      exact absurd h' h
-
-/-- What an accepted signature is made of.
-
-- The epoch is in the key's range.
-- The randomizer is admissible.
-- The chain elements and the co-path are the honest ones. -/
-theorem sign_eq_ok (h : sign sk msg epoch = .ok σ) :
-    sk.epochStart ≤ epoch ∧ epoch ≤ sk.epochEnd ∧
-      ∃ x, wotsEncode sk.publicParam msg σ.randomness epoch = some x ∧
-        σ.chainElements =
-          otsReveal sk.publicParam epoch
-            (otsSecretKey sk.publicParam sk.seed epoch) x ∧
-        σ.merklePath = sk.tree.authPath sk.leaves epoch := by
-  unfold sign at h
+- The bottom key `idx` signs the message.
+- The top key `b` signs the root that the bottom key's leaf and path lead to. -/
+theorem sign_eq_ok {sk : SecretKey} {idx : LeafIndex} {m : Message} {σ : Signature}
+    (h : sign sk idx m = .ok σ) :
+    σ.leafIndex = idx ∧
+      signLayer sk.publicParam sk.schemeSeed .bottom idx.toNat (packBytes m) = .ok σ.bottom ∧
+      signLayer sk.publicParam sk.schemeSeed .top (bottomTree idx)
+        (packBytes (fold sk.publicParam .bottom idx.toNat
+          (otsPublicLeaf sk.publicParam sk.schemeSeed .bottom idx) σ.bottom.path))
+        = .ok σ.top := by
+  simp only [sign, bind, Except.bind, pure, Except.pure] at h
+  -- Each layer is either an error, which propagates, or a value the next step uses.
   split at h
   · exact absurd h (by simp)
-  · rename_i hr
-    simp only [Bool.or_eq_true, decide_eq_true_eq, not_or, UInt32.not_lt] at hr
-    dsimp only at h
+  · rename_i bottom hbottom
     split at h
     · exact absurd h (by simp)
-    · rename_i rnd' x' hf
-      cases Except.ok.inj h
-      exact ⟨hr.1, hr.2, x', findRandomness_wotsEncode hf, rfl, rfl⟩
+    · rename_i top htop
+      obtain rfl := (Except.ok.inj h).symm
+      exact ⟨rfl, hbottom, htop⟩
 
-/-! ## Known answer -/
-
-/-- Signing at epoch 7 gives the reference signature. -/
-theorem sign_known_answer :
-    (keyGen exampleSeed 6 8 >>= fun (sk, _) =>
-      sign sk exampleMessage 7).toOption = some exampleSignature := by
-  -- Grinding takes thousands of attempts, so native evaluation again.
-  native_decide
-
-/-- An epoch outside the range rejects, before any hashing. -/
-theorem sign_out_of_range :
-    (keyGen exampleSeed 6 8 >>= fun (sk, _) =>
-      sign sk exampleMessage 9).toOption.isNone := by
-  decide +kernel
+/-- Signing fails only when one layer's one-time key finds no codeword. -/
+theorem sign_error {sk : SecretKey} {idx : LeafIndex} {m : Message} {err : XmssError}
+    (h : sign sk idx m = .error err) :
+    ∃ layer key, err = .noAdmissibleEncoding layer key := by
+  simp only [sign, bind, Except.bind, pure, Except.pure] at h
+  split at h
+  · rename_i e' hbottom
+    obtain rfl := Except.error.inj h
+    exact ⟨_, _, (signLayer_error hbottom).2⟩
+  · split at h
+    · rename_i e' htop
+      obtain rfl := Except.error.inj h
+      exact ⟨_, _, (signLayer_error htop).2⟩
+    · exact absurd h (by simp)
 
 end EthLib.Cryptography.Xmss

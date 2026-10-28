@@ -88,6 +88,10 @@ class SoundnessFacts(unittest.TestCase):
     def check(self) -> list[str]:
         return facts.run(self.root, check=True)
 
+    def test_no_native_theorem_is_said_plainly(self):
+        (self.root / "scripts" / "check_decls_baseline.txt").write_text("partial Foo.spin\n")
+        self.assertEqual(facts.native(self.root), "No theorem uses them.\n")
+
     def test_intact_tree_passes(self):
         self.assertEqual(self.check(), [])
 

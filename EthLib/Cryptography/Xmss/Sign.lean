@@ -1,3 +1,4 @@
+import EthLib.Cryptography.Xmss.Errors
 import EthLib.Cryptography.Xmss.KeyGen
 
 /-!
@@ -5,80 +6,60 @@ import EthLib.Cryptography.Xmss.KeyGen
 
 Signing.
 
-Signing is deterministic: same key, message and epoch => same signature.
+Signing is deterministic: same key, leaf index and message give the same signature.
 
-A key must never sign two different messages at one epoch.
+A leaf index must never sign two different messages.
 
-Signing is stateless, so tracking spent epochs is the caller's job.
+Their two codewords would reveal every chain at the smaller of their two positions.
+
+Signing is stateless, so tracking spent leaf indices is the caller's job.
+
+Source: the leanXMSS specification draft, section "The scheme", paragraph "Signing".
 -/
 
 namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
-/-! ## Grinding the randomizer -/
-
-/-- The randomizer of one attempt: the first 24 bytes of the tweakable hash.
-
-The seed is in the hash input, so the randomizer stays secret until signed. -/
-def randomizer (pp : PublicParam) (seed : Seed) (msg : Message) (epoch : Epoch)
-    (trial : Nat) : Randomness :=
-  -- The attempt number sits where other call sites put a chain or level.
-  (tweakHashFull pp .randomizer (UInt32.ofNat trial) epoch
-    (packBytes seed ++ packBytes msg)).take RANDOMNESS_LEN
-
-namespace Internal
-
-/-- Try the attempts from `trial` onward, at most `fuel` of them.
-
-Returns the first admissible randomizer with its digits. -/
-def findRandomness (pp : PublicParam) (seed : Seed) (msg : Message)
-    (epoch : Epoch) (trial fuel : Nat) :
-    Option (Randomness × Vector (Fin CHAIN_LENGTH) V) :=
-  match fuel with
-  | 0 => none
-  | fuel + 1 =>
-    let rnd := randomizer pp seed msg epoch trial
-    match wotsEncode pp msg rnd epoch with
-    -- The first admissible attempt wins.
-    | some x => some (rnd, x)
-    -- Otherwise move on to the next attempt.
-    | none => findRandomness pp seed msg epoch (trial + 1) fuel
-
-end Internal
-
-/-! ## Signing -/
-
-/-- Sign a message at an epoch of the key's range.
-
-# Warning
-
-Never sign two different messages at one epoch with one secret key.
-
-The two signatures reveal chains at two heights, which lets anyone forge.
+/-- One layer's signature by key `e` of a message: the one-time signature and the path.
 
 # Errors
 
-- The epoch is outside the key's range.
-- No attempt encodes the message, which happens with low probability. -/
-def sign (sk : SecretKey) (msg : Message) (epoch : Epoch) :
-    Except XmssError Signature :=
-  -- The range check comes first, so a bad epoch costs no hashing.
-  if epoch < sk.epochStart || sk.epochEnd < epoch then
-    .error (.epochOutOfRange epoch sk.epochStart sk.epochEnd)
-  else
-    let tree := sk.tree
-    let pp := tree.publicParam
-    -- Step 1: grind the randomizer until the message encodes.
-    let found :=
-      Internal.findRandomness pp sk.seed msg epoch 0 MAX_RANDOMIZER_TRIALS
-    match found with
-    | none => .error (.noAdmissibleEncoding epoch)
-    | some (rnd, x) => .ok {
-        -- Step 2: reveal each chain at the height its digit names.
-        chainElements := otsReveal pp epoch (otsSecretKey pp sk.seed epoch) x
-        randomness := rnd
-        -- Step 3: the co-path of the epoch's leaf.
-        merklePath := tree.authPath sk.leaves epoch }
+- No randomizer trial gives a codeword, which happens with probability below `exp(-2^11)`. -/
+def signLayer (pp : PublicParam) (s : Seed) (layer : Layer) (e : Nat) (msg : ByteArray) :
+    Except XmssError LayerSignature :=
+  -- No codeword is an error.
+  -- A one-time signature is packed with the key's path.
+  (otsSign pp s layer (UInt32.ofNat e) msg).elim (.error (.noAdmissibleEncoding layer e))
+    fun ots => .ok { randomizer := ots.1, chainValues := ots.2, path := path pp s layer e }
+
+/-- `Sig(sk, idx, m)`: sign a message at a leaf index.
+
+1. The bottom key `idx` signs the message.
+2. The top key `b = floor(idx / 2^16)` signs the root of bottom tree `b`.
+
+# Warning
+
+Never sign two different messages at one leaf index with one secret key.
+
+The top key `b` signs only the root of bottom tree `b`.
+
+So it signs one message, however many leaf indices of that tree are used.
+
+# Errors
+
+- Either layer's one-time signature finds no codeword. -/
+def sign (sk : SecretKey) (idx : LeafIndex) (msg : Message) : Except XmssError Signature := do
+  let s := sk.schemeSeed
+  let pp := sk.publicParam
+  -- Step 1: the bottom key signs the message, with its path in bottom tree `b`.
+  let bottom ← signLayer pp s .bottom idx.toNat (packBytes msg)
+  -- Step 2: the root of bottom tree `b`, from the key's leaf and its path.
+  -- The path leads to that root, so this costs one leaf and 16 hashes, not a whole tree.
+  let leaf := otsPublicLeaf pp s .bottom idx
+  let bottomRoot := fold pp .bottom idx.toNat leaf bottom.path
+  -- Step 3: the top key `b` signs that root, with its path in the top tree.
+  let top ← signLayer pp s .top (bottomTree idx) (packBytes bottomRoot)
+  return { leafIndex := idx, bottom, top }
 
 end EthLib.Cryptography.Xmss

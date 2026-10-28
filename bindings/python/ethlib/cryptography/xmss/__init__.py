@@ -1,4 +1,4 @@
-"""XMSS signatures: key generation, signing and verification only.
+"""leanXMSS signatures: key generation, signing and verification only.
 
 - Malformed arguments raise TypeError, ValueError or OverflowError.
 - Inputs the spec rejects raise RuntimeError.
@@ -15,19 +15,28 @@ from .._native import (
 )
 
 
-def key_gen(seed: bytes, epoch_start: int, epoch_end: int) -> bytes:
-    """The public key grown from a seed, for epochs start to end inclusive."""
-    return xmss_key_gen(seed, epoch_start, epoch_end)
+def key_gen(seed: bytes) -> bytes:
+    """The public key grown from a 32-byte seed.
+
+    It builds the whole top tree, 2^16 one-time keys, so it takes a while.
+    """
+    return xmss_key_gen(seed)
 
 
-def sign(seed: bytes, epoch_start: int, epoch_end: int, epoch: int, message: bytes) -> bytes:
-    """Sign a message at an epoch with the key grown from a seed and epoch range."""
-    return xmss_sign(seed, epoch_start, epoch_end, epoch, message)
+def sign(seed: bytes, leaf_index: int, message: bytes) -> bytes:
+    """Sign a 32-byte message at a leaf index below 2^32, with the key grown from a seed.
+
+    Never sign two different messages at one leaf index: it breaks the key.
+    """
+    return xmss_sign(seed, leaf_index, message)
 
 
-def verify(public_key: bytes, epoch: int, message: bytes, signature: bytes) -> bool:
-    """Whether a signature signs a message at an epoch under a public key."""
-    return xmss_verify(public_key, epoch, message, signature)
+def verify(public_key: bytes, message: bytes, signature: bytes) -> bool:
+    """Whether a signature signs a message under a public key.
+
+    The leaf index travels inside the signature.
+    """
+    return xmss_verify(public_key, message, signature)
 
 
 __all__ = [

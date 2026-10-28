@@ -3,9 +3,7 @@ import EthLib.Cryptography.Xmss.Types
 /-!
 # `Xmss.Errors`
 
-Typed failures for the XMSS surface.
-
-Fallible operations should return a result rather than throwing.
+Typed failures for the leanXMSS surface.
 
 Verification is not here.
 
@@ -18,14 +16,10 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
-/-- Every way an XMSS operation can reject its input. -/
+/-- Every way a leanXMSS operation can reject its input. -/
 inductive XmssError where
-  /-- Key generation was given an empty epoch range. -/
-  | invalidEpochRange (epochStart epochEnd : Epoch)
-  /-- Signing was given an epoch the key does not cover. -/
-  | epochOutOfRange (epoch epochStart epochEnd : Epoch)
-  /-- Signing exhausted every randomizer without landing in the code. -/
-  | noAdmissibleEncoding (epoch : Epoch)
+  /-- A one-time key exhausted every randomizer without reaching a codeword. -/
+  | noAdmissibleEncoding (layer : Layer) (key : Nat)
   /-- Public key bytes were not the public key length. -/
   | badPublicKeySize (actual : Nat)
   /-- Signature bytes were not the signature length. -/
@@ -38,12 +32,8 @@ inductive XmssError where
 /-- Human-readable description, used at the C-ABI boundary. -/
 def XmssError.message : XmssError → String
   -- One line per rejection, phrased for someone reading a Python traceback.
-  | .invalidEpochRange epochStart epochEnd =>
-      s!"invalid epoch range: {epochStart} is past {epochEnd}"
-  | .epochOutOfRange epoch epochStart epochEnd =>
-      s!"epoch {epoch} is outside the key's range [{epochStart}, {epochEnd}]"
-  | .noAdmissibleEncoding epoch =>
-      s!"no admissible encoding at epoch {epoch} within the trial limit"
+  | .noAdmissibleEncoding layer key =>
+      s!"no codeword within the trial limit for key {key} of layer {layer.toNat}"
   -- The expected length is fixed by the parameter set.
   -- So it is read from there rather than carried in the error.
   | .badPublicKeySize actual =>

@@ -64,7 +64,7 @@ No theorem covers the code that runs, the C boundary, or timing.
 ### XMSS
 
 `verify_keyGen_sign` (`Proofs/Xmss/Correctness.lean`):
-if `keyGen seed epochStart epochEnd` returns a key pair, and `sign` returns a signature for a message at an epoch, then `verify` accepts that signature under that public key.
+if `keyGen seed` returns a key pair, and `sign` returns a signature for a message at a leaf index, then `verify` accepts that signature under that public key.
 
 It is a correctness statement.
 It says nothing about unforgeability.
@@ -194,11 +194,11 @@ A proof is unaffected unless it uses one of the tactics of C2.
 <!-- generated: exports -->
 Lean exports 17 operations and 19 size constants.
 The Python extension calls 17 of the operations and 14 of the constants.
-Exported constants it does not call: `eth_xmss_const_code_length`, `eth_xmss_const_digest_len`, `eth_xmss_const_log_lifetime`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomness_len`.
+Exported constants it does not call: `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-1192 lines of hand-written C sit between them and Python: `bls.c` (87), `kzg.c` (533), `module.c` (332), `wrappers.h` (102), `xmss.c` (138).
+1177 lines of hand-written C sit between them and Python: `bls.c` (87), `kzg.c` (533), `module.c` (332), `wrappers.h` (102), `xmss.c` (123).
 <!-- end generated -->
 
 They convert arguments, own and free Lean objects, and turn errors into Python exceptions.
@@ -243,9 +243,7 @@ It also trusts every `@[implemented_by]` and `@[extern]` that the compiled code 
 A new use fails `lake exe check-decls`.
 
 <!-- generated: native -->
-1 theorems still use them, and `scripts/check_decls_baseline.txt` lists each one:
-
-- `EthLib.Cryptography.Xmss.sign_known_answer`
+No theorem uses them.
 <!-- end generated -->
 
 ### C3. Declarations the kernel did not check
@@ -261,9 +259,9 @@ None runs yet.
 A client chooses the right operation for its fork, passes inputs of the right form, and handles errors.
 
 XMSS adds one more.
-Never sign two different messages at one epoch with one secret key.
-Each epoch's key is a one-time signing key, and nothing in EthLib records which epochs were used, so the caller must prevent reuse.
-The Lean docstring of `sign` says so, but the Python `sign` docstring does not yet (#110).
+Never sign two different messages at one leaf index with one secret key.
+Each leaf index names a one-time signing key, and nothing in EthLib records which leaf indices were used, so the caller must prevent reuse.
+The Lean and Python docstrings of `sign` both say so.
 
 ### D2. Dependencies
 

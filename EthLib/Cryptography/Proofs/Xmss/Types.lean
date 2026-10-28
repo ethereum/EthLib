@@ -84,4 +84,76 @@ theorem readBytes_append_right {a b : ByteArray} {offset n : Nat} (h) :
     unpackBytes? n ⟨v.toArray⟩ = some v :=
   unpackBytes?_packBytes v
 
+/-! ## Little-endian integers -/
+
+/-- The first byte of a little-endian integer is its low byte; the rest encode the quotient. -/
+theorem littleEndian_toList_succ (k z : Nat) :
+    (littleEndian (k + 1) z).toList = UInt8.ofNat z :: (littleEndian k (z / 256)).toList := by
+  simp only [littleEndian, Vector.toList_ofFn, List.ofFn_succ, Fin.val_zero, Nat.pow_zero,
+    Nat.div_one, Fin.val_succ, Nat.pow_succ, Nat.div_div_eq_div_mul, List.cons.injEq, true_and]
+  -- Byte `i + 1` of `z` is byte `i` of `z / 256`.
+  congr 1
+  funext i
+  congr 1
+  rw [Nat.mul_comm]
+
+/-- Reading an integer back folds over the bytes as a list. -/
+theorem fromLittleEndian_eq_foldr {k : Nat} (v : Vector UInt8 k) :
+    fromLittleEndian v = v.toList.foldr (fun byte acc => byte.toNat + 256 * acc) 0 := by
+  unfold fromLittleEndian
+  rw [← Array.foldr_toList]
+  rfl
+
+/-- Encoding an integer in `k` bytes and reading it back keeps its low `8k` bits. -/
+@[simp] theorem fromLittleEndian_littleEndian (k z : Nat) :
+    fromLittleEndian (littleEndian k z) = z % 256 ^ k := by
+  rw [fromLittleEndian_eq_foldr]
+  induction k generalizing z with
+  | zero => simp [littleEndian, Nat.mod_one, Vector.toList_ofFn]
+  | succ k ih =>
+    -- The low byte plus 256 times the higher bytes is the remainder by `256^(k+1)`.
+    rw [littleEndian_toList_succ, List.foldr_cons, ih, Nat.pow_succ, Nat.mul_comm _ 256,
+      Nat.mod_mul]
+    simp [UInt8.toNat_ofNat']
+
+private theorem foldr_lt (l : List UInt8) :
+    l.foldr (fun byte acc => byte.toNat + 256 * acc) 0 < 256 ^ l.length := by
+  induction l with
+  | nil => simp
+  | cons b t ih =>
+    simp only [List.foldr_cons, List.length_cons, Nat.pow_succ]
+    -- The low byte is below 256, and the rest is below `256^length`.
+    have := b.toNat_lt
+    omega
+
+/-- A `k`-byte integer is below `256^k`. -/
+theorem fromLittleEndian_lt {k : Nat} (v : Vector UInt8 k) : fromLittleEndian v < 256 ^ k := by
+  rw [fromLittleEndian_eq_foldr]
+  simpa using foldr_lt v.toList
+
+private theorem littleEndian_foldr (l : List UInt8) :
+    (littleEndian l.length (l.foldr (fun byte acc => byte.toNat + 256 * acc) 0)).toList = l := by
+  induction l with
+  | nil => simp [littleEndian, Vector.toList_ofFn]
+  | cons b t ih =>
+    rw [List.length_cons, littleEndian_toList_succ, List.foldr_cons]
+    have hb := b.toNat_lt
+    -- The low byte is below 256, so dividing by 256 leaves the higher bytes.
+    have hdiv : (b.toNat + 256 * t.foldr (fun byte acc => byte.toNat + 256 * acc) 0) / 256
+        = t.foldr (fun byte acc => byte.toNat + 256 * acc) 0 := by omega
+    rw [hdiv, ih]
+    -- The low byte of the integer is the first byte itself.
+    congr 1
+    apply UInt8.toNat.inj
+    simp
+
+/-- Reading `k` bytes as an integer and encoding it back returns the bytes. -/
+@[simp] theorem littleEndian_fromLittleEndian {k : Nat} (v : Vector UInt8 k) :
+    littleEndian k (fromLittleEndian v) = v := by
+  -- Expose the vector as a list, so its length is the list's own.
+  rcases v with ⟨⟨l⟩, rfl⟩
+  apply Vector.toList_inj.mp
+  rw [fromLittleEndian_eq_foldr]
+  exact littleEndian_foldr l
+
 end EthLib.Cryptography.Xmss

@@ -1,57 +1,62 @@
-# XMSS signatures
+# leanXMSS signatures
 
-XMSS is a hash-based signature scheme, proposed to replace BLS on a post-quantum consensus layer for Ethereum.
+leanXMSS is a hash-based signature scheme, proposed to replace BLS on a post-quantum consensus layer for Ethereum.
 
-A key covers a range of epochs, and each epoch signs at most one message, ever.
+A key is two layers of Merkle trees of height 16, whose leaves are WOTS+C one-time keys.
 
-This instance has 32-byte public keys and 1208-byte signatures, small enough for one 1280-byte IPv6 datagram.
+The top layer is one tree, and its root is the public key.
 
-This page was checked against EthLib commit `a0838f3`.
-Check it again when a definition it names changes.
+The bottom layer is `2^16` trees, and key `b` of the top tree signs the root of bottom tree `b`.
+
+So a key signs at `2^32` leaf indices, each one at most once, ever.
+
+```text
+                      top tree               root = public key
+                     /   ...   \
+           top key b signs the root of bottom tree b
+                         |
+     ... bottom tree b-1 | bottom tree b | bottom tree b+1 ...
+                              |
+              bottom key idx signs the message
+```
+
+A public key is 32 bytes and a signature 2404 bytes.
 
 ## Source
 
-EthLib's issue #29 names three sources:
+The specification is the note "leanXMSS for Ethereum PQ-Consensus, specification draft", [`doc/lean_xmss/main.tex`](https://github.com/leanEthereum/leanVM/blob/55f8b0389c6cceab02dee82a003e40f7d80d0699/doc/lean_xmss/main.tex) at commit `55f8b0389c6cceab02dee82a003e40f7d80d0699`.
 
-- the specification note `doc/xmss/main.tex` in `leanEthereum/leanVM`;
-- the implementation `crates/xmss` in the same repository, which this module is meant to stay byte-compatible with;
-- the paper with the construction and its security analysis, [ePrint 2025/055](https://eprint.iacr.org/2025/055).
+Its hash `H` is BLAKE2s-256 (RFC 7693) at that commit.
 
-[leanEthereum/leanVM#640](https://github.com/leanEthereum/leanVM/pull/640) removed the note and the crate.
-Their last text is at leanVM commit `a0ca7858f2533ce51abdc20bb635c007e19b26b3`, the parent of that removal:
-
-- [`doc/xmss/main.tex`](https://github.com/leanEthereum/leanVM/blob/a0ca7858f2533ce51abdc20bb635c007e19b26b3/doc/xmss/main.tex);
-- [`crates/xmss`](https://github.com/leanEthereum/leanVM/tree/a0ca7858f2533ce51abdc20bb635c007e19b26b3/crates/xmss).
-
-leanVM now specifies a different scheme, in `doc/lean_xmss/main.tex`.
-This module does not implement it.
-
-Every constant in `Constants.lean` agrees with the crate at that commit, except the trial cap.
-`MAX_RANDOMIZER_TRIALS` is `2^23` here, and `2^32` in the note and the crate.
-Signing takes the first randomizer that encodes, so the two agree whenever one of the first `2^23` trials succeeds.
-When all of them fail, this module returns an error, where the crate keeps trying.
-The docstring of `MAX_RANDOMIZER_TRIALS` gives the reason for the smaller cap: each trial enters the security bound.
-
-The byte layout of a signature differs too.
-The note and the crate serialize the chain values first, then the randomizer, then the path.
-This module puts the randomizer first, the order of the note's signature tuple `(rho, sigma_OTS, path)`:
+Each module cites the section it implements:
 
 ```text
-note and crate:  [ 42 chain values: 672 | randomizer: 24 | 32 siblings: 512 ]
-this module:     [ randomizer: 24 | 42 chain values: 672 | 32 siblings: 512 ]
+Constants.lean        Hashing and parameters
+Address.lean          Address encoding
+TweakableHash.lean    Hashing and parameters
+Encoding.lean         WOTS+C, Codewords
+Ots.lean              WOTS+C
+Tree.lean             Trees
+KeyGen.lean           The scheme, Key generation
+Sign.lean             The scheme, Signing
+Verify.lean           The scheme, Verification
+Serialization.lean    The scheme, Serialization
 ```
 
-Both are 1208 bytes, so a length check cannot tell them apart.
-A signature encoded by one decodes to different fields in the other.
-
-The public key has the same layout in all three: the root, then the public parameter.
+The names follow the note: `Th` is `th`, `Ots.sign` is `otsSign`, `Tree.fold` is `fold`.
 
 The code cites two more sources:
 
-- the WOTS+C encoding, [ePrint 2022/778](https://eprint.iacr.org/2022/778) (`Encoding.lean`);
+- the target-sum code of WOTS+C, [ePrint 2022/778](https://eprint.iacr.org/2022/778) (`Encoding.lean`);
 - BLAKE2s-256, [RFC 7693](https://www.rfc-editor.org/rfc/rfc7693) (`EthLib/Cryptography/Hash/Blake2s.lean`).
 
-Keys and signatures encode as their fields concatenated, each at a fixed offset (`Serialization.lean`).
+One step computes a value of the note another way.
+
+To sign, the note's top key signs the root `X^0_{16,b}` of bottom tree `b`.
+
+`sign` computes that root by folding the bottom key's leaf up its own path, 16 hashes, instead of the whole tree.
+
+`fold_path` proves the two equal, and `verify_sign` uses it.
 
 ## Operations
 
@@ -62,23 +67,28 @@ sign       Sign.lean       eth_xmss_sign       xmss.sign
 verify     Verify.lean     eth_xmss_verify     xmss.verify
 ```
 
-The secret key is the seed and the epoch range, and everything else is derived from the seed.
-So the exports of `keyGen` and `sign` take the seed and the range, and rebuild the key on each call.
+The secret key is the 32-byte seed, and everything else derives from it.
 
-Never sign two different messages at one epoch with one key.
-Nothing in EthLib records which epochs a key has signed, so the caller must prevent reuse.
+So the exports of `keyGen` and `sign` take the seed and rebuild what they need on each call.
+
+- `keyGen` builds the top tree: `2^16` one-time keys.
+- `sign` builds the paths of both keys: about one tree on each layer.
+
+Never sign two different messages at one leaf index with one key.
+
+Nothing in EthLib records which leaf indices a key has signed, so the caller must prevent reuse.
 
 ## Test vectors
 
-`tests/cryptography/` has no XMSS vectors yet.
+`tests/cryptography/` has no leanXMSS vectors yet.
 
-The proofs pin one public key and one signature instead.
-The key covers epochs 6 to 8 and grows from the seed `0, 1, ..., 31`, and the signature is that key's at epoch 7.
-The pull requests that added them, #40 and #42, say that `crates/xmss` produced them.
-They do not record which commit of the crate.
+The proofs pin one full key and one signature instead (`Proofs/Xmss/KnownAnswer*.lean`).
 
-The known answers compare structured keys and signatures, not their bytes.
-So they do not show that the serialized forms agree, and for signatures the layouts above differ.
+The key grows from the seed `S_0[i] = 37 i + 11 mod 256`, and the signature signs `m[i] = 7 i + 3` at leaf index `0xA5C37E19`.
+
+The public key and the signature bytes were computed outside EthLib, by an independent implementation of the note.
+
+The compiled `keyGen` and `sign` reproduce both, byte for byte.
 
 ## What is proved
 
@@ -87,48 +97,49 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
 - Correctness.
   A key from `keyGen` verifies every signature that `sign` makes with it (`verify_keyGen_sign`, `Correctness.lean`).
 - What verification checks.
-  `verify` accepts exactly when the message encodes under the signature's randomizer, and the leaf recovered from the chain elements climbs the path to the key's root (`verify_iff`, `Verify.lean`).
-- Errors.
-  Key generation fails exactly when the epoch range is empty (`keyGen_eq_error_iff`, `KeyGen.lean`).
-  Signing fails with `epochOutOfRange` exactly when the epoch is outside the key's range (`sign_eq_error_epochOutOfRange`, `Sign.lean`).
-- The randomizer.
-  Signing returns the first trial whose randomizer encodes (`findRandomness_first`, `Sign.lean`).
-  The target-sum code is at least a `2^-15` share of all `2^128` digests (`code_probability`, `CodeSize.lean`).
-  Reading that share as one trial's chance of success is part of the completeness argument, not of the theorem.
-- The encoding (`Encoding.lean`).
-  Two different valid encodings are incomparable: each has a digit smaller than the other's (`wotsEncode_incomparable`).
-- Domain separation (`TweakHash.lean`, `Encoding.lean`).
-  The input of a tweakable hash determines its tweak type, positions, public parameter and payload (`tweakInput_injective`).
-  Inputs of different tweak types never coincide (`tweakInput_ne_of_type_ne`).
-  No query of key generation equals the query that encodes a message (`keyGen_query_ne_encoding_query`).
-- The trees.
-  Walking revealed chain elements to the end recovers the one-time public key (`otsRecover_otsReveal`, `Ots.lean`).
-  For an epoch in the key's range, its authentication path climbs from its leaf to the root (`computeRoot_authPath`, `Merkle.lean`).
+  `verify` accepts exactly when the bottom layer leads to some root, and the top layer, signing that root, leads to the key's root (`verify_iff`, `Verify.lean`).
+- Signing.
+  Grinding returns the least trial whose digest is a codeword (`findCodeword_spec`, `Ots.lean`).
+  Signing fails only when a one-time key finds no codeword (`sign_error`, `Sign.lean`).
+- The code (`Encoding.lean`, `CodeSize.lean`).
+  A codeword's digits sum to `T = 106` (`sum_of_codeword`).
+  No two digests share a codeword (`eq_of_codeword`).
+  Two distinct codewords are incomparable: each has a digit below the other's (`codeword_incomparable`).
+  The code has `323504418562481994618807509487594` words, so one trial succeeds with probability `2^-20.0045` (`card_onTarget`, `code_probability`).
+- Domain separation (`Address.lean`, `TweakableHash.lean`).
+  An address determines its type, its position and both fields (`encodeAddress_inj`).
+  The two layers never share an address (`layerHi_inj`).
+  Each address of a key determines its own arguments (`addrPrf_inj` and the five like it).
+  A hash input determines its public parameter, address and payload (`thInput_inj`).
+- The one-time signature and the trees.
+  An honest one-time signature leads back to its key's leaf (`otsLeaf_otsSign`, `Ots.lean`).
+  An honest path leads from a key's leaf to its tree's root (`fold_path`, `Tree.lean`).
 - Serialization (`Serialization.lean`).
-  Decoding a signature succeeds exactly on `SIG_SIZE` bytes, and encoding the result returns those bytes (`decodeSignature_success_iff`, `encodeSignature_decodeSignature`).
-  The same holds for public keys.
+  Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
 - Known answers.
-  `keyGen_known_answer` and `sign_known_answer` reproduce the key and the signature above.
-  `verify_known_answer` accepts the signature, and `verify_wrong_epoch` and `verify_tampered_path` reject it at another epoch and with a changed path.
-- BLAKE2s (`Proofs/Hash/Blake2s.lean`).
-  The kernel checks six known answers, among them the RFC 7693 Appendix B example.
+  The signature verifies under the public key (`verify_known_answer`).
+  It rejects with a changed message, the neighbouring leaf index, or a changed path (`verify_wrong_message`, `verify_wrong_leafIndex`, `verify_tampered_path`).
+  The scheme seed, the public parameter and both keys' leaves, computed from the seed, match the key and the signature (`KnownAnswer.lean`, `KnownAnswerKeyBottom.lean`, `KnownAnswerKeyTop.lean`).
 
 ## What is not proved
 
-- Any security property, such as unforgeability, or the security bound of the note and the paper.
+- Any security property, such as unforgeability, or the `q / 2^127` bound of the note.
 - That signing fails with small probability.
-  `code_probability` bounds the fraction of digests that belong to the code.
-  Turning that fraction into a chance that signing succeeds needs further probabilistic assumptions.
-  The bound for all `2^23` trials is only argued in the docstring of `MAX_RANDOMIZER_TRIALS`.
-- That this module and `crates/xmss` compute the same keys and signatures on any input other than the known answers.
-- Anything about BLAKE2s beyond its known answers and facts about its blocks and words.
+  `code_probability` gives one trial's chance, if digests were uniform.
+  That all `2^32` trials fail with probability below `exp(-2^11)` is only argued in the docstring of `MAX_RANDOMIZER_TRIALS`.
+- That every codeword is the codeword of some digest.
+  `eq_of_codeword` shows at most one digest per codeword, so at most `|C|` digests are codewords.
+- That this module and any other implementation compute the same keys and signatures on inputs other than the known answer.
 
 ## What the kernel cannot evaluate
 
 This is a limit on computing results inside Lean, separate from the missing theorems above.
 
-The kernel checks `verify_known_answer`, `verify_wrong_epoch` and `verify_tampered_path` itself.
+The kernel checks every known answer itself, with no `native_decide`.
 
-`keyGen_known_answer` and `sign_known_answer` use `native_decide` instead.
-For the key, a root over three leaves is too deep for the kernel's evaluator, and for the signature, grinding takes thousands of attempts.
-`native_decide` trusts the compiled code, and `scripts/check_decls_baseline.txt` lists both as `native`.
+A whole verification is too large for one kernel check, so the known answer checks it in pieces: each layer's codeword, a few chains at a time, the leaf and the path.
+
+The pieces run over the fast form of BLAKE2s, with its hash inputs as lists, which the kernel evaluates far faster than the specification's arrays.
+`Proofs/Xmss/Kernel.lean` proves each rewrite equal to the specification.
+
+The public key from the seed needs the whole top tree, `2^16` one-time keys, which is beyond the kernel.
