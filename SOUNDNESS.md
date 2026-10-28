@@ -135,7 +135,7 @@ What remains of them is part of what a reader trusts.
 
 EthLib makes no constant-time claim.
 
-`Hash/Blake2s.lean` and `Hash/Keccak.lean` say they are "not intended to be constant-time".
+`Hash/Keccak.lean` says it "is not intended to be constant-time".
 The field arithmetic uses Lean's `Nat`, which gives no timing guarantee.
 XMSS `keyGen` and `sign` handle secret data.
 The Python bindings expose both, as `key_gen` and `sign`, which take the secret seed.

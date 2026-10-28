@@ -1,10 +1,10 @@
 import EthLib.Cryptography.Xmss
-import EthLib.Cryptography.Proofs.Hash.Blake2sKernel
+import EthLib.Cryptography.Proofs.Hash.KeccakKernel
 
 /-!
 # Proofs: leanXMSS over the kernel's fast hash
 
-The known answers evaluate hundreds of hash compressions in the kernel.
+The known answers evaluate hundreds of Keccak permutations in the kernel.
 
 The kernel reads an array by walking a list, and appends to one an element at a time.
 
@@ -44,13 +44,13 @@ open EthLib.Cryptography.Xmss.Constants
 
 /-! ## The hash -/
 
-/-- The fast form of the scheme's hash: BLAKE2s with its working vector as a record. -/
+/-- The fast form of the scheme's hash: Keccak-256 over the record form of Keccak-f. -/
 def hash (input : ByteArray) : Vector UInt8 32 :=
-  Hash.Blake2s.hashFast input
+  Hash.Keccak.Kernel.keccak256 input
 
 /-- The scheme's hash is its fast form. -/
 theorem hash_eq (input : ByteArray) : Xmss.hash input = hash input :=
-  Hash.Blake2s.hash_eq_hashFast input
+  Hash.Keccak.Kernel.keccak256_eq input
 
 /-- A tweakable hash input, written as one list. -/
 theorem hash_thInput (pp : PublicParam) (address : Address) (payload : ByteArray) :

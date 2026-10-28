@@ -20,15 +20,15 @@ theorem topCodeword_known_answer :
   simp only [messageDigest, Kernel.th_eq, Kernel.toList_append, Kernel.toList_packBytes]
   decide +kernel
 
-/-- The top layer's chains 0 to 22, walked to their ends. -/
-theorem topChains_0 : ∀ i : Fin V, 0 ≤ i.val → i.val < 23 →
+/-- The top layer's chains 0 to 23, walked to their ends. -/
+theorem topChains_0 : ∀ i : Fin V, 0 ≤ i.val → i.val < 24 →
     chainEnd publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) topCodeword
       signature.top.chainValues i = topEnds[i] := by
   simp only [chainEnd, Kernel.chain_eq]
   decide +kernel
 
-/-- The top layer's chains 23 to 38, walked to their ends. -/
-theorem topChains_1 : ∀ i : Fin V, 23 ≤ i.val → i.val < 39 →
+/-- The top layer's chains 24 to 38, walked to their ends. -/
+theorem topChains_1 : ∀ i : Fin V, 24 ≤ i.val → i.val < 39 →
     chainEnd publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) topCodeword
       signature.top.chainValues i = topEnds[i] := by
   simp only [chainEnd, Kernel.chain_eq]
@@ -46,8 +46,8 @@ theorem topChains : ∀ i : Fin V,
     chainEnd publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) topCodeword
       signature.top.chainValues i = topEnds[i] := by
   intro i
-  have : (0 ≤ i.val ∧ i.val < 23)
-    ∨ (23 ≤ i.val ∧ i.val < 39)
+  have : (0 ≤ i.val ∧ i.val < 24)
+    ∨ (24 ≤ i.val ∧ i.val < 39)
     ∨ (39 ≤ i.val ∧ i.val < 58) := by
     have := i.isLt
     simp only [V] at this

@@ -20,22 +20,22 @@ theorem bottomCodeword_known_answer :
   simp only [messageDigest, Kernel.th_eq, Kernel.toList_append, Kernel.toList_packBytes]
   decide +kernel
 
-/-- The bottom layer's chains 0 to 23, walked to their ends. -/
-theorem bottomChains_0 : ∀ i : Fin V, 0 ≤ i.val → i.val < 24 →
+/-- The bottom layer's chains 0 to 21, walked to their ends. -/
+theorem bottomChains_0 : ∀ i : Fin V, 0 ≤ i.val → i.val < 22 →
     chainEnd publicKey.publicParam .bottom (UInt32.ofNat leafIndex.toNat) bottomCodeword
       signature.bottom.chainValues i = bottomEnds[i] := by
   simp only [chainEnd, Kernel.chain_eq]
   decide +kernel
 
-/-- The bottom layer's chains 24 to 43, walked to their ends. -/
-theorem bottomChains_1 : ∀ i : Fin V, 24 ≤ i.val → i.val < 44 →
+/-- The bottom layer's chains 22 to 40, walked to their ends. -/
+theorem bottomChains_1 : ∀ i : Fin V, 22 ≤ i.val → i.val < 41 →
     chainEnd publicKey.publicParam .bottom (UInt32.ofNat leafIndex.toNat) bottomCodeword
       signature.bottom.chainValues i = bottomEnds[i] := by
   simp only [chainEnd, Kernel.chain_eq]
   decide +kernel
 
-/-- The bottom layer's chains 44 to 57, walked to their ends. -/
-theorem bottomChains_2 : ∀ i : Fin V, 44 ≤ i.val → i.val < 58 →
+/-- The bottom layer's chains 41 to 57, walked to their ends. -/
+theorem bottomChains_2 : ∀ i : Fin V, 41 ≤ i.val → i.val < 58 →
     chainEnd publicKey.publicParam .bottom (UInt32.ofNat leafIndex.toNat) bottomCodeword
       signature.bottom.chainValues i = bottomEnds[i] := by
   simp only [chainEnd, Kernel.chain_eq]
@@ -46,9 +46,9 @@ theorem bottomChains : ∀ i : Fin V,
     chainEnd publicKey.publicParam .bottom (UInt32.ofNat leafIndex.toNat) bottomCodeword
       signature.bottom.chainValues i = bottomEnds[i] := by
   intro i
-  have : (0 ≤ i.val ∧ i.val < 24)
-    ∨ (24 ≤ i.val ∧ i.val < 44)
-    ∨ (44 ≤ i.val ∧ i.val < 58) := by
+  have : (0 ≤ i.val ∧ i.val < 22)
+    ∨ (22 ≤ i.val ∧ i.val < 41)
+    ∨ (41 ≤ i.val ∧ i.val < 58) := by
     have := i.isLt
     simp only [V] at this
     omega
