@@ -17,6 +17,9 @@ permanently if the performance of this library is sufficient.
 
 ## Contributing
 
+Read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+It sets the terms under which you contribute, and points to the rules in [AGENTS.md](AGENTS.md).
+
 ### Prerequisites
 
 Install [elan](https://github.com/leanprover/elan):
