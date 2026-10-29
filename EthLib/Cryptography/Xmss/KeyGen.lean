@@ -18,19 +18,21 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
+variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+
 /-! ## Derivations from the seed -/
 
 /-- `S = H("leanXMSS" | S_0)`: the seed every secret derives from.
 
 The scheme's name comes first, so no other scheme derives from the same bytes. -/
-def schemeSeed (seed : Seed) : Seed :=
-  hash (ByteArray.mk SEED_TAG.toArray ++ packBytes seed)
+def schemeSeed (seed : Seed) : m Seed :=
+  H (ByteArray.mk SEED_TAG.toArray ++ packBytes seed)
 
 /-- `P = Th(0^128, A_param, S)`: the public parameter.
 
 The all-zero parameter stands in for the one being derived. -/
-def publicParamOf (s : Seed) : PublicParam :=
-  th (Vector.replicate PUBLIC_PARAM_LEN 0) addrParam (packBytes s)
+def publicParamOf (s : Seed) : m PublicParam :=
+  th H (Vector.replicate PUBLIC_PARAM_LEN 0) addrParam (packBytes s)
 
 /-! ## Keys -/
 
@@ -39,28 +41,22 @@ structure SecretKey where
   /-- The 32 uniform bytes every secret derives from. -/
   seed : Seed
 
-/-- The secret key's scheme seed `S`. -/
-def SecretKey.schemeSeed (sk : SecretKey) : Seed :=
-  Xmss.schemeSeed sk.seed
-
-/-- The secret key's public parameter `P`. -/
-def SecretKey.publicParam (sk : SecretKey) : PublicParam :=
-  publicParamOf sk.schemeSeed
-
-/-- The public key: the root of the top tree, with the public parameter.
-
-Computing it builds the whole top tree: `2^16` one-time keys. -/
-def SecretKey.publicKey (sk : SecretKey) : PublicKey where
-  root := node sk.publicParam sk.schemeSeed .top LAYER_HEIGHT (Nat.le_refl _) 0
-  publicParam := sk.publicParam
-
 /-! ## Key generation -/
 
-/-- The key pair grown from a seed.
+/-- `Gen` over a hash `H`: the key pair grown from a seed.
+
+1. The scheme seed `S` and the public parameter `P`, from the seed.
+2. The root of the top tree, which builds all `2^16` of its one-time keys.
 
 The seed must be 32 uniform bytes, kept secret. -/
+def keyGenWith (seed : Seed) : m (SecretKey × PublicKey) := do
+  let s ← schemeSeed H seed
+  let pp ← publicParamOf H s
+  let root ← node H pp s .top LAYER_HEIGHT (Nat.le_refl _) 0
+  return (⟨seed⟩, { root, publicParam := pp })
+
+/-- `Gen`, with Keccak-256. -/
 def keyGen (seed : Seed) : SecretKey × PublicKey :=
-  let sk : SecretKey := ⟨seed⟩
-  (sk, sk.publicKey)
+  (keyGenWith hashId seed).run
 
 end EthLib.Cryptography.Xmss

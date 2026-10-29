@@ -156,4 +156,19 @@ private theorem littleEndian_foldr (l : List UInt8) :
   rw [fromLittleEndian_eq_foldr]
   exact littleEndian_foldr l
 
+/-! ## Computing a vector in order -/
+
+/-- In the identity monad, computing a vector in order is building it from its entries. -/
+@[simp] theorem ofFnInOrder_run {α : Type} :
+    ∀ (n : Nat) (f : Fin n → Id α), (ofFnInOrder n f).run = Vector.ofFn fun i => (f i).run
+  | 0, _ => Vector.ext fun _ hi => absurd hi (Nat.not_lt_zero _)
+  | n + 1, f => by
+    simp only [ofFnInOrder, Id.run_bind, Id.run_pure, ofFnInOrder_run n]
+    apply Vector.ext
+    intro i hi
+    -- Entry 0 is the head, entry `i + 1` is entry `i` of the tail.
+    cases i with
+    | zero => simp
+    | succ i => simp [Fin.succ]
+
 end EthLib.Cryptography.Xmss

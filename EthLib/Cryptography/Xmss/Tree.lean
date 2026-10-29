@@ -19,6 +19,10 @@ On layer `l`, for `1 <= lambda <= 16`:
 
 A signature carries its key's path: the sibling of every node on the way up.
 
+Every definition takes the hash `H`.
+
+A node computes its left subtree, then its right subtree, then its own hash.
+
 ```text
 level 2                 root
                       /      \
@@ -37,24 +41,28 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
+variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+
 /-! ## Nodes -/
 
 /-- The parent at index `j` on `level`, from its two children. -/
 def nodeHash (pp : PublicParam) (layer : Layer) (level : Fin (LAYER_HEIGHT + 1)) (j : Nat)
-    (left right : Digest) : Digest :=
+    (left right : Digest) : m Digest :=
   -- The payload is the left child, then the right child.
-  th pp (addrNode layer level (UInt32.ofNat j)) (packBytes left ++ packBytes right)
+  th H pp (addrNode layer level (UInt32.ofNat j)) (packBytes left ++ packBytes right)
 
 /-- `X_{level,j}`: node `j` on `level` of a layer.
 
 Computing it evaluates the `2^level` leaves below it. -/
 def node (pp : PublicParam) (seed : Seed) (layer : Layer) :
-    (level : Nat) → level ≤ LAYER_HEIGHT → (j : Nat) → Digest
+    (level : Nat) → level ≤ LAYER_HEIGHT → (j : Nat) → m Digest
   -- One leaf per one-time key, and the key's index is the leaf's.
-  | 0, _, j => otsPublicLeaf pp seed layer (UInt32.ofNat j)
+  | 0, _, j => otsPublicLeaf H pp seed layer (UInt32.ofNat j)
   -- The children of node `j` on level `l + 1` are `2j` and `2j + 1` on level `l`.
-  | l + 1, h, j => nodeHash pp layer ⟨l + 1, by omega⟩ j
-      (node pp seed layer l (by omega) (2 * j)) (node pp seed layer l (by omega) (2 * j + 1))
+  | l + 1, h, j => do
+    let left ← node pp seed layer l (by omega) (2 * j)
+    let right ← node pp seed layer l (by omega) (2 * j + 1)
+    nodeHash H pp layer ⟨l + 1, by omega⟩ j left right
 
 /-! ## The path -/
 
@@ -69,8 +77,9 @@ def siblingIndex (e level : Nat) : Nat :=
 ```
 -/
 def path (pp : PublicParam) (seed : Seed) (layer : Layer) (e : Nat) :
-    Vector Digest LAYER_HEIGHT :=
-  Vector.ofFn fun level => node pp seed layer level (by omega) (siblingIndex e level)
+    m (Vector Digest LAYER_HEIGHT) :=
+  -- Level 0 first.
+  ofFnInOrder LAYER_HEIGHT fun level => node H pp seed layer level (by omega) (siblingIndex e level)
 
 /-! ## Climbing a path -/
 
@@ -80,29 +89,30 @@ namespace Internal
 
 Bit `level` of `e` says which child the held node is. -/
 def climbStep (pp : PublicParam) (layer : Layer) (e : Nat) (level : Fin LAYER_HEIGHT)
-    (current sibling : Digest) : Digest :=
+    (current sibling : Digest) : m Digest :=
   -- The parent sits one level up, at the index with one more bit shifted out.
   let parent : Fin (LAYER_HEIGHT + 1) := ⟨level.val + 1, by omega⟩
   if (e >>> level.val) % 2 == 0 then
     -- Bit zero: the held node is the left child.
-    nodeHash pp layer parent (e >>> (level.val + 1)) current sibling
+    nodeHash H pp layer parent (e >>> (level.val + 1)) current sibling
   else
     -- Bit one: the held node is the right child.
-    nodeHash pp layer parent (e >>> (level.val + 1)) sibling current
+    nodeHash H pp layer parent (e >>> (level.val + 1)) sibling current
 
 /-- Climb the bottom `levels` levels of a path, starting from a leaf. -/
 def climbUpto (pp : PublicParam) (layer : Layer) (e : Nat) (pi : Vector Digest LAYER_HEIGHT)
-    (leaf : Digest) : (levels : Nat) → levels ≤ LAYER_HEIGHT → Digest
-  | 0, _ => leaf
+    (leaf : Digest) : (levels : Nat) → levels ≤ LAYER_HEIGHT → m Digest
+  | 0, _ => pure leaf
   -- The last step folds in the sibling on `l`, after climbing the `l` levels below it.
-  | l + 1, h => climbStep pp layer e ⟨l, by omega⟩
-      (climbUpto pp layer e pi leaf l (by omega)) (pi[l]'(by omega))
+  | l + 1, h => do
+    let current ← climbUpto pp layer e pi leaf l (by omega)
+    climbStep H pp layer e ⟨l, by omega⟩ current (pi[l]'(by omega))
 
 end Internal
 
 /-- `Tree.fold(l, e, X, pi)`: the root a path leads to from a leaf. -/
 def fold (pp : PublicParam) (layer : Layer) (e : Nat) (leaf : Digest)
-    (pi : Vector Digest LAYER_HEIGHT) : Digest :=
-  Internal.climbUpto pp layer e pi leaf LAYER_HEIGHT (Nat.le_refl _)
+    (pi : Vector Digest LAYER_HEIGHT) : m Digest :=
+  Internal.climbUpto H pp layer e pi leaf LAYER_HEIGHT (Nat.le_refl _)
 
 end EthLib.Cryptography.Xmss
