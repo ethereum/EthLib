@@ -561,6 +561,20 @@ theorem out_fold (H : Array UInt32) :
     · rw [b0, show p / 4 = n by omega, show p % 4 = 0 by omega]
     · exact bytes p (by omega)
 
+/-- Every digest is 32 bytes long, whatever the message. -/
+theorem hash_size (msg : ByteArray) : (Sha256.hash msg).size = 32 := by
+  simp only [Sha256.hash, Id.run, IdLoops.id_pure, IdLoops.id_bind, IdLoops.forIn_range_yield]
+  rw [forIn_range_step_yield]
+  generalize (List.range' 0 (((padded msg).size - 0 + 64 - 1) / 64) 64).foldl
+    (fun acc off => compressBlock acc (padded msg) off) IV = H
+  -- The output loop writes the eight words into a buffer of 32 bytes, and never grows it.
+  rw [show (fun (acc : ByteArray) (j : Nat) =>
+      (((acc.set! (4 * j) (UInt8.ofNat (H[j]! >>> 24).toNat)).set! (4 * j + 1)
+        (UInt8.ofNat ((H[j]! >>> 16).toNat &&& 255))).set! (4 * j + 2)
+        (UInt8.ofNat ((H[j]! >>> 8).toNat &&& 255))).set! (4 * j + 3) (UInt8.ofNat (H[j]!.toNat &&& 255)))
+      = outStep H from rfl]
+  exact (out_fold H 8 (Nat.le_refl _)).1
+
 /-- The state words, read in digest order. -/
 theorem interpret_words (H : Array UInt32) (i : Nat) (lt : i < 8) :
     (interpret H).words[i] = H[i]!.toBitVec := by

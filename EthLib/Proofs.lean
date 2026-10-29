@@ -1,3 +1,4 @@
+import EthLib.Consensus.Proofs
 import EthLib.Cryptography.Proofs
 import EthLib.Precompiles.Proofs
 
