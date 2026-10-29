@@ -3,7 +3,7 @@ import EthLib.Serialization.Rlp.Item
 /-!
 # `Serialization.Rlp.Encode`
 
-The RLP encoding of an item, as Appendix B of the Yellow Paper (Shanghai version) defines it.
+The RLP encoding of an item, as Appendix B of the Yellow Paper (Shanghai version, `ethereum/yellowpaper` at `efc5f9a`) defines it.
 
 An encoding is a prefix, then a payload.
 

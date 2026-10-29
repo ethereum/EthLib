@@ -7,7 +7,7 @@ RLP is the serialization of the execution layer.
 
 Block headers, transactions, receipts and trie nodes are written with it.
 
-Appendix B of the Yellow Paper (Shanghai version) defines it.
+Appendix B of the Yellow Paper (Shanghai version, `ethereum/yellowpaper` at `efc5f9a`) defines it.
 
 An item is a byte string or a list of items, so the items form a tree:
 

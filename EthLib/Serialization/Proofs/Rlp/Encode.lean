@@ -61,25 +61,49 @@ A length must be below `2^64`.
 
 No test vector comes near it: no byte string that long fits in memory.
 
-So the bound is checked on `lengthPrefix` directly. -/
+So the prefix of the largest length is checked on `lengthPrefix` directly.
 
-/-- The largest length, `2^64 - 1`, takes 8 bytes, so a long string starts with at most `0xbf`. -/
+Every longer payload is proved to make `encode` fail. -/
+
+/-- The largest length, `2^64 - 1`, for a byte string: the prefix `bf`, then the length on 8 bytes. -/
 theorem lengthPrefix_bytes_max :
     output (lengthPrefix .bytes (2 ^ 64 - 1)) = some (bytesOf 9 0xbfffffffffffffffff) := by
   decide +kernel
 
-/-- For a list, the same length starts with `0xff`, the largest byte. -/
+/-- The same length for a list: the prefix `ff`, then the length on 8 bytes. -/
 theorem lengthPrefix_list_max :
     output (lengthPrefix .list (2 ^ 64 - 1)) = some (bytesOf 9 0xffffffffffffffffff) := by
   decide +kernel
 
-/-- A payload of `2^64` bytes or more has no encoding, for a byte string or a list. -/
+/-- `lengthPrefix` refuses every length from `2^64` on, for a byte string or a list. -/
 theorem lengthPrefix_too_long (kind : PayloadKind) (length : Nat) (h : 2 ^ 64 ≤ length) :
     lengthPrefix kind length = .error (.payloadTooLong length) := by
   -- `length` is below neither bound of `lengthPrefix`, 56 or `2^64`.
   have notShort : ¬ length < 56 := Nat.not_lt.mpr (Nat.le_trans (by decide) h)
   have notLong : ¬ length < 2 ^ 64 := Nat.not_lt.mpr h
   rw [lengthPrefix, ite_eq_right notShort, ite_eq_right notLong]
+
+/-- `encode` refuses a byte string of `2^64` bytes or more. -/
+theorem encode_bytes_too_long (data : ByteArray) (h : 2 ^ 64 ≤ data.size) :
+    encode (.bytes data) = .error (.payloadTooLong data.size) := by
+  -- More than one byte, so the byte string is not its own encoding and takes a prefix.
+  have notOne : data.size ≠ 1 := Nat.ne_of_gt (Nat.lt_of_lt_of_le (by decide) h)
+  have notSingle : isSingleLowByte data = false := by simp [isSingleLowByte, notOne]
+  rw [encode, encodeBytes, notSingle]
+  -- The prefix fails, so the encoding fails with it.
+  show (fun prefixBytes => prefixBytes ++ data) <$> lengthPrefix .bytes data.size = _
+  rw [lengthPrefix_too_long .bytes data.size h]
+  rfl
+
+/-- `encode` refuses a list whose items encode to a payload of `2^64` bytes or more. -/
+theorem encode_list_too_long (items : List Item) (payload : ByteArray)
+    (hp : joinEncodings items = .ok payload) (h : 2 ^ 64 ≤ payload.size) :
+    encode (.list items) = .error (.payloadTooLong payload.size) := by
+  rw [encode, hp]
+  -- The prefix of the payload fails, so the encoding fails with it.
+  show (fun prefixBytes => prefixBytes ++ payload) <$> lengthPrefix .list payload.size = _
+  rw [lengthPrefix_too_long .list payload.size h]
+  rfl
 
 /-! ## `RLPTests/rlptest.json`
 
@@ -99,7 +123,7 @@ A string that starts with `#` is a decimal number, so it is a scalar too.
 
 A string that starts with `0x` is hex bytes, but no input of this file starts with `0x`.
 
-A list that repeats one item is written with `List.replicate`.
+A list of more than two copies of one list is written with `List.replicate`.
 
 A string longer than 64 characters is cut after a space into pieces, written with `strPieces`.
 
