@@ -62,7 +62,7 @@ The list covers the main theorems and is not yet complete.
 
 Most of these theorems are about correctness: an honest run gives the expected answer, or malformed input is rejected.
 Only one states a security property, the unforgeability of leanXMSS, for EthLib's own definitions.
-No theorem states unforgeability for BLS, or binding for KZG.
+No theorem states unforgeability for leanSPHINCS or BLS, or binding for KZG.
 No theorem covers the code that runs, the C boundary, or timing.
 
 ### XMSS
@@ -110,6 +110,20 @@ No theorem bounds the probability of finding a collision or a second preimage.
 The VRF's `verify_unique` uses `climb_binding`.
 leanXMSS states `fold_binding` with `climb_binding_node`, but its unforgeability proof does not use either theorem.
 SSZ uses neither.
+
+### leanSPHINCS
+
+The correctness theorem is `verify_keyGen_sign` (`Proofs/Sphincs/Correctness.lean`).
+If `keyGen seed` returns a key pair, and `sign` returns a signature for a message, then `verify` accepts that signature under that public key.
+
+`verify_known_answer` (`Proofs/Sphincs/KnownAnswerVerify.lean`) checks one pinned signature's bytes against one pinned public key's bytes.
+The kernel evaluates every one of the 492 permutations.
+
+`all_counters_fail_probability` (`Proofs/Sphincs/CodeSize.lean`) bounds a number: if digests were uniform, signing would fail with probability below `exp(-2^18)`.
+That digests are uniform is not proved.
+
+The 127-bit unforgeability bound of the configuration is a theorem about the specification's own Lean model, outside EthLib.
+No theorem links that model to this module.
 
 ### VRF tree
 
@@ -242,7 +256,7 @@ Whatever those hypotheses leave unproved is part of what a reader trusts.
 EthLib makes no constant-time claim.
 `Hash/Keccak.lean` says it "is not intended to be constant-time", and the field arithmetic uses Lean's `Nat`, which gives no timing guarantee.
 This matters where secret data is handled.
-XMSS `keyGen` and `sign` handle secret data, and the Python bindings expose both, as `key_gen` and `sign`, which take the secret seed.
+XMSS and leanSPHINCS `keyGen` and `sign` handle secret data, and the Python bindings expose the XMSS ones, as `key_gen` and `sign`, which take the secret seed.
 
 ### A4. Idealisations
 
@@ -364,6 +378,11 @@ A client chooses the right operation for its fork, passes inputs of the right fo
 XMSS adds one more obligation: never sign two different messages at one leaf index with one secret key.
 Each leaf index names a one-time signing key, and nothing in EthLib records which leaf indices were used, so the caller must prevent reuse.
 The Lean and Python docstrings of `sign` both say so.
+
+leanSPHINCS adds another.
+Never sign more than `2^30` messages with one secret key.
+Nothing in EthLib counts signatures, so the caller must.
+The Lean docstring of `sign` says so.
 
 ### D2. Dependencies
 
