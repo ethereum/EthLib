@@ -7,7 +7,8 @@ A 48-byte proof then opens the committed polynomial at any point.
 Ethereum uses KZG for blobs (EIP-4844, from Deneb) and for the cells of data availability sampling (EIP-7594, from Fulu).
 
 This page was checked against EthLib commit `6390c73`.
-Check it again when a definition it names changes.
+`scripts/readme_facts.py --check` fails when the code, proofs or exports it describes change, or a file it cites, until someone checks it again.
+<!-- reviewed: 6be4e223d50d3b73 -->
 
 ## Source
 
@@ -71,6 +72,7 @@ The two challenge helpers are pure: each returns a field element.
 
 ## Test vectors
 
+<!-- generated: vectors -->
 `tests/cryptography/kzg/` holds 344 cases:
 
 ```text
@@ -88,6 +90,7 @@ verify_blob_kzg_proof_batch                          24
 verify_cell_kzg_proof_batch                          32
 verify_kzg_proof                                    122
 ```
+<!-- end generated -->
 
 They match the consensus-specs `v1.7.0-alpha.12` general vectors byte for byte.
 Their expected values come from the Python specification, not from EthLib.
@@ -166,9 +169,14 @@ That reference is opaque to the kernel.
 So the kernel cannot compute the result of an operation that reads the setup, for example to check a known answer.
 `computeCells` and the two challenge helpers do not read it.
 
-`scripts/check_decls_baseline.txt` lists `TrustedSetup.globalRef` as `opaque`.
-It lists `TrustedSetup.get!` and `KzgM` as `reaches-opaque`.
-That kind means a definition reaches an opaque constant when unfolded, not that it is opaque itself.
+<!-- generated: baseline -->
+`scripts/check_decls_baseline.txt` lists these findings in this module:
 
-The pairing that verification uses comes from the BLS module.
-The baseline lists its `millerLoop` as `reaches-opaque`.
+- `EthLib.Cryptography.Kzg.KzgM`, `reaches-opaque`
+- `EthLib.Cryptography.Kzg.TrustedSetup.get!`, `reaches-opaque`
+- `EthLib.Cryptography.Kzg.TrustedSetup.globalRef`, `opaque`
+<!-- end generated -->
+
+A `reaches-opaque` definition reaches an opaque constant when unfolded, but is not opaque itself.
+
+The pairing that verification uses comes from the BLS module, and [its page](../Bls/README.md#what-the-kernel-cannot-evaluate) lists what the kernel cannot evaluate there.
