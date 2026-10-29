@@ -36,7 +36,7 @@ The table below marks which rows apply to which use:
 | A1 | A definition does not match its source | Definitions named and shaped after the source; vectors pinned to consensus-specs `v1.7.0-alpha.12`; consistency theorems on the constants | P R B V |
 | A2 | A theorem holds only under a hypothesis | Each conditional theorem below lists its hypotheses | P |
 | A3 | Timing reveals secret data | None: no constant-time claim | R B |
-| A4 | A security theorem idealises a primitive | None needed yet: no security theorem exists | P |
+| A4 | A security theorem idealises a primitive | Each idealisation is listed in A4 | P |
 | B1 | The Lean compiler, the C compiler or the Lean runtime is wrong | Regenerating the vectors locally, then checking them against their pinned digests | R B |
 | B2 | Lean core runs code other than its definitions | Lean core is a declared baseline | R B |
 | B3 | Elaboration runs native code | None | P |
@@ -58,7 +58,8 @@ The sections below explain each row.
 This section lists the main theorems by primitive.
 It is not yet complete.
 
-No theorem states a security property: unforgeability for XMSS or BLS, or binding for KZG.
+One theorem states a security property: unforgeability of leanXMSS, about a model of the scheme rather than EthLib's definitions.
+No theorem states unforgeability for BLS, or binding for KZG.
 No theorem covers the code that runs, the C boundary, or timing.
 
 ### XMSS
@@ -68,6 +69,15 @@ if `keyGen seed` returns a key pair, and `sign` returns a signature for a messag
 
 It is a correctness statement.
 It says nothing about unforgeability.
+
+`XmssSecurity.leanXmss_has_127_bits_of_classical_security` (`Proofs/Xmss/Security/XmssSecurity.lean`):
+in the random oracle model, an adversary whose experiment makes at most `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
+
+The proof comes from leanerVM, and `Proofs/Xmss/Security/README.md` lists what changed here.
+
+It is about the scheme as the proof writes it, in the namespace `LeanXmss`, not about EthLib's `keyGen`, `sign` and `verify`.
+
+Its statement is written with VCVio's oracle computations and probabilities, so their definitions are part of what it says.
 
 ### BLS12-381
 
@@ -153,7 +163,9 @@ The Python bindings expose both, as `key_gen` and `sign`, which take the secret 
 ### A4. Idealisations
 
 A security theorem rests on a model, such as a random oracle for a hash.
-None exists yet, so there is nothing to list.
+
+- leanXMSS: the hash `H`, Keccak-256, is a random oracle on byte strings.
+  The theorem says nothing about an attack that uses the structure of Keccak.
 
 ## Gap B: does the code that runs match the definitions?
 
@@ -279,7 +291,9 @@ The Lean and Python docstrings of `sign` both say so.
 
 <!-- generated: pins -->
 The specification requires no package.
-The package requires Mathlib, at `v4.35.0`, commit `56a0058`, which only the proofs import.
+The package requires Mathlib, at `v4.35.0`, commit `56a0058`.
+The package requires VCVio, at `bbf05ee`.
+Only the proofs import them.
 The Lean toolchain is `leanprover/lean4:v4.35.0`.
 <!-- end generated -->
 

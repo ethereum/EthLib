@@ -16,6 +16,7 @@ import EthLib.Cryptography.Proofs.Xmss.KnownAnswerTop
 import EthLib.Cryptography.Proofs.Xmss.KnownAnswerVerify
 import EthLib.Cryptography.Proofs.Xmss.KnownAnswerKeyBottom
 import EthLib.Cryptography.Proofs.Xmss.KnownAnswerKeyTop
+import EthLib.Cryptography.Proofs.Xmss.Security
 
 /-!
 # `EthLib.Cryptography.Proofs.Xmss`
