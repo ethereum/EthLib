@@ -1,5 +1,4 @@
 import EthLib.Cryptography.Hash.Sha256
-import EthLib.Cryptography.Proofs.IdLoops
 
 /-!
 # Proofs: `Hash.Sha256`
@@ -121,9 +120,9 @@ def hash (message : ByteArray) : ByteArray :=
 end Spec
 
 /-- Eight machine words read as the model's working variables. -/
-def interpret (H : Array UInt32) : Spec.State :=
-  ⟨H[0]!.toBitVec, H[1]!.toBitVec, H[2]!.toBitVec, H[3]!.toBitVec,
-    H[4]!.toBitVec, H[5]!.toBitVec, H[6]!.toBitVec, H[7]!.toBitVec⟩
+def interpret (H : Vector UInt32 8) : Spec.State :=
+  ⟨H[0].toBitVec, H[1].toBitVec, H[2].toBitVec, H[3].toBitVec,
+    H[4].toBitVec, H[5].toBitVec, H[6].toBitVec, H[7].toBitVec⟩
 
 /-! ## The constants -/
 
@@ -171,7 +170,7 @@ The initial hash value is what FIPS 180-4 §5.3.3 derives: the square roots of t
 So no initial word is taken on trust.
 -/
 theorem IV_from_primes :
-    (smallPrimes 20).length = 8 ∧ IV.size = 8 ∧
+    (smallPrimes 20).length = 8 ∧ IV.toList.length = 8 ∧
       ((smallPrimes 20).zip (IV.toList.map UInt32.toNat)).all
         (fun pair => squareRootFraction pair.1 pair.2) = true := by
   decide +kernel
@@ -182,13 +181,14 @@ The round constants are what FIPS 180-4 §4.2.2 derives: the cube roots of the f
 So no round constant is taken on trust.
 -/
 theorem K_from_primes :
-    (smallPrimes 312).length = 64 ∧ K.size = 64 ∧
+    (smallPrimes 312).length = 64 ∧ K.toList.length = 64 ∧
       ((smallPrimes 312).zip (K.toList.map UInt32.toNat)).all
         (fun pair => cubeRootFraction pair.1 pair.2) = true := by
   decide +kernel
 
 /-! ## The functions on words -/
 
+/-- `smallSigma0` is σ0 of FIPS 180-4 §4.1.2. -/
 theorem smallSigma0_toBitVec (x : UInt32) : (smallSigma0 x).toBitVec = Spec.small0 x.toBitVec := by
   -- Each pair of shifts joined by an or is a rotation.
   simp [smallSigma0, rotr, shr, Spec.small0, BitVec.rotateRight_def]
@@ -212,418 +212,272 @@ theorem big32_toBitVec (b : ByteArray) (off : Nat) : (big32 b off).toBitVec = Sp
     BitVec.eq_of_toNat_eq (by simp)
   simp [big32, Spec.inputWord, byte]
 
-/-! ## Loops as folds -/
+/-! ## The message schedule -/
 
-/-- A loop over `[start:stop:step]` that always continues is a fold over the same numbers. -/
-theorem forIn_range_step_yield {β : Type} (start stop step : Nat) (positive : 0 < step) (init : β)
-    (f : Nat → β → β) :
-    (forIn (m := Id) { start := start, stop := stop, step := step, step_pos := positive : Std.Legacy.Range } init
-        (fun j acc => ForInStep.yield (f j acc))) =
-      (List.range' start ((stop - start + step - 1) / step) step).foldl (fun acc j => f j acc) init := by
-  rw [Std.Legacy.Range.forIn_eq_forIn_range', IdLoops.forIn_list_yield]
-  rfl
+/-- Extending the schedule keeps every word already computed. -/
+theorem schedulePrefix_get (block : ByteArray) (start count upper i : Nat) (within : i < count)
+    (bound : count ≤ upper) :
+    (schedulePrefix block start upper)[i]'(by omega) = (schedulePrefix block start count)[i] := by
+  -- Each step only appends, so no earlier position ever changes.
+  induction upper generalizing count with
+  | zero => omega
+  | succ upper ih =>
+    by_cases same : count = upper + 1
+    · subst count; rfl
+    · rw [schedulePrefix, Vector.getElem_push_lt (by omega)]
+      exact ih count within (by omega)
 
-/-- Writing one entry of an array changes that entry and no other. -/
-theorem getElem!_set! {α : Type} [Inhabited α] (a : Array α) (i j : Nat) (v : α) (hi : i < a.size) :
-    (a.set! j v)[i]! = if j = i then v else a[i]! := by
-  have hi' : i < (a.set! j v).size := by simpa [Array.set!] using hi
-  rw [getElem!_pos (a.set! j v) i hi', getElem!_pos a i hi]
-  exact Array.getElem_setIfInBounds hi
+/-- The first sixteen schedule words are the block's big-endian words. -/
+theorem schedule_input (block : ByteArray) (start i : Nat) (input : i < 16) :
+    (schedule block start)[i]'(by omega) = big32 block (start + 4 * i) := by
+  rw [schedule, schedulePrefix_get block start (i + 1) 64 i (by omega) (by omega)]
+  simp [schedulePrefix, input]
 
-/-! ## The compression function -/
+/-- Every later word mixes four earlier ones, FIPS 180-4 §6.2.2, step 1. -/
+theorem schedule_recurrence (block : ByteArray) (start i : Nat) (later : 16 ≤ i) (within : i < 64) :
+    (schedule block start)[i] =
+      (schedule block start)[i - 16]'(by omega) + smallSigma0 ((schedule block start)[i - 15]'(by omega)) +
+        (schedule block start)[i - 7]'(by omega) + smallSigma1 ((schedule block start)[i - 2]'(by omega)) := by
+  -- The recurrence reads only older words, which the full schedule keeps.
+  unfold schedule
+  rw [schedulePrefix_get block start (i + 1) 64 i (by omega) (by omega),
+    schedulePrefix_get block start i 64 (i - 16) (by omega) (by omega),
+    schedulePrefix_get block start i 64 (i - 15) (by omega) (by omega),
+    schedulePrefix_get block start i 64 (i - 7) (by omega) (by omega),
+    schedulePrefix_get block start i 64 (i - 2) (by omega) (by omega)]
+  simp [schedulePrefix, show ¬ i < 16 by omega]
 
-/-- One step of the first schedule loop: word `j` read from the block. -/
-def loadStep (buf : ByteArray) (off : Nat) (acc : Array UInt32) (j : Nat) : Array UInt32 :=
-  acc.set! j (big32 buf (off + 4 * j))
-
-/-- One step of the second schedule loop: word `j` from four earlier words. -/
-def extendStep (acc : Array UInt32) (j : Nat) : Array UInt32 :=
-  acc.set! j (acc[j - 16]! + smallSigma0 acc[j - 15]! + acc[j - 7]! + smallSigma1 acc[j - 2]!)
-
-/-- The schedule array `compressBlock` builds. -/
-def scheduleArray (buf : ByteArray) (off : Nat) : Array UInt32 :=
-  (List.range' 16 48).foldl extendStep ((List.range' 0 16).foldl (loadStep buf off) (Array.replicate 64 0))
-
-/-- The eight working variables, as `compressBlock` carries them. -/
-abbrev Working := UInt32 × UInt32 × UInt32 × UInt32 × UInt32 × UInt32 × UInt32 × UInt32
-
-/-- One round of `compressBlock`. -/
-def roundStep (W : Array UInt32) (s : Working) (t : Nat) : Working :=
-  (s.2.2.2.2.2.2.2 + bigSigma1 s.2.2.2.2.1 + ch s.2.2.2.2.1 s.2.2.2.2.2.1 s.2.2.2.2.2.2.1 + K[t]! + W[t]! +
-      (bigSigma0 s.1 + maj s.1 s.2.1 s.2.2.1),
-    s.1, s.2.1, s.2.2.1,
-    s.2.2.2.1 + (s.2.2.2.2.2.2.2 + bigSigma1 s.2.2.2.2.1 + ch s.2.2.2.2.1 s.2.2.2.2.2.1 s.2.2.2.2.2.2.1 + K[t]! + W[t]!),
-    s.2.2.2.2.1, s.2.2.2.2.2.1, s.2.2.2.2.2.2.1)
-
-/-- The working variables read as the model's state. -/
-def Working.toState (s : Working) : Spec.State :=
-  ⟨s.1.toBitVec, s.2.1.toBitVec, s.2.2.1.toBitVec, s.2.2.2.1.toBitVec,
-    s.2.2.2.2.1.toBitVec, s.2.2.2.2.2.1.toBitVec, s.2.2.2.2.2.2.1.toBitVec, s.2.2.2.2.2.2.2.toBitVec⟩
-
-/-- `compressBlock`, with its three loops written as folds. -/
-theorem compressBlock_eq (H : Array UInt32) (buf : ByteArray) (off : Nat) :
-    compressBlock H buf off =
-      let s := (List.range' 0 64).foldl (roundStep (scheduleArray buf off))
-        (H[0]!, H[1]!, H[2]!, H[3]!, H[4]!, H[5]!, H[6]!, H[7]!)
-      #[H[0]! + s.1, H[1]! + s.2.1, H[2]! + s.2.2.1, H[3]! + s.2.2.2.1, H[4]! + s.2.2.2.2.1,
-        H[5]! + s.2.2.2.2.2.1, H[6]! + s.2.2.2.2.2.2.1, H[7]! + s.2.2.2.2.2.2.2] := by
-  simp only [compressBlock, Id.run, IdLoops.id_pure, IdLoops.id_bind]
-  rw [forIn_range_step_yield, forIn_range_step_yield, forIn_range_step_yield]
-  simp only [Nat.sub_zero, Nat.add_sub_cancel, Nat.div_one]
-  -- Name each loop body, so that no step evaluates a loop.
-  rw [show (fun (acc : Array UInt32) (j : Nat) => acc.set! j (big32 buf (off + 4 * j))) = loadStep buf off from rfl,
-    show (fun (acc : Array UInt32) (j : Nat) =>
-      acc.set! j (acc[j - 16]! + smallSigma0 acc[j - 15]! + acc[j - 7]! + smallSigma1 acc[j - 2]!)) = extendStep
-      from rfl,
-    show (64 - 16 : Nat) = 48 from rfl,
-    show List.foldl extendStep (List.foldl (loadStep buf off) (Array.replicate 64 0) (List.range' 0 16))
-      (List.range' 16 48) = scheduleArray buf off from rfl,
-    show (fun (s : Working) (t : Nat) => (s.2.2.2.2.2.2.2 + bigSigma1 s.2.2.2.2.1 +
-        ch s.2.2.2.2.1 s.2.2.2.2.2.1 s.2.2.2.2.2.2.1 + K[t]! + (scheduleArray buf off)[t]! +
-          (bigSigma0 s.1 + maj s.1 s.2.1 s.2.2.1),
-        s.1, s.2.1, s.2.2.1,
-        s.2.2.2.1 + (s.2.2.2.2.2.2.2 + bigSigma1 s.2.2.2.2.1 + ch s.2.2.2.2.1 s.2.2.2.2.2.1 s.2.2.2.2.2.2.1 +
-          K[t]! + (scheduleArray buf off)[t]!),
-        s.2.2.2.2.1, s.2.2.2.2.2.1, s.2.2.2.2.2.2.1)) = roundStep (scheduleArray buf off) from rfl]
-
-/-- The first loop writes the block's words, whatever array of 64 words it starts from. -/
-private theorem load_fold (buf : ByteArray) (off : Nat) (A : Array UInt32) (size : A.size = 64) :
-    ∀ n ≤ 16, ((List.range' 0 n).foldl (loadStep buf off) A).size = 64 ∧
-      ∀ i < n, ((List.range' 0 n).foldl (loadStep buf off) A)[i]! = big32 buf (off + 4 * i) := by
-  intro n
-  induction n with
-  | zero => intro _; simp [size]
-  | succ n ih =>
-    intro bound
-    rw [List.range'_1_concat, List.foldl_append, List.foldl_cons, List.foldl_nil, Nat.zero_add]
-    generalize (List.range' 0 n).foldl (loadStep buf off) A = B at ih ⊢
-    obtain ⟨sizeB, words⟩ := ih (by omega)
-    refine ⟨by simpa [loadStep, Array.set!] using sizeB, fun i lt => ?_⟩
-    -- The new entry is written now, and every earlier one was written before.
-    rw [loadStep, getElem!_set! _ _ _ _ (by omega)]
-    split
-    · subst_vars; rfl
-    · exact words i (by omega)
-
-/-- The second loop extends a prefix of model words by the recurrence. -/
-private theorem extend_fold (input : Vector Spec.Word 16) (A : Array UInt32) (size : A.size = 64)
-    (early : ∀ i < 16, A[i]!.toBitVec = Spec.messageWord input i) :
-    ∀ k ≤ 48, ((List.range' 16 k).foldl extendStep A).size = 64 ∧
-      ∀ i < 16 + k, ((List.range' 16 k).foldl extendStep A)[i]!.toBitVec = Spec.messageWord input i := by
-  intro k
-  induction k with
-  | zero => intro _; exact ⟨size, fun i lt => early i (by omega)⟩
-  | succ k ih =>
-    intro bound
-    rw [List.range'_1_concat, List.foldl_append, List.foldl_cons, List.foldl_nil]
-    generalize (List.range' 16 k).foldl extendStep A = B at ih ⊢
-    obtain ⟨sizeB, words⟩ := ih (by omega)
-    refine ⟨by simpa [extendStep, Array.set!] using sizeB, fun i lt => ?_⟩
-    rw [extendStep, getElem!_set! _ _ _ _ (by omega)]
-    split
-    · -- The new word reads four earlier words, all of them already the model's.
-      subst_vars
-      simp only [UInt32.toBitVec_add, smallSigma0_toBitVec, smallSigma1_toBitVec]
-      rw [words _ (by omega), words _ (by omega), words _ (by omega), words _ (by omega)]
-      conv_rhs => rw [Spec.messageWord]
-      simp [show ¬ 16 + k < 16 by omega]
-    · exact words i (by omega)
-
-/-- Every schedule word is the one FIPS 180-4 §6.2.2, step 1 defines. -/
-theorem scheduleArray_toBitVec (buf : ByteArray) (off : Nat) :
-    ∀ t < 64, (scheduleArray buf off)[t]!.toBitVec = Spec.messageWord (Spec.inputWords buf off) t := by
-  obtain ⟨size16, words16⟩ := load_fold buf off (Array.replicate 64 0) (by simp) 16 (Nat.le_refl _)
-  have early : ∀ i < 16, ((List.range' 0 16).foldl (loadStep buf off) (Array.replicate 64 0))[i]!.toBitVec =
-      Spec.messageWord (Spec.inputWords buf off) i := by
-    intro i lt
-    rw [words16 i lt, big32_toBitVec, Spec.messageWord]
-    simp [lt, Spec.inputWords]
-  intro t lt
-  exact (extend_fold _ _ size16 early 48 (Nat.le_refl _)).2 t (by omega)
-
-/-- One executable round is one round of the model. -/
-theorem roundStep_toState (W : Array UInt32) (s : Working) (t : Nat) :
-    (roundStep W s t).toState = Spec.step s.toState (K[t]!).toBitVec (W[t]!).toBitVec := by
-  -- Machine addition and bit operations are the model's, word for word.
-  simp [roundStep, Working.toState, Spec.step, ch, maj, bigSigma0_toBitVec, bigSigma1_toBitVec]
-
-/-- The first `n` executable rounds are the model's first `n` rounds. -/
-theorem rounds_fold (buf : ByteArray) (off : Nat) (s : Working) :
-    ∀ n ≤ 64, ((List.range' 0 n).foldl (roundStep (scheduleArray buf off)) s).toState =
-      Spec.rounds (Spec.inputWords buf off) s.toState n := by
+/-- The schedule reads only the sixty-four bytes of its block. -/
+theorem schedule_congr (b₁ b₂ : ByteArray) (s₁ s₂ : Nat) (same : ∀ i < 64, b₁[s₁ + i]! = b₂[s₂ + i]!) :
+    schedule b₁ s₁ = schedule b₂ s₂ := by
+  -- Every prefix agrees, by induction on its length.
+  suffices ∀ n ≤ 64, schedulePrefix b₁ s₁ n = schedulePrefix b₂ s₂ n from this 64 (Nat.le_refl _)
   intro n
   induction n with
   | zero => intro _; rfl
   | succ n ih =>
-    intro bound
-    rw [List.range'_1_concat, List.foldl_append, List.foldl_cons, List.foldl_nil, Nat.zero_add,
-      roundStep_toState, ih (by omega), scheduleArray_toBitVec buf off n (by omega)]
-    rfl
+    intro within
+    simp only [schedulePrefix, ih (by omega)]
+    -- An input word reads four bytes of the block.
+    by_cases first : n < 16
+    · simp only [first, ↓reduceDIte, big32, Nat.add_assoc]
+      rw [same (4 * n) (by omega), same (4 * n + 1) (by omega), same (4 * n + 2) (by omega),
+        same (4 * n + 3) (by omega)]
+    · simp only [first, ↓reduceDIte]
 
-/-- `compressBlock` is the compression function of FIPS 180-4 §6.2.2. -/
-theorem compressBlock_toState (H : Array UInt32) (buf : ByteArray) (off : Nat) :
-    interpret (compressBlock H buf off) = Spec.compression (Spec.inputWords buf off) (interpret H) := by
-  rw [compressBlock_eq]
-  have rounds := rounds_fold buf off (H[0]!, H[1]!, H[2]!, H[3]!, H[4]!, H[5]!, H[6]!, H[7]!) 64 (Nat.le_refl _)
-  generalize (List.range' 0 64).foldl (roundStep (scheduleArray buf off))
-    (H[0]!, H[1]!, H[2]!, H[3]!, H[4]!, H[5]!, H[6]!, H[7]!) = s at rounds ⊢
-  -- The feed-forward adds the incoming words back, position by position.
-  simp only [Working.toState] at rounds
-  simp [interpret, Spec.compression, ← rounds]
+/-- Every schedule word is the one FIPS 180-4 §6.2.2, step 1 defines. -/
+theorem schedule_toBitVec (block : ByteArray) (start : Nat) :
+    ∀ t, (within : t < 64) →
+      ((schedule block start)[t]).toBitVec = Spec.messageWord (Spec.inputWords block start) t := by
+  -- Strong induction covers the four backward references of the recurrence.
+  intro t
+  induction t using Nat.strongRecOn with
+  | ind t ih =>
+    intro within
+    by_cases early : t < 16
+    · rw [schedule_input block start t early, big32_toBitVec, Spec.messageWord]
+      simp [early, Spec.inputWords]
+    · rw [schedule_recurrence block start t (by omega) within]
+      simp only [UInt32.toBitVec_add, smallSigma0_toBitVec, smallSigma1_toBitVec]
+      rw [ih (t - 16) (by omega) (by omega), ih (t - 15) (by omega) (by omega),
+        ih (t - 7) (by omega) (by omega), ih (t - 2) (by omega) (by omega)]
+      conv => rhs; rw [Spec.messageWord]
+      simp [early]
+
+/-! ## One block -/
+
+/-- One round is one round of the model. -/
+theorem round_toState (state : Vector UInt32 8) (constant word : UInt32) :
+    interpret (round state constant word) =
+      Spec.step (interpret state) constant.toBitVec word.toBitVec := by
+  -- Machine addition and bit operations are the model's, word for word.
+  simp [interpret, round, Spec.step, ch, maj, bigSigma0_toBitVec, bigSigma1_toBitVec]
+
+/-- The first rounds of a block are the model's first rounds. -/
+private theorem rounds_toState (block : ByteArray) (start : Nat) (state : Vector UInt32 8) :
+    ∀ n, (bounded : n ≤ 64) →
+      interpret (((List.finRange 64).take n).foldl
+        (fun current t => round current K[t] (schedule block start)[t]) state) =
+      Spec.rounds (Spec.inputWords block start) (interpret state) n := by
+  intro n
+  induction n with
+  | zero => intro _; rfl
+  | succ n ih =>
+    intro bounded
+    -- One more index is one more round.
+    rw [List.take_succ_eq_append_getElem (by simp; omega), List.foldl_append]
+    simp only [List.foldl_cons, List.foldl_nil, List.getElem_finRange, Fin.cast_mk]
+    rw [round_toState, ih (by omega)]
+    simp only [Fin.getElem_fin]
+    rw [schedule_toBitVec block start n (by omega)]
+    simp only [Spec.rounds, getElem!_pos K n (by omega)]
+
+/-- `compress` is the compression of FIPS 180-4 §6.2.2, steps 2 to 4. -/
+theorem compress_toState (state : Vector UInt32 8) (block : ByteArray) (start : Nat) :
+    interpret (compress state block start) =
+      Spec.compression (Spec.inputWords block start) (interpret state) := by
+  have rounds := rounds_toState block start state 64 (by omega)
+  rw [List.take_of_length_le (by simp)] at rounds
+  simp only [compress, Spec.compression, ← rounds]
+  simp [interpret]
+
+/-- Compression reads only the sixty-four bytes of its block. -/
+theorem compress_congr (state : Vector UInt32 8) (b₁ b₂ : ByteArray) (s₁ s₂ : Nat)
+    (same : ∀ i < 64, b₁[s₁ + i]! = b₂[s₂ + i]!) : compress state b₁ s₁ = compress state b₂ s₂ := by
+  simp only [compress, schedule_congr b₁ b₂ s₁ s₂ same]
 
 /-! ## Padding -/
 
-/-- Writing one byte changes that byte and no other. -/
-theorem bytes_getElem!_set! (b : ByteArray) (i j : Nat) (v : UInt8) (hi : i < b.size) :
-    (b.set! j v)[i]! = if j = i then v else b[i]! := by
-  rcases b with ⟨data⟩
-  have hi' : i < (ByteArray.set! ⟨data⟩ j v).size := by
-    simpa [ByteArray.set!, Array.set!, ByteArray.size] using hi
-  rw [getElem!_pos (ByteArray.set! ⟨data⟩ j v) i hi', getElem!_pos (⟨data⟩ : ByteArray) i hi]
-  simp only [ByteArray.set!, ByteArray.getElem_eq_getElem_data]
-  exact Array.getElem_setIfInBounds (by simpa [ByteArray.size] using hi)
+/-- The length takes eight bytes. -/
+@[simp] theorem lengthBytes_size (size : Nat) : (lengthBytes size).size = 8 := by
+  simp only [lengthBytes, ByteArray.size, Array.size_ofFn]
 
-/-- Writing a byte keeps the size. -/
-@[simp] theorem bytes_size_set! (b : ByteArray) (j : Nat) (v : UInt8) : (b.set! j v).size = b.size := by
-  rcases b with ⟨data⟩
-  simp [ByteArray.set!, Array.set!, ByteArray.size]
+/-- Padding adds the `0x80` byte, the zeros, and the eight length bytes. -/
+theorem pad_size (message : ByteArray) :
+    (pad message).size = message.size + 1 + paddingZeros message.size + 8 := by
+  simp only [pad, ByteArray.size_append, ByteArray.size_push, lengthBytes_size]
+  simp only [ByteArray.size, Array.size_replicate]
 
-/-- Writing `n` bytes from a base offset fills exactly those positions. -/
-theorem fold_set_bytes (b : ByteArray) (base : Nat) (g : Nat → UInt8) :
-    ∀ n, ((List.range' 0 n).foldl (fun acc j => acc.set! (base + j) (g j)) b).size = b.size ∧
-      ∀ p < b.size, ((List.range' 0 n).foldl (fun acc j => acc.set! (base + j) (g j)) b)[p]! =
-        if base ≤ p ∧ p < base + n then g (p - base) else b[p]! := by
-  intro n
-  induction n with
-  | zero => simp
-  | succ n ih =>
-    rw [List.range'_1_concat, List.foldl_append, List.foldl_cons, List.foldl_nil, Nat.zero_add]
-    generalize (List.range' 0 n).foldl (fun acc j => acc.set! (base + j) (g j)) b = c at ih ⊢
-    obtain ⟨size, bytes⟩ := ih
-    refine ⟨by simp [size], fun p lt => ?_⟩
-    rw [bytes_getElem!_set! _ _ _ _ (by omega), bytes p lt]
-    -- The newest write wins at its own position, and the earlier ones everywhere else in the run.
-    by_cases at_n : base + n = p
-    · subst at_n; simp
-    · simp only [at_n, ite_false]
-      by_cases inside : base ≤ p ∧ p < base + n
-      · simp [inside, show base ≤ p ∧ p < base + (n + 1) by omega]
-      · simp [inside, show ¬ (base ≤ p ∧ p < base + (n + 1)) by omega]
+/-- Padding adds fewer than a block of zeros. -/
+theorem paddingZeros_lt (size : Nat) : paddingZeros size < 64 := Nat.mod_lt _ (by decide)
 
-/-- Two byte arrays of the same size agree when they agree at every position. -/
-theorem bytes_ext {a b : ByteArray} (size : a.size = b.size) (same : ∀ p < a.size, a[p]! = b[p]!) : a = b := by
-  apply ByteArray.ext
-  apply Array.ext (by simpa using size)
-  intro p ha hb
-  have := same p (by simpa using ha)
-  rwa [getElem!_pos a p (by simpa using ha), getElem!_pos b p (by simpa using hb),
-    ByteArray.getElem_eq_getElem_data, ByteArray.getElem_eq_getElem_data] at this
-
-/-- The size of the model's padding. -/
-theorem spec_padded_size (msg : ByteArray) :
-    (Spec.padded msg).size = msg.size + 1 + Spec.zeroCount msg.size + 8 := by
-  rw [← ByteArray.size_data]
-  simp [Spec.padded]
+/-- A padded message is whole blocks. -/
+theorem pad_size_mod (message : ByteArray) : (pad message).size % 64 = 0 := by
+  rw [pad_size]
+  unfold paddingZeros
   omega
 
-/-- A byte of the model's padding: message, `0x80`, zeros, then the bit length. -/
-theorem spec_padded_get (msg : ByteArray) (p : Nat) (lt : p < msg.size + 1 + Spec.zeroCount msg.size + 8) :
-    (Spec.padded msg)[p]! =
-      if p < msg.size then msg[p]! else if p = msg.size then 0x80
-      else if p < msg.size + 1 + Spec.zeroCount msg.size then 0
-      else UInt8.ofNat ((msg.size * 8 / 2 ^ (56 - 8 * (p - (msg.size + 1 + Spec.zeroCount msg.size)))) % 256) := by
-  rw [getElem!_pos _ p (by rw [spec_padded_size]; exact lt), ByteArray.getElem_eq_getElem_data]
-  simp only [Spec.padded]
-  -- Each region of the concatenation is read where it sits.
-  split_ifs with h1 h2 h3
-  · rw [Array.getElem_append_left (by simp; omega), Array.getElem_append_left (by simp; omega),
-      Array.getElem_append_left (by simp; omega), getElem!_pos msg p h1, ByteArray.getElem_eq_getElem_data]
-  · subst h2
-    rw [Array.getElem_append_left (by simp; omega), Array.getElem_append_left (by simp),
-      Array.getElem_append_right (by simp)]
-    simp
-  · rw [Array.getElem_append_left (by simp; omega), Array.getElem_append_right (by simp; omega)]
-    simp
-  · rw [Array.getElem_append_right (by simp; omega)]
-    simp
+/-- No fewer zeros would fill whole blocks. -/
+theorem paddingZeros_minimal (size zeros : Nat) (complete : (size + 1 + zeros + 8) % 64 = 0) :
+    paddingZeros size ≤ zeros := by
+  unfold paddingZeros
+  omega
 
-/-- One byte of the bit length: the 64-bit shift is the model's division, below 2^61 bytes. -/
-theorem length_byte (len j : Nat) (admitted : len < 2 ^ 61) (hj : j < 8) :
-    UInt8.ofNat ((UInt64.ofNat (len * 8) >>> UInt64.ofNat ((7 - j) * 8)).toNat) =
-      UInt8.ofNat ((len * 8 / 2 ^ (56 - 8 * j)) % 256) := by
-  apply UInt8.toNat_inj.mp
-  -- Eight byte positions, each a fixed shift below the word width.
-  rcases j with _ | _ | _ | _ | _ | _ | _ | _ | j
-  all_goals first
-    | omega
-    | (simp [UInt64.toNat_shiftRight, Nat.shiftRight_eq_div_pow]; done)
-    | (simp [UInt64.toNat_shiftRight, Nat.shiftRight_eq_div_pow]; omega)
+/-- Padding keeps every byte of the message where it was. -/
+theorem pad_prefix (message : ByteArray) (i : Nat) (within : i < message.size) :
+    (pad message)[i]'(by rw [pad_size]; omega) = message[i] := by
+  unfold pad
+  rw [ByteArray.getElem_append_left (by simp; omega), ByteArray.getElem_append_left (by simp; omega)]
+  exact Array.getElem_push_lt within
 
-/-- `padded` is the padding of FIPS 180-4 §5.1.1, for every message shorter than 2^61 bytes. -/
-theorem padded_eq (msg : ByteArray) (admitted : msg.size < 2 ^ 61) : padded msg = Spec.padded msg := by
-  simp only [padded, Id.run, IdLoops.id_pure, IdLoops.id_bind, IdLoops.forIn_range_yield]
-  rw [show (fun (acc : ByteArray) (j : Nat) => acc.set! j msg[j]!) = (fun acc j => acc.set! (0 + j) msg[j]!) from by
-    funext acc j; rw [Nat.zero_add]]
-  generalize hz : (56 + 64 - (msg.size + 1) % 64) % 64 = z
-  have zeros : z = Spec.zeroCount msg.size := by subst hz; unfold Spec.zeroCount; omega
-  -- The three writes: the message, the `0x80` byte, then the eight length bytes.
-  have size0 : (⟨Array.replicate (msg.size + 1 + z + 8) 0⟩ : ByteArray).size = msg.size + 1 + z + 8 := by
-    rw [← ByteArray.size_data]; simp
-  obtain ⟨size1, bytes1⟩ :=
-    fold_set_bytes ⟨Array.replicate (msg.size + 1 + z + 8) 0⟩ 0 (fun j => msg[j]!) msg.size
-  generalize (List.range' 0 msg.size).foldl (fun (acc : ByteArray) (j : Nat) => acc.set! (0 + j) msg[j]!)
-    (⟨Array.replicate (msg.size + 1 + z + 8) 0⟩ : ByteArray) = B at size1 bytes1 ⊢
-  obtain ⟨size3, bytes3⟩ := fold_set_bytes (B.set! msg.size 128) (msg.size + 1 + z + 8 - 8)
-    (fun j => UInt8.ofNat ((UInt64.ofNat (msg.size * 8) >>> UInt64.ofNat ((7 - j) * 8)).toNat)) 8
-  generalize (List.range' 0 8).foldl (fun (acc : ByteArray) (j : Nat) => acc.set! (msg.size + 1 + z + 8 - 8 + j)
-    (UInt8.ofNat ((UInt64.ofNat (msg.size * 8) >>> UInt64.ofNat ((7 - j) * 8)).toNat)))
-    (B.set! msg.size 128) = C at size3 bytes3 ⊢
-  rw [size0] at size1
-  apply bytes_ext
-  · rw [size3, bytes_size_set!, size1, spec_padded_size, zeros]
-  · intro p lt
-    rw [size3, bytes_size_set!, size1] at lt
-    rw [bytes3 p (by simpa [size1] using lt), spec_padded_get msg p (by rw [← zeros]; exact lt), ← zeros]
-    -- Each position is a message byte, the `0x80` byte, a zero, or a length byte.
-    split_ifs with h1 h2 h3 h4 h5 h6 <;> try omega
-    · -- A length byte.
-      rw [show msg.size + 1 + z + 8 - 8 = msg.size + 1 + z by omega]
-      exact length_byte _ _ admitted (by omega)
-    · -- A message byte.
-      rw [bytes_getElem!_set! _ _ _ _ (by omega), ite_eq_right (by omega), bytes1 p (by rw [size0]; omega)]
-      simp only [Nat.zero_le, true_and, Nat.zero_add, Nat.sub_zero]
-      split_ifs
-      rfl
-    · -- The `0x80` byte.
-      subst_vars
-      rw [bytes_getElem!_set! _ _ _ _ (by omega)]
-      simp
-    · -- A zero byte.
-      rw [bytes_getElem!_set! _ _ _ _ (by omega), ite_eq_right (by omega), bytes1 p (by rw [size0]; omega)]
-      simp only [Nat.zero_le, true_and, Nat.zero_add, Nat.sub_zero]
-      split_ifs
-      rw [getElem!_pos _ p (by rw [size0]; exact lt), ByteArray.getElem_eq_getElem_data]
-      simp
+/-- The byte after the message is `0x80`. -/
+theorem pad_delimiter (message : ByteArray) :
+    (pad message)[message.size]'(by rw [pad_size]; omega) = 0x80 := by
+  unfold pad
+  rw [ByteArray.getElem_append_left (by simp; omega), ByteArray.getElem_append_left (by simp)]
+  exact Array.getElem_push_eq
 
-/-! ## The whole hash -/
+/-- Every byte between `0x80` and the length is zero. -/
+theorem pad_zero (message : ByteArray) (i : Nat) (within : i < paddingZeros message.size) :
+    (pad message)[message.size + 1 + i]'(by rw [pad_size]; omega) = 0 := by
+  have zeroSize : (ByteArray.mk (Array.replicate (paddingZeros message.size) 0)).size =
+      paddingZeros message.size := Array.size_replicate
+  unfold pad
+  rw [ByteArray.getElem_append_left (by simp only [ByteArray.size_append, ByteArray.size_push, zeroSize]; omega)]
+  rw [ByteArray.getElem_append_right (by simp)]
+  exact Array.getElem_replicate _
 
-/-- Compressing the first `n` blocks is the model's block chain. -/
-theorem blocks_fold (buf : ByteArray) (H : Array UInt32) :
-    ∀ n, interpret ((List.range' 0 n 64).foldl (fun acc off => compressBlock acc buf off) H) =
-      Spec.blocks buf (interpret H) n := by
-  intro n
+/-- The last eight bytes are the length. -/
+theorem pad_length_suffix (message : ByteArray) :
+    (pad message).extract ((pad message).size - 8) (pad message).size = lengthBytes message.size := by
+  have zeroSize : (ByteArray.mk (Array.replicate (paddingZeros message.size) 0)).size =
+      paddingZeros message.size := Array.size_replicate
+  rw [pad_size]
+  unfold pad
+  apply ByteArray.extract_append_eq_right
+  · simp only [ByteArray.size_append, ByteArray.size_push, zeroSize]
+    omega
+  · simp only [ByteArray.size_append, ByteArray.size_push, lengthBytes_size, zeroSize]
+
+private theorem bits_toNat (size : Nat) (admitted : size < 2 ^ 61) : (UInt64.ofNat size * 8).toNat = size * 8 := by
+  -- Below 2⁶¹ bytes, the bit count does not wrap.
+  simp [UInt64.toNat_mul, UInt64.toNat_ofNat]
+  omega
+
+private theorem offset_toNat (i : Fin 8) : (8 * UInt64.ofNat i.val).toNat = 8 * i.val := by
+  simp [UInt64.toNat_mul, UInt64.toNat_ofNat]
+  omega
+
+private theorem shift_toNat (i : Fin 8) : (56 - 8 * UInt64.ofNat i.val).toNat = 56 - 8 * i.val := by
+  rw [UInt64.toNat_sub_of_le]
+  · simp only [offset_toNat]; rfl
+  · apply UInt64.le_iff_toNat_le.mpr
+    rw [offset_toNat]
+    change 8 * i.val ≤ 56
+    omega
+
+/-- Below 2⁶¹ bytes, the length bytes are the bit length's base-256 digits, most significant first. -/
+theorem lengthBytes_digit (size : Nat) (admitted : size < 2 ^ 61) (i : Fin 8) :
+    ((lengthBytes size)[i.val]'(by simp)).toNat = (size * 8 / 2 ^ (56 - 8 * i.val)) % 256 := by
+  simp only [lengthBytes, ByteArray.getElem_eq_getElem_data, Array.getElem_ofFn, UInt64.toNat_toUInt8,
+    UInt64.toNat_shiftRight, bits_toNat size admitted, shift_toNat]
+  change ((size * 8) >>> ((56 - 8 * i.val) % 64)) % 256 = _
+  rw [Nat.mod_eq_of_lt (show 56 - 8 * i.val < 64 by omega), Nat.shiftRight_eq_div_pow]
+
+/-- `pad` is the padding of FIPS 180-4 §5.1.1, below 2⁶¹ bytes. -/
+theorem pad_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
+    pad message = Spec.padded message := by
+  have zeros : paddingZeros message.size = Spec.zeroCount message.size := by
+    unfold paddingZeros Spec.zeroCount
+    omega
+  have length : (lengthBytes message.size).data =
+      Array.ofFn (fun i : Fin 8 => UInt8.ofNat ((message.size * 8 / 2 ^ (56 - 8 * i.val)) % 256)) := by
+    apply Array.ext
+    · exact (lengthBytes_size message.size).trans Array.size_ofFn.symm
+    · intro p left right
+      apply UInt8.toNat_inj.mp
+      simpa [ByteArray.getElem_eq_getElem_data] using
+        lengthBytes_digit message.size admitted ⟨p, by simpa using left⟩
+  -- The message, the `0x80` byte, the zeros and the length agree region by region.
+  apply ByteArray.ext
+  simp only [pad, Spec.padded, ByteArray.data_append, ByteArray.data_push, zeros, length, Array.push_eq_append]
+
+/-! ## The hash -/
+
+/-- Every digest is 32 bytes long, whatever the message. -/
+@[simp] theorem hash_size (message : ByteArray) : (hash message).size = 32 := by
+  simp only [hash, digest, ByteArray.size, Array.size_ofFn]
+
+/-- Compressing the first `n` blocks is the model's chain of blocks. -/
+theorem blocks_toState (message : ByteArray) (state : Vector UInt32 8) (n : Nat) :
+    interpret ((List.range n).foldl (fun current i => compress current message (64 * i)) state) =
+      Spec.blocks message (interpret state) n := by
   induction n with
   | zero => rfl
   | succ n ih =>
-    rw [List.range'_concat, List.foldl_append, List.foldl_cons, List.foldl_nil, compressBlock_toState, ih,
-      Nat.zero_add]
-    rfl
-
-/-- One step of the output loop: word `j` written as four big-endian bytes. -/
-def outStep (H : Array UInt32) (acc : ByteArray) (j : Nat) : ByteArray :=
-  (((acc.set! (4 * j) (UInt8.ofNat (H[j]! >>> 24).toNat)).set! (4 * j + 1)
-    (UInt8.ofNat ((H[j]! >>> 16).toNat &&& 255))).set! (4 * j + 2)
-    (UInt8.ofNat ((H[j]! >>> 8).toNat &&& 255))).set! (4 * j + 3) (UInt8.ofNat (H[j]!.toNat &&& 255))
-
-/-- Each output byte is one base-256 digit of its word, most significant first. -/
-theorem out_bytes (h : UInt32) :
-    UInt8.ofNat (h >>> 24).toNat = UInt8.ofNat (h.toNat / 2 ^ 24 % 256) ∧
-      UInt8.ofNat ((h >>> 16).toNat &&& 255) = UInt8.ofNat (h.toNat / 2 ^ 16 % 256) ∧
-      UInt8.ofNat ((h >>> 8).toNat &&& 255) = UInt8.ofNat (h.toNat / 2 ^ 8 % 256) ∧
-      UInt8.ofNat (h.toNat &&& 255) = UInt8.ofNat (h.toNat / 2 ^ 0 % 256) := by
-  have mask (x : Nat) : x &&& 255 = x % 256 := Nat.and_two_pow_sub_one_eq_mod x 8
-  refine ⟨?_, ?_, ?_, ?_⟩ <;> apply UInt8.toNat_inj.mp <;>
-    simp [UInt32.toNat_shiftRight, Nat.shiftRight_eq_div_pow, mask]
-
-/-- The output loop writes every word of the state as its four big-endian bytes. -/
-theorem out_fold (H : Array UInt32) :
-    ∀ n ≤ 8, ((List.range' 0 n).foldl (outStep H) ⟨Array.replicate 32 0⟩).size = 32 ∧
-      ∀ p < 4 * n, ((List.range' 0 n).foldl (outStep H) ⟨Array.replicate 32 0⟩)[p]! =
-        UInt8.ofNat (H[p / 4]!.toNat / 2 ^ (24 - 8 * (p % 4)) % 256) := by
-  intro n
-  induction n with
-  | zero => intro _; refine ⟨by rw [← ByteArray.size_data]; simp, fun p lt => by omega⟩
-  | succ n ih =>
-    intro bound
-    rw [List.range'_1_concat, List.foldl_append, List.foldl_cons, List.foldl_nil, Nat.zero_add]
-    generalize (List.range' 0 n).foldl (outStep H) ⟨Array.replicate 32 0⟩ = O at ih ⊢
-    obtain ⟨size, bytes⟩ := ih (by omega)
-    refine ⟨by simp [outStep, size], fun p lt => ?_⟩
-    obtain ⟨b0, b1, b2, b3⟩ := out_bytes H[n]!
-    simp only [outStep]
-    rw [bytes_getElem!_set! _ _ _ _ (by simp [size]; omega), bytes_getElem!_set! _ _ _ _ (by simp [size]; omega),
-      bytes_getElem!_set! _ _ _ _ (by simp [size]; omega), bytes_getElem!_set! _ _ _ _ (by omega)]
-    -- The four new bytes belong to word `n`, and every earlier byte was already written.
-    split_ifs with h3 h2 h1 h0
-    · rw [b3, show p / 4 = n by omega, show p % 4 = 3 by omega]
-    · rw [b2, show p / 4 = n by omega, show p % 4 = 2 by omega]
-    · rw [b1, show p / 4 = n by omega, show p % 4 = 1 by omega]
-    · rw [b0, show p / 4 = n by omega, show p % 4 = 0 by omega]
-    · exact bytes p (by omega)
-
-/-- Every digest is 32 bytes long, whatever the message. -/
-theorem hash_size (msg : ByteArray) : (Sha256.hash msg).size = 32 := by
-  simp only [Sha256.hash, Id.run, IdLoops.id_pure, IdLoops.id_bind, IdLoops.forIn_range_yield]
-  rw [forIn_range_step_yield]
-  generalize (List.range' 0 (((padded msg).size - 0 + 64 - 1) / 64) 64).foldl
-    (fun acc off => compressBlock acc (padded msg) off) IV = H
-  -- The output loop writes the eight words into a buffer of 32 bytes, and never grows it.
-  rw [show (fun (acc : ByteArray) (j : Nat) =>
-      (((acc.set! (4 * j) (UInt8.ofNat (H[j]! >>> 24).toNat)).set! (4 * j + 1)
-        (UInt8.ofNat ((H[j]! >>> 16).toNat &&& 255))).set! (4 * j + 2)
-        (UInt8.ofNat ((H[j]! >>> 8).toNat &&& 255))).set! (4 * j + 3) (UInt8.ofNat (H[j]!.toNat &&& 255)))
-      = outStep H from rfl]
-  exact (out_fold H 8 (Nat.le_refl _)).1
+    rw [List.range_succ, List.foldl_append]
+    simp only [List.foldl_cons, List.foldl_nil, compress_toState, ih, Spec.blocks]
 
 /-- The state words, read in digest order. -/
-theorem interpret_words (H : Array UInt32) (i : Nat) (lt : i < 8) :
-    (interpret H).words[i] = H[i]!.toBitVec := by
+private theorem interpret_words (state : Vector UInt32 8) (i : Nat) (within : i < 8) :
+    (interpret state).words[i] = state[i].toBitVec := by
   rcases i with _ | _ | _ | _ | _ | _ | _ | _ | i
   all_goals first | omega | simp [interpret, Spec.State.words]
 
-/-- A byte of `padded`: message, `0x80`, zeros, then the bit length in eight big-endian bytes. -/
-theorem padded_get (msg : ByteArray) (admitted : msg.size < 2 ^ 61) (p : Nat)
-    (lt : p < msg.size + 1 + Spec.zeroCount msg.size + 8) :
-    (padded msg)[p]! =
-      if p < msg.size then msg[p]! else if p = msg.size then 0x80
-      else if p < msg.size + 1 + Spec.zeroCount msg.size then 0
-      else UInt8.ofNat ((msg.size * 8 / 2 ^ (56 - 8 * (p - (msg.size + 1 + Spec.zeroCount msg.size)))) % 256) := by
-  rw [padded_eq msg admitted]
-  exact spec_padded_get msg p lt
+/-- One output byte is one base-256 digit of its word. -/
+private theorem digit (word : UInt32) (k : Nat) (within : k < 4) :
+    (word >>> (24 - 8 * UInt32.ofNat k)).toUInt8 = UInt8.ofNat ((word.toNat / 2 ^ (24 - 8 * k)) % 256) := by
+  rcases k with _ | _ | _ | _ | k
+  all_goals first | omega | (apply UInt8.toNat_inj.mp; simp [Nat.shiftRight_eq_div_pow])
 
-/-- The size of a padded message is a whole number of blocks. -/
-theorem padded_size_mod (msg : ByteArray) (admitted : msg.size < 2 ^ 61) : (padded msg).size % 64 = 0 := by
-  rw [padded_eq msg admitted, spec_padded_size]
-  unfold Spec.zeroCount
-  omega
+/-- `digest` writes the model's digest. -/
+theorem digest_eq_spec (state : Vector UInt32 8) : digest state = Spec.digest (interpret state) := by
+  apply ByteArray.ext
+  apply Array.ext
+  · simp [digest, Spec.digest]
+  · intro p left right
+    have within : p < 32 := by simpa [digest] using left
+    simp only [digest, Spec.digest, Array.getElem_ofFn]
+    rw [digit _ _ (Nat.mod_lt _ (by decide)), interpret_words state (p / 4) (by omega), UInt32.toNat_toBitVec]
 
 /--
-SHA-256 is the hash of FIPS 180-4 §6.2, on every message shorter than 2^61 bytes.
+SHA-256 is the hash of FIPS 180-4 §6.2, on every message shorter than 2⁶¹ bytes.
 
-FIPS 180-4 §5.1.1 bounds a message at 2^64 bits, which is 2^61 bytes.
+FIPS 180-4 §5.1.1 bounds a message at 2⁶⁴ bits, which is 2⁶¹ bytes.
 -/
-theorem hash_eq_spec (msg : ByteArray) (admitted : msg.size < 2 ^ 61) : Sha256.hash msg = Spec.hash msg := by
-  simp only [Sha256.hash, Id.run, IdLoops.id_pure, IdLoops.id_bind, IdLoops.forIn_range_yield]
-  rw [forIn_range_step_yield, show ((padded msg).size - 0 + 64 - 1) / 64 = (padded msg).size / 64 by
-    have := padded_size_mod msg admitted; omega]
-  have chain := blocks_fold (padded msg) IV ((padded msg).size / 64)
-  generalize (List.range' 0 ((padded msg).size / 64) 64).foldl
-    (fun acc off => compressBlock acc (padded msg) off) IV = H at chain ⊢
-  rw [show (fun (acc : ByteArray) (j : Nat) =>
-      (((acc.set! (4 * j) (UInt8.ofNat (H[j]! >>> 24).toNat)).set! (4 * j + 1)
-        (UInt8.ofNat ((H[j]! >>> 16).toNat &&& 255))).set! (4 * j + 2)
-        (UInt8.ofNat ((H[j]! >>> 8).toNat &&& 255))).set! (4 * j + 3) (UInt8.ofNat (H[j]!.toNat &&& 255)))
-      = outStep H from rfl]
-  obtain ⟨size, bytes⟩ := out_fold H 8 (Nat.le_refl _)
-  -- The model hashes the same padded message from the same initial words.
+theorem hash_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
+    hash message = Spec.hash message := by
   have start : interpret IV = Spec.initial := by decide
-  simp only [Spec.hash, ← padded_eq msg admitted, ← start, ← chain]
-  have digestSize : (Spec.digest (interpret H)).size = 32 := by rw [← ByteArray.size_data]; simp [Spec.digest]
-  apply bytes_ext (by rw [size, digestSize])
-  intro p lt
-  rw [size] at lt
-  rw [bytes p (by omega), getElem!_pos _ p (by rw [digestSize]; exact lt), ByteArray.getElem_eq_getElem_data]
-  simp only [Spec.digest, Array.getElem_ofFn]
-  rw [interpret_words H (p / 4) (by omega), UInt32.toNat_toBitVec]
+  simp only [hash, Spec.hash, digest_eq_spec, blocks_toState, start, pad_eq_spec message admitted]
 
 end EthLib.Cryptography.Hash.Sha256

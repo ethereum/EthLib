@@ -7,9 +7,6 @@
 # Remove an entry in the pull request that removes its finding.
 # Never add one: a new finding is fixed, not listed.
 
-# The Miller loop's `while` loops compile to `Loop.forIn`, which Lean core defines with `partial`.
-reaches-opaque EthLib.Cryptography.Bls.millerLoop
-
 # The KZG trusted setup is read through `IO`, from a reference set at initialization.
 opaque EthLib.Cryptography.Kzg.TrustedSetup.globalRef
 reaches-opaque EthLib.Cryptography.Kzg.TrustedSetup.get!
