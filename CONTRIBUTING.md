@@ -80,9 +80,9 @@ A new domain with exports adds its export root to the `Exports` library.
 - Do not use `sorry`, `admit` or a new `axiom`.
   CI builds with `--wfail`, so an unfinished proof fails the build.
 - Prefer proofs the kernel checks on its own.
-- Do not use `native_decide` or `bv_decide`.
-  Each adds a generated axiom that trusts the compiler, so the kernel no longer checks the proof.
-  `scripts/check_decls_baseline.txt` lists the theorems that still use them, and the goal is to remove each one.
+- Do not use a tactic that trusts compiled code, such as `native_decide`, `bv_decide` or `decide +native`.
+  Their computed results are justified by compiler-trusting axioms rather than kernel evaluation.
+  `lake exe check-decls` fails on any use.
 - After a proof change, check its axioms with `lake exe check-decls`.
   The goal is `propext`, `Classical.choice` and `Quot.sound`, nothing else.
 - Prove what a reader cares about: round trips, injectivity, the rejection of bad input and the invariants of a state transition.
