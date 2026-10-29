@@ -2,6 +2,7 @@ import EthLib.Cryptography.Hash
 import EthLib.Cryptography.Bls
 import EthLib.Cryptography.Kzg
 import EthLib.Cryptography.Xmss
+import EthLib.Cryptography.Sphincs
 
 /-!
 # `EthLib.Cryptography`

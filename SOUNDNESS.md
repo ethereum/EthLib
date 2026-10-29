@@ -58,7 +58,7 @@ The sections below explain each row.
 This section lists the main theorems by primitive.
 It is not yet complete.
 
-No theorem states a security property: unforgeability for XMSS or BLS, or binding for KZG.
+No theorem states a security property: unforgeability for XMSS, leanSPHINCS or BLS, or binding for KZG.
 No theorem covers the code that runs, the C boundary, or timing.
 
 ### XMSS
@@ -68,6 +68,20 @@ if `keyGen seed` returns a key pair, and `sign` returns a signature for a messag
 
 It is a correctness statement.
 It says nothing about unforgeability.
+
+### leanSPHINCS
+
+`verify_keyGen_sign` (`Proofs/Sphincs/Correctness.lean`):
+if `keyGen seed` returns a key pair, and `sign` returns a signature for a message, then `verify` accepts that signature under that public key.
+
+`verify_known_answer` (`Proofs/Sphincs/KnownAnswerVerify.lean`): one pinned signature's bytes verify under one pinned public key's bytes.
+The kernel evaluates every one of the 492 permutations.
+
+`all_counters_fail_probability` (`Proofs/Sphincs/CodeSize.lean`) bounds a number: if digests were uniform, signing would fail with probability below `exp(-2^18)`.
+That digests are uniform is not proved.
+
+The 127-bit unforgeability bound of the configuration is a theorem about the specification's own Lean model, outside EthLib.
+No theorem links that model to this module.
 
 ### BLS12-381
 
@@ -147,8 +161,8 @@ EthLib makes no constant-time claim.
 
 `Hash/Keccak.lean` says it "is not intended to be constant-time".
 The field arithmetic uses Lean's `Nat`, which gives no timing guarantee.
-XMSS `keyGen` and `sign` handle secret data.
-The Python bindings expose both, as `key_gen` and `sign`, which take the secret seed.
+XMSS and leanSPHINCS `keyGen` and `sign` handle secret data.
+The Python bindings expose the XMSS ones, as `key_gen` and `sign`, which take the secret seed.
 
 ### A4. Idealisations
 
@@ -272,6 +286,11 @@ XMSS adds one more.
 Never sign two different messages at one leaf index with one secret key.
 Each leaf index names a one-time signing key, and nothing in EthLib records which leaf indices were used, so the caller must prevent reuse.
 The Lean and Python docstrings of `sign` both say so.
+
+leanSPHINCS adds another.
+Never sign more than `2^30` messages with one secret key.
+Nothing in EthLib counts signatures, so the caller must.
+The Lean docstring of `sign` says so.
 
 ### D2. Dependencies
 
