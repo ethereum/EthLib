@@ -33,10 +33,6 @@ The byte count is an argument, not read off the width, so each EthLib type names
 def ofBV (n : Nat) {w : Nat} (x : BitVec w) : Vector UInt8 n :=
   Vector.ofFn fun i => UInt8.ofBitVec (x.extractLsb' (8 * i.val) 8)
 
-/-- The bit vector whose little-endian bytes these are. -/
-def toBV {n : Nat} (v : Vector UInt8 n) : BitVec (8 * n) :=
-  BitVec.ofNat (8 * n) (fromLittleEndian v)
-
 /-- Byte `i` of `ofBV n x` is bits `8 i` to `8 i + 7` of `x`. -/
 @[simp] theorem getElem_ofBV (n : Nat) {w : Nat} (x : BitVec w) (i : Nat) (hi : i < n) :
     (ofBV n x)[i] = UInt8.ofBitVec (x.extractLsb' (8 * i) 8) := by
@@ -83,17 +79,6 @@ theorem ofBV_eq_littleEndian (n : Nat) {w : Nat} (y : BitVec w) :
   rw [show (256 : Nat) ^ i = 2 ^ (8 * i) by rw [pow_mul]; norm_num]
   simp
 
-@[simp] theorem ofBV_toBV {n : Nat} (v : Vector UInt8 n) : ofBV n (toBV v) = v := by
-  rw [toBV, ofBV_ofNat, littleEndian_fromLittleEndian]
-
-theorem ofBV_injective (n : Nat) : Function.Injective (ofBV n (w := 8 * n)) := by
-  intro x y h
-  apply LeanXmss.bytesLE_injective
-  rw [← toList_ofBV, ← toList_ofBV, h]
-
-@[simp] theorem toBV_ofBV {n : Nat} (x : BitVec (8 * n)) : toBV (ofBV n x) = x :=
-  ofBV_injective n (ofBV_toBV _)
-
 /-! ## The bytes of each object
 
 Each EthLib object has its own length constant, so each gets its own conversion and its own lemma.
@@ -136,10 +121,6 @@ abbrev ofOutput {w : Nat} (x : BitVec w) : Vector UInt8 32 := ofBV 32 x
 
 @[simp] theorem toList_ofMessage (x : LeanXmss.Message) :
     (ofMessage x).toList = LeanXmss.bytesLE 32 x :=
-  toList_ofBV 32 x
-
-@[simp] theorem toList_ofOutput (x : LeanXmss.HashOutput) :
-    (ofOutput x).toList = LeanXmss.bytesLE 32 x :=
   toList_ofBV 32 x
 
 /-- The bytes of a fixed-size object, as a list. -/

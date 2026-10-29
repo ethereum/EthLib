@@ -25,8 +25,6 @@ open EthLib.Cryptography.Xmss.Constants
 def layerOf (layer : Layer) : LeanXmss.Layer :=
   ⟨layer.toNat, by cases layer <;> decide⟩
 
-@[simp] theorem val_layerOf (layer : Layer) : (layerOf layer).val = layer.toNat := rfl
-
 /-- A key's index as the proof writes it, below `2^32`. -/
 def keyOf (e : UInt32) : LeanXmss.KeyIndex :=
   ⟨e.toNat, by simpa [LeanXmss.lifetime, LeanXmss.numLayers, LeanXmss.layerHeight] using e.toNat_lt⟩
@@ -62,10 +60,6 @@ theorem toList_encodeAddress (tau : Fin 32) (mu : Fin 8) (hi : Fin (2 ^ 24)) (lo
   rfl
 
 /-! ## The addresses of a key -/
-
-/-- `hi_l(a)`, as EthLib and as the proof compute it. -/
-@[simp] theorem val_layerHi (layer : Layer) (a : Fin (2 ^ 23)) :
-    (layerHi layer a).val = LeanXmss.layerHi (layerOf layer) a.val := rfl
 
 theorem toList_addrChain (layer : Layer) (e : UInt32) (mu : Fin (CHAIN_LENGTH - 1)) :
     (addrChain layer e mu).toList

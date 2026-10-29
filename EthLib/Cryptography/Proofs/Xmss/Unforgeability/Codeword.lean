@@ -24,10 +24,9 @@ open EthLib.Cryptography.Xmss.Constants
 /-- The integer the bytes of a bit vector encode is the bit vector's. -/
 theorem fromLittleEndian_ofBV (n : Nat) (x : BitVec (8 * n)) :
     fromLittleEndian (ofBV n x) = x.toNat := by
-  have h := congrArg BitVec.toNat (toBV_ofBV x)
-  rw [toBV, BitVec.toNat_ofNat] at h
-  -- The bytes encode an integer below `256^n = 2^(8n)`, so the modulus does nothing.
-  rwa [Nat.mod_eq_of_lt (by simpa [pow_mul] using fromLittleEndian_lt (ofBV n x))] at h
+  rw [ofBV_eq_littleEndian, fromLittleEndian_littleEndian]
+  -- The integer is below `2^(8n) = 256^n`, so the modulus does nothing.
+  exact Nat.mod_eq_of_lt (by simpa [pow_mul] using x.isLt)
 
 /-- A digest's integer is its bit vector's. -/
 @[simp] theorem fromLittleEndian_ofDigest (x : LeanXmss.Digest) :
