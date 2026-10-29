@@ -125,7 +125,6 @@ either: the invalid vectors that write an array assert only the name the refusal
   Objects: a name written into one is read back from it, and every name an object carries is one it was written from, so a written struct never trips the undeclared-field refusal.
   The mapping is deliberately not canonical, and a checked counterexample gives two documents for one value.
   [Missing fields](../Proofs/Ssz/Codec/JsonLaws.lean): a container or progressive container document that leaves out a declared field is refused.
-- [SHA-256](../../Cryptography/Proofs/Hash/Sha256.lean): roots hash with `EthLib.Cryptography.Hash.Sha256`, which is proved equal to FIPS 180-4 on every message shorter than 2^61 bytes, with its constants derived from prime roots.
 
 ### Domains and limits
 
