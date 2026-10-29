@@ -42,6 +42,8 @@ The proof writes that scheme itself, in the namespace `LeanXmss`.
 
 It does not mention EthLib's definitions.
 
+`Proofs/Xmss/Unforgeability.lean` carries its theorem to EthLib's definitions.
+
 The files keep leanerVM's style, not EthLib's, so they can be compared with leanerVM line by line.
 
 ## What changed here
