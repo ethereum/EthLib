@@ -10,22 +10,22 @@ namespace EthLib.Cryptography.Hash.Sha256
 
 /-! ## 32-bit primitives -/
 
-@[inline] private def rotr (x : UInt32) (n : UInt32) : UInt32 :=
+@[inline] def rotr (x : UInt32) (n : UInt32) : UInt32 :=
   (x >>> n) ||| (x <<< (32 - n))
 
-@[inline] private def shr (x : UInt32) (n : UInt32) : UInt32 := x >>> n
+@[inline] def shr (x : UInt32) (n : UInt32) : UInt32 := x >>> n
 
-@[inline] private def ch  (x y z : UInt32) : UInt32 := (x &&& y) ^^^ ((~~~x) &&& z)
-@[inline] private def maj (x y z : UInt32) : UInt32 := (x &&& y) ^^^ (x &&& z) ^^^ (y &&& z)
+@[inline] def ch  (x y z : UInt32) : UInt32 := (x &&& y) ^^^ ((~~~x) &&& z)
+@[inline] def maj (x y z : UInt32) : UInt32 := (x &&& y) ^^^ (x &&& z) ^^^ (y &&& z)
 
-@[inline] private def bigSigma0 (x : UInt32) : UInt32 := rotr x 2  ^^^ rotr x 13 ^^^ rotr x 22
-@[inline] private def bigSigma1 (x : UInt32) : UInt32 := rotr x 6  ^^^ rotr x 11 ^^^ rotr x 25
-@[inline] private def smallSigma0 (x : UInt32) : UInt32 := rotr x 7  ^^^ rotr x 18 ^^^ shr x 3
-@[inline] private def smallSigma1 (x : UInt32) : UInt32 := rotr x 17 ^^^ rotr x 19 ^^^ shr x 10
+@[inline] def bigSigma0 (x : UInt32) : UInt32 := rotr x 2  ^^^ rotr x 13 ^^^ rotr x 22
+@[inline] def bigSigma1 (x : UInt32) : UInt32 := rotr x 6  ^^^ rotr x 11 ^^^ rotr x 25
+@[inline] def smallSigma0 (x : UInt32) : UInt32 := rotr x 7  ^^^ rotr x 18 ^^^ shr x 3
+@[inline] def smallSigma1 (x : UInt32) : UInt32 := rotr x 17 ^^^ rotr x 19 ^^^ shr x 10
 
 /-! ## Round constants -/
 
-private def K : Array UInt32 := #[
+def K : Array UInt32 := #[
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
   0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
   0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
@@ -35,9 +35,16 @@ private def K : Array UInt32 := #[
   0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
   0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2 ]
 
+/-! ## Initial hash value -/
+
+/-- The initial hash value, FIPS 180-4 §5.3.3. -/
+def IV : Array UInt32 := #[
+  0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+  0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 ]
+
 /-! ## Padding -/
 
-private def padded (msg : ByteArray) : ByteArray := Id.run do
+def padded (msg : ByteArray) : ByteArray := Id.run do
   let len      := msg.size
   let bitLen   : UInt64 := UInt64.ofNat (len * 8)
   let after80  := len + 1
@@ -54,13 +61,13 @@ private def padded (msg : ByteArray) : ByteArray := Id.run do
 
 /-! ## Compression function over a 64-byte block -/
 
-private def big32 (b : ByteArray) (off : Nat) : UInt32 :=
+def big32 (b : ByteArray) (off : Nat) : UInt32 :=
   (UInt32.ofNat b[off]!.toNat <<< 24)
   ||| (UInt32.ofNat b[off + 1]!.toNat <<< 16)
   ||| (UInt32.ofNat b[off + 2]!.toNat <<< 8)
   ||| UInt32.ofNat b[off + 3]!.toNat
 
-private def compressBlock (H : Array UInt32) (buf : ByteArray) (off : Nat) : Array UInt32 := Id.run do
+def compressBlock (H : Array UInt32) (buf : ByteArray) (off : Nat) : Array UInt32 := Id.run do
   -- Schedule W[0..63].
   let mut W : Array UInt32 := Array.replicate 64 0
   for t in [:16] do W := W.set! t (big32 buf (off + 4*t))
@@ -88,10 +95,7 @@ private def compressBlock (H : Array UInt32) (buf : ByteArray) (off : Nat) : Arr
 
 /-- SHA-256 of an arbitrary-length `ByteArray`. -/
 def hash (msg : ByteArray) : ByteArray := Id.run do
-  -- Initial hash value (FIPS 180-4 §5.3.3).
-  let mut H : Array UInt32 := #[
-    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 ]
+  let mut H : Array UInt32 := IV
   let buf := padded msg
   for off in [0 : buf.size : 64] do
     H := compressBlock H buf off
