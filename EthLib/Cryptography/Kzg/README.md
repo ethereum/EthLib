@@ -6,7 +6,7 @@ A 48-byte proof then opens the committed polynomial at any point.
 
 Ethereum uses KZG for blobs (EIP-4844, from Deneb) and for the cells of data availability sampling (EIP-7594, from Fulu).
 
-This page was checked against EthLib commit `a0838f3`.
+This page was checked against EthLib commit `6390c73`.
 Check it again when a definition it names changes.
 
 ## Source
@@ -22,9 +22,23 @@ It said the KZG specification should exist only in `ethereum/cryptography-specs`
 The links above point to consensus-specs commit `8a3df1d79d70000801407e33d660171be9cd06d1`.
 It is the parent of that removal, so it holds the last text of both documents.
 
-Every function of the two documents has a Lean definition, except `is_power_of_two`.
+Every function of the two documents has a Lean definition, except `is_power_of_two`, `coset_shift_for_cell` and `compute_kzg_proof_multi_impl`.
 Each keeps its name, in Lean's casing: `compute_cells_and_kzg_proofs` is `computeCellsAndKzgProofs`.
 The private `_fft_field` is `fftFieldAux`.
+
+Three steps of the cell operations use a faster method than the documents:
+
+```text
+step                       the documents                                 EthLib
+the cells of a blob        evaluate_polynomialcoeff at each point        one FFT on 8192 points
+the 128 cell proofs        compute_kzg_proof_multi_impl for each cell    all at once, by FK20
+one cell's interpolation   interpolate_polynomialcoeff                   one inverse FFT on the cell's coset
+```
+
+`computeCells` uses the first.
+`computeCellsAndKzgProofs` and `recoverCellsAndKzgProofs` use the first two.
+`verifyCellKzgProofBatch` uses the third.
+FK20 is the method of Feist and Khovratovich, "Fast amortized KZG proofs", [ePrint 2023/033](https://eprint.iacr.org/2023/033).
 
 The trusted setup is consensus-specs `presets/mainnet/trusted_setups/trusted_setup_4096.json`.
 `TrustedSetupData.lean` records the commit it comes from and its sha256.
@@ -88,7 +102,7 @@ That changes no value and no behaviour.
 
 The proofs are in `EthLib/Cryptography/Proofs/Kzg/`.
 
-Apart from the rejection of malformed input, they cover the steps the operations are built from, not the operations' results.
+Apart from the rejection of malformed input, they cover steps the operations are built from, not the operations' results.
 
 - Malformed input is rejected with a typed error.
   The public operations reject a wrong size, and lists of different lengths (`Core.lean`, `Cells.lean`, `Recovery.lean`).
@@ -97,6 +111,8 @@ Apart from the rejection of malformed input, they cover the steps the operations
   Without that bound it is not: `00` and `00 00` both decode to 0.
   Decoding the `len`-byte encoding of `n` returns `n` when `n < 256^len` (`bytesBEToNat_intToBytesBE_of_lt`), and `n mod 256^len` otherwise (`bytesBEToNat_intToBytesBE`).
   Encoding a decoded string at its own length returns that string (`intToBytesBE_bytesBEToNat`).
+- Cells (`Cells.lean`).
+  Encoding the 64 field elements of a cell as bytes and decoding them returns the same elements (`cellToCosetEvals_cosetEvalsToCell`).
 - Bit reversal (`BitReversal.lean`).
   Reversing the bits of an index below `2^k` twice returns it (`reverseBits_reverseBits`).
   The bit-reversal permutation of an array of `2^k` elements is its own inverse (`bitReversalPermutation_bitReversalPermutation`).
@@ -110,6 +126,7 @@ Apart from the rejection of malformed input, they cover the steps the operations
 - Interpolation and division.
   Interpolation through fewer than 8192 distinct points returns a polynomial through every point (`interpolatePolynomialcoeff_spec_of_distinct`).
   Long division returns a quotient `q` with `a(x) = q(x) * b(x) + r(x)`, where `r` is the remainder it computes (`dividePolynomialcoeff_eval_identity`).
+  No operation calls these two functions: the faster methods above replace them.
 - Recovery.
   Take at least 64 of the 128 cells, at distinct valid indices, holding the values of a polynomial with 4096 coefficients.
   Recovery returns that polynomial (`recoverPolynomialcoeff_correct_of_valid_indices`, `RecoveryReconstruction.lean`).
@@ -128,6 +145,10 @@ Apart from the rejection of malformed input, they cover the steps the operations
 - What an accepted input returns.
   No theorem states the result of an operation on valid input.
   In particular, none says that an honest proof verifies.
+- That the faster methods compute the documents' values.
+  No theorem relates the cells from one FFT (`extendedEvaluations`), FK20 (`computeCellsAndKzgProofsPolynomialcoeff`), the FFT over G1 points (`fftG1`) or interpolation by inverse FFT (`interpolateCosetEvals`) to the functions they replace.
+  `FftEvaluation.lean` proves what the FFT itself computes, but no theorem carries that through to the cells.
+  The test vectors check the results byte for byte, on the vectors' inputs only.
 - Any security property, such as binding.
   Binding also needs the ceremony secret to stay unknown, which no proof can show.
 - The trusted setup itself.
@@ -150,4 +171,4 @@ It lists `TrustedSetup.get!` and `KzgM` as `reaches-opaque`.
 That kind means a definition reaches an opaque constant when unfolded, not that it is opaque itself.
 
 The pairing that verification uses comes from the BLS module.
-The baseline lists its `Fp2.powNat` and `Fp12.powNat` as `partial`, and its `millerLoop` as `reaches-opaque`.
+The baseline lists its `millerLoop` as `reaches-opaque`.

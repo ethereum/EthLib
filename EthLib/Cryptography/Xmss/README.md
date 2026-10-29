@@ -22,6 +22,9 @@ So a key signs at `2^32` leaf indices, each one at most once, ever.
 
 A public key is 32 bytes and a signature 2404 bytes.
 
+This page was checked against EthLib commit `6390c73`.
+Check it again when a definition it names changes.
+
 ## Source
 
 The specification is the note "leanXMSS for Ethereum PQ-Consensus, specification draft", [`doc/lean_xmss/main.tex`](https://github.com/leanEthereum/leanVM/blob/4af2cdddd7cd41b9df2cc7e123e314a91b0b4462/doc/lean_xmss/main.tex) at commit `4af2cdddd7cd41b9df2cc7e123e314a91b0b4462`.
@@ -56,7 +59,7 @@ To sign, the note's top key signs the root `X^0_{16,b}` of bottom tree `b`.
 
 `sign` computes that root by folding the bottom key's leaf up its own path, 16 hashes, instead of the whole tree.
 
-`fold_path` proves the two equal, and `verify_sign` uses it.
+`fold_path` proves the two equal.
 
 ## Operations
 
@@ -82,15 +85,27 @@ Nothing in EthLib records which leaf indices a key has signed, so the caller mus
 
 `tests/cryptography/xmss/` has cases for `key_gen`, `sign` and `verify`.
 
-The proofs also pin one full key and one signature (`Proofs/Xmss/KnownAnswer*.lean`).
+The proofs also pin one public key and one signature (`Proofs/Xmss/KnownAnswer*.lean`).
 
 The key grows from the seed `S_0[i] = 37 i + 11 mod 256`, and the signature signs `m[i] = 7 i + 3` at leaf index `0xA5C37E19`.
 
-The public key and the signature bytes were computed outside EthLib, by an independent implementation of the note.
+`Proofs/Xmss/KnownAnswer.lean` says that an independent implementation of the note computed the public key and the signature bytes, outside EthLib.
+
+Neither it nor the vectors record which implementation, or which revision of it.
 
 The `key_gen_known_answer` and `sign_known_answer` cases hold the same bytes.
 
 The other cases are EthLib's own: nothing outside EthLib has checked them yet.
+
+Key generation and signing build `2^16` one-time keys per tree, which takes minutes per case.
+
+So a plain `pytest` run, as in CI, does not run `key_gen` or `sign` on a valid seed.
+
+It reads those cases back, and only verifies them.
+
+It runs everything else: the `verify` cases and the inputs that `key_gen` and `sign` reject.
+
+Recomputing the valid `key_gen` and `sign` cases needs `ETHLIB_SLOW_VECTORS=1`.
 
 ## What is proved
 
@@ -107,7 +122,8 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
   A codeword's digits sum to `T = 106` (`sum_of_codeword`).
   No two digests share a codeword (`eq_of_codeword`).
   Two distinct codewords are incomparable: each has a digit below the other's (`codeword_incomparable`).
-  The code has `323504418562481994618807509487594` words, so one trial succeeds with probability `2^-20.0045` (`card_onTarget`, `code_probability`).
+  The code has `323504418562481994618807509487594` words (`card_onTarget`).
+  That count, divided by `2^128`, lies between `2^-21` and `2^-20` (`code_probability`).
 - Domain separation (`Address.lean`, `TweakableHash.lean`).
   An address determines its type, its position and both fields (`encodeAddress_inj`).
   The two layers never share an address (`layerHi_inj`).
@@ -126,11 +142,19 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
 ## What is not proved
 
 - Any security property, such as unforgeability, or the `q / 2^127` bound of the note.
-- That signing fails with small probability.
-  `code_probability` gives one trial's chance, if digests were uniform.
-  That all `2^32` trials fail with probability below `exp(-2^11)` is only argued in the docstring of `MAX_RANDOMIZER_TRIALS`.
-- That every codeword is the codeword of some digest.
-  `eq_of_codeword` shows at most one digest per codeword, so at most `|C|` digests are codewords.
+  The note says that the leanVM repository proves that bound in Lean, in `formal/lean_xmss/`.
+  EthLib does not import or check that proof.
+- Any probability that signing succeeds or fails.
+  `code_probability` compares two counts, not the chance of a random event.
+  Reading it as one trial's chance needs the digest to be uniform, a model of the hash rather than a theorem.
+  It also needs every codeword to be the codeword of some digest, which is not proved.
+  `eq_of_codeword` shows at most one digest per codeword, so at most `|C|` digests are codewords, where `|C|` is the size of the code.
+  That bounds one trial's chance from above, while a bound on how often signing fails needs it from below.
+  Combining the `2^32` trials into one failure bound also needs their digests to be independent, another model of the hash.
+  That all `2^32` trials fail with probability below `exp(-2^11)` is only argued, in the note and in the docstring of `MAX_RANDOMIZER_TRIALS`.
+- That `keyGen` and `sign` compute the known answer's key and signature.
+  The proofs check the pieces of key generation listed above, and that the signature verifies.
+  The vector suite recomputes both only with `ETHLIB_SLOW_VECTORS=1`.
 - That this module and any other implementation compute the same keys and signatures on inputs other than the known answer.
 
 ## What the kernel cannot evaluate
