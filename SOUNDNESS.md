@@ -58,7 +58,7 @@ The sections below explain each row.
 This section lists the main theorems by primitive.
 It is not yet complete.
 
-One theorem states a security property: unforgeability of leanXMSS, about a model of the scheme rather than EthLib's definitions.
+One theorem states a security property: unforgeability of leanXMSS, for EthLib's own definitions.
 No theorem states unforgeability for BLS, or binding for KZG.
 No theorem covers the code that runs, the C boundary, or timing.
 
@@ -75,9 +75,18 @@ in the random oracle model, an adversary whose experiment makes at most `q >= 1`
 
 The proof comes from leanerVM, and `Proofs/Xmss/Security/README.md` lists what changed here.
 
-It is about the scheme as the proof writes it, in the namespace `LeanXmss`, not about EthLib's `keyGen`, `sign` and `verify`.
+It is about the scheme as the proof writes it, in the namespace `LeanXmss`.
 
-Its statement is written with VCVio's oracle computations and probabilities, so their definitions are part of what it says.
+`Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability.lean`) carries the same bound to EthLib's `keyGenWith`, `signWith` and `verifyWith`.
+Its game runs those definitions, with the hash `H` a query to the random oracle.
+`keyGen`, `sign` and `verify` are the same definitions with Keccak-256 as `H`.
+
+Its game follows the note's section "Security".
+The adversary gets the public key, queries `H`, and requests signatures, never at the same leaf index twice.
+It wins when its forgery verifies and no request for the forged message returned the forged signature.
+The budget `q` counts every hash call of the game, including those of key generation, signing and the final verification.
+
+Both statements are written with VCVio's oracle computations and probabilities, so their definitions are part of what they say.
 
 ### BLS12-381
 

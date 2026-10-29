@@ -127,6 +127,10 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
   An honest path leads from a key's leaf to its tree's root (`fold_path`, `Tree.lean`).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
+- Unforgeability.
+  In the random oracle model, an adversary that makes at most `q >= 1` hash calls forges with probability at most `q / 2^127` (`unforgeable`, `Unforgeability.lean`).
+  The game is the note's section "Security", run on `keyGenWith`, `signWith` and `verifyWith` with `H` a query to the oracle.
+  The bound comes from the security proof vendored in `Security/`.
 - Known answers.
   The signature verifies under the public key (`verify_known_answer`).
   It rejects with a changed message, the neighbouring leaf index, or a changed path (`verify_wrong_message`, `verify_wrong_leafIndex`, `verify_tampered_path`).
@@ -134,7 +138,9 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
 
 ## What is not proved
 
-- Any security property, such as unforgeability, or the `q / 2^127` bound of the note.
+- Any security property beyond the random oracle model.
+  The theorem says nothing about an attack that uses the structure of Keccak-256.
+- Security against a quantum adversary.
 - That signing fails with small probability.
   `code_probability` gives one trial's chance, if digests were uniform.
   That all `2^32` trials fail with probability below `exp(-2^11)` is only argued in the docstring of `MAX_RANDOMIZER_TRIALS`.
