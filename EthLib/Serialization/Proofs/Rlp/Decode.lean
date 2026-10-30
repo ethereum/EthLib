@@ -21,7 +21,7 @@ namespace EthLib.Serialization.Rlp
 open Vectors
 
 /-- The error of a failure, or `none` for a success. -/
-private def errorOf (result : Except RlpError Item) : Option RlpError :=
+def errorOf (result : Except RlpError Item) : Option RlpError :=
   match result with
   | .error e => some e
   | .ok _ => none

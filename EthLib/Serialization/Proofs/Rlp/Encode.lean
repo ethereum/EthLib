@@ -27,7 +27,7 @@ open Vectors
 The kernel compares two lists of bytes in linear time.
 
 With `decide +kernel`, comparing two `ByteArray`s of a kilobyte takes more than 6 GB of memory instead. -/
-private def output (result : Except RlpError ByteArray) : Option (List UInt8) :=
+def output (result : Except RlpError ByteArray) : Option (List UInt8) :=
   result.toOption.map (·.data.toList)
 
 /-! ## The bound of a length

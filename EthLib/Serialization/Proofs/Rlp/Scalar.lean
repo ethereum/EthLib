@@ -84,7 +84,7 @@ Each claim pins one input to the scalar it holds, or to the error that rejects i
 open Vectors
 
 /-- The error of a failure, or `none` for a success. -/
-private def scalarError (result : Except RlpError Nat) : Option RlpError :=
+def scalarError (result : Except RlpError Nat) : Option RlpError :=
   match result with
   | .error e => some e
   | .ok _ => none
