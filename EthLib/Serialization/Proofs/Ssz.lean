@@ -72,6 +72,7 @@ import EthLib.Serialization.Proofs.Ssz.Codec.Totality
 import EthLib.Serialization.Proofs.Ssz.Codec.WalkerClosure
 import EthLib.Serialization.Proofs.Ssz.Codec.WalkerLaws
 import EthLib.Serialization.Proofs.Ssz.Merkle.Authentication
+import EthLib.Serialization.Proofs.Ssz.Merkle.Branch
 import EthLib.Serialization.Proofs.Ssz.Merkle.CommitmentTree
 import EthLib.Serialization.Proofs.Ssz.Merkle.ClaimChecks
 import EthLib.Serialization.Proofs.Ssz.Merkle.Gindex

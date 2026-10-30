@@ -23,6 +23,8 @@ Ssz/Merkle    bounded and progressive trees, indices, and verification
 
 Hashing uses `EthLib.Cryptography.Hash.Sha256`.
 
+The perfect trees are the shared Merkle trees of [`EthLib.Cryptography.Merkle`](../../Cryptography/Merkle/), with a node hash that ignores the position.
+
 The conformance harness lives in [`ethereum/ssz-specs`](https://github.com/ethereum/ssz-specs), under `lean/`.
 It runs this specification against the released test vectors, and against the Python implementation on generated cases.
 
@@ -107,6 +109,8 @@ either: the invalid vectors that write an array assert only the name the refusal
 - [Type paths](../Proofs/Ssz/Codec/PathSelection.lean): recursive selections through present fields and elements agree with the value walker across every supported type family.
   Packed elements select their containing chunk, reserved steps select mixing words, and union descent follows the active option.
   A type-only index can name an absent position without asserting that a value is present; every readable padding node remains covered by the general branch theorem.
+- [Branches as Merkle folds](../Proofs/Ssz/Merkle/Branch.lean): climbing a branch from its leaf is the fold of the shared Merkle tree, with the generalized index as the leaf index.
+  The shared tree's completeness and binding theorems therefore apply to SSZ branches.
 - [Authentication](../Proofs/Ssz/Merkle/Authentication.lean): two accepted branches at the same index and root either open the same leaf or exhibit a SHA-256 collision between actual 64-byte branch inputs.
   [Multiproof binding](../Proofs/Ssz/Merkle/MultiproofBinding.lean) gives the same guarantee for shared claims across different requests, with collision witnesses from the verifier's hash inputs.
 - [Whole-value binding](../Proofs/Ssz/Codec/Binding.lean): admissible values of the same well-formed type with equal roots are equal, or their Merkle computations contain distinct 64-byte inputs with equal SHA-256 hashes.

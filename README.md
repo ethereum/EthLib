@@ -13,6 +13,7 @@ permanently if the performance of this library is sufficient.
 
 - [BLS12-381 signatures](EthLib/Cryptography/Bls/)
 - [KZG polynomial commitments](EthLib/Cryptography/Kzg/)
+- [Merkle trees](EthLib/Cryptography/Merkle/)
 - [XMSS signatures](EthLib/Cryptography/Xmss/)
 
 ### Precompiles

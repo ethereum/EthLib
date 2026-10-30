@@ -1,5 +1,6 @@
 import EthLib.Serialization.Proofs.Ssz.Merkle.HelperAntichain
 import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofAcceptance
+import EthLib.Serialization.Proofs.Ssz.Merkle.Branch
 
 /-! A multiproof of one claim is the single-item proof of that claim. -/
 
@@ -91,18 +92,6 @@ theorem getHelperIndices_singleton (index : Nat) :
     rw [eraseDups_of_nodup (decreasing.imp Nat.ne_of_gt),
       List.filter_eq_self.mpr (fun node member => by simpa using outside node member),
       List.mergeSort_of_pairwise (decreasing.imp fun ordered => by simpa using Nat.le_of_lt ordered)]
-
-/-- Climbing one more node adds one hash at the top of the climb. -/
-private theorem climbBranch_append (index : Nat) : ∀ (level : Nat) (node last : Bytes)
-    (siblings : List Bytes), climbBranch index level node (siblings ++ [last]) =
-      if gindexBit index (level + siblings.length)
-      then combine last (climbBranch index level node siblings)
-      else combine (climbBranch index level node siblings) last
-  | _, _, _, [] => by simp [climbBranch]
-  | level, node, last, sibling :: rest => by
-    simp only [List.cons_append, climbBranch, List.length_cons]
-    rw [climbBranch_append index (level + 1)]
-    simp [Nat.add_assoc, Nat.add_comm 1]
 
 /-- With one claim, the multiproof fold rebuilds the root the single-item climb reaches. -/
 theorem calculateMultiMerkleRootUnchecked_singleton {leaf root : Bytes} {proof : List Bytes}

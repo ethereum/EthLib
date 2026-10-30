@@ -1,4 +1,5 @@
 import EthLib.Cryptography.Xmss.Tree
+import EthLib.Cryptography.Proofs.Merkle.Binding
 
 /-!
 # Proofs: `Xmss.Tree`
@@ -8,6 +9,10 @@ An honest path leads from a key's leaf to the root of its tree.
 On the bottom layer, key `idx` reaches the root of bottom tree `floor(idx / 2^16)`.
 
 On the top layer, key `b < 2^16` reaches the root of the one top tree.
+
+A forged path that reaches the same root exposes a second preimage of `Th`.
+
+Each statement specializes one proved for every Merkle tree.
 -/
 
 namespace EthLib.Cryptography.Xmss
@@ -24,67 +29,39 @@ theorem node_succ (l : Nat) (h : l + 1 ≤ LAYER_HEIGHT) (j : Nat) :
       (node pp seed layer l (by omega) (2 * j)) (node pp seed layer l (by omega) (2 * j + 1)) :=
   rfl
 
-/-! ## Indices -/
-
-/-- Flipping the bottom bit, written as arithmetic. -/
-private theorem xor_one (n : Nat) : n ^^^ 1 = 2 * (n / 2) + (1 - n % 2) := by
-  -- The bits above the bottom one are untouched.
-  have hd : (n ^^^ 1) / 2 = n / 2 := by rw [Nat.xor_div_two]; simp
-  -- The bottom one is swapped.
-  have hm : (n ^^^ 1) % 2 = 1 ↔ n % 2 = 0 := by simp
-  have h1 := Nat.mod_two_eq_zero_or_one n
-  have h2 := Nat.mod_two_eq_zero_or_one (n ^^^ 1)
-  omega
-
 /-! ## The path reaches the root -/
-
-/-- The verifier's node on each level is the signer's, all the way up. -/
-theorem climbUpto_eq_node (e : Nat) :
-    ∀ (levels : Nat) (hl : levels ≤ LAYER_HEIGHT),
-      Internal.climbUpto pp layer e (path pp seed layer e) (node pp seed layer 0 (by omega) e)
-          levels hl
-        = node pp seed layer levels hl (e >>> levels) := by
-  intro levels
-  induction levels with
-  | zero => intro _; rfl
-  | succ l ih =>
-    intro hl
-    -- Below the last step the two sides agree by the induction hypothesis.
-    simp only [Internal.climbUpto, ih (by omega)]
-    simp only [path, Vector.getElem_ofFn, Internal.climbStep, node_succ l hl]
-    have hhalf : e >>> (l + 1) = (e >>> l) / 2 := Nat.shiftRight_succ _ _
-    rcases Nat.mod_two_eq_zero_or_one (e >>> l) with hr | hr
-    · -- Bit `l` is zero, so the path node is the left child.
-      have hb : 2 * (e >>> (l + 1)) + 1 = siblingIndex e l := by
-        rw [hhalf]
-        simp only [siblingIndex, xor_one]
-        omega
-      have ha : 2 * (e >>> (l + 1)) = e >>> l := by
-        rw [hhalf]
-        omega
-      rw [hb, ha]
-      simp [hr]
-    · -- Bit `l` is one, so the sibling is the left child.
-      have hb : 2 * (e >>> (l + 1)) + 1 = e >>> l := by
-        rw [hhalf]
-        omega
-      have ha : 2 * (e >>> (l + 1)) = siblingIndex e l := by
-        rw [hhalf]
-        simp only [siblingIndex, xor_one]
-        omega
-      rw [hb, ha]
-      simp [hr]
 
 /-- An honest path leads from key `e`'s leaf to node `floor(e / 2^16)` on the top level. -/
 theorem fold_path (e : Nat) :
     fold pp layer e (node pp seed layer 0 (by omega) e) (path pp seed layer e)
       = node pp seed layer LAYER_HEIGHT (Nat.le_refl _) (e >>> LAYER_HEIGHT) :=
-  climbUpto_eq_node e LAYER_HEIGHT (Nat.le_refl _)
+  Merkle.fold_path e
 
 /-- On the top layer, key `b < 2^16` reaches the root of the one top tree. -/
 theorem fold_path_top {b : Nat} (hb : b < 2 ^ LAYER_HEIGHT) :
     fold pp .top b (node pp seed .top 0 (by omega) b) (path pp seed .top b)
-      = node pp seed .top LAYER_HEIGHT (Nat.le_refl _) 0 := by
-  rw [fold_path, Nat.shiftRight_eq_div_pow, Nat.div_eq_of_lt hb]
+      = node pp seed .top LAYER_HEIGHT (Nat.le_refl _) 0 :=
+  Merkle.fold_path_root hb
+
+/-! ## A path binds its leaf -/
+
+/-- A path from key `e`'s leaf that reaches the root of its tree is honest.
+
+That root is node `floor(e / 2^16)` on the top level: bottom tree `b`'s, or the top tree's.
+
+Otherwise some level `lambda` holds a second preimage of `Th` under `A_node(l, lambda, floor(e / 2^lambda))`:
+
+- one input is that node's two honest children;
+- the other is the pair the forged path hashes there.
+-/
+theorem fold_eq_node_binding {e : Nat} {leaf : Digest} {pi : Vector Digest LAYER_HEIGHT}
+    (heq : fold pp layer e leaf pi
+      = node pp seed layer LAYER_HEIGHT (Nat.le_refl _) (e >>> LAYER_HEIGHT)) :
+    (leaf = node pp seed layer 0 (by omega) e ∧ pi = path pp seed layer e) ∨
+      ∃ l : Fin LAYER_HEIGHT, Merkle.Collision (nodeHash pp layer) l.succ (e >>> (l.val + 1))
+        (node pp seed layer l (by omega) (2 * (e >>> (l.val + 1))),
+          node pp seed layer l (by omega) (2 * (e >>> (l.val + 1)) + 1))
+        (Merkle.climbChildren (nodeHash pp layer) e pi leaf l) :=
+  Merkle.fold_eq_node_binding heq
 
 end EthLib.Cryptography.Xmss

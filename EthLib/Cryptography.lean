@@ -1,6 +1,7 @@
 import EthLib.Cryptography.Hash
 import EthLib.Cryptography.Bls
 import EthLib.Cryptography.Kzg
+import EthLib.Cryptography.Merkle
 import EthLib.Cryptography.Xmss
 
 /-!
