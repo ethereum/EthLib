@@ -16,25 +16,6 @@ noncomputable def globalHighDirectUniformImpl :
           (RevealProbeOracleSimulation.World GlobalChainValueIndex))) :=
   globalCausalUniformImpl
 
-noncomputable abbrev globalHighDirectHashFromHighImpl
-    (high : GlobalChainValueIndex → Digest)
-    (secretKey : SecretKey) :
-    QueryImpl HashSpec
-      (StateT GlobalCausalHashState
-        (OracleComp
-          (RevealProbeOracleSimulation.World GlobalChainValueIndex))) :=
-  globalCausalAttackerHashQueryFromHigh high secretKey
-
-noncomputable abbrev globalHighDirectHashImpl
-    (keyView : ProgrammedGlobalChainKeygenView)
-    (edgeHigh : GlobalChainEdgeIndex → Digest) :
-    QueryImpl HashSpec
-      (StateT GlobalCausalHashState
-        (OracleComp
-          (RevealProbeOracleSimulation.World GlobalChainValueIndex))) :=
-  globalHighDirectHashFromHighImpl
-    (globalChainValueHighTableOfEdges edgeHigh) keyView.secretKey
-
 noncomputable def globalHighDirectOracleExecution
     (keyView : ProgrammedGlobalChainKeygenView)
     (edgeHigh : GlobalChainEdgeIndex → Digest)
@@ -379,7 +360,6 @@ def globalHighMonitoredDirectProjection
     (((result.1.1.1, result.1.2),
       (result.2.1, result.2.2.1.causal)), result.2.2.1.trace))
 
-
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 2000000
 
@@ -497,14 +477,6 @@ theorem globalHighMonitoredPublicProjection_eq_append_direct
     globalHighMonitoredDirectProjection
   rw [globalHighMonitored_forgeryProbeTrace_eq_direct result]
   rfl
-
-theorem evalDist_map_congr_of_evalDist_eq
-    (project : α → β) (left right : ProbComp α)
-    (hdist : left =ᵈ right) :
-    (project <$> left) =ᵈ (project <$> right) :=
-  hdist.map project
-
-
 
 abbrev GlobalHighDirectTracedState :=
   GlobalCausalHashState × AttackerActionTrace

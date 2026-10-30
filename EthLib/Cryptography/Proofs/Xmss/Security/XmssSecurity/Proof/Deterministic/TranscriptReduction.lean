@@ -40,10 +40,6 @@ noncomputable def transcriptReduction (publicKey : PublicKey) (adversary : Adver
       OracleComp OracleWorld Bool)
   return (transcriptWin result.1.1 result.1.2 verified, transcriptWin result.1.1 result.2 verified)
 
-theorem runSigning_baseLift {α : Type} (sign : SignRequest → OracleComp HashSpec (Option Signature))
-    (computation : OracleComp OracleWorld α) : runSigning sign (baseLift computation) = computation := by
-  rw [runSigning, simulateQ_baseLift, simulateQ_ofLift_eq_self]
-
 theorem runSigning_sourceGame (randomizers : RandomizerOutputs) (secretKey : XmssSecurity.SecretKey)
     (publicKey : PublicKey) (adversary : Adversary) :
     runSigning (fun (request : SignRequest) => tableSign randomizers secretKey request.leafIndex request.message) (sourceGame publicKey adversary) =

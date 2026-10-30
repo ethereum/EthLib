@@ -69,82 +69,6 @@ theorem run_sequenceFin_fresh {n : Nat} (inputs : Fin n → D)
       simp only [bind_pure_comp, Functor.map_map, cacheFin]
       rfl
 
-def cacheRows : {rows cols : Nat} → QueryCache (D →ₒ R) → (Fin rows → Fin cols → D) →
-    (Fin rows → Fin cols → R) → QueryCache (D →ₒ R)
-  | 0, _, cache, _, _ => cache
-  | _ + 1, _, cache, inputs, outputs =>
-      cacheRows (cacheFin cache (inputs 0) (outputs 0))
-        (fun i => inputs i.succ) (fun i => outputs i.succ)
-
-omit [SampleableType R] in
-theorem cacheRows_apply_of_not_mem {rows cols : Nat} (cache : QueryCache (D →ₒ R))
-    (inputs : Fin rows → Fin cols → D) (outputs : Fin rows → Fin cols → R) (input : D)
-    (hinput : ∀ i j, input ≠ inputs i j) : cacheRows cache inputs outputs input = cache input := by
-  induction rows generalizing cache with
-  | zero => rfl
-  | succ rows ih =>
-      rw [cacheRows, ih _ _ _ (fun i j => hinput i.succ j)]
-      exact cacheFin_apply_of_not_mem _ _ _ _ (hinput 0)
-
-/-- The row-major version used by the leaf index and chain loops in XMSS key generation. -/
-theorem run_sequenceFin_rows_fresh {rows cols : Nat} (inputs : Fin rows → Fin cols → D)
-    (hinj : ∀ i j i' j', inputs i j = inputs i' j' → i = i' ∧ j = j')
-    (cache : QueryCache (D →ₒ R)) (hfresh : ∀ i j, cache (inputs i j) = none) :
-    (simulateQ randomOracle (Concrete.sequenceFin fun i => Concrete.sequenceFin fun j =>
-      (liftM ((D →ₒ R).query (inputs i j)) : OracleComp (D →ₒ R) R))).run cache =
-      (do
-        let outputs ← Concrete.sequenceFin fun _ : Fin rows =>
-          Concrete.sequenceFin fun _ : Fin cols => ($ᵗ R : ProbComp R)
-        pure (outputs, cacheRows cache inputs outputs)) := by
-  induction rows generalizing cache with
-  | zero => simp only [Concrete.sequenceFin, simulateQ_pure, StateT.run_pure, pure_bind, cacheRows]
-  | succ rows ih =>
-      simp only [Concrete.sequenceFin]
-      simp only [simulateQ_bind, StateT.run_bind, simulateQ_pure, StateT.run_pure]
-      rw [run_sequenceFin_fresh (inputs 0) (fun _ _ h => (hinj 0 _ 0 _ h).2) cache (hfresh 0)]
-      simp only [bind_pure_comp, bind_map_left, map_bind]
-      apply bind_congr
-      intro head
-      have htail : ∀ i : Fin rows, ∀ j : Fin cols,
-          cacheFin cache (inputs 0) head (inputs i.succ j) = none := by
-        intro i j
-        rw [cacheFin_apply_of_not_mem]
-        · exact hfresh i.succ j
-        · intro k h
-          exact Fin.succ_ne_zero i (hinj i.succ j 0 k h).1
-      rw [ih (fun i => inputs i.succ)
-        (fun i j i' j' h => ⟨Fin.succ_injective _ (hinj i.succ j i'.succ j' h).1,
-          (hinj i.succ j i'.succ j' h).2⟩) _ htail]
-      simp only [bind_pure_comp, Functor.map_map, cacheRows]
-      rfl
-
-theorem sequenceFin_map {m : Type → Type} [Monad m] [LawfulMonad m] {A B : Type} {n : Nat}
-    (f : A → B) (computation : Fin n → m A) :
-    Concrete.sequenceFin (fun i => f <$> computation i) =
-      (fun values i => f (values i)) <$> Concrete.sequenceFin computation := by
-  induction n with
-  | zero =>
-      simp only [Concrete.sequenceFin, map_pure]
-      congr 1
-      funext i
-      exact i.elim0
-  | succ n ih =>
-      simp only [Concrete.sequenceFin, bind_map_left, ih, map_bind, bind_pure_comp, Functor.map_map]
-      apply bind_congr
-      intro head
-      congr 1
-      funext tail i
-      cases i using Fin.cases <;> rfl
-
-theorem evalDist_sequenceFin_congr {A : Type} {n : Nat}
-    (left right : Fin n → ProbComp A) (h : ∀ i, left i =ᵈ right i) :
-    Concrete.sequenceFin left =ᵈ Concrete.sequenceFin right := by
-  induction n with
-  | zero => rfl
-  | succ n ih =>
-      simp only [Concrete.sequenceFin, bind_pure_comp]
-      exact (h 0).bind fun _ => (ih _ _ (fun i => h i.succ)).map _
-
 theorem evalDist_sequenceFin_uniform [Fintype R] (n : Nat) :
     (Concrete.sequenceFin fun _ : Fin n => ($ᵗ R : ProbComp R)) =ᵈ ($ᵗ (Fin n → R)) := by
   classical
@@ -169,6 +93,5 @@ theorem evalDist_sequenceFin_uniform [Fintype R] (n : Nat) :
           evalDist_independent_uniform_pair.map _
         _ =ᵈ _ := SampleableType.map_uniformSample_evalDistEq_of_bijective
           (finHeadTailEquiv R n).bijective
-
 
 end XmssSecurity.Seeded

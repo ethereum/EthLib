@@ -45,13 +45,10 @@ theorem nextRand_no_return (ρ : Randomness) (j : ℕ) (h0 : 0 < j) (hj : j < si
   simp [signingAttemptLimit] at hj
   omega
 
-
 /-! ### Expectations over a fresh output -/
 
 /-- The mean of `f` over a uniform oracle output. -/
 noncomputable def ex (f : HashOutput → ℝ≥0∞) : ℝ≥0∞ := ∑ u, Pr{let x ← $ᵗ HashOutput}[x = u] * f u
-
-theorem ex_def (f : HashOutput → ℝ≥0∞) : ex f = ∑ u, Pr{let x ← $ᵗ HashOutput}[x = u] * f u := rfl
 
 theorem ex_const (c : ℝ≥0∞) : ex (fun _ => c) = c := by
   simp only [ex, SampleableType.prEvent_uniformSample_eq_singleton, ← Finset.sum_mul, Finset.sum_const, Finset.card_univ, nsmul_eq_mul]
@@ -128,7 +125,6 @@ theorem ex_outcome (F : St → ℝ≥0∞) :
   simp_rw [h]
   rw [ex_add, ex_mul_const, ex_mul_const, ex_valid, hinv]
 
-
 /-! ### One query at a position -/
 
 open Classical
@@ -192,7 +188,6 @@ theorem line_cacheQuery_of_ne (x : Position) (u : HashOutput) {m : Message} (hm 
   funext ρ
   rw [line, status_cacheQuery, ite_eq_right fun he => hm (by rw [← he]), line]
 
-
 /-! ### Other inputs -/
 
 section Agree
@@ -234,7 +229,6 @@ theorem potentials_cacheQuery_of_not_input {i : HashInput} (hi : ∀ y, i ≠ in
   have h : ∀ y, cache.cacheQuery i u (input parameter leafIndex y) = cache (input parameter leafIndex y) :=
     fun y => QueryCache.cacheQuery_of_ne _ _ fun he => hi y he.symm
   exact ⟨Φ_congr h, H_congr h, C_congr h, V_congr h⟩
-
 
 /-! ### The mass on the hits -/
 
@@ -280,7 +274,6 @@ theorem landing_mul_H_le :
   rw [H_eq, C_eq, V_eq, Finset.mul_sum, Finset.mul_sum, Finset.sum_mul, ← Finset.sum_add_distrib]
   exact Finset.sum_le_sum fun m _ =>
     mass_hit_le landing_le_one (line cache parameter leafIndex m) signingAttemptLimit nextRand_no_return
-
 
 /-- A new hit only cuts walks. -/
 theorem reach_update_hit_le {α : Type} [DecidableEq α] {σ : Equiv.Perm α} {p : ℝ≥0∞} (st : α → St) (x y : α) :

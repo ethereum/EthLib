@@ -1,6 +1,6 @@
 import EthLib.Cryptography.Xmss
 import EthLib.Cryptography.Proofs.Xmss.Types
-import EthLib.Cryptography.Proofs.Xmss.Security.LeanXmss.Bytes
+import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
 
 /-!
 # Proofs: EthLib's bytes as the security proof's bit vectors
@@ -40,10 +40,10 @@ def ofBV (n : Nat) {w : Nat} (x : BitVec w) : Vector UInt8 n :=
 
 /-- `ofBV n` lists the bytes the proof's `bytesLE n` does. -/
 theorem toList_ofBV (n : Nat) (x : BitVec (8 * n)) :
-    (ofBV n x).toList = LeanXmss.bytesLE n x := by
-  apply List.ext_getElem (by simp [LeanXmss.bytesLE_length])
+    (ofBV n x).toList = XmssSecurity.bytesLE n x := by
+  apply List.ext_getElem (by simp [XmssSecurity.length_bytesLE])
   intro i _ _
-  simp [LeanXmss.bytesLE]
+  simp [XmssSecurity.bytesLE]
 
 /-- Bits `a` to `a + c - 1` of `z mod 2^b` are those of `z`, when `a + c <= b`. -/
 private theorem mod_div_mod (z a b c : Nat) (h : a + c ≤ b) :
@@ -103,24 +103,24 @@ abbrev ofMessage {w : Nat} (x : BitVec w) : Message := ofBV MESSAGE_LEN x
 /-- A hash value's 32 bytes. -/
 abbrev ofOutput {w : Nat} (x : BitVec w) : Vector UInt8 32 := ofBV 32 x
 
-@[simp] theorem toList_ofDigest (x : LeanXmss.Digest) :
-    (ofDigest x).toList = LeanXmss.bytesLE 16 x :=
+@[simp] theorem toList_ofDigest (x : XmssSecurity.Digest) :
+    (ofDigest x).toList = XmssSecurity.bytesLE 16 x :=
   toList_ofBV 16 x
 
-@[simp] theorem toList_ofParam (x : LeanXmss.PublicParameter) :
-    (ofParam x).toList = LeanXmss.bytesLE 16 x :=
+@[simp] theorem toList_ofParam (x : XmssSecurity.PublicParameter) :
+    (ofParam x).toList = XmssSecurity.bytesLE 16 x :=
   toList_ofBV 16 x
 
-@[simp] theorem toList_ofRandomizer (x : LeanXmss.Randomness) :
-    (ofRandomizer x).toList = LeanXmss.bytesLE 16 x :=
+@[simp] theorem toList_ofRandomizer (x : XmssSecurity.Randomness) :
+    (ofRandomizer x).toList = XmssSecurity.bytesLE 16 x :=
   toList_ofBV 16 x
 
-@[simp] theorem toList_ofSeed (x : LeanXmss.MasterSeed) :
-    (ofSeed x).toList = LeanXmss.bytesLE 32 x :=
+@[simp] theorem toList_ofSeed (x : XmssSecurity.MasterSeed) :
+    (ofSeed x).toList = XmssSecurity.bytesLE 32 x :=
   toList_ofBV 32 x
 
-@[simp] theorem toList_ofMessage (x : LeanXmss.Message) :
-    (ofMessage x).toList = LeanXmss.bytesLE 32 x :=
+@[simp] theorem toList_ofMessage (x : XmssSecurity.Message) :
+    (ofMessage x).toList = XmssSecurity.bytesLE 32 x :=
   toList_ofBV 32 x
 
 /-- The bytes of a fixed-size object, as a list. -/
@@ -173,34 +173,37 @@ private theorem extractLsb'_byte_low {w : Nat} (x : BitVec w) (lo m i : Nat) (h 
   rw [mod_div_mod _ (8 * i) m 8 h, Nat.div_div_eq_div_mul, ← pow_add]
 
 /-- The first 16 bytes of a hash value are the bytes of its low 128 bits. -/
-theorem halfOf_zero_ofOutput (x : LeanXmss.HashOutput) :
-    halfOf 0 (ofOutput x) = ofDigest (LeanXmss.truncateHash x) := by
+theorem halfOf_zero_ofOutput (x : XmssSecurity.HashOutput) :
+    halfOf 0 (ofOutput x) = ofDigest (XmssSecurity.truncateHash x) := by
   apply Vector.ext
   intro i hi
   simp only [DIGEST_LEN] at hi
-  simp only [halfOf, Vector.getElem_ofFn, getElem_ofBV, LeanXmss.truncateHash, LeanXmss.digestBits]
+  simp only [halfOf, Vector.getElem_ofFn, getElem_ofBV, XmssSecurity.truncateHash,
+    XmssSecurity.digestBits]
   rw [extractLsb'_byte_low x 0 128 i (by omega)]
   congr 2
   omega
 
 /-- The last 16 bytes of a hash value are the bytes of its high 128 bits. -/
-theorem halfOf_one_ofOutput (x : LeanXmss.HashOutput) :
-    halfOf 1 (ofOutput x) = ofDigest (LeanXmss.upperHash x) := by
+theorem halfOf_one_ofOutput (x : XmssSecurity.HashOutput) :
+    halfOf 1 (ofOutput x) = ofDigest (XmssSecurity.upperHash x) := by
   apply Vector.ext
   intro i hi
   simp only [DIGEST_LEN] at hi
-  simp only [halfOf, Vector.getElem_ofFn, getElem_ofBV, LeanXmss.upperHash, LeanXmss.digestBits]
+  simp only [halfOf, Vector.getElem_ofFn, getElem_ofBV, XmssSecurity.upperHash,
+    XmssSecurity.digestBits]
   rw [extractLsb'_byte_low x 128 128 i (by omega)]
   congr 2
   omega
 
 /-- The half of a hash value that starts chain `i`: the first for even `i`, the last for odd `i`. -/
-theorem halfOf_mod_two_ofOutput (x : LeanXmss.HashOutput) (i : Nat) :
-    halfOf ⟨i % 2, Nat.mod_lt _ (by decide)⟩ (ofOutput x) = ofDigest (LeanXmss.hashHalf i x) := by
+theorem halfOf_mod_two_ofOutput (x : XmssSecurity.HashOutput) (i : Nat) :
+    halfOf ⟨i % 2, Nat.mod_lt _ (by decide)⟩ (ofOutput x)
+      = ofDigest (XmssSecurity.hashHalf i x) := by
   rcases Nat.mod_two_eq_zero_or_one i with h | h
-  · simp only [h, LeanXmss.hashHalf, ↓reduceIte]
+  · simp only [h, XmssSecurity.hashHalf, ↓reduceIte]
     exact halfOf_zero_ofOutput x
-  · simp only [h, LeanXmss.hashHalf, Nat.one_ne_zero, ↓reduceIte]
+  · simp only [h, XmssSecurity.hashHalf, Nat.one_ne_zero, ↓reduceIte]
     exact halfOf_one_ofOutput x
 
 end EthLib.Cryptography.Xmss.Unforgeability

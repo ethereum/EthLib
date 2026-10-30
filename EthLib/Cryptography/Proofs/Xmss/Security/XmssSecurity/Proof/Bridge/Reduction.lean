@@ -11,7 +11,9 @@ with the table signer. A budget of `q - 1` from `S` leaves `q - K` hash calls af
 -/
 
 open OracleComp OracleSpec
+open EthLib.Cryptography.Xmss.Unforgeability (toModelAdversary)
 
+open EthLib.Cryptography.Xmss.Unforgeability renaming Adversary → EthAdversary
 namespace XmssSecurity.Bridge
 
 open Seeded DeterministicSigning
@@ -49,22 +51,22 @@ theorem mem_support_preparation (seed : MasterSeed) (d : Derivations)
 
 /-- The table game reached from a seed: the derivations drawn, the model key prepared from the
 programmed cache, then the model's game with the table signer. -/
-noncomputable def tableGame (adversary : LeanXmss.Security.Adversary) (seed : MasterSeed) : ProbComp Bool := do
+noncomputable def tableGame (adversary : EthAdversary) (seed : MasterSeed) : ProbComp Bool := do
   let d ← drawDerivations
   let r ← (simulateQ randomOracle (honestRun d).withQueryLog).run (progCache seed d)
   (simulateQ romImpl (Seeded.gameRest (tableScheme d.rnd) (toModelAdversary adversary)
     (modelPublicKey d r.1) (modelSecretKey d r.1))).run' r.2
 
-/-- The real game from the scheme's seed `S`. -/
-noncomputable def realAfterSeed (adversary : LeanXmss.Security.Adversary) (seed : MasterSeed) :
-    OracleComp OracleWorld Bool :=
-  (liftM (realKeygen seed) : OracleComp OracleWorld _) >>= fun keys => realRest adversary keys.1 keys.2
+/-- EthLib's game from the scheme's seed `S`, its signer keeping `S` and `P`. -/
+noncomputable def realAfterSeed (adversary : EthAdversary)
+    (seed : MasterSeed) : OracleComp OracleWorld Bool :=
+  (liftM (realKeygen seed) : OracleComp OracleWorld _) >>= fun pk => realRest adversary pk seed
 
 /-- The real game with `S` sampled uniformly rather than hashed from the key's seed. -/
-noncomputable def innerGame (adversary : LeanXmss.Security.Adversary) : OracleComp OracleWorld Bool :=
+noncomputable def innerGame (adversary : EthAdversary) : OracleComp OracleWorld Bool :=
   (liftM sampleMasterSeed : OracleComp OracleWorld _) >>= realAfterSeed adversary
 
-theorem erases_afterKeygen (adversary : LeanXmss.Security.Adversary) {seed : MasterSeed} {d : Derivations}
+theorem erases_afterKeygen (adversary : EthAdversary) {seed : MasterSeed} {d : Derivations}
     {result : (Digest × (TopIndex → Option (Randomness × Encoding))) × QueryLog HashSpec}
     {cache : QueryCache HashSpec} (h : Prepared seed d result cache) :
     Erases (worldKnown cache) (realAfterSeed adversary seed)
@@ -78,7 +80,7 @@ theorem lift_hash_romImpl {α : Type} (c : OracleComp HashSpec α) :
   QueryImpl.simulateQ_add_liftM_right _ _ c
 
 /-- The inner game's winning distribution is the table game's. -/
-theorem evalDist_innerGame (adversary : LeanXmss.Security.Adversary) :
+theorem evalDist_innerGame (adversary : EthAdversary) :
     ((simulateQ romImpl (innerGame adversary)).run' ∅) =ᵈ (sampleMasterSeed >>= tableGame adversary) := by
   rw [innerGame, run'_lift_sample_bind]
   apply EvalDistEq.bind_right
@@ -106,7 +108,7 @@ theorem probOutput_countHashQueries (computation : OracleComp OracleWorld Bool) 
   exact (prEvent_map _ Prod.fst (· = true)).symm
 
 /-- The inner game's winning probability is the table game's. -/
-theorem innerGame_eq_tableGame (adversary : LeanXmss.Security.Adversary) :
+theorem innerGame_eq_tableGame (adversary : EthAdversary) :
     Pr{let x ← (simulateQ romImpl (innerGame adversary)).run' ∅}[x = true] =
       Pr{let x ← sampleMasterSeed >>= tableGame adversary}[x = true] :=
   (evalDist_innerGame adversary).prEvent_eq (· = true)
@@ -114,11 +116,11 @@ theorem innerGame_eq_tableGame (adversary : LeanXmss.Security.Adversary) :
 /-! ## Budgets -/
 
 /-- The real budget `q` less the seed hash bounds the real game from every scheme seed. -/
-def SeededBudget (adversary : LeanXmss.Security.Adversary) (q : Nat) : Prop :=
+def SeededBudget (adversary : EthAdversary) (q : Nat) : Prop :=
   ∀ seed, HashQueryBound (realAfterSeed adversary seed) ∅ (q - 1)
 
 /-- The real budget `q` leaves `q - K` hash calls for the table game after key generation. -/
-theorem afterKeygen_budget (adversary : LeanXmss.Security.Adversary) (q : Nat)
+theorem afterKeygen_budget (adversary : EthAdversary) (q : Nat)
     (hbound : SeededBudget adversary q) (seed : MasterSeed) (d : Derivations)
     (r : (Digest × (TopIndex → Option (Randomness × Encoding))) × QueryLog HashSpec)
     (cache : QueryCache HashSpec)
@@ -133,9 +135,10 @@ theorem afterKeygen_budget (adversary : LeanXmss.Security.Adversary) (q : Nat)
   have h := prepared_of_mem seed d r cache hr
   have hrun := run_countHashQueries_lift_of_resolves (c := realKeygen seed) (queryCount_realKeygen seed)
     h.realKeygen
-  have hfirst := hashQueryBound_bind (realKeygen seed) (fun keys => realRest adversary keys.1 keys.2) cache
-    (q - 1) hprep (((⟨r.1.1, d.parameter⟩, ⟨seed, d.parameter⟩), keygenQueries - 1), cache)
-    (by rw [hrun]; simp)
+  have hfirst := hashQueryBound_bind (realKeygen seed) (fun pk => realRest adversary pk seed) cache
+    (q - 1) hprep ((EthLib.Cryptography.Xmss.Unforgeability.ofPublicKey (modelPublicKey d r),
+      keygenQueries - 1), cache)
+    (by rw [hrun]; simp [modelPublicKey])
   have hK : keygenQueries - 1 ≤ q - 1 := hfirst.1
   have hK' := keygenQueries_eq
   refine ⟨by omega, ?_⟩

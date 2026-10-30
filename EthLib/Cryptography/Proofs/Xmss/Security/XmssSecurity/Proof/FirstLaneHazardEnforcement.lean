@@ -402,15 +402,6 @@ def enforceEagerResult
     (Index → Digest) × (α × ActionTrace Index) :=
   (result.1, (result.2.1, enforceHazardTrace fuel result.2.2))
 
-omit [Fintype Index] [DecidableEq Index] in
-theorem enforceEagerResult_eq_self_of_count_le
-    (fuel : Nat)
-    (result : (Index → Digest) × (α × ActionTrace Index))
-    (hcount : hazardCount result.2.2 ≤ fuel) :
-    enforceEagerResult fuel result = result := by
-  unfold enforceEagerResult
-  rw [enforceHazardTrace_eq_self_of_count_le result.2.2 fuel hcount]
-
 theorem eagerExperiment_enforceHazardBound_eq_map
     (computation : OracleComp (World Index) α) (fuel : Nat) :
     eagerExperiment (enforceHazardBound fuel computation) =

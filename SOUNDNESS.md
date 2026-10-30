@@ -70,23 +70,22 @@ if `keyGen seed` returns a key pair, and `sign` returns a signature for a messag
 It is a correctness statement.
 It says nothing about unforgeability.
 
-`XmssSecurity.leanXmss_has_127_bits_of_classical_security` (`Proofs/Xmss/Security/XmssSecurity.lean`):
+`Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability.lean`):
 in the random oracle model, an adversary whose experiment makes at most `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
 
-The proof comes from leanerVM, and `Proofs/Xmss/Security/README.md` lists what changed here.
-
-It is about the scheme as the proof writes it, in the namespace `LeanXmss`.
-
-`Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability.lean`) carries the same bound to EthLib's `keyGenWith`, `signWith` and `verifyWith`.
-Its game runs those definitions, with the hash `H` a query to the random oracle.
+Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash `H` a query to the random oracle.
 `keyGen`, `sign` and `verify` are the same definitions with Keccak-256 as `H`.
+
+The proof is adapted from leanerVM's, and `Proofs/Xmss/Security/README.md` lists what changed here.
+It reasons over EthLib's algorithms.
+Its model of the scheme with precomputed keys is a step of the proof, not a second statement.
 
 Its game follows the note's section "Security".
 The adversary gets the public key, queries `H`, and requests signatures, never at the same leaf index twice.
 It wins when its forgery verifies and no request for the forged message returned the forged signature.
 The budget `q` counts every hash call of the game, including those of key generation, signing and the final verification.
 
-Both statements are written with VCVio's oracle computations and probabilities, so their definitions are part of what they say.
+The statement is written with VCVio's oracle computations and probabilities, so their definitions are part of what it says.
 
 ### BLS12-381
 

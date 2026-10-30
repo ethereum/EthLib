@@ -87,12 +87,6 @@ theorem Resolves.map {α β : Type} {cache : QueryCache (D →ₒ R)} {c : Oracl
   rw [map_eq_bind_pure_comp]
   exact h.bind (.pure _)
 
-theorem Resolves.of_map {α β : Type} {cache : QueryCache (D →ₒ R)} {c : OracleComp (D →ₒ R) α}
-    {g : α → β} {w : β} (h : Resolves cache (g <$> c) w) : ∃ v, Resolves cache c v ∧ g v = w := by
-  rw [map_eq_bind_pure_comp] at h
-  obtain ⟨v, hv, hw⟩ := h.of_bind
-  exact ⟨v, hv, hw.pure_inv⟩
-
 theorem Resolves.sequenceFin {α : Type} {cache : QueryCache (D →ₒ R)} {n : Nat}
     {c : Fin n → OracleComp (D →ₒ R) α} {v : Fin n → α} (h : ∀ i, Resolves cache (c i) (v i)) :
     Resolves cache (XmssSecurity.Concrete.sequenceFin c) v := by
@@ -306,16 +300,6 @@ theorem OnlyQueries.withQueryLog {α : Type} {c : OracleComp (D →ₒ R) α} (h
       change OnlyQueries S (simulateQ loggingOracle (liftM ((D →ₒ R).query x) >>= next)).run
       rw [OracleComp.run_simulateQ_loggingOracle_query_bind]
       exact .query x hx _ fun a => (ih a).map _
-
-theorem OnlyQueries.eval_congr {α : Type} {c : OracleComp (D →ₒ R) α} (hc : OnlyQueries S c)
-    {f g : QueryImpl (D →ₒ R) Id} (hfg : ∀ x, S x → f x = g x) :
-    evalWithAnswerFn f c = evalWithAnswerFn g c := by
-  induction hc with
-  | pure a => rfl
-  | query x hx next _ ih =>
-      rw [evalWithAnswerFn_bind, evalWithAnswerFn_bind, DeterministicSigning.eval_liftM_query,
-        DeterministicSigning.eval_liftM_query, hfg x hx]
-      exact ih _
 
 theorem Resolves.congr {α : Type} {cache cache' : QueryCache (D →ₒ R)}
     {c : OracleComp (D →ₒ R) α} {v : α} (h : Resolves cache c v) (hc : OnlyQueries S c)

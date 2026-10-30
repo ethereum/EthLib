@@ -1,22 +1,30 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Signer
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TranscriptReduction
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Adversary
 
 /-!
-# The real game as the model's
+# EthLib's game as the model's
 
-The statement's adversary is a model adversary whose signing requests and answers are translated.
-Under the prepared cache, the real game after key generation erases to the model's game with the
-table signer: the transcripts correspond entry by entry, and the forgery wins in one exactly when its
-translation wins in the other.
+After key generation, EthLib's game with a signer that keeps `S` and `P` is the model's game.
+
+The model's game uses the table signer, and the prepared cache answers EthLib's derivations.
+
+The adversary is translated as in `Unforgeability/Adversary.lean`.
+
+The transcripts correspond entry by entry.
+
+The forgery wins in one exactly when its translation wins in the other.
 -/
 
 open OracleComp OracleSpec
+open EthLib.Cryptography
+open EthLib.Cryptography.Xmss.Unforgeability (queryH ofParam ofSeed ofDigest ofLeafIndex ofMessage
+  ofSignature ofPublicKey toLeafIndex toMessage toSignature toModelAdversary toModelForgery
+  toModelRequest adversaryImpl ofEntry)
 
 namespace XmssSecurity.Bridge
 
 open Seeded DeterministicSigning
-
-set_option backward.isDefEq.respectTransparency false
 
 /-! ## Logged simulations with translated logs -/
 
@@ -54,7 +62,6 @@ theorem Erases.simulateQ_writer_map {ι κ : Type} {source : OracleSpec ι} {tar
       rw [hright]
       exact (h input).bind _ _ fun a => (ih a.1).map _
 
-
 theorem Erases.of_eq {ι : Type} {spec : OracleSpec ι} {α : Type} {known : QueryCache spec}
     {left right : OracleComp spec α} (h : left = right) : Erases known left right :=
   h ▸ .refl known left
@@ -64,85 +71,27 @@ theorem liftM_hash_map {α β : Type} (f : α → β) (c : OracleComp HashSpec �
   rw [map_eq_bind_pure_comp, liftM_bind, map_eq_bind_pure_comp]
   simp only [Function.comp_def, liftM_pure]
 
-/-! ## The adversary -/
+/-! ## EthLib's game after key generation -/
 
-def toModelReq (request : LeanXmss.SignRequest) : SignRequest := ⟨request.leafIndex, request.message⟩
+/-- EthLib's signer from the scheme's seed `S` and the parameter `P`, each request logged. -/
+def derivedSigningOracle (s : Xmss.Seed) (pp : Xmss.PublicParam) :
+    QueryImpl Xmss.Unforgeability.SigningSpec
+      (WriterT (QueryLog Xmss.Unforgeability.SigningSpec) (OracleComp OracleWorld)) :=
+  QueryImpl.withLogging fun request =>
+    liftM (Except.toOption <$> Xmss.signDerived queryH s pp request.leafIndex request.message :
+      OracleComp HashSpec _)
 
-def toRealReq (request : SignRequest) : LeanXmss.SignRequest := ⟨request.leafIndex, request.message⟩
-
-/-- A real forgery as the model's: its signature's leaf index moves to the claim. -/
-def toModelForgery (forgery : LeanXmss.Forgery) : Forgery :=
-  ⟨forgery.signature.leafIndex, forgery.message, toModelSig forgery.signature⟩
-
-/-- Answer the statement adversary's queries with the model's oracles, translating each signature. -/
-def adversaryImpl :
-    QueryImpl (LeanXmss.OracleWorld + LeanXmss.SigningSpec) (OracleComp (OracleWorld + SigningSpec))
-  | .inl input => liftM ((OracleWorld + SigningSpec).query (.inl input))
-  | .inr request => Option.map (toRealSig request.leafIndex) <$>
-      liftM ((OracleWorld + SigningSpec).query (.inr (toModelReq request)))
-
-/-- The statement's adversary as a model adversary. -/
-noncomputable def toModelAdversary (adversary : LeanXmss.Security.Adversary) : Adversary where
-  main publicKey := toModelForgery <$> simulateQ adversaryImpl (adversary.main (toRealPk publicKey))
-
-/-- A model transcript entry as the real one. -/
-def toRealEntry (entry : (_ : SignRequest) × Option Signature) :
-    (_ : LeanXmss.SignRequest) × Option LeanXmss.Signature :=
-  ⟨toRealReq entry.1, entry.2.map (toRealSig entry.1.leafIndex)⟩
-
-theorem valid_map (log : QueryLog SigningSpec) :
-    LeanXmss.SigningTranscript.Valid (log.map toRealEntry) ↔ SigningTranscript.Valid log := by
-  simp only [LeanXmss.SigningTranscript.Valid, SigningTranscript.Valid, List.map_map]
-  rfl
-
-theorem contains_map (log : QueryLog SigningSpec) (forgery : LeanXmss.Forgery) :
-    LeanXmss.SigningTranscript.Contains (log.map toRealEntry) forgery ↔
-      SigningTranscript.Contains log (toModelForgery forgery) := by
-  rcases forgery with ⟨fmessage, fsignature⟩
-  simp only [LeanXmss.SigningTranscript.Contains, SigningTranscript.Contains,
-    List.mem_map]
-  constructor
-  · rintro ⟨_, ⟨entry, hentry, rfl⟩, hmessage, hsignature⟩
-    obtain ⟨request, answer⟩ := entry
-    cases answer with
-    | none => simp [toRealEntry] at hsignature
-    | some signature =>
-        simp only [toRealEntry, Option.map_some, Option.some.injEq] at hsignature
-        refine ⟨⟨request, some signature⟩, hentry, ?_, ?_⟩
-        · subst hsignature
-          simp only [toModelForgery, Forgery.request, toRealSig_leafIndex]
-          rw [← hmessage]
-          rfl
-        · subst hsignature
-          simp [toModelForgery]
-  · rintro ⟨entry, hentry, hrequest, hsignature⟩
-    refine ⟨toRealEntry entry, ⟨entry, hentry, rfl⟩, ?_, ?_⟩
-    · simp only [toRealEntry, toRealReq]
-      rw [hrequest]
-      rfl
-    · simp only [toRealEntry, hsignature, Option.map_some]
-      rw [hrequest]
-      simp [Forgery.request, toModelForgery]
-
-/-! ## The real game -/
-
-/-- The real game after key generation. -/
-noncomputable def realRest (adversary : LeanXmss.Security.Adversary) (publicKey : LeanXmss.PublicKey)
-    (secretKey : LeanXmss.Seeded.SecretKey) : OracleComp LeanXmss.OracleWorld Bool := do
-  let ((forgery, log) : LeanXmss.Forgery × QueryLog LeanXmss.SigningSpec) ←
-    (simulateQ (QueryImpl.ofLift LeanXmss.OracleWorld
-      (WriterT (QueryLog LeanXmss.SigningSpec) (OracleComp LeanXmss.OracleWorld)) +
-        LeanXmss.Security.signingOracle secretKey) (adversary.main publicKey)).run
-  let verified ← liftM (LeanXmss.Concrete.verify publicKey forgery.message forgery.signature :
-    OracleComp LeanXmss.HashSpec Bool)
-  return decide (LeanXmss.SigningTranscript.Valid log ∧ ¬LeanXmss.SigningTranscript.Contains log forgery) &&
+/-- EthLib's game after key generation, its signer keeping `S` and `P`. -/
+noncomputable def realRest (adversary : Xmss.Unforgeability.Adversary) (pk : Xmss.PublicKey)
+    (seed : MasterSeed) : OracleComp OracleWorld Bool := do
+  let ((forgery, log) : Xmss.Unforgeability.Forgery × QueryLog Xmss.Unforgeability.SigningSpec) ←
+    (simulateQ (QueryImpl.ofLift OracleWorld
+      (WriterT (QueryLog Xmss.Unforgeability.SigningSpec) (OracleComp OracleWorld)) +
+        derivedSigningOracle (ofSeed seed) pk.publicParam) (adversary.main pk)).run
+  let verified ← liftM (Xmss.verifyWith queryH pk forgery.message forgery.signature :
+    OracleComp HashSpec Bool)
+  return decide (Xmss.Unforgeability.Valid log ∧ ¬Xmss.Unforgeability.Contains log forgery) &&
     verified
-
-theorem gameCore_eq (adversary : LeanXmss.Security.Adversary) :
-    LeanXmss.Security.gameCore adversary = (do
-      let seed ← liftM LeanXmss.sampleMasterSeed
-      let keys ← liftM (LeanXmss.Seeded.keygenFromSeed seed)
-      realRest adversary keys.1 keys.2) := rfl
 
 namespace Prepared
 
@@ -150,56 +99,84 @@ variable {seed : MasterSeed} {d : Derivations}
   {result : (Digest × (TopIndex → Option (Randomness × Encoding))) × QueryLog HashSpec}
   {cache : QueryCache HashSpec}
 
-theorem erases_oracles (h : Prepared seed d result cache) (input : (LeanXmss.OracleWorld + LeanXmss.SigningSpec).Domain) :
+theorem erases_oracles (h : Prepared seed d result cache)
+    (input : (OracleWorld + Xmss.Unforgeability.SigningSpec).Domain) :
     Erases (worldKnown cache)
-      ((QueryImpl.ofLift LeanXmss.OracleWorld
-        (WriterT (QueryLog LeanXmss.SigningSpec) (OracleComp LeanXmss.OracleWorld)) +
-          LeanXmss.Security.signingOracle ⟨seed, d.parameter⟩) input).run
-      ((fun p => (p.1, p.2.map toRealEntry)) <$>
-        (((forwardOracles + signingOracle (tableScheme d.rnd) (modelSecretKey d result)) ∘ₛ adversaryImpl)
-          input).run) := by
+      ((QueryImpl.ofLift OracleWorld
+        (WriterT (QueryLog Xmss.Unforgeability.SigningSpec) (OracleComp OracleWorld)) +
+          derivedSigningOracle (ofSeed seed) (ofParam d.parameter)) input).run
+      ((fun p => (p.1, p.2.map ofEntry)) <$>
+        (((forwardOracles + signingOracle (tableScheme d.rnd) (modelSecretKey d result)) ∘ₛ
+          adversaryImpl) input).run) := by
   cases input with
   | inl input =>
-      simp only [QueryImpl.add_apply_inl, QueryImpl.apply_compose, adversaryImpl, simulateQ_spec_query,
-        forwardOracles, QueryImpl.ofLift_apply]
-      show Erases _ ((fun a => (a, ([] : QueryLog LeanXmss.SigningSpec))) <$>
+      simp only [QueryImpl.add_apply_inl, QueryImpl.apply_compose, adversaryImpl,
+        simulateQ_spec_query, forwardOracles, QueryImpl.ofLift_apply]
+      show Erases _ ((fun a => (a, ([] : QueryLog Xmss.Unforgeability.SigningSpec))) <$>
           (liftM (OracleWorld.query input) : OracleComp OracleWorld _))
-        ((fun p => (p.1, p.2.map toRealEntry)) <$> ((fun a => (a, ([] : QueryLog SigningSpec))) <$>
+        ((fun p => (p.1, p.2.map ofEntry)) <$> ((fun a => (a, ([] : QueryLog SigningSpec))) <$>
           (liftM (OracleWorld.query input) : OracleComp OracleWorld _)))
       rw [Functor.map_map]
       exact .refl _ _
   | inr request =>
       simp only [QueryImpl.add_apply_inr, QueryImpl.apply_compose, adversaryImpl, simulateQ_map,
-        simulateQ_spec_query, WriterT.run_map', LeanXmss.Security.signingOracle, signingOracle,
+        simulateQ_spec_query, WriterT.run_map', derivedSigningOracle, signingOracle,
         QueryImpl.run_withLogging_apply, tableScheme]
-      have key := (h.erases_sign request.leafIndex request.message).lift_hash.bind
-        (fun u => (pure (u, [(⟨request, u⟩ : (r : LeanXmss.SignRequest) × Option LeanXmss.Signature)]) :
+      -- The request is the translation of its model request.
+      have hidx : ofLeafIndex (toModelRequest request).leafIndex = request.leafIndex := by
+        simp [toModelRequest]
+      have hmsg : ofMessage (toModelRequest request).message = request.message := by
+        simp [toModelRequest]
+      have key := (h.erases_sign (toModelRequest request).leafIndex
+        (toModelRequest request).message).lift_hash.bind
+        (fun u => (pure (u, [(⟨request, u⟩ :
+          (_ : Xmss.Unforgeability.SignRequest) × Option Xmss.Signature)]) :
           OracleComp OracleWorld _))
-        (fun u => (pure (u, [(⟨request, u⟩ : (r : LeanXmss.SignRequest) × Option LeanXmss.Signature)]) :
+        (fun u => (pure (u, [(⟨request, u⟩ :
+          (_ : Xmss.Unforgeability.SignRequest) × Option Xmss.Signature)]) :
           OracleComp OracleWorld _)) fun u => .pure _
-      convert key using 1 <;> try rfl
-      simp only [liftM_hash_map, map_bind, bind_map_left, map_pure, Prod.map_apply, id_eq, List.map_cons,
-        List.map_nil]
-      rfl
+      rw [hidx, hmsg] at key
+      refine (congrArg₂ (Erases (worldKnown cache)) ?_ ?_).mpr key
+      -- `erw`: the oracle's `<$>` is the free monad's functor, the lemmas' the monad's.
+      · erw [liftM_hash_map, bind_map_left]
+      · erw [liftM_hash_map, bind_map_left, map_bind]
+        refine Eq.trans (map_bind _ _ _) (bind_congr fun a => ?_)
+        erw [map_pure]
+        simp [ofEntry, toModelRequest]
 
-
-
-theorem erases_rest (h : Prepared seed d result cache) (adversary : LeanXmss.Security.Adversary) :
+/-- EthLib's game after key generation erases to the model's. -/
+theorem erases_rest (h : Prepared seed d result cache) (adversary : Xmss.Unforgeability.Adversary) :
     Erases (worldKnown cache)
-      (realRest adversary ⟨result.1.1, d.parameter⟩ ⟨seed, d.parameter⟩)
+      (realRest adversary (ofPublicKey (modelPublicKey d result)) seed)
       (Seeded.gameRest (tableScheme d.rnd) (toModelAdversary adversary) (modelPublicKey d result)
         (modelSecretKey d result)) := by
   unfold realRest Seeded.gameRest toModelAdversary
   simp only [simulateQ_map, WriterT.run_map', ← QueryImpl.simulateQ_compose]
-  have hsim := Erases.simulateQ_writer_map (worldKnown cache) _ _ toRealEntry h.erases_oracles
-    (adversary.main (toRealPk (modelPublicKey d result)))
+  have hsim := Erases.simulateQ_writer_map (worldKnown cache) _ _ ofEntry h.erases_oracles
+    (adversary.main (ofPublicKey (modelPublicKey d result)))
   refine Erases.trans (hsim.bind _ _ fun _ => Erases.refl _ _) (Erases.of_eq ?_)
-  rw [bind_map_left, bind_map_left]
-  apply bind_congr
-  intro p
-  simp only [tableScheme, Concrete.scheme, valid_map, contains_map]
-  rw [verify_real]
-  rfl
+  -- `erw`, as above: the `<$>` is the free monad's functor.
+  erw [bind_map_left]
+  refine Eq.trans ?_ (bind_map_left _ _ _).symm
+  refine bind_congr fun p => ?_
+  -- The verifier is the model's, on the translated forgery.
+  have hverify :
+      (Xmss.verifyWith queryH (ofPublicKey (modelPublicKey d result)) p.1.message p.1.signature :
+        OracleComp HashSpec Bool)
+      = Concrete.verify (modelPublicKey d result) (toLeafIndex p.1.signature.leafIndex)
+        (toMessage p.1.message) (toSignature p.1.signature) := by
+    rw [← Xmss.Unforgeability.verifyWith_queryH, Xmss.Unforgeability.ofMessage_toMessage,
+      Xmss.Unforgeability.ofSignature_toSignature]
+  -- So is the winning condition.
+  have hwin : decide (Xmss.Unforgeability.Valid (p.2.map ofEntry) ∧
+        ¬Xmss.Unforgeability.Contains (p.2.map ofEntry) p.1)
+      = decide (SigningTranscript.Valid p.2 ∧
+          ¬SigningTranscript.Contains p.2 (toModelForgery p.1)) :=
+    decide_eq_decide.mpr (and_congr (Xmss.Unforgeability.valid_map _)
+      (not_congr (Xmss.Unforgeability.contains_map _ _)))
+  simp only [tableScheme, Concrete.scheme]
+  rw [hverify]
+  exact bind_congr fun verified => congrArg (fun b => pure (b && verified)) hwin
 
 end Prepared
 

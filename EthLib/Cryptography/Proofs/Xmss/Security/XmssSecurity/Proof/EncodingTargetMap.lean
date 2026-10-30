@@ -66,24 +66,4 @@ theorem IsSignedEncodingTarget.unique
   subst rightSignature
   rfl
 
-/-- Select the returned signature input at the candidate input's leaf index. If no signature was returned at that leaf index, leave the candidate unchanged. -/
-noncomputable def signedEncodingTargetInput (parameter : PublicParameter)
-    (log : QueryLog SigningSpec) (candidate : HashInput) : HashInput := by
-  classical
-  exact if h : ∃ target, IsSignedEncodingTarget parameter log candidate target then
-      Classical.choose h
-    else
-      candidate
-
-theorem signedEncodingTargetInput_eq_of_target
-    {parameter : PublicParameter} {log : QueryLog SigningSpec}
-    (hvalid : SigningTranscript.Valid log) {candidate target : HashInput}
-    (htarget : IsSignedEncodingTarget parameter log candidate target) :
-    signedEncodingTargetInput parameter log candidate = target := by
-  classical
-  unfold signedEncodingTargetInput
-  split <;> rename_i h
-  · exact IsSignedEncodingTarget.unique hvalid (Classical.choose_spec h) htarget
-  · exact (h ⟨target, htarget⟩).elim
-
 end XmssSecurity

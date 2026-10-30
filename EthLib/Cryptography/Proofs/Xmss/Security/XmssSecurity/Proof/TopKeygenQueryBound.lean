@@ -66,13 +66,6 @@ theorem topCovers_zero_iff (node : TopNode) (key : TopIndex) :
     unfold TopCovers
     simp
 
-theorem topCovers_unique {levels : Nat} {left right : TopNode} {key : TopIndex}
-    (hleft : TopCovers levels left key) (hright : TopCovers levels right key) :
-    left = right := by
-  unfold TopCovers at hleft hright
-  apply Fin.ext
-  rw [← Nat.div_eq_of_lt_le hleft.1 hleft.2, ← Nat.div_eq_of_lt_le hright.1 hright.2]
-
 theorem topSubtreeValid_mono {small large : Nat} {node : TopNode}
     (hle : small ≤ large) (hvalid : TopSubtreeValid large node) :
     TopSubtreeValid small node := by

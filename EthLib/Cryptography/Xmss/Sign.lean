@@ -36,12 +36,31 @@ def signLayer (pp : PublicParam) (s : Seed) (layer : Layer) (e : Nat) (msg : Byt
   -- A one-time signature is packed with the key's path.
   return .ok { randomizer, chainValues, path := ← path H pp s layer e }
 
+/-- Sign a message at a leaf index, from the scheme seed `S` and the parameter `P`.
+
+1. The bottom key `idx` signs the message.
+2. The root `X^0_{16,b}` of bottom tree `b = floor(idx / 2^16)`, which builds that whole tree.
+3. The top key `b` signs that root.
+
+# Errors
+
+- Either layer's one-time signature finds no codeword. -/
+def signDerived (s : Seed) (pp : PublicParam) (idx : LeafIndex) (msg : Message) :
+    m (Except XmssError Signature) := do
+  -- A layer's error ends signing, before any later hash call.
+  let bottom ← match ← signLayer H pp s .bottom idx.toNat (packBytes msg) with
+    | .ok sig => pure sig
+    | .error err => return .error err
+  let bottomRoot ← node H pp s .bottom LAYER_HEIGHT (Nat.le_refl _) (bottomTree idx)
+  let top ← match ← signLayer H pp s .top (bottomTree idx) (packBytes bottomRoot) with
+    | .ok sig => pure sig
+    | .error err => return .error err
+  return .ok { leafIndex := idx, bottom, top }
+
 /-- `Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.
 
 1. The scheme seed `S` and the public parameter `P`, from the secret key's seed.
-2. The bottom key `idx` signs the message.
-3. The root `X^0_{16,b}` of bottom tree `b = floor(idx / 2^16)`, which builds that whole tree.
-4. The top key `b` signs that root.
+2. The signature from `S` and `P`.
 
 # Warning
 
@@ -58,15 +77,7 @@ def signWith (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
     m (Except XmssError Signature) := do
   let s ← schemeSeed H sk.seed
   let pp ← publicParamOf H s
-  -- A layer's error ends signing, before any later hash call.
-  let bottom ← match ← signLayer H pp s .bottom idx.toNat (packBytes msg) with
-    | .ok sig => pure sig
-    | .error err => return .error err
-  let bottomRoot ← node H pp s .bottom LAYER_HEIGHT (Nat.le_refl _) (bottomTree idx)
-  let top ← match ← signLayer H pp s .top (bottomTree idx) (packBytes bottomRoot) with
-    | .ok sig => pure sig
-    | .error err => return .error err
-  return .ok { leafIndex := idx, bottom, top }
+  signDerived H s pp idx msg
 
 /-- `Sig(sk, idx, m)`, with Keccak-256. -/
 def sign (sk : SecretKey) (idx : LeafIndex) (msg : Message) : Except XmssError Signature :=

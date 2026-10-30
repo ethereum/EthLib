@@ -427,7 +427,6 @@ theorem evalDist_uniformTable_eq_bind_update
         (evalDistEq_uniformSample_bind_update index continuation).symm
     _ = _ := by simp [bind_assoc]
 
-
 set_option maxRecDepth 100000 in
 def observedProbeCount : ActionTrace Index → Nat
   | [] => 0

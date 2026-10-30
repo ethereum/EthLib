@@ -4,10 +4,10 @@ import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 /-!
 # The leanXMSS model
 
-The scheme of `LeanXmss/Scheme.lean` (`doc/lean_xmss`) with precomputed keys: two layers of XMSS of
+leanXMSS (`doc/lean_xmss`) with precomputed keys, a device of the proof: two layers of XMSS of
 height 16. The bottom layer is a forest of `2^16` trees over the `2^32` bottom one-time keys, its node
 indices global; top key `b` signs the root of bottom tree `b` once, at key generation. Every hash
-input is byte for byte the one of `LeanXmss`.
+input is byte for byte the one of EthLib's algorithms (`Unforgeability/Translate.lean`).
 -/
 
 open OracleComp OracleSpec ENNReal

@@ -48,7 +48,7 @@ theorem signWith_run {sk : SecretKey} {idx : LeafIndex} {m : Message}
               (bottomTree idx)).run)).run.bind fun top =>
             .ok { leafIndex := idx, bottom, top } := by
   subst hs hpp
-  rw [signWith, Id.run_bind, Id.run_bind, Id.run_bind]
+  rw [signWith, Id.run_bind, Id.run_bind, signDerived, Id.run_bind]
   cases (signLayer (pureHash f)
       (publicParamOf (pureHash f) (schemeSeed (pureHash f) sk.seed).run).run
       (schemeSeed (pureHash f) sk.seed).run .bottom idx.toNat (packBytes m)).run with

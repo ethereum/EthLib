@@ -114,11 +114,6 @@ theorem simulateQ_countHashQueries {α : Type} (computation : OracleComp OracleW
   funext input
   cases input <;> rfl
 
-theorem hasHashQueryBound_iff {Key : Type} (scheme : Scheme Key) (adversary : Adversary) (q : Nat) :
-    HasHashQueryBound scheme adversary q ↔ HashQueryBound (gameCore scheme adversary) ∅ q := by
-  simp only [HasHashQueryBound, HashQueryBound, simulateQ_countHashQueries]
-  rfl
-
 theorem countHashQueries_forget {α : Type} (computation : OracleComp OracleWorld α) :
     Prod.fst <$> countHashQueries computation = computation :=
   QueryCounting.counted_forget _ computation

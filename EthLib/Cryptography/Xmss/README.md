@@ -130,7 +130,7 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
 - Unforgeability.
   In the random oracle model, an adversary that makes at most `q >= 1` hash calls forges with probability at most `q / 2^127` (`unforgeable`, `Unforgeability.lean`).
   The game is the note's section "Security", run on `keyGenWith`, `signWith` and `verifyWith` with `H` a query to the oracle.
-  The bound comes from the security proof vendored in `Security/`.
+  The proof, adapted from leanerVM's, reasons over these same definitions (`Proofs/Xmss/Security/`).
 - Known answers.
   The signature verifies under the public key (`verify_known_answer`).
   It rejects with a changed message, the neighbouring leaf index, or a changed path (`verify_wrong_message`, `verify_wrong_leafIndex`, `verify_tampered_path`).

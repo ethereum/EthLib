@@ -46,7 +46,6 @@ theorem length_bytesLE_publicParameter (value : PublicParameter) :
 theorem length_bytesLE_message (value : Message) : (bytesLE 32 value).length = 32 :=
   length_bytesLE 32 value
 
-
 theorem bytesLE_injective (byteCount : Nat) : Function.Injective (bytesLE byteCount) := by
   intro left right heq
   have hbytes :

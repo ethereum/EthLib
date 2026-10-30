@@ -174,12 +174,6 @@ theorem const_mul_probEvent_le_expectedFinal (f : σ → ℝ≥0∞) (E : σ →
     exact mul_le_mul_right (hf r.2 hr) _
   · simp
 
-theorem probEvent_le_expectedFinal (f : σ → ℝ≥0∞) (E : σ → Prop)
-    (hf : ∀ s, E s → 1 ≤ f s) (computation : OracleComp spec α) (s : σ) :
-    Pr{let r ← (simulateQ implementation computation).run s}[E r.2] ≤
-      expectedFinal implementation f computation s := by
-  simpa using const_mul_probEvent_le_expectedFinal implementation f E 1 hf computation s
-
 end Frame
 
 end XmssSecurity

@@ -97,10 +97,6 @@ inductive ObservedAction where
   | query (leafIndex : LeafIndex) (output : HashOutput)
   | sign (leafIndex : LeafIndex) (output : HashOutput)
 
-def ObservedAction.IsSignAt (target : LeafIndex) : ObservedAction → Prop
-  | .query _ _ => False
-  | .sign leafIndex _ => leafIndex = target
-
 def observedSignLeafIndices : List ObservedAction → List LeafIndex
   | [] => []
   | .query _ _ :: actions => observedSignLeafIndices actions

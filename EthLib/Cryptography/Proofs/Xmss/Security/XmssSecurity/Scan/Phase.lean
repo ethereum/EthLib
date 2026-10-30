@@ -200,14 +200,6 @@ theorem aCost_cached {parameter : PublicParameter} {x : HashInput} {cache : Quer
   | none => rfl
   | some p => rw [Option.elim_some, ite_eq_right fun h => by rw [hc] at h; exact Option.some_ne_none _ h.1]
 
-theorem openInd_cached {parameter : PublicParameter} {x : HashInput} {cache : QueryCache HashSpec}
-    {o : HashOutput} (hc : cache x = some o) (trace : SigningCacheTrace) :
-    openInd parameter x cache trace = 0 := by
-  unfold openInd
-  cases dec parameter x with
-  | none => rfl
-  | some p => rw [Option.elim_some, ite_eq_right fun h => by rw [hc] at h; exact Option.some_ne_none _ h.1]
-
 theorem counts_fresh_le {parameter : PublicParameter} {x : HashInput} {cache : QueryCache HashSpec}
     {trace : SigningCacheTrace} (hx : cache x = none) (u : HashOutput) :
     nCount parameter (cache.cacheQuery x u) trace ≤ nCount parameter cache trace + 1 := by

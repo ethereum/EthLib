@@ -13,12 +13,14 @@ in `q / 2^127`: the two guess terms cost a unit each.
 -/
 
 open OracleComp OracleSpec ENNReal
+open EthLib.Cryptography.Xmss.Unforgeability (toModelAdversary)
 
+open EthLib.Cryptography.Xmss.Unforgeability renaming Adversary → EthAdversary
 namespace XmssSecurity.Bridge
 
 set_option backward.isDefEq.respectTransparency false
 
-theorem keygenQueries_le (adversary : LeanXmss.Security.Adversary) (q : Nat)
+theorem keygenQueries_le (adversary : EthAdversary) (q : Nat)
     (hbound : SeededBudget adversary q) : keygenQueries ≤ q := by
   let d : Derivations := ⟨0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0⟩
   obtain ⟨r, hr⟩ := probComp_support_nonempty
@@ -55,17 +57,20 @@ theorem final_arithmetic (q : Nat) (hK : keygenQueries ≤ q) (hq : q < 2 ^ 127)
       exact_mod_cast (by omega : 2 * (q - keygenQueries) + 2 ^ 20 + 1 + 1 ≤ 2 * q)
     _ = _ := hhalf
 
-/-- leanXMSS has 127 bits of classical security. -/
-theorem leanXmss_security : LeanXmss.LeanXmssSecurityStatement := by
-  intro q _ adversary hbound
+/-- The real game wins with probability at most `q / 2^127`, for a budget of `q >= 1` calls. -/
+theorem realGame_security (q : Nat) (hq : 1 ≤ q)
+    (adversary : EthAdversary)
+    (hbound : HashQueryBound (realGame adversary) ∅ q) :
+    Pr{let x ← (simulateQ romImpl (realGame adversary)).run' ∅}[x = true] ≤
+      q / ((2 ^ 127 : Nat) : ℝ≥0∞) := by
   by_cases hsmall : q < 2 ^ 127
   · have hseeded := seededBudget adversary q (by omega) hbound
     have hK := keygenQueries_le adversary q hseeded
     have hlanes := Proof.concreteScheme_afterKeygenSecurity (q - keygenQueries) (by omega)
       (modelAdversary adversary) (afterKeygenBudget adversary q (by omega) hseeded)
-    calc LeanXmss.Security.forgeAdvantage adversary
+    calc Pr{let x ← (simulateQ romImpl (realGame adversary)).run' ∅}[x = true]
         ≤ Pr{let x ← (simulateQ romImpl (innerGame adversary)).run' ∅}[x = true] +
-          ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) := forgeAdvantage_le_inner adversary q hseeded
+          ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) := realGame_le_inner adversary q hseeded
       _ = Pr{let x ← sampleMasterSeed >>= tableGame adversary}[x = true] +
           ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) := by rw [innerGame_eq_tableGame]
       _ ≤ Pr{let x ← cleanGame adversary}[x = true] +
@@ -81,11 +86,12 @@ theorem leanXmss_security : LeanXmss.LeanXmssSecurityStatement := by
             ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) := by rw [refGame_eq]
       _ ≤ ((2 * (q - keygenQueries) + lowerOrderSlack : Nat) : ℝ≥0∞) / ((2 ^ 128 : Nat) : ℝ≥0∞) +
           ((q - keygenQueries : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) +
-            ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) := add_le_add (add_le_add hlanes le_rfl) le_rfl
+            ((q - 1 : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) :=
+        add_le_add (add_le_add hlanes le_rfl) le_rfl
       _ ≤ _ := final_arithmetic q hK hsmall
   · have hlarge : 2 ^ 127 ≤ q := Nat.le_of_not_gt hsmall
     calc
-      LeanXmss.Security.forgeAdvantage adversary ≤ 1 := (prEvent_le_one _)
+      Pr{let x ← (simulateQ romImpl (realGame adversary)).run' ∅}[x = true] ≤ 1 := prEvent_le_one _
       _ = ((2 ^ 127 : Nat) : ℝ≥0∞) / ((2 ^ 127 : Nat) : ℝ≥0∞) :=
         (ENNReal.div_self (by norm_num) (ENNReal.natCast_ne_top _)).symm
       _ ≤ _ := ENNReal.div_le_div (by exact_mod_cast hlarge) le_rfl

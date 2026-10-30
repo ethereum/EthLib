@@ -43,17 +43,23 @@ structure SecretKey where
 
 /-! ## Key generation -/
 
+/-- The public key of the scheme seed `S`: the parameter `P`, then the root of the top tree.
+
+Computing the root builds all `2^16` one-time keys of the top tree. -/
+def publicKeyOf (s : Seed) : m PublicKey := do
+  let pp ← publicParamOf H s
+  let root ← node H pp s .top LAYER_HEIGHT (Nat.le_refl _) 0
+  return { root, publicParam := pp }
+
 /-- `Gen` over a hash `H`: the key pair grown from a seed.
 
-1. The scheme seed `S` and the public parameter `P`, from the seed.
-2. The root of the top tree, which builds all `2^16` of its one-time keys.
+1. The scheme seed `S`, from the seed.
+2. The public key of `S`.
 
 The seed must be 32 uniform bytes, kept secret. -/
 def keyGenWith (seed : Seed) : m (SecretKey × PublicKey) := do
   let s ← schemeSeed H seed
-  let pp ← publicParamOf H s
-  let root ← node H pp s .top LAYER_HEIGHT (Nat.le_refl _) 0
-  return (⟨seed⟩, { root, publicParam := pp })
+  return (⟨seed⟩, ← publicKeyOf H s)
 
 /-- `Gen`, with Keccak-256. -/
 def keyGen (seed : Seed) : SecretKey × PublicKey :=

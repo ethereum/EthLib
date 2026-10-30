@@ -1,5 +1,5 @@
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Algorithms
-import EthLib.Cryptography.Proofs.Xmss.Security.LeanXmss.Statement
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+import VCVio.OracleComp.QueryTracking.WriterCost
 
 /-!
 # Proofs: the security game of leanXMSS, for EthLib's algorithms
@@ -31,7 +31,7 @@ The signer re-derives `S` and `P` from `S_0` on each request, as `signWith` does
 
 Those calls count too.
 
-The oracle's cost model is the one of the security proof (`LeanXmss.Security.countedOracle`).
+The oracle is lazily sampled, from an empty cache, and counts every call (`countedOracle`).
 -/
 
 namespace EthLib.Cryptography.Xmss.Unforgeability
@@ -40,7 +40,7 @@ open OracleComp OracleSpec ENNReal
 open EthLib.Cryptography.Xmss
 
 /-- `H` in the game: a query to the random oracle. -/
-abbrev H : ByteArray → OracleComp LeanXmss.HashSpec (Vector UInt8 32) := queryH
+abbrev H : ByteArray → OracleComp XmssSecurity.HashSpec (Vector UInt8 32) := queryH
 
 /-- A signing request: a leaf index and a message. -/
 structure SignRequest where
@@ -61,7 +61,7 @@ abbrev SigningSpec := SignRequest →ₒ Option Signature
 
 From the public key, it samples coins, queries `H`, requests signatures, and returns a forgery. -/
 structure Adversary where
-  main : PublicKey → OracleComp (LeanXmss.OracleWorld + SigningSpec) Forgery
+  main : PublicKey → OracleComp (XmssSecurity.OracleWorld + SigningSpec) Forgery
 
 /-- No leaf index was requested twice. -/
 def Valid (log : QueryLog SigningSpec) : Prop :=
@@ -81,30 +81,40 @@ instance (log : QueryLog SigningSpec) (forgery : Forgery) : Decidable (Contains 
 
 /-- `Sig(sk, idx, m)` on each request, recorded with its answer. -/
 def signingOracle (sk : SecretKey) :
-    QueryImpl SigningSpec (WriterT (QueryLog SigningSpec) (OracleComp LeanXmss.OracleWorld)) :=
+    QueryImpl SigningSpec (WriterT (QueryLog SigningSpec) (OracleComp XmssSecurity.OracleWorld)) :=
   QueryImpl.withLogging fun request =>
     liftM (Except.toOption <$> signWith H sk request.leafIndex request.message)
 
 /-- A uniform seed `S_0`: the bytes of a uniform 256-bit vector, which `ofSeed` maps one to one. -/
 noncomputable def sampleSeed : ProbComp Seed :=
-  ofSeed <$> LeanXmss.sampleMasterSeed
+  ofSeed <$> XmssSecurity.sampleMasterSeed
 
 /-- The game: key generation, the adversary with its oracles, then the check of its forgery. -/
-noncomputable def gameCore (adversary : Adversary) : OracleComp LeanXmss.OracleWorld Bool := do
+noncomputable def gameCore (adversary : Adversary) : OracleComp XmssSecurity.OracleWorld Bool := do
   let seed ← liftM sampleSeed
   let (sk, pk) ← liftM (keyGenWith H seed)
   let ((forgery, log) : Forgery × QueryLog SigningSpec) ←
-    (simulateQ (QueryImpl.ofLift LeanXmss.OracleWorld
-      (WriterT (QueryLog SigningSpec) (OracleComp LeanXmss.OracleWorld)) + signingOracle sk)
+    (simulateQ (QueryImpl.ofLift XmssSecurity.OracleWorld
+      (WriterT (QueryLog SigningSpec) (OracleComp XmssSecurity.OracleWorld)) + signingOracle sk)
       (adversary.main pk)).run
   let verified ← liftM (verifyWith H pk forgery.message forgery.signature)
   return decide (Valid log ∧ ¬Contains log forgery) && verified
 
-/-- The game against one lazily sampled random oracle, from an empty cache.
+/-- The oracles of the game.
+
+Coins pass through for free.
+
+`H` is a random oracle, sampled lazily, and each call costs 1, a repeated input included. -/
+noncomputable def countedOracle :=
+  (unifFwdImpl XmssSecurity.HashSpec + (randomOracle : QueryImpl XmssSecurity.HashSpec
+    (StateT (QueryCache XmssSecurity.HashSpec) ProbComp))).withAddCost
+    (fun | .inl _ => (0 : Nat) | .inr _ => 1)
+
+/-- The game against one random oracle, from an empty cache.
 
 It counts every hash call. -/
 noncomputable def experiment (adversary : Adversary) : ProbComp (Bool × Nat) :=
-  (simulateQ LeanXmss.Security.countedOracle (gameCore adversary)).run.run' ∅
+  (simulateQ countedOracle (gameCore adversary)).run.run' ∅
 
 /-- The probability that the adversary forges. -/
 noncomputable def forgeAdvantage (adversary : Adversary) : ℝ≥0∞ :=

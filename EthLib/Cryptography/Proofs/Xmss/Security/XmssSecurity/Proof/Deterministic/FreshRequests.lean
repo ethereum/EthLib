@@ -125,34 +125,6 @@ noncomputable def freshRun {α : Type}
     let tape ← liftM ($ᵗ Tape : ProbComp Tape)
     sign request tape) computation
 
-omit [DecidableEq Request] [Finite Request] [Finite Tape] [Nonempty Tape]
-    [SampleableType (Request → Tape)] in
-theorem freshRun_request_bind {α : Type}
-    (handler : QueryImpl base (StateT State ProbComp))
-    (sign : Request → Tape → StateT State ProbComp Answer) (input : Request)
-    (next : Answer → OracleComp (base + (Request →ₒ Answer)) α) :
-    freshRun handler sign (liftM ((base + (Request →ₒ Answer)).query (.inr input)) >>= next) =
-      (do
-        let tape ← liftM ($ᵗ Tape : ProbComp Tape)
-        let answer ← sign input tape
-        freshRun handler sign (next answer)) := by
-  simp only [freshRun, simulateQ_bind, simulateQ_spec_query]
-  change ((do
-    let tape ← liftM ($ᵗ Tape : ProbComp Tape)
-    sign input tape) >>= _) = _
-  simp only [bind_assoc]
-  rfl
-
-omit [DecidableEq Request] [Finite Request] [Finite Tape] [Nonempty Tape]
-    [SampleableType (Request → Tape)] in
-theorem freshRun_baseLift_bind {α β : Type}
-    (handler : QueryImpl base (StateT State ProbComp))
-    (sign : Request → Tape → StateT State ProbComp Answer) (first : OracleComp base α)
-    (next : α → OracleComp (base + (Request →ₒ Answer)) β) :
-    freshRun handler sign (baseLift first >>= next) =
-      (simulateQ handler first >>= fun value => freshRun handler sign (next value)) := by
-  simp only [freshRun, simulateQ_bind, simulateQ_baseLift]
-
 theorem evalDist_table_refresh {α : Type} (request : Request)
     (next : (Request → Tape) → ProbComp α) :
     (do let table ← $ᵗ (Request → Tape); next table) =ᵈ (do

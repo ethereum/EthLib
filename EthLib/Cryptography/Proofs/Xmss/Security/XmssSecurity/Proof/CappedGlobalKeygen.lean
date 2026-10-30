@@ -91,7 +91,6 @@ theorem globalChainInputProbe?_topChainInput
       some ((chain, .inr key, chainStepDigit step), value) :=
   globalChainInputProbe?_keyChainInput parameter (.inr key) chain step value
 
-
 theorem globalChainInputProbe?_eq_none_of_atHashAddress
     (parameter : PublicParameter) (domain : HashDomain) (input : HashInput)
     (haddress : AtHashAddress parameter domain input)
@@ -414,7 +413,6 @@ theorem globalChainEdgeHighTableOfCache_mono
   have hlarger := hle hcache
   simp [globalChainEdgeHighTableOfCache, hcache, hlarger]
 
-
 abbrev GlobalChainEdgeOutputTable := GlobalChainEdgeIndex → HashOutput
 
 def outputChainSteps : List ChainStep :=
@@ -520,16 +518,6 @@ theorem globalChainEdgeOutputTableOfTape_map
       (globalTrajectoryEdgeOrder.map table) = table :=
   finiteTableOfTape_map globalTrajectoryEdgeOrder
     globalTrajectoryEdgeOrder_nodup mem_globalTrajectoryEdgeOrder table
-
-theorem evalDist_globalChainEdgeOutputTableOfTape_drawList_eq_uniform :
-    (globalChainEdgeOutputTableOfTape <$>
-      OracleComp.drawList ($ᵗ HashOutput)
-        globalTrajectoryEdgeOrder.length) =ᵈ
-    ($ᵗ GlobalChainEdgeOutputTable) :=
-  (evalDist_finiteTableOfTape_drawList_eq_uniform globalTrajectoryEdgeOrder
-    globalTrajectoryEdgeOrder_nodup mem_globalTrajectoryEdgeOrder).trans
-    (uniformSample_evalDistEq_inst _ _)
-
 
 noncomputable local instance outputTableSampleable :
     SampleableType GlobalChainEdgeOutputTable :=
@@ -643,10 +631,6 @@ theorem independentGlobalChainValueTable_eq_uniform :
     independentGlobalChainValueTable =
       ($ᵗ (GlobalChainValueIndex → Digest)) := rfl
 
-theorem evalDist_independentGlobalChainValueTable_eq_uniformMeasure :
-    independentGlobalChainValueTable =ᵈ ($ᵗ (GlobalChainValueIndex → Digest)) :=
-  .of_eq independentGlobalChainValueTable_eq_uniform
-
 noncomputable def independentGlobalChainTableHigh :
     ProbComp ((GlobalChainValueIndex → Digest) ×
       (GlobalChainEdgeIndex → Digest)) := do
@@ -667,11 +651,6 @@ theorem evalDist_uniformGlobalChainKeygenRandomness_eq_uniform :
   rw [uniformGlobalChainKeygenRandomness]
   exact (prod_seq_evalDistEq_left Concrete.evalDist_sampleChainStarts_eq_uniform _).trans
     uniformSample_prod_evalDistEq_seq.symm
-
-theorem evalDist_uniformGlobalChainKeygenRandomness_eq_uniformMeasure :
-    uniformGlobalChainKeygenRandomness =ᵈ
-      ($ᵗ ((ChainKey → ChainIndex → Digest) × GlobalChainEdgeOutputTable)) :=
-  evalDist_uniformGlobalChainKeygenRandomness_eq_uniform
 
 set_option maxRecDepth 100000 in
 theorem evalDist_uniformGlobalChainKeygenRandomness_eq_independent :
@@ -700,7 +679,6 @@ theorem evalDist_globalChainKeygenRandomnessView_eq_independent :
             GlobalChainEdgeOutputTable))) := by
       exact evalDist_uniformGlobalChainKeygenRandomness_eq_uniform.map _
     _ =ᵈ _ := evalDist_uniformGlobalChainKeygenRandomness_eq_independent
-
 
 abbrev AllChainTrajectories := ChainIndex → List FullChainTrajectory
 
@@ -2416,7 +2394,6 @@ theorem evalDist_coupledGlobalChainKeygen_eq_programmedTrajectories :
     _ = _ := by
       unfold programmedGlobalChainTrajectoryMaterial
       simp only [bind_assoc, pure_bind]
-
 
 def ProgrammedGlobalChainKeygenRelation
     (left : ProgrammedGlobalChainKeygenView)

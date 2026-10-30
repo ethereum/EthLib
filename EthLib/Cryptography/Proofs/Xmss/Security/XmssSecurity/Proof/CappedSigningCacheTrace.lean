@@ -79,24 +79,6 @@ theorem cappedUnloggedMappedAdversaryImpl_cache_le
         (Concrete.scheme.sign secretKey request.leafIndex request.message)
         initialCache result hmem
 
-theorem cappedCacheTracedMappedAdversaryImpl_query_cache_le
-    (publicKey : PublicKey) (secretKey : SecretKey)
-    (input : (OracleWorld + SigningSpec).Domain)
-    (initialState : QueryCache HashSpec × SigningCacheTrace)
-    (result : (OracleWorld + SigningSpec).Range input ×
-      (QueryCache HashSpec × SigningCacheTrace))
-    (hmem : result ∈ support
-      ((cappedCacheTracedMappedAdversaryImpl publicKey secretKey input).run
-        initialState)) :
-    initialState.1 ≤ result.2.1 := by
-  rw [cappedCacheTracedMappedAdversaryImpl, QueryImpl.extendState_apply,
-    mem_support_bind_iff] at hmem
-  obtain ⟨baseResult, hbase, hpure⟩ := hmem
-  simp only [support_pure, Set.mem_singleton_iff] at hpure
-  subst result
-  exact cappedUnloggedMappedAdversaryImpl_cache_le publicKey secretKey input
-    initialState.1 baseResult hbase
-
 theorem cappedCacheTracedMappedAdversaryImpl_query_cachesLe
     (publicKey : PublicKey) (secretKey : SecretKey)
     (input : (OracleWorld + SigningSpec).Domain)

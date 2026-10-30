@@ -11,7 +11,9 @@ dropping them costs at most one `2^-256` guess of `S` per hash call after key ge
 -/
 
 open OracleComp OracleSpec ENNReal
+open EthLib.Cryptography.Xmss.Unforgeability (toModelAdversary)
 
+open EthLib.Cryptography.Xmss.Unforgeability renaming Adversary → EthAdversary
 namespace XmssSecurity.Bridge
 
 open Seeded DeterministicSigning
@@ -27,7 +29,7 @@ theorem run_progCache (seed : MasterSeed) (d : Derivations) :
     (fun x hx => progCache_tweakable hx) ∅
 
 /-- The table game with the programmed derivations dropped from the cache. -/
-noncomputable def cleanGame (adversary : LeanXmss.Security.Adversary) : ProbComp Bool := do
+noncomputable def cleanGame (adversary : EthAdversary) : ProbComp Bool := do
   let d ← drawDerivations
   let p ← (simulateQ randomOracle (honestRun d).withQueryLog).run ∅
   (simulateQ romImpl (Seeded.gameRest (tableScheme d.rnd) (toModelAdversary adversary)
@@ -42,7 +44,7 @@ theorem mem_support_progCache {seed : MasterSeed} {d : Derivations}
   exact ⟨p, hp, rfl⟩
 
 /-- The real budget, after key generation, from the clean cache. -/
-theorem cleanBudget (adversary : LeanXmss.Security.Adversary) (q : Nat) (hq : q < 2 ^ 256)
+theorem cleanBudget (adversary : EthAdversary) (q : Nat) (hq : q < 2 ^ 256)
     (hbound : SeededBudget adversary q) (d : Derivations)
     {p : ((Digest × (TopIndex → Option (Randomness × Encoding))) × QueryLog HashSpec) × QueryCache HashSpec}
     (hp : p ∈ support ((simulateQ randomOracle (honestRun d).withQueryLog).run ∅)) :
@@ -56,7 +58,7 @@ theorem cleanBudget (adversary : LeanXmss.Security.Adversary) (q : Nat) (hq : q 
     (fun seed _ => (afterKeygen_budget adversary q hbound seed d p.1 _ (mem_support_progCache hp)).2)
 
 /-- Dropping the programmed entries costs a seed guess per hash call after key generation. -/
-theorem tableGame_le_clean (adversary : LeanXmss.Security.Adversary) (q : Nat) (hq : q < 2 ^ 256)
+theorem tableGame_le_clean (adversary : EthAdversary) (q : Nat) (hq : q < 2 ^ 256)
     (hbound : SeededBudget adversary q) :
     Pr{let x ← sampleMasterSeed >>= tableGame adversary}[x = true] ≤
       Pr{let x ← cleanGame adversary}[x = true] + ((q - keygenQueries : Nat) : ℝ≥0∞) / ((2 ^ 256 : Nat) : ℝ≥0∞) := by

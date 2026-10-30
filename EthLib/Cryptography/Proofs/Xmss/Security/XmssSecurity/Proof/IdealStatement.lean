@@ -38,7 +38,6 @@ noncomputable def precomputedCappedSign (secretKey : SecretKey)
 
 attribute [irreducible] signingRandomness precomputedCappedSign
 
-
 variable {m : Type → Type} [Monad m] [HasQuery HashSpec m]
 
 noncomputable local instance : SampleableType PublicParameter :=
@@ -90,10 +89,6 @@ noncomputable def Concrete.scheme : Scheme SecretKey where
   sign := Concrete.precomputedCappedSign
   verify := fun publicKey leafIndex message signature =>
     liftM (Concrete.verify publicKey leafIndex message signature : OracleComp HashSpec Bool)
-
-/-- The security claim: `127` bits of classical strong unforgeability in the random-oracle model. -/
-abbrev IndependentSecurityStatement : Prop :=
-  HasClassicalSecurityBits Concrete.scheme 127
 
 noncomputable def Seeded.randomizedScheme : Scheme Seeded.SecretKey where
   keygen := Seeded.keygen
