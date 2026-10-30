@@ -1,7 +1,7 @@
 """
 Check the pinned test vectors.
 
-The BLS and KZG vectors are pinned: each directory must hold a `SHA256SUMS`
+The BLS, KZG and secp256k1 vectors are pinned: each directory must hold a `SHA256SUMS`
 file, and a missing one is an error, so deleting it cannot switch the check
 off. Any other vector directory that holds a `SHA256SUMS` file is pinned too.
 Every `data.yaml` under a pinned directory must be listed there, with the
@@ -30,7 +30,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
 # The suites that must be pinned. Their manifests are checked in CI.
-REQUIRED = ("bls", "kzg")
+REQUIRED = ("bls", "kzg", "secp256k1")
 
 # consensus-specs v1.7.0-alpha.12, the last release before consensus-specs#5398.
 UPSTREAM_URL = (
