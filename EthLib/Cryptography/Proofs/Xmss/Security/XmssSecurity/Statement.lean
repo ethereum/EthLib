@@ -96,7 +96,4 @@ def HasClassicalSecurityBits (bits : Nat) : Prop :=
 
 end Security
 
-/-- The security claim. -/
-abbrev XmssSecurityStatement : Prop := Security.HasClassicalSecurityBits 127
-
 end XmssSecurity

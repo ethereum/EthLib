@@ -88,13 +88,6 @@ noncomputable def sign (secretKey : SecretKey)
   liftM (signAttempt secretKey leafIndex message randomness :
     OracleComp HashSpec (Option Signature))
 
-theorem sign_eq (secretKey : SecretKey)
-    (leafIndex : LeafIndex) (message : Message) :
-    sign secretKey leafIndex message = (do
-      let randomness ← liftM signingRandomness
-      liftM (signAttempt secretKey leafIndex message randomness :
-        OracleComp HashSpec (Option Signature))) := rfl
-
 attribute [irreducible] sign
 
 noncomputable def signBoundedAttempts (secretKey : SecretKey) (leafIndex : LeafIndex)

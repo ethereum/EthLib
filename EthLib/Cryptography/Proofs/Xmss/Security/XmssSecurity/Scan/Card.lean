@@ -1,10 +1,10 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingRejection
-import EthLib.Cryptography.Proofs.Xmss.Security.LeanXmss.Code
+import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Code
 
 /-!
 # The number of codewords
 
-`validDigests` is in bijection with the digit words of sum `T`, which `LeanXmss.Code` counts.
+`validDigests` is in bijection with the digit words of sum `T`, which `Code.lean` counts.
 -/
 
 set_option maxRecDepth 100000
@@ -35,21 +35,10 @@ theorem validDigests_card_eq :
     exact ⟨d, Finset.mem_filter.mpr ⟨Finset.mem_univ _,
       x, decodeDigest_eq_some_iff.mpr ⟨hd, (Finset.mem_filter.mp hx).2⟩⟩, congrArg Prod.fst hd⟩
 
-/-- The two libraries' digit words of sum `T` are the same set. -/
-theorem card_valid_eq_codeCount :
-    (Finset.univ.filter Valid : Finset Encoding).card =
-      LeanXmss.Codeword.codeCount LeanXmss.targetSum := by
-  have hv : ∀ x : Encoding, Valid x ↔ LeanXmss.Codeword.sum x = LeanXmss.targetSum := fun _ => Iff.rfl
-  unfold LeanXmss.Codeword.codeCount
-  exact Finset.card_bij (fun x _ => x)
-    (fun x hx => Finset.mem_filter.mpr ⟨Finset.mem_univ _, (hv x).mp (Finset.mem_filter.mp hx).2⟩)
-    (fun _ _ _ _ h => h)
-    (fun x hx =>
-      ⟨x, Finset.mem_filter.mpr ⟨Finset.mem_univ _, (hv x).mpr (Finset.mem_filter.mp hx).2⟩, rfl⟩)
-
 theorem validDigests_card :
     validDigests.card = 323504418562481994618807509487594 := by
-  rw [validDigests_card_eq, card_valid_eq_codeCount, LeanXmss.Codeword.codeCount_target]
+  rw [validDigests_card_eq, ← codeCount_target]
+  rfl
 
 theorem two_pow_107_le_validDigests_card : 2 ^ 107 ≤ validDigests.card := by
   rw [validDigests_card]; norm_num

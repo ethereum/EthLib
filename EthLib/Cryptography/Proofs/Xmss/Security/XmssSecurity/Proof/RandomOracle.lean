@@ -147,7 +147,6 @@ theorem evalDist_sampledHashOutputWithDigest_eq_uniform :
       rw [Functor.map_map]
       exact .of_eq (congrArg (· <$> ($ᵗ HashOutput)) hfunction)
 
-
 /-- A programmed low digest and its independent high half may be replaced by one ordinary random-oracle output inside any continuation. -/
 theorem evalDist_sampledHashOutputWithDigest_bind_eq_uniform_bind
     (continuation : Digest × HashOutput → ProbComp α) :

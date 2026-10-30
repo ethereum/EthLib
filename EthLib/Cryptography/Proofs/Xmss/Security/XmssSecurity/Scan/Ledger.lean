@@ -331,13 +331,6 @@ section Sign
 variable (secretKey : SecretKey) {request : SignRequest} {cache : QueryCache HashSpec}
   {trace : SigningCacheTrace} {r : Option Signature × QueryCache HashSpec}
 
-theorem first_append_new_of_unsigned (h : Unsigned trace request.leafIndex) :
-    first (trace ++ [⟨request, r.1, cache, r.2⟩]) request.leafIndex = some ⟨request, r.1, cache, r.2⟩ := by
-  unfold Unsigned first at h
-  unfold first
-  rw [List.find?_append, h]
-  simp
-
 theorem first_append_eq_of_some {e : LeafIndex} {entry : SigningCacheEntry} (new : SigningCacheEntry)
     (h' : first (trace ++ [new]) e = some entry) :
     first trace e = some entry ∨ (Unsigned trace e ∧ entry = new) := by

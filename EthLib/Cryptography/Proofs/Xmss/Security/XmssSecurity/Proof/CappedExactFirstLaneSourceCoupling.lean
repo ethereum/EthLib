@@ -52,20 +52,6 @@ theorem sourceSigningTracedMappedAdversaryImpl_query_eq_map
   intro result
   rfl
 
-theorem sourceSigningTracedMappedAdversaryImpl_query_projection
-    (publicKey : PublicKey) (secretKey : SecretKey)
-    (input : (OracleWorld + SigningSpec).Domain)
-    (initialState : SourceSigningTracedState) :
-    (fun result => (result.1,
-        sourceSigningTracedStateProjection result.2)) <$>
-        (sourceSigningTracedMappedAdversaryImpl publicKey secretKey input).run
-          initialState =
-      (sourceDirectTracedMappedAdversaryImpl publicKey secretKey input).run
-        (sourceSigningTracedStateProjection initialState) := by
-  rw [sourceSigningTracedMappedAdversaryImpl_query_eq_map]
-  simp [Functor.map_map, sourceSigningTracedQueryResult,
-    sourceSigningTracedStateProjection]
-
 def GlobalSigningMonitoredTracedStateRelation
     (left : ProgrammedGlobalChainKeygenView)
     (right : ProgrammedGlobalChainKeygenView ×
@@ -244,7 +230,6 @@ theorem probEvent_eq_of_evalDist_eq
     (heval : computation₁ =ᵈ computation₂) :
     Pr{let x ← computation₁}[event x] = Pr{let x ← computation₂}[event x] :=
   heval.prEvent_eq event
-
 
 theorem encodingObservation?_eq_of_globalSigningCachesAgree
     (secretKey : SecretKey)
@@ -451,7 +436,6 @@ theorem relTriple_programmed_globalHighMonitored_sourceExact_action
     · exact Or.inr hbad
   rw [cappedBothTracedMappedAdversaryImpl_query_eq_sourceExactMap]
   simpa using hlifted
-
 
 theorem appendVerificationEncodingObservation_eq_of_globalSigningCachesAgree
     (leftSecret rightSecret : SecretKey)
@@ -671,7 +655,6 @@ theorem cappedExactFirstLane_probability_eq_sourceGlobalExact
       rw [← cappedDetailedGameWithKeygenCacheAndBothTraces_encodingProjection_eq adversary,
         prEvent_map]
       rfl
-
 
     _ = Pr{let x ← (sourceGlobalExactProgramResult <$>
           sourceGlobalExactTracedProgram adversary)}[(WinningExactFirstLaneBadEventOccurs ∘ cappedBothEncodingProjection) x] :=

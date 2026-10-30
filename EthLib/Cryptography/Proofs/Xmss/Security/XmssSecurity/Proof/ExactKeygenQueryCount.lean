@@ -2,7 +2,7 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExactQueryCou
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheReplayEval
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.DetailedExecution
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.EncodingQueryBound
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryBoundSupport
+import VCVio.OracleComp.QueryTracking.QueryBound
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
 import VCVio.OracleComp.QueryTracking.SubSpec
@@ -80,14 +80,6 @@ theorem treeNode (parameter : PublicParameter)
 
 end ExactQueryCount
 
-theorem treeHashQueryCount_base_le (levels : Nat) :
-    numChains * (chainLength - 1) + 1 ≤ treeHashQueryCount levels := by
-  induction levels with
-  | zero => rfl
-  | succ levels ih =>
-      simp only [treeHashQueryCount]
-      omega
-
 def IsHashQuery : OracleWorld.Domain → Prop := fun input => input matches .inr _
 
 instance : DecidablePred IsHashQuery := by
@@ -96,25 +88,7 @@ instance : DecidablePred IsHashQuery := by
 
 namespace ExactQueryCount.ExactPredicateQueryCount
 
-theorem liftProbComp_hashCount_zero (computation : ProbComp α) :
-    ExactPredicateQueryCount IsHashQuery
-      (liftM computation : OracleComp OracleWorld α) 0 := by
-  apply ExactQueryCount.ExactPredicateQueryCount.of_isQueryBoundP_zero
-  exact OracleComp.IsQueryBoundP.liftComp_subSpec
-    (p := fun _ : unifSpec.Domain => False) (q := IsHashQuery)
-    (fun input => by simp [IsHashQuery])
-    (OracleComp.isQueryBoundP_false computation 0)
-
 end ExactQueryCount.ExactPredicateQueryCount
-
-theorem countHashQueries_of_exact {α : Type} {computation : OracleComp OracleWorld α} {count : Nat}
-    (hexact : ExactPredicateQueryCount IsHashQuery computation count) :
-    countHashQueries computation = (fun value => (value, count)) <$> computation := by
-  induction hexact with
-  | pure value => simp only [countHashQueries_pure, map_pure]
-  | query input next count hnext ih =>
-      simp only [countHashQueries_query_bind, ih, map_bind, bind_pure_comp, Functor.map_map]
-      cases input <;> simp [IsHashQuery, Nat.add_comm]
 
 /-- The after-key-generation budget bounds every run after key generation. -/
 theorem afterKeygen_hashQueryBound (adversary : Adversary) (q : Nat)

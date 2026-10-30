@@ -225,7 +225,6 @@ theorem relTriple_coupledGlobalChainKeygen_withBaseHigh
     programmedGlobalChainTrajectoryMaterial_chainsWarm parameter rightMaterialBaseHigh.1.1
       hrightMaterialSupport, hrunRel⟩, hhighFinal, hmatches.mono hcacheLe⟩
 
-
 set_option maxRecDepth 2000000
 set_option maxHeartbeats 3000000
 set_option linter.constructorNameAsVariable false
@@ -417,7 +416,6 @@ theorem relTriple_trajectoryProgrammedGlobalChainKeygen_withBaseHigh_stable :
     evalDist_coupledGlobalChainKeygen_eq_trajectoryProgrammed.symm
     relTriple_coupledGlobalChainKeygen_withBaseHigh_fullCacheStable
 
-
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 2000000
 
@@ -462,16 +460,6 @@ theorem globalChainInputProbe?_keyLeafInput
   apply globalChainInputProbe?_eq_none_of_tweakableHashInput
   intro chainKey chain step
   cases chainKey <;> cases key <;> simp [ChainKey.chainDomain, ChainKey.leafDomain]
-
-theorem globalChainInputProbe?_merkleHashInput
-    (parameter : PublicParameter) (input : HashInput)
-    (hinput : MerkleHashInput parameter input) :
-    globalChainInputProbe? parameter input = none := by
-  obtain ⟨domain, hretained, haddress⟩ := hinput
-  apply globalChainInputProbe?_eq_none_of_atHashAddress parameter domain input haddress
-  intro key chain step heq
-  subst domain
-  cases key <;> exact hretained
 
 def FilteredCacheExtensionRelation
     (leftBase left right : QueryCache HashSpec) : Prop :=
@@ -744,7 +732,6 @@ def GlobalFilteredHashResultRelation
   leftResult.1 = rightResult.1.1 ∧
     GlobalFilteredCausalStateRelation left right leftResult.2 rightResult.1.2
 
-
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 2000000
 
@@ -824,7 +811,6 @@ theorem relTriple_globalEncodingHash_run_filtered
   exact ⟨congrArg truncateHash hresult.output_eq, hresult.caches_agree,
     hresult.left_le, hresult.right_le, hresult.filtered⟩
 
-
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 2000000
 
@@ -881,7 +867,6 @@ theorem programmedGlobal_filteredKeygen_stateRelation
       exact ⟨rfl, by simp [globalFilteredCausalKeygenState, hmerkle]⟩
   · intro index value hvalue
     simp [globalFilteredCausalKeygenState] at hvalue
-
 
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 2000000
@@ -949,7 +934,6 @@ theorem globalChainEdgeOutputFromHigh_eq_revealOutput
       globalChainEdgeOutputFromHigh high table edge := by
   unfold globalChainEdgeOutputFromHigh globalChainTableEdgeTarget
   rw [globalChainValueHighTableOfEdges_next]
-
 
 theorem Concrete.keygen_signWithEncoding_eq_base
     (keyResult : (PublicKey × SecretKey) × QueryCache HashSpec)
@@ -1390,7 +1374,6 @@ theorem relTriple_programmed_globalFilteredCausalSigningQuery
   split
   · exact hequal (by assumption)
   · rfl
-
 
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 2000000

@@ -9,11 +9,6 @@ def WinningEncodingEventOccurs
     (cache : QueryCache HashSpec) (outcome : GameOutcome) : Prop :=
   WinningGlobalBadEventOccurs cache outcome .encoding
 
-/-- A winning execution with a bad event of the top layer. -/
-def WinningTopBadEventOccurs
-    (cache : QueryCache HashSpec) (outcome : GameOutcome) : Prop :=
-  WinningGlobalBadEventOccurs cache outcome .top
-
 def WinningUnifiedBadEventOccurs
     (cache : QueryCache HashSpec) (outcome : GameOutcome) : Prop :=
   WinningEncodingEventOccurs cache outcome ∨

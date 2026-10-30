@@ -12,7 +12,9 @@ real budget bounds the model's calls after key generation.
 -/
 
 open OracleComp OracleSpec ENNReal
+open EthLib.Cryptography.Xmss.Unforgeability (toModelAdversary)
 
+open EthLib.Cryptography.Xmss.Unforgeability renaming Adversary → EthAdversary
 namespace XmssSecurity.Bridge
 
 open Seeded DeterministicSigning
@@ -20,11 +22,11 @@ open Seeded DeterministicSigning
 set_option backward.isDefEq.respectTransparency false
 
 /-- The model's adversary: the statement's, translated and memoized. -/
-noncomputable def modelAdversary (adversary : LeanXmss.Security.Adversary) : Adversary :=
+noncomputable def modelAdversary (adversary : EthAdversary) : Adversary :=
   memoAdversary (toModelAdversary adversary)
 
 /-- The clean game with the model's signer. -/
-noncomputable def refGame (adversary : LeanXmss.Security.Adversary) : ProbComp Bool := do
+noncomputable def refGame (adversary : EthAdversary) : ProbComp Bool := do
   let d ← drawDerivations
   let p ← (simulateQ randomOracle (honestRun d).withQueryLog).run ∅
   (simulateQ romImpl (Seeded.gameRest Concrete.scheme (modelAdversary adversary)
@@ -38,7 +40,7 @@ private theorem prob_bind_mono {α : Type} {mx : ProbComp α} {f g : α → Prob
     Pr{let x ← mx >>= f}[x = true] ≤ Pr{let x ← mx >>= g}[x = true] :=
   prEvent_bind_mono_of_forall_le_of_support mx f g _ _ h
 
-theorem cleanGame_le_ref (adversary : LeanXmss.Security.Adversary) :
+theorem cleanGame_le_ref (adversary : EthAdversary) :
     Pr{let x ← cleanGame adversary}[x = true] ≤ Pr{let x ← refGame adversary}[x = true] := by
   unfold cleanGame refGame drawDerivations modelAdversary
   simp only [bind_assoc, pure_bind, honestRun, modelSecretKey, modelPublicKey, Derivations.parameter,
@@ -57,7 +59,7 @@ theorem cleanGame_le_ref (adversary : LeanXmss.Security.Adversary) :
         prob_bind_mono fun rnd _ => prob_table_le_memo _ _ _ _ _
     _ = _ := (evalDist_table_memo _ _ _ _).prEvent_eq (· = true)
 
-theorem refGame_eq (adversary : LeanXmss.Security.Adversary) :
+theorem refGame_eq (adversary : EthAdversary) :
     Pr{let x ← refGame adversary}[x = true] = forgeAdvantage Concrete.scheme (modelAdversary adversary) := by
   unfold refGame forgeAdvantage gameCore
   refine ((evalDist_keygen (fun pk sk cache => (simulateQ romImpl (Seeded.gameRest Concrete.scheme
@@ -84,7 +86,7 @@ theorem mem_support_keygen {key : (PublicKey × XmssSecurity.SecretKey) × Query
   obtain ⟨p, hp, hmem⟩ := hmem
   exact ⟨d, p, hp, by simpa using hmem⟩
 
-theorem afterKeygenBudget (adversary : LeanXmss.Security.Adversary) (q : Nat) (hq : q < 2 ^ 256)
+theorem afterKeygenBudget (adversary : EthAdversary) (q : Nat) (hq : q < 2 ^ 256)
     (hbound : SeededBudget adversary q) :
     HasAfterKeygenHashQueryBound Concrete.scheme (modelAdversary adversary) (q - keygenQueries) := by
   intro key hkey result hresult

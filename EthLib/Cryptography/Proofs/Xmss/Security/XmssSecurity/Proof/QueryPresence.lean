@@ -50,19 +50,6 @@ theorem leafAt_query_cached_in_largerCache
   rw [hendpoints]
   exact hle hcached
 
-theorem leafAt_query_cached
-    (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest) (leafIndex : LeafIndex)
-    (initialCache finalCache : QueryCache HashSpec) (digest : Digest)
-    (hmem : (digest, finalCache) ∈ support
-      ((simulateQ randomOracle
-        (Concrete.leafAt parameter secret leafIndex : OracleComp HashSpec Digest)).run
-          initialCache)) :
-    ∃ output,
-      finalCache (Concrete.CacheView.leafInput parameter leafIndex
-        (oneTimePublicKey finalCache parameter secret leafIndex)) = some output :=
-  leafAt_query_cached_in_largerCache parameter secret leafIndex initialCache finalCache
-    finalCache digest hmem le_rfl
-
 theorem treeNode_leaf_query_cached_in_largerCache
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest) (leafIndex : LeafIndex)
     (levels : Nat) (node : MerkleNode)

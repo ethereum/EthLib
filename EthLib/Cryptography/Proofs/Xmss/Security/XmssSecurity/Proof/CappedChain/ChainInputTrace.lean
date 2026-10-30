@@ -1,6 +1,6 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.EncodingQueryBound
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainInputTrace
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryBoundSupport
+import VCVio.OracleComp.QueryTracking.QueryBound
 
 open OracleComp OracleSpec
 
@@ -80,12 +80,5 @@ theorem attackerActionFragment_toSigningLog
   cases input with
   | inl worldInput => cases worldInput <;> rfl
   | inr request => rfl
-
-noncomputable def sourceActionTracedMappedAdversaryImpl
-    (publicKey : PublicKey) (secretKey : SecretKey) :
-    QueryImpl (OracleWorld + SigningSpec)
-      (WriterT AttackerActionTrace (OracleComp OracleWorld)) :=
-  (sourceUnloggedMappedAdversaryImpl publicKey secretKey).withTraceAppend
-    attackerActionFragment
 
 end XmssSecurity.CappedChain

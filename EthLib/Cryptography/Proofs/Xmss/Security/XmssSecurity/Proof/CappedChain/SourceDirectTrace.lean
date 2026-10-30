@@ -43,47 +43,6 @@ noncomputable def sourceDirectTracedMappedAdversaryImpl
     (sourceDirectMappedAdversaryImpl publicKey secretKey)
     attackerActionFragment
 
-theorem sourceDirectTracedMappedAdversaryImpl_query_run_eq
-    (publicKey : PublicKey) (secretKey : SecretKey)
-    (input : (OracleWorld + SigningSpec).Domain)
-    (cache : QueryCache HashSpec) (trace : AttackerActionTrace) :
-    (sourceDirectTracedMappedAdversaryImpl publicKey secretKey input).run
-        (cache, trace) =
-      (fun result =>
-        (result.1.1, (result.2, trace ++ result.1.2))) <$>
-        (simulateQ romImpl
-          (sourceActionTracedMappedAdversaryImpl publicKey secretKey input).run
-            ).run cache := by
-  unfold sourceDirectTracedMappedAdversaryImpl actionTracedStateImpl
-    sourceActionTracedMappedAdversaryImpl
-  rw [sourceDirectMappedAdversaryImpl_eq_compose]
-  simp [QueryImpl.apply_compose,
-    map_eq_bind_pure_comp]
-
-set_option maxRecDepth 1000000 in
-theorem sourceDirectTracedMappedAdversaryImpl_run_eq
-    (publicKey : PublicKey) (secretKey : SecretKey)
-    (computation : OracleComp (OracleWorld + SigningSpec) α)
-    (cache : QueryCache HashSpec) (trace : AttackerActionTrace) :
-    (simulateQ (sourceDirectTracedMappedAdversaryImpl publicKey secretKey)
-        computation).run (cache, trace) =
-      (fun result =>
-        (result.1.1, (result.2, trace ++ result.1.2))) <$>
-        (simulateQ romImpl
-          (simulateQ (sourceActionTracedMappedAdversaryImpl publicKey secretKey)
-            computation).run).run cache := by
-  induction computation using OracleComp.inductionOn generalizing cache trace with
-  | pure value => simp
-  | query_bind input next ih =>
-      simp only [StateT.run_bind, WriterT.run_bind', simulateQ_bind, map_bind,
-        simulateQ_spec_query]
-      rw [sourceDirectTracedMappedAdversaryImpl_query_run_eq]
-      simp only [bind_map_left]
-      apply bind_congr
-      intro head
-      simpa [List.append_assoc] using
-        (ih head.1.1 head.2 (trace ++ head.1.2))
-
 noncomputable abbrev sourceDirectTracedHashVerifierImpl
     (hashInput : HashInput) : StateT SourceTracedState ProbComp HashOutput :=
   StateT.mk fun state =>

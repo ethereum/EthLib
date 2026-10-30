@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SignCacheHitProbability
+import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingTargetMap
+import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SigningRandomnessUniformity
+import Mathlib.Data.Set.Card.Arithmetic
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
 
 open OracleComp OracleSpec ENNReal

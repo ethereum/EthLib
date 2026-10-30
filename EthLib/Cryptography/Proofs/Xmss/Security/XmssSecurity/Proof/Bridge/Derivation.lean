@@ -1,4 +1,4 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Translate
+import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Basic
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TableSigner
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.FiniteTable
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.SeedGuessing
@@ -38,21 +38,19 @@ structure Derivations where
   topRnd : TopRndPos → HashOutput
 
 def paramInput (seed : MasterSeed) : HashInput :=
-  LeanXmss.keygenHashInput 0 .parameter seed
+  keygenHashInput 0 .parameter seed
 
 def bottomInput (parameter : PublicParameter) (seed : MasterSeed) (pos : BottomPos) : HashInput :=
-  LeanXmss.keygenHashInput parameter (.ots LeanXmss.bottomLayer pos.1 pos.2) seed
+  keygenHashInput parameter (.chain pos.1 pos.2) seed
 
 def topInput (parameter : PublicParameter) (seed : MasterSeed) (pos : TopOtsPos) : HashInput :=
-  LeanXmss.keygenHashInput parameter (.ots LeanXmss.topLayer (topKey pos.1) pos.2) seed
+  keygenHashInput parameter (.topChain pos.1 pos.2) seed
 
 def rndInput (parameter : PublicParameter) (seed : MasterSeed) (request : SignRequest) : HashInput :=
-  LeanXmss.randomizerHashInput parameter LeanXmss.bottomLayer request.leafIndex seed
-    (LeanXmss.bytesLE 32 request.message)
+  randomizerHashInput parameter seed request.leafIndex request.message
 
 def topRndInput (parameter : PublicParameter) (seed : MasterSeed) (pos : TopRndPos) : HashInput :=
-  LeanXmss.randomizerHashInput parameter LeanXmss.topLayer (topKey pos.1) seed
-    (LeanXmss.bytesLE 16 pos.2)
+  topRandomizerHashInput parameter seed pos.1 pos.2
 
 /-! ## Input layout -/
 
@@ -61,35 +59,26 @@ theorem paramInput_eq (seed : MasterSeed) :
 
 theorem bottomInput_eq (parameter : PublicParameter) (seed : MasterSeed) (pos : BottomPos) :
     bottomInput parameter seed pos =
-      bytesLE 16 parameter ++ fieldBytes (tweakFields 0 0 pos.2.val pos.1.val) ++ bytesLE 32 seed := by
-  simp only [bottomInput, LeanXmss.keygenHashInput, LeanXmss.keygenDomainFields, LeanXmss.layerHi,
-    LeanXmss.bottomLayer]
+      bytesLE 16 parameter ++ fieldBytes (tweakFields 0 0 pos.2.val pos.1.val) ++ bytesLE 32 seed :=
   rfl
 
 theorem topInput_eq (parameter : PublicParameter) (seed : MasterSeed) (pos : TopOtsPos) :
     topInput parameter seed pos =
       bytesLE 16 parameter ++ fieldBytes (tweakFields 0 0 (topFlag + pos.2.val) pos.1.val) ++
-        bytesLE 32 seed := by
-  simp only [topInput, LeanXmss.keygenHashInput, LeanXmss.keygenDomainFields]
-  have h : LeanXmss.layerHi LeanXmss.topLayer pos.2.val = topFlag + pos.2.val := by
-    simp only [LeanXmss.layerHi, LeanXmss.topLayer, topFlag]
-    omega
-  rw [h]
+        bytesLE 32 seed :=
   rfl
 
 theorem rndInput_eq (parameter : PublicParameter) (seed : MasterSeed) (request : SignRequest) :
     rndInput parameter seed request =
       bytesLE 16 parameter ++ fieldBytes (tweakFields 7 0 0 request.leafIndex.val) ++
         (bytesLE 32 seed ++ bytesLE 32 request.message) := by
-  simp only [rndInput, LeanXmss.randomizerHashInput, List.append_assoc]
-  rfl
+  simp only [rndInput, randomizerHashInput, List.append_assoc]
 
 theorem topRndInput_eq (parameter : PublicParameter) (seed : MasterSeed) (pos : TopRndPos) :
     topRndInput parameter seed pos =
       bytesLE 16 parameter ++ fieldBytes (tweakFields 7 0 topFlag pos.1.val) ++
         (bytesLE 32 seed ++ bytesLE 16 pos.2) := by
-  simp only [topRndInput, LeanXmss.randomizerHashInput, List.append_assoc]
-  rfl
+  simp only [topRndInput, topRandomizerHashInput, List.append_assoc]
 
 theorem tweakableHashInput_eq (parameter : PublicParameter) (domain : HashDomain) (payload : HashInput) :
     tweakableHashInput parameter domain payload =
@@ -110,9 +99,6 @@ theorem ofNat_inj {w a b : Nat} (ha : a < 2 ^ w) (hb : b < 2 ^ w)
     (h : BitVec.ofNat w a = BitVec.ofNat w b) : a = b := by
   have := congrArg BitVec.toNat h
   rwa [BitVec.toNat_ofNat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha, Nat.mod_eq_of_lt hb] at this
-
-theorem tag_of_fields {a b c d a' b' c' d' : Nat} (h : tweakFields a b c d = tweakFields a' b' c' d') :
-    BitVec.ofNat 5 a = BitVec.ofNat 5 a' := congrArg TweakFields.tag h
 
 theorem hi_of_fields {a b c d a' b' c' d' : Nat} (h : tweakFields a b c d = tweakFields a' b' c' d')
     (hc : c < 2 ^ 24) (hc' : c' < 2 ^ 24) : c = c' := ofNat_inj hc hc' (congrArg TweakFields.hi h)

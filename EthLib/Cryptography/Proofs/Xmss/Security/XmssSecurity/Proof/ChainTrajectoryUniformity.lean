@@ -127,5 +127,4 @@ theorem Concrete.chainTrajectory_queryBound_zero_of_avoids
       · exact OracleComp.isQueryBoundP_pure
           (p := AtHashAddress parameter targetDomain) (values.push 0) 0
 
-
 end XmssSecurity

@@ -677,47 +677,6 @@ theorem Concrete.fixedSeedChainTrajectoriesFromCache_replay_in_largerCache
             (hrestInfo.1.trans hlarger)
       · exact ih first.2 rest largerCache hrest hlarger
 
-theorem Concrete.fixedSeedChainTrajectoriesFromCache_table_eq_in_largerCache
-    (parameter : PublicParameter) (start : ChainKey → ChainIndex → Digest)
-    (chain : ChainIndex) (initialCache : QueryCache HashSpec)
-    (result : List FullChainTrajectory × QueryCache HashSpec)
-    (largerCache : QueryCache HashSpec)
-    (hresult : result ∈ support
-      (Concrete.fixedSeedChainTrajectoriesFromCache parameter start chain
-        (chainLength - 1) initialCache allChainKeys))
-    (hle : result.2 ≤ largerCache)
-    (secretKey : SecretKey) (hparameter : secretKey.parameter = parameter)
-    (hstart : secretKey.keyChainStart = start) :
-    chainValueTableOfList result.1 = keygenChainValueTable largerCache secretKey chain := by
-  have hinfo := Concrete.fixedSeedChainTrajectoriesFromCache_support_info
-    parameter start chain (chainLength - 1) allChainKeys initialCache result hresult
-  have hpairs :=
-    Concrete.fixedSeedChainTrajectoriesFromCache_replay_in_largerCache
-      parameter start chain (chainLength - 1) allChainKeys initialCache result largerCache
-      hresult hle
-  funext index
-  unfold chainValueTableOfList
-  split
-  · rename_i htableLength
-    let position := chainKeyPosition index.1
-    have hresultPosition : position.val < result.1.length := by
-      rw [← htableLength]
-      exact position.isLt
-    have hpair := hpairs.get position.isLt hresultPosition
-    have hkey : allChainKeys.get position = index.1 := by
-      exact allChainKeys_get_chainKeyPosition index.1
-    rw [hkey] at hpair
-    have hvalue := congrArg
-      (fun trajectory : FullChainTrajectory =>
-        trajectory[index.2.val]'(by
-          have hdigit := index.2.isLt
-          omega)) hpair
-    rw [Concrete.chainTrajectory_getElem] at hvalue
-    rw [keygenChainValueTable, hparameter, hstart]
-    exact hvalue.symm
-  · rename_i htableLength
-    exact (htableLength hinfo.2.1.symm).elim
-
 theorem evalDist_run_eq_fixedSeedTrajectories_then {α : Type} (parameter : PublicParameter)
     (start : ChainKey → ChainIndex → Digest) (computation : OracleComp HashSpec α)
     (hcovers : CoversKeyChains parameter start computation)

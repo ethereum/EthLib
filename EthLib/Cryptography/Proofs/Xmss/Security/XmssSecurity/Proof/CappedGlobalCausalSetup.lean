@@ -48,7 +48,6 @@ def eraseGlobalChainKeygenView
       result.1.1.cache result.1.1.secretKey), result.1.1.cache),
     result.1.2), result.2)
 
-
 structure GlobalCausalHashState where
   cache : QueryCache HashSpec
   keygenCache : QueryCache HashSpec
@@ -304,7 +303,6 @@ theorem revealGlobalSignatureChains_run_isProbeQueryBoundP
       exact ih (replaceSignatureChainValue signature chain value)
         (state.recordReveal index value)
 
-
 noncomputable def revealGlobalSignatureTopChains
     (request : SignRequest) (encoding : ChainIndex → Digit) :
     List ChainIndex → Signature →
@@ -445,7 +443,6 @@ theorem revealGlobalSignatureTopChains_run_isProbeQueryBoundP
       intro value _hvalue
       exact ih (replaceSignatureTopChainValue signature chain value)
         (state.recordReveal index value)
-
 
 theorem Signature.eq_of_fields
     (left right : Signature)
@@ -992,8 +989,6 @@ theorem GlobalSigningRevealsAgree.globalSignatureRevealResult
       apply ih
       exact hagrees.recordReveal (chain, .inl request.leafIndex, encoding chain)
 
-
-
 theorem GlobalSigningRevealsAgree.globalSignatureTopRevealResult
     {table : GlobalChainValueIndex → Digest}
     {state : GlobalCausalHashState}
@@ -1017,8 +1012,6 @@ theorem GlobalSigningRevealsAgree.globalSignatureTopRevealResult
             (table (chain, .inr (topKeyOf request.leafIndex), encoding chain)))).2
       apply ih
       exact hagrees.recordReveal (chain, .inr (topKeyOf request.leafIndex), encoding chain)
-
-
 
 theorem GlobalSigningRevealsAgree.globalSignatureFullRevealResult
     {table : GlobalChainValueIndex → Digest}
@@ -1047,17 +1040,6 @@ def ProgrammedGlobalChainKeygenFullCacheRelation
         leftEndpoints left.cache ∧
       ReplayEndpointsMatch right.1.secretKey.parameter
         right.1.secretKey.keyChainStart rightEndpoints right.1.cache
-
-theorem Concrete.CacheView.encodingInput_ne_leafInput
-    (parameter : PublicParameter) (encodingLeafIndex leafIndex : LeafIndex)
-    (message : Message) (randomness : Randomness)
-    (endpoints : ChainIndex → Digest) :
-    Concrete.CacheView.encodingInput parameter encodingLeafIndex
-        (message, randomness) ≠
-      Concrete.CacheView.leafInput parameter leafIndex endpoints := by
-  intro heq
-  have hdomain := domain_eq_of_tweakableHashInput_eq parameter heq
-  simp at hdomain
 
 def GlobalTreeSigningCacheRelation
     (parameter : PublicParameter)

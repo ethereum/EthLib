@@ -7,18 +7,6 @@ namespace XmssSecurity.Seeded
 
 set_option backward.isDefEq.respectTransparency false
 
-theorem run'_lift_hash_bind {α β : Type} (computation : OracleComp HashSpec α)
-    (next : α → OracleComp OracleWorld β) (cache : QueryCache HashSpec) :
-    (simulateQ romImpl ((liftM computation : OracleComp OracleWorld α) >>= next)).run' cache =
-      ((simulateQ randomOracle computation).run cache >>= fun result =>
-        (simulateQ romImpl (next result.1)).run' result.2) := by
-  rw [simulateQ_bind, StateT.run'_eq, StateT.run_bind]
-  have h : simulateQ romImpl (liftM computation : OracleComp OracleWorld α) =
-      simulateQ randomOracle computation :=
-    QueryImpl.simulateQ_add_liftM_right _ _ computation
-  rw [h, map_bind]
-  rfl
-
 theorem run'_lift_sample_bind {α β : Type} (computation : ProbComp α)
     (next : α → OracleComp OracleWorld β) (cache : QueryCache HashSpec) :
     (simulateQ romImpl ((liftM computation : OracleComp OracleWorld α) >>= next)).run' cache =
