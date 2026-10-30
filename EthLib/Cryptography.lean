@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Bls
 public import EthLib.Cryptography.Kzg
 public import EthLib.Cryptography.Xmss
 public import EthLib.Cryptography.Vrf
+public import EthLib.Cryptography.Secp256k1
 
 /-!
 # `EthLib.Cryptography`
