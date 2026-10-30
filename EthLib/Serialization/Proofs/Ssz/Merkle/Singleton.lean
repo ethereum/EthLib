@@ -98,9 +98,9 @@ private theorem climbBranch_append (index : Nat) : ∀ (level : Nat) (node last 
       if gindexBit index (level + siblings.length)
       then combine last (climbBranch index level node siblings)
       else combine (climbBranch index level node siblings) last
-  | _, _, _, [] => by simp [climbBranch]
+  | _, _, _, [] => by simp [climbBranch_nil, climbBranch_cons]
   | level, node, last, sibling :: rest => by
-    simp only [List.cons_append, climbBranch, List.length_cons]
+    simp only [List.cons_append, climbBranch_cons, List.length_cons]
     rw [climbBranch_append index (level + 1)]
     simp [Nat.add_assoc, Nat.add_comm 1]
 
@@ -151,7 +151,7 @@ theorem calculateMultiMerkleRootUnchecked_singleton {leaf root : Bytes} {proof :
     | zero =>
       intro _
       simp [proofTree_supplied _ _ _ (by simp [nodes, nodeAt] : nodeAt nodes index = some leaf),
-        CommitmentTree.root, climbBranch]
+        CommitmentTree.root, climbBranch_nil]
     | succ step ih =>
       intro below
       -- A path node above the claim is not supplied, since it would sit above the claim.

@@ -1,10 +1,30 @@
 import EthLib.Serialization.Ssz.Merkle.Verify
 import EthLib.Serialization.Proofs.Ssz.Merkle.Gindex
 import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
+import EthLib.Cryptography.Proofs.Merkle.Tree
 
 /-! Laws of branch verification: what climbing a branch folds, and when it rebuilds a root. -/
 
 namespace EthLib.Serialization.Ssz
+
+/-- A branch with no node left is the node already reached. -/
+@[simp] theorem climbBranch_nil (index level : Nat) (node : Bytes) :
+    climbBranch index level node [] = node :=
+  rfl
+
+/-- One step of a branch: bit `level` of the index says which side the branch node joins on. -/
+theorem climbBranch_cons (index level : Nat) (node sibling : Bytes) (rest : List Bytes) :
+    climbBranch index level node (sibling :: rest)
+      = climbBranch index (level + 1)
+          (if gindexBit index level then combine sibling node else combine node sibling) rest := by
+  -- An even shifted index is a clear bit, which keeps the node on the left.
+  have step : combine (Cryptography.Merkle.ordered (index >>> level) node sibling).1
+      (Cryptography.Merkle.ordered (index >>> level) node sibling).2
+      = if gindexBit index level then combine sibling node else combine node sibling := by
+    simp only [Cryptography.Merkle.ordered, gindexBit_parity]
+    rcases Nat.mod_two_eq_zero_or_one (index >>> level) with h | h <;> simp [h]
+  unfold climbBranch
+  rw [Cryptography.Merkle.climb_cons, ← Nat.shiftRight_succ, step]
 
 /-- A node and its sibling combine to the node above them, in whichever order they sit. -/
 theorem combine_sibling {node : Nat → Bytes} (tree : MerkleTree node) (index : Nat)
@@ -54,12 +74,12 @@ theorem climbBranch_folds {node : Nat → Bytes} (tree : MerkleTree node) :
   | zero =>
     -- Nothing to climb, so the node reached is the one the walk opened on.
     intro index level _
-    simp [climbBranch]
+    simp [climbBranch_nil]
   | succ count ih =>
     intro index level reaches
     -- The first sibling is the one at this level, and the rest belong one level up.
     rw [List.range_succ_eq_map]
-    simp only [List.map_cons, List.map_map, Function.comp_def, Nat.add_zero, climbBranch]
+    simp only [List.map_cons, List.map_map, Function.comp_def, Nat.add_zero, climbBranch_cons]
     -- The remaining climb still has to reach the root, which is what it opened able to do.
     have onward : 1 ≤ index >>> (level + 1 + count) := by
       rwa [Nat.add_assoc, Nat.add_comm 1]
@@ -111,12 +131,12 @@ theorem climbBranch_folds_on_path (node : Nat → Bytes) (index : Nat) :
   | zero =>
     -- An empty branch leaves the current node unchanged.
     intro level _
-    simp [climbBranch]
+    simp [climbBranch_nil]
   | succ count ih =>
     intro level parents
     -- Peel off the first sibling, then start the remaining climb one level higher.
     rw [List.range_succ_eq_map]
-    simp only [List.map_cons, List.map_map, Function.comp_def, Nat.add_zero, climbBranch]
+    simp only [List.map_cons, List.map_map, Function.comp_def, Nat.add_zero, climbBranch_cons]
     rw [parents level (by omega) (by omega)]
     simpa [Nat.add_assoc, Nat.add_comm, Nat.add_left_comm] using
       ih (level + 1) (fun step lower upper => parents step (by omega) (by omega))

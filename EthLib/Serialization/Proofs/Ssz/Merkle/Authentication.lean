@@ -94,7 +94,7 @@ theorem climbBranch_binding (index : Nat) : ∀ level left leftProof right right
             (by dsimp only [otherParent]; split <;> simp)
             (fun node member => leftWidths node (List.mem_cons_of_mem _ member))
             (fun node member => rightWidths node (List.mem_cons_of_mem _ member))
-            (by simpa using lengths) same
+            (by simpa using lengths) (by rwa [climbBranch_cons, climbBranch_cons] at same)
           obtain ⟨a, aIn, b, bIn, different, collision⟩ := next.resolve_left joined
           exact .inr ⟨a, List.mem_cons_of_mem _ aIn, b, List.mem_cons_of_mem _ bIn, different, collision⟩
 

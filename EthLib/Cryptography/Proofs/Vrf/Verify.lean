@@ -1,7 +1,7 @@
 import EthLib.Cryptography.Vrf.Verify
 import EthLib.Cryptography.Vrf.KeyGen
 import EthLib.Cryptography.Proofs.Vrf.Hash
-import EthLib.Cryptography.Proofs.Vrf.Tree
+import EthLib.Cryptography.Proofs.Merkle.Binding
 
 /-!
 # Proofs: `Vrf.Verify`
@@ -31,9 +31,9 @@ def HashCollision : Prop :=
 /-- An opening verifies exactly when its path leads from its leaf to the root, and the output is the secret's. -/
 theorem verify_eq_some_iff {root : Digest} {i : UInt32} {o : Opening} {y : Digest} :
     verify root i o = some y ↔
-      Tree.climb nodeHash i.toNat (leafHash o.secret) o.path.toList = root ∧ y = outputHash o.secret := by
+      Merkle.climb treeHash 0 i.toNat (leafHash o.secret) o.path.toList = root ∧ y = outputHash o.secret := by
   unfold verify
-  by_cases hp : Tree.climb nodeHash i.toNat (leafHash o.secret) o.path.toList = root <;>
+  by_cases hp : Merkle.climb treeHash 0 i.toNat (leafHash o.secret) o.path.toList = root <;>
     simp [hp, eq_comm]
 
 /-- The output of a valid opening is the hash of its secret. -/
@@ -49,15 +49,16 @@ theorem verify_opening (secrets : UInt32 → Digest) (i : UInt32) :
   refine verify_eq_some_iff.mpr ⟨?_, rfl⟩
   -- Leaf `i` of the tree commits to secret `i`.
   have hleaf : leaves secrets i.toNat = leafHash (secrets i) := by simp [leaves]
-  show Tree.climb nodeHash i.toNat (leafHash (secrets i))
-    (Tree.path nodeHash VRF_TREE_HEIGHT (leaves secrets) i.toNat).toList = _
+  show Merkle.climb treeHash 0 i.toNat (leafHash (secrets i))
+    (Merkle.path treeHash (leaves secrets) VRF_TREE_HEIGHT i.toNat).toList = _
   rw [← hleaf]
-  exact Tree.climb_path nodeHash VRF_TREE_HEIGHT (leaves secrets) i.toNat_lt
+  exact Merkle.climb_path_root treeHash (leaves secrets) i.toNat_lt
 
 /-! ## Uniqueness -/
 
 /-- A collision of the node hash is a collision of Keccak-256. -/
-theorem hashCollision_of_nodeCollision : Tree.Collision nodeHash → HashCollision := by
+theorem hashCollision_of_collision {level j : Nat} :
+    Merkle.Collision treeHash level j → HashCollision := by
   rintro ⟨x, y, hne, heq⟩
   refine ⟨nodeInput x.1 x.2, nodeInput y.1 y.2, fun h => hne ?_, heq⟩
   -- A node input determines its two children.
@@ -78,10 +79,11 @@ theorem verify_secret_unique {root : Digest} {i : UInt32} {o o' : Opening} {y y'
     o.secret = o'.secret ∨ HashCollision := by
   -- Both paths lead to the same root from the same index.
   have hroot := (verify_eq_some_iff.mp h).1.trans (verify_eq_some_iff.mp h').1.symm
-  rcases Tree.climb_binding nodeHash (by simp) hroot with ⟨hleaf, -⟩ | hcol
+  have binding := Merkle.climb_binding treeHash _ _ 0 i.toNat _ _ (by simp) hroot
+  rcases binding with ⟨hleaf, -⟩ | ⟨k, -, hcol⟩
   · -- Equal leaves come from equal secrets, unless the leaf hash collides.
     exact leafHash_binding hleaf
-  · exact .inr (hashCollision_of_nodeCollision hcol)
+  · exact .inr (hashCollision_of_collision hcol)
 
 /-- Uniqueness: two openings that verify at one index under one root give one output, or Keccak-256 collides. -/
 theorem verify_unique {root : Digest} {i : UInt32} {o o' : Opening} {y y' : Digest}

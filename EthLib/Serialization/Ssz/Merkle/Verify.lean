@@ -9,13 +9,11 @@ namespace EthLib.Serialization.Ssz
 Joining a node with each branch node in turn, from the leaf upward.
 
 The level counts how far the walk has climbed, which is the bit of the index it reads.
+
+It is the Merkle climb from the node at that level, hashing every node alike.
 -/
-def climbBranch (index : Nat) : (level : Nat) → (node : Bytes) → List Bytes → Bytes
-  | _, node, [] => node
-  | level, node, sibling :: rest =>
-    -- A set bit puts this node on the right, so the branch node joins on the left.
-    let parent := if gindexBit index level then combine sibling node else combine node sibling
-    climbBranch index (level + 1) parent rest
+def climbBranch (index level : Nat) (node : Bytes) (branch : List Bytes) : Bytes :=
+  Cryptography.Merkle.climb (fun _ _ => combine) level (index >>> level) node branch
 
 /--
 A root rebuilt from one leaf and its branch, trusting every node to be 32 bytes wide.

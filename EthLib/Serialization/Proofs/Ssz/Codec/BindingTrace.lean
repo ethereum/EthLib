@@ -19,7 +19,7 @@ def perfectTrees : Nat → (Nat → CommitmentTree) → CommitmentTree
   -- Each binary fork performs the same hash as the perfect-tree fold.
   induction depth generalizing leaves with
   | zero => rfl
-  | succ depth ih => simp [perfectTrees, root, subtreeRoot, ih]
+  | succ depth ih => simp [perfectTrees, root, subtreeRoot_halves, ih]
 
 /-- Padding consists of plain zero nodes, as in the SSZ root computation. -/
 def paddedTrees (trees : Array CommitmentTree) (i : Nat) : CommitmentTree :=

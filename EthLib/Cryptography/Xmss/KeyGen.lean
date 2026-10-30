@@ -51,7 +51,7 @@ def SecretKey.publicParam (sk : SecretKey) : PublicParam :=
 
 Computing it builds the whole top tree: `2^16` one-time keys. -/
 def SecretKey.publicKey (sk : SecretKey) : PublicKey where
-  root := node sk.publicParam sk.schemeSeed .top LAYER_HEIGHT (Nat.le_refl _) 0
+  root := node sk.publicParam sk.schemeSeed .top LAYER_HEIGHT 0
   publicParam := sk.publicParam
 
 /-! ## Key generation -/

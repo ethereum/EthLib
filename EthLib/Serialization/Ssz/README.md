@@ -23,6 +23,8 @@ Ssz/Merkle    bounded and progressive trees, indices, and verification
 
 Hashing uses `EthLib.Cryptography.Hash.Sha256`.
 
+The perfect trees and branch climbs are the Merkle trees of [`EthLib.Cryptography.Merkle`](../../Cryptography/Merkle/), hashing every node alike.
+
 The conformance harness lives in [`ethereum/ssz-specs`](https://github.com/ethereum/ssz-specs), under `lean/`.
 It runs this specification against the released test vectors, and against the Python implementation on generated cases.
 
