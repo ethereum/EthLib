@@ -38,6 +38,7 @@ class CheckLocal(unittest.TestCase):
         self.root = Path(self.tmp.name)
         write_suite(self.root, "bls", {"sign/case_0": b"bls 0"})
         write_suite(self.root, "kzg", {"blob/case_0": b"kzg 0", "blob/case_1": b"kzg 1"})
+        write_suite(self.root, "secp256k1", {"verify/case_0": b"secp256k1 0"})
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -51,6 +52,10 @@ class CheckLocal(unittest.TestCase):
     def test_missing_kzg_manifest_fails(self):
         (self.root / "kzg" / "SHA256SUMS").unlink()
         self.assertEqual(self.errors(), ["kzg/SHA256SUMS: missing, so nothing in kzg is checked"])
+
+    def test_missing_secp256k1_manifest_fails(self):
+        (self.root / "secp256k1" / "SHA256SUMS").unlink()
+        self.assertEqual(self.errors(), ["secp256k1/SHA256SUMS: missing, so nothing in secp256k1 is checked"])
 
     def test_missing_both_manifests_fails(self):
         (self.root / "bls" / "SHA256SUMS").unlink()

@@ -1,6 +1,7 @@
 import EthLib.Cryptography.Exports.Bls
 import EthLib.Cryptography.Exports.Kzg
 import EthLib.Cryptography.Exports.Xmss
+import EthLib.Cryptography.Exports.Secp256k1
 
 /-!
 # `EthLib.Cryptography.Exports`

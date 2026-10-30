@@ -24,4 +24,13 @@ inductive Secp256k1Error where
   | pointAtInfinity
 deriving DecidableEq, Repr
 
+/-- A message for a rejection, phrased for someone reading a Python traceback. -/
+def Secp256k1Error.message : Secp256k1Error → String
+  | .invalidEncodingLength size => s!"bad point encoding size: {size}, expected 33 or 65"
+  | .invalidPrefix byte => s!"bad point encoding prefix: {byte}"
+  | .coordinateTooLarge => "point coordinate is not below p"
+  | .notOnCurve => "point is not on the curve"
+  | .noPointWithX => "no point of the curve has this x"
+  | .pointAtInfinity => "the point at infinity is not a public key"
+
 end EthLib.Cryptography.Secp256k1

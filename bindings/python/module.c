@@ -27,6 +27,9 @@ size_t XMSS_SIG_SIZE;
 size_t MODEXP_LENGTH_HEADER_BYTES;
 size_t MODEXP_MAX_LENGTH_BYTES;
 
+size_t SECP256K1_HASH_LEN;
+size_t SECP256K1_SIGNATURE_LEN;
+
 /* ---- Lean externs: size accessors ------------------------------------ */
 
 extern uint64_t
@@ -106,6 +109,16 @@ eth_modexp_const_length_header_bytes(
 
 extern uint64_t
 eth_modexp_const_max_length_bytes(
+  uint8_t unit
+);
+
+extern uint64_t
+eth_secp256k1_const_hash_len(
+  uint8_t unit
+);
+
+extern uint64_t
+eth_secp256k1_const_signature_len(
   uint8_t unit
 );
 
@@ -272,6 +285,23 @@ run_io_into_pyint(
   return PyLong_FromUnsignedLongLong(value);
 }
 
+/* Run an IO action returning a `UInt8` boolean, as a Python `bool`.
+ *
+ * On failure it sets a `ValueError` with the Lean message and returns NULL. */
+PyObject*
+run_io_into_pybool(
+  lean_object* io_result,
+  const char* what
+) {
+  if (!lean_io_result_is_ok(io_result)) {
+    raise_io_error(io_result, what);
+    return NULL;
+  }
+  uint8_t value = lean_unbox(lean_io_result_get_value(io_result));
+  lean_dec(io_result);
+  if (value) Py_RETURN_TRUE; else Py_RETURN_FALSE;
+}
+
 /* ---- Argument parsing helpers ---------------------------------------- */
 
 /* Validate that `obj` is a `bytes` of exactly `expected` length. Returns
@@ -348,6 +378,8 @@ static PyMethodDef methods[] = {
   {"xmss_signature_index", py_xmss_signature_index, METH_VARARGS, NULL},
   {"modexp", py_modexp, METH_VARARGS, NULL},
   {"modexp_gas_cost", py_modexp_gas_cost, METH_VARARGS, NULL},
+  {"secp256k1_verify", py_secp256k1_verify, METH_VARARGS, NULL},
+  {"secp256k1_is_low_s", py_secp256k1_is_low_s, METH_VARARGS, NULL},
   {NULL, NULL, 0, NULL},
 };
 
@@ -404,6 +436,8 @@ PyInit__native(void) {
 
     MODEXP_LENGTH_HEADER_BYTES = (size_t) eth_modexp_const_length_header_bytes(0);
     MODEXP_MAX_LENGTH_BYTES    = (size_t) eth_modexp_const_max_length_bytes(0);
+    SECP256K1_HASH_LEN      = (size_t) eth_secp256k1_const_hash_len(0);
+    SECP256K1_SIGNATURE_LEN = (size_t) eth_secp256k1_const_signature_len(0);
 
     initialized = 1;
   }
@@ -428,5 +462,7 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "XMSS_SIG_SIZE", XMSS_SIG_SIZE);
   PyModule_AddIntConstant(m, "MODEXP_LENGTH_HEADER_BYTES", MODEXP_LENGTH_HEADER_BYTES);
   PyModule_AddIntConstant(m, "MODEXP_MAX_LENGTH_BYTES", MODEXP_MAX_LENGTH_BYTES);
+  PyModule_AddIntConstant(m, "SECP256K1_HASH_LEN", SECP256K1_HASH_LEN);
+  PyModule_AddIntConstant(m, "SECP256K1_SIGNATURE_LEN", SECP256K1_SIGNATURE_LEN);
   return m;
 }
