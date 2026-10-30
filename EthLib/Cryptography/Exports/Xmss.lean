@@ -9,7 +9,7 @@ import EthLib.Cryptography.Xmss.Serialization
 
 C-ABI exports for leanXMSS, callable from the Python C extension.
 
-Only key generation, signing and verification cross the boundary, with the sizes.
+Only key generation, signing, verification and reading a signature's leaf index cross the boundary, with the sizes.
 The scheme is a black box to callers: no hash, chain or tree is exported.
 -/
 
@@ -111,5 +111,14 @@ def verifyExport (pk : ByteArray) (msg : ByteArray) (sig : ByteArray) : IO UInt8
     let msg ← readExact MESSAGE_LEN msg .badMessageSize
     let sig ← decodeSignature sig
     return if verify pk msg sig then 1 else 0
+
+/-- The leaf index a signature carries.
+
+It is returned as a `UInt64`, so the C side reads it as any other exported integer.
+
+A `UInt32` always fits, so the conversion drops nothing. -/
+@[export eth_xmss_signature_index]
+def signatureIndexExport (sig : ByteArray) : IO UInt64 :=
+  runXmss ((signatureIndex sig).map UInt32.toUInt64)
 
 end EthLib.Cryptography.Xmss.Exports

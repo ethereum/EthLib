@@ -345,6 +345,7 @@ static PyMethodDef methods[] = {
   {"xmss_key_gen", py_xmss_key_gen, METH_VARARGS, NULL},
   {"xmss_sign", py_xmss_sign, METH_VARARGS, NULL},
   {"xmss_verify", py_xmss_verify, METH_VARARGS, NULL},
+  {"xmss_signature_index", py_xmss_signature_index, METH_VARARGS, NULL},
   {"modexp", py_modexp, METH_VARARGS, NULL},
   {"modexp_gas_cost", py_modexp_gas_cost, METH_VARARGS, NULL},
   {NULL, NULL, 0, NULL},

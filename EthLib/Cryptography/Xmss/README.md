@@ -61,10 +61,11 @@ To sign, the note's top key signs the root `X^0_{16,b}` of bottom tree `b`.
 ## Operations
 
 ```text
-Lean       file            C export            Python
-keyGen     KeyGen.lean     eth_xmss_key_gen    xmss.key_gen
-sign       Sign.lean       eth_xmss_sign       xmss.sign
-verify     Verify.lean     eth_xmss_verify     xmss.verify
+Lean            file                  C export                    Python
+keyGen          KeyGen.lean           eth_xmss_key_gen            xmss.key_gen
+sign            Sign.lean             eth_xmss_sign               xmss.sign
+verify          Verify.lean           eth_xmss_verify             xmss.verify
+signatureIndex  Serialization.lean    eth_xmss_signature_index    xmss.signature_index
 ```
 
 The secret key is the 32-byte seed, and everything else derives from it.
@@ -78,9 +79,15 @@ Never sign two different messages at one leaf index with one key.
 
 Nothing in EthLib records which leaf indices a key has signed, so the caller must prevent reuse.
 
+`signatureIndex` reads the leaf index a signature carries, its first 4 bytes, without verifying it.
+
+It is `xmss_signature_index` of [EIP-8450](https://github.com/ethereum/EIPs/blob/95861ee8b80914b6998a9e1abbaba73da8f32fef/EIPS/eip-8450.md).
+
+A consensus rule uses it to require that a proof of possession signs at leaf 0.
+
 ## Test vectors
 
-`tests/cryptography/xmss/` has cases for `key_gen`, `sign` and `verify`.
+`tests/cryptography/xmss/` has cases for `key_gen`, `sign`, `verify` and `signature_index`.
 
 The proofs also pin one full key and one signature (`Proofs/Xmss/KnownAnswer*.lean`).
 
@@ -118,6 +125,9 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
   An honest path leads from a key's leaf to its tree's root (`fold_path`, `Tree.lean`).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
+  The leaf index read alone is the 4-byte little-endian formula of EIP-8450 (`signatureIndex_eq_bytes`).
+  It agrees with full decoding (`signatureIndex_eq_decodeSignature`).
+  A signature from `sign` reads back the index it was signed at (`signatureIndex_sign`, `Sign.lean`).
 - Known answers.
   The signature verifies under the public key (`verify_known_answer`).
   It rejects with a changed message, the neighbouring leaf index, or a changed path (`verify_wrong_message`, `verify_wrong_leafIndex`, `verify_tampered_path`).

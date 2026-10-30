@@ -1,5 +1,6 @@
 import EthLib.Cryptography.Xmss.Sign
 import EthLib.Cryptography.Proofs.Xmss.Ots
+import EthLib.Cryptography.Proofs.Xmss.Serialization
 
 /-!
 # Proofs: `Xmss.Sign`
@@ -58,6 +59,14 @@ theorem sign_eq_ok {sk : SecretKey} {idx : LeafIndex} {m : Message} {σ : Signat
     · rename_i top htop
       obtain rfl := (Except.ok.inj h).symm
       exact ⟨rfl, hbottom, htop⟩
+
+/-- An encoded signature carries the leaf index it was signed at.
+
+So a verifier that reads the index from the bytes learns which one-time key signed. -/
+theorem signatureIndex_sign {sk : SecretKey} {idx : LeafIndex} {m : Message} {σ : Signature}
+    (h : sign sk idx m = .ok σ) :
+    signatureIndex (encodeSignature σ) = .ok idx := by
+  rw [signatureIndex_encodeSignature, (sign_eq_ok h).1]
 
 /-- Signing fails only when one layer's one-time key finds no codeword. -/
 theorem sign_error {sk : SecretKey} {idx : LeafIndex} {m : Message} {err : XmssError}
