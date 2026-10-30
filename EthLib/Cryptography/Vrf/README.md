@@ -27,8 +27,27 @@ The properties proved are the ones that define a VRF in [Micali, Rabin and Vadha
 - `verify` (`Verify.lean`) is `vrf.Verify` of [EIP-8450](https://eips.ethereum.org/EIPS/eip-8450): it returns the output at an index, or nothing.
 - `verifyBytes` (`Serialization.lean`) is `vrf_verify` of the draft: the same over bytes, rejecting a malformed root, opening or index.
 - `root` and `opening` (`Tree.lean`) build the tree and open it, from any function giving the secret of each index.
+- `keyGen`, `prove` and `evaluate` (`KeyGen.lean`) do the same from one 32-byte seed.
 
-How the holder derives its secrets is not part of the specification.
+## Key generation
+
+The holder stores one seed, sampled as 32 uniformly random bytes and kept secret.
+
+Each leaf secret derives from it:
+
+```text
+    s_i = keccak256(PQ_VRF_SECRET | seed | LE32(i))
+```
+
+This is the pseudorandom key generation of [RFC 8391](https://www.rfc-editor.org/rfc/rfc8391) §3.1.7, `sk[i] = PRF(S, i)`, with Keccak-256 keyed by a prefix as in §5.1.
+
+So the holder stores 32 bytes instead of `2^32` secrets, and recomputes a secret or a subtree when it opens an index.
+
+Verification never reads the seed, so the derivation is not consensus-critical.
+
+It is specified so that every implementation rebuilds the same tree from the same seed.
+
+The draft leaves the derivation to the holder, so this one is EthLib's own.
 
 ## What is proved
 
@@ -42,9 +61,13 @@ The proofs are in `EthLib/Cryptography/Proofs/Vrf/`.
   Against an honest tree, every valid opening gives the honest output, or Keccak-256 collides (`verify_root_unique`).
 - What verification checks.
   An opening verifies exactly when its path leads from its leaf to the root, and the output is the hash of its secret (`verify_eq_some_iff`).
-- Domain separation (`Hash.lean`).
-  The leaf, node and output inputs are 43, 75 and 45 bytes, so no input of one is an input of another.
-  Each input determines its arguments, and each prefix is the ASCII string the draft names.
+- Key generation (`KeyGen.lean`).
+  The tree of a seed verifies at every index, with the output of that index's secret (`verify_prove`).
+  Every valid opening of it gives that output, or Keccak-256 collides (`verify_keyGen_unique`).
+- Domain separation (`Hash.lean`, `KeyGen.lean`).
+  The secret, leaf, node and output inputs are 49, 43, 75 and 45 bytes, so no input of one is an input of another.
+  Each input determines its arguments.
+  Each prefix is the ASCII string of its name: the draft's three, and `PQ_VRF_SECRET`.
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on 1056-byte strings, and encoding and decoding are inverse bijections there.
   Verification over bytes rejects a root that is not 32 bytes, an opening that is not 1056 bytes, and an index outside `[0, 2^32)`.
@@ -52,10 +75,12 @@ The proofs are in `EthLib/Cryptography/Proofs/Vrf/`.
   One opening at index 0 and one at index `2^32 - 1` verify, with their outputs.
   Each is rejected with a wrong secret, a wrong sibling, and at another index.
   The roots and outputs were computed outside EthLib, by the draft's own `vrf_verify`.
+  One seed's secrets and outputs at the same two indices were computed outside EthLib too (`KnownAnswerSecret.lean`).
 
 ## What is not proved
 
 - Pseudorandomness: that an output is unpredictable until opened.
-  It rests on the preimage resistance of Keccak-256, which needs a model of the hash.
+  It rests on Keccak-256 being a pseudorandom function keyed by the seed, and on its preimage resistance, which need a model of the hash.
 - Any bound on the cost of a Keccak-256 collision.
-  Uniqueness turns a second output into a collision; how hard that is depends on the hash.
+  Uniqueness turns a second output into a collision.
+  How hard a collision is depends on the hash.

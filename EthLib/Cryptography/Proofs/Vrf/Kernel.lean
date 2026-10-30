@@ -1,4 +1,5 @@
 import EthLib.Cryptography.Vrf.Verify
+import EthLib.Cryptography.Vrf.KeyGen
 import EthLib.Cryptography.Proofs.Hash.KeccakKernel
 
 /-!
@@ -50,6 +51,16 @@ theorem nodeHash_eq (left right : Digest) : Vrf.nodeHash left right = nodeHash l
 /-- The output hash is the output hash over the fast hash. -/
 theorem outputHash_eq (secret : Digest) : Vrf.outputHash secret = outputHash secret := by
   rw [Vrf.outputHash, Vrf.hash, Hash.Keccak.Kernel.keccak256_eq, outputHash, hash, outputInput]
+  -- The two inputs are the same bytes, by definition.
+  congr 1
+
+/-- A leaf secret, over the fast hash. -/
+def secret (seed : Seed) (i : UInt32) : Digest :=
+  hash (VRF_SECRET_DST.toList ++ seed.toList ++ (indexBytes i).toList)
+
+/-- A leaf secret is the leaf secret over the fast hash. -/
+theorem secret_eq (seed : Seed) (i : UInt32) : Vrf.secret seed i = secret seed i := by
+  rw [Vrf.secret, Vrf.hash, Hash.Keccak.Kernel.keccak256_eq, secret, hash, secretInput]
   -- The two inputs are the same bytes, by definition.
   congr 1
 

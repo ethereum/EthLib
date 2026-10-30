@@ -2,6 +2,7 @@ import EthLib.Cryptography.Vrf.Constants
 import EthLib.Cryptography.Vrf.Types
 import EthLib.Cryptography.Vrf.Hash
 import EthLib.Cryptography.Vrf.Tree
+import EthLib.Cryptography.Vrf.KeyGen
 import EthLib.Cryptography.Vrf.Verify
 import EthLib.Cryptography.Vrf.Serialization
 

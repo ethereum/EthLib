@@ -3,6 +3,8 @@
 
 The parameters of the VRF tree.
 
+The seed size and the secret prefix are EthLib's own: the draft leaves the derivation of the secrets to the holder.
+
 Source: [EIP-CRYPTO draft](https://github.com/kevaundray/EIPs/blob/fd2c9c53994eb1e7705011e0e4c53327bd61bdcc/EIPS/eip-crypto.md), section "VRF tree", "Parameters".
 -/
 
@@ -30,6 +32,11 @@ def VRF_HASH_SIZE : Nat := 32
 -/
 def VRF_OPENING_SIZE : Nat := 1056
 
+/-- The size in bytes of the seed every leaf secret derives from.
+
+256 bits, so guessing the seed is no easier than guessing a secret. -/
+def VRF_SEED_SIZE : Nat := 32
+
 /-- The prefix of a leaf hash: the ASCII bytes of `PQ_VRF_LEAF`. -/
 def VRF_LEAF_DST : Vector UInt8 11 :=
   #v[0x50, 0x51, 0x5f, 0x56, 0x52, 0x46, 0x5f, 0x4c, 0x45, 0x41, 0x46]
@@ -41,5 +48,9 @@ def VRF_NODE_DST : Vector UInt8 11 :=
 /-- The prefix of an output hash: the ASCII bytes of `PQ_VRF_OUTPUT`. -/
 def VRF_OUTPUT_DST : Vector UInt8 13 :=
   #v[0x50, 0x51, 0x5f, 0x56, 0x52, 0x46, 0x5f, 0x4f, 0x55, 0x54, 0x50, 0x55, 0x54]
+
+/-- The prefix of a leaf secret: the ASCII bytes of `PQ_VRF_SECRET`. -/
+def VRF_SECRET_DST : Vector UInt8 13 :=
+  #v[0x50, 0x51, 0x5f, 0x56, 0x52, 0x46, 0x5f, 0x53, 0x45, 0x43, 0x52, 0x45, 0x54]
 
 end EthLib.Cryptography.Vrf.Constants
