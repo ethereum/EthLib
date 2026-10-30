@@ -81,9 +81,7 @@ Nothing in EthLib records which leaf indices a key has signed, so the caller mus
 
 `signatureIndex` reads the leaf index a signature carries, its first 4 bytes, without verifying it.
 
-It is `xmss_signature_index` of [EIP-8450](https://github.com/ethereum/EIPs/blob/95861ee8b80914b6998a9e1abbaba73da8f32fef/EIPS/eip-8450.md).
-
-A consensus rule uses it to require that a proof of possession signs at leaf 0.
+A caller can use it to require a given leaf before verifying, such as leaf 0 for a proof of possession.
 
 ## Test vectors
 
@@ -125,7 +123,7 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
   An honest path leads from a key's leaf to its tree's root (`fold_path`, `Tree.lean`).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
-  The leaf index read alone is the 4-byte little-endian formula of EIP-8450 (`signatureIndex_eq_bytes`).
+  The leaf index read alone is its first 4 bytes, as a little-endian integer (`signatureIndex_eq_bytes`).
   It agrees with full decoding (`signatureIndex_eq_decodeSignature`).
   A signature from `sign` reads back the index it was signed at (`signatureIndex_sign`, `Sign.lean`).
 - Known answers.

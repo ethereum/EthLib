@@ -44,8 +44,6 @@ def signature_index(signature: bytes) -> int:
     """The leaf index a 2404-byte signature carries.
 
     It reads the first 4 bytes, little-endian, and does not verify the signature.
-
-    This is `xmss_signature_index` of EIP-8450.
     """
     return xmss_signature_index(signature)
 

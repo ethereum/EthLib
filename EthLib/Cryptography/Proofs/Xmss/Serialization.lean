@@ -232,9 +232,7 @@ theorem signatureIndex_eq_decodeSignature (bytes : ByteArray) :
 
 /-- The leaf index is the first 4 bytes, read as a little-endian integer.
 
-This is the formula of EIP-8450, `int.from_bytes(signature[0:4], "little")`.
-
-So the EIP and this module read the same index from every signature. -/
+So any reader that takes `b_0 + 2^8 b_1 + 2^16 b_2 + 2^24 b_3` gets the same index. -/
 theorem signatureIndex_eq_bytes {bytes : ByteArray} (sized : bytes.size = SIG_SIZE) :
     signatureIndex bytes = .ok (UInt32.ofNat
       (bytes[0]!.toNat + 2 ^ 8 * bytes[1]!.toNat + 2 ^ 16 * bytes[2]!.toNat

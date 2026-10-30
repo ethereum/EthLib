@@ -109,9 +109,7 @@ It reads only the first 4 bytes.
 
 It does not verify the signature, so the index is only what the signer claims.
 
-A consensus rule uses it to require that a proof of possession signs at leaf 0.
-
-Source: [EIP-8450](https://github.com/ethereum/EIPs/blob/95861ee8b80914b6998a9e1abbaba73da8f32fef/EIPS/eip-8450.md), function `xmss_signature_index`.
+A caller can use it to require a given leaf before verifying, such as leaf 0 for a proof of possession.
 -/
 def signatureIndex (bytes : ByteArray) : Except XmssError LeafIndex :=
   -- The whole signature must be there, as for decoding, so a truncated one is rejected.
