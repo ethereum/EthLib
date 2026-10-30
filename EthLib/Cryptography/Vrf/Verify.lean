@@ -1,3 +1,4 @@
+import EthLib.Cryptography.Vrf.Hash
 import EthLib.Cryptography.Vrf.Tree
 
 /-!
@@ -21,6 +22,8 @@ def verify (root : Digest) (i : UInt32) (opening : Opening) : Option Digest :=
   -- The leaf commits to the secret.
   let leaf := leafHash opening.secret
   -- The opening is valid when its path leads from that leaf to the root.
-  if pathRoot i leaf opening.path = root then some (outputHash opening.secret) else none
+  if Tree.climb nodeHash i.toNat leaf opening.path.toList = root then
+    some (outputHash opening.secret)
+  else none
 
 end EthLib.Cryptography.Vrf

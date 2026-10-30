@@ -10,7 +10,7 @@ The known answers evaluate 34 Keccak permutations in the kernel.
 So they run on a fast form of verification, proved equal to the specification.
 
 - The hash is the record form of Keccak-f, over an input written as one list.
-- The climb and the verifier are the specification's, step for step, over that hash.
+- The verifier is the specification's, step for step, over that hash.
 -/
 
 namespace EthLib.Cryptography.Vrf.Kernel
@@ -64,38 +64,19 @@ theorem secret_eq (seed : Seed) (i : UInt32) : Vrf.secret seed i = secret seed i
   -- The two inputs are the same bytes, by definition.
   congr 1
 
-/-! ## Climbing and verifying -/
+/-! ## Verifying -/
 
-/-- Climbing a path over the fast hash, level for level the specification's. -/
-def climbUpto (i : UInt32) (pi : Vector Digest VRF_TREE_HEIGHT) (leaf : Digest) :
-    (levels : Nat) → levels ≤ VRF_TREE_HEIGHT → Digest
-  | 0, _ => leaf
-  | l + 1, h =>
-    let current := climbUpto i pi leaf l (by omega)
-    let sibling := pi[l]'(by omega)
-    -- Bit `l` of the index says which child the held node is.
-    if (i.toNat >>> l) % 2 == 0 then nodeHash current sibling else nodeHash sibling current
-
-/-- Climbing a path is climbing it over the fast hash. -/
-theorem climbUpto_eq (i : UInt32) (pi : Vector Digest VRF_TREE_HEIGHT) (leaf : Digest) :
-    ∀ levels h, Internal.climbUpto i pi leaf levels h = climbUpto i pi leaf levels h := by
-  intro levels
-  induction levels with
-  | zero => intro h; rfl
-  | succ l ih =>
-    intro h
-    -- One level on each side, the climbs below it equal by induction.
-    simp only [Internal.climbUpto, Internal.climbStep, climbUpto, nodeHash_eq, ih]
-
-/-- Verification over the fast hash. -/
+/-- Verification over the fast hash, step for step the specification's. -/
 def verify (root : Digest) (i : UInt32) (o : Opening) : Option Digest :=
-  if climbUpto i o.path (leafHash o.secret) VRF_TREE_HEIGHT (Nat.le_refl _) = root then
+  if Tree.climb nodeHash i.toNat (leafHash o.secret) o.path.toList = root then
     some (outputHash o.secret)
   else none
 
 /-- Verification is verification over the fast hash. -/
 theorem verify_eq (root : Digest) (i : UInt32) (o : Opening) :
     Vrf.verify root i o = verify root i o := by
-  simp only [Vrf.verify, verify, pathRoot, climbUpto_eq, leafHash_eq, outputHash_eq]
+  -- The node hash is the fast one, as a function.
+  have hnode : Vrf.nodeHash = nodeHash := funext fun l => funext fun r => nodeHash_eq l r
+  simp only [Vrf.verify, verify, hnode, leafHash_eq, outputHash_eq]
 
 end EthLib.Cryptography.Vrf.Kernel

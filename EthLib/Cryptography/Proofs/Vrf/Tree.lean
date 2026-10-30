@@ -3,41 +3,26 @@ import EthLib.Cryptography.Vrf.Tree
 /-!
 # Proofs: `Vrf.Tree`
 
-- The path of index `i` leads from `i`'s leaf to the root.
-- Two paths that lead to one root from one index are equal, or the node hash collides.
+The two guarantees of a Merkle tree, for every node type and node hash.
+
+- Completeness: the path of leaf `i` leads from that leaf to the root.
+- Binding: two openings of one index that lead to one root are equal, or the node hash collides.
 -/
 
-namespace EthLib.Cryptography.Vrf
+namespace EthLib.Cryptography.Vrf.Tree
 
-open EthLib.Cryptography.Vrf.Constants
+variable {α : Type} (hash : α → α → α)
 
-variable {secrets : UInt32 → Digest}
-
-/-! ## Unfolding -/
+/-- Two different child pairs with one parent. -/
+def Collision : Prop :=
+  ∃ x y : α × α, x ≠ y ∧ hash x.1 x.2 = hash y.1 y.2
 
 /-- Every node above level 0 is the hash of its two children. -/
-theorem node_succ (l j : Nat) :
-    node secrets (l + 1) j = nodeHash (node secrets l (2 * j)) (node secrets l (2 * j + 1)) :=
+theorem node_succ (leaves : Nat → α) (l j : Nat) :
+    node hash leaves (l + 1) j = hash (node hash leaves l (2 * j)) (node hash leaves l (2 * j + 1)) :=
   rfl
 
-/-- The two children a climb step hashes on `level`, the left one first. -/
-def stepChildren (i : UInt32) (level : Nat) (current sibling : Digest) : Digest × Digest :=
-  if (i.toNat >>> level) % 2 == 0 then (current, sibling) else (sibling, current)
-
-/-- A climb step hashes its two children in tree order. -/
-theorem climbStep_eq (i : UInt32) (level : Nat) (current sibling : Digest) :
-    Internal.climbStep i level current sibling
-      = nodeHash (stepChildren i level current sibling).1 (stepChildren i level current sibling).2 := by
-  unfold Internal.climbStep stepChildren
-  split <;> rfl
-
-/-- The children determine the held node and its sibling. -/
-theorem stepChildren_inj {i : UInt32} {level : Nat} {c s c' s' : Digest} :
-    stepChildren i level c s = stepChildren i level c' s' ↔ c = c' ∧ s = s' := by
-  unfold stepChildren
-  split <;> simp only [Prod.mk.injEq, and_comm]
-
-/-! ## The path reaches the root -/
+/-! ## Completeness -/
 
 /-- Flipping the bottom bit, written as arithmetic. -/
 private theorem xor_one (n : Nat) : n ^^^ 1 = 2 * (n / 2) + (1 - n % 2) := by
@@ -49,107 +34,78 @@ private theorem xor_one (n : Nat) : n ^^^ 1 = 2 * (n / 2) + (1 - n % 2) := by
   have h2 := Nat.mod_two_eq_zero_or_one (n ^^^ 1)
   omega
 
-/-- An ancestor of index `i` and its sibling are the two children of the next ancestor.
+/-- Climbing the honest siblings from leaf `i`'s ancestor on level `k` reaches its ancestor `n` levels up. -/
+theorem climb_siblings (leaves : Nat → α) (i : Nat) :
+    ∀ n k, climb hash (i >>> k) (node hash leaves k (i >>> k)) (siblings hash leaves i k n)
+      = node hash leaves (k + n) (i >>> (k + n)) := by
+  intro n
+  induction n with
+  | zero => intro k; rfl
+  | succ n ih =>
+    intro k
+    simp only [siblings, climb]
+    -- Halving the index moves to the ancestor one level up.
+    have hs : i >>> k / 2 = i >>> (k + 1) := (Nat.shiftRight_succ _ _).symm
+    rw [hs]
+    -- The held node and its sibling are the two children of that ancestor.
+    have hstep : (if i >>> k % 2 = 0 then
+          hash (node hash leaves k (i >>> k)) (node hash leaves k ((i >>> k) ^^^ 1))
+        else hash (node hash leaves k ((i >>> k) ^^^ 1)) (node hash leaves k (i >>> k)))
+        = node hash leaves (k + 1) (i >>> (k + 1)) := by
+      simp only [node]
+      rw [← hs, xor_one]
+      rcases Nat.mod_two_eq_zero_or_one (i >>> k) with hr | hr
+      · simp only [hr, ite_true]
+        congr 2 <;> omega
+      · simp only [hr]
+        simp
+        congr 2 <;> omega
+    rw [hstep, ih (k + 1), show k + 1 + n = k + (n + 1) by omega]
 
-Here `f` reads one level of the tree. -/
-theorem stepChildren_siblingIndex (f : Nat → Digest) (i : UInt32) (level : Nat) :
-    stepChildren i level (f (i.toNat >>> level)) (f (siblingIndex i.toNat level))
-      = (f (2 * (i.toNat >>> (level + 1))), f (2 * (i.toNat >>> (level + 1)) + 1)) := by
-  have hhalf : i.toNat >>> (level + 1) = (i.toNat >>> level) / 2 := Nat.shiftRight_succ _ _
-  unfold stepChildren
-  rcases Nat.mod_two_eq_zero_or_one (i.toNat >>> level) with hr | hr
-  · -- Bit zero: the ancestor is the left child, its sibling the right one.
-    have ha : 2 * (i.toNat >>> (level + 1)) = i.toNat >>> level := by
-      rw [hhalf]
-      omega
-    have hb : 2 * (i.toNat >>> (level + 1)) + 1 = siblingIndex i.toNat level := by
-      rw [hhalf]
-      simp only [siblingIndex, xor_one]
-      omega
-    rw [hb, ha]
-    simp [hr]
-  · -- Bit one: the sibling is the left child, the ancestor the right one.
-    have ha : 2 * (i.toNat >>> (level + 1)) = siblingIndex i.toNat level := by
-      rw [hhalf]
-      simp only [siblingIndex, xor_one]
-      omega
-    have hb : 2 * (i.toNat >>> (level + 1)) + 1 = i.toNat >>> level := by
-      rw [hhalf]
-      omega
-    rw [hb, ha]
-    simp [hr]
+/-- Completeness: the path of a leaf `i < 2^h` leads from that leaf to the root. -/
+theorem climb_path (h : Nat) (leaves : Nat → α) {i : Nat} (hi : i < 2 ^ h) :
+    climb hash i (leaves i) (path hash h leaves i).toList = root hash h leaves := by
+  have := climb_siblings hash leaves i h 0
+  simp only [Nat.shiftRight_zero, Nat.zero_add] at this
+  -- Leaf `i` sits below the root, so its ancestor on level `h` is node 0.
+  rw [show (path hash h leaves i).toList = siblings hash leaves i 0 h from rfl,
+    show leaves i = node hash leaves 0 i from rfl, this, root, Nat.shiftRight_eq_div_pow,
+    Nat.div_eq_of_lt hi]
 
-/-- The leaf of index `i` is node `i` on level 0. -/
-theorem node_zero_toNat (i : UInt32) : node secrets 0 i.toNat = leafHash (secrets i) := by
-  simp [node]
+/-! ## Binding -/
 
-/-- The verifier's node on each level is the tree's, all the way up. -/
-theorem climbUpto_eq_node (i : UInt32) :
-    ∀ (levels : Nat) (hl : levels ≤ VRF_TREE_HEIGHT),
-      Internal.climbUpto i (path secrets i) (leafHash (secrets i)) levels hl
-        = node secrets levels (i.toNat >>> levels) := by
-  intro levels
-  induction levels with
-  | zero => intro _; simp [Internal.climbUpto, node_zero_toNat]
-  | succ l ih =>
-    intro hl
-    -- Below the last step the two sides agree by the induction hypothesis.
-    simp only [Internal.climbUpto, climbStep_eq]
-    rw [ih (by omega)]
-    simp only [path, Vector.getElem_ofFn]
-    -- The held node and the path's sibling are the two children of the next node up.
-    rw [stepChildren_siblingIndex (fun j => node secrets l j)]
-    rfl
+/-- Binding: two climbs from one index over equally many siblings that meet are equal, or the hash collides. -/
+theorem climb_binding {i : Nat} {a b : α} {p q : List α} (hl : p.length = q.length)
+    (heq : climb hash i a p = climb hash i b q) : (a = b ∧ p = q) ∨ Collision hash := by
+  induction p generalizing i a b q with
+  | nil =>
+    cases q with
+    | nil => exact .inl ⟨heq, rfl⟩
+    | cons _ _ => simp at hl
+  | cons s rest ih =>
+    cases q with
+    | nil => simp at hl
+    | cons t rest' =>
+      simp only [climb] at heq
+      -- The two pairs of children hashed on this level, in tree order.
+      let x := if i % 2 = 0 then (a, s) else (s, a)
+      let y := if i % 2 = 0 then (b, t) else (t, b)
+      by_cases hxy : x = y
+      · -- Equal pairs: the held nodes and the siblings agree, and so do the climbs above.
+        have hab : a = b ∧ s = t := by
+          by_cases hi : i % 2 = 0 <;> simp_all [x, y, Prod.ext_iff]
+        obtain ⟨rfl, rfl⟩ := hab
+        rcases ih (by simpa using hl) heq with ⟨-, hr⟩ | hcol
+        · exact .inl ⟨rfl, by rw [hr]⟩
+        · exact .inr hcol
+      · by_cases hparent : (if i % 2 = 0 then hash a s else hash s a)
+            = (if i % 2 = 0 then hash b t else hash t b)
+        · -- Different pairs with one parent: a collision on this level.
+          refine .inr ⟨x, y, hxy, ?_⟩
+          by_cases hi : i % 2 = 0 <;> simp_all [x, y]
+        · -- Different parents: the climbs above must collide to meet.
+          rcases ih (by simpa using hl) heq with ⟨hp, -⟩ | hcol
+          · exact absurd hp hparent
+          · exact .inr hcol
 
-/-- The path of index `i` leads from `i`'s leaf to the root. -/
-theorem pathRoot_path (i : UInt32) :
-    pathRoot i (leafHash (secrets i)) (path secrets i) = root secrets := by
-  rw [pathRoot, climbUpto_eq_node]
-  -- An index below `2^32` has no ancestor on level 32 other than node 0.
-  have htop : i.toNat >>> VRF_TREE_HEIGHT = 0 := by
-    rw [Nat.shiftRight_eq_div_pow]
-    exact Nat.div_eq_of_lt i.toNat_lt
-  rw [htop]
-  rfl
-
-/-! ## A path binds its leaf -/
-
-/-- Two different child pairs with one parent. -/
-def NodeCollision : Prop :=
-  ∃ x y : Digest × Digest, x ≠ y ∧ nodeHash x.1 x.2 = nodeHash y.1 y.2
-
-/-- Two climbs from one index that meet after `levels` levels agree below, or the node hash collides. -/
-theorem climbUpto_binding (i : UInt32) (pi pi' : Vector Digest VRF_TREE_HEIGHT) (a b : Digest) :
-    ∀ (levels : Nat) (hl : levels ≤ VRF_TREE_HEIGHT),
-      Internal.climbUpto i pi a levels hl = Internal.climbUpto i pi' b levels hl →
-      (a = b ∧ ∀ l (h : l < levels), pi[l]'(by omega) = pi'[l]'(by omega)) ∨ NodeCollision := by
-  intro levels
-  induction levels with
-  | zero =>
-    -- No level climbed: both sides are their leaves.
-    intro _ heq
-    exact .inl ⟨heq, fun _ h => absurd h (Nat.not_lt_zero _)⟩
-  | succ k ih =>
-    intro hl heq
-    simp only [Internal.climbUpto, climbStep_eq] at heq
-    by_cases hpair : stepChildren i k (Internal.climbUpto i pi a k (by omega)) (pi[k]'(by omega))
-        = stepChildren i k (Internal.climbUpto i pi' b k (by omega)) (pi'[k]'(by omega))
-    · -- Equal pairs: the held nodes and the siblings on level `k` agree.
-      obtain ⟨hheld, hsib⟩ := stepChildren_inj.mp hpair
-      rcases ih (by omega) hheld with ⟨hab, hbelow⟩ | hcol
-      · refine .inl ⟨hab, fun l h => ?_⟩
-        rcases Nat.lt_succ_iff_lt_or_eq.mp h with h | rfl
-        · exact hbelow l h
-        · exact hsib
-      · exact .inr hcol
-    · -- Different pairs with one parent: a collision on level `k + 1`.
-      exact .inr ⟨_, _, hpair, heq⟩
-
-/-- Two paths from one index to one root have the same leaf and siblings, or the node hash collides. -/
-theorem pathRoot_binding {i : UInt32} {a b : Digest} {pi pi' : Vector Digest VRF_TREE_HEIGHT}
-    (heq : pathRoot i a pi = pathRoot i b pi') : (a = b ∧ pi = pi') ∨ NodeCollision := by
-  rcases climbUpto_binding i pi pi' a b VRF_TREE_HEIGHT (Nat.le_refl _) heq with ⟨hab, hpi⟩ | hcol
-  · exact .inl ⟨hab, Vector.ext fun l h => hpi l h⟩
-  · exact .inr hcol
-
-end EthLib.Cryptography.Vrf
+end EthLib.Cryptography.Vrf.Tree

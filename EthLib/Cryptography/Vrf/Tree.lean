@@ -1,90 +1,72 @@
-import EthLib.Cryptography.Vrf.Hash
+import EthLib.Cryptography.Vrf.Types
 
 /-!
 # `Vrf.Tree`
 
-The tree over the `2^32` leaf secrets, and the root a leaf and a path lead to.
+A binary Merkle tree of height `h`, generic in its nodes and its node hash.
 
-For `1 <= lambda <= 32`:
+For `1 <= lambda <= h`:
 
 ```text
-    X_{0,j} = leaf(s_j)
-    X_{lambda,j} = node(X_{lambda-1,2j}, X_{lambda-1,2j+1})
+    X_{0,j} = leaves(j)
+    X_{lambda,j} = hash(X_{lambda-1,2j}, X_{lambda-1,2j+1})
 ```
 
-The root is `X_{32,0}`.
+The root is `X_{h,0}`.
 
-The path of index `i` holds the sibling of `i`'s ancestor on each level, from the leaf up.
+The path of leaf `i` holds the sibling of `i`'s ancestor on each level, from the leaf up.
 
-The tree takes the secrets as any function of the index.
+Climbing a leaf with its path recomputes the root.
 
-Key generation derives them from a seed.
+Nothing here is specific to the VRF, which uses this tree with its own leaves and node hash.
 -/
 
-namespace EthLib.Cryptography.Vrf
+namespace EthLib.Cryptography.Vrf.Tree
 
-open EthLib.Cryptography.Vrf.Constants
+variable {α : Type} (hash : α → α → α)
 
-/-! ## Nodes -/
-
-/-- `X_{level,j}`: node `j` on `level` of the tree over the secrets `s_i`.
+/-- `X_{level,j}`: node `j` on `level`.
 
 Computing it evaluates the `2^level` leaves below it. -/
-def node (secrets : UInt32 → Digest) : (level j : Nat) → Digest
-  | 0, j => leafHash (secrets (UInt32.ofNat j))
+def node (leaves : Nat → α) : (level j : Nat) → α
+  | 0, j => leaves j
   -- The children of node `j` on level `l + 1` are `2j` and `2j + 1` on level `l`.
-  | l + 1, j => nodeHash (node secrets l (2 * j)) (node secrets l (2 * j + 1))
+  | l + 1, j => hash (node leaves l (2 * j)) (node leaves l (2 * j + 1))
 
-/-- The root: the one node on level 32. -/
-def root (secrets : UInt32 → Digest) : Digest :=
-  node secrets VRF_TREE_HEIGHT 0
+/-- The root of the tree of height `h`: its one node on level `h`. -/
+def root (h : Nat) (leaves : Nat → α) : α :=
+  node hash leaves h 0
 
-/-! ## Opening -/
+/-- The siblings of leaf `i`'s ancestors on `n` consecutive levels, from level `k` up.
 
-/-- The sibling of index `i`'s ancestor on `level`: that ancestor with its low bit flipped. -/
-def siblingIndex (i level : Nat) : Nat :=
-  (i >>> level) ^^^ 1
+The sibling on level `k` is that ancestor with its low bit flipped. -/
+def siblings (leaves : Nat → α) (i : Nat) : (k n : Nat) → List α
+  | _, 0 => []
+  | k, n + 1 => node hash leaves k ((i >>> k) ^^^ 1) :: siblings leaves i (k + 1) n
 
-/-- The path of index `i`, from the leaf up.
+/-- There is one sibling per level. -/
+theorem length_siblings (leaves : Nat → α) (i : Nat) :
+    ∀ k n, (siblings hash leaves i k n).length = n
+  | _, 0 => rfl
+  | k, n + 1 => by simp [siblings, length_siblings leaves i (k + 1) n]
+
+/-- The path of leaf `i` in a tree of height `h`, from the leaf up.
 
 ```text
     pi_lambda = X_{lambda, floor(i / 2^lambda) xor 1}
 ```
 -/
-def path (secrets : UInt32 → Digest) (i : UInt32) : Vector Digest VRF_TREE_HEIGHT :=
-  Vector.ofFn fun level => node secrets level (siblingIndex i.toNat level)
+def path (h : Nat) (leaves : Nat → α) (i : Nat) : Vector α h :=
+  ⟨⟨siblings hash leaves i 0 h⟩, by simp [length_siblings]⟩
 
-/-- The opening at index `i`: its secret and its path. -/
-def opening (secrets : UInt32 → Digest) (i : UInt32) : Opening where
-  secret := secrets i
-  path := path secrets i
+/-- The node reached by climbing from a node, hashing in one sibling per level.
 
-/-! ## Climbing a path -/
-
-namespace Internal
-
-/-- Hash the node held on `level` with its sibling into their parent.
-
-Bit `level` of the index says which child the held node is. -/
-def climbStep (i : UInt32) (level : Nat) (current sibling : Digest) : Digest :=
-  if (i.toNat >>> level) % 2 == 0 then
+The low bit of `i` says which child the held node is, and the climb goes on with `i / 2`. -/
+def climb : (i : Nat) → α → List α → α
+  | _, current, [] => current
+  | i, current, sibling :: rest =>
     -- Bit zero: the held node is the left child.
-    nodeHash current sibling
-  else
-    -- Bit one: the held node is the right child.
-    nodeHash sibling current
+    -- Bit one: it is the right child.
+    climb (i / 2) (if i % 2 = 0 then hash current sibling else hash sibling current) rest
 
-/-- Climb the bottom `levels` levels of a path, starting from a leaf. -/
-def climbUpto (i : UInt32) (pi : Vector Digest VRF_TREE_HEIGHT) (leaf : Digest) :
-    (levels : Nat) → levels ≤ VRF_TREE_HEIGHT → Digest
-  | 0, _ => leaf
-  -- The last step folds in the sibling on `l`, after climbing the `l` levels below it.
-  | l + 1, h => climbStep i l (climbUpto i pi leaf l (by omega)) (pi[l]'(by omega))
-
-end Internal
-
-/-- The root that the leaf at index `i` and a path lead to. -/
-def pathRoot (i : UInt32) (leaf : Digest) (pi : Vector Digest VRF_TREE_HEIGHT) : Digest :=
-  Internal.climbUpto i pi leaf VRF_TREE_HEIGHT (Nat.le_refl _)
-
-end EthLib.Cryptography.Vrf
+end EthLib.Cryptography.Vrf.Tree
