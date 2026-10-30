@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Codec.Serialize
+module
+
+public import EthLib.Serialization.Ssz.Codec.Serialize
 
 /-! Length words must represent the exact counts they commit to. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

@@ -1,4 +1,6 @@
-import EthLib.Precompiles.Modexp.Constants
+module
+
+public import EthLib.Precompiles.Modexp.Constants
 
 /-!
 # `Modexp.Errors`
@@ -12,6 +14,8 @@ They differ in when they happen:
 - A length above the bound of EIP-7823 is an exceptional halt, raised before any gas is charged.
 - A call whose gas is below the price runs out of gas.
 -/
+
+@[expose] public section
 
 namespace EthLib.Precompiles.Modexp
 

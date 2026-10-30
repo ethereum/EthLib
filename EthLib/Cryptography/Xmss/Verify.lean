@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Xmss.Tree
+module
+
+public import EthLib.Cryptography.Xmss.Tree
 
 /-!
 # `Xmss.Verify`
@@ -32,6 +34,8 @@ Nothing here needs to be constant time: every value it reads is public.
 
 Source: the leanXMSS specification draft, section "The scheme".
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

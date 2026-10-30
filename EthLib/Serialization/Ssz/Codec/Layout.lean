@@ -1,8 +1,12 @@
-import EthLib.Serialization.Ssz.Codec.Deserialize
-import EthLib.Serialization.Ssz.Type.Paths
-import EthLib.Serialization.Ssz.Merkle.Tree
+module
+
+public import EthLib.Serialization.Ssz.Codec.Deserialize
+public import EthLib.Serialization.Ssz.Type.Paths
+public import EthLib.Serialization.Ssz.Merkle.Tree
 
 /-! What a value merkleizes into, stated before any of it is hashed. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

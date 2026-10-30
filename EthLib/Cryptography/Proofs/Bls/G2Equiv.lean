@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Bls.G2Validity
+module
+
+public import EthLib.Cryptography.Proofs.Bls.G2Validity
 
 /-!
 # Proofs: `G2` projective equality and group laws
@@ -11,6 +13,8 @@ On `Valid` triples, `projectiveEq` agrees with Mathlib's Jacobian quotient and e
 
 Associativity, commutativity, and right-inverse laws of `G2.add` follow immediately up to `projectiveEq`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.G2
 

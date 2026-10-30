@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Merkle.Chunk
+module
+
+public import EthLib.Serialization.Ssz.Merkle.Chunk
 
 /-! The root of an SSZ Merkle tree, and the facts an implementation of it leans on. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

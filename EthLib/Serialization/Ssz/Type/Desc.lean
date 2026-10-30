@@ -1,4 +1,8 @@
+module
+
 /-! The SSZ type universe, written as data. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

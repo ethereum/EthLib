@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Kzg.FftInverse
-import EthLib.Cryptography.Proofs.Kzg.Domain
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.FftInverse
+public import EthLib.Cryptography.Proofs.Kzg.Domain
 
 /-!
 # Proofs: the inverse coset FFT
@@ -15,6 +17,8 @@ The inverse transform undoes the FFT and then the shift.
 So both round trips are the identity, including on the 8192-point recovery domain.
 -/
 
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)

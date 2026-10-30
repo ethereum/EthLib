@@ -1,10 +1,12 @@
-import EthLib.Cryptography.Bls.Fp
-import EthLib.Cryptography.Proofs.PowMod
-import Mathlib.Data.ZMod.Basic
-import Mathlib.Algebra.Field.ZMod
-import Mathlib.NumberTheory.LucasPrimality
-import Mathlib.Tactic.NormNum.Prime
-import Mathlib.FieldTheory.Finite.Basic
+module
+
+public import EthLib.Cryptography.Bls.Fp
+public import EthLib.Cryptography.Proofs.PowMod
+public import Mathlib.Data.ZMod.Basic
+public import Mathlib.Algebra.Field.ZMod
+public import Mathlib.NumberTheory.LucasPrimality
+public import Mathlib.Tactic.NormNum.Prime
+public import Mathlib.FieldTheory.Finite.Basic
 
 /-!
 # Proofs: `Fp` as a Mathlib finite field
@@ -33,6 +35,8 @@ is kernel-checked without `native_decide`.
 The square-root helper (`Fp.sqrt`) is *not* treated here; its
 correctness proof belongs with the decompression proofs that need it.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.Fp
 
@@ -506,7 +510,8 @@ private theorem inverse_eq_zmod_inv (a : ZMod modulus) :
 
 /-- The Mathlib field structure on `ZMod Fp.modulus`, named so it can be
 used as the source of the structure update in `instField` below. -/
-@[reducible] private def zmodField : Field (ZMod modulus) := inferInstance
+-- The exposed field instance reduces through this structure.
+@[reducible] def zmodField : Field (ZMod modulus) := inferInstance
 
 /-- Field structure on `Fp`, transported from `Field (ZMod Fp.modulus)`
 with one change: the `Div` data is the spec's own high-priority
@@ -517,8 +522,10 @@ instance is scoped. Activate with
 scoped instance instField : Field Fp :=
   { zmodField with
     div := (· / ·)
-    div_eq_mul_inv := fun a b =>
-      congrArg (fun x : ZMod modulus =>
+    -- A `by` field keeps its private proof dependencies out of the public data.
+    div_eq_mul_inv := by
+      intro a b
+      exact congrArg (fun x : ZMod modulus =>
           @HMul.hMul (ZMod modulus) (ZMod modulus) (ZMod modulus) _ a x)
         (inverse_eq_zmod_inv b)
     nnratCast_def := fun q => by

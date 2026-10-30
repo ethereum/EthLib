@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Codec.Serialize
+module
+
+public import EthLib.Serialization.Ssz.Codec.Serialize
 
 /-! What it means for a value to be one its type admits. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

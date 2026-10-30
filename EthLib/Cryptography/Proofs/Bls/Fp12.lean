@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Bls.Fp12
-import EthLib.Cryptography.Proofs.Bls.Fp6
+module
+
+public import EthLib.Cryptography.Bls.Fp12
+public import EthLib.Cryptography.Proofs.Bls.Fp6
 
 /-!
 # Proofs: `Fp12`
@@ -18,6 +20,8 @@ And `2` is not a square in `Fp`, because `p = 3 mod 8`.
 
 It also proves that the library's exponentiation is the field power.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.Fp12
 

@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Bls.G1Order
-import Mathlib.GroupTheory.Index
+module
+
+public import EthLib.Cryptography.Proofs.Bls.G1Order
+public import Mathlib.GroupTheory.Index
 
 /-!
 # Proofs: elementary cardinality bound for `G1`
@@ -10,6 +12,8 @@ For each `x`, at most two values of `y` solve that quadratic equation, and `0` a
 
 Injecting `curve.toAffine.Point` into an optional pair of a residue mod `p` and a sign bit gives `#E(Fp) <= 2 * p + 1`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.G1
 

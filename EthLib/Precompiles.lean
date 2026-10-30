@@ -1,4 +1,6 @@
-import EthLib.Precompiles.Modexp
+module
+
+public import EthLib.Precompiles.Modexp
 
 /-!
 # `EthLib.Precompiles`

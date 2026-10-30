@@ -1,5 +1,7 @@
-import Mathlib.Tactic.SplitIfs
-import EthLib.Precompiles.Modexp.Gas
+module
+
+public import Mathlib.Tactic.SplitIfs
+public import EthLib.Precompiles.Modexp.Gas
 
 /-!
 # Proofs: `Gas`
@@ -15,6 +17,8 @@ What the gas formula guarantees.
 
 The known answers at the end are the worked examples of EIP-198 and EIP-7883.
 -/
+
+@[expose] public section
 
 namespace EthLib.Precompiles.Modexp
 

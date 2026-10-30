@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Xmss.Errors
-import EthLib.Cryptography.Xmss.KeyGen
+module
+
+public import EthLib.Cryptography.Xmss.Errors
+public import EthLib.Cryptography.Xmss.KeyGen
 
 /-!
 # `Xmss.Sign`
@@ -16,6 +18,8 @@ Signing is stateless, so tracking spent leaf indices is the caller's job.
 
 Source: the leanXMSS specification draft, section "The scheme", paragraph "Signing".
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

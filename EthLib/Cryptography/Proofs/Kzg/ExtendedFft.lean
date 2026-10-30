@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Kzg.FftEvaluation
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.FftEvaluation
 
 /-!
 # Proofs: the FFT on the extended domain
@@ -11,6 +13,8 @@ This file instantiates the general FFT facts at that domain.
 - The coset FFT evaluates it at each root times the recovery shift.
 - The inverse FFT gives back the coefficients.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)

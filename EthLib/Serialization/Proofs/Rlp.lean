@@ -1,11 +1,13 @@
-import EthLib.Serialization.Proofs.Rlp.Item
-import EthLib.Serialization.Proofs.Rlp.Encode
-import EthLib.Serialization.Proofs.Rlp.Bound
-import EthLib.Serialization.Proofs.Rlp.Decode
-import EthLib.Serialization.Proofs.Rlp.Strict
-import EthLib.Serialization.Proofs.Rlp.RoundTrip
-import EthLib.Serialization.Proofs.Rlp.Canonical
-import EthLib.Serialization.Proofs.Rlp.Scalar
+module
+
+public import EthLib.Serialization.Proofs.Rlp.Item
+public import EthLib.Serialization.Proofs.Rlp.Encode
+public import EthLib.Serialization.Proofs.Rlp.Bound
+public import EthLib.Serialization.Proofs.Rlp.Decode
+public import EthLib.Serialization.Proofs.Rlp.Strict
+public import EthLib.Serialization.Proofs.Rlp.RoundTrip
+public import EthLib.Serialization.Proofs.Rlp.Canonical
+public import EthLib.Serialization.Proofs.Rlp.Scalar
 
 /-!
 # `EthLib.Serialization.Proofs.Rlp`

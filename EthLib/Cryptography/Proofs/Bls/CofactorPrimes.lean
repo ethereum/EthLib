@@ -1,10 +1,14 @@
-import EthLib.Cryptography.Proofs.PowMod
-import Mathlib.NumberTheory.LucasPrimality
-import Mathlib.Tactic.NormNum.Prime
+module
+
+public import EthLib.Cryptography.Proofs.PowMod
+public import Mathlib.NumberTheory.LucasPrimality
+public import Mathlib.Tactic.NormNum.Prime
 
 /-!
 # Proofs: Kernel-checked Lucas certificates for the prime factors of the twist group order
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.CofactorPrimes
 open EthLib.Cryptography

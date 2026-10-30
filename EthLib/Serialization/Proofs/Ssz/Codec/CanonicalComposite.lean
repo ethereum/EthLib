@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalTable
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalTable
 
 /-! Canonicality is preserved when decoded elements are assembled into composites. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

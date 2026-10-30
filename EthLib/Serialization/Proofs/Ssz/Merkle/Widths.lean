@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.Authentication
-import EthLib.Serialization.Proofs.Ssz.Codec.RoundTripScalar
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Authentication
+public import EthLib.Serialization.Proofs.Ssz.Codec.RoundTripScalar
 
 /-! Complete leaves, padding, and mixing words produce complete 32-byte roots. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

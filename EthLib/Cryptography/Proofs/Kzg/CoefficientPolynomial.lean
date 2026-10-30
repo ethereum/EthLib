@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Kzg.FftEvaluation
-import Mathlib.Algebra.Polynomial.OfFn
-import Mathlib.Algebra.Polynomial.Eval.Defs
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.FftEvaluation
+public import Mathlib.Algebra.Polynomial.OfFn
+public import Mathlib.Algebra.Polynomial.Eval.Defs
 
 /-!
 # Proofs: coefficient arrays as Mathlib polynomials
@@ -13,6 +15,8 @@ The map preserves coefficients, evaluation and the degree bound.
 
 So facts about degree and roots from Mathlib apply to the arrays the code computes.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)

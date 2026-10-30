@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Kzg.VanishingNonzero
-import EthLib.Cryptography.Proofs.Kzg.FftEvaluation
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.VanishingNonzero
+public import EthLib.Cryptography.Proofs.Kzg.FftEvaluation
 
 /-!
 # Proofs: the recovery coset avoids every root
@@ -12,6 +14,8 @@ The shift is a generator of the whole multiplicative group, so no shifted point 
 
 So `Z` is nonzero at every shifted point, and no division is by zero.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)

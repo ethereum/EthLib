@@ -1,7 +1,9 @@
-import EthLib.Serialization.Rlp.Scalar
-import EthLib.Serialization.Proofs.Rlp.Canonical
-import EthLib.Serialization.Proofs.Rlp.Bound
-import EthLib.Serialization.Proofs.Rlp.Vectors
+module
+
+public import EthLib.Serialization.Rlp.Scalar
+public import EthLib.Serialization.Proofs.Rlp.Canonical
+public import EthLib.Serialization.Proofs.Rlp.Bound
+public import EthLib.Serialization.Proofs.Rlp.Vectors
 
 /-!
 # `Serialization.Proofs.Rlp.Scalar`
@@ -13,6 +15,8 @@ The decoding of a scalar is the inverse of its encoding, and accepts only canoni
 - `decodeScalar_eq_ok_iff`: `decodeScalar b = .ok n` exactly when `b` is the encoding of `n`.
 - `encode_scalar_succeeds`: every scalar below `2^256` has an encoding, so every 256-bit word does.
 -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Rlp
 

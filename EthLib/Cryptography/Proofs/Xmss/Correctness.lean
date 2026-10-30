@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Xmss.Sign
-import EthLib.Cryptography.Proofs.Xmss.Tree
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Sign
+public import EthLib.Cryptography.Proofs.Xmss.Tree
 
 /-!
 # Proofs: leanXMSS correctness
@@ -21,6 +23,8 @@ Signing fails only when a one-time key finds no codeword in `2^32` trials.
 
 How often that happens is not proved: it needs the random oracle model.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

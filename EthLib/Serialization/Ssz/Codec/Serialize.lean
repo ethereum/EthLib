@@ -1,7 +1,11 @@
-import EthLib.Serialization.Ssz.Type.Value
-import EthLib.Serialization.Ssz.Codec.Error
+module
+
+public import EthLib.Serialization.Ssz.Type.Value
+public import EthLib.Serialization.Ssz.Codec.Error
 
 /-! Turning a value into bytes. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

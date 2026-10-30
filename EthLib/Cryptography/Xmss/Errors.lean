@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Xmss.Types
+module
+
+public import EthLib.Cryptography.Xmss.Types
 
 /-!
 # `Xmss.Errors`
@@ -11,6 +13,8 @@ Bytes that do not parse are a caller error and fail here.
 
 A well-formed signature that does not verify is an ordinary `false`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

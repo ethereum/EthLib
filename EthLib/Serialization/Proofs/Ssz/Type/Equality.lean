@@ -1,7 +1,11 @@
-import EthLib.Serialization.Ssz.Type.Default
-import EthLib.Serialization.Ssz.Type.Valid
+module
+
+public import EthLib.Serialization.Ssz.Type.Default
+public import EthLib.Serialization.Ssz.Type.Valid
 
 /-! Structural equality and recognition of default values. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Vrf.Verify
+module
+
+public import EthLib.Cryptography.Vrf.Verify
 
 /-!
 # `Vrf.Serialization`
@@ -11,6 +13,8 @@ An opening as 1056 bytes, and verification over bytes.
 
 The siblings run from the leaf up to the root.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf
 

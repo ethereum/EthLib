@@ -1,5 +1,7 @@
-import EthLib.Serialization.Proofs.Rlp
-import EthLib.Serialization.Proofs.Ssz
+module
+
+public import EthLib.Serialization.Proofs.Rlp
+public import EthLib.Serialization.Proofs.Ssz
 
 /-!
 # `EthLib.Serialization.Proofs`

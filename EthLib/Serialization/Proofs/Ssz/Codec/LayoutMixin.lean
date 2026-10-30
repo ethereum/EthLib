@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Codec.Layout
+module
+
+public import EthLib.Serialization.Ssz.Codec.Layout
 
 /-! Sequence layouts preserve the caller’s mixing word. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Bls.Fp2
+module
+
+public import EthLib.Cryptography.Bls.Fp2
 
 /-!
 # `Fp6`
@@ -16,6 +18,8 @@ and collecting:
 
 Inversion uses the formula derived from the norm in `Fp6` over `Fp2`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls
 

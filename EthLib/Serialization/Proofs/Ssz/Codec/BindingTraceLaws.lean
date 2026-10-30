@@ -1,8 +1,12 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingTrace
-import EthLib.Serialization.Proofs.Ssz.Codec.NodeWidths
-import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingTrace
+public import EthLib.Serialization.Proofs.Ssz.Codec.NodeWidths
+public import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
 
 /-! Expanded commitment computations preserve the executable root and complete node widths. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz.CommitmentTree
 

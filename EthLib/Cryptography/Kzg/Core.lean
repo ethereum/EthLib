@@ -1,9 +1,11 @@
-import EthLib.Cryptography.Bls
-import EthLib.Cryptography.Kzg.Constants
-import EthLib.Cryptography.Kzg.BitReversal
-import EthLib.Cryptography.Kzg.Polynomials
-import EthLib.Cryptography.Kzg.TrustedSetup
-import EthLib.Cryptography.Kzg.Errors
+module
+
+public import EthLib.Cryptography.Bls
+public import EthLib.Cryptography.Kzg.Constants
+public import EthLib.Cryptography.Kzg.BitReversal
+public import EthLib.Cryptography.Kzg.Polynomials
+public import EthLib.Cryptography.Kzg.TrustedSetup
+public import EthLib.Cryptography.Kzg.Errors
 
 /-!
 # `Kzg.Core`
@@ -13,6 +15,8 @@ The blob-commitment surface of KZG. Public methods live in `KzgM`
 report typed domain errors; internal helpers that only manipulate field
 elements remain pure.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 
@@ -113,7 +117,7 @@ For more details, read
 https://dankradfeist.de/ethereum/2021/06/18/pcs-multiproofs.html section
 "Dividing when one of the points is zero". The code below computes q(x_m)
 for the roots of unity special case. -/
-private def computeQuotientEvalWithinDomain
+def computeQuotientEvalWithinDomain
     (z : Fr) (polynomial : Polynomial) (y : Fr)
     : Fr :=
   let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB
@@ -133,7 +137,7 @@ private def computeQuotientEvalWithinDomain
       result + numerator * inverses[i]!
 
 /-- Returns the KZG proof at `z` and the evaluation `y = p(z)`. -/
-private def computeKzgProofImpl
+def computeKzgProofImpl
     (polynomial : Polynomial) (z : Fr) : KzgM (KZGProof × Fr) := do
   let setup ← TrustedSetup.get!
   let g1LagrangeBrp := bitReversalPermutation setup.g1Lagrange
@@ -176,7 +180,7 @@ def computeKzgProof (blob : Blob) (zBytes : Bytes32) : KzgM (KZGProof × Bytes32
 /-- Verify a KZG proof that `p(z) == y`, where `p(x)` is the polynomial
 committed to in `commitmentG1`. Checks the pairing equation
 `e(P - [y], -[1]) * e(proof, [s] - [z]) == 1`. -/
-private def verifyKzgProofImpl
+def verifyKzgProofImpl
     (commitmentG1 : G1) (z y : Fr) (proofG1 : G1)
     : KzgM Bool := do
   let setup ← TrustedSetup.get!
@@ -212,7 +216,7 @@ def verifyKzgProof
   verifyKzgProofImpl commitmentG1 z y proofG1
 
 /-- Verify multiple KZG proofs efficiently using a random linear combination. -/
-private def verifyKzgProofBatch
+def verifyKzgProofBatch
     (commitments : Array KZGCommitment)
     (commitmentsG1 : Array G1)
     (zs ys : Array Fr)

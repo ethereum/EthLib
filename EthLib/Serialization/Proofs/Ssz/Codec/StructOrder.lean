@@ -1,7 +1,11 @@
-import EthLib.Serialization.Ssz.Codec.Deserialize
-import EthLib.Serialization.Proofs.Ssz.Codec.Admits
+module
+
+public import EthLib.Serialization.Ssz.Codec.Deserialize
+public import EthLib.Serialization.Proofs.Ssz.Codec.Admits
 
 /-! Reading a struct's fixed part first changes which refusal is met, never what is accepted. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

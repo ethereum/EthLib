@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Bls.Fp
-import EthLib.Cryptography.Bls.Fr
+module
+
+public import EthLib.Cryptography.Bls.Fp
+public import EthLib.Cryptography.Bls.Fr
 
 /-!
 # `G1`
@@ -17,6 +19,8 @@ Arithmetic formulas are the textbook ones from Bernstein–Lange's
 [explicit-formulas database](https://hyperelliptic.org/EFD/) for short
 Weierstrass curves with `a = 0`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls
 

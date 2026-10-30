@@ -1,7 +1,11 @@
-import EthLib.Serialization.Ssz.Type.Desc
-import EthLib.Serialization.Ssz.Codec.Error
+module
+
+public import EthLib.Serialization.Ssz.Type.Desc
+public import EthLib.Serialization.Ssz.Codec.Error
 
 /-! Declaration validity and compatibility of Merkle layouts. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

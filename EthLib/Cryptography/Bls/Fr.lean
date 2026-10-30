@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Bls.Errors
-import EthLib.Cryptography.Hash.Sha256
+module
+
+public import EthLib.Cryptography.Bls.Errors
+public import EthLib.Cryptography.Hash.Sha256
 
 /-!
 # `Fr`
@@ -21,6 +23,8 @@ needs: `+`, `*`, and `-` reduce modulo `n` (core's subtraction
 given `NeZero Fr.modulus`. The definitions below are thin wrappers kept
 so the rest of the spec is unaffected by the representation change.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls
 

@@ -1,9 +1,13 @@
+module
+
 /-!
 # `CheckDeclsForeign`
 
 Declarations from outside the checked scope, as a dependency would provide them.
 The fixtures in `CheckDeclsTest` use them, and the check must still see what they bring in.
 -/
+
+@[expose] public section
 
 namespace CheckDeclsForeign
 

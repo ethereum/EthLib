@@ -1,8 +1,10 @@
-import EthLib.Cryptography.Bls.Compress
-import EthLib.Cryptography.Proofs.Bls.Compress
-import EthLib.Cryptography.Proofs.Bls.G1Cardinality
-import Mathlib.GroupTheory.Index
-import Mathlib.Data.ZMod.QuotientGroup
+module
+
+public import EthLib.Cryptography.Bls.Compress
+public import EthLib.Cryptography.Proofs.Bls.Compress
+public import EthLib.Cryptography.Proofs.Bls.G1Cardinality
+public import Mathlib.GroupTheory.Index
+public import Mathlib.Data.ZMod.QuotientGroup
 
 /-!
 # Proofs: completeness of the `G1` generator span on `r`-torsion
@@ -15,6 +17,8 @@ Therefore every `r`-torsion point in `G1` lies in the cyclic subgroup generated 
 
 Each `G1.keyValidatePoint` key (`IRTF draft-irtf-cfrg-bls-signature-04 §2.5`) is `[a] * g_1` with `a != 0`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.G1
 

@@ -1,10 +1,14 @@
-import EthLib.Serialization.Rlp.Item
+module
+
+public import EthLib.Serialization.Rlp.Item
 
 /-!
 # `Serialization.Proofs.Rlp.Vectors`
 
 How the known answers write their bytes and items, so that the kernel evaluates them in little memory.
 -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Rlp.Vectors
 

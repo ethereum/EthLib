@@ -1,4 +1,6 @@
-import EthLib.Serialization.Rlp.Decode
+module
+
+public import EthLib.Serialization.Rlp.Decode
 
 /-!
 # `Serialization.Rlp.Scalar`
@@ -18,6 +20,8 @@ For example:
 - `00`, the byte string `[00]`, holds no scalar, since 0 encodes as `80`;
 - `82 00 01` holds no scalar, since 1 encodes as `01`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Rlp
 

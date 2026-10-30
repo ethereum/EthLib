@@ -1,8 +1,10 @@
-import EthLib.Cryptography.Hash
-import EthLib.Cryptography.Bls
-import EthLib.Cryptography.Kzg
-import EthLib.Cryptography.Xmss
-import EthLib.Cryptography.Vrf
+module
+
+public import EthLib.Cryptography.Hash
+public import EthLib.Cryptography.Bls
+public import EthLib.Cryptography.Kzg
+public import EthLib.Cryptography.Xmss
+public import EthLib.Cryptography.Vrf
 
 /-!
 # `EthLib.Cryptography`

@@ -1,11 +1,15 @@
-import EthLib.Cryptography.Bls
-import EthLib.Cryptography.Kzg.Constants
+module
+
+public import EthLib.Cryptography.Bls
+public import EthLib.Cryptography.Kzg.Constants
 
 /-!
 # `Fft`
 
 Number-theoretic transforms over `Fr`, including a coset variant.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 

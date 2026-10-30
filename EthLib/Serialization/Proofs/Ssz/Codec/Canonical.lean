@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.DecodeFits
-import EthLib.Serialization.Proofs.Ssz.Codec.RoundTrip
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.DecodeFits
+public import EthLib.Serialization.Proofs.Ssz.Codec.RoundTrip
 
 /-! Accepted scalar encodings have a unique byte representation. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

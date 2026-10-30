@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Xmss.Constants
+module
+
+public import EthLib.Cryptography.Xmss.Constants
 
 /-!
 # `Xmss.Types`
@@ -11,6 +13,8 @@ Fixed-size byte objects, with the length carried in the type.
 
 Untyped bytes survive at two edges only: hash inputs and serialization.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

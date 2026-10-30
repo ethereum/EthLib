@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Bls.HashToCurve
-import EthLib.Cryptography.Bls.Pairing
-import EthLib.Cryptography.Bls.Errors
+module
+
+public import EthLib.Cryptography.Bls.HashToCurve
+public import EthLib.Cryptography.Bls.Pairing
+public import EthLib.Cryptography.Bls.Errors
 
 /-!
 # `Signatures`
@@ -12,6 +14,8 @@ The Ethereum consensus uses the proof-of-possession (POP) scheme with
 G1 pubkeys / G2 signatures; the DST is fixed as
 `BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.Signatures
 
@@ -26,10 +30,10 @@ bits of byte 0 set to compressed+infinity). -/
 def G2_POINT_AT_INFINITY : ByteArray := G2.infinityBytes
 
 /-- IRTF `signature_subgroup_check`. Slow but correct. -/
-private def signatureSubgroupCheck (sig : G2) : Bool := G2.inSubgroup sig
+def signatureSubgroupCheck (sig : G2) : Bool := G2.inSubgroup sig
 
 /-- IRTF `CoreVerify`: pairing-equation check `e(P, R) · e(-PK, Q) == 1`. -/
-private def coreVerify
+def coreVerify
     (pkBytes : ByteArray) (msg : ByteArray) (sigBytes : ByteArray) : Bool :=
   -- Validate pubkey (subgroup, on-curve, not infinity).
   if pkBytes.size ≠ 48 || !(G1.keyValidate pkBytes).isOk then false

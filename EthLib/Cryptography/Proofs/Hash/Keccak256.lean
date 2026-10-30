@@ -1,10 +1,14 @@
-import EthLib.Cryptography.Proofs.Hash.KeccakKernel
+module
+
+public import EthLib.Cryptography.Proofs.Hash.KeccakKernel
 
 /-!
 # Proofs: Keccak-256
 
 Keccak-256 agrees with the Keccak team's reference values, and its digest is always 32 bytes.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Hash.Keccak
 
@@ -63,6 +67,8 @@ theorem keccak256_abc :
     (keccak256 "abc".toUTF8).toArray
       = (hexBytes "4E03657AEA45A94FC7D47BA826C8D667C0D1E6E33A64A036EC44F58FA12D6C45").data := by
   rw [Kernel.keccak256_eq]
+  -- Use the public string equation before evaluating the three ASCII bytes.
+  rw [String.toUTF8_eq_toByteArray]
   decide +kernel
 
 /-- `Len = 8` of `ShortMsgKAT_256.txt`: one byte, the smallest nonempty message. -/

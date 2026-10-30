@@ -1,9 +1,11 @@
-import EthLib.Cryptography.Proofs.Bls.CofactorSpan
-import EthLib.Cryptography.Proofs.Bls.CofactorIndependence
-import EthLib.Cryptography.Proofs.Bls.CofactorPointQ2713
-import EthLib.Cryptography.Proofs.Bls.CofactorPointQ11953
-import EthLib.Cryptography.Proofs.Bls.CofactorPointQ262069
-import EthLib.Cryptography.Proofs.Bls.CofactorPointLarge
+module
+
+public import EthLib.Cryptography.Proofs.Bls.CofactorSpan
+public import EthLib.Cryptography.Proofs.Bls.CofactorIndependence
+public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ2713
+public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ11953
+public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ262069
+public import EthLib.Cryptography.Proofs.Bls.CofactorPointLarge
 
 /-!
 # Proofs: `clearCofactor` and `hashToG2` land in the prime-order `G2` subgroup
@@ -18,6 +20,8 @@ So that kernel is the whole twist, by the size bound `2 * p^2 + 1`.
 
 Hence hash to curve always returns a point in the subgroup of order `r`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.HashToCurve
 

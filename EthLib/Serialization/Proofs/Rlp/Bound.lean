@@ -1,4 +1,6 @@
-import EthLib.Serialization.Proofs.Rlp.Encode
+module
+
+public import EthLib.Serialization.Proofs.Rlp.Encode
 
 /-!
 # `Serialization.Proofs.Rlp.Bound`
@@ -14,6 +16,8 @@ The Yellow Paper gives no encoding to a payload of `2^64` bytes or more, and eve
 
 So `encode` fails exactly where the Yellow Paper gives no encoding, at some byte string or list of the tree.
 -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Rlp
 

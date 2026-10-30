@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Bls.Fp2
-import EthLib.Cryptography.Bls.Fr
+module
+
+public import EthLib.Cryptography.Bls.Fp2
+public import EthLib.Cryptography.Bls.Fr
 
 /-!
 # `G2`
@@ -11,6 +13,8 @@ same shape as `G1` but with `Fp2` coordinates and the constant `b' =
 The arithmetic formulas are identical to G1's; we just substitute `Fp`
 operations with `Fp2` ones.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls
 

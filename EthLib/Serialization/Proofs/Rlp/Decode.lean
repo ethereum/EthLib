@@ -1,5 +1,7 @@
-import EthLib.Serialization.Rlp.Decode
-import EthLib.Serialization.Proofs.Rlp.Vectors
+module
+
+public import EthLib.Serialization.Rlp.Decode
+public import EthLib.Serialization.Proofs.Rlp.Vectors
 
 /-!
 # `Serialization.Proofs.Rlp.Decode`
@@ -11,6 +13,8 @@ Known answers for the strict RLP decoding.
 
 `decide +kernel` has the kernel itself evaluate each claim.
 -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Rlp
 

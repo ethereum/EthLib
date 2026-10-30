@@ -1,4 +1,6 @@
-import EthLib.Precompiles.Modexp.Constants
+module
+
+public import EthLib.Precompiles.Modexp.Constants
 
 /-!
 # `Modexp.Bytes`
@@ -11,6 +13,8 @@ So every read is total: an index past the end reads as zero.
 
 That is the rule of `buffer_read` in `forks/bpo2/vm/memory.py`, in execution-specs at `2c0c8e7`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Precompiles.Modexp
 

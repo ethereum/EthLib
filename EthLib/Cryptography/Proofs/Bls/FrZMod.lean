@@ -1,11 +1,13 @@
-import EthLib.Cryptography.Bls.Fr
-import EthLib.Cryptography.Proofs.Bls.Fr
-import Mathlib.Data.ZMod.Basic
-import Mathlib.Algebra.Field.ZMod
-import Mathlib.NumberTheory.LucasPrimality
-import Mathlib.Tactic.NormNum.Prime
-import Mathlib.FieldTheory.Finite.Basic
-import Mathlib.RingTheory.RootsOfUnity.PrimitiveRoots
+module
+
+public import EthLib.Cryptography.Bls.Fr
+public import EthLib.Cryptography.Proofs.Bls.Fr
+public import Mathlib.Data.ZMod.Basic
+public import Mathlib.Algebra.Field.ZMod
+public import Mathlib.NumberTheory.LucasPrimality
+public import Mathlib.Tactic.NormNum.Prime
+public import Mathlib.FieldTheory.Finite.Basic
+public import Mathlib.RingTheory.RootsOfUnity.PrimitiveRoots
 
 /-!
 # Proofs: `Fr` as a Mathlib finite field
@@ -55,6 +57,8 @@ structure. Downstream proofs activate the field structure with
 for the same reason Mathlib keeps `Fin.instCommRing` scoped (see the
 note in `Mathlib.Data.ZMod.Defs` about coercion loops).
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.Fr
 
@@ -241,7 +245,8 @@ private theorem inverse_eq_zmod_inv (a : ZMod modulus) :
 
 /-- The Mathlib field structure on `ZMod Fr.modulus`, named so it can be
 used as the source of the structure update in `instField` below. -/
-@[reducible] private def zmodField : Field (ZMod modulus) := inferInstance
+-- The exposed field instance reduces through this structure.
+@[reducible] def zmodField : Field (ZMod modulus) := inferInstance
 
 /-- Field structure on `Fr`, transported from `Field (ZMod Fr.modulus)`
 with one change: the `Div` data is the spec's own high-priority
@@ -261,11 +266,13 @@ elaborate. Activate with `open scoped EthLib.Cryptography.Bls.Fr`. -/
 scoped instance instField : Field Fr :=
   { zmodField with
     div := (· / ·)
-    div_eq_mul_inv := fun a b =>
+    -- A `by` field keeps its private proof dependencies out of the public data.
+    div_eq_mul_inv := by
+      intro a b
       -- Explicit `@HMul.hMul` because `a * ·` would make the binop
       -- elaborator look for `HMul (ZMod modulus) Fr` on the mixed-type
       -- operands; the defeq handover to the goal is checked by `exact`.
-      congrArg (fun x : ZMod modulus =>
+      exact congrArg (fun x : ZMod modulus =>
           @HMul.hMul (ZMod modulus) (ZMod modulus) (ZMod modulus) _ a x)
         (inverse_eq_zmod_inv b)
     nnratCast_def := fun q => by

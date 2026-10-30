@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Bls.CofactorSubgroupLanding
+module
+
+public import EthLib.Cryptography.Proofs.Bls.CofactorSubgroupLanding
 
 /-!
 # Proofs: Twist curve cardinality and `G2.generator` span completeness
@@ -11,6 +13,8 @@ The generator spans it.
 
 So every point that passes the subgroup check is `[a] * g_2` for some `a`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.G2
 

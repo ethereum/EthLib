@@ -1,3 +1,5 @@
+module
+
 /-!
 # `Hash.Keccak`
 
@@ -13,6 +15,8 @@ It is written as a direct transcription of the standard, to be read against it.
 
 It is not intended to be constant-time.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Hash.Keccak
 

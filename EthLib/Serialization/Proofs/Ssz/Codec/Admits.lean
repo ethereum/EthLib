@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.Fits
-import EthLib.Serialization.Ssz.Type.Valid
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.Fits
+public import EthLib.Serialization.Ssz.Type.Valid
 
 /-! Every value a real type encodes is a value that type admits. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

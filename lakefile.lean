@@ -17,15 +17,14 @@ self-contained Python extension.
 
 package «EthLib» where
   moreLeancArgs := #["-fPIC"]
-  -- Mathlib asks importers to use the module system, and Lake warns on each
-  -- file that imports it without a `module` header. EthLib files are not
-  -- modules yet, so the warning is off until they move.
-  allowNonModules := true
 
 require "leanprover-community" / "mathlib" @ git "v4.35.0"
 
 @[default_target]
 lean_lib «EthLib» where
+  -- Lean v4.35.0, Source Files and Modules, section 5.4.
+  -- Ordinary importers load public definitions without private proof bodies.
+  requiresModuleSystem := true
   precompileModules := true
 
 /-- Proofs about the specification. A separate library (rooted at
@@ -37,6 +36,7 @@ Each domain's proof tree is also a root, so that its modules belong to
 this library rather than to `EthLib`. -/
 @[default_target]
 lean_lib «Proofs» where
+  requiresModuleSystem := true
   roots := #[`EthLib.Proofs, `EthLib.Serialization.Proofs, `EthLib.Cryptography.Proofs, `EthLib.Networking.Proofs,
     `EthLib.Precompiles.Proofs]
   precompileModules := false
@@ -51,6 +51,7 @@ Each domain's export tree is also a root, so that its modules belong to
 this library rather than to `EthLib`. -/
 @[default_target]
 lean_lib «Exports» where
+  requiresModuleSystem := true
   roots := #[`EthLib.Exports, `EthLib.Cryptography.Exports, `EthLib.Precompiles.Exports]
   precompileModules := true
 
@@ -61,9 +62,13 @@ lean_exe «check-decls» where
   srcDir := "scripts"
   root := `CheckDecls
   supportInterpreter := true
+  -- The checker loads private proof bodies to inspect their dependencies.
+  allowNonModules := true
 
 /-- Declarations the check must catch, and one module it must pass. Not a
 default target: `scripts/test_check_decls.sh` builds and checks it. -/
 lean_lib «CheckDeclsTest» where
   srcDir := "scripts"
   roots := #[`CheckDeclsTest, `CheckDeclsForeign]
+  -- The classic root checks findings behind ordinary module boundaries.
+  allowNonModules := true

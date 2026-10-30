@@ -1,7 +1,11 @@
-import EthLib.Serialization.Ssz.Codec.Proof
-import EthLib.Serialization.Proofs.Ssz.Merkle.Verify
+module
+
+public import EthLib.Serialization.Ssz.Codec.Proof
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Verify
 
 /-! Laws of the node reader and the branch builder that sit directly on their definitions. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

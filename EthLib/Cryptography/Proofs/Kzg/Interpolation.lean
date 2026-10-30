@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Kzg.Polynomials
-import EthLib.Cryptography.Proofs.Bls.FrZMod
-import Mathlib.Algebra.BigOperators.Ring.List
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.Polynomials
+public import EthLib.Cryptography.Proofs.Bls.FrZMod
+public import Mathlib.Algebra.BigOperators.Ring.List
 
 /-!
 # Coefficient interpolation correctness
@@ -9,6 +11,8 @@ Source: consensus-specs v1.6.0, Fulu polynomial-commitments-sampling,
 `interpolate_polynomialcoeff`.
 The theorem applies to every successful interpolation at pairwise distinct nodes.
 -/
+@[expose] public section
+
 namespace EthLib.Cryptography.Kzg
 open Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants

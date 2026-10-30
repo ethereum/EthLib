@@ -1,8 +1,10 @@
-import EthLib.Cryptography.Bls.Pairing
-import EthLib.Cryptography.Bls.Compress
-import EthLib.Cryptography.Proofs.Bls.FrZMod
-import EthLib.Cryptography.Proofs.Bls.G1Group
-import EthLib.Cryptography.Proofs.Bls.G1Order
+module
+
+public import EthLib.Cryptography.Bls.Pairing
+public import EthLib.Cryptography.Bls.Compress
+public import EthLib.Cryptography.Proofs.Bls.FrZMod
+public import EthLib.Cryptography.Proofs.Bls.G1Group
+public import EthLib.Cryptography.Proofs.Bls.G1Order
 
 /-!
 # Sufficiency of the ceremony pairing checks
@@ -24,6 +26,8 @@ submitted point to be the expected power of the updated trapdoor.
 The theorem concerns the exact, unbatched checks. Soundness of random-linear-combination
 batching is a separate probabilistic statement.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg.CeremonyChecks
 

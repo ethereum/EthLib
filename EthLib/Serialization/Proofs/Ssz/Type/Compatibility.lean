@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Type.Equality
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Type.Equality
 
 /-! Byte-array aliases and the limits of tree-shape compatibility. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

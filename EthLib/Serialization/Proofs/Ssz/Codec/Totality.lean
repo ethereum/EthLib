@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.Fits
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.Fits
 
 /-! Admissible values encode successfully unless a composite exceeds the offset budget. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

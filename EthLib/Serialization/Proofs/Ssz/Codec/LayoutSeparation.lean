@@ -1,8 +1,12 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.Admits
-import EthLib.Serialization.Proofs.Ssz.Codec.LengthBinding
-import EthLib.Serialization.Proofs.Ssz.Codec.RootLaws
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.Admits
+public import EthLib.Serialization.Proofs.Ssz.Codec.LengthBinding
+public import EthLib.Serialization.Proofs.Ssz.Codec.RootLaws
 
 /-! The layout mixed into a progressive container's root tells absent fields from zero values. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

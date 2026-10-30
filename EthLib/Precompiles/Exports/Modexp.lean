@@ -1,6 +1,8 @@
-import EthLib.Precompiles.Modexp.Constants
-import EthLib.Precompiles.Modexp.Errors
-import EthLib.Precompiles.Modexp.Core
+module
+
+public import EthLib.Precompiles.Modexp.Constants
+public import EthLib.Precompiles.Modexp.Errors
+public import EthLib.Precompiles.Modexp.Core
 
 /-!
 # `Exports.Modexp`
@@ -11,6 +13,8 @@ C-ABI exports for the MODEXP precompile, callable from the Python C extension.
 - Outputs are `ByteArray` or `UInt64`.
 - Failures are `IO` errors, which Python raises.
 -/
+
+public section
 
 namespace EthLib.Precompiles.Modexp.Exports
 

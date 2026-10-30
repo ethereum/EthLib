@@ -1,8 +1,12 @@
-import EthLib.Cryptography.Hash.Sha256
-import EthLib.Serialization.Ssz.Codec.Serialize
-import EthLib.Serialization.Ssz.Merkle.Merkleize
+module
+
+public import EthLib.Cryptography.Hash.Sha256
+public import EthLib.Serialization.Ssz.Codec.Serialize
+public import EthLib.Serialization.Ssz.Merkle.Merkleize
 
 /-! The two tree shapes SSZ merkleizes into, and the words a shape hashes itself against. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

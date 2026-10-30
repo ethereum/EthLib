@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingDomain
-import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingDomain
+public import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
 
 /-! Admissibility and count bounds descend to the children that a layout actually selects. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

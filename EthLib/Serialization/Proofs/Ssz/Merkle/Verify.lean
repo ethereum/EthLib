@@ -1,8 +1,12 @@
-import EthLib.Serialization.Ssz.Merkle.Verify
-import EthLib.Serialization.Proofs.Ssz.Merkle.Gindex
-import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
+module
+
+public import EthLib.Serialization.Ssz.Merkle.Verify
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Gindex
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
 
 /-! Laws of branch verification: what climbing a branch folds, and when it rebuilds a root. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

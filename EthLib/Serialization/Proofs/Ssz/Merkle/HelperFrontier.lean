@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.Verify
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Verify
 
 /-! Requested paths and their missing siblings form a finite proof frontier. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

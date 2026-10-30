@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Merkle.Merkleize
+module
+
+public import EthLib.Serialization.Ssz.Merkle.Merkleize
 
 /-! Building a tree from its leaves upward, which is the order an implementation works in. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

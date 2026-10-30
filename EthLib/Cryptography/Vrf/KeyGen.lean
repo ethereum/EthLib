@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Vrf.Hash
-import EthLib.Cryptography.Vrf.Tree
+module
+
+public import EthLib.Cryptography.Vrf.Hash
+public import EthLib.Cryptography.Vrf.Tree
 
 /-!
 # `Vrf.KeyGen`
@@ -22,6 +24,8 @@ It is specified so that any implementation rebuilds the same tree from the same 
 
 Keccak-256, keyed by the seed and separated by its prefix, acts as a pseudorandom function of the index.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf
 

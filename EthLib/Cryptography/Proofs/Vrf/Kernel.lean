@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Vrf.Verify
-import EthLib.Cryptography.Vrf.KeyGen
-import EthLib.Cryptography.Proofs.Hash.KeccakKernel
+module
+
+public import EthLib.Cryptography.Vrf.Verify
+public import EthLib.Cryptography.Vrf.KeyGen
+public import EthLib.Cryptography.Proofs.Hash.KeccakKernel
 
 /-!
 # Proofs: the VRF tree over the kernel's fast hash
@@ -12,6 +14,8 @@ So they run on a fast form of verification, proved equal to the specification.
 - The hash is the record form of Keccak-f, over an input written as one list.
 - The verifier is the specification's, step for step, over that hash.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf.Kernel
 

@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.Gindex
-import EthLib.Serialization.Ssz.Type.Paths
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Gindex
+public import EthLib.Serialization.Ssz.Type.Paths
 
 /-! Type paths compose relative generalized indices and stop at mixing words. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

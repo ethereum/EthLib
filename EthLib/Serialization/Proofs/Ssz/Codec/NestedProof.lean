@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.ProofBudget
-import EthLib.Serialization.Proofs.Ssz.Codec.ProofTree
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.ProofBudget
+public import EthLib.Serialization.Proofs.Ssz.Codec.ProofTree
 
 /-! Crossing a composite leaf preserves the nested value's root and branch turns. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

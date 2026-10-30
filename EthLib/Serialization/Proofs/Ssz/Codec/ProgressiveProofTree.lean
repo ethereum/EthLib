@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.ProofTree
-import EthLib.Serialization.Proofs.Ssz.Codec.RootLaws
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.ProofTree
+public import EthLib.Serialization.Proofs.Ssz.Codec.RootLaws
 
 /-! Progressive proof walks follow the same widening spine that computes the root. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

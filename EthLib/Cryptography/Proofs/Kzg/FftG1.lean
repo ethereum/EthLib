@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Kzg.FftInverse
-import EthLib.Cryptography.Proofs.Bls.G1Order
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.FftInverse
+public import EthLib.Cryptography.Proofs.Bls.G1Order
 
 /-!
 # Proofs: the radix-2 FFT over `G1`
@@ -23,6 +25,8 @@ This file proves:
 - `fftG1` preserves `Bls.G1.Valid` and prime-order torsion (`Fr.modulus * toPoint P = 0`).
 - Entry `j` maps under `Bls.G1.toPoint` to `sum_{i < 2^k} (omega^(i * j)).val * toPoint vals[i]`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 

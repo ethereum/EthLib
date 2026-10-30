@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.RoundTripScalar
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.RoundTripScalar
 
 /-! Round-trip laws for sequences, fields, and selected union options. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

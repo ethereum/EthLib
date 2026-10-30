@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.ProgressiveClosure
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.ProgressiveClosure
 
 /-! A successfully rooted value gives locally consistent reads throughout its nested Merkle tree. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

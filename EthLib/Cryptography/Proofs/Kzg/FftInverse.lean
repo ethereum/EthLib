@@ -1,8 +1,10 @@
-import EthLib.Cryptography.Kzg.Fft
-import EthLib.Cryptography.Proofs.Kzg.Fft
-import EthLib.Cryptography.Proofs.Bls.FrZMod
-import Mathlib.Algebra.Field.GeomSum
-import Mathlib.RingTheory.RootsOfUnity.PrimitiveRoots
+module
+
+public import EthLib.Cryptography.Kzg.Fft
+public import EthLib.Cryptography.Proofs.Kzg.Fft
+public import EthLib.Cryptography.Proofs.Bls.FrZMod
+public import Mathlib.Algebra.Field.GeomSum
+public import Mathlib.RingTheory.RootsOfUnity.PrimitiveRoots
 
 /-!
 # Proofs: the FFT round-trip `IFFT (FFT x) = x`
@@ -32,6 +34,8 @@ The argument/file has three parts:
 
 Uses the scoped `Field Fr` instance from `Proofs.Bls.FrZMod`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 

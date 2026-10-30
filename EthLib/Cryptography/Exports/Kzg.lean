@@ -1,11 +1,13 @@
-import EthLib.Cryptography.Bls
-import EthLib.Cryptography.Kzg.Constants
-import EthLib.Cryptography.Kzg.Polynomials
-import EthLib.Cryptography.Kzg.Core
-import EthLib.Cryptography.Kzg.Cells
-import EthLib.Cryptography.Kzg.Recovery
-import EthLib.Cryptography.Kzg.TrustedSetup
-import EthLib.Cryptography.Kzg.Errors
+module
+
+public import EthLib.Cryptography.Bls
+public import EthLib.Cryptography.Kzg.Constants
+public import EthLib.Cryptography.Kzg.Polynomials
+public import EthLib.Cryptography.Kzg.Core
+public import EthLib.Cryptography.Kzg.Cells
+public import EthLib.Cryptography.Kzg.Recovery
+public import EthLib.Cryptography.Kzg.TrustedSetup
+public import EthLib.Cryptography.Kzg.Errors
 
 /-!
 # `Exports.Kzg`
@@ -27,6 +29,8 @@ Two notes:
   single outputs, `Array ByteArray` (or pairs thereof) for multi-output
   public methods. Booleans are returned as `UInt8`.
 -/
+
+public section
 
 namespace EthLib.Cryptography.Kzg.Exports
 

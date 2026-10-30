@@ -1,4 +1,6 @@
-import EthLib.Serialization.Proofs.Rlp.RoundTrip
+module
+
+public import EthLib.Serialization.Proofs.Rlp.RoundTrip
 
 /-!
 # `Serialization.Proofs.Rlp.Canonical`
@@ -19,6 +21,8 @@ The proof runs the decoder backwards.
 2. A byte string the decoder reads is not one byte below `0x80`, so the encoding writes it with that prefix.
 3. A list payload is shorter than its item, so induction on the number of bytes covers its items.
 -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Rlp
 

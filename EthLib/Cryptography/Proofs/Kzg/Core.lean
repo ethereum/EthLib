@@ -1,5 +1,10 @@
-import EthLib.Cryptography.Kzg.Core
-import EthLib.Cryptography.Proofs.Kzg.Polynomials
+module
+
+public import EthLib.Cryptography.Kzg.Core
+public import EthLib.Cryptography.Proofs.Kzg.Polynomials
+-- Validation uses the public laws of `ExceptT` and `IO`, rather than their hidden bodies.
+import Batteries.Lean.LawfulMonad
+import Init.Control.Lawful.Instances
 
 /-!
 # Proofs: `Core`
@@ -10,6 +15,8 @@ validators succeed exactly on valid bytes (returning them unchanged),
 point rejects malformed input with exactly the documented error before
 doing any real work.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 
@@ -111,7 +118,6 @@ theorem g1LincombPoints_length_mismatch {points : Array Bls.G1}
     g1LincombPoints points scalars
       = throw (.lincombLengthMismatch points.size scalars.size) := by
   simp [g1LincombPoints, h]
-  rfl
 
 /-- `g1LincombPoints` of nothing is the identity (the point at infinity). -/
 theorem g1LincombPoints_empty :
@@ -139,7 +145,6 @@ theorem g1Lincomb_length_mismatch {points : Array KZGCommitment}
     g1Lincomb points scalars
       = throw (.lincombLengthMismatch points.size scalars.size) := by
   simp [g1Lincomb, h]
-  rfl
 
 /-- `g1Lincomb` of nothing is the identity (the point at infinity). -/
 theorem g1Lincomb_empty :
@@ -158,19 +163,18 @@ theorem g1LincombPoints_of_uncompress {pointsBytes : Array KZGCommitment}
   unfold g1Lincomb g1LincombPoints
   rw [hsz]
   by_cases hne : pointsBytes.size ≠ scalars.size
-  · simp [hne]; rfl
+  · simp [hne]
   · rw [ite_eq_right hne, ite_eq_right hne]
     by_cases h0 : pointsBytes.size = 0
-    · simp [h0]; rfl
+    · simp [h0]
     · rw [ite_eq_right h0, ite_eq_right h0, h]
-      rfl
+      simp only [pure_bind]
 
 /-- `computeKzgProof` rejects a wrongly-sized blob. -/
 theorem computeKzgProof_badBlobSize {blob : Blob} (zBytes : Bytes32)
     (h : blob.size ≠ BYTES_PER_BLOB) :
     computeKzgProof blob zBytes = throw (.badBlobSize blob.size) := by
   simp [computeKzgProof, h]
-  rfl
 
 /-- `computeKzgProof` rejects a wrongly-sized evaluation point. -/
 theorem computeKzgProof_badFieldElementSize {blob : Blob} {zBytes : Bytes32}
@@ -179,7 +183,6 @@ theorem computeKzgProof_badFieldElementSize {blob : Blob} {zBytes : Bytes32}
     computeKzgProof blob zBytes
       = throw (.badFieldElementSize zBytes.size) := by
   simp [computeKzgProof, hb, h]
-  rfl
 
 /-- `verifyKzgProof` rejects a wrongly-sized commitment. -/
 theorem verifyKzgProof_badCommitmentSize {commitmentBytes : Bytes48}
@@ -188,14 +191,12 @@ theorem verifyKzgProof_badCommitmentSize {commitmentBytes : Bytes48}
     verifyKzgProof commitmentBytes zBytes yBytes proofBytes
       = throw (.badCommitmentSize commitmentBytes.size) := by
   simp [verifyKzgProof, h]
-  rfl
 
 /-- `blobToKzgCommitment` rejects a wrongly-sized blob. -/
 theorem blobToKzgCommitment_badBlobSize {blob : Blob}
     (h : blob.size ≠ BYTES_PER_BLOB) :
     blobToKzgCommitment blob = throw (.badBlobSize blob.size) := by
   simp [blobToKzgCommitment, h]
-  rfl
 
 /-- `computeBlobKzgProof` rejects a wrongly-sized blob. -/
 theorem computeBlobKzgProof_badBlobSize {blob : Blob}
@@ -203,7 +204,6 @@ theorem computeBlobKzgProof_badBlobSize {blob : Blob}
     computeBlobKzgProof blob commitmentBytes
       = throw (.badBlobSize blob.size) := by
   simp [computeBlobKzgProof, h]
-  rfl
 
 /-- `verifyBlobKzgProof` rejects a wrongly-sized blob. -/
 theorem verifyBlobKzgProof_badBlobSize {blob : Blob}
@@ -212,7 +212,6 @@ theorem verifyBlobKzgProof_badBlobSize {blob : Blob}
     verifyBlobKzgProof blob commitmentBytes proofBytes
       = throw (.badBlobSize blob.size) := by
   simp [verifyBlobKzgProof, h]
-  rfl
 
 /-- `verifyBlobKzgProofBatch` rejects a commitments array whose length
 does not match the blobs array. -/
@@ -224,7 +223,6 @@ theorem verifyBlobKzgProofBatch_commitments_mismatch
       = throw (.inputLengthMismatch "commitmentsBytes" blobs.size
           commitmentsBytes.size) := by
   simp [verifyBlobKzgProofBatch, h]
-  rfl
 
 /-- `verifyBlobKzgProofBatch` rejects a proofs array whose length does
 not match the blobs array. -/
@@ -236,6 +234,5 @@ theorem verifyBlobKzgProofBatch_proofs_mismatch
       = throw (.inputLengthMismatch "proofsBytes" blobs.size
           proofsBytes.size) := by
   simp [verifyBlobKzgProofBatch, hc, h]
-  rfl
 
 end EthLib.Cryptography.Kzg

@@ -1,3 +1,7 @@
+module
+
+@[expose] public section
+
 namespace EthLib.Cryptography.Bls.Constants
 
 /-- Number of bytes in a serialized G1 pubkey (compressed). -/

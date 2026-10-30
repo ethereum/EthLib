@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.Layout
-import EthLib.Serialization.Proofs.Ssz.Codec.Admits
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.Layout
+public import EthLib.Serialization.Proofs.Ssz.Codec.Admits
 
 /-! Nested leaves always carry types shallower than their enclosing type. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Vrf.KeyGen
-import EthLib.Cryptography.Proofs.Vrf.Verify
+module
+
+public import EthLib.Cryptography.Vrf.KeyGen
+public import EthLib.Cryptography.Proofs.Vrf.Verify
 
 /-!
 # Proofs: `Vrf.KeyGen`
@@ -9,6 +11,8 @@ import EthLib.Cryptography.Proofs.Vrf.Verify
 - The tree of a seed verifies at every index, with the output of that index's secret.
 - Every valid opening of that tree gives that output, or Keccak-256 collides.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf
 

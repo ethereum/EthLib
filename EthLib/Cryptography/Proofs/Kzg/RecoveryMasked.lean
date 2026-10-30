@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Kzg.RecoveryFlatten
-import EthLib.Cryptography.Proofs.Kzg.RecoveryProduct
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.RecoveryFlatten
+public import EthLib.Cryptography.Proofs.Kzg.RecoveryProduct
 
 /-!
 # Proofs: the masked product identity
@@ -15,6 +17,8 @@ Call `P` the source polynomial and `Z` the vanishing polynomial of the missing p
 
 So `E * Z` and `P * Z` agree at all 8192 points of the domain.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)

@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.Widths
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Widths
 
 /-! Count and layout words preserve their information within their stated widths. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

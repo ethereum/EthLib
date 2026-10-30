@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Exports
-import EthLib.Precompiles.Exports
+module
+
+public import EthLib.Cryptography.Exports
+public import EthLib.Precompiles.Exports
 
 /-!
 # `EthLib.Exports`

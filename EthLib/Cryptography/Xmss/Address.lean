@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Xmss.Types
+module
+
+public import EthLib.Cryptography.Xmss.Types
 
 /-!
 # `Xmss.Address`
@@ -19,6 +21,8 @@ Giving each call site its own address removes the discount.
 
 Source: the leanXMSS specification draft, section "Address encoding".
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

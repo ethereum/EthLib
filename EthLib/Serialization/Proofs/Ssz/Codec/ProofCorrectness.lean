@@ -1,9 +1,13 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.WalkerLaws
-import EthLib.Serialization.Proofs.Ssz.Codec.BranchConstruction
-import EthLib.Serialization.Proofs.Ssz.Codec.NodeWidths
-import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.WalkerLaws
+public import EthLib.Serialization.Proofs.Ssz.Codec.BranchConstruction
+public import EthLib.Serialization.Proofs.Ssz.Codec.NodeWidths
+public import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
 
 /-! Constructed branches authenticate readable nodes of a successfully rooted SSZ value. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

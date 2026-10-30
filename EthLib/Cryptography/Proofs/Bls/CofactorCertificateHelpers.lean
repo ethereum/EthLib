@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Bls.CofactorCardinality
+module
+
+public import EthLib.Cryptography.Proofs.Bls.CofactorCardinality
 
 /-!
 # Proofs: Fuel-based ladder and certificate helpers for `G2` torsion witnesses
@@ -7,6 +9,8 @@ The kernel cannot unfold well-founded recursion, so these copies recurse on a fu
 
 Each copy is proved equal to the library function it mirrors.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.CofactorCertificate
 

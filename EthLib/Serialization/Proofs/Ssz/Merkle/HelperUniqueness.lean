@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.HelperFrontier
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.HelperFrontier
 
 /-! A multiproof assigns exactly one supplied node to each claimed or helper index. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

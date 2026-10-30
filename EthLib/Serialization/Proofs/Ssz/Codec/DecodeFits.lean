@@ -1,8 +1,12 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.Admits
-import EthLib.Serialization.Proofs.Ssz.Codec.StructOrder
-import EthLib.Serialization.Ssz.Codec.Deserialize
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.Admits
+public import EthLib.Serialization.Proofs.Ssz.Codec.StructOrder
+public import EthLib.Serialization.Ssz.Codec.Deserialize
 
 /-! Successful decoding establishes the value's declared bounds and shape. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

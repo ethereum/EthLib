@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Codec.Error
+module
+
+public import EthLib.Serialization.Ssz.Codec.Error
 
 /-! Generalized indices: naming one node of a tree, and the nodes a proof of it needs. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

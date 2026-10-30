@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Codec.Serialize
+module
+
+public import EthLib.Serialization.Ssz.Codec.Serialize
 
 /-! Turning bytes back into a value, refusing anything a value would not have produced. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

@@ -1,10 +1,14 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.HelperUniqueness
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.HelperUniqueness
 
 /-!
 The index checks of a multiproof, read one claim at a time.
 
 A path is walked by halving until the root, and a claim is refused when one of its strict ancestors is claimed too.
 -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

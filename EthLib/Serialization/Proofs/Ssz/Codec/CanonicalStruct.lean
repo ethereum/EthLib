@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalTable
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalTable
 
 /-! Accepted container slices reconstruct their original header and bodies. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

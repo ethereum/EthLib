@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Xmss.Verify
-import EthLib.Cryptography.Xmss.Errors
+module
+
+public import EthLib.Cryptography.Xmss.Verify
+public import EthLib.Cryptography.Xmss.Errors
 
 /-!
 # `Xmss.Serialization`
@@ -14,6 +16,8 @@ Decoding checks the total length, then reads each field at its fixed offset.
 
 Source: the leanXMSS specification draft, section "The scheme", paragraph "Serialization".
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

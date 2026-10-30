@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.PathSelection
-import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.PathSelection
+public import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
 
 /-! Admissible packed values select the complete chunk containing each addressed byte or bit. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

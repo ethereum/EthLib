@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Codec.Deserialize
+module
+
+public import EthLib.Serialization.Ssz.Codec.Deserialize
 
 /-! Reading back the offset table a struct or a sequence was laid out with. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

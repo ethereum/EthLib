@@ -1,9 +1,13 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.LayoutProofTree
-import EthLib.Serialization.Proofs.Ssz.Codec.NestedProof
-import EthLib.Serialization.Proofs.Ssz.Type.PathLaws
-import EthLib.Serialization.Proofs.Ssz.Codec.ProgressiveIndex
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.LayoutProofTree
+public import EthLib.Serialization.Proofs.Ssz.Codec.NestedProof
+public import EthLib.Serialization.Proofs.Ssz.Type.PathLaws
+public import EthLib.Serialization.Proofs.Ssz.Codec.ProgressiveIndex
 
 /-! Type paths select the same positions that the value walker reads. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

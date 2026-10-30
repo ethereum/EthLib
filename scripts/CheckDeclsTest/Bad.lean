@@ -1,10 +1,14 @@
-import CheckDeclsForeign
+module
+
+public import CheckDeclsForeign
 
 /-!
 # `CheckDeclsTest.Bad`
 
 One declaration for each finding the declaration check must report.
 -/
+
+@[expose] public section
 
 namespace CheckDeclsTest.Bad
 

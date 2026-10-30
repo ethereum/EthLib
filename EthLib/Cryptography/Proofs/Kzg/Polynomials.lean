@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Kzg.Polynomials
-import EthLib.Cryptography.Proofs.Bls.Fr
-import EthLib.Cryptography.Proofs.Kzg.BitReversal
+module
+
+public import EthLib.Cryptography.Kzg.Polynomials
+public import EthLib.Cryptography.Proofs.Bls.Fr
+public import EthLib.Cryptography.Proofs.Kzg.BitReversal
 
 /-!
 # Proofs: `Polynomials`
@@ -10,6 +12,8 @@ conversions round-trip, `computePowers` really returns powers,
 `blobToPolynomial` is characterized on its success and failure paths,
 and evaluation at a domain point is a table lookup.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 
@@ -448,6 +452,8 @@ theorem evalPolyAt_addPoly (a b : PolynomialCoeff) (x : Fr) :
     simp
     omega
   rw [multiplyPolynomialcoeff, ite_eq_right hnot]
+  -- Use the range equations instead of reducing its unexposed implementation.
+  simp only [Array.size_empty, Array.range_eq_range', Array.range'_zero]
   rfl
 
 private theorem addPolynomialcoeff_replicate_zero (m n : Nat) :

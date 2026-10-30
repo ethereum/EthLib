@@ -1,7 +1,9 @@
-import EthLib.Serialization.Rlp.Item
-import EthLib.Serialization.Rlp.Encode
-import EthLib.Serialization.Rlp.Decode
-import EthLib.Serialization.Rlp.Scalar
+module
+
+public import EthLib.Serialization.Rlp.Item
+public import EthLib.Serialization.Rlp.Encode
+public import EthLib.Serialization.Rlp.Decode
+public import EthLib.Serialization.Rlp.Scalar
 
 /-!
 # `EthLib.Serialization.Rlp`

@@ -1,8 +1,10 @@
-import EthLib.Cryptography.Proofs.Kzg.RecoveryMasked
-import EthLib.Cryptography.Proofs.Kzg.CoefficientPadding
-import EthLib.Cryptography.Proofs.Kzg.ExtendedFft
-import EthLib.Cryptography.Proofs.Kzg.RecoveryCapacity
-import EthLib.Cryptography.Proofs.Bls.FrBatchInverse
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.RecoveryMasked
+public import EthLib.Cryptography.Proofs.Kzg.CoefficientPadding
+public import EthLib.Cryptography.Proofs.Kzg.ExtendedFft
+public import EthLib.Cryptography.Proofs.Kzg.RecoveryCapacity
+public import EthLib.Cryptography.Proofs.Bls.FrBatchInverse
 
 /-!
 # Proofs: recovery returns the source polynomial
@@ -25,6 +27,8 @@ Given at least 64 distinct cells that match a polynomial with 4096 coefficients,
 ```
 -/
 
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)

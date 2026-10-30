@@ -1,17 +1,21 @@
-import EthLib.Cryptography.Bls
-import EthLib.Cryptography.Kzg.Constants
-import EthLib.Cryptography.Kzg.BitReversal
-import EthLib.Cryptography.Kzg.Polynomials
-import EthLib.Cryptography.Kzg.Fft
-import EthLib.Cryptography.Kzg.Cells
-import EthLib.Cryptography.Kzg.TrustedSetup
-import EthLib.Cryptography.Kzg.Errors
+module
+
+public import EthLib.Cryptography.Bls
+public import EthLib.Cryptography.Kzg.Constants
+public import EthLib.Cryptography.Kzg.BitReversal
+public import EthLib.Cryptography.Kzg.Polynomials
+public import EthLib.Cryptography.Kzg.Fft
+public import EthLib.Cryptography.Kzg.Cells
+public import EthLib.Cryptography.Kzg.TrustedSetup
+public import EthLib.Cryptography.Kzg.Errors
 
 /-!
 # `Recovery`
 
 The Reed-Solomon recovery routine for cell proofs.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 

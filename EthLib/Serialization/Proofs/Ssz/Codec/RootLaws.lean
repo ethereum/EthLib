@@ -1,7 +1,11 @@
-import EthLib.Serialization.Ssz.Codec.Root
-import EthLib.Serialization.Proofs.Ssz.Codec.LayoutLaws
+module
+
+public import EthLib.Serialization.Ssz.Codec.Root
+public import EthLib.Serialization.Proofs.Ssz.Codec.LayoutLaws
 
 /-! Type depth bounds rooting, and materialized leaves preserve positions and intervals. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

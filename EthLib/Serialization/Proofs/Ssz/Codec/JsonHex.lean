@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Codec.Json
+module
+
+public import EthLib.Serialization.Ssz.Codec.Json
 
 /-! Hex strings written by the JSON mapping read back as the bytes they came from. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

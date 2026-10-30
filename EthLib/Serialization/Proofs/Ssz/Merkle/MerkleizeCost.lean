@@ -1,8 +1,12 @@
-import EthLib.Serialization.Ssz.Merkle.Tree
-import EthLib.Serialization.Ssz.Type.Paths
-import EthLib.Serialization.Proofs.Ssz.Merkle.Merkleize
+module
+
+public import EthLib.Serialization.Ssz.Merkle.Tree
+public import EthLib.Serialization.Ssz.Type.Paths
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Merkleize
 
 /-! What a bounded root costs in hashes, and why a large capacity barely adds to it. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

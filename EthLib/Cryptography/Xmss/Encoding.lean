@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Xmss.TweakableHash
+module
+
+public import EthLib.Cryptography.Xmss.TweakableHash
 
 /-!
 # `Xmss.Encoding`
@@ -21,6 +23,8 @@ This replaces the Winternitz checksum.
 
 Source: the leanXMSS specification draft, section "WOTS+C", paragraph "Codewords".
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

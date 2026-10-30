@@ -1,3 +1,5 @@
+module
+
 /-!
 # `Serialization.Rlp.Item`
 
@@ -15,6 +17,8 @@ For example, `[ "cat", [ "dog" ], [] ]` is a list of three items:
 
 The empty byte string and the empty list are different items, with different encodings.
 -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Rlp
 

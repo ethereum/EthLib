@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Kzg.Recovery
-import EthLib.Cryptography.Proofs.Kzg.CosetInverse
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.Recovery
+public import EthLib.Cryptography.Proofs.Kzg.CosetInverse
 
 /-!
 # Proofs: the vanishing polynomial has no extra roots
@@ -10,6 +12,8 @@ A product in a field is zero only if one factor is.
 
 So it is nonzero at every point outside its chosen roots.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)

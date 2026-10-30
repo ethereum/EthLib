@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Type.Desc
+module
+
+public import EthLib.Serialization.Ssz.Type.Desc
 
 /-! Values, and what it means for one to fit a type. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

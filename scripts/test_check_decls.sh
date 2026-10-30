@@ -27,7 +27,7 @@ csimp CheckDeclsTest.Bad.double_eq_doubleFast
 extern CheckDeclsTest.Bad.external
 implemented_by CheckDeclsTest.Bad.slow
 native CheckDeclsTest.Bad.native
-native CheckDeclsTest.Proofs.Native.big
+native _private.CheckDeclsTest.Proofs.Native.0.CheckDeclsTest.Proofs.Native.big
 opaque CheckDeclsTest.Bad.hidden
 partial CheckDeclsTest.Bad.spin
 reaches-opaque CheckDeclsTest.Bad.countdown

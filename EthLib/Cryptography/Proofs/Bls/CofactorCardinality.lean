@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Bls.CofactorAlgebra
-import Mathlib.GroupTheory.Index
+module
+
+public import EthLib.Cryptography.Proofs.Bls.CofactorAlgebra
+public import Mathlib.GroupTheory.Index
 
 /-!
 # Proofs: Elementary cardinality bound for the `G2` twist curve
@@ -10,6 +12,8 @@ A finite point `(x, y)` on `E' : y^2 = x^3 + 4*(1 + i)` is fixed by `x` and the 
 
 So `#E'(Fp2) <= 2 * p^2 + 1`, with no appeal to Hasse's theorem.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.G2
 

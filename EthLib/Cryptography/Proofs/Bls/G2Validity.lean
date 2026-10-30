@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Bls.Compress
-import EthLib.Cryptography.Proofs.Bls.G2Group
+module
+
+public import EthLib.Cryptography.Bls.Compress
+public import EthLib.Cryptography.Proofs.Bls.G2Group
 
 /-!
 # Proofs: `G2` twist membership and generator validity
@@ -16,6 +18,8 @@ Every affine solution `(x, y)` therefore has `y != 0` and nonzero `y`-derivative
 
 `valid_of_isOnTwist_of_z_one` deduces `Valid` for `z = 1` twist points, certifying `valid_generator` in the kernel.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.G2
 

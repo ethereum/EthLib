@@ -1,8 +1,12 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.NestedProof
-import EthLib.Serialization.Proofs.Ssz.Type.PathLaws
-import EthLib.Serialization.Proofs.Ssz.Codec.LayoutProofTree
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.NestedProof
+public import EthLib.Serialization.Proofs.Ssz.Type.PathLaws
+public import EthLib.Serialization.Proofs.Ssz.Codec.LayoutProofTree
 
 /-! A path spliced below a composite leaf reads the same node inside that value. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

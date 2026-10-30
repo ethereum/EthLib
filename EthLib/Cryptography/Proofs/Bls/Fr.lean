@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Bls.Fr
+module
+
+public import EthLib.Cryptography.Bls.Fr
 
 /-!
 # Proofs: `Fr`
@@ -10,6 +12,8 @@ by construction and the lemmas below hold unconditionally. Several are
 thin restatements of core `Fin` lemmas, kept under the `Fr` namespace so
 downstream proofs are unaffected by the representation change.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.Fr
 

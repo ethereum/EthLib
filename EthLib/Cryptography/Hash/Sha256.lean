@@ -1,3 +1,5 @@
+module
+
 /-!
 # `Sha256`
 
@@ -17,6 +19,8 @@ hash       §6.2     every block of the padded message, in order
 Used by BLS hash-to-curve (`expand_message_xmd`), KZG's Fiat-Shamir challenges, and SSZ Merkleization.
 None of them needs constant time, so this is written for clarity.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Hash.Sha256
 

@@ -1,4 +1,6 @@
-import EthLib.Networking.Encoding.Varint
+module
+
+public import EthLib.Networking.Encoding.Varint
 
 /-!
 # `Networking.Proofs.Encoding.Varint`
@@ -11,6 +13,8 @@ Properties of the unsigned protobuf varint codec, proved for every 64-bit value.
 
 The kernel checks everything here, so no `native_decide` or `bv_decide` axiom appears.
 -/
+
+@[expose] public section
 
 namespace EthLib.Networking.Proofs.Encoding.Varint
 

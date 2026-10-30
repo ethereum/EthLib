@@ -1,3 +1,5 @@
+module
+
 /-!
 # `Bls.Errors`
 
@@ -9,6 +11,8 @@ stringly-typed `IO.userError`s. The C exports in
 `EthLib.Cryptography.Exports.Bls` turn a `BlsError` into the
 `IO.userError` the Python bindings expect.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls
 

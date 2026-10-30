@@ -1,8 +1,10 @@
-import EthLib.Cryptography.Xmss.Constants
-import EthLib.Cryptography.Xmss.Errors
-import EthLib.Cryptography.Xmss.KeyGen
-import EthLib.Cryptography.Xmss.Sign
-import EthLib.Cryptography.Xmss.Serialization
+module
+
+public import EthLib.Cryptography.Xmss.Constants
+public import EthLib.Cryptography.Xmss.Errors
+public import EthLib.Cryptography.Xmss.KeyGen
+public import EthLib.Cryptography.Xmss.Sign
+public import EthLib.Cryptography.Xmss.Serialization
 
 /-!
 # `Exports.Xmss`
@@ -12,6 +14,8 @@ C-ABI exports for leanXMSS, callable from the Python C extension.
 Only key generation, signing, verification and reading a signature's leaf index cross the boundary, with the sizes.
 The scheme is a black box to callers: no hash, chain or tree is exported.
 -/
+
+public section
 
 namespace EthLib.Cryptography.Xmss.Exports
 

@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Xmss.Address
-import EthLib.Cryptography.Proofs.Xmss.Types
+module
+
+public import EthLib.Cryptography.Xmss.Address
+public import EthLib.Cryptography.Proofs.Xmss.Types
 
 /-!
 # Proofs: `Xmss.Address`
@@ -11,6 +13,8 @@ Distinct call sites have distinct addresses.
 - The top layer's flag is a separate bit, so the two layers never share an address.
 - Each address of a key determines its own arguments.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Kzg.Domain
-import EthLib.Cryptography.Proofs.Kzg.Barycentric
-import Mathlib.LinearAlgebra.Lagrange
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.Domain
+public import EthLib.Cryptography.Proofs.Kzg.Barycentric
+public import Mathlib.LinearAlgebra.Lagrange
 
 /-!
 # Proofs: correctness of `evaluatePolynomialInEvaluationForm`
@@ -29,6 +31,8 @@ spec's formula as restated in `Proofs.Kzg.Barycentric`.
 
 Uses the scoped `Field Fr` instance from `Proofs.Bls.FrZMod`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 

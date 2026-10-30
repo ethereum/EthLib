@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.Verify
-import EthLib.Cryptography.Proofs.Hash.Sha256
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Verify
+public import EthLib.Cryptography.Proofs.Hash.Sha256
 
 /-! Conflicting branch openings expose a hash collision among the messages actually hashed. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

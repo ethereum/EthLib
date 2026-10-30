@@ -1,6 +1,8 @@
-import Mathlib.Tactic.Ring
-import Mathlib.Tactic.Linarith
-import EthLib.Precompiles.Modexp.Bytes
+module
+
+public import Mathlib.Tactic.Ring
+public import Mathlib.Tactic.Linarith
+public import EthLib.Precompiles.Modexp.Bytes
 
 /-!
 # Proofs: `Bytes`
@@ -13,6 +15,8 @@ How the call data is read and the output is written.
   So padding the call data with zeros changes no read.
 - A read depends only on the bytes it covers.
 -/
+
+@[expose] public section
 
 namespace EthLib.Precompiles.Modexp
 

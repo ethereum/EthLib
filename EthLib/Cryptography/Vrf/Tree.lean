@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Vrf.Types
+module
+
+public import EthLib.Cryptography.Vrf.Types
 
 /-!
 # `Vrf.Tree`
@@ -20,6 +22,8 @@ Climbing a leaf with its path recomputes the root.
 
 Nothing here is specific to the VRF, which uses this tree with its own leaves and node hash.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf.Tree
 

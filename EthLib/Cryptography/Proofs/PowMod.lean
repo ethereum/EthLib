@@ -1,4 +1,6 @@
-import Mathlib.Data.ZMod.Basic
+module
+
+public import Mathlib.Data.ZMod.Basic
 
 /-!
 # Proofs: kernel-friendly modular exponentiation
@@ -16,6 +18,8 @@ This generalizes (over the modulus) the private infrastructure that
 base-field certificate chain in `Proofs.Bls.FpZMod` needs it for a
 dozen different moduli, one per node of its Pratt tree.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.PowMod
 

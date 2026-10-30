@@ -1,7 +1,11 @@
-import EthLib.Serialization.Ssz.Merkle.Tree
-import EthLib.Serialization.Proofs.Ssz.Merkle.Merkleize
+module
+
+public import EthLib.Serialization.Ssz.Merkle.Tree
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Merkleize
 
 /-! Laws of the concrete SHA-256 trees: node widths, zero subtrees, and windowed roots. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

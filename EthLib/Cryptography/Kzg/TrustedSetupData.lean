@@ -1,3 +1,5 @@
+module
+
 /-!
 # `TrustedSetupData`
 
@@ -24,6 +26,8 @@ Parsing and honest-proof correctness do not require this secrecy assumption.
 
 `TrustedSetup.lean` decodes the points when it loads them, and no theorem states that they are valid.
 -/
+
+@[expose] public section
 
 set_option maxRecDepth 65536
 set_option maxHeartbeats 4000000

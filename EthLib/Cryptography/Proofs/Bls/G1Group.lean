@@ -1,7 +1,9 @@
-import EthLib.Cryptography.Bls.G1
-import EthLib.Cryptography.Proofs.Bls.FpZMod
-import Mathlib.AlgebraicGeometry.EllipticCurve.Jacobian.Point
-import Mathlib.Tactic.Module
+module
+
+public import EthLib.Cryptography.Bls.G1
+public import EthLib.Cryptography.Proofs.Bls.FpZMod
+public import Mathlib.AlgebraicGeometry.EllipticCurve.Jacobian.Point
+public import Mathlib.Tactic.Module
 
 /-!
 # Proofs: the `G1` group structure
@@ -27,6 +29,8 @@ Jacobian representatives by weighted scaling and carries a *proven*
   the weighted scaling `u = -(2·z₁·z₂)`, modulo the two curve
   equations.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.G1
 

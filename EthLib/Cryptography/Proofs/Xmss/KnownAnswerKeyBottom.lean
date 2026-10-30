@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.KnownAnswerBottom
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.KnownAnswerBottom
 
 /-!
 # Proofs: the known answer's bottom leaf comes from the seed
@@ -7,6 +9,8 @@ The signer derives the bottom key `0xA5C37E19` from the seed: 29 chain starts, 1
 
 The leaf it reaches is the one the verifier recovers from the signature.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss.KnownAnswer
 

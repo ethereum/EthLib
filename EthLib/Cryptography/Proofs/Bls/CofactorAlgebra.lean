@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Bls.TwistFrobenius
-import EthLib.Cryptography.Proofs.Bls.G2Subgroup
+module
+
+public import EthLib.Cryptography.Proofs.Bls.TwistFrobenius
+public import EthLib.Cryptography.Proofs.Bls.G2Subgroup
 
 /-!
 # Proofs: Algebra and endomorphism polynomial of `clearCofactor`
@@ -11,6 +13,8 @@ Source: `RFC 9380 Appendix G.3`.
 - `clearCofactor` is a group homomorphism on the twist, since `psi` is one.
 - `clearCofactor` keeps a point of order `r` in the subgroup of order `r`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.HashToCurve
 

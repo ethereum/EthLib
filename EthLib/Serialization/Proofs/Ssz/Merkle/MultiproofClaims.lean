@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofAcceptance
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofAcceptance
 
 /-! Each multiproof claim read from a finite tree has a corresponding single-branch opening. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

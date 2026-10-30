@@ -1,7 +1,11 @@
-import EthLib.Serialization.Ssz.Type.Default
-import EthLib.Serialization.Proofs.Ssz.Codec.Fits
+module
+
+public import EthLib.Serialization.Ssz.Type.Default
+public import EthLib.Serialization.Proofs.Ssz.Codec.Fits
 
 /-! Defaults belong to their declared value domains. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.NestedProof
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.NestedProof
 
 /-! Every readable branch node has a readable sibling and the expected parent hash. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

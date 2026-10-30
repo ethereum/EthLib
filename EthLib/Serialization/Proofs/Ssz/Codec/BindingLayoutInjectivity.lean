@@ -1,9 +1,13 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingPacking
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingDomain
-import EthLib.Serialization.Proofs.Ssz.Codec.LengthBinding
-import EthLib.Serialization.Proofs.Ssz.Codec.LayoutMixin
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingPacking
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingDomain
+public import EthLib.Serialization.Proofs.Ssz.Codec.LengthBinding
+public import EthLib.Serialization.Proofs.Ssz.Codec.LayoutMixin
 
 /-! Before hashing, SSZ layouts preserve admissible values with exact length words. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

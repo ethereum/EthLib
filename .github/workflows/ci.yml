@@ -11,6 +11,11 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+    inputs:
+      clean_build:
+        description: Build EthLib without restoring its build cache
+        type: boolean
+        default: false
 
 # A new push to a pull request supersedes the run still in flight.
 concurrency:
@@ -22,11 +27,37 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      BUILD_TIMING_SOURCE_SHA: ${{ github.sha }}
+      BUILD_TIMING_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: initialize timing paths
+        run: |
+          echo "BUILD_TIMING_RESULTS=$RUNNER_TEMP/ethlib-build-timing/results.jsonl" >> "$GITHUB_ENV"
+          echo "BUILD_TIMING_LOG_DIR=$RUNNER_TEMP/ethlib-build-timing" >> "$GITHUB_ENV"
+
+      # Keep EthLib's artifacts apart from Mathlib, whose cache is fetched below.
+      # The toolchain and manifest prevent reuse across incompatible dependencies.
+      - name: restore EthLib build
+        if: inputs.clean_build != true
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: .lake/build
+          key: ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
+      - name: keep earlier module times
+        run: |
+          mkdir -p "$BUILD_TIMING_LOG_DIR"
+          if [ -f .lake/build/ethlib-module-times.json ]; then
+            cp .lake/build/ethlib-module-times.json "$BUILD_TIMING_LOG_DIR/module-times-base.json"
+          fi
 
       # Installs elan and fetches the mathlib cache.
       # The builds run as named steps below, so the log shows which part failed.
@@ -35,21 +66,27 @@ jobs:
           auto-config: false
           use-mathlib-cache: true
 
-          # Caching `.lake` is pointless: mathlib alone exceeds the 10 GB limit.
+          # EthLib's build has its own cache; Mathlib uses its published cache.
           use-github-cache: false
 
       # The library alone comes first, so the vector suites run before the proofs.
       # An unfinished proof only warns, so warnings have to be fatal.
       - name: library
-        run: lake build --wfail EthLib
+        run: bash scripts/build_timing_report.sh run library_build "$BUILD_TIMING_RESULTS" -- lake build --wfail EthLib
 
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version-file: pyproject.toml
+
+      # pip suppresses successful backend output, so time Lean exports before it runs.
+      - name: exports
+        run: bash scripts/build_timing_report.sh run exports_build "$BUILD_TIMING_RESULTS" -- lake build --wfail Exports
+
+      - name: bindings
+        run: bash scripts/build_timing_report.sh run bindings_build "$BUILD_TIMING_RESULTS" -- pip install -e '.[test]'
+
       - name: vector suites
-        run: |
-          pip install -e '.[test]'
-          pytest
+        run: bash scripts/build_timing_report.sh run test_path "$BUILD_TIMING_RESULTS" -- pytest
 
       # The generators rewrite every case, so a changed vector shows up as a diff.
       - name: unchanged vectors
@@ -58,19 +95,68 @@ jobs:
       # The steps below run even after a failed suite, so every result is reported.
       - name: proofs
         if: ${{ !cancelled() }}
-        run: lake build --wfail
+        run: bash scripts/build_timing_report.sh run proofs_build "$BUILD_TIMING_RESULTS" -- lake build --wfail
 
       # Every compiled declaration: its axioms, and anything the kernel cannot
       # unfold or the compiler runs differently. Only the findings that exist
       # today, listed in scripts/check_decls_baseline.txt, pass.
       - name: declarations
         if: ${{ !cancelled() }}
-        run: lake exe check-decls
+        run: bash scripts/build_timing_report.sh run declarations "$BUILD_TIMING_RESULTS" -- lake exe check-decls
 
       # The check must report exactly what its fixtures plant.
       - name: declaration check fixtures
         if: ${{ !cancelled() }}
         run: scripts/test_check_decls.sh
+
+      - name: module system regression
+        if: ${{ !cancelled() }}
+        run: bash scripts/test_module_system.sh
+
+      - name: timing report fixtures
+        if: ${{ !cancelled() }}
+        run: python3 -m unittest discover -s scripts -p 'test_build_timing.py'
+
+      - name: build pipeline regressions
+        if: ${{ !cancelled() }}
+        run: python3 -m unittest discover -s scripts -p 'test_build_pipeline.py'
+
+      # A failed run still publishes its logs and the status of each measured command.
+      - name: build timing report
+        if: ${{ always() }}
+        run: |
+          mkdir -p "$BUILD_TIMING_LOG_DIR"
+          python3 scripts/module_times.py update .lake/build/ethlib-module-times.json \
+            --commit "$GITHUB_SHA" \
+            "$BUILD_TIMING_LOG_DIR/library_build.log" \
+            "$BUILD_TIMING_LOG_DIR/exports_build.log" \
+            "$BUILD_TIMING_LOG_DIR/bindings_build.log" \
+            "$BUILD_TIMING_LOG_DIR/proofs_build.log"
+          cp .lake/build/ethlib-module-times.json "$BUILD_TIMING_LOG_DIR/module-times.json"
+          bash scripts/build_timing_report.sh render "$BUILD_TIMING_RESULTS" \
+            > "$BUILD_TIMING_LOG_DIR/report.md"
+          cat "$BUILD_TIMING_LOG_DIR/report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: upload build timing
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ethlib-build-timing
+          path: ${{ runner.temp }}/ethlib-build-timing
+          if-no-files-found: warn
+          retention-days: 30
+
+      # Only successful master pushes publish a cache for later builds to consume.
+      - name: prepare EthLib cache
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: bash scripts/prepare_build_cache.sh
+
+      - name: save EthLib build
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: .lake/build
+          key: ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   vectors:
     runs-on: ubuntu-latest

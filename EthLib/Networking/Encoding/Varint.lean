@@ -1,3 +1,5 @@
+module
+
 /-!
 # `Networking.Encoding.Varint`
 
@@ -30,6 +32,8 @@ It states three rules for the length prefix:
 
 The byte format itself is the "Base 128 Varints" section of the protobuf encoding guide that the specification links.
 -/
+
+@[expose] public section
 
 namespace EthLib.Networking.Encoding.Varint
 

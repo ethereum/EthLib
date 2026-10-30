@@ -1,12 +1,16 @@
-import EthLib.Cryptography.Xmss.Sign
-import EthLib.Cryptography.Proofs.Xmss.Ots
-import EthLib.Cryptography.Proofs.Xmss.Serialization
+module
+
+public import EthLib.Cryptography.Xmss.Sign
+public import EthLib.Cryptography.Proofs.Xmss.Ots
+public import EthLib.Cryptography.Proofs.Xmss.Serialization
 
 /-!
 # Proofs: `Xmss.Sign`
 
 What a successful signature holds, and how signing can fail.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

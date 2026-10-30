@@ -1,7 +1,11 @@
-import EthLib.Serialization.Ssz.Merkle.Gindex
-import EthLib.Serialization.Ssz.Merkle.Tree
+module
+
+public import EthLib.Serialization.Ssz.Merkle.Gindex
+public import EthLib.Serialization.Ssz.Merkle.Tree
 
 /-! Rebuilding a root from nodes and the indices they sit at, reading no declaration. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

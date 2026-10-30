@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Vrf.Hash
+module
+
+public import EthLib.Cryptography.Vrf.Hash
 
 /-!
 # Proofs: `Vrf.Hash`
@@ -12,6 +14,8 @@ The three hash inputs are separated.
 So a collision found among the tree's hashes is a collision of Keccak-256 on two inputs of one kind.
 -/
 
+@[expose] public section
+
 namespace EthLib.Cryptography.Vrf
 
 open EthLib.Cryptography.Vrf.Constants
@@ -20,14 +24,20 @@ open EthLib.Cryptography.Vrf.Constants
 
 /-- The leaf prefix is the string `PQ_VRF_LEAF`. -/
 theorem VRF_LEAF_DST_eq : VRF_LEAF_DST.toList = "PQ_VRF_LEAF".toUTF8.toList := by
+  -- Use the public string equation before reducing the ASCII bytes.
+  rw [String.toUTF8_eq_toByteArray]
   decide +kernel
 
 /-- The node prefix is the string `PQ_VRF_NODE`. -/
 theorem VRF_NODE_DST_eq : VRF_NODE_DST.toList = "PQ_VRF_NODE".toUTF8.toList := by
+  -- Use the public string equation before reducing the ASCII bytes.
+  rw [String.toUTF8_eq_toByteArray]
   decide +kernel
 
 /-- The output prefix is the string `PQ_VRF_OUTPUT`. -/
 theorem VRF_OUTPUT_DST_eq : VRF_OUTPUT_DST.toList = "PQ_VRF_OUTPUT".toUTF8.toList := by
+  -- Use the public string equation before reducing the ASCII bytes.
+  rw [String.toUTF8_eq_toByteArray]
   decide +kernel
 
 /-- An opening is a secret and one sibling per level, 32 bytes each. -/

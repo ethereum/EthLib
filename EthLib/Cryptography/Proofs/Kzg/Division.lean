@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Kzg.Polynomials
-import EthLib.Cryptography.Proofs.Bls.FrZMod
-import Mathlib.Tactic
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.Polynomials
+public import EthLib.Cryptography.Proofs.Bls.FrZMod
+public import Mathlib.Tactic
 
 /-!
 # Proofs: polynomial long division
@@ -17,6 +19,8 @@ The proofs track one fact through both loops:
 
 At the end the remainder has degree below the divisor.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 open Bls (Fr)
@@ -59,7 +63,8 @@ theorem evalPolyAt_set (a : PolynomialCoeff) (x v : Fr) (i : Nat)
   rw [show (a.set! i v).size = a.size by simp [Array.set!], evalAux_set a x v i a.size hi (Nat.le_refl _), ite_eq_left hi]
 
 
-private def divisionSubtract (a b : PolynomialCoeff) (shift : Nat) (quot : Fr)
+-- The exposed loop-state model reduces through this subtraction step.
+def divisionSubtract (a b : PolynomialCoeff) (shift : Nat) (quot : Fr)
     (count : Nat) : PolynomialCoeff :=
   (List.range count).foldl
     (fun r i => r.set! (shift + i) (r[shift + i]! - b[i]! * quot)) a

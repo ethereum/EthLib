@@ -1,4 +1,6 @@
-import EthLib.Networking.Encoding.Varint
+module
+
+public import EthLib.Networking.Encoding.Varint
 
 /-!
 # `EthLib.Networking`

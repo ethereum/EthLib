@@ -1,9 +1,11 @@
-import EthLib.Cryptography.Bls.Fp2
-import EthLib.Cryptography.Bls.Compress
-import EthLib.Cryptography.Proofs.Bls.FpZMod
-import EthLib.Cryptography.Proofs.Bls.Compress
-import Mathlib.Tactic.Ring
-import Mathlib.Tactic.LinearCombination
+module
+
+public import EthLib.Cryptography.Bls.Fp2
+public import EthLib.Cryptography.Bls.Compress
+public import EthLib.Cryptography.Proofs.Bls.FpZMod
+public import EthLib.Cryptography.Proofs.Bls.Compress
+public import Mathlib.Tactic.Ring
+public import Mathlib.Tactic.LinearCombination
 
 /-!
 # Proofs: `Fp2`
@@ -20,6 +22,8 @@ That holds since `p = 3 mod 4`, and it makes every nonzero element invertible.
 
 It also proves that the library's exponentiation is the field power, and that a square root it returns squares back to its input.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.Fp2
 

@@ -1,8 +1,10 @@
-import EthLib.Cryptography.Proofs.Hash
-import EthLib.Cryptography.Proofs.Bls
-import EthLib.Cryptography.Proofs.Kzg
-import EthLib.Cryptography.Proofs.Xmss
-import EthLib.Cryptography.Proofs.Vrf
+module
+
+public import EthLib.Cryptography.Proofs.Hash
+public import EthLib.Cryptography.Proofs.Bls
+public import EthLib.Cryptography.Proofs.Kzg
+public import EthLib.Cryptography.Proofs.Xmss
+public import EthLib.Cryptography.Proofs.Vrf
 
 /-!
 # `EthLib.Cryptography.Proofs`

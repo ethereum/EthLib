@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Hash.Sha256
+module
+
+public import EthLib.Cryptography.Hash.Sha256
 
 /-!
 # Proofs: `Hash.Sha256`
@@ -7,6 +9,8 @@ SHA-256 agrees with FIPS 180-4 on every message shorter than 2^61 bytes.
 
 The standard is restated below as a model over 32-bit bit vectors, independent of the executable code.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Hash.Sha256
 
@@ -356,14 +360,20 @@ theorem paddingZeros_minimal (size zeros : Nat) (complete : (size + 1 + zeros + 
 /-- Padding keeps every byte of the message where it was. -/
 theorem pad_prefix (message : ByteArray) (i : Nat) (within : i < message.size) :
     (pad message)[i]'(by rw [pad_size]; omega) = message[i] := by
-  unfold pad
+  -- Normalize the bound with the value, rather than unfolding inside an abstracted proof.
+  have bound : i < (pad message).size := by rw [pad_size]; omega
+  change (pad message)[i]'bound = message[i]
+  unfold pad at bound ⊢
   rw [ByteArray.getElem_append_left (by simp; omega), ByteArray.getElem_append_left (by simp; omega)]
   exact Array.getElem_push_lt within
 
 /-- The byte after the message is `0x80`. -/
 theorem pad_delimiter (message : ByteArray) :
     (pad message)[message.size]'(by rw [pad_size]; omega) = 0x80 := by
-  unfold pad
+  -- The local bound unfolds at the same time as the indexed byte array.
+  have bound : message.size < (pad message).size := by rw [pad_size]; omega
+  change (pad message)[message.size]'bound = 0x80
+  unfold pad at bound ⊢
   rw [ByteArray.getElem_append_left (by simp; omega), ByteArray.getElem_append_left (by simp)]
   exact Array.getElem_push_eq
 
@@ -372,7 +382,10 @@ theorem pad_zero (message : ByteArray) (i : Nat) (within : i < paddingZeros mess
     (pad message)[message.size + 1 + i]'(by rw [pad_size]; omega) = 0 := by
   have zeroSize : (ByteArray.mk (Array.replicate (paddingZeros message.size) 0)).size =
       paddingZeros message.size := Array.size_replicate
-  unfold pad
+  -- Give the index proof the normalized array size before rewriting the lookup.
+  have bound : message.size + 1 + i < (pad message).size := by rw [pad_size]; omega
+  change (pad message)[message.size + 1 + i]'bound = 0
+  unfold pad at bound ⊢
   rw [ByteArray.getElem_append_left (by simp only [ByteArray.size_append, ByteArray.size_push, zeroSize]; omega)]
   rw [ByteArray.getElem_append_right (by simp)]
   exact Array.getElem_replicate _

@@ -48,7 +48,12 @@ def nativeOwner? (env : Environment) (a : Name) : Option Name := do
   let cs := a.components
   guard (cs.contains `_native)
   let owner := (cs.takeWhile (· != `_native)).foldl (· ++ ·) .anonymous
-  guard (cs.length > owner.components.length + 1 && owner != a && env.contains owner)
+  guard (cs.length > owner.components.length + 1 && owner != a)
+  -- Module proof bodies give generated axioms a private prefix even for public theorems.
+  -- Lean v4.35.0, `Lean.Meta.nativeEqTrue` in Lean/Meta/Native.lean.
+  -- Prefer an existing private owner before resolving the corresponding public name.
+  let owner := if env.contains owner then owner else privateToUserName owner
+  guard (env.contains owner)
   return owner
 
 /-- An axiom that trusts compiled code, rather than a statement the kernel checks.
@@ -60,6 +65,7 @@ def isNativeAxiom (env : Environment) (n : Name) : Bool :=
 /-- The module that defines `n`. -/
 def moduleOf? (env : Environment) (n : Name) : Option Name := do
   let idx ← env.getModuleIdxFor? n
+  -- Lean v4.35.0 `EnvironmentHeader.moduleNames` maps this array on every call.
   return (← env.header.modules[idx.toNat]?).module
 
 /-- Whether `n` is defined in a module under `scope`. -/
@@ -305,9 +311,11 @@ unsafe def run (args : List String) : IO UInt32 := do
   let mods := if mods.isEmpty then [`EthLib, `EthLib.Proofs, `EthLib.Exports] else mods
   initSearchPath (← findSysroot)
   -- `loadExts := true` is essential: without it the `@[csimp]` table, among others, stays empty.
+  -- Lean v4.35.0 `Lean.importModules`: `.private` loads every private proof body.
+  -- Exported artifacts alone cannot reveal a theorem's full dependencies.
   enableInitializersExecution
   let env ← importModules (mods.toArray.map fun m => { module := m }) {} (trustLevel := 1024)
-    (loadExts := true)
+    (loadExts := true) (level := .private)
   if (csimpTheorems env).isEmpty then
     IO.eprintln "check-decls: no @[csimp] theorems visible, so the extensions did not load"
     return 3

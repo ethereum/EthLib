@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.RoundTripComposite
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.RoundTripComposite
 
 /-! Canonical sequence encodings split back into precisely their original element bytes. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

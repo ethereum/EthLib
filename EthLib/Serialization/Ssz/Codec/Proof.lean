@@ -1,7 +1,11 @@
-import EthLib.Serialization.Ssz.Codec.Root
-import EthLib.Serialization.Ssz.Merkle.Verify
+module
+
+public import EthLib.Serialization.Ssz.Codec.Root
+public import EthLib.Serialization.Ssz.Merkle.Verify
 
 /-! Reading an index against a value's data, and building the proofs that carry it. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

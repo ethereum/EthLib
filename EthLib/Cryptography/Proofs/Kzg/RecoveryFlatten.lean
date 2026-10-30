@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Kzg.RecoveryDomain
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.RecoveryDomain
 
 /-!
 # Proofs: flattening cells into one evaluation array
@@ -11,6 +13,8 @@ Recovery writes each provided cell into a zero-filled array of 8192 entries.
 
 The loop invariant: a position holds its cell's value if that cell was provided, and zero otherwise.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)

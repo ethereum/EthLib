@@ -1,7 +1,11 @@
-import Lean.Data.Json
-import EthLib.Serialization.Ssz.Codec.Deserialize
+module
+
+public import Lean.Data.Json
+public import EthLib.Serialization.Ssz.Codec.Deserialize
 
 /-! The JSON document a value is written as, which an SSZ schema defines alongside its bytes. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

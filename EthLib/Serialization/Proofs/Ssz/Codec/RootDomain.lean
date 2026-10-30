@@ -1,8 +1,12 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.RootLaws
-import EthLib.Serialization.Proofs.Ssz.Merkle.Widths
-import EthLib.Serialization.Proofs.Ssz.Type.Equality
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.RootLaws
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Widths
+public import EthLib.Serialization.Proofs.Ssz.Type.Equality
 
 /-! Admissible values have a Merkle root, independently of serialization's offset limit. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

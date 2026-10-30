@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
-import EthLib.Serialization.Ssz.Codec.Root
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
+public import EthLib.Serialization.Ssz.Codec.Root
 
 /-! A byte array and its sequence of one-byte integer values have the same SSZ meaning. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

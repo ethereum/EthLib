@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Flat.Fold
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Flat.Fold
 
 /-! Walking a bounded tree from its leaves to its root, and what that walk computes. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

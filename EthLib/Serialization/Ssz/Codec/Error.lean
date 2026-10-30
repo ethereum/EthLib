@@ -1,4 +1,8 @@
+module
+
 /-! Why a type, a value, an encoding, or a proof was refused. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 
