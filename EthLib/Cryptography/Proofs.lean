@@ -3,6 +3,7 @@ import EthLib.Cryptography.Proofs.Bls
 import EthLib.Cryptography.Proofs.Kzg
 import EthLib.Cryptography.Proofs.Xmss
 import EthLib.Cryptography.Proofs.Vrf
+import EthLib.Cryptography.Proofs.Secp256k1
 
 /-!
 # `EthLib.Cryptography.Proofs`
