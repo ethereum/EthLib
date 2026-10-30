@@ -1,6 +1,7 @@
 import EthLib.Cryptography.Secp256k1.Field
 import EthLib.Cryptography.Secp256k1.Curve
 import EthLib.Cryptography.Secp256k1.Encoding
+import EthLib.Cryptography.Secp256k1.Ecdsa
 
 /-!
 # `EthLib.Cryptography.Secp256k1`
