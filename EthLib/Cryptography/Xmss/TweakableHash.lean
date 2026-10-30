@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Hash.Keccak
-import EthLib.Cryptography.Xmss.Address
+module
+
+public import EthLib.Cryptography.Hash.Keccak
+public import EthLib.Cryptography.Xmss.Address
 
 /-!
 # `Xmss.TweakableHash`
@@ -16,6 +18,8 @@ The hash every other definition is built from.
 
 Source: the leanXMSS specification draft, section "Hashing and parameters".
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

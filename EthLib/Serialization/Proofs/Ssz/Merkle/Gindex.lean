@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Merkle.Gindex
+module
+
+public import EthLib.Serialization.Ssz.Merkle.Gindex
 
 /-! Arithmetic laws of the generalized indices, and the refusals their entry points make. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

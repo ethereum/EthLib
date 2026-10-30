@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.WalkerClosure
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.WalkerClosure
 
 /-! Readable nodes of a closed finite tree produce branches that reconstruct its root. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

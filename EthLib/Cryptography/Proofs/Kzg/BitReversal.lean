@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Kzg.BitReversal
+module
+
+public import EthLib.Cryptography.Kzg.BitReversal
 
 /-!
 # Proofs: `BitReversal`
@@ -10,6 +12,8 @@ The output bits of `reverseBitsAux` are characterized via `Nat.testBit`
 (`testBit_reverseBitsAux`); everything else follows from that
 characterization.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg.BitReversal
 

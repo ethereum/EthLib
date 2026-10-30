@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Xmss.TweakableHash
-import EthLib.Cryptography.Proofs.Xmss.Types
+module
+
+public import EthLib.Cryptography.Xmss.TweakableHash
+public import EthLib.Cryptography.Proofs.Xmss.Types
 
 /-!
 # Proofs: `Xmss.TweakableHash`
@@ -8,6 +10,8 @@ A hash input determines its public parameter, its address and its payload.
 
 So two calls hash the same bytes only when they are the same call.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

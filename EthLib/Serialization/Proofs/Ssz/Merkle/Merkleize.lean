@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Merkle.Merkleize
+module
+
+public import EthLib.Serialization.Ssz.Merkle.Merkleize
 
 /-! Laws of the abstract tree roots: padding depth, congruence, and roots past the data. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

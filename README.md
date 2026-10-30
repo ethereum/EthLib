@@ -49,6 +49,8 @@ Compile the primitives and check every proof:
 lake build
 ```
 
+See [BUILDING.md](BUILDING.md) for module boundaries, CI caching, and build timing reports.
+
 When refreshing dependencies, use `lake --keep-toolchain update` to retain the toolchain matching Mathlib.
 
 ### Testing

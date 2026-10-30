@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Xmss.Ots
+module
+
+public import EthLib.Cryptography.Xmss.Ots
 
 /-!
 # Proofs: `Xmss.Ots`
@@ -8,6 +10,8 @@ Correctness of the one-time signature.
 - Grinding returns the least trial whose digest is a codeword.
 - An honest one-time signature leads back to the key's own leaf.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

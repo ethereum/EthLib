@@ -1,6 +1,9 @@
-import EthLib.Serialization.Proofs
-import EthLib.Cryptography.Proofs
-import EthLib.Precompiles.Proofs
+module
+
+public import EthLib.Serialization.Proofs
+public import EthLib.Cryptography.Proofs
+public import EthLib.Networking.Proofs
+public import EthLib.Precompiles.Proofs
 
 /-!
 # `EthLib.Proofs`

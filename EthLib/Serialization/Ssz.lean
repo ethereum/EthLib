@@ -1,20 +1,22 @@
-import EthLib.Serialization.Ssz.Type.Desc
-import EthLib.Serialization.Ssz.Type.Value
-import EthLib.Serialization.Ssz.Type.Valid
-import EthLib.Serialization.Ssz.Type.Default
-import EthLib.Serialization.Ssz.Type.Paths
-import EthLib.Serialization.Ssz.Codec.Error
-import EthLib.Serialization.Ssz.Codec.Serialize
-import EthLib.Serialization.Ssz.Codec.Deserialize
-import EthLib.Serialization.Ssz.Codec.Layout
-import EthLib.Serialization.Ssz.Codec.Json
-import EthLib.Serialization.Ssz.Codec.Root
-import EthLib.Serialization.Ssz.Codec.Proof
-import EthLib.Serialization.Ssz.Merkle.Chunk
-import EthLib.Serialization.Ssz.Merkle.Merkleize
-import EthLib.Serialization.Ssz.Merkle.Tree
-import EthLib.Serialization.Ssz.Merkle.Gindex
-import EthLib.Serialization.Ssz.Merkle.Verify
+module
+
+public import EthLib.Serialization.Ssz.Type.Desc
+public import EthLib.Serialization.Ssz.Type.Value
+public import EthLib.Serialization.Ssz.Type.Valid
+public import EthLib.Serialization.Ssz.Type.Default
+public import EthLib.Serialization.Ssz.Type.Paths
+public import EthLib.Serialization.Ssz.Codec.Error
+public import EthLib.Serialization.Ssz.Codec.Serialize
+public import EthLib.Serialization.Ssz.Codec.Deserialize
+public import EthLib.Serialization.Ssz.Codec.Layout
+public import EthLib.Serialization.Ssz.Codec.Json
+public import EthLib.Serialization.Ssz.Codec.Root
+public import EthLib.Serialization.Ssz.Codec.Proof
+public import EthLib.Serialization.Ssz.Merkle.Chunk
+public import EthLib.Serialization.Ssz.Merkle.Merkleize
+public import EthLib.Serialization.Ssz.Merkle.Tree
+public import EthLib.Serialization.Ssz.Merkle.Gindex
+public import EthLib.Serialization.Ssz.Merkle.Verify
 
 /-!
 # `EthLib.Serialization.Ssz`

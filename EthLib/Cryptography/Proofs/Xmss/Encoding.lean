@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Xmss.Encoding
-import EthLib.Cryptography.Proofs.Xmss.Types
-import Mathlib.Tactic
+module
+
+public import EthLib.Cryptography.Xmss.Encoding
+public import EthLib.Cryptography.Proofs.Xmss.Types
+public import Mathlib.Tactic
 
 /-!
 # Proofs: `Xmss.Encoding`
@@ -11,6 +13,8 @@ What a codeword is, and what it guarantees.
 - Its digits determine the digest: no two digests share a codeword.
 - Two distinct codewords are incomparable: each has a digit below the other's.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

@@ -1,10 +1,14 @@
-import EthLib.Cryptography.Proofs.Xmss.KnownAnswer
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.KnownAnswer
 
 /-!
 # Proofs: the known answer's top layer
 
 The top key `0xA5C3` signs the root of bottom tree `0xA5C3`, and its path reaches the key's root.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss.KnownAnswer
 

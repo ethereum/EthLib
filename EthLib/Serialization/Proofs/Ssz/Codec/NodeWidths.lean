@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.ProofBudget
-import EthLib.Serialization.Proofs.Ssz.Merkle.Widths
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.ProofBudget
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Widths
 
 /-! Every successful Merkle read returns one complete 32-byte node. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

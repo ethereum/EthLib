@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofTrace
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofTrace
 
 /-! Accepted multiproofs have complete nodes and precisely the canonical reconstruction shape. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

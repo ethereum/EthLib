@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Bls.Compress
-import EthLib.Cryptography.Hash.Sha256
+module
+
+public import EthLib.Cryptography.Bls.Compress
+public import EthLib.Cryptography.Hash.Sha256
 
 /-!
 # `HashToCurve`
@@ -11,22 +13,24 @@ The pipeline is `expand_message_xmd → hash_to_field → SSWU → 3-isogeny
 → clear_cofactor`. Constants are reproduced verbatim from the RFC.
 -/
 
+@[expose] public section
+
 namespace EthLib.Cryptography.Bls.HashToCurve
 
 open EthLib.Cryptography.Bls
 
 /-! ## `expand_message_xmd` (RFC 9380 §5.3.1) -/
 
-private def sha256BlockSize : Nat := 64
-private def sha256OutputSize : Nat := 32
-private def oversizeDstPrefix : ByteArray :=
+def sha256BlockSize : Nat := 64
+def sha256OutputSize : Nat := 32
+def oversizeDstPrefix : ByteArray :=
   String.toUTF8 "H2C-OVERSIZE-DST-"
 
-private def i2osp (n : Nat) (len : Nat) : ByteArray :=
+def i2osp (n : Nat) (len : Nat) : ByteArray :=
   ByteArray.mk <| Array.ofFn (n := len) fun i =>
     UInt8.ofNat ((n >>> ((len - 1 - i.val) * 8)) &&& 0xff)
 
-private def strxor (a b : ByteArray) : ByteArray :=
+def strxor (a b : ByteArray) : ByteArray :=
   ByteArray.mk <| Array.ofFn (n := a.size) fun i => a[i.val]! ^^^ b[i.val]!
 
 /-- Expand `msg` into `lenInBytes` pseudo-random bytes via XMD with
@@ -65,7 +69,7 @@ def expandMessageXmd
 Returns `count` Fp2 elements, each derived from `2 * L = 128` bytes of
 expand-message output. -/
 
-private def fpFromBytesL (b : ByteArray) : Fp :=
+def fpFromBytesL (b : ByteArray) : Fp :=
   -- OS2IP into a Nat, then reduce mod p.
   let n := Id.run do
     let mut acc : Nat := 0
@@ -140,52 +144,52 @@ def simpleSwu (u : Fp2) : Fp2 × Fp2 :=
 
 Each `kI_J` is the Fp2 coefficient `k_(I,J)` written as `c0 + c1·I`. -/
 
-private def fp2 (c0 c1 : Nat) : Fp2 := ⟨Fp.ofNat c0, Fp.ofNat c1⟩
+def fp2 (c0 c1 : Nat) : Fp2 := ⟨Fp.ofNat c0, Fp.ofNat c1⟩
 
 -- x_num coefficients
-private def k10 : Fp2 := fp2
+def k10 : Fp2 := fp2
   0x5c759507e8e333ebb5b7a9a47d7ed8532c52d39fd3a042a88b58423c50ae15d5c2638e343d9c71c6238aaaaaaaa97d6
   0x5c759507e8e333ebb5b7a9a47d7ed8532c52d39fd3a042a88b58423c50ae15d5c2638e343d9c71c6238aaaaaaaa97d6
-private def k11 : Fp2 := fp2
+def k11 : Fp2 := fp2
   0
   0x11560bf17baa99bc32126fced787c88f984f87adf7ae0c7f9a208c6b4f20a4181472aaa9cb8d555526a9ffffffffc71a
-private def k12 : Fp2 := fp2
+def k12 : Fp2 := fp2
   0x11560bf17baa99bc32126fced787c88f984f87adf7ae0c7f9a208c6b4f20a4181472aaa9cb8d555526a9ffffffffc71e
   0x8ab05f8bdd54cde190937e76bc3e447cc27c3d6fbd7063fcd104635a790520c0a395554e5c6aaaa9354ffffffffe38d
-private def k13 : Fp2 := fp2
+def k13 : Fp2 := fp2
   0x171d6541fa38ccfaed6dea691f5fb614cb14b4e7f4e810aa22d6108f142b85757098e38d0f671c7188e2aaaaaaaa5ed1
   0
 
 -- x_den coefficients
-private def k20 : Fp2 := fp2
+def k20 : Fp2 := fp2
   0
   0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaa63
-private def k21 : Fp2 := fp2
+def k21 : Fp2 := fp2
   0xc
   0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaa9f
 
 -- y_num coefficients
-private def k30 : Fp2 := fp2
+def k30 : Fp2 := fp2
   0x1530477c7ab4113b59a4c18b076d11930f7da5d4a07f649bf54439d87d27e500fc8c25ebf8c92f6812cfc71c71c6d706
   0x1530477c7ab4113b59a4c18b076d11930f7da5d4a07f649bf54439d87d27e500fc8c25ebf8c92f6812cfc71c71c6d706
-private def k31 : Fp2 := fp2
+def k31 : Fp2 := fp2
   0
   0x5c759507e8e333ebb5b7a9a47d7ed8532c52d39fd3a042a88b58423c50ae15d5c2638e343d9c71c6238aaaaaaaa97be
-private def k32 : Fp2 := fp2
+def k32 : Fp2 := fp2
   0x11560bf17baa99bc32126fced787c88f984f87adf7ae0c7f9a208c6b4f20a4181472aaa9cb8d555526a9ffffffffc71c
   0x8ab05f8bdd54cde190937e76bc3e447cc27c3d6fbd7063fcd104635a790520c0a395554e5c6aaaa9354ffffffffe38f
-private def k33 : Fp2 := fp2
+def k33 : Fp2 := fp2
   0x124c9ad43b6cf79bfbf7043de3811ad0761b0f37a1e26286b0e977c69aa274524e79097a56dc4bd9e1b371c71c718b10
   0
 
 -- y_den coefficients
-private def k40 : Fp2 := fp2
+def k40 : Fp2 := fp2
   0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffa8fb
   0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffa8fb
-private def k41 : Fp2 := fp2
+def k41 : Fp2 := fp2
   0
   0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffa9d3
-private def k42 : Fp2 := fp2
+def k42 : Fp2 := fp2
   0x12
   0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaa99
 
@@ -204,20 +208,20 @@ def isoMapG2 (xp yp : Fp2) : Fp2 × Fp2 :=
 Uses the psi endomorphism for the fast Budroni-Pintore method. -/
 
 /-- Frobenius for `GF(p^2)` with basis `(1, I)`: `c0 + c1·I ↦ c0 − c1·I`. -/
-private def frobeniusFp2 (x : Fp2) : Fp2 := ⟨x.c0, -x.c1⟩
+def frobeniusFp2 (x : Fp2) : Fp2 := ⟨x.c0, -x.c1⟩
 
 /-- `c1_psi = 1 / (1 + I)^((p − 1) / 3)`. -/
-private def c1Psi : Fp2 :=
+def c1Psi : Fp2 :=
   let oneI : Fp2 := ⟨Fp.one, Fp.one⟩
   (Fp2.powNat oneI ((Fp.modulus - 1) / 3)).inverse
 
 /-- `c2_psi = 1 / (1 + I)^((p − 1) / 2)`. -/
-private def c2Psi : Fp2 :=
+def c2Psi : Fp2 :=
   let oneI : Fp2 := ⟨Fp.one, Fp.one⟩
   (Fp2.powNat oneI ((Fp.modulus - 1) / 2)).inverse
 
 /-- `c1_psi2 = 1 / 2^((p − 1) / 3)`, lifted into Fp2. -/
-private def c1Psi2 : Fp2 :=
+def c1Psi2 : Fp2 :=
   let two : Fp := Fp.ofNat 2
   let v : Fp := (Fp.powNat two ((Fp.modulus - 1) / 3)).inverse
   ⟨v, Fp.zero⟩

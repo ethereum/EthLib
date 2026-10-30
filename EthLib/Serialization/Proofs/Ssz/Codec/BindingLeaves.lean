@@ -1,8 +1,12 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingLeafShape
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingTraceLaws
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingCongruence
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingLeafShape
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingTraceLaws
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingCongruence
 
 /-! Aligned layout computations authenticate their packed nodes and nested values. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

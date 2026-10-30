@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Vrf.Kernel
-import EthLib.Cryptography.Proofs.Vrf.Serialization
+module
+
+public import EthLib.Cryptography.Proofs.Vrf.Kernel
+public import EthLib.Cryptography.Proofs.Vrf.Serialization
 
 /-!
 # Proofs: VRF tree known answers
@@ -15,6 +17,8 @@ The kernel checks every answer, with no `native_decide`.
 
 The answers at each index sit in their own file, so the two build in parallel.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf.KnownAnswer
 

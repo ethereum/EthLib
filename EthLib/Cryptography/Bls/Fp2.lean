@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Bls.Fp
+module
+
+public import EthLib.Cryptography.Bls.Fp
 
 /-!
 # `Fp2`
@@ -12,6 +14,8 @@ Inversion uses the conjugate identity:
 
   (a + b·i)⁻¹ = (a − b·i) / (a² + b²)
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls
 

@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Bls.G2Order
-import EthLib.Cryptography.Proofs.Bls.G2Equiv
+module
+
+public import EthLib.Cryptography.Proofs.Bls.G2Order
+public import EthLib.Cryptography.Proofs.Bls.G2Equiv
 
 /-!
 # Proofs: semantics of the `G2` subgroup check
@@ -10,6 +12,8 @@ It accepts `G2.generator` and is closed under `mulNat`, `add`, and `neg`.
 
 This file proves the `r`-torsion characterization without claiming that `E'(Fp2)[r]` is cyclic.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.G2
 

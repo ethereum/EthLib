@@ -1,9 +1,13 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.PathProof
-import EthLib.Serialization.Proofs.Ssz.Codec.PathDescent
-import EthLib.Serialization.Proofs.Ssz.Codec.PathSlots
-import EthLib.Serialization.Proofs.Ssz.Type.PathSteps
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.PathProof
+public import EthLib.Serialization.Proofs.Ssz.Codec.PathDescent
+public import EthLib.Serialization.Proofs.Ssz.Codec.PathSlots
+public import EthLib.Serialization.Proofs.Ssz.Type.PathSteps
 
 /-! Paths through present values select mixing words, packed chunks, and nested Merkle nodes. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

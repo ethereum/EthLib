@@ -1,3 +1,5 @@
+module
+
 /-!
 # `Kzg.Errors`
 
@@ -13,6 +15,8 @@ The C exports in `EthLib.Cryptography.Exports.Kzg` run a `KzgM` action
 back down to `IO`, turning a `KzgError` into the `IO.userError` that the
 Python bindings expect.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 

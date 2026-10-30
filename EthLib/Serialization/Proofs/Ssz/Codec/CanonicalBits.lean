@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.Canonical
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.Canonical
 
 /-! Delimited bit encodings preserve every byte when decoded and re-encoded. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

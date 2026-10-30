@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.Admits
-import EthLib.Serialization.Proofs.Ssz.Type.DefaultLaws
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.Admits
+public import EthLib.Serialization.Proofs.Ssz.Type.DefaultLaws
 
 /-! The executable value checker reflects declarative admissibility. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

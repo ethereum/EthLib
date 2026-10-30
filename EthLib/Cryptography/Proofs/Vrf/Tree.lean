@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Vrf.Tree
+module
+
+public import EthLib.Cryptography.Vrf.Tree
 
 /-!
 # Proofs: `Vrf.Tree`
@@ -8,6 +10,8 @@ The two guarantees of a Merkle tree, for every node type and node hash.
 - Completeness: the path of leaf `i` leads from that leaf to the root.
 - Binding: two openings of one index that lead to one root are equal, or the node hash collides.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf.Tree
 

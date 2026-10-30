@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.Encoding
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Encoding
 
 /-!
 # Proofs: the size of the target-sum code
@@ -19,6 +21,8 @@ A digest is a codeword only through its digits, and no two digests share one.
 
 So at most `|C|` of the `2^128` digests are codewords.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

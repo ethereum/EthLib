@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Bls
-import EthLib.Cryptography.Kzg.Constants
-import EthLib.Cryptography.Kzg.TrustedSetupData
+module
+
+public import EthLib.Cryptography.Bls
+public import EthLib.Cryptography.Kzg.Constants
+public import EthLib.Cryptography.Kzg.TrustedSetupData
 
 /-!
 # `TrustedSetup`
@@ -13,6 +15,8 @@ hex strings. At module-init we decode them, decompress to projective
 points, and stash both forms in a global ref accessed via
 `TrustedSetup.get!`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 

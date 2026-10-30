@@ -1,7 +1,9 @@
-import EthLib.Cryptography.Bls.G2
-import EthLib.Cryptography.Proofs.Bls.Fp2
-import Mathlib.AlgebraicGeometry.EllipticCurve.Jacobian.Point
-import Mathlib.Tactic.Module
+module
+
+public import EthLib.Cryptography.Bls.G2
+public import EthLib.Cryptography.Proofs.Bls.Fp2
+public import Mathlib.AlgebraicGeometry.EllipticCurve.Jacobian.Point
+public import Mathlib.Tactic.Module
 
 /-!
 # Proofs: the `G2` group structure
@@ -23,6 +25,8 @@ Doubling agrees with Mathlib's `dblXYZ` with unit weight `u = 1`.
 
 General addition matches `addXYZ` up to the nonzero Jacobian weight `u = -(2 * z_1 * z_2)` modulo the curve equations.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.G2
 

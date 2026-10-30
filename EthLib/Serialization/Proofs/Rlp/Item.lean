@@ -1,4 +1,6 @@
-import EthLib.Serialization.Rlp.Item
+module
+
+public import EthLib.Serialization.Rlp.Item
 
 /-!
 # `Serialization.Proofs.Rlp.Item`
@@ -16,6 +18,8 @@ The Yellow Paper defines `BE(x)` by two properties of its bytes `b`:
 
 `bigEndian_size_le` bounds the number of bytes, which keeps the first byte of a prefix below 256.
 -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Rlp
 

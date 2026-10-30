@@ -1,4 +1,6 @@
-import EthLib.Precompiles.Modexp.Constants
+module
+
+public import EthLib.Precompiles.Modexp.Constants
 
 /-!
 # `Modexp.Gas`
@@ -37,6 +39,8 @@ The EIP-2565 pseudocode is the same, with 8 in place of 16.
 
 This module follows EIP-198 and execution-specs, which agree with each other.
 -/
+
+@[expose] public section
 
 namespace EthLib.Precompiles.Modexp
 

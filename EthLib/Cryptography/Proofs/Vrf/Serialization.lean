@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Vrf.Serialization
-import EthLib.Cryptography.Proofs.Vrf.Verify
+module
+
+public import EthLib.Cryptography.Vrf.Serialization
+public import EthLib.Cryptography.Proofs.Vrf.Verify
 
 /-!
 # Proofs: `Vrf.Serialization`
@@ -12,6 +14,8 @@ The encoding is a bijection between openings and 1056-byte strings.
 
 Verification over bytes rejects malformed input, and agrees with typed verification on the rest.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf
 

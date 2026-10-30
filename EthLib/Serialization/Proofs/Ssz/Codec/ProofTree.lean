@@ -1,8 +1,12 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.Proof
-import EthLib.Serialization.Proofs.Ssz.Merkle.HelperFrontier
-import EthLib.Serialization.Proofs.Ssz.Type.Equality
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.Proof
+public import EthLib.Serialization.Proofs.Ssz.Merkle.HelperFrontier
+public import EthLib.Serialization.Proofs.Ssz.Type.Equality
 
 /-! A bounded proof walk reads the same binary subtrees that merkleization hashes. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

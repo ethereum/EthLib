@@ -1,8 +1,10 @@
-import EthLib.Cryptography.Xmss
-import EthLib.Cryptography.Proofs.Xmss.Kernel
-import EthLib.Cryptography.Proofs.Xmss.Serialization
-import EthLib.Cryptography.Proofs.Xmss.Verify
-import EthLib.Cryptography.Proofs.Xmss.Ots
+module
+
+public import EthLib.Cryptography.Xmss
+public import EthLib.Cryptography.Proofs.Xmss.Kernel
+public import EthLib.Cryptography.Proofs.Xmss.Serialization
+public import EthLib.Cryptography.Proofs.Xmss.Verify
+public import EthLib.Cryptography.Proofs.Xmss.Ots
 
 /-!
 # Proofs: the leanXMSS known answer
@@ -43,6 +45,8 @@ Instead the files pin the pieces of key generation that a signature exposes:
 - the scheme seed and the public parameter, from the seed;
 - the bottom and top keys' leaves, from the seed, equal to the leaves the signature recovers.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss.KnownAnswer
 

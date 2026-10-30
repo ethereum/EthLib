@@ -1,7 +1,9 @@
-import EthLib.Cryptography
-import EthLib.Networking
-import EthLib.Precompiles
-import EthLib.Serialization
+module
+
+public import EthLib.Cryptography
+public import EthLib.Networking
+public import EthLib.Precompiles
+public import EthLib.Serialization
 
 /-!
 # `EthLib`

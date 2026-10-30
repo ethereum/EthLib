@@ -1,10 +1,14 @@
-import EthLib.Cryptography.Xmss.Types
+module
+
+public import EthLib.Cryptography.Xmss.Types
 
 /-!
 # Proofs: `Xmss.Types`
 
 Properties of the fixed-size byte objects.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

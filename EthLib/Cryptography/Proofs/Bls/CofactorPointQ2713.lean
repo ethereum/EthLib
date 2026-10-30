@@ -1,8 +1,12 @@
-import EthLib.Cryptography.Proofs.Bls.CofactorCertificateHelpers
+module
+
+public import EthLib.Cryptography.Proofs.Bls.CofactorCertificateHelpers
 
 /-!
 # Proofs: `2713`-torsion witness on the BLS12-381 twist
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.CofactorCertificate
 

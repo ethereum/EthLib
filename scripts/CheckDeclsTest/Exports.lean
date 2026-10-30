@@ -1,8 +1,12 @@
+module
+
 /-!
 # `CheckDeclsTest.Exports`
 
 An export module: it may reach `IO`, which the specification may not.
 -/
+
+@[expose] public section
 
 namespace CheckDeclsTest.Exports
 

@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Kzg.Recovery
-import EthLib.Cryptography.Proofs.Kzg.CoefficientPolynomial
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.Recovery
+public import EthLib.Cryptography.Proofs.Kzg.CoefficientPolynomial
 
 /-!
 # Proofs: the product fits the domain
@@ -10,6 +12,8 @@ With at most half the cells missing, `deg(P * Z) < 8192`.
 
 So 8192 evaluations determine `P * Z` exactly, and the inverse FFT returns its coefficients.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)

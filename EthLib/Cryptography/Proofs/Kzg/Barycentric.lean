@@ -1,7 +1,9 @@
-import EthLib.Cryptography.Proofs.Kzg.Polynomials
-import EthLib.Cryptography.Proofs.Bls.FrZMod
-import EthLib.Cryptography.Proofs.Bls.FrBatchInverse
-import Mathlib.Algebra.BigOperators.Intervals
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.Polynomials
+public import EthLib.Cryptography.Proofs.Bls.FrZMod
+public import EthLib.Cryptography.Proofs.Bls.FrBatchInverse
+public import Mathlib.Algebra.BigOperators.Intervals
 
 /-!
 # Proofs: barycentric evaluation in Mathlib form
@@ -17,6 +19,8 @@ Lagrange-interpolation argument consumes.
 
 Uses the scoped `Field Fr` instance from `Proofs.Bls.FrZMod`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 

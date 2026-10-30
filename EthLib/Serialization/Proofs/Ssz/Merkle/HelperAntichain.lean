@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.HelperUniqueness
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.HelperUniqueness
 
 /-! Supplied multiproof nodes form a cut: no supplied node hides another beneath it. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

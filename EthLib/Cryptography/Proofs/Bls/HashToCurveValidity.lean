@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Bls.Isogeny
+module
+
+public import EthLib.Cryptography.Proofs.Bls.Isogeny
 
 /-!
 # Proofs: Twist curve validity of `hashToG2`
@@ -11,6 +13,8 @@ Together with `simpleSwu_isoMapG2_valid`, every `hashToG2 msg dst` call succeeds
 
 This file proves nonsingular curve membership (`G2.Valid`), not `r`-torsion subgroup membership.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.HashToCurve
 

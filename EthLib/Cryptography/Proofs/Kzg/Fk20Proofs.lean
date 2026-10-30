@@ -1,12 +1,17 @@
-import EthLib.Cryptography.Proofs.Kzg.FftG1
-import EthLib.Cryptography.Proofs.Kzg.ExtendedCells
-import EthLib.Cryptography.Proofs.Kzg.CosetInterpolation
-import EthLib.Cryptography.Proofs.Kzg.Core
-import EthLib.Cryptography.Proofs.Kzg.Division
-import EthLib.Cryptography.Proofs.Kzg.RecoveryDomain
-import EthLib.Cryptography.Proofs.Kzg.RecoveryReconstruction
-import EthLib.Cryptography.Proofs.Bls.G1Msm
-import EthLib.Cryptography.Proofs.Bls.Compress
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.FftG1
+public import EthLib.Cryptography.Proofs.Kzg.ExtendedCells
+public import EthLib.Cryptography.Proofs.Kzg.CosetInterpolation
+public import EthLib.Cryptography.Proofs.Kzg.Core
+public import EthLib.Cryptography.Proofs.Kzg.Division
+public import EthLib.Cryptography.Proofs.Kzg.RecoveryDomain
+public import EthLib.Cryptography.Proofs.Kzg.RecoveryReconstruction
+public import EthLib.Cryptography.Proofs.Bls.G1Msm
+public import EthLib.Cryptography.Proofs.Bls.Compress
+-- Lifted successful results are simplified with the public monad laws.
+import Batteries.Lean.LawfulMonad
+import Init.Control.Lawful.Instances
 
 /-!
 # Proofs: FK20 cell proofs equal per-cell quotient commitments
@@ -47,6 +52,8 @@ This file proves:
 - Given at least 64 valid cells of a polynomial, `recoverCellsAndKzgProofs` recovers all 128 cells and proofs.
 -/
 
+@[expose] public section
+
 namespace EthLib.Cryptography.Kzg
 
 open EthLib.Cryptography.Bls (Fr G1)
@@ -54,6 +61,13 @@ open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
 attribute [-instance] Fin.instNatPow
+
+/-- A successful lifted result passes its value to the continuation.
+This is `pure_bind` from Lean v4.35.0, `Init.Control.Lawful.Basic`. -/
+private theorem bind_mk_ok {α β : Type} (value : α) (next : α → KzgM β) :
+    (ExceptT.mk (pure (Except.ok value)) >>= next) = next value := by
+  change (pure value >>= next) = next value
+  exact pure_bind value next
 
 private theorem fr_pow_zero (a : Fr) : a ^ 0 = 1 := pow_zero a
 private theorem fr_pow_succ (a : Fr) (n : Nat) : a ^ (n + 1) = a ^ n * a := pow_succ a n
@@ -725,7 +739,7 @@ theorem computeCellsAndKzgProofs_ok_eq_bind {blob : Blob} {poly : Polynomial}
   rw [ite_eq_right (not_not.mpr hbsize)]
   change (ExceptT.mk (pure (blobToPolynomial blob)) >>= fun polynomial =>
     computeCellsAndKzgProofsPolynomialcoeff (polynomialEvalToCoeff polynomial)) = _
-  rw [hblob]
+  rw [hblob, bind_mk_ok]
   rfl
 
 private theorem getElem!_extract {α : Type} [Inhabited α] (xs : Array α)
@@ -1219,7 +1233,7 @@ private theorem mapM_lift_cellToCosetEvals {cells : Array Cell} {cosetsEvals : A
         have hstep : (cellToCosetEvals hd : KzgM CosetEvals) = ExceptT.mk (pure (.ok y)) := by
           rw [hhd]
           rfl
-        rw [hstep]
+        rw [hstep, bind_mk_ok]
         change Array.mapM.map (fun c => (cellToCosetEvals c : KzgM CosetEvals)) cells (i + 1)
           (acc.push y) = pure (acc ++ (y :: ys).toArray)
         rw [ih (i + 1) (acc.push y) ys hdrop_next htl]
@@ -1321,10 +1335,10 @@ theorem recoverCellsAndKzgProofs_ok_eq_bind
     ite_eq_right (Nat.not_lt.mpr hmax),
     ite_eq_right (by simp [hbound]),
     ite_eq_right (by simpa [Array.size_range] using hasc)]
-  simp only [hfind, mapM_lift_cellToCosetEvals hdec]
+  simp only [hfind, mapM_lift_cellToCosetEvals hdec, pure_bind]
   change (ExceptT.mk (pure (recoverPolynomialcoeff cellIndices cosetsEvals)) >>=
     computeCellsAndKzgProofsPolynomialcoeff) = _
-  rw [hrec]
+  rw [hrec, bind_mk_ok]
   rfl
 
 /-- End-to-end recovery specification for `recoverCellsAndKzgProofs`.

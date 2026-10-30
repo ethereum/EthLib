@@ -1,8 +1,12 @@
-import EthLib.Serialization.Ssz.Type.Desc
-import EthLib.Serialization.Ssz.Merkle.Gindex
-import EthLib.Serialization.Ssz.Merkle.Merkleize
+module
+
+public import EthLib.Serialization.Ssz.Type.Desc
+public import EthLib.Serialization.Ssz.Merkle.Gindex
+public import EthLib.Serialization.Ssz.Merkle.Merkleize
 
 /-! Paths through a type, resolved to the generalized index of the node they select. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

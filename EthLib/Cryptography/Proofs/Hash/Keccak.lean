@@ -1,4 +1,9 @@
-import EthLib.Cryptography.Hash.Keccak
+module
+
+public import EthLib.Cryptography.Hash.Keccak
+-- The kernel checks the constants by reducing `Array.map` and the finite range loop.
+import all Init.Data.Array.Basic
+import all Init.Data.Range.Basic
 
 /-!
 # Proofs: `Hash.Keccak`
@@ -9,6 +14,8 @@ The permutation agrees with the Keccak team's reference values.
 
 The padding cuts every message into whole blocks, and no two messages pad alike.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Hash.Keccak
 

@@ -1,4 +1,6 @@
-import EthLib.Serialization.Rlp.Encode
+module
+
+public import EthLib.Serialization.Rlp.Encode
 
 /-!
 # `Serialization.Rlp.Decode`
@@ -23,6 +25,8 @@ There are three such forms, each longer than the real encoding:
 
 The decoder rejects all three, and any input that ends early or has bytes left after the item.
 -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Rlp
 

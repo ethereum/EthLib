@@ -1,4 +1,6 @@
-import EthLib.Precompiles.Proofs.Modexp.Bytes
-import EthLib.Precompiles.Proofs.Modexp.PowMod
-import EthLib.Precompiles.Proofs.Modexp.Gas
-import EthLib.Precompiles.Proofs.Modexp.Core
+module
+
+public import EthLib.Precompiles.Proofs.Modexp.Bytes
+public import EthLib.Precompiles.Proofs.Modexp.PowMod
+public import EthLib.Precompiles.Proofs.Modexp.Gas
+public import EthLib.Precompiles.Proofs.Modexp.Core

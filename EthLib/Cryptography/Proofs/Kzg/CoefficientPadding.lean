@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Kzg.CoefficientPolynomial
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.CoefficientPolynomial
 
 /-!
 # Proofs: zero-padding a coefficient array
@@ -10,6 +12,8 @@ Padding with zeros and truncating again are both exact.
 - Padding keeps every coefficient and the evaluation at every point.
 - Truncating a padded array gives back the original.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)

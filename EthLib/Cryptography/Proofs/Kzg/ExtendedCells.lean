@@ -1,6 +1,11 @@
-import EthLib.Cryptography.Proofs.Kzg.ExtendedFft
-import EthLib.Cryptography.Proofs.Kzg.CoefficientPadding
-import EthLib.Cryptography.Proofs.Kzg.Cells
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.ExtendedFft
+public import EthLib.Cryptography.Proofs.Kzg.CoefficientPadding
+public import EthLib.Cryptography.Proofs.Kzg.Cells
+-- The successful computation is simplified with the public monad laws.
+import Batteries.Lean.LawfulMonad
+import Init.Control.Lawful.Instances
 
 /-!
 # Proofs: extended evaluations and cells via FFT
@@ -26,6 +31,8 @@ This file proves:
 - Every cell of `cellsOfExtendedEvaluations (extendedEvaluations polynomialCoeff)` matches that encoding.
 - On a valid blob, `computeCells` returns 128 cells matching that encoding.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 
@@ -232,6 +239,9 @@ theorem computeCells_ok_spec {blob : Blob} {poly : Polynomial}
   change (ExceptT.mk (pure (blobToPolynomial blob)) >>= fun polynomial =>
     pure (cellsOfExtendedEvaluations (extendedEvaluations (polynomialEvalToCoeff polynomial)))) = _
   rw [hblob]
-  rfl
+  -- Read the successful lift as a pure `KzgM` value before applying its bind law.
+  change (pure poly >>= fun polynomial =>
+    pure (cellsOfExtendedEvaluations (extendedEvaluations (polynomialEvalToCoeff polynomial)))) = _
+  simp only [pure_bind]
 
 end EthLib.Cryptography.Kzg

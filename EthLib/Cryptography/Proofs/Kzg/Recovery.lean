@@ -1,6 +1,11 @@
-import EthLib.Cryptography.Kzg.Recovery
-import EthLib.Cryptography.Proofs.Kzg.Fft
-import EthLib.Cryptography.Proofs.Kzg.Polynomials
+module
+
+public import EthLib.Cryptography.Kzg.Recovery
+public import EthLib.Cryptography.Proofs.Kzg.Fft
+public import EthLib.Cryptography.Proofs.Kzg.Polynomials
+-- Validation uses the public laws of `ExceptT` and `IO`, rather than their hidden bodies.
+import Batteries.Lean.LawfulMonad
+import Init.Control.Lawful.Instances
 
 /-!
 # Proofs: `Recovery`
@@ -10,6 +15,8 @@ exactly `FIELD_ELEMENTS_PER_BLOB` coefficients) and the validation
 surface of `recoverCellsAndKzgProofs`: each malformed input is rejected
 with exactly the documented error.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 
@@ -530,7 +537,6 @@ theorem recoverCellsAndKzgProofs_length_mismatch
     recoverCellsAndKzgProofs cellIndices cells
       = throw (.inputLengthMismatch "cells" cellIndices.size cells.size) := by
   simp [recoverCellsAndKzgProofs, h]
-  rfl
 
 /-- `recoverCellsAndKzgProofs` rejects fewer than 50% of the cells. -/
 theorem recoverCellsAndKzgProofs_notEnoughCells
@@ -539,7 +545,6 @@ theorem recoverCellsAndKzgProofs_notEnoughCells
     (h : cellIndices.size < CELLS_PER_EXT_BLOB / 2) :
     recoverCellsAndKzgProofs cellIndices cells = throw .notEnoughCells := by
   simp [recoverCellsAndKzgProofs, hlen, h]
-  rfl
 
 /-- `recoverCellsAndKzgProofs` rejects more cells than exist. -/
 theorem recoverCellsAndKzgProofs_tooManyCells
@@ -549,7 +554,6 @@ theorem recoverCellsAndKzgProofs_tooManyCells
     (h : cellIndices.size > CELLS_PER_EXT_BLOB) :
     recoverCellsAndKzgProofs cellIndices cells = throw .tooManyCells := by
   simp [recoverCellsAndKzgProofs, hlen, hmin, h]
-  rfl
 
 /-- `recoverCellsAndKzgProofs` rejects an out-of-bounds cell index. -/
 theorem recoverCellsAndKzgProofs_cellIndexOutOfBounds
@@ -561,7 +565,6 @@ theorem recoverCellsAndKzgProofs_cellIndexOutOfBounds
     recoverCellsAndKzgProofs cellIndices cells
       = throw .cellIndexOutOfBounds := by
   simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, h]
-  rfl
 
 /-- `recoverCellsAndKzgProofs` rejects cell indices that are not
 strictly ascending. -/
@@ -577,7 +580,6 @@ theorem recoverCellsAndKzgProofs_indicesNotAscending
       = throw .indicesNotAscending := by
   simp only [Array.size_range] at h
   simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, hbound, h]
-  rfl
 
 /-- `recoverCellsAndKzgProofs` rejects a wrongly-sized cell, reporting
 the first offender's size. -/
@@ -594,7 +596,6 @@ theorem recoverCellsAndKzgProofs_badCellSize
       = throw (.badCellSize c.size) := by
   simp only [Array.size_range] at hasc
   simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, hbound, hasc, h]
-  rfl
 
 /-- The recovery vanishing polynomial has no coefficient above its mathematical degree bound. -/
 theorem constructVanishingPolynomial_high_zero

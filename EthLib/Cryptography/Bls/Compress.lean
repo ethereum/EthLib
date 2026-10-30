@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Bls.G1
-import EthLib.Cryptography.Bls.G2
-import EthLib.Cryptography.Bls.Errors
+module
+
+public import EthLib.Cryptography.Bls.G1
+public import EthLib.Cryptography.Bls.G2
+public import EthLib.Cryptography.Bls.Errors
 
 /-!
 # `Compress`
@@ -22,6 +24,8 @@ subgroup membership by `[r]·P = O`, and rejects the identity point
 (per IRTF BLS §2.5). Callers that explicitly *allow* the identity
 (e.g. KZG's `validateKzgG1`) wrap `keyValidate` upstream.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls
 
@@ -72,7 +76,8 @@ def Fp2.sqrt (a : Fp2) : Except BlsError Fp2 :=
         .ok ⟨c0Fp, c1Fp⟩
 
 /-- True iff `bytes[start..]` are all zero. -/
-private def tailAllZero (bytes : ByteArray) (start : Nat) : Bool := Id.run do
+-- The exposed decoders need this body for downstream reduction.
+def tailAllZero (bytes : ByteArray) (start : Nat) : Bool := Id.run do
   let mut ok := true
   for i in [start : bytes.size] do
     if bytes.get! i ≠ 0 then ok := false

@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Bls.Fp6
-import EthLib.Cryptography.Proofs.Bls.Fp2
+module
+
+public import EthLib.Cryptography.Bls.Fp6
+public import EthLib.Cryptography.Proofs.Bls.Fp2
 
 /-!
 # Proofs: `Fp6`
@@ -16,6 +18,8 @@ The norm of `xi` down to `Fp` is `2`, and `2` is not a cube in `Fp`.
 
 The kernel checks the last step by computing `2^((p-1)/3) mod p`, which is not `1`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.Fp6
 

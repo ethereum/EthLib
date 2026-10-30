@@ -1,6 +1,8 @@
-import EthLib.Precompiles.Modexp.Bytes
-import EthLib.Precompiles.Modexp.Gas
-import EthLib.Precompiles.Modexp.Errors
+module
+
+public import EthLib.Precompiles.Modexp.Bytes
+public import EthLib.Precompiles.Modexp.Gas
+public import EthLib.Precompiles.Modexp.Errors
 
 /-!
 # `Modexp.Core`
@@ -32,6 +34,8 @@ That module is in execution-specs at `2c0c8e7`.
       -> read BASE, EXPONENT, MODULUS and compute the output
 ```
 -/
+
+@[expose] public section
 
 namespace EthLib.Precompiles.Modexp
 

@@ -1,5 +1,7 @@
-import Mathlib.Data.List.Basic
-import Mathlib.Tactic.NormNum
+module
+
+public import Mathlib.Data.List.Basic
+public import Mathlib.Tactic.NormNum
 
 /-!
 # Proofs: `Id.run do` loops as folds
@@ -12,6 +14,8 @@ bodies whose branches both yield (the `ite`'s type ascription inside a
 them). `id_pure`/`id_bind` are `rfl`-lemmas for `dsimp`-normalizing
 the monadic plumbing away.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.IdLoops
 

@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.RoundTripSlices
-import EthLib.Serialization.Proofs.Ssz.Codec.StructOrder
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.RoundTripSlices
+public import EthLib.Serialization.Proofs.Ssz.Codec.StructOrder
 
 /-! Round trips, widths, and encoder injectivity for every well-formed type. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

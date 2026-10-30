@@ -1,4 +1,6 @@
-import EthLib.Serialization.Rlp.Item
+module
+
+public import EthLib.Serialization.Rlp.Item
 
 /-!
 # `Serialization.Rlp.Encode`
@@ -39,6 +41,8 @@ It also keeps the first byte of a long list at most `0xf7 + 8 = 0xff`, which is 
 
 A payload of `2^64` bytes or more has no encoding.
 -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Rlp
 

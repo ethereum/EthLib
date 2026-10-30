@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Xmss.Ots
+module
+
+public import EthLib.Cryptography.Xmss.Ots
 
 /-!
 # `Xmss.Tree`
@@ -32,6 +34,8 @@ path        l_3 on level 0, then n_0 on level 1
 
 Source: the leanXMSS specification draft, section "Trees".
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

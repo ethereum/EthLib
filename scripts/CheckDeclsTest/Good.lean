@@ -1,8 +1,12 @@
+module
+
 /-!
 # `CheckDeclsTest.Good`
 
 Declarations the declaration check must pass.
 -/
+
+@[expose] public section
 
 namespace CheckDeclsTest.Good
 

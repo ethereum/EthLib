@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Kzg.ExtendedCells
-import EthLib.Cryptography.Proofs.Kzg.Interpolation
-import Mathlib.LinearAlgebra.Lagrange
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.ExtendedCells
+public import EthLib.Cryptography.Proofs.Kzg.Interpolation
+public import Mathlib.LinearAlgebra.Lagrange
 
 /-!
 # Proofs: cell interpolation via inverse coset FFT
@@ -29,6 +31,8 @@ This file proves:
 - The output polynomial evaluates to `evals[j]!` at every coset point `coset[j]!`.
 - The output equals `interpolatePolynomialcoeff coset evals` coefficient by coefficient.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 

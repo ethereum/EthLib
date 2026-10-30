@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Type.PathLaws
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Type.PathLaws
 
 /-! Each type path step names its declared field, packed chunk, or mixing word. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

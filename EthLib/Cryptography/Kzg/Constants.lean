@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Bls.Fr
+module
+
+public import EthLib.Cryptography.Bls.Fr
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg.Constants
 

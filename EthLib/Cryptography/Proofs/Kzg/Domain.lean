@@ -1,8 +1,10 @@
-import EthLib.Cryptography.Kzg.Polynomials
-import EthLib.Cryptography.Proofs.Bls.FrZMod
-import EthLib.Cryptography.Proofs.Kzg.BitReversal
-import EthLib.Cryptography.Proofs.Kzg.Polynomials
-import Batteries.Data.Array.Lemmas
+module
+
+public import EthLib.Cryptography.Kzg.Polynomials
+public import EthLib.Cryptography.Proofs.Bls.FrZMod
+public import EthLib.Cryptography.Proofs.Kzg.BitReversal
+public import EthLib.Cryptography.Proofs.Kzg.Polynomials
+public import Batteries.Data.Array.Lemmas
 
 /-!
 # Proofs: the roots-of-unity evaluation domain
@@ -19,6 +21,8 @@ vanishes (`sub_getElem_ne_zero_of_idxOf?_eq_none`).
 
 Uses the scoped `Field Fr` instance from `Proofs.Bls.FrZMod`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 

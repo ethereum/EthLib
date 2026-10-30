@@ -1,3 +1,5 @@
+module
+
 /-!
 # `Modexp.Constants`
 
@@ -12,6 +14,8 @@ BPO2 activated at timestamp 1767747671, on 2026-01-07.
 BPO2 changes only blob parameters.
 So MODEXP behaves as in Osaka, the fork that introduced EIP-7823 and EIP-7883.
 -/
+
+@[expose] public section
 
 namespace EthLib.Precompiles.Modexp.Constants
 

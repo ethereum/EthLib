@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.PathSelection
-import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.PathSelection
+public import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
 
 /-! Admissible composite values support paths through their actual fields and elements. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

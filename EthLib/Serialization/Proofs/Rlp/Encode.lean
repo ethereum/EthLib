@@ -1,6 +1,8 @@
-import EthLib.Serialization.Rlp.Encode
-import EthLib.Serialization.Proofs.Rlp.Item
-import EthLib.Serialization.Proofs.Rlp.Vectors
+module
+
+public import EthLib.Serialization.Rlp.Encode
+public import EthLib.Serialization.Proofs.Rlp.Item
+public import EthLib.Serialization.Proofs.Rlp.Vectors
 
 /-!
 # `Serialization.Proofs.Rlp.Encode`
@@ -14,6 +16,8 @@ A claim `output r = some b` says that `r` succeeds, with exactly the bytes `b`.
 It adds no axiom, unlike `native_decide`.
 -/
 
+@[expose] public section
+
 namespace EthLib.Serialization.Rlp
 
 open Vectors
@@ -23,7 +27,7 @@ open Vectors
 The kernel compares two lists of bytes in linear time.
 
 With `decide +kernel`, comparing two `ByteArray`s of a kilobyte takes more than 6 GB of memory instead. -/
-private def output (result : Except RlpError ByteArray) : Option (List UInt8) :=
+def output (result : Except RlpError ByteArray) : Option (List UInt8) :=
   result.toOption.map (·.data.toList)
 
 /-! ## The bound of a length

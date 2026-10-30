@@ -1,4 +1,8 @@
+module
+
 /-! The width of a tree node. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

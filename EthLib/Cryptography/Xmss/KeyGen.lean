@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Xmss.Verify
+module
+
+public import EthLib.Cryptography.Xmss.Verify
 
 /-!
 # `Xmss.KeyGen`
@@ -13,6 +15,8 @@ So the seed alone regenerates every chain, every node and the public key.
 
 Source: the leanXMSS specification draft, sections "Hashing and parameters" and "The scheme".
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

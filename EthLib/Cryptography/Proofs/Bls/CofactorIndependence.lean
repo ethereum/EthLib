@@ -1,7 +1,9 @@
-import EthLib.Cryptography.Proofs.Bls.CofactorPointQ13
-import EthLib.Cryptography.Proofs.Bls.CofactorPointQ23
-import EthLib.Cryptography.Proofs.Bls.CofactorPointIndependent13
-import EthLib.Cryptography.Proofs.Bls.CofactorPointIndependent23
+module
+
+public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ13
+public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ23
+public import EthLib.Cryptography.Proofs.Bls.CofactorPointIndependent13
+public import EthLib.Cryptography.Proofs.Bls.CofactorPointIndependent23
 
 /-!
 # Proofs: Independence of the `13`-torsion and `23`-torsion witness pairs on `G2`
@@ -12,6 +14,8 @@ The same holds for the two `23`-torsion points.
 
 The kernel checks every multiple `[0..12]` and `[0..22]`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.CofactorCertificate
 

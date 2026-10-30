@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Bls.Constants
-import EthLib.Cryptography.Bls.Signatures
-import EthLib.Cryptography.Bls.Errors
+module
+
+public import EthLib.Cryptography.Bls.Constants
+public import EthLib.Cryptography.Bls.Signatures
+public import EthLib.Cryptography.Bls.Errors
 
 /-!
 # `Exports.Bls`
@@ -9,6 +11,8 @@ C-ABI exports for the BLS spec functions, callable from the Python C extension.
 
 Same conventions as the KZG exports: inputs are `ByteArray` or `Array ByteArray`, and booleans come back as `UInt8`.
 -/
+
+public section
 
 namespace EthLib.Cryptography.Bls.Exports
 

@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.KnownAnswerTop
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.KnownAnswerTop
 
 /-!
 # Proofs: the known answer's top leaf comes from the seed
@@ -7,6 +9,8 @@ The signer derives the top key `0xA5C3` from the seed: 29 chain starts, 174 chai
 
 The leaf it reaches is the one the verifier recovers from the signature.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss.KnownAnswer
 

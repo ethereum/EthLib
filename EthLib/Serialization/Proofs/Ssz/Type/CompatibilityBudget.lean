@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Type.CompatibilitySymmetry
-import EthLib.Serialization.Proofs.Ssz.Codec.LayoutLaws
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Type.CompatibilitySymmetry
+public import EthLib.Serialization.Proofs.Ssz.Codec.LayoutLaws
 
 /-! Compatibility gives the same verdict at every budget that covers the left type's nesting. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

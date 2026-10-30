@@ -1,10 +1,14 @@
-import EthLib.Cryptography.Xmss.Verify
+module
+
+public import EthLib.Cryptography.Xmss.Verify
 
 /-!
 # Proofs: `Xmss.Verify`
 
 What an accepting verifier has checked.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

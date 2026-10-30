@@ -1,5 +1,7 @@
-import EthLib.Serialization.Rlp.Decode
-import EthLib.Serialization.Proofs.Rlp.Item
+module
+
+public import EthLib.Serialization.Rlp.Decode
+public import EthLib.Serialization.Proofs.Rlp.Item
 
 /-!
 # `Serialization.Proofs.Rlp.RoundTrip`
@@ -19,6 +21,8 @@ The proof follows the shape of an encoding.
 
 Each step holds with any bytes after the encoding, since a list holds more items after each one.
 -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Rlp
 

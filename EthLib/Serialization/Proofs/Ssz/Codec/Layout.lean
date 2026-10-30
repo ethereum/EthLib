@@ -1,7 +1,11 @@
-import EthLib.Serialization.Ssz.Codec.Layout
-import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
+module
+
+public import EthLib.Serialization.Ssz.Codec.Layout
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
 
 /-! Laws of the layout that places a progressive container's fields around its gaps. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

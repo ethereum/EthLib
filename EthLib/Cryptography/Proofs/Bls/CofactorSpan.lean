@@ -1,9 +1,11 @@
-import EthLib.Cryptography.Proofs.Bls.CofactorPrimes
-import EthLib.Cryptography.Proofs.Bls.FrZMod
-import EthLib.Cryptography.Proofs.Bls.FpZMod
-import Mathlib.GroupTheory.Index
-import Mathlib.Data.ZMod.QuotientGroup
-import Mathlib.Tactic.Ring
+module
+
+public import EthLib.Cryptography.Proofs.Bls.CofactorPrimes
+public import EthLib.Cryptography.Proofs.Bls.FrZMod
+public import EthLib.Cryptography.Proofs.Bls.FpZMod
+public import Mathlib.GroupTheory.Index
+public import Mathlib.Data.ZMod.QuotientGroup
+public import Mathlib.Tactic.Ring
 
 /-!
 # Proofs: Finite-group torsion certificate helpers for the twist cofactor image
@@ -16,6 +18,8 @@ If that product exceeds half the group's size bound, the subgroup is the whole g
 2. `|H| <= |E'(Fp2)| <= 2 * p^2 + 1 < 2 * h_2 * r`.
 3. So `|H| = h_2 * r = |E'(Fp2)|`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.CofactorSpan
 

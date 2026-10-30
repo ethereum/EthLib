@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.HelperUniqueness
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.HelperUniqueness
 
 /-! How many helper nodes a multiproof of several claims at one depth has to carry. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

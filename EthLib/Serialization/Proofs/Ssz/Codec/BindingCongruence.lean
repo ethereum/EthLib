@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingTrace
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingTrace
 
 /-! Collision-free computations preserve the roots at every aligned subtree position. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz.CommitmentTree
 

@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Vrf.Hash
-import EthLib.Cryptography.Vrf.Tree
+module
+
+public import EthLib.Cryptography.Vrf.Hash
+public import EthLib.Cryptography.Vrf.Tree
 
 /-!
 # `Vrf.Verify`
@@ -14,6 +16,8 @@ Verify an opening at an index, and return the output there.
 
 The output is a hash of the secret, not the leaf.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf
 

@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Hash.Keccak
+module
+
+public import EthLib.Cryptography.Hash.Keccak
 
 /-!
 # Proofs: a fast form of Keccak-f for the kernel
@@ -22,6 +24,8 @@ The equalities are proved once, for every state.
 
 A known answer rewrites its permutation or its hash to the fast form, then lets the kernel evaluate it.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Hash.Keccak
 

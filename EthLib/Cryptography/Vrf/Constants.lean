@@ -1,8 +1,12 @@
+module
+
 /-!
 # `Vrf.Constants`
 
 The parameters of the VRF tree.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf.Constants
 

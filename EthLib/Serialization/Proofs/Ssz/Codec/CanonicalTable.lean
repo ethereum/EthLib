@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalBits
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalBits
 
 /-! Reassembling the byte ranges accepted by composite decoders. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

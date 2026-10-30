@@ -1,8 +1,10 @@
-import EthLib.Cryptography.Bls
-import EthLib.Cryptography.Kzg.Constants
-import EthLib.Cryptography.Kzg.BitReversal
-import EthLib.Cryptography.Kzg.Errors
-import EthLib.Cryptography.Kzg.Fft
+module
+
+public import EthLib.Cryptography.Bls
+public import EthLib.Cryptography.Kzg.Constants
+public import EthLib.Cryptography.Kzg.BitReversal
+public import EthLib.Cryptography.Kzg.Errors
+public import EthLib.Cryptography.Kzg.Fft
 
 /-!
 # `Polynomials`
@@ -19,6 +21,8 @@ the boundaries.
 the cell-proof surface. Function names are picked to avoid collision
 (`evaluatePolynomialcoeff` vs `evaluatePolynomialInEvaluationForm`).
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 

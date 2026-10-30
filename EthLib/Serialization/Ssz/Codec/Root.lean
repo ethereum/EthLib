@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Codec.Layout
+module
+
+public import EthLib.Serialization.Ssz.Codec.Layout
 
 /-! The Merkle root of a value, taken from the tree its layout describes. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

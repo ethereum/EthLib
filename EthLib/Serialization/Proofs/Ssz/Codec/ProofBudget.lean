@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.Proof
-import EthLib.Serialization.Proofs.Ssz.Codec.RootLaws
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.Proof
+public import EthLib.Serialization.Proofs.Ssz.Codec.RootLaws
 
 /-! A value's type depth bounds every recursive descent of the Merkle walker. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

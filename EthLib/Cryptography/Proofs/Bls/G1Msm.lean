@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Bls.G1Order
-import EthLib.Cryptography.Proofs.IdLoops
+module
+
+public import EthLib.Cryptography.Proofs.Bls.G1Order
+public import EthLib.Cryptography.Proofs.IdLoops
 
 /-!
 # Proofs: the spec's Pippenger MSM computes `Σ [sᵢ]Pᵢ`
@@ -16,6 +18,8 @@ Two layers:
 
 The headline result is `toPoint_msm`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.G1
 

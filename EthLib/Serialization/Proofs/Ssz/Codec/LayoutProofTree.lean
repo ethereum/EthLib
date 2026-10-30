@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.ProgressiveProofTree
-import EthLib.Serialization.Proofs.Ssz.Codec.ProofBudget
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.ProgressiveProofTree
+public import EthLib.Serialization.Proofs.Ssz.Codec.ProofBudget
 
 /-! A value's materialized leaves determine its top-level proof tree, including nested field roots. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

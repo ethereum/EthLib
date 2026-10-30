@@ -1,7 +1,9 @@
-import EthLib.Cryptography.Proofs.Hash.Keccak
-import EthLib.Cryptography.Proofs.Hash.KeccakKernel
-import EthLib.Cryptography.Proofs.Hash.Keccak256
-import EthLib.Cryptography.Proofs.Hash.Sha256
+module
+
+public import EthLib.Cryptography.Proofs.Hash.Keccak
+public import EthLib.Cryptography.Proofs.Hash.KeccakKernel
+public import EthLib.Cryptography.Proofs.Hash.Keccak256
+public import EthLib.Cryptography.Proofs.Hash.Sha256
 
 /-!
 # `EthLib.Cryptography.Proofs.Hash`

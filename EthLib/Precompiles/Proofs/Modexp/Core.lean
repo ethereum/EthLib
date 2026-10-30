@@ -1,7 +1,9 @@
-import EthLib.Precompiles.Proofs.Modexp.Bytes
-import EthLib.Precompiles.Proofs.Modexp.PowMod
-import EthLib.Precompiles.Proofs.Modexp.Gas
-import EthLib.Precompiles.Modexp.Core
+module
+
+public import EthLib.Precompiles.Proofs.Modexp.Bytes
+public import EthLib.Precompiles.Proofs.Modexp.PowMod
+public import EthLib.Precompiles.Proofs.Modexp.Gas
+public import EthLib.Precompiles.Modexp.Core
 
 /-!
 # Proofs: `Core`
@@ -18,6 +20,8 @@ The precompile does what EIP-198 and EIP-7823 say.
 
 The known answers at the end run the worked examples of EIP-198 through the whole precompile.
 -/
+
+@[expose] public section
 
 namespace EthLib.Precompiles.Modexp
 

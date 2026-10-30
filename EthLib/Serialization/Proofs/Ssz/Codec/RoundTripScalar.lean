@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.Table
-import EthLib.Serialization.Proofs.Ssz.Codec.Admits
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.Table
+public import EthLib.Serialization.Proofs.Ssz.Codec.Admits
 
 /-! Packing and round trips for scalar values and bitfields. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

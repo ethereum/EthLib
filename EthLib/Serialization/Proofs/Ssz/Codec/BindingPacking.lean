@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.RoundTrip
-import EthLib.Serialization.Proofs.Ssz.Codec.Layout
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.RoundTrip
+public import EthLib.Serialization.Proofs.Ssz.Codec.Layout
 
 /-! Packing preserves payloads when their lengths are known. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

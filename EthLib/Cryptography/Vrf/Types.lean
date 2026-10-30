@@ -1,10 +1,14 @@
-import EthLib.Cryptography.Vrf.Constants
+module
+
+public import EthLib.Cryptography.Vrf.Constants
 
 /-!
 # `Vrf.Types`
 
 The objects of the VRF tree, with their sizes in their types.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf
 

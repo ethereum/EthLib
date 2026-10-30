@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Type.Valid
+module
+
+public import EthLib.Serialization.Ssz.Type.Valid
 
 /-! What a legal composite type declares, read off the checks that validity makes. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

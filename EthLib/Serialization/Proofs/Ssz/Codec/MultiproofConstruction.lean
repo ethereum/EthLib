@@ -1,10 +1,14 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.NodeWidths
-import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
-import EthLib.Serialization.Proofs.Ssz.Codec.WalkerLaws
-import EthLib.Serialization.Proofs.Ssz.Codec.BranchConstruction
-import EthLib.Serialization.Proofs.Ssz.Merkle.Multiproof
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.NodeWidths
+public import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
+public import EthLib.Serialization.Proofs.Ssz.Codec.WalkerLaws
+public import EthLib.Serialization.Proofs.Ssz.Codec.BranchConstruction
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Multiproof
 
 /-! Multiproofs constructed from a value reconstruct its root without extending its leaf nodes. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

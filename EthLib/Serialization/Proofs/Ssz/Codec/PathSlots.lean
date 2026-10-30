@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.Layout
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.Layout
 
 /-! Progressive field ordinals and materialized layout positions preserve the same values. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

@@ -1,10 +1,12 @@
-import EthLib.Cryptography.Vrf.Constants
-import EthLib.Cryptography.Vrf.Types
-import EthLib.Cryptography.Vrf.Hash
-import EthLib.Cryptography.Vrf.Tree
-import EthLib.Cryptography.Vrf.KeyGen
-import EthLib.Cryptography.Vrf.Verify
-import EthLib.Cryptography.Vrf.Serialization
+module
+
+public import EthLib.Cryptography.Vrf.Constants
+public import EthLib.Cryptography.Vrf.Types
+public import EthLib.Cryptography.Vrf.Hash
+public import EthLib.Cryptography.Vrf.Tree
+public import EthLib.Cryptography.Vrf.KeyGen
+public import EthLib.Cryptography.Vrf.Verify
+public import EthLib.Cryptography.Vrf.Serialization
 
 /-!
 # `EthLib.Cryptography.Vrf`

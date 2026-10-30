@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Merkle.Gindex
+module
+
+public import EthLib.Serialization.Ssz.Merkle.Gindex
 
 /-! Where each level of a progressive spine begins, and how deep its chunks sit. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

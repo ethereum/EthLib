@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Bls.FrZMod
+module
+
+public import EthLib.Cryptography.Proofs.Bls.FrZMod
 
 /-!
 # Proofs: batch inversion computes every inverse
@@ -9,6 +11,8 @@ The headline result is `batchInverse_eq_map`: it returns `xs.map inverse`, for e
 
 Zeros included, since both sides map zero to zero.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.Fr
 

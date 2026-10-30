@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Xmss.Serialization
-import EthLib.Cryptography.Proofs.Xmss.Types
+module
+
+public import EthLib.Cryptography.Xmss.Serialization
+public import EthLib.Cryptography.Proofs.Xmss.Types
 
 /-!
 # Proofs: `Xmss.Serialization`
@@ -10,6 +12,8 @@ The encodings are bijections between objects and byte strings of the declared le
 - Every string of the declared length is an encoding.
 - Every string of another length is rejected.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

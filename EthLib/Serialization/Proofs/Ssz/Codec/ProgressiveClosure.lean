@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.WalkerClosure
-import EthLib.Serialization.Proofs.Ssz.Codec.ProgressiveProofTree
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.WalkerClosure
+public import EthLib.Serialization.Proofs.Ssz.Codec.ProgressiveProofTree
 
 /-! Progressive walks retain readable siblings and parents even when they enter nested values. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

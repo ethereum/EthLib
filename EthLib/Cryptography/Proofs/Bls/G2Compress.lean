@@ -1,9 +1,14 @@
-import EthLib.Cryptography.Bls.G2
-import EthLib.Cryptography.Bls.Compress
-import EthLib.Cryptography.Proofs.Bls.Fp2
-import EthLib.Cryptography.Proofs.Bls.Compress
-import EthLib.Cryptography.Proofs.Bls.G2Equiv
-import EthLib.Cryptography.Proofs.IdLoops
+module
+
+public import EthLib.Cryptography.Bls.G2
+public import EthLib.Cryptography.Bls.Compress
+public import EthLib.Cryptography.Proofs.Bls.Fp2
+public import EthLib.Cryptography.Proofs.Bls.Compress
+public import EthLib.Cryptography.Proofs.Bls.G2Equiv
+public import EthLib.Cryptography.Proofs.IdLoops
+-- The closed infinity check reduces the derived `Except` equality and the range loop.
+import all Batteries.Data.Except
+import all Init.Data.Range.Basic
 
 /-!
 # Proofs: 96-byte `G2` compressed serialization
@@ -24,6 +29,8 @@ The last two facts need `y != 0` on the twist.
 
 That holds because `x^3 + 4*(1 + i)` has no root in `Fp2`.
 -/
+
+@[expose] public section
 
 deriving instance DecidableEq for EthLib.Cryptography.Bls.G2
 

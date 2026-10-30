@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.HelperFrontier
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.HelperFrontier
 
 /-! Multiproof reconstruction preserves the parent equations of a finite Merkle tree. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 
@@ -499,7 +503,10 @@ theorem calculateMultiMerkleRootUnchecked_two_children (left right : Bytes) :
     calculateMultiMerkleRootUnchecked [left, right] [] [2, 3] = .ok (combine left right) := by
   -- Both children are already present, so their ordered hash is the complete root.
   have helpers : getHelperIndices [2, 3] = .ok [] := by
-    with_unfolding_all rfl
+    -- List equations avoid reducing the unexposed sorting implementation.
+    simp [getHelperIndices, rejectRelated, rejectClaimPaths, rejectAncestors,
+      collectPathIndices, getPathIndices, gindexLength, gindexDepth, gindexSibling,
+      Bind.bind, Except.bind, Pure.pure, Except.pure, List.range_succ, List.eraseDups_cons]
   have two : Nat.log2 2 = 1 := by rfl
   have three : Nat.log2 3 = 1 := by rfl
   simp [calculateMultiMerkleRootUnchecked, helpers, foldToRoot, foldLevel, foldLevelNodes,

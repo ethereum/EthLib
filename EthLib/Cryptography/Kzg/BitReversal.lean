@@ -1,8 +1,12 @@
+module
+
 /-!
 # `BitReversal`
 
 `bitReversalPermutation` and friends. Operate on any `Array α`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg.BitReversal
 

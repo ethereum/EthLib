@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofTree
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofTree
 
 /-! Collision witnesses can be located in the hashes executed by multiproof reconstruction. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

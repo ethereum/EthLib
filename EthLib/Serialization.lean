@@ -1,5 +1,7 @@
-import EthLib.Serialization.Rlp
-import EthLib.Serialization.Ssz
+module
+
+public import EthLib.Serialization.Rlp
+public import EthLib.Serialization.Ssz
 
 /-!
 # `EthLib.Serialization`

@@ -1,4 +1,6 @@
-import EthLib.Precompiles.Modexp.Core
+module
+
+public import EthLib.Precompiles.Modexp.Core
 
 /-!
 # Proofs: square-and-multiply
@@ -11,6 +13,8 @@ The mathematical form could not run on a 1024-byte exponent.
 
 The statement holds for every modulus, including `0`, where `% 0` leaves the number unchanged.
 -/
+
+@[expose] public section
 
 namespace EthLib.Precompiles.Modexp
 

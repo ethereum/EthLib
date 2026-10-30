@@ -1,8 +1,12 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalComposite
-import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalStruct
-import EthLib.Serialization.Proofs.Ssz.Codec.StructOrder
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalComposite
+public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalStruct
+public import EthLib.Serialization.Proofs.Ssz.Codec.StructOrder
 
 /-! Decoding accepts exactly the canonical encodings of well-formed types. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

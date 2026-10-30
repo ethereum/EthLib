@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Hash.Keccak
-import EthLib.Cryptography.Vrf.Types
+module
+
+public import EthLib.Cryptography.Hash.Keccak
+public import EthLib.Cryptography.Vrf.Types
 
 /-!
 # `Vrf.Hash`
@@ -18,6 +20,8 @@ The output is not the leaf.
 
 An opening reveals the leaf of its sibling index, and that must not reveal the sibling's output.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf
 

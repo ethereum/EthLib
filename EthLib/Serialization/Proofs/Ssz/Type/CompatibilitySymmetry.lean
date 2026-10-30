@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Type.Equality
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Type.Equality
 
 /-! Tree-shape compatibility is symmetric at every comparison depth. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

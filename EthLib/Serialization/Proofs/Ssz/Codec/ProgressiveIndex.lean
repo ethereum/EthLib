@@ -1,7 +1,11 @@
-import EthLib.Serialization.Ssz.Codec.Proof
-import EthLib.Serialization.Proofs.Ssz.Merkle.Gindex
+module
+
+public import EthLib.Serialization.Ssz.Codec.Proof
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Gindex
 
 /-! Progressive chunk indices select their own leaf through the widening Merkle spine. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

@@ -1,6 +1,14 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
+-- Shape-specific round trips unfold Lean's `Json.mkObj` implementation.
+import all Lean.Data.Json.Basic
+-- The two literal union-field names are ordered by `String.compare`.
+import all Init.Data.Ord.String
 
 /-! A JSON document written for a value reads back as that value, at every shape. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

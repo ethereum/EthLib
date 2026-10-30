@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Bls.G2Validity
-import EthLib.Cryptography.Proofs.Bls.FrZMod
+module
+
+public import EthLib.Cryptography.Proofs.Bls.G2Validity
+public import EthLib.Cryptography.Proofs.Bls.FrZMod
 
 /-!
 # Proofs: the order of the `G2` generator and the `Fr` action
@@ -14,6 +16,8 @@ Twist parameters also match `draft-irtf-cfrg-pairing-friendly-curves-07 §4.2.1`
 - Because `r` is prime (`Fr.modulus_prime`) and `g_2 != 0`, `addOrderOf_toPoint_generator` pins the order to `r`.
 - `ofFr` maps `s : Fr` to `[s.val] * g_2` and satisfies `Fr`-linearity modulo `r`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.G2
 

@@ -1,11 +1,15 @@
-import EthLib.Cryptography.Proofs.Xmss.KnownAnswerBottom
-import EthLib.Cryptography.Proofs.Xmss.KnownAnswerTop
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.KnownAnswerBottom
+public import EthLib.Cryptography.Proofs.Xmss.KnownAnswerTop
 
 /-!
 # Proofs: the known answer verifies
 
 The two layers join into one accepting verification.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss.KnownAnswer
 

@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.Authentication
-import EthLib.Serialization.Proofs.Ssz.Merkle.Widths
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Authentication
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Widths
 
 /-! Equal roots of equally shaped trees reveal equal leaves or a collision in their own hashes. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

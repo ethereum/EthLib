@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.HelperAntichain
-import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofAcceptance
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.HelperAntichain
+public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofAcceptance
 
 /-! A multiproof of one claim is the single-item proof of that claim. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

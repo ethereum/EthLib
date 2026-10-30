@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Exports.Bls
-import EthLib.Cryptography.Exports.Kzg
-import EthLib.Cryptography.Exports.Xmss
+module
+
+public import EthLib.Cryptography.Exports.Bls
+public import EthLib.Cryptography.Exports.Kzg
+public import EthLib.Cryptography.Exports.Xmss
 
 /-!
 # `EthLib.Cryptography.Exports`

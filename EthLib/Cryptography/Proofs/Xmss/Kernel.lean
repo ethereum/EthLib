@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Xmss
-import EthLib.Cryptography.Proofs.Hash.KeccakKernel
+module
+
+public import EthLib.Cryptography.Xmss
+public import EthLib.Cryptography.Proofs.Hash.KeccakKernel
 
 /-!
 # Proofs: leanXMSS over the kernel's fast hash
@@ -19,6 +21,8 @@ So the known answers run on a fast form instead, proved equal to the specificati
 
 A known answer rewrites its statement with these equalities, then lets the kernel evaluate it.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss.Kernel
 

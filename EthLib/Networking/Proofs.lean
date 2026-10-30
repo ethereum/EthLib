@@ -1,4 +1,6 @@
-import EthLib.Networking.Proofs.Encoding.Varint
+module
+
+public import EthLib.Networking.Proofs.Encoding.Varint
 
 /-!
 # `EthLib.Networking.Proofs`

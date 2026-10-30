@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.Admits
-import EthLib.Serialization.Proofs.Ssz.Codec.Table
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.Admits
+public import EthLib.Serialization.Proofs.Ssz.Codec.Table
 
 /-! Mathematical encoding sizes and the offset bounds needed for successful serialization. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

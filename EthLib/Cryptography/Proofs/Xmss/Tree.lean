@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Xmss.Tree
+module
+
+public import EthLib.Cryptography.Xmss.Tree
 
 /-!
 # Proofs: `Xmss.Tree`
@@ -9,6 +11,8 @@ On the bottom layer, key `idx` reaches the root of bottom tree `floor(idx / 2^16
 
 On the top layer, key `b < 2^16` reaches the root of the one top tree.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

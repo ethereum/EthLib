@@ -1,4 +1,6 @@
-import EthLib.Precompiles.Proofs.Modexp
+module
+
+public import EthLib.Precompiles.Proofs.Modexp
 
 /-!
 # `EthLib.Precompiles.Proofs`

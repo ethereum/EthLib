@@ -1,9 +1,11 @@
-import EthLib.Cryptography.Proofs.Bls.Fp12
-import EthLib.Cryptography.Proofs.Bls.G2Equiv
-import EthLib.Cryptography.Proofs.Bls.G2Order
-import EthLib.Cryptography.Proofs.Bls.HashToCurveValidity
-import Mathlib.FieldTheory.Finite.Basic
-import Mathlib.Tactic.FieldSimp
+module
+
+public import EthLib.Cryptography.Proofs.Bls.Fp12
+public import EthLib.Cryptography.Proofs.Bls.G2Equiv
+public import EthLib.Cryptography.Proofs.Bls.G2Order
+public import EthLib.Cryptography.Proofs.Bls.HashToCurveValidity
+public import Mathlib.FieldTheory.Finite.Basic
+public import Mathlib.Tactic.FieldSimp
 
 /-!
 # Proofs: The concrete twist Frobenius endomorphism `psi`
@@ -27,6 +29,8 @@ The Frobenius map is a group homomorphism, so `psi` is one too.
 On the generator, `psi` acts as multiplication by the BLS parameter `x = -|x|`.
 -/
 
+@[expose] public section
+
 namespace EthLib.Cryptography.Bls
 
 namespace TwistFrobenius
@@ -36,19 +40,20 @@ open HashToCurve
 
 /-! ## Finite-field cardinalities across the `Fp -> Fp2 -> Fp6 -> Fp12` tower -/
 
-private def fp2Equiv : Fp2 ≃ Fp × Fp where
+-- The exposed finite-type instances reduce through these coordinate equivalences.
+def fp2Equiv : Fp2 ≃ Fp × Fp where
   toFun a := (a.c0, a.c1)
   invFun a := ⟨a.1, a.2⟩
   left_inv a := by cases a; rfl
   right_inv a := by cases a; rfl
 
-private def fp6Equiv : Fp6 ≃ Fp2 × Fp2 × Fp2 where
+def fp6Equiv : Fp6 ≃ Fp2 × Fp2 × Fp2 where
   toFun a := (a.c0, a.c1, a.c2)
   invFun a := ⟨a.1, a.2.1, a.2.2⟩
   left_inv a := by cases a; rfl
   right_inv a := by rcases a with ⟨a, b, c⟩; rfl
 
-private def fp12Equiv : Fp12 ≃ Fp6 × Fp6 where
+def fp12Equiv : Fp12 ≃ Fp6 × Fp6 where
   toFun a := (a.c0, a.c1)
   invFun a := ⟨a.1, a.2⟩
   left_inv a := by cases a; rfl
@@ -436,7 +441,8 @@ private theorem twist_nonsingular {x y : Fp2}
 noncomputable def mapPoint : G2.curve.toAffine.Point → G2.curve.toAffine.Point
   | .zero => 0
   | .some x y h => .some (psiAlpha * x.conjugate) (psiBeta * y.conjugate)
-      (twist_nonsingular (twist_frob_equation
+      -- The curve-membership proof can depend on private lemmas.
+      (by exact twist_nonsingular (twist_frob_equation
         ((short_equation G2.bTwist x y).mp h.1)))
 
 /-- Untwisting `mapPoint` yields the `p`-power Frobenius on `E(Fp12)`. -/

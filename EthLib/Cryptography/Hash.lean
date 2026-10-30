@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Hash.Sha256
-import EthLib.Cryptography.Hash.Keccak
+module
+
+public import EthLib.Cryptography.Hash.Sha256
+public import EthLib.Cryptography.Hash.Keccak
 
 /-!
 # `EthLib.Cryptography.Hash`

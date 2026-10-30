@@ -1,6 +1,10 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingTrace
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingTrace
 
 /-! Successful value computations expose their layouts without assuming layout injectivity. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 open CommitmentTree

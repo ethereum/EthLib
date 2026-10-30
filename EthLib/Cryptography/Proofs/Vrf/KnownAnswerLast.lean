@@ -1,10 +1,14 @@
-import EthLib.Cryptography.Proofs.Vrf.KnownAnswer
+module
+
+public import EthLib.Cryptography.Proofs.Vrf.KnownAnswer
 
 /-!
 # Proofs: VRF tree known answers at index `2^32 - 1`
 
 One opening at the last index, and its rejections.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf.KnownAnswer
 

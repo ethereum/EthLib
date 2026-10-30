@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofAcceptance
-import EthLib.Serialization.Proofs.Ssz.Merkle.HelperAntichain
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofAcceptance
+public import EthLib.Serialization.Proofs.Ssz.Merkle.HelperAntichain
 
 /-! Conflicting multiproof claims expose collisions in the hashes actually used to verify them. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

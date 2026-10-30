@@ -1,8 +1,10 @@
-import EthLib.Precompiles.Modexp.Constants
-import EthLib.Precompiles.Modexp.Bytes
-import EthLib.Precompiles.Modexp.Gas
-import EthLib.Precompiles.Modexp.Errors
-import EthLib.Precompiles.Modexp.Core
+module
+
+public import EthLib.Precompiles.Modexp.Constants
+public import EthLib.Precompiles.Modexp.Bytes
+public import EthLib.Precompiles.Modexp.Gas
+public import EthLib.Precompiles.Modexp.Errors
+public import EthLib.Precompiles.Modexp.Core
 
 /-!
 # `EthLib.Precompiles.Modexp`

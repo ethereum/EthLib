@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.CommitmentTree
-import EthLib.Serialization.Proofs.Ssz.Merkle.Multiproof
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.CommitmentTree
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Multiproof
 
 /-! A multiproof reconstructs the finite tree whose leaves are its supplied frontier. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

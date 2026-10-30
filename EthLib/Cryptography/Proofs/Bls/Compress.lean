@@ -1,7 +1,13 @@
-import EthLib.Cryptography.Bls.Compress
-import EthLib.Cryptography.Proofs.Bls.G1Group
-import EthLib.Cryptography.Proofs.IdLoops
-import EthLib.Cryptography.Proofs.Kzg.Polynomials
+module
+
+public import EthLib.Cryptography.Bls.Compress
+public import EthLib.Cryptography.Proofs.Bls.G1Group
+public import EthLib.Cryptography.Proofs.IdLoops
+public import EthLib.Cryptography.Proofs.Kzg.Polynomials
+-- The infinity check reduces the finite range loop in `tailAllZero`.
+import all Init.Data.Range.Basic
+-- Its closed equality check needs the body of Batteries' derived `Except` instance.
+import all Batteries.Data.Except
 
 /-!
 # Proofs: `Fp.sqrt` and the G1 compressed-encoding round-trip
@@ -20,6 +26,8 @@ The converse direction shows that the encoding is canonical.
 - Compressing it gives back the exact input bytes.
 - So two different byte strings never decode to the same point.
 -/
+@[expose] public section
+
 deriving instance DecidableEq for EthLib.Cryptography.Bls.BlsError
 deriving instance DecidableEq for EthLib.Cryptography.Bls.G1
 

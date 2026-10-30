@@ -1,10 +1,14 @@
-import EthLib.Cryptography.Proofs.Vrf.KnownAnswer
+module
+
+public import EthLib.Cryptography.Proofs.Vrf.KnownAnswer
 
 /-!
 # Proofs: VRF tree known answers at index 0
 
 One opening at the first index, its rejections, and an index out of range.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf.KnownAnswer
 

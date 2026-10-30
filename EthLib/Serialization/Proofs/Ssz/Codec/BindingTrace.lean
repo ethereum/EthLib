@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Merkle.CommitmentTree
-import EthLib.Serialization.Ssz.Codec.Layout
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Merkle.CommitmentTree
+public import EthLib.Serialization.Ssz.Codec.Layout
 
 /-! The expanded finite hash computation of an SSZ value, including its nested values. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz.CommitmentTree
 

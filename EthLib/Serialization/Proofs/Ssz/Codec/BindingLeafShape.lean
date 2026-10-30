@@ -1,6 +1,10 @@
-import EthLib.Serialization.Ssz.Codec.Layout
+module
+
+public import EthLib.Serialization.Ssz.Codec.Layout
 
 /-! Leaf shapes record the positions and types needed to align commitments. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Bls.Fp6
+module
+
+public import EthLib.Cryptography.Bls.Fp6
 
 /-!
 # `Fp12`
@@ -13,6 +15,8 @@ Inversion comes from `(a₀ + a₁·w)·(a₀ − a₁·w) = a₀² − v·a₁�
 
   (a₀ + a₁·w)⁻¹ = (a₀ − a₁·w) / (a₀² − v·a₁²)
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls
 

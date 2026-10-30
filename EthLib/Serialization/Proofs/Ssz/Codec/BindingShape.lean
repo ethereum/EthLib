@@ -1,10 +1,14 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingLeafShape
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingDomain
-import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
-import EthLib.Serialization.Proofs.Ssz.Codec.LengthBinding
-import EthLib.Serialization.Proofs.Ssz.Codec.LayoutMixin
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingLeafShape
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingDomain
+public import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
+public import EthLib.Serialization.Proofs.Ssz.Codec.LengthBinding
+public import EthLib.Serialization.Proofs.Ssz.Codec.LayoutMixin
 
 /-! A type and its exact mixing word determine the alignment of its Merkle leaves. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

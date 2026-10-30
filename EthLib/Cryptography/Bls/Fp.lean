@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Bls.Errors
+module
+
+public import EthLib.Cryptography.Bls.Errors
 
 /-!
 # `Fp`
@@ -25,6 +27,8 @@ the fact that `p ≡ 3 (mod 4)` so `sqrt(x) = x^((p+1)/4)`.
 There's no Montgomery form, Barrett reduction, or other optimization
 here: the goal is clarity, not speed.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls
 

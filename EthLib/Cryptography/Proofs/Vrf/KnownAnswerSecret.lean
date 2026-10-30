@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Vrf.Kernel
+module
+
+public import EthLib.Cryptography.Proofs.Vrf.Kernel
 
 /-!
 # Proofs: VRF tree known answers for the leaf secrets
@@ -9,6 +11,8 @@ Its secrets and outputs at indices 0 and `2^32 - 1` were computed outside EthLib
 
 The kernel checks every answer, with no `native_decide`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf.KnownAnswer
 

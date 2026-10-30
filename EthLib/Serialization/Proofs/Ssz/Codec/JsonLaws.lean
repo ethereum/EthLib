@@ -1,10 +1,16 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.JsonHex
-import EthLib.Serialization.Proofs.Ssz.Codec.RoundTrip
-import Std.Data.TreeMap.Raw.WF
-import Std.Data.TreeMap.Raw.Lemmas
-import Std.Data.String.ToNat
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.JsonHex
+public import EthLib.Serialization.Proofs.Ssz.Codec.RoundTrip
+public import Std.Data.TreeMap.Raw.WF
+public import Std.Data.TreeMap.Raw.Lemmas
+public import Std.Data.String.ToNat
+-- The round-trip proof unfolds Lean's `Json.mkObj` and `Json.getObjVal?`.
+import all Lean.Data.Json.Basic
 
 /-! Reading back what the JSON mapping writes, and what the mapping does not pin down. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

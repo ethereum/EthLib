@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Bls.HashToCurve
-import EthLib.Cryptography.Proofs.Bls.G2Validity
+module
+
+public import EthLib.Cryptography.Proofs.Bls.HashToCurve
+public import EthLib.Cryptography.Proofs.Bls.G2Validity
 
 /-!
 # Proofs: The degree-3 BLS12-381 rational isogeny
@@ -18,6 +20,8 @@ Both denominators share a single root `x = -6 + 6*i`, where `swuG (-6 + 6*i) = 4
 
 Every point produced by `simpleSwu` therefore avoids the pole and lands on `G2.Valid`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.HashToCurve
 

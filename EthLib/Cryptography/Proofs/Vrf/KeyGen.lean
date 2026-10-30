@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Vrf.KeyGen
-import EthLib.Cryptography.Proofs.Vrf.Verify
+module
+
+public import EthLib.Cryptography.Vrf.KeyGen
+public import EthLib.Cryptography.Proofs.Vrf.Verify
 
 /-!
 # Proofs: `Vrf.KeyGen`
@@ -10,6 +12,8 @@ import EthLib.Cryptography.Proofs.Vrf.Verify
 - Every valid opening of that tree gives that output, or Keccak-256 collides.
 -/
 
+@[expose] public section
+
 namespace EthLib.Cryptography.Vrf
 
 open EthLib.Cryptography.Vrf.Constants
@@ -18,6 +22,8 @@ open EthLib.Cryptography.Vrf.Constants
 
 /-- The secret prefix is the string `PQ_VRF_SECRET`. -/
 theorem VRF_SECRET_DST_eq : VRF_SECRET_DST.toList = "PQ_VRF_SECRET".toUTF8.toList := by
+  -- Use the public string equation before reducing the ASCII bytes.
+  rw [String.toUTF8_eq_toByteArray]
   decide +kernel
 
 /-- A secret hash reads 13 + 32 + 4 = 49 bytes. -/

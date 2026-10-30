@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Xmss.Encoding
+module
+
+public import EthLib.Cryptography.Xmss.Encoding
 
 /-!
 # `Xmss.Ots`
@@ -19,6 +21,8 @@ The chains of key `e` on layer `l`, for `i < 58` and `mu < 3`:
 
 Source: the leanXMSS specification draft, section "WOTS+C".
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss
 

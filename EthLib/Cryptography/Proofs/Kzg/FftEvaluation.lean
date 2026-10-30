@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Kzg.CosetInverse
+module
+
+public import EthLib.Cryptography.Proofs.Kzg.CosetInverse
 
 /-!
 # Proofs: FFT outputs are polynomial evaluations
@@ -13,6 +15,8 @@ The coset FFT first scales coefficient `j` by `k^j`.
 
 That is the same as evaluating at `k * w^i`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)

@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Type.CompatibilitySymmetry
-import EthLib.Serialization.Proofs.Ssz.Type.PathSteps
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Type.CompatibilitySymmetry
+public import EthLib.Serialization.Proofs.Ssz.Type.PathSteps
 
 /-! What the compatibility checks buy: the tree positions two compatible types agree on. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

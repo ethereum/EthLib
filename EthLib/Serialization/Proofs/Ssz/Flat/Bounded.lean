@@ -1,7 +1,11 @@
-import EthLib.Serialization.Proofs.Ssz.Flat.Walk
-import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Flat.Walk
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
 
 /-! The upward walk, read against the tree the specification defines. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

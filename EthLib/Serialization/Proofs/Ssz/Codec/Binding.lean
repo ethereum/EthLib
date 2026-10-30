@@ -1,10 +1,14 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingChildren
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingLayout
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingLayoutInjectivity
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingLeaves
-import EthLib.Serialization.Proofs.Ssz.Codec.BindingShape
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingChildren
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingLayout
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingLayoutInjectivity
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingLeaves
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingShape
 
 /-! Whole-value binding reduces conflicting same-type SSZ commitments to a concrete SHA-256 collision. -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 open CommitmentTree

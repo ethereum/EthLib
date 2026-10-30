@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Bls.G1
-import EthLib.Cryptography.Bls.G2
-import EthLib.Cryptography.Bls.Fp12
+module
+
+public import EthLib.Cryptography.Bls.G1
+public import EthLib.Cryptography.Bls.G2
+public import EthLib.Cryptography.Bls.Fp12
 
 /-!
 # `Pairing`
@@ -26,6 +28,8 @@ For BLS curves with negative `x`, the final result is then conjugated.
 The final exponentiation reduces the Miller output to the `r`-th roots
 of unity in `Fp12*`, where the bilinear pairing actually lives.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls
 

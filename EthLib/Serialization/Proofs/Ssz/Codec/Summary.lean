@@ -1,11 +1,15 @@
-import EthLib.Serialization.Proofs.Ssz.Codec.NodeWidths
-import EthLib.Serialization.Proofs.Ssz.Type.Equality
+module
+
+public import EthLib.Serialization.Proofs.Ssz.Codec.NodeWidths
+public import EthLib.Serialization.Proofs.Ssz.Type.Equality
 
 /-!
 Replacing nested values by their roots leaves the outer root unchanged.
 
 The spec calls the result a summary of the original value.
 -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Ssz
 

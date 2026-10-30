@@ -1,7 +1,9 @@
-import EthLib.Cryptography.Vrf.Verify
-import EthLib.Cryptography.Vrf.KeyGen
-import EthLib.Cryptography.Proofs.Vrf.Hash
-import EthLib.Cryptography.Proofs.Vrf.Tree
+module
+
+public import EthLib.Cryptography.Vrf.Verify
+public import EthLib.Cryptography.Vrf.KeyGen
+public import EthLib.Cryptography.Proofs.Vrf.Hash
+public import EthLib.Cryptography.Proofs.Vrf.Tree
 
 /-!
 # Proofs: `Vrf.Verify`
@@ -17,6 +19,8 @@ The third property, pseudorandomness, needs a model of the hash and is not prove
 
 Source: the three properties are those of [Micali, Rabin and Vadhan, "Verifiable Random Functions", FOCS 1999](https://doi.org/10.1109/SFFCS.1999.814584).
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Vrf
 

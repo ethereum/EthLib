@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Bls.HashToCurve
-import EthLib.Cryptography.Proofs.Bls.Fp2
+module
+
+public import EthLib.Cryptography.Bls.HashToCurve
+public import EthLib.Cryptography.Proofs.Bls.Fp2
 
 /-!
 # Proofs: Simplified SWU map onto the 3-isogenous curve
@@ -22,6 +24,8 @@ Hence `Fp2.sqrt` succeeds on `gx1` or `gx2` for every `u : Fp2`.
 
 The fallback `panic!` branch in `simpleSwu` is unreachable, and `(simpleSwu u).2^2 = swuG (simpleSwu u).1` holds unconditionally.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Bls.HashToCurve
 

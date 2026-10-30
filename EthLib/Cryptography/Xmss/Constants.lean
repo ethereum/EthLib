@@ -1,3 +1,5 @@
+module
+
 /-!
 # `Xmss.Constants`
 
@@ -5,6 +7,8 @@ The leanXMSS parameter set.
 
 Source: the leanXMSS specification draft, section "Hashing and parameters".
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss.Constants
 

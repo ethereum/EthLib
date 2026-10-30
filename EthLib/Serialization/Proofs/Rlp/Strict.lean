@@ -1,4 +1,6 @@
-import EthLib.Serialization.Rlp.Decode
+module
+
+public import EthLib.Serialization.Rlp.Decode
 
 /-!
 # `Serialization.Proofs.Rlp.Strict`
@@ -17,6 +19,8 @@ Each one could be read as an item, but the encoding writes that item with fewer 
 - `f7 + k`, then a length with a leading zero byte, for a list;
 - `f8 l`, with `0 < l < 56`, for a list payload of `l` bytes, which encodes as `c0 + l`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Serialization.Rlp
 
