@@ -4,16 +4,12 @@ import EthLib.Serialization.Rlp.Encode
 /-!
 # `EthLib.Serialization.Rlp`
 
-Recursive Length Prefix (RLP) is the serialization of the execution layer.
+Recursive Length Prefix (RLP), the serialization of the execution layer.
 
-Appendix B of the Yellow Paper (Shanghai version) defines it.
+Source: Appendix B of the Yellow Paper, Shanghai version, in [`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
 
-That is `Paper.tex` in `ethereum/yellowpaper` at commit `efc5f9a1f356cba376c978eedb63cb0363c2aa85`.
-
-```text
-    Rlp/Item     items, the errors, and the bytes of a scalar
-    Rlp/Encode   the encoding
-```
+- `Rlp/Item` holds the items, the errors, and the big-endian bytes of a number.
+- `Rlp/Encode` holds the encoding.
 
 The properties proved of these definitions sit under `EthLib.Serialization.Proofs.Rlp`, mirroring this layout.
 -/

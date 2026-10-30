@@ -1,9 +1,10 @@
 import EthLib.Serialization.Rlp.Encode
+import EthLib.Serialization.Proofs.Rlp.Item
 
 /-!
 # `Serialization.Proofs.Rlp.Encode`
 
-Known answers for the RLP encoding.
+The bound on a length, and known answers for the RLP encoding.
 
 A claim `output r = some b` says that `r` succeeds, with exactly the bytes `b`.
 
@@ -64,6 +65,17 @@ No test vector comes near it: no byte string that long fits in memory.
 So the prefix of the largest length is checked on `lengthPrefix` directly.
 
 Every longer payload is proved to make `encode` fail. -/
+
+/-- Below `2^64`, the first byte of a long prefix is at most `offset + 63`.
+
+That is `0xbf` for a byte string, below every list, and `0xff` for a list, still a byte.
+
+So the first byte of a prefix never wraps around 256. -/
+theorem lengthPrefix_first_byte_le (kind : PayloadKind) (length : Nat) (h : length < 2 ^ 64) :
+    kind.offset + 55 + (bigEndian length).size ≤ kind.offset + 63 := by
+  -- `2^64 = 256^8`, so the length has at most 8 digits in base 256.
+  have := bigEndian_size_le length 8 (by simpa using h)
+  omega
 
 /-- The largest length, `2^64 - 1`, for a byte string: the prefix `bf`, then the length on 8 bytes. -/
 theorem lengthPrefix_bytes_max :

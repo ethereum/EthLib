@@ -1,29 +1,19 @@
 /-!
 # `Serialization.Rlp.Item`
 
-The values that Recursive Length Prefix (RLP) encodes.
+The values that Recursive Length Prefix (RLP) encodes, and the big-endian bytes of a number.
 
-RLP is the serialization of the execution layer.
+Source: Appendix B of the Yellow Paper, Shanghai version, in [`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
 
-Block headers, transactions, receipts and trie nodes are written with it.
+An item is a byte string or a list of items, so the items form a tree.
 
-Appendix B of the Yellow Paper (Shanghai version, `ethereum/yellowpaper` at `efc5f9a`) defines it.
+For example, `[ "cat", [ "dog" ], [] ]` is a list of three items:
 
-An item is a byte string or a list of items, so the items form a tree:
-
-```text
-    [ "cat", [ "dog" ], [] ]
-
-    list
-     |- byte string  63 61 74
-     |- list
-     |   '- byte string  64 6f 67
-     '- list, empty
-```
+- the byte string `63 61 74`;
+- a list that holds the byte string `64 6f 67`;
+- the empty list.
 
 The empty byte string and the empty list are different items, with different encodings.
-
-A scalar, a non-negative integer, is encoded as a byte string: its digits in base 256, with no leading zero.
 -/
 
 namespace EthLib.Serialization.Rlp
@@ -39,9 +29,11 @@ inductive Item where
 
 /-- Why RLP refused its input. -/
 inductive RlpError where
-  /-- A byte string or a list whose payload has `length` bytes, where `length` is `2^64` or more.
+  /-- A payload of `length` bytes, where `length` is `2^64` or more.
 
-  The payload of a byte string is its bytes, and the payload of a list is the encodings of its items.
+  The payload of a byte string is its bytes.
+
+  The payload of a list is the encodings of its items.
 
   The Yellow Paper gives such an item no encoding. -/
   | payloadTooLong (length : Nat)
@@ -51,11 +43,11 @@ inductive RlpError where
 
 # Why fuel
 
-The recursion counts down a byte budget instead of shrinking `n`.
+The recursion counts down a byte budget instead of dividing `n`.
 
 The kernel unfolds such a definition directly, so it can evaluate the known answers.
 
-`bigEndian` passes a budget of `n`, which never runs out: `n` has at most `n` digits in base 256.
+A budget of `n` bytes never runs out, since `n` has at most `n` digits in base 256.
 -/
 def bigEndianAux : Nat → Nat → ByteArray
   -- Out of budget: write nothing.
@@ -71,21 +63,26 @@ def bigEndianAux : Nat → Nat → ByteArray
 /-- `BE` of the Yellow Paper: `n` in base 256, most significant byte first, with no leading zero byte.
 
 ```text
-    BE(0)     =  []
-    BE(127)   =  [ 7f ]
-    BE(1024)  =  [ 04 00 ]
+BE(0) = []
+BE(127) = [ 7f ]
+BE(1024) = [ 04 00 ]
 ```
 
-`BE(0)` is empty, since the Yellow Paper asks for a byte array of minimal length.
--/
+`BE(0)` is empty, since the Yellow Paper asks for the shortest such byte string. -/
 def bigEndian (n : Nat) : ByteArray :=
   bigEndianAux n n
 
+/-- The number that `bytes` writes in base 256, most significant byte first.
+
+The Yellow Paper defines `BE(x)` as the bytes `b` with `x = sum_n b_n * 256^(k - 1 - n)`, where `k` is their count.
+
+This is that sum, computed one byte at a time. -/
+def ofBigEndian (bytes : List UInt8) : Nat :=
+  bytes.foldl (fun acc byte => 256 * acc + byte.toNat) 0
+
 /-- The item of a scalar `n`: the byte string `BE(n)`.
 
-The Yellow Paper encodes a scalar `i` as `RLP(BE(i))`.
-
-So 0 is the empty byte string. -/
+The Yellow Paper encodes a scalar `i` as `RLP(BE(i))`, so 0 is the empty byte string. -/
 def Item.scalar (n : Nat) : Item :=
   .bytes (bigEndian n)
 

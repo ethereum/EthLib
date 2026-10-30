@@ -3,45 +3,41 @@ import EthLib.Serialization.Rlp.Item
 /-!
 # `Serialization.Rlp.Encode`
 
-The RLP encoding of an item, as Appendix B of the Yellow Paper (Shanghai version, `ethereum/yellowpaper` at `efc5f9a`) defines it.
+The RLP encoding of an item.
+
+Source: Appendix B of the Yellow Paper, Shanghai version, in [`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex), equations for `R_b`, `R_l` and `s`.
 
 An encoding is a prefix, then a payload.
 
-The payload of a byte string is its bytes, and the payload of a list is the encodings of its items, one after another.
+The payload of a byte string is its bytes.
 
-The one exception is a single byte below `0x80`, which is its own encoding, with no prefix.
+The payload of a list is the encodings of its items, one after another.
 
-A byte string or a list is short when its payload has fewer than 56 bytes.
+A single byte below `0x80` is the one exception: it is its own encoding, with no prefix.
 
-The first byte of an encoding alone tells a byte string from a list, and a short one from a long one:
+A payload is short when it has fewer than 56 bytes.
+
+The first byte of an encoding tells a byte string from a list, and a short payload from a long one:
+
+- `0x00` to `0x7f`: a single byte below `0x80`, which is its own encoding.
+- `0x80` to `0xb7`: a short byte string, with `0x80 + length`.
+- `0xb8` to `0xbf`: a long byte string, with `0xb7` plus the size of `BE(length)`, then `BE(length)`.
+- `0xc0` to `0xf7`: a short list, with `0xc0 + length`.
+- `0xf8` to `0xff`: a long list, with `0xf7` plus the size of `BE(length)`, then `BE(length)`.
+
+For example, the list of "cat" and "dog" encodes as:
 
 ```text
-    0x00..0x7f   a single byte below 0x80 is its own encoding
-    0x80..0xb7   short string: 0x80 + length, then the bytes
-    0xb8..0xbf   long string:  0xb7 + length of the length, the length, then the bytes
-    0xc0..0xf7   short list:   0xc0 + payload length, then the payload
-    0xf8..0xff   long list:    0xf7 + length of the length, the length, then the payload
+[ c8 | 83 63 61 74 | 83 64 6f 67 ]
 ```
 
-For example:
+A length must be below `2^64`, so `BE(length)` has at most 8 bytes.
 
-```text
-    [ "cat", "dog" ]  ->  c8 | 83 63 61 74 | 83 64 6f 67
-```
-
-A long byte string or list writes the length of its payload as `BE(length)`: in base 256, with no leading zero byte.
-
-The length must be below `2^64`, so `BE(length)` takes at most 8 bytes.
-
-That keeps the first byte of a long string at most `0xb7 + 8 = 0xbf`, below every list.
+That keeps the first byte of a long byte string at most `0xb7 + 8 = 0xbf`, below every list.
 
 It also keeps the first byte of a long list at most `0xf7 + 8 = 0xff`, which is still a byte.
 
 A payload of `2^64` bytes or more has no encoding.
-
-The execution specs use `ethereum/ethereum-rlp`, and its `src/ethereum_rlp/rlp.py` at v0.1.6 encodes by the same rules.
-
-It has no check for the `2^64` bound, which no byte string in memory reaches.
 -/
 
 namespace EthLib.Serialization.Rlp
@@ -60,20 +56,18 @@ def PayloadKind.offset : PayloadKind → Nat
 
 /-- The prefix of a payload of `length` bytes.
 
-```text
-    length < 56      [ offset + length ]
-    length < 2^64    [ offset + 55 + k | BE(length) ]
-    otherwise        no encoding
-```
+- Below 56 bytes, it is the one byte `offset + length`.
+- Below `2^64` bytes, it is the byte `offset + 55 + k`, then `BE(length)` on its `k` bytes.
+- From `2^64` bytes on, there is no prefix.
 
-Here `offset` is `kind.offset`, and `k` is the number of bytes of `BE(length)`.
+The offset is `0x80` for a byte string and `0xc0` for a list.
 
 The Yellow Paper writes `offset + 55` as 183 for a byte string and 247 for a list. -/
 def lengthPrefix (kind : PayloadKind) (length : Nat) : Except RlpError ByteArray :=
   if length < 56 then
     .ok ⟨#[UInt8.ofNat (kind.offset + length)]⟩
   else if length < 2 ^ 64 then
-    -- Below `2^64`, `BE(length)` has at most 8 bytes, so the first byte is at most `0xc0 + 63 = 0xff`.
+    -- Below `2^64`, `BE(length)` has at most 8 bytes, so the first byte is at most `0xc0 + 55 + 8 = 0xff`.
     let lengthBytes := bigEndian length
     .ok (⟨#[UInt8.ofNat (kind.offset + 55 + lengthBytes.size)]⟩ ++ lengthBytes)
   else
@@ -85,8 +79,10 @@ def isSingleLowByte (data : ByteArray) : Bool :=
 
 /-- `R_b` of the Yellow Paper: the encoding of a byte string. -/
 def encodeBytes (data : ByteArray) : Except RlpError ByteArray :=
+  -- One byte below `0x80` is its own encoding.
   if isSingleLowByte data then
     .ok data
+  -- Any other byte string takes the prefix of its length.
   else do
     return (← lengthPrefix .bytes data.size) ++ data
 
@@ -109,6 +105,7 @@ def encode : Item → Except RlpError ByteArray
 It fails when the encoding of one of them fails. -/
 def joinEncodings : List Item → Except RlpError ByteArray
   | [] => .ok .empty
+  -- Each item's encoding, in order, and a failure if any of them fails.
   | item :: rest => do
       let head ← encode item
       let tail ← joinEncodings rest
