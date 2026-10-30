@@ -12,8 +12,6 @@ Verify an opening at an index, and return the output there.
 ```
 
 The output is a hash of the secret, not the leaf.
-
-Source: [EIP-CRYPTO draft](https://github.com/kevaundray/EIPs/blob/fd2c9c53994eb1e7705011e0e4c53327bd61bdcc/EIPS/eip-crypto.md), section "VRF tree", `vrf_verify`.
 -/
 
 namespace EthLib.Cryptography.Vrf

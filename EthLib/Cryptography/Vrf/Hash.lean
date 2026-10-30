@@ -17,8 +17,6 @@ Their inputs are 43, 75 and 45 bytes long, so no input of one is an input of ano
 The output is not the leaf.
 
 An opening reveals the leaf of its sibling index, and that must not reveal the sibling's output.
-
-Source: [EIP-CRYPTO draft](https://github.com/kevaundray/EIPs/blob/fd2c9c53994eb1e7705011e0e4c53327bd61bdcc/EIPS/eip-crypto.md), section "VRF tree", `vrf_verify`.
 -/
 
 namespace EthLib.Cryptography.Vrf

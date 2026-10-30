@@ -7,7 +7,7 @@ import EthLib.Cryptography.Proofs.Vrf.Serialization
 Two openings, at the first index and at the last.
 
 - Each secret and sibling is a fixed byte pattern.
-- Each root and output was computed outside EthLib, by the specification's own `vrf_verify`.
+- Each root and output was computed outside EthLib, by an independent implementation of this specification.
 
 Each opening is also rejected with a wrong secret, a wrong sibling, and at another index.
 

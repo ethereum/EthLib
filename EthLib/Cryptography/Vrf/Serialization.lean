@@ -10,8 +10,6 @@ An opening as 1056 bytes, and verification over bytes.
 ```
 
 The siblings run from the leaf up to the root.
-
-Source: [EIP-CRYPTO draft](https://github.com/kevaundray/EIPs/blob/fd2c9c53994eb1e7705011e0e4c53327bd61bdcc/EIPS/eip-crypto.md), section "VRF tree", "Encoding" and `vrf_verify`.
 -/
 
 namespace EthLib.Cryptography.Vrf

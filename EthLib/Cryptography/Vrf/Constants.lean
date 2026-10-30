@@ -2,10 +2,6 @@
 # `Vrf.Constants`
 
 The parameters of the VRF tree.
-
-The seed size and the secret prefix are EthLib's own: the draft leaves the derivation of the secrets to the holder.
-
-Source: [EIP-CRYPTO draft](https://github.com/kevaundray/EIPs/blob/fd2c9c53994eb1e7705011e0e4c53327bd61bdcc/EIPS/eip-crypto.md), section "VRF tree", "Parameters".
 -/
 
 namespace EthLib.Cryptography.Vrf.Constants

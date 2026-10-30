@@ -17,11 +17,7 @@ Verification never sees the seed, so this derivation is not consensus-critical.
 
 It is specified so that any implementation rebuilds the same tree from the same seed.
 
-The draft leaves this derivation to the holder, so it is EthLib's own.
-
-It is the pseudorandom key generation of RFC 8391, `sk[i] = PRF(S, i)`, with Keccak-256 keyed by a prefix.
-
-Source: [RFC 8391](https://www.rfc-editor.org/rfc/rfc8391) §3.1.7 and §5.1.
+Keccak-256, keyed by the seed and separated by its prefix, acts as a pseudorandom function of the index.
 -/
 
 namespace EthLib.Cryptography.Vrf

@@ -16,9 +16,9 @@ The root is `X_{32,0}`.
 
 The path of index `i` holds the sibling of `i`'s ancestor on each level, from the leaf up.
 
-How the holder derives the secrets is not part of the specification.
+The tree takes the secrets as any function of the index.
 
-Source: [EIP-CRYPTO draft](https://github.com/kevaundray/EIPs/blob/fd2c9c53994eb1e7705011e0e4c53327bd61bdcc/EIPS/eip-crypto.md), section "VRF tree", `vrf_verify` and "Generation and opening".
+Key generation derives them from a seed.
 -/
 
 namespace EthLib.Cryptography.Vrf
