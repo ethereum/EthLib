@@ -80,4 +80,6 @@ The decoder rejects, each with its own error:
 - So two items never share an encoding.
 - No encoding is a proper prefix of another, so encodings one after another split in only one way.
 - An encoding followed by more bytes is rejected, with the count of bytes left over.
+- The decoder accepts only canonical input: every input it accepts is the encoding of what it decodes to.
+- So the encoding is a bijection between items and the inputs the decoder accepts, and two decoders that follow it agree on every input.
 - The decoding matches every case of `RLPTests/rlptest.json`, and rejects every case of [`RLPTests/invalidRLPTest.json`](https://github.com/ethereum/tests/blob/c67e485ff8b5be9abc8ad15345ec21aa22e290d9/RLPTests/invalidRLPTest.json).
