@@ -9,6 +9,10 @@ With the round trip, `decode_eq_ok_iff` makes `encode` a bijection between items
 
 So no item has two accepted encodings, and two decoders that follow this specification agree on every input.
 
+`decode_isOk_iff` proves that `decode` succeeds exactly on the encodings of items.
+
+`decodeItem_append` proves that the parser reads the same item from a longer input, as a stream decoder needs.
+
 The proof runs the decoder backwards.
 
 1. A prefix the decoder accepts is the prefix the encoding writes, because a length has no leading zero and is at least 56 in the long form.
@@ -356,5 +360,40 @@ theorem encode_decode (b : ByteArray) (x : Item) (h : decode b = .ok x) : encode
 - Every input that decodes is the encoding of what it decodes to. -/
 theorem decode_eq_ok_iff (b : ByteArray) (x : Item) : decode b = .ok x ↔ encode x = .ok b :=
   ⟨encode_decode b x, decode_encode x b⟩
+
+/-- What the parser reads from the front of an input is encoded as exactly the bytes it consumed.
+
+This is the right-inverse property of Coglio's parser, `rlp-encode-tree-of-rlp-parse-tree`. -/
+theorem encode_of_decodeItem (input rest : List UInt8) (x : Item) (hRest : rest.length < input.length)
+    (h : decodeItem input = .ok (x, ⟨rest, hRest⟩)) :
+    ∃ e, encode x = .ok e ∧ input = e.data.toList ++ rest :=
+  (canonical_upTo input.length).1 input (Nat.le_refl _) x rest (by simp [readItem, h, Except.map])
+
+/-- The parser reads the same item from a longer input, and leaves the extra bytes after the rest.
+
+So a decoder that reads a stream needs no end marker. -/
+theorem decodeItem_append (input rest more : List UInt8) (x : Item) (hRest : rest.length < input.length)
+    (h : decodeItem input = .ok (x, ⟨rest, hRest⟩)) :
+    ∃ hMore, decodeItem (input ++ more) = .ok (x, ⟨rest ++ more, hMore⟩) := by
+  -- The input is an encoding of `x`, then the rest, so the longer input is that encoding, then `rest ++ more`.
+  obtain ⟨e, hEncode, hInput⟩ := encode_of_decodeItem input rest x hRest h
+  rw [hInput, List.append_assoc]
+  exact decodeItem_encode x e hEncode (rest ++ more)
+
+/-- The byte strings that encode some item: the image of `encode`.
+
+This is `rlp-tree-encoding-p` of Coglio, Figure 4. -/
+def IsEncoding (b : ByteArray) : Prop :=
+  ∃ x, encode x = .ok b
+
+/-- `decode` succeeds exactly on the encodings of items.
+
+With `decode_eq_ok_iff`, it is the declarative decoder of Coglio, Figure 6: the inverse of `encode` on its image. -/
+theorem decode_isOk_iff (b : ByteArray) : (∃ x, decode b = .ok x) ↔ IsEncoding b := by
+  constructor
+  · rintro ⟨x, h⟩
+    exact ⟨x, encode_decode b x h⟩
+  · rintro ⟨x, h⟩
+    exact ⟨x, decode_encode x b h⟩
 
 end EthLib.Serialization.Rlp
