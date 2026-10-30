@@ -22,6 +22,8 @@ open EthLib.Cryptography.Vrf.Constants
 
 /-- The secret prefix is the string `PQ_VRF_SECRET`. -/
 theorem VRF_SECRET_DST_eq : VRF_SECRET_DST.toList = "PQ_VRF_SECRET".toUTF8.toList := by
+  -- Use the public string equation before reducing the ASCII bytes.
+  rw [String.toUTF8_eq_toByteArray]
   decide +kernel
 
 /-- A secret hash reads 13 + 32 + 4 = 49 bytes. -/
