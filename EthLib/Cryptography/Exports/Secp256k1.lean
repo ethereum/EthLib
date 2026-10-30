@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Secp256k1.Ecdsa
+public import EthLib.Cryptography.Secp256k1.Recovery
 
 /-!
 # `Exports.Secp256k1`
@@ -74,5 +75,17 @@ def verifyExport (publicKey hash signature : ByteArray) : IO UInt8 := do
 def isLowSExport (signature : ByteArray) : IO UInt8 := do
   let (_, s) ← readSignature signature
   return if Ecdsa.isLowS s then 1 else 0
+
+/-- The public key that signed a hash, recovered from the signature and a recovery id of `0` or `1`.
+
+It comes back in the 65-byte uncompressed encoding. -/
+@[export eth_secp256k1_recover]
+def recoverExport (hash signature : ByteArray) (recoveryId : UInt8) : IO ByteArray := do
+  let h ← readHash hash
+  let (r, s) ← readSignature signature
+  if hid : recoveryId.toNat < 2 then
+    let q ← runSecp256k1 (Ecdsa.recover h r s ⟨recoveryId.toNat, hid⟩)
+    return q.encodeUncompressed
+  else throw (IO.userError s!"bad recovery id: {recoveryId}, expected 0 or 1")
 
 end EthLib.Cryptography.Secp256k1.Exports

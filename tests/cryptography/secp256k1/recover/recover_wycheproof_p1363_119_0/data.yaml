@@ -1,0 +1,5 @@
+input:
+  msg_hash: '0xbb5a52f42f9c9261ed4361f59422a1e30036e7c32b270c8807a419feca605023'
+  signature: '0x7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc24238e70b431b1a64efdf9032669939d4b77f249503fc6905feb7540dea3e6d2'
+  recovery_id: 0
+output: '0x041b3a98f9e1f57901f465a08a24ee9b340174f936099b46a202815cc1abe9b37958a567e59cb3802d076e70d1f3c5c6907edd582af67463478ed557ba059238ef'

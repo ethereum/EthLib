@@ -17,6 +17,13 @@ eth_secp256k1_is_low_s(
   lean_object* signature
 );
 
+extern lean_object*
+eth_secp256k1_recover(
+  lean_object* hash,
+  lean_object* signature,
+  uint8_t recovery_id
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 PyObject*
@@ -60,4 +67,28 @@ py_secp256k1_is_low_s(
   lean_object* res = eth_secp256k1_is_low_s(
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(sig_obj), PyBytes_GET_SIZE(sig_obj)));
   return run_io_into_pybool(res, "secp256k1 is_low_s");
+}
+
+PyObject*
+py_secp256k1_recover(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *hash_obj, *sig_obj;
+  unsigned char recovery_id;
+  /* `b` reads an int in [0, 255]; Lean rejects any id but 0 and 1. */
+  if (!PyArg_ParseTuple(args, "OOb", &hash_obj, &sig_obj, &recovery_id)) return NULL;
+  if (!PyBytes_Check(hash_obj)) {
+    PyErr_SetString(PyExc_TypeError, "msg_hash must be bytes");
+    return NULL;
+  }
+  if (!PyBytes_Check(sig_obj)) {
+    PyErr_SetString(PyExc_TypeError, "signature must be bytes");
+    return NULL;
+  }
+  lean_object* res = eth_secp256k1_recover(
+    mk_bytearray((const uint8_t*) PyBytes_AS_STRING(hash_obj), PyBytes_GET_SIZE(hash_obj)),
+    mk_bytearray((const uint8_t*) PyBytes_AS_STRING(sig_obj), PyBytes_GET_SIZE(sig_obj)),
+    recovery_id);
+  return run_io_into_pybytes(res, "secp256k1 recover");
 }

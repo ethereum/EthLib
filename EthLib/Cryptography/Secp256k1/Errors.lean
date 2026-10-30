@@ -28,6 +28,8 @@ inductive Secp256k1Error where
   | noPointWithX
   /-- The input was the point at infinity, which is not a public key. -/
   | pointAtInfinity
+  /-- An integer `r` or `s` of a signature was not in `[1, n - 1]`. -/
+  | scalarOutOfRange
 deriving DecidableEq, Repr
 
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
@@ -38,5 +40,6 @@ def Secp256k1Error.message : Secp256k1Error → String
   | .notOnCurve => "point is not on the curve"
   | .noPointWithX => "no point of the curve has this x"
   | .pointAtInfinity => "the point at infinity is not a public key"
+  | .scalarOutOfRange => "signature integer is not in [1, n - 1]"
 
 end EthLib.Cryptography.Secp256k1
