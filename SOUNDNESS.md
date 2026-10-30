@@ -69,6 +69,16 @@ if `keyGen seed` returns a key pair, and `sign` returns a signature for a messag
 It is a correctness statement.
 It says nothing about unforgeability.
 
+### VRF tree
+
+`verify_unique` (`Proofs/Vrf/Verify.lean`): two openings that verify at one index under one root give one output, or Keccak-256 collides.
+It holds for every root, including one built to cheat.
+
+`verify_opening` (`Proofs/Vrf/Verify.lean`): the opening of an honest tree verifies, with the output of its secret.
+
+Uniqueness is reduced to a collision, and no theorem bounds the cost of one.
+No theorem says that an output is unpredictable before it is opened.
+
 ### BLS12-381
 
 `modulus_prime` (`Proofs/Bls/FpZMod.lean` and `Proofs/Bls/FrZMod.lean`): both moduli are prime.
