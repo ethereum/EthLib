@@ -35,12 +35,6 @@ The low bit of the index says whether the held node is the left or the right chi
 
 The index is halved at each step, so it always names the node held.
 
-## Users
-
-- leanXMSS (`Xmss/Tree.lean`): `Th` under the address of each node.
-- The VRF tree (`Vrf/KeyGen.lean`, `Vrf/Verify.lean`): Keccak-256 of the two children, at every node.
-- SSZ (`Serialization/Ssz/Merkle/`): SHA-256 of the two children, at every node, through `subtreeRoot` and `climbBranch`.
-
 ## What is proved
 
 The proofs are in `EthLib/Cryptography/Proofs/Merkle/`, for every node hash.
