@@ -14,7 +14,8 @@ namespace EthLib.Serialization.Rlp.Vectors
 
 /-- A byte string written as text: the UTF-8 bytes of the text, one byte per ASCII character. -/
 def str (text : String) : Item :=
-  .bytes text.toUTF8
+  -- Lean v4.35.0 `String.toUTF8_eq_toByteArray` gives the public byte representation.
+  .bytes text.toByteArray
 
 /-- A long byte string written as text in pieces: the UTF-8 bytes of the pieces, one after another.
 
@@ -24,7 +25,8 @@ In one string, the 1024 characters of `longstring2` take it more than 4 GB of me
 
 In pieces of at most 64 characters, they take it less than 0.5 GB. -/
 def strPieces (pieces : List String) : Item :=
-  .bytes ⟨⟨pieces.flatMap (·.toUTF8.data.toList)⟩⟩
+  -- Use the same public representation for each piece before joining its bytes.
+  .bytes ⟨⟨pieces.flatMap (·.toByteArray.data.toList)⟩⟩
 
 /-- `value` in base 256 on exactly `size` bytes, most significant first.
 
