@@ -1,5 +1,6 @@
 import EthLib.Serialization.Rlp.Item
 import EthLib.Serialization.Rlp.Encode
+import EthLib.Serialization.Rlp.Decode
 
 /-!
 # `EthLib.Serialization.Rlp`
@@ -10,6 +11,7 @@ Source: Appendix B of the Yellow Paper, Shanghai version, in [`Paper.tex` at `ef
 
 - `Rlp/Item` holds the items, the errors, and the big-endian bytes of a number.
 - `Rlp/Encode` holds the encoding.
+- `Rlp/Decode` holds the strict decoding.
 
 The properties proved of these definitions sit under `EthLib.Serialization.Proofs.Rlp`, mirroring this layout.
 -/

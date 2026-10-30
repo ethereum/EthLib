@@ -27,9 +27,47 @@ inductive Item where
   /-- A list of items, a branch of the tree. -/
   | list (items : List Item)
 
+mutual
+
+/-- Whether two items are equal.
+
+Two byte strings are compared as lists of bytes, which the kernel does in linear time. -/
+def Item.decEq : (a b : Item) → Decidable (a = b)
+  | .bytes x, .bytes y =>
+    if h : x.data.toList = y.data.toList then
+      isTrue (by
+        -- Equal lists of bytes make equal byte arrays.
+        cases x; cases y
+        simp only [Array.toList_inj] at h
+        rw [h])
+    else
+      isFalse (by intro e; cases e; exact h rfl)
+  | .list xs, .list ys =>
+    match Item.decEqList xs ys with
+    | isTrue h => isTrue (by rw [h])
+    | isFalse h => isFalse (by intro e; cases e; exact h rfl)
+  -- A byte string is never a list.
+  | .bytes _, .list _ => isFalse (by intro e; cases e)
+  | .list _, .bytes _ => isFalse (by intro e; cases e)
+
+/-- Whether two lists of items are equal, item by item. -/
+def Item.decEqList : (a b : List Item) → Decidable (a = b)
+  | [], [] => isTrue rfl
+  | x :: xs, y :: ys =>
+    match Item.decEq x y, Item.decEqList xs ys with
+    | isTrue hx, isTrue hxs => isTrue (by rw [hx, hxs])
+    | isFalse hx, _ => isFalse (by intro e; cases e; exact hx rfl)
+    | _, isFalse hxs => isFalse (by intro e; cases e; exact hxs rfl)
+  | [], _ :: _ => isFalse (by intro e; cases e)
+  | _ :: _, [] => isFalse (by intro e; cases e)
+
+end
+
+instance : DecidableEq Item := Item.decEq
+
 /-- Why RLP refused its input. -/
 inductive RlpError where
-  /-- A payload of `length` bytes, where `length` is `2^64` or more.
+  /-- The encoder met a payload of `length` bytes, where `length` is `2^64` or more.
 
   The payload of a byte string is its bytes.
 
@@ -37,6 +75,20 @@ inductive RlpError where
 
   The Yellow Paper gives such an item no encoding. -/
   | payloadTooLong (length : Nat)
+  /-- The input ends `available` bytes in, where `needed` bytes were announced. -/
+  | inputTooShort (needed available : Nat)
+  /-- A byte below `0x80` written with a prefix, as `0x81` then the byte.
+
+  Such a byte is its own encoding. -/
+  | singleByteWithPrefix (byte : UInt8)
+  /-- A length below 56 written in the long form.
+
+  Such a length fits in the first byte. -/
+  | longFormForShortLength (length : Nat)
+  /-- A length written with a leading zero byte. -/
+  | leadingZeroInLength
+  /-- `count` bytes left after the item. -/
+  | trailingBytes (count : Nat)
   deriving Repr, DecidableEq
 
 /-- `n` in base 256, most significant byte first, using at most `fuel` bytes.

@@ -1,5 +1,6 @@
 import EthLib.Serialization.Rlp.Encode
 import EthLib.Serialization.Proofs.Rlp.Item
+import EthLib.Serialization.Proofs.Rlp.Vectors
 
 /-!
 # `Serialization.Proofs.Rlp.Encode`
@@ -15,19 +16,7 @@ It adds no axiom, unlike `native_decide`.
 
 namespace EthLib.Serialization.Rlp
 
-/-- A byte string written as text: the UTF-8 bytes of the text, one byte per ASCII character. -/
-private def str (text : String) : Item :=
-  .bytes text.toUTF8
-
-/-- A long byte string written as text in pieces: the UTF-8 bytes of the pieces, one after another.
-
-The kernel's cost to turn a string into bytes grows with the square of its length.
-
-In one string, the 1024 characters of `longstring2` take it more than 4 GB of memory.
-
-In pieces of at most 64 characters, they take it less than 0.5 GB. -/
-private def strPieces (pieces : List String) : Item :=
-  .bytes ⟨⟨pieces.flatMap (·.toUTF8.data.toList)⟩⟩
+open Vectors
 
 /-- The bytes of a success, as a list, or `none` for a failure.
 
@@ -36,25 +25,6 @@ The kernel compares two lists of bytes in linear time.
 With `decide +kernel`, comparing two `ByteArray`s of a kilobyte takes more than 6 GB of memory instead. -/
 private def output (result : Except RlpError ByteArray) : Option (List UInt8) :=
   result.toOption.map (·.data.toList)
-
-/-- `value` in base 256 on exactly `size` bytes, most significant first.
-
-Each expected output below is the hex number its source gives, after its byte count.
-
-The count keeps a leading zero byte, as in the output `00`.
-
-A value too large for its count gives the empty list, which is no encoding, so the claim fails instead of comparing fewer bytes.
-
-The kernel computes these bytes with its fast arithmetic on natural numbers.
-
-Reading the same hex from a string costs it far more. -/
-private def bytesOf (size value : Nat) : List UInt8 :=
-  if value < 256 ^ size then go size value [] else []
-where
-  /-- The lowest `size` digits of `value`, in front of `acc`. -/
-  go : Nat → Nat → List UInt8 → List UInt8
-    | 0, _, acc => acc
-    | size + 1, value, acc => go size (value / 256) (UInt8.ofNat (value % 256) :: acc)
 
 /-! ## The bound of a length
 

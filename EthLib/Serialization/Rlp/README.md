@@ -53,6 +53,20 @@ So its length has at most 8 bytes, and the first byte of a long byte string is a
 
 The encoding returns an error for a longer payload, instead of a prefix that would read as a list.
 
+## The decoding
+
+The Yellow Paper defines only the encoding, so the decoder accepts exactly its outputs.
+
+Every item has one encoding, so two decoders that follow this rule agree on every input.
+
+The decoder rejects, each with its own error:
+
+- a byte below `0x80` written with a prefix, as `81 05` for `05`;
+- a length below 56 written in the long form, as `b8 03` for `83`;
+- a length written with a leading zero byte, as `b9 00 40` for `b8 40`;
+- an input that ends before the bytes its prefix announces;
+- bytes left after the item.
+
 ## Proven properties
 
 - The big-endian bytes of a number read back as that number.
@@ -61,3 +75,4 @@ The encoding returns an error for a longer payload, instead of a prefix that wou
 - A length below `2^64` writes a first byte that never wraps around 256.
 - The encoding refuses every payload of `2^64` bytes or more.
 - The encoding matches every case of `RLPTests/rlptest.json` in [`ethereum/tests`](https://github.com/ethereum/tests/blob/c67e485ff8b5be9abc8ad15345ec21aa22e290d9/RLPTests/rlptest.json).
+- The decoding matches every case of `RLPTests/rlptest.json`, and rejects every case of [`RLPTests/invalidRLPTest.json`](https://github.com/ethereum/tests/blob/c67e485ff8b5be9abc8ad15345ec21aa22e290d9/RLPTests/invalidRLPTest.json).
