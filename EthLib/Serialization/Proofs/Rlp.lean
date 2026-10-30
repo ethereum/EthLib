@@ -5,6 +5,7 @@ import EthLib.Serialization.Proofs.Rlp.Decode
 import EthLib.Serialization.Proofs.Rlp.Strict
 import EthLib.Serialization.Proofs.Rlp.RoundTrip
 import EthLib.Serialization.Proofs.Rlp.Canonical
+import EthLib.Serialization.Proofs.Rlp.Scalar
 
 /-!
 # `EthLib.Serialization.Proofs.Rlp`
@@ -19,4 +20,5 @@ Machine-checked properties of RLP.
 - `Proofs/Rlp/Strict` proves that `decode` rejects each of the five non-canonical forms, whatever bytes follow.
 - `Proofs/Rlp/RoundTrip` proves that decoding undoes encoding, so the encoding is injective and prefix-free.
 - `Proofs/Rlp/Canonical` proves that the decoder accepts only canonical input, so `encode` is a bijection onto what `decode` accepts.
+- `Proofs/Rlp/Scalar` proves that `decodeScalar` decodes exactly the encodings of scalars, and rejects a leading zero byte.
 -/

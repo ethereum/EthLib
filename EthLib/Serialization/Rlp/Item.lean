@@ -89,6 +89,12 @@ inductive RlpError where
   | leadingZeroInLength
   /-- `count` bytes left after the item. -/
   | trailingBytes (count : Nat)
+  /-- A scalar written with a leading zero byte.
+
+  The Yellow Paper asks clients to reject it as non-canonical. -/
+  | leadingZeroInScalar
+  /-- A list where a scalar was expected. -/
+  | listAsScalar
   deriving Repr, DecidableEq
 
 /-- `n` in base 256, most significant byte first, using at most `fuel` bytes.

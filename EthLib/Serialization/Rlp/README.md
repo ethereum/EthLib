@@ -45,6 +45,8 @@ A scalar, a non-negative integer, is encoded as the byte string of its digits in
 
 So 0 is the empty byte string, and 1024 encodes as `82 04 00`.
 
+A byte string with a leading zero byte holds no scalar, so `decodeScalar` rejects `00` and `82 00 01`, as the Yellow Paper asks.
+
 ## Bounds
 
 A payload must have fewer than `2^64` bytes, as the Yellow Paper asks.
@@ -83,4 +85,6 @@ The decoder rejects, each with its own error:
 - The decoder accepts only canonical input: every input it accepts is the encoding of what it decodes to.
 - So the encoding is a bijection between items and the inputs the decoder accepts, and two decoders that follow it agree on every input.
 - The parser reads the same item from a longer input and leaves the extra bytes, so a stream needs no end marker.
+- A scalar decodes exactly from its encoding, and a byte string with a leading zero byte holds no scalar.
+- Every scalar below `2^256` has an encoding.
 - The decoding matches every case of `RLPTests/rlptest.json`, and rejects every case of [`RLPTests/invalidRLPTest.json`](https://github.com/ethereum/tests/blob/c67e485ff8b5be9abc8ad15345ec21aa22e290d9/RLPTests/invalidRLPTest.json).
