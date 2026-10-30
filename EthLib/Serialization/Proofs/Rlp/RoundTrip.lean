@@ -8,6 +8,8 @@ Decoding undoes encoding: `decode_encode` proves `encode x = .ok b → decode b 
 
 So `encode` is injective: two items never share an encoding.
 
+`encode_prefix_free` proves that no encoding is a proper prefix of another.
+
 The proof follows the shape of an encoding.
 
 1. The first byte and the length bytes of a prefix read back as the kind and the length of the payload.
@@ -295,6 +297,46 @@ theorem encode_injective (x y : Item) (b : ByteArray) (hx : encode x = .ok b) (h
   -- Both decode from `b`, and decoding is a function.
   have := (decode_encode x b hx).symm.trans (decode_encode y b hy)
   cases this
+  rfl
+
+/-- The parser reads an encoding from the front of any input, and leaves exactly the bytes after it.
+
+This is the left-inverse property of Coglio's parser, `rlp-parse-tree-of-rlp-encode-tree`, with any bytes after the encoding. -/
+theorem decodeItem_encode (x : Item) (e : ByteArray) (h : encode x = .ok e) (rest : List UInt8) :
+    ∃ hRest, decodeItem (e.data.toList ++ rest) = .ok (x, ⟨rest, hRest⟩) :=
+  decodeItem_of_readItem _ _ _ (readItem_encode x e h rest)
+
+/-- No encoding is a proper prefix of another: `RLP` is prefix-free.
+
+So a stream of encodings, one after another, splits in only one way, with no end marker.
+
+This is `rlp-encode-tree-unamb-prefix` of Coglio, [Ethereum's Recursive Length Prefix in ACL2](https://doi.org/10.4204/EPTCS.327.11), Figure 5. -/
+theorem encode_prefix_free (x y : Item) (ex ey : ByteArray) (hx : encode x = .ok ex) (hy : encode y = .ok ey)
+    (more : List UInt8) (hPrefix : ey.data.toList = ex.data.toList ++ more) : more = [] := by
+  -- Read `ey` from the front in two ways: as `y` with nothing after, and as `x` with `more` after.
+  have hY := readItem_encode y ey hy []
+  have hX := readItem_encode x ex hx more
+  rw [List.append_nil, hPrefix, hX] at hY
+  cases hY
+  rfl
+
+/-- An encoding followed by more bytes is not a whole encoding: `decode` reports the bytes left over. -/
+theorem decode_trailing (x : Item) (e : ByteArray) (h : encode x = .ok e) (more : ByteArray)
+    (hMore : more.size ≠ 0) :
+    decode (e ++ more) = .error (.trailingBytes more.size) := by
+  -- The item is read from the front, and the bytes of `more` are left.
+  have hAppend : (e ++ more).data.toList = e.data.toList ++ more.data.toList := by simp
+  obtain ⟨hRest, hDecode⟩ : ∃ hRest, decodeItem (e ++ more).data.toList = .ok (x, ⟨more.data.toList, hRest⟩) := by
+    rw [hAppend]
+    exact decodeItem_encode x e h more.data.toList
+  have hLen : more.data.toList.length = more.size := Array.length_toList
+  have hNe : more.data.toList.isEmpty = false := by
+    cases hm : more.data.toList with
+    | nil =>
+      rw [hm] at hLen
+      exact absurd hLen.symm hMore
+    | cons _ _ => rfl
+  simp only [decode, hDecode, bind, Except.bind, hNe, hLen]
   rfl
 
 end EthLib.Serialization.Rlp

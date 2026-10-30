@@ -14,5 +14,5 @@ Machine-checked properties of RLP.
 - It also checks `encode` against every case of `RLPTests/rlptest.json` in `ethereum/tests`.
 - `Proofs/Rlp/Decode` checks `decode` against every case of `rlptest.json` and `invalidRLPTest.json`.
 - `Proofs/Rlp/Strict` proves that `decode` rejects each of the five non-canonical forms, whatever bytes follow.
-- `Proofs/Rlp/RoundTrip` proves that decoding undoes encoding, so the encoding is injective.
+- `Proofs/Rlp/RoundTrip` proves that decoding undoes encoding, so the encoding is injective and prefix-free.
 -/
