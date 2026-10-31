@@ -47,6 +47,12 @@ def leafHash (secret : Digest) : Digest :=
 def nodeHash (left right : Digest) : Digest :=
   hash (nodeInput left right)
 
+/-- The node hash at a position of the tree.
+
+The VRF tree hashes every node alike, so the position is ignored. -/
+def treeHash (_level _j : Nat) (left right : Digest) : Digest :=
+  nodeHash left right
+
 /-- The output of a secret. -/
 def outputHash (secret : Digest) : Digest :=
   hash (outputInput secret)

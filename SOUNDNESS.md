@@ -69,6 +69,15 @@ if `keyGen seed` returns a key pair, and `sign` returns a signature for a messag
 It is a correctness statement.
 It says nothing about unforgeability.
 
+### Merkle trees
+
+`climb_binding` (`Proofs/Merkle/Binding.lean`): two climbs from one position that reach one node are equal, or the node hash collides at an ancestor.
+
+`climb_binding_node`: a climb that reaches an honest node but is not the honest one gives a second preimage of an honest ancestor.
+
+They hold for every node hash, and leanXMSS, the VRF tree and SSZ build on them.
+No theorem bounds the cost of a collision or a second preimage.
+
 ### VRF tree
 
 `verify_unique` (`Proofs/Vrf/Verify.lean`): two openings that verify at one index under one root give one output, or Keccak-256 collides.

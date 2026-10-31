@@ -31,9 +31,9 @@ The properties proved are the ones that define a VRF in [Micali, Rabin and Vadha
 - `root` and `opening` (`KeyGen.lean`) build the tree and open it, from any function giving the secret of each index.
 - `keyGen`, `prove` and `evaluate` (`KeyGen.lean`) do the same from one 32-byte seed.
 
-The Merkle tree itself (`Tree.lean`) is generic in its nodes and its node hash, and knows nothing of the VRF.
+The tree is the Merkle tree of [`EthLib.Cryptography.Merkle`](../Merkle/), with the VRF's node hash at every position.
 
-Its proofs give the tree's two guarantees, completeness and binding, which the VRF's proofs build on.
+Its two guarantees, completeness and binding, are proved there, and the VRF's proofs build on them.
 
 ## Key generation
 

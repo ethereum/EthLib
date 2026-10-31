@@ -43,7 +43,7 @@ theorem closed_branch_climb (read : Nat → Except Err Bytes) (closed : WalkerCl
     · subst parentEq
       rw [← climbed]
       rcases Nat.mod_two_eq_zero_or_one (index >>> level) with bit | bit <;>
-        simp [climbBranch, gindexBit_parity, bit]
+        simp [climbBranch_cons, gindexBit_parity, bit]
 
 /-- A readable node of a closed tree has a complete branch reconstructing its root. -/
 theorem closed_branch_rebuilds_root {read : Nat → Except Err Bytes} (closed : WalkerClosed read)

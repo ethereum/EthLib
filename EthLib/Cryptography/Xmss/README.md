@@ -121,6 +121,8 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
 - The one-time signature and the trees.
   An honest one-time signature leads back to its key's leaf (`otsLeaf_otsSign`, `Ots.lean`).
   An honest path leads from a key's leaf to its tree's root (`fold_path`, `Tree.lean`).
+  Another path that reaches that root exposes a second preimage of `Th` under the address of an ancestor (`fold_binding`, `Tree.lean`).
+  Both specialize theorems proved for every tree in [`Merkle`](../Merkle/).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
   The leaf index read alone is its first 4 bytes, as a little-endian integer (`signatureIndex_eq_bytes`).

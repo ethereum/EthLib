@@ -136,7 +136,7 @@ def perfect : Nat → (Nat → Bytes) → CommitmentTree
   -- Both descriptions split at the same half-width and hash the same child roots.
   induction depth generalizing leaves with
   | zero => rfl
-  | succ depth ih => simp [perfect, root, subtreeRoot, ih]
+  | succ depth ih => simp [perfect, root, subtreeRoot_halves, ih]
 
 /-- Expanding cached zero subtrees gives exactly the executable bounded-tree root. -/
 theorem perfect_subtreeAt (chunks : Array Bytes) (depth start : Nat) :

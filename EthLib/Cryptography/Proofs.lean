@@ -1,6 +1,7 @@
 import EthLib.Cryptography.Proofs.Hash
 import EthLib.Cryptography.Proofs.Bls
 import EthLib.Cryptography.Proofs.Kzg
+import EthLib.Cryptography.Proofs.Merkle
 import EthLib.Cryptography.Proofs.Xmss
 import EthLib.Cryptography.Proofs.Vrf
 

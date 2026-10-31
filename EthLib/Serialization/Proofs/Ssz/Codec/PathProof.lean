@@ -63,7 +63,7 @@ theorem nodeRoot_bounded_leaf {shape : Desc} {value : Value} {layout : MerkleLay
   rw [nodeRoot_bounded_layout laid materialized bounded unmixed fits _ positive
     (by simp only [bounded_leaf_depth inside, Nat.le_refl])]
   simp [boundedReading, boundedTreeNode, bounded_leaf_depth inside,
-    bounded_leaf_position inside, subtreeAt_eq_subtreeRoot, subtreeRoot]
+    bounded_leaf_position inside, subtreeAt_eq_subtreeRoot, subtreeRoot_zero]
 
 /-- A bounded contents leaf adds one leading left turn before its ordinal. -/
 theorem mixed_leaf_index {capacity ordinal : Nat} (inside : ordinal < capacity) :
@@ -108,7 +108,7 @@ theorem nodeRoot_mixed_leaf {shape : Desc} {value : Value} {layout : MerkleLayou
   rw [nodeRoot_mixed_layout laid materialized bounded mixed fits _
     (Or.inr (Or.inr ⟨positive, by simpa [depth] using turn, by simp [depth]⟩))]
   simp [mixedReading, show 2 * nextPow2 capacity + ordinal ≠ 1 by omega, notWord,
-    boundedTreeNode, depth, position, subtreeAt_eq_subtreeRoot, subtreeRoot]
+    boundedTreeNode, depth, position, subtreeAt_eq_subtreeRoot, subtreeRoot_zero]
 
 /-- An occupied progressive chunk reads exactly its materialized leaf, without an extra hash. -/
 theorem nodeRoot_progressive_leaf {shape : Desc} {value : Value} {layout : MerkleLayout}
@@ -142,6 +142,6 @@ theorem nodeRoot_progressive_leaf {shape : Desc} {value : Value} {layout : Merkl
       walked, left]
     rw [boundedNode_window (layoutChunksAt_window budget layout chunks materialized)
       _ stop.depth stop.leavesFrom stop.capacity (by omega)]
-    simp [boundedTreeNode, height, position, subtreeAt_eq_subtreeRoot, subtreeRoot]
+    simp [boundedTreeNode, height, position, subtreeAt_eq_subtreeRoot, subtreeRoot_zero]
 
 end EthLib.Serialization.Ssz

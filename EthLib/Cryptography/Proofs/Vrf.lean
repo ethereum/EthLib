@@ -1,5 +1,4 @@
 import EthLib.Cryptography.Proofs.Vrf.Hash
-import EthLib.Cryptography.Proofs.Vrf.Tree
 import EthLib.Cryptography.Proofs.Vrf.Verify
 import EthLib.Cryptography.Proofs.Vrf.KeyGen
 import EthLib.Cryptography.Proofs.Vrf.Serialization

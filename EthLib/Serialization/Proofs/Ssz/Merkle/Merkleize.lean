@@ -1,3 +1,4 @@
+import EthLib.Cryptography.Proofs.Merkle.Tree
 import EthLib.Serialization.Ssz.Merkle.Merkleize
 
 /-! Laws of the abstract tree roots: padding depth, congruence, and roots past the data. -/
@@ -5,6 +6,27 @@ import EthLib.Serialization.Ssz.Merkle.Merkleize
 namespace EthLib.Serialization.Ssz
 
 variable {α : Type}
+
+/-- A tree of depth zero is its one leaf. -/
+theorem subtreeRoot_zero (combine : α → α → α) (leaves : Nat → α) :
+    subtreeRoot combine 0 leaves = leaves 0 :=
+  rfl
+
+/--
+A tree one level deeper joins the trees over its two halves.
+
+The right half reads the same leaves, shifted past the left half's width.
+-/
+theorem subtreeRoot_halves (combine : α → α → α) (depth : Nat) (leaves : Nat → α) :
+    subtreeRoot combine (depth + 1) leaves
+      = combine (subtreeRoot combine depth leaves)
+          (subtreeRoot combine depth fun i => leaves (i + 2 ^ depth)) := by
+  -- Each child of the root is the root of the tree over its own half of the leaves.
+  show combine (Cryptography.Merkle.node _ leaves depth 0) (Cryptography.Merkle.node _ leaves depth 1) = _
+  rw [Cryptography.Merkle.node_const_shift combine depth leaves 0,
+    Cryptography.Merkle.node_const_shift combine depth leaves 1]
+  simp only [Nat.zero_mul, Nat.zero_add, Nat.one_mul, Nat.add_comm (2 ^ depth)]
+  rfl
 
 /--
 The chosen depth really does hold the requested number of leaves.
@@ -73,7 +95,7 @@ theorem subtreeRoot_congr (combine : α → α → α) (depth : Nat) {f g : Nat 
           = subtreeRoot combine depth (fun i => g (i + 2 ^ depth)) :=
       ih fun position bound =>
         agree (position + 2 ^ depth) (by rw [Nat.pow_succ]; omega)
-    simp [subtreeRoot, left, right]
+    simp [subtreeRoot_halves, left, right]
 
 /--
 A tree of zero leaves folds to the table entry for its depth.
@@ -85,7 +107,7 @@ theorem subtreeRoot_const_zero (combine : α → α → α) (zero : α) (depth :
   -- The leaf supply is the same constant at every level, so plain induction suffices.
   induction depth with
   | zero => rfl
-  | succ depth ih => simp [subtreeRoot, zeroRoot, ih]
+  | succ depth ih => simp [subtreeRoot_halves, zeroRoot, ih]
 
 /--
 Appending zero nodes to the data changes no leaf.

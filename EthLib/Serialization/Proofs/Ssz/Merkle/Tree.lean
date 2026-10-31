@@ -120,8 +120,8 @@ theorem subtreeAt_eq_subtreeRoot (chunks : Array Bytes) :
     split
     · -- Past the data, the lookup answers with the zero node the leaf would have read.
       rw [zeroSubtree_eq]
-      simp [subtreeRoot, zeroRoot, padded, Array.getElem?_eq_none (show chunks.size ≤ start by omega)]
-    · simp [subtreeRoot, padded]
+      simp [subtreeRoot_zero, zeroRoot, padded, Array.getElem?_eq_none (show chunks.size ≤ start by omega)]
+    · simp [subtreeRoot_zero, padded]
   | succ depth ih =>
     intro start
     unfold subtreeAt
@@ -133,7 +133,7 @@ theorem subtreeAt_eq_subtreeRoot (chunks : Array Bytes) :
     · -- Otherwise both sides fold the same two halves, and the shift lines up.
       show combine (subtreeAt chunks depth start) (subtreeAt chunks depth (start + 2 ^ depth)) = _
       -- Each half is the same claim one level down, which the hypothesis gives twice.
-      rw [subtreeRoot, ih start, ih (start + 2 ^ depth)]
+      rw [subtreeRoot_halves, ih start, ih (start + 2 ^ depth)]
       -- The right half starts a half-width along, which is the shift the fold applies.
       simp only [Nat.add_assoc, Nat.add_comm (2 ^ depth)]
 
