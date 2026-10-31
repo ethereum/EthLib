@@ -133,7 +133,9 @@ theorem evalDist_table_refresh {α : Type} (request : Request)
         next (Function.update table request tape)) := by
   exact (evalDistEq_uniformSample_bind_update request next).symm
 
-/-- Independent tapes may be sampled when a request first appears. The state can include query costs. -/
+/-- Independent tapes may be sampled when a request first appears.
+
+The state can include query costs. -/
 theorem FreshRequests.evalDist_tableRun {α : Type} {used : Set Request}
     {computation : OracleComp (base + (Request →ₒ Answer)) α}
     (h : FreshRequests used computation)

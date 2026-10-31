@@ -3,12 +3,15 @@ import VCVio.OracleComp.Constructions.SampleableType.Measure
 import VCVio.OracleComp.EvalDist.Sum
 import VCVio.EvalDist.Monad.UniformTable
 
-/-! Elaboration aids for equality in distribution (`=ᵈ`). -/
+/-! Elaboration aids for equality in distribution (`EvalDistEq`). -/
 
 universe v
 
-/-- Elaborate both sides of `=ᵈ` against a common type, as `=` does, so a side whose monad is
-only known from the other (a `do` block or `pure` in a `calc` step) elaborates. -/
+/-- Elaborate both sides of the `EvalDistEq` infix notation against a common type, as `=` does.
+
+So a side whose monad is only known from the other elaborates.
+
+For example, a `do` block or `pure` in a `calc` step. -/
 macro_rules | `($a =ᵈ $b) => `(binrel% EvalDistEq $a $b)
 
 /-- Syntactically equal computations are equal in distribution. -/
@@ -21,8 +24,9 @@ theorem SampleableType.uniformSample_evalDistEq_of_inst {A : Type} (i₁ i₂ : 
     (@uniformSample A i₁) =ᵈ (@uniformSample A i₂) :=
   EvalDistEq.of_forall_prEvent_eq fun p => SampleableType.prEvent_uniformSample_inst_irrel i₁ i₂ p
 
-/-- Overwriting one cell of a uniform table with an independent uniform value leaves the table
-uniform, before any continuation. -/
+/-- Overwrite one cell of a uniform table with an independent uniform value.
+
+The table stays uniform, before any continuation. -/
 theorem evalDistEq_uniformSample_bind_update {D R α : Type} [Finite D] [DecidableEq D] [Finite R]
     [Nonempty R] [SampleableType R] [SampleableType (D → R)] (t : D) (f : (D → R) → ProbComp α) :
     ($ᵗ R >>= fun u => $ᵗ (D → R) >>= fun g => f (Function.update g t u)) =ᵈ
@@ -43,8 +47,9 @@ theorem evalDistEq_uniformSample_map_comp_injective {A B R : Type} [Finite A] [F
     SampleableType.evalDist_uniformSample SampleableType.evalDist_uniformSample he)
 
 open MeasureTheory in
-/-- Continuation events within `ε` of each other at every possible output of a common prefix
-stay within `ε` after the prefix. -/
+/-- Take continuation events within `ε` of each other at every possible output of a common prefix.
+
+They stay within `ε` after the prefix. -/
 theorem OracleComp.prEvent_bind_congr_le_add {ι : Type} {spec : OracleSpec ι}
     [OracleSpec.AnswerMeasure spec] {α β : Type} {mx : OracleComp spec α}
     {my oc : α → OracleComp spec β} {q : β → Prop} {ε : ENNReal}

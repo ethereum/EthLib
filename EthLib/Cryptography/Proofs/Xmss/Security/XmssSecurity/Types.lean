@@ -54,10 +54,13 @@ abbrev ChainStep := Fin (chainLength - 1)
 abbrev MerkleHeight := Fin (treeHeight + 1)
 /-- A level of the authentication path, below the root; the tweak carries `level + 1`. -/
 abbrev MerkleLevel := Fin treeHeight
-/-- A bottom node within a level, numbered globally across the forest. Level `ℓ` only uses the values
-below `2^(2h - ℓ)`. -/
+/-- A bottom node within a level, numbered globally across the forest.
+
+Level `l` only uses the values below `2^(2h - l)`. -/
 abbrev MerkleNode := Fin lifetime
-/-- A top node within a level. Level `ℓ` only uses the values below `2^(h - ℓ)`. -/
+/-- A top node within a level.
+
+Level `l` only uses the values below `2^(h - l)`. -/
 abbrev TopNode := Fin topLifetime
 /-- A pair of chains `(2t, 2t + 1)`, `t < 29`: one seed derivation. -/
 abbrev ChainPair := Fin (numChains / 2)
@@ -68,11 +71,15 @@ abbrev HashInput := List UInt8
 def truncateHash (output : HashOutput) : Digest :=
   output.extractLsb' 0 digestBits
 
-/-- The second 16 bytes of a hash output. Only the seed derivations of chain starts use them. -/
+/-- The second 16 bytes of a hash output.
+
+Only the seed derivations of chain starts use them. -/
 def upperHash (output : HashOutput) : Digest :=
   output.extractLsb' digestBits digestBits
 
-/-- The half of a derivation that starts chain `n`: the first for even `n`, the second for odd `n`. -/
+/-- The half of a derivation that starts chain `n`.
+
+It is the first for even `n` and the second for odd `n`. -/
 def hashHalf (n : Nat) (output : HashOutput) : Digest :=
   if n % 2 = 0 then truncateHash output else upperHash output
 
@@ -100,8 +107,11 @@ structure LayerSignature where
   authPath : Fin treeHeight → Digest
 deriving DecidableEq
 
-/-- Cached chain starts, chain values and Merkle nodes of both layers, the top signature of every
-bottom tree (its randomizer and codeword, `none` if its grinding failed), and the public parameter. -/
+/-- Cached chain starts, chain values and Merkle nodes of both layers, and the public parameter.
+
+It also holds the top signature of every bottom tree: its randomizer and codeword.
+
+The top signature is `none` if its grinding failed. -/
 structure SecretKey where
   parameter : PublicParameter
   chainStart : LeafIndex → ChainIndex → Digest
@@ -112,8 +122,9 @@ structure SecretKey where
   topTreeValue : MerkleHeight → TopNode → Digest
   topSigned : TopIndex → Option (Randomness × Encoding)
 
-/-- The bottom layer's randomizer, chain values and path, then the top layer's signature. The leaf
-index travels with the request and the forgery. -/
+/-- The bottom layer's randomizer, chain values and path, then the top layer's signature.
+
+The leaf index travels with the request and the forgery. -/
 structure Signature where
   randomness : Randomness
   chainValue : ChainIndex → Digest
@@ -126,8 +137,9 @@ def bytesLE (byteCount : Nat) (value : BitVec (8 * byteCount)) : List UInt8 :=
   List.ofFn fun index : Fin byteCount =>
     UInt8.ofBitVec (value.extractLsb' (8 * index.val) 8)
 
-/-- The address of a hash call: its type `tag < 32`, a chain step `step < 8`, and two fields
-`hi < 2^24` and `lo < 2^32`. -/
+/-- The address of a hash call: its type `tag < 32` and a chain step `step < 8`.
+
+It also has two fields `hi < 2^24` and `lo < 2^32`. -/
 structure TweakFields where
   tag : BitVec 5
   step : BitVec 3
@@ -135,8 +147,11 @@ structure TweakFields where
   lo : BitVec 32
 deriving DecidableEq
 
-/-- The 16 address bytes `lo || hi || (tag + 32 * step) || 0^8`: `lo` on 4 bytes, `hi` on 3 bytes,
-each least significant byte first, then the type byte, then 8 zero bytes. -/
+/-- The 16 address bytes `lo || hi || (tag + 32 * step) || 0^8`.
+
+`lo` is on 4 bytes and `hi` on 3 bytes, each least significant byte first.
+
+Then come the type byte and 8 zero bytes. -/
 def fieldBytes (fields : TweakFields) : List UInt8 :=
   bytesLE 4 fields.lo ++ bytesLE 3 fields.hi ++ bytesLE 1 (fields.step ++ fields.tag) ++ bytesLE 8 0
 
@@ -144,8 +159,11 @@ def fieldBytes (fields : TweakFields) : List UInt8 :=
 def tweakFields (tag step hi lo : Nat) : TweakFields :=
   ⟨BitVec.ofNat 5 tag, BitVec.ofNat 3 step, BitVec.ofNat 24 hi, BitVec.ofNat 32 lo⟩
 
-/-- The verification hash domains of both layers: `TWEAK_CHAIN = 1`, `TWEAK_LEAF = 2`,
-`TWEAK_NODE = 3`, `TWEAK_MSG = 12`, the top layer's `hi` carrying `topFlag`. -/
+/-- The verification hash domains of both layers.
+
+They are `TWEAK_CHAIN = 1`, `TWEAK_LEAF = 2`, `TWEAK_NODE = 3` and `TWEAK_MSG = 12`.
+
+The top layer's `hi` carries `topFlag`. -/
 inductive HashDomain where
   | chain (leafIndex : LeafIndex) (chain : ChainIndex) (step : ChainStep)
   | leaf (leafIndex : LeafIndex)
@@ -172,15 +190,17 @@ def hashDomainFields : HashDomain → TweakFields
 def tweakBytes (domain : HashDomain) : List UInt8 :=
   fieldBytes (hashDomainFields domain)
 
-/-- What a domain appends after the payload: a chain step's `LE_128(i)`, nothing otherwise. The chain
-index is not in the address, so a key's chains share their step addresses. -/
+/-- What a domain appends after the payload: a chain step's `LE_128(i)`, nothing otherwise.
+
+The chain index is not in the address, so a key's chains share their step addresses. -/
 def domainSuffix : HashDomain → HashInput
   | .chain _ chain _ => bytesLE 16 (BitVec.ofNat 128 chain.val)
   | .topChain _ chain _ => bytesLE 16 (BitVec.ofNat 128 chain.val)
   | _ => []
 
-/-- The random-oracle input of every tweakable hash call: `P || A || payload`, where a chain step's
-payload is its value followed by `domainSuffix`. -/
+/-- The random-oracle input of every tweakable hash call: `P || A || payload`.
+
+A chain step's payload is its value followed by `domainSuffix`. -/
 def tweakableHashInput (parameter : PublicParameter) (domain : HashDomain)
     (message : HashInput) : HashInput :=
   bytesLE 16 parameter ++ tweakBytes domain ++ message ++ domainSuffix domain
@@ -197,15 +217,20 @@ def topRandomizerHashInput (parameter : PublicParameter) (seed : MasterSeed)
   bytesLE 16 parameter ++ fieldBytes (tweakFields 7 0 topFlag key.val) ++
     bytesLE 32 seed ++ bytesLE 16 root
 
-/-- The seed derivations: the parameter (under `P = 0`), and the starts of chains `2t` and `2t + 1`
-of a one-time key of either layer, the two halves of one hash. -/
+/-- The seed derivations: the parameter (under `P = 0`), and pairs of chain starts.
+
+A pair is the starts of chains `2t` and `2t + 1` of a one-time key of either layer.
+
+They are the two halves of one hash. -/
 inductive KeygenDomain where
   | parameter
   | chain (leafIndex : LeafIndex) (pair : ChainPair)
   | topChain (key : TopIndex) (pair : ChainPair)
 deriving DecidableEq
 
-/-- `TWEAK_PARAMETER = 5`, `TWEAK_PRF = 0` (`hi` the pair, flagged on the top layer, `lo` the key). -/
+/-- `TWEAK_PARAMETER = 5`, `TWEAK_PRF = 0`.
+
+`hi` is the pair, flagged on the top layer, and `lo` is the key. -/
 def keygenDomainFields : KeygenDomain → TweakFields
   | .parameter => tweakFields 5 0 0 0
   | .chain leafIndex pair => tweakFields 0 0 pair leafIndex
@@ -222,7 +247,11 @@ def keygenHashInput (parameter : PublicParameter) (domain : KeygenDomain)
 
 /-! ### The target-sum code
 
-`v = 58` digits of `w = 2` bits, the low `2v = 116` bits of the digest; the code is the words of digit sum `T = 106` whose top `12` bits, the last `6` base-4 digits, are zero. -/
+`v = 58` digits of `w = 2` bits, the low `2v = 116` bits of the digest.
+
+The code is the words of digit sum `T = 106` whose top `12` bits are zero.
+
+Those bits are the last `6` base-4 digits. -/
 
 namespace TargetSum
 
@@ -249,8 +278,11 @@ def digestEncoding (digest : Digest) : Encoding :=
 def digestTop (digest : Digest) : BitVec zeroBits :=
   digest.extractLsb' (winternitzBits * numChains) zeroBits
 
-/-- A digest is a codeword when its last `64 - v` base-4 digits, its top 12 bits, are zero and its
-first `v` digits sum to `T`. -/
+/-- A digest is a codeword when two conditions hold.
+
+Its last `64 - v` base-4 digits, its top 12 bits, are zero.
+
+Its first `v` digits sum to `T`. -/
 def decodeDigest (digest : Digest) : Option Encoding :=
   if digestTop digest = 0 ∧ Valid (digestEncoding digest)
   then some (digestEncoding digest) else none
@@ -259,12 +291,22 @@ end TargetSum
 
 /-! ## The algorithms
 
-`Concrete` contains the hash and verification routines; `Seeded` contains key generation and signing. Hashing routines work in any monad with access to `HashSpec`. The experiment samples the master seed and charges every hash call, including repeated calls. Out-of-range branches only make the definitions total; honest algorithms never reach them. -/
+`Concrete` contains the hash and verification routines.
+
+`Seeded` contains key generation and signing.
+
+Hashing routines work in any monad with access to `HashSpec`.
+
+The experiment samples the master seed and charges every hash call, including repeated calls.
+
+Out-of-range branches only make the definitions total; honest algorithms never reach them. -/
 
 /-- A hash query takes an arbitrary byte string and returns 32 bytes. -/
 abbrev HashSpec := HashInput →ₒ HashOutput
 
-/-- Private uniform sampling and the shared hash oracle. Only hash calls count toward the query budget. -/
+/-- Private uniform sampling and the shared hash oracle.
+
+Only hash calls count toward the query budget. -/
 abbrev OracleWorld := unifSpec + HashSpec
 
 namespace Concrete

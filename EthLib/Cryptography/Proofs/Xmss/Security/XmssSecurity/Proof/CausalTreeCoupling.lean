@@ -1,12 +1,19 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TreeCacheVocabulary
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheAgreement
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # Coupling key generation over two chain tables
 
-Once every chain of both layers is cached, key generation's remaining queries are leaves, Merkle
-nodes and top digests. Two runs from caches holding different chain tables couple with equal outputs:
-a leaf query is fresh on both sides or answered alike, and every other query has the same input.
+Suppose every chain of both layers is cached.
+
+Then key generation's remaining queries are leaves, Merkle nodes and top digests.
+
+Two runs from caches holding different chain tables couple with equal outputs.
+
+A leaf query is fresh on both sides or answered alike.
+
+Every other query has the same input.
 -/
 
 open OracleComp OracleSpec ENNReal
@@ -321,6 +328,7 @@ theorem relTriple_treeNode_run :
         Concrete.leafAt, simulateQ_bind, StateT.run_bind, simulateQ_bind, StateT.run_bind,
         hleftWarm.oneTimePublicKey_run_eq hrel.1 node,
         hrightWarm.oneTimePublicKey_run_eq hrel.2.1 node, pure_bind, pure_bind]
+      tweakable_hashes
       exact relTriple_keyLeafHash hrel (.inl node)
   | succ levels ih =>
       intro node leftCache rightCache hrel
@@ -335,7 +343,8 @@ theorem relTriple_treeNode_run :
       obtain ⟨hotherEq, hotherRel⟩ := hother
       rw [hotherEq]
       split
-      · exact relTriple_tweakableHash_retained hotherRel (.merkle _ node) trivial _
+      · tweakable_hashes
+        exact relTriple_tweakableHash_retained hotherRel (.merkle _ node) trivial _
       · exact relTriple_pure_pure ⟨rfl, hotherRel⟩
 
 theorem relTriple_topTreeNode_run :
@@ -357,6 +366,7 @@ theorem relTriple_topTreeNode_run :
         Concrete.topLeafAt, simulateQ_bind, StateT.run_bind, simulateQ_bind, StateT.run_bind,
         hleftWarm.topOneTimePublicKey_run_eq hrel.1 node,
         hrightWarm.topOneTimePublicKey_run_eq hrel.2.1 node, pure_bind, pure_bind]
+      tweakable_hashes
       exact relTriple_keyLeafHash hrel (.inr node)
   | succ levels ih =>
       intro node leftCache rightCache hrel
@@ -371,7 +381,8 @@ theorem relTriple_topTreeNode_run :
       obtain ⟨hotherEq, hotherRel⟩ := hother
       rw [hotherEq]
       split
-      · exact relTriple_tweakableHash_retained hotherRel (.topMerkle _ node) trivial _
+      · tweakable_hashes
+        exact relTriple_tweakableHash_retained hotherRel (.topMerkle _ node) trivial _
       · exact relTriple_pure_pure ⟨rfl, hotherRel⟩
 
 omit hleftWarm hrightWarm in
@@ -392,6 +403,7 @@ theorem relTriple_topSignFrom_run (key : TopIndex) (root : Digest) (base : Rando
   | succ attempts ih =>
       intro trial leftCache rightCache hrel
       rw [Concrete.topSignFrom, simulateQ_bind, StateT.run_bind]
+      tweakable_hashes
       apply relTriple_bind (relTriple_tweakableHash_retained hrel (.topEncoding key) trivial _)
       rintro ⟨leftValue, leftDigestCache⟩ ⟨rightValue, rightDigestCache⟩ ⟨hdigestEq, hdigestRel⟩
       dsimp only at hdigestEq hdigestRel ⊢

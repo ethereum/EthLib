@@ -2,9 +2,19 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatemen
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Wots
 
 /-!
-Proof-side mirrors of the sealed statement definitions, and rewrite lemmas restating them so proofs can unfold them without unsealing.
+Proof-side mirrors of the sealed statement definitions.
 
-The statement stores the precomputed secret key as `evalWithAnswerFn (replayHash cache)` runs of its own oracle algorithms. `Wots.walk`, `CacheView`, and `CacheReplay` are the equivalent first-order forms of those replays that the proof works with; `Proof.CacheReplayEval` bridges the two.
+Rewrite lemmas restate them, so proofs can unfold them without unsealing.
+
+The statement stores the precomputed secret key as runs of its own oracle algorithms.
+
+Each run uses `evalWithAnswerFn (replayHash cache)`.
+
+`Wots.walk`, `CacheView`, and `CacheReplay` are the equivalent first-order forms of those replays.
+
+The proof works with these forms.
+
+`Proof.CacheReplayEval` bridges the two.
 -/
 
 open OracleComp OracleSpec

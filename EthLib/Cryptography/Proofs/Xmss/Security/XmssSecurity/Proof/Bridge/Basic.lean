@@ -3,9 +3,11 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic
 /-!
 # Deterministic executions, query counts and query domains
 
-Generic facts about oracle computations under a cache: a computation every query of which the cache
-answers (`Resolves`), one that makes the same number of queries on every path (`QueryCount`), and one
-that queries only inputs of a given set (`OnlyQueries`).
+Generic facts about oracle computations under a cache, for three kinds of computation:
+
+* `Resolves`: the cache answers every query.
+* `QueryCount`: the computation makes the same number of queries on every path.
+* `OnlyQueries`: the computation queries only inputs of a given set.
 -/
 
 open OracleComp OracleSpec
@@ -123,8 +125,9 @@ theorem eval_liftM_query (f : QueryImpl (D →ₒ R) Id) (x : D) :
     evalWithAnswerFn f (liftM ((D →ₒ R).query x) : OracleComp (D →ₒ R) R) = f x :=
   evalWithAnswerFn_query f x
 
-/-- A resolved computation evaluates to its value under any answer function that agrees with the
-cache. -/
+/-- A resolved computation evaluates to its value under an answer function.
+
+The answer function can be any one that agrees with the cache. -/
 theorem Resolves.eval {α : Type} {cache : QueryCache (D →ₒ R)} {c : OracleComp (D →ₒ R) α}
     {v : α} (h : Resolves cache c v) (f : QueryImpl (D →ₒ R) Id)
     (hf : ∀ x a, cache x = some a → f x = a) : evalWithAnswerFn f c = v := by
@@ -233,8 +236,9 @@ theorem QueryCount.sequenceFin {α : Type} {k n : Nat} {c : Fin k → OracleComp
 
 end QueryCount
 
-/-- A resolved computation with an exact count runs, counted and lifted, to its value without
-touching the cache. -/
+/-- A resolved computation with an exact count runs, counted and lifted, to its value.
+
+It does not touch the cache. -/
 theorem run_countHashQueries_lift_of_resolves {α : Type} {c : OracleComp HashSpec α} {n : Nat}
     (hcount : QueryCount c n) {cache : QueryCache HashSpec} {v : α} (hres : Resolves cache c v) :
     (simulateQ romImpl (countHashQueries (liftM c : OracleComp OracleWorld α))).run cache =
@@ -336,8 +340,9 @@ theorem overlay_cacheQuery [DecidableEq D] {E C : QueryCache (D →ₒ R)} {x : 
 
 variable [SampleableType R]
 
-/-- A computation that never queries `E`'s inputs runs over `E` laid on a cache as it runs on the
-cache, with `E` laid over the result. -/
+/-- Take a computation that never queries `E`'s inputs.
+
+It runs over `E` laid on a cache as it runs on the cache, with `E` laid over the result. -/
 theorem OnlyQueries.run_overlay [DecidableEq D] {α : Type} {c : OracleComp (D →ₒ R) α} (hc : OnlyQueries S c)
     {E : QueryCache (D →ₒ R)} (hE : ∀ x, S x → E x = none) (C : QueryCache (D →ₒ R)) :
     (simulateQ randomOracle c).run (overlay E C) =

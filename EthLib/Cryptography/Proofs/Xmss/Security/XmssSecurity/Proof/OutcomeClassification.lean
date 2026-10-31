@@ -62,8 +62,13 @@ noncomputable def OutcomeBadEventOccurs (cache : QueryCache HashSpec)
           outcome.forgery.leafIndex outcome.forgery.signature.randomness forgedEncoding))
       hforgedValid event))
 
-/-- A top-layer bad event of the forgery: its bottom layer decodes and reaches a root, and its top
-signature of that root is an accepted strong forgery of the top key or its tree's top signature. -/
+/-- A top-layer bad event of the forgery.
+
+Its bottom layer decodes and reaches a root.
+
+Its top signature of that root is an accepted strong forgery.
+
+It is a forgery of the top key or of its tree's top signature. -/
 noncomputable def OutcomeTopBadEventOccurs (cache : QueryCache HashSpec)
     (outcome : GameOutcome) (event : BadEvent) : Prop :=
   outcome.verified = true ∧
@@ -85,8 +90,9 @@ noncomputable def OutcomeTopBadEventOccurs (cache : QueryCache HashSpec)
     Concrete.TopBadEventOccurs cache outcome.secretKey (topKeyOf outcome.forgery.leafIndex) root
       outcome.forgery.signature.top forgedTopEncoding event
 
-/-- An accepted top signature of a bottom root is a top-layer bad event, or the honest top signature
-of the honest bottom root. -/
+/-- Take an accepted top signature of a bottom root.
+
+It is a top-layer bad event, or the honest top signature of the honest bottom root. -/
 theorem top_badEvent_or_honest (cache : QueryCache HashSpec) (secretKey : SecretKey)
     (htopSigned : ∀ key randomness encoding,
       secretKey.topSigned key = some (randomness, encoding) →
@@ -181,8 +187,9 @@ theorem top_badEvent_or_honest (cache : QueryCache HashSpec) (secretKey : Secret
       rw [hsigned]
       exact ⟨hforgedValid, hevent⟩
 
-/-- Every consistent winning execution has one of the concrete cache-level bad events, of the bottom
-layer or of the top. -/
+/-- Every consistent winning execution has one of the concrete cache-level bad events.
+
+The event is of the bottom layer or of the top. -/
 theorem winning_outcome_has_badEvent (cache : QueryCache HashSpec)
     (outcome : GameOutcome) (hconsistent : ConcreteOutcomeConsistent cache outcome)
     (hwin : outcome.won = true) :

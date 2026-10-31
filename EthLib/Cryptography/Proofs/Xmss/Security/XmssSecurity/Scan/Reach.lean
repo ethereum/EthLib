@@ -5,9 +5,10 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.LoopWalk
 
 * `reach_update_self`: the reach to `x` ignores the status of `x`.
 * `reach_probe`: a query at a fresh position is a martingale for the reach to any position.
-* `hitReach`: the probability that the walk stops at a cached hit. It equals the walk paying one at
-  a hit (`hitReach_eq_walk`), so it is at most one and a new hit does not lower it.
-* `mass_hit_le`: the starts weigh at most `card (cached) + card (hits) · (1 − p)/p` on the hits.
+* `hitReach`: the probability that the walk stops at a cached hit.
+  It equals the walk paying one at a hit (`hitReach_eq_walk`).
+  So it is at most one, and a new hit does not lower it.
+* `mass_hit_le`: the starts weigh at most `card (cached) + card (hits) * (1 - p)/p` on the hits.
 -/
 
 open ENNReal
@@ -49,8 +50,11 @@ theorem reach_update_of_not_visit (st : α → St) (y x : α) (s : St) :
         | miss => rw [reach_succ_miss A hr (hst.trans h'), reach_succ_miss A hr h', ih]
         | fresh => rw [reach_succ_fresh A hr (hst.trans h'), reach_succ_fresh A hr h', ih]
 
-/-- **One query is a martingale for the reach.** A query at the fresh position `x` (hit w.p. `p`,
-miss otherwise) leaves the mean reach to any position unchanged. -/
+/-- One query is a martingale for the reach.
+
+A query at the fresh position `x` is a hit with probability `p` and a miss otherwise.
+
+It leaves the mean reach to any position unchanged. -/
 theorem reach_probe (hp : p ≤ 1) (st : α → St) {x : α} (hx : st x = .fresh) (y : α) :
     ∀ (A : ℕ), (∀ j, 0 < j → j < A → (σ ^ j) x ≠ x) → ∀ r : α,
       p * reach σ p (Function.update st x .hit) y A r + (1 - p) * reach σ p (Function.update st x .miss) y A r =
@@ -141,14 +145,17 @@ theorem walk_one_le_update (hp : p ≤ 1) (st : α → St) (x : α) :
             rw [walk_succ_fresh _ _ _ _ h, walk_succ_fresh _ _ _ _ (hst.trans h)]
             gcongr
 
-/-- **Landing never lowers the hit mass.** -/
+/-- Landing never lowers the hit mass. -/
 theorem hitReach_le_update (hp : p ≤ 1) (st : α → St) (x : α) (A : ℕ) (r : α) :
     hitReach σ p st A r ≤ hitReach σ p (Function.update st x .hit) A r := by
   rw [hitReach_eq_walk, hitReach_eq_walk]
   exact walk_one_le_update hp st x A r
 
-/-- **The mass on the hits.** The starts reach the cached hits with total weight at most the number
-of cached positions plus `(1 − p)/p` per cached hit. -/
+/-- The mass on the hits.
+
+The starts reach the cached hits with total weight at most a bound.
+
+The bound is the number of cached positions plus `(1 - p)/p` per cached hit. -/
 theorem mass_hit_le (hp : p ≤ 1) (st : α → St) (A : ℕ) (hA : ∀ x j, 0 < j → j < A → (σ ^ j) x ≠ x) :
     p * ∑ z, (if st z = .hit then ∑ r, reach σ p st z A r else 0) ≤
       p * (Finset.univ.filter fun r => st r ≠ .fresh).card +

@@ -4,7 +4,11 @@ open OracleComp OracleSpec ENNReal
 
 namespace XmssSecurity
 
-/-- A classified bad event on an execution that actually wins the signature game. Keeping the winning condition exposes transcript validity without weakening the deterministic classification. -/
+/-- A classified bad event on an execution that actually wins the signature game.
+
+Keeping the winning condition exposes transcript validity.
+
+It does not weaken the deterministic classification. -/
 def WinningOutcomeBadEventOccurs (cache : QueryCache HashSpec)
     (outcome : GameOutcome) (event : BadEvent) : Prop :=
   outcome.won = true ∧ OutcomeBadEventOccurs cache outcome event

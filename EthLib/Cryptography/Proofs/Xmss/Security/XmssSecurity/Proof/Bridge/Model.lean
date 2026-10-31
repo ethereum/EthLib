@@ -5,10 +5,17 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Keygen
 /-!
 # From the clean table game to the model
 
-The randomizer table is independent of key generation. For each key, memoizing the adversary and
-drawing the table lazily turns the table signer into the model's signer, and the key distribution is
-the model's: the clean table game is at most the model's game against the memoized adversary, and the
-real budget bounds the model's calls after key generation.
+The randomizer table is independent of key generation.
+
+Fix a key.
+
+Memoizing the adversary and drawing the table lazily turns the table signer into the model's signer.
+
+The key distribution is the model's.
+
+So the clean table game is at most the model's game against the memoized adversary.
+
+The real budget bounds the model's calls after key generation.
 -/
 
 open OracleComp OracleSpec ENNReal

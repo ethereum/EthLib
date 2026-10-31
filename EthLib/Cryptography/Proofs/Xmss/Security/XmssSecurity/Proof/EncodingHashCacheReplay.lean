@@ -1,5 +1,6 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheReplayEval
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 open OracleComp OracleSpec
 
@@ -22,7 +23,7 @@ theorem Concrete.CacheReplay.encodingHash_eq_of_run_support_of_cache_le
         (truncateHash result.1, result.2)) <$> (randomOracle
           (Concrete.CacheView.encodingInput parameter leafIndex
             (message, randomness))).run initialCache) := by
-    simpa [Concrete.encodingHash, Concrete.tweakableHash,
+    simpa [Concrete.encodingHash_eq, Concrete.tweakableHash,
       Concrete.oracleHash, Concrete.CacheView.encodingInput,
       map_eq_bind_pure_comp] using hresult
   rw [support_map] at hmapped

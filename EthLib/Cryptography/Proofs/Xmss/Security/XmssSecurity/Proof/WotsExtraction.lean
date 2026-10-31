@@ -52,7 +52,9 @@ theorem eq_or_hasStepCollision {α : Type} (step : Nat → α → α) (position 
       · right
         exact ⟨steps, Nat.lt_succ_self steps, hmid, by simpa only [walk] using hend⟩
 
-/-- A value forged earlier in a chain either recovers the signed value or creates a chain collision. -/
+/-- Take a value forged earlier in a chain.
+
+It either recovers the signed value or creates a chain collision. -/
 theorem backward_value_or_hasStepCollision {α : Type} (step : Nat → α → α)
     (forgedPosition signedPosition finish : Nat) (forgedValue signedValue : α)
     (hforged : forgedPosition ≤ signedPosition) (hsigned : signedPosition ≤ finish)
@@ -88,7 +90,9 @@ theorem recover_signChain_eq_publicChain {α : Type} (step : Nat → α → α)
       congr 2
       omega
 
-/-- A distinct valid WOTS encoding with the same recovered endpoints yields a backward preimage or a chain collision. -/
+/-- Take a distinct valid WOTS encoding with the same recovered endpoints.
+
+It yields a backward preimage or a chain collision. -/
 theorem extract_of_distinct_valid_encodings {α : Type}
     (step : ChainIndex → Nat → α → α)
     (signedEncoding forgedEncoding : Encoding)
@@ -175,7 +179,7 @@ def HasSuffixCollisionWitness {α : Type} (step : ChainIndex → Nat → α → 
     (signedValue forgedValue : ChainIndex → α) : Prop :=
   ∃ position, IsSuffixCollisionAt step signedEncoding forgedEncoding signedValue forgedValue position
 
-/-- The WOTS extraction alternatives are indexed by 58 chains and exactly 68 valid suffix positions. -/
+/-- WOTS extraction alternatives are indexed by 58 chains and exactly 68 valid suffix positions. -/
 theorem classify_distinct_valid_encodings {α : Type}
     (step : ChainIndex → Nat → α → α)
     (signedEncoding forgedEncoding : Encoding)
@@ -195,7 +199,9 @@ theorem classify_distinct_valid_encodings {α : Type}
     obtain ⟨offset, hoffset, hne, heq⟩ := hcollision
     exact ⟨⟨i, ⟨offset, hoffset⟩⟩, hi.le, hne, heq⟩
 
-/-- With the same encoding, different chain values recovering the same endpoints expose a suffix collision. -/
+/-- Fix the encoding, and take different chain values that recover the same endpoints.
+
+They expose a suffix collision. -/
 theorem suffixCollision_of_sameEncoding_of_values_ne {α : Type}
     (step : ChainIndex → Nat → α → α) (encoding : Encoding)
     (signedValue forgedValue : ChainIndex → α)
@@ -227,7 +233,9 @@ def HasFreshChainValue {α : Type} (step : ChainIndex → Nat → α → α)
     (encoding : Encoding) (forgedValue secret : ChainIndex → α) : Prop :=
   ∃ i, IsFreshChainValueAt step encoding forgedValue secret i
 
-/-- A fresh-leaf-index WOTS opening either reveals an honest hidden chain value or creates a suffix collision. -/
+/-- Take a fresh-leaf-index WOTS opening.
+
+It either reveals an honest hidden chain value or creates a suffix collision. -/
 theorem freshChainValue_or_suffixCollision {α : Type}
     (step : ChainIndex → Nat → α → α) (encoding : Encoding)
     (forgedValue secret : ChainIndex → α)

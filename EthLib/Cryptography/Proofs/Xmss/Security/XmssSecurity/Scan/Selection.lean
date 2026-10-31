@@ -2,15 +2,24 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedBo
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingRejection
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.LoopWalk
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # The selection law of the scan signer
 
-For one message and one cache, the scan `base, base + 1, ...` of
-`Concrete.precomputedSignBoundedAttempts` returns a cached hit `y` with exactly the probability
-`reach nextRand landing (scanStatus ...) y A base` of `LoopWalk`: a fresh position lands with
-probability `landing`, and the cache grows only at positions the walk has left and, within
-`2^128` attempts, never revisits.
+Fix one message and one cache.
+
+Consider the scan `base, base + 1, ...` of `Concrete.precomputedSignBoundedAttempts`.
+
+It returns a cached hit `y` with exactly the probability that `LoopWalk` gives.
+
+That probability is `reach nextRand landing (scanStatus ...) y A base`.
+
+A fresh position lands with probability `landing`.
+
+The cache grows only at positions the walk has left.
+
+Within `2^128` attempts, the walk never revisits those positions.
 -/
 
 open OracleComp OracleSpec ENNReal
@@ -48,8 +57,9 @@ theorem attempt_run (secretKey : SecretKey) (leafIndex : LeafIndex) (message : M
       (fun z => (attemptResult secretKey leafIndex randomness z.1, z.2)) <$>
         (randomOracle (Concrete.CacheView.encodingInput secretKey.parameter leafIndex
           (message, randomness))).run cache := by
-  unfold Concrete.precomputedSignAttempt Concrete.encodingHash Concrete.tweakableHash
-    Concrete.oracleHash
+  unfold Concrete.precomputedSignAttempt
+  rw [Concrete.encodingHash_eq]
+  unfold Concrete.tweakableHash Concrete.oracleHash
   simp only [simulateQ_bind, StateT.run_bind, map_eq_bind_pure_comp, bind_assoc, pure_bind]
   simp [-QueryImpl.withCaching_apply, Concrete.CacheView.encodingInput]
   refine bind_congr fun z => ?_
@@ -97,7 +107,7 @@ theorem scanStatus_cacheQuery_of_ne (secretKey : SecretKey) (leafIndex : LeafInd
   intro heq
   exact h (congrArg Prod.snd (Concrete.CacheView.encodingInput_injective _ _ heq))
 
-/-- The scan's successor `ρ ↦ ρ + 1`. -/
+/-- The scan's successor `rho -> rho + 1`. -/
 def nextRand : Equiv.Perm Randomness := Equiv.addRight 1
 
 theorem nextRand_pow_apply (randomness : Randomness) (j : ℕ) :
@@ -135,9 +145,15 @@ theorem continuation_none (attempts trial : ℕ) (secretKey : SecretKey) (leafIn
           cache := by
   simp [Concrete.precomputedSignBoundedAttemptsContinuation]
 
-/-- **Selection law, from any trial.** The scan from trial `trial` returns the cached hit `y` with the
-probability that the walk from `base + trial` reaches `y`, as long as the statuses `st` agree with the
-cache on the positions it may visit. -/
+/-- Selection law, from any trial.
+
+Two events have the same probability.
+
+The scan from trial `trial` returns the cached hit `y`.
+
+The walk from `base + trial` reaches `y`.
+
+This holds as long as the statuses `st` agree with the cache on the positions the walk may visit. -/
 theorem selection_eq_reach (secretKey : SecretKey) (leafIndex : LeafIndex) (message : Message)
     (base : Randomness) (st : Randomness → St) (y : Randomness) :
     ∀ (A trial : ℕ) (cache : QueryCache HashSpec), A ≤ 2 ^ randomnessBits →
@@ -221,8 +237,13 @@ theorem selection_eq_reach (secretKey : SecretKey) (leafIndex : LeafIndex) (mess
               · rw [hr, show trial + 1 + j = trial + (j + 1) by omega]
                 exact trial_ne base trial (j + 1) (by omega) (by omega)
 
-/-- **Selection law.** The scan from `base` returns a cached hit `y` with the probability that the walk
-over the cache's statuses reaches `y` from `base`. -/
+/-- Selection law.
+
+Two events have the same probability.
+
+The scan from `base` returns a cached hit `y`.
+
+The walk over the cache's statuses reaches `y` from `base`. -/
 theorem selection_eq (secretKey : SecretKey) (leafIndex : LeafIndex) (message : Message)
     (cache : QueryCache HashSpec) (base y : Randomness) {A : ℕ} (hA : A ≤ 2 ^ randomnessBits)
     (hy : scanStatus secretKey leafIndex message cache y = .hit) :
@@ -239,7 +260,7 @@ theorem signingAttemptLimit_le : signingAttemptLimit ≤ 2 ^ randomnessBits := b
 noncomputable local instance : SampleableType Randomness :=
   SampleableType.ofFintype Randomness
 
-/-- **Selection law, averaged over the start.** -/
+/-- Selection law, averaged over the start. -/
 theorem selection_uniform_eq (secretKey : SecretKey) (leafIndex : LeafIndex) (message : Message)
     (cache : QueryCache HashSpec) (y : Randomness)
     (hy : scanStatus secretKey leafIndex message cache y = .hit) :

@@ -3,8 +3,11 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Deriva
 /-!
 # The programmed derivation cache
 
-Answering every derivation of a seed up front is one uniform draw of a derivation table, recorded in
-`progCache`. The cache holds only inputs naming the seed, and no tweakable input.
+Answering every derivation of a seed up front is one uniform draw of a derivation table.
+
+`progCache` records that draw.
+
+The cache holds only inputs naming the seed, and no tweakable input.
 -/
 
 open OracleComp OracleSpec

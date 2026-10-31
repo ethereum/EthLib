@@ -30,9 +30,15 @@ The model is a device of the proof, not a second statement.
 
 It holds every chain value and node in a table, so its signer makes only the calls an adversary can learn from.
 
-Its verifier is EthLib's own `verifyWith`, so verification has one definition.
+Its hashes and its verifier are EthLib's, run with the oracle on the bytes of the model's values.
 
-`Unforgeability/Translate.lean` proves that each hashing routine of EthLib, run with the oracle, is the model's, call for call.
+So each hash and the verification have one definition.
+
+The hashes are EthLib's `messageDigest`, `chainStep`, `otsLeafHash` and `nodeHash`, and the verifier is EthLib's `verifyWith`.
+
+`Unforgeability/Translate.lean` names the oracle input each hash makes (`Concrete.encodingHash_eq` and the others), and the proof reasons about those inputs.
+
+It also proves that EthLib's chain walks and path climbs make the model's calls, call for call.
 
 The `Bridge/` files then use it on EthLib's algorithms directly.
 
@@ -66,14 +72,18 @@ leanerVM proves the bound for its own copy of leanXMSS, `LeanXmss` (`Statement/L
 Here that copy is gone.
 
 - `Statement/`, `lean_xmss/LeanXmss/`, `lean_xmss/LeanXmss.lean` and `XmssSecurity/Proof/Bridge/Translate.lean` are not copied.
-- The model's verifier is EthLib's.
-  `Concrete.verify`, `Concrete.verifyAfterLeaf` and `Concrete.verifyTop` are EthLib's `verifyWith`, `fold` and top-layer `layerRoot`, read through the byte conversions (`Unforgeability/Convert.lean`).
-  Their former bodies are theorems (`Concrete.verify_eq`, `Concrete.verifyAfterLeaf_eq`, `Concrete.verifyTop_eq`, in `Unforgeability/Translate.lean`), which the proof rewrites with where it unfolded them.
+- The model's hashes and verifier are EthLib's.
+  The eight hashes of `Scheme.lean`, from `encodingHash` to `topNodeHash`, are EthLib's `messageDigest`, `chainStep`, `otsLeafHash` and `nodeHash` of either layer.
+  `Concrete.verify`, `Concrete.verifyAfterLeaf` and `Concrete.verifyTop` are EthLib's `verifyWith`, `fold` and top-layer `layerRoot`.
+  Both read the model's values through the byte conversions (`Unforgeability/Convert.lean`).
+  leanerVM's bodies of these definitions are theorems here (`Concrete.encodingHash_eq`, `Concrete.verify_eq` and the others, in `Unforgeability/Translate.lean`).
+  The proof rewrites with them where leanerVM unfolds the definitions, often through the `tweakable_hashes` tactic.
   The model's types and hash inputs move to `XmssSecurity/Types.lean`, so the conversions can come before the model.
 - `Bridge/Real.lean`, `Bridge/Signer.lean` and `Bridge/Game.lean` are rewritten to reason about EthLib's `publicKeyOf`, `signDerived` and `verifyWith`.
 - `Bridge/Derivation.lean` names its inputs by the model's byte layout.
 - `Bridge/SchemeSeed.lean`, `Reduction.lean`, `Seed.lean`, `Model.lean` and `Security.lean` take EthLib's adversary and state the real game (`realGame`) directly.
 - The codeword count of `LeanXmss/Code.lean`, which `Scan/Card.lean` needs, moves to `XmssSecurity/Code.lean`.
+- The documentation follows EthLib's rules: one sentence per line, at most 100 characters, and ASCII math.
 
 leanerVM also proves the theorem in the random-permutation model, where Keccak-256 is a sponge over a random permutation.
 
@@ -92,5 +102,3 @@ The rest are fixes for this Lean, VCVio and EthLib:
   `CappedGlobalChainHighLocalCoupling.lean`, `CappedGlobalChainHighCoverage.lean` and `CappedGlobalChainHighReplay.lean` rewrite with them instead of unfolding.
 - `lake exe check-decls` rejects `opaque` declarations, which the kernel cannot unfold.
   The four sampling instances `randomizerOutputsSampleableType` (`Deterministic/TableSigner.lean`), `bottomSampleable`, `topOtsSampleable` and `topRndSampleable` (`Bridge/Program.lean`) are `@[irreducible] noncomputable def` instead.
-
-The other files keep leanerVM's style, not EthLib's, so they can be compared with leanerVM file by file.

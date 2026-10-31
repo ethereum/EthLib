@@ -6,8 +6,9 @@ open OracleSpec OracleComp ENNReal
 
 namespace XmssSecurity
 
-/-- The expected number of matching source queries after interpreting a computation in a
-stateful probabilistic oracle implementation. -/
+/-- The expected number of matching source queries of a computation.
+
+The computation is interpreted in a stateful probabilistic oracle implementation. -/
 noncomputable def expectedSimulatedQueryCount
     {ι : Type} {spec : OracleSpec ι} {α state : Type}
     (implementation : QueryImpl spec (StateT state ProbComp))
@@ -81,8 +82,7 @@ theorem expectedSimulatedQueryCount_mono
       gcongr
       exact ih result.1 result.2
 
-/-- Expected simulated query count decomposes into the head count plus the expected continuation
-count. -/
+/-- The expected simulated query count is the head count plus the expected continuation count. -/
 theorem expectedSimulatedQueryCount_bind
     {ι : Type} {spec : OracleSpec ι} {α β state : Type}
     (implementation : QueryImpl spec (StateT state ProbComp))

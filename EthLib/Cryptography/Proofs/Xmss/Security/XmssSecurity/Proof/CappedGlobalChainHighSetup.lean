@@ -147,8 +147,11 @@ noncomputable def coupledGlobalChainKeygenWithBaseHigh
   } : CoupledGlobalChainKeygenView), materialBaseHigh.1.2),
     materialBaseHigh.2)
 
-/-- Two coupled key generations: equal outputs, the left table is the base, and the caches extend
-warm chain caches with corresponding trees. -/
+/-- Two coupled key generations.
+
+They have equal outputs, and the left table is the base.
+
+The caches extend warm chain caches with corresponding trees. -/
 def CoupledGlobalChainKeygenRunRelation
     (parameter : PublicParameter)
     (left : CoupledGlobalChainKeygenView)
@@ -1095,8 +1098,11 @@ def GlobalFilteredSigningResultRelation
   leftResult.1 = rightResult.1.1 ∧
     GlobalFilteredCausalStateRelation left right leftResult.2 rightResult.1.2
 
-/-- Signing attempts agree on whether they succeed, and on the signature itself when the request's
-bottom tree has a top signature: otherwise the signer discards it. -/
+/-- Signing attempts agree on whether they succeed.
+
+They also agree on the signature itself when the request's bottom tree has a top signature.
+
+Otherwise the signer discards it. -/
 def GlobalFilteredSigningLoopRelation
     (left : ProgrammedGlobalChainKeygenView)
     (right : ProgrammedGlobalChainKeygenView ×

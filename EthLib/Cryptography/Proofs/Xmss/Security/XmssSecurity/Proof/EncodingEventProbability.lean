@@ -6,7 +6,13 @@ open OracleComp OracleSpec ENNReal
 
 namespace XmssSecurity
 
-/-- A winning encoding event identifies a genuine returned signature and a distinct forged encoding input with the same cached 128-bit digest. Its transcript contains at most one request per leaf index. -/
+/-- A winning encoding event identifies two things.
+
+One is a genuine returned signature.
+
+The other is a distinct forged encoding input with the same cached 128-bit digest.
+
+Its transcript contains at most one request per leaf index. -/
 theorem winning_encoding_event_has_signed_collision
     (cache : QueryCache HashSpec) (outcome : GameOutcome)
     (hevent : WinningOutcomeBadEventOccurs cache outcome .encoding) :
@@ -58,7 +64,11 @@ theorem winning_encoding_event_has_signed_collision
   · simp [Concrete.FreshLeafIndexBadEventOccurs,
       XmssSecurity.FreshLeafIndexBadEventOccurs] at hfresh
 
-/-- A winning encoding collision is oriented at the matching signing boundary: either the forged encoding input was already cached before signing, or it was still fresh when the signer installed the honest target. -/
+/-- A winning encoding collision is oriented at the matching signing boundary.
+
+Either the forged encoding input was already cached before signing.
+
+Or it was still fresh when the signer installed the honest target. -/
 theorem winning_encoding_event_trace_temporal_decomposition
     (cache : QueryCache HashSpec) (outcome : GameOutcome)
     (trace : SigningCacheTrace)
@@ -123,7 +133,11 @@ theorem winning_encoding_event_trace_temporal_decomposition
           (Concrete.CacheView.encodingInput outcome.secretKey.parameter
             entry.request.leafIndex) heq.symm
 
-/-- A winning encoding event is a cached selection with a colliding input, a fresh selection landing on an older digest, or a fresh selection hit by a later digest. -/
+/-- A winning encoding event is one of three cases:
+
+* a cached selection with a colliding input;
+* a fresh selection landing on an older digest;
+* a fresh selection hit by a later digest. -/
 theorem winning_encoding_event_trace_monitor_decomposition
     (cache : QueryCache HashSpec) (outcome : GameOutcome)
     (trace : SigningCacheTrace)

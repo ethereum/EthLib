@@ -5,7 +5,9 @@ open OracleSpec
 
 namespace XmssSecurity
 
-/-- Recover the leaf index tag from a well-formed serialized encoding input. Inputs outside the encoding domain return `none`. -/
+/-- Recover the leaf index tag from a well-formed serialized encoding input.
+
+Inputs outside the encoding domain return `none`. -/
 noncomputable def encodingInputLeafIndex? (parameter : PublicParameter)
     (candidate : HashInput) : Option LeafIndex :=
   if h : ∃ leafIndex input,
@@ -41,7 +43,9 @@ theorem exists_encodingInput_of_encodingInputLeafIndex?_eq_some
     exact ⟨input, hinput⟩
   · contradiction
 
-/-- `target` is the serialized input of the unique returned signature at the leaf index encoded by `candidate`. -/
+/-- `target` is the serialized input of the unique returned signature at a leaf index.
+
+That leaf index is the one `candidate` encodes. -/
 def IsSignedEncodingTarget (parameter : PublicParameter)
     (log : QueryLog SigningSpec) (candidate target : HashInput) : Prop :=
   ∃ request signature,

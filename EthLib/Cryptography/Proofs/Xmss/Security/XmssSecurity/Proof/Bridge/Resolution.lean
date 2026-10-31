@@ -3,8 +3,9 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Honest
 /-!
 # What the prepared cache resolves
 
-Every chain prefix, leaf and in-range node of both layers, and every top grinding, resolves in the
-prepared cache to the value the model's secret key stores.
+Take every chain prefix, leaf and in-range node of both layers, and every top grinding.
+
+Each resolves in the prepared cache to the value the model's secret key stores.
 -/
 
 open OracleComp OracleSpec

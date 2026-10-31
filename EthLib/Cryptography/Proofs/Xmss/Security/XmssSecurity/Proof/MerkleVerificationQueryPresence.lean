@@ -292,7 +292,7 @@ theorem authenticationRoot_query_cached_as_in_largerCache
             (.merkle ⟨levels, hlevel⟩ (Concrete.CacheView.nodeIndex leafIndex levels))
             (Concrete.nodePayload (Concrete.signaturePath signature levels) current)
             currentCache resultCache root (by
-              simpa [Concrete.nodeHash] using hnode)
+              simpa [Concrete.nodeHash_eq] using hnode)
           refine ⟨output, ?_⟩
           rw [hcurrentEval]
           change resultCache
@@ -311,7 +311,7 @@ theorem authenticationRoot_query_cached_as_in_largerCache
             (.merkle ⟨levels, hlevel⟩ (Concrete.CacheView.nodeIndex leafIndex levels))
             (Concrete.nodePayload current (Concrete.signaturePath signature levels))
             currentCache resultCache root (by
-              simpa [Concrete.nodeHash] using hnode)
+              simpa [Concrete.nodeHash_eq] using hnode)
           refine ⟨output, ?_⟩
           rw [hcurrentEval]
           change resultCache

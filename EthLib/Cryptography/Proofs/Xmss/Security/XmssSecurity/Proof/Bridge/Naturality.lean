@@ -1,10 +1,14 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # The model's key generation is natural in its monad
 
-Simulating a computation of the model's key generation, written against one oracle capability, gives
-the same computation against another, provided each hash query is simulated by a hash query.
+Take a computation of the model's key generation, written against one oracle capability.
+
+Simulating it gives the same computation against another capability.
+
+This needs each hash query to be simulated by a hash query.
 -/
 
 open OracleComp OracleSpec
@@ -45,7 +49,8 @@ theorem nat_chainWalk (parameter : PublicParameter) (index : LeafIndex) (chain :
       apply bind_congr
       intro previous
       split
-      · exact nat_tweakableHash impl hq _ _ _
+      · rw [Concrete.chainHash_eq, Concrete.chainHash_eq]
+        exact nat_tweakableHash impl hq _ _ _
       · simp
 
 theorem nat_topChainWalk (parameter : PublicParameter) (key : TopIndex) (chain : ChainIndex)
@@ -59,7 +64,8 @@ theorem nat_topChainWalk (parameter : PublicParameter) (key : TopIndex) (chain :
       apply bind_congr
       intro previous
       split
-      · exact nat_tweakableHash impl hq _ _ _
+      · rw [Concrete.topChainHash_eq, Concrete.topChainHash_eq]
+        exact nat_tweakableHash impl hq _ _ _
       · simp
 
 theorem nat_treeNode (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
@@ -68,8 +74,9 @@ theorem nat_treeNode (parameter : PublicParameter) (secret : LeafIndex → Chain
       Concrete.treeNode (m := m₂) parameter secret levels node := by
   induction levels generalizing node with
   | zero =>
-      simp only [Concrete.treeNode_zero_eq, Concrete.leafAt, Concrete.oneTimePublicKey, Concrete.leafHash,
-        simulateQ_bind, nat_sequenceFin impl, nat_chainWalk impl hq, nat_tweakableHash impl hq]
+      simp only [Concrete.treeNode_zero_eq, Concrete.leafAt, Concrete.oneTimePublicKey,
+        Concrete.leafHash_eq, simulateQ_bind, nat_sequenceFin impl, nat_chainWalk impl hq,
+        nat_tweakableHash impl hq]
   | succ levels ih =>
       simp only [Concrete.treeNode_succ_eq, simulateQ_bind, ih]
       apply bind_congr
@@ -77,7 +84,8 @@ theorem nat_treeNode (parameter : PublicParameter) (secret : LeafIndex → Chain
       apply bind_congr
       intro right
       split
-      · exact nat_tweakableHash impl hq _ _ _
+      · rw [Concrete.nodeHash_eq, Concrete.nodeHash_eq]
+        exact nat_tweakableHash impl hq _ _ _
       · simp
 
 theorem nat_topTreeNode (parameter : PublicParameter) (topSecret : TopIndex → ChainIndex → Digest)
@@ -87,7 +95,7 @@ theorem nat_topTreeNode (parameter : PublicParameter) (topSecret : TopIndex → 
   induction levels generalizing node with
   | zero =>
       simp only [Concrete.topTreeNode, Concrete.topLeafAt, Concrete.topOneTimePublicKey,
-        Concrete.topLeafHash, simulateQ_bind, nat_sequenceFin impl, nat_topChainWalk impl hq,
+        Concrete.topLeafHash_eq, simulateQ_bind, nat_sequenceFin impl, nat_topChainWalk impl hq,
         nat_tweakableHash impl hq]
   | succ levels ih =>
       simp only [Concrete.topTreeNode, simulateQ_bind, ih]
@@ -96,7 +104,8 @@ theorem nat_topTreeNode (parameter : PublicParameter) (topSecret : TopIndex → 
       apply bind_congr
       intro right
       split
-      · exact nat_tweakableHash impl hq _ _ _
+      · rw [Concrete.topNodeHash_eq, Concrete.topNodeHash_eq]
+        exact nat_tweakableHash impl hq _ _ _
       · simp
 
 theorem nat_topSignFrom (parameter : PublicParameter) (key : TopIndex) (root : Digest) (base : Randomness)
@@ -106,7 +115,8 @@ theorem nat_topSignFrom (parameter : PublicParameter) (key : TopIndex) (root : D
   induction attempts generalizing trial with
   | zero => simp [Concrete.topSignFrom]
   | succ attempts ih =>
-      simp only [Concrete.topSignFrom, Concrete.topEncodingHash, simulateQ_bind, nat_tweakableHash impl hq]
+      simp only [Concrete.topSignFrom, Concrete.topEncodingHash_eq, simulateQ_bind,
+        nat_tweakableHash impl hq]
       apply bind_congr
       intro digest
       split

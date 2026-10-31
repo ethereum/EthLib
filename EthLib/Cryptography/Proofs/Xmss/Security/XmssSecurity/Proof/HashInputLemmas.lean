@@ -158,8 +158,11 @@ private theorem hashDomainNats_hi_lt_iff (domain : HashDomain) :
   | topMerkle level _ => simp [hashDomainNats, HashDomain.isTop, topFlag]; omega
   | _ => simp [hashDomainNats, HashDomain.isTop, topFlag]
 
-/-- The address fixes a domain up to its chain index: domains with equal address fields have suffixes
-of equal length, and are equal once their suffixes are. -/
+/-- The address fixes a domain up to its chain index.
+
+Domains with equal address fields have suffixes of equal length.
+
+They are equal once their suffixes are. -/
 theorem domain_eq_of_hashDomainFields_eq {left right : HashDomain}
     (heq : hashDomainFields left = hashDomainFields right) :
     (domainSuffix left).length = (domainSuffix right).length ∧

@@ -6,9 +6,13 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic
 /-!
 # From the table signer to the model's signer
 
-For a fixed key and cache: memoizing the adversary's repeated requests can only help it, and then
-every request is fresh, so a uniform table of randomizer bases is a fresh uniform base per request,
-the model's signer. The budget transfers the same way.
+Fix a key and a cache.
+
+Memoizing the adversary's repeated requests can only help it, and then every request is fresh.
+
+So a uniform table of randomizer bases is a fresh uniform base per request, the model's signer.
+
+The budget transfers the same way.
 -/
 
 open OracleComp OracleSpec

@@ -2,14 +2,19 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedKe
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConcreteForgery
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenQueryBound
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopVerificationQueryPresence
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # Key generation's cache: the bottom forest's nodes and the top layer
 
-What key generation caches at the bottom forest's Merkle addresses (global node indices, so level
-`ℓ` uses nodes below `2^(2h - ℓ - 1)`), and at the top layer's addresses: one honest input per top
-chain step, top leaf and top Merkle node, and at a top message digest address only the trials of
-the honest bottom root, of which the selected one is the only one that decodes.
+What key generation caches at two kinds of address.
+
+* The bottom forest's Merkle addresses.
+  Node indices are global, so level `l` uses nodes below `2^(2h - l - 1)`.
+* The top layer's addresses.
+  There it caches one honest input per top chain step, top leaf and top Merkle node.
+  At a top message digest address it caches only the trials of the honest bottom root.
+  Of these, the selected one is the only one that decodes.
 -/
 
 open OracleComp OracleSpec
@@ -259,7 +264,7 @@ theorem Concrete.precomputedKeygen_cache_has_topLeafInput
     Concrete.CacheReplay.runsBelow_bind_left hleaf
   obtain ⟨output, hcached, _⟩ := Concrete.CacheReplay.tweakableHash_query_cached
     keyResult.1.2.parameter (.topLeaf key) (Concrete.leafPayload endpoints) endpointsCache
-    afterCache value hhash
+    afterCache value (by tweakable_hashes at hhash; exact hhash)
   have hendpointsEval := Concrete.CacheReplay.eval_answerFn_largerCache_eq_of_mem_support _
     beforeCache endpointsCache keyResult.2 endpoints hendpoints
     ((Concrete.CacheReplay.randomOracle_cache_le _ _ _ hhash).trans hafter)
@@ -321,7 +326,8 @@ theorem Concrete.precomputedKeygen_cache_has_topMerkleInput
   simp only [level.isLt, ↓reduceDIte] at hhash
   obtain ⟨output, hcached, _⟩ := Concrete.CacheReplay.tweakableHash_query_cached
     keyResult.1.2.parameter (.topMerkle ⟨level.val, level.isLt⟩ node)
-    (Concrete.nodePayload left right) rightCache afterCache value hhash
+    (Concrete.nodePayload left right) rightCache afterCache value
+    (by tweakable_hashes at hhash; exact hhash)
   have hleftEval := Concrete.CacheReplay.eval_answerFn_largerCache_eq_of_mem_support _
     beforeCache leftCache keyResult.2 left hleft (hleftLe.trans hafter)
   have hrightEval := Concrete.CacheReplay.eval_answerFn_largerCache_eq_of_mem_support _
@@ -489,8 +495,9 @@ def TopDecodesAt (cache : QueryCache HashSpec) (input : HashInput) (encoding : E
     ∃ output, cache input = some output ∧
       TargetSum.decodeDigest (truncateHash output) = some encoding
 
-/-- Every decoding input at key `b`'s address is the trial a top signature `signed` selected, of one
-bottom root. -/
+/-- Every decoding input at key `b`'s address is the trial a top signature `signed` selected.
+
+That signature is of one bottom root. -/
 def TopDecodingsSelected (cache : QueryCache HashSpec)
     (signed : Option (Randomness × Encoding)) : Prop :=
   ∃ root, ∀ input encoding, TopDecodesAt parameter key cache input encoding →
@@ -527,12 +534,12 @@ theorem topEncodingHash_run (root : Digest) (randomness : Randomness)
         finalCache input = initialCache input := by
   obtain ⟨output, hcached, hdigest⟩ := Concrete.CacheReplay.tweakableHash_query_cached parameter
     (.topEncoding key) (Concrete.topEncodingPayload root randomness) initialCache finalCache digest
-    hmem
+    (by tweakable_hashes at hmem; exact hmem)
   refine ⟨output, hcached, hdigest, fun input hne => ?_⟩
   refine Concrete.CacheReplay.cache_eq_of_zero_query_bound _
     (· ≠ Concrete.CacheView.topEncodingInput parameter key (root, randomness))
     initialCache finalCache digest ?_ hmem input hne
-  simp [Concrete.topEncodingHash, Concrete.tweakableHash, Concrete.oracleHash,
+  simp [Concrete.topEncodingHash_eq, Concrete.tweakableHash, Concrete.oracleHash,
     Concrete.CacheView.topEncodingInput]
 
 /-- A grinding returning a trial caches it, with its codeword. -/
@@ -569,8 +576,9 @@ theorem topSignFrom_some_cached (root : Digest) (base : Randomness) :
           subst hrandomness hencoding hcache
           exact ⟨output, hcached, hdigestEq ▸ hdecode⟩
 
-/-- From a cache with no decoding input at its address, a grinding leaves only its selected trial
-decoding there. -/
+/-- Start from a cache with no decoding input at a grinding's address.
+
+The grinding leaves only its selected trial decoding there. -/
 theorem topSignFrom_decodings (root : Digest) (base : Randomness) :
     ∀ (attempts trial : Nat) (initialCache finalCache : QueryCache HashSpec)
       (result : Option (Randomness × Encoding)),
@@ -635,6 +643,7 @@ theorem topSignFrom_queryBound_zero_other_key (otherKey : TopIndex) (hne : other
   | zero => simp [Concrete.topSignFrom]
   | succ attempts ih =>
       rw [Concrete.topSignFrom]
+      tweakable_hashes
       refine OracleComp.isQueryBoundP_bind (m := 0)
         (Concrete.tweakableHash_queryBound_atOtherAddress parameter _ _ _ (by simpa using hne)) ?_
       intro digest _
@@ -685,8 +694,9 @@ theorem topDecodingsSelected_sequenceFin {n : Nat}
 
 end TopEncoding
 
-/-- Key generation's honest computation leaves, at each top message digest address, only the trial
-its grinding selected decoding. -/
+/-- Consider key generation's honest computation at each top message digest address.
+
+It leaves only the trial its grinding selected decoding there. -/
 theorem Concrete.honestKeygen_topDecodingsSelected
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
     (topSecret : TopIndex → ChainIndex → Digest) (topBase : TopIndex → Randomness)
@@ -800,9 +810,13 @@ theorem Concrete.precomputedKeygen_cache_has_topEncodingInput
     keyResult hmem key randomness encoding hsigned
   exact ⟨output, hcached⟩
 
-/-- A top message digest input key generation caches whose digest decodes is the selected trial of a
-successful grinding: it is the honest bottom root with the selected randomizer. The other trials,
-also of the honest bottom root, all fail to decode. -/
+/-- Take a top message digest input that key generation caches and whose digest decodes.
+
+It is the selected trial of a successful grinding.
+
+That trial is the honest bottom root with the selected randomizer.
+
+The other trials, also of the honest bottom root, all fail to decode. -/
 theorem Concrete.precomputedKeygen_cache_topEncodingInput_decode
     (keyResult : (PublicKey × SecretKey) × QueryCache HashSpec)
     (hmem : keyResult ∈ support

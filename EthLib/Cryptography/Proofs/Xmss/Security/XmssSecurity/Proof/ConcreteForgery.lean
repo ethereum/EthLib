@@ -167,9 +167,13 @@ def honestTopValues (cache : QueryCache HashSpec) (secretKey : SecretKey) (key :
   fun chain => Wots.signChain (CacheView.topChainStep cache secretKey.parameter key chain)
     (encoding chain) (secretKey.topChainStart key chain)
 
-/-- A top-layer bad event for a forged top signature `forged` of bottom root `root` by key `b`,
-whose digest decodes to `forgedEncoding`: against the honest top signature of tree `b` if its
-grinding succeeded, otherwise against the top key's secrets. -/
+/-- A top-layer bad event for a forged top signature `forged` of bottom root `root` by key `b`.
+
+Its digest decodes to `forgedEncoding`.
+
+The event is against the honest top signature of tree `b` if its grinding succeeded.
+
+Otherwise it is against the top key's secrets. -/
 noncomputable def TopBadEventOccurs (cache : QueryCache HashSpec) (secretKey : SecretKey)
     (key : TopIndex) (root : Digest) (forged : LayerSignature) (forgedEncoding : Encoding)
     (event : BadEvent) : Prop :=

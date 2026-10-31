@@ -4,8 +4,9 @@ open OracleComp OracleSpec ENNReal
 
 namespace XmssSecurity
 
-/-- The five cryptographic failure mechanisms of the bottom layer, without coordinate indices, and
-any bad event of the top layer. -/
+/-- The five failure mechanisms of the bottom layer, and any bad event of the top layer.
+
+The bottom mechanisms are cryptographic and carry no coordinate indices. -/
 inductive GlobalBadEvent where
   | encoding
   | chain

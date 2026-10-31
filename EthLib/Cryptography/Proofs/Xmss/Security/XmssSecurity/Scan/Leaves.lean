@@ -4,9 +4,15 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Step
 /-!
 # Per-leaf bookkeeping of the adversary phase
 
-A leaf index is signed once the trace has an entry at it; its first entry's initial cache is its
-frozen cache. `dec` reads an encoding input back as its leaf index and position. The lemmas here say
-how one oracle answer or one signing request moves the caches the potentials read.
+A leaf index is signed once the trace has an entry at it.
+
+Its first entry's initial cache is its frozen cache.
+
+`dec` reads an encoding input back as its leaf index and position.
+
+The lemmas here say how one oracle answer or one signing request moves the caches.
+
+These are the caches the potentials read.
 -/
 
 open OracleComp OracleSpec ENNReal

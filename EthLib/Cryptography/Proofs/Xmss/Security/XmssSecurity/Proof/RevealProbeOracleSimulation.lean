@@ -266,8 +266,11 @@ def tableHits
   decide (∃ index, table index ∈ state.pending index)
 
 omit [DecidableEq Index] in
-/-- `tableHits` as a proposition. Rewrite with it rather than unfold `tableHits`: at a concrete
-index type, unfolding makes Lean evaluate the `Fintype` decision procedure over every index. -/
+/-- `tableHits` as a proposition.
+
+Rewrite with it rather than unfold `tableHits`.
+
+At a concrete index type, unfolding runs the `Fintype` decision procedure over every index. -/
 theorem tableHits_eq_true_iff
     (state : AdaptiveRevealMonitor.State Index) (table : Index → Digest) :
     tableHits state table = true ↔ ∃ index, table index ∈ state.pending index := by

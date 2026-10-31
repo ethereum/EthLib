@@ -7,9 +7,15 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSuffixE
 /-!
 # The top layer's bad events
 
-A top bad event is either a guess, the forgery's top chain value at a coordinate the honest top
-signature never reveals being the honest one (lane 1), or a hit, a query after key generation whose
-output is the honest output key generation fixed at its address (lane 2).
+A top bad event is either a guess (lane 1) or a hit (lane 2).
+
+In a guess, the forgery's top chain value at some coordinate is the honest one.
+
+The honest top signature never reveals that coordinate.
+
+A hit is a query after key generation whose output is the honest output at its address.
+
+Key generation fixed that honest output.
 -/
 
 open OracleComp OracleSpec
@@ -18,8 +24,9 @@ namespace XmssSecurity
 
 namespace CappedTop
 
-/-- The honest input key generation used at an input's top address, or the input itself. The top
-message digest's honest input is the selected trial of the top grinding. -/
+/-- The honest input key generation used at an input's top address, or the input itself.
+
+The top message digest's honest input is the selected trial of the top grinding. -/
 noncomputable def keygenTopTargetInput (secretKey : SecretKey) (cache : QueryCache HashSpec)
     (input : HashInput) : HashInput :=
   if h : ∃ address : TopIndex × ChainIndex × ChainStep, ∃ value,
@@ -662,7 +669,9 @@ theorem topBadEvent_afterKeygen
 
 end CappedTop
 
-/-- A verified forgery's top check cached its queries, on the bottom root its bottom layer reaches. -/
+/-- A verified forgery's top check cached its queries.
+
+The check runs on the bottom root its bottom layer reaches. -/
 theorem CappedTop.detailed_execution_topQueriesCached
     (adversary : Adversary)
     (execution : GameOutcome × QueryCache HashSpec)
@@ -760,7 +769,9 @@ noncomputable def OutcomeTopChainValueRevealed (cache : QueryCache HashSpec)
         (forgedTopEncoding chain)
         (outcome.secretKey.topChainStart (topKeyOf outcome.forgery.leafIndex) chain)
 
-/-- A winning top chain event whose forged value is a hidden honest one: a guess, charged to lane 1. -/
+/-- A winning top chain event whose forged value is a hidden honest one.
+
+It is a guess, charged to lane 1. -/
 def WinningTopGuessOccurs (cache : QueryCache HashSpec) (outcome : GameOutcome) : Prop :=
   outcome.won = true ∧ ∃ chain,
     OutcomeTopBadEventOccurs cache outcome (.chain chain) ∧

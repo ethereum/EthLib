@@ -3,10 +3,17 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Phase
 /-!
 # One key: the cached-selection collision against the encoding queries
 
-From a key cache with no encoding input, the adversary phase followed by a final computation (the
-verification) has a first entry whose selected cached input is partnered, or whose selected digest a
-later query repeats, with probability at most the source game's expected encoding queries over
-`2^128`.
+Start from a key cache with no encoding input.
+
+Run the adversary phase, then a final computation (the verification).
+
+The event is a first entry of one of two kinds.
+
+In the first, its selected cached input is partnered.
+
+In the second, a later query repeats its selected digest.
+
+The event has probability at most the source game's expected encoding queries over `2^128`.
 -/
 
 open OracleComp OracleSpec ENNReal
@@ -88,7 +95,7 @@ noncomputable def signedCost : (OracleWorld + SigningSpec).Domain → State → 
   onHash fun x s => signedInd secretKey.parameter x s.1.2
 
 include hc0 in
-/-- **Before signing.** -/
+/-- Before signing. -/
 theorem preBad_le (Q : ℕ) (hQ : Q ≤ 2 ^ 127) (computation : OracleComp (OracleWorld + SigningSpec) α)
     (hbound : HashQueryBound (simulateQ (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey)
       computation) cache0 Q) :
@@ -139,8 +146,11 @@ theorem preBad_le (Q : ℕ) (hQ : Q ≤ 2 ^ 127) (computation : OracleComp (Orac
       _ ≤ _ := h23.trans (mul_le_mul' le_rfl h3)
   exact hpre.trans hcost
 
-/-- **After signing.** The final computation's encoding queries each repeat a selected digest with
-probability `2^-128`. -/
+/-- After signing.
+
+The final computation's encoding queries each repeat a selected digest.
+
+Each such repeat has probability `2^-128`. -/
 theorem postPot_final_le (trace : SigningCacheTrace) (computation : OracleComp OracleWorld β)
     (cache : QueryCache HashSpec) :
     ∑' y, Pr{let x ← (simulateQ romImpl computation).run cache}[x = y] * (N * N * postPot secretKey.parameter trace y.2) ≤
@@ -206,7 +216,7 @@ theorem openCost_add_signedCost_le (input : (OracleWorld + SigningSpec).Domain) 
   · rw [openCost, signedCost, onHash_sign, onHash_sign, add_zero]; exact zero_le
 
 include hc0 in
-/-- **One key.** -/
+/-- One key. -/
 theorem collision_le (Q : ℕ) (hQ : Q < 2 ^ 127) (computation : OracleComp (OracleWorld + SigningSpec) α)
     (cont : α → OracleComp OracleWorld β)
     (hbound : HashQueryBound (simulateQ (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey)
@@ -225,7 +235,7 @@ theorem collision_le (Q : ℕ) (hQ : Q < 2 ^ 127) (computation : OracleComp (Ora
   set Ecount := fun (r : α × State) =>
     expectedSimulatedQueryCount romImpl (CappedEncodingMonitor.IsEncodingHashQuery P) (cont r.1) r.2.1.1
   have hhead := hashQueryBound_left hbound
-  -- the event against the two potentials
+  -- Bound the event by the two potentials.
   have hsplit : N * N * Pr{let y ← run >>= fun r => (fun v => (r, v)) <$> (simulateQ romImpl (cont r.1)).run r.2.1.1}[y.1.2.1.2.leafIndices.Nodup ∧
         (PreBad secretKey y.1.2.1.2 ∨ PostBad P y.1.2.1.2 y.2.2)] ≤
       ∑' r, Pr{let x ← run}[x = r] * (N * N * (if PreBad secretKey r.2.1.2 then 1 else 0) +

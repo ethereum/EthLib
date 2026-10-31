@@ -1,5 +1,6 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TreeQueryBound
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 namespace XmssSecurity
 
@@ -133,9 +134,11 @@ theorem Concrete.treeNode_queryBound_merkleAddress
           obtain ⟨hlevelEq, hnodeEq⟩ := HashDomain.merkle.inj heq
           subst targetLevel
           subst targetNode
+          tweakable_hashes
           exact Concrete.tweakableHash_queryBound_atAddress parameter
             (.merkle ⟨levels, hlevel⟩ node) (Concrete.nodePayload left right)
         · simp only [heq, ite_false]
+          tweakable_hashes
           exact Concrete.tweakableHash_queryBound_atOtherAddress parameter
             (.merkle targetLevel targetNode) (.merkle ⟨levels, hlevel⟩ node)
             (Concrete.nodePayload left right) heq

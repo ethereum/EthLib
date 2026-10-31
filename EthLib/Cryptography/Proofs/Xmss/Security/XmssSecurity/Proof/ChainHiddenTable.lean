@@ -41,7 +41,9 @@ noncomputable def keygenChainValueTable
     (Concrete.CacheView.keyChainStep keygenCache secretKey.parameter index.1 chain)
     0 index.2.val (secretKey.keyChainStart index.1 chain)
 
-/-- The chain coordinate used by a winning chain event precedes the coordinate returned by every successful signature at the forged leaf index. -/
+/-- Take the chain coordinate used by a winning chain event.
+
+It precedes the coordinate returned by every successful signature at the forged leaf index. -/
 theorem WinningOutcomeBadEventOccurs.chain_coordinate_lt_returned
     {cache : QueryCache HashSpec} {outcome : GameOutcome} {chain : ChainIndex}
     (hevent : WinningOutcomeBadEventOccurs cache outcome (.chain chain))
@@ -85,8 +87,9 @@ theorem WinningOutcomeBadEventOccurs.chain_coordinate_lt_returned
   · obtain ⟨_eventForgedEncoding, _hvalid, hunsigned, _hdecode, _hchain⟩ := hfresh
     exact (hunsigned ⟨request, signature, hreturned, hleafIndex⟩).elim
 
-/-- The coordinates a returned signature sends at a chain of either layer: the bottom one at its
-leaf index and the top one of its bottom tree. -/
+/-- The coordinates a returned signature sends at a chain of either layer.
+
+These are the bottom one at its leaf index and the top one of its bottom tree. -/
 def ReturnedChainValueIndex
     (cache : QueryCache HashSpec) (secretKey : SecretKey)
     (log : QueryLog SigningSpec) (chain : ChainIndex) (index : ChainValueIndex) : Prop :=
@@ -101,7 +104,9 @@ def ReturnedChainValueIndex
       secretKey.topSigned (topKeyOf request.leafIndex) = some (randomness, topEncoding) ∧
       index.1 = .inr (topKeyOf request.leafIndex) ∧ topEncoding chain ≤ index.2)
 
-/-- Coordinates sent by the signer, together with every later coordinate that can be derived by walking the chain forward. -/
+/-- Coordinates sent by the signer, together with every later coordinate derivable from them.
+
+A later coordinate is derived by walking the chain forward. -/
 noncomputable def returnedChainValueIndices
     (cache : QueryCache HashSpec) (secretKey : SecretKey)
     (log : QueryLog SigningSpec) (chain : ChainIndex) : Finset ChainValueIndex := by

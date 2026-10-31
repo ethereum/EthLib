@@ -13,8 +13,9 @@ noncomputable local instance : SampleableType Randomness :=
 noncomputable def signingRandomness : ProbComp Randomness :=
   $ᵗ Randomness
 
-/-- At most `attempts` attempts with the randomizers `base + trial, base + trial + 1, ...`, stopping
-at the first that encodes. -/
+/-- At most `attempts` attempts with the randomizers `base + trial, base + trial + 1, ...`.
+
+The attempts stop at the first that encodes. -/
 def precomputedSignBoundedAttempts (secretKey : SecretKey) (leafIndex : LeafIndex)
     (message : Message) (base : Randomness) :
     Nat → Nat → OracleComp OracleWorld (Option Signature)
@@ -27,8 +28,9 @@ def precomputedSignBoundedAttempts (secretKey : SecretKey) (leafIndex : LeafInde
       | some signature => pure (some signature)
       | none => precomputedSignBoundedAttempts secretKey leafIndex message base attempts (trial + 1)
 
-/-- `Sig(sk, idx, m)`: a uniform randomizer base `R0`, then at most `A_max` trials `R0 + c`. The
-once-per-leaf-index discipline is the game's, in `SigningTranscript.Valid`. -/
+/-- `Sig(sk, idx, m)`: a uniform randomizer base `R0`, then at most `A_max` trials `R0 + c`.
+
+The once-per-leaf-index discipline is the game's, in `SigningTranscript.Valid`. -/
 noncomputable def precomputedCappedSign (secretKey : SecretKey)
     (leafIndex : LeafIndex) (message : Message) :
     OracleComp OracleWorld (Option Signature) := do
@@ -65,7 +67,9 @@ noncomputable def sampleTopSecret : ProbComp (TopIndex → ChainIndex → Digest
 noncomputable def sampleTopBase : ProbComp (TopIndex → Randomness) :=
   $ᵗ (TopIndex → Randomness)
 
-/-- `Gen`: sample the parameter and the secrets, compute the root through the oracle, and store every chain value and node as the replay of that computation. -/
+/-- `Gen`: sample the parameter and the secrets, and compute the root through the oracle.
+
+Then store every chain value and node as the replay of that computation. -/
 noncomputable def precomputedKeygen :
     OracleComp OracleWorld (PublicKey × SecretKey) := do
   let parameter ← liftM samplePublicParameter
@@ -83,7 +87,11 @@ attribute [irreducible] samplePublicParameter sampleSecret sampleTopSecret sampl
 
 end Concrete
 
-/-- The concrete XMSS scheme: the precomputed key generation, the capped retry signer, and the ordinary verifier defined above. -/
+/-- The concrete XMSS scheme.
+
+It has the precomputed key generation and the capped retry signer.
+
+Its verifier is the ordinary one defined above. -/
 noncomputable def Concrete.scheme : Scheme SecretKey where
   keygen := Concrete.precomputedKeygen
   sign := Concrete.precomputedCappedSign

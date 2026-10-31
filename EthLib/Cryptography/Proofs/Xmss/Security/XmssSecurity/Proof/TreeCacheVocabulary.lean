@@ -13,8 +13,11 @@ def hashCacheLookup (cache : QueryCache HashSpec) (input : HashInput) :
     Option HashOutput :=
   cache input
 
-/-- The domains whose key-generation entries agree between two key generations with the same tree
-values: Merkle nodes of both layers and the top message digests. -/
+/-- The domains whose key-generation entries agree between two key generations.
+
+The two key generations have the same tree values.
+
+The domains are the Merkle nodes of both layers and the top message digests. -/
 def HashDomain.Retained : HashDomain → Prop
   | .merkle .. => True
   | .topMerkle .. => True
@@ -128,7 +131,9 @@ theorem LeafCacheOutputsCorrespond.cacheQuery_pair
           key (rightEndpoints candidate) (rightEndpoints key)).mp heq).1)]
     exact hrel candidate
 
-/-- Map a leaf input of either layer to the honest leaf input key generation fixed at its address. -/
+/-- Map a leaf input of either layer to the honest leaf input at its address.
+
+Key generation fixed that honest input. -/
 noncomputable def keygenKeyLeafTargetInput (secretKey : SecretKey)
     (cache : QueryCache HashSpec) (input : HashInput) : HashInput :=
   if h : ∃ key endpoints,

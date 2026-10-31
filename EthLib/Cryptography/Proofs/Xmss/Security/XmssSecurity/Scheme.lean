@@ -4,11 +4,17 @@ import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Convert
 /-!
 # The leanXMSS model
 
-leanXMSS (`doc/lean_xmss`) with precomputed keys, a device of the proof: two layers of XMSS of
-height 16. The bottom layer is a forest of `2^16` trees over the `2^32` bottom one-time keys, its node
-indices global; top key `b` signs the root of bottom tree `b` once, at key generation.
+leanXMSS (`doc/lean_xmss`) with precomputed keys, a device of the proof.
 
-Its verifier is EthLib's `verifyWith`, read through the byte conversions.
+It has two layers of XMSS of height 16.
+
+The bottom layer is a forest of `2^16` trees over the `2^32` bottom one-time keys.
+
+Its node indices are global.
+
+Top key `b` signs the root of bottom tree `b` once, at key generation.
+
+Its hashes and its verifier are EthLib's, read through the byte conversions.
 -/
 
 open OracleComp OracleSpec ENNReal
@@ -28,8 +34,9 @@ def hashCacheOfLog (log : QueryLog HashSpec) : QueryCache HashSpec :=
 
 namespace Concrete
 
-/-- `m || rho`: with `P || A`, 80 bytes, one block of the leanVM hash, so a trial is one Keccak-f
-permutation. -/
+/-- `m || rho`: with `P || A`, 80 bytes, one block of the leanVM hash.
+
+So a trial is one Keccak-f permutation. -/
 def encodingPayload (message : Message) (randomness : Randomness) : HashInput :=
   bytesLE 32 message ++ bytesLE 16 randomness
 
@@ -64,42 +71,69 @@ def tweakableHash
   let output ← oracleHash (tweakableHashInput parameter domain payload)
   return truncateHash output
 
-/-- The digest `D` of `IncEnc(P, m, rho, idx)`. -/
+/-! ### The hashes
+
+Each hash is EthLib's, run with `queryH` on the bytes of the model's values.
+
+`tweakableHash` names the oracle input each one makes.
+
+`Unforgeability/Translate.lean` proves it, as `encodingHash_eq` and the others. -/
+
+section
+
+open EthLib.Cryptography.Xmss.Unforgeability (queryH ofParam ofLeafIndex ofTopIndex ofDigest
+  toDigest ofMessage ofRandomizer ofChains)
+
+/-- The digest `D` of `IncEnc(P, m, rho, idx)`: EthLib's bottom `messageDigest`. -/
 def encodingHash (parameter : PublicParameter) (leafIndex : LeafIndex)
     (message : Message) (randomness : Randomness) : m Digest :=
-  tweakableHash parameter (.encoding leafIndex) (encodingPayload message randomness)
+  toDigest <$> EthLib.Cryptography.Xmss.messageDigest queryH (ofParam parameter) .bottom
+    (ofLeafIndex leafIndex) (EthLib.Cryptography.Xmss.packBytes (ofMessage message))
+    (ofRandomizer randomness)
 
-/-- One chain step, under `tweak_chain(idx, i, step + 1)`. -/
+/-- One chain step, under `tweak_chain(idx, i, step + 1)`: EthLib's bottom `chainStep`. -/
 def chainHash (parameter : PublicParameter) (leafIndex : LeafIndex) (chain : ChainIndex)
     (step : ChainStep) (value : Digest) : m Digest :=
-  tweakableHash parameter (.chain leafIndex chain step) (bytesLE 16 value)
+  toDigest <$> EthLib.Cryptography.Xmss.chainStep queryH (ofParam parameter) .bottom
+    (ofLeafIndex leafIndex) ⟨chain.val, chain.isLt⟩ step (ofDigest value)
 
-/-- `X_{0,idx}`, the hash of the `v` public values. -/
+/-- `X_{0,idx}`, the hash of the `v` public values: EthLib's bottom `otsLeafHash`. -/
 def leafHash (parameter : PublicParameter) (leafIndex : LeafIndex)
     (endpoints : ChainIndex → Digest) : m Digest :=
-  tweakableHash parameter (.leaf leafIndex) (leafPayload endpoints)
+  toDigest <$> EthLib.Cryptography.Xmss.otsLeafHash queryH (ofParam parameter) .bottom
+    (ofLeafIndex leafIndex) (ofChains endpoints)
 
-/-- `X_{level+1,node}` from its two children. -/
+/-- `X_{level+1,node}` from its two children: EthLib's bottom `nodeHash`. -/
 def nodeHash (parameter : PublicParameter) (level : MerkleLevel) (node : MerkleNode)
     (left right : Digest) : m Digest :=
-  tweakableHash parameter (.merkle level node) (nodePayload left right)
+  toDigest <$> EthLib.Cryptography.Xmss.nodeHash queryH (ofParam parameter) .bottom
+    ⟨level.val + 1, Nat.succ_lt_succ level.isLt⟩ node.val (ofDigest left) (ofDigest right)
 
-/-- The top layer's message digest of a bottom root. -/
+/-- The top layer's message digest of a bottom root: EthLib's top `messageDigest`. -/
 def topEncodingHash (parameter : PublicParameter) (key : TopIndex)
     (root : Digest) (randomness : Randomness) : m Digest :=
-  tweakableHash parameter (.topEncoding key) (topEncodingPayload root randomness)
+  toDigest <$> EthLib.Cryptography.Xmss.messageDigest queryH (ofParam parameter) .top
+    (ofTopIndex key) (EthLib.Cryptography.Xmss.packBytes (ofDigest root)) (ofRandomizer randomness)
 
+/-- One top chain step: EthLib's top `chainStep`. -/
 def topChainHash (parameter : PublicParameter) (key : TopIndex) (chain : ChainIndex)
     (step : ChainStep) (value : Digest) : m Digest :=
-  tweakableHash parameter (.topChain key chain step) (bytesLE 16 value)
+  toDigest <$> EthLib.Cryptography.Xmss.chainStep queryH (ofParam parameter) .top
+    (ofTopIndex key) ⟨chain.val, chain.isLt⟩ step (ofDigest value)
 
+/-- A top leaf: EthLib's top `otsLeafHash`. -/
 def topLeafHash (parameter : PublicParameter) (key : TopIndex)
     (endpoints : ChainIndex → Digest) : m Digest :=
-  tweakableHash parameter (.topLeaf key) (leafPayload endpoints)
+  toDigest <$> EthLib.Cryptography.Xmss.otsLeafHash queryH (ofParam parameter) .top
+    (ofTopIndex key) (ofChains endpoints)
 
+/-- A top node from its two children: EthLib's top `nodeHash`. -/
 def topNodeHash (parameter : PublicParameter) (level : MerkleLevel) (node : TopNode)
     (left right : Digest) : m Digest :=
-  tweakableHash parameter (.topMerkle level node) (nodePayload left right)
+  toDigest <$> EthLib.Cryptography.Xmss.nodeHash queryH (ofParam parameter) .top
+    ⟨level.val + 1, Nat.succ_lt_succ level.isLt⟩ node.val (ofDigest left) (ofDigest right)
+
+end
 
 /-! ### Verification -/
 
@@ -107,7 +141,11 @@ def topNodeHash (parameter : PublicParameter) (level : MerkleLevel) (node : TopN
 def signaturePath (signature : Signature) (level : Nat) : Digest :=
   if hlevel : level < treeHeight then signature.authPath ⟨level, hlevel⟩ else 0
 
-/-- `Chain_{i,idx}(P, start, steps, value)`: the step onto position `start + steps + 1` carries step `start + steps` in its address and `i` after its value. -/
+/-- `Chain_{i,idx}(P, start, steps, value)`.
+
+The step onto position `start + steps + 1` carries step `start + steps` in its address.
+
+It carries `i` after its value. -/
 def chainWalk (parameter : PublicParameter) (leafIndex : LeafIndex) (chain : ChainIndex) :
     Nat → Nat → Digest → m Digest
   | _, 0, value => pure value
@@ -136,7 +174,9 @@ def nodeIndex (leafIndex : LeafIndex) (level : Nat) : MerkleNode :=
     have hle := Nat.div_le_self leafIndex.val (2 ^ (level + 1))
     exact hle.trans_lt leafIndex.isLt⟩
 
-/-- `Z_{level+1}` from `Z_level` and `A_level`, in the order bit `level` of the leaf index dictates. -/
+/-- `Z_{level+1}` from `Z_level` and `A_level`.
+
+Bit `level` of the leaf index dictates their order. -/
 def authenticationNodeHash (parameter : PublicParameter) (leafIndex : LeafIndex)
     (level : Nat) (current sibling : Digest) : m Digest :=
   if hlevel : level < treeHeight then
@@ -296,8 +336,9 @@ def topTreeNode (parameter : PublicParameter) (topSecret : TopIndex → ChainInd
 def rootNode : TopNode :=
   ⟨0, by simp [topLifetime]⟩
 
-/-- The top grinding of bottom root `root` by key `b` from the base `R0`: the least trial whose digest
-is a codeword, with that codeword. -/
+/-- The top grinding of bottom root `root` by key `b` from the base `R0`.
+
+It returns the least trial whose digest is a codeword, with that codeword. -/
 def topSignFrom (parameter : PublicParameter) (key : TopIndex) (root : Digest) (base : Randomness) :
     Nat → Nat → m (Option (Randomness × Encoding))
   | 0, _ => pure none
@@ -308,8 +349,11 @@ def topSignFrom (parameter : PublicParameter) (key : TopIndex) (root : Digest) (
       | some encoding => return some (randomness, encoding)
       | none => topSignFrom parameter key root base attempts (trial + 1)
 
-/-- The honest computation of key generation: every bottom root and its top signature (from the base
-`topBase b r_b`), then the top tree's root. -/
+/-- The honest computation of key generation.
+
+It computes every bottom root and its top signature, from the base `topBase b r_b`.
+
+Then it computes the top tree's root. -/
 def honestKeygen (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
     (topSecret : TopIndex → ChainIndex → Digest) (topBase : TopIndex → Digest → m Randomness) :
     m (Digest × (TopIndex → Option (Randomness × Encoding))) := do
@@ -324,8 +368,9 @@ def honestKeygen (parameter : PublicParameter) (secret : LeafIndex → ChainInde
 def replayHash (cache : QueryCache HashSpec) : QueryImpl HashSpec Id :=
   fun input => (cache input).getD 0
 
-/-- Compute the stored chain values and nodes of both layers by replaying the key-generation query
-log. -/
+/-- Compute the stored chain values and nodes of both layers.
+
+This replays the key-generation query log. -/
 def precomputedSecretKey (parameter : PublicParameter)
     (secret : LeafIndex → ChainIndex → Digest) (topSecret : TopIndex → ChainIndex → Digest)
     (topSigned : TopIndex → Option (Randomness × Encoding)) (cache : QueryCache HashSpec) :
@@ -359,7 +404,9 @@ def authenticationPathNode (leafIndex : LeafIndex) (level : MerkleLevel) : Merkl
 def topPathNode (key : TopIndex) (level : MerkleLevel) : TopNode :=
   topNodeOfNat (Nat.xor (key.val / 2 ^ level.val) 1)
 
-/-- The top layer's signature of bottom tree `b`, read from the key (zeros if its grinding failed). -/
+/-- The top layer's signature of bottom tree `b`, read from the key.
+
+It is zeros if its grinding failed. -/
 def topPart (secretKey : SecretKey) (key : TopIndex) : LayerSignature :=
   match secretKey.topSigned key with
   | some (randomness, encoding) =>
@@ -431,14 +478,16 @@ noncomputable def sampleMasterSeed : ProbComp MasterSeed :=
 
 namespace Seeded
 
-/-- The scheme's seed `S` and the chain and tree values and top signatures computed during key
-generation. -/
+/-- The scheme's seed `S`, and what key generation computes.
+
+That is the chain and tree values and the top signatures. -/
 structure SecretKey where
   seed : MasterSeed
   precomputed : XmssSecurity.SecretKey
 
-/-- Hash the key's seed `S_0` into `S = H("leanXMSS" || S_0)`, derive the parameter and the secrets,
-then compute and store both layers. -/
+/-- Hash the key's seed `S_0` into `S = H("leanXMSS" || S_0)`.
+
+Derive the parameter and the secrets, then compute and store both layers. -/
 def keygenFromSeed (keySeed : MasterSeed) : OracleComp HashSpec (PublicKey × SecretKey) := do
   let seed ← Concrete.oracleHash (seedHashInput keySeed)
   let parameter ← deriveKey 0 .parameter seed
@@ -450,8 +499,9 @@ def keygenFromSeed (keySeed : MasterSeed) : OracleComp HashSpec (PublicKey × Se
     (hashCacheOfLog result.2)
   return (⟨result.1.1, parameter⟩, ⟨seed, precomputed⟩)
 
-/-- Try the randomizers `base + trial, base + trial + 1, ...`, stopping at the first admissible
-encoding. -/
+/-- Try the randomizers `base + trial, base + trial + 1, ...`.
+
+Stop at the first admissible encoding. -/
 def signFrom (secretKey : SecretKey) (leafIndex : LeafIndex) (message : Message) (base : Randomness) :
     Nat → Nat → m (Option Signature)
   | 0, _ => pure none
@@ -461,8 +511,11 @@ def signFrom (secretKey : SecretKey) (leafIndex : LeafIndex) (message : Message)
       | some signature => return some signature
       | none => signFrom secretKey leafIndex message base attempts (trial + 1)
 
-/-- Derive `R0`, take the least admissible trial `R0 + c`, `c < A_max`, and attach the top signature;
-fail if the bottom tree has none. -/
+/-- Derive `R0` and take the least admissible trial `R0 + c`, `c < A_max`.
+
+Then attach the top signature.
+
+Fail if the bottom tree has none. -/
 def sign (secretKey : SecretKey) (leafIndex : LeafIndex) (message : Message) : m (Option Signature) := do
   let base ← deriveRandomizer secretKey.precomputed.parameter secretKey.seed leafIndex message
   let result ← signFrom secretKey leafIndex message base signingAttemptLimit 0

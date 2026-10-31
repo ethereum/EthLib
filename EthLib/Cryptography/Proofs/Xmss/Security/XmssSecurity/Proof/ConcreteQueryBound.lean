@@ -1,6 +1,7 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashAddress
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 open OracleComp OracleSpec
 
@@ -23,7 +24,8 @@ theorem Concrete.chainWalk_queryBound_zero_of_avoids
         (ih fun offset hoffset => havoid offset (by omega)) ?_
       intro previous _
       split
-      · exact Concrete.tweakableHash_queryBound_atOtherAddress parameter targetDomain
+      · tweakable_hashes
+        exact Concrete.tweakableHash_queryBound_atOtherAddress parameter targetDomain
           (.chain leafIndex chain ⟨position + steps, by assumption⟩)
           (Concrete.digestBytes previous) (havoid steps (by omega) _)
       · simp
@@ -55,10 +57,12 @@ theorem Concrete.chainWalk_queryBound_atAddress
             omega
           refine OracleComp.isQueryBoundP_bind (m := 1) hprefix ?_
           intro previous _
+          tweakable_hashes
           exact Concrete.tweakableHash_queryBound_atAddress parameter calledDomain
             (Concrete.digestBytes previous)
         · refine OracleComp.isQueryBoundP_bind (m := 0) ih ?_
           intro previous _
+          tweakable_hashes
           exact Concrete.tweakableHash_queryBound_atOtherAddress parameter targetDomain
             calledDomain (Concrete.digestBytes previous) heq
       · refine OracleComp.isQueryBoundP_bind (m := 0) ih ?_
@@ -178,6 +182,7 @@ theorem Concrete.leafAt_queryBound_chainAddress
     (Concrete.oneTimePublicKey_queryBound_chainAddress parameter secret leafIndex
       targetLeafIndex targetChain targetStep) ?_
   intro endpoints _
+  tweakable_hashes
   exact Concrete.tweakableHash_queryBound_atOtherAddress parameter
     (.chain targetLeafIndex targetChain targetStep) (.leaf leafIndex)
     (Concrete.leafPayload endpoints) (by simp)
@@ -193,6 +198,7 @@ theorem Concrete.leafAt_queryBound_zero_chainAddress_at_other_leafIndex
     (Concrete.oneTimePublicKey_queryBound_zero_chainAddress_at_other_leafIndex parameter secret
       leafIndex targetLeafIndex targetChain targetStep hne) ?_
   intro endpoints _
+  tweakable_hashes
   exact Concrete.tweakableHash_queryBound_atOtherAddress parameter
     (.chain targetLeafIndex targetChain targetStep) (.leaf leafIndex)
     (Concrete.leafPayload endpoints) (by simp)
@@ -226,6 +232,7 @@ theorem Concrete.leafAt_queryBound_zero_at_other_leaf
   refine OracleComp.isQueryBoundP_bind (m := 0)
     (Concrete.oneTimePublicKey_queryBound_zero_leafAddress parameter secret leafIndex targetLeafIndex) ?_
   intro endpoints _
+  tweakable_hashes
   exact Concrete.tweakableHash_queryBound_atOtherAddress parameter (.leaf targetLeafIndex)
     (.leaf leafIndex) (Concrete.leafPayload endpoints) (by simpa using hne)
 
@@ -240,6 +247,7 @@ theorem Concrete.leafAt_queryBound_leafAddress
     refine OracleComp.isQueryBoundP_bind (m := 1)
       (Concrete.oneTimePublicKey_queryBound_zero_leafAddress parameter secret leafIndex leafIndex) ?_
     intro endpoints _
+    tweakable_hashes
     exact Concrete.tweakableHash_queryBound_atAddress parameter (.leaf leafIndex)
       (Concrete.leafPayload endpoints)
   · exact (Concrete.leafAt_queryBound_zero_at_other_leaf parameter secret leafIndex
@@ -276,6 +284,7 @@ theorem Concrete.leafAt_queryBound_zero_merkleAddress
     (Concrete.oneTimePublicKey_queryBound_zero_merkleAddress parameter secret leafIndex
       targetLevel targetNode) ?_
   intro endpoints _
+  tweakable_hashes
   exact Concrete.tweakableHash_queryBound_atOtherAddress parameter
     (.merkle targetLevel targetNode) (.leaf leafIndex)
     (Concrete.leafPayload endpoints) (by simp)
@@ -287,7 +296,7 @@ theorem Concrete.encodingHash_queryBound_zero_at_other_input
       target) :
     (Concrete.encodingHash parameter leafIndex message randomness :
       OracleComp HashSpec Digest).IsQueryBoundP (· = target) 0 := by
-  simp [Concrete.encodingHash, Concrete.tweakableHash, Concrete.oracleHash,
+  simp [Concrete.encodingHash_eq, Concrete.tweakableHash, Concrete.oracleHash,
     show ¬tweakableHashInput parameter (.encoding leafIndex)
       (Concrete.encodingPayload message randomness) = target by
         simpa only [Concrete.CacheView.encodingInput] using hne]

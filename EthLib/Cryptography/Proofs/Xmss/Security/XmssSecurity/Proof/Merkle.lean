@@ -70,7 +70,9 @@ def HasXmssPathCollision {α β : Type} (nodeHash : Nat → α → β → α)
     (leftPath rightPath : Nat → β) (left right : α) : Prop :=
   ∃ level, IsXmssPathCollisionAt nodeHash leftPath rightPath left right level
 
-/-- An alternative XMSS authentication path reaching the same root is identical or collides at one of 32 levels. -/
+/-- Take an alternative XMSS authentication path that reaches the same root.
+
+It is identical, or it collides at one of 32 levels. -/
 theorem sameXmssPath_or_hasCollision {α β : Type} (nodeHash : Nat → α → β → α)
     (leftPath rightPath : Nat → β) (left right : α)
     (hroot : ascend nodeHash leftPath 0 treeHeight left =

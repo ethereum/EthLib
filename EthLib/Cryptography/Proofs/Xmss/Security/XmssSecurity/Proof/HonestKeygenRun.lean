@@ -3,10 +3,17 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.KeygenCache
 /-!
 # Runs inside key generation's honest computation
 
-A lazy random-oracle run of `Concrete.honestKeygen` contains a run of every bottom tree and of the top
-tree, each ending in a cache below the final one; a tree's run contains a run of each of its subtrees,
-and a chain walk's run a run of each of its prefixes. Every replay of such a run is stable in the final
-cache and all larger ones.
+Take a lazy random-oracle run of `Concrete.honestKeygen`.
+
+It contains a run of every bottom tree and of the top tree.
+
+Each ends in a cache below the final one.
+
+A tree's run contains a run of each of its subtrees.
+
+A chain walk's run contains a run of each of its prefixes.
+
+Every replay of such a run is stable in the final cache and all larger ones.
 -/
 
 open OracleComp OracleSpec

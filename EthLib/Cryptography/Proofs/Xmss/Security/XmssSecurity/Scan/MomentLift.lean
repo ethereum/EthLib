@@ -3,10 +3,11 @@ import Mathlib.Basic.ENNReal.Real
 import Mathlib.Basic.ENNReal.Operations
 
 /-!
-# The quadratic potential in `ℝ≥0∞`
+# The quadratic potential in `ENNReal`
 
-`F3` is `Λ + A n` with the remaining budget `Q - k`, and `⊤` once the count passes the budget. It is a
-supermartingale of an encoding step up to `A`, and bounds `V (p n + (1 - p) V)` by `p² F3`.
+`F3` is `Λ + A n` with the remaining budget `Q - k`, and `top` once the count passes the budget.
+
+It is a supermartingale of an encoding step up to `A`, and bounds `V (p n + (1 - p) V)` by `p^2 F3`.
 -/
 
 open ENNReal
@@ -59,7 +60,7 @@ theorem F3_encoding (hp : 1 / 2 ^ 21 ≤ p) (hp' : p ≤ 1 / 2 ^ 20) (hQ : Q ≤
   push_cast
   nlinarith
 
-/-- **The pointwise bound.** -/
+/-- The pointwise bound. -/
 theorem ofReal_le_F3 (hp0 : 0 < p) (hp1 : p ≤ 1) (n v k : ℕ) :
     ENNReal.ofReal (p * v * n + (1 - p) * v ^ 2) ≤ ENNReal.ofReal (p ^ 2) * F3 p Q n v k := by
   unfold F3

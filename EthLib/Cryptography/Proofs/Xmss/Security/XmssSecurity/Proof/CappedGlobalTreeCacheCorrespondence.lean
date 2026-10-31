@@ -6,8 +6,9 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemm
 /-!
 # Key generation over two chain tables
 
-Two key generations whose chains were presampled into different tables run with equal outputs, and
-their final caches replay the same trees of both layers.
+Take two key generations whose chains were presampled into different tables.
+
+They run with equal outputs, and their final caches replay the same trees of both layers.
 -/
 
 open OracleComp OracleSpec

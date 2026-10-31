@@ -5,9 +5,11 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePr
 /-!
 # The top layer's queries in a successful verification
 
-A successful verification runs the top check on the bottom root its bottom layer reaches, and that
-check caches its top message digest input, its top chain steps from the forged digits on, its top leaf
-and every top node on its path.
+A successful verification runs the top check on the bottom root its bottom layer reaches.
+
+That check caches its top message digest input and its top chain steps from the forged digits on.
+
+It also caches its top leaf and every top node on its path.
 -/
 
 open OracleComp OracleSpec
@@ -116,6 +118,7 @@ theorem topChainWalk_query_cached_in_largerCache
       · have hoffsetEq : offset = steps := by omega
         subst offset
         simp only [hposition, ↓reduceDIte] at hrest
+        tweakable_hashes at hrest
         obtain ⟨output, hcached, _⟩ := tweakableHash_query_cached parameter
           (.topChain key chain ⟨position + steps, hposition⟩)
           (Concrete.digestBytes previous) middleCache resultCache digest hrest
@@ -169,7 +172,7 @@ theorem topAuthenticationRoot_query_cached_as_in_largerCache
           obtain ⟨output, hcached, _⟩ := tweakableHash_query_cached parameter
             (.topMerkle ⟨levels, hlevel⟩ (Concrete.topNodeIndex key levels))
             (Concrete.nodePayload (path ⟨levels, hlevel⟩) current)
-            currentCache resultCache root (by simpa [Concrete.topNodeHash] using hnode)
+            currentCache resultCache root (by simpa [Concrete.topNodeHash_eq] using hnode)
           refine ⟨output, ?_⟩
           change resultCache (XmssSecurity.tweakableHashInput parameter
             (.topMerkle ⟨levels, hlevel⟩ (Concrete.topNodeIndex key levels))
@@ -184,7 +187,7 @@ theorem topAuthenticationRoot_query_cached_as_in_largerCache
           obtain ⟨output, hcached, _⟩ := tweakableHash_query_cached parameter
             (.topMerkle ⟨levels, hlevel⟩ (Concrete.topNodeIndex key levels))
             (Concrete.nodePayload current (path ⟨levels, hlevel⟩))
-            currentCache resultCache root (by simpa [Concrete.topNodeHash] using hnode)
+            currentCache resultCache root (by simpa [Concrete.topNodeHash_eq] using hnode)
           refine ⟨output, ?_⟩
           change resultCache (XmssSecurity.tweakableHashInput parameter
             (.topMerkle ⟨levels, hlevel⟩ (Concrete.topNodeIndex key levels))
@@ -198,8 +201,11 @@ theorem topAuthenticationRoot_query_cached_as_in_largerCache
           initialCache currentCache current hcurrent (hcurrentLe.trans hle)
         exact ⟨output, hcurrentLe hcached⟩
 
-/-- What a successful top check caches: its digest input, the forged top chains from their digits,
-the top leaf and the top nodes on its path. -/
+/-- What a successful top check caches.
+
+It caches its digest input and the forged top chains from their digits.
+
+It also caches the top leaf and the top nodes on its path. -/
 def TopQueriesCached (cache : QueryCache HashSpec) (parameter : PublicParameter) (key : TopIndex)
     (root : Digest) (part : LayerSignature) : Prop :=
   ∃ encoding,
@@ -274,7 +280,7 @@ theorem verifyTop_true_queries_cached
             OracleComp HashSpec Digest) =
           Concrete.CacheView.topEncodingHash largerCache publicKey.parameter key
             (root, part.randomness) := by
-        simp [Concrete.topEncodingHash, Concrete.CacheView.topEncodingHash,
+        simp [Concrete.topEncodingHash_eq, Concrete.CacheView.topEncodingHash,
           Concrete.CacheView.topEncodingInput, Concrete.CacheView.tweakableHash]
       have hendpointsEval := eval_answerFn_largerCache_eq_of_mem_support _
         digestCache endpointsCache largerCache endpoints hendpoints (hendpointsLe.trans hrootLarger)
@@ -285,7 +291,7 @@ theorem verifyTop_true_queries_cached
       have hleafView : evalWithAnswerFn (answerFn largerCache)
           (Concrete.topLeafHash publicKey.parameter key endpoints : OracleComp HashSpec Digest) =
           Concrete.CacheView.topLeafHash largerCache publicKey.parameter key endpoints := by
-        simp [Concrete.topLeafHash, Concrete.CacheView.topLeafHash,
+        simp [Concrete.topLeafHash_eq, Concrete.CacheView.topLeafHash,
           Concrete.CacheView.topLeafInput, Concrete.CacheView.tweakableHash]
       rw [hleafView] at hleafEval
       have hendpointsEq : endpoints = recoveredEndpoints
@@ -297,7 +303,7 @@ theorem verifyTop_true_queries_cached
       · rw [← hdigestView, hdigestEval, hdecode]
       · obtain ⟨output, hcached, _⟩ := tweakableHash_query_cached publicKey.parameter
           (.topEncoding key) (Concrete.topEncodingPayload root part.randomness)
-          initialCache digestCache digest (by simpa [Concrete.topEncodingHash] using hdigest)
+          initialCache digestCache digest (by simpa [Concrete.topEncodingHash_eq] using hdigest)
         exact ⟨output, hrootLarger (hdigestLe hcached)⟩
       · intro chain offset hoffset
         obtain ⟨beforeCache, afterCache, value, hchain, hchainLe⟩ :=
@@ -313,7 +319,7 @@ theorem verifyTop_true_queries_cached
           value hchain hchainLe
       · obtain ⟨output, hcached, _⟩ := tweakableHash_query_cached publicKey.parameter
           (.topLeaf key) (Concrete.leafPayload endpoints)
-          endpointsCache leafCache leaf (by simpa [Concrete.topLeafHash] using hleaf)
+          endpointsCache leafCache leaf (by simpa [Concrete.topLeafHash_eq] using hleaf)
         refine ⟨output, ?_⟩
         rw [← hendpointsEq]
         exact hrootLarger (hleafLe hcached)

@@ -7,7 +7,9 @@ open OracleComp ENNReal
 
 namespace XmssSecurity.Rom
 
-/-- A uniform 256-bit oracle output has any fixed 128-bit truncation with probability exactly `2^-128`. -/
+/-- Take a uniform 256-bit oracle output.
+
+Its 128-bit truncation equals any fixed value with probability exactly `2^-128`. -/
 theorem uniform_truncate_probability (target : Digest) :
     Pr{let output ← $ᵗ HashOutput}[truncateHash output = target] =
       ((2 ^ digestBits : Nat) : ℝ≥0∞)⁻¹ := by

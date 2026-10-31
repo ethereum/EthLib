@@ -50,7 +50,9 @@ private def digestFiberEquiv (target : Digest) :
           (BitVec.extractLsb'_append_extractLsb' (x := splitHashOutput output.val))
       _ = output.val := by simp [splitHashOutput]
 
-/-- A 256-bit random-oracle answer is equivalently an independent high half and the 128-bit digest used by XMSS. -/
+/-- A 256-bit random-oracle answer is equivalently two independent parts.
+
+These are a high half and the 128-bit digest used by XMSS. -/
 def hashOutputEquivDigestPair : HashOutput ≃ Digest × Digest where
   toFun output := (highDigest output, truncateHash output)
   invFun halves := joinDigest halves.1 halves.2
@@ -99,7 +101,9 @@ theorem evalDist_truncate_uniformHashOutput :
         Function.comp_apply, bind_pure]
       exact OracleComp.EvalDistEq.bind_const _ _
 
-/-- Sample a 256-bit oracle answer whose low XMSS digest is fixed while its high half remains uniform. -/
+/-- Sample a 256-bit oracle answer whose low XMSS digest is fixed.
+
+Its high half remains uniform. -/
 noncomputable def sampleHashOutputWithDigest (target : Digest) :
     ProbComp HashOutput :=
   (fun high => hashOutputEquivDigestPair.symm (high, target)) <$>
@@ -112,7 +116,9 @@ noncomputable def sampledHashOutputWithDigest :
   let output ← sampleHashOutputWithDigest low
   return (low, output)
 
-/-- A programmed answer together with its chosen low digest has the same joint distribution as a uniform answer together with its truncation. -/
+/-- Take a programmed answer together with its chosen low digest.
+
+It has the same joint distribution as a uniform answer together with its truncation. -/
 theorem evalDist_sampledHashOutputWithDigest_eq_uniform :
     sampledHashOutputWithDigest =ᵈ ((fun output : HashOutput => (truncateHash output, output)) <$>
         ($ᵗ HashOutput)) := by
@@ -147,7 +153,9 @@ theorem evalDist_sampledHashOutputWithDigest_eq_uniform :
       rw [Functor.map_map]
       exact .of_eq (congrArg (· <$> ($ᵗ HashOutput)) hfunction)
 
-/-- A programmed low digest and its independent high half may be replaced by one ordinary random-oracle output inside any continuation. -/
+/-- Take a programmed low digest and its independent high half.
+
+Inside any continuation, one ordinary random-oracle output may replace them. -/
 theorem evalDist_sampledHashOutputWithDigest_bind_eq_uniform_bind
     (continuation : Digest × HashOutput → ProbComp α) :
     (sampledHashOutputWithDigest >>= continuation) =ᵈ

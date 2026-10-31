@@ -5,11 +5,19 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Interface
 /-!
 # leanXMSS has 127 bits of security
 
-The real experiment is at most the model's game against the translated, memoized adversary plus one
-guess of the key's seed `S_0` per hash call after the seed hash and one guess of the scheme's seed `S`
-per hash call after key generation, and the model's after-key-generation budget is the real budget less
-the `K` calls of real key generation. The model's bound, two units per call plus the slack, then fits
-in `q / 2^127`: the two guess terms cost a unit each.
+The real experiment is at most the sum of three terms:
+
+* the model's game against the translated, memoized adversary;
+* one guess of the key's seed `S_0` per hash call after the seed hash;
+* one guess of the scheme's seed `S` per hash call after key generation.
+
+The model's budget after key generation is the real budget less `K`.
+
+`K` is the number of calls of real key generation.
+
+The model's bound, two units per call plus the slack, then fits in `q / 2^127`.
+
+The two guess terms cost a unit each.
 -/
 
 open OracleComp OracleSpec ENNReal

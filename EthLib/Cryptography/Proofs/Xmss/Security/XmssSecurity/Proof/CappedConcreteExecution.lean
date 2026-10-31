@@ -1,5 +1,6 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.OutcomeClassification
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedKeygenCache
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 open OracleComp OracleSpec
 
@@ -52,7 +53,7 @@ theorem Concrete.CacheReplay.topSignFrom_decode_of_eval (cache : QueryCache Hash
       (Concrete.topEncodingHash parameter key root randomness : OracleComp HashSpec Digest) =
       Concrete.CacheView.topEncodingHash cache parameter key (root, randomness) := by
     intro randomness
-    simp [Concrete.topEncodingHash, Concrete.CacheView.topEncodingHash,
+    simp [Concrete.topEncodingHash_eq, Concrete.CacheView.topEncodingHash,
       Concrete.CacheView.topEncodingInput, Concrete.CacheView.tweakableHash]
   induction attempts generalizing trial with
   | zero => simp [Concrete.topSignFrom] at heval
@@ -80,8 +81,9 @@ theorem Concrete.CacheReplay.eval_honestKeygen (cache : QueryCache HashSpec)
   simp [Concrete.honestKeygen, evalWithAnswerFn_bind]
 
 set_option linter.constructorNameAsVariable false in
-/-- Key generation's honest computation, replayed in the final cache, gives the root and the top
-signatures. -/
+/-- Replay key generation's honest computation in the final cache.
+
+It gives the root and the top signatures. -/
 theorem capped_detailed_execution_keygen_eval
     (adversary : Adversary)
     (execution : GameOutcome × QueryCache HashSpec)

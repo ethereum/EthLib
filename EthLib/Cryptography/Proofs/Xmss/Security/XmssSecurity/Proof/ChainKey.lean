@@ -1,11 +1,13 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashAddress
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # One-time keys of either layer
 
-Lane 1 presamples the hidden chain values of both layers in one table. A `ChainKey` is a bottom leaf
-index or a top key; its chain steps differ only in their address.
+Lane 1 presamples the hidden chain values of both layers in one table.
+
+A `ChainKey` is a bottom leaf index or a top key; its chain steps differ only in their address.
 -/
 
 open OracleComp OracleSpec
@@ -75,20 +77,24 @@ def keyChainWalk (parameter : PublicParameter) (key : ChainKey) (chain : ChainIn
         pure 0
 
 theorem keyChainWalk_inl (parameter : PublicParameter) (leafIndex : LeafIndex)
-    (chain : ChainIndex) (position steps : Nat) (value : Digest) :
+    (chain : ChainIndex) (position steps : Nat) (value : Digest) [LawfulMonad m] :
     keyChainWalk (m := m) parameter (.inl leafIndex) chain position steps value =
       chainWalk parameter leafIndex chain position steps value := by
   induction steps with
   | zero => rfl
-  | succ steps ih => simp only [keyChainWalk, chainWalk, ih]; rfl
+  | succ steps ih =>
+    simp only [keyChainWalk, chainWalk, ih, keyChainHash, Concrete.chainHash_eq]
+    rfl
 
 theorem keyChainWalk_inr (parameter : PublicParameter) (key : TopIndex)
-    (chain : ChainIndex) (position steps : Nat) (value : Digest) :
+    (chain : ChainIndex) (position steps : Nat) (value : Digest) [LawfulMonad m] :
     keyChainWalk (m := m) parameter (.inr key) chain position steps value =
       topChainWalk parameter key chain position steps value := by
   induction steps with
   | zero => rfl
-  | succ steps ih => simp only [keyChainWalk, topChainWalk, ih]; rfl
+  | succ steps ih =>
+    simp only [keyChainWalk, topChainWalk, ih, keyChainHash, Concrete.topChainHash_eq]
+    rfl
 
 namespace CacheView
 

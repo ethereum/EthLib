@@ -26,8 +26,9 @@ noncomputable def sampleRandomizerOutputs : ProbComp RandomizerOutputs := $ᵗ R
 
 variable {m : Type → Type} [Monad m] [HasQuery HashSpec m]
 
-/-- The trials `base + trial, base + trial + 1, ...` against the precomputed key, stopping at the first
-admissible encoding. -/
+/-- The trials `base + trial, base + trial + 1, ...` against the precomputed key.
+
+They stop at the first admissible encoding. -/
 def tableSignFrom (base : Randomness) (secretKey : XmssSecurity.SecretKey)
     (leafIndex : LeafIndex) (message : Message) : Nat → Nat → m (Option Signature)
   | 0, _ => pure none
