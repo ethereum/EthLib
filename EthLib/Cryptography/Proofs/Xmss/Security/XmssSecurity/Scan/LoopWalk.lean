@@ -6,24 +6,36 @@ import Mathlib.Algebra.BigOperators.Ring.Finset
 /-!
 # The value of the scan loop `R = R0 + i`
 
-A signer that derives one start `R0` per message and tries `R0, R0 + 1, ...` is, for one message and
-one state of the digest cache, a walk over positions: a position is `fresh` (digest not queried: it
-lands with probability `p`), a cached `miss` (the walk goes on) or a cached `hit` (the walk stops
-there). `walk` is the expected payoff of the walk from a start, with a payoff `item x` at a cached
-hit `x`, `fr` at a fresh position that lands and `ex` when the attempts are exhausted.
+Take a signer that derives one start `R0` per message and tries `R0, R0 + 1, ...`.
+
+For one message and one state of the digest cache, it is a walk over positions.
+
+A position is one of three kinds:
+
+* `fresh`: the digest is not queried, and it lands with probability `p`;
+* a cached `miss`: the walk goes on;
+* a cached `hit`: the walk stops there.
+
+`walk` is the expected payoff of the walk from a start.
+
+The payoff is `item x` at a cached hit `x` and `fr` at a fresh position that lands.
+
+It is `ex` when the attempts are exhausted.
 
 Main results, for a successor `σ` that does not return to a position within the attempt limit:
 
-* `probe_eq`: one digest query at a fresh position `y`. Averaged over its two outcomes (hit with
-  payoff `c`, miss), the walk from any other start changes by `p · reach · (c − fr)`, where `reach`
-  is the probability that the start reaches `y`.
-* `sum_reach_le`: the fresh starts reach a given position with total weight at most `(1 − p)/p`.
-* `creation_le`: with the group value `gv` (fresh payoff `base` for a fresh start, `favg` for a
-  cached one: the pending mass of dangling queries), a query raises the value by at most
-  `(2 − p) · (favg − base)` in the mean. This is the creation rate of the scan loop: `2 − p` times
-  the rate of independent attempts, and it is attained.
-* `mass_le`: the starts that do not end at a cached hit weigh at least
-  `card − (cached positions) − (cached hits) · (1 − p)/p`.
+* `probe_eq`: one digest query at a fresh position `y`.
+  Average over its two outcomes, a hit with payoff `c` and a miss.
+  Then the walk from any other start changes by `p * reach * (c - fr)`.
+  Here `reach` is the probability that the start reaches `y`.
+* `sum_reach_le`: the fresh starts reach a given position with total weight at most `(1 - p)/p`.
+* `creation_le`: a query raises the group value by at most `(2 - p) * (favg - base)` in the mean.
+  The group value `gv` has fresh payoff `base` for a fresh start and `favg` for a cached one.
+  `favg` is the pending mass of dangling queries.
+  The bound is the creation rate of the scan loop: `2 - p` times the rate of independent attempts.
+  The bound is attained.
+* `mass_le`: a lower bound on the weight of the starts that do not end at a cached hit.
+  They weigh at least `card - (cached positions) - (cached hits) * (1 - p)/p`.
 
 Nothing here mentions hashing.
 -/
@@ -32,8 +44,9 @@ open ENNReal
 
 namespace XmssSecurity.LoopWalk
 
-/-- The status of a position for one message: digest not queried, queried and rejected, queried and
-landing. -/
+/-- The status of a position for one message.
+
+Its digest is not queried, queried and rejected, or queried and landing. -/
 inductive St
   | fresh
   | miss
@@ -209,9 +222,13 @@ theorem reach_le_one (st : α → St) (y : α) : ∀ (A : ℕ) (r : α), reach �
 theorem reach_ne_top (st : α → St) (y : α) (A : ℕ) (r : α) : reach σ p st y A r ≠ ⊤ :=
   ne_top_of_le_ne_top one_ne_top (reach_le_one st y A r)
 
-/-- **One query, one start.** A fresh position `y` is queried: it becomes a hit with payoff `c` with
-probability `p` and a miss otherwise. In the mean the walk from any start gains `p · reach · c` and
-loses `p · reach · fr`. -/
+/-- One query, one start.
+
+A fresh position `y` is queried.
+
+It becomes a hit with payoff `c` with probability `p` and a miss otherwise.
+
+In the mean the walk from any start gains `p * reach * c` and loses `p * reach * fr`. -/
 theorem probe_eq (hp : p ≤ 1) (st : α → St) (item : α → ℝ≥0∞) (fr ex c : ℝ≥0∞) (y : α)
     (hy : st y = .fresh) :
     ∀ (A : ℕ), (∀ j, 0 < j → j < A → (σ ^ j) y ≠ y) → ∀ r : α,
@@ -336,14 +353,15 @@ theorem reach_le_pass (st : α → St) (y : α) (A : ℕ) (hA : ∀ j, 0 < j →
             rw [reach_succ_fresh n hr h, hstep]
             exact mul_le_mul' le_rfl (hprev n)
 
-/-- The fresh positions among the `j` positions before `y`, weighted by their passing
-probabilities. -/
+/-- The fresh positions among the `j` positions before `y`.
+
+Each is weighted by its passing probability. -/
 noncomputable def back (σ : Equiv.Perm α) (p : ℝ≥0∞) (st : α → St) (y : α) : ℕ → ℝ≥0∞
   | 0 => 0
   | j + 1 => back σ p st y j + (if st ((σ⁻¹ ^ (j + 1)) y) = .fresh then pass σ p st y (j + 1) else 0)
 
 omit [DecidableEq α] in
-/-- The invariant of the backward scan: `p · back + (1 − p) · pass ≤ 1 − p`. -/
+/-- The invariant of the backward scan: `p * back + (1 - p) * pass <= 1 - p`. -/
 theorem back_le (hp : p ≤ 1) (st : α → St) (y : α) :
     ∀ j, p * back σ p st y j + (1 - p) * pass σ p st y j ≤ 1 - p
   | 0 => by simp [back, pass]
@@ -382,7 +400,7 @@ theorem sum_range_back (st : α → St) (y : α) (h : α → ℝ≥0∞) (hh : �
 
 variable [Fintype α]
 
-/-- **The fresh starts that reach a position** weigh at most `(1 − p)/p`. -/
+/-- The fresh starts that reach a position weigh at most `(1 - p)/p`. -/
 theorem sum_reach_le (hp : p ≤ 1) (st : α → St) (y : α) (A : ℕ) (hA : ∀ j, 0 < j → j < A → (σ ^ j) y ≠ y) :
     p * ∑ r, (if r ≠ y ∧ st r = .fresh then reach σ p st y A r else 0) ≤ 1 - p := by
   set h : α → ℝ≥0∞ := fun x => if st x = .fresh then 1 else 0 with hdef
@@ -426,16 +444,24 @@ section Group
 variable [DecidableEq α] [Fintype α]
 
 variable (σ p) in
-/-- **The group value** of one message, up to the factor `1 / card`: the sum over the starts of the
-walk payoffs, where a fresh position that lands pays `base` to a fresh start (the view of that
-signature is fresh: nothing beyond the slot) and `favg` to a cached start (pending mass of a
-dangling query). Exhausted attempts pay `base`. -/
+/-- The group value of one message, up to the factor `1 / card`.
+
+It is the sum over the starts of the walk payoffs.
+
+A fresh position that lands pays `base` to a fresh start.
+
+The view of that signature is fresh: nothing beyond the slot.
+
+The same position pays `favg` to a cached start, the pending mass of a dangling query.
+
+Exhausted attempts pay `base`. -/
 noncomputable def gv (st : α → St) (item : α → ℝ≥0∞) (base favg : ℝ≥0∞) (A : ℕ) : ℝ≥0∞ :=
   ∑ r, walk σ p st item (if st r = .fresh then base else favg) base A r
 
 omit [Fintype α] in
-/-- One query, one start: the mean payoff after a query at the fresh position `y` (hit with payoff
-`favg = base + δ`, or miss). -/
+/-- One query, one start: the mean payoff after a query at the fresh position `y`.
+
+The query is a hit with payoff `favg = base + δ`, or a miss. -/
 theorem start_le (hp : p ≤ 1) (st : α → St) (item : α → ℝ≥0∞) (base δ : ℝ≥0∞) (hbase : base ≠ ⊤)
     (hδ : δ ≠ ⊤) (y : α) (hy : st y = .fresh) (A : ℕ) (hA : ∀ j, 0 < j → j < A → (σ ^ j) y ≠ y) (r : α) :
     p * walk σ p (Function.update st y .hit) (Function.update item y (base + δ))
@@ -485,8 +511,11 @@ theorem start_le (hp : p ≤ 1) (st : α → St) (item : α → ℝ≥0∞) (bas
       have h := probe_eq hp st item (base + δ) base (base + δ) y hy A hA r
       exact le_of_eq ((ENNReal.add_left_inj (ENNReal.mul_ne_top hρ (ENNReal.add_ne_top.2 ⟨hbase, hδ⟩))).1 h)
 
-/-- **The creation rate of the scan loop.** A query at a fresh position raises the group value by at
-most `(2 − p) δ` in the mean, `δ = favg − base` the gain of a fresh uniform view. -/
+/-- The creation rate of the scan loop.
+
+A query at a fresh position raises the group value by at most `(2 - p) δ` in the mean.
+
+Here `δ = favg - base` is the gain of a fresh uniform view. -/
 theorem creation_le (hp : p ≤ 1) (st : α → St) (item : α → ℝ≥0∞) (base δ : ℝ≥0∞) (hbase : base ≠ ⊤)
     (hδ : δ ≠ ⊤) (y : α) (hy : st y = .fresh) (A : ℕ) (hA : ∀ j, 0 < j → j < A → (σ ^ j) y ≠ y) :
     p * gv σ p (Function.update st y .hit) (Function.update item y (base + δ)) base (base + δ) A +
@@ -534,7 +563,7 @@ theorem hit_le_sum_reach (st : α → St) :
           · rw [reach_succ_fresh A (fun hrx => by rw [hrx, hx] at h; cases h) h]
           · rw [mul_zero]
 
-/-- The fresh starts end at a cached hit with total weight at most `(1 − p)/p` per hit. -/
+/-- The fresh starts end at a cached hit with total weight at most `(1 - p)/p` per hit. -/
 theorem sum_fresh_hit_le (hp : p ≤ 1) (st : α → St) (A : ℕ) (hA : ∀ x j, 0 < j → j < A → (σ ^ j) x ≠ x) :
     p * ∑ r, (if st r = .fresh then walk σ p st (fun _ => 1) 0 0 A r else 0) ≤
       (Finset.univ.filter fun x => st x = .hit).card * (1 - p) := by
@@ -562,9 +591,15 @@ theorem sum_fresh_hit_le (hp : p ≤ 1) (st : α → St) (A : ℕ) (hA : ∀ x j
     _ = _ := by
         rw [Finset.sum_ite, Finset.sum_const_zero, add_zero, Finset.sum_const, nsmul_eq_mul]
 
-/-- **The mass on the identity.** The starts whose walk leaves the disclosures unchanged (a fresh
-start that ends at a fresh position, or exhausted attempts) weigh at least the number of positions
-minus the cached ones and `(1 − p)/p` per cached hit. -/
+/-- The mass on the identity.
+
+Take the starts whose walk leaves the disclosures unchanged.
+
+Such a walk is a fresh start that ends at a fresh position, or it exhausts its attempts.
+
+These starts weigh at least the number of positions, minus the cached ones.
+
+The bound also subtracts `(1 - p)/p` per cached hit. -/
 theorem mass_le (hp : p ≤ 1) (st : α → St) (A : ℕ) (hA : ∀ x j, 0 < j → j < A → (σ ^ j) x ≠ x) :
     p * (Fintype.card α : ℝ≥0∞) ≤
       p * gv σ p st (fun _ => 0) 1 0 A + p * (Finset.univ.filter fun r => st r ≠ .fresh).card +

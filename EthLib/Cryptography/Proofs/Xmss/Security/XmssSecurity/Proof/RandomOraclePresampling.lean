@@ -22,7 +22,9 @@ theorem QueryCache.cacheQuery_comm_of_ne
       simp [QueryCache.cacheQuery_of_ne, hleft]
     · simp [QueryCache.cacheQuery_of_ne, hleft, hright]
 
-/-- Sampling one absent entry before a computation preserves the full result and final-cache distribution when every execution of the computation caches that entry. -/
+/-- Suppose every execution of a computation caches one absent entry.
+
+Then sampling that entry first preserves the distribution of the full result and final cache. -/
 theorem evalDist_randomOracle_run_eq_presample_of_cached
     {α : Type} (computation : OracleComp (D →ₒ R) α)
     (cache : (D →ₒ R).QueryCache) (target : D)
@@ -147,7 +149,11 @@ theorem evalDist_randomOracle_run_eq_presample_of_cached
                 simp only [Function.comp_apply, bind_assoc, pure_bind]
                 rfl
 
-/-- Querying one entry and discarding its answer before a computation preserves the full result and final-cache distribution when the computation always caches that entry. -/
+/-- Suppose a computation always caches one entry.
+
+Then query that entry first and discard its answer.
+
+This preserves the distribution of the full result and final cache. -/
 theorem evalDist_randomOracle_run_eq_query_then_of_cached
     {α : Type} (computation : OracleComp (D →ₒ R) α)
     (cache : (D →ₒ R).QueryCache) (target : D)

@@ -3,12 +3,14 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainKey
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenQueryBound
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HonestKeygenRun
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryPresence
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # Key generation's top layer
 
-Top counterparts of the bottom facts of `TreeQueryBound` and `KeygenCache`: key generation queries
-each top chain-step address at most once.
+Top counterparts of the bottom facts of `TreeQueryBound` and `KeygenCache`.
+
+Key generation queries each top chain-step address at most once.
 -/
 
 open OracleComp OracleSpec
@@ -17,8 +19,9 @@ namespace XmssSecurity
 
 attribute [local irreducible] Concrete.topTreeNode
 
-/-- A supported execution of key generation's honest computation from an empty cache contains at
-most one input at each top chain-step address. -/
+/-- Run key generation's honest computation from an empty cache.
+
+A supported execution contains at most one input at each top chain-step address. -/
 theorem Concrete.CacheReplay.honestKeygen_cache_unique_topChainAddress
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
     (topSecret : TopIndex → ChainIndex → Digest) (topBase : TopIndex → Randomness)
@@ -65,8 +68,9 @@ theorem Concrete.keygen_cache_unique_keyChainAddress
         topSecret topBase root keyResult.2 hroot key chain step left right leftOutput rightOutput
         hleftP hrightP hleft hright
 
-/-- A supported execution of key generation's honest computation from an empty cache contains at
-most one input at each top leaf address. -/
+/-- Run key generation's honest computation from an empty cache.
+
+A supported execution contains at most one input at each top leaf address. -/
 theorem Concrete.CacheReplay.honestKeygen_cache_unique_topLeafAddress
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
     (topSecret : TopIndex → ChainIndex → Digest) (topBase : TopIndex → Randomness)
@@ -111,7 +115,8 @@ theorem Concrete.keygen_cache_has_keyLeafInput
       obtain ⟨endpoints, middleCache, hendpoints, hleaf, hmiddleLe⟩ :=
         Concrete.CacheReplay.runsBelow_bind_left hrun
       obtain ⟨output, hcached, _⟩ := Concrete.CacheReplay.tweakableHash_query_cached parameter
-        (.topLeaf key) (Concrete.leafPayload endpoints) middleCache afterCache value hleaf
+        (.topLeaf key) (Concrete.leafPayload endpoints) middleCache afterCache value
+        (by tweakable_hashes at hleaf; exact hleaf)
       have hreplay := Concrete.CacheReplay.eval_answerFn_largerCache_eq_of_mem_support
         (Concrete.topOneTimePublicKey parameter topSecret key :
           OracleComp HashSpec (ChainIndex → Digest))

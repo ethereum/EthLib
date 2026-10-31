@@ -5,10 +5,17 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Frame
 /-!
 # The adversary phase with a ghost query count
 
-The traced handler of `cappedCacheTracedMappedAdversaryImpl`, extended with a count of the
-adversary's own hash queries. Under a hash-query bound the count never reaches the budget
-(`expectedSimulatedCost_overBudget_eq_zero`), and the adversary's encoding queries are counted by the
-source game (`expectedSimulatedCost_advEncoding_le`).
+The traced handler of `cappedCacheTracedMappedAdversaryImpl`, extended with a count.
+
+The count is of the adversary's own hash queries.
+
+Under a hash-query bound the count never reaches the budget.
+
+`expectedSimulatedCost_overBudget_eq_zero` states this.
+
+The source game counts the adversary's encoding queries.
+
+`expectedSimulatedCost_advEncoding_le` states this.
 -/
 
 open OracleComp OracleSpec ENNReal
@@ -128,7 +135,7 @@ theorem simulateQ_source_query_bind (input : (OracleWorld + SigningSpec).Domain)
 noncomputable def overBudget (Q : ℕ) (input : (OracleWorld + SigningSpec).Domain) (s : State) : ℝ≥0∞ :=
   if IsAdvHash input ∧ Q ≤ s.2 then ⊤ else 0
 
-/-- **The budget is never exceeded.** -/
+/-- The budget is never exceeded. -/
 theorem expectedSimulatedCost_overBudget_eq_zero (Q : ℕ)
     (computation : OracleComp (OracleWorld + SigningSpec) α) :
     ∀ (cache : QueryCache HashSpec) (trace : SigningCacheTrace) (k : ℕ),
@@ -187,7 +194,7 @@ theorem expectedSimulatedQueryCount_liftM_query (parameter : PublicParameter)
     expectedSimulatedQueryCount_query_bind]
   simp
 
-/-- **The source game counts the adversary's encoding queries.** -/
+/-- The source game counts the adversary's encoding queries. -/
 theorem expectedSimulatedCost_advEncoding_le (parameter : PublicParameter)
     (computation : OracleComp (OracleWorld + SigningSpec) α) :
     ∀ (cache : QueryCache HashSpec) (trace : SigningCacheTrace) (k : ℕ),

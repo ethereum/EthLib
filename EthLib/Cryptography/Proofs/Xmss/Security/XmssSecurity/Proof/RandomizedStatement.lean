@@ -18,7 +18,11 @@ noncomputable def Seeded.keygen : OracleComp OracleWorld (PublicKey × Seeded.Se
   let seed ← liftM sampleMasterSeed
   liftM (Seeded.keygenFromSeed seed)
 
-/-- The random-oracle semantics: hash queries are answered lazily and consistently by uniform sampling and cached; uniform-sampling queries are forwarded unchanged. -/
+/-- The random-oracle semantics.
+
+Hash queries are answered lazily and consistently by uniform sampling, and cached.
+
+Uniform-sampling queries are forwarded unchanged. -/
 noncomputable def romImpl : QueryImpl OracleWorld (StateT (QueryCache HashSpec) ProbComp) :=
   unifFwdImpl HashSpec +
     (randomOracle : QueryImpl HashSpec (StateT (QueryCache HashSpec) ProbComp))
@@ -29,16 +33,24 @@ structure Scheme (Key : Type := Seeded.SecretKey) where
   sign : Key → LeafIndex → Message → OracleComp OracleWorld (Option Signature)
   verify : PublicKey → LeafIndex → Message → Signature → OracleComp OracleWorld Bool
 
-/-- A classical adaptive adversary. After receiving the public key, it may query the shared random oracle, request signatures, and finally return a claimed forgery. -/
+/-- A classical adaptive adversary.
+
+After receiving the public key, it may query the shared random oracle and request signatures.
+
+Finally it returns a claimed forgery. -/
 structure Adversary where
   main : PublicKey → OracleComp (OracleWorld + SigningSpec) Forgery
 
-/-- The signing oracle used in the game. It records every request and response while forwarding the request to the scheme's signer. -/
+/-- The signing oracle used in the game.
+
+It records every request and response while forwarding the request to the scheme's signer. -/
 def signingOracle {Key : Type} (scheme : Scheme Key) (sk : Key) :
     QueryImpl SigningSpec (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) :=
   QueryImpl.withLogging fun request => scheme.sign sk request.leafIndex request.message
 
-/-- Forward the shared random oracle and uniform sampling to the adversary unchanged, alongside the logged signing oracle. -/
+/-- Forward the shared random oracle and uniform sampling to the adversary unchanged.
+
+The logged signing oracle runs alongside them. -/
 def forwardOracles :
     QueryImpl OracleWorld (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) :=
   fun input => liftM (OracleWorld.query input)
@@ -64,7 +76,9 @@ noncomputable def forgeAdvantage {Key : Type} (scheme : Scheme Key) (adversary :
 noncomputable def countedRomImpl :=
   romImpl.withAddCost (fun | .inl _ => (0 : Nat) | .inr _ => 1)
 
-/-- Every execution of the consistent random oracle uses at most `q` hash calls, including key generation, adversarial hashing, signing, and final verification. -/
+/-- Every execution of the consistent random oracle uses at most `q` hash calls.
+
+The count includes key generation, adversarial hashing, signing, and final verification. -/
 def HasHashQueryBound {Key : Type} (scheme : Scheme Key) (adversary : Adversary) (q : Nat) : Prop :=
   ∀ result ∈ support ((simulateQ countedRomImpl (gameCore scheme adversary)).run.run' ∅),
     result.2 ≤ q
@@ -74,9 +88,13 @@ def HasClassicalSecurityBits {Key : Type} (scheme : Scheme Key) (bits : Nat) : P
   ∀ q, 1 ≤ q → ∀ adversary, HasHashQueryBound scheme adversary q →
     forgeAdvantage scheme adversary ≤ q / ((2 ^ bits : Nat) : ℝ≥0∞)
 
-/-- Every execution after key generation, from any cache key generation can leave, uses at most `q`
-hash calls: the adversary's, the signer's and the final verification's. Model key generation does
-more work than the real scheme's and is not charged. -/
+/-- Every execution after key generation uses at most `q` hash calls.
+
+This holds from any cache key generation can leave.
+
+The calls are the adversary's, the signer's and the final verification's.
+
+Model key generation does more work than the real scheme's and is not charged. -/
 def HasAfterKeygenHashQueryBound {Key : Type} (scheme : Scheme Key) (adversary : Adversary) (q : Nat) :
     Prop :=
   ∀ keyResult ∈ support ((simulateQ romImpl scheme.keygen).run ∅),
@@ -84,8 +102,9 @@ def HasAfterKeygenHashQueryBound {Key : Type} (scheme : Scheme Key) (adversary :
       (Seeded.gameRest scheme adversary keyResult.1.1 keyResult.1.2)).run.run' keyResult.2),
       result.2 ≤ q
 
-/-- Room for the verification's constant and other lower-order terms, against the key-generation
-calls of the real scheme. -/
+/-- Room for the verification's constant and other lower-order terms.
+
+This room is set against the key-generation calls of the real scheme. -/
 def lowerOrderSlack : Nat := 2 ^ 20
 
 /-- Two units per hash call after key generation, plus the slack. -/

@@ -63,7 +63,9 @@ def SigningCacheEntry.FreshSigningEncodingCollision
     oldInput ≠ (entry.request.message, signature.randomness) ∧
     truncateHash signedOutput = truncateHash oldOutput
 
-/-- The signer selected an input that was already cached, and another input at the same leaf index has the same digest. -/
+/-- The signer selected an input that was already cached.
+
+Another input at the same leaf index has the same digest. -/
 def SigningCacheEntry.CachedSelectionCollision
     (secretKey : SecretKey) (cache : QueryCache HashSpec) (entry : SigningCacheEntry) : Prop :=
   ∃ signature signedOutput otherInput otherOutput,

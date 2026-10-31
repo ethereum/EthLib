@@ -3,12 +3,19 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Types
 /-!
 # The codewords
 
-A digest is a codeword when its top `128 - 2v = 12` bits are zero and its first `v = 58` base-4
-digits sum to `T = 106`. Its digits determine it, so codewords and digit words of sum `T` are in
-bijection, and there are `[z^106](1 + z + z^2 + z^3)^58` of them.
+A digest is a codeword when two conditions hold.
 
-The count packs the polynomial into one natural number in base `2^117`, above every coefficient, so
-the kernel evaluates the coefficient as a digit of a power.
+Its top `128 - 2v = 12` bits are zero.
+
+Its first `v = 58` base-4 digits sum to `T = 106`.
+
+Its digits determine it, so codewords and digit words of sum `T` are in bijection.
+
+There are `[z^106](1 + z + z^2 + z^3)^58` of them.
+
+The count packs the polynomial into one natural number in base `2^117`, above every coefficient.
+
+So the kernel evaluates the coefficient as a digit of a power.
 -/
 
 open Finset

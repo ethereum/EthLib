@@ -1,10 +1,14 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HonestKeygenRun
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # Key generation queries each top chain, leaf and Merkle address at most once
 
-Only the top tree queries those addresses: the bottom trees query bottom domains, and the top grinding
-only top message digests. The top tree queries each such address at most once.
+Only the top tree queries those addresses.
+
+The bottom trees query bottom domains, and the top grinding only top message digests.
+
+The top tree queries each such address at most once.
 -/
 
 open OracleComp OracleSpec
@@ -92,7 +96,8 @@ theorem Concrete.topChainWalk_queryBound_zero_of_avoids
         (ih fun offset hoffset => havoid offset (by omega)) ?_
       intro previous _
       split
-      · exact Concrete.tweakableHash_queryBound_atOtherAddress parameter targetDomain
+      · tweakable_hashes
+        exact Concrete.tweakableHash_queryBound_atOtherAddress parameter targetDomain
           (.topChain key chain ⟨position + steps, by assumption⟩)
           (Concrete.digestBytes previous) (havoid steps (by omega) _)
       · simp
@@ -124,10 +129,12 @@ theorem Concrete.topChainWalk_queryBound_atAddress
             omega
           refine OracleComp.isQueryBoundP_bind (m := 1) hprefix ?_
           intro previous _
+          tweakable_hashes
           exact Concrete.tweakableHash_queryBound_atAddress parameter calledDomain
             (Concrete.digestBytes previous)
         · refine OracleComp.isQueryBoundP_bind (m := 0) ih ?_
           intro previous _
+          tweakable_hashes
           exact Concrete.tweakableHash_queryBound_atOtherAddress parameter targetDomain
             calledDomain (Concrete.digestBytes previous) heq
       · refine OracleComp.isQueryBoundP_bind (m := 0) ih ?_
@@ -143,8 +150,9 @@ theorem Concrete.topLeafAt_queryBound_chainAddress
       (if key = targetKey then 1 else 0) := by
   have hleaf (endpoints : ChainIndex → Digest) :
       (Concrete.topLeafHash parameter key endpoints : OracleComp HashSpec Digest).IsQueryBoundP
-        (AtHashAddress parameter (.topChain targetKey targetChain targetStep)) 0 :=
-    Concrete.tweakableHash_queryBound_atOtherAddress parameter
+        (AtHashAddress parameter (.topChain targetKey targetChain targetStep)) 0 := by
+    tweakable_hashes
+    exact Concrete.tweakableHash_queryBound_atOtherAddress parameter
       (.topChain targetKey targetChain targetStep) (.topLeaf key)
       (Concrete.leafPayload endpoints) (by simp)
   rw [Concrete.topLeafAt]
@@ -188,10 +196,12 @@ theorem Concrete.topLeafAt_queryBound_leafAddress
   by_cases hkey : key = targetKey
   · subst targetKey
     rw [ite_eq_left rfl]
+    tweakable_hashes
     exact OracleComp.isQueryBoundP_bind (n := 0) (m := 1) hchains fun endpoints _ =>
       Concrete.tweakableHash_queryBound_atAddress parameter (.topLeaf key)
         (Concrete.leafPayload endpoints)
   · rw [ite_eq_right hkey]
+    tweakable_hashes
     exact OracleComp.isQueryBoundP_bind (n := 0) (m := 0) hchains fun endpoints _ =>
       Concrete.tweakableHash_queryBound_atOtherAddress parameter (.topLeaf targetKey)
         (.topLeaf key) (Concrete.leafPayload endpoints) (by simpa using hkey)
@@ -209,6 +219,7 @@ theorem Concrete.topLeafAt_queryBound_zero_merkleAddress
     intro offset _ hvalid heq
     cases heq
   · intro endpoints _
+    tweakable_hashes
     exact Concrete.tweakableHash_queryBound_atOtherAddress parameter _ (.topLeaf key)
       (Concrete.leafPayload endpoints) (by simp)
 
@@ -241,6 +252,7 @@ theorem Concrete.topTreeNode_queryBound_keyAddress
       refine OracleComp.isQueryBoundP_bind hleft fun left _ => ?_
       refine (OracleComp.isQueryBoundP_bind (m := 0) hright fun right _ => ?_).mono (by omega)
       simp only [hlevel, ↓reduceDIte]
+      tweakable_hashes
       exact Concrete.tweakableHash_queryBound_atOtherAddress parameter target
         (.topMerkle ⟨levels, hlevel⟩ node) (Concrete.nodePayload left right) (hmerkle _ _)
 
@@ -333,9 +345,11 @@ theorem Concrete.topTreeNode_queryBound_merkleAddress
         obtain ⟨hlevelEq, hnodeEq⟩ := HashDomain.topMerkle.inj heq
         subst targetLevel
         subst targetNode
+        tweakable_hashes
         exact Concrete.tweakableHash_queryBound_atAddress parameter
           (.topMerkle ⟨levels, hlevel⟩ node) (Concrete.nodePayload left right)
       · simp only [heq, ite_false]
+        tweakable_hashes
         exact Concrete.tweakableHash_queryBound_atOtherAddress parameter
           (.topMerkle targetLevel targetNode) (.topMerkle ⟨levels, hlevel⟩ node)
           (Concrete.nodePayload left right) heq
@@ -349,6 +363,7 @@ theorem Concrete.topTreeNode_queryBound_zero_topEncoding
   induction levels generalizing node with
   | zero =>
       rw [Concrete.topTreeNode, Concrete.topLeafAt]
+      tweakable_hashes
       refine OracleComp.isQueryBoundP_bind (m := 0) ?_ fun endpoints _ =>
         Concrete.tweakableHash_queryBound_atOtherAddress parameter _ (.topLeaf node)
           (Concrete.leafPayload endpoints) (by simp)
@@ -362,7 +377,8 @@ theorem Concrete.topTreeNode_queryBound_zero_topEncoding
       refine OracleComp.isQueryBoundP_bind (m := 0) (ih _) fun left _ => ?_
       refine OracleComp.isQueryBoundP_bind (m := 0) (ih _) fun right _ => ?_
       split
-      · exact Concrete.tweakableHash_queryBound_atOtherAddress parameter _ _ _ (by simp)
+      · tweakable_hashes
+        exact Concrete.tweakableHash_queryBound_atOtherAddress parameter _ _ _ (by simp)
       · simp
 
 /-! ### Key generation -/
@@ -378,6 +394,7 @@ theorem Concrete.topSignFrom_queryBound_zero_of_not_encoding
   | zero => simp [Concrete.topSignFrom]
   | succ attempts ih =>
       rw [Concrete.topSignFrom]
+      tweakable_hashes
       refine OracleComp.isQueryBoundP_bind (m := 0)
         (Concrete.tweakableHash_queryBound_atOtherAddress parameter target _ _ (htarget key)) ?_
       intro digest _
@@ -385,8 +402,9 @@ theorem Concrete.topSignFrom_queryBound_zero_of_not_encoding
       · simp
       · exact ih _
 
-/-- Key generation's honest computation queries a top chain, leaf or Merkle address only in its
-top tree. -/
+/-- Consider a top chain, leaf or Merkle address.
+
+Key generation's honest computation queries it only in its top tree. -/
 theorem Concrete.honestKeygen_queryBound_of_topTree
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
     (topSecret : TopIndex → ChainIndex → Digest) (topBase : TopIndex → Randomness)

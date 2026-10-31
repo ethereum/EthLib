@@ -4,15 +4,19 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveFresh
 /-!
 # One encoding query and the partner potential
 
-A query at a fresh position `x` of the leaf index, its output `u` uniform. With `ex f` the mean of `f u`:
+A query at a fresh position `x` of the leaf index, its output `u` uniform.
 
-* `line_cacheQuery_self`, `line_cacheQuery_of_ne`: the query sets the status of `x` by the `outcome` of `u`.
+With `ex f` the mean of `f u`:
+
+* `line_cacheQuery_self`, `line_cacheQuery_of_ne`: the query sets the status of `x`.
+  The `outcome` of `u` decides the new status.
 * `nextRand_no_return`: the successor does not return within the attempt limit.
-* `probOutput_valid`, `probOutput_truncate`: `u` lands w.p. `landing` and hits a digest w.p. `N⁻¹`.
+* `probOutput_valid`, `probOutput_truncate`: `u` lands with probability `landing`.
+  It hits a digest with probability `N^-1`.
 * `ex_W`, `ex_sum_W`: the reach to any position is a martingale.
-* `ex_Φ_le`: the partner step, `E[Φ'] ≤ Φ + (V · W x + H) · N⁻¹`.
-* `ex_V_mul_H`: the compensator step, `E[V' · H'] ≥ V · H + landing · (H + V · W x)`.
-* `landing_mul_H_le`: the mass bound, `landing · H ≤ landing · C + V · (1 − landing)`.
+* `ex_Φ_le`: the partner step, `E[Φ'] <= Φ + (V * W x + H) * N^-1`.
+* `ex_V_mul_H`: the compensator step, `E[V' * H'] >= V * H + landing * (H + V * W x)`.
+* `landing_mul_H_le`: the mass bound, `landing * H <= landing * C + V * (1 - landing)`.
 * `potentials_cacheQuery_of_not_input`: other inputs change nothing.
 -/
 
@@ -76,7 +80,7 @@ theorem ex_ite (P : Prop) [Decidable P] (f : HashOutput → ℝ≥0∞) :
 theorem ex_mono {f g : HashOutput → ℝ≥0∞} (h : ∀ u, f u ≤ g u) : ex f ≤ ex g :=
   Finset.sum_le_sum fun u _ => mul_le_mul' le_rfl (h u)
 
-/-- `N⁻¹`, the probability of one digest. -/
+/-- `N^-1`, the probability of one digest. -/
 theorem ex_digest (d : Digest) :
     ex (fun u => if truncateHash u = d then 1 else 0) = ((2 ^ digestBits : Nat) : ℝ≥0∞)⁻¹ := by
   rw [← Rom.uniform_truncate_probability d, OracleComp.prEvent_eq_tsum_ite, tsum_fintype, ex]
@@ -110,7 +114,7 @@ theorem landing_ne_top : landing ≠ ⊤ := ne_top_of_le_ne_top one_ne_top landi
 noncomputable def outcome (u : HashOutput) : St :=
   if TargetSum.ValidDigest (truncateHash u) then .hit else .miss
 
-/-- A function of the outcome has mean `landing · F hit + (1 − landing) · F miss`. -/
+/-- A function of the outcome has mean `landing * F hit + (1 - landing) * F miss`. -/
 theorem ex_outcome (F : St → ℝ≥0∞) :
     ex (fun u => F (outcome u)) = landing * F .hit + (1 - landing) * F .miss := by
   have hinv : ex (fun u => if TargetSum.ValidDigest (truncateHash u) then 0 else 1) = 1 - landing := by
@@ -171,7 +175,9 @@ theorem status_cacheQuery (x y : Position) (u : HashOutput) :
   · subst h; simp [status, outcome]
   · unfold status; rw [cacheQuery_input_of_ne x y u h]
 
-/-- **Line facts.** The query rewrites the status of `x` on its line by the outcome. -/
+/-- Line facts.
+
+The query rewrites the status of `x` on its line by the outcome. -/
 theorem line_cacheQuery_self (x : Position) (u : HashOutput) :
     line (cache.cacheQuery (input parameter leafIndex x) u) parameter leafIndex x.1 =
       Function.update (line cache parameter leafIndex x.1) x.2 (outcome u) := by
@@ -181,7 +187,9 @@ theorem line_cacheQuery_self (x : Position) (u : HashOutput) :
   · subst h; simp
   · rw [ite_eq_right fun he => h (by rw [← he]), Function.update_of_ne h, line]
 
-/-- **Line facts.** Other messages' lines are unchanged. -/
+/-- Line facts.
+
+Other messages' lines are unchanged. -/
 theorem line_cacheQuery_of_ne (x : Position) (u : HashOutput) {m : Message} (hm : m ≠ x.1) :
     line (cache.cacheQuery (input parameter leafIndex x) u) parameter leafIndex m =
       line cache parameter leafIndex m := by
@@ -219,7 +227,9 @@ theorem V_congr : V c₁ parameter leafIndex = V c₂ parameter leafIndex := by
 
 end Agree
 
-/-- **Other inputs.** A query outside the leaf index's encoding inputs changes none of the potentials. -/
+/-- Other inputs.
+
+A query outside the leaf index's encoding inputs changes none of the potentials. -/
 theorem potentials_cacheQuery_of_not_input {i : HashInput} (hi : ∀ y, i ≠ input parameter leafIndex y)
     (u : HashOutput) :
     Φ (cache.cacheQuery i u) parameter leafIndex = Φ cache parameter leafIndex ∧
@@ -267,7 +277,7 @@ theorem H_eq_hitReach : H cache parameter leafIndex =
   refine Finset.sum_congr rfl fun z _ => ?_
   split_ifs <;> simp
 
-/-- **Mass bound.** -/
+/-- Mass bound. -/
 theorem landing_mul_H_le :
     landing * H cache parameter leafIndex ≤
       landing * C cache parameter leafIndex + V cache parameter leafIndex * (1 - landing) := by
@@ -330,7 +340,9 @@ include hx
 theorem line_fresh : line cache parameter leafIndex x.1 x.2 = .fresh := by
   simp [line, status, hx]
 
-/-- **Martingale.** The mean reach to any position is unchanged by the query. -/
+/-- Martingale.
+
+The mean reach to any position is unchanged by the query. -/
 theorem ex_W (y : Position) :
     ex (fun u => W (cache.cacheQuery (input parameter leafIndex x) u) parameter leafIndex y) =
       W cache parameter leafIndex y := by
@@ -346,7 +358,7 @@ theorem ex_W (y : Position) :
   · simp_rw [W_cacheQuery_of_ne x _ hm]
     exact ex_const _
 
-/-- **Martingale of a fixed set.** -/
+/-- Martingale of a fixed set. -/
 theorem ex_sum_W (P : Finset Position) :
     ex (fun u => ∑ y ∈ P, W (cache.cacheQuery (input parameter leafIndex x) u) parameter leafIndex y) =
       ∑ y ∈ P, W cache parameter leafIndex y := by
@@ -419,7 +431,7 @@ theorem H_le_cacheQuery_of_hit {u : HashOutput} (hu : outcome u = .hit) :
     exact hitReach_le_update landing_le_one _ _ _ _
   · rw [line_cacheQuery_of_ne x u hm]
 
-/-- **The compensator step.** -/
+/-- The compensator step. -/
 theorem ex_V_mul_H :
     (V cache parameter leafIndex : ℝ≥0∞) * H cache parameter leafIndex +
         landing * (H cache parameter leafIndex + V cache parameter leafIndex * W cache parameter leafIndex x) ≤
@@ -440,8 +452,13 @@ theorem ex_V_mul_H :
         landing * H cache parameter leafIndex := by ring
     _ ≤ _ := add_le_add le_rfl hlow
 
-/-- A partnered position after the query was partnered before, or is `x` with the digest of a hit, or is a
-hit whose digest the query repeats. -/
+/-- Take a position that is partnered after the query.
+
+Then one of three cases holds:
+
+* it was partnered before;
+* it is `x` with the digest of a hit;
+* it is a hit whose digest the query repeats. -/
 theorem Φ_cacheQuery_le (u : HashOutput) :
     Φ (cache.cacheQuery (input parameter leafIndex x) u) parameter leafIndex ≤
       (∑ y, if IsPartnered cache parameter leafIndex y then
@@ -500,7 +517,7 @@ theorem Φ_cacheQuery_le (u : HashOutput) :
   refine (Finset.sum_le_sum fun y _ => hterm y).trans ?_
   rw [Finset.sum_add_distrib, Finset.sum_add_distrib, Finset.sum_ite_eq', ite_eq_left (Finset.mem_univ _)]
 
-/-- **The partner step.** -/
+/-- The partner step. -/
 theorem ex_Φ_le :
     ex (fun u => Φ (cache.cacheQuery (input parameter leafIndex x) u) parameter leafIndex) ≤
       Φ cache parameter leafIndex +

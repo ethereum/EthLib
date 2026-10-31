@@ -5,9 +5,13 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.Budget
 /-!
 # Eliminating the seed
 
-The model's key generation never queries a derivation, so it runs over the programmed cache as over
-the empty one, with the programmed entries laid on top. Those entries all name the scheme's seed `S`:
-dropping them costs at most one `2^-256` guess of `S` per hash call after key generation.
+The model's key generation never queries a derivation.
+
+So it runs over the programmed cache as over the empty one, with the programmed entries laid on top.
+
+Those entries all name the scheme's seed `S`.
+
+Dropping them costs at most one `2^-256` guess of `S` per hash call after key generation.
 -/
 
 open OracleComp OracleSpec ENNReal

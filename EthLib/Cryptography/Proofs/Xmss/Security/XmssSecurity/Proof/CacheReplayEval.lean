@@ -47,7 +47,7 @@ theorem eval_encodingHash (cache : QueryCache HashSpec)
     evalWithAnswerFn (answerFn cache)
       (Concrete.encodingHash parameter leafIndex message randomness : OracleComp HashSpec Digest) =
       CacheView.encodingHash cache parameter leafIndex (message, randomness) := by
-  simp [Concrete.encodingHash, CacheView.encodingHash, CacheView.encodingInput,
+  simp [Concrete.encodingHash_eq, CacheView.encodingHash, CacheView.encodingInput,
     CacheView.tweakableHash]
 
 @[simp]
@@ -63,7 +63,7 @@ theorem eval_chainWalk (cache : QueryCache HashSpec)
   | succ steps ih =>
       simp only [Concrete.chainWalk, evalWithAnswerFn_bind, ih, Wots.walk]
       by_cases hposition : position + steps < chainLength - 1
-      · simp [hposition, Concrete.chainHash, CacheView.chainStep,
+      · simp [hposition, Concrete.chainHash_eq, CacheView.chainStep,
           CacheView.chainInput, CacheView.tweakableHash]
       · simp [hposition, CacheView.chainStep]
 
@@ -110,7 +110,7 @@ theorem eval_leafHash (cache : QueryCache HashSpec)
     evalWithAnswerFn (answerFn cache)
       (Concrete.leafHash parameter leafIndex endpoints : OracleComp HashSpec Digest) =
       CacheView.leafHash cache parameter leafIndex endpoints := by
-  simp [Concrete.leafHash, CacheView.leafHash, CacheView.leafInput,
+  simp [Concrete.leafHash_eq, CacheView.leafHash, CacheView.leafInput,
     CacheView.tweakableHash]
 
 @[simp]
@@ -120,7 +120,7 @@ theorem eval_nodeHash (cache : QueryCache HashSpec)
     evalWithAnswerFn (answerFn cache)
       (Concrete.nodeHash parameter level node left right : OracleComp HashSpec Digest) =
       CacheView.merkleHash cache parameter level node left right := by
-  simp [Concrete.nodeHash, CacheView.merkleHash, CacheView.merkleInput,
+  simp [Concrete.nodeHash_eq, CacheView.merkleHash, CacheView.merkleInput,
     CacheView.tweakableHash]
 
 @[simp]
@@ -170,7 +170,7 @@ theorem eval_topChainWalk (cache : QueryCache HashSpec)
   | succ steps ih =>
       simp only [Concrete.topChainWalk, evalWithAnswerFn_bind, ih, Wots.walk]
       by_cases hposition : position + steps < chainLength - 1
-      · simp [hposition, Concrete.topChainHash, CacheView.topChainStep,
+      · simp [hposition, Concrete.topChainHash_eq, CacheView.topChainStep,
           CacheView.topChainInput, CacheView.tweakableHash]
       · simp [hposition, CacheView.topChainStep]
 
@@ -186,7 +186,7 @@ theorem eval_topLeafAt (cache : QueryCache HashSpec)
       topOneTimePublicKey cache parameter topSecret key := by
     funext chain
     simp [Concrete.topOneTimePublicKey, topOneTimePublicKey]
-  simp [Concrete.topLeafAt, topLeafAt, hkey, Concrete.topLeafHash, CacheView.topLeafHash,
+  simp [Concrete.topLeafAt, topLeafAt, hkey, Concrete.topLeafHash_eq, CacheView.topLeafHash,
     CacheView.topLeafInput, CacheView.tweakableHash]
 
 @[simp]
@@ -203,10 +203,18 @@ theorem eval_topTreeNode (cache : QueryCache HashSpec)
   | succ levels ih =>
       rw [Concrete.topTreeNode, topTreeNode_succ_eq]
       simp only [evalWithAnswerFn_bind, ih]
-      split <;> simp_all [Concrete.topNodeHash, CacheView.topMerkleHash, CacheView.topMerkleInput,
-        CacheView.tweakableHash]
+      split <;> simp_all [Concrete.topNodeHash_eq, CacheView.topMerkleHash,
+        CacheView.topMerkleInput, CacheView.tweakableHash]
 
-/-! The statement stores the precomputed secret key as `evalWithAnswerFn (replayHash cache)` runs of its own oracle algorithms; `answerFn` is the same answer function, so the `eval_*` lemmas above give the first-order `CacheView`/`CacheReplay` forms of the stored tables. -/
+/-! The statement stores the precomputed secret key as runs of its own oracle algorithms.
+
+Each run uses `evalWithAnswerFn (replayHash cache)`.
+
+`answerFn` is the same answer function.
+
+So the `eval_*` lemmas above give the first-order forms of the stored tables.
+
+These forms are `CacheView` and `CacheReplay`. -/
 
 theorem answerFn_eq_replayHash (cache : QueryCache HashSpec) :
     answerFn cache = Concrete.replayHash cache := rfl
@@ -335,10 +343,10 @@ theorem eval_authenticationRoot (cache : QueryCache HashSpec)
       by_cases hlevel : levels < treeHeight
       · by_cases hbit : leafIndex.val.testBit levels = true
         · simp [Concrete.authenticationNodeHash, CacheView.nodeHash, hlevel, hbit,
-            Concrete.nodeHash, CacheView.nodeInput, CacheView.authenticationNodePayload,
+            Concrete.nodeHash_eq, CacheView.nodeInput, CacheView.authenticationNodePayload,
             CacheView.tweakableHash]
         · simp [Concrete.authenticationNodeHash, CacheView.nodeHash, hlevel, hbit,
-            Concrete.nodeHash, CacheView.nodeInput, CacheView.authenticationNodePayload,
+            Concrete.nodeHash_eq, CacheView.nodeInput, CacheView.authenticationNodePayload,
             CacheView.tweakableHash]
       · simp [Concrete.authenticationNodeHash, CacheView.nodeHash, hlevel]
 
@@ -358,9 +366,9 @@ theorem eval_topAuthenticationRoot (cache : QueryCache HashSpec)
         Nat.zero_add]
       by_cases hlevel : levels < treeHeight
       · by_cases hbit : key.val.testBit levels = true
-        · simp [CacheView.topNodeHash, hlevel, hbit, Concrete.layerPath, Concrete.topNodeHash,
+        · simp [CacheView.topNodeHash, hlevel, hbit, Concrete.layerPath, Concrete.topNodeHash_eq,
             CacheView.topNodeInput, CacheView.topAuthenticationNodePayload, CacheView.tweakableHash]
-        · simp [CacheView.topNodeHash, hlevel, hbit, Concrete.layerPath, Concrete.topNodeHash,
+        · simp [CacheView.topNodeHash, hlevel, hbit, Concrete.layerPath, Concrete.topNodeHash_eq,
             CacheView.topNodeInput, CacheView.topAuthenticationNodePayload, CacheView.tweakableHash]
       · simp [CacheView.topNodeHash, hlevel]
 
@@ -375,13 +383,13 @@ theorem eval_verifyTop (cache : QueryCache HashSpec) (publicKey : PublicKey)
       (Concrete.topEncodingHash publicKey.parameter key root part.randomness :
         OracleComp HashSpec Digest) =
       CacheView.topEncodingHash cache publicKey.parameter key (root, part.randomness) := by
-    simp [Concrete.topEncodingHash, CacheView.topEncodingHash, CacheView.topEncodingInput,
+    simp [Concrete.topEncodingHash_eq, CacheView.topEncodingHash, CacheView.topEncodingInput,
       CacheView.tweakableHash]
   have hleaf : ∀ endpoints, evalWithAnswerFn (answerFn cache)
       (Concrete.topLeafHash publicKey.parameter key endpoints : OracleComp HashSpec Digest) =
       CacheView.topLeafHash cache publicKey.parameter key endpoints := by
     intro endpoints
-    simp [Concrete.topLeafHash, CacheView.topLeafHash, CacheView.topLeafInput,
+    simp [Concrete.topLeafHash_eq, CacheView.topLeafHash, CacheView.topLeafInput,
       CacheView.tweakableHash]
   have hpath : Concrete.layerPath ⟨0, fun _ => 0, part.authPath⟩ = Concrete.layerPath part := rfl
   rw [Concrete.verifyTop_eq]
@@ -449,8 +457,11 @@ theorem randomOracle_cache_le {α : Type} (computation : OracleComp HashSpec α)
           queryResult hquery))
     computation initialCache le_rfl result hmem
 
-/-- Rerunning a lazy random-oracle computation against any extension of a cache produced by a
-successful first run is deterministic and leaves the larger cache unchanged. -/
+/-- Take a cache produced by a successful first run of a lazy random-oracle computation.
+
+Rerunning the computation against any extension of that cache is deterministic.
+
+The rerun leaves the larger cache unchanged. -/
 theorem randomOracle_rerun_largerCache_eq_pure_of_mem_support {α : Type}
     (computation : OracleComp HashSpec α)
     (initialCache resultCache largerCache : QueryCache HashSpec) (result : α)

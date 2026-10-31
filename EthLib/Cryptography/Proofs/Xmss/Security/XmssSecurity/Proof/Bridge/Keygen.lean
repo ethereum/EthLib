@@ -6,8 +6,11 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic
 /-!
 # The prepared key is the model's key
 
-Over a uniform derivation table, the parameter, the chain starts of both layers and the top bases are
-uniform and independent, and the model key built from the run equals the model's key generation.
+Draw the derivation table uniformly.
+
+Then the parameter, the chain starts of both layers and the top bases are uniform and independent.
+
+The model key built from the run equals the model's key generation.
 -/
 
 open OracleComp OracleSpec

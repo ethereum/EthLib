@@ -1,6 +1,7 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.TreeCacheStable
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleQueryPresence
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedKeygenCache
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 open OracleComp OracleSpec
 
@@ -111,6 +112,7 @@ theorem Concrete.CacheReplay.RunsBelow.chainInput_cached {parameter : PublicPara
     Concrete.CacheReplay.runsBelow_bind_left hmem
   have hstep : 0 + step.val < chainLength - 1 := by simp
   simp only [hstep, ↓reduceDIte] at hrest
+  tweakable_hashes at hrest
   obtain ⟨output, hcached, _⟩ := Concrete.CacheReplay.tweakableHash_query_cached parameter _ _
     middleCache afterCache digest hrest
   have hwalk := Concrete.CacheReplay.eval_answerFn_largerCache_eq_of_mem_support

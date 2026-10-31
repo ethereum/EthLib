@@ -2026,8 +2026,9 @@ theorem sourceGlobal_origin_implies_right_publicObservedHit
     apply RevealProbeOracleSimulation.runObserved_append_eq_true_of_prefix
     exact right.2.2.1.bad_implies_runObserved right.1.1.2 hbad
 
-/-- A forged top chain value that is the hidden honest value at a coordinate no returned signature
-revealed. -/
+/-- A forged top chain value that is the hidden honest value at some coordinate.
+
+No returned signature revealed that coordinate. -/
 noncomputable def GlobalWinningOutcomeTopChainValueHasKeygenOrigin
     (keygenCache finalCache : QueryCache HashSpec) (secretKey : SecretKey)
     (outcome : GameOutcome) : Prop :=

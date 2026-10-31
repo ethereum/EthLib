@@ -2,6 +2,7 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalC
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneOracleSimulation
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingActionTrace
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneEagerSimulation
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 open OracleComp OracleSpec
 open OracleComp.ProgramLogic.Relational
@@ -879,7 +880,7 @@ theorem globalFirstLaneErasedEncodingDigestQuery_eq_original
       state := by
   simp [globalFirstLaneErasedEncodingDigestQuery,
     globalFirstLaneErasedEncodingHashQuery,
-    globalFirstLaneOriginalEncodingDigestQuery, Concrete.encodingHash,
+    globalFirstLaneOriginalEncodingDigestQuery, Concrete.encodingHash_eq,
     Concrete.tweakableHash, Concrete.oracleHash, Concrete.CacheView.encodingInput,
     RevealProbeOracleSimulation.liftProbComp,
     map_eq_bind_pure_comp, GlobalCausalHashState.setCache]

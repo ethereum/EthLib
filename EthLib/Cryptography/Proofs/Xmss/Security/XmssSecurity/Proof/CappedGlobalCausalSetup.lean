@@ -611,8 +611,11 @@ theorem globalSignatureTopRevealResult_topAuthPath
       rw [globalSignatureTopRevealResult]
       exact ih _ _
 
-/-- Reveal the chain values a returned signature sends: its bottom ones and those of its top
-signature. An unsigned bottom tree's signature is never returned, so nothing is revealed. -/
+/-- Reveal the chain values a returned signature sends.
+
+These are its bottom ones and those of its top signature.
+
+An unsigned bottom tree's signature is never returned, so nothing is revealed. -/
 noncomputable def revealGlobalSignature
     (topSigned : TopIndex → Option (Randomness × Encoding))
     (request : SignRequest) (encoding : ChainIndex → Digit) (signature : Signature) :
@@ -828,8 +831,9 @@ theorem LayerSignature.eq_of_fields
   cases right
   simp_all
 
-/-- When its bottom tree is signed, a signature replayed from one key generation is the one the
-other key generation's signer writes the revealed table values into. -/
+/-- Take a signature replayed from one key generation, and suppose its bottom tree is signed.
+
+Then it is the one the other key generation's signer writes the revealed table values into. -/
 theorem keygenViews_signWithEncoding_eq_globalReveal
     (left : ProgrammedGlobalChainKeygenView)
     (right : ProgrammedGlobalChainKeygenView ×

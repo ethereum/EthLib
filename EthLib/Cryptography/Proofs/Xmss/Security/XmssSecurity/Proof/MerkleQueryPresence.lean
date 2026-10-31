@@ -1,6 +1,7 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleQueryBound
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryPresence
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 open OracleComp OracleSpec
 
@@ -54,7 +55,7 @@ theorem treeNode_merkle_query_cached_in_largerCache
         obtain ⟨output, hcached, _⟩ := tweakableHash_query_cached parameter
           (.merkle ⟨levels, hlevel⟩ node) (Concrete.nodePayload left right)
           rightCache resultCache digest (by
-            simpa [Concrete.nodeHash, hlevel] using hnode)
+            simpa [Concrete.nodeHash_eq, hlevel] using hnode)
         have hleftEval := eval_answerFn_largerCache_eq_of_mem_support
           (Concrete.treeNode parameter secret levels (Concrete.childNode node false) :
             OracleComp HashSpec Digest)

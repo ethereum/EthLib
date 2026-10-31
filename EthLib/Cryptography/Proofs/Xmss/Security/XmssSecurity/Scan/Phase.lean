@@ -5,12 +5,18 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Card
 /-!
 # The adversary phase, query by query
 
-The four potentials on the ghost state and their one-query steps, for `Frame`'s `expectedFinal_le`
-and `expectedFinal_ge`:
-* `f1 = N² 1{PreBad} + N openΦ`, raised by `aCost` on a fresh encoding query at an unsigned leaf index;
-* `f2 = hvSum`, raised by at least `landing · aCost`;
-* `f3 = F3 (nCount, vCount, count)`, raised by `A` on the same queries, and `⊤` past the budget;
-* `f4 = N² 1{PostBad}`, raised by `N` on an encoding query at a signed leaf index.
+The four potentials on the ghost state and their one-query steps.
+
+`Frame`'s `expectedFinal_le` and `expectedFinal_ge` use them:
+
+* `f1 = N^2 1{PreBad} + N openΦ`.
+  It is raised by `aCost` on a fresh encoding query at an unsigned leaf index.
+* `f2 = hvSum`.
+  It is raised by at least `landing * aCost`.
+* `f3 = F3 (nCount, vCount, count)`.
+  It is raised by `A` on the same queries, and is `top` past the budget.
+* `f4 = N^2 1{PostBad}`.
+  It is raised by `N` on an encoding query at a signed leaf index.
 -/
 
 open OracleComp OracleSpec ENNReal
@@ -365,7 +371,7 @@ theorem f3_step (hQ : Q ≤ 2 ^ 127) (input : (OracleWorld + SigningSpec).Domain
       unfold f3
       rw [(counts_sign secretKey hr).1, (counts_sign secretKey hr).2.1]
 
-/-- **The mass bound.** -/
+/-- The mass bound. -/
 theorem landing_mul_hvSum_le (parameter : PublicParameter) (cache : QueryCache HashSpec)
     (trace : SigningCacheTrace) :
     landing * hvSum parameter cache trace ≤

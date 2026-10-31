@@ -8,9 +8,15 @@ import Mathlib.Basic.Real.Basic
 /-!
 # A quadratic potential for the landed count
 
-`X = V / p` rescales the landed count, `D = X - n` its drift from the query count. `Λ` is a
-supermartingale of an encoding step (a query that lands with probability `p`, caching one input and
-spending one unit of budget), so `X C + (1 - p) X²` is bounded in mean by `A n`.
+`X = V / p` rescales the landed count, `D = X - n` its drift from the query count.
+
+`Λ` is a supermartingale of an encoding step.
+
+An encoding step is a query that lands with probability `p`.
+
+It caches one input and spends one unit of budget.
+
+So `X C + (1 - p) X^2` is bounded in mean by `A n`.
 -/
 
 namespace XmssSecurity.Partner

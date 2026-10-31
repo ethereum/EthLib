@@ -380,8 +380,9 @@ theorem publicKey_eq_publicKeyFromCache (cache : QueryCache HashSpec)
   rw [publicKeyFromCache]
   exact congrArg₂ PublicKey.mk hroot rfl
 
-/-- The honest top signature of tree `b`, whose digest decodes in the cache, verifies on the honest
-bottom root. -/
+/-- Take the honest top signature of tree `b`, whose digest decodes in the cache.
+
+It verifies on the honest bottom root. -/
 theorem verifyTopFromCache_topPart (cache : QueryCache HashSpec) (secretKey : SecretKey)
     (key : TopIndex) (randomness : Randomness) (encoding : Encoding)
     (hsigned : secretKey.topSigned key = some (randomness, encoding))

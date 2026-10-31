@@ -56,7 +56,9 @@ theorem TreeCacheStable.authenticationPath_eq
       (by omega) (authenticationPathNode_subtreeValid leafIndex level)
         largerCache hle
 
-/-- The honest top signatures replayed from the key-generation cache do not change in larger caches. -/
+/-- Replay the honest top signatures from the key-generation cache.
+
+They do not change in larger caches. -/
 def TopCacheStable (secretKey : SecretKey) (cache : QueryCache HashSpec) : Prop :=
   ∀ largerCache, cache ≤ largerCache → ∀ key,
     Concrete.CacheReplay.topPartFromCache cache secretKey key =

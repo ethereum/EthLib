@@ -38,7 +38,8 @@ theorem leafAt_query_cached_in_largerCache
   rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
   obtain ⟨⟨endpoints, middleCache⟩, honeTime, hleaf⟩ := hmem
   obtain ⟨output, hcached, _hdigest⟩ := tweakableHash_query_cached parameter
-    (.leaf leafIndex) (Concrete.leafPayload endpoints) middleCache resultCache digest hleaf
+    (.leaf leafIndex) (Concrete.leafPayload endpoints) middleCache resultCache digest
+    (by tweakable_hashes at hleaf; exact hleaf)
   have hmiddleLe : middleCache ≤ resultCache :=
     randomOracle_cache_le (Concrete.leafHash parameter leafIndex endpoints :
       OracleComp HashSpec Digest) middleCache (digest, resultCache) hleaf
@@ -159,7 +160,9 @@ theorem leafAt_oneTimePublicKey_eq_in_largerCache
   rw [eval_oneTimePublicKey] at hresult hlarger
   exact hresult.trans hlarger.symm
 
-/-- Replaying a covered leafIndex's WOTS public key is stable after the surrounding tree computation. -/
+/-- Take the replay of a covered leafIndex's WOTS public key.
+
+It is stable after the surrounding tree computation. -/
 theorem treeNode_oneTimePublicKey_eq_in_largerCache
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest) (leafIndex : LeafIndex)
     (levels : Nat) (node : MerkleNode)
@@ -322,7 +325,9 @@ end XmssSecurity
 namespace XmssSecurity.Concrete.CacheReplay
 
 set_option linter.constructorNameAsVariable false in
-/-- A supported successful verification caches its exact recovered leaf input in every later cache. -/
+/-- Take a supported successful verification.
+
+It caches its exact recovered leaf input in every later cache. -/
 theorem verify_true_leaf_query_cached_in_largerCache
     (publicKey : PublicKey) (leafIndex : LeafIndex) (message : Message) (signature : Signature)
     (initialCache resultCache largerCache : QueryCache HashSpec)
@@ -364,7 +369,8 @@ theorem verify_true_leaf_query_cached_in_largerCache
       have hendpointsLe : endpointsCache ≤ largerCache := by
         exact hleafResultLe.trans (hrestLe.trans hle)
       obtain ⟨output, hleafCached, _⟩ := tweakableHash_query_cached publicKey.parameter
-        (.leaf leafIndex) (Concrete.leafPayload endpoints) endpointsCache leafCache leaf hleaf
+        (.leaf leafIndex) (Concrete.leafPayload endpoints) endpointsCache leafCache leaf
+        (by tweakable_hashes at hleaf; exact hleaf)
       have hleafLe : leafCache ≤ largerCache := by
         exact hrestLe.trans hle
       have hendpointsEval := eval_answerFn_largerCache_eq_of_mem_support

@@ -1304,7 +1304,8 @@ theorem concreteEncodingHash_eq_query
         (tweakableHashInput parameter (.encoding leafIndex)
           (Concrete.encodingPayload message randomness))
       pure (truncateHash output)) := by
-  unfold Concrete.encodingHash Concrete.tweakableHash Concrete.oracleHash
+  rw [Concrete.encodingHash_eq]
+  unfold Concrete.tweakableHash Concrete.oracleHash
   rfl
 
 theorem simulateQ_eagerTrace_query_pure_support_decompose

@@ -6,7 +6,9 @@ open OracleComp OracleSpec
 
 namespace XmssSecurity
 
-/-- Inputs of one concrete hash address: the 32-byte prefix `P || A`, ending with the domain's suffix. -/
+/-- Inputs of one concrete hash address.
+
+They start with the 32-byte prefix `P || A` and end with the domain's suffix. -/
 def AtHashAddress (parameter : PublicParameter) (domain : HashDomain)
     (input : HashInput) : Prop :=
   input.take 32 = bytesLE 16 parameter ++ tweakBytes domain ∧ domainSuffix domain <:+ input

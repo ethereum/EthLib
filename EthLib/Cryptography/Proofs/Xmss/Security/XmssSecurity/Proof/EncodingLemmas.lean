@@ -40,9 +40,13 @@ noncomputable def enumerateSuffixPositions (x : Encoding) (hx : Valid x) :
     SuffixPosition x ≃ Fin verificationChainHashes :=
   Fintype.equivFinOfCardEq (card_suffixPosition x hx)
 
-/-! The encoding-view decomposition of a digest: the 58 two-bit digits together with the top 12 bits.
-The statement's `decodeDigest` tests the top bits; `decodeDigest_eq_decodeView` restates it through this
-view. -/
+/-! The encoding-view decomposition of a digest.
+
+It is the 58 two-bit digits together with the top 12 bits.
+
+The statement's `decodeDigest` tests the top bits.
+
+`decodeDigest_eq_decodeView` restates it through this view. -/
 
 /-- The top bits accompany the 58 two-bit digits. -/
 abbrev EncodingView := Encoding × BitVec zeroBits
@@ -152,7 +156,9 @@ theorem digest_eq_of_decodeDigest_eq_some {left right : Digest} {x : Encoding}
   apply digestView_injective
   rw [(decodeDigest_eq_some_iff.mp hleft).1, (decodeDigest_eq_some_iff.mp hright).1]
 
-/-- Two distinct encoding-hash inputs decoding to the same valid encoding form a target collision. -/
+/-- Take two distinct encoding-hash inputs that decode to the same valid encoding.
+
+They form a target collision. -/
 theorem hash_collision_of_same_decodedEncoding {α : Type} (hash : α → Digest)
     {left right : α} {x : Encoding} (hne : left ≠ right)
     (hleft : decodeDigest (hash left) = some x)

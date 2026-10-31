@@ -6,9 +6,12 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.Budget
 # The scheme's seed
 
 Key generation first hashes the key's seed `S_0` into the scheme's seed `S = H("leanXMSS" || S_0)`.
-The answer is uniform, so the real game is the inner game from a uniform `S`, over a cache whose one
-entry names `S_0`. Dropping that entry costs at most one `2^-256` guess of `S_0` per hash call after the
-seed hash.
+
+The answer is uniform, so the real game is the inner game from a uniform `S`.
+
+It runs over a cache whose one entry names `S_0`.
+
+Dropping that entry costs at most one `2^-256` guess of `S_0` per hash call after the seed hash.
 
 The real game here is EthLib's, its signer keeping `S` and `P`.
 -/

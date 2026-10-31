@@ -4,7 +4,9 @@ import VCVio.OracleComp.QueryTracking.WriterCost
 /-!
 # XMSS security statement
 
-Strong unforgeability under chosen-message attacks (SUF-CMA) in the classical random-oracle model, with a 127-bit security target for the scheme in `Scheme.lean`.
+Strong unforgeability under chosen-message attacks (SUF-CMA) in the classical random-oracle model.
+
+The security target for the scheme in `Scheme.lean` is 127 bits.
 -/
 
 open OracleComp OracleSpec ENNReal
@@ -35,14 +37,22 @@ abbrev SigningSpec := SignRequest →ₒ Option Signature
 
 namespace SigningTranscript
 
-/-- A signing transcript is valid exactly when no leaf index occurs twice. Thus the adversary may make adaptive signing requests, but may not request two signatures at the same leaf index. -/
+/-- A signing transcript is valid exactly when no leaf index occurs twice.
+
+Thus the adversary may make adaptive signing requests.
+
+It may not request two signatures at the same leaf index. -/
 def Valid (log : QueryLog SigningSpec) : Prop :=
   (log.map fun entry => entry.1.leafIndex).Nodup
 
 instance (log : QueryLog SigningSpec) : Decidable (Valid log) :=
   inferInstanceAs (Decidable ((log.map fun entry => entry.1.leafIndex).Nodup))
 
-/-- The signer returned the claimed forgery exactly when the transcript contains the same leaf index, message, and signature. A different signature for a signed message is therefore a valid strong forgery. -/
+/-- The signer returned the claimed forgery.
+
+That is, the transcript contains the same leaf index, message, and signature.
+
+A different signature for a signed message is therefore a valid strong forgery. -/
 def Contains (log : QueryLog SigningSpec) (forgery : Forgery) : Prop :=
   ∃ entry ∈ log, entry.1 = forgery.request ∧ entry.2 = some forgery.signature
 
@@ -72,12 +82,16 @@ noncomputable def gameCore (adversary : Adversary) : OracleComp OracleWorld Bool
   let verified ← liftM (Concrete.verify pk forgery.leafIndex forgery.message forgery.signature : OracleComp HashSpec Bool)
   return decide (SigningTranscript.Valid log ∧ ¬SigningTranscript.Contains log forgery) && verified
 
-/-- Forward private sampling for free; answer hash queries consistently and count every call, including cache hits. -/
+/-- Forward private sampling for free.
+
+Answer hash queries consistently and count every call, including cache hits. -/
 noncomputable def countedOracle :=
   (unifFwdImpl HashSpec + (randomOracle : QueryImpl HashSpec (StateT (QueryCache HashSpec) ProbComp))).withAddCost
     (fun | .inl _ => (0 : Nat) | .inr _ => 1)
 
-/-- Run the game from an empty random-oracle cache, recording success and the total number of hash calls. -/
+/-- Run the game from an empty random-oracle cache.
+
+Record success and the total number of hash calls. -/
 noncomputable def experiment (adversary : Adversary) : ProbComp (Bool × Nat) :=
   (simulateQ countedOracle (gameCore adversary)).run.run' ∅
 
@@ -85,7 +99,9 @@ noncomputable def experiment (adversary : Adversary) : ProbComp (Bool × Nat) :=
 noncomputable def forgeAdvantage (adversary : Adversary) : ℝ≥0∞ :=
   Pr{let result ← experiment adversary}[result.1 = true]
 
-/-- Every execution uses at most `q` hash calls, including key generation, signing, and verification. -/
+/-- Every execution uses at most `q` hash calls.
+
+The count includes key generation, signing, and verification. -/
 def HasHashQueryBound (adversary : Adversary) (q : Nat) : Prop :=
   ∀ result ∈ support (experiment adversary), result.2 ≤ q
 

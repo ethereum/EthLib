@@ -8,9 +8,13 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
 /-!
 # The top randomizer bases
 
-Key generation reads the table of top randomizer bases once per top key, at the bottom root it has
-just computed. A uniform table read that way is a uniform base per key: both are a fresh uniform
-answer per request, the requests being distinct.
+Key generation reads the table of top randomizer bases once per top key.
+
+It reads it at the bottom root it has just computed.
+
+A uniform table read that way is a uniform base per key.
+
+Both are a fresh uniform answer per request, since the requests are distinct.
 -/
 
 open OracleComp OracleSpec

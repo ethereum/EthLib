@@ -124,7 +124,9 @@ theorem Concrete.keygen_cache_unique_merkleAddress
     keyResult.2 hroot targetLevel targetNode left right leftOutput rightOutput
     hleftP hrightP hleft hright
 
-/-- Key generation evaluates only chain, leaf, and Merkle domains, so its cache contains no encoding input. -/
+/-- Key generation evaluates only chain, leaf, and Merkle domains.
+
+So its cache contains no encoding input. -/
 theorem Concrete.keygen_cache_none_encodingInput
     (keyResult : (PublicKey × SecretKey) × QueryCache HashSpec)
     (hmem : keyResult ∈ support

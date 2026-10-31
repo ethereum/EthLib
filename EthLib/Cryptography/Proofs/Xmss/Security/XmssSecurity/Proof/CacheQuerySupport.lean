@@ -5,7 +5,9 @@ open OracleComp OracleSpec
 
 namespace XmssSecurity.Concrete.CacheReplay
 
-/-- A computation making no query to an absent input leaves that input absent from the lazy-oracle cache. -/
+/-- Take a computation that makes no query to an absent input.
+
+It leaves that input absent from the lazy-oracle cache. -/
 theorem cache_none_of_zero_query_bound {α : Type}
     (computation : OracleComp HashSpec α) (target : HashInput)
     (initialCache finalCache : QueryCache HashSpec) (result : α)
@@ -42,7 +44,9 @@ theorem cache_none_of_zero_query_bound {α : Type}
       exact ih output middleCache finalCache result
         (by simpa [hne] using hbound.2 output) hmiddle hrest
 
-/-- From an initially empty address class, one query to that class can cache at most one input in it. -/
+/-- Start from an address class with no cached input.
+
+One query to that class can cache at most one input in it. -/
 theorem cache_unique_of_query_bound_one {α : Type}
     (computation : OracleComp HashSpec α) (p : HashInput → Prop) [DecidablePred p]
     (initialCache finalCache : QueryCache HashSpec) (result : α)

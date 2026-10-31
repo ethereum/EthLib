@@ -4,10 +4,19 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodin
 /-!
 # The partner potential
 
-For one leaf index, the cached encoding inputs `(message, randomness)` and the scan walk on each
-message's line of randomizers. A cached input is a hit when its digest is valid; it is partnered when
-another cached input of the same leaf index has the same digest. `W y` is the start mass the scan
-carries to `y`, `Φ` the mass of the partnered hits and `H` the mass of all hits.
+Fix one leaf index.
+
+The file covers its cached encoding inputs `(message, randomness)`.
+
+It also covers the scan walk on each message's line of randomizers.
+
+A cached input is a hit when its digest is valid.
+
+It is partnered when another cached input of the same leaf index has the same digest.
+
+`W y` is the start mass the scan carries to `y`.
+
+`Φ` is the mass of the partnered hits, and `H` the mass of all hits.
 -/
 
 open OracleComp OracleSpec ENNReal

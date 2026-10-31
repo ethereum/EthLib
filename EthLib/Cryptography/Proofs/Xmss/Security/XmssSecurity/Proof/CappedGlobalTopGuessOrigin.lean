@@ -5,8 +5,9 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopStructural
 /-!
 # The origin of a top guess
 
-A winning top guess forges the hidden honest top value at a coordinate no returned signature
-revealed.
+A winning top guess forges the hidden honest top value at some coordinate.
+
+No returned signature revealed that coordinate.
 -/
 
 open OracleComp OracleSpec

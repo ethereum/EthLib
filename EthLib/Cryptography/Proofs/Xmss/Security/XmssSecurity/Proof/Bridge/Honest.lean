@@ -1,12 +1,15 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Program
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # The honest preparation
 
-The model's key generation over a derivation table computes every chain, leaf and node of both
-layers and every top signature. After it, the cache resolves each of these computations to the value
-the model's secret key stores.
+The model's key generation runs over a derivation table.
+
+It computes every chain, leaf and node of both layers and every top signature.
+
+After it, the cache resolves each of these computations to the value the model's secret key stores.
 -/
 
 open OracleComp OracleSpec
@@ -19,7 +22,9 @@ set_option backward.isDefEq.respectTransparency false
 
 /-! ## The model key over a table -/
 
-/-- The bottom chain starts: chain `i` of key `idx` is half `i mod 2` of derivation `(idx, i / 2)`. -/
+/-- The bottom chain starts.
+
+Chain `i` of key `idx` is half `i mod 2` of derivation `(idx, i / 2)`. -/
 def Derivations.secret (d : Derivations) : LeafIndex → ChainIndex → Digest :=
   fun index chain => hashHalf chain.val (d.bottom (index, chainPair chain))
 
@@ -57,6 +62,56 @@ theorem tweakableHash_tweakable (parameter : PublicParameter) (domain : HashDoma
     OnlyQueries Tweakable (Concrete.tweakableHash parameter domain payload : OracleComp HashSpec Digest) :=
   (onlyQueries_query ⟨parameter, domain, payload, rfl⟩).bind fun _ => .pure _
 
+/-- Each of the model's hashes makes one tweakable query. -/
+theorem chainHash_tweakable (parameter : PublicParameter) (index : LeafIndex) (chain : ChainIndex)
+    (step : ChainStep) (value : Digest) :
+    OnlyQueries Tweakable (Concrete.chainHash parameter index chain step value :
+      OracleComp HashSpec Digest) := by
+  rw [Concrete.chainHash_eq]
+  exact tweakableHash_tweakable _ _ _
+
+theorem topChainHash_tweakable (parameter : PublicParameter) (key : TopIndex) (chain : ChainIndex)
+    (step : ChainStep) (value : Digest) :
+    OnlyQueries Tweakable (Concrete.topChainHash parameter key chain step value :
+      OracleComp HashSpec Digest) := by
+  rw [Concrete.topChainHash_eq]
+  exact tweakableHash_tweakable _ _ _
+
+theorem leafHash_tweakable (parameter : PublicParameter) (index : LeafIndex)
+    (ends : ChainIndex → Digest) :
+    OnlyQueries Tweakable (Concrete.leafHash parameter index ends :
+      OracleComp HashSpec Digest) := by
+  rw [Concrete.leafHash_eq]
+  exact tweakableHash_tweakable _ _ _
+
+theorem topLeafHash_tweakable (parameter : PublicParameter) (key : TopIndex)
+    (ends : ChainIndex → Digest) :
+    OnlyQueries Tweakable (Concrete.topLeafHash parameter key ends :
+      OracleComp HashSpec Digest) := by
+  rw [Concrete.topLeafHash_eq]
+  exact tweakableHash_tweakable _ _ _
+
+theorem nodeHash_tweakable (parameter : PublicParameter) (level : MerkleLevel) (node : MerkleNode)
+    (left right : Digest) :
+    OnlyQueries Tweakable (Concrete.nodeHash parameter level node left right :
+      OracleComp HashSpec Digest) := by
+  rw [Concrete.nodeHash_eq]
+  exact tweakableHash_tweakable _ _ _
+
+theorem topNodeHash_tweakable (parameter : PublicParameter) (level : MerkleLevel) (node : TopNode)
+    (left right : Digest) :
+    OnlyQueries Tweakable (Concrete.topNodeHash parameter level node left right :
+      OracleComp HashSpec Digest) := by
+  rw [Concrete.topNodeHash_eq]
+  exact tweakableHash_tweakable _ _ _
+
+theorem topEncodingHash_tweakable (parameter : PublicParameter) (key : TopIndex) (root : Digest)
+    (randomness : Randomness) :
+    OnlyQueries Tweakable (Concrete.topEncodingHash parameter key root randomness :
+      OracleComp HashSpec Digest) := by
+  rw [Concrete.topEncodingHash_eq]
+  exact tweakableHash_tweakable _ _ _
+
 theorem chainWalk_tweakable (parameter : PublicParameter) (index : LeafIndex) (chain : ChainIndex)
     (start steps : Nat) (value : Digest) :
     OnlyQueries Tweakable (Concrete.chainWalk parameter index chain start steps value :
@@ -67,7 +122,7 @@ theorem chainWalk_tweakable (parameter : PublicParameter) (index : LeafIndex) (c
       rw [Concrete.chainWalk]
       refine ih.bind fun previous => ?_
       split
-      · exact tweakableHash_tweakable _ _ _
+      · exact chainHash_tweakable _ _ _ _ _
       · exact .pure _
 
 theorem topChainWalk_tweakable (parameter : PublicParameter) (key : TopIndex) (chain : ChainIndex)
@@ -80,7 +135,7 @@ theorem topChainWalk_tweakable (parameter : PublicParameter) (key : TopIndex) (c
       rw [Concrete.topChainWalk]
       refine ih.bind fun previous => ?_
       split
-      · exact tweakableHash_tweakable _ _ _
+      · exact topChainHash_tweakable _ _ _ _ _
       · exact .pure _
 
 theorem treeNode_tweakable (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
@@ -90,12 +145,12 @@ theorem treeNode_tweakable (parameter : PublicParameter) (secret : LeafIndex →
   | zero =>
       rw [Concrete.treeNode_zero_eq]
       exact (OnlyQueries.sequenceFin fun chain => chainWalk_tweakable _ _ _ _ _ _).bind
-        fun _ => tweakableHash_tweakable _ _ _
+        fun _ => leafHash_tweakable _ _ _
   | succ levels ih =>
       rw [Concrete.treeNode_succ_eq]
       refine (ih _).bind fun _ => (ih _).bind fun _ => ?_
       split
-      · exact tweakableHash_tweakable _ _ _
+      · exact nodeHash_tweakable _ _ _ _ _
       · exact .pure _
 
 theorem topTreeNode_tweakable (parameter : PublicParameter) (topSecret : TopIndex → ChainIndex → Digest)
@@ -106,12 +161,12 @@ theorem topTreeNode_tweakable (parameter : PublicParameter) (topSecret : TopInde
   | zero =>
       rw [Concrete.topTreeNode]
       exact (OnlyQueries.sequenceFin fun chain => topChainWalk_tweakable _ _ _ _ _ _).bind
-        fun _ => tweakableHash_tweakable _ _ _
+        fun _ => topLeafHash_tweakable _ _ _
   | succ levels ih =>
       rw [Concrete.topTreeNode]
       refine (ih _).bind fun _ => (ih _).bind fun _ => ?_
       split
-      · exact tweakableHash_tweakable _ _ _
+      · exact topNodeHash_tweakable _ _ _ _ _
       · exact .pure _
 
 theorem topSignFrom_tweakable (parameter : PublicParameter) (key : TopIndex) (root : Digest)
@@ -122,7 +177,7 @@ theorem topSignFrom_tweakable (parameter : PublicParameter) (key : TopIndex) (ro
   | zero => exact .pure _
   | succ attempts ih =>
       rw [Concrete.topSignFrom]
-      refine (tweakableHash_tweakable _ _ _).bind fun digest => ?_
+      refine (topEncodingHash_tweakable _ _ _ _).bind fun digest => ?_
       split
       · exact .pure _
       · exact ih _
@@ -135,8 +190,9 @@ theorem honestRun_tweakable (d : Derivations) : OnlyQueries Tweakable (honestRun
 
 /-! ## The prepared cache -/
 
-/-- `cache` is the cache after the logged run of `honestRun d` with result `result` from the
-programmed cache of `seed`. -/
+/-- `cache` is the cache after the logged run of `honestRun d` with result `result`.
+
+The run starts from the programmed cache of `seed`. -/
 structure Prepared (seed : MasterSeed) (d : Derivations)
     (result : (Digest × (TopIndex → Option (Randomness × Encoding))) × QueryLog HashSpec)
     (cache : QueryCache HashSpec) : Prop where

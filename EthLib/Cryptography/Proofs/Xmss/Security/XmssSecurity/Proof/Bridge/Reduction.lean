@@ -4,10 +4,17 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.Presam
 /-!
 # From the real experiment to the table game
 
-The real game from a uniform scheme seed `S` (`innerGame`; `SchemeSeed` reaches it from the real
-experiment). Presampling every derivation and the model's key generation before it changes nothing;
-afterwards the real key generation is cached and the rest of the real game erases to the model's game
-with the table signer. A budget of `q - 1` from `S` leaves `q - K` hash calls after key generation.
+The real game from a uniform scheme seed `S` is `innerGame`.
+
+`SchemeSeed` reaches it from the real experiment.
+
+Presampling every derivation and the model's key generation before it changes nothing.
+
+Afterwards the real key generation is cached.
+
+The rest of the real game erases to the model's game with the table signer.
+
+A budget of `q - 1` from `S` leaves `q - K` hash calls after key generation.
 -/
 
 open OracleComp OracleSpec
@@ -49,8 +56,11 @@ theorem mem_support_preparation (seed : MasterSeed) (d : Derivations)
   rw [mem_support_bind_iff]
   exact ⟨(r, cache), hr, by simp⟩
 
-/-- The table game reached from a seed: the derivations drawn, the model key prepared from the
-programmed cache, then the model's game with the table signer. -/
+/-- The table game reached from a seed.
+
+It draws the derivations and prepares the model key from the programmed cache.
+
+Then it runs the model's game with the table signer. -/
 noncomputable def tableGame (adversary : EthAdversary) (seed : MasterSeed) : ProbComp Bool := do
   let d ← drawDerivations
   let r ← (simulateQ randomOracle (honestRun d).withQueryLog).run (progCache seed d)

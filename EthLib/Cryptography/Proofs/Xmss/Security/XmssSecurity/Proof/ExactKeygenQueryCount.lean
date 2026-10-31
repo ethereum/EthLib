@@ -6,6 +6,7 @@ import VCVio.OracleComp.QueryTracking.QueryBound
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
 import VCVio.OracleComp.QueryTracking.SubSpec
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 open OracleComp OracleSpec
 open scoped BigOperators
@@ -41,8 +42,9 @@ theorem leafAt (parameter : PublicParameter)
   unfold Concrete.leafAt
   exact (oneTimePublicKey parameter secret leafIndex).bind
     (fun endpoints => Concrete.leafHash parameter leafIndex endpoints) 1
-    (fun endpoints => tweakableHash parameter (.leaf leafIndex)
-      (Concrete.leafPayload endpoints))
+    (fun endpoints => by
+      rw [Concrete.leafHash_eq]
+      exact tweakableHash parameter (.leaf leafIndex) (Concrete.leafPayload endpoints))
 
 theorem treeNode (parameter : PublicParameter)
     (secret : LeafIndex → ChainIndex → Digest) (levels : Nat) (node : MerkleNode)
@@ -67,8 +69,10 @@ theorem treeNode (parameter : PublicParameter)
             (treeHashQueryCount levels + 1) :=
         hright.bind
           (fun right => Concrete.nodeHash parameter ⟨levels, hlevel⟩ node left right) 1
-          (fun right => tweakableHash parameter (.merkle ⟨levels, hlevel⟩ node)
-            (Concrete.nodePayload left right))
+          (fun right => by
+            rw [Concrete.nodeHash_eq]
+            exact tweakableHash parameter (.merkle ⟨levels, hlevel⟩ node)
+              (Concrete.nodePayload left right))
       simpa [hlevel, treeHashQueryCount, Nat.add_assoc, Nat.add_comm,
         Nat.add_left_comm, Nat.two_mul] using
         hleft.bind

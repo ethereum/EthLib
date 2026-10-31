@@ -5,7 +5,7 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.SignStep
 
 Summed over leaf indices, each read on the leaf index's frozen cache:
 * `openΦ`: the partner mass `Φ` of the unsigned leaf indices;
-* `hvSum`: `V · H`;
+* `hvSum`: `V * H`;
 * `nCount`, `vCount`: the cached inputs and the cached hits;
 * `PreBad`: a first entry selected a cached input partnered in its initial cache;
 * `PostBad`: a first entry selected a cached input, and a later query repeated its digest.

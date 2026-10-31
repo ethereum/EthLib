@@ -19,8 +19,9 @@ noncomputable instance (relevant : HashInput → Prop) :
     DecidablePred (IsRelevantHashQuery relevant) :=
   Classical.decPred _
 
-/-- Only fresh hits at relevant hash inputs are charged, so unrelated hash domains consume no
-collision budget. -/
+/-- Only fresh hits at relevant hash inputs are charged.
+
+So unrelated hash domains consume no collision budget. -/
 theorem mixed_adaptive_truncated_output_fresh_relevant_hit_from_cache_le_expected
     {α : Type} (computation : OracleComp OracleWorld α)
     (relevant : HashInput → Prop) (target : HashInput → Digest)
@@ -300,8 +301,9 @@ theorem mixed_adaptive_truncated_output_fresh_relevant_hit_from_cache_le_expecte
                   ((2 ^ digestBits : Nat) : ENNReal) := by
                 rw [hcount, ite_eq_right hrelevant, zero_add]
 
-/-- An adaptive fresh-target collision is charged only to source queries at inputs moved by the
-target map. -/
+/-- An adaptive fresh-target collision is charged only to some source queries.
+
+These are the queries at inputs the target map moves. -/
 theorem mixed_adaptiveFreshDigestCollisionWith_le_expected_moved
     {α : Type} (computation : OracleComp OracleWorld α)
     (cache : QueryCache HashSpec) (targetInput : HashInput → HashInput)
@@ -344,8 +346,9 @@ theorem mixed_adaptiveFreshDigestCollisionWith_le_expected_moved
     _ ≤ _ := mixed_adaptive_truncated_output_fresh_relevant_hit_from_cache_le_expected
       computation (fun input => targetInput input ≠ input) target cache
 
-/-- A randomized prefix may choose the initial cache and target map. The collision is charged
-only to continuation queries at inputs moved by the chosen map. -/
+/-- A randomized prefix may choose the initial cache and target map.
+
+The collision is charged only to continuation queries at inputs moved by the chosen map. -/
 theorem mixed_adaptiveFreshDigestCollision_after_prefix_le_expectedMovedContinuation
     {α β : Type}
     (head : OracleComp OracleWorld β)

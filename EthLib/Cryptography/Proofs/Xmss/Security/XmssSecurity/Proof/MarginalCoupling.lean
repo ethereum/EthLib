@@ -282,8 +282,9 @@ theorem generalFiberCoupling_support
 
 end GeneralFiberCoupling
 
-/-- A pair in the support of a mass function has each coordinate in the support of the
-corresponding marginal. -/
+/-- Take a pair in the support of a mass function.
+
+Each coordinate is in the support of the corresponding marginal. -/
 theorem PMF.fst_mem_support_map {α β : Type} {c : PMF (α × β)} {pair : α × β}
     (hpair : pair ∈ c.support) : pair.1 ∈ (c.map Prod.fst).support :=
   (PMF.mem_support_map_iff _ _ _).2 ⟨pair, hpair, rfl⟩
@@ -300,8 +301,9 @@ private instance finiteRangeOfUniform {ι : Type} {spec : OracleSpec ι}
     [OracleSpec.UniformAnswerMeasure spec] (t : spec.Domain) : Finite (spec.Range t) :=
   OracleSpec.UniformAnswerMeasure.finite_range t
 
-/-- The output distribution of an oracle computation with finite answers, as a mass function:
-each output's mass is the probability of drawing it. -/
+/-- The output distribution of an oracle computation with finite answers, as a mass function.
+
+Each output's mass is the probability of drawing it. -/
 noncomputable def outputPMF {α ι : Type} {spec : OracleSpec ι}
     [OracleSpec.UniformAnswerMeasure spec] (oa : OracleComp spec α) : PMF α :=
   ⟨fun x => Pr{let y ← oa}[y = x], by
@@ -343,8 +345,9 @@ theorem mem_support_of_mem_support_outputPMF {oa : OracleComp spec α} {x : α}
     (hx : x ∈ (outputPMF oa).support) : x ∈ support oa :=
   (OracleComp.mem_support_iff_prEvent_ne_zero oa x).2 ((PMF.mem_support_iff _ _).1 hx)
 
-/-- A mass function on pairs with the two output distributions as marginals, concentrated on a
-relation, gives a relational triple. -/
+/-- Take a mass function on pairs with the two output distributions as marginals.
+
+If it is concentrated on a relation, it gives a relational triple. -/
 theorem relTriple_of_pmf (oa : OracleComp spec₁ α) (ob : OracleComp spec₂ β)
     {R : α → β → Prop} (c : PMF (α × β))
     (hfst : c.map Prod.fst = outputPMF oa) (hsnd : c.map Prod.snd = outputPMF ob)
@@ -359,8 +362,9 @@ theorem relTriple_of_pmf (oa : OracleComp spec₁ α) (ob : OracleComp spec₂ �
   · rw [ae_iff, PMF.toMeasure_apply_eq_toOuterMeasure, PMF.toOuterMeasure_apply_eq_zero_iff]
     exact Set.disjoint_left.mpr fun pair hpair hnot => hnot (hR pair hpair)
 
-/-- A relational triple between oracle computations with finite answers has a coupling mass
-function concentrated on its relation. -/
+/-- Take a relational triple between oracle computations with finite answers.
+
+It has a coupling mass function concentrated on its relation. -/
 theorem exists_pmf_of_relTriple {oa : OracleComp spec₁ α} {ob : OracleComp spec₂ β}
     {R : α → β → Prop} (h : RelTriple oa ob R) :
     ∃ c : PMF (α × β), c.map Prod.fst = outputPMF oa ∧ c.map Prod.snd = outputPMF ob ∧

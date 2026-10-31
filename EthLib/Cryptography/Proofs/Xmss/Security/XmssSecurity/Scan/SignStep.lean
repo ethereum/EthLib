@@ -4,8 +4,9 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Selection
 /-!
 # A signing request at an unsigned leaf index
 
-The signer selects a cached hit `y` with probability at most `W y / 2^128`, so it selects a partnered one with
-probability at most `Φ / 2^128`.
+The signer selects a cached hit `y` with probability at most `W y / 2^128`.
+
+So it selects a partnered one with probability at most `Φ / 2^128`.
 -/
 
 open OracleComp OracleSpec ENNReal
@@ -67,7 +68,7 @@ theorem sign_select_le (leafIndex : LeafIndex) (message : Message) (cache : Quer
     congr 1
 
 open Classical in
-/-- **The signer selects a partnered input with probability at most `Φ / 2^128`.** -/
+/-- The signer selects a partnered input with probability at most `Φ / 2^128`. -/
 theorem sign_collision_le (leafIndex : LeafIndex) (message : Message) (cache : QueryCache HashSpec) :
     Pr{let r ← (simulateQ romImpl (Concrete.scheme.sign secretKey leafIndex message)).run cache}[(⟨⟨leafIndex, message⟩, r.1, cache, r.2⟩ : SigningCacheEntry).CachedSelectionCollision
           secretKey cache] ≤

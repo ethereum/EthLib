@@ -1,4 +1,5 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 open OracleComp OracleSpec
 open scoped BigOperators
@@ -136,8 +137,9 @@ theorem chainWalk (parameter : PublicParameter) (leafIndex : LeafIndex)
       exact (ih value (by omega)).bind
         (fun previous => Concrete.chainHash parameter leafIndex chain
           ⟨position + steps, hstep⟩ previous) 1
-        (fun previous => tweakableHash parameter (.chain leafIndex chain
-          ⟨position + steps, hstep⟩) (Concrete.digestBytes previous))
+        (fun previous => by
+          rw [Concrete.chainHash_eq]
+          exact tweakableHash parameter (.chain leafIndex chain ⟨position + steps, hstep⟩) _)
 
 theorem sequenceFin {n : Nat} (computation : Fin n → OracleComp spec α)
     (count : Fin n → Nat)

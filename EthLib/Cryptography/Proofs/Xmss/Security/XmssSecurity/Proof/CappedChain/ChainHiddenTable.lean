@@ -85,8 +85,9 @@ theorem winningOutcomeChainValueHasKeygenOrigin_eq_table
   outcomeChainValueHasKeygenOrigin_eq_table keygenCache finalCache secretKey
     outcome chain horigin.2
 
-/-- The coordinates a returned signature sends at a chain of either layer: the bottom one at its
-leaf index and the top one of its bottom tree. -/
+/-- The coordinates a returned signature sends at a chain of either layer.
+
+These are the bottom one at its leaf index and the top one of its bottom tree. -/
 def ReturnedChainValueIndex
     (cache : QueryCache HashSpec) (secretKey : SecretKey)
     (log : QueryLog SigningSpec) (chain : ChainIndex) (index : ChainValueIndex) : Prop :=
@@ -101,7 +102,9 @@ def ReturnedChainValueIndex
       secretKey.topSigned (topKeyOf request.leafIndex) = some (randomness, topEncoding) ∧
       index.1 = .inr (topKeyOf request.leafIndex) ∧ topEncoding chain ≤ index.2)
 
-/-- Coordinates sent by the signer, together with every later coordinate that can be derived by walking the chain forward. -/
+/-- Coordinates sent by the signer, together with every later coordinate derivable from them.
+
+A later coordinate is derived by walking the chain forward. -/
 noncomputable def returnedChainValueIndices
     (cache : QueryCache HashSpec) (secretKey : SecretKey)
     (log : QueryLog SigningSpec) (chain : ChainIndex) : Finset ChainValueIndex := by

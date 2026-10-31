@@ -1,5 +1,6 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConcreteQueryBound
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 open OracleComp OracleSpec
 
@@ -103,6 +104,7 @@ theorem Concrete.treeNode_queryBound_leafAddress
               (if TreeCovers levels (Concrete.childNode node true) targetLeafIndex then 1 else 0) := by
         refine OracleComp.isQueryBoundP_bind (m := 0) hright ?_
         intro right _
+        tweakable_hashes
         exact Concrete.tweakableHash_queryBound_atOtherAddress parameter
           (.leaf targetLeafIndex) (.merkle ⟨levels, hlevel⟩ node)
           (Concrete.nodePayload left right) (by simp)
@@ -113,8 +115,11 @@ theorem Concrete.treeNode_queryBound_leafAddress
 
 /-! ### Key generation's honest computation by part
 
-The bottom trees query only bottom chain, leaf and Merkle domains, the top grinding and the top tree
-only top domains, so a predicate that rejects the top domains is bounded by the bottom trees alone. -/
+The bottom trees query only bottom chain, leaf and Merkle domains.
+
+The top grinding and the top tree query only top domains.
+
+So a predicate that rejects the top domains is bounded by the bottom trees alone. -/
 
 /-- A predicate rejecting every input of the top layer's domains. -/
 def RejectsTop (parameter : PublicParameter) (p : HashInput → Prop) : Prop :=
@@ -150,7 +155,8 @@ theorem Concrete.topChainWalk_queryBound_zero_of_rejectsTop (htop : RejectsTop p
       refine OracleComp.isQueryBoundP_bind (m := 0) ih ?_
       intro previous _
       split
-      · exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p (htop _ _ rfl)
+      · tweakable_hashes
+        exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p (htop _ _ rfl)
       · simp
 
 theorem Concrete.topTreeNode_queryBound_zero_of_rejectsTop (htop : RejectsTop parameter p)
@@ -164,6 +170,7 @@ theorem Concrete.topTreeNode_queryBound_zero_of_rejectsTop (htop : RejectsTop pa
         (Concrete.sequenceFin_queryBound_zero _ p fun chain =>
           Concrete.topChainWalk_queryBound_zero_of_rejectsTop parameter p htop _ _ _ _ _) ?_
       intro endpoints _
+      tweakable_hashes
       exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p (htop _ _ rfl)
   | succ levels ih =>
       rw [Concrete.topTreeNode]
@@ -172,7 +179,8 @@ theorem Concrete.topTreeNode_queryBound_zero_of_rejectsTop (htop : RejectsTop pa
       refine OracleComp.isQueryBoundP_bind (m := 0) (ih _) ?_
       intro right _
       split
-      · exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p (htop _ _ rfl)
+      · tweakable_hashes
+        exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p (htop _ _ rfl)
       · simp
 
 theorem Concrete.topSignFrom_queryBound_zero_of_rejectsTop (htop : RejectsTop parameter p)
@@ -183,6 +191,7 @@ theorem Concrete.topSignFrom_queryBound_zero_of_rejectsTop (htop : RejectsTop pa
   | zero => simp [Concrete.topSignFrom]
   | succ attempts ih =>
       rw [Concrete.topSignFrom]
+      tweakable_hashes
       refine OracleComp.isQueryBoundP_bind (m := 0)
         (Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p (htop _ _ rfl)) ?_
       intro digest _
@@ -202,7 +211,8 @@ theorem Concrete.chainWalk_queryBound_zero_of_rejectsBottomTree
       refine OracleComp.isQueryBoundP_bind (m := 0) ih ?_
       intro previous _
       split
-      · exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p
+      · tweakable_hashes
+        exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p
           (hbottom _ _ rfl (by simp))
       · simp
 
@@ -218,6 +228,7 @@ theorem Concrete.treeNode_queryBound_zero_of_rejectsBottomTree
         (Concrete.sequenceFin_queryBound_zero _ p fun chain =>
           Concrete.chainWalk_queryBound_zero_of_rejectsBottomTree parameter p hbottom _ _ _ _ _) ?_
       intro endpoints _
+      tweakable_hashes
       exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p
         (hbottom _ _ rfl (by simp))
   | succ levels ih =>
@@ -227,15 +238,17 @@ theorem Concrete.treeNode_queryBound_zero_of_rejectsBottomTree
       refine OracleComp.isQueryBoundP_bind (m := 0) (ih _) ?_
       intro right _
       split
-      · exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p
+      · tweakable_hashes
+        exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p
           (hbottom _ _ rfl (by simp))
       · simp
 
 variable (secret : LeafIndex → ChainIndex → Digest) (topSecret : TopIndex → ChainIndex → Digest)
   (topBase : TopIndex → Digest → OracleComp HashSpec Randomness)
 
-/-- Key generation's honest computation is bounded by its bottom trees, for a predicate rejecting
-the top domains and met by no top base query. -/
+/-- Take a predicate that rejects the top domains and that no top base query meets.
+
+For it, key generation's honest computation is bounded by its bottom trees. -/
 theorem Concrete.honestKeygen_queryBound_of_bottomTrees (bound : TopIndex → Nat) (n : Nat)
     (htop : RejectsTop parameter p) (hbase : ∀ key root, (topBase key root).IsQueryBoundP p 0)
     (htrees : ∀ key, (Concrete.treeNode parameter secret treeHeight (Concrete.bottomRootNode key) :
@@ -257,7 +270,9 @@ theorem Concrete.honestKeygen_queryBound_of_bottomTrees (bound : TopIndex → Na
         Concrete.topSignFrom_queryBound_zero_of_rejectsTop parameter p htop key root base _ 0)
     (by omega)
 
-/-- Key generation's honest computation makes no query rejected by both layers' trees and grinding. -/
+/-- Take a query that both layers' trees and grinding reject.
+
+Key generation's honest computation never makes it. -/
 theorem Concrete.honestKeygen_queryBound_zero
     (htop : RejectsTop parameter p) (hbottom : RejectsBottomTree parameter p)
     (hbase : ∀ key root, (topBase key root).IsQueryBoundP p 0) :
@@ -323,7 +338,9 @@ theorem Concrete.rootTree_queryBound_leafAddress
       Concrete.treeNode_queryBound_leafAddress parameter secret targetLeafIndex treeHeight
         (Concrete.bottomRootNode key) le_rfl (treeSubtreeValid_bottomRootNode _)
 
-/-- A supported execution of key generation's honest computation from an empty cache contains at most one input at each bottom leaf address. -/
+/-- Run key generation's honest computation from an empty cache.
+
+A supported execution contains at most one input at each bottom leaf address. -/
 theorem Concrete.CacheReplay.rootTree_cache_unique_leafAddress
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
     (topSecret : TopIndex → ChainIndex → Digest) (topBase : TopIndex → Randomness)
@@ -396,6 +413,7 @@ theorem Concrete.treeNode_queryBound_chainAddress
               (if TreeCovers levels (Concrete.childNode node true) targetLeafIndex then 1 else 0) := by
         refine OracleComp.isQueryBoundP_bind (m := 0) hright ?_
         intro right _
+        tweakable_hashes
         exact Concrete.tweakableHash_queryBound_atOtherAddress parameter
           (.chain targetLeafIndex targetChain targetStep) (.merkle ⟨levels, hlevel⟩ node)
           (Concrete.nodePayload left right) (by simp)
@@ -423,7 +441,9 @@ theorem Concrete.rootTree_queryBound_chainAddress
       Concrete.treeNode_queryBound_chainAddress parameter secret targetLeafIndex targetChain
         targetStep treeHeight (Concrete.bottomRootNode key) le_rfl (treeSubtreeValid_bottomRootNode _)
 
-/-- A supported execution of key generation's honest computation from an empty cache contains at most one input at each bottom chain-step address. -/
+/-- Run key generation's honest computation from an empty cache.
+
+A supported execution contains at most one input at each bottom chain-step address. -/
 theorem Concrete.CacheReplay.rootTree_cache_unique_chainAddress
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
     (topSecret : TopIndex → ChainIndex → Digest) (topBase : TopIndex → Randomness)

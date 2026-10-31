@@ -19,7 +19,9 @@ def StateLens.fst : StateLens (BaseState × AuxState) BaseState where
   get_set := by simp
   set_set := by simp
 
-/-- If every decorated query runs a base query and only overwrites the viewed state component, the same description holds for every oracle computation. -/
+/-- Suppose every decorated query runs a base query and only overwrites the viewed state component.
+
+Then the same description holds for every oracle computation. -/
 theorem StateLens.simulateQ_run_eq
     {spec : OracleSpec ι} {m : Type → Type*} [Monad m] [LawfulMonad m]
     {State BaseState : Type}

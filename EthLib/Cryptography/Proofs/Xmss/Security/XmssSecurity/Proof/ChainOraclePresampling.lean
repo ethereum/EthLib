@@ -7,12 +7,18 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HiddenValue
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.UniformFiniteTable
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HonestKeygenRun
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenFacts
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # Presampling the chains of key generation
 
-Key generation walks every chain of both layers, so its run equals the run that first computes every
-chain trajectory and then runs key generation from the warmed cache.
+Key generation walks every chain of both layers.
+
+So its run equals a run in two steps.
+
+The first step computes every chain trajectory.
+
+The second runs key generation from the warmed cache.
 -/
 
 open OracleComp OracleSpec ENNReal
@@ -119,6 +125,7 @@ theorem chainWalk_query_cached_in_largerCache
       · have hoffsetEq : offset = steps := by omega
         subst offset
         simp only [hposition, ↓reduceDIte] at hrest
+        tweakable_hashes at hrest
         obtain ⟨output, hcached, _⟩ := tweakableHash_query_cached parameter
           (.chain leafIndex chain ⟨position + steps, hposition⟩)
           (Concrete.digestBytes previous) middleCache resultCache digest hrest
@@ -209,8 +216,9 @@ namespace XmssSecurity
 
 open Concrete.CacheReplay
 
-/-- Key generation's honest computation from one start function for both layers' chains and fixed
-top bases. -/
+/-- Key generation's honest computation with fixed top bases.
+
+One start function serves the chains of both layers. -/
 abbrev Concrete.honestKeygenFrom (parameter : PublicParameter)
     (start : ChainKey → ChainIndex → Digest) (topBase : TopIndex → Randomness) :
     OracleComp HashSpec (Digest × (TopIndex → Option (Randomness × Encoding))) :=
@@ -731,7 +739,7 @@ theorem Concrete.simulateQ_encodingHash_run (parameter : PublicParameter) (leafI
       (fun result : HashOutput × QueryCache HashSpec => (truncateHash result.1, result.2)) <$>
         (randomOracle (Concrete.CacheView.encodingInput parameter leafIndex
           (message, randomness))).run cache := by
-  simp only [Concrete.encodingHash, Concrete.tweakableHash, Concrete.oracleHash,
+  simp only [Concrete.encodingHash_eq, Concrete.tweakableHash, Concrete.oracleHash,
     HasQuery.instOfMonadLift_query, bind_pure_comp, simulateQ_map, StateT.run_map, simulateQ_spec_query]
   rfl
 

@@ -106,7 +106,9 @@ theorem adaptiveFreshDigestCollisionWith_of_leafCollision
     rw [hstable, Concrete.CacheView.digestAt_eq_of_cache_eq_some hhonestFinal] at hleafEquality
     exact hleafEquality
 
-/-- A final-cache leaf collision against the honest WOTS public key is fresh after key generation. -/
+/-- Take a final-cache leaf collision against the honest WOTS public key.
+
+It is fresh after key generation. -/
 theorem leafCollision_afterKeygen_orientation
     (adversary : Adversary)
     (keyResult : (PublicKey × SecretKey) × QueryCache HashSpec)
@@ -164,7 +166,9 @@ theorem leafCollision_afterKeygen_orientation
     execution.2 leafIndex forgedEndpoints forgedOutput honestOutput hforgedCached hforgedInitial
     hhonestCached (hafterCacheLe hhonestCached) honeTimeStable hleafCollision.2
 
-/-- The leaf branch of a concrete fresh-leaf-index event is exactly a collision with the honest WOTS public key. -/
+/-- Take the leaf branch of a concrete fresh-leaf-index event.
+
+It is exactly a collision with the honest WOTS public key. -/
 theorem fresh_leaf_badEvent_is_collision
     (cache : QueryCache HashSpec) (secretKey : SecretKey) (leafIndex : LeafIndex)
     (forgedEncoding : Encoding) (forgedSignature : Signature)
@@ -215,7 +219,9 @@ theorem detailed_execution_verified_leaf_cached_as
   subst actualEncoding
   exact ⟨output, hcached⟩
 
-/-- A supported fresh leaf witness supplies both the verifier query and its concrete leaf collision. -/
+/-- A supported fresh leaf witness supplies the verifier query.
+
+It also supplies its concrete leaf collision. -/
 theorem fresh_leaf_event_afterKeygen_orientation
     (adversary : Adversary)
     (keyResult : (PublicKey × SecretKey) × QueryCache HashSpec)
