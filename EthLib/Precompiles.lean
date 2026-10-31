@@ -1,3 +1,4 @@
+import EthLib.Precompiles.Blake2f
 import EthLib.Precompiles.Modexp
 
 /-!
