@@ -1,3 +1,4 @@
+import EthLib.Cryptography.Proofs.Hash.Blake2b
 import EthLib.Cryptography.Proofs.Hash.Keccak
 import EthLib.Cryptography.Proofs.Hash.KeccakKernel
 import EthLib.Cryptography.Proofs.Hash.Keccak256

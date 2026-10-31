@@ -1,3 +1,4 @@
+import EthLib.Precompiles.Proofs.Blake2f
 import EthLib.Precompiles.Proofs.Modexp
 
 /-!
