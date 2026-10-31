@@ -53,11 +53,11 @@ The scheme it is about is the one of the leanXMSS note at leanVM commit `4af2cdd
 
 ## License
 
-These files keep leanerVM's license: MIT ([`LICENSE-MIT`](LICENSE-MIT)) or Apache-2.0 ([`LICENSE-APACHE`](LICENSE-APACHE)), at your option.
+These files are under CC0, like the rest of EthLib (`LICENSE` at the root).
 
-Both license files are leanerVM's, copied unchanged.
+leanerVM ships them under MIT or Apache-2.0.
 
-The rest of EthLib is under CC0 (`LICENSE` at the root).
+Their copyright holder, leanEthereum, releases them to EthLib under CC0.
 
 ## What changed here
 
