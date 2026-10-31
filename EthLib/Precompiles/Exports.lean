@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Precompiles.Exports.Modexp
+public import EthLib.Precompiles.Exports.Ripemd160
 
 /-!
 # `EthLib.Precompiles.Exports`
