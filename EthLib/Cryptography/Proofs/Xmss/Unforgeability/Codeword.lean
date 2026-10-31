@@ -1,4 +1,4 @@
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Bytes
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Convert
 import EthLib.Cryptography.Proofs.Xmss.Encoding
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Code
 
@@ -83,9 +83,6 @@ private theorem tail_zero_iff (z : Nat) (hz : z < 2 ^ 128) :
     rw [this, h, Nat.zero_div, Nat.zero_mod]
 
 /-! ## Codewords -/
-
-/-- A chain as the model numbers it. -/
-def chainOf (i : Fin V) : XmssSecurity.ChainIndex := ⟨i.val, i.isLt⟩
 
 /-- The model's codeword, as EthLib's vector of 58 digits. -/
 def ofEncoding (enc : XmssSecurity.Encoding) : Vector (Fin CHAIN_LENGTH) V :=

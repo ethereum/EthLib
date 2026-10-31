@@ -37,10 +37,6 @@ def toLeafIndex (idx : LeafIndex) : XmssSecurity.LeafIndex :=
 def toMessage (msg : Message) : XmssSecurity.Message :=
   BitVec.ofNat _ (fromLittleEndian msg)
 
-/-- A digest as the model writes it. -/
-def toDigest (d : Digest) : XmssSecurity.Digest :=
-  BitVec.ofNat _ (fromLittleEndian d)
-
 /-- A randomizer as the model writes it. -/
 def toRandomness (r : Randomizer) : XmssSecurity.Randomness :=
   BitVec.ofNat _ (fromLittleEndian r)
@@ -75,12 +71,6 @@ def toSignature (σ : Signature) : XmssSecurity.Signature where
     toMessage (ofMessage msg) = msg :=
   ofBV_inj (n := MESSAGE_LEN) (by simp [MESSAGE_LEN, XmssSecurity.messageBits])
     (ofMessage_toMessage _)
-
-@[simp] theorem ofDigest_toDigest (d : Digest) : ofDigest (toDigest d) = d :=
-  ofBV_ofNat_fromLittleEndian d (by simp [DIGEST_LEN, XmssSecurity.digestBits])
-
-@[simp] theorem toDigest_ofDigest (d : XmssSecurity.Digest) : toDigest (ofDigest d) = d :=
-  ofBV_inj (n := DIGEST_LEN) (by simp [DIGEST_LEN, XmssSecurity.digestBits]) (ofDigest_toDigest _)
 
 @[simp] theorem ofRandomizer_toRandomness (r : Randomizer) :
     ofRandomizer (toRandomness r) = r :=

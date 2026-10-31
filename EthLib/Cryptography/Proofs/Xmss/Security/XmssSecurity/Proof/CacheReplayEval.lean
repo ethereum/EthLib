@@ -4,6 +4,7 @@ import VCVio.OracleComp.QueryTracking.CachingOracle
 import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 import VCVio.OracleComp.SimSemantics.StateT.PreservesInv
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 open OracleComp OracleSpec
 
@@ -383,7 +384,8 @@ theorem eval_verifyTop (cache : QueryCache HashSpec) (publicKey : PublicKey)
     simp [Concrete.topLeafHash, CacheView.topLeafHash, CacheView.topLeafInput,
       CacheView.tweakableHash]
   have hpath : Concrete.layerPath ⟨0, fun _ => 0, part.authPath⟩ = Concrete.layerPath part := rfl
-  unfold Concrete.verifyTop Concrete.verifyTopFromCache
+  rw [Concrete.verifyTop_eq]
+  unfold Concrete.verifyTopFromCache
   simp only [evalWithAnswerFn_bind, hdigest]
   cases TargetSum.decodeDigest
     (CacheView.topEncodingHash cache publicKey.parameter key (root, part.randomness)) with
@@ -401,7 +403,7 @@ theorem eval_verifyAfterLeaf (cache : QueryCache HashSpec) (publicKey : PublicKe
       Concrete.verifyTopFromCache cache publicKey (topKeyOf leafIndex)
         (Merkle.ascend (CacheView.nodeHash cache publicKey.parameter leafIndex)
           (Concrete.signaturePath signature) 0 treeHeight leaf) signature.top := by
-  simp [Concrete.verifyAfterLeaf]
+  simp [Concrete.verifyAfterLeaf_eq]
 
 @[simp]
 theorem eval_verify (cache : QueryCache HashSpec) (publicKey : PublicKey)
@@ -410,7 +412,8 @@ theorem eval_verify (cache : QueryCache HashSpec) (publicKey : PublicKey)
       (Concrete.verify publicKey leafIndex message signature : OracleComp HashSpec Bool) =
       Concrete.verifyFromCache cache publicKey leafIndex message signature := by
   classical
-  unfold Concrete.verify Concrete.verifyFromCache Concrete.bottomRootFromCache
+  rw [Concrete.verify_eq]
+  unfold Concrete.verifyFromCache Concrete.bottomRootFromCache
   simp only [evalWithAnswerFn_bind, eval_encodingHash]
   cases TargetSum.decodeDigest
     (CacheView.encodingHash cache publicKey.parameter leafIndex (message, signature.randomness)) <;> simp

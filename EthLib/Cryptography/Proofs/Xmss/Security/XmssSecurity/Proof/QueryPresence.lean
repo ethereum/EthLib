@@ -1,5 +1,6 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HonestKeygenRun
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 open OracleComp OracleSpec
 
@@ -338,7 +339,7 @@ theorem verify_true_leaf_query_cached_in_largerCache
         (XmssSecurity.recoveredEndpoints
           (fun chain => Concrete.CacheView.chainStep largerCache publicKey.parameter leafIndex chain)
           encoding signature.chainValue)) = some output := by
-  unfold Concrete.verify at hmem
+  rw [Concrete.verify_eq] at hmem
   rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
   obtain ⟨⟨digest, digestCache⟩, hdigest, hafterDigest⟩ := hmem
   cases hdecode : TargetSum.decodeDigest digest with

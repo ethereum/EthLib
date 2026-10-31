@@ -30,6 +30,8 @@ The model is a device of the proof, not a second statement.
 
 It holds every chain value and node in a table, so its signer makes only the calls an adversary can learn from.
 
+Its verifier is EthLib's own `verifyWith`, so verification has one definition.
+
 `Unforgeability/Translate.lean` proves that each hashing routine of EthLib, run with the oracle, is the model's, call for call.
 
 The `Bridge/` files then use it on EthLib's algorithms directly.
@@ -64,6 +66,10 @@ leanerVM proves the bound for its own copy of leanXMSS, `LeanXmss` (`Statement/L
 Here that copy is gone.
 
 - `Statement/`, `lean_xmss/LeanXmss/`, `lean_xmss/LeanXmss.lean` and `XmssSecurity/Proof/Bridge/Translate.lean` are not copied.
+- The model's verifier is EthLib's.
+  `Concrete.verify`, `Concrete.verifyAfterLeaf` and `Concrete.verifyTop` are EthLib's `verifyWith`, `fold` and top-layer `layerRoot`, read through the byte conversions (`Unforgeability/Convert.lean`).
+  Their former bodies are theorems (`Concrete.verify_eq`, `Concrete.verifyAfterLeaf_eq`, `Concrete.verifyTop_eq`, in `Unforgeability/Translate.lean`), which the proof rewrites with where it unfolded them.
+  The model's types and hash inputs move to `XmssSecurity/Types.lean`, so the conversions can come before the model.
 - `Bridge/Real.lean`, `Bridge/Signer.lean` and `Bridge/Game.lean` are rewritten to reason about EthLib's `publicKeyOf`, `signDerived` and `verifyWith`.
 - `Bridge/Derivation.lean` names its inputs by the model's byte layout.
 - `Bridge/SchemeSeed.lean`, `Reduction.lean`, `Seed.lean`, `Model.lean` and `Security.lean` take EthLib's adversary and state the real game (`realGame`) directly.

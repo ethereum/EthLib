@@ -1,4 +1,4 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scheme
+import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Types
 
 /-!
 # The codewords
