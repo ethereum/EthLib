@@ -26,6 +26,7 @@ size_t XMSS_SIG_SIZE;
 
 size_t MODEXP_LENGTH_HEADER_BYTES;
 size_t MODEXP_MAX_LENGTH_BYTES;
+size_t RIPEMD160_OUTPUT_BYTES;
 
 /* ---- Lean externs: size accessors ------------------------------------ */
 
@@ -106,6 +107,11 @@ eth_modexp_const_length_header_bytes(
 
 extern uint64_t
 eth_modexp_const_max_length_bytes(
+  uint8_t unit
+);
+
+extern uint64_t
+eth_ripemd160_const_output_bytes(
   uint8_t unit
 );
 
@@ -348,6 +354,7 @@ static PyMethodDef methods[] = {
   {"xmss_signature_index", py_xmss_signature_index, METH_VARARGS, NULL},
   {"modexp", py_modexp, METH_VARARGS, NULL},
   {"modexp_gas_cost", py_modexp_gas_cost, METH_VARARGS, NULL},
+  {"ripemd160", py_ripemd160, METH_VARARGS, NULL},
   {NULL, NULL, 0, NULL},
 };
 
@@ -405,6 +412,8 @@ PyInit__native(void) {
     MODEXP_LENGTH_HEADER_BYTES = (size_t) eth_modexp_const_length_header_bytes(0);
     MODEXP_MAX_LENGTH_BYTES    = (size_t) eth_modexp_const_max_length_bytes(0);
 
+    RIPEMD160_OUTPUT_BYTES = (size_t) eth_ripemd160_const_output_bytes(0);
+
     initialized = 1;
   }
 
@@ -428,5 +437,6 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "XMSS_SIG_SIZE", XMSS_SIG_SIZE);
   PyModule_AddIntConstant(m, "MODEXP_LENGTH_HEADER_BYTES", MODEXP_LENGTH_HEADER_BYTES);
   PyModule_AddIntConstant(m, "MODEXP_MAX_LENGTH_BYTES", MODEXP_MAX_LENGTH_BYTES);
+  PyModule_AddIntConstant(m, "RIPEMD160_OUTPUT_BYTES", RIPEMD160_OUTPUT_BYTES);
   return m;
 }

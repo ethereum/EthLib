@@ -1,4 +1,5 @@
 import EthLib.Precompiles.Exports.Modexp
+import EthLib.Precompiles.Exports.Ripemd160
 
 /-!
 # `EthLib.Precompiles.Exports`

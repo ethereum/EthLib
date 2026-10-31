@@ -1,4 +1,5 @@
 import EthLib.Precompiles.Proofs.Modexp
+import EthLib.Precompiles.Proofs.Ripemd160
 
 /-!
 # `EthLib.Precompiles.Proofs`

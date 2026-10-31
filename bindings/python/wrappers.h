@@ -35,6 +35,8 @@ extern size_t XMSS_SIG_SIZE;
 extern size_t MODEXP_LENGTH_HEADER_BYTES;
 extern size_t MODEXP_MAX_LENGTH_BYTES;
 
+extern size_t RIPEMD160_OUTPUT_BYTES;
+
 /* ---- Lean ↔ C marshalling helpers ------------------------------------ */
 
 lean_object*
@@ -126,5 +128,6 @@ PyObject* py_xmss_verify                                  (PyObject* self, PyObj
 PyObject* py_xmss_signature_index                         (PyObject* self, PyObject* args);
 PyObject* py_modexp                                       (PyObject* self, PyObject* args);
 PyObject* py_modexp_gas_cost                              (PyObject* self, PyObject* args);
+PyObject* py_ripemd160                                    (PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */
