@@ -6,7 +6,7 @@ Public keys are points of G1, in 48 bytes, and signatures are points of G2, in 9
 
 Many signatures over one message aggregate into one signature, which the aggregate of the signers' public keys verifies.
 
-This page was checked against EthLib commit `a0838f3`.
+This page was checked against EthLib commit `6390c73`.
 Check it again when a definition it names changes.
 
 ## Source
@@ -81,11 +81,17 @@ Most statements below assume valid points.
 
 - The fields.
   The moduli of `Fp` and `Fr` are prime (`modulus_prime`, `FpZMod.lean` and `FrZMod.lean`), and each type is a Mathlib field.
+  The extensions `Fp2`, `Fp6` and `Fp12` are Mathlib fields too, with the library's own operations (`Fp2.lean`, `Fp6.lean`, `Fp12.lean`).
+  `Fp2.powNat` and `Fp12.powNat` compute the field power (`powNat_eq_pow`).
   7 generates the multiplicative group of `Fr`, of order `r - 1` (`isPrimitiveRoot_seven`, `FrZMod.lean`).
   KZG derives its roots of unity from that root.
+  `Fr.batchInverse` inverts a whole array with one field inversion, and returns each element's inverse, with zero mapped to zero (`batchInverse_eq_map`, `FrBatchInverse.lean`).
+  KZG uses it for evaluation, proofs and recovery.
 - Square roots in `Fp` (`Compress.lean`).
   When `Fp.sqrt a` returns `c`, then `c * c = a` (`sqrt_ok`).
   When `a` has a square root, `Fp.sqrt a` returns `a^((p + 1) / 4)`, where `p` is the modulus of `Fp` (`sqrt_complete`).
+- Square roots in `Fp2` (`Fp2.lean`).
+  When `Fp2.sqrt a` returns `c`, then `c * c = a` (`sqrt_ok`).
 - The group law of G1 (`G1Group.lean`).
   For valid `P` and `Q`, `add P Q` is valid and denotes the sum of the two curve points (`valid_add`, `toPoint_add`).
   For a valid `P`, `mul P s` denotes `s * P` (`toPoint_mul`).
@@ -112,13 +118,9 @@ Most statements below assume valid points.
 
 This is a limit on computing results inside Lean, separate from the missing theorems above.
 
-`Fp2.powNat` and `Fp12.powNat` are `partial` definitions, which the kernel cannot unfold.
-`scripts/check_decls_baseline.txt` lists both as `partial`.
-
 `millerLoop` is declared `partial`, but it does not call itself, so Lean makes it an ordinary definition.
 Its `while` loops reach `Loop.forIn`, which Lean core defines with `partial`.
-The baseline lists it as `reaches-opaque`: it reaches an opaque constant when unfolded, but is not opaque itself.
+`scripts/check_decls_baseline.txt` lists it as `reaches-opaque`: it reaches an opaque constant when unfolded, but is not opaque itself.
 
-The pairing check runs `millerLoop`, then raises the result to a power with `Fp12.powNat`.
-Hash-to-curve clears the cofactor with constants computed by `Fp2.powNat`.
-So the kernel cannot compute the result of `ethFastAggregateVerify` once its input reaches hash-to-curve and the pairing check.
+The pairing check runs `millerLoop`.
+So the kernel cannot compute the result of `ethFastAggregateVerify` once its input reaches the pairing check.
