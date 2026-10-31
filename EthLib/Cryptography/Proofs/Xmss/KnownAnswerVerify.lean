@@ -31,7 +31,7 @@ def tamperedRoot : Digest := #v[0x36, 0xf1, 0x3f, 0x87, 0x1d, 0x37, 0x6d, 0x54, 
 
 /-- The tampered path leads to another root. -/
 theorem tamperedFold_known_answer :
-    fold publicKey.publicParam .top (bottomTree leafIndex) topLeaf tamperedTop.path
+    (fold hashId publicKey.publicParam .top (bottomTree leafIndex) topLeaf tamperedTop.path).run
       = tamperedRoot := by
   rw [Kernel.fold_eq]
   decide +kernel
@@ -42,8 +42,8 @@ A root computation that ignored one side of a node would still accept. -/
 theorem verify_tampered_path :
     verify publicKey message { signature with top := tamperedTop } = false := by
   -- The top layer's codeword, chains and leaf do not read the path.
-  have hroot : layerRoot publicKey.publicParam .top (bottomTree leafIndex) (packBytes bottomRoot)
-      tamperedTop = some tamperedRoot :=
+  have hroot : (layerRoot hashId publicKey.publicParam .top (bottomTree leafIndex)
+      (packBytes bottomRoot) tamperedTop).run = some tamperedRoot :=
     layerRoot_eq topCodeword_known_answer topChains topLeaf_known_answer tamperedFold_known_answer
   exact verify_of_layerRoot_ne bottomLayerRoot_known_answer hroot (by decide +kernel)
 

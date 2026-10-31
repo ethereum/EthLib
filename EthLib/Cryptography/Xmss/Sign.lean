@@ -21,22 +21,46 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
+variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+
 /-- One layer's signature by key `e` of a message: the one-time signature and the path.
 
 # Errors
 
 - No randomizer trial gives a codeword, which happens with probability below `exp(-2^11)`. -/
 def signLayer (pp : PublicParam) (s : Seed) (layer : Layer) (e : Nat) (msg : ByteArray) :
-    Except XmssError LayerSignature :=
+    m (Except XmssError LayerSignature) := do
   -- No codeword is an error.
+  let some (randomizer, chainValues) ← otsSign H pp s layer (UInt32.ofNat e) msg
+    | return .error (.noAdmissibleEncoding layer e)
   -- A one-time signature is packed with the key's path.
-  (otsSign pp s layer (UInt32.ofNat e) msg).elim (.error (.noAdmissibleEncoding layer e))
-    fun ots => .ok { randomizer := ots.1, chainValues := ots.2, path := path pp s layer e }
+  return .ok { randomizer, chainValues, path := ← path H pp s layer e }
 
-/-- `Sig(sk, idx, m)`: sign a message at a leaf index.
+/-- Sign a message at a leaf index, from the scheme seed `S` and the parameter `P`.
 
 1. The bottom key `idx` signs the message.
-2. The top key `b = floor(idx / 2^16)` signs the root of bottom tree `b`.
+2. The root `X^0_{16,b}` of bottom tree `b = floor(idx / 2^16)`, which builds that whole tree.
+3. The top key `b` signs that root.
+
+# Errors
+
+- Either layer's one-time signature finds no codeword. -/
+def signDerived (s : Seed) (pp : PublicParam) (idx : LeafIndex) (msg : Message) :
+    m (Except XmssError Signature) := do
+  -- A layer's error ends signing, before any later hash call.
+  let bottom ← match ← signLayer H pp s .bottom idx.toNat (packBytes msg) with
+    | .ok sig => pure sig
+    | .error err => return .error err
+  let bottomRoot ← node H pp s .bottom LAYER_HEIGHT (Nat.le_refl _) (bottomTree idx)
+  let top ← match ← signLayer H pp s .top (bottomTree idx) (packBytes bottomRoot) with
+    | .ok sig => pure sig
+    | .error err => return .error err
+  return .ok { leafIndex := idx, bottom, top }
+
+/-- `Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.
+
+1. The scheme seed `S` and the public parameter `P`, from the secret key's seed.
+2. The signature from `S` and `P`.
 
 # Warning
 
@@ -49,17 +73,14 @@ So it signs one message, however many leaf indices of that tree are used.
 # Errors
 
 - Either layer's one-time signature finds no codeword. -/
-def sign (sk : SecretKey) (idx : LeafIndex) (msg : Message) : Except XmssError Signature := do
-  let s := sk.schemeSeed
-  let pp := sk.publicParam
-  -- Step 1: the bottom key signs the message, with its path in bottom tree `b`.
-  let bottom ← signLayer pp s .bottom idx.toNat (packBytes msg)
-  -- Step 2: the root of bottom tree `b`, from the key's leaf and its path.
-  -- The path leads to that root, so this costs one leaf and 16 hashes, not a whole tree.
-  let leaf := otsPublicLeaf pp s .bottom idx
-  let bottomRoot := fold pp .bottom idx.toNat leaf bottom.path
-  -- Step 3: the top key `b` signs that root, with its path in the top tree.
-  let top ← signLayer pp s .top (bottomTree idx) (packBytes bottomRoot)
-  return { leafIndex := idx, bottom, top }
+def signWith (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
+    m (Except XmssError Signature) := do
+  let s ← schemeSeed H sk.seed
+  let pp ← publicParamOf H s
+  signDerived H s pp idx msg
+
+/-- `Sig(sk, idx, m)`, with Keccak-256. -/
+def sign (sk : SecretKey) (idx : LeafIndex) (msg : Message) : Except XmssError Signature :=
+  (signWith hashId sk idx msg).run
 
 end EthLib.Cryptography.Xmss

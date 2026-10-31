@@ -1,5 +1,6 @@
 import EthLib.Cryptography.Proofs.Xmss.Sign
 import EthLib.Cryptography.Proofs.Xmss.Tree
+import EthLib.Cryptography.Proofs.Xmss.Verify
 
 /-!
 # Proofs: leanXMSS correctness
@@ -8,10 +9,14 @@ A signature this specification produces is one it accepts.
 
 ```text
     bottom:  Ots.leaf(0, idx, m, rho^0, y^0)   = X^0_{0,idx}     honest leaf
-             Tree.fold(0, idx, X^0_{0,idx}, pi^0)                the root the top key signed
+             Tree.fold(0, idx, X^0_{0,idx}, pi^0) = X^0_{16,b}   the root the top key signed
     top:     Ots.leaf(1, b, root, rho^1, y^1)  = X^1_{0,b}       honest leaf
              Tree.fold(1, b, X^1_{0,b}, pi^1)  = X^1_{16,0}      the public key's root
 ```
+
+Correctness holds for every hash function `f`, run in the identity monad.
+
+`verify_keyGen_sign` is the case `f = hash`, the specification as it runs.
 
 # Assumption
 
@@ -32,38 +37,51 @@ theorem bottomTree_lt (idx : LeafIndex) : bottomTree idx < 2 ^ LAYER_HEIGHT := b
   simp only [bottomTree, LAYER_HEIGHT, UInt32.size] at *
   omega
 
+variable {f : ByteArray → Vector UInt8 32}
+
 /-- An honest layer signature leads to the root its key's leaf and path give. -/
 theorem layerRoot_signLayer {pp : PublicParam} {s : Seed} {layer : Layer} {e : Nat}
-    {msg : ByteArray} {sig : LayerSignature} (h : signLayer pp s layer e msg = .ok sig) :
-    layerRoot pp layer e msg sig
-      = some (fold pp layer e (otsPublicLeaf pp s layer (UInt32.ofNat e)) sig.path) := by
+    {msg : ByteArray} {sig : LayerSignature}
+    (h : (signLayer (pureHash f) pp s layer e msg).run = .ok sig) :
+    (layerRoot (pureHash f) pp layer e msg sig).run
+      = some (fold (pureHash f) pp layer e
+          (otsPublicLeaf (pureHash f) pp s layer (UInt32.ofNat e)).run sig.path).run := by
   obtain ⟨hots, -⟩ := signLayer_eq_ok h
-  rw [layerRoot, otsLeaf_otsSign hots]
-  rfl
-
-/-- Verification accepts every signature the secret key produces. -/
-theorem verify_sign {sk : SecretKey} {idx : LeafIndex} {m : Message} {σ : Signature}
-    (h : sign sk idx m = .ok σ) : verify sk.publicKey m σ = true := by
-  obtain ⟨rfl, hbottom, htop⟩ := sign_eq_ok h
-  -- Step 1: the bottom layer leads to the root the top key signed.
-  have hb := layerRoot_signLayer hbottom
-  rw [UInt32.ofNat_toNat] at hb
-  -- Step 2: the top layer leads from that root's signature to the top root.
-  have ht := layerRoot_signLayer htop
-  -- Step 3: the top key's leaf and honest path reach the root of the top tree.
-  have hpath := (signLayer_eq_ok htop).2
-  have hroot := fold_path_top (pp := sk.publicParam) (seed := sk.schemeSeed)
-    (bottomTree_lt σ.leafIndex)
-  simp only [verify, SecretKey.publicKey, hb, Option.bind_eq_bind, Option.bind_some, ht, hpath]
-  exact decide_eq_true (congrArg some hroot)
+  rw [layerRoot_run, otsLeaf_otsSign hots, Option.map_some]
 
 /-- Correctness: a generated key pair verifies every signature it makes. -/
+theorem verifyWith_keyGenWith_signWith {seed : Seed} {sk : SecretKey} {pk : PublicKey}
+    {idx : LeafIndex} {m : Message} {σ : Signature}
+    (hk : (keyGenWith (pureHash f) seed).run = (sk, pk))
+    (hs : (signWith (pureHash f) sk idx m).run = .ok σ) :
+    (verifyWith (pureHash f) pk m σ).run = true := by
+  -- The secret key is the seed, and the public key is the one it derives.
+  have hsk : sk = ⟨seed⟩ := (congrArg Prod.fst hk).symm.trans rfl
+  have hpk : pk = (keyGenWith (pureHash f) seed).run.2 := (congrArg Prod.snd hk).symm
+  subst hsk hpk
+  obtain ⟨rfl, hbottom, htop⟩ := sign_eq_ok rfl rfl hs
+  -- Step 1: the bottom layer leads to the root of bottom tree `b`, which the top key signed.
+  have hb := layerRoot_signLayer hbottom
+  rw [(signLayer_eq_ok hbottom).2] at hb
+  have hbroot := fold_path (f := f) (pp := (publicParamOf (pureHash f)
+    (schemeSeed (pureHash f) seed).run).run) (seed := (schemeSeed (pureHash f) seed).run)
+    (layer := .bottom) σ.leafIndex.toNat
+  -- The bottom tree of `idx` is `idx` shifted down by one layer.
+  rw [Nat.shiftRight_eq_div_pow] at hbroot
+  -- Step 2: the top layer leads from that root's signature to the top root.
+  have ht := layerRoot_signLayer htop
+  rw [(signLayer_eq_ok htop).2] at ht
+  -- Step 3: the top key's leaf and honest path reach the root of the top tree.
+  have hroot := fold_path_top (f := f) (pp := (publicParamOf (pureHash f)
+    (schemeSeed (pureHash f) seed).run).run) (seed := (schemeSeed (pureHash f) seed).run)
+    (bottomTree_lt σ.leafIndex)
+  -- A key's leaf is the level-0 node of its index, by definition.
+  exact verify_of_layerRoot (hb.trans (congrArg some hbroot)) (ht.trans (congrArg some hroot))
+
+/-- Correctness, with Keccak-256: a generated key pair verifies every signature it makes. -/
 theorem verify_keyGen_sign {seed : Seed} {sk : SecretKey} {pk : PublicKey} {idx : LeafIndex}
     {m : Message} {σ : Signature} (hk : keyGen seed = (sk, pk))
-    (hs : sign sk idx m = .ok σ) : verify pk m σ = true := by
-  -- The public key is the one the secret key derives.
-  simp only [keyGen, Prod.mk.injEq] at hk
-  obtain ⟨rfl, rfl⟩ := hk
-  exact verify_sign hs
+    (hs : sign sk idx m = .ok σ) : verify pk m σ = true :=
+  verifyWith_keyGenWith_signWith (f := hash) hk hs
 
 end EthLib.Cryptography.Xmss

@@ -151,6 +151,19 @@ class SoundnessFacts(unittest.TestCase):
         self.write_manifest("0000000000000000000000000000000000000000")
         self.assertIn("generated blocks are out of date: run python3 scripts/soundness_facts.py", self.check())
 
+    def test_direct_requirements_are_named_and_inherited_ones_are_not(self):
+        (self.root / "lake-manifest.json").write_text(json.dumps({"packages": [
+            {"name": "mathlib", "rev": "5e932f97dd25535344f80f9dd8da3aab83df0fe6", "inputRev": "v4.29.1",
+             "inherited": False},
+            {"name": "Foo", "rev": "1234567890abcdef1234567890abcdef12345678",
+             "inputRev": "1234567890abcdef1234567890abcdef12345678", "inherited": False},
+            {"name": "batteries", "rev": "abcdef0123456789abcdef0123456789abcdef01", "inherited": True},
+        ]}))
+        text = facts.pins(self.root)
+        self.assertIn("The package requires Foo, at `1234567`.\n"
+                      "The package requires Mathlib, at `v4.29.1`, commit `5e932f9`.\n", text)
+        self.assertNotIn("batteries", text)
+
     def test_changed_baseline_fails(self):
         (self.root / "scripts" / "check_decls_baseline.txt").write_text("partial Foo.spin\n")
         self.assertIn("generated blocks are out of date: run python3 scripts/soundness_facts.py", self.check())

@@ -85,26 +85,34 @@ Returns nothing when the signed digest is not a codeword.
 
 - `e`: the signing key's index on its layer.
 - `msg`: the 32-byte message on the bottom layer, a 16-byte root on the top. -/
-def layerRoot (pp : PublicParam) (layer : Layer) (e : Nat) (msg : ByteArray)
-    (sig : LayerSignature) : Option Digest := do
+def layerRoot {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+    (pp : PublicParam) (layer : Layer) (e : Nat) (msg : ByteArray)
+    (sig : LayerSignature) : m (Option Digest) := do
   -- Recover the key's leaf from the one-time signature.
-  let leaf ← otsLeaf pp layer (UInt32.ofNat e) msg sig.randomizer sig.chainValues
+  let some leaf ← otsLeaf H pp layer (UInt32.ofNat e) msg sig.randomizer sig.chainValues
+    | return none
   -- Climb the key's path to its tree's root.
-  return fold pp layer e leaf sig.path
+  return some (← fold H pp layer e leaf sig.path)
 
-/-- `Ver(pk, m, sigma)`: whether a signature signs a message under a public key.
+/-- `Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key.
 
 A yes or a no, never a reason.
 
 Which step rejected a well-formed signature carries no consensus meaning. -/
-def verify (pk : PublicKey) (msg : Message) (sig : Signature) : Bool :=
+def verifyWith {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+    (pk : PublicKey) (msg : Message) (sig : Signature) : m Bool := do
   let pp := pk.publicParam
-  let root? : Option Digest := do
-    -- Step 1: the bottom key signs the message, so its path reaches bottom tree `b`'s root.
-    let bottomRoot ← layerRoot pp .bottom sig.leafIndex.toNat (packBytes msg) sig.bottom
-    -- Step 2: the top key `b` signs that root, so its path reaches the top root.
-    layerRoot pp .top (bottomTree sig.leafIndex) (packBytes bottomRoot) sig.top
+  -- Step 1: the bottom key signs the message, so its path reaches bottom tree `b`'s root.
+  let some bottomRoot ← layerRoot H pp .bottom sig.leafIndex.toNat (packBytes msg) sig.bottom
+    | return false
+  -- Step 2: the top key `b` signs that root, so its path reaches the top root.
+  let some root ← layerRoot H pp .top (bottomTree sig.leafIndex) (packBytes bottomRoot) sig.top
+    | return false
   -- Step 3: neither layer failed, and the top root is the key's.
-  decide (root? = some pk.root)
+  return decide (root = pk.root)
+
+/-- `Ver(pk, m, sigma)`, with Keccak-256. -/
+def verify (pk : PublicKey) (msg : Message) (sig : Signature) : Bool :=
+  (verifyWith hashId pk msg sig).run
 
 end EthLib.Cryptography.Xmss

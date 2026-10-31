@@ -6,59 +6,136 @@ import EthLib.Cryptography.Proofs.Xmss.Serialization
 # Proofs: `Xmss.Sign`
 
 What a successful signature holds, and how signing can fail.
+
+Each theorem holds for every hash function `f`, run in the identity monad.
+
+`sign` is the case `f = hash`.
 -/
 
 namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
-variable {pp : PublicParam} {s : Seed} {layer : Layer} {e : Nat} {msg : ByteArray}
-  {sig : LayerSignature}
+variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {s : Seed} {layer : Layer} {e : Nat}
+  {msg : ByteArray} {sig : LayerSignature}
+
+/-! ## The signer as a value
+
+`rw` unfolds the signer, not `simp`: see `otsSign_run`. -/
+
+/-- What a layer's signature computes: the one-time signature with the key's path, or the error. -/
+theorem signLayer_run :
+    (signLayer (pureHash f) pp s layer e msg).run
+      = match (otsSign (pureHash f) pp s layer (UInt32.ofNat e) msg).run with
+        | none => .error (.noAdmissibleEncoding layer e)
+        | some (randomizer, chainValues) =>
+          .ok { randomizer, chainValues, path := (path (pureHash f) pp s layer e).run } := by
+  rw [signLayer, Id.run_bind]
+  cases (otsSign (pureHash f) pp s layer (UInt32.ofNat e) msg).run with
+  | none => rfl
+  | some found => rfl
+
+/-- What signing computes, one layer after the other, as a computation in `Except`.
+
+- `s` and `pp` are the scheme seed and the public parameter, from the secret key's seed.
+- The top layer signs the root of bottom tree `b`, which signing builds. -/
+theorem signWith_run {sk : SecretKey} {idx : LeafIndex} {m : Message}
+    (hs : (schemeSeed (pureHash f) sk.seed).run = s)
+    (hpp : (publicParamOf (pureHash f) s).run = pp) :
+    (signWith (pureHash f) sk idx m).run
+      = (signLayer (pureHash f) pp s .bottom idx.toNat (packBytes m)).run.bind fun bottom =>
+          (signLayer (pureHash f) pp s .top (bottomTree idx)
+            (packBytes (node (pureHash f) pp s .bottom LAYER_HEIGHT (Nat.le_refl _)
+              (bottomTree idx)).run)).run.bind fun top =>
+            .ok { leafIndex := idx, bottom, top } := by
+  subst hs hpp
+  rw [signWith, Id.run_bind, Id.run_bind, signDerived, Id.run_bind]
+  cases (signLayer (pureHash f)
+      (publicParamOf (pureHash f) (schemeSeed (pureHash f) sk.seed).run).run
+      (schemeSeed (pureHash f) sk.seed).run .bottom idx.toNat (packBytes m)).run with
+  | error err => rfl
+  | ok bottom =>
+    -- No signer is unfolded here, so `simp` may reduce the matches on `.ok`.
+    simp only [Id.run_bind, Id.run_pure, Except.bind]
+    cases (signLayer (pureHash f)
+        (publicParamOf (pureHash f) (schemeSeed (pureHash f) sk.seed).run).run
+        (schemeSeed (pureHash f) sk.seed).run .top (bottomTree idx)
+        (packBytes (node (pureHash f)
+          (publicParamOf (pureHash f) (schemeSeed (pureHash f) sk.seed).run).run
+          (schemeSeed (pureHash f) sk.seed).run .bottom LAYER_HEIGHT (Nat.le_refl _)
+          (bottomTree idx)).run)).run with
+    | error err => rfl
+    | ok top => rfl
+
+/-! ## Layers -/
 
 /-- A layer's signature is a one-time signature from the seed, with the key's honest path. -/
-theorem signLayer_eq_ok (h : signLayer pp s layer e msg = .ok sig) :
-    otsSign pp s layer (UInt32.ofNat e) msg = some (sig.randomizer, sig.chainValues) ∧
-      sig.path = path pp s layer e := by
+theorem signLayer_eq_ok (h : (signLayer (pureHash f) pp s layer e msg).run = .ok sig) :
+    (otsSign (pureHash f) pp s layer (UInt32.ofNat e) msg).run
+        = some (sig.randomizer, sig.chainValues) ∧
+      sig.path = (path (pureHash f) pp s layer e).run := by
+  rw [signLayer_run] at h
   -- Name the one-time signature, so the match reduces without evaluating it.
-  cases hots : otsSign pp s layer (UInt32.ofNat e) msg with
-  | none => simp [signLayer, hots] at h
+  cases hots : (otsSign (pureHash f) pp s layer (UInt32.ofNat e) msg).run with
+  | none =>
+    rw [hots] at h
+    cases h
   | some found =>
-    simp only [signLayer, hots, Option.elim_some] at h
+    obtain ⟨randomizer, chainValues⟩ := found
+    rw [hots] at h
     -- The accepting branch packs the one-time signature with the path.
-    obtain rfl := (Except.ok.inj h).symm
+    cases h
     exact ⟨rfl, rfl⟩
 
 /-- A layer fails only when no randomizer trial gives a codeword. -/
-theorem signLayer_error {err : XmssError} (h : signLayer pp s layer e msg = .error err) :
-    otsSign pp s layer (UInt32.ofNat e) msg = none ∧ err = .noAdmissibleEncoding layer e := by
-  cases hots : otsSign pp s layer (UInt32.ofNat e) msg with
+theorem signLayer_error {err : XmssError}
+    (h : (signLayer (pureHash f) pp s layer e msg).run = .error err) :
+    (otsSign (pureHash f) pp s layer (UInt32.ofNat e) msg).run = none ∧
+      err = .noAdmissibleEncoding layer e := by
+  rw [signLayer_run] at h
+  cases hots : (otsSign (pureHash f) pp s layer (UInt32.ofNat e) msg).run with
   | none =>
-    simp only [signLayer, hots, Option.elim_none] at h
-    exact ⟨rfl, (Except.error.inj h).symm⟩
-  | some found => simp [signLayer, hots] at h
+    rw [hots] at h
+    cases h
+    exact ⟨rfl, rfl⟩
+  | some found =>
+    obtain ⟨randomizer, chainValues⟩ := found
+    rw [hots] at h
+    cases h
+
+/-! ## Signatures -/
 
 /-- A signature holds one honest signature per layer.
 
 - The bottom key `idx` signs the message.
-- The top key `b` signs the root that the bottom key's leaf and path lead to. -/
+- The top key `b` signs the root of bottom tree `b`. -/
 theorem sign_eq_ok {sk : SecretKey} {idx : LeafIndex} {m : Message} {σ : Signature}
-    (h : sign sk idx m = .ok σ) :
+    (hs : (schemeSeed (pureHash f) sk.seed).run = s)
+    (hpp : (publicParamOf (pureHash f) s).run = pp)
+    (h : (signWith (pureHash f) sk idx m).run = .ok σ) :
     σ.leafIndex = idx ∧
-      signLayer sk.publicParam sk.schemeSeed .bottom idx.toNat (packBytes m) = .ok σ.bottom ∧
-      signLayer sk.publicParam sk.schemeSeed .top (bottomTree idx)
-        (packBytes (fold sk.publicParam .bottom idx.toNat
-          (otsPublicLeaf sk.publicParam sk.schemeSeed .bottom idx) σ.bottom.path))
-        = .ok σ.top := by
-  simp only [sign, bind, Except.bind, pure, Except.pure] at h
+      (signLayer (pureHash f) pp s .bottom idx.toNat (packBytes m)).run = .ok σ.bottom ∧
+      (signLayer (pureHash f) pp s .top (bottomTree idx)
+        (packBytes (node (pureHash f) pp s .bottom LAYER_HEIGHT (Nat.le_refl _)
+          (bottomTree idx)).run)).run = .ok σ.top := by
+  rw [signWith_run hs hpp] at h
   -- Each layer is either an error, which propagates, or a value the next step uses.
-  split at h
-  · exact absurd h (by simp)
-  · rename_i bottom hbottom
-    split at h
-    · exact absurd h (by simp)
-    · rename_i top htop
-      obtain rfl := (Except.ok.inj h).symm
-      exact ⟨rfl, hbottom, htop⟩
+  cases hbottom : (signLayer (pureHash f) pp s .bottom idx.toNat (packBytes m)).run with
+  | error err =>
+    rw [hbottom] at h
+    cases h
+  | ok bottom =>
+    rw [hbottom, Except.bind] at h
+    cases htop : (signLayer (pureHash f) pp s .top (bottomTree idx)
+        (packBytes (node (pureHash f) pp s .bottom LAYER_HEIGHT (Nat.le_refl _)
+          (bottomTree idx)).run)).run with
+    | error err =>
+      rw [htop] at h
+      cases h
+    | ok top =>
+      rw [htop] at h
+      cases h
+      exact ⟨rfl, rfl, rfl⟩
 
 /-- An encoded signature carries the leaf index it was signed at.
 
@@ -66,21 +143,34 @@ So a verifier that reads the index from the bytes learns which one-time key sign
 theorem signatureIndex_sign {sk : SecretKey} {idx : LeafIndex} {m : Message} {σ : Signature}
     (h : sign sk idx m = .ok σ) :
     signatureIndex (encodeSignature σ) = .ok idx := by
-  rw [signatureIndex_encodeSignature, (sign_eq_ok h).1]
+  rw [signatureIndex_encodeSignature, (sign_eq_ok rfl rfl h).1]
 
 /-- Signing fails only when one layer's one-time key finds no codeword. -/
 theorem sign_error {sk : SecretKey} {idx : LeafIndex} {m : Message} {err : XmssError}
-    (h : sign sk idx m = .error err) :
+    (h : (signWith (pureHash f) sk idx m).run = .error err) :
     ∃ layer key, err = .noAdmissibleEncoding layer key := by
-  simp only [sign, bind, Except.bind, pure, Except.pure] at h
-  split at h
-  · rename_i e' hbottom
-    obtain rfl := Except.error.inj h
+  rw [signWith_run rfl rfl] at h
+  -- The error comes from one of the two layers.
+  cases hbottom : (signLayer (pureHash f) (publicParamOf (pureHash f)
+      (schemeSeed (pureHash f) sk.seed).run).run (schemeSeed (pureHash f) sk.seed).run .bottom
+      idx.toNat (packBytes m)).run with
+  | error e' =>
+    rw [hbottom] at h
+    cases h
     exact ⟨_, _, (signLayer_error hbottom).2⟩
-  · split at h
-    · rename_i e' htop
-      obtain rfl := Except.error.inj h
+  | ok bottom =>
+    rw [hbottom, Except.bind] at h
+    cases htop : (signLayer (pureHash f) (publicParamOf (pureHash f)
+        (schemeSeed (pureHash f) sk.seed).run).run (schemeSeed (pureHash f) sk.seed).run .top
+        (bottomTree idx) (packBytes (node (pureHash f) (publicParamOf (pureHash f)
+          (schemeSeed (pureHash f) sk.seed).run).run (schemeSeed (pureHash f) sk.seed).run
+          .bottom LAYER_HEIGHT (Nat.le_refl _) (bottomTree idx)).run)).run with
+    | error e' =>
+      rw [htop] at h
+      cases h
       exact ⟨_, _, (signLayer_error htop).2⟩
-    · exact absurd h (by simp)
+    | ok top =>
+      rw [htop] at h
+      cases h
 
 end EthLib.Cryptography.Xmss

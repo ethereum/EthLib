@@ -140,4 +140,20 @@ def splitDigests {n : Nat} (bytes : Vector UInt8 (n * DIGEST_LEN)) : Vector Dige
     simp only [DIGEST_LEN] at *
     omega)
 
+/-! ## Computing a vector in order -/
+
+/-- Run one computation per index, index 0 first, and collect the results.
+
+The order matters when each computation calls the hash.
+
+It fixes the sequence of hash calls, which a proof in the random oracle model counts. -/
+def ofFnInOrder {m : Type → Type} [Monad m] {α : Type} :
+    (n : Nat) → (Fin n → m α) → m (Vector α n)
+  | 0, _ => pure #v[]
+  -- Structural recursion, so the kernel can evaluate it.
+  | n + 1, f => do
+    let head ← f 0
+    let tail ← ofFnInOrder n fun i => f i.succ
+    return (#v[head] ++ tail).cast (Nat.add_comm 1 n)
+
 end EthLib.Cryptography.Xmss

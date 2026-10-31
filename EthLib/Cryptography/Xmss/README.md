@@ -50,13 +50,21 @@ The code cites two more sources:
 - the target-sum code of WOTS+C, [ePrint 2022/778](https://eprint.iacr.org/2022/778) (`Encoding.lean`);
 - Keccak-256, [FIPS 202](https://csrc.nist.gov/pubs/fips/202/final) with Keccak's original padding (`EthLib/Cryptography/Hash/Keccak.lean`).
 
-One step computes a value of the note another way.
+## The hash as an argument
 
-To sign, the note's top key signs the root `X^0_{16,b}` of bottom tree `b`.
+Every definition that hashes takes the hash `H` as an argument, a function that runs in a monad.
 
-`sign` computes that root by folding the bottom key's leaf up its own path, 16 hashes, instead of the whole tree.
+`keyGen`, `sign` and `verify` run them in the identity monad with Keccak-256 (`hashId`).
 
-`fold_path` proves the two equal, and `verify_sign` uses it.
+The note's security theorem models `H` as a random oracle.
+
+A proof in that model passes a query to the oracle as `H`, so it is about the code that runs.
+
+So the code makes its hash calls as the note defines them, one by one and in a fixed order:
+
+- a vector of hashes is computed entry 0 first (`ofFnInOrder`);
+- a node computes its left subtree, then its right subtree, then its own hash;
+- `sign` builds the root `X^0_{16,b}` of bottom tree `b` from the whole tree, as the note defines it.
 
 ## Operations
 
@@ -73,7 +81,7 @@ The secret key is the 32-byte seed, and everything else derives from it.
 So the exports of `keyGen` and `sign` take the seed and rebuild what they need on each call.
 
 - `keyGen` builds the top tree: `2^16` one-time keys.
-- `sign` builds the paths of both keys: about one tree on each layer.
+- `sign` builds the paths of both keys and the root of the bottom tree: about two trees on the bottom layer and one on the top.
 
 Never sign two different messages at one leaf index with one key.
 
@@ -103,6 +111,7 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
 
 - Correctness.
   A key from `keyGen` verifies every signature that `sign` makes with it (`verify_keyGen_sign`, `Correctness.lean`).
+  It holds for every hash function, not only Keccak-256 (`verifyWith_keyGenWith_signWith`).
 - What verification checks.
   `verify` accepts exactly when the bottom layer leads to some root, and the top layer, signing that root, leads to the key's root (`verify_iff`, `Verify.lean`).
 - Signing.
@@ -126,6 +135,11 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
   The leaf index read alone is its first 4 bytes, as a little-endian integer (`signatureIndex_eq_bytes`).
   It agrees with full decoding (`signatureIndex_eq_decodeSignature`).
   A signature from `sign` reads back the index it was signed at (`signatureIndex_sign`, `Sign.lean`).
+- Unforgeability.
+  In the random oracle model, an adversary whose experiment makes at most `q >= 1` hash calls forges with probability at most `q / 2^127` (`unforgeable`, `Unforgeability.lean`).
+  `q` counts every hash call of the experiment, key generation and signing included, so it is never below about `2^23.7`, plus more than `2^33` per signing request (`SOUNDNESS.md`).
+  The game is the note's section "Security", run on `keyGenWith`, `signWith` and `verifyWith` with `H` a query to the oracle.
+  The proof, adapted from leanerVM's, reasons over these same definitions (`Proofs/Xmss/Security/`).
 - Known answers.
   The signature verifies under the public key (`verify_known_answer`).
   It rejects with a changed message, the neighbouring leaf index, or a changed path (`verify_wrong_message`, `verify_wrong_leafIndex`, `verify_tampered_path`).
@@ -133,7 +147,9 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
 
 ## What is not proved
 
-- Any security property, such as unforgeability, or the `q / 2^127` bound of the note.
+- Any security property beyond the random oracle model.
+  The theorem says nothing about an attack that uses the structure of Keccak-256.
+- Security against a quantum adversary.
 - That signing fails with small probability.
   `code_probability` gives one trial's chance, if digests were uniform.
   That all `2^32` trials fail with probability below `exp(-2^11)` is only argued in the docstring of `MAX_RANDOMIZER_TRIALS`.

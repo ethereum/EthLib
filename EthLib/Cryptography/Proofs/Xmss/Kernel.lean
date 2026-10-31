@@ -17,6 +17,8 @@ So the known answers run on a fast form instead, proved equal to the specificati
     a path fold      =  the same fold over that Th
 ```
 
+The specification runs in the identity monad with `hashId`, so each equality is stated for `.run`.
+
 A known answer rewrites its statement with these equalities, then lets the kernel evaluate it.
 -/
 
@@ -63,8 +65,8 @@ def th (pp : PublicParam) (address : Address) (payload : List UInt8) : Digest :=
 
 /-- `Th` is `Th` over the fast hash, of the payload's bytes. -/
 theorem th_eq (pp : PublicParam) (address : Address) (payload : ByteArray) :
-    Xmss.th pp address payload = th pp address payload.data.toList := by
-  simp only [Xmss.th, hashHalf, hash_eq, th]
+    (Xmss.th hashId pp address payload).run = th pp address payload.data.toList := by
+  simp only [Xmss.th, hashId, pureHash, Id.run_bind, Id.run_pure, hash_eq, th]
   -- The two inputs are the same bytes, by definition.
   rfl
 
@@ -81,14 +83,16 @@ def chain (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
 /-- A chain walk is the walk over the fast hash. -/
 theorem chain_eq (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V) (start : Nat) :
     ∀ steps h value,
-      Xmss.chain pp layer e i start steps h value = chain pp layer e i start steps h value := by
+      (Xmss.chain hashId pp layer e i start steps h value).run
+        = chain pp layer e i start steps h value := by
   intro steps
   induction steps with
   | zero => intro h value; rfl
   | succ s ih =>
     intro h value
     -- One step on each side, the walks below it equal by induction.
-    simp only [Xmss.chain, chainStep, chain, th_eq, ih, toList_append, toList_packBytes]
+    simp only [Xmss.chain, chainStep, chain, Id.run_bind, th_eq, ih, toList_append,
+      toList_packBytes]
 
 /-! ## Paths -/
 
@@ -108,20 +112,23 @@ def climbUpto (pp : PublicParam) (layer : Layer) (e : Nat) (pi : Vector Digest L
 theorem climbUpto_eq (pp : PublicParam) (layer : Layer) (e : Nat)
     (pi : Vector Digest LAYER_HEIGHT) (leaf : Digest) :
     ∀ levels h,
-      Internal.climbUpto pp layer e pi leaf levels h = climbUpto pp layer e pi leaf levels h := by
+      (Internal.climbUpto hashId pp layer e pi leaf levels h).run
+        = climbUpto pp layer e pi leaf levels h := by
   intro levels
   induction levels with
   | zero => intro h; rfl
   | succ l ih =>
     intro h
     -- One level on each side, the climbs below it equal by induction.
-    simp only [Internal.climbUpto, Internal.climbStep, nodeHash, climbUpto, th_eq, ih,
-      toList_append, toList_packBytes]
+    simp only [Internal.climbUpto, Internal.climbStep, nodeHash, climbUpto, Id.run_bind, ih]
+    -- Both sides branch on the same bit.
+    split <;> simp only [th_eq, toList_append, toList_packBytes]
 
 /-- A path fold is the fold over the fast hash. -/
 theorem fold_eq (pp : PublicParam) (layer : Layer) (e : Nat) (leaf : Digest)
     (pi : Vector Digest LAYER_HEIGHT) :
-    fold pp layer e leaf pi = climbUpto pp layer e pi leaf LAYER_HEIGHT (Nat.le_refl _) :=
+    (fold hashId pp layer e leaf pi).run
+      = climbUpto pp layer e pi leaf LAYER_HEIGHT (Nat.le_refl _) :=
   climbUpto_eq pp layer e pi leaf _ _
 
 end EthLib.Cryptography.Xmss.Kernel
