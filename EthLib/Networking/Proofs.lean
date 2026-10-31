@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Networking.Proofs.Encoding.Varint
+public import EthLib.Networking.Proofs.Snappy.Block
 
 /-!
 # `EthLib.Networking.Proofs`
