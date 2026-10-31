@@ -1,4 +1,5 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleQueryPresence
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 open OracleComp OracleSpec ENNReal
 
@@ -35,7 +36,8 @@ theorem verificationAfterLeafRoot_eq (publicKey : PublicKey) (leafIndex : LeafIn
     (signature : Signature) (leaf : Digest) :
     verificationAfterLeafRoot publicKey leafIndex signature leaf =
       (Concrete.verifyAfterLeaf publicKey leafIndex signature leaf : OracleComp HashSpec Bool) := by
-  unfold verificationAfterLeafRoot authenticationRootComputation Concrete.verifyAfterLeaf
+  rw [Concrete.verifyAfterLeaf_eq]
+  unfold verificationAfterLeafRoot authenticationRootComputation
   rfl
 
 attribute [irreducible] authenticationRootComputation verificationAfterLeafRoot
@@ -63,7 +65,7 @@ theorem verify_true_digestRun
         (Concrete.verify publicKey leafIndex message signature :
           OracleComp HashSpec Bool)).run initialCache)) :
     VerifiedDigestRun publicKey leafIndex message signature initialCache resultCache := by
-  unfold Concrete.verify at hmem
+  rw [Concrete.verify_eq] at hmem
   rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
   obtain ⟨⟨digest, digestCache⟩, hdigest, hafterDigest⟩ := hmem
   cases hdecode : TargetSum.decodeDigest digest with

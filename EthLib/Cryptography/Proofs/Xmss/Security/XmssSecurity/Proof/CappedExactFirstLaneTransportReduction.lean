@@ -4,6 +4,7 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalC
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.DirectQueryAccounting
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StateLens
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EagerTraceInvariant
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 open OracleComp OracleSpec ENNReal
 open OracleComp.ProgramLogic.Relational
@@ -1263,7 +1264,8 @@ theorem concreteVerify_eq_encodingHash_bind_afterDigest
       let digest ← Concrete.encodingHash publicKey.parameter leafIndex message
         signature.randomness
       concreteVerificationAfterDigest publicKey leafIndex signature digest) := by
-  unfold Concrete.verify concreteVerificationAfterDigest
+  rw [Concrete.verify_eq]
+  unfold concreteVerificationAfterDigest
   apply bind_congr
   intro digest
   cases TargetSum.decodeDigest digest <;> rfl

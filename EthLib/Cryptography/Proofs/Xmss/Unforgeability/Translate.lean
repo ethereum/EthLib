@@ -1,5 +1,6 @@
 import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Address
 import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Codeword
+import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scheme
 
 /-!
 # Proofs: EthLib's hashing is the model's
@@ -30,25 +31,11 @@ open EthLib.Cryptography.Xmss.Constants
 
 variable {m : Type → Type} [Monad m] [LawfulMonad m] [HasQuery XmssSecurity.HashSpec m]
 
-/-- `H` as a query to the model's oracle.
-
-The input's bytes go in, and the answer's 32 bytes come out. -/
-def queryH (input : ByteArray) : m (Vector UInt8 32) :=
-  ofOutput <$> XmssSecurity.Concrete.oracleHash (m := m) input.data.toList
-
 /-! ## Bytes of hash inputs -/
 
 @[simp] theorem toList_data_append (a b : ByteArray) :
     (a ++ b).data.toList = a.data.toList ++ b.data.toList := by
   simp [ByteArray.data_append]
-
-/-- The 58 values of a function on chains, as EthLib's vector of digests. -/
-def ofChains (f : XmssSecurity.ChainIndex → XmssSecurity.Digest) : Vector Digest V :=
-  Vector.ofFn fun i => ofDigest (f (chainOf i))
-
-/-- A path as the model writes it, as EthLib's vector of 16 digests. -/
-def ofPath (f : Fin XmssSecurity.treeHeight → XmssSecurity.Digest) : Vector Digest LAYER_HEIGHT :=
-  Vector.ofFn fun l => ofDigest (f ⟨l.val, l.isLt⟩)
 
 omit [Monad m] [LawfulMonad m] [HasQuery XmssSecurity.HashSpec m] in
 /-- A list of functions' values, each a list, flattened. -/
@@ -111,28 +98,6 @@ omit [LawfulMonad m] [HasQuery XmssSecurity.HashSpec m] in
 theorem ofFnInOrder_congr {α : Type} {n : Nat} {c c' : Fin n → m α} (h : ∀ i, c i = c' i) :
     ofFnInOrder n c = ofFnInOrder n c' := by
   rw [funext h]
-
-/-! ## Keys
-
-A bottom key is a leaf index below `2^32`, and a top key an index below `2^16`.
-
-EthLib numbers both as `UInt32`. -/
-
-/-- A leaf index as EthLib's. -/
-def ofLeafIndex (idx : XmssSecurity.LeafIndex) : LeafIndex :=
-  UInt32.ofNatLT idx.val (by simpa [XmssSecurity.lifetime, XmssSecurity.treeHeight] using idx.isLt)
-
-/-- A top key as EthLib's. -/
-def ofTopIndex (key : XmssSecurity.TopIndex) : UInt32 :=
-  UInt32.ofNatLT key.val (lt_of_lt_of_le key.isLt (by decide))
-
-@[simp] theorem toNat_ofLeafIndex (idx : XmssSecurity.LeafIndex) :
-    (ofLeafIndex idx).toNat = idx.val := by
-  simp [ofLeafIndex]
-
-@[simp] theorem toNat_ofTopIndex (key : XmssSecurity.TopIndex) :
-    (ofTopIndex key).toNat = key.val := by
-  simp [ofTopIndex]
 
 omit [Monad m] [LawfulMonad m] [HasQuery XmssSecurity.HashSpec m] in
 /-- An address is the model's when its four fields are. -/
@@ -399,26 +364,6 @@ theorem climbUpto_top (P : XmssSecurity.PublicParameter) (key : XmssSecurity.Top
       climbStep_top]
     simp only [hl, ↓reduceDIte]
 
-/-! ## Keys and signatures -/
-
-/-- A public key as EthLib's. -/
-@[simps] def ofPublicKey (pk : XmssSecurity.PublicKey) : PublicKey where
-  root := ofDigest pk.root
-  publicParam := ofParam pk.parameter
-
-/-- One layer's signature as EthLib's. -/
-@[simps] def ofLayerSig (s : XmssSecurity.LayerSignature) : LayerSignature where
-  randomizer := ofRandomizer s.randomness
-  chainValues := ofChains s.chainValue
-  path := ofPath s.authPath
-
-/-- A signature at a leaf index as EthLib's, which carries the leaf index. -/
-@[simps] def ofSignature (idx : XmssSecurity.LeafIndex) (σ : XmssSecurity.Signature) :
-    Signature where
-  leafIndex := ofLeafIndex idx
-  bottom := ofLayerSig ⟨σ.randomness, σ.chainValue, σ.authPath⟩
-  top := ofLayerSig σ.top
-
 /-! ## A layer's root -/
 
 /-- `UInt32.ofNat` of a leaf index is EthLib's leaf index. -/
@@ -435,24 +380,25 @@ theorem ofNat_val_topIndex (key : XmssSecurity.TopIndex) :
     simp [Nat.mod_eq_of_lt (lt_of_lt_of_le key.isLt
       (show XmssSecurity.topLifetime ≤ 4294967296 by decide))])
 
-/-- The root a bottom layer's signature leads to, from the message it signs. -/
+/-- The root a bottom layer's signature leads to, from the message it signs.
+
+Up to the leaf in the model's routines, then EthLib's fold up the path. -/
 theorem layerRoot_bottom (P : XmssSecurity.PublicParameter) (idx : XmssSecurity.LeafIndex)
     (msg : XmssSecurity.Message) (σ : XmssSecurity.Signature) :
     layerRoot (queryH (m := m)) (ofParam P) .bottom idx.val (packBytes (ofMessage msg))
         (ofLayerSig ⟨σ.randomness, σ.chainValue, σ.authPath⟩)
-      = Option.map ofDigest <$> (do
+      = (do
           let digest ← XmssSecurity.Concrete.encodingHash (m := m) P idx msg σ.randomness
           match XmssSecurity.TargetSum.decodeDigest digest with
           | none => pure none
           | some encoding => do
             let endpoints ← XmssSecurity.Concrete.recoverEndpoints P idx encoding σ
             let leaf ← XmssSecurity.Concrete.leafHash P idx endpoints
-            let root ← XmssSecurity.Concrete.authenticationRoot P idx σ XmssSecurity.treeHeight
-              leaf
-            pure (some root)) := by
+            some <$> fold queryH (ofParam P) .bottom idx.val (ofDigest leaf)
+              (ofPath σ.authPath)) := by
   unfold layerRoot otsLeaf
   dsimp only [ofLayerSig]
-  rw [ofNat_val_leafIndex, messageDigest_bottom, bind_assoc, bind_map_left, map_bind]
+  rw [ofNat_val_leafIndex, messageDigest_bottom, bind_assoc, bind_map_left]
   refine bind_congr fun digest => ?_
   rw [codeword?_ofDigest]
   cases XmssSecurity.TargetSum.decodeDigest digest with
@@ -471,16 +417,13 @@ theorem layerRoot_bottom (P : XmssSecurity.PublicParameter) (idx : XmssSecurity.
           congrArg Fin.val (Vector.getElem_ofFn _)]
         rfl]
     rewrite [ofFnInOrder_eq_sequenceFin, bind_map_left]
-    simp only [XmssSecurity.Concrete.recoverEndpoints, map_bind]
+    simp only [XmssSecurity.Concrete.recoverEndpoints]
     -- `ends` typed by the model's chains, so the leaf lemma applies by rewriting.
     refine bind_congr fun (ends : XmssSecurity.ChainIndex → XmssSecurity.Digest) => ?_
     rewrite [show (Vector.ofFn fun i : Fin V => ofDigest (ends i)) = ofChains ends from rfl,
       otsLeafHash_bottom, bind_map_left]
     refine bind_congr fun leaf => ?_
-    simp only [pure_bind, fold]
-    rw [climbUpto_bottom]
-    -- EthLib's tree height is the model's.
-    simp [LAYER_HEIGHT, XmssSecurity.treeHeight]
+    simp [map_eq_bind_pure_comp]
 
 /-- The root a top layer's signature leads to, from the bottom root it signs. -/
 theorem layerRoot_top (P : XmssSecurity.PublicParameter) (key : XmssSecurity.TopIndex)
@@ -540,16 +483,30 @@ theorem bottomTree_ofLeafIndex (idx : XmssSecurity.LeafIndex) :
     bottomTree (ofLeafIndex idx) = (XmssSecurity.topKeyOf idx).val := by
   simp [bottomTree, XmssSecurity.topKeyOf, LAYER_HEIGHT, XmssSecurity.treeHeight]
 
-/-- `Ver(pk, m, sigma)`. -/
+omit [LawfulMonad m] in
+/-- The model's verifier is EthLib's, by definition. -/
 theorem verifyWith_queryH (pk : XmssSecurity.PublicKey) (idx : XmssSecurity.LeafIndex)
     (msg : XmssSecurity.Message) (σ : XmssSecurity.Signature) :
     verifyWith (queryH (m := m)) (ofPublicKey pk) (ofMessage msg) (ofSignature idx σ)
-      = XmssSecurity.Concrete.verify (m := m) pk idx msg σ := by
-  unfold verifyWith XmssSecurity.Concrete.verify XmssSecurity.Concrete.verifyAfterLeaf
-    XmssSecurity.Concrete.verifyTop
-  simp only [ofSignature_leafIndex, toNat_ofLeafIndex, ofSignature_bottom, ofPublicKey_publicParam,
-    bottomTree_ofLeafIndex, ofSignature_top]
-  rw [layerRoot_bottom, bind_map_left]
+      = XmssSecurity.Concrete.verify (m := m) pk idx msg σ :=
+  rfl
+
+/-- The top layer's check, in the model's routines. -/
+theorem _root_.XmssSecurity.Concrete.verifyTop_eq (pk : XmssSecurity.PublicKey)
+    (key : XmssSecurity.TopIndex) (root : XmssSecurity.Digest)
+    (part : XmssSecurity.LayerSignature) :
+    XmssSecurity.Concrete.verifyTop (m := m) pk key root part = (do
+      let digest ← XmssSecurity.Concrete.topEncodingHash pk.parameter key root part.randomness
+      let some encoding := XmssSecurity.TargetSum.decodeDigest digest | return false
+      let endpoints ← XmssSecurity.Concrete.sequenceFin fun chain =>
+        XmssSecurity.Concrete.topChainWalk pk.parameter key chain (encoding chain).val
+          (XmssSecurity.chainLength - 1 - (encoding chain).val) (part.chainValue chain)
+      let leaf ← XmssSecurity.Concrete.topLeafHash pk.parameter key endpoints
+      let topRoot ← XmssSecurity.Concrete.topAuthenticationRoot pk.parameter key part.authPath
+        XmssSecurity.treeHeight leaf
+      return decide (topRoot = pk.root)) := by
+  unfold XmssSecurity.Concrete.verifyTop
+  rw [layerRoot_top, bind_map_left]
   simp only [bind_assoc]
   refine bind_congr fun digest => ?_
   cases XmssSecurity.TargetSum.decodeDigest digest with
@@ -558,18 +515,50 @@ theorem verifyWith_queryH (pk : XmssSecurity.PublicKey) (idx : XmssSecurity.Leaf
     simp only [bind_assoc, pure_bind]
     refine bind_congr fun endpoints => ?_
     refine bind_congr fun leaf => ?_
+    refine bind_congr fun topRoot => ?_
+    simp [ofDigest_eq_iff]
+
+/-- The bottom fold, then the top layer's check, in the model's routines. -/
+theorem _root_.XmssSecurity.Concrete.verifyAfterLeaf_eq (pk : XmssSecurity.PublicKey)
+    (idx : XmssSecurity.LeafIndex) (σ : XmssSecurity.Signature) (leaf : XmssSecurity.Digest) :
+    XmssSecurity.Concrete.verifyAfterLeaf (m := m) pk idx σ leaf = (do
+      let root ← XmssSecurity.Concrete.authenticationRoot pk.parameter idx σ
+        XmssSecurity.treeHeight leaf
+      XmssSecurity.Concrete.verifyTop pk (XmssSecurity.topKeyOf idx) root σ.top) := by
+  unfold XmssSecurity.Concrete.verifyAfterLeaf fold
+  rw [climbUpto_bottom, bind_map_left]
+  -- EthLib's tree height is the model's.
+  simp only [toDigest_ofDigest, LAYER_HEIGHT, XmssSecurity.treeHeight]
+
+/-- `Ver(pk, idx, m, sigma)`, in the model's routines.
+
+The bottom layer up to its leaf, then the rest.
+
+The security proof reasons on this form. -/
+theorem _root_.XmssSecurity.Concrete.verify_eq (pk : XmssSecurity.PublicKey)
+    (idx : XmssSecurity.LeafIndex) (msg : XmssSecurity.Message) (σ : XmssSecurity.Signature) :
+    XmssSecurity.Concrete.verify (m := m) pk idx msg σ = (do
+      let digest ← XmssSecurity.Concrete.encodingHash pk.parameter idx msg σ.randomness
+      let some encoding := XmssSecurity.TargetSum.decodeDigest digest | return false
+      let endpoints ← XmssSecurity.Concrete.recoverEndpoints pk.parameter idx encoding σ
+      let leaf ← XmssSecurity.Concrete.leafHash pk.parameter idx endpoints
+      XmssSecurity.Concrete.verifyAfterLeaf pk idx σ leaf) := by
+  unfold XmssSecurity.Concrete.verify verifyWith XmssSecurity.Concrete.verifyAfterLeaf
+    XmssSecurity.Concrete.verifyTop
+  simp only [ofSignature_leafIndex, toNat_ofLeafIndex, ofSignature_bottom, ofPublicKey_publicParam,
+    bottomTree_ofLeafIndex, ofSignature_top, ofPublicKey_root]
+  rw [layerRoot_bottom]
+  simp only [bind_assoc]
+  refine bind_congr fun digest => ?_
+  cases XmssSecurity.TargetSum.decodeDigest digest with
+  | none => simp
+  | some enc =>
+    simp only [bind_assoc, bind_map_left]
+    refine bind_congr fun endpoints => ?_
+    refine bind_congr fun leaf => ?_
     refine bind_congr fun root => ?_
-    simp only [Option.map_some]
-    rw [layerRoot_top, bind_map_left]
-    simp only [bind_assoc]
-    refine bind_congr fun digest' => ?_
-    cases XmssSecurity.TargetSum.decodeDigest digest' with
-    | none => simp
-    | some enc' =>
-      simp only [bind_assoc, pure_bind]
-      refine bind_congr fun endpoints' => ?_
-      refine bind_congr fun leaf' => ?_
-      refine bind_congr fun topRoot => ?_
-      simp [ofPublicKey_root, ofDigest_eq_iff]
+    -- The top layer signs the bytes of the bottom root, which round trip.
+    simp only [ofDigest_toDigest]
+    rfl
 
 end EthLib.Cryptography.Xmss.Unforgeability

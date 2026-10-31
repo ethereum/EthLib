@@ -1,6 +1,6 @@
 import EthLib.Cryptography.Xmss
 import EthLib.Cryptography.Proofs.Xmss.Types
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
+import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Types
 
 /-!
 # Proofs: EthLib's bytes as the security proof's bit vectors
@@ -41,7 +41,7 @@ def ofBV (n : Nat) {w : Nat} (x : BitVec w) : Vector UInt8 n :=
 /-- `ofBV n` lists the bytes the proof's `bytesLE n` does. -/
 theorem toList_ofBV (n : Nat) (x : BitVec (8 * n)) :
     (ofBV n x).toList = XmssSecurity.bytesLE n x := by
-  apply List.ext_getElem (by simp [XmssSecurity.length_bytesLE])
+  apply List.ext_getElem (by simp [XmssSecurity.bytesLE])
   intro i _ _
   simp [XmssSecurity.bytesLE]
 

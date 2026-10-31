@@ -1,4 +1,5 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleVerificationQueryPresence
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePresampling
 
 /-!
@@ -235,7 +236,7 @@ theorem verifyTop_true_queries_cached
         (Concrete.verifyTop publicKey key root part : OracleComp HashSpec Bool)).run initialCache))
     (hle : resultCache ≤ largerCache) :
     TopQueriesCached largerCache publicKey.parameter key root part := by
-  unfold Concrete.verifyTop at hmem
+  rw [Concrete.verifyTop_eq] at hmem
   rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
   obtain ⟨⟨digest, digestCache⟩, hdigest, hafterDigest⟩ := hmem
   cases hdecode : TargetSum.decodeDigest digest with

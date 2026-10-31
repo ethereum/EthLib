@@ -1,4 +1,5 @@
 import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePresampling
+import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 open OracleComp OracleSpec
 
@@ -22,7 +23,7 @@ theorem verify_true_chain_query_cached_as_in_largerCache
         ⟨(encoding chain).val + offset, by omega⟩
         (Wots.walk (Concrete.CacheView.chainStep largerCache publicKey.parameter leafIndex chain)
           (encoding chain).val offset (signature.chainValue chain))) = some output := by
-  unfold Concrete.verify at hmem
+  rw [Concrete.verify_eq] at hmem
   rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
   obtain ⟨⟨digest, digestCache⟩, hdigest, hafterDigest⟩ := hmem
   cases hactualDecode : TargetSum.decodeDigest digest with
