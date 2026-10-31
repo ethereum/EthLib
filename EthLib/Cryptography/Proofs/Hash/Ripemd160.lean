@@ -147,9 +147,9 @@ theorem pad_length_suffix (message : ByteArray) :
 
 /-! ## Known answers
 
-The first nine are the test vectors on Bosselaers' RIPEMD-160 page, which states them for the algorithm of the paper.
-The tenth, one million times "a", is the page's last vector.
-The kernel does not run it: it needs 15625 blocks.
+The first eight are test vectors on Bosselaers' RIPEMD-160 page, which states them for the algorithm of the paper.
+The ninth published vector, one million times "a", is the page's last vector.
+The kernel does not run this long-message vector.
 The Python tests of the bindings do.
 
 The rest pin each way a message can end against the 64-byte block.
@@ -158,7 +158,7 @@ The two agree on every one of them.
 
 ```text
     bytes   blocks   padding
-      0       1      56 zero bytes, then the length
+      0       1      55 zero bytes, then the length
      55       1      0 zero bytes
      56       2      63 zero bytes
      63       2      56 zero bytes

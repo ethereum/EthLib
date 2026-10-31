@@ -22,7 +22,7 @@ hash       every block of the padded message, in order
 Words are little-endian, unlike SHA-256: the message words, the length and the digest all put the least significant byte first.
 
 Used by the precompile at address `0x03`, which returns the digest left-padded to 32 bytes.
-None of its users needs constant time, so this is written for clarity.
+This specification makes no constant-time guarantee.
 -/
 
 namespace EthLib.Cryptography.Hash.Ripemd160
@@ -112,7 +112,8 @@ def paddingZeros (size : Nat) : Nat := (64 - (size + 9) % 64) % 64
 /--
 The length of a message in bits, as eight little-endian bytes.
 
-MD4 admits fewer than 2^64 bits, so the length of an admitted message fits in 64 bits.
+RFC 1320 section 3.2 appends the low 64 bits of the bit length.
+The conversion and multiplication below implement that reduction modulo 2^64.
 -/
 def lengthBytes (size : Nat) : ByteArray :=
   let bits : UInt64 := UInt64.ofNat size * 8
