@@ -14,10 +14,6 @@ abbrev randomnessBytes (randomness : Randomness) : HashInput := bytesLE 16 rando
 
 end Concrete
 
-noncomputable def Seeded.keygen : OracleComp OracleWorld (PublicKey × Seeded.SecretKey) := do
-  let seed ← liftM sampleMasterSeed
-  liftM (Seeded.keygenFromSeed seed)
-
 /-- The random-oracle semantics.
 
 Hash queries are answered lazily and consistently by uniform sampling, and cached.
@@ -28,7 +24,7 @@ noncomputable def romImpl : QueryImpl OracleWorld (StateT (QueryCache HashSpec) 
     (randomOracle : QueryImpl HashSpec (StateT (QueryCache HashSpec) ProbComp))
 
 /-- The interface of a synchronized signature scheme in the random-oracle experiment. -/
-structure Scheme (Key : Type := Seeded.SecretKey) where
+structure Scheme (Key : Type) where
   keygen : OracleComp OracleWorld (PublicKey × Key)
   sign : Key → LeafIndex → Message → OracleComp OracleWorld (Option Signature)
   verify : PublicKey → LeafIndex → Message → Signature → OracleComp OracleWorld Bool
@@ -111,11 +107,5 @@ def lowerOrderSlack : Nat := 2 ^ 20
 def HasAfterKeygenSecurity {Key : Type} (scheme : Scheme Key) : Prop :=
   ∀ q, q < 2 ^ 127 → ∀ adversary, HasAfterKeygenHashQueryBound scheme adversary q →
     forgeAdvantage scheme adversary ≤ ((2 * q + lowerOrderSlack : Nat) : ℝ≥0∞) / ((2 ^ 128 : Nat) : ℝ≥0∞)
-
-noncomputable def Seeded.scheme : Scheme Seeded.SecretKey where
-  keygen := Seeded.keygen
-  sign := fun sk leafIndex message => liftM (Seeded.sign sk leafIndex message : OracleComp HashSpec _)
-  verify := fun publicKey leafIndex message signature =>
-    liftM (Concrete.verify publicKey leafIndex message signature : OracleComp HashSpec Bool)
 
 end XmssSecurity

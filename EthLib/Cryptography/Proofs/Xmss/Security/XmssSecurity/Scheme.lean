@@ -438,89 +438,8 @@ attribute [irreducible] verifyAfterLeaf treeNode
 
 end Concrete
 
-variable {m : Type → Type} [Monad m] [HasQuery HashSpec m]
-
-def deriveKey (parameter : PublicParameter) (domain : KeygenDomain) (seed : MasterSeed) : m Digest := do
-  return truncateHash (← Concrete.oracleHash (keygenHashInput parameter domain seed))
-
-/-- One seed derivation, all 32 bytes: the starts of two chains are its halves. -/
-def deriveOutput (parameter : PublicParameter) (domain : KeygenDomain) (seed : MasterSeed) :
-    m HashOutput :=
-  Concrete.oracleHash (keygenHashInput parameter domain seed)
-
-/-- `R0 = Th(P, A_rnd(idx), S || m)`. -/
-def deriveRandomizer (parameter : PublicParameter) (seed : MasterSeed) (leafIndex : LeafIndex)
-    (message : Message) : m Randomness := do
-  return (← Concrete.oracleHash (randomizerHashInput parameter seed leafIndex message)).extractLsb' 0 randomnessBits
-
-/-- `R0` of the top signature of bottom tree `b`. -/
-def deriveTopRandomizer (parameter : PublicParameter) (seed : MasterSeed) (key : TopIndex)
-    (root : Digest) : m Randomness := do
-  return truncateHash (← Concrete.oracleHash (topRandomizerHashInput parameter seed key root))
-
-/-- The chain starts of every bottom key, from 29 derivations each. -/
-def deriveSecrets (parameter : PublicParameter) (seed : MasterSeed) :
-    m (LeafIndex → ChainIndex → Digest) := do
-  let outputs ← Concrete.sequenceFin fun leafIndex => Concrete.sequenceFin fun pair =>
-    deriveOutput parameter (.chain leafIndex pair) seed
-  return fun leafIndex chain => hashHalf chain.val (outputs leafIndex (chainPair chain))
-
-/-- The chain starts of every top key. -/
-def deriveTopSecrets (parameter : PublicParameter) (seed : MasterSeed) :
-    m (TopIndex → ChainIndex → Digest) := do
-  let outputs ← Concrete.sequenceFin fun key => Concrete.sequenceFin fun pair =>
-    deriveOutput parameter (.topChain key pair) seed
-  return fun key chain => hashHalf chain.val (outputs key (chainPair chain))
-
 noncomputable def sampleMasterSeed : ProbComp MasterSeed :=
   letI := SampleableType.ofFintype MasterSeed
   $ᵗ MasterSeed
-
-namespace Seeded
-
-/-- The scheme's seed `S`, and what key generation computes.
-
-That is the chain and tree values and the top signatures. -/
-structure SecretKey where
-  seed : MasterSeed
-  precomputed : XmssSecurity.SecretKey
-
-/-- Hash the key's seed `S_0` into `S = H("leanXMSS" || S_0)`.
-
-Derive the parameter and the secrets, then compute and store both layers. -/
-def keygenFromSeed (keySeed : MasterSeed) : OracleComp HashSpec (PublicKey × SecretKey) := do
-  let seed ← Concrete.oracleHash (seedHashInput keySeed)
-  let parameter ← deriveKey 0 .parameter seed
-  let secret ← deriveSecrets parameter seed
-  let topSecret ← deriveTopSecrets parameter seed
-  let result ← (Concrete.honestKeygen parameter secret topSecret
-    (deriveTopRandomizer parameter seed) : OracleComp HashSpec _).withQueryLog
-  let precomputed := Concrete.precomputedSecretKey parameter secret topSecret result.1.2
-    (hashCacheOfLog result.2)
-  return (⟨result.1.1, parameter⟩, ⟨seed, precomputed⟩)
-
-/-- Try the randomizers `base + trial, base + trial + 1, ...`.
-
-Stop at the first admissible encoding. -/
-def signFrom (secretKey : SecretKey) (leafIndex : LeafIndex) (message : Message) (base : Randomness) :
-    Nat → Nat → m (Option Signature)
-  | 0, _ => pure none
-  | attempts + 1, trial => do
-      let randomness := base + BitVec.ofNat randomnessBits trial
-      match ← Concrete.precomputedSignAttempt secretKey.precomputed leafIndex message randomness with
-      | some signature => return some signature
-      | none => signFrom secretKey leafIndex message base attempts (trial + 1)
-
-/-- Derive `R0` and take the least admissible trial `R0 + c`, `c < A_max`.
-
-Then attach the top signature.
-
-Fail if the bottom tree has none. -/
-def sign (secretKey : SecretKey) (leafIndex : LeafIndex) (message : Message) : m (Option Signature) := do
-  let base ← deriveRandomizer secretKey.precomputed.parameter secretKey.seed leafIndex message
-  let result ← signFrom secretKey leafIndex message base signingAttemptLimit 0
-  return if Concrete.topSignedAt secretKey.precomputed leafIndex then result else none
-
-end Seeded
 
 end XmssSecurity

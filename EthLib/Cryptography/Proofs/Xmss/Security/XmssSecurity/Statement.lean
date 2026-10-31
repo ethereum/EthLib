@@ -2,18 +2,16 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scheme
 import VCVio.OracleComp.QueryTracking.WriterCost
 
 /-!
-# XMSS security statement
+# The model's signing transcript
 
-Strong unforgeability under chosen-message attacks (SUF-CMA) in the classical random-oracle model.
+The requests, forgeries and transcripts the model's game is written with.
 
-The security target for the scheme in `Scheme.lean` is 127 bits.
+The theorem's statement is not here: it is EthLib's, in `Unforgeability/Statement.lean`.
 -/
 
 open OracleComp OracleSpec ENNReal
 
 namespace XmssSecurity
-
-/-! ## The security experiment -/
 
 /-- A signing request contains a 32-bit leaf index and a 32-byte message. -/
 structure SignRequest where
@@ -61,55 +59,5 @@ instance (log : QueryLog SigningSpec) (forgery : Forgery) : Decidable (Contains 
     (Decidable (∃ entry ∈ log, entry.1 = forgery.request ∧ entry.2 = some forgery.signature))
 
 end SigningTranscript
-
-namespace Security
-
-/-- A probabilistic adaptive adversary with private randomness and access to hashing and signing. -/
-structure Adversary where
-  main : PublicKey → OracleComp (OracleWorld + SigningSpec) Forgery
-
-/-- Record each signing request and its answer. -/
-def signingOracle (sk : Seeded.SecretKey) :
-    QueryImpl SigningSpec (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) :=
-  QueryImpl.withLogging fun request => liftM (Seeded.sign sk request.leafIndex request.message : OracleComp HashSpec _)
-
-/-- Sample the master seed, then run all parties with one shared hash oracle. -/
-noncomputable def gameCore (adversary : Adversary) : OracleComp OracleWorld Bool := do
-  let seed ← liftM sampleMasterSeed
-  let (pk, sk) ← liftM (Seeded.keygenFromSeed seed)
-  let ((forgery, log) : Forgery × QueryLog SigningSpec) ←
-    (simulateQ (QueryImpl.ofLift OracleWorld (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) + signingOracle sk) (adversary.main pk)).run
-  let verified ← liftM (Concrete.verify pk forgery.leafIndex forgery.message forgery.signature : OracleComp HashSpec Bool)
-  return decide (SigningTranscript.Valid log ∧ ¬SigningTranscript.Contains log forgery) && verified
-
-/-- Forward private sampling for free.
-
-Answer hash queries consistently and count every call, including cache hits. -/
-noncomputable def countedOracle :=
-  (unifFwdImpl HashSpec + (randomOracle : QueryImpl HashSpec (StateT (QueryCache HashSpec) ProbComp))).withAddCost
-    (fun | .inl _ => (0 : Nat) | .inr _ => 1)
-
-/-- Run the game from an empty random-oracle cache.
-
-Record success and the total number of hash calls. -/
-noncomputable def experiment (adversary : Adversary) : ProbComp (Bool × Nat) :=
-  (simulateQ countedOracle (gameCore adversary)).run.run' ∅
-
-/-- The probability of a successful forgery. -/
-noncomputable def forgeAdvantage (adversary : Adversary) : ℝ≥0∞ :=
-  Pr{let result ← experiment adversary}[result.1 = true]
-
-/-- Every execution uses at most `q` hash calls.
-
-The count includes key generation, signing, and verification. -/
-def HasHashQueryBound (adversary : Adversary) (q : Nat) : Prop :=
-  ∀ result ∈ support (experiment adversary), result.2 ≤ q
-
-/-- Every adversary with nonzero query budget `q` wins with probability at most `q / 2^bits`. -/
-def HasClassicalSecurityBits (bits : Nat) : Prop :=
-  ∀ q, 1 ≤ q → ∀ adversary, HasHashQueryBound adversary q →
-    forgeAdvantage adversary ≤ q / ((2 ^ bits : Nat) : ℝ≥0∞)
-
-end Security
 
 end XmssSecurity

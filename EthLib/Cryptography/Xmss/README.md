@@ -136,7 +136,8 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
   It agrees with full decoding (`signatureIndex_eq_decodeSignature`).
   A signature from `sign` reads back the index it was signed at (`signatureIndex_sign`, `Sign.lean`).
 - Unforgeability.
-  In the random oracle model, an adversary that makes at most `q >= 1` hash calls forges with probability at most `q / 2^127` (`unforgeable`, `Unforgeability.lean`).
+  In the random oracle model, an adversary whose experiment makes at most `q >= 1` hash calls forges with probability at most `q / 2^127` (`unforgeable`, `Unforgeability.lean`).
+  `q` counts every hash call of the experiment, key generation and signing included, so it is never below about `2^23.7`, plus more than `2^33` per signing request (`SOUNDNESS.md`).
   The game is the note's section "Security", run on `keyGenWith`, `signWith` and `verifyWith` with `H` a query to the oracle.
   The proof, adapted from leanerVM's, reasons over these same definitions (`Proofs/Xmss/Security/`).
 - Known answers.

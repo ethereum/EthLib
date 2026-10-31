@@ -84,6 +84,13 @@ Its game follows the note's section "Security".
 The adversary gets the public key, queries `H`, and requests signatures, never at the same leaf index twice.
 It wins when its forgery verifies and no request for the forged message returned the forged signature.
 The budget `q` counts every hash call of the game, including those of key generation, signing and the final verification.
+It bounds every run, including the unlucky ones, so the bound is weaker than `2^-127` per adversary call:
+
+- Key generation alone makes `K = 13,434,881` calls, about `2^23.7`, so the bound is never below about `2^-103.3`.
+- A signing request can try up to `2^32` randomizers on each layer before one gives a codeword.
+  So each signing request adds more than `2^33` to `q`, and an adversary with `n >= 1` requests gets a bound above `n * 2^-94`.
+
+The bound is classical: the adversary queries the oracle as a classical algorithm.
 
 The statement is written with VCVio's oracle computations and probabilities, so their definitions are part of what it says.
 
