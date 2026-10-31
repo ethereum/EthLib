@@ -11,8 +11,15 @@ Take an adversary whose experiment makes at most `q >= 1` hash calls.
 
 It forges a signature with probability at most `q / 2^127`.
 
-The game (`Unforgeability/Statement.lean`) runs EthLib's own `keyGenWith`, `signWith` and
-`verifyWith`.
+`q` counts every hash call of the experiment, the signer's and key generation's included.
+
+Key generation alone makes about `2^23.7` calls.
+
+A signing request can make more than `2^33`, when its randomizer trials keep missing.
+
+So the bound is never below about `2^-103.3`, and each signing request adds more than `2^-94`.
+
+The game (`Unforgeability/Statement.lean`) runs EthLib's `keyGenWith`, `signWith` and `verifyWith`.
 
 Their hash `H` is a query to the oracle.
 

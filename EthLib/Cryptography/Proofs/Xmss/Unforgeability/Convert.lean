@@ -5,12 +5,13 @@ import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Bytes
 
 The security proof's model (`XmssSecurity`) writes values as bit vectors.
 
-These definitions read them as EthLib's: digests, paths, chain values, leaf indices, public keys
-and signatures.
+These definitions read them as EthLib's.
+
+They cover digests, paths, chain values, leaf indices, public keys and signatures.
 
 `queryH` is `H` as a query to the model's oracle.
 
-The model's verifier is EthLib's `verifyWith`, run with `queryH` on these translations.
+The model's hashes and verifier are EthLib's, run with `queryH` on these translations.
 -/
 
 namespace EthLib.Cryptography.Xmss.Unforgeability

@@ -7,6 +7,12 @@ This directory holds the proof that leanXMSS, as EthLib computes it, is strongly
     Pr[strong forgery] <= q / 2^127
 ```
 
+`q` counts every hash call of the game, not only the adversary's, in the worst run.
+
+Key generation makes about `2^23.7` calls, and a signing request can make more than `2^33`, one per randomizer trial.
+
+So the bound is never below about `2^-103.3`, and it grows by more than `2^-94` per signing request.
+
 The real game runs EthLib's own algorithms, with the hash a query to the random oracle.
 
 Its signer keeps the scheme seed `S` and the parameter `P`.
@@ -15,7 +21,7 @@ The theorem is `XmssSecurity.Bridge.realGame_security` (`XmssSecurity/Proof/Brid
 
 `Proofs/Xmss/Unforgeability.lean` carries it to EthLib's game, whose signer re-derives `S` and `P`, as `Unforgeability.unforgeable`.
 
-There is one definition of the scheme: EthLib's.
+The statement uses only EthLib's definitions of the scheme.
 
 ## The route
 
