@@ -86,6 +86,14 @@ The C exports live in a third library, `Exports`, so a Lean project that imports
 
 A new domain with exports adds its export root to the `Exports` library.
 
+## Skills
+
+`.agents/skills/` holds step-by-step guides for common tasks, one directory each, in the [Agent Skills](https://agentskills.io) format.
+
+- `proof`: add or change a theorem.
+
+They add the mechanics of this repository to the rules here, and never override them.
+
 ## Lean
 
 ### Library code
@@ -263,7 +271,9 @@ The type says what kind of change it is:
 
 - `feat`: new behaviour, such as a new function, module or export.
 - `fix`: behaviour that disagreed with the specification now agrees.
-- `proof`: new or changed theorems, with no change to the library code.
+- `proof`: new or changed theorems, with no change to the library's behaviour.
+  A definition may be restructured or made public to state or prove a theorem, if it still computes the same values.
+  The body then says what changed and why.
 - `perf`: the same results, computed faster.
 - `refactor`: the same behaviour, with the code restructured.
 - `test`: test vectors, known answers or the Python suite.
