@@ -1,3 +1,4 @@
+import EthLib.Serialization.Proofs.Rlp
 import EthLib.Serialization.Proofs.Ssz
 
 /-!

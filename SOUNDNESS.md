@@ -87,6 +87,16 @@ The budget `q` counts every hash call of the game, including those of key genera
 
 The statement is written with VCVio's oracle computations and probabilities, so their definitions are part of what it says.
 
+### VRF tree
+
+`verify_unique` (`Proofs/Vrf/Verify.lean`): two openings that verify at one index under one root give one output, or Keccak-256 collides.
+It holds for every root, including one built to cheat.
+
+`verify_opening` (`Proofs/Vrf/Verify.lean`): the opening of an honest tree verifies, with the output of its secret.
+
+Uniqueness is reduced to a collision, and no theorem bounds the cost of one.
+No theorem says that an output is unpredictable before it is opened.
+
 ### BLS12-381
 
 `modulus_prime` (`Proofs/Bls/FpZMod.lean` and `Proofs/Bls/FrZMod.lean`): both moduli are prime.
@@ -221,13 +231,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 ### B4. The C boundary
 
 <!-- generated: exports -->
-Lean exports 19 operations and 21 size constants.
-The Python extension calls 19 of the operations and 16 of the constants.
+Lean exports 20 operations and 21 size constants.
+The Python extension calls 20 of the operations and 16 of the constants.
 Exported constants it does not call: `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-1364 lines of hand-written C sit between them and Python: `bls.c` (87), `kzg.c` (533), `modexp.c` (61), `module.c` (431), `wrappers.h` (129), `xmss.c` (123).
+1386 lines of hand-written C sit between them and Python: `bls.c` (87), `kzg.c` (533), `modexp.c` (61), `module.c` (432), `wrappers.h` (130), `xmss.c` (143).
 <!-- end generated -->
 
 They convert arguments, own and free Lean objects, and turn errors into Python exceptions.

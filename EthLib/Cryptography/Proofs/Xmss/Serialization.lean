@@ -151,7 +151,7 @@ theorem decodeLayerSignature_middle {b a c : ByteArray} {sig : LayerSignature} {
     rw [fromLittleEndian_littleEndian, Nat.mod_eq_of_lt (by
       have := sig.leafIndex.toNat_lt_size
       simpa [LEAF_INDEX_SIZE, UInt32.size] using this), UInt32.ofNat_toNat]
-  simp only [idx, bottom, top, word]
+  simp only [decodeLeafIndex, idx, bottom, top, word]
 
 /-! ## Every string of the right length is an encoding -/
 
@@ -205,13 +205,51 @@ theorem encodeSignature_decodeSignature {bytes : ByteArray} (sized : bytes.size 
     have := fromLittleEndian_lt (readBytes bytes 0 LEAF_INDEX_SIZE
       (by simp only [sized, SIG_SIZE]; omega))
     simpa [LEAF_INDEX_SIZE] using this
-  rw [UInt32.toNat_ofNat_of_lt' hword, littleEndian_fromLittleEndian, packBytes_readBytes,
+  rw [decodeLeafIndex, UInt32.toNat_ofNat_of_lt' hword, littleEndian_fromLittleEndian, packBytes_readBytes,
     Nat.zero_add, slice_append _ (by omega) (by omega), slice_append _ (by omega) (by omega)]
   -- The slice from 0 to the end is the whole buffer.
   congr 1
   apply ByteArray.ext
   simp only [ByteArray.size] at sized
   simp [sized, SIG_SIZE, LAYER_SIG_SIZE, LEAF_INDEX_SIZE]
+  omega
+
+/-! ## The leaf index alone -/
+
+/-- Reading the leaf index alone gives the index that decoding the whole signature gives.
+
+Both reject the same strings, those not 2404 bytes long. -/
+theorem signatureIndex_eq_decodeSignature (bytes : ByteArray) :
+    signatureIndex bytes = (decodeSignature bytes).map (·.leafIndex) := by
+  -- Both branches test the same length, and both read the index the same way.
+  unfold signatureIndex decodeSignature
+  split <;> rfl
+
+/-- An encoded signature reads back the leaf index it was built with. -/
+@[simp] theorem signatureIndex_encodeSignature (sig : Signature) :
+    signatureIndex (encodeSignature sig) = .ok sig.leafIndex := by
+  simp [signatureIndex_eq_decodeSignature, Except.map]
+
+/-- The leaf index is the first 4 bytes, read as a little-endian integer.
+
+So any reader that takes `b_0 + 2^8 b_1 + 2^16 b_2 + 2^24 b_3` gets the same index. -/
+theorem signatureIndex_eq_bytes {bytes : ByteArray} (sized : bytes.size = SIG_SIZE) :
+    signatureIndex bytes = .ok (UInt32.ofNat
+      (bytes[0]!.toNat + 2 ^ 8 * bytes[1]!.toNat + 2 ^ 16 * bytes[2]!.toNat
+        + 2 ^ 24 * bytes[3]!.toNat)) := by
+  -- The 4 bytes exist, so each checked read is a plain read.
+  have room : 4 ≤ bytes.size := by rw [sized]; decide
+  rw [signatureIndex, dite_eq_left sized, decodeLeafIndex, fromLittleEndian_eq_foldr]
+  -- Both sides convert the same integer, so compare the integers.
+  congr 2
+  -- Unroll Horner's rule over the 4 bytes: b_0 + 256 (b_1 + 256 (b_2 + 256 b_3)).
+  simp only [readBytes, LEAF_INDEX_SIZE, Vector.toList_ofFn, List.ofFn_succ, List.ofFn_zero,
+    List.foldr_cons, List.foldr_nil]
+  rw [getElem!_pos bytes 0 (by omega), getElem!_pos bytes 1 (by omega),
+    getElem!_pos bytes 2 (by omega), getElem!_pos bytes 3 (by omega)]
+  simp only [ByteArray.getElem_eq_getElem_data, Nat.zero_add, Fin.val_zero, Fin.val_succ,
+    Nat.reduceAdd]
+  -- Expanding the nested form gives the sum of powers.
   omega
 
 /-- Distinct public keys have distinct encodings. -/
@@ -245,6 +283,11 @@ theorem decodePublicKey_success_iff (bytes : ByteArray) :
   · intro sized
     rw [decodePublicKey, dite_eq_left sized]
     exact ⟨_, rfl⟩
+
+/-- A signature string of any other length than 2404 bytes has no leaf index. -/
+theorem signatureIndex_badSize {bytes : ByteArray} (wrong : bytes.size ≠ SIG_SIZE) :
+    signatureIndex bytes = .error (.badSignatureSize bytes.size) := by
+  rw [signatureIndex, dite_eq_right wrong]
 
 /-- Signature decoding succeeds exactly on 2404-byte strings. -/
 theorem decodeSignature_success_iff (bytes : ByteArray) :

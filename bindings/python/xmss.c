@@ -24,6 +24,11 @@ eth_xmss_verify(
   lean_object* sig
 );
 
+extern lean_object*
+eth_xmss_signature_index(
+  lean_object* sig
+);
+
 /* ---- Local helpers (XMSS-only) --------------------------------------- */
 
 /* Read a Python int in [0, max]; returns 0 on success. */
@@ -120,4 +125,19 @@ py_xmss_verify(
     return NULL;
   }
   if (ok) Py_RETURN_TRUE; else Py_RETURN_FALSE;
+}
+
+PyObject*
+py_xmss_signature_index(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *sig_obj;
+  if (!PyArg_ParseTuple(args, "O", &sig_obj)) return NULL;
+  const uint8_t* sig = parse_bytes_of_size(sig_obj, XMSS_SIG_SIZE, "signature");
+  if (!sig) return NULL;
+
+  /* The index is below 2^32, so it fits the `UInt64` the export returns. */
+  lean_object* res = eth_xmss_signature_index(mk_bytearray(sig, XMSS_SIG_SIZE));
+  return run_io_into_pyint(res, "signature_index");
 }

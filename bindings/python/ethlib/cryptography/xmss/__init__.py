@@ -1,4 +1,4 @@
-"""leanXMSS signatures: key generation, signing and verification only.
+"""leanXMSS signatures: key generation, signing, verification and the leaf index.
 
 - Malformed arguments raise TypeError, ValueError or OverflowError.
 - Inputs the spec rejects raise RuntimeError.
@@ -8,6 +8,7 @@ from .._native import (
     xmss_key_gen,
     xmss_sign,
     xmss_verify,
+    xmss_signature_index,
     XMSS_MESSAGE_LEN as MESSAGE_LEN,
     XMSS_PUB_KEY_SIZE as PUB_KEY_SIZE,
     XMSS_SEED_LEN as SEED_LEN,
@@ -39,10 +40,19 @@ def verify(public_key: bytes, message: bytes, signature: bytes) -> bool:
     return xmss_verify(public_key, message, signature)
 
 
+def signature_index(signature: bytes) -> int:
+    """The leaf index a 2404-byte signature carries.
+
+    It reads the first 4 bytes, little-endian, and does not verify the signature.
+    """
+    return xmss_signature_index(signature)
+
+
 __all__ = [
     "key_gen",
     "sign",
     "verify",
+    "signature_index",
     "MESSAGE_LEN",
     "PUB_KEY_SIZE",
     "SEED_LEN",

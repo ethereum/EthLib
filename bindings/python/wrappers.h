@@ -123,6 +123,7 @@ PyObject* py_recover_cells_and_kzg_proofs                 (PyObject* self, PyObj
 PyObject* py_xmss_key_gen                                 (PyObject* self, PyObject* args);
 PyObject* py_xmss_sign                                    (PyObject* self, PyObject* args);
 PyObject* py_xmss_verify                                  (PyObject* self, PyObject* args);
+PyObject* py_xmss_signature_index                         (PyObject* self, PyObject* args);
 PyObject* py_modexp                                       (PyObject* self, PyObject* args);
 PyObject* py_modexp_gas_cost                              (PyObject* self, PyObject* args);
 

@@ -14,6 +14,7 @@ permanently if the performance of this library is sufficient.
 - [BLS12-381 signatures](EthLib/Cryptography/Bls/)
 - [KZG polynomial commitments](EthLib/Cryptography/Kzg/)
 - [XMSS signatures](EthLib/Cryptography/Xmss/)
+- [VRF tree](EthLib/Cryptography/Vrf/)
 
 ### Precompiles
 

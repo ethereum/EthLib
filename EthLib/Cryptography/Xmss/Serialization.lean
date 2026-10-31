@@ -81,6 +81,11 @@ def decodeLayerSignature (bytes : ByteArray) (offset : Nat)
     (readBytes bytes (offset + RANDOMIZER_LEN + V * DIGEST_LEN) (LAYER_HEIGHT * DIGEST_LEN)
       (by simp only [LAYER_SIG_SIZE] at h; omega))
 
+/-- Read the leaf index from the first 4 bytes of a buffer, as a little-endian word. -/
+def decodeLeafIndex (bytes : ByteArray) (h : LEAF_INDEX_SIZE ≤ bytes.size) : LeafIndex :=
+  -- Four bytes hold at most `2^32 - 1`, so the conversion drops nothing.
+  UInt32.ofNat (fromLittleEndian (readBytes bytes 0 LEAF_INDEX_SIZE (by omega)))
+
 /-- Decode a signature from 2404 bytes.
 
 Length is the only check: every 2404-byte string decodes.
@@ -90,12 +95,26 @@ Decoding does not verify the signature.
 def decodeSignature (bytes : ByteArray) : Except XmssError Signature :=
   if h : bytes.size = SIG_SIZE then
     -- The leaf index, then the bottom layer at 4, then the top layer at 1204.
-    .ok { leafIndex := UInt32.ofNat (fromLittleEndian
-            (readBytes bytes 0 LEAF_INDEX_SIZE (by simp only [h, SIG_SIZE]; omega)))
+    .ok { leafIndex := decodeLeafIndex bytes (by simp only [h, SIG_SIZE]; omega)
           bottom := decodeLayerSignature bytes LEAF_INDEX_SIZE
             (by simp only [h, SIG_SIZE]; omega)
           top := decodeLayerSignature bytes (LEAF_INDEX_SIZE + LAYER_SIG_SIZE)
             (by simp only [h, SIG_SIZE]; omega) }
+  else
+    .error (.badSignatureSize bytes.size)
+
+/-- The leaf index a 2404-byte signature carries.
+
+It reads only the first 4 bytes.
+
+It does not verify the signature, so the index is only what the signer claims.
+
+A caller can use it to require a given leaf before verifying, such as leaf 0 for a proof of possession.
+-/
+def signatureIndex (bytes : ByteArray) : Except XmssError LeafIndex :=
+  -- The whole signature must be there, as for decoding, so a truncated one is rejected.
+  if h : bytes.size = SIG_SIZE then
+    .ok (decodeLeafIndex bytes (by simp only [h, SIG_SIZE]; omega))
   else
     .error (.badSignatureSize bytes.size)
 

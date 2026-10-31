@@ -69,10 +69,11 @@ So the code makes its hash calls as the note defines them, one by one and in a f
 ## Operations
 
 ```text
-Lean       file            C export            Python
-keyGen     KeyGen.lean     eth_xmss_key_gen    xmss.key_gen
-sign       Sign.lean       eth_xmss_sign       xmss.sign
-verify     Verify.lean     eth_xmss_verify     xmss.verify
+Lean            file                  C export                    Python
+keyGen          KeyGen.lean           eth_xmss_key_gen            xmss.key_gen
+sign            Sign.lean             eth_xmss_sign               xmss.sign
+verify          Verify.lean           eth_xmss_verify             xmss.verify
+signatureIndex  Serialization.lean    eth_xmss_signature_index    xmss.signature_index
 ```
 
 The secret key is the 32-byte seed, and everything else derives from it.
@@ -86,9 +87,13 @@ Never sign two different messages at one leaf index with one key.
 
 Nothing in EthLib records which leaf indices a key has signed, so the caller must prevent reuse.
 
+`signatureIndex` reads the leaf index a signature carries, its first 4 bytes, without verifying it.
+
+A caller can use it to require a given leaf before verifying, such as leaf 0 for a proof of possession.
+
 ## Test vectors
 
-`tests/cryptography/xmss/` has cases for `key_gen`, `sign` and `verify`.
+`tests/cryptography/xmss/` has cases for `key_gen`, `sign`, `verify` and `signature_index`.
 
 The proofs also pin one full key and one signature (`Proofs/Xmss/KnownAnswer*.lean`).
 
@@ -127,6 +132,9 @@ The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
   An honest path leads from a key's leaf to its tree's root (`fold_path`, `Tree.lean`).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
+  The leaf index read alone is its first 4 bytes, as a little-endian integer (`signatureIndex_eq_bytes`).
+  It agrees with full decoding (`signatureIndex_eq_decodeSignature`).
+  A signature from `sign` reads back the index it was signed at (`signatureIndex_sign`, `Sign.lean`).
 - Unforgeability.
   In the random oracle model, an adversary that makes at most `q >= 1` hash calls forges with probability at most `q / 2^127` (`unforgeable`, `Unforgeability.lean`).
   The game is the note's section "Security", run on `keyGenWith`, `signWith` and `verifyWith` with `H` a query to the oracle.

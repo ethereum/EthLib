@@ -60,7 +60,7 @@ def isNativeAxiom (env : Environment) (n : Name) : Bool :=
 /-- The module that defines `n`. -/
 def moduleOf? (env : Environment) (n : Name) : Option Name := do
   let idx ← env.getModuleIdxFor? n
-  env.header.moduleNames[idx.toNat]?
+  return (← env.header.modules[idx.toNat]?).module
 
 /-- Whether `n` is defined in a module under `scope`. -/
 def inScope (env : Environment) (scope : Name) (n : Name) : Bool :=
