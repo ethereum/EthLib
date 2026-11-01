@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingQueryBound
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExpectedQueryCount
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingTargetMap
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingQueryBound
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExpectedQueryCount
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingTargetMap
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Game
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.Presampling
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Game
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.Presampling
 
 /-!
 # From the real experiment to the table game
@@ -16,6 +18,8 @@ The rest of the real game erases to the model's game with the table signer.
 
 A budget of `q - 1` from `S` leaves `q - K` hash calls after key generation.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open EthLib.Cryptography.Xmss.Unforgeability (toModelAdversary)

@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.Erasure
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.Erasure
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

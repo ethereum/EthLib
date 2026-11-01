@@ -1,8 +1,12 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneEagerBound
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneHazardEnforcement
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MarginalCoupling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheAgreement
-import VCVio.ProgramLogic.Relational.FromUnary
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneEagerBound
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneHazardEnforcement
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MarginalCoupling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheAgreement
+public import VCVio.ProgramLogic.Relational.FromUnary
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open OracleComp.ProgramLogic.Relational

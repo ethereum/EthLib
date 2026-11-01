@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
+
+@[expose] public section
 
 namespace XmssSecurity
 

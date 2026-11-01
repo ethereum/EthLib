@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashAddress
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashAddress
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # One-time keys of either layer
@@ -9,6 +11,8 @@ Lane 1 presamples the hidden chain values of both layers in one table.
 
 A `ChainKey` is a bottom leaf index or a top key; its chain steps differ only in their address.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

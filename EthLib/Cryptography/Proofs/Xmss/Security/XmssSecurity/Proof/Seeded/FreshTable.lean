@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomizedStatement
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.UniformFiniteTable
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomizedStatement
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.UniformFiniteTable
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

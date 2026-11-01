@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Resolution
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Resolution
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # EthLib's key generation under the programmed cache
@@ -12,6 +14,8 @@ With every derivation programmed, a tree node EthLib computes from `S` is the mo
 
 Only the derivation queries differ, and the cache answers them.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open EthLib.Cryptography

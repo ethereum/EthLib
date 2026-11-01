@@ -1,9 +1,11 @@
-import Mathlib.Tactic.FieldSimp
-import Mathlib.Tactic.Linarith
-import Mathlib.Tactic.LinearCombination
-import Mathlib.Tactic.Positivity
-import Mathlib.Tactic.Ring
-import Mathlib.Basic.Real.Basic
+module
+
+public import Mathlib.Tactic.FieldSimp
+public import Mathlib.Tactic.Linarith
+public import Mathlib.Tactic.LinearCombination
+public import Mathlib.Tactic.Positivity
+public import Mathlib.Tactic.Ring
+public import Mathlib.Basic.Real.Basic
 
 /-!
 # A quadratic potential for the landed count
@@ -18,6 +20,8 @@ It caches one input and spends one unit of budget.
 
 So `X C + (1 - p) X^2` is bounded in mean by `A n`.
 -/
+
+@[expose] public section
 
 namespace XmssSecurity.Partner
 

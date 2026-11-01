@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainRevealFiltering
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainRevealFiltering
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

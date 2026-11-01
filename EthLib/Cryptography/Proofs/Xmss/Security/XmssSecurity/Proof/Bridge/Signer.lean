@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Real
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Real
 
 /-!
 # EthLib's signer under the prepared cache
@@ -15,6 +17,8 @@ That is the chains, the path, the bottom root and the whole top signature.
 
 So it erases to the values the model's key stores.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open EthLib.Cryptography

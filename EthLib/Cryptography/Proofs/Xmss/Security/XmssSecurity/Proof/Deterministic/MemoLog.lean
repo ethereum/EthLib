@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.Memoize
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.Memoize
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

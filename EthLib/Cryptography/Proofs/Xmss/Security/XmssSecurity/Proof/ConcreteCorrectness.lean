@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheReplayEval
-import Mathlib.Data.Nat.Bitwise
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheReplayEval
+public import Mathlib.Data.Nat.Bitwise
+
+@[expose] public section
 
 open OracleSpec
 

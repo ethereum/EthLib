@@ -1,9 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Basic
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TableSigner
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.FiniteTable
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.SeedGuessing
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.CacheCoupling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Basic
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TableSigner
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.FiniteTable
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.SeedGuessing
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.CacheCoupling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
 
 /-!
 # The seed derivations of the real scheme
@@ -17,6 +19,8 @@ Every input of the real scheme that contains the scheme's seed `S`:
 
 Their answers are presampled into a programmed cache; no tweakable hash input is one of them.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HiddenValue
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
-import VCVio.OracleComp.Constructions.SampleableType
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HiddenValue
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
+public import VCVio.OracleComp.Constructions.SampleableType
+
+@[expose] public section
 
 open OracleComp ENNReal
 

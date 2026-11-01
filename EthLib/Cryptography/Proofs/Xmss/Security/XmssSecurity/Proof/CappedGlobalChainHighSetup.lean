@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainOutputUniformity
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalCausalSetup
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MarginalCoupling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainOutputUniformity
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalCausalSetup
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MarginalCoupling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open OracleComp.ProgramLogic.Relational

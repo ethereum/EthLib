@@ -1,10 +1,14 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainRevealFiltering
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePresampling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashOutputHigh
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.UniformFiniteTable
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalKeygenCoupling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalTreeCoupling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenFacts
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainRevealFiltering
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePresampling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashOutputHigh
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.UniformFiniteTable
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalKeygenCoupling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalTreeCoupling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenFacts
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 open OracleComp.ProgramLogic.Relational

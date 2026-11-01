@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Reduction
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.BudgetTransfer
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Reduction
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.BudgetTransfer
 
 /-!
 # The scheme's seed
@@ -15,6 +17,8 @@ Dropping that entry costs at most one `2^-256` guess of `S_0` per hash call afte
 
 The real game here is EthLib's, its signer keeping `S` and `P`.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

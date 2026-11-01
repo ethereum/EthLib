@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainHighCoverage
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainEventDecomposition
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopStructural
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainHighCoverage
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainEventDecomposition
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopStructural
 
 /-!
 # The origin of a top guess
@@ -9,6 +11,8 @@ A winning top guess forges the hidden honest top value at some coordinate.
 
 No returned signature revealed that coordinate.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

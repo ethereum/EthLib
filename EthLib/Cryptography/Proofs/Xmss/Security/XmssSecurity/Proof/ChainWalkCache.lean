@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePresampling
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePresampling
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

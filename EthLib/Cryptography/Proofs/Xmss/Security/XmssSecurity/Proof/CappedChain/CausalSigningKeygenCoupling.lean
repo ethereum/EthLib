@@ -1,11 +1,15 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheAgreement
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainWalkCache
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.BoundedSignProbability
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedBoundedSignProbability
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.TreeCacheStable
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalTreeCoupling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.KeygenCache
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheAgreement
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainWalkCache
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.BoundedSignProbability
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedBoundedSignProbability
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.TreeCacheStable
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalTreeCoupling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.KeygenCache
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open OracleComp.ProgramLogic.Relational

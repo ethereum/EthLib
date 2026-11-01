@@ -1,8 +1,12 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalAuthenticationPathIndependence
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePresampling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleQueryPresence
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalKeygenCoupling
-import VCVio.ProgramLogic.Relational.Basic
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalAuthenticationPathIndependence
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePresampling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleQueryPresence
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalKeygenCoupling
+public import VCVio.ProgramLogic.Relational.Basic
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open OracleComp.ProgramLogic.Relational

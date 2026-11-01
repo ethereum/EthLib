@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleQueryBound
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryPresence
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleQueryBound
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryPresence
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

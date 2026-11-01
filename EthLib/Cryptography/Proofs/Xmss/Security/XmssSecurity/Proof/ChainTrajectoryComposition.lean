@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainTrajectoryUniformity
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainTrajectoryUniformity
+
+@[expose] public section
 
 namespace XmssSecurity
 

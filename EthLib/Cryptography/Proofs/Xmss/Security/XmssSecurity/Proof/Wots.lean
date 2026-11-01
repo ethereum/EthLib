@@ -1,8 +1,12 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
 
 /-! The WOTS chain walk, the first-order form of the statement's monadic `chainWalk`.
 
 The proof's pure cache replays and extraction arguments use it. -/
+
+@[expose] public section
 
 namespace XmssSecurity.Wots
 

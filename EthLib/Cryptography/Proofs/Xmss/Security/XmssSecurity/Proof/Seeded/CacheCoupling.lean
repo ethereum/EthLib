@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.StoppedRun
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.StoppedRun
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

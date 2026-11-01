@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
-import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
-import VCVio.OracleComp.SimSemantics.StateT.PreservesInv
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
+public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
+public import VCVio.OracleComp.SimSemantics.StateT.PreservesInv
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

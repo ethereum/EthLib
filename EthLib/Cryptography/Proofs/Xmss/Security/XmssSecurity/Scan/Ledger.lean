@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.SignStep
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.SignStep
 
 /-!
 # The potentials of the adversary phase
@@ -12,6 +14,8 @@ Summed over leaf indices, each read on the leaf index's frozen cache:
 
 This file proves how one fresh oracle answer moves each of them.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

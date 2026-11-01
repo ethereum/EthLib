@@ -1,9 +1,13 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainHighReplay
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalCausalUniformTrace
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.SourceDirectTrace
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ReturnedChainValueCoverage
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingHashCacheReplay
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RunObservedAppend
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainHighReplay
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalCausalUniformTrace
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.SourceDirectTrace
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ReturnedChainValueCoverage
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingHashCacheReplay
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RunObservedAppend
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open OracleComp.ProgramLogic.Relational

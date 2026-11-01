@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RevealTraceReplay
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RunObservedAppend
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RevealTraceReplay
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RunObservedAppend
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open OracleComp.ProgramLogic.Relational

@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSigningCacheTrace
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSigningCacheTrace
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

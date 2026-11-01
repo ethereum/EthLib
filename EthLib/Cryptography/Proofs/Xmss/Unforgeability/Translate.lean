@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Address
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Codeword
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scheme
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Address
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Codeword
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scheme
 
 /-!
 # Proofs: EthLib's hashing is the model's
@@ -29,6 +31,8 @@ So the hash lemmas also name the oracle input each hash makes.
 
 Those are `Concrete.encodingHash_eq` and the others.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss.Unforgeability
 

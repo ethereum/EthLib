@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Program
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Program
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # The honest preparation
@@ -11,6 +13,8 @@ It computes every chain, leaf and node of both layers and every top signature.
 
 After it, the cache resolves each of these computations to the value the model's secret key stores.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

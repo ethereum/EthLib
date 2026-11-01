@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingGameTrace
-import VCVio.OracleComp.SimSemantics.StateT.PreservesInv
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingGameTrace
+public import VCVio.OracleComp.SimSemantics.StateT.PreservesInv
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

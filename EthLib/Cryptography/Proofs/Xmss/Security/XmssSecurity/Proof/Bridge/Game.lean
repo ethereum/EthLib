@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Signer
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TranscriptReduction
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Adversary
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Signer
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TranscriptReduction
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Adversary
 
 /-!
 # EthLib's game as the model's
@@ -15,6 +17,8 @@ The transcripts correspond entry by entry.
 
 The forgery wins in one exactly when its translation wins in the other.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open EthLib.Cryptography

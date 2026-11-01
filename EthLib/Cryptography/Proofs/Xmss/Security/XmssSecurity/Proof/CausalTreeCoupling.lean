@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TreeCacheVocabulary
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheAgreement
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TreeCacheVocabulary
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheAgreement
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # Coupling key generation over two chain tables
@@ -15,6 +17,8 @@ A leaf query is fresh on both sides or answered alike.
 
 Every other query has the same input.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 open OracleComp.ProgramLogic.Relational

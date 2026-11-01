@@ -1,6 +1,10 @@
-import VCVio.OracleComp.SimSemantics.StateT.Measure
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TrialSampling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TranscriptReduction
+module
+
+public import VCVio.OracleComp.SimSemantics.StateT.Measure
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TrialSampling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TranscriptReduction
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

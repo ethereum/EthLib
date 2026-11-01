@@ -1,13 +1,17 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalKeygen
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalTreeCacheCorrespondence
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainTracedGame
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedKeygenCache
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainOrigin
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainRevealFiltering
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.SignatureChainValue
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RevealProbeOracleSimulation
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.CausalSigningKeygenCoupling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalKeygen
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalTreeCacheCorrespondence
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainTracedGame
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedKeygenCache
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainOrigin
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainRevealFiltering
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.SignatureChainValue
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RevealProbeOracleSimulation
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.CausalSigningKeygenCoupling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open OracleComp.ProgramLogic.Relational

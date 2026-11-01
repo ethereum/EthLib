@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveLeafIndexCollision
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingTargetMap
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SigningCacheTrace
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveLeafIndexCollision
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingTargetMap
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SigningCacheTrace
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

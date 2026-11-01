@@ -1,7 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalKeygen
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.CausalSigningKeygenCoupling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TreeCacheVocabulary
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalKeygen
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.CausalSigningKeygenCoupling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TreeCacheVocabulary
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
 
 /-!
 # Key generation over two chain tables
@@ -10,6 +12,8 @@ Take two key generations whose chains were presampled into different tables.
 
 They run with equal outputs, and their final caches replay the same trees of both layers.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open OracleComp.ProgramLogic.Relational

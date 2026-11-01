@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalCollisionProbability
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedLeafEventProbability
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.GlobalWinningChainValueRevealed
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopStructural
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalCollisionProbability
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedLeafEventProbability
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.GlobalWinningChainValueRevealed
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopStructural
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

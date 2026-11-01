@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedKeygenCache
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePresampling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainHiddenTable
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedKeygenCache
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePresampling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainHiddenTable
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

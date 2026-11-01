@@ -1,9 +1,13 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.KeygenCache
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalAuthenticationPathIndependence
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePresampling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleQueryPresence
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalKeygenCoupling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.KeygenCache
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalAuthenticationPathIndependence
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePresampling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleQueryPresence
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalKeygenCoupling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

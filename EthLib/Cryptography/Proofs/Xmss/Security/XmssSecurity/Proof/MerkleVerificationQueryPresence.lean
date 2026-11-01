@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleQueryPresence
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleQueryPresence
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

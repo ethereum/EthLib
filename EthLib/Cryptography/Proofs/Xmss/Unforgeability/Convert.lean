@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Bytes
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Bytes
 
 /-!
 # Proofs: EthLib's values from the model's
@@ -13,6 +15,8 @@ They cover digests, paths, chain values, leaf indices, public keys and signature
 
 The model's hashes and verifier are EthLib's, run with `queryH` on these translations.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss.Unforgeability
 

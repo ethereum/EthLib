@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.WinningEventReduction
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.WinningEventReduction
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
+
+@[expose] public section
 
 open OracleSpec
 

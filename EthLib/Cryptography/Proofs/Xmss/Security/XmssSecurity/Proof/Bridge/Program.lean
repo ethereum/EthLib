@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Derivation
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Derivation
 
 /-!
 # The programmed derivation cache
@@ -9,6 +11,8 @@ Answering every derivation of a seed up front is one uniform draw of a derivatio
 
 The cache holds only inputs naming the seed, and no tweakable input.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

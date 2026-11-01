@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConcreteQueryBound
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConcreteQueryBound
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

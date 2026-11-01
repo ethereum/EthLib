@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedConcreteExecution
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedBoundedSign
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SigningLogConsistency
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.WinningEventReduction
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedConcreteExecution
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedBoundedSign
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SigningLogConsistency
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.WinningEventReduction
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 open scoped BigOperators

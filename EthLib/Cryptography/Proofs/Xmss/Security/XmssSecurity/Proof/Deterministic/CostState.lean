@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.World
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConsistentQueryBound
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.World
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConsistentQueryBound
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

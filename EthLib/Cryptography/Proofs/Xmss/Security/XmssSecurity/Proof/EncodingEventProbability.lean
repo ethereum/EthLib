@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingTargetMap
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SigningCacheTrace
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.WinningEventReduction
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingTargetMap
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SigningCacheTrace
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.WinningEventReduction
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

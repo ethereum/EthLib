@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveFreshTarget
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExpectedQueryCount
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveFreshTarget
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExpectedQueryCount
+
+@[expose] public section
 
 open OracleComp ENNReal
 

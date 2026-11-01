@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.KeygenCache
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.KeygenCache
 
 /-!
 # Runs inside key generation's honest computation
@@ -15,6 +17,8 @@ A chain walk's run contains a run of each of its prefixes.
 
 Every replay of such a run is stable in the final cache and all larger ones.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

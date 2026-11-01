@@ -1,5 +1,7 @@
-import VCVio.OracleComp.QueryTracking.LoggingOracle.Core
-import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
+module
+
+public import VCVio.OracleComp.QueryTracking.LoggingOracle.Core
+public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 
 /-!
 # The leanXMSS model: parameters, types and hash inputs
@@ -8,6 +10,8 @@ The model of `Scheme.lean` writes values as bit vectors and hash inputs as byte 
 
 Every hash input is byte for byte the one of EthLib's algorithms (`Unforgeability/Translate.lean`).
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

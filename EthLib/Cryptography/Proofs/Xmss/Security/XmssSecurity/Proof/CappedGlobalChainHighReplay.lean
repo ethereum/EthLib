@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainHighLocalCoupling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ObservedTraceMonitor
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainHighLocalCoupling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ObservedTraceMonitor
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open OracleComp.ProgramLogic.Relational

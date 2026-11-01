@@ -1,5 +1,10 @@
-import VCVio.OracleComp.QueryTracking.WriterCost
-import VCVio.OracleComp.QueryTracking.QueryBound
+module
+
+public import VCVio.OracleComp.QueryTracking.WriterCost
+public import VCVio.OracleComp.QueryTracking.QueryBound
+
+@[expose] public section
+
 namespace XmssSecurity.QueryCounting
 
 open _root_.OracleComp OracleSpec

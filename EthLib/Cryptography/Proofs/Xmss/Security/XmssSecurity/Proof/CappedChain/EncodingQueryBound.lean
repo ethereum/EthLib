@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingQueryBound
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingQueryAccounting
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingQueryBound
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingQueryAccounting
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

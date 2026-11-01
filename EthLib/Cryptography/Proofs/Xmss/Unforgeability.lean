@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Game
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Game
 
 /-!
 # Proofs: leanXMSS as EthLib computes it is unforgeable
@@ -40,6 +42,8 @@ Key generation made those calls first, so they return cached answers and change 
 
 They still count toward the budget `q`, so the bound holds as stated.
 -/
+
+@[expose] public section
 
 /-! The build fails if the theorem ever depends on more than Lean's three standard axioms. -/
 

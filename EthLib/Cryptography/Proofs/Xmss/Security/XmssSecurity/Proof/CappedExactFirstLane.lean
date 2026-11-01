@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedJointExactLoss
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedJointExactLoss
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

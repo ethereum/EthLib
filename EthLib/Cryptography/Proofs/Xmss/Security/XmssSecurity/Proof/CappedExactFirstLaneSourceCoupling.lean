@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedExactFirstLane
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalFirstLaneExperiment
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StateLens
-import VCVio.OracleComp.SimSemantics.StateT.StateProjection
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedExactFirstLane
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalFirstLaneExperiment
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StateLens
+public import VCVio.OracleComp.SimSemantics.StateT.StateProjection
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open OracleComp.ProgramLogic.Relational

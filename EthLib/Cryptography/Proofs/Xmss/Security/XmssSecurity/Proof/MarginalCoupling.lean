@@ -1,7 +1,11 @@
-import VCVio.ProgramLogic.Relational.Basic
-import VCVio.OracleComp.EvalDist.Sum
-import Mathlib.Probability.ProbabilityMassFunction.Constructions
-import ToMathlib.MeasureTheory.Measure.Coupling.Maximal
+module
+
+public import VCVio.ProgramLogic.Relational.Basic
+public import VCVio.OracleComp.EvalDist.Sum
+public import Mathlib.Probability.ProbabilityMassFunction.Constructions
+public import ToMathlib.MeasureTheory.Measure.Coupling.Maximal
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 open OracleComp.ProgramLogic.Relational
@@ -297,7 +301,7 @@ section GeneralRelTriple
 
 open MeasureTheory
 
-private instance finiteRangeOfUniform {ι : Type} {spec : OracleSpec ι}
+instance finiteRangeOfUniform {ι : Type} {spec : OracleSpec ι}
     [OracleSpec.UniformAnswerMeasure spec] (t : spec.Domain) : Finite (spec.Range t) :=
   OracleSpec.UniformAnswerMeasure.finite_range t
 

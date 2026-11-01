@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainInputTrace
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.WinningEventReduction
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainKey
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainInputTrace
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.WinningEventReduction
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainKey
+
+@[expose] public section
 
 open OracleSpec
 

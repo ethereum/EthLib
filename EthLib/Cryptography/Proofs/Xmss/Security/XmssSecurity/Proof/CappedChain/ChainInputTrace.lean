@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.EncodingQueryBound
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainInputTrace
-import VCVio.OracleComp.QueryTracking.QueryBound
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.EncodingQueryBound
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainInputTrace
+public import VCVio.OracleComp.QueryTracking.QueryBound
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

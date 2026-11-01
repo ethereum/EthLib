@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Potential
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveFreshTarget
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Potential
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveFreshTarget
 
 /-!
 # One encoding query and the partner potential
@@ -19,6 +21,8 @@ With `ex f` the mean of `f u`:
 * `landing_mul_H_le`: the mass bound, `landing * H <= landing * C + V * (1 - landing)`.
 * `potentials_cacheQuery_of_not_input`: other inputs change nothing.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

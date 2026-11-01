@@ -147,7 +147,7 @@ So a verifier that reads the index from the bytes learns which one-time key sign
 theorem signatureIndex_sign {sk : SecretKey} {idx : LeafIndex} {m : Message} {σ : Signature}
     (h : sign sk idx m = .ok σ) :
     signatureIndex (encodeSignature σ) = .ok idx := by
-  rw [signatureIndex_encodeSignature, (sign_eq_ok h).1]
+  rw [signatureIndex_encodeSignature, (sign_eq_ok rfl rfl h).1]
 
 /-- Signing fails only when one layer's one-time key finds no codeword. -/
 theorem sign_error {sk : SecretKey} {idx : LeafIndex} {m : Message} {err : XmssError}

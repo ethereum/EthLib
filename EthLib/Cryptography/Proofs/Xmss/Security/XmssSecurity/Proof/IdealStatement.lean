@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomizedStatement
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomizedStatement
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

@@ -1,6 +1,10 @@
-import VCVio.OracleComp.QueryTracking.QueryBound
-import VCVio.OracleComp.ProbComp
-import VCVio.OracleComp.EvalDist.Sum
+module
+
+public import VCVio.OracleComp.QueryTracking.QueryBound
+public import VCVio.OracleComp.ProbComp
+public import VCVio.OracleComp.EvalDist.Sum
+
+@[expose] public section
 
 open OracleSpec OracleComp ENNReal
 

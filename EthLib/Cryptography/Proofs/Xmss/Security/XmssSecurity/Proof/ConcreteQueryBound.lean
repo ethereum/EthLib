@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashAddress
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashAddress
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

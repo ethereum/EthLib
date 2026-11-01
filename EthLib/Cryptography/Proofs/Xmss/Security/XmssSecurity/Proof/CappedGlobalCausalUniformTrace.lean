@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalCausalSetup
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RevealProbeOracleSimulation
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalCausalSetup
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RevealProbeOracleSimulation
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

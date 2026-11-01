@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CachedSelectionBound
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedUnifiedExpectedDigest
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LossDecomposition
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CachedSelectionBound
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedUnifiedExpectedDigest
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LossDecomposition
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

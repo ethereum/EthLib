@@ -1,7 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.RequestSampling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.ReferenceSource
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.MemoGame
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.CostState
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.RequestSampling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.ReferenceSource
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.MemoGame
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.CostState
 
 /-!
 # From the table signer to the model's signer
@@ -14,6 +16,8 @@ So a uniform table of randomizer bases is a fresh uniform base per request, the 
 
 The budget transfers the same way.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

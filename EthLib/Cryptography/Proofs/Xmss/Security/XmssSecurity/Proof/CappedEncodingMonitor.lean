@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingRejection
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingRejection
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
+
+@[expose] public section
 
 open OracleComp ENNReal
 

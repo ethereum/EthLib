@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.KeyDerivation
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.KeyDerivation
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

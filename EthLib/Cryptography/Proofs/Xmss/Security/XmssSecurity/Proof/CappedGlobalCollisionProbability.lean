@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.GlobalBadEvent
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSuffixEventProbability
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedMerkleEventProbability
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExpectedAdaptiveFreshTarget
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.GlobalBadEvent
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSuffixEventProbability
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedMerkleEventProbability
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExpectedAdaptiveFreshTarget
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

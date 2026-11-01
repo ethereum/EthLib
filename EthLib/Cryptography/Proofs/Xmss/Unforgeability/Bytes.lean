@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Xmss
-import EthLib.Cryptography.Proofs.Xmss.Types
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Types
+module
+
+public import EthLib.Cryptography.Xmss
+public import EthLib.Cryptography.Proofs.Xmss.Types
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Types
 
 /-!
 # Proofs: EthLib's bytes as the security proof's bit vectors
@@ -19,6 +21,8 @@ So EthLib builds a hash input from `ofBV` values.
 
 The proof builds the same input from the values themselves.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss.Unforgeability
 

@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingExpectedBound
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedUnifiedStructuralCollision
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExactKeygenQueryCount
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LossDecomposition
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingExpectedBound
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedUnifiedStructuralCollision
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExactKeygenQueryCount
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LossDecomposition
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 set_option backward.isDefEq.respectTransparency false

@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ForgeryCases
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ForgeryCases
+
+@[expose] public section
 
 open OracleSpec
 

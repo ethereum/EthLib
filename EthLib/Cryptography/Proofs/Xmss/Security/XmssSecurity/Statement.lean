@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scheme
-import VCVio.OracleComp.QueryTracking.WriterCost
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scheme
+public import VCVio.OracleComp.QueryTracking.WriterCost
 
 /-!
 # The model's signing transcript
@@ -8,6 +10,8 @@ The requests, forgeries and transcripts the model's game is written with.
 
 The theorem's statement is not here: it is EthLib's, in `Unforgeability/Statement.lean`.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.OutcomeClassification
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedKeygenCache
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.OutcomeClassification
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedKeygenCache
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

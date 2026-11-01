@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Security
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Security
 
 /-!
 # Proofs: EthLib's game wins as often as the real game
@@ -24,6 +26,8 @@ They change nothing, and only cost budget.
 
 Hence both games win with the same probability, and the real game spends at most EthLib's budget.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss.Unforgeability
 

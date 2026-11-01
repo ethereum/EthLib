@@ -1,5 +1,9 @@
-import VCVio.OracleComp.EvalDist.Sum
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomizedStatement
+module
+
+public import VCVio.OracleComp.EvalDist.Sum
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomizedStatement
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

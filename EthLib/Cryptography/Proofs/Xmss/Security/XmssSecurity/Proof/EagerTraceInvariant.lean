@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneEagerBound
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneEagerBound
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

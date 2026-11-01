@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Statement
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomizedStatement
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Statement
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomizedStatement
 
 /-!
 # Proofs: EthLib's adversary is one of the model's
@@ -20,6 +22,8 @@ The round trips hold in both directions.
 
 So the translated transcripts and forgeries win exactly when the originals do.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss.Unforgeability
 

@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedUnifiedExpectedDigest
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingGameTrace
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Frame
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedUnifiedExpectedDigest
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingGameTrace
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Frame
 
 /-!
 # The adversary phase with a ghost query count
@@ -17,6 +19,8 @@ The source game counts the adversary's encoding queries.
 
 `expectedSimulatedCost_advEncoding_le` states this.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

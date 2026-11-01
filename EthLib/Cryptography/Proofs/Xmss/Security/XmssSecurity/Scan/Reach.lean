@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.LoopWalk
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.LoopWalk
 
 /-!
 # Reaching positions under one more query
@@ -10,6 +12,8 @@ import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.LoopWalk
   So it is at most one, and a new hit does not lower it.
 * `mass_hit_le`: the starts weigh at most `card (cached) + card (hits) * (1 - p)/p` on the hits.
 -/
+
+@[expose] public section
 
 open ENNReal
 

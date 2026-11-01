@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExpectedAdaptiveFreshTarget
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedDetailedQueryPresence
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSigningLogReplay
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LeafTargetInput
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExpectedAdaptiveFreshTarget
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedDetailedQueryPresence
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSigningLogReplay
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LeafTargetInput
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

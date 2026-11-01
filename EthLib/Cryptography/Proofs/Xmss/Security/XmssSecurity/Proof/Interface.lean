@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedExactFirstLaneBound
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedExactFirstLaneBound
+
+@[expose] public section
 
 namespace XmssSecurity.Proof
 

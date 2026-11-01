@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
-import VCVio.OracleComp.QueryTracking.WriterCost
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import VCVio.OracleComp.QueryTracking.WriterCost
 
 /-!
 # Proofs: the security game of leanXMSS, for EthLib's algorithms
@@ -33,6 +35,8 @@ Those calls count too.
 
 The oracle is lazily sampled, from an empty cache, and counts every call (`countedOracle`).
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss.Unforgeability
 

@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Ghost
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Step
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Ghost
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Step
 
 /-!
 # Per-leaf bookkeeping of the adversary phase
@@ -14,6 +16,8 @@ The lemmas here say how one oracle answer or one signing request moves the cache
 
 These are the caches the potentials read.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

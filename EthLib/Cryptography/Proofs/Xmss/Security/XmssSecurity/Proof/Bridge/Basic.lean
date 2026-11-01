@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.Preparation
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.Preparation
 
 /-!
 # Deterministic executions, query counts and query domains
@@ -9,6 +11,8 @@ Generic facts about oracle computations under a cache, for three kinds of comput
 * `QueryCount`: the computation makes the same number of queries on every path.
 * `OnlyQueries`: the computation queries only inputs of a given set.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingTargetMap
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SigningRandomnessUniformity
-import Mathlib.Data.Set.Card.Arithmetic
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingTargetMap
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SigningRandomnessUniformity
+public import Mathlib.Data.Set.Card.Arithmetic
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

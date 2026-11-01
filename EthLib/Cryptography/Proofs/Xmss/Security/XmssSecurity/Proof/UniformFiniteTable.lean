@@ -1,7 +1,11 @@
-import VCVio.OracleComp.QueryTracking.RandomOracle.DeferredSampling
-import VCVio.OracleComp.Constructions.SampleableType
-import VCVio.OracleComp.Constructions.SampleableType.Measure
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
+module
+
+public import VCVio.OracleComp.QueryTracking.RandomOracle.DeferredSampling
+public import VCVio.OracleComp.Constructions.SampleableType
+public import VCVio.OracleComp.Constructions.SampleableType.Measure
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

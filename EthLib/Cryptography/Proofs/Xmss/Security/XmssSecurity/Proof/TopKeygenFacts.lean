@@ -1,9 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.KeygenCache
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainKey
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenQueryBound
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HonestKeygenRun
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryPresence
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.KeygenCache
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainKey
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenQueryBound
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HonestKeygenRun
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryPresence
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # Key generation's top layer
@@ -12,6 +14,8 @@ Top counterparts of the bottom facts of `TreeQueryBound` and `KeygenCache`.
 
 Key generation queries each top chain-step address at most once.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SigningLogConsistency
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SigningLogConsistency
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

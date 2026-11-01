@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.CacheCoupling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConsistentQueryBound
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.CacheCoupling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConsistentQueryBound
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

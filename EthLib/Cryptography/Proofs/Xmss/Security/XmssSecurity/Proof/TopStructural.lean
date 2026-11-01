@@ -1,8 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.GlobalBadEvent
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveFreshTarget
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenCache
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopVerificationQueryPresence
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSuffixEventProbability
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.GlobalBadEvent
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveFreshTarget
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenCache
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopVerificationQueryPresence
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSuffixEventProbability
 
 /-!
 # The top layer's bad events
@@ -17,6 +19,8 @@ A hit is a query after key generation whose output is the honest output at its a
 
 Key generation fixed that honest output.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

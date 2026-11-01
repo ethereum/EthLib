@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Honest
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Honest
 
 /-!
 # What the prepared cache resolves
@@ -7,6 +9,8 @@ Take every chain prefix, leaf and in-range node of both layers, and every top gr
 
 Each resolves in the prepared cache to the value the model's secret key stores.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

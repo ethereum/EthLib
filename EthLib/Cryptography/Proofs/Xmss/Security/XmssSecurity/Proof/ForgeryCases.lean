@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Merkle
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SecurityBudget
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.WotsExtraction
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Merkle
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SecurityBudget
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.WotsExtraction
+
+@[expose] public section
 
 namespace XmssSecurity
 

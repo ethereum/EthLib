@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSigningLogReplay
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedBoundedSignCache
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SigningCacheTrace
-import VCVio.OracleComp.SimSemantics.StateT.PreservesInv
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSigningLogReplay
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedBoundedSignCache
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.SigningCacheTrace
+public import VCVio.OracleComp.SimSemantics.StateT.PreservesInv
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 
@@ -253,7 +257,8 @@ theorem cappedSelectivelyLoggedMappedAdversaryImpl_apply_inr
         (fun request => simulateQ romImpl
           (Concrete.scheme.sign secretKey
             request.leafIndex request.message)) request := by
-  rfl
+  simp [cappedSelectivelyLoggedMappedAdversaryImpl, cappedUnloggedMappedAdversaryImpl,
+    signingLogFragment]
 
 theorem cappedMappedAdversaryImpl_apply_inr
     (publicKey : PublicKey) (secretKey : SecretKey) (request : SignRequest) :
@@ -278,14 +283,11 @@ theorem cappedSelectivelyLoggedMappedAdversaryImpl_eq_mapped
   funext input
   cases input with
   | inl worldInput =>
-      change (do
-          let output ← liftM (romImpl worldInput)
-          tell ([] : QueryLog SigningSpec)
-          pure output) =
-        WriterT.mk ((fun output => (output, ([] : QueryLog SigningSpec))) <$>
-          romImpl worldInput)
+      -- A random-oracle query is forwarded unchanged and logs no signing request.
       apply WriterT.ext
-      simp
+      simp [cappedSelectivelyLoggedMappedAdversaryImpl, cappedUnloggedMappedAdversaryImpl,
+        signingLogFragment, cappedMappedAdversaryImpl]
+      rfl
   | inr request =>
       rw [cappedSelectivelyLoggedMappedAdversaryImpl_apply_inr,
         cappedMappedAdversaryImpl_apply_inr]

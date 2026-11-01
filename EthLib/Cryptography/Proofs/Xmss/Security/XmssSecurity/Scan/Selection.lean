@@ -1,8 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedBoundedSignProbability
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingRejection
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.LoopWalk
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedBoundedSignProbability
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingRejection
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.LoopWalk
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # The selection law of the scan signer
@@ -21,6 +23,8 @@ The cache grows only at positions the walk has left.
 
 Within `2^128` attempts, the walk never revisits those positions.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

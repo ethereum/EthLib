@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Types
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Types
 
 /-!
 # The codewords
@@ -17,6 +19,8 @@ The count packs the polynomial into one natural number in base `2^117`, above ev
 
 So the kernel evaluates the coefficient as a digit of a power.
 -/
+
+@[expose] public section
 
 open Finset
 

@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleQueryBound
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Execution
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LazyScheme
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleQueryBound
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Execution
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LazyScheme
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

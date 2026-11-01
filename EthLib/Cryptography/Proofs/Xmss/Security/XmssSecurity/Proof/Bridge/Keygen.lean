@@ -1,7 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.TopBase
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Honest
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TrialSampling
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.TopBase
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Honest
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TrialSampling
 
 /-!
 # The prepared key is the model's key
@@ -12,6 +14,8 @@ Then the parameter, the chain starts of both layers and the top bases are unifor
 
 The model key built from the run equals the model's key generation.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

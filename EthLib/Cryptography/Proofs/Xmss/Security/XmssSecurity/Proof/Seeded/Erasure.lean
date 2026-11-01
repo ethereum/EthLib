@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.BudgetTransfer
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Execution
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.BudgetTransfer
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Execution
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

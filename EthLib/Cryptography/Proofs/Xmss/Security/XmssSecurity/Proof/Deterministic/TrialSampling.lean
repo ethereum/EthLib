@@ -1,9 +1,13 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TableSigner
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.World
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.UniformFiniteTable
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.TableSigner
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.World
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.UniformFiniteTable
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

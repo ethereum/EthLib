@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Wots
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Wots
 
 /-!
 Proof-side mirrors of the sealed statement definitions.
@@ -16,6 +18,8 @@ The proof works with these forms.
 
 `Proof.CacheReplayEval` bridges the two.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

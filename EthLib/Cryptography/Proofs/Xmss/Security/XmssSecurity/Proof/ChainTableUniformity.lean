@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainHiddenTable
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainTrajectoryComposition
-import Init.Data.Vector.OfFn
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainHiddenTable
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainTrajectoryComposition
+public import Init.Data.Vector.OfFn
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

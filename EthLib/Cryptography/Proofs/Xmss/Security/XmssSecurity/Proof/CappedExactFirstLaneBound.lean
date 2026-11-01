@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedExactFirstLaneTransportReduction
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.BoundedFirstLaneCoupling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalTopGuessOrigin
-import VCVio.OracleComp.SimSemantics.StateT.StateProjection
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedExactFirstLaneTransportReduction
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.BoundedFirstLaneCoupling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalTopGuessOrigin
+public import VCVio.OracleComp.SimSemantics.StateT.StateProjection
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 set_option backward.isDefEq.respectTransparency false

@@ -1,10 +1,14 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedExactFirstLaneSourceCoupling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalFirstLaneExperiment
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainHighReduction
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.DirectQueryAccounting
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StateLens
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EagerTraceInvariant
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedExactFirstLaneSourceCoupling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalFirstLaneExperiment
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainHighReduction
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.DirectQueryAccounting
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StateLens
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EagerTraceInvariant
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 open OracleComp.ProgramLogic.Relational

@@ -1,10 +1,14 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheVerify
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LazyScheme
-import VCVio.OracleComp.QueryTracking.CachingOracle
-import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
-import VCVio.OracleComp.SimSemantics.StateT.PreservesInv
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheVerify
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LazyScheme
+public import VCVio.OracleComp.QueryTracking.CachingOracle
+public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
+public import VCVio.OracleComp.SimSemantics.StateT.PreservesInv
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

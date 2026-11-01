@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Model
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.SchemeSeed
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Interface
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Model
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.SchemeSeed
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Interface
 
 /-!
 # leanXMSS has 127 bits of security
@@ -19,6 +21,8 @@ The model's bound, two units per call plus the slack, then fits in `q / 2^127`.
 
 The two guess terms cost a unit each.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 open EthLib.Cryptography.Xmss.Unforgeability (toModelAdversary)

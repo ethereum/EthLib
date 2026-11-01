@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Types
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Convert
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Types
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Convert
 
 /-!
 # The leanXMSS model
@@ -16,6 +18,8 @@ Top key `b` signs the root of bottom tree `b` once, at key generation.
 
 Its hashes and its verifier are EthLib's, read through the byte conversions.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

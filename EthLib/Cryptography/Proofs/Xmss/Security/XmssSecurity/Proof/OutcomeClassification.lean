@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConcreteCorrectness
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.DetailedExecution
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConcreteCorrectness
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.DetailedExecution
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 open scoped BigOperators

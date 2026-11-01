@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Ledger
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.MomentLift
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Card
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Ledger
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.MomentLift
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Card
 
 /-!
 # The adversary phase, query by query
@@ -18,6 +20,8 @@ The four potentials on the ghost state and their one-query steps.
 * `f4 = N^2 1{PostBad}`.
   It is raised by `N` on an encoding query at a signed leaf index.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

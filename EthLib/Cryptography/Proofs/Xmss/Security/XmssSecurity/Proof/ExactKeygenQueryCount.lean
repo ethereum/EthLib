@@ -1,12 +1,16 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExactQueryCount
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheReplayEval
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.DetailedExecution
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.EncodingQueryBound
-import VCVio.OracleComp.QueryTracking.QueryBound
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
-import VCVio.OracleComp.QueryTracking.SubSpec
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExactQueryCount
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheReplayEval
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.DetailedExecution
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.EncodingQueryBound
+public import VCVio.OracleComp.QueryTracking.QueryBound
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+public import VCVio.OracleComp.QueryTracking.SubSpec
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open scoped BigOperators

@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Seed
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Reference
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Keygen
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Seed
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Reference
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Keygen
 
 /-!
 # From the clean table game to the model
@@ -17,6 +19,8 @@ So the clean table game is at most the model's game against the memoized adversa
 
 The real budget bounds the model's calls after key generation.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 open EthLib.Cryptography.Xmss.Unforgeability (toModelAdversary)

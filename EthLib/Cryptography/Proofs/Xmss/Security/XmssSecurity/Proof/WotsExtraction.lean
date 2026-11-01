@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Wots
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingLemmas
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Wots
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingLemmas
+
+@[expose] public section
 
 namespace XmssSecurity.Wots
 

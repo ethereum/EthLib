@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExpectedAdaptiveFreshTarget
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedLeafEventProbability
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.VerificationChainQuery
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExpectedAdaptiveFreshTarget
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedLeafEventProbability
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.VerificationChainQuery
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

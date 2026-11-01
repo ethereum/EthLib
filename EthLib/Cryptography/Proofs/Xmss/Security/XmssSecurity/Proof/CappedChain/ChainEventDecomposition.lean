@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedLeafEventProbability
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSuffixEventProbability
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainTargetInput
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedLeafEventProbability
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSuffixEventProbability
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainTargetInput
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

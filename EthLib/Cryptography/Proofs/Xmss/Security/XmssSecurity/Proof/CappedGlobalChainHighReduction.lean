@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainHighCoverage
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StateLens
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainHighCoverage
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StateLens
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open OracleComp.ProgramLogic.Relational

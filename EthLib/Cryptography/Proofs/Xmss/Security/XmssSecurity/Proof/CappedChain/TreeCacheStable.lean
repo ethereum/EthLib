@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalAuthenticationPathIndependence
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HonestKeygenRun
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CausalAuthenticationPathIndependence
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HonestKeygenRun
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

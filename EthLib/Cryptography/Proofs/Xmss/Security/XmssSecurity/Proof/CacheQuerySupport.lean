@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheReplayEval
-import VCVio.OracleComp.QueryTracking.QueryBound
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheReplayEval
+public import VCVio.OracleComp.QueryTracking.QueryBound
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

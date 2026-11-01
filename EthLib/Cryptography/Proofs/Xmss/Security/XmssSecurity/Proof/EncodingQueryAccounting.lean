@@ -1,4 +1,8 @@
-import VCVio.OracleComp.QueryTracking.SubSpec
+module
+
+public import VCVio.OracleComp.QueryTracking.SubSpec
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

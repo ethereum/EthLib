@@ -1,11 +1,15 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingRejection
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Code
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingRejection
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Code
 
 /-!
 # The number of codewords
 
 `validDigests` is in bijection with the digit words of sum `T`, which `Code.lean` counts.
 -/
+
+@[expose] public section
 
 set_option maxRecDepth 100000
 

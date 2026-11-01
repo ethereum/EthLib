@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConcreteCorrectness
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TreeQueryBound
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConcreteCorrectness
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TreeQueryBound
+
+@[expose] public section
 
 namespace XmssSecurity
 

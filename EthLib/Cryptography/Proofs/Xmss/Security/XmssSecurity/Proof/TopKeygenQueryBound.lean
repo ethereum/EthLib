@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HonestKeygenRun
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HonestKeygenRun
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # Key generation queries each top chain, leaf and Merkle address at most once
@@ -10,6 +12,8 @@ The bottom trees query bottom domains, and the top grinding only top message dig
 
 The top tree queries each such address at most once.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

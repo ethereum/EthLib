@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheReplayEval
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Execution
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LazyScheme
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheReplayEval
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Execution
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LazyScheme
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

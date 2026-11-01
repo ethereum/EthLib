@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Statement
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Statement
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

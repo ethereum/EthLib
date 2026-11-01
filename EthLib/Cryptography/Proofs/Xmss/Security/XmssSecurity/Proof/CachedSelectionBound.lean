@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingExpectedBound
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LossDecomposition
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.PerKey
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingExpectedBound
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LossDecomposition
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.PerKey
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

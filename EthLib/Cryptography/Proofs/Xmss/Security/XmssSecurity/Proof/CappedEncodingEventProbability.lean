@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingActionTrace
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSigningCacheTrace
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingEventProbability
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingActionTrace
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSigningCacheTrace
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingEventProbability
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

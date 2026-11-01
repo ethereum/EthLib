@@ -1,13 +1,15 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryPresence
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainTableUniformity
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveFreshTarget
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOraclePresampling
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HiddenValue
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.UniformFiniteTable
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HonestKeygenRun
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenFacts
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryPresence
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainTableUniformity
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveFreshTarget
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOraclePresampling
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HiddenValue
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.UniformFiniteTable
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HonestKeygenRun
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenFacts
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # Presampling the chains of key generation
@@ -20,6 +22,8 @@ The first step computes every chain trajectory.
 
 The second runs key generation from the warmed cache.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 open OracleComp.ProgramLogic

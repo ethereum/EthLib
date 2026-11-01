@@ -1,9 +1,11 @@
-import VCVio.OracleComp.SimSemantics.StateT.Measure
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Naturality
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Program
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.FreshRequests
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
+module
+
+public import VCVio.OracleComp.SimSemantics.StateT.Measure
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Naturality
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Program
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.FreshRequests
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
 
 /-!
 # The top randomizer bases
@@ -16,6 +18,8 @@ A uniform table read that way is a uniform base per key.
 
 Both are a fresh uniform answer per request, since the requests are distinct.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleVerificationQueryPresence
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePresampling
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleVerificationQueryPresence
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePresampling
 
 /-!
 # The top layer's queries in a successful verification
@@ -11,6 +13,8 @@ That check caches its top message digest input and its top chain steps from the 
 
 It also caches its top leaf and every top node on its path.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

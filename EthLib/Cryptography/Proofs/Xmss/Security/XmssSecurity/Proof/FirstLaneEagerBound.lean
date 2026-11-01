@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneEagerSimulation
-import VCVio.ProgramLogic.Relational.Quantitative
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneEagerSimulation
+public import VCVio.ProgramLogic.Relational.Quantitative
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveFreshTarget
-import VCVio.OracleComp.Constructions.SampleableType
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveFreshTarget
+public import VCVio.OracleComp.Constructions.SampleableType
+
+@[expose] public section
 
 open OracleComp ENNReal
 open scoped BigOperators

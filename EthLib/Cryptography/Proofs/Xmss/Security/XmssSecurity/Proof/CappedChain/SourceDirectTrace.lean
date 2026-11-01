@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainInputTrace
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StateLens
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainInputTrace
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StateLens
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

@@ -1,5 +1,9 @@
-import VCVio.OracleComp.QueryTracking.RandomOracle.DeferredSampling
-import VCVio.OracleComp.QueryTracking.RandomOracle.EagerTable
+module
+
+public import VCVio.OracleComp.QueryTracking.RandomOracle.DeferredSampling
+public import VCVio.OracleComp.QueryTracking.RandomOracle.EagerTable
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

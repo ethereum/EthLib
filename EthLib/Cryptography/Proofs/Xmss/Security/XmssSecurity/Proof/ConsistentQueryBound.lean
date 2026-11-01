@@ -1,6 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryCounting
-import VCVio.OracleComp.QueryTracking.SubSpec
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryCounting
+public import VCVio.OracleComp.QueryTracking.SubSpec
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
+
+@[expose] public section
 
 namespace XmssSecurity
 
@@ -112,7 +116,8 @@ theorem simulateQ_countHashQueries {α : Type} (computation : OracleComp OracleW
   rw [countHashQueries, QueryCounting.simulate_withCost]
   congr 2
   funext input
-  cases input <;> rfl
+  -- Each side's cost is 0 on a uniform query and 1 on a hash query.
+  cases input <;> simp [countedRomImpl]
 
 theorem countHashQueries_forget {α : Type} (computation : OracleComp OracleWorld α) :
     Prod.fst <$> countHashQueries computation = computation :=

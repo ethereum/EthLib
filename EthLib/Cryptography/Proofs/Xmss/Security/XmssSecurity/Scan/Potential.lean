@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Reach
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingRejection
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Reach
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingRejection
 
 /-!
 # The partner potential
@@ -18,6 +20,8 @@ It is partnered when another cached input of the same leaf index has the same di
 
 `Φ` is the mass of the partnered hits, and `H` the mass of all hits.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.UnifiedBadEvent
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.UnifiedBadEvent
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

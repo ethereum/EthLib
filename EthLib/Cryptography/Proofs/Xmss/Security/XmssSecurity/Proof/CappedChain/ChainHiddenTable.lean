@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainOriginProbability
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainKey
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainOriginProbability
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainKey
+
+@[expose] public section
 
 open OracleSpec
 

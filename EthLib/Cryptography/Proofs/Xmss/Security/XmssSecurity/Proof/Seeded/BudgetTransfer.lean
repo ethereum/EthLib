@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.AdaptiveSeedGuessing
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.AdaptiveSeedGuessing
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

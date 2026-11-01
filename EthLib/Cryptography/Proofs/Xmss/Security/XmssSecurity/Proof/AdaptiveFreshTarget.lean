@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Execution
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.HashInputLemmas
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Execution
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
+
+@[expose] public section
 
 open OracleComp ENNReal
 

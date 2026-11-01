@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Convert
-import EthLib.Cryptography.Proofs.Xmss.Encoding
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Code
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Convert
+public import EthLib.Cryptography.Proofs.Xmss.Encoding
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Code
 
 /-!
 # Proofs: EthLib's codewords are the model's
@@ -15,6 +17,8 @@ The randomizer trials agree too.
 
 EthLib adds `c` to the base's integer, and the model adds it to the bit vector, both modulo `2^128`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss.Unforgeability
 

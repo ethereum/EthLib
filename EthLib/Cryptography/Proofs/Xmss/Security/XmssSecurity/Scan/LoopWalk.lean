@@ -1,7 +1,9 @@
-import Mathlib.GroupTheory.Perm.Basic
-import Mathlib.Basic.ENNReal.BigOperators
-import Mathlib.Data.Fintype.BigOperators
-import Mathlib.Algebra.BigOperators.Ring.Finset
+module
+
+public import Mathlib.GroupTheory.Perm.Basic
+public import Mathlib.Basic.ENNReal.BigOperators
+public import Mathlib.Data.Fintype.BigOperators
+public import Mathlib.Algebra.BigOperators.Ring.Finset
 
 /-!
 # The value of the scan loop `R = R0 + i`
@@ -39,6 +41,8 @@ Main results, for a successor `σ` that does not return to a position within the
 
 Nothing here mentions hashing.
 -/
+
+@[expose] public section
 
 open ENNReal
 

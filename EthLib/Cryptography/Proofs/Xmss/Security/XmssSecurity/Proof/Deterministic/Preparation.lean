@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.MemoErasure
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.Presampling
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.MemoErasure
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.Presampling
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

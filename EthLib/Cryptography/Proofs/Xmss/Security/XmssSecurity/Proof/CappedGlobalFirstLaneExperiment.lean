@@ -1,8 +1,12 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainHighReduction
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneOracleSimulation
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingActionTrace
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneEagerSimulation
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedGlobalChainHighReduction
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneOracleSimulation
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingActionTrace
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneEagerSimulation
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+
+@[expose] public section
 
 open OracleComp OracleSpec
 open OracleComp.ProgramLogic.Relational

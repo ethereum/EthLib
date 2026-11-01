@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Phase
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Phase
 
 /-!
 # One key: the cached-selection collision against the encoding queries
@@ -15,6 +17,8 @@ In the second, a later query repeats its selected digest.
 
 The event has probability at most the source game's expected encoding queries over `2^128`.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

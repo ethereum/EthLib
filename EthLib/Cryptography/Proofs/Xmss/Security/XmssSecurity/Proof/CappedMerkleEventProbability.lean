@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExpectedAdaptiveFreshTarget
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedLeafEventProbability
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleVerificationQueryPresence
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenCache
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExpectedAdaptiveFreshTarget
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedLeafEventProbability
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleVerificationQueryPresence
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenCache
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

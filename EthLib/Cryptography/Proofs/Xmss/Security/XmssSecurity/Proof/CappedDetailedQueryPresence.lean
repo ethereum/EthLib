@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedConcreteExecution
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryPresence
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedConcreteExecution
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.QueryPresence
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

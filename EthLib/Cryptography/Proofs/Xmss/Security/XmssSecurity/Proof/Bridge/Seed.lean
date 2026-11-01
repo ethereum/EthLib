@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Reduction
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.BudgetTransfer
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Reduction
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.BudgetTransfer
 
 /-!
 # Eliminating the seed
@@ -13,6 +15,8 @@ Those entries all name the scheme's seed `S`.
 
 Dropping them costs at most one `2^-256` guess of `S` per hash call after key generation.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 open EthLib.Cryptography.Xmss.Unforgeability (toModelAdversary)

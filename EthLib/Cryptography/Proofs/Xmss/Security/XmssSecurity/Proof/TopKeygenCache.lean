@@ -1,8 +1,10 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedKeyConsistency
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConcreteForgery
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenQueryBound
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopVerificationQueryPresence
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedKeyConsistency
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConcreteForgery
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenQueryBound
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopVerificationQueryPresence
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 /-!
 # Key generation's cache: the bottom forest's nodes and the top layer
@@ -16,6 +18,8 @@ What key generation caches at two kinds of address.
   At a top message digest address it caches only the trials of the honest bottom root.
   Of these, the selected one is the only one that decodes.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec
 

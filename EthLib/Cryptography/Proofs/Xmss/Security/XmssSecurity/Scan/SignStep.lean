@@ -1,5 +1,7 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Leaves
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Selection
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Leaves
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Selection
 
 /-!
 # A signing request at an unsigned leaf index
@@ -8,6 +10,8 @@ The signer selects a cached hit `y` with probability at most `W y / 2^128`.
 
 So it selects a partnered one with probability at most `Φ / 2^128`.
 -/
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

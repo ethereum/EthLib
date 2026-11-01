@@ -1,5 +1,9 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConcreteQueryBound
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainKey
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConcreteQueryBound
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainKey
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

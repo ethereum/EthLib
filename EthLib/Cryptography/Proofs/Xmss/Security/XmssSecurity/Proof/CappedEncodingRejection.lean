@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingOracleSimulation
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingOracleSimulation
+
+@[expose] public section
 
 open OracleComp ENNReal
 

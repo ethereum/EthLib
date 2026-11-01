@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSigningLogReplay
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedSigningLogReplay
+
+@[expose] public section
 
 open OracleComp OracleSpec ENNReal
 

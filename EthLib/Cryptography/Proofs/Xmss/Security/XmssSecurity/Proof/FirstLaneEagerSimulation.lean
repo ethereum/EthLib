@@ -1,7 +1,11 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneOracleSimulation
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingOracleSimulation
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RevealProbeOracleSimulation
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingMonitor
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.FirstLaneOracleSimulation
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EncodingOracleSimulation
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RevealProbeOracleSimulation
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingMonitor
+
+@[expose] public section
 
 open OracleComp OracleSpec
 
@@ -99,8 +103,12 @@ theorem simulate_eagerTrace_liftProbComp
         (fun result => (result, ([] : ActionTrace Index))) <$> computation := by
   unfold liftProbComp
   rw [← QueryImpl.simulateQ_compose]
-  change (simulateQ ((QueryImpl.id' unifSpec).withTraceAppend
-    (fun _ _ => ([] : ActionTrace Index))) computation).run = _
+  -- A forwarded uniform query is answered uniformly and leaves no trace.
+  have forward : (eagerTraceImpl table ∘ₛ uniformForwardImpl : QueryImpl unifSpec _) =
+      (QueryImpl.id' unifSpec).withTraceAppend (fun _ _ => ([] : ActionTrace Index)) := by
+    funext n
+    simp [eagerTraceImpl, uniformForwardImpl, uniformQuery, eagerImpl, traceFragment]
+  rw [forward]
   simpa using QueryImpl.run_simulateQ_withTraceAppend_const_empty
     (Log := ActionTrace Index) (QueryImpl.id' unifSpec) computation
 

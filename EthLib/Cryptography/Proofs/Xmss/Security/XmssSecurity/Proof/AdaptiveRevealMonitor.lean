@@ -1,4 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveLeafIndexCollision
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AdaptiveLeafIndexCollision
+
+@[expose] public section
 
 open OracleComp ENNReal
 open scoped BigOperators

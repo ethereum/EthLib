@@ -1,6 +1,8 @@
-import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Moment
-import Mathlib.Basic.ENNReal.Real
-import Mathlib.Basic.ENNReal.Operations
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Moment
+public import Mathlib.Basic.ENNReal.Real
+public import Mathlib.Basic.ENNReal.Operations
 
 /-!
 # The quadratic potential in `ENNReal`
@@ -9,6 +11,8 @@ import Mathlib.Basic.ENNReal.Operations
 
 It is a supermartingale of an encoding step up to `A`, and bounds `V (p n + (1 - p) V)` by `p^2 F3`.
 -/
+
+@[expose] public section
 
 open ENNReal
 

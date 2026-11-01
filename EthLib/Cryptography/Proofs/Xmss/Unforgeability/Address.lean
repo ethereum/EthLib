@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Bytes
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Bytes
 
 /-!
 # Proofs: EthLib's addresses are the model's
@@ -13,6 +15,8 @@ EthLib's address of the same call has the same 16 bytes.
 
 The top layer sets bit 23 of `hi`, the model's `topFlag`.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Xmss.Unforgeability
 
