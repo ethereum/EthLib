@@ -10,6 +10,7 @@ Malformed arguments raise TypeError or ValueError, and so does a public key the 
 from .._native import (
     secp256k1_verify,
     secp256k1_is_low_s,
+    secp256k1_recover,
     SECP256K1_HASH_LEN as HASH_LEN,
     SECP256K1_SIGNATURE_LEN as SIGNATURE_LEN,
 )
@@ -28,4 +29,13 @@ def is_low_s(signature: bytes) -> bool:
     return secp256k1_is_low_s(signature)
 
 
-__all__ = ["verify", "is_low_s", "HASH_LEN", "SIGNATURE_LEN"]
+def recover(msg_hash: bytes, signature: bytes, recovery_id: int) -> bytes:
+    """The public key that signed the hash, by SEC 1 v2 §4.1.6, as 65 uncompressed bytes.
+
+    The recovery id is 0 or 1: the parity of the y of the signer's point R.
+    A signature with no key for that id raises ValueError.
+    """
+    return secp256k1_recover(msg_hash, signature, recovery_id)
+
+
+__all__ = ["verify", "is_low_s", "recover", "HASH_LEN", "SIGNATURE_LEN"]

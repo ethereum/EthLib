@@ -222,13 +222,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 ### B4. The C boundary
 
 <!-- generated: exports -->
-Lean exports 24 operations and 24 size constants.
-The Python extension calls 24 of the operations and 19 of the constants.
+Lean exports 25 operations and 24 size constants.
+The Python extension calls 25 of the operations and 19 of the constants.
 Exported constants it does not call: `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-1590 lines of hand-written C sit between them and Python: `bls.c` (87), `kzg.c` (533), `modexp.c` (61), `module.c` (479), `ripemd160.c` (36), `secp256k1.c` (63), `sha256.c` (38), `wrappers.h` (150), `xmss.c` (143).
+1623 lines of hand-written C sit between them and Python: `bls.c` (87), `kzg.c` (533), `modexp.c` (61), `module.c` (480), `ripemd160.c` (36), `secp256k1.c` (94), `sha256.c` (38), `wrappers.h` (151), `xmss.c` (143).
 <!-- end generated -->
 
 They convert arguments, own and free Lean objects, and turn errors into Python exceptions.

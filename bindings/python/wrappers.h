@@ -146,5 +146,6 @@ PyObject* py_ripemd160                                    (PyObject* self, PyObj
 
 PyObject* py_secp256k1_verify                             (PyObject* self, PyObject* args);
 PyObject* py_secp256k1_is_low_s                           (PyObject* self, PyObject* args);
+PyObject* py_secp256k1_recover                            (PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */

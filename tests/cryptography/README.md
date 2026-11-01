@@ -33,7 +33,9 @@ here:      tests/cryptography/<kind>/<handler>/<case>/data.yaml
 
 The `secp256k1/` cases come from the Wycheproof ECDSA sets of `C2SP/wycheproof`, at commit `d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9`.
 
-Their expected outputs are Wycheproof's, so they check EthLib against an independent source.
+The `verify` and `verify_low_s` outputs are Wycheproof's, so they check EthLib against an independent source.
+
+The `recover` outputs come from EthLib, checked against Wycheproof's keys, as `recover/format.md` explains.
 
 They keep Wycheproof's licence, the Apache License 2.0, in `secp256k1/LICENSE`.
 
