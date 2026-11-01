@@ -1,4 +1,6 @@
-import EthLib.Cryptography.Hash.Ripemd160
+module
+
+public import EthLib.Cryptography.Hash.Ripemd160
 
 /-!
 # `EthLib.Precompiles.Ripemd160`
@@ -19,6 +21,8 @@ The Yellow Paper lists the precompile in Appendix E.
 The gas price is not specified here.
 The precompile never fails once it has the gas, so its output does not depend on the price.
 -/
+
+@[expose] public section
 
 namespace EthLib.Precompiles.Ripemd160
 

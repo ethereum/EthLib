@@ -1,3 +1,5 @@
+module
+
 /-!
 # `Ripemd160`
 
@@ -24,6 +26,8 @@ Words are little-endian, unlike SHA-256: the message words, the length and the d
 Used by the precompile at address `0x03`, which returns the digest left-padded to 32 bytes.
 This specification makes no constant-time guarantee.
 -/
+
+@[expose] public section
 
 namespace EthLib.Cryptography.Hash.Ripemd160
 

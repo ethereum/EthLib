@@ -1,4 +1,6 @@
-import EthLib.Precompiles.Ripemd160
+module
+
+public import EthLib.Precompiles.Ripemd160
 
 /-!
 # `Exports.Ripemd160`
@@ -8,6 +10,8 @@ C-ABI exports for the RIPEMD-160 precompile, callable from the Python C extensio
 - Input and output are `ByteArray`.
 - The precompile never fails, so no export returns an `IO` error.
 -/
+
+public section
 
 namespace EthLib.Precompiles.Ripemd160.Exports
 
