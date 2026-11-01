@@ -1,1 +1,1 @@
-__all__ = ["bls", "kzg", "xmss"]
+__all__ = ["bls", "kzg", "sha256", "xmss"]

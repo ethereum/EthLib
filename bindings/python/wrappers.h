@@ -126,5 +126,6 @@ PyObject* py_xmss_verify                                  (PyObject* self, PyObj
 PyObject* py_xmss_signature_index                         (PyObject* self, PyObject* args);
 PyObject* py_modexp                                       (PyObject* self, PyObject* args);
 PyObject* py_modexp_gas_cost                              (PyObject* self, PyObject* args);
+PyObject* py_sha256                                       (PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */

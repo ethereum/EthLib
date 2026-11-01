@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Exports.Bls
 public import EthLib.Cryptography.Exports.Kzg
+public import EthLib.Cryptography.Exports.Sha256
 public import EthLib.Cryptography.Exports.Xmss
 
 /-!

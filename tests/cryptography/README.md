@@ -47,6 +47,16 @@ Every other run writes the `verify` cases and the rejections, and reads the slow
 
 The other cases come from the code under test.
 
+## SHA-256
+
+The `sha256/` cases are pinned too.
+
+Every pytest run rewrites them, and `SHA256SUMS` pins the tree.
+
+Most cases come from the NIST CAVP `SHA256ShortMsg` and `SHA256LongMsg` distributions.
+
+Two cases are the SHA-256 examples of FIPS 180-2, which NIST republishes on its example-values page.
+
 ## Checks
 
 ```bash
