@@ -91,6 +91,19 @@ No theorem says that an output is unpredictable before it is opened.
 These check the constants.
 A wrong digit in a modulus or in the generator would very likely make one of them fail.
 
+### secp256k1
+
+`card_point` (`Proofs/Secp256k1/Order.lean`): the group has `n` points, so the cofactor is 1.
+
+`decode_eq_ok_iff` (`Proofs/Secp256k1/Encoding.lean`): the decoder accepts exactly the encodings of the points other than `O`.
+
+`verify_sign` (`Proofs/Secp256k1/Ecdsa.lean`): a signature from the signing operation of SEC 1 verifies.
+
+`verify_recover` and `recover_of_verify` (`Proofs/Secp256k1/Recovery.lean`): a recovered key verifies the signature, and every key that verifies one is recovered, when `r + n >= p`.
+
+These are correctness statements.
+No theorem states unforgeability, which rests on the discrete logarithm problem.
+
 ### KZG
 
 `Proofs/Kzg/Core.lean`: the public operations reject malformed inputs, such as a wrong size or lists of different lengths.
