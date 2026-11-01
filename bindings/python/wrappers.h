@@ -36,6 +36,8 @@ extern size_t MODEXP_LENGTH_HEADER_BYTES;
 extern size_t MODEXP_MAX_LENGTH_BYTES;
 
 extern size_t RIPEMD160_OUTPUT_BYTES;
+extern size_t SECP256K1_HASH_LEN;
+extern size_t SECP256K1_SIGNATURE_LEN;
 
 /* ---- Lean ↔ C marshalling helpers ------------------------------------ */
 
@@ -87,6 +89,17 @@ run_io_into_pyint(
   const char* what
 );
 
+/* Run an IO action returning a `UInt8` boolean, as a Python `bool`.
+ *
+ * On failure it sets a `ValueError` and returns NULL.
+ *
+ * `what` names the operation in the message. */
+PyObject*
+run_io_into_pybool(
+  lean_object* io_result,
+  const char* what
+);
+
 /* ---- Argument parsing helpers ---------------------------------------- */
 
 const uint8_t*
@@ -130,5 +143,8 @@ PyObject* py_modexp                                       (PyObject* self, PyObj
 PyObject* py_modexp_gas_cost                              (PyObject* self, PyObject* args);
 PyObject* py_sha256                                       (PyObject* self, PyObject* args);
 PyObject* py_ripemd160                                    (PyObject* self, PyObject* args);
+
+PyObject* py_secp256k1_verify                             (PyObject* self, PyObject* args);
+PyObject* py_secp256k1_is_low_s                           (PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */

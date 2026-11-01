@@ -8,7 +8,7 @@ The generators under `bindings/python/tests/` write the cases through the Python
 
 ## Pinned vectors
 
-The `bls/` and `kzg/` directories are pinned, and so is any other directory with a `SHA256SUMS` file.
+The `bls/`, `kzg/` and `secp256k1/` directories are pinned, and so is any other directory with a `SHA256SUMS` file.
 
 Every case under a pinned directory is listed there with its digest, so regenerating a case that changes its answer is caught.
 
@@ -28,6 +28,16 @@ The digests preserve that independent provenance for the cases committed here.
 upstream:  tests/general/<fork>/<kind>/<handler>/<suite>/<case>/data.yaml
 here:      tests/cryptography/<kind>/<handler>/<case>/data.yaml
 ```
+
+## secp256k1
+
+The `secp256k1/` cases come from the Wycheproof ECDSA sets of `C2SP/wycheproof`, at commit `d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9`.
+
+Their expected outputs are Wycheproof's, so they check EthLib against an independent source.
+
+They keep Wycheproof's licence, the Apache License 2.0, in `secp256k1/LICENSE`.
+
+Each operation's `format.md` says which set its cases come from.
 
 ## leanXMSS
 

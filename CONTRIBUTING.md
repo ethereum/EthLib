@@ -11,7 +11,8 @@ How to build and test is in the [README](README.md#contributing).
 
 EthLib's own material is distributed under CC0 1.0 Universal.
 The legal text is in [LICENSE](LICENSE).
-`pyproject.toml` declares `CC0-1.0 AND MIT` for the Python package, since it ships the MIT-licensed RLP test cases from `ethereum/tests`.
+`pyproject.toml` declares `CC0-1.0 AND MIT AND Apache-2.0` for the Python package.
+It ships the MIT-licensed RLP test cases from `ethereum/tests`, and the Apache-licensed secp256k1 test sets from `C2SP/wycheproof`.
 Material from other projects keeps its own terms, as the last section says.
 
 By submitting a contribution, you agree to make it available under CC0 1.0 Universal.
