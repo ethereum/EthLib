@@ -31,6 +31,8 @@ size_t RIPEMD160_OUTPUT_BYTES;
 size_t SECP256K1_HASH_LEN;
 size_t SECP256K1_SIGNATURE_LEN;
 
+size_t ECRECOVER_GAS;
+
 /* ---- Lean externs: size accessors ------------------------------------ */
 
 extern uint64_t
@@ -125,6 +127,11 @@ eth_secp256k1_const_hash_len(
 
 extern uint64_t
 eth_secp256k1_const_signature_len(
+  uint8_t unit
+);
+
+extern uint64_t
+eth_ecrecover_const_gas(
   uint8_t unit
 );
 
@@ -389,6 +396,7 @@ static PyMethodDef methods[] = {
   {"secp256k1_verify", py_secp256k1_verify, METH_VARARGS, NULL},
   {"secp256k1_is_low_s", py_secp256k1_is_low_s, METH_VARARGS, NULL},
   {"secp256k1_recover", py_secp256k1_recover, METH_VARARGS, NULL},
+  {"ecrecover", py_ecrecover, METH_VARARGS, NULL},
   {NULL, NULL, 0, NULL},
 };
 
@@ -447,6 +455,7 @@ PyInit__native(void) {
     MODEXP_MAX_LENGTH_BYTES    = (size_t) eth_modexp_const_max_length_bytes(0);
     SECP256K1_HASH_LEN      = (size_t) eth_secp256k1_const_hash_len(0);
     SECP256K1_SIGNATURE_LEN = (size_t) eth_secp256k1_const_signature_len(0);
+    ECRECOVER_GAS           = (size_t) eth_ecrecover_const_gas(0);
 
     RIPEMD160_OUTPUT_BYTES = (size_t) eth_ripemd160_const_output_bytes(0);
 
@@ -476,5 +485,6 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "RIPEMD160_OUTPUT_BYTES", RIPEMD160_OUTPUT_BYTES);
   PyModule_AddIntConstant(m, "SECP256K1_HASH_LEN", SECP256K1_HASH_LEN);
   PyModule_AddIntConstant(m, "SECP256K1_SIGNATURE_LEN", SECP256K1_SIGNATURE_LEN);
+  PyModule_AddIntConstant(m, "ECRECOVER_GAS", ECRECOVER_GAS);
   return m;
 }

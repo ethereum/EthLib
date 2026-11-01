@@ -39,6 +39,8 @@ extern size_t RIPEMD160_OUTPUT_BYTES;
 extern size_t SECP256K1_HASH_LEN;
 extern size_t SECP256K1_SIGNATURE_LEN;
 
+extern size_t ECRECOVER_GAS;
+
 /* ---- Lean ↔ C marshalling helpers ------------------------------------ */
 
 lean_object*
@@ -147,5 +149,7 @@ PyObject* py_ripemd160                                    (PyObject* self, PyObj
 PyObject* py_secp256k1_verify                             (PyObject* self, PyObject* args);
 PyObject* py_secp256k1_is_low_s                           (PyObject* self, PyObject* args);
 PyObject* py_secp256k1_recover                            (PyObject* self, PyObject* args);
+
+PyObject* py_ecrecover                                    (PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */

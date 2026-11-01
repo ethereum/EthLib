@@ -3,6 +3,7 @@ module
 public import EthLib.Precompiles.Proofs.Blake2f
 public import EthLib.Precompiles.Proofs.Modexp
 public import EthLib.Precompiles.Proofs.Ripemd160
+public import EthLib.Precompiles.Proofs.Ecrecover
 
 /-!
 # `EthLib.Precompiles.Proofs`
