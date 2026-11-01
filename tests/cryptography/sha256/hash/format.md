@@ -1,6 +1,6 @@
 # Test format: SHA-256 hash
 
-Compute the SHA-256 digest of a given `message`.
+Compute the SHA-256 digest of a message, as FIPS 180-4 §6.2 defines it.
 
 ## Test case format
 
@@ -12,21 +12,18 @@ input:
 output: Digest -- the 32-byte digest
 ```
 
-- `Message` is a byte string of any length, hexadecimal encoding, prefixed
-  with `0x`.
-- `Digest` is a 32-byte string, same encoding.
-
-All byte(s) fields are encoded as strings, hexadecimal encoding, prefixed with
-`0x`.
+- `Message` is a byte string of any length, in hexadecimal, prefixed with `0x`.
+- `Digest` is a 32-byte string, in the same encoding.
 
 ## Condition
 
-The `hash` handler should compute the SHA-256 digest of `message` (FIPS 180-4).
+The `hash` handler computes the digest of `message`.
 
-The result should match the expected `output`.
-
-The cases come from the NIST CAVP `SHA256ShortMsg.rsp` and `SHA256LongMsg.rsp` distributions.
-
-Two more cases are the SHA-256 examples of FIPS 180-2, which NIST republishes on its example-values page.
+The result must match `output`.
 
 SHA-256 accepts every byte string, so the suite has no invalid cases.
+
+## Sources
+
+- 129 cases are the NIST CAVP files `SHA256ShortMsg.rsp` and `SHA256LongMsg.rsp`.
+- 2 cases are the SHA-256 examples of FIPS 180-2, Appendix B.
