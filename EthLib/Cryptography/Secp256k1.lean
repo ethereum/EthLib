@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Secp256k1.Field
 public import EthLib.Cryptography.Secp256k1.Curve
+public import EthLib.Cryptography.Secp256k1.Encoding
 
 /-!
 # `EthLib.Cryptography.Secp256k1`
