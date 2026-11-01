@@ -140,6 +140,17 @@ F itself is checked by known answers only (`Cryptography/Proofs/Hash/Blake2b.lea
 They are RFC 7693 Appendix A, one full block of the BLAKE2 test vectors, test vectors 4 to 7 of EIP-152, the rounds field of test vector 8, and one call that sets `t1`.
 No theorem states the output of test vector 8, which asks for `2^32 - 1` rounds.
 
+### ECRECOVER
+
+`output_sign` (`Precompiles/Proofs/Ecrecover/Core.lean`): a signature made with a private key returns that key's address.
+
+`output_verify` (`Precompiles/Proofs/Ecrecover/Core.lean`): a nonempty output is the address of a key that verifies the signature.
+
+`output_of_verify` (`Precompiles/Proofs/Ecrecover/Core.lean`): every key that verifies a signature has its address returned for `v = 27` or `v = 28`, when `r + n >= p`.
+
+These rest on the secp256k1 theorems.
+No theorem relates the module to the execution-specs code it follows, which calls a C library to recover the key.
+
 ### What cannot be proved yet
 
 These definitions prevent direct kernel evaluation.
@@ -235,13 +246,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 ### B4. The C boundary
 
 <!-- generated: exports -->
-Lean exports 25 operations and 24 size constants.
-The Python extension calls 25 of the operations and 19 of the constants.
+Lean exports 26 operations and 25 size constants.
+The Python extension calls 26 of the operations and 20 of the constants.
 Exported constants it does not call: `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-1623 lines of hand-written C sit between them and Python: `bls.c` (87), `kzg.c` (533), `modexp.c` (61), `module.c` (480), `ripemd160.c` (36), `secp256k1.c` (94), `sha256.c` (38), `wrappers.h` (151), `xmss.c` (143).
+1671 lines of hand-written C sit between them and Python: `bls.c` (87), `ecrecover.c` (34), `kzg.c` (533), `modexp.c` (61), `module.c` (490), `ripemd160.c` (36), `secp256k1.c` (94), `sha256.c` (38), `wrappers.h` (155), `xmss.c` (143).
 <!-- end generated -->
 
 They convert arguments, own and free Lean objects, and turn errors into Python exceptions.
