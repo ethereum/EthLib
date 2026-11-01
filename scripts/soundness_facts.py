@@ -203,19 +203,27 @@ def c_lines(root: Path) -> str:
     return f"{total} lines of hand-written C sit between them and Python: {each}.\n"
 
 
+# How the document names a required package; any other package keeps its Lake name.
+PACKAGE_NAMES = {"mathlib": "Mathlib"}
+
+
 def pins(root: Path) -> str:
-    """The pinned dependencies: the commit each resolved to, and the tag or branch requested."""
-    manifest = {p["name"]: p for p in json.loads((root / "lake-manifest.json").read_text())["packages"]}
+    """The pinned dependencies: the commit each resolved to, and the tag or branch requested.
+    Only the packages the lakefile requires itself are named, not the ones they require."""
+    packages = json.loads((root / "lake-manifest.json").read_text())["packages"]
     toolchain = (root / "lean-toolchain").read_text().strip()
 
-    def pin(name: str) -> str:
-        p = manifest[name]
+    def pin(p: dict) -> str:
         rev, requested = p["rev"][:7], p.get("inputRev")
         return f"`{requested}`, commit `{rev}`" if requested and not p["rev"].startswith(requested) else f"`{rev}`"
 
-    return (f"The specification requires no package.\n"
-            f"The package requires Mathlib, at {pin('mathlib')}, which only the proofs import.\n"
-            f"The Lean toolchain is `{toolchain}`.\n")
+    # One line per package, sorted by name, so the text does not follow the manifest's order.
+    required = sorted((PACKAGE_NAMES.get(p["name"], p["name"]), pin(p))
+                      for p in packages if not p.get("inherited", False))
+    return ("The specification requires no package.\n"
+            + "".join(f"The package requires {name}, at {at}.\n" for name, at in required)
+            + "Only the proofs import them.\n"
+            + f"The Lean toolchain is `{toolchain}`.\n")
 
 
 GENERATORS = {

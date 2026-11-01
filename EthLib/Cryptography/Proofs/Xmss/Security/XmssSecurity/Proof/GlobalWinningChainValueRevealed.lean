@@ -1,0 +1,18 @@
+module
+
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.GlobalBadEvent
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.ChainEventDecomposition
+
+@[expose] public section
+
+open OracleComp OracleSpec
+
+namespace XmssSecurity
+
+def GlobalWinningChainValueRevealed
+    (cache : QueryCache HashSpec) (outcome : GameOutcome) : Prop :=
+  ∃ chain, WinningOutcomeBadEventOccurs cache outcome (.chain chain) ∧
+    CappedChain.OutcomeChainValueRevealed cache outcome chain
+
+end XmssSecurity
+
