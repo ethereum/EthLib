@@ -1,10 +1,7 @@
 # Contributing
 
 This file sets the terms under which you contribute to EthLib.
-
-The rules for the work itself are in [AGENTS.md](AGENTS.md): sources, proofs, documentation, commits and pull requests.
-They apply to every contributor, human or AI.
-
+The rules for the work itself, on sources, proofs, documentation, commits and pull requests, are in [AGENTS.md](AGENTS.md), and they apply to every contributor, human or AI.
 How to build and test is in the [README](README.md#contributing).
 
 ## Licence
@@ -13,7 +10,7 @@ EthLib's own material is distributed under CC0 1.0 Universal.
 The legal text is in [LICENSE](LICENSE).
 `pyproject.toml` declares `CC0-1.0 AND MIT AND Apache-2.0` for the Python package.
 It ships the MIT-licensed RLP test cases from `ethereum/tests`, and the Apache-licensed secp256k1 test sets from `C2SP/wycheproof`.
-Material from other projects keeps its own terms, as the last section says.
+Material from other projects keeps its own terms, as [Material from other projects](#material-from-other-projects) explains.
 
 By submitting a contribution, you agree to make it available under CC0 1.0 Universal.
 You must have the authority to do so.

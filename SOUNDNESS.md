@@ -1,28 +1,24 @@
 # Soundness
 
-What the proofs of EthLib establish, and what a user of EthLib trusts on top of them.
+This document says what the proofs of EthLib establish, and what a user of EthLib trusts on top of them.
 
 No formal verification is absolute.
-A proof links a Lean definition to a theorem.
-Each of them is assumed to match something outside Lean: the source document, the code that runs, and what the client needs.
-This document names each of those assumptions.
-
+A proof links a Lean definition to a theorem, and both are assumed to match something outside Lean: the source document the definition implements, the code that actually runs, and what the client needs.
+Each of those links is an assumption, and this document names them one by one.
 It follows the structure of s2n-bignum's [`SOUNDNESS.md`](https://github.com/awslabs/s2n-bignum/blob/main/SOUNDNESS.md), adapted to a specification library.
 
 This document describes the development tree that declares package version `0.2.0` in `pyproject.toml`.
-
 It does not describe the tag `v0.2.0`, which points to an earlier commit, without the declaration check or the exports library.
 
-The prose was reviewed for that package version.
-CI fails when `pyproject.toml` declares another version, so each version bump reviews the document again and updates the line above.
-
-The facts that change with the code, such as which theorems still use `native_decide`, are generated from the repository by `scripts/soundness_facts.py`.
+The prose was reviewed by hand for that package version.
+CI fails when `pyproject.toml` declares another version, so each version bump forces a new review of the document and an update of the line above.
+The facts that change with the code, such as which theorems still use `native_decide`, are instead generated from the repository by `scripts/soundness_facts.py`.
 CI fails when one of them is out of date, so they hold for every commit, not only for one version.
 
 ## Ways to use EthLib
 
-Each way of using EthLib trusts a different set of things.
-The table below marks which rows apply to which use:
+Each way of using EthLib trusts a different set of things, so the summary table marks which risks apply to which use.
+There are four uses:
 
 - **P**, a Lean proof that imports the specification;
 - **R**, a Lean program that runs the specification;
@@ -30,6 +26,12 @@ The table below marks which rows apply to which use:
 - **V**, a client that tests against the vectors in `tests/`.
 
 ## Summary
+
+The risks fall into four gaps, one per link in the chain from source to client.
+Gap A asks whether the definition says what the source and the client need.
+Gap B asks whether the code that runs matches the definitions.
+Gap C asks whether the proof itself is sound.
+Gap D asks whether the use of EthLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
@@ -51,28 +53,26 @@ The table below marks which rows apply to which use:
 | D3 | The KZG trusted setup is not what it should be | Bytes match the consensus-specs setup | P R B V |
 | D4 | The vectors are wrong | They match consensus-specs `v1.7.0-alpha.12`, and CI checks their pinned digests | V |
 
-The sections below explain each row.
+The sections after the next one explain each row.
 
 ## What the proofs say
 
-This section lists the main theorems by primitive.
-It is not yet complete.
+Before the risks, here is what is actually proved, primitive by primitive.
+The list covers the main theorems and is not yet complete.
 
-One theorem states a security property: unforgeability of leanXMSS, for EthLib's own definitions.
+Most of these theorems are about correctness: an honest run gives the expected answer, or malformed input is rejected.
+Only one states a security property, the unforgeability of leanXMSS, for EthLib's own definitions.
 No theorem states unforgeability for BLS, or binding for KZG.
 No theorem covers the code that runs, the C boundary, or timing.
 
 ### XMSS
 
-`verify_keyGen_sign` (`Proofs/Xmss/Correctness.lean`):
-if `keyGen seed` returns a key pair, and `sign` returns a signature for a message at a leaf index, then `verify` accepts that signature under that public key.
-
-It is a correctness statement.
+The correctness theorem is `verify_keyGen_sign` (`Proofs/Xmss/Correctness.lean`).
+If `keyGen seed` returns a key pair, and `sign` returns a signature for a message at a leaf index, then `verify` accepts that signature under that public key.
 It says nothing about unforgeability.
 
-`Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability.lean`):
-in the random oracle model, an adversary whose experiment makes at most `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
-
+Unforgeability is `Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability.lean`).
+In the random oracle model, an adversary whose experiment makes at most `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
 Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash `H` a query to the random oracle.
 `keyGen`, `sign` and `verify` are the same definitions with Keccak-256 as `H`.
 
@@ -80,63 +80,56 @@ The proof is adapted from leanerVM's, and `Proofs/Xmss/Security/README.md` lists
 It reasons over EthLib's algorithms.
 Its model of the scheme with precomputed keys is a step of the proof, not a second statement.
 
-Its game follows the note's section "Security".
+The game follows the note's section "Security".
 The adversary gets the public key, queries `H`, and requests signatures, never at the same leaf index twice.
 It wins when its forgery verifies and no request for the forged message returned the forged signature.
+
 The budget `q` counts every hash call of the game, including those of key generation, signing and the final verification.
-It bounds every run, including the unlucky ones, so the bound is weaker than `2^-127` per adversary call:
+It bounds every run, including the unlucky ones, so the bound is weaker than `2^-127` per adversary call, in two ways:
 
 - Key generation alone makes `K = 13,434,881` calls, about `2^23.7`, so the bound is never below about `2^-103.3`.
 - A signing request can try up to `2^32` randomizers on each layer before one gives a codeword.
   So each signing request adds more than `2^33` to `q`, and an adversary with `n >= 1` requests gets a bound above `n * 2^-94`.
 
 The bound is classical: the adversary queries the oracle as a classical algorithm.
-
 The statement is written with VCVio's oracle computations and probabilities, so their definitions are part of what it says.
 
 ### VRF tree
 
-`verify_unique` (`Proofs/Vrf/Verify.lean`): two openings that verify at one index under one root give one output, or Keccak-256 collides.
+A VRF tree commits to secret outputs under one root, and later opens them one index at a time.
+Two theorems in `Proofs/Vrf/Verify.lean` describe it.
+`verify_unique` says that two openings that verify at one index under one root give one output, or Keccak-256 collides.
 It holds for every root, including one built to cheat.
+`verify_opening` says that the opening of an honest tree verifies, with the output of its secret.
 
-`verify_opening` (`Proofs/Vrf/Verify.lean`): the opening of an honest tree verifies, with the output of its secret.
-
-Uniqueness is reduced to a collision, and no theorem bounds the cost of one.
+Uniqueness is reduced to a collision, and no theorem bounds the cost of finding one.
 No theorem says that an output is unpredictable before it is opened.
 
 ### BLS12-381
 
-`modulus_prime` (`Proofs/Bls/FpZMod.lean` and `Proofs/Bls/FrZMod.lean`): both moduli are prime.
-
-`seven_pow_card_sub_one` and `seven_pow_div_prime_ne_one` (`Proofs/Bls/FrZMod.lean`): `7` generates the multiplicative group of the scalar field.
-`7` is also the KZG constant `PRIMITIVE_ROOT_OF_UNITY`.
-
-`addOrderOf_toPoint_generator` (`Proofs/Bls/G1Order.lean`): the G1 generator has order `r`.
-
-These check the constants.
-A wrong digit in a modulus or in the generator would very likely make one of them fail.
+The BLS theorems check the constants, because a wrong digit in a modulus or in the generator would very likely make one of them fail.
+`modulus_prime` (`Proofs/Bls/FpZMod.lean` and `Proofs/Bls/FrZMod.lean`) proves that both moduli are prime.
+`seven_pow_card_sub_one` and `seven_pow_div_prime_ne_one` (`Proofs/Bls/FrZMod.lean`) prove that `7` generates the multiplicative group of the scalar field; `7` is also the KZG constant `PRIMITIVE_ROOT_OF_UNITY`.
+`addOrderOf_toPoint_generator` (`Proofs/Bls/G1Order.lean`) proves that the G1 generator has order `r`.
 
 ### secp256k1
 
-`card_point` (`Proofs/Secp256k1/Order.lean`): the group has `n` points, so the cofactor is 1.
+The secp256k1 theorems are correctness statements.
+`card_point` (`Proofs/Secp256k1/Order.lean`) proves that the group has `n` points, so the cofactor is 1.
+`decode_eq_ok_iff` (`Proofs/Secp256k1/Encoding.lean`) proves that the decoder accepts exactly the encodings of the points other than `O`.
+`verify_sign` (`Proofs/Secp256k1/Ecdsa.lean`) proves that a signature from the signing operation of SEC 1 verifies.
+`verify_recover` and `recover_of_verify` (`Proofs/Secp256k1/Recovery.lean`) prove that a recovered key verifies the signature, and that every key that verifies one is recovered, when `r + n >= p`.
 
-`decode_eq_ok_iff` (`Proofs/Secp256k1/Encoding.lean`): the decoder accepts exactly the encodings of the points other than `O`.
-
-`verify_sign` (`Proofs/Secp256k1/Ecdsa.lean`): a signature from the signing operation of SEC 1 verifies.
-
-`verify_recover` and `recover_of_verify` (`Proofs/Secp256k1/Recovery.lean`): a recovered key verifies the signature, and every key that verifies one is recovered, when `r + n >= p`.
-
-These are correctness statements.
 No theorem states unforgeability, which rests on the discrete logarithm problem.
 
 ### KZG
 
-`Proofs/Kzg/Core.lean`: the public operations reject malformed inputs, such as a wrong size or lists of different lengths.
-
+`Proofs/Kzg/Core.lean` proves that the public operations reject malformed inputs, such as a wrong size or lists of different lengths.
 No theorem says what an accepted input returns.
 The operations run in `IO` to read the trusted setup, so the kernel cannot evaluate them, and their results on success are unproved.
 
-`checksSufficient` (`Proofs/Kzg/CeremonyChecks.lean`): the ceremony's pairing checks force each G1 and G2 point of a contribution to be the expected power of the trapdoor.
+`checksSufficient` (`Proofs/Kzg/CeremonyChecks.lean`) is about the ceremony that produced the trusted setup.
+It proves that the ceremony's pairing checks force each G1 and G2 point of a contribution to be the expected power of the trapdoor.
 It holds under four hypotheses besides the checks themselves:
 
 - `ConcreteBlsLaws`, one law the repository does not prove yet, `pairingEq_mul_iff`: on multiples of the generators, the concrete pairing check holds exactly when the scalar products agree, which is bilinearity and non-degeneracy;
@@ -146,19 +139,18 @@ It holds under four hypotheses besides the checks themselves:
 
 ### MODEXP
 
-`compute_eq_pow_mod` (`Precompiles/Proofs/Modexp/Core.lean`): the output is `BASE ^ EXPONENT mod MODULUS`, or 0 for a zero modulus.
-It rests on `powMod_eq` (`Precompiles/Proofs/Modexp/PowMod.lean`): the square-and-multiply loop equals `b ^ e % m`.
+These theorems state agreement with EIP-198 and EIP-7823.
+`compute_eq_pow_mod` (`Precompiles/Proofs/Modexp/Core.lean`) proves that the output is `BASE ^ EXPONENT mod MODULUS`, or 0 for a zero modulus.
+It rests on `powMod_eq` (`Precompiles/Proofs/Modexp/PowMod.lean`), which proves that the square-and-multiply loop equals `b ^ e % m`.
+`modexp_out_of_gas` and `modexp_ok` (`Precompiles/Proofs/Modexp/Core.lean`) prove that, with every length within the EIP-7823 bound, a call fails exactly when the gas is below the price.
 
-`modexp_out_of_gas` and `modexp_ok` (`Precompiles/Proofs/Modexp/Core.lean`): with every length within the EIP-7823 bound, a call fails exactly when the gas is below the price.
-
-These state agreement with EIP-198 and EIP-7823.
 No theorem relates the module to the execution-specs code it follows.
 
 ### BLAKE2F
 
-`blake2f_invalidLength`, `blake2f_invalidFlag` and `blake2f_ok` (`Precompiles/Proofs/Blake2f.lean`): a call fails exactly when the input is not 213 bytes long, or its flag byte is neither `0` nor `1`.
+The theorems pin down the input format exactly, and leave the compression function F to known answers.
+`blake2f_invalidLength`, `blake2f_invalidFlag` and `blake2f_ok` (`Precompiles/Proofs/Blake2f.lean`) prove that a call fails exactly when the input is not 213 bytes long, or its flag byte is neither `0` nor `1`.
 Otherwise it returns `compute` of the input, which decodes the fields and runs F of RFC 7693 on them.
-
 `readWord_toNat`, `readRounds_toNat` and `writeState_word` state the encoding of EIP-152 for every input: the rounds field big-endian, every word little-endian, and the output in the encoding of the input.
 
 F itself is checked by known answers only (`Cryptography/Proofs/Hash/Blake2b.lean` and `Precompiles/Proofs/Blake2f.lean`).
@@ -167,23 +159,23 @@ No theorem states the output of test vector 8, which asks for `2^32 - 1` rounds.
 
 ### ECRECOVER
 
-`output_sign` (`Precompiles/Proofs/Ecrecover/Core.lean`): a signature made with a private key returns that key's address.
+The ECRECOVER theorems rest on the secp256k1 ones, and all three are in `Precompiles/Proofs/Ecrecover/Core.lean`.
+`output_sign` proves that a signature made with a private key returns that key's address.
+`output_verify` proves that a nonempty output is the address of a key that verifies the signature.
+`output_of_verify` proves that every key that verifies a signature has its address returned for `v = 27` or `v = 28`, when `r + n >= p`.
 
-`output_verify` (`Precompiles/Proofs/Ecrecover/Core.lean`): a nonempty output is the address of a key that verifies the signature.
-
-`output_of_verify` (`Precompiles/Proofs/Ecrecover/Core.lean`): every key that verifies a signature has its address returned for `v = 27` or `v = 28`, when `r + n >= p`.
-
-These rest on the secp256k1 theorems.
 No theorem relates the module to the execution-specs code it follows, which calls a C library to recover the key.
 
 ### What cannot be proved yet
 
-These definitions prevent direct kernel evaluation.
-Their intended computational properties remain unproved.
-`lake exe check-decls` reports each one, and `scripts/check_decls_baseline.txt` lists those that remain, with the reason for each group.
+Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate them, and their intended computational properties remain unproved.
+They come in three kinds.
 A `partial` definition is defined by `partial` recursion.
 An `opaque` one is an opaque constant, such as the global reference that holds the KZG trusted setup.
 A `reaches-opaque` one unfolds to an opaque constant, such as `Loop.forIn`, which `while` compiles to, or the `IO` that reads that reference.
+
+`lake exe check-decls` reports each one, and `scripts/check_decls_baseline.txt` lists those that remain, with the reason for each group.
+Today they are:
 
 <!-- generated: unfoldable -->
 - `EthLib.Cryptography.Kzg.KzgM`, `reaches-opaque`
@@ -195,33 +187,29 @@ A `reaches-opaque` one unfolds to an opaque constant, such as `Loop.forIn`, whic
 
 ### A1. A wrong definition
 
-A definition can differ from its source while every theorem about it holds.
-
-Mitigations:
-
-- Each definition is named and shaped after its source, so that a reader can compare them line by line.
-- The KZG and BLS vectors in `tests/cryptography/` match the consensus-specs `v1.7.0-alpha.12` general vectors byte for byte.
-  Those were produced by the Python specification, not by EthLib.
-- Consistency theorems on the constants, listed above.
+A definition can differ from its source while every theorem about it holds, because the theorems are proved about the definition, not about the source.
+Three things guard against that.
+Each definition is named and shaped after its source, so that a reader can compare them line by line.
+The KZG and BLS vectors in `tests/cryptography/` match the consensus-specs `v1.7.0-alpha.12` general vectors byte for byte, and those were produced by the Python specification, not by EthLib.
+Finally, the consistency theorems on the constants, listed under BLS12-381, catch a wrong digit.
 
 ### A2. Hypotheses inside theorems
 
 A conditional theorem is only as strong as its hypotheses.
-`checksSufficient` is the main one today, and its four hypotheses are listed above.
-What remains of them is part of what a reader trusts.
+`checksSufficient` is the main one today, and its four hypotheses are listed under KZG.
+Whatever those hypotheses leave unproved is part of what a reader trusts.
 
 ### A3. Side channels
 
 EthLib makes no constant-time claim.
-
-`Hash/Keccak.lean` says it "is not intended to be constant-time".
-The field arithmetic uses Lean's `Nat`, which gives no timing guarantee.
-XMSS `keyGen` and `sign` handle secret data.
-The Python bindings expose both, as `key_gen` and `sign`, which take the secret seed.
+`Hash/Keccak.lean` says it "is not intended to be constant-time", and the field arithmetic uses Lean's `Nat`, which gives no timing guarantee.
+This matters where secret data is handled.
+XMSS `keyGen` and `sign` handle secret data, and the Python bindings expose both, as `key_gen` and `sign`, which take the secret seed.
 
 ### A4. Idealisations
 
 A security theorem rests on a model, such as a random oracle for a hash.
+EthLib has one such theorem, and one idealisation:
 
 - leanXMSS: the hash `H`, Keccak-256, is a random oracle on byte strings.
   The theorem says nothing about an attack that uses the structure of Keccak.
@@ -231,6 +219,7 @@ A security theorem rests on a model, such as a random oracle for a hash.
 s2n-bignum proves its theorems about the object code, so a compiler bug cannot invalidate them.
 EthLib is the other way round.
 Its theorems are about the Lean definitions, and everything between them and the running code is trusted.
+The sketch shows where each gap sits.
 
 ```text
  source document --A-- Lean definition == proof == theorem
@@ -252,17 +241,15 @@ The Python suite regenerates every vector through the bindings and writes it ove
 For most operations it does not compare the result with an expected answer, so a passing run proves nothing on its own.
 The check is that the regenerated files are identical to the committed ones, which match consensus-specs `v1.7.0-alpha.12`.
 `python3 tests/cryptography/check_vectors.py` makes that comparison against the pinned digests.
-CI runs it on the committed vectors on every change, but it does not regenerate them, which takes hours.
+
+CI runs that check on the committed vectors on every change, but it does not regenerate them, which takes hours.
 So for B1 and B4 the regeneration is a local step, and only the check after it shows that the bindings still produce the committed answers.
 
 ### B2. Lean core's own implementations
 
-Lean core implements `Array.forIn'`, `foldlM`, `foldrM`, `mapM` and `anyM` with `@[implemented_by]`.
-It implements the `Nat`, `ByteArray` and `Array` primitives with `@[extern]`.
+Lean core implements `Array.forIn'`, `foldlM`, `foldrM`, `mapM` and `anyM` with `@[implemented_by]`, and the `Nat`, `ByteArray` and `Array` primitives with `@[extern]`.
 The compiled code runs those implementations, not the definitions the kernel checks.
-
-Any loop or fold over an array reaches them, so Lean core is a declared trusted baseline.
-`lake exe check-decls` does not report it.
+Any loop or fold over an array reaches them, so Lean core is a declared trusted baseline, and `lake exe check-decls` does not report it.
 
 ### B3. Native code during elaboration
 
@@ -271,6 +258,8 @@ So `#eval`, or a tactic that evaluates, in any module that imports them runs nat
 A proof is unaffected unless it uses one of the tactics of C2.
 
 ### B4. The C boundary
+
+Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
 Lean exports 26 operations and 25 size constants.
@@ -282,17 +271,15 @@ Exported constants it does not call: `eth_xmss_const_chains`, `eth_xmss_const_di
 1671 lines of hand-written C sit between them and Python: `bls.c` (87), `ecrecover.c` (34), `kzg.c` (533), `modexp.c` (61), `module.c` (490), `ripemd160.c` (36), `secp256k1.c` (94), `sha256.c` (38), `wrappers.h` (155), `xmss.c` (143).
 <!-- end generated -->
 
-They convert arguments, own and free Lean objects, and turn errors into Python exceptions.
+That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
 The vectors test this layer only through the regeneration and comparison of B1.
-
 Each typed Lean error becomes a `RuntimeError` with the operation's name, and the Lean message is dropped.
 A wrong argument size is caught in C first, and raises `ValueError`.
 
 ### B5. Compiler substitutions in this repository
 
 `@[implemented_by]` and `@[extern]` make the compiled code run something other than the definition, with no proof that the two agree.
-`@[csimp]` replaces a function with one proved equal to it, so it adds no logical trust.
-It still means the code that runs is not the definition a reader reads.
+`@[csimp]` replaces a function with one proved equal to it, so it adds no logical trust, but the code that runs is still not the definition a reader reads.
 
 The repository has none of the three today.
 `lake exe check-decls` reports any of them, and fails on one that is not in its baseline.
@@ -309,10 +296,9 @@ The repository has none of the three today.
 Every theorem trusts the Lean kernel, and whichever of the three standard axioms it uses: `propext`, `Classical.choice` and `Quot.sound`.
 Those three are the allowed set; a theorem may use fewer.
 
-`lake exe check-decls` checks dependencies: that no declaration depends on an axiom outside that set, apart from those in its baseline.
+`lake exe check-decls` checks dependencies: no declaration may depend on an axiom outside that set, apart from those in its baseline.
 It does not check the kernel, and it does not show that the axioms are consistent.
-That rests on Lean's own design and review.
-No independent checker replays the environment yet (C3).
+That rests on Lean's own design and review, and no independent checker replays the environment yet (C3).
 
 ### C2. Tactics that trust compiled code
 
@@ -320,8 +306,7 @@ No independent checker replays the environment yet (C3).
 A proof that uses one is no longer checked by the kernel alone.
 It also trusts every `@[implemented_by]` and `@[extern]` that the compiled code reaches (B2).
 
-`AGENTS.md` does not allow them.
-A new use fails `lake exe check-decls`.
+`AGENTS.md` does not allow these tactics, and a new use fails `lake exe check-decls`.
 
 <!-- generated: native -->
 No theorem uses them.
@@ -330,8 +315,7 @@ No theorem uses them.
 ### C3. Declarations the kernel did not check
 
 A metaprogram can add a declaration to the environment without the kernel checking it.
-An independent checker that replays the environment, such as `lean4checker`, would catch it.
-None runs yet.
+An independent checker that replays the environment, such as `lean4checker`, would catch it, but none runs yet.
 
 ## Gap D: does the use of EthLib hold together?
 
@@ -339,8 +323,7 @@ None runs yet.
 
 A client chooses the right operation for its fork, passes inputs of the right form, and handles errors.
 
-XMSS adds one more.
-Never sign two different messages at one leaf index with one secret key.
+XMSS adds one more obligation: never sign two different messages at one leaf index with one secret key.
 Each leaf index names a one-time signing key, and nothing in EthLib records which leaf indices were used, so the caller must prevent reuse.
 The Lean and Python docstrings of `sign` both say so.
 
@@ -358,17 +341,15 @@ The Lean toolchain is `leanprover/lean4:v4.35.0`.
 
 ### D3. The KZG trusted setup
 
-The setup raises three separate assumptions, and each use of KZG relies on a different subset.
+The setup raises three separate assumptions, and each use of KZG relies on a different subset of them.
 
 - Provenance: the embedded bytes are the ceremony's output.
-  They match consensus-specs `presets/mainnet/trusted_setups/trusted_setup_4096.json` byte for byte.
-  `Kzg/TrustedSetupData.lean` records that source, the commit it comes from and its sha256.
+  They match consensus-specs `presets/mainnet/trusted_setups/trusted_setup_4096.json` byte for byte, and `Kzg/TrustedSetupData.lean` records that source, the commit it comes from and its sha256.
 - Algebraic consistency: the bytes decode to valid points, the monomial points are powers of one secret, and the Lagrange points are the matching basis.
   None of this is proved for the embedded bytes.
   `checksSufficient` covers the ceremony's monomial points, under its hypotheses.
 - Secrecy: no one knows the secret, which holds if at least one ceremony participant was honest.
-  Only binding, a security property, needs it.
-  A theorem about parsing, or that an honest proof verifies, does not.
+  Only binding, a security property, needs it; a theorem about parsing, or that an honest proof verifies, does not.
 
 ### D4. The vectors
 

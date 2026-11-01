@@ -3,13 +3,9 @@
 Rules for any agent, human or AI, that changes this repository.
 
 EthLib is a library of formally verified Ethereum primitives, written in Lean.
-
 Each primitive implements a published specification, from whichever part of the protocol it comes.
-
 Clients and other Lean projects build on it.
-
 A bug here spreads to everything built on top of it.
-
 So every line must be correct and justified by its source.
 
 ## The bar
@@ -27,43 +23,30 @@ Work the way the author of a standard would.
   One idea per pull request.
 
 When you are not sure, ask.
-
 A question costs minutes.
-
 A plausible guess merged into this library costs far more.
 
 ## Sources of truth
 
 Each module implements a published specification.
-
 It can be an EIP, an RFC, an ePrint paper, an ethresear.ch post, a specification repository such as `ethereum/consensus-specs`, or any other primary source.
-
 When several exist, use the most authoritative one.
-
 That specification is normative.
-
 When the code and the specification disagree, the code is wrong until shown otherwise.
 
 Cite the exact document and section in the code that implements it.
-
 For example: `RFC 9380 §5.3.1`, or the fork and function name in `consensus-specs`.
 
 Do not cite another implementation as the authority for a behaviour.
-
 Matching a client byte for byte is a useful test, not a justification.
 
 ## Work as a specialist
 
 Each task belongs to a domain, and each domain has its experts.
-
 Before starting, take the role of the specialist the task needs.
-
 That specialist knows both the theory of the domain and Lean 4.
-
 A cryptographer for a signature scheme, a consensus researcher for a fork-choice rule, a compiler engineer for the EVM.
-
 Adapt the role to each task.
-
 Hold the work to the standard that specialist would accept.
 
 ## Layout
@@ -77,13 +60,10 @@ tests/<domain>/<module>/             generated test vectors
 ```
 
 A new domain adds its proof root to the `Proofs` library in `lakefile.lean`.
-
 The library code never imports the proofs.
-
 Proofs live in their own Lake library, so the library code builds and links without them.
 
 The C exports live in a third library, `Exports`, so a Lean project that imports the specification gets no `@[export]` symbol.
-
 A new domain with exports adds its export root to the `Exports` library.
 
 ## Lean
@@ -118,38 +98,41 @@ A new domain with exports adds its export root to the `Exports` library.
 ### Known answers
 
 A known answer pins one input to one output, byte for byte.
-
 Take it from the specification's own test vectors when they exist.
-
 Otherwise, describe what it pins.
-
 For example: "one honest signature at epoch 7", or "one empty slot processed".
 
 Never regenerate an expected value from the code under test and call it a check.
 
 ## Documentation
 
-Developers all over the world read this documentation.
+Developers all over the world read this documentation, many of them in their second language.
+Write for a smart reader who has never seen the file.
 
-Many read it in their second language.
+Two kinds of documentation live here, and they are read differently.
+A doc comment in Lean sits next to the code and is read a few lines at a time, so it is terse.
+A Markdown file is read from top to bottom, like a chapter, so it is prose.
 
-Write for a smart reader who has never seen this file.
+These rules hold for both:
 
-- One sentence per line.
-  A sentence that wraps onto a second line is too long, so split it.
-- Leave a blank line between ideas.
-  Space makes a dense subject readable.
 - Short, plain words.
   Define a term the first time it appears.
 - Explain why, not what.
   The code already says what.
 - Use ASCII for math and layouts: `x_i`, `2^32`, `sum_i`.
-- Draw byte layouts and data flow in a fenced `text` block.
+- Draw byte layouts in a fenced `text` block.
 - No marketing, no hedging, no filler.
   Words such as "robust", "seamless", "comprehensive" and "it is worth noting" go.
 - No editorial headers such as `# Why this matters`.
 - Describe the code as it is now.
   Never "previously", "the fix", "as discussed".
+
+### Doc comments in Lean
+
+- One sentence per line.
+  A sentence that wraps onto a second line is too long, so split it.
+- Leave a blank line between ideas.
+  Space makes a dense subject readable.
 - Comment every non-obvious step of a definition or proof.
   Put the comment right above the line it explains.
 
@@ -169,8 +152,24 @@ def encodeLayerSignature (sig : LayerSignature) : ByteArray :=
   packBytes sig.randomizer ++ packDigests sig.chainValues ++ packDigests sig.path
 ````
 
-When a module does not follow these rules, apply them to what you change.
+### Markdown files
 
+A README, `SOUNDNESS.md` or a guide such as this one reads like a short chapter of a good mathematics textbook: precise, concise and written to teach.
+
+- Write paragraphs.
+  A paragraph develops one idea over several sentences that lead into each other.
+  A blank line after every sentence breaks that thread, so leave one only between paragraphs.
+- In the source, start each sentence on a new line.
+  Markdown joins the lines of a paragraph, and a diff then shows one sentence per line.
+- Lead with the problem, then the idea, then the details.
+  The reader should know why an object exists before meeting its definition.
+- Show one small, concrete example where it helps, with the steps written out.
+  Take its values from the specification or work them out by hand, never from the code under test.
+- Keep bullets for content that is a list: operations, cases, files, commands.
+  A bullet holds a full thought, not a fragment of a sentence.
+- Use a Markdown table for tabular content, and name a file or theorem where the reader needs to find it, not in every sentence.
+
+When a module does not follow these rules, apply them to what you change.
 Do not reformat untouched code in an unrelated pull request.
 
 ## Bindings
@@ -201,13 +200,10 @@ lake exe check-decls
 ```
 
 It reports any axiom beyond the standard three, and any `partial`, `opaque`, `unsafe`, `@[extern]`, `@[implemented_by]` or `@[csimp]`.
-
 It also reports a definition of the specification that cannot unfold in the kernel, for example because it uses `while` or `IO`.
 
 `scripts/check_decls_baseline.txt` lists the findings that exist today, each one to be removed.
-
 A pull request that removes a finding removes its line, or the check fails on the stale entry.
-
 A new finding is fixed, never added to the list.
 
 When you change the check, also run `scripts/test_check_decls.sh`.
@@ -240,7 +236,6 @@ python3 tests/cryptography/check_vectors.py
 ```
 
 Report what you ran and what it printed.
-
 If you skipped a check, say so.
 
 ## Commits and pull requests
@@ -250,9 +245,7 @@ A reviewer should know in fifteen seconds what the change does and where to look
 ### Titles
 
 Titles follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/).
-
 That holds for commit subjects and pull request titles alike.
-
 A squash merge turns the pull request title into the commit on `master`.
 
 ```text
@@ -273,21 +266,16 @@ The type says what kind of change it is:
 - `chore`: anything else that touches no library code, proof or test.
 
 Conventional Commits only fixes `feat` and `fix`.
-
 The other types are the common ones, plus `proof`, which this repository needs.
 
 The scope names the domain or module, in lowercase: `xmss`, `kzg`, `bls`, `ssz`, `bindings`.
-
 Leave the scope out when the change spans the repository.
 
 The summary is in the imperative mood, starts lowercase and has no trailing period.
-
 The whole title fits in 72 characters.
 
 A change that breaks consumers adds `!` before the colon.
-
 That covers a new wire format, a renamed or removed export, or a new test-vector layout.
-
 Its commit body then ends with a `BREAKING CHANGE:` footer that says what to change.
 
 ```text
@@ -303,7 +291,6 @@ docs: add AGENTS.md
 The commit body says why, when the subject cannot.
 
 The pull request body is written for a human who has never seen the change.
-
 Its length follows the change.
 
 - A typo or a dependency bump needs one line, or none.
@@ -352,7 +339,5 @@ Rules for every body:
 - Stacked pull requests say so: `Stacked on #43.`
 
 Read the body aloud before posting.
-
 If it sounds like a report, cut it.
-
 If you are an AI agent, say so in the pull request.
