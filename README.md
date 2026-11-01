@@ -1,11 +1,9 @@
 # EthLib
 
-Formally verified Ethereum primitives, written in Lean. EthLib is intended to be
-the shared home for Ethereum definitions and proofs, so that Lean projects can
-build on a common implementation instead of each maintaining its own. Some of
-these primitives can also be used by Ethereum clients via bindings. Clients may
-use the bindings temporarily until a native implementation exists, or
-permanently if the performance of this library is sufficient.
+Formally verified Ethereum primitives, written in Lean.
+EthLib is intended to be the shared home for Ethereum definitions and proofs, so that Lean projects can build on a common implementation instead of each maintaining its own.
+Some of these primitives can also be used by Ethereum clients via bindings.
+Clients may use the bindings temporarily until a native implementation exists, or permanently if the performance of this library is sufficient.
 
 ## Primitives
 
@@ -51,9 +49,8 @@ Compile the primitives and check every proof:
 lake build
 ```
 
-See [BUILDING.md](BUILDING.md) for module boundaries, CI caching, and build timing reports.
-
-When refreshing dependencies, use `lake --keep-toolchain update` to retain the toolchain matching Mathlib.
+[BUILDING.md](BUILDING.md) covers module boundaries, CI caching and build timing reports.
+When you refresh the dependencies, use `lake --keep-toolchain update`, so that the toolchain stays the one Mathlib expects.
 
 ### Testing
 
