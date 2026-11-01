@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Precompiles.Blake2f
 public import EthLib.Precompiles.Modexp
 public import EthLib.Precompiles.Ripemd160
 

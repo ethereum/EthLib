@@ -116,6 +116,17 @@ It rests on `powMod_eq` (`Precompiles/Proofs/Modexp/PowMod.lean`): the square-an
 These state agreement with EIP-198 and EIP-7823.
 No theorem relates the module to the execution-specs code it follows.
 
+### BLAKE2F
+
+`blake2f_invalidLength`, `blake2f_invalidFlag` and `blake2f_ok` (`Precompiles/Proofs/Blake2f.lean`): a call fails exactly when the input is not 213 bytes long, or its flag byte is neither `0` nor `1`.
+Otherwise it returns `compute` of the input, which decodes the fields and runs F of RFC 7693 on them.
+
+`readWord_toNat`, `readRounds_toNat` and `writeState_word` state the encoding of EIP-152 for every input: the rounds field big-endian, every word little-endian, and the output in the encoding of the input.
+
+F itself is checked by known answers only (`Cryptography/Proofs/Hash/Blake2b.lean` and `Precompiles/Proofs/Blake2f.lean`).
+They are RFC 7693 Appendix A, one full block of the BLAKE2 test vectors, test vectors 4 to 7 of EIP-152, the rounds field of test vector 8, and one call that sets `t1`.
+No theorem states the output of test vector 8, which asks for `2^32 - 1` rounds.
+
 ### What cannot be proved yet
 
 These definitions prevent direct kernel evaluation.

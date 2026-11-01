@@ -20,6 +20,7 @@ permanently if the performance of this library is sufficient.
 
 - [MODEXP](EthLib/Precompiles/Modexp/)
 - [RIPEMD-160](EthLib/Precompiles/Ripemd160.lean)
+- [BLAKE2F](EthLib/Precompiles/Blake2f/)
 
 [`SOUNDNESS.md`](SOUNDNESS.md) says what the proofs establish, and what each use of EthLib trusts on top of them.
 
