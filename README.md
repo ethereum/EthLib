@@ -27,8 +27,8 @@ A module imports only from its own layer or from those below it, and the executi
 | Networking | [`Encoding`](EthLib/Networking/Encoding/) | the protobuf varint of req/resp messages |
 | Networking | [`Snappy`](EthLib/Networking/Snappy/) | Snappy block decompression |
 | Networking | [`Gossip`](EthLib/Networking/Gossip/) | the gossip message ID of Phase 0 and Altair |
-| Execution | [`Fees`](EthLib/Fees/) | the EIP-1559 base fee |
-| Execution | [`Precompiles`](EthLib/Precompiles/) | ECRECOVER, RIPEMD-160, MODEXP and BLAKE2F |
+| Execution | [`Fees`](EthLib/Execution/Fees/) | the EIP-1559 base fee and the blob base fee |
+| Execution | [`Precompiles`](EthLib/Execution/Precompiles/) | ECRECOVER, RIPEMD-160, MODEXP and BLAKE2F |
 
 The theorems about a module live under `Proofs/` in its layer, and the C exports that the bindings call under `Exports/`.
 

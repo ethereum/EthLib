@@ -3,8 +3,7 @@ module
 public import EthLib.Serialization.Proofs
 public import EthLib.Cryptography.Proofs
 public import EthLib.Networking.Proofs
-public import EthLib.Precompiles.Proofs
-public import EthLib.Fees.Proofs
+public import EthLib.Execution.Proofs
 
 /-!
 # `EthLib.Proofs`
