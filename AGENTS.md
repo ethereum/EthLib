@@ -59,6 +59,7 @@ bindings/python/                     the C extension and the Python package
 tests/<domain>/<module>/             generated test vectors
 ```
 
+[`ARCHITECTURE.md`](ARCHITECTURE.md) says which domain a module belongs to, what it may import and which types it shares.
 A new domain adds its proof root to the `Proofs` library in `lakefile.lean`.
 The library code never imports the proofs.
 Proofs live in their own Lake library, so the library code builds and links without them.
