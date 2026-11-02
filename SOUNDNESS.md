@@ -137,6 +137,16 @@ It holds under four hypotheses besides the checks themselves:
 - `previousTauNonzero`, that the previous transcript's tau point is not at infinity;
 - `pubkeyNonzero`, that the contributor's public key is not at infinity.
 
+### EVM instructions
+
+Each instruction follows execution-specs, which computes with Python integers.
+Lean core defines the same operations on `BitVec`, independently of EthLib.
+The theorems in `Execution/Proofs/Evm/Instructions/` prove that the two agree, apart from the divisor 0, where the EVM returns 0.
+`sdiv_eq` covers the quotient of -2^255 by -1, the one signed quotient that does not fit in a word, and `bitwiseSar_eq` covers every shift up to 2^256 - 1.
+The 38 test cases of EIP-145 pin SHL, SHR and SAR.
+
+No theorem relates the definitions to the Yellow Paper, and the stack, gas and program counter are not modelled yet.
+
 ### MODEXP
 
 These theorems state agreement with EIP-198 and EIP-7823.
