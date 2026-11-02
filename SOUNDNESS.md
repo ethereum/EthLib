@@ -105,6 +105,16 @@ It holds for every root, including one built to cheat.
 Uniqueness is reduced to a collision, and no theorem bounds the cost of finding one.
 No theorem says that an output is unpredictable before it is opened.
 
+### Keccak-256
+
+`KeccakBits.keccak256_eq` (`Cryptography/Proofs/Hash/KeccakBitsRefinement.lean`) proves that the lane hash agrees for every byte message with a separate bit-coordinate sponge.
+The proof covers original Keccak padding, block absorption, the 24-round permutation and output packing.
+`ofLanes_toLanes` and `toLanes_ofLanes` (`Cryptography/Proofs/Hash/KeccakBitsRepresentation.lean`) show that the bit and lane state representations are inverses, so the permutation correspondence also applies to every bit state.
+The bit model does not add the SHA3-256 suffix.
+
+The theorem relates Lean definitions; it does not prove that the definitions match the source documents or that compiled execution matches the definitions.
+The bit model and its proofs are available through the cryptography and proof roots, and existing hash clients need no migration.
+
 ### BLS12-381
 
 The BLS theorems check the constants, because a wrong digit in a modulus or in the generator would very likely make one of them fail.
