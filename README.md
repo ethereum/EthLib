@@ -5,20 +5,32 @@ EthLib is intended to be the shared home for Ethereum definitions and proofs, so
 Some of these primitives can also be used by Ethereum clients via bindings.
 Clients may use the bindings temporarily until a native implementation exists, or permanently if the performance of this library is sufficient.
 
-## Primitives
+## Architecture
 
-### Cryptography
+EthLib is organised in layers, from the bytes and integers every specification uses up to the two layers of the protocol.
+A module imports only from its own layer or from those below it, and the execution and consensus layers never import each other.
 
-- [BLS12-381 signatures](EthLib/Cryptography/Bls/)
-- [KZG polynomial commitments](EthLib/Cryptography/Kzg/)
-- [XMSS signatures](EthLib/Cryptography/Xmss/)
-- [VRF tree](EthLib/Cryptography/Vrf/)
+[ARCHITECTURE.md](ARCHITECTURE.md) gives the scope, the rules behind each layer, the types that modules share and how forks are written.
 
-### Precompiles
+## Where things live
 
-- [MODEXP](EthLib/Precompiles/Modexp/)
-- [RIPEMD-160](EthLib/Precompiles/Ripemd160.lean)
-- [BLAKE2F](EthLib/Precompiles/Blake2f/)
+| Layer | Module | What it specifies |
+| --- | --- | --- |
+| Cryptography | [`Hash`](EthLib/Cryptography/Hash/) | Keccak-256, SHA-256, RIPEMD-160, the BLAKE2b compression function, CRC-32C |
+| Cryptography | [`Secp256k1`](EthLib/Cryptography/Secp256k1/) | the secp256k1 curve, ECDSA, public key recovery, addresses |
+| Cryptography | [`Bls`](EthLib/Cryptography/Bls/) | BLS12-381 and BLS signatures |
+| Cryptography | [`Kzg`](EthLib/Cryptography/Kzg/) | KZG commitments to blobs and cells |
+| Cryptography | [`Xmss`](EthLib/Cryptography/Xmss/) | leanXMSS, a hash-based signature for a post-quantum consensus layer |
+| Cryptography | [`Vrf`](EthLib/Cryptography/Vrf/) | the VRF tree, one verifiable random output per index |
+| Serialization | [`Rlp`](EthLib/Serialization/Rlp/) | Recursive Length Prefix, the encoding of the execution layer |
+| Serialization | [`Ssz`](EthLib/Serialization/Ssz/) | Simple Serialize and its merkleization, the encoding of the consensus layer |
+| Networking | [`Encoding`](EthLib/Networking/Encoding/) | the protobuf varint of req/resp messages |
+| Networking | [`Snappy`](EthLib/Networking/Snappy/) | Snappy block decompression |
+| Networking | [`Gossip`](EthLib/Networking/Gossip/) | the gossip message ID of Phase 0 and Altair |
+| Execution | [`Fees`](EthLib/Fees/) | the EIP-1559 base fee |
+| Execution | [`Precompiles`](EthLib/Precompiles/) | ECRECOVER, RIPEMD-160, MODEXP and BLAKE2F |
+
+The theorems about a module live under `Proofs/` in its layer, and the C exports that the bindings call under `Exports/`.
 
 [`SOUNDNESS.md`](SOUNDNESS.md) says what the proofs establish, and what each use of EthLib trusts on top of them.
 
