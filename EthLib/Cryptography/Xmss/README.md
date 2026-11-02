@@ -120,6 +120,8 @@ Finally, a hash input determines its public parameter, address and payload (`thI
 
 **The one-time signature and the trees.**
 An honest one-time signature leads back to its key's leaf (`otsLeaf_otsSign`, `Ots.lean`), and an honest path leads from a key's leaf to its tree's root (`fold_path`, `Tree.lean`).
+Another path that reaches that root exposes a second preimage of `Th` under the address of an ancestor (`fold_binding`, `Tree.lean`).
+Both statements specialize theorems proved for every tree in [`Merkle`](../Merkle/).
 
 **Serialization.**
 Decoding succeeds exactly on strings of the declared length, and on those strings encoding and decoding are inverse bijections (`Serialization.lean`).

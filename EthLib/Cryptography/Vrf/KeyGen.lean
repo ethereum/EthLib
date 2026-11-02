@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Vrf.Hash
-public import EthLib.Cryptography.Vrf.Tree
+public import EthLib.Cryptography.Merkle.Tree
 
 /-!
 # `Vrf.KeyGen`
@@ -39,12 +39,12 @@ def leaves (secrets : UInt32 → Digest) (j : Nat) : Digest :=
 
 /-- The root of the tree over the secrets. -/
 def root (secrets : UInt32 → Digest) : Digest :=
-  Tree.root nodeHash VRF_TREE_HEIGHT (leaves secrets)
+  (Merkle.root treeHash (m := Id) (leaves secrets) VRF_TREE_HEIGHT).run
 
 /-- The opening at index `i`: its secret and its path. -/
 def opening (secrets : UInt32 → Digest) (i : UInt32) : Opening where
   secret := secrets i
-  path := Tree.path nodeHash VRF_TREE_HEIGHT (leaves secrets) i.toNat
+  path := (Merkle.path treeHash (m := Id) (leaves secrets) VRF_TREE_HEIGHT i.toNat).run
 
 /-! ## The secrets of a seed -/
 

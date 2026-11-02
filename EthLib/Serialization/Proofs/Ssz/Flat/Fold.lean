@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Serialization.Ssz.Merkle.Merkleize
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Merkleize
 
 /-! Building a tree from its leaves upward, which is the order an implementation works in. -/
 
@@ -52,11 +52,8 @@ theorem subtreeRoot_succ (combine : α → α → α) (depth : Nat) (leaves : Na
       simp only [levelFold, Nat.pow_succ]
       congr 2 <;> omega
     -- Each half of the tree is then the same claim one level down.
-    show combine (subtreeRoot combine (depth + 1) leaves)
-        (subtreeRoot combine (depth + 1) fun i => leaves (i + 2 ^ (depth + 1)))
-      = combine (subtreeRoot combine depth (levelFold combine leaves))
-        (subtreeRoot combine depth fun i => levelFold combine leaves (i + 2 ^ depth))
-    rw [ih, ih, shift]
+    rw [subtreeRoot_halves combine (depth + 1) leaves,
+      subtreeRoot_halves combine depth (levelFold combine leaves), ih, ih, shift]
 
 /--
 Folding a list agrees with folding the leaves it stands for.

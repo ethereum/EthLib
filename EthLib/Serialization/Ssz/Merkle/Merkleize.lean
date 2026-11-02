@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Merkle.Tree
 public import EthLib.Serialization.Ssz.Merkle.Chunk
 
 /-! The root of an SSZ Merkle tree, and the facts an implementation of it leans on. -/
@@ -28,14 +29,11 @@ A tree wider than its data therefore needs no padding to describe.
           `-- leaf 3
 
 Nothing here reads a node, so this holds for any node type at all.
+
+It is the Merkle tree of that depth, hashing every node alike.
 -/
-def subtreeRoot (combine : α → α → α) : (depth : Nat) → (leaves : Nat → α) → α
-  | 0, leaves => leaves 0
-  -- The right half sees the same leaves, shifted past the left half's width.
-  | depth + 1, leaves =>
-      combine
-        (subtreeRoot combine depth leaves)
-        (subtreeRoot combine depth fun i => leaves (i + 2 ^ depth))
+def subtreeRoot (combine : α → α → α) (depth : Nat) (leaves : Nat → α) : α :=
+  (Cryptography.Merkle.root (m := Id) (fun _ _ => combine) leaves depth).run
 
 /--
 Root of the perfect binary tree of a given depth whose every leaf is zero.

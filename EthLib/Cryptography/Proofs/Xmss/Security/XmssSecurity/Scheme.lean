@@ -111,7 +111,7 @@ def leafHash (parameter : PublicParameter) (leafIndex : LeafIndex)
 def nodeHash (parameter : PublicParameter) (level : MerkleLevel) (node : MerkleNode)
     (left right : Digest) : m Digest :=
   toDigest <$> EthLib.Cryptography.Xmss.nodeHash queryH (ofParam parameter) .bottom
-    ⟨level.val + 1, Nat.succ_lt_succ level.isLt⟩ node.val (ofDigest left) (ofDigest right)
+    (level.val + 1) node.val (ofDigest left) (ofDigest right)
 
 /-- The top layer's message digest of a bottom root: EthLib's top `messageDigest`. -/
 def topEncodingHash (parameter : PublicParameter) (key : TopIndex)
@@ -135,7 +135,7 @@ def topLeafHash (parameter : PublicParameter) (key : TopIndex)
 def topNodeHash (parameter : PublicParameter) (level : MerkleLevel) (node : TopNode)
     (left right : Digest) : m Digest :=
   toDigest <$> EthLib.Cryptography.Xmss.nodeHash queryH (ofParam parameter) .top
-    ⟨level.val + 1, Nat.succ_lt_succ level.isLt⟩ node.val (ofDigest left) (ofDigest right)
+    (level.val + 1) node.val (ofDigest left) (ofDigest right)
 
 end
 

@@ -52,7 +52,7 @@ structure SecretKey where
 Computing the root builds all `2^16` one-time keys of the top tree. -/
 def publicKeyOf (s : Seed) : m PublicKey := do
   let pp ← publicParamOf H s
-  let root ← node H pp s .top LAYER_HEIGHT (Nat.le_refl _) 0
+  let root ← node H pp s .top LAYER_HEIGHT 0
   return { root, publicParam := pp }
 
 /-- `Gen` over a hash `H`: the key pair grown from a seed.

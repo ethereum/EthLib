@@ -94,6 +94,14 @@ It bounds every run, including the unlucky ones, so the bound is weaker than `2^
 The bound is classical: the adversary queries the oracle as a classical algorithm.
 The statement is written with VCVio's oracle computations and probabilities, so their definitions are part of what it says.
 
+### Merkle trees
+
+leanXMSS, the VRF tree and SSZ build their trees on one definition, and two theorems in `Proofs/Merkle/Binding.lean` describe what a path binds.
+`climb_binding` says that two climbs from one position that reach one node are equal, or the node hash collides at an ancestor of that position.
+`climb_binding_node` says that a climb that reaches an honest node but is not the honest one gives a second preimage of an honest ancestor.
+Both hold for every node hash.
+No theorem bounds the cost of finding a collision or a second preimage.
+
 ### VRF tree
 
 A VRF tree commits to secret outputs under one root, and later opens them one index at a time.

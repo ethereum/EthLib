@@ -186,14 +186,13 @@ theorem realTopPath (h : Prepared seed d result cache) (key : TopIndex) :
       (ofPath fun level =>
         (modelSecretKey d result).topTreeValue level.castSucc
           (Concrete.topPathNode key level)) := by
-  unfold Xmss.path
+  rw [Xmss.path_eq_ofFnInOrder]
   refine Resolves.ofFnInOrder fun level => ?_
   have hlevel : level.val < 16 := level.isLt
   have hb : key.val / 2 ^ level.val < 2 ^ (16 - level.val) := by
     rw [Nat.div_lt_iff_lt_mul (Nat.two_pow_pos _), ← pow_add,
       show 16 - level.val + level.val = 16 by omega]
     exact lt_of_lt_of_eq key.isLt (by norm_num [topLifetime, treeHeight])
-  rw [Xmss.siblingIndex, Nat.shiftRight_eq_div_pow]
   exact h.realTopNode level.val (by omega) _ (xor_one_lt hb (by omega))
 
 /-- A bottom key's path resolves to the key's stored nodes. -/
@@ -202,14 +201,13 @@ theorem realBottomPath (h : Prepared seed d result cache) (index : LeafIndex) :
         OracleComp HashSpec _)
       (ofPath fun level => (modelSecretKey d result).treeValue level.castSucc
         (Concrete.authenticationPathNode index level)) := by
-  unfold Xmss.path
+  rw [Xmss.path_eq_ofFnInOrder]
   refine Resolves.ofFnInOrder fun level => ?_
   have hlevel : level.val < 16 := level.isLt
   have hb : index.val / 2 ^ level.val < 2 ^ (32 - level.val) := by
     rw [Nat.div_lt_iff_lt_mul (Nat.two_pow_pos _), ← pow_add,
       show 32 - level.val + level.val = 32 by omega]
     exact lt_of_lt_of_eq index.isLt (by norm_num [lifetime, treeHeight])
-  rw [Xmss.siblingIndex, Nat.shiftRight_eq_div_pow]
   exact h.realBottomNode level.val (by omega) _ (xor_one_lt hb (by omega))
 
 /-- The top layer's signature of bottom tree `b`, or its error, as the key stores it. -/
@@ -252,7 +250,7 @@ theorem bottomKey_lt (index : LeafIndex) : (topKeyOf index).val < 2 ^ (32 - 16) 
 /-- The root of bottom tree `b` resolves to the one the key stores. -/
 theorem root_resolves (h : Prepared seed d result cache) (index : LeafIndex) :
     Resolves cache (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .bottom LAYER_HEIGHT
-        (Nat.le_refl _) (topKeyOf index).val : OracleComp HashSpec Xmss.Digest)
+        (topKeyOf index).val : OracleComp HashSpec Xmss.Digest)
       (ofDigest (h.root (topKeyOf index))) := by
   have hroot := h.realBottomNode 16 le_rfl (topKeyOf index).val (bottomKey_lt index)
   unfold Prepared.root
