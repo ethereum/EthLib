@@ -29,6 +29,10 @@ It sets the terms under which you contribute, and points to the rules in [AGENTS
 
 ### Prerequisites
 
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) for repository Python checks.
+CI uses uv 0.13.6.
+The soundness checks select Python 3.12, which uv downloads if needed.
+
 Install [elan](https://github.com/leanprover/elan):
 
 ```bash
@@ -54,7 +58,17 @@ When you refresh the dependencies, use `lake --keep-toolchain update`, so that t
 
 ### Testing
 
-Run the test suite:
+From the repository root, run the soundness checks used by CI:
+
+```bash
+uv run --no-project --python 3.12 python scripts/soundness_facts.py --check
+uv run --no-project --python 3.12 python -m unittest scripts/test_soundness_facts.py
+```
+
+These checks use only the standard library.
+`--no-project` runs them without installing the native bindings.
+
+Run the binding test suite:
 
 ```bash
 python3 -m venv .venv
