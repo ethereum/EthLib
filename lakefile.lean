@@ -44,7 +44,7 @@ this library rather than to `EthLib`. -/
 lean_lib «Proofs» where
   requiresModuleSystem := true
   roots := #[`EthLib.Proofs, `EthLib.Serialization.Proofs, `EthLib.Cryptography.Proofs, `EthLib.Networking.Proofs,
-    `EthLib.Precompiles.Proofs, `EthLib.Fees.Proofs]
+    `EthLib.Execution.Proofs]
   precompileModules := false
 
 /-- The C exports the Python extension calls, and nothing else. A separate
@@ -58,7 +58,7 @@ this library rather than to `EthLib`. -/
 @[default_target]
 lean_lib «Exports» where
   requiresModuleSystem := true
-  roots := #[`EthLib.Exports, `EthLib.Cryptography.Exports, `EthLib.Precompiles.Exports]
+  roots := #[`EthLib.Exports, `EthLib.Cryptography.Exports, `EthLib.Execution.Exports]
   precompileModules := true
 
 /-- Checks the compiled declarations of every library: their axioms, and any

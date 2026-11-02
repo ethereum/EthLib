@@ -1,0 +1,18 @@
+module
+
+public import EthLib.Execution.Proofs.Fees
+public import EthLib.Execution.Proofs.Precompiles
+
+/-!
+# `EthLib.Execution.Proofs`
+
+Machine-checked properties of the execution-layer specifications.
+
+The tree mirrors the definitions it proves things about.
+
+The proofs for `EthLib.Execution.Foo` live in `EthLib.Execution.Proofs.Foo`.
+
+They build in the `Proofs` Lake library, which the library code does not depend on.
+
+So nothing here is linked into the Python extension.
+-/

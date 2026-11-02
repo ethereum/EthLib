@@ -155,7 +155,7 @@ initialize_EthLib_EthLib_Cryptography_Exports(
 );
 
 extern lean_object*
-initialize_EthLib_EthLib_Precompiles_Exports(
+initialize_EthLib_EthLib_Execution_Exports(
   uint8_t builtin
 );
 
@@ -418,7 +418,7 @@ PyInit__native(void) {
     lean_object* res = initialize_EthLib_EthLib_Cryptography_Exports(1);
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Precompiles_Exports(1);
+      res = initialize_EthLib_EthLib_Execution_Exports(1);
     }
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);

@@ -106,7 +106,7 @@ Each layer is a directory under `EthLib/`, which `AGENTS.md` calls a domain, and
 | Layer | Holds | Directory |
 | --- | --- | --- |
 | Consensus | the state transition and the fork choice of the consensus layer | `EthLib/Consensus/` |
-| Execution | the state transition of the execution layer | `EthLib/Execution/` |
+| Execution | the EVM, its precompiles, the fees, and the state transition of the execution layer | `EthLib/Execution/` |
 | Networking | the messages peers exchange, with their framing and compression | `EthLib/Networking/` |
 | Serialization | the encodings the protocol sends and hashes | `EthLib/Serialization/` |
 | Cryptography | hashes and Merkle trees, then the schemes built on them | `EthLib/Cryptography/` |
@@ -218,3 +218,5 @@ A new module finds its place by answering three questions in order.
    If two modules need the same thing, write it once, in the lower of their layers.
 
 Then the module follows the layout of `AGENTS.md`: the specification in `EthLib/<Domain>/<Module>/`, its theorems in `EthLib/<Domain>/Proofs/<Module>/`, and its C exports in `EthLib/<Domain>/Exports/`.
+Modules of one kind share a directory inside their layer.
+The precompiles are one kind, so ECRECOVER sits in `EthLib/Execution/Precompiles/Ecrecover/`, and its theorems in `EthLib/Execution/Proofs/Precompiles/Ecrecover/`.
