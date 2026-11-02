@@ -71,8 +71,10 @@ These checks use only the standard library.
 Run the binding test suite:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e '.[test]'
-pytest
+uv sync --frozen --extra test
+uv run --no-sync pytest
 ```
+
+Run `uv sync --frozen --extra test` again after changing Lean or C sources.
+Sync rebuilds the native extension.
+`uv run --no-sync` tests that build.

@@ -40,7 +40,7 @@ Key generation and signing build `2^16` one-time keys per tree, which takes the 
 So the generators rewrite the `key_gen` and `sign` cases only on request:
 
 ```bash
-ETHLIB_SLOW_VECTORS=1 pytest bindings/python/tests/xmss
+ETHLIB_SLOW_VECTORS=1 uv run --no-sync pytest bindings/python/tests/xmss
 ```
 
 Every other run writes the `verify` cases and the rejections, and reads the slow cases back.
@@ -60,7 +60,7 @@ Most cases come from the NIST CAVP `SHA256ShortMsg` and `SHA256LongMsg` distribu
 The first check compares every pinned directory with its manifest:
 
 ```bash
-python3 tests/cryptography/check_vectors.py
+uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py
 ```
 
 It checks that every case in a pinned directory is listed, with the listed digest.
@@ -69,7 +69,7 @@ It needs only Python's standard library, and CI runs it on every change.
 The second check tests the first one, on a small tree built in a temporary directory:
 
 ```bash
-python3 -m unittest tests/cryptography/test_check_vectors.py
+uv run --no-project --python 3.12 python -m unittest tests/cryptography/test_check_vectors.py
 ```
 
 A missing manifest, a changed case, an unlisted case and a deleted case must each fail.
@@ -78,7 +78,7 @@ CI runs it with the check.
 The third check goes back to the source:
 
 ```bash
-python3 tests/cryptography/check_vectors.py --upstream
+uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py --upstream
 ```
 
 It downloads the upstream archive, checks its digest, and checks that every upstream case is pinned here with the upstream digest.

@@ -227,14 +227,14 @@ See [prerequisites](README.md#prerequisites) for setup.
 When you touch bindings or test vectors, also run the Python suite:
 
 ```bash
-pip install -e '.[test]'
-pytest
+uv sync --frozen --extra test
+uv run --no-sync pytest
 ```
 
 The suite rewrites the vectors, so then check that the pinned ones are unchanged:
 
 ```bash
-python3 tests/cryptography/check_vectors.py
+uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py
 ```
 
 Report what you ran and what it printed.

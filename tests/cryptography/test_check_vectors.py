@@ -2,7 +2,7 @@
 Check `check_vectors.py` itself, on a small vector tree built in a temporary
 directory.
 
-    python3 -m unittest tests/cryptography/test_check_vectors.py
+    uv run --no-project --python 3.12 python -m unittest tests/cryptography/test_check_vectors.py
 
 Only the standard library is used, like the check.
 """

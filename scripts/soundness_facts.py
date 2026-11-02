@@ -15,8 +15,8 @@ The facts that change with the code, such as the theorems that still use
     ...
     <!-- end generated -->
 
-    python3 scripts/soundness_facts.py           # rewrite the generated blocks
-    python3 scripts/soundness_facts.py --check   # fail if any is out of date, or the version differs
+    uv run --no-project --python 3.12 python scripts/soundness_facts.py           # rewrite the generated blocks
+    uv run --no-project --python 3.12 python scripts/soundness_facts.py --check   # fail if any is out of date, or the version differs
 
 Only the standard library is used, and Python 3.10 is enough, so the check
 needs no Lean, no build and no install step.
@@ -280,7 +280,7 @@ def run(root: Path, check: bool) -> list[str]:
     problems += check_version(root, doc)
     if check:
         if new != doc:
-            problems.append("generated blocks are out of date: run python3 scripts/soundness_facts.py")
+            problems.append("generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py")
     elif new != doc:
         path.write_text(new)
         print("SOUNDNESS.md: generated blocks updated")
