@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Fees.BaseFee
+public import EthLib.Fees.BlobBaseFee
 
 /-!
 # `EthLib.Fees`

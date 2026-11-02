@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Fees.Proofs.BaseFee
+public import EthLib.Fees.Proofs.BlobBaseFee
 
 /-!
 # `EthLib.Fees.Proofs`
