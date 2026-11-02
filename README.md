@@ -16,6 +16,7 @@ A module imports only from its own layer or from those below it, and the executi
 
 | Layer | Module | What it specifies |
 | --- | --- | --- |
+| Base | [`U256`](EthLib/Base/U256.lean) | the 256-bit word of the EVM, and its two's complement reading |
 | Cryptography | [`Hash`](EthLib/Cryptography/Hash/) | Keccak-256, SHA-256, RIPEMD-160, the BLAKE2b compression function, CRC-32C |
 | Cryptography | [`Secp256k1`](EthLib/Cryptography/Secp256k1/) | the secp256k1 curve, ECDSA, public key recovery, addresses |
 | Cryptography | [`Bls`](EthLib/Cryptography/Bls/) | BLS12-381 and BLS signatures |
@@ -28,6 +29,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Networking | [`Snappy`](EthLib/Networking/Snappy/) | Snappy block decompression |
 | Networking | [`Gossip`](EthLib/Networking/Gossip/) | the gossip message ID of Phase 0 and Altair |
 | Execution | [`Fees`](EthLib/Execution/Fees/) | the EIP-1559 base fee and the blob base fee |
+| Execution | [`Evm`](EthLib/Execution/Evm/) | the arithmetic, comparison and bitwise instructions of the EVM |
 | Execution | [`Precompiles`](EthLib/Execution/Precompiles/) | ECRECOVER, RIPEMD-160, MODEXP and BLAKE2F |
 
 The theorems about a module live under `Proofs/` in its layer, and the C exports that the bindings call under `Exports/`.

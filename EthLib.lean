@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base
 public import EthLib.Cryptography
 public import EthLib.Networking
 public import EthLib.Execution
@@ -12,8 +13,9 @@ Ethereum specifications, written in Lean.
 
 Each domain lives in its own subtree:
 
+- `EthLib.Base` holds the bytes and integers every layer uses.
 - `EthLib.Cryptography` holds the cryptographic primitives.
 - `EthLib.Networking` holds the wire formats of the networking layer.
-- `EthLib.Execution` holds the execution layer: the fees of a block and the precompiled contracts of the EVM.
+- `EthLib.Execution` holds the execution layer: the fees of a block, the EVM and its precompiled contracts.
 - `EthLib.Serialization` holds the encodings of Ethereum data.
 -/
