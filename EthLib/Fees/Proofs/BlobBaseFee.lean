@@ -5,15 +5,9 @@ public import EthLib.Fees.BlobBaseFee
 /-!
 # Proofs: `BlobBaseFee`
 
-What the blob fee rules guarantee.
-
-- The loop of `fake_exponential` terminates: its accumulator reaches 0 within `fakeExponentialFuel` steps.
-- So the bound never changes the result, and the result is the sum of the accumulators, divided by the denominator.
-- `fake_exponential` is monotone in its numerator, so the base fee per blob gas is monotone in the excess blob gas.
-- With an excess of 0 the fee is `MIN_BASE_FEE_PER_BLOB_GAS`, and it is never lower.
-- Before EIP-7918, the excess is the parent's excess plus its blob gas, minus the target, at least 0.
-- Below the reserve price of EIP-7918, the excess does not fall, once the parent's excess plus its blob gas reaches the target.
-- Under both rules, a parent with at most `GAS_PER_BLOB * max` blob gas raises the excess by at most `GAS_PER_BLOB * (max - target)`.
+- The loop of `fake_exponential` stops before its bound.
+- The base fee per blob gas is monotone in the excess, and at least 1.
+- Each excess rule raises the excess by at most `GAS_PER_BLOB * (max - target)` per block.
 
 The known answers at the end are worked by hand from the formulas.
 -/
@@ -60,7 +54,7 @@ theorem partialSum_eq_of_le {factor numerator denominator k m : Nat}
     · rw [partialSum, ih (Nat.le_of_lt_succ hlt), accum_eq_zero_of_le h (Nat.le_of_lt_succ hlt), Nat.add_zero]
     · rw [heq]
 
-/-- The loop adds up the accumulators: from step `k + 1`, `fuel` more steps give the sum of the first `k + fuel`.
+/-- From step `k + 1`, `fuel` more steps of the loop give the sum of the first `k + fuel` accumulators.
 
 The loop stops early only at an accumulator of 0, and from there on the sum does not grow. -/
 theorem fakeExponentialLoop_eq (factor numerator denominator fuel k : Nat) :
@@ -119,7 +113,7 @@ theorem accum_succ_le_half {factor numerator denominator k : Nat} (hk : 2 * nume
           _ ≤ denominator * (k + 1) := Nat.le_mul_of_pos_left _ hd
     _ = accum factor numerator denominator k / 2 := Nat.mul_div_mul_right _ _ hn
 
-/-- After `2 * numerator + j` steps, the accumulator is at most the one of step `2 * numerator`, over `2^j`. -/
+/-- After `2 * numerator + j` steps, the accumulator has been halved at least `j` times. -/
 theorem accum_add_le (factor numerator denominator j : Nat) :
     accum factor numerator denominator (2 * numerator + j)
       ≤ accum factor numerator denominator (2 * numerator) / 2 ^ j := by
@@ -265,7 +259,7 @@ theorem calcExcessBlobGas_eq (schedule : BlobSchedule) (parentExcessBlobGas pare
   -- Below the target both sides are 0, and from the target up they are the same subtraction.
   split <;> omega
 
-/-- A parent with at most `GAS_PER_BLOB * max` blob gas raises the excess by at most `GAS_PER_BLOB * (max - target)`. -/
+/-- A parent within its maximum raises the excess by at most `GAS_PER_BLOB * (max - target)`. -/
 theorem calcExcessBlobGas_le (schedule : BlobSchedule) (parentExcessBlobGas : Nat) {parentBlobGasUsed : Nat}
     (h : parentBlobGasUsed ≤ GAS_PER_BLOB * schedule.max) :
     calcExcessBlobGas schedule parentExcessBlobGas parentBlobGasUsed
@@ -282,7 +276,7 @@ namespace Osaka
 abbrev BelowReserve (schedule : BlobSchedule) (parentExcessBlobGas parentBaseFeePerGas : Nat) : Prop :=
   BLOB_BASE_COST * parentBaseFeePerGas > GAS_PER_BLOB * getBaseFeePerBlobGas schedule parentExcessBlobGas
 
-/-- When the parent's excess plus its blob gas is below the target, the excess is 0, whatever the reserve price. -/
+/-- Below the target, the excess is 0 whatever the reserve price. -/
 theorem calcExcessBlobGas_of_lt {schedule : BlobSchedule} {parentExcessBlobGas parentBlobGasUsed : Nat}
     (parentBaseFeePerGas : Nat) (h : parentExcessBlobGas + parentBlobGasUsed < GAS_PER_BLOB * schedule.target) :
     calcExcessBlobGas schedule parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas = 0 := by
@@ -296,7 +290,7 @@ theorem calcExcessBlobGas_of_not_below {schedule : BlobSchedule} {parentExcessBl
   unfold BelowReserve at h
   simp only [calcExcessBlobGas, Cancun.calcExcessBlobGas, h, ↓reduceIte]
 
-/-- Below the reserve price, once the parent's excess plus its blob gas reaches the target, the excess grows by `parentBlobGasUsed * (max - target) / max`. -/
+/-- Below the reserve price and at the target or above, the excess grows by `parentBlobGasUsed * (max - target) / max`. -/
 theorem calcExcessBlobGas_of_below {schedule : BlobSchedule} {parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas : Nat}
     (ht : GAS_PER_BLOB * schedule.target ≤ parentExcessBlobGas + parentBlobGasUsed)
     (h : BelowReserve schedule parentExcessBlobGas parentBaseFeePerGas) :
@@ -305,7 +299,7 @@ theorem calcExcessBlobGas_of_below {schedule : BlobSchedule} {parentExcessBlobGa
   unfold BelowReserve at h
   simp only [calcExcessBlobGas, Nat.not_lt.mpr ht, h, ↓reduceIte]
 
-/-- Below the reserve price, once the parent's excess plus its blob gas reaches the target, the excess does not fall. -/
+/-- Below the reserve price and at the target or above, the excess does not fall. -/
 theorem le_calcExcessBlobGas_of_below {schedule : BlobSchedule}
     {parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas : Nat}
     (ht : GAS_PER_BLOB * schedule.target ≤ parentExcessBlobGas + parentBlobGasUsed)
@@ -314,7 +308,7 @@ theorem le_calcExcessBlobGas_of_below {schedule : BlobSchedule}
   rw [calcExcessBlobGas_of_below ht h]
   exact Nat.le_add_right _ _
 
-/-- A parent with at most `GAS_PER_BLOB * max` blob gas raises the excess by at most `GAS_PER_BLOB * (max - target)`, as before EIP-7918. -/
+/-- A parent within its maximum raises the excess by at most `GAS_PER_BLOB * (max - target)`, as before Osaka. -/
 theorem calcExcessBlobGas_le (schedule : BlobSchedule) (parentExcessBlobGas parentBaseFeePerGas : Nat)
     {parentBlobGasUsed : Nat} (h : parentBlobGasUsed ≤ GAS_PER_BLOB * schedule.max) :
     calcExcessBlobGas schedule parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas
@@ -340,7 +334,7 @@ end Osaka
 
 Each answer is worked by hand from the formulas of EIP-4844 and EIP-7918.
 
-For `fake_exponential`, each comment lists the accumulators, which the loop adds up before the last division. -/
+For `fake_exponential`, each comment lists the accumulators that the loop adds up. -/
 
 /-- `fake_exponential(1, 0, d)` is 1: accumulators `d`, then 0, so `d // d = 1`. -/
 example : fakeExponential 1 0 5007716 = 1 := by decide +kernel
@@ -366,14 +360,16 @@ namespace TestVector
 
 /-- The schedule of Cancun: target 3, max 6, update fraction 3338477.
 
-[EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#parameters), Parameters, gives the update fraction, and the target and the maximum in blob gas: `TARGET_BLOB_GAS_PER_BLOCK = 393216` and `MAX_BLOB_GAS_PER_BLOCK = 786432` are 3 and 6 blobs. -/
+[EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#parameters), Parameters.
+
+Its `TARGET_BLOB_GAS_PER_BLOCK = 393216` and `MAX_BLOB_GAS_PER_BLOCK = 786432` are 3 and 6 blobs. -/
 def cancun : BlobSchedule := { target := 3, max := 6, baseFeeUpdateFraction := 3338477 }
 
 /-- The schedule of Osaka: target 6, max 9, update fraction 5007716.
 
 [EIP-7691](https://eips.ethereum.org/EIPS/eip-7691#parameters), Parameters, sets them for Prague.
 
-[`forks/osaka/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/osaka/vm/gas.py#L96-L101) of execution-specs at `2c0c8e7` keeps them for Osaka. -/
+Osaka keeps them, in [`forks/osaka/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/osaka/vm/gas.py#L96-L101) at `2c0c8e7`. -/
 def osaka : BlobSchedule := { target := 6, max := 9, baseFeeUpdateFraction := 5007716 }
 
 end TestVector
@@ -417,16 +413,16 @@ example : Osaka.calcExcessBlobGas osaka 0 786432 17 = 262144 := by decide +kerne
 The excess grows by 917504 * 3 // 9 = 2752512 // 9 = 305834, rounded down from 305834.67. -/
 example : Osaka.calcExcessBlobGas osaka 0 917504 17 = 305834 := by decide +kernel
 
-/-- The parent at its target with a base fee of 16: 2^13 * 16 = 131072 is not above 131072, so the target is subtracted. -/
+/-- At a base fee of 16, 2^13 * 16 = 131072 is not above 131072, so the target is subtracted. -/
 example : Osaka.calcExcessBlobGas osaka 0 786432 16 = 0 := by decide +kernel
 
-/-- A parent with 5 blobs and no excess, below the target, gives 0 even far below the reserve price, at a base fee of 10^9. -/
+/-- A parent with 5 blobs and no excess is below the target, so 0, even at a base fee of 10^9. -/
 example : Osaka.calcExcessBlobGas osaka 0 655360 1000000000 = 0 := by decide +kernel
 
-/-- An empty parent with an excess of 500000, below the target of 786432: the excess falls to 0, even far below the reserve price. -/
+/-- An empty parent with an excess of 500000 is below the target of 786432, so 0, even at a base fee of 10^9. -/
 example : Osaka.calcExcessBlobGas osaka 500000 0 1000000000 = 0 := by decide +kernel
 
-/-- An excess of 5007716 makes the blob base fee 2, so the reserve price binds only for a base fee above 2^17 * 2 / 2^13 = 32.
+/-- An excess of 5007716 makes the blob base fee 2, so the reserve binds above a base fee of 2^17 * 2 / 2^13 = 32.
 
 With 33, the excess grows by 262144 for a parent at its target. -/
 example : Osaka.calcExcessBlobGas osaka 5007716 786432 33 = 5269860 := by decide +kernel
