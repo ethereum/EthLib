@@ -18,9 +18,9 @@ The fee moves by one eighth of the scaled distance `base_fee * |used - target| /
 ```text
     target = parent_gas_limit // 2
 
-    used = target:   base_fee
-    used > target:   base_fee + max(base_fee * (used - target) // target // 8, 1)
-    used < target:   base_fee - base_fee * (target - used) // target // 8
+    used = target:  base_fee
+    used > target:  base_fee + max(base_fee * (used - target) // target // 8, 1)
+    used < target:  base_fee - base_fee * (target - used) // target // 8
 ```
 
 So a fall is at most `base_fee // 8`.
@@ -54,7 +54,7 @@ namespace EthLib.Fees.BaseFee
 
 /-- `ELASTICITY_MULTIPLIER`: the gas limit of a block over its gas target.
 
-EIP-1559, Specification.
+[EIP-1559](https://eips.ethereum.org/EIPS/eip-1559#specification), Specification.
 
 The target is the gas limit over this, rounded down.
 
@@ -63,14 +63,14 @@ def ELASTICITY_MULTIPLIER : Nat := 2
 
 /-- `BASE_FEE_MAX_CHANGE_DENOMINATOR`: the base fee moves by one eighth of the scaled distance.
 
-EIP-1559, Specification.
+[EIP-1559](https://eips.ethereum.org/EIPS/eip-1559#specification), Specification.
 
 For a parent between empty and twice its target, a change is then at most the larger of one eighth of the fee and 1. -/
 def BASE_FEE_MAX_CHANGE_DENOMINATOR : Nat := 8
 
 /-- `calculate_base_fee_per_gas`: the base fee per gas of a block, from its parent's gas limit, gas used and base fee.
 
-EIP-1559, Specification, the base fee check in `validate_block`.
+[EIP-1559](https://eips.ethereum.org/EIPS/eip-1559#specification), Specification, the base fee check in `validate_block`.
 
 The `max` with 1 raises the fee by at least 1 above the target, even when one eighth of the scaled distance rounds down to 0.
 

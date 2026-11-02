@@ -18,6 +18,7 @@ The scaled distance is `base_fee * |used - target| / target`, and the fee moves 
   Up to the gas limit, the fee then rises by at most `max ((base_fee + base_fee / target) / 8) 1`.
 - For a positive target, an empty parent, a parent at twice its target and a full parent with an odd gas limit reach these three upper bounds.
 - With the same gas limit and base fee, a parent that used more gas never gives a lower fee.
+- With the same gas limit and gas used, a parent with a higher base fee never gives a lower fee.
 - A positive fee stays positive.
 
 The known answers at the end are worked by hand, and each says what it pins.
@@ -217,6 +218,45 @@ theorem calculateBaseFeePerGas_mono (parentGasLimit : Nat) {parentGasUsed parent
     · -- The second is at the target.
       rw [calculateBaseFeePerGas_of_eq _ heq']
       exact calculateBaseFeePerGas_le_self _ (by omega)
+
+/-- With the same gas limit and gas used, a parent with a higher base fee never gives a lower base fee.
+
+Below the target, each extra unit of the parent's fee adds at most 1 to the scaled distance, so at most 1 to the fall. -/
+theorem calculateBaseFeePerGas_mono_baseFee (parentGasLimit parentGasUsed : Nat)
+    {parentBaseFeePerGas parentBaseFeePerGas' : Nat} (h : parentBaseFeePerGas ≤ parentBaseFeePerGas') :
+    calculateBaseFeePerGas parentGasLimit parentGasUsed parentBaseFeePerGas
+      ≤ calculateBaseFeePerGas parentGasLimit parentGasUsed parentBaseFeePerGas' := by
+  rcases Nat.lt_or_ge parentGasUsed (parentGasLimit / ELASTICITY_MULTIPLIER) with hlt | hge
+  · rw [calculateBaseFeePerGas_of_lt _ hlt, calculateBaseFeePerGas_of_lt _ hlt]
+    have hpos : 0 < parentGasLimit / ELASTICITY_MULTIPLIER := by omega
+    generalize parentGasLimit / ELASTICITY_MULTIPLIER = target at hlt hpos ⊢
+    have hdist : target - parentGasUsed ≤ target := Nat.sub_le _ _
+    -- The scaled distance of the higher fee exceeds the other by at most the difference of the fees.
+    have hstep : parentBaseFeePerGas' * (target - parentGasUsed) / target
+        ≤ parentBaseFeePerGas * (target - parentGasUsed) / target + (parentBaseFeePerGas' - parentBaseFeePerGas) := by
+      calc parentBaseFeePerGas' * (target - parentGasUsed) / target
+          = (parentBaseFeePerGas * (target - parentGasUsed)
+              + (parentBaseFeePerGas' - parentBaseFeePerGas) * (target - parentGasUsed)) / target := by
+            rw [← Nat.add_mul, Nat.add_sub_cancel' h]
+        _ ≤ (parentBaseFeePerGas * (target - parentGasUsed)
+              + (parentBaseFeePerGas' - parentBaseFeePerGas) * target) / target :=
+            Nat.div_le_div_right (Nat.add_le_add_left (Nat.mul_le_mul_left _ hdist) _)
+        _ = parentBaseFeePerGas * (target - parentGasUsed) / target + (parentBaseFeePerGas' - parentBaseFeePerGas) :=
+            Nat.add_mul_div_right _ _ hpos
+    -- Each scaled distance is at most its fee.
+    have hle := mul_div_le_of_le (fee := parentBaseFeePerGas) hdist
+    have hle' := mul_div_le_of_le (fee := parentBaseFeePerGas') hdist
+    generalize parentBaseFeePerGas * (target - parentGasUsed) / target = scaled at hstep hle ⊢
+    generalize parentBaseFeePerGas' * (target - parentGasUsed) / target = scaled' at hstep hle' ⊢
+    unfold BASE_FEE_MAX_CHANGE_DENOMINATOR
+    omega
+  · rcases Nat.lt_or_eq_of_le hge with hgt | heq
+    · -- Above the target, the higher fee gives the larger rise.
+      rw [calculateBaseFeePerGas_of_gt _ hgt, calculateBaseFeePerGas_of_gt _ hgt]
+      exact Nat.add_le_add h (max_one_le_max_one
+        (Nat.div_le_div_right (Nat.div_le_div_right (Nat.mul_le_mul_right _ h))))
+    · rw [calculateBaseFeePerGas_of_eq _ heq.symm, calculateBaseFeePerGas_of_eq _ heq.symm]
+      exact h
 
 /-- A positive base fee stays positive. -/
 theorem calculateBaseFeePerGas_pos (parentGasLimit parentGasUsed : Nat) {parentBaseFeePerGas : Nat}
