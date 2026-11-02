@@ -29,7 +29,7 @@ append_result() {
   local exit_code="$6"
   local measured="${7:-1}"
 
-  python3 - "$results_file" "$label" "$real_time" "$user_time" "$sys_time" "$exit_code" \
+  uv run --no-project --python 3.12 python - "$results_file" "$label" "$real_time" "$user_time" "$sys_time" "$exit_code" \
     "$measured" <<'PY'
 import json
 import pathlib
@@ -123,7 +123,7 @@ render_report() {
 
   local results_file="$1"
 
-  python3 - "$results_file" <<'PY'
+  uv run --no-project --python 3.12 python - "$results_file" <<'PY'
 import html
 import json
 import os
@@ -143,7 +143,7 @@ source_repo = os.environ.get("GITHUB_REPOSITORY")
 display = {
     "library_build": ("Specification build", "lake build --wfail EthLib"),
     "exports_build": ("Exports build", "lake build --wfail Exports"),
-    "bindings_build": ("Bindings build", "pip install -e '.[test]'"),
+    "bindings_build": ("Bindings build", "uv sync --frozen --extra test"),
     "test_path": ("Vector suites", "pytest"),
     "proofs_build": ("Proofs build", "lake build --wfail"),
     "declarations": ("Declaration check", "lake exe check-decls"),

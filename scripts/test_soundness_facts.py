@@ -2,7 +2,7 @@
 Check `soundness_facts.py` itself, on a small repository built in a temporary
 directory.
 
-    python3 -m unittest scripts/test_soundness_facts.py
+    uv run --no-project --python 3.12 python -m unittest scripts/test_soundness_facts.py
 
 Only the standard library is used, like the script.
 """
@@ -140,7 +140,7 @@ class SoundnessFacts(unittest.TestCase):
     def test_removed_call_fails(self):
         c = self.root / "bindings" / "python" / "foo.c"
         c.write_text(C_SOURCE.replace("  eth_foo_op_two(0);\n", ""))
-        self.assertIn("generated blocks are out of date: run python3 scripts/soundness_facts.py", self.check())
+        self.assertIn("generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py", self.check())
 
     def test_reformatted_export_keeps_its_count(self):
         lean = self.root / "EthLib" / "Exports" / "Foo.lean"
@@ -149,7 +149,7 @@ class SoundnessFacts(unittest.TestCase):
 
     def test_changed_mathlib_commit_fails(self):
         self.write_manifest("0000000000000000000000000000000000000000")
-        self.assertIn("generated blocks are out of date: run python3 scripts/soundness_facts.py", self.check())
+        self.assertIn("generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py", self.check())
 
     def test_direct_requirements_are_named_and_inherited_ones_are_not(self):
         (self.root / "lake-manifest.json").write_text(json.dumps({"packages": [
@@ -166,7 +166,7 @@ class SoundnessFacts(unittest.TestCase):
 
     def test_changed_baseline_fails(self):
         (self.root / "scripts" / "check_decls_baseline.txt").write_text("partial Foo.spin\n")
-        self.assertIn("generated blocks are out of date: run python3 scripts/soundness_facts.py", self.check())
+        self.assertIn("generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py", self.check())
 
     def test_version_bump_fails(self):
         (self.root / "pyproject.toml").write_text('[project]\nname = "foo"\nversion = "1.1.0"\n')

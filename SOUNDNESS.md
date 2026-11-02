@@ -240,7 +240,7 @@ The vectors can test it end to end, but only through a comparison.
 The Python suite regenerates every vector through the bindings and writes it over the committed one.
 For most operations it does not compare the result with an expected answer, so a passing run proves nothing on its own.
 The check is that the regenerated files are identical to the committed ones, which match consensus-specs `v1.7.0-alpha.12`.
-`python3 tests/cryptography/check_vectors.py` makes that comparison against the pinned digests.
+`uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py` makes that comparison against the pinned digests.
 
 CI runs that check on the committed vectors on every change, but it does not regenerate them, which takes hours.
 So for B1 and B4 the regeneration is a local step, and only the check after it shows that the bindings still produce the committed answers.

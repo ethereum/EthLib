@@ -12,9 +12,9 @@ With `--upstream`, also check that the pinned digests are the ones
 consensus-specs published, in the general test archive of its last
 release before the KZG specification moved here (consensus-specs#5398).
 
-    python3 tests/cryptography/check_vectors.py
-    python3 tests/cryptography/check_vectors.py --upstream
-    python3 tests/cryptography/check_vectors.py --upstream --archive general.tar.gz
+    uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py
+    uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py --upstream
+    uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py --upstream --archive general.tar.gz
 
 Only the standard library is used, so the check needs no Lean and no
 install step.

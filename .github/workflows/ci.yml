@@ -36,6 +36,12 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.13.6"
+          enable-cache: false
+
       - name: initialize timing paths
         run: |
           echo "BUILD_TIMING_RESULTS=$RUNNER_TEMP/ethlib-build-timing/results.jsonl" >> "$GITHUB_ENV"
@@ -74,19 +80,16 @@ jobs:
       - name: library
         run: bash scripts/build_timing_report.sh run library_build "$BUILD_TIMING_RESULTS" -- lake build --wfail EthLib
 
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version-file: pyproject.toml
 
-      # pip suppresses successful backend output, so time Lean exports before it runs.
+      # Time Lean exports separately from the Python package build.
       - name: exports
         run: bash scripts/build_timing_report.sh run exports_build "$BUILD_TIMING_RESULTS" -- lake build --wfail Exports
 
       - name: bindings
-        run: bash scripts/build_timing_report.sh run bindings_build "$BUILD_TIMING_RESULTS" -- pip install -e '.[test]'
+        run: bash scripts/build_timing_report.sh run bindings_build "$BUILD_TIMING_RESULTS" -- uv sync --frozen --extra test
 
       - name: vector suites
-        run: bash scripts/build_timing_report.sh run test_path "$BUILD_TIMING_RESULTS" -- pytest
+        run: bash scripts/build_timing_report.sh run test_path "$BUILD_TIMING_RESULTS" -- uv run --no-sync pytest
 
       # The generators rewrite every case, so a changed vector shows up as a diff.
       - name: unchanged vectors
@@ -115,18 +118,18 @@ jobs:
 
       - name: timing report fixtures
         if: ${{ !cancelled() }}
-        run: python3 -m unittest discover -s scripts -p 'test_build_timing.py'
+        run: uv run --no-project --python 3.12 python -m unittest discover -s scripts -p 'test_build_timing.py'
 
       - name: build pipeline regressions
         if: ${{ !cancelled() }}
-        run: python3 -m unittest discover -s scripts -p 'test_build_pipeline.py'
+        run: uv run --no-sync python -m unittest discover -s scripts -p 'test_build_pipeline.py'
 
       # A failed run still publishes its logs and the status of each measured command.
       - name: build timing report
         if: ${{ always() }}
         run: |
           mkdir -p "$BUILD_TIMING_LOG_DIR"
-          python3 scripts/module_times.py update .lake/build/ethlib-module-times.json \
+          uv run --no-project --python 3.12 python scripts/module_times.py update .lake/build/ethlib-module-times.json \
             --commit "$GITHUB_SHA" \
             "$BUILD_TIMING_LOG_DIR/library_build.log" \
             "$BUILD_TIMING_LOG_DIR/exports_build.log" \
@@ -165,13 +168,20 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.13.6"
+          enable-cache: false
+
+
       # Every pinned vector must match its recorded digest.
       # Only the standard library is used, so the runner's Python is enough.
-      - run: python3 tests/cryptography/check_vectors.py
+      - run: uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py
 
       # The check must fail on a missing manifest and on a changed, unlisted
       # or deleted case.
-      - run: python3 -m unittest tests/cryptography/test_check_vectors.py
+      - run: uv run --no-project --python 3.12 python -m unittest tests/cryptography/test_check_vectors.py
 
   soundness:
     runs-on: ubuntu-latest
@@ -180,11 +190,18 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.13.6"
+          enable-cache: false
+
+
       # SOUNDNESS.md must name the package version in pyproject.toml, and its
-      # generated facts must match the repository. Only the standard library
-      # is used, so the runner's Python is enough.
-      - run: python3 scripts/soundness_facts.py --check
+      # generated facts must match the repository. These checks use only the
+      # standard library, without installing the native bindings.
+      - run: uv run --no-project --python 3.12 python scripts/soundness_facts.py --check
 
       # The generator must count exports however they are written, count
       # calls rather than declarations, and fail on each kind of drift.
-      - run: python3 -m unittest scripts/test_soundness_facts.py
+      - run: uv run --no-project --python 3.12 python -m unittest scripts/test_soundness_facts.py

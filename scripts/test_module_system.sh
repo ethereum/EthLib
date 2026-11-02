@@ -16,7 +16,7 @@ cleanup() {
 trap cleanup EXIT
 
 # Include unimported source files, which the root modules would not otherwise check.
-python3 - <<'PY'
+uv run --no-project --python 3.12 python - <<'PY'
 from pathlib import Path
 import re
 from scripts.soundness_facts import strip_lean

@@ -212,7 +212,8 @@ When you change the check, also run `scripts/test_check_decls.sh`.
 Then check that `SOUNDNESS.md` still holds:
 
 ```bash
-python3 scripts/soundness_facts.py --check
+uv run --no-project --python 3.12 python scripts/soundness_facts.py --check
+uv run --no-project --python 3.12 python -m unittest scripts/test_soundness_facts.py
 ```
 
 It fails when a fact it generates, such as the theorems that still use `native_decide`, no longer matches the repository.
@@ -221,19 +222,20 @@ Run it without `--check` to regenerate them.
 It also fails when `pyproject.toml` declares a package version other than the one `SOUNDNESS.md` describes.
 Then review the whole document for the new version, and update its version line by hand.
 
-It needs Python 3.10 or later, and only the standard library.
+These commands use uv and Python 3.12, with only the standard library.
+See [prerequisites](README.md#prerequisites) for setup.
 
 When you touch bindings or test vectors, also run the Python suite:
 
 ```bash
-pip install -e '.[test]'
-pytest
+uv sync --frozen --extra test
+uv run --no-sync pytest
 ```
 
 The suite rewrites the vectors, so then check that the pinned ones are unchanged:
 
 ```bash
-python3 tests/cryptography/check_vectors.py
+uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py
 ```
 
 Report what you ran and what it printed.

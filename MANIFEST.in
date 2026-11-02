@@ -5,6 +5,8 @@
 include lakefile.lean
 include lake-manifest.json
 include lean-toolchain
+include uv.lock
+include .python-version
 include bindings/python/wrappers.h
 
 recursive-include EthLib *.lean

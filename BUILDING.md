@@ -72,7 +72,7 @@ Native objects are platform-specific.
 The build therefore does not claim the platform independence that CompPoly's library-only release archive relies on.
 
 The job summary reports the wall time and the CPU work of each build and test stage.
-The exports are measured before the bindings are installed, because pip hides the output of a build backend that succeeds.
+The exports are measured before the bindings are installed, to keep their timing separate from the uv package build.
 The `ethlib-build-timing` artifact holds the logs, the timing records, the module tables and the report.
 
 Per-module comparisons use the last samples stored with the restored build.
@@ -85,7 +85,7 @@ They also inspect a saved tar archive, restore it, and check that Lake needs no 
 Run them after installing the test dependencies:
 
 ```bash
-python3 -m unittest discover -s scripts -p 'test_build_pipeline.py'
+uv run --no-sync python -m unittest discover -s scripts -p 'test_build_pipeline.py'
 ```
 
 To time a local command:
