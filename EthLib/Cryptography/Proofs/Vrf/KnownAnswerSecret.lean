@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Vrf.Kernel
+public import EthLib.Cryptography.Proofs.Vrf.FastHash
 
 /-!
 # Proofs: VRF tree known answers for the leaf secrets
@@ -33,7 +33,7 @@ def seedSecretZero : Digest :=
 
 /-- The secret at index 0 is the one computed outside EthLib. -/
 theorem secret_zero : secret seed 0 = seedSecretZero := by
-  rw [Kernel.secret_eq]
+  rw [FastHash.secret_eq]
   decide +kernel
 
 /-- The output at index 0, computed outside EthLib. -/
@@ -43,7 +43,7 @@ def seedOutputZero : Digest :=
 
 /-- The output at index 0 is the one computed outside EthLib. -/
 theorem evaluate_zero : evaluate seed 0 = seedOutputZero := by
-  rw [evaluate, Kernel.outputHash_eq, Kernel.secret_eq]
+  rw [evaluate, FastHash.outputHash_eq, FastHash.secret_eq]
   decide +kernel
 
 /-- The secret at index `2^32 - 1`, computed outside EthLib. -/
@@ -53,7 +53,7 @@ def seedSecretLast : Digest :=
 
 /-- The secret at index `2^32 - 1` is the one computed outside EthLib. -/
 theorem secret_last : secret seed 0xFFFFFFFF = seedSecretLast := by
-  rw [Kernel.secret_eq]
+  rw [FastHash.secret_eq]
   decide +kernel
 
 /-- The output at index `2^32 - 1`, computed outside EthLib. -/
@@ -63,7 +63,7 @@ def seedOutputLast : Digest :=
 
 /-- The output at index `2^32 - 1` is the one computed outside EthLib. -/
 theorem evaluate_last : evaluate seed 0xFFFFFFFF = seedOutputLast := by
-  rw [evaluate, Kernel.outputHash_eq, Kernel.secret_eq]
+  rw [evaluate, FastHash.outputHash_eq, FastHash.secret_eq]
   decide +kernel
 
 end EthLib.Cryptography.Vrf.KnownAnswer

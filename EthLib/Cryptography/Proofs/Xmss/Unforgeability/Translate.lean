@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Address
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Codeword
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scheme
-public import EthLib.Cryptography.Proofs.Merkle.Tree
+public import EthLib.Cryptography.Proofs.Merkle.Completeness
 
 /-!
 # Proofs: EthLib's hashing is the model's

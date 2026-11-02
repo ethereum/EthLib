@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Merkle.Tree
 
 /-!
-# Proofs: `Merkle.Tree`
+# Proofs: completeness of `Merkle.Tree`
 
 Completeness: climbing from a leaf with its path reaches the root.
 

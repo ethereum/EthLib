@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Merkle.Tree
+public import EthLib.Cryptography.Proofs.Merkle.Completeness
 public import EthLib.Cryptography.Proofs.Merkle.Binding
 
 /-!

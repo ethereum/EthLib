@@ -84,56 +84,56 @@ def topStarts : Vector Digest V := #v[
 theorem topStarts_0 : ∀ i : Fin V, 0 ≤ i.val → i.val < 8 →
     (chainStarts hashId publicKey.publicParam (schemeSeed hashId seed).run .top (UInt32.ofNat (bottomTree leafIndex))).run[i] = topStarts[i] := by
   simp only [chainStarts, Id.run_bind, Id.run_pure, ofFnInOrder_run, pureHash,
-    Vector.getElem_ofFn, Kernel.hash_eq, Kernel.hash_thInput, Kernel.toList_packBytes]
+    Vector.getElem_ofFn, FastHash.hash_eq, FastHash.hash_thInput, FastHash.toList_packBytes]
   decide +kernel
 
 /-- The top key's chain starts 8 to 15, from the scheme seed. -/
 theorem topStarts_1 : ∀ i : Fin V, 8 ≤ i.val → i.val < 16 →
     (chainStarts hashId publicKey.publicParam (schemeSeed hashId seed).run .top (UInt32.ofNat (bottomTree leafIndex))).run[i] = topStarts[i] := by
   simp only [chainStarts, Id.run_bind, Id.run_pure, ofFnInOrder_run, pureHash,
-    Vector.getElem_ofFn, Kernel.hash_eq, Kernel.hash_thInput, Kernel.toList_packBytes]
+    Vector.getElem_ofFn, FastHash.hash_eq, FastHash.hash_thInput, FastHash.toList_packBytes]
   decide +kernel
 
 /-- The top key's chain starts 16 to 23, from the scheme seed. -/
 theorem topStarts_2 : ∀ i : Fin V, 16 ≤ i.val → i.val < 24 →
     (chainStarts hashId publicKey.publicParam (schemeSeed hashId seed).run .top (UInt32.ofNat (bottomTree leafIndex))).run[i] = topStarts[i] := by
   simp only [chainStarts, Id.run_bind, Id.run_pure, ofFnInOrder_run, pureHash,
-    Vector.getElem_ofFn, Kernel.hash_eq, Kernel.hash_thInput, Kernel.toList_packBytes]
+    Vector.getElem_ofFn, FastHash.hash_eq, FastHash.hash_thInput, FastHash.toList_packBytes]
   decide +kernel
 
 /-- The top key's chain starts 24 to 31, from the scheme seed. -/
 theorem topStarts_3 : ∀ i : Fin V, 24 ≤ i.val → i.val < 32 →
     (chainStarts hashId publicKey.publicParam (schemeSeed hashId seed).run .top (UInt32.ofNat (bottomTree leafIndex))).run[i] = topStarts[i] := by
   simp only [chainStarts, Id.run_bind, Id.run_pure, ofFnInOrder_run, pureHash,
-    Vector.getElem_ofFn, Kernel.hash_eq, Kernel.hash_thInput, Kernel.toList_packBytes]
+    Vector.getElem_ofFn, FastHash.hash_eq, FastHash.hash_thInput, FastHash.toList_packBytes]
   decide +kernel
 
 /-- The top key's chain starts 32 to 39, from the scheme seed. -/
 theorem topStarts_4 : ∀ i : Fin V, 32 ≤ i.val → i.val < 40 →
     (chainStarts hashId publicKey.publicParam (schemeSeed hashId seed).run .top (UInt32.ofNat (bottomTree leafIndex))).run[i] = topStarts[i] := by
   simp only [chainStarts, Id.run_bind, Id.run_pure, ofFnInOrder_run, pureHash,
-    Vector.getElem_ofFn, Kernel.hash_eq, Kernel.hash_thInput, Kernel.toList_packBytes]
+    Vector.getElem_ofFn, FastHash.hash_eq, FastHash.hash_thInput, FastHash.toList_packBytes]
   decide +kernel
 
 /-- The top key's chain starts 40 to 47, from the scheme seed. -/
 theorem topStarts_5 : ∀ i : Fin V, 40 ≤ i.val → i.val < 48 →
     (chainStarts hashId publicKey.publicParam (schemeSeed hashId seed).run .top (UInt32.ofNat (bottomTree leafIndex))).run[i] = topStarts[i] := by
   simp only [chainStarts, Id.run_bind, Id.run_pure, ofFnInOrder_run, pureHash,
-    Vector.getElem_ofFn, Kernel.hash_eq, Kernel.hash_thInput, Kernel.toList_packBytes]
+    Vector.getElem_ofFn, FastHash.hash_eq, FastHash.hash_thInput, FastHash.toList_packBytes]
   decide +kernel
 
 /-- The top key's chain starts 48 to 55, from the scheme seed. -/
 theorem topStarts_6 : ∀ i : Fin V, 48 ≤ i.val → i.val < 56 →
     (chainStarts hashId publicKey.publicParam (schemeSeed hashId seed).run .top (UInt32.ofNat (bottomTree leafIndex))).run[i] = topStarts[i] := by
   simp only [chainStarts, Id.run_bind, Id.run_pure, ofFnInOrder_run, pureHash,
-    Vector.getElem_ofFn, Kernel.hash_eq, Kernel.hash_thInput, Kernel.toList_packBytes]
+    Vector.getElem_ofFn, FastHash.hash_eq, FastHash.hash_thInput, FastHash.toList_packBytes]
   decide +kernel
 
 /-- The top key's chain starts 56 to 57, from the scheme seed. -/
 theorem topStarts_7 : ∀ i : Fin V, 56 ≤ i.val → i.val < 58 →
     (chainStarts hashId publicKey.publicParam (schemeSeed hashId seed).run .top (UInt32.ofNat (bottomTree leafIndex))).run[i] = topStarts[i] := by
   simp only [chainStarts, Id.run_bind, Id.run_pure, ofFnInOrder_run, pureHash,
-    Vector.getElem_ofFn, Kernel.hash_eq, Kernel.hash_thInput, Kernel.toList_packBytes]
+    Vector.getElem_ofFn, FastHash.hash_eq, FastHash.hash_thInput, FastHash.toList_packBytes]
   decide +kernel
 
 /-- The top key's chain starts: 29 hashes of the scheme seed. -/
@@ -165,56 +165,56 @@ theorem topStarts_known_answer :
 theorem topKeyChains_0 : ∀ i : Fin V, 0 ≤ i.val → i.val < 8 →
     (chain hashId publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) i 0 (CHAIN_LENGTH - 1) (by decide)
       topStarts[i]).run = topEnds[i] := by
-  simp only [Kernel.chain_eq]
+  simp only [FastHash.chain_eq]
   decide +kernel
 
 /-- The top key's chains 8 to 15, walked from the seed to their ends. -/
 theorem topKeyChains_1 : ∀ i : Fin V, 8 ≤ i.val → i.val < 16 →
     (chain hashId publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) i 0 (CHAIN_LENGTH - 1) (by decide)
       topStarts[i]).run = topEnds[i] := by
-  simp only [Kernel.chain_eq]
+  simp only [FastHash.chain_eq]
   decide +kernel
 
 /-- The top key's chains 16 to 23, walked from the seed to their ends. -/
 theorem topKeyChains_2 : ∀ i : Fin V, 16 ≤ i.val → i.val < 24 →
     (chain hashId publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) i 0 (CHAIN_LENGTH - 1) (by decide)
       topStarts[i]).run = topEnds[i] := by
-  simp only [Kernel.chain_eq]
+  simp only [FastHash.chain_eq]
   decide +kernel
 
 /-- The top key's chains 24 to 31, walked from the seed to their ends. -/
 theorem topKeyChains_3 : ∀ i : Fin V, 24 ≤ i.val → i.val < 32 →
     (chain hashId publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) i 0 (CHAIN_LENGTH - 1) (by decide)
       topStarts[i]).run = topEnds[i] := by
-  simp only [Kernel.chain_eq]
+  simp only [FastHash.chain_eq]
   decide +kernel
 
 /-- The top key's chains 32 to 39, walked from the seed to their ends. -/
 theorem topKeyChains_4 : ∀ i : Fin V, 32 ≤ i.val → i.val < 40 →
     (chain hashId publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) i 0 (CHAIN_LENGTH - 1) (by decide)
       topStarts[i]).run = topEnds[i] := by
-  simp only [Kernel.chain_eq]
+  simp only [FastHash.chain_eq]
   decide +kernel
 
 /-- The top key's chains 40 to 47, walked from the seed to their ends. -/
 theorem topKeyChains_5 : ∀ i : Fin V, 40 ≤ i.val → i.val < 48 →
     (chain hashId publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) i 0 (CHAIN_LENGTH - 1) (by decide)
       topStarts[i]).run = topEnds[i] := by
-  simp only [Kernel.chain_eq]
+  simp only [FastHash.chain_eq]
   decide +kernel
 
 /-- The top key's chains 48 to 55, walked from the seed to their ends. -/
 theorem topKeyChains_6 : ∀ i : Fin V, 48 ≤ i.val → i.val < 56 →
     (chain hashId publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) i 0 (CHAIN_LENGTH - 1) (by decide)
       topStarts[i]).run = topEnds[i] := by
-  simp only [Kernel.chain_eq]
+  simp only [FastHash.chain_eq]
   decide +kernel
 
 /-- The top key's chains 56 to 57, walked from the seed to their ends. -/
 theorem topKeyChains_7 : ∀ i : Fin V, 56 ≤ i.val → i.val < 58 →
     (chain hashId publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) i 0 (CHAIN_LENGTH - 1) (by decide)
       topStarts[i]).run = topEnds[i] := by
-  simp only [Kernel.chain_eq]
+  simp only [FastHash.chain_eq]
   decide +kernel
 
 /-- The top key's leaf, from the seed, is the leaf its signature recovers. -/

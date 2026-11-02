@@ -11,7 +11,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Verify
 public import EthLib.Cryptography.Proofs.Xmss.Serialization
 public import EthLib.Cryptography.Proofs.Xmss.Sign
 public import EthLib.Cryptography.Proofs.Xmss.Correctness
-public import EthLib.Cryptography.Proofs.Xmss.Kernel
+public import EthLib.Cryptography.Proofs.Xmss.FastHash
 public import EthLib.Cryptography.Proofs.Xmss.KnownAnswer
 public import EthLib.Cryptography.Proofs.Xmss.KnownAnswerBottom
 public import EthLib.Cryptography.Proofs.Xmss.KnownAnswerTop

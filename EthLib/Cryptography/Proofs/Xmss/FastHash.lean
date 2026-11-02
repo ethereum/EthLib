@@ -26,7 +26,7 @@ A known answer rewrites its statement with these equalities, then lets the kerne
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Xmss.Kernel
+namespace EthLib.Cryptography.Xmss.FastHash
 
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
@@ -120,4 +120,4 @@ theorem fold_eq (pp : PublicParam) (layer : Layer) (e : Nat) (leaf : Digest)
       = (Merkle.climb (nodeHash pp layer) 0 e leaf pi.toList).run := by
   rw [fold, nodeHash_eq]
 
-end EthLib.Cryptography.Xmss.Kernel
+end EthLib.Cryptography.Xmss.FastHash

@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Merkle.Tree
+public import EthLib.Cryptography.Proofs.Merkle.Completeness
 public import EthLib.Serialization.Ssz.Merkle.Merkleize
 
 /-! Laws of the abstract tree roots: padding depth, congruence, and roots past the data. -/

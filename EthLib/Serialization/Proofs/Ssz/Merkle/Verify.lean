@@ -3,7 +3,7 @@ module
 public import EthLib.Serialization.Ssz.Merkle.Verify
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Gindex
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
-public import EthLib.Cryptography.Proofs.Merkle.Tree
+public import EthLib.Cryptography.Proofs.Merkle.Completeness
 
 /-! Laws of branch verification: what climbing a branch folds, and when it rebuilds a root. -/
 

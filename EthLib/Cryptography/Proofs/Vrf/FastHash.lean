@@ -17,7 +17,7 @@ So they run on a fast form of verification, proved equal to the specification.
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Vrf.Kernel
+namespace EthLib.Cryptography.Vrf.FastHash
 
 open EthLib.Cryptography.Vrf
 open EthLib.Cryptography.Vrf.Constants
@@ -85,4 +85,4 @@ theorem verify_eq (root : Digest) (i : UInt32) (o : Opening) :
     funext fun _ => funext fun _ => funext fun l => funext fun r => nodeHash_eq l r
   simp only [Vrf.verify, verify, hnode, leafHash_eq, outputHash_eq]
 
-end EthLib.Cryptography.Vrf.Kernel
+end EthLib.Cryptography.Vrf.FastHash

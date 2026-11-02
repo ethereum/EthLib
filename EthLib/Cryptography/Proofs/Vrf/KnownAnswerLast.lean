@@ -33,7 +33,7 @@ def outputLast : Digest :=
 
 /-- The opening at index `2^32 - 1` verifies, with its output. -/
 theorem verify_last : verify rootLast 0xFFFFFFFF openingLast = some outputLast := by
-  rw [Kernel.verify_eq]
+  rw [FastHash.verify_eq]
   decide +kernel
 
 /-- Over bytes, the opening at index `2^32 - 1` verifies, with its output. -/
@@ -44,17 +44,17 @@ theorem verifyBytes_last :
 
 /-- A wrong secret at index `2^32 - 1` is rejected. -/
 theorem verify_last_wrongSecret : verify rootLast 0xFFFFFFFF (wrongSecret openingLast) = none := by
-  rw [Kernel.verify_eq]
+  rw [FastHash.verify_eq]
   decide +kernel
 
 /-- A wrong sibling at index `2^32 - 1` is rejected. -/
 theorem verify_last_wrongSibling : verify rootLast 0xFFFFFFFF (wrongSibling openingLast) = none := by
-  rw [Kernel.verify_eq]
+  rw [FastHash.verify_eq]
   decide +kernel
 
 /-- The opening at index `2^32 - 1` is rejected at index `2^32 - 2`. -/
 theorem verify_last_otherIndex : verify rootLast 0xFFFFFFFE openingLast = none := by
-  rw [Kernel.verify_eq]
+  rw [FastHash.verify_eq]
   decide +kernel
 
 end EthLib.Cryptography.Vrf.KnownAnswer

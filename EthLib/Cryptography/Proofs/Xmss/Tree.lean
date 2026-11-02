@@ -103,7 +103,7 @@ theorem fold_path_top {b : Nat} (hb : b < 2 ^ LAYER_HEIGHT) :
 
 That root is node `floor(e / 2^16)` on the top level: bottom tree `b`'s, or the top tree's.
 
-Otherwise some level holds a second preimage of `Th` under the address of an ancestor of the leaf:
+Otherwise `findSecondPreimage` returns a second preimage of `Th` under the address of an ancestor of the leaf:
 
 - one input is that ancestor's two honest children;
 - the other is a different pair with the same hash.
@@ -113,15 +113,19 @@ theorem fold_binding {e : Nat} {leaf : Digest} {pi : Vector Digest LAYER_HEIGHT}
       = (node (pureHash f) pp seed layer LAYER_HEIGHT (e >>> LAYER_HEIGHT)).run) :
     (leaf = (node (pureHash f) pp seed layer 0 e).run ∧
         pi = (path (pureHash f) pp seed layer e).run) ∨
-      ∃ k < LAYER_HEIGHT,
-        Merkle.SecondPreimage (nodeHash (pureHash f) pp layer) (leaves (pureHash f) pp seed layer) k
-          (e / 2 ^ (k + 1)) := by
+      ∃ w, Merkle.findSecondPreimage (nodeHash (pureHash f) pp layer)
+          (leaves (pureHash f) pp seed layer) 0 e leaf pi.toList = some w ∧
+        w.Valid (nodeHash (pureHash f) pp layer) (leaves (pureHash f) pp seed layer) ∧
+        w.level < LAYER_HEIGHT := by
   rw [Nat.shiftRight_eq_div_pow] at heq
   rcases Merkle.climb_binding_node (nodeHash (pureHash f) pp layer)
       (leaves (pureHash f) pp seed layer)
-      LAYER_HEIGHT 0 e leaf pi.toList (by simp) heq with ⟨hleaf, hpi⟩ | ⟨k, hk, hsp⟩
+      LAYER_HEIGHT 0 e leaf pi.toList (by simp) heq with ⟨hleaf, hpi⟩ | hfound
   · -- The siblings are the honest path, as lists and so as vectors.
     exact .inl ⟨hleaf, Vector.toList_inj.mp hpi⟩
-  · exact .inr ⟨k, hk, by simpa using hsp⟩
+  · -- The search returns a valid second preimage, on one of the 16 levels.
+    obtain ⟨w, hw⟩ := Option.isSome_iff_exists.mp hfound
+    obtain ⟨hvalid, k, hk, hlevel, -⟩ := Merkle.findSecondPreimage_valid _ _ _ _ _ _ w hw
+    exact .inr ⟨w, hw, hvalid, by simpa [hlevel] using hk⟩
 
 end EthLib.Cryptography.Xmss

@@ -23,6 +23,14 @@ The node hash receives the position of the node it computes.
 - A tree that tweaks every hash by its position reads it, as hash-based signatures do.
 - A tree that hashes every node alike ignores it.
 
+The tree never hashes on its own.
+
+Each primitive passes its node hash, and with it its own domain separation:
+
+- leanXMSS hashes a node with `Th`, under its public parameter and the node's address `A_node`.
+- The VRF tree prefixes every node input with `PQ_VRF_NODE`.
+- SSZ hashes the two children with no prefix, as the SSZ specification fixes it.
+
 The path of a leaf holds the sibling of each of its ancestors, from the leaf up.
 
 Climbing from the leaf with its path recomputes the root, so a path proves its leaf.

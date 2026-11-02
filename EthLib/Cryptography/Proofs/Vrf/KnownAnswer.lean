@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Vrf.Kernel
+public import EthLib.Cryptography.Proofs.Vrf.FastHash
 public import EthLib.Cryptography.Proofs.Vrf.Serialization
 
 /-!

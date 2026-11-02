@@ -1,21 +1,26 @@
 module
 
-public import EthLib.Cryptography.Proofs.Merkle.Tree
+public import EthLib.Cryptography.Proofs.Merkle.Completeness
 
 /-!
 # Proofs: a path binds its leaf
 
-Two climbs from one position that meet are equal, or the node hash collides.
+A real node hash compresses two nodes into one, so collisions exist.
 
-The collision has a known position: an ancestor of the starting node.
+A statement "the climbs are equal, or a collision exists" would then say nothing.
+
+So each theorem here names an algorithm that computes the collision from the two climbs.
+
+That algorithm is the reduction: whoever forges a path also finds a collision, at the cost of a few hashes.
+
+- `findCollision` walks two climbs from one position up, level by level.
+- It returns the first level where they hash two different pairs to one parent.
+- `findSecondPreimage` does the same for one climb against an honest tree.
+- It returns the first level where the climb hashes another pair to the honest node.
+
+The position found is an ancestor of the starting node.
 
 So a hash tweaked by its position collides under one tweak.
-
-Against an honest tree the statement is sharper.
-
-A climb that reaches an honest node but is not the honest one gives a second preimage.
-
-That is a pair other than the honest children of some ancestor, with the same hash.
 
 The statements hold for every node hash, run in the identity monad.
 -/
@@ -26,25 +31,71 @@ namespace EthLib.Cryptography.Merkle
 
 variable {α : Type} (hash : Nat → Nat → α → α → Id α)
 
-/-- Two different pairs of children that hash to one parent at position `(level, j)`. -/
-def Collision (level j : Nat) : Prop :=
-  ∃ x y : α × α, x ≠ y ∧ (hash level j x.1 x.2).run = (hash level j y.1 y.2).run
-
-/-- A pair other than the honest children of node `(level + 1, j)` that hashes to that node. -/
-def SecondPreimage (leaves : Nat → Id α) (level j : Nat) : Prop :=
-  ∃ y : α × α,
-    y ≠ ((node hash leaves level (2 * j)).run, (node hash leaves level (2 * j + 1)).run) ∧
-      (hash (level + 1) j y.1 y.2).run = (node hash leaves (level + 1) j).run
-
 /-! ## Any two climbs -/
 
-/-- Two climbs from `(level, j)` over equally many siblings that meet are equal, or the hash collides.
+/-- Two pairs of children offered for the node at `(level, j)`. -/
+structure Collision (α : Type) where
+  /-- The level of the parent. -/
+  level : Nat
+  /-- The index of the parent on its level. -/
+  j : Nat
+  /-- The first pair, left child first. -/
+  x : α × α
+  /-- The second pair, left child first. -/
+  y : α × α
 
-The collision is at an ancestor: `k + 1` levels up, at index `j / 2^(k + 1)`. -/
-theorem climb_binding :
+/-- The two pairs differ, and hash to one parent at their position. -/
+def Collision.Valid (c : Collision α) : Prop :=
+  c.x ≠ c.y ∧ (hash c.level c.j c.x.1 c.x.2).run = (hash c.level c.j c.y.1 c.y.2).run
+
+/-- The collision two climbs from `(level, j)` run into, at the lowest level where one exists.
+
+On each level, both climbs hash their held node with their sibling, in the order the index gives.
+
+A level where the two pairs differ but the parents agree is a collision. -/
+def findCollision [DecidableEq α] : (level j : Nat) → (a b : α) → (p q : List α) → Option (Collision α)
+  | level, j, a, b, s :: p, t :: q =>
+    let x := ordered j a s
+    let y := ordered j b t
+    let parentA := (hash (level + 1) (j / 2) x.1 x.2).run
+    let parentB := (hash (level + 1) (j / 2) y.1 y.2).run
+    if x ≠ y ∧ parentA = parentB then some ⟨level + 1, j / 2, x, y⟩
+    else findCollision (level + 1) (j / 2) parentA parentB p q
+  | _, _, _, _, _, _ => none
+
+/-- Every collision `findCollision` returns is valid, at an ancestor of `(level, j)`.
+
+The ancestor is `k + 1` levels up, at index `j / 2^(k + 1)`. -/
+theorem findCollision_valid [DecidableEq α] :
+    ∀ (p q : List α) (level j : Nat) (a b : α) (c : Collision α),
+      findCollision hash level j a b p q = some c →
+      c.Valid hash ∧ ∃ k < p.length, c.level = level + k + 1 ∧ c.j = j / 2 ^ (k + 1) := by
+  intro p
+  induction p with
+  | nil => intro q level j a b c h; simp [findCollision] at h
+  | cons s rest ih =>
+    intro q level j a b c h
+    cases q with
+    | nil => simp [findCollision] at h
+    | cons t rest' =>
+      simp only [findCollision] at h
+      split at h
+      · -- This level is the collision.
+        rename_i hfound
+        cases h
+        exact ⟨hfound, 0, by simp, rfl, by simp⟩
+      · -- The collision is further up: one level higher in the count.
+        obtain ⟨hvalid, k, hk, hlevel, hj⟩ := ih rest' (level + 1) (j / 2) _ _ c h
+        refine ⟨hvalid, k + 1, by simpa using hk, by omega, ?_⟩
+        rw [hj, div_two_div_pow]
+
+/-- Binding: two climbs from `(level, j)` over equally many siblings that meet are equal.
+
+Otherwise `findCollision` finds a collision of the node hash, valid by `findCollision_valid`. -/
+theorem climb_binding [DecidableEq α] :
     ∀ (p q : List α) (level j : Nat) (a b : α), p.length = q.length →
       (climb hash level j a p).run = (climb hash level j b q).run →
-      (a = b ∧ p = q) ∨ ∃ k < p.length, Collision hash (level + k + 1) (j / 2 ^ (k + 1)) := by
+      (a = b ∧ p = q) ∨ (findCollision hash level j a b p q).isSome := by
   intro p
   induction p with
   | nil =>
@@ -58,28 +109,85 @@ theorem climb_binding :
     | nil => simp at hl
     | cons t rest' =>
       rw [climb_cons, climb_cons] at heq
+      simp only [findCollision]
+      -- When this level is a collision, the search stops here.
+      by_cases hfound : ordered j a s ≠ ordered j b t ∧
+          (hash (level + 1) (j / 2) (ordered j a s).1 (ordered j a s).2).run
+            = (hash (level + 1) (j / 2) (ordered j b t).1 (ordered j b t).2).run
+      · exact .inr (by simp [hfound])
+      simp only [hfound, ↓reduceIte]
       rcases ih rest' (level + 1) (j / 2) _ _ (by simpa using hl) heq with
-        ⟨hparent, hrest⟩ | ⟨k, hk, hcol⟩
-      · by_cases hpair : ordered j a s = ordered j b t
-        · -- Equal pairs: the held nodes and the first siblings agree.
-          obtain ⟨rfl, rfl⟩ := ordered_inj.mp hpair
-          exact .inl ⟨rfl, by rw [hrest]⟩
-        · -- Different pairs with one parent: a collision one level up.
-          exact .inr ⟨0, by simp, _, _, hpair, by simpa using hparent⟩
-      · -- A collision further up stays a collision, one level higher in the count.
-        refine .inr ⟨k + 1, by simpa using hk, ?_⟩
-        rwa [div_two_div_pow, show level + 1 + k + 1 = level + (k + 1) + 1 by omega] at hcol
+        ⟨hparent, hrest⟩ | hsome
+      · -- Equal parents and no collision here: the pairs are equal, so the climbs are.
+        have hpair : ordered j a s = ordered j b t :=
+          Classical.byContradiction fun hne => hfound ⟨hne, hparent⟩
+        obtain ⟨rfl, rfl⟩ := ordered_inj.mp hpair
+        exact .inl ⟨rfl, by rw [hrest]⟩
+      · exact .inr hsome
 
 /-! ## Against an honest tree -/
 
-/-- A climb from `(level, j)` over `n` siblings that reaches the honest ancestor is honest, or gives a second preimage.
+/-- A pair offered for honest node `(level + 1, j)` in place of its children. -/
+structure SecondPreimage (α : Type) where
+  /-- The level of the children. -/
+  level : Nat
+  /-- The index of the parent on level `level + 1`. -/
+  j : Nat
+  /-- The pair, left child first. -/
+  y : α × α
 
-The second preimage is of the ancestor `k + 1` levels up, at index `j / 2^(k + 1)`. -/
-theorem climb_binding_node (leaves : Nat → Id α) :
+/-- The pair is not the honest children, and hashes to the honest node. -/
+def SecondPreimage.Valid (leaves : Nat → Id α) (w : SecondPreimage α) : Prop :=
+  w.y ≠ ((node hash leaves w.level (2 * w.j)).run, (node hash leaves w.level (2 * w.j + 1)).run) ∧
+    (hash (w.level + 1) w.j w.y.1 w.y.2).run = (node hash leaves (w.level + 1) w.j).run
+
+/-- The second preimage a climb from `(level, j)` runs into, at the lowest level where one exists.
+
+On each level, the climb hashes its held node with its sibling, in the order the index gives.
+
+A level where that pair is not the honest one but the parent is honest is a second preimage. -/
+def findSecondPreimage [DecidableEq α] (leaves : Nat → Id α) :
+    (level j : Nat) → (b : α) → (q : List α) → Option (SecondPreimage α)
+  | level, j, b, t :: q =>
+    let y := ordered j b t
+    let parent := (hash (level + 1) (j / 2) y.1 y.2).run
+    if y ≠ ((node hash leaves level (2 * (j / 2))).run, (node hash leaves level (2 * (j / 2) + 1)).run) ∧
+        parent = (node hash leaves (level + 1) (j / 2)).run then
+      some ⟨level, j / 2, y⟩
+    else findSecondPreimage leaves (level + 1) (j / 2) parent q
+  | _, _, _, [] => none
+
+/-- Every second preimage `findSecondPreimage` returns is valid, for an ancestor of `(level, j)`.
+
+The ancestor is `k + 1` levels up, at index `j / 2^(k + 1)`. -/
+theorem findSecondPreimage_valid [DecidableEq α] (leaves : Nat → Id α) :
+    ∀ (q : List α) (level j : Nat) (b : α) (w : SecondPreimage α),
+      findSecondPreimage hash leaves level j b q = some w →
+      w.Valid hash leaves ∧ ∃ k < q.length, w.level = level + k ∧ w.j = j / 2 ^ (k + 1) := by
+  intro q
+  induction q with
+  | nil => intro level j b w h; simp [findSecondPreimage] at h
+  | cons t rest ih =>
+    intro level j b w h
+    simp only [findSecondPreimage] at h
+    split at h
+    · -- This level is the second preimage.
+      rename_i hfound
+      cases h
+      exact ⟨hfound, 0, by simp, rfl, by simp⟩
+    · -- The second preimage is further up: one level higher in the count.
+      obtain ⟨hvalid, k, hk, hlevel, hj⟩ := ih (level + 1) (j / 2) _ w h
+      refine ⟨hvalid, k + 1, by simpa using hk, by omega, ?_⟩
+      rw [hj, div_two_div_pow]
+
+/-- Binding against an honest tree: a climb from `(level, j)` over `n` siblings that reaches the honest ancestor is honest.
+
+Otherwise `findSecondPreimage` finds a second preimage, valid by `findSecondPreimage_valid`. -/
+theorem climb_binding_node [DecidableEq α] (leaves : Nat → Id α) :
     ∀ (n level j : Nat) (b : α) (q : List α), q.length = n →
       (climb hash level j b q).run = (node hash leaves (level + n) (j / 2 ^ n)).run →
       (b = (node hash leaves level j).run ∧ q = (siblings hash leaves level j n).run.toList) ∨
-        ∃ k < n, SecondPreimage hash leaves (level + k) (j / 2 ^ (k + 1)) := by
+        (findSecondPreimage hash leaves level j b q).isSome := by
   intro n
   induction n with
   | zero =>
@@ -93,21 +201,25 @@ theorem climb_binding_node (leaves : Nat → Id α) :
     | nil => simp at hl
     | cons t rest =>
       rw [climb_cons, ← div_two_div_pow, show level + (n + 1) = level + 1 + n by omega] at heq
+      simp only [findSecondPreimage]
+      -- The honest children, in order, are the honest node and its sibling.
+      have honest := ordered_sibling (fun i => (node hash leaves level i).run) j
+      -- When this level is a second preimage, the search stops here.
+      by_cases hfound : ordered j b t
+            ≠ ((node hash leaves level (2 * (j / 2))).run, (node hash leaves level (2 * (j / 2) + 1)).run) ∧
+          (hash (level + 1) (j / 2) (ordered j b t).1 (ordered j b t).2).run
+            = (node hash leaves (level + 1) (j / 2)).run
+      · exact .inr (by simp [hfound])
+      simp only [hfound, ↓reduceIte]
       rcases ih (level + 1) (j / 2) _ rest (by simpa using hl) heq with
-        ⟨hparent, hrest⟩ | ⟨k, hk, hsp⟩
-      · -- The honest children, in order, are the honest node and its sibling.
-        have honest := ordered_sibling (fun i => (node hash leaves level i).run) j
-        by_cases hpair : ordered j b t
-            = ordered j (node hash leaves level j).run (node hash leaves level (j ^^^ 1)).run
-        · obtain ⟨rfl, rfl⟩ := ordered_inj.mp hpair
-          exact .inl ⟨rfl, by rw [siblings_succ_toList, hrest]⟩
-        · -- Another pair with the honest parent's hash: a second preimage one level up.
-          refine .inr ⟨0, by simp, ordered j b t, ?_, ?_⟩
-          · simp only [Nat.add_zero, Nat.zero_add, Nat.pow_one]
-            rwa [← honest]
-          simpa [node_succ_run] using hparent
-      · -- A second preimage further up stays one, one level higher in the count.
-        refine .inr ⟨k + 1, by simpa using hk, ?_⟩
-        rwa [div_two_div_pow, show level + 1 + k = level + (k + 1) by omega] at hsp
+        ⟨hparent, hrest⟩ | hsome
+      · -- An honest parent and no second preimage here: the pair is the honest one.
+        have hpair : ordered j b t
+            = ordered j (node hash leaves level j).run (node hash leaves level (j ^^^ 1)).run := by
+          rw [honest]
+          exact Classical.byContradiction fun hne => hfound ⟨hne, hparent⟩
+        obtain ⟨rfl, rfl⟩ := ordered_inj.mp hpair
+        exact .inl ⟨rfl, by rw [siblings_succ_toList, hrest]⟩
+      · exact .inr hsome
 
 end EthLib.Cryptography.Merkle

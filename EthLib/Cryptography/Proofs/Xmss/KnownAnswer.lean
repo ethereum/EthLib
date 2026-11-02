@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Xmss
-public import EthLib.Cryptography.Proofs.Xmss.Kernel
+public import EthLib.Cryptography.Proofs.Xmss.FastHash
 public import EthLib.Cryptography.Proofs.Xmss.Serialization
 public import EthLib.Cryptography.Proofs.Xmss.Verify
 public import EthLib.Cryptography.Proofs.Xmss.Ots
