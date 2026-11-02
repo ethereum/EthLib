@@ -11,6 +11,7 @@ How the call data is read and the output is written.
 
 - A list of `k` bytes holds a big-endian value below `256 ^ k`.
 - Writing `n` on `len` bytes gives exactly `len` bytes, which read back as `n % 256 ^ len`.
+- Reading `k` bytes and writing the value back on `k` bytes gives the same bytes.
 - Reading past the end of the call data gives zeros.
   So padding the call data with zeros changes no read.
 - A read depends only on the bytes it covers.
@@ -81,6 +82,27 @@ theorem bytesToNat_natToBytes (len n : Nat) :
 theorem bytesToNat_natToBytes_of_lt {len n : Nat} (h : n < 256 ^ len) :
     bytesToNat (natToBytes len n) = n := by
   rw [bytesToNat_natToBytes, Nat.mod_eq_of_lt h]
+
+/-- A list of bytes survives the round trip through its value, written back on as many bytes. -/
+theorem natToBytes_bytesToNat (bytes : List UInt8) :
+    natToBytes bytes.length (bytesToNat bytes) = bytes := by
+  generalize hn : bytes.length = len
+  induction len generalizing bytes with
+  | zero => simp [List.length_eq_zero_iff.mp hn, natToBytes]
+  | succ len ih =>
+    -- Split off the last byte, the lowest digit.
+    obtain ⟨front, b, rfl⟩ := (List.eq_nil_or_concat bytes).resolve_left (by rintro rfl; simp at hn)
+    rw [List.concat_eq_append] at hn ⊢
+    have hf : front.length = len := by simpa using hn
+    have hb : b.toNat < 256 := b.toNat_lt
+    have hv : bytesToNat (front ++ [b]) = bytesToNat front * 256 + b.toNat := by
+      rw [bytesToNat_append]
+      simp [bytesToNat]
+    -- The front is the value divided by 256, and the last byte its remainder.
+    have h1 : (bytesToNat front * 256 + b.toNat) / 256 = bytesToNat front := by omega
+    have h2 : (bytesToNat front * 256 + b.toNat) % 256 = b.toNat := by omega
+    rw [hv, natToBytes, h1, h2, ih front hf]
+    simp
 
 /-- A window of the call data has exactly the `size` bytes asked for. -/
 theorem bufferRead_length (data : ByteArray) (start size : Nat) :
