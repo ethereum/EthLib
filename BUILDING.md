@@ -85,7 +85,7 @@ They also inspect a saved tar archive, restore it, and check that Lake needs no 
 Run them after installing the test dependencies:
 
 ```bash
-uv run --no-project --python 3.12 python -m unittest discover -s scripts -p 'test_build_pipeline.py'
+uv run --no-sync python -m unittest discover -s scripts -p 'test_build_pipeline.py'
 ```
 
 To time a local command:

@@ -76,5 +76,5 @@ uv run --no-sync pytest
 ```
 
 Run `uv sync --frozen --extra test` again after changing Lean or C sources.
-Sync rebuilds the native extension.
+Sync rebuilds the native extension when its source or build inputs change.
 `uv run --no-sync` tests that build.

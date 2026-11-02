@@ -99,7 +99,7 @@ class LakeThenBuild(build_ext):
                 "building the C extension"
             )
         # Re-resolve include_dirs and link inputs lazily: at metadata time
-        # (e.g. `uv run --no-project --python 3.12 python -m build --sdist`) Lean may not be installed.
+        # (e.g. `uv build --sdist`) Lean may not be installed.
         runtime_objs, library_dirs, libraries = _lean_runtime_link(sysroot)
         for ext in self.extensions:
             if str(sysroot / "include") not in ext.include_dirs:

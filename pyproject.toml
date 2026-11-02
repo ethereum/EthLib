@@ -20,8 +20,21 @@ test = [
 ]
 
 [tool.uv]
-# Lean and C inputs also affect the extension; always rebuild it during sync.
-reinstall-package = ["ethlib"]
+# Rebuild the native extension only when its source or build inputs change.
+cache-keys = [
+  { file = "pyproject.toml" },
+  { file = "setup.py" },
+  { file = "README.md" },
+  { file = "MANIFEST.in" },
+  { file = "lean-toolchain" },
+  { file = "lakefile.lean" },
+  { file = "lake-manifest.json" },
+  { file = "EthLib.lean" },
+  { file = "EthLib/**/*.lean" },
+  { file = "bindings/python/**/*.c" },
+  { file = "bindings/python/**/*.h" },
+  { file = "bindings/python/**/*.py" },
+]
 
 [tool.pytest.ini_options]
 testpaths = ["bindings/python/tests"]
