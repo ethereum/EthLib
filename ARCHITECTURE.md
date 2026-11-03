@@ -186,10 +186,10 @@ That module is the place to read a fork as a whole.
 
 ## Sources
 
-Every definition cites its source, with a link pinned to a commit, as `CONTRIBUTING.md` asks.
+Every definition cites its source with a link pinned to a commit.
 Two modules that pin two commits of one repository can disagree without anyone noticing.
 So each source repository has one pinned commit, recorded in one file, and every module that cites the repository uses it.
-Moving that pin is one pull request, which checks every module that cites the repository.
+Update the pin in one pull request. Check every module that cites the repository.
 
 ## Packages
 
