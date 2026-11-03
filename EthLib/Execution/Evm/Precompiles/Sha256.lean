@@ -14,14 +14,16 @@ gas:     60 + 12 * ceil(len(data) / 32)
 output:  [ SHA-256(data): 32 ]
 ```
 
-The executable source is `src/ethereum/forks/amsterdam/vm/precompiled_contracts/sha256.py` in `ethereum/execution-specs`, at commit `fd9298410ec7218838c8348f69c1eb633f1797dc`.
-It charges `PRECOMPILE_SHA256_BASE + PRECOMPILE_SHA256_PER_WORD * word_count` with `charge_gas`, then returns `hashlib.sha256(data).digest()`.
-The two prices are in `GasCosts`, in `src/ethereum/forks/amsterdam/vm/gas.py` at the same commit.
-Amsterdam is the execution-layer fork of Glamsterdam, EIP-7773.
+Source: [`forks/frontier/vm/precompiled_contracts/sha256.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/frontier/vm/precompiled_contracts/sha256.py#L24-L45) of execution-specs at `2c0c8e7`, function `sha256`.
 
-The only failure is running out of gas.
-`charge_gas` raises `OutOfGasError` when the execution gas left is strictly below the price, so a call with exactly the price succeeds.
-Here `gas` is that execution gas left, the `gas_left` of the frame's gas meter.
+It charges `PRECOMPILE_SHA256_BASE + PRECOMPILE_SHA256_PER_WORD * word_count` with `charge_gas`, then returns `hashlib.sha256(data).digest()`.
+
+Every later fork there computes the same result with the same prices, up to Bogota.
+
+The call fails only when it runs out of gas.
+
+`charge_gas` raises `OutOfGasError` when the gas left is strictly below the price, so a call with exactly the price succeeds.
+
 The hash is `EthLib.Cryptography.Hash.sha256`, the FIPS 180-4 hash of the cryptography layer.
 -/
 
@@ -35,13 +37,13 @@ def OUTPUT_BYTES : Nat := 32
 /-- The size in bytes of the word the gas counts. -/
 def WORD_BYTES : Nat := 32
 
-/-- The price of every call, `GasCosts.PRECOMPILE_SHA256_BASE` in execution-specs. -/
+/-- The price of every call, `GasCosts.PRECOMPILE_SHA256_BASE` in [`forks/frontier/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/frontier/vm/gas.py#L66). -/
 def GAS_BASE : Nat := 60
 
-/-- The price of each word of call data, `GasCosts.PRECOMPILE_SHA256_PER_WORD` in execution-specs. -/
+/-- The price of each word of call data, `GasCosts.PRECOMPILE_SHA256_PER_WORD` in [`forks/frontier/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/frontier/vm/gas.py#L67). -/
 def GAS_PER_WORD : Nat := 12
 
-/-- The least multiple of 32 that is at least `value`, `ceil32` in `src/ethereum/utils/numeric.py` of execution-specs. -/
+/-- `ceil32`: the least multiple of 32 that is at least `value`, as in [`utils/numeric.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/utils/numeric.py#L43). -/
 def ceil32 (value : Nat) : Nat :=
   if value % WORD_BYTES = 0 then value else value + WORD_BYTES - value % WORD_BYTES
 
@@ -55,7 +57,7 @@ def gasCost (size : Nat) : Nat := GAS_BASE + GAS_PER_WORD * wordCount size
 inductive Sha256Error where
   /-- The gas given was below the price.
 
-  `charge_gas` raises `OutOfGasError` in `src/ethereum/forks/amsterdam/vm/gas.py`, and the call consumes all its gas. -/
+  `charge_gas` raises `OutOfGasError` in [`forks/frontier/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/frontier/vm/gas.py#L183-L198), and the call consumes all its gas. -/
   | outOfGas (cost gas : Nat)
   deriving Repr, DecidableEq
 

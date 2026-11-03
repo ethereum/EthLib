@@ -2,7 +2,7 @@
 
 The messages and digests are the NIST vectors of `tests/sha256`.
 The price is `60 + 12 * ceil(len / 32)`, from `GasCosts.PRECOMPILE_SHA256_BASE` and
-`GasCosts.PRECOMPILE_SHA256_PER_WORD` in execution-specs, `forks/amsterdam/vm/gas.py`.
+`GasCosts.PRECOMPILE_SHA256_PER_WORD` in execution-specs at `2c0c8e7`, `forks/frontier/vm/gas.py`.
 """
 
 import pytest

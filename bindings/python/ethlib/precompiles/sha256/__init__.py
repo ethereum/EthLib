@@ -1,4 +1,4 @@
-"""The SHA-256 precompile at address `0x02`, as of Amsterdam, the execution fork of Glamsterdam.
+"""The SHA-256 precompile at address `0x02`.
 
 - The price is `60 + 12 * ceil(len(data) / 32)`.
 - A call with too little gas raises ValueError.
