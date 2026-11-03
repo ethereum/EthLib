@@ -316,7 +316,7 @@ That rests on Lean's own design and review, and no independent checker replays t
 A proof that uses one is no longer checked by the kernel alone.
 It also trusts every `@[implemented_by]` and `@[extern]` that the compiled code reaches (B2).
 
-`AGENTS.md` does not allow these tactics, and a new use fails `lake exe check-decls`.
+`CONTRIBUTING.md` does not allow these tactics, and a new use fails `lake exe check-decls`.
 
 <!-- generated: native -->
 No theorem uses them.

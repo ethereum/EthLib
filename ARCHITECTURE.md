@@ -101,7 +101,7 @@ A specification never imports a property or a model, and a property never import
 ## Layers
 
 The specifications form layers.
-Each layer is a directory under `EthLib/`, which `AGENTS.md` calls a domain, and a module imports only from its own layer or from the layers below it.
+Each layer is a directory under `EthLib/`, which `CONTRIBUTING.md` calls a domain, and a module imports only from its own layer or from the layers below it.
 
 | Layer | Holds | Directory |
 | --- | --- | --- |
@@ -155,7 +155,7 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
 
 - Bytes of any length are a `ByteArray`.
 - Bytes of a fixed length `n` are a `Vector UInt8 n`.
-  The length is then part of the type, as `AGENTS.md` asks, and a 48-byte commitment cannot be passed where a 96-byte signature is expected.
+  The length is then part of the type, as `CONTRIBUTING.md` asks, and a 48-byte commitment cannot be passed where a 96-byte signature is expected.
 - A fixed-size type keeps the name its source gives it, defined once by the layer that owns the concept.
   `Hash32`, `Bytes32` and `Address` belong to Base, `BLSPubkey` to Cryptography, `Root` and `Slot` to Consensus.
 - An integer keeps the range its source gives it.
@@ -186,7 +186,7 @@ That module is the place to read a fork as a whole.
 
 ## Sources
 
-Every definition cites its source, with a link pinned to a commit, as `AGENTS.md` asks.
+Every definition cites its source, with a link pinned to a commit, as `CONTRIBUTING.md` asks.
 Two modules that pin two commits of one repository can disagree without anyone noticing.
 So each source repository has one pinned commit, recorded in one file, and every module that cites the repository uses it.
 Moving that pin is one pull request, which checks every module that cites the repository.
@@ -217,6 +217,6 @@ A new module finds its place by answering three questions in order.
    Look in the layers below before writing a tree, an encoding or a field.
    If two modules need the same thing, write it once, in the lower of their layers.
 
-Then the module follows the layout of `AGENTS.md`: the specification in `EthLib/<Domain>/<Module>/`, its theorems in `EthLib/<Domain>/Proofs/<Module>/`, and its C exports in `EthLib/<Domain>/Exports/`.
+Then the module follows the layout of `CONTRIBUTING.md`: the specification in `EthLib/<Domain>/<Module>/`, its theorems in `EthLib/<Domain>/Proofs/<Module>/`, and its C exports in `EthLib/<Domain>/Exports/`.
 Modules of one kind share a directory inside their layer.
 The precompiles are one kind, so ECRECOVER sits in `EthLib/Execution/Precompiles/Ecrecover/`, and its theorems in `EthLib/Execution/Proofs/Precompiles/Ecrecover/`.

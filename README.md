@@ -39,7 +39,7 @@ The theorems about a module live under `Proofs/` in its layer, and the C exports
 ## Contributing
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) first.
-It sets the terms under which you contribute, and points to the rules in [AGENTS.md](AGENTS.md).
+It sets the rules and the terms under which you contribute.
 
 ### Prerequisites
 
