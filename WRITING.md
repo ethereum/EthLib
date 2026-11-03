@@ -18,7 +18,7 @@ The guide applies to all prose in the repository and around it:
 
 - Markdown files, such as this one, `README.md` and the README of a module.
 - Lean doc comments and other comments.
-- Comments in Python, C, shell scripts and workflows.
+- Comments in Lean, Python, C, shell scripts and workflows.
 - Commit messages.
 - Pull request and issue descriptions, and review comments.
 
