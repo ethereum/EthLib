@@ -147,6 +147,17 @@ The 38 test cases of EIP-145 pin SHL, SHR and SAR.
 
 No theorem relates the definitions to the Yellow Paper, and the stack, gas and program counter are not modelled yet.
 
+### SHA-256 precompile
+
+The precompile reuses the SHA-256 of the cryptography layer, so its theorems are about the gas and the failure.
+`sha256_eq_ok_iff` and `sha256_eq_error_iff` (`Execution/Proofs/Evm/Precompiles/Sha256.lean`) prove that a call succeeds exactly when the gas covers `60 + 12 * ceil(len / 32)`, and then returns the digest of the whole call data.
+`le_wordCount` and `wordCount_le` prove that the word count is the least number of 32-byte words that covers the call data.
+`sha256_ok_eq_spec` carries `hash_eq_spec` over to the output, so the output is the FIPS 180-4 hash when the call data is shorter than 2^61 bytes.
+`sha256_ok_eq_spec_of_gas` drops that hypothesis for every call that succeeds with less than `60 + 12 * 2^56` gas.
+`gasCost_lt_two_pow_64` proves that the price of call data shorter than 2^63 bytes fits in the 64 bits the C export returns.
+
+No theorem relates the module to the execution-specs code it follows, which calls `hashlib.sha256`.
+
 ### MODEXP
 
 These theorems state agreement with EIP-198 and EIP-7823.
@@ -272,13 +283,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 26 operations and 25 size constants.
-The Python extension calls 26 of the operations and 20 of the constants.
+Lean exports 28 operations and 26 size constants.
+The Python extension calls 28 of the operations and 21 of the constants.
 Exported constants it does not call: `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-1671 lines of hand-written C sit between them and Python: `bls.c` (87), `ecrecover.c` (34), `kzg.c` (533), `modexp.c` (61), `module.c` (490), `ripemd160.c` (36), `secp256k1.c` (94), `sha256.c` (38), `wrappers.h` (155), `xmss.c` (143).
+1746 lines of hand-written C sit between them and Python: `bls.c` (87), `ecrecover.c` (34), `kzg.c` (533), `modexp.c` (61), `module.c` (500), `ripemd160.c` (36), `secp256k1.c` (94), `sha256.c` (38), `sha256_precompile.c` (62), `wrappers.h` (158), `xmss.c` (143).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

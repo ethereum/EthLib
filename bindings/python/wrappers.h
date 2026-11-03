@@ -36,6 +36,7 @@ extern size_t MODEXP_LENGTH_HEADER_BYTES;
 extern size_t MODEXP_MAX_LENGTH_BYTES;
 
 extern size_t RIPEMD160_OUTPUT_BYTES;
+extern size_t SHA256_PRECOMPILE_OUTPUT_BYTES;
 extern size_t SECP256K1_HASH_LEN;
 extern size_t SECP256K1_SIGNATURE_LEN;
 
@@ -145,6 +146,8 @@ PyObject* py_modexp                                       (PyObject* self, PyObj
 PyObject* py_modexp_gas_cost                              (PyObject* self, PyObject* args);
 PyObject* py_sha256                                       (PyObject* self, PyObject* args);
 PyObject* py_ripemd160                                    (PyObject* self, PyObject* args);
+PyObject* py_sha256_precompile                            (PyObject* self, PyObject* args);
+PyObject* py_sha256_precompile_gas_cost                   (PyObject* self, PyObject* args);
 
 PyObject* py_secp256k1_verify                             (PyObject* self, PyObject* args);
 PyObject* py_secp256k1_is_low_s                           (PyObject* self, PyObject* args);
