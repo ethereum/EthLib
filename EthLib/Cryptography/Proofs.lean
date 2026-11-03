@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Proofs.Bls
 public import EthLib.Cryptography.Proofs.Kzg
 public import EthLib.Cryptography.Proofs.Merkle
 public import EthLib.Cryptography.Proofs.Xmss
+public import EthLib.Cryptography.Proofs.Sphincs
 public import EthLib.Cryptography.Proofs.Vrf
 public import EthLib.Cryptography.Proofs.Secp256k1
 

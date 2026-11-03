@@ -180,6 +180,18 @@ theorem ordered_sibling (f : Nat → α) (j : Nat) :
     simp
     congr 2 <;> omega
 
+/-- The siblings of `n + 1` ancestors are those of the first `n`, then the sibling of the next. -/
+theorem siblings_succ_toList_concat (leaves : Nat → Id α) :
+    ∀ n level j,
+      (siblings hash leaves level j (n + 1)).run.toList
+        = (siblings hash leaves level j n).run.toList
+            ++ [(node hash leaves (level + n) ((j / 2 ^ n) ^^^ 1)).run]
+  | 0, level, j => by simp [siblings]
+  | n + 1, level, j => by
+    -- Peel the first sibling on both sides, then go on one level up.
+    conv => lhs; rw [siblings_succ_toList, siblings_succ_toList_concat leaves n (level + 1) (j / 2)]
+    rw [siblings_succ_toList, List.cons_append, div_two_div_pow, Nat.add_assoc, Nat.add_comm 1 n]
+
 /-- Climbing from a node with the siblings of its ancestors reaches its ancestor `n` levels up. -/
 theorem climb_siblings (leaves : Nat → Id α) :
     ∀ n level j,
@@ -203,6 +215,32 @@ theorem climb_path (leaves : Nat → Id α) (h j : Nat) :
       = (node hash leaves h (j / 2 ^ h)).run := by
   have := climb_siblings hash leaves h 0 j
   rwa [Nat.zero_add] at this
+
+/-- The top two nodes below the root, in order, from a path of a tree of height `n + 1`.
+
+The climb over the first `n` siblings reaches the leaf's ancestor on level `n`.
+
+The last sibling is the other node on level `n`, and bit `n` of `j` puts the two in order. -/
+theorem ordered_climb_path_last (leaves : Nat → Id α) {h n : Nat} (hn : h = n + 1) (j : Nat) :
+    ordered (j / 2 ^ n)
+        (climb hash 0 j (leaves j).run ((path hash leaves h j).run.toList.take n)).run
+        ((path hash leaves h j).run[n]'(by omega))
+      = ((node hash leaves n (2 * (j / 2 ^ n / 2))).run,
+          (node hash leaves n (2 * (j / 2 ^ n / 2) + 1)).run) := by
+  subst hn
+  -- The path is the `n` siblings below level `n`, then the other node on level `n`.
+  have hsplit := siblings_succ_toList_concat hash leaves n 0 j
+  have hlength : ((siblings hash leaves 0 j n).run.toList).length = n := by simp
+  rw [← Vector.getElem_toList (by simp)]
+  unfold path
+  simp only [hsplit, List.take_left' hlength, Nat.zero_add]
+  rw [List.getElem_append_right (by simp)]
+  simp only [hlength, Nat.sub_self, List.getElem_cons_zero]
+  -- The climb over those siblings reaches the leaf's ancestor on level `n`.
+  have hclimb := climb_siblings hash leaves n 0 j
+  rw [Nat.zero_add] at hclimb
+  rw [show (leaves j).run = (node hash leaves 0 j).run from rfl, hclimb]
+  exact ordered_sibling (fun i => (node hash leaves n i).run) (j / 2 ^ n)
 
 /-- Completeness: climbing from a leaf `j < 2^h` with its path reaches the root. -/
 theorem climb_path_root (leaves : Nat → Id α) {h j : Nat} (hj : j < 2 ^ h) :

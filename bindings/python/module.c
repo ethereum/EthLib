@@ -24,6 +24,11 @@ size_t XMSS_SEED_LEN;
 size_t XMSS_PUB_KEY_SIZE;
 size_t XMSS_SIG_SIZE;
 
+size_t SPHINCS_MESSAGE_LEN;
+size_t SPHINCS_SEED_LEN;
+size_t SPHINCS_PUB_KEY_SIZE;
+size_t SPHINCS_SIG_SIZE;
+
 size_t MODEXP_LENGTH_HEADER_BYTES;
 size_t MODEXP_MAX_LENGTH_BYTES;
 size_t RIPEMD160_OUTPUT_BYTES;
@@ -103,6 +108,26 @@ eth_xmss_const_pub_key_size(
 
 extern uint64_t
 eth_xmss_const_sig_size(
+  uint8_t unit
+);
+
+extern uint64_t
+eth_sphincs_const_message_len(
+  uint8_t unit
+);
+
+extern uint64_t
+eth_sphincs_const_seed_len(
+  uint8_t unit
+);
+
+extern uint64_t
+eth_sphincs_const_pub_key_size(
+  uint8_t unit
+);
+
+extern uint64_t
+eth_sphincs_const_sig_size(
   uint8_t unit
 );
 
@@ -395,6 +420,9 @@ static PyMethodDef methods[] = {
   {"xmss_sign", py_xmss_sign, METH_VARARGS, NULL},
   {"xmss_verify", py_xmss_verify, METH_VARARGS, NULL},
   {"xmss_signature_index", py_xmss_signature_index, METH_VARARGS, NULL},
+  {"sphincs_key_gen", py_sphincs_key_gen, METH_VARARGS, NULL},
+  {"sphincs_sign", py_sphincs_sign, METH_VARARGS, NULL},
+  {"sphincs_verify", py_sphincs_verify, METH_VARARGS, NULL},
   {"modexp", py_modexp, METH_VARARGS, NULL},
   {"modexp_gas_cost", py_modexp_gas_cost, METH_VARARGS, NULL},
   {"sha256", py_sha256, METH_VARARGS, NULL},
@@ -459,6 +487,10 @@ PyInit__native(void) {
     XMSS_SEED_LEN     = (size_t) eth_xmss_const_seed_len(0);
     XMSS_PUB_KEY_SIZE = (size_t) eth_xmss_const_pub_key_size(0);
     XMSS_SIG_SIZE     = (size_t) eth_xmss_const_sig_size(0);
+    SPHINCS_MESSAGE_LEN  = (size_t) eth_sphincs_const_message_len(0);
+    SPHINCS_SEED_LEN     = (size_t) eth_sphincs_const_seed_len(0);
+    SPHINCS_PUB_KEY_SIZE = (size_t) eth_sphincs_const_pub_key_size(0);
+    SPHINCS_SIG_SIZE     = (size_t) eth_sphincs_const_sig_size(0);
 
     MODEXP_LENGTH_HEADER_BYTES = (size_t) eth_modexp_const_length_header_bytes(0);
     MODEXP_MAX_LENGTH_BYTES    = (size_t) eth_modexp_const_max_length_bytes(0);
@@ -490,6 +522,10 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "XMSS_SEED_LEN", XMSS_SEED_LEN);
   PyModule_AddIntConstant(m, "XMSS_PUB_KEY_SIZE", XMSS_PUB_KEY_SIZE);
   PyModule_AddIntConstant(m, "XMSS_SIG_SIZE", XMSS_SIG_SIZE);
+  PyModule_AddIntConstant(m, "SPHINCS_MESSAGE_LEN", SPHINCS_MESSAGE_LEN);
+  PyModule_AddIntConstant(m, "SPHINCS_SEED_LEN", SPHINCS_SEED_LEN);
+  PyModule_AddIntConstant(m, "SPHINCS_PUB_KEY_SIZE", SPHINCS_PUB_KEY_SIZE);
+  PyModule_AddIntConstant(m, "SPHINCS_SIG_SIZE", SPHINCS_SIG_SIZE);
   PyModule_AddIntConstant(m, "MODEXP_LENGTH_HEADER_BYTES", MODEXP_LENGTH_HEADER_BYTES);
   PyModule_AddIntConstant(m, "MODEXP_MAX_LENGTH_BYTES", MODEXP_MAX_LENGTH_BYTES);
   PyModule_AddIntConstant(m, "RIPEMD160_OUTPUT_BYTES", RIPEMD160_OUTPUT_BYTES);
