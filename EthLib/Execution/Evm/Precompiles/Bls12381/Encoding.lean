@@ -150,4 +150,12 @@ def g2ToBytes (point : G2) : List UInt8 :=
   let (x, y) := point.toAffine
   natToBytes 48 x.c0.val ++ natToBytes 48 x.c1.val ++ natToBytes 48 y.c0.val ++ natToBytes 48 y.c1.val
 
+/-- `MULTIPLIER`: the discounts of the multi-scalar multiplications are in thousandths. -/
+def MULTIPLIER : Nat := 1000
+
+/-- The call data cut into `count` pieces of `size` bytes, in order. -/
+def chunks (size : Nat) : Nat → List UInt8 → List (List UInt8)
+  | 0, _ => []
+  | count + 1, bytes => bytes.take size :: chunks size count (bytes.drop size)
+
 end EthLib.Execution.Evm.Precompiles.Bls12381

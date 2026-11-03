@@ -7,7 +7,9 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 # Proofs: `Evm.Precompiles.Bls12381.G2`
 
 - G2ADD rejects any length other than 512 bytes before it charges gas, and then runs out of gas below its price.
-- Every encoded G2 point, and so every output of G2ADD, has 256 bytes.
+- Every encoded G2 point, and so every output of G2ADD and G2MSM, has 256 bytes.
+- G2MSM rejects an empty input or a length that is not a whole number of 288-byte pairs.
+- Its discount never raises the price above that of `k` separate products.
 -/
 
 @[expose] public section
@@ -47,5 +49,65 @@ theorem bls12G2Add_size {data : ByteArray} {gas : Nat} {out : ByteArray} (h : bl
   obtain ⟨_, _, h⟩ := bind_eq_ok h
   cases h
   simp [ByteArray.size, length_padG2_g2ToBytes]
+
+/-! ## G2MSM -/
+
+/-- G2MSM rejects an empty input or a length that is not a whole number of pairs, whatever the gas. -/
+theorem bls12G2Msm_invalidInputLength {data : ByteArray}
+    (hsize : data.size = 0 ∨ data.size % LENGTH_PER_PAIR_G2 ≠ 0) (gas : Nat) :
+    bls12G2Msm data gas = .error (.invalidInputLength data.size) := by
+  unfold bls12G2Msm
+  rw [ite_eq_left_of_eq_true _ _ (eq_true hsize)]
+  rfl
+
+/-- G2MSM runs out of gas below its price. -/
+theorem bls12G2Msm_outOfGas {data : ByteArray} (hsize : ¬(data.size = 0 ∨ data.size % LENGTH_PER_PAIR_G2 ≠ 0))
+    {gas : Nat} (hgas : gas < msmGasG2 (data.size / LENGTH_PER_PAIR_G2)) :
+    bls12G2Msm data gas = .error (.outOfGas (msmGasG2 (data.size / LENGTH_PER_PAIR_G2)) gas) := by
+  unfold bls12G2Msm
+  rw [ite_eq_right_of_eq_false _ _ (eq_false hsize)]
+  dsimp only
+  rw [ite_eq_left_of_eq_true _ _ (eq_true hgas)]
+  rfl
+
+/-- Every output of G2MSM has 256 bytes. -/
+theorem bls12G2Msm_size {data : ByteArray} {gas : Nat} {out : ByteArray} (h : bls12G2Msm data gas = .ok out) :
+    out.size = 256 := by
+  simp only [bls12G2Msm, bind, throw, throwThe, MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  obtain ⟨_, _, h⟩ := bind_eq_ok h
+  obtain ⟨_, _, h⟩ := bind_eq_ok h
+  cases h
+  simp [ByteArray.size, length_padG2_g2ToBytes]
+
+/-- Every entry of the discount table is at most 1000 thousandths. -/
+theorem G2_K_DISCOUNT_le : ∀ i : Fin 128, G2_K_DISCOUNT[i] ≤ 1000 := by decide
+
+/-- Every discount is at most 1000 thousandths. -/
+theorem discountG2_le (k : Nat) : discountG2 k ≤ MULTIPLIER := by
+  unfold discountG2
+  split
+  · rename_i h
+    exact G2_K_DISCOUNT_le ⟨k - 1, by omega⟩
+  · decide
+
+/-- The price of `k` pairs is at most the price of `k` separate products. -/
+theorem msmGasG2_le (k : Nat) : msmGasG2 k ≤ k * GAS_G2MUL := by
+  unfold msmGasG2
+  have := discountG2_le k
+  calc k * GAS_G2MUL * discountG2 k / MULTIPLIER
+      ≤ k * GAS_G2MUL * MULTIPLIER / MULTIPLIER := Nat.div_le_div_right (Nat.mul_le_mul_left _ this)
+    _ = k * GAS_G2MUL := by simp [MULTIPLIER]
+
+/-- One pair costs one product, 22500 gas. -/
+theorem msmGasG2_one : msmGasG2 1 = 22500 := by decide
+
+/-- Past 128 pairs, the discount stays at 524 thousandths. -/
+theorem discountG2_of_lt {k : Nat} (hk : 128 < k) : discountG2 k = 524 := by
+  simp [discountG2, G2_MAX_DISCOUNT]
+  omega
 
 end EthLib.Execution.Evm.Precompiles.Bls12381
