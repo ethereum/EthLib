@@ -1,3 +1,3 @@
 """The EVM precompiled contracts."""
 
-__all__ = ["ecrecover", "modexp", "ripemd160"]
+__all__ = ["ecrecover", "modexp", "ripemd160", "sha256"]
