@@ -5,6 +5,7 @@ public import EthLib.Execution.Evm.Instructions.Comparison
 public import EthLib.Execution.Evm.Instructions.Bitwise
 public import EthLib.Execution.Evm.Instructions.Keccak
 public import EthLib.Execution.Evm.Precompiles
+public import EthLib.Execution.Evm.Words
 
 /-!
 # `EthLib.Execution.Evm`

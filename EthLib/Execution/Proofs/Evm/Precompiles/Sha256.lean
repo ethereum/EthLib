@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.Sha256
+public import EthLib.Execution.Proofs.Evm.Words
 public import EthLib.Cryptography.Proofs.Hash.Sha256
 public import EthLib.Cryptography.Proofs.Hash.Ripemd160
 
@@ -18,46 +19,10 @@ Every call that succeeds with less than `60 + 12 * 2^56` gas has such call data.
 
 namespace EthLib.Execution.Evm.Precompiles.Sha256
 
+open EthLib.Execution.Evm (wordCount_eq)
+
 -- Only the hex and ASCII helpers of the RIPEMD-160 known answers, so `sha256` keeps naming the precompile.
 open EthLib.Cryptography.Hash.Ripemd160 (hexBytes ascii)
-
-/-! ## Words -/
-
-/-- `ceil32` is a multiple of 32. -/
-theorem ceil32_mod (value : Nat) : ceil32 value % 32 = 0 := by
-  unfold ceil32 WORD_BYTES
-  split <;> omega
-
-/-- `ceil32` is at least its argument. -/
-theorem le_ceil32 (value : Nat) : value ≤ ceil32 value := by
-  unfold ceil32 WORD_BYTES
-  split <;> omega
-
-/-- `ceil32` is the least multiple of 32 that is at least its argument. -/
-theorem ceil32_le {value bound : Nat} (multiple : bound % 32 = 0) (above : value ≤ bound) :
-    ceil32 value ≤ bound := by
-  unfold ceil32 WORD_BYTES
-  split <;> omega
-
-/-- The words cover the call data. -/
-theorem le_wordCount (size : Nat) : size ≤ 32 * wordCount size := by
-  have := ceil32_mod size
-  have := le_ceil32 size
-  unfold wordCount WORD_BYTES
-  omega
-
-/-- No fewer words cover the call data. -/
-theorem wordCount_le {size words : Nat} (covers : size ≤ 32 * words) : wordCount size ≤ words := by
-  have := ceil32_le (value := size) (bound := 32 * words) (by omega) covers
-  unfold wordCount WORD_BYTES
-  omega
-
-/-- The word count in closed form: `ceil(size / 32)`. -/
-theorem wordCount_eq (size : Nat) : wordCount size = (size + 31) / 32 := by
-  -- Both sides are the least `w` with `size ≤ 32 * w`.
-  have covers := le_wordCount size
-  have least := wordCount_le (size := size) (words := (size + 31) / 32) (by omega)
-  omega
 
 /-! ## Gas -/
 
