@@ -312,7 +312,8 @@ The other types are the common ones, plus `proof`, which this repository needs.
 The scope names the domain or module, in lowercase: `xmss`, `kzg`, `bls`, `ssz`, `bindings`.
 Leave the scope out when the change spans the repository.
 
-The summary is in the imperative mood, starts lowercase and has no trailing period.
+The summary is an imperative phrase, such as "add strict scalar decoding", or a noun phrase for the result, such as "strict scalar decoding for RLP".
+It starts lowercase and has no trailing period.
 A name in the summary keeps its own case, such as `KZG` or `U256`.
 The whole title fits in 72 characters.
 
