@@ -104,10 +104,12 @@ This guide makes the recommendations that it names into requirements for EthLib.
 - **W7.** Write English words instead of Latin abbreviations in prose: "for example" instead of "e.g.", and "that is" instead of "i.e.".
   Official titles and quotations keep their form.
   (STE GR-6)
-- **W8.** Use American English spelling in prose, such as "behavior" and "serialize".
-  The Ethereum specifications, Lean and Mathlib use the same spelling, so the prose and the identifiers agree.
+- **W8.** Use Oxford spelling in prose: British spelling with "-ize" endings, such as "behaviour", "serialize" and "analyse".
+  American spelling is also correct.
+  Keep one spelling within a file.
   Official names, identifiers, quotations and legal text keep their own spelling.
-  (STE 1.14)
+  Lean declaration names follow the American spelling of Mathlib.
+  (STE 1.14, 9.4)
 - **W9.** Use gender-neutral language when gender is not relevant.
   Use "they" for a person whose pronouns you do not know.
   (STE GR-7)
@@ -409,7 +411,7 @@ A shorter sentence is not better if it changes the statement.
 | STE 1.1 to 1.4, general vocabulary | Kept as the reference for general meanings and parts of speech. This guide and its checker do not contain the dictionary. |
 | STE 1.5 to 1.13, technical terms | Applied through the vocabulary and the established usage of each subject field. |
 | STE 1.7, 1.12 and 1.13, noun and verb roles | Applied as written: a word such as "hash" can be a technical noun and a technical verb when each use belongs to its category. |
-| STE 1.14, spelling | Applied as written: American English, which the Ethereum specifications, Lean and Mathlib also use. Legal text keeps its own spelling. |
+| STE 1.14, spelling | STE 1.14 permits another official spelling directive. EthLib uses Oxford spelling and also accepts American spelling. Lean declaration names follow Mathlib. Legal text keeps its own spelling. |
 | All STE rules | Technical accuracy comes first. A term or a language pattern that is standard in cryptography, computer science or mathematics stays when a rule conflicts with it. |
 | STE 2 to 6, 8 and 9 | The source principles inform the rules above. Notation and the stated adaptations keep the technical meaning. |
 | STE 3.1 to 3.4, verb forms (V1) | Adapted: simple forms stay preferred, but a modal or complex form stays when a simple form would lose an uncertainty or a time span. |

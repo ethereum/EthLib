@@ -39,7 +39,7 @@ When the code and the specification disagree, the code is wrong until someone sh
 Cite the exact document and section in the code that implements it.
 For example: `RFC 9380 §5.3.1`, or the fork and function name in `consensus-specs`.
 
-Do not cite another implementation as the authority for a behavior.
+Do not cite another implementation as the authority for a behaviour.
 A byte-for-byte match with a client is a useful test, not a justification.
 
 ## Layout
@@ -295,11 +295,11 @@ A squash merge turns the pull request title into the commit on `master`.
 
 The type says what kind of change it is:
 
-- `feat`: new behavior, such as a new function, module or export.
-- `fix`: behavior that disagreed with the specification now agrees.
+- `feat`: new behaviour, such as a new function, module or export.
+- `fix`: behaviour that disagreed with the specification now agrees.
 - `proof`: new or changed theorems, with no change to the library code.
 - `perf`: the same results, computed faster.
-- `refactor`: the same behavior, with the code restructured.
+- `refactor`: the same behaviour, with the code restructured.
 - `test`: test vectors, known answers or the Python suite.
 - `docs`: documentation only.
 - `build`: Lake, the Lean toolchain, dependencies or packaging.
