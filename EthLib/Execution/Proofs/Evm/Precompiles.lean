@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Proofs.Evm.Precompiles.Blake2f
+public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381
 public import EthLib.Execution.Proofs.Evm.Precompiles.Modexp
 public import EthLib.Execution.Proofs.Evm.Precompiles.Ripemd160
 public import EthLib.Execution.Proofs.Evm.Precompiles.Sha256
