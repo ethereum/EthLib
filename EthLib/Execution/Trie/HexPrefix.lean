@@ -9,18 +9,14 @@ A leaf or an extension node of the trie stores part of a key path, as nibbles.
 
 The first nibble of its encoding holds the node type and the parity of the path length:
 
-```text
-    first nibble   node        path length
-    0              extension   even, then a 0 nibble of padding
-    1              extension   odd
-    2              leaf        even, then a 0 nibble of padding
-    3              leaf        odd
+- 0: an extension with an even path, followed by a 0 nibble of padding.
+- 1: an extension with an odd path, whose first nibble shares the first byte.
+- 2: a leaf with an even path, followed by a 0 nibble of padding.
+- 3: a leaf with an odd path, whose first nibble shares the first byte.
 
-    extension [1, 2, 3, 4, 5]     ->  11 23 45
-    leaf      [0, f, 1, c, b, 8]  ->  20 0f 1c b8
-```
+So the extension path `[1, 2, 3, 4, 5]` encodes as `0x112345`, and the leaf path `[0, f, 1, c, b, 8]` as `0x200f1cb8`.
 
-Every fork from Frontier to Bogota uses it: execution-specs at `2c0c8e7` defines it once, in `merkle_patricia_trie.py`.
+Execution-specs at `2c0c8e7` defines it once, in `merkle_patricia_trie.py`, and every fork from Frontier to Bogota uses it.
 
 The Yellow Paper and execution-specs define only the encoding, so the decoder accepts exactly its outputs.
 -/

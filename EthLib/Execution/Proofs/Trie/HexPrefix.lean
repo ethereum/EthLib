@@ -7,7 +7,7 @@ public import EthLib.Execution.Trie.HexPrefix
 
 - Decoding undoes the encoding, for every path and flag, so the encoding is injective.
 - The decoder accepts exactly the encodings, and rejects an empty input, a first nibble above 3 and a padding nibble other than 0.
-- Known answers: the leaf examples of #72, worked by hand, and every case of `BasicTests/hexencodetest.json` in `ethereum/tests`.
+- Known answers: two leaf paths worked by hand from `HP`, and every case of `BasicTests/hexencodetest.json` in `ethereum/tests`.
 -/
 
 @[expose] public section
@@ -191,9 +191,9 @@ theorem compactToNibbleList_nonZeroPadding (first : UInt8) (rest : List UInt8)
 
 /-! ## Known answers
 
-The leaf examples of #72, worked by hand from `HP`.
+Two leaf paths, worked by hand from `HP`.
 
-Its extension examples are the cases `nz,odd,open` and `z,even,open` of `BasicTests/hexencodetest.json` below. -/
+The extension paths `[1, 2, 3, 4, 5]` and `[0, 1, 2, 3, 4, 5]` are the cases `nz,odd,open` and `z,even,open` of `BasicTests/hexencodetest.json` below. -/
 
 /-- An even leaf path that starts with a 0 nibble: the 0 follows the padding. -/
 theorem nibbleListToCompact_leaf_even :
