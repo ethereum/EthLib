@@ -57,7 +57,7 @@ theorem digitSum_eq_sum (x : Codeword) : Internal.digitSum x = ∑ i : Fin V, (x
   have h1 : (⟨arr, harr⟩ : Codeword).foldl (fun sum d => sum + d.val) 0
       = arr.toList.foldl (fun sum d => sum + d.val) 0 := by
     simp [Array.foldl_toList]
-  -- Adding the digit values is summing the mapped list.
+  -- The sum of the digit values is the sum of the mapped list.
   have h2 : arr.toList.foldl (fun sum (d : Fin CHAIN_LENGTH) => sum + d.val) 0
       = (arr.toList.map Fin.val).sum := by
     rw [List.sum_eq_foldl, List.foldl_map]

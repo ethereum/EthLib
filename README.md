@@ -23,7 +23,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Cryptography | [`AltBn128`](EthLib/Cryptography/AltBn128/) | the alt_bn128 curve of EIP-196 and EIP-197, also called BN254, and its pairing |
 | Cryptography | [`Bls`](EthLib/Cryptography/Bls/) | BLS12-381 and BLS signatures |
 | Cryptography | [`Kzg`](EthLib/Cryptography/Kzg/) | KZG commitments to blobs and cells |
-| Cryptography | [`Merkle`](EthLib/Cryptography/Merkle/) | the perfect binary Merkle tree that leanXMSS, SSZ and the VRF share |
+| Cryptography | [`Merkle`](EthLib/Cryptography/Merkle/) | the perfect binary Merkle tree that leanXMSS, leanSPHINCS, SSZ and the VRF share |
 | Cryptography | [`Xmss`](EthLib/Cryptography/Xmss/) | leanXMSS, a hash-based signature for a post-quantum consensus layer |
 | Cryptography | [`Sphincs`](EthLib/Cryptography/Sphincs/) | leanSPHINCS, a stateless hash-based signature with FORS for `2^30` signatures |
 | Cryptography | [`Vrf`](EthLib/Cryptography/Vrf/) | the VRF tree, one verifiable random output per index |

@@ -39,8 +39,8 @@ Each file cites the definitions it follows:
 - `TweakableHash.lean`: `tweakableHashInput`, `truncateHash` and `hashHalf`.
 - `Encoding.lean`: `TargetSum.digestEncoding`, and WOTS+C from [ePrint 2022/778](https://eprint.iacr.org/2022/778).
 - `Ots.lean`: `otsSecrets`, `chainWalk`, `encode`, `otsSign` and `otsLeaf`.
-- `Tree.lean`: `Seeded.treeNode`, `Seeded.treePath` and `treeFold`.
-- `Fors.lean`: `forsNode`, `forsKey`, `treeOpen`, `treeRecover` and `forsRecover`, and FORS from [FIPS 205](https://doi.org/10.6028/NIST.FIPS.205) §8.
+- `Tree.lean`: `Seeded.treeNode`, `Seeded.treePath` and `treeFold`, built on the shared [Merkle trees](../Merkle/).
+- `Fors.lean`: `forsNode`, `forsKey`, `treeOpen`, `treeRecover` and `forsRecover`, and FORS from [FIPS 205](https://doi.org/10.6028/NIST.FIPS.205) §8, on the same Merkle trees.
 - `Digest.lean`: `deriveRandomizer`, `messageDigest`, `digestIndex` and `digestLeaves`.
 - `KeyGen.lean`: `keygenFromSeed`.
 - `Sign.lean`: `Seeded.sign`.
@@ -115,6 +115,8 @@ The proofs are in `EthLib/Cryptography/Proofs/Sphincs/`.
   Honest openings recover the instance's FORS key (`forsRecover_forsSign`).
 - The hypertree (`Tree.lean`, `Correctness.lean`).
   An honest path leads from a key's leaf to its tree's root (`fold_path_root`).
+  A tree hashes only at its own levels, so every node address names the true level (`path_eq_of_agree`, `fold_eq_of_agree`).
+  A FORS tree hashes only at levels 1 to 9, where its node address is exact (`forsNode_eq_of_agree`, `treeOpen_path_eq_of_agree`).
   Each higher key signs the root of the tree its index names on the layer below (`OtsKey.ofIndex_child`).
 - The digest (`Digest.lean`).
   The digest is two Keccak-256 calls, and the index and the 24 leaves are exactly its low 266 bits (`digest_fields`).
@@ -151,7 +153,7 @@ The proofs are in `EthLib/Cryptography/Proofs/Sphincs/`.
 
 ## What the kernel cannot evaluate
 
-This is a limit on computing results inside Lean, separate from the missing theorems above.
+That limit is on computing results inside Lean, and is separate from the missing theorems above.
 
 The kernel checks the known answer itself, with no `native_decide`.
 

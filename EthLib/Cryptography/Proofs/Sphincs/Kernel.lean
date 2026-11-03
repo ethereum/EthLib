@@ -14,7 +14,8 @@ So the known answer runs on a fast form instead, proved equal to the specificati
 
 - The hash is the record form of Keccak-f, over its input written as one list.
 - `Th(P, A, M)` is that hash of the list `P ++ A ++ M`.
-- A chain walk, a path fold and a FORS climb are the same walks over that `Th`.
+- A chain walk is the same walk over that `Th`.
+- A path fold and a FORS climb are the climbs of the shared Merkle tree, with that `Th` as the node hash.
 
 A known answer rewrites its statement with these equalities, then lets the kernel evaluate it.
 -/
@@ -93,83 +94,47 @@ theorem chain_eq (pp : PublicParam) (key : OtsKey) (i : Fin V) (start : Nat) :
 
 /-! ## Paths -/
 
-/-- Climbing a hypertree path over the fast hash, level for level the specification's. -/
-def climbUpto (pp : PublicParam) (layer : Layer) (tree e : Nat) (pi : Vector Digest layer.height)
-    (leaf : Digest) : (levels : Nat) → levels ≤ layer.height → Digest
-  | 0, _ => leaf
-  | l + 1, h =>
-    let current := climbUpto pp layer tree e pi leaf l (by omega)
-    let sibling := pi[l]'(by omega)
-    let address := addrNode layer tree ⟨l + 1, by have := layer.height_le; omega⟩ (e >>> (l + 1))
-    -- Bit `l` of the key's index says which child the held node is.
-    if (e >>> l) % 2 == 0 then th pp address (current.toList ++ sibling.toList)
-    else th pp address (sibling.toList ++ current.toList)
+/-- A parent node over the fast hash, its children written as lists. -/
+def nodeHash (pp : PublicParam) (layer : Layer) (tree level j : Nat) (left right : Digest) : Id Digest :=
+  th pp (addrNode layer tree (Fin.ofNat _ level) j) (left.toList ++ right.toList)
 
-/-- Climbing a path is climbing it over the fast hash. -/
-theorem climbUpto_eq (pp : PublicParam) (layer : Layer) (tree e : Nat)
-    (pi : Vector Digest layer.height) (leaf : Digest) :
-    ∀ levels h,
-      Internal.climbUpto pp layer tree e pi leaf levels h
-        = climbUpto pp layer tree e pi leaf levels h := by
-  intro levels
-  induction levels with
-  | zero => intro h; rfl
-  | succ l ih =>
-    intro h
-    -- One level on each side, the climbs below it equal by induction.
-    simp only [Internal.climbUpto, Internal.climbStep, nodeHash, climbUpto, th_eq, ih,
-      toList_append, toList_packBytes]
+/-- A parent node is the parent over the fast hash. -/
+theorem nodeHash_eq (pp : PublicParam) (layer : Layer) (tree : Nat) :
+    Sphincs.nodeHash pp layer tree = nodeHash pp layer tree := by
+  funext level j left right
+  simp only [Sphincs.nodeHash, nodeHash, th_eq, toList_append, toList_packBytes]
 
-/-- A path fold is the fold over the fast hash. -/
+/-- A path fold is the same climb over the fast hash. -/
 theorem fold_eq (pp : PublicParam) (layer : Layer) (tree e : Nat) (leaf : Digest)
     (pi : Vector Digest layer.height) :
-    fold pp layer tree e leaf pi = climbUpto pp layer tree e pi leaf layer.height (Nat.le_refl _) :=
-  climbUpto_eq pp layer tree e pi leaf _ _
+    fold pp layer tree e leaf pi = (Merkle.climb (nodeHash pp layer tree) 0 e leaf pi.toList).run := by
+  rw [fold, nodeHash_eq]
 
 /-! ## FORS -/
 
-/-- Climbing a FORS path over the fast hash, level for level the specification's. -/
-def forsClimbUpto (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREES) (l : Nat)
-    (pi : Vector Digest FORS_HEIGHT) (leaf : Digest) :
-    (levels : Nat) → levels ≤ FORS_HEIGHT - 1 → Digest
-  | 0, _ => leaf
-  | k + 1, h =>
-    let current := forsClimbUpto pp idx kappa l pi leaf k (by omega)
-    let sibling := pi[k]'(by have := h; simp only [FORS_HEIGHT] at this ⊢; omega)
-    let address := addrForsNode idx kappa ⟨k + 1, by have := h; simp only [FORS_HEIGHT] at this; omega⟩
-      (forsIndex (l >>> (k + 1)))
-    -- Bit `k` of the leaf index says which child the held node is.
-    if (l >>> k) % 2 == 0 then th pp address (current.toList ++ sibling.toList)
-    else th pp address (sibling.toList ++ current.toList)
+/-- A FORS parent node over the fast hash, its children written as lists. -/
+def forsNodeHash (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREES) (level j : Nat)
+    (left right : Digest) : Id Digest :=
+  th pp (addrForsNode idx kappa (Fin.ofNat _ level) (forsIndex j)) (left.toList ++ right.toList)
 
-/-- Climbing a FORS path is climbing it over the fast hash. -/
-theorem forsClimbUpto_eq (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREES) (l : Nat)
-    (pi : Vector Digest FORS_HEIGHT) (leaf : Digest) :
-    ∀ levels h,
-      Internal.forsClimbUpto pp idx kappa l pi leaf levels h
-        = forsClimbUpto pp idx kappa l pi leaf levels h := by
-  intro levels
-  induction levels with
-  | zero => intro h; rfl
-  | succ k ih =>
-    intro h
-    -- One level on each side, the climbs below it equal by induction.
-    simp only [Internal.forsClimbUpto, Internal.forsClimbStep, forsNodeHash, forsClimbUpto, th_eq, ih,
-      toList_append, toList_packBytes]
-    rfl
+/-- A FORS parent node is the parent over the fast hash. -/
+theorem forsNodeHash_eq (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREES) :
+    Sphincs.forsNodeHash pp idx kappa = forsNodeHash pp idx kappa := by
+  funext level j left right
+  simp only [Sphincs.forsNodeHash, forsNodeHash, th_eq, toList_append, toList_packBytes]
 
 /-- The two level-9 nodes an opening leads to, over the fast hash. -/
 def treeRecover (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREES) (l : Fin (2 ^ FORS_HEIGHT))
     (opening : TreeOpening) : Digest × Digest :=
   let leaf := th pp (addrForsLeaf idx kappa l) opening.secret.toList
-  let reached := forsClimbUpto pp idx kappa l opening.path leaf (FORS_HEIGHT - 1) (Nat.le_refl _)
-  let other := opening.path[FORS_HEIGHT - 1]'(by decide)
-  if (l.val >>> (FORS_HEIGHT - 1)) % 2 == 0 then (reached, other) else (other, reached)
+  let reached :=
+    (Merkle.climb (forsNodeHash pp idx kappa) 0 l leaf (opening.path.toList.take (FORS_HEIGHT - 1))).run
+  Merkle.ordered (l.val >>> (FORS_HEIGHT - 1)) reached (opening.path[FORS_HEIGHT - 1]'(by decide))
 
-/-- Recovering a tree's two level-9 nodes is recovering them over the fast hash. -/
+/-- The two level-9 nodes that an opening recovers are the ones it recovers over the fast hash. -/
 theorem treeRecover_eq (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREES)
     (l : Fin (2 ^ FORS_HEIGHT)) (opening : TreeOpening) :
     Sphincs.treeRecover pp idx kappa l opening = treeRecover pp idx kappa l opening := by
-  simp only [Sphincs.treeRecover, forsLeafHash, th_eq, forsClimbUpto_eq, treeRecover, toList_packBytes]
+  simp only [Sphincs.treeRecover, forsLeafHash, th_eq, forsNodeHash_eq, treeRecover, toList_packBytes]
 
 end EthLib.Cryptography.Sphincs.Kernel

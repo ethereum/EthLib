@@ -96,7 +96,7 @@ The statement is written with VCVio's oracle computations and probabilities, so 
 
 ### Merkle trees
 
-leanXMSS, the VRF tree and SSZ build their trees on one definition.
+leanXMSS, leanSPHINCS, the VRF tree and SSZ build their trees on one definition.
 Two theorems in `Proofs/Merkle/Binding.lean` describe what a path binds, for every node hash.
 The first is `climb_binding`, about two climbs from one position that reach one node.
 They are equal, or `findCollision` returns a collision of the node hash at an ancestor of that position.

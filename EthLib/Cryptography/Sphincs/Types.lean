@@ -10,7 +10,7 @@ Fixed-size byte objects, with the length carried in the type, and the layers of 
 
 - Indexing is total, so reading a field needs no bounds proof and cannot panic.
 - Sizes stop being side conditions dragged through proofs.
-- These are abbreviations, so equal-length objects stay interchangeable.
+- The types are abbreviations, so equal-length objects stay interchangeable.
 
 The byte conversions are leanXMSS's: both schemes read and write integers little-endian.
 -/

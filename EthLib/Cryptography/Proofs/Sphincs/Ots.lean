@@ -25,7 +25,7 @@ variable {pp : PublicParam} {key : OtsKey} {i : Fin V} {start s₁ s₂ : Nat} {
 @[simp] theorem chain_zero (h : start + 0 < CHAIN_LENGTH) :
     chain pp key i start 0 h value = value := rfl
 
-/-- Walking `s₁` steps then `s₂` more is walking `s₁ + s₂` steps. -/
+/-- A walk of `s_1` steps, then `s_2` more, is a walk of `s_1 + s_2` steps. -/
 theorem chain_add (h₁ : start + s₁ < CHAIN_LENGTH) (h : start + s₁ + s₂ < CHAIN_LENGTH) :
     chain pp key i (start + s₁) s₂ h (chain pp key i start s₁ h₁ value)
       = chain pp key i start (s₁ + s₂) (by omega) value := by

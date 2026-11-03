@@ -24,8 +24,10 @@ So one definition serves both kinds of tree, and every theorem holds for both.
 The tree never hashes on its own.
 The primitive that passes the node hash also chooses its domain separation.
 
-leanXMSS hashes a node with `Th`, under its public parameter and the node's address `A_node(l, lambda, j)`.
+leanXMSS hashes a node with `Th`, under its public parameter and the address `A_node(l, lambda, j)`.
 That address names the layer, the level and the index of the node.
+The hypertree and the FORS trees of leanSPHINCS do the same, with addresses that also name the tree.
+
 The VRF tree prefixes every node input with the 11 bytes `PQ_VRF_NODE`.
 Its proofs show that no node input is also a leaf, secret or output input.
 SSZ hashes the 64 bytes of the two children with SHA-256 and no prefix, as the SSZ specification fixes every root.

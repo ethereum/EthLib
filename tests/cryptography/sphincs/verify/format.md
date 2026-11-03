@@ -19,7 +19,8 @@ All bytes are hex strings prefixed with `0x`.
 Inputs of any other length are rejected.
 
 The message digest picks the FORS instance and its leaves, and the FORS openings give a FORS key.
-A signature verifies when each layer's counter encodes what the layer signs as a codeword, and the top layer's path reaches the root of the public key.
+A signature verifies when two conditions hold.
+Each layer's counter encodes what the layer signs as a codeword, and the top layer's path reaches the root of the public key.
 
 Each case named `tampered` flips one bit in the first value of one field, except `tampered_top_last_sibling`, which flips the last byte of the signature.
 
