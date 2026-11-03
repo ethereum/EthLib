@@ -215,15 +215,15 @@ This guide makes the recommendations that it names into requirements for EthLib.
 ### Word count
 
 STE 8.4 to 8.7 say how to count words.
-A number with its unit, such as "48 bytes", counts as one word.
-So do an abbreviation, a proper name, a quoted title, a formula and a group of hyphenated words.
+A number, or a number with its unit such as "48 bytes", counts as one word.
+So do an abbreviation, an alphanumeric identifier, quoted text, a title or label, a proper name and a group of hyphenated words.
 Do not add hyphens or quotation marks to hide a long sentence.
 
 Text in parentheses counts as one word in the sentence around it.
 Check the text in the parentheses on its own for length.
 For the count, a list introduction ends at its colon, and each list item counts separately.
 
-EthLib also counts an identifier, a command, a URL and a citation key as one word.
+EthLib also counts a formula, a command, a URL and a citation key as one word.
 A citation of a document and its section, such as RFC 9380 §5.3.1, also counts as one word.
 This adaptation keeps exact references whole, so that the limit does not push a writer to shorten them.
 The text of an ordinary link keeps its words.
@@ -415,7 +415,7 @@ A shorter sentence is not better if it changes the statement.
 | STE 3.1 to 3.4, verb forms (V1) | Adapted: simple forms stay preferred, but a modal or complex form stays when a simple form would lose an uncertainty or a time span. |
 | STE 5.3, instructions (S4) | Adapted: a requirement keeps its "must", "may" or "can", because contribution rules state obligations as well as steps. |
 | STE 7, safety instructions | Applied to risky operations, such as a command that rewrites the test vectors: the condition or the instruction comes before the explanation of the result. |
-| STE 8.6, word count | Adapted: identifiers, commands, URLs, citation keys and citations of a document and its section count as one word, so that exact references stay whole. |
+| STE 8.6, word count | Adapted: formulas, commands, URLs, citation keys and citations of a document and its section count as one word, so that exact references stay whole. |
 | STE general recommendations | The recommendations named above are requirements of this guide, not STE rules. |
 | EthLib additions | The claims and evidence rules (C1 to C9), the rule against dashes between clauses (U2) and the rule on emphasis (U5) are EthLib policies. |
 
