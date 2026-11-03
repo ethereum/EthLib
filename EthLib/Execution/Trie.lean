@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Trie.HexPrefix
+public import EthLib.Execution.Trie.Proof
 public import EthLib.Execution.Trie.Root
 
 /-!
