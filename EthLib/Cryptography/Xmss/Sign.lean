@@ -55,7 +55,7 @@ def signDerived (s : Seed) (pp : PublicParam) (idx : LeafIndex) (msg : Message) 
   let bottom ← match ← signLayer H pp s .bottom idx.toNat (packBytes msg) with
     | .ok sig => pure sig
     | .error err => return .error err
-  let bottomRoot ← node H pp s .bottom LAYER_HEIGHT (Nat.le_refl _) (bottomTree idx)
+  let bottomRoot ← node H pp s .bottom LAYER_HEIGHT (bottomTree idx)
   let top ← match ← signLayer H pp s .top (bottomTree idx) (packBytes bottomRoot) with
     | .ok sig => pure sig
     | .error err => return .error err

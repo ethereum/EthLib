@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Address
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Codeword
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scheme
+public import EthLib.Cryptography.Proofs.Merkle.Completeness
 
 /-!
 # Proofs: EthLib's hashing is the model's
@@ -337,15 +338,17 @@ Its oracle input is the model's tweakable hash input. -/
 theorem nodeHash_bottom_tweakable (P : XmssSecurity.PublicParameter)
     (level : XmssSecurity.MerkleLevel)
     (node : XmssSecurity.MerkleNode) (left right : XmssSecurity.Digest) :
-    nodeHash (queryH (m := m)) (ofParam P) .bottom ⟨level.val + 1, by
-        have := level.isLt; simp only [XmssSecurity.treeHeight, LAYER_HEIGHT] at *; omega⟩
-        node.val (ofDigest left) (ofDigest right)
+    nodeHash (queryH (m := m)) (ofParam P) .bottom (level.val + 1) node.val (ofDigest left) (ofDigest right)
       = ofDigest <$> XmssSecurity.Concrete.tweakableHash (m := m) P (.merkle level node)
           (XmssSecurity.Concrete.nodePayload left right) := by
   rw [nodeHash]
   refine th_queryH P _ _ _ _ ?_ ?_
   · rw [toList_addrNode]
-    refine fieldBytes_congr rfl rfl (by simp [Layer.toNat]) ?_
+    have hlevel : level.val + 1 < LAYER_HEIGHT + 1 := by
+      have := level.isLt
+      simp only [XmssSecurity.treeHeight, LAYER_HEIGHT] at *
+      omega
+    refine fieldBytes_congr rfl rfl (by simp [Layer.toNat, Nat.mod_eq_of_lt hlevel]) ?_
     have h32 : node.val < 4294967296 := lt_of_lt_of_le node.isLt (by decide)
     simp [Nat.mod_eq_of_lt h32]
   · simp only [toList_data_append, toList_data_packBytes, toList_ofDigest]
@@ -354,9 +357,7 @@ theorem nodeHash_bottom_tweakable (P : XmssSecurity.PublicParameter)
 /-- A bottom node, from its two children. -/
 theorem nodeHash_bottom (P : XmssSecurity.PublicParameter) (level : XmssSecurity.MerkleLevel)
     (node : XmssSecurity.MerkleNode) (left right : XmssSecurity.Digest) :
-    nodeHash (queryH (m := m)) (ofParam P) .bottom ⟨level.val + 1, by
-        have := level.isLt; simp only [XmssSecurity.treeHeight, LAYER_HEIGHT] at *; omega⟩
-        node.val (ofDigest left) (ofDigest right)
+    nodeHash (queryH (m := m)) (ofParam P) .bottom (level.val + 1) node.val (ofDigest left) (ofDigest right)
       = ofDigest <$> XmssSecurity.Concrete.nodeHash (m := m) P level node left right := by
   rw [XmssSecurity.Concrete.nodeHash, map_ofDigest_toDigest]
 
@@ -365,15 +366,18 @@ theorem nodeHash_bottom (P : XmssSecurity.PublicParameter) (level : XmssSecurity
 Its oracle input is the model's tweakable hash input. -/
 theorem nodeHash_top_tweakable (P : XmssSecurity.PublicParameter) (level : XmssSecurity.MerkleLevel)
     (node : XmssSecurity.TopNode) (left right : XmssSecurity.Digest) :
-    nodeHash (queryH (m := m)) (ofParam P) .top ⟨level.val + 1, by
-        have := level.isLt; simp only [XmssSecurity.treeHeight, LAYER_HEIGHT] at *; omega⟩
-        node.val (ofDigest left) (ofDigest right)
+    nodeHash (queryH (m := m)) (ofParam P) .top (level.val + 1) node.val (ofDigest left) (ofDigest right)
       = ofDigest <$> XmssSecurity.Concrete.tweakableHash (m := m) P (.topMerkle level node)
           (XmssSecurity.Concrete.nodePayload left right) := by
   rw [nodeHash]
   refine th_queryH P _ _ _ _ ?_ ?_
   · rw [toList_addrNode]
-    refine fieldBytes_congr rfl rfl (by simp [Layer.toNat, XmssSecurity.topFlag]; omega) ?_
+    have hlevel : level.val + 1 < LAYER_HEIGHT + 1 := by
+      have := level.isLt
+      simp only [XmssSecurity.treeHeight, LAYER_HEIGHT] at *
+      omega
+    refine fieldBytes_congr rfl rfl
+      (by simp [Layer.toNat, XmssSecurity.topFlag, Nat.mod_eq_of_lt hlevel]; omega) ?_
     have h32 : node.val < 4294967296 := lt_of_lt_of_le node.isLt (by decide)
     simp [Nat.mod_eq_of_lt h32]
   · simp only [toList_data_append, toList_data_packBytes, toList_ofDigest]
@@ -382,9 +386,7 @@ theorem nodeHash_top_tweakable (P : XmssSecurity.PublicParameter) (level : XmssS
 /-- A top node, from its two children. -/
 theorem nodeHash_top (P : XmssSecurity.PublicParameter) (level : XmssSecurity.MerkleLevel)
     (node : XmssSecurity.TopNode) (left right : XmssSecurity.Digest) :
-    nodeHash (queryH (m := m)) (ofParam P) .top ⟨level.val + 1, by
-        have := level.isLt; simp only [XmssSecurity.treeHeight, LAYER_HEIGHT] at *; omega⟩
-        node.val (ofDigest left) (ofDigest right)
+    nodeHash (queryH (m := m)) (ofParam P) .top (level.val + 1) node.val (ofDigest left) (ofDigest right)
       = ofDigest <$> XmssSecurity.Concrete.topNodeHash (m := m) P level node left right := by
   rw [XmssSecurity.Concrete.topNodeHash, map_ofDigest_toDigest]
 
@@ -462,93 +464,134 @@ theorem _root_.XmssSecurity.Concrete.topNodeHash_eq (P : XmssSecurity.PublicPara
 
 /-! ## Climbing a path -/
 
-/-- One level of a bottom path, in the order bit `l` of the key names. -/
+/-- One level of a bottom path, in the order bit `l` of the key names.
+
+The held node is node `floor(idx / 2^l)` on level `l`, so its low bit is bit `l` of `idx`. -/
 theorem climbStep_bottom (P : XmssSecurity.PublicParameter) (idx : XmssSecurity.LeafIndex)
     (l : Fin LAYER_HEIGHT) (current sibling : XmssSecurity.Digest) :
-    Internal.climbStep (queryH (m := m)) (ofParam P) .bottom idx.val l (ofDigest current)
-        (ofDigest sibling)
+    (if idx.val / 2 ^ l.val % 2 = 0 then
+        nodeHash (queryH (m := m)) (ofParam P) .bottom (l.val + 1) (idx.val / 2 ^ l.val / 2)
+          (ofDigest current) (ofDigest sibling)
+      else
+        nodeHash (queryH (m := m)) (ofParam P) .bottom (l.val + 1) (idx.val / 2 ^ l.val / 2)
+          (ofDigest sibling) (ofDigest current))
       = ofDigest <$> XmssSecurity.Concrete.authenticationNodeHash (m := m) P idx l.val current
           sibling := by
   have hl : l.val < XmssSecurity.treeHeight := l.isLt
-  have hbit : (idx.val >>> l.val % 2 == 0) = !idx.val.testBit l.val := by
-    rw [Nat.testBit_eq_decide_div_mod_eq, Nat.shiftRight_eq_div_pow]
-    rcases Nat.mod_two_eq_zero_or_one (idx.val / 2 ^ l.val) with h | h <;> simp [h]
   -- The parent's index is the model's node index one level up.
-  have hnode : idx.val >>> (l.val + 1) = (XmssSecurity.Concrete.nodeIndex idx l.val).val := by
-    rw [Nat.shiftRight_eq_div_pow]
+  have hnode : idx.val / 2 ^ l.val / 2 = (XmssSecurity.Concrete.nodeIndex idx l.val).val := by
+    rw [Nat.div_div_eq_div_mul, ← Nat.pow_succ]
     rfl
-  unfold Internal.climbStep XmssSecurity.Concrete.authenticationNodeHash
-  rw [hbit, hnode]
-  simp only [hl, ↓reduceDIte]
-  cases idx.val.testBit l.val <;>
-  · simp only [Bool.not_true, Bool.not_false, Bool.false_eq_true, ↓reduceIte]
+  unfold XmssSecurity.Concrete.authenticationNodeHash
+  simp only [hnode, hl, ↓reduceDIte]
+  rcases Nat.mod_two_eq_zero_or_one (idx.val / 2 ^ l.val) with hbit | hbit
+  · -- Bit `l` is clear: the held node is the left child.
+    have htest : idx.val.testBit l.val = false := by
+      rw [Nat.testBit_eq_decide_div_mod_eq]
+      simp [hbit]
+    simp only [hbit, htest, ↓reduceIte, Bool.false_eq_true]
+    exact nodeHash_bottom P ⟨l.val, hl⟩ _ _ _
+  · -- Bit `l` is set: the held node is the right child.
+    have htest : idx.val.testBit l.val = true := by
+      rw [Nat.testBit_eq_decide_div_mod_eq]
+      simp [hbit]
+    simp only [hbit, htest, Nat.one_ne_zero, ↓reduceIte]
     exact nodeHash_bottom P ⟨l.val, hl⟩ _ _ _
 
 /-- One level of a top path, in the order bit `l` of the key names. -/
 theorem climbStep_top (P : XmssSecurity.PublicParameter) (key : XmssSecurity.TopIndex)
     (l : Fin LAYER_HEIGHT) (current sibling : XmssSecurity.Digest) :
-    Internal.climbStep (queryH (m := m)) (ofParam P) .top key.val l (ofDigest current)
-        (ofDigest sibling)
+    (if key.val / 2 ^ l.val % 2 = 0 then
+        nodeHash (queryH (m := m)) (ofParam P) .top (l.val + 1) (key.val / 2 ^ l.val / 2)
+          (ofDigest current) (ofDigest sibling)
+      else
+        nodeHash (queryH (m := m)) (ofParam P) .top (l.val + 1) (key.val / 2 ^ l.val / 2)
+          (ofDigest sibling) (ofDigest current))
       = ofDigest <$> (if key.val.testBit l.val then
           XmssSecurity.Concrete.topNodeHash (m := m) P ⟨l.val, l.isLt⟩
             (XmssSecurity.Concrete.topNodeIndex key l.val) sibling current
         else
           XmssSecurity.Concrete.topNodeHash P ⟨l.val, l.isLt⟩
             (XmssSecurity.Concrete.topNodeIndex key l.val) current sibling) := by
-  have hbit : (key.val >>> l.val % 2 == 0) = !key.val.testBit l.val := by
-    rw [Nat.testBit_eq_decide_div_mod_eq, Nat.shiftRight_eq_div_pow]
-    rcases Nat.mod_two_eq_zero_or_one (key.val / 2 ^ l.val) with h | h <;> simp [h]
   -- The parent's index is the model's node index one level up.
-  have hnode : key.val >>> (l.val + 1) = (XmssSecurity.Concrete.topNodeIndex key l.val).val := by
-    rw [Nat.shiftRight_eq_div_pow]
+  have hnode : key.val / 2 ^ l.val / 2 = (XmssSecurity.Concrete.topNodeIndex key l.val).val := by
+    rw [Nat.div_div_eq_div_mul, ← Nat.pow_succ]
     rfl
-  unfold Internal.climbStep
-  rw [hbit, hnode]
-  cases key.val.testBit l.val <;>
-  · simp only [Bool.not_true, Bool.not_false, Bool.false_eq_true, ↓reduceIte]
+  simp only [hnode]
+  rcases Nat.mod_two_eq_zero_or_one (key.val / 2 ^ l.val) with hbit | hbit
+  · -- Bit `l` is clear: the held node is the left child.
+    have htest : key.val.testBit l.val = false := by
+      rw [Nat.testBit_eq_decide_div_mod_eq]
+      simp [hbit]
+    simp only [hbit, htest, ↓reduceIte, Bool.false_eq_true]
+    exact nodeHash_top P ⟨l.val, l.isLt⟩ _ _ _
+  · -- Bit `l` is set: the held node is the right child.
+    have htest : key.val.testBit l.val = true := by
+      rw [Nat.testBit_eq_decide_div_mod_eq]
+      simp [hbit]
+    simp only [hbit, htest, Nat.one_ne_zero, ↓reduceIte]
     exact nodeHash_top P ⟨l.val, l.isLt⟩ _ _ _
 
-/-- A bottom leaf, climbed up the bottom `levels` levels of a signature's path. -/
-theorem climbUpto_bottom (P : XmssSecurity.PublicParameter) (idx : XmssSecurity.LeafIndex)
+/-- A bottom leaf, climbed up the first `levels` siblings of a signature's path. -/
+theorem climb_take_bottom (P : XmssSecurity.PublicParameter) (idx : XmssSecurity.LeafIndex)
     (σ : XmssSecurity.Signature) (leaf : XmssSecurity.Digest) :
-    ∀ (levels : Nat) (h : levels ≤ LAYER_HEIGHT),
-      Internal.climbUpto (queryH (m := m)) (ofParam P) .bottom idx.val (ofPath σ.authPath)
-          (ofDigest leaf) levels h
+    ∀ (levels : Nat), levels ≤ LAYER_HEIGHT →
+      Merkle.climb (nodeHash (queryH (m := m)) (ofParam P) .bottom) 0 idx.val (ofDigest leaf)
+          ((ofPath σ.authPath).toList.take levels)
         = ofDigest <$> XmssSecurity.Concrete.authenticationRoot (m := m) P idx σ levels leaf
-  | 0, _ => by simp [Internal.climbUpto, XmssSecurity.Concrete.authenticationRoot]
+  | 0, _ => by simp [Merkle.climb, XmssSecurity.Concrete.authenticationRoot]
   | l + 1, h => by
-    unfold Internal.climbUpto
-    rewrite [climbUpto_bottom P idx σ leaf l (by omega), bind_map_left]
+    rw [Merkle.climb_take_succ _ _ _ _ _ (by simp; omega),
+      climb_take_bottom P idx σ leaf l (by omega), bind_map_left]
     simp only [XmssSecurity.Concrete.authenticationRoot, map_bind]
     refine bind_congr fun current => ?_
     -- The sibling on level `l` is entry `l` of the path.
     have hl : l < XmssSecurity.treeHeight := by
       simp only [XmssSecurity.treeHeight, LAYER_HEIGHT] at *
       omega
-    rw [show (ofPath σ.authPath)[l] = ofDigest (σ.authPath ⟨l, hl⟩) from Vector.getElem_ofFn _,
-      climbStep_bottom]
+    rw [show (ofPath σ.authPath).toList[l]'(by simp; omega) = ofDigest (σ.authPath ⟨l, hl⟩) by
+      simp [ofPath]]
+    rw [climbStep_bottom P idx ⟨l, by omega⟩]
     simp only [XmssSecurity.Concrete.signaturePath, hl, ↓reduceDIte]
 
-/-- A top leaf, climbed up the bottom `levels` levels of a path. -/
-theorem climbUpto_top (P : XmssSecurity.PublicParameter) (key : XmssSecurity.TopIndex)
+/-- A top leaf, climbed up the first `levels` siblings of a path. -/
+theorem climb_take_top (P : XmssSecurity.PublicParameter) (key : XmssSecurity.TopIndex)
     (path : Fin XmssSecurity.treeHeight → XmssSecurity.Digest) (leaf : XmssSecurity.Digest) :
-    ∀ (levels : Nat) (h : levels ≤ LAYER_HEIGHT),
-      Internal.climbUpto (queryH (m := m)) (ofParam P) .top key.val (ofPath path) (ofDigest leaf)
-          levels h
+    ∀ (levels : Nat), levels ≤ LAYER_HEIGHT →
+      Merkle.climb (nodeHash (queryH (m := m)) (ofParam P) .top) 0 key.val (ofDigest leaf)
+          ((ofPath path).toList.take levels)
         = ofDigest <$> XmssSecurity.Concrete.topAuthenticationRoot (m := m) P key path levels leaf
-  | 0, _ => by simp [Internal.climbUpto, XmssSecurity.Concrete.topAuthenticationRoot]
+  | 0, _ => by simp [Merkle.climb, XmssSecurity.Concrete.topAuthenticationRoot]
   | l + 1, h => by
-    unfold Internal.climbUpto
-    rewrite [climbUpto_top P key path leaf l (by omega), bind_map_left]
+    rw [Merkle.climb_take_succ _ _ _ _ _ (by simp; omega),
+      climb_take_top P key path leaf l (by omega), bind_map_left]
     simp only [XmssSecurity.Concrete.topAuthenticationRoot, map_bind]
     refine bind_congr fun current => ?_
     -- The sibling on level `l` is entry `l` of the path.
     have hl : l < XmssSecurity.treeHeight := by
       simp only [XmssSecurity.treeHeight, LAYER_HEIGHT] at *
       omega
-    rw [show (ofPath path)[l] = ofDigest (path ⟨l, hl⟩) from Vector.getElem_ofFn _,
-      climbStep_top]
+    rw [show (ofPath path).toList[l]'(by simp; omega) = ofDigest (path ⟨l, hl⟩) by
+      simp [ofPath]]
+    rw [climbStep_top P key ⟨l, by omega⟩]
     simp only [hl, ↓reduceDIte]
+
+/-- A bottom fold climbs the whole path. -/
+theorem fold_bottom (P : XmssSecurity.PublicParameter) (idx : XmssSecurity.LeafIndex)
+    (σ : XmssSecurity.Signature) (leaf : XmssSecurity.Digest) :
+    fold (queryH (m := m)) (ofParam P) .bottom idx.val (ofDigest leaf) (ofPath σ.authPath)
+      = ofDigest <$> XmssSecurity.Concrete.authenticationRoot (m := m) P idx σ LAYER_HEIGHT leaf := by
+  rw [fold, ← climb_take_bottom P idx σ leaf LAYER_HEIGHT (Nat.le_refl _),
+    List.take_of_length_le (by simp)]
+
+/-- A top fold climbs the whole path. -/
+theorem fold_top (P : XmssSecurity.PublicParameter) (key : XmssSecurity.TopIndex)
+    (path : Fin XmssSecurity.treeHeight → XmssSecurity.Digest) (leaf : XmssSecurity.Digest) :
+    fold (queryH (m := m)) (ofParam P) .top key.val (ofDigest leaf) (ofPath path)
+      = ofDigest <$> XmssSecurity.Concrete.topAuthenticationRoot (m := m) P key path LAYER_HEIGHT
+          leaf := by
+  rw [fold, ← climb_take_top P key path leaf LAYER_HEIGHT (Nat.le_refl _),
+    List.take_of_length_le (by simp)]
 
 /-! ## A layer's root -/
 
@@ -655,8 +698,8 @@ theorem layerRoot_top (P : XmssSecurity.PublicParameter) (key : XmssSecurity.Top
     rewrite [show (Vector.ofFn fun i : Fin V => ofDigest (ends i)) = ofChains ends from rfl,
       otsLeafHash_top, bind_map_left]
     refine bind_congr fun leaf => ?_
-    simp only [pure_bind, fold]
-    rw [climbUpto_top]
+    simp only [pure_bind]
+    rw [fold_top]
     -- EthLib's tree height is the model's.
     simp [LAYER_HEIGHT, XmssSecurity.treeHeight]
 
@@ -711,8 +754,8 @@ theorem _root_.XmssSecurity.Concrete.verifyAfterLeaf_eq (pk : XmssSecurity.Publi
       let root ← XmssSecurity.Concrete.authenticationRoot pk.parameter idx σ
         XmssSecurity.treeHeight leaf
       XmssSecurity.Concrete.verifyTop pk (XmssSecurity.topKeyOf idx) root σ.top) := by
-  unfold XmssSecurity.Concrete.verifyAfterLeaf fold
-  rw [climbUpto_bottom, bind_map_left]
+  unfold XmssSecurity.Concrete.verifyAfterLeaf
+  rw [fold_bottom, bind_map_left]
   -- EthLib's tree height is the model's.
   simp only [toDigest_ofDigest, LAYER_HEIGHT, XmssSecurity.treeHeight]
 

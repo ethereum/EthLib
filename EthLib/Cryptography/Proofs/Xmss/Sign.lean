@@ -49,7 +49,7 @@ theorem signWith_run {sk : SecretKey} {idx : LeafIndex} {m : Message}
     (signWith (pureHash f) sk idx m).run
       = (signLayer (pureHash f) pp s .bottom idx.toNat (packBytes m)).run.bind fun bottom =>
           (signLayer (pureHash f) pp s .top (bottomTree idx)
-            (packBytes (node (pureHash f) pp s .bottom LAYER_HEIGHT (Nat.le_refl _)
+            (packBytes (node (pureHash f) pp s .bottom LAYER_HEIGHT
               (bottomTree idx)).run)).run.bind fun top =>
             .ok { leafIndex := idx, bottom, top } := by
   subst hs hpp
@@ -66,7 +66,7 @@ theorem signWith_run {sk : SecretKey} {idx : LeafIndex} {m : Message}
         (schemeSeed (pureHash f) sk.seed).run .top (bottomTree idx)
         (packBytes (node (pureHash f)
           (publicParamOf (pureHash f) (schemeSeed (pureHash f) sk.seed).run).run
-          (schemeSeed (pureHash f) sk.seed).run .bottom LAYER_HEIGHT (Nat.le_refl _)
+          (schemeSeed (pureHash f) sk.seed).run .bottom LAYER_HEIGHT
           (bottomTree idx)).run)).run with
     | error err => rfl
     | ok top => rfl
@@ -120,7 +120,7 @@ theorem sign_eq_ok {sk : SecretKey} {idx : LeafIndex} {m : Message} {σ : Signat
     σ.leafIndex = idx ∧
       (signLayer (pureHash f) pp s .bottom idx.toNat (packBytes m)).run = .ok σ.bottom ∧
       (signLayer (pureHash f) pp s .top (bottomTree idx)
-        (packBytes (node (pureHash f) pp s .bottom LAYER_HEIGHT (Nat.le_refl _)
+        (packBytes (node (pureHash f) pp s .bottom LAYER_HEIGHT
           (bottomTree idx)).run)).run = .ok σ.top := by
   rw [signWith_run hs hpp] at h
   -- Each layer is either an error, which propagates, or a value the next step uses.
@@ -131,7 +131,7 @@ theorem sign_eq_ok {sk : SecretKey} {idx : LeafIndex} {m : Message} {σ : Signat
   | ok bottom =>
     rw [hbottom, Except.bind] at h
     cases htop : (signLayer (pureHash f) pp s .top (bottomTree idx)
-        (packBytes (node (pureHash f) pp s .bottom LAYER_HEIGHT (Nat.le_refl _)
+        (packBytes (node (pureHash f) pp s .bottom LAYER_HEIGHT
           (bottomTree idx)).run)).run with
     | error err =>
       rw [htop] at h
@@ -168,7 +168,7 @@ theorem sign_error {sk : SecretKey} {idx : LeafIndex} {m : Message} {err : XmssE
         (schemeSeed (pureHash f) sk.seed).run).run (schemeSeed (pureHash f) sk.seed).run .top
         (bottomTree idx) (packBytes (node (pureHash f) (publicParamOf (pureHash f)
           (schemeSeed (pureHash f) sk.seed).run).run (schemeSeed (pureHash f) sk.seed).run
-          .bottom LAYER_HEIGHT (Nat.le_refl _) (bottomTree idx)).run)).run with
+          .bottom LAYER_HEIGHT (bottomTree idx)).run)).run with
     | error e' =>
       rw [htop] at h
       cases h

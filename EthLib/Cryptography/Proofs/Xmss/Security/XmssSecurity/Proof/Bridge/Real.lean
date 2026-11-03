@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Resolution
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Tree
 
 /-!
 # EthLib's key generation under the programmed cache
@@ -88,28 +89,28 @@ theorem queryCount_otsPublicLeaf (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer 
     fun _ => queryCount_th _ _ _
 
 theorem queryCount_node (pp : Xmss.PublicParam) (s : Xmss.Seed) (layer : Xmss.Layer) :
-    ∀ (level : Nat) (h : level ≤ LAYER_HEIGHT) (j : Nat),
-      QueryCount (Xmss.node queryH pp s layer level h j : OracleComp HashSpec Xmss.Digest)
+    ∀ (level : Nat) (j : Nat),
+      QueryCount (Xmss.node queryH pp s layer level j : OracleComp HashSpec Xmss.Digest)
         (nodeQueries level)
-  | 0, _, j => by
-    unfold Xmss.node
+  | 0, j => by
+    rw [Xmss.node_zero]
     exact queryCount_otsPublicLeaf pp s layer _
-  | l + 1, h, j => by
-    unfold Xmss.node
+  | l + 1, j => by
+    rw [Xmss.node_succ]
     have hcount : nodeQueries (l + 1) = nodeQueries l + (nodeQueries l + 1) := by
       simp only [nodeQueries, pow_succ]
       have : 1 ≤ 2 ^ l := Nat.one_le_two_pow
       omega
     rw [hcount]
-    exact (queryCount_node pp s layer l (by omega) _).bind fun _ =>
-      (queryCount_node pp s layer l (by omega) _).bind fun _ => queryCount_th _ _ _
+    exact (queryCount_node pp s layer l _).bind fun _ =>
+      (queryCount_node pp s layer l _).bind fun _ => queryCount_th _ _ _
 
 theorem queryCount_realKeygen (seed : MasterSeed) :
     QueryCount (realKeygen seed) (keygenQueries - 1) := by
   unfold realKeygen Xmss.publicKeyOf Xmss.publicParamOf
   rw [show keygenQueries - 1 = 1 + (nodeQueries 16 + 0) by decide]
   exact (queryCount_th _ _ _).bind fun _ =>
-    (queryCount_node _ _ _ 16 le_rfl 0).bind fun _ => .pure _
+    (queryCount_node _ _ _ 16 0).bind fun _ => .pure _
 
 /-! ## Erasing the derivations -/
 
@@ -253,12 +254,12 @@ theorem ofNat_topNodeOfNat {j : Nat} (hj : j < 2 ^ 16) :
 
 /-- A bottom node from `S` is the model's with its derivations erased. -/
 theorem erases_node_bottom (seed : MasterSeed) (d : Derivations) :
-    ∀ (level : Nat) (hlevel : level ≤ LAYER_HEIGHT) (j : Nat), j < 2 ^ (32 - level) →
+    ∀ (level : Nat), level ≤ LAYER_HEIGHT → ∀ (j : Nat), j < 2 ^ (32 - level) →
       Erases (progCache seed d) (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .bottom
-          level hlevel j : OracleComp HashSpec Xmss.Digest)
+          level j : OracleComp HashSpec Xmss.Digest)
         (ofDigest <$> Concrete.treeNode d.parameter d.secret level (Concrete.merkleNodeOfNat j))
   | 0, _, j, hj => by
-    rw [Xmss.node.eq_1, Concrete.treeNode_zero_eq, ofNat_merkleNodeOfNat (by simpa using hj),
+    rw [Xmss.node_zero, Concrete.treeNode_zero_eq, ofNat_merkleNodeOfNat (by simpa using hj),
       ← leaf_bottom]
     unfold Xmss.otsPublicLeaf
     exact (erases_pure_of_resolves (chainStarts_bottom seed d _)).bind_known _ _ (.refl _ _)
@@ -271,7 +272,7 @@ theorem erases_node_bottom (seed : MasterSeed) (d : Derivations) :
       have := Nat.pow_le_pow_right (show 0 < 2 by decide) (show 32 - (l + 1) ≤ 32 by omega)
       have : (2 : Nat) ^ 32 = 4294967296 := by norm_num
       omega
-    rw [Xmss.node.eq_2, Concrete.treeNode_succ_eq]
+    rw [Xmss.node_succ, Concrete.treeNode_succ_eq]
     simp only [show l < treeHeight by simp only [treeHeight]; omega, ↓reduceDIte]
     -- The children of node `j` are nodes `2j` and `2j + 1`, in both.
     have hleft : Concrete.childNode (Concrete.merkleNodeOfNat j) false
@@ -302,12 +303,12 @@ theorem erases_node_bottom (seed : MasterSeed) (d : Derivations) :
 
 /-- A top node from `S` is the model's with its derivations erased. -/
 theorem erases_node_top (seed : MasterSeed) (d : Derivations) :
-    ∀ (level : Nat) (hlevel : level ≤ LAYER_HEIGHT) (j : Nat), j < 2 ^ (16 - level) →
+    ∀ (level : Nat), level ≤ LAYER_HEIGHT → ∀ (j : Nat), j < 2 ^ (16 - level) →
       Erases (progCache seed d) (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .top
-          level hlevel j : OracleComp HashSpec Xmss.Digest)
+          level j : OracleComp HashSpec Xmss.Digest)
         (ofDigest <$> Concrete.topTreeNode d.parameter d.topSecret level (Concrete.topNodeOfNat j))
   | 0, _, j, hj => by
-    rw [Xmss.node.eq_1, Concrete.topTreeNode, ofNat_topNodeOfNat (by simpa using hj), ← leaf_top]
+    rw [Xmss.node_zero, Concrete.topTreeNode, ofNat_topNodeOfNat (by simpa using hj), ← leaf_top]
     unfold Xmss.otsPublicLeaf
     exact (erases_pure_of_resolves (chainStarts_top seed d _)).bind_known _ _ (.refl _ _)
   | l + 1, hlevel, j, hj => by
@@ -319,7 +320,7 @@ theorem erases_node_top (seed : MasterSeed) (d : Derivations) :
       have := Nat.pow_le_pow_right (show 0 < 2 by decide) (show 16 - (l + 1) ≤ 16 by omega)
       have : (2 : Nat) ^ 16 = 65536 := by norm_num
       omega
-    rw [Xmss.node.eq_2, Concrete.topTreeNode]
+    rw [Xmss.node_succ, Concrete.topTreeNode]
     simp only [show l < treeHeight by simp only [treeHeight]; omega, ↓reduceDIte]
     -- The children of node `j` are nodes `2j` and `2j + 1`, in both.
     have hleft : Concrete.topChildNode (Concrete.topNodeOfNat j) false
@@ -359,7 +360,7 @@ variable {seed : MasterSeed} {d : Derivations}
 theorem realBottomNode (h : Prepared seed d result cache) (level : Nat)
     (hlevel : level ≤ LAYER_HEIGHT)
     (j : Nat) (hj : j < 2 ^ (32 - level)) :
-    Resolves cache (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .bottom level hlevel j :
+    Resolves cache (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .bottom level j :
         OracleComp HashSpec Xmss.Digest)
       (ofDigest ((modelSecretKey d result).treeValue ⟨level, by
         have : level ≤ 16 := hlevel; simp only [treeHeight]; omega⟩
@@ -370,7 +371,7 @@ theorem realBottomNode (h : Prepared seed d result cache) (level : Nat)
 theorem realTopNode (h : Prepared seed d result cache) (level : Nat)
     (hlevel : level ≤ LAYER_HEIGHT)
     (j : Nat) (hj : j < 2 ^ (16 - level)) :
-    Resolves cache (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .top level hlevel j :
+    Resolves cache (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .top level j :
         OracleComp HashSpec Xmss.Digest)
       (ofDigest ((modelSecretKey d result).topTreeValue ⟨level, by
         have : level ≤ 16 := hlevel; simp only [treeHeight]; omega⟩

@@ -21,28 +21,28 @@ set_option maxRecDepth 100000
 theorem bottomCodeword_known_answer :
     codeword? (messageDigest hashId publicKey.publicParam .bottom (UInt32.ofNat leafIndex.toNat) (packBytes message)
       signature.bottom.randomizer).run = some bottomCodeword := by
-  simp only [messageDigest, Kernel.th_eq, Kernel.toList_append, Kernel.toList_packBytes]
+  simp only [messageDigest, FastHash.th_eq, FastHash.toList_append, FastHash.toList_packBytes]
   decide +kernel
 
 /-- The bottom layer's chains 0 to 21, walked to their ends. -/
 theorem bottomChains_0 : ∀ i : Fin V, 0 ≤ i.val → i.val < 22 →
     chainEnd hash publicKey.publicParam .bottom (UInt32.ofNat leafIndex.toNat) bottomCodeword
       signature.bottom.chainValues i = bottomEnds[i] := by
-  simp only [chainEnd, Kernel.chain_eq]
+  simp only [chainEnd, FastHash.chain_eq]
   decide +kernel
 
 /-- The bottom layer's chains 22 to 40, walked to their ends. -/
 theorem bottomChains_1 : ∀ i : Fin V, 22 ≤ i.val → i.val < 41 →
     chainEnd hash publicKey.publicParam .bottom (UInt32.ofNat leafIndex.toNat) bottomCodeword
       signature.bottom.chainValues i = bottomEnds[i] := by
-  simp only [chainEnd, Kernel.chain_eq]
+  simp only [chainEnd, FastHash.chain_eq]
   decide +kernel
 
 /-- The bottom layer's chains 41 to 57, walked to their ends. -/
 theorem bottomChains_2 : ∀ i : Fin V, 41 ≤ i.val → i.val < 58 →
     chainEnd hash publicKey.publicParam .bottom (UInt32.ofNat leafIndex.toNat) bottomCodeword
       signature.bottom.chainValues i = bottomEnds[i] := by
-  simp only [chainEnd, Kernel.chain_eq]
+  simp only [chainEnd, FastHash.chain_eq]
   decide +kernel
 
 /-- Every chain of the bottom layer, walked to its end. -/
@@ -64,13 +64,13 @@ theorem bottomChains : ∀ i : Fin V,
 /-- The bottom key's leaf, from its chain ends. -/
 theorem bottomLeaf_known_answer :
     (otsLeafHash hashId publicKey.publicParam .bottom (UInt32.ofNat leafIndex.toNat) bottomEnds).run = bottomLeaf := by
-  simp only [otsLeafHash, Kernel.th_eq, Kernel.toList_packDigests]
+  simp only [otsLeafHash, FastHash.th_eq, FastHash.toList_packDigests]
   decide +kernel
 
 /-- The bottom key's path leads from its leaf to the root of bottom tree 0xA5C3. -/
 theorem bottomFold_known_answer :
     (fold hashId publicKey.publicParam .bottom leafIndex.toNat bottomLeaf signature.bottom.path).run = bottomRoot := by
-  rw [Kernel.fold_eq]
+  rw [FastHash.fold_eq]
   decide +kernel
 
 /-- The bottom layer leads to the root of bottom tree 0xA5C3. -/

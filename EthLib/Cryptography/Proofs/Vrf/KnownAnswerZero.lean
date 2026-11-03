@@ -33,7 +33,7 @@ def outputZero : Digest :=
 
 /-- The opening at index 0 verifies, with its output. -/
 theorem verify_zero : verify rootZero 0 openingZero = some outputZero := by
-  rw [Kernel.verify_eq]
+  rw [FastHash.verify_eq]
   decide +kernel
 
 /-- Over bytes, the opening at index 0 verifies, with its output. -/
@@ -44,17 +44,17 @@ theorem verifyBytes_zero :
 
 /-- A wrong secret at index 0 is rejected. -/
 theorem verify_zero_wrongSecret : verify rootZero 0 (wrongSecret openingZero) = none := by
-  rw [Kernel.verify_eq]
+  rw [FastHash.verify_eq]
   decide +kernel
 
 /-- A wrong sibling at index 0 is rejected. -/
 theorem verify_zero_wrongSibling : verify rootZero 0 (wrongSibling openingZero) = none := by
-  rw [Kernel.verify_eq]
+  rw [FastHash.verify_eq]
   decide +kernel
 
 /-- The opening at index 0 is rejected at index 1. -/
 theorem verify_zero_otherIndex : verify rootZero 1 openingZero = none := by
-  rw [Kernel.verify_eq]
+  rw [FastHash.verify_eq]
   decide +kernel
 
 /-! ## Malformed input -/

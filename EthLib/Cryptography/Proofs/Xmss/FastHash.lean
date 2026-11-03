@@ -16,7 +16,7 @@ So the known answers run on a fast form instead, proved equal to the specificati
     hash             =  the fast form of the hash
     Th(P, A, M)      =  that hash of the list P ++ A ++ M
     a chain walk     =  the same walk over that Th
-    a path fold      =  the same fold over that Th
+    a path fold      =  the same climb over that Th
 ```
 
 The specification runs in the identity monad with `hashId`, so each equality is stated for `.run`.
@@ -26,7 +26,7 @@ A known answer rewrites its statement with these equalities, then lets the kerne
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Xmss.Kernel
+namespace EthLib.Cryptography.Xmss.FastHash
 
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
@@ -100,39 +100,24 @@ theorem chain_eq (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V) (st
 
 /-! ## Paths -/
 
-/-- Climbing a path over the fast hash, level for level the specification's. -/
-def climbUpto (pp : PublicParam) (layer : Layer) (e : Nat) (pi : Vector Digest LAYER_HEIGHT)
-    (leaf : Digest) : (levels : Nat) → levels ≤ LAYER_HEIGHT → Digest
-  | 0, _ => leaf
-  | l + 1, h =>
-    let current := climbUpto pp layer e pi leaf l (by omega)
-    let sibling := pi[l]'(by omega)
-    let address := addrNode layer ⟨l + 1, by omega⟩ (UInt32.ofNat (e >>> (l + 1)))
-    -- Bit `l` of the key's index says which child the held node is.
-    if (e >>> l) % 2 == 0 then th pp address (current.toList ++ sibling.toList)
-    else th pp address (sibling.toList ++ current.toList)
+/-- A parent node over the fast hash, its children written as lists. -/
+def nodeHash (pp : PublicParam) (layer : Layer) (level j : Nat) (left right : Digest) : Id Digest :=
+  th pp (addrNode layer (Fin.ofNat _ level) (UInt32.ofNat j)) (left.toList ++ right.toList)
 
-/-- Climbing a path is climbing it over the fast hash. -/
-theorem climbUpto_eq (pp : PublicParam) (layer : Layer) (e : Nat)
-    (pi : Vector Digest LAYER_HEIGHT) (leaf : Digest) :
-    ∀ levels h,
-      (Internal.climbUpto hashId pp layer e pi leaf levels h).run
-        = climbUpto pp layer e pi leaf levels h := by
-  intro levels
-  induction levels with
-  | zero => intro h; rfl
-  | succ l ih =>
-    intro h
-    -- One level on each side, the climbs below it equal by induction.
-    simp only [Internal.climbUpto, Internal.climbStep, nodeHash, climbUpto, Id.run_bind, ih]
-    -- Both sides branch on the same bit.
-    split <;> simp only [th_eq, toList_append, toList_packBytes]
+/-- A parent node is the parent over the fast hash. -/
+theorem nodeHash_eq (pp : PublicParam) (layer : Layer) :
+    Xmss.nodeHash hashId pp layer = nodeHash pp layer := by
+  funext level j left right
+  have h := th_eq pp (addrNode layer (Fin.ofNat _ level) (UInt32.ofNat j))
+    (packBytes left ++ packBytes right)
+  simp only [toList_append, toList_packBytes] at h
+  exact h
 
-/-- A path fold is the fold over the fast hash. -/
+/-- A path fold is the same climb over the fast hash. -/
 theorem fold_eq (pp : PublicParam) (layer : Layer) (e : Nat) (leaf : Digest)
     (pi : Vector Digest LAYER_HEIGHT) :
     (fold hashId pp layer e leaf pi).run
-      = climbUpto pp layer e pi leaf LAYER_HEIGHT (Nat.le_refl _) :=
-  climbUpto_eq pp layer e pi leaf _ _
+      = (Merkle.climb (nodeHash pp layer) 0 e leaf pi.toList).run := by
+  rw [fold, nodeHash_eq]
 
-end EthLib.Cryptography.Xmss.Kernel
+end EthLib.Cryptography.Xmss.FastHash

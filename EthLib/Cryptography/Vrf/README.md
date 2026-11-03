@@ -24,8 +24,8 @@ The module offers four groups of operations:
 - `root` and `opening` (`KeyGen.lean`) build the tree and open it, from any function that gives the secret of each index.
 - `keyGen`, `prove` and `evaluate` (`KeyGen.lean`) do the same from one 32-byte seed.
 
-The Merkle tree itself (`Tree.lean`) is generic in its nodes and its node hash, and knows nothing of the VRF.
-Its proofs give the tree's two guarantees, completeness and binding, and the proofs about the VRF build on them.
+The tree is the Merkle tree of [`EthLib.Cryptography.Merkle`](../Merkle/), with the VRF's node hash at every position.
+Its two guarantees, completeness and binding, are proved there, and the proofs about the VRF build on them.
 
 ## Key generation
 

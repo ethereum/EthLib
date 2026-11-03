@@ -120,6 +120,8 @@ Finally, a hash input determines its public parameter, address and payload (`thI
 
 **The one-time signature and the trees.**
 An honest one-time signature leads back to its key's leaf (`otsLeaf_otsSign`, `Ots.lean`), and an honest path leads from a key's leaf to its tree's root (`fold_path`, `Tree.lean`).
+Another path that reaches that root lets `findSecondPreimage` compute a second preimage of `Th` under the address of an ancestor (`fold_binding`, `Tree.lean`).
+Both statements specialize theorems proved for every tree in [`Merkle`](../Merkle/).
 
 **Serialization.**
 Decoding succeeds exactly on strings of the declared length, and on those strings encoding and decoding are inverse bijections (`Serialization.lean`).
@@ -152,8 +154,10 @@ The scheme seed, the public parameter and both keys' leaves, computed from the s
 This is a limit on computing results inside Lean, separate from the missing theorems in the previous section.
 
 The kernel checks every known answer itself, with no `native_decide`.
-A whole verification is too large for one kernel check, so the known answer checks it in pieces: each layer's codeword, a few chains at a time, the leaf and the path.
-The pieces run over a record form of Keccak-f, with the hash inputs as lists, which the kernel evaluates far faster than the specification's vectors and arrays.
-`Proofs/Hash/KeccakKernel.lean` proves the record form equal to Keccak-f for every state, and `Proofs/Xmss/Kernel.lean` carries that through the chains and the paths.
+A whole verification is too large for one kernel check.
+So the known answer checks it in pieces: each layer's codeword, a few chains at a time, the leaf and the path.
+The pieces run over a record form of Keccak-f, with the hash inputs as lists.
+The kernel evaluates that form far faster than the vectors and arrays of the specification.
+`Proofs/Hash/KeccakKernel.lean` proves the record form equal to Keccak-f for every state, and `Proofs/Xmss/FastHash.lean` carries that through the chains and the paths.
 
 The public key from the seed needs the whole top tree, `2^16` one-time keys, which is beyond the kernel.

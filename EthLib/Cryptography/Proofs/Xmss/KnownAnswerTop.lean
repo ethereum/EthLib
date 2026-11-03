@@ -21,28 +21,28 @@ set_option maxRecDepth 100000
 theorem topCodeword_known_answer :
     codeword? (messageDigest hashId publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) (packBytes bottomRoot)
       signature.top.randomizer).run = some topCodeword := by
-  simp only [messageDigest, Kernel.th_eq, Kernel.toList_append, Kernel.toList_packBytes]
+  simp only [messageDigest, FastHash.th_eq, FastHash.toList_append, FastHash.toList_packBytes]
   decide +kernel
 
 /-- The top layer's chains 0 to 23, walked to their ends. -/
 theorem topChains_0 : ∀ i : Fin V, 0 ≤ i.val → i.val < 24 →
     chainEnd hash publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) topCodeword
       signature.top.chainValues i = topEnds[i] := by
-  simp only [chainEnd, Kernel.chain_eq]
+  simp only [chainEnd, FastHash.chain_eq]
   decide +kernel
 
 /-- The top layer's chains 24 to 38, walked to their ends. -/
 theorem topChains_1 : ∀ i : Fin V, 24 ≤ i.val → i.val < 39 →
     chainEnd hash publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) topCodeword
       signature.top.chainValues i = topEnds[i] := by
-  simp only [chainEnd, Kernel.chain_eq]
+  simp only [chainEnd, FastHash.chain_eq]
   decide +kernel
 
 /-- The top layer's chains 39 to 57, walked to their ends. -/
 theorem topChains_2 : ∀ i : Fin V, 39 ≤ i.val → i.val < 58 →
     chainEnd hash publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) topCodeword
       signature.top.chainValues i = topEnds[i] := by
-  simp only [chainEnd, Kernel.chain_eq]
+  simp only [chainEnd, FastHash.chain_eq]
   decide +kernel
 
 /-- Every chain of the top layer, walked to its end. -/
@@ -64,14 +64,14 @@ theorem topChains : ∀ i : Fin V,
 /-- The top key's leaf, from its chain ends. -/
 theorem topLeaf_known_answer :
     (otsLeafHash hashId publicKey.publicParam .top (UInt32.ofNat (bottomTree leafIndex)) topEnds).run = topLeaf := by
-  simp only [otsLeafHash, Kernel.th_eq, Kernel.toList_packDigests]
+  simp only [otsLeafHash, FastHash.th_eq, FastHash.toList_packDigests]
   decide +kernel
 
 /-- The top key's path leads from its leaf to the key's root. -/
 theorem topFold_known_answer :
     (fold hashId publicKey.publicParam .top (bottomTree leafIndex) topLeaf signature.top.path).run
       = publicKey.root := by
-  rw [Kernel.fold_eq]
+  rw [FastHash.fold_eq]
   decide +kernel
 
 /-- The top layer leads to the key's root. -/

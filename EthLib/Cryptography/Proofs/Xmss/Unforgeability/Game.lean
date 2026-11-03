@@ -288,7 +288,7 @@ theorem knownKeys_le (S0 : MasterSeed) (S Pf : HashOutput) (c1 c2 : QueryCache H
 /-- The top tree's root, from `S` and the parameter. -/
 noncomputable def topRoot (S Pf : HashOutput) : OracleComp OracleWorld Digest :=
   liftM (node (queryH (m := OracleComp HashSpec)) (ofParam (truncateHash Pf)) (ofSeed S) .top
-    LAYER_HEIGHT (Nat.le_refl _) 0)
+    LAYER_HEIGHT 0)
 
 -- `S` is a hash value, `BitVec hashOutputBits`, and a seed is `BitVec 256`.
 -- As in the vendored proof, definitional checks may unfold the width to match them.

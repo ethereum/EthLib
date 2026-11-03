@@ -37,7 +37,7 @@ def tamperedRoot : Digest := #v[0x36, 0xf1, 0x3f, 0x87, 0x1d, 0x37, 0x6d, 0x54, 
 theorem tamperedFold_known_answer :
     (fold hashId publicKey.publicParam .top (bottomTree leafIndex) topLeaf tamperedTop.path).run
       = tamperedRoot := by
-  rw [Kernel.fold_eq]
+  rw [FastHash.fold_eq]
   decide +kernel
 
 /-- Changing the topmost sibling of the top layer rejects.

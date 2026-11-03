@@ -17,7 +17,7 @@ So they run on a fast form of verification, proved equal to the specification.
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Vrf.Kernel
+namespace EthLib.Cryptography.Vrf.FastHash
 
 open EthLib.Cryptography.Vrf
 open EthLib.Cryptography.Vrf.Constants
@@ -72,7 +72,8 @@ theorem secret_eq (seed : Seed) (i : UInt32) : Vrf.secret seed i = secret seed i
 
 /-- Verification over the fast hash, step for step the specification's. -/
 def verify (root : Digest) (i : UInt32) (o : Opening) : Option Digest :=
-  if Tree.climb nodeHash i.toNat (leafHash o.secret) o.path.toList = root then
+  if (Merkle.climb (m := Id) (fun _ _ l r => nodeHash l r) 0 i.toNat (leafHash o.secret)
+      o.path.toList).run = root then
     some (outputHash o.secret)
   else none
 
@@ -80,7 +81,8 @@ def verify (root : Digest) (i : UInt32) (o : Opening) : Option Digest :=
 theorem verify_eq (root : Digest) (i : UInt32) (o : Opening) :
     Vrf.verify root i o = verify root i o := by
   -- The node hash is the fast one, as a function.
-  have hnode : Vrf.nodeHash = nodeHash := funext fun l => funext fun r => nodeHash_eq l r
+  have hnode : Vrf.treeHash = fun _ _ l r => nodeHash l r :=
+    funext fun _ => funext fun _ => funext fun l => funext fun r => nodeHash_eq l r
   simp only [Vrf.verify, verify, hnode, leafHash_eq, outputHash_eq]
 
-end EthLib.Cryptography.Vrf.Kernel
+end EthLib.Cryptography.Vrf.FastHash
