@@ -7,6 +7,7 @@ Only the standard library is used, like the script.
 """
 from __future__ import annotations
 
+from contextlib import ExitStack
 import importlib.util
 import io
 import os
@@ -179,12 +180,25 @@ class LeanExtractionTests(unittest.TestCase):
 
 
 class ChangedLineTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # Keep fixture Git commands and checker reads independent of the contributor's setup.
+        contexts = ExitStack()
+        self.addCleanup(contexts.close)
+        template = contexts.enter_context(tempfile.TemporaryDirectory())
+        environment = {key: value for key, value in os.environ.items()
+                       if not key.upper().startswith("GIT_")}
+        environment.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_SYSTEM=os.devnull,
+                           GIT_CONFIG_GLOBAL=os.devnull, GIT_TEMPLATE_DIR=template)
+        contexts.enter_context(mock.patch.dict(os.environ, environment, clear=True))
+
     def test_only_changed_blocks_are_checked(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
 
             def run(*args: str) -> None:
-                subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+                subprocess.run(["git", "-c", f"core.hooksPath={os.devnull}",
+                                "-c", "commit.gpgSign=false", *args],
+                               cwd=root, check=True, capture_output=True)
 
             run("init", "-q", "-b", "main")
             run("config", "user.email", "test@example.org")

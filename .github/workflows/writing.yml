@@ -1,7 +1,7 @@
 # Check the prose of a pull request against WRITING.md.
 #
-# The prose checks only report warnings, and they never fail the run, even if the
-# checker stops with an error. Only the tests of the checker itself can fail it.
+# Prose findings are warnings, and the checker exits with status 0 when it runs.
+# Checker errors and failures of its tests fail the job.
 #
 # The description comes from the pull request author, so it reaches the script
 # through an environment variable and is never interpolated into a command.
@@ -43,13 +43,11 @@ jobs:
         run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py
 
       - name: changed prose (warnings only)
-        continue-on-error: true
         env:
           BASE_REF: ${{ github.base_ref }}
         run: uv run --no-project --python 3.12 python scripts/check_writing.py --base "origin/${BASE_REF}" --github
 
       - name: pull request description (warnings only)
-        continue-on-error: true
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: printf '%s\n' "$PR_BODY" | uv run --no-project --python 3.12 python scripts/check_writing.py --stdin description --github
