@@ -2,6 +2,8 @@ module
 
 public import EthLib.Execution.Proofs.Trie.HexPrefix
 public import EthLib.Execution.Proofs.Trie.Order
+public import EthLib.Execution.Proofs.Trie.Proof
+public import EthLib.Execution.Proofs.Trie.ProofKnownAnswers
 public import EthLib.Execution.Proofs.Trie.Root
 public import EthLib.Execution.Proofs.Trie.RootKnownAnswers
 
