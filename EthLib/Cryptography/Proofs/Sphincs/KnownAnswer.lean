@@ -10,7 +10,7 @@ public import EthLib.Cryptography.Proofs.Sphincs.Verify
 
 One key, one message and one signature, pinned byte for byte.
 
-- The seed is `S[i] = 37 i + 11 mod 256`, for `i < 32`.
+- The scheme seed is `S[i] = 37 i + 11 mod 256`, for `i < 32`.
 - The message is `m[i] = 7 i + 3`, for `i < 32`.
 - The digest picks index `65963065`: bottom tree 257668, middle tree 1006, top leaf 1006.
 
@@ -34,7 +34,11 @@ Building the public key needs the whole top tree, `2^10` one-time keys.
 
 That is beyond the kernel, so no theorem states the public key from the seed.
 
-The public parameter, one hash of the seed, is checked.
+The public parameter, one hash of the scheme seed, is checked.
+
+The key pins everything below the scheme's name, from the scheme seed `S` on.
+
+The name is pinned apart: the scheme seed of the 32-byte seed `S` itself is checked too.
 -/
 
 @[expose] public section
@@ -57,7 +61,7 @@ instance : NeZero (2 ^ FORS_HEIGHT) := ⟨by decide⟩
 
 /-! ## Inputs -/
 
-/-- The seed `S`. -/
+/-- The scheme seed `S`, which every secret of the key derives from. -/
 def seed : Seed := Vector.ofFn fun i => UInt8.ofNat (37 * i.val + 11)
 
 /-- The message `m`. -/
@@ -1170,6 +1174,15 @@ theorem decode_signature : (decodeSignature signatureBytes).toOption = some sign
   rfl
 
 /-! ## Derivations from the seed -/
+
+/-- The scheme seed `H("leanSPHINCS" | S_0)` of the seed `S_0 = S`. -/
+def taggedSeed : Seed := #v[0x3d, 0xac, 0x1d, 0x0e, 0x84, 0x04, 0x04, 0x51, 0xb2, 0xf9, 0xdf, 0x2e, 0xab, 0x04, 0xab, 0x5a, 0x53, 0x6e, 0x97, 0x1e, 0x22, 0x5b, 0x1e, 0x3e, 0x05, 0xd1, 0xe2, 0x03, 0x39, 0xae, 0xb8, 0x15]
+
+/-- The scheme seed hashes the scheme's name, then the key's seed. -/
+theorem schemeSeed_known_answer : schemeSeed seed = taggedSeed := by
+  simp only [schemeSeed, Sphincs.hash, Hash.Keccak.Kernel.keccak256_eq]
+  -- The output length `HASH_LEN` and the seed length differ in name, so the instance is passed by hand.
+  exact of_decide_eq_true (inst := instDecidableEqVector _ _) (by decide +kernel)
 
 /-- The public parameter `P = Th(0^128, A_param, S)` is the one in the public key. -/
 theorem publicParam_known_answer : publicParamOf seed = publicKey.publicParam := by

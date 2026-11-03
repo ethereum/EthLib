@@ -6,11 +6,13 @@ Derive a leanSPHINCS public key from a 32-byte seed.
 
 ```yaml
 input:
-  seed: Bytes32 -- the secret seed S
+  seed: Bytes32 -- the secret seed S_0
 output: Bytes32 | null -- the public key, or null when the input is rejected
 ```
 
 All bytes are hex strings prefixed with `0x`.
+
+Every secret derives from the scheme seed `S = H("leanSPHINCS" | S_0)`, not from `S_0` itself.
 
 The public key is the root of the top tree, then the public parameter:
 

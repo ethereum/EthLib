@@ -70,7 +70,8 @@ Never sign more than `2^30` messages with one secret key.
 
 - A one-time signature finds no codeword. -/
 def sign (sk : SecretKey) (m : Message) : Except SphincsError Signature := do
-  let seed := sk.seed
+  -- Every secret derives from the scheme seed, not from the key's seed itself.
+  let seed := sk.master
   let pp := sk.publicParam
   -- Step 1: the randomizer, then the digest it gives the message.
   let rho := randomizer pp seed m

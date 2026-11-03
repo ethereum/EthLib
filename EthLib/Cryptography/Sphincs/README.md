@@ -55,11 +55,11 @@ This module reads a 32-byte output as a little-endian number, so its first 16 by
 
 ## Choices this module makes
 
-The secret key is the 32-byte seed, used as the model's `keygenFromSeed` uses it.
-
-No hash of the configuration comes first.
-
-So one seed must never serve two configurations, or their one-time keys would coincide.
+The secret key is the 32-byte seed `S_0`.
+Every secret derives from the scheme seed `S = H("leanSPHINCS" | S_0)`, the hash of the scheme's 11-byte ASCII name, then the seed.
+The model's `keygenFromSeed` derives from the seed directly.
+The name separates these derivations from those of every other scheme, and leanXMSS hashes its own name the same way.
+Key generation costs one permutation more than in the model, and everything below the scheme seed is the model's.
 
 Every index lands in the key, so the signer keeps the first randomizer `R_0`.
 
@@ -93,11 +93,13 @@ Nothing in EthLib counts signatures, so the caller must.
 `tests/cryptography/sphincs/` has cases for `key_gen`, `sign` and `verify`.
 
 The proofs also pin one public key and one signature (`Proofs/Sphincs/KnownAnswer*.lean`).
-The key grows from the seed `S[i] = 37 i + 11 mod 256`, and the signature signs `m[i] = 7 i + 3`.
-The kernel checks that the signature's bytes verify under the key's bytes, and that the key's public parameter is the one the seed gives.
+The key grows from the scheme seed `S[i] = 37 i + 11 mod 256`, and the signature signs `m[i] = 7 i + 3`.
+So the known answer pins everything below the scheme's name, and a separate known answer pins the hash of the name with that seed.
+The kernel checks that the signature's bytes verify under the key's bytes, and that the key's public parameter is the one the scheme seed gives.
 It does not compute the key's root from the seed: the root is pinned as the one the signature's top path reaches.
-The `key_gen_known_answer` and `sign_known_answer` cases hold the same bytes as the proofs.
-The other cases are EthLib's own: nothing outside EthLib checks them yet.
+
+The `key_gen_known_answer` and `sign_known_answer` cases take the same bytes `S[i]` as a key's seed `S_0`.
+Their scheme seed is the hash of the name with `S[i]`, so their key and signature differ from the proofs' known answer.
 
 ## What is proved
 

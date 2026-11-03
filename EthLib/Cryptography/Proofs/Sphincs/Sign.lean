@@ -53,14 +53,14 @@ theorem signLayer_error {e : SphincsError} (h : signLayer pp seed layer idx msg 
 Each layer's key signs what the layer below gives. -/
 theorem sign_eq_ok {sk : SecretKey} {m : Message} {σ : Signature} (h : sign sk m = .ok σ) :
     let d := messageDigest sk.publicParam m σ.randomizer
-    σ.randomizer = randomizer sk.publicParam sk.seed m ∧
-      σ.fors = forsSign sk.publicParam sk.seed (digestIndex d) (digestLeaves d) ∧
-      signLayer sk.publicParam sk.seed .bottom (digestIndex d)
-          (layerMessage sk.publicParam sk.seed .bottom (digestIndex d)) = .ok σ.bottom ∧
-      signLayer sk.publicParam sk.seed .middle (digestIndex d)
-          (layerMessage sk.publicParam sk.seed .middle (digestIndex d)) = .ok σ.middle ∧
-      signLayer sk.publicParam sk.seed .top (digestIndex d)
-          (layerMessage sk.publicParam sk.seed .top (digestIndex d)) = .ok σ.top := by
+    σ.randomizer = randomizer sk.publicParam sk.master m ∧
+      σ.fors = forsSign sk.publicParam sk.master (digestIndex d) (digestLeaves d) ∧
+      signLayer sk.publicParam sk.master .bottom (digestIndex d)
+          (layerMessage sk.publicParam sk.master .bottom (digestIndex d)) = .ok σ.bottom ∧
+      signLayer sk.publicParam sk.master .middle (digestIndex d)
+          (layerMessage sk.publicParam sk.master .middle (digestIndex d)) = .ok σ.middle ∧
+      signLayer sk.publicParam sk.master .top (digestIndex d)
+          (layerMessage sk.publicParam sk.master .top (digestIndex d)) = .ok σ.top := by
   -- Peel the three layers off the signer, one bind at a time.
   simp only [sign, bind, Except.bind] at h
   split at h

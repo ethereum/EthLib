@@ -27,7 +27,8 @@ slow = pytest.mark.skipif(not SLOW, reason="set ETHLIB_SLOW_VECTORS=1 to regener
 
 # ---- Seeds and messages ----------------------------------------------------
 
-# The seed of the known answer the proofs pin: byte i is 37 i + 11 mod 256.
+# Byte i is 37 i + 11 mod 256.
+# The proofs pin the key of this scheme seed; as a key's seed, it is first hashed with the scheme's name.
 SEED_KNOWN_ANSWER = bytes((37 * i + 11) % 256 for i in range(32))
 
 # The all-zero seed, a second key.

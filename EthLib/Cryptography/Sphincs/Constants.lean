@@ -45,8 +45,13 @@ def RANDOMIZER_LEN : Nat := 16
 
 /-- The secret key length in bytes.
 
-The secret key is one uniform seed, and every other secret derives from it. -/
+The secret key is one uniform seed, and every other secret derives from its hash with the scheme's name. -/
 def SEED_LEN : Nat := 32
+
+/-- The scheme's name, `"leanSPHINCS"` in ASCII, hashed before the seed.
+
+No other scheme derives its secrets from the same bytes, leanXMSS included. -/
+def SEED_TAG : List UInt8 := "leanSPHINCS".toList.map fun c => UInt8.ofNat c.toNat
 
 /-- The length in bytes of a WOTS+C counter, a little-endian 32-bit word. -/
 def COUNTER_LEN : Nat := 4
@@ -217,6 +222,10 @@ theorem top_layer_sig_size_eq : layerSigSize TOP_HEIGHT = 1188 := by decide
 It is `signature_size` of [FORS/Scheme/Layout.lean](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme/Layout.lean): `16 + 16 k (a + 1) + 1028 d + 16 h`. -/
 theorem sig_size_eq : SIG_SIZE = 7740 ∧
     SIG_SIZE = 16 + 16 * FORS_TREES * (FORS_HEIGHT + 1) + 1028 * LAYERS + 16 * HEIGHT := by
+  decide
+
+/-- The scheme's name is these 11 bytes. -/
+theorem seed_tag_eq : SEED_TAG = [0x6c, 0x65, 0x61, 0x6e, 0x53, 0x50, 0x48, 0x49, 0x4e, 0x43, 0x53] := by
   decide
 
 end EthLib.Cryptography.Sphincs.Constants

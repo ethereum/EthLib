@@ -6,7 +6,7 @@ Sign a 32-byte message with the key of a seed.
 
 ```yaml
 input:
-  seed: Bytes32 -- the secret seed S
+  seed: Bytes32 -- the secret seed S_0
   message: Bytes32 -- the message
 output: Bytes7740 | null -- the signature, or null when the input is rejected
 ```
