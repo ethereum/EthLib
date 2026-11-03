@@ -383,7 +383,6 @@ Rules for every body:
 
 Read the body aloud before you post it.
 If it sounds like a report, cut it.
-If you are an AI agent, say so in the pull request.
 
 ## Licence
 
@@ -405,7 +404,7 @@ The [CC0 FAQ](https://wiki.creativecommons.org/wiki/CC0_FAQ#May_I_apply_CC0_to_c
 
 A file of EthLib's own may still need a notice, for example when it is distributed on its own.
 That notice names "The EthLib Contributors", not a person or an organisation.
-Do not add an AI-attribution line to a file or to its notice.
+Do not add an AI-attribution line to a file header or its copyright notice.
 The name is a convention for notices.
 It does not say who holds which rights; the git history records who contributed what.
 
