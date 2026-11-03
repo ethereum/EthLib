@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.Bls12381.Encoding
+public import EthLib.Cryptography.Bls.MapToCurve
 
 /-!
 # `Evm.Precompiles.Bls12381.G2`
@@ -9,6 +10,7 @@ The BLS12-381 G2 precompiles of EIP-2537.
 
 - G2ADD at `0x0d` adds two G2 points.
 - G2MSM at `0x0e` sums the products of G2 points by 32-byte scalars, priced with a discount that grows with the number of pairs.
+- MAP_FP2_TO_G2 at `0x11` maps an element of `Fp2` to a point of G2.
 
 Source: [`forks/amsterdam/vm/precompiled_contracts/bls12_381/bls12_381_g2.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/amsterdam/vm/precompiled_contracts/bls12_381/bls12_381_g2.py) of execution-specs at `2c0c8e7`.
 
@@ -88,5 +90,21 @@ def bls12G2Msm (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray :
   let pairs ← (chunks LENGTH_PER_PAIR_G2 k data.data.toList).mapM fun pair => do
     return (← unpadG2 (pair.take 256), pair.drop 256)
   return ⟨(padG2 (g2ToBytes (← g2Msm pairs))).toArray⟩
+
+/-- The price of MAP_FP2_TO_G2, `GasCosts.PRECOMPILE_BLS_G2MAP` in [`forks/amsterdam/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/amsterdam/vm/gas.py#L122). -/
+def GAS_G2MAP : Nat := 23800
+
+/-- `bls12_map_fp2_to_g2`: the point of G2 that RFC 9380 maps an element of `Fp2` to, `c0` given first. -/
+def bls12MapFp2ToG2 (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray := do
+  -- The length is checked before the gas is charged.
+  if data.size ≠ 128 then
+    throw (.invalidInputLength data.size)
+  if gas < GAS_G2MAP then
+    throw (.outOfGas GAS_G2MAP gas)
+  -- Both paddings are checked before either field element is read.
+  let c0 ← unpadFp (data.data.toList.take 64)
+  let c1 ← unpadFp (data.data.toList.drop 64)
+  let u ← bytesToFq2 (c0 ++ c1)
+  return ⟨(padG2 (g2ToBytes (Cryptography.Bls.MapToCurve.mapToG2 u))).toArray⟩
 
 end EthLib.Execution.Evm.Precompiles.Bls12381
