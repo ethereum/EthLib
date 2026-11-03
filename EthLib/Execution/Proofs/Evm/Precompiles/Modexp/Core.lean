@@ -26,6 +26,7 @@ The known answers at the end run the worked examples of EIP-198 through the whol
 namespace EthLib.Execution.Evm.Precompiles.Modexp
 
 open EthLib.Base
+open EthLib.Execution.Evm
 open EthLib.Execution.Evm.Precompiles.Modexp.Constants
 
 /-- The big-endian integer held by the output bytes. -/

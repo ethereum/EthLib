@@ -20,6 +20,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Cryptography | [`Hash`](EthLib/Cryptography/Hash/) | Keccak-256, SHA-256, RIPEMD-160, the BLAKE2b compression function, CRC-32C |
 | Cryptography | [`Secp256k1`](EthLib/Cryptography/Secp256k1/) | the secp256k1 curve, ECDSA, public key recovery, addresses |
 | Cryptography | [`Secp256r1`](EthLib/Cryptography/Secp256r1/) | the secp256r1 curve, also called P-256, and ECDSA verification |
+| Cryptography | [`AltBn128`](EthLib/Cryptography/AltBn128/) | the alt_bn128 curve of EIP-196 and EIP-197, also called BN254 |
 | Cryptography | [`Bls`](EthLib/Cryptography/Bls/) | BLS12-381 and BLS signatures |
 | Cryptography | [`Kzg`](EthLib/Cryptography/Kzg/) | KZG commitments to blobs and cells |
 | Cryptography | [`Xmss`](EthLib/Cryptography/Xmss/) | leanXMSS, a hash-based signature for a post-quantum consensus layer |
@@ -31,7 +32,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Networking | [`Gossip`](EthLib/Networking/Gossip/) | the gossip message ID of Phase 0 and Altair |
 | Execution | [`Fees`](EthLib/Execution/Fees/) | the EIP-1559 base fee and the blob base fee |
 | Execution | [`Evm`](EthLib/Execution/Evm/) | the arithmetic, comparison and bitwise instructions of the EVM |
-| Execution | [`Precompiles`](EthLib/Execution/Evm/Precompiles/) | ECRECOVER, SHA-256, RIPEMD-160, IDENTITY, MODEXP, BLAKE2F, point evaluation, the seven BLS12-381 precompiles and P256VERIFY |
+| Execution | [`Precompiles`](EthLib/Execution/Evm/Precompiles/) | ECRECOVER, SHA-256, RIPEMD-160, IDENTITY, MODEXP, BLAKE2F, point evaluation, ECADD, ECMUL, the seven BLS12-381 precompiles and P256VERIFY |
 | Execution | [`Trie`](EthLib/Execution/Trie/) | the root of the Merkle Patricia Trie, plain and secured, its Merkle proofs, and the hex-prefix encoding of its paths |
 
 The theorems about a module live under `Proofs/` in its layer, and the C exports that the bindings call under `Exports/`.
