@@ -31,7 +31,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Execution | [`Fees`](EthLib/Execution/Fees/) | the EIP-1559 base fee and the blob base fee |
 | Execution | [`Evm`](EthLib/Execution/Evm/) | the arithmetic, comparison and bitwise instructions of the EVM |
 | Execution | [`Precompiles`](EthLib/Execution/Evm/Precompiles/) | ECRECOVER, RIPEMD-160, MODEXP and BLAKE2F |
-| Execution | [`Trie`](EthLib/Execution/Trie/) | the hex-prefix encoding of the paths in the Merkle Patricia Trie |
+| Execution | [`Trie`](EthLib/Execution/Trie/) | the root of the Merkle Patricia Trie, plain and secured, and the hex-prefix encoding of its paths |
 
 The theorems about a module live under `Proofs/` in its layer, and the C exports that the bindings call under `Exports/`.
 

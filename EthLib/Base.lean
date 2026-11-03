@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.BigEndian
+public import EthLib.Base.Hash32
 public import EthLib.Base.U256
 
 /-!
