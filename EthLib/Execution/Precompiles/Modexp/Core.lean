@@ -39,6 +39,7 @@ That module is in execution-specs at `2c0c8e7`.
 
 namespace EthLib.Execution.Precompiles.Modexp
 
+open EthLib.Base
 open EthLib.Execution.Precompiles.Modexp.Constants
 
 /-- The three length headers of an input, in bytes. -/

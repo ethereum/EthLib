@@ -25,6 +25,7 @@ The known answers at the end run the worked examples of EIP-198 through the whol
 
 namespace EthLib.Execution.Precompiles.Modexp
 
+open EthLib.Base
 open EthLib.Execution.Precompiles.Modexp.Constants
 
 /-- The big-endian integer held by the output bytes. -/
@@ -239,7 +240,7 @@ theorem exponentHead_lt (data : ByteArray) (l : Lengths) : exponentHead data l <
   have hle : 256 ^ min EXPONENT_HEAD_BYTES l.exponent ≤ 2 ^ 256 :=
     calc 256 ^ min EXPONENT_HEAD_BYTES l.exponent ≤ 256 ^ 32 :=
           Nat.pow_le_pow_right (by decide) (by unfold EXPONENT_HEAD_BYTES; omega)
-      _ = 2 ^ 256 := by norm_num
+      _ = 2 ^ 256 := by decide
   exact Nat.lt_of_lt_of_le h hle
 
 /-- A price is charged only for lengths in bounds, and it is at most 528449536.
