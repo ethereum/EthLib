@@ -22,7 +22,7 @@ Work the way the author of a standard would.
 - Never invent a citation, a section number, a test vector or a known answer.
 - Never claim a check passed unless you ran it and saw it pass.
 - Keep changes small and on topic.
-  One idea per pull request.
+  Give each pull request one idea.
 
 When you are not sure, ask.
 A question costs minutes.
@@ -34,13 +34,13 @@ Each module implements a published specification.
 It can be an EIP, an RFC, an ePrint paper, an ethresear.ch post, a specification repository such as `ethereum/consensus-specs`, or any other primary source.
 When several exist, use the most authoritative one.
 That specification is normative.
-When the code and the specification disagree, the code is wrong until shown otherwise.
+When the code and the specification disagree, the code is wrong until someone shows otherwise.
 
 Cite the exact document and section in the code that implements it.
 For example: `RFC 9380 §5.3.1`, or the fork and function name in `consensus-specs`.
 
-Do not cite another implementation as the authority for a behaviour.
-Matching a client byte for byte is a useful test, not a justification.
+Do not cite another implementation as the authority for a behavior.
+A byte-for-byte match with a client is a useful test, not a justification.
 
 ## Layout
 
@@ -70,24 +70,23 @@ A new domain with exports adds its export root to the `Exports` library.
   If the paper calls it the randomizer, the code does too.
   If `consensus-specs` calls it `process_slots`, so does the code, in Lean's casing.
 - Reject malformed input at the boundary with a typed error.
-  No truncation, no padding, no silent fallback.
+  Do not truncate or pad it, and do not replace it silently with a default.
 - Put invariants in types, such as `Vector` lengths and `Fin` bounds.
 - Avoid `partial def` in new code.
   A function the kernel cannot unfold is a function nobody can prove anything about.
 
 ### Proofs
 
-- No `sorry`, `admit` or new `axiom`.
+- Do not use `sorry`, `admit` or a new `axiom`.
   CI builds with `--wfail`, so an unfinished proof fails the build.
 - Prefer proofs the kernel checks on its own.
 - Do not use `native_decide` or `bv_decide`.
   Each adds a generated axiom that trusts the compiler, so the kernel no longer checks the proof.
-  The theorems that still use them are listed in `scripts/check_decls_baseline.txt`, to be removed.
+  `scripts/check_decls_baseline.txt` lists the theorems that still use them, and the goal is to remove each one.
 - After a proof change, check its axioms with `lake exe check-decls`.
   The goal is `propext`, `Classical.choice` and `Quot.sound`, nothing else.
-- Prove what a reader cares about.
-  Round trips, injectivity, rejection of bad input, invariants of a state transition.
-  Above all, agreement with the specification.
+- Prove what a reader cares about: round trips, injectivity, the rejection of bad input and the invariants of a state transition.
+  Above all, prove agreement with the specification.
 
 ### Known answers
 
@@ -98,9 +97,53 @@ For example: "one honest signature at epoch 7", or "one empty slot processed".
 
 Never regenerate an expected value from the code under test and call it a check.
 
+## Writing
+
+Developers all over the world read EthLib, many of them in their second language.
+[WRITING.md](WRITING.md) sets the standard for its English, based on ASD-STE100 Simplified Technical English (STE).
+The standard applies to every author, human or AI.
+It covers all prose: documentation, doc comments and other comments, commit messages, pull request and issue text, and review comments.
+
+WRITING.md gives the full rules and the vocabulary of EthLib.
+These rules matter most:
+
+- Write short sentences: 20 words or fewer in an instruction, and 25 words or fewer in a description.
+- Give each paragraph one topic, in six sentences or fewer.
+- Use the active voice, and name the actor, such as the decoder, the verifier or CI.
+- Use one term for one concept, with the meaning that the vocabulary gives it.
+- Do not use semicolons, contractions or Latin abbreviations such as "e.g." in prose.
+- Claim only what the code, a theorem or a check that you ran shows.
+  A style edit keeps every hypothesis, bound, condition and uncertainty of the claim.
+
+Technical accuracy comes first.
+If a rule conflicts with a term or a language pattern that is standard in cryptography, computer science or mathematics, keep the standard form.
+A habit of this repository is not such a standard.
+
+Existing prose is not a model to copy.
+When you change a passage, bring it to the standard.
+Leave unrelated prose for a separate pull request.
+
+`scripts/check_writing.py` finds some departures from the standard, such as long sentences and semicolons.
+Run it on the prose that your branch changes:
+
+```bash
+uv run --no-project --python 3.12 python scripts/check_writing.py --base origin/master
+```
+
+For a stacked pull request, give its base branch instead of `origin/master`.
+Each finding is a suggestion, so read it before you edit.
+Fix the real problems, and do not change a correct sentence only to make the checker quiet.
+CI runs the same check on the changed prose and on the pull request description.
+It reports the findings as warnings, and they do not fail CI.
+
+When you change the checker, also run its tests:
+
+```bash
+uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py
+```
+
 ## Documentation
 
-Developers all over the world read this documentation, many of them in their second language.
 Write for a smart reader who has never seen the file.
 
 Two kinds of documentation live here, and they are read differently.
@@ -109,21 +152,21 @@ A Markdown file is read from top to bottom, like a chapter, so it is prose.
 
 These rules hold for both:
 
-- Short, plain words.
+- Use short, plain words.
   Define a term the first time it appears.
 - Explain why, not what.
   The code already says what.
 - Use ASCII for math and layouts: `x_i`, `2^32`, `sum_i`.
 - Draw byte layouts in a fenced `text` block.
-- No marketing, no hedging, no filler.
+- Do not add marketing or filler.
   Words such as "robust", "seamless", "comprehensive" and "it is worth noting" go.
-- No editorial headers such as `# Why this matters`.
-- Describe the code as it is now.
-  Never "previously", "the fix", "as discussed".
+- Do not hedge a claim that the evidence supports, and keep an uncertainty that the evidence does not resolve.
+- Do not write editorial headings such as `# Why this matters`.
+- Describe the code as it is now, without words such as "previously", "the fix" or "as discussed".
 
 ### Doc comments in Lean
 
-- One sentence per line.
+- Write one sentence per line.
   A sentence that wraps onto a second line is too long, so split it.
 - Leave a blank line between ideas.
   Space makes a dense subject readable.
@@ -148,7 +191,8 @@ def encodeLayerSignature (sig : LayerSignature) : ByteArray :=
 
 ### Markdown files
 
-A README, `SOUNDNESS.md` or a guide such as this one reads like a short chapter of a good mathematics textbook: precise, concise and written to teach.
+A README, `SOUNDNESS.md` or a guide such as this one reads like a short chapter of a good mathematics textbook.
+It is precise, concise and written to teach.
 
 - Write paragraphs.
   A paragraph develops one idea over several sentences that lead into each other.
@@ -161,7 +205,8 @@ A README, `SOUNDNESS.md` or a guide such as this one reads like a short chapter 
   Take its values from the specification or work them out by hand, never from the code under test.
 - Keep bullets for content that is a list: operations, cases, files, commands.
   A bullet holds a full thought, not a fragment of a sentence.
-- Use a Markdown table for tabular content, and name a file or theorem where the reader needs to find it, not in every sentence.
+- Use a Markdown table for tabular content.
+- Name a file or a theorem where the reader needs to find it, not in every sentence.
 
 When a module does not follow these rules, apply them to what you change.
 Do not reformat untouched code in an unrelated pull request.
@@ -179,7 +224,7 @@ The C exports and the Python package are the public surface for clients.
 
 ## Checks
 
-Run these before opening a pull request:
+Run these checks before you open a pull request:
 
 ```bash
 lake build
@@ -196,7 +241,7 @@ lake exe check-decls
 It reports any axiom beyond the standard three, and any `partial`, `opaque`, `unsafe`, `@[extern]`, `@[implemented_by]` or `@[csimp]`.
 It also reports a definition of the specification that cannot unfold in the kernel, for example because it uses `while` or `IO`.
 
-`scripts/check_decls_baseline.txt` lists the findings that exist today, each one to be removed.
+`scripts/check_decls_baseline.txt` lists the findings that exist today, and the goal is to remove each one.
 A pull request that removes a finding removes its line, or the check fails on the stale entry.
 A new finding is fixed, never added to the list.
 
@@ -250,24 +295,25 @@ A squash merge turns the pull request title into the commit on `master`.
 
 The type says what kind of change it is:
 
-- `feat`: new behaviour, such as a new function, module or export.
-- `fix`: behaviour that disagreed with the specification now agrees.
+- `feat`: new behavior, such as a new function, module or export.
+- `fix`: behavior that disagreed with the specification now agrees.
 - `proof`: new or changed theorems, with no change to the library code.
 - `perf`: the same results, computed faster.
-- `refactor`: the same behaviour, with the code restructured.
+- `refactor`: the same behavior, with the code restructured.
 - `test`: test vectors, known answers or the Python suite.
 - `docs`: documentation only.
 - `build`: Lake, the Lean toolchain, dependencies or packaging.
 - `ci`: the GitHub workflows.
 - `chore`: anything else that touches no library code, proof or test.
 
-Conventional Commits only fixes `feat` and `fix`.
+Conventional Commits defines only `feat` and `fix`.
 The other types are the common ones, plus `proof`, which this repository needs.
 
 The scope names the domain or module, in lowercase: `xmss`, `kzg`, `bls`, `ssz`, `bindings`.
 Leave the scope out when the change spans the repository.
 
 The summary is in the imperative mood, starts lowercase and has no trailing period.
+A name in the summary keeps its own case, such as `KZG` or `U256`.
 The whole title fits in 72 characters.
 
 A change that breaks consumers adds `!` before the colon.
@@ -286,7 +332,7 @@ docs: add AGENTS.md
 
 The commit body says why, when the subject cannot.
 
-The pull request body is written for a human who has never seen the change.
+Write the pull request body for a human who has never seen the change.
 Its length follows the change.
 
 - A typo or a dependency bump needs one line, or none.
@@ -326,15 +372,15 @@ Every implementation that encodes or decodes signatures must switch.
 
 Rules for every body:
 
-- Plain words and short sentences.
+- Use plain words and short sentences, as [Writing](#writing) describes.
   Define a term the first time it appears.
 - Use a heading only when the body has several distinct parts.
 - Leave out what the diff already shows: file lists, renamed symbols, the code retold.
-- No checklists, no "this PR", no tables of unchanged values.
+- Do not add checklists, the phrase "this PR" or tables of unchanged values.
 - Link the issue it closes: `Closes #22.`
 - Stacked pull requests say so: `Stacked on #43.`
 
-Read the body aloud before posting.
+Read the body aloud before you post it.
 If it sounds like a report, cut it.
 If you are an AI agent, say so in the pull request.
 
