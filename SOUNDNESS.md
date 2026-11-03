@@ -158,6 +158,16 @@ The precompile reuses the SHA-256 of the cryptography layer, so its theorems are
 
 No theorem relates the module to the execution-specs code it follows, which calls `hashlib.sha256`.
 
+### IDENTITY
+
+The IDENTITY precompile returns its call data, so its theorems are about the price and the one failure.
+`identity_eq_ok_iff` and `identity_eq_error_iff` (`Execution/Proofs/Evm/Precompiles/Identity.lean`) hold for all call data and all gas.
+They prove that a call succeeds exactly when the gas covers `15 + 3 * ceil(len / 32)`, and then returns the call data unchanged.
+`wordCount_le_iff` (`Execution/Proofs/Evm/Words.lean`) proves that the word count is the least number of 32-byte EVM words that covers the call data.
+`toNat_ofNat_gasCost` proves that the price of call data shorter than 2^64 bytes fits in the 64 bits that the C export returns.
+
+No theorem relates the module to the execution-specs code that it follows.
+
 ### MODEXP
 
 These theorems state agreement with EIP-198 and EIP-7823.
@@ -283,13 +293,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 28 operations and 26 size constants.
-The Python extension calls 28 of the operations and 21 of the constants.
+Lean exports 30 operations and 26 size constants.
+The Python extension calls 30 of the operations and 21 of the constants.
 Exported constants it does not call: `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-1746 lines of hand-written C sit between them and Python: `bls.c` (87), `ecrecover.c` (34), `kzg.c` (533), `modexp.c` (61), `module.c` (500), `ripemd160.c` (36), `secp256k1.c` (94), `sha256.c` (38), `sha256_precompile.c` (62), `wrappers.h` (158), `xmss.c` (143).
+1814 lines of hand-written C sit between them and Python: `bls.c` (87), `ecrecover.c` (34), `identity.c` (64), `kzg.c` (533), `modexp.c` (61), `module.c` (502), `ripemd160.c` (36), `secp256k1.c` (94), `sha256.c` (38), `sha256_precompile.c` (62), `wrappers.h` (160), `xmss.c` (143).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

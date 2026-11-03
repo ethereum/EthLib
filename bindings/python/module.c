@@ -401,6 +401,8 @@ static PyMethodDef methods[] = {
   {"ripemd160", py_ripemd160, METH_VARARGS, NULL},
   {"sha256_precompile", py_sha256_precompile, METH_VARARGS, NULL},
   {"sha256_precompile_gas_cost", py_sha256_precompile_gas_cost, METH_VARARGS, NULL},
+  {"identity", py_identity, METH_VARARGS, NULL},
+  {"identity_gas_cost", py_identity_gas_cost, METH_VARARGS, NULL},
   {"secp256k1_verify", py_secp256k1_verify, METH_VARARGS, NULL},
   {"secp256k1_is_low_s", py_secp256k1_is_low_s, METH_VARARGS, NULL},
   {"secp256k1_recover", py_secp256k1_recover, METH_VARARGS, NULL},

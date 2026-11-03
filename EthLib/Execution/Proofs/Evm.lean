@@ -4,6 +4,7 @@ public import EthLib.Execution.Proofs.Evm.Instructions.Arithmetic
 public import EthLib.Execution.Proofs.Evm.Instructions.Comparison
 public import EthLib.Execution.Proofs.Evm.Instructions.Bitwise
 public import EthLib.Execution.Proofs.Evm.Instructions.Keccak
+public import EthLib.Execution.Proofs.Evm.Words
 public import EthLib.Execution.Proofs.Evm.Precompiles
 
 /-!

@@ -43,6 +43,14 @@ example : EthLib.Networking.Encoding.Varint.groupSize = 128 :=
 EOF
 lake env lean -DwarningAsError=true --root="$module_test_dir" "$module_test_dir/Consumer.lean"
 
+# Versioned consumers: an `*Ordinary.lean` file imports no proof and also runs its `main`.
+for consumer in scripts/ConsumerTest/*.lean; do
+  case "$consumer" in
+    *Ordinary.lean) lake env lean -DwarningAsError=true --run "$consumer" ;;
+    *) lake env lean -DwarningAsError=true "$consumer" ;;
+  esac
+done
+
 # The same compiler checks the artifact boundary on a small, isolated import graph.
 cp lean-toolchain "$module_test_dir/lean-toolchain"
 cat > "$module_test_dir/lakefile.toml" <<'EOF'
