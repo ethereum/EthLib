@@ -256,7 +256,8 @@ Whatever those hypotheses leave unproved is part of what a reader trusts.
 EthLib makes no constant-time claim.
 `Hash/Keccak.lean` says it "is not intended to be constant-time", and the field arithmetic uses Lean's `Nat`, which gives no timing guarantee.
 This matters where secret data is handled.
-XMSS and leanSPHINCS `keyGen` and `sign` handle secret data, and the Python bindings expose the XMSS ones, as `key_gen` and `sign`, which take the secret seed.
+XMSS and leanSPHINCS `keyGen` and `sign` handle secret data.
+The Python bindings expose all four, as `key_gen` and `sign` in each module, which take the secret seed.
 
 ### A4. Idealisations
 
@@ -314,13 +315,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 29 operations and 26 size constants.
-The Python extension calls 29 of the operations and 21 of the constants.
-Exported constants it does not call: `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
+Lean exports 32 operations and 34 size constants.
+The Python extension calls 32 of the operations and 25 of the constants.
+Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_const_n`, `eth_sphincs_const_public_param_len`, `eth_sphincs_const_randomizer_len`, `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-1792 lines of hand-written C sit between them and Python: `bls.c` (87), `ecrecover.c` (34), `kzg.c` (533), `modexp.c` (61), `module.c` (501), `precompile.c` (43), `ripemd160.c` (36), `secp256k1.c` (94), `sha256.c` (38), `sha256_precompile.c` (62), `wrappers.h` (160), `xmss.c` (143).
+1930 lines of hand-written C sit between them and Python: `bls.c` (87), `ecrecover.c` (34), `kzg.c` (533), `modexp.c` (61), `module.c` (537), `precompile.c` (43), `ripemd160.c` (36), `secp256k1.c` (94), `sha256.c` (38), `sha256_precompile.c` (62), `sphincs.c` (94), `wrappers.h` (168), `xmss.c` (143).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
@@ -382,7 +383,7 @@ The Lean and Python docstrings of `sign` both say so.
 leanSPHINCS adds another.
 Never sign more than `2^30` messages with one secret key.
 Nothing in EthLib counts signatures, so the caller must.
-The Lean docstring of `sign` says so.
+The Lean and Python docstrings of `sign` both say so.
 
 ### D2. Dependencies
 

@@ -71,24 +71,33 @@ The values are the same, so the signatures are the same.
 
 ## Operations
 
-```text
-Lean       file
-keyGen     KeyGen.lean
-sign       Sign.lean
-verify     Verify.lean
-```
+| Lean | File | C export | Python |
+| --- | --- | --- | --- |
+| `keyGen` | `KeyGen.lean` | `eth_sphincs_key_gen` | `sphincs.key_gen` |
+| `sign` | `Sign.lean` | `eth_sphincs_sign` | `sphincs.sign` |
+| `verify` | `Verify.lean` | `eth_sphincs_verify` | `sphincs.verify` |
 
-The secret key is the seed, and everything else derives from it.
-
-- `keyGen` builds the top tree: `2^10` one-time keys, about 231,000 hashes.
-- `sign` builds the FORS key and openings, both lower trees and the top tree's path, and searches three counters: about half a million Keccak-f[1600] permutations.
-- `verify` makes 492 Keccak-f[1600] permutations.
+The secret key is the 32-byte seed, and everything else derives from it.
+So the exports of `keyGen` and `sign` take the seed and rebuild what they need on each call.
+`keyGen` builds the top tree, which means `2^10` one-time keys and about 231,000 hashes.
+`sign` builds the FORS key and openings, both lower trees and the top tree's path, and searches three counters.
+That costs about half a million Keccak-f[1600] permutations.
+`verify` makes 492 Keccak-f[1600] permutations.
 
 Never sign more than `2^30` messages with one key.
-
+The digest picks a FORS instance at random, so instances are reused, and each signature from an instance weakens it.
 Nothing in EthLib counts signatures, so the caller must.
 
-There are no C exports or Python bindings yet.
+## Test vectors
+
+`tests/cryptography/sphincs/` has cases for `key_gen`, `sign` and `verify`.
+
+The proofs also pin one public key and one signature (`Proofs/Sphincs/KnownAnswer*.lean`).
+The key grows from the seed `S[i] = 37 i + 11 mod 256`, and the signature signs `m[i] = 7 i + 3`.
+The kernel checks that the signature's bytes verify under the key's bytes, and that the key's public parameter is the one the seed gives.
+It does not compute the key's root from the seed: the root is pinned as the one the signature's top path reaches.
+The `key_gen_known_answer` and `sign_known_answer` cases hold the same bytes as the proofs.
+The other cases are EthLib's own: nothing outside EthLib checks them yet.
 
 ## What is proved
 

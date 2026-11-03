@@ -49,6 +49,20 @@ The cases differ in where their expected values come from.
 `key_gen_known_answer` and `sign_known_answer` hold the bytes the proofs pin, which an independent implementation computed.
 The other cases come from the code under test.
 
+## leanSPHINCS
+
+The `sphincs/` cases are pinned too, and their key generation and signing are slow in the same way.
+Key generation builds `2^10` one-time keys, and signing builds the FORS key and three trees, which takes the compiled specification seconds per case.
+So the generators rewrite the `key_gen` and `sign` cases only on request:
+
+```bash
+ETHLIB_SLOW_VECTORS=1 uv run --no-sync pytest bindings/python/tests/sphincs
+```
+
+`key_gen_known_answer` and `sign_known_answer` hold the bytes the proofs pin.
+The kernel checks that this signature verifies under this key, and that the key's public parameter is the one the seed gives.
+The other cases come from the code under test.
+
 ## SHA-256
 
 The `sha256/` cases are pinned too.
