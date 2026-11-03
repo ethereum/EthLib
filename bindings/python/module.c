@@ -405,6 +405,7 @@ static PyMethodDef methods[] = {
   {"secp256k1_is_low_s", py_secp256k1_is_low_s, METH_VARARGS, NULL},
   {"secp256k1_recover", py_secp256k1_recover, METH_VARARGS, NULL},
   {"ecrecover", py_ecrecover, METH_VARARGS, NULL},
+  {"precompile_run", py_precompile_run, METH_VARARGS, NULL},
   {NULL, NULL, 0, NULL},
 };
 

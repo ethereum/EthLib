@@ -17,6 +17,8 @@ The fields are decoded as EIP-152 encodes them, for every input:
 - every word of `h`, `m`, `t0` and `t1` is little-endian;
 - the output words are little-endian too, the encoding of the input.
 
+With its gas, a 213-byte call fails exactly when the gas is below the number of rounds, and otherwise returns the precompile's result.
+
 Known answers then run test vectors 0 to 7 of EIP-152 through the whole precompile.
 -/
 
@@ -25,6 +27,23 @@ Known answers then run test vectors 0 to 7 of EIP-152 through the whole precompi
 namespace EthLib.Execution.Evm.Precompiles.Blake2f
 
 /-! ## The errors and the result -/
+
+/-- A call with a 213-byte input and too little gas runs out of gas, whatever its flag byte. -/
+theorem call_outOfGas (data : ByteArray) (h : data.size = INPUT_BYTES) {gas : Nat}
+    (hgas : gas < GAS_PER_ROUND * (readRounds ⟨data.data, h⟩).toNat) :
+    call data gas = .error (.outOfGas (GAS_PER_ROUND * (readRounds ⟨data.data, h⟩).toNat) gas) := by
+  simp [call, h, hgas]
+
+/-- A call with a 213-byte input and enough gas returns the result of the precompile, as bytes. -/
+theorem call_of_gas (data : ByteArray) (h : data.size = INPUT_BYTES) {gas : Nat}
+    (hgas : GAS_PER_ROUND * (readRounds ⟨data.data, h⟩).toNat ≤ gas) :
+    call data gas = (blake2f data).map fun out => ⟨out.toArray⟩ := by
+  simp [call, h, Nat.not_lt.mpr hgas]
+
+/-- A call with an input that is not 213 bytes long is rejected before any gas is charged. -/
+theorem call_invalidLength (data : ByteArray) (h : data.size ≠ INPUT_BYTES) (gas : Nat) :
+    call data gas = .error (.invalidLength data.size) := by
+  simp [call, h]
 
 /-- An input that is not 213 bytes long is rejected, whatever it holds. -/
 theorem blake2f_invalidLength (data : ByteArray) (h : data.size ≠ INPUT_BYTES) :

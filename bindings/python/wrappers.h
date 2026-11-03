@@ -155,4 +155,6 @@ PyObject* py_secp256k1_recover                            (PyObject* self, PyObj
 
 PyObject* py_ecrecover                                    (PyObject* self, PyObject* args);
 
+PyObject* py_precompile_run                               (PyObject* self, PyObject* args);
+
 #endif /* ETHCS_WRAPPERS_H */

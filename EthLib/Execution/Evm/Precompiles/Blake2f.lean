@@ -23,7 +23,9 @@ The input is exactly 213 bytes:
 
 The output is the new state `h`, 64 bytes, in the same encoding.
 
-The gas cost, one per round, is not part of this module.
+The price is one gas per round.
+
+The call checks the length, then charges the gas, then reads the flag.
 -/
 
 @[expose] public section
@@ -41,12 +43,14 @@ def OUTPUT_BYTES : Nat := 64
 /-- An input of the right length. -/
 abbrev Input := Vector UInt8 INPUT_BYTES
 
-/-- The two errors of EIP-152. -/
+/-- Why a BLAKE2F call fails: the two errors of EIP-152, or too little gas. -/
 inductive Blake2fError where
   /-- The input is not exactly 213 bytes, EIP-152 test vectors 0 to 2. -/
   | invalidLength (length : Nat)
   /-- The flag byte is neither `0` nor `1`, EIP-152 Specification. -/
   | invalidFlag (flag : UInt8)
+  /-- The gas given was below the price, so `charge_gas` raises `OutOfGasError` and the call consumes all its gas. -/
+  | outOfGas (cost gas : Nat)
   deriving Repr, DecidableEq
 
 /-! ## Reading the input -/
@@ -103,6 +107,21 @@ def blake2f (data : ByteArray) : Except Blake2fError (Vector UInt8 OUTPUT_BYTES)
     match readFlag (input[212]'(by simp only [INPUT_BYTES]; omega)) with
     | .error e => .error e
     | .ok f => .ok (compute input f)
+  else .error (.invalidLength data.size)
+
+/-! ## The price -/
+
+/-- The price of each round, `GasCosts.PRECOMPILE_BLAKE2F_PER_ROUND` in [`forks/istanbul/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/istanbul/vm/gas.py#L71). -/
+def GAS_PER_ROUND : Nat := 1
+
+/-- The call: the precompile, once the gas covers the price of the rounds.
+
+The gas is charged after the length check and before the flag check, as in [`blake2f`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/bogota/vm/precompiled_contracts/blake2f.py). -/
+def call (data : ByteArray) (gas : Nat) : Except Blake2fError ByteArray :=
+  if hsize : data.size = INPUT_BYTES then
+    let cost := GAS_PER_ROUND * (readRounds ⟨data.data, hsize⟩).toNat
+    if gas < cost then .error (.outOfGas cost gas)
+    else (blake2f data).map fun out => ⟨out.toArray⟩
   else .error (.invalidLength data.size)
 
 end EthLib.Execution.Evm.Precompiles.Blake2f

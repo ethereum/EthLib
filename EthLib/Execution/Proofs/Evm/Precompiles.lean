@@ -12,6 +12,7 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Sha256
 public import EthLib.Execution.Proofs.Evm.Precompiles.Ecrecover
 public import EthLib.Execution.Proofs.Evm.Precompiles.Identity
 public import EthLib.Execution.Proofs.Evm.Precompiles.PointEvaluation
+public import EthLib.Execution.Proofs.Evm.Precompiles.Table
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Precompiles`

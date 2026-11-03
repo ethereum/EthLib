@@ -2,11 +2,13 @@ module
 
 public import EthLib.Execution.Evm.Precompiles.Ripemd160
 public import EthLib.Cryptography.Proofs.Hash.Ripemd160
+public import EthLib.Execution.Proofs.Evm.Words
 
 /-!
 # Proofs: `Ripemd160`
 
-The output of the precompile at address `0x03` is 32 bytes: twelve zero bytes, then the RIPEMD-160 digest.
+- The output of the precompile at address `0x03` is 32 bytes: twelve zero bytes, then the RIPEMD-160 digest.
+- A call succeeds exactly when the gas covers `600 + 120 * ceil(len / 32)`, and then returns that output.
 -/
 
 @[expose] public section
@@ -62,5 +64,31 @@ theorem ripemd160_empty :
     ripemd160 ByteArray.empty =
       Ripemd160.hexBytes "0000000000000000000000009c1185a5c5e9fc54612808977ee8f548b2258d31" := by
   decide +kernel
+
+/-! ## The price -/
+
+/-- The price in closed form, `600 + 120 * ceil(size / 32)`. -/
+theorem gasCost_eq (size : Nat) : gasCost size = 600 + 120 * ((size + 31) / 32) := by
+  rw [gasCost, EthLib.Execution.Evm.wordCount_eq]
+  rfl
+
+/-- A call succeeds exactly when the gas covers the price, and then returns the output. -/
+theorem call_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
+    call data gas = .ok out ↔ gasCost data.size ≤ gas ∧ out = ripemd160 data := by
+  unfold call
+  by_cases short : gas < gasCost data.size
+  · simp only [short, ↓reduceIte, reduceCtorEq, false_iff, not_and]
+    omega
+  · simp only [short, ↓reduceIte, Except.ok.injEq]
+    exact ⟨fun h => ⟨by omega, h.symm⟩, fun h => h.2.symm⟩
+
+/-- A call fails exactly when the gas is below the price, and the error carries both. -/
+theorem call_eq_error_iff (data : ByteArray) (gas : Nat) (e : Ripemd160Error) :
+    call data gas = .error e ↔ gas < gasCost data.size ∧ e = .outOfGas (gasCost data.size) gas := by
+  unfold call
+  by_cases short : gas < gasCost data.size
+  · simp only [short, ↓reduceIte, Except.error.injEq, true_and]
+    exact eq_comm
+  · simp [short]
 
 end EthLib.Execution.Evm.Precompiles.Ripemd160
