@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Evm.Precompiles.AltBn128
 public import EthLib.Execution.Evm.Precompiles.Blake2f
 public import EthLib.Execution.Evm.Precompiles.Bls12381
 public import EthLib.Execution.Evm.Precompiles.Modexp
