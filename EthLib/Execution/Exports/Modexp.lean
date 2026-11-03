@@ -1,8 +1,8 @@
 module
 
-public import EthLib.Execution.Precompiles.Modexp.Constants
-public import EthLib.Execution.Precompiles.Modexp.Errors
-public import EthLib.Execution.Precompiles.Modexp.Core
+public import EthLib.Execution.Evm.Precompiles.Modexp.Constants
+public import EthLib.Execution.Evm.Precompiles.Modexp.Errors
+public import EthLib.Execution.Evm.Precompiles.Modexp.Core
 
 /-!
 # `Exports.Modexp`
@@ -16,10 +16,10 @@ C-ABI exports for the MODEXP precompile, callable from the Python C extension.
 
 public section
 
-namespace EthLib.Execution.Precompiles.Modexp.Exports
+namespace EthLib.Execution.Evm.Precompiles.Modexp.Exports
 
-open EthLib.Execution.Precompiles.Modexp
-open EthLib.Execution.Precompiles.Modexp.Constants
+open EthLib.Execution.Evm.Precompiles.Modexp
+open EthLib.Execution.Evm.Precompiles.Modexp.Constants
 
 /-- Run a fallible MODEXP computation down to `IO`.
 
@@ -63,4 +63,4 @@ A proof in the proofs library shows this, so the conversion to `UInt64` drops no
 def gasCostExport (data : ByteArray) : IO UInt64 :=
   runModexp ((chargedGas data).map UInt64.ofNat)
 
-end EthLib.Execution.Precompiles.Modexp.Exports
+end EthLib.Execution.Evm.Precompiles.Modexp.Exports

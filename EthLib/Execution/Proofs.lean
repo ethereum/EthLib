@@ -2,7 +2,6 @@ module
 
 public import EthLib.Execution.Proofs.Evm
 public import EthLib.Execution.Proofs.Fees
-public import EthLib.Execution.Proofs.Precompiles
 
 /-!
 # `EthLib.Execution.Proofs`

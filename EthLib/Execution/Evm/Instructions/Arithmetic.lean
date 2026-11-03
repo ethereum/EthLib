@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.U256
-public import EthLib.Execution.Precompiles.Modexp.Core
+public import EthLib.Execution.Evm.Precompiles.Modexp.Core
 
 /-!
 # `Evm.Instructions.Arithmetic`
