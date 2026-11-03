@@ -16,6 +16,6 @@ Each domain lives in its own subtree:
 - `EthLib.Base` holds the bytes and integers every layer uses.
 - `EthLib.Cryptography` holds the cryptographic primitives.
 - `EthLib.Networking` holds the wire formats of the networking layer.
-- `EthLib.Execution` holds the execution layer: the fees of a block, the EVM and its precompiled contracts.
+- `EthLib.Execution` holds the execution layer: the fees of a block, the EVM, its precompiled contracts and the hex-prefix encoding of trie paths.
 - `EthLib.Serialization` holds the encodings of Ethereum data.
 -/
