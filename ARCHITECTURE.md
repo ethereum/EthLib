@@ -47,7 +47,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - Transactions: the typed envelope of EIP-2718, and the legacy, access-list (EIP-2930), fee-market (EIP-1559), blob (EIP-4844) and set-code (EIP-7702) types, with their signatures and validity rules.
 - Fees: the base fee of EIP-1559, the blob base fee of EIP-4844 with its later bounds, and the gas limit of a block.
 - The EVM: the stack, memory and storage, every instruction, the gas schedule, calls and contract creation.
-- Precompiles: ECRECOVER, SHA-256, RIPEMD-160, IDENTITY, MODEXP, the alt_bn128 operations, BLAKE2F, point evaluation, the BLS12-381 operations of EIP-2537, and P256VERIFY.
+- Precompiles, which only the EVM calls: ECRECOVER, SHA-256, RIPEMD-160, IDENTITY, MODEXP, the alt_bn128 operations, BLAKE2F, point evaluation, the BLS12-381 operations of EIP-2537, and P256VERIFY.
 - System contracts and requests: the beacon block root of EIP-4788, historical block hashes of EIP-2935, and the deposit, withdrawal and consolidation requests of EIP-6110, EIP-7002, EIP-7251 and EIP-7685.
 - State: accounts, storage and code, committed by the Merkle Patricia Trie, and the trees proposed to replace it, such as the binary tree of EIP-7864.
 - Blocks: the header, receipts and their logs bloom, withdrawals of EIP-4895, the block-level access lists of EIP-7928, and the state transition of a block from Frontier to the latest fork.
@@ -106,7 +106,7 @@ Each layer is a directory under `EthLib/`, which `CONTRIBUTING.md` calls a domai
 | Layer | Holds | Directory |
 | --- | --- | --- |
 | Consensus | the state transition and the fork choice of the consensus layer | `EthLib/Consensus/` |
-| Execution | the EVM, its precompiles, the fees, and the state transition of the execution layer | `EthLib/Execution/` |
+| Execution | the EVM with its precompiles, the fees, and the state transition of the execution layer | `EthLib/Execution/` |
 | Networking | the messages peers exchange, with their framing and compression | `EthLib/Networking/` |
 | Serialization | the encodings the protocol sends and hashes | `EthLib/Serialization/` |
 | Cryptography | hashes and Merkle trees, then the schemes built on them | `EthLib/Cryptography/` |
@@ -218,5 +218,5 @@ A new module finds its place by answering three questions in order.
    If two modules need the same thing, write it once, in the lower of their layers.
 
 Then the module follows the layout of `CONTRIBUTING.md`: the specification in `EthLib/<Domain>/<Module>/`, its theorems in `EthLib/<Domain>/Proofs/<Module>/`, and its C exports in `EthLib/<Domain>/Exports/`.
-Modules of one kind share a directory inside their layer.
-The precompiles are one kind, so ECRECOVER sits in `EthLib/Execution/Precompiles/Ecrecover/`, and its theorems in `EthLib/Execution/Proofs/Precompiles/Ecrecover/`.
+Modules of one kind share a directory, under the part of the layer that uses them.
+The precompiles are one kind, and only the EVM calls them, so ECRECOVER sits in `EthLib/Execution/Evm/Precompiles/Ecrecover/`, and its theorems in `EthLib/Execution/Proofs/Evm/Precompiles/Ecrecover/`.

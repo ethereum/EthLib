@@ -150,26 +150,26 @@ No theorem relates the definitions to the Yellow Paper, and the stack, gas and p
 ### MODEXP
 
 These theorems state agreement with EIP-198 and EIP-7823.
-`compute_eq_pow_mod` (`Execution/Proofs/Precompiles/Modexp/Core.lean`) proves that the output is `BASE ^ EXPONENT mod MODULUS`, or 0 for a zero modulus.
-It rests on `powMod_eq` (`Execution/Proofs/Precompiles/Modexp/PowMod.lean`), which proves that the square-and-multiply loop equals `b ^ e % m`.
-`modexp_out_of_gas` and `modexp_ok` (`Execution/Proofs/Precompiles/Modexp/Core.lean`) prove that, with every length within the EIP-7823 bound, a call fails exactly when the gas is below the price.
+`compute_eq_pow_mod` (`Execution/Proofs/Evm/Precompiles/Modexp/Core.lean`) proves that the output is `BASE ^ EXPONENT mod MODULUS`, or 0 for a zero modulus.
+It rests on `powMod_eq` (`Execution/Proofs/Evm/Precompiles/Modexp/PowMod.lean`), which proves that the square-and-multiply loop equals `b ^ e % m`.
+`modexp_out_of_gas` and `modexp_ok` (`Execution/Proofs/Evm/Precompiles/Modexp/Core.lean`) prove that, with every length within the EIP-7823 bound, a call fails exactly when the gas is below the price.
 
 No theorem relates the module to the execution-specs code it follows.
 
 ### BLAKE2F
 
 The theorems pin down the input format exactly, and leave the compression function F to known answers.
-`blake2f_invalidLength`, `blake2f_invalidFlag` and `blake2f_ok` (`Execution/Proofs/Precompiles/Blake2f.lean`) prove that a call fails exactly when the input is not 213 bytes long, or its flag byte is neither `0` nor `1`.
+`blake2f_invalidLength`, `blake2f_invalidFlag` and `blake2f_ok` (`Execution/Proofs/Evm/Precompiles/Blake2f.lean`) prove that a call fails exactly when the input is not 213 bytes long, or its flag byte is neither `0` nor `1`.
 Otherwise it returns `compute` of the input, which decodes the fields and runs F of RFC 7693 on them.
 `readWord_toNat`, `readRounds_toNat` and `writeState_word` state the encoding of EIP-152 for every input: the rounds field big-endian, every word little-endian, and the output in the encoding of the input.
 
-F itself is checked by known answers only (`Cryptography/Proofs/Hash/Blake2b.lean` and `Execution/Proofs/Precompiles/Blake2f.lean`).
+F itself is checked by known answers only (`Cryptography/Proofs/Hash/Blake2b.lean` and `Execution/Proofs/Evm/Precompiles/Blake2f.lean`).
 They are RFC 7693 Appendix A, one full block of the BLAKE2 test vectors, test vectors 4 to 7 of EIP-152, the rounds field of test vector 8, and one call that sets `t1`.
 No theorem states the output of test vector 8, which asks for `2^32 - 1` rounds.
 
 ### ECRECOVER
 
-The ECRECOVER theorems rest on the secp256k1 ones, and all three are in `Execution/Proofs/Precompiles/Ecrecover/Core.lean`.
+The ECRECOVER theorems rest on the secp256k1 ones, and all three are in `Execution/Proofs/Evm/Precompiles/Ecrecover/Core.lean`.
 `output_sign` proves that a signature made with a private key returns that key's address.
 `output_verify` proves that a nonempty output is the address of a key that verifies the signature.
 `output_of_verify` proves that every key that verifies a signature has its address returned for `v = 27` or `v = 28`, when `r + n >= p`.

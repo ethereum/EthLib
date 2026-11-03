@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Precompiles.Ripemd160
+public import EthLib.Execution.Evm.Precompiles.Ripemd160
 
 /-!
 # `Exports.Ripemd160`
@@ -13,7 +13,7 @@ C-ABI exports for the RIPEMD-160 precompile, callable from the Python C extensio
 
 public section
 
-namespace EthLib.Execution.Precompiles.Ripemd160.Exports
+namespace EthLib.Execution.Evm.Precompiles.Ripemd160.Exports
 
 /-! ## Sizes
 
@@ -32,4 +32,4 @@ def constOutputBytes (_ : Unit) : UInt64 :=
 def ripemd160Export (data : ByteArray) : ByteArray :=
   ripemd160 data
 
-end EthLib.Execution.Precompiles.Ripemd160.Exports
+end EthLib.Execution.Evm.Precompiles.Ripemd160.Exports

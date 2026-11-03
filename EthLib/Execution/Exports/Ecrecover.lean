@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Precompiles.Ecrecover.Core
+public import EthLib.Execution.Evm.Precompiles.Ecrecover.Core
 
 /-!
 # `Exports.Ecrecover`
@@ -14,7 +14,7 @@ C-ABI exports for the ECRECOVER precompile, callable from the Python C extension
 
 public section
 
-namespace EthLib.Execution.Precompiles.Ecrecover.Exports
+namespace EthLib.Execution.Evm.Precompiles.Ecrecover.Exports
 
 /-- The gas of a call. -/
 @[export eth_ecrecover_const_gas]
@@ -31,4 +31,4 @@ def ecrecoverExport (data : ByteArray) (gas : UInt64) : IO ByteArray :=
   -- A lack of gas becomes the user error the Python bindings expect.
   | .error e => throw (IO.userError e.message)
 
-end EthLib.Execution.Precompiles.Ecrecover.Exports
+end EthLib.Execution.Evm.Precompiles.Ecrecover.Exports
