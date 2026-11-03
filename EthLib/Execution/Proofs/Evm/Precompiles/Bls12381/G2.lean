@@ -10,6 +10,7 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 - Every encoded G2 point, and so every output of G2ADD and G2MSM, has 256 bytes.
 - G2MSM rejects an empty input or a length that is not a whole number of 288-byte pairs.
 - Its discount never raises the price above that of `k` separate products.
+- MAP_FP2_TO_G2 rejects any length other than 128 bytes before it charges gas, and every output has 256 bytes.
 -/
 
 @[expose] public section
@@ -109,5 +110,33 @@ theorem msmGasG2_one : msmGasG2 1 = 22500 := by decide
 theorem discountG2_of_lt {k : Nat} (hk : 128 < k) : discountG2 k = 524 := by
   simp [discountG2, G2_MAX_DISCOUNT]
   omega
+
+/-! ## MAP_FP2_TO_G2 -/
+
+/-- MAP_FP2_TO_G2 rejects any length other than 128 bytes, whatever the gas. -/
+theorem bls12MapFp2ToG2_invalidInputLength {data : ByteArray} (hsize : data.size ≠ 128) (gas : Nat) :
+    bls12MapFp2ToG2 data gas = .error (.invalidInputLength data.size) := by
+  unfold bls12MapFp2ToG2
+  rw [ite_eq_left_of_eq_true _ _ (eq_true hsize)]
+  rfl
+
+/-- MAP_FP2_TO_G2 runs out of gas below its price. -/
+theorem bls12MapFp2ToG2_outOfGas {data : ByteArray} (hsize : data.size = 128) {gas : Nat} (hgas : gas < GAS_G2MAP) :
+    bls12MapFp2ToG2 data gas = .error (.outOfGas GAS_G2MAP gas) := by
+  unfold bls12MapFp2ToG2
+  rw [ite_eq_right_of_eq_false _ _ (eq_false (by omega)), ite_eq_left_of_eq_true _ _ (eq_true hgas)]
+  rfl
+
+/-- Every output of MAP_FP2_TO_G2 has 256 bytes. -/
+theorem bls12MapFp2ToG2_size {data : ByteArray} {gas : Nat} {out : ByteArray} (h : bls12MapFp2ToG2 data gas = .ok out) :
+    out.size = 256 := by
+  simp only [bls12MapFp2ToG2, bind, throw, throwThe, MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  repeat obtain ⟨_, _, h⟩ := bind_eq_ok h
+  cases h
+  simp [ByteArray.size, length_padG2_g2ToBytes]
 
 end EthLib.Execution.Evm.Precompiles.Bls12381

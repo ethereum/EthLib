@@ -11,6 +11,7 @@ public import EthLib.Cryptography.Bls.G2
 public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Cryptography.Bls.Pairing
 public import EthLib.Cryptography.Bls.HashToCurve
+public import EthLib.Cryptography.Bls.MapToCurve
 public import EthLib.Cryptography.Bls.Signatures
 
 /-!

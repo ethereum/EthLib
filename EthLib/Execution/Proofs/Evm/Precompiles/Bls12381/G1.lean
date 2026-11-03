@@ -10,6 +10,7 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 - Every encoded G1 point, and so every output of G1ADD and G1MSM, has 128 bytes.
 - G1MSM rejects an empty input or a length that is not a whole number of 160-byte pairs.
 - Its discount never raises the price above that of `k` separate products.
+- MAP_FP_TO_G1 rejects any length other than 64 bytes before it charges gas, and every output has 128 bytes.
 -/
 
 @[expose] public section
@@ -109,5 +110,33 @@ theorem msmGasG1_one : msmGasG1 1 = 12000 := by decide
 theorem discountG1_of_lt {k : Nat} (hk : 128 < k) : discountG1 k = 519 := by
   simp [discountG1, G1_MAX_DISCOUNT]
   omega
+
+/-! ## MAP_FP_TO_G1 -/
+
+/-- MAP_FP_TO_G1 rejects any length other than 64 bytes, whatever the gas. -/
+theorem bls12MapFpToG1_invalidInputLength {data : ByteArray} (hsize : data.size ≠ 64) (gas : Nat) :
+    bls12MapFpToG1 data gas = .error (.invalidInputLength data.size) := by
+  unfold bls12MapFpToG1
+  rw [ite_eq_left_of_eq_true _ _ (eq_true hsize)]
+  rfl
+
+/-- MAP_FP_TO_G1 runs out of gas below its price. -/
+theorem bls12MapFpToG1_outOfGas {data : ByteArray} (hsize : data.size = 64) {gas : Nat} (hgas : gas < GAS_G1MAP) :
+    bls12MapFpToG1 data gas = .error (.outOfGas GAS_G1MAP gas) := by
+  unfold bls12MapFpToG1
+  rw [ite_eq_right_of_eq_false _ _ (eq_false (by omega)), ite_eq_left_of_eq_true _ _ (eq_true hgas)]
+  rfl
+
+/-- Every output of MAP_FP_TO_G1 has 128 bytes. -/
+theorem bls12MapFpToG1_size {data : ByteArray} {gas : Nat} {out : ByteArray} (h : bls12MapFpToG1 data gas = .ok out) :
+    out.size = 128 := by
+  simp only [bls12MapFpToG1, bind, throw, throwThe, MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  repeat obtain ⟨_, _, h⟩ := bind_eq_ok h
+  cases h
+  simp [ByteArray.size, length_padG1_g1ToBytes]
 
 end EthLib.Execution.Evm.Precompiles.Bls12381

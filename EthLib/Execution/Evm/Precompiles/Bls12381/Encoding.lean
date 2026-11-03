@@ -59,6 +59,10 @@ inductive Bls12381Error where
   | notOnCurve
   /-- A point is not in the subgroup of prime order. -/
   | notInSubgroup
+  /-- Neither candidate of the map of a field element to G1 has a square root.
+
+  RFC 9380 §6.6.2 excludes this case, because `Z` is not a square. -/
+  | notASquare
   deriving Repr, DecidableEq
 
 /-- `unpad_fp`: the 48 bytes of a padded field element, once its 16 leading bytes are checked to be zero. -/
