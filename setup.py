@@ -148,6 +148,7 @@ def _make_extension() -> Extension:
             "bindings/python/sha256_precompile.c",
             "bindings/python/secp256k1.c",
             "bindings/python/ecrecover.c",
+            "bindings/python/precompile.c",
         ],
         include_dirs=["bindings/python"],
         extra_objects=[],

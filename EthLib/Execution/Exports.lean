@@ -4,6 +4,7 @@ public import EthLib.Execution.Exports.Modexp
 public import EthLib.Execution.Exports.Ripemd160
 public import EthLib.Execution.Exports.Sha256
 public import EthLib.Execution.Exports.Ecrecover
+public import EthLib.Execution.Exports.Precompiles
 
 /-!
 # `EthLib.Execution.Exports`
