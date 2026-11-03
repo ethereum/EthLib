@@ -7,6 +7,7 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.AddKnownAnswers
 public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.MulKnownAnswers
 public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.MsmG1KnownAnswers
 public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.MsmG2KnownAnswers
+public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Pairing
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Precompiles.Bls12381`
