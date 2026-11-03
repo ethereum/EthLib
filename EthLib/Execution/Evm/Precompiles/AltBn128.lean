@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.BigEndian
-public import EthLib.Cryptography.AltBn128.Curve
+public import EthLib.Cryptography.AltBn128.Pairing
 public import EthLib.Execution.Evm.Memory
 
 /-!
@@ -11,6 +11,7 @@ The alt_bn128 precompiles of EIP-196 and EIP-197, which zkSNARK verifiers call.
 
 - ECADD at `0x06` adds two points of `G_1`.
 - ECMUL at `0x07` multiplies a point of `G_1` by a 32-byte scalar.
+- ECPAIRING at `0x08` checks that the product of the pairings of pairs of points is 1.
 
 A point is its coordinates as two 32-byte big-endian integers, and `(0, 0)` is the point at infinity:
 
@@ -18,11 +19,13 @@ A point is its coordinates as two 32-byte big-endian integers, and `(0, 0)` is t
 ECADD input:  [ x1: 32 | y1: 32 | x2: 32 | y2: 32 ]
 ECMUL input:  [ x: 32 | y: 32 | scalar: 32 ]
 output:       [ x: 32 | y: 32 ]
+ECPAIRING:    k pairs of [ G_1 point: 64 | G_2 point: 128 ], and 1 or 0 as a 32-byte word
+G_2 point:    [ x.c1: 32 | x.c0: 32 | y.c1: 32 | y.c0: 32 ]
 ```
 
 The call data reads as if padded with zeros, so a short input is padded and bytes past the input are ignored.
 
-Source: [`forks/istanbul/vm/precompiled_contracts/alt_bn128.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/istanbul/vm/precompiled_contracts/alt_bn128.py#L39-L192) of execution-specs at `2c0c8e7`.
+Source: [`forks/istanbul/vm/precompiled_contracts/alt_bn128.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/istanbul/vm/precompiled_contracts/alt_bn128.py#L39-L234) of execution-specs at `2c0c8e7`.
 
 Byzantium introduced the precompiles, and Istanbul lowered their prices with EIP-1108.
 
@@ -55,6 +58,10 @@ inductive AltBn128Error where
   | invalidFieldElement
   /-- A point is not on its curve. -/
   | notOnCurve
+  /-- The call data of a pairing check is not a whole number of 192-byte pairs. -/
+  | invalidInputLength (size : Nat)
+  /-- A point is not in the group of order `q`. -/
+  | notInSubgroup
   deriving Repr, DecidableEq
 
 /-- `bytes_to_g1`: a point of `G_1` from 64 bytes, with `(0, 0)` for the point at infinity. -/
@@ -93,5 +100,54 @@ def ecmul (data : ByteArray) (gas : Nat) : Except AltBn128Error ByteArray := do
   let n := bytesToNat (bufferRead data 64 32)
   -- A 32-byte scalar is below `2^256`, so 256 bits cover it.
   return ⟨(g1ToBytes (Point.mulBits 256 n p0)).toArray⟩
+
+/-- The price of every pairing check, `GasCosts.PRECOMPILE_ECPAIRING_BASE` in [`forks/istanbul/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/istanbul/vm/gas.py#L74). -/
+def GAS_ECPAIRING_BASE : Nat := 45000
+
+/-- The price of each pair, `GasCosts.PRECOMPILE_ECPAIRING_PER_POINT` in [`forks/istanbul/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/istanbul/vm/gas.py#L75). -/
+def GAS_ECPAIRING_PER_POINT : Nat := 34000
+
+/-- The price of a pairing check on `size` bytes: one pair per whole 192 bytes. -/
+def ecpairingGas (size : Nat) : Nat := GAS_ECPAIRING_PER_POINT * (size / 192) + GAS_ECPAIRING_BASE
+
+/-- An element of `Fp` from 32 bytes. -/
+def bytesToFp (raw : List UInt8) : Except AltBn128Error Fp :=
+  let value := bytesToNat raw
+  if h : value < Fp.modulus then .ok ⟨value, h⟩ else .error .invalidFieldElement
+
+/-- `bytes_to_g2`: a point of the twist from 128 bytes, the `i` part of each coordinate first, with zeros for the point at infinity. -/
+def bytesToG2 (raw : List UInt8) : Except AltBn128Error Point2 := do
+  let x1 ← bytesToFp (raw.take 32)
+  let x0 ← bytesToFp ((raw.drop 32).take 32)
+  let y1 ← bytesToFp ((raw.drop 64).take 32)
+  let y0 ← bytesToFp (raw.drop 96)
+  let x : Fp2 := ⟨x0, x1⟩
+  let y : Fp2 := ⟨y0, y1⟩
+  if x = ⟨0, 0⟩ ∧ y = ⟨0, 0⟩ then
+    return .infinity
+  let point := Point2.affine x y
+  if point.isOnCurve then return point else throw .notOnCurve
+
+/-- One pair of the call data, decoded and checked to be in the groups of order `q`. -/
+def decodePair (data : ByteArray) (index : Nat) : Except AltBn128Error (Point × Point2) := do
+  let p ← bytesToG1 (bufferRead data (192 * index) 64)
+  let q ← bytesToG2 (bufferRead data (192 * index + 64) 128)
+  -- `q` has 254 bits, so 256 bits of the scalar cover it.
+  if Point.mulBits 256 Fr.modulus p ≠ .infinity then
+    throw .notInSubgroup
+  if Point2.mulBits 256 Fr.modulus q ≠ .infinity then
+    throw .notInSubgroup
+  return (p, q)
+
+/-- `alt_bn128_pairing_check`: 1 as a 32-byte word when the product of the pairings of the pairs is 1, and 0 otherwise.
+
+The gas is charged before the length is checked. -/
+def ecpairing (data : ByteArray) (gas : Nat) : Except AltBn128Error ByteArray := do
+  if gas < ecpairingGas data.size then
+    throw (.outOfGas (ecpairingGas data.size) gas)
+  if data.size % 192 ≠ 0 then
+    throw (.invalidInputLength data.size)
+  let pairs ← (List.range (data.size / 192)).mapM (decodePair data)
+  return ⟨(List.replicate 31 (0 : UInt8) ++ [if pairingCheck pairs then 1 else 0]).toArray⟩
 
 end EthLib.Execution.Evm.Precompiles.AltBn128

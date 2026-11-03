@@ -9,12 +9,15 @@ public import EthLib.Serialization.Proofs.Rlp.Vectors
 # Proofs: `Evm.Precompiles.AltBn128`
 
 - ECADD and ECMUL fail exactly when the gas is below the price or a point is invalid.
-- Every output has 64 bytes.
+- Every output of ECADD and ECMUL has 64 bytes, and every output of ECPAIRING is the word 0 or 1.
+- ECPAIRING charges its gas before it checks that the call data is a whole number of 192-byte pairs.
 - The known answers pin the group: `G + G = 2 G`, `G + (-G) = O`, `q G = O`, `(q + 1) G = G`.
 
 `2 G` and `3 G` are the points that py_ecc 8.0.0 computes, the library that execution-specs calls.
 
 The other expected outputs follow from the group law and from `q`, the order of `G`.
+
+The kernel cannot run the final exponentiation of a pairing, so the successful pairing checks run in the Python suite.
 -/
 
 @[expose] public section
@@ -148,6 +151,51 @@ theorem ecmul_g_0 : ecmul (byteArrayOf 64 0x000000000000000000000000000000000000
 /-- An invalid point fails, whatever the scalar. -/
 theorem ecmul_not_on_curve :
     ecmul (byteArrayOf 96 0x000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000002) 6000 = .error .notOnCurve :=
+  eq_error_of_kernel (by decide +kernel)
+
+/-! ## ECPAIRING -/
+
+/-- ECPAIRING runs out of gas below its price, before it checks the length. -/
+theorem ecpairing_outOfGas (data : ByteArray) {gas : Nat} (hgas : gas < ecpairingGas data.size) :
+    ecpairing data gas = .error (.outOfGas (ecpairingGas data.size) gas) := by
+  simp [ecpairing, hgas, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+
+/-- With enough gas, a length that is not a whole number of pairs fails. -/
+theorem ecpairing_invalidInputLength {data : ByteArray} {gas : Nat} (hgas : ecpairingGas data.size ≤ gas)
+    (hsize : data.size % 192 ≠ 0) :
+    ecpairing data gas = .error (.invalidInputLength data.size) := by
+  simp [ecpairing, Nat.not_lt.mpr hgas, hsize, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+
+/-- Every output of ECPAIRING is the word 0 or 1. -/
+theorem ecpairing_ok {data : ByteArray} {gas : Nat} {out : ByteArray} (h : ecpairing data gas = .ok out) :
+    ∃ result : Bool, out = ⟨(List.replicate 31 (0 : UInt8) ++ [if result then 1 else 0]).toArray⟩ := by
+  simp only [ecpairing, bind, throw, throwThe, MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  obtain ⟨_, _, h⟩ := bind_eq_ok h
+  cases h
+  exact ⟨_, rfl⟩
+
+/-- The price of no pair is the base price alone. -/
+theorem ecpairingGas_empty : ecpairingGas 0 = 45000 := rfl
+
+/-- One pair costs `34000 + 45000 = 79000`. -/
+theorem ecpairingGas_one : ecpairingGas 192 = 79000 := rfl
+
+/-- 191 bytes are one short of a pair. -/
+theorem ecpairing_191 : ecpairing (byteArrayOf 191 0) 45000 = .error (.invalidInputLength 191) :=
+  eq_error_of_kernel (by decide +kernel)
+
+/-- A `G_2` coordinate equal to `p` is not a field element. -/
+theorem ecpairing_g2_x_is_p :
+    ecpairing (byteArrayOf 192 0x0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000230644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd471800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6ed090689d0585ff075ec9e99ad690c3395bc4b313370b38ef355acdadcd122975b12c85ea5db8c6deb4aab71808dcb408fe3d1e7690c43d37b4ce6cc0166fa7daa) 79000 = .error .invalidFieldElement :=
+  eq_error_of_kernel (by decide +kernel)
+
+/-- `(1, 1, 1, 1)` is not on the twist. -/
+theorem ecpairing_g2_not_on_curve :
+    ecpairing (byteArrayOf 192 0x000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001) 79000 = .error .notOnCurve :=
   eq_error_of_kernel (by decide +kernel)
 
 end EthLib.Execution.Evm.Precompiles.AltBn128
