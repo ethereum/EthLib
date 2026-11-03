@@ -47,7 +47,7 @@ theorem climb_append [LawfulMonad m] :
     have position : j / 2 / 2 ^ rest.length = j / 2 ^ (rest.length + 1) := by
       rw [Nat.div_div_eq_div_mul, ← Nat.pow_succ']
     have level_up : level + 1 + rest.length = level + (rest.length + 1) := by omega
-    split <;> simp only [bind_assoc, climb_append rest q, position, level_up]
+    simp only [bind_assoc, climb_append rest q, position, level_up]
 
 /-- Climbing the first `n + 1` siblings climbs the first `n`, then hashes in sibling `n`.
 
@@ -61,6 +61,53 @@ theorem climb_take_succ [LawfulMonad m] (j : Nat) (current : α) (p : List α) (
   rw [List.take_add_one, List.getElem?_eq_getElem hn, Option.toList_some, climb_append,
     List.length_take_of_le (Nat.le_of_lt hn)]
   simp only [Nat.zero_add, climb, bind_pure]
+  -- The order of the children is the one the bit gives.
+  refine congrArg _ (funext fun held => ?_)
+  unfold ordered
+  split <;> rfl
+
+/-! ## The levels a tree hashes at -/
+
+/-- A node on `level` hashes only at levels 1 to `level`.
+
+So two node hashes that agree there give the same node. -/
+theorem node_congr (hash' : Nat → Nat → α → α → m α) (leaves : Nat → m α) :
+    ∀ (level j : Nat), (∀ k, 1 ≤ k → k ≤ level → hash k = hash' k) →
+      node hash leaves level j = node hash' leaves level j
+  | 0, _, _ => rfl
+  | level + 1, j, agree => by
+    -- The children agree by induction, and the node's own hash is at `level + 1`.
+    have below : ∀ k, 1 ≤ k → k ≤ level → hash k = hash' k := fun k h1 h2 => agree k h1 (by omega)
+    rw [node_succ, node_succ, node_congr hash' leaves level (2 * j) below,
+      node_congr hash' leaves level (2 * j + 1) below, agree (level + 1) (by omega) (Nat.le_refl _)]
+
+/-- The `n` siblings from `level` up hash only at levels 1 to `level + n - 1`. -/
+theorem siblings_congr (hash' : Nat → Nat → α → α → m α) (leaves : Nat → m α) :
+    ∀ (n level j : Nat), (∀ k, 1 ≤ k → k < level + n → hash k = hash' k) →
+      siblings hash leaves level j n = siblings hash' leaves level j n
+  | 0, _, _, _ => rfl
+  | n + 1, level, j, agree => by
+    -- The first sibling is a node on `level`, and the rest start one level up.
+    simp only [siblings]
+    rw [node_congr hash hash' leaves level (j ^^^ 1) (fun k h1 h2 => agree k h1 (by omega)),
+      siblings_congr hash' leaves n (level + 1) (j / 2) (fun k h1 h2 => agree k h1 (by omega))]
+
+/-- The path in a tree of height `h` hashes only at levels 1 to `h - 1`. -/
+theorem path_congr (hash' : Nat → Nat → α → α → m α) (leaves : Nat → m α) (h j : Nat)
+    (agree : ∀ k, 1 ≤ k → k < h → hash k = hash' k) : path hash leaves h j = path hash' leaves h j :=
+  siblings_congr hash hash' leaves h 0 j (by simpa using agree)
+
+/-- A climb from `level` over `n` siblings hashes only at levels `level + 1` to `level + n`. -/
+theorem climb_congr (hash' : Nat → Nat → α → α → m α) :
+    ∀ (siblings : List α) (level j : Nat) (current : α),
+      (∀ k, level < k → k ≤ level + siblings.length → hash k = hash' k) →
+        climb hash level j current siblings = climb hash' level j current siblings
+  | [], _, _, _, _ => rfl
+  | sibling :: rest, level, j, current, agree => by
+    -- This step hashes at `level + 1`, and the rest of the climb above it.
+    simp only [climb, agree (level + 1) (by omega) (by simp)]
+    exact congrArg _ (funext fun parent => climb_congr hash' rest (level + 1) (j / 2) parent
+      (fun k h1 h2 => agree k (by omega) (by simp; omega)))
 
 end Monad
 
@@ -87,12 +134,6 @@ theorem siblings_succ_toList (leaves : Nat → Id α) (level j n : Nat) :
     (climb hash level j current []).run = current :=
   rfl
 
-/-- The two children a climb step hashes, the left one first.
-
-The low bit of `j` says whether the held node is the left one. -/
-def ordered (j : Nat) (current sibling : α) : α × α :=
-  if j % 2 = 0 then (current, sibling) else (sibling, current)
-
 /-- The pair of children determines the held node and its sibling. -/
 theorem ordered_inj {j : Nat} {c s c' s' : α} :
     ordered j c s = ordered j c' s' ↔ c = c' ∧ s = s' := by
@@ -104,9 +145,8 @@ theorem climb_cons (level j : Nat) (current sibling : α) (rest : List α) :
     (climb hash level j current (sibling :: rest)).run
       = (climb hash (level + 1) (j / 2)
           (hash (level + 1) (j / 2) (ordered j current sibling).1
-            (ordered j current sibling).2).run rest).run := by
-  simp only [climb, ordered]
-  split <;> rfl
+            (ordered j current sibling).2).run rest).run :=
+  rfl
 
 /-! ## Completeness -/
 

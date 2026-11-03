@@ -86,16 +86,20 @@ def path (leaves : Nat → m α) (h j : Nat) : m (Vector α h) :=
 
 /-! ## Climbing -/
 
-/-- The node reached by climbing from the node `current` at `(level, j)`, one sibling per level.
+/-- The two children of a climb step, the left one first.
 
-The low bit of `j` says whether `current` is the left or the right child.
+The low bit of `j` says whether the node held at index `j` is the left child. -/
+def ordered (j : Nat) (current sibling : α) : α × α :=
+  if j % 2 = 0 then (current, sibling) else (sibling, current)
+
+/-- The node reached by climbing from the node `current` at `(level, j)`, one sibling per level.
 
 Its parent sits at `(level + 1, j / 2)`. -/
 def climb : (level j : Nat) → (current : α) → (siblings : List α) → m α
   | _, _, current, [] => pure current
   | level, j, current, sibling :: rest => do
-    let parent ← if j % 2 = 0 then hash (level + 1) (j / 2) current sibling
-      else hash (level + 1) (j / 2) sibling current
+    let children := ordered j current sibling
+    let parent ← hash (level + 1) (j / 2) children.1 children.2
     climb (level + 1) (j / 2) parent rest
 
 end EthLib.Cryptography.Merkle

@@ -11,7 +11,9 @@ A statement "the climbs are equal, or a collision exists" would then say nothing
 
 So each theorem here names an algorithm that computes the collision from the two climbs.
 
-That algorithm is the reduction: whoever forges a path also finds a collision, at the cost of a few hashes.
+That algorithm is the reduction: whoever forges a path also finds a collision.
+
+Each search takes one step per level, and no theorem here counts its hash calls.
 
 - `findCollision` walks two climbs from one position up, level by level.
 - It returns the first level where they hash two different pairs to one parent.

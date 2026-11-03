@@ -96,12 +96,20 @@ The statement is written with VCVio's oracle computations and probabilities, so 
 
 ### Merkle trees
 
-leanXMSS, the VRF tree and SSZ build their trees on one definition, and two theorems in `Proofs/Merkle/Binding.lean` describe what a path binds.
-`climb_binding` says that two climbs from one position that reach one node are equal, or `findCollision` returns a collision of the node hash at an ancestor of that position.
-`climb_binding_node` says that a climb that reaches an honest node but is not the honest one is caught by `findSecondPreimage`, which returns a second preimage of an honest ancestor.
-Both searches are explicit algorithms, proved to return valid answers, so the statements say something even though every compressing hash has collisions.
-Both hold for every node hash.
+leanXMSS, the VRF tree and SSZ build their trees on one definition.
+Two theorems in `Proofs/Merkle/Binding.lean` describe what a path binds, for every node hash.
+The first is `climb_binding`, about two climbs from one position that reach one node.
+They are equal, or `findCollision` returns a collision of the node hash at an ancestor of that position.
+The second is `climb_binding_node`, about a climb that reaches an honest node but is not the honest climb.
+Then `findSecondPreimage` returns a second preimage of an honest ancestor.
+
+Both searches are explicit algorithms, proved to return valid answers.
+So the statements say something, even though every compressing hash has collisions.
 No theorem bounds the probability of finding a collision or a second preimage.
+
+The VRF's `verify_unique` uses `climb_binding`.
+leanXMSS states `fold_binding` with `climb_binding_node`, but its unforgeability proof does not use either theorem.
+SSZ uses neither.
 
 ### VRF tree
 

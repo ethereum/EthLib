@@ -15,6 +15,8 @@ On the top layer, key `b < 2^16` reaches the root of the one top tree.
 
 Another path that reaches the same root exposes a second preimage of `Th`, under one node address.
 
+The tree hashes only at levels 1 to 16, so no node address holds a level reduced modulo 17.
+
 Each statement specializes one proved for every Merkle tree.
 
 The unfolding equations hold in every monad.
@@ -76,6 +78,40 @@ theorem path_eq_ofFnInOrder [LawfulMonad m] (e : Nat) :
       rfl
   simpa [path, Merkle.path] using siblings_eq LAYER_HEIGHT 0 e
 
+/-! ## Every level is read exactly
+
+The node hash reads its level into the address modulo 17.
+
+The tree hashes only at levels 1 to 16, where that read is exact.
+
+So the address of every node of the tree names its true level. -/
+
+/-- On levels up to 16, the node hash reads its level exactly into the address. -/
+theorem nodeHash_of_le {level : Nat} (hlevel : level ≤ LAYER_HEIGHT) (j : Nat) (left right : Digest) :
+    nodeHash H pp layer level j left right
+      = th H pp (addrNode layer ⟨level, by omega⟩ (UInt32.ofNat j)) (packBytes left ++ packBytes right) := by
+  simp only [nodeHash, Fin.ofNat, Nat.mod_eq_of_lt (Nat.lt_succ_of_le hlevel)]
+
+/-- A node up to level 16 is the same with any node hash that agrees on levels 1 to 16. -/
+theorem node_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest)
+    (agree : ∀ k, 1 ≤ k → k ≤ LAYER_HEIGHT → nodeHash H pp layer k = hash' k)
+    {level : Nat} (hlevel : level ≤ LAYER_HEIGHT) (j : Nat) :
+    node H pp seed layer level j = Merkle.node hash' (leaves H pp seed layer) level j :=
+  Merkle.node_congr _ hash' _ level j fun k h1 h2 => agree k h1 (by omega)
+
+/-- A path is the same with any node hash that agrees on levels 1 to 16. -/
+theorem path_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest)
+    (agree : ∀ k, 1 ≤ k → k ≤ LAYER_HEIGHT → nodeHash H pp layer k = hash' k) (e : Nat) :
+    path H pp seed layer e = Merkle.path hash' (leaves H pp seed layer) LAYER_HEIGHT e :=
+  Merkle.path_congr _ hash' _ _ e fun k h1 h2 => agree k h1 (by omega)
+
+/-- A fold is the same with any node hash that agrees on levels 1 to 16. -/
+theorem fold_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest)
+    (agree : ∀ k, 1 ≤ k → k ≤ LAYER_HEIGHT → nodeHash H pp layer k = hash' k) (e : Nat) (leaf : Digest)
+    (pi : Vector Digest LAYER_HEIGHT) :
+    fold H pp layer e leaf pi = Merkle.climb hash' 0 e leaf pi.toList :=
+  Merkle.climb_congr _ hash' _ 0 e leaf fun k h1 h2 => agree k (by omega) (by simpa using h2)
+
 end Monad
 
 /-! ## The path reaches the root -/
@@ -105,8 +141,8 @@ That root is node `floor(e / 2^16)` on the top level: bottom tree `b`'s, or the 
 
 Otherwise `findSecondPreimage` returns a second preimage of `Th` under the address of an ancestor of the leaf:
 
-- one input is that ancestor's two honest children;
-- the other is a different pair with the same hash.
+- One input is that ancestor's two honest children.
+- The other input is a different pair with the same hash.
 -/
 theorem fold_binding {e : Nat} {leaf : Digest} {pi : Vector Digest LAYER_HEIGHT}
     (heq : (fold (pureHash f) pp layer e leaf pi).run

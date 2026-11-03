@@ -22,12 +22,12 @@ On layer `l`, for `1 <= lambda <= 16`:
 
 A signature carries its key's path: the sibling of every node on the way up.
 
-For example, in a tree of height 2 with leaves `l_0` to `l_3`, the path of `l_2` is:
+For example, in a tree of height 2 with leaves `l_0` to `l_3`, the path of `l_2` holds two nodes:
 
-- `l_3`, its sibling on level 0;
+- `l_3`, its sibling on level 0.
 - `X_{1,0}`, the sibling of its parent on level 1.
 
-These are Merkle trees whose node hash reads the node's position into its address.
+The trees of a layer are Merkle trees whose node hash reads the node's position into its address.
 
 Every definition takes the hash `H`.
 
@@ -48,7 +48,9 @@ variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
 /-- The parent at index `j` on `level`, from its two children.
 
-The level is read into the address as a level of a layer, from 1 to 16 in a tree. -/
+The address holds the level modulo 17.
+
+The tree hashes only at levels 1 to 16, so the address names the true level. -/
 def nodeHash (pp : PublicParam) (layer : Layer) (level j : Nat) (left right : Digest) : m Digest :=
   -- The payload is the left child, then the right child.
   th H pp (addrNode layer (Fin.ofNat _ level) (UInt32.ofNat j)) (packBytes left ++ packBytes right)

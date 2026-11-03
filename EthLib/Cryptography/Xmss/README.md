@@ -154,8 +154,10 @@ The scheme seed, the public parameter and both keys' leaves, computed from the s
 This is a limit on computing results inside Lean, separate from the missing theorems in the previous section.
 
 The kernel checks every known answer itself, with no `native_decide`.
-A whole verification is too large for one kernel check, so the known answer checks it in pieces: each layer's codeword, a few chains at a time, the leaf and the path.
-The pieces run over a record form of Keccak-f, with the hash inputs as lists, which the kernel evaluates far faster than the specification's vectors and arrays.
+A whole verification is too large for one kernel check.
+So the known answer checks it in pieces: each layer's codeword, a few chains at a time, the leaf and the path.
+The pieces run over a record form of Keccak-f, with the hash inputs as lists.
+The kernel evaluates that form far faster than the vectors and arrays of the specification.
 `Proofs/Hash/KeccakKernel.lean` proves the record form equal to Keccak-f for every state, and `Proofs/Xmss/FastHash.lean` carries that through the chains and the paths.
 
 The public key from the seed needs the whole top tree, `2^16` one-time keys, which is beyond the kernel.
