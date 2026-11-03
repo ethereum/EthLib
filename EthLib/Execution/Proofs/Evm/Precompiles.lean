@@ -5,6 +5,7 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Modexp
 public import EthLib.Execution.Proofs.Evm.Precompiles.Ripemd160
 public import EthLib.Execution.Proofs.Evm.Precompiles.Sha256
 public import EthLib.Execution.Proofs.Evm.Precompiles.Ecrecover
+public import EthLib.Execution.Proofs.Evm.Precompiles.Identity
 
 /-!
 # `EthLib.Execution.Proofs.Evm.Precompiles`

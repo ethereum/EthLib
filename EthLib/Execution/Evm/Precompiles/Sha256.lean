@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Hash.Sha256
+public import EthLib.Execution.Evm.Words
 
 /-!
 # `EthLib.Execution.Evm.Precompiles.Sha256`
@@ -31,24 +32,16 @@ The hash is `EthLib.Cryptography.Hash.sha256`, the FIPS 180-4 hash of the crypto
 
 namespace EthLib.Execution.Evm.Precompiles.Sha256
 
+open EthLib.Execution.Evm (wordCount)
+
 /-- The size of the output in bytes: one SHA-256 digest. -/
 def OUTPUT_BYTES : Nat := 32
-
-/-- The size in bytes of the word the gas counts. -/
-def WORD_BYTES : Nat := 32
 
 /-- The price of every call, `GasCosts.PRECOMPILE_SHA256_BASE` in [`forks/frontier/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/frontier/vm/gas.py#L66). -/
 def GAS_BASE : Nat := 60
 
 /-- The price of each word of call data, `GasCosts.PRECOMPILE_SHA256_PER_WORD` in [`forks/frontier/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/frontier/vm/gas.py#L67). -/
 def GAS_PER_WORD : Nat := 12
-
-/-- `ceil32`: the least multiple of 32 that is at least `value`, as in [`utils/numeric.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/utils/numeric.py#L43). -/
-def ceil32 (value : Nat) : Nat :=
-  if value % WORD_BYTES = 0 then value else value + WORD_BYTES - value % WORD_BYTES
-
-/-- The number of 32-byte words that cover `size` bytes, `word_count` in `sha256` of execution-specs. -/
-def wordCount (size : Nat) : Nat := ceil32 size / WORD_BYTES
 
 /-- The gas a call with `size` bytes of call data is charged. -/
 def gasCost (size : Nat) : Nat := GAS_BASE + GAS_PER_WORD * wordCount size
