@@ -34,6 +34,14 @@ eth_consensus_compute_columns_for_custody_group(
   uint64_t group
 );
 
+extern lean_object*
+eth_consensus_ssz_static(
+  lean_object* name,
+  lean_object* fork,
+  lean_object* type,
+  lean_object* data
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* The UTF-8 bytes of a `str` argument, or NULL with a TypeError set. */
@@ -127,4 +135,35 @@ py_consensus_compute_columns_for_custody_group(
   if (!name) return NULL;
   return except_into_pybytes(
     eth_consensus_compute_columns_for_custody_group(name, (uint64_t) group), CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_ssz_static(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *type_obj, *data_obj;
+  if (!PyArg_ParseTuple(args, "OOOO", &name_obj, &fork_obj, &type_obj, &data_obj)) return NULL;
+  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
+  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj) || !PyUnicode_Check(type_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name, fork and type must be str");
+    return NULL;
+  }
+  if (!PyBytes_Check(data_obj)) {
+    PyErr_SetString(PyExc_TypeError, "data must be bytes");
+    return NULL;
+  }
+  Py_ssize_t name_len, fork_len, type_len;
+  const char* name_utf8 = PyUnicode_AsUTF8AndSize(name_obj, &name_len);
+  if (!name_utf8) return NULL;
+  const char* fork_utf8 = PyUnicode_AsUTF8AndSize(fork_obj, &fork_len);
+  if (!fork_utf8) return NULL;
+  const char* type_utf8 = PyUnicode_AsUTF8AndSize(type_obj, &type_len);
+  if (!type_utf8) return NULL;
+  lean_object* name = mk_bytearray((const uint8_t*) name_utf8, name_len);
+  lean_object* fork = mk_bytearray((const uint8_t*) fork_utf8, fork_len);
+  lean_object* type = mk_bytearray((const uint8_t*) type_utf8, type_len);
+  lean_object* data = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(data_obj), PyBytes_GET_SIZE(data_obj));
+  return except_into_pybytes(eth_consensus_ssz_static(name, fork, type, data), SSZ_ERROR);
 }

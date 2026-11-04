@@ -257,6 +257,9 @@
 #define DOC_consensus_compute_columns_for_custody_group \
   "The columns of a custody group."
 
+#define DOC_consensus_ssz_static \
+  "The root of the value that the bytes encode, then the bytes of that value."
+
 #define DOC_reqresp_max_compressed_len \
   "The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`."
 
