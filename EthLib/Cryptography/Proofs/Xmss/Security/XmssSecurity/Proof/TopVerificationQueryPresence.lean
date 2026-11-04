@@ -85,7 +85,7 @@ theorem verify_true_verifyTop_run
     (authenticationRootComputation publicKey.parameter leafIndex signature leaf)
     leafCache rootCache largerCache root hroot (hrootLe.trans hle)
   unfold authenticationRootComputation at hrootEval
-  rw [eval_climb_ofFn largerCache publicKey.parameter .bottom leafIndex.val leafIndex.isLt]
+  rw [eval_climb]
     at hrootEval
   refine ⟨rootCache, ?_⟩
   rw [hendpointsEval, hleafEval, hrootEval]
@@ -266,7 +266,7 @@ theorem verifyTop_true_queries_cached
       · intro level
         rw [← List.take_of_length_le (l := List.ofFn part.authPath) (i := treeHeight) (by simp)]
           at hroot
-        obtain ⟨output, hcached⟩ := climb_query_cached publicKey.parameter .top key.val key.isLt
+        obtain ⟨output, hcached⟩ := climb_query_cached publicKey.parameter .top key.val
           part.authPath leaf treeHeight le_rfl level level.isLt leafCache rootCache largerCache
           topRoot hroot hrootLarger
         refine ⟨output, ?_⟩

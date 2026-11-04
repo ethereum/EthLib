@@ -41,81 +41,130 @@ theorem childNode_subtreeValid (levels : Nat) (node : MerkleNode)
   have hpow : 0 < 2 ^ levels := pow_pos (by omega) _
   split <;> nlinarith
 
-theorem treeCovers_children_sum (levels : Nat) (node : MerkleNode) (leafIndex : LeafIndex)
-    (hvalid : TreeSubtreeValid (levels + 1) node) :
-    (if TreeCovers levels (Concrete.childNode node false) leafIndex then 1 else 0) +
-        (if TreeCovers levels (Concrete.childNode node true) leafIndex then 1 else 0) =
-      if TreeCovers (levels + 1) node leafIndex then 1 else 0 := by
-  by_cases hleft : TreeCovers levels (Concrete.childNode node false) leafIndex
-  <;> by_cases hright : TreeCovers levels (Concrete.childNode node true) leafIndex
-  <;> by_cases hparent : TreeCovers (levels + 1) node leafIndex
-  <;> simp only [hleft, hright, hparent, ↓reduceIte]
-  all_goals
-    unfold TreeCovers at hleft hright hparent
-    simp only [childNode_val_of_subtreeValid_succ levels node false hvalid,
-      childNode_val_of_subtreeValid_succ levels node true hvalid,
-      Bool.false_eq_true, ↓reduceIte] at hleft hright
-    rw [pow_succ] at hparent
-    have hpow : 0 < 2 ^ levels := pow_pos (by omega) _
-    ring_nf at hleft hright hparent
-    omega
+theorem treeCovers_iff (levels : Nat) (node : MerkleNode) (leafIndex : LeafIndex) :
+    TreeCovers levels node leafIndex ↔ leafIndex.val / 2 ^ levels = node.val := by
+  have hpos := Nat.two_pow_pos levels
+  rw [TreeCovers, Nat.div_eq_iff hpos, Nat.add_mul, one_mul]
+  generalize 2 ^ levels = d at *
+  omega
+
+/-! ### Counting along a tree
+
+Node `j` on `level` lies above the leaves `j * 2^level` to `(j + 1) * 2^level - 1`.
+
+It makes the queries of those leaves and of the node hashes between them. -/
+
+/-- A node queries `p` at most once if the only leaf that does lies below it, else never. -/
+theorem node_queryBound_leaf (hash : Nat → Nat → Digest → Digest → OracleComp HashSpec Digest)
+    (leaves : Nat → OracleComp HashSpec Digest) (p : HashInput → Prop) [DecidablePred p]
+    (count target : Nat)
+    (hleaves : ∀ j < count, (leaves j).IsQueryBoundP p (if target = j then 1 else 0))
+    (hhash : ∀ level j left right, (hash level j left right).IsQueryBoundP p 0) :
+    ∀ level j, (j + 1) * 2 ^ level ≤ count →
+      (EthLib.Cryptography.Merkle.node hash leaves level j).IsQueryBoundP p
+        (if target / 2 ^ level = j then 1 else 0)
+  | 0, j, hj => by
+    simpa [EthLib.Cryptography.Merkle.node_zero] using hleaves j (by simpa using hj)
+  | level + 1, j, hj => by
+    rw [EthLib.Cryptography.Merkle.node_succ, pow_succ] at *
+    refine (OracleComp.isQueryBoundP_bind (node_queryBound_leaf hash leaves p count target hleaves
+      hhash level (2 * j) (by nlinarith)) fun _ _ => OracleComp.isQueryBoundP_bind
+        (node_queryBound_leaf hash leaves p count target hleaves hhash level (2 * j + 1)
+          (by nlinarith)) fun _ _ => hhash _ _ _ _).mono ?_
+    rw [← Nat.div_div_eq_div_mul]
+    split_ifs <;> omega
+
+/-- A node queries `p` at most once if the only node hash that does is at or below it, else never.
+
+That node hash sits at position `(K, I)`, above the leaves. -/
+theorem node_queryBound_node (hash : Nat → Nat → Digest → Digest → OracleComp HashSpec Digest)
+    (leaves : Nat → OracleComp HashSpec Digest) (p : HashInput → Prop) [DecidablePred p]
+    (count K I : Nat) (hK : 0 < K) (hleaves : ∀ j, (leaves j).IsQueryBoundP p 0)
+    (hhash : ∀ level j left right, (j + 1) * 2 ^ level ≤ count →
+      (hash level j left right).IsQueryBoundP p (if level = K ∧ j = I then 1 else 0)) :
+    ∀ level j, (j + 1) * 2 ^ level ≤ count →
+      (EthLib.Cryptography.Merkle.node hash leaves level j).IsQueryBoundP p
+        (if K ≤ level ∧ I / 2 ^ (level - K) = j then 1 else 0)
+  | 0, j, _ => by
+    simpa [EthLib.Cryptography.Merkle.node_zero, show ¬K ≤ 0 by omega] using hleaves j
+  | level + 1, j, hj => by
+    have hpow : 2 ^ (level + 1) = 2 ^ level * 2 := pow_succ 2 level
+    rw [EthLib.Cryptography.Merkle.node_succ]
+    refine (OracleComp.isQueryBoundP_bind (node_queryBound_node hash leaves p count K I hK hleaves
+      hhash level (2 * j) (by rw [hpow] at hj; nlinarith)) fun _ _ => OracleComp.isQueryBoundP_bind
+        (node_queryBound_node hash leaves p count K I hK hleaves hhash level (2 * j + 1)
+          (by rw [hpow] at hj; nlinarith)) fun _ _ => hhash _ _ _ _ hj).mono ?_
+    -- A target below the parent is in one child, and a target at the parent is the parent.
+    rcases Nat.lt_or_ge level K with hlt | hge
+    · by_cases hKeq : K = level + 1
+      · subst hKeq
+        simp only [le_refl, Nat.sub_self, pow_zero, Nat.div_one, true_and]
+        split_ifs <;> omega
+      · split_ifs <;> omega
+    · rw [show level + 1 - K = level - K + 1 by omega, pow_succ, ← Nat.div_div_eq_div_mul]
+      split_ifs <;> omega
+
+/-- A node hash makes no query that `p` accepts, when no hash at a node address does. -/
+theorem Concrete.nodeAt_queryBound_zero (parameter : PublicParameter) (p : HashInput → Prop)
+    [DecidablePred p] (layer : EthLib.Cryptography.Xmss.Layer)
+    (hhash : ∀ level j payload,
+      (Concrete.tweakableHash parameter (Concrete.nodeDomain layer level j)
+        payload : OracleComp HashSpec Digest).IsQueryBoundP p 0)
+    (level j : Nat) (left right : Digest) :
+    (Concrete.nodeAt parameter layer level j left right :
+      OracleComp HashSpec Digest).IsQueryBoundP p 0 := by
+  rcases level with _ | level
+  · simp [Concrete.nodeAt]
+  · by_cases hlevel : level < treeHeight
+    · rw [show level = (⟨level, hlevel⟩ : MerkleLevel).val from rfl, Concrete.nodeAt_eq]
+      exact hhash _ _ _
+    · simp [Concrete.nodeAt, hlevel]
+
+/-- A node hash queries the address of node `I` above `level` at most once, at that node. -/
+theorem Concrete.nodeAt_queryBound_node (parameter : PublicParameter)
+    (layer : EthLib.Cryptography.Xmss.Layer) (level : MerkleLevel) (I : Nat)
+    (hI : I < Concrete.layerLeaves layer) (k j : Nat) (hj : j < Concrete.layerLeaves layer)
+    (left right : Digest) :
+    (Concrete.nodeAt parameter layer k j left right : OracleComp HashSpec Digest).IsQueryBoundP
+      (AtHashAddress parameter (Concrete.nodeDomain layer level I))
+      (if k = level.val + 1 ∧ j = I then 1 else 0) := by
+  rcases k with _ | k
+  · simp [Concrete.nodeAt]
+  · by_cases hk : k < treeHeight
+    · rw [show k = (⟨k, hk⟩ : MerkleLevel).val from rfl, Concrete.nodeAt_eq]
+      by_cases heq : k = level.val ∧ j = I
+      · obtain ⟨hk', rfl⟩ := heq
+        obtain rfl : (⟨k, hk⟩ : MerkleLevel) = level := Fin.ext hk'
+        simpa using Concrete.tweakableHash_queryBound_atAddress parameter _
+          (Concrete.nodePayload left right)
+      · have hne : Concrete.nodeDomain layer ⟨k, hk⟩ j ≠ Concrete.nodeDomain layer level I := by
+          cases layer <;>
+            simp_all [Concrete.nodeDomain, Concrete.merkleNodeOfNat, Concrete.topNodeOfNat,
+              Concrete.layerLeaves, Fin.ext_iff, Nat.mod_eq_of_lt]
+        simpa [heq] using Concrete.tweakableHash_queryBound_atOtherAddress parameter _ _
+          (Concrete.nodePayload left right) hne
+    · simp [Concrete.nodeAt, hk]
 
 theorem Concrete.treeNode_queryBound_leafAddress
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
     (targetLeafIndex : LeafIndex) (levels : Nat) (node : MerkleNode)
-    (hlevels : levels ≤ treeHeight) (hvalid : TreeSubtreeValid levels node) :
+    (hvalid : TreeSubtreeValid levels node) :
     (Concrete.treeNode parameter secret levels node :
       OracleComp HashSpec Digest).IsQueryBoundP
         (AtHashAddress parameter (.leaf targetLeafIndex))
         (if TreeCovers levels node targetLeafIndex then 1 else 0) := by
-  induction levels generalizing node with
-  | zero =>
-      rw [Concrete.treeNode_zero_eq]
-      by_cases hcover : TreeCovers 0 node targetLeafIndex
-      · have heq : node = targetLeafIndex := by
-          apply Fin.ext
-          unfold TreeCovers at hcover
-          simp only [pow_zero, mul_one] at hcover
-          omega
-        subst targetLeafIndex
-        simpa [hcover] using
-          Concrete.leafAt_queryBound_leafAddress parameter secret node node
-      · have hne : node ≠ targetLeafIndex := by
-          intro heq
-          subst targetLeafIndex
-          apply hcover
-          unfold TreeCovers
-          simp
-        simpa [hcover] using
-          Concrete.leafAt_queryBound_zero_at_other_leaf parameter secret node
-            targetLeafIndex hne
-  | succ levels ih =>
-      have hlevel : levels < treeHeight := Nat.lt_of_succ_le hlevels
-      have hleftValid := childNode_subtreeValid levels node false hvalid
-      have hrightValid := childNode_subtreeValid levels node true hvalid
-      have hleft := ih (Concrete.childNode node false)
-        (Nat.le_of_succ_le hlevels) hleftValid
-      have hright := ih (Concrete.childNode node true)
-        (Nat.le_of_succ_le hlevels) hrightValid
-      rw [Concrete.treeNode_succ_eq]
-      have hcontinuation (left : Digest) :
-          (do
-            let right ← Concrete.treeNode parameter secret levels
-              (Concrete.childNode node true)
-            Concrete.nodeHash parameter ⟨levels, hlevel⟩ node left right :
-            OracleComp HashSpec Digest).IsQueryBoundP
-              (AtHashAddress parameter (.leaf targetLeafIndex))
-              (if TreeCovers levels (Concrete.childNode node true) targetLeafIndex then 1 else 0) := by
-        refine OracleComp.isQueryBoundP_bind (m := 0) hright ?_
-        intro right _
-        tweakable_hashes
-        exact Concrete.tweakableHash_queryBound_atOtherAddress parameter
-          (.leaf targetLeafIndex) (.merkle ⟨levels, hlevel⟩ node)
-          (Concrete.nodePayload left right) (by simp)
-      have hall := OracleComp.isQueryBoundP_bind hleft
-        (fun left _ => hcontinuation left)
-      simpa only [hlevel, ↓reduceDIte, Nat.add_zero,
-        treeCovers_children_sum levels node targetLeafIndex hvalid] using hall
+  rw [Concrete.treeNode]
+  simp only [treeCovers_iff]
+  refine node_queryBound_leaf _ _ _ lifetime targetLeafIndex.val (fun j hj => ?_)
+    (Concrete.nodeAt_queryBound_zero parameter _ .bottom fun _ _ _ =>
+      Concrete.tweakableHash_queryBound_atOtherAddress parameter _ _ _
+        (by simp [Concrete.nodeDomain])) levels node.val hvalid
+  rw [show Concrete.merkleNodeOfNat j = ⟨j, hj⟩ from Fin.ext (Nat.mod_eq_of_lt hj)]
+  by_cases htarget : targetLeafIndex.val = j
+  · obtain rfl : targetLeafIndex = ⟨j, hj⟩ := Fin.ext htarget
+    simpa using Concrete.leafAt_queryBound_leafAddress parameter secret _ _
+  · simpa [htarget] using Concrete.leafAt_queryBound_zero_at_other_leaf parameter secret ⟨j, hj⟩
+      targetLeafIndex fun h => htarget (congrArg Fin.val h).symm
 
 /-! ### Key generation's honest computation by part
 
@@ -167,25 +216,16 @@ theorem Concrete.topTreeNode_queryBound_zero_of_rejectsTop (htop : RejectsTop pa
     (topSecret : TopIndex → ChainIndex → Digest) (levels : Nat) (node : TopNode) :
     (Concrete.topTreeNode parameter topSecret levels node :
       OracleComp HashSpec Digest).IsQueryBoundP p 0 := by
-  induction levels generalizing node with
-  | zero =>
-      rw [Concrete.topTreeNode, Concrete.topLeafAt]
-      refine OracleComp.isQueryBoundP_bind (m := 0)
-        (Concrete.sequenceFin_queryBound_zero _ p fun chain =>
-          Concrete.topChainWalk_queryBound_zero_of_rejectsTop parameter p htop _ _ _ _ _) ?_
-      intro endpoints _
-      tweakable_hashes
-      exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p (htop _ _ rfl)
-  | succ levels ih =>
-      rw [Concrete.topTreeNode]
-      refine OracleComp.isQueryBoundP_bind (m := 0) (ih _) ?_
-      intro left _
-      refine OracleComp.isQueryBoundP_bind (m := 0) (ih _) ?_
-      intro right _
-      split
-      · tweakable_hashes
-        exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p (htop _ _ rfl)
-      · simp
+  rw [Concrete.topTreeNode]
+  refine EthLib.Cryptography.Merkle.node_rec _ (fun x => OracleComp.IsQueryBoundP x p 0)
+    (fun hx hf => OracleComp.isQueryBoundP_bind (m := 0) hx fun b _ => hf b) _ (fun _ => ?_)
+    (Concrete.nodeAt_queryBound_zero parameter p .top fun _ _ _ =>
+      Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p (htop _ _ rfl)) levels node.val
+  refine OracleComp.isQueryBoundP_bind (m := 0) (Concrete.sequenceFin_queryBound_zero _ p
+    fun chain => Concrete.topChainWalk_queryBound_zero_of_rejectsTop parameter p htop _ _ _ _ _) ?_
+  intro endpoints _
+  tweakable_hashes
+  exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p (htop _ _ rfl)
 
 theorem Concrete.topSignFrom_queryBound_zero_of_rejectsTop (htop : RejectsTop parameter p)
     (key : TopIndex) (root : Digest) (base : Randomness) (attempts trial : Nat) :
@@ -225,27 +265,19 @@ theorem Concrete.treeNode_queryBound_zero_of_rejectsBottomTree
     (secret : LeafIndex → ChainIndex → Digest) (levels : Nat) (node : MerkleNode) :
     (Concrete.treeNode parameter secret levels node :
       OracleComp HashSpec Digest).IsQueryBoundP p 0 := by
-  induction levels generalizing node with
-  | zero =>
-      rw [Concrete.treeNode_zero_eq, Concrete.leafAt]
-      refine OracleComp.isQueryBoundP_bind (m := 0)
-        (Concrete.sequenceFin_queryBound_zero _ p fun chain =>
-          Concrete.chainWalk_queryBound_zero_of_rejectsBottomTree parameter p hbottom _ _ _ _ _) ?_
-      intro endpoints _
-      tweakable_hashes
-      exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p
-        (hbottom _ _ rfl (by simp))
-  | succ levels ih =>
-      rw [Concrete.treeNode_succ_eq]
-      refine OracleComp.isQueryBoundP_bind (m := 0) (ih _) ?_
-      intro left _
-      refine OracleComp.isQueryBoundP_bind (m := 0) (ih _) ?_
-      intro right _
-      split
-      · tweakable_hashes
-        exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p
-          (hbottom _ _ rfl (by simp))
-      · simp
+  rw [Concrete.treeNode]
+  refine EthLib.Cryptography.Merkle.node_rec _ (fun x => OracleComp.IsQueryBoundP x p 0)
+    (fun hx hf => OracleComp.isQueryBoundP_bind (m := 0) hx fun b _ => hf b) _ (fun _ => ?_)
+    (Concrete.nodeAt_queryBound_zero parameter p .bottom fun _ _ _ =>
+      Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p
+        (hbottom _ _ rfl (by simp [Concrete.nodeDomain])))
+    levels node.val
+  refine OracleComp.isQueryBoundP_bind (m := 0) (Concrete.sequenceFin_queryBound_zero _ p
+    fun chain => Concrete.chainWalk_queryBound_zero_of_rejectsBottomTree parameter p hbottom
+      _ _ _ _ _) ?_
+  intro endpoints _
+  tweakable_hashes
+  exact Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p (hbottom _ _ rfl (by simp))
 
 variable (secret : LeafIndex → ChainIndex → Digest) (topSecret : TopIndex → ChainIndex → Digest)
   (topBase : TopIndex → Digest → OracleComp HashSpec Randomness)
@@ -336,11 +368,11 @@ theorem Concrete.rootTree_queryBound_leafAddress
     (rejectsTop_atHashAddress parameter _ rfl) (fun _ _ => by simp) ?_ ?_
   · simpa [(treeCovers_bottomRootNode_iff _ _).2 rfl] using
       Concrete.treeNode_queryBound_leafAddress parameter secret targetLeafIndex treeHeight
-        (Concrete.bottomRootNode (topKeyOf targetLeafIndex)) le_rfl (treeSubtreeValid_bottomRootNode _)
+        (Concrete.bottomRootNode (topKeyOf targetLeafIndex)) (treeSubtreeValid_bottomRootNode _)
   · intro key hne
     simpa [treeCovers_bottomRootNode_iff, hne] using
       Concrete.treeNode_queryBound_leafAddress parameter secret targetLeafIndex treeHeight
-        (Concrete.bottomRootNode key) le_rfl (treeSubtreeValid_bottomRootNode _)
+        (Concrete.bottomRootNode key) (treeSubtreeValid_bottomRootNode _)
 
 /-- Run key generation's honest computation from an empty cache.
 
@@ -370,61 +402,24 @@ theorem Concrete.CacheReplay.rootTree_cache_unique_leafAddress
 theorem Concrete.treeNode_queryBound_chainAddress
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
     (targetLeafIndex : LeafIndex) (targetChain : ChainIndex) (targetStep : ChainStep)
-    (levels : Nat) (node : MerkleNode)
-    (hlevels : levels ≤ treeHeight) (hvalid : TreeSubtreeValid levels node) :
+    (levels : Nat) (node : MerkleNode) (hvalid : TreeSubtreeValid levels node) :
     (Concrete.treeNode parameter secret levels node :
       OracleComp HashSpec Digest).IsQueryBoundP
         (AtHashAddress parameter (.chain targetLeafIndex targetChain targetStep))
         (if TreeCovers levels node targetLeafIndex then 1 else 0) := by
-  induction levels generalizing node with
-  | zero =>
-      rw [Concrete.treeNode_zero_eq]
-      by_cases hcover : TreeCovers 0 node targetLeafIndex
-      · have heq : node = targetLeafIndex := by
-          apply Fin.ext
-          unfold TreeCovers at hcover
-          simp only [pow_zero, mul_one] at hcover
-          omega
-        subst targetLeafIndex
-        simpa [hcover] using
-          Concrete.leafAt_queryBound_chainAddress parameter secret node node
-            targetChain targetStep
-      · have hne : node ≠ targetLeafIndex := by
-          intro heq
-          subst targetLeafIndex
-          apply hcover
-          unfold TreeCovers
-          simp
-        simpa [hcover] using
-          Concrete.leafAt_queryBound_zero_chainAddress_at_other_leafIndex parameter secret node
-            targetLeafIndex targetChain targetStep hne
-  | succ levels ih =>
-      have hlevel : levels < treeHeight := Nat.lt_of_succ_le hlevels
-      have hleftValid := childNode_subtreeValid levels node false hvalid
-      have hrightValid := childNode_subtreeValid levels node true hvalid
-      have hleft := ih (Concrete.childNode node false)
-        (Nat.le_of_succ_le hlevels) hleftValid
-      have hright := ih (Concrete.childNode node true)
-        (Nat.le_of_succ_le hlevels) hrightValid
-      rw [Concrete.treeNode_succ_eq]
-      have hcontinuation (left : Digest) :
-          (do
-            let right ← Concrete.treeNode parameter secret levels
-              (Concrete.childNode node true)
-            Concrete.nodeHash parameter ⟨levels, hlevel⟩ node left right :
-            OracleComp HashSpec Digest).IsQueryBoundP
-              (AtHashAddress parameter (.chain targetLeafIndex targetChain targetStep))
-              (if TreeCovers levels (Concrete.childNode node true) targetLeafIndex then 1 else 0) := by
-        refine OracleComp.isQueryBoundP_bind (m := 0) hright ?_
-        intro right _
-        tweakable_hashes
-        exact Concrete.tweakableHash_queryBound_atOtherAddress parameter
-          (.chain targetLeafIndex targetChain targetStep) (.merkle ⟨levels, hlevel⟩ node)
-          (Concrete.nodePayload left right) (by simp)
-      have hall := OracleComp.isQueryBoundP_bind hleft
-        (fun left _ => hcontinuation left)
-      simpa only [hlevel, ↓reduceDIte, Nat.add_zero,
-        treeCovers_children_sum levels node targetLeafIndex hvalid] using hall
+  rw [Concrete.treeNode]
+  simp only [treeCovers_iff]
+  refine node_queryBound_leaf _ _ _ lifetime targetLeafIndex.val (fun j hj => ?_)
+    (Concrete.nodeAt_queryBound_zero parameter _ .bottom fun _ _ _ =>
+      Concrete.tweakableHash_queryBound_atOtherAddress parameter _ _ _
+        (by simp [Concrete.nodeDomain])) levels node.val hvalid
+  rw [show Concrete.merkleNodeOfNat j = ⟨j, hj⟩ from Fin.ext (Nat.mod_eq_of_lt hj)]
+  by_cases htarget : targetLeafIndex.val = j
+  · obtain rfl : targetLeafIndex = ⟨j, hj⟩ := Fin.ext htarget
+    simpa using Concrete.leafAt_queryBound_chainAddress parameter secret _ _ targetChain targetStep
+  · simpa [htarget] using Concrete.leafAt_queryBound_zero_chainAddress_at_other_leafIndex parameter
+      secret ⟨j, hj⟩ targetLeafIndex targetChain targetStep
+      fun h => htarget (congrArg Fin.val h).symm
 
 /-- The honest computation of key generation queries each bottom chain-step address at most once. -/
 theorem Concrete.rootTree_queryBound_chainAddress
@@ -438,12 +433,12 @@ theorem Concrete.rootTree_queryBound_chainAddress
     (rejectsTop_atHashAddress parameter _ rfl) (fun _ _ => by simp) ?_ ?_
   · simpa [(treeCovers_bottomRootNode_iff _ _).2 rfl] using
       Concrete.treeNode_queryBound_chainAddress parameter secret targetLeafIndex targetChain
-        targetStep treeHeight (Concrete.bottomRootNode (topKeyOf targetLeafIndex)) le_rfl
+        targetStep treeHeight (Concrete.bottomRootNode (topKeyOf targetLeafIndex))
         (treeSubtreeValid_bottomRootNode _)
   · intro key hne
     simpa [treeCovers_bottomRootNode_iff, hne] using
       Concrete.treeNode_queryBound_chainAddress parameter secret targetLeafIndex targetChain
-        targetStep treeHeight (Concrete.bottomRootNode key) le_rfl (treeSubtreeValid_bottomRootNode _)
+        targetStep treeHeight (Concrete.bottomRootNode key) (treeSubtreeValid_bottomRootNode _)
 
 /-- Run key generation's honest computation from an empty cache.
 

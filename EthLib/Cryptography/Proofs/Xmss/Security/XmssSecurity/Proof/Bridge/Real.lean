@@ -308,7 +308,8 @@ theorem erases_node_top (seed : MasterSeed) (d : Derivations) :
           level j : OracleComp HashSpec Xmss.Digest)
         (ofDigest <$> Concrete.topTreeNode d.parameter d.topSecret level (Concrete.topNodeOfNat j))
   | 0, _, j, hj => by
-    rw [Xmss.node_zero, Concrete.topTreeNode, ofNat_topNodeOfNat (by simpa using hj), ← leaf_top]
+    rw [Xmss.node_zero, Concrete.topTreeNode_zero_eq, ofNat_topNodeOfNat (by simpa using hj),
+      ← leaf_top]
     unfold Xmss.otsPublicLeaf
     exact (erases_pure_of_resolves (chainStarts_top seed d _)).bind_known _ _ (.refl _ _)
   | l + 1, hlevel, j, hj => by
@@ -320,7 +321,7 @@ theorem erases_node_top (seed : MasterSeed) (d : Derivations) :
       have := Nat.pow_le_pow_right (show 0 < 2 by decide) (show 16 - (l + 1) ≤ 16 by omega)
       have : (2 : Nat) ^ 16 = 65536 := by norm_num
       omega
-    rw [Xmss.node_succ, Concrete.topTreeNode]
+    rw [Xmss.node_succ, Concrete.topTreeNode_succ_eq]
     simp only [show l < treeHeight by simp only [treeHeight]; omega, ↓reduceDIte]
     -- The children of node `j` are nodes `2j` and `2j + 1`, in both.
     have hleft : Concrete.topChildNode (Concrete.topNodeOfNat j) false

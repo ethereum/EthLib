@@ -56,64 +56,6 @@ theorem leafAt_query_cached_in_largerCache
   rw [hendpoints]
   exact hle hcached
 
-theorem treeNode_leaf_query_cached_in_largerCache
-    (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest) (leafIndex : LeafIndex)
-    (levels : Nat) (node : MerkleNode)
-    (hlevels : levels ≤ treeHeight) (hvalid : TreeSubtreeValid levels node)
-    (hcover : TreeCovers levels node leafIndex)
-    (initialCache resultCache largerCache : QueryCache HashSpec) (digest : Digest)
-    (hmem : (digest, resultCache) ∈ support
-      ((simulateQ randomOracle
-        (Concrete.treeNode parameter secret levels node :
-          OracleComp HashSpec Digest)).run initialCache))
-    (hle : resultCache ≤ largerCache) :
-    ∃ output,
-      largerCache (Concrete.CacheView.leafInput parameter leafIndex
-        (oneTimePublicKey largerCache parameter secret leafIndex)) = some output := by
-  induction levels generalizing node initialCache resultCache digest with
-  | zero =>
-      have hnode : node = leafIndex := treeCovers_zero_iff node leafIndex |>.mp hcover
-      subst node
-      rw [Concrete.treeNode_zero_eq] at hmem
-      exact leafAt_query_cached_in_largerCache parameter secret leafIndex initialCache
-        resultCache largerCache digest hmem hle
-  | succ levels ih =>
-      have hlevel : levels < treeHeight := Nat.lt_of_succ_le hlevels
-      have hleftValid := childNode_subtreeValid levels node false hvalid
-      have hrightValid := childNode_subtreeValid levels node true hvalid
-      rw [Concrete.treeNode_succ_eq, simulateQ_bind, StateT.run_bind,
-        mem_support_bind_iff] at hmem
-      obtain ⟨⟨left, leftCache⟩, hleft, hrest⟩ := hmem
-      have hrestAll := hrest
-      rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hrest
-      obtain ⟨⟨right, rightCache⟩, hright, hnode⟩ := hrest
-      have hpartition := treeCovers_children_sum levels node leafIndex hvalid
-      rw [ite_eq_left hcover] at hpartition
-      by_cases hleftCover : TreeCovers levels (Concrete.childNode node false) leafIndex
-      · have hleftLe : leftCache ≤ resultCache :=
-          randomOracle_cache_le
-            (do
-              let right ← Concrete.treeNode parameter secret levels
-                (Concrete.childNode node true)
-              Concrete.nodeHash parameter ⟨levels, hlevel⟩ node left right :
-              OracleComp HashSpec Digest)
-            leftCache (digest, resultCache) (by
-              simpa only [hlevel, ↓reduceDIte] using hrestAll)
-        exact ih (Concrete.childNode node false) (Nat.le_of_succ_le hlevels)
-          hleftValid hleftCover initialCache leftCache left hleft (hleftLe.trans hle)
-      · have hrightCover : TreeCovers levels (Concrete.childNode node true) leafIndex := by
-          by_contra hrightCover
-          simp only [hleftCover, hrightCover, ite_false, zero_add] at hpartition
-          omega
-        have hrightLe : rightCache ≤ resultCache :=
-          randomOracle_cache_le
-            (Concrete.nodeHash parameter ⟨levels, hlevel⟩ node left right :
-              OracleComp HashSpec Digest)
-            rightCache (digest, resultCache) (by
-              simpa only [hlevel, ↓reduceDIte] using hnode)
-        exact ih (Concrete.childNode node true) (Nat.le_of_succ_le hlevels)
-          hrightValid hrightCover leftCache rightCache right hright (hrightLe.trans hle)
-
 theorem rootTree_leaf_query_cached
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
     (topSecret : TopIndex → ChainIndex → Digest) (topBase : TopIndex → Randomness) (leafIndex : LeafIndex)
@@ -125,12 +67,12 @@ theorem rootTree_leaf_query_cached
     ∃ output,
       cache (Concrete.CacheView.leafInput parameter leafIndex
         (oneTimePublicKey cache parameter secret leafIndex)) = some output := by
-  obtain ⟨beforeCache, afterCache, digest, htree, hafter⟩ :=
-    honestKeygen_runsBelow_bottomTree parameter secret topSecret _ ∅ cache root hmem
-      (topKeyOf leafIndex)
-  exact treeNode_leaf_query_cached_in_largerCache parameter secret leafIndex treeHeight _ le_rfl
-    (treeSubtreeValid_bottomRootNode _) ((treeCovers_bottomRootNode_iff _ _).2 rfl) beforeCache
-    afterCache cache digest htree hafter
+  -- The leaf runs inside key generation.
+  obtain ⟨beforeCache, afterCache, digest, hleaf, hafter⟩ := honestKeygen_runsBelow_treeNode hmem 0
+    leafIndex (by omega) (by simp [TreeSubtreeValid])
+  rw [Concrete.treeNode_zero_eq] at hleaf
+  exact leafAt_query_cached_in_largerCache parameter secret leafIndex beforeCache afterCache cache
+    digest hleaf hafter
 
 end XmssSecurity.Concrete.CacheReplay
 
@@ -164,76 +106,6 @@ theorem leafAt_oneTimePublicKey_eq_in_largerCache
   rw [eval_oneTimePublicKey] at hresult hlarger
   exact hresult.trans hlarger.symm
 
-/-- Take the replay of a covered leafIndex's WOTS public key.
-
-It is stable after the surrounding tree computation. -/
-theorem treeNode_oneTimePublicKey_eq_in_largerCache
-    (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest) (leafIndex : LeafIndex)
-    (levels : Nat) (node : MerkleNode)
-    (hlevels : levels ≤ treeHeight) (hvalid : TreeSubtreeValid levels node)
-    (hcover : TreeCovers levels node leafIndex)
-    (initialCache resultCache largerCache : QueryCache HashSpec) (digest : Digest)
-    (hmem : (digest, resultCache) ∈ support
-      ((simulateQ randomOracle
-        (Concrete.treeNode parameter secret levels node :
-          OracleComp HashSpec Digest)).run initialCache))
-    (hle : resultCache ≤ largerCache) :
-    oneTimePublicKey resultCache parameter secret leafIndex =
-      oneTimePublicKey largerCache parameter secret leafIndex := by
-  induction levels generalizing node initialCache resultCache largerCache digest with
-  | zero =>
-      have hnode : node = leafIndex := treeCovers_zero_iff node leafIndex |>.mp hcover
-      subst node
-      rw [Concrete.treeNode_zero_eq] at hmem
-      exact leafAt_oneTimePublicKey_eq_in_largerCache parameter secret leafIndex initialCache
-        resultCache largerCache digest hmem hle
-  | succ levels ih =>
-      have hlevel : levels < treeHeight := Nat.lt_of_succ_le hlevels
-      have hleftValid := childNode_subtreeValid levels node false hvalid
-      have hrightValid := childNode_subtreeValid levels node true hvalid
-      rw [Concrete.treeNode_succ_eq, simulateQ_bind, StateT.run_bind,
-        mem_support_bind_iff] at hmem
-      obtain ⟨⟨left, leftCache⟩, hleft, hrest⟩ := hmem
-      have hrestAll := hrest
-      rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hrest
-      obtain ⟨⟨right, rightCache⟩, hright, hnode⟩ := hrest
-      have hpartition := treeCovers_children_sum levels node leafIndex hvalid
-      rw [ite_eq_left hcover] at hpartition
-      by_cases hleftCover : TreeCovers levels (Concrete.childNode node false) leafIndex
-      · have hleftLe : leftCache ≤ resultCache :=
-          randomOracle_cache_le
-            (do
-              let right ← Concrete.treeNode parameter secret levels
-                (Concrete.childNode node true)
-              Concrete.nodeHash parameter ⟨levels, hlevel⟩ node left right :
-              OracleComp HashSpec Digest)
-            leftCache (digest, resultCache) (by
-              simpa only [hlevel, ↓reduceDIte] using hrestAll)
-        have hresult := ih (Concrete.childNode node false)
-          (Nat.le_of_succ_le hlevels) hleftValid hleftCover initialCache leftCache
-          resultCache left hleft hleftLe
-        have hlarger := ih (Concrete.childNode node false)
-          (Nat.le_of_succ_le hlevels) hleftValid hleftCover initialCache leftCache
-          largerCache left hleft (hleftLe.trans hle)
-        exact hresult.symm.trans hlarger
-      · have hrightCover : TreeCovers levels (Concrete.childNode node true) leafIndex := by
-          by_contra hrightCover
-          simp only [hleftCover, hrightCover, ite_false, zero_add] at hpartition
-          omega
-        have hrightLe : rightCache ≤ resultCache :=
-          randomOracle_cache_le
-            (Concrete.nodeHash parameter ⟨levels, hlevel⟩ node left right :
-              OracleComp HashSpec Digest)
-            rightCache (digest, resultCache) (by
-              simpa only [hlevel, ↓reduceDIte] using hnode)
-        have hresult := ih (Concrete.childNode node true)
-          (Nat.le_of_succ_le hlevels) hrightValid hrightCover leftCache rightCache
-          resultCache right hright hrightLe
-        have hlarger := ih (Concrete.childNode node true)
-          (Nat.le_of_succ_le hlevels) hrightValid hrightCover leftCache rightCache
-          largerCache right hright (hrightLe.trans hle)
-        exact hresult.symm.trans hlarger
-
 /-- Every WOTS public key replay is stable after a complete root-tree computation. -/
 theorem rootTree_oneTimePublicKey_eq_in_largerCache
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
@@ -246,13 +118,13 @@ theorem rootTree_oneTimePublicKey_eq_in_largerCache
     (hle : cache ≤ largerCache) :
     oneTimePublicKey cache parameter secret leafIndex =
       oneTimePublicKey largerCache parameter secret leafIndex := by
-  obtain ⟨beforeCache, afterCache, digest, htree, hafter⟩ :=
-    honestKeygen_runsBelow_bottomTree parameter secret topSecret _ ∅ cache root hmem
-      (topKeyOf leafIndex)
+  -- The leaf runs inside key generation.
+  obtain ⟨beforeCache, afterCache, digest, hleaf, hafter⟩ := honestKeygen_runsBelow_treeNode hmem 0
+    leafIndex (by omega) (by simp [TreeSubtreeValid])
+  rw [Concrete.treeNode_zero_eq] at hleaf
   have hstable (largerCache : QueryCache HashSpec) (hle : afterCache ≤ largerCache) :=
-    treeNode_oneTimePublicKey_eq_in_largerCache parameter secret leafIndex treeHeight _ le_rfl
-      (treeSubtreeValid_bottomRootNode _) ((treeCovers_bottomRootNode_iff _ _).2 rfl) beforeCache
-      afterCache largerCache digest htree hle
+    leafAt_oneTimePublicKey_eq_in_largerCache parameter secret leafIndex beforeCache afterCache
+      largerCache digest hleaf hle
   exact (hstable cache hafter).symm.trans (hstable largerCache (hafter.trans hle))
 
 end XmssSecurity.Concrete.CacheReplay

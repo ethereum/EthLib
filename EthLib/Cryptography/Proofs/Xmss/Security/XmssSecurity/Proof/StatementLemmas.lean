@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Wots
+public import EthLib.Cryptography.Proofs.Merkle.Completeness
 
 /-!
 Proof-side mirrors of the sealed statement definitions.
@@ -120,16 +121,6 @@ def topMerkleHash (cache : QueryCache HashSpec) (parameter : PublicParameter)
     (level : MerkleLevel) (node : TopNode) (left right : Digest) : Digest :=
   digestAt cache (topMerkleInput parameter level node left right)
 
-/-- The address of node `j` above `level` in a layer's tree, with `j` reduced modulo its nodes. -/
-def nodeDomain : EthLib.Cryptography.Xmss.Layer → MerkleLevel → Nat → HashDomain
-  | .bottom, level, j => .merkle level (Concrete.merkleNodeOfNat j)
-  | .top, level, j => .topMerkle level (Concrete.topNodeOfNat j)
-
-/-- The number of leaves of a layer's tree, which bounds every node index on it. -/
-def layerLeaves : EthLib.Cryptography.Xmss.Layer → Nat
-  | .bottom => lifetime
-  | .top => topLifetime
-
 /-- The oracle input of node `j` above `level` in a layer's tree, from its two children. -/
 def nodeInput (parameter : PublicParameter) (layer : EthLib.Cryptography.Xmss.Layer)
     (level : MerkleLevel) (j : Nat) (left right : Digest) : HashInput :=
@@ -193,16 +184,12 @@ def leafAt (cache : QueryCache HashSpec) (parameter : PublicParameter)
   CacheView.leafHash cache parameter leafIndex
     (oneTimePublicKey cache parameter secret leafIndex)
 
+/-- `X_{levels,node}` of the bottom forest, read from the cache. -/
 def treeNode (cache : QueryCache HashSpec) (parameter : PublicParameter)
-    (secret : LeafIndex → ChainIndex → Digest) : Nat → MerkleNode → Digest
-  | 0, node => leafAt cache parameter secret node
-  | levels + 1, node =>
-      if hlevel : levels < treeHeight then
-        CacheView.merkleHash cache parameter ⟨levels, hlevel⟩ node
-          (treeNode cache parameter secret levels (Concrete.childNode node false))
-          (treeNode cache parameter secret levels (Concrete.childNode node true))
-      else
-        0
+    (secret : LeafIndex → ChainIndex → Digest) (levels : Nat) (node : MerkleNode) : Digest :=
+  (EthLib.Cryptography.Merkle.node (CacheView.nodeAt cache parameter .bottom)
+    (fun j => pure (leafAt cache parameter secret (Concrete.merkleNodeOfNat j))) levels
+    node.val).run
 
 attribute [irreducible] treeNode
 
@@ -215,22 +202,52 @@ def topLeafAt (cache : QueryCache HashSpec) (parameter : PublicParameter)
     (topSecret : TopIndex → ChainIndex → Digest) (key : TopIndex) : Digest :=
   CacheView.topLeafHash cache parameter key (topOneTimePublicKey cache parameter topSecret key)
 
+/-- `X_{levels,node}` of the top tree, read from the cache. -/
 def topTreeNode (cache : QueryCache HashSpec) (parameter : PublicParameter)
-    (topSecret : TopIndex → ChainIndex → Digest) : Nat → TopNode → Digest
-  | 0, node => topLeafAt cache parameter topSecret node
-  | levels + 1, node =>
-      if hlevel : levels < treeHeight then
-        CacheView.topMerkleHash cache parameter ⟨levels, hlevel⟩ node
-          (topTreeNode cache parameter topSecret levels (Concrete.topChildNode node false))
-          (topTreeNode cache parameter topSecret levels (Concrete.topChildNode node true))
-      else
-        0
+    (topSecret : TopIndex → ChainIndex → Digest) (levels : Nat) (node : TopNode) : Digest :=
+  (EthLib.Cryptography.Merkle.node (CacheView.nodeAt cache parameter .top)
+    (fun j => pure (topLeafAt cache parameter topSecret (Concrete.topNodeOfNat j))) levels
+    node.val).run
 
 attribute [irreducible] topTreeNode
 
 end CacheReplay
 
-attribute [local semireducible] treeNode CacheReplay.treeNode sampleSecret signingRandomness
+attribute [local semireducible] CacheReplay.treeNode sampleSecret signingRandomness
+
+/-- A bottom node index reduced modulo the leaves names the same node. -/
+theorem merkleNodeOfNat_mod (j : Nat) : merkleNodeOfNat (j % lifetime) = merkleNodeOfNat j :=
+  Fin.ext (Nat.mod_mod _ _)
+
+/-- A top node index reduced modulo the leaves names the same node. -/
+theorem topNodeOfNat_mod (j : Nat) : topNodeOfNat (j % topLifetime) = topNodeOfNat j :=
+  Fin.ext (Nat.mod_mod _ _)
+
+@[simp]
+theorem merkleNodeOfNat_val (node : MerkleNode) : merkleNodeOfNat node.val = node :=
+  Fin.ext (Nat.mod_eq_of_lt node.isLt)
+
+@[simp]
+theorem topNodeOfNat_val (node : TopNode) : topNodeOfNat node.val = node :=
+  Fin.ext (Nat.mod_eq_of_lt node.isLt)
+
+/-- A node hash reads its index only modulo the layer's leaves. -/
+theorem nodeAt_mod {m : Type → Type} [Monad m] [HasQuery HashSpec m] (parameter : PublicParameter)
+    (layer : EthLib.Cryptography.Xmss.Layer) (level j : Nat) :
+    nodeAt (m := m) parameter layer level j =
+      nodeAt parameter layer level (j % layerLeaves layer) := by
+  funext left right
+  cases level <;> simp [nodeAt]
+
+/-- A node hash read from the cache reads its index only modulo the layer's leaves. -/
+theorem CacheView.nodeAt_mod (cache : QueryCache HashSpec) (parameter : PublicParameter)
+    (layer : EthLib.Cryptography.Xmss.Layer) (level j : Nat) :
+    CacheView.nodeAt cache parameter layer level j =
+      CacheView.nodeAt cache parameter layer level (j % layerLeaves layer) := by
+  funext left right
+  cases level <;> cases layer <;>
+    simp [CacheView.nodeAt, CacheView.nodeInput, nodeDomain, layerLeaves,
+      merkleNodeOfNat_mod, topNodeOfNat_mod]
 
 noncomputable local instance : SampleableType (LeafIndex → ChainIndex → Digest) :=
   SampleableType.ofFintype (LeafIndex → ChainIndex → Digest)
@@ -243,7 +260,8 @@ theorem treeNode_zero_eq {m : Type → Type} [Monad m] [HasQuery HashSpec m]
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
     (node : MerkleNode) :
     treeNode (m := m) parameter secret 0 node =
-      leafAt (m := m) parameter secret node := rfl
+      leafAt (m := m) parameter secret node := by
+  simp [treeNode, EthLib.Cryptography.Merkle.node_zero]
 
 theorem treeNode_succ_eq {m : Type → Type} [Monad m] [HasQuery HashSpec m]
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
@@ -254,46 +272,49 @@ theorem treeNode_succ_eq {m : Type → Type} [Monad m] [HasQuery HashSpec m]
       if hlevel : levels < treeHeight then
         nodeHash (m := m) parameter ⟨levels, hlevel⟩ node left right
       else
-        pure 0) := rfl
+        pure 0) := by
+  -- The children's indices, reduced modulo the leaves, name the same nodes.
+  have hmod := EthLib.Cryptography.Merkle.node_mod (nodeAt (m := m) parameter .bottom)
+    (fun j => leafAt (m := m) parameter secret (merkleNodeOfNat j)) lifetime
+    (fun j => by rw [merkleNodeOfNat_mod]) (nodeAt_mod parameter .bottom)
+  have hchild (right : Bool) :
+      (childNode node right).val = (2 * node.val + if right then 1 else 0) % lifetime := rfl
+  simp only [treeNode, EthLib.Cryptography.Merkle.node_succ, hchild, Bool.false_eq_true,
+    ↓reduceIte, Nat.add_zero, ← hmod]
+  by_cases hlevel : levels < treeHeight <;> simp [hlevel, nodeHash, nodeAt]
+
+@[simp]
+theorem topTreeNode_zero_eq {m : Type → Type} [Monad m] [HasQuery HashSpec m]
+    (parameter : PublicParameter) (topSecret : TopIndex → ChainIndex → Digest) (node : TopNode) :
+    topTreeNode (m := m) parameter topSecret 0 node =
+      topLeafAt (m := m) parameter topSecret node := by
+  simp [topTreeNode, EthLib.Cryptography.Merkle.node_zero]
+
+theorem topTreeNode_succ_eq {m : Type → Type} [Monad m] [HasQuery HashSpec m]
+    (parameter : PublicParameter) (topSecret : TopIndex → ChainIndex → Digest)
+    (levels : Nat) (node : TopNode) :
+    topTreeNode (m := m) parameter topSecret (levels + 1) node = (do
+      let left ← topTreeNode (m := m) parameter topSecret levels (topChildNode node false)
+      let right ← topTreeNode (m := m) parameter topSecret levels (topChildNode node true)
+      if hlevel : levels < treeHeight then
+        topNodeHash (m := m) parameter ⟨levels, hlevel⟩ node left right
+      else
+        pure 0) := by
+  -- The children's indices, reduced modulo the leaves, name the same nodes.
+  have hmod := EthLib.Cryptography.Merkle.node_mod (nodeAt (m := m) parameter .top)
+    (fun j => topLeafAt (m := m) parameter topSecret (topNodeOfNat j)) topLifetime
+    (fun j => by rw [topNodeOfNat_mod]) (nodeAt_mod parameter .top)
+  have hchild (right : Bool) :
+      (topChildNode node right).val = (2 * node.val + if right then 1 else 0) % topLifetime := rfl
+  simp only [topTreeNode, EthLib.Cryptography.Merkle.node_succ, hchild, Bool.false_eq_true,
+    ↓reduceIte, Nat.add_zero, ← hmod]
+  by_cases hlevel : levels < treeHeight <;> simp [hlevel, topNodeHash, nodeAt]
 
 theorem sampleSecret_eq : sampleSecret = $ᵗ (LeafIndex → ChainIndex → Digest) := rfl
 
 theorem signingRandomness_eq : signingRandomness = $ᵗ Randomness := rfl
 
 namespace CacheReplay
-
-@[simp]
-theorem treeNode_zero_eq (cache : QueryCache HashSpec) (parameter : PublicParameter)
-    (secret : LeafIndex → ChainIndex → Digest) (node : MerkleNode) :
-    treeNode cache parameter secret 0 node = leafAt cache parameter secret node := by
-  with_unfolding_all rfl
-
-theorem treeNode_succ_eq (cache : QueryCache HashSpec) (parameter : PublicParameter)
-    (secret : LeafIndex → ChainIndex → Digest) (levels : Nat) (node : MerkleNode) :
-    treeNode cache parameter secret (levels + 1) node =
-      if hlevel : levels < treeHeight then
-        CacheView.merkleHash cache parameter ⟨levels, hlevel⟩ node
-          (treeNode cache parameter secret levels (Concrete.childNode node false))
-          (treeNode cache parameter secret levels (Concrete.childNode node true))
-      else
-        0 := by
-  with_unfolding_all rfl
-
-theorem topTreeNode_zero_eq (cache : QueryCache HashSpec) (parameter : PublicParameter)
-    (topSecret : TopIndex → ChainIndex → Digest) (node : TopNode) :
-    topTreeNode cache parameter topSecret 0 node = topLeafAt cache parameter topSecret node := by
-  with_unfolding_all rfl
-
-theorem topTreeNode_succ_eq (cache : QueryCache HashSpec) (parameter : PublicParameter)
-    (topSecret : TopIndex → ChainIndex → Digest) (levels : Nat) (node : TopNode) :
-    topTreeNode cache parameter topSecret (levels + 1) node =
-      if hlevel : levels < treeHeight then
-        CacheView.topMerkleHash cache parameter ⟨levels, hlevel⟩ node
-          (topTreeNode cache parameter topSecret levels (Concrete.topChildNode node false))
-          (topTreeNode cache parameter topSecret levels (Concrete.topChildNode node true))
-      else
-        0 := by
-  with_unfolding_all rfl
 
 end CacheReplay
 

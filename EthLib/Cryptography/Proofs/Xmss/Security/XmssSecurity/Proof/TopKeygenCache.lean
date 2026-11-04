@@ -263,7 +263,7 @@ theorem Concrete.precomputedKeygen_cache_has_topLeafInput
   obtain ⟨beforeCache, afterCache, value, hleaf, hafter⟩ :=
     Concrete.CacheReplay.honestKeygen_runsBelow_topTreeNode hrun 0 key (by omega)
       (by rw [Nat.sub_zero]; exact key.isLt)
-  rw [Concrete.topTreeNode, Concrete.topLeafAt] at hleaf
+  rw [Concrete.topTreeNode_zero_eq, Concrete.topLeafAt] at hleaf
   obtain ⟨endpoints, endpointsCache, hendpoints, hhash, hendpointsLe⟩ :=
     Concrete.CacheReplay.runsBelow_bind_left hleaf
   obtain ⟨output, hcached, _⟩ := Concrete.CacheReplay.tweakableHash_query_cached
@@ -322,7 +322,7 @@ theorem Concrete.precomputedKeygen_cache_has_topMerkleInput
   obtain ⟨beforeCache, afterCache, value, hnodeRun, hafter⟩ :=
     Concrete.CacheReplay.honestKeygen_runsBelow_topTreeNode hrun (level.val + 1) node
       level.isLt hnode
-  rw [Concrete.topTreeNode] at hnodeRun
+  rw [Concrete.topTreeNode_succ_eq] at hnodeRun
   obtain ⟨left, leftCache, hleft, hrest, hleftLe⟩ :=
     Concrete.CacheReplay.runsBelow_bind_left hnodeRun
   obtain ⟨right, rightCache, hright, hhash, hrightLe⟩ :=

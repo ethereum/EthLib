@@ -126,6 +126,61 @@ theorem climb_congr (hash' : Nat → Nat → α → α → m α) :
     exact congrArg _ (funext fun parent => climb_congr hash' rest (level + 1) (j / 2) parent
       (fun k h1 h2 => agree k (by omega) (by simp; omega)))
 
+/-- A node depends on its index only modulo `N`, when the leaves and the node hash do. -/
+theorem node_mod (leaves : Nat → m α) (N : Nat) (hleaves : ∀ j, leaves j = leaves (j % N))
+    (hhash : ∀ level j, hash level j = hash level (j % N)) :
+    ∀ (level j : Nat), node hash leaves level j = node hash leaves level (j % N) := by
+  -- Two indices equal modulo `N` have children equal modulo `N`.
+  suffices h : ∀ level j j', j % N = j' % N → node hash leaves level j = node hash leaves level j'
+    from fun level j => h level j (j % N) (Nat.mod_mod j N).symm
+  intro level
+  induction level with
+  | zero => intro j j' hj; rw [node_zero, node_zero, hleaves, hj, ← hleaves]
+  | succ level ih =>
+    intro j j' hj
+    rw [node_succ, node_succ, ih (2 * j) (2 * j') (by rw [Nat.mul_mod, hj, ← Nat.mul_mod]),
+      ih (2 * j + 1) (2 * j' + 1) (by rw [Nat.add_mod, Nat.mul_mod, hj, ← Nat.mul_mod,
+        ← Nat.add_mod]), hhash, hj, ← hhash]
+
+/-- A property kept by `bind` that holds of the leaves and of the node hash holds of every node. -/
+theorem node_rec (P : ∀ {β : Type}, m β → Prop)
+    (bind : ∀ {β γ : Type} {x : m β} {f : β → m γ}, P x → (∀ b, P (f b)) → P (x >>= f))
+    (leaves : Nat → m α) (hleaves : ∀ j, P (leaves j))
+    (hhash : ∀ level j left right, P (hash level j left right)) :
+    ∀ (level j : Nat), P (node hash leaves level j)
+  | 0, j => hleaves j
+  | level + 1, j => by
+    rw [node_succ]
+    exact bind (node_rec P bind leaves hleaves hhash level _) fun _ =>
+      bind (node_rec P bind leaves hleaves hhash level _) fun _ => hhash _ _ _ _
+
+section Map
+
+variable {n : Type → Type} [Monad n] (φ : ∀ {β : Type}, m β → n β)
+  (map_pure : ∀ {β : Type} (b : β), φ (pure b) = pure b)
+  (map_bind : ∀ {β γ : Type} (x : m β) (f : β → m γ), φ (x >>= f) = φ x >>= fun b => φ (f b))
+
+include map_bind
+
+/-- A map of monads that keeps `pure` and `bind` sends a node to the node of the mapped hash. -/
+theorem node_map (leaves : Nat → m α) :
+    ∀ (level j : Nat), φ (node hash leaves level j) =
+      node (fun level j left right => φ (hash level j left right)) (fun j => φ (leaves j)) level j
+  | 0, _ => rfl
+  | level + 1, j => by
+    simp only [node_succ, map_bind, node_map leaves level]
+
+include map_pure in
+/-- A map of monads that keeps `pure` and `bind` sends a climb to the climb of the mapped hash. -/
+theorem climb_map_monad :
+    ∀ (siblings : List α) (level j : Nat) (current : α), φ (climb hash level j current siblings) =
+      climb (fun level j left right => φ (hash level j left right)) level j current siblings
+  | [], _, _, _ => map_pure _
+  | _ :: rest, level, j, current => by
+    simp only [climb, map_bind, climb_map_monad rest]
+
+end Map
+
 end Monad
 
 /-! ## Unfolding, in the identity monad -/
@@ -208,6 +263,17 @@ theorem siblings_succ_toList_concat (leaves : Nat → Id α) :
     -- Peel the first sibling on both sides, then go on one level up.
     conv => lhs; rw [siblings_succ_toList, siblings_succ_toList_concat leaves n (level + 1) (j / 2)]
     rw [siblings_succ_toList, List.cons_append, div_two_div_pow, Nat.add_assoc, Nat.add_comm 1 n]
+
+/-- The siblings of the ancestors of leaf `j`, read one per level, start with its first siblings. -/
+theorem ofFn_take_siblings (leaves : Nat → Id α) (j h : Nat) :
+    ∀ n, n ≤ h → (List.ofFn fun level : Fin h =>
+        (node hash leaves level ((j / 2 ^ level.val) ^^^ 1)).run).take n =
+      (siblings hash leaves 0 j n).run.toList
+  | 0, _ => by simp [siblings]
+  | n + 1, hn => by
+    rw [siblings_succ_toList_concat, ← ofFn_take_siblings leaves j h n (by omega),
+      List.take_add_one]
+    simp [show n < h by omega]
 
 /-- Climbing from a node with the siblings of its ancestors reaches its ancestor `n` levels up. -/
 theorem climb_siblings (leaves : Nat → Id α) :

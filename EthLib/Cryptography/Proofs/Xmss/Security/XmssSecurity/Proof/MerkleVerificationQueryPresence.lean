@@ -261,8 +261,8 @@ theorem verify_true_authenticationRoot_support_in_largerCache
 
 Each pair is the one the cache's climb computes. -/
 theorem climb_query_cached (parameter : PublicParameter) (layer : EthLib.Cryptography.Xmss.Layer)
-    (j : Nat) (hj : j < Concrete.CacheView.layerLeaves layer) (path : Fin treeHeight → Digest)
-    (leaf : Digest) (levels : Nat) (hlevels : levels ≤ treeHeight) (target : MerkleLevel)
+    (j : Nat) (path : Fin treeHeight → Digest) (leaf : Digest) (levels : Nat)
+    (hlevels : levels ≤ treeHeight) (target : MerkleLevel)
     (htarget : target.val < levels) (initialCache resultCache largerCache : QueryCache HashSpec)
     (root : Digest)
     (hmem : (root, resultCache) ∈ support
@@ -290,15 +290,13 @@ theorem climb_query_cached (parameter : PublicParameter) (layer : EthLib.Cryptog
         -- The held node is the cache's climb over the levels below.
         have hcurrentEval := eval_answerFn_largerCache_eq_of_mem_support _
           initialCache currentCache largerCache current hcurrent (hcurrentLe.trans hle)
-        rw [eval_climb largerCache parameter layer _ 0 j leaf (by simp) hj] at hcurrentEval
+        rw [eval_climb] at hcurrentEval
         have hparent : j / 2 ^ levels / 2 = j / 2 ^ (levels + 1) := by
           rw [Nat.div_div_eq_div_mul, ← Nat.pow_succ]
-        have hparentLt : j / 2 ^ (levels + 1) < Concrete.CacheView.layerLeaves layer :=
-          (Nat.div_le_self _ _).trans_lt hj
         rw [Merkle.pairAt, hcurrentEval]
         simp only [List.getElem_ofFn, hparent] at hnode
-        rw [nodeAt_eq parameter layer ⟨levels, hlevel⟩ _ hparentLt,
-          nodeAt_eq parameter layer ⟨levels, hlevel⟩ _ hparentLt] at hnode
+        rw [nodeAt_eq parameter layer ⟨levels, hlevel⟩, nodeAt_eq parameter layer ⟨levels, hlevel⟩]
+          at hnode
         unfold Merkle.ordered
         split at hnode <;> rename_i hbit
         · obtain ⟨output, hcached, -⟩ := tweakableHash_query_cached _ _ _ _ _ _ hnode
@@ -347,8 +345,8 @@ theorem verify_true_merkle_query_cached_as_in_largerCache
   rw [← List.take_of_length_le (l := List.ofFn signature.authPath) (i := treeHeight) (by simp)]
     at hroot
   obtain ⟨output, hcached⟩ := climb_query_cached publicKey.parameter .bottom leafIndex.val
-    leafIndex.isLt signature.authPath leaf treeHeight le_rfl target target.isLt leafCache
-    rootCache largerCache root hroot (hrootLe.trans hle)
+    signature.authPath leaf treeHeight le_rfl target target.isLt leafCache rootCache largerCache
+    root hroot (hrootLe.trans hle)
   rw [hleaf]
   exact ⟨output, hrootLe hcached⟩
 

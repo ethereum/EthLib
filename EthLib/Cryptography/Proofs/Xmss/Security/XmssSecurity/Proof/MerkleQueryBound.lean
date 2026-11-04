@@ -19,25 +19,6 @@ instance (targetLevel : MerkleLevel) (targetNode : MerkleNode)
   unfold MerkleAddressInSubtree
   infer_instance
 
-theorem treeSubtreeValid_mono {small large : Nat} {node : MerkleNode}
-    (hle : small ≤ large) (hvalid : TreeSubtreeValid large node) :
-    TreeSubtreeValid small node := by
-  unfold TreeSubtreeValid at hvalid ⊢
-  have hpow : 2 ^ small ≤ 2 ^ large := Nat.pow_le_pow_right (by omega) hle
-  nlinarith
-
-theorem treeCovers_zero_iff (left right : MerkleNode) :
-    TreeCovers 0 left right ↔ left = right := by
-  constructor
-  · intro h
-    apply Fin.ext
-    unfold TreeCovers at h
-    simp only [pow_zero, mul_one] at h
-    omega
-  · rintro rfl
-    unfold TreeCovers
-    simp
-
 theorem treeCovers_unique {levels : Nat} {left right leafIndex : MerkleNode}
     (hleft : TreeCovers levels left leafIndex) (hright : TreeCovers levels right leafIndex) :
     left = right := by
@@ -45,112 +26,31 @@ theorem treeCovers_unique {levels : Nat} {left right leafIndex : MerkleNode}
   apply Fin.ext
   rw [← Nat.div_eq_of_lt_le hleft.1 hleft.2, ← Nat.div_eq_of_lt_le hright.1 hright.2]
 
-theorem merkleAddressInSubtree_step_sum
-    (targetLevel : MerkleLevel) (targetNode : MerkleNode)
-    (levels : Nat) (node : MerkleNode) (hlevel : levels < treeHeight)
-    (hvalid : TreeSubtreeValid (levels + 1) node) :
-    (if MerkleAddressInSubtree targetLevel targetNode levels
-          (Concrete.childNode node false) then 1 else 0) +
-        ((if MerkleAddressInSubtree targetLevel targetNode levels
-          (Concrete.childNode node true) then 1 else 0) +
-          if HashDomain.merkle ⟨levels, hlevel⟩ node =
-            .merkle targetLevel targetNode then 1 else 0) =
-      if MerkleAddressInSubtree targetLevel targetNode (levels + 1) node then 1 else 0 := by
-  by_cases hlt : targetLevel.val < levels
-  · have hparentLt : targetLevel.val < levels + 1 := by omega
-    have hexponent : levels + 1 - (targetLevel.val + 1) =
-        (levels - (targetLevel.val + 1)) + 1 := by omega
-    have hsmall : (levels - (targetLevel.val + 1)) + 1 ≤ levels + 1 := by omega
-    have hpartition := treeCovers_children_sum
-      (levels - (targetLevel.val + 1)) node targetNode
-      (treeSubtreeValid_mono hsmall hvalid)
-    have hdomain : HashDomain.merkle ⟨levels, hlevel⟩ node ≠
-        .merkle targetLevel targetNode := by
-      intro heq
-      have hlevelEq := congrArg Fin.val (HashDomain.merkle.inj heq).1
-      simp only at hlevelEq
-      omega
-    unfold MerkleAddressInSubtree
-    simp only [hlt, hparentLt, true_and, hdomain, ite_false, add_zero]
-    rw [hexponent]
-    exact hpartition
-  · by_cases heq : targetLevel.val = levels
-    · have hlevelEq : targetLevel = ⟨levels, hlevel⟩ := by
-        apply Fin.ext
-        exact heq
-      subst targetLevel
-      simp only [MerkleAddressInSubtree, lt_self_iff_false, false_and, ite_false,
-        Nat.lt_succ_self, true_and, Nat.sub_self, treeCovers_zero_iff,
-        HashDomain.merkle.injEq]
-      simp
-    · have habove : levels < targetLevel.val := by omega
-      have hnotParent : ¬targetLevel.val < levels + 1 := by omega
-      have hdomain : HashDomain.merkle ⟨levels, hlevel⟩ node ≠
-          .merkle targetLevel targetNode := by
-        intro hsame
-        have hlevelEq := congrArg Fin.val (HashDomain.merkle.inj hsame).1
-        simp only at hlevelEq
-        omega
-      simp [MerkleAddressInSubtree, hlt, hnotParent, hdomain]
-
 open OracleComp OracleSpec
 
 theorem Concrete.treeNode_queryBound_merkleAddress
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
     (targetLevel : MerkleLevel) (targetNode : MerkleNode)
-    (levels : Nat) (node : MerkleNode)
-    (hlevels : levels ≤ treeHeight) (hvalid : TreeSubtreeValid levels node) :
+    (levels : Nat) (node : MerkleNode) (hvalid : TreeSubtreeValid levels node) :
     (Concrete.treeNode parameter secret levels node :
       OracleComp HashSpec Digest).IsQueryBoundP
         (AtHashAddress parameter (.merkle targetLevel targetNode))
         (if MerkleAddressInSubtree targetLevel targetNode levels node then 1 else 0) := by
-  induction levels generalizing node with
-  | zero =>
-      rw [Concrete.treeNode_zero_eq]
-      simpa [MerkleAddressInSubtree] using
-        Concrete.leafAt_queryBound_zero_merkleAddress parameter secret node
-          targetLevel targetNode
-  | succ levels ih =>
-      have hlevel : levels < treeHeight := Nat.lt_of_succ_le hlevels
-      have hleftValid := childNode_subtreeValid levels node false hvalid
-      have hrightValid := childNode_subtreeValid levels node true hvalid
-      have hleft := ih (Concrete.childNode node false)
-        (Nat.le_of_succ_le hlevels) hleftValid
-      have hright := ih (Concrete.childNode node true)
-        (Nat.le_of_succ_le hlevels) hrightValid
-      rw [Concrete.treeNode_succ_eq]
-      have hcontinuation (left : Digest) :
-          (do
-            let right ← Concrete.treeNode parameter secret levels
-              (Concrete.childNode node true)
-            Concrete.nodeHash parameter ⟨levels, hlevel⟩ node left right :
-            OracleComp HashSpec Digest).IsQueryBoundP
-              (AtHashAddress parameter (.merkle targetLevel targetNode))
-              ((if MerkleAddressInSubtree targetLevel targetNode levels
-                  (Concrete.childNode node true) then 1 else 0) +
-                if HashDomain.merkle ⟨levels, hlevel⟩ node =
-                  .merkle targetLevel targetNode then 1 else 0) := by
-        refine OracleComp.isQueryBoundP_bind hright ?_
-        intro right _
-        by_cases heq : HashDomain.merkle ⟨levels, hlevel⟩ node =
-            .merkle targetLevel targetNode
-        · simp only [heq, ite_eq_left]
-          obtain ⟨hlevelEq, hnodeEq⟩ := HashDomain.merkle.inj heq
-          subst targetLevel
-          subst targetNode
-          tweakable_hashes
-          exact Concrete.tweakableHash_queryBound_atAddress parameter
-            (.merkle ⟨levels, hlevel⟩ node) (Concrete.nodePayload left right)
-        · simp only [heq, ite_false]
-          tweakable_hashes
-          exact Concrete.tweakableHash_queryBound_atOtherAddress parameter
-            (.merkle targetLevel targetNode) (.merkle ⟨levels, hlevel⟩ node)
-            (Concrete.nodePayload left right) heq
-      have hall := OracleComp.isQueryBoundP_bind hleft
-        (fun left _ => hcontinuation left)
-      simpa only [hlevel, ↓reduceDIte,
-        merkleAddressInSubtree_step_sum targetLevel targetNode levels node hlevel hvalid]
-        using hall
+  rw [Concrete.treeNode]
+  have hbound := node_queryBound_node (Concrete.nodeAt parameter .bottom)
+    (fun j => Concrete.leafAt parameter secret (Concrete.merkleNodeOfNat j)) _ lifetime
+    (targetLevel.val + 1) targetNode.val
+    (by omega) (fun j => Concrete.leafAt_queryBound_zero_merkleAddress parameter secret _
+      targetLevel targetNode) (fun k j left right hj => by
+        simpa [Concrete.nodeDomain] using Concrete.nodeAt_queryBound_node parameter .bottom
+          targetLevel targetNode.val targetNode.isLt k j
+          (by have := Nat.one_le_two_pow (n := k); simp only [Concrete.layerLeaves]; nlinarith)
+          left right) levels node.val hvalid
+  have hiff : MerkleAddressInSubtree targetLevel targetNode levels node ↔
+      targetLevel.val + 1 ≤ levels ∧
+      targetNode.val / 2 ^ (levels - (targetLevel.val + 1)) = node.val := by
+    rw [MerkleAddressInSubtree, treeCovers_iff, Nat.succ_le_iff]
+  simpa only [hiff] using hbound
 
 theorem Concrete.rootTree_queryBound_merkleAddress
     (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
@@ -160,7 +60,7 @@ theorem Concrete.rootTree_queryBound_merkleAddress
       OracleComp HashSpec _).IsQueryBoundP
         (AtHashAddress parameter (.merkle targetLevel targetNode)) 1 := by
   have hbound (key : TopIndex) := Concrete.treeNode_queryBound_merkleAddress parameter secret
-    targetLevel targetNode treeHeight (Concrete.bottomRootNode key) le_rfl
+    targetLevel targetNode treeHeight (Concrete.bottomRootNode key)
     (treeSubtreeValid_bottomRootNode key)
   have htop := rejectsTop_atHashAddress parameter (.merkle targetLevel targetNode) rfl
   by_cases hex : ∃ key, MerkleAddressInSubtree targetLevel targetNode treeHeight

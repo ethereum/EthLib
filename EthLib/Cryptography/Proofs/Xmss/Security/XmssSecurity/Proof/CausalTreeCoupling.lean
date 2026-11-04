@@ -366,7 +366,7 @@ theorem relTriple_topTreeNode_run :
   induction levels with
   | zero =>
       intro node leftCache rightCache hrel
-      rw [Concrete.topTreeNode, Concrete.topTreeNode, Concrete.topLeafAt,
+      rw [Concrete.topTreeNode_zero_eq, Concrete.topTreeNode_zero_eq, Concrete.topLeafAt,
         Concrete.topLeafAt, simulateQ_bind, StateT.run_bind, simulateQ_bind, StateT.run_bind,
         hleftWarm.topOneTimePublicKey_run_eq hrel.1 node,
         hrightWarm.topOneTimePublicKey_run_eq hrel.2.1 node, pure_bind, pure_bind]
@@ -374,7 +374,7 @@ theorem relTriple_topTreeNode_run :
       exact relTriple_keyLeafHash hrel (.inr node)
   | succ levels ih =>
       intro node leftCache rightCache hrel
-      rw [Concrete.topTreeNode, Concrete.topTreeNode, simulateQ_bind,
+      rw [Concrete.topTreeNode_succ_eq, Concrete.topTreeNode_succ_eq, simulateQ_bind,
         StateT.run_bind, simulateQ_bind, StateT.run_bind]
       apply relTriple_bind (ih _ leftCache rightCache hrel)
       intro leftChild rightChild hchild
