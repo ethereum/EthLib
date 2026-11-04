@@ -29,6 +29,8 @@ public import EthLib.Cryptography.Proofs.Kzg.FftG1
 public import EthLib.Cryptography.Proofs.Kzg.Fk20Proofs
 public import EthLib.Cryptography.Proofs.Kzg.TrustedSetup
 public import EthLib.Cryptography.Proofs.Kzg.Commitment
+public import EthLib.Cryptography.Proofs.Kzg.Quotient
+public import EthLib.Cryptography.Proofs.Kzg.Verify
 
 /-!
 # `EthLib.Cryptography.Proofs.Kzg`

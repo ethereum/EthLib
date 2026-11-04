@@ -295,7 +295,9 @@ They take two hypotheses on the setup.
 `TrustedSetup.WellFormed.valid` and `TrustedSetup.WellFormed.torsion` derive both from a well-formed setup.
 
 For a well-formed setup, `blobToKzgCommitment_represents` (`Proofs/Kzg/Commitment.lean`) proves that a blob's commitment holds its polynomial at the secret.
-No theorem states what a verification operation returns on accepted input.
+Under the pairing law and for a well-formed setup, honest KZG proofs and blob proofs verify (`verifyKzgProof_computeKzgProof`, `verifyBlobKzgProof_computeBlobKzgProof`, `Proofs/Kzg/Verify.lean`).
+`verifyKzgProofImpl_iff` states when the check accepts: `c - y = w (τ - z)`, for decoded points representing `c` and `w`.
+No theorem states what the batch checks return on accepted input.
 
 `checksSufficient_of_subgroupChecks` (`Proofs/Kzg/CeremonyChecks.lean`) is about the ceremony that produced the trusted setup.
 It proves that the ceremony's pairing checks force each G1 and G2 point of a contribution to represent the expected power of the trapdoor.
@@ -639,7 +641,7 @@ The setup raises three separate assumptions, and each use of KZG relies on a dif
   No theorem says that they decode, or that the points lie in the subgroup.
   `checksSufficient` covers the ceremony's monomial points, under its hypotheses.
   `TrustedSetup.WellFormed s τ` (`Proofs/Kzg/Commitment.lean`) states the consistency of a setup `s` with a secret `τ`.
-  The commitment theorem takes it as a hypothesis.
+  The theorems on commitments and on honest proofs take it as a hypothesis.
   For the embedded setup, that some `τ` makes it well formed is an assumption, and no theorem proves it.
 - Secrecy: no one knows the secret, which holds if at least one ceremony participant was honest.
   Only binding, a security property, needs it; a theorem about parsing, or that an honest proof verifies, does not.
