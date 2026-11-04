@@ -1831,6 +1831,56 @@
    "docstring":
    "The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris.\n\n```text\n    D(H) = max(D_min, P_d + ⌊P_d / 2048⌋ · factor + ε)\n```\n\n`P_d` is the parent's difficulty, and `ε` is the bomb.\n\nThe factor is the one of the time since the parent.\n\nFrom Paris on, [EIP-3675](https://eips.ethereum.org/EIPS/eip-3675#block-structure) sets it to 0.\n\nThe genesis block has no parent, and its difficulty is part of the chain's configuration."},
   {"summary":
+   "The transactions root of the transactions of a block, decoded at the fork.",
+   "signature": "(fork: str, block: bytes) -> bytes",
+   "operation": "EthLib.Execution.Blocks.Exports.transactionsRootExport",
+   "method": "block_transactions_root",
+   "errors":
+   [{"type": "EthLib.Serialization.Rlp.RlpError",
+     "codes":
+     [{"constructor": "payloadTooLong", "code": 1},
+      {"constructor": "inputTooShort", "code": 2},
+      {"constructor": "singleByteWithPrefix", "code": 3},
+      {"constructor": "longFormForShortLength", "code": 4},
+      {"constructor": "leadingZeroInLength", "code": 5},
+      {"constructor": "trailingBytes", "code": 6},
+      {"constructor": "leadingZeroInScalar", "code": 7},
+      {"constructor": "listAsScalar", "code": 8},
+      {"constructor": "listAsBytes", "code": 9},
+      {"constructor": "bytesAsList", "code": 10},
+      {"constructor": "wrongLength", "code": 11},
+      {"constructor": "scalarTooLarge", "code": 12},
+      {"constructor": "wrongFieldCount", "code": 13},
+      {"constructor": "inField", "code": 14}]}],
+   "error_class": "BlockError",
+   "docstring":
+   "The transactions root of the transactions of a block, decoded at the fork."},
+  {"summary":
+   "The withdrawals root of the withdrawals of a block, decoded at a fork from Shapella.",
+   "signature": "(fork: str, block: bytes) -> bytes",
+   "operation": "EthLib.Execution.Blocks.Exports.withdrawalsRootExport",
+   "method": "block_withdrawals_root",
+   "errors":
+   [{"type": "EthLib.Serialization.Rlp.RlpError",
+     "codes":
+     [{"constructor": "payloadTooLong", "code": 1},
+      {"constructor": "inputTooShort", "code": 2},
+      {"constructor": "singleByteWithPrefix", "code": 3},
+      {"constructor": "longFormForShortLength", "code": 4},
+      {"constructor": "leadingZeroInLength", "code": 5},
+      {"constructor": "trailingBytes", "code": 6},
+      {"constructor": "leadingZeroInScalar", "code": 7},
+      {"constructor": "listAsScalar", "code": 8},
+      {"constructor": "listAsBytes", "code": 9},
+      {"constructor": "bytesAsList", "code": 10},
+      {"constructor": "wrongLength", "code": 11},
+      {"constructor": "scalarTooLarge", "code": 12},
+      {"constructor": "wrongFieldCount", "code": 13},
+      {"constructor": "inField", "code": 14}]}],
+   "error_class": "BlockError",
+   "docstring":
+   "The withdrawals root of the withdrawals of a block, decoded at a fork from Shapella."},
+  {"summary":
    "The base fee per gas of a block, from its parent's gas limit, gas used and base fee.",
    "signature":
    "(parent_gas_limit: bytes, parent_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes",

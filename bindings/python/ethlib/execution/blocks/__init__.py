@@ -17,6 +17,16 @@ def reencode(fork: str, block: bytes) -> bytes:
     return _native.block_reencode(fork, block)
 
 
+def transactions_root(fork: str, block: bytes) -> bytes:
+    """The transactions root of the transactions of a block, decoded at the fork."""
+    return _native.block_transactions_root(fork, block)
+
+
+def withdrawals_root(fork: str, block: bytes) -> bytes:
+    """The withdrawals root of the withdrawals of a block, decoded at a fork from Shapella."""
+    return _native.block_withdrawals_root(fork, block)
+
+
 def receipt_reencode(fork: str, receipt: bytes) -> bytes:
     """The bytes of a receipt, decoded at the fork and encoded again."""
     return _native.receipt_reencode(fork, receipt)
@@ -32,5 +42,5 @@ def validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -
     _native.block_validate_header(parent_fork, fork, parent, header)
 
 
-__all__ = ["header_hash", "reencode", "receipt_reencode", "receipt_logs_bloom",
-           "validate_header", "BlockError"]
+__all__ = ["header_hash", "reencode", "transactions_root", "withdrawals_root",
+           "receipt_reencode", "receipt_logs_bloom", "validate_header", "BlockError"]

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from ethlib.execution import blocks
+from ethlib.serialization import rlp
 
 _REPO = Path(__file__).resolve().parents[4]
 _CASES_FILE = _REPO / "tests" / "execution" / "blocks" / "blockchain_tests.json"
@@ -68,6 +69,51 @@ def test_header_rejected_at_other_fork(case) -> None:
     header = _first_item(bytes.fromhex(case["rlp"]))
     with pytest.raises(ValueError):
         blocks.header_hash(other, header)
+
+
+# The networks before Shanghai, whose blocks have no withdrawals.
+BEFORE_SHANGHAI = BEFORE_LONDON | {"London", "Paris"}
+
+# The empty trie has this root, the Keccak-256 hash of 0x80.
+EMPTY_TRIE_ROOT = bytes.fromhex(
+    "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+
+
+@pytest.mark.parametrize("case", CASES, ids=[_case_id(c) for c in CASES])
+def test_body_roots(case) -> None:
+    fork = FORK_OF_NETWORK[case["network"]]
+    block = bytes.fromhex(case["rlp"])
+    header = rlp.decode(block)[0]
+    # The roots of the body are the roots that the header of the fixture holds.
+    assert blocks.transactions_root(fork, block) == header[4]
+    if case["network"] in BEFORE_SHANGHAI:
+        with pytest.raises(blocks.BlockError, match="before Shapella") as error:
+            blocks.withdrawals_root(fork, block)
+        assert error.value.code == 0
+    else:
+        assert blocks.withdrawals_root(fork, block) == header[16]
+
+
+def test_body_roots_cover_both_cases() -> None:
+    # The fixtures hold empty and nonempty lists of transactions and of withdrawals.
+    bodies = [rlp.decode(bytes.fromhex(c["rlp"])) for c in CASES]
+    assert any(b[1] == [] for b in bodies) and any(b[1] != [] for b in bodies)
+    later = [b for b, c in zip(bodies, CASES) if c["network"] not in BEFORE_SHANGHAI]
+    assert any(b[3] == [] for b in later) and any(b[3] != [] for b in later)
+    assert any(b[0][4] == EMPTY_TRIE_ROOT for b in bodies)
+    # Each type of typed transaction appears, as its type then its payload.
+    types = {tx[0] for b in bodies for tx in b[1] if isinstance(tx, bytes)}
+    assert types == {1, 2, 3, 4}
+
+
+def test_typed_transaction_must_start_with_its_type() -> None:
+    case = next(c for c in CASES if c["network"] == "Prague")
+    block = rlp.decode(bytes.fromhex(case["rlp"]))
+    # A byte string that holds a legacy transaction is no typed transaction.
+    block[1] = [rlp.encode([b"", b"", b"", b"", b"", b"", b"", b"", b""])]
+    with pytest.raises(blocks.BlockError, match="does not start with its type") as error:
+        blocks.transactions_root("pectra", rlp.encode(block))
+    assert error.value.code == 0
 
 
 def test_trailing_byte_rejected() -> None:

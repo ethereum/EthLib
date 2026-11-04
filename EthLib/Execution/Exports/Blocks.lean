@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Exports
 public import EthLib.Execution.Blocks
+public import EthLib.Execution.Transactions.Envelope
 public import EthLib.Serialization.Exports.Rlp
 
 /-!
@@ -20,6 +21,8 @@ A rejected input comes back as the code and the message of its RLP error.
 A receipt error has a code from 101, and a failed header check a code from 201.
 
 An unknown fork name, or forks out of order, has code 0, since no error type covers it.
+
+So does a transaction of a block that does not decode, and a trie with an empty value.
 -/
 
 public section
@@ -85,5 +88,39 @@ def validateHeaderExport (parentFork fork parent header : ByteArray) : Result UI
       else throw (0, "the fork is before Paris")
     else throw (0, "the parent's fork is after the fork")
   else throw (0, "the parent's fork is before London")
+
+/-- The transaction that an item of a block holds at the fork.
+
+A list is a legacy transaction, and a byte string is the bytes of a typed one. -/
+def transactionOfItem (fork : Fork) (item : Item) : Result Transactions.Transaction := do
+  let bytes ← match item with
+    | .list _ => runRlp "transaction has no encoding" (encode item)
+    | .bytes bytes =>
+      if bytes.size > 0 ∧ bytes[0]! < 0xc0 then pure bytes
+      else throw (0, "a typed transaction does not start with its type")
+  (Transactions.decodeTransaction fork bytes).mapError
+    fun e => (0, s!"transaction rejected: {reprStr e}")
+
+/-- A root, or the code and the message of its trie error. -/
+def runTrie (act : Except Trie.TrieError Hash32) : Result ByteArray :=
+  match act with
+  | .ok hash => return ⟨hash.toArray⟩
+  | .error (.rlp e) => throw (e.code, s!"no root: {reprStr e}")
+  | .error e => throw (0, s!"no root: {reprStr e}")
+
+/-- The transactions root of the transactions of a block, decoded at the fork. -/
+@[export eth_block_transactions_root]
+def transactionsRootExport (fork block : ByteArray) : Result ByteArray := do
+  let fork ← forkOfName fork
+  let b : Block fork Item ← runRlp "block rejected" (Codec.decode block)
+  runTrie (transactionsRoot (← b.transactions.mapM (transactionOfItem fork)))
+
+/-- The withdrawals root of the withdrawals of a block, decoded at a fork from Shapella. -/
+@[export eth_block_withdrawals_root]
+def withdrawalsRootExport (fork block : ByteArray) : Result ByteArray := do
+  let fork ← forkOfName fork
+  let b : Block fork Item ← runRlp "block rejected" (Codec.decode block)
+  if h : .shapella ≤ fork then runTrie (withdrawalsRoot (b.withdrawals h))
+  else throw (0, "the fork is before Shapella")
 
 end EthLib.Execution.Blocks.Exports

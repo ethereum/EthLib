@@ -18,6 +18,18 @@ eth_block_reencode(
 );
 
 extern lean_object*
+eth_block_transactions_root(
+  lean_object* fork,
+  lean_object* block
+);
+
+extern lean_object*
+eth_block_withdrawals_root(
+  lean_object* fork,
+  lean_object* block
+);
+
+extern lean_object*
 eth_receipt_reencode(
   lean_object* fork,
   lean_object* receipt
@@ -103,6 +115,28 @@ py_block_reencode(
   lean_object* block;
   if (!parse_fork_and_bytes(args, "block", &fork, &block)) return NULL;
   return except_into_pybytes(eth_block_reencode(fork, block), BLOCK_ERROR);
+}
+
+PyObject*
+py_block_transactions_root(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* fork;
+  lean_object* block;
+  if (!parse_fork_and_bytes(args, "block", &fork, &block)) return NULL;
+  return except_into_pybytes(eth_block_transactions_root(fork, block), BLOCK_ERROR);
+}
+
+PyObject*
+py_block_withdrawals_root(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* fork;
+  lean_object* block;
+  if (!parse_fork_and_bytes(args, "block", &fork, &block)) return NULL;
+  return except_into_pybytes(eth_block_withdrawals_root(fork, block), BLOCK_ERROR);
 }
 
 PyObject*

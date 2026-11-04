@@ -375,6 +375,14 @@ def pow_block_difficulty(fork: bytes, number: bytes, timestamp: bytes, parent_ti
     """The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris."""
     ...
 
+def block_transactions_root(fork: str, block: bytes) -> bytes:
+    """The transactions root of the transactions of a block, decoded at the fork."""
+    ...
+
+def block_withdrawals_root(fork: str, block: bytes) -> bytes:
+    """The withdrawals root of the withdrawals of a block, decoded at a fork from Shapella."""
+    ...
+
 def fees_base_fee_per_gas(parent_gas_limit: bytes, parent_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes:
     """The base fee per gas of a block, from its parent's gas limit, gas used and base fee."""
     ...
