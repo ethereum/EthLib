@@ -1,7 +1,6 @@
-"""Test-vector generator: `verify`.
+"""Test-vector generator: `verify`."""
 
-Each opening verifies at its own index with its output, and each rejection changes one input.
-"""
+# Each opening verifies at its own index with its output, and each rejection changes one input.
 
 import pytest
 
