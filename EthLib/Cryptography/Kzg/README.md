@@ -177,6 +177,11 @@ That a secret makes the embedded setup well formed is an assumption, recorded in
 Under the pairing law and for a well-formed setup, honest single proofs and blob proofs verify.
 `Proofs/Kzg/Verify.lean` proves both, at every point, inside or outside the domain.
 
+**Binding.**
+For single proofs, a theorem reduces binding to a hard problem.
+Two accepted openings to different values give a strong Diffie–Hellman solution,
+in `Proofs/Kzg/Binding.lean`.
+
 **The ceremony.**
 The trusted setup came from a ceremony in which many participants each mixed in a secret.
 
@@ -189,7 +194,8 @@ It assumes the pairing law, the subgroup checks, and that two points are not at 
 ## What is not proved
 
 - No theorem states what a batch check returns on valid input.
-- No security property, such as binding, is proved.
+- Binding of batch checks and of cell proofs is not proved.
+  The cell case would give a solution of the bilinear variant of the problem.
   Binding also needs the ceremony secret to stay unknown, which no proof can show.
 - The trusted setup itself is not proved correct.
   Its bytes match the pinned file that `TrustedSetupData.lean` names.

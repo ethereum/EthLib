@@ -225,8 +225,9 @@ theorem interpolant_eq_of_eval {Q : Polynomial} {g : _root_.Polynomial Fr}
   exact (Lagrange.eq_interpolate_of_eval_eq _ evalDomain_injective.injOn hdeg
     fun i _ => (h i).symm).symm
 
-/-- On 4096 values, the proof computation returns the compressed sum of the Lagrange points
-times the values of `q`, and `p(z)`. -/
+/-- On 4096 values, the proof computation commits to the values of `q`, and returns `p(z)`.
+
+The commitment is the sum of the Lagrange points times those values. -/
 theorem computeKzgProofImpl_eq (s : TrustedSetup) {poly : Polynomial}
     (hsize : poly.size = FIELD_ELEMENTS_PER_BLOB) (z : Fr) :
     ∃ Q : Array Fr, Q.size = FIELD_ELEMENTS_PER_BLOB ∧

@@ -32,6 +32,7 @@ public import EthLib.Cryptography.Proofs.Kzg.Commitment
 public import EthLib.Cryptography.Proofs.Kzg.Quotient
 public import EthLib.Cryptography.Proofs.Kzg.Verify
 public import EthLib.Cryptography.Proofs.Kzg.Errors
+public import EthLib.Cryptography.Proofs.Kzg.Binding
 
 /-!
 # `EthLib.Cryptography.Proofs.Kzg`

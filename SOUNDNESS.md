@@ -62,11 +62,13 @@ The list covers the main theorems and is not yet complete.
 
 Most of these theorems are about correctness: an honest run gives the expected answer, or malformed input is rejected.
 
-Four of them state a security property.
+Five of them state a security property.
 The unforgeability of leanXMSS holds for EthLib's own definitions.
 The unforgeability of BLS signatures holds for a scheme that EthLib's signing and verification compute.
 The accountable safety and the plausible liveness of Casper FFG hold for an abstract model of votes.
-No theorem states unforgeability for leanSPHINCS, or binding for KZG.
+The evaluation binding of single KZG proofs reduces to the strong Diffie–Hellman problem.
+
+No theorem states unforgeability for leanSPHINCS, or binding for KZG batch checks and cell proofs.
 No theorem covers the code that runs, the C boundary, or timing.
 
 ### XMSS
@@ -298,6 +300,11 @@ For a well-formed setup, `blobToKzgCommitment_represents` (`Proofs/Kzg/Commitmen
 Under the pairing law and for a well-formed setup, honest KZG proofs and blob proofs verify (`verifyKzgProof_computeKzgProof`, `verifyBlobKzgProof_computeBlobKzgProof`, `Proofs/Kzg/Verify.lean`).
 `verifyKzgProofImpl_iff` states when the check accepts: `c - y = w (τ - z)`, for decoded points representing `c` and `w`.
 No theorem states what the batch checks return on accepted input.
+
+`findSdh_valid_bytes` (`Proofs/Kzg/Binding.lean`) is the evaluation binding of single proofs.
+Let the check accept one commitment at one point with two different values.
+Then a search over the two openings returns a strong Diffie–Hellman solution for the secret.
+It needs the pairing law and a well-formed setup, and no model of a hash.
 
 `checksSufficient_of_subgroupChecks` (`Proofs/Kzg/CeremonyChecks.lean`) is about the ceremony that produced the trusted setup.
 It proves that the ceremony's pairing checks force each G1 and G2 point of a contribution to represent the expected power of the trapdoor.
