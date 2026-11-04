@@ -162,6 +162,10 @@ Under the pairing law, an honest signature, an honest proof of possession and an
 For the fast aggregate verification on one message, `fastAggregateVerify_aggregate` also assumes that the secret keys do not sum to zero modulo `r`.
 Otherwise the aggregate key is the point at infinity, and key validation rejects it.
 
+Under the pairing law, a key and a message have at most one signature that verifies, byte for byte (`verify_unique`, `Proofs/Bls/SignaturesUnique.lean`).
+From a victim's key alone, an attacker builds a second key and a signature that passes the fast aggregate verification for both (`fastAggregateVerify_rogue`).
+So each key of that verification needs a verified proof of possession.
+
 ### secp256k1
 
 The secp256k1 theorems are correctness statements.

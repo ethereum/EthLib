@@ -52,6 +52,7 @@ Fast aggregate verification is safe only when no signer can choose a public key 
 The draft rules this out by requiring a proof of possession, verified with `PopVerify`, for every public key that `FastAggregateVerify` uses ([draft v4 §3.3](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-3.3)).
 `KeyValidate` does not check it, and the fast aggregate verifications do not call `PopVerify`.
 The caller must make sure that every public key passed to `ethFastAggregateVerify` has a verified proof of possession.
+`fastAggregateVerify_rogue` (`Proofs/Bls/SignaturesUnique.lean`) states the attack: from a victim's key alone, an attacker builds a second key and one signature that passes for both.
 
 The message length is also left to the caller.
 `ethFastAggregateVerify` takes a message of any length, as the draft's `FastAggregateVerify` does, while consensus-specs types the message as `Bytes32`.

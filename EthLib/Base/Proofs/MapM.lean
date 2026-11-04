@@ -11,6 +11,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - The function succeeds on every input.
 - Each output is the image of an input.
 - The map succeeds when the function succeeds on every input.
+- A function that returns a known value on every input maps to the list of those values.
 -/
 
 @[expose] public section
@@ -74,5 +75,14 @@ theorem mapM_exists_ok {xs : List α} (h : ∀ x ∈ xs, ∃ y, f x = .ok y) :
     obtain ⟨y, head⟩ := h x List.mem_cons_self
     obtain ⟨rest, tail⟩ := ih fun x' member => h x' (List.mem_cons_of_mem x member)
     exact ⟨y :: rest, mapM_cons_ok.mpr ⟨y, rest, head, tail, rfl⟩⟩
+
+/-- A function that returns `g x` on every input `x` maps the list to its image under `g`. -/
+theorem mapM_eq_ok_map {g : α → β} {xs : List α} (h : ∀ x ∈ xs, f x = .ok (g x)) :
+    xs.mapM f = .ok (xs.map g) := by
+  induction xs with
+  | nil => rfl
+  | cons x xs ih =>
+    exact mapM_cons_ok.mpr ⟨g x, xs.map g, h x List.mem_cons_self,
+      ih fun x' member => h x' (List.mem_cons_of_mem x member), rfl⟩
 
 end EthLib.Base
