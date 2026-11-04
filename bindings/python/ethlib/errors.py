@@ -73,6 +73,10 @@ class KeccakError(EthLibError, ValueError):
     """The Keccak-f[1600] permutation rejected its state."""
 
 
+class EthashError(EthLibError, ValueError):
+    """An Ethash export rejected its cache."""
+
+
 class ReqRespError(EthLibError, ValueError):
     """A request or a response, or a fork name, was rejected."""
 
@@ -184,6 +188,7 @@ __all__ = [
     "PrecompileError",
     "StateError",
     "KeccakError",
+    "EthashError",
     "ReqRespError",
     "ConsensusError",
     "HkdfError",

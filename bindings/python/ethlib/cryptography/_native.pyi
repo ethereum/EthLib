@@ -159,6 +159,26 @@ def keccak512(data: bytes) -> bytes:
     """Keccak-512 of a byte string: `Keccak[1024](M, 512)` of FIPS 202 §5.2."""
     ...
 
+def ethash_cache_size(number: bytes) -> bytes:
+    """The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2."""
+    ...
+
+def ethash_dataset_size(number: bytes) -> bytes:
+    """The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2."""
+    ...
+
+def ethash_seed(number: bytes) -> bytes:
+    """The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1."""
+    ...
+
+def ethash_cache(number: bytes) -> bytes:
+    """The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2."""
+    ...
+
+def ethash_dataset_item(cache: bytes, index: bytes) -> bytes:
+    """The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3."""
+    ...
+
 def keccak_f1600(state: bytes) -> bytes:
     """Keccak-f[1600], FIPS 202 §3.4: Keccak-p[1600, 24], rounds 0 to 23 in order."""
     ...

@@ -119,6 +119,21 @@
 #define DOC_keccak512 \
   "Keccak-512 of a byte string: `Keccak[1024](M, 512)` of FIPS 202 §5.2."
 
+#define DOC_ethash_cache_size \
+  "The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2."
+
+#define DOC_ethash_dataset_size \
+  "The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2."
+
+#define DOC_ethash_seed \
+  "The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1."
+
+#define DOC_ethash_cache \
+  "The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2."
+
+#define DOC_ethash_dataset_item \
+  "The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3."
+
 #define DOC_keccak_f1600 \
   "Keccak-f[1600], FIPS 202 §3.4: Keccak-p[1600, 24], rounds 0 to 23 in order."
 

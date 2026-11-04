@@ -11,6 +11,7 @@ public import EthLib.Cryptography.Secp256k1
 public import EthLib.Cryptography.Secp256r1
 public import EthLib.Cryptography.AltBn128
 public import EthLib.Cryptography.Aes
+public import EthLib.Cryptography.Ethash
 
 /-!
 # `EthLib.Cryptography`
