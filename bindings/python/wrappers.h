@@ -243,6 +243,7 @@ PyObject* py_trie_hex_prefix                              (PyObject* self, PyObj
 PyObject* py_vrf_verify                                   (PyObject* self, PyObject* args);
 PyObject* py_vrf_secret                                   (PyObject* self, PyObject* args);
 PyObject* py_vrf_evaluate                                 (PyObject* self, PyObject* args);
+PyObject* py_crc32                                       (PyObject* self, PyObject* args);
 PyObject* py_crc32c                                      (PyObject* self, PyObject* args);
 PyObject* py_aes_encrypt_block                            (PyObject* self, PyObject* args);
 PyObject* py_aes_decrypt_block                            (PyObject* self, PyObject* args);

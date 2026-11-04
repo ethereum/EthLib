@@ -993,6 +993,15 @@
    "error_class": "VrfError",
    "docstring": "The output at index `i` of the tree of a seed."},
   {"summary":
+   "The four digest bytes of CRC-32: the highest power of each byte at its least significant bit.",
+   "signature": "(data: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.Hash.Crc32.digest",
+   "method": "crc32",
+   "errors": [],
+   "error_class": null,
+   "docstring":
+   "The four digest bytes of CRC-32: the highest power of each byte at its least significant bit."},
+  {"summary":
    "The four digest bytes of RFC 3720 §12.1: the CRC, which is R(x) complemented.",
    "signature": "(data: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Hash.Crc32c.digest",
