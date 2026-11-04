@@ -34,4 +34,10 @@ def natToBytes : Nat → Nat → List UInt8
   -- The higher bytes first, then the lowest byte last.
   | len + 1, n => natToBytes len (n / 256) ++ [UInt8.ofNat (n % 256)]
 
+/-- Writing on `len` bytes gives exactly `len` bytes. -/
+theorem natToBytes_length (len n : Nat) : (natToBytes len n).length = len := by
+  induction len generalizing n with
+  | zero => simp [natToBytes]
+  | succ len ih => simp [natToBytes, ih]
+
 end EthLib.Base

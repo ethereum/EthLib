@@ -8,7 +8,8 @@ public import EthLib.Base.BigEndian
 Reading and writing big-endian bytes undo each other.
 
 - A list of `k` bytes holds a value below `256 ^ k`.
-- Writing `n` on `len` bytes gives exactly `len` bytes, which read back as `n % 256 ^ len`.
+- Writing `n` on `len` bytes gives bytes that read back as `n % 256 ^ len`.
+- On `a + b` bytes, `n` is `n / 256 ^ b` on the first `a` bytes, then `n` on the last `b`.
 - Reading `k` bytes and writing the value back on `k` bytes gives the same bytes.
 -/
 
@@ -50,12 +51,6 @@ theorem bytesToNat_lt (bytes : List UInt8) : bytesToNat bytes < 256 ^ bytes.leng
         < (b.toNat + 1) * 256 ^ rest.length := by rw [Nat.succ_mul]; omega
       _ ≤ 256 * 256 ^ rest.length := Nat.mul_le_mul_right _ hb
 
-/-- Writing on `len` bytes gives exactly `len` bytes. -/
-theorem natToBytes_length (len n : Nat) : (natToBytes len n).length = len := by
-  induction len generalizing n with
-  | zero => simp [natToBytes]
-  | succ len ih => simp [natToBytes, ih]
-
 /-- Writing `n` on `len` bytes and reading it back gives `n % 256 ^ len`. -/
 theorem bytesToNat_natToBytes (len n : Nat) :
     bytesToNat (natToBytes len n) = n % 256 ^ len := by
@@ -69,6 +64,16 @@ theorem bytesToNat_natToBytes (len n : Nat) :
     rw [hlow, Nat.pow_one]
     -- `n % 256^(len+1) = n % 256 + 256 * (n / 256 % 256^len)`.
     rw [Nat.pow_succ', Nat.mod_mul, Nat.mul_comm, Nat.add_comm]
+
+/-- Writing on `a + b` bytes puts `n / 256 ^ b` on the first `a` bytes and `n` on the last `b`. -/
+theorem natToBytes_add (a b n : Nat) :
+    natToBytes (a + b) n = natToBytes a (n / 256 ^ b) ++ natToBytes b n := by
+  induction b generalizing n with
+  | zero => simp [natToBytes]
+  | succ b ih =>
+    -- Both sides end with the lowest byte, and the higher bytes are `n / 256` written on `a + b`.
+    rw [← Nat.add_assoc, natToBytes, ih, natToBytes, List.append_assoc, Nat.div_div_eq_div_mul,
+      Nat.pow_succ, Nat.mul_comm 256]
 
 /-- A number below `256 ^ len` survives the round trip through `len` bytes. -/
 theorem bytesToNat_natToBytes_of_lt {len n : Nat} (h : n < 256 ^ len) :

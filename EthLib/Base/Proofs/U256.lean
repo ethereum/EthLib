@@ -8,6 +8,7 @@ public import EthLib.Base.Proofs.BigEndian
 
 - The two's complement reading of a word is Lean's `BitVec.toInt`, and it inverts `fromSigned` on `[-2^255, 2^255)`.
 - Reading 32 bytes as a word loses nothing: the word is their exact value, and writing it back gives the same bytes.
+- Writing a word as 32 bytes and reading them back gives the same word.
 -/
 
 @[expose] public section
@@ -47,5 +48,21 @@ theorem fromBeBytes_injective : Function.Injective fromBeBytes := by
   intro a b h
   apply Vector.toList_inj.mp
   rw [← natToBytes_toNat_fromBeBytes a, ← natToBytes_toNat_fromBeBytes b, h]
+
+/-- The 32 bytes of a word are its big-endian value. -/
+theorem toList_toBeBytes (w : U256) : (toBeBytes w).toList = natToBytes 32 w.toNat := by
+  simp [toBeBytes]
+
+/-- Reading back the 32 bytes of a word gives the word. -/
+theorem fromBeBytes_toBeBytes (w : U256) : fromBeBytes (toBeBytes w) = w := by
+  apply BitVec.eq_of_toNat_eq
+  rw [toNat_fromBeBytes, toList_toBeBytes]
+  exact bytesToNat_natToBytes_of_lt w.isLt
+
+/-- Writing back the word of 32 bytes gives the same bytes. -/
+theorem toBeBytes_fromBeBytes (bytes : Vector UInt8 32) :
+    toBeBytes (fromBeBytes bytes) = bytes := by
+  apply Vector.toList_inj.mp
+  rw [toList_toBeBytes, natToBytes_toNat_fromBeBytes]
 
 end EthLib.Base.U256
