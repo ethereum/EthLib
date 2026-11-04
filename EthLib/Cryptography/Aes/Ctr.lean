@@ -48,11 +48,17 @@ def inc (m : Nat) (T : Block) : Block :=
 The last block can be partial, of `u` bytes.
 
 Then the XOR uses `MSB_u(O_n)`, because XOR of two lists stops at the shorter one. -/
-def xorKeystream (ciph : Block → Block) (m : Nat) : Nat → Block → List UInt8 → List UInt8
-  | 0, _, _ => []
-  | n + 1, T, data =>
-    List.zipWith (· ^^^ ·) (data.take 16) (ciph T).toList ++
-      xorKeystream ciph m n (inc m T) (data.drop 16)
+def xorKeystream (ciph : Block → Block) (m n : Nat) (T : Block) (data : List UInt8) :
+    List UInt8 :=
+  (go n T data #[]).toList
+where
+  /-- Append the XOR of `n` more blocks to the output so far.
+
+  The loop keeps the output in an array, so it runs in constant stack for any length. -/
+  go : Nat → Block → List UInt8 → Array UInt8 → Array UInt8
+    | 0, _, _, out => out
+    | n + 1, T, data, out =>
+      go n (inc m T) (data.drop 16) (out ++ List.zipWith (· ^^^ ·) (data.take 16) (ciph T).toList)
 
 /-- CTR encryption and decryption of SP 800-38A §6.5.
 

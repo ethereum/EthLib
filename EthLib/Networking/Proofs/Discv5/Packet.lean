@@ -41,9 +41,9 @@ theorem xorKeystream_take (ciph : Aes.Block → Aes.Block) (m n : Nat) (T : Aes.
     (data : List UInt8) (k : Nat) :
     Aes.xorKeystream ciph m n T (data.take k) = (Aes.xorKeystream ciph m n T data).take k := by
   induction n generalizing T data k with
-  | zero => simp [Aes.xorKeystream]
+  | zero => simp [Aes.xorKeystream_zero]
   | succ n ih =>
-    simp only [Aes.xorKeystream, List.take_take, List.drop_take, ih, List.take_append,
+    simp only [Aes.xorKeystream_succ, List.take_take, List.drop_take, ih, List.take_append,
       List.take_zipWith, List.length_zipWith, List.length_take, Vector.length_toList]
     rw [zipWith_take_right _ _ _ (by simp [List.length_take]; omega), Nat.min_comm k 16]
     congr 1
@@ -63,7 +63,7 @@ theorem xorKeystream_add (ciph : Aes.Block → Aes.Block) (m n j : Nat) (T : Aes
     simp [Aes.xorKeystream_nil]
   | succ n ih =>
     rw [show n + 1 + j = (n + j) + 1 by omega]
-    simp only [Aes.xorKeystream]
+    simp only [Aes.xorKeystream_succ]
     rw [ih _ _ (by simp; omega)]
 
 /-- Masking keeps the length of the data. -/
