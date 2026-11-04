@@ -164,6 +164,8 @@ The theorem holds for every root, including one built to cheat.
 
 Uniqueness is reduced to a collision, and no theorem bounds the cost of finding one.
 No theorem says that an output is unpredictable before it is opened.
+That could hold only for a tree built from a secret seed.
+Verification accepts any tree, so a holder that chooses its secrets can bias every output.
 
 ### BLS12-381
 

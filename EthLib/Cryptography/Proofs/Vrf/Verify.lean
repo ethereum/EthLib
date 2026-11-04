@@ -18,6 +18,8 @@ Uniqueness holds for every root, including one the holder built to cheat.
 
 The third property, pseudorandomness, needs a model of the hash and is not proved here.
 
+It could hold only for an honest tree: a holder that chooses its secrets can bias every output.
+
 Source: the three properties are those of [Micali, Rabin and Vadhan][mrv99].
 
 Their paper is "Verifiable Random Functions", FOCS 1999.
