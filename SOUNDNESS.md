@@ -445,6 +445,9 @@ Each definition is named and shaped after its source, so that a reader can compa
 The KZG and BLS vectors in `tests/cryptography/` match consensus-specs `v1.7.0-alpha.12` and `ethereum/bls12-381-tests` `v0.1.2` byte for byte, and EthLib produced none of them.
 Finally, the consistency theorems on the constants, listed under BLS12-381, catch a wrong digit.
 
+One definition also does what its source does not.
+The PeerDAS custody search fails after `2^16` node IDs in the export, where its source loops on, and no theorem bounds the steps it needs.
+
 ### A2. Hypotheses inside theorems
 
 A conditional theorem is only as strong as its hypotheses.
@@ -535,13 +538,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 102 operations and 39 size constants.
-The Python extension calls 102 of the operations and 30 of the constants.
+Lean exports 104 operations and 39 size constants.
+The Python extension calls 104 of the operations and 30 of the constants.
 Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_const_n`, `eth_sphincs_const_public_param_len`, `eth_sphincs_const_randomizer_len`, `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-4191 lines of hand-written C sit between them and Python: `blocks.c` (105), `bls.c` (326), `consensus.c` (82), `crc32c.c` (38), `discv5.c` (193), `ecrecover.c` (34), `enr.c` (122), `gossip.c` (63), `hmac.c` (99), `keccak.c` (61), `kzg.c` (503), `modexp.c` (61), `module.c` (747), `precompile.c` (43), `reqresp.c` (121), `ripemd160.c` (36), `rlp.c` (162), `rlpx.c` (72), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `snappy.c` (131), `sphincs.c` (85), `state.c` (28), `transactions.c` (132), `trie.c` (76), `vrf.c` (119), `wrappers.h` (307), `xmss.c` (134).
+4240 lines of hand-written C sit between them and Python: `blocks.c` (105), `bls.c` (326), `consensus.c` (126), `crc32c.c` (38), `discv5.c` (193), `ecrecover.c` (34), `enr.c` (122), `gossip.c` (63), `hmac.c` (99), `keccak.c` (61), `kzg.c` (503), `modexp.c` (61), `module.c` (750), `precompile.c` (43), `reqresp.c` (121), `ripemd160.c` (36), `rlp.c` (162), `rlpx.c` (72), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `snappy.c` (131), `sphincs.c` (85), `state.c` (28), `transactions.c` (132), `trie.c` (76), `vrf.c` (119), `wrappers.h` (309), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

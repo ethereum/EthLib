@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.Containers.Execution
+public import EthLib.Consensus.Proofs.DataAvailability.Custody
 public import EthLib.Consensus.Proofs.Models.Ffg.AccountableSafety
 public import EthLib.Consensus.Proofs.Models.Ffg.PlausibleLiveness
 public import EthLib.Consensus.Proofs.Models.ForkChoice.LmdGhost

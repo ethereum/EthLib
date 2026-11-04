@@ -1,0 +1,6 @@
+preset: mainnet
+fork: fulu
+runner: networking
+handler: get_custody_groups
+suite: pyspec_tests
+case: get_custody_groups_max_node_id_minus_1_max_custody_group_count

@@ -78,7 +78,7 @@ class ReqRespError(EthLibError, ValueError):
 
 
 class ConsensusError(EthLibError, ValueError):
-    """No preset, configuration or fork has the name given."""
+    """A custody selection failed (codes 1-3), or a name is unknown (code 0)."""
 
 
 class HkdfError(EthLibError, ValueError):

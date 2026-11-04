@@ -14,7 +14,8 @@
 commit = "84454a9d57f4f49f74c78e9f375347baf30474f2"
 release = "v1.7.0-alpha.12"
 directories = [
-  "tests/consensus/parameters", "tests/cryptography/bls", "tests/cryptography/kzg",
+  "tests/consensus/networking", "tests/consensus/parameters", "tests/cryptography/bls",
+  "tests/cryptography/kzg",
 ]
 
 [repositories."ethereum/bls12-381-tests"]

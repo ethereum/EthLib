@@ -19,3 +19,8 @@ Each file keeps its upstream bytes and its upstream path below `parameters/`, an
 A replacement carries the name of its fork as a suffix, such as `INACTIVITY_PENALTY_QUOTIENT_ALTAIR` in the Altair preset.
 One suffixed value is new rather than a replacement: `MAX_EFFECTIVE_BALANCE_ELECTRA`, the largest effective balance of a compounding validator.
 The suite fails on any other suffixed value, so a replacement that Lean does not hold cannot pass unnoticed.
+
+The directory `networking/` holds the custody vectors of Fulu from the test release `v1.7.0-alpha.12` of `ethereum/consensus-specs`, built at the same commit `84454a9d57f4f49f74c78e9f375347baf30474f2`.
+They are the cases of the handlers `get_custody_groups` and `compute_columns_for_custody_group`, copied byte for byte under their path in `mainnet.tar.gz`.
+The release repeats the same cases for Gloas and Heze, with only the fork name changed, so the directory keeps those of Fulu.
+`bindings/python/tests/consensus/test_custody.py` runs each case through the Lean definitions.

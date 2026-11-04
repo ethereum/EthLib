@@ -1,12 +1,4 @@
-"""The consensus layer: the presets, the configurations and the parameters at a fork.
-
-A preset or a configuration is named "mainnet" or "minimal".
-A fork is named as in the Lean type of forks, such as "phase0", "altair" or "pectra".
-
-Each function returns a dict from the names of the source to their values.
-An integer is an int, and a byte string is "0x" and lowercase hex.
-An unknown name raises ConsensusError, a ValueError with code 0.
-"""
+"""The consensus layer: its presets, configurations and parameters, and the custody of columns."""
 
 import json
 
@@ -43,4 +35,29 @@ def parameters(name: str, fork: str) -> dict:
     return _value(json.loads(_native.consensus_parameters(name, fork)))
 
 
-__all__ = ["preset", "config", "parameters", "ConsensusError"]
+def get_custody_groups(node_id: int, custody_group_count: int, name: str = "mainnet") -> list:
+    """The sorted custody groups of a node, or ConsensusError when they cannot be selected."""
+    if not 0 <= node_id < 2**256 or not 0 <= custody_group_count < 2**64:
+        raise ValueError("node_id or custody_group_count is out of range")
+    groups = _native.consensus_get_custody_groups(
+        name, node_id.to_bytes(32, "big"), custody_group_count
+    )
+    return _value(json.loads(groups))
+
+
+def compute_columns_for_custody_group(custody_group: int, name: str = "mainnet") -> list:
+    """The columns of a custody group, or ConsensusError for a group out of range."""
+    if not 0 <= custody_group < 2**64:
+        raise ValueError("custody_group is out of range")
+    columns = _native.consensus_compute_columns_for_custody_group(name, custody_group)
+    return _value(json.loads(columns))
+
+
+__all__ = [
+    "preset",
+    "config",
+    "parameters",
+    "ConsensusError",
+    "get_custody_groups",
+    "compute_columns_for_custody_group",
+]
