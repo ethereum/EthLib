@@ -33,7 +33,9 @@ def mul1(k: int):
     return bn128.multiply(bn128.G1, k)
 
 
-@pytest.mark.parametrize("a, b", [(1, 1), (1, 2), (5, 7), (3, bn128.curve_order - 3), (0, 9), (0, 0)])
+@pytest.mark.parametrize("a, b", [
+    (1, 1), (1, 2), (1, bn128.curve_order - 1), (5, 7), (3, bn128.curve_order - 3), (0, 9), (0, 0),
+])
 def test_ecadd(a: int, b: int) -> None:
     expected = g1(bn128.add(mul1(a), mul1(b)))
     assert run(0x06, g1(mul1(a)) + g1(mul1(b)), 150) == expected
@@ -42,6 +44,8 @@ def test_ecadd(a: int, b: int) -> None:
 def test_ecadd_short_input_is_zero_padded() -> None:
     # Missing bytes read as zero, so an empty input adds two points at infinity.
     assert run(0x06, b"", 150) == bytes(64)
+    # Call data that stops after G adds the point at infinity to it.
+    assert run(0x06, g1(bn128.G1), 150) == g1(bn128.G1)
 
 
 def test_ecadd_errors() -> None:
@@ -53,10 +57,28 @@ def test_ecadd_errors() -> None:
         run(0x06, b"", 149)
 
 
-@pytest.mark.parametrize("k", [0, 1, 2, 3, 2**128 + 1, bn128.curve_order - 1, bn128.curve_order, 2**256 - 1])
-def test_ecmul(k: int) -> None:
-    point = mul1(7)
+SCALARS = [
+    0, 1, 2, 3, 2**128 + 1, bn128.curve_order - 1, bn128.curve_order, bn128.curve_order + 1,
+    2**256 - 1,
+]
+
+
+@pytest.mark.parametrize("k", SCALARS)
+@pytest.mark.parametrize("base", [1, 7])
+def test_ecmul(base: int, k: int) -> None:
+    # The scalar is not reduced, but the result wraps around the group of order q.
+    point = mul1(base)
     assert run(0x07, g1(point) + word(k), 6000) == g1(bn128.multiply(point, k % bn128.curve_order))
+
+
+def test_ecmul_short_scalar() -> None:
+    # A missing scalar reads as 0, so the result is the point at infinity.
+    assert run(0x07, g1(bn128.G1), 6000) == bytes(64)
+
+
+def test_ecmul_not_on_curve() -> None:
+    with pytest.raises(ValueError, match="notOnCurve"):
+        run(0x07, word(1) + word(3) + word(2), 6000)
 
 
 def test_ecmul_out_of_gas() -> None:
@@ -96,6 +118,14 @@ def test_ecpairing(pairs, holds: bool) -> None:
 def test_ecpairing_invalid_length() -> None:
     with pytest.raises(ValueError, match="invalidInputLength"):
         run(0x08, bytes(191), 10**6)
+
+
+def test_ecpairing_g2_x_is_p() -> None:
+    # The imaginary part of the G2 x coordinate is p, which is not a field element.
+    data = bytearray(pairing_input([(bn128.G1, bn128.G2)]))
+    data[64:96] = word(bn128.field_modulus)
+    with pytest.raises(ValueError, match="invalidFieldElement"):
+        run(0x08, bytes(data), pairing_price(1))
 
 
 def test_ecpairing_g2_not_on_curve() -> None:
