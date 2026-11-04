@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Sphincs.Digest
 
 /-!
-# `Sphincs.Verify`
+# leanSPHINCS verification
 
 Signature verification.
 
@@ -33,7 +33,8 @@ That is `2 + 240 + 8 + 192 + 24 + 26 = 492`.
 
 Nothing here needs to be constant time: every value it reads is public.
 
-Source: `Concrete.verify` in [FORS/Scheme.lean](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean).
+Source: `Concrete.verify` in FORS/Scheme.lean.
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
 -/
 
 @[expose] public section

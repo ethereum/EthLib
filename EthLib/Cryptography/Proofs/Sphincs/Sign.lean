@@ -4,11 +4,12 @@ public import EthLib.Cryptography.Sphincs.Sign
 public import EthLib.Cryptography.Proofs.Sphincs.Ots
 
 /-!
-# Proofs: `Sphincs.Sign`
+# Proofs: leanSPHINCS signing
 
 What a successful signature is made of, and why signing can fail.
 
-- A signature carries the message's randomizer, the FORS openings at its digest, and three honest layer signatures.
+- A signature carries the message's randomizer and the FORS openings at its digest.
+- It also carries three honest layer signatures.
 - Signing fails only when a one-time key finds no codeword in `2^32` counters.
 -/
 
@@ -48,7 +49,7 @@ theorem signLayer_error {e : SphincsError} (h : signLayer pp seed layer idx msg 
     simp only [signLayer, hots, Option.elim_some] at h
     cases h
 
-/-- A signature is made of the message's randomizer, the FORS openings its digest picks, and three layers.
+/-- A signature holds the randomizer, the FORS openings its digest picks, and three layers.
 
 Each layer's key signs what the layer below gives. -/
 theorem sign_eq_ok {sk : SecretKey} {m : Message} {σ : Signature} (h : sign sk m = .ok σ) :
@@ -77,7 +78,9 @@ theorem sign_eq_ok {sk : SecretKey} {m : Message} {σ : Signature} (h : sign sk 
   subst h
   exact ⟨rfl, rfl, hbottom, hmiddle, htop⟩
 
-/-- Signing fails only when a one-time key finds no codeword, and the error names that key's layer. -/
+/-- Signing fails only when a one-time key finds no codeword.
+
+The error names the layer of that key. -/
 theorem sign_error {sk : SecretKey} {m : Message} {e : SphincsError} (h : sign sk m = .error e) :
     ∃ layer, e = .noAdmissibleEncoding layer := by
   simp only [sign, bind, Except.bind] at h

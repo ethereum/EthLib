@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Sphincs.Verify
 
 /-!
-# `Sphincs.KeyGen`
+# leanSPHINCS key generation
 
 Key generation.
 
@@ -15,9 +15,12 @@ So the seed alone regenerates every chain, every FORS secret and the public key.
 
 The scheme's name separates these derivations from those of every other scheme, leanXMSS included.
 
-Source: `keygenFromSeed` in [FORS/Scheme.lean](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean).
+Source: `keygenFromSeed` in FORS/Scheme.lean.
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
 
-That model derives from `S_0` directly, and this module hashes the scheme's name first, as leanXMSS does.
+That model derives from `S_0` directly.
+
+This module hashes the scheme's name first, as leanXMSS does.
 -/
 
 @[expose] public section

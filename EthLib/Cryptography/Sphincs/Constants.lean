@@ -1,7 +1,7 @@
 module
 
 /-!
-# `Sphincs.Constants`
+# leanSPHINCS parameters
 
 The leanSPHINCS parameter set: lifetime `2^30`, Keccak-256, FORS, layered.
 
@@ -9,7 +9,11 @@ The leanSPHINCS parameter set: lifetime `2^30`, Keccak-256, FORS, layered.
 - One-time signature: WOTS+C, 64 chains of 4 positions, target sum 128.
 - Hypertree: three layers of heights 10, 8 and 8, top first.
 
-Source: the layered key of `2^30` in [leanSPHINCS.tex](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex) §1, which is `Params.layered 26 3 8 24 10` in [FORS/Scheme.lean](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean).
+Source: the layered key of `2^30` in leanSPHINCS.tex §1.
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex>
+
+It is `Params.layered 26 3 8 24 10` in FORS/Scheme.lean.
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
 -/
 
 @[expose] public section
@@ -45,7 +49,9 @@ def RANDOMIZER_LEN : Nat := 16
 
 /-- The secret key length in bytes.
 
-The secret key is one uniform seed, and every other secret derives from its hash with the scheme's name. -/
+The secret key is one uniform seed.
+
+Every other secret derives from its hash with the scheme's name. -/
 def SEED_LEN : Nat := 32
 
 /-- The scheme's name, `"leanSPHINCS"` in ASCII, hashed before the seed.
@@ -137,9 +143,12 @@ def DIGEST_CALLS : Nat := (DIGEST_BITS + 8 * HASH_LEN - 1) / (8 * HASH_LEN)
 
 The model proves more, up to `N = 1,182,000,000` signatures, about `2^30.14`.
 
-Up to `N`, a forgery has probability at most `q / 2^127` for `q` hash queries, in the random-oracle model.
+Up to `N`, a forgery has probability at most `q / 2^127` for `q` hash queries.
 
-That is `h26_layered` in [FORS/Main.lean](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Main.lean). -/
+That bound holds in the random-oracle model.
+
+That is `h26_layered` in FORS/Main.lean.
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Main.lean> -/
 def SIGNATURE_LIMIT : Nat := 2 ^ 30
 
 /-! ## Serialized sizes -/
@@ -155,7 +164,11 @@ abbrev TREE_OPENING_SIZE : Nat := N + FORS_HEIGHT * N
 /-- Bytes in one layer's signature of height `height`: counter, chain values, path. -/
 def layerSigSize (height : Nat) : Nat := COUNTER_LEN + V * N + height * N
 
-/-- Bytes in a serialized signature: randomizer, FORS opening, then the three layers from the bottom up. -/
+/--
+Bytes in a serialized signature.
+
+It holds the randomizer, the FORS opening, then the three layers from the bottom up.
+-/
 def SIG_SIZE : Nat :=
   RANDOMIZER_LEN + FORS_TREES * TREE_OPENING_SIZE
     + 2 * layerSigSize LOWER_HEIGHT + layerSigSize TOP_HEIGHT
@@ -217,9 +230,11 @@ theorem lower_layer_sig_size_eq : layerSigSize LOWER_HEIGHT = 1156 := by decide
 /-- The advertised size of the top layer's signature. -/
 theorem top_layer_sig_size_eq : layerSigSize TOP_HEIGHT = 1188 := by decide
 
-/-- The advertised signature size, `7740` bytes, as in [leanSPHINCS.tex](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex) §1.
+/-- The advertised signature size, `7740` bytes, as in leanSPHINCS.tex §1.
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex>
 
-It is `signature_size` of [FORS/Scheme/Layout.lean](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme/Layout.lean): `16 + 16 k (a + 1) + 1028 d + 16 h`. -/
+It is `16 + 16 k (a + 1) + 1028 d + 16 h`, `signature_size` of FORS/Scheme/Layout.lean:
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme/Layout.lean> -/
 theorem sig_size_eq : SIG_SIZE = 7740 ∧
     SIG_SIZE = 16 + 16 * FORS_TREES * (FORS_HEIGHT + 1) + 1028 * LAYERS + 16 * HEIGHT := by
   decide

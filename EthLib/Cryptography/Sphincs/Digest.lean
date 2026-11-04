@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Sphincs.Fors
 
 /-!
-# `Sphincs.Digest`
+# The leanSPHINCS message digest
 
 The message digest, and the randomizer the signer hashes into it.
 
@@ -21,14 +21,17 @@ Its low `h + k a = 266` bits are the fields:
     [ idx: 26 | leaf_0: 10 | leaf_1: 10 | ... | leaf_23: 10 ]
 ```
 
-- `idx` is bits 0 to 25: the bottom leaf, and so the FORS instance and the path up the hypertree.
-- `leaf_kappa` is bits `26 + 10 kappa` to `35 + 10 kappa`: the leaf of FORS tree `kappa` that the signature opens.
+- `idx` is bits 0 to 25: the bottom leaf.
+  It fixes the FORS instance and the path up the hypertree.
+- `leaf_kappa` is bits `26 + 10 kappa` to `35 + 10 kappa`.
+  It is the leaf of FORS tree `kappa` that the signature opens.
 
 The index is in `D_0`, and leaf 23 straddles the two calls.
 
 The public key's root is not hashed: `P` already binds the digest to the key.
 
-Source: `deriveRandomizer`, `messageDigest`, `digestIndex` and `digestLeaves` in [FORS/Scheme.lean](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean).
+Source: `deriveRandomizer`, `messageDigest`, `digestIndex` and `digestLeaves` in FORS/Scheme.lean.
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
 -/
 
 @[expose] public section
@@ -45,7 +48,9 @@ The seed is in the input, so the randomizer is unpredictable to anyone without t
 
 Every index is a leaf of this key, so the first randomizer is always kept.
 
-The note's signer would try `R + i delta` for `i = 1, 2, ...` only if an index could miss the key. -/
+The note's signer would try `R + i delta` for `i = 1, 2, ...`.
+
+It does so only if an index could miss the key. -/
 def randomizer (pp : PublicParam) (seed : Seed) (m : Message) : Randomizer :=
   th pp addrRnd (packBytes seed ++ packBytes m)
 

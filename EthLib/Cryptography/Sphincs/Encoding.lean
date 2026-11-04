@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Sphincs.TweakableHash
 
 /-!
-# `Sphincs.Encoding`
+# The WOTS+C target-sum code
 
 The target-sum code of WOTS+C (ePrint 2022/778).
 
@@ -21,9 +21,13 @@ So the chain values revealed for one codeword never sign another.
 
 This replaces the Winternitz checksum.
 
-Source: [ePrint 2022/778](https://eprint.iacr.org/2022/778) for WOTS+C, with `v = 64` and `T = 128` from [leanSPHINCS.tex](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex) §1.
+Source: [ePrint 2022/778](https://eprint.iacr.org/2022/778) for WOTS+C.
 
-The digits follow `TargetSum.digestEncoding` in [FORS/Scheme.lean](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean).
+The parameters `v = 64` and `T = 128` come from leanSPHINCS.tex §1:
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex>
+
+The digits follow `TargetSum.digestEncoding` in FORS/Scheme.lean.
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
 -/
 
 @[expose] public section

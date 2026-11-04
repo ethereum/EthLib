@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Sphincs.Tree
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
 
 /-!
-# Proofs: `Sphincs.Tree`
+# Proofs: the trees of the leanSPHINCS hypertree
 
 An honest path leads from a key's leaf to the root of its tree.
 

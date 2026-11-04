@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Sphincs.Address
 public import EthLib.Cryptography.Proofs.Xmss.Types
 
 /-!
-# Proofs: `Sphincs.Address`
+# Proofs: leanSPHINCS addresses
 
 Distinct call sites have distinct addresses.
 

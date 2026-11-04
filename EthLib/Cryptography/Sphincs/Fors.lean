@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Sphincs.Tree
 
 /-!
-# `Sphincs.Fors`
+# FORS
 
 FORS, the few-time signature under each bottom leaf: 24 trees of 1024 leaves.
 
@@ -34,9 +34,15 @@ An opening reveals a leaf's secret and its 10 path nodes.
 
 The last path node is the other level-9 node, which the verifier needs in the key.
 
-Source: FORS of [FIPS 205](https://doi.org/10.6028/NIST.FIPS.205) §8, without its root hash, as [leanSPHINCS.tex](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex) §4 specifies.
+Source: FORS of [FIPS 205](https://doi.org/10.6028/NIST.FIPS.205) §8, without its root hash.
 
-The algorithms follow `forsNode`, `forsKey`, `treeOpen`, `treeRecover` and `forsRecover` in [FORS/Scheme.lean](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean).
+leanSPHINCS.tex §4 specifies that change:
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/leanSPHINCS.tex>
+
+The algorithms follow five definitions of FORS/Scheme.lean:
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
+
+They are `forsNode`, `forsKey`, `treeOpen`, `treeRecover` and `forsRecover`.
 -/
 
 @[expose] public section

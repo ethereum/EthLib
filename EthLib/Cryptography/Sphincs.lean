@@ -16,7 +16,7 @@ public import EthLib.Cryptography.Sphincs.KeyGen
 public import EthLib.Cryptography.Sphincs.Sign
 
 /-!
-# `EthLib.Cryptography.Sphincs`
+# leanSPHINCS
 
 leanSPHINCS: FORS under a hypertree of WOTS+C keys, three layers of heights 10, 8 and 8.
 

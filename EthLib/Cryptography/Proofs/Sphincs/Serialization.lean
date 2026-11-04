@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Sphincs.Serialization
 public import EthLib.Cryptography.Proofs.Xmss.Serialization
 
 /-!
-# Proofs: `Sphincs.Serialization`
+# Proofs: leanSPHINCS byte encodings
 
 The encodings are bijections between objects and byte strings of the declared length.
 

@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Sphincs.TweakableHash
 public import EthLib.Cryptography.Proofs.Xmss.TweakableHash
 
 /-!
-# Proofs: `Sphincs.TweakableHash`
+# Proofs: the leanSPHINCS tweakable hash
 
 A hash input determines its public parameter, its address and its payload.
 

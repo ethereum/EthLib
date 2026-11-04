@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Sphincs.Verify
 
 /-!
-# Proofs: `Sphincs.Verify`
+# Proofs: leanSPHINCS verification
 
 What verification checks, as one statement.
 
