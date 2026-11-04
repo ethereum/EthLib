@@ -21,6 +21,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Cryptography | [`Secp256k1`](EthLib/Cryptography/Secp256k1/) | the secp256k1 curve, ECDSA, public key recovery, addresses |
 | Cryptography | [`Secp256r1`](EthLib/Cryptography/Secp256r1/) | the secp256r1 curve, also called P-256, and ECDSA verification |
 | Cryptography | [`AltBn128`](EthLib/Cryptography/AltBn128/) | the alt_bn128 curve of EIP-196 and EIP-197, also called BN254, and its pairing |
+| Cryptography | [`Aes`](EthLib/Cryptography/Aes/) | the AES block cipher for 128-bit and 256-bit keys, and the CTR mode |
 | Cryptography | [`Bls`](EthLib/Cryptography/Bls/) | BLS12-381 and BLS signatures |
 | Cryptography | [`Kzg`](EthLib/Cryptography/Kzg/) | KZG commitments to blobs and cells |
 | Cryptography | [`Merkle`](EthLib/Cryptography/Merkle/) | the perfect binary Merkle tree that leanXMSS, leanSPHINCS, SSZ and the VRF share |

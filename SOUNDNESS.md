@@ -193,6 +193,15 @@ The kernel checks it by an inverse of `X^p - X` modulo the cubic.
 `verify_sign` (`Proofs/Secp256r1/Ecdsa.lean`) proves that a signature from the signing operation of SEC 1 verifies.
 No theorem states unforgeability.
 
+### AES
+
+The AES theorems are correctness statements, and none states a security property.
+`invCipher_cipher` and `ciphInv_ciph` (`Proofs/Aes/Block.lean`) prove that the inverse cipher of FIPS 197 undoes the cipher, for every key schedule and so for every key.
+`sbox_eq` proves that each entry of the S-box table equals the inverse in GF(2^8) followed by the affine map of FIPS 197 §5.1.1.
+`ctr_ctr` (`Proofs/Aes/Ctr.lean`) proves that CTR decryption of SP 800-38A returns the plaintext, for every forward cipher and initial counter.
+The kernel checks FIPS 197 Appendix B and the AES-128 and AES-256 vectors of its 2001 Appendix C.
+It also checks the first two blocks of the CTR examples F.5.1 and F.5.5 of SP 800-38A.
+
 ### KZG
 
 `Proofs/Kzg/Core.lean` proves that the public operations reject malformed inputs, such as a wrong size or lists of different lengths.
@@ -303,6 +312,10 @@ This matters where secret data is handled.
 XMSS and leanSPHINCS `keyGen` and `sign` handle secret data.
 The Python bindings expose all four, as `key_gen` and `sign` in each module, which take the secret seed.
 BLS signing and the proof of possession take the secret key, and the Python bindings expose both.
+
+Every AES function that takes a key handles secret data.
+Its S-box is a table, and the cipher reads it at indices that depend on the key.
+No binding exposes AES.
 
 ### A4. Idealisations
 
