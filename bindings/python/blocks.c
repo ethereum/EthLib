@@ -29,7 +29,30 @@ eth_receipt_logs_bloom(
   lean_object* receipt
 );
 
+extern lean_object*
+eth_block_validate_header(
+  lean_object* parent_fork,
+  lean_object* fork,
+  lean_object* parent,
+  lean_object* header
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
+
+/* A fork name as a Lean byte array, or NULL with a TypeError set. */
+static lean_object*
+parse_fork(
+  PyObject* obj
+) {
+  if (!PyUnicode_Check(obj)) {
+    PyErr_SetString(PyExc_TypeError, "fork must be str");
+    return NULL;
+  }
+  Py_ssize_t len;
+  const char* utf8 = PyUnicode_AsUTF8AndSize(obj, &len);
+  if (!utf8) return NULL;
+  return mk_bytearray((const uint8_t*) utf8, len);
+}
 
 /* Read a fork name and RLP bytes, as Lean byte arrays.
  *
@@ -102,4 +125,28 @@ py_receipt_logs_bloom(
   lean_object* receipt;
   if (!parse_fork_and_bytes(args, "receipt", &fork, &receipt)) return NULL;
   return except_into_pybytes(eth_receipt_logs_bloom(fork, receipt), BLOCK_ERROR);
+}
+
+PyObject*
+py_block_validate_header(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *parent_fork_obj, *fork_obj, *parent_obj, *header_obj;
+  if (!PyArg_ParseTuple(args, "OOOO", &parent_fork_obj, &fork_obj, &parent_obj, &header_obj)) {
+    return NULL;
+  }
+  if (!PyBytes_Check(parent_obj) || !PyBytes_Check(header_obj)) {
+    PyErr_SetString(PyExc_TypeError, "parent and header must be bytes");
+    return NULL;
+  }
+  lean_object* parent_fork = parse_fork(parent_fork_obj);
+  if (!parent_fork) return NULL;
+  lean_object* fork = parse_fork(fork_obj);
+  if (!fork) { lean_dec(parent_fork); return NULL; }
+  lean_object* parent = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(parent_obj), PyBytes_GET_SIZE(parent_obj));
+  lean_object* header = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(header_obj), PyBytes_GET_SIZE(header_obj));
+  return except_into_pybool(eth_block_validate_header(parent_fork, fork, parent, header), BLOCK_ERROR);
 }

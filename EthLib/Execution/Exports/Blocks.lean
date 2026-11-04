@@ -17,7 +17,9 @@ Each operation decodes at the fork first.
 
 A rejected input comes back as the code and the message of its RLP error.
 
-An unknown fork name has code 0, since no error type of the specification covers it.
+A receipt error has a code from 101, and a failed header check a code from 201.
+
+An unknown fork name, or forks out of order, has code 0, since no error type covers it.
 -/
 
 public section
@@ -67,5 +69,21 @@ def receiptLogsBloomExport (fork receipt : ByteArray) : Result ByteArray := do
   let fork ← forkOfName fork
   let (_, r) ← decodeReceiptAt fork receipt
   return ⟨(logsBloom r.logs).toArray⟩
+
+/-- Check a header at a fork against its parent at the parent's fork, from Paris on. -/
+@[export eth_block_validate_header]
+def validateHeaderExport (parentFork fork parent header : ByteArray) : Result UInt8 := do
+  let parentFork ← forkOfName parentFork
+  let fork ← forkOfName fork
+  let parent : Header parentFork ← runRlp "parent rejected" (Codec.decode parent)
+  let header : Header fork ← runRlp "header rejected" (Codec.decode header)
+  if hLondon : .london ≤ parentFork then
+    if hFork : parentFork ≤ fork then
+      if hParis : .paris ≤ fork then
+        (validateHeader hLondon hFork hParis parent header).map (fun () => 1) |>.mapError
+          fun e => (e.code, s!"header invalid: {reprStr e}")
+      else throw (0, "the fork is before Paris")
+    else throw (0, "the parent's fork is after the fork")
+  else throw (0, "the parent's fork is before London")
 
 end EthLib.Execution.Blocks.Exports

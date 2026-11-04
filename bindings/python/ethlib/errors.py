@@ -90,10 +90,7 @@ class ConcatKdfError(EthLibError, ValueError):
 
 
 class BlockError(EthLibError, ValueError):
-    """A header, a block or a receipt was rejected, or no fork has the name given.
-
-    A header or a block has the code of its RLP error, and a receipt error a code from 101.
-    """
+    """A header, block or receipt was rejected: RLP 1-14, receipts 101-103, checks 201-214."""
 
 
 class RlpError(EthLibError, ValueError):
