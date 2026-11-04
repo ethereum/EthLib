@@ -88,7 +88,11 @@ private theorem message (valid : Reconstruction leaves proof indices helpers roo
 end Reconstruction
 
 /--
-Accepted requests for the same root cannot disagree at an overlapping claimed position without exposing a collision among the 64-byte inputs hashed by those requests.
+Two accepted requests for one root agree where they both claim a position.
+
+Otherwise a search finds a collision.
+
+The search compares the 64-byte inputs that the two verifiers hash.
 -/
 theorem verifyMerkleMultiproof_overlap_binding
     {leftLeaves leftProof rightLeaves rightProof : List Bytes}
@@ -98,10 +102,12 @@ theorem verifyMerkleMultiproof_overlap_binding
     (leftClaim : (index, firstValue) ∈ leftIndices.zip leftLeaves)
     (rightClaim : (index, secondValue) ∈ rightIndices.zip rightLeaves) :
     firstValue = secondValue ∨
-      ∃ first ∈ verifiedMultiproofMessages leftLeaves leftProof leftIndices,
-      ∃ second ∈ verifiedMultiproofMessages rightLeaves rightProof rightIndices,
-        first.size = 64 ∧ second.size = 64 ∧ first ≠ second ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk first) = Cryptography.Hash.Sha256.hash (ByteArray.mk second) := by
+      ∃ first second, findMessageCollision
+          (verifiedMultiproofMessages leftLeaves leftProof leftIndices)
+          (verifiedMultiproofMessages rightLeaves rightProof rightIndices) = some (first, second) ∧
+        first ∈ verifiedMultiproofMessages leftLeaves leftProof leftIndices ∧
+        second ∈ verifiedMultiproofMessages rightLeaves rightProof rightIndices ∧
+        MessageCollision first second := by
   -- Each accepted proof determines a complete finite reconstruction and locates the shared claim.
   obtain ⟨leftHelpers, left⟩ := reconstruction_of_accepted leftAccepted
   obtain ⟨rightHelpers, right⟩ := reconstruction_of_accepted rightAccepted
@@ -113,41 +119,49 @@ theorem verifyMerkleMultiproof_overlap_binding
     leftFound rightFound (Nat.log2 index) (multiproofHeight leftIndices leftHelpers)
     (multiproofHeight rightIndices rightHelpers) 1 leftBound rightBound (by decide)
     (shiftRight_depth positive) (left.rebuilt.trans right.rebuilt.symm)
-  -- Locate both distinct compression inputs in the actual verifier executions.
-  exact binding.imp id fun ⟨first, firstMember, second, secondMember, distinct, hashed⟩ =>
-    ⟨first, (left.message firstMember).1, second, (right.message secondMember).1,
-      (left.message firstMember).2, (right.message secondMember).2, distinct, hashed⟩
+  refine binding.imp id fun ⟨first, firstMember, second, secondMember, distinct, hashed⟩ => ?_
+  -- Both inputs occur in the verifier executions, so the search returns a collision there.
+  obtain ⟨a, b, found⟩ := findMessageCollision_of_collision (left.message firstMember).1
+    (right.message secondMember).1
+    ⟨(left.message firstMember).2, (right.message secondMember).2, distinct, hashed⟩
+  exact ⟨a, b, found, findMessageCollision_valid found⟩
 
 /--
 Two accepted multiproofs for the same positions bind every claimed value.
-A disagreement exposes distinct 64-byte inputs hashed by their actual reconstruction folds.
+
+Otherwise a search over the inputs that the two verifiers hash finds a collision.
 -/
 theorem verifyMerkleMultiproof_binding {leftLeaves leftProof rightLeaves rightProof : List Bytes}
     {indices : List Nat} {root : Bytes}
     (leftAccepted : verifyMerkleMultiproof leftLeaves leftProof indices root = .ok true)
     (rightAccepted : verifyMerkleMultiproof rightLeaves rightProof indices root = .ok true) :
     leftLeaves = rightLeaves ∨
-      ∃ first ∈ verifiedMultiproofMessages leftLeaves leftProof indices,
-      ∃ second ∈ verifiedMultiproofMessages rightLeaves rightProof indices,
-        first.size = 64 ∧ second.size = 64 ∧ first ≠ second ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk first) = Cryptography.Hash.Sha256.hash (ByteArray.mk second) := by
+      ∃ first second, findMessageCollision
+          (verifiedMultiproofMessages leftLeaves leftProof indices)
+          (verifiedMultiproofMessages rightLeaves rightProof indices) = some (first, second) ∧
+        first ∈ verifiedMultiproofMessages leftLeaves leftProof indices ∧
+        second ∈ verifiedMultiproofMessages rightLeaves rightProof indices ∧
+        MessageCollision first second := by
   -- Equal request positions give equal list lengths, so unequal claims differ at some position.
   obtain ⟨_, left⟩ := reconstruction_of_accepted leftAccepted
   obtain ⟨_, right⟩ := reconstruction_of_accepted rightAccepted
   have leftCount := left.leafCount
   have rightCount := right.leafCount
-  by_cases collision : ∃ first ∈ verifiedMultiproofMessages leftLeaves leftProof indices,
-      ∃ second ∈ verifiedMultiproofMessages rightLeaves rightProof indices,
-        first.size = 64 ∧ second.size = 64 ∧ first ≠ second ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk first) = Cryptography.Hash.Sha256.hash (ByteArray.mk second)
-  · exact .inr collision
-  · refine .inl (List.ext_getElem (by omega) fun position leftBound rightBound => ?_)
+  cases found : findMessageCollision (verifiedMultiproofMessages leftLeaves leftProof indices)
+      (verifiedMultiproofMessages rightLeaves rightProof indices) with
+  | some pair => exact .inr ⟨pair.1, pair.2, rfl, findMessageCollision_valid found⟩
+  | none =>
+    refine .inl (List.ext_getElem (by omega) fun position leftBound rightBound => ?_)
     have indexBound : position < indices.length := by omega
     -- Every shared position is bound by the theorem for overlapping requests.
     have first : (indices[position], leftLeaves[position]) ∈ indices.zip leftLeaves :=
       List.mem_iff_getElem.mpr ⟨position, by simp; omega, by simp⟩
     have second : (indices[position], rightLeaves[position]) ∈ indices.zip rightLeaves :=
       List.mem_iff_getElem.mpr ⟨position, by simp; omega, by simp⟩
-    exact (verifyMerkleMultiproof_overlap_binding leftAccepted rightAccepted first second).resolve_right collision
+    -- The search found nothing, so the overlap theorem leaves only equal values.
+    rcases verifyMerkleMultiproof_overlap_binding leftAccepted rightAccepted first second with
+      equal | ⟨_, _, collided, -⟩
+    · exact equal
+    · simp [found] at collided
 
 end EthLib.Serialization.Ssz
