@@ -44,7 +44,15 @@ commit = "be307c948f28897adb8f25afcc253c2c909de35d"
 
 [repositories."ethereum/tests"]
 commit = "c67e485ff8b5be9abc8ad15345ec21aa22e290d9"
-directories = ["bindings/python/tests/rlp/vectors", "bindings/python/tests/state/genesis"]
+directories = [
+  "bindings/python/tests/rlp/vectors",
+  "bindings/python/tests/state/genesis",
+  "bindings/python/tests/trie/trietests",
+]
+
+[repositories."ethereum/execution-apis"]
+commit = "3284ee80c3da3e516c53782dde75157cccf1ebdc"
+directories = ["bindings/python/tests/trie/getproof"]
 
 [repositories."ethereum/yellowpaper"]
 commit = "efc5f9a1f356cba376c978eedb63cb0363c2aa85"

@@ -8,6 +8,7 @@ public import EthLib.Execution.Exports.Ecrecover
 public import EthLib.Execution.Exports.Precompiles
 public import EthLib.Execution.Exports.State
 public import EthLib.Execution.Exports.Transactions
+public import EthLib.Execution.Exports.Trie
 
 /-!
 # `EthLib.Execution.Exports`

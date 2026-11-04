@@ -355,7 +355,7 @@ end Internal
     return Trunc_256(S)                      squeeze
 ```
 
-The permutation `f` is an argument, so a proof can run the same sponge over an equal permutation. -/
+FIPS 202 §4 defines the sponge for any permutation `f`, so the permutation is an argument. -/
 def sponge (f : State → State) (msg : ByteArray) : Vector UInt8 DIGEST_LEN :=
   -- Step 1: append the padding, so the length is a multiple of the rate.
   let padded := (pad msg).data.toList
