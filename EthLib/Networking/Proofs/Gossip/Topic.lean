@@ -53,28 +53,28 @@ theorem eq_append_of_dropSuffix? {suf cs start : List Char}
 /-! ## The fork digest -/
 
 /-- The hex digit of a value below 16 reads back as that value. -/
-theorem hexDigit?_hexDigitChar : ∀ k < 16, hexDigit? (hexDigitChar k) = some k := by
+theorem hexDigit?_hexAlphabet : ∀ k < 16, hexDigit? Base.hexAlphabet[k]! = some k := by
   decide
 
 /-- A character that reads as a value is the hex digit of that value, below 16. -/
 theorem hexDigit?_eq_some {c : Char} {k : Nat} (h : hexDigit? c = some k) :
-    k < 16 ∧ hexDigitChar k = c := by
+    k < 16 ∧ Base.hexAlphabet[k]! = c := by
   unfold hexDigit? at h
   have := List.find?_some h
   exact ⟨List.mem_range.mp (List.mem_of_find?_eq_some h), by simpa using this⟩
 
 /-- The two hex digits of a byte read back as that byte. -/
 theorem hexByte?_digits (byte : UInt8) :
-    hexByte? (hexDigitChar (byte.toNat / 16)) (hexDigitChar (byte.toNat % 16)) = some byte := by
+    hexByte? Base.hexAlphabet[byte.toNat / 16]! Base.hexAlphabet[byte.toNat % 16]! = some byte := by
   have := byte.toNat_lt
-  have hi := hexDigit?_hexDigitChar (byte.toNat / 16) (by omega)
-  have lo := hexDigit?_hexDigitChar (byte.toNat % 16) (by omega)
+  have hi := hexDigit?_hexAlphabet (byte.toNat / 16) (by omega)
+  have lo := hexDigit?_hexAlphabet (byte.toNat % 16) (by omega)
   simp only [hexByte?, hi, lo, Option.pure_def, Option.bind_eq_bind, Option.bind_some,
     Nat.div_add_mod, UInt8.ofNat_toNat]
 
 /-- Two characters that read as a byte are the two hex digits of that byte. -/
 theorem digits_of_hexByte? {hi lo : Char} {byte : UInt8} (h : hexByte? hi lo = some byte) :
-    [hexDigitChar (byte.toNat / 16), hexDigitChar (byte.toNat % 16)] = [hi, lo] := by
+    [Base.hexAlphabet[byte.toNat / 16]!, Base.hexAlphabet[byte.toNat % 16]!] = [hi, lo] := by
   simp only [hexByte?, Option.pure_def, Option.bind_eq_bind, Option.bind_eq_some_iff,
     Option.some.injEq] at h
   obtain ⟨k, hk, l, hl, rfl⟩ := h

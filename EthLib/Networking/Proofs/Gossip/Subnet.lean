@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Networking.Gossip.Subnet
 
 /-!
@@ -22,27 +23,6 @@ open EthLib.Networking.Gossip
 variable {ε : Type} {config : AttestationSubnetConfig}
   {shuffle : UInt64 → UInt64 → ByteArray → Except ε UInt64} {nodeId : NodeID} {epoch : UInt64}
 
-/-- A traversal that succeeds has one output per input, and each output comes from an input. -/
-private theorem mapM_ok {α β : Type} {f : α → Except ε β} {xs : List α} {ys : List β}
-    (h : xs.mapM f = .ok ys) : ys.length = xs.length ∧ ∀ y ∈ ys, ∃ x ∈ xs, f x = .ok y := by
-  induction xs generalizing ys with
-  | nil =>
-    simp only [List.mapM_nil, pure, Except.pure, Except.ok.injEq] at h
-    simp [← h]
-  | cons x xs ih =>
-    rw [List.mapM_cons] at h
-    cases hx : f x <;> cases hxs : xs.mapM f <;>
-      simp only [hx, hxs, bind, Except.bind, pure, Except.pure, reduceCtorEq,
-        Except.ok.injEq] at h
-    subst h
-    obtain ⟨length, from_input⟩ := ih hxs
-    refine ⟨by simp [length], ?_⟩
-    intro y hy
-    rcases List.mem_cons.mp hy with rfl | hy
-    · exact ⟨x, List.mem_cons_self, hx⟩
-    · obtain ⟨x', hx', hf⟩ := from_input y hy
-      exact ⟨x', List.mem_cons_of_mem x hx', hf⟩
-
 /-- Every subnet is below the number of subnets. -/
 theorem computeSubscribedSubnet_lt {index : UInt64} {subnet : SubnetID}
     (h : computeSubscribedSubnet config shuffle nodeId epoch index = .ok subnet) :
@@ -63,22 +43,13 @@ theorem computeSubscribedSubnet_lt {index : UInt64} {subnet : SubnetID}
   rw [UInt64.lt_iff_toNat_lt, UInt64.toNat_mod]
   exact Nat.mod_lt _ positive
 
-/-- A traversal succeeds when the function succeeds on every input. -/
-private theorem mapM_exists_ok {α β : Type} {f : α → Except ε β} {xs : List α}
-    (h : ∀ x ∈ xs, ∃ y, f x = .ok y) : ∃ ys, xs.mapM f = .ok ys := by
-  induction xs with
-  | nil => exact ⟨[], rfl⟩
-  | cons x xs ih =>
-    obtain ⟨y, hy⟩ := h x List.mem_cons_self
-    obtain ⟨ys, hys⟩ := ih fun x' hx' => h x' (List.mem_cons_of_mem x hx')
-    exact ⟨y :: ys, by simp [List.mapM_cons, hy, hys, bind, Except.bind, pure, Except.pure]⟩
-
 /-- A node gets as many subnets as the subnets per node, each below the number of subnets. -/
 theorem computeSubscribedSubnets_ok {subnets : List SubnetID}
     (h : computeSubscribedSubnets config shuffle nodeId epoch = .ok subnets) :
     subnets.length = config.subnetsPerNode.toNat ∧
       ∀ subnet ∈ subnets, subnet < config.subnetCount := by
-  obtain ⟨length, from_index⟩ := mapM_ok h
+  have length := Base.mapM_ok_length h
+  have from_index := Base.mapM_ok_mem h
   refine ⟨by simpa using length, fun subnet member => ?_⟩
   obtain ⟨_, _, ok⟩ := from_index subnet member
   exact computeSubscribedSubnet_lt ok
@@ -160,7 +131,7 @@ theorem computeSubscribedSubnets_exists
     (shuffled : ∀ i n seed, i < n → ∃ p, shuffle i n seed = .ok p ∧ p < n)
     (perNode : config.subnetsPerNode.toNat ≤ 2 ^ 63) :
     ∃ subnets, computeSubscribedSubnets config shuffle nodeId epoch = .ok subnets :=
-  mapM_exists_ok fun index member =>
+  Base.mapM_exists_ok fun index member =>
     computeSubscribedSubnet_exists count epochs bits period shuffled (by
       have := List.mem_range.mp member
       have := config.subnetsPerNode.toNat_lt
