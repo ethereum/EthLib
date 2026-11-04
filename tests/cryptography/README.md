@@ -72,7 +72,7 @@ ETHLIB_SLOW_VECTORS=1 uv run --no-sync pytest bindings/python/tests/xmss
 Every other run writes the `verify` cases and the rejections, and reads the slow cases back.
 
 The cases differ in where their expected values come from.
-`key_gen_known_answer` and `sign_known_answer` hold the bytes the proofs pin, which an independent implementation computed.
+`key_gen_known_answer` and `sign_known_answer` hold bytes that an independent implementation computed.
 The other cases come from the code under test.
 
 ## leanSPHINCS

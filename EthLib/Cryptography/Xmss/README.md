@@ -82,11 +82,11 @@ A caller can use it to require a given leaf before verifying, such as leaf 0 for
 
 `tests/cryptography/xmss/` has cases for `key_gen`, `sign`, `verify` and `signature_index`.
 
-The proofs also pin one full key and one signature (`Proofs/Xmss/KnownAnswer*.lean`).
+The `key_gen_known_answer` and `sign_known_answer` cases pin one full key and one signature.
 The key grows from the seed `S_0[i] = 37 i + 11 mod 256`, and the signature signs `m[i] = 7 i + 3` at leaf index `0xA5C37E19`.
 The public key and the signature bytes were computed outside EthLib, by an independent implementation of the note.
-The `key_gen_known_answer` and `sign_known_answer` cases hold the same bytes.
-The other cases are EthLib's own: nothing outside EthLib has checked them yet.
+The `verify` cases check that this signature verifies, and that it fails with a changed message, leaf index, randomizer, chain value or sibling.
+The other cases are EthLib's own, and nothing outside EthLib checks them yet.
 
 ## What is proved
 
@@ -134,11 +134,6 @@ In the random oracle model, an adversary whose experiment makes at most `q >= 1`
 The game is the note's section "Security", run on `keyGenWith`, `signWith` and `verifyWith` with `H` a query to the oracle.
 The proof, adapted from leanerVM's, reasons over these same definitions (`Proofs/Xmss/Security/`).
 
-**Known answers.**
-The pinned signature verifies under the pinned public key (`verify_known_answer`).
-It is rejected with a changed message, the neighbouring leaf index, or a changed path (`verify_wrong_message`, `verify_wrong_leafIndex`, `verify_tampered_path`).
-The scheme seed, the public parameter and both keys' leaves, computed from the seed, match the key and the signature (`KnownAnswer.lean`, `KnownAnswerKeyBottom.lean`, `KnownAnswerKeyTop.lean`).
-
 ## What is not proved
 
 - No security property is proved beyond the random oracle model, so the theorem says nothing about an attack that uses the structure of Keccak-256.
@@ -147,17 +142,5 @@ The scheme seed, the public parameter and both keys' leaves, computed from the s
   `code_probability` gives one trial's chance, if digests were uniform, and the claim that all `2^32` trials fail with probability below `exp(-2^11)` is only argued in the docstring of `MAX_RANDOMIZER_TRIALS`.
 - No theorem says that every codeword is the codeword of some digest.
   `eq_of_codeword` shows at most one digest per codeword, so at most `|C|` digests are codewords.
-- No theorem says that this module and any other implementation compute the same keys and signatures on inputs other than the known answer.
-
-## What the kernel cannot evaluate
-
-This is a limit on computing results inside Lean, separate from the missing theorems in the previous section.
-
-The kernel checks every known answer itself, with no `native_decide`.
-A whole verification is too large for one kernel check.
-So the known answer checks it in pieces: each layer's codeword, a few chains at a time, the leaf and the path.
-The pieces run over a record form of Keccak-f, with the hash inputs as lists.
-The kernel evaluates that form far faster than the vectors and arrays of the specification.
-`Proofs/Hash/KeccakKernel.lean` proves the record form equal to Keccak-f for every state, and `Proofs/Xmss/FastHash.lean` carries that through the chains and the paths.
-
-The public key from the seed needs the whole top tree, `2^16` one-time keys, which is beyond the kernel.
+- No theorem says that this module and any other implementation compute the same keys and signatures.
+  The test vectors check one key and one signature against an independent implementation.
