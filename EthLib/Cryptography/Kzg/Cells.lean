@@ -31,28 +31,20 @@ open EthLib.Cryptography.Bls (G1 G2 Fr)
 
 /-! ## Type aliases -/
 
-abbrev Cell             := ByteArray
+/-- A cell: 64 field elements of 32 bytes each. -/
+abbrev Cell             := Vector UInt8 BYTES_PER_CELL
 abbrev CellIndex        := Nat
 abbrev CommitmentIndex  := Nat
 abbrev Coset            := Array Fr
 abbrev CosetEvals       := Array Fr
 
 /-- Convert an untrusted `Cell` into a trusted `CosetEvals`. -/
-def cellToCosetEvals (cell : Cell) : Except KzgError CosetEvals := do
-  if cell.size ≠ BYTES_PER_CELL then
-    throw (.badCellSize cell.size)
-  (Array.range FIELD_ELEMENTS_PER_CELL).mapM fun i =>
-    let s := i * BYTES_PER_FIELD_ELEMENT
-    let e := (i + 1) * BYTES_PER_FIELD_ELEMENT
-    match bytesToBlsField (cell.extract s e) with
-    | .ok f    => pure f
-    | .error _ => throw (.invalidFieldElement (some i))
+def cellToCosetEvals (cell : Cell) : Except KzgError CosetEvals :=
+  bytesToBlsFields (k := FIELD_ELEMENTS_PER_CELL) cell
 
 /-- Convert a trusted `CosetEvals` back into an untrusted `Cell`. -/
 def cosetEvalsToCell (cosetEvals : CosetEvals) : Cell :=
-  (Array.range FIELD_ELEMENTS_PER_CELL).foldl
-    (init := ByteArray.empty)
-    fun bytes i => bytes ++ blsFieldToBytes cosetEvals[i]!
+  (Vector.ofFn (n := FIELD_ELEMENTS_PER_CELL) fun i => blsFieldToBytes cosetEvals[i.val]!).flatten
 
 /-! ## Cell cosets -/
 
@@ -115,8 +107,6 @@ def cellsOfExtendedEvaluations (evals : Array Fr) : Array Cell :=
 
 /-- Reed-Solomon-extend `blob` and return its cells. -/
 def computeCells (blob : Blob) : Except KzgError (Array Cell) := do
-  if blob.size ≠ BYTES_PER_BLOB then
-    throw (.badBlobSize blob.size)
   let polynomial ← blobToPolynomial blob
   return cellsOfExtendedEvaluations (extendedEvaluations (polynomialEvalToCoeff polynomial))
 
@@ -181,15 +171,13 @@ def computeCellsAndKzgProofsPolynomialcoeff (setup : TrustedSetup)
     -- The bit reversal puts the proofs in cell order.
     let padded := hs ++ Array.replicate (CELLS_PER_EXT_BLOB - hs.size) Bls.G1.zero
     bitReversalPermutation (fftG1 padded (computeRootsOfUnity CELLS_PER_EXT_BLOB))).get
-  return (cells, proofs.map Bls.G1.compress)
+  return (cells, proofs.map compressG1)
 
 /-- Compute the cells of a blob and their proofs.
 
 The proofs come together, by the FK20 method. -/
 def computeCellsAndKzgProofs (setup : TrustedSetup)
     (blob : Blob) : Except KzgError (Array Cell × Array KZGProof) := do
-  if blob.size ≠ BYTES_PER_BLOB then
-    throw (.badBlobSize blob.size)
   let polynomial ← blobToPolynomial blob
   let polynomialCoeff := polynomialEvalToCoeff polynomial
   computeCellsAndKzgProofsPolynomialcoeff setup polynomialCoeff
@@ -206,13 +194,13 @@ def computeVerifyCellKzgProofBatchChallenge
     ++ intToBytesBE FIELD_ELEMENTS_PER_CELL 8
     ++ intToBytesBE commitments.size 8
     ++ intToBytesBE cellIndices.size 8
-  let h := commitments.foldl (init := h) fun h c => h ++ c
+  let h := commitments.foldl (init := h) fun h c => h ++ ⟨c.toArray⟩
   let h := (Array.range cosetsEvals.size).foldl (init := h) fun h k =>
     let h := h ++ intToBytesBE commitmentIndices[k]! 8
     let h := h ++ intToBytesBE cellIndices[k]! 8
     let h := cosetsEvals[k]!.foldl (init := h) fun h ce =>
-      h ++ blsFieldToBytes ce
-    h ++ proofs[k]!
+      h ++ ⟨(blsFieldToBytes ce).toArray⟩
+    h ++ ⟨proofs[k]!.toArray⟩
   Fr.hashToBlsField h
 
 /-- Verify that a set of cells belong to their commitments, given distinct commitments.
@@ -348,14 +336,8 @@ def verifyCellKzgProofBatch (setup : TrustedSetup)
   if cellIndices.size ≠ commitmentsBytes.size then
     throw (.inputLengthMismatch "cellIndices" commitmentsBytes.size cellIndices.size)
 
-  if let some cb := commitmentsBytes.find? (fun cb => cb.size != BYTES_PER_COMMITMENT) then
-    throw (.badCommitmentSize cb.size)
   if cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) then
     throw .cellIndexOutOfBounds
-  if let some c := cells.find? (fun c => c.size != BYTES_PER_CELL) then
-    throw (.badCellSize c.size)
-  if let some pb := proofsBytes.find? (fun pb => pb.size != BYTES_PER_PROOF) then
-    throw (.badProofSize pb.size)
 
   -- Remove repeated commitments, keeping the first index, by a scan over the short list.
   let (deduped, commitmentIndices) ←

@@ -210,11 +210,6 @@ theorem computeCells_ok_spec {blob : Blob} {poly : Polynomial}
       ∀ cellIndex coset, cosetForCell cellIndex = .ok coset →
         cells[cellIndex]! =
           cosetEvalsToCell (coset.map (evaluatePolynomialcoeff (polynomialEvalToCoeff poly))) := by
-  have hbsize : blob.size = BYTES_PER_BLOB := by
-    by_contra hne
-    have herr := (blobToPolynomial_error_badBlobSize blob blob.size).mpr ⟨hne, rfl⟩
-    rw [hblob] at herr
-    cases herr
   have hp_le : (polynomialEvalToCoeff poly).size ≤ FIELD_ELEMENTS_PER_EXT_BLOB := by
     rw [size_polynomialEvalToCoeff, size_blobToPolynomial blob poly hblob]
     decide
@@ -222,7 +217,6 @@ theorem computeCells_ok_spec {blob : Blob} {poly : Polynomial}
     ?_, size_cellsOfExtendedEvaluations _, fun cellIndex coset hcoset =>
       getElem!_cellsOfExtendedEvaluations_extendedEvaluations hp_le hcoset⟩
   unfold computeCells
-  rw [ite_eq_right (not_not.mpr hbsize)]
   rw [hblob]
   rfl
 

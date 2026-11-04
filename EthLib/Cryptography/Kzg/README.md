@@ -63,6 +63,10 @@ All of them except `computeCells` read the trusted setup, which they take as the
 The C exports decode it once, when their module is initialized.
 The two challenge helpers return a field element.
 
+Blobs, cells, commitments, proofs and field elements are byte vectors.
+Their length is part of their type, as in the source.
+The C exports read untyped bytes into these types, and reject a wrong length there.
+
 ## Test vectors
 
 `tests/cryptography/kzg/` holds 344 cases:

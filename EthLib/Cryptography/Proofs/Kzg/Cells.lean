@@ -72,117 +72,20 @@ theorem cosetForCell_ok_iff {cellIndex : CellIndex} :
     obtain ⟨c, hc, _, _⟩ := cosetForCell_ok_of_lt hlt
     exact ⟨c, hc⟩
 
-private theorem size_foldl_cosetEvalsToCell (cosetEvals : CosetEvals) (k : Nat) :
-    ((List.range k).foldl (fun bytes i => bytes ++ blsFieldToBytes cosetEvals[i]!)
-      ByteArray.empty).size = k * BYTES_PER_FIELD_ELEMENT := by
-  induction k with
-  | zero => rfl
-  | succ k ih =>
-    rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
-        ByteArray.size_append, ih, size_blsFieldToBytes, Nat.succ_mul]
-
-/-- `cosetEvalsToCell` always produces a byte buffer of size `BYTES_PER_CELL`. -/
-@[simp] theorem size_cosetEvalsToCell (cosetEvals : CosetEvals) :
-    (cosetEvalsToCell cosetEvals).size = BYTES_PER_CELL := by
-  unfold cosetEvalsToCell
-  rw [← Array.foldl_toList, Array.toList_range, size_foldl_cosetEvalsToCell]
-  rfl
-
-private theorem ba_extract_append_of_le {a b : ByteArray} {s e : Nat}
-    (he : e ≤ a.size) :
-    (a ++ b).extract s e = a.extract s e := by
-  have he' : e ≤ a.data.size := he
-  apply ByteArray.ext
-  rw [ByteArray.data_extract, ByteArray.data_extract, ByteArray.data_append,
-      Array.extract_append,
-      Array.extract_empty_of_stop_le_start (show e - a.data.size ≤ s - a.data.size by omega),
-      Array.append_empty]
-
-private theorem ba_extract_append_exact {a b : ByteArray} :
-    (a ++ b).extract a.size (a.size + b.size) = b := by
-  have hsz : a.size = a.data.size := rfl
-  have hbsz : b.size = b.data.size := rfl
-  apply ByteArray.ext
-  rw [ByteArray.data_extract, ByteArray.data_append, hsz, hbsz]
-  simp [-ByteArray.size_data]
-
-private theorem extract_foldl_cosetEvalsToCell (cosetEvals : CosetEvals)
-    (k j : Nat) (hj : j < k) :
-    ((List.range k).foldl (fun bytes i => bytes ++ blsFieldToBytes cosetEvals[i]!)
-      ByteArray.empty).extract
-        (j * BYTES_PER_FIELD_ELEMENT) ((j + 1) * BYTES_PER_FIELD_ELEMENT) =
-      blsFieldToBytes cosetEvals[j]! := by
-  induction k with
-  | zero => exact absurd hj (Nat.not_lt_zero j)
-  | succ k ih =>
-    rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil]
-    let pref := (List.range k).foldl
-      (fun bytes i => bytes ++ blsFieldToBytes cosetEvals[i]!) ByteArray.empty
-    have hpref_sz : pref.size = k * BYTES_PER_FIELD_ELEMENT :=
-      size_foldl_cosetEvalsToCell cosetEvals k
-    rcases Nat.lt_succ_iff_lt_or_eq.mp hj with hlt | rfl
-    · rw [ba_extract_append_of_le (a := pref)]
-      · exact ih hlt
-      · rw [hpref_sz]
-        exact Nat.mul_le_mul_right BYTES_PER_FIELD_ELEMENT hlt
-    · have h1 : j * BYTES_PER_FIELD_ELEMENT = pref.size := hpref_sz.symm
-      have h2 : (j + 1) * BYTES_PER_FIELD_ELEMENT =
-          pref.size + (blsFieldToBytes cosetEvals[j]!).size := by
-        rw [hpref_sz, size_blsFieldToBytes, Nat.succ_mul]
-      rw [h1, h2, ba_extract_append_exact (a := pref)]
-
-/-- Extracting the `j`-th 32-byte field-element chunk from `cosetEvalsToCell`
-returns `blsFieldToBytes cosetEvals[j]!`. -/
-@[simp] theorem extract_cosetEvalsToCell (cosetEvals : CosetEvals)
-    {j : Nat} (hj : j < FIELD_ELEMENTS_PER_CELL) :
-    (cosetEvalsToCell cosetEvals).extract
-        (j * BYTES_PER_FIELD_ELEMENT) ((j + 1) * BYTES_PER_FIELD_ELEMENT) =
-      blsFieldToBytes cosetEvals[j]! := by
-  unfold cosetEvalsToCell
-  rw [← Array.foldl_toList, Array.toList_range]
-  exact extract_foldl_cosetEvalsToCell cosetEvals FIELD_ELEMENTS_PER_CELL j hj
-
-/-- Deserializing the `j`-th 32-byte field-element chunk from `cosetEvalsToCell`
-recovers `cosetEvals[j]!`. -/
-@[simp] theorem bytesToBlsField_extract_cosetEvalsToCell (cosetEvals : CosetEvals)
-    {j : Nat} (hj : j < FIELD_ELEMENTS_PER_CELL) :
-    bytesToBlsField ((cosetEvalsToCell cosetEvals).extract
-        (j * BYTES_PER_FIELD_ELEMENT) ((j + 1) * BYTES_PER_FIELD_ELEMENT)) =
-      .ok cosetEvals[j]! := by
-  rw [extract_cosetEvalsToCell cosetEvals hj, bytesToBlsField_blsFieldToBytes]
-
-/-- A loop over the indices below `n` returns `ys` when the step at each index returns its element. -/
-private theorem mapM_range_eq_ok {ε α : Type} [Inhabited α] {n : Nat} {ys : Array α}
-    (f : Nat → Except ε α) (hsize : ys.size = n) (hf : ∀ i < n, f i = .ok ys[i]!) :
-    (Array.range n).mapM f = .ok ys := by
-  -- On a list of indices below `n`, the loop is a plain map.
-  have hlist (is : List Nat) (his : ∀ i ∈ is, i < n) :
-      is.mapM f = .ok (is.map fun i => ys[i]!) := by
-    induction is with
-    | nil => rfl
-    | cons i is ih =>
-      rw [List.mapM_cons, hf i (his i (by simp)), ih fun j hj => his j (by simp [hj])]
-      rfl
-  rw [Array.mapM_eq_mapM_toList, Array.toList_range, hlist _ fun i hi => List.mem_range.mp hi]
-  -- Reading every index below the size gives back the array.
+/-- Encoding a cell and decoding it gives back the same field elements. -/
+theorem cellToCosetEvals_cosetEvalsToCell
+    (ys : CosetEvals) (hsize : ys.size = FIELD_ELEMENTS_PER_CELL) :
+    cellToCosetEvals (cosetEvalsToCell ys) = .ok ys := by
+  unfold cellToCosetEvals cosetEvalsToCell
+  refine (bytesToBlsFields_eq_ok (k := FIELD_ELEMENTS_PER_CELL) (fun i => ys[i.val]!)
+    fun i => ?_).trans ?_
+  · rw [fieldElementBytes_flatten]
+    simp only [Fin.getElem_fin, Vector.getElem_ofFn, bytesToBlsField_blsFieldToBytes]
   refine congrArg Except.ok ?_
   apply Array.ext
   · simp [hsize]
   · intro i _ hi
     simp [getElem!_pos ys i hi]
-
-/-- Encoding a cell and decoding it gives back the same field elements. -/
-theorem cellToCosetEvals_cosetEvalsToCell
-    (ys : CosetEvals) (hsize : ys.size = FIELD_ELEMENTS_PER_CELL) :
-    cellToCosetEvals (cosetEvalsToCell ys) = .ok ys := by
-  unfold cellToCosetEvals
-  -- The encoding has the cell size, so the size check passes.
-  rw [ite_eq_right (by simp)]
-  dsimp only
-  -- Each 32-byte chunk decodes to its element.
-  refine mapM_range_eq_ok _ hsize fun i hi => ?_
-  simp only [bytesToBlsField_extract_cosetEvalsToCell ys hi]
-  rfl
 
 /-- The cell-batch challenge is a canonical field element. -/
 theorem val_computeVerifyCellKzgProofBatchChallenge_lt
@@ -195,42 +98,6 @@ theorem val_computeVerifyCellKzgProofBatchChallenge_lt
       cellIndices cosetsEvals proofs).val < Fr.modulus := by
   rw [computeVerifyCellKzgProofBatchChallenge]
   exact Fr.val_hashToBlsField_lt _
-
-/-- The cell-batch challenge serializes to `BYTES_PER_FIELD_ELEMENT` bytes
-and is a canonical field element. -/
-theorem size_computeVerifyCellKzgProofBatchChallenge
-    (commitments : Array KZGCommitment)
-    (commitmentIndices : Array CommitmentIndex)
-    (cellIndices : Array CellIndex)
-    (cosetsEvals : Array CosetEvals)
-    (proofs : Array KZGProof) :
-    (blsFieldToBytes (computeVerifyCellKzgProofBatchChallenge commitments
-      commitmentIndices cellIndices cosetsEvals proofs)).size =
-        BYTES_PER_FIELD_ELEMENT ∧
-    (computeVerifyCellKzgProofBatchChallenge commitments commitmentIndices
-      cellIndices cosetsEvals proofs).val < Fr.modulus :=
-  ⟨by simp only [blsFieldToBytes, Fr.toBytesBE, ByteArray.size, Array.size_ofFn,
-        BYTES_PER_FIELD_ELEMENT],
-   val_computeVerifyCellKzgProofBatchChallenge_lt _ _ _ _ _⟩
-
-/-- `cellToCosetEvals` rejects a wrongly-sized cell. -/
-theorem cellToCosetEvals_badCellSize {cell : Cell}
-    (h : cell.size ≠ BYTES_PER_CELL) :
-    cellToCosetEvals cell = throw (.badCellSize cell.size) := by
-  simp [cellToCosetEvals, h]
-  rfl
-
-/-- `computeCells` rejects a wrongly-sized blob. -/
-theorem computeCells_badBlobSize {blob : Blob}
-    (h : blob.size ≠ BYTES_PER_BLOB) :
-    computeCells blob = throw (.badBlobSize blob.size) := by
-  simp [computeCells, h, throw_bind]
-
-/-- `computeCellsAndKzgProofs` rejects a wrongly-sized blob. -/
-theorem computeCellsAndKzgProofs_badBlobSize (setup : TrustedSetup) {blob : Blob}
-    (h : blob.size ≠ BYTES_PER_BLOB) :
-    computeCellsAndKzgProofs setup blob = throw (.badBlobSize blob.size) := by
-  simp [computeCellsAndKzgProofs, h, throw_bind]
 
 /-! ## `verifyCellKzgProofBatchImpl` validation -/
 
@@ -399,19 +266,6 @@ theorem verifyCellKzgProofBatch_cellIndices_mismatch (setup : TrustedSetup)
           cellIndices.size) := by
   simp [verifyCellKzgProofBatch, hcells, hproofs, h, throw_bind]
 
-/-- Rejects a wrongly-sized commitment, reporting the first offender. -/
-theorem verifyCellKzgProofBatch_badCommitmentSize (setup : TrustedSetup)
-    {commitmentsBytes : Array Bytes48} {cellIndices : Array CellIndex}
-    {cells : Array Cell} {proofsBytes : Array Bytes48} {cb : Bytes48}
-    (hcells : cells.size = commitmentsBytes.size)
-    (hproofs : proofsBytes.size = commitmentsBytes.size)
-    (hcidx : cellIndices.size = commitmentsBytes.size)
-    (h : commitmentsBytes.find? (fun cb => cb.size != BYTES_PER_COMMITMENT)
-      = some cb) :
-    verifyCellKzgProofBatch setup commitmentsBytes cellIndices cells proofsBytes
-      = throw (.badCommitmentSize cb.size) := by
-  simp [verifyCellKzgProofBatch, hcells, hproofs, hcidx, h, throw_bind]
-
 /-- Rejects an out-of-bounds cell index in `verifyCellKzgProofBatch`. -/
 theorem verifyCellKzgProofBatch_cellIndexOutOfBounds (setup : TrustedSetup)
     {commitmentsBytes : Array Bytes48} {cellIndices : Array CellIndex}
@@ -419,13 +273,11 @@ theorem verifyCellKzgProofBatch_cellIndexOutOfBounds (setup : TrustedSetup)
     (hcells : cells.size = commitmentsBytes.size)
     (hproofs : proofsBytes.size = commitmentsBytes.size)
     (hcidx : cellIndices.size = commitmentsBytes.size)
-    (hcb : commitmentsBytes.find? (fun cb => cb.size != BYTES_PER_COMMITMENT)
-      = none)
     (h : cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) = true) :
     verifyCellKzgProofBatch setup commitmentsBytes cellIndices cells proofsBytes
       = throw .cellIndexOutOfBounds := by
   unfold verifyCellKzgProofBatch
-  rw [hcb, h]
+  rw [h]
   simp [hcells, hproofs, hcidx, throw_bind]
 
 /-- Alias for `verifyCellKzgProofBatch_cellIndexOutOfBounds`. -/
@@ -435,47 +287,10 @@ theorem computeVerifyCellKzgProofBatchChallenge_cellIndex_oob (setup : TrustedSe
     (hcells : cells.size = commitmentsBytes.size)
     (hproofs : proofsBytes.size = commitmentsBytes.size)
     (hcidx : cellIndices.size = commitmentsBytes.size)
-    (hcb : commitmentsBytes.find? (fun cb => cb.size != BYTES_PER_COMMITMENT)
-      = none)
     (h : cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) = true) :
     verifyCellKzgProofBatch setup commitmentsBytes cellIndices cells proofsBytes
       = throw .cellIndexOutOfBounds :=
-  verifyCellKzgProofBatch_cellIndexOutOfBounds setup hcells hproofs hcidx hcb h
-
-/-- Rejects a wrongly-sized cell, reporting the first offender. -/
-theorem verifyCellKzgProofBatch_badCellSize (setup : TrustedSetup)
-    {commitmentsBytes : Array Bytes48} {cellIndices : Array CellIndex}
-    {cells : Array Cell} {proofsBytes : Array Bytes48} {c : Cell}
-    (hcells : cells.size = commitmentsBytes.size)
-    (hproofs : proofsBytes.size = commitmentsBytes.size)
-    (hcidx : cellIndices.size = commitmentsBytes.size)
-    (hcb : commitmentsBytes.find? (fun cb => cb.size != BYTES_PER_COMMITMENT)
-      = none)
-    (hbound : cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) = false)
-    (h : cells.find? (fun c => c.size != BYTES_PER_CELL) = some c) :
-    verifyCellKzgProofBatch setup commitmentsBytes cellIndices cells proofsBytes
-      = throw (.badCellSize c.size) := by
-  unfold verifyCellKzgProofBatch
-  rw [hcb, hbound, h]
-  simp [hcells, hproofs, hcidx, throw_bind]
-
-/-- Rejects a wrongly-sized proof, reporting the first offender. -/
-theorem verifyCellKzgProofBatch_badProofSize (setup : TrustedSetup)
-    {commitmentsBytes : Array Bytes48} {cellIndices : Array CellIndex}
-    {cells : Array Cell} {proofsBytes : Array Bytes48} {pb : Bytes48}
-    (hcells : cells.size = commitmentsBytes.size)
-    (hproofs : proofsBytes.size = commitmentsBytes.size)
-    (hcidx : cellIndices.size = commitmentsBytes.size)
-    (hcb : commitmentsBytes.find? (fun cb => cb.size != BYTES_PER_COMMITMENT)
-      = none)
-    (hbound : cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) = false)
-    (hcellsz : cells.find? (fun c => c.size != BYTES_PER_CELL) = none)
-    (h : proofsBytes.find? (fun pb => pb.size != BYTES_PER_PROOF) = some pb) :
-    verifyCellKzgProofBatch setup commitmentsBytes cellIndices cells proofsBytes
-      = throw (.badProofSize pb.size) := by
-  unfold verifyCellKzgProofBatch
-  rw [hcb, hbound, hcellsz, h]
-  simp [hcells, hproofs, hcidx, throw_bind]
+  verifyCellKzgProofBatch_cellIndexOutOfBounds setup hcells hproofs hcidx h
 
 /-- `unpackIndicesBE` rejects any byte buffer whose length is not a multiple of 8. -/
 theorem unpackIndicesBE_bad_size {b : ByteArray} (h : b.size % 8 ≠ 0) :

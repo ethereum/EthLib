@@ -23,18 +23,19 @@ namespace EthLib.Cryptography.Kzg
 
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
+open EthLib.Base (Bytes32)
 open EthLib.Cryptography.Bls (G1 G2 Fr)
 
-/-! ## Type aliases
+/-! ## Type aliases -/
 
-A commitment and a proof are 48 bytes each.
+/-- A commitment: a compressed `G1` point. -/
+abbrev KZGCommitment := Bytes48
 
-They stay byte arrays, as the public operations take them. -/
+/-- A proof: a compressed `G1` point. -/
+abbrev KZGProof := Bytes48
 
-abbrev G1Point       := ByteArray
-abbrev G2Point       := ByteArray
-abbrev KZGCommitment := ByteArray
-abbrev KZGProof      := ByteArray
+/-- The 48-byte compressed encoding of a point. -/
+def compressG1 (p : G1) : Bytes48 := ⟨(Bls.G1.compress p).data, Bls.G1.size_compress p⟩
 
 /-! ## Validation -/
 
@@ -48,14 +49,14 @@ def validateKzgG1Point (b : Bytes48) : Except KzgError G1 :=
   -- The canonical infinity encoding is accepted as the identity.
   if b == G1_POINT_AT_INFINITY then .ok Bls.G1.zero
   -- Any other input must pass full public-key validation.
-  else match Bls.G1.keyValidatePoint b with
+  else match Bls.G1.keyValidatePoint ⟨b.toArray⟩ with
   | .ok p    => .ok p
   | .error _ => .error .invalidG1Point
 
 /-- BLS validation, allowing the point at infinity. -/
 def validateKzgG1 (b : Bytes48) : Bool :=
   if b == G1_POINT_AT_INFINITY then true
-  else (Bls.G1.keyValidate b).isOk
+  else (Bls.G1.keyValidate ⟨b.toArray⟩).isOk
 
 /-- Decompress 48 bytes into a point, or fail with an invalid-point error.
 
@@ -64,7 +65,7 @@ A failed decompression must stop the computation.
 Falling back to a default point would silently replace the input with the point at infinity.
 -/
 def uncompressG1 (b : Bytes48) : Except KzgError G1 :=
-  match Bls.G1.uncompress b with
+  match Bls.G1.uncompress ⟨b.toArray⟩ with
   | .ok g    => pure g
   | .error _ => throw .invalidG1Point
 
@@ -79,7 +80,7 @@ def bytesToKzgProof (b : Bytes48) : Except KzgError KZGProof :=
 /-- Fiat-Shamir challenge for a (blob, commitment) pair. -/
 def computeChallenge (blob : Blob) (commitment : KZGCommitment) : Fr :=
   let degreePoly := intToBytesBE FIELD_ELEMENTS_PER_BLOB 16
-  let data := FIAT_SHAMIR_PROTOCOL_DOMAIN ++ degreePoly ++ blob ++ commitment
+  let data := FIAT_SHAMIR_PROTOCOL_DOMAIN ++ degreePoly ++ ⟨blob.toArray⟩ ++ ⟨commitment.toArray⟩
   Fr.hashToBlsField data
 
 /-- The linear combination `sum_i scalars_i * points_i` of decoded points.
@@ -142,17 +143,13 @@ def computeKzgProofImpl (setup : TrustedSetup)
       a * inverses[i.val]!
 
   let proofG1 ← g1LincombPoints g1LagrangeBrp quotient
-  return (Bls.G1.compress proofG1, y)
+  return (compressG1 proofG1, y)
 
 /-- The KZG proof at `z` for the polynomial of a blob, with the value `p(z)`.
 
 The value comes as 32 big-endian bytes. -/
 def computeKzgProof (setup : TrustedSetup) (blob : Blob) (zBytes : Bytes32) :
     Except KzgError (KZGProof × Bytes32) := do
-  if blob.size ≠ BYTES_PER_BLOB then
-    throw (.badBlobSize blob.size)
-  if zBytes.size ≠ BYTES_PER_FIELD_ELEMENT then
-    throw (.badFieldElementSize zBytes.size)
   let polynomial ← blobToPolynomial blob
   let z ← bytesToBlsField zBytes
   let (proof, y) ← computeKzgProofImpl setup polynomial z
@@ -182,14 +179,6 @@ def verifyKzgProofImpl (setup : TrustedSetup)
 def verifyKzgProof (setup : TrustedSetup)
     (commitmentBytes : Bytes48) (zBytes yBytes : Bytes32) (proofBytes : Bytes48)
     : Except KzgError Bool := do
-  if commitmentBytes.size ≠ BYTES_PER_COMMITMENT then
-    throw (.badCommitmentSize commitmentBytes.size)
-  if zBytes.size ≠ BYTES_PER_FIELD_ELEMENT then
-    throw (.badFieldElementSize zBytes.size)
-  if yBytes.size ≠ BYTES_PER_FIELD_ELEMENT then
-    throw (.badFieldElementSize yBytes.size)
-  if proofBytes.size ≠ BYTES_PER_PROOF then
-    throw (.badProofSize proofBytes.size)
   let commitmentG1 ← match validateKzgG1Point commitmentBytes with
                      | .ok c    => pure c
                      | .error _ => throw (.invalidCommitment none)
@@ -220,10 +209,10 @@ def verifyKzgProofBatch (setup : TrustedSetup)
   let data := (Array.range commitments.size).foldl
     (init := RANDOM_CHALLENGE_KZG_BATCH_DOMAIN ++ degreePoly ++ numCommitments)
     fun data i => data
-        ++ commitments[i]!
-        ++ blsFieldToBytes zs[i]!
-        ++ blsFieldToBytes ys[i]!
-        ++ proofs[i]!
+        ++ ⟨commitments[i]!.toArray⟩
+        ++ ⟨(blsFieldToBytes zs[i]!).toArray⟩
+        ++ ⟨(blsFieldToBytes ys[i]!).toArray⟩
+        ++ ⟨proofs[i]!.toArray⟩
   let r := Fr.hashToBlsField data
   let rPowers := computePowers r commitments.size
 
@@ -250,21 +239,15 @@ def verifyKzgProofBatch (setup : TrustedSetup)
 /-- Compute a KZG commitment from a blob. -/
 def blobToKzgCommitment (setup : TrustedSetup) (blob : Blob) :
     Except KzgError KZGCommitment := do
-  if blob.size ≠ BYTES_PER_BLOB then
-    throw (.badBlobSize blob.size)
   let polynomial ← blobToPolynomial blob
   let commitmentG1 ← g1LincombPoints setup.g1LagrangeBrp.toArray polynomial
-  return Bls.G1.compress commitmentG1
+  return compressG1 commitmentG1
 
 /-- Compute the KZG proof of a blob against a commitment.
 
 It does not check that the commitment belongs to the blob. -/
 def computeBlobKzgProof (setup : TrustedSetup) (blob : Blob) (commitmentBytes : Bytes48) :
     Except KzgError KZGProof := do
-  if blob.size ≠ BYTES_PER_BLOB then
-    throw (.badBlobSize blob.size)
-  if commitmentBytes.size ≠ BYTES_PER_COMMITMENT then
-    throw (.badCommitmentSize commitmentBytes.size)
   let commitment ← bytesToKzgCommitment commitmentBytes
   let polynomial ← blobToPolynomial blob
   let evaluationChallenge := computeChallenge blob commitment
@@ -275,12 +258,6 @@ def computeBlobKzgProof (setup : TrustedSetup) (blob : Blob) (commitmentBytes : 
 def verifyBlobKzgProof (setup : TrustedSetup)
     (blob : Blob) (commitmentBytes : Bytes48) (proofBytes : Bytes48)
     : Except KzgError Bool := do
-  if blob.size ≠ BYTES_PER_BLOB then
-    throw (.badBlobSize blob.size)
-  if commitmentBytes.size ≠ BYTES_PER_COMMITMENT then
-    throw (.badCommitmentSize commitmentBytes.size)
-  if proofBytes.size ≠ BYTES_PER_PROOF then
-    throw (.badProofSize proofBytes.size)
   let commitmentG1 ← match validateKzgG1Point commitmentBytes with
                      | .ok c    => pure c
                      | .error _ => throw (.invalidCommitment none)
@@ -312,13 +289,6 @@ def verifyBlobKzgProofBatch (setup : TrustedSetup)
         let blob := blobs[i]!
         let cb := commitmentsBytes[i]!
         let pb := proofsBytes[i]!
-        if blob.size ≠ BYTES_PER_BLOB then
-          throw (.badBlobSize blob.size)
-        if cb.size ≠ BYTES_PER_COMMITMENT then
-          throw (.badCommitmentSize cb.size)
-        if pb.size ≠ BYTES_PER_PROOF then
-          throw (.badProofSize pb.size)
-
         let commitmentG1 ← match validateKzgG1Point cb with
                            | .ok c    => pure c
                            | .error _ => throw (.invalidCommitment (some i))
