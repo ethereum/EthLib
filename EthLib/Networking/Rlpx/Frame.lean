@@ -161,6 +161,12 @@ def readFrame (st : FrameState) (input : ByteArray) :
 The sending direction of a session, from its secrets.
 
 `rlpx.md` does not fix the first counter block, and EthLib takes the zero block.
+
+Both directions start with the same key and the same counter, so they use the same keystream.
+
+Who knows the plaintext of one direction can then decrypt the other at the same positions.
+
+`rlpx.md` lists this weakness in its section "Known Issues in the current version".
 -/
 def Secrets.egress (s : Secrets) : FrameState :=
   ⟨⟨s.aesSecret.toArray, by simp [Aes.KeySize.Nk]⟩, Vector.replicate 16 0,
