@@ -7,6 +7,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from ethlib import consensus
+from ethlib.cryptography import _native
 
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "networking"
 CASES = FILES / "mainnet" / "fulu" / "networking"
@@ -59,3 +60,30 @@ def test_unknown_name():
     with pytest.raises(consensus.ConsensusError) as info:
         consensus.compute_columns_for_custody_group(0, "nonexistent")
     assert info.value.code == 0
+
+
+OUT_OF_RANGE = [-1, 2**64, 2**64 + 1]
+
+
+@pytest.mark.parametrize("value", OUT_OF_RANGE)
+def test_native_rejects_out_of_range(value):
+    # The extension raises instead of reducing the value modulo 2^64.
+    with pytest.raises(OverflowError):
+        _native.consensus_get_custody_groups("mainnet", bytes(32), value)
+    with pytest.raises(OverflowError):
+        _native.consensus_compute_columns_for_custody_group("mainnet", value)
+
+
+def test_native_rejects_non_integer():
+    with pytest.raises(TypeError):
+        _native.consensus_get_custody_groups("mainnet", bytes(32), "4")
+    with pytest.raises(TypeError):
+        _native.consensus_compute_columns_for_custody_group("mainnet", "0")
+
+
+@pytest.mark.parametrize("value", OUT_OF_RANGE)
+def test_wrapper_rejects_out_of_range(value):
+    with pytest.raises(ValueError):
+        consensus.get_custody_groups(0, value)
+    with pytest.raises(ValueError):
+        consensus.compute_columns_for_custody_group(value)
