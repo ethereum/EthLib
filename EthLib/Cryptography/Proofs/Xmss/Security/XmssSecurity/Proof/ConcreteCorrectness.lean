@@ -188,10 +188,10 @@ theorem authenticationPath_ascends_to_treeNode (cache : QueryCache HashSpec)
       treeNode cache secretKey.parameter secretKey.chainStart levels
         (pathNode leafIndex levels) := by
   induction levels with
-  | zero => simp [Merkle.ascend]
+  | zero => simp
   | succ level ih =>
       have hlevel : level < treeHeight := Nat.lt_of_succ_le hlevels
-      rw [Merkle.ascend, ih (Nat.le_of_succ_le hlevels)]
+      rw [Merkle.ascend_succ, ih (Nat.le_of_succ_le hlevels)]
       simp only [Nat.zero_add]
       have hpath :
           Concrete.signaturePath
@@ -315,10 +315,10 @@ theorem honestTopPath_ascends_to_topTreeNode (cache : QueryCache HashSpec)
       topTreeNode cache secretKey.parameter secretKey.topChainStart levels
         (topPathNodeAt key levels) := by
   induction levels with
-  | zero => simp [Merkle.ascend, topTreeNode_zero_eq]
+  | zero => simp [topTreeNode_zero_eq]
   | succ level ih =>
       have hlevel : level < treeHeight := Nat.lt_of_succ_le hlevels
-      rw [Merkle.ascend, ih (Nat.le_of_succ_le hlevels)]
+      rw [Merkle.ascend_succ, ih (Nat.le_of_succ_le hlevels)]
       simp only [Nat.zero_add, Concrete.honestTopPath, hlevel, ↓reduceDIte]
       exact top_authentication_step_eq_topTreeNode cache secretKey.parameter
         secretKey.topChainStart key level hlevel

@@ -340,9 +340,9 @@ theorem eval_authenticationRoot (cache : QueryCache HashSpec)
       Merkle.ascend (CacheView.nodeHash cache parameter leafIndex)
         (Concrete.signaturePath signature) 0 levels leaf := by
   induction levels with
-  | zero => simp [Concrete.authenticationRoot, Merkle.ascend]
+  | zero => simp [Concrete.authenticationRoot]
   | succ levels ih =>
-      simp only [Concrete.authenticationRoot, evalWithAnswerFn_bind, ih, Merkle.ascend,
+      simp only [Concrete.authenticationRoot, evalWithAnswerFn_bind, ih, Merkle.ascend_succ,
         Nat.zero_add]
       by_cases hlevel : levels < treeHeight
       · by_cases hbit : leafIndex.val.testBit levels = true
@@ -364,9 +364,9 @@ theorem eval_topAuthenticationRoot (cache : QueryCache HashSpec)
       Merkle.ascend (CacheView.topNodeHash cache parameter key)
         (Concrete.layerPath ⟨0, fun _ => 0, path⟩) 0 levels leaf := by
   induction levels with
-  | zero => simp [Concrete.topAuthenticationRoot, Merkle.ascend]
+  | zero => simp [Concrete.topAuthenticationRoot]
   | succ levels ih =>
-      simp only [Concrete.topAuthenticationRoot, evalWithAnswerFn_bind, ih, Merkle.ascend,
+      simp only [Concrete.topAuthenticationRoot, evalWithAnswerFn_bind, ih, Merkle.ascend_succ,
         Nat.zero_add]
       by_cases hlevel : levels < treeHeight
       · by_cases hbit : key.val.testBit levels = true

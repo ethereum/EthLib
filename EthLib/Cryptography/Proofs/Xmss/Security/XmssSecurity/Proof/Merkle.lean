@@ -1,93 +1,81 @@
 module
 
+public import EthLib.Cryptography.Proofs.Merkle.Binding
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
+
+/-!
+# The model's climb on the shared Merkle tree
+
+The model's node hash takes the held node first and orders the pair itself.
+
+So its climb is the shared climb from index 0, where the held node is always the left input.
+-/
 
 @[expose] public section
 
 namespace XmssSecurity.Merkle
 
-/-- Ascend `steps` levels, starting at `position`, using the supplied authentication path. -/
-def ascend {α β : Type} (nodeHash : Nat → α → β → α) (path : Nat → β) :
-    Nat → Nat → α → α
-  | _, 0, leaf => leaf
-  | position, steps + 1, leaf =>
-      nodeHash (position + steps) (ascend nodeHash path position steps leaf)
-        (path (position + steps))
+open EthLib.Cryptography.Merkle (climb climb_append climb_binding findCollision_valid ordered)
 
-def SamePathSegment {β : Type} (leftPath rightPath : Nat → β)
-    (position steps : Nat) : Prop :=
+variable {α : Type} (nodeHash : Nat → α → α → α)
+
+/-- Climb `steps` levels from level `position`, with the sibling `path l` on level `l`. -/
+def ascend (path : Nat → α) (position steps : Nat) (leaf : α) : α :=
+  (climb (m := Id) (fun level _ current sibling => nodeHash (level - 1) current sibling)
+    position 0 leaf ((List.range steps).map fun offset => path (position + offset))).run
+
+@[simp] theorem ascend_zero (path : Nat → α) (position : Nat) (leaf : α) :
+    ascend nodeHash path position 0 leaf = leaf := rfl
+
+/-- One more level hashes the held node with the next sibling. -/
+theorem ascend_succ (path : Nat → α) (position steps : Nat) (leaf : α) :
+    ascend nodeHash path position (steps + 1) leaf =
+      nodeHash (position + steps) (ascend nodeHash path position steps leaf)
+        (path (position + steps)) := by
+  simp [ascend, List.range_succ, climb_append, climb, ordered]
+  rfl
+
+def SamePathSegment (leftPath rightPath : Nat → α) (position steps : Nat) : Prop :=
   ∀ offset, offset < steps → leftPath (position + offset) = rightPath (position + offset)
 
-def HasNodeCollision {α β : Type} (nodeHash : Nat → α → β → α)
-    (leftPath rightPath : Nat → β) (position steps : Nat) (left right : α) : Prop :=
-  ∃ offset, offset < steps ∧
-    (ascend nodeHash leftPath position offset left, leftPath (position + offset)) ≠
-      (ascend nodeHash rightPath position offset right, rightPath (position + offset)) ∧
-    nodeHash (position + offset) (ascend nodeHash leftPath position offset left)
-        (leftPath (position + offset)) =
-      nodeHash (position + offset) (ascend nodeHash rightPath position offset right)
-        (rightPath (position + offset))
-
-/-- Equal Merkle roots imply identical leaves and paths, or an explicit collision at one level. -/
-theorem samePath_or_hasNodeCollision {α β : Type} (nodeHash : Nat → α → β → α)
-    (leftPath rightPath : Nat → β) (position steps : Nat) (left right : α)
-    (hroot : ascend nodeHash leftPath position steps left =
-      ascend nodeHash rightPath position steps right) :
-    (left = right ∧ SamePathSegment leftPath rightPath position steps) ∨
-      HasNodeCollision nodeHash leftPath rightPath position steps left right := by
-  induction steps with
-  | zero =>
-      left
-      exact ⟨by simpa [ascend] using hroot, by simp [SamePathSegment]⟩
-  | succ steps ih =>
-      let leftInput :=
-        (ascend nodeHash leftPath position steps left, leftPath (position + steps))
-      let rightInput :=
-        (ascend nodeHash rightPath position steps right, rightPath (position + steps))
-      by_cases hinput : leftInput = rightInput
-      · have hmid : ascend nodeHash leftPath position steps left =
-            ascend nodeHash rightPath position steps right := congrArg Prod.fst hinput
-        have hsibling : leftPath (position + steps) = rightPath (position + steps) :=
-          congrArg Prod.snd hinput
-        rcases ih hmid with ⟨hleaf, hpath⟩ | hcollision
-        · left
-          refine ⟨hleaf, ?_⟩
-          intro offset hoffset
-          by_cases hlt : offset < steps
-          · exact hpath offset hlt
-          · have heq : offset = steps := by omega
-            simpa [heq] using hsibling
-        · right
-          obtain ⟨offset, hoffset, hne, heq⟩ := hcollision
-          exact ⟨offset, Nat.lt_succ_of_lt hoffset, hne, heq⟩
-      · right
-        exact ⟨steps, Nat.lt_succ_self steps, hinput, by simpa [leftInput, rightInput, ascend] using hroot⟩
-
-def IsXmssPathCollisionAt {α β : Type} (nodeHash : Nat → α → β → α)
-    (leftPath rightPath : Nat → β) (left right : α) (level : Fin treeHeight) : Prop :=
+def IsXmssPathCollisionAt (leftPath rightPath : Nat → α) (left right : α)
+    (level : Fin treeHeight) : Prop :=
   (ascend nodeHash leftPath 0 level.val left, leftPath level.val) ≠
     (ascend nodeHash rightPath 0 level.val right, rightPath level.val) ∧
   nodeHash level.val (ascend nodeHash leftPath 0 level.val left) (leftPath level.val) =
     nodeHash level.val (ascend nodeHash rightPath 0 level.val right) (rightPath level.val)
 
-def HasXmssPathCollision {α β : Type} (nodeHash : Nat → α → β → α)
-    (leftPath rightPath : Nat → β) (left right : α) : Prop :=
+def HasXmssPathCollision (leftPath rightPath : Nat → α) (left right : α) : Prop :=
   ∃ level, IsXmssPathCollisionAt nodeHash leftPath rightPath left right level
 
 /-- Take an alternative XMSS authentication path that reaches the same root.
 
-It is identical, or it collides at one of 32 levels. -/
-theorem sameXmssPath_or_hasCollision {α β : Type} (nodeHash : Nat → α → β → α)
-    (leftPath rightPath : Nat → β) (left right : α)
+It has the same leaf and the same path, or it collides at one of its 16 levels.
+
+A collision at level `l` hashes two different pairs of level-`l` nodes to one node of level `l + 1`.
+
+The shared search finds the lowest such level, and records the parent's level `l + 1`. -/
+theorem sameXmssPath_or_hasCollision (leftPath rightPath : Nat → α) (left right : α)
     (hroot : ascend nodeHash leftPath 0 treeHeight left =
       ascend nodeHash rightPath 0 treeHeight right) :
     (left = right ∧ SamePathSegment leftPath rightPath 0 treeHeight) ∨
       HasXmssPathCollision nodeHash leftPath rightPath left right := by
-  rcases samePath_or_hasNodeCollision nodeHash leftPath rightPath 0 treeHeight left right hroot with
-    hsame | ⟨level, hlevel, hne, heq⟩
-  · exact Or.inl hsame
-  · refine Or.inr ⟨⟨level, hlevel⟩, ?_, ?_⟩
-    · simpa using hne
-    · simpa using heq
+  classical
+  rcases climb_binding _ _ _ 0 0 left right (by simp) hroot with ⟨hleaf, hpath⟩ | hfound
+  · -- Equal lists of siblings agree at every level.
+    refine .inl ⟨hleaf, fun offset hoffset => ?_⟩
+    simpa [hoffset] using congrArg (·[offset]?) hpath
+  · obtain ⟨c, hc⟩ := Option.isSome_iff_exists.mp hfound
+    obtain ⟨⟨hne, heq⟩, k, s, t, hs, ht, hlevel, _, hx, hy⟩ :=
+      findCollision_valid _ _ _ _ _ _ _ c hc
+    obtain ⟨hk, rfl⟩ := List.getElem?_eq_some_iff.mp hs
+    obtain ⟨_, rfl⟩ := List.getElem?_eq_some_iff.mp ht
+    have hk' : k < treeHeight := by simpa using hk
+    -- The collision's pairs hold the nodes both climbs reach after `k` levels, and sibling `k`.
+    rw [← List.map_take, List.take_range, Nat.min_eq_left hk'.le] at hx hy
+    refine .inr ⟨⟨k, hk'⟩, ?_, ?_⟩
+    · simpa [hx, hy, ordered, ascend] using hne
+    · simp [hx, hy, hlevel, ordered, ascend] at heq ⊢
+      exact heq
 
 end XmssSecurity.Merkle

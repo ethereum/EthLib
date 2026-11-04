@@ -65,13 +65,18 @@ def findCollision [DecidableEq α] : (level j : Nat) → (a b : α) → (p q : L
     else findCollision (level + 1) (j / 2) parentA parentB p q
   | _, _, _, _, _, _ => none
 
-/-- Every collision `findCollision` returns is valid, at an ancestor of `(level, j)`.
+/-- Every collision the search returns is valid, at an ancestor of `(level, j)`.
 
-The ancestor is `k + 1` levels up, at index `j / 2^(k + 1)`. -/
+The ancestor is `k + 1` levels up, at index `j / 2^(k + 1)`.
+
+Its two pairs are the ones the two climbs hash there, after `k` levels. -/
 theorem findCollision_valid [DecidableEq α] :
     ∀ (p q : List α) (level j : Nat) (a b : α) (c : Collision α),
       findCollision hash level j a b p q = some c →
-      c.Valid hash ∧ ∃ k < p.length, c.level = level + k + 1 ∧ c.j = j / 2 ^ (k + 1) := by
+      c.Valid hash ∧ ∃ k s t, p[k]? = some s ∧ q[k]? = some t ∧
+        c.level = level + k + 1 ∧ c.j = j / 2 ^ (k + 1) ∧
+        c.x = ordered (j / 2 ^ k) (climb hash level j a (p.take k)).run s ∧
+        c.y = ordered (j / 2 ^ k) (climb hash level j b (q.take k)).run t := by
   intro p
   induction p with
   | nil => intro q level j a b c h; simp [findCollision] at h
@@ -85,11 +90,12 @@ theorem findCollision_valid [DecidableEq α] :
       · -- This level is the collision.
         rename_i hfound
         cases h
-        exact ⟨hfound, 0, by simp, rfl, by simp⟩
+        exact ⟨hfound, 0, s, t, rfl, rfl, rfl, by simp, by simp, by simp⟩
       · -- The collision is further up: one level higher in the count.
-        obtain ⟨hvalid, k, hk, hlevel, hj⟩ := ih rest' (level + 1) (j / 2) _ _ c h
-        refine ⟨hvalid, k + 1, by simpa using hk, by omega, ?_⟩
-        rw [hj, div_two_div_pow]
+        obtain ⟨hvalid, k, s', t', hs, ht, hlevel, hj, hx, hy⟩ :=
+          ih rest' (level + 1) (j / 2) _ _ c h
+        refine ⟨hvalid, k + 1, s', t', hs, ht, by omega, ?_, ?_, ?_⟩ <;>
+          rw [div_two_div_pow] at * <;> assumption
 
 /-- Binding: two climbs from `(level, j)` over equally many siblings that meet are equal.
 
