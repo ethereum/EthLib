@@ -173,6 +173,10 @@ A setup is well formed for a secret `τ` when its points represent `τ^i` and th
 For such a setup, `blobToKzgCommitment_represents`, in `Proofs/Kzg/Commitment.lean`, proves that a blob's commitment represents its polynomial at `τ`.
 That a secret makes the embedded setup well formed is an assumption, recorded in SOUNDNESS.md D3.
 
+**The proofs.**
+Under the pairing law and for a well-formed setup, honest single proofs and blob proofs verify.
+`Proofs/Kzg/Verify.lean` proves both, at every point, inside or outside the domain.
+
 **The ceremony.**
 The trusted setup came from a ceremony in which many participants each mixed in a secret.
 
@@ -184,10 +188,7 @@ It assumes the pairing law, the subgroup checks, and that two points are not at 
 
 ## What is not proved
 
-- No theorem states what a verification operation returns on valid input.
-  In particular, none says that an honest proof verifies.
-  The FK20 theorems state the cells and proofs that two operations return,
-  under hypotheses on the setup.
+- No theorem states what a batch check returns on valid input.
 - No security property, such as binding, is proved.
   Binding also needs the ceremony secret to stay unknown, which no proof can show.
 - The trusted setup itself is not proved correct.
