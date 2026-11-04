@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from ethlib import precompiles
 from ethlib.precompiles import run
 
 from .forks import since
@@ -19,19 +20,20 @@ EIP_1108_FORKS = since("istanbul")
 # Directory: tests/byzantium
 # Files: eip196_ec_add_mul/test_ecadd.py, eip196_ec_add_mul/test_ecmul.py
 # Files: eip197_ec_pairing/test_ecpairing.py, eip197_ec_pairing/test_ecpairing_fuzzed.py
+# Files: eip196_ec_add_mul/test_gas.py, eip197_ec_pairing/test_gas.py
 # Repository: ethereum/execution-specs
 # Commit: e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e
 # Licence: CC0-1.0
 #
 # `extract_alt_bn128_cases.py` read the `pytest.param` lists with Python's `ast`.
 # It evaluated their expressions over the constants of each `spec.py`, without running the files.
-# An empty output marks a call that must fail.
-# A gas modifier of -1 marks a call given one unit of gas less than its price.
+# An empty output marks a call that must fail, and a null output one that must succeed.
+# The gas modifier is added to the price: -1 must run out of gas, and an invalid input fails
+# with any extra gas.
 #
-# Two kinds of test there are not read.
-# The `test_gas.py` files check the price at every fork from Byzantium; `test_alt_bn128.py`
-# checks those prices, from EIP-196, EIP-197 and EIP-1108.
-# The ported state test `stZeroKnowledge/test_pairing_test.py` calls the precompile from EVM code.
+# The `test_gas.py` files give no price; the price below is that of EIP-196, EIP-197 and EIP-1108.
+# The ported state test `stZeroKnowledge/test_pairing_test.py` calls the precompile from EVM code,
+# so it is not read.
 CASES = json.loads((Path(__file__).parent / "alt_bn128_cases.json").read_text())
 
 
@@ -51,15 +53,21 @@ def price(fork: str, address: int, data: bytes) -> int:
     return 45000 + 34000 * (len(data) // 192)
 
 
-VALID = [pytest.param(c, id=c["id"]) for c in CASES if c["output"] and not c["gas_modifier"]]
-INVALID = [pytest.param(c, id=c["id"]) for c in CASES if not c["output"] and not c["gas_modifier"]]
-SHORT = [pytest.param(c, id=c["id"]) for c in CASES if c["gas_modifier"]]
+def _group(test) -> list:
+    return [pytest.param(c, id=c["id"]) for c in CASES if test(c)]
+
+
+VALID = _group(lambda c: c["output"] and c["gas_modifier"] == 0)
+SUCCEEDS = _group(lambda c: c["output"] is None)
+INVALID = _group(lambda c: c["output"] == "" and c["gas_modifier"] >= 0)
+SHORT = _group(lambda c: c["gas_modifier"] < 0)
 
 
 def test_case_count() -> None:
-    # Every case is in exactly one group, and the three groups are those of the files.
-    assert len(VALID) + len(INVALID) + len(SHORT) == len(CASES) == 359
-    assert (len(VALID), len(INVALID), len(SHORT)) == (173, 183, 3)
+    # Every case is in exactly one group.
+    groups = (VALID, SUCCEEDS, INVALID, SHORT)
+    assert sum(map(len, groups)) == len(CASES) == 371
+    assert tuple(map(len, groups)) == (173, 3, 189, 6)
 
 
 @pytest.mark.parametrize("case", VALID)
@@ -80,11 +88,20 @@ def test_valid_one_gas_short(fork: str, case: dict) -> None:
 @pytest.mark.parametrize("case", INVALID)
 @pytest.mark.parametrize("fork", FORKS)
 def test_invalid(fork: str, case: dict) -> None:
-    # The call fails at its full price, so it fails for its input and not for lack of gas.
+    # The call fails at its price or above, so it fails for its input and not for lack of gas.
     data = bytes.fromhex(case["input"])
     with pytest.raises(ValueError, match=r"PrecompileError\.altBn128") as error:
-        run(fork, case["address"], data, price(fork, case["address"], data))
+        run(fork, case["address"], data, price(fork, case["address"], data) + case["gas_modifier"])
     assert "outOfGas" not in str(error.value)
+
+
+@pytest.mark.parametrize("case", SUCCEEDS)
+@pytest.mark.parametrize("fork", FORKS)
+def test_succeeds_at_price(fork: str, case: dict) -> None:
+    # The file checks only that the call succeeds; the length is that of the precompile's output.
+    data = bytes.fromhex(case["input"])
+    out = run(fork, case["address"], data, price(fork, case["address"], data))
+    assert len(out) == (32 if case["address"] == 0x08 else 64)
 
 
 @pytest.mark.parametrize("case", SHORT)
@@ -93,3 +110,11 @@ def test_short_of_gas(fork: str, case: dict) -> None:
     data = bytes.fromhex(case["input"])
     with pytest.raises(ValueError, match="outOfGas"):
         run(fork, case["address"], data, price(fork, case["address"], data) + case["gas_modifier"])
+
+
+@pytest.mark.parametrize("fork", FORKS)
+def test_price_export(fork: str) -> None:
+    # The price that EthLib exports is the price of the EIPs, on every input of the files.
+    for case in CASES:
+        data = bytes.fromhex(case["input"])
+        assert precompiles.price(fork, case["address"], data) == price(fork, case["address"], data)

@@ -204,6 +204,38 @@ def cases(path: Path, spec: Namespace):
             }
 
 
+def gas_cases(path: Path, spec: Namespace, address: int):
+    """Each case of a `test_gas.py`, which gives a gas modifier but no output."""
+    evaluate = Evaluate({"Spec": spec, "PointG1": PointG1, "PointG2": PointG2, "FP": FP,
+                         "Scalar": FP, "pytest": PYTEST, "int": int, "bytes": bytes})
+    for node in ast.parse(path.read_text()).body:
+        if not isinstance(node, ast.FunctionDef) or not node.name.startswith("test_"):
+            continue
+        sets = [rows(d, evaluate) for d in node.decorator_list if is_parametrize(d)]
+        for combination in itertools.product(*[r for _, r in sets]):
+            # The input defaults to the empty call data of the test's STATICCALL.
+            row, ids = {"input_data": b"", "precompile_address": address}, []
+            for (names, _), (values, case_id) in zip(sets, combination):
+                row.update(zip(names, values))
+                ids.append(str(case_id if case_id is not None else values[0]))
+            # The EIP-196 file names its invalid input `invalid_input`.
+            row["input_data"] = row.get("invalid_input", row["input_data"])
+            if "enough_gas" in row:
+                # A call with its price succeeds, with an output the file does not give.
+                # One unit of gas less fails.
+                modifier, output = (0, None) if row["enough_gas"] else (-1, "")
+            else:
+                # An invalid input fails with its price, and with extra gas too.
+                modifier, output = row["extra_gas"], ""
+            yield {
+                "id": f"{path.parent.name}/{path.stem}::{node.name}[{'-'.join(ids)}]",
+                "address": int(row["precompile_address"]),
+                "input": bytes(row["input_data"]).hex(),
+                "output": output,
+                "gas_modifier": modifier,
+            }
+
+
 def main() -> None:
     byzantium, out = Path(sys.argv[1]), Path(sys.argv[2])
     add_mul, pairing = byzantium / "eip196_ec_add_mul", byzantium / "eip197_ec_pairing"
@@ -213,6 +245,8 @@ def main() -> None:
               for c in cases(add_mul / name, spec196)]
     result += [c for name in ("test_ecpairing.py", "test_ecpairing_fuzzed.py")
                for c in cases(pairing / name, spec197)]
+    result += list(gas_cases(add_mul / "test_gas.py", spec196, 0x06))
+    result += list(gas_cases(pairing / "test_gas.py", spec197, 0x08))
     assert len({c["id"] for c in result}) == len(result), "duplicate id"
     out.write_text(json.dumps(result, indent=1) + "\n")
 
