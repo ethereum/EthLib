@@ -12,12 +12,14 @@ Both moduli are prime, so `ZMod p` and `ZMod n` are fields.
 
 `Fp` is `Fin p`, which is `ZMod p` by definition, with the same ring operations.
 
-So a proof states its algebra over `ZMod p`, where `ring` and `field_simp` work, and an `Fp` crosses over unchanged.
+So a proof states its algebra over `ZMod p`, where `ring` and `field_simp` work.
 
-- `Fp.modulus_prime` and `Fn.modulus_prime`: Pratt certificates, which the kernel checks.
-- `Fin.powBits_eq_pow`: square and multiply computes the power.
-- `Fp.inv_eq_inv` and `Fn.inv_eq_inv`: Fermat's inverse is the field inverse.
-- `Fp.sqrt_mul_self` and `Fp.sqrt_isSome`: `sqrt` returns a square root exactly when one exists.
+An element of `Fp` crosses over unchanged.
+
+- Both moduli are prime, by Pratt certificates that the kernel checks.
+- Square and multiply computes the power.
+- Fermat's inverse is the field inverse.
+- The square root succeeds exactly on the squares, and then returns a root.
 -/
 
 @[expose] public section
@@ -40,7 +42,7 @@ theorem Fin.powBits_eq_pow {m : Nat} [NeZero m] (fuel : Nat) (a : Fin m) (e : Na
 
 namespace Fp
 
--- The certificates evaluate `powModAux` on 256-bit numbers, deeper than the default.
+-- The certificates compute powers mod 256-bit numbers, deeper than the default.
 set_option maxRecDepth 8000
 
 /-- `13331831` is prime, with witness `13`. -/
@@ -153,7 +155,9 @@ private theorem prime_255515944373312847190720520512484175977 : Nat.Prime 255515
     · exact prime_107590001)
     (by decide) (by decide)
 
-/-- `205115282021455665897114700593932402728804164701536103180137503955397371` is prime, with witness `10`. -/
+/-- This number is prime, with witness `10`:
+
+`205115282021455665897114700593932402728804164701536103180137503955397371`. -/
 private theorem prime_205115282021455665897114700593932402728804164701536103180137503955397371 : Nat.Prime 205115282021455665897114700593932402728804164701536103180137503955397371 :=
   Pratt.prime_of_lucas 205115282021455665897114700593932402728804164701536103180137503955397371 10 256 [(2, 1), (3, 1), (5, 1), (29, 2), (31, 1), (7723, 1), (132896956044521568488119, 1), (255515944373312847190720520512484175977, 1)] (by decide) (by decide)
     (by

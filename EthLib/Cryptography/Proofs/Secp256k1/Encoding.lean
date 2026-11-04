@@ -7,14 +7,18 @@ public import EthLib.Cryptography.Proofs.Hash.Keccak256
 /-!
 # Proofs: the point encodings of secp256k1
 
-The decoder accepts exactly the two encodings of the points other than `O`, and returns the point encoded.
+The decoder accepts exactly the two encodings of the points other than `O`.
 
-- `decode_encodeCompressed`, `decode_encodeUncompressed`: decoding undoes either encoding.
-- `decode_eq_ok_iff`: a decoded point is on the curve, is not `O`, and the input is one of its two encodings.
+It returns the point that was encoded.
+
+- Decoding undoes either encoding.
+- A decoded point is on the curve and is not `O`, and the input is one of its two encodings.
 
 So the encodings are canonical: no other bytes decode to a point.
 
-That rules out a coordinate of `p` or more, an unknown prefix, a pair off the curve, an `x` with no point, and `O`.
+The decoder rejects a coordinate of `p` or more, an unknown prefix, and a pair off the curve.
+
+It also rejects an `x` with no point, and `O`.
 -/
 
 @[expose] public section
@@ -99,7 +103,7 @@ private theorem sqrt_ne_zero {x c : Fp} (h : (x * x * x + b).sqrt = some c) : c 
   have h0 := (Point.isOnCurve_affine x 0).mp (isOnCurve_of_sqrt h)
   exact cube_ne_neg_seven (Fp.toZMod x) (by rw [Fp.toZMod_zero] at h0; linear_combination -h0)
 
-/-- `decompress x odd` is the point of the curve with coordinate `x` and parity `odd`, when it exists. -/
+/-- Decompression gives the point of the curve with coordinate `x` and the given parity, if any. -/
 theorem decompress_eq_ok_iff {x : Fp} {odd : Bool} {p : Point} :
     Point.decompress x odd = .ok p ↔
       ∃ y : Fp, p = .affine x y ∧ (Point.affine x y).isOnCurve = true ∧ decide (y.val % 2 = 1) = odd := by

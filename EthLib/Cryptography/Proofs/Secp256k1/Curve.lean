@@ -9,14 +9,14 @@ public import Mathlib.AlgebraicGeometry.EllipticCurve.Affine.Point
 
 The addition rule of SEC 1 v2 §2.2.1 is the group law of the elliptic curve `y^2 = x^3 + 7`.
 
-Mathlib defines that curve over the field `ZMod p`, proves its points form a commutative group, and calls it `curve.Point`.
+Mathlib defines that curve over the field `ZMod p`, and proves its points form a commutative group.
 
-`toPoint` sends a point of the specification to that group.
+Each point of the specification maps to an element of that group.
 
-- `toPoint_add`, `toPoint_neg`: addition and negation are the group's.
-- `toPoint_mulBits`, `toPoint_mul`: double and add computes `k P`.
-- `isOnCurve_add`, `isOnCurve_neg`, `isOnCurve_mul`: each operation stays on the curve.
-- `toPoint_inj`, `toPoint_surjective`: points on the curve and group elements correspond one to one.
+- Addition and negation are the group's.
+- Double and add computes `k P`.
+- Each operation stays on the curve.
+- Points on the curve and group elements correspond one to one.
 
 So every fact about the group, such as associativity, holds for the specification's points.
 -/
@@ -48,7 +48,7 @@ theorem equation_iff (x y : ZMod Fp.modulus) : curve.Equation x y ↔ y * y = x 
 theorem nonsingular_of {x y : ZMod Fp.modulus} (h : y * y = x * x * x + 7) : curve.Nonsingular x y :=
   equation_iff_nonsingular.mp ((equation_iff x y).mpr h)
 
-/-- `negY` on this curve is plain negation, since `a_1 = a_3 = 0`. -/
+/-- Mathlib's negation of `y` is plain negation on this curve, since `a_1 = a_3 = 0`. -/
 @[simp] theorem negY_eq (x y : ZMod Fp.modulus) : curve.negY x y = -y := by
   simp [Affine.negY, curve]
 
@@ -64,7 +64,7 @@ def toPoint : Point → curve.Point
       .some _ _ (nonsingular_of h)
     else 0
 
-/-- The test `isOnCurve`, as an equation in `ZMod p`. -/
+/-- The curve test, as an equation in `ZMod p`. -/
 theorem isOnCurve_affine (x y : Fp) :
     (affine x y).isOnCurve = true ↔ Fp.toZMod y * Fp.toZMod y = Fp.toZMod x * Fp.toZMod x * Fp.toZMod x + 7 := by
   simp only [isOnCurve, beq_iff_eq]
@@ -215,7 +215,7 @@ theorem toPoint_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) (hk
 theorem isOnCurve_mul (k : Fn) {p : Point} (hp : p.isOnCurve = true) : (mul k p).isOnCurve = true :=
   isOnCurve_mulBits 256 k.val hp
 
-/-- `mul k P` is `k P`, with the value of `k` below `n`. -/
+/-- Scalar multiplication computes `k P`, with the value of `k` below `n`. -/
 theorem toPoint_mul (k : Fn) {p : Point} (hp : p.isOnCurve = true) :
     toPoint (mul k p) = k.val • toPoint p :=
   toPoint_mulBits 256 k.val hp (Nat.lt_trans k.isLt (by decide))

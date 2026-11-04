@@ -26,10 +26,10 @@ The kernel checks that by Euler's criterion: `(-7)^((p - 1) / 3) != 1`, since `p
 
 With `n` points, `n X = 0` for every point `X`, so the scalars of `Fn` act on the group.
 
-- `card_point`: the group has `n` points.
-- `nsmul_order`: `n X = 0` for every point.
-- `toPoint_mul'`: `mul k P` is `k P` with `k` in `ZMod n`.
-- `exists_eq_mul_generator`: every point on the curve is `k G` for some scalar `k`.
+- The group has `n` points.
+- `n X = 0` for every point.
+- Scalar multiplication computes `k P`, with `k` in `ZMod n`.
+- Every point on the curve is `k G` for some scalar `k`.
 -/
 
 @[expose] public section

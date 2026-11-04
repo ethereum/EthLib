@@ -7,15 +7,19 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
 /-!
 # Proofs: public key recovery
 
-- `verify_recover`: a recovered key verifies the signature.
-- `recover_sign`: recovery returns the key of the signer, with the parity of `R` as the id.
-- `recover_of_verify`: every key that verifies a signature is recovered by one of the two ids, when `r + n >= p`.
-- `recover_neg_s`: replacing `s` by `n - s` swaps the two ids, the malleability EIP-2 removes.
-- `recover_ne`: the two ids give two different keys.
+- A recovered key verifies the signature.
+- Recovery returns the key of the signer, with the parity of `R` as the id.
+- When `r + n >= p`, every key that verifies a signature is recovered by one of the two ids.
+- The swap of `s` for `n - s` swaps the two ids: EIP-2 removes that malleability.
+- The two ids give two different keys.
 
-The bound `r + n >= p` of `recover_of_verify` covers every `r` but the smallest `p - n`, about `2^128` of the `2^256`.
+The bound `r + n >= p` covers every `r` but the smallest `p - n`.
 
-Below it, `R` could have `x = r + n`, which only the ids 2 and 3 reach, and Ethereum does not use them.
+That is about `2^128` values of `r` out of `2^256`.
+
+Below it, `R` could have `x = r + n`, which only the ids 2 and 3 reach.
+
+Ethereum does not use those ids.
 -/
 
 @[expose] public section
@@ -41,7 +45,7 @@ private theorem toPoint_recovered (rInv sF e : Fn) {R : Point} (hR : R.isOnCurve
   rw [toPoint_add (isOnCurve_mul _ hR) (isOnCurve_mul _ isOnCurve_generator), toPoint_mul' _ hR,
     toPoint_mul' _ isOnCurve_generator, map_mul, map_neg, map_mul, neg_smul, sub_eq_add_neg]
 
-/-- `recover` in steps: the ranges, then the point `R`, then the key. -/
+/-- Recovery in steps: the ranges, then the point `R`, then the key. -/
 private theorem recover_eq (hash : Vector UInt8 32) (r s : Nat) (id : Fin 2) (hr : 0 < r ∧ r < Fn.modulus)
     (hs : 0 < s ∧ s < Fn.modulus) :
     recover hash r s id = (decompress (Fin.ofNat _ r) (id == 1)).bind fun R =>
@@ -196,7 +200,9 @@ theorem recover_sign (d k : Fn) (hash : Vector UInt8 32) (hd : d ≠ 0) {x y : F
   field_simp
   ring
 
-/-- What a valid signature gives: the ranges, a valid key, and the rebuilt point `R` with `x_R mod n = r`. -/
+/-- What a valid signature gives: the ranges, a valid key, and the rebuilt point `R`.
+
+That point has `x_R mod n = r`. -/
 theorem verify_rebuilt {q : Point} {hash : Vector UInt8 32} {r s : Nat} (hv : verify q hash r s = true) :
     ∃ (hr : 0 < r ∧ r < Fn.modulus) (hs : 0 < s ∧ s < Fn.modulus), q ≠ .infinity ∧ q.isOnCurve = true ∧
       ∃ x y : Fp, mul (Fin.ofNat _ (hashToInt hash) * Fn.inv ⟨s, hs.2⟩) generator
@@ -256,7 +262,9 @@ theorem recover_of_verify {q : Point} {hash : Vector UInt8 32} {r s : Nat} (hv :
     rw [hA, hB, one_smul]
     abel
 
-/-- What a recovery gives: the point `R` with `x = r` and the parity of the id, and the key `r^(-1) (s R - e G)`. -/
+/-- What a recovery gives: the point `R` with `x = r` and the parity of the id.
+
+The key is then `r^(-1) (s R - e G)`. -/
 private theorem recover_spec {hash : Vector UInt8 32} {r s : Nat} {id : Fin 2} {q : Point}
     (h : recover hash r s id = .ok q) :
     ∃ (hr : 0 < r ∧ r < Fn.modulus) (hs : 0 < s ∧ s < Fn.modulus) (y : Fp),
@@ -291,7 +299,9 @@ private theorem toZMod_sub_eq_neg {s : Nat} (hs : 0 < s ∧ s < Fn.modulus) (hs'
 
 /-- Replacing `s` by `n - s` swaps the recovery ids, and the key stays the same.
 
-This is the malleability EIP-2 removes: the flipped signature, with the flipped id, still names the sender. -/
+EIP-2 removes this malleability.
+
+The flipped signature, with the flipped id, still names the sender. -/
 theorem recover_neg_s {hash : Vector UInt8 32} {r s : Nat} {id : Fin 2} {q : Point}
     (h : recover hash r s id = .ok q) : recover hash r (Fn.modulus - s) (1 - id) = .ok q := by
   obtain ⟨hqc, hqi⟩ := recover_valid h
@@ -313,7 +323,9 @@ theorem recover_neg_s {hash : Vector UInt8 32} {r s : Nat} {id : Fin 2} {q : Poi
 
 /-- The two recovery ids give two different keys.
 
-Their difference is `2 r^(-1) s R`, which is not `O`: `R` is not `O`, and `2 r^(-1) s != 0` mod `n`. -/
+Their difference is `2 r^(-1) s R`.
+
+It is not `O`, since `R` is not `O` and `2 r^(-1) s != 0` mod `n`. -/
 theorem recover_ne {hash : Vector UInt8 32} {r s : Nat} {q0 q1 : Point} (h0 : recover hash r s 0 = .ok q0)
     (h1 : recover hash r s 1 = .ok q1) : q0 ≠ q1 := by
   obtain ⟨hr, hs, y0, -, hc0, hpar0, hq0⟩ := recover_spec h0

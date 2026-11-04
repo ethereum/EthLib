@@ -9,7 +9,9 @@ ECDSA verification over secp256k1, from SEC 1 v2 §4.1.4.
 
 A signature on a 32-byte hash is a pair of integers `(r, s)`.
 
-The signer picks a secret nonce `k`, sets `R = k G`, takes `r = x_R mod n`, and sets `s = k^(-1) (e + r d) mod n`.
+The signer picks a secret nonce `k` and sets `R = k G`.
+
+The signature is `r = x_R mod n` and `s = k^(-1) (e + r d) mod n`.
 
 Here `d` is the private key and `e` the hash read as an integer.
 
@@ -26,7 +28,9 @@ The signature is valid when the `x` of that point is `r` mod `n`.
 
 EIP-2 removes that freedom from transactions: their `s` must be at most `n / 2`.
 
-The rule is not part of ECDSA, and the `ecrecover` precompile does not apply it, so it is a separate test, `isLowS`.
+The rule is not part of ECDSA, and the `ecrecover` precompile does not apply it.
+
+So it is a separate test.
 -/
 
 @[expose] public section
@@ -44,7 +48,7 @@ def hashToInt (hash : Vector UInt8 32) : Nat := ofBytesBE hash.toList
 
 `q` must be a valid public key, as SEC 1 v2 §3.2.2.1 checks: on the curve, and not `O`.
 
-A key from `Point.decode` always is.
+A key from the decoder always is.
 
 The key `O` would accept any `r` that some `u1 G` hits, so it is rejected here too. -/
 def verify (q : Point) (hash : Vector UInt8 32) (r s : Nat) : Bool :=
