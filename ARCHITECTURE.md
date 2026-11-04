@@ -260,6 +260,8 @@ The SSZ container of a beacon state works the same way.
 
 The execution block header, in `EthLib/Execution/Blocks/Header.lean`, uses this design.
 Its RLP codec is lawful at every fork, which validates the design for RLP.
+The execution payload of the consensus layer, in `EthLib/Consensus/Containers/Execution.lean`, uses it with SSZ.
+Its SSZ codec is lawful at every fork, which validates the design for SSZ.
 
 The simpler form `if f ≤ fork then α else Unit` reduces to `α` or to `Unit` at a known fork.
 At a fork variable, it needs a cast at each read and each write, and the function form needs none.
