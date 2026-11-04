@@ -297,7 +297,9 @@ They take two hypotheses on the setup.
 - `setup.Valid`: every point of the setup is on its curve.
   For the embedded setup, `TrustedSetup.ofHex_valid` proves it if the setup decodes.
 - `hsetup_tor`: the first 4032 monomial points of `G1` have an order that divides `r`.
-  No theorem proves it for the embedded setup.
+  No theorem proves it for the embedded setup, so it stays an assumption on that setup.
+  The Python suite checks it (`bindings/python/tests/kzg/test_trusted_setup.py`).
+  It decodes each point of the embedded setup, in `G1` and `G2`, and checks that it is in the subgroup.
 
 `TrustedSetup.WellFormed.valid` and `TrustedSetup.WellFormed.torsion` derive both from a well-formed setup.
 
@@ -663,6 +665,7 @@ The setup raises three separate assumptions, and each use of KZG relies on a dif
   For the embedded bytes, only the first part is proved, and only in part.
   `TrustedSetup.ofHex_valid` (`Proofs/Kzg/TrustedSetup.lean`) proves that, if they decode, each point is on its curve.
   No theorem says that they decode, or that the points lie in the subgroup.
+  The Python suite checks both for every point (`bindings/python/tests/kzg/test_trusted_setup.py`).
   `checksSufficient` covers the ceremony's monomial points, under its hypotheses.
   `TrustedSetup.WellFormed s τ` (`Proofs/Kzg/Commitment.lean`) states the consistency of a setup `s` with a secret `τ`.
   The theorems on commitments and on honest proofs take it as a hypothesis.
