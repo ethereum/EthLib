@@ -257,7 +257,15 @@ theorem chargedGas_le {data : ByteArray} {cost : Nat} (h : chargedGas data = .ok
   · next hc =>
     cases h
     unfold checkLengths at hc
-    split_ifs at hc with h1 h2 h3
+    split at hc
+    · cases hc
+    next h1 =>
+    split at hc
+    · cases hc
+    next h2 =>
+    split at hc
+    · cases hc
+    next h3 =>
     exact gasCost_le (Nat.le_of_not_lt h1) (Nat.le_of_not_lt h3) (Nat.le_of_not_lt h2)
       (exponentHead_lt _ _)
 
