@@ -15,6 +15,8 @@ public import EthLib.Execution.Proofs.Evm.Frame
 public import EthLib.Execution.Proofs.Evm.Step
 public import EthLib.Execution.Proofs.Evm.StackOnly
 public import EthLib.Execution.Proofs.Evm.MemoryData
+public import EthLib.Execution.Proofs.Evm.JumpDest
+public import EthLib.Execution.Proofs.Evm.ControlFlow
 
 /-!
 # `EthLib.Execution.Proofs.Evm`

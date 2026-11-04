@@ -76,6 +76,10 @@ structure Evm (Meter : Type) where
   memory : ByteArray
   /-- The code that runs. -/
   code : ByteArray
+  /-- The valid jump destinations of the code, one flag for each position.
+
+  The frame must hold the flags that the scan of its code gives, or a jump checks the wrong code. -/
+  validJumpDestinations : Array Bool
   /-- The gas meter. -/
   gas : Meter
   /-- Whether the frame still runs. -/
