@@ -155,9 +155,10 @@ the representation it returns may differ from that of `P`.
 - The map to G1 of EIP-2537 has no theorem:
   neither its validity nor its landing in the subgroup is proved.
 - No theorem says which signatures verification rejects, beyond malformed input.
-- Unforgeability is proved only in the random oracle model, for a scheme over abstract groups.
-  No theorem yet links that scheme to EthLib's own signing and verification.
-  The proof rests on a co-Diffie-Hellman problem that no theorem proves hard.
+- Unforgeability is proved only in the random oracle model, with the hash to G2 as the oracle.
+  It covers signing and verification, not aggregation or proofs of possession.
+  Its adversary works on group elements, and the step to a forger on bytes is not proved.
+  It rests on a co-Diffie-Hellman problem that no theorem proves hard.
 - `PairingLaws`, the law of the pairing check, is not proved:
   on representatives of `a_i * g_1` and `b_i * g_2`,
   the check passes exactly when `sum_i a_i * b_i = 0`.
