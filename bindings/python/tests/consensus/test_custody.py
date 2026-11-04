@@ -10,11 +10,19 @@ from ethlib import consensus
 from ethlib.cryptography import _native
 
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "networking"
-CASES = FILES / "mainnet" / "fulu" / "networking"
+
+# The presets whose Fulu cases the directory holds.
+PRESETS = ("mainnet", "minimal")
 
 
 def _cases(handler: str) -> list:
-    return sorted((CASES / handler / "pyspec_tests").iterdir())
+    """Each case of a handler, with the preset it runs on."""
+    params = []
+    for preset in PRESETS:
+        suite = FILES / preset / "fulu" / "networking" / handler / "pyspec_tests"
+        params += [pytest.param(preset, case, id=f"{preset}-{case.name}")
+                   for case in sorted(suite.iterdir())]
+    return params
 
 
 def _meta(case: Path) -> dict:
@@ -29,19 +37,26 @@ def test_digests():
         assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name
 
 
-@pytest.mark.parametrize("case", _cases("get_custody_groups"), ids=lambda case: case.name)
-def test_get_custody_groups(case):
+def test_counts():
+    # Each preset has 11 cases of the first handler and 5 of the second.
+    for handler, count in (("get_custody_groups", 11), ("compute_columns_for_custody_group", 5)):
+        found = [case.values[0] for case in _cases(handler)]
+        assert [found.count(preset) for preset in PRESETS] == [count, count], handler
+
+
+@pytest.mark.parametrize(("preset", "case"), _cases("get_custody_groups"))
+def test_get_custody_groups(preset, case):
     meta = _meta(case)
-    groups = consensus.get_custody_groups(int(meta["node_id"]), meta["custody_group_count"])
+    node_id = int(meta["node_id"])
+    groups = consensus.get_custody_groups(node_id, meta["custody_group_count"], preset)
     assert groups == meta["result"]
 
 
-@pytest.mark.parametrize(
-    "case", _cases("compute_columns_for_custody_group"), ids=lambda case: case.name
-)
-def test_compute_columns_for_custody_group(case):
+@pytest.mark.parametrize(("preset", "case"), _cases("compute_columns_for_custody_group"))
+def test_compute_columns_for_custody_group(preset, case):
     meta = _meta(case)
-    assert consensus.compute_columns_for_custody_group(meta["custody_group"]) == meta["result"]
+    columns = consensus.compute_columns_for_custody_group(meta["custody_group"], preset)
+    assert columns == meta["result"]
 
 
 def test_too_many_groups():
