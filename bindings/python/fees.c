@@ -13,6 +13,7 @@ extern lean_object* eth_fees_fake_exponential(lean_object*, lean_object*, lean_o
 extern lean_object* eth_fees_base_fee_per_blob_gas(lean_object*, lean_object*);
 extern lean_object* eth_fees_excess_blob_gas(
   lean_object*, lean_object*, lean_object*, lean_object*);
+extern lean_object* eth_fees_blob_data_fee(lean_object*, lean_object*, lean_object*);
 
 /* The largest number of arguments of a fee export. */
 #define FEES_MAX_ARGS 4
@@ -87,4 +88,14 @@ py_fees_excess_blob_gas(
   lean_object* a[FEES_MAX_ARGS];
   if (!parse_bytes_args(args, 4, a)) return NULL;
   return except_into_pybytes(eth_fees_excess_blob_gas(a[0], a[1], a[2], a[3]), FEES_ERROR);
+}
+
+PyObject*
+py_fees_blob_data_fee(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[FEES_MAX_ARGS];
+  if (!parse_bytes_args(args, 3, a)) return NULL;
+  return except_into_pybytes(eth_fees_blob_data_fee(a[0], a[1], a[2]), FEES_ERROR);
 }

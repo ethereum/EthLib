@@ -630,6 +630,7 @@ static PyMethodDef methods[] = {
   {"fees_base_fee_per_gas", py_fees_base_fee_per_gas, METH_VARARGS, DOC_fees_base_fee_per_gas},
   {"fees_fake_exponential", py_fees_fake_exponential, METH_VARARGS, DOC_fees_fake_exponential},
   {"fees_base_fee_per_blob_gas", py_fees_base_fee_per_blob_gas, METH_VARARGS, DOC_fees_base_fee_per_blob_gas},
+  {"fees_blob_data_fee", py_fees_blob_data_fee, METH_VARARGS, DOC_fees_blob_data_fee},
   {"fees_excess_blob_gas", py_fees_excess_blob_gas, METH_VARARGS, DOC_fees_excess_blob_gas},
   {"evm_word_op", py_evm_word_op, METH_VARARGS, DOC_evm_word_op},
   {"evm_memory_gas_cost", py_evm_memory_gas_cost, METH_VARARGS, DOC_evm_memory_gas_cost},

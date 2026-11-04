@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Exports
 public import EthLib.Execution.Fees
 public import EthLib.Execution.Exports.Evm
+public import EthLib.Execution.Transactions.Envelope
 
 /-!
 # `Exports.Fees`
@@ -16,6 +17,8 @@ A fork crosses it as its name, and the blob exports read the blob schedule of th
 A fork that is unknown, or that comes before Dencun and has no blobs, fails with code 0.
 
 So does Hegotá, whose blob schedule is not yet specified.
+
+So does a transaction that does not decode at the fork.
 -/
 
 public section
@@ -64,5 +67,13 @@ def excessBlobGasExport (fork excess used baseFee : ByteArray) : Result ByteArra
   let (fork, schedule) ← scheduleOfName fork
   pure (bytesOfNat
     (calcExcessBlobGas fork schedule (numberOf excess) (numberOf used) (numberOf baseFee)))
+
+/-- The fee of the blobs of a transaction, decoded at a fork, at an excess blob gas. -/
+@[export eth_fees_blob_data_fee]
+def blobDataFeeExport (fork excess tx : ByteArray) : Result ByteArray := do
+  let (fork, schedule) ← scheduleOfName fork
+  let tx ← (Transactions.decodeTransaction fork tx).mapError
+    fun e => (0, s!"transaction rejected: {reprStr e}")
+  pure (bytesOfNat (calculateDataFee schedule (numberOf excess) tx))
 
 end EthLib.Execution.Fees.Exports
