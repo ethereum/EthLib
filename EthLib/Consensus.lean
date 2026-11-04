@@ -18,6 +18,7 @@ public import EthLib.Consensus.Containers.SyncCommittee
 public import EthLib.Consensus.DataAvailability.Custody
 public import EthLib.Consensus.ForkSchedule
 public import EthLib.Consensus.Gossip.Topics
+public import EthLib.Consensus.InclusionList
 public import EthLib.Consensus.Preset
 public import EthLib.Consensus.ReqResp.Messages
 public import EthLib.Consensus.Shuffle
