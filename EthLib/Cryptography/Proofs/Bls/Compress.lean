@@ -604,7 +604,7 @@ private theorem dy_ne_zero_zmod {x y : ZMod Fp.modulus} (h : y * y = x * x * x +
   exact mul_ne_zero h2 hy hdy'
 
 /-- A pair `(x, y)` with `y^2 = x^3 + 4` gives a nonsingular point with `z = 1`. -/
-private theorem valid_of_affine_eq {x y : Fp}
+theorem valid_of_affine_eq {x y : Fp}
     (h : (y : ZMod Fp.modulus) * y = x * x * x + Fp.ofNat 4) :
     Valid ⟨x, y, Fp.one⟩ := by
   show curve.Nonsingular (rep ⟨x, y, Fp.one⟩)

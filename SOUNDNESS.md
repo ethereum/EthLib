@@ -191,6 +191,9 @@ The pairing law is a hypothesis, `AltBn128.PairingLaws` (`Proofs/AltBn128/Pairin
 It states the check of EIP-197: the pairs `(a_i P1, b_i g2)` pass exactly when `sum_i a_i b_i = 0`.
 No theorem proves it.
 
+`ecadd_toPoint` and `ecmul_toPoint` (`Execution/Proofs/Evm/Precompiles/AltBn128Group.lean`) carry this group law to the precompiles.
+A call of ECADD that succeeds returns the sum of its two points, and a call of ECMUL returns its point times its 32-byte scalar.
+
 ### secp256r1
 
 The secp256r1 theorems are correctness statements, like those of secp256k1.
@@ -285,6 +288,14 @@ The ECRECOVER theorems rest on the secp256k1 ones, and all three are in `Executi
 `output_of_verify` proves that every key that verifies a signature has its address returned for `v = 27` or `v = 28`, when `r + n >= p`.
 
 No theorem relates the module to the execution-specs code it follows, which calls a C library to recover the key.
+
+### EIP-2537 encodings
+
+The BLS12-381 precompiles read and write field elements and points in the encoding of EIP-2537.
+`bytesToG1_g1ToBytes` and `bytesToG2_g2ToBytes` (`Execution/Proofs/Evm/Precompiles/Bls12381/RoundTrip.lean`) prove that decoding the encoding of a valid point gives the same group element.
+With the subgroup check, the same holds for a point of the subgroup.
+`g1ToBytes_bytesToG1` (`Execution/Proofs/Evm/Precompiles/Bls12381/Encoding.lean`) and `g2ToBytes_bytesToG2` prove the converse, so every decoded point has one encoding.
+The same file proves the round trips of a field element, an element of `Fp2` and the padding.
 
 ### Merkle Patricia Trie
 

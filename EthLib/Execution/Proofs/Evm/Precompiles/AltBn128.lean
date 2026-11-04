@@ -9,6 +9,8 @@ public import EthLib.Serialization.Proofs.Rlp.Vectors
 # Proofs: `Evm.Precompiles.AltBn128`
 
 - ECADD and ECMUL fail exactly when the gas is below the price or a point is invalid.
+- ECPAIRING succeeds exactly when the gas covers the price and every pair decodes.
+- Every decoded point is on the curve.
 - Every output of ECADD and ECMUL has 64 bytes, and every output of ECPAIRING is the word 0 or 1.
 - ECPAIRING charges its gas before it checks that the call data is a whole number of 192-byte pairs.
 - The known answers pin the group: `G + G = 2 G`, `G + (-G) = O`, `q G = O`, `(q + 1) G = G`.
@@ -26,6 +28,7 @@ namespace EthLib.Execution.Evm.Precompiles.AltBn128
 
 open EthLib.Serialization.Rlp.Vectors (byteArrayOf)
 open EthLib.Cryptography.AltBn128
+open EthLib.Execution.Evm (bufferRead)
 
 /-- ECADD runs out of gas below its price. -/
 theorem ecadd_outOfGas (data : ByteArray) {gas : Nat} (hgas : gas < GAS_ECADD) :
@@ -75,6 +78,48 @@ theorem bytesToG1_invalidFieldElement {raw : List UInt8}
     (hx : Fp.modulus ≤ EthLib.Base.bytesToNat (raw.take 32)) :
     bytesToG1 raw = .error .invalidFieldElement := by
   simp [bytesToG1, Nat.not_lt.mpr hx, throw, throwThe, MonadExceptOf.throw]
+
+/-! ## Success -/
+
+/-- A decoded point is on the curve. -/
+theorem bytesToG1_isOnCurve {raw : List UInt8} {p : Point} (h : bytesToG1 raw = .ok p) :
+    p.isOnCurve = true := by
+  simp only [bytesToG1, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at h
+  split at h
+  · split at h
+    · split at h
+      · cases h
+        rfl
+      · split at h
+        · cases h
+          assumption
+        · cases h
+    · cases h
+  · cases h
+
+/-- ECADD succeeds exactly when the gas covers the price and both points decode. -/
+theorem ecadd_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
+    ecadd data gas = .ok out ↔ GAS_ECADD ≤ gas ∧ ∃ p0 p1,
+      bytesToG1 (bufferRead data 0 64) = .ok p0 ∧ bytesToG1 (bufferRead data 64 64) = .ok p1 ∧
+      out = ⟨(g1ToBytes (p0 + p1)).toArray⟩ := by
+  by_cases hgas : gas < GAS_ECADD
+  · simp [ecadd_outOfGas data hgas, Nat.not_le.mpr hgas]
+  · simp only [ecadd, hgas, bind, Except.bind, pure, Except.pure, throw, throwThe,
+      MonadExceptOf.throw]
+    cases h0 : bytesToG1 (bufferRead data 0 64) <;>
+      cases h1 : bytesToG1 (bufferRead data 64 64) <;> simp [Nat.not_lt.mp hgas, eq_comm]
+
+/-- ECMUL succeeds exactly when the gas covers the price and the point decodes. -/
+theorem ecmul_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
+    ecmul data gas = .ok out ↔ GAS_ECMUL ≤ gas ∧ ∃ p0,
+      bytesToG1 (bufferRead data 0 64) = .ok p0 ∧
+      out = ⟨(g1ToBytes
+        (Point.mulBits 256 (Base.bytesToNat (bufferRead data 64 32)) p0)).toArray⟩ := by
+  by_cases hgas : gas < GAS_ECMUL
+  · simp [ecmul_outOfGas data hgas, Nat.not_le.mpr hgas]
+  · simp only [ecmul, hgas, bind, Except.bind, pure, Except.pure, throw, throwThe,
+      MonadExceptOf.throw]
+    cases h0 : bytesToG1 (bufferRead data 0 64) <;> simp [Nat.not_lt.mp hgas, eq_comm]
 
 /-! ## Known answers -/
 
@@ -177,6 +222,36 @@ theorem ecpairing_ok {data : ByteArray} {gas : Nat} {out : ByteArray} (h : ecpai
   obtain ⟨_, _, h⟩ := bind_eq_ok h
   cases h
   exact ⟨_, rfl⟩
+
+/-- ECPAIRING succeeds exactly when the gas covers the price and every pair decodes.
+
+The call data must be a whole number of pairs. -/
+theorem ecpairing_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
+    ecpairing data gas = .ok out ↔ ecpairingGas data.size ≤ gas ∧ data.size % 192 = 0 ∧
+      ∃ pairs, (List.range (data.size / 192)).mapM (decodePair data) = .ok pairs ∧
+        out = ⟨(List.replicate 31 (0 : UInt8) ++
+          [if pairingCheck pairs then 1 else 0]).toArray⟩ := by
+  by_cases hgas : gas < ecpairingGas data.size
+  · simp [ecpairing_outOfGas data hgas, Nat.not_le.mpr hgas]
+  by_cases hsize : data.size % 192 ≠ 0
+  · simp [ecpairing_invalidInputLength (Nat.not_lt.mp hgas) hsize, hsize]
+  · have hwhole : data.size % 192 = 0 := Decidable.not_not.mp hsize
+    simp only [ecpairing, hgas, hsize, bind, Except.bind, pure, Except.pure, ↓reduceIte]
+    cases h : (List.range (data.size / 192)).mapM (decodePair data) with
+    | error e =>
+      constructor
+      · intro hok
+        cases hok
+      · rintro ⟨_, _, _, hpairs, _⟩
+        cases hpairs
+    | ok pairs =>
+      constructor
+      · intro hok
+        cases hok
+        exact ⟨Nat.not_lt.mp hgas, hwhole, pairs, rfl, rfl⟩
+      · rintro ⟨_, _, _, hpairs, rfl⟩
+        cases hpairs
+        rfl
 
 /-- The price of no pair is the base price alone. -/
 theorem ecpairingGas_empty : ecpairingGas 0 = 45000 := rfl
