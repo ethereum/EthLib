@@ -63,7 +63,7 @@ The list covers the main theorems and is not yet complete.
 Most of these theorems are about correctness: an honest run gives the expected answer, or malformed input is rejected.
 Two state a security property.
 The unforgeability of leanXMSS holds for EthLib's own definitions.
-The unforgeability of BLS signatures holds for a scheme over abstract groups.
+The unforgeability of BLS signatures holds for a scheme that EthLib's signing and verification compute.
 No theorem states unforgeability for leanSPHINCS, or binding for KZG.
 No theorem covers the code that runs, the C boundary, or timing.
 
@@ -177,7 +177,17 @@ Then a forger wins at most `q` times as often as a named solver of a co-Diffie-H
 That problem asks for `(a * c) • g2` from `a • g1`, `a • g2` and `c • g2`.
 It is stronger than the co-CDH of the source's §2, which omits `a • g2`.
 The source needs it when no computable map from `G1` to `G2` is known.
-The theorem does not yet speak about EthLib's own signing and verification.
+
+`forgeAdvantage_blsScheme_le` (`Proofs/Bls/Security/Refinement.lean`) applies the theorem to EthLib.
+The groups are the multiples of the generators of G1 and G2, and the test is the pairing check.
+Under the pairing law, the test is sound (`blsScheme_sound`).
+`sign_eq` and `verify_iff_isDh` prove that EthLib's `sign` and `verify` compute the scheme.
+There `H(m)` is the hash to G2 of `m` under the message tag.
+Aggregation and proofs of possession lie outside the game.
+
+The game's adversary receives and returns group elements, not their encodings.
+Every signature that EthLib accepts decodes to a group element.
+No theorem turns a forger on bytes into a forger on group elements, so that last step is argued, not proved.
 
 ### secp256k1
 
@@ -398,8 +408,9 @@ EthLib has two such theorems, each with one idealisation:
 
 - leanXMSS: the hash `H`, Keccak-256, is a random oracle on byte strings.
   The theorem says nothing about an attack that uses the structure of Keccak.
-- BLS: the hash into `G2` is a random oracle that answers each new message with a uniform multiple of `g2`.
-  The theorem is about abstract groups, so it says nothing yet about EthLib's hash to `G2`.
+- BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`.
+  [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
+  Nothing in EthLib proves that the hash behaves as such an oracle.
 
 ## Gap B: does the code that runs match the definitions?
 
