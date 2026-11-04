@@ -623,6 +623,10 @@ def state_withdrawals_root(fork: str, state: bytes, block: bytes) -> bytes:
     """The state root after the withdrawals of a block, from the state that `input` encodes."""
     ...
 
+def state_dao_fork_root(state: bytes) -> bytes:
+    """The state root after the DAO Fork moves the ether of its accounts, from the state of `input`."""
+    ...
+
 def mainnet_active_fork(number: int, timestamp: int) -> bytes:
     """The name of the active fork of mainnet at a block, or no bytes when no fork is active."""
     ...

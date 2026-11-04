@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Exports
 public import EthLib.Execution.Blocks.Block
+public import EthLib.Execution.Blocks.DaoFork
 public import EthLib.Execution.State.Root
 public import EthLib.Execution.State.Errors
 
@@ -109,5 +110,13 @@ def withdrawalsRootExport (fork input block : ByteArray) : Result ByteArray := d
       fun e => (e.code, s!"withdrawals failed: {reprStr e}")
     rootOf post.applyChanges
   else throw (0, "the fork is before Shapella")
+
+/-- The state root after the DAO Fork moves the ether of its accounts, from the state of `input`. -/
+@[export eth_state_dao_fork_root]
+def daoForkRootExport (input : ByteArray) : Result ByteArray := do
+  let pre ← (ofInput input).mapError fun e => (e.code, e.message)
+  let tx ← (Blocks.applyDaoFork .daoFork (.ofBlock ⟨pre, ∅, ∅, ∅, ∅⟩)).mapError
+    fun e => (e.code, s!"the DAO Fork failed: {reprStr e}")
+  rootOf tx.incorporateTxIntoBlock.parent.applyChanges
 
 end EthLib.Execution.State.Exports

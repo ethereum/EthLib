@@ -517,6 +517,10 @@ def bindings : List Binding := [
     "(fork: str, state: bytes, block: bytes) -> bytes",
     [`EthLib.Execution.State.StateInputError, `EthLib.Execution.State.StateError],
     some "StateError"⟩,
+  ⟨"state_dao_fork_root", `EthLib.Execution.State.Exports.daoForkRootExport,
+    "(state: bytes) -> bytes",
+    [`EthLib.Execution.State.StateInputError, `EthLib.Execution.State.StateError],
+    some "StateError"⟩,
   ⟨"mainnet_active_fork", `EthLib.Base.ChainConfig.Exports.mainnetActiveForkExport,
     "(number: int, timestamp: int) -> bytes",
     [], none⟩
