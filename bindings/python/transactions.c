@@ -18,6 +18,12 @@ eth_tx_hash(
 );
 
 extern lean_object*
+eth_tx_network_check(
+  lean_object* fork,
+  lean_object* network
+);
+
+extern lean_object*
 eth_tx_recover_sender(
   lean_object* fork,
   lean_object* tx
@@ -129,4 +135,14 @@ py_tx_check(
   lean_object *fork, *tx;
   if (!parse_fork_and_tx(fork_obj, tx_obj, &fork, &tx)) return NULL;
   return except_into_pybytes(eth_tx_check(fork, chain_id, tx), TRANSACTION_ERROR);
+}
+
+PyObject*
+py_tx_network_check(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object *fork, *network;
+  if (!parse_args(args, &fork, &network)) return NULL;
+  return except_into_pybytes(eth_tx_network_check(fork, network), TRANSACTION_ERROR);
 }

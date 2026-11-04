@@ -449,6 +449,9 @@ def bindings : List Binding := [
   ⟨"tx_check", `EthLib.Execution.Transactions.Exports.checkExport,
     "(fork: str, chain_id: int, tx: bytes) -> bytes",
     [`EthLib.Execution.Transactions.TransactionError], some "TransactionError"⟩,
+  ⟨"tx_network_check", `EthLib.Execution.Transactions.Exports.networkCheckExport,
+    "(fork: str, network: bytes) -> bytes",
+    [`EthLib.Execution.Transactions.NetworkError], some "TransactionError"⟩,
   ⟨"rlpx_make_auth", `EthLib.Networking.Rlpx.Exports.makeAuthExport,
     "(static_key: bytes, ephemeral_key: bytes, nonce: bytes, recipient: bytes, " ++
       "r: bytes, iv: bytes, padding: bytes) -> bytes",

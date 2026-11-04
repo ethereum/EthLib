@@ -410,6 +410,9 @@
 #define DOC_tx_check \
   "Check a transaction alone on the chain `chainId`."
 
+#define DOC_tx_network_check \
+  "Check the network form of a blob transaction at the named fork."
+
 #define DOC_rlpx_make_auth \
   "The packet `auth` from the initiator to the recipient's public key."
 
