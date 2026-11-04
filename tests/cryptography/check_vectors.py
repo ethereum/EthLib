@@ -52,7 +52,10 @@ UPSTREAM = "consensus-specs/v1.7.0-alpha.12/general"
 BLS_TESTS = "bls12-381-tests/v0.1.2/bls_tests_yaml"
 
 # The handlers of that archive that are pinned here, under `bls/`.
-BLS_TESTS_HANDLERS = ("aggregate", "aggregate_verify", "fast_aggregate_verify", "sign", "verify")
+BLS_TESTS_HANDLERS = (
+    "aggregate", "aggregate_verify", "deserialization_G1", "deserialization_G2",
+    "fast_aggregate_verify", "hash_to_G2", "sign", "verify",
+)
 
 
 def sha256(data: bytes) -> str:

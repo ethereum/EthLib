@@ -32,6 +32,12 @@
 #define DOC_bls_pop_verify \
   "Verify a proof of possession (§3.3.3)."
 
+#define DOC_bls_decode_g1 \
+  "A compressed `G1` point, decoded, checked in the subgroup, and compressed again."
+
+#define DOC_bls_decode_g2 \
+  "A compressed `G2` point, decoded, checked in the subgroup, and compressed again."
+
 #define DOC_bls_expand_message_xmd \
   "Expand `msg` into `lenInBytes` pseudo-random bytes via XMD with SHA-256. Follows RFC 9380 §5.3.1 and §5.3.3: oversized DSTs are first shortened with SHA-256, and oversized output requests are rejected."
 

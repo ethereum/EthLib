@@ -37,6 +37,7 @@ here:      tests/cryptography/<kind>/<handler>/<case>/data.yaml
 
 The general archives of consensus-specs have no BLS signing or verification cases.
 So the `sign`, `verify`, `aggregate`, `fast_aggregate_verify` and `aggregate_verify` cases of `bls/` come from `ethereum/bls12-381-tests` `v0.1.2`, at commit `89ff3a86f1a9b89a555495f7535c853cda589320`.
+The `deserialization_G1`, `deserialization_G2` and `hash_to_G2` cases come from the same release.
 Its archive `bls_tests_yaml.tar.gz` has sha256 `a4ef909b6248395094949a3bcdeb4e1b5b999733d4436f2c5006edba99d29279`.
 A case keeps its upstream bytes, and only its path differs:
 

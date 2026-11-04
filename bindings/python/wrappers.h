@@ -207,6 +207,8 @@ PyObject* py_bls_aggregate_verify                         (PyObject* self, PyObj
 PyObject* py_bls_fast_aggregate_verify                    (PyObject* self, PyObject* args);
 PyObject* py_bls_pop_prove                                (PyObject* self, PyObject* args);
 PyObject* py_bls_pop_verify                               (PyObject* self, PyObject* args);
+PyObject* py_bls_decode_g1                                (PyObject* self, PyObject* args);
+PyObject* py_bls_decode_g2                                (PyObject* self, PyObject* args);
 PyObject* py_bls_expand_message_xmd                       (PyObject* self, PyObject* args);
 PyObject* py_bls_hash_to_g2                               (PyObject* self, PyObject* args);
 PyObject* py_bls_pairing                                  (PyObject* self, PyObject* args);
