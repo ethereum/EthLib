@@ -1,6 +1,7 @@
 """EthLib against the pinned BLS and hash-to-curve vectors.
 
-The `sign`, `verify`, `aggregate`, `fast_aggregate_verify` and `aggregate_verify` cases come from
+The `sign`, `verify`, `aggregate`, `fast_aggregate_verify`, `aggregate_verify`,
+`deserialization_G1`, `deserialization_G2` and `hash_to_G2` cases come from
 `ethereum/bls12-381-tests` v0.1.2.
 The `hash_to_curve` cases come from RFC 9380, Appendices J.10.1, K.1 and K.2.
 
@@ -81,3 +82,47 @@ def test_hash_to_g2(case: dict) -> None:
     i, o = case["input"], case["output"]
     expected = b"".join(b(c) for c in o["x"] + o["y"])
     assert bls.hash_to_g2(b(i["msg"]), b(i["dst"])) == expected
+
+
+# The error of each failing deserialization case: the point is malformed or off the curve, or it is
+# on the curve but outside the subgroup of order r.
+# The G1 case with the infinity flag cleared reads as x = 0, and 0^3 + 4 = 2^2, so it decodes to an
+# affine point on the curve, which is outside the subgroup.
+# In G2, x = 0 gives y^2 = 4(1 + i), which has no square root, so that case is off the curve.
+DESERIALIZATION_ERRORS = {
+    ("G1", "deserialization_fails_not_in_G1"): ("point not in subgroup", 7),
+    ("G1", "deserialization_fails_infinity_with_false_b_flag"): ("point not in subgroup", 7),
+    ("G2", "deserialization_fails_not_in_G2"): ("point not in subgroup", 7),
+}
+
+
+DECODE = {"G1": (bls.decode_g1, "pubkey"), "G2": (bls.decode_g2, "signature")}
+
+
+@pytest.mark.parametrize("group, name, case", [
+    pytest.param(group, param.id, param.values[0], id=f"{group}-{param.id}")
+    for group in DECODE
+    for param in cases("bls", f"deserialization_{group}")
+])
+def test_deserialization(group: str, name: str, case: dict) -> None:
+    decode, field = DECODE[group]
+    data = b(case["input"][field])
+    if case["output"]:
+        # A valid encoding decodes, and its canonical encoding is the input itself.
+        assert decode(data) == data
+        return
+    message, code = DESERIALIZATION_ERRORS.get(
+        (group, name), (f"invalid {group} point", 4 if group == "G1" else 5))
+    with pytest.raises(bls.BlsError, match=message) as error:
+        decode(data)
+    assert error.value.code == code
+
+
+@pytest.mark.parametrize("case", cases("bls", "hash_to_G2"))
+def test_hash_to_g2_bls_tests(case: dict) -> None:
+    # The messages are ASCII text, hashed under the test DST of RFC 9380, Appendix J.10.1.
+    # Each coordinate is written as its two Fp components, c0 then c1.
+    dst = b"QUUX-V01-CS02-with-BLS12381G2_XMD:SHA-256_SSWU_RO_"
+    out = case["output"]
+    expected = b"".join(b(c) for c in out["x"].split(",") + out["y"].split(","))
+    assert bls.hash_to_g2(case["input"]["msg"].encode(), dst) == expected

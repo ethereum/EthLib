@@ -107,7 +107,7 @@ class BlsTestsDigests(unittest.TestCase):
             archive = Path(tmp) / "bls.tar.gz"
             with tarfile.open(archive, "w:gz") as tar:
                 for name, data in (("./sign/case_0.yaml", b"sign 0"),
-                                   ("./hash_to_G2/case_0.yaml", b"not pinned")):
+                                   ("./batch_verify/case_0.yaml", b"not pinned")):
                     info = tarfile.TarInfo(name)
                     info.size = len(data)
                     tar.addfile(info, io.BytesIO(data))

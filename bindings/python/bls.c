@@ -277,6 +277,42 @@ py_bls_pop_verify(
   return except_into_pybool(eth_bls_pop_verify(pk, proof), BLS_ERROR);
 }
 
+/* ---- Point decoding --------------------------------------------------- */
+
+extern lean_object*
+eth_bls_decode_g1(
+  lean_object* point
+);
+
+extern lean_object*
+eth_bls_decode_g2(
+  lean_object* point
+);
+
+PyObject*
+py_bls_decode_g1(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *point_obj;
+  if (!PyArg_ParseTuple(args, "O", &point_obj)) return NULL;
+  lean_object *point;
+  if (parse_bytes(point_obj, "point", &point)) return NULL;
+  return except_into_pybytes(eth_bls_decode_g1(point), BLS_ERROR);
+}
+
+PyObject*
+py_bls_decode_g2(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *point_obj;
+  if (!PyArg_ParseTuple(args, "O", &point_obj)) return NULL;
+  lean_object *point;
+  if (parse_bytes(point_obj, "point", &point)) return NULL;
+  return except_into_pybytes(eth_bls_decode_g2(point), BLS_ERROR);
+}
+
 /* ---- Hash to curve ---------------------------------------------------- */
 
 extern lean_object*

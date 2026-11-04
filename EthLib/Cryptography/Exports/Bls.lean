@@ -106,6 +106,28 @@ def popProveExport (sk : ByteArray) : Result ByteArray := do
 def popVerifyExport (pk proof : ByteArray) : Result UInt8 :=
   return ofBool (popVerify pk proof)
 
+/-! ## Point decoding
+
+These exports let a client check the decoding of compressed points against published cases.
+
+A point is accepted when it decompresses to a point on the curve in the subgroup of order `r`.
+
+The point at infinity is accepted in its one canonical encoding. -/
+
+/-- A compressed `G1` point, decoded, checked in the subgroup, and compressed again. -/
+@[export eth_bls_decode_g1]
+def decodeG1Export (bytes : ByteArray) : Result ByteArray := do
+  let p ← runBls (G1.uncompress bytes)
+  if !G1.inSubgroup p then runBls (.error .notInSubgroup)
+  return G1.compress p
+
+/-- A compressed `G2` point, decoded, checked in the subgroup, and compressed again. -/
+@[export eth_bls_decode_g2]
+def decodeG2Export (bytes : ByteArray) : Result ByteArray := do
+  let p ← runBls (G2.uncompress bytes)
+  if !G2.inSubgroup p then runBls (.error .notInSubgroup)
+  return G2.compress p
+
 /-! ## Hash to curve
 
 These exports let a client check the hash to `G2` against RFC 9380. -/

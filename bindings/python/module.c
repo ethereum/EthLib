@@ -523,6 +523,8 @@ static PyMethodDef methods[] = {
   {"bls_fast_aggregate_verify", py_bls_fast_aggregate_verify, METH_VARARGS, DOC_bls_fast_aggregate_verify},
   {"bls_pop_prove", py_bls_pop_prove, METH_VARARGS, DOC_bls_pop_prove},
   {"bls_pop_verify", py_bls_pop_verify, METH_VARARGS, DOC_bls_pop_verify},
+  {"bls_decode_g1", py_bls_decode_g1, METH_VARARGS, DOC_bls_decode_g1},
+  {"bls_decode_g2", py_bls_decode_g2, METH_VARARGS, DOC_bls_decode_g2},
   {"bls_expand_message_xmd", py_bls_expand_message_xmd, METH_VARARGS, DOC_bls_expand_message_xmd},
   {"bls_hash_to_g2", py_bls_hash_to_g2, METH_VARARGS, DOC_bls_hash_to_g2},
   {"bls_pairing", py_bls_pairing, METH_VARARGS, DOC_bls_pairing},

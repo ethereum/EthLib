@@ -43,6 +43,14 @@ def bls_pop_verify(pubkey: bytes, proof: bytes) -> bool:
     """Verify a proof of possession (§3.3.3)."""
     ...
 
+def bls_decode_g1(point: bytes) -> bytes:
+    """A compressed `G1` point, decoded, checked in the subgroup, and compressed again."""
+    ...
+
+def bls_decode_g2(point: bytes) -> bytes:
+    """A compressed `G2` point, decoded, checked in the subgroup, and compressed again."""
+    ...
+
 def bls_expand_message_xmd(message: bytes, dst: bytes, length: int) -> bytes:
     """Expand `msg` into `lenInBytes` pseudo-random bytes via XMD with SHA-256. Follows RFC 9380 §5.3.1 and §5.3.3: oversized DSTs are first shortened with SHA-256, and oversized output requests are rejected."""
     ...

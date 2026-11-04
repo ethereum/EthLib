@@ -53,6 +53,7 @@ A client calls the proof-of-possession scheme of the draft and the two Ethereum 
 All of them but key generation live in `Signatures.lean`,
 on top of the core operations of the draft.
 Key validation and the subgroup checks live in `Compress.lean`.
+The exports `eth_bls_decode_g1` and `eth_bls_decode_g2` run that decoding and subgroup check alone, so a client can test them against published cases.
 
 A secret key is an element of `Fr` other than zero, and the exports read it as 32 big-endian bytes.
 No function here runs in constant time.
