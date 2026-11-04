@@ -5,9 +5,11 @@ public import EthLib.Execution.Trie.Root
 /-!
 # Proofs: `Trie.Root`
 
-- The budget of `patricialize` never runs out: any budget above the longest path, counted from the level, gives the same node.
+- The budget of the node composition never runs out.
+  Any budget above the longest path, counted from the level, gives the same node.
 - The root of the empty map is the hash of `0x80`, secured or not.
-- A map with an empty value has no root, and every other map's keys and values reach `patricialize` unchanged, in order.
+- A map with an empty value has no root.
+- The keys and values of every other map reach the composition unchanged, in order.
 - A key that is set takes the new value, and every other key keeps its value.
 -/
 

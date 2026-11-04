@@ -6,7 +6,8 @@ public import EthLib.Execution.Trie.HexPrefix
 # Proofs: `HexPrefix`
 
 - Decoding undoes the encoding, for every path and flag, so the encoding is injective.
-- The decoder accepts exactly the encodings, and rejects an empty input, a first nibble above 3 and a padding nibble other than 0.
+- The decoder accepts exactly the encodings.
+- It rejects an empty input, a first nibble above 3 and a padding nibble other than 0.
 - Known answers: two leaf paths worked by hand from `HP`, and every case of `BasicTests/hexencodetest.json` in `ethereum/tests`.
 -/
 

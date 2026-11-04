@@ -8,14 +8,15 @@ public import EthLib.Execution.Proofs.Trie.HexPrefix
 
 Two clients that hold the same map must compute the same root, whatever order they set its keys in.
 
-The source picks the first key of a call in two places, and the proofs show that neither pick matters:
+The node composition picks the first key in two places, and neither pick matters:
 
 - The run that an extension consumes is the shortest common prefix of the first path with every path.
-  Common prefixes satisfy `min(cpl(a, b), cpl(b, c)) <= cpl(a, c)`, so every path gives the same shortest one.
+  Common prefixes satisfy `min(cpl(a, b), cpl(b, c)) <= cpl(a, c)`.
+  So every path gives the same shortest one.
 - The value of a branch is the value of the last key whose path ends there.
   When the paths are distinct, at most one ends there.
 
-So `patricialize` gives the same node for any reordering of keys with distinct paths.
+So the composition gives the same node for any reordering of keys with distinct paths.
 
 The root then depends only on the map:
 
