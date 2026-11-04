@@ -502,6 +502,7 @@ static PyMethodDef methods[] = {
   {"bls_pop_verify", py_bls_pop_verify, METH_VARARGS, NULL},
   {"bls_expand_message_xmd", py_bls_expand_message_xmd, METH_VARARGS, NULL},
   {"bls_hash_to_g2", py_bls_hash_to_g2, METH_VARARGS, NULL},
+  {"bls_pairing", py_bls_pairing, METH_VARARGS, NULL},
   {"blob_to_kzg_commitment", py_blob_to_kzg_commitment, METH_VARARGS, NULL},
   {"compute_challenge", py_compute_challenge, METH_VARARGS, NULL},
   {"compute_kzg_proof", py_compute_kzg_proof, METH_VARARGS, NULL},

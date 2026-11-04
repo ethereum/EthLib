@@ -297,6 +297,12 @@ eth_bls_hash_to_g2(
   lean_object* dst
 );
 
+extern lean_object*
+eth_bls_pairing(
+  lean_object* p,
+  lean_object* q
+);
+
 PyObject*
 py_bls_expand_message_xmd(
   PyObject* self,
@@ -323,4 +329,17 @@ py_bls_hash_to_g2(
   if (parse_bytes(msg_obj, "message", &msg)) return NULL;
   if (parse_bytes(dst_obj, "dst", &dst)) { lean_dec(msg); return NULL; }
   return except_into_pybytes(eth_bls_hash_to_g2(msg, dst), BLS_ERROR);
+}
+
+PyObject*
+py_bls_pairing(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *p_obj, *q_obj;
+  if (!PyArg_ParseTuple(args, "OO", &p_obj, &q_obj)) return NULL;
+  lean_object *p, *q;
+  if (parse_bytes(p_obj, "g1_point", &p)) return NULL;
+  if (parse_bytes(q_obj, "g2_point", &q)) { lean_dec(p); return NULL; }
+  return except_into_pybytes(eth_bls_pairing(p, q), BLS_ERROR);
 }

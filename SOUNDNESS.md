@@ -184,8 +184,9 @@ Then the check of the pairs `(P_i, Q_i)` passes exactly when `sum_i a_i * b_i = 
 The law holds when the check tests `prod_i e(P_i, Q_i) = 1` for any bilinear map `e` with `e(g_1, g_2) != 1` into a group of order `r`.
 `pairingCheck_congr` (`Proofs/Bls/PairingCongr.lean`) proves that the check depends only on the group elements of valid points, so the law can quantify over representatives.
 
-The kernel computes the pairing of the two generators and finds the value that [draft-irtf-cfrg-pairing-friendly-curves-11](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-11) publishes in Appendix B (`pairing_generators`, `Proofs/Bls/PairingKnownAnswer.lean`).
-This known answer supports the pairing law but does not prove it.
+The pairing of the two generators equals the value that [draft-irtf-cfrg-pairing-friendly-curves-11](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-11) publishes in Appendix B.
+The Python suite checks it through the bindings (`bindings/python/tests/bls/test_pairing.py`), with a few bilinearity checks.
+This evidence supports the pairing law but does not prove it.
 
 `keyValidatePoint_eq_ok_iff` (`Proofs/Bls/KeyValidate.lean`) proves that key validation accepts exactly the encodings of the nonzero points of order `r` in G1.
 The G1 and G2 subgroup checks accept exactly the valid points that represent a multiple of the generator.
@@ -545,13 +546,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 104 operations and 39 size constants.
-The Python extension calls 104 of the operations and 30 of the constants.
+Lean exports 105 operations and 39 size constants.
+The Python extension calls 105 of the operations and 30 of the constants.
 Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_const_n`, `eth_sphincs_const_public_param_len`, `eth_sphincs_const_randomizer_len`, `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-4240 lines of hand-written C sit between them and Python: `blocks.c` (105), `bls.c` (326), `consensus.c` (126), `crc32c.c` (38), `discv5.c` (193), `ecrecover.c` (34), `enr.c` (122), `gossip.c` (63), `hmac.c` (99), `keccak.c` (61), `kzg.c` (503), `modexp.c` (61), `module.c` (750), `precompile.c` (43), `reqresp.c` (121), `ripemd160.c` (36), `rlp.c` (162), `rlpx.c` (72), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `snappy.c` (131), `sphincs.c` (85), `state.c` (28), `transactions.c` (132), `trie.c` (76), `vrf.c` (119), `wrappers.h` (309), `xmss.c` (134).
+4261 lines of hand-written C sit between them and Python: `blocks.c` (105), `bls.c` (345), `consensus.c` (126), `crc32c.c` (38), `discv5.c` (193), `ecrecover.c` (34), `enr.c` (122), `gossip.c` (63), `hmac.c` (99), `keccak.c` (61), `kzg.c` (503), `modexp.c` (61), `module.c` (751), `precompile.c` (43), `reqresp.c` (121), `ripemd160.c` (36), `rlp.c` (162), `rlpx.c` (72), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `snappy.c` (131), `sphincs.c` (85), `state.c` (28), `transactions.c` (132), `trie.c` (76), `vrf.c` (119), `wrappers.h` (310), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
