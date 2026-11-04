@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Containers.Attestation
+public import EthLib.Consensus.Containers.Block
 public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.Operations
 public import EthLib.Consensus.Containers.Requests
@@ -90,6 +91,9 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
   | "WithdrawalRequest" => if .pectra ≤ fork then some ⟨WithdrawalRequest⟩ else none
   | "ConsolidationRequest" => if .pectra ≤ fork then some ⟨ConsolidationRequest⟩ else none
   | "ExecutionRequests" => if .pectra ≤ fork then some ⟨ExecutionRequests preset⟩ else none
+  | "BeaconBlockBody" => some ⟨BeaconBlockBody preset fork⟩
+  | "BeaconBlock" => some ⟨BeaconBlock preset fork⟩
+  | "SignedBeaconBlock" => some ⟨SignedBeaconBlock preset fork⟩
   | "Withdrawal" => if .shapella ≤ fork then some ⟨Withdrawal⟩ else none
   | "ExecutionPayload" =>
     if .bellatrix ≤ fork then some ⟨ExecutionPayload preset fork⟩ else none
