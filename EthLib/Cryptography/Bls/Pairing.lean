@@ -144,42 +144,48 @@ def millerLoop (s : Nat) (R₀ P : Embedded.Point) : Fp12 :=
 
 /-! ## Final exponentiation -/
 
+/-- The BLS parameter `|x|`. -/
+def blsX : Nat := 0xD201000000010000
+
 /-- The exponent `(p¹² − 1) / r`. -/
 def finalExpExponent : Nat :=
   (Fp.modulus ^ 12 - 1) / Fr.modulus
 
-/-- The hard part of the final exponent, `(p⁴ − p² + 1) / r`.
-
-`r` divides `p⁴ − p² + 1`, the twelfth cyclotomic polynomial at `p`, so the division is exact. -/
-def finalExpHard : Nat :=
-  (Fp.modulus ^ 4 - Fp.modulus ^ 2 + 1) / Fr.modulus
-
 /-- Raise `f` to `(p¹² − 1) / r`.
 
-The exponent factors into three parts.
-
-```text
-    (p¹² − 1) / r = (p⁶ − 1) · (p² + 1) · (p⁴ − p² + 1) / r
-```
+The exponent is the product of `p⁶ − 1`, `p² + 1` and the hard part `h = (p⁴ − p² + 1) / r`.
 
 In this tower, `f^(p⁶)` is the conjugate of `f`.
 
-That power is the automorphism of `Fp12` over `Fp6`.
+So the first factor costs one inversion: `f^(p⁶ − 1) = conj(f) · f⁻¹`.
 
-It maps `w` to `−w`, because `v` is not a square in `Fp6`.
+The second factor costs two Frobenius maps and one product.
 
-So the first part costs one inversion: `f^(p⁶ − 1) = conj(f) · f⁻¹`.
+The result `m` satisfies `m^(p⁶) = m⁻¹`.
 
-The two remaining powers have exponents of 762 and 1268 bits, instead of one of 4314 bits. -/
+So the power of `m` by `−n` is the conjugate of its power by `n`.
+
+The hard part uses the BLS parameter `x = −|x|`, since `p` and `r` are polynomials in `x`.
+
+It equals `((|x| + 1)² / 3) (p − |x|) (|x|² + p² − 1) + 1`.
+
+So `m^h` needs only powers by `|x|` and `(|x| + 1) / 3`, Frobenius maps and conjugates.
+
+These exponents have at most 64 bits.
+
+The steps compute exactly `f^((p¹² − 1) / r)`, and a theorem proves it. -/
 def finalExponentiation (f : Fp12) : Fp12 :=
-  let easy := f.conjugate * f.inverse
-  let middle := Fp12.powNat easy (Fp.modulus ^ 2) * easy
-  Fp12.powNat middle finalExpHard
+  let t := f.conjugate * f.inverse
+  let m := t.frobenius.frobenius * t
+  -- `a = m^((|x| + 1)² / 3)`.
+  let a := (m.powNat ((blsX + 1) / 3)).powNat (blsX + 1)
+  -- `b = a^(p − |x|)`.
+  let b := a.frobenius * (a.powNat blsX).conjugate
+  -- `c = b^(|x|² + p² − 1)`.
+  let c := (b.powNat blsX).powNat blsX * b.frobenius.frobenius * b.conjugate
+  c * m
 
 /-! ## The pairing -/
-
-/-- The BLS parameter `|x|`. -/
-def blsX : Nat := 0xD201000000010000
 
 /-- Returns `true` iff `∏ e(P_i, Q_i) = 1`. -/
 def pairingCheck (pairs : Array (G1 × G2)) : Bool := Id.run do

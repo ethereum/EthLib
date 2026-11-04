@@ -166,7 +166,8 @@ theorem pairingCheck_eq_finalExp_prod (pairs : Array (G1 × G2)) :
       (finalExponentiation ((pairs.toList.filterMap pairFactor).foldl (· * ·) Fp12.one)).isOne := by
   unfold pairingCheck
   rw [← forIn_eq_foldl, Array.forIn_toList]
-  -- The two sides differ only in the monadic plumbing of the loop.
+  -- Only the monadic plumbing differs; the final exponentiation stays abstract, never unfolded.
+  generalize finalExponentiation = fe
   rfl
 
 /-- Pairs whose points have the same group elements have the same factor. -/
