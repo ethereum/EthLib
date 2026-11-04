@@ -427,6 +427,10 @@ def block_requests_hash(requests: bytes) -> bytes:
     """The requests hash of request lists, given as an RLP list of byte strings."""
     ...
 
+def block_validate_size(fork: str, block: bytes) -> bool:
+    """Check the RLP size of a block, decoded at the fork: from Fusaka, at most 8 MiB."""
+    ...
+
 def fees_base_fee_per_gas(parent_gas_limit: bytes, parent_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes:
     """The base fee per gas of a block, from its parent's gas limit, gas used and base fee."""
     ...

@@ -13,6 +13,8 @@ So a valid header uses at most its gas limit, and the gas limit rule accepts its
 It also has the base fee that its parent gives.
 
 From Dencun, it also has the excess blob gas that its parent gives.
+
+From Fusaka, a block passes the size check exactly when its RLP form fits in the limit.
 -/
 
 @[expose] public section
@@ -89,6 +91,24 @@ theorem number_timestamp_of_validateHeader
   · simpa using check_of_validateHeader hv
       (c := (decide (parent.timestamp.toNat < header.timestamp.toNat), .timestampNotAfterParent))
       (by simp [headerChecks])
+
+/-- A block passes the size check exactly when its fork is before Fusaka, or its RLP form fits.
+
+The RLP form fits when it has at most 8 MiB, that is 8,388,608 bytes. -/
+theorem validateBlockSize_eq_ok_iff {fork : Fork} {Tx : Type} [Serialization.Rlp.Codec Tx]
+    (block : Block fork Tx) :
+    validateBlockSize block = .ok () ↔
+      fork < .fusaka ∨ ∃ bytes, Serialization.Rlp.Codec.encode block = .ok bytes ∧
+        bytes.size ≤ MAX_RLP_BLOCK_SIZE := by
+  unfold validateBlockSize
+  by_cases hfork : fork ≥ .fusaka
+  · have hnot : ¬ fork < .fusaka := fun hlt => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le hlt hfork)
+    simp only [hfork, ↓reduceIte, hnot, false_or]
+    cases Serialization.Rlp.Codec.encode block with
+    | error e => simp [Except.mapError, bind, Except.bind]
+    | ok bytes => simp [Except.mapError, bind, Except.bind, firstFailure_eq_ok_iff]
+  · have hlt : fork < .fusaka := Nat.lt_of_not_le hfork
+    simp [hfork, hlt]
 
 /-- Two errors with one code come from one constructor. -/
 theorem BlockError.code_injective (e₁ e₂ : BlockError) (h : e₁.code = e₂.code) :

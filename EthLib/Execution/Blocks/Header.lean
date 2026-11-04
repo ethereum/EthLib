@@ -61,7 +61,7 @@ structure Header (fork : Fork) : Type where
 
   From Paris, EIP-3675 fixes it to the hash of the RLP form of the empty list. -/
   ommersHash : Hash32
-  /-- The account that receives the priority fees, called the beneficiary. -/
+  /-- The account that the block pays its fees to, called the beneficiary. -/
   coinbase : Address
   /-- The root of the state trie after the block. -/
   stateRoot : Hash32

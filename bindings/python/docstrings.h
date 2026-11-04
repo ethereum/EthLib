@@ -320,6 +320,9 @@
 #define DOC_block_requests_hash \
   "The requests hash of request lists, given as an RLP list of byte strings."
 
+#define DOC_block_validate_size \
+  "Check the RLP size of a block, decoded at the fork: from Fusaka, at most 8 MiB."
+
 #define DOC_fees_base_fee_per_gas \
   "The base fee per gas of a block, from its parent's gas limit, gas used and base fee."
 
