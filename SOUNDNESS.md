@@ -457,6 +457,11 @@ Finally, the consistency theorems on the constants, listed under BLS12-381, catc
 One definition also does what its source does not.
 The PeerDAS custody search fails after `2^16` node IDs in the export, where its source loops on, and no theorem bounds the steps it needs.
 
+Some official vectors expect more than a source says.
+The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.
+No rule of the Yellow Paper rejects such a transaction alone, and EIP-7825 caps the gas limit only from Fusaka on.
+EthLib accepts them, and the suite asserts that it does, as `tests/execution/ethereum_tests/README.md` explains.
+
 ### A2. Hypotheses inside theorems
 
 A conditional theorem is only as strong as its hypotheses.
