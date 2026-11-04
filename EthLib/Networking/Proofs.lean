@@ -1,6 +1,9 @@
 module
 
 public import EthLib.Networking.Proofs.Encoding.Varint
+public import EthLib.Networking.Proofs.Enr.Base64
+public import EthLib.Networking.Proofs.Enr.KnownAnswer
+public import EthLib.Networking.Proofs.Enr.Record
 public import EthLib.Networking.Proofs.Gossip.MessageId
 public import EthLib.Networking.Proofs.Gossip.Subnet
 public import EthLib.Networking.Proofs.Gossip.Topic

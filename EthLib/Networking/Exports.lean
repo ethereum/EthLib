@@ -1,0 +1,15 @@
+module
+
+public import EthLib.Networking.Exports.Enr
+
+/-!
+# `EthLib.Networking.Exports`
+
+The C exports of the networking layer, for the Python bindings.
+
+They are compiled by the `Exports` Lake library.
+
+The specification does not import them.
+
+So a Lean project that imports `EthLib` gets no `@[export]` symbol.
+-/
