@@ -56,14 +56,4 @@ theorem verify_of_s_out (q : Point) (e r : Nat) {s : Nat} (hs : ¬(0 < s ∧ s <
   unfold verify
   split <;> simp_all
 
-/-- A result that the kernel computes as the bytes `out` is `.ok out`. -/
-theorem eq_ok_of_kernel {result : Except P256VerifyError ByteArray} {out : ByteArray}
-    (h : (result.toOption.map fun bytes => bytes.data.toList) = some out.data.toList) : result = .ok out := by
-  cases result with
-  | error => simp [Except.toOption] at h
-  | ok bytes =>
-    simp only [Except.toOption, Option.map_some, Option.some.injEq] at h
-    cases bytes; cases out
-    simp_all
-
 end EthLib.Execution.Evm.Precompiles.P256Verify
