@@ -46,6 +46,12 @@ inductive BlsError where
   | emptySignatureList
   /-- Secret key bytes were not 32 bytes of an integer in `[1, r - 1]`. -/
   | invalidSecretKey
+  /-- Key generation got fewer than 32 bytes of input keying material. -/
+  | keyGenIkmTooShort (size : Nat)
+  /-- Every attempt of key generation gave a multiple of `r`. -/
+  | keyGenNoKey
+  /-- HKDF rejected its input during key generation. -/
+  | keyGenHkdf
 
 /-- Human-readable description, used at the C-ABI boundary. -/
 def BlsError.message : BlsError → String
@@ -65,6 +71,9 @@ def BlsError.message : BlsError → String
       s!"expand_message_xmd too many blocks: {ell}"
   | .emptySignatureList         => "empty signature list"
   | .invalidSecretKey           => "invalid secret key"
+  | .keyGenIkmTooShort size     => s!"input keying material too short: {size} bytes"
+  | .keyGenNoKey                => "key generation found no key"
+  | .keyGenHkdf                 => "HKDF failed in key generation"
 
 end EthLib.Cryptography.Bls
 

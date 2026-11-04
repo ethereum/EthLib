@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls.Constants
 public import EthLib.Cryptography.Bls.Signatures
+public import EthLib.Cryptography.Bls.KeyGen
 public import EthLib.Cryptography.Bls.Errors
 
 /-!
@@ -63,6 +64,12 @@ EthLib makes no constant-time claim, so these exports can leak a secret key thro
 
 /-- A Lean `Bool` as the `UInt8` that the C extension reads. -/
 def ofBool (b : Bool) : UInt8 := if b then 1 else 0
+
+/-- A secret key from input keying material and key information, as 32 big-endian bytes. -/
+@[export eth_bls_key_gen]
+def keyGenExport (ikm keyInfo : ByteArray) : IO ByteArray := do
+  let sk ← runBls (keyGen ikm keyInfo)
+  return Fr.toBytesBE sk.val
 
 @[export eth_bls_sign]
 def signExport (sk msg : ByteArray) : IO ByteArray := do

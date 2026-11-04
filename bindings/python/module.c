@@ -423,6 +423,7 @@ pack_bytes_sequence(
 static PyMethodDef methods[] = {
   {"eth_aggregate_pubkeys", py_eth_aggregate_pubkeys, METH_VARARGS, NULL},
   {"eth_fast_aggregate_verify", py_eth_fast_aggregate_verify, METH_VARARGS, NULL},
+  {"bls_key_gen", py_bls_key_gen, METH_VARARGS, NULL},
   {"bls_sign", py_bls_sign, METH_VARARGS, NULL},
   {"bls_verify", py_bls_verify, METH_VARARGS, NULL},
   {"bls_aggregate", py_bls_aggregate, METH_VARARGS, NULL},

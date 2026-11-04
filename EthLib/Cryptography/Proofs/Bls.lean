@@ -44,6 +44,7 @@ public import EthLib.Cryptography.Proofs.Bls.PairingLaws
 public import EthLib.Cryptography.Proofs.Bls.KeyValidate
 public import EthLib.Cryptography.Proofs.Bls.MapToCurve
 public import EthLib.Cryptography.Proofs.Bls.Signatures
+public import EthLib.Cryptography.Proofs.Bls.KeyGen
 public import EthLib.Cryptography.Proofs.Bls.PairingKnownAnswerMiller
 public import EthLib.Cryptography.Proofs.Bls.PairingKnownAnswer
 

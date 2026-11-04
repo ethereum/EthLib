@@ -1,6 +1,7 @@
 from .._native import (
     eth_aggregate_pubkeys,
     eth_fast_aggregate_verify,
+    bls_key_gen as _key_gen,
     bls_sign as sign,
     bls_verify as verify,
     bls_aggregate as aggregate,
@@ -14,9 +15,19 @@ from .._native import (
     BYTES_PER_SIGNATURE,
 )
 
+
+def key_gen(ikm: bytes, key_info: bytes = b"") -> bytes:
+    """A secret key, as 32 big-endian bytes, from at least 32 bytes of keying material.
+
+    The keying material and the key are secret, and EthLib makes no constant-time claim.
+    """
+    return _key_gen(ikm, key_info)
+
+
 __all__ = [
     "eth_aggregate_pubkeys",
     "eth_fast_aggregate_verify",
+    "key_gen",
     "sign",
     "verify",
     "aggregate",
