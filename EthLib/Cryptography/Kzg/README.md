@@ -203,6 +203,8 @@ It assumes the pairing law, the subgroup checks, and that two points are not at 
   if the setup decodes.
   No theorem says that it decodes, that its points lie in the subgroup,
   or that they are powers of one secret.
+  The Python suite checks that each point decodes and lies in the subgroup,
+  in `bindings/python/tests/kzg/test_trusted_setup.py`.
 - The pairing law that the ceremony theorem assumes is not proved.
   It is bilinearity together with non-degeneracy.
 
