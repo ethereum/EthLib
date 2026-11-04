@@ -480,6 +480,7 @@ static PyMethodDef methods[] = {
   {"enr_verify_v4", py_enr_verify_v4, METH_VARARGS, NULL},
   {"enr_node_id", py_enr_node_id, METH_VARARGS, NULL},
   {"precompile_run", py_precompile_run, METH_VARARGS, NULL},
+  {"state_root", py_state_root, METH_VARARGS, NULL},
   {NULL, NULL, 0, NULL},
 };
 

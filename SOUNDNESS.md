@@ -421,13 +421,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 48 operations and 38 size constants.
-The Python extension calls 48 of the operations and 29 of the constants.
+Lean exports 49 operations and 38 size constants.
+The Python extension calls 49 of the operations and 29 of the constants.
 Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_const_n`, `eth_sphincs_const_public_param_len`, `eth_sphincs_const_randomizer_len`, `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-2427 lines of hand-written C sit between them and Python: `bls.c` (332), `ecrecover.c` (34), `enr.c` (91), `keccak.c` (38), `kzg.c` (533), `modexp.c` (61), `module.c` (595), `precompile.c` (43), `ripemd160.c` (36), `secp256k1.c` (94), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `sphincs.c` (94), `wrappers.h` (191), `xmss.c` (143).
+2458 lines of hand-written C sit between them and Python: `bls.c` (332), `ecrecover.c` (34), `enr.c` (91), `keccak.c` (38), `kzg.c` (533), `modexp.c` (61), `module.c` (596), `precompile.c` (43), `ripemd160.c` (36), `secp256k1.c` (94), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `sphincs.c` (94), `state.c` (28), `wrappers.h` (193), `xmss.c` (143).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
