@@ -1,6 +1,6 @@
 # leanXMSS security proof
 
-This directory proves that leanXMSS, as EthLib computes it, is strongly unforgeable in the random oracle model, with 127 bits of classical security.
+This directory proves that leanXMSS, as EthLib computes it, is strongly unforgeable in the random oracle model, with the classical bound `q / 2^127` below.
 Strong unforgeability means that an adversary who sees signatures of messages of its choice cannot produce any new valid pair of message and signature, not even a second signature of a message already signed.
 The random oracle model treats the hash as an ideal random function that everyone, adversary included, can only query.
 The theorem bounds the adversary's success by the number of those queries:
@@ -13,6 +13,7 @@ The theorem bounds the adversary's success by the number of those queries:
 Here `q` counts every hash call of the game in the worst run, not only the adversary's.
 Key generation alone makes about `2^23.7` calls, and a signing request can make more than `2^33`, one per randomizer trial.
 So the bound is never below about `2^-103.3`, and it grows by more than `2^-94` per signing request.
+An adversary that requests all `2^32` signatures of the key has `q > 2^65`, so over the key's lifetime the bound is above `2^-62`.
 
 The real game runs EthLib's own algorithms, with the hash a query to the random oracle, and its signer keeps the scheme seed `S` and the parameter `P`.
 The theorem about it is `XmssSecurity.Bridge.realGame_security` (`XmssSecurity/Proof/Bridge/Security.lean`).

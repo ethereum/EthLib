@@ -128,7 +128,9 @@ noncomputable def forgeAdvantage (adversary : Adversary) : ℝ≥0∞ :=
 def HasHashQueryBound (adversary : Adversary) (q : Nat) : Prop :=
   ∀ result ∈ support (experiment adversary), result.2 ≤ q
 
-/-- An adversary with a budget of `q >= 1` hash calls forges with probability `<= q / 2^bits`. -/
+/-- An adversary with a budget of `q >= 1` hash calls forges with probability `<= q / 2^bits`.
+
+The budget counts every hash call of the experiment, the signer's included. -/
 def HasClassicalSecurityBits (bits : Nat) : Prop :=
   ∀ q, 1 ≤ q → ∀ adversary, HasHashQueryBound adversary q →
     forgeAdvantage adversary ≤ q / ((2 ^ bits : Nat) : ℝ≥0∞)

@@ -377,11 +377,17 @@ theorem hashQueryBound_realGame (adversary : Adversary) (q : Nat)
     (fun S0 S Pf c1 c2 h1 h12 h2 => knownKeys_le S0 S Pf c1 c2 h1 h12 h2)
     (fun S0 S Pf => erases_after adversary S0 S Pf) q hEth
 
-/-- leanXMSS as EthLib computes it has 127 bits of classical security in the random oracle model.
+/-- leanXMSS as EthLib computes it is strongly unforgeable in the random oracle model.
 
-Take an adversary whose experiment makes at most `q >= 1` hash calls.
+Take an adversary whose experiment makes at most `q >= 1` hash calls in every run.
 
-It forges with probability at most `q / 2^127`. -/
+It forges with probability at most `q / 2^127`.
+
+`q` counts the calls of key generation and of every signing request too.
+
+A signing request can make more than `2^33` calls, so `2^32` requests give `q > 2^65`.
+
+Over the key's lifetime, the bound is then above `2^-62`. -/
 theorem unforgeable : HasClassicalSecurityBits 127 := fun q hq adversary hbound =>
   (forgeAdvantage_eq adversary).trans_le
     (XmssSecurity.Bridge.realGame_security q hq adversary

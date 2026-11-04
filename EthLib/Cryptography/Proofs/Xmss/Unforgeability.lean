@@ -21,6 +21,8 @@ A signing request can make more than `2^33`, when its randomizer trials keep mis
 
 So the bound is never below about `2^-103.3`, and each signing request adds more than `2^-94`.
 
+With all `2^32` leaf indices signed, `q` exceeds `2^65`, and the bound exceeds `2^-62`.
+
 The game runs EthLib's key generation, signing and verification.
 
 Their hash `H` is a query to the oracle.
