@@ -12,11 +12,6 @@ exponents hundreds of bits wide. `natCast_pow_eq_one_iff` and
 `natCast_pow_div_ne_one` convert such computations into the
 `(b : ZMod m) ^ e = 1` / `≠ 1` facts that Lucas primality certificates
 (`lucas_primality`) consume.
-
-This generalizes (over the modulus) the private infrastructure that
-`Proofs.Bls.FrZMod` introduced for the scalar-field modulus; the
-base-field certificate chain in `Proofs.Bls.FpZMod` needs it for a
-dozen different moduli, one per node of its Pratt tree.
 -/
 
 @[expose] public section

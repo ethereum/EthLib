@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls.Fr
 public import EthLib.Cryptography.Proofs.Bls.Fr
+public import EthLib.Cryptography.Proofs.PowMod
 public import Mathlib.Data.ZMod.Basic
 public import Mathlib.Algebra.Field.ZMod
 public import Mathlib.NumberTheory.LucasPrimality
@@ -81,54 +82,14 @@ set_option maxRecDepth 4000
 -- `Fr ^ Nat` lemmas must repeat this line.
 attribute [-instance] Fin.instNatPow
 
-/-- Fuel-based modular square-and-multiply: `powModAux fuel m b e` is
-`b ^ e % m` provided `e < 2 ^ fuel`. Structural recursion on `fuel`
-keeps kernel reduction shallow, and every arithmetic step is a
-GMP-accelerated `Nat` operation, so `decide` can evaluate it even for
-255-bit exponents. -/
-private def powModAux : Nat → Nat → Nat → Nat → Nat
-  | 0, m, _, _ => 1 % m
-  | fuel+1, m, b, e =>
-    if e = 0 then 1 % m
-    else if e % 2 = 1 then powModAux fuel m (b * b % m) (e / 2) * b % m
-    else powModAux fuel m (b * b % m) (e / 2)
-
-private theorem powModAux_eq (fuel m b e : Nat) (he : e < 2 ^ fuel) :
-    powModAux fuel m b e = b ^ e % m := by
-  induction fuel generalizing b e with
-  | zero =>
-    have h1 : e < 1 := by simpa using he
-    have h0 : e = 0 := by omega
-    subst h0
-    simp [powModAux]
-  | succ fuel ih =>
-    by_cases h0 : e = 0
-    · subst h0; simp [powModAux]
-    · have h2 : e / 2 < 2 ^ fuel := by
-        rw [Nat.pow_succ] at he; omega
-      have hrec := ih (b * b % m) (e / 2) h2
-      by_cases h1 : e % 2 = 1
-      · rw [powModAux, ite_eq_right h0, ite_eq_left h1, hrec, ← Nat.pow_mod, ← Nat.pow_two,
-            ← Nat.pow_mul, Nat.mod_mul_mod, ← Nat.pow_succ,
-            show (2 * (e / 2)).succ = e by omega]
-      · rw [powModAux, ite_eq_right h0, ite_eq_right h1, hrec, ← Nat.pow_mod, ← Nat.pow_two,
-            ← Nat.pow_mul, show 2 * (e / 2) = e by omega]
-
-private theorem natCast_pow_eq_one_iff (b e : Nat) (he : e < 2 ^ 256) :
-    ((b : ZMod modulus) ^ e = 1) ↔ powModAux 256 modulus b e = 1 % modulus := by
-  rw [powModAux_eq 256 modulus b e he, ← Nat.cast_pow, ← Nat.cast_one (R := ZMod modulus),
-      ZMod.natCast_eq_natCast_iff]
-  exact Iff.rfl
-
 private theorem seven_pow_div_ne_one (q : Nat)
-    (hne : powModAux 256 modulus 7 ((modulus - 1) / q) ≠ 1 % modulus) :
+    (hne : PowMod.powModAux 256 modulus 7 ((modulus - 1) / q) ≠ 1 % modulus) :
     ((7 : ℕ) : ZMod modulus) ^ ((modulus - 1) / q) ≠ 1 :=
-  fun h => hne ((natCast_pow_eq_one_iff 7 _
-    (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (by decide))).mp h)
+  PowMod.natCast_pow_div_ne_one modulus 256 7 q (by decide) hne
 
 /-- First half of the Lucas certificate: `7 ^ (r - 1) = 1` in `ZMod r`. -/
 theorem seven_pow_card_sub_one : ((7 : ℕ) : ZMod modulus) ^ (modulus - 1) = 1 := by
-  rw [natCast_pow_eq_one_iff 7 (modulus - 1) (by decide)]
+  rw [PowMod.natCast_pow_eq_one_iff modulus 256 7 (modulus - 1) (by decide)]
   decide
 
 /-- Second half of the Lucas certificate: `7 ^ ((r - 1) / q) ≠ 1` in
