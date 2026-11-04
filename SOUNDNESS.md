@@ -162,6 +162,15 @@ The alt_bn128 theorems check the constants and the group law of `G_1`, which the
 
 No theorem covers `G_2` or the pairing.
 
+### secp256r1
+
+The secp256r1 theorems are correctness statements, like those of secp256k1.
+`modulus_prime` (`Proofs/Secp256r1/Field.lean`) proves that both moduli are prime.
+`toPoint_add` (`Proofs/Secp256r1/Curve.lean`) proves that the addition of SEC 1 is the group law of the curve.
+`card_point` (`Proofs/Secp256r1/Order.lean`) proves that the group has `n` points, so the cofactor is 1.
+That proof needs one more fact than the proof for secp256k1: `x^3 - 3 x + b` has no root mod `p`.
+The kernel checks it by an inverse of `X^p - X` modulo the cubic.
+
 ### KZG
 
 `Proofs/Kzg/Core.lean` proves that the public operations reject malformed inputs, such as a wrong size or lists of different lengths.
