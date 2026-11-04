@@ -1,8 +1,8 @@
 module
 
 public import EthLib.Base.BigEndian
-public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Cryptography.Kzg.Core
+public import EthLib.Cryptography.Kzg.VersionedHash
 
 /-!
 # `Evm.Precompiles.PointEvaluation`
@@ -34,7 +34,8 @@ namespace EthLib.Execution.Evm.Precompiles.PointEvaluation
 
 open EthLib.Base (natToBytes)
 open EthLib.Cryptography.Bls (G2 Fr)
-open EthLib.Cryptography.Kzg (parseBytes validateKzgG1Point verifyKzgProofWith)
+open EthLib.Cryptography.Kzg (kzgCommitmentToVersionedHash parseBytes validateKzgG1Point
+  verifyKzgProofWith)
 
 /-- The size of the call data: a versioned hash, two field elements and two compressed G1 points. -/
 def INPUT_BYTES : Nat := 192
@@ -44,9 +45,6 @@ def GAS_POINT_EVALUATION : Nat := 50000
 
 /-- `FIELD_ELEMENTS_PER_BLOB`: the number of field elements in a blob, which the output reports. -/
 def FIELD_ELEMENTS_PER_BLOB : Nat := 4096
-
-/-- `VERSIONED_HASH_VERSION_KZG`: the first byte of the versioned hash of a KZG commitment. -/
-def VERSIONED_HASH_VERSION_KZG : UInt8 := 0x01
 
 /-- `KZG_SETUP_G2_MONOMIAL_1`: `[tau]_2`, the trusted setup's G2 point for the secret `tau`, compressed.
 
@@ -80,10 +78,6 @@ inductive PointEvaluationError where
   /-- The pairing check fails: the proof does not show `p(z) = y`. -/
   | proofRejected
   deriving Repr, DecidableEq
-
-/-- `kzg_commitment_to_versioned_hash`: the version byte `0x01`, then the last 31 bytes of the SHA-256 of the commitment. -/
-def kzgCommitmentToVersionedHash (commitment : ByteArray) : ByteArray :=
-  ⟨#[VERSIONED_HASH_VERSION_KZG]⟩ ++ (Cryptography.Hash.sha256 commitment).extract 1 32
 
 /-- Whether `proof` shows that the polynomial of `commitment` takes the value `y` at `z`.
 

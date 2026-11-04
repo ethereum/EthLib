@@ -1,14 +1,12 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.PointEvaluation
-public import EthLib.Cryptography.Proofs.Hash.Sha256
 
 /-!
 # Proofs: `Evm.Precompiles.PointEvaluation`
 
 - A call succeeds exactly when the call data has 192 bytes, the gas covers 50000, the versioned hash names the commitment and the proof verifies.
 - Every successful call returns the same 64 bytes: 4096, then the BLS12-381 group order.
-- The versioned hash has 32 bytes, and starts with the version `0x01`.
 -/
 
 @[expose] public section
@@ -16,6 +14,7 @@ public import EthLib.Cryptography.Proofs.Hash.Sha256
 namespace EthLib.Execution.Evm.Precompiles.PointEvaluation
 
 open EthLib.Cryptography.Bls (Fr)
+open EthLib.Cryptography.Kzg (kzgCommitmentToVersionedHash)
 
 /-- Call data of any other length than 192 bytes fails before the gas is charged. -/
 theorem pointEvaluation_invalidInputLength {data : ByteArray} (hsize : data.size ≠ INPUT_BYTES) (gas : Nat) :
@@ -77,16 +76,5 @@ theorem output_eq :
        0x73, 0xed, 0xa7, 0x53, 0x29, 0x9d, 0x7d, 0x48, 0x33, 0x39, 0xd8, 0x08, 0x09, 0xa1, 0xd8, 0x05,
        0x53, 0xbd, 0xa4, 0x02, 0xff, 0xfe, 0x5b, 0xfe, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01] := by
   decide +kernel
-
-/-- The versioned hash of every commitment has 32 bytes and starts with `0x01`. -/
-theorem kzgCommitmentToVersionedHash_shape (commitment : ByteArray) :
-    (kzgCommitmentToVersionedHash commitment).size = 32 ∧
-      (kzgCommitmentToVersionedHash commitment).data.toList.head? = some VERSIONED_HASH_VERSION_KZG := by
-  have hsize := Cryptography.Hash.Sha256.hash_size commitment
-  constructor
-  · simp [kzgCommitmentToVersionedHash, Cryptography.Hash.sha256, ByteArray.size_append, ByteArray.size_extract,
-      hsize]
-    rfl
-  · simp [kzgCommitmentToVersionedHash]
 
 end EthLib.Execution.Evm.Precompiles.PointEvaluation

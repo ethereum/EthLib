@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Gas
-public import EthLib.Execution.Evm.Precompiles.PointEvaluation
+public import EthLib.Cryptography.Kzg.VersionedHash
 public import EthLib.Execution.Transactions.Signature
 
 /-!
@@ -201,7 +201,7 @@ def checkContents (fork : Fork) : Transaction → Except TransactionError Unit
     else if fork ≥ .fusaka ∧ MAX_BLOBS_PER_TRANSACTION < tx.blobVersionedHashes.length then
       .error (.blobCountExceeded tx.blobVersionedHashes.length)
     else if tx.blobVersionedHashes.any
-        (fun h => h[0] != Precompiles.PointEvaluation.VERSIONED_HASH_VERSION_KZG) then
+        (fun h => h[0] != Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG) then
       .error .invalidBlobVersionedHash
     else .ok ()
   | .setCode tx => if tx.authorizations.isEmpty then .error .emptyAuthorizationList else .ok ()
