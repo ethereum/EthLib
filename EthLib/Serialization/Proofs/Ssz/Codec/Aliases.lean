@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.Uint
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
 public import EthLib.Serialization.Ssz.Codec.Root
@@ -20,7 +21,8 @@ theorem serializeEach_bytes (data : List UInt8) :
       .ok (data.map fun byte => #[byte]) := by
   -- Encoding proceeds one byte at a time and preserves both its value and its position.
   have bound (byte : UInt8) : byte.toNat < 256 := byte.toNat_lt
-  induction data <;> simp_all [serializeEach, serialize, uintBytes_zero, uintBytes_succ,
+  induction data <;> simp_all [serializeEach_nil, serializeEach_cons, serialize, uintBytes_zero,
+      uintBytes_succ,
     Nat.mod_eq_of_lt, Bind.bind, Except.bind, pure, Except.pure]
 
 /-- Singleton fixed slots contribute one byte each, all in the fixed part. -/
@@ -28,14 +30,15 @@ private theorem byteSlots_width (data : List UInt8) :
     headWidth (data.map fun byte => (true, #[byte])) = data.length ∧
       bodyWidth (data.map fun byte => (true, #[byte])) = 0 := by
   -- There are no offsets or trailing bodies for fixed-width elements.
-  induction data <;> simp_all [headWidth, bodyWidth, Nat.add_comm]
+  induction data <;> simp_all [headWidth_nil, headWidth_cons, bodyWidth_nil, bodyWidth_cons_inline,
+      Nat.add_comm]
 
 /-- Singleton fixed slots concatenate to the original byte sequence. -/
 private theorem byteSlots_content (data : List UInt8) (start : Nat) :
     headOf start (data.map fun byte => (true, #[byte])) = data.toArray ∧
       bodiesOf (data.map fun byte => (true, #[byte])) = #[] := by
   -- Each slot appends one original byte without changing it.
-  induction data <;> simp_all [headOf, bodiesOf]
+  induction data <;> simp_all [headOf_nil, headOf_cons_inline, bodiesOf_nil, bodiesOf_cons_inline]
 
 /-- Byte sequences use no offsets, so they encode to their input or meet the size bound. -/
 theorem serializeSequence_bytes (data : Bytes) :

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.RootLaws
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Widths
 public import EthLib.Serialization.Proofs.Ssz.Type.Equality
@@ -49,13 +50,14 @@ theorem serializeEach_basic_size {shape : Desc} (basic : shape.isBasic = true) :
     induction parts <;> simp [*, Nat.add_assoc]
   intro values
   induction values with
-  | nil => intro _; exact ⟨[], by simp [serializeEach], by simp⟩
+  | nil => intro _; exact ⟨[], by simp [serializeEach_nil], by simp⟩
   | cons value values ih =>
     intro each
     -- The first basic value contributes its fixed byte width to the remaining sequence.
     obtain ⟨head, wrote, sized⟩ := basic_encoding basic (each value List.mem_cons_self)
     obtain ⟨tail, rest, total⟩ := ih (fun item member => each item (List.mem_cons_of_mem _ member))
-    refine ⟨head :: tail, by simp [serializeEach, wrote, rest, Bind.bind, Except.bind, pure, Except.pure], ?_⟩
+    refine ⟨head :: tail, by simp [serializeEach_cons, wrote, rest, Bind.bind, Except.bind, pure,
+        Except.pure], ?_⟩
     simp only [fold_size, Array.size_empty, Nat.zero_add] at total ⊢
     simp [sized, total, Nat.add_mul, Nat.add_comm]
 

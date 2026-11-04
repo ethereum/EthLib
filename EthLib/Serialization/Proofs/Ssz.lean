@@ -44,6 +44,7 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.LayoutMixin
 public import EthLib.Serialization.Proofs.Ssz.Codec.LayoutProofTree
 public import EthLib.Serialization.Proofs.Ssz.Codec.LayoutSeparation
 public import EthLib.Serialization.Proofs.Ssz.Codec.LengthBinding
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.MultiproofConstruction
 public import EthLib.Serialization.Proofs.Ssz.Codec.NestedProof
 public import EthLib.Serialization.Proofs.Ssz.Codec.NodeWidths

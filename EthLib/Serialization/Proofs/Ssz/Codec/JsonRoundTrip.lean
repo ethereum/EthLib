@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
 -- Shape-specific round trips unfold Lean's `Json.mkObj` implementation.
 import all Lean.Data.Json.Basic
@@ -28,17 +29,17 @@ theorem byteElements_cons (byte : UInt8) (data : Bytes) :
 /-- A run of one-byte values is recovered from the bytes it wrote. -/
 theorem byteElements_byteRun : ∀ (values : List Value) (data : Bytes),
     byteRun values = .ok data → byteElements data = values
-  | [], data, wrote => by simp_all [byteRun, byteElements]
+  | [], data, wrote => by simp_all [byteRun_nil, byteElements]
   | .uint n :: rest, data, wrote => by
     -- A small value writes one byte, and that byte reads back as the same value.
     cases run : byteRun rest <;> by_cases wide : 256 ≤ n <;>
-      simp [byteRun, run, wide, Bind.bind, Except.bind, pure, Except.pure] at wrote
+      simp [byteRun_uint, run, wide, Bind.bind, Except.bind, pure, Except.pure] at wrote
     subst wrote
     rw [byteElements_cons, byteElements_byteRun rest _ run]
     simp
     omega
   | .bool _ :: _, _, wrote | .bytes _ :: _, _, wrote | .bits _ :: _, _, wrote
-  | .seq _ :: _, _, wrote | .union _ _ :: _, _, wrote => by simp [byteRun] at wrote
+  | .seq _ :: _, _, wrote | .union _ _ :: _, _, wrote => by simp [byteRun, byteRunFrom] at wrote
 
 /-- Each entry of a sequence document reads back as the element it was written from. -/
 theorem valueOfEntries_jsonOfEach (element : Desc) (spelling : Spelling)

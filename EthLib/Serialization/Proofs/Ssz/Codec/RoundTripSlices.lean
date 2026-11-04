@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.RoundTripComposite
 
 /-! Canonical sequence encodings split back into precisely their original element bytes. -/
@@ -50,7 +51,7 @@ theorem listSlices_offset_parts {element : Desc} (varying : element.fixedSize = 
       (headOf (parts.length * bytesPerOffset) (offsetSlots parts) ++ concatParts parts) = .ok parts := by
   -- With no elements, both the table and body are empty.
   cases parts with
-  | nil => simp [listSlices, headOf, concatParts, Pure.pure, Except.pure]
+  | nil => simp [listSlices, headOf_nil, concatParts, Pure.pure, Except.pure]
   | cons part rest =>
     let parts := part :: rest
     have nameable : parts.length * bytesPerOffset + bodyWidth (offsetSlots parts) <

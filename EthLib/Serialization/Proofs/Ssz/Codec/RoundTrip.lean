@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.RoundTripSlices
 public import EthLib.Serialization.Proofs.Ssz.Codec.StructOrder
 
@@ -155,7 +156,7 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
         -- No elements, so the table is empty and so is the encoding.
         have none : elements = [] := List.eq_nil_of_length_eq_zero lengths.symm
         subst none
-        simp [deserialize, vectorSlices, varying, headOf, concatParts, deserializeEach]
+        simp [deserialize, vectorSlices, varying, headOf_nil, concatParts, deserializeEach]
         rfl
       | part :: rest, lengths, nameable, decoded, sizeIs, frontIs =>
         simp only [deserialize, vectorSlices, varying, sizeIs,

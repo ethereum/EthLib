@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.Uint
 public import EthLib.Serialization.Ssz.Codec.Deserialize
 
@@ -115,7 +116,7 @@ theorem readSlots_headOf :
   induction fields with
   | nil =>
     intro parts front bodies bodyStart _ _ _
-    simp [readSlots, slotsOf, expectedSlots, headWidth]
+    simp [readSlots, slotsOf, expectedSlots, headWidth_nil]
   | cons field fields ih =>
     intro parts front bodies bodyStart paired widths nameable
     cases parts with
@@ -128,7 +129,8 @@ theorem readSlots_headOf :
       cases fixed : field.fixedSize with
       | some width =>
         obtain rfl : part.size = width := widths (field, part) (by simp) width fixed
-        simp only [headOf, bodyWidth, headWidth, ite_eq_left, expectedSlots,
+        simp only [headOf_cons_inline, bodyWidth_cons_inline, headWidth_cons, ite_eq_left,
+            expectedSlots,
           Desc.isFixed, fixed, Option.isSome_some] at nameable ⊢
         -- The rest of the read is the same claim with this field behind it.
         have inner := ih parts (front ++ part) bodies bodyStart
@@ -137,7 +139,8 @@ theorem readSlots_headOf :
         -- What was cut out is the whole of this field's own bytes.
         simp [readSlots, fixed, inner, Nat.add_assoc, Bind.bind, Except.bind, pure, Except.pure]
       | none =>
-        simp only [headOf, bodyWidth, headWidth, expectedSlots, Desc.isFixed, fixed,
+        simp only [headOf_cons_variable, bodyWidth_cons_variable, headWidth_cons, expectedSlots,
+            Desc.isFixed, fixed,
           Option.isSome_none, Bool.false_eq_true, ite_false] at nameable ⊢
         -- The offset stands in for the body, and the body follows the fixed part.
         have inner := ih parts (front ++ uintBytes bytesPerOffset bodyStart) bodies
@@ -187,7 +190,8 @@ theorem bodySizes_of_no_offsets :
         bodySizes fields parts = [] ∧ bodyWidth (slotsOf fields parts) = 0 := by
   -- Without any body offsets, every paired field must be stored inline.
   intro fields parts bodyStart named
-  fun_induction bodyOffsets bodyStart fields parts <;> simp_all [bodySizes, slotsOf, bodyWidth]
+  fun_induction bodyOffsets bodyStart fields parts <;> simp_all [bodySizes, slotsOf, bodyWidth_nil,
+      bodyWidth_cons_inline]
 
 /--
 The spans between consecutive offsets are the widths of the bodies.
@@ -210,17 +214,19 @@ theorem offsetSpans_bodyOffsets :
       rw [slotsOf_cons]
       by_cases fixed : field.isFixed
       · -- A field written in place opens no body, so nothing between offsets changes.
-        simpa [bodyOffsets, bodySizes, fixed, bodyWidth] using ih parts bodyStart
+        simpa [bodyOffsets, bodySizes, fixed, bodyWidth_nil, bodyWidth_cons_inline,
+            bodyWidth_cons_variable] using ih parts bodyStart
       · -- This field opens a body, which ends where the next one begins.
         have onward := ih parts (bodyStart + part.size)
         cases later : bodyOffsets (bodyStart + part.size) fields parts with
         | nil =>
           -- Nothing follows, so the budget closes this body.
           obtain ⟨noSizes, noWidth⟩ := bodySizes_of_no_offsets fields parts _ later
-          simp [bodyOffsets, bodySizes, fixed, bodyWidth, later, noSizes, noWidth, offsetSpans]
+          simp [bodyOffsets, bodySizes, fixed, bodyWidth_cons_variable, later, noSizes, noWidth,
+              offsetSpans]
         | cons next others =>
           cases bodyOffsets_head fields parts _ next others later
-          simp_all [bodyOffsets, bodySizes, bodyWidth, offsetSpans, Nat.add_assoc,
+          simp_all [bodyOffsets, bodySizes, bodyWidth_cons_variable, offsetSpans, Nat.add_assoc,
             Bind.bind, Except.bind, pure, Except.pure]
 
 /--
@@ -238,7 +244,7 @@ theorem takeSlots_expectedSlots :
   induction fields with
   | nil =>
     intro parts _ paired
-    cases parts <;> simp_all [slotsOf, expectedSlots, takeSlots, bodySizes, bodiesOf]
+    cases parts <;> simp_all [slotsOf, expectedSlots, takeSlots, bodySizes, bodiesOf_nil]
   | cons field fields ih =>
     intro parts front paired
     cases parts with
@@ -247,22 +253,35 @@ theorem takeSlots_expectedSlots :
       -- This field's body is the run the offset opened, and the rest follow it.
       have onward := ih parts (front ++ part) (by simpa using paired)
       by_cases fixed : field.isFixed <;>
-        simp_all [expectedSlots, bodySizes, bodiesOf, takeSlots, slotsOf_cons, Bind.bind,
+        simp_all [expectedSlots, bodySizes, bodiesOf_cons_inline, bodiesOf_cons_variable, takeSlots,
+            slotsOf_cons, Bind.bind,
           Except.bind, pure, Except.pure]
 
 /-- The fixed part is as wide as the slots say it is. -/
 theorem headOf_size : ∀ (slots : List (Bool × Bytes)) (start : Nat),
     (headOf start slots).size = headWidth slots := by
   -- Sum full payload widths for inline fields and four-byte widths for body references.
-  intro slots start
-  fun_induction headOf start slots <;> simp_all [headWidth, uintBytes_size]
+  intro slots
+  induction slots with
+  | nil => intro start; simp [headOf_nil, headWidth_nil]
+  | cons slot rest ih =>
+    intro start
+    obtain ⟨inline, part⟩ := slot
+    cases inline <;>
+      simp [headOf_cons_inline, headOf_cons_variable, headWidth_cons, uintBytes_size, ih]
 
 /-- The bodies are as wide as the slots say they are. -/
 theorem bodiesOf_size : ∀ (slots : List (Bool × Bytes)),
     (bodiesOf slots).size = bodyWidth slots := by
   -- Only variable-field payloads contribute bytes after the header.
   intro slots
-  fun_induction bodiesOf slots <;> simp_all [bodyWidth]
+  induction slots with
+  | nil => simp [bodiesOf_nil, bodyWidth_nil]
+  | cons slot rest ih =>
+    obtain ⟨inline, part⟩ := slot
+    cases inline <;>
+      simp [bodiesOf_cons_inline, bodiesOf_cons_variable, bodyWidth_cons_inline,
+        bodyWidth_cons_variable, ih]
 
 /-- With no bodies, the slots hold every part in place. -/
 theorem map_expectedSlots_of_no_offsets :
@@ -286,7 +305,7 @@ theorem fieldsFixedSize_headWidth :
   induction fields with
   | nil =>
     intro parts width paired _ fixed
-    cases parts <;> simp_all [slotsOf, headWidth, bodyWidth, Desc.fieldsFixedSize]
+    cases parts <;> simp_all [slotsOf, headWidth_nil, bodyWidth_nil, Desc.fieldsFixedSize]
   | cons field fields ih =>
     intro parts width paired widths fixed
     cases parts with
@@ -298,7 +317,7 @@ theorem fieldsFixedSize_headWidth :
       rename_i fieldWidth remaining fieldIs restIs
       have onward := ih parts remaining (by simpa using paired)
         (fun pair member => widths pair (List.mem_cons_of_mem _ member)) restIs
-      simp_all [slotsOf_cons, headWidth, bodyWidth, Desc.isFixed,
+      simp_all [slotsOf_cons, headWidth_cons, bodyWidth_cons_inline, Desc.isFixed,
         widths (field, part) (by simp) fieldWidth fieldIs]
 
 /-- The fixed part the slots write is as wide as the declaration says it is. -/
@@ -309,7 +328,7 @@ theorem leadingWidth_headWidth :
       headWidth (slotsOf fields parts) = Desc.leadingWidth fields := by
   intro fields
   induction fields with
-  | nil => intro parts _ _; simp [slotsOf, headWidth, Desc.leadingWidth]
+  | nil => intro parts _ _; simp [slotsOf, headWidth_nil, Desc.leadingWidth]
   | cons field fields ih =>
     intro parts paired widths
     cases parts with
@@ -319,7 +338,7 @@ theorem leadingWidth_headWidth :
       have rest := ih parts (by simpa using paired)
         (fun pair member w fixed => widths pair (by simp [member]) w fixed)
       cases fixed : field.fixedSize <;>
-        simp_all [slotsOf_cons, headWidth, Desc.isFixed, Desc.leadingWidth]
+        simp_all [slotsOf_cons, headWidth_cons, Desc.isFixed, Desc.leadingWidth]
 
 /-- The budget an encoder wrote is one the decoder settles before it reads a field. -/
 theorem structBudget_of_written :
@@ -450,13 +469,13 @@ theorem headOf_inline : ∀ (parts : List Bytes) (start : Nat),
     headOf start (inlineSlots parts) = concatParts parts := by
   -- Every payload is included in the header in its original order.
   intro parts
-  induction parts <;> simp_all [inlineSlots, headOf, concatParts]
+  induction parts <;> simp_all [inlineSlots, headOf_nil, headOf_cons_inline, concatParts]
 
 /-- The bodies of such a sequence are empty. -/
 theorem bodiesOf_inline : ∀ (parts : List Bytes), bodiesOf (inlineSlots parts) = #[] := by
   -- Skipping every inline payload leaves an empty body byte string.
   intro parts
-  induction parts <;> simp_all [inlineSlots, bodiesOf]
+  induction parts <;> simp_all [inlineSlots, bodiesOf_nil, bodiesOf_cons_inline]
 
 /-- A sequence of fixed elements encodes to its elements laid end to end. -/
 theorem assemble_inline (parts : List Bytes) (bytes : Bytes)
@@ -515,7 +534,7 @@ theorem headWidth_offset : ∀ (parts : List Bytes),
     headWidth (offsetSlots parts) = parts.length * bytesPerOffset := by
   -- Each variable-size element contributes exactly four header bytes, independently of payload length.
   intro parts
-  induction parts <;> simp_all [offsetSlots_cons, headWidth, Nat.succ_mul]
+  induction parts <;> simp_all [offsetSlots_cons, headWidth_nil, headWidth_cons, Nat.succ_mul]
   omega
 
 /-- The bodies of such a sequence are its elements laid end to end. -/
@@ -523,7 +542,7 @@ theorem bodiesOf_offset : ∀ (parts : List Bytes),
     bodiesOf (offsetSlots parts) = concatParts parts := by
   -- Every variable-size payload belongs to the body region in element order.
   intro parts
-  induction parts <;> simp_all [offsetSlots_cons, bodiesOf, concatParts]
+  induction parts <;> simp_all [offsetSlots_cons, bodiesOf_nil, bodiesOf_cons_variable, concatParts]
 
 /-- Each offset in the table names where its own body begins. -/
 theorem readUint_headOf_offset : ∀ (parts : List Bytes) (start : Nat) (front bodies : Bytes)
@@ -538,7 +557,7 @@ theorem readUint_headOf_offset : ∀ (parts : List Bytes) (start : Nat) (front b
   | nil => intro _ _ _ index inside _; simp at inside
   | cons part rest ih =>
     intro start front bodies index inside nameable
-    simp only [offsetSlots_cons, headOf, bodyWidth] at nameable ⊢
+    simp only [offsetSlots_cons, headOf_cons_variable, bodyWidth_cons_variable] at nameable ⊢
     match index with
     | 0 =>
       -- The first offset sits at the front of the table.
@@ -587,7 +606,8 @@ theorem offsetSpans_runningOffsets : ∀ (parts : List Bytes) (start : Nat),
     intro start
     -- Either this is the last element, closed by the budget, or the next one closes it.
     have onward := ih (start + part.size)
-    cases rest <;> simp_all [runningOffsets, offsetSpans, offsetSlots_cons, bodyWidth,
+    cases rest <;> simp_all [runningOffsets, offsetSpans, offsetSlots_cons, bodyWidth_nil,
+        bodyWidth_cons_variable,
       Nat.add_assoc, Bind.bind, Except.bind, pure, Except.pure]
 
 /-- Each body is cut back out of where its offset put it. -/

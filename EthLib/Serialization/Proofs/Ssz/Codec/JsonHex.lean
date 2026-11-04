@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Ssz.Codec.Json
 
 /-! Hex strings written by the JSON mapping read back as the bytes they came from. -/
@@ -51,14 +52,14 @@ private theorem hexBytes_digits (data : Bytes) : hexBytes (hexDigitsOf data) = .
       hexBytes (bytes.flatMap hexPair) = .ok bytes.toArray := by
     intro bytes
     induction bytes with
-    | nil => simp [hexBytes]
+    | nil => simp [hexBytes_nil]
     | cons byte rest ih =>
       have high : byte.toNat >>> 4 < 16 := by
         rw [Nat.shiftRight_eq_div_pow]
         have := byte.toNat_lt
         omega
       have low : byte.toNat &&& 0xF < 16 := Nat.and_lt_two_pow _ (by decide : 15 < 2 ^ 4)
-      simp [hexPair, hexBytes, hexDigit_alphabet high, hexDigit_alphabet low,
+      simp [hexPair, hexBytes_cons, hexDigit_alphabet high, hexDigit_alphabet low,
         byte_halves byte, ih, Bind.bind, Except.bind, pure, Except.pure,
         UInt8.ofNat_toNat]
   simpa [hexDigitsOf] using general data.toList
