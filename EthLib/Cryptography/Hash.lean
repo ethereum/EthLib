@@ -5,6 +5,9 @@ public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Cryptography.Hash.Ripemd160
 public import EthLib.Cryptography.Hash.Crc32c
 public import EthLib.Cryptography.Hash.Blake2b
+public import EthLib.Cryptography.Hash.Hmac
+public import EthLib.Cryptography.Hash.Hkdf
+public import EthLib.Cryptography.Hash.ConcatKdf
 
 /-!
 # `EthLib.Cryptography.Hash`
