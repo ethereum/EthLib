@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.AltBn128.Order
-public import EthLib.Cryptography.Proofs.AltBn128.Twist
+public import EthLib.Cryptography.Proofs.AltBn128.G2Order
 
 /-!
 # Proofs: the pairing law of alt_bn128 as one hypothesis
@@ -12,9 +12,7 @@ It returns one exactly when `sum_i log_P1(a_i) log_P2(b_i) = 0`.
 
 EthLib does not prove that its pairing check computes this, so it states the law as one hypothesis.
 
-The law fixes a point `g2` of order `q` on the twist in place of `P2`.
-
-EIP-197 says that `G_2` is the only group of order `q` on the twist, so any such `g2` will do.
+The law reads points as multiples of the generators `P1` and `P2`.
 
 Points are affine, so each group element has one representative.
 
@@ -29,24 +27,21 @@ namespace EthLib.Cryptography.AltBn128
 def Point.Represents (P : Point) (a : ZMod Fr.modulus) : Prop :=
   P = Point.mulBits 256 a.val Point.generator
 
-/-- `Q` is `b g2`. -/
-def Point2.Represents (g2 Q : Point2) (b : ZMod Fr.modulus) : Prop :=
-  Q = Point2.mulBits 256 b.val g2
+/-- `Q` is `b P2`. -/
+def Point2.Represents (Q : Point2) (b : ZMod Fr.modulus) : Prop :=
+  Q = Point2.mulBits 256 b.val Point2.generator
 
-/-- The law of the pairing check, for a point `g2` of order `q` on the twist.
+/-- The law of the pairing check.
 
-Let `P_i = a_i P1` and `Q_i = b_i g2`.
+Let `P_i = a_i P1` and `Q_i = b_i P2`.
 
 The check of the pairs `(P_i, Q_i)` passes exactly when `sum_i a_i b_i = 0`. -/
-structure PairingLaws (g2 : Point2) : Prop where
-  isOnCurve_g2 : g2.isOnCurve = true
-  g2_ne_infinity : g2 ≠ .infinity
-  mulBits_order_g2 : Point2.mulBits 256 Fr.modulus g2 = .infinity
+structure PairingLaws : Prop where
   pairingCheck_iff :
     ∀ (pairs : List (Point × Point2)) (a b : List (ZMod Fr.modulus)),
       a.length = pairs.length → b.length = pairs.length →
       (∀ i (h : i < pairs.length),
-        (pairs[i]).1.Represents a[i]! ∧ Point2.Represents g2 (pairs[i]).2 b[i]!) →
+        (pairs[i]).1.Represents a[i]! ∧ (pairs[i]).2.Represents b[i]!) →
       (pairingCheck pairs = true ↔ (List.zipWith (· * ·) a b).sum = 0)
 
 /-! ## Pairs with a point at infinity -/
@@ -83,21 +78,19 @@ theorem represents_generator : generator.Represents 1 := by
 
 end Point
 
-namespace PairingLaws
-
-variable {g2 : Point2}
-
-/-- `g2` is `1 g2`. -/
-theorem represents_g2 (laws : PairingLaws g2) : Point2.Represents g2 g2 1 := by
-  have h := laws.isOnCurve_g2
+/-- `P2` is `1 P2`. -/
+theorem Point2.represents_generator : Point2.generator.Represents 1 := by
+  have h := Point2.isOnCurve_generator
   rw [Point2.Represents, ZMod.val_one, ← Point2.toPoint_inj h (Point2.isOnCurve_mulBits _ _ h),
     Point2.toPoint_mulBits _ _ h (by decide), one_smul]
 
+namespace PairingLaws
+
 /-- The law for two pairs, the shape of a check `e(A, B) e(C, D) = 1`. -/
-theorem two_pairs (laws : PairingLaws g2) {P P' : Point} {Q Q' : Point2}
+theorem two_pairs (laws : PairingLaws) {P P' : Point} {Q Q' : Point2}
     {a b c d : ZMod Fr.modulus}
-    (hP : P.Represents a) (hQ : Point2.Represents g2 Q b)
-    (hP' : P'.Represents c) (hQ' : Point2.Represents g2 Q' d) :
+    (hP : P.Represents a) (hQ : Q.Represents b)
+    (hP' : P'.Represents c) (hQ' : Q'.Represents d) :
     pairingCheck [(P, Q), (P', Q')] = true ↔ a * b + c * d = 0 := by
   have h := laws.pairingCheck_iff [(P, Q), (P', Q')] [a, c] [b, d] rfl rfl (by
     intro i hi
@@ -107,15 +100,16 @@ theorem two_pairs (laws : PairingLaws g2) {P P' : Point} {Q Q' : Point2}
   simpa using h
 
 /-- The check of no pairs passes. -/
-theorem pairingCheck_nil (laws : PairingLaws g2) : pairingCheck [] = true :=
+theorem pairingCheck_nil (laws : PairingLaws) : pairingCheck [] = true :=
   (laws.pairingCheck_iff [] [] [] rfl rfl (fun _ h => absurd h (Nat.not_lt_zero _))).mpr rfl
 
-/-- The law is non-degenerate: `P1` and `g2` do not pair to 1. -/
-theorem nondegenerate (laws : PairingLaws g2) : pairingCheck [(Point.generator, g2)] = false := by
-  have h := laws.pairingCheck_iff [(Point.generator, g2)] [1] [1] rfl rfl (by
+/-- The law is non-degenerate: `P1` and `P2` do not pair to 1. -/
+theorem nondegenerate (laws : PairingLaws) :
+    pairingCheck [(Point.generator, Point2.generator)] = false := by
+  have h := laws.pairingCheck_iff [(Point.generator, Point2.generator)] [1] [1] rfl rfl (by
     intro i hi
     match i, hi with
-    | 0, _ => exact ⟨Point.represents_generator, laws.represents_g2⟩)
+    | 0, _ => exact ⟨Point.represents_generator, Point2.represents_generator⟩)
   simp only [List.zipWith_cons_cons, List.zipWith_nil_left, List.sum_cons, List.sum_nil] at h
   exact Bool.eq_false_iff.mpr fun ht => absurd (h.mp ht) (by decide)
 
