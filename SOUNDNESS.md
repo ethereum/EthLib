@@ -218,6 +218,7 @@ It also checks the first two blocks of the CTR examples F.5.1 and F.5.5 of SP 80
 `decrypt_encrypt` (`Proofs/Aes/Gcm.lean`) proves that GCM decryption of SP 800-38D returns the plaintext of an honest ciphertext and tag.
 `decrypt_eq_ok` proves that decryption accepts no tag other than the honest one.
 Both hold for every forward cipher.
+`encrypt_shortTag` and `decrypt_shortTag` prove that both functions reject the 64-bit and 32-bit tags, which SP 800-38D Appendix C restricts.
 The kernel checks seven test cases of the NIST CAVP file `gcmtestvectors.zip`, one of them a forged tag that decryption rejects.
 
 ### KZG

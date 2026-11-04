@@ -81,6 +81,8 @@ Authenticated decryption returns FAIL for each of them (§7.2, steps 1 and 8). -
 inductive Error where
   /-- The tag length is not one of the seven of §5.2.1.2, or the tag has another length. -/
   | tagLength
+  /-- The tag length is 64 or 32 bits, which Appendix C restricts and this module rejects. -/
+  | shortTag
   /-- The IV is empty, or longer than `2^64 - 1` bits (§5.2.1.1). -/
   | ivLength
   /-- The plaintext or the ciphertext is longer than `2^39 - 256` bits (§5.2.1.1). -/
@@ -91,14 +93,23 @@ inductive Error where
   | authentication
   deriving DecidableEq, Repr
 
-/-- The tag lengths of SP 800-38D §5.2.1.2 in bytes, for 128, 120, 112, 104, 96, 64 and 32 bits.
+/-- The supported tag lengths in bytes, for 128, 120, 112, 104 and 96 bits.
 
-Appendix C limits the use of the 64-bit and 32-bit tags, and the caller must follow it. -/
+SP 800-38D §5.2.1.2 lets an implementation support only some of its seven tag lengths. -/
 def tagLengths : List Nat :=
-  [16, 15, 14, 13, 12, 8, 4]
+  [16, 15, 14, 13, 12]
+
+/-- The short tag lengths of SP 800-38D §5.2.1.2 in bytes, for 64 and 32 bits.
+
+Appendix C allows them only with a bound on the number of decryptions under each key.
+
+One call cannot enforce that bound, so both functions reject these lengths. -/
+def shortTagLengths : List Nat :=
+  [8, 4]
 
 /-- The length checks of SP 800-38D §5.2.1.1 and §5.2.1.2, all in bits. -/
 def checkLengths (t : Nat) (iv text aad : ByteArray) : Except Error Unit := do
+  if t ∈ shortTagLengths then throw .shortTag
   unless t ∈ tagLengths do throw .tagLength
   unless 1 ≤ 8 * iv.size ∧ 8 * iv.size ≤ 2 ^ 64 - 1 do throw .ivLength
   unless 8 * text.size ≤ 2 ^ 39 - 256 do throw .textLength
