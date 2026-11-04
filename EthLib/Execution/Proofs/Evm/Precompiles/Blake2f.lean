@@ -258,4 +258,11 @@ theorem readFlag_ok_iff (flag : UInt8) (f : Bool) : readFlag flag = .ok f ↔ fl
   · rintro rfl
     cases f <;> rfl
 
+/-- Two errors with one code come from one constructor. -/
+theorem Blake2fError.code_injective (e₁ e₂ : Blake2fError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [Blake2fError.code] at h; exact absurd h (by decide))
+
 end EthLib.Execution.Evm.Precompiles.Blake2f

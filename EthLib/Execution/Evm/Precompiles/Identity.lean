@@ -43,6 +43,14 @@ inductive IdentityError where
   | outOfGas (cost gas : Nat)
   deriving Repr, DecidableEq
 
+/-- The stable code of an error, one per constructor.
+
+The code ignores the arguments of the constructor.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def IdentityError.code : IdentityError → UInt32
+  | .outOfGas .. => 1
+
 /-- `identity`: the call data itself, once the gas covers the price. -/
 def identity (data : ByteArray) (gas : Nat) : Except IdentityError ByteArray :=
   let cost := gasCost data.size

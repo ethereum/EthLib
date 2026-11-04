@@ -56,4 +56,11 @@ theorem verify_of_s_out (q : Point) (e r : Nat) {s : Nat} (hs : ¬(0 < s ∧ s <
   unfold verify
   split <;> simp_all
 
+/-- Two errors with one code come from one constructor. -/
+theorem P256VerifyError.code_injective (e₁ e₂ : P256VerifyError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [P256VerifyError.code] at h; exact absurd h (by decide))
+
 end EthLib.Execution.Evm.Precompiles.P256Verify
