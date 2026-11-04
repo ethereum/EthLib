@@ -113,7 +113,8 @@ private theorem sq_or_neg_sq_zmod (x : ZMod Fp.modulus) :
           = (Fp.modulus - 1) + 2 by decide,
         pow_add, ZMod.pow_card_sub_one_eq_one hx, one_mul, pow_two]
 
-private theorem sq_or_neg_sq (a : Fp) :
+/-- Because `p = 3 mod 4`, the candidate root squares to `a` or to `-a`. -/
+theorem sq_or_neg_sq (a : Fp) :
     let s := Fp.powNat a ((Fp.modulus + 1) / 4)
     (s : ZMod Fp.modulus) * s = a ∨ (s : ZMod Fp.modulus) * s = (-a : Fp) := by
   dsimp only
