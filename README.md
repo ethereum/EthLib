@@ -34,7 +34,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Networking | [`Snappy`](EthLib/Networking/Snappy/) | Snappy block decompression |
 | Networking | [`Gossip`](EthLib/Networking/Gossip/) | the gossip message ID of Phase 0 and Altair |
 | Execution | [`Fees`](EthLib/Execution/Fees/) | the EIP-1559 base fee and the blob base fee |
-| Execution | [`Evm`](EthLib/Execution/Evm/) | the arithmetic, comparison and bitwise instructions of the EVM |
+| Execution | [`Evm`](EthLib/Execution/Evm/) | the arithmetic, comparison and bitwise instructions of the EVM, its gas prices and the price of memory |
 | Execution | [`Precompiles`](EthLib/Execution/Evm/Precompiles/) | all 18 precompiles of Bogota, from ECRECOVER to P256VERIFY, run by address from one table |
 | Execution | [`Trie`](EthLib/Execution/Trie/) | the root of the Merkle Patricia Trie, plain and secured, its Merkle proofs, and the hex-prefix encoding of its paths |
 

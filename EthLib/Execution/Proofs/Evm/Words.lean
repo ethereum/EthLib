@@ -49,4 +49,20 @@ theorem wordCount_eq (size : Nat) : wordCount size = (size + 31) / 32 := by
   have least := wordCount_le (size := size) (words := (size + 31) / 32) (by omega)
   omega
 
+/-- A multiple of 32 is already rounded. -/
+theorem ceil32_of_mod {value : Nat} (h : value % 32 = 0) : ceil32 value = value := by
+  unfold ceil32 WORD_BYTES
+  simp [h]
+
+/-- More bytes need no fewer words. -/
+theorem wordCount_mono {a b : Nat} (h : a ≤ b) : wordCount a ≤ wordCount b := by
+  rw [wordCount_eq, wordCount_eq]
+  omega
+
+/-- Rounding up to whole words does not change the word count. -/
+theorem wordCount_ceil32 (size : Nat) : wordCount (ceil32 size) = wordCount size := by
+  rw [wordCount_eq, wordCount_eq]
+  unfold ceil32 WORD_BYTES
+  split <;> omega
+
 end EthLib.Execution.Evm
