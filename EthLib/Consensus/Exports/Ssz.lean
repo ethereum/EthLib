@@ -1,6 +1,8 @@
 module
 
 public import EthLib.Consensus.Containers.Execution
+public import EthLib.Consensus.Containers.Operations
+public import EthLib.Consensus.Containers.Signing
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Serialization.Exports.Ssz
 
@@ -33,8 +35,30 @@ structure Container where
 
 attribute [instance] Container.codec
 
-/-- The container of a name at a preset and a fork, if the fork has one. -/
+/-- The container of a name at a preset and a fork, if the fork has one.
+
+Altair replaces the pending attestations of a state by participation flags.
+
+Capella stops adding historical batches, and adds historical summaries instead. -/
 def containerOf (preset : Preset) (fork : Fork) : String → Option Container
+  | "Fork" => some ⟨ForkVersions⟩
+  | "ForkData" => some ⟨ForkData⟩
+  | "SigningData" => some ⟨SigningData⟩
+  | "Checkpoint" => some ⟨Checkpoint⟩
+  | "Validator" => some ⟨Validator⟩
+  | "AttestationData" => some ⟨AttestationData⟩
+  | "PendingAttestation" => if fork < .altair then some ⟨PendingAttestation preset⟩ else none
+  | "Eth1Data" => some ⟨Eth1Data⟩
+  | "HistoricalBatch" => if fork < .shapella then some ⟨HistoricalBatch preset⟩ else none
+  | "DepositMessage" => some ⟨DepositMessage⟩
+  | "DepositData" => some ⟨DepositData⟩
+  | "BeaconBlockHeader" => some ⟨BeaconBlockHeader⟩
+  | "SignedBeaconBlockHeader" => some ⟨SignedBeaconBlockHeader⟩
+  | "Eth1Block" => some ⟨Eth1Block⟩
+  | "ProposerSlashing" => some ⟨ProposerSlashing⟩
+  | "Deposit" => some ⟨Deposit⟩
+  | "VoluntaryExit" => some ⟨VoluntaryExit⟩
+  | "SignedVoluntaryExit" => some ⟨SignedVoluntaryExit⟩
   | "Withdrawal" => if .shapella ≤ fork then some ⟨Withdrawal⟩ else none
   | "ExecutionPayload" =>
     if .bellatrix ≤ fork then some ⟨ExecutionPayload preset fork⟩ else none

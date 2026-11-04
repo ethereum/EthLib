@@ -23,10 +23,28 @@ FORKS = {
     "fulu": "fusaka",
 }
 
-# Each container that EthLib defines, with the first fork that has it.
+# Each container that EthLib defines, with the first fork that has it and the first that drops it.
 CONTAINERS = {
-    "Withdrawal": "capella",
-    "ExecutionPayload": "bellatrix",
+    "Fork": ("phase0", None),
+    "ForkData": ("phase0", None),
+    "SigningData": ("phase0", None),
+    "Checkpoint": ("phase0", None),
+    "Validator": ("phase0", None),
+    "AttestationData": ("phase0", None),
+    "PendingAttestation": ("phase0", "altair"),
+    "Eth1Data": ("phase0", None),
+    "HistoricalBatch": ("phase0", "capella"),
+    "DepositMessage": ("phase0", None),
+    "DepositData": ("phase0", None),
+    "BeaconBlockHeader": ("phase0", None),
+    "SignedBeaconBlockHeader": ("phase0", None),
+    "Eth1Block": ("phase0", None),
+    "ProposerSlashing": ("phase0", None),
+    "Deposit": ("phase0", None),
+    "VoluntaryExit": ("phase0", None),
+    "SignedVoluntaryExit": ("phase0", None),
+    "Withdrawal": ("capella", None),
+    "ExecutionPayload": ("bellatrix", None),
 }
 
 
@@ -65,12 +83,23 @@ def test_case(preset, fork, container, case):
     assert encoded == data
 
 
-@pytest.mark.parametrize("container, first", CONTAINERS.items())
-def test_no_container_before_its_fork(container, first):
+@pytest.mark.parametrize("container", CONTAINERS)
+def test_no_container_outside_its_forks(container):
+    first, dropped = CONTAINERS[container]
     forks = list(FORKS)
-    for fork in forks[:forks.index(first)]:
+    end = forks.index(dropped) if dropped else len(forks)
+    for fork in forks[:forks.index(first)] + forks[end:]:
         with pytest.raises(SszError):
             consensus.ssz_static("minimal", FORKS[fork], container, b"")
+
+
+def test_every_fork_of_a_container_has_cases():
+    found = {(fork, container) for _, fork, container, _ in _cases()}
+    forks = list(FORKS)
+    for container, (first, dropped) in CONTAINERS.items():
+        end = forks.index(dropped) if dropped else len(forks)
+        for fork in forks[forks.index(first):end]:
+            assert (fork, container) in found, (fork, container)
 
 
 def test_truncated_bytes_are_rejected():
