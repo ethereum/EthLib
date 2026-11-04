@@ -9,19 +9,25 @@ public import EthLib.Serialization.Ssz.Codec.Serialize
 
 The message ID of gossip on the consensus layer.
 
-Gossipsub, the publish-subscribe protocol that the consensus layer uses, drops a message whose ID is still in its cache of seen IDs.
+Gossipsub is the publish-subscribe protocol of the consensus layer.
 
-The consensus layer computes that ID from the content, so a second copy of the same data on one topic gets the same ID and is dropped.
+It drops a message whose ID is still in its cache of seen IDs.
 
-The rules are in "Topics and messages" of [`phase0/p2p-interface.md`](https://github.com/ethereum/consensus-specs/blob/55a48db47eff748266187888f01227940e3e7e64/specs/phase0/p2p-interface.md#topics-and-messages) and of [`altair/p2p-interface.md`](https://github.com/ethereum/consensus-specs/blob/55a48db47eff748266187888f01227940e3e7e64/specs/altair/p2p-interface.md#topics-and-messages).
+The consensus layer computes that ID from the content.
 
-The data of a message is Snappy-compressed, and one payload, the uncompressed content, has many compressions.
+So a second copy of the same data on one topic gets the same ID and is dropped.
 
-Data decompresses when `Snappy.decompress` accepts it.
+The data of a message is Snappy-compressed.
+
+One payload, the uncompressed content, has many compressions.
+
+Data decompresses when the Snappy block decoder accepts it.
 
 That decoder reads at most five preamble bytes, which hold any length up to 2^32 - 1.
 
-Data that decompresses is hashed as its payload, so on one topic all data that decompresses to one payload gets one ID.
+Data that decompresses is hashed as its payload.
+
+So on one topic, all data that decompresses to one payload gets one ID.
 
 Data that does not decompress is hashed as it is.
 
@@ -40,23 +46,19 @@ The topic length is little-endian.
 
 Messages on a topic with the Phase 0 fork digest keep the Phase 0 rule, so both rules are here.
 
-Clients reject messages over the sizes in [Gossipsub size limits](https://github.com/ethereum/consensus-specs/blob/55a48db47eff748266187888f01227940e3e7e64/specs/phase0/p2p-interface.md#gossipsub-size-limits), as a separate check.
+Clients reject messages over a size limit, as a separate check.
 
-The message ID rules do not mention those sizes, so the ID does not apply them.
+The message ID rules do not mention that limit, so the ID does not apply it.
 -/
 
 @[expose] public section
 
 namespace EthLib.Networking.Gossip
 
-/-- `MESSAGE_DOMAIN_INVALID_SNAPPY`, the domain of data that does not decompress.
-
-[Configs](https://github.com/ethereum/consensus-specs/blob/55a48db47eff748266187888f01227940e3e7e64/specs/phase0/p2p-interface.md#configs) of the Phase 0 p2p specification. -/
+/-- The domain of data that does not decompress. -/
 def MESSAGE_DOMAIN_INVALID_SNAPPY : Vector UInt8 4 := #v[0x00, 0x00, 0x00, 0x00]
 
-/-- `MESSAGE_DOMAIN_VALID_SNAPPY`, the domain of data that decompresses.
-
-[Configs](https://github.com/ethereum/consensus-specs/blob/55a48db47eff748266187888f01227940e3e7e64/specs/phase0/p2p-interface.md#configs) of the Phase 0 p2p specification. -/
+/-- The domain of data that decompresses. -/
 def MESSAGE_DOMAIN_VALID_SNAPPY : Vector UInt8 4 := #v[0x01, 0x00, 0x00, 0x00]
 
 namespace Phase0
@@ -67,9 +69,9 @@ def hashInput (domain : Vector UInt8 4) (bytes : ByteArray) : ByteArray :=
 
 /-- The message ID of Phase 0: the first 20 bytes of a SHA-256 digest.
 
-Data that decompresses is hashed as its payload, under `MESSAGE_DOMAIN_VALID_SNAPPY`.
+Data that decompresses is hashed as its payload, under the domain `01 00 00 00`.
 
-Other data is hashed as it is, under `MESSAGE_DOMAIN_INVALID_SNAPPY`.
+Other data is hashed as it is, under the domain `00 00 00 00`.
 -/
 def messageId (data : ByteArray) : ByteArray :=
   match Snappy.decompress data with
@@ -80,11 +82,13 @@ end Phase0
 
 namespace Altair
 
-/-- The bytes Altair hashes: the domain, the topic length, the topic, then `bytes`, the payload or the raw data.
+/-- The bytes Altair hashes: the domain, the topic length, the topic, then `bytes`.
 
-The length is `uint_to_bytes(Uint64(len(message.topic)))`, eight little-endian bytes, which `Serialization.Ssz.uintBytes 8` writes.
+The bytes are the payload or the raw data.
 
-A topic of 2^64 bytes or more has no `Uint64` length, and for it `uintBytes 8` keeps only the low 64 bits of the length.
+The length of the topic is a 64-bit integer, written as eight little-endian bytes.
+
+A topic of 2^64 bytes or more has no 64-bit length, and the bytes keep the low 64 bits of it.
 
 The length marks where the topic ends and the bytes start.
 -/
@@ -93,9 +97,9 @@ def hashInput (domain : Vector UInt8 4) (topic bytes : ByteArray) : ByteArray :=
 
 /-- The message ID from Altair on: the first 20 bytes of a SHA-256 digest.
 
-Data that decompresses is hashed as its payload, under `MESSAGE_DOMAIN_VALID_SNAPPY`.
+Data that decompresses is hashed as its payload, under the domain `01 00 00 00`.
 
-Other data is hashed as it is, under `MESSAGE_DOMAIN_INVALID_SNAPPY`.
+Other data is hashed as it is, under the domain `00 00 00 00`.
 
 A missing topic or data field of the protobuf message is the empty byte string.
 -/

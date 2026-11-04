@@ -8,13 +8,15 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.Table
 /-!
 # `Networking.Proofs.Gossip.MessageId`
 
-Properties of the gossip message ID, against "Topics and messages" of [`phase0/p2p-interface.md`](https://github.com/ethereum/consensus-specs/blob/55a48db47eff748266187888f01227940e3e7e64/specs/phase0/p2p-interface.md#topics-and-messages) and of [`altair/p2p-interface.md`](https://github.com/ethereum/consensus-specs/blob/55a48db47eff748266187888f01227940e3e7e64/specs/altair/p2p-interface.md#topics-and-messages).
+Properties of the gossip message ID.
 
 - Every ID is 20 bytes.
-- Data that decompresses is hashed as its payload under `MESSAGE_DOMAIN_VALID_SNAPPY`, and other data as it is under `MESSAGE_DOMAIN_INVALID_SNAPPY`.
+- Data that decompresses is hashed as its payload under the domain `01 00 00 00`.
+- Other data is hashed as it is under the domain `00 00 00 00`.
 - Two byte strings that decompress to one payload get one ID, on the same topic for Altair.
-- Each hash input determines its domain and its bytes, and under Altair its topic, for topics shorter than 2^64 bytes.
-  So two messages that differ in one of these share an ID only if SHA-256, cut to 20 bytes, collides.
+- Each hash input determines its domain and its bytes, and under Altair its topic.
+  The topic must be shorter than 2^64 bytes.
+  So two messages that differ in one share an ID only if SHA-256, cut to 20 bytes, collides.
 - Known answers: one per rule and per case, one for an empty message, and one for a six-byte preamble.
 
 The kernel checks everything here, so no `native_decide` or `bv_decide` axiom appears.
@@ -75,7 +77,7 @@ theorem Altair.messageId_of_error (topic : ByteArray) {data : ByteArray} {e : Sn
 
 /-- Two byte strings that decompress to one payload get one Phase 0 ID.
 
-This is the first case of the note under the Phase 0 rule: several byte strings can decompress to the same value.
+Several byte strings can decompress to the same value, so they share an ID.
 -/
 theorem Phase0.messageId_eq_of_decompress {data₁ data₂ payload : ByteArray}
     (h₁ : decompress data₁ = .ok payload) (h₂ : decompress data₂ = .ok payload) :
@@ -106,7 +108,9 @@ theorem Phase0.hashInput_injective {domain₁ domain₂ : Vector UInt8 4} {bytes
   obtain ⟨domains, rest⟩ := List.append_inj lists (by simp)
   exact ⟨Vector.toList_inj.mp domains, ByteArray.ext (Array.toList_inj.mp rest)⟩
 
-/-- The Altair hash input determines the domain, the topic and the bytes after them, for topics shorter than 2^64 bytes. -/
+/-- The Altair hash input determines the domain, the topic and the bytes after them.
+
+The topics are shorter than 2^64 bytes. -/
 theorem Altair.hashInput_injective {domain₁ domain₂ : Vector UInt8 4} {topic₁ topic₂ bytes₁ bytes₂ : ByteArray}
     (hsize₁ : topic₁.size < 2 ^ 64) (hsize₂ : topic₂.size < 2 ^ 64)
     (h : Altair.hashInput domain₁ topic₁ bytes₁ = Altair.hashInput domain₂ topic₂ bytes₂) :

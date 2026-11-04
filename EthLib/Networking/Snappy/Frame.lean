@@ -154,8 +154,7 @@ def decodeChunks : List UInt8 → Nat → Except FrameError (List UInt8)
 
 /-- The bytes a framed stream decodes to, or why it is not a valid stream. -/
 def decodeFramesList (bs : List UInt8) : Except FrameError (List UInt8) :=
-  -- The first chunk must be a stream identifier (§1).
-  -- The chunk loop then checks its length and contents.
+  -- The first chunk must be a stream identifier (§1), whose length and contents the loop checks.
   match bs with
   | type :: _ =>
       if type == streamIdentifierType then decodeChunks bs bs.length

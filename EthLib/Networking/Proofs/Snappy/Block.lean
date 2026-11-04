@@ -7,9 +7,10 @@ public import EthLib.Networking.Encoding.Varint
 /-!
 # `Networking.Proofs.Snappy.Block`
 
-Properties of Snappy block decompression, against [`format_description.txt`](https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt).
+Properties of Snappy block decompression, against `format_description.txt` of `google/snappy`:
+<https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt>.
 
-- The preamble is a little-endian varint: it reads back every encoding of a length up to 2^32 - 1 (§1).
+- The preamble is a little-endian varint, and it reads back every length up to 2^32 - 1 (§1).
 - A copy writes exactly the bytes §2.2 describes, overlapping copies included.
 - A block cannot start with a copy (§2).
 - A block that decompresses yields exactly the length it declared, at most 2^32 - 1.
@@ -80,7 +81,7 @@ theorem readPreambleAux_encodeAux {n fuel : Nat} (acc shift : Nat) (rest : List 
         rw [show (2 : Nat) ^ 7 = 128 from rfl]
         ac_rfl
 
-/-- The preamble reads back the varint encoding of every length up to 2^32 - 1, whatever follows it. -/
+/-- The preamble reads back the varint of every length up to 2^32 - 1, whatever follows it. -/
 theorem readPreamble_encode {n : Nat} (rest : List UInt8) (hn : n ≤ maxUncompressedLength) :
     readPreamble (EthLib.Networking.Encoding.Varint.encodeAux n preambleMaxLength ++ rest) =
       .ok (n, rest) := by
@@ -214,8 +215,7 @@ theorem decompressElements_copy_first {tag : UInt8} {rest : List UInt8} {fuel : 
     ∃ e, decompressElements (tag :: rest) [] (fuel + 1) = .error e := by
   simp only [decompressElements, beq_iff_eq, hcopy, ↓reduceIte, EthLib.Base.bytesToUint_toVector]
   repeat' split
-  -- Every branch is an error, except a successful copy, which cannot happen.
-  -- Every copy length is at least 1, and the output is empty.
+  -- Every branch is an error, since a copy of at least 1 byte cannot read an empty output.
   all_goals first
     | exact ⟨_, rfl⟩
     | (rename_i h; rw [copyBytes_nil (by omega)] at h; cases h)

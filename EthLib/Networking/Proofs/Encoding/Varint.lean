@@ -22,7 +22,9 @@ open EthLib.Networking.Encoding.Varint
 
 /-! ## The constants as numerals
 
-`omega` handles `%` and `/` only by numerals, so the radix and the continuation bit are restated as 128.
+`omega` handles `%` and `/` only by numerals.
+
+So the radix and the continuation bit are restated as 128.
 -/
 
 /-- The radix is 128. -/

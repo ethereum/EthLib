@@ -22,15 +22,14 @@ The top bit of a byte is the continuation bit: it is set on every byte but the l
     300  ->  [ 0xac, 0x02 ]
 ```
 
-The specification is `phase0/p2p-interface.md` in `ethereum/consensus-specs`, under "Encoding-dependent header".
-
-It states three rules for the length prefix:
+The consensus layer sets three rules for the length prefix:
 
 - It SHOULD be minimally encoded.
 - It MUST NOT exceed 10 bytes.
 - It MUST decode into a type that holds every `Uint64` value.
 
-The byte format itself is the "Base 128 Varints" section of the protobuf encoding guide that the specification links.
+The byte format is "Base 128 Varints" of the protobuf encoding guide:
+<https://protobuf.dev/programming-guides/encoding/#varints>.
 -/
 
 @[expose] public section
