@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.AltBn128.Curve
 public import EthLib.Cryptography.Proofs.AltBn128.Field
-public import Mathlib.AlgebraicGeometry.EllipticCurve.Affine.Point
+public import EthLib.Cryptography.Proofs.ShortWeierstrass
 
 /-!
 # Proofs: the group law of alt_bn128
@@ -25,29 +25,23 @@ namespace EthLib.Cryptography.AltBn128
 open WeierstrassCurve WeierstrassCurve.Affine
 
 /-- alt_bn128 as a Weierstrass curve over `ZMod p`: `y^2 = x^3 + 3`. -/
-def curve : WeierstrassCurve.Affine (ZMod Fp.modulus) :=
-  { a₁ := 0, a₂ := 0, a₃ := 0, a₄ := 0, a₆ := 3 }
+abbrev curve : WeierstrassCurve.Affine (ZMod Fp.modulus) := ShortWeierstrass.curve 0 3
 
 /-- The discriminant of the curve is `-16 * 27 * 3^2`, a unit mod `p`, so the curve is smooth. -/
-instance : curve.IsElliptic := by
-  refine ⟨isUnit_iff_ne_zero.mpr ?_⟩
-  simp only [WeierstrassCurve.Δ, WeierstrassCurve.b₂, WeierstrassCurve.b₄, WeierstrassCurve.b₆,
-    WeierstrassCurve.b₈, curve]
-  decide
+instance : curve.IsElliptic :=
+  ⟨isUnit_iff_ne_zero.mpr (by rw [ShortWeierstrass.discriminant_eq]; decide)⟩
 
 /-- The equation of the curve, with `a = 0` and `b = 3`. -/
 theorem equation_iff (x y : ZMod Fp.modulus) : curve.Equation x y ↔ y * y = x * x * x + 3 := by
-  rw [Affine.equation_iff]
-  simp only [curve]
-  constructor <;> intro h <;> linear_combination h
+  rw [ShortWeierstrass.equation_iff, zero_mul, add_zero]
 
 /-- On this smooth curve, every solution of the equation is a nonsingular point. -/
 theorem nonsingular_of {x y : ZMod Fp.modulus} (h : y * y = x * x * x + 3) : curve.Nonsingular x y :=
   equation_iff_nonsingular.mp ((equation_iff x y).mpr h)
 
 /-- The negation of `y` in Mathlib is plain negation here, since `a_1 = a_3 = 0`. -/
-@[simp] theorem negY_eq (x y : ZMod Fp.modulus) : curve.negY x y = -y := by
-  simp [Affine.negY, curve]
+@[simp] theorem negY_eq (x y : ZMod Fp.modulus) : curve.negY x y = -y :=
+  ShortWeierstrass.negY_eq x y
 
 namespace Point
 
@@ -90,36 +84,33 @@ theorem toPoint_neg {p : Point} (h : p.isOnCurve = true) : toPoint p.neg = -toPo
   | affine x y =>
     show toPoint (affine x (-y)) = _
     rw [toPoint_affine h, toPoint_affine (isOnCurve_neg h), Affine.Point.neg_some]
-    simp [curve]
+    simp [ShortWeierstrass.curve]
 
 /-! ## Addition -/
 
-/-- Two points of the curve with the same `x` are equal or opposite. -/
-private theorem y_eq_or_eq_neg {x y1 y2 : ZMod Fp.modulus} (h1 : y1 * y1 = x * x * x + 3)
-    (h2 : y2 * y2 = x * x * x + 3) : y2 = y1 ∨ y2 = -y1 :=
-  Fp.eq_or_eq_neg_of_mul_self (h2.trans h1.symm)
-
 /-- A pair whose coordinates are those of a group element is on the curve, and is that element. -/
-private theorem affine_of_eq {x3 y3 : Fp} {X Y : ZMod Fp.modulus} (hX : Fp.toZMod x3 = X)
-    (hY : Fp.toZMod y3 = Y) (h : curve.Nonsingular X Y) :
-    (affine x3 y3).isOnCurve = true ∧ toPoint (affine x3 y3) = .some X Y h := by
-  subst hX hY
-  have hc : (affine x3 y3).isOnCurve = true := (isOnCurve_affine x3 y3).mpr ((equation_iff _ _).mp h.1)
+private theorem affine_of_eq {x3 y3 : Fp} {P : curve.Point}
+    (h : ∃ h3, P = .some (Fp.toZMod x3) (Fp.toZMod y3) h3) :
+    (affine x3 y3).isOnCurve = true ∧ toPoint (affine x3 y3) = P := by
+  obtain ⟨h3, rfl⟩ := h
+  have hc : (affine x3 y3).isOnCurve = true :=
+    (isOnCurve_affine x3 y3).mpr ((equation_iff _ _).mp h3.1)
   exact ⟨hc, toPoint_affine hc⟩
 
 @[simp] private theorem toZMod_two : Fp.toZMod 2 = 2 := by decide
 
 @[simp] private theorem toZMod_three : Fp.toZMod 3 = 3 := by decide
 
-private theorem two_ne_zero' : (2 : ZMod Fp.modulus) ≠ 0 := by decide
-
 /-- The rule for two points of the curve, both away from infinity. -/
 private theorem add_affine {x1 y1 x2 y2 : Fp} (h1 : (affine x1 y1).isOnCurve = true)
     (h2 : (affine x2 y2).isOnCurve = true) :
     (affine x1 y1 + affine x2 y2).isOnCurve = true
       ∧ toPoint (affine x1 y1 + affine x2 y2) = toPoint (affine x1 y1) + toPoint (affine x2 y2) := by
-  have e1 := (isOnCurve_affine x1 y1).mp h1
-  have e2 := (isOnCurve_affine x2 y2).mp h2
+  -- The generic rules state the equation with the term `a x`, here `0 x`.
+  have e1 := (ShortWeierstrass.equation_iff _ _).mp
+    ((equation_iff _ _).mpr ((isOnCurve_affine x1 y1).mp h1))
+  have e2 := (ShortWeierstrass.equation_iff _ _).mp
+    ((equation_iff _ _).mpr ((isOnCurve_affine x2 y2).mp h2))
   rw [toPoint_affine h1, toPoint_affine h2]
   show (add (affine x1 y1) (affine x2 y2)).isOnCurve = true ∧ toPoint (add (affine x1 y1) (affine x2 y2)) = _
   simp only [add]
@@ -128,33 +119,27 @@ private theorem add_affine {x1 y1 x2 y2 : Fp} (h1 : (affine x1 y1).isOnCurve = t
     rw [ite_eq_left rfl]
     by_cases hy : y2 = -y1
     · -- Rule 3: opposite points sum to `O`.
-      rw [ite_eq_left hy, Affine.Point.add_of_Y_eq rfl (by rw [negY_eq, hy, Fp.toZMod_neg, neg_neg])]
+      rw [ite_eq_left hy, ShortWeierstrass.add_of_y_eq_neg _ _ (by rw [hy, Fp.toZMod_neg])]
       exact ⟨rfl, rfl⟩
     · -- Same `x`, not opposite: the points are equal, and rule 5 doubles.
       rw [ite_eq_right hy]
       have hy2 : y2 = y1 := by
-        rcases y_eq_or_eq_neg e1 (e2.trans (by rfl)) with h | h
+        rcases ShortWeierstrass.y_eq_or_eq_neg e1 e2 with h | h
         · exact Fp.toZMod.injective h
         · exact absurd (Fp.toZMod.injective (h.trans (Fp.toZMod_neg y1).symm)) hy
       subst hy2
-      have hne : Fp.toZMod y2 ≠ curve.negY (Fp.toZMod x1) (Fp.toZMod y2) := fun h =>
-        hy (Fp.toZMod.injective (by rw [Fp.toZMod_neg]; rw [negY_eq] at h; exact h))
-      have h2y : 2 * Fp.toZMod y2 ≠ 0 := fun h => hne (by rw [negY_eq]; linear_combination h)
-      rw [Affine.Point.add_self_of_Y_ne hne]
-      refine affine_of_eq ?_ ?_ _ <;>
-        simp only [map_mul, map_sub, Fp.toZMod_inv, toZMod_two, toZMod_three, Affine.addX, Affine.addY,
-          Affine.negAddY, negY_eq, Affine.slope_of_Y_ne rfl hne] <;>
-        simp only [curve] <;> field_simp <;> ring
+      have hne : Fp.toZMod y2 ≠ -Fp.toZMod y2 := fun h =>
+        hy (Fp.toZMod.injective (by rw [Fp.toZMod_neg]; exact h))
+      -- The tangent's slope of the curve is `3 x^2 / (2 y)`, with `a = 0`.
+      refine affine_of_eq
+        (ShortWeierstrass.add_self_of_y_ne (l := Fp.toZMod (3 * x1 * x1 * (2 * y2).inv)) _ hne
+          ?_ ?_ ?_) <;>
+        simp only [map_mul, map_sub, Fp.toZMod_inv, toZMod_two, toZMod_three, add_zero]
   · -- Rule 4: different `x`, the chord.
     rw [ite_eq_right hx]
     have hX : Fp.toZMod x1 ≠ Fp.toZMod x2 := fun h => hx (Fp.toZMod.injective h)
-    have hX' : Fp.toZMod x2 - Fp.toZMod x1 ≠ 0 := sub_ne_zero.mpr (Ne.symm hX)
-    have hX'' : Fp.toZMod x1 - Fp.toZMod x2 ≠ 0 := sub_ne_zero.mpr hX
-    rw [Affine.Point.add_of_X_ne hX]
-    refine affine_of_eq ?_ ?_ _ <;>
-      simp only [map_mul, map_sub, Fp.toZMod_inv, Affine.addX, Affine.addY, Affine.negAddY, negY_eq,
-        Affine.slope_of_X_ne hX] <;>
-      simp only [curve] <;> field_simp <;> ring
+    refine affine_of_eq (ShortWeierstrass.add_of_x_ne _ _ hX rfl ?_ ?_) <;>
+      simp only [map_mul, map_sub, Fp.toZMod_inv]
 
 theorem isOnCurve_add {p q : Point} (hp : p.isOnCurve = true) (hq : q.isOnCurve = true) :
     (p + q).isOnCurve = true := by
