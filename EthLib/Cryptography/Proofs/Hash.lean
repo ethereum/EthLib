@@ -4,7 +4,6 @@ public import EthLib.Cryptography.Proofs.Hash.Crc32c
 public import EthLib.Cryptography.Proofs.Hash.Crc32cPolynomial
 public import EthLib.Cryptography.Proofs.Hash.Blake2b
 public import EthLib.Cryptography.Proofs.Hash.Keccak
-public import EthLib.Cryptography.Proofs.Hash.KeccakKernel
 public import EthLib.Cryptography.Proofs.Hash.Keccak256
 public import EthLib.Cryptography.Proofs.Hash.KeccakHasher
 public import EthLib.Cryptography.Proofs.Hash.Sha256

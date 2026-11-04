@@ -499,6 +499,8 @@ static PyMethodDef methods[] = {
   {"sha256", py_sha256, METH_VARARGS, NULL},
   {"keccak256", py_keccak256, METH_VARARGS, NULL},
   {"keccak_f1600", py_keccak_f1600, METH_VARARGS, NULL},
+  {"trie_root", py_trie_root, METH_VARARGS, NULL},
+  {"trie_verify_proof", py_trie_verify_proof, METH_VARARGS, NULL},
   {"vrf_verify", py_vrf_verify, METH_VARARGS, NULL},
   {"vrf_secret", py_vrf_secret, METH_VARARGS, NULL},
   {"vrf_evaluate", py_vrf_evaluate, METH_VARARGS, NULL},

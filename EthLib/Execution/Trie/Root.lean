@@ -36,8 +36,6 @@ So the empty map has a fixed root, the hash of `0x80`.
 Ethereum hashes with Keccak-256.
 
 The hash is an argument here.
-
-So a known answer can pass a faster form of Keccak-256 for the kernel, which is proved equal to it.
 -/
 
 @[expose] public section
@@ -144,7 +142,7 @@ def patricializeStep (hash : ByteArray → Hash32)
 
 # Why fuel
 
-The kernel cannot unfold well-founded recursion, so it could not evaluate the known answers.
+The kernel cannot unfold well-founded recursion, so it could not evaluate a concrete root.
 
 This definition recurses on a budget instead.
 
