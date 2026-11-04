@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Bytes
 public import EthLib.Base.Proofs.LittleEndian
 public import EthLib.Cryptography.Xmss.Types
 
@@ -13,9 +14,7 @@ Properties of the fixed-size byte objects.
 
 namespace EthLib.Cryptography.Xmss
 
-/-- A fixed-size object serializes to exactly its own length. -/
-@[simp] theorem size_packBytes {n : Nat} (v : Vector UInt8 n) :
-    (packBytes v).size = n := v.size_toArray
+export EthLib.Base (size_packBytes readBytes_packBytes packBytes_injective)
 
 /-- Reading succeeds exactly when the buffer has room for the object.
 
@@ -26,13 +25,6 @@ Nothing weaker is accepted, so a caller cannot slip a short buffer through. -/
   rw [unpackBytes?]
   split <;> simp_all
 
-/-- Reading the bytes of an object returns that object. -/
-@[simp] theorem readBytes_packBytes {n : Nat} (v : Vector UInt8 n) (h) :
-    readBytes (packBytes v) 0 n h = v := by
-  apply Vector.ext
-  intro i hi
-  simp [readBytes, packBytes]
-
 /-- Writing an object and reading it back returns the same object. -/
 @[simp] theorem unpackBytes?_packBytes {n : Nat} (v : Vector UInt8 n) :
     unpackBytes? n (packBytes v) = some v := by
@@ -40,13 +32,6 @@ Nothing weaker is accepted, so a caller cannot slip a short buffer through. -/
   rw [unpackBytes?, dite_eq_left (by simp : 0 + n ≤ (packBytes v).size)]
   -- Reading back index `i` gives entry `i`, which rebuilds the object.
   exact congrArg some (readBytes_packBytes v _)
-
-/-- Two objects with the same bytes are the same object. -/
-theorem packBytes_injective {n : Nat} :
-    Function.Injective (packBytes (n := n)) := by
-  -- Reading the bytes back recovers each object.
-  intro v w h
-  simpa using congrArg (unpackBytes? n) h
 
 /-- Reading a full-length buffer and writing it back returns it unchanged.
 
