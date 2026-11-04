@@ -1,0 +1,6 @@
+preset: general
+fork: phase0
+runner: ssz_generic
+handler: uints
+suite: invalid
+case: uint_256_one_too_high

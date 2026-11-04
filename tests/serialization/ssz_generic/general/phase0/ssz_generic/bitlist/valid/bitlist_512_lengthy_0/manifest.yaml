@@ -1,0 +1,6 @@
+preset: general
+fork: phase0
+runner: ssz_generic
+handler: bitlist
+suite: valid
+case: bitlist_512_lengthy_0

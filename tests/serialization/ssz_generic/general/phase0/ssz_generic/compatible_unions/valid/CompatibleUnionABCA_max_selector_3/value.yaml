@@ -1,0 +1,14 @@
+selector: 3
+data:
+  A: 255
+  B: [65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 
+      65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 
+      65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 
+      65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 
+      65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 
+      65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 
+      65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 
+      65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 
+      65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535, 
+      65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535]
+  C: '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01'

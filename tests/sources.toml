@@ -85,3 +85,4 @@ directories = ["tests/serialization/ssz"]
 "bindings/python/tests/aes/cavp" = "KAT_AES.zip of NIST CAVP"
 "bindings/python/tests/keccak/kat" = "KeccakKAT-3.zip of the Keccak team"
 "bindings/python/tests/sha256/cavp" = "shabytetestvectors.zip of NIST CAVP"
+"tests/serialization/ssz_generic" = "general.tar.gz of the consensus-specs release v1.7.0-alpha.13"

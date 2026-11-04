@@ -1,0 +1,6 @@
+preset: general
+fork: phase0
+runner: ssz_generic
+handler: compatible_unions
+suite: invalid
+case: CompatibleUnionA_lengthy_extra_padding

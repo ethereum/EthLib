@@ -1,0 +1,6 @@
+preset: general
+fork: phase0
+runner: ssz_generic
+handler: basic_vector
+suite: invalid
+case: vec_uint32_2_nil

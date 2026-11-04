@@ -1,0 +1,6 @@
+preset: general
+fork: phase0
+runner: ssz_generic
+handler: basic_progressive_list
+suite: valid
+case: proglist_uint128_max_1365

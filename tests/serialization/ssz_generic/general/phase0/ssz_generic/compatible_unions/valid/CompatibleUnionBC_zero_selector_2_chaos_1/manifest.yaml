@@ -1,0 +1,6 @@
+preset: general
+fork: phase0
+runner: ssz_generic
+handler: compatible_unions
+suite: valid
+case: CompatibleUnionBC_zero_selector_2_chaos_1
