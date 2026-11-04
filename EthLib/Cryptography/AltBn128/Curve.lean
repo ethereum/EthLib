@@ -5,7 +5,11 @@ public import EthLib.Cryptography.Secp256k1.Field
 /-!
 # `AltBn128.Curve`
 
-The curve `E: y^2 = x^3 + 3` over `Fp`, also called BN254, from [EIP-196](https://eips.ethereum.org/EIPS/eip-196) and [EIP-197](https://eips.ethereum.org/EIPS/eip-197).
+The curve `E: y^2 = x^3 + 3` over `Fp`, also called BN254.
+
+[EIP-196](https://eips.ethereum.org/EIPS/eip-196) defines the curve.
+
+[EIP-197](https://eips.ethereum.org/EIPS/eip-197) defines its groups and its pairing.
 
 - `Fp` is the base field, integers mod the prime `p`.
 - `Fr` is the scalar field, integers mod the prime order `q` of the group `G_1`.

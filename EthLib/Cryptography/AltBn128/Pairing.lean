@@ -7,9 +7,11 @@ public import EthLib.Cryptography.AltBn128.Curve
 
 The optimal ate pairing of alt_bn128, which EIP-197 checks products of.
 
-The pairing maps a point of `G_1` and a point of `G_2` to `Fp12`, and it is bilinear: `e(a P, b Q) = e(P, Q)^(a b)`.
+The pairing maps a point of `G_1` and a point of `G_2` to `Fp12`.
 
-The fields follow py_ecc, the library that execution-specs calls:
+It is bilinear: `e(a P, b Q) = e(P, Q)^(a b)`.
+
+It uses two extension fields of `Fp`:
 
 - `Fp2 = Fp[i] / (i^2 + 1)`, where the points of `G_2` live.
 - `Fp12 = Fp[w] / (w^12 - 18 w^6 + 82)`, where the pairing lands.
@@ -21,7 +23,7 @@ The twist sends `(x, y)` to `(x w^2, y w^3)` on `y^2 = x^3 + 3` over `Fp12`.
 
 The Miller loop adds and doubles points on the twist, over `Fp2`.
 
-Each line of the loop is evaluated in `Fp12`, as py_ecc evaluates it on the twisted points.
+Each line of the loop is evaluated in `Fp12`, at the twisted points.
 -/
 
 @[expose] public section
@@ -158,7 +160,7 @@ def mul (a b : Fp12) : Fp12 :=
   let product : Array Fp := Array.ofFn (n := 23) fun m =>
     (List.range 12).foldl (fun acc i =>
       if i ≤ m.val ∧ m.val - i < 12 then acc + a[i]! * b[m.val - i]! else acc) 0
-  -- From the top degree down, `w^m = 18 w^(m - 6) - 82 w^(m - 12)` folds each high term into lower ones.
+  -- From the top degree down, `w^m = 18 w^(m - 6) - 82 w^(m - 12)` folds each high term.
   let reduced := (List.range 11).foldl (fun (coefficients : Array Fp) step =>
     let m := 22 - step
     let top := coefficients[m]!
@@ -180,13 +182,15 @@ end Fp12
 
 /-! ## The pairing -/
 
-/-- `ate_loop_count`, the length of the Miller loop in py_ecc. -/
+/-- The count `6 u + 2` of the Miller loop, for the BN parameter `u = 4965661367192848881`. -/
 def ATE_LOOP_COUNT : Nat := 29793968203157093288
 
-/-- `log_ate_loop_count`, the index of the top bit that the loop starts from. -/
+/-- The bit that the loop starts from.
+
+The count has 65 bits, and its top bit 64 is the starting point `q`. -/
 def LOG_ATE_LOOP_COUNT : Nat := 63
 
-/-- `linefunc`: the line through the twisted points `r` and `q`, at the point `(xt, yt)` of `G_1`.
+/-- The line through the twisted points `r` and `q`, at the point `(xt, yt)` of `G_1`.
 
 A twisted point has `x` times `w^2` and `y` times `w^3`.
 
@@ -225,9 +229,9 @@ def frobenius : Point2 → Point2
   | .infinity => .infinity
   | .affine x y => .affine (x.conj * frobeniusX) (y.conj * frobeniusY)
 
-/-- The Miller loop of `miller_loop` in py_ecc, before the final exponentiation. -/
+/-- The Miller loop of the optimal ate pairing, before the final exponentiation. -/
 def millerLoop (q : Point2) (xp yp : Fp) : Fp12 :=
-  -- The bits of `ATE_LOOP_COUNT` from the top, each doubling `r`, then adding `q` on a set bit.
+  -- The bits below the top one, each doubling `r`, then adding `q` on a set bit.
   let (f, r) := (List.range (LOG_ATE_LOOP_COUNT + 1)).foldl (fun (f, r) step =>
     let i := LOG_ATE_LOOP_COUNT - step
     let f := f * f * linefunc r r xp yp
@@ -246,15 +250,17 @@ def FINAL_EXPONENT : Nat := (Fp.modulus ^ 12 - 1) / Fr.modulus
 
 /-- Whether the product of the pairings of the pairs is 1.
 
-A pair with a point at infinity contributes 1, as in py_ecc.
+A pair with a point at infinity contributes 1.
 
-The Miller loops are multiplied, then raised to the final exponent once, since `(a * b)^e = a^e * b^e`. -/
+The Miller loops are multiplied, then raised to the final exponent once.
+
+That is valid since `(a * b)^e = a^e * b^e`. -/
 def pairingCheck (pairs : List (Point × Point2)) : Bool :=
   let product := pairs.foldl (fun f pair =>
     match pair with
     | (.affine xp yp, q@(.affine _ _)) => f * millerLoop q xp yp
     | _ => f) Fp12.one
-  -- `FINAL_EXPONENT` has fewer than 3072 bits.
+  -- The final exponent has fewer than 3072 bits.
   Fp12.powBits 3072 product FINAL_EXPONENT == Fp12.one
 
 end EthLib.Cryptography.AltBn128
