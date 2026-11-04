@@ -5,7 +5,7 @@ EthLib writes each list in Lean, and a typo in one value would change every rule
 So the Python suite compares the Lean values with the files that consensus-specs publishes.
 
 The directory `parameters/` holds those files: the mainnet and minimal presets from Phase 0 to Fulu, and the mainnet and minimal configurations.
-They come from `ethereum/consensus-specs` at commit `84454a9d57f4f49f74c78e9f375347baf30474f2`, the release `v1.7.0-alpha.12`.
+They come from `ethereum/consensus-specs` at commit `aa16bb4c156184e9548a997d53efaf2a228a6304`, the release `v1.7.0-beta.4`.
 Each file keeps its upstream bytes and its upstream path below `parameters/`, and `parameters/SHA256SUMS` records its digest.
 
 `bindings/python/tests/consensus/test_parameters.py` reads them and runs three comparisons:
@@ -20,7 +20,14 @@ A replacement carries the name of its fork as a suffix, such as `INACTIVITY_PENA
 One suffixed value is new rather than a replacement: `MAX_EFFECTIVE_BALANCE_ELECTRA`, the largest effective balance of a compounding validator.
 The suite fails on any other suffixed value, so a replacement that Lean does not hold cannot pass unnoticed.
 
-The directory `networking/` holds the custody vectors of Fulu from the test release `v1.7.0-alpha.12` of `ethereum/consensus-specs`, built at the same commit `84454a9d57f4f49f74c78e9f375347baf30474f2`.
+The directory `networking/` holds the custody vectors of Fulu from the test release `v1.7.0-beta.4` of `ethereum/consensus-specs`, built at the same commit.
 They are the cases of the handlers `get_custody_groups` and `compute_columns_for_custody_group`, copied byte for byte under their path in `mainnet.tar.gz`.
 The release repeats the same cases for Gloas and Heze, with only the fork name changed, so the directory keeps those of Fulu.
 `bindings/python/tests/consensus/test_custody.py` runs each case through the Lean definitions.
+
+The test release publishes its cases in three archives.
+Their SHA-256 digests are:
+
+- `general.tar.gz`: `c4f395f71f606c28093500e32067990e430cc73a2277be6f3bf5090adcce3f67`, 3,228 bytes.
+- `mainnet.tar.gz`: `67762986572372a08d3b182535aa760433c86e174e14e0bbd756f350dd19398c`, 967,886,924 bytes.
+- `minimal.tar.gz`: `26d09aea70c62ed235a120a95082d544ab1c2e6fe36bd35ea1bd5da62f3b7b68`, 468,730,308 bytes.

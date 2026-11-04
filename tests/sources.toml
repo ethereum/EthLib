@@ -11,12 +11,15 @@
 #     uv run --no-project --python 3.12 python scripts/check_fixture_pins.py
 
 [repositories."ethereum/consensus-specs"]
-commit = "84454a9d57f4f49f74c78e9f375347baf30474f2"
-release = "v1.7.0-alpha.12"
+commit = "aa16bb4c156184e9548a997d53efaf2a228a6304"
+release = "v1.7.0-beta.4"
 directories = [
   "tests/consensus/networking", "tests/consensus/parameters", "tests/cryptography/bls",
-  "tests/cryptography/kzg",
 ]
+
+[repositories."ethereum/c-kzg-4844"]
+commit = "a751e2d92abcd63b01d1400789789f5ea289a8b0"
+directories = ["tests/cryptography/kzg"]
 
 [repositories."ethereum/bls12-381-tests"]
 commit = "89ff3a86f1a9b89a555495f7535c853cda589320"
