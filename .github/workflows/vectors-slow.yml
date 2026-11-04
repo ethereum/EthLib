@@ -55,6 +55,10 @@ jobs:
           - suite: parity-consensus
             bindings: true
             run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_consensus.py
+          # Every AES-GCM case of the NIST CAVP files, of which ci.yml runs an excerpt.
+          - suite: nist-cavp
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/aes/test_cavp_gcm.py
           # The pinned BLS and KZG digests against the releases that published them.
           - suite: cryptography
             bindings: false

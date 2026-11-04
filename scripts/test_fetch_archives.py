@@ -11,6 +11,7 @@ import io
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -43,6 +44,19 @@ def tar_gz(members: dict[str, bytes], links: dict[str, str] | None = None) -> by
     return buffer.getvalue()
 
 
+def zip_file(members: dict[str, bytes], links: dict[str, str] | None = None) -> bytes:
+    """A zip file with the regular files `members` and the symbolic `links`."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zipped:
+        for name, data in members.items():
+            zipped.writestr(name, data)
+        for name, target in (links or {}).items():
+            info = zipfile.ZipInfo(name)
+            info.external_attr = 0o120777 << 16
+            zipped.writestr(info, target)
+    return buffer.getvalue()
+
+
 class Fetch(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -52,9 +66,10 @@ class Fetch(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def archive(self, data: bytes, sha256: str | None = None) -> "fetch.Archive":
+    def archive(self, data: bytes, sha256: str | None = None,
+                name: str = "served.tar.gz") -> "fetch.Archive":
         """An archive served from a local file, pinned to `sha256` or else to its own digest."""
-        path = self.root / "served.tar.gz"
+        path = self.root / name
         path.write_bytes(data)
         digest = sha256 or hashlib.sha256(data).hexdigest()
         return fetch.Archive("vectors", path.as_uri(), len(data), digest)
@@ -115,6 +130,27 @@ class Fetch(unittest.TestCase):
 
     def test_link_fails(self):
         archive = self.archive(tar_gz(MEMBERS, {"fixtures/a/link": "/etc/passwd"}))
+        with self.assertRaisesRegex(fetch.ArchiveError, "not a file or a directory"):
+            fetch.unpack(archive, self.cache, ["fixtures/a"])
+
+    def test_zip(self):
+        archive = self.archive(zip_file(MEMBERS), name="served.zip")
+        expected = ["fixtures/a/one.json", "fixtures/a/two.json", "fixtures/b/three.json"]
+        self.assertEqual(fetch.members(archive, self.cache), expected)
+        target = fetch.unpack(archive, self.cache, ["fixtures/a"])
+        self.assertEqual((target / "fixtures/a/two.json").read_bytes(), b"two")
+        self.assertFalse((target / "fixtures/b").exists())
+        self.assertTrue((self.cache / f"{archive.sha256}.zip").is_file())
+
+    def test_zip_member_that_leaves_the_directory_fails(self):
+        archive = self.archive(zip_file({"fixtures/../../escape": b"x"}), name="served.zip")
+        with self.assertRaisesRegex(fetch.ArchiveError, "unsafe member"):
+            fetch.unpack(archive, self.cache, ["fixtures"])
+        self.assertFalse((self.root / "escape").exists())
+
+    def test_zip_link_fails(self):
+        archive = self.archive(zip_file(MEMBERS, {"fixtures/a/link": "/etc/passwd"}),
+                               name="served.zip")
         with self.assertRaisesRegex(fetch.ArchiveError, "not a file or a directory"):
             fetch.unpack(archive, self.cache, ["fixtures/a"])
 

@@ -10,7 +10,7 @@ Test vectors of NIST CAVP for AES and AES-GCM, with 128-bit and 256-bit keys, co
 - Archive: [`aesmct.zip`](https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/aes/aesmct.zip)
 - Archive sha256 at the copy: `6a2a72c00b1daacb9a7d20ab92617d322fa1c5dee493968660990e3f4571426b`
 
-- Files: `gcmEncryptExtIV128.rsp`, `gcmEncryptExtIV256.rsp`, `gcmDecrypt128.rsp`, `gcmDecrypt256.rsp`
+- Files: excerpts of `gcmEncryptExtIV128.rsp`, `gcmEncryptExtIV256.rsp`, `gcmDecrypt128.rsp`, `gcmDecrypt256.rsp`
 - Archive: [`gcmtestvectors.zip`](https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/mac/gcmtestvectors.zip)
 - Archive sha256 at the copy: `f9fc479e134cde2980b3bb7cddbcb567b2cd96fd753835243ed067699f26a023`
 
@@ -32,6 +32,12 @@ Each of these files has an encrypt section and a decrypt section.
 
 The GCM files hold 7875 cases each, in sections by the lengths of the IV, the text, the additional data and the tag.
 A case of a decryption file either gives the plaintext or says FAIL, when the tag does not authenticate the input.
+
+The whole GCM files take 11.8 MB, so this directory keeps an excerpt of each, `<name>.excerpt.rsp`.
+An excerpt is the header of the file and 21 of its 525 sections, copied without change.
+The sections have a 104-bit text, 160-bit additional data, each of the three IV lengths and each of the seven tag lengths.
+`tests/sources.toml` pins the archive, and the weekly job reads it.
+There, `test_cavp_gcm.py` runs every case of the four files, and checks that each excerpt is the same sections of its file.
 
 The archives also hold the AES-192 files and the CBC, CFB and OFB files.
 EthLib implements none of these, so they are not copied.

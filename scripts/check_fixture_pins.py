@@ -22,6 +22,7 @@ A hexadecimal word of 7 to 40 digits, with a letter and a digit, is a citation t
 That holds when the word is in backticks or follows "at", as in "execution-specs at `2c0c8e7`".
 A short commit must be a prefix of a pin.
 A test names a release archive by its key in the table `archives`, in double quotes.
+An archive from no repository, such as a NIST zip file, gives a `source` in place of a repository.
 
     uv run --no-project --python 3.12 python scripts/check_fixture_pins.py
 
@@ -116,8 +117,10 @@ def check(root: Path) -> list[str]:
 
     archives = config.get("archives", {})
     for name, entry in archives.items():
-        if entry.get("repository") not in repositories:
-            problems.append(f"{SOURCES}: the archive {name} needs a recorded repository")
+        if "repository" in entry or not entry.get("source"):
+            if entry.get("repository") not in repositories:
+                problems.append(f"{SOURCES}: the archive {name} needs a recorded repository, "
+                                "or a source that is no repository")
         if not str(entry.get("url", "")).startswith("https://"):
             problems.append(f"{SOURCES}: the archive {name} needs an https URL")
         size = entry.get("size")
