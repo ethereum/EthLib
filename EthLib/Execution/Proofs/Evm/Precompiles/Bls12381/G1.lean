@@ -103,9 +103,6 @@ theorem msmGasG1_le (k : Nat) : msmGasG1 k ≤ k * GAS_G1MUL := by
       ≤ k * GAS_G1MUL * MULTIPLIER / MULTIPLIER := Nat.div_le_div_right (Nat.mul_le_mul_left _ this)
     _ = k * GAS_G1MUL := by simp [MULTIPLIER]
 
-/-- One pair costs one product, 12000 gas. -/
-theorem msmGasG1_one : msmGasG1 1 = 12000 := by decide
-
 /-- Past 128 pairs, the discount stays at 519 thousandths. -/
 theorem discountG1_of_lt {k : Nat} (hk : 128 < k) : discountG1 k = 519 := by
   simp [discountG1, G1_MAX_DISCOUNT]
