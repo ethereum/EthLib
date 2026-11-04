@@ -86,7 +86,9 @@ commit = "efc5f9a1f356cba376c978eedb63cb0363c2aa85"
 [repositories."ethereum/execution-specs"]
 commit = "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e"
 release = "tests@v21.0.2"
-directories = ["tests/execution/blocks", "tests/execution/transactions"]
+directories = [
+  "tests/execution/blocks", "tests/execution/fees", "tests/execution/transactions",
+]
 
 [repositories."ethereum/ssz-specs"]
 commit = "7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70"
