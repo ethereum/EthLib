@@ -129,6 +129,13 @@ pack_bytes_sequence(
 
 PyObject* py_eth_aggregate_pubkeys                        (PyObject* self, PyObject* args);
 PyObject* py_eth_fast_aggregate_verify                    (PyObject* self, PyObject* args);
+PyObject* py_bls_sign                                     (PyObject* self, PyObject* args);
+PyObject* py_bls_verify                                   (PyObject* self, PyObject* args);
+PyObject* py_bls_aggregate                                (PyObject* self, PyObject* args);
+PyObject* py_bls_aggregate_verify                         (PyObject* self, PyObject* args);
+PyObject* py_bls_fast_aggregate_verify                    (PyObject* self, PyObject* args);
+PyObject* py_bls_pop_prove                                (PyObject* self, PyObject* args);
+PyObject* py_bls_pop_verify                               (PyObject* self, PyObject* args);
 
 PyObject* py_blob_to_kzg_commitment                       (PyObject* self, PyObject* args);
 PyObject* py_compute_challenge                            (PyObject* self, PyObject* args);

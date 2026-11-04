@@ -23,30 +23,31 @@ EthLib's implementation cites the published versions of these, section by sectio
 
 ## Operations
 
-A client calls two operations, the two Ethereum wrappers:
+A client calls the proof-of-possession scheme of the draft and the two Ethereum wrappers:
 
-| consensus-specs | Lean | File | C export |
-| --- | --- | --- | --- |
-| `eth_aggregate_pubkeys` | `ethAggregatePubkeys` | `Signatures.lean` | `eth_bls_aggregate_pubkeys` |
-| `eth_fast_aggregate_verify` | `ethFastAggregateVerify` | `Signatures.lean` | `eth_bls_fast_aggregate_verify` |
-
-They rest on these functions of the draft:
-
-| Draft | Lean | File |
+| Source | Lean | C export |
 | --- | --- | --- |
-| `KeyValidate` | `G1.keyValidate` | `Compress.lean` |
-| `FastAggregateVerify` | `fastAggregateVerify` | `Signatures.lean` |
-| `CoreVerify` | `coreVerify` (private) | `Signatures.lean` |
-| `signature_subgroup_check` | `G2.inSubgroup` | `Compress.lean` |
-| `hash_to_curve` | `HashToCurve.hashToG2` | `HashToCurve.lean` |
+| `Sign` | `sign` | `eth_bls_sign` |
+| `Verify` | `verify` | `eth_bls_verify` |
+| `Aggregate` | `aggregate` | `eth_bls_aggregate` |
+| `AggregateVerify` | `aggregateVerify` | `eth_bls_aggregate_verify` |
+| `FastAggregateVerify` | `fastAggregateVerify` | `eth_bls_fast_aggregate_verify_core` |
+| `PopProve` | `popProve` | `eth_bls_pop_prove` |
+| `PopVerify` | `popVerify` | `eth_bls_pop_verify` |
+| `eth_aggregate_pubkeys` | `ethAggregatePubkeys` | `eth_bls_aggregate_pubkeys` |
+| `eth_fast_aggregate_verify` | `ethFastAggregateVerify` | `eth_bls_fast_aggregate_verify` |
 
-EthLib has only this verification path.
-It has no key generation, and no `Sign`, `Aggregate`, `Verify`, `AggregateVerify` or proof-of-possession functions.
+All of them live in `Signatures.lean`, on top of the core operations of the draft.
+Key validation and the subgroup checks live in `Compress.lean`.
 
-That last gap puts a duty on the caller.
+A secret key is an element of `Fr` other than zero, and the exports read it as 32 big-endian bytes.
+EthLib has no key generation yet, and no function here runs in constant time.
+As in the draft, aggregation does not check the subgroup of a signature.
+Verification checks it.
+
 Fast aggregate verification is safe only when no signer can choose a public key as a function of the others' keys, a so-called rogue-key attack.
 The draft rules this out by requiring a proof of possession, verified with `PopVerify`, for every public key that `FastAggregateVerify` uses ([draft v4 §3.3](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-3.3)).
-`KeyValidate` does not check it, and nothing in EthLib does.
+`KeyValidate` does not check it, and the fast aggregate verifications do not call `PopVerify`.
 The caller must make sure that every public key passed to `ethFastAggregateVerify` has a verified proof of possession.
 
 The message length is also left to the caller.
@@ -70,7 +71,8 @@ They match the consensus-specs `v1.7.0-alpha.12` general vectors byte for byte, 
 
 The proofs are in `EthLib/Cryptography/Proofs/Bls/`.
 They cover the two fields and the group G1, which is what KZG commitments are built from.
-They say nothing yet about G2, the pairing or the signature functions.
+They say nothing yet about G2 or the pairing.
+Of the signature functions, they prove only that signing never fails.
 
 Most statements concern valid points.
 A G1 point is stored as a representative in coordinates, and it is *valid* when that representative is a nonsingular point of the curve.
@@ -111,7 +113,7 @@ The theorem is about the group element, not the stored coordinates: the represen
 ## What is not proved
 
 - Nothing is proved about G2, the pairing, hash-to-curve or SHA-256.
-- The map to G1 of EIP-2537 has no theorem: neither its validity nor its landing in the subgroup is proved.
+- No theorem says that `KeyValidate` and the subgroup checks accept exactly the points of the prime-order subgroups.
 - No theorem states what the signature functions return; in particular, none says that an honest aggregate signature verifies.
 - No security property, such as unforgeability, is proved.
 - `PairingLaws`, the law of the pairing check, is not proved: on representatives of `a_i * g_1` and `b_i * g_2`, the check passes exactly when `sum_i a_i * b_i = 0`.

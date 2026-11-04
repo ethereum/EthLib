@@ -5,58 +5,208 @@ public import EthLib.Cryptography.Bls.Pairing
 public import EthLib.Cryptography.Bls.Errors
 
 /-!
-# `Signatures`
+# BLS signatures
 
-BLS signature verification per IRTF draft-irtf-cfrg-bls-signature, plus
-the Ethereum wrappers `eth_aggregate_pubkeys` and `eth_fast_aggregate_verify`.
+The signatures of the IRTF BLS signature draft, version 4, and the Ethereum wrappers.
 
-The Ethereum consensus uses the proof-of-possession (POP) scheme with
-G1 pubkeys / G2 signatures; the DST is fixed as
-`BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_`.
+<https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04>
+
+Ethereum uses the proof-of-possession scheme of §3.3, with keys in `G1` and signatures in `G2`.
 -/
 
 @[expose] public section
+
+namespace EthLib.Cryptography.Bls
+
+/-- A compressed `G1` point, the public key type of consensus-specs phase0. -/
+abbrev BLSPubkey := Vector UInt8 48
+
+/-- A compressed `G2` point, the signature type of consensus-specs phase0. -/
+abbrev BLSSignature := Vector UInt8 96
+
+end EthLib.Cryptography.Bls
 
 namespace EthLib.Cryptography.Bls.Signatures
 
 open EthLib.Cryptography.Bls
 
-/-- DST for the POP-scheme G2 hash-to-curve. -/
+/-- The domain separation tag for messages in the proof-of-possession ciphersuite (§4.2.3). -/
 def DST : ByteArray :=
   String.toUTF8 "BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_"
 
-/-- Compressed-G2 encoding of the point at infinity (96 bytes; high
-bits of byte 0 set to compressed+infinity). -/
+/-- The domain separation tag for public keys in the same ciphersuite.
+
+It differs from the message tag, as §3.3.1 requires. -/
+def POP_DST : ByteArray :=
+  String.toUTF8 "BLS_POP_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_"
+
+/-- The compressed encoding of the `G2` point at infinity. -/
 def G2_POINT_AT_INFINITY : ByteArray := G2.infinityBytes
 
-/-- IRTF `signature_subgroup_check`. Slow but correct. -/
+/-! ## Keys and encodings -/
+
+/-- A secret key: an integer `SK` with `1 <= SK < r` (§2.3). -/
+abbrev SecretKey := { sk : Fr // sk ≠ 0 }
+
+/-- Decode a secret key from 32 big-endian bytes.
+
+It rejects a wrong length, an integer `>= r` and zero. -/
+def SecretKey.fromBytes (bytes : ByteArray) : Except BlsError SecretKey :=
+  match Fr.fromBytesBE bytes with
+  | .error _ => .error .invalidSecretKey
+  | .ok sk => if h : sk = 0 then .error .invalidSecretKey else .ok ⟨sk, h⟩
+
+private theorem size_toBytesBE (x : Fp) : x.toBytesBE.size = 48 := by
+  simp only [Fp.toBytesBE, ByteArray.size, Array.size_ofFn]
+
+private theorem size_set! (b : ByteArray) (j : Nat) (v : UInt8) : (b.set! j v).size = b.size :=
+  Array.size_setIfInBounds
+
+/-- A compressed `G1` point has 48 bytes. -/
+theorem size_compressG1 (p : G1) : (G1.compress p).data.size = 48 := by
+  rcases hpa : p.toAffine with ⟨xa, ya⟩
+  by_cases h : p.isInfinity = true
+  · have he : G1.compress p = G1.infinityBytes := by
+      unfold G1.compress
+      simp only [Id.run, h, ↓reduceIte]
+      rfl
+    rw [he]
+    rfl
+  · have he : G1.compress p =
+        (let base := xa.toBytesBE.set! 0 (xa.toBytesBE.get! 0 ||| 0x80)
+         if Fp.signBit ya then base.set! 0 (base.get! 0 ||| 0x20) else base) := by
+      unfold G1.compress
+      simp only [Id.run, h, hpa]
+      rfl
+    rw [he]
+    show ByteArray.size _ = 48
+    dsimp only
+    split <;> simp only [size_set!, size_toBytesBE]
+
+/-- A compressed `G2` point has 96 bytes. -/
+theorem size_compressG2 (p : G2) : (G2.compress p).data.size = 96 := by
+  rcases hpa : p.toAffine with ⟨xa, ya⟩
+  by_cases h : p.isInfinity = true
+  · have he : G2.compress p = G2.infinityBytes := by
+      unfold G2.compress
+      simp only [Id.run, h, ↓reduceIte]
+      rfl
+    rw [he]
+    rfl
+  · have he : G2.compress p =
+        (let base := (G2.fp2ToBytes xa).set! 0 ((G2.fp2ToBytes xa).get! 0 ||| 0x80)
+         if Fp2.signBit ya then base.set! 0 (base.get! 0 ||| 0x20) else base) := by
+      unfold G2.compress
+      simp only [Id.run, h, hpa]
+      rfl
+    rw [he]
+    show ByteArray.size _ = 96
+    dsimp only
+    split <;> simp only [size_set!, G2.fp2ToBytes, ByteArray.size_append, size_toBytesBE]
+
+/-- The public key of a point, in the minimal-pubkey-size variant (§2.2). -/
+def pointToPubkey (p : G1) : BLSPubkey := ⟨(G1.compress p).data, size_compressG1 p⟩
+
+/-- The signature of a point, in the minimal-pubkey-size variant (§2.2). -/
+def pointToSignature (p : G2) : BLSSignature := ⟨(G2.compress p).data, size_compressG2 p⟩
+
+/-- The public key `SK * P` of a secret key (§2.4).
+
+The key is secret, and this function does not run in constant time. -/
+def skToPk (sk : SecretKey) : BLSPubkey := pointToPubkey (G1.mul G1.generator sk.val)
+
+/-- The subgroup check of a signature point (§2.7, step 3). -/
 def signatureSubgroupCheck (sig : G2) : Bool := G2.inSubgroup sig
 
-/-- IRTF `CoreVerify`: pairing-equation check `e(P, R) · e(-PK, Q) == 1`. -/
-def coreVerify
-    (pkBytes : ByteArray) (msg : ByteArray) (sigBytes : ByteArray) : Bool :=
-  -- Validate pubkey (subgroup, on-curve, not infinity).
-  if pkBytes.size ≠ 48 || !(G1.keyValidate pkBytes).isOk then false
-  else match G1.uncompress pkBytes with
-  | .error _ => false
-  | .ok pk =>
-    -- Validate signature: decompress, on-curve (implicit), in subgroup.
-    if sigBytes.size ≠ 96 then false
-    else match G2.uncompress sigBytes with
-    | .error _ => false
-    | .ok sig =>
-      if !signatureSubgroupCheck sig then false
-      else
-        match HashToCurve.hashToG2 msg DST with
-        | .error _ => false
-        | .ok q =>
-          Bls.pairingCheck #[
-            (G1.generator, sig),
-            (G1.neg pk, q)
-          ]
+/-! ## Core operations -/
 
-/-- IRTF `FastAggregateVerify` for a single message: aggregate pubkeys
-then verify. Returns `false` on invalid encodings. -/
+/-- The core signature `SK * H(message)`, with `H` the hash to `G2` under `dst` (§2.6).
+
+The key is secret, and this function does not run in constant time.
+
+The error comes from the hash to curve, which never fails. -/
+def coreSign (sk : SecretKey) (msg dst : ByteArray) : Except BlsError BLSSignature := do
+  let q ← HashToCurve.hashToG2 msg dst
+  return pointToSignature (G2.mul q sk.val)
+
+/-- The core verification: check `e(P, R) = e(PK, H(message))` (§2.7).
+
+It returns `false` on any invalid input. -/
+def coreVerify (pk msg sig dst : ByteArray) : Bool :=
+  match G2.uncompress sig with
+  | .error _ => false
+  | .ok r =>
+    signatureSubgroupCheck r &&
+    -- Key validation returns the public key as a point.
+    match G1.keyValidatePoint pk with
+    | .error _ => false
+    | .ok xP =>
+      match HashToCurve.hashToG2 msg dst with
+      | .error _ => false
+      | .ok q => pairingCheck #[(G1.generator, r), (G1.neg xP, q)]
+
+/-- The compressed sum of the signatures (§2.8).
+
+It fails on an empty list and on a signature that does not decode.
+
+As in the draft, it does not check that a signature lies in the subgroup. -/
+def aggregate (sigs : Array ByteArray) : Except BlsError BLSSignature := do
+  if sigs.isEmpty then throw .emptySignatureList
+  -- Adding a point to the point at infinity returns that point exactly.
+  let agg ← sigs.foldlM (fun agg sig => return G2.add agg (← G2.uncompress sig)) G2.zero
+  return pointToSignature agg
+
+/-- The core aggregate verification: check `e(P, R) = prod_i e(PK_i, H(message_i))` (§2.9).
+
+It returns `false` on an empty list, on lists of two sizes and on any invalid input. -/
+def coreAggregateVerify (pks msgs : Array ByteArray) (sig dst : ByteArray) : Bool :=
+  if pks.isEmpty || pks.size != msgs.size then false else
+  match G2.uncompress sig with
+  | .error _ => false
+  | .ok r =>
+    signatureSubgroupCheck r &&
+    -- One pair `(-PK_i, H(message_i))` for each key, so that the product of all pairs is 1.
+    match (pks.zip msgs).mapM (fun (pk, msg) => do
+        let xP ← G1.keyValidatePoint pk
+        let q ← HashToCurve.hashToG2 msg dst
+        return (G1.neg xP, q)) with
+    | .error _ => false
+    | .ok pairs => pairingCheck (#[(G1.generator, r)] ++ pairs)
+
+/-! ## The proof-of-possession scheme (§3.3)
+
+Signing and both verifications are the core operations under the message tag. -/
+
+/-- Sign a message under the message tag.
+
+The key is secret, and this function does not run in constant time. -/
+def sign (sk : SecretKey) (msg : ByteArray) : Except BlsError BLSSignature := coreSign sk msg DST
+
+/-- Verify a signature under the message tag. -/
+def verify (pk msg sig : ByteArray) : Bool := coreVerify pk msg sig DST
+
+/-- Verify an aggregate signature on several messages under the message tag.
+
+The scheme does not require the messages to differ. -/
+def aggregateVerify (pks msgs : Array ByteArray) (sig : ByteArray) : Bool :=
+  coreAggregateVerify pks msgs sig DST
+
+/-- The proof of possession `SK * H'(PK)`, with `H'` the hash under the public key tag (§3.3.2).
+
+It is the core signature of the public key under that tag.
+
+The key is secret, and this function does not run in constant time. -/
+def popProve (sk : SecretKey) : Except BlsError BLSSignature :=
+  coreSign sk ⟨(skToPk sk).toArray⟩ POP_DST
+
+/-- Verify a proof of possession (§3.3.3).
+
+It is the core verification of the public key as message, under the public key tag. -/
+def popVerify (pk proof : ByteArray) : Bool := coreVerify pk pk proof POP_DST
+
+/-- Sum the public keys, then verify the signature under the sum (§3.3.4).
+
+It returns `false` on an empty list and on any key that fails key validation. -/
 def fastAggregateVerify
     (pubkeys : Array ByteArray) (msg : ByteArray) (sigBytes : ByteArray) : Bool := Id.run do
   if pubkeys.isEmpty then return false
@@ -67,12 +217,13 @@ def fastAggregateVerify
     | .error _ => return false
     | .ok p => agg := G1.add agg p
   let aggBytes := G1.compress agg
-  return coreVerify aggBytes msg sigBytes
+  return verify aggBytes msg sigBytes
 
 /-! ## Ethereum wrappers -/
 
-/-- `eth_aggregate_pubkeys` — sum compressed G1 pubkeys after `KeyValidate`.
-Fails with a `BlsError` on an empty list or any invalid pubkey. -/
+/-- The public key aggregation of consensus-specs altair: the sum of validated keys.
+
+It fails on an empty list and on any invalid key. -/
 def ethAggregatePubkeys (pubkeys : Array ByteArray) : Except BlsError ByteArray := do
   if pubkeys.isEmpty then
     throw .emptyPubkeyList
@@ -88,9 +239,9 @@ def ethAggregatePubkeys (pubkeys : Array ByteArray) : Except BlsError ByteArray 
     | .ok p => agg := G1.add agg p
   return G1.compress agg
 
-/-- `eth_fast_aggregate_verify` — Ethereum's special-cased FastAggregateVerify.
-Returns `true` for empty pubkeys iff the signature is the G2 point at
-infinity; otherwise delegates to `FastAggregateVerify`. -/
+/-- The fast aggregate verification of consensus-specs altair.
+
+An empty key list passes exactly with the signature of the point at infinity. -/
 def ethFastAggregateVerify
     (pubkeys : Array ByteArray) (msg : ByteArray) (sigBytes : ByteArray) : Bool :=
   if pubkeys.isEmpty then

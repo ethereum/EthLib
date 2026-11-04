@@ -404,6 +404,13 @@ pack_bytes_sequence(
 static PyMethodDef methods[] = {
   {"eth_aggregate_pubkeys", py_eth_aggregate_pubkeys, METH_VARARGS, NULL},
   {"eth_fast_aggregate_verify", py_eth_fast_aggregate_verify, METH_VARARGS, NULL},
+  {"bls_sign", py_bls_sign, METH_VARARGS, NULL},
+  {"bls_verify", py_bls_verify, METH_VARARGS, NULL},
+  {"bls_aggregate", py_bls_aggregate, METH_VARARGS, NULL},
+  {"bls_aggregate_verify", py_bls_aggregate_verify, METH_VARARGS, NULL},
+  {"bls_fast_aggregate_verify", py_bls_fast_aggregate_verify, METH_VARARGS, NULL},
+  {"bls_pop_prove", py_bls_pop_prove, METH_VARARGS, NULL},
+  {"bls_pop_verify", py_bls_pop_verify, METH_VARARGS, NULL},
   {"blob_to_kzg_commitment", py_blob_to_kzg_commitment, METH_VARARGS, NULL},
   {"compute_challenge", py_compute_challenge, METH_VARARGS, NULL},
   {"compute_kzg_proof", py_compute_kzg_proof, METH_VARARGS, NULL},
