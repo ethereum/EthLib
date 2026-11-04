@@ -12,7 +12,8 @@ Since the root fixes every leaf, it fixes one output per index before any index 
 
 This module is the specification of the VRF tree.
 The hash is Keccak-256, as in [FIPS 202](https://csrc.nist.gov/pubs/fips/202/final) but with Keccak's original padding (`EthLib/Cryptography/Hash/Keccak.lean`).
-The properties proved are the ones that define a VRF in [Micali, Rabin and Vadhan, "Verifiable Random Functions", FOCS 1999](https://doi.org/10.1109/SFFCS.1999.814584).
+A VRF is defined in [Micali, Rabin and Vadhan, "Verifiable Random Functions", FOCS 1999](https://doi.org/10.1109/SFFCS.1999.814584) by three properties: provability, uniqueness and pseudorandomness.
+The proofs here cover the first two.
 
 ## Operations
 
@@ -61,7 +62,8 @@ It must first mix each output with randomness that becomes known only after the 
 ## What is proved
 
 The proofs are in `EthLib/Cryptography/Proofs/Vrf/`.
-The first three properties are those of Micali, Rabin and Vadhan.
+Two of the three properties of Micali, Rabin and Vadhan are proved: provability and uniqueness.
+The third, pseudorandomness, is not proved (see [What is not proved](#what-is-not-proved)).
 
 *Provability* says that an honest holder can always convince a verifier.
 The opening of an honest tree at index `i` verifies, and gives the output of secret `i` (`verify_opening`, `Verify.lean`).
@@ -77,7 +79,7 @@ It is an efficient algorithm, so the theorem is a security reduction: whoever fi
 The search makes at most 68 Keccak-256 calls, no more than verifying the two openings.
 The count is read from the definitions, and no theorem proves it.
 
-The third statement says exactly what verification checks.
+A third statement, which is not one of those properties, says exactly what verification checks.
 An opening verifies if and only if its path leads from its leaf to the root, and its output is the hash of its secret (`verify_eq_some_iff`).
 
 The same guarantees hold for a tree built from a seed (`KeyGen.lean`).
