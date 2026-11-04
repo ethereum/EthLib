@@ -1,0 +1,65 @@
+module
+
+public import EthLib.Cryptography.Kzg.Core
+public import EthLib.Cryptography.Proofs.Bls.KeyValidate
+-- The kernel decodes one fixed encoding, which runs a range loop.
+import all Init.Data.Range.Basic
+-- It then compares two `Except` values, so it needs the body of that instance.
+import all Batteries.Data.Except
+
+/-!
+# Proofs: validation of KZG points in `G1`
+
+KZG validation is key validation that also accepts the point at infinity.
+
+So it accepts exactly the encodings of the points of order dividing `r`.
+-/
+
+@[expose] public section
+
+namespace EthLib.Cryptography.Kzg
+
+open EthLib.Cryptography.Bls (G1 Fr)
+open EthLib.Cryptography.Kzg.Constants
+
+/-- The encoding of the point at infinity decodes to the zero triple. -/
+theorem uncompress_G1_POINT_AT_INFINITY : G1.uncompress G1_POINT_AT_INFINITY = .ok G1.zero := by
+  decide +kernel
+
+/-- Byte arrays compare equal exactly when their bytes are equal. -/
+private theorem byteArray_beq_iff {a b : ByteArray} : (a == b) = true ↔ a = b := by
+  change (a.data == b.data) = true ↔ a = b
+  rw [beq_iff_eq]
+  exact ByteArray.ext_iff.symm
+
+/-- KZG validation accepts exactly the decodable points of order dividing `r`. -/
+theorem validateKzgG1Point_eq_ok_iff {b : Bytes48} {P : G1} :
+    validateKzgG1Point b = .ok P ↔
+      G1.uncompress b = .ok P ∧ Fr.modulus • G1.toPoint P = 0 := by
+  unfold validateKzgG1Point
+  by_cases hb : (b == G1_POINT_AT_INFINITY) = true
+  · rw [ite_eq_left hb, byteArray_beq_iff.mp hb, uncompress_G1_POINT_AT_INFINITY]
+    constructor
+    · intro h
+      cases h
+      exact ⟨rfl, by rw [G1.toPoint_zero]; exact nsmul_zero _⟩
+    · intro h
+      exact (Except.ok.inj h.1).symm ▸ rfl
+  · rw [ite_eq_right hb]
+    -- Away from the encoding of infinity, a decoded point of order dividing `r` is nonzero.
+    have key : G1.keyValidatePoint b = .ok P ↔
+        G1.uncompress b = .ok P ∧ Fr.modulus • G1.toPoint P = 0 := by
+      rw [G1.keyValidatePoint_eq_ok_iff]
+      refine ⟨fun h => ⟨h.1, h.2.2.2⟩, fun ⟨hu, hr⟩ => ⟨hu, G1.uncompress_valid hu, ?_, hr⟩⟩
+      intro h0
+      have hinf := (G1.isInfinity_eq_true_iff_toPoint_eq_zero (G1.uncompress_valid hu)).mpr h0
+      have hc := G1.compress_uncompress hu
+      unfold G1.compress at hc
+      simp only [Id.run, hinf, ite_true] at hc
+      exact hb (byteArray_beq_iff.mpr (hc.symm.trans rfl))
+    rw [← key]
+    cases G1.keyValidatePoint b with
+    | error e => exact iff_of_false (fun h => by cases h) (fun h => by cases h)
+    | ok q => exact ⟨fun h => by cases h; rfl, fun h => by cases h; rfl⟩
+
+end EthLib.Cryptography.Kzg
