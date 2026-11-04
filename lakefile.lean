@@ -20,8 +20,10 @@ package «EthLib» where
 
 require "leanprover-community" / "mathlib" @ git "v4.35.0"
 
--- Probability and oracle computations, for the leanXMSS security proof only.
+-- Probability and oracle computations, for the leanXMSS and BLS security proofs only.
+--
 -- The library code never imports it.
+--
 -- A commit on VCVio's `main`, built against the same Mathlib.
 require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @
   "bbf05eeeedf84c5f98baaf5ab846f2d2479cc8ab"

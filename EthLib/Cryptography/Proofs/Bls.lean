@@ -49,6 +49,7 @@ public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
 public import EthLib.Cryptography.Proofs.Bls.SignaturesUnique
 public import EthLib.Cryptography.Proofs.Bls.PairingKnownAnswerMiller
 public import EthLib.Cryptography.Proofs.Bls.PairingKnownAnswer
+public import EthLib.Cryptography.Proofs.Bls.Security
 
 /-!
 # `EthLib.Cryptography.Proofs.Bls`
