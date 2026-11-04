@@ -43,8 +43,7 @@ theorem verifyKzgProofWith_iff (laws : Bls.PairingLaws) {s2 : G2} {τ : Fr}
   have h := laws.two_pairs hCy G2.represents_generator.neg hP hX
   exact h.trans (opening_iff c y w τ z)
 
-/-- Under the pairing law and a well-formed setup, the check accepts exactly when
-`c - y = w (τ - z)`. -/
+/-- Under the pairing law and a well-formed setup, the check accepts iff `c - y = w (τ - z)`. -/
 theorem verifyKzgProofImpl_iff (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) {C P : G1} {c w : Fr}
     (hC : G1.Represents C c) (hP : G1.Represents P w) (z y : Fr) :
@@ -149,8 +148,7 @@ theorem verifyKzgProof_computeKzgProof (laws : Bls.PairingLaws) {s : TrustedSetu
 
 /-- **Honest blob proofs verify.**
 
-Under the pairing law and a well-formed setup, the proof of a blob against its commitment
-verifies. -/
+Under the pairing law and a well-formed setup, a blob's proof verifies against its commitment. -/
 theorem verifyBlobKzgProof_computeBlobKzgProof (laws : Bls.PairingLaws) {s : TrustedSetup}
     {τ : Fr} (hs : s.WellFormed τ) {blob : Blob} {C P : KZGCommitment}
     (hC : blobToKzgCommitment s blob = .ok C)
