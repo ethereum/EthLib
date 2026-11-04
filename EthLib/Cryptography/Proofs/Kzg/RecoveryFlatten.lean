@@ -7,9 +7,7 @@ public import EthLib.Cryptography.Proofs.Kzg.RecoveryDomain
 
 Recovery writes each provided cell into a zero-filled array of 8192 entries.
 
-```text
-    cell ci, entry j   ->   position ci * 64 + j
-```
+Entry `j` of cell `c` goes to position `64 c + j`.
 
 The loop invariant: a position holds its cell's value if that cell was provided, and zero otherwise.
 -/

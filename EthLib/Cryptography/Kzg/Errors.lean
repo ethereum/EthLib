@@ -16,15 +16,15 @@ namespace EthLib.Cryptography.Kzg
 
 /-- Every way a KZG operation can reject its input. -/
 inductive KzgError where
-  /-- A blob was not `BYTES_PER_BLOB` bytes long. -/
+  /-- A blob was not 131072 bytes long. -/
   | badBlobSize (actual : Nat)
-  /-- A commitment was not `BYTES_PER_COMMITMENT` bytes long. -/
+  /-- A commitment was not 48 bytes long. -/
   | badCommitmentSize (actual : Nat)
-  /-- A proof was not `BYTES_PER_PROOF` bytes long. -/
+  /-- A proof was not 48 bytes long. -/
   | badProofSize (actual : Nat)
-  /-- A cell was not `BYTES_PER_CELL` bytes long. -/
+  /-- A cell was not 2048 bytes long. -/
   | badCellSize (actual : Nat)
-  /-- A field element (`z` or `y`) was not `BYTES_PER_FIELD_ELEMENT` bytes long. -/
+  /-- A field element, `z` or `y`, was not 32 bytes long. -/
   | badFieldElementSize (actual : Nat)
   /-- Commitment bytes failed group validation. -/
   | invalidCommitment (index : Option Nat)
@@ -32,14 +32,13 @@ inductive KzgError where
   | invalidProof (index : Option Nat)
   /-- A field element was not canonical. -/
   | invalidFieldElement (index : Option Nat)
-  /-- An input array (`input`, named after the parameter) did not have
-  the same length as the input array it must match. -/
+  /-- An input array, named by its parameter, did not have the length of the array it must match. -/
   | inputLengthMismatch (input : String) (expected actual : Nat)
   /-- A G1 linear combination got different point and scalar counts. -/
   | lincombLengthMismatch (points scalars : Nat)
   /-- A commitment index referenced a commitment that does not exist. -/
   | commitmentIndexOutOfBounds
-  /-- A cell index was `≥ CELLS_PER_EXT_BLOB`. -/
+  /-- A cell index was 128 or more. -/
   | cellIndexOutOfBounds
   /-- Cell indices were not strictly ascending. -/
   | indicesNotAscending
@@ -47,24 +46,21 @@ inductive KzgError where
   | notEnoughCells
   /-- More cells than exist in an extended blob were provided. -/
   | tooManyCells
-  /-- Polynomial division by an empty polynomial or one whose leading
-  coefficient is zero (`Fr` division alone would silently produce a
-  wrong polynomial). -/
+  /-- Polynomial division by an empty polynomial, or by one with a zero leading coefficient.
+
+  Division in `Fr` alone would give a wrong polynomial, with no error. -/
   | zeroDivisorPolynomial
-  /-- A coefficient-form product would exceed `FIELD_ELEMENTS_PER_EXT_BLOB`
-  coefficients. -/
+  /-- A coefficient-form product would have more than 8192 coefficients. -/
   | polynomialProductTooLong (lenA lenB : Nat)
-  /-- An evaluation-form polynomial did not have `FIELD_ELEMENTS_PER_BLOB`
-  elements. -/
+  /-- An evaluation-form polynomial did not have 4096 elements. -/
   | badPolynomialSize (actual : Nat)
-  /-- The deduplicated commitments list passed to
-  `verifyCellKzgProofBatchImpl` contained duplicates. -/
+  /-- The list of commitments of the core cell check contained a repeated commitment. -/
   | duplicateCommitments
   /-- 48-byte input failed to decompress to a G1 point. -/
   | invalidG1Point
-  /-- Every cell of the extended blob was reported missing; the vanishing
-  polynomial for that case is not representable here (and recovery
-  requires at least half the cells anyway). -/
+  /-- Every cell of the extended blob was missing.
+
+  The vanishing polynomial of that case does not fit, and recovery needs half the cells anyway. -/
   | tooManyMissingCells
   /-- A buffer of packed 8-byte indices has a length that is not a multiple of 8. -/
   | badIndicesBytesSize (actual : Nat)

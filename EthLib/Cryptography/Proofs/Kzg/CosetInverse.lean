@@ -8,9 +8,7 @@ public import EthLib.Cryptography.Proofs.Kzg.Domain
 
 A coset FFT evaluates a polynomial on the domain shifted by a constant `k`.
 
-```text
-    coefficients c_i  --shift by k^i-->  FFT  ==  evaluations at k * w^i
-```
+It scales coefficient `i` by `k^i`, then runs the FFT, which gives the values at `k * w^i`.
 
 The inverse transform undoes the FFT and then the shift.
 

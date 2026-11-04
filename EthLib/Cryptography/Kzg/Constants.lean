@@ -39,13 +39,13 @@ def BYTES_PER_CELL : Nat := FIELD_ELEMENTS_PER_CELL * BYTES_PER_FIELD_ELEMENT
 /-- Number of cells in an extended blob. -/
 def CELLS_PER_EXT_BLOB : Nat := FIELD_ELEMENTS_PER_EXT_BLOB / FIELD_ELEMENTS_PER_CELL
 
-/-- Domain separator for the Fiat-Shamir challenge in `computeChallenge`. -/
+/-- Domain separator for the Fiat-Shamir challenge of a blob and its commitment. -/
 def FIAT_SHAMIR_PROTOCOL_DOMAIN : ByteArray := String.toUTF8 "FSBLOBVERIFY_V1_"
 
-/-- Domain separator for the Fiat-Shamir challenge in `verifyKzgProofBatch`. -/
+/-- Domain separator for the Fiat-Shamir challenge of the batch check of blob proofs. -/
 def RANDOM_CHALLENGE_KZG_BATCH_DOMAIN : ByteArray := String.toUTF8 "RCKZGBATCH___V1_"
 
-/-- Domain separator for the Fiat-Shamir challenge in `verifyCellKzgProofBatch`. -/
+/-- Domain separator for the Fiat-Shamir challenge of the batch check of cell proofs. -/
 def RANDOM_CHALLENGE_KZG_CELL_BATCH_DOMAIN : ByteArray := String.toUTF8 "RCKZGCBATCH__V1_"
 
 /-- Serialized form of the point at infinity on the G1 group. -/

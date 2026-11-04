@@ -5,28 +5,18 @@ public import EthLib.Cryptography.Proofs.Kzg.CoefficientPadding
 public import EthLib.Cryptography.Proofs.Kzg.Cells
 
 /-!
-# Proofs: extended evaluations and cells via FFT
+# Proofs: extended evaluations and cells by FFT
 
-The Fulu sampling specification evaluates a polynomial across each cell coset with Horner's rule.
+The direct method evaluates the polynomial on each cell's coset with Horner's rule.
 
-See `consensus-specs` `specs/fulu/polynomial-commitments-sampling.md` at `8a3df1d79d70000801407e33d660171be9cd06d1`.
+The code instead pads to 8192 coefficients, runs one forward FFT, and bit-reverses the output.
 
-`extendedEvaluations` pads to 8192 coefficients, runs one forward FFT, and bit-reverses the output.
+It then cuts the 8192 values into 128 blocks of 64, one block per cell.
 
-`cellsOfExtendedEvaluations` cuts those 8192 values into 128 blocks of 64 elements and encodes each cell.
-
-```text
-    polynomialCoeff  --pad to 8192-->  FFT  --brp-->  extendedEvaluations
-                                                           |
-                                   slice [64*k .. 64*(k+1)) = coset.map(Horner)
-```
-
-This file proves:
-
-- `evaluatePolynomialcoeff` equals the monomial sum `evalPolyAt`.
-- Every 64-element slice of `extendedEvaluations` equals `coset.map (evaluatePolynomialcoeff polynomialCoeff)`.
-- Every cell of `cellsOfExtendedEvaluations (extendedEvaluations polynomialCoeff)` matches that encoding.
-- On a valid blob, `computeCells` returns 128 cells matching that encoding.
+- Horner's rule equals the sum of monomials.
+- Each block of 64 values is the polynomial evaluated on the cell's coset.
+- Each cell matches the encoding of those values.
+- On a valid blob, the cell computation returns 128 such cells.
 -/
 
 @[expose] public section

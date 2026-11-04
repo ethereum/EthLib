@@ -10,10 +10,9 @@ Call `E` the flattened evaluations, with zeros where cells are missing.
 
 Call `P` the source polynomial and `Z` the vanishing polynomial of the missing positions.
 
-```text
-    known position:     E = P,   so  E * Z = P * Z
-    missing position:   Z = 0,   so  E * Z = 0 = P * Z
-```
+At a known position `E = P`, so `E * Z = P * Z`.
+
+At a missing position `Z = 0`, so `E * Z = 0 = P * Z`.
 
 So `E * Z` and `P * Z` agree at all 8192 points of the domain.
 -/

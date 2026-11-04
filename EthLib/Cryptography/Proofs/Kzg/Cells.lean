@@ -4,13 +4,15 @@ public import EthLib.Cryptography.Kzg.Cells
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
 
 /-!
-# Proofs: `Cells`
+# Proofs: the shape and the input checks of the cell operations
 
-Shape properties of the coefficient-form helpers (`addPolynomialcoeff`
-spans the longer input, `cosetForCell` yields a full cell of points),
-canonicity of the batch challenge, and the validation surface of the
-cell-proof entry points: each malformed input is rejected with exactly
-the documented error before any real work.
+The sum of two coefficient arrays spans the longer one.
+
+The coset of a cell has a full cell of points.
+
+The batch challenge is a canonical field element.
+
+Each cell operation rejects each malformed input with its own error, before any other work.
 -/
 
 @[expose] public section

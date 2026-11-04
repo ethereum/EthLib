@@ -5,12 +5,11 @@ public import EthLib.Cryptography.Proofs.Kzg.Fft
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
 
 /-!
-# Proofs: `Recovery`
+# Proofs: the shape and the input checks of recovery
 
-Shape properties of the recovery pipeline (the recovered polynomial has
-exactly `FIELD_ELEMENTS_PER_BLOB` coefficients) and the validation
-surface of `recoverCellsAndKzgProofs`: each malformed input is rejected
-with exactly the documented error.
+The recovered polynomial has exactly 4096 coefficients.
+
+Recovery rejects each malformed input with its own error.
 -/
 
 @[expose] public section

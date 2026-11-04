@@ -24,54 +24,45 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 
-/-- Given the cells indices that are missing from the data, compute the
-polynomial that vanishes at every point that corresponds to a missing field
-element.
+/-- The polynomial that vanishes on the points of the missing cells.
 
-This method assumes that all of the cells cannot be missing. In this case the
-vanishing polynomial could be computed as `Z(x) = x^n - 1`, where `n` is
-`FIELD_ELEMENTS_PER_EXT_BLOB`.
+At least one cell must be present.
 
-We never encounter this case however because this method is used solely for
-recovery and recovery only works if at least half of the cells are available. -/
+If every cell were missing, the polynomial would be `Z(x) = x^n - 1`, with `n = 8192`.
+
+Recovery needs at least half of the cells, so that case never arises. -/
 def constructVanishingPolynomial
     (missingCellIndices : Array CellIndex) : Except KzgError PolynomialCoeff := do
-  -- When every cell is missing, `shortZeroPoly` below is longer than
-  -- CELLS_PER_EXT_BLOB and the fixed-size `set!` writes would silently
-  -- drop those coefficients (an out-of-range `set!` is a no-op).
+  -- With every cell missing, the short polynomial has 129 coefficients, too many for the writes.
   if missingCellIndices.size ≥ CELLS_PER_EXT_BLOB then
     throw .tooManyMissingCells
-  -- Small domain: roots of unity of order CELLS_PER_EXT_BLOB.
+  -- The small domain: the 128-th roots of unity.
   let rouReduced := computeRootsOfUnity CELLS_PER_EXT_BLOB
 
-  -- Vanishing polynomial over the small domain (roots in BRP order).
+  -- The vanishing polynomial over the small domain, with roots in bit-reversed order.
   let xs : Array Fr := missingCellIndices.map fun mci =>
     rouReduced[reverseBits mci CELLS_PER_EXT_BLOB]!
   let shortZeroPoly ← vanishingPolynomialcoeff xs
 
-  -- Extend to the full domain using the closed form of the vanishing
-  -- polynomial over a coset.
+  -- Extend it to the full domain, by the closed form of the vanishing polynomial of a coset.
   return (Array.range shortZeroPoly.size).foldl
     (init := Array.replicate FIELD_ELEMENTS_PER_EXT_BLOB Fr.zero)
     fun zeroPoly i =>
       zeroPoly.set! (i * FIELD_ELEMENTS_PER_CELL) shortZeroPoly[i]!
 
-/-- Recover the polynomial in coefficient form that when evaluated at the
-roots of unity will give the extended blob. -/
+/-- Recover the polynomial in coefficient form whose values on the domain are the extended blob. -/
 def recoverPolynomialcoeff
     (cellIndices : Array CellIndex) (cosetsEvals : Array CosetEvals)
     : Except KzgError PolynomialCoeff := do
-  -- Each provided cell index needs its coset evaluations; a length
-  -- mismatch must fail rather than read zero-padded evaluations.
+  -- Each cell index needs its values, so a length mismatch fails instead of reading zeros.
   if cosetsEvals.size ≠ cellIndices.size then
     throw (.inputLengthMismatch "cosetsEvals" cellIndices.size cosetsEvals.size)
-  -- Get the extended domain. This will be referred to as the FFT domain.
+  -- The extended domain, called the FFT domain below.
   let rouExt := computeRootsOfUnity FIELD_ELEMENTS_PER_EXT_BLOB
 
-  -- Flatten the cosets evaluations.
-  -- If a cell is missing, then its evaluation is zero.
-  -- We let E(x) be a polynomial of degree FIELD_ELEMENTS_PER_EXT_BLOB - 1
-  -- that interpolates the evaluations including the zeros for missing ones.
+  -- Flatten the values of the cosets, with zeros for the missing cells.
+  --
+  -- Let E(x) be the polynomial of degree below 8192 through these values.
   let extendedRbo : Array Fr := (Array.range cellIndices.size).foldl
     (init := Array.replicate FIELD_ELEMENTS_PER_EXT_BLOB Fr.zero)
     fun acc k =>
@@ -82,9 +73,9 @@ def recoverPolynomialcoeff
 
   let extended := bitReversalPermutation extendedRbo
 
-  -- Compute the vanishing polynomial Z(x) in coefficient form.
-  -- Z(x) is the polynomial which vanishes on all of the evaluations which are missing.
-  -- CELLS_PER_EXT_BLOB = 128; an Array.contains lookup is plenty fast.
+  -- The vanishing polynomial Z(x) of the missing points, in coefficient form.
+  --
+  -- There are only 128 cells, so a linear lookup is fast enough.
   let missing : Array CellIndex :=
     (Array.range CELLS_PER_EXT_BLOB).filter fun ci => !cellIndices.contains ci
   let zeroPolyCoeff ← constructVanishingPolynomial missing
@@ -93,16 +84,13 @@ def recoverPolynomialcoeff
   let zeroPolyEval := fftField zeroPolyCoeff rouExt
 
   -- Compute (E*Z)(x) = E(x) * Z(x) in evaluation form over the FFT domain.
-  -- Note: over the FFT domain, the polynomials (E*Z)(x) and (P*Z)(x) agree, where
-  -- P(x) is the polynomial we want to reconstruct (degree FIELD_ELEMENTS_PER_BLOB - 1).
+  --
+  -- For the polynomial P(x) to recover, (E*Z)(x) and (P*Z)(x) agree over the FFT domain.
   let extTimesZero : Array Fr :=
     Array.ofFn (n := FIELD_ELEMENTS_PER_EXT_BLOB) fun i =>
       zeroPolyEval[i.val]! * extended[i.val]!
 
-  -- We know that (E*Z)(x) and (P*Z)(x) agree over the FFT domain,
-  -- and we know that (P*Z)(x) has degree at most FIELD_ELEMENTS_PER_EXT_BLOB - 1.
-  -- Thus, an inverse FFT of the evaluations of (E*Z)(x) (= evaluations of (P*Z)(x))
-  -- yields the coefficient form of (P*Z)(x).
+  -- (P*Z)(x) has degree below 8192, so the inverse FFT of (E*Z)(x) gives its coefficients.
   let extTimesZeroCoeffs := fftField extTimesZero rouExt (inv := true)
 
   -- Next step is to divide the polynomial (P*Z)(x) by polynomial Z(x) to get P(x).
@@ -126,13 +114,12 @@ def recoverPolynomialcoeff
 
   return pCoeff.extract 0 FIELD_ELEMENTS_PER_BLOB
 
-/-- Given at least 50% of cells for a blob, recover all the cells/proofs.
-This algorithm uses FFTs to recover cells faster than using Lagrange
-implementation, as can be seen here:
-https://ethresear.ch/t/reed-solomon-erasure-code-recovery-in-n-log-2-n-time-with-ffts/3039
+/-- Recover every cell and every cell proof from at least half of the cells.
 
-A faster version thanks to Qi Zhou can be found here:
-https://github.com/ethereum/research/blob/51b530a53bd4147d123ab3e390a9d08605c2cdb8/polynomial_reconstruction/polynomial_reconstruction_danksharding.py -/
+The recovery uses FFTs, which is faster than Lagrange interpolation.
+
+The method is the one of
+<https://ethresear.ch/t/reed-solomon-erasure-code-recovery-in-n-log-2-n-time-with-ffts/3039>. -/
 def recoverCellsAndKzgProofs (setup : TrustedSetup)
     (cellIndices : Array CellIndex) (cells : Array Cell)
     : Except KzgError (Array Cell × Array KZGProof) := do

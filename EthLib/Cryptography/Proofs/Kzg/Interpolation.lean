@@ -5,11 +5,11 @@ public import EthLib.Cryptography.Proofs.Bls.FrZMod
 public import Mathlib.Algebra.BigOperators.Ring.List
 
 /-!
-# Coefficient interpolation correctness
+# Proofs: interpolation in coefficient form
 
-Source: consensus-specs v1.6.0, Fulu polynomial-commitments-sampling,
-`interpolate_polynomialcoeff`.
-The theorem applies to every successful interpolation at pairwise distinct nodes.
+Interpolation succeeds exactly when the points and the values have one length, below 8192.
+
+At pairwise distinct points, the result takes each given value at its point.
 -/
 @[expose] public section
 

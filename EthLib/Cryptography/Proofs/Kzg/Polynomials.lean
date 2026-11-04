@@ -5,12 +5,15 @@ public import EthLib.Cryptography.Proofs.Bls.Fr
 public import EthLib.Cryptography.Proofs.Kzg.BitReversal
 
 /-!
-# Proofs: `Polynomials`
+# Proofs: the polynomial helpers
 
-Properties of the polynomial helpers: byte <-> field element
-conversions round-trip, `computePowers` really returns powers,
-`blobToPolynomial` is characterized on its success and failure paths,
-and evaluation at a domain point is a table lookup.
+The conversions between bytes and field elements round trip.
+
+The powers helper returns powers.
+
+The decoding of a blob is described on its success and its failure paths.
+
+Evaluation at a domain point is a table lookup.
 -/
 
 @[expose] public section

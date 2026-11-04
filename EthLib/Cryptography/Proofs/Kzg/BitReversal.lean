@@ -3,14 +3,13 @@ module
 public import EthLib.Cryptography.Kzg.BitReversal
 
 /-!
-# Proofs: `BitReversal`
+# Proofs: bit reversal
 
-Correctness properties of `reverseBitsAux`, `reverseBits`, and
-`bitReversalPermutation`.
+The bits of a reversed index are the input bits in reverse order.
 
-The output bits of `reverseBitsAux` are characterized via `Nat.testBit`
-(`testBit_reverseBitsAux`); everything else follows from that
-characterization.
+Every other property follows from that description.
+
+So reversing twice gives back the index, and the permutation is an involution.
 -/
 
 @[expose] public section
