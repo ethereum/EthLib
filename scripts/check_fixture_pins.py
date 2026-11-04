@@ -11,11 +11,15 @@ The check fails on each of these:
   the README is the one in the directory, or else the nearest one above it;
 - a commit that a test cites, in a Python file, a Markdown file or a `SHA256SUMS`, that is
   not a recorded pin;
-- a recorded pin that no test cites.
+- a recorded pin that no test cites;
+- a release archive whose repository is not recorded, whose URL is not an https URL, or whose
+  size or sha256 is malformed;
+- a release archive that no test names.
 
 A test cites a commit as "commit <sha>", as a "Commit: <sha>" line, or in a GitHub link with
 `/blob/<sha>` or `/tree/<sha>`.
 A short commit must be a prefix of a pin.
+A test names a release archive by its key in the table `archives`, in double quotes.
 
     uv run --no-project --python 3.12 python scripts/check_fixture_pins.py
 
@@ -32,6 +36,7 @@ SOURCES = "tests/sources.toml"
 TREES = ("tests", "bindings/python/tests")
 COMMIT = re.compile(r"(?:\b[Cc]ommit:?[\s#`]*|/(?:blob|tree)/)(?=[0-9a-f]*[0-9])([0-9a-f]{7,40})\b")
 FULL_COMMIT = re.compile(r"[0-9a-f]{40}")
+SHA256 = re.compile(r"[0-9a-f]{64}")
 SOURCE_LINE = "# Source: "
 
 
@@ -103,9 +108,22 @@ def check(root: Path) -> list[str]:
                 if commit not in text and problem not in problems:
                     problems.append(problem)
 
-    cited = set()
+    archives = config.get("archives", {})
+    for name, entry in archives.items():
+        if entry.get("repository") not in repositories:
+            problems.append(f"{SOURCES}: the archive {name} needs a recorded repository")
+        if not str(entry.get("url", "")).startswith("https://"):
+            problems.append(f"{SOURCES}: the archive {name} needs an https URL")
+        size = entry.get("size")
+        if type(size) is not int or size <= 0:
+            problems.append(f"{SOURCES}: the archive {name} needs a positive size in bytes")
+        if not SHA256.fullmatch(str(entry.get("sha256", ""))):
+            problems.append(f"{SOURCES}: the archive {name} needs a 64-digit sha256")
+
+    cited, named = set(), set()
     for path in scanned_files(root):
         text = path.read_text(encoding="utf-8")
+        named.update(name for name in archives if f'"{name}"' in text)
         for match in COMMIT.finditer(text):
             short = match.group(1)
             line = text.count("\n", 0, match.start(1)) + 1
@@ -120,6 +138,8 @@ def check(root: Path) -> list[str]:
                 cited.add(name)
     for name in sorted(set(pins) - cited):
         problems.append(f"{SOURCES}: no test cites the pin of {name}")
+    for name in sorted(set(archives) - named):
+        problems.append(f"{SOURCES}: no test names the archive {name}")
     return problems
 
 

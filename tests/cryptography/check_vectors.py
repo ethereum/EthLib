@@ -9,9 +9,10 @@ listed digest.
 Regenerating a vector that changes its answer then fails this check.
 
 With `--upstream`, also check that the pinned digests are the ones
-upstream published. consensus-specs published most of them, in the general
-test archive of its last release before the KZG specification moved here
-(consensus-specs#5398). That archive has no BLS signing or verification
+upstream published, in the archives that `tests/sources.toml` pins.
+The archives are downloaded into the cache of scripts/fetch_archives.py.
+consensus-specs published most of the digests, in the general test archive of its last release
+before the KZG specification moved here (consensus-specs#5398). That archive has no BLS signing or verification
 cases, so those come from the ethereum/bls12-381-tests release archive.
 
     uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py
@@ -24,10 +25,9 @@ install step.
 """
 import argparse
 import hashlib
+import importlib.util
 import sys
 import tarfile
-import tempfile
-import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -35,20 +35,21 @@ ROOT = Path(__file__).resolve().parent
 # The suites that must be pinned. Their manifests are checked in CI.
 REQUIRED = ("bls", "kzg", "secp256k1", "secp256r1")
 
-# consensus-specs v1.7.0-alpha.12, the last release before consensus-specs#5398.
-# The cases come from this archive. The pins in tests/sources.toml hold the same bytes.
-UPSTREAM_URL = (
-    "https://github.com/ethereum/consensus-specs/releases/download/"
-    "v1.7.0-alpha.12/general.tar.gz"
-)
-UPSTREAM_SHA256 = "329f3cf58927df2614ecafbce78eb3c5258a13e8731d2f410bb31d8e4a5b9eaf"
+# The fetcher of the release archives that `tests/sources.toml` pins, loaded by path:
+# `scripts` is not a package.
+_spec = importlib.util.spec_from_file_location(
+    "fetch_archives", ROOT.parents[1] / "scripts" / "fetch_archives.py")
+fetch_archives = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(fetch_archives)
 
-# ethereum/bls12-381-tests v0.1.2, at commit 89ff3a86f1a9b89a555495f7535c853cda589320.
-BLS_TESTS_URL = (
-    "https://github.com/ethereum/bls12-381-tests/releases/download/"
-    "v0.1.2/bls_tests_yaml.tar.gz"
-)
-BLS_TESTS_SHA256 = "a4ef909b6248395094949a3bcdeb4e1b5b999733d4436f2c5006edba99d29279"
+# The general test archive of consensus-specs v1.7.0-alpha.12, the last release before
+# consensus-specs#5398.
+# The cases come from this archive.
+# The pins in tests/sources.toml hold the same bytes.
+UPSTREAM = "consensus-specs/v1.7.0-alpha.12/general"
+
+# The release archive of ethereum/bls12-381-tests v0.1.2.
+BLS_TESTS = "bls12-381-tests/v0.1.2/bls_tests_yaml"
 
 # The handlers of that archive that are pinned here, under `bls/`.
 BLS_TESTS_HANDLERS = ("aggregate", "aggregate_verify", "fast_aggregate_verify", "sign", "verify")
@@ -156,9 +157,10 @@ def check_upstream(archive: Path, bls_archive: Path, root: Path = ROOT) -> tuple
     A case that exists in no upstream archive is allowed, and counted.
     Returns the errors and the number of such cases.
     """
-    if sha256_file(archive) != UPSTREAM_SHA256:
+    archives = fetch_archives.load()
+    if sha256_file(archive) != archives[UPSTREAM].sha256:
         return [f"{archive}: not the pinned upstream archive"], 0
-    if sha256_file(bls_archive) != BLS_TESTS_SHA256:
+    if sha256_file(bls_archive) != archives[BLS_TESTS].sha256:
         return [f"{bls_archive}: not the pinned bls12-381-tests archive"], 0
     upstream = upstream_digests(archive) | bls_tests_digests(bls_archive)
     errors, own = [], 0
@@ -189,15 +191,11 @@ def main() -> int:
 
     errors, own = check_local(), 0
     if args.upstream:
-        with tempfile.TemporaryDirectory() as tmp:
-            archive, bls_archive = args.archive, args.bls_archive
-            if archive is None:
-                archive = Path(tmp) / "general.tar.gz"
-                urllib.request.urlretrieve(UPSTREAM_URL, archive)
-            if bls_archive is None:
-                bls_archive = Path(tmp) / "bls_tests_yaml.tar.gz"
-                urllib.request.urlretrieve(BLS_TESTS_URL, bls_archive)
-            upstream_errors, own = check_upstream(archive, bls_archive)
+        archives = fetch_archives.load()
+        cache = fetch_archives.default_cache()
+        archive = args.archive or fetch_archives.download(archives[UPSTREAM], cache)
+        bls_archive = args.bls_archive or fetch_archives.download(archives[BLS_TESTS], cache)
+        upstream_errors, own = check_upstream(archive, bls_archive)
         errors += upstream_errors
 
     for error in errors:

@@ -311,6 +311,8 @@ uv run --no-project --python 3.12 python scripts/check_fixture_pins.py
 
 `tests/sources.toml` records one pinned commit for each repository that tests read from.
 The check fails when a test cites another commit, and when a directory with a `SHA256SUMS` file does not name its sources.
+The file also pins each release archive that is too large to vendor, by its URL, its size and its sha256.
+The check fails when no test names an archive.
 
 Then check the layout of the Lean lines that your branch changes:
 
@@ -337,6 +339,17 @@ The suite rewrites the vectors, so then check that the pinned ones are unchanged
 ```bash
 uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py
 ```
+
+A test marked `archive` reads a release archive, and the suite skips it by default.
+To run such tests, set `ETHLIB_ARCHIVES` to a cache directory:
+
+```bash
+ETHLIB_ARCHIVES=~/.cache/ethlib/archives uv run --no-sync pytest -m archive
+```
+
+The first run downloads each archive that the tests name, and checks its size and digest.
+Each test then unpacks only the paths that it reads.
+The `vectors-slow` workflow runs these tests every Monday.
 
 Report what you ran and what it printed.
 If you skipped a check, say so.

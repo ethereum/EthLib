@@ -42,3 +42,6 @@ pythonpath = ["bindings/python/tests"]
 # importlib import mode keeps the per-suite fixtures.py files from
 # clashing in sys.modules during collection.
 addopts = "--import-mode=importlib"
+markers = [
+  "archive(name, *paths): reads the paths of a release archive of tests/sources.toml; skipped unless ETHLIB_ARCHIVES names a cache directory",
+]

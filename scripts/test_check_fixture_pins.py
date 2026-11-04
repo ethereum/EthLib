@@ -127,5 +127,43 @@ class Pins(unittest.TestCase):
         self.assertIn("tests/sources.toml: org/vectors needs a full 40-digit commit", problems)
 
 
+ARCHIVE = f"""
+[archives."vectors/v1/all"]
+repository = "org/vectors"
+url = "https://example.org/v1/all.tar.gz"
+size = 10
+sha256 = "{"3" * 64}"
+"""
+
+
+class Archives(unittest.TestCase):
+    def tree(self, archive: str = ARCHIVE) -> Tree:
+        """The intact tree, with one archive that a test names."""
+        tree = Tree()
+        tree.write("tests/sources.toml", SOURCES + archive)
+        tree.write("bindings/python/tests/test_b.py", 'ARCHIVE = "vectors/v1/all"\n')
+        return tree
+
+    def test_named_archive_passes(self):
+        self.assertEqual(self.tree().problems(), [])
+
+    def test_archive_that_no_test_names(self):
+        tree = self.tree()
+        (tree.root / "bindings/python/tests/test_b.py").unlink()
+        self.assertEqual(tree.problems(),
+                         ["tests/sources.toml: no test names the archive vectors/v1/all"])
+
+    def test_malformed_archive(self):
+        for old, new, text in (('"org/vectors"', '"org/other"', "a recorded repository"),
+                               ("https://", "http://", "an https URL"),
+                               ("size = 10", "size = 0", "a positive size"),
+                               ("size = 10", 'size = "10"', "a positive size"),
+                               ("3" * 64, "3" * 63, "a 64-digit sha256")):
+            with self.subTest(text=text, new=new):
+                problems = self.tree(ARCHIVE.replace(old, new)).problems()
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn(f"the archive vectors/v1/all needs {text}", problems[0])
+
+
 if __name__ == "__main__":
     unittest.main()
