@@ -143,7 +143,8 @@ An index computed from the type alone can name an absent position without assert
 The results so far show that honest proofs verify.
 The binding results show that a dishonest proof cannot verify unless SHA-256 has a collision.
 
-By [authentication](../Proofs/Ssz/Merkle/Authentication.lean), two accepted branches at the same index and root either open the same leaf or exhibit a SHA-256 collision between actual 64-byte branch inputs.
+Two accepted branches at the same index and root open the same leaf, or `findBranchCollision` returns a collision ([authentication](../Proofs/Ssz/Merkle/Authentication.lean)).
+That collision is two 64-byte messages with one SHA-256 hash, each one hashed along its own branch.
 [Multiproof binding](../Proofs/Ssz/Merkle/MultiproofBinding.lean) gives the same guarantee for shared claims across different requests, with collision witnesses taken from the verifier's hash inputs.
 
 [Whole-value binding](../Proofs/Ssz/Codec/Binding.lean) lifts this to values.

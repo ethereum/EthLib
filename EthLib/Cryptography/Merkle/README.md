@@ -72,6 +72,10 @@ It returns the first level where they hash two different pairs to one parent.
 `findCollision_valid` says that every collision it returns is valid, and that its pairs are the ones the two climbs hash there.
 The collision sits at an ancestor of the starting node, so a hash tweaked by its position collides under one tweak.
 
+`climbPairs` lists the pairs a climb hashes, one per level.
+`findCollision_mem_climbPairs` follows from `findCollision_valid`: each pair of the collision is an entry of its own climb's list.
+So the collision lies among the hash inputs of the two climbs.
+
 Against an honest tree, the statement is sharper.
 `findSecondPreimage` walks one climb against the honest tree.
 It returns the first level where the climb hashes a pair other than the honest children to an honest node.
