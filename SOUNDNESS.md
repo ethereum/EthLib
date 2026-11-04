@@ -367,9 +367,12 @@ Whatever those hypotheses leave unproved is part of what a reader trusts.
 EthLib makes no constant-time claim.
 `Hash/Keccak.lean` says it "is not intended to be constant-time", and the field arithmetic uses Lean's `Nat`, which gives no timing guarantee.
 This matters where secret data is handled.
+
 XMSS and leanSPHINCS `keyGen` and `sign` handle secret data.
 The Python bindings expose all four, as `key_gen` and `sign` in each module, which take the secret seed.
 BLS key generation, signing and the proof of possession handle secret data, and the Python bindings expose all three.
+HMAC-SHA-256, HKDF and the Concatenation KDF take a secret key, input keying material or shared secret.
+The Python bindings expose them as `hmac_sha256`, `hkdf_extract`, `hkdf` and `concat_kdf`.
 
 Every AES function that takes a key handles secret data.
 Its S-box is a table, and the cipher reads it at indices that depend on the key.

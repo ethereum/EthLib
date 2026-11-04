@@ -182,7 +182,11 @@ end EthLib.Cryptography.Hash.Sha256
 
 namespace EthLib.Cryptography.Hash
 
-/-- SHA-256 of a byte string of any length. -/
+/--
+SHA-256 of a byte string shorter than 2^61 bytes, the bound of FIPS 180-4 §1.
+
+A longer input wraps its bit length modulo 2^64, and the result is not SHA-256.
+-/
 @[inline] def sha256 (data : ByteArray) : ByteArray := Sha256.hash data
 
 end EthLib.Cryptography.Hash
