@@ -8,6 +8,7 @@ public import EthLib.Execution.Trie.Root
 - The budget of `patricialize` never runs out: any budget above the longest path, counted from the level, gives the same node.
 - The root of the empty map is the hash of `0x80`, secured or not.
 - A map with an empty value has no root, and every other map's keys and values reach `patricialize` unchanged, in order.
+- A key that is set takes the new value, and every other key keeps its value.
 -/
 
 @[expose] public section
@@ -205,5 +206,66 @@ theorem prepareData_ok (hash : ByteArray → Hash32) (secured : Bool) :
     simp only [prepareData] at hrest
     simp only [prepareData, List.mapM_cons, h (key, value) List.mem_cons_self, ↓reduceIte, hrest]
     rfl
+
+/-! ## Getting and setting a key -/
+
+/-- The trie compares two keys by their bytes, so it finds them equal exactly when they are. -/
+theorem sameBytes_iff (a b : ByteArray) : sameBytes a b = true ↔ a = b := by
+  cases a; cases b
+  simp [sameBytes, Array.toList_inj]
+
+/-- A key that was just set has the value it was set to. -/
+theorem trieGet_trieSet_self (trie : Trie) (key value : ByteArray) :
+    trieGet (trieSet trie key value) key = value := by
+  unfold trieSet trieGet
+  split
+  · -- The key is removed, so it has the default, the empty value it was set to.
+    rename_i hempty
+    rw [List.find?_filter, List.find?_eq_none.mpr (by simp)]
+    exact (ByteArray.size_eq_zero_iff.mp hempty).symm
+  · split
+    · -- The key is present, and every entry of it now holds the new value.
+      rename_i hany
+      simp only [List.find?_map, Function.comp_def, apply_ite Prod.fst, ite_self]
+      cases hfind : trie.data.find? (fun entry => sameBytes entry.1 key) with
+      | none => exact absurd (List.find?_isSome.mpr (List.any_eq_true.mp hany)) (by simp [hfind])
+      | some entry =>
+        have hkey : sameBytes entry.1 key = true :=
+          List.find?_some (p := fun entry : ByteArray × ByteArray => sameBytes entry.1 key) hfind
+        simp [hkey]
+    · -- The key is absent, so its only entry is the new one at the end.
+      rename_i hany
+      rw [List.find?_append, List.find?_eq_none.mpr fun entry hmem hsame =>
+        hany (List.any_eq_true.mpr ⟨entry, hmem, hsame⟩)]
+      simp [(sameBytes_iff key key).mpr rfl]
+
+/-- Setting a key leaves the value of every other key unchanged. -/
+theorem trieGet_trieSet_of_ne (trie : Trie) {key other : ByteArray} (value : ByteArray)
+    (h : other ≠ key) : trieGet (trieSet trie key value) other = trieGet trie other := by
+  unfold trieSet trieGet
+  -- An entry of the other key is not an entry of the key that is set.
+  have hne : ∀ k, sameBytes k other = true → sameBytes k key = false := by
+    intro k hother
+    rw [(sameBytes_iff k other).mp hother]
+    exact Bool.eq_false_iff.mpr fun hkey => h ((sameBytes_iff other key).mp hkey)
+  split
+  · -- Removing the key keeps every entry of the other key.
+    rw [List.find?_filter]
+    congr 3
+    funext entry
+    cases hother : sameBytes entry.1 other <;> simp [hother, hne]
+  · split
+    · -- The first entry of the other key keeps its value.
+      simp only [List.find?_map, Function.comp_def, apply_ite Prod.fst, ite_self]
+      cases hfind : trie.data.find? (fun entry => sameBytes entry.1 other) with
+      | none => rfl
+      | some entry =>
+        have hother : sameBytes entry.1 other = true :=
+          List.find?_some (p := fun entry : ByteArray × ByteArray => sameBytes entry.1 other) hfind
+        simp [hne entry.1 hother]
+    · -- The new entry at the end is not an entry of the other key.
+      have hkey : sameBytes key other = false :=
+        Bool.eq_false_iff.mpr fun hother => h ((sameBytes_iff key other).mp hother).symm
+      simp [List.find?_append, hkey]
 
 end EthLib.Execution.Trie
