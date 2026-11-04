@@ -6,6 +6,7 @@ public import EthLib.Execution.Exports.Ripemd160
 public import EthLib.Execution.Exports.Sha256
 public import EthLib.Execution.Exports.Ecrecover
 public import EthLib.Execution.Exports.Evm
+public import EthLib.Execution.Exports.Fees
 public import EthLib.Execution.Exports.Precompiles
 public import EthLib.Execution.Exports.State
 public import EthLib.Execution.Exports.Transactions

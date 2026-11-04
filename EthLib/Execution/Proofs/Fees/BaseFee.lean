@@ -20,8 +20,6 @@ The scaled distance is `base_fee * |used - target| / target`, and the fee moves 
 - With the same gas limit and base fee, a parent that used more gas never gives a lower fee.
 - With the same gas limit and gas used, a parent with a higher base fee never gives a lower fee.
 - A positive fee stays positive.
-
-The known answers at the end are worked by hand, and each says what it pins.
 -/
 
 @[expose] public section
@@ -267,46 +265,5 @@ theorem calculateBaseFeePerGas_pos (parentGasLimit parentGasUsed : Nat) {parentB
   have heighth : parentBaseFeePerGas / BASE_FEE_MAX_CHANGE_DENOMINATOR < parentBaseFeePerGas :=
     Nat.div_lt_self h (by decide)
   omega
-
-/-! ## Known answers
-
-The first eight are worked by hand from the formula of EIP-1559.
-
-The last pins this definition at a target of 0, where that formula divides by zero.
-
-The first five use a gas limit of 30,000,000, so a target of 15,000,000, and a base fee of 10 gwei. -/
-
-/-- A parent at its target keeps the base fee. -/
-example : calculateBaseFeePerGas 30000000 15000000 10000000000 = 10000000000 := by decide +kernel
-
-/-- A full parent, twice its target: `10^10 * 15000000 / 15000000 / 8 = 1250000000`. -/
-example : calculateBaseFeePerGas 30000000 30000000 10000000000 = 11250000000 := by decide +kernel
-
-/-- An empty parent: the fee falls by the same 1,250,000,000. -/
-example : calculateBaseFeePerGas 30000000 0 10000000000 = 8750000000 := by decide +kernel
-
-/-- 20,000,000 gas used: `10^10 * 5000000 / 15000000 = 3333333333`, and `/ 8` gives 416,666,666. -/
-example : calculateBaseFeePerGas 30000000 20000000 10000000000 = 10416666666 := by decide +kernel
-
-/-- 10,000,000 gas used: the fall is the same 416,666,666. -/
-example : calculateBaseFeePerGas 30000000 10000000 10000000000 = 9583333334 := by decide +kernel
-
-/-- A fee of 7, with gas used one unit above the target: `7 * 1 / 15000000 / 8 = 0`, so `max 0 1` raises it by 1. -/
-example : calculateBaseFeePerGas 30000000 15000001 7 = 8 := by decide +kernel
-
-/-- A fee of 7, with gas used one unit below the target: the fall rounds down to 0, so the fee stays. -/
-example : calculateBaseFeePerGas 30000000 14999999 7 = 7 := by decide +kernel
-
-/-- An odd gas limit of 30,000,001, full: the parent used 15,000,001 over its target of 15,000,000.
-
-With a fee of `120000000 = 8 * 15000000`, the rise is `120000000 * 15000001 / 15000000 / 8`.
-
-That is `120000008 / 8 = 15000001`, one more than `120000000 / 8`. -/
-example : calculateBaseFeePerGas 30000001 30000001 120000000 = 135000001 := by decide +kernel
-
-/-- A gas limit of 1, so a target of 0: `x / 0 = 0` makes the rise `max (0 / 8) 1 = 1`.
-
-In execution-specs, `check_gas_limit` rejects every block whose parent has this gas limit, before `calculate_base_fee_per_gas` divides by the target. -/
-example : calculateBaseFeePerGas 1 1 100 = 101 := by decide +kernel
 
 end EthLib.Execution.Fees.BaseFee

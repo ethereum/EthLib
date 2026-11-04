@@ -76,6 +76,7 @@ PyObject* TRANSACTION_ERROR;
 PyObject* VRF_ERROR;
 PyObject* TRIE_ERROR;
 PyObject* EVM_ERROR;
+PyObject* FEES_ERROR;
 
 /* ---- Lean externs: size accessors ------------------------------------ */
 
@@ -583,6 +584,10 @@ static PyMethodDef methods[] = {
   {"reqresp_decode_response_chunk", py_reqresp_decode_response_chunk, METH_VARARGS, NULL},
   {"block_header_hash", py_block_header_hash, METH_VARARGS, NULL},
   {"block_reencode", py_block_reencode, METH_VARARGS, NULL},
+  {"fees_base_fee_per_gas", py_fees_base_fee_per_gas, METH_VARARGS, NULL},
+  {"fees_fake_exponential", py_fees_fake_exponential, METH_VARARGS, NULL},
+  {"fees_base_fee_per_blob_gas", py_fees_base_fee_per_blob_gas, METH_VARARGS, NULL},
+  {"fees_excess_blob_gas", py_fees_excess_blob_gas, METH_VARARGS, NULL},
   {"evm_word_op", py_evm_word_op, METH_VARARGS, NULL},
   {"evm_memory_gas_cost", py_evm_memory_gas_cost, METH_VARARGS, NULL},
   {"evm_extend_memory_cost", py_evm_extend_memory_cost, METH_VARARGS, NULL},
@@ -668,6 +673,7 @@ PyInit__native(void) {
     VRF_ERROR = PyObject_GetAttrString(errors, "VrfError");
     TRIE_ERROR = PyObject_GetAttrString(errors, "TrieError");
     EVM_ERROR = PyObject_GetAttrString(errors, "EvmError");
+    FEES_ERROR = PyObject_GetAttrString(errors, "FeesError");
     Py_DECREF(errors);
     if (PyErr_Occurred()) return NULL;
 

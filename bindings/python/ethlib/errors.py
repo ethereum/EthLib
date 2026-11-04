@@ -139,6 +139,10 @@ class EvmError(EthLibError, ValueError):
     """An opcode does not push a word of its operands alone, with code 0."""
 
 
+class FeesError(EthLibError, ValueError):
+    """A fee export got an unknown fork, or one before Dencun, with code 0."""
+
+
 class TrieError(EthLibError, ValueError):
     """A trie has no root, a proof does not verify, or an RLP input is malformed.
 
@@ -188,4 +192,5 @@ __all__ = [
     "VrfError",
     "TrieError",
     "EvmError",
+    "FeesError",
 ]
