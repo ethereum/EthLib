@@ -12,6 +12,7 @@ from .._native import (
     bls_pop_verify as pop_verify,
     bls_expand_message_xmd as expand_message_xmd,
     bls_hash_to_g2 as hash_to_g2,
+    bls_pairing as pairing,
     BYTES_PER_PUBKEY,
     BYTES_PER_SIGNATURE,
 )
@@ -38,6 +39,7 @@ __all__ = [
     "pop_verify",
     "expand_message_xmd",
     "hash_to_g2",
+    "pairing",
     "BYTES_PER_PUBKEY",
     "BYTES_PER_SIGNATURE",
     "BlsError",

@@ -125,4 +125,30 @@ def hashToG2Export (msg dst : ByteArray) : Result ByteArray := do
   let (x, y) := p.toAffine
   return x.c0.toBytesBE ++ x.c1.toBytesBE ++ y.c0.toBytesBE ++ y.c1.toBytesBE
 
+/-! ## Pairing
+
+This export lets a client compare the pairing with a published value. -/
+
+/-- The 576 bytes of an element of `Fp12`: its 12 coefficients in `Fp`, 48 bytes each.
+
+They follow the order of the fields, from `c0.c0.c0` to `c1.c2.c1`. -/
+def fp12Bytes (f : Fp12) : ByteArray :=
+  [f.c0.c0, f.c0.c1, f.c0.c2, f.c1.c0, f.c1.c1, f.c1.c2].foldl
+    (fun acc (a : Fp2) => acc ++ a.c0.toBytesBE ++ a.c1.toBytesBE) ByteArray.empty
+
+/-- The pairing `e(P, Q)` of a compressed `G1` point and a compressed `G2` point.
+
+Both points must lie in their subgroups of order `r`.
+
+A point at infinity gives the identity, as in the pairing check. -/
+@[export eth_bls_pairing]
+def pairingExport (p q : ByteArray) : Result ByteArray := do
+  let P ← runBls (G1.uncompress p)
+  let Q ← runBls (G2.uncompress q)
+  if !G1.inSubgroup P || !G2.inSubgroup Q then runBls (.error .notInSubgroup)
+  if P.isInfinity || Q.isInfinity then return fp12Bytes Fp12.one
+  -- The same Miller loop and final exponentiation as one pair of the pairing check.
+  let f := millerLoop blsX (Embedded.ofG2 Q) (Embedded.ofG1 P)
+  return fp12Bytes (finalExponentiation f.conjugate)
+
 end EthLib.Cryptography.Bls.Exports
