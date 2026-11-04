@@ -14,6 +14,8 @@ The timeline pins each position, so a fork moved in the type fails the build.
 Each fork reads back from its name, and no two forks share a name.
 
 A field that appears at a fork holds nothing before it, and one value from it on.
+
+A field that a fork removes holds one value before it, and nothing from it on.
 -/
 
 @[expose] public section
@@ -101,3 +103,17 @@ theorem eq_const (h : f ≤ fork) (x : Since f fork α) : x = fun _ => x h :=
   funext fun _ => rfl
 
 end EthLib.Base.Since
+
+namespace EthLib.Base.Until
+
+variable {f fork : Fork} {α : Type}
+
+/-- From the fork that removes it, a field has only one value. -/
+theorem eq_of_not_lt (h : ¬fork < f) (x y : Until f fork α) : x = y :=
+  funext fun h' => absurd h' h
+
+/-- Before the fork that removes it, a field is the one value that it holds. -/
+theorem eq_const (h : fork < f) (x : Until f fork α) : x = fun _ => x h :=
+  funext fun _ => rfl
+
+end EthLib.Base.Until

@@ -14,6 +14,8 @@ From Shapella on, one upgrade changes both layers, and it is one fork.
 When a fork activates is chain configuration, so the type holds only the order.
 
 A field that a fork adds to a type holds a value only from that fork on.
+
+A field that a fork removes holds a value only before that fork.
 -/
 
 @[expose] public section
@@ -205,5 +207,14 @@ Before `f` no such proof exists, so the field has one value and holds nothing.
 
 From `f` on, the field holds one value of `α`. -/
 def Since (f fork : Fork) (α : Type) : Type := f ≤ fork → α
+
+/-- A field that a fork `f` removes, in a type at fork `fork`.
+
+It maps a proof of `fork < f` to a value.
+
+Before `f`, the field holds one value of `α`.
+
+From `f` on, no such proof exists, so the field has one value and holds nothing. -/
+def Until (f fork : Fork) (α : Type) : Type := fork < f → α
 
 end EthLib.Base
