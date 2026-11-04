@@ -25,7 +25,7 @@ public section
 
 namespace EthLib.Consensus.Exports
 
-open EthLib.Exports (Result forkOfName)
+open EthLib.Exports (Result forkUpTo)
 
 open Lean Base
 
@@ -69,11 +69,13 @@ def configOf : String → Result Config
   | "minimal" => return .minimal
   | name => throw (0, s!"no configuration is named {name}")
 
-/-- The fork of a name, for the forks from Phase 0 to BPO2, the last fork up to Fulu. -/
+/-- The fork of a name, for the forks from Phase 0 to BPO2, the last fork up to Fulu.
+
+Gloas and Heze are not yet specified, so Glamsterdam and Hegotá fail. -/
 def forkOf (name : ByteArray) : Result Fork := do
-  let fork ← forkOfName name
-  if .phase0 ≤ fork ∧ fork ≤ .bpo2 then return fork
-  else throw (0, s!"{fork.name} is not a fork of the beacon chain up to Fulu")
+  let fork ← forkUpTo .bpo2 name
+  if .phase0 ≤ fork then return fork
+  else throw (0, s!"{fork.name} is not a fork of the beacon chain")
 
 /-- The JSON text of a value, as UTF-8 bytes. -/
 def jsonBytes (value : Json) : ByteArray := value.compress.toUTF8

@@ -39,7 +39,9 @@ def forkAtEpoch (config : Config) (epoch : Epoch) : Fork :=
 
 A fork that changes only the execution layer, or only the blob schedule, keeps that version.
 
-The configuration lists the forks up to Fulu, so a later fork keeps the version of Fulu. -/
+The configuration lists the forks up to Fulu, so a later fork keeps the version of Fulu.
+
+So Glamsterdam and Hegotá get that version until Gloas and Heze are specified. -/
 def forkVersion (config : Config) (fork : Fork) : Version :=
   if .fusaka ≤ fork then config.FULU_FORK_VERSION
   else if .pectra ≤ fork then config.ELECTRA_FORK_VERSION

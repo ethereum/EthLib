@@ -14,6 +14,8 @@ Each number crosses the boundary as its big-endian bytes, so no value is truncat
 A fork crosses it as its name, and the blob exports read the blob schedule of that fork.
 
 A fork that is unknown, or that comes before Dencun and has no blobs, fails with code 0.
+
+So does Hegotá, whose blob schedule is not yet specified.
 -/
 
 public section
@@ -21,7 +23,7 @@ public section
 namespace EthLib.Execution.Fees.Exports
 
 open EthLib.Base (Fork bytesToNat)
-open EthLib.Exports (Result forkOfName)
+open EthLib.Exports (Result forkUpTo)
 open EthLib.Execution.Evm.Exports (bytesOfNat)
 open EthLib.Execution.Fees.BaseFee (calculateBaseFeePerGas)
 open EthLib.Execution.Fees.BlobBaseFee
@@ -32,7 +34,7 @@ def numberOf (bytes : ByteArray) : Nat :=
 
 /-- The blob schedule of a named fork, from Dencun on. -/
 def scheduleOfName (name : ByteArray) : Result (Fork × BlobSchedule) := do
-  let fork ← forkOfName name
+  let fork ← forkUpTo .glamsterdam name
   if h : .dencun ≤ fork then
     pure (fork, blobSchedule fork h)
   else

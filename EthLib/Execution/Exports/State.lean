@@ -25,13 +25,15 @@ A failed change to the state has a code from 101.
 A fork name crosses the boundary as the name of its case in Lean, such as `shapella`.
 
 An unknown fork, a fork before Shapella, or a block that does not decode, has code 0.
+
+So does Hegotá, which is not yet specified.
 -/
 
 public section
 
 namespace EthLib.Execution.State.Exports
 
-open EthLib.Exports (Result forkOfName)
+open EthLib.Exports (Result forkUpTo)
 
 open EthLib.Base
 open EthLib.Execution.State
@@ -98,7 +100,7 @@ def stateRootExport (input : ByteArray) : Result ByteArray := do
 The block is decoded at the fork, which must be Shapella or later. -/
 @[export eth_state_withdrawals_root]
 def withdrawalsRootExport (fork input block : ByteArray) : Result ByteArray := do
-  let fork ← forkOfName fork
+  let fork ← forkUpTo .glamsterdam fork
   let pre ← (ofInput input).mapError fun e => (e.code, e.message)
   let b : Blocks.Block fork Item ← (Codec.decode block).mapError
     fun e => (0, s!"block rejected: {reprStr e}")

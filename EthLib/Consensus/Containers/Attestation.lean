@@ -34,7 +34,9 @@ def maxAttesters (preset : Preset) (fork : Fork) : Nat :=
     preset.MAX_VALIDATORS_PER_COMMITTEE.toNat * preset.MAX_COMMITTEES_PER_SLOT.toNat
   else preset.MAX_VALIDATORS_PER_COMMITTEE.toNat
 
-/-- An aggregate vote of validators, with one bit for each validator that signed. -/
+/-- An aggregate vote of validators, with one bit for each validator that signed.
+
+Gloas is not yet specified, so from Glamsterdam on this is still the shape of Electra. -/
 structure Attestation (preset : Preset) (fork : Fork) where
   /-- One bit for each member of the committees, in committee order, set when it signed. -/
   aggregationBits : Bitlist (maxAttesters preset fork)

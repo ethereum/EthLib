@@ -10,13 +10,15 @@ public import EthLib.Execution.Evm.Precompiles.Table
 C-ABI exports that run any precompile, and give its price, at a fork named by the caller.
 
 A fork with no precompile at the address gives an error with code 0.
+
+Glamsterdam keeps the precompiles of BPO2, and Hegotá is not yet specified.
 -/
 
 public section
 
 namespace EthLib.Execution.Evm.Precompiles.Exports
 
-open EthLib.Exports (Result forkOfName)
+open EthLib.Exports (Result forkUpTo)
 
 open EthLib.Execution.Evm.Precompiles
 
@@ -30,7 +32,7 @@ No error of a precompile has that code. -/
 @[export eth_precompile_run]
 def runExport (fork : ByteArray) (address : UInt64) (data : ByteArray) (gas : UInt64) :
     Result ByteArray := do
-  let fork ← forkOfName fork
+  let fork ← forkUpTo .glamsterdam fork
   match run fork address.toNat data gas.toNat with
   | some result => result.mapError fun e => (e.code, reprStr e)
   | none => throw (0, s!"no precompile at address {address} at fork {fork.name}")
@@ -42,7 +44,7 @@ The price is a big-endian integer, since a long call data can price it above `2^
 An unknown fork, or an address with no precompile at the fork, has code 0. -/
 @[export eth_precompile_price]
 def priceExport (fork : ByteArray) (address : UInt64) (data : ByteArray) : Result ByteArray := do
-  let fork ← forkOfName fork
+  let fork ← forkUpTo .glamsterdam fork
   match price fork address.toNat data with
   | some cost => return Evm.Exports.bytesOfNat cost
   | none => throw (0, s!"no precompile at address {address} at fork {fork.name}")

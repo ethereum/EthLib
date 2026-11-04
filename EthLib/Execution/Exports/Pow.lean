@@ -17,6 +17,8 @@ A fork crosses it as its name, and an unknown name fails with code 0.
 A header crosses it as its RLP bytes, and a header that the decoder rejects fails with its RLP code.
 
 The proof-of-work check takes a fork before Paris, and fails with code 0 at a later one.
+
+Hegotá fails with code 0 too, since it is not yet specified.
 -/
 
 public section
@@ -24,7 +26,7 @@ public section
 namespace EthLib.Execution.Blocks.Exports
 
 open EthLib.Base (bytesToNat)
-open EthLib.Exports (Result forkOfName)
+open EthLib.Exports (Result forkUpTo)
 open EthLib.Execution.Evm.Exports (bytesOfNat)
 
 /-- The difficulty of a block at a named fork, from its number, its timestamp and its parent.
@@ -33,14 +35,14 @@ The parent's ommers count only as none or some. -/
 @[export eth_pow_block_difficulty]
 def blockDifficultyExport (fork number timestamp parentTimestamp parentDifficulty
     parentOmmers : ByteArray) : Result ByteArray := do
-  let fork ← forkOfName fork
+  let fork ← forkUpTo .glamsterdam fork
   let n (bytes : ByteArray) := bytesToNat bytes.toList
   pure (bytesOfNat (blockDifficulty fork (n number) (n timestamp) (n parentTimestamp)
     (n parentDifficulty) (n parentOmmers ≠ 0)))
 
 /-- The header at a named fork that RLP bytes hold. -/
 def headerOf (fork header : ByteArray) : Result (Σ fork : Base.Fork, Header fork) := do
-  let fork ← forkOfName fork
+  let fork ← forkUpTo .glamsterdam fork
   let header : Header fork ← (Serialization.Rlp.Codec.decode header).mapError
     fun e => (e.code, s!"header rejected: {reprStr e}")
   pure ⟨fork, header⟩
