@@ -81,7 +81,7 @@ Each directory has a `SHA256SUMS` that pins its cases, and CI checks the pins.
 The proofs are in `EthLib/Cryptography/Proofs/Bls/`.
 They cover the two fields and the group G1, which is what KZG commitments are built from.
 They say nothing yet about G2 or the pairing.
-Of the signature functions, they prove only that signing never fails.
+Of the signature functions, they prove that signing never fails, and that honest signatures verify under the pairing law.
 
 Most statements concern valid points.
 A G1 point is stored as a representative in coordinates, and it is *valid* when that representative is a nonsingular point of the curve.
@@ -123,7 +123,7 @@ The theorem is about the group element, not the stored coordinates: the represen
 
 - Nothing is proved about G2, the pairing, hash-to-curve or SHA-256.
 - The map to G1 of EIP-2537 has no theorem: neither its validity nor its landing in the subgroup is proved.
-- No theorem states what the signature functions return; in particular, none says that an honest aggregate signature verifies.
+- No theorem says which signatures verification rejects, beyond malformed input.
 - No security property, such as unforgeability, is proved.
 - `PairingLaws`, the law of the pairing check, is not proved: on representatives of `a_i * g_1` and `b_i * g_2`, the check passes exactly when `sum_i a_i * b_i = 0`.
   Theorems about the result of a pairing check take it as a hypothesis, and the KZG ceremony law `ConcreteBlsLaws` follows from it.
