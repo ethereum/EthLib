@@ -338,6 +338,10 @@ def squeeze (S : State) : Vector UInt8 DIGEST_LEN :=
   Vector.ofFn fun k =>
     (S[k.val / 8]'(by simp only [LANES, DIGEST_LEN] at *; omega) >>> UInt64.ofNat (8 * (k.val % 8))).toUInt8
 
+/-- Absorb blocks in order, one permutation each: FIPS 202 §4, Algorithm 8, step 6. -/
+def absorbBlocks (f : State → State) (S : State) (blocks : List (List UInt8)) : State :=
+  blocks.foldl (fun S block => f (absorbBlock S block)) S
+
 end Internal
 
 /-- The sponge of FIPS 202 §4, Algorithm 8, at rate 136 bytes and output 256 bits.
@@ -358,7 +362,7 @@ def sponge (f : State → State) (msg : ByteArray) : Vector UInt8 DIGEST_LEN :=
   -- Steps 2 and 3: the blocks, in order.
   let blocks := Internal.chunks RATE (blockCount msg.size) padded
   -- Steps 5 and 6: absorb the blocks in order, one permutation each.
-  let S := blocks.foldl (fun S block => f (Internal.absorbBlock S block)) State.zero
+  let S := Internal.absorbBlocks f State.zero blocks
   -- Steps 7 to 10: one block of output already holds the 32 digest bytes.
   Internal.squeeze S
 
@@ -367,5 +371,39 @@ def sponge (f : State → State) (msg : ByteArray) : Vector UInt8 DIGEST_LEN :=
 It is the sponge over Keccak-f[1600]. -/
 def keccak256 (msg : ByteArray) : Vector UInt8 DIGEST_LEN :=
   sponge keccakF msg
+
+/-! ## Incremental hashing
+
+A hasher absorbs a message in pieces, for a digest of all the pieces so far.
+
+It keeps the state after the whole blocks, and the bytes of the block not yet full.
+
+The digest pads those bytes and absorbs the last block, without changing the hasher. -/
+
+/-- A Keccak-256 hasher: the state after the whole blocks so far, and the bytes after them. -/
+structure Hasher where
+  /-- The state after every whole block so far. -/
+  state : State
+  /-- The bytes after the last whole block, fewer than the rate. -/
+  pending : List UInt8
+
+namespace Hasher
+
+/-- The hasher of the empty message. -/
+def empty : Hasher := ⟨State.zero, []⟩
+
+/-- Absorb more bytes: every block they complete goes through the permutation. -/
+def absorb (h : Hasher) (data : ByteArray) : Hasher :=
+  let bytes := h.pending ++ data.data.toList
+  let count := bytes.length / RATE
+  ⟨Internal.absorbBlocks keccakF h.state (Internal.chunks RATE count bytes),
+    bytes.drop (RATE * count)⟩
+
+/-- The Keccak-256 digest of every byte absorbed so far: pad the last block, absorb it, squeeze. -/
+def digest (h : Hasher) : Vector UInt8 DIGEST_LEN :=
+  let last := h.pending ++ (padding h.pending.length).data.toList
+  Internal.squeeze (Internal.absorbBlocks keccakF h.state [last])
+
+end Hasher
 
 end EthLib.Cryptography.Hash.Keccak
