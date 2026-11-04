@@ -100,6 +100,48 @@ theorem Item.eq_scalar_of_toScalarBelow {bits n : Nat} {item : Item}
       exact ⟨eq_scalar_of_toScalar item _ hs, by assumption⟩
     · cases h
 
+/-- A structure reads back exactly when its item is a list of its fields and they read back. -/
+theorem Item.fields_bind_eq_ok {β : Type} {count : Nat} {item : Item}
+    {f : List Item → Except RlpError β} {y : β} :
+    (item.fields count >>= f) = .ok y ↔
+      ∃ items, item = .list items ∧ items.length = count ∧ f items = .ok y := by
+  cases h : item.fields count with
+  | error e =>
+    simp only [bind, Except.bind, reduceCtorEq, false_iff, not_exists, not_and]
+    intro items hItem hLen
+    rw [Item.fields_eq_ok.mpr ⟨hItem, hLen⟩] at h
+    cases h
+  | ok items =>
+    obtain ⟨rfl, hLen⟩ := Item.fields_eq_ok.mp h
+    simp [bind, Except.bind, hLen]
+
+/-- A field of a structure holds a value exactly when its item holds that value. -/
+theorem Item.field_eq_ok {α : Type} [Codec α] {index : Nat} {item : Item} {x : α} :
+    Item.field index item = .ok x ↔ Codec.ofItem item = .ok x := by
+  unfold Item.field
+  cases (Codec.ofItem item : Except RlpError α) <;> simp [Except.mapError]
+
+/-- The fields of a structure, read back from their items. -/
+theorem Item.field_toItem {α : Type} [Codec α] [LawfulCodec α] (index : Nat) (x : α) :
+    Item.field index (Codec.toItem x) = .ok x :=
+  Item.field_eq_ok.mpr (LawfulCodec.ofItem_toItem x)
+
+/-- A field and the rest of a structure read back exactly when the field holds a value.
+
+The rest must also read back from that value, and the field is then the item of the value. -/
+theorem Item.field_bind_eq_ok {α β : Type} [Codec α] [LawfulCodec α] {index : Nat} {item : Item}
+    {f : α → Except RlpError β} {y : β} :
+    (Item.field index item >>= f) = .ok y ↔ ∃ x, item = Codec.toItem x ∧ f x = .ok y := by
+  constructor
+  · intro h
+    cases hx : (Item.field index item : Except RlpError α) with
+    | error e => simp [hx, bind, Except.bind] at h
+    | ok x =>
+      simp only [hx, bind, Except.bind] at h
+      exact ⟨x, (LawfulCodec.toItem_of_ofItem (Item.field_eq_ok.mp hx)).symm, h⟩
+  · rintro ⟨x, rfl, h⟩
+    simp [Item.field_toItem, bind, Except.bind, h]
+
 /-! ## Each codec is lawful -/
 
 instance : LawfulCodec Nat where
@@ -133,6 +175,20 @@ instance : LawfulCodec UInt64 where
       obtain ⟨rfl, hn⟩ := Item.eq_scalar_of_toScalarBelow hs
       subst h
       simp [Codec.toItem, UInt64.toNat_ofNat_of_lt' hn]
+
+instance : LawfulCodec UInt8 where
+  ofItem_toItem x := by
+    simp [Codec.ofItem, Codec.toItem, Item.toScalarBelow_scalar x.toNat_lt, bind, Except.bind,
+      pure, Except.pure]
+  toItem_of_ofItem {item x} h := by
+    simp only [Codec.ofItem, bind, Except.bind] at h
+    cases hs : item.toScalarBelow 8 with
+    | error e => simp [hs] at h
+    | ok n =>
+      simp only [hs, pure, Except.pure, Except.ok.injEq] at h
+      obtain ⟨rfl, hn⟩ := Item.eq_scalar_of_toScalarBelow hs
+      subst h
+      simp [Codec.toItem, UInt8.toNat_ofNat_of_lt' hn]
 
 instance : LawfulCodec Bool where
   ofItem_toItem b := by

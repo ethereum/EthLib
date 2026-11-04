@@ -36,6 +36,13 @@ instance : LawfulOrderOrd Fork where
   isLE_compare a b := LawfulOrderOrd.isLE_compare a.ctorIdx b.ctorIdx
   isGE_compare a b := LawfulOrderOrd.isGE_compare a.ctorIdx b.ctorIdx
 
+/-- Frontier is the first fork. -/
+theorem frontier_le (f : Fork) : frontier ≤ f := Nat.zero_le f.ctorIdx
+
+/-- Hegotá is the last fork. -/
+theorem le_hegota (f : Fork) : f ≤ hegota := by
+  cases f <;> decide
+
 /-! ## The comparison
 
 Core derives these laws from the three instances above. -/

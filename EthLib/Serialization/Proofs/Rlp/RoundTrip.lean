@@ -201,6 +201,23 @@ theorem encode_list_ok (items : List Item) (e : ByteArray) (h : encode (.list it
       simp [hJoin, hPre, bind, Except.bind, pure, Except.pure] at h
       exact ⟨payload, pre, by simp, hPre, h.symm⟩
 
+/-- The encoding of a list starts with a byte of at least `0xc0`.
+
+So it never starts like a byte string, whose first byte is below `0xc0`. -/
+theorem encode_list_head (items : List Item) (e : ByteArray) (h : encode (.list items) = .ok e) :
+    ∃ first rest, e.data.toList = first :: rest ∧ 0xc0 ≤ first := by
+  obtain ⟨payload, pre, -, hPre, rfl⟩ := encode_list_ok items e h
+  obtain ⟨first, lengthBytes, hList, -, hRead⟩ :=
+    lengthPrefix_readPrefix .list payload.size pre hPre
+  refine ⟨first, lengthBytes ++ payload.data.toList, by simp [hList], ?_⟩
+  -- Below `0xc0`, the prefix reads as the prefix of a byte string, not of a list.
+  have hList := hRead []
+  refine Decidable.byContradiction fun hLow => ?_
+  unfold readPrefix readPrefix.readLongLength at hList
+  simp only [UInt8.not_le] at hLow
+  repeat' split at hList
+  all_goals (try simp only at hList) <;> (repeat' split at hList) <;> simp at hList
+
 /-- What a successful encoding of a byte string is made of. -/
 theorem encodeBytes_ok (data e : ByteArray) (h : encodeBytes data = .ok e) :
     (isSingleLowByte data = true ∧ e = data) ∨

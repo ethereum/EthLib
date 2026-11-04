@@ -67,6 +67,10 @@ def Item.fields (count : Nat) (item : Item) : Except RlpError (List Item) := do
   let items ← item.toItems
   if items.length = count then .ok items else .error (.wrongFieldCount count items.length)
 
+/-- The value of field `index` of a structure, with the index in its error. -/
+def Item.field {α : Type} [Codec α] (index : Nat) (item : Item) : Except RlpError α :=
+  (Codec.ofItem item).mapError (.inField index)
+
 /-- The scalar that an item holds, if it is below `2 ^ bits`. -/
 def Item.toScalarBelow (bits : Nat) (item : Item) : Except RlpError Nat := do
   let n ← item.toScalar
@@ -86,6 +90,11 @@ instance : Codec U256 where
 instance : Codec UInt64 where
   toItem x := .scalar x.toNat
   ofItem item := do return UInt64.ofNat (← item.toScalarBelow 64)
+
+/-- A byte is a scalar below 2^8, so it has at most 1 byte. -/
+instance : Codec UInt8 where
+  toItem x := .scalar x.toNat
+  ofItem item := do return UInt8.ofNat (← item.toScalarBelow 8)
 
 /-- A boolean is the scalar 1 for true and 0 for false, so false is the empty byte string. -/
 instance : Codec Bool where
