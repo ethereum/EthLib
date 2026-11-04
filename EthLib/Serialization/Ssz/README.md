@@ -153,7 +153,8 @@ It requires [CommitmentSized](../Proofs/Ssz/Codec/BindingDomain.lean), that ever
 The proof recovers lengths, selectors, packed data, and nested values, and callers supply no assumption about tree alignment.
 
 Layouts are bound too.
-By [layout separation](../Proofs/Ssz/Codec/LayoutSeparation.lean), two legal progressive containers with different layouts and one root expose a SHA-256 collision between 64-byte inputs.
+By [layout separation](../Proofs/Ssz/Codec/LayoutSeparation.lean), two legal progressive containers with one root have one layout, or a search returns a SHA-256 collision.
+The search compares the 64-byte inputs of the last hash of the two roots, each a contents node followed by a layout word.
 By [layout words](../Proofs/Ssz/Codec/LengthBinding.lean), legal layouts of any lengths with equal mixed-in words are equal, so an absent field never shares a root with a zero value.
 
 ### Summaries
