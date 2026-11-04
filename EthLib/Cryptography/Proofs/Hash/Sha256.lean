@@ -9,7 +9,9 @@ SHA-256 agrees with FIPS 180-4 on every message shorter than 2^61 bytes.
 
 The file restates the standard as a model over 32-bit bit vectors.
 
-The model is independent of the executable code.
+The model shares only the 64 round constants with the executable code.
+
+A theorem below derives them from the cube roots of the first 64 primes.
 -/
 
 @[expose] public section
