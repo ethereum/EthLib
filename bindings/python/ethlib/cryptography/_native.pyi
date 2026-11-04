@@ -179,6 +179,10 @@ def ethash_dataset_item(cache: bytes, index: bytes) -> bytes:
     """The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3."""
     ...
 
+def ethash_hashimoto_light(dataset_size: bytes, cache: bytes, header_hash: bytes, nonce: bytes) -> bytes:
+    """The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache."""
+    ...
+
 def keccak_f1600(state: bytes) -> bytes:
     """Keccak-f[1600], FIPS 202 §3.4: Keccak-p[1600, 24], rounds 0 to 23 in order."""
     ...
@@ -409,6 +413,14 @@ def block_reencode(fork: str, block: bytes) -> bytes:
 
 def pow_block_difficulty(fork: bytes, number: bytes, timestamp: bytes, parent_timestamp: bytes, parent_difficulty: bytes, parent_ommers: bytes) -> bytes:
     """The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris."""
+    ...
+
+def pow_seal_hash(fork: bytes, header: bytes) -> bytes:
+    """The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce."""
+    ...
+
+def pow_check(fork: bytes, header: bytes) -> bool:
+    """Check the proof of work of a header, as section 4.3.4 of the Yellow Paper asks."""
     ...
 
 def block_transactions_root(fork: str, block: bytes) -> bytes:

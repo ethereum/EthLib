@@ -28,7 +28,19 @@ def block_difficulty(
     return int.from_bytes(result, "big")
 
 
+def seal_hash(fork: str, header: bytes) -> bytes:
+    """The Keccak-256 hash of a header without its mix digest and nonce."""
+    return _native.pow_seal_hash(fork.encode(), header)
+
+
+def check_proof_of_work(fork: str, header: bytes) -> bool:
+    """Check the proof of work of a header in RLP form, at a fork before Paris."""
+    return _native.pow_check(fork.encode(), header)
+
+
 __all__ = [
     "BlockError",
     "block_difficulty",
+    "check_proof_of_work",
+    "seal_hash",
 ]

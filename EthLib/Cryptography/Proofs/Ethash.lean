@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Ethash.Sizes
 public import EthLib.Cryptography.Proofs.Ethash.Cache
+public import EthLib.Cryptography.Proofs.Ethash.Hashimoto
 
 /-!
 # Proofs: Ethash

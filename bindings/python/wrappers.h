@@ -244,6 +244,7 @@ PyObject* py_ethash_dataset_size                          (PyObject* self, PyObj
 PyObject* py_ethash_seed                                  (PyObject* self, PyObject* args);
 PyObject* py_ethash_cache                                 (PyObject* self, PyObject* args);
 PyObject* py_ethash_dataset_item                          (PyObject* self, PyObject* args);
+PyObject* py_ethash_hashimoto_light                       (PyObject* self, PyObject* args);
 PyObject* py_keccak_f1600                                 (PyObject* self, PyObject* args);
 PyObject* py_trie_root                                    (PyObject* self, PyObject* args);
 PyObject* py_trie_verify_proof                            (PyObject* self, PyObject* args);
@@ -308,6 +309,8 @@ PyObject* py_reqresp_decode_response_chunk                (PyObject* self, PyObj
 PyObject* py_block_header_hash                            (PyObject* self, PyObject* args);
 PyObject* py_block_reencode                               (PyObject* self, PyObject* args);
 PyObject* py_pow_block_difficulty                         (PyObject* self, PyObject* args);
+PyObject* py_pow_seal_hash                                (PyObject* self, PyObject* args);
+PyObject* py_pow_check                                    (PyObject* self, PyObject* args);
 PyObject* py_block_transactions_root                      (PyObject* self, PyObject* args);
 PyObject* py_block_withdrawals_root                       (PyObject* self, PyObject* args);
 PyObject* py_block_deposit_requests                       (PyObject* self, PyObject* args);

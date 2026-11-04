@@ -14,6 +14,8 @@ A number crosses the boundary as its big-endian bytes.
 A cache crosses it as its items in order, 64 bytes each.
 
 A dataset item needs a cache of at least one item, and the export rejects any other with code 0.
+
+The proof-of-work function also rejects, with code 0, a header hash or a nonce of the wrong size.
 -/
 
 public section
@@ -68,5 +70,19 @@ def cacheExport (number : ByteArray) : ByteArray :=
 def datasetItemExport (cacheBytes index : ByteArray) : Result ByteArray := do
   let c ← cacheOfBytes cacheBytes
   pure (bytesOfWords (datasetItem c (numberOf index)))
+
+/-- The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache.
+
+The header hash must be 32 bytes and the nonce 8 bytes. -/
+@[export eth_ethash_hashimoto_light]
+def hashimotoLightExport (datasetSize cacheBytes headerHash nonce : ByteArray) :
+    Result ByteArray := do
+  let c ← cacheOfBytes cacheBytes
+  if headerHash.size ≠ 32 then
+    throw (0, s!"Ethash: a header hash is 32 bytes, got {headerHash.size}")
+  if nonce.size ≠ 8 then
+    throw (0, s!"Ethash: a nonce is 8 bytes, got {nonce.size}")
+  let out := hashimotoLight (numberOf datasetSize) c headerHash nonce
+  pure (out.mixDigest ++ out.result)
 
 end EthLib.Cryptography.Ethash.Exports

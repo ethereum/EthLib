@@ -1004,6 +1004,16 @@
    "docstring":
    "The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3.\n\nThe mix starts as the Keccak-512 digest of a cache item whose first word is XORed with the index.\n\nEach of 256 parents is a cache item that the index and the mix choose, and FNV folds it in.\n\nThe item is the Keccak-512 digest of the last mix.\n\nThe appendix reads the cache by its size in bytes, and the specification by its count of items.\n\nThe definition follows the specification.\n\nThe index is below `2^32` while the dataset has fewer than `2^32` items."},
   {"summary":
+   "The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache.",
+   "signature":
+   "(dataset_size: bytes, cache: bytes, header_hash: bytes, nonce: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.Ethash.Exports.hashimotoLightExport",
+   "method": "ethash_hashimoto_light",
+   "errors": [],
+   "error_class": "EthashError",
+   "docstring":
+   "The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache.\n\nThe header hash must be 32 bytes and the nonce 8 bytes."},
+  {"summary":
    "Keccak-f[1600], FIPS 202 §3.4: Keccak-p[1600, 24], rounds 0 to 23 in order.",
    "signature": "(state: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Hash.Keccak.keccakF",
@@ -1950,6 +1960,61 @@
    "error_class": "BlockError",
    "docstring":
    "The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris.\n\n```text\n    D(H) = max(D_min, P_d + ⌊P_d / 2048⌋ · factor + ε)\n```\n\n`P_d` is the parent's difficulty, and `ε` is the bomb.\n\nThe factor is the one of the time since the parent.\n\nFrom Paris on, [EIP-3675](https://eips.ethereum.org/EIPS/eip-3675#block-structure) sets it to 0.\n\nThe genesis block has no parent, and its difficulty is part of the chain's configuration."},
+  {"summary":
+   "The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce.",
+   "signature": "(fork: bytes, header: bytes) -> bytes",
+   "operation": "EthLib.Execution.Blocks.Exports.sealHashExport",
+   "method": "pow_seal_hash",
+   "errors":
+   [{"type": "EthLib.Serialization.Rlp.RlpError",
+     "codes":
+     [{"constructor": "payloadTooLong", "code": 1},
+      {"constructor": "inputTooShort", "code": 2},
+      {"constructor": "singleByteWithPrefix", "code": 3},
+      {"constructor": "longFormForShortLength", "code": 4},
+      {"constructor": "leadingZeroInLength", "code": 5},
+      {"constructor": "trailingBytes", "code": 6},
+      {"constructor": "leadingZeroInScalar", "code": 7},
+      {"constructor": "listAsScalar", "code": 8},
+      {"constructor": "listAsBytes", "code": 9},
+      {"constructor": "bytesAsList", "code": 10},
+      {"constructor": "wrongLength", "code": 11},
+      {"constructor": "scalarTooLarge", "code": 12},
+      {"constructor": "wrongFieldCount", "code": 13},
+      {"constructor": "inField", "code": 14}]}],
+   "error_class": "BlockError",
+   "docstring":
+   "The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce."},
+  {"summary":
+   "Check the proof of work of a header, as section 4.3.4 of the Yellow Paper asks.",
+   "signature": "(fork: bytes, header: bytes) -> bool",
+   "operation": "EthLib.Execution.Blocks.checkProofOfWork",
+   "method": "pow_check",
+   "errors":
+   [{"type": "EthLib.Serialization.Rlp.RlpError",
+     "codes":
+     [{"constructor": "payloadTooLong", "code": 1},
+      {"constructor": "inputTooShort", "code": 2},
+      {"constructor": "singleByteWithPrefix", "code": 3},
+      {"constructor": "longFormForShortLength", "code": 4},
+      {"constructor": "leadingZeroInLength", "code": 5},
+      {"constructor": "trailingBytes", "code": 6},
+      {"constructor": "leadingZeroInScalar", "code": 7},
+      {"constructor": "listAsScalar", "code": 8},
+      {"constructor": "listAsBytes", "code": 9},
+      {"constructor": "bytesAsList", "code": 10},
+      {"constructor": "wrongLength", "code": 11},
+      {"constructor": "scalarTooLarge", "code": 12},
+      {"constructor": "wrongFieldCount", "code": 13},
+      {"constructor": "inField", "code": 14}]},
+    {"type": "EthLib.Execution.Blocks.PowError",
+     "codes":
+     [{"constructor": "encoding", "code": 221},
+      {"constructor": "wrongMixDigest", "code": 222},
+      {"constructor": "resultAboveTarget", "code": 223}]}],
+   "error_class": "BlockError",
+   "docstring":
+   "Check the proof of work of a header, as section 4.3.4 of the Yellow Paper asks."},
   {"summary":
    "The transactions root of the transactions of a block, decoded at the fork.",
    "signature": "(fork: str, block: bytes) -> bytes",

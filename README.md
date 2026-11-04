@@ -22,7 +22,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Cryptography | [`Secp256r1`](EthLib/Cryptography/Secp256r1/) | the secp256r1 curve, also called P-256, and ECDSA verification |
 | Cryptography | [`AltBn128`](EthLib/Cryptography/AltBn128/) | the alt_bn128 curve of EIP-196 and EIP-197, also called BN254, and its pairing |
 | Cryptography | [`Aes`](EthLib/Cryptography/Aes/) | the AES block cipher for 128-bit and 256-bit keys, and the CTR and GCM modes |
-| Cryptography | [`Ethash`](EthLib/Cryptography/Ethash/) | the proof of work before Paris: its sizes, seed, cache and dataset items |
+| Cryptography | [`Ethash`](EthLib/Cryptography/Ethash/) | the proof of work before Paris: its sizes, seed, cache, dataset items and loop |
 | Cryptography | [`Bls`](EthLib/Cryptography/Bls/) | BLS12-381 and BLS signatures |
 | Cryptography | [`Kzg`](EthLib/Cryptography/Kzg/) | KZG commitments to blobs and cells |
 | Cryptography | [`Merkle`](EthLib/Cryptography/Merkle/) | the perfect binary Merkle tree that leanXMSS, leanSPHINCS, SSZ and the VRF share |
@@ -45,7 +45,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Execution | [`Precompiles`](EthLib/Execution/Evm/Precompiles/) | all 18 precompiles, from ECRECOVER to P256VERIFY, each run by address from the fork that adds it |
 | Execution | [`State`](EthLib/Execution/State/) | accounts, the state, the state and storage roots, and the writes of a block and a transaction with their rollback |
 | Execution | [`Transactions`](EthLib/Execution/Transactions/) | the five kinds of transaction, their bytes and hashes, the sender at each fork, and the intrinsic gas and validity of one transaction |
-| Execution | [`Blocks`](EthLib/Execution/Blocks/) | the header, withdrawals, logs, receipts and block of each fork, the logs bloom filter, the header hash and the difficulty before Paris |
+| Execution | [`Blocks`](EthLib/Execution/Blocks/) | the header, withdrawals, logs, receipts and block of each fork, the logs bloom filter, the header hash, and the difficulty and the proof of work before Paris |
 | Execution | [`Trie`](EthLib/Execution/Trie/) | the root of the Merkle Patricia Trie, plain and secured, its Merkle proofs, and the hex-prefix encoding of its paths |
 | Consensus | [`Consensus`](EthLib/Consensus/) | the configuration, presets and constants, slots and epochs, the fork of an epoch, signing domains, the swap-or-not shuffle and committees, containers with the execution payload, the custody of data columns, and models of Casper FFG and the LMD-GHOST fork choice |
 
