@@ -33,7 +33,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Networking | [`Encoding`](EthLib/Networking/Encoding/) | the protobuf varint of req/resp messages |
 | Networking | [`Enr`](EthLib/Networking/Enr/) | Ethereum Node Records of EIP-778, their text form, the "v4" identity scheme, node IDs and the consensus entries |
 | Networking | [`Snappy`](EthLib/Networking/Snappy/) | Snappy block decompression, a literal block encoder and the framing format |
-| Networking | [`Gossip`](EthLib/Networking/Gossip/) | the gossip message ID of Phase 0 and Altair |
+| Networking | [`Gossip`](EthLib/Networking/Gossip/) | topic strings, the message ID of Phase 0 and Altair, and the attestation subnets of a node |
 | Networking | [`Discv5`](EthLib/Networking/Discv5/) | the node distance, the "v4" handshake cryptography and the packets of discv5 |
 | Networking | [`ReqResp`](EthLib/Networking/ReqResp/) | the `ssz_snappy` encoding of requests and response chunks, with its size bounds |
 | Execution | [`Fees`](EthLib/Execution/Fees/) | the EIP-1559 base fee and the blob base fee |
@@ -41,6 +41,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Execution | [`Precompiles`](EthLib/Execution/Evm/Precompiles/) | all 18 precompiles of Bogota, from ECRECOVER to P256VERIFY, run by address from one table |
 | Execution | [`State`](EthLib/Execution/State/) | accounts, the state, the state and storage roots, and the writes of a block and a transaction with their rollback |
 | Execution | [`Trie`](EthLib/Execution/Trie/) | the root of the Merkle Patricia Trie, plain and secured, its Merkle proofs, and the hex-prefix encoding of its paths |
+| Consensus | [`Consensus`](EthLib/Consensus/) | the configuration, presets and constants, the execution payload, and models of Casper FFG and the LMD-GHOST fork choice |
 
 The theorems about a module live under `Proofs/` in its layer, and the C exports that the bindings call under `Exports/`.
 

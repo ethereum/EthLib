@@ -127,7 +127,11 @@ Take two finalized checkpoints whose blocks conflict.
 
 Then validators of `V` with at least one third of its stake are slashable.
 
-The validator set and the stakes are the same for every vote. -/
+The validator set and the stakes are the same for every vote.
+
+With zero total stake the conclusion holds for every set of votes.
+
+So the theorem has content only for positive stake. -/
 theorem accountable_safety {c₁ c₂ : Checkpoint β}
     (h₁ : Finalized V w genesis votes c₁) (h₂ : Finalized V w genesis votes c₂)
     (hc : Conflicting c₁.block c₂.block) : OneThirdSlashable V w votes := by

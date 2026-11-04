@@ -61,9 +61,11 @@ Before the risks, here is what is actually proved, primitive by primitive.
 The list covers the main theorems and is not yet complete.
 
 Most of these theorems are about correctness: an honest run gives the expected answer, or malformed input is rejected.
-Two state a security property.
+
+Four of them state a security property.
 The unforgeability of leanXMSS holds for EthLib's own definitions.
 The unforgeability of BLS signatures holds for a scheme that EthLib's signing and verification compute.
+The accountable safety and the plausible liveness of Casper FFG hold for an abstract model of votes.
 No theorem states unforgeability for leanSPHINCS, or binding for KZG.
 No theorem covers the code that runs, the C boundary, or timing.
 
@@ -352,6 +354,28 @@ It searches only a secured trie, and it is proved to return only collisions.
 Both theorems still assume that the keys of each trie are distinct, as the keys of a map are.
 No theorem bounds the probability of finding a collision.
 
+### Casper FFG
+
+Casper FFG finalizes checkpoints, each a block with an epoch, from the votes of validators.
+The model in `Consensus/Proofs/Models/Ffg/` follows Casper FFG §2 and Gasper §4.
+It fixes one validator set and one stake for each validator, for every vote.
+
+`accountable_safety` (`AccountableSafety.lean`) takes two finalized checkpoints whose blocks conflict.
+Then validators with at least one third of the stake broke a slashing condition.
+With a total stake of zero this holds for every set of votes, so the theorem says something only for positive stake.
+
+`plausible_liveness` (`PlausibleLiveness.lean`) takes honest validators with at least two thirds of the stake.
+The votes so far are finite, the total stake is positive, and no honest validator is slashable.
+Each honest vote comes from a justified source.
+
+Then there is a justified checkpoint with the following property.
+For every block whose chain contains its block, the honest validators can add votes that finalize that block.
+The block is finalized at an epoch above every justified epoch so far.
+The new votes come from justified sources, and no honest validator becomes slashable.
+
+A vote names the validator that signed it, so both theorems assume that no one forges a vote.
+No theorem links the model to the beacon chain, so neither theorem is yet about what a client runs.
+
 ### What cannot be proved yet
 
 Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate them, and their intended computational properties remain unproved.
@@ -404,13 +428,15 @@ No binding exposes AES.
 ### A4. Idealisations
 
 A security theorem rests on a model, such as a random oracle for a hash.
-EthLib has two such theorems, each with one idealisation:
+EthLib has four such theorems, and each rests on one idealisation:
 
 - leanXMSS: the hash `H`, Keccak-256, is a random oracle on byte strings.
   The theorem says nothing about an attack that uses the structure of Keccak.
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
   Nothing in EthLib proves that the hash behaves as such an oracle.
+- Casper FFG: a vote names its signer, so no one can forge a vote.
+  The theorems of accountable safety and plausible liveness say nothing about an attack on the signatures.
 
 ## Gap B: does the code that runs match the definitions?
 
