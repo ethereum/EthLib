@@ -3,7 +3,9 @@
 Each case of these four files sets keys one after another, starting from an empty trie, and gives the root.
 `trietest.json` and `trieanyorder.json` are for the plain trie, and the two `secureTrie` files for the secured trie.
 
-- Source: `TrieTests/` in [`ethereum/tests`](https://github.com/ethereum/tests) at commit `c67e485ff8b5be9abc8ad15345ec21aa22e290d9`.
+`hexencodetest.json` gives twelve paths of nibbles, each with its leaf flag and its hex-prefix encoding.
+
+- Source: `TrieTests/` and `BasicTests/hexencodetest.json` in [`ethereum/tests`](https://github.com/ethereum/tests) at commit `c67e485ff8b5be9abc8ad15345ec21aa22e290d9`.
 - Authors: the Ethereum Foundation.
 - Licence: the MIT License, under the notice below.
 

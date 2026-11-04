@@ -2,13 +2,14 @@ module
 
 public import EthLib.Base.Exports
 public import EthLib.Cryptography.Hash.Keccak
+public import EthLib.Execution.Trie.HexPrefix
 public import EthLib.Execution.Trie.Proof
 public import EthLib.Serialization.Rlp.Codec
 
 /-!
 # Exports: the Merkle Patricia trie
 
-The C exports of the trie root and of proof verification, for the Python bindings.
+The C exports of the trie root, of proof verification and of the hex-prefix encoding.
 
 Both hash with Keccak-256.
 
@@ -75,5 +76,15 @@ def verifyProofExport (root : ByteArray) (secured : UInt8) (key proof : ByteArra
     | .error e => throw (e.code, s!"proof does not verify: {repr e}")
   else
     throw (0, s!"bad root size: {root.size}, expected 32")
+
+/-- The hex-prefix encoding of a path, with one nibble in each input byte.
+
+A byte of 16 or more is not a nibble, and fails with code 0. -/
+@[export eth_trie_hex_prefix]
+def hexPrefixExport (nibbles : ByteArray) (isLeaf : UInt8) : Result ByteArray := do
+  let path ← nibbles.toList.mapM fun b =>
+    if h : b.toNat < 16 then pure (⟨b.toNat, h⟩ : Nibble)
+    else throw (0, s!"{b} is not a nibble")
+  return nibbleListToCompact path (isLeaf != 0)
 
 end EthLib.Execution.Trie.Exports

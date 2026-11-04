@@ -533,6 +533,7 @@ static PyMethodDef methods[] = {
   {"keccak_f1600", py_keccak_f1600, METH_VARARGS, NULL},
   {"trie_root", py_trie_root, METH_VARARGS, NULL},
   {"trie_verify_proof", py_trie_verify_proof, METH_VARARGS, NULL},
+  {"trie_hex_prefix", py_trie_hex_prefix, METH_VARARGS, NULL},
   {"vrf_verify", py_vrf_verify, METH_VARARGS, NULL},
   {"vrf_secret", py_vrf_secret, METH_VARARGS, NULL},
   {"vrf_evaluate", py_vrf_evaluate, METH_VARARGS, NULL},

@@ -19,6 +19,12 @@ eth_trie_verify_proof(
   lean_object* proof
 );
 
+extern lean_object*
+eth_trie_hex_prefix(
+  lean_object* nibbles,
+  uint8_t is_leaf
+);
+
 /* ---- Local helpers ---------------------------------------------------- */
 
 /* A Lean ByteArray copy of a Python `bytes`, or NULL with a TypeError set. */
@@ -73,4 +79,18 @@ py_trie_verify_proof(
     Py_RETURN_NONE;
   }
   return value;
+}
+
+PyObject*
+py_trie_hex_prefix(
+  PyObject* self,
+  PyObject* args
+) {
+  /* The path, one nibble in each byte, and whether it ends at a leaf. */
+  PyObject* nibbles_obj;
+  int is_leaf;
+  if (!PyArg_ParseTuple(args, "Op", &nibbles_obj, &is_leaf)) return NULL;
+  lean_object* nibbles = bytes_arg(nibbles_obj, "nibbles");
+  if (!nibbles) return NULL;
+  return except_into_pybytes(eth_trie_hex_prefix(nibbles, (uint8_t) is_leaf), TRIE_ERROR);
 }
