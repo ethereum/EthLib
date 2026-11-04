@@ -65,6 +65,9 @@ def test_out_of_gas() -> None:
     data, _ = call_data("verify_kzg_proof_case_correct_proof_0_0")
     with pytest.raises(ValueError, match="outOfGas"):
         run(0x0A, data, 49999)
+    # The gas is checked before the call data is decoded.
+    with pytest.raises(ValueError, match="outOfGas"):
+        run(0x0A, bytes(192), 49999)
 
 
 @pytest.mark.parametrize("size", [0, 191, 193])

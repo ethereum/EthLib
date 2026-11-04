@@ -89,17 +89,4 @@ theorem kzgCommitmentToVersionedHash_shape (commitment : ByteArray) :
     rfl
   · simp [kzgCommitmentToVersionedHash]
 
-/-! ## Known answers
-
-Each length and price is worked out by hand. -/
-
-/-- 191 bytes are one short: the call fails before the gas is charged. -/
-theorem pointEvaluation_191 : pointEvaluation ⟨.replicate 191 0⟩ 50000 = .error (.invalidInputLength 191) :=
-  pointEvaluation_invalidInputLength (by simp [ByteArray.size, INPUT_BYTES]) 50000
-
-/-- 192 bytes with 49999 gas run out of gas. -/
-theorem pointEvaluation_49999 :
-    pointEvaluation ⟨.replicate 192 0⟩ 49999 = .error (.outOfGas 50000 49999) :=
-  pointEvaluation_outOfGas (by simp [ByteArray.size, INPUT_BYTES]) (by decide)
-
 end EthLib.Execution.Evm.Precompiles.PointEvaluation
