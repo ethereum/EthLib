@@ -15,13 +15,17 @@ A range of size 0 never grows memory, and nothing is paid when no range grows it
 A gas budget `g` bounds the words of memory by `w * w ≤ 512 * g`.
 
 A call passes on at most the gas it has, and at least 63 64ths of it.
+
+From Berlin, an access to an account or a slot pays the cold or the warm price.
+
+The token prices of EIP-7623 and the refund of EIP-3529 agree with the prices they derive from.
 -/
 
 @[expose] public section
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (U256)
+open EthLib.Base (Fork U256)
 open GasCosts
 
 /-- The price of memory in closed form, for `w` words. -/
@@ -118,6 +122,47 @@ theorem initCodeCost_eq (initCodeLength : Nat) :
   have := ceil32_mod initCodeLength
   unfold initCodeCost wordCount WORD_BYTES CODE_INIT_PER_WORD
   omega
+
+/-- From Berlin, SLOAD pays the price of a cold or a warm access to the slot. -/
+theorem sloadCost_of_berlin_le {fork : Fork} (h : fork ≥ .berlin) (cold : Bool) :
+    sloadCost fork cold = if cold then COLD_STORAGE_ACCESS else WARM_ACCESS := by
+  simp [sloadCost, h]
+
+/-- From Berlin, BALANCE pays the price of a cold or a warm access to the account. -/
+theorem balanceCost_of_berlin_le {fork : Fork} (h : fork ≥ .berlin) (cold : Bool) :
+    balanceCost fork cold = accountAccessCost cold := by
+  simp [balanceCost, h]
+
+/-- From Berlin, EXTCODESIZE and EXTCODECOPY pay the price of a cold or a warm access. -/
+theorem externalBaseCost_of_berlin_le {fork : Fork} (h : fork ≥ .berlin) (cold : Bool) :
+    externalBaseCost fork cold = accountAccessCost cold := by
+  simp [externalBaseCost, h]
+
+/-- From Berlin, EXTCODEHASH pays the price of a cold or a warm access to the account. -/
+theorem extcodehashCost_of_berlin_le {fork : Fork} (h : fork ≥ .berlin) (cold : Bool) :
+    extcodehashCost fork cold = accountAccessCost cold := by
+  simp [extcodehashCost, h]
+
+/-- From Berlin, the calls pay the price of a cold or a warm access to the account. -/
+theorem callBaseCost_of_berlin_le {fork : Fork} (h : fork ≥ .berlin) (cold : Bool) :
+    callBaseCost fork cold = accountAccessCost cold := by
+  simp [callBaseCost, h]
+
+/-- From Istanbul, a byte of call data costs the standard price of its tokens.
+
+A zero byte is one token, and a nonzero byte is four, so EIP-7623 keeps the price of EIP-2028. -/
+theorem txData_of_istanbul_le {fork : Fork} (h : fork ≥ .istanbul) :
+    TX_DATA_PER_ZERO = TX_DATA_TOKEN_STANDARD ∧
+      (gasSchedule fork).TX_DATA_PER_NON_ZERO = 4 * TX_DATA_TOKEN_STANDARD := by
+  simp [gasSchedule, h, TX_DATA_PER_ZERO, TX_DATA_TOKEN_STANDARD]
+
+/-- From London, the refund to clear a slot is the reset price plus the price of a listed key.
+
+EIP-3529 defines it so, with the reset price of EIP-2929, which excludes the cold access. -/
+theorem refundStorageClear_of_london_le {fork : Fork} (h : fork ≥ .london) :
+    (gasSchedule fork).REFUND_STORAGE_CLEAR =
+      COLD_STORAGE_WRITE - COLD_STORAGE_ACCESS + TX_ACCESS_LIST_STORAGE_KEY := by
+  simp [gasSchedule, h, COLD_STORAGE_WRITE, COLD_STORAGE_ACCESS, TX_ACCESS_LIST_STORAGE_KEY]
 
 /-- 32 bytes of memory cost 3 gas. -/
 example : memoryGasCost 32 = 3 := by decide
