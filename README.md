@@ -17,7 +17,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Layer | Module | What it specifies |
 | --- | --- | --- |
 | Base | [`U256`](EthLib/Base/U256.lean) | the 256-bit word of the EVM, and its two's complement reading |
-| Cryptography | [`Hash`](EthLib/Cryptography/Hash/) | Keccak-256, SHA-256, RIPEMD-160, the BLAKE2b compression function, CRC-32C |
+| Cryptography | [`Hash`](EthLib/Cryptography/Hash/) | Keccak-256, SHA-256, RIPEMD-160, the BLAKE2b compression function, CRC-32C, HMAC-SHA-256, HKDF, the Concatenation KDF |
 | Cryptography | [`Secp256k1`](EthLib/Cryptography/Secp256k1/) | the secp256k1 curve, ECDSA, public key recovery, addresses |
 | Cryptography | [`Secp256r1`](EthLib/Cryptography/Secp256r1/) | the secp256r1 curve, also called P-256, and ECDSA verification |
 | Cryptography | [`AltBn128`](EthLib/Cryptography/AltBn128/) | the alt_bn128 curve of EIP-196 and EIP-197, also called BN254, and its pairing |
