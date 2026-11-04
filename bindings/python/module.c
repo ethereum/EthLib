@@ -63,6 +63,7 @@ PyObject* KECCAK_ERROR;
 PyObject* REQRESP_ERROR;
 PyObject* CONSENSUS_ERROR;
 PyObject* HKDF_ERROR;
+PyObject* AES_ERROR;
 PyObject* CONCAT_KDF_ERROR;
 PyObject* BLOCK_ERROR;
 PyObject* RLP_ERROR;
@@ -535,6 +536,11 @@ static PyMethodDef methods[] = {
   {"vrf_secret", py_vrf_secret, METH_VARARGS, NULL},
   {"vrf_evaluate", py_vrf_evaluate, METH_VARARGS, NULL},
   {"crc32c", py_crc32c, METH_VARARGS, NULL},
+  {"aes_encrypt_block", py_aes_encrypt_block, METH_VARARGS, NULL},
+  {"aes_decrypt_block", py_aes_decrypt_block, METH_VARARGS, NULL},
+  {"aes_ctr", py_aes_ctr, METH_VARARGS, NULL},
+  {"aes_gcm_encrypt", py_aes_gcm_encrypt, METH_VARARGS, NULL},
+  {"aes_gcm_decrypt", py_aes_gcm_decrypt, METH_VARARGS, NULL},
   {"hmac_sha256", py_hmac_sha256, METH_VARARGS, NULL},
   {"hkdf_sha256", py_hkdf_sha256, METH_VARARGS, NULL},
   {"concat_kdf_sha256", py_concat_kdf_sha256, METH_VARARGS, NULL},
@@ -649,6 +655,7 @@ PyInit__native(void) {
     REQRESP_ERROR = PyObject_GetAttrString(errors, "ReqRespError");
     CONSENSUS_ERROR = PyObject_GetAttrString(errors, "ConsensusError");
     HKDF_ERROR = PyObject_GetAttrString(errors, "HkdfError");
+    AES_ERROR = PyObject_GetAttrString(errors, "AesError");
     CONCAT_KDF_ERROR = PyObject_GetAttrString(errors, "ConcatKdfError");
     BLOCK_ERROR = PyObject_GetAttrString(errors, "BlockError");
     RLP_ERROR = PyObject_GetAttrString(errors, "RlpError");

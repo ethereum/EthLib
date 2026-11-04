@@ -89,6 +89,10 @@ class ConcatKdfError(EthLibError, ValueError):
     """The Concatenation KDF rejected its input."""
 
 
+class AesError(EthLibError, ValueError):
+    """AES rejected a key or a block size (code 0), or GCM rejected its input (codes 1-6)."""
+
+
 class BlockError(EthLibError, ValueError):
     """A header, block or receipt was rejected: RLP 1-14, receipts 101-103, checks 201-214."""
 
@@ -172,6 +176,7 @@ __all__ = [
     "ConsensusError",
     "HkdfError",
     "ConcatKdfError",
+    "AesError",
     "BlockError",
     "RlpError",
     "SnappyError",

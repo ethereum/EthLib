@@ -200,6 +200,7 @@ def test_unknown_names_have_code_zero() -> None:
         (errors.ConsensusError, (ValueError,)),
         (errors.HkdfError, (ValueError,)),
         (errors.ConcatKdfError, (ValueError,)),
+        (errors.AesError, (ValueError,)),
         (errors.BlockError, (ValueError,)),
         (errors.RlpError, (ValueError,)),
         (errors.SnappyError, (ValueError,)),
