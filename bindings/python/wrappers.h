@@ -289,6 +289,7 @@ PyObject* py_consensus_config                             (PyObject* self, PyObj
 PyObject* py_consensus_parameters                         (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_custody_groups                 (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_columns_for_custody_group  (PyObject* self, PyObject* args);
+PyObject* py_consensus_ssz_static                         (PyObject* self, PyObject* args);
 
 PyObject* py_reqresp_max_compressed_len                   (PyObject* self, PyObject* args);
 PyObject* py_reqresp_decode_payload                       (PyObject* self, PyObject* args);

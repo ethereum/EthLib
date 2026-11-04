@@ -599,6 +599,7 @@ static PyMethodDef methods[] = {
   {"consensus_get_custody_groups", py_consensus_get_custody_groups, METH_VARARGS, DOC_consensus_get_custody_groups},
   {"consensus_compute_columns_for_custody_group", py_consensus_compute_columns_for_custody_group,
    METH_VARARGS, DOC_consensus_compute_columns_for_custody_group},
+  {"consensus_ssz_static", py_consensus_ssz_static, METH_VARARGS, DOC_consensus_ssz_static},
   {"reqresp_max_compressed_len", py_reqresp_max_compressed_len, METH_VARARGS, DOC_reqresp_max_compressed_len},
   {"reqresp_decode_payload", py_reqresp_decode_payload, METH_VARARGS, DOC_reqresp_decode_payload},
   {"reqresp_decode_response_chunk", py_reqresp_decode_response_chunk, METH_VARARGS, DOC_reqresp_decode_response_chunk},

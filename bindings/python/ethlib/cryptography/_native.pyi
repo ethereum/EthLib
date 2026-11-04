@@ -343,6 +343,10 @@ def consensus_compute_columns_for_custody_group(name: str, custody_group: int) -
     """The columns of a custody group."""
     ...
 
+def consensus_ssz_static(name: str, fork: str, type: str, data: bytes) -> bytes:
+    """The root of the value that the bytes encode, then the bytes of that value."""
+    ...
+
 def reqresp_max_compressed_len(n: int) -> int:
     """The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`."""
     ...

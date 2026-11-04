@@ -1,4 +1,4 @@
-"""The consensus layer: its presets, configurations and parameters, and the custody of columns."""
+"""The consensus layer: its presets, configurations, parameters, containers and custody."""
 
 import json
 from typing import Any
@@ -54,6 +54,12 @@ def compute_columns_for_custody_group(custody_group: int, name: str = "mainnet")
     return _value(json.loads(columns))
 
 
+def ssz_static(name: str, fork: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
+    """The root of the beacon container that SSZ bytes encode, and its bytes encoded again."""
+    out = _native.consensus_ssz_static(name, fork, type_name, data)
+    return out[:32], out[32:]
+
+
 __all__ = [
     "preset",
     "config",
@@ -61,4 +67,5 @@ __all__ = [
     "ConsensusError",
     "get_custody_groups",
     "compute_columns_for_custody_group",
+    "ssz_static",
 ]

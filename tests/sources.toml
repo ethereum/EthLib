@@ -14,7 +14,8 @@
 commit = "aa16bb4c156184e9548a997d53efaf2a228a6304"
 release = "v1.7.0-beta.4"
 directories = [
-  "tests/consensus/networking", "tests/consensus/parameters", "tests/cryptography/bls",
+  "tests/consensus/networking", "tests/consensus/parameters", "tests/consensus/ssz_static",
+  "tests/cryptography/bls",
 ]
 
 [repositories."ethereum/c-kzg-4844"]
