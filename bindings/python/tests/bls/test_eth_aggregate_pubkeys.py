@@ -20,7 +20,7 @@ def _emit_valid(case: str, pubkeys: list[bytes]) -> None:
 
 
 def _emit_invalid(case: str, pubkeys: list[bytes]) -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(bls.BlsError):
         bls.eth_aggregate_pubkeys(pubkeys)
     write_case("bls", HANDLER, case, {
         "input":  hex_list(pubkeys),

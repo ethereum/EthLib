@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Exports
 public import EthLib.Cryptography.Bls.Constants
 public import EthLib.Cryptography.Bls.Signatures
 public import EthLib.Cryptography.Bls.KeyGen
@@ -10,24 +11,24 @@ public import EthLib.Cryptography.Bls.Errors
 
 C-ABI exports for the BLS spec functions, callable from the Python C extension.
 
-Same conventions as the KZG exports: inputs are `ByteArray` or `Array ByteArray`, and booleans come back as `UInt8`.
+Inputs are `ByteArray` or `Array ByteArray`, and a boolean comes back as `UInt8`.
+
+An operation returns its value, or the code and the message of its error.
 -/
 
 public section
 
 namespace EthLib.Cryptography.Bls.Exports
 
+open EthLib.Exports (Result)
+
 open EthLib.Cryptography.Bls.Constants
 open EthLib.Cryptography.Bls
 open EthLib.Cryptography.Bls.Signatures
 
-/-- Run a fallible BLS computation down to `IO`.
-
-A `BlsError` becomes the `IO.userError` that the C extension surfaces to callers. -/
-def runBls {α : Type} (act : Except BlsError α) : IO α :=
-  match act with
-  | .ok a    => pure a
-  | .error e => throw (IO.userError e.message)
+/-- Run a fallible BLS computation, with its error as a code and a message. -/
+def runBls {α : Type} (act : Except BlsError α) : Result α :=
+  act.mapError fun e => (e.code, e.message)
 
 /-! ## Sizes
 
@@ -47,13 +48,13 @@ def constBytesPerSignature (_ : Unit) : UInt64 :=
 
 @[export eth_bls_aggregate_pubkeys]
 def ethAggregatePubkeysExport
-    (pubkeys : Array ByteArray) : IO ByteArray :=
+    (pubkeys : Array ByteArray) : Result ByteArray :=
   runBls (ethAggregatePubkeys pubkeys)
 
 @[export eth_bls_fast_aggregate_verify]
 def ethFastAggregateVerifyExport
     (pubkeys : Array ByteArray) (msg : ByteArray) (sig : ByteArray)
-    : IO UInt8 := do
+    : Result UInt8 := do
   return if ethFastAggregateVerify pubkeys msg sig then 1 else 0
 
 /-! ## Draft operations
@@ -67,42 +68,42 @@ def ofBool (b : Bool) : UInt8 := if b then 1 else 0
 
 /-- A secret key from input keying material and key information, as 32 big-endian bytes. -/
 @[export eth_bls_key_gen]
-def keyGenExport (ikm keyInfo : ByteArray) : IO ByteArray := do
+def keyGenExport (ikm keyInfo : ByteArray) : Result ByteArray := do
   let sk ← runBls (keyGen ikm keyInfo)
   return Fr.toBytesBE sk.val
 
 @[export eth_bls_sign]
-def signExport (sk msg : ByteArray) : IO ByteArray := do
+def signExport (sk msg : ByteArray) : Result ByteArray := do
   let sk ← runBls (SecretKey.fromBytes sk)
   let sig ← runBls (sign sk msg)
   return ⟨sig.toArray⟩
 
 @[export eth_bls_verify]
-def verifyExport (pk msg sig : ByteArray) : IO UInt8 :=
+def verifyExport (pk msg sig : ByteArray) : Result UInt8 :=
   return ofBool (verify pk msg sig)
 
 @[export eth_bls_aggregate]
-def aggregateExport (sigs : Array ByteArray) : IO ByteArray := do
+def aggregateExport (sigs : Array ByteArray) : Result ByteArray := do
   let sig ← runBls (aggregate sigs)
   return ⟨sig.toArray⟩
 
 @[export eth_bls_aggregate_verify]
-def aggregateVerifyExport (pks msgs : Array ByteArray) (sig : ByteArray) : IO UInt8 :=
+def aggregateVerifyExport (pks msgs : Array ByteArray) (sig : ByteArray) : Result UInt8 :=
   return ofBool (aggregateVerify pks msgs sig)
 
 /-- The draft's `FastAggregateVerify`, without the Ethereum rule for an empty key list. -/
 @[export eth_bls_fast_aggregate_verify_core]
-def fastAggregateVerifyExport (pks : Array ByteArray) (msg sig : ByteArray) : IO UInt8 :=
+def fastAggregateVerifyExport (pks : Array ByteArray) (msg sig : ByteArray) : Result UInt8 :=
   return ofBool (fastAggregateVerify pks msg sig)
 
 @[export eth_bls_pop_prove]
-def popProveExport (sk : ByteArray) : IO ByteArray := do
+def popProveExport (sk : ByteArray) : Result ByteArray := do
   let sk ← runBls (SecretKey.fromBytes sk)
   let proof ← runBls (popProve sk)
   return ⟨proof.toArray⟩
 
 @[export eth_bls_pop_verify]
-def popVerifyExport (pk proof : ByteArray) : IO UInt8 :=
+def popVerifyExport (pk proof : ByteArray) : Result UInt8 :=
   return ofBool (popVerify pk proof)
 
 /-! ## Hash to curve
@@ -111,14 +112,14 @@ These exports let a client check the hash to `G2` against RFC 9380. -/
 
 /-- The uniform bytes of RFC 9380 §5.3.1. -/
 @[export eth_bls_expand_message_xmd]
-def expandMessageXmdExport (msg dst : ByteArray) (len : UInt64) : IO ByteArray :=
+def expandMessageXmdExport (msg dst : ByteArray) (len : UInt64) : Result ByteArray :=
   runBls (HashToCurve.expandMessageXmd msg dst len.toNat)
 
 /-- The hash of a message to `G2`, as the affine `x.c0 ‖ x.c1 ‖ y.c0 ‖ y.c1`, 48 bytes each.
 
 The point at infinity has no affine form, so it is an error. -/
 @[export eth_bls_hash_to_g2]
-def hashToG2Export (msg dst : ByteArray) : IO ByteArray := do
+def hashToG2Export (msg dst : ByteArray) : Result ByteArray := do
   let p ← runBls (HashToCurve.hashToG2 msg dst)
   if p.isInfinity then runBls (.error .pointAtInfinity)
   let (x, y) := p.toAffine

@@ -10,6 +10,7 @@ public import EthLib.Execution.Evm.Precompiles.Table
 - A call that succeeds had at least its price in gas.
 - A call with less gas than its price fails.
 - Gas above the price changes nothing, so a call that succeeds uses exactly its price.
+- Each precompile has its own error code, and no code is 0.
 -/
 
 @[expose] public section
@@ -70,5 +71,18 @@ theorem run_ok_price {address : Nat} {data : ByteArray} {gas : Nat} {out : ByteA
   -- Less gas than the price would make the call fail.
   obtain ⟨e, he⟩ := run_outOfGas hcost short
   simp [hrun] at he
+
+/-! ## Error codes -/
+
+/-- Two errors with one code come from one constructor. -/
+theorem PrecompileError.code_injective (e₁ e₂ : PrecompileError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [PrecompileError.code] at h; exact absurd h (by decide))
+
+/-- No error has code 0, which a caller can keep for an address with no precompile. -/
+theorem PrecompileError.code_ne_zero (e : PrecompileError) : e.code ≠ 0 := by
+  cases e <;> simp only [PrecompileError.code] <;> decide
 
 end EthLib.Execution.Evm.Precompiles

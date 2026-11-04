@@ -58,6 +58,18 @@ inductive EciesError where
   | tagMismatch
 deriving DecidableEq, Repr
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def EciesError.code : EciesError → UInt32
+  | .tooShort _ => 1
+  | .invalidEphemeralKey _ => 2
+  | .keyAgreement _ => 3
+  | .keyDerivation _ => 4
+  | .tagMismatch => 5
+
 /--
 The keys `k_E || k_M = KDF(S, 32)` of the shared secret `S`.
 

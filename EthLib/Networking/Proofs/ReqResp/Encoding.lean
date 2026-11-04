@@ -14,6 +14,8 @@ A payload that decodes has its declared length, within both bounds.
 More compressed bytes than the bound for the declared length reject the payload.
 
 The literal encoder writes payloads and response chunks that decode back.
+
+Two errors with one code come from one constructor, and no error has code 0.
 -/
 
 @[expose] public section
@@ -275,5 +277,18 @@ theorem decodeResponseChunk_encodeResponseChunkLiteral {contextBytes : Nat}
     | success => contradiction
     | _ =>
       simp [decodePayload_encodePayloadLiteral hp ht, bind, Except.bind, pure, Except.pure]
+
+/-! ## Error codes -/
+
+/-- Two errors with one code come from one constructor. -/
+theorem code_injective (e₁ e₂ : ReqRespError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [ReqRespError.code] at h; exact absurd h (by decide))
+
+/-- No error has code 0, which the export keeps for an unknown fork name. -/
+theorem code_ne_zero (e : ReqRespError) : e.code ≠ 0 := by
+  cases e <;> simp only [ReqRespError.code] <;> decide
 
 end EthLib.Networking.Proofs.ReqResp.Encoding

@@ -2,6 +2,8 @@
 
 from typing import NamedTuple
 
+from ...errors import TransactionError
+
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
 from ...cryptography import _native
@@ -40,4 +42,12 @@ def check(fork: str, chain_id: int, tx: bytes) -> Checked:
     return Checked(raw[:20], int.from_bytes(raw[20:28], "big"))
 
 
-__all__ = ["Checked", "check", "intrinsic_gas", "recover_sender", "tx_hash", "tx_type"]
+__all__ = [
+    "Checked",
+    "check",
+    "intrinsic_gas",
+    "recover_sender",
+    "tx_hash",
+    "tx_type",
+    "TransactionError",
+]

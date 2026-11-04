@@ -53,6 +53,25 @@ inductive PrecompileError where
   | p256Verify (e : P256Verify.P256VerifyError)
   deriving Repr, DecidableEq
 
+/-- The stable code of an error: one per precompile, for the C exports.
+
+The code names the precompile that failed, and the message carries its error.
+
+No code is 0, so a caller can keep 0 for an address with no precompile.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def PrecompileError.code : PrecompileError → UInt32
+  | .ecrecover _ => 1
+  | .sha256 _ => 2
+  | .ripemd160 _ => 3
+  | .identity _ => 4
+  | .modexp _ => 5
+  | .altBn128 _ => 6
+  | .blake2f _ => 7
+  | .pointEvaluation _ => 8
+  | .bls12381 _ => 9
+  | .p256Verify _ => 10
+
 /-- The addresses of the 18 precompiles, in increasing order. -/
 def ADDRESSES : List Nat :=
   [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x100]

@@ -57,5 +57,5 @@ py_keccak_f1600(
   if (!state) return NULL;
   /* The export takes ownership of the copy, and returns the permuted state. */
   lean_object* res = eth_keccak_f1600(mk_bytearray(state, KECCAK_STATE_SIZE));
-  return run_io_into_pybytes(res, "keccak_f1600");
+  return except_into_pybytes(res, KECCAK_ERROR);
 }

@@ -1,5 +1,7 @@
 """Block headers, blocks and receipts of the execution layer, at each fork."""
 
+from ...errors import BlockError
+
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
 from ...cryptography import _native
@@ -25,4 +27,5 @@ def receipt_logs_bloom(fork: str, receipt: bytes) -> bytes:
     return _native.receipt_logs_bloom(fork, receipt)
 
 
-__all__ = ["header_hash", "reencode", "receipt_reencode", "receipt_logs_bloom"]
+__all__ = ["header_hash", "reencode", "receipt_reencode", "receipt_logs_bloom",
+           "BlockError"]

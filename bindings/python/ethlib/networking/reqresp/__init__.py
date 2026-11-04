@@ -6,10 +6,13 @@
 Each function takes the whole message.
 A fork is named as on the timeline of EthLib, such as "bellatrix".
 The payload cap depends on the fork: 1 MiB before Bellatrix and 10 MiB from Bellatrix on.
-A message that the decoder rejects raises ValueError.
+A message that the decoder rejects raises ReqRespError, a ValueError with a code.
+An unknown fork name raises ReqRespError with code 0.
 """
 
 from typing import NamedTuple
+
+from ...errors import ReqRespError
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -55,6 +58,7 @@ def decode_response_chunk(
 
 
 __all__ = [
+    "ReqRespError",
     "MAX_ERROR_MESSAGE_SIZE",
     "ResponseChunk",
     "max_compressed_len",

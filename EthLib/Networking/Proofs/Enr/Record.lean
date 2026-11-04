@@ -16,6 +16,8 @@ Every record it accepts has the key `id`, and it rejects a record without it.
 It undoes the encoder on every record that fits, has increasing keys and has the key `id`.
 
 The same holds for the text form.
+
+Two errors with one code come from one constructor.
 -/
 
 @[expose] public section
@@ -187,5 +189,14 @@ theorem fromText_toText (r : Enr) (text : String) (bytes : ByteArray) (he : r.en
   simp only [Base64.encode, String.toList_ofList] at hlist
   simp only [Base64.encode, String.toList_ofList, hlist, Except.mapError, bind, Except.bind,
     hdec, decode_encode r bytes he hs hk hid]
+
+/-! ## Error codes -/
+
+/-- Two errors with one code come from one constructor. -/
+theorem EnrError.code_injective (e₁ e₂ : EnrError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [EnrError.code] at h; exact absurd h (by decide))
 
 end EthLib.Networking.Enr

@@ -47,7 +47,7 @@ py_trie_root(
   if (!PyArg_ParseTuple(args, "pO", &secured, &pairs_obj)) return NULL;
   lean_object* pairs = bytes_arg(pairs_obj, "pairs");
   if (!pairs) return NULL;
-  return run_io_into_pybytes(eth_trie_root((uint8_t) secured, pairs), "trie_root");
+  return except_into_pybytes(eth_trie_root((uint8_t) secured, pairs), TRIE_ERROR);
 }
 
 PyObject*
@@ -67,7 +67,7 @@ py_trie_verify_proof(
     bytes_arg(root_obj, "root"), (uint8_t) secured,
     bytes_arg(key_obj, "key"), bytes_arg(proof_obj, "proof"));
   /* No bytes means that the key is not set, since no value is empty. */
-  PyObject* value = run_io_into_pybytes(res, "trie_verify_proof");
+  PyObject* value = except_into_pybytes(res, TRIE_ERROR);
   if (value && PyBytes_GET_SIZE(value) == 0) {
     Py_DECREF(value);
     Py_RETURN_NONE;

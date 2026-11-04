@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Secp256r1.Curve
+public import EthLib.Cryptography.Secp256r1.Errors
 
 /-!
 # `EthLib.Cryptography.Secp256r1`

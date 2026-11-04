@@ -339,4 +339,20 @@ theorem decompress_compressLiteral {d : ByteArray} (h : d.size ≤ maxUncompress
   rw [decompressList_compressLiteralList hl]
   rfl
 
+/-! ## Error codes -/
+
+section
+
+open EthLib.Networking.Snappy
+
+/-- Two errors with one code come from one constructor. -/
+theorem _root_.EthLib.Networking.Snappy.SnappyError.code_injective
+    (e₁ e₂ : SnappyError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [SnappyError.code] at h; exact absurd h (by decide))
+
+end
+
 end EthLib.Networking.Proofs.Snappy.Block

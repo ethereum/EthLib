@@ -152,4 +152,26 @@ theorem encodeReceipt_of_decodeReceipt {bytes : ByteArray} {type : UInt8} {r : R
       · cases h
   · cases h
 
+/-! ## Error codes -/
+
+section
+
+open EthLib.Execution.Blocks
+open EthLib.Serialization.Rlp
+
+/-- Two errors with one code come from one constructor. -/
+theorem _root_.EthLib.Execution.Blocks.ReceiptError.code_injective
+    (e₁ e₂ : ReceiptError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [ReceiptError.code] at h; exact absurd h (by decide))
+
+/-- A receipt error never has the code of an RLP error, so one Python class carries both. -/
+theorem _root_.EthLib.Execution.Blocks.ReceiptError.code_ne_rlp
+    (e : ReceiptError) (r : RlpError) : e.code ≠ r.code := by
+  cases e <;> cases r <;> simp only [ReceiptError.code, RlpError.code] <;> decide
+
+end
+
 end EthLib.Execution.Blocks

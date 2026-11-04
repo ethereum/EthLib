@@ -89,6 +89,25 @@ inductive FrameError where
   | reservedUnskippable (type : UInt8)
   deriving Repr, DecidableEq
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+The codes start at 101, above every code of a block error, so that the two never meet.
+
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def FrameError.code : FrameError → UInt32
+  | .missingStreamIdentifier => 101
+  | .headerTruncated => 102
+  | .chunkPastEnd => 103
+  | .badStreamIdentifier => 104
+  | .checksumTruncated => 105
+  | .chunkTooLarge _ => 106
+  | .checksumMismatch .. => 107
+  | .block _ => 108
+  | .reservedUnskippable _ => 109
+
 /-- The uncompressed data of a chunk, if the stored checksum matches it (§3).
 
 The checksum is four bytes, little-endian.

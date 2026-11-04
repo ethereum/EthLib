@@ -66,6 +66,15 @@ inductive TrieError where
   | rlp (error : RlpError)
   deriving Repr, DecidableEq
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def TrieError.code : TrieError → UInt32
+  | .emptyValue => 1
+  | .rlp _ => 2
+
 /-- The RLP structure of a node before it is encoded: `c` of the Yellow Paper.
 
 No node is the empty byte string. -/

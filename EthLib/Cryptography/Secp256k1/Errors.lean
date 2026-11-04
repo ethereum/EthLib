@@ -36,6 +36,16 @@ inductive Secp256k1Error where
   | unrecoverableNonce
   /-- The nonce generator gave no usable nonce within its bound on attempts. -/
   | noNonce
+  /-- A hash was not 32 bytes long. -/
+  | badHashSize (size : Nat)
+  /-- A signature was not 64 bytes long. -/
+  | badSignatureSize (size : Nat)
+  /-- A recovery id was neither 0 nor 1. -/
+  | badRecoveryId (id : UInt8)
+  /-- A private key was not 32 bytes long. -/
+  | badPrivateKeySize (size : Nat)
+  /-- A private key was `n` or more. -/
+  | privateKeyTooLarge
 deriving DecidableEq, Repr
 
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
@@ -50,5 +60,32 @@ def Secp256k1Error.message : Secp256k1Error → String
   | .zeroPrivateKey => "private key is zero"
   | .unrecoverableNonce => "nonce point has x >= n, so no recovery id 0 or 1 names it"
   | .noNonce => "no usable nonce within the bound on attempts"
+  | .badHashSize size => s!"bad hash size: {size}, expected 32"
+  | .badSignatureSize size => s!"bad signature size: {size}, expected 64"
+  | .badRecoveryId id => s!"bad recovery id: {id}, expected 0 or 1"
+  | .badPrivateKeySize size => s!"bad private key size: {size}, expected 32"
+  | .privateKeyTooLarge => "bad private key: not below the group order n"
+
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def Secp256k1Error.code : Secp256k1Error → UInt32
+  | .invalidEncodingLength _ => 1
+  | .invalidPrefix _ => 2
+  | .coordinateTooLarge => 3
+  | .notOnCurve => 4
+  | .noPointWithX => 5
+  | .pointAtInfinity => 6
+  | .scalarOutOfRange => 7
+  | .zeroPrivateKey => 8
+  | .unrecoverableNonce => 9
+  | .noNonce => 10
+  | .badHashSize _ => 11
+  | .badSignatureSize _ => 12
+  | .badRecoveryId _ => 13
+  | .badPrivateKeySize _ => 14
+  | .privateKeyTooLarge => 15
 
 end EthLib.Cryptography.Secp256k1

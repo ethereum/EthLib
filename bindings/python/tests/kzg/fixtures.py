@@ -149,6 +149,14 @@ INVALID_BLOBS = [
 ]
 
 
+def invalid_blob_error(blob: bytes) -> type[Exception]:
+    """The error an invalid blob raises.
+
+    The binding checks the length before Lean runs, and Lean checks the field elements.
+    """
+    return ValueError if len(blob) != kzg.BYTES_PER_BLOB else kzg.KzgError
+
+
 # ---- Compressed G1 inputs --------------------------------------------------
 
 G1_INVALID_TOO_FEW_BYTES   = G1[:-1]

@@ -5,6 +5,7 @@ The input keying material and the shared secret are secret.
 EthLib makes no constant-time claim.
 """
 
+from ...errors import ConcatKdfError, HkdfError
 from .._native import concat_kdf_sha256 as native_concat_kdf_sha256
 from .._native import hkdf_sha256 as native_hkdf_sha256
 from .._native import hmac_sha256 as native_hmac_sha256
@@ -23,7 +24,7 @@ def hkdf_extract(salt: bytes, ikm: bytes) -> bytes:
 def hkdf(salt: bytes, ikm: bytes, info: bytes, length: int) -> bytes:
     """HKDF-SHA-256 of RFC 5869 §2: `length` bytes of output keying material.
 
-    A length above 255 * 32 = 8160 bytes raises `ValueError`.
+    A length above 255 * 32 = 8160 bytes raises `HkdfError`, a `ValueError`.
 
     A non-`bytes` argument raises `TypeError`, and a negative length raises `OverflowError`.
     """
@@ -33,7 +34,8 @@ def hkdf(salt: bytes, ikm: bytes, info: bytes, length: int) -> bytes:
 def concat_kdf(z: bytes, fixed_info: bytes, length: int) -> bytes:
     """The Concatenation KDF of SP 800-56C Rev. 2 §4.1 with SHA-256: `length` bytes of key.
 
-    A length of zero, or one that needs more than 2^32 - 1 blocks, raises `ValueError`.
+    A length of zero, or one that needs more than 2^32 - 1 blocks, raises `ConcatKdfError`,
+    a `ValueError`.
 
     A non-`bytes` argument raises `TypeError`, and a negative length raises `OverflowError`.
     """
@@ -41,6 +43,8 @@ def concat_kdf(z: bytes, fixed_info: bytes, length: int) -> bytes:
 
 
 __all__ = [
+    "ConcatKdfError",
+    "HkdfError",
     "concat_kdf",
     "hkdf",
     "hkdf_extract",

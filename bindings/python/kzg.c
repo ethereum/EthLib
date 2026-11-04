@@ -144,10 +144,7 @@ py_blob_to_kzg_commitment(
   uint8_t out[BYTES_PER_COMMITMENT];
   lean_object* res = eth_kzg_blob_to_kzg_commitment(
     mk_bytearray(blob, BYTES_PER_BLOB));
-  if (run_io_into_bytearray(res, out, BYTES_PER_COMMITMENT)) {
-    PyErr_SetString(PyExc_RuntimeError, "blob_to_kzg_commitment failed");
-    return NULL;
-  }
+  if (except_into_buffer(res, KZG_ERROR, out, BYTES_PER_COMMITMENT)) return NULL;
   return PyBytes_FromStringAndSize((const char*) out, BYTES_PER_COMMITMENT);
 }
 
@@ -166,10 +163,7 @@ py_compute_challenge(
   lean_object* res = eth_kzg_compute_challenge(
     mk_bytearray(blob, BYTES_PER_BLOB),
     mk_bytearray(com, BYTES_PER_COMMITMENT));
-  if (run_io_into_bytearray(res, out, BYTES_PER_FIELD_ELEMENT)) {
-    PyErr_SetString(PyExc_RuntimeError, "compute_challenge failed");
-    return NULL;
-  }
+  if (except_into_buffer(res, KZG_ERROR, out, BYTES_PER_FIELD_ELEMENT)) return NULL;
   return PyBytes_FromStringAndSize((const char*) out, BYTES_PER_FIELD_ELEMENT);
 }
 
@@ -188,10 +182,7 @@ py_compute_kzg_proof(
   lean_object* res = eth_kzg_compute_kzg_proof(
     mk_bytearray(blob, BYTES_PER_BLOB),
     mk_bytearray(z, BYTES_PER_FIELD_ELEMENT));
-  if (run_io_into_bytearray(res, buf, sizeof(buf))) {
-    PyErr_SetString(PyExc_RuntimeError, "compute_kzg_proof failed");
-    return NULL;
-  }
+  if (except_into_buffer(res, KZG_ERROR, buf, sizeof(buf))) return NULL;
   PyObject* proof = PyBytes_FromStringAndSize((const char*) buf, BYTES_PER_PROOF);
   PyObject* y = PyBytes_FromStringAndSize((const char*) (buf + BYTES_PER_PROOF),
                                               BYTES_PER_FIELD_ELEMENT);
@@ -221,10 +212,7 @@ py_verify_kzg_proof(
     mk_bytearray(z, BYTES_PER_FIELD_ELEMENT),
     mk_bytearray(y, BYTES_PER_FIELD_ELEMENT),
     mk_bytearray(p, BYTES_PER_PROOF));
-  if (run_io_into_bool(res, &ok)) {
-    PyErr_SetString(PyExc_RuntimeError, "verify_kzg_proof failed");
-    return NULL;
-  }
+  if (except_into_flag(res, KZG_ERROR, &ok)) return NULL;
   if (ok) Py_RETURN_TRUE; else Py_RETURN_FALSE;
 }
 
@@ -243,10 +231,7 @@ py_compute_blob_kzg_proof(
   lean_object* res = eth_kzg_compute_blob_kzg_proof(
     mk_bytearray(blob, BYTES_PER_BLOB),
     mk_bytearray(c, BYTES_PER_COMMITMENT));
-  if (run_io_into_bytearray(res, out, BYTES_PER_PROOF)) {
-    PyErr_SetString(PyExc_RuntimeError, "compute_blob_kzg_proof failed");
-    return NULL;
-  }
+  if (except_into_buffer(res, KZG_ERROR, out, BYTES_PER_PROOF)) return NULL;
   return PyBytes_FromStringAndSize((const char*) out, BYTES_PER_PROOF);
 }
 
@@ -268,10 +253,7 @@ py_verify_blob_kzg_proof(
     mk_bytearray(blob, BYTES_PER_BLOB),
     mk_bytearray(c, BYTES_PER_COMMITMENT),
     mk_bytearray(p, BYTES_PER_PROOF));
-  if (run_io_into_bool(res, &ok)) {
-    PyErr_SetString(PyExc_RuntimeError, "verify_blob_kzg_proof failed");
-    return NULL;
-  }
+  if (except_into_flag(res, KZG_ERROR, &ok)) return NULL;
   if (ok) Py_RETURN_TRUE; else Py_RETURN_FALSE;
 }
 
@@ -300,10 +282,7 @@ py_verify_blob_kzg_proof_batch(
     mk_bytearray_array(coms, nc, BYTES_PER_COMMITMENT),
     mk_bytearray_array(proofs, np, BYTES_PER_PROOF));
   PyMem_Free(blobs); PyMem_Free(coms); PyMem_Free(proofs);
-  if (run_io_into_bool(res, &ok)) {
-    PyErr_SetString(PyExc_RuntimeError, "verify_blob_kzg_proof_batch failed");
-    return NULL;
-  }
+  if (except_into_flag(res, KZG_ERROR, &ok)) return NULL;
   if (ok) Py_RETURN_TRUE; else Py_RETURN_FALSE;
 }
 
@@ -321,9 +300,8 @@ py_compute_cells(
   if (!out) return PyErr_NoMemory();
   lean_object* res = eth_kzg_compute_cells(
     mk_bytearray(blob, BYTES_PER_BLOB));
-  if (run_io_into_bytearray(res, out, total)) {
+  if (except_into_buffer(res, KZG_ERROR, out, total)) {
     PyMem_Free(out);
-    PyErr_SetString(PyExc_RuntimeError, "compute_cells failed");
     return NULL;
   }
   PyObject* list = PyList_New(CELLS_PER_EXT_BLOB);
@@ -351,9 +329,8 @@ py_compute_cells_and_kzg_proofs(
   if (!buf) return PyErr_NoMemory();
   lean_object* res = eth_kzg_compute_cells_and_kzg_proofs(
     mk_bytearray(blob, BYTES_PER_BLOB));
-  if (run_io_into_bytearray(res, buf, total)) {
+  if (except_into_buffer(res, KZG_ERROR, buf, total)) {
     PyMem_Free(buf);
-    PyErr_SetString(PyExc_RuntimeError, "compute_cells_and_kzg_proofs failed");
     return NULL;
   }
   PyObject* cells = PyList_New(CELLS_PER_EXT_BLOB);
@@ -445,10 +422,7 @@ py_compute_verify_cell_kzg_proof_batch_challenge(
   PyMem_Free(packed);
   PyMem_Free(cell_idx); PyMem_Free(com_idx); PyMem_Free(coms);
 
-  if (run_io_into_bytearray(res, out, BYTES_PER_FIELD_ELEMENT)) {
-    PyErr_SetString(PyExc_RuntimeError, "compute_verify_cell_kzg_proof_batch_challenge failed");
-    return NULL;
-  }
+  if (except_into_buffer(res, KZG_ERROR, out, BYTES_PER_FIELD_ELEMENT)) return NULL;
   return PyBytes_FromStringAndSize((const char*) out, BYTES_PER_FIELD_ELEMENT);
 
 fail_evals:
@@ -483,10 +457,7 @@ py_verify_cell_kzg_proof_batch(
     mk_bytearray_array(cells, n_cells, BYTES_PER_CELL),
     mk_bytearray_array(proofs, n_proofs, BYTES_PER_PROOF));
   PyMem_Free(proofs); PyMem_Free(cells); PyMem_Free(idx); PyMem_Free(coms);
-  if (run_io_into_bool(res, &ok)) {
-    PyErr_SetString(PyExc_RuntimeError, "verify_cell_kzg_proof_batch failed");
-    return NULL;
-  }
+  if (except_into_flag(res, KZG_ERROR, &ok)) return NULL;
   if (ok) Py_RETURN_TRUE; else Py_RETURN_FALSE;
 }
 
@@ -512,9 +483,8 @@ py_recover_cells_and_kzg_proofs(
     mk_bytearray_array(cells, n_cells, BYTES_PER_CELL));
   PyMem_Free(cells); PyMem_Free(idx);
 
-  if (run_io_into_bytearray(res, buf, total)) {
+  if (except_into_buffer(res, KZG_ERROR, buf, total)) {
     PyMem_Free(buf);
-    PyErr_SetString(PyExc_RuntimeError, "recover_cells_and_kzg_proofs failed");
     return NULL;
   }
   PyObject* out_cells = PyList_New(CELLS_PER_EXT_BLOB);

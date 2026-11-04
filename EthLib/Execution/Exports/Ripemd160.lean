@@ -8,7 +8,7 @@ public import EthLib.Execution.Evm.Precompiles.Ripemd160
 C-ABI exports for the RIPEMD-160 precompile, callable from the Python C extension.
 
 - Input and output are `ByteArray`.
-- The precompile never fails, so no export returns an `IO` error.
+- The precompile never fails, so no export returns an error.
 -/
 
 public section

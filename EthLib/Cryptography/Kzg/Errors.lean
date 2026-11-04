@@ -7,7 +7,7 @@ Typed errors for the KZG surface.
 
 Every operation returns its result or one of these errors, so a failure names its cause.
 
-The C exports turn an error into the message of a Python exception.
+The C exports pass the code and the message of an error to the bindings.
 -/
 
 @[expose] public section
@@ -99,5 +99,35 @@ def KzgError.message : KzgError → String
   | .badIndicesBytesSize actual =>
       s!"bad indices byte buffer size: {actual} (must be a multiple of 8)"
   | .invalidTrustedSetup        => "invalid trusted setup"
+
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def KzgError.code : KzgError → UInt32
+  | .badBlobSize _             => 1
+  | .badCommitmentSize _       => 2
+  | .badProofSize _            => 3
+  | .badCellSize _             => 4
+  | .badFieldElementSize _     => 5
+  | .invalidCommitment _       => 6
+  | .invalidProof _            => 7
+  | .invalidFieldElement _     => 8
+  | .inputLengthMismatch ..    => 9
+  | .lincombLengthMismatch ..  => 10
+  | .commitmentIndexOutOfBounds => 11
+  | .cellIndexOutOfBounds      => 12
+  | .indicesNotAscending       => 13
+  | .notEnoughCells            => 14
+  | .tooManyCells              => 15
+  | .zeroDivisorPolynomial     => 16
+  | .polynomialProductTooLong .. => 17
+  | .badPolynomialSize _       => 18
+  | .duplicateCommitments      => 19
+  | .invalidG1Point            => 20
+  | .tooManyMissingCells       => 21
+  | .badIndicesBytesSize _     => 22
+  | .invalidTrustedSetup       => 23
 
 end EthLib.Cryptography.Kzg

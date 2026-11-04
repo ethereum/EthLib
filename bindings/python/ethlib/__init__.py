@@ -1,1 +1,2 @@
-__all__ = ["consensus", "cryptography", "execution", "networking", "serialization"]
+__all__ = ["consensus", "cryptography", "errors", "execution", "networking", "precompiles",
+           "serialization"]

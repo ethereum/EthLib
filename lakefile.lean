@@ -58,19 +58,19 @@ lean_lib «Proofs» where
   precompileModules := false
   platformIndependent := true
 
-/-- The C exports the Python extension calls, and nothing else. A separate
-library (rooted at `EthLib/Exports.lean`), so that the specification never
-imports an `@[export]` symbol or the `IO` that turns a typed error into a
-Python exception. `precompileModules` is on: these objects are the ones
-`setup.py` links.
+/-- The C exports the Python extension calls, and nothing else.
 
-Each domain's export tree is also a root, so that its modules belong to
-this library rather than to `EthLib`. -/
+It is a separate library, so that the specification never imports an `@[export]` symbol.
+
+`precompileModules` is on, because `setup.py` links these objects.
+
+Each domain's export tree is also a root, so that its modules belong to this library. -/
 @[default_target]
 lean_lib «Exports» where
   requiresModuleSystem := true
-  roots := #[`EthLib.Exports, `EthLib.Cryptography.Exports, `EthLib.Networking.Exports,
-    `EthLib.Execution.Exports, `EthLib.Consensus.Exports, `EthLib.Serialization.Exports]
+  roots := #[`EthLib.Exports, `EthLib.Base.Exports, `EthLib.Cryptography.Exports,
+    `EthLib.Networking.Exports, `EthLib.Execution.Exports, `EthLib.Consensus.Exports,
+    `EthLib.Serialization.Exports]
   precompileModules := true
 
 /-- Checks the compiled declarations of every library: their axioms, and any

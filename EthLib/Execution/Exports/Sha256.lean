@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Exports
 public import EthLib.Execution.Evm.Precompiles.Sha256
 
 /-!
@@ -9,7 +10,7 @@ C-ABI exports for the SHA-256 precompile, callable from the Python C extension.
 
 - Inputs are `ByteArray` or `UInt64`.
 - Outputs are `ByteArray` or `UInt64`.
-- Running out of gas is an `IO` error, which Python raises.
+- A call with too little gas fails, and returns the code and the message of its error.
 
 The symbols carry `precompile` in their names, because `eth_sha256` is the bare hash of the cryptography exports.
 -/
@@ -17,6 +18,8 @@ The symbols carry `precompile` in their names, because `eth_sha256` is the bare 
 public section
 
 namespace EthLib.Execution.Evm.Precompiles.Sha256.Exports
+
+open EthLib.Exports (Result)
 
 open EthLib.Execution.Evm.Precompiles.Sha256
 
@@ -36,10 +39,8 @@ def constOutputBytes (_ : Unit) : UInt64 :=
 
 EVM gas is a 64-bit integer, so the gas crosses the boundary as `UInt64`. -/
 @[export eth_sha256_precompile]
-def sha256Export (data : ByteArray) (gas : UInt64) : IO ByteArray :=
-  match sha256 data gas.toNat with
-  | .ok out => pure out
-  | .error e => throw (IO.userError e.message)
+def sha256Export (data : ByteArray) (gas : UInt64) : Result ByteArray :=
+  (sha256 data gas.toNat).mapError fun e => (e.code, e.message)
 
 /-- The gas the precompile charges for the call data.
 

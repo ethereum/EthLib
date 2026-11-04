@@ -6,6 +6,8 @@ The storage is a list of pairs `[key, value]`, with a 32-byte key and a word.
 The code hash of an account is the Keccak-256 hash of its code.
 """
 
+from ..errors import StateError
+
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
 from ..cryptography import _native
@@ -16,9 +18,9 @@ def state_root(state: bytes) -> bytes:
 
     A storage key with the value zero is absent from the storage.
 
-    Raises ValueError when the bytes encode no such list, or give one address twice.
+    Raises StateError, a ValueError, when the bytes encode no such list, or give one address twice.
     """
     return _native.state_root(state)
 
 
-__all__ = ["state_root"]
+__all__ = ["state_root", "StateError"]

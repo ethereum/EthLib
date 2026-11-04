@@ -62,8 +62,9 @@ py_enr_from_text(
   Py_ssize_t len;
   const char* utf8 = PyUnicode_AsUTF8AndSize(obj, &len);
   if (!utf8) return NULL;
-  lean_object* res = eth_enr_from_text(mk_bytearray((const uint8_t*) utf8, len));
-  return run_io_into_pybytes(res, "enr from_text");
+  /* Python gives valid UTF-8, which the export reads as a Lean string. */
+  lean_object* res = eth_enr_from_text(lean_mk_string_from_bytes(utf8, (size_t) len));
+  return except_into_pybytes(res, ENR_ERROR);
 }
 
 PyObject*
@@ -73,7 +74,7 @@ py_enr_seq(
 ) {
   lean_object* record = parse_record_arg(args, "record");
   if (!record) return NULL;
-  return run_io_into_pyint(eth_enr_seq(record), "enr seq");
+  return except_into_pyint(eth_enr_seq(record), ENR_ERROR);
 }
 
 PyObject*
@@ -83,7 +84,7 @@ py_enr_verify_v4(
 ) {
   lean_object* record = parse_record_arg(args, "record");
   if (!record) return NULL;
-  return run_io_into_pybool(eth_enr_verify_v4(record), "enr verify_v4");
+  return except_into_pybool(eth_enr_verify_v4(record), ENR_ERROR);
 }
 
 PyObject*
@@ -93,7 +94,7 @@ py_enr_node_id(
 ) {
   lean_object* record = parse_record_arg(args, "record");
   if (!record) return NULL;
-  return run_io_into_pybytes(eth_enr_node_id(record), "enr node_id");
+  return except_into_pybytes(eth_enr_node_id(record), ENR_ERROR);
 }
 
 PyObject*
@@ -117,5 +118,5 @@ py_enr_consensus_entries(
   lean_object* fork = mk_bytearray((const uint8_t*) utf8, len);
   lean_object* record = mk_bytearray(
     (const uint8_t*) PyBytes_AS_STRING(record_obj), PyBytes_GET_SIZE(record_obj));
-  return run_io_into_pybytes(eth_enr_consensus_entries(fork, record), "enr consensus_entries");
+  return except_into_pybytes(eth_enr_consensus_entries(fork, record), ENR_ERROR);
 }

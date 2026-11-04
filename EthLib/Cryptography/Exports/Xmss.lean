@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Exports
 public import EthLib.Cryptography.Xmss.Constants
 public import EthLib.Cryptography.Xmss.Errors
 public import EthLib.Cryptography.Xmss.KeyGen
@@ -19,18 +20,14 @@ public section
 
 namespace EthLib.Cryptography.Xmss.Exports
 
+open EthLib.Exports (Result)
+
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
 
-/-- Run a fallible leanXMSS computation down to `IO`.
-
-The C-ABI layer surfaces failures to Python as exceptions. -/
-def runXmss {α : Type} (act : Except XmssError α) : IO α :=
-  match act with
-  -- Success passes straight through.
-  | .ok a    => pure a
-  -- Failure becomes the user error the Python bindings expect.
-  | .error e => throw (IO.userError e.message)
+/-- Run a fallible leanXMSS computation, with its error as a code and a message. -/
+def runXmss {α : Type} (act : Except XmssError α) : Result α :=
+  act.mapError fun e => (e.code, e.message)
 
 /-! ## Sizes
 
@@ -86,7 +83,7 @@ private def readExact (n : Nat) (bytes : ByteArray) (bad : Nat → XmssError) :
 
 It builds the whole top tree, `2^16` one-time keys. -/
 @[export eth_xmss_key_gen]
-def keyGenExport (seed : ByteArray) : IO ByteArray :=
+def keyGenExport (seed : ByteArray) : Result ByteArray :=
   runXmss do
     let seed ← readExact SEED_LEN seed .badSeedSize
     -- The secret half is dropped: the seed regrows it.
@@ -96,7 +93,7 @@ def keyGenExport (seed : ByteArray) : IO ByteArray :=
 /-- Sign a message at a leaf index with the key grown from a seed. -/
 @[export eth_xmss_sign]
 def signExport (seed : ByteArray) (leafIndex : LeafIndex) (msg : ByteArray) :
-    IO ByteArray :=
+    Result ByteArray :=
   runXmss do
     let seed ← readExact SEED_LEN seed .badSeedSize
     let msg ← readExact MESSAGE_LEN msg .badMessageSize
@@ -108,7 +105,7 @@ def signExport (seed : ByteArray) (leafIndex : LeafIndex) (msg : ByteArray) :
 
 The leaf index travels inside the signature. -/
 @[export eth_xmss_verify]
-def verifyExport (pk : ByteArray) (msg : ByteArray) (sig : ByteArray) : IO UInt8 :=
+def verifyExport (pk : ByteArray) (msg : ByteArray) (sig : ByteArray) : Result UInt8 :=
   runXmss do
     -- Only the lengths are checked: every correctly sized string decodes.
     let pk ← decodePublicKey pk
@@ -122,7 +119,7 @@ It is returned as a `UInt64`, so the C side reads it as any other exported integ
 
 A `UInt32` always fits, so the conversion drops nothing. -/
 @[export eth_xmss_signature_index]
-def signatureIndexExport (sig : ByteArray) : IO UInt64 :=
+def signatureIndexExport (sig : ByteArray) : Result UInt64 :=
   runXmss ((signatureIndex sig).map UInt32.toUInt64)
 
 end EthLib.Cryptography.Xmss.Exports

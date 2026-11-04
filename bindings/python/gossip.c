@@ -40,7 +40,7 @@ py_gossip_message_id_phase0(
   if (!PyArg_ParseTuple(args, "O", &data_obj)) return NULL;
   lean_object* data = bytes_arg(data_obj, "data");
   if (!data) return NULL;
-  return run_io_into_pybytes(eth_gossip_message_id_phase0(data), "gossip message_id");
+  return pybytes_of_bytearray(eth_gossip_message_id_phase0(data));
 }
 
 PyObject*
@@ -59,5 +59,5 @@ py_gossip_message_id_altair(
   lean_object* topic = bytes_arg(topic_obj, "topic");
   if (!topic) return NULL;
   lean_object* data = bytes_arg(data_obj, "data");
-  return run_io_into_pybytes(eth_gossip_message_id_altair(topic, data), "gossip message_id");
+  return pybytes_of_bytearray(eth_gossip_message_id_altair(topic, data));
 }

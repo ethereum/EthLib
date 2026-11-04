@@ -50,4 +50,13 @@ def ModexpError.message : ModexpError → String
       s!"modulus length {length} exceeds {Constants.MAX_LENGTH_BYTES}"
   | .outOfGas cost gas => s!"out of gas: price {cost}, gas {gas}"
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def ModexpError.code : ModexpError → UInt32
+  | .lengthTooLarge .. => 1
+  | .outOfGas .. => 2
+
 end EthLib.Execution.Evm.Precompiles.Modexp

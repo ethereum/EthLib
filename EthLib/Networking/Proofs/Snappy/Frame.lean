@@ -249,4 +249,25 @@ theorem decodeChunk_compressed_checksumMismatch {checksum block data : List UInt
   simp [decodeChunk, hcs, hpre, hb, verifyChecksum, EthLib.Base.bytesToUint_toVector, hne,
     show ¬ maxChunkLength < data.length by omega]
 
+/-! ## Error codes -/
+
+section
+
+open EthLib.Networking.Snappy
+
+/-- Two errors with one code come from one constructor. -/
+theorem _root_.EthLib.Networking.Snappy.FrameError.code_injective
+    (e₁ e₂ : FrameError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [FrameError.code] at h; exact absurd h (by decide))
+
+/-- A frame error never has the code of a block error, so one Python class carries both. -/
+theorem _root_.EthLib.Networking.Snappy.FrameError.code_ne_block
+    (e : FrameError) (r : SnappyError) : e.code ≠ r.code := by
+  cases e <;> cases r <;> simp only [FrameError.code, SnappyError.code] <;> decide
+
+end
+
 end EthLib.Networking.Proofs.Snappy.Frame

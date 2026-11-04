@@ -30,5 +30,5 @@ py_ecrecover(
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(data_obj),
                  (size_t) PyBytes_GET_SIZE(data_obj)),
     gas);
-  return run_io_into_pybytes(res, "ecrecover");
+  return except_into_pybytes(res, ECRECOVER_ERROR);
 }

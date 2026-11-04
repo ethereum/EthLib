@@ -68,7 +68,7 @@ py_reqresp_max_payload_size(
   if (!PyArg_ParseTuple(args, "O", &fork_obj)) return NULL;
   lean_object* fork = parse_fork(fork_obj);
   if (!fork) return NULL;
-  return run_io_into_pyint(eth_reqresp_max_payload_size(fork), "max_payload_size");
+  return except_into_pyint(eth_reqresp_max_payload_size(fork), REQRESP_ERROR);
 }
 
 PyObject*
@@ -80,7 +80,7 @@ py_reqresp_max_compressed_len(
   if (!PyArg_ParseTuple(args, "O", &n_obj)) return NULL;
   uint64_t n;
   if (parse_uint64(n_obj, "n", &n)) return NULL;
-  return run_io_into_pyint(eth_reqresp_max_compressed_len(n), "max_compressed_len");
+  return except_into_pyint(eth_reqresp_max_compressed_len(n), REQRESP_ERROR);
 }
 
 PyObject*
@@ -96,8 +96,8 @@ py_reqresp_decode_payload(
   if (!data) return NULL;
   lean_object* fork = parse_fork(fork_obj);
   if (!fork) { lean_dec(data); return NULL; }
-  return run_io_into_pybytes(
-    eth_reqresp_decode_payload(fork, type_bound, data), "decode_payload");
+  return except_into_pybytes(
+    eth_reqresp_decode_payload(fork, type_bound, data), REQRESP_ERROR);
 }
 
 PyObject*
@@ -116,7 +116,6 @@ py_reqresp_decode_response_chunk(
   if (!data) return NULL;
   lean_object* fork = parse_fork(fork_obj);
   if (!fork) { lean_dec(data); return NULL; }
-  return run_io_into_pybytes(
-    eth_reqresp_decode_response_chunk(fork, context_bytes, type_bound, data),
-    "decode_response_chunk");
+  return except_into_pybytes(
+    eth_reqresp_decode_response_chunk(fork, context_bytes, type_bound, data), REQRESP_ERROR);
 }

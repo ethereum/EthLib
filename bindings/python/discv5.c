@@ -105,7 +105,7 @@ py_discv5_log_distance(
 ) {
   lean_object* a[2];
   if (!parse_bytes_args(args, 2, a)) return NULL;
-  return run_io_into_pyint(eth_discv5_log_distance(a[0], a[1]), "discv5 log_distance");
+  return except_into_pyint(eth_discv5_log_distance(a[0], a[1]), DISCV5_ERROR);
 }
 
 PyObject*
@@ -115,7 +115,7 @@ py_discv5_ecdh(
 ) {
   lean_object* a[2];
   if (!parse_bytes_args(args, 2, a)) return NULL;
-  return run_io_into_pybytes(eth_discv5_ecdh(a[0], a[1]), "discv5 ecdh");
+  return except_into_pybytes(eth_discv5_ecdh(a[0], a[1]), DISCV5_ERROR);
 }
 
 PyObject*
@@ -125,8 +125,8 @@ py_discv5_derive_keys(
 ) {
   lean_object* a[5];
   if (!parse_bytes_args(args, 5, a)) return NULL;
-  return run_io_into_pybytes(
-    eth_discv5_derive_keys(a[0], a[1], a[2], a[3], a[4]), "discv5 derive_keys");
+  return except_into_pybytes(
+    eth_discv5_derive_keys(a[0], a[1], a[2], a[3], a[4]), DISCV5_ERROR);
 }
 
 PyObject*
@@ -136,7 +136,7 @@ py_discv5_id_sign(
 ) {
   lean_object* a[4];
   if (!parse_bytes_args(args, 4, a)) return NULL;
-  return run_io_into_pybytes(eth_discv5_id_sign(a[0], a[1], a[2], a[3]), "discv5 id_sign");
+  return except_into_pybytes(eth_discv5_id_sign(a[0], a[1], a[2], a[3]), DISCV5_ERROR);
 }
 
 PyObject*
@@ -146,8 +146,8 @@ py_discv5_id_verify(
 ) {
   lean_object* a[5];
   if (!parse_bytes_args(args, 5, a)) return NULL;
-  return run_io_into_pybool(
-    eth_discv5_id_verify(a[0], a[1], a[2], a[3], a[4]), "discv5 id_verify");
+  return except_into_pybool(
+    eth_discv5_id_verify(a[0], a[1], a[2], a[3], a[4]), DISCV5_ERROR);
 }
 
 PyObject*
@@ -157,7 +157,7 @@ py_discv5_decode_packet(
 ) {
   lean_object* a[2];
   if (!parse_bytes_args(args, 2, a)) return NULL;
-  return run_io_into_pybytes(eth_discv5_decode_packet(a[0], a[1]), "discv5 decode_packet");
+  return except_into_pybytes(eth_discv5_decode_packet(a[0], a[1]), DISCV5_ERROR);
 }
 
 PyObject*
@@ -167,7 +167,7 @@ py_discv5_reencode_packet(
 ) {
   lean_object* a[2];
   if (!parse_bytes_args(args, 2, a)) return NULL;
-  return run_io_into_pybytes(eth_discv5_reencode_packet(a[0], a[1]), "discv5 reencode_packet");
+  return except_into_pybytes(eth_discv5_reencode_packet(a[0], a[1]), DISCV5_ERROR);
 }
 
 PyObject*
@@ -177,8 +177,8 @@ py_discv5_encrypt_message(
 ) {
   lean_object* a[4];
   if (!parse_bytes_args(args, 4, a)) return NULL;
-  return run_io_into_pybytes(
-    eth_discv5_encrypt_message(a[0], a[1], a[2], a[3]), "discv5 encrypt_message");
+  return except_into_pybytes(
+    eth_discv5_encrypt_message(a[0], a[1], a[2], a[3]), DISCV5_ERROR);
 }
 
 PyObject*
@@ -188,6 +188,6 @@ py_discv5_decrypt_message(
 ) {
   lean_object* a[4];
   if (!parse_bytes_args(args, 4, a)) return NULL;
-  return run_io_into_pybytes(
-    eth_discv5_decrypt_message(a[0], a[1], a[2], a[3]), "discv5 decrypt_message");
+  return except_into_pybytes(
+    eth_discv5_decrypt_message(a[0], a[1], a[2], a[3]), DISCV5_ERROR);
 }

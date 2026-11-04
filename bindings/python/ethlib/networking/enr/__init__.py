@@ -4,10 +4,13 @@
 - Its text form is "enr:", then the unpadded URL-safe base64 of those bytes.
 
 Each function decodes the record first.
-A record that the decoder rejects raises ValueError, and so does a malformed text.
+A record that the decoder rejects raises EnrError, and so does a malformed text.
+EnrError is a ValueError, with the code of the Lean error.
 """
 
 from typing import NamedTuple
+
+from ...errors import EnrError
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -67,7 +70,7 @@ class ConsensusEntries(NamedTuple):
 def consensus_entries(fork: str, record: bytes) -> ConsensusEntries:
     """The consensus entries of a record, read by a node at the named fork, such as "fusaka".
 
-    It does not check the signature. A missing eth2 entry raises ValueError, and so does a missing
+    It does not check the signature. A missing eth2 entry raises EnrError, and so does a missing
     cgc or nfd entry from Fulu on.
     """
     raw = _native.enr_consensus_entries(fork, record)
@@ -96,4 +99,5 @@ __all__ = [
     "EnrForkId",
     "ConsensusEntries",
     "consensus_entries",
+    "EnrError",
 ]

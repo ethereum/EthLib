@@ -58,8 +58,7 @@ py_rlpx_ecies_encrypt(
 ) {
   lean_object* a[5];
   if (!parse_bytes_args(args, 5, a)) return NULL;
-  return run_io_into_pybytes(eth_rlpx_ecies_encrypt(a[0], a[1], a[2], a[3], a[4]),
-    "rlpx ecies_encrypt");
+  return except_into_pybytes(eth_rlpx_ecies_encrypt(a[0], a[1], a[2], a[3], a[4]), RLPX_ERROR);
 }
 
 PyObject*
@@ -69,5 +68,5 @@ py_rlpx_ecies_decrypt(
 ) {
   lean_object* a[3];
   if (!parse_bytes_args(args, 3, a)) return NULL;
-  return run_io_into_pybytes(eth_rlpx_ecies_decrypt(a[0], a[1], a[2]), "rlpx ecies_decrypt");
+  return except_into_pybytes(eth_rlpx_ecies_decrypt(a[0], a[1], a[2]), RLPX_ERROR);
 }

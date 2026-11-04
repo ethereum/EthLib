@@ -67,7 +67,7 @@ py_secp256k1_verify(
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(pk_obj), PyBytes_GET_SIZE(pk_obj)),
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(hash_obj), PyBytes_GET_SIZE(hash_obj)),
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(sig_obj), PyBytes_GET_SIZE(sig_obj)));
-  return run_io_into_pybool(res, "secp256k1 verify");
+  return except_into_pybool(res, SECP256K1_ERROR);
 }
 
 PyObject*
@@ -83,7 +83,7 @@ py_secp256k1_is_low_s(
   }
   lean_object* res = eth_secp256k1_is_low_s(
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(sig_obj), PyBytes_GET_SIZE(sig_obj)));
-  return run_io_into_pybool(res, "secp256k1 is_low_s");
+  return except_into_pybool(res, SECP256K1_ERROR);
 }
 
 PyObject*
@@ -107,7 +107,7 @@ py_secp256k1_recover(
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(hash_obj), PyBytes_GET_SIZE(hash_obj)),
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(sig_obj), PyBytes_GET_SIZE(sig_obj)),
     recovery_id);
-  return run_io_into_pybytes(res, "secp256k1 recover");
+  return except_into_pybytes(res, SECP256K1_ERROR);
 }
 
 PyObject*
@@ -128,7 +128,7 @@ py_secp256k1_sign(
   lean_object* res = eth_secp256k1_sign(
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(sk_obj), PyBytes_GET_SIZE(sk_obj)),
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(hash_obj), PyBytes_GET_SIZE(hash_obj)));
-  return run_io_into_pybytes(res, "secp256k1 sign");
+  return except_into_pybytes(res, SECP256K1_ERROR);
 }
 
 PyObject*
@@ -149,7 +149,7 @@ py_secp256k1_ecdh(
   lean_object* res = eth_secp256k1_ecdh(
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(sk_obj), PyBytes_GET_SIZE(sk_obj)),
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(pk_obj), PyBytes_GET_SIZE(pk_obj)));
-  return run_io_into_pybytes(res, "secp256k1 ecdh");
+  return except_into_pybytes(res, SECP256K1_ERROR);
 }
 
 PyObject*
@@ -165,5 +165,5 @@ py_secp256k1_address(
   }
   lean_object* res = eth_secp256k1_address(
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(sk_obj), PyBytes_GET_SIZE(sk_obj)));
-  return run_io_into_pybytes(res, "secp256k1 address");
+  return except_into_pybytes(res, SECP256K1_ERROR);
 }

@@ -120,6 +120,21 @@ inductive ReqRespError where
   | contextTruncated
   deriving Repr, DecidableEq
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def ReqRespError.code : ReqRespError → UInt32
+  | .varint _ => 1
+  | .lengthOutOfBounds .. => 2
+  | .arith _ => 3
+  | .compressedTooLong .. => 4
+  | .frame _ => 5
+  | .lengthMismatch .. => 6
+  | .missingCode => 7
+  | .contextTruncated => 8
+
 /-- The bytes of a varint at the start of the input, and the bytes after them.
 
 A varint ends at its first byte below `0x80`.

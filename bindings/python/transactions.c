@@ -83,7 +83,7 @@ py_tx_type(
 ) {
   lean_object *fork, *tx;
   if (!parse_args(args, &fork, &tx)) return NULL;
-  return run_io_into_pyint(eth_tx_type(fork, tx), "tx type");
+  return except_into_pyint(eth_tx_type(fork, tx), TRANSACTION_ERROR);
 }
 
 PyObject*
@@ -93,7 +93,7 @@ py_tx_hash(
 ) {
   lean_object *fork, *tx;
   if (!parse_args(args, &fork, &tx)) return NULL;
-  return run_io_into_pybytes(eth_tx_hash(fork, tx), "tx hash");
+  return except_into_pybytes(eth_tx_hash(fork, tx), TRANSACTION_ERROR);
 }
 
 PyObject*
@@ -103,7 +103,7 @@ py_tx_recover_sender(
 ) {
   lean_object *fork, *tx;
   if (!parse_args(args, &fork, &tx)) return NULL;
-  return run_io_into_pybytes(eth_tx_recover_sender(fork, tx), "tx recover_sender");
+  return except_into_pybytes(eth_tx_recover_sender(fork, tx), TRANSACTION_ERROR);
 }
 
 PyObject*
@@ -113,7 +113,7 @@ py_tx_intrinsic_gas(
 ) {
   lean_object *fork, *tx;
   if (!parse_args(args, &fork, &tx)) return NULL;
-  return run_io_into_pyint(eth_tx_intrinsic_gas(fork, tx), "tx intrinsic_gas");
+  return except_into_pyint(eth_tx_intrinsic_gas(fork, tx), TRANSACTION_ERROR);
 }
 
 PyObject*
@@ -128,5 +128,5 @@ py_tx_check(
   if (PyErr_Occurred()) return NULL;
   lean_object *fork, *tx;
   if (!parse_fork_and_tx(fork_obj, tx_obj, &fork, &tx)) return NULL;
-  return run_io_into_pybytes(eth_tx_check(fork, chain_id, tx), "tx check");
+  return except_into_pybytes(eth_tx_check(fork, chain_id, tx), TRANSACTION_ERROR);
 }

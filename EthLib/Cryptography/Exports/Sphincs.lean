@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Exports
 public import EthLib.Cryptography.Sphincs.Constants
 public import EthLib.Cryptography.Sphincs.Errors
 public import EthLib.Cryptography.Sphincs.KeyGen
@@ -20,18 +21,14 @@ public section
 
 namespace EthLib.Cryptography.Sphincs.Exports
 
+open EthLib.Exports (Result)
+
 open EthLib.Cryptography.Sphincs
 open EthLib.Cryptography.Sphincs.Constants
 
-/-- Run a fallible leanSPHINCS computation down to `IO`.
-
-The C-ABI layer surfaces failures to Python as exceptions. -/
-def runSphincs {α : Type} (act : Except SphincsError α) : IO α :=
-  match act with
-  -- Success passes straight through.
-  | .ok a    => pure a
-  -- Failure becomes the user error the Python bindings expect.
-  | .error e => throw (IO.userError e.message)
+/-- Run a fallible leanSPHINCS computation, with its error as a code and a message. -/
+def runSphincs {α : Type} (act : Except SphincsError α) : Result α :=
+  act.mapError fun e => (e.code, e.message)
 
 /-! ## Sizes
 
@@ -85,7 +82,7 @@ private def readExact (n : Nat) (bytes : ByteArray) (bad : Nat → SphincsError)
 
 It builds the whole top tree, `2^10` one-time keys. -/
 @[export eth_sphincs_key_gen]
-def keyGenExport (seed : ByteArray) : IO ByteArray :=
+def keyGenExport (seed : ByteArray) : Result ByteArray :=
   runSphincs do
     let seed ← readExact SEED_LEN seed .badSeedSize
     -- The secret half is dropped: the seed regrows it.
@@ -96,7 +93,7 @@ def keyGenExport (seed : ByteArray) : IO ByteArray :=
 
 The message digest picks the FORS instance, so no index crosses the boundary. -/
 @[export eth_sphincs_sign]
-def signExport (seed : ByteArray) (msg : ByteArray) : IO ByteArray :=
+def signExport (seed : ByteArray) (msg : ByteArray) : Result ByteArray :=
   runSphincs do
     let seed ← readExact SEED_LEN seed .badSeedSize
     let msg ← readExact MESSAGE_LEN msg .badMessageSize
@@ -106,7 +103,7 @@ def signExport (seed : ByteArray) (msg : ByteArray) : IO ByteArray :=
 
 /-- Whether a signature signs a message under a public key, as 1 or 0. -/
 @[export eth_sphincs_verify]
-def verifyExport (pk : ByteArray) (msg : ByteArray) (sig : ByteArray) : IO UInt8 :=
+def verifyExport (pk : ByteArray) (msg : ByteArray) (sig : ByteArray) : Result UInt8 :=
   runSphincs do
     -- Only the lengths are checked: every correctly sized string decodes.
     let pk ← decodePublicKey pk

@@ -48,4 +48,16 @@ def SphincsError.message : SphincsError → String
   | .badMessageSize actual =>
       s!"bad message size: {actual}, expected {MESSAGE_LEN}"
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def SphincsError.code : SphincsError → UInt32
+  | .noAdmissibleEncoding _ => 1
+  | .badPublicKeySize _     => 2
+  | .badSignatureSize _     => 3
+  | .badSeedSize _          => 4
+  | .badMessageSize _       => 5
+
 end EthLib.Cryptography.Sphincs

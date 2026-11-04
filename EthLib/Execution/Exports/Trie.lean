@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Exports
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Execution.Trie.Proof
 public import EthLib.Serialization.Rlp.Codec
@@ -13,12 +14,16 @@ Both hash with Keccak-256.
 
 The pairs of a trie and the nodes of a proof cross the boundary as RLP lists.
 
-A malformed input is an `IO` error, which Python raises.
+A trie or proof error comes back with its code and a message.
+
+A malformed RLP input has code 0, since no error type of the specification covers that format.
 -/
 
 public section
 
 namespace EthLib.Execution.Trie.Exports
+
+open EthLib.Exports (Result)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
@@ -30,9 +35,9 @@ def ofPairItem (item : Item) : Except RlpError (ByteArray × ByteArray) := do
   | items => .error (.wrongFieldCount 2 items.length)
 
 /-- The items of the RLP list that `input` encodes, or an error naming `what`. -/
-def readList (input : ByteArray) (what : String) : IO (List Item) := do
-  let .ok item := decode input | throw (IO.userError s!"{what} is not one RLP item")
-  let .ok items := item.toItems | throw (IO.userError s!"{what} is not an RLP list")
+def readList (input : ByteArray) (what : String) : Result (List Item) := do
+  let .ok item := decode input | throw (0, s!"{what} is not one RLP item")
+  let .ok items := item.toItems | throw (0, s!"{what} is not an RLP list")
   return items
 
 /-- The root of the trie that sets the pairs of `input` in order, from an empty trie.
@@ -43,13 +48,13 @@ An empty value removes its key.
 
 A `secured` other than 0 hashes each key before it becomes a path. -/
 @[export eth_trie_root]
-def rootExport (secured : UInt8) (input : ByteArray) : IO ByteArray := do
+def rootExport (secured : UInt8) (input : ByteArray) : Result ByteArray := do
   let .ok pairs := (← readList input "pairs").mapM ofPairItem
-    | throw (IO.userError "a pair is not a list of a key and a value")
+    | throw (0, "a pair is not a list of a key and a value")
   let trie := pairs.foldl (fun trie (key, value) => trieSet trie key value) ⟨secured != 0, []⟩
-  let .ok hash := root Cryptography.Hash.Keccak.keccak256 trie
-    | throw (IO.userError "trie has no root")
-  return ⟨hash.toArray⟩
+  match root Cryptography.Hash.Keccak.keccak256 trie with
+  | .ok hash => return ⟨hash.toArray⟩
+  | .error e => throw (e.code, s!"trie has no root: {repr e}")
 
 /-- The value of `key` in the trie of `root`, as the nodes of `proof` show.
 
@@ -60,15 +65,15 @@ No bytes means that `key` is not set, since no value is empty.
 A root of another length than 32 bytes, or a proof that does not verify, is an error. -/
 @[export eth_trie_verify_proof]
 def verifyProofExport (root : ByteArray) (secured : UInt8) (key proof : ByteArray) :
-    IO ByteArray := do
+    Result ByteArray := do
   if h : root.size = 32 then
     let .ok nodes := (← readList proof "proof").mapM Item.toBytes
-      | throw (IO.userError "a node of the proof is not a byte string")
+      | throw (0, "a node of the proof is not a byte string")
     match verifyProof Cryptography.Hash.Keccak.keccak256 ⟨root.data, h⟩ (secured != 0) key nodes with
     | .ok (some value) => return value
     | .ok none => return .empty
-    | .error e => throw (IO.userError s!"proof does not verify: {repr e}")
+    | .error e => throw (e.code, s!"proof does not verify: {repr e}")
   else
-    throw (IO.userError s!"bad root size: {root.size}, expected 32")
+    throw (0, s!"bad root size: {root.size}, expected 32")
 
 end EthLib.Execution.Trie.Exports

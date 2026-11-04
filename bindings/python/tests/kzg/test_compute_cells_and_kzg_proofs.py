@@ -24,7 +24,7 @@ def test_valid(i: int) -> None:
 @pytest.mark.parametrize("i", range(len(F.INVALID_BLOBS)))
 def test_invalid_blob(i: int) -> None:
     blob = F.INVALID_BLOBS[i]
-    with pytest.raises(Exception):
+    with pytest.raises(F.invalid_blob_error(blob)):
         kzg.compute_cells_and_kzg_proofs(blob)
     write_case("kzg", HANDLER, f"{HANDLER}_case_invalid_blob_{i}",
                {"input": {"blob": hex_str(blob)}, "output": None})

@@ -1,6 +1,8 @@
 module
 
+public import EthLib.Base.Exports
 public import EthLib.Cryptography.Secp256r1.Curve
+public import EthLib.Cryptography.Secp256r1.Errors
 public import EthLib.Cryptography.Secp256k1.Encoding
 
 /-!
@@ -13,11 +15,15 @@ A hash is 32 bytes.
 A public key is `x || y`, and a signature is `r || s`, with 32 bytes for each field.
 
 Each field is a big-endian integer.
+
+An operation returns its value, or the code and the message of its error.
 -/
 
 public section
 
 namespace EthLib.Cryptography.Secp256r1.Exports
+
+open EthLib.Exports (Result)
 
 open EthLib.Cryptography.Secp256k1 (ofBytesBE)
 
@@ -30,30 +36,33 @@ def HASH_LEN : Nat := 32
 /-- The length of a signature: `r` then `s`, 32 bytes each. -/
 def SIGNATURE_LEN : Nat := 64
 
+/-- Run a fallible computation, with its error as a code and a message. -/
+def runSecp256r1 {α : Type} (act : Except Secp256r1Error α) : Result α :=
+  act.mapError fun e => (e.code, e.message)
+
 /-- A coordinate below `p`, or an error. -/
-def readCoordinate (bytes : List UInt8) : IO Fp :=
+def readCoordinate (bytes : List UInt8) : Except Secp256r1Error Fp :=
   let v := ofBytesBE bytes
-  if h : v < Fp.modulus then pure ⟨v, h⟩
-  else throw (IO.userError "bad public key: a coordinate is not below p")
+  if h : v < Fp.modulus then .ok ⟨v, h⟩ else .error .coordinateTooLarge
 
 /-- The affine point of a 64-byte public key, or an error for any other length. -/
-def readPublicKey (bytes : ByteArray) : IO Point := do
+def readPublicKey (bytes : ByteArray) : Except Secp256r1Error Point := do
   if bytes.size = PUBLIC_KEY_LEN then
     let x ← readCoordinate (bytes.data.toList.take 32)
     let y ← readCoordinate (bytes.data.toList.drop 32)
     pure (.affine x y)
-  else throw (IO.userError s!"bad public key size: {bytes.size}, expected {PUBLIC_KEY_LEN}")
+  else throw (.badPublicKeySize bytes.size)
 
 /-- The integer of a 32-byte hash, or an error for any other length. -/
-def readHash (bytes : ByteArray) : IO Nat :=
-  if bytes.size = HASH_LEN then pure (ofBytesBE bytes.data.toList)
-  else throw (IO.userError s!"bad hash size: {bytes.size}, expected {HASH_LEN}")
+def readHash (bytes : ByteArray) : Except Secp256r1Error Nat :=
+  if bytes.size = HASH_LEN then .ok (ofBytesBE bytes.data.toList)
+  else .error (.badHashSize bytes.size)
 
 /-- The integers `r` and `s` of a 64-byte signature, or an error for any other length. -/
-def readSignature (bytes : ByteArray) : IO (Nat × Nat) :=
+def readSignature (bytes : ByteArray) : Except Secp256r1Error (Nat × Nat) :=
   if bytes.size = SIGNATURE_LEN then
-    pure (ofBytesBE (bytes.data.toList.take 32), ofBytesBE (bytes.data.toList.drop 32))
-  else throw (IO.userError s!"bad signature size: {bytes.size}, expected {SIGNATURE_LEN}")
+    .ok (ofBytesBE (bytes.data.toList.take 32), ofBytesBE (bytes.data.toList.drop 32))
+  else .error (.badSignatureSize bytes.size)
 
 /-! ## Sizes
 
@@ -72,7 +81,7 @@ def constSignatureLen (_ : Unit) : UInt64 := UInt64.ofNat SIGNATURE_LEN
 
 /-- ECDSA verification of a signature on a hash, under a public key. -/
 @[export eth_secp256r1_verify]
-def verifyExport (publicKey hash signature : ByteArray) : IO UInt8 := do
+def verifyExport (publicKey hash signature : ByteArray) : Result UInt8 := runSecp256r1 do
   let q ← readPublicKey publicKey
   let e ← readHash hash
   let (r, s) ← readSignature signature

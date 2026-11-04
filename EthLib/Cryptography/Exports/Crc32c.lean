@@ -7,7 +7,7 @@ public import EthLib.Cryptography.Hash.Crc32c
 
 The C export of CRC-32C, RFC 3720 §12.1, for the Python bindings.
 
-CRC-32C is total, so the export has no `IO` error path.
+CRC-32C is total, so the export has no error path.
 -/
 
 public section

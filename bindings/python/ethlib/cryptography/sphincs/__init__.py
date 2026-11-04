@@ -1,9 +1,10 @@
 """leanSPHINCS signatures: key generation, signing and verification.
 
 - Malformed arguments raise TypeError or ValueError.
-- Inputs the spec rejects raise RuntimeError.
+- Inputs the spec rejects raise SphincsError, with the code and the message of the Lean error.
 """
 
+from ...errors import SphincsError
 from .._native import (
     sphincs_key_gen,
     sphincs_sign,
@@ -46,4 +47,5 @@ __all__ = [
     "PUB_KEY_SIZE",
     "SEED_LEN",
     "SIG_SIZE",
+    "SphincsError",
 ]
