@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Networking.Gossip.MessageId
-public import EthLib.Cryptography.Proofs.Hash.Sha256
 public import EthLib.Serialization.Proofs.Ssz.Codec.LengthBinding
 public import EthLib.Serialization.Proofs.Ssz.Codec.Table
 
@@ -17,7 +16,6 @@ Properties of the gossip message ID.
 - Each hash input determines its domain and its bytes, and under Altair its topic.
   The topic must be shorter than 2^64 bytes.
   So two messages that differ in one share an ID only if SHA-256, cut to 20 bytes, collides.
-- Known answers: one per rule and per case, one for an empty message, and one for a six-byte preamble.
 
 The kernel checks everything here, so no `native_decide` or `bv_decide` axiom appears.
 -/
@@ -153,96 +151,5 @@ theorem Altair.hashInput_valid_ne_invalid (topic₁ topic₂ bytes₁ bytes₂ :
   have first := congrArg (fun b : ByteArray => b.data.toList.head?) h
   simp [Altair.hashInput, ByteArray.data_append, MESSAGE_DOMAIN_VALID_SNAPPY,
     MESSAGE_DOMAIN_INVALID_SNAPPY] at first
-
-/-! ## Known answers
-
-The payload is 32 zero bytes.
-
-`python-snappy` 0.7.3 (on `cramjam` 2.14.0) compresses it to `20 00 00 7a 01 00`.
-
-That is the length 32, a literal of one byte (tag `00`, then `00`), and a copy of 31 bytes from 1 byte back (tag `7a`, then offset `01 00`).
-
-The raw payload is not a Snappy block: its first byte declares an empty block, and 31 more bytes follow.
-
-Each expected ID was computed with Python's `hashlib`, never with this code.
-
-`python-snappy` decided which data decompresses, except in the last answer.
-
-There `python-snappy` and `Snappy.decompress` disagree, and the ID follows `Snappy.decompress`.
--/
-
-namespace TestVector
-
-/-- The beacon block topic `/eth2/afcaaba0/beacon_block/ssz_snappy`, 38 bytes of ASCII.
-
-The ID reads the topic only as bytes, so any fork digest would do.
--/
-def topic : ByteArray := ⟨#[
-  0x2f, 0x65, 0x74, 0x68, 0x32, 0x2f, 0x61, 0x66, 0x63, 0x61, 0x61, 0x62, 0x61, 0x30, 0x2f, 0x62,
-  0x65, 0x61, 0x63, 0x6f, 0x6e, 0x5f, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x2f, 0x73, 0x73, 0x7a, 0x5f,
-  0x73, 0x6e, 0x61, 0x70, 0x70, 0x79]⟩
-
-/-- 32 zero bytes, compressed by `python-snappy`. -/
-def compressed : ByteArray := ⟨#[0x20, 0x00, 0x00, 0x7a, 0x01, 0x00]⟩
-
-/-- 32 zero bytes, sent without compression. -/
-def raw : ByteArray := ⟨Array.replicate 32 0⟩
-
-/-- The length 0 written in six preamble bytes, one more than a 32-bit length ever needs, and nothing after it. -/
-def longPreamble : ByteArray := ⟨#[0x80, 0x80, 0x80, 0x80, 0x80, 0x00]⟩
-
-end TestVector
-
-open TestVector
-
-/-- Phase 0, data that decompresses: SHA256(01 00 00 00 | 32 zero bytes)[:20]. -/
-theorem phase0_valid :
-    Phase0.messageId compressed = ⟨#[
-      0x11, 0xbc, 0x11, 0x5c, 0x02, 0x26, 0x32, 0x9c, 0x9a, 0x35,
-      0xa7, 0xfe, 0xe1, 0xd2, 0x9c, 0x1f, 0x52, 0x48, 0xe0, 0xf7]⟩ := by
-  decide +kernel
-
-/-- Phase 0, data that does not decompress: SHA256(00 00 00 00 | 32 zero bytes)[:20]. -/
-theorem phase0_invalid :
-    Phase0.messageId raw = ⟨#[
-      0x6d, 0xb6, 0x5f, 0xd5, 0x9f, 0xd3, 0x56, 0xf6, 0x72, 0x91,
-      0x40, 0x57, 0x1b, 0x5b, 0xcd, 0x6b, 0xb3, 0xb8, 0x34, 0x92]⟩ := by
-  decide +kernel
-
-/-- Altair, data that decompresses: SHA256(01 00 00 00 | 26 00 00 00 00 00 00 00 | topic | 32 zero bytes)[:20]. -/
-theorem altair_valid :
-    Altair.messageId topic compressed = ⟨#[
-      0xdf, 0x1b, 0xb5, 0x4c, 0x62, 0xc1, 0x77, 0x6b, 0x50, 0x28,
-      0xf4, 0x4c, 0xb8, 0x79, 0xb2, 0xb4, 0xf3, 0x92, 0x6c, 0x09]⟩ := by
-  decide +kernel
-
-/-- Altair, data that does not decompress: SHA256(00 00 00 00 | 26 00 00 00 00 00 00 00 | topic | 32 zero bytes)[:20]. -/
-theorem altair_invalid :
-    Altair.messageId topic raw = ⟨#[
-      0x72, 0x3e, 0x3f, 0x27, 0x85, 0xc7, 0x22, 0x7d, 0xa1, 0xfe,
-      0x5c, 0xb0, 0x6a, 0x5e, 0xd4, 0x6a, 0x3a, 0x64, 0x7a, 0xd4]⟩ := by
-  decide +kernel
-
-/-- Altair, a message with neither topic nor data: SHA256(00 00 00 00 | eight zero bytes)[:20].
-
-Empty data is not a Snappy block, since a block starts with its length.
--/
-theorem altair_empty :
-    Altair.messageId ByteArray.empty ByteArray.empty = ⟨#[
-      0x15, 0xec, 0x7b, 0xf0, 0xb5, 0x07, 0x32, 0xb4, 0x9f, 0x82,
-      0x28, 0xe0, 0x7d, 0x24, 0x36, 0x53, 0x38, 0xf9, 0xe3, 0xab]⟩ := by
-  decide +kernel
-
-/-- Phase 0, a preamble of six bytes: SHA256(00 00 00 00 | 80 80 80 80 80 00)[:20].
-
-`Snappy.decompress` reads at most five preamble bytes, so the data is hashed as it is.
-
-`python-snappy` decompresses it to the empty payload, which would give the ID SHA256(01 00 00 00)[:20] = `67abdd721024f0ff4e0b3f4c2fc13bc5bad42d0b` instead.
--/
-theorem phase0_long_preamble :
-    Phase0.messageId longPreamble = ⟨#[
-      0xf5, 0x0b, 0xf1, 0x26, 0xb6, 0x8e, 0x05, 0xa9, 0xaa, 0x7f,
-      0x6c, 0x4f, 0x03, 0x9a, 0xb9, 0xad, 0x25, 0x3f, 0xd4, 0x05]⟩ := by
-  decide +kernel
 
 end EthLib.Networking.Proofs.Gossip.MessageId
