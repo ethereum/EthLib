@@ -147,6 +147,13 @@ def finalExponentiation (f : Fp12) : Fp12 :=
 
 /-! ## The pairing -/
 
+/-- The pairing `e(P, Q)`, an element of `Fp12`.
+
+A point at infinity gives 1. -/
+def pairing (P : G1) (Q : G2) : Fp12 :=
+  if P.isInfinity || Q.isInfinity then Fp12.one
+  else finalExponentiation (millerLoop blsX Q.toAffine P.toAffine).conjugate
+
 /-- Returns `true` iff `∏ e(P_i, Q_i) = 1`. -/
 def pairingCheck (pairs : Array (G1 × G2)) : Bool := Id.run do
   let mut acc : Fp12 := Fp12.one
