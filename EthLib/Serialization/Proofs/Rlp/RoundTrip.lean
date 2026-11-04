@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Rlp.Loops
 public import EthLib.Serialization.Rlp.Decode
 public import EthLib.Serialization.Proofs.Rlp.Item
 
@@ -236,7 +237,7 @@ theorem encodeBytes_ok (data e : ByteArray) (h : encodeBytes data = .ok e) :
 theorem joinEncodings_cons_ok (item : Item) (rest : List Item) (e : ByteArray)
     (h : joinEncodings (item :: rest) = .ok e) :
     ∃ head tail, encode item = .ok head ∧ joinEncodings rest = .ok tail ∧ e = head ++ tail := by
-  rw [joinEncodings] at h
+  rw [joinEncodings_cons] at h
   cases hHead : encode item with
   | error err => simp [hHead, bind, Except.bind] at h
   | ok head =>
@@ -285,7 +286,7 @@ theorem decodeItems_joinEncodings : (xs : List Item) → (e : ByteArray) → joi
   | [], e, h => by
     simp [joinEncodings] at h
     subst h
-    rw [decodeItems]
+    rw [decodeItems_eq]
     simp
   | x :: xs, e, h => by
     obtain ⟨head, tail, hHead, hTail, rfl⟩ := joinEncodings_cons_ok x xs e h
@@ -300,7 +301,7 @@ theorem decodeItems_joinEncodings : (xs : List Item) → (e : ByteArray) → joi
         simp [h0] at hRest
       simp [hHeadNe]
     have hAppend : (head ++ tail).data.toList = head.data.toList ++ tail.data.toList := by simp
-    rw [hAppend, decodeItems]
+    rw [hAppend, decodeItems_eq]
     simp [hNe, hDecode, bind, Except.bind, hTailItems]
 termination_by structural xs => xs
 

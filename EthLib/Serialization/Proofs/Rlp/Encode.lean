@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Rlp.Loops
 public import EthLib.Serialization.Rlp.Encode
 public import EthLib.Serialization.Proofs.Rlp.Item
 

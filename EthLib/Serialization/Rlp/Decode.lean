@@ -31,6 +31,39 @@ The decoder rejects all three, and any input that ends early or has bytes left a
 
 namespace EthLib.Serialization.Rlp
 
+namespace Internal
+
+/-- Whether a list has at least `n` elements, read in at most `n` steps. -/
+def hasAtLeast {α : Type} : Nat → List α → Bool
+  | 0, _ => true
+  | _ + 1, [] => false
+  | n + 1, _ :: rest => hasAtLeast n rest
+
+/-- The check reads the length of the list against the bound. -/
+theorem hasAtLeast_iff {α : Type} (n : Nat) (l : List α) :
+    hasAtLeast n l = true ↔ n ≤ l.length := by
+  induction n generalizing l with
+  | zero => simp [hasAtLeast]
+  | succ n ih => cases l <;> simp [hasAtLeast, ih]
+
+/-- A bound on the length of a list, decided in as many steps as the bound.
+
+Each length a decoder reads is checked against the rest of the input.
+
+So each check costs that length, not the whole input. -/
+@[instance_reducible] def decideLeLength {α : Type} (n : Nat) (l : List α) :
+    Decidable (n ≤ l.length) :=
+  decidable_of_iff _ (hasAtLeast_iff n l)
+
+/-- A list shorter than a bound, decided in as many steps as the bound. -/
+@[instance_reducible] def decideLengthLt {α : Type} (l : List α) (n : Nat) :
+    Decidable (l.length < n) :=
+  decidable_of_iff (¬ hasAtLeast n l = true) (by rw [hasAtLeast_iff]; omega)
+
+end Internal
+
+attribute [local instance high] Internal.decideLeLength Internal.decideLengthLt
+
 /-- What the first bytes of an encoding announce, from its first byte `first` and the rest.
 
 The result is the kind of payload, the number `k` of bytes that write the length, and the length.
@@ -107,19 +140,25 @@ def decodeItem (input : List UInt8) :
           .ok (.list items, rest)
       else
         .error (.inputTooShort length body.length)
-termination_by 2 * input.length
+termination_by 3 * input.length
 decreasing_by simp; omega
 
 /-- The items whose encodings, one after another, are exactly `payload`. -/
 def decodeItems (payload : List UInt8) : Except RlpError (List Item) :=
+  decodeItemsFrom payload []
+termination_by 3 * payload.length + 2
+
+/-- The items read so far, in reverse order, then the items of `payload`.
+
+The loop runs in constant stack for any number of items. -/
+def decodeItemsFrom (payload : List UInt8) (done : List Item) : Except RlpError (List Item) :=
   if payload.isEmpty then
-    .ok []
+    .ok done.reverse
   else do
     -- The first item, then the items of what is left.
     let (item, ⟨rest, _⟩) ← decodeItem payload
-    let items ← decodeItems rest
-    .ok (item :: items)
-termination_by 2 * payload.length + 1
+    decodeItemsFrom rest (item :: done)
+termination_by 3 * payload.length + 1
 
 end
 

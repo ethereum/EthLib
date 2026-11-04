@@ -300,7 +300,7 @@ theorem canonical_upTo (n : Nat) :
     intro payload hLen xs h
     have hNil : payload = [] := List.eq_nil_of_length_eq_zero (by omega)
     subst hNil
-    rw [decodeItems] at h
+    rw [decodeItems_eq] at h
     simp at h
     subst h
     exact ⟨.empty, rfl, rfl⟩
@@ -312,7 +312,7 @@ theorem canonical_upTo (n : Nat) :
         readItem_canonical input (fun p hp => ih.2 p (by omega)) x rest h
     refine ⟨hItem, ?_⟩
     intro payload hLen xs h
-    rw [decodeItems] at h
+    rw [decodeItems_eq] at h
     by_cases hEmpty : payload.isEmpty
     · -- An empty payload holds no item.
       simp only [hEmpty, ite_true, Except.ok.injEq] at h
@@ -338,7 +338,7 @@ theorem canonical_upTo (n : Nat) :
           obtain ⟨head, hHead, hPayload⟩ := hItem payload hLen item rest hRead
           obtain ⟨tail, hTail, hRestBytes⟩ := ih.2 rest (by omega) items hNext
           refine ⟨head ++ tail, ?_, ?_⟩
-          · simp [joinEncodings, hHead, hTail, bind, Except.bind, pure, Except.pure]
+          · simp [joinEncodings_cons, hHead, hTail, bind, Except.bind, pure, Except.pure]
           · simp [hPayload, hRestBytes]
 
 /-- The decoder accepts only canonical input: what it decodes from `b` is encoded as exactly `b`. -/
