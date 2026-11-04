@@ -31,7 +31,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Serialization | [`Rlp`](EthLib/Serialization/Rlp/) | Recursive Length Prefix, the encoding of the execution layer |
 | Serialization | [`Ssz`](EthLib/Serialization/Ssz/) | Simple Serialize and its merkleization, the encoding of the consensus layer |
 | Networking | [`Encoding`](EthLib/Networking/Encoding/) | the protobuf varint of req/resp messages |
-| Networking | [`Enr`](EthLib/Networking/Enr/) | Ethereum Node Records of EIP-778, their text form, the "v4" identity scheme and node IDs |
+| Networking | [`Enr`](EthLib/Networking/Enr/) | Ethereum Node Records of EIP-778, their text form, the "v4" identity scheme, node IDs and the consensus entries |
 | Networking | [`Snappy`](EthLib/Networking/Snappy/) | Snappy block decompression, a literal block encoder and the framing format |
 | Networking | [`Gossip`](EthLib/Networking/Gossip/) | the gossip message ID of Phase 0 and Altair |
 | Networking | [`ReqResp`](EthLib/Networking/ReqResp/) | the `ssz_snappy` encoding of requests and response chunks, with its size bounds |

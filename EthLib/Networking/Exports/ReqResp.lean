@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Networking.Exports.Fork
 public import EthLib.Networking.ReqResp.Encoding
 
 /-!
@@ -15,6 +16,8 @@ A response chunk comes back as one byte string: its code, its context bytes, the
 public section
 
 namespace EthLib.Networking.ReqResp.Exports
+
+open EthLib.Networking.Exports (forkAt)
 
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
 def message : ReqRespError → String
@@ -42,15 +45,6 @@ def runReqResp {α : Type} (act : Except ReqRespError α) : IO α :=
 def constMaxErrorMessageSize (_ : Unit) : UInt64 := MAX_ERROR_MESSAGE_SIZE
 
 /-! ## Operations -/
-
-/-- The fork with a name, such as `bellatrix`, as the constructor of the timeline writes it. -/
-def forkAt (name : ByteArray) : IO Base.Fork := do
-  let some name := String.fromUTF8? name | throw (IO.userError "fork name is not UTF-8")
-  -- The timeline has fewer than 64 forks, and each index reads back as its fork.
-  let forks := (List.range 64).map Base.Fork.ofNat
-  match forks.find? (fun fork => ((reprStr fork).splitOn ".").getLast? == some name) with
-  | some fork => pure fork
-  | none => throw (IO.userError s!"no fork named {name}")
 
 /-- The payload cap at the named fork. -/
 @[export eth_reqresp_max_payload_size]
