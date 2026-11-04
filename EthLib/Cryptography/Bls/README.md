@@ -119,7 +119,7 @@ The theorem is about the group element, not the stored coordinates: the represen
 ## What is not proved
 
 - Nothing is proved about G2, the pairing, hash-to-curve or SHA-256.
-- No theorem says that `KeyValidate` and the subgroup checks accept exactly the points of the prime-order subgroups.
+- The map to G1 of EIP-2537 has no theorem: neither its validity nor its landing in the subgroup is proved.
 - No theorem states what the signature functions return; in particular, none says that an honest aggregate signature verifies.
 - No security property, such as unforgeability, is proved.
 - `PairingLaws`, the law of the pairing check, is not proved: on representatives of `a_i * g_1` and `b_i * g_2`, the check passes exactly when `sum_i a_i * b_i = 0`.
