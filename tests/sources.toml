@@ -35,6 +35,7 @@ directories = [
 
 [repositories."BLAKE2/BLAKE2"]
 commit = "ed1974ea83433eba7b2d95c5dcd9ac33cb847913"
+directories = ["bindings/python/tests/precompile/blake2"]
 
 [repositories."ethereum/devp2p"]
 commit = "88f1c80800d622cc3a542a2125bbe33cc18c9f9c"
