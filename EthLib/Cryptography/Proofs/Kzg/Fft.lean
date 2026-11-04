@@ -4,11 +4,13 @@ public import EthLib.Cryptography.Kzg.Fft
 public import EthLib.Cryptography.Proofs.Bls.Fr
 
 /-!
-# Proofs: `Fft`
+# Proofs: the shape of the FFT helpers
 
-Shape and element-wise properties of the FFT helpers: every transform in
-this file preserves the size of its input, `fftHalve` picks out every
-other element, and `shiftVals` multiplies element `i` by `factor ^ i`.
+Every transform keeps the size of its input.
+
+The halving step picks out every other element.
+
+The shift multiplies element `i` by `factor^i`.
 -/
 
 @[expose] public section

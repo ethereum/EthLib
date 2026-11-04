@@ -5,31 +5,22 @@ public import EthLib.Cryptography.Proofs.Kzg.Interpolation
 public import Mathlib.LinearAlgebra.Lagrange
 
 /-!
-# Proofs: cell interpolation via inverse coset FFT
+# Proofs: cell interpolation by an inverse coset FFT
 
-Each cell holds 64 evaluations on a shifted roots-of-unity coset in bit-reversed order.
+A cell holds 64 values on a shifted coset of roots of unity, in bit-reversed order.
 
-The Fulu sampling specification recovers the cell polynomial with general Lagrange interpolation.
+Lagrange interpolation of a cell takes `64 * 63` field inversions.
 
-See `consensus-specs` `specs/fulu/polynomial-commitments-sampling.md` at `8a3df1d79d70000801407e33d660171be9cd06d1`.
+The cell interpolation uses the structure of the coset instead.
 
-Lagrange interpolation computes `64 * 63` field inversions per cell.
+It bit-reverses the values, runs one inverse FFT of size 64, and scales coefficient `i` by `h^(-i)`.
 
-`interpolateCosetEvals` exploits the coset structure instead.
+Here `h` is the shift, and point `j` of the coset is `h * v^(rev_6(j))` for a 64-th root `v`.
 
-It bit-reverses the evaluations, runs one inverse FFT of size 64, and scales coefficient `i` by `h^(-i)`.
-
-```text
-    coset[j] = h * v^(rev_6(j))      v = domainRoot 64, h = coset shift
-    evals  --brp-->  IFFT_64  --shift by h^(-1)-->  coefficients I
-```
-
-This file proves:
-
-- `interpolateCosetEvals` rejects wrong-sized inputs and succeeds on 64 elements.
-- Every coset point of cell `cellIndex` factors as `h * domainRoot 64 ^ reverseBits j 64`.
-- The output polynomial evaluates to `evals[j]!` at every coset point `coset[j]!`.
-- The output equals `interpolatePolynomialcoeff coset evals` coefficient by coefficient.
+- Interpolation rejects inputs of the wrong size, and succeeds on 64 values.
+- Each point of a cell's coset factors as above.
+- The result takes the value `evals[j]` at coset point `j`.
+- The result equals Lagrange interpolation, coefficient by coefficient.
 -/
 
 @[expose] public section

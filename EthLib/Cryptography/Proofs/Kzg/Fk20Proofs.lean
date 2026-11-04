@@ -13,38 +13,32 @@ public import EthLib.Cryptography.Proofs.Bls.G1Msm
 public import EthLib.Cryptography.Proofs.Bls.Compress
 
 /-!
-# Proofs: FK20 cell proofs equal per-cell quotient commitments
+# Proofs: FK20 cell proofs equal the quotient commitments of each cell
 
-The Fulu sampling specification proves each cell `k` on its own.
+The direct method proves each cell `k` on its own.
 
-See `consensus-specs` `specs/fulu/polynomial-commitments-sampling.md` at `8a3df1d79d70000801407e33d660171be9cd06d1`.
+- It builds the vanishing polynomial `Z_k(X)` of the 64 points of the cell's coset.
+- It divides `f(X)` by `Z_k(X)` in coefficient form, which gives the quotient `q_k(X)`.
+- It commits to `q_k` with one multi-scalar multiplication over the monomial setup.
 
-- Build the vanishing polynomial `Z_k(X)` over the 64 points of `cosetForCell k`.
-- Divide `f(X)` by `Z_k(X)` in coefficient form to obtain quotient `q_k(X)`.
-- Commit to `q_k` with one multi-scalar multiplication against `setup.g1Monomial` and compress.
+The code computes all 128 cell proofs together, by the Toeplitz structure of FK20.
 
-`computeCellsAndKzgProofsPolynomialcoeff` computes all 128 cell proofs together via the Toeplitz structure of FK20.
+See Feist and Khovratovich, "Fast amortized KZG proofs", <https://eprint.iacr.org/2023/033>.
 
-See Feist and Khovratovich, "Fast amortized KZG proofs", ePrint 2023/033.
-
-```text
-    coset k  : h_k * mu_64,  c_k = h_k^64 = omega_128^(rev_7(k))
-    Z_k(X)   : X^64 - c_k
-    q_k[t]   : sum_{e < shifts, t + 64*(e+1) < size} c_k^e * f[t + 64*(e+1)]
-    H_d      : sum_{t < size - 64*d} f[t + 64*d] * setup.g1Monomial[t]
-    proof_k  : compress( sum_{e < shifts} c_k^e * H_(e+1) )
-```
+- The coset of cell `k` is `h_k * mu_64`, with `c_k = h_k^64 = omega_128^(rev_7(k))`.
+- Its vanishing polynomial is `Z_k(X) = X^64 - c_k`.
+- The quotient is `q_k[t] = sum_e c_k^e * f[t + 64 (e + 1)]`, over the terms that exist.
+- The point `H_d` is `sum_t f[t + 64 d] * [s^t]`.
+- The proof is the compression of `sum_e c_k^e * H_(e + 1)`.
 
 The operation is stated through its body, a plain function of the setup and the coefficients.
 
-This file proves:
-
-- Valid `G1` points representing the same curve element compress to the same 48 bytes.
-- Every cell coset's vanishing polynomial `vanishingPolynomialcoeff coset` equals `X^64 - h_k^64`.
-- Dividing `polynomialCoeff` by `vanishingPolynomialcoeff coset` gives the Toeplitz series `q_k`.
-- Cell `k` of `fk20CellsAndProofs` equals `cosetEvalsToCell (coset.map (evaluatePolynomialcoeff polynomialCoeff))`.
-- Proof `k` of `fk20CellsAndProofs` equals the compressed MSM of `setup.g1Monomial` by `quotient`.
-- Given at least 64 valid cells of a polynomial, `recoverCellsAndKzgProofs` recovers all 128 cells and proofs.
+- Valid points of `G1` with the same group element compress to the same 48 bytes.
+- The vanishing polynomial of each cell's coset is `X^64 - h_k^64`.
+- Division by that polynomial gives the Toeplitz series `q_k`.
+- Cell `k` holds the values of the polynomial on its coset.
+- Proof `k` is the compressed commitment to the quotient `q_k`.
+- From at least 64 valid cells of a polynomial, recovery returns all 128 cells and proofs.
 -/
 
 @[expose] public section
@@ -80,11 +74,11 @@ private theorem fr_sub_cancel_top (s₁ s₂ top : Fr) : s₁ - s₂ = (s₁ + t
 
 /-! ## Canonical compression of equal `G1` curve points -/
 
-/-- Valid `G1` points with the same `toPoint` image compress to identical 48-byte strings.
+/-- Valid points of `G1` with the same group element compress to the same 48 bytes.
 
-`uncompress` maps compressed bytes to a canonical `z = 1` point (or `G1.zero`) with the same `toPoint`.
+Decompression gives a canonical point, with `z = 1` or at infinity, and the same group element.
 
-`compress_uncompress` then rebuilds the original compressed bytes from that canonical point.
+Compressing that canonical point gives back the original bytes.
 -/
 theorem compress_eq_of_toPoint_eq {p₁ p₂ : G1}
     (hv₁ : G1.Valid p₁) (hv₂ : G1.Valid p₂)
@@ -164,7 +158,7 @@ theorem compress_eq_of_toPoint_eq {p₁ p₂ : G1}
 
 /-! ## Cell coset vanishing polynomial: `Z_k(X) = X^64 - c_k` -/
 
-/-- Coefficient representation of `X^n - c`: `-c` at index `0`, `0` through `n - 1`, and `1` at `n`. -/
+/-- The coefficients of `X^n - c`: `-c` at index `0`, then zeros, and `1` at index `n`. -/
 def binomialVanishing (n : Nat) (c : Fr) : PolynomialCoeff :=
   Array.ofFn (n := n + 1) fun i =>
     if i.val = 0 then -c
@@ -201,7 +195,7 @@ theorem evalPolyAt_binomialVanishing {n : Nat} (hn : 0 < n) (c x : Fr) :
     show (Fr.one : Fr) = 1 from rfl, fr_one_mul]
   exact (add_comm (-c) (x ^ (m + 1))).trans (sub_eq_add_neg (x ^ (m + 1)) c).symm
 
-/-- Raised to the 64-th power, coset shift `cellIndex` is `(computeRootsOfUnity 128)[rev_7(cellIndex)]!`. -/
+/-- The 64-th power of the shift of cell `k` is root `rev_7(k)` of the 128-th roots of unity. -/
 theorem cosetShift_pow_cell (cellIndex : CellIndex) (hci : cellIndex < CELLS_PER_EXT_BLOB) :
     (rootsOfUnityBrp FIELD_ELEMENTS_PER_EXT_BLOB)[FIELD_ELEMENTS_PER_CELL * cellIndex]! ^
         FIELD_ELEMENTS_PER_CELL =
@@ -280,7 +274,7 @@ private theorem monic_poly_eq_of_roots {z b xs : Array Fr} {n : Nat}
     subst hi_eq
     exact hz_top.trans hb_top.symm
 
-/-- On any valid cell coset `coset` with shift `h`, `vanishingPolynomialcoeff coset` equals `X^64 - h^64`. -/
+/-- The vanishing polynomial of a valid cell coset with shift `h` is `X^64 - h^64`. -/
 theorem vanishingPolynomialcoeff_cosetForCell
     {cellIndex : CellIndex} {coset : Coset}
     (hcoset : cosetForCell cellIndex = .ok coset) :
@@ -541,7 +535,7 @@ private theorem size_dividePolynomialcoeff {a b q : PolynomialCoeff}
 
 /-- Dividing `f` by `binomialVanishing n c` produces `toeplitzQuotient f n c`.
 
-Evaluation agreement over `Fr` pins down polynomials of degree below `Fr.modulus`, so `f.size < Fr.modulus` suffices.
+Values over `Fr` fix a polynomial of degree below `r`, so `f.size < r` suffices.
 -/
 theorem dividePolynomialcoeff_binomialVanishing {f : PolynomialCoeff} {n : Nat}
     (hn : 0 < n) (hf : f.size < Fr.modulus) (c : Fr) :
@@ -739,7 +733,9 @@ private theorem getElem!_extract {α : Type} [Inhabited α] (xs : Array α)
 
 Let `hs[e]` commit to `f[t + n * (e + 1)]` against `pts[t]` for each `e < shifts`.
 
-Padding `hs` with zeros to length `N` and summing `c^i * padded[i]` gives the MSM of `toeplitzQuotient f n c`.
+Pad `hs` with zeros to length `N`.
+
+Then the sum of `c^i * padded[i]` is the multi-scalar multiplication of the Toeplitz quotient.
 -/
 private theorem sum_padded_msm_eq_msm_toeplitz
     {pts : Array G1} {f : PolynomialCoeff} {n N : Nat}
@@ -923,7 +919,7 @@ private theorem sum_padded_msm_eq_msm_toeplitz
   rw [Finset.mem_range] at ht
   rw [getElem!_extract pts 0 (f.size - n) t hpts_sz (by omega), Nat.zero_add]
 
-/-- With at most `FIELD_ELEMENTS_PER_EXT_BLOB` coefficients, FK20 needs at most `CELLS_PER_EXT_BLOB` shifts. -/
+/-- With at most 8192 coefficients, FK20 needs at most 128 shifts. -/
 private theorem shifts_le_cells_per_ext_blob {sz : Nat}
     (hsz : sz ≤ FIELD_ELEMENTS_PER_EXT_BLOB) :
     (sz + FIELD_ELEMENTS_PER_CELL - 1) / FIELD_ELEMENTS_PER_CELL - 1 ≤ CELLS_PER_EXT_BLOB := by
@@ -931,7 +927,7 @@ private theorem shifts_le_cells_per_ext_blob {sz : Nat}
   show (sz + 64 - 1) / 64 - 1 ≤ 128
   omega
 
-/-- `fk20CellsAndProofs` outputs 128 cells and 128 proofs when `polynomialCoeff.size <= FIELD_ELEMENTS_PER_EXT_BLOB`. -/
+/-- FK20 outputs 128 cells and 128 proofs, for at most 8192 coefficients. -/
 theorem size_fk20CellsAndProofs (setup : TrustedSetup) {polynomialCoeff : PolynomialCoeff}
     (hp : polynomialCoeff.size ≤ FIELD_ELEMENTS_PER_EXT_BLOB) :
     (fk20CellsAndProofs setup polynomialCoeff).1.size = CELLS_PER_EXT_BLOB ∧
@@ -946,19 +942,18 @@ theorem size_fk20CellsAndProofs (setup : TrustedSetup) {polynomialCoeff : Polyno
   simp only [Array.size_map, Array.size_range]
   omega
 
-/-- `fk20CellsAndProofs` matches the Fulu per-cell specification on every cell.
+/-- FK20 agrees with the direct method on every cell.
 
-Assume `polynomialCoeff.size <= FIELD_ELEMENTS_PER_EXT_BLOB`.
+Assume `n <= 8192` coefficients.
 
-Assume `setup.g1Monomial` holds at least `polynomialCoeff.size - FIELD_ELEMENTS_PER_CELL` valid `r`-torsion points.
+Assume that the monomial setup holds at least `n - 64` valid points of order dividing `r`.
 
-Then for every cell `cosetForCell cellIndex = .ok coset`:
+Then for every cell with a valid coset:
 
-- `vanishingPolynomialcoeff coset` returns `vanishing`.
-- `dividePolynomialcoeff polynomialCoeff vanishing` returns `quotient`.
-- `g1LincombPoints` on `setup.g1Monomial.toArray.extract 0 quotient.size` and `quotient` returns `Bls.G1.msm`.
-- Cell `cellIndex` equals `cosetEvalsToCell (coset.map (evaluatePolynomialcoeff polynomialCoeff))`.
-- Proof `cellIndex` equals `Bls.G1.compress (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient)`.
+- The vanishing polynomial of the coset, and the quotient by it, exist.
+- The linear combination of the setup points by the quotient is their multi-scalar multiplication.
+- The cell holds the values of the polynomial on its coset.
+- The proof is the compressed commitment to the quotient.
 -/
 theorem fk20CellsAndProofs_eq_perCellSpec
     {setup : TrustedSetup} {polynomialCoeff : PolynomialCoeff}
@@ -1078,11 +1073,11 @@ theorem fk20CellsAndProofs_eq_perCellSpec
   rw [hget_proof, hq_sz]
   exact compress_eq_of_toPoint_eq hv_fft hv_msm_q hpt_fft
 
-/-- Specialization of `fk20CellsAndProofs_eq_perCellSpec` to decoded blobs.
+/-- The agreement of FK20 with the direct method, for a decoded blob.
 
-When `blobToPolynomial blob = .ok poly`, `polynomialEvalToCoeff poly` has `4096` coefficients.
+A decoded blob gives a polynomial with 4096 coefficients.
 
-Every cell and proof returned by `computeCellsAndKzgProofs` then matches the Fulu per-cell specification.
+Every cell and proof of the blob then agrees with the direct method.
 -/
 theorem computeCellsAndKzgProofs_blob_spec
     {setup : TrustedSetup} {blob : Blob} {poly : Polynomial}
@@ -1216,11 +1211,13 @@ theorem recoverCellsAndKzgProofs_ok_eq (setup : TrustedSetup)
   rw [hrec]
   rfl
 
-/-- End-to-end recovery specification for `recoverCellsAndKzgProofs`.
+/-- Recovery of cells and proofs, end to end.
 
-With at least 64 strictly ascending valid cells of `p`, it reconstructs all 128 cells and proofs of `p`.
+Take at least 64 valid cells of `p`, in strictly ascending order.
 
-Each recovered cell and proof satisfies the Fulu per-cell quotient commitment specification.
+Recovery rebuilds all 128 cells of `p` and their proofs.
+
+Each recovered cell and proof agrees with the direct method.
 -/
 theorem recoverCellsAndKzgProofs_spec
     {setup : TrustedSetup} {p : PolynomialCoeff}

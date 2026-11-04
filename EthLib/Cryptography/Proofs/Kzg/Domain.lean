@@ -9,17 +9,19 @@ public import Batteries.Data.Array.Lemmas
 /-!
 # Proofs: the roots-of-unity evaluation domain
 
-Characterizes `rootsOfUnityBrp n` for power-of-two `n` dividing
-`r - 1`: element `i` is `ω ^ reverseBits i n` for `ω` a primitive
-`n`-th root of unity (`domainRoot`), the elements are pairwise
-distinct, and membership is exactly "is an `n`-th root of unity"
-(`mem_rootsOfUnityBrp`). The `idxOf?` bridges translate the two
-branches of `evaluatePolynomialInEvaluationFormAux` into algebra:
-a hit pins down `z` as a domain element, and a miss means
-`z ^ n ≠ 1` — in particular no barycentric denominator `z - D[i]`
-vanishes (`sub_getElem_ne_zero_of_idxOf?_eq_none`).
+Take a power of two `n` that divides `r - 1`.
 
-Uses the scoped `Field Fr` instance from `Proofs.Bls.FrZMod`.
+Entry `i` of the bit-reversed domain is `ω^(rev(i))`, for a primitive `n`-th root `ω`.
+
+The entries are pairwise distinct, and they are exactly the `n`-th roots of unity.
+
+Evaluation looks `z` up in the domain.
+
+A hit makes `z` a domain point.
+
+A miss gives `z^n ≠ 1`, so no barycentric denominator `z - D[i]` vanishes.
+
+It uses the scoped field instance on `Fr` of the BLS proofs.
 -/
 
 @[expose] public section

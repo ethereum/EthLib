@@ -9,22 +9,17 @@ public import EthLib.Cryptography.Proofs.Bls.FrBatchInverse
 /-!
 # Proofs: recovery returns the source polynomial
 
-The endpoint of the recovery proofs.
+This file is the end point of the recovery proofs.
 
-Given at least 64 distinct cells that match a polynomial with 4096 coefficients, recovery returns that polynomial.
+Take at least 64 distinct cells that match a polynomial `P` with 4096 coefficients.
 
-```text
-    cells (at least 64 of 128)
-      |  flatten, with zeros for missing cells
-      v
-    E * Z on the 8192-point domain       (equals P * Z there)
-      |  inverse FFT
-      v
-    coefficients of P * Z
-      |  coset FFT, divide by Z pointwise, inverse coset FFT
-      v
-    coefficients of P, truncated to 4096
-```
+Then recovery returns `P`.
+
+- The cells are flattened, with zeros for the missing cells, into `E`.
+- On the 8192-point domain, `E * Z` equals `P * Z`.
+- The inverse FFT gives the coefficients of `P * Z`.
+- A coset FFT, a pointwise division by `Z` and an inverse coset FFT give `P`.
+- The result is truncated to 4096 coefficients.
 -/
 
 

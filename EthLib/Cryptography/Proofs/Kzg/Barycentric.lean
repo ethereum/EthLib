@@ -8,16 +8,17 @@ public import Mathlib.Algebra.BigOperators.Intervals
 /-!
 # Proofs: barycentric evaluation in Mathlib form
 
-Restates the slow (barycentric) path of
-`evaluatePolynomialInEvaluationForm` purely in Mathlib operations:
-the fold `barycentricRefSum` becomes a `Finset.sum`
-(`barycentricRefSum_eq_sum`), the spec's `Fr`-exponent power and
-Fermat inverse become monoid power and field inverse, and the width
-constant becomes a `Nat.cast`. The result,
-`evaluatePolynomialInEvaluationForm_slowPath_sum`, is the form the
-Lagrange-interpolation argument consumes.
+The slow path of evaluation in evaluation form is the barycentric formula.
 
-Uses the scoped `Field Fr` instance from `Proofs.Bls.FrZMod`.
+This file restates it with Mathlib operations only.
+
+The fold becomes a finite sum, and the powers and the inverse become Mathlib's.
+
+The width becomes a cast of a natural number.
+
+That form feeds the proof that evaluation is Lagrange interpolation.
+
+It uses the scoped field instance on `Fr` of the BLS proofs.
 -/
 
 @[expose] public section

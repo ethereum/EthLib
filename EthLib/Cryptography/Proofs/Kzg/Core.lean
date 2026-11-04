@@ -4,13 +4,13 @@ public import EthLib.Cryptography.Kzg.Core
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
 
 /-!
-# Proofs: `Core`
+# Proofs: the input checks of the blob operations
 
-The validation surface of the blob-commitment methods: the byte
-validators succeed exactly on valid bytes (returning them unchanged),
-`computeChallenge` produces a canonical field element, and each entry
-point rejects malformed input with exactly the documented error before
-doing any real work.
+The validators of commitments and proofs accept exactly the valid bytes, and keep them.
+
+The challenge of a blob is a canonical field element.
+
+Each blob operation rejects each malformed input with its own error, before any other work.
 -/
 
 @[expose] public section

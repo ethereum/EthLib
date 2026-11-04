@@ -7,9 +7,7 @@ public import EthLib.Cryptography.Proofs.Kzg.CosetInverse
 
 Entry `i` of the forward FFT is the polynomial evaluated at `w^i`.
 
-```text
-    fft(c)[i] = sum_j c_j * (w^i)^j = p(w^i)
-```
+That is, `fft(c)[i] = sum_j c_j * (w^i)^j = p(w^i)`.
 
 The coset FFT first scales coefficient `j` by `k^j`.
 

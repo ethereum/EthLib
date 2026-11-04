@@ -5,31 +5,25 @@ public import EthLib.Cryptography.Proofs.Kzg.Barycentric
 public import Mathlib.LinearAlgebra.Lagrange
 
 /-!
-# Proofs: correctness of `evaluatePolynomialInEvaluationForm`
+# Proofs: evaluation in evaluation form
 
-The main results of this file:
+Take a polynomial `p` of 4096 values on the bit-reversed roots of unity.
 
-* `evaluatePolynomialInEvaluationForm_eq_interpolate`: for a
-  full-width polynomial `p` (in evaluation form over the bit-reversed
-  roots-of-unity domain), `evaluatePolynomialInEvaluationForm p z` is
-  the evaluation at `z` of the Lagrange interpolant of the pairs
-  `(D[i], p[i])`.
-* `evaluatePolynomialInEvaluationForm_eq_eval` (spec voice): if
-  `p[i] = f(D[i])` for a polynomial `f` of degree `< 4096`, the
-  function returns `f(z)` — i.e. it evaluates *the* polynomial of
-  degree `< 4096` determined by the blob, at any point of `Fr`.
+Its evaluation at `z` is the Lagrange interpolant of the pairs `(D[i], p[i])`, evaluated at `z`.
 
-The proof splits on `idxOf?`. The fast path is
-`Lagrange.eval_interpolate_at_node`. The slow path is the barycentric
-formula: `Lagrange.eval_interpolate_not_at_node` expresses the
-interpolant's value as `nodal(z) · Σ_i w_i/(z − D[i]) · p[i]`, and on
-our domain the nodal polynomial is `X^4096 − 1` (`nodal_evalDomain`,
-because the domain enumerates exactly the 4096th roots of unity) with
-nodal weights `D[i]/4096` (`nodalWeight_evalDomain`, from the
-derivative `4096·X^4095` and `D[i]^4096 = 1`), which is precisely the
-spec's formula as restated in `Proofs.Kzg.Barycentric`.
+So if `p[i] = f(D[i])` for a polynomial `f` of degree below 4096, evaluation returns `f(z)`.
 
-Uses the scoped `Field Fr` instance from `Proofs.Bls.FrZMod`.
+The proof splits on whether `z` is in the domain.
+
+In the domain, the interpolant takes the value of its node.
+
+Outside it, the interpolant is a barycentric sum with the nodal polynomial `X^4096 - 1`.
+
+The nodal weights are `D[i] / 4096`, from the derivative `4096 X^4095` and `D[i]^4096 = 1`.
+
+That is the formula of the specification.
+
+It uses the scoped field instance on `Fr` of the BLS proofs.
 -/
 
 @[expose] public section

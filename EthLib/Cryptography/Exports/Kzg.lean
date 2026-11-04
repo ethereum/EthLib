@@ -14,20 +14,17 @@ public import EthLib.Cryptography.Kzg.Errors
 
 C-ABI exports for the Python bindings.
 
-Lean's `@[export]` attribute generates a C symbol with the given name
-that takes Lean-runtime objects (`lean_object*`) and returns one. The
-CPython extension under `bindings/python/` calls these symbols directly
-after marshalling Python values into `ByteArray`s and `Array`s.
+Each export is a C symbol that takes and returns Lean runtime objects.
 
-Two notes:
+The CPython extension under `bindings/python/` calls them on converted Python values.
 
-* `lean_initialize_runtime_module()` must be called by the loader
-  before any of these are invoked. The Python wrapper does this in its
-  `PyInit_*` function.
+The loader must initialize the Lean runtime before the first call.
 
-* All inputs are `ByteArray` or `Array X`. We return `ByteArray` for
-  single outputs, `Array ByteArray` (or pairs thereof) for multi-output
-  public methods. Booleans are returned as `UInt8`.
+Each input is a `ByteArray` or an `Array`.
+
+A single output is a `ByteArray`, and several outputs are arrays of them, or pairs.
+
+Booleans come back as `UInt8`.
 -/
 
 public section
@@ -58,15 +55,11 @@ def runKzgWithSetup {α : Type} (act : TrustedSetup → Except KzgError α) : IO
 
 /-! ## Sizes
 
-The Python C extension reads every size through these at module-init time, so the wrapper hardcodes no constant of its own.
+The Python C extension reads every size through these when its module loads.
 
-Each accessor takes a unit argument, so its C signature is fixed:
+So the binding fixes no constant of its own.
 
-```text
-    uint64_t f(lean_object* unit)
-```
-
-The accessor ignores its argument.
+Each accessor takes a unit argument and ignores it, so its C signature is fixed.
 -/
 
 @[export eth_kzg_const_bytes_per_field_element]
@@ -119,7 +112,7 @@ def computeChallengeExport
     let commitment ← bytesToKzgCommitment commitment
     return blsFieldToBytes (computeChallenge blob commitment)
 
-/-- Returns a 80-byte buffer: 48-byte proof followed by 32-byte y. -/
+/-- An 80-byte buffer: the 48-byte proof, then the 32 bytes of `y`. -/
 @[export eth_kzg_compute_kzg_proof]
 def computeKzgProofExport
     (blob : ByteArray) (z : ByteArray) : IO ByteArray := do

@@ -27,8 +27,9 @@ open EthLib.Cryptography.Bls (G1 G2 Fr)
 
 /-! ## Type aliases
 
-`KZGCommitment` and `KZGProof` are `Bytes48` aliases, kept as
-`ByteArray` for direct interop with public method signatures. -/
+A commitment and a proof are 48 bytes each.
+
+They stay byte arrays, as the public operations take them. -/
 
 abbrev G1Point       := ByteArray
 abbrev G2Point       := ByteArray
@@ -38,8 +39,6 @@ abbrev KZGProof      := ByteArray
 /-! ## Validation -/
 
 /-- Validate a commitment or a proof and return its point.
-
-This is `validate_kzg_g1` from the Deneb polynomial commitments specification.
 
 It is BLS public-key validation, except that the point at infinity is allowed.
 
@@ -85,8 +84,6 @@ def computeChallenge (blob : Blob) (commitment : KZGCommitment) : Fr :=
 
 /-- The linear combination `sum_i scalars_i * points_i` of decoded points.
 
-This is `g1_lincomb` from the Deneb polynomial commitments specification, on decoded points.
-
 The setup and the inputs are decoded once, so no point goes through bytes in between.
 -/
 def g1LincombPoints
@@ -97,14 +94,12 @@ def g1LincombPoints
     return Bls.G1.zero
   return Bls.G1.msm points scalars
 
-/-- Given `y == p(z)` for a polynomial `p(x)`, compute `q(z)`: the KZG
-quotient polynomial evaluated at `z` for the special case where `z` is in
-roots of unity.
+/-- The quotient `q(z)` of the KZG proof, given `y = p(z)`, when `z` is a root of unity.
 
-For more details, read
-https://dankradfeist.de/ethereum/2021/06/18/pcs-multiproofs.html section
-"Dividing when one of the points is zero". The code below computes q(x_m)
-for the roots of unity special case. -/
+The general quotient divides by zero at such a `z`, so this case has its own formula.
+
+It is the section "Dividing when one of the points is zero" of
+<https://dankradfeist.de/ethereum/2021/06/18/pcs-multiproofs.html>. -/
 def computeQuotientEvalWithinDomain
     (z : Fr) (polynomial : Polynomial) (y : Fr)
     : Fr :=
@@ -119,9 +114,7 @@ def computeQuotientEvalWithinDomain
     else
       let f_i := polynomial[i]! - y
       let numerator := f_i * omega_i
-      -- `z` is a root of unity here (the caller only reaches this function
-      -- when `z` is in the domain), so `z ≠ 0`; and `omega_i ≠ z` by the
-      -- skip above — the denominator is nonzero.
+      -- Here `z` is in the domain, so `z ≠ 0`, and the skip gives `omega_i ≠ z`.
       result + numerator * inverses[i]!
 
 /-- Returns the KZG proof at `z` and the evaluation `y = p(z)`. -/
@@ -151,9 +144,9 @@ def computeKzgProofImpl (setup : TrustedSetup)
   let proofG1 ← g1LincombPoints g1LagrangeBrp quotient
   return (Bls.G1.compress proofG1, y)
 
-/-- Compute a KZG proof at `z` for the polynomial represented by `blob`.
-Returns `(proof, y_bytes)`, where `y_bytes` is the 32-byte big-endian
-encoding of `p(z)`. -/
+/-- The KZG proof at `z` for the polynomial of a blob, with the value `p(z)`.
+
+The value comes as 32 big-endian bytes. -/
 def computeKzgProof (setup : TrustedSetup) (blob : Blob) (zBytes : Bytes32) :
     Except KzgError (KZGProof × Bytes32) := do
   if blob.size ≠ BYTES_PER_BLOB then
@@ -180,9 +173,7 @@ def verifyKzgProofWith (s : G2)
   ]
   Bls.pairingCheck pairs
 
-/-- Verify a KZG proof that `p(z) == y` for the polynomial committed to in `commitmentG1`.
-
-The Deneb specification calls it `verify_kzg_proof_impl`. -/
+/-- Verify a KZG proof that `p(z) == y` for the committed polynomial `p`. -/
 def verifyKzgProofImpl (setup : TrustedSetup)
     (commitmentG1 : G1) (z y : Fr) (proofG1 : G1) : Bool :=
   verifyKzgProofWith (setup.g2Monomial[1]'(by decide)) commitmentG1 z y proofG1
@@ -265,8 +256,9 @@ def blobToKzgCommitment (setup : TrustedSetup) (blob : Blob) :
   let commitmentG1 ← g1LincombPoints setup.g1LagrangeBrp.toArray polynomial
   return Bls.G1.compress commitmentG1
 
-/-- Compute the KZG proof verifying `blob` against `commitment`. Does
-not check that `commitment` is correct for `blob`. -/
+/-- Compute the KZG proof of a blob against a commitment.
+
+It does not check that the commitment belongs to the blob. -/
 def computeBlobKzgProof (setup : TrustedSetup) (blob : Blob) (commitmentBytes : Bytes48) :
     Except KzgError KZGProof := do
   if blob.size ≠ BYTES_PER_BLOB then
@@ -300,8 +292,9 @@ def verifyBlobKzgProof (setup : TrustedSetup)
                 | .error _ => throw (.invalidProof none)
   return verifyKzgProofImpl setup commitmentG1 evaluationChallenge y proofG1
 
-/-- Verify a batch of (blob, commitment, proof) triples. Returns `true`
-for the empty input. -/
+/-- Verify a batch of triples of a blob, a commitment and a proof.
+
+The empty batch verifies. -/
 def verifyBlobKzgProofBatch (setup : TrustedSetup)
     (blobs : Array Blob)
     (commitmentsBytes : Array Bytes48)

@@ -6,24 +6,19 @@ public import EthLib.Cryptography.Proofs.Bls.G1Order
 /-!
 # Proofs: the radix-2 FFT over `G1`
 
-`fftG1` applies the Cooley-Tukey butterfly directly to `G1` points.
+This FFT applies the Cooley-Tukey butterfly to points of `G1`.
 
-Field products become scalar multiplications in the prime-order subgroup, where `Fr.modulus * P = 0`.
+Field products become scalar multiplications in the subgroup of prime order `r`.
 
-```text
-    even[q] + [roots[q]] odd[q]       (top half:    j = q)
-    even[q] - [roots[q]] odd[q]       (bottom half: j = q + 2^k)
-```
+There `r * P = 0`.
 
-Each butterfly product runs in a `Task.spawn`.
+The butterfly gives `even[q] + [roots[q]] odd[q]` at `j = q`, and the difference at `j = q + 2^k`.
 
-Reading `.get` gives its value by definition.
+Each butterfly product runs as its own task, and reading the task gives its value by definition.
 
-This file proves:
-
-- `fftG1` preserves input array length.
-- `fftG1` preserves `Bls.G1.Valid` and prime-order torsion (`Fr.modulus * toPoint P = 0`).
-- Entry `j` maps under `Bls.G1.toPoint` to `sum_{i < 2^k} (omega^(i * j)).val * toPoint vals[i]`.
+- The FFT keeps the length of its input.
+- It keeps valid points, and points of order dividing `r`.
+- Entry `j` is the point `sum_{i < 2^k} omega^(i j) * vals[i]`.
 -/
 
 @[expose] public section

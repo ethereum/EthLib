@@ -21,8 +21,9 @@ open EthLib.Cryptography.Kzg.Constants
 def fftHalve (xs : Array Fr) (start : Nat) : Array Fr :=
   Array.ofFn (n := xs.size / 2) fun i => xs[start + 2 * i.val]!
 
-/-- Cooley-Tukey radix-2 forward FFT. `rootsOfUnity` must have the same
-length as `vals`. -/
+/-- The radix-2 Cooley-Tukey forward FFT.
+
+The roots of unity must have the length of the values. -/
 def fftFieldAux
     (vals : Array Fr) (rootsOfUnity : Array Fr)
     : Array Fr :=
@@ -47,9 +48,9 @@ def fftFieldAux
 termination_by vals.size
 decreasing_by all_goals (simp [fftHalve]; omega)
 
-/-- Forward (`inv = false`) or inverse FFT (`inv = true`) over `vals`.
-The inverse reverses the roots of unity and divides each output by
-`len(vals)`. -/
+/-- The forward FFT, or the inverse FFT when `inv` is true.
+
+The inverse reverses the roots of unity and divides each output by the length. -/
 def fftField
     (vals : Array Fr) (rootsOfUnity : Array Fr)
     (inv : Bool := false) : Array Fr :=
@@ -63,9 +64,7 @@ def fftField
       (fftFieldAux vals reversed).map (· * invlen)
     else
       fftFieldAux vals rootsOfUnity
-  -- Only (non-empty) power-of-two input lengths are legal: `fftHalve`
-  -- silently truncates an odd length reached during recursion instead of
-  -- failing, and the empty input has no well-defined transform.
+  -- Only nonempty power-of-two lengths are valid, since halving would truncate an odd length.
   if vals.size.isPowerOfTwo then out
   else panicWith out s!"fftField: input length {vals.size} is not a power of two"
 
@@ -79,11 +78,11 @@ def fftHalveG1 (xs : Array Bls.G1) (start : Nat) : Array Bls.G1 :=
     out[i] = sum_j [rootsOfUnity[i]^j] vals[j]
 ```
 
-The butterflies are those of `fftFieldAux`.
+The butterflies are those of the FFT over `Fr`.
 
 Each product by a root is a scalar multiplication.
 
-`rootsOfUnity` has the length of `vals`, a power of two. -/
+The roots of unity have the length of the values, a power of two. -/
 def fftG1 (vals : Array Bls.G1) (rootsOfUnity : Array Fr) : Array Bls.G1 :=
   if vals.size ≤ 1 then
     vals
@@ -102,8 +101,7 @@ def fftG1 (vals : Array Bls.G1) (rootsOfUnity : Array Fr) : Array Bls.G1 :=
 termination_by vals.size
 decreasing_by all_goals (simp [fftHalveG1]; omega)
 
-/-- Multiply successive elements of `vals` by successive powers of
-`factor`, starting at `shift`. -/
+/-- Multiply successive values by successive powers of `factor`, starting at `shift`. -/
 def shiftValsAux (factor : Fr) : Fr → List Fr → List Fr
   | _, [] => []
   | shift, v :: rest => (v * shift) :: shiftValsAux factor (shift * factor) rest
@@ -114,8 +112,9 @@ def shiftVals
     : Array Fr :=
   (shiftValsAux factor Fr.one vals.toList).toArray
 
-/-- FFT/IFFT over a coset of the roots of unity. Useful for dividing by
-a polynomial that vanishes on the unshifted domain. -/
+/-- The FFT or the inverse FFT over a coset of the roots of unity.
+
+It serves to divide by a polynomial that vanishes on the unshifted domain. -/
 def cosetFftField
     (vals : Array Fr) (rootsOfUnity : Array Fr)
     (inv : Bool := false) : Array Fr :=

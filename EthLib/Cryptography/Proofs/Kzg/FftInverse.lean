@@ -7,32 +7,19 @@ public import Mathlib.Algebra.Field.GeomSum
 public import Mathlib.RingTheory.RootsOfUnity.PrimitiveRoots
 
 /-!
-# Proofs: the FFT round-trip `IFFT (FFT x) = x`
+# Proofs: the FFT round trip
 
-This file works towards the correctness of the number-theoretic transform
-in `Kzg/Fft.lean`: for a vector `x` of length `n = 2 ^ k` and a table of
-roots of unity `roots[i] = ω ^ i` with `ω` a primitive `n`-th root, the
-inverse transform recovers the input,
+Take a vector `x` of length `n = 2^k`, and the roots `ω^i` for a primitive `n`-th root `ω`.
 
-    fftField (fftField x roots false) roots true = x
+The inverse FFT of the FFT of `x` is `x`, and so is the FFT of the inverse FFT.
 
-    and
+The proof has three parts.
 
-    fftField (fftField x roots true) roots false = x
+- Orthogonality: the powers of an `n`-th root of unity sum to `n` for the root 1, else to 0.
+- The Cooley-Tukey recursion computes the transform `y[j] = ∑ i, x[i] * ω^(i * j)`.
+- The round trips follow from the first two parts.
 
-The argument/file has three parts:
-
-* **Orthogonality** (`geom_sum_root_ne_one`, `sum_pow_mul`): the geometric
-  sum of the powers of an `n`-th root of unity is `n` when the root is `1`
-  and `0` otherwise. This is the algebraic reason interpolation inverts
-  evaluation.
-* **DFT characterisation** (`getElem_fftFieldAux`): the Cooley–Tukey
-  recursion computes the discrete Fourier transform
-  `y[j] = ∑ i, x[i] * ω ^ (i * j)`. Proved by strong induction on `k`
-  using the even/odd split `sum_range_split_even_odd`.
-* **Round-trip** (`fftField_fftField_inv` and `fftField_inv_fftField`)
-
-Uses the scoped `Field Fr` instance from `Proofs.Bls.FrZMod`.
+It uses the scoped field instance on `Fr` of the BLS proofs.
 -/
 
 @[expose] public section

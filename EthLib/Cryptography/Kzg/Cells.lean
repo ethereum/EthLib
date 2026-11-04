@@ -12,11 +12,13 @@ public import EthLib.Cryptography.Kzg.Errors
 /-!
 # `Cells`
 
-Cell proofs over a Reed-Solomon-extended blob. The extended
-polynomial is split into `CELLS_PER_EXT_BLOB` cosets of
-`FIELD_ELEMENTS_PER_CELL` evaluations each; each cell carries an
-independent KZG multi-evaluation proof, so verifiers can sample any
-subset of cells without downloading the full blob.
+Cell proofs over a blob extended by a Reed-Solomon code.
+
+The values of the extended polynomial split into 128 cosets of 64 values each.
+
+Each cell carries its own KZG multi-evaluation proof.
+
+So a verifier can sample any set of cells without downloading the whole blob.
 -/
 
 @[expose] public section
@@ -54,12 +56,13 @@ def cosetEvalsToCell (cosetEvals : CosetEvals) : Cell :=
 
 /-! ## Cell cosets -/
 
-/-- Get the coset for a given `cellIndex`.
-Precisely, consider the group of roots of unity of order
-`FIELD_ELEMENTS_PER_CELL * CELLS_PER_EXT_BLOB`.
-Let `G = {1, g, g^2, ...}` denote its subgroup of order `FIELD_ELEMENTS_PER_CELL`.
-Then, the coset is defined as `h * G = {h, hg, hg^2, ...}`.
-This function, returns the coset. -/
+/-- The coset of a cell.
+
+Let `G = {1, g, g^2, ...}` be the subgroup of order 64 of the 8192-th roots of unity.
+
+The coset is `h * G = {h, hg, hg^2, ...}` for a shift `h`.
+
+It is block `i` of 64 points of the bit-reversed domain, for the cell index `i`. -/
 def cosetForCell (cellIndex : CellIndex) : Except KzgError Coset := do
   if cellIndex ≥ CELLS_PER_EXT_BLOB then
     throw .cellIndexOutOfBounds
@@ -67,16 +70,14 @@ def cosetForCell (cellIndex : CellIndex) : Except KzgError Coset := do
   let start := FIELD_ELEMENTS_PER_CELL * cellIndex
   return Array.ofFn (n := FIELD_ELEMENTS_PER_CELL) fun i => domain[start + i.val]!
 
-/-- Interpolate one cell: the polynomial of degree below 64 with the values `evals` on the coset of shift `h`.
+/-- Interpolate one cell: the polynomial `I` of degree below 64 with the values on the coset.
 
-The coset is a shifted FFT domain, in bit-reversed order.
+The coset has the shift `h`, and it is a shifted FFT domain, in bit-reversed order.
 
-```text
-    point j    : h * v^(rev(j))          v a 64-th root of unity, rev the 6-bit reversal
-    J(Y)       : I(h * Y)                so J takes the values evals on the 64-th roots
-    J          : IFFT(brp(evals))
-    I_i        : J_i * h^(-i)
-```
+- Point `j` is `h * v^(rev(j))`, for a 64-th root of unity `v` and the 6-bit reversal `rev`.
+- `J(Y) = I(h * Y)` takes the cell's values on the 64-th roots of unity.
+- So `J` is the inverse FFT of the bit-reversed values.
+- Then `I_i = J_i * h^(-i)`.
 
 It returns the same polynomial as Lagrange interpolation.
 
@@ -91,13 +92,11 @@ def interpolateCosetEvals (h : Fr) (evals : CosetEvals) : Except KzgError Polyno
 
 /-- The values of a polynomial on the extended domain, in bit-reversed order.
 
-Cell `i` holds the values at `cosetForCell i`.
+Cell `i` holds the values on its coset.
 
 That coset is the `i`-th block of 64 points of the bit-reversed domain.
 
-```text
-    values : [ cell 0: 64 | cell 1: 64 | ... | cell 127: 64 ]
-```
+So the values are the 64 of cell 0, then the 64 of cell 1, up to cell 127.
 
 One FFT of size 8192 gives every value, in `O(n log n)` field operations.
 
@@ -123,7 +122,7 @@ def computeCells (blob : Blob) : Except KzgError (Array Cell) := do
 
 /-- Compute cells and proofs for a polynomial in coefficient form.
 
-The specification proves each cell on its own.
+The direct method proves each cell on its own.
 
 It divides `f` by the cell's vanishing polynomial, then commits to the quotient.
 
@@ -131,15 +130,12 @@ That costs one multi-scalar multiplication of 4032 points per cell.
 
 The 128 quotients share their structure, so this computes them together.
 
-```text
-    cell k   : the coset h_k * mu_64
-    Z_k      : X^64 - c_k,   with c_k = h_k^64
-    q_k      : f / Z_k = sum_{d >= 1} c_k^(d - 1) * (f >> 64 d)
-    proof_k  : [q_k(s)] = sum_{d = 1}^{63} c_k^(d - 1) * H_d
-    H_d      : sum_i f_(i + 64 d) * [s^i]
-
-    (f >> m)_i = f_(i + m)
-```
+- Cell `k` is the coset `h_k * mu_64`.
+- Its vanishing polynomial is `Z_k = X^64 - c_k`, with `c_k = h_k^64`.
+- The quotient is `q_k = f / Z_k = sum_{d >= 1} c_k^(d - 1) * (f >> 64 d)`.
+- Here `(f >> m)_i = f_(i + m)`.
+- The proof is `[q_k(s)] = sum_{d = 1}^{63} c_k^(d - 1) * H_d`.
+- The point `H_d` is `sum_i f_(i + 64 d) * [s^i]`.
 
 The points `H_d` do not depend on the cell.
 
@@ -153,7 +149,7 @@ One FFT in G1 computes them all.
 
 This is the Toeplitz structure of FK20.
 
-See Feist and Khovratovich, "Fast amortized KZG proofs", ePrint 2023/033.
+See Feist and Khovratovich, "Fast amortized KZG proofs", <https://eprint.iacr.org/2023/033>.
 
 The polynomial has at most 4096 coefficients, the size of the monomial setup. -/
 def computeCellsAndKzgProofsPolynomialcoeff (setup : TrustedSetup)
@@ -162,12 +158,13 @@ def computeCellsAndKzgProofsPolynomialcoeff (setup : TrustedSetup)
   let size := polynomialCoeff.size
   let cells := cellsOfExtendedEvaluations (extendedEvaluations polynomialCoeff)
 
-  -- Phase 1: H_d for each shift d that leaves a coefficient.
+  -- Phase 1: `H_d` for each shift `d` that leaves a coefficient.
   --
-  --     4096 coefficients → d = 1, ..., 63 → H_d sums 4096 - 64 d points
+  -- With 4096 coefficients, `d` runs from 1 to 63, and `H_d` sums `4096 - 64 d` points.
   --
   -- The sums are independent, so each runs as its own task.
-  -- Both slices have `size - n * d` entries, so the multi-scalar multiplication sees no length mismatch.
+  --
+  -- Both slices have `size - n * d` entries, so the lengths of the sum agree.
   --
   -- Both phases run inside one task.
   -- Lean's pool starts a new worker only when no worker is idle.
@@ -186,8 +183,9 @@ def computeCellsAndKzgProofsPolynomialcoeff (setup : TrustedSetup)
     bitReversalPermutation (fftG1 padded (computeRootsOfUnity CELLS_PER_EXT_BLOB))).get
   return (cells, proofs.map Bls.G1.compress)
 
-/-- Compute all cell proofs for an extended blob. Naive O(n²);
-optimal implementations use FK20. -/
+/-- Compute the cells of a blob and their proofs.
+
+The proofs come together, by the FK20 method. -/
 def computeCellsAndKzgProofs (setup : TrustedSetup)
     (blob : Blob) : Except KzgError (Array Cell × Array KZGProof) := do
   if blob.size ≠ BYTES_PER_BLOB then
@@ -217,15 +215,15 @@ def computeVerifyCellKzgProofBatchChallenge
     h ++ proofs[k]!
   Fr.hashToBlsField h
 
-/-- Helper: Verify that a set of cells belong to their corresponding commitment.
+/-- Verify that a set of cells belong to their commitments, given distinct commitments.
 
-Given a list of `commitments` (which contains no duplicates) and four lists
-representing tuples of (`commitmentIndex`, `cellIndex`, `evals`, `proof`), the
-function verifies `proof` which shows that `evals` are the evaluations of the
-polynomial associated with `commitments[commitmentIndex]`, evaluated over the
-domain specified by `cellIndex`.
+Each cell comes with a commitment index, a cell index, its values and a proof.
 
-This function is the internal implementation of `verifyCellKzgProofBatch`. -/
+The proof shows that the values are those of the polynomial of the indexed commitment.
+
+The values are taken over the coset of the cell index.
+
+It is the core of the batch check of cell proofs. -/
 def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
     (commitments : Array KZGCommitment)
     (commitmentIndices : Array CommitmentIndex)
@@ -302,9 +300,9 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
       throw .cellIndexOutOfBounds
     pure domain[n * cellIndex]!
 
-  -- Step 4.2: RLI = [Σ_k r^k I_k(s)].
-  -- Each I_k comes from one inverse FFT over its coset.
-  -- It is the IDFT method of the blog post linked in `verifyCellKzgProofBatch`.
+  -- Step 4.2: RLI = [Σ_k r^k I_k(s)], each I_k from one inverse FFT over its coset.
+  --
+  -- That is the inverse DFT method of the post on the universal verification equation.
   let sumInterp : PolynomialCoeff ← (Array.range numCells).foldlM
     (init := Array.replicate n Fr.zero)
     fun sumInterp k => do
@@ -327,19 +325,16 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
     (rl, Bls.G2.neg (setup.g2Monomial[0]'(by decide)))
   ]
 
-/-- Verify that a set of cells belong to their corresponding commitments.
+/-- Verify that a set of cells belong to their commitments.
 
-Given four lists representing tuples of (`commitment`, `cellIndex`, `cell`,
-`proof`), the function verifies `proof` which shows that `cell` are the
-evaluations of the polynomial associated with `commitment`, evaluated over the
-domain specified by `cellIndex`.
+Each cell comes with a commitment, a cell index and a proof.
 
-This function implements the universal verification equation that has been
-introduced here:
-https://ethresear.ch/t/a-universal-verification-equation-for-data-availability-sampling/13240
+The proof shows that the cell holds the values of the committed polynomial on its coset.
 
-Deduplicates `commitmentsBytes` and forwards into
-`verifyCellKzgProofBatchImpl`. -/
+The check is the universal verification equation of
+<https://ethresear.ch/t/a-universal-verification-equation-for-data-availability-sampling/13240>.
+
+It removes repeated commitments, then runs the core check. -/
 def verifyCellKzgProofBatch (setup : TrustedSetup)
     (commitmentsBytes : Array Bytes48)
     (cellIndices : Array CellIndex)
@@ -362,15 +357,13 @@ def verifyCellKzgProofBatch (setup : TrustedSetup)
   if let some pb := proofsBytes.find? (fun pb => pb.size != BYTES_PER_PROOF) then
     throw (.badProofSize pb.size)
 
-  -- Deduplicate commitments while preserving the index of first occurrence.
-  -- We use a simple linear scan (`idxOf?`); the input list of commitments
-  -- tends to be short relative to the cell list.
+  -- Remove repeated commitments, keeping the first index, by a scan over the short list.
   let (deduped, commitmentIndices) ←
     (Array.range commitmentsBytes.size).foldlM
       (init := ((#[] : Array KZGCommitment), (#[] : Array CommitmentIndex)))
       fun (deduped, commitmentIndices) i => do
         let cb := commitmentsBytes[i]!
-        -- Validate (also acts as `bytes_to_kzg_commitment`).
+        -- Validate the commitment, which also decodes it.
         let _ ← match bytesToKzgCommitment cb with
                 | .ok c    => pure c
                 | .error _ => throw (.invalidCommitment (some i))
@@ -393,14 +386,11 @@ def verifyCellKzgProofBatch (setup : TrustedSetup)
 
 /-- Decode a buffer of packed indices.
 
-Each index is 8 bytes, big-endian:
+The buffer holds the indices one after another, each as 8 big-endian bytes.
 
-```text
-    [ index_0: 8 | index_1: 8 | ... | index_(n-1): 8 ]
-```
+The Python binding packs index arrays this way, so the C exports take only byte arrays.
 
-The Python wrapper packs index arrays this way, so the C exports take only byte arrays.
-It is pure parsing, so it lives in the specification, where the proofs can reach it, and the exports call it.
+It is pure parsing, so it lives in the specification, where the proofs can reach it.
 
 A length that is not a multiple of 8 is rejected, never truncated.
 -/

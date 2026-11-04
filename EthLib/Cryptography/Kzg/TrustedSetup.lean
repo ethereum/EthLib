@@ -56,7 +56,7 @@ def hexToBytes? (s : String) : Option ByteArray :=
 
 /-- Decode a trusted setup from compressed points.
 
-The Deneb specification fixes the lengths of the three lists: 4096, 4096 and 65.
+The three lists have the lengths 4096, 4096 and 65.
 
 A list of another length, or a point that does not decompress, is rejected.
 
@@ -73,8 +73,7 @@ def ofBytes (g1LagrangeBytes g1MonomialBytes g2MonomialBytes : Array ByteArray) 
   if h₁ : g1Lagrange.size = FIELD_ELEMENTS_PER_BLOB then
     if h₂ : g1Monomial.size = FIELD_ELEMENTS_PER_BLOB then
       if h₃ : g2Monomial.size = KZG_SETUP_G2_LENGTH then
-        -- The Deneb operations read the Lagrange points in bit-reversed order.
-        -- So the permutation runs once, here.
+        -- The operations read the Lagrange points in bit-reversed order, so they are permuted here.
         return {
           g1LagrangeBrp := ⟨BitReversal.bitReversalPermutation g1Lagrange,
             (Array.size_ofFn ..).trans h₁⟩

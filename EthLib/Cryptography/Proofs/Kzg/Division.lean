@@ -7,15 +7,9 @@ public import Mathlib.Tactic
 /-!
 # Proofs: polynomial long division
 
-The code divides two coefficient arrays the way the specification does.
-
 Each step cancels the current leading coefficient of the dividend.
 
-The proofs track one fact through both loops:
-
-```text
-    a(x) = q(x) * b(x) + r(x)      at every evaluation point x
-```
+The proofs track one fact through both loops: `a(x) = q(x) * b(x) + r(x)` at every point `x`.
 
 At the end the remainder has degree below the divisor.
 -/
