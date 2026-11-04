@@ -115,8 +115,12 @@ def Aprime : Fp2 := ⟨Fp.zero, Fp.ofNat 240⟩
 /-- `B' = 1012 * (1 + I)`. -/
 def Bprime : Fp2 := ⟨Fp.ofNat 1012, Fp.ofNat 1012⟩
 
-/-- Simplified SWU onto `E' : y^2 = x^3 + A'*x + B'`. -/
-def simpleSwu (u : Fp2) : Fp2 × Fp2 :=
+/-- Simplified SWU onto `E' : y^2 = x^3 + A'*x + B'` (RFC 9380 §6.6.2).
+
+`Z` is not a square in `Fp2`, so one of `g(x1)` and `g(x2)` is a square.
+
+The error is the case where neither is, which the RFC excludes. -/
+def simpleSwu (u : Fp2) : Except BlsError (Fp2 × Fp2) := do
   let u2 := u * u
   let zu2 := Z * u2
   let denom := zu2 * zu2 + zu2          -- Z^2·u^4 + Z·u^2
@@ -129,16 +133,12 @@ def simpleSwu (u : Fp2) : Fp2 × Fp2 :=
   let gx1 := x1 * x1 * x1 + Aprime * x1 + Bprime
   match Fp2.sqrt gx1 with
   | .ok y =>
-    let y := if sgn0Fp2 u = sgn0Fp2 y then y else -y
-    (x1, y)
+    -- The sign of `y` follows the sign of `u`.
+    return (x1, if sgn0Fp2 u = sgn0Fp2 y then y else -y)
   | .error _ =>
     let x2 := zu2 * x1
-    let gx2 := x2 * x2 * x2 + Aprime * x2 + Bprime
-    match Fp2.sqrt gx2 with
-    | .ok y =>
-      let y := if sgn0Fp2 u = sgn0Fp2 y then y else -y
-      (x2, y)
-    | .error _ => panic! "neither gx1 nor gx2 is a square"
+    let y ← Fp2.sqrt (x2 * x2 * x2 + Aprime * x2 + Bprime)
+    return (x2, if sgn0Fp2 u = sgn0Fp2 y then y else -y)
 
 /-! ## 3-isogeny map `E' → E` (RFC 9380 Appendix E.3)
 
@@ -193,15 +193,20 @@ def k42 : Fp2 := fp2
   0x12
   0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaa99
 
-/-- Degree-3 rational isogeny from the SSWU source curve `E'` to the BLS twist `E`. -/
-def isoMapG2 (xp yp : Fp2) : Fp2 × Fp2 :=
+/-- The 3-isogeny of RFC 9380 Appendix E.3, from the SSWU curve `E'` to the BLS twist `E`.
+
+- `x = x_num / x_den`, where `x_den` is monic of degree 2.
+- `y = y' * y_num / y_den`, where `y_den` is monic of degree 3.
+
+An input that sends a denominator to zero maps to the identity point, as RFC 9380 §6.6.3 requires. -/
+def isoMapG2 (xp yp : Fp2) : G2 :=
   let xp2 := xp * xp
   let xp3 := xp2 * xp
   let xNum := k13 * xp3 + k12 * xp2 + k11 * xp + k10
   let xDen := xp2 + k21 * xp + k20
   let yNum := k33 * xp3 + k32 * xp2 + k31 * xp + k30
   let yDen := xp3 + k42 * xp2 + k41 * xp + k40
-  (xNum / xDen, yp * yNum / yDen)
+  if xDen.isZero || yDen.isZero then G2.zero else ⟨xNum / xDen, yp * yNum / yDen, Fp2.one⟩
 
 /-! ## Cofactor clearing (RFC 9380 Appendix G.3)
 
@@ -265,12 +270,8 @@ def clearCofactor (P : G2) : G2 :=
 /-- Hash a message + DST to a G2 point on BLS12-381. -/
 def hashToG2 (msg : ByteArray) (dst : ByteArray) : Except BlsError G2 := do
   let us ← hashToFieldFp2 msg dst 2
-  let (x0, y0) := simpleSwu us[0]!
-  let (x1, y1) := simpleSwu us[1]!
-  let (xa, ya) := isoMapG2 x0 y0
-  let (xb, yb) := isoMapG2 x1 y1
-  let p0 : G2 := ⟨xa, ya, Fp2.one⟩
-  let p1 : G2 := ⟨xb, yb, Fp2.one⟩
-  return clearCofactor (G2.add p0 p1)
+  let (x0, y0) ← simpleSwu us[0]!
+  let (x1, y1) ← simpleSwu us[1]!
+  return clearCofactor (G2.add (isoMapG2 x0 y0) (isoMapG2 x1 y1))
 
 end EthLib.Cryptography.Bls.HashToCurve

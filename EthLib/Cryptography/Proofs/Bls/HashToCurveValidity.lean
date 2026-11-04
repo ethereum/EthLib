@@ -9,7 +9,7 @@ Source: `RFC 9380 §8.8.2 and Appendix G.3`.
 
 `psi`, `psi2`, `mulNegX`, and `clearCofactor` preserve `G2.Valid` on the BLS12-381 twist.
 
-Together with `simpleSwu_isoMapG2_valid`, every `hashToG2 msg dst` call succeeds and returns a `G2.Valid` point.
+Together with `simpleSwu_ok` and `simpleSwu_isoMapG2_valid`, every `hashToG2 msg dst` call succeeds and returns a `G2.Valid` point.
 
 This file proves nonsingular curve membership (`G2.Valid`), not `r`-torsion subgroup membership.
 -/
@@ -129,10 +129,16 @@ theorem hashToG2_valid {msg dst : ByteArray} {P : G2}
   cases hf : hashToFieldFp2 msg dst 2 with
   | error e => simp [hf, bind, Except.bind] at h
   | ok us =>
-    simp [hf, bind, Except.bind, pure, Except.pure] at h
-    subst P
-    exact clearCofactor_valid (G2.valid_add
-      (simpleSwu_isoMapG2_valid us[0]!) (simpleSwu_isoMapG2_valid us[1]!))
+    cases h0 : simpleSwu us[0]! with
+    | error e => simp [hf, h0, bind, Except.bind] at h
+    | ok p0 =>
+      cases h1 : simpleSwu us[1]! with
+      | error e => simp [hf, h0, h1, bind, Except.bind] at h
+      | ok p1 =>
+        simp [hf, h0, h1, bind, Except.bind, pure, Except.pure] at h
+        subst P
+        exact clearCofactor_valid (G2.valid_add
+          (simpleSwu_isoMapG2_valid h0) (simpleSwu_isoMapG2_valid h1))
 
 private theorem expandMessageXmd_256_ok (msg dst : ByteArray) :
     ∃ uniform, expandMessageXmd msg dst 256 = .ok uniform := by
@@ -156,9 +162,15 @@ private theorem hashToFieldFp2_two_ok (msg dst : ByteArray) :
 theorem hashToG2_total (msg dst : ByteArray) :
     ∃ P : G2, hashToG2 msg dst = .ok P ∧ G2.Valid P := by
   obtain ⟨us, hus⟩ := hashToFieldFp2_two_ok msg dst
+  obtain ⟨p0, h0⟩ := simpleSwu_ok us[0]!
+  obtain ⟨p1, h1⟩ := simpleSwu_ok us[1]!
   have hok : ∃ P : G2, hashToG2 msg dst = .ok P := by
     unfold hashToG2
     rw [hus]
+    dsimp only [bind, Except.bind]
+    rw [h0]
+    dsimp only
+    rw [h1]
     exact ⟨_, rfl⟩
   rcases hok with ⟨P, hP⟩
   exact ⟨P, hP, hashToG2_valid hP⟩

@@ -22,7 +22,7 @@ At the exceptional denominator `Z^2 * u^4 + Z * u^2 = 0`, `g(B' / (Z * A'))` has
 
 Hence `Fp2.sqrt` succeeds on `gx1` or `gx2` for every `u : Fp2`.
 
-The fallback `panic!` branch in `simpleSwu` is unreachable, and `(simpleSwu u).2^2 = swuG (simpleSwu u).1` holds unconditionally.
+So `simpleSwu u` never returns its error, and its output `(x, y)` satisfies `y^2 = swuG x`.
 -/
 
 @[expose] public section
@@ -260,7 +260,7 @@ private theorem norm_gx2_sq_zmod {nz nu ng sz sg : ZMod Fp.modulus}
 
 /-- For every `u : Fp2`, at least one of `g(x1(u))` or `g(x2(u))` has a square root in `Fp2`.
 
-This proves that the `panic!` branch in `simpleSwu` is unreachable.
+So `simpleSwu` never returns its error.
 -/
 theorem simpleSwu_sqrt_complete (u : Fp2) :
     (∃ y, Fp2.sqrt (swuG (swuX1 u)) = .ok y) ∨
@@ -297,35 +297,47 @@ theorem simpleSwu_sqrt_complete (u : Fp2) :
         exact norm_gx2_sq_zmod sqrtNegNormZ_sq hs2
       exact sqrt_of_norm_sq hw_sq
 
-/-- Soundness and totality of `simpleSwu` (`RFC 9380 §6.6.2 and §8.8.2`).
-
-For every `u : Fp2`, `simpleSwu u` lies on the 3-isogenous curve `E' : y^2 = x^3 + A'*x + B'`.
--/
-theorem simpleSwu_curve_eq (u : Fp2) :
-    (simpleSwu u).2 * (simpleSwu u).2 = swuG (simpleSwu u).1 := by
-  have hsqrt : ∀ {a c : Fp2}, Fp2.sqrt a = .ok c → c * c = a := fun hs => Fp2.sqrt_ok hs
+/-- `simpleSwu` succeeds on every `u : Fp2` (`RFC 9380 §6.6.2`). -/
+theorem simpleSwu_ok (u : Fp2) : ∃ p, simpleSwu u = .ok p := by
   have hor := simpleSwu_sqrt_complete u
   revert hor
   unfold simpleSwu swuG swuX2 swuX1
-  generalize Fp2.sqrt = sqrtFn at hsqrt ⊢
+  generalize Fp2.sqrt = sqrtFn
   rintro (⟨y1, hy1⟩ | ⟨y2, hy2⟩)
   · dsimp only
     rw [hy1]
-    dsimp only
-    rw [sq_ite_neg (sgn0Fp2 u = sgn0Fp2 y1) y1]
-    exact hsqrt hy1
+    exact ⟨_, rfl⟩
   · dsimp only
-    cases h1 : sqrtFn _ with
-    | ok y1 =>
-      dsimp only
-      rw [sq_ite_neg (sgn0Fp2 u = sgn0Fp2 y1) y1]
-      exact hsqrt h1
+    cases sqrtFn _ with
+    | ok y1 => exact ⟨_, rfl⟩
     | error _ =>
       dsimp only
       rw [hy2]
+      exact ⟨_, rfl⟩
+
+/-- Every output of `simpleSwu` lies on `E' : y^2 = x^3 + A'*x + B'` (`RFC 9380 §6.6.2 and §8.8.2`). -/
+theorem simpleSwu_curve_eq {u : Fp2} {p : Fp2 × Fp2} (h : simpleSwu u = .ok p) :
+    p.2 * p.2 = swuG p.1 := by
+  have hsqrt : ∀ {a c : Fp2}, Fp2.sqrt a = .ok c → c * c = a := fun hs => Fp2.sqrt_ok hs
+  revert h
+  unfold simpleSwu swuG
+  generalize Fp2.sqrt = sqrtFn at hsqrt ⊢
+  dsimp only
+  cases h1 : sqrtFn _ with
+  | ok y1 =>
+    rintro ⟨⟩
+    dsimp only
+    rw [sq_ite_neg (sgn0Fp2 u = sgn0Fp2 y1) y1]
+    exact hsqrt h1
+  | error _ =>
+    dsimp only
+    cases h2 : sqrtFn _ with
+    | error _ => rintro ⟨⟩
+    | ok y2 =>
+      rintro ⟨⟩
       dsimp only
       rw [sq_ite_neg (sgn0Fp2 u = sgn0Fp2 y2) y2]
-      exact hsqrt hy2
+      exact hsqrt h2
 
 end SwuComplete
 

@@ -96,10 +96,16 @@ theorem hashToG2_inSubgroup {msg dst : ByteArray} {P : G2}
   cases hf : hashToFieldFp2 msg dst 2 with
   | error e => simp [hf, bind, Except.bind] at h
   | ok us =>
-    simp [hf, bind, Except.bind, pure, Except.pure] at h
-    subst P
-    exact clearCofactor_inSubgroup (G2.valid_add
-      (simpleSwu_isoMapG2_valid us[0]!) (simpleSwu_isoMapG2_valid us[1]!))
+    cases h0 : simpleSwu us[0]! with
+    | error e => simp [hf, h0, bind, Except.bind] at h
+    | ok p0 =>
+      cases h1 : simpleSwu us[1]! with
+      | error e => simp [hf, h0, h1, bind, Except.bind] at h
+      | ok p1 =>
+        simp [hf, h0, h1, bind, Except.bind, pure, Except.pure] at h
+        subst P
+        exact clearCofactor_inSubgroup (G2.valid_add
+          (simpleSwu_isoMapG2_valid h0) (simpleSwu_isoMapG2_valid h1))
 
 /-- Hash to curve succeeds on every input and returns a valid point of order `r`. -/
 theorem hashToG2_total_inSubgroup (msg dst : ByteArray) :

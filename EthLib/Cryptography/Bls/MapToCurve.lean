@@ -26,7 +26,7 @@ An input that sends a denominator of the isogeny to zero maps to the identity po
 namespace EthLib.Cryptography.Bls.MapToCurve
 
 open EthLib.Cryptography.Bls
-open EthLib.Cryptography.Bls.HashToCurve (sgn0Fp k10 k11 k12 k13 k20 k21 k30 k31 k32 k33 k40 k41 k42)
+open EthLib.Cryptography.Bls.HashToCurve (sgn0Fp)
 
 /-! ## G1 -/
 
@@ -143,19 +143,11 @@ def mapToG1 (u : Fp) : Except BlsError G1 := do
 
 /-! ## G2 -/
 
-/-- The 3-isogeny of RFC 9380 Appendix E.3, with the identity when a denominator is 0. -/
-def isoMapG2 (xp yp : Fp2) : G2 :=
-  let xp2 := xp * xp
-  let xp3 := xp2 * xp
-  let xNum := k13 * xp3 + k12 * xp2 + k11 * xp + k10
-  let xDen := xp2 + k21 * xp + k20
-  let yNum := k33 * xp3 + k32 * xp2 + k31 * xp + k30
-  let yDen := xp3 + k42 * xp2 + k41 * xp + k40
-  if xDen.isZero || yDen.isZero then G2.zero else ⟨xNum / xDen, yp * yNum / yDen, Fp2.one⟩
+/-- `map_to_curve` then `clear_cofactor` for G2: a point of the subgroup for `u`.
 
-/-- `map_to_curve` then `clear_cofactor` for G2: a point of the subgroup for `u`. -/
-def mapToG2 (u : Fp2) : G2 :=
-  let (xp, yp) := HashToCurve.simpleSwu u
-  HashToCurve.clearCofactor (isoMapG2 xp yp)
+The error is the case where the SSWU map finds no square root, which the RFC excludes. -/
+def mapToG2 (u : Fp2) : Except BlsError G2 := do
+  let (xp, yp) ← HashToCurve.simpleSwu u
+  return HashToCurve.clearCofactor (HashToCurve.isoMapG2 xp yp)
 
 end EthLib.Cryptography.Bls.MapToCurve
