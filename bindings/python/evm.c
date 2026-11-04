@@ -1,4 +1,4 @@
-/* Python wrappers of the EVM word and memory price exports.
+/* Python wrappers of the EVM word, memory price and contract address exports.
  *
  * Words and numbers cross the boundary as big-endian bytes, which the Python package converts. */
 #include "wrappers.h"
@@ -11,6 +11,8 @@ extern lean_object* eth_evm_word_op(uint8_t, lean_object*, lean_object*, lean_ob
 extern lean_object* eth_evm_memory_gas_cost(lean_object*);
 extern lean_object* eth_evm_extend_memory_cost(lean_object*, lean_object*);
 extern lean_object* eth_evm_extend_memory_expand_by(lean_object*, lean_object*);
+extern lean_object* eth_evm_create_address(lean_object*, lean_object*);
+extern lean_object* eth_evm_create2_address(lean_object*, lean_object*, lean_object*);
 
 /* The largest number of `bytes` arguments of an EVM export. */
 #define EVM_MAX_ARGS 3
@@ -133,4 +135,29 @@ py_evm_extend_memory_expand_by(
   lean_object* a[EVM_MAX_ARGS];
   if (!parse_bytes_args(args, 0, 2, a)) return NULL;
   return pybytes_of_bytearray(eth_evm_extend_memory_expand_by(a[0], a[1]));
+}
+
+PyObject*
+py_evm_create_address(
+  PyObject* self,
+  PyObject* args
+) {
+  /* The sender is an address of 20 bytes, and the nonce is big-endian. */
+  if (!check_length(args, 0, 20, 1, "the sender must be 20 bytes")) return NULL;
+  lean_object* a[EVM_MAX_ARGS];
+  if (!parse_bytes_args(args, 0, 2, a)) return NULL;
+  return except_into_pybytes(eth_evm_create_address(a[0], a[1]), RLP_ERROR);
+}
+
+PyObject*
+py_evm_create2_address(
+  PyObject* self,
+  PyObject* args
+) {
+  /* The sender is an address of 20 bytes, and the salt is one word. */
+  if (!check_length(args, 0, 20, 1, "the sender must be 20 bytes")) return NULL;
+  if (!check_length(args, 1, 32, 1, "the salt must be 32 bytes")) return NULL;
+  lean_object* a[EVM_MAX_ARGS];
+  if (!parse_bytes_args(args, 0, 3, a)) return NULL;
+  return pybytes_of_bytearray(eth_evm_create2_address(a[0], a[1], a[2]));
 }
