@@ -156,6 +156,13 @@ theorem compress_eq_of_toPoint_eq {p₁ p₂ : G1}
       exact ⟨hx', hy', hz₁.trans hz₂.symm⟩
   rw [hrep]
 
+/-- Valid points with the same group element have the same 48-byte encoding. -/
+theorem compressG1_eq_of_toPoint_eq {p₁ p₂ : G1}
+    (hv₁ : G1.Valid p₁) (hv₂ : G1.Valid p₂)
+    (heq : G1.toPoint p₁ = G1.toPoint p₂) :
+    compressG1 p₁ = compressG1 p₂ :=
+  Vector.toArray_inj.mp (congrArg ByteArray.data (compress_eq_of_toPoint_eq hv₁ hv₂ heq))
+
 /-! ## Cell coset vanishing polynomial: `Z_k(X) = X^64 - c_k` -/
 
 /-- The coefficients of `X^n - c`: `-c` at index `0`, then zeros, and `1` at index `n`. -/
@@ -696,7 +703,7 @@ def fk20CellsAndProofs (setup : TrustedSetup) (polynomialCoeff : PolynomialCoeff
     let hs := tasks.map Task.get
     let padded := hs ++ Array.replicate (CELLS_PER_EXT_BLOB - hs.size) Bls.G1.zero
     bitReversalPermutation (fftG1 padded (computeRootsOfUnity CELLS_PER_EXT_BLOB))).get
-  (cells, proofs.map Bls.G1.compress)
+  (cells, proofs.map compressG1)
 
 /-- The cell operation on coefficients returns its plain body. -/
 theorem computeCellsAndKzgProofsPolynomialcoeff_eq (setup : TrustedSetup)
@@ -710,13 +717,8 @@ theorem computeCellsAndKzgProofs_ok_eq (setup : TrustedSetup) {blob : Blob} {pol
     (hblob : blobToPolynomial blob = .ok poly) :
     computeCellsAndKzgProofs setup blob =
       .ok (fk20CellsAndProofs setup (polynomialEvalToCoeff poly)) := by
-  have hbsize : blob.size = BYTES_PER_BLOB := by
-    by_contra hne
-    have herr := (blobToPolynomial_error_badBlobSize blob blob.size).mpr ⟨hne, rfl⟩
-    rw [hblob] at herr
-    cases herr
   unfold computeCellsAndKzgProofs
-  rw [ite_eq_right (not_not.mpr hbsize), hblob]
+  rw [hblob]
   rfl
 
 private theorem getElem!_extract {α : Type} [Inhabited α] (xs : Array α)
@@ -973,7 +975,7 @@ theorem fk20CellsAndProofs_eq_perCellSpec
       (fk20CellsAndProofs setup polynomialCoeff).1[cellIndex]! =
         cosetEvalsToCell (coset.map (evaluatePolynomialcoeff polynomialCoeff)) ∧
       (fk20CellsAndProofs setup polynomialCoeff).2[cellIndex]! =
-        Bls.G1.compress (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient) := by
+        compressG1 (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient) := by
   have hci : cellIndex < CELLS_PER_EXT_BLOB := cosetForCell_ok_iff.mp ⟨coset, hcoset⟩
   let n := FIELD_ELEMENTS_PER_CELL
   let N := CELLS_PER_EXT_BLOB
@@ -1010,9 +1012,9 @@ theorem fk20CellsAndProofs_eq_perCellSpec
     rfl
   have hproofs_eq :
       (fk20CellsAndProofs setup polynomialCoeff).2 =
-        (bitReversalPermutation (fftG1 padded (computeRootsOfUnity N))).map Bls.G1.compress := by
+        (bitReversalPermutation (fftG1 padded (computeRootsOfUnity N))).map compressG1 := by
     dsimp only [fk20CellsAndProofs]
-    change (bitReversalPermutation (fftG1 _ (computeRootsOfUnity N))).map Bls.G1.compress = _
+    change (bitReversalPermutation (fftG1 _ (computeRootsOfUnity N))).map compressG1 = _
     rw [htasks_eq]
   -- Relate `c` to `omega^r`.
   have hr_lt : r < N := reverseBits_lt_two_pow cellIndex 7
@@ -1053,7 +1055,7 @@ theorem fk20CellsAndProofs_eq_perCellSpec
       refine Finset.sum_congr rfl fun i _ => ?_
       rw [Nat.mul_comm i r, fr_pow_mul, ← hc_eq_ωr]
     exact hpow_rw.trans hsum_eq
-  -- Index into `(bitReversalPermutation (fftG1 ...)).map Bls.G1.compress`.
+  -- Index into `(bitReversalPermutation (fftG1 ...)).map compressG1`.
   set fftOut := fftG1 padded (computeRootsOfUnity N)
   have hfft_sz : fftOut.size = N := by
     rw [size_fftG1, hpad_sz]; rfl
@@ -1063,7 +1065,7 @@ theorem fk20CellsAndProofs_eq_perCellSpec
   have hci_fft : cellIndex < fftOut.size := hfft_sz.symm ▸ hci
   have hget_proof :
       (fk20CellsAndProofs setup polynomialCoeff).2[cellIndex]! =
-        Bls.G1.compress fftOut[r]! := by
+        compressG1 fftOut[r]! := by
     rw [hproofs_eq,
       getElem!_pos _ cellIndex (by rw [Array.size_map]; exact hci_brp),
       Array.getElem_map,
@@ -1071,7 +1073,7 @@ theorem fk20CellsAndProofs_eq_perCellSpec
       getElem!_bitReversalPermutation fftOut cellIndex hci_fft,
       hfft_sz]
   rw [hget_proof, hq_sz]
-  exact compress_eq_of_toPoint_eq hv_fft hv_msm_q hpt_fft
+  exact compressG1_eq_of_toPoint_eq hv_fft hv_msm_q hpt_fft
 
 /-- The agreement of FK20 with the direct method, for a decoded blob.
 
@@ -1096,7 +1098,7 @@ theorem computeCellsAndKzgProofs_blob_spec
       (fk20CellsAndProofs setup polynomialCoeff).1[cellIndex]! =
         cosetEvalsToCell (coset.map (evaluatePolynomialcoeff polynomialCoeff)) ∧
       (fk20CellsAndProofs setup polynomialCoeff).2[cellIndex]! =
-        Bls.G1.compress (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient) := by
+        compressG1 (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient) := by
   intro polynomialCoeff
   have hp_sz : polynomialCoeff.size = FIELD_ELEMENTS_PER_BLOB := by
     rw [size_polynomialEvalToCoeff, size_blobToPolynomial blob poly hblob]
@@ -1182,15 +1184,6 @@ theorem recoverCellsAndKzgProofs_ok_eq (setup : TrustedSetup)
   obtain ⟨es, hes, hes_arr⟩ := hlist_ok
   have hlen_es := Base.mapM_ok_length hes
   have hmem_es := Base.mapM_ok_of_mem hes
-  have hfind : cells.find? (fun c => c.size != BYTES_PER_CELL) = none := by
-    rw [Array.find?_eq_none]
-    intro c hc
-    obtain ⟨k, hk, rfl⟩ := Array.getElem_of_mem hc
-    obtain ⟨y, hy⟩ := hmem_es cells[k] (Array.getElem_mem_toList hk)
-    by_contra hbad
-    have hne : cells[k].size ≠ BYTES_PER_CELL := by simpa using hbad
-    rw [cellToCosetEvals, ite_eq_left hne] at hy
-    cases hy
   have hcosets_len : cosetsEvals.size = cellIndices.size := by
     rw [← hes_arr, List.size_toArray, hlen_es, Array.length_toList, hlen]
   have hrec : recoverPolynomialcoeff cellIndices cosetsEvals = .ok p :=
@@ -1201,7 +1194,6 @@ theorem recoverCellsAndKzgProofs_ok_eq (setup : TrustedSetup)
     ite_eq_right (Nat.not_lt.mpr hmax),
     ite_eq_right (by simp [hbound]),
     ite_eq_right (by simpa [Array.size_range] using hasc)]
-  simp only [hfind]
   change (cells.mapM cellToCosetEvals >>= fun cosetsEvals =>
     recoverPolynomialcoeff cellIndices cosetsEvals >>=
       computeCellsAndKzgProofsPolynomialcoeff setup) = _
@@ -1244,7 +1236,7 @@ theorem recoverCellsAndKzgProofs_spec
       (fk20CellsAndProofs setup p).1[cellIndex]! =
         cosetEvalsToCell (coset.map (evaluatePolynomialcoeff p)) ∧
       (fk20CellsAndProofs setup p).2[cellIndex]! =
-        Bls.G1.compress (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient) :=
+        compressG1 (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient) :=
   ⟨recoverCellsAndKzgProofs_ok_eq setup hp hlen hmin hbound hasc hdec hmatch,
    fk20CellsAndProofs_eq_perCellSpec
      (hp ▸ (by decide : FIELD_ELEMENTS_PER_BLOB ≤ FIELD_ELEMENTS_PER_EXT_BLOB))

@@ -224,7 +224,11 @@ The kernel checks seven test cases of the NIST CAVP file `gcmtestvectors.zip`, o
 
 ### KZG
 
-`Proofs/Kzg/Core.lean` proves that the public operations reject malformed inputs, such as a wrong size or lists of different lengths.
+Blobs, cells, commitments, proofs and field elements are byte vectors with their length in the type.
+`Proofs/Kzg/Core.lean` proves that parsing rejects bytes of any other length.
+It and `Proofs/Kzg/Cells.lean` prove that the operations reject other malformed inputs.
+An example is two lists of different lengths.
+
 Each operation takes the trusted setup as an argument and returns `Except KzgError`, so the kernel can unfold it.
 `computeCellsAndKzgProofs_blob_spec` and `recoverCellsAndKzgProofs_spec` (`Proofs/Kzg/Fk20Proofs.lean`) state the cells and proofs that two operations return, under hypotheses on the setup.
 No theorem states what a verification operation returns on accepted input.

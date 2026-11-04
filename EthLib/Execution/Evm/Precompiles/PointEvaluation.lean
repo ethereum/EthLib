@@ -34,7 +34,7 @@ namespace EthLib.Execution.Evm.Precompiles.PointEvaluation
 
 open EthLib.Base (natToBytes)
 open EthLib.Cryptography.Bls (G2 Fr)
-open EthLib.Cryptography.Kzg (validateKzgG1Point verifyKzgProofWith)
+open EthLib.Cryptography.Kzg (parseBytes validateKzgG1Point verifyKzgProofWith)
 
 /-- The size of the call data: a versioned hash, two field elements and two compressed G1 points. -/
 def INPUT_BYTES : Nat := 192
@@ -92,10 +92,13 @@ It decodes the inputs and `[tau]_2`, then runs the KZG check with `[tau]_2` alon
 The check holds when the quotient `(p(X) - y) / (X - z)` is a polynomial. -/
 def verifyKzgProof (commitment z y proof : ByteArray) : Except PointEvaluationError Bool := do
   -- The inputs are decoded in the order of EIP-4844.
-  let commitmentPoint ← (validateKzgG1Point commitment).mapError fun _ => .invalidCommitment
+  let commitmentPoint ←
+    (parseBytes 48 .badCommitmentSize commitment >>= validateKzgG1Point).mapError
+      fun _ => .invalidCommitment
   let zField ← (Fr.fromBytesBE z).mapError fun _ => .invalidFieldElement
   let yField ← (Fr.fromBytesBE y).mapError fun _ => .invalidFieldElement
-  let proofPoint ← (validateKzgG1Point proof).mapError fun _ => .invalidProof
+  let proofPoint ←
+    (parseBytes 48 .badProofSize proof >>= validateKzgG1Point).mapError fun _ => .invalidProof
   let tau ← (G2.uncompress KZG_SETUP_G2_MONOMIAL_1).mapError fun _ => .invalidTrustedSetup
   return verifyKzgProofWith tau commitmentPoint zField yField proofPoint
 

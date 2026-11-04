@@ -49,8 +49,8 @@ def RANDOM_CHALLENGE_KZG_BATCH_DOMAIN : ByteArray := String.toUTF8 "RCKZGBATCH__
 def RANDOM_CHALLENGE_KZG_CELL_BATCH_DOMAIN : ByteArray := String.toUTF8 "RCKZGCBATCH__V1_"
 
 /-- Serialized form of the point at infinity on the G1 group. -/
-def G1_POINT_AT_INFINITY : ByteArray :=
-  ByteArray.mk <| Array.replicate 48 0 |>.set! 0 0xc0
+def G1_POINT_AT_INFINITY : Vector UInt8 48 :=
+  (Vector.replicate 48 0).set 0 0xc0
 
 /-- Number of G2 points in the trusted setup. -/
 def KZG_SETUP_G2_LENGTH : Nat := 65

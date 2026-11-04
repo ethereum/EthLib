@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Bytes
 public import EthLib.Cryptography.Bls
 public import EthLib.Cryptography.Kzg.Constants
 public import EthLib.Cryptography.Kzg.BitReversal
@@ -22,6 +23,7 @@ A polynomial in coefficient form is also an array of `Fr`, for the cells.
 
 namespace EthLib.Cryptography.Kzg
 
+open EthLib.Base (Bytes32)
 open EthLib.Cryptography.Bls (Fr)
 
 open EthLib.Cryptography.Kzg.Constants
@@ -31,9 +33,19 @@ open EthLib.Cryptography.Kzg.BitReversal
 
 abbrev Polynomial      := Array Fr
 abbrev PolynomialCoeff := Array Fr
-abbrev Blob            := ByteArray
-abbrev Bytes32         := ByteArray
-abbrev Bytes48         := ByteArray
+
+/-- A blob: 4096 field elements of 32 bytes each. -/
+abbrev Blob := Vector UInt8 BYTES_PER_BLOB
+
+/-- 48 bytes, the size of a compressed `G1` point. -/
+abbrev Bytes48 := Vector UInt8 48
+
+/-- Read untyped bytes as a byte vector of length `n`.
+
+Bytes of any other length are rejected with the error that `err` builds from that length. -/
+def parseBytes (n : Nat) (err : Nat → KzgError) (b : ByteArray) :
+    Except KzgError (Vector UInt8 n) :=
+  if h : b.size = n then .ok ⟨b.data, h⟩ else .error (err b.size)
 
 /-! ## Bytes <-> field element helpers -/
 
@@ -53,16 +65,32 @@ def bytesBEToNat (b : ByteArray) : Nat :=
 
 /-- Convert untrusted bytes to an element of the BLS scalar field.
 
-It rejects an input of the wrong size, and an integer of at least the modulus. -/
+It rejects an integer of at least the modulus. -/
 def bytesToBlsField (b : Bytes32) : Except KzgError Fr :=
-  if b.size ≠ BYTES_PER_FIELD_ELEMENT then
-    .error (.badFieldElementSize b.size)
-  else match Fr.fromBytesBE b with
+  match Fr.fromBytesBE ⟨b.toArray⟩ with
   | .ok f    => .ok f
   | .error _ => .error (.invalidFieldElement none)
 
 /-- Encode `x` as 32 big-endian bytes. -/
-@[inline] def blsFieldToBytes (x : Fr) : Bytes32 := x.toBytesBE
+@[inline] def blsFieldToBytes (x : Fr) : Bytes32 := ⟨x.toBytesBE.data, Array.size_ofFn⟩
+
+/-- The 32 bytes of field element `i`, in bytes that hold `k` field elements in a row. -/
+def fieldElementBytes {k : Nat} (bytes : Vector UInt8 (k * BYTES_PER_FIELD_ELEMENT))
+    (i : Fin k) : Bytes32 :=
+  Vector.ofFn fun j => bytes[i.val * BYTES_PER_FIELD_ELEMENT + j.val]'(by
+    -- Field element `i < k` ends at byte `32 * (i + 1) ≤ 32 * k`.
+    have hi := i.isLt
+    have hj := j.isLt
+    simp only [BYTES_PER_FIELD_ELEMENT] at *
+    omega)
+
+/-- Decode the `k` field elements of `bytes`, in order.
+
+The first one that is not below `BLS_MODULUS` is rejected, with its index. -/
+def bytesToBlsFields {k : Nat} (bytes : Vector UInt8 (k * BYTES_PER_FIELD_ELEMENT)) :
+    Except KzgError (Array Fr) :=
+  (Array.finRange k).mapM fun i =>
+    (bytesToBlsField (fieldElementBytes bytes i)).mapError fun _ => .invalidFieldElement (some i)
 
 /-- `[current, current * x, ..., current * x^(n-1)]`. -/
 def computePowersAux (x current : Fr) : Nat → List Fr
@@ -185,25 +213,11 @@ def polynomialEvalToCoeff (polynomial : Polynomial) : PolynomialCoeff :=
 
 /-! ## Blob <-> Polynomial -/
 
-/-- Decode `count` 32-byte chunks of a blob, from the chunk of index `i`.
-
-The first invalid field element fails, with its chunk index. -/
-def blobToPolynomialAux (blob : Blob) : Nat → Nat → Except KzgError (List Fr)
-  | _, 0 => .ok []
-  | i, count + 1 =>
-    let start := i * BYTES_PER_FIELD_ELEMENT
-    let stop  := (i + 1) * BYTES_PER_FIELD_ELEMENT
-    match bytesToBlsField (blob.extract start stop) with
-    | .ok f    => do return f :: (← blobToPolynomialAux blob (i + 1) count)
-    | .error _ => throw (.invalidFieldElement (some i))
-
 /-- Convert a blob to a sequence of elements of `Fr`.
 
-It rejects a blob of the wrong size, and a 32-byte chunk of at least the modulus. -/
-def blobToPolynomial (blob : Blob) : Except KzgError Polynomial := do
-  if blob.size ≠ BYTES_PER_BLOB then
-    throw (.badBlobSize blob.size)
-  return (← blobToPolynomialAux blob 0 FIELD_ELEMENTS_PER_BLOB).toArray
+It rejects a 32-byte chunk of at least the modulus. -/
+def blobToPolynomial (blob : Blob) : Except KzgError Polynomial :=
+  bytesToBlsFields (k := FIELD_ELEMENTS_PER_BLOB) blob
 
 /-! ## Evaluating a polynomial in evaluation form -/
 

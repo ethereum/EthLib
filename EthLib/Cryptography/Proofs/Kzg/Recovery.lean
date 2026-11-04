@@ -577,22 +577,6 @@ theorem recoverCellsAndKzgProofs_indicesNotAscending (setup : TrustedSetup)
   simp only [Array.size_range] at h
   simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, hbound, h, throw_bind]
 
-/-- `recoverCellsAndKzgProofs` rejects a wrongly-sized cell, reporting
-the first offender's size. -/
-theorem recoverCellsAndKzgProofs_badCellSize (setup : TrustedSetup)
-    {cellIndices : Array CellIndex} {cells : Array Cell} {c : Cell}
-    (hlen : cells.size = cellIndices.size)
-    (hmin : ¬cellIndices.size < CELLS_PER_EXT_BLOB / 2)
-    (hmax : ¬cellIndices.size > CELLS_PER_EXT_BLOB)
-    (hbound : cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) = false)
-    (hasc : (Array.range (cellIndices.size - 1)).any
-      (fun i => cellIndices[i + 1]! ≤ cellIndices[i]!) = false)
-    (h : cells.find? (fun c => c.size != BYTES_PER_CELL) = some c) :
-    recoverCellsAndKzgProofs setup cellIndices cells
-      = throw (.badCellSize c.size) := by
-  simp only [Array.size_range] at hasc
-  simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, hbound, hasc, h, throw_bind]
-
 /-- The recovery vanishing polynomial has no coefficient above its mathematical degree bound. -/
 theorem constructVanishingPolynomial_high_zero
     {missing : Array CellIndex} {p : PolynomialCoeff}

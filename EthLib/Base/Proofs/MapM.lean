@@ -13,6 +13,8 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - The map succeeds when the function succeeds on every input.
 - A function that returns a known value on every input maps to the list of those values.
 - A part of each output that its input fixes comes out in the order of the inputs.
+- Output `i` is the image of input `i`.
+- A failed map fails on some input, and succeeds on every input before it.
 -/
 
 @[expose] public section
@@ -96,5 +98,44 @@ theorem map_of_mapM_ok {γ : Type} {p : β → γ} {q : α → γ} (hpart : ∀ 
   | cons x xs ih =>
     obtain ⟨y, rest, head, tail, rfl⟩ := mapM_cons_ok.mp h
     simp [hpart x y head, ih tail]
+
+/-- Output `i` of a successful map is the image of input `i`. -/
+theorem mapM_ok_getElem {xs : List α} {ys : List β} (h : xs.mapM f = .ok ys)
+    (i : Nat) (hi : i < xs.length) :
+    f xs[i] = .ok (ys[i]'(by rw [mapM_ok_length h]; exact hi)) := by
+  induction xs generalizing ys i with
+  | nil => exact absurd hi (Nat.not_lt_zero i)
+  | cons x xs ih =>
+    obtain ⟨y, rest, head, tail, rfl⟩ := mapM_cons_ok.mp h
+    cases i with
+    | zero => exact head
+    | succ i => exact ih tail i (Nat.lt_of_succ_lt_succ hi)
+
+/-- A failed map fails with its error on some input, and succeeds on every input before it. -/
+theorem mapM_error {xs : List α} {e : ε} (h : xs.mapM f = .error e) :
+    ∃ i, ∃ hi : i < xs.length, f xs[i] = .error e ∧
+      ∀ k (hk : k < i), ∃ y, f (xs[k]'(Nat.lt_trans hk hi)) = .ok y := by
+  induction xs with
+  | nil => simp [List.mapM_nil, pure, Except.pure] at h
+  | cons x xs ih =>
+    rw [List.mapM_cons] at h
+    cases hx : f x with
+    | error e' =>
+      rw [hx] at h
+      cases h
+      exact ⟨0, by simp, hx, fun k hk => absurd hk (Nat.not_lt_zero k)⟩
+    | ok y =>
+      cases hxs : xs.mapM f with
+      | ok rest =>
+        rw [hx, hxs] at h
+        cases h
+      | error e' =>
+        rw [hx, hxs] at h
+        cases h
+        obtain ⟨i, hi, hfail, hbefore⟩ := ih hxs
+        refine ⟨i + 1, by simpa using hi, hfail, fun k hk => ?_⟩
+        cases k with
+        | zero => exact ⟨y, hx⟩
+        | succ k => exact hbefore k (Nat.lt_of_succ_lt_succ hk)
 
 end EthLib.Base

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Cryptography.Kzg.Polynomials
 public import EthLib.Cryptography.Proofs.Bls.Fr
 public import EthLib.Cryptography.Proofs.Kzg.BitReversal
@@ -20,6 +21,7 @@ Evaluation at a domain point is a table lookup.
 
 namespace EthLib.Cryptography.Kzg
 
+open EthLib.Base (Bytes32)
 open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
@@ -187,48 +189,145 @@ theorem intToBytesBE_bytesBEToNat (b : ByteArray) :
   bytesBEToNat_inj Array.size_ofFn
     (bytesBEToNat_intToBytesBE_of_lt (bytesBEToNat_lt b))
 
-/-- A successful `bytesToBlsField` implies: the input was 32 bytes, the
-value is the big-endian decoding, and the value is canonical. -/
+/-- A decoded field element is the big-endian value of its bytes.
+
+That value is below the modulus. -/
 theorem bytesToBlsField_ok {b : Bytes32} {f : Fr}
     (h : bytesToBlsField b = .ok f) :
-    b.size = BYTES_PER_FIELD_ELEMENT ∧ f.val = bytesBEToNat b ∧
-      f.val < Fr.modulus := by
+    f.val = bytesBEToNat ⟨b.toArray⟩ ∧ f.val < Fr.modulus := by
   rw [bytesToBlsField] at h
   split at h
+  · rename_i g hg
+    cases h
+    obtain ⟨_, hval, hlt⟩ := Bls.Fr.fromBytesBE_ok hg
+    refine ⟨?_, hlt⟩
+    rw [hval, bytesBEToNat, bytesBEToNatAux_eq_fromBytesBEAux]
   · cases h
-  · split at h
-    · rename_i g hg
-      cases h
-      obtain ⟨hsz, hval, hlt⟩ := Bls.Fr.fromBytesBE_ok hg
-      refine ⟨hsz, ?_, hlt⟩
-      rw [hval, bytesBEToNat, bytesBEToNatAux_eq_fromBytesBEAux]
-    · cases h
 
-@[simp] theorem size_blsFieldToBytes (x : Fr) :
-    (blsFieldToBytes x).size = BYTES_PER_FIELD_ELEMENT := by
-  simp only [blsFieldToBytes, Fr.toBytesBE, ByteArray.size, Array.size_ofFn,
-    BYTES_PER_FIELD_ELEMENT]
-
-/-- `bytesToBlsField` is a left inverse of `blsFieldToBytes`. -/
+/-- Decoding the encoding of a field element gives it back. -/
 @[simp] theorem bytesToBlsField_blsFieldToBytes (x : Fr) :
     bytesToBlsField (blsFieldToBytes x) = .ok x := by
-  have heq : blsFieldToBytes x = intToBytesBE x.val 32 := rfl
+  have heq : (⟨(blsFieldToBytes x).toArray⟩ : ByteArray) = intToBytesBE x.val 32 := rfl
   have hlt256 : x.val < 256 ^ 32 :=
     Nat.lt_trans x.isLt (by decide : Fr.modulus < 256 ^ 32)
-  have hdec : Bls.Fr.bytesBEToNat (blsFieldToBytes x) = x.val := by
+  have hdec : Bls.Fr.bytesBEToNat ⟨(blsFieldToBytes x).toArray⟩ = x.val := by
     rw [Bls.Fr.bytesBEToNat, ← bytesBEToNatAux_eq_fromBytesBEAux,
         ← bytesBEToNat, heq, bytesBEToNat_intToBytesBE_of_lt hlt256]
-  have hfrom : Bls.Fr.fromBytesBE (blsFieldToBytes x) = .ok x := by
+  have hfrom : Bls.Fr.fromBytesBE ⟨(blsFieldToBytes x).toArray⟩ = .ok x := by
     unfold Bls.Fr.fromBytesBE
-    have hsz : ¬ (blsFieldToBytes x).size ≠ 32 := by
-      simp [size_blsFieldToBytes, BYTES_PER_FIELD_ELEMENT]
+    have hsz : ¬ (⟨(blsFieldToBytes x).toArray⟩ : ByteArray).size ≠ 32 := by
+      simp [ByteArray.size]
     rw [ite_eq_right hsz]
     dsimp only []
     simp only [hdec, dite_eq_ite, ite_eq_left x.isLt, Fin.eta]
   unfold bytesToBlsField
-  have hsz : ¬ (blsFieldToBytes x).size ≠ BYTES_PER_FIELD_ELEMENT := by
-    simp [size_blsFieldToBytes]
-  rw [ite_eq_right hsz, hfrom]
+  rw [hfrom]
+
+/-- Field element `i` of a flattened vector of 32-byte chunks is chunk `i`. -/
+@[simp] theorem fieldElementBytes_flatten {k : Nat} (v : Vector Bytes32 k) (i : Fin k) :
+    fieldElementBytes (k := k) v.flatten i = v[i] := by
+  apply Vector.ext
+  intro j hj
+  have hdiv : (i.val * BYTES_PER_FIELD_ELEMENT + j) / 32 = i.val := by
+    simp only [BYTES_PER_FIELD_ELEMENT]
+    omega
+  have hmod : (i.val * BYTES_PER_FIELD_ELEMENT + j) % 32 = j := by
+    simp only [BYTES_PER_FIELD_ELEMENT]
+    omega
+  simp only [fieldElementBytes, Vector.getElem_ofFn]
+  exact (Vector.getElem_flatten _).trans (by simp only [hdiv, hmod, Fin.getElem_fin])
+
+/-- Relabelling the error keeps a success unchanged. -/
+private theorem mapError_eq_ok {ε ε' α : Type} {g : ε → ε'} {x : Except ε α} {y : α} :
+    x.mapError g = .ok y ↔ x = .ok y := by
+  cases x <;> simp [Except.mapError]
+
+/-- Relabelling the error fails exactly when the original fails. -/
+private theorem mapError_eq_error {ε ε' α : Type} {g : ε → ε'} {x : Except ε α} {e' : ε'} :
+    x.mapError g = .error e' ↔ ∃ e, x = .error e ∧ g e = e' := by
+  cases x <;> simp [Except.mapError]
+
+/-- The decoding loop, as a map over a list. -/
+private theorem bytesToBlsFields_eq {k : Nat} (bytes : Vector UInt8 (k * BYTES_PER_FIELD_ELEMENT)) :
+    bytesToBlsFields bytes = List.toArray <$> (Array.finRange k).toList.mapM
+      (fun i => (bytesToBlsField (fieldElementBytes bytes i)).mapError
+        fun _ => KzgError.invalidFieldElement (some i)) := by
+  rw [bytesToBlsFields, Array.mapM_eq_mapM_toList]
+
+/-- A successful decoding of `k` field elements returns `k` field elements. -/
+theorem size_bytesToBlsFields {k : Nat} {bytes : Vector UInt8 (k * BYTES_PER_FIELD_ELEMENT)}
+    {ys : Array Fr} (h : bytesToBlsFields bytes = .ok ys) : ys.size = k := by
+  rw [bytesToBlsFields_eq] at h
+  cases hl : (Array.finRange k).toList.mapM
+      (fun i => (bytesToBlsField (fieldElementBytes bytes i)).mapError
+        fun _ => KzgError.invalidFieldElement (some i)) with
+  | error e => rw [hl] at h; cases h
+  | ok l =>
+    rw [hl] at h
+    cases h
+    simpa using Base.mapM_ok_length hl
+
+/-- Element `i` of a successful decoding is the decoding of chunk `i`. -/
+theorem getElem_bytesToBlsFields {k : Nat} {bytes : Vector UInt8 (k * BYTES_PER_FIELD_ELEMENT)}
+    {ys : Array Fr} (h : bytesToBlsFields bytes = .ok ys) (i : Fin k) :
+    bytesToBlsField (fieldElementBytes bytes i) =
+      .ok (ys[i.val]'(by rw [size_bytesToBlsFields h]; exact i.isLt)) := by
+  have hsize := size_bytesToBlsFields h
+  rw [bytesToBlsFields_eq] at h
+  cases hl : (Array.finRange k).toList.mapM
+      (fun i => (bytesToBlsField (fieldElementBytes bytes i)).mapError
+        fun _ => KzgError.invalidFieldElement (some i)) with
+  | error e => rw [hl] at h; cases h
+  | ok l =>
+    rw [hl] at h
+    cases h
+    have hil : i.val < (Array.finRange k).toList.length := by simp
+    have hstep := Base.mapM_ok_getElem hl i.val hil
+    simp only [Array.getElem_toList, Array.getElem_finRange, mapError_eq_ok] at hstep
+    simpa using hstep
+
+/-- A failed decoding names its first invalid chunk.
+
+That chunk does not decode, and every chunk before it does. -/
+theorem bytesToBlsFields_error {k : Nat} {bytes : Vector UInt8 (k * BYTES_PER_FIELD_ELEMENT)}
+    {e : KzgError} (h : bytesToBlsFields bytes = .error e) :
+    ∃ j : Fin k, e = .invalidFieldElement (some j.val) ∧
+      (∀ f, bytesToBlsField (fieldElementBytes bytes j) ≠ .ok f) ∧
+      ∀ i : Fin k, i < j → ∃ f, bytesToBlsField (fieldElementBytes bytes i) = .ok f := by
+  rw [bytesToBlsFields_eq] at h
+  cases hl : (Array.finRange k).toList.mapM
+      (fun i => (bytesToBlsField (fieldElementBytes bytes i)).mapError
+        fun _ => KzgError.invalidFieldElement (some i)) with
+  | ok l => rw [hl] at h; cases h
+  | error e' =>
+    rw [hl] at h
+    cases h
+    obtain ⟨j, hj, hfail, hbefore⟩ := Base.mapM_error hl
+    have hjk : j < k := by simpa using hj
+    simp only [Array.getElem_toList, Array.getElem_finRange, mapError_eq_error] at hfail
+    obtain ⟨e₀, he₀, rfl⟩ := hfail
+    refine ⟨⟨j, hjk⟩, rfl, fun f hf => ?_, fun i hij => ?_⟩
+    · have : bytesToBlsField (fieldElementBytes bytes ⟨j, hjk⟩) = .error e₀ := by
+        simpa using he₀
+      rw [this] at hf
+      cases hf
+    · obtain ⟨y, hy⟩ := hbefore i.val hij
+      simp only [Array.getElem_toList, Array.getElem_finRange, mapError_eq_ok] at hy
+      exact ⟨y, by simpa using hy⟩
+
+/-- The decoding succeeds when every chunk decodes.
+
+It then returns the decoded values. -/
+theorem bytesToBlsFields_eq_ok {k : Nat} {bytes : Vector UInt8 (k * BYTES_PER_FIELD_ELEMENT)}
+    (g : Fin k → Fr) (h : ∀ i, bytesToBlsField (fieldElementBytes bytes i) = .ok (g i)) :
+    bytesToBlsFields bytes = .ok (Array.ofFn g) := by
+  rw [bytesToBlsFields_eq, Base.mapM_eq_ok_map (g := g) fun i _ => mapError_eq_ok.mpr (h i)]
+  show Except.ok _ = _
+  congr 1
+  apply Array.ext
+  · simp
+  · intro i _ _
+    simp
 
 /-- Drop trailing zero coefficients from a list of field elements. -/
 def stripTrailingZerosList : List Fr → List Fr
@@ -1059,198 +1158,30 @@ theorem computeRootsOfUnity_def (order : Nat) :
     (computeRootsOfUnity order).size = order := by
   simp [computeRootsOfUnity_def]
 
-/-- A successful `blobToPolynomialAux` returns exactly `count` elements. -/
-theorem length_blobToPolynomialAux (blob : Blob) (i count : Nat)
-    (l : List Fr) (h : blobToPolynomialAux blob i count = .ok l) :
-    l.length = count := by
-  induction count generalizing i l with
-  | zero =>
-    rw [blobToPolynomialAux] at h
-    cases h
-    rfl
-  | succ count ih =>
-    rw [blobToPolynomialAux] at h
-    split at h
-    · rename_i f hf
-      cases hrec : blobToPolynomialAux blob (i + 1) count with
-      | ok rest =>
-        rw [hrec] at h
-        cases h
-        simp [ih (i + 1) rest hrec]
-      | error e =>
-        rw [hrec] at h
-        cases h
-    · cases h
-
-/-- Element `j` of a successful `blobToPolynomialAux` decode is the
-decoding of chunk `start + j`. -/
-theorem getElem_blobToPolynomialAux (blob : Blob) (start count : Nat)
-    (l : List Fr) (h : blobToPolynomialAux blob start count = .ok l)
-    (j : Nat) (hj : j < l.length) :
-    bytesToBlsField (blob.extract ((start + j) * BYTES_PER_FIELD_ELEMENT)
-      ((start + j + 1) * BYTES_PER_FIELD_ELEMENT)) = .ok l[j] := by
-  induction count generalizing start l j with
-  | zero =>
-    rw [blobToPolynomialAux] at h
-    cases h
-    exact absurd hj (by simp)
-  | succ count ih =>
-    rw [blobToPolynomialAux] at h
-    split at h
-    · rename_i f hf
-      cases hrec : blobToPolynomialAux blob (start + 1) count with
-      | ok rest =>
-        rw [hrec] at h
-        cases h
-        cases j with
-        | zero => simpa using hf
-        | succ j =>
-          have := ih (start + 1) rest hrec j (by simpa using hj)
-          simpa [show start + 1 + j = start + (j + 1) by omega] using this
-      | error e =>
-        rw [hrec] at h
-        cases h
-    · cases h
-
-/-- `blobToPolynomialAux` fails exactly with the index of the *first*
-invalid chunk: that chunk does not decode, and every chunk before it
-does. -/
-theorem blobToPolynomialAux_error (blob : Blob) (start count : Nat)
-    (e : KzgError) (h : blobToPolynomialAux blob start count = .error e) :
-    ∃ j, start ≤ j ∧ j < start + count ∧
-      e = .invalidFieldElement (some j) ∧
-      (∀ f, bytesToBlsField (blob.extract (j * BYTES_PER_FIELD_ELEMENT)
-        ((j + 1) * BYTES_PER_FIELD_ELEMENT)) ≠ .ok f) ∧
-      (∀ k, start ≤ k → k < j →
-        ∃ f, bytesToBlsField (blob.extract (k * BYTES_PER_FIELD_ELEMENT)
-          ((k + 1) * BYTES_PER_FIELD_ELEMENT)) = .ok f) := by
-  induction count generalizing start e with
-  | zero =>
-    rw [blobToPolynomialAux] at h
-    cases h
-  | succ count ih =>
-    rw [blobToPolynomialAux] at h
-    split at h
-    · rename_i f hf
-      cases hrec : blobToPolynomialAux blob (start + 1) count with
-      | ok rest =>
-        rw [hrec] at h
-        cases h
-      | error e' =>
-        rw [hrec] at h
-        cases h
-        obtain ⟨j, hj1, hj2, hj3, hj4, hj5⟩ := ih (start + 1) e hrec
-        refine ⟨j, by omega, by omega, hj3, hj4, fun k hk1 hk2 => ?_⟩
-        rcases Nat.eq_or_lt_of_le hk1 with rfl | hk
-        · exact ⟨f, hf⟩
-        · exact hj5 k hk hk2
-    · rename_i herr
-      cases h
-      refine ⟨start, Nat.le_refl _, by omega, rfl, fun f hf => ?_,
-        fun k hk1 hk2 => absurd (Nat.lt_of_le_of_lt hk1 hk2)
-          (Nat.lt_irrefl _)⟩
-      rw [herr] at hf
-      cases hf
-
 /-- A successful `blobToPolynomial` returns exactly
 `FIELD_ELEMENTS_PER_BLOB` field elements. -/
 theorem size_blobToPolynomial (blob : Blob) (poly : Polynomial)
     (h : blobToPolynomial blob = .ok poly) :
-    poly.size = FIELD_ELEMENTS_PER_BLOB := by
-  rw [blobToPolynomial] at h
-  split at h
-  · cases h
-  · generalize FIELD_ELEMENTS_PER_BLOB = N at h ⊢
-    cases hrec : blobToPolynomialAux blob 0 N with
-    | ok l =>
-      rw [hrec] at h
-      cases h
-      simpa using length_blobToPolynomialAux blob 0 N l hrec
-    | error e =>
-      rw [hrec] at h
-      cases h
+    poly.size = FIELD_ELEMENTS_PER_BLOB :=
+  size_bytesToBlsFields (k := FIELD_ELEMENTS_PER_BLOB) h
 
-/-- Element `i` of a successful `blobToPolynomial` is the decoding of
-the `i`-th 32-byte chunk of the blob. -/
+/-- Element `i` of a decoded blob is the decoding of the `i`-th 32-byte chunk. -/
 theorem getElem_blobToPolynomial (blob : Blob) (poly : Polynomial)
-    (h : blobToPolynomial blob = .ok poly) (i : Nat) (hi : i < poly.size) :
-    bytesToBlsField (blob.extract (i * BYTES_PER_FIELD_ELEMENT)
-      ((i + 1) * BYTES_PER_FIELD_ELEMENT)) = .ok poly[i] := by
-  rw [blobToPolynomial] at h
-  split at h
-  · cases h
-  · generalize FIELD_ELEMENTS_PER_BLOB = N at h
-    cases hrec : blobToPolynomialAux blob 0 N with
-    | ok l =>
-      rw [hrec] at h
-      cases h
-      have hj : i < l.length := by simpa using hi
-      have := getElem_blobToPolynomialAux blob 0 N l hrec i hj
-      simpa using this
-    | error e =>
-      rw [hrec] at h
-      cases h
+    (h : blobToPolynomial blob = .ok poly) (i : Fin FIELD_ELEMENTS_PER_BLOB) :
+    bytesToBlsField (fieldElementBytes (k := FIELD_ELEMENTS_PER_BLOB) blob i) =
+      .ok (poly[i.val]'(by rw [size_blobToPolynomial blob poly h]; exact i.isLt)) :=
+  getElem_bytesToBlsFields (k := FIELD_ELEMENTS_PER_BLOB) h i
 
-/-- A `blobToPolynomial` failure with `invalidFieldElement (some j)`
-means: the blob size was right, `j` is in range, chunk `j` does not
-decode, and all chunks before `j` do. -/
-theorem blobToPolynomial_error_invalidFieldElement (blob : Blob) (j : Nat)
-    (h : blobToPolynomial blob = .error (.invalidFieldElement (some j))) :
-    blob.size = BYTES_PER_BLOB ∧ j < FIELD_ELEMENTS_PER_BLOB ∧
-      (∀ f, bytesToBlsField (blob.extract (j * BYTES_PER_FIELD_ELEMENT)
-        ((j + 1) * BYTES_PER_FIELD_ELEMENT)) ≠ .ok f) ∧
-      (∀ k, k < j →
-        ∃ f, bytesToBlsField (blob.extract (k * BYTES_PER_FIELD_ELEMENT)
-          ((k + 1) * BYTES_PER_FIELD_ELEMENT)) = .ok f) := by
-  rw [blobToPolynomial] at h
-  split at h
-  · rename_i hsz
-    cases h
-  · rename_i hsz
-    refine ⟨by omega, ?_⟩
-    generalize hN : FIELD_ELEMENTS_PER_BLOB = N at h ⊢
-    cases hrec : blobToPolynomialAux blob 0 N with
-    | ok l =>
-      rw [hrec] at h
-      cases h
-    | error e =>
-      rw [hrec] at h
-      cases h
-      obtain ⟨j', _, hj2, hj3, hj4, hj5⟩ :=
-        blobToPolynomialAux_error blob 0 N _ hrec
-      cases hj3
-      exact ⟨by omega, hj4, fun k hk => hj5 k (Nat.zero_le k) hk⟩
+/-- A failed decoding of a blob names its first invalid chunk `j`.
 
-/-- `blobToPolynomial` fails with `badBlobSize` exactly when the blob has
-the wrong size (and reports that size). -/
-theorem blobToPolynomial_error_badBlobSize (blob : Blob) (n : Nat) :
-    blobToPolynomial blob = .error (.badBlobSize n) ↔
-      blob.size ≠ BYTES_PER_BLOB ∧ n = blob.size := by
-  rw [blobToPolynomial]
-  split
-  · rename_i hsz
-    constructor
-    · intro h
-      cases h
-      exact ⟨hsz, rfl⟩
-    · rintro ⟨_, rfl⟩
-      rfl
-  · rename_i hsz
-    constructor
-    · intro h
-      generalize FIELD_ELEMENTS_PER_BLOB = N at h
-      cases hrec : blobToPolynomialAux blob 0 N with
-      | ok l =>
-        rw [hrec] at h
-        cases h
-      | error e =>
-        rw [hrec] at h
-        cases h
-        obtain ⟨j, _, _, hj3, _, _⟩ :=
-          blobToPolynomialAux_error blob 0 N _ hrec
-        cases hj3
-    · rintro ⟨hcontra, _⟩
-      exact absurd hcontra hsz
+Chunk `j` does not decode, and all chunks before `j` do. -/
+theorem blobToPolynomial_error (blob : Blob) {e : KzgError}
+    (h : blobToPolynomial blob = .error e) :
+    ∃ j : Fin FIELD_ELEMENTS_PER_BLOB, e = .invalidFieldElement (some j.val) ∧
+      (∀ f, bytesToBlsField (fieldElementBytes (k := FIELD_ELEMENTS_PER_BLOB) blob j) ≠ .ok f) ∧
+      ∀ i : Fin FIELD_ELEMENTS_PER_BLOB, i < j →
+        ∃ f, bytesToBlsField (fieldElementBytes (k := FIELD_ELEMENTS_PER_BLOB) blob i) = .ok f :=
+  bytesToBlsFields_error (k := FIELD_ELEMENTS_PER_BLOB) h
 
 @[simp] theorem size_rootsOfUnityBrp (size : Nat) :
     (rootsOfUnityBrp size).size = size := by

@@ -146,10 +146,6 @@ def recoverCellsAndKzgProofs (setup : TrustedSetup)
       (fun i => cellIndices[i + 1]! ≤ cellIndices[i]!) then
     throw .indicesNotAscending
 
-  -- Cells must be the correct size.
-  if let some c := cells.find? (fun c => c.size != BYTES_PER_CELL) then
-    throw (.badCellSize c.size)
-
   -- Convert cells to coset evaluations.
   let cosetsEvals : Array CosetEvals ← cells.mapM fun c =>
     cellToCosetEvals c
