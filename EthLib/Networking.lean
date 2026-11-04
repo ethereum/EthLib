@@ -14,6 +14,7 @@ public import EthLib.Networking.Enr.V4
 public import EthLib.Networking.Gossip.MessageId
 public import EthLib.Networking.Gossip.Subnet
 public import EthLib.Networking.Gossip.Topic
+public import EthLib.Networking.Gossip.Validation
 public import EthLib.Networking.ReqResp.Encoding
 public import EthLib.Networking.Rlpx.Ecies
 public import EthLib.Networking.Rlpx.Frame
