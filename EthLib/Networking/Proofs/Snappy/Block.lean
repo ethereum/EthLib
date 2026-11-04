@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Networking.Snappy.Block
+public import EthLib.Base.Proofs.LittleEndian
 public import EthLib.Networking.Encoding.Varint
 
 /-!
@@ -24,6 +25,7 @@ The kernel checks everything here, so no `native_decide` or `bv_decide` axiom ap
 
 namespace EthLib.Networking.Proofs.Snappy.Block
 
+open EthLib.Base (bytesToUint uintToBytes)
 open EthLib.Networking.Snappy
 
 /-! ## The preamble (§1) -/
@@ -99,24 +101,6 @@ theorem readPreamble_le {bs rest : List UInt8} {len : Nat}
   · split at h
     · cases h
     · cases h; omega
-
-/-! ## Little-endian bytes -/
-
-/-- Writing `k` little-endian bytes gives exactly `k` bytes. -/
-@[simp] theorem length_leBytes (n k : Nat) : (leBytes n k).length = k := by
-  induction k generalizing n with
-  | zero => rfl
-  | succ k ih => simp [leBytes, ih]
-
-/-- Reading `k` little-endian bytes back gives the number modulo 256^k. -/
-theorem leValue_leBytes (n k : Nat) : leValue (leBytes n k) = n % 256 ^ k := by
-  induction k generalizing n with
-  | zero => simp [leBytes, leValue, Nat.mod_one]
-  | succ k ih =>
-      simp only [leBytes, leValue, ih, UInt8.toNat_ofNat']
-      -- n mod 256^(k+1) = (n mod 256) + 256 * ((n / 256) mod 256^k)
-      show n % 256 + 256 * (n / 256 % 256 ^ k) = n % 256 ^ (k + 1)
-      rw [Nat.pow_succ', Nat.mod_mul]
 
 /-! ## Copies (§2.2)
 
@@ -228,7 +212,7 @@ theorem decompressElements_fuel (input out : List UInt8) {fuel : Nat}
 theorem decompressElements_copy_first {tag : UInt8} {rest : List UInt8} {fuel : Nat}
     (hcopy : tag.toNat % 4 ≠ 0) :
     ∃ e, decompressElements (tag :: rest) [] (fuel + 1) = .error e := by
-  simp only [decompressElements, beq_iff_eq, hcopy, ↓reduceIte]
+  simp only [decompressElements, beq_iff_eq, hcopy, ↓reduceIte, EthLib.Base.bytesToUint_toVector]
   repeat' split
   -- Every branch is an error, except a successful copy, which cannot happen.
   -- Every copy length is at least 1, and the output is empty.
@@ -324,10 +308,11 @@ theorem decompressElements_literal {data : List UInt8} (hne : data ≠ [])
     generalize literalLengthBytes (data.length - 1) = k at *
     have ht : (UInt8.ofNat ((59 + k) * 4)).toNat = (59 + k) * 4 := by
       rw [UInt8.toNat_ofNat']; omega
-    have hv : leValue (leBytes (data.length - 1) k) = data.length - 1 := by
-      rw [leValue_leBytes, Nat.mod_eq_of_lt hlt]
+    have hv : (uintToBytes k (data.length - 1)).toList.foldr
+        (fun byte acc => byte.toNat + 256 * acc) 0 = data.length - 1 := by
+      rw [EthLib.Base.foldr_uintToBytes, Nat.mod_eq_of_lt hlt]
     rw [List.cons_append]
-    simp only [decompressElements, ht]
+    simp only [decompressElements, ht, EthLib.Base.bytesToUint_toVector]
     simp [show ¬ 59 + k < 60 by omega, show 59 + k - 59 = k by omega, hv,
       show data.length - 1 + 1 = data.length by omega, decompressElements]
 
