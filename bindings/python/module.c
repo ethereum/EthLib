@@ -67,6 +67,7 @@ PyObject* AES_ERROR;
 PyObject* CONCAT_KDF_ERROR;
 PyObject* BLOCK_ERROR;
 PyObject* RLP_ERROR;
+PyObject* SSZ_ERROR;
 PyObject* SNAPPY_ERROR;
 PyObject* VARINT_ERROR;
 PyObject* DISCV5_ERROR;
@@ -261,6 +262,11 @@ initialize_EthLib_EthLib_Execution_Exports(
 
 extern lean_object*
 initialize_EthLib_EthLib_Consensus_Exports(
+  uint8_t builtin
+);
+
+extern lean_object*
+initialize_EthLib_EthLib_Serialization_Exports(
   uint8_t builtin
 );
 
@@ -596,6 +602,8 @@ static PyMethodDef methods[] = {
   {"rlp_encode", py_rlp_encode, METH_VARARGS, NULL},
   {"rlp_decode", py_rlp_decode, METH_VARARGS, NULL},
   {"rlp_decode_as", py_rlp_decode_as, METH_VARARGS, NULL},
+  {"ssz_serialize", py_ssz_serialize, METH_VARARGS, NULL},
+  {"ssz_deserialize", py_ssz_deserialize, METH_VARARGS, NULL},
   {"rlpx_ecies_encrypt", py_rlpx_ecies_encrypt, METH_VARARGS, NULL},
   {"rlpx_ecies_decrypt", py_rlpx_ecies_decrypt, METH_VARARGS, NULL},
   {"devp2p_decode_message", py_devp2p_decode_message, METH_VARARGS, NULL},
@@ -665,6 +673,7 @@ PyInit__native(void) {
     CONCAT_KDF_ERROR = PyObject_GetAttrString(errors, "ConcatKdfError");
     BLOCK_ERROR = PyObject_GetAttrString(errors, "BlockError");
     RLP_ERROR = PyObject_GetAttrString(errors, "RlpError");
+    SSZ_ERROR = PyObject_GetAttrString(errors, "SszError");
     SNAPPY_ERROR = PyObject_GetAttrString(errors, "SnappyError");
     VARINT_ERROR = PyObject_GetAttrString(errors, "VarintError");
     DISCV5_ERROR = PyObject_GetAttrString(errors, "Discv5Error");
@@ -691,6 +700,10 @@ PyInit__native(void) {
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
       res = initialize_EthLib_EthLib_Consensus_Exports(1);
+    }
+    if (lean_io_result_is_ok(res)) {
+      lean_dec_ref(res);
+      res = initialize_EthLib_EthLib_Serialization_Exports(1);
     }
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);

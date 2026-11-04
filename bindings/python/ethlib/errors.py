@@ -101,6 +101,10 @@ class RlpError(EthLibError, ValueError):
     """RLP rejected its input, or no RLP type has the name given."""
 
 
+class SszError(EthLibError, ValueError):
+    """SSZ rejected a type, a value or its bytes, or could not read the JSON of one."""
+
+
 class SnappyError(EthLibError, ValueError):
     """A Snappy block or framed stream was rejected.
 
@@ -184,6 +188,7 @@ __all__ = [
     "BlockError",
     "RlpError",
     "SnappyError",
+    "SszError",
     "VarintError",
     "Discv5Error",
     "RlpxError",
