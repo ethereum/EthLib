@@ -63,12 +63,14 @@ EXPORTS = {
 }
 
 # The exports whose rules hold at Glamsterdam: the forms of transactions, blocks and receipts,
-# the checks of a header, the blob schedule, proof of work and the precompiles.
+# the checks of a header, the blob schedule, proof of work, the precompiles, and the preset
+# parameters of Gloas.
 AT_GLAMSTERDAM = {
     "tx_type", "tx_hash", "recover_sender", "header_hash", "reencode", "transactions_root",
     "withdrawals_root", "validate_header", "validate_size", "receipt_reencode",
     "receipt_logs_bloom", "state_withdrawals_root", "base_fee_per_blob_gas", "excess_blob_gas",
     "block_difficulty", "seal_hash", "check_proof_of_work", "precompile_run", "precompile_price",
+    "consensus_parameters",
 }
 
 

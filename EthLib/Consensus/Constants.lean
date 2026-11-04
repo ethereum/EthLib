@@ -13,6 +13,10 @@ The constants of the beacon chain: values that no preset, configuration or fork 
 Each constant keeps the name and the type of its source.
 
 A constant that a fork adds names that fork.
+
+The constants of Gloas come from EIP-7732 and EIP-8282, both in Last Call on 2026-11-03.
+
+They can change until the EIPs are final.
 -/
 
 @[expose] public section
@@ -191,5 +195,59 @@ def CONSOLIDATION_REQUEST_TYPE : Vector UInt8 1 := #v[0x02]
 
 /-- From Fulu: the largest 256-bit unsigned integer, `2^256 - 1`. -/
 def UINT256_MAX : Base.U256 := BitVec.allOnes 256
+
+/-- From Gloas: the bit that marks a validator index as the index of a builder, `2^40`.
+
+A withdrawal names a validator or a builder through the same index field.
+
+[EIP-7732](https://eips.ethereum.org/EIPS/eip-7732#index-flags) defines it. -/
+def BUILDER_INDEX_FLAG : UInt64 := 2 ^ 40
+
+/-- From Gloas: the domain type of a builder's bid and of its payload envelope.
+
+[EIP-7732](https://eips.ethereum.org/EIPS/eip-7732#domains) defines the four Gloas domains. -/
+def DOMAIN_BEACON_BUILDER : DomainType := #v[0x0B, 0x00, 0x00, 0x00]
+
+/-- From Gloas: the domain type of a vote of the payload timeliness committee. -/
+def DOMAIN_PTC_ATTESTER : DomainType := #v[0x0C, 0x00, 0x00, 0x00]
+
+/-- From Gloas: the domain type of the preferences that a proposer gives builders. -/
+def DOMAIN_PROPOSER_PREFERENCES : DomainType := #v[0x0D, 0x00, 0x00, 0x00]
+
+/-- From Gloas: the domain type of a builder deposit. -/
+def DOMAIN_BUILDER_DEPOSIT : DomainType := #v[0x0E, 0x00, 0x00, 0x00]
+
+/-- From Gloas: the builder index of a payload that the proposer built itself, `2^64 - 1`.
+
+[EIP-7732](https://eips.ethereum.org/EIPS/eip-7732#misc) defines it. -/
+def BUILDER_INDEX_SELF_BUILD : BuilderIndex := UInt64.ofNat (2 ^ 64 - 1)
+
+/-- From Gloas: the numerator of the share of attesting balance that releases a builder payment.
+
+[EIP-7732](https://eips.ethereum.org/EIPS/eip-7732#misc) sets the share to 6/10. -/
+def BUILDER_PAYMENT_THRESHOLD_NUMERATOR : UInt64 := 6
+
+/-- From Gloas: the denominator of the share of attesting balance that releases a payment. -/
+def BUILDER_PAYMENT_THRESHOLD_DENOMINATOR : UInt64 := 10
+
+/-- From Gloas: the first byte of the withdrawal credentials of a builder.
+
+[EIP-7732](https://eips.ethereum.org/EIPS/eip-7732#withdrawal-prefixes) defines it. -/
+def BUILDER_WITHDRAWAL_PREFIX : Vector UInt8 1 := #v[0xB0]
+
+/-- From Gloas: the version of the builders that may submit payloads.
+
+[EIP-7732](https://eips.ethereum.org/EIPS/eip-7732#builder-versions) defines it. -/
+def PAYLOAD_BUILDER_VERSION : UInt8 := 0
+
+/-- From Gloas: the type of a builder deposit request.
+
+[EIP-8282](https://eips.ethereum.org/EIPS/eip-8282#constants) defines it. -/
+def BUILDER_DEPOSIT_REQUEST_TYPE : Vector UInt8 1 := #v[0x03]
+
+/-- From Gloas: the type of a builder exit request.
+
+[EIP-8282](https://eips.ethereum.org/EIPS/eip-8282#constants) defines it. -/
+def BUILDER_EXIT_REQUEST_TYPE : Vector UInt8 1 := #v[0x04]
 
 end EthLib.Consensus
