@@ -13,8 +13,9 @@ Properties of Snappy block decompression, against [`format_description.txt`](htt
 - A block cannot start with a copy (§2).
 - A block that decompresses yields exactly the length it declared, at most 2^32 - 1.
 - The fuel that bounds the element loop never changes the result.
+- A block of one literal decompresses back to its data, for at most 2^32 - 1 bytes.
 
-There is no round trip: one byte string has many encodings, and compression is out of scope.
+One byte string has many encodings, so the round trip goes one way only.
 
 The kernel checks everything here, so no `native_decide` or `bv_decide` axiom appears.
 -/
@@ -278,6 +279,81 @@ theorem decompress_size_eq_declared {bs out : ByteArray}
       cases h
       exact decompressList_length_eq_declared hd
 
+/-! ## The literal encoder -/
+
+/-- The bytes of a byte array, read one by one, are the bytes of its array. -/
+theorem toList_eq_data_toList (bs : ByteArray) : bs.toList = bs.data.toList := by
+  have hs : bs.data.toList.length = bs.size := Array.length_toList
+  -- From index i on, the loop puts the bytes it has read back in order, then the rest.
+  have loop : ∀ i r, i ≤ bs.size →
+      ByteArray.toList.loop bs i r = r.reverse ++ bs.data.toList.drop i := by
+    intro i r hi
+    fun_induction ByteArray.toList.loop bs i r with
+    | case1 i r hlt ih =>
+        rw [ih (by omega)]
+        have hget : bs.get! i = bs.data.toList[i]'(by omega) := by
+          obtain ⟨a⟩ := bs
+          exact (getElem!_pos a i hlt).trans (Array.getElem_toList _).symm
+        rw [hget, List.reverse_cons, List.append_assoc, List.singleton_append,
+          ← List.drop_eq_getElem_cons]
+    | case2 i r hge =>
+        rw [List.drop_eq_nil_of_le (by omega), List.append_nil]
+  unfold ByteArray.toList
+  simpa using loop 0 [] (Nat.zero_le _)
+
+/-- The tag of a literal reads back as a literal, and its length as the data length (§2.1). -/
+theorem decompressElements_literal {data : List UInt8} (hne : data ≠ [])
+    (h : data.length ≤ 2 ^ 32) (fuel : Nat) :
+    decompressElements (literal data) [] (fuel + 1) = .ok data.reverse := by
+  have hpos : 0 < data.length := List.length_pos_iff.mpr hne
+  dsimp only [literal]
+  split
+  -- The length sits in the tag.
+  · rename_i hn
+    have ht : (UInt8.ofNat ((data.length - 1) * 4)).toNat = (data.length - 1) * 4 := by
+      rw [UInt8.toNat_ofNat']; omega
+    simp only [decompressElements, ht]
+    simp [hn, show data.length - 1 + 1 = data.length by omega, decompressElements]
+  -- The length takes 1 to 4 bytes after the tag.
+  · rename_i hn
+    have hk : 1 ≤ literalLengthBytes (data.length - 1) ∧ literalLengthBytes (data.length - 1) ≤ 4 ∧
+        data.length - 1 < 256 ^ literalLengthBytes (data.length - 1) := by
+      unfold literalLengthBytes
+      split <;> (try split) <;> (try split) <;> simp only [Nat.reducePow] at * <;> omega
+    obtain ⟨hk1, hk4, hlt⟩ := hk
+    generalize literalLengthBytes (data.length - 1) = k at *
+    have ht : (UInt8.ofNat ((59 + k) * 4)).toNat = (59 + k) * 4 := by
+      rw [UInt8.toNat_ofNat']; omega
+    have hv : leValue (leBytes (data.length - 1) k) = data.length - 1 := by
+      rw [leValue_leBytes, Nat.mod_eq_of_lt hlt]
+    rw [List.cons_append]
+    simp only [decompressElements, ht]
+    simp [show ¬ 59 + k < 60 by omega, show 59 + k - 59 = k by omega, hv,
+      show data.length - 1 + 1 = data.length by omega, decompressElements]
+
+/-- A block of one literal decompresses to its data, for data of at most 2^32 - 1 bytes. -/
+theorem decompressList_compressLiteralList {data : List UInt8}
+    (h : data.length ≤ maxUncompressedLength) :
+    decompressList (compressLiteralList data) = .ok data := by
+  rw [decompressList, compressLiteralList, readPreamble_encode _ h]
+  cases data with
+  | nil => rfl
+  | cons b bs =>
+      simp only [List.isEmpty_cons, Bool.false_eq_true, ↓reduceIte]
+      obtain ⟨f, hf⟩ : ∃ f, (literal (b :: bs)).length = f + 1 := by
+        dsimp only [literal]; split <;> exact ⟨_, rfl⟩
+      rw [hf, decompressElements_literal (List.cons_ne_nil b bs)
+        (by simp [maxUncompressedLength] at h ⊢; omega)]
+      simp
+
+/-- The literal block of a byte array decompresses back to it, for at most 2^32 - 1 bytes. -/
+theorem decompress_compressLiteral {d : ByteArray} (h : d.size ≤ maxUncompressedLength) :
+    decompress (compressLiteral d) = .ok d := by
+  have hl : d.data.toList.length ≤ maxUncompressedLength := by simpa using h
+  rw [decompress, compressLiteral, toList_eq_data_toList]
+  rw [decompressList_compressLiteralList hl]
+  rfl
+
 /-! ## Known answers
 
 Each block is built by hand from the format description.
@@ -328,6 +404,36 @@ example : decompressList [0x00] = .ok [] := rfl
 
 /-- A preamble of one that is not minimally encoded, which §1 allows. -/
 example : decompressList [0x81, 0x00, 0x00, 0x41] = .ok [0x41] := rfl
+
+/-! ## Blocks of one literal
+
+The first block matches the one `python-snappy` 0.7.3 writes for the same data.
+
+The others are built by hand from §1 and §2.1.
+-/
+
+/-- The nine bytes `123456789`: length 9, then a tag holding the length minus one. -/
+example : compressLiteralList [0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39] =
+    [0x09, 0x20, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39] := by
+  decide +kernel
+
+/-- Empty data: the length zero and no elements. -/
+example : compressLiteralList [] = [0x00] := by decide +kernel
+
+/-- A literal of 60 bytes, the longest whose length fits in the tag. -/
+example : compressLiteralList (List.replicate 60 0x41) =
+    [0x3c, 0xec] ++ List.replicate 60 0x41 := by
+  decide +kernel
+
+/-- A literal of 61 bytes, the shortest whose length takes one extra byte (tag 60). -/
+example : compressLiteralList (List.replicate 61 0x41) =
+    [0x3d, 0xf0, 0x3c] ++ List.replicate 61 0x41 := by
+  decide +kernel
+
+/-- A literal of 257 bytes, whose length minus one, 256, takes two extra bytes (tag 61). -/
+example :
+    (compressLiteralList (List.replicate 257 0x41)).take 5 = [0x81, 0x02, 0xf4, 0x00, 0x01] := by
+  decide +kernel
 
 /-! ## Rejected blocks
 

@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Networking.Encoding.Varint
+
 /-!
 # `Networking.Snappy.Block`
 
@@ -32,7 +34,9 @@ The result is reversed once at the end.
 
 The code is written for clarity, not speed.
 
-Compression is out of scope.
+The encoder writes the data as one literal, so it never compresses.
+
+Proofs, tests and bindings use it as the inverse of decompression.
 -/
 
 @[expose] public section
@@ -209,5 +213,39 @@ def decompressList (bs : List UInt8) : Except SnappyError (List UInt8) :=
 /-- The bytes a Snappy block decompresses to, or why it is not a valid block. -/
 def decompress (bs : ByteArray) : Except SnappyError ByteArray :=
   (decompressList bs.toList).map fun out => ⟨out.toArray⟩
+
+/-- The fewest bytes that hold `n` little-endian, for `n < 2^32` (§2.1). -/
+def literalLengthBytes (n : Nat) : Nat :=
+  if n < 2 ^ 8 then 1 else if n < 2 ^ 16 then 2 else if n < 2 ^ 24 then 3 else 4
+
+/-- One literal element that holds `data`, of 1 to 2^32 bytes (§2.1).
+
+A length up to 60 sits in the tag as the length minus one.
+
+A longer length is written, minus one, in 1 to 4 bytes after the tag.
+
+The six upper bits of the tag then hold 59 plus that count, so 60 to 63.
+-/
+def literal (data : List UInt8) : List UInt8 :=
+  let n := data.length - 1
+  if n < 60 then
+    UInt8.ofNat (n * 4) :: data
+  else
+    let k := literalLengthBytes n
+    UInt8.ofNat ((59 + k) * 4) :: leBytes n k ++ data
+
+/-- A Snappy block of `data`: the length as a varint, then the data as one literal.
+
+The data has at most 2^32 - 1 bytes, the most a preamble may declare (§1).
+-/
+def compressLiteralList (data : List UInt8) : List UInt8 :=
+  -- A varint of the consensus layer has the same little-endian groups of seven bits.
+  EthLib.Networking.Encoding.Varint.encodeAux data.length preambleMaxLength ++
+    -- Empty data has no elements, since a literal holds at least one byte.
+    if data.isEmpty then [] else literal data
+
+/-- A Snappy block of `data` that holds one literal, for data of at most 2^32 - 1 bytes. -/
+def compressLiteral (data : ByteArray) : ByteArray :=
+  ⟨(compressLiteralList data.data.toList).toArray⟩
 
 end EthLib.Networking.Snappy
