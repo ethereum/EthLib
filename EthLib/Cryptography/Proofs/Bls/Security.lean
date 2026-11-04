@@ -1,11 +1,11 @@
 module
 
-public import EthLib.Cryptography.Proofs.Bls.Security.Game
+public import EthLib.Cryptography.Proofs.Bls.Security.Reduction
 
 /-!
 # Proofs: the security of BLS signatures
 
-The unforgeability game of BLS signatures in the random oracle model.
+In the random oracle model, a BLS forger gives a solver of a co-Diffie-Hellman problem.
 
-It rests on a computational co-Diffie-Hellman problem over two groups.
+A forger within `q` hash calls wins at most `q` times as often as that solver.
 -/
