@@ -22,6 +22,10 @@ So when the search finds nothing, the two proofs are one proof, and give the key
 Soundness follows: a proof that verifies against a trie's root is the trie's own proof.
 
 Otherwise the search finds a collision between the two.
+
+A secured trie gives one root for any order of its entries.
+
+Otherwise a search over its keys returns two keys with one hash.
 -/
 
 @[expose] public section
@@ -33,7 +37,7 @@ open EthLib.Serialization.Rlp
 
 /-! ## The search -/
 
-/-- Two different node encodings with one hash. -/
+/-- Two different byte strings with one hash, such as two node encodings or two keys. -/
 def IsCollision (hash : ByteArray → Hash32) (pair : ByteArray × ByteArray) : Prop :=
   pair.1 ≠ pair.2 ∧ hash pair.1 = hash pair.2
 
@@ -312,5 +316,78 @@ theorem root_binding (hash : ByteArray → Hash32) {trie₁ trie₂ : Trie} {roo
   rcases verifyProof_binding hash hverify₁ hverify₂ with ⟨-, hvalue⟩ | ⟨pair, hfind, hvalid⟩
   · exact .inl hvalue
   · exact .inr ⟨pair, by simp [findCollision, hp, hq, hfind], hvalid⟩
+
+
+/-! ## Keys with one hash -/
+
+/-- The first two different keys of the list with one hash, if any. -/
+def findKeyCollision (hash : ByteArray → Hash32) : List ByteArray → Option (ByteArray × ByteArray)
+  | [] => none
+  | key :: rest =>
+    match rest.find? fun other => other ≠ key ∧ hash other = hash key with
+    | some other => some (key, other)
+    | none => findKeyCollision hash rest
+
+/-- Every pair that the search returns is a collision. -/
+theorem findKeyCollision_valid (hash : ByteArray → Hash32) :
+    (keys : List ByteArray) → {pair : ByteArray × ByteArray} →
+      findKeyCollision hash keys = some pair → IsCollision hash pair
+  | [], _, h => by cases h
+  | key :: rest, pair, h => by
+    unfold findKeyCollision at h
+    split at h
+    · rename_i other hfind
+      cases h
+      have hother := List.find?_some hfind
+      simp only [ne_eq, decide_eq_true_eq] at hother
+      exact ⟨fun heq => hother.1 heq.symm, hother.2.symm⟩
+    · exact findKeyCollision_valid hash rest h
+
+/-- Keys with distinct hashes have no collision, so the search can return none. -/
+theorem findKeyCollision_of_nodup (hash : ByteArray → Hash32) :
+    (keys : List ByteArray) → (keys.map hash).Nodup → findKeyCollision hash keys = none
+  | [], _ => rfl
+  | key :: rest, h => by
+    simp only [List.map_cons, List.nodup_cons, List.mem_map, not_exists, not_and] at h
+    unfold findKeyCollision
+    rw [List.find?_eq_none.mpr fun other hmem hother => h.1 other hmem (by simp_all)]
+    exact findKeyCollision_of_nodup hash rest h.2
+
+/-- Distinct keys in which the search finds no collision have distinct hashes. -/
+theorem nodup_map_of_findKeyCollision (hash : ByteArray → Hash32) :
+    (keys : List ByteArray) → keys.Nodup → findKeyCollision hash keys = none →
+      (keys.map hash).Nodup
+  | [], _, _ => List.nodup_nil
+  | key :: rest, hkeys, h => by
+    rw [List.nodup_cons] at hkeys
+    unfold findKeyCollision at h
+    split at h
+    · cases h
+    · rename_i hfind
+      simp only [List.map_cons, List.nodup_cons, List.mem_map, not_exists, not_and]
+      refine ⟨fun other hmem heq => ?_, nodup_map_of_findKeyCollision hash rest hkeys.2 h⟩
+      have hother := List.find?_eq_none.mp hfind other hmem
+      simp only [ne_eq, decide_eq_true_eq, not_and] at hother
+      -- A key with the hash of the first key is the first key, which the rest does not hold.
+      exact hkeys.1 (Decidable.byContradiction (fun hne => hother hne heq) ▸ hmem)
+
+/-- Order of a secured trie: any order of its entries gives one root.
+
+Otherwise the search over its keys returns two keys with one hash.
+
+The keys must be distinct. -/
+theorem root_secured_perm (hash : ByteArray → Hash32) {data data' : List (ByteArray × ByteArray)}
+    (hperm : data.Perm data') (hkeys : (data.map Prod.fst).Nodup) :
+    root hash ⟨true, data⟩ = root hash ⟨true, data'⟩ ∨
+      ∃ pair, findKeyCollision hash (data.map Prod.fst) = some pair ∧ IsCollision hash pair := by
+  cases hfind : findKeyCollision hash (data.map Prod.fst) with
+  | some pair => exact .inr ⟨pair, rfl, findKeyCollision_valid hash _ hfind⟩
+  | none =>
+    refine .inl (root_perm hash hperm ?_)
+    -- Distinct hashes have distinct bytes, and distinct bytes have distinct nibbles.
+    have hhashes := nodup_map_of_findKeyCollision hash _ hkeys hfind
+    have hbytes := nodup_map_of_injective hashBytes_injective hhashes
+    simpa [keyPath, List.map_map, Function.comp_def] using
+      nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hbytes
 
 end EthLib.Execution.Trie

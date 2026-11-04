@@ -30,6 +30,10 @@ commit = "d386b29b5a31bd5cfd8d21bbf4e8a0c87734085e"
 [repositories."ethereum/ERCs"]
 commit = "be307c948f28897adb8f25afcc253c2c909de35d"
 
+[repositories."ethereum/tests"]
+commit = "c67e485ff8b5be9abc8ad15345ec21aa22e290d9"
+directories = ["bindings/python/tests/state/genesis"]
+
 [repositories."ethereum/execution-specs"]
 commit = "b758df2bcaaa95c04d31e25c94fbfb8d6de756e7"
 

@@ -188,4 +188,6 @@ PyObject* py_enr_node_id                                  (PyObject* self, PyObj
 
 PyObject* py_precompile_run                               (PyObject* self, PyObject* args);
 
+PyObject* py_state_root                                   (PyObject* self, PyObject* args);
+
 #endif /* ETHCS_WRAPPERS_H */
