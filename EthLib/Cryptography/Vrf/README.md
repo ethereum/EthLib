@@ -11,7 +11,6 @@ Since the root fixes every leaf, it fixes one output per index before any index 
 ## Source
 
 This module is the specification of the VRF tree.
-[EIP-8450](https://eips.ethereum.org/EIPS/eip-8450) registers its root and names its interface, `vrf.Verify`.
 The hash is Keccak-256, as in [FIPS 202](https://csrc.nist.gov/pubs/fips/202/final) but with Keccak's original padding (`EthLib/Cryptography/Hash/Keccak.lean`).
 The properties proved are the ones that define a VRF in [Micali, Rabin and Vadhan, "Verifiable Random Functions", FOCS 1999](https://doi.org/10.1109/SFFCS.1999.814584).
 
@@ -19,7 +18,7 @@ The properties proved are the ones that define a VRF in [Micali, Rabin and Vadha
 
 The module offers four groups of operations:
 
-- `verify` (`Verify.lean`) is `vrf.Verify` of [EIP-8450](https://eips.ethereum.org/EIPS/eip-8450): it returns the output at an index, or nothing.
+- `verify` (`Verify.lean`) returns the output at an index, or nothing.
 - `verifyBytes` (`Serialization.lean`) does the same over bytes, and rejects a malformed root, opening or index.
 - `root` and `opening` (`KeyGen.lean`) build the tree and open it, from any function that gives the secret of each index.
 - `keyGen`, `prove` and `evaluate` (`KeyGen.lean`) do the same from one 32-byte seed.

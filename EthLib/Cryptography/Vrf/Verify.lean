@@ -22,9 +22,9 @@ The output is a hash of the secret, not the leaf.
 namespace EthLib.Cryptography.Vrf
 
 /--
-`vrf.Verify(root, i, opening)` of EIP-8450.
+Verify an opening at index `i` against a root.
 
-It returns the output at index `i`, or nothing if the opening is invalid.
+It returns the output at `i`, or nothing if the opening is invalid.
 -/
 def verify (root : Digest) (i : UInt32) (opening : Opening) : Option Digest :=
   -- The leaf commits to the secret.
