@@ -5,11 +5,11 @@ public import EthLib.Serialization.Ssz.Typed.Basic
 /-!
 # Typed SSZ values: collections
 
-Vectors, lists, bitfields and progressive lists, as Lean types.
+Vectors, lists, bitfields, progressive lists and progressive bitlists, as Lean types.
 
 A length or a limit is part of the type, so every value of the type fits its SSZ type.
 
-Progressive lists follow [EIP-7916](https://eips.ethereum.org/EIPS/eip-7916).
+Progressive lists and bitlists follow [EIP-7916](https://eips.ethereum.org/EIPS/eip-7916).
 -/
 
 @[expose] public section
@@ -42,6 +42,12 @@ structure Bitlist (limit : Nat) where
 structure ProgressiveList (α : Type) where
   /-- The elements, in order. -/
   data : Array α
+  deriving DecidableEq
+
+/-- `ProgressiveBitlist`: any number of bits, in a tree that grows with them. -/
+structure ProgressiveBitlist where
+  /-- The bits, in order. -/
+  bits : Array Bool
   deriving DecidableEq
 
 namespace SszType
@@ -112,6 +118,13 @@ instance {α : Type} [SszType α] : SszType (ProgressiveList α) where
   toValue l := .seq (l.data.toList.map toValue)
   ofValue
     | .seq elements => ProgressiveList.mk <$> ofElements elements
+    | _ => .error .typeMismatch
+
+instance : SszType ProgressiveBitlist where
+  desc := .progressiveBitList none
+  toValue b := .bits b.bits
+  ofValue
+    | .bits data => .ok ⟨data⟩
     | _ => .error .typeMismatch
 
 end EthLib.Serialization.Ssz

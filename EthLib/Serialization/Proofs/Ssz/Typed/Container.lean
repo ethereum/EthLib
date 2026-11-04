@@ -101,4 +101,44 @@ theorem LawfulSszType.container {σ β : Type} [SszFields β] [LawfulSszFields �
         subst made
         simp [toValue, right, LawfulSszFields.toValues_of_ofValues read] }
 
+/--
+A progressive container is lawful when its layout and names are well formed.
+
+The layout ends on a set bit, has at most 256 bits, and sets one bit for each field.
+
+The names must be distinct, at least one, and one for each field.
+
+The two conversions must undo each other.
+-/
+theorem LawfulSszType.progressiveContainer {σ β : Type} [SszFields β] [LawfulSszFields β]
+    {active : List Bool} {names : List String} {fields : σ → β} {build : β → σ}
+    (layout : active.getLast? = some true ∧ active.length ≤ maxActiveFields ∧
+      active.count true = (descs β).length)
+    (named : names.length = (descs β).length ∧ names ≠ [] ∧ firstDuplicate names = none)
+    (left : ∀ s, build (fields s) = s) (right : ∀ b, fields (build b) = b) :
+    @LawfulSszType σ (SszType.progressiveContainer active names fields build) := by
+  letI := SszType.progressiveContainer active names fields build
+  obtain ⟨last, narrow, set⟩ := layout
+  obtain ⟨count, present, distinct⟩ := named
+  have nonempty : descs β ≠ [] := fun empty => present (List.eq_nil_of_length_eq_zero (by
+    simp [count, empty]))
+  have occupied : active ≠ [] := by rintro rfl; simp at last
+  exact {
+    wellFormed := by
+      simp [desc, Desc.wellFormed, List.isEmpty_iff, occupied, last, Nat.not_lt.mpr narrow,
+        nonempty, ← set, List.count, count, distinct, LawfulSszFields.allWellFormed (β := β)]
+    fits := fun s => .progressiveContainer (LawfulSszFields.fits (fields s)).1
+      (LawfulSszFields.fits (fields s)).2
+    ofValue_toValue := fun s => by
+      simp [toValue, ofValue, LawfulSszFields.ofValues_toValues, left, Functor.map, Except.map]
+    toValue_of_ofValue := fun {value s} made => by
+      cases value <;> simp only [ofValue] at made <;> try cases made
+      rename_i values
+      cases read : ofValues (β := β) values with
+      | error fault => simp [read, Functor.map, Except.map] at made
+      | ok b =>
+        simp only [read, Functor.map, Except.map, Except.ok.injEq] at made
+        subst made
+        simp [toValue, right, LawfulSszFields.toValues_of_ofValues read] }
+
 end EthLib.Serialization.Ssz

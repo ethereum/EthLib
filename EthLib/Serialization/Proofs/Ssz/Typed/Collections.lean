@@ -157,4 +157,12 @@ instance {α : Type} [SszType α] [LawfulSszType α] : LawfulSszType (Progressiv
       subst made
       simp [toValue, ← map_toValue_of_ofElements read]
 
+instance : LawfulSszType ProgressiveBitlist where
+  wellFormed := rfl
+  fits b := .progressiveBitList rfl
+  ofValue_toValue b := rfl
+  toValue_of_ofValue {value b} made := by
+    cases value <;> simp only [ofValue] at made <;> try cases made
+    rfl
+
 end EthLib.Serialization.Ssz

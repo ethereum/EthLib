@@ -176,10 +176,13 @@ Its Lean type names a declaration, and each value converts to an untyped value a
 A length or a limit is part of the Lean type, so every typed value fits its declaration.
 Serialization, deserialization and the root then run the codec above, with no second codec.
 
-The basic types, byte vectors, byte lists, bitfields, vectors, lists and progressive lists have typed values.
+The basic types, byte vectors, byte lists, bitfields, vectors, lists, progressive lists and progressive bitlists have typed values.
 A container gets them from the types of its fields.
+A progressive container does too, and also places its fields on a layout of active positions and gaps.
 A typed value is *lawful* when its declaration is well formed, every value fits it, and the two conversions undo each other.
 Collections and containers are lawful when their parts are, and fixed counts are positive.
+A progressive container also needs a layout that ends on a set bit and sets one bit per field.
+The layout has at most 256 bits.
 
 By [typed round trips](../Proofs/Ssz/Typed/Class.lean), a lawful value deserializes from its bytes.
 Conversely, bytes that deserialize are the bytes of the value they give.
