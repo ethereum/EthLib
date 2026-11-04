@@ -18,6 +18,8 @@ The check fails on each of these:
 
 A test cites a commit as "commit <sha>", as a "Commit: <sha>" line, or in a GitHub link with
 `/blob/<sha>` or `/tree/<sha>`.
+A hexadecimal word of 7 to 40 digits, with a letter and a digit, is a citation too.
+That holds when the word is in backticks or follows "at", as in "execution-specs at `2c0c8e7`".
 A short commit must be a prefix of a pin.
 A test names a release archive by its key in the table `archives`, in double quotes.
 
@@ -35,6 +37,10 @@ ROOT = Path(__file__).resolve().parent.parent
 SOURCES = "tests/sources.toml"
 TREES = ("tests", "bindings/python/tests")
 COMMIT = re.compile(r"(?:\b[Cc]ommit:?[\s#`]*|/(?:blob|tree)/)(?=[0-9a-f]*[0-9])([0-9a-f]{7,40})\b")
+# A word that reads as a commit: in backticks, or after "at".
+_HEX = r"(?=[0-9a-f]*[0-9])(?=[0-9a-f]*[a-f])([0-9a-f]{7,40})"
+HEX_QUOTED = re.compile(rf"`{_HEX}`")
+HEX_AT = re.compile(rf"\bat\s+{_HEX}\b")
 FULL_COMMIT = re.compile(r"[0-9a-f]{40}")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 SOURCE_LINE = "# Source: "
@@ -124,9 +130,12 @@ def check(root: Path) -> list[str]:
     for path in scanned_files(root):
         text = path.read_text(encoding="utf-8")
         named.update(name for name in archives if f'"{name}"' in text)
-        for match in COMMIT.finditer(text):
-            short = match.group(1)
-            line = text.count("\n", 0, match.start(1)) + 1
+        starts = {}
+        for pattern in (COMMIT, HEX_QUOTED, HEX_AT):
+            for match in pattern.finditer(text):
+                starts.setdefault(match.start(1), match.group(1))
+        for start, short in sorted(starts.items()):
+            line = text.count("\n", 0, start) + 1
             owners = [name for name, commit in pins.items() if commit.startswith(short)]
             if owners:
                 cited.add(owners[0])

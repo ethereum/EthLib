@@ -1,6 +1,10 @@
 """Every precompile through the one entry point, against an independent oracle.
 
-The prices are those of execution-specs at `2c0c8e7`, `forks/bogota/vm/precompiled_contracts`.
+The prices are those of Fusaka, the fork `osaka` of execution-specs.
+
+Repository: ethereum/execution-specs
+Commit: e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e
+Path: src/ethereum/forks/osaka/vm/precompiled_contracts
 """
 
 import hashlib

@@ -1,8 +1,12 @@
 """Known answers of the SHA-256 precompile.
 
 The messages and digests are the NIST vectors of `tests/sha256`.
-The price is `60 + 12 * ceil(len / 32)`, from `GasCosts.PRECOMPILE_SHA256_BASE` and
-`GasCosts.PRECOMPILE_SHA256_PER_WORD` in execution-specs at `2c0c8e7`, `forks/frontier/vm/gas.py`.
+The price is `60 + 12 * ceil(len / 32)`.
+It comes from `GasCosts.PRECOMPILE_SHA256_BASE` and `GasCosts.PRECOMPILE_SHA256_PER_WORD`.
+
+Repository: ethereum/execution-specs
+Commit: e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e
+Path: src/ethereum/forks/frontier/vm/gas.py
 """
 
 import pytest
