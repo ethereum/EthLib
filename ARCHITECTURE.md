@@ -195,21 +195,48 @@ Update the pin in one pull request. Check every module that cites the repository
 
 What a consumer imports decides what it must download and trust.
 A client needs the specifications and nothing else, while a security proof needs the specifications, Mathlib and a probability library.
-So EthLib splits into packages by what each part requires:
+So EthLib splits into three Lake packages by what each part requires:
 
-- a core package with the specifications, the properties that need nothing beyond the Lean toolchain, and the C exports;
-- a package for the properties that need Mathlib;
-- a package for the models, which need a library of probabilistic computations such as VCVio.
+- The core package `EthLib`, in the root directory, holds the specifications, the properties that need nothing beyond the Lean toolchain, and the C exports.
+  It has the libraries `EthLib`, `Proofs` and `Exports`, the `check-decls` executable, and no `require`.
+- The package `EthLibMathlib`, in `mathlib/`, holds the properties that need Mathlib.
+  It requires `EthLib from ".."` and Mathlib.
+- The package `EthLibModels`, in `models/`, holds the models.
+  It requires `EthLibMathlib from "../mathlib"` and VCVio, a library of probabilistic computations.
 
 Each package depends on the ones before it, never the reverse.
 A consumer then takes exactly what it needs, and the core moves to a new Lean version without waiting for Mathlib.
+
+The core accepts nothing outside the Lean toolchain.
+Batteries is not part of the toolchain, so a core module must not import it, even in a workspace where Mathlib brings it in.
+A property that needs Batteries goes in `EthLibMathlib`.
+Every model goes in `EthLibModels`, even a model that needs only Mathlib.
+The package then follows the kind, so the rule that no property imports a model is also a boundary between packages.
+
+Each package has its own module root, named after the package.
+Two packages cannot share a module prefix.
+Suppose that `EthLibMathlib` kept the name `EthLib.Cryptography.Proofs.Bls.FpZMod` for one of its modules.
+Lake would then look for that module in the core package, which owns the prefix `EthLib`, and an `import` in a downstream project would fail.
+The same `import` succeeds inside the package's own workspace, so the error shows only downstream.
+
+A module that moves to another package changes only the first component of its name.
+So `EthLib.Cryptography.Proofs.Bls.FpZMod` becomes `EthLibMathlib.Cryptography.Proofs.Bls.FpZMod`, in the file `mathlib/EthLibMathlib/Cryptography/Proofs/Bls/FpZMod.lean`.
+The `Proofs` component stays, because `lake exe check-decls` finds a proof module by that component.
+The check exempts the definitions of a proof module from its rule that a definition of the specification never reaches an opaque constant.
+
+The repository does not have this layout yet.
+The root package still requires Mathlib and VCVio, and every property and model is a module under `EthLib/`.
+Some of these modules import Mathlib, Batteries or VCVio.
+The split moves each of them to its package, unless the module stops using the import first.
 
 ## Where a new module goes
 
 A new module finds its place by answering three questions in order.
 
-1. Which kind is it?
+1. Which kind is it, and which package holds it?
    Code that computes the protocol is a specification, a theorem about it is a property, and an abstract protocol is a model.
+   A specification goes in `EthLib`, and so does a property that needs only the Lean toolchain.
+   A property that needs Mathlib or Batteries goes in `EthLibMathlib`, and a model goes in `EthLibModels`.
 2. Which layer is it in?
    Take the highest layer whose concepts it needs, and check that it needs nothing above it.
    An Ethereum Node Record is signed with secp256k1 and encoded with RLP, so it sits in Networking, above both.
@@ -218,5 +245,7 @@ A new module finds its place by answering three questions in order.
    If two modules need the same thing, write it once, in the lower of their layers.
 
 Then the module follows the layout of `CONTRIBUTING.md`: the specification in `EthLib/<Domain>/<Module>/`, its theorems in `EthLib/<Domain>/Proofs/<Module>/`, and its C exports in `EthLib/<Domain>/Exports/`.
+In `EthLibMathlib` and `EthLibModels`, the same path sits under the package root: a property in `EthLibMathlib` goes in `mathlib/EthLibMathlib/<Domain>/Proofs/<Module>/`.
+Until the split, a property or a model that needs Mathlib, Batteries or VCVio still goes in `EthLib/<Domain>/Proofs/<Module>/`, and the split moves it.
 Modules of one kind share a directory, under the part of the layer that uses them.
 The precompiles are one kind, and only the EVM calls them, so ECRECOVER sits in `EthLib/Execution/Evm/Precompiles/Ecrecover/`, and its theorems in `EthLib/Execution/Proofs/Evm/Precompiles/Ecrecover/`.
