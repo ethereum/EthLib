@@ -8,9 +8,10 @@ public import EthLib.Cryptography.Hash.Keccak
 
 The KECCAK256 instruction of the EVM.
 
-Source: [`forks/frontier/vm/instructions/keccak.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/frontier/vm/instructions/keccak.py#L56-L58) of execution-specs at `2c0c8e7`.
+Source: Appendix H.2 of the Yellow Paper, Shanghai version, in `Paper.tex`:
+<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>.
 
-Every later fork there computes the same result, up to Bogota.
+Every fork since Frontier computes the same result.
 
 The instruction hashes a region of memory and pushes the digest, read as a big-endian word.
 
@@ -24,7 +25,7 @@ namespace EthLib.Execution.Evm.Instructions
 open EthLib.Base
 open EthLib.Cryptography.Hash.Keccak (keccak256)
 
-/-- `keccak`: the word pushed for `data`, which is `U256.from_be_bytes(keccak256(data))`.
+/-- The word pushed for `data`: the Keccak-256 digest of `data`, read as a big-endian word.
 
 The digest has exactly 32 bytes, so it fits in one word with nothing cut. -/
 def keccak (data : ByteArray) : U256 := U256.fromBeBytes (keccak256 data)
