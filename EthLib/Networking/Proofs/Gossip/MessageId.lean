@@ -12,7 +12,8 @@ Properties of the gossip message ID.
 - Every ID is 20 bytes.
 - Data that decompresses is hashed as its payload under the domain `01 00 00 00`.
 - Other data is hashed as it is under the domain `00 00 00 00`.
-- Two byte strings that decompress to one payload get one ID, on the same topic for Altair.
+- Two byte strings that decompress to one payload get one ID on one topic.
+- Before Altair the topic does not change the ID.
 - Each hash input determines its domain and its bytes, and under Altair its topic.
   The topic must be shorter than 2^64 bytes.
   So two messages that differ in one share an ID only if SHA-256, cut to 20 bytes, collides.
@@ -35,58 +36,58 @@ open EthLib.Serialization.Ssz (uintBytes_size uintBytes_injective)
 private theorem sha256_extract_size (input : ByteArray) : ((sha256 input).extract 0 20).size = 20 := by
   simp [sha256, ByteArray.size_extract]
 
-/-- Every Phase 0 message ID is 20 bytes. -/
-theorem Phase0.messageId_size (data : ByteArray) : (Phase0.messageId data).size = 20 := by
-  unfold Phase0.messageId
-  split <;> exact sha256_extract_size _
-
-/-- Every Altair message ID is 20 bytes. -/
-theorem Altair.messageId_size (topic data : ByteArray) : (Altair.messageId topic data).size = 20 := by
-  unfold Altair.messageId
+/-- Every message ID is 20 bytes. -/
+theorem messageId_size (fork : Base.Fork) (topic data : ByteArray) :
+    (messageId fork topic data).size = 20 := by
+  unfold messageId
   split <;> exact sha256_extract_size _
 
 /-! ## The two cases -/
 
-/-- Phase 0 hashes data that decompresses as its payload, under the valid domain. -/
-theorem Phase0.messageId_of_ok {data payload : ByteArray} (h : decompress data = .ok payload) :
-    Phase0.messageId data =
-      (sha256 (Phase0.hashInput MESSAGE_DOMAIN_VALID_SNAPPY payload)).extract 0 20 := by
-  simp only [Phase0.messageId, h]
-
-/-- Phase 0 hashes data that does not decompress as it is, under the invalid domain. -/
-theorem Phase0.messageId_of_error {data : ByteArray} {e : SnappyError} (h : decompress data = .error e) :
-    Phase0.messageId data =
-      (sha256 (Phase0.hashInput MESSAGE_DOMAIN_INVALID_SNAPPY data)).extract 0 20 := by
-  simp only [Phase0.messageId, h]
-
-/-- Altair hashes data that decompresses as its payload, under the valid domain. -/
-theorem Altair.messageId_of_ok (topic : ByteArray) {data payload : ByteArray}
+/-- Data that decompresses is hashed as its payload, under the valid domain. -/
+theorem messageId_of_ok (fork : Base.Fork) (topic : ByteArray) {data payload : ByteArray}
     (h : decompress data = .ok payload) :
-    Altair.messageId topic data =
-      (sha256 (Altair.hashInput MESSAGE_DOMAIN_VALID_SNAPPY topic payload)).extract 0 20 := by
-  simp only [Altair.messageId, h]
+    messageId fork topic data =
+      (sha256 (hashInput fork MESSAGE_DOMAIN_VALID_SNAPPY topic payload)).extract 0 20 := by
+  simp only [messageId, h]
 
-/-- Altair hashes data that does not decompress as it is, under the invalid domain. -/
-theorem Altair.messageId_of_error (topic : ByteArray) {data : ByteArray} {e : SnappyError}
-    (h : decompress data = .error e) :
-    Altair.messageId topic data =
-      (sha256 (Altair.hashInput MESSAGE_DOMAIN_INVALID_SNAPPY topic data)).extract 0 20 := by
-  simp only [Altair.messageId, h]
+/-- Data that does not decompress is hashed as it is, under the invalid domain. -/
+theorem messageId_of_error (fork : Base.Fork) (topic : ByteArray) {data : ByteArray}
+    {e : SnappyError} (h : decompress data = .error e) :
+    messageId fork topic data =
+      (sha256 (hashInput fork MESSAGE_DOMAIN_INVALID_SNAPPY topic data)).extract 0 20 := by
+  simp only [messageId, h]
 
-/-- Two byte strings that decompress to one payload get one Phase 0 ID.
+/--
+Two byte strings that decompress to one payload get one ID on one topic.
 
 Several byte strings can decompress to the same value, so they share an ID.
 -/
-theorem Phase0.messageId_eq_of_decompress {data₁ data₂ payload : ByteArray}
+theorem messageId_eq_of_decompress (fork : Base.Fork) (topic : ByteArray)
+    {data₁ data₂ payload : ByteArray}
     (h₁ : decompress data₁ = .ok payload) (h₂ : decompress data₂ = .ok payload) :
-    Phase0.messageId data₁ = Phase0.messageId data₂ := by
-  rw [Phase0.messageId_of_ok h₁, Phase0.messageId_of_ok h₂]
+    messageId fork topic data₁ = messageId fork topic data₂ := by
+  rw [messageId_of_ok fork topic h₁, messageId_of_ok fork topic h₂]
 
-/-- Two byte strings that decompress to one payload get one Altair ID on the same topic. -/
-theorem Altair.messageId_eq_of_decompress (topic : ByteArray) {data₁ data₂ payload : ByteArray}
-    (h₁ : decompress data₁ = .ok payload) (h₂ : decompress data₂ = .ok payload) :
-    Altair.messageId topic data₁ = Altair.messageId topic data₂ := by
-  rw [Altair.messageId_of_ok topic h₁, Altair.messageId_of_ok topic h₂]
+/-! ## The fork -/
+
+/-- Before Altair the hash input is the Phase 0 one, which holds no topic. -/
+theorem hashInput_of_lt_altair {fork : Base.Fork} (before : fork < .altair)
+    (domain : Vector UInt8 4) (topic bytes : ByteArray) :
+    hashInput fork domain topic bytes = Phase0.hashInput domain bytes := by
+  simp [hashInput, before]
+
+/-- From Altair on the hash input is the Altair one, which holds the topic. -/
+theorem hashInput_of_altair_le {fork : Base.Fork} (since : .altair ≤ fork)
+    (domain : Vector UInt8 4) (topic bytes : ByteArray) :
+    hashInput fork domain topic bytes = Altair.hashInput domain topic bytes := by
+  simp [hashInput, show ¬ fork < .altair from Nat.not_lt.mpr since]
+
+/-- Before Altair the topic does not change the ID. -/
+theorem messageId_topic_of_lt_altair {fork : Base.Fork} (before : fork < .altair)
+    (topic₁ topic₂ data : ByteArray) :
+    messageId fork topic₁ data = messageId fork topic₂ data := by
+  simp only [messageId, hashInput_of_lt_altair before]
 
 /-! ## The hash input -/
 
@@ -151,5 +152,14 @@ theorem Altair.hashInput_valid_ne_invalid (topic₁ topic₂ bytes₁ bytes₂ :
   have first := congrArg (fun b : ByteArray => b.data.toList.head?) h
   simp [Altair.hashInput, ByteArray.data_append, MESSAGE_DOMAIN_VALID_SNAPPY,
     MESSAGE_DOMAIN_INVALID_SNAPPY] at first
+
+/-- At every fork, a hash input under the valid domain differs from one under the invalid domain. -/
+theorem hashInput_valid_ne_invalid (fork : Base.Fork) (topic₁ topic₂ bytes₁ bytes₂ : ByteArray) :
+    hashInput fork MESSAGE_DOMAIN_VALID_SNAPPY topic₁ bytes₁ ≠
+      hashInput fork MESSAGE_DOMAIN_INVALID_SNAPPY topic₂ bytes₂ := by
+  unfold hashInput
+  split
+  · exact Phase0.hashInput_valid_ne_invalid bytes₁ bytes₂
+  · exact Altair.hashInput_valid_ne_invalid topic₁ topic₂ bytes₁ bytes₂
 
 end EthLib.Networking.Proofs.Gossip.MessageId

@@ -65,6 +65,7 @@ PyObject* RLP_ERROR;
 PyObject* SSZ_ERROR;
 PyObject* SNAPPY_ERROR;
 PyObject* VARINT_ERROR;
+PyObject* GOSSIP_ERROR;
 PyObject* DISCV5_ERROR;
 PyObject* RLPX_ERROR;
 PyObject* DEVP2P_ERROR;
@@ -619,8 +620,8 @@ static PyMethodDef methods[] = {
   {"snappy_masked_crc", py_snappy_masked_crc, METH_VARARGS, DOC_snappy_masked_crc},
   {"varint_encode", py_varint_encode, METH_VARARGS, DOC_varint_encode},
   {"varint_decode", py_varint_decode, METH_VARARGS, DOC_varint_decode},
-  {"gossip_message_id_phase0", py_gossip_message_id_phase0, METH_VARARGS, DOC_gossip_message_id_phase0},
-  {"gossip_message_id_altair", py_gossip_message_id_altair, METH_VARARGS, DOC_gossip_message_id_altair},
+  {"gossip_message_id", py_gossip_message_id, METH_VARARGS, DOC_gossip_message_id},
+  {"gossip_decode_payload", py_gossip_decode_payload, METH_VARARGS, DOC_gossip_decode_payload},
   {"receipt_reencode", py_receipt_reencode, METH_VARARGS, DOC_receipt_reencode},
   {"receipt_logs_bloom", py_receipt_logs_bloom, METH_VARARGS, DOC_receipt_logs_bloom},
   {"tx_type", py_tx_type, METH_VARARGS, DOC_tx_type},
@@ -684,6 +685,7 @@ PyInit__native(void) {
     SSZ_ERROR = PyObject_GetAttrString(errors, "SszError");
     SNAPPY_ERROR = PyObject_GetAttrString(errors, "SnappyError");
     VARINT_ERROR = PyObject_GetAttrString(errors, "VarintError");
+    GOSSIP_ERROR = PyObject_GetAttrString(errors, "GossipError");
     DISCV5_ERROR = PyObject_GetAttrString(errors, "Discv5Error");
     RLPX_ERROR = PyObject_GetAttrString(errors, "RlpxError");
     DEVP2P_ERROR = PyObject_GetAttrString(errors, "Devp2pError");

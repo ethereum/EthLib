@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Fork
 public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Networking.Snappy.Block
 public import EthLib.Serialization.Ssz.Codec.Serialize
@@ -44,7 +45,11 @@ The bytes are the payload when the data decompresses, and the data itself otherw
 
 The topic length is little-endian.
 
-Messages on a topic with the Phase 0 fork digest keep the Phase 0 rule, so both rules are here.
+The rule is the one of the fork whose digest the topic carries.
+
+So a message on a topic with the Phase 0 fork digest keeps the Phase 0 rule.
+
+No fork after Altair changes the rule.
 
 Clients reject messages over a size limit, as a separate check.
 
@@ -67,17 +72,6 @@ namespace Phase0
 def hashInput (domain : Vector UInt8 4) (bytes : ByteArray) : ByteArray :=
   ⟨domain.toArray⟩ ++ bytes
 
-/-- The message ID of Phase 0: the first 20 bytes of a SHA-256 digest.
-
-Data that decompresses is hashed as its payload, under the domain `01 00 00 00`.
-
-Other data is hashed as it is, under the domain `00 00 00 00`.
--/
-def messageId (data : ByteArray) : ByteArray :=
-  match Snappy.decompress data with
-  | .ok payload => (Cryptography.Hash.sha256 (hashInput MESSAGE_DOMAIN_VALID_SNAPPY payload)).extract 0 20
-  | .error _ => (Cryptography.Hash.sha256 (hashInput MESSAGE_DOMAIN_INVALID_SNAPPY data)).extract 0 20
-
 end Phase0
 
 namespace Altair
@@ -95,19 +89,31 @@ The length marks where the topic ends and the bytes start.
 def hashInput (domain : Vector UInt8 4) (topic bytes : ByteArray) : ByteArray :=
   ⟨domain.toArray⟩ ++ ⟨Serialization.Ssz.uintBytes 8 topic.size⟩ ++ topic ++ bytes
 
-/-- The message ID from Altair on: the first 20 bytes of a SHA-256 digest.
+end Altair
+
+/-- The bytes hashed for a message on a topic of a fork: the Phase 0 form, or from Altair on. -/
+def hashInput (fork : Base.Fork) (domain : Vector UInt8 4) (topic bytes : ByteArray) :
+    ByteArray :=
+  if fork < .altair then Phase0.hashInput domain bytes else Altair.hashInput domain topic bytes
+
+/--
+The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest.
 
 Data that decompresses is hashed as its payload, under the domain `01 00 00 00`.
 
 Other data is hashed as it is, under the domain `00 00 00 00`.
 
+Before Altair the topic is not hashed.
+
 A missing topic or data field of the protobuf message is the empty byte string.
 -/
-def messageId (topic data : ByteArray) : ByteArray :=
+def messageId (fork : Base.Fork) (topic data : ByteArray) : ByteArray :=
   match Snappy.decompress data with
-  | .ok payload => (Cryptography.Hash.sha256 (hashInput MESSAGE_DOMAIN_VALID_SNAPPY topic payload)).extract 0 20
-  | .error _ => (Cryptography.Hash.sha256 (hashInput MESSAGE_DOMAIN_INVALID_SNAPPY topic data)).extract 0 20
-
-end Altair
+  | .ok payload =>
+    (Cryptography.Hash.sha256 (hashInput fork MESSAGE_DOMAIN_VALID_SNAPPY topic payload)).extract
+      0 20
+  | .error _ =>
+    (Cryptography.Hash.sha256 (hashInput fork MESSAGE_DOMAIN_INVALID_SNAPPY topic data)).extract
+      0 20
 
 end EthLib.Networking.Gossip
