@@ -5,8 +5,12 @@ import pytest
 from ethlib.precompiles import run
 from ethlib.precompiles.modexp import gas_cost
 
-# The examples and prices come from `EIPS/eip-198.md` and `EIPS/eip-7883.md` in `ethereum/EIPs`,
-# at commit `0ce679f4654ba4d120c97113626f320475e22fa9`, under CC0-1.0.
+# The examples and prices of EIP-198 and EIP-7883.
+#
+# Files: EIPS/eip-198.md, EIPS/eip-7883.md
+# Repository: ethereum/EIPs
+# Commit: 0ce679f4654ba4d120c97113626f320475e22fa9
+# Licence: CC0-1.0
 
 # The modulus of the first two examples of EIP-198.
 P = 2**256 - 2**32 - 977

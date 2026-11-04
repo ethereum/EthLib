@@ -4,9 +4,13 @@ import pytest
 
 from ethlib.networking import devp2p
 
-# The Hello of "Test Vectors", "devp2p Base Protocol", in EIP-8, at commit
-# 0ce679f4654ba4d120c97113626f320475e22fa9 of ethereum/EIPs, under CC0-1.0.
+# The Hello of "Test Vectors", "devp2p Base Protocol", in EIP-8.
 # It holds version 55, two capabilities and three list elements after the five fields of Hello.
+#
+# File: EIPS/eip-8.md
+# Repository: ethereum/EIPs
+# Commit: 0ce679f4654ba4d120c97113626f320475e22fa9
+# Licence: CC0-1.0
 HELLO = bytes.fromhex(
     "f87137916b6e6574682f76302e39312f706c616e39cdc5836574683dc6846d6f726b1682270fb840"
     "fda1cff674c90c9a197539fe3dfb53086ace64f83ed7c6eabec741f7f381cc803e52ab2cd55d5569"

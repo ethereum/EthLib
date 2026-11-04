@@ -7,8 +7,12 @@ import pytest
 
 from ethlib.precompiles import run
 
-# The cases of `assets/eip-2537` in `ethereum/EIPs` at `0ce679f4654ba4d120c97113626f320475e22fa9`,
-# under CC0-1.0, keyed by file, except the MSM cases with more than 8 pairs.
+# The cases of EIP-2537, keyed by file, except the MSM cases with more than 8 pairs.
+#
+# Directory: assets/eip-2537
+# Repository: ethereum/EIPs
+# Commit: 0ce679f4654ba4d120c97113626f320475e22fa9
+# Licence: CC0-1.0
 CASES = json.loads((Path(__file__).parent / "eip2537_cases.json").read_text())
 
 # The address of the precompile that each file tests.

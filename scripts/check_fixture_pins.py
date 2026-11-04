@@ -13,7 +13,8 @@ The check fails on each of these:
   not a recorded pin;
 - a recorded pin that no test cites.
 
-A test cites a commit as "commit <sha>", or in a GitHub link with `/blob/<sha>` or `/tree/<sha>`.
+A test cites a commit as "commit <sha>", as a "Commit: <sha>" line, or in a GitHub link with
+`/blob/<sha>` or `/tree/<sha>`.
 A short commit must be a prefix of a pin.
 
     uv run --no-project --python 3.12 python scripts/check_fixture_pins.py
@@ -29,7 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 SOURCES = "tests/sources.toml"
 TREES = ("tests", "bindings/python/tests")
-COMMIT = re.compile(r"(?:\bcommit[\s#`]*|/(?:blob|tree)/)(?=[0-9a-f]*[0-9])([0-9a-f]{7,40})\b")
+COMMIT = re.compile(r"(?:\b[Cc]ommit:?[\s#`]*|/(?:blob|tree)/)(?=[0-9a-f]*[0-9])([0-9a-f]{7,40})\b")
 FULL_COMMIT = re.compile(r"[0-9a-f]{40}")
 SOURCE_LINE = "# Source: "
 

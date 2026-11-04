@@ -1,9 +1,11 @@
 """Key generation against EIP-2333 and `py_ecc.bls.G2ProofOfPossession`.
 
 The `master_SK` cases of EIP-2333 run key generation with no key information.
-They come from `ERCS/erc-2333.md` of `ethereum/ERCs`, at commit
-`be307c948f28897adb8f25afcc253c2c909de35d`.
 These tests write no vectors.
+
+File: ERCS/erc-2333.md
+Repository: ethereum/ERCs
+Commit: be307c948f28897adb8f25afcc253c2c909de35d
 """
 
 import pytest

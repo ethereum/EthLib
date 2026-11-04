@@ -1,8 +1,11 @@
 """The ECRECOVER precompile against the cases of execution-specs.
 
-`execution_specs_cases.json` holds every case of `test_precompiles` in
-`tests/frontier/precompiles/test_ecrecover.py`, in `ethereum/execution-specs`
-at commit e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e, under CC0-1.0.
+`execution_specs_cases.json` holds every case of `test_precompiles` in the file below.
+
+File: tests/frontier/precompiles/test_ecrecover.py
+Repository: ethereum/execution-specs
+Commit: e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e
+Licence: CC0-1.0
 
 Each case is the 128-byte input, `hash || v || r || s`, and the expected output.
 They were read from that file's `pytest.param` lists, without running anything.

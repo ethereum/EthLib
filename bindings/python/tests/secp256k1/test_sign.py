@@ -8,8 +8,12 @@ import pytest
 
 from ethlib.cryptography import secp256k1
 
-# `tests/fixtures/ecdsa.json` of `bitcoinjs/tiny-secp256k1` at commit
-# e1fd7a77bb0ca87fb4726fb1fd4f424f30a04db9, under the MIT License in `tiny_secp256k1/LICENSE`.
+# The ECDSA fixtures of tiny-secp256k1.
+#
+# File: tests/fixtures/ecdsa.json
+# Repository: bitcoinjs/tiny-secp256k1
+# Commit: e1fd7a77bb0ca87fb4726fb1fd4f424f30a04db9
+# Licence: MIT (tiny_secp256k1/LICENSE)
 FIXTURES = Path(__file__).resolve().parent / "tiny_secp256k1" / "ecdsa.json"
 
 # The SHA-256 of the vendored file, so an edit to it fails the suite.

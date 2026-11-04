@@ -8,8 +8,12 @@ import pytest
 
 from ethlib.cryptography import secp256k1
 
-# `testvectors_v1/ecdh_secp256k1_test.json` of `C2SP/wycheproof` at commit
-# d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9, under the Apache License 2.0 in `wycheproof/LICENSE`.
+# The secp256k1 ECDH vectors of Wycheproof.
+#
+# File: testvectors_v1/ecdh_secp256k1_test.json
+# Repository: C2SP/wycheproof
+# Commit: d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9
+# Licence: Apache 2.0 (wycheproof/LICENSE)
 SET = Path(__file__).resolve().parent / "wycheproof" / "ecdh_secp256k1_test.json"
 
 # The SHA-256 of the vendored file, so an edit to it fails the suite.

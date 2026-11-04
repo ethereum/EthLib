@@ -11,9 +11,12 @@ from ethlib.cryptography.keccak import keccak256
 N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 
 
-# Appendix F of the Yellow Paper, `Paper.tex` of `ethereum/yellowpaper` at commit
-# efc5f9a1f356cba376c978eedb63cb0363c2aa85: the last 20 bytes of the Keccak-256 hash of `x || y`.
+# Appendix F of the Yellow Paper: the last 20 bytes of the Keccak-256 hash of `x || y`.
 # `py_ecc` computes `d G` independently, and EthLib's Keccak-256 is pinned by its own vectors.
+#
+# File: Paper.tex
+# Repository: ethereum/yellowpaper
+# Commit: efc5f9a1f356cba376c978eedb63cb0363c2aa85
 def expected_address(d: int) -> bytes:
     """The address of Appendix F, from an independent scalar multiplication."""
     x, y = reference.privtopub(d.to_bytes(32, "big"))
