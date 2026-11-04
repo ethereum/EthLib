@@ -107,16 +107,6 @@ def merkleizeBoundedUnchecked (chunks : Array Bytes) (limit : Option Nat) : Exce
   | none => return subtreeAt chunks (depthFor chunks.size) 0
 
 /--
-Root of the bounded tree over a node sequence.
-
-Every node is checked to be 32 bytes wide, before the capacity is.
--/
-def merkleizeBounded (chunks : Array Bytes) (limit : Option Nat) : Except Err Bytes := do
-  -- A lone short leaf would pass as a root, and a 31-byte node beside a 33-byte one as a pair.
-  checkChunks chunks.toList
-  merkleizeBoundedUnchecked chunks limit
-
-/--
 Root of the progressive tree over a node sequence, per EIP-7916.
 
 A right-leaning spine of binary subtrees, closed by a zero node.
@@ -151,16 +141,6 @@ decreasing_by
     | nil => simp_all
     | cons _ _ => simp
   omega
-
-/--
-Root of the progressive tree over a node sequence, per EIP-7916.
-
-Every node is checked to be 32 bytes wide first.
--/
-def merkleizeProgressive (chunks : List Bytes) (level : Nat := 0) : Except Err Bytes := do
-  -- A node of another width would move the boundary between two hashed operands.
-  checkChunks chunks
-  return merkleizeProgressiveUnchecked chunks level
 
 /--
 Root of the progressive tree, starting from a level of a given width.
