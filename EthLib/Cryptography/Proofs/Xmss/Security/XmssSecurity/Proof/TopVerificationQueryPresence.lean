@@ -16,12 +16,13 @@ It also caches its top leaf and every top node on its path.
 
 @[expose] public section
 
+open EthLib.Cryptography
+
 open OracleComp OracleSpec
 
 namespace XmssSecurity.Concrete.CacheReplay
 
 set_option linter.constructorNameAsVariable false
-attribute [local irreducible] Concrete.topAuthenticationRoot
 
 /-- A successful verification runs the top check on the bottom root, as the cache computes it. -/
 theorem verify_true_verifyTop_run
@@ -38,13 +39,14 @@ theorem verify_true_verifyTop_run
     ∃ topCache, (true, resultCache) ∈ support
       ((simulateQ randomOracle
         (Concrete.verifyTop publicKey (topKeyOf leafIndex)
-          (Merkle.ascend (Concrete.CacheView.nodeHash largerCache publicKey.parameter leafIndex)
-            (Concrete.signaturePath signature) 0 treeHeight
+          (Merkle.climb (Concrete.CacheView.nodeAt largerCache publicKey.parameter .bottom) 0
+            leafIndex.val
             (Concrete.CacheView.leafHash largerCache publicKey.parameter leafIndex
               (recoveredEndpoints
                 (fun chain => Concrete.CacheView.chainStep largerCache publicKey.parameter
                   leafIndex chain)
-                encoding signature.chainValue)))
+                encoding signature.chainValue))
+            (List.ofFn signature.authPath)).run
           signature.top : OracleComp HashSpec Bool)).run topCache) := by
   have leafRun :=
     ((verify_true_digestRun publicKey leafIndex message signature initialCache resultCache
@@ -80,10 +82,11 @@ theorem verify_true_verifyTop_run
       (Concrete.verifyTop publicKey (topKeyOf leafIndex) root signature.top :
         OracleComp HashSpec Bool) rootCache (true, resultCache) htop
   have hrootEval := eval_answerFn_largerCache_eq_of_mem_support
-    (authenticationRootComputation publicKey.parameter leafIndex signature treeHeight leaf)
+    (authenticationRootComputation publicKey.parameter leafIndex signature leaf)
     leafCache rootCache largerCache root hroot (hrootLe.trans hle)
   unfold authenticationRootComputation at hrootEval
-  rw [eval_authenticationRoot] at hrootEval
+  rw [eval_climb_ofFn largerCache publicKey.parameter .bottom leafIndex.val leafIndex.isLt]
+    at hrootEval
   refine ⟨rootCache, ?_⟩
   rw [hendpointsEval, hleafEval, hrootEval]
   exact htop
@@ -135,76 +138,6 @@ theorem topChainWalk_query_cached_in_largerCache
         rw [hprevious]
         exact hle hcached
 
-theorem topAuthenticationRoot_query_cached_as_in_largerCache
-    (parameter : PublicParameter) (key : TopIndex) (path : Fin treeHeight → Digest)
-    (levels : Nat) (leaf : Digest) (target : MerkleLevel)
-    (htarget : target.val < levels) (hlevels : levels ≤ treeHeight)
-    (initialCache resultCache largerCache : QueryCache HashSpec) (root : Digest)
-    (hmem : (root, resultCache) ∈ support
-      ((simulateQ randomOracle
-        (Concrete.topAuthenticationRoot parameter key path levels leaf :
-          OracleComp HashSpec Digest)).run initialCache))
-    (hle : resultCache ≤ largerCache) :
-    ∃ output, resultCache
-      (Concrete.CacheView.topNodeInput parameter key target
-        (Merkle.ascend (Concrete.CacheView.topNodeHash largerCache parameter key)
-          (Concrete.layerPath ⟨0, fun _ => 0, path⟩) 0 target.val leaf)
-        (Concrete.layerPath ⟨0, fun _ => 0, path⟩ target.val)) = some output := by
-  induction levels generalizing initialCache resultCache root with
-  | zero => omega
-  | succ levels ih =>
-      have hlevel : levels < treeHeight := Nat.lt_of_succ_le hlevels
-      rw [Concrete.topAuthenticationRoot, simulateQ_bind, StateT.run_bind,
-        mem_support_bind_iff] at hmem
-      obtain ⟨⟨current, currentCache⟩, hcurrent, hnode⟩ := hmem
-      simp only [hlevel, ↓reduceDIte] at hnode
-      have hcurrentLe : currentCache ≤ resultCache :=
-        randomOracle_cache_le _ currentCache (root, resultCache) hnode
-      by_cases heq : target.val = levels
-      · have htargetEq : target = ⟨levels, hlevel⟩ := Fin.ext heq
-        subst target
-        have hcurrentEval := eval_answerFn_largerCache_eq_of_mem_support
-          (Concrete.topAuthenticationRoot parameter key path levels leaf :
-            OracleComp HashSpec Digest)
-          initialCache currentCache largerCache current hcurrent (hcurrentLe.trans hle)
-        rw [eval_topAuthenticationRoot] at hcurrentEval
-        have hsibling : Concrete.layerPath ⟨0, fun _ => 0, path⟩ levels = path ⟨levels, hlevel⟩ := by
-          simp [Concrete.layerPath, hlevel]
-        rw [hcurrentEval, hsibling]
-        by_cases hbit : key.val.testBit levels = true
-        · simp only [hbit, ↓reduceIte] at hnode
-          obtain ⟨output, hcached, _⟩ := tweakableHash_query_cached parameter
-            (.topMerkle ⟨levels, hlevel⟩ (Concrete.topNodeIndex key levels))
-            (Concrete.nodePayload (path ⟨levels, hlevel⟩) current)
-            currentCache resultCache root (by simpa [Concrete.topNodeHash_eq] using hnode)
-          refine ⟨output, ?_⟩
-          change resultCache (XmssSecurity.tweakableHashInput parameter
-            (.topMerkle ⟨levels, hlevel⟩ (Concrete.topNodeIndex key levels))
-            (if key.val.testBit levels then
-              Concrete.nodePayload (path ⟨levels, hlevel⟩) current
-            else Concrete.nodePayload current (path ⟨levels, hlevel⟩))) = some output
-          rw [ite_eq_left hbit]
-          exact hcached
-        · have hbitFalse : key.val.testBit levels = false :=
-            Bool.eq_false_of_not_eq_true hbit
-          simp only [hbitFalse, Bool.false_eq_true, ↓reduceIte] at hnode
-          obtain ⟨output, hcached, _⟩ := tweakableHash_query_cached parameter
-            (.topMerkle ⟨levels, hlevel⟩ (Concrete.topNodeIndex key levels))
-            (Concrete.nodePayload current (path ⟨levels, hlevel⟩))
-            currentCache resultCache root (by simpa [Concrete.topNodeHash_eq] using hnode)
-          refine ⟨output, ?_⟩
-          change resultCache (XmssSecurity.tweakableHashInput parameter
-            (.topMerkle ⟨levels, hlevel⟩ (Concrete.topNodeIndex key levels))
-            (if key.val.testBit levels then
-              Concrete.nodePayload (path ⟨levels, hlevel⟩) current
-            else Concrete.nodePayload current (path ⟨levels, hlevel⟩))) = some output
-          rw [ite_eq_right hbit]
-          exact hcached
-      · have htargetLt : target.val < levels := by omega
-        obtain ⟨output, hcached⟩ := ih htargetLt (Nat.le_of_succ_le hlevels)
-          initialCache currentCache current hcurrent (hcurrentLe.trans hle)
-        exact ⟨output, hcurrentLe hcached⟩
-
 /-- What a successful top check caches.
 
 It caches its digest input and the forged top chains from their digits.
@@ -229,14 +162,17 @@ def TopQueriesCached (cache : QueryCache HashSpec) (parameter : PublicParameter)
         (recoveredEndpoints (fun chain => Concrete.CacheView.topChainStep cache parameter key chain)
           encoding part.chainValue)) = some output) ∧
     (∀ level : MerkleLevel, ∃ output, cache
-      (Concrete.CacheView.topNodeInput parameter key level
-        (Merkle.ascend (Concrete.CacheView.topNodeHash cache parameter key)
-          (Concrete.layerPath part) 0 level.val
+      (Concrete.CacheView.nodeInput parameter .top level (key.val / 2 ^ (level.val + 1))
+        (Merkle.pairAt (Concrete.CacheView.nodeAt cache parameter .top) key.val part.authPath
           (Concrete.CacheView.topLeafHash cache parameter key
             (recoveredEndpoints
               (fun chain => Concrete.CacheView.topChainStep cache parameter key chain)
-              encoding part.chainValue)))
-        (Concrete.layerPath part level.val)) = some output)
+              encoding part.chainValue)) level).1
+        (Merkle.pairAt (Concrete.CacheView.nodeAt cache parameter .top) key.val part.authPath
+          (Concrete.CacheView.topLeafHash cache parameter key
+            (recoveredEndpoints
+              (fun chain => Concrete.CacheView.topChainStep cache parameter key chain)
+              encoding part.chainValue)) level).2) = some output)
 
 theorem verifyTop_true_queries_cached
     (publicKey : PublicKey) (key : TopIndex) (root : Digest) (part : LayerSignature)
@@ -328,9 +264,11 @@ theorem verifyTop_true_queries_cached
         rw [← hendpointsEq]
         exact hrootLarger (hleafLe hcached)
       · intro level
-        obtain ⟨output, hcached⟩ := topAuthenticationRoot_query_cached_as_in_largerCache
-          publicKey.parameter key part.authPath treeHeight leaf level level.isLt le_rfl
-          leafCache rootCache largerCache topRoot hroot hrootLarger
+        rw [← List.take_of_length_le (l := List.ofFn part.authPath) (i := treeHeight) (by simp)]
+          at hroot
+        obtain ⟨output, hcached⟩ := climb_query_cached publicKey.parameter .top key.val key.isLt
+          part.authPath leaf treeHeight le_rfl level level.isLt leafCache rootCache largerCache
+          topRoot hroot hrootLarger
         refine ⟨output, ?_⟩
         rw [← hendpointsEq, hleafEval]
         exact hrootLarger hcached

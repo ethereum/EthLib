@@ -80,28 +80,6 @@ def merkleHash (cache : QueryCache HashSpec) (parameter : PublicParameter)
     (level : MerkleLevel) (node : MerkleNode) (left right : Digest) : Digest :=
   digestAt cache (merkleInput parameter level node left right)
 
-abbrev nodeIndex (leafIndex : LeafIndex) (level : Nat) : MerkleNode :=
-  Concrete.nodeIndex leafIndex level
-
-def authenticationNodePayload (leafIndex : LeafIndex) (level : Nat)
-    (current sibling : Digest) : HashInput :=
-  if leafIndex.val.testBit level then
-    Concrete.nodePayload sibling current
-  else
-    Concrete.nodePayload current sibling
-
-def nodeInput (parameter : PublicParameter) (leafIndex : LeafIndex) (level : MerkleLevel)
-    (current sibling : Digest) : HashInput :=
-  XmssSecurity.tweakableHashInput parameter (.merkle level (nodeIndex leafIndex level.val))
-    (authenticationNodePayload leafIndex level.val current sibling)
-
-def nodeHash (cache : QueryCache HashSpec) (parameter : PublicParameter)
-    (leafIndex : LeafIndex) (level : Nat) (left right : Digest) : Digest :=
-  if hlevel : level < treeHeight then
-    digestAt cache (nodeInput parameter leafIndex ⟨level, hlevel⟩ left right)
-  else
-    0
-
 /-! The top layer's cache view. -/
 
 def topEncodingInput (parameter : PublicParameter) (key : TopIndex)
@@ -142,24 +120,64 @@ def topMerkleHash (cache : QueryCache HashSpec) (parameter : PublicParameter)
     (level : MerkleLevel) (node : TopNode) (left right : Digest) : Digest :=
   digestAt cache (topMerkleInput parameter level node left right)
 
-def topAuthenticationNodePayload (key : TopIndex) (level : Nat) (current sibling : Digest) :
-    HashInput :=
-  if key.val.testBit level then
-    Concrete.nodePayload sibling current
-  else
-    Concrete.nodePayload current sibling
+/-- The address of node `j` above `level` in a layer's tree, with `j` reduced modulo its nodes. -/
+def nodeDomain : EthLib.Cryptography.Xmss.Layer → MerkleLevel → Nat → HashDomain
+  | .bottom, level, j => .merkle level (Concrete.merkleNodeOfNat j)
+  | .top, level, j => .topMerkle level (Concrete.topNodeOfNat j)
 
-def topNodeInput (parameter : PublicParameter) (key : TopIndex) (level : MerkleLevel)
-    (current sibling : Digest) : HashInput :=
-  XmssSecurity.tweakableHashInput parameter (.topMerkle level (Concrete.topNodeIndex key level.val))
-    (topAuthenticationNodePayload key level.val current sibling)
+/-- The number of leaves of a layer's tree, which bounds every node index on it. -/
+def layerLeaves : EthLib.Cryptography.Xmss.Layer → Nat
+  | .bottom => lifetime
+  | .top => topLifetime
 
-def topNodeHash (cache : QueryCache HashSpec) (parameter : PublicParameter)
-    (key : TopIndex) (level : Nat) (left right : Digest) : Digest :=
-  if hlevel : level < treeHeight then
-    digestAt cache (topNodeInput parameter key ⟨level, hlevel⟩ left right)
-  else
-    0
+/-- The oracle input of node `j` above `level` in a layer's tree, from its two children. -/
+def nodeInput (parameter : PublicParameter) (layer : EthLib.Cryptography.Xmss.Layer)
+    (level : MerkleLevel) (j : Nat) (left right : Digest) : HashInput :=
+  XmssSecurity.tweakableHashInput parameter (nodeDomain layer level j)
+    (Concrete.nodePayload left right)
+
+/-- The node at position `(level, j)` of a layer's tree, from its two children, read from the cache.
+
+The level is the parent's, from 1 to 16, and the address holds the children's level. -/
+def nodeAt (cache : QueryCache HashSpec) (parameter : PublicParameter)
+    (layer : EthLib.Cryptography.Xmss.Layer) : Nat → Nat → Digest → Digest → Id Digest
+  | level + 1, j, left, right =>
+      if hlevel : level < treeHeight then
+        pure (digestAt cache (nodeInput parameter layer ⟨level, hlevel⟩ j left right))
+      else
+        pure 0
+  | 0, _, _, _ => pure 0
+
+/-- The oracle input of a bottom node is its Merkle input, at its index modulo the node count. -/
+theorem nodeInput_bottom (parameter : PublicParameter) (level : MerkleLevel) (j : Nat)
+    (left right : Digest) :
+    nodeInput parameter .bottom level j left right =
+      merkleInput parameter level (Concrete.merkleNodeOfNat j) left right :=
+  rfl
+
+/-- The oracle input of a top node is its Merkle input, at its index modulo the node count. -/
+theorem nodeInput_top (parameter : PublicParameter) (level : MerkleLevel) (j : Nat)
+    (left right : Digest) :
+    nodeInput parameter .top level j left right =
+      topMerkleInput parameter level (Concrete.topNodeOfNat j) left right :=
+  rfl
+
+/-- A node of the bottom forest, read from the cache, is the hash of its address. -/
+
+theorem nodeAt_bottom (cache : QueryCache HashSpec) (parameter : PublicParameter)
+    (level : MerkleLevel) (j : Nat) (left right : Digest) :
+    (nodeAt cache parameter .bottom (level.val + 1) j left right).run =
+      merkleHash cache parameter level (Concrete.merkleNodeOfNat j) left right := by
+  simp [nodeAt, level.isLt]
+  rfl
+
+/-- A node of the top tree, read from the cache, is the hash of its address. -/
+theorem nodeAt_top (cache : QueryCache HashSpec) (parameter : PublicParameter)
+    (level : MerkleLevel) (j : Nat) (left right : Digest) :
+    (nodeAt cache parameter .top (level.val + 1) j left right).run =
+      topMerkleHash cache parameter level (Concrete.topNodeOfNat j) left right := by
+  simp [nodeAt, level.isLt]
+  rfl
 
 end CacheView
 

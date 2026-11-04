@@ -936,7 +936,7 @@ theorem keygenViews_signWithEncoding_eq_globalReveal
           (topKeyOf request.leafIndex)).authPath level
       rw [← hleftTop, ← hrightTopStable]
       simp only [Concrete.CacheReplay.topPartFromCache, htop, hrightTop]
-      exact hrel.1.2.2.2.2 (topKeyOf request.leafIndex) level.val
+      exact hrel.1.2.2.2.2 (topKeyOf request.leafIndex) level
 
 def GlobalSigningComparableHashInput
     (parameter : PublicParameter) (input : HashInput) : Prop :=

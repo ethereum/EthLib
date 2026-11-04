@@ -4,78 +4,85 @@ public import EthLib.Cryptography.Proofs.Merkle.Binding
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
 
 /-!
-# The model's climb on the shared Merkle tree
+# The model's paths on the shared Merkle tree
 
-The model's node hash takes the held node first and orders the pair itself.
+A path of the model is the shared climb from its leaf index, over the 16 siblings of the path.
 
-So its climb is the shared climb from index 0, where the held node is always the left input.
+Two paths that reach one root have one leaf and one path, or the shared search finds a collision.
+
+A collision sits at the level of its parent, from 1 to 16, as the shared search records it.
 -/
 
 @[expose] public section
 
 namespace XmssSecurity.Merkle
 
-open EthLib.Cryptography.Merkle (climb climb_append climb_binding findCollision_valid ordered)
+open EthLib.Cryptography.Merkle (Collision climb climb_binding climb_take_succ div_two_div_pow
+  findCollision findCollision_valid ordered)
 
-variable {α : Type} (nodeHash : Nat → α → α → α)
+variable {α : Type} (hash : Nat → Nat → α → α → Id α)
 
-/-- Climb `steps` levels from level `position`, with the sibling `path l` on level `l`. -/
-def ascend (path : Nat → α) (position steps : Nat) (leaf : α) : α :=
-  (climb (m := Id) (fun level _ current sibling => nodeHash (level - 1) current sibling)
-    position 0 leaf ((List.range steps).map fun offset => path (position + offset))).run
+/-- The pair a climb from leaf `j` hashes into its node above `level`, the left child first. -/
+def pairAt (j : Nat) (path : Fin treeHeight → α) (leaf : α) (level : Fin treeHeight) : α × α :=
+  ordered (j / 2 ^ level.val) (climb hash 0 j leaf ((List.ofFn path).take level.val)).run
+    (path level)
 
-@[simp] theorem ascend_zero (path : Nat → α) (position : Nat) (leaf : α) :
-    ascend nodeHash path position 0 leaf = leaf := rfl
+/-- The search over two climbs from leaf `j` finds a collision whose parent is on `level`. -/
+def CollidesAt [DecidableEq α] (j : Nat) (leftPath rightPath : Fin treeHeight → α) (left right : α)
+    (level : Nat) : Prop :=
+  ∃ c, findCollision hash 0 j left right (List.ofFn leftPath) (List.ofFn rightPath) = some c ∧
+    c.level = level
 
-/-- One more level hashes the held node with the next sibling. -/
-theorem ascend_succ (path : Nat → α) (position steps : Nat) (leaf : α) :
-    ascend nodeHash path position (steps + 1) leaf =
-      nodeHash (position + steps) (ascend nodeHash path position steps leaf)
-        (path (position + steps)) := by
-  simp [ascend, List.range_succ, climb_append, climb, ordered]
-  rfl
+/-- One more level of the climb hashes the pair below it, at the position of the parent. -/
+theorem climb_take_succ_run (j : Nat) (path : Fin treeHeight → α) (leaf : α)
+    (level : Fin treeHeight) :
+    (climb hash 0 j leaf ((List.ofFn path).take (level.val + 1))).run =
+      (hash (level.val + 1) (j / 2 ^ (level.val + 1)) (pairAt hash j path leaf level).1
+        (pairAt hash j path leaf level).2).run := by
+  have hparent : j / 2 ^ (level.val + 1) = j / 2 ^ level.val / 2 := by
+    rw [Nat.pow_succ, Nat.div_div_eq_div_mul]
+  rw [climb_take_succ hash j leaf _ level.val (by simp), pairAt, hparent]
+  unfold ordered
+  split <;> simp
 
-def SamePathSegment (leftPath rightPath : Nat → α) (position steps : Nat) : Prop :=
-  ∀ offset, offset < steps → leftPath (position + offset) = rightPath (position + offset)
+/-- A collision found with its parent on level `level + 1` is between the pairs of `level`.
 
-def IsXmssPathCollisionAt (leftPath rightPath : Nat → α) (left right : α)
-    (level : Fin treeHeight) : Prop :=
-  (ascend nodeHash leftPath 0 level.val left, leftPath level.val) ≠
-    (ascend nodeHash rightPath 0 level.val right, rightPath level.val) ∧
-  nodeHash level.val (ascend nodeHash leftPath 0 level.val left) (leftPath level.val) =
-    nodeHash level.val (ascend nodeHash rightPath 0 level.val right) (rightPath level.val)
+The two pairs differ, and hash to one parent at the parent's position. -/
+theorem CollidesAt.pairs [DecidableEq α] {j : Nat} {leftPath rightPath : Fin treeHeight → α}
+    {left right : α} {level : Fin treeHeight}
+    (hcollision : CollidesAt hash j leftPath rightPath left right (level.val + 1)) :
+    pairAt hash j leftPath left level ≠ pairAt hash j rightPath right level ∧
+      (hash (level.val + 1) (j / 2 ^ (level.val + 1)) (pairAt hash j leftPath left level).1
+          (pairAt hash j leftPath left level).2).run =
+        (hash (level.val + 1) (j / 2 ^ (level.val + 1)) (pairAt hash j rightPath right level).1
+          (pairAt hash j rightPath right level).2).run := by
+  obtain ⟨c, hfound, hlevel⟩ := hcollision
+  obtain ⟨⟨hne, heq⟩, k, s, t, hs, ht, hk, hj, hx, hy⟩ :=
+    findCollision_valid hash _ _ _ _ _ _ c hfound
+  -- The search names the pairs after `k` levels, and `k` is the level below the parent.
+  obtain rfl : k = level.val := by omega
+  have hs' : s = leftPath level := by simpa using hs.symm
+  have ht' : t = rightPath level := by simpa using ht.symm
+  have hx' : c.x = pairAt hash j leftPath left level := by rw [hx, hs', pairAt]
+  have hy' : c.y = pairAt hash j rightPath right level := by rw [hy, ht', pairAt]
+  rw [← hx', ← hy']
+  exact ⟨hne, by simpa [Collision.Valid, hlevel, hj] using heq⟩
 
-def HasXmssPathCollision (leftPath rightPath : Nat → α) (left right : α) : Prop :=
-  ∃ level, IsXmssPathCollisionAt nodeHash leftPath rightPath left right level
+/-- Two paths of leaf `j` that climb to one root have the same leaf and siblings, or collide.
 
-/-- Take an alternative XMSS authentication path that reaches the same root.
-
-It has the same leaf and the same path, or it collides at one of its 16 levels.
-
-A collision at level `l` hashes two different pairs of level-`l` nodes to one node of level `l + 1`.
-
-The shared search finds the lowest such level, and records the parent's level `l + 1`. -/
-theorem sameXmssPath_or_hasCollision (leftPath rightPath : Nat → α) (left right : α)
-    (hroot : ascend nodeHash leftPath 0 treeHeight left =
-      ascend nodeHash rightPath 0 treeHeight right) :
-    (left = right ∧ SamePathSegment leftPath rightPath 0 treeHeight) ∨
-      HasXmssPathCollision nodeHash leftPath rightPath left right := by
-  classical
-  rcases climb_binding _ _ _ 0 0 left right (by simp) hroot with ⟨hleaf, hpath⟩ | hfound
-  · -- Equal lists of siblings agree at every level.
-    refine .inl ⟨hleaf, fun offset hoffset => ?_⟩
-    simpa [hoffset] using congrArg (·[offset]?) hpath
+The collision's parent is on one of the 16 levels from 1 to 16. -/
+theorem samePath_or_collidesAt [DecidableEq α] (j : Nat) (leftPath rightPath : Fin treeHeight → α)
+    (left right : α)
+    (hroot : (climb hash 0 j left (List.ofFn leftPath)).run =
+      (climb hash 0 j right (List.ofFn rightPath)).run) :
+    (left = right ∧ leftPath = rightPath) ∨
+      ∃ level : Fin treeHeight,
+        CollidesAt hash j leftPath rightPath left right (level.val + 1) := by
+  rcases climb_binding hash _ _ 0 j left right (by simp) hroot with ⟨hleaf, hpath⟩ | hfound
+  · exact .inl ⟨hleaf, List.ofFn_injective hpath⟩
   · obtain ⟨c, hc⟩ := Option.isSome_iff_exists.mp hfound
-    obtain ⟨⟨hne, heq⟩, k, s, t, hs, ht, hlevel, _, hx, hy⟩ :=
-      findCollision_valid _ _ _ _ _ _ _ c hc
-    obtain ⟨hk, rfl⟩ := List.getElem?_eq_some_iff.mp hs
-    obtain ⟨_, rfl⟩ := List.getElem?_eq_some_iff.mp ht
-    have hk' : k < treeHeight := by simpa using hk
-    -- The collision's pairs hold the nodes both climbs reach after `k` levels, and sibling `k`.
-    rw [← List.map_take, List.take_range, Nat.min_eq_left hk'.le] at hx hy
-    refine .inr ⟨⟨k, hk'⟩, ?_, ?_⟩
-    · simpa [hx, hy, ordered, ascend] using hne
-    · simp [hx, hy, hlevel, ordered, ascend] at heq ⊢
-      exact heq
+    obtain ⟨-, k, s, -, hs, -, hlevel, -⟩ := findCollision_valid hash _ _ _ _ _ _ c hc
+    have hk : k < treeHeight := by simpa using (List.getElem?_eq_some_iff.mp hs).1
+    exact .inr ⟨⟨k, hk⟩, c, hc, by simpa using hlevel⟩
 
 end XmssSecurity.Merkle

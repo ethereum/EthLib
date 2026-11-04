@@ -136,14 +136,12 @@ theorem KeygenRunRelation.honestTopPath_eq
     (hrel : KeygenRunRelation parameter leftStart rightStart leftWarm rightWarm
       leftCache rightCache)
     (leftSigned rightSigned : TopIndex → Option (Randomness × Encoding)) (key : TopIndex)
-    (level : Nat) :
+    (level : Fin treeHeight) :
     Concrete.honestTopPath leftCache (startSecretKey parameter leftStart leftSigned) key level =
       Concrete.honestTopPath rightCache (startSecretKey parameter rightStart rightSigned) key
-        level := by
-  unfold Concrete.honestTopPath
-  split
-  · exact KeygenRunRelation.topTreeNode_eq hleftWarm hrightWarm hrel level _
-  · rfl
+        level :=
+  KeygenRunRelation.topTreeNode_eq hleftWarm hrightWarm hrel level.val _
+
 
 end Replay
 

@@ -176,7 +176,7 @@ It is exactly a collision with the honest WOTS public key. -/
 theorem fresh_leaf_badEvent_is_collision
     (cache : QueryCache HashSpec) (secretKey : SecretKey) (leafIndex : LeafIndex)
     (forgedEncoding : Encoding) (forgedSignature : Signature)
-    (honestPath : Nat → Digest) (hforgedValid : TargetSum.Valid forgedEncoding)
+    (honestPath : Fin treeHeight → Digest) (hforgedValid : TargetSum.Valid forgedEncoding)
     (hevent : Concrete.FreshLeafIndexBadEventOccurs cache secretKey.parameter leafIndex
       forgedEncoding forgedSignature (secretKey.chainStart leafIndex) honestPath
       hforgedValid .leaf) :
@@ -250,9 +250,9 @@ theorem fresh_leaf_event_afterKeygen_orientation
       Concrete.FreshLeafIndexBadEventOccurs execution.2 execution.1.secretKey.parameter
         execution.1.forgery.leafIndex forgedEncoding execution.1.forgery.signature
         (execution.1.secretKey.chainStart execution.1.forgery.leafIndex)
-        (Concrete.signaturePath
-          (Concrete.CacheReplay.signWithEncoding execution.2 execution.1.secretKey
-            execution.1.forgery.leafIndex execution.1.forgery.signature.randomness forgedEncoding))
+        (Concrete.CacheReplay.signWithEncoding execution.2 execution.1.secretKey
+          execution.1.forgery.leafIndex execution.1.forgery.signature.randomness
+          forgedEncoding).authPath
         hforgedValid .leaf) :
     Rom.AdaptiveFreshDigestCollisionWith keyResult.2 execution.2
       (keygenLeafTargetInput keyResult.1.2 keyResult.2) := by
@@ -277,10 +277,10 @@ theorem fresh_leaf_event_afterKeygen_orientation
   · simpa [forgedEndpoints] using hforgedCached
   · exact fresh_leaf_badEvent_is_collision execution.2 execution.1.secretKey
       execution.1.forgery.leafIndex forgedEncoding execution.1.forgery.signature
-      (Concrete.signaturePath
-        (Concrete.CacheReplay.signWithEncoding execution.2 execution.1.secretKey
-          execution.1.forgery.leafIndex execution.1.forgery.signature.randomness
-          forgedEncoding)) hforgedValid hleafEvent
+      (Concrete.CacheReplay.signWithEncoding execution.2 execution.1.secretKey
+        execution.1.forgery.leafIndex execution.1.forgery.signature.randomness
+        forgedEncoding).authPath hforgedValid hleafEvent
+
 
 
 theorem signed_recoveredEndpoints_eq_oneTimePublicKey

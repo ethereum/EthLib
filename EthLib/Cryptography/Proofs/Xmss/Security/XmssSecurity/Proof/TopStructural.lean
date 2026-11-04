@@ -22,6 +22,8 @@ Key generation fixed that honest output.
 
 @[expose] public section
 
+open EthLib.Cryptography
+
 open OracleComp OracleSpec
 
 namespace XmssSecurity
@@ -302,101 +304,52 @@ theorem topLeafCollision_afterKeygen
   · rw [keygenTopTargetInput_topLeafInput, hstable]
     exact hcollision.2
 
-/-- The children of a top node, ordered as the path's bit at its level orders them. -/
-def topOrderedNodePair (key : TopIndex) (level : Nat) (current sibling : Digest) :
-    Digest × Digest :=
-  if key.val.testBit level then (sibling, current) else (current, sibling)
-
 omit hkeygen hle in
-theorem topNodeInput_eq_topMerkleInput_ordered (parameter : PublicParameter) (key : TopIndex)
-    (level : MerkleLevel) (current sibling : Digest) :
-    Concrete.CacheView.topNodeInput parameter key level current sibling =
-      Concrete.CacheView.topMerkleInput parameter level (Concrete.topNodeIndex key level.val)
-        (topOrderedNodePair key level.val current sibling).1
-        (topOrderedNodePair key level.val current sibling).2 := by
-  by_cases hbit : key.val.testBit level.val = true
-  · simp [Concrete.CacheView.topNodeInput, Concrete.CacheView.topMerkleInput,
-      Concrete.CacheView.topAuthenticationNodePayload, topOrderedNodePair, hbit]
-  · have hbitFalse := Bool.eq_false_of_not_eq_true hbit
-    simp [Concrete.CacheView.topNodeInput, Concrete.CacheView.topMerkleInput,
-      Concrete.CacheView.topAuthenticationNodePayload, topOrderedNodePair, hbitFalse]
-
-omit hkeygen hle in
-theorem topOrderedNodePair_injective (key : TopIndex) (level : Nat) :
-    Function.Injective fun pair : Digest × Digest =>
-      topOrderedNodePair key level pair.1 pair.2 := by
-  intro left right heq
-  by_cases hbit : key.val.testBit level = true
-  · simp [topOrderedNodePair, hbit] at heq
-    exact Prod.ext heq.2 heq.1
-  · have hbitFalse := Bool.eq_false_of_not_eq_true hbit
-    simpa [topOrderedNodePair, hbitFalse] using heq
-
-omit hkeygen hle in
-theorem topNodeIndex_lt (key : TopIndex) (level : MerkleLevel) :
-    (Concrete.topNodeIndex key level.val).val < 2 ^ (treeHeight - (level.val + 1)) := by
+/-- The node on the path of a top key one level above `level` is a node of the top tree. -/
+theorem topPathNodeAt_lt (key : TopIndex) (level : MerkleLevel) :
+    (Concrete.CacheReplay.topPathNodeAt key (level.val + 1)).val <
+      2 ^ (treeHeight - (level.val + 1)) := by
   have hsum : (treeHeight - (level.val + 1)) + (level.val + 1) = treeHeight := by
     have := level.isLt
     omega
-  apply (Nat.div_lt_iff_lt_mul (by positivity : 0 < 2 ^ (level.val + 1))).2
-  calc
-    key.val < 2 ^ treeHeight := key.isLt
-    _ = 2 ^ (treeHeight - (level.val + 1)) * 2 ^ (level.val + 1) := by
-      rw [← Nat.pow_add, hsum]
-
-omit hkeygen hle in
-theorem topOrdered_honestNodePair_eq_children (cache : QueryCache HashSpec)
-    (secretKey : SecretKey) (key : TopIndex) (level : MerkleLevel) :
-    topOrderedNodePair key level.val
-        (Concrete.CacheReplay.topTreeNode cache secretKey.parameter secretKey.topChainStart
-          level.val (Concrete.CacheReplay.topPathNodeAt key level.val))
-        (Concrete.CacheReplay.topTreeNode cache secretKey.parameter secretKey.topChainStart
-          level.val (Concrete.topPathNode key level)) =
-      (Concrete.CacheReplay.topTreeNode cache secretKey.parameter secretKey.topChainStart
-          level.val (Concrete.topChildNode (Concrete.topNodeIndex key level.val) false),
-        Concrete.CacheReplay.topTreeNode cache secretKey.parameter secretKey.topChainStart
-          level.val (Concrete.topChildNode (Concrete.topNodeIndex key level.val) true)) := by
-  rw [Concrete.CacheReplay.topNodeIndex_eq_topPathNodeAt_succ]
-  have hchildren := Concrete.CacheReplay.topPathNode_children key level.val level.isLt
-  by_cases hbit : key.val.testBit level.val = true
-  · simp only [hbit, ↓reduceIte] at hchildren
-    rcases hchildren with ⟨hleft, hright⟩
-    simp [topOrderedNodePair, hbit, hleft, hright]
-  · have hbitFalse := Bool.eq_false_of_not_eq_true hbit
-    simp only [hbitFalse, Bool.false_eq_true, ↓reduceIte] at hchildren
-    rcases hchildren with ⟨hleft, hright⟩
-    simp [topOrderedNodePair, hbitFalse, hleft, hright]
+  have hquotient : key.val / 2 ^ (level.val + 1) < 2 ^ (treeHeight - (level.val + 1)) := by
+    apply (Nat.div_lt_iff_lt_mul (by positivity : 0 < 2 ^ (level.val + 1))).2
+    calc
+      key.val < 2 ^ treeHeight := key.isLt
+      _ = 2 ^ (treeHeight - (level.val + 1)) * 2 ^ (level.val + 1) := by
+        rw [← Nat.pow_add, hsum]
+  simp only [Concrete.CacheReplay.topPathNodeAt, Concrete.topNodeOfNat]
+  exact (Nat.mod_le _ _).trans_lt hquotient
 
 set_option maxRecDepth 10000 in
 /-- A cached top node on a path that collides with the honest one at its address. -/
 theorem topMerkleCollision_afterKeygen
-    (key : TopIndex) (level : MerkleLevel)
-    (forgedCurrent forgedSibling honestCurrent honestSibling : Digest)
+    (key : TopIndex) (level : MerkleLevel) (forged honest : Digest × Digest)
     (forgedOutput : HashOutput)
     (hforgedCached : finalCache
-      (Concrete.CacheView.topNodeInput keyResult.1.2.parameter key level
-        forgedCurrent forgedSibling) = some forgedOutput)
-    (hne : (forgedCurrent, forgedSibling) ≠ (honestCurrent, honestSibling))
-    (heq : Concrete.CacheView.topNodeHash finalCache keyResult.1.2.parameter key level.val
-        forgedCurrent forgedSibling =
-      Concrete.CacheView.topNodeHash finalCache keyResult.1.2.parameter key level.val
-        honestCurrent honestSibling)
-    (hhonest : topOrderedNodePair key level.val honestCurrent honestSibling =
+      (Concrete.CacheView.nodeInput keyResult.1.2.parameter .top level
+        (key.val / 2 ^ (level.val + 1)) forged.1 forged.2) = some forgedOutput)
+    (hne : forged ≠ honest)
+    (heq : (Concrete.CacheView.nodeAt finalCache keyResult.1.2.parameter .top (level.val + 1)
+        (key.val / 2 ^ (level.val + 1)) forged.1 forged.2).run =
+      (Concrete.CacheView.nodeAt finalCache keyResult.1.2.parameter .top (level.val + 1)
+        (key.val / 2 ^ (level.val + 1)) honest.1 honest.2).run)
+    (hhonest : honest =
       (Concrete.CacheReplay.topTreeNode finalCache keyResult.1.2.parameter
           keyResult.1.2.topChainStart level.val
-          (Concrete.topChildNode (Concrete.topNodeIndex key level.val) false),
+          (Concrete.topChildNode (Concrete.CacheReplay.topPathNodeAt key (level.val + 1)) false),
         Concrete.CacheReplay.topTreeNode finalCache keyResult.1.2.parameter
           keyResult.1.2.topChainStart level.val
-          (Concrete.topChildNode (Concrete.topNodeIndex key level.val) true))) :
+          (Concrete.topChildNode (Concrete.CacheReplay.topPathNodeAt key (level.val + 1)) true))) :
     Rom.AdaptiveFreshDigestCollisionWith keyResult.2 finalCache
       (keygenTopTargetInput keyResult.1.2 keyResult.2) := by
-  let node := Concrete.topNodeIndex key level.val
-  have hnode : node.val < 2 ^ (treeHeight - (level.val + 1)) := topNodeIndex_lt key level
+  let node := Concrete.CacheReplay.topPathNodeAt key (level.val + 1)
+  have hnode : node.val < 2 ^ (treeHeight - (level.val + 1)) := topPathNodeAt_lt key level
   have hchild (right : Bool) :=
     Concrete.precomputedKeygen_topTreeNode_eq_of_cache_le keyResult hkeygen finalCache hle
       level.val level.isLt.le (Concrete.topChildNode node right)
       (Concrete.topChildNode_lt level.val node hnode level.isLt right)
-  have hhonestInitial : topOrderedNodePair key level.val honestCurrent honestSibling =
+  have hhonestInitial : honest =
       (Concrete.CacheReplay.topTreeNode keyResult.2 keyResult.1.2.parameter
           keyResult.1.2.topChainStart level.val (Concrete.topChildNode node false),
         Concrete.CacheReplay.topTreeNode keyResult.2 keyResult.1.2.parameter
@@ -405,23 +358,18 @@ theorem topMerkleCollision_afterKeygen
   obtain ⟨honestOutput, hhonestCached⟩ :=
     Concrete.precomputedKeygen_cache_has_topMerkleInput keyResult hkeygen level node hnode
   have hforgedInitial := Concrete.precomputedKeygen_cache_topMerkleInput_eq_none_of_ne keyResult
-    hkeygen level node hnode
-    (topOrderedNodePair key level.val forgedCurrent forgedSibling).1
-    (topOrderedNodePair key level.val forgedCurrent forgedSibling).2 (by
-      rw [← hhonestInitial]
-      intro hordered
-      exact hne (topOrderedNodePair_injective key level.val hordered))
-  rw [← topNodeInput_eq_topMerkleInput_ordered] at hforgedInitial
-  refine ⟨Concrete.CacheView.topNodeInput keyResult.1.2.parameter key level forgedCurrent
-    forgedSibling, forgedOutput, honestOutput, hforgedCached, hforgedInitial, ?_, ?_⟩
-  · rw [topNodeInput_eq_topMerkleInput_ordered, keygenTopTargetInput_topMerkleInput]
+    hkeygen level node hnode forged.1 forged.2 (by rw [← hhonestInitial]; exact hne)
+  rw [Concrete.CacheView.nodeInput_top] at hforgedCached
+  -- The honest output is stated at its plain type, so its input is not compared.
+  refine ⟨Concrete.CacheView.topMerkleInput keyResult.1.2.parameter level node forged.1 forged.2,
+    forgedOutput, show HashOutput from honestOutput, hforgedCached, hforgedInitial, ?_, ?_⟩
+  · rw [keygenTopTargetInput_topMerkleInput]
     exact hhonestCached
-  · rw [topNodeInput_eq_topMerkleInput_ordered, keygenTopTargetInput_topMerkleInput]
-    unfold Concrete.CacheView.topNodeHash at heq
-    rw [dite_eq_left level.isLt, dite_eq_left level.isLt] at heq
-    rw [topNodeInput_eq_topMerkleInput_ordered, topNodeInput_eq_topMerkleInput_ordered,
-      hhonestInitial] at heq
+  · rw [keygenTopTargetInput_topMerkleInput]
+    rw [Concrete.CacheView.nodeAt_top, Concrete.CacheView.nodeAt_top, hhonestInitial] at heq
+    unfold Concrete.CacheView.topMerkleHash at heq
     exact heq
+
 
 set_option maxRecDepth 10000 in
 /-- A cached top message digest input, other than the honest selected trial, with its digest. -/
@@ -559,29 +507,22 @@ theorem topForgedStep_afterKeygen (key : TopIndex) (encoding : Encoding)
 theorem topPathCollision_afterKeygen (key : TopIndex) (part : LayerSignature)
     (forgedLeaf : Digest) (level : MerkleLevel)
     (hcached : ∃ output, finalCache
-      (Concrete.CacheView.topNodeInput keyResult.1.2.parameter key level
-        (Merkle.ascend (Concrete.CacheView.topNodeHash finalCache keyResult.1.2.parameter key)
-          (Concrete.layerPath part) 0 level.val forgedLeaf)
-        (Concrete.layerPath part level.val)) = some output)
-    (hevent : Merkle.IsXmssPathCollisionAt
-      (Concrete.CacheView.topNodeHash finalCache keyResult.1.2.parameter key)
-      (Concrete.layerPath part) (Concrete.honestTopPath finalCache keyResult.1.2 key) forgedLeaf
+      (Concrete.CacheView.nodeInput keyResult.1.2.parameter .top level
+        (key.val / 2 ^ (level.val + 1))
+        (Merkle.pairAt (Concrete.CacheView.nodeAt finalCache keyResult.1.2.parameter .top)
+          key.val part.authPath forgedLeaf level).1
+        (Merkle.pairAt (Concrete.CacheView.nodeAt finalCache keyResult.1.2.parameter .top)
+          key.val part.authPath forgedLeaf level).2) = some output)
+    (hevent : Merkle.CollidesAt (Concrete.CacheView.nodeAt finalCache keyResult.1.2.parameter .top)
+      key.val part.authPath (Concrete.honestTopPath finalCache keyResult.1.2 key) forgedLeaf
       (Concrete.CacheReplay.topLeafAt finalCache keyResult.1.2.parameter
-        keyResult.1.2.topChainStart key) level) :
+        keyResult.1.2.topChainStart key) (level.val + 1)) :
     Rom.AdaptiveFreshDigestCollisionWith keyResult.2 finalCache
       (keygenTopTargetInput keyResult.1.2 keyResult.2) := by
   obtain ⟨output, hforged⟩ := hcached
-  obtain ⟨hne, heq⟩ := hevent
-  have hcurrent := Concrete.CacheReplay.honestTopPath_ascends_to_topTreeNode finalCache
-    keyResult.1.2 key level.val level.isLt.le
-  have hsibling : Concrete.honestTopPath finalCache keyResult.1.2 key level.val =
-      Concrete.CacheReplay.topTreeNode finalCache keyResult.1.2.parameter
-        keyResult.1.2.topChainStart level.val (Concrete.topPathNode key level) := by
-    simp [Concrete.honestTopPath, level.isLt]
-  apply topMerkleCollision_afterKeygen keyResult hkeygen finalCache hle key level _ _ _ _ output
-    hforged hne heq
-  rw [hcurrent, hsibling]
-  exact topOrdered_honestNodePair_eq_children finalCache keyResult.1.2 key level
+  obtain ⟨hne, heq⟩ := Merkle.CollidesAt.pairs _ hevent
+  exact topMerkleCollision_afterKeygen keyResult hkeygen finalCache hle key level _ _ output
+    hforged hne heq (Concrete.CacheReplay.pairAt_honestTopPath finalCache keyResult.1.2 key level)
 
 end Collisions
 
@@ -663,7 +604,7 @@ theorem topBadEvent_afterKeygen
         exact topLeafCollision_afterKeygen keyResult hkeygen finalCache hle key _ output hforged
           hevent
     | merkle level =>
-        change Merkle.IsXmssPathCollisionAt _ _ _ _
+        change Merkle.CollidesAt _ _ _ _ _
           (Concrete.CacheView.topLeafHash finalCache keyResult.1.2.parameter key
             (recoveredEndpoints _ signedEncoding
               (Concrete.honestTopValues finalCache keyResult.1.2 key signedEncoding))) _ at hevent
@@ -688,16 +629,15 @@ theorem CappedTop.detailed_execution_topQueriesCached
         some encoding) :
     Concrete.CacheReplay.TopQueriesCached execution.2 execution.1.secretKey.parameter
       (topKeyOf execution.1.forgery.leafIndex)
-      (Merkle.ascend
-        (Concrete.CacheView.nodeHash execution.2 execution.1.secretKey.parameter
-          execution.1.forgery.leafIndex)
-        (Concrete.signaturePath execution.1.forgery.signature) 0 treeHeight
+      (Merkle.climb (Concrete.CacheView.nodeAt execution.2 execution.1.secretKey.parameter .bottom)
+        0 execution.1.forgery.leafIndex.val
         (Concrete.CacheView.leafHash execution.2 execution.1.secretKey.parameter
           execution.1.forgery.leafIndex
           (recoveredEndpoints
             (fun chain => Concrete.CacheView.chainStep execution.2
               execution.1.secretKey.parameter execution.1.forgery.leafIndex chain)
-            encoding execution.1.forgery.signature.chainValue)))
+            encoding execution.1.forgery.signature.chainValue))
+        (List.ofFn execution.1.forgery.signature.authPath)).run
       execution.1.forgery.signature.top := by
   have hparameter :=
     (capped_detailed_execution_key_components_consistent adversary execution hmem).1
@@ -758,13 +698,13 @@ noncomputable def OutcomeTopChainValueRevealed (cache : QueryCache HashSpec)
     TargetSum.decodeDigest
       (Concrete.CacheView.topEncodingHash cache outcome.secretKey.parameter
         (topKeyOf outcome.forgery.leafIndex)
-        (Merkle.ascend
-          (Concrete.CacheView.nodeHash cache outcome.secretKey.parameter outcome.forgery.leafIndex)
-          (Concrete.signaturePath outcome.forgery.signature) 0 treeHeight
+        ((Merkle.climb (Concrete.CacheView.nodeAt cache outcome.secretKey.parameter .bottom) 0
+          outcome.forgery.leafIndex.val
           (Concrete.CacheView.leafHash cache outcome.secretKey.parameter outcome.forgery.leafIndex
             (recoveredEndpoints
               (fun chain => Concrete.CacheView.chainStep cache outcome.secretKey.parameter
-                outcome.forgery.leafIndex chain) encoding outcome.forgery.signature.chainValue)),
+                outcome.forgery.leafIndex chain) encoding outcome.forgery.signature.chainValue))
+          (List.ofFn outcome.forgery.signature.authPath)).run,
           outcome.forgery.signature.top.randomness)) = some forgedTopEncoding ∧
     outcome.forgery.signature.top.chainValue chain =
       Wots.signChain

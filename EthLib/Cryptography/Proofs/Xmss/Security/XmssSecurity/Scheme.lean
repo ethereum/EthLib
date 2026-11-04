@@ -107,11 +107,18 @@ def leafHash (parameter : PublicParameter) (leafIndex : LeafIndex)
   toDigest <$> EthLib.Cryptography.Xmss.otsLeafHash queryH (ofParam parameter) .bottom
     (ofLeafIndex leafIndex) (ofChains endpoints)
 
+/-- The node at position `(level, j)` of a layer's tree, from its two children.
+
+It is EthLib's node hash, and its level is the parent's, from 1 to 16. -/
+def nodeAt (parameter : PublicParameter) (layer : EthLib.Cryptography.Xmss.Layer) (level j : Nat)
+    (left right : Digest) : m Digest :=
+  toDigest <$> EthLib.Cryptography.Xmss.nodeHash queryH (ofParam parameter) layer level j
+    (ofDigest left) (ofDigest right)
+
 /-- `X_{level+1,node}` from its two children: EthLib's bottom node hash. -/
 def nodeHash (parameter : PublicParameter) (level : MerkleLevel) (node : MerkleNode)
     (left right : Digest) : m Digest :=
-  toDigest <$> EthLib.Cryptography.Xmss.nodeHash queryH (ofParam parameter) .bottom
-    (level.val + 1) node.val (ofDigest left) (ofDigest right)
+  nodeAt parameter .bottom (level.val + 1) node.val left right
 
 /-- The top layer's message digest of a bottom root: EthLib's top message digest. -/
 def topEncodingHash (parameter : PublicParameter) (key : TopIndex)
@@ -134,16 +141,11 @@ def topLeafHash (parameter : PublicParameter) (key : TopIndex)
 /-- A top node from its two children: EthLib's top node hash. -/
 def topNodeHash (parameter : PublicParameter) (level : MerkleLevel) (node : TopNode)
     (left right : Digest) : m Digest :=
-  toDigest <$> EthLib.Cryptography.Xmss.nodeHash queryH (ofParam parameter) .top
-    (level.val + 1) node.val (ofDigest left) (ofDigest right)
+  nodeAt parameter .top (level.val + 1) node.val left right
 
 end
 
 /-! ### Verification -/
-
-/-- `A_level`, or `0` above the tree. -/
-def signaturePath (signature : Signature) (level : Nat) : Digest :=
-  if hlevel : level < treeHeight then signature.authPath ⟨level, hlevel⟩ else 0
 
 /-- `Chain_{i,idx}(P, start, steps, value)`.
 
@@ -172,33 +174,6 @@ def recoverEndpoints (parameter : PublicParameter) (leafIndex : LeafIndex)
   sequenceFin fun chain =>
     recoverChain parameter leafIndex chain (encoding chain) (signature.chainValue chain)
 
-/-- The index of the Merkle node on the path of the leaf index, one level above `level`. -/
-def nodeIndex (leafIndex : LeafIndex) (level : Nat) : MerkleNode :=
-  ⟨leafIndex.val / 2 ^ (level + 1), by
-    have hle := Nat.div_le_self leafIndex.val (2 ^ (level + 1))
-    exact hle.trans_lt leafIndex.isLt⟩
-
-/-- `Z_{level+1}` from `Z_level` and `A_level`.
-
-Bit `level` of the leaf index dictates their order. -/
-def authenticationNodeHash (parameter : PublicParameter) (leafIndex : LeafIndex)
-    (level : Nat) (current sibling : Digest) : m Digest :=
-  if hlevel : level < treeHeight then
-    if leafIndex.val.testBit level then
-      nodeHash parameter ⟨level, hlevel⟩ (nodeIndex leafIndex level) sibling current
-    else
-      nodeHash parameter ⟨level, hlevel⟩ (nodeIndex leafIndex level) current sibling
-  else
-    pure 0
-
-/-- `Z_levels`, folded up from the leaf `Z_0`. -/
-def authenticationRoot (parameter : PublicParameter) (leafIndex : LeafIndex)
-    (signature : Signature) : Nat → Digest → m Digest
-  | 0, leaf => pure leaf
-  | levels + 1, leaf => do
-      let current ← authenticationRoot parameter leafIndex signature levels leaf
-      authenticationNodeHash parameter leafIndex levels current (signaturePath signature levels)
-
 /-- A top chain walk, as the bottom chain walk. -/
 def topChainWalk (parameter : PublicParameter) (key : TopIndex) (chain : ChainIndex) :
     Nat → Nat → Digest → m Digest
@@ -207,27 +182,6 @@ def topChainWalk (parameter : PublicParameter) (key : TopIndex) (chain : ChainIn
       let previous ← topChainWalk parameter key chain position steps value
       if hposition : position + steps < chainLength - 1 then
         topChainHash parameter key chain ⟨position + steps, hposition⟩ previous
-      else
-        pure 0
-
-/-- The top node on the path of key `b` one level above `level`. -/
-def topNodeIndex (key : TopIndex) (level : Nat) : TopNode :=
-  ⟨key.val / 2 ^ (level + 1), by
-    have hle := Nat.div_le_self key.val (2 ^ (level + 1))
-    exact hle.trans_lt key.isLt⟩
-
-/-- `Z_levels` of the top tree, folded up from the top leaf. -/
-def topAuthenticationRoot (parameter : PublicParameter) (key : TopIndex)
-    (path : Fin treeHeight → Digest) : Nat → Digest → m Digest
-  | 0, leaf => pure leaf
-  | levels + 1, leaf => do
-      let current ← topAuthenticationRoot parameter key path levels leaf
-      if hlevel : levels < treeHeight then
-        let sibling := path ⟨levels, hlevel⟩
-        if key.val.testBit levels then
-          topNodeHash parameter ⟨levels, hlevel⟩ (topNodeIndex key levels) sibling current
-        else
-          topNodeHash parameter ⟨levels, hlevel⟩ (topNodeIndex key levels) current sibling
       else
         pure 0
 

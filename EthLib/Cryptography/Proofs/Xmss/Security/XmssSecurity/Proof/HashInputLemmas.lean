@@ -305,14 +305,6 @@ theorem chainStep_eq (cache : QueryCache HashSpec) (parameter : PublicParameter)
       digestAt cache (chainInput parameter leafIndex chain ⟨position, hposition⟩ value) := by
   simp [chainStep, hposition]
 
-@[simp]
-theorem nodeHash_eq (cache : QueryCache HashSpec) (parameter : PublicParameter)
-    (leafIndex : LeafIndex) (level : Nat) (left right : Digest)
-    (hlevel : level < treeHeight) :
-    nodeHash cache parameter leafIndex level left right =
-      digestAt cache (nodeInput parameter leafIndex ⟨level, hlevel⟩ left right) := by
-  simp [nodeHash, hlevel]
-
 theorem encodingInput_injective (parameter : PublicParameter) (leafIndex : LeafIndex) :
     Function.Injective (encodingInput parameter leafIndex) := by
   intro left right heq

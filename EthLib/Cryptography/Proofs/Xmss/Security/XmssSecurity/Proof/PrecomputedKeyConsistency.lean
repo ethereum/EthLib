@@ -146,7 +146,7 @@ theorem Concrete.precomputed_topPart_eq (parameter : PublicParameter)
     · funext chain
       simp [Concrete.precomputedSecretKey, Concrete.honestTopValues, Wots.signChain]
     · funext level
-      simp [Concrete.precomputedSecretKey, Concrete.honestTopPath, level.isLt]
+      simp [Concrete.precomputedSecretKey, Concrete.honestTopPath]
 
 theorem Concrete.precomputedKeygen_support_consistent
     (keyResult : (PublicKey × SecretKey) × QueryCache HashSpec)

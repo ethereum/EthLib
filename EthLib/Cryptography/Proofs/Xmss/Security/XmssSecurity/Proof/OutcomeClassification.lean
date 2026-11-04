@@ -5,6 +5,8 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Detail
 
 @[expose] public section
 
+open EthLib.Cryptography
+
 open OracleComp OracleSpec ENNReal
 open scoped BigOperators
 
@@ -61,9 +63,8 @@ noncomputable def OutcomeBadEventOccurs (cache : QueryCache HashSpec)
     Concrete.FreshLeafIndexBadEventOccurs cache outcome.secretKey.parameter
       outcome.forgery.leafIndex forgedEncoding outcome.forgery.signature
       (outcome.secretKey.chainStart outcome.forgery.leafIndex)
-      (Concrete.signaturePath
-        (Concrete.CacheReplay.signWithEncoding cache outcome.secretKey
-          outcome.forgery.leafIndex outcome.forgery.signature.randomness forgedEncoding))
+      (Concrete.CacheReplay.signWithEncoding cache outcome.secretKey
+        outcome.forgery.leafIndex outcome.forgery.signature.randomness forgedEncoding).authPath
       hforgedValid event))
 
 /-- A top-layer bad event of the forgery.
@@ -80,13 +81,13 @@ noncomputable def OutcomeTopBadEventOccurs (cache : QueryCache HashSpec)
     TargetSum.decodeDigest
       (Concrete.CacheView.encodingHash cache outcome.secretKey.parameter outcome.forgery.leafIndex
         (outcome.forgery.message, outcome.forgery.signature.randomness)) = some encoding ∧
-    let root := Merkle.ascend
-      (Concrete.CacheView.nodeHash cache outcome.secretKey.parameter outcome.forgery.leafIndex)
-      (Concrete.signaturePath outcome.forgery.signature) 0 treeHeight
+    let root := (Merkle.climb (Concrete.CacheView.nodeAt cache outcome.secretKey.parameter .bottom)
+      0 outcome.forgery.leafIndex.val
       (Concrete.CacheView.leafHash cache outcome.secretKey.parameter outcome.forgery.leafIndex
         (recoveredEndpoints
           (fun chain => Concrete.CacheView.chainStep cache outcome.secretKey.parameter
             outcome.forgery.leafIndex chain) encoding outcome.forgery.signature.chainValue))
+      (List.ofFn outcome.forgery.signature.authPath)).run
     TargetSum.decodeDigest
       (Concrete.CacheView.topEncodingHash cache outcome.secretKey.parameter
         (topKeyOf outcome.forgery.leafIndex) (root, outcome.forgery.signature.top.randomness)) =
@@ -127,64 +128,57 @@ theorem top_badEvent_or_honest (cache : QueryCache HashSpec) (secretKey : Secret
   | some signed =>
       obtain ⟨randomness, encoding⟩ := signed
       have hdecode := htopSigned key randomness encoding hsigned
-      obtain ⟨hpart, -⟩ := Concrete.CacheReplay.layerPath_topPartFromCache cache secretKey key
+      have hpart := Concrete.CacheReplay.topPartFromCache_eq cache secretKey key
         randomness encoding hsigned
       have hhonestRoot :
-          Merkle.ascend (Concrete.CacheView.topNodeHash cache secretKey.parameter key)
-              (Concrete.honestTopPath cache secretKey key) 0 treeHeight
+          (Merkle.climb (Concrete.CacheView.nodeAt cache secretKey.parameter .top) 0 key.val
               (Concrete.CacheView.topLeafHash cache secretKey.parameter key
                 (recoveredEndpoints
                   (fun chain => Concrete.CacheView.topChainStep cache secretKey.parameter key chain)
-                  encoding (Concrete.honestTopValues cache secretKey key encoding))) =
+                  encoding (Concrete.honestTopValues cache secretKey key encoding)))
+              (List.ofFn (Concrete.honestTopPath cache secretKey key))).run =
             Concrete.CacheReplay.topTreeNode cache secretKey.parameter secretKey.topChainStart
               treeHeight Concrete.rootNode := by
         rw [Concrete.CacheReplay.recover_honestTopValues]
-        exact Concrete.CacheReplay.honestTopPath_ascends_to_root cache secretKey key
+        exact Concrete.CacheReplay.honestTopPath_climbs_to_root cache secretKey key
       by_cases hsame : (Concrete.bottomRoot cache secretKey key, randomness) =
             (root, part.randomness) ∧
           Concrete.honestTopValues cache secretKey key encoding = part.chainValue ∧
-          Merkle.SamePathSegment (Concrete.honestTopPath cache secretKey key)
-            (Concrete.layerPath part) 0 treeHeight
+          Concrete.honestTopPath cache secretKey key = part.authPath
       · obtain ⟨hinput, hvalues, hpath⟩ := hsame
         simp only [Prod.mk.injEq] at hinput
         refine Or.inr ⟨hinput.1.symm, ?_, by simp⟩
         rw [hpart]
         obtain ⟨partRandomness, partValues, partPath⟩ := part
-        dsimp only at hinput hvalues
-        rw [hinput.2, hvalues, LayerSignature.mk.injEq]
-        refine ⟨rfl, rfl, ?_⟩
-        funext level
-        have hlevel := hpath level.val level.isLt
-        simp only [Nat.zero_add, Concrete.layerPath, level.isLt, ↓reduceDIte] at hlevel
-        exact hlevel.symm
+        dsimp only at hinput hvalues hpath
+        rw [hinput.2, hvalues, hpath]
       · have hstrong : (Concrete.bottomRoot cache secretKey key, randomness) ≠
               (root, part.randomness) ∨
             Concrete.honestTopValues cache secretKey key encoding ≠ part.chainValue ∨
-            ¬Merkle.SamePathSegment (Concrete.honestTopPath cache secretKey key)
-              (Concrete.layerPath part) 0 treeHeight := by
+            Concrete.honestTopPath cache secretKey key ≠ part.authPath := by
           simpa only [not_and_or] using hsame
         obtain ⟨event, hevent⟩ := XmssSecurity.sameLeafIndex_forgery_has_badEvent
           (Concrete.CacheView.topEncodingHash cache secretKey.parameter key)
           (fun chain => Concrete.CacheView.topChainStep cache secretKey.parameter key chain)
           (Concrete.CacheView.topLeafHash cache secretKey.parameter key)
-          (Concrete.CacheView.topNodeHash cache secretKey.parameter key)
+          (Concrete.CacheView.nodeAt cache secretKey.parameter .top) key.val
           (Concrete.bottomRoot cache secretKey key, randomness) (root, part.randomness)
           encoding forgedEncoding
           (Concrete.honestTopValues cache secretKey key encoding) part.chainValue
-          (Concrete.honestTopPath cache secretKey key) (Concrete.layerPath part)
+          (Concrete.honestTopPath cache secretKey key) part.authPath
           hdecode hforgedEncoding (hforgedRoot.trans hhonestRoot.symm) hstrong
         refine Or.inl ⟨forgedEncoding, event, hforgedEncoding, ?_⟩
         unfold Concrete.TopBadEventOccurs
         rw [hsigned]
         exact ⟨_, hevent⟩
   | none =>
-      have hhonestRoot := Concrete.CacheReplay.honestTopPath_ascends_to_root cache secretKey key
+      have hhonestRoot := Concrete.CacheReplay.honestTopPath_climbs_to_root cache secretKey key
       obtain ⟨event, hevent⟩ := XmssSecurity.freshLeafIndex_forgery_has_badEvent
         (fun chain => Concrete.CacheView.topChainStep cache secretKey.parameter key chain)
         (Concrete.CacheView.topLeafHash cache secretKey.parameter key)
-        (Concrete.CacheView.topNodeHash cache secretKey.parameter key)
+        (Concrete.CacheView.nodeAt cache secretKey.parameter .top) key.val
         forgedEncoding part.chainValue (secretKey.topChainStart key)
-        (Concrete.layerPath part) (Concrete.honestTopPath cache secretKey key) hforgedValid
+        part.authPath (Concrete.honestTopPath cache secretKey key) hforgedValid
         (hforgedRoot.trans hhonestRoot.symm)
       refine Or.inl ⟨forgedEncoding, event, hforgedEncoding, ?_⟩
       unfold Concrete.TopBadEventOccurs
@@ -254,7 +248,7 @@ theorem winning_outcome_has_badEvent (cache : QueryCache HashSpec)
     have htop : signature.top = outcome.forgery.signature.top := by
       rw [htopEq, hsignature, ← hleafIndex]
       rfl
-    have hhonestRoot := Concrete.CacheReplay.authenticationPath_ascends_to_root cache
+    have hhonestRoot := Concrete.CacheReplay.authenticationPath_climbs_to_root cache
       outcome.secretKey request.leafIndex signature.randomness signedEncoding
     rw [← hleafIndex] at hforgedVerify hforgedEncoding hrootEq
     have hroot :
@@ -281,16 +275,16 @@ theorem winning_outcome_has_badEvent (cache : QueryCache HashSpec)
     obtain rfl : p = outcome.secretKey.parameter := hp.symm.trans hparam
     exact ⟨event, Or.inl ⟨hverifed, Or.inl ⟨request, signature, actualSignedEncoding,
       forgedEncoding', hactualSignedEncoding, hforgedEncoding', hentry, hleafIndex, hevent⟩⟩⟩
-  · have hhonestRoot := Concrete.CacheReplay.authenticationPath_ascends_to_root cache
+  · have hhonestRoot := Concrete.CacheReplay.authenticationPath_climbs_to_root cache
       outcome.secretKey outcome.forgery.leafIndex outcome.forgery.signature.randomness
       forgedEncoding
     have hforgedValid := (TargetSum.decodeDigest_eq_some_iff.mp hforgedEncoding).2
     obtain ⟨event, hevent⟩ := Concrete.freshLeafIndex_forgery_has_badEvent cache
       outcome.secretKey.parameter outcome.forgery.leafIndex forgedEncoding
       outcome.forgery.signature (outcome.secretKey.chainStart outcome.forgery.leafIndex)
-      (Concrete.signaturePath
-        (Concrete.CacheReplay.signWithEncoding cache outcome.secretKey outcome.forgery.leafIndex
-          outcome.forgery.signature.randomness forgedEncoding)) hforgedValid
+      (Concrete.CacheReplay.signWithEncoding cache outcome.secretKey outcome.forgery.leafIndex
+        outcome.forgery.signature.randomness forgedEncoding).authPath hforgedValid
+
       (hrootEq.trans hhonestRoot.symm)
     exact ⟨event, Or.inl ⟨hverifed, Or.inr ⟨forgedEncoding, hforgedValid, hsigned,
       hforgedEncoding, hevent⟩⟩⟩

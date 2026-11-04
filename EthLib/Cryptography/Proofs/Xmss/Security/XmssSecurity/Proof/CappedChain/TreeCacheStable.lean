@@ -121,7 +121,7 @@ theorem keygen_support_topCacheStable
         (Concrete.topPathNode key level) hlevel.le hnode
       have heval := hrun.eval_eq largerCache hle
       rw [Concrete.CacheReplay.eval_topTreeNode, Concrete.CacheReplay.eval_topTreeNode] at heval
-      simp only [Concrete.honestTopPath, hlevel, ↓reduceDIte]
+      simp only [Concrete.honestTopPath]
       exact heval
   · rfl
 

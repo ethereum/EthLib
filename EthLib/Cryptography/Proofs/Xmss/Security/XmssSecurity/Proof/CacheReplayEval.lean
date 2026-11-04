@@ -10,6 +10,8 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 @[expose] public section
 
+open EthLib.Cryptography
+
 open OracleComp OracleSpec
 
 namespace XmssSecurity.Concrete.CacheReplay
@@ -299,7 +301,8 @@ def topPartFromCache (cache : QueryCache HashSpec) (secretKey : SecretKey) (key 
   match secretKey.topSigned key with
   | some (randomness, encoding) =>
       ⟨randomness, Concrete.honestTopValues cache secretKey key encoding,
-        fun level => Concrete.honestTopPath cache secretKey key level.val⟩
+        Concrete.honestTopPath cache secretKey key⟩
+
   | none => ⟨0, fun _ => 0, fun _ => 0⟩
 
 def signWithEncoding (cache : QueryCache HashSpec) (secretKey : SecretKey)
@@ -328,51 +331,53 @@ theorem precomputedAuthenticationPath_eq (parameter : PublicParameter)
   exact precomputedSecretKey_treeValue parameter secret topSecret topSigned cache level.castSucc
     (Concrete.authenticationPathNode leafIndex level)
 
-@[simp]
-theorem eval_authenticationRoot (cache : QueryCache HashSpec)
-    (parameter : PublicParameter) (leafIndex : LeafIndex) (signature : Signature)
-    (levels : Nat) (leaf : Digest) :
-    evalWithAnswerFn (answerFn cache)
-      (Concrete.authenticationRoot parameter leafIndex signature levels leaf :
-        OracleComp HashSpec Digest) =
-      Merkle.ascend (CacheView.nodeHash cache parameter leafIndex)
-        (Concrete.signaturePath signature) 0 levels leaf := by
-  induction levels with
-  | zero => simp [Concrete.authenticationRoot]
-  | succ levels ih =>
-      simp only [Concrete.authenticationRoot, evalWithAnswerFn_bind, ih, Merkle.ascend_succ,
-        Nat.zero_add]
-      by_cases hlevel : levels < treeHeight
-      · by_cases hbit : leafIndex.val.testBit levels = true
-        · simp [Concrete.authenticationNodeHash, CacheView.nodeHash, hlevel, hbit,
-            Concrete.nodeHash_eq, CacheView.nodeInput, CacheView.authenticationNodePayload,
-            CacheView.tweakableHash]
-        · simp [Concrete.authenticationNodeHash, CacheView.nodeHash, hlevel, hbit,
-            Concrete.nodeHash_eq, CacheView.nodeInput, CacheView.authenticationNodePayload,
-            CacheView.tweakableHash]
-      · simp [Concrete.authenticationNodeHash, CacheView.nodeHash, hlevel]
+/-- A node of a layer's tree is a tweakable hash at its address, below the layer's leaf count. -/
+theorem nodeAt_eq (parameter : PublicParameter) (layer : EthLib.Cryptography.Xmss.Layer)
+    (level : MerkleLevel) (j : Nat) (hj : j < CacheView.layerLeaves layer) (left right : Digest) :
+    (Concrete.nodeAt parameter layer (level.val + 1) j left right : OracleComp HashSpec Digest) =
+      Concrete.tweakableHash parameter (CacheView.nodeDomain layer level j)
+        (Concrete.nodePayload left right) := by
+  cases layer with
+  | bottom =>
+    have hnode : Concrete.merkleNodeOfNat j = ⟨j, hj⟩ := Fin.ext (Nat.mod_eq_of_lt hj)
+    simpa [Concrete.nodeHash, CacheView.nodeDomain, hnode] using
+      Concrete.nodeHash_eq (m := OracleComp HashSpec) parameter level ⟨j, hj⟩ left right
+  | top =>
+    have hnode : Concrete.topNodeOfNat j = ⟨j, hj⟩ := Fin.ext (Nat.mod_eq_of_lt hj)
+    simpa [Concrete.topNodeHash, CacheView.nodeDomain, hnode] using
+      Concrete.topNodeHash_eq (m := OracleComp HashSpec) parameter level ⟨j, hj⟩ left right
 
-@[simp]
-theorem eval_topAuthenticationRoot (cache : QueryCache HashSpec)
-    (parameter : PublicParameter) (key : TopIndex) (path : Fin treeHeight → Digest)
-    (levels : Nat) (leaf : Digest) :
+/-- From the cache, a climb of a layer's tree is the climb with the cache's node hash.
+
+
+The climb starts at a node index of the layer and ends at most at the root. -/
+theorem eval_climb (cache : QueryCache HashSpec) (parameter : PublicParameter)
+    (layer : EthLib.Cryptography.Xmss.Layer) :
+    ∀ (siblings : List Digest) (level j : Nat) (current : Digest),
+      level + siblings.length ≤ treeHeight → j < CacheView.layerLeaves layer →
+      evalWithAnswerFn (answerFn cache)
+          (Merkle.climb (Concrete.nodeAt parameter layer) level j current siblings :
+            OracleComp HashSpec Digest) =
+        (Merkle.climb (CacheView.nodeAt cache parameter layer) level j current siblings).run
+  | [], _, _, _, _, _ => rfl
+  | sibling :: rest, level, j, current, hlength, hj => by
+    have hlevel : level < treeHeight := by simp at hlength; omega
+    have hhalf : j / 2 < CacheView.layerLeaves layer := (Nat.div_le_self j 2).trans_lt hj
+    simp only [Merkle.climb, evalWithAnswerFn_bind]
+    rw [nodeAt_eq parameter layer ⟨level, hlevel⟩ (j / 2) hhalf, eval_tweakableHash,
+      eval_climb cache parameter layer rest (level + 1) (j / 2) _ (by simp at hlength; omega)
+        hhalf]
+    simp [CacheView.nodeAt, hlevel, CacheView.tweakableHash, CacheView.nodeInput]
+
+/-- From the cache, the climb of a whole path from a node index of a layer is the cache's climb. -/
+theorem eval_climb_ofFn (cache : QueryCache HashSpec) (parameter : PublicParameter)
+    (layer : EthLib.Cryptography.Xmss.Layer) (j : Nat) (hj : j < CacheView.layerLeaves layer)
+    (path : Fin treeHeight → Digest) (leaf : Digest) :
     evalWithAnswerFn (answerFn cache)
-      (Concrete.topAuthenticationRoot parameter key path levels leaf :
-        OracleComp HashSpec Digest) =
-      Merkle.ascend (CacheView.topNodeHash cache parameter key)
-        (Concrete.layerPath ⟨0, fun _ => 0, path⟩) 0 levels leaf := by
-  induction levels with
-  | zero => simp [Concrete.topAuthenticationRoot]
-  | succ levels ih =>
-      simp only [Concrete.topAuthenticationRoot, evalWithAnswerFn_bind, ih, Merkle.ascend_succ,
-        Nat.zero_add]
-      by_cases hlevel : levels < treeHeight
-      · by_cases hbit : key.val.testBit levels = true
-        · simp [CacheView.topNodeHash, hlevel, hbit, Concrete.layerPath, Concrete.topNodeHash_eq,
-            CacheView.topNodeInput, CacheView.topAuthenticationNodePayload, CacheView.tweakableHash]
-        · simp [CacheView.topNodeHash, hlevel, hbit, Concrete.layerPath, Concrete.topNodeHash_eq,
-            CacheView.topNodeInput, CacheView.topAuthenticationNodePayload, CacheView.tweakableHash]
-      · simp [CacheView.topNodeHash, hlevel]
+        (Merkle.climb (Concrete.nodeAt parameter layer) 0 j leaf (List.ofFn path) :
+          OracleComp HashSpec Digest) =
+      (Merkle.climb (CacheView.nodeAt cache parameter layer) 0 j leaf (List.ofFn path)).run :=
+  eval_climb cache parameter layer _ 0 j leaf (by simp) hj
 
 @[simp]
 theorem eval_verifyTop (cache : QueryCache HashSpec) (publicKey : PublicKey)
@@ -393,7 +398,6 @@ theorem eval_verifyTop (cache : QueryCache HashSpec) (publicKey : PublicKey)
     intro endpoints
     simp [Concrete.topLeafHash_eq, CacheView.topLeafHash, CacheView.topLeafInput,
       CacheView.tweakableHash]
-  have hpath : Concrete.layerPath ⟨0, fun _ => 0, part.authPath⟩ = Concrete.layerPath part := rfl
   rw [Concrete.verifyTop_eq]
   unfold Concrete.verifyTopFromCache
   simp only [evalWithAnswerFn_bind, hdigest]
@@ -402,7 +406,7 @@ theorem eval_verifyTop (cache : QueryCache HashSpec) (publicKey : PublicKey)
   | none => simp
   | some encoding =>
       simp only [evalWithAnswerFn_bind, eval_sequenceFin, eval_topChainWalk, hleaf,
-        eval_topAuthenticationRoot, hpath, evalWithAnswerFn_pure]
+        eval_climb_ofFn cache publicKey.parameter .top key.val key.isLt, evalWithAnswerFn_pure]
       rfl
 
 @[simp]
@@ -411,9 +415,10 @@ theorem eval_verifyAfterLeaf (cache : QueryCache HashSpec) (publicKey : PublicKe
     evalWithAnswerFn (answerFn cache)
       (Concrete.verifyAfterLeaf publicKey leafIndex signature leaf : OracleComp HashSpec Bool) =
       Concrete.verifyTopFromCache cache publicKey (topKeyOf leafIndex)
-        (Merkle.ascend (CacheView.nodeHash cache publicKey.parameter leafIndex)
-          (Concrete.signaturePath signature) 0 treeHeight leaf) signature.top := by
-  simp [Concrete.verifyAfterLeaf_eq]
+        (Merkle.climb (CacheView.nodeAt cache publicKey.parameter .bottom) 0 leafIndex.val leaf
+          (List.ofFn signature.authPath)).run signature.top := by
+  simp [Concrete.verifyAfterLeaf_eq,
+    eval_climb_ofFn cache publicKey.parameter .bottom leafIndex.val leafIndex.isLt]
 
 @[simp]
 theorem eval_verify (cache : QueryCache HashSpec) (publicKey : PublicKey)

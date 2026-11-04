@@ -5,6 +5,8 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TreeQu
 
 @[expose] public section
 
+open EthLib.Cryptography
+
 namespace XmssSecurity
 
 theorem treeSubtreeValid_pathNode
@@ -36,18 +38,16 @@ theorem authenticationPathNode_subtreeValid
   have hparent : TreeSubtreeValid (level.val + 1)
       (Concrete.CacheReplay.pathNode leafIndex (level.val + 1)) :=
     treeSubtreeValid_pathNode leafIndex (level.val + 1) (by omega)
-  have hchildren := Concrete.CacheReplay.pathNode_children
-    leafIndex level.val level.isLt
-  by_cases hbit : leafIndex.val.testBit level.val = true
-  · rw [ite_eq_left hbit] at hchildren
-    have hvalid := childNode_subtreeValid level.val
-      (Concrete.CacheReplay.pathNode leafIndex (level.val + 1)) false hparent
-    rw [hchildren.1] at hvalid
-    exact hvalid
-  · rw [ite_eq_right hbit] at hchildren
-    have hvalid := childNode_subtreeValid level.val
+  -- The sibling is one of the two children of the next node on the path.
+  have hchildren := Concrete.CacheReplay.ordered_pathNode leafIndex level
+  unfold Merkle.ordered at hchildren
+  split at hchildren
+  · have hvalid := childNode_subtreeValid level.val
       (Concrete.CacheReplay.pathNode leafIndex (level.val + 1)) true hparent
-    rw [hchildren.2] at hvalid
-    exact hvalid
+    rwa [← (Prod.mk.inj hchildren).2] at hvalid
+  · have hvalid := childNode_subtreeValid level.val
+      (Concrete.CacheReplay.pathNode leafIndex (level.val + 1)) false hparent
+    rwa [← (Prod.mk.inj hchildren).1] at hvalid
+
 
 end XmssSecurity
