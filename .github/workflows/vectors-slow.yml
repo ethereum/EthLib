@@ -42,6 +42,10 @@ jobs:
               uv run --no-sync pytest -n auto -m archive
               bindings/python/tests/blocks/test_archive.py
               bindings/python/tests/transactions/test_archive.py
+          # Every static SSZ case of the beacon containers that EthLib defines.
+          - suite: consensus-spec-tests
+            bindings: true
+            run: uv run --no-sync pytest -m archive bindings/python/tests/consensus/test_ssz_static.py
           # The pinned BLS and KZG digests against the releases that published them.
           - suite: cryptography
             bindings: false
