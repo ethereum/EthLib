@@ -8,26 +8,17 @@ public import Mathlib.GroupTheory.OrderOfElement
 /-!
 # Proofs: the order of `G_1`
 
-The curve of alt_bn128 over `Fp` has exactly `q` points, so `G_1` is the whole group and `P1` generates it.
+[EIP-197](https://eips.ethereum.org/EIPS/eip-197) §"Definition of the groups" defines `G_1` and `q`.
 
-[EIP-197](https://eips.ethereum.org/EIPS/eip-197) §"Definition of the groups" defines `G_1` on this curve as a cyclic group of prime order `q`, with generator `P1 = (1, 2)`.
+The curve over `Fp` has exactly `q` points, so `G_1` is the whole group.
 
-The proof has three steps.
+The kernel computes `q P1 = O`, so `q` divides the number of points.
 
-- The kernel runs `q P1` and gets `O`, so `P1` has order `q`, a prime.
-- So `q` divides the number of points.
-- At most `2 p + 1` points exist, fewer than `3 q`, so the count is `q` or `2 q`.
+At most `2 p + 1 < 3 q` points exist, so the count is `q` or `2 q`.
 
-A group of `2 q` points would hold a point of order 2, which is `(x, 0)` with `x^3 = -3`.
+A count of `2 q` needs a point `(x, 0)` with `x^3 = -3`.
 
-No such `x` exists, because `-3` is not a cube mod `p`.
-
-The kernel checks that by Euler's criterion: `(-3)^((p - 1) / 3) != 1`, since `p = 1 mod 3`.
-
-- `card_point`: the group has `q` points, so the cofactor is 1.
-- `nsmul_order`: `q X = 0` for every point `X`.
-- `mulBits_order`: `q P = O` for every point on the curve, so the subgroup check of ECPAIRING accepts every point of `G_1`.
-- `exists_eq_mulBits_generator`: every point on the curve is `k P1` for some `k < q`.
+Euler's criterion rules it out: `(-3)^((p - 1) / 3) != 1`, since `p = 1 mod 3`.
 -/
 
 @[expose] public section
