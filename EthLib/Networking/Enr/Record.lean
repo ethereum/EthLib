@@ -8,7 +8,8 @@ public import EthLib.Serialization.Rlp.Codec
 
 Ethereum Node Records, from the sections "RLP Encoding" and "Text Encoding" of EIP-778.
 
-Source: [EIP-778](https://github.com/ethereum/EIPs/blob/7622abc1c6569b7e7ade9ed957dde4ed2271cc40/EIPS/eip-778.md).
+Source: EIP-778, at
+<https://github.com/ethereum/EIPs/blob/7622abc1c6569b7e7ade9ed957dde4ed2271cc40/EIPS/eip-778.md>.
 
 A record is a signed list of key and value pairs that says how to reach a node.
 

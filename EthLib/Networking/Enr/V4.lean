@@ -9,7 +9,8 @@ public import EthLib.Cryptography.Secp256k1.Ecdsa
 
 The "v4" identity scheme of EIP-778, from its section of that name.
 
-Source: [EIP-778](https://github.com/ethereum/EIPs/blob/7622abc1c6569b7e7ade9ed957dde4ed2271cc40/EIPS/eip-778.md).
+Source: EIP-778, at
+<https://github.com/ethereum/EIPs/blob/7622abc1c6569b7e7ade9ed957dde4ed2271cc40/EIPS/eip-778.md>.
 
 The `id` pair names the scheme, and the `secp256k1` pair holds the compressed public key.
 

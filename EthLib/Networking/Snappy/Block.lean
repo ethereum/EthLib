@@ -8,9 +8,10 @@ public import EthLib.Networking.Encoding.Varint
 
 Decompression of the Snappy block format.
 
-The format is [`format_description.txt`](https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt) of `google/snappy`.
+Source: `format_description.txt` of `google/snappy`, at
+<https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/format_description.txt>.
 
-Gossip on the consensus layer compresses every message with it, per [`phase0/p2p-interface.md`](https://github.com/ethereum/consensus-specs/blob/55a48db47eff748266187888f01227940e3e7e64/specs/phase0/p2p-interface.md#encodings), "Encodings".
+Gossip on the consensus layer compresses every message with it.
 
 A block is a preamble, then elements:
 
@@ -169,8 +170,7 @@ def decompressElements : List UInt8 → List UInt8 → Nat → Except SnappyErro
       else
         -- A copy: the tag fixes the width of the offset (§2.2.1 to §2.2.3).
         let width := if t == 1 then 1 else if t == 2 then 2 else 4
-        -- A one-byte-offset copy holds the length minus four in tag bits 2 to 4.
-        -- The other copies hold the length minus one in the six upper bits.
+        -- The length minus 4 is in tag bits 2 to 4 for a one-byte offset, else the length minus 1.
         let len := if t == 1 then 4 + upper % 8 else upper + 1
         if rest.length < width then
           .error .copyPastEnd
