@@ -10,13 +10,13 @@ Rewrite lemmas restate them, so proofs can unfold them without unsealing.
 
 The statement stores the precomputed secret key as runs of its own oracle algorithms.
 
-Each run uses `evalWithAnswerFn (replayHash cache)`.
+Each run replays the hash from the cache.
 
-`Wots.walk`, `CacheView`, and `CacheReplay` are the equivalent first-order forms of those replays.
+The chain walk, the cache views and the cache replays are first-order forms of those replays.
 
 The proof works with these forms.
 
-`Proof.CacheReplayEval` bridges the two.
+The cache-replay evaluation file bridges the two.
 -/
 
 @[expose] public section

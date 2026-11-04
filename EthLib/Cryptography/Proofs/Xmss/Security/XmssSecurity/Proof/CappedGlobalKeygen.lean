@@ -280,7 +280,7 @@ theorem Concrete.evalDist_sampleChainStarts_eq_uniform :
       (Equiv.sumArrowEquivProdArrow LeafIndex TopIndex (ChainIndex → Digest)).symm.bijective)).trans
     (uniformSample_evalDistEq_inst _ _)
 
-/-- The secret key of key generation with chain starts `start` and top signatures `topSigned`. -/
+/-- The secret key of key generation with the given chain starts and top signatures. -/
 def startSecretKey (parameter : PublicParameter) (start : ChainKey → ChainIndex → Digest)
     (topSigned : TopIndex → Option (Randomness × Encoding)) : SecretKey :=
   SecretKey.withoutPrecomputation parameter (fun leafIndex => start (.inl leafIndex))

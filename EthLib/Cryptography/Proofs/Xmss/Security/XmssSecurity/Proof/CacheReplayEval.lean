@@ -212,13 +212,11 @@ theorem eval_topTreeNode (cache : QueryCache HashSpec)
 
 /-! The statement stores the precomputed secret key as runs of its own oracle algorithms.
 
-Each run uses `evalWithAnswerFn (replayHash cache)`.
+Each run replays the hash from the cache, with the same answer function.
 
-`answerFn` is the same answer function.
+So the evaluation lemmas above give the first-order forms of the stored tables.
 
-So the `eval_*` lemmas above give the first-order forms of the stored tables.
-
-These forms are `CacheView` and `CacheReplay`. -/
+These forms are the cache views and the cache replays. -/
 
 theorem answerFn_eq_replayHash (cache : QueryCache HashSpec) :
     answerFn cache = Concrete.replayHash cache := rfl

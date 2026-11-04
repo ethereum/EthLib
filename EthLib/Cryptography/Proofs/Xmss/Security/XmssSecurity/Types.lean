@@ -6,9 +6,11 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 /-!
 # The leanXMSS model: parameters, types and hash inputs
 
-The model of `Scheme.lean` writes values as bit vectors and hash inputs as byte lists.
+The model writes values as bit vectors and hash inputs as byte lists.
 
-Every hash input is byte for byte the one of EthLib's algorithms (`Unforgeability/Translate.lean`).
+Every hash input is byte for byte the one of EthLib's algorithms.
+
+The translation proofs of the unforgeability theorem show that.
 -/
 
 @[expose] public section
@@ -167,7 +169,7 @@ def tweakFields (tag step hi lo : Nat) : TweakFields :=
 
 They are `TWEAK_CHAIN = 1`, `TWEAK_LEAF = 2`, `TWEAK_NODE = 3` and `TWEAK_MSG = 12`.
 
-The top layer's `hi` carries `topFlag`. -/
+The field `hi` of the top layer carries the top flag. -/
 inductive HashDomain where
   | chain (leafIndex : LeafIndex) (chain : ChainIndex) (step : ChainStep)
   | leaf (leafIndex : LeafIndex)
@@ -204,7 +206,7 @@ def domainSuffix : HashDomain → HashInput
 
 /-- The random-oracle input of every tweakable hash call: `P || A || payload`.
 
-A chain step's payload is its value followed by `domainSuffix`. -/
+A chain step's payload is its value followed by the domain suffix. -/
 def tweakableHashInput (parameter : PublicParameter) (domain : HashDomain)
     (message : HashInput) : HashInput :=
   bytesLE 16 parameter ++ tweakBytes domain ++ message ++ domainSuffix domain
@@ -295,11 +297,11 @@ end TargetSum
 
 /-! ## The algorithms
 
-`Concrete` contains the hash and verification routines.
+One namespace holds the hash and verification routines.
 
-`Seeded` contains key generation and signing.
+Another holds key generation and signing.
 
-Hashing routines work in any monad with access to `HashSpec`.
+Hashing routines work in any monad with access to the hash oracle.
 
 The experiment samples the master seed and charges every hash call, including repeated calls.
 

@@ -5,12 +5,13 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.SignSte
 /-!
 # The potentials of the adversary phase
 
-Summed over leaf indices, each read on the leaf index's frozen cache:
-* `openΦ`: the partner mass `Φ` of the unsigned leaf indices;
-* `hvSum`: `V * H`;
-* `nCount`, `vCount`: the cached inputs and the cached hits;
-* `PreBad`: a first entry selected a cached input partnered in its initial cache;
-* `PostBad`: a first entry selected a cached input, and a later query repeated its digest.
+The potentials are sums over leaf indices, each read on the leaf index's frozen cache:
+
+* The partner mass `Φ` of the unsigned leaf indices.
+* The product `V * H`.
+* The counts of the cached inputs and of the cached hits.
+* The early bad event: a first entry selected a cached input partnered in its initial cache.
+* The late bad event: a first entry selected a cached input, and a later query repeated its digest.
 
 This file proves how one fresh oracle answer moves each of them.
 -/

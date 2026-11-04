@@ -173,7 +173,7 @@ def honestTopValues (cache : QueryCache HashSpec) (secretKey : SecretKey) (key :
 
 /-- A top-layer bad event for a forged top signature `forged` of bottom root `root` by key `b`.
 
-Its digest decodes to `forgedEncoding`.
+Its digest decodes to the forged encoding.
 
 The event is against the honest top signature of tree `b` if its grinding succeeded.
 

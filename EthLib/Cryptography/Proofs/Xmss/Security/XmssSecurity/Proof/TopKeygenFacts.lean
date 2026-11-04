@@ -10,7 +10,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 /-!
 # Key generation's top layer
 
-Top counterparts of the bottom facts of `TreeQueryBound` and `KeygenCache`.
+Top counterparts of the bottom facts on tree queries and on the key generation cache.
 
 Key generation queries each top chain-step address at most once.
 -/

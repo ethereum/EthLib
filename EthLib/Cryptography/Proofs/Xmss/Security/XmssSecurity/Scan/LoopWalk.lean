@@ -14,11 +14,11 @@ For one message and one state of the digest cache, it is a walk over positions.
 
 A position is one of three kinds:
 
-* `fresh`: the digest is not queried, and it lands with probability `p`;
-* a cached `miss`: the walk goes on;
-* a cached `hit`: the walk stops there.
+* Fresh: the digest is not queried, and it lands with probability `p`.
+* A cached miss: the walk goes on.
+* A cached hit: the walk stops there.
 
-`walk` is the expected payoff of the walk from a start.
+The value of a start is the expected payoff of the walk from it.
 
 The payoff is `item x` at a cached hit `x` and `fr` at a fresh position that lands.
 
@@ -26,17 +26,17 @@ It is `ex` when the attempts are exhausted.
 
 Main results, for a successor `σ` that does not return to a position within the attempt limit:
 
-* `probe_eq`: one digest query at a fresh position `y`.
+* One digest query at a fresh position `y`.
   Average over its two outcomes, a hit with payoff `c` and a miss.
   Then the walk from any other start changes by `p * reach * (c - fr)`.
   Here `reach` is the probability that the start reaches `y`.
-* `sum_reach_le`: the fresh starts reach a given position with total weight at most `(1 - p)/p`.
-* `creation_le`: a query raises the group value by at most `(2 - p) * (favg - base)` in the mean.
+* The fresh starts reach a given position with total weight at most `(1 - p)/p`.
+* A query raises the group value by at most `(2 - p) * (favg - base)` in the mean.
   The group value `gv` has fresh payoff `base` for a fresh start and `favg` for a cached one.
   `favg` is the pending mass of dangling queries.
   The bound is the creation rate of the scan loop: `2 - p` times the rate of independent attempts.
   The bound is attained.
-* `mass_le`: a lower bound on the weight of the starts that do not end at a cached hit.
+* A lower bound on the weight of the starts that do not end at a cached hit.
   They weigh at least `card - (cached positions) - (cached hits) * (1 - p)/p`.
 
 Nothing here mentions hashing.

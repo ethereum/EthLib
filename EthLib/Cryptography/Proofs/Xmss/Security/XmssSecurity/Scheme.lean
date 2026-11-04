@@ -38,7 +38,7 @@ def hashCacheOfLog (log : QueryLog HashSpec) : QueryCache HashSpec :=
 
 namespace Concrete
 
-/-- `m || rho`: with `P || A`, 80 bytes, one block of the leanVM hash.
+/-- `m || rho`: with `P || A`, 80 bytes, one block of Keccak-256.
 
 So a trial is one Keccak-f permutation. -/
 def encodingPayload (message : Message) (randomness : Randomness) : HashInput :=
@@ -77,61 +77,61 @@ def tweakableHash
 
 /-! ### The hashes
 
-Each hash is EthLib's, run with `queryH` on the bytes of the model's values.
+Each hash is EthLib's, run with the oracle query on the bytes of the model's values.
 
-`tweakableHash` names the oracle input each one makes.
+The tweakable hash names the oracle input each one makes.
 
-`Unforgeability/Translate.lean` proves it, as `encodingHash_eq` and the others. -/
+The translation proofs of the unforgeability theorem prove it. -/
 
 section
 
 open EthLib.Cryptography.Xmss.Unforgeability (queryH ofParam ofLeafIndex ofTopIndex ofDigest
   toDigest ofMessage ofRandomizer ofChains)
 
-/-- The digest `D` of `IncEnc(P, m, rho, idx)`: EthLib's bottom `messageDigest`. -/
+/-- The digest `D` of `IncEnc(P, m, rho, idx)`: EthLib's bottom message digest. -/
 def encodingHash (parameter : PublicParameter) (leafIndex : LeafIndex)
     (message : Message) (randomness : Randomness) : m Digest :=
   toDigest <$> EthLib.Cryptography.Xmss.messageDigest queryH (ofParam parameter) .bottom
     (ofLeafIndex leafIndex) (EthLib.Cryptography.Xmss.packBytes (ofMessage message))
     (ofRandomizer randomness)
 
-/-- One chain step, under `tweak_chain(idx, i, step + 1)`: EthLib's bottom `chainStep`. -/
+/-- One chain step, under `tweak_chain(idx, i, step + 1)`: EthLib's bottom chain step. -/
 def chainHash (parameter : PublicParameter) (leafIndex : LeafIndex) (chain : ChainIndex)
     (step : ChainStep) (value : Digest) : m Digest :=
   toDigest <$> EthLib.Cryptography.Xmss.chainStep queryH (ofParam parameter) .bottom
     (ofLeafIndex leafIndex) ⟨chain.val, chain.isLt⟩ step (ofDigest value)
 
-/-- `X_{0,idx}`, the hash of the `v` public values: EthLib's bottom `otsLeafHash`. -/
+/-- `X_{0,idx}`, the hash of the `v` public values: EthLib's bottom one-time leaf hash. -/
 def leafHash (parameter : PublicParameter) (leafIndex : LeafIndex)
     (endpoints : ChainIndex → Digest) : m Digest :=
   toDigest <$> EthLib.Cryptography.Xmss.otsLeafHash queryH (ofParam parameter) .bottom
     (ofLeafIndex leafIndex) (ofChains endpoints)
 
-/-- `X_{level+1,node}` from its two children: EthLib's bottom `nodeHash`. -/
+/-- `X_{level+1,node}` from its two children: EthLib's bottom node hash. -/
 def nodeHash (parameter : PublicParameter) (level : MerkleLevel) (node : MerkleNode)
     (left right : Digest) : m Digest :=
   toDigest <$> EthLib.Cryptography.Xmss.nodeHash queryH (ofParam parameter) .bottom
     (level.val + 1) node.val (ofDigest left) (ofDigest right)
 
-/-- The top layer's message digest of a bottom root: EthLib's top `messageDigest`. -/
+/-- The top layer's message digest of a bottom root: EthLib's top message digest. -/
 def topEncodingHash (parameter : PublicParameter) (key : TopIndex)
     (root : Digest) (randomness : Randomness) : m Digest :=
   toDigest <$> EthLib.Cryptography.Xmss.messageDigest queryH (ofParam parameter) .top
     (ofTopIndex key) (EthLib.Cryptography.Xmss.packBytes (ofDigest root)) (ofRandomizer randomness)
 
-/-- One top chain step: EthLib's top `chainStep`. -/
+/-- One top chain step: EthLib's top chain step. -/
 def topChainHash (parameter : PublicParameter) (key : TopIndex) (chain : ChainIndex)
     (step : ChainStep) (value : Digest) : m Digest :=
   toDigest <$> EthLib.Cryptography.Xmss.chainStep queryH (ofParam parameter) .top
     (ofTopIndex key) ⟨chain.val, chain.isLt⟩ step (ofDigest value)
 
-/-- A top leaf: EthLib's top `otsLeafHash`. -/
+/-- A top leaf: EthLib's top one-time leaf hash. -/
 def topLeafHash (parameter : PublicParameter) (key : TopIndex)
     (endpoints : ChainIndex → Digest) : m Digest :=
   toDigest <$> EthLib.Cryptography.Xmss.otsLeafHash queryH (ofParam parameter) .top
     (ofTopIndex key) (ofChains endpoints)
 
-/-- A top node from its two children: EthLib's top `nodeHash`. -/
+/-- A top node from its two children: EthLib's top node hash. -/
 def topNodeHash (parameter : PublicParameter) (level : MerkleLevel) (node : TopNode)
     (left right : Digest) : m Digest :=
   toDigest <$> EthLib.Cryptography.Xmss.nodeHash queryH (ofParam parameter) .top
@@ -172,7 +172,7 @@ def recoverEndpoints (parameter : PublicParameter) (leafIndex : LeafIndex)
   sequenceFin fun chain =>
     recoverChain parameter leafIndex chain (encoding chain) (signature.chainValue chain)
 
-/-- The index of the Merkle node on the path of `leafIndex` one level above `level`. -/
+/-- The index of the Merkle node on the path of the leaf index, one level above `level`. -/
 def nodeIndex (leafIndex : LeafIndex) (level : Nat) : MerkleNode :=
   ⟨leafIndex.val / 2 ^ (level + 1), by
     have hle := Nat.div_le_self leafIndex.val (2 ^ (level + 1))
@@ -199,7 +199,7 @@ def authenticationRoot (parameter : PublicParameter) (leafIndex : LeafIndex)
       let current ← authenticationRoot parameter leafIndex signature levels leaf
       authenticationNodeHash parameter leafIndex levels current (signaturePath signature levels)
 
-/-- A top chain walk, as `chainWalk`. -/
+/-- A top chain walk, as the bottom chain walk. -/
 def topChainWalk (parameter : PublicParameter) (key : TopIndex) (chain : ChainIndex) :
     Nat → Nat → Digest → m Digest
   | _, 0, value => pure value
@@ -233,7 +233,7 @@ def topAuthenticationRoot (parameter : PublicParameter) (key : TopIndex)
 
 /-- The top layer's check: its signature of bottom root `root` by key `b` reaches the public root.
 
-It is EthLib's top layer (`layerRoot`), on the bytes of the model's values. -/
+It is EthLib's top layer, on the bytes of the model's values. -/
 def verifyTop (publicKey : PublicKey) (key : TopIndex) (root : Digest) (part : LayerSignature) :
     m Bool := do
   let some topRoot ← EthLib.Cryptography.Xmss.layerRoot
@@ -246,7 +246,7 @@ def verifyTop (publicKey : PublicKey) (key : TopIndex) (root : Digest) (part : L
 
 /-- Fold the bottom leaf to its tree's root, then check the top layer's signature of that root.
 
-The fold is EthLib's (`fold`), on the bytes of the model's values. -/
+The fold is EthLib's, on the bytes of the model's values. -/
 def verifyAfterLeaf
     (publicKey : PublicKey) (leafIndex : LeafIndex) (signature : Signature) (leaf : Digest) :
     m Bool := do
@@ -259,7 +259,7 @@ def verifyAfterLeaf
 
 /-- `Ver(pk, idx, m, sigma)`: EthLib's verifier, on the bytes of the model's values.
 
-`Unforgeability/Translate.lean` unfolds it into the routines above (`Concrete.verify_eq`). -/
+The translation proofs unfold it into the routines above. -/
 def verify (publicKey : PublicKey) (leafIndex : LeafIndex)
     (message : Message) (signature : Signature) : m Bool :=
   EthLib.Cryptography.Xmss.verifyWith EthLib.Cryptography.Xmss.Unforgeability.queryH

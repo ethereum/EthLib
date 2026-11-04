@@ -172,7 +172,7 @@ def ofEntry (entry : (_ : XmssSecurity.SignRequest) × Option XmssSecurity.Signa
 /-- The translated transcript repeats a leaf index exactly when the model's does. -/
 theorem valid_map (log : QueryLog XmssSecurity.SigningSpec) :
     Valid (log.map ofEntry) ↔ XmssSecurity.SigningTranscript.Valid log := by
-  -- The translated leaf indices are the model's, each through `ofLeafIndex`, which is injective.
+  -- The translated leaf indices are the model's, each through an injective conversion.
   have hmap : (log.map ofEntry).map (fun entry => entry.1.leafIndex)
       = (log.map fun entry => entry.1.leafIndex).map ofLeafIndex := by
     simp only [List.map_map]

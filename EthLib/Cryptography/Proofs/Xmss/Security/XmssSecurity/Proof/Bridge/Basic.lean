@@ -7,9 +7,9 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Determ
 
 Generic facts about oracle computations under a cache, for three kinds of computation:
 
-* `Resolves`: the cache answers every query.
-* `QueryCount`: the computation makes the same number of queries on every path.
-* `OnlyQueries`: the computation queries only inputs of a given set.
+* The cache answers every query.
+* The computation makes the same number of queries on every path.
+* The computation queries only inputs of a given set.
 -/
 
 @[expose] public section

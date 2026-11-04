@@ -11,9 +11,9 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 Fix one message and one cache.
 
-Consider the scan `base, base + 1, ...` of `Concrete.precomputedSignBoundedAttempts`.
+Consider the scan `base, base + 1, ...` of the bounded precomputed signer.
 
-It returns a cached hit `y` with exactly the probability that `LoopWalk` gives.
+It returns a cached hit `y` with exactly the probability that the scan-loop walk gives.
 
 That probability is `reach nextRand landing (scanStatus ...) y A base`.
 
