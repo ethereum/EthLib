@@ -22,6 +22,8 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 ### Cryptography
 
 - Hash functions: Keccak-256, Keccak-512, SHA-256, RIPEMD-160, and the BLAKE2b compression function of EIP-152.
+- Checksums: CRC-32 for the fork identifier of EIP-2124, and CRC-32C for the Snappy framing format.
+- Symmetric encryption: AES with the CTR and GCM modes, which the RLPx transport and discv5 use.
 - Key derivation over SHA-256: HMAC, HKDF, and the Concatenation KDF.
 - secp256k1: ECDSA signatures with RFC 6979 nonces, public key recovery, the address of a public key, and ECDH.
 - secp256r1: signature verification for the P256VERIFY precompile of EIP-7951.
@@ -31,6 +33,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - Merkle trees: the binary trees of SSZ and of hash-based signatures, with their proofs.
 - Ethash: the proof of work of the execution layer before Paris.
 - Post-quantum signatures: hash-based schemes such as XMSS and SPHINCS, proposed to replace BLS signatures.
+- Verifiable random functions: a hash-based VRF built on a Merkle tree.
 
 ### Serialization
 
@@ -40,9 +43,8 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 ### Networking
 
 - Discovery: Ethereum Node Records of EIP-778, and the discovery protocols that exchange them.
-- Execution-layer peers: the encrypted transport, and the wire protocol that carries blocks, transactions and receipts.
+- Execution-layer peers: the encrypted RLPx transport, and the "p2p" capability that opens a session.
 - Consensus-layer peers: gossip topics and their message IDs, request and response protocols, and the Snappy compression and length prefixes they use.
-- Data availability: the sidecars that carry blobs, and the sampling of data columns of EIP-7594.
 
 ### Execution layer
 
@@ -53,6 +55,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - System contracts and requests: the beacon block root of EIP-4788, historical block hashes of EIP-2935, and the deposit, withdrawal and consolidation requests of EIP-6110, EIP-7002, EIP-7251 and EIP-7685.
 - State: accounts, storage and code, committed by the Merkle Patricia Trie, and the trees proposed to replace it, such as the binary tree of EIP-7864.
 - Blocks: the header, receipts and their logs bloom, withdrawals of EIP-4895, the block-level access lists of EIP-7928, and the state transition of a block from Frontier to the latest fork.
+- The eth wire protocol of devp2p, which carries blocks, transactions and receipts between peers.
 
 ### Consensus layer
 
@@ -64,6 +67,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - Honest validator duties: proposing, attesting, aggregating and serving on a sync committee.
 - Light clients: the sync protocol that follows the chain from sync committee signatures.
 - Weak subjectivity: how long a checkpoint stays safe to start from.
+- Data availability: the sidecars that carry blobs, and the custody and sampling of data columns of EIP-7594.
 - Proposer-builder separation of EIP-7732, and fork-choice enforced inclusion lists of EIP-7805.
 - The protocols proposed to replace the current ones: faster finality, available chains with a finality gadget, and a consensus layer built on post-quantum signatures.
 
@@ -200,7 +204,7 @@ The type holds only the order.
 When a fork activates, by block number, timestamp or epoch, on mainnet or on a testnet, is chain configuration.
 `EthLib/Base/ChainConfig.lean` gives the activations on an execution chain, in the order of the timeline.
 A fork activates there by block number up to Paris, and by timestamp from Shapella on.
-The configuration of the consensus layer, in `EthLib/Consensus/Config.lean`, gives the epochs of its forks.
+On the consensus layer, a fork activates at an epoch, and `EthLib/Consensus/ForkSchedule.lean` gives the fork of each epoch.
 At each point of a chain, the active fork is the latest fork whose activation is at or before that point.
 Two forks can activate at one block.
 Constantinople and Petersburg did so on mainnet, and Petersburg is then the active fork, as EIP-1716 requires.
@@ -315,7 +319,7 @@ EthLib is one Lake package, and three libraries hold its code.
 - The library `Proofs` holds the properties and the models, in the `Proofs/` directory of each layer.
 - The library `Exports` holds the C exports that the Python bindings call.
 
-The package also builds the `check-decls` executable.
+The package also builds two executables: `check-decls`, which checks the compiled declarations, and `gen-bindings`, which writes the binding contract from Lean.
 A fourth library, `CheckDeclsTest`, holds the test cases of that executable, in `scripts/`.
 It is not a default target, and `scripts/test_check_decls.sh` builds it.
 
@@ -343,6 +347,6 @@ A new module finds its place by answering three questions in order.
    If two modules need the same thing, write it once, in the lower of their layers.
 
 Then the module follows the layout of `CONTRIBUTING.md`: the specification in `EthLib/<Domain>/<Module>/`, its theorems in `EthLib/<Domain>/Proofs/<Module>/`, and its C exports in `EthLib/<Domain>/Exports/`.
-A model goes under `Proofs/` too, as the Casper FFG model does in `EthLib/Consensus/Proofs/Models/Ffg/`.
+A model goes under `Proofs/` too, as the models of Casper FFG and LMD-GHOST do in `EthLib/Consensus/Proofs/Models/`.
 Modules of one kind share a directory, under the part of the layer that uses them.
 The precompiles are one kind, and only the EVM calls them, so ECRECOVER sits in `EthLib/Execution/Evm/Precompiles/Ecrecover/`, and its theorems in `EthLib/Execution/Proofs/Evm/Precompiles/Ecrecover/`.
