@@ -85,6 +85,13 @@ def tailAllZero (bytes : ByteArray) (start : Nat) : Bool := Id.run do
 
 /-! ## G1 -/
 
+/-- An `Fp` element encodes as 48 bytes. -/
+theorem Fp.size_toBytesBE (x : Fp) : (Fp.toBytesBE x).size = 48 := by
+  simp only [Fp.toBytesBE, ByteArray.size, Array.size_ofFn]
+
+private theorem size_set! (b : ByteArray) (j : Nat) (v : UInt8) : (b.set! j v).size = b.size :=
+  Array.size_setIfInBounds
+
 namespace G1
 
 /-- Canonical compressed-infinity encoding: `0xc0` then 47 zero bytes. -/
@@ -130,6 +137,26 @@ def uncompress (bytes : ByteArray) : Except BlsError G1 :=
         | .ok yPos =>
           let y := if Fp.signBit yPos = ySign then yPos else -yPos
           .ok ⟨x, y, Fp.one⟩
+
+/-- A compressed `G1` point has 48 bytes. -/
+theorem size_compress (p : G1) : (compress p).size = 48 := by
+  rcases hpa : p.toAffine with ⟨xa, ya⟩
+  by_cases h : p.isInfinity = true
+  · have he : compress p = infinityBytes := by
+      unfold compress
+      simp only [Id.run, h, ↓reduceIte]
+      rfl
+    rw [he]
+    rfl
+  · have he : compress p =
+        (let base := xa.toBytesBE.set! 0 (xa.toBytesBE.get! 0 ||| 0x80)
+         if Fp.signBit ya then base.set! 0 (base.get! 0 ||| 0x20) else base) := by
+      unfold compress
+      simp only [Id.run, h, hpa]
+      rfl
+    rw [he]
+    dsimp only
+    split <;> simp only [size_set!, Fp.size_toBytesBE]
 
 /-- Subgroup-membership check via `[r]·P = O`. -/
 def inSubgroup (p : G1) : Bool :=
@@ -184,6 +211,30 @@ def compress (p : G2) : ByteArray := Id.run do
   if Fp2.signBit y then
     bytes := bytes.set! 0 ((bytes.get! 0) ||| 0x20)
   return bytes
+
+/-- An `Fp2` element encodes as `c1` then `c0`, `48 + 48 = 96` bytes. -/
+@[simp] theorem size_fp2ToBytes (x : Fp2) : (fp2ToBytes x).size = 96 := by
+  rw [fp2ToBytes, ByteArray.size_append, Fp.size_toBytesBE, Fp.size_toBytesBE]
+
+/-- A compressed `G2` point has 96 bytes. -/
+theorem size_compress (p : G2) : (compress p).size = 96 := by
+  rcases hpa : p.toAffine with ⟨xa, ya⟩
+  by_cases h : p.isInfinity = true
+  · have he : compress p = infinityBytes := by
+      unfold compress
+      simp only [Id.run, h, ↓reduceIte]
+      rfl
+    rw [he]
+    rfl
+  · have he : compress p =
+        (let base := (fp2ToBytes xa).set! 0 ((fp2ToBytes xa).get! 0 ||| 0x80)
+         if Fp2.signBit ya then base.set! 0 (base.get! 0 ||| 0x20) else base) := by
+      unfold compress
+      simp only [Id.run, h, hpa]
+      rfl
+    rw [he]
+    dsimp only
+    split <;> simp only [size_set!, size_fp2ToBytes]
 
 /-- Decompress 96 bytes into a `G2` point, failing with `invalidG2Point`
 for malformed inputs or non-curve points. -/
