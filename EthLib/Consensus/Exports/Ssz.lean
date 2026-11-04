@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.Operations
+public import EthLib.Consensus.Containers.Requests
 public import EthLib.Consensus.Containers.Signing
 public import EthLib.Consensus.Containers.SyncCommittee
 public import EthLib.Consensus.Exports.Parameters
@@ -82,6 +83,13 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
   | "BLSToExecutionChange" => if .shapella ≤ fork then some ⟨BLSToExecutionChange⟩ else none
   | "SignedBLSToExecutionChange" =>
     if .shapella ≤ fork then some ⟨SignedBLSToExecutionChange⟩ else none
+  | "PendingDeposit" => if .pectra ≤ fork then some ⟨PendingDeposit⟩ else none
+  | "PendingPartialWithdrawal" => if .pectra ≤ fork then some ⟨PendingPartialWithdrawal⟩ else none
+  | "PendingConsolidation" => if .pectra ≤ fork then some ⟨PendingConsolidation⟩ else none
+  | "DepositRequest" => if .pectra ≤ fork then some ⟨DepositRequest⟩ else none
+  | "WithdrawalRequest" => if .pectra ≤ fork then some ⟨WithdrawalRequest⟩ else none
+  | "ConsolidationRequest" => if .pectra ≤ fork then some ⟨ConsolidationRequest⟩ else none
+  | "ExecutionRequests" => if .pectra ≤ fork then some ⟨ExecutionRequests preset⟩ else none
   | "Withdrawal" => if .shapella ≤ fork then some ⟨Withdrawal⟩ else none
   | "ExecutionPayload" =>
     if .bellatrix ≤ fork then some ⟨ExecutionPayload preset fork⟩ else none

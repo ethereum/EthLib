@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.Constants
 public import EthLib.Consensus.Proofs.Containers.Attestation
 public import EthLib.Consensus.Proofs.Containers.Execution
 public import EthLib.Consensus.Proofs.Containers.Misc
+public import EthLib.Consensus.Proofs.Containers.Requests
 public import EthLib.Consensus.Proofs.Containers.Signing
 public import EthLib.Consensus.Proofs.Containers.SyncCommittee
 public import EthLib.Consensus.Proofs.DataAvailability.Custody
