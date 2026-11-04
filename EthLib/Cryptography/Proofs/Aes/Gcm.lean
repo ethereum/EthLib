@@ -10,6 +10,8 @@ Decryption of an honest ciphertext returns its plaintext.
 
 Decryption accepts no tag other than the honest one.
 
+Both functions reject the 64-bit and 32-bit tags.
+
 Both hold for every forward cipher, so for AES under every key.
 -/
 
@@ -43,10 +45,31 @@ theorem size_tag (ciph : Block → Block) {t : Nat} (ht : t ∈ tagLengths) (H J
 theorem mem_of_checkLengths {t : Nat} {iv text aad : ByteArray}
     (h : checkLengths t iv text aad = .ok ()) : t ∈ tagLengths := by
   unfold checkLengths at h
+  by_cases hs : t ∈ shortTagLengths
+  · simp [hs] at h
+    contradiction
   by_cases ht : t ∈ tagLengths
   · exact ht
-  · simp [ht] at h
+  · simp [hs, ht] at h
     contradiction
+
+/-- The length checks reject a 64-bit or 32-bit tag before any other check. -/
+theorem checkLengths_shortTag {t : Nat} (ht : t ∈ shortTagLengths) (iv text aad : ByteArray) :
+    checkLengths t iv text aad = .error .shortTag := by
+  simp [checkLengths, ht]
+  rfl
+
+/-- Encryption rejects a 64-bit or 32-bit tag, for every input. -/
+theorem encrypt_shortTag (ciph : Block → Block) {t : Nat} (ht : t ∈ shortTagLengths)
+    (iv p aad : ByteArray) : encrypt ciph t iv p aad = .error .shortTag := by
+  simp only [encrypt, checkLengths_shortTag ht]
+  rfl
+
+/-- Decryption rejects a 64-bit or 32-bit tag, for every input. -/
+theorem decrypt_shortTag (ciph : Block → Block) {t : Nat} (ht : t ∈ shortTagLengths)
+    (iv c aad T : ByteArray) : decrypt ciph t iv c aad T = .error .shortTag := by
+  simp only [decrypt, checkLengths_shortTag ht]
+  rfl
 
 /-- Decryption of an honest ciphertext and tag returns the plaintext, SP 800-38D §7.2. -/
 theorem decrypt_encrypt (ciph : Block → Block) (t : Nat) (iv p aad c T : ByteArray)

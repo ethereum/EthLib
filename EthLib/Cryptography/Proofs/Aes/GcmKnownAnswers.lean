@@ -107,41 +107,41 @@ Its section is `Keylen = 128, IVlen = 96, PTlen = 128, AADlen = 128, Taglen = 96
 One block of each, with a 96-bit tag. -/
 
 /-- The key. -/
-def shortTagKey : Key .aes128 := #v[
+def tag96Key : Key .aes128 := #v[
   0x56, 0x2a, 0xe8, 0xaa, 0xdb, 0x8d, 0x23, 0xe0, 0xf2, 0x71, 0xa9, 0x9a, 0x7d, 0x1b, 0xd4, 0xd1]
 
 /-- The IV. -/
-def shortTagIv : ByteArray := ⟨#[
+def tag96Iv : ByteArray := ⟨#[
   0xf7, 0xa5, 0xe2, 0x39, 0x94, 0x13, 0xb8, 0x9b, 0x6a, 0xd3, 0x1a, 0xff]⟩
 
 /-- The plaintext. -/
-def shortTagPt : ByteArray := ⟨#[
+def tag96Pt : ByteArray := ⟨#[
   0xbb, 0xdc, 0x35, 0x04, 0xd8, 0x03, 0x68, 0x2a, 0xa0, 0x8a, 0x77, 0x3c, 0xde, 0x5f, 0x23, 0x1a]⟩
 
 /-- The additional data. -/
-def shortTagAad : ByteArray := ⟨#[
+def tag96Aad : ByteArray := ⟨#[
   0x2b, 0x96, 0x80, 0xb8, 0x86, 0xb3, 0xef, 0xb7, 0xc6, 0x35, 0x4b, 0x38, 0xc6, 0x3b, 0x53, 0x73]⟩
 
 /-- The ciphertext. -/
-def shortTagCt : ByteArray := ⟨#[
+def tag96Ct : ByteArray := ⟨#[
   0xe2, 0xb7, 0xe5, 0xed, 0x5f, 0xf2, 0x7f, 0xc8, 0x66, 0x41, 0x48, 0xf5, 0xa6, 0x28, 0xa4, 0x6d]⟩
 
 /-- The tag. -/
-def shortTagTag : ByteArray := ⟨#[
+def tag96Tag : ByteArray := ⟨#[
   0xcb, 0xf2, 0x01, 0x51, 0x84, 0xff, 0xfb, 0x82, 0xf2, 0x65, 0x1c, 0x36]⟩
 
 
 /-- Encryption gives the ciphertext and the tag of the file. -/
-theorem encrypt_shortTag :
-    (encrypt (ciph .aes128 shortTagKey) 12 shortTagIv shortTagPt shortTagAad).toOption =
-      some (shortTagCt, shortTagTag) := by
+theorem encrypt_tag96 :
+    (encrypt (ciph .aes128 tag96Key) 12 tag96Iv tag96Pt tag96Aad).toOption =
+      some (tag96Ct, tag96Tag) := by
   decide +kernel
 
 /-- Decryption returns the plaintext, by the round trip. -/
-theorem decrypt_shortTag :
-    decrypt (ciph .aes128 shortTagKey) 12 shortTagIv shortTagCt shortTagAad shortTagTag =
-      .ok shortTagPt :=
-  decrypt_encrypt _ _ _ _ _ _ _ (eq_ok_of_toOption encrypt_shortTag)
+theorem decrypt_tag96 :
+    decrypt (ciph .aes128 tag96Key) 12 tag96Iv tag96Ct tag96Aad tag96Tag =
+      .ok tag96Pt :=
+  decrypt_encrypt _ _ _ _ _ _ _ (eq_ok_of_toOption encrypt_tag96)
 
 /-! ## gcmDecrypt128.rsp, Count = 1
 
