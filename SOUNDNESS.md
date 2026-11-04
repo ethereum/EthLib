@@ -466,7 +466,9 @@ The setup raises three separate assumptions, and each use of KZG relies on a dif
 - Provenance: the embedded bytes are the ceremony's output.
   They match consensus-specs `presets/mainnet/trusted_setups/trusted_setup_4096.json` byte for byte, and `Kzg/TrustedSetupData.lean` records that source, the commit it comes from and its sha256.
 - Algebraic consistency: the bytes decode to valid points, the monomial points are powers of one secret, and the Lagrange points are the matching basis.
-  None of this is proved for the embedded bytes.
+  For the embedded bytes, only the first part is proved, and only in part.
+  `TrustedSetup.ofHex_valid` (`Proofs/Kzg/TrustedSetup.lean`) proves that, if they decode, each point is on its curve.
+  No theorem says that they decode, or that the points lie in the subgroup.
   `checksSufficient` covers the ceremony's monomial points, under its hypotheses.
 - Secrecy: no one knows the secret, which holds if at least one ceremony participant was honest.
   Only binding, a security property, needs it; a theorem about parsing, or that an honest proof verifies, does not.

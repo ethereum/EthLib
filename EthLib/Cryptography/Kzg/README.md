@@ -135,7 +135,9 @@ It assumes `ConcreteBlsLaws`, `SubgroupExponents`, and that two points are not a
 - No security property, such as binding, is proved.
   Binding also needs the ceremony secret to stay unknown, which no proof can show.
 - The trusted setup itself is not proved correct.
-  Its bytes match the consensus-specs file, but no theorem says that they decode to valid points, or that they are powers of one secret.
+  Its bytes match the consensus-specs file.
+  `TrustedSetup.ofHex_valid` proves that, if the embedded setup decodes, each of its points is on its curve.
+  No theorem says that it decodes, that its points lie in the subgroup, or that they are powers of one secret.
 - `ConcreteBlsLaws`, the law of the BLS pairing that `checksSufficient` assumes, is not proved: it is `pairingEq_mul_iff`, bilinearity together with non-degeneracy.
 - `SubgroupExponents`, which stands in for the subgroup checks in `checksSufficient`, is not proved.
 

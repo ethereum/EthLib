@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Bls
+public import EthLib.Cryptography.Kzg.BitReversal
 public import EthLib.Cryptography.Kzg.Constants
 public import EthLib.Cryptography.Kzg.Errors
 public import EthLib.Cryptography.Kzg.TrustedSetupData
@@ -21,19 +22,14 @@ namespace EthLib.Cryptography.Kzg
 
 open EthLib.Cryptography.Kzg.Constants
 
-/-- The KZG trusted setup.
-
-Each entry is stored as both the decoded point and its compressed bytes.
-
-A few callers consume the bytes directly. -/
+/-- The KZG trusted setup, as decoded points. -/
 structure TrustedSetup where
-  g1Lagrange       : Array Bls.G1
-  g1LagrangeBytes  : Array ByteArray
-  g1Monomial       : Array Bls.G1
-  g1MonomialBytes  : Array ByteArray
-  g2Monomial       : Array Bls.G2
-  g2MonomialBytes  : Array ByteArray
-deriving Inhabited
+  /-- The Lagrange-basis G1 points, in bit-reversed order. -/
+  g1LagrangeBrp : Vector Bls.G1 FIELD_ELEMENTS_PER_BLOB
+  /-- The monomial-basis G1 points. -/
+  g1Monomial : Vector Bls.G1 FIELD_ELEMENTS_PER_BLOB
+  /-- The monomial-basis G2 points. -/
+  g2Monomial : Vector Bls.G2 KZG_SETUP_G2_LENGTH
 
 namespace TrustedSetup
 
@@ -67,30 +63,36 @@ A list of another length, or a point that does not decompress, is rejected.
 Decompression checks that a point is on its curve, not that it is in the subgroup. -/
 def ofBytes (g1LagrangeBytes g1MonomialBytes g2MonomialBytes : Array ByteArray) :
     Except KzgError TrustedSetup := do
-  if g1LagrangeBytes.size ≠ FIELD_ELEMENTS_PER_BLOB ∨
-      g1MonomialBytes.size ≠ FIELD_ELEMENTS_PER_BLOB ∨
-      g2MonomialBytes.size ≠ KZG_SETUP_G2_LENGTH then
-    throw .invalidTrustedSetup
   let toG1 (b : ByteArray) : Except KzgError Bls.G1 :=
     (Bls.G1.uncompress b).mapError fun _ => .invalidTrustedSetup
   let toG2 (b : ByteArray) : Except KzgError Bls.G2 :=
     (Bls.G2.uncompress b).mapError fun _ => .invalidTrustedSetup
-  return {
-    g1Lagrange := ← g1LagrangeBytes.mapM toG1, g1LagrangeBytes,
-    g1Monomial := ← g1MonomialBytes.mapM toG1, g1MonomialBytes,
-    g2Monomial := ← g2MonomialBytes.mapM toG2, g2MonomialBytes,
-  }
+  let g1Lagrange ← g1LagrangeBytes.mapM toG1
+  let g1Monomial ← g1MonomialBytes.mapM toG1
+  let g2Monomial ← g2MonomialBytes.mapM toG2
+  if h₁ : g1Lagrange.size = FIELD_ELEMENTS_PER_BLOB then
+    if h₂ : g1Monomial.size = FIELD_ELEMENTS_PER_BLOB then
+      if h₃ : g2Monomial.size = KZG_SETUP_G2_LENGTH then
+        -- The Deneb operations read the Lagrange points in bit-reversed order.
+        -- So the permutation runs once, here.
+        return {
+          g1LagrangeBrp := ⟨BitReversal.bitReversalPermutation g1Lagrange,
+            (Array.size_ofFn ..).trans h₁⟩
+          g1Monomial := ⟨g1Monomial, h₂⟩
+          g2Monomial := ⟨g2Monomial, h₃⟩ }
+  throw .invalidTrustedSetup
 
-/-- Decode the embedded setup of the mainnet ceremony.
+/-- Decode a list of hexadecimal strings, or reject the list if one string is malformed. -/
+def hexListToBytes (hex : Array String) : Except KzgError (Array ByteArray) :=
+  hex.mapM fun s => match hexToBytes? s with
+    | some b => .ok b
+    | none   => .error .invalidTrustedSetup
 
-A string that is not hexadecimal is rejected. -/
+/-- Decode the embedded setup of the mainnet ceremony. -/
 def ofHex : Except KzgError TrustedSetup := do
-  let decode (hex : Array String) : Except KzgError (Array ByteArray) :=
-    hex.mapM fun s => match hexToBytes? s with
-      | some b => .ok b
-      | none   => .error .invalidTrustedSetup
-  ofBytes (← decode TrustedSetupData.g1LagrangeHex) (← decode TrustedSetupData.g1MonomialHex)
-    (← decode TrustedSetupData.g2MonomialHex)
+  ofBytes (← hexListToBytes TrustedSetupData.g1LagrangeHex)
+    (← hexListToBytes TrustedSetupData.g1MonomialHex)
+    (← hexListToBytes TrustedSetupData.g2MonomialHex)
 
 end TrustedSetup
 

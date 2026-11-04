@@ -24,7 +24,7 @@ The setup is trusted, not proved.
 KZG binding relies on the ceremony secret remaining unknown.
 Parsing and honest-proof correctness do not require this secrecy assumption.
 
-`TrustedSetup.lean` decodes the points when it loads them, and no theorem states that they are valid.
+The decoder checks that each point is on its curve, not that it is in the subgroup.
 -/
 
 @[expose] public section
