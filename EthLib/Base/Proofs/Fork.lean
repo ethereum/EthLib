@@ -63,15 +63,16 @@ example : LawfulEqOrd Fork := inferInstance
 theorem pairwise_lt_timeline :
     [frontier, homestead, daoFork, tangerineWhistle, spuriousDragon, byzantium, constantinople,
       petersburg, istanbul, muirGlacier, phase0, berlin, london, altair, arrowGlacier, grayGlacier,
-      bellatrix, paris, shapella, dencun, pectra, fusaka, bpo1, bpo2, glamsterdam,
-      hegota].Pairwise (· < ·) := by
+      bellatrix, paris, shapella, dencun, pectra, fusaka, bpo1, bpo2, bpo3, bpo4, bpo5,
+      glamsterdam, hegota].Pairwise (· < ·) := by
   decide
 
 /-- The timeline lists every fork. -/
 theorem mem_timeline (f : Fork) :
     f ∈ [frontier, homestead, daoFork, tangerineWhistle, spuriousDragon, byzantium, constantinople,
       petersburg, istanbul, muirGlacier, phase0, berlin, london, altair, arrowGlacier, grayGlacier,
-      bellatrix, paris, shapella, dencun, pectra, fusaka, bpo1, bpo2, glamsterdam, hegota] := by
+      bellatrix, paris, shapella, dencun, pectra, fusaka, bpo1, bpo2, bpo3, bpo4, bpo5,
+      glamsterdam, hegota] := by
   cases f <;> decide
 
 /-! ## Names -/

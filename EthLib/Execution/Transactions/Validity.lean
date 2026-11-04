@@ -23,13 +23,13 @@ They read the gas limit, the nonce, the fees, the chain, the blobs and the autho
 
 The rules that read the state, such as the balance of the sender, belong to the block.
 
-The rules here hold up to BPO2.
+The rules here hold up to BPO5, which keeps the rules of BPO2.
 
 Glamsterdam changes the intrinsic gas, the floor and the bound on the gas limit.
 
 EIP-2780, EIP-7976, EIP-7981, EIP-8037 and EIP-8038 make these changes.
 
-Until those changes are here, the rules give Glamsterdam and Hegotá the values of BPO2.
+Until those changes are here, the rules give Glamsterdam and Hegotá the values of BPO5.
 
 So the exports reject both forks as not yet specified.
 

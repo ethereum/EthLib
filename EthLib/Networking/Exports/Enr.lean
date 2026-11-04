@@ -19,7 +19,9 @@ Booleans come back as `UInt8`.
 
 The consensus entries hold up to BPO2.
 
-The entries of Gloas are not yet specified, so Glamsterdam and Hegotá fail with code 0.
+BPO3 to BPO5 have no consensus configuration yet, and Gloas is not yet specified.
+
+So the forks after BPO2 fail with code 0.
 -/
 
 public section
