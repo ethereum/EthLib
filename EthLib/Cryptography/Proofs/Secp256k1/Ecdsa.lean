@@ -58,19 +58,27 @@ theorem verify_of_not_isOnCurve {q : Point} (hq : q.isOnCurve = false) (hash : V
     · rfl
   · rfl
 
+/-- A product `k^(-1) a` that is not zero has a nonzero `k`, since the inverse of zero is zero. -/
+theorem ne_zero_of_inv_mul_ne_zero {k a : Fn} (h : k.inv * a ≠ 0) : k ≠ 0 := by
+  rintro rfl
+  apply h
+  apply Fn.toZMod.injective
+  rw [map_mul, Fn.toZMod_inv, map_zero, inv_zero, zero_mul]
+
 /-- Completeness: a signature made by the signing operation of SEC 1 v2 §4.1.3 verifies.
 
-The signer has the private key `d` and the nonce `k`, both nonzero.
+The signer has a nonzero private key `d` and the nonce `k`.
 
 `R = k G` has coordinate `x`, `r = x mod n`, and `s = k^(-1) (e + r d)`.
 
 Neither `r` nor `s` is zero. -/
-theorem verify_sign (d k : Fn) (hash : Vector UInt8 32) (hd : d ≠ 0) (hk : k ≠ 0) {x y : Fp}
+theorem verify_sign (d k : Fn) (hash : Vector UInt8 32) (hd : d ≠ 0) {x y : Fp}
     (hR : mul k generator = .affine x y) (hr : x.val % Fn.modulus ≠ 0)
     (hs : k.inv * (Fin.ofNat _ (hashToInt hash) + Fin.ofNat _ (x.val % Fn.modulus) * d) ≠ 0) :
     verify (mul d generator) hash (x.val % Fn.modulus)
       (k.inv * (Fin.ofNat _ (hashToInt hash) + Fin.ofNat _ (x.val % Fn.modulus) * d)).val = true := by
   set sig := k.inv * (Fin.ofNat _ (hashToInt hash) + Fin.ofNat _ (x.val % Fn.modulus) * d) with hsig
+  have hk : k ≠ 0 := ne_zero_of_inv_mul_ne_zero hs
   have hrr : 0 < x.val % Fn.modulus ∧ x.val % Fn.modulus < Fn.modulus :=
     ⟨Nat.pos_of_ne_zero hr, Nat.mod_lt _ (by decide)⟩
   have hss : 0 < sig.val ∧ sig.val < Fn.modulus := ⟨Nat.pos_of_ne_zero (fun h => hs (Fin.ext h)), sig.isLt⟩

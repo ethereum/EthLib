@@ -81,17 +81,23 @@ theorem verify_of_not_isOnCurve {q : Point} (hq : q.isOnCurve = false) (e r s : 
 
 /-- Completeness: a signature from the signing operation of SEC 1 v2 §4.1.3 verifies.
 
-The signer has the private key `d` and the nonce `k`, both nonzero.
+The signer has a nonzero private key `d` and the nonce `k`.
 
 `R = k G` has coordinate `x`, `r = x mod n`, and `s = k^(-1) (e + r d)`.
 
 Neither `r` nor `s` is zero. -/
-theorem verify_sign (d k : Fn) (e : Nat) (hd : d ≠ 0) (hk : k ≠ 0) {x y : Fp}
+theorem verify_sign (d k : Fn) (e : Nat) (hd : d ≠ 0) {x y : Fp}
     (hR : mul k generator = .affine x y) (hr : x.val % Fn.modulus ≠ 0)
     (hs : Fn.inv k * (Fin.ofNat _ e + Fin.ofNat _ (x.val % Fn.modulus) * d) ≠ 0) :
     verify (mul d generator) e (x.val % Fn.modulus)
       (Fn.inv k * (Fin.ofNat _ e + Fin.ofNat _ (x.val % Fn.modulus) * d)).val = true := by
   set sig := Fn.inv k * (Fin.ofNat _ e + Fin.ofNat _ (x.val % Fn.modulus) * d) with hsig
+  -- A zero nonce would make `s` zero.
+  have hk : k ≠ 0 := by
+    rintro rfl
+    apply hs
+    apply Fn.toZMod.injective
+    rw [hsig, map_mul, Fn.toZMod_inv, map_zero, inv_zero, zero_mul]
   have hrr : 0 < x.val % Fn.modulus ∧ x.val % Fn.modulus < Fn.modulus :=
     ⟨Nat.pos_of_ne_zero hr, Nat.mod_lt _ (by decide)⟩
   have hss : 0 < sig.val ∧ sig.val < Fn.modulus :=

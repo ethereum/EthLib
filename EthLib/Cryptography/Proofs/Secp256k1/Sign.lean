@@ -93,10 +93,10 @@ private theorem ofNat_mod (x : Nat) :
 theorem verify_sign_rfc6979 {sk : Fn} {hash : Vector UInt8 32} {r s : Fn} {odd : Bool}
     (h : sign sk hash = .ok (r, s, odd)) : verify (mul sk generator) hash r.val s.val = true := by
   obtain ⟨hsk, s0, odd0, hw, hs⟩ := sign_spec h
-  obtain ⟨k, x, y, hk, hR, hx, rfl, hr0, hs1, hs0, -⟩ := signWith_spec hw
+  obtain ⟨k, x, y, -, hR, hx, rfl, hr0, hs1, hs0, -⟩ := signWith_spec hw
   have hrv : (Fin.ofNat Fn.modulus x.val : Fn).val = x.val % Fn.modulus := Fin.val_ofNat _ _
   -- The loop's signature is the one of SEC 1 v2 §4.1.3, whose verification is proved.
-  have hv := verify_sign sk k hash hsk hk hR
+  have hv := verify_sign sk k hash hsk hR
     (by rw [← hrv]; exact fun h0 => hr0 (Fin.ext h0)) (by rw [ofNat_mod, ← hs1]; exact hs0)
   rw [ofNat_mod, ← hrv, ← hs1] at hv
   rcases hs with ⟨-, rfl, -⟩ | ⟨-, rfl, -⟩
