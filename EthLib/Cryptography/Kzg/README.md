@@ -168,6 +168,11 @@ The mathematical sum comes from `Bls.G1.toPoint_msm`, in `Proofs/Bls/G1Msm.lean`
 Let every point be valid, which means a nonsingular point of the curve.
 Then `msm` returns a valid point equal to `sum_i scalars_i * points_i` in the curve group.
 
+**The commitment.**
+A setup is well formed for a secret `τ` when its points represent `τ^i` and the Lagrange basis at `τ`.
+For such a setup, `blobToKzgCommitment_represents`, in `Proofs/Kzg/Commitment.lean`, proves that a blob's commitment represents its polynomial at `τ`.
+That a secret makes the embedded setup well formed is an assumption, recorded in SOUNDNESS.md D3.
+
 **The ceremony.**
 The trusted setup came from a ceremony in which many participants each mixed in a secret.
 

@@ -28,6 +28,7 @@ public import EthLib.Cryptography.Proofs.Kzg.CosetInterpolation
 public import EthLib.Cryptography.Proofs.Kzg.FftG1
 public import EthLib.Cryptography.Proofs.Kzg.Fk20Proofs
 public import EthLib.Cryptography.Proofs.Kzg.TrustedSetup
+public import EthLib.Cryptography.Proofs.Kzg.Commitment
 
 /-!
 # `EthLib.Cryptography.Proofs.Kzg`
