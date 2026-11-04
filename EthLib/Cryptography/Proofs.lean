@@ -9,6 +9,7 @@ public import EthLib.Cryptography.Proofs.Sphincs
 public import EthLib.Cryptography.Proofs.Vrf
 public import EthLib.Cryptography.Proofs.Secp256k1
 public import EthLib.Cryptography.Proofs.AltBn128
+public import EthLib.Cryptography.Proofs.Secp256r1
 
 /-!
 # `EthLib.Cryptography.Proofs`
