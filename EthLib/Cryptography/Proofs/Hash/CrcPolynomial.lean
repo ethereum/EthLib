@@ -1,27 +1,29 @@
 module
 
-public import EthLib.Cryptography.Proofs.Hash.Crc32c
+public import EthLib.Cryptography.Proofs.Hash.Crc
 public import Mathlib.Algebra.Polynomial.Div
 public import Mathlib.Data.ZMod.Basic
 public import Mathlib.Tactic.LinearCombination
 
 /-!
-# Proofs: CRC-32C is a remainder in GF(2)[X]
+# Proofs: a 32-bit CRC is a remainder in GF(2)[X]
 
-RFC 3720 §12.1 defines CRC-32C by a division of polynomials over GF(2).
+A 32-bit CRC is defined by a division of polynomials over GF(2).
 
 The specification computes it with a 32-bit register, one coefficient at a time.
 
-This file proves that the register holds the remainder of that division, for every message.
+For every generator and every message, the register holds the remainder of that division.
 
 A register of 32 bits is the polynomial whose coefficient of `x^i` is its bit `i`.
 -/
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Hash.Crc32c
+namespace EthLib.Cryptography.Hash.Crc
 
 open Polynomial
+
+variable (g : UInt32)
 
 /-! ## Polynomials -/
 
@@ -32,18 +34,18 @@ def bit (b : Bool) : ZMod 2 := if b then 1 else 0
 noncomputable def toPoly (r : UInt32) : (ZMod 2)[X] :=
   ∑ i ∈ Finset.range 32, C (bit (r.toBitVec.getLsbD i)) * X ^ i
 
-/-- The generator `G(x)` of RFC 3720 §12.1, with its `x^32` term. -/
-noncomputable def G : (ZMod 2)[X] := X ^ 32 + toPoly generator
+/-- The generator `G(x)`, with its `x^32` term. -/
+noncomputable def G : (ZMod 2)[X] := X ^ 32 + toPoly g
 
 /--
 The message polynomial `M(x)` of a run of bits: the first bit is the highest coefficient.
 
-The bits of a message enter the division in the order of RFC 3720 §12.1.
+The bits of a message enter the division in that order.
 -/
 noncomputable def ofBits (bits : List Bool) : (ZMod 2)[X] :=
   bits.foldl (fun p b => X * p + C (bit b)) 0
 
-/-- The message polynomial `M(x)` of RFC 3720 §12.1. -/
+/-- The message polynomial `M(x)` of the bytes of a message. -/
 noncomputable def message (data : ByteArray) : (ZMod 2)[X] :=
   ofBits (data.data.toList.flatMap byteBits)
 
@@ -68,11 +70,11 @@ theorem degree_toPoly_lt (r : UInt32) : (toPoly r).degree < 32 := by
   omega
 
 /-- `G(x)` is monic, so dividing by it is defined over any ring. -/
-theorem monic_G : G.Monic :=
+theorem monic_G : (G g).Monic :=
   (monic_X_pow 32).add_of_left (by rw [degree_X_pow]; exact degree_toPoly_lt _)
 
 /-- `G(x)` has degree 32. -/
-theorem degree_G : G.degree = 32 := by
+theorem degree_G : (G g).degree = 32 := by
   rw [G, degree_add_eq_left_of_degree_lt (by rw [degree_X_pow]; exact degree_toPoly_lt _),
     degree_X_pow]
   rfl
@@ -108,11 +110,11 @@ theorem X_mul_toPoly (r : UInt32) :
 
 /-- One division step is `(x R(x) + c x^32) mod G(x)`. -/
 theorem toPoly_shift (r : UInt32) (c : Bool) :
-    toPoly (shift r c) = (X * toPoly r + C (bit c) * X ^ 32) %ₘ G := by
+    toPoly (shift g r c) = (X * toPoly r + C (bit c) * X ^ 32) %ₘ G g := by
   -- The register already has degree below 32, so it is its own remainder.
-  rw [← (modByMonic_eq_self_iff (p := toPoly (shift r c)) monic_G).mpr
+  rw [← (modByMonic_eq_self_iff (p := toPoly (shift g r c)) (monic_G g)).mpr
     (by rw [degree_G]; exact degree_toPoly_lt _)]
-  apply modByMonic_eq_of_dvd_sub monic_G
+  apply modByMonic_eq_of_dvd_sub (monic_G g)
   -- The two differ by `G(x)` when the coefficient of `x^32` is 1, and by 0 otherwise.
   refine ⟨C (bit ((r >>> 31 == 1) ^^ c)), ?_⟩
   rw [shift_eq_feedback, toPoly_xor, X_mul_toPoly]
@@ -140,18 +142,20 @@ theorem foldl_ofBits (bits : List Bool) (p : (ZMod 2)[X]) :
 
 /-- After `n` bits from the register `r`, it holds `(x^32 M(x) + x^n r(x)) mod G(x)`. -/
 theorem toPoly_foldl_shift (bits : List Bool) (r : UInt32) :
-    toPoly (bits.foldl shift r) = (X ^ 32 * ofBits bits + X ^ bits.length * toPoly r) %ₘ G := by
+    toPoly (bits.foldl (shift g) r)
+      = (X ^ 32 * ofBits bits + X ^ bits.length * toPoly r) %ₘ G g := by
   induction bits generalizing r with
   | nil =>
     simp only [List.foldl_nil, ofBits, mul_zero, List.length_nil, pow_zero, one_mul, zero_add]
-    exact ((modByMonic_eq_self_iff monic_G).mpr (by rw [degree_G]; exact degree_toPoly_lt _)).symm
+    exact ((modByMonic_eq_self_iff (monic_G g)).mpr
+      (by rw [degree_G]; exact degree_toPoly_lt _)).symm
   | cons c bits ih =>
     rw [List.foldl_cons, ih, toPoly_shift]
-    apply modByMonic_eq_of_dvd_sub monic_G
+    apply modByMonic_eq_of_dvd_sub (monic_G g)
     -- Replacing the remainder of the first step by its dividend changes a multiple of `G(x)`.
     have hc : ofBits (c :: bits) = X ^ bits.length * C (bit c) + ofBits bits := by
       rw [ofBits, List.foldl_cons, foldl_ofBits, mul_zero, zero_add]
-    obtain ⟨q, hq⟩ := dvd_modByMonic_sub (X * toPoly r + C (bit c) * X ^ 32) G
+    obtain ⟨q, hq⟩ := dvd_modByMonic_sub (X * toPoly r + C (bit c) * X ^ 32) (G g)
     refine ⟨X ^ bits.length * q, ?_⟩
     rw [hc, List.length_cons, pow_succ X bits.length]
     linear_combination X ^ bits.length * hq
@@ -162,7 +166,7 @@ The register after a message is `(x^32 M(x) + x^n L(x)) mod G(x)`, for a message
 The term `x^n L(x)` comes from the register's start at `0xffffffff`.
 -/
 theorem toPoly_remainder (data : ByteArray) :
-    toPoly (remainder data) = (X ^ 32 * message data + X ^ (8 * data.size) * L) %ₘ G := by
+    toPoly (remainder g data) = (X ^ 32 * message data + X ^ (8 * data.size) * L) %ₘ G g := by
   -- Each byte enters as its eight bits.
   have hbits (l : List UInt8) : (l.flatMap byteBits).length = 8 * l.length := by
     induction l with
@@ -176,13 +180,13 @@ theorem toPoly_remainder (data : ByteArray) :
   rw [remainder, foldl_shiftByte, toPoly_foldl_shift, hlen, message, L]
 
 /--
-The division of RFC 3720 §12.1, for a message of at least 32 bits.
+The division that defines the CRC, for a message of at least 32 bits.
 
 It complements the 32 highest coefficients of `M(x)`, multiplies by `x^32`, and divides by `G(x)`.
 -/
-theorem toPoly_remainder_rfc (data : ByteArray) (long : 4 ≤ data.size) :
-    toPoly (remainder data)
-      = (X ^ 32 * (message data + X ^ (8 * data.size - 32) * L)) %ₘ G := by
+theorem toPoly_remainder_complement (data : ByteArray) (long : 4 ≤ data.size) :
+    toPoly (remainder g data)
+      = (X ^ 32 * (message data + X ^ (8 * data.size - 32) * L)) %ₘ G g := by
   rw [toPoly_remainder, show 8 * data.size = (8 * data.size - 32) + 32 by omega, pow_add,
     show 8 * data.size - 32 + 32 - 32 = 8 * data.size - 32 by omega]
   ring_nf
@@ -222,38 +226,38 @@ theorem coeff_toPoly_eq_zero (r : UInt32) {i : Nat} (hi : i < 32) :
   cases r.toBitVec.getLsbD i <;> decide
 
 /--
-The digest of RFC 3720 §12.1, bit by bit.
+The digest, bit by bit.
 
 Bit `j` of byte `k` is the complement of the coefficient of `x^(31 - 8k - j)` in the remainder.
 
-The value of bit `j` is `2^j`, so bit 7 of the RFC, the least significant, is bit 0 here.
+The value of bit `j` is `2^j`, so the highest power of a byte lands on its bit 0.
 -/
 theorem digest_eq_modByMonic (data : ByteArray) (k : Fin 4) {j : Nat} (hj : j < 8) :
-    (digest data)[k].toBitVec.getLsbD j
-      = decide (((X ^ 32 * message data + X ^ (8 * data.size) * L) %ₘ G).coeff
+    (digest g data)[k].toBitVec.getLsbD j
+      = decide (((X ^ 32 * message data + X ^ (8 * data.size) * L) %ₘ G g).coeff
           (31 - 8 * k.val - j) = 0) := by
   rw [← toPoly_remainder]
   simp only [coeff_toPoly_eq_zero _ (show 31 - 8 * k.val - j < 32 by omega), Bool.decide_eq_false]
   -- Byte k holds the bits 31 - 8k down to 24 - 8k of the complemented remainder, reversed.
   have h7 : 7 - j < 8 := by omega
   fin_cases k
-  · show (reverseBits (~~~remainder data >>> 24).toUInt8).toBitVec.getLsbD j = _
+  · show (reverseBits (~~~remainder g data >>> 24).toUInt8).toBitVec.getLsbD j = _
     rw [getLsbD_reverseBits _ hj, getLsbD_toUInt8_shiftRight _ _ (by decide) h7,
       getLsbD_not _ (by simp; omega)]
     congr 2
     simp; omega
-  · show (reverseBits (~~~remainder data >>> 16).toUInt8).toBitVec.getLsbD j = _
+  · show (reverseBits (~~~remainder g data >>> 16).toUInt8).toBitVec.getLsbD j = _
     rw [getLsbD_reverseBits _ hj, getLsbD_toUInt8_shiftRight _ _ (by decide) h7,
       getLsbD_not _ (by simp; omega)]
     congr 2
     simp; omega
-  · show (reverseBits (~~~remainder data >>> 8).toUInt8).toBitVec.getLsbD j = _
+  · show (reverseBits (~~~remainder g data >>> 8).toUInt8).toBitVec.getLsbD j = _
     rw [getLsbD_reverseBits _ hj, getLsbD_toUInt8_shiftRight _ _ (by decide) h7,
       getLsbD_not _ (by simp; omega)]
     congr 2
     simp; omega
-  · show (reverseBits (~~~remainder data).toUInt8).toBitVec.getLsbD j = _
+  · show (reverseBits (~~~remainder g data).toUInt8).toBitVec.getLsbD j = _
     rw [getLsbD_reverseBits _ hj, getLsbD_toUInt8 _ h7, getLsbD_not _ (by omega)]
     congr 2
 
-end EthLib.Cryptography.Hash.Crc32c
+end EthLib.Cryptography.Hash.Crc

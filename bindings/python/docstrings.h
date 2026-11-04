@@ -134,6 +134,9 @@
 #define DOC_vrf_evaluate \
   "The output at index `i` of the tree of a seed."
 
+#define DOC_crc32 \
+  "The four digest bytes of CRC-32: the highest power of each byte at its least significant bit."
+
 #define DOC_crc32c \
   "The four digest bytes of RFC 3720 §12.1: the CRC, which is R(x) complemented."
 

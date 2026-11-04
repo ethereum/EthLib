@@ -1,7 +1,9 @@
 module
 
+public import EthLib.Cryptography.Proofs.Hash.Crc
 public import EthLib.Cryptography.Proofs.Hash.Crc32c
-public import EthLib.Cryptography.Proofs.Hash.Crc32cPolynomial
+public import EthLib.Cryptography.Proofs.Hash.Crc32
+public import EthLib.Cryptography.Proofs.Hash.CrcPolynomial
 public import EthLib.Cryptography.Proofs.Hash.Blake2b
 public import EthLib.Cryptography.Proofs.Hash.Keccak
 public import EthLib.Cryptography.Proofs.Hash.Keccak256

@@ -179,6 +179,10 @@ def vrf_evaluate(seed: bytes, index: int) -> bytes:
     """The output at index `i` of the tree of a seed."""
     ...
 
+def crc32(data: bytes) -> bytes:
+    """The four digest bytes of CRC-32: the highest power of each byte at its least significant bit."""
+    ...
+
 def crc32c(data: bytes) -> bytes:
     """The four digest bytes of RFC 3720 §12.1: the CRC, which is R(x) complemented."""
     ...
