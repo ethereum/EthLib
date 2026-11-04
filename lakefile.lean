@@ -17,7 +17,7 @@ self-contained Python extension.
 
 package «EthLib» where
   -- The release version, the same as in `pyproject.toml` (`scripts/release_manifest.py`).
-  version := v!"0.2.0"
+  version := v!"0.3.0"
   moreLeancArgs := #["-fPIC"]
 
 require "leanprover-community" / "mathlib" @ git "v4.35.0"
