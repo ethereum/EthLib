@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Xmss.TweakableHash
 public import EthLib.Cryptography.Proofs.Xmss.Types
 
 /-!
-# Proofs: `Xmss.TweakableHash`
+# Proofs: the leanXMSS tweakable hash
 
 A hash input determines its public parameter, its address and its payload.
 

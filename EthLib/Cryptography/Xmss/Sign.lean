@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Xmss.Errors
 public import EthLib.Cryptography.Xmss.KeyGen
 
 /-!
-# `Xmss.Sign`
+# leanXMSS signing
 
 Signing.
 

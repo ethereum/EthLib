@@ -4,7 +4,7 @@ public import EthLib.Base.LittleEndian
 public import EthLib.Cryptography.Xmss.Constants
 
 /-!
-# `Xmss.Types`
+# leanXMSS types
 
 Fixed-size byte objects, with the length carried in the type.
 

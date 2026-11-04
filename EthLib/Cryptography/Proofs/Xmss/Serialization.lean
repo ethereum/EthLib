@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Xmss.Serialization
 public import EthLib.Cryptography.Proofs.Xmss.Types
 
 /-!
-# Proofs: `Xmss.Serialization`
+# Proofs: leanXMSS byte encodings
 
 The encodings are bijections between objects and byte strings of the declared length.
 

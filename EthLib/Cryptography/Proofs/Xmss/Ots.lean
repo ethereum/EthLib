@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Xmss.Ots
 public import EthLib.Cryptography.Proofs.Xmss.Types
 
 /-!
-# Proofs: `Xmss.Ots`
+# Proofs: WOTS+C one-time signatures
 
 Correctness of the one-time signature.
 
@@ -96,7 +96,7 @@ theorem findCodeword_spec {msg : ByteArray} {base : Randomizer} :
 
 /-! ## An honest signature leads to the key's leaf -/
 
-/-- What `Ots.sign` computes: the grinding result, with each chain walked to its digit.
+/-- What the one-time signer computes: the grinding result, with each chain walked to its digit.
 
 `rw` unfolds the signer, not `simp`.
 

@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Xmss.Verify
 public import EthLib.Cryptography.Proofs.Xmss.Types
 
 /-!
-# Proofs: `Xmss.Verify`
+# Proofs: leanXMSS verification
 
 What an accepting verifier has checked.
 
@@ -23,7 +23,7 @@ variable {f : ByteArray → Vector UInt8 32}
 
 /-! ## The verifier as a value -/
 
-/-- What `Ots.leaf` computes.
+/-- What the one-time leaf recovery computes.
 
 Nothing unless the digest is a codeword, else the leaf of the walked chains. -/
 theorem otsLeaf_run {pp : PublicParam} {layer : Layer} {e : UInt32} {msg : ByteArray}
@@ -78,7 +78,9 @@ theorem verifyWith_run {pk : PublicKey} {m : Message} {sig : Signature} :
 
 /-- Acceptance, unfolded.
 
-The bottom layer leads to some root, the top layer signs that root, and its path reaches the key's root. -/
+The bottom layer leads to some root, and the top layer signs that root.
+
+The path of the top layer reaches the key's root. -/
 theorem verify_iff {pk : PublicKey} {m : Message} {sig : Signature} :
     (verifyWith (pureHash f) pk m sig).run = true ↔
       ∃ bottomRoot,

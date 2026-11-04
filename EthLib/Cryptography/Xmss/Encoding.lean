@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Xmss.TweakableHash
 
 /-!
-# `Xmss.Encoding`
+# The leanXMSS target-sum code
 
 The target-sum code of WOTS+C (ePrint 2022/778).
 

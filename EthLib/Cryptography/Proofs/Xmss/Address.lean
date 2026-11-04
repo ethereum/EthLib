@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Xmss.Address
 public import EthLib.Cryptography.Proofs.Xmss.Types
 
 /-!
-# Proofs: `Xmss.Address`
+# Proofs: leanXMSS addresses
 
 Distinct call sites have distinct addresses.
 

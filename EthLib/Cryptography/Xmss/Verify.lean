@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Xmss.Tree
 
 /-!
-# `Xmss.Verify`
+# leanXMSS verification
 
 Signature verification.
 

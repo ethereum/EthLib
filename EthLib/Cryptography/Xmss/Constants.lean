@@ -1,7 +1,7 @@
 module
 
 /-!
-# `Xmss.Constants`
+# leanXMSS parameters
 
 The leanXMSS parameter set.
 

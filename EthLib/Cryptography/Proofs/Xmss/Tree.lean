@@ -5,7 +5,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Types
 public import EthLib.Cryptography.Proofs.Merkle.Binding
 
 /-!
-# Proofs: `Xmss.Tree`
+# Proofs: the leanXMSS trees
 
 An honest path leads from a key's leaf to the root of its tree.
 
@@ -139,7 +139,9 @@ theorem fold_path_top {b : Nat} (hb : b < 2 ^ LAYER_HEIGHT) :
 
 That root is node `floor(e / 2^16)` on the top level: bottom tree `b`'s, or the top tree's.
 
-Otherwise `findSecondPreimage` returns a second preimage of `Th` under the address of an ancestor of the leaf:
+Otherwise the search returns a second preimage of `Th`.
+
+The preimage is under the address of an ancestor of the leaf:
 
 - One input is that ancestor's two honest children.
 - The other input is a different pair with the same hash.

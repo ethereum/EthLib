@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Merkle.Tree
 public import EthLib.Cryptography.Xmss.Ots
 
 /-!
-# `Xmss.Tree`
+# The leanXMSS trees
 
 The Merkle trees of one layer, whose leaves are the layer's one-time keys.
 

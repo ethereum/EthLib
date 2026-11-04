@@ -5,7 +5,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Ots
 public import EthLib.Cryptography.Proofs.Xmss.Serialization
 
 /-!
-# Proofs: `Xmss.Sign`
+# Proofs: leanXMSS signing
 
 What a successful signature holds, and how signing can fail.
 
@@ -25,7 +25,7 @@ variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {s : Seed} {laye
 
 /-! ## The signer as a value
 
-`rw` unfolds the signer, not `simp`: see `otsSign_run`. -/
+`rw` unfolds the signer, not `simp`, as for the one-time signer. -/
 
 /-- What a layer's signature computes: the one-time signature with the key's path, or the error. -/
 theorem signLayer_run :

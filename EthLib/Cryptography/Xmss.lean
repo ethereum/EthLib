@@ -14,7 +14,7 @@ public import EthLib.Cryptography.Xmss.KeyGen
 public import EthLib.Cryptography.Xmss.Sign
 
 /-!
-# `EthLib.Cryptography.Xmss`
+# leanXMSS
 
 leanXMSS: two layers of XMSS of height 16 over WOTS+C one-time keys.
 

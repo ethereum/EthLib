@@ -4,7 +4,7 @@ public import EthLib.Base.Proofs.LittleEndian
 public import EthLib.Cryptography.Xmss.Types
 
 /-!
-# Proofs: `Xmss.Types`
+# Proofs: leanXMSS types
 
 Properties of the fixed-size byte objects.
 -/

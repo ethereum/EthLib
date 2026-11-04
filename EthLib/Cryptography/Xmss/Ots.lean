@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Xmss.Encoding
 
 /-!
-# `Xmss.Ots`
+# WOTS+C one-time signatures
 
 The WOTS+C one-time signature: 58 hash chains of 4 positions.
 

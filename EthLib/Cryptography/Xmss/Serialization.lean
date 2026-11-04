@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Xmss.Verify
 public import EthLib.Cryptography.Xmss.Errors
 
 /-!
-# `Xmss.Serialization`
+# leanXMSS byte encodings
 
 The byte encodings of the public key and the signature.
 
@@ -113,7 +113,9 @@ It reads only the first 4 bytes.
 
 It does not verify the signature, so the index is only what the signer claims.
 
-A caller can use it to require a given leaf before verifying, such as leaf 0 for a proof of possession.
+A caller can use it to require a given leaf before verifying.
+
+For example, a proof of possession requires leaf 0.
 -/
 def signatureIndex (bytes : ByteArray) : Except XmssError LeafIndex :=
   -- The whole signature must be there, as for decoding, so a truncated one is rejected.
