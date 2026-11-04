@@ -181,6 +181,9 @@ The secp256r1 theorems are correctness statements, like those of secp256k1.
 That proof needs one more fact than the proof for secp256k1: `x^3 - 3 x + b` has no root mod `p`.
 The kernel checks it by an inverse of `X^p - X` modulo the cubic.
 
+`verify_sign` (`Proofs/Secp256r1/Ecdsa.lean`) proves that a signature from the signing operation of SEC 1 verifies.
+No theorem states unforgeability.
+
 ### KZG
 
 `Proofs/Kzg/Core.lean` proves that the public operations reject malformed inputs, such as a wrong size or lists of different lengths.
@@ -348,13 +351,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 39 operations and 34 size constants.
-The Python extension calls 39 of the operations and 25 of the constants.
+Lean exports 40 operations and 37 size constants.
+The Python extension calls 40 of the operations and 28 of the constants.
 Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_const_n`, `eth_sphincs_const_public_param_len`, `eth_sphincs_const_randomizer_len`, `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-2127 lines of hand-written C sit between them and Python: `bls.c` (270), `ecrecover.c` (34), `kzg.c` (533), `modexp.c` (61), `module.c` (544), `precompile.c` (43), `ripemd160.c` (36), `secp256k1.c` (94), `sha256.c` (38), `sha256_precompile.c` (62), `sphincs.c` (94), `wrappers.h` (175), `xmss.c` (143).
+2200 lines of hand-written C sit between them and Python: `bls.c` (270), `ecrecover.c` (34), `kzg.c` (533), `modexp.c` (61), `module.c` (570), `precompile.c` (43), `ripemd160.c` (36), `secp256k1.c` (94), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `sphincs.c` (94), `wrappers.h` (180), `xmss.c` (143).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

@@ -1,0 +1,5 @@
+input:
+  public_key: '0xf19b78928720d5bee8e670fb90010fb15c37bf91b58a5157c3f3c059b2655e88cf701ec962fb4a11dcf273f5dc357e58468560c7cfeb942d074abd4329260509'
+  msg_hash: '0xbb5a52f42f9c9261ed4361f59422a1e30036e7c32b270c8807a419feca605023'
+  signature: '0x7ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd16e1e458f021248a5b9434ae23f474b43ee55ba37ea585fef95c90416600f1ba'
+output: true

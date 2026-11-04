@@ -37,6 +37,10 @@ size_t SHA256_PRECOMPILE_OUTPUT_BYTES;
 size_t SECP256K1_HASH_LEN;
 size_t SECP256K1_SIGNATURE_LEN;
 
+size_t SECP256R1_PUBLIC_KEY_LEN;
+size_t SECP256R1_HASH_LEN;
+size_t SECP256R1_SIGNATURE_LEN;
+
 size_t ECRECOVER_GAS;
 
 /* ---- Lean externs: size accessors ------------------------------------ */
@@ -158,6 +162,21 @@ eth_secp256k1_const_hash_len(
 
 extern uint64_t
 eth_secp256k1_const_signature_len(
+  uint8_t unit
+);
+
+extern uint64_t
+eth_secp256r1_const_public_key_len(
+  uint8_t unit
+);
+
+extern uint64_t
+eth_secp256r1_const_hash_len(
+  uint8_t unit
+);
+
+extern uint64_t
+eth_secp256r1_const_signature_len(
   uint8_t unit
 );
 
@@ -439,6 +458,7 @@ static PyMethodDef methods[] = {
   {"secp256k1_verify", py_secp256k1_verify, METH_VARARGS, NULL},
   {"secp256k1_is_low_s", py_secp256k1_is_low_s, METH_VARARGS, NULL},
   {"secp256k1_recover", py_secp256k1_recover, METH_VARARGS, NULL},
+  {"secp256r1_verify", py_secp256r1_verify, METH_VARARGS, NULL},
   {"ecrecover", py_ecrecover, METH_VARARGS, NULL},
   {"precompile_run", py_precompile_run, METH_VARARGS, NULL},
   {NULL, NULL, 0, NULL},
@@ -503,6 +523,9 @@ PyInit__native(void) {
     MODEXP_MAX_LENGTH_BYTES    = (size_t) eth_modexp_const_max_length_bytes(0);
     SECP256K1_HASH_LEN      = (size_t) eth_secp256k1_const_hash_len(0);
     SECP256K1_SIGNATURE_LEN = (size_t) eth_secp256k1_const_signature_len(0);
+    SECP256R1_PUBLIC_KEY_LEN = (size_t) eth_secp256r1_const_public_key_len(0);
+    SECP256R1_HASH_LEN       = (size_t) eth_secp256r1_const_hash_len(0);
+    SECP256R1_SIGNATURE_LEN  = (size_t) eth_secp256r1_const_signature_len(0);
     ECRECOVER_GAS           = (size_t) eth_ecrecover_const_gas(0);
 
     RIPEMD160_OUTPUT_BYTES = (size_t) eth_ripemd160_const_output_bytes(0);
@@ -539,6 +562,9 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "SHA256_PRECOMPILE_OUTPUT_BYTES", SHA256_PRECOMPILE_OUTPUT_BYTES);
   PyModule_AddIntConstant(m, "SECP256K1_HASH_LEN", SECP256K1_HASH_LEN);
   PyModule_AddIntConstant(m, "SECP256K1_SIGNATURE_LEN", SECP256K1_SIGNATURE_LEN);
+  PyModule_AddIntConstant(m, "SECP256R1_PUBLIC_KEY_LEN", SECP256R1_PUBLIC_KEY_LEN);
+  PyModule_AddIntConstant(m, "SECP256R1_HASH_LEN", SECP256R1_HASH_LEN);
+  PyModule_AddIntConstant(m, "SECP256R1_SIGNATURE_LEN", SECP256R1_SIGNATURE_LEN);
   PyModule_AddIntConstant(m, "ECRECOVER_GAS", ECRECOVER_GAS);
   return m;
 }

@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Exports.Sha256
 public import EthLib.Cryptography.Exports.Xmss
 public import EthLib.Cryptography.Exports.Sphincs
 public import EthLib.Cryptography.Exports.Secp256k1
+public import EthLib.Cryptography.Exports.Secp256r1
 
 /-!
 # `EthLib.Cryptography.Exports`

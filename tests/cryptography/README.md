@@ -10,7 +10,7 @@ The generators under `bindings/python/tests/` write the cases through the Python
 ## Pinned vectors
 
 A vector is only worth something if its expected output is right, and regenerating it from the code under test would silently accept whatever that code returns.
-So some directories are pinned: the `bls/`, `kzg/` and `secp256k1/` directories, and any other directory with a `SHA256SUMS` file.
+So some directories are pinned: `bls/`, `kzg/`, `secp256k1/`, `secp256r1/`, and any other directory with a `SHA256SUMS` file.
 Every case under a pinned directory is listed in that file with its digest, so regenerating a case that changes its answer is caught.
 A pinned directory without its `SHA256SUMS` is an error, so deleting the file cannot switch the check off.
 
@@ -32,6 +32,11 @@ The `verify` and `verify_low_s` outputs are Wycheproof's, so they check EthLib a
 The `recover` outputs come from EthLib, checked against Wycheproof's keys, as `recover/format.md` explains.
 The cases keep Wycheproof's licence, the Apache License 2.0, in `secp256k1/LICENSE`.
 Each operation's `format.md` says which set its cases come from.
+
+## secp256r1
+
+The `secp256r1/` cases come from the Wycheproof set `ecdsa_secp256r1_sha256_p1363_test.json`, at the same commit.
+Their outputs are Wycheproof's, and they keep its licence in `secp256r1/LICENSE`.
 
 ## leanXMSS
 
