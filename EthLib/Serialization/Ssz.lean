@@ -17,10 +17,12 @@ public import EthLib.Serialization.Ssz.Merkle.Merkleize
 public import EthLib.Serialization.Ssz.Merkle.Tree
 public import EthLib.Serialization.Ssz.Merkle.Gindex
 public import EthLib.Serialization.Ssz.Merkle.Verify
+public import EthLib.Serialization.Ssz.Merkle.Branch
 public import EthLib.Serialization.Ssz.Typed.Class
 public import EthLib.Serialization.Ssz.Typed.Basic
 public import EthLib.Serialization.Ssz.Typed.Collections
 public import EthLib.Serialization.Ssz.Typed.Container
+public import EthLib.Serialization.Ssz.Typed.Gindex
 
 /-!
 # `EthLib.Serialization.Ssz`

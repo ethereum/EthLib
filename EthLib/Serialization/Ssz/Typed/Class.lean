@@ -42,9 +42,7 @@ The 32-byte Merkle root of a value.
 The width check never fails on a well-formed type, since every root there is one node.
 -/
 def hashTreeRoot (a : α) : Except Err (Vector UInt8 32) := do
-  let root ← Ssz.hashTreeRoot (desc α) (toValue a)
-  if width : root.size = bytesPerChunk then return ⟨root, width⟩
-  else throw (.count bytesPerChunk root.size)
+  toChunk (← Ssz.hashTreeRoot (desc α) (toValue a))
 
 end SszType
 

@@ -30,14 +30,7 @@ theorem hashTreeRoot_ok_iff {a : α} {root : Vector UInt8 32} :
   | error fault => simp [bind, Except.bind]
   | ok bytes =>
     simp only [bind, Except.bind, Except.ok.injEq]
-    constructor
-    · intro made
-      split at made
-      · cases made
-        rfl
-      · cases made
-    · rintro rfl
-      simp [pure, Except.pure]
+    exact toChunk_ok_iff
 
 variable [LawfulSszType α]
 

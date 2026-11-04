@@ -268,4 +268,17 @@ theorem merkleizeProgressiveUnchecked_eq (chunks : List Bytes) (level : Nat) :
     dsimp only
     rw [subtreeAt_zero_eq, ih]
 
+/-- A node converts to a 32-byte vector exactly when that vector holds its bytes. -/
+theorem toChunk_ok_iff {node : Bytes} {chunk : Vector UInt8 bytesPerChunk} :
+    toChunk node = .ok chunk ↔ node = chunk.toArray := by
+  unfold toChunk
+  constructor
+  · intro made
+    split at made
+    · cases made
+      rfl
+    · cases made
+  · rintro rfl
+    simp
+
 end EthLib.Serialization.Ssz

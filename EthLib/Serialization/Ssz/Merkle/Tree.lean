@@ -77,6 +77,11 @@ def checkChunk (node : Bytes) : Except Err Unit :=
   -- Fixed-width children make the boundary between the two hash operands unambiguous.
   if node.size = bytesPerChunk then .ok () else .error (.count bytesPerChunk node.size)
 
+/-- A node as a 32-byte vector, refused if it has another width. -/
+def toChunk (node : Bytes) : Except Err (Vector UInt8 bytesPerChunk) :=
+  if width : node.size = bytesPerChunk then .ok ⟨node, width⟩
+  else .error (.count bytesPerChunk node.size)
+
 /-- Refuse a node sequence containing a node of the wrong width. -/
 def checkChunks : List Bytes → Except Err Unit
   | [] => .ok ()
