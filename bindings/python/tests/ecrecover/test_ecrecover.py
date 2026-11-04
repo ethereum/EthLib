@@ -2,7 +2,7 @@
 
 `execution_specs_cases.json` holds every case of `test_precompiles` in
 `tests/frontier/precompiles/test_ecrecover.py`, in `ethereum/execution-specs`
-at commit b758df2bcaaa95c04d31e25c94fbfb8d6de756e7, under CC0-1.0.
+at commit e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e, under CC0-1.0.
 
 Each case is the 128-byte input, `hash || v || r || s`, and the expected output.
 They were read from that file's `pytest.param` lists, without running anything.

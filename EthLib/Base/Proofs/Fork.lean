@@ -10,6 +10,8 @@ Forks are ordered by their position in the type, and the order is linear.
 The comparison agrees with that order, as an ordered map needs.
 
 The timeline pins each position, so a fork moved in the type fails the build.
+
+A field that appears at a fork holds nothing before it, and one value from it on.
 -/
 
 @[expose] public section
@@ -69,3 +71,17 @@ theorem mem_timeline (f : Fork) :
   cases f <;> decide
 
 end EthLib.Base.Fork
+
+namespace EthLib.Base.Since
+
+variable {f fork : Fork} {α : Type}
+
+/-- Before its fork, a field has only one value. -/
+theorem eq_of_not_le (h : ¬f ≤ fork) (x y : Since f fork α) : x = y :=
+  funext fun h' => absurd h' h
+
+/-- From its fork on, a field is the one value that it holds. -/
+theorem eq_const (h : f ≤ fork) (x : Since f fork α) : x = fun _ => x h :=
+  funext fun _ => rfl
+
+end EthLib.Base.Since

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Address
+public import EthLib.Base.Fork
 public import EthLib.Serialization.Rlp.Scalar
 
 /-!
@@ -18,6 +19,7 @@ A codec writes a value as an item, and reads an item back as a value.
 - A byte string of a fixed length must have exactly that length.
 - A list holds the item of each element.
 - A structure is a list of its fields, in order, with exactly one item per field.
+- A field that appears at a fork has an item only from that fork on.
 - An optional value is the empty byte string for none, if no value has that item.
 - So the recipient of a transaction is 20 bytes, or the empty byte string for a contract creation.
 
@@ -71,6 +73,37 @@ def Item.fields (count : Nat) (item : Item) : Except RlpError (List Item) := do
 def Item.field {α : Type} [Codec α] (index : Nat) (item : Item) : Except RlpError α :=
   (Codec.ofItem item).mapError (.inField index)
 
+/-- The field at the front of the remaining items of a structure with `count` fields.
+
+It returns the value and the items after it.
+
+The field's index is `count` minus the number of remaining items.
+
+A decoder checks the count first, so it never reads past the last item. -/
+def Item.readField {α : Type} [Codec α] (count : Nat) :
+    List Item → Except RlpError (α × List Item)
+  | [] => .error (.wrongFieldCount count count)
+  | item :: rest => do return (← Item.field (count - (rest.length + 1)) item, rest)
+
+/-- The items of a field that appears at fork `f`: one item from `f` on, and none before. -/
+def Item.ofSince {f fork : Fork} {α : Type} [Codec α] (x : Since f fork α) : List Item :=
+  if h : f ≤ fork then [Codec.toItem (x h)] else []
+
+/-- The count of items of a field that appears at fork `f`: 1 from `f` on, and 0 before. -/
+def Item.sinceCount (f fork : Fork) : Nat := if f ≤ fork then 1 else 0
+
+/-- A field that appears at fork `f`, in a structure with `count` fields, and the items after it.
+
+From `f` on, the field is read from the first item.
+
+Before `f`, it holds nothing and reads no item. -/
+def Item.readSince {f fork : Fork} {α : Type} [Codec α] (count : Nat) (items : List Item) :
+    Except RlpError (Since f fork α × List Item) :=
+  if h : f ≤ fork then do
+    let (x, rest) ← (Item.readField count items : Except RlpError (α × List Item))
+    return (fun _ => x, rest)
+  else .ok (fun h' => absurd h' h, items)
+
 /-- The scalar that an item holds, if it is below `2 ^ bits`. -/
 def Item.toScalarBelow (bits : Nat) (item : Item) : Except RlpError Nat := do
   let n ← item.toScalar
@@ -114,6 +147,11 @@ instance {n : Nat} : Codec (Vector UInt8 n) where
   ofItem item := do
     let data ← item.toBytes
     if h : data.size = n then .ok ⟨data.data, h⟩ else .error (.wrongLength n data.size)
+
+/-- An item is itself, so a structure can hold an item that it does not read. -/
+instance : Codec Item where
+  toItem := id
+  ofItem := .ok
 
 /-- A list is the list of the items of its elements. -/
 instance {α : Type} [Codec α] : Codec (List α) where

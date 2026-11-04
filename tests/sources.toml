@@ -40,7 +40,9 @@ commit = "c67e485ff8b5be9abc8ad15345ec21aa22e290d9"
 directories = ["bindings/python/tests/state/genesis"]
 
 [repositories."ethereum/execution-specs"]
-commit = "b758df2bcaaa95c04d31e25c94fbfb8d6de756e7"
+commit = "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e"
+release = "tests@v21.0.2"
+directories = ["tests/execution/blocks"]
 
 # The pinned vector directories whose cases come from no repository, with their source.
 [other]

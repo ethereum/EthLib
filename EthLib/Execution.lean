@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Blocks
 public import EthLib.Execution.Evm
 public import EthLib.Execution.Fees
 public import EthLib.Execution.State

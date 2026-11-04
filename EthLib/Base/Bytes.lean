@@ -15,7 +15,13 @@ It writes `B_n` for the byte strings of length `n`.
 
 namespace EthLib.Base
 
+/-- `B_8`: exactly 8 bytes, such as the nonce of a block header. -/
+abbrev Bytes8 := Vector UInt8 8
+
 /-- `B_32`: exactly 32 bytes, such as a storage key. -/
 abbrev Bytes32 := Vector UInt8 32
+
+/-- `B_256`: exactly 256 bytes, such as the logs bloom of a block header. -/
+abbrev Bytes256 := Vector UInt8 256
 
 end EthLib.Base
