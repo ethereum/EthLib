@@ -468,7 +468,10 @@
   "The initiator's secrets for its `auth` and the `ack` it received."
 
 #define DOC_block_validate_header \
-  "Check a header at a fork against its parent at the parent's fork, from Paris on."
+  "Check a header at a fork against its parent at the parent's fork, at every fork."
+
+#define DOC_block_check_header \
+  "Check a header against its parent at two named forks, every check but the proof of work."
 
 #define DOC_precompile_run \
   "Run the precompile at the address on the call data, with the gas given, at the fork named."

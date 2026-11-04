@@ -624,7 +624,11 @@ def rlpx_finish(static_key: bytes, ephemeral_key: bytes, nonce: bytes, auth: byt
     ...
 
 def block_validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -> bool:
-    """Check a header at a fork against its parent at the parent's fork, from Paris on."""
+    """Check a header at a fork against its parent at the parent's fork, at every fork."""
+    ...
+
+def block_check_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -> bool:
+    """Check a header against its parent at two named forks, every check but the proof of work."""
     ...
 
 def precompile_run(fork: str, address: int, data: bytes, gas: int) -> bytes:

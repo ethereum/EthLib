@@ -65,6 +65,14 @@ eth_block_validate_header(
   lean_object* header
 );
 
+extern lean_object*
+eth_block_check_header(
+  lean_object* parent_fork,
+  lean_object* fork,
+  lean_object* parent,
+  lean_object* header
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* A fork name as a Lean byte array, or NULL with a TypeError set. */
@@ -223,26 +231,51 @@ py_block_validate_size(
   return except_into_pybool(eth_block_validate_size(fork, block), BLOCK_ERROR);
 }
 
+/* Read the parent fork, the fork, the parent and the header of a header check.
+ *
+ * It returns 0 with a Python error set when an argument is wrong, and builds nothing then. */
+static int
+parse_header_args(
+  PyObject* args,
+  lean_object** out
+) {
+  PyObject *parent_fork_obj, *fork_obj, *parent_obj, *header_obj;
+  if (!PyArg_ParseTuple(args, "OOOO", &parent_fork_obj, &fork_obj, &parent_obj, &header_obj)) {
+    return 0;
+  }
+  if (!PyBytes_Check(parent_obj) || !PyBytes_Check(header_obj)) {
+    PyErr_SetString(PyExc_TypeError, "parent and header must be bytes");
+    return 0;
+  }
+  lean_object* parent_fork = parse_fork(parent_fork_obj);
+  if (!parent_fork) return 0;
+  lean_object* fork = parse_fork(fork_obj);
+  if (!fork) { lean_dec(parent_fork); return 0; }
+  out[0] = parent_fork;
+  out[1] = fork;
+  out[2] = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(parent_obj), PyBytes_GET_SIZE(parent_obj));
+  out[3] = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(header_obj), PyBytes_GET_SIZE(header_obj));
+  return 1;
+}
+
 PyObject*
 py_block_validate_header(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *parent_fork_obj, *fork_obj, *parent_obj, *header_obj;
-  if (!PyArg_ParseTuple(args, "OOOO", &parent_fork_obj, &fork_obj, &parent_obj, &header_obj)) {
-    return NULL;
-  }
-  if (!PyBytes_Check(parent_obj) || !PyBytes_Check(header_obj)) {
-    PyErr_SetString(PyExc_TypeError, "parent and header must be bytes");
-    return NULL;
-  }
-  lean_object* parent_fork = parse_fork(parent_fork_obj);
-  if (!parent_fork) return NULL;
-  lean_object* fork = parse_fork(fork_obj);
-  if (!fork) { lean_dec(parent_fork); return NULL; }
-  lean_object* parent = mk_bytearray(
-    (const uint8_t*) PyBytes_AS_STRING(parent_obj), PyBytes_GET_SIZE(parent_obj));
-  lean_object* header = mk_bytearray(
-    (const uint8_t*) PyBytes_AS_STRING(header_obj), PyBytes_GET_SIZE(header_obj));
-  return except_into_pybool(eth_block_validate_header(parent_fork, fork, parent, header), BLOCK_ERROR);
+  lean_object* a[4];
+  if (!parse_header_args(args, a)) return NULL;
+  return except_into_pybool(eth_block_validate_header(a[0], a[1], a[2], a[3]), BLOCK_ERROR);
+}
+
+PyObject*
+py_block_check_header(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[4];
+  if (!parse_header_args(args, a)) return NULL;
+  return except_into_pybool(eth_block_check_header(a[0], a[1], a[2], a[3]), BLOCK_ERROR);
 }

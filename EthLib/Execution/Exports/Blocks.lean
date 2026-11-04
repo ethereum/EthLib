@@ -91,21 +91,31 @@ def validateSizeExport (fork block : ByteArray) : Result UInt8 := do
   (validateBlockSize b).map (fun () => 1) |>.mapError
     fun e => (e.code, s!"block invalid: {reprStr e}")
 
-/-- Check a header at a fork against its parent at the parent's fork, from Paris on. -/
+/-- Check a header at a fork against its parent at the parent's fork, at every fork. -/
 @[export eth_block_validate_header]
 def validateHeaderExport (parentFork fork parent header : ByteArray) : Result UInt8 := do
   let parentFork ← forkUpTo .glamsterdam parentFork
   let fork ← forkUpTo .glamsterdam fork
   let parent : Header parentFork ← runRlp "parent rejected" (Codec.decode parent)
   let header : Header fork ← runRlp "header rejected" (Codec.decode header)
-  if hLondon : .london ≤ parentFork then
-    if hFork : parentFork ≤ fork then
-      if hParis : .paris ≤ fork then
-        (validateHeader hLondon hFork hParis parent header).map (fun () => 1) |>.mapError
-          fun e => (e.code, s!"header invalid: {reprStr e}")
-      else throw (0, "the fork is before Paris")
-    else throw (0, "the parent's fork is after the fork")
-  else throw (0, "the parent's fork is before London")
+  if hFork : parentFork ≤ fork then
+    (validateHeader hFork parent header).map (fun () => 1) |>.mapError
+      fun e => (e.code, s!"header invalid: {reprStr e}")
+  else throw (0, "the parent's fork is after the fork")
+
+/-- Check a header against its parent at two named forks, every check but the proof of work.
+
+Test chains that run without proof of work check their headers this way. -/
+@[export eth_block_check_header]
+def checkHeaderExport (parentFork fork parent header : ByteArray) : Result UInt8 := do
+  let parentFork ← forkUpTo .glamsterdam parentFork
+  let fork ← forkUpTo .glamsterdam fork
+  let parent : Header parentFork ← runRlp "parent rejected" (Codec.decode parent)
+  let header : Header fork ← runRlp "header rejected" (Codec.decode header)
+  if hFork : parentFork ≤ fork then
+    (checkHeader hFork parent header).map (fun () => 1) |>.mapError
+      fun e => (e.code, s!"header invalid: {reprStr e}")
+  else throw (0, "the parent's fork is after the fork")
 
 /-- The transaction that an item of a block holds at the fork.
 

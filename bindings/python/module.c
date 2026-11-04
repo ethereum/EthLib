@@ -673,6 +673,7 @@ static PyMethodDef methods[] = {
   {"rlpx_recipient_secrets", py_rlpx_recipient_secrets, METH_VARARGS, DOC_rlpx_recipient_secrets},
   {"rlpx_finish", py_rlpx_finish, METH_VARARGS, DOC_rlpx_finish},
   {"block_validate_header", py_block_validate_header, METH_VARARGS, DOC_block_validate_header},
+  {"block_check_header", py_block_check_header, METH_VARARGS, DOC_block_check_header},
   {"precompile_run", py_precompile_run, METH_VARARGS, DOC_precompile_run},
   {"precompile_price", py_precompile_price, METH_VARARGS, DOC_precompile_price},
   {"state_root", py_state_root, METH_VARARGS, DOC_state_root},

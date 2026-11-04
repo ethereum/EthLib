@@ -98,7 +98,7 @@ class AesError(EthLibError, ValueError):
 
 
 class BlockError(EthLibError, ValueError):
-    """A header, block or receipt was rejected: RLP 1-14, receipts 101-103, checks 201-223, deposits 301-303."""
+    """A header, block or receipt was rejected; the code names the failed check."""
 
 
 class RlpError(EthLibError, ValueError):
