@@ -140,6 +140,8 @@ Its vocabulary helps distinguish technical meanings.
 For advice about sentence structure and punctuation, use the guide in context.
 The source, proof, citation and testing requirements elsewhere in this file still apply.
 
+Claim only what the code, a theorem or a check that you ran shows.
+
 Leave clear, correct text alone, even when it does not follow a writing rule.
 Read the surrounding passage before an edit, and preserve its meaning, conditions and requirement strength.
 Correct real clarity or accuracy problems; leave unrelated prose for a separate change.
