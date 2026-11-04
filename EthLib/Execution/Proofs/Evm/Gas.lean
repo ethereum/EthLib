@@ -164,16 +164,4 @@ theorem refundStorageClear_of_london_le {fork : Fork} (h : fork ≥ .london) :
       COLD_STORAGE_WRITE - COLD_STORAGE_ACCESS + TX_ACCESS_LIST_STORAGE_KEY := by
   simp [gasSchedule, h, COLD_STORAGE_WRITE, COLD_STORAGE_ACCESS, TX_ACCESS_LIST_STORAGE_KEY]
 
-/-- 32 bytes of memory cost 3 gas. -/
-example : memoryGasCost 32 = 3 := by decide
-
-/-- 1024 words cost `3 * 1024 + 1024 * 1024 / 512 = 5120` gas. -/
-example : memoryGasCost (32 * 1024) = 5120 := by decide
-
-/-- One word written to empty memory grows it by 32 bytes, for 3 gas. -/
-example : extendMemory 0 [(0, 32)] = ⟨3, 32⟩ := by decide
-
-/-- A range of 1 byte at 32 grows 32 bytes of memory to 64 bytes, for `6 - 3 = 3` gas. -/
-example : extendMemory 32 [(32, 1)] = ⟨3, 32⟩ := by decide
-
 end EthLib.Execution.Evm
