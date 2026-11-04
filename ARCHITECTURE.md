@@ -88,8 +88,10 @@ It is executable, pure and total, and it follows its source definition by defini
 Clients and other Lean projects import it, and the bindings run it.
 
 A **property** says what a specification guarantees.
-Round trips of encodings, bounds on a fee, the rejection of malformed input and known answers are all properties.
+Round trips of encodings, bounds on a fee and the rejection of malformed input are all properties.
 They are stated about the specification itself, so they hold for exactly the code that runs.
+A known answer fixes one input and its output, so it is a test and not a property.
+Known answers live in the Python test suite, which runs the specification through the bindings.
 
 A **model** says why the protocol is secure.
 It is abstract where the specification is concrete: a hash becomes a random oracle, a network becomes an adversary that schedules messages.

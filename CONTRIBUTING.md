@@ -108,9 +108,27 @@ The split then moves it to its package.
 ### Known answers
 
 A known answer pins one input to one output, byte for byte.
-Take it from the specification's own test vectors when they exist.
-Otherwise, describe what it pins.
+Known answers belong in the Python test suite, in `bindings/python/tests/`, and never in Lean.
+
+In Lean, a known answer is a theorem or an `example` that evaluates a definition on concrete inputs.
+It compares the result with an expected value, by `rfl`, `decide`, `decide +kernel` or `simp`.
+The build must then run the definition on those inputs.
+One such proof can need several gigabytes of memory and minutes of build time.
+It also checks only one input.
+
+So state each Lean theorem for all inputs.
+Test concrete inputs from Python, through the bindings.
+If a function has no C export yet, add the export and its binding.
+
+Lean keeps one kind of concrete fact: a small decidable fact that a definition needs to be correct.
+Examples are a constant checked against the algorithm that generates it, or a Pratt certificate.
+The order of the fork timeline is another example.
+Each such proof must take a few seconds at most.
+
+Take the test vectors from the specification's own test vectors when they exist.
+Otherwise, describe what each vector pins.
 For example: "one honest signature at epoch 7", or "one empty slot processed".
+Next to the vectors, record their pinned origin, such as the commit they come from.
 
 Never regenerate an expected value from the code under test and call it a check.
 
