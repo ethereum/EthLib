@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Uint
 public import EthLib.Serialization.Ssz.Codec.Deserialize
 
 /-! Reading back the offset table a struct or a sequence was laid out with. -/
@@ -15,20 +16,21 @@ theorem uintBytes_size (width value : Nat) : (uintBytes width value).size = widt
   -- No bytes were asked for, and none were written.
   | zero => rfl
   -- One byte was written and the rest is the same claim one width down.
-  | succ width ih => simp only [uintBytes, Array.size_append, Array.size_singleton, ih]; omega
+  | succ width ih => simp only [uintBytes_succ, Array.size_append, Array.size_singleton, ih]; omega
 
 /-- Reading past a byte put on the front is reading the rest from one place earlier. -/
 theorem readUint_shift (data : Bytes) (byte : UInt8) (start width : Nat) :
     readUint (#[byte] ++ data) (start + 1) width = readUint data start width := by
   -- The read moves along as the width shrinks, so the position stays quantified over.
-  induction width generalizing start <;> simp_all [readUint, Array.getElem?_append]
+  induction width generalizing start <;>
+    simp_all [readUint_zero, readUint_succ, Array.getElem?_append]
 
 /-- Reading past a run of bytes on the front is reading the rest from where it starts. -/
 theorem readUint_append (front back : Bytes) (start width : Nat) :
     readUint (front ++ back) (front.size + start) width = readUint back start width := by
   -- The read moves along as the width shrinks, so the position stays quantified over.
   induction width generalizing start <;>
-    simp_all [readUint, Array.getElem?_append_right, Nat.add_assoc]
+    simp_all [readUint_zero, readUint_succ, Array.getElem?_append_right, Nat.add_assoc]
 
 /--
 An integer written and read back at the same width is the integer written.
@@ -41,7 +43,7 @@ theorem readUint_uintBytes_prefix (back : Bytes) (width value : Nat)
   induction width generalizing value with
   -- A width of no bytes holds only the value zero.
   | zero =>
-    simp [readUint] at bound ⊢
+    simp [readUint_zero] at bound ⊢
     omega
   | succ width ih =>
     -- One more byte of width is one more factor of 256 of range.
@@ -53,7 +55,7 @@ theorem readUint_uintBytes_prefix (back : Bytes) (width value : Nat)
     have shifted := readUint_shift (uintBytes width (value / 256) ++ back)
       (UInt8.ofNat (value % 256)) 0 width
     simp only [Nat.zero_add] at shifted
-    simp [readUint, uintBytes, Array.append_assoc, shifted, tail, Array.getElem?_append]
+    simp [readUint_succ, uintBytes_succ, Array.append_assoc, shifted, tail, Array.getElem?_append]
     -- A number is its low byte plus 256 times the rest.
     omega
 

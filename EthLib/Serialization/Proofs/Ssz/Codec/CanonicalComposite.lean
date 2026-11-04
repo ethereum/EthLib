@@ -107,7 +107,8 @@ theorem firstByte_append_tail (data : Bytes) (nonempty : 0 < data.size) :
   -- The first one-byte slice contains exactly the selector byte.
   have first : data.extract 0 1 = #[data[0]!] := by
     have encoded := uintBytes_readUint_slice data 0 1 (by omega)
-    simpa [uintBytes, readUint, getElem!_pos, nonempty, Array.getElem?_eq_getElem nonempty]
+    simpa [uintBytes_zero, uintBytes_succ, readUint_zero, readUint_succ, getElem!_pos, nonempty,
+      Array.getElem?_eq_getElem nonempty]
       using encoded.symm
   -- The selector slice and payload slice are adjacent and cover the whole message.
   rw [← first, extract_join data (by omega) (by omega), Array.extract_size]
