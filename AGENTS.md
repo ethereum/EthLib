@@ -61,8 +61,49 @@ Fix the real problems, and keep an accurate technical expression.
 Do not rewrite a correct claim only to make the checker quiet.
 The checker does not show that the text is clear, that it agrees with its source or that it conforms to STE.
 
-For a pull request description, keep the change, the checks that you ran and the open questions apart.
-A request for a draft does not establish the status of a pull request, an approval or a CI result.
-State those facts only when a source gives them.
-Write the draft to a file.
-Commit it, post it or open a pull request with it only when the user asks.
+## Write a pull request description
+
+A pull request description teaches a reviewer who has never seen the change.
+Write it the way a good teacher explains: the problem first, then the idea, then one concrete example.
+A reviewer should be able to read it in about two minutes.
+
+Follow [Bodies](CONTRIBUTING.md#bodies) in CONTRIBUTING.md, in this shape:
+
+```markdown
+<Two or three sentences: what changes and why, in plain words.>
+
+## The problem
+
+What was wrong or missing, and why it matters.
+
+## The idea
+
+The one insight the change rests on, with each new name explained.
+
+## Example
+
+One small case with real values, traced step by step.
+
+## For reviewers
+
+The decisions to question, and the cases a reviewer could miss.
+
+## Checks
+
+One line per check that you ran: the command and its result.
+
+## Open questions
+
+Only if there are any.
+```
+
+- When a theorem changes, show its statement before and after in a `text` block.
+- Keep each section short: a few lines or a short list.
+  A wall of sentences without headings is not acceptable.
+- Define each term the first time it appears.
+  When you name a definition, say in the same sentence what it does.
+- A one-line change, such as a typo or a version bump, needs only the first sentence.
+- Claim only what a check or a source shows.
+  A request for a draft does not establish the status of a pull request, an approval or a CI result.
+- Write the draft to a file, and run the description check on it.
+  Commit it, post it or open a pull request with it only when the user asks.
