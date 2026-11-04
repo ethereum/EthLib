@@ -42,6 +42,10 @@ Each case gives a seed, a count of indices and the shuffled position of each ind
 The shuffle runs the 10 rounds of the minimal preset or the 90 rounds of the mainnet preset.
 `bindings/python/tests/consensus/test_shuffling.py` compares each list with the shuffle in Lean.
 
+The run on each change reads only the cases of this directory, and the weekly parity job reads every case of the archives.
+That job also fails when a preset, fork and handler that a runner covers has no case here.
+So a new runner comes with vendored cases of each preset and fork.
+
 The test release publishes its cases in three archives.
 Their SHA-256 digests are:
 
