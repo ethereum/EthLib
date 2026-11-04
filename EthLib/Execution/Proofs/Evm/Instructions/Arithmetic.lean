@@ -2,7 +2,7 @@ module
 
 public import EthLib.Execution.Evm.Instructions.Arithmetic
 public import EthLib.Base.Proofs.U256
-public import EthLib.Execution.Proofs.Evm.Precompiles.Modexp.PowMod
+public import EthLib.Execution.Proofs.Evm.PowMod
 
 /-!
 # Proofs: `Evm.Instructions.Arithmetic`
@@ -116,7 +116,7 @@ theorem toNat_mulmod (x y z : U256) :
 
 /-- EXP is the power modulo 2^256. -/
 theorem toNat_exp (base exponent : U256) : (exp base exponent).toNat = base.toNat ^ exponent.toNat % 2 ^ 256 := by
-  rw [exp, BitVec.toNat_ofNat, Precompiles.Modexp.powMod_eq, Nat.mod_mod]
+  rw [exp, BitVec.toNat_ofNat, powMod_eq, Nat.mod_mod]
 
 /-- For `byteNum <= 31`, SIGNEXTEND is `BitVec.signExtend` of the low `byteNum + 1` bytes. -/
 theorem signextend_eq (byteNum value : U256) (h : byteNum.toNat ≤ 31) :

@@ -114,14 +114,19 @@ def blake2f (data : ByteArray) : Except Blake2fError (Vector UInt8 OUTPUT_BYTES)
 /-- The price of each round, `GasCosts.PRECOMPILE_BLAKE2F_PER_ROUND` in [`forks/istanbul/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/istanbul/vm/gas.py#L71). -/
 def GAS_PER_ROUND : Nat := 1
 
+/-- The gas a call is charged: one gas per round, for a 213-byte input.
+
+Any other input fails before the charge, so its price is 0. -/
+def gasCost (data : ByteArray) : Nat :=
+  if hsize : data.size = INPUT_BYTES then GAS_PER_ROUND * (readRounds ⟨data.data, hsize⟩).toNat
+  else 0
+
 /-- The call: the precompile, once the gas covers the price of the rounds.
 
 The gas is charged after the length check and before the flag check, as in [`blake2f`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/bogota/vm/precompiled_contracts/blake2f.py). -/
 def call (data : ByteArray) (gas : Nat) : Except Blake2fError ByteArray :=
-  if hsize : data.size = INPUT_BYTES then
-    let cost := GAS_PER_ROUND * (readRounds ⟨data.data, hsize⟩).toNat
-    if gas < cost then .error (.outOfGas cost gas)
-    else (blake2f data).map fun out => ⟨out.toArray⟩
-  else .error (.invalidLength data.size)
+  if data.size ≠ INPUT_BYTES then .error (.invalidLength data.size)
+  else if gas < gasCost data then .error (.outOfGas (gasCost data) gas)
+  else (blake2f data).map fun out => ⟨out.toArray⟩
 
 end EthLib.Execution.Evm.Precompiles.Blake2f

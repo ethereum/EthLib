@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Evm.Precompiles.Modexp.Core
+public import EthLib.Execution.Evm.PowMod
 
 /-!
 # Proofs: square-and-multiply
@@ -16,7 +16,7 @@ The statement holds for every modulus, including `0`, where `% 0` leaves the num
 
 @[expose] public section
 
-namespace EthLib.Execution.Evm.Precompiles.Modexp
+namespace EthLib.Execution.Evm
 
 /-- The square-and-multiply loop computes `b ^ e % m`. -/
 theorem powMod_eq (b e m : Nat) : powMod b e m = b ^ e % m := by
@@ -64,4 +64,4 @@ example : powMod 3 65535 (2 ^ 255)
     = 0x3b01b01ac41f2d6e917c6d6a221ce793802469026d9ab7578fa2e79e4da6aaab := by
   decide +kernel
 
-end EthLib.Execution.Evm.Precompiles.Modexp
+end EthLib.Execution.Evm

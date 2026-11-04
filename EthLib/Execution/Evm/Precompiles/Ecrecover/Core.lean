@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Secp256k1.Recovery
 public import EthLib.Cryptography.Secp256k1.Address
 public import EthLib.Execution.Evm.Precompiles.Ecrecover.Errors
+public import EthLib.Execution.Evm.Memory
 
 /-!
 # `Ecrecover.Core`
@@ -41,15 +42,14 @@ A high `s` is accepted: the low-s rule of EIP-2 is for transactions only.
 namespace EthLib.Execution.Evm.Precompiles.Ecrecover
 
 open EthLib.Cryptography.Secp256k1
+open EthLib.Execution.Evm (byteAt)
 
 /-- The gas of a call, `GasCosts.PRECOMPILE_ECRECOVER` in `forks/bpo2/vm/gas.py`. -/
 def GAS_ECRECOVER : Nat := 3000
 
-/-- The byte at index `i` of the call data, or `0` past its end, by `buffer_read` in `forks/bpo2/vm/memory.py`. -/
-def byteAt (data : ByteArray) (i : Nat) : UInt8 := data.data.getD i 0
-
 /-- 32 bytes of the call data from `start`, zero-padded on the right. -/
-def word (data : ByteArray) (start : Nat) : Vector UInt8 32 := Vector.ofFn fun i => byteAt data (start + i.val)
+def word (data : ByteArray) (start : Nat) : Vector UInt8 32 :=
+  Vector.ofFn fun i => byteAt data (start + i.val)
 
 /-- The output for a hash and the integers `v`, `r` and `s`.
 
