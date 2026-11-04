@@ -169,9 +169,19 @@ partial def opaquesOf (env : Environment) (n : Name) : StateM (NameMap NameSet) 
 def isFormattingType (c : ConstantInfo) : Bool :=
   c.type.getForallBody.getAppFn.constName? |>.any fun h => h == ``Repr || h == ``ToString
 
-/-- Whether `n` is a `Repr` or `ToString` instance, or a function generated for one, such as `instReprFoo.repr`. -/
+/-- Whether `n` is a `Repr` or `ToString` instance, or a function generated for one.
+
+A generated function sits below its instance, such as `instReprFoo.repr`.
+
+Recursion adds another level, such as `instReprFoo.repr._f`, so every prefix counts. -/
 def isFormatting (env : Environment) (n : Name) (c : ConstantInfo) : Bool :=
-  isFormattingType c || (env.find? n.getPrefix).any isFormattingType
+  isFormattingType c || go n.getPrefix
+where
+  /-- Whether `p` or one of its prefixes is a `Repr` or `ToString` instance. -/
+  go : Name → Bool
+    | .anonymous => false
+    | p@(.str q _) => (env.find? p).any isFormattingType || go q
+    | p@(.num q _) => (env.find? p).any isFormattingType || go q
 
 /-! ## The check -/
 
