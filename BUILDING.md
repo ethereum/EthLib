@@ -112,3 +112,17 @@ bash scripts/build_timing_report.sh render "$BUILD_TIMING_LOG_DIR/results.jsonl"
 The setup follows [ArkLib's migration](https://github.com/Verified-zkEVM/ArkLib/blob/bc367f8d53f603a48c5502e1ad7d39b7b3be725c/docs/wiki/module-system.md) and [VCVio's boundary policy](https://github.com/Verified-zkEVM/VCVio/blob/aae1c9cbd6c00311091d691b74f2d0032d76d9bd/docs/agents/module-system.md).
 [CompPoly's cache guide](https://github.com/Verified-zkEVM/CompPoly/blob/9be21b026e43ff9b032113dc9b766d2b17fd6c3c/docs/wiki/build-cache.md) distinguishes dependency caches from release archives.
 The sources and license of the ported timing scripts are recorded in [BUILD_TIMING_SOURCES.md](scripts/BUILD_TIMING_SOURCES.md).
+
+## Memory
+
+CI builds EthLib on a GitHub runner with 16 GB of memory, and Lake elaborates several files at once.
+A file that needs too much memory can therefore stop the whole build.
+So on a pull request, CI elaborates each Lean file that the pull request adds or changes once more, after the proofs.
+The job summary gives the time and the peak memory of each of these files.
+A file that needs more than 4 GiB gets a warning, and a file that needs more than 6 GiB fails the job.
+
+To measure files on your machine, build their imports first, then run:
+
+```bash
+uv run --no-project --python 3.12 python scripts/check_memory.py <file>...
+```
