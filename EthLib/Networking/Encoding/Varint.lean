@@ -68,7 +68,7 @@ inductive VarintError where
   | unterminated
   /-- A last byte was followed by more bytes. -/
   | trailingBytes
-  /-- More than ten bytes carry the continuation bit. -/
+  /-- Ten bytes carry the continuation bit, and another byte follows. -/
   | tooLong
   /-- The value is 2^64 or more, outside the 64-bit range. -/
   | overflow

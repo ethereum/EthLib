@@ -116,7 +116,7 @@ Each layer is a directory under `EthLib/`, which `CONTRIBUTING.md` calls a domai
 | Cryptography | hashes and Merkle trees, then the schemes built on them | `EthLib/Cryptography/` |
 | Base | the bytes, the integers and the forks that every layer uses | `EthLib/Base/` |
 
-Models sit above all of them, in their own package, described under [Packages](#packages).
+Models sit above all of them, under `Proofs/` in the layer they are about, as [Packages](#packages) describes.
 
 The order follows what each layer needs.
 SSZ merkleization hashes with SHA-256, so Serialization sits above Cryptography.
@@ -277,7 +277,7 @@ A message on a topic with the Phase 0 fork digest keeps the Phase 0 rule.
 A preset, such as the mainnet or the minimal preset of the consensus layer, is independent of the fork.
 A constant that differs between presets, such as `SLOTS_PER_EPOCH` (32 on mainnet, 8 on minimal), stays a field of a preset structure that the rule takes as an argument.
 When a constant depends on both, the function of the fork takes the preset as an argument too.
-No module defines a preset yet, so the first one that needs it adds the structure.
+`EthLib/Consensus/Preset.lean` defines the preset structure, with the mainnet and minimal presets.
 
 ## Sources
 
@@ -295,50 +295,30 @@ Update the pin in one pull request, and check every test that reads from the rep
 
 ## Packages
 
-What a consumer imports decides what it must download and trust.
-A client needs the specifications and nothing else, while a security proof needs the specifications, Mathlib and a probability library.
-So EthLib splits into three Lake packages by what each part requires:
+EthLib is one Lake package, with three libraries.
 
-- The core package `EthLib`, in the root directory, holds the specifications, the properties that need nothing beyond the Lean toolchain, and the C exports.
-  It has the libraries `EthLib`, `Proofs` and `Exports`, the `check-decls` executable, and no `require`.
-- The package `EthLibMathlib`, in `mathlib/`, holds the properties that need Mathlib.
-  It requires `EthLib from ".."` and Mathlib.
-- The package `EthLibModels`, in `models/`, holds the models.
-  It requires `EthLibMathlib from "../mathlib"` and VCVio, a library of probabilistic computations.
+- The library `EthLib` holds the specifications.
+- The library `Proofs` holds the properties and the models, in the `Proofs/` directory of each layer.
+- The library `Exports` holds the C exports that the Python bindings call.
 
-Each package depends on the ones before it, never the reverse.
-A consumer then takes exactly what it needs, and the core moves to a new Lean version without waiting for Mathlib.
+The package also builds the `check-decls` executable.
 
-The core accepts nothing outside the Lean toolchain.
-Batteries is not part of the toolchain, so a core module must not import it, even in a workspace where Mathlib brings it in.
-A property that needs Batteries goes in `EthLibMathlib`.
-Every model goes in `EthLibModels`, even a model that needs only Mathlib.
-The package then follows the kind, so the rule that no property imports a model is also a boundary between packages.
+The package requires Mathlib and VCVio, a library of probabilistic computations.
+Only the properties and the models may import them, or Batteries.
+A specification or an export imports nothing beyond the Lean toolchain.
+So the code that clients and the bindings run depends on no other library.
+Lake still downloads Mathlib and VCVio for a project that requires EthLib, because a requirement holds for the whole package.
 
-Each package has its own module root, named after the package.
-Two packages cannot share a module prefix.
-Suppose that `EthLibMathlib` kept the name `EthLib.Cryptography.Proofs.Bls.FpZMod` for one of its modules.
-Lake would then look for that module in the core package, which owns the prefix `EthLib`, and an `import` in a downstream project would fail.
-The same `import` succeeds inside the package's own workspace, so the error shows only downstream.
-
-A module that moves to another package changes only the first component of its name.
-So `EthLib.Cryptography.Proofs.Bls.FpZMod` becomes `EthLibMathlib.Cryptography.Proofs.Bls.FpZMod`, in the file `mathlib/EthLibMathlib/Cryptography/Proofs/Bls/FpZMod.lean`.
-The `Proofs` component stays, because `lake exe check-decls` finds a proof module by that component.
-The check exempts the definitions of a proof module from its rule that a definition of the specification never reaches an opaque constant.
-
-The repository does not have this layout yet.
-The root package still requires Mathlib and VCVio, and every property and model is a module under `EthLib/`.
-Some of these modules import Mathlib, Batteries or VCVio.
-The split moves each of them to its package, unless the module stops using the import first.
+A model is a module under `Proofs/`, like a property.
+The rule that no property imports a model is a rule between modules, not between packages.
 
 ## Where a new module goes
 
 A new module finds its place by answering three questions in order.
 
-1. Which kind is it, and which package holds it?
+1. Which kind is it?
    Code that computes the protocol is a specification, a theorem about it is a property, and an abstract protocol is a model.
-   A specification goes in `EthLib`, and so does a property that needs only the Lean toolchain.
-   A property that needs Mathlib or Batteries goes in `EthLibMathlib`, and a model goes in `EthLibModels`.
+   A specification goes in the library `EthLib`, and a property or a model in the library `Proofs`.
 2. Which layer is it in?
    Take the highest layer whose concepts it needs, and check that it needs nothing above it.
    An Ethereum Node Record is signed with secp256k1 and encoded with RLP, so it sits in Networking, above both.
@@ -347,7 +327,6 @@ A new module finds its place by answering three questions in order.
    If two modules need the same thing, write it once, in the lower of their layers.
 
 Then the module follows the layout of `CONTRIBUTING.md`: the specification in `EthLib/<Domain>/<Module>/`, its theorems in `EthLib/<Domain>/Proofs/<Module>/`, and its C exports in `EthLib/<Domain>/Exports/`.
-In `EthLibMathlib` and `EthLibModels`, the same path sits under the package root: a property in `EthLibMathlib` goes in `mathlib/EthLibMathlib/<Domain>/Proofs/<Module>/`.
-Until the split, a property or a model that needs Mathlib, Batteries or VCVio still goes in `EthLib/<Domain>/Proofs/<Module>/`, and the split moves it.
+A model goes under `Proofs/` too, as the Casper FFG model does in `EthLib/Consensus/Proofs/Models/Ffg/`.
 Modules of one kind share a directory, under the part of the layer that uses them.
 The precompiles are one kind, and only the EVM calls them, so ECRECOVER sits in `EthLib/Execution/Evm/Precompiles/Ecrecover/`, and its theorems in `EthLib/Execution/Proofs/Evm/Precompiles/Ecrecover/`.
