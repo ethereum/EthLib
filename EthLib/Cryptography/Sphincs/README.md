@@ -92,14 +92,16 @@ Nothing in EthLib counts signatures, so the caller must.
 
 `tests/cryptography/sphincs/` has cases for `key_gen`, `sign` and `verify`.
 
-The proofs also pin one public key and one signature (`Proofs/Sphincs/KnownAnswer*.lean`).
+The `verify_valid_scheme_seed` case pins one public key and one signature, computed outside EthLib by an independent implementation.
 The key grows from the scheme seed `S[i] = 37 i + 11 mod 256`, and the signature signs `m[i] = 7 i + 3`.
-So the known answer pins everything below the scheme's name, and a separate known answer pins the hash of the name with that seed.
-The kernel checks that the signature's bytes verify under the key's bytes, and that the key's public parameter is the one the scheme seed gives.
-It does not compute the key's root from the seed: the root is pinned as the one the signature's top path reaches.
+So the case fixes every hash that verification makes.
+Verification reads the public parameter from the key, so no case checks that it is the one the scheme seed gives.
+A test checks the value Keccak-256 gives for the name followed by the seed, the hash that key generation starts with.
+Two more cases reject that signature with a zeroed FORS secret and with a zeroed top sibling.
 
 The `key_gen_known_answer` and `sign_known_answer` cases take the same bytes `S[i]` as a key's seed `S_0`.
-Their scheme seed is the hash of the name with `S[i]`, so their key and signature differ from the proofs' known answer.
+Their scheme seed is the hash of the name with `S[i]`, so their key and signature differ from the case above.
+They come from the code under test.
 
 ## What is proved
 
@@ -137,11 +139,6 @@ The proofs are in `EthLib/Cryptography/Proofs/Sphincs/`.
   A hash input determines its public parameter, address and payload (`thInput_inj`).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
-- Known answer (`KnownAnswer*.lean`).
-  One key, from the seed `S[i] = 37 i + 11`, and one signature of the message `m[i] = 7 i + 3`, are pinned byte for byte.
-  The public parameter, from the seed, matches the public key (`publicParam_known_answer`).
-  The signature's bytes verify under the public key's bytes (`verify_known_answer`).
-  A changed FORS secret and a changed top sibling each reject (`verify_tampered_fors_secret`, `verify_tampered_top_path`).
 
 ## What is not proved
 
@@ -152,19 +149,3 @@ The proofs are in `EthLib/Cryptography/Proofs/Sphincs/`.
 - That signing fails with small probability.
   `all_counters_fail_probability` bounds the number, assuming uniform digests, which is the random-oracle assumption.
 - That every codeword is the codeword of some digest.
-
-## What the kernel cannot evaluate
-
-That limit is on computing results inside Lean, and is separate from the missing theorems above.
-
-The kernel checks the known answer itself, with no `native_decide`.
-
-One verification is too large for one kernel check, so it is checked in pieces.
-The pieces are the digest, the FORS trees a few at a time, and the codeword, chains, leaf and path of each layer.
-
-The pieces run over a record form of Keccak-f, with the hash inputs as lists.
-The kernel evaluates that form far faster than the specification's vectors and arrays.
-
-`Proofs/Hash/KeccakKernel.lean` proves the record form equal to Keccak-f for every state, and `Proofs/Sphincs/Kernel.lean` carries that through the chains, the paths and the FORS climbs.
-
-The public key from the seed needs the whole top tree, `2^10` one-time keys, which is beyond the kernel.

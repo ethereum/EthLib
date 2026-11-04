@@ -85,8 +85,7 @@ So the generators rewrite the `key_gen` and `sign` cases only on request:
 ETHLIB_SLOW_VECTORS=1 uv run --no-sync pytest bindings/python/tests/sphincs
 ```
 
-`key_gen_known_answer` and `sign_known_answer` hold the bytes the proofs pin.
-The kernel checks that this signature verifies under this key, and that the key's public parameter is the one the seed gives.
+`verify_valid_scheme_seed` holds a public key and a signature that an independent implementation computed.
 The other cases come from the code under test.
 
 ## SHA-256

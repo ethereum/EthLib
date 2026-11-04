@@ -24,4 +24,7 @@ Each layer's counter encodes what the layer signs as a codeword, and the top lay
 
 Each case named `tampered` flips one bit in the first value of one field, except `tampered_top_last_sibling`, which flips the last byte of the signature.
 
+The cases named `zeroed` set the secret of FORS tree 0, or the last sibling of the top layer, to zero.
+
 The valid cases come from the `sign` cases, and the public keys from the `key_gen` cases.
+The exception is `verify_valid_scheme_seed`, whose key and signature an independent implementation computed, and the cases built from it.

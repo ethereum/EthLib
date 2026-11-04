@@ -117,8 +117,7 @@ leanXMSS also states `fold_binding` with `climb_binding_node`, which its unforge
 The correctness theorem is `verify_keyGen_sign` (`Proofs/Sphincs/Correctness.lean`).
 If `keyGen seed` returns a key pair, and `sign` returns a signature for a message, then `verify` accepts that signature under that public key.
 
-`verify_known_answer` (`Proofs/Sphincs/KnownAnswerVerify.lean`) checks one pinned signature's bytes against one pinned public key's bytes.
-The kernel evaluates every one of the 492 permutations.
+The Python suite checks one signature that an independent implementation computed, with its public key, through the bindings.
 
 `all_counters_fail_probability` (`Proofs/Sphincs/CodeSize.lean`) bounds a number: if digests were uniform, signing would fail with probability below `exp(-2^18)`.
 That digests are uniform is not proved.
