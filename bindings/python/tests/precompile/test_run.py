@@ -1,10 +1,7 @@
-"""Every precompile through the one entry point, against an independent oracle.
+"""Every precompile through the one entry point, at every fork, against an independent oracle.
 
-The prices are those of Fusaka, the fork `osaka` of execution-specs.
-
-Repository: ethereum/execution-specs
-Commit: e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e
-Path: src/ethereum/forks/osaka/vm/precompiled_contracts
+The prices of the first four precompiles are those of Appendix E of the Yellow Paper.
+The others are those of the EIP that adds each precompile.
 """
 
 import hashlib
@@ -12,9 +9,20 @@ import struct
 
 import pytest
 
-from ethlib.precompiles import ADDRESSES, run
+from ethlib.precompiles import ADDRESSES, price, run
 from ethlib.precompiles import ecrecover as ecrecover_precompile
-from ethlib.precompiles import modexp as modexp_precompile
+
+from .forks import FORKS, since
+
+# The fork that adds each precompile, from its EIP, and Frontier for the first four.
+ADDED = {
+    **{address: "frontier" for address in (0x01, 0x02, 0x03, 0x04)},
+    **{address: "byzantium" for address in (0x05, 0x06, 0x07, 0x08)},
+    0x09: "istanbul",
+    0x0A: "dencun",
+    **{address: "pectra" for address in range(0x0B, 0x12)},
+    0x100: "fusaka",
+}
 
 
 def word(value: int) -> bytes:
@@ -23,68 +31,100 @@ def word(value: int) -> bytes:
 
 def test_addresses() -> None:
     assert ADDRESSES == tuple(range(0x01, 0x12)) + (0x100,)
+    assert set(ADDED) == set(ADDRESSES)
+
+
+@pytest.mark.parametrize("address", ADDRESSES)
+@pytest.mark.parametrize("fork", FORKS)
+def test_fork_adds_precompile(fork: str, address: int) -> None:
+    # Before the fork that adds it, an address has no precompile, and neither run nor price
+    # reaches one.
+    if fork in since(ADDED[address]):
+        assert price(fork, address, b"") >= 0
+    else:
+        with pytest.raises(ValueError, match="no precompile at address"):
+            run(fork, address, b"", 10**6)
+        with pytest.raises(ValueError, match="no precompile at address"):
+            price(fork, address, b"")
+
+
+def test_unknown_fork() -> None:
+    with pytest.raises(ValueError, match="no fork named"):
+        run("osaka", 0x04, b"", 100)
+    with pytest.raises(ValueError, match="no fork named"):
+        price("osaka", 0x04, b"")
 
 
 @pytest.mark.parametrize("address", [0x00, 0x12, 0xFF, 0x101, 2**64 - 1])
-def test_unknown_address(address: int) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_unknown_address(fork: str, address: int) -> None:
     with pytest.raises(ValueError, match="no precompile at address"):
-        run(address, b"", 10**6)
+        run(fork, address, b"", 10**6)
 
 
 def test_rejects_bad_arguments() -> None:
     with pytest.raises(TypeError):
-        run(0x04, "abc", 100)  # type: ignore[arg-type]
+        run("fusaka", 0x04, "abc", 100)  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        run(b"fusaka", 0x04, b"", 100)  # type: ignore[arg-type]
     with pytest.raises(OverflowError):
-        run(0x04, b"", 2**64)
+        run("fusaka", 0x04, b"", 2**64)
+    with pytest.raises(OverflowError):
+        price("fusaka", 2**64, b"")
 
 
-def test_ecrecover() -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_ecrecover(fork: str) -> None:
     # The same call through the dedicated binding gives the same output.
     data = bytes(range(128))
-    assert run(0x01, data, 3000) == ecrecover_precompile.ecrecover(data, 3000)
+    assert run(fork, 0x01, data, 3000) == ecrecover_precompile.ecrecover(data, 3000)
     with pytest.raises(ValueError, match="outOfGas"):
-        run(0x01, data, 2999)
+        run(fork, 0x01, data, 2999)
 
 
-def test_sha256() -> None:
-    assert run(0x02, b"abc", 72) == hashlib.sha256(b"abc").digest()
+@pytest.mark.parametrize("fork", FORKS)
+def test_sha256(fork: str) -> None:
+    assert run(fork, 0x02, b"abc", 72) == hashlib.sha256(b"abc").digest()
     with pytest.raises(ValueError, match="outOfGas"):
-        run(0x02, b"abc", 71)
+        run(fork, 0x02, b"abc", 71)
 
 
-@pytest.mark.parametrize("data, digest, price", [
+@pytest.mark.parametrize("data, digest, cost", [
     # The digests are those of the RIPEMD-160 paper, Appendix B.
     (b"", "9c1185a5c5e9fc54612808977ee8f548b2258d31", 600),
     (b"abc", "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc", 720),
     (b"a" * 33, None, 840),
 ])
-def test_ripemd160(data: bytes, digest: str | None, price: int) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_ripemd160(fork: str, data: bytes, digest: str | None, cost: int) -> None:
     # The price is 600, plus 120 per started 32-byte word.
-    out = run(0x03, data, price)
+    out = run(fork, 0x03, data, cost)
     assert out[:12] == bytes(12)
     if digest is not None:
         assert out[12:].hex() == digest
     with pytest.raises(ValueError, match="outOfGas"):
-        run(0x03, data, price - 1)
+        run(fork, 0x03, data, cost - 1)
 
 
-@pytest.mark.parametrize("size, price", [(0, 15), (33, 21)])
-def test_identity(size: int, price: int) -> None:
+@pytest.mark.parametrize("size, cost", [(0, 15), (33, 21)])
+@pytest.mark.parametrize("fork", FORKS)
+def test_identity(fork: str, size: int, cost: int) -> None:
     # The price is 15, plus 3 per started 32-byte word.
     data = bytes(range(size))
-    assert run(0x04, data, price) == data
+    assert run(fork, 0x04, data, cost) == data
     with pytest.raises(ValueError, match="outOfGas"):
-        run(0x04, data, price - 1)
+        run(fork, 0x04, data, cost - 1)
 
 
-def test_modexp() -> None:
-    # 3^(p - 2) mod p for the prime p = 2^255 - 19, through the dedicated binding and through Python.
+@pytest.mark.parametrize("fork", since("byzantium"))
+def test_modexp(fork: str) -> None:
+    # 3^(p - 2) mod p for the prime p = 2^255 - 19, through the precompile and through Python.
     p = 2**255 - 19
     data = word(1) + word(32) + word(32) + bytes([3]) + word(p - 2) + word(p)
-    price = modexp_precompile.gas_cost(data)
-    assert run(0x05, data, price) == word(pow(3, p - 2, p))
+    cost = price(fork, 0x05, data)
+    assert run(fork, 0x05, data, cost) == word(pow(3, p - 2, p))
     with pytest.raises(ValueError, match="outOfGas"):
-        run(0x05, data, price - 1)
+        run(fork, 0x05, data, cost - 1)
 
 
 def blake2f_input(rounds: int, message: bytes, final: int) -> bytes:
@@ -100,41 +140,45 @@ def blake2f_input(rounds: int, message: bytes, final: int) -> bytes:
             + struct.pack("<2Q", len(message), 0) + bytes([final]))
 
 
-def test_blake2f() -> None:
+@pytest.mark.parametrize("fork", since("istanbul"))
+def test_blake2f(fork: str) -> None:
     # With 12 rounds and the final flag, F on the one block of "abc" is the whole BLAKE2b-512 hash.
     data = blake2f_input(12, b"abc", 1)
-    assert run(0x09, data, 12) == hashlib.blake2b(b"abc").digest()
+    assert run(fork, 0x09, data, 12) == hashlib.blake2b(b"abc").digest()
     with pytest.raises(ValueError, match="outOfGas"):
-        run(0x09, data, 11)
+        run(fork, 0x09, data, 11)
 
 
-def test_blake2f_order_of_checks() -> None:
+@pytest.mark.parametrize("fork", since("istanbul"))
+def test_blake2f_order_of_checks(fork: str) -> None:
     # The length is checked before the gas, and the gas before the flag.
     with pytest.raises(ValueError, match="invalidLength"):
-        run(0x09, blake2f_input(12, b"abc", 1)[:-1], 0)
+        run(fork, 0x09, blake2f_input(12, b"abc", 1)[:-1], 0)
     with pytest.raises(ValueError, match="outOfGas"):
-        run(0x09, blake2f_input(12, b"abc", 2), 11)
+        run(fork, 0x09, blake2f_input(12, b"abc", 2), 11)
     with pytest.raises(ValueError, match="invalidFlag"):
-        run(0x09, blake2f_input(12, b"abc", 2), 12)
+        run(fork, 0x09, blake2f_input(12, b"abc", 2), 12)
 
 
-@pytest.mark.parametrize("address, size, price, out_size", [
+@pytest.mark.parametrize("address, size, cost, out_size", [
     # The sum of two points at infinity is the point at infinity.
     (0x0B, 256, 375, 128),
     (0x0D, 512, 600, 256),
 ])
-def test_bls12_add_infinity(address: int, size: int, price: int, out_size: int) -> None:
-    assert run(address, bytes(size), price) == bytes(out_size)
+@pytest.mark.parametrize("fork", since("pectra"))
+def test_bls12_add_infinity(fork: str, address: int, size: int, cost: int, out_size: int) -> None:
+    assert run(fork, address, bytes(size), cost) == bytes(out_size)
     with pytest.raises(ValueError, match="outOfGas"):
-        run(address, bytes(size), price - 1)
+        run(fork, address, bytes(size), cost - 1)
 
 
-@pytest.mark.parametrize("address, size, price, out_size", [
+@pytest.mark.parametrize("address, size, cost, out_size", [
     (0x10, 64, 5500, 128),
     (0x11, 128, 23800, 256),
 ])
-def test_bls12_map_zero(address: int, size: int, price: int, out_size: int) -> None:
+@pytest.mark.parametrize("fork", since("pectra"))
+def test_bls12_map_zero(fork: str, address: int, size: int, cost: int, out_size: int) -> None:
     # The zero field element maps to a point, which the EIP-2537 vectors fix.
-    assert len(run(address, bytes(size), price)) == out_size
+    assert len(run(fork, address, bytes(size), cost)) == out_size
     with pytest.raises(ValueError, match="outOfGas"):
-        run(address, bytes(size), price - 1)
+        run(fork, address, bytes(size), cost - 1)

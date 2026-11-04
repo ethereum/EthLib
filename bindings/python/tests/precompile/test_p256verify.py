@@ -23,15 +23,22 @@ import pytest
 
 from ethlib.precompiles import run
 
+from .forks import ends
+
+# The fork that adds the precompile, fusaka, and the latest fork: no fork in between changes it.
+FORKS = ends("fusaka")
+
 CASES = json.loads((Path(__file__).parent / "eip7951_cases.json").read_text())
 
 
 @pytest.mark.parametrize("case", CASES, ids=[case["Name"] for case in CASES])
-def test_vector(case: dict) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_vector(fork: str, case: dict) -> None:
     # A valid signature gives the word 1, and every invalid input gives empty output.
-    assert run(0x100, bytes.fromhex(case["Input"]), 6900).hex() == case["Expected"]
+    assert run(fork, 0x100, bytes.fromhex(case["Input"]), 6900).hex() == case["Expected"]
 
 
-def test_out_of_gas() -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_out_of_gas(fork: str) -> None:
     with pytest.raises(ValueError, match="outOfGas"):
-        run(0x100, bytes.fromhex(CASES[0]["Input"]), 6899)
+        run(fork, 0x100, bytes.fromhex(CASES[0]["Input"]), 6899)

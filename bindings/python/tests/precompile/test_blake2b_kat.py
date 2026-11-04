@@ -13,6 +13,9 @@ from .test_blake2f import compress
 
 ADDRESS = 0x09
 
+# The precompile is the same at every fork from Istanbul, so the hash runs at the latest one.
+FORK = "bpo2"
+
 # The BLAKE2b entries of the BLAKE2 known answers.
 #
 # File: testvectors/blake2-kat.json
@@ -33,7 +36,7 @@ def precompile(h: list[int], block: bytes, t: int, last: bool) -> list[int]:
     """F through the precompile, with the 12 rounds of BLAKE2b."""
     call = (struct.pack(">I", 12) + struct.pack("<8Q", *h) + block
             + struct.pack("<2Q", t, 0) + bytes([last]))
-    return list(struct.unpack("<8Q", run(ADDRESS, call, 12)))
+    return list(struct.unpack("<8Q", run(FORK, ADDRESS, call, 12)))
 
 
 def oracle(h: list[int], block: bytes, t: int, last: bool) -> list[int]:

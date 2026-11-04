@@ -1,34 +1,50 @@
 module
 
+public import EthLib.Execution.Exports.Evm
 public import EthLib.Base.Exports
 public import EthLib.Execution.Evm.Precompiles.Table
 
 /-!
 # `Exports.Precompiles`
 
-A C-ABI export that runs any of the 18 precompiles of Fusaka, callable from the Python C extension.
+C-ABI exports that run any precompile, and give its price, at a fork named by the caller.
 
-- The address and the gas are `UInt64`, and the call data is a `ByteArray`.
-- A failed call, or an address with no precompile, comes back as an error code and a message.
+A fork with no precompile at the address gives an error with code 0.
 -/
 
 public section
 
 namespace EthLib.Execution.Evm.Precompiles.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result forkOfName)
 
 open EthLib.Execution.Evm.Precompiles
 
-/-- Run the precompile at the address on the call data, with the gas given.
+/-- Run the precompile at the address on the call data, with the gas given, at the fork named.
 
 The code of a failed call names the precompile, and the message is its error, as Lean prints it.
 
-An address with no precompile has code 0, which no error of a precompile has. -/
+An unknown fork, or an address with no precompile at the fork, has code 0.
+
+No error of a precompile has that code. -/
 @[export eth_precompile_run]
-def runExport (address : UInt64) (data : ByteArray) (gas : UInt64) : Result ByteArray :=
-  match run .fusaka address.toNat data gas.toNat with
+def runExport (fork : ByteArray) (address : UInt64) (data : ByteArray) (gas : UInt64) :
+    Result ByteArray := do
+  let fork ← forkOfName fork
+  match run fork address.toNat data gas.toNat with
   | some result => result.mapError fun e => (e.code, reprStr e)
-  | none => .error (0, s!"no precompile at address {address}")
+  | none => throw (0, s!"no precompile at address {address} at fork {fork.name}")
+
+/-- The price of the precompile at the address on the call data, at the fork named.
+
+The price is a big-endian integer, since a long call data can price it above `2^64`.
+
+An unknown fork, or an address with no precompile at the fork, has code 0. -/
+@[export eth_precompile_price]
+def priceExport (fork : ByteArray) (address : UInt64) (data : ByteArray) : Result ByteArray := do
+  let fork ← forkOfName fork
+  match price fork address.toNat data with
+  | some cost => return Evm.Exports.bytesOfNat cost
+  | none => throw (0, s!"no precompile at address {address} at fork {fork.name}")
 
 end EthLib.Execution.Evm.Precompiles.Exports

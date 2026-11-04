@@ -60,7 +60,7 @@ def test_modexp_error_code() -> None:
 def test_precompile_error_names_the_precompile() -> None:
     data = (1).to_bytes(32, "big") * 3 + b"\x02\x03\x05"
     with pytest.raises(errors.PrecompileError) as info:
-        run(0x05, data, 0)
+        run("fusaka", 0x05, data, 0)
     # The code of MODEXP among the precompiles.
     assert info.value.code == 5
     assert "outOfGas" in info.value.message
@@ -68,7 +68,7 @@ def test_precompile_error_names_the_precompile() -> None:
 
 def test_no_precompile_has_code_zero() -> None:
     with pytest.raises(errors.PrecompileError) as info:
-        run(0x12, b"", 0)
+        run("fusaka", 0x12, b"", 0)
     assert info.value.code == 0
 
 

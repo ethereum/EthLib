@@ -358,6 +358,7 @@ PyObject* py_rlpx_finish                                  (PyObject* self, PyObj
 PyObject* py_block_validate_header                        (PyObject* self, PyObject* args);
 
 PyObject* py_precompile_run                               (PyObject* self, PyObject* args);
+PyObject* py_precompile_price                             (PyObject* self, PyObject* args);
 
 PyObject* py_state_root                                   (PyObject* self, PyObject* args);
 PyObject* py_state_withdrawals_root                       (PyObject* self, PyObject* args);

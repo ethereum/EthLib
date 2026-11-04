@@ -3021,8 +3021,8 @@
    "docstring":
    "Check a header at a fork against its parent at the parent's fork, from Paris on."},
   {"summary":
-   "Run the precompile at the address on the call data, with the gas given.",
-   "signature": "(address: int, data: bytes, gas: int) -> bytes",
+   "Run the precompile at the address on the call data, with the gas given, at the fork named.",
+   "signature": "(fork: str, address: int, data: bytes, gas: int) -> bytes",
    "operation": "EthLib.Execution.Evm.Precompiles.Exports.runExport",
    "method": "precompile_run",
    "errors":
@@ -3040,7 +3040,16 @@
       {"constructor": "p256Verify", "code": 10}]}],
    "error_class": "PrecompileError",
    "docstring":
-   "Run the precompile at the address on the call data, with the gas given.\n\nThe code of a failed call names the precompile, and the message is its error, as Lean prints it.\n\nAn address with no precompile has code 0, which no error of a precompile has."},
+   "Run the precompile at the address on the call data, with the gas given, at the fork named.\n\nThe code of a failed call names the precompile, and the message is its error, as Lean prints it.\n\nAn unknown fork, or an address with no precompile at the fork, has code 0.\n\nNo error of a precompile has that code."},
+  {"summary":
+   "The price of the precompile at the address on the call data, at the fork named.",
+   "signature": "(fork: str, address: int, data: bytes) -> bytes",
+   "operation": "EthLib.Execution.Evm.Precompiles.Exports.priceExport",
+   "method": "precompile_price",
+   "errors": [],
+   "error_class": "PrecompileError",
+   "docstring":
+   "The price of the precompile at the address on the call data, at the fork named.\n\nThe price is a big-endian integer, since a long call data can price it above `2^64`.\n\nAn unknown fork, or an address with no precompile at the fork, has code 0."},
   {"summary":
    "The 32-byte state root, with Keccak-256, of the state that `input` encodes.",
    "signature": "(state: bytes) -> bytes",

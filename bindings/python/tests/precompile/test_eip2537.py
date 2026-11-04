@@ -7,6 +7,11 @@ import pytest
 
 from ethlib.precompiles import run
 
+from .forks import ends
+
+# The fork that adds the precompile, pectra, and the latest fork: no fork in between changes it.
+FORKS = ends("pectra")
+
 # The cases of EIP-2537, keyed by file, except the MSM cases with more than 8 pairs.
 #
 # Directory: assets/eip-2537
@@ -57,20 +62,23 @@ FAILURE = [
 
 
 @pytest.mark.parametrize("address, case", SUCCESS)
-def test_exact_price(address: int, case: dict) -> None:
-    assert run(address, bytes.fromhex(case["Input"]), case["Gas"]).hex() == case["Expected"]
+@pytest.mark.parametrize("fork", FORKS)
+def test_exact_price(fork: str, address: int, case: dict) -> None:
+    assert run(fork, address, bytes.fromhex(case["Input"]), case["Gas"]).hex() == case["Expected"]
 
 
 @pytest.mark.parametrize("address, case", SUCCESS)
-def test_one_gas_short(address: int, case: dict) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_one_gas_short(fork: str, address: int, case: dict) -> None:
     with pytest.raises(ValueError, match="outOfGas"):
-        run(address, bytes.fromhex(case["Input"]), case["Gas"] - 1)
+        run(fork, address, bytes.fromhex(case["Input"]), case["Gas"] - 1)
 
 
 @pytest.mark.parametrize("address, case", FAILURE)
-def test_error(address: int, case: dict) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_error(fork: str, address: int, case: dict) -> None:
     with pytest.raises(ValueError, match=rf"\.{ERROR[case['ExpectedError']]}\b"):
-        run(address, bytes.fromhex(case["Input"]), AMPLE_GAS)
+        run(fork, address, bytes.fromhex(case["Input"]), AMPLE_GAS)
 
 
 # The MSM cases of EIP-2537 with more than 8 pairs, from the same directory.
@@ -101,11 +109,13 @@ def test_large_msm_count() -> None:
 
 
 @pytest.mark.parametrize("address, data, case", LARGE)
-def test_large_msm_exact_price(address: int, data: bytes, case: dict) -> None:
-    assert run(address, data, case["Gas"]).hex() == case["Expected"]
+@pytest.mark.parametrize("fork", FORKS)
+def test_large_msm_exact_price(fork: str, address: int, data: bytes, case: dict) -> None:
+    assert run(fork, address, data, case["Gas"]).hex() == case["Expected"]
 
 
 @pytest.mark.parametrize("address, data, case", LARGE)
-def test_large_msm_one_gas_short(address: int, data: bytes, case: dict) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_large_msm_one_gas_short(fork: str, address: int, data: bytes, case: dict) -> None:
     with pytest.raises(ValueError, match="outOfGas"):
-        run(address, data, case["Gas"] - 1)
+        run(fork, address, data, case["Gas"] - 1)

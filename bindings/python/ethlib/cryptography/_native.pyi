@@ -599,8 +599,12 @@ def block_validate_header(parent_fork: str, fork: str, parent: bytes, header: by
     """Check a header at a fork against its parent at the parent's fork, from Paris on."""
     ...
 
-def precompile_run(address: int, data: bytes, gas: int) -> bytes:
-    """Run the precompile at the address on the call data, with the gas given."""
+def precompile_run(fork: str, address: int, data: bytes, gas: int) -> bytes:
+    """Run the precompile at the address on the call data, with the gas given, at the fork named."""
+    ...
+
+def precompile_price(fork: str, address: int, data: bytes) -> bytes:
+    """The price of the precompile at the address on the call data, at the fork named."""
     ...
 
 def state_root(state: bytes) -> bytes:
