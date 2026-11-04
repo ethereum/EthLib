@@ -34,7 +34,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Networking | [`Enr`](EthLib/Networking/Enr/) | Ethereum Node Records of EIP-778, their text form, the "v4" identity scheme, node IDs and the consensus entries |
 | Networking | [`Snappy`](EthLib/Networking/Snappy/) | Snappy block decompression, a literal block encoder and the framing format |
 | Networking | [`Gossip`](EthLib/Networking/Gossip/) | the gossip message ID of Phase 0 and Altair |
-| Networking | [`Discv5`](EthLib/Networking/Discv5/) | the node distance and the "v4" handshake cryptography of discv5 |
+| Networking | [`Discv5`](EthLib/Networking/Discv5/) | the node distance, the "v4" handshake cryptography and the packets of discv5 |
 | Networking | [`ReqResp`](EthLib/Networking/ReqResp/) | the `ssz_snappy` encoding of requests and response chunks, with its size bounds |
 | Execution | [`Fees`](EthLib/Execution/Fees/) | the EIP-1559 base fee and the blob base fee |
 | Execution | [`Evm`](EthLib/Execution/Evm/) | the arithmetic, comparison and bitwise instructions of the EVM, its gas prices and the price of memory |

@@ -1,9 +1,5 @@
-"""The discv5 "v4" handshake cryptography against the devp2p test vectors.
-
-The ECDH, key derivation and ID nonce signing values come from "Cryptographic Primitives" of
-discv5/discv5-wire-test-vectors.md, at commit 88f1c80800d622cc3a542a2125bbe33cc18c9f9c of
-ethereum/devp2p. The distance tests are hand-built, and each one names what it pins.
-"""
+"""discv5 handshake cryptography against discv5-wire-test-vectors.md of ethereum/devp2p,
+commit 88f1c80800d622cc3a542a2125bbe33cc18c9f9c."""
 
 import pytest
 

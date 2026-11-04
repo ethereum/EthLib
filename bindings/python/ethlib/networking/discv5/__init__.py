@@ -1,11 +1,6 @@
-"""The Node Discovery Protocol v5 (discv5): node distances and the "v4" handshake cryptography.
+"""Node distances, handshake cryptography and packets of discv5."""
 
-- A node ID is 32 bytes, and a private key is 32 big-endian bytes.
-- A public key is a SEC 1 encoding of a point of secp256k1, compressed or not.
-
-An invalid key or node ID raises ValueError.
-"""
-
+import json
 from typing import NamedTuple
 
 # Every domain links into one extension module.
@@ -64,4 +59,40 @@ def id_verify(
     )
 
 
-__all__ = ["SessionKeys", "log_distance", "ecdh", "derive_keys", "id_sign", "id_verify"]
+def _hex_fields(raw: bytes) -> dict:
+    fields = json.loads(raw)
+    return {k: bytes.fromhex(v[2:]) if isinstance(v, str) else v for k, v in fields.items()}
+
+
+def decode_packet(dest_id: bytes, packet: bytes) -> dict:
+    """The fields of a packet that node dest_id reads, with message_ad its additional data."""
+    return _hex_fields(_native.discv5_decode_packet(dest_id, packet))
+
+
+def reencode_packet(dest_id: bytes, packet: bytes) -> bytes:
+    """The bytes of the decoded packet, written again by the encoder."""
+    return _native.discv5_reencode_packet(dest_id, packet)
+
+
+def encrypt_message(key: bytes, nonce: bytes, plaintext: bytes, ad: bytes) -> bytes:
+    """AES-128-GCM of the plaintext, then the 16-byte tag."""
+    return _native.discv5_encrypt_message(key, nonce, plaintext, ad)
+
+
+def decrypt_message(key: bytes, nonce: bytes, message: bytes, ad: bytes) -> bytes:
+    """The plaintext of an encrypted message that authenticates."""
+    return _native.discv5_decrypt_message(key, nonce, message, ad)
+
+
+__all__ = [
+    "SessionKeys",
+    "log_distance",
+    "ecdh",
+    "derive_keys",
+    "id_sign",
+    "id_verify",
+    "decode_packet",
+    "reencode_packet",
+    "encrypt_message",
+    "decrypt_message",
+]
