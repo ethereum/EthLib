@@ -24,6 +24,23 @@ eth_secp256k1_recover(
   uint8_t recovery_id
 );
 
+extern lean_object*
+eth_secp256k1_sign(
+  lean_object* private_key,
+  lean_object* hash
+);
+
+extern lean_object*
+eth_secp256k1_ecdh(
+  lean_object* private_key,
+  lean_object* public_key
+);
+
+extern lean_object*
+eth_secp256k1_address(
+  lean_object* private_key
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 PyObject*
@@ -91,4 +108,62 @@ py_secp256k1_recover(
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(sig_obj), PyBytes_GET_SIZE(sig_obj)),
     recovery_id);
   return run_io_into_pybytes(res, "secp256k1 recover");
+}
+
+PyObject*
+py_secp256k1_sign(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *sk_obj, *hash_obj;
+  if (!PyArg_ParseTuple(args, "OO", &sk_obj, &hash_obj)) return NULL;
+  if (!PyBytes_Check(sk_obj)) {
+    PyErr_SetString(PyExc_TypeError, "private_key must be bytes");
+    return NULL;
+  }
+  if (!PyBytes_Check(hash_obj)) {
+    PyErr_SetString(PyExc_TypeError, "msg_hash must be bytes");
+    return NULL;
+  }
+  lean_object* res = eth_secp256k1_sign(
+    mk_bytearray((const uint8_t*) PyBytes_AS_STRING(sk_obj), PyBytes_GET_SIZE(sk_obj)),
+    mk_bytearray((const uint8_t*) PyBytes_AS_STRING(hash_obj), PyBytes_GET_SIZE(hash_obj)));
+  return run_io_into_pybytes(res, "secp256k1 sign");
+}
+
+PyObject*
+py_secp256k1_ecdh(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *sk_obj, *pk_obj;
+  if (!PyArg_ParseTuple(args, "OO", &sk_obj, &pk_obj)) return NULL;
+  if (!PyBytes_Check(sk_obj)) {
+    PyErr_SetString(PyExc_TypeError, "private_key must be bytes");
+    return NULL;
+  }
+  if (!PyBytes_Check(pk_obj)) {
+    PyErr_SetString(PyExc_TypeError, "public_key must be bytes");
+    return NULL;
+  }
+  lean_object* res = eth_secp256k1_ecdh(
+    mk_bytearray((const uint8_t*) PyBytes_AS_STRING(sk_obj), PyBytes_GET_SIZE(sk_obj)),
+    mk_bytearray((const uint8_t*) PyBytes_AS_STRING(pk_obj), PyBytes_GET_SIZE(pk_obj)));
+  return run_io_into_pybytes(res, "secp256k1 ecdh");
+}
+
+PyObject*
+py_secp256k1_address(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *sk_obj;
+  if (!PyArg_ParseTuple(args, "O", &sk_obj)) return NULL;
+  if (!PyBytes_Check(sk_obj)) {
+    PyErr_SetString(PyExc_TypeError, "private_key must be bytes");
+    return NULL;
+  }
+  lean_object* res = eth_secp256k1_address(
+    mk_bytearray((const uint8_t*) PyBytes_AS_STRING(sk_obj), PyBytes_GET_SIZE(sk_obj)));
+  return run_io_into_pybytes(res, "secp256k1 address");
 }

@@ -9,9 +9,7 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Recovery
 public import EthLib.Cryptography.Proofs.Secp256k1.Address
 public import EthLib.Cryptography.Proofs.Secp256k1.Malleability
 public import EthLib.Cryptography.Proofs.Secp256k1.Sign
-public import EthLib.Cryptography.Proofs.Secp256k1.SignKnownAnswer
 public import EthLib.Cryptography.Proofs.Secp256k1.Ecdh
-public import EthLib.Cryptography.Proofs.Secp256k1.EcdhKnownAnswer
 
 /-!
 # `EthLib.Cryptography.Proofs.Secp256k1`

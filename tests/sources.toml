@@ -32,6 +32,10 @@ commit = "ed1974ea83433eba7b2d95c5dcd9ac33cb847913"
 [repositories."ethereum/devp2p"]
 commit = "88f1c80800d622cc3a542a2125bbe33cc18c9f9c"
 
+[repositories."bitcoinjs/tiny-secp256k1"]
+commit = "e1fd7a77bb0ca87fb4726fb1fd4f424f30a04db9"
+directories = ["bindings/python/tests/secp256k1/tiny_secp256k1"]
+
 [repositories."ethereum/EIPs"]
 commit = "d386b29b5a31bd5cfd8d21bbf4e8a0c87734085e"
 
@@ -41,6 +45,9 @@ commit = "be307c948f28897adb8f25afcc253c2c909de35d"
 [repositories."ethereum/tests"]
 commit = "c67e485ff8b5be9abc8ad15345ec21aa22e290d9"
 directories = ["bindings/python/tests/rlp/vectors", "bindings/python/tests/state/genesis"]
+
+[repositories."ethereum/yellowpaper"]
+commit = "efc5f9a1f356cba376c978eedb63cb0363c2aa85"
 
 [repositories."ethereum/execution-specs"]
 commit = "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e"
