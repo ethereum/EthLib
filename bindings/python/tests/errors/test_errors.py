@@ -117,7 +117,7 @@ def test_enr_error_code() -> None:
 def test_reqresp_error_code() -> None:
     # A lone byte 0xff starts a varint and never ends it.
     with pytest.raises(reqresp.ReqRespError) as info:
-        reqresp.decode_payload("fusaka", 100, b"\xff")
+        reqresp.decode_payload(100, b"\xff")
     # The code of a bad varint prefix.
     assert info.value.code == 1
 
@@ -172,9 +172,6 @@ def test_transaction_and_discv5_codes() -> None:
 
 def test_unknown_names_have_code_zero() -> None:
     # No Lean error type covers a name that the binding does not know.
-    with pytest.raises(reqresp.ReqRespError) as info:
-        reqresp.max_payload_size("nofork")
-    assert info.value.code == 0
     with pytest.raises(consensus.ConsensusError) as info:
         consensus.preset("nopreset")
     assert info.value.code == 0

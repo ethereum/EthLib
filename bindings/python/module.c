@@ -36,6 +36,7 @@ size_t RIPEMD160_OUTPUT_BYTES;
 size_t SHA256_PRECOMPILE_OUTPUT_BYTES;
 
 size_t ENR_MAX_RECORD_SIZE;
+size_t REQRESP_MAX_PAYLOAD_SIZE;
 size_t REQRESP_MAX_ERROR_MESSAGE_SIZE;
 size_t SECP256K1_HASH_LEN;
 size_t SECP256K1_SIGNATURE_LEN;
@@ -224,6 +225,11 @@ eth_ecrecover_const_gas(
 
 extern uint64_t
 eth_enr_const_max_record_size(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_reqresp_const_max_payload_size(
   lean_object* unit
 );
 
@@ -587,7 +593,6 @@ static PyMethodDef methods[] = {
   {"consensus_compute_columns_for_custody_group", py_consensus_compute_columns_for_custody_group,
    METH_VARARGS, DOC_consensus_compute_columns_for_custody_group},
   {"reqresp_max_compressed_len", py_reqresp_max_compressed_len, METH_VARARGS, DOC_reqresp_max_compressed_len},
-  {"reqresp_max_payload_size", py_reqresp_max_payload_size, METH_VARARGS, DOC_reqresp_max_payload_size},
   {"reqresp_decode_payload", py_reqresp_decode_payload, METH_VARARGS, DOC_reqresp_decode_payload},
   {"reqresp_decode_response_chunk", py_reqresp_decode_response_chunk, METH_VARARGS, DOC_reqresp_decode_response_chunk},
   {"block_header_hash", py_block_header_hash, METH_VARARGS, DOC_block_header_hash},
@@ -751,6 +756,7 @@ PyInit__native(void) {
     SECP256R1_SIGNATURE_LEN  = (size_t) eth_secp256r1_const_signature_len(lean_box(0));
     ECRECOVER_GAS           = (size_t) eth_ecrecover_const_gas(lean_box(0));
     ENR_MAX_RECORD_SIZE     = (size_t) eth_enr_const_max_record_size(lean_box(0));
+    REQRESP_MAX_PAYLOAD_SIZE = (size_t) eth_reqresp_const_max_payload_size(lean_box(0));
     REQRESP_MAX_ERROR_MESSAGE_SIZE = (size_t) eth_reqresp_const_max_error_message_size(lean_box(0));
 
     RIPEMD160_OUTPUT_BYTES = (size_t) eth_ripemd160_const_output_bytes(lean_box(0));
@@ -792,6 +798,7 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "SECP256R1_SIGNATURE_LEN", SECP256R1_SIGNATURE_LEN);
   PyModule_AddIntConstant(m, "ECRECOVER_GAS", ECRECOVER_GAS);
   PyModule_AddIntConstant(m, "ENR_MAX_RECORD_SIZE", ENR_MAX_RECORD_SIZE);
+  PyModule_AddIntConstant(m, "REQRESP_MAX_PAYLOAD_SIZE", REQRESP_MAX_PAYLOAD_SIZE);
   PyModule_AddIntConstant(m, "REQRESP_MAX_ERROR_MESSAGE_SIZE", REQRESP_MAX_ERROR_MESSAGE_SIZE);
   return m;
 }

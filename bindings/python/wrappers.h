@@ -51,6 +51,7 @@ extern size_t SECP256R1_SIGNATURE_LEN;
 extern size_t ECRECOVER_GAS;
 
 extern size_t ENR_MAX_RECORD_SIZE;
+extern size_t REQRESP_MAX_PAYLOAD_SIZE;
 extern size_t REQRESP_MAX_ERROR_MESSAGE_SIZE;
 
 /* ---- Lean ↔ C marshalling helpers ------------------------------------ */
@@ -288,7 +289,6 @@ PyObject* py_consensus_get_custody_groups                 (PyObject* self, PyObj
 PyObject* py_consensus_compute_columns_for_custody_group  (PyObject* self, PyObject* args);
 
 PyObject* py_reqresp_max_compressed_len                   (PyObject* self, PyObject* args);
-PyObject* py_reqresp_max_payload_size                     (PyObject* self, PyObject* args);
 PyObject* py_reqresp_decode_payload                       (PyObject* self, PyObject* args);
 PyObject* py_reqresp_decode_response_chunk                (PyObject* self, PyObject* args);
 PyObject* py_block_header_hash                            (PyObject* self, PyObject* args);

@@ -257,11 +257,8 @@
 #define DOC_reqresp_max_compressed_len \
   "The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`."
 
-#define DOC_reqresp_max_payload_size \
-  "The largest payload a request or a response chunk may hold at a fork, in SSZ bytes."
-
 #define DOC_reqresp_decode_payload \
-  "The SSZ bytes of a payload at a fork, given the bound of its SSZ type."
+  "The SSZ bytes of a payload, given the bound of its SSZ type."
 
 #define DOC_reqresp_decode_response_chunk \
   "One response chunk, given the number of context bytes that the method sends."

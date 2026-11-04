@@ -12,8 +12,6 @@ Each operation takes the whole message.
 
 A rejected message comes back as the code and the message of its error.
 
-An unknown fork name has code 0, which no error of the encoding has.
-
 A response chunk comes back as one byte string: its code, its context bytes, then its payload.
 -/
 
@@ -21,7 +19,7 @@ public section
 
 namespace EthLib.Networking.ReqResp.Exports
 
-open EthLib.Exports (Result forkOfName)
+open EthLib.Exports (Result)
 
 
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
@@ -41,15 +39,13 @@ def runReqResp {α : Type} (act : Except ReqRespError α) : Result α :=
 
 /-! ## Sizes -/
 
+@[export eth_reqresp_const_max_payload_size]
+def constMaxPayloadSize (_ : Unit) : UInt64 := MAX_PAYLOAD_SIZE
+
 @[export eth_reqresp_const_max_error_message_size]
 def constMaxErrorMessageSize (_ : Unit) : UInt64 := MAX_ERROR_MESSAGE_SIZE
 
 /-! ## Operations -/
-
-/-- The payload cap at the named fork. -/
-@[export eth_reqresp_max_payload_size]
-def maxPayloadSizeExport (fork : ByteArray) : Result UInt64 := do
-  return maxPayloadSize (← forkOfName fork)
 
 /-- The bound on the compressed size of `n` bytes. -/
 @[export eth_reqresp_max_compressed_len]
@@ -58,15 +54,14 @@ def maxCompressedLenExport (n : UInt64) : Result UInt64 :=
 
 /-- The SSZ bytes of a request or response payload. -/
 @[export eth_reqresp_decode_payload]
-def decodePayloadExport (fork : ByteArray) (typeBound : UInt64) (bs : ByteArray) :
-    Result ByteArray := do
-  runReqResp (decodePayload (← forkOfName fork) typeBound bs)
+def decodePayloadExport (typeBound : UInt64) (bs : ByteArray) : Result ByteArray :=
+  runReqResp (decodePayload typeBound bs)
 
 /-- The code, the context bytes and the payload of one response chunk, as one byte string. -/
 @[export eth_reqresp_decode_response_chunk]
-def decodeResponseChunkExport (fork : ByteArray) (contextBytes typeBound : UInt64)
-    (bs : ByteArray) : Result ByteArray := do
-  let chunk ← runReqResp (decodeResponseChunk (← forkOfName fork) contextBytes.toNat typeBound bs)
+def decodeResponseChunkExport (contextBytes typeBound : UInt64) (bs : ByteArray) :
+    Result ByteArray := do
+  let chunk ← runReqResp (decodeResponseChunk contextBytes.toNat typeBound bs)
   return ⟨#[chunk.code.toByte]⟩ ++ chunk.context ++ chunk.payload
 
 end EthLib.Networking.ReqResp.Exports
