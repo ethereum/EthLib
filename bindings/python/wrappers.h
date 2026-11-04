@@ -51,6 +51,7 @@ extern size_t SECP256R1_SIGNATURE_LEN;
 extern size_t ECRECOVER_GAS;
 
 extern size_t ENR_MAX_RECORD_SIZE;
+extern size_t REQRESP_MAX_ERROR_MESSAGE_SIZE;
 
 /* ---- Lean ↔ C marshalling helpers ------------------------------------ */
 
@@ -188,6 +189,11 @@ PyObject* py_enr_node_id                                  (PyObject* self, PyObj
 PyObject* py_consensus_preset                             (PyObject* self, PyObject* args);
 PyObject* py_consensus_config                             (PyObject* self, PyObject* args);
 PyObject* py_consensus_parameters                         (PyObject* self, PyObject* args);
+
+PyObject* py_reqresp_max_compressed_len                   (PyObject* self, PyObject* args);
+PyObject* py_reqresp_max_payload_size                     (PyObject* self, PyObject* args);
+PyObject* py_reqresp_decode_payload                       (PyObject* self, PyObject* args);
+PyObject* py_reqresp_decode_response_chunk                (PyObject* self, PyObject* args);
 
 PyObject* py_precompile_run                               (PyObject* self, PyObject* args);
 

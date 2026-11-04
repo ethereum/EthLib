@@ -35,6 +35,7 @@ size_t RIPEMD160_OUTPUT_BYTES;
 size_t SHA256_PRECOMPILE_OUTPUT_BYTES;
 
 size_t ENR_MAX_RECORD_SIZE;
+size_t REQRESP_MAX_ERROR_MESSAGE_SIZE;
 size_t SECP256K1_HASH_LEN;
 size_t SECP256K1_SIGNATURE_LEN;
 
@@ -188,6 +189,11 @@ eth_ecrecover_const_gas(
 
 extern uint64_t
 eth_enr_const_max_record_size(
+  uint8_t unit
+);
+
+extern uint64_t
+eth_reqresp_const_max_error_message_size(
   uint8_t unit
 );
 
@@ -487,6 +493,10 @@ static PyMethodDef methods[] = {
   {"consensus_preset", py_consensus_preset, METH_VARARGS, NULL},
   {"consensus_config", py_consensus_config, METH_VARARGS, NULL},
   {"consensus_parameters", py_consensus_parameters, METH_VARARGS, NULL},
+  {"reqresp_max_compressed_len", py_reqresp_max_compressed_len, METH_VARARGS, NULL},
+  {"reqresp_max_payload_size", py_reqresp_max_payload_size, METH_VARARGS, NULL},
+  {"reqresp_decode_payload", py_reqresp_decode_payload, METH_VARARGS, NULL},
+  {"reqresp_decode_response_chunk", py_reqresp_decode_response_chunk, METH_VARARGS, NULL},
   {"precompile_run", py_precompile_run, METH_VARARGS, NULL},
   {"state_root", py_state_root, METH_VARARGS, NULL},
   {NULL, NULL, 0, NULL},
@@ -564,6 +574,7 @@ PyInit__native(void) {
     SECP256R1_SIGNATURE_LEN  = (size_t) eth_secp256r1_const_signature_len(0);
     ECRECOVER_GAS           = (size_t) eth_ecrecover_const_gas(0);
     ENR_MAX_RECORD_SIZE     = (size_t) eth_enr_const_max_record_size(0);
+    REQRESP_MAX_ERROR_MESSAGE_SIZE = (size_t) eth_reqresp_const_max_error_message_size(0);
 
     RIPEMD160_OUTPUT_BYTES = (size_t) eth_ripemd160_const_output_bytes(0);
     SHA256_PRECOMPILE_OUTPUT_BYTES = (size_t) eth_sha256_precompile_const_output_bytes(0);
@@ -604,5 +615,6 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "SECP256R1_SIGNATURE_LEN", SECP256R1_SIGNATURE_LEN);
   PyModule_AddIntConstant(m, "ECRECOVER_GAS", ECRECOVER_GAS);
   PyModule_AddIntConstant(m, "ENR_MAX_RECORD_SIZE", ENR_MAX_RECORD_SIZE);
+  PyModule_AddIntConstant(m, "REQRESP_MAX_ERROR_MESSAGE_SIZE", REQRESP_MAX_ERROR_MESSAGE_SIZE);
   return m;
 }

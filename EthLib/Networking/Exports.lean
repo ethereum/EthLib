@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Networking.Exports.Enr
+public import EthLib.Networking.Exports.ReqResp
 
 /-!
 # `EthLib.Networking.Exports`

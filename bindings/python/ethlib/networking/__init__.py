@@ -1,3 +1,3 @@
 """The networking layer: the formats that peers exchange."""
 
-__all__ = ["enr"]
+__all__ = ["enr", "reqresp"]
