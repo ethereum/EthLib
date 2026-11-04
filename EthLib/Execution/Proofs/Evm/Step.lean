@@ -108,13 +108,6 @@ theorem ternaryOp_of_length_lt {cost : Nat} {f : U256 → U256 → U256 → U256
     simp only [List.length_cons] at h
     omega
 
-/-- A chain of steps that succeeds succeeded at its first step. -/
-theorem except_bind_eq_ok {α β : Type} {x : Except EvmError α} {f : α → Except EvmError β}
-    {y : β} (h : x >>= f = .ok y) : ∃ a, x = .ok a ∧ f a = .ok y := by
-  cases x with
-  | error => cases h
-  | ok a => exact ⟨a, rfl, h⟩
-
 /-- The second frame has the message, the state and the substate of the first. -/
 structure SameContext {Meter : Type} (before after : Evm fork Meter) : Prop where
   message : after.message = before.message

@@ -27,6 +27,8 @@ public import EthLib.Execution.Evm.TransientStorage
 public import EthLib.Execution.Evm.Storage
 public import EthLib.Execution.Evm.JumpDest
 public import EthLib.Execution.Evm.ControlFlow
+public import EthLib.Execution.Evm.Measure
+public import EthLib.Execution.Evm.Interpreter
 
 /-!
 # `EthLib.Execution.Evm`
@@ -46,4 +48,6 @@ The opcodes, the stack, the memory and the state of a frame are here, with the g
 The addresses of the contracts that CREATE and CREATE2 make are here.
 
 The environments of the block and of the transaction are here, with the substate.
+
+The loop that runs one frame is here, with the measure that makes it end.
 -/

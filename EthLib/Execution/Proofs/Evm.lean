@@ -25,6 +25,7 @@ public import EthLib.Execution.Proofs.Evm.TransientStorage
 public import EthLib.Execution.Proofs.Evm.Storage
 public import EthLib.Execution.Proofs.Evm.JumpDest
 public import EthLib.Execution.Proofs.Evm.ControlFlow
+public import EthLib.Execution.Proofs.Evm.Interpreter
 
 /-!
 # `EthLib.Execution.Proofs.Evm`

@@ -14,6 +14,12 @@ The gas meter is a parameter, because a fork can change how an instruction pays.
 
 Up to Fusaka, the meter is one counter of the gas left.
 
+A meter obeys two laws.
+
+A charge lowers the gas left by at least its amount.
+
+An exceptional halt leaves no gas.
+
 A frame also holds the writes of its transaction so far, and the accrued substate.
 
 The substate gathers what the transaction acts on after its code runs.
@@ -41,11 +47,38 @@ class GasMeter (Meter : Type) where
   charge : Meter → Nat → Except EvmError Meter
   /-- The gas left, which the GAS instruction pushes. -/
   gasLeft : Meter → Nat
+  /-- The meter after an exceptional halt, which consumes all the gas left. -/
+  exhaust : Meter → Meter
+
+/-- The laws of a gas meter, which make the execution of a frame end.
+
+A charge lowers the gas left by at least the amount it charges.
+
+An exceptional halt leaves no gas. -/
+class LawfulGasMeter (Meter : Type) [GasMeter Meter] : Prop where
+  /-- A charge of `amount` lowers the gas left by at least `amount`. -/
+  gasLeft_charge {meter after : Meter} {amount : Nat} :
+    GasMeter.charge meter amount = .ok after →
+      GasMeter.gasLeft after + amount ≤ GasMeter.gasLeft meter
+  /-- An exceptional halt leaves no gas. -/
+  gasLeft_exhaust (meter : Meter) : GasMeter.gasLeft (GasMeter.exhaust meter) = 0
 
 /-- The meter of every fork up to Fusaka: one counter of the gas left. -/
 instance : GasMeter Nat where
   charge gas amount := if gas < amount then .error .outOfGas else .ok (gas - amount)
   gasLeft gas := gas
+  exhaust _ := 0
+
+/-- One counter of gas obeys the laws of a meter. -/
+instance : LawfulGasMeter Nat where
+  gasLeft_charge {gas after amount} h := by
+    simp only [GasMeter.charge] at h
+    split at h
+    · cases h
+    · cases h
+      simp only [GasMeter.gasLeft]
+      omega
+  gasLeft_exhaust _ := rfl
 
 /-- A message at fork `fork`: a call to an account, or the creation of a contract. -/
 structure Message (fork : Fork) where
