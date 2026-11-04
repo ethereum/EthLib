@@ -179,8 +179,10 @@ It assumes the pairing law, the subgroup checks, and that two points are not at 
 
 ## What is not proved
 
-- No theorem states the result of an operation on valid input.
+- No theorem states what a verification operation returns on valid input.
   In particular, none says that an honest proof verifies.
+  The FK20 theorems state the cells and proofs that two operations return,
+  under hypotheses on the setup.
 - No security property, such as binding, is proved.
   Binding also needs the ceremony secret to stay unknown, which no proof can show.
 - The trusted setup itself is not proved correct.

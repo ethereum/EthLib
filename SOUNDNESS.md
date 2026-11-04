@@ -255,7 +255,13 @@ It and `Proofs/Kzg/Cells.lean` prove that the operations reject other malformed 
 An example is two lists of different lengths.
 
 Each operation takes the trusted setup as an argument and returns `Except KzgError`, so the kernel can unfold it.
-`computeCellsAndKzgProofs_blob_spec` and `recoverCellsAndKzgProofs_spec` (`Proofs/Kzg/Fk20Proofs.lean`) state the cells and proofs that two operations return, under hypotheses on the setup.
+`computeCellsAndKzgProofs_blob_spec` and `recoverCellsAndKzgProofs_spec` (`Proofs/Kzg/Fk20Proofs.lean`) state the cells and proofs that two operations return.
+They take two hypotheses on the setup.
+
+- `setup.Valid`: every point of the setup is on its curve.
+  For the embedded setup, `TrustedSetup.ofHex_valid` proves it if the setup decodes.
+- `hsetup_tor`: the first 4032 monomial points of `G1` have an order that divides `r`.
+  No theorem proves it for the embedded setup.
 No theorem states what a verification operation returns on accepted input.
 
 `checksSufficient_of_subgroupChecks` (`Proofs/Kzg/CeremonyChecks.lean`) is about the ceremony that produced the trusted setup.

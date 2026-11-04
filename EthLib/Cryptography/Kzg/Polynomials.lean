@@ -124,7 +124,9 @@ def addPolynomialcoeff (a b : PolynomialCoeff) : PolynomialCoeff :=
 
 /-- Multiply the coefficient-form polynomials `a` and `b`.
 
-It rejects a product of more than 8192 coefficients. -/
+It rejects factors whose sizes sum to more than 8192.
+
+So a product has at most 8191 coefficients. -/
 def multiplyPolynomialcoeff (a b : PolynomialCoeff) :
     Except KzgError PolynomialCoeff := do
   if a.size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB then
