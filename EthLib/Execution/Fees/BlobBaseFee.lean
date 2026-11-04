@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Base.Fork
+
 /-!
 # `Fees.BlobBaseFee`
 
@@ -27,6 +29,8 @@ So it cannot reach 2^64 within 2^44 blocks.
 @[expose] public section
 
 namespace EthLib.Execution.Fees.BlobBaseFee
+
+open EthLib.Base
 
 /-- The blob gas of one blob.
 
@@ -115,46 +119,51 @@ Source: [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#gas-accounting), Gas 
 def getBaseFeePerBlobGas (schedule : BlobSchedule) (excessBlobGas : Nat) : Nat :=
   fakeExponential MIN_BASE_FEE_PER_BLOB_GAS excessBlobGas schedule.baseFeeUpdateFraction
 
-namespace Cancun
+/-- The mainnet blob schedule of a fork, from Dencun on.
 
-/-- The excess blob gas of Cancun and Prague.
+- Dencun: target 3, max 6, update fraction 3338477, from [EIP-4844][eip-4844].
+- Pectra: target 6, max 9, update fraction 5007716, from [EIP-7691][eip-7691].
+- BPO1: target 10, max 15, update fraction 8346193, from [EIP-8134][eip-8134].
+- BPO2: target 14, max 21, update fraction 11684671, from [EIP-8135][eip-8135].
 
-It is the excess of the parent plus its blob gas, minus the target, and at least 0.
+Fusaka keeps the values of Pectra, and the forks after BPO2 keep those of BPO2.
 
-Source: [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#header-extension), Header extension.
+[EIP-7892][eip-7892] makes the schedule chain configuration, so a testnet can set others.
 
-A parent without the blob gas fields counts both as 0. -/
-def calcExcessBlobGas (schedule : BlobSchedule) (parentExcessBlobGas parentBlobGasUsed : Nat) : Nat :=
-  let targetBlobGas := GAS_PER_BLOB * schedule.target
-  if parentExcessBlobGas + parentBlobGasUsed < targetBlobGas then
-    0
-  else
-    parentExcessBlobGas + parentBlobGasUsed - targetBlobGas
+[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#parameters
+[eip-7691]: https://eips.ethereum.org/EIPS/eip-7691#parameters
+[eip-7892]: https://eips.ethereum.org/EIPS/eip-7892#execution-layer-configuration
+[eip-8134]: https://eips.ethereum.org/EIPS/eip-8134#bpo1-parameters
+[eip-8135]: https://eips.ethereum.org/EIPS/eip-8135#bpo2-parameters -/
+def blobSchedule (fork : Fork) : Since .dencun fork BlobSchedule := fun _ =>
+  if fork ≥ .bpo2 then { target := 14, max := 21, baseFeeUpdateFraction := 11684671 }
+  else if fork ≥ .bpo1 then { target := 10, max := 15, baseFeeUpdateFraction := 8346193 }
+  else if fork ≥ .pectra then { target := 6, max := 9, baseFeeUpdateFraction := 5007716 }
+  else { target := 3, max := 6, baseFeeUpdateFraction := 3338477 }
 
-end Cancun
+/-- The excess blob gas of a block at `fork`, from its parent's excess, blob gas and base fee.
 
-namespace Osaka
+Before Fusaka, it is the parent's excess plus its blob gas, minus the target, and at least 0.
 
-/-- The excess blob gas since Osaka: below the reserve price, the target is not subtracted.
+Source: [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#header-extension).
 
-Source: [EIP-7918](https://eips.ethereum.org/EIPS/eip-7918#functions), Functions.
+From Fusaka, [EIP-7918](https://eips.ethereum.org/EIPS/eip-7918#functions) adds a reserve price.
 
-- Below the reserve price, a blob costs less than `2^13` units of execution gas.
+- Below it, a blob costs less than `2^13` units of execution gas.
 - The excess then grows by `parentBlobGasUsed * (max - target) // max`.
 - Below the target, the excess is 0 whatever the prices.
 - The parent's blob base fee uses this block's schedule.
 
 A parent without the blob gas fields counts all three as 0. -/
-def calcExcessBlobGas (schedule : BlobSchedule) (parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas : Nat) :
-    Nat :=
+def calcExcessBlobGas (fork : Fork) (schedule : BlobSchedule)
+    (parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas : Nat) : Nat :=
   let targetBlobGas := GAS_PER_BLOB * schedule.target
   if parentExcessBlobGas + parentBlobGasUsed < targetBlobGas then
     0
-  else if BLOB_BASE_COST * parentBaseFeePerGas > GAS_PER_BLOB * getBaseFeePerBlobGas schedule parentExcessBlobGas then
+  else if fork ≥ .fusaka ∧ BLOB_BASE_COST * parentBaseFeePerGas >
+      GAS_PER_BLOB * getBaseFeePerBlobGas schedule parentExcessBlobGas then
     parentExcessBlobGas + parentBlobGasUsed * (schedule.max - schedule.target) / schedule.max
   else
     parentExcessBlobGas + parentBlobGasUsed - targetBlobGas
-
-end Osaka
 
 end EthLib.Execution.Fees.BlobBaseFee

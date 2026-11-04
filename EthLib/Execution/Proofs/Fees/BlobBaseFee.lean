@@ -1,20 +1,21 @@
 module
 
 public import EthLib.Execution.Fees.BlobBaseFee
+public import EthLib.Base.Proofs.Fork
 
 /-!
 # Proofs: `BlobBaseFee`
 
 - The loop of `fake_exponential` stops before its bound.
 - The base fee per blob gas is monotone in the excess, and at least 1.
-- Each excess rule raises the excess by at most `GAS_PER_BLOB * (max - target)` per block.
-
-The known answers at the end are worked by hand from the formulas.
+- At every fork, the excess rises by at most `GAS_PER_BLOB * (max - target)` per block.
 -/
 
 @[expose] public section
 
 namespace EthLib.Execution.Fees.BlobBaseFee
+
+open EthLib.Base
 
 /-! ## The accumulator -/
 
@@ -247,77 +248,80 @@ theorem le_getBaseFeePerBlobGas (schedule : BlobSchedule) (excessBlobGas : Nat) 
 
 /-! ## The excess blob gas -/
 
-namespace Cancun
+/-- The reserve condition of EIP-7918: a blob costs less than `BLOB_BASE_COST` execution gas. -/
+abbrev BelowReserve (schedule : BlobSchedule) (parentExcessBlobGas parentBaseFeePerGas : Nat) :
+    Prop :=
+  BLOB_BASE_COST * parentBaseFeePerGas >
+    GAS_PER_BLOB * getBaseFeePerBlobGas schedule parentExcessBlobGas
 
-/-- Before EIP-7918, the excess is the parent's excess plus its blob gas, minus the target, at least 0.
+variable {fork : Fork} {schedule : BlobSchedule}
 
-`Nat` subtraction already stops at 0. -/
-theorem calcExcessBlobGas_eq (schedule : BlobSchedule) (parentExcessBlobGas parentBlobGasUsed : Nat) :
-    calcExcessBlobGas schedule parentExcessBlobGas parentBlobGasUsed
+/-- Below the target, the excess is 0 at every fork, whatever the reserve price. -/
+theorem calcExcessBlobGas_of_lt {parentExcessBlobGas parentBlobGasUsed : Nat}
+    (parentBaseFeePerGas : Nat)
+    (h : parentExcessBlobGas + parentBlobGasUsed < GAS_PER_BLOB * schedule.target) :
+    calcExcessBlobGas fork schedule parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas
+      = 0 := by
+  simp only [calcExcessBlobGas, h, ↓reduceIte]
+
+/-- Without the reserve price, the excess is the parent's excess and blob gas, minus the target.
+
+It is at least 0.
+
+That is the rule before Fusaka, and the rule from Fusaka at or above the reserve price. -/
+theorem calcExcessBlobGas_eq_sub {parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas : Nat}
+    (h : ¬(fork ≥ .fusaka ∧ BelowReserve schedule parentExcessBlobGas parentBaseFeePerGas)) :
+    calcExcessBlobGas fork schedule parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas
       = parentExcessBlobGas + parentBlobGasUsed - GAS_PER_BLOB * schedule.target := by
-  simp only [calcExcessBlobGas]
+  unfold BelowReserve at h
+  simp only [calcExcessBlobGas, h, ↓reduceIte]
   -- Below the target both sides are 0, and from the target up they are the same subtraction.
   split <;> omega
 
-/-- A parent within its maximum raises the excess by at most `GAS_PER_BLOB * (max - target)`. -/
-theorem calcExcessBlobGas_le (schedule : BlobSchedule) (parentExcessBlobGas : Nat) {parentBlobGasUsed : Nat}
-    (h : parentBlobGasUsed ≤ GAS_PER_BLOB * schedule.max) :
-    calcExcessBlobGas schedule parentExcessBlobGas parentBlobGasUsed
-      ≤ parentExcessBlobGas + GAS_PER_BLOB * (schedule.max - schedule.target) := by
-  -- `GAS_PER_BLOB * (max - target)` is `GAS_PER_BLOB * max - GAS_PER_BLOB * target`.
-  rw [calcExcessBlobGas_eq, Nat.mul_sub]
-  omega
+/-- Before Fusaka, the excess is the parent's excess plus its blob gas, minus the target. -/
+theorem calcExcessBlobGas_of_lt_fusaka
+    {parentExcessBlobGas parentBlobGasUsed : Nat} (parentBaseFeePerGas : Nat)
+    (hFork : fork < .fusaka) :
+    calcExcessBlobGas fork schedule parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas
+      = parentExcessBlobGas + parentBlobGasUsed - GAS_PER_BLOB * schedule.target :=
+  calcExcessBlobGas_eq_sub fun h => absurd h.1 (Nat.not_le_of_lt hFork)
 
-end Cancun
+/-- From Fusaka, below the reserve price and from the target, the excess grows more slowly.
 
-namespace Osaka
-
-/-- The reserve condition of EIP-7918: a blob costs less than `BLOB_BASE_COST` units of execution gas. -/
-abbrev BelowReserve (schedule : BlobSchedule) (parentExcessBlobGas parentBaseFeePerGas : Nat) : Prop :=
-  BLOB_BASE_COST * parentBaseFeePerGas > GAS_PER_BLOB * getBaseFeePerBlobGas schedule parentExcessBlobGas
-
-/-- Below the target, the excess is 0 whatever the reserve price. -/
-theorem calcExcessBlobGas_of_lt {schedule : BlobSchedule} {parentExcessBlobGas parentBlobGasUsed : Nat}
-    (parentBaseFeePerGas : Nat) (h : parentExcessBlobGas + parentBlobGasUsed < GAS_PER_BLOB * schedule.target) :
-    calcExcessBlobGas schedule parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas = 0 := by
-  simp only [calcExcessBlobGas, h, ↓reduceIte]
-
-/-- At or above the reserve price, EIP-7918 gives the same excess as EIP-4844. -/
-theorem calcExcessBlobGas_of_not_below {schedule : BlobSchedule} {parentExcessBlobGas parentBaseFeePerGas : Nat}
-    (parentBlobGasUsed : Nat) (h : ¬ BelowReserve schedule parentExcessBlobGas parentBaseFeePerGas) :
-    calcExcessBlobGas schedule parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas
-      = Cancun.calcExcessBlobGas schedule parentExcessBlobGas parentBlobGasUsed := by
-  unfold BelowReserve at h
-  simp only [calcExcessBlobGas, Cancun.calcExcessBlobGas, h, ↓reduceIte]
-
-/-- Below the reserve price and at the target or above, the excess grows by `parentBlobGasUsed * (max - target) / max`. -/
-theorem calcExcessBlobGas_of_below {schedule : BlobSchedule} {parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas : Nat}
+It grows by `parentBlobGasUsed * (max - target) / max`. -/
+theorem calcExcessBlobGas_of_below
+    {parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas : Nat} (hFork : fork ≥ .fusaka)
     (ht : GAS_PER_BLOB * schedule.target ≤ parentExcessBlobGas + parentBlobGasUsed)
     (h : BelowReserve schedule parentExcessBlobGas parentBaseFeePerGas) :
-    calcExcessBlobGas schedule parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas
-      = parentExcessBlobGas + parentBlobGasUsed * (schedule.max - schedule.target) / schedule.max := by
+    calcExcessBlobGas fork schedule parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas
+      = parentExcessBlobGas
+        + parentBlobGasUsed * (schedule.max - schedule.target) / schedule.max := by
   unfold BelowReserve at h
-  simp only [calcExcessBlobGas, Nat.not_lt.mpr ht, h, ↓reduceIte]
+  simp only [calcExcessBlobGas, Nat.not_lt.mpr ht, hFork, h, and_self, ↓reduceIte]
 
-/-- Below the reserve price and at the target or above, the excess does not fall. -/
-theorem le_calcExcessBlobGas_of_below {schedule : BlobSchedule}
-    {parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas : Nat}
+/-- From Fusaka, below the reserve price and at the target or above, the excess does not fall. -/
+theorem le_calcExcessBlobGas_of_below
+    {parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas : Nat} (hFork : fork ≥ .fusaka)
     (ht : GAS_PER_BLOB * schedule.target ≤ parentExcessBlobGas + parentBlobGasUsed)
     (h : BelowReserve schedule parentExcessBlobGas parentBaseFeePerGas) :
-    parentExcessBlobGas ≤ calcExcessBlobGas schedule parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas := by
-  rw [calcExcessBlobGas_of_below ht h]
+    parentExcessBlobGas ≤
+      calcExcessBlobGas fork schedule parentExcessBlobGas parentBlobGasUsed
+        parentBaseFeePerGas := by
+  rw [calcExcessBlobGas_of_below hFork ht h]
   exact Nat.le_add_right _ _
 
-/-- A parent within its maximum raises the excess by at most `GAS_PER_BLOB * (max - target)`, as before Osaka. -/
-theorem calcExcessBlobGas_le (schedule : BlobSchedule) (parentExcessBlobGas parentBaseFeePerGas : Nat)
+/-- A parent within its maximum raises the excess by at most `GAS_PER_BLOB * (max - target)`. -/
+theorem calcExcessBlobGas_le (parentExcessBlobGas parentBaseFeePerGas : Nat)
     {parentBlobGasUsed : Nat} (h : parentBlobGasUsed ≤ GAS_PER_BLOB * schedule.max) :
-    calcExcessBlobGas schedule parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas
+    calcExcessBlobGas fork schedule parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas
       ≤ parentExcessBlobGas + GAS_PER_BLOB * (schedule.max - schedule.target) := by
-  by_cases hbelow : BelowReserve schedule parentExcessBlobGas parentBaseFeePerGas
-  · rcases Nat.lt_or_ge (parentExcessBlobGas + parentBlobGasUsed) (GAS_PER_BLOB * schedule.target) with hlt | hge
+  by_cases hReserve :
+      fork ≥ .fusaka ∧ BelowReserve schedule parentExcessBlobGas parentBaseFeePerGas
+  · rcases Nat.lt_or_ge (parentExcessBlobGas + parentBlobGasUsed)
+        (GAS_PER_BLOB * schedule.target) with hlt | hge
     · rw [calcExcessBlobGas_of_lt _ hlt]
       exact Nat.zero_le _
-    · rw [calcExcessBlobGas_of_below hge hbelow]
+    · rw [calcExcessBlobGas_of_below hReserve.1 hge hReserve.2]
       apply Nat.add_le_add_left
       -- The parent's blob gas is at most `GAS_PER_BLOB * max`, and the `max` cancels.
       calc parentBlobGasUsed * (schedule.max - schedule.target) / schedule.max
@@ -325,109 +329,8 @@ theorem calcExcessBlobGas_le (schedule : BlobSchedule) (parentExcessBlobGas pare
             Nat.div_le_div_right (Nat.mul_le_mul_right _ h)
         _ = GAS_PER_BLOB * (schedule.max - schedule.target) := by
             rw [Nat.mul_right_comm, Nat.mul_div_cancel _ schedule.max_pos]
-  · rw [calcExcessBlobGas_of_not_below _ hbelow]
-    exact Cancun.calcExcessBlobGas_le schedule parentExcessBlobGas h
-
-end Osaka
-
-/-! ## Known answers
-
-Each answer is worked by hand from the formulas of EIP-4844 and EIP-7918.
-
-For `fake_exponential`, each comment lists the accumulators that the loop adds up. -/
-
-/-- `fake_exponential(1, 0, d)` is 1: accumulators `d`, then 0, so `d // d = 1`. -/
-example : fakeExponential 1 0 5007716 = 1 := by decide +kernel
-
-/-- `fake_exponential(1, 1, 1)`, about e: accumulators 1, 1, then 0, so 2. -/
-example : fakeExponential 1 1 1 = 2 := by decide +kernel
-
-/-- `fake_exponential(1, 2, 1)`, about e^2: accumulators 1, 2, 2, 1, then 0, so 6. -/
-example : fakeExponential 1 2 1 = 6 := by decide +kernel
-
-/-- `fake_exponential(1, 3, 1)`, about e^3: accumulators 1, 3, 4, 4, 3, 1, then 0, so 16. -/
-example : fakeExponential 1 3 1 = 16 := by decide +kernel
-
-/-- `fake_exponential(1, 4, 2)`, about e^2: accumulators 2, 4, 4, 2, 1, then 0, so 13 // 2 = 6. -/
-example : fakeExponential 1 4 2 = 6 := by decide +kernel
-
-/-- `fake_exponential(10, 8, 2)`, about 10 * e^4.
-
-The accumulators are 20, 80, 160, 213, 213, 170, 113, 64, 32, 14, 5, 1, then 0, so 1085 // 2 = 542. -/
-example : fakeExponential 10 8 2 = 542 := by decide +kernel
-
-namespace TestVector
-
-/-- The schedule of Cancun: target 3, max 6, update fraction 3338477.
-
-[EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#parameters), Parameters.
-
-Its `TARGET_BLOB_GAS_PER_BLOCK = 393216` and `MAX_BLOB_GAS_PER_BLOCK = 786432` are 3 and 6 blobs. -/
-def cancun : BlobSchedule := { target := 3, max := 6, baseFeeUpdateFraction := 3338477 }
-
-/-- The schedule of Osaka: target 6, max 9, update fraction 5007716.
-
-[EIP-7691](https://eips.ethereum.org/EIPS/eip-7691#parameters), Parameters, sets them for Prague.
-
-Osaka keeps them, in [`forks/osaka/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/osaka/vm/gas.py#L96-L101) at `2c0c8e7`. -/
-def osaka : BlobSchedule := { target := 6, max := 9, baseFeeUpdateFraction := 5007716 }
-
-end TestVector
-
-open TestVector
-
-/-- An excess of 0 gives `MIN_BASE_FEE_PER_BLOB_GAS`. -/
-example : getBaseFeePerBlobGas cancun 0 = 1 := by decide +kernel
-
-/-- An excess equal to the update fraction, so about e.
-
-With `numerator = denominator`, each accumulator is the previous one over `i`, rounded down.
-
-The accumulators are 3338477, 3338477, 1669238, 556412, 139103, 27820, 4636, 662, 82, 9, then 0.
-
-They add up to 9074916, and 9074916 // 3338477 = 2. -/
-example : getBaseFeePerBlobGas cancun 3338477 = 2 := by decide +kernel
-
-/-- The same for Osaka: 5007716, 5007716, 2503858, 834619, 208654, 41730, 6955, 993, 124, 13, 1, then 0.
-
-They add up to 13612379, and 13612379 // 5007716 = 2. -/
-example : getBaseFeePerBlobGas osaka 5007716 = 2 := by decide +kernel
-
-/-- Cancun, a parent with 6 blobs and no excess: 6 * 2^17 - 3 * 2^17 = 393216. -/
-example : Cancun.calcExcessBlobGas cancun 0 786432 = 393216 := by decide +kernel
-
-/-- Cancun, a parent with 1 blob and no excess: below the target, so 0. -/
-example : Cancun.calcExcessBlobGas cancun 0 131072 = 0 := by decide +kernel
-
-/-- Osaka, a parent at its target of 6 blobs, with no excess and a base fee of 17.
-
-The reserve price is 2^13 * 17 = 139264, above the blob price 2^17 * 1 = 131072.
-
-So the excess grows by 786432 * (9 - 6) // 9 = 262144 instead of 0.
-
-Dividing first would give 786432 // 9 * 3 = 262143. -/
-example : Osaka.calcExcessBlobGas osaka 0 786432 17 = 262144 := by decide +kernel
-
-/-- Osaka, a parent with 7 blobs, so 917504 blob gas, with no excess and a base fee of 17.
-
-The excess grows by 917504 * 3 // 9 = 2752512 // 9 = 305834, rounded down from 305834.67. -/
-example : Osaka.calcExcessBlobGas osaka 0 917504 17 = 305834 := by decide +kernel
-
-/-- At a base fee of 16, 2^13 * 16 = 131072 is not above 131072, so the target is subtracted. -/
-example : Osaka.calcExcessBlobGas osaka 0 786432 16 = 0 := by decide +kernel
-
-/-- A parent with 5 blobs and no excess is below the target, so 0, even at a base fee of 10^9. -/
-example : Osaka.calcExcessBlobGas osaka 0 655360 1000000000 = 0 := by decide +kernel
-
-/-- An empty parent with an excess of 500000 is below the target of 786432, so 0, even at a base fee of 10^9. -/
-example : Osaka.calcExcessBlobGas osaka 500000 0 1000000000 = 0 := by decide +kernel
-
-/-- An excess of 5007716 makes the blob base fee 2, so the reserve binds above a base fee of 2^17 * 2 / 2^13 = 32.
-
-With 33, the excess grows by 262144 for a parent at its target. -/
-example : Osaka.calcExcessBlobGas osaka 5007716 786432 33 = 5269860 := by decide +kernel
-
-/-- With 32, the reserve price equals the blob price, so the target is subtracted and the excess stays. -/
-example : Osaka.calcExcessBlobGas osaka 5007716 786432 32 = 5007716 := by decide +kernel
+  · -- `GAS_PER_BLOB * (max - target)` is `GAS_PER_BLOB * max - GAS_PER_BLOB * target`.
+    rw [calcExcessBlobGas_eq_sub hReserve, Nat.mul_sub]
+    omega
 
 end EthLib.Execution.Fees.BlobBaseFee

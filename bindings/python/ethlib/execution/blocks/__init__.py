@@ -27,5 +27,10 @@ def receipt_logs_bloom(fork: str, receipt: bytes) -> bytes:
     return _native.receipt_logs_bloom(fork, receipt)
 
 
+def validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -> None:
+    """Check a header against its parent, from Paris on, and raise BlockError if it fails."""
+    _native.block_validate_header(parent_fork, fork, parent, header)
+
+
 __all__ = ["header_hash", "reencode", "receipt_reencode", "receipt_logs_bloom",
-           "BlockError"]
+           "validate_header", "BlockError"]

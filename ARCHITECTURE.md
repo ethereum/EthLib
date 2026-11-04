@@ -268,9 +268,9 @@ At a fork variable, it needs a cast at each read and each write, and the functio
 
 ### The existing modules
 
-Two rules keep one version for each fork in a namespace named after the fork.
-The gossip message ID has one in `Phase0` and one in `Altair`, and the excess blob gas has one in `Cancun` and one in `Osaka`.
-A later pull request makes each pair one function of the fork, which branches at Altair and at Fusaka.
+The gossip message ID keeps one version for each fork in a namespace named after the fork, one in `Phase0` and one in `Altair`.
+A later pull request makes the pair one function of the fork, which branches at Altair.
+The excess blob gas is already one function of the fork, which branches at Fusaka.
 For the message ID, the argument is the fork of the topic, not the fork of the chain head.
 A message on a topic with the Phase 0 fork digest keeps the Phase 0 rule.
 
