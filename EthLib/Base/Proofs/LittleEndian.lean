@@ -7,8 +7,9 @@ public import EthLib.Base.LittleEndian
 
 Writing and reading little-endian bytes undo each other.
 
-A number below `256 ^ k` survives the trip through `k` bytes, and `k` bytes survive the trip
-through their value.
+A number below `256 ^ k` survives the trip through `k` bytes.
+
+A vector of `k` bytes survives the trip through its value.
 -/
 
 @[expose] public section

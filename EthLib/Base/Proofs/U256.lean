@@ -6,16 +6,18 @@ public import EthLib.Base.Proofs.BigEndian
 /-!
 # Proofs: `U256`
 
-- The two's complement reading of a word is Lean's `BitVec.toInt`, and it inverts `fromSigned` on `[-2^255, 2^255)`.
-- Reading 32 bytes as a word loses nothing: the word is their exact value, and writing it back gives the same bytes.
-- Writing a word as 32 bytes and reading them back gives the same word.
+The two's complement reading of a word is the signed value of its bit vector.
+
+On `[-2^255, 2^255)`, that reading inverts the encoding of an integer.
+
+A word and its 32 big-endian bytes determine each other.
 -/
 
 @[expose] public section
 
 namespace EthLib.Base.U256
 
-/-- `to_signed` agrees with `BitVec.toInt`. -/
+/-- The two's complement reading is the signed value of the bit vector. -/
 theorem toSigned_eq_toInt (w : U256) : toSigned w = w.toInt := by
   unfold toSigned
   rw [BitVec.toInt_eq_toNat_cond]

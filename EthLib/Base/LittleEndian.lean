@@ -22,14 +22,14 @@ An unsigned integer of `k` bytes is below `256 ^ k`, and its bytes are exact.
 
 A larger `n` keeps only `n % 256 ^ k`.
 
-Example: `uintToBytes 2 0x1234 = #v[0x34, 0x12]`. -/
+For example, the two low bytes of `0x1234` are `[0x34, 0x12]`. -/
 def uintToBytes (k n : Nat) : Vector UInt8 k :=
   -- Byte `i` holds bits `8i` to `8i + 7`.
   Vector.ofFn fun i => UInt8.ofNat (n / 256 ^ i.val)
 
 /-- The number whose little-endian bytes these are.
 
-Example: `bytesToUint #v[0x34, 0x12] = 0x1234`. -/
+For example, `[0x34, 0x12]` reads as `0x1234`. -/
 def bytesToUint {k : Nat} (bytes : Vector UInt8 k) : Nat :=
   -- Horner's rule from the most significant byte down.
   bytes.toArray.foldr (fun byte acc => byte.toNat + 256 * acc) 0
