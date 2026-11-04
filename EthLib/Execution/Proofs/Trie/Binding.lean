@@ -26,6 +26,8 @@ Otherwise the search finds a collision between the two.
 A secured trie gives one root for any order of its entries.
 
 Otherwise a search over its keys returns two keys with one hash.
+
+The same search covers two keys that share a path in soundness and in binding.
 -/
 
 @[expose] public section
@@ -248,76 +250,6 @@ theorem verifyProof_binding (hash : ByteArray → Hash32) {root : Hash32} {secur
               · cases hq
             · cases hp
 
-/-- Soundness: a proof that verifies against the trie's root is the proof that the trie builds.
-
-So it gives the trie's value of the key.
-
-Otherwise the search finds a collision between the proof and the honest proof.
-
-The keys of the trie must have distinct paths. -/
-theorem verifyProof_sound (hash : ByteArray → Hash32) {trie : Trie} {key : ByteArray}
-    {root' : Hash32}
-    {honestProof proof : List ByteArray} {result : Option ByteArray}
-    (hroot : root hash trie = .ok root') (hhonest : getProof hash trie key = .ok honestProof)
-    (hpaths : (trie.data.map fun entry => keyPath hash trie.secured entry.1).Nodup)
-    (hverify : verifyProof hash root' trie.secured key proof = .ok result) :
-    (proof = honestProof ∧ result = valueAt hash trie key) ∨
-      ∃ pair, findProofCollision hash proof honestProof = some pair ∧ IsCollision hash pair :=
-  verifyProof_binding hash hverify (verifyProof_getProof hash hroot hhonest hpaths)
-
-/-! ## Two tries with one root -/
-
-/-- The first collision in the proofs of one key in two tries, if any. -/
-def findCollision (hash : ByteArray → Hash32) (trie₁ trie₂ : Trie) (key : ByteArray) :
-    Option (ByteArray × ByteArray) :=
-  match getProof hash trie₁ key, getProof hash trie₂ key with
-  | .ok p, .ok q => findProofCollision hash p q
-  | _, _ => none
-
-/-- Every pair that the search returns is a collision. -/
-theorem findCollision_valid (hash : ByteArray → Hash32) {trie₁ trie₂ : Trie} {key : ByteArray}
-    {pair : ByteArray × ByteArray} (h : findCollision hash trie₁ trie₂ key = some pair) :
-    IsCollision hash pair := by
-  unfold findCollision at h
-  split at h
-  · exact findProofCollision_valid hash _ _ h
-  · cases h
-
-/-- A trie compared with itself has no collision. -/
-theorem findCollision_self (hash : ByteArray → Hash32) (trie : Trie) (key : ByteArray) :
-    findCollision hash trie trie key = none := by
-  unfold findCollision
-  split
-  · rename_i p q hp hq
-    rw [hp] at hq
-    cases hq
-    exact findProofCollision_self hash p
-  · rfl
-
-/-- Binding of the root: two tries with one root give every key one value.
-
-Otherwise the search finds a collision in the proofs of that key.
-
-The two tries must hash their keys alike, and the keys of each must have distinct paths. -/
-theorem root_binding (hash : ByteArray → Hash32) {trie₁ trie₂ : Trie} {root' : Hash32}
-    (hsecured : trie₁.secured = trie₂.secured)
-    (hroot₁ : root hash trie₁ = .ok root') (hroot₂ : root hash trie₂ = .ok root')
-    (hpaths₁ : (trie₁.data.map fun entry => keyPath hash trie₁.secured entry.1).Nodup)
-    (hpaths₂ : (trie₂.data.map fun entry => keyPath hash trie₂.secured entry.1).Nodup)
-    (key : ByteArray) :
-    valueAt hash trie₁ key = valueAt hash trie₂ key ∨
-      ∃ pair, findCollision hash trie₁ trie₂ key = some pair ∧ IsCollision hash pair := by
-  -- Each trie's proof of the key verifies against the one root, with the trie's value of the key.
-  obtain ⟨p, hp⟩ := getProof_ok hash hroot₁ key
-  obtain ⟨q, hq⟩ := getProof_ok hash hroot₂ key
-  have hverify₁ := verifyProof_getProof hash hroot₁ hp hpaths₁
-  have hverify₂ := verifyProof_getProof hash hroot₂ hq hpaths₂
-  rw [hsecured] at hverify₁
-  rcases verifyProof_binding hash hverify₁ hverify₂ with ⟨-, hvalue⟩ | ⟨pair, hfind, hvalid⟩
-  · exact .inl hvalue
-  · exact .inr ⟨pair, by simp [findCollision, hp, hq, hfind], hvalid⟩
-
-
 /-! ## Keys with one hash -/
 
 /-- The first two different keys of the list with one hash, if any. -/
@@ -370,6 +302,131 @@ theorem nodup_map_of_findKeyCollision (hash : ByteArray → Hash32) :
       simp only [ne_eq, decide_eq_true_eq, not_and] at hother
       -- A key with the hash of the first key is the first key, which the rest does not hold.
       exact hkeys.1 (Decidable.byContradiction (fun hne => hother hne heq) ▸ hmem)
+
+/-- Two different keys of a trie with one path.
+
+Only a secured trie can have them, as two keys with one hash. -/
+def findPathCollision (hash : ByteArray → Hash32) (trie : Trie) : Option (ByteArray × ByteArray) :=
+  if trie.secured then findKeyCollision hash (trie.data.map Prod.fst) else none
+
+/-- Every pair that the search returns is a collision. -/
+theorem findPathCollision_valid (hash : ByteArray → Hash32) {trie : Trie}
+    {pair : ByteArray × ByteArray} (h : findPathCollision hash trie = some pair) :
+    IsCollision hash pair := by
+  unfold findPathCollision at h
+  split at h
+  · exact findKeyCollision_valid hash _ h
+  · cases h
+
+/-- Distinct keys have distinct paths, unless the search finds two keys with one hash. -/
+theorem keyPath_nodup (hash : ByteArray → Hash32) {trie : Trie}
+    (hkeys : (trie.data.map Prod.fst).Nodup) (hsearch : findPathCollision hash trie = none) :
+    (trie.data.map fun entry => keyPath hash trie.secured entry.1).Nodup := by
+  obtain ⟨secured, data⟩ := trie
+  unfold findPathCollision at hsearch
+  cases secured with
+  | false =>
+    -- A plain trie: distinct keys have distinct nibbles.
+    simpa [keyPath, List.map_map, Function.comp_def] using
+      nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hkeys
+  | true =>
+    -- A secured trie: distinct hashes have distinct bytes, and distinct bytes distinct nibbles.
+    simp only [↓reduceIte] at hsearch
+    have hhashes := nodup_map_of_findKeyCollision hash _ hkeys hsearch
+    have hbytes := nodup_map_of_injective hashBytes_injective hhashes
+    simpa [keyPath, List.map_map, Function.comp_def] using
+      nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hbytes
+
+/-- Soundness: a proof that verifies against the trie's root is the proof that the trie builds.
+
+So it gives the trie's value of the key.
+
+Otherwise the search finds a collision between the proof and the honest proof.
+
+Or a secured trie has two keys with one hash, which the key search finds.
+
+The keys of the trie must be distinct. -/
+theorem verifyProof_sound (hash : ByteArray → Hash32) {trie : Trie} {key : ByteArray}
+    {root' : Hash32}
+    {honestProof proof : List ByteArray} {result : Option ByteArray}
+    (hroot : root hash trie = .ok root') (hhonest : getProof hash trie key = .ok honestProof)
+    (hkeys : (trie.data.map Prod.fst).Nodup)
+    (hverify : verifyProof hash root' trie.secured key proof = .ok result) :
+    (proof = honestProof ∧ result = valueAt hash trie key) ∨
+      (∃ pair, findProofCollision hash proof honestProof = some pair ∧ IsCollision hash pair) ∨
+      ∃ pair, findPathCollision hash trie = some pair ∧ IsCollision hash pair := by
+  cases hsearch : findPathCollision hash trie with
+  | some pair => exact .inr (.inr ⟨pair, rfl, findPathCollision_valid hash hsearch⟩)
+  | none =>
+    have hpaths := keyPath_nodup hash hkeys hsearch
+    rcases verifyProof_binding hash hverify (verifyProof_getProof hash hroot hhonest hpaths)
+      with hhonest | hfound
+    · exact .inl hhonest
+    · exact .inr (.inl hfound)
+
+/-! ## Two tries with one root -/
+
+/-- The first collision in the proofs of one key in two tries, if any. -/
+def findCollision (hash : ByteArray → Hash32) (trie₁ trie₂ : Trie) (key : ByteArray) :
+    Option (ByteArray × ByteArray) :=
+  match getProof hash trie₁ key, getProof hash trie₂ key with
+  | .ok p, .ok q => findProofCollision hash p q
+  | _, _ => none
+
+/-- Every pair that the search returns is a collision. -/
+theorem findCollision_valid (hash : ByteArray → Hash32) {trie₁ trie₂ : Trie} {key : ByteArray}
+    {pair : ByteArray × ByteArray} (h : findCollision hash trie₁ trie₂ key = some pair) :
+    IsCollision hash pair := by
+  unfold findCollision at h
+  split at h
+  · exact findProofCollision_valid hash _ _ h
+  · cases h
+
+/-- A trie compared with itself has no collision. -/
+theorem findCollision_self (hash : ByteArray → Hash32) (trie : Trie) (key : ByteArray) :
+    findCollision hash trie trie key = none := by
+  unfold findCollision
+  split
+  · rename_i p q hp hq
+    rw [hp] at hq
+    cases hq
+    exact findProofCollision_self hash p
+  · rfl
+
+/-- Binding of the root: two tries with one root give every key one value.
+
+Otherwise the search finds a collision in the proofs of that key.
+
+Or one of two secured tries has two keys with one hash, which the key search finds.
+
+The two tries must hash their keys alike, and the keys of each must be distinct. -/
+theorem root_binding (hash : ByteArray → Hash32) {trie₁ trie₂ : Trie} {root' : Hash32}
+    (hsecured : trie₁.secured = trie₂.secured)
+    (hroot₁ : root hash trie₁ = .ok root') (hroot₂ : root hash trie₂ = .ok root')
+    (hkeys₁ : (trie₁.data.map Prod.fst).Nodup) (hkeys₂ : (trie₂.data.map Prod.fst).Nodup)
+    (key : ByteArray) :
+    valueAt hash trie₁ key = valueAt hash trie₂ key ∨
+      (∃ pair, findCollision hash trie₁ trie₂ key = some pair ∧ IsCollision hash pair) ∨
+      (∃ pair, findPathCollision hash trie₁ = some pair ∧ IsCollision hash pair) ∨
+      ∃ pair, findPathCollision hash trie₂ = some pair ∧ IsCollision hash pair := by
+  -- A secured trie with two keys of one hash gives the collision outright.
+  cases hsearch₁ : findPathCollision hash trie₁ with
+  | some pair => exact .inr (.inr (.inl ⟨pair, rfl, findPathCollision_valid hash hsearch₁⟩))
+  | none =>
+  cases hsearch₂ : findPathCollision hash trie₂ with
+  | some pair => exact .inr (.inr (.inr ⟨pair, rfl, findPathCollision_valid hash hsearch₂⟩))
+  | none =>
+  have hpaths₁ := keyPath_nodup hash hkeys₁ hsearch₁
+  have hpaths₂ := keyPath_nodup hash hkeys₂ hsearch₂
+  -- Each trie's proof of the key verifies against the one root, with the trie's value of the key.
+  obtain ⟨p, hp⟩ := getProof_ok hash hroot₁ key
+  obtain ⟨q, hq⟩ := getProof_ok hash hroot₂ key
+  have hverify₁ := verifyProof_getProof hash hroot₁ hp hpaths₁
+  have hverify₂ := verifyProof_getProof hash hroot₂ hq hpaths₂
+  rw [hsecured] at hverify₁
+  rcases verifyProof_binding hash hverify₁ hverify₂ with ⟨-, hvalue⟩ | ⟨pair, hfind, hvalid⟩
+  · exact .inl hvalue
+  · exact .inr (.inl ⟨pair, by simp [findCollision, hp, hq, hfind], hvalid⟩)
 
 /-- Order of a secured trie: any order of its entries gives one root.
 
