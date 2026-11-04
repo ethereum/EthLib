@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint8_max[ssz_test]": {
+        "typeName": "Uint8",
+        "value": "255",
+        "serialized": "0xff",
+        "root": "0xff00000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x0cbad51bcf321ecf7b852ca158901c45a71031bc4cd78011d82b60fd03c9f2aa",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint8_max",
+            "description": "A one-byte uint at its upper bound round-trips unchanged.\n\n    Given\n    -----\n    - the value 255 as a one-byte uint.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

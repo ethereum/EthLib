@@ -1,0 +1,18 @@
+{
+    "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_square[ssz_test]": {
+        "typeName": "SampleSquare",
+        "value": {
+            "side": 4660,
+            "color": 86
+        },
+        "serialized": "0x341256",
+        "root": "0x5ebd038215d6c6868befbe172ffb9442b2f5ade276bd96eb304c1da38deff823",
+        "_info": {
+            "hash": "0xaf84d40ea83ddab999a3024adc1bedcabaf2efd67cd0f6dca8a3d7a775780e4a",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_square",
+            "description": "A progressive container with an interior gap round-trips unchanged.\n\n    Given\n    -----\n    - a layout of three positions with the middle one cleared.\n    - a two-byte field at position 0 and a one-byte field at position 2.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the encoding is three bytes, the gap costing nothing.\n    - the root places the field roots at positions 0 and 2 and mixes the layout in.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

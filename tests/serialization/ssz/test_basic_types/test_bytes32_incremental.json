@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bytes32_incremental[ssz_test]": {
+        "typeName": "Bytes32",
+        "value": "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        "serialized": "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        "root": "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        "_info": {
+            "hash": "0x68572c9a374f9e07bcfaaaac9151c47cb311a755bf9a135d20fd3312b16f456f",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bytes32_incremental",
+            "description": "A 32-byte array with distinct bytes round-trips unchanged.\n\n    Given\n    -----\n    - a 32-byte array holding the bytes 0x00 through 0x1f.\n    - every byte distinct, so a byte swap would be detected.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

@@ -1,0 +1,21 @@
+{
+    "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_second_option[ssz_test]": {
+        "typeName": "SampleShape",
+        "value": {
+            "selector": 2,
+            "data": {
+                "radius": 4660,
+                "color": 66
+            }
+        },
+        "serialized": "0x02341242",
+        "root": "0x083aefd3204f6d1f088b3c0eaa0dc967b414ab177ed0dd5a7eaa06c6729d1ad8",
+        "_info": {
+            "hash": "0x5883923b681f03158a784e5a94e8924d6d5f2548bd80bf06c0b54fb1c1787dd4",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_second_option",
+            "description": "A union holding its second option round-trips unchanged.\n\n    Given\n    -----\n    - the same union, and a value holding the option under selector 2.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the payload bytes match the first option's exactly.\n    - the root differs, because the option's layout and the selector both differ.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

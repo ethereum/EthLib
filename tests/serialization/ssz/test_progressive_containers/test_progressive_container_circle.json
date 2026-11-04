@@ -1,0 +1,18 @@
+{
+    "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_circle[ssz_test]": {
+        "typeName": "SampleCircle",
+        "value": {
+            "radius": 4660,
+            "color": 86
+        },
+        "serialized": "0x341256",
+        "root": "0x44dd01593fff4f0bea317b62a9e70d20f063e7413f331598d681d9e645fa8eae",
+        "_info": {
+            "hash": "0x7ffdaf0c9f3e609163fe5ad6ed4c4a16e087514cfd639b6ad8b3f808c236cf14",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_circle",
+            "description": "A progressive container with a leading gap round-trips unchanged.\n\n    Given\n    -----\n    - a layout of three positions with the first one cleared.\n    - the same field widths as the interior-gap shape, in positions 1 and 2.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the encoding matches the interior-gap shape byte for byte.\n    - the root differs from it, because the mixed-in layout differs.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

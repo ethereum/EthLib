@@ -1,0 +1,22 @@
+{
+    "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_decode_failure_first_offset[ssz_test]": {
+        "rejectionReason": "FIRST_OFFSET",
+        "typeName": "SampleBoundedListField",
+        "value": {
+            "head": 7,
+            "body": {
+                "data": []
+            }
+        },
+        "rawBytes": "0x07000000000000000d000000",
+        "serialized": "0x07000000000000000d000000",
+        "root": "",
+        "_info": {
+            "hash": "0xb5f9ec1f95b88765d8f67abc1a65669d3bc5e3646db3d010773518c3c1adf607",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_decode_failure_first_offset",
+            "description": "Decoding a progressive container whose first offset skips a byte is rejected.\n\n    Given\n    -----\n    - a shape whose fixed part is twelve bytes: an eight-byte field and one offset.\n    - an offset of thirteen, which leaves a byte belonging to no field.\n\n    When\n    ----\n    - the input is decoded into that type.\n\n    Then\n    ----\n    - decoding is rejected.\n    - the reason is that the first offset must end the fixed part exactly.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

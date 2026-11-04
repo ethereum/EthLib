@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint32_list_empty[ssz_test]": {
+        "typeName": "SampleUint32List16",
+        "value": {
+            "data": []
+        },
+        "serialized": "0x",
+        "root": "0x7a0501f5957bdf9cb3a8ff4966f02265f968658b7a9c62642cba1165e86642f5",
+        "_info": {
+            "hash": "0xf4804210ee49ad92ecd71dcf10cffa6f75c79cd48e3c44919746aa923c7b8496",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint32_list_empty",
+            "description": "An empty uint list round-trips unchanged.\n\n    Given\n    -----\n    - a uint list with no elements.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

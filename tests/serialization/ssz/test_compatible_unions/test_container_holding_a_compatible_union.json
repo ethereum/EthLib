@@ -1,0 +1,24 @@
+{
+    "tests/fillers/ssz/test_compatible_unions.py::test_container_holding_a_compatible_union[ssz_test]": {
+        "typeName": "SampleShapeContainer",
+        "value": {
+            "tag": 7,
+            "body": {
+                "selector": 1,
+                "data": {
+                    "side": 4660,
+                    "color": 66
+                }
+            }
+        },
+        "serialized": "0x07000000000000000c00000001341242",
+        "root": "0x6bd1bc8c09046c329cc92f9175aee34f9c8ea3ac39290b4366fc2cc5f4d1ab12",
+        "_info": {
+            "hash": "0xbe57a90c4f0c74179f6f30dd62cb84ac1375accfcc6887482c22e20672aa62fd",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_compatible_unions.py::test_container_holding_a_compatible_union",
+            "description": "An ordinary container holding a union round-trips unchanged.\n\n    Given\n    -----\n    - a container with an eight-byte tag and a union field.\n    - a union value whose every option happens to be fixed-size.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - one offset follows the fixed part, because a union is always variable-size.\n    - the union contributes its selector-mixed root as an ordinary leaf.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

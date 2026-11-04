@@ -1,0 +1,20 @@
+{
+    "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_empty_variable_size_option[ssz_test]": {
+        "typeName": "SampleNumbers",
+        "value": {
+            "selector": 2,
+            "data": {
+                "data": []
+            }
+        },
+        "serialized": "0x02",
+        "root": "0x6735630c0dd0ae42f505cf2e229851902e57048e0fe30b86144a3d97a5f0f46a",
+        "_info": {
+            "hash": "0xd4d76870ff4a4db3af26ec1a06a2230250afe74fe4e127bca3c70f7c2c35e0bb",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_empty_variable_size_option",
+            "description": "A union holding an empty variable-size option round-trips unchanged.\n\n    Given\n    -----\n    - the same union, holding a list with no elements.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the encoding is the selector byte alone.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

@@ -1,0 +1,21 @@
+{
+    "tests/fillers/ssz/test_merkleization_boundaries.py::test_uint64_list_with_misaligned_chunk_count[ssz_test]": {
+        "typeName": "BoundaryUint64List32",
+        "value": {
+            "data": [
+                1,
+                2,
+                3
+            ]
+        },
+        "serialized": "0x010000000000000002000000000000000300000000000000",
+        "root": "0xeac541ed75add596f34e7d491f512397ad78e73126db30505ac611ea7eeca09c",
+        "_info": {
+            "hash": "0x0e8151c402dd79d8496beeb372851fd47e41a12b7af52f4455d81dc872d650f9",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_merkleization_boundaries.py::test_uint64_list_with_misaligned_chunk_count",
+            "description": "A uint64 list whose bytes span a partial chunk merkleizes to a stable root.\n\n    Given\n    -----\n    - a uint64 list with three entries occupying 24 bytes.\n    - a length one byte shy of a full 32-byte chunk.\n\n    When\n    ----\n    - the value is merkleized.\n\n    Then\n    ----\n    - the root matches the expected zero-pad and length-mixin layout.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

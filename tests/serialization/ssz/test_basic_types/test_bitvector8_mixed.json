@@ -1,0 +1,26 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bitvector8_mixed[ssz_test]": {
+        "typeName": "SampleBitVector8",
+        "value": {
+            "data": [
+                true,
+                false,
+                true,
+                false,
+                true,
+                false,
+                true,
+                false
+            ]
+        },
+        "serialized": "0x55",
+        "root": "0x5500000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x4b61856e5dc4e1b9c631fc9281cd26bc46df63dbc7e553b4afd2f74d90e48f5e",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bitvector8_mixed",
+            "description": "An eight-bit vector with alternating bits round-trips unchanged.\n\n    Given\n    -----\n    - an eight-bit vector with alternating set and clear bits.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.\n    - the encoding is the byte 0x55.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

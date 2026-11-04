@@ -1,0 +1,22 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint64_vector4_zero[ssz_test]": {
+        "typeName": "SampleUint64Vector4",
+        "value": {
+            "data": [
+                0,
+                0,
+                0,
+                0
+            ]
+        },
+        "serialized": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "root": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x791beacc9bd810923206fdec228de926f45341e19c64991b7c631b714e38b284",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint64_vector4_zero",
+            "description": "A four-element uint vector of zeros round-trips unchanged.\n\n    Given\n    -----\n    - a vector of four eight-byte uints, all zero.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

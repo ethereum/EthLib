@@ -1,0 +1,24 @@
+{
+    "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_of_unions[ssz_test]": {
+        "typeName": "SampleNestedShape",
+        "value": {
+            "selector": 1,
+            "data": {
+                "selector": 2,
+                "data": {
+                    "radius": 4660,
+                    "color": 66
+                }
+            }
+        },
+        "serialized": "0x0102341242",
+        "root": "0xb45b07fd067fcaa8d39d7a83723c8680424f5ad10c762d639a4a37a0697fbf34",
+        "_info": {
+            "hash": "0x43842025eba914dc0a8f5627b81e7adbe559c707b69f365e0ecdc8c80ce754ba",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_of_unions",
+            "description": "A union whose option is itself a union round-trips unchanged.\n\n    Given\n    -----\n    - an outer union whose first option is the shape union.\n    - a value holding the inner union, which in turn holds its second option.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - two selector bytes lead, one per level, before any payload byte.\n    - each level mixes its own selector into the root of the level below it.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

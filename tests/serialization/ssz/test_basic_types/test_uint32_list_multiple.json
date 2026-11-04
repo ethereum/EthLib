@@ -1,0 +1,21 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint32_list_multiple[ssz_test]": {
+        "typeName": "SampleUint32List16",
+        "value": {
+            "data": [
+                0,
+                100,
+                4294967295
+            ]
+        },
+        "serialized": "0x0000000064000000ffffffff",
+        "root": "0x417350028526a110c970acdfbdcc7c95a3735964d9c350109a26ff3b24837efb",
+        "_info": {
+            "hash": "0xea377c6c32e666d54e88c9aa83d12449c9808915d2c516caf869186e3c799fe7",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint32_list_multiple",
+            "description": "A uint list with three elements round-trips unchanged.\n\n    Given\n    -----\n    - a uint list of three four-byte elements spanning the value range.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

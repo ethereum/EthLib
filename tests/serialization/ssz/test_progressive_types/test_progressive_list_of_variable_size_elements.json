@@ -1,0 +1,34 @@
+{
+    "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_of_variable_size_elements[ssz_test]": {
+        "typeName": "SampleNestedProgressiveList",
+        "value": {
+            "data": [
+                {
+                    "data": [
+                        1,
+                        2
+                    ]
+                },
+                {
+                    "data": []
+                },
+                {
+                    "data": [
+                        3,
+                        4,
+                        5
+                    ]
+                }
+            ]
+        },
+        "serialized": "0x0c000000100000001000000001000200030004000500",
+        "root": "0xd0df6fea8320f394b0d6673861125069302ab339bbd80979dc41d998581d3a83",
+        "_info": {
+            "hash": "0x19d9ab84fa13e8bdfceb16919720be943ff5acb335053da30f7532e1b5344560",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_of_variable_size_elements",
+            "description": "A progressive list of variable-size elements round-trips unchanged.\n\n    Given\n    -----\n    - a progressive list whose elements are themselves progressive lists.\n    - inner lists of differing widths, including an empty one.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the encoding carries an offset table sized for the runtime element count.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

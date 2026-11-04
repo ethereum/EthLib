@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_empty[ssz_test]": {
+        "typeName": "SampleUint64ProgressiveList",
+        "value": {
+            "data": []
+        },
+        "serialized": "0x",
+        "root": "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
+        "_info": {
+            "hash": "0xebc56e690cc852ff47e458653d29a0c3805515fd36ca95e46481fca79a8d0cc1",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_empty",
+            "description": "An empty progressive list round-trips unchanged.\n\n    Given\n    -----\n    - a progressive list of eight-byte elements with no entries.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the encoding is empty.\n    - the root is the zero terminator with a zero count mixed in.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

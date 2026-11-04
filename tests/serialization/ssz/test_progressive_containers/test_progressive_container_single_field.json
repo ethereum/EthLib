@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_single_field[ssz_test]": {
+        "typeName": "SampleOneField",
+        "value": {
+            "a": 48879
+        },
+        "serialized": "0xefbe",
+        "root": "0xa88f083e786a9c55bf466e4954c4e25b3112cad5a5a2f85248d3a88d42b9fc58",
+        "_info": {
+            "hash": "0xda9655d121309365633a3554c4e383be2af13c906727ed104f17dcf21046e80d",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_single_field",
+            "description": "A progressive container occupying its only position round-trips unchanged.\n\n    Given\n    -----\n    - a layout of one position, occupied.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the single leaf fills the width-one level and meets the terminator.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

@@ -1,0 +1,22 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint64_vector4_typical[ssz_test]": {
+        "typeName": "SampleUint64Vector4",
+        "value": {
+            "data": [
+                1,
+                4294967296,
+                9223372036854775808,
+                18446744073709551615
+            ]
+        },
+        "serialized": "0x010000000000000000000000010000000000000000000080ffffffffffffffff",
+        "root": "0x010000000000000000000000010000000000000000000080ffffffffffffffff",
+        "_info": {
+            "hash": "0x9ce48b25f6bdea719ae476672f8225c79f31d49e2d4db6a43ad3c0379cda92a1",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint64_vector4_typical",
+            "description": "A four-element uint vector spanning the value range round-trips unchanged.\n\n    Given\n    -----\n    - a vector of four eight-byte uints spanning the full per-element range.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

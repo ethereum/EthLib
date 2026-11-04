@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_boolean_false[ssz_test]": {
+        "typeName": "Boolean",
+        "value": false,
+        "serialized": "0x00",
+        "root": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x4fe7d4f179e9208b0dfb91f223a6e2a5b987a1d6af0d2abd97411583c594fb18",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_boolean_false",
+            "description": "The boolean false round-trips through encoding unchanged.\n\n    Given\n    -----\n    - the boolean value false.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the encoding is the byte 0x00.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

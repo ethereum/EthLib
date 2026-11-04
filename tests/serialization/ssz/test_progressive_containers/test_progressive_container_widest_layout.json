@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_widest_layout[ssz_test]": {
+        "typeName": "SampleWidestLayout",
+        "value": {
+            "tail": 171
+        },
+        "serialized": "0xab",
+        "root": "0x1bf935e375b4ebf1516fe0dae3e6d959168fd74f470b694b064e2d504491fba0",
+        "_info": {
+            "hash": "0x296118096a0d457b02918d15b30fc7a9085ba5ce765c207013530c7effbaf0fd",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_widest_layout",
+            "description": "A progressive container with the widest legal layout round-trips unchanged.\n\n    Given\n    -----\n    - a layout of 256 positions, the capacity of the mixed-in word.\n    - a single one-byte field at the last position.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the encoding is one byte.\n    - the mixed-in word has only its highest bit set.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

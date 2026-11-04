@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint32_zero[ssz_test]": {
+        "typeName": "Uint32",
+        "value": "0",
+        "serialized": "0x00000000",
+        "root": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x3bcc4518e1d2bfe5afffd831744eb8aecb0c4b3fe505dd941a5479e61a58d6bb",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint32_zero",
+            "description": "A four-byte uint at its lower bound round-trips unchanged.\n\n    Given\n    -----\n    - the value 0 as a four-byte uint.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bytes52_zero[ssz_test]": {
+        "typeName": "Bytes52",
+        "value": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "serialized": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "root": "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
+        "_info": {
+            "hash": "0xb211438984fb6f03987e4bd3ff4db4a1e2a638ecad04e1a96fe003540f418f04",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bytes52_zero",
+            "description": "A 52-byte array of zeros round-trips unchanged.\n\n    Given\n    -----\n    - a 52-byte array of all-zero bytes.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bytes32_zero[ssz_test]": {
+        "typeName": "Bytes32",
+        "value": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "serialized": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "root": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x44d8386ebd39061f96ca83bdf9a9f1549ff21081a562263dacc4b6c91ffdaa2b",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bytes32_zero",
+            "description": "A 32-byte array of zeros round-trips unchanged.\n\n    Given\n    -----\n    - a 32-byte array of all-zero bytes.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

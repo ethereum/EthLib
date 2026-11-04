@@ -1,0 +1,21 @@
+{
+    "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_highest_selector[ssz_test]": {
+        "typeName": "SampleShape",
+        "value": {
+            "selector": 127,
+            "data": {
+                "side": 4660,
+                "color": 66
+            }
+        },
+        "serialized": "0x7f341242",
+        "root": "0xcf559aac715a5d80315dae88b3727252c2407242be2960403aa6b8a3197ea001",
+        "_info": {
+            "hash": "0x80296254ef5a59a3bd365c805aff71cab7088507b19debafaf7341a0509031fe",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_highest_selector",
+            "description": "A union holding an option under selector 127 round-trips unchanged.\n\n    Given\n    -----\n    - the same union, whose selector 127 names the same option as selector 1.\n    - a value holding that option under the higher selector.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the selector byte is 0x7f, the top of the legal range.\n    - the root differs from the same payload under selector 1.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

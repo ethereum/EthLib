@@ -1,0 +1,19 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bitlist_single_true[ssz_test]": {
+        "typeName": "SampleBitList16",
+        "value": {
+            "data": [
+                true
+            ]
+        },
+        "serialized": "0x03",
+        "root": "0x56d8a66fbae0300efba7ec2c531973aaae22e7a2ed6ded081b5b32d07a32780a",
+        "_info": {
+            "hash": "0x8c9e9ed98daa334add084ad87802f0b23a3069fc584dc5591f12d21effaf8115",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bitlist_single_true",
+            "description": "A bitlist with one set bit round-trips unchanged.\n\n    Given\n    -----\n    - a bitlist holding a single set bit.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.\n    - the sentinel immediately follows the data bit.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

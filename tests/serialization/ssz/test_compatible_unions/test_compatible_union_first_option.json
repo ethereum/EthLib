@@ -1,0 +1,21 @@
+{
+    "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_first_option[ssz_test]": {
+        "typeName": "SampleShape",
+        "value": {
+            "selector": 1,
+            "data": {
+                "side": 4660,
+                "color": 66
+            }
+        },
+        "serialized": "0x01341242",
+        "root": "0x18ef429c95e07846bdc4ed6fabee72897f927350cf61faa15682e776e4465478",
+        "_info": {
+            "hash": "0x480c7e44594f5974059f8938a74cd07b556266ffb4bc551683df32686b8a83f7",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_first_option",
+            "description": "A union holding its first option round-trips unchanged.\n\n    Given\n    -----\n    - a union declaring a progressive container under selector 1.\n    - a value holding that option.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the encoding is the selector byte followed by the option's own three bytes.\n    - the root is the option's own root with the selector mixed in as a full chunk.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bytes4_typical[ssz_test]": {
+        "typeName": "Bytes4",
+        "value": "0xdeadbeef",
+        "serialized": "0xdeadbeef",
+        "root": "0xdeadbeef00000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0xdd28307a5ad5a4be7d40e013477443547d013878d68e5ad61bb828187309c8a5",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bytes4_typical",
+            "description": "A four-byte array with non-zero content round-trips unchanged.\n\n    Given\n    -----\n    - a four-byte array holding the bytes 0xdeadbeef.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

@@ -1,0 +1,23 @@
+{
+    "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_decode_failure_truncated_payload[ssz_test]": {
+        "rejectionReason": "TRUNCATED",
+        "typeName": "SampleShape",
+        "value": {
+            "selector": 1,
+            "data": {
+                "side": 4660,
+                "color": 66
+            }
+        },
+        "rawBytes": "0x0134",
+        "serialized": "0x0134",
+        "root": "",
+        "_info": {
+            "hash": "0x27668b77534ce141f47058ace2ec167f0fbe230fde33fd48e10eb48bb47ca6de",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_decode_failure_truncated_payload",
+            "description": "Decoding a union whose payload is cut short is rejected.\n\n    Given\n    -----\n    - a union whose selected option opens with a two-byte field.\n    - the input bytes 0x0134, which leave that field one byte short.\n\n    When\n    ----\n    - the input is decoded into that type.\n\n    Then\n    ----\n    - decoding is rejected.\n    - the reason surfaces from the option itself, since the rest of the budget is its own.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

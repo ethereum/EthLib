@@ -1,0 +1,22 @@
+{
+    "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_fills_first_level[ssz_test]": {
+        "typeName": "SampleUint64ProgressiveList",
+        "value": {
+            "data": [
+                0,
+                1,
+                2,
+                3
+            ]
+        },
+        "serialized": "0x0000000000000000010000000000000002000000000000000300000000000000",
+        "root": "0xfb119bdda96d8ebf59b511db66fc19a40f4f1543a5aa87d8d9b4519655a8eda9",
+        "_info": {
+            "hash": "0x5720a777f56e896d4e768f529b84afa9dfb21d71cbff8779f9b4e9419de308ff",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_fills_first_level",
+            "description": "A progressive list whose data fills the first level exactly round-trips unchanged.\n\n    Given\n    -----\n    - a progressive list of four eight-byte elements.\n    - data occupying exactly one 32-byte chunk, the full width of level one.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the root leaves every level past the first as the terminator.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

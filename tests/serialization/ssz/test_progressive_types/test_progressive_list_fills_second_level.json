@@ -1,0 +1,38 @@
+{
+    "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_fills_second_level[ssz_test]": {
+        "typeName": "SampleUint64ProgressiveList",
+        "value": {
+            "data": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19
+            ]
+        },
+        "serialized": "0x00000000000000000100000000000000020000000000000003000000000000000400000000000000050000000000000006000000000000000700000000000000080000000000000009000000000000000a000000000000000b000000000000000c000000000000000d000000000000000e000000000000000f000000000000001000000000000000110000000000000012000000000000001300000000000000",
+        "root": "0x1957d11b2bce3ef0c72872fca6fa4cffacc27e601c91b88ab8e6b28eebc6525c",
+        "_info": {
+            "hash": "0x3d9238fa002ce367fab2a45a77a5885e946b61cde7366a6ec8f5dbe11db6b440",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_fills_second_level",
+            "description": "A progressive list whose data fills two levels exactly round-trips unchanged.\n\n    Given\n    -----\n    - a progressive list of twenty eight-byte elements.\n    - data occupying five chunks, the cumulative capacity of levels one and two.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the root needs no padding in either occupied level.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

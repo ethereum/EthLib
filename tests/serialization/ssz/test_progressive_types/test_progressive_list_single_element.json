@@ -1,0 +1,19 @@
+{
+    "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_single_element[ssz_test]": {
+        "typeName": "SampleUint64ProgressiveList",
+        "value": {
+            "data": [
+                1
+            ]
+        },
+        "serialized": "0x0100000000000000",
+        "root": "0x905efb51c2764c2c7a4efb0548e372569df06db82115c3b1896c186632f3fe5b",
+        "_info": {
+            "hash": "0x588e81507fb906a4e2161378e1370fbb05fa18937c5c46081484a38a1629921c",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_single_element",
+            "description": "A progressive list holding one element round-trips unchanged.\n\n    Given\n    -----\n    - a progressive list with a single eight-byte element.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the root hashes one chunk against the terminator.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

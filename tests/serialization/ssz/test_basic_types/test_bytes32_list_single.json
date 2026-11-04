@@ -1,0 +1,19 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bytes32_list_single[ssz_test]": {
+        "typeName": "SampleBytes32List8",
+        "value": {
+            "data": [
+                "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ]
+        },
+        "serialized": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "root": "0x23f61250eb803aed609f6b7b760298c3abfc31c6ef3019271b3fdf4fdb59011f",
+        "_info": {
+            "hash": "0x3508a3940914483605adc69fed942f4f760c76d3468ff97cc579c38dbfc55ba2",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bytes32_list_single",
+            "description": "A 32-byte-element list with one entry round-trips unchanged.\n\n    Given\n    -----\n    - a list holding a single 32-byte element.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

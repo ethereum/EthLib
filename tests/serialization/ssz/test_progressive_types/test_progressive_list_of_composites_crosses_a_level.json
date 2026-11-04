@@ -1,0 +1,24 @@
+{
+    "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_of_composites_crosses_a_level[ssz_test]": {
+        "typeName": "SampleBytes32ProgressiveList",
+        "value": {
+            "data": [
+                "0x0101010101010101010101010101010101010101010101010101010101010101",
+                "0x0202020202020202020202020202020202020202020202020202020202020202",
+                "0x0303030303030303030303030303030303030303030303030303030303030303",
+                "0x0404040404040404040404040404040404040404040404040404040404040404",
+                "0x0505050505050505050505050505050505050505050505050505050505050505",
+                "0x0606060606060606060606060606060606060606060606060606060606060606"
+            ]
+        },
+        "serialized": "0x010101010101010101010101010101010101010101010101010101010101010102020202020202020202020202020202020202020202020202020202020202020303030303030303030303030303030303030303030303030303030303030303040404040404040404040404040404040404040404040404040404040404040405050505050505050505050505050505050505050505050505050505050505050606060606060606060606060606060606060606060606060606060606060606",
+        "root": "0x690beb7f075e2dc91699aa3ee9354687772923889ce755458cb405ae95e34055",
+        "_info": {
+            "hash": "0xac582c0a2228e843f901d71d9d64fbb7e3f3814e4cdf7f64e5edccefab29887c",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_of_composites_crosses_a_level",
+            "description": "A progressive list of six composite elements round-trips unchanged.\n\n    Given\n    -----\n    - a progressive list of six 32-byte elements.\n    - one leaf per element, so six leaves reach into the third level.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the root places each element root at a stable position on the spine.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

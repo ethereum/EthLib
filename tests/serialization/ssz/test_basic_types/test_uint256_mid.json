@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint256_mid[ssz_test]": {
+        "typeName": "Uint256",
+        "value": "57896044618658097711785492504343953926634992332820282019728792003956564819968",
+        "serialized": "0x0000000000000000000000000000000000000000000000000000000000000080",
+        "root": "0x0000000000000000000000000000000000000000000000000000000000000080",
+        "_info": {
+            "hash": "0x218bd7d5ba295b5c0712aaf1aa7e0db4a7173e18433b12f68a619dacfe8768b2",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint256_mid",
+            "description": "A thirty-two-byte uint with its high bit set round-trips unchanged.\n\n    Given\n    -----\n    - the value 2^255 as a thirty-two-byte uint.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.\n    - the thirty-two-byte little-endian layout is preserved.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

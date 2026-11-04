@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint16_one[ssz_test]": {
+        "typeName": "Uint16",
+        "value": "1",
+        "serialized": "0x0100",
+        "root": "0x0100000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x51689d1f09482639c6493ca38cc23734955c8b72aab2c490f6c3de1a721b21c1",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint16_one",
+            "description": "The smallest non-zero two-byte uint round-trips unchanged.\n\n    Given\n    -----\n    - the value 1 as a two-byte uint.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

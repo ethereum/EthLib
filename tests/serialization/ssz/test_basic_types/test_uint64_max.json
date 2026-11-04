@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint64_max[ssz_test]": {
+        "typeName": "Uint64",
+        "value": "18446744073709551615",
+        "serialized": "0xffffffffffffffff",
+        "root": "0xffffffffffffffff000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x54159edf10fe00a1e85b22f43e3865f6fda532ae3783b1f7a3364da3411985cc",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint64_max",
+            "description": "An eight-byte uint at its upper bound round-trips unchanged.\n\n    Given\n    -----\n    - the largest eight-byte uint value (2^64 - 1).\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.\n    - the encoding is eight bytes of 0xff.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

@@ -1,0 +1,23 @@
+{
+    "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_decode_failure_empty_input[ssz_test]": {
+        "rejectionReason": "NO_SELECTOR",
+        "typeName": "SampleShape",
+        "value": {
+            "selector": 1,
+            "data": {
+                "side": 4660,
+                "color": 66
+            }
+        },
+        "rawBytes": "0x",
+        "serialized": "0x",
+        "root": "",
+        "_info": {
+            "hash": "0x45f4521ea2f234c57cc1e3a240b305085a599ef8ea9b746921a7e8ffd7e5ae46",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_decode_failure_empty_input",
+            "description": "Decoding a union from an empty input is rejected.\n\n    Given\n    -----\n    - a union whose every encoding opens with a selector byte.\n    - an input of zero bytes.\n\n    When\n    ----\n    - the input is decoded into that type.\n\n    Then\n    ----\n    - decoding is rejected.\n    - the reason is that the budget holds no selector at all.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint128_mid[ssz_test]": {
+        "typeName": "Uint128",
+        "value": "170141183460469231731687303715884105728",
+        "serialized": "0x00000000000000000000000000000080",
+        "root": "0x0000000000000000000000000000008000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x45efdb190e91d83bc858a2c840312ba9750618d4fdd00637a99ccc5b3674895b",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint128_mid",
+            "description": "A sixteen-byte uint with its high bit set round-trips unchanged.\n\n    Given\n    -----\n    - the value 2^127 as a sixteen-byte uint.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.\n    - the sixteen-byte little-endian layout is preserved.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

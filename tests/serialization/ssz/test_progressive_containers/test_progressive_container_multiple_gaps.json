@@ -1,0 +1,19 @@
+{
+    "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_multiple_gaps[ssz_test]": {
+        "typeName": "SampleMultipleGaps",
+        "value": {
+            "a": 1,
+            "b": 515,
+            "c": 67438087
+        },
+        "serialized": "0x01030207060504",
+        "root": "0x4c581934216751d2ec29ea5bbaf238a78ae8c240c594afa8662b449eb51cd455",
+        "_info": {
+            "hash": "0x646b2f2dbd8f0e48fcd6eae585fefad7d1d332d84b33d2176fa473341e0e4258",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_multiple_gaps",
+            "description": "A progressive container with gaps of differing widths round-trips unchanged.\n\n    Given\n    -----\n    - a layout of six positions, three of them occupied.\n    - fields of one, two and four bytes at positions 0, 3 and 5.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the encoding is the three fields back to back.\n    - the tree holds six leaves, three of which are zero chunks.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

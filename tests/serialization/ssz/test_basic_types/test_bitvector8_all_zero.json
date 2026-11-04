@@ -1,0 +1,26 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bitvector8_all_zero[ssz_test]": {
+        "typeName": "SampleBitVector8",
+        "value": {
+            "data": [
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false
+            ]
+        },
+        "serialized": "0x00",
+        "root": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x1caa5dc815dbc6615b8349764ae2b7e85a5f142702b21e82946b12e43c5ec456",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bitvector8_all_zero",
+            "description": "An eight-bit vector with all bits clear round-trips unchanged.\n\n    Given\n    -----\n    - an eight-bit vector whose bits are all clear.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.\n    - the encoding is the byte 0x00.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

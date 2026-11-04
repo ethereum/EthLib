@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint16_mid[ssz_test]": {
+        "typeName": "Uint16",
+        "value": "32768",
+        "serialized": "0x0080",
+        "root": "0x0080000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0xc3e7413fe7123b823710dd0974fc713dcec7ffbfcc061377fc44e19dbed6f322",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint16_mid",
+            "description": "A two-byte uint with its high bit set round-trips unchanged.\n\n    Given\n    -----\n    - the value 32768 as a two-byte uint.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.\n    - the little-endian byte order is preserved.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

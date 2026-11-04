@@ -1,0 +1,26 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bitvector8_all_one[ssz_test]": {
+        "typeName": "SampleBitVector8",
+        "value": {
+            "data": [
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true
+            ]
+        },
+        "serialized": "0xff",
+        "root": "0xff00000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0xdb2859c57da927403053a6d923d886665afc128c4af051230a6a1ed60f49c136",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bitvector8_all_one",
+            "description": "An eight-bit vector with all bits set round-trips unchanged.\n\n    Given\n    -----\n    - an eight-bit vector whose bits are all set.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.\n    - the encoding is the byte 0xff.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

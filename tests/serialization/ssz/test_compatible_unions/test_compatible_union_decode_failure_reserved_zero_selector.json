@@ -1,0 +1,23 @@
+{
+    "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_decode_failure_reserved_zero_selector[ssz_test]": {
+        "rejectionReason": "UNKNOWN_SELECTOR",
+        "typeName": "SampleShape",
+        "value": {
+            "selector": 1,
+            "data": {
+                "side": 4660,
+                "color": 66
+            }
+        },
+        "rawBytes": "0x00341242",
+        "serialized": "0x00341242",
+        "root": "",
+        "_info": {
+            "hash": "0x4a1fc52ee1fc4ccf317e59036767c3e25175d3189c35880eb62cde9e9c713bb0",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_compatible_unions.py::test_compatible_union_decode_failure_reserved_zero_selector",
+            "description": "Decoding a union whose selector is the reserved zero is rejected.\n\n    Given\n    -----\n    - the input bytes 0x00341242, whose leading byte is the reserved selector.\n\n    When\n    ----\n    - the input is decoded into that type.\n\n    Then\n    ----\n    - decoding is rejected.\n    - the reason is that zero can never name an option, so an uninitialized value cannot\n      pass as a valid one.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}
