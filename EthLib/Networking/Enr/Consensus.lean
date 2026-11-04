@@ -43,14 +43,13 @@ instance : SszType EnrForkId :=
   .container ["fork_digest", "next_fork_version", "next_fork_epoch"]
     (fun e => (e.forkDigest, e.nextForkVersion, e.nextForkEpoch)) (fun (d, v, e) => ⟨d, v, e⟩)
 
-/-- The number of attestation subnets, 64 in the mainnet and minimal configurations. -/
-def ATTESTATION_SUBNET_COUNT : Nat := 64
-
 /-- The number of sync committee subnets. -/
 def SYNC_COMMITTEE_SUBNET_COUNT : Nat := 4
 
-/-- The attestation subnets of a node, one bit each. -/
-abbrev Attnets := Bitvector ATTESTATION_SUBNET_COUNT
+/-- The attestation subnets of a node, one bit for each of the `count` subnets.
+
+The count is the number of attestation subnets of the configuration. -/
+abbrev Attnets (count : UInt64) := Bitvector count.toNat
 
 /-- The sync committee subnets of a node, one bit each. -/
 abbrev Syncnets := Bitvector SYNC_COMMITTEE_SUBNET_COUNT
@@ -145,12 +144,14 @@ def readCgc (r : Enr) : Except EntryError (Option UInt64) := do
   | none => return none
   | some value => return some (← (Rlp.Codec.ofItem (.bytes value)).mapError .cgc)
 
-/-- The consensus entries of a record, as a node at one fork reads them. -/
-structure ConsensusEntries where
+/-- The consensus entries of a record, as a node at one fork reads them.
+
+`count` is the number of attestation subnets, which fixes the length of `attnets`. -/
+structure ConsensusEntries (count : UInt64) where
   /-- The current and next forks, which every node record of the consensus layer carries. -/
   eth2 : EnrForkId
   /-- The attestation subnets, which a node may leave out when it subscribes to none. -/
-  attnets : Option Attnets
+  attnets : Option (Attnets count)
   /-- The sync committee subnets, read from Altair on. -/
   syncnets : Option Syncnets
   /-- The custody group count, read and required from Fulu on. -/
@@ -173,14 +174,15 @@ def readRequiredAt {α : Type} (fork : Fork) (key : ConsensusKey)
     | none => throw (.missing key)
   else return none
 
-/-- The consensus entries of a record at a fork.
+/-- The consensus entries of a record at a fork, with `count` attestation subnets.
 
 `eth2` is required at every fork, and `cgc` and `nfd` from Fulu on.
 
 A node does not read an entry of a later fork, since it does not know the key. -/
-def readEntries (fork : Fork) (r : Enr) : Except EntryError ConsensusEntries := do
+def readEntries (count : UInt64) (fork : Fork) (r : Enr) :
+    Except EntryError (ConsensusEntries count) := do
   let some eth2 ← readSsz EnrForkId r .eth2 | throw (.missing .eth2)
-  let attnets ← readSsz Attnets r .attnets
+  let attnets ← readSsz (Attnets count) r .attnets
   let syncnets ← readAt fork .syncnets (readSsz Syncnets r .syncnets)
   let cgc ← readRequiredAt fork .cgc (readCgc r)
   let nfd ← readRequiredAt fork .nfd (readSsz (Vector UInt8 4) r .nfd)

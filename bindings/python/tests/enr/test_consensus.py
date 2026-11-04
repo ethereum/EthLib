@@ -118,3 +118,16 @@ def test_cgc_leading_zero():
     record = _record({**FULL, b"cgc": bytes([0x00, 0x80])})
     with pytest.raises(ValueError, match="cgc"):
         enr.consensus_entries("fusaka", record)
+
+
+def test_minimal_configuration():
+    # The minimal configuration also has 64 attestation subnets.
+    entries = enr.consensus_entries("fusaka", _record(FULL), config="minimal")
+    assert entries.attnets == ATTNETS
+
+
+def test_attnets_of_7_bytes():
+    # 64 subnets need 8 bytes, so 7 bytes are rejected.
+    record = _record({**FULL, b"attnets": ATTNETS[:7]})
+    with pytest.raises(ValueError, match="attnets"):
+        enr.consensus_entries("fusaka", record)

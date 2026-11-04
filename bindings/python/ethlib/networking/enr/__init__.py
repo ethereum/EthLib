@@ -10,6 +10,7 @@ EnrError is a ValueError, with the code of the Lean error.
 
 from typing import NamedTuple
 
+from ... import consensus
 from ...errors import EnrError
 
 # Every domain links into one extension module.
@@ -67,18 +68,15 @@ class ConsensusEntries(NamedTuple):
     nfd: bytes | None
 
 
-def consensus_entries(fork: str, record: bytes) -> ConsensusEntries:
-    """The consensus entries of a record, read by a node at the named fork, such as "fusaka".
-
-    It does not check the signature. A missing eth2 entry raises EnrError, and so does a missing
-    cgc or nfd entry from Fulu on.
-    """
-    raw = _native.enr_consensus_entries(fork, record)
+def consensus_entries(fork: str, record: bytes, config: str = "mainnet") -> ConsensusEntries:
+    """The consensus entries of a record at a fork, with the subnet count of a configuration."""
+    count = consensus.config(config)["ATTESTATION_SUBNET_COUNT"]
+    raw = _native.enr_consensus_entries(fork, count, record)
     eth2 = EnrForkId(raw[0:4], raw[4:8], int.from_bytes(raw[8:16], "little"))
     pos = 16
     fields = []
-    # attnets: 8 bytes, syncnets: 1 byte, cgc: a little-endian uint64, nfd: 4 bytes.
-    for size in (8, 1, 8, 4):
+    # attnets: one bit per subnet, syncnets: 1 byte, cgc: a little-endian uint64, nfd: 4 bytes.
+    for size in ((count + 7) // 8, 1, 8, 4):
         if raw[pos] == 0:
             fields.append(None)
             pos += 1

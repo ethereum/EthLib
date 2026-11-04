@@ -20,18 +20,18 @@ namespace EthLib.Networking.Proofs.Gossip.Subnet
 
 open EthLib.Networking.Gossip
 
-variable {ε : Type} {config : AttestationSubnetConfig}
+variable {ε : Type} {config : SubnetParameters}
   {shuffle : UInt64 → UInt64 → ByteArray → Except ε UInt64} {nodeId : NodeID} {epoch : UInt64}
 
 /-- Every subnet is below the number of subnets. -/
 theorem computeSubscribedSubnet_lt {index : UInt64} {subnet : SubnetID}
     (h : computeSubscribedSubnet config shuffle nodeId epoch index = .ok subnet) :
-    subnet < config.subnetCount := by
-  have count : config.subnetCount ≠ 0 := by
+    subnet < config.ATTESTATION_SUBNET_COUNT := by
+  have count : config.ATTESTATION_SUBNET_COUNT ≠ 0 := by
     intro zero
     simp [computeSubscribedSubnet, computeAttestationSubnetPrefixBits, zero, bind, Except.bind,
       throw, throwThe, MonadExceptOf.throw] at h
-  have positive : 0 < config.subnetCount.toNat :=
+  have positive : 0 < config.ATTESTATION_SUBNET_COUNT.toNat :=
     Nat.pos_of_ne_zero fun zero => count (UInt64.toNat_inj.mp (by simpa using zero))
   unfold computeSubscribedSubnet at h
   simp only [bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw,
@@ -46,8 +46,8 @@ theorem computeSubscribedSubnet_lt {index : UInt64} {subnet : SubnetID}
 /-- A node gets as many subnets as the subnets per node, each below the number of subnets. -/
 theorem computeSubscribedSubnets_ok {subnets : List SubnetID}
     (h : computeSubscribedSubnets config shuffle nodeId epoch = .ok subnets) :
-    subnets.length = config.subnetsPerNode.toNat ∧
-      ∀ subnet ∈ subnets, subnet < config.subnetCount := by
+    subnets.length = config.SUBNETS_PER_NODE.toNat ∧
+      ∀ subnet ∈ subnets, subnet < config.ATTESTATION_SUBNET_COUNT := by
   have length := Base.mapM_ok_length h
   have from_index := Base.mapM_ok_mem h
   refine ⟨by simpa using length, fun subnet member => ?_⟩
@@ -70,22 +70,26 @@ theorem nodePrefix_lt (nodeId : NodeID) {bits : Nat} (h : bits ≤ NODE_ID_BITS)
 
 The shuffle must succeed on every index below the count, with a position below the count. -/
 theorem computeSubscribedSubnet_exists {index : UInt64}
-    (count : config.subnetCount ≠ 0) (epochs : config.epochsPerSubscription ≠ 0)
-    (bits : Serialization.Ssz.depthFor config.subnetCount.toNat + config.extraBits.toNat < 64)
-    (period : epoch.toNat + config.epochsPerSubscription.toNat ≤ 2 ^ 64)
+    (count : config.ATTESTATION_SUBNET_COUNT ≠ 0)
+    (epochs : config.EPOCHS_PER_SUBNET_SUBSCRIPTION ≠ 0)
+    (bits : Serialization.Ssz.depthFor config.ATTESTATION_SUBNET_COUNT.toNat +
+      config.ATTESTATION_SUBNET_EXTRA_BITS.toNat < 64)
+    (period : epoch.toNat + config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat ≤ 2 ^ 64)
     (shuffled : ∀ i n seed, i < n → ∃ p, shuffle i n seed = .ok p ∧ p < n)
     (small : index.toNat ≤ 2 ^ 63) :
     ∃ subnet, computeSubscribedSubnet config shuffle nodeId epoch index = .ok subnet := by
   have prefixBits : computeAttestationSubnetPrefixBits (ε := ε) config =
-      .ok (Serialization.Ssz.depthFor config.subnetCount.toNat + config.extraBits.toNat) := by
+      .ok (Serialization.Ssz.depthFor config.ATTESTATION_SUBNET_COUNT.toNat +
+        config.ATTESTATION_SUBNET_EXTRA_BITS.toNat) := by
     simp [computeAttestationSubnetPrefixBits, count, pure, Except.pure]
-  generalize Serialization.Ssz.depthFor config.subnetCount.toNat + config.extraBits.toNat = b
-    at prefixBits bits
+  generalize Serialization.Ssz.depthFor config.ATTESTATION_SUBNET_COUNT.toNat +
+    config.ATTESTATION_SUBNET_EXTRA_BITS.toNat = b at prefixBits bits
   have below : 2 ^ b < 2 ^ 64 := Nat.pow_lt_pow_right (by decide) bits
   have nodePrefix : nodeId.toNat >>> (NODE_ID_BITS - b) < 2 ^ b :=
     nodePrefix_lt nodeId (by unfold NODE_ID_BITS; omega)
   have offset :
-      nodeId.toNat % config.epochsPerSubscription.toNat < config.epochsPerSubscription.toNat :=
+      nodeId.toNat % config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat <
+        config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat :=
     Nat.mod_lt _ (Nat.pos_of_ne_zero fun zero => epochs (UInt64.toNat_inj.mp (by simpa using zero)))
   have toNat_of_lt {n : Nat} (h : n < 2 ^ 64) : n.toUInt64.toNat = n := by
     rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt h]
@@ -96,7 +100,7 @@ theorem computeSubscribedSubnet_exists {index : UInt64}
   have bitsFit : ¬64 ≤ b := by omega
   have half : 2 ^ b ≤ 2 ^ 63 := Nat.pow_le_pow_right (by decide) (by omega)
   have shifted := addChecked_of_lt (a := epoch)
-    (b := (nodeId.toNat % config.epochsPerSubscription.toNat).toUInt64)
+    (b := (nodeId.toNat % config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat).toUInt64)
     (by rw [toNat_of_lt (by omega)]; omega)
   unfold computeSubscribedSubnet
   simp only [prefixBits, bind, Except.bind, pure, Except.pure, Except.mapError, epochs, bitsFit,
@@ -125,16 +129,18 @@ theorem computeSubscribedSubnet_exists {index : UInt64}
 
 The shuffle must succeed on every index below the count, with a position below the count. -/
 theorem computeSubscribedSubnets_exists
-    (count : config.subnetCount ≠ 0) (epochs : config.epochsPerSubscription ≠ 0)
-    (bits : Serialization.Ssz.depthFor config.subnetCount.toNat + config.extraBits.toNat < 64)
-    (period : epoch.toNat + config.epochsPerSubscription.toNat ≤ 2 ^ 64)
+    (count : config.ATTESTATION_SUBNET_COUNT ≠ 0)
+    (epochs : config.EPOCHS_PER_SUBNET_SUBSCRIPTION ≠ 0)
+    (bits : Serialization.Ssz.depthFor config.ATTESTATION_SUBNET_COUNT.toNat +
+      config.ATTESTATION_SUBNET_EXTRA_BITS.toNat < 64)
+    (period : epoch.toNat + config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat ≤ 2 ^ 64)
     (shuffled : ∀ i n seed, i < n → ∃ p, shuffle i n seed = .ok p ∧ p < n)
-    (perNode : config.subnetsPerNode.toNat ≤ 2 ^ 63) :
+    (perNode : config.SUBNETS_PER_NODE.toNat ≤ 2 ^ 63) :
     ∃ subnets, computeSubscribedSubnets config shuffle nodeId epoch = .ok subnets :=
   Base.mapM_exists_ok fun index member =>
     computeSubscribedSubnet_exists count epochs bits period shuffled (by
       have := List.mem_range.mp member
-      have := config.subnetsPerNode.toNat_lt
+      have := config.SUBNETS_PER_NODE.toNat_lt
       rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
       omega)
 

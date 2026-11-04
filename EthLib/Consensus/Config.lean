@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Hash32
 public import EthLib.Base.U256
 public import EthLib.Consensus.Constants
+public import EthLib.Networking.Gossip.Parameters
 
 /-!
 # `Consensus.Config`
@@ -10,6 +11,8 @@ public import EthLib.Consensus.Constants
 A configuration fixes the values of one network, such as its genesis and the epochs of its forks.
 
 It holds each value under the name of its source, from Phase 0 to Fulu.
+
+The parameters of the attestation subnets come from the networking layer, which reads them too.
 -/
 
 @[expose] public section
@@ -27,7 +30,7 @@ structure BlobScheduleEntry where
   deriving DecidableEq, Repr
 
 /-- The values of a configuration, from Phase 0 to Fulu. -/
-structure Config where
+structure Config extends Networking.Gossip.SubnetParameters where
   /-- The name of the preset that the configuration uses. -/
   PRESET_BASE : String
   /-- The name of the configuration. -/
@@ -124,18 +127,10 @@ structure Config where
   MAX_PAYLOAD_SIZE : UInt64
   /-- Before Deneb: the most blocks in one request. -/
   MAX_REQUEST_BLOCKS : UInt64
-  /-- The number of epochs that a subscription to a subnet lasts. -/
-  EPOCHS_PER_SUBNET_SUBSCRIPTION : Epoch
   /-- The most slots during which an attestation can propagate. -/
   ATTESTATION_PROPAGATION_SLOT_RANGE : Slot
   /-- The largest clock disparity between honest nodes, in milliseconds. -/
   MAXIMUM_GOSSIP_CLOCK_DISPARITY : UInt64
-  /-- The number of long-lived subnets that a node subscribes to. -/
-  SUBNETS_PER_NODE : UInt64
-  /-- The number of attestation subnets. -/
-  ATTESTATION_SUBNET_COUNT : UInt64
-  /-- The number of extra bits of a node ID that choose its subnets. -/
-  ATTESTATION_SUBNET_EXTRA_BITS : UInt64
   /-- From Deneb: the most blocks in one request. -/
   MAX_REQUEST_BLOCKS_DENEB : UInt64
   /-- From Deneb: the fewest recent epochs whose blob sidecars a node serves. -/
