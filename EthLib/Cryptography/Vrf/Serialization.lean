@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Vrf.Verify
 
 /-!
-# `Vrf.Serialization`
+# VRF openings as bytes
 
 An opening as 1056 bytes, and verification over bytes.
 
@@ -39,9 +39,14 @@ def decodeOpening (bytes : ByteArray) : Option Opening :=
   else
     none
 
-/-- `vrf_verify(root, index, opening)`: verification over bytes.
+/-- Verification over bytes.
 
-Returns nothing for a root that is not 32 bytes, an opening that is not 1056 bytes, or an index outside `[0, 2^32)`. -/
+It returns nothing in three cases:
+
+- The root is not 32 bytes.
+- The opening is not 1056 bytes.
+- The index is outside `[0, 2^32)`.
+-/
 def verifyBytes (root : ByteArray) (index : Nat) (opening : ByteArray) : Option Digest := do
   -- Each check rejects; none pads, truncates or reduces.
   if hr : root.size = VRF_HASH_SIZE then

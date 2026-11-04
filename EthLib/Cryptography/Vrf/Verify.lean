@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Vrf.Hash
 public import EthLib.Cryptography.Merkle.Tree
 
 /-!
-# `Vrf.Verify`
+# VRF verification
 
 Verify an opening at an index, and return the output there.
 
@@ -21,7 +21,11 @@ The output is a hash of the secret, not the leaf.
 
 namespace EthLib.Cryptography.Vrf
 
-/-- `vrf.Verify(root, i, opening)`: the output at index `i`, or nothing if the opening is invalid. -/
+/--
+`vrf.Verify(root, i, opening)` of EIP-8450.
+
+It returns the output at index `i`, or nothing if the opening is invalid.
+-/
 def verify (root : Digest) (i : UInt32) (opening : Opening) : Option Digest :=
   -- The leaf commits to the secret.
   let leaf := leafHash opening.secret

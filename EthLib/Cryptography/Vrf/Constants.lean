@@ -1,7 +1,7 @@
 module
 
 /-!
-# `Vrf.Constants`
+# VRF parameters
 
 The parameters of the VRF tree.
 -/
