@@ -1,10 +1,15 @@
-/* Python wrappers of the Keccak-256 and Keccak-f[1600] exports. */
+/* Python wrappers of the Keccak-256, Keccak-512 and Keccak-f[1600] exports. */
 #include "wrappers.h"
 
 /* ---- Lean externs ----------------------------------------------------- */
 
 extern lean_object*
 eth_keccak256(
+  lean_object* data
+);
+
+extern lean_object*
+eth_keccak512(
   lean_object* data
 );
 
@@ -43,6 +48,25 @@ py_keccak256(
    * On a failed copy, the result is NULL with a Python error already set. */
   lean_dec(res);
   return out;
+}
+
+PyObject*
+py_keccak512(
+  PyObject* self,
+  PyObject* args
+) {
+  /* Take exactly one argument, and only `bytes`. */
+  PyObject* data_obj;
+  if (!PyArg_ParseTuple(args, "O", &data_obj)) return NULL;
+  if (!PyBytes_Check(data_obj)) {
+    PyErr_SetString(PyExc_TypeError, "data must be bytes");
+    return NULL;
+  }
+  /* The export takes ownership of the copy, and returns the digest itself.
+   * The helper copies the digest into `bytes` and frees it. */
+  return pybytes_of_bytearray(eth_keccak512(
+    mk_bytearray((const uint8_t*) PyBytes_AS_STRING(data_obj),
+                 (size_t) PyBytes_GET_SIZE(data_obj))));
 }
 
 PyObject*

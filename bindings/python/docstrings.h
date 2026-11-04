@@ -110,6 +110,9 @@
 #define DOC_keccak256 \
   "Keccak-256 of a byte string: `Keccak[512](M, 256)` of FIPS 202 §5.2."
 
+#define DOC_keccak512 \
+  "Keccak-512 of a byte string: `Keccak[1024](M, 512)` of FIPS 202 §5.2."
+
 #define DOC_keccak_f1600 \
   "Keccak-f[1600], FIPS 202 §3.4: Keccak-p[1600, 24], rounds 0 to 23 in order."
 

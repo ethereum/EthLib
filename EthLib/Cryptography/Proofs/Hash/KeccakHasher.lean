@@ -43,7 +43,7 @@ theorem absorbBlocks_append (f : State → State) (S : State) (a b : List (List 
   simp [absorbBlocks, List.foldl_append]
 
 /-- The padding reads its length only mod the rate. -/
-theorem padding_mod (len : Nat) : padding (len % RATE) = padding len := by
+theorem padding_mod (rate len : Nat) : padding rate (len % rate) = padding rate len := by
   apply ByteArray.ext
   apply Array.ext
   · simp [padding]
@@ -92,8 +92,8 @@ theorem absorb_absorb (h : Hasher) (a b : ByteArray) :
 /-- The digest of a hasher that absorbed one message is its Keccak-256. -/
 theorem digest_absorb_empty (msg : ByteArray) :
     (Hasher.empty.absorb msg).digest = keccak256 msg := by
-  simp only [Hasher.absorb, Hasher.digest, Hasher.empty, List.nil_append, keccak256, sponge, pad,
-    ByteArray.data_append, Array.toList_append, blockCount]
+  simp only [Hasher.absorb, Hasher.digest, Hasher.empty, List.nil_append, keccak256, spongeAbsorb,
+    pad, ByteArray.data_append, Array.toList_append, blockCount]
   generalize hl : msg.data.toList = bytes
   have hsize : msg.size = bytes.length := by rw [← hl, Array.length_toList, ByteArray.size_data]
   rw [hsize]
@@ -107,16 +107,17 @@ theorem digest_absorb_empty (msg : ByteArray) :
   rw [hpend, padding_mod]
   -- The last block is those bytes and the padding: exactly one block.
   have hlast :
-      (bytes.drop (RATE * (bytes.length / RATE)) ++ (padding bytes.length).data.toList).length
+      (bytes.drop (RATE * (bytes.length / RATE)) ++ (padding RATE bytes.length).data.toList).length
       = RATE := by
     have := Nat.mod_lt bytes.length (show 0 < RATE by decide)
-    have hpad : (padding bytes.length).data.toList.length = RATE - bytes.length % RATE :=
-      (Array.length_toList).trans (size_padding _)
+    have hpad : (padding RATE bytes.length).data.toList.length = RATE - bytes.length % RATE :=
+      (Array.length_toList).trans (size_padding _ _)
     rw [List.length_append, hpend, hpad]
     omega
-  have hsplit : bytes ++ (padding bytes.length).data.toList
+  have hsplit : bytes ++ (padding RATE bytes.length).data.toList
       = bytes.take (RATE * (bytes.length / RATE))
-        ++ (bytes.drop (RATE * (bytes.length / RATE)) ++ (padding bytes.length).data.toList) := by
+        ++ (bytes.drop (RATE * (bytes.length / RATE))
+          ++ (padding RATE bytes.length).data.toList) := by
     rw [← List.append_assoc, List.take_append_drop]
   have hfirst : chunks RATE (bytes.length / RATE) bytes
       = chunks RATE (bytes.length / RATE) (bytes.take (RATE * (bytes.length / RATE))) := by

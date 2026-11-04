@@ -1,7 +1,8 @@
-"""The Keccak-256 hash function: FIPS 202 Keccak[r = 1088, c = 512] with Keccak's padding."""
+"""The Keccak-256 and Keccak-512 hash functions and the Keccak-f[1600] permutation."""
 
 from ...errors import KeccakError
 from .._native import keccak256 as native_keccak256
+from .._native import keccak512 as native_keccak512
 from .._native import keccak_f1600 as native_keccak_f1600
 
 
@@ -15,6 +16,11 @@ def keccak256(data: bytes) -> bytes:
     A non-`bytes` argument raises `TypeError`.
     """
     return native_keccak256(data)
+
+
+def keccak512(data: bytes) -> bytes:
+    """The 64-byte Keccak-512 digest of the message."""
+    return native_keccak512(data)
 
 
 def keccak_f1600(state: bytes) -> bytes:
@@ -31,5 +37,6 @@ def keccak_f1600(state: bytes) -> bytes:
 __all__ = [
     "KeccakError",
     "keccak256",
+    "keccak512",
     "keccak_f1600",
 ]

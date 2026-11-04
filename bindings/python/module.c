@@ -543,6 +543,7 @@ static PyMethodDef methods[] = {
   {"modexp_gas_cost", py_modexp_gas_cost, METH_VARARGS, DOC_modexp_gas_cost},
   {"sha256", py_sha256, METH_VARARGS, DOC_sha256},
   {"keccak256", py_keccak256, METH_VARARGS, DOC_keccak256},
+  {"keccak512", py_keccak512, METH_VARARGS, DOC_keccak512},
   {"keccak_f1600", py_keccak_f1600, METH_VARARGS, DOC_keccak_f1600},
   {"trie_root", py_trie_root, METH_VARARGS, DOC_trie_root},
   {"trie_verify_proof", py_trie_verify_proof, METH_VARARGS, DOC_trie_verify_proof},

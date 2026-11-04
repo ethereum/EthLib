@@ -6,9 +6,9 @@ public import EthLib.Cryptography.Hash.Keccak
 /-!
 # Exports: Keccak
 
-The C exports of Keccak-256 and of the Keccak-f[1600] permutation, for the Python bindings.
+The C exports of Keccak-256, Keccak-512 and the Keccak-f[1600] permutation, for Python.
 
-Keccak-256 is total, so its export has no error path.
+Both hashes are total, so their exports have no error path.
 
 The permutation takes a state of exactly 200 bytes, and its export rejects any other length.
 
@@ -27,6 +27,11 @@ open EthLib.Cryptography.Hash.Keccak
 @[export eth_keccak256]
 def keccak256 (data : ByteArray) : ByteArray :=
   ⟨(EthLib.Cryptography.Hash.Keccak.keccak256 data).toArray⟩
+
+/-- The 64-byte Keccak-512 digest of a message of any length, FIPS 202 with Keccak's padding. -/
+@[export eth_keccak512]
+def keccak512 (data : ByteArray) : ByteArray :=
+  ⟨(EthLib.Cryptography.Hash.Keccak.keccak512 data).toArray⟩
 
 /-- Keccak-f[1600] of a 200-byte state string, as a 200-byte state string.
 

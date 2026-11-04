@@ -147,6 +147,10 @@ def keccak256(data: bytes) -> bytes:
     """Keccak-256 of a byte string: `Keccak[512](M, 256)` of FIPS 202 §5.2."""
     ...
 
+def keccak512(data: bytes) -> bytes:
+    """Keccak-512 of a byte string: `Keccak[1024](M, 512)` of FIPS 202 §5.2."""
+    ...
+
 def keccak_f1600(state: bytes) -> bytes:
     """Keccak-f[1600], FIPS 202 §3.4: Keccak-p[1600, 24], rounds 0 to 23 in order."""
     ...
