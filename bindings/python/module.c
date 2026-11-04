@@ -639,6 +639,7 @@ static PyMethodDef methods[] = {
   {"precompile_price", py_precompile_price, METH_VARARGS, DOC_precompile_price},
   {"state_root", py_state_root, METH_VARARGS, DOC_state_root},
   {"state_withdrawals_root", py_state_withdrawals_root, METH_VARARGS, DOC_state_withdrawals_root},
+  {"state_dao_fork_root", py_state_dao_fork_root, METH_VARARGS, DOC_state_dao_fork_root},
   {"mainnet_active_fork", py_mainnet_active_fork, METH_VARARGS, DOC_mainnet_active_fork},
   {NULL, NULL, 0, NULL},
 };

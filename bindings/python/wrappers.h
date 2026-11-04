@@ -356,6 +356,7 @@ PyObject* py_precompile_price                             (PyObject* self, PyObj
 
 PyObject* py_state_root                                   (PyObject* self, PyObject* args);
 PyObject* py_state_withdrawals_root                       (PyObject* self, PyObject* args);
+PyObject* py_state_dao_fork_root                         (PyObject* self, PyObject* args);
 
 PyObject* py_mainnet_active_fork                          (PyObject* self, PyObject* args);
 
