@@ -172,6 +172,9 @@ PyObject* py_sha256                                       (PyObject* self, PyObj
 PyObject* py_keccak256                                    (PyObject* self, PyObject* args);
 PyObject* py_keccak_f1600                                 (PyObject* self, PyObject* args);
 PyObject* py_crc32c                                      (PyObject* self, PyObject* args);
+PyObject* py_hmac_sha256                                 (PyObject* self, PyObject* args);
+PyObject* py_hkdf_sha256                                 (PyObject* self, PyObject* args);
+PyObject* py_concat_kdf_sha256                           (PyObject* self, PyObject* args);
 PyObject* py_ripemd160                                    (PyObject* self, PyObject* args);
 PyObject* py_sha256_precompile                            (PyObject* self, PyObject* args);
 PyObject* py_sha256_precompile_gas_cost                   (PyObject* self, PyObject* args);
