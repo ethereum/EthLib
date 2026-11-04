@@ -25,13 +25,21 @@ An unknown fork name, or forks out of order, has code 0, since no error type cov
 So does a transaction of a block that does not decode, and a trie with an empty value.
 
 A deposit log in another layout has a code from 301.
+
+Every operation here holds up to Glamsterdam, and Hegotá is not yet specified.
+
+Glamsterdam adds two header fields, by EIP-7928 and EIP-7843.
+
+The encodings of the body and the receipt stay those of BPO2.
+
+So do the checks of a header against its parent.
 -/
 
 public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Exports (Result forkOfName)
+open EthLib.Exports (Result forkUpTo)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
@@ -44,7 +52,7 @@ def runRlp {α : Type} (what : String) (act : Except RlpError α) : Result α :=
 /-- The hash of a header in RLP form, after the decoder at the fork accepts it. -/
 @[export eth_block_header_hash]
 def headerHashExport (fork header : ByteArray) : Result ByteArray := do
-  let fork ← forkOfName fork
+  let fork ← forkUpTo .glamsterdam fork
   let h : Header fork ← runRlp "header rejected" (Codec.decode header)
   return ⟨(← runRlp "header has no hash" h.hash).toArray⟩
 
@@ -53,7 +61,7 @@ def headerHashExport (fork header : ByteArray) : Result ByteArray := do
 Each transaction stays the item that it is, so any transaction form passes. -/
 @[export eth_block_reencode]
 def reencodeExport (fork block : ByteArray) : Result ByteArray := do
-  let fork ← forkOfName fork
+  let fork ← forkUpTo .glamsterdam fork
   let b : Block fork Item ← runRlp "block rejected" (Codec.decode block)
   runRlp "block has no encoding" (Codec.encode b)
 
@@ -64,21 +72,21 @@ def decodeReceiptAt (fork : Fork) (receipt : ByteArray) : Result (UInt8 × Recei
 /-- The bytes of a receipt, decoded at the fork and encoded again with its transaction type. -/
 @[export eth_receipt_reencode]
 def receiptReencodeExport (fork receipt : ByteArray) : Result ByteArray := do
-  let fork ← forkOfName fork
+  let fork ← forkUpTo .glamsterdam fork
   let (type, r) ← decodeReceiptAt fork receipt
   runRlp "receipt has no encoding" (encodeReceipt type r)
 
 /-- The logs Bloom filter of the logs of a receipt, decoded at the fork. -/
 @[export eth_receipt_logs_bloom]
 def receiptLogsBloomExport (fork receipt : ByteArray) : Result ByteArray := do
-  let fork ← forkOfName fork
+  let fork ← forkUpTo .glamsterdam fork
   let (_, r) ← decodeReceiptAt fork receipt
   return ⟨(logsBloom r.logs).toArray⟩
 
 /-- Check the RLP size of a block, decoded at the fork: from Fusaka, at most 8 MiB. -/
 @[export eth_block_validate_size]
 def validateSizeExport (fork block : ByteArray) : Result UInt8 := do
-  let fork ← forkOfName fork
+  let fork ← forkUpTo .glamsterdam fork
   let b : Block fork Item ← runRlp "block rejected" (Codec.decode block)
   (validateBlockSize b).map (fun () => 1) |>.mapError
     fun e => (e.code, s!"block invalid: {reprStr e}")
@@ -86,8 +94,8 @@ def validateSizeExport (fork block : ByteArray) : Result UInt8 := do
 /-- Check a header at a fork against its parent at the parent's fork, from Paris on. -/
 @[export eth_block_validate_header]
 def validateHeaderExport (parentFork fork parent header : ByteArray) : Result UInt8 := do
-  let parentFork ← forkOfName parentFork
-  let fork ← forkOfName fork
+  let parentFork ← forkUpTo .glamsterdam parentFork
+  let fork ← forkUpTo .glamsterdam fork
   let parent : Header parentFork ← runRlp "parent rejected" (Codec.decode parent)
   let header : Header fork ← runRlp "header rejected" (Codec.decode header)
   if hLondon : .london ≤ parentFork then
@@ -121,14 +129,14 @@ def runTrie (act : Except Trie.TrieError Hash32) : Result ByteArray :=
 /-- The transactions root of the transactions of a block, decoded at the fork. -/
 @[export eth_block_transactions_root]
 def transactionsRootExport (fork block : ByteArray) : Result ByteArray := do
-  let fork ← forkOfName fork
+  let fork ← forkUpTo .glamsterdam fork
   let b : Block fork Item ← runRlp "block rejected" (Codec.decode block)
   runTrie (transactionsRoot (← b.transactions.mapM (transactionOfItem fork)))
 
 /-- The withdrawals root of the withdrawals of a block, decoded at a fork from Shapella. -/
 @[export eth_block_withdrawals_root]
 def withdrawalsRootExport (fork block : ByteArray) : Result ByteArray := do
-  let fork ← forkOfName fork
+  let fork ← forkUpTo .glamsterdam fork
   let b : Block fork Item ← runRlp "block rejected" (Codec.decode block)
   if h : .shapella ≤ fork then runTrie (withdrawalsRoot (b.withdrawals h))
   else throw (0, "the fork is before Shapella")

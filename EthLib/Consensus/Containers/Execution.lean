@@ -49,6 +49,8 @@ Capella adds the withdrawals of [EIP-4895].
 
 Deneb adds the two fields of blob gas of [EIP-4844].
 
+Gloas is not yet specified, so from Glamsterdam on this is still the shape of Fulu.
+
 [EIP-4895]: https://eips.ethereum.org/EIPS/eip-4895#new-field-in-the-execution-payload-withdrawals
 [EIP-4844]: https://eips.ethereum.org/EIPS/eip-4844#header-extension
 -/

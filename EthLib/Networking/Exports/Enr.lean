@@ -16,13 +16,17 @@ Each operation decodes the record first.
 A rejected record comes back as the code and the message of its error.
 
 Booleans come back as `UInt8`.
+
+The consensus entries hold up to BPO2.
+
+The entries of Gloas are not yet specified, so Glamsterdam and Hegotá fail with code 0.
 -/
 
 public section
 
 namespace EthLib.Networking.Enr.Exports
 
-open EthLib.Exports (Result forkOfName)
+open EthLib.Exports (Result forkUpTo)
 
 open EthLib.Serialization.Ssz (SszType)
 
@@ -107,7 +111,7 @@ Each of the four is the byte 0 when absent, or the byte 1 and its SSZ bytes. -/
 @[export eth_enr_consensus_entries]
 def consensusEntriesExport (fork : ByteArray) (count : UInt64) (record : ByteArray) :
     Result ByteArray := do
-  let fork ← forkOfName fork
+  let fork ← forkUpTo .bpo2 fork
   let r ← runEnr (decode record)
   let e ← (readEntries count fork r).mapError fun err => (err.code, entryMessage err)
   return (← sszBytes e.eth2) ++ (← optionBytes e.attnets) ++ (← optionBytes e.syncnets) ++

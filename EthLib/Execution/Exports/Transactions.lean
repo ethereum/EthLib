@@ -22,13 +22,19 @@ The message of an error names the rule that failed, so a test can match it.
 The network form of a blob transaction keeps the codes of transaction errors.
 
 Its own errors about the blobs take codes from 101.
+
+The type, the hash and the sender hold up to Glamsterdam, which keeps the transaction forms.
+
+The intrinsic gas and the checks hold up to BPO2.
+
+Glamsterdam changes both, by EIP-2780 and EIP-8037, so a later fork is not yet specified.
 -/
 
 public section
 
 namespace EthLib.Execution.Transactions.Exports
 
-open EthLib.Exports (Result forkOfName)
+open EthLib.Exports (Result forkUpTo)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
@@ -57,20 +63,20 @@ def gasToUInt64 (gas : Nat) : Result UInt64 :=
   -- No error type covers this bound of the binding, so its code is 0.
   if gas < 2 ^ 64 then pure (UInt64.ofNat gas) else throw (0, "gas is 2^64 or more")
 
-/-- The transaction that `bytes` encodes at the named fork. -/
-def decodeAt (fork bytes : ByteArray) : Result (Fork × Transaction) := do
-  let fork ← forkOfName fork
+/-- The transaction that `bytes` encodes at the named fork, if it comes no later than `last`. -/
+def decodeAt (last : Fork) (fork bytes : ByteArray) : Result (Fork × Transaction) := do
+  let fork ← forkUpTo last fork
   return (fork, ← runTx (decodeTransaction fork bytes))
 
 /-- The type of a transaction: 0 for a legacy transaction. -/
 @[export eth_tx_type]
 def typeExport (fork bytes : ByteArray) : Result UInt64 := do
-  return (← decodeAt fork bytes).2.type.toUInt64
+  return (← decodeAt .glamsterdam fork bytes).2.type.toUInt64
 
 /-- The 32-byte hash of a transaction. -/
 @[export eth_tx_hash]
 def hashExport (fork bytes : ByteArray) : Result ByteArray := do
-  let (_, tx) ← decodeAt fork bytes
+  let (_, tx) ← decodeAt .glamsterdam fork bytes
   match transactionHash tx with
   | .ok hash => return ⟨hash.toArray⟩
   | .error e => throw ((TransactionError.encoding e).code, s!"encoding: {rlpMessage e}")
@@ -78,13 +84,13 @@ def hashExport (fork bytes : ByteArray) : Result ByteArray := do
 /-- The 20-byte address of the sender of a transaction. -/
 @[export eth_tx_recover_sender]
 def recoverSenderExport (fork bytes : ByteArray) : Result ByteArray := do
-  let (fork, tx) ← decodeAt fork bytes
+  let (fork, tx) ← decodeAt .glamsterdam fork bytes
   return ⟨(← runTx (recoverSender fork tx)).toArray⟩
 
 /-- The intrinsic gas of a transaction, without the call data floor. -/
 @[export eth_tx_intrinsic_gas]
 def intrinsicGasExport (fork bytes : ByteArray) : Result UInt64 := do
-  let (fork, tx) ← decodeAt fork bytes
+  let (fork, tx) ← decodeAt .bpo2 fork bytes
   gasToUInt64 (intrinsicGas fork tx)
 
 /-- Check a transaction alone on the chain `chainId`.
@@ -92,7 +98,7 @@ def intrinsicGasExport (fork bytes : ByteArray) : Result UInt64 := do
 It returns 28 bytes: the 20-byte sender, then the intrinsic gas as 8 big-endian bytes. -/
 @[export eth_tx_check]
 def checkExport (fork : ByteArray) (chainId : UInt64) (bytes : ByteArray) : Result ByteArray := do
-  let (fork, tx) ← decodeAt fork bytes
+  let (fork, tx) ← decodeAt .bpo2 fork bytes
   let (sender, gas) ← runTx (checkTransaction fork chainId tx)
   let gas ← gasToUInt64 gas
   return ⟨sender.toArray ++ (List.range 8).reverse.toArray.map
@@ -121,7 +127,7 @@ It returns the bytes of the transaction alone, as a block holds it.
 -/
 @[export eth_tx_network_check]
 def networkCheckExport (fork bytes : ByteArray) : Result ByteArray := do
-  let fork ← forkOfName fork
+  let fork ← forkUpTo .bpo2 fork
   let w ← runNetwork (decodeNetwork fork bytes)
   let setup ← runNetwork (Cryptography.Kzg.Exports.embeddedSetup.mapError .kzg)
   runNetwork (validateNetwork setup fork w)
