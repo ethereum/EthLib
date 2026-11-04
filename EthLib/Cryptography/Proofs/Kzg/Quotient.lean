@@ -50,8 +50,18 @@ theorem natDegree_interpolant_lt (poly : Polynomial) :
 /-- The quotient has degree at most 4094. -/
 theorem natDegree_quotientPoly_le (poly : Polynomial) (z : Fr) :
     (quotientPoly poly z).natDegree ≤ FIELD_ELEMENTS_PER_BLOB - 2 := by
+  -- The lemma takes the semiring of `Fr` from `Ring`, and the goal takes it from `Semifield`.
+  --
+  -- To match the two on the interpolant, the kernel replay unfolds polynomial addition.
+  --
+  -- That addition matches on its arguments, so the kernel computes the interpolant.
+  --
+  -- For a variable polynomial the match is cheap, and the rewrite below needs no match.
+  have natDegree_sub_C' (p : _root_.Polynomial Fr) (a : Fr) :
+      (p - C a).natDegree = p.natDegree :=
+    natDegree_sub_C
   rw [quotientPoly, natDegree_divByMonic _ (monic_X_sub_C z), natDegree_X_sub_C,
-    natDegree_sub_C]
+    natDegree_sub_C']
   have := natDegree_interpolant_lt poly
   omega
 
