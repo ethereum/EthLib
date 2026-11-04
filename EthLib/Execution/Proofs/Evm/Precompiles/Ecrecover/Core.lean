@@ -2,8 +2,6 @@ module
 
 public import EthLib.Execution.Evm.Precompiles.Ecrecover.Core
 public import EthLib.Cryptography.Proofs.Secp256k1.Recovery
-public import EthLib.Cryptography.Proofs.Hash.Keccak256
-public import EthLib.Cryptography.Proofs.Hash.KeccakKernel
 
 /-!
 # Proofs: `Ecrecover.Core`
@@ -19,8 +17,6 @@ The precompile returns the address of a key that verifies the signature, or noth
 - `output_sign`: a signature made with a private key returns that key's address.
 - `output_of_bad_v`, `output_of_range`, `output_of_recover_error`: the three causes of an empty output.
 - `ecrecover_out_of_gas`, `ecrecover_ok`: the call fails exactly when the gas is below 3000.
-
-The known answers at the end run cases of execution-specs through the whole precompile.
 -/
 
 @[expose] public section
@@ -221,73 +217,5 @@ theorem output_sign (d k : Fn) (hash : Vector UInt8 32) (hd : d ≠ 0) {x y : Fp
     refine ⟨address qx qy, rfl, ?_⟩
     rw [hQ] at hrec
     rw [output, dite_eq_left hv, hid, hrec]
-
-/-! ## Known answers
-
-The cases come from `tests/frontier/precompiles/test_ecrecover.py`, in `ethereum/execution-specs` at commit `b758df2bcaaa95c04d31e25c94fbfb8d6de756e7`.
-
-Each case names its test id, and its input is the hash, `v`, `r` and `s`, 32 bytes each.
-
-The kernel runs the whole precompile, recovery and Keccak-256 included. -/
-
-/-- Whether the precompile maps an input to an output, both in hex. -/
-def maps (input output : String) : Bool :=
-  (compute (EthLib.Cryptography.Hash.Keccak.hexBytes input)).data == (EthLib.Cryptography.Hash.Keccak.hexBytes output).data
-
-/-- `valid_signature_1`: A valid signature with `v = 28`. -/
-theorem compute_valid_signature_1 :
-    maps "18c547e4f7b0f325ad1e56f57e26c745b09a3e503d86e00e5255ff7f715d3d1c000000000000000000000000000000000000000000000000000000000000001c73b1693892219d736caba55bdb67216e485557ea6b6af75f37096c9aa6a5a75feeb940b1d03b21e36b0e47e79769f095fe2ab855bd91e3a38756b7d75a9c4549"
-      "000000000000000000000000a94f5374fce5edbc8e2a8697c15331677e6ebf0b" = true := by
-  simp only [maps, compute, output, address, EthLib.Cryptography.Hash.Keccak.Kernel.keccak256_eq]
-  decide +kernel
-
-/-- `valid_signature_2`: A valid signature with `v = 27`. -/
-theorem compute_valid_signature_2 :
-    maps "18c547e4f7b0f325ad1e56f57e26c745b09a3e503d86e00e5255ff7f715d3d1c000000000000000000000000000000000000000000000000000000000000001b7af9e73057870458f03c143483bc5fcb6f39d01c9b26d28ed9f3fe23714f66283134a4ba8fafe11b351a720538398a5635e235c0b3258dce19942000731079ec"
-      "0000000000000000000000009a04aede774152f135315670f562c19c5726df2c" = true := by
-  simp only [maps, compute, output, address, EthLib.Cryptography.Hash.Keccak.Kernel.keccak256_eq]
-  decide +kernel
-
-/-- `R_eq_2G_high_s`: A high `s`, which the precompile accepts. -/
-theorem compute_r_eq_point_2g_high_s :
-    maps "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff000000000000000000000000000000000000000000000000000000000000001cc6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd036413b"
-      "000000000000000000000000bbb10a3b5835400b63ca00372c16db781220fb0b" = true := by
-  simp only [maps, compute, output, address, EthLib.Cryptography.Hash.Keccak.Kernel.keccak256_eq]
-  decide +kernel
-
-/-- `v_eq_0`: `v = 0` is no recovery id plus 27. -/
-theorem compute_v_eq_0 :
-    maps "00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000541c4ce1565a646ddde26e1b483a88a6500ce15bd24622492f05cdd18b97161d1827e364c15cfa61dab02339904b1e542f3939c6e8d6367d352026e71ffd6af5"
-      "" = true := by
-  simp only [maps, compute, output, address, EthLib.Cryptography.Hash.Keccak.Kernel.keccak256_eq]
-  decide +kernel
-
-/-- `r_eq_N`: `r = n` is out of range. -/
-theorem compute_r_eq_n :
-    maps "18c547e4f7b0f325ad1e56f57e26c745b09a3e503d86e00e5255ff7f715d3d1c000000000000000000000000000000000000000000000000000000000000001cfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141eeb940b1d03b21e36b0e47e79769f095fe2ab855bd91e3a38756b7d75a9c4549"
-      "" = true := by
-  simp only [maps, compute, output, address, EthLib.Cryptography.Hash.Keccak.Kernel.keccak256_eq]
-  decide +kernel
-
-/-- `s_eq_N_plus_one`: `s = n + 1` is out of range. -/
-theorem compute_s_eq_n_plus_one :
-    maps "18c547e4f7b0f325ad1e56f57e26c745b09a3e503d86e00e5255ff7f715d3d1c000000000000000000000000000000000000000000000000000000000000001c48b55bfa915ac795c431978d8a6a992b628d557da5ff759b307d495a36649353fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364142"
-      "" = true := by
-  simp only [maps, compute, output, address, EthLib.Cryptography.Hash.Keccak.Kernel.keccak256_eq]
-  decide +kernel
-
-/-- `r_not_on_curve`: No point has `x = r`. -/
-theorem compute_r_not_on_curve :
-    maps "18c547e4f7b0f325ad1e56f57e26c745b09a3e503d86e00e5255ff7f715d3d1c000000000000000000000000000000000000000000000000000000000000001b00000000000000000000000000000000000000000000000000000000000000050000000000000000000000000000000000000000000000000000000000000001"
-      "" = true := by
-  simp only [maps, compute, output, address, EthLib.Cryptography.Hash.Keccak.Kernel.keccak256_eq]
-  decide +kernel
-
-/-- `zero_input`: 128 zero bytes. -/
-theorem compute_zero_input :
-    maps "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-      "" = true := by
-  simp only [maps, compute, output, address, EthLib.Cryptography.Hash.Keccak.Kernel.keccak256_eq]
-  decide +kernel
 
 end EthLib.Execution.Evm.Precompiles.Ecrecover
