@@ -40,7 +40,7 @@ theorem branchMessages_congr {index other : Nat} :
   | level, node, sibling :: rest, bits => by
     have head := bits 0 (by simp)
     simp only [Nat.add_zero] at head
-    simp only [branchMessages, head]
+    simp only [branchMessages_cons, head]
     rw [branchMessages_congr fun i below => by
       simpa [Nat.add_assoc, Nat.add_comm 1] using bits (i + 1) (by simpa using below)]
 
@@ -162,8 +162,12 @@ theorem isValidMerkleBranch_binding {leaf other root : Vector UInt8 32}
         simpa using bits i lt
     rcases verifyMerkleProof_binding verified otherVerified with same | collision
     · exact .inl (Vector.toArray_inj.mp same)
-    · rw [messages count, messages otherCount] at collision
-      exact .inr collision
+    · -- The search names the two messages.
+      -- Each is hashed along its own branch.
+      obtain ⟨a, b, -, aIn, bIn, rest⟩ := collision
+      rw [messages count] at aIn
+      rw [messages otherCount] at bIn
+      exact .inr ⟨a, aIn, b, bIn, rest⟩
 
 /-- An index of at least two sits at a positive depth. -/
 theorem log2_pos {gindex : Nat} (named : 2 ≤ gindex) : 0 < Nat.log2 gindex := by

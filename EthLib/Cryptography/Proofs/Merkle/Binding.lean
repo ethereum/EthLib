@@ -17,6 +17,7 @@ Each search takes one step per level, and no theorem here counts its hash calls.
 
 - `findCollision` walks two climbs from one position up, level by level.
 - It returns the first level where they hash two different pairs to one parent.
+- Each pair it returns is one its own climb hashes.
 - `findSecondPreimage` does the same for one climb against an honest tree.
 - It returns the first level where the climb hashes another pair to the honest node.
 
@@ -141,6 +142,83 @@ theorem climb_binding [DecidableEq α] :
         obtain ⟨rfl, rfl⟩ := ordered_inj.mp hpair
         exact .inl ⟨rfl, by rw [hrest]⟩
       · exact .inr hsome
+
+/-! ## What a climb hashes -/
+
+/-- The pairs a climb from `(level, j)` hashes, one per level, from the bottom up.
+
+Each pair holds the climb's node and its sibling, in the order the index gives. -/
+def climbPairs : (level j : Nat) → (a : α) → (p : List α) → List (α × α)
+  | _, _, _, [] => []
+  | level, j, a, s :: p =>
+    let x := ordered j a s
+    x :: climbPairs (level + 1) (j / 2) (hash (level + 1) (j / 2) x.1 x.2).run p
+
+/-- The pair a climb hashes `k` levels up holds the node it reached there and the `k`-th sibling. -/
+theorem climbPairs_getElem? :
+    ∀ (p : List α) (level j : Nat) (a : α) (k : Nat),
+      (climbPairs hash level j a p)[k]?
+        = p[k]?.map (ordered (j / 2 ^ k) (climb hash level j a (p.take k)).run) := by
+  intro p
+  induction p with
+  | nil => intro level j a k; simp [climbPairs]
+  | cons s rest ih =>
+    intro level j a k
+    cases k with
+    | zero => simp [climbPairs]
+    | succ k =>
+      -- One level up, the climb restarts from the parent, at half the index.
+      simp only [climbPairs, List.getElem?_cons_succ, List.take_succ_cons, ih, climb_cons,
+        div_two_div_pow]
+
+/-- Each pair of a collision the search returns is one its own climb hashes.
+
+So the collision lies among the hash inputs of the two climbs. -/
+theorem findCollision_mem_climbPairs [DecidableEq α] {p q : List α} {level j : Nat} {a b : α}
+    {c : Collision α} (h : findCollision hash level j a b p q = some c) :
+    c.x ∈ climbPairs hash level j a p ∧ c.y ∈ climbPairs hash level j b q := by
+  -- The search names the level of the collision and the two pairs hashed there.
+  obtain ⟨-, k, s, t, hs, ht, -, -, hx, hy⟩ := findCollision_valid hash p q level j a b c h
+  have hX := climbPairs_getElem? hash p level j a k
+  have hY := climbPairs_getElem? hash q level j b k
+  rw [hs, Option.map_some, ← hx] at hX
+  rw [ht, Option.map_some, ← hy] at hY
+  exact ⟨List.mem_of_getElem? hX, List.mem_of_getElem? hY⟩
+
+/-- Both nodes of every pair a climb hashes have any property its inputs have.
+
+The inputs are the starting node, the siblings and every hash output.
+
+For example, if every node has 32 bytes, so does every pair. -/
+theorem climbPairs_children (P : α → Prop) (output : ∀ level j x y, P (hash level j x y).run) :
+    ∀ (p : List α) (level j : Nat) (a : α), P a → (∀ s ∈ p, P s) →
+      ∀ x ∈ climbPairs hash level j a p, P x.1 ∧ P x.2 := by
+  intro p
+  induction p with
+  | nil => intro level j a _ _ x hx; simp [climbPairs] at hx
+  | cons s rest ih =>
+    intro level j a ha hp x hx
+    simp only [climbPairs, List.mem_cons] at hx
+    rcases hx with rfl | hx
+    · -- The pair hashed here holds the climb's node and its sibling.
+      have hs := hp s List.mem_cons_self
+      unfold ordered
+      split <;> exact ⟨‹_›, ‹_›⟩
+    · -- The pairs further up start from a hash output.
+      exact ih _ _ _ (output ..) (fun t ht => hp t (List.mem_cons_of_mem _ ht)) x hx
+
+/-- Each child in a collision the search returns has any property the climbs' inputs have.
+
+The collision is among the pairs the two climbs hash, and those pairs have the property. -/
+theorem findCollision_children [DecidableEq α] (P : α → Prop)
+    (output : ∀ level j x y, P (hash level j x y).run) {p q : List α} {level j : Nat} {a b : α}
+    {c : Collision α} (ha : P a) (hb : P b) (hp : ∀ s ∈ p, P s) (hq : ∀ t ∈ q, P t)
+    (h : findCollision hash level j a b p q = some c) :
+    P c.x.1 ∧ P c.x.2 ∧ P c.y.1 ∧ P c.y.2 := by
+  obtain ⟨hx, hy⟩ := findCollision_mem_climbPairs hash h
+  obtain ⟨x1, x2⟩ := climbPairs_children hash P output p level j a ha hp c.x hx
+  obtain ⟨y1, y2⟩ := climbPairs_children hash P output q level j b hb hq c.y hy
+  exact ⟨x1, x2, y1, y2⟩
 
 /-! ## Against an honest tree -/
 
