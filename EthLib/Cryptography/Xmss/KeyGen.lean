@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Xmss.Verify
 
 /-!
-# `Xmss.KeyGen`
+# leanXMSS key generation
 
 Key generation.
 

@@ -7,7 +7,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Game
 
 Source: the leanXMSS specification draft, section "Security".
 
-`Unforgeability.unforgeable` holds in the random oracle model.
+The theorem holds in the random oracle model.
 
 Take an adversary whose experiment makes at most `q >= 1` hash calls.
 
@@ -21,7 +21,7 @@ A signing request can make more than `2^33`, when its randomizer trials keep mis
 
 So the bound is never below about `2^-103.3`, and each signing request adds more than `2^-94`.
 
-The game (`Unforgeability/Statement.lean`) runs EthLib's `keyGenWith`, `signWith` and `verifyWith`.
+The game runs EthLib's key generation, signing and verification.
 
 Their hash `H` is a query to the oracle.
 
@@ -29,12 +29,10 @@ The security proof in `Security/` reasons over EthLib's algorithms too.
 
 It compares them with a model of the scheme with precomputed keys, its own game-hopping device:
 
-```text
-    Bytes, Address, Codeword    EthLib's bytes, addresses and codewords are the model's
-    Translate                   each hashing routine of EthLib is the model's, call for call
-    Adversary                   EthLib's adversary is one of the model's
-    Game                        EthLib's game wins as often as the real game of the proof
-```
+- EthLib's bytes, addresses and codewords are the model's.
+- Each hashing routine of EthLib is the model's, call for call.
+- EthLib's adversary is one of the model's.
+- EthLib's game wins as often as the real game of the proof.
 
 EthLib's signer gets the seed `S_0` and re-derives `S` and `P` with two hash calls.
 

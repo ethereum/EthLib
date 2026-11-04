@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Xmss.Types
 
 /-!
-# `Xmss.Address`
+# leanXMSS addresses
 
 Addresses keep the hash inputs of a key distinct.
 

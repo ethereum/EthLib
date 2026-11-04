@@ -18,7 +18,7 @@ A signature this specification produces is one it accepts.
 
 Correctness holds for every hash function `f`, run in the identity monad.
 
-`verify_keyGen_sign` is the case `f = hash`, the specification as it runs.
+The case `f = hash` is the specification as it runs.
 
 # Assumption
 

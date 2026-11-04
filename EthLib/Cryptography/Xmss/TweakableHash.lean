@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Cryptography.Xmss.Address
 
 /-!
-# `Xmss.TweakableHash`
+# The leanXMSS tweakable hash
 
 The hash every other definition is built from.
 
@@ -18,7 +18,7 @@ The hash every other definition is built from.
 
 Every definition that hashes takes the hash `H` as an argument, in a monad `m`.
 
-- `hashId` is the hash EthLib computes: Keccak-256, in the identity monad.
+- The hash that EthLib computes is Keccak-256, in the identity monad.
 - A proof in the random oracle model passes a query to the oracle instead.
 
 So the definitions that run are the definitions that the security proof is about.

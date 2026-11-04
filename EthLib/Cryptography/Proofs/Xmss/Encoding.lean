@@ -5,7 +5,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Types
 public import Mathlib.Tactic
 
 /-!
-# Proofs: `Xmss.Encoding`
+# Proofs: the leanXMSS target-sum code
 
 What a codeword is, and what it guarantees.
 
@@ -29,7 +29,11 @@ variable {d d' : Digest} {x y : Vector (Fin CHAIN_LENGTH) V}
     ((Internal.digits d)[i]'hi).val = bytesToUint d / 4 ^ i % 4 := by
   simp [Internal.digits, CHAIN_LENGTH]
 
-/-- A codeword holds the digest's first 58 digits, its other 6 digits are zero, and it sums to `T`. -/
+/--
+A codeword holds the digest's first 58 digits.
+
+Its other 6 digits are zero, and it sums to `T`.
+-/
 theorem codeword?_eq_some (h : codeword? d = some x) :
     (∀ i : Fin V, (x[i] : Nat) = bytesToUint d / 4 ^ i.val % 4) ∧
       (∀ i, V ≤ i → i < DIGITS → bytesToUint d / 4 ^ i % 4 = 0) ∧
