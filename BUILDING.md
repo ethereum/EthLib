@@ -64,6 +64,17 @@ CI restores only EthLib's `.lake/build`, and only from successful pushes to `mas
 The EthLib cache key includes the operating system, the architecture, the toolchain and the dependency manifest.
 Pull requests read the cache but never publish one, and the manual workflow's `clean_build` input skips the restore.
 
+Each push to `master` runs in a concurrency group of its own.
+So every commit on `master` gets a complete run and can publish a cache.
+A new push to a pull request cancels the run that is still in progress for that pull request.
+
+The cache saves the most time when a change rebuilds only the proofs that it affects.
+Because `EthLib` sets `precompileModules`, Lake loads the native shared library of all of `EthLib` into each proof that imports the specification.
+By default, Lake also adds that shared library to the trace of the proof, so a change to any specification module rebuilds every proof.
+The `Proofs` library sets `platformIndependent`, which keeps platform-dependent inputs such as this shared library out of the traces of its modules.
+A proof then does not rebuild for a change to a specification module that it does not import.
+It still rebuilds when the `.olean` files of a module that it imports change.
+
 Before saving, CI deletes the generated `*.setup.json` files from the build directory.
 These files contain absolute runner paths, and Lake regenerates them.
 The cache uses version `v2`, so that it cannot restore entries saved before this cleanup.
@@ -80,8 +91,11 @@ They compare the same rebuilt modules, and keep the precision Lake reports.
 Native compilation counts in the command timings, but not in the elaboration table.
 A small difference can come from parallel load or from noise on the runner.
 
-The build pipeline regressions change one export in an isolated Lean project, and check that its timing reaches the report.
-They also inspect a saved tar archive, restore it, and check that Lake needs no rebuild.
+The build pipeline regressions build an isolated Lean project with the default libraries of `lakefile.lean` and their settings.
+They change one export, and check that its timing reaches the report.
+They change a specification module that the proof of the project does not import, and check that the proof does not rebuild.
+Then they change the module that the proof imports, and check that the proof rebuilds.
+They also inspect a saved tar archive, restore it, and check that Lake needs no rebuild of any default target.
 Run them after installing the test dependencies:
 
 ```bash
