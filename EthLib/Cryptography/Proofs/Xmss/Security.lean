@@ -12,6 +12,10 @@ The proof that the real game of leanXMSS is won with probability at most `q / 2^
     Pr[strong forgery] <= q / 2^127
 ```
 
+Here `q` counts every hash call of the game in the worst run, the signer's included.
+
+With all `2^32` leaf indices signed, `q` exceeds `2^65`, and the bound exceeds `2^-62`.
+
 The real game runs EthLib's own algorithms.
 
 Its signer keeps the scheme seed `S` and the parameter `P`.

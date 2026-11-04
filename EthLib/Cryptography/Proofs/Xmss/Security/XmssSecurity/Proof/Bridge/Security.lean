@@ -5,7 +5,9 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Interface
 
 /-!
-# leanXMSS has 127 bits of security
+# The bound `q / 2^127` on the real game of leanXMSS
+
+`q` counts every hash call of the game, the signer's included.
 
 The real experiment is at most the sum of three terms:
 
