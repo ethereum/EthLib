@@ -64,9 +64,8 @@ CI restores only EthLib's `.lake/build`, and only from successful pushes to `mas
 The EthLib cache key includes the operating system, the architecture, the toolchain and the dependency manifest.
 Pull requests read the cache but never publish one, and the manual workflow's `clean_build` input skips the restore.
 
-Each push to `master` runs in a concurrency group of its own.
-So every commit on `master` gets a complete run and can publish a cache.
-A new push to a pull request cancels the run that is still in progress for that pull request.
+A new push cancels the run still in progress on the same branch or pull request.
+When several pull requests merge in a row, only the run for the latest `master` commit finishes and publishes a cache.
 
 The cache saves the most time when a change rebuilds only the proofs that it affects.
 Because `EthLib` sets `precompileModules`, Lake loads the native shared library of all of `EthLib` into each proof that imports the specification.
