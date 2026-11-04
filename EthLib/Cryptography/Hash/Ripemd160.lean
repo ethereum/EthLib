@@ -5,8 +5,9 @@ module
 
 RIPEMD-160 of a message of whole bytes.
 
-Dobbertin, Bosselaers and Preneel define it in "RIPEMD-160: A strengthened version of RIPEMD"
-(FSE 1996).
+Dobbertin, Bosselaers and Preneel define it in "RIPEMD-160: A strengthened version of RIPEMD".
+
+The paper appeared at FSE 1996.
 
 The notation follows the authors' pseudo-code, `rmd160.txt` on Bosselaers' RIPEMD-160 page:
 
@@ -161,8 +162,7 @@ def line (X : Vector UInt32 16) (start : Vector UInt32 5) (constants : Vector UI
     (index : Vector (Fin 16) 80) (rotation : Vector UInt32 80) (reversed : Bool) : Vector UInt32 5 :=
   (List.finRange 80).foldl
     (fun state j =>
-      -- The left line uses f(j), and the right line f(79 - j).
-      -- The constant changes every sixteen steps.
+      -- The left line uses f(j), the right line f(79 - j), and the constant changes every 16 steps.
       let group : Fin 5 := if reversed then ⟨4 - j.val / 16, by omega⟩ else ⟨j.val / 16, by omega⟩
       step group state X[index[j]] constants[(⟨j.val / 16, by omega⟩ : Fin 5)] rotation[j])
     start

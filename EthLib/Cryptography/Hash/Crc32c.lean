@@ -3,8 +3,7 @@ module
 /-!
 # CRC-32C
 
-CRC-32C, the Castagnoli CRC of
-[RFC 3720 §12.1](https://www.rfc-editor.org/rfc/rfc3720#section-12.1).
+CRC-32C, the Castagnoli CRC of [RFC 3720 §12.1][rfc3720-12.1].
 
 The Snappy framing format §3 checks each data chunk with it:
 <https://github.com/google/snappy/blob/f82bff66afe0de4c9ae22f8c4ef84e3c2233e799/framing_format.txt>
@@ -23,10 +22,14 @@ The CRC is the complemented remainder of a division by a generator G(x):
 
 A polynomial of degree below 32 is a `UInt32`, with bit i holding the coefficient of x^i.
 
-The RFC numbers the bits of a byte the other way: bit 0 is the most significant
-([RFC 3720 §2.3.3](https://www.rfc-editor.org/rfc/rfc3720#section-2.3.3)).
+The RFC numbers the bits of a byte the other way: bit 0 is the most significant.
+
+[RFC 3720 §2.3.3][rfc3720-2.3.3] fixes that order.
 
 The division runs one coefficient at a time, to be read against the RFC, not for speed.
+
+[rfc3720-12.1]: https://www.rfc-editor.org/rfc/rfc3720#section-12.1
+[rfc3720-2.3.3]: https://www.rfc-editor.org/rfc/rfc3720#section-2.3.3
 -/
 
 @[expose] public section
