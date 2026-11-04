@@ -28,5 +28,14 @@ def test_every_group_has_a_runner_or_a_plan() -> None:
     harness.check_groups(CASES)
 
 
+def test_every_runnable_group_has_vendored_cases() -> None:
+    # The run on each change reads vendored cases, so each preset, fork and handler that a
+    # runner covers keeps some of its cases under tests/consensus, at their path in the archive.
+    vendored = archives.REPO / "tests" / "consensus"
+    groups = {"/".join(case.path.split("/")[1:5]) for case in harness.runnable(CASES)}
+    missing = sorted(group for group in groups if not any(vendored.glob(f"*/{group}/*/*")))
+    assert missing == []
+
+
 def test_disagreements() -> None:
     harness.check_disagreements(CASES, DISAGREEMENTS)
