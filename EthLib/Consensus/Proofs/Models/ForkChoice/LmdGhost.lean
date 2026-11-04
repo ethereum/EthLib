@@ -15,7 +15,11 @@ The rule starts at a block and moves to the heaviest child until it reaches a le
 
 The weight of a block is the stake of the validators with a latest message in its subtree.
 
-A tie between two children goes to the greater block.
+Each block has a root, and a tie between two children goes to the greater root.
+
+The order on roots is a parameter.
+
+The beacon chain compares roots as byte strings, lexicographically.
 
 One validator set `V` and one stake function `w` hold throughout.
 -/
@@ -197,56 +201,60 @@ theorem height_lt_of_mem_children {b c : β} (hc : c ∈ children G b) :
   have h2 : T.height c ≤ G.blocks.sup T.height := Finset.le_sup hc.1
   omega
 
-variable [LinearOrder β] (V w G)
+variable {ρ : Type*} [LinearOrder ρ] (root : β → ρ) (V w G)
 
-/-- The child that the rule picks: the greatest by weight, then by block. -/
+/-- The child that the rule picks: the greatest by weight, then by root.
+
+Two children with one weight and one root leave the choice open. -/
 noncomputable def heaviestChild (b : β) (h : (children G b).Nonempty) : β :=
-  Classical.choose ((children G b).exists_max_image (fun c => toLex (weight V w G c, c)) h)
+  Classical.choose ((children G b).exists_max_image (fun c => toLex (weight V w G c, root c)) h)
 
 theorem heaviestChild_spec (b : β) (h : (children G b).Nonempty) :
-    heaviestChild V w G b h ∈ children G b ∧ ∀ c ∈ children G b,
-      toLex (weight V w G c, c) ≤
-        toLex (weight V w G (heaviestChild V w G b h), heaviestChild V w G b h) :=
-  Classical.choose_spec ((children G b).exists_max_image (fun c => toLex (weight V w G c, c)) h)
+    heaviestChild V w G root b h ∈ children G b ∧ ∀ c ∈ children G b,
+      toLex (weight V w G c, root c) ≤
+        toLex (weight V w G (heaviestChild V w G root b h),
+          root (heaviestChild V w G root b h)) :=
+  Classical.choose_spec
+    ((children G b).exists_max_image (fun c => toLex (weight V w G c, root c)) h)
 
 /-- LMD-GHOST from the block `b`: move to the heaviest child until the block has no child. -/
 noncomputable def ghost (b : β) : β :=
-  if h : (children G b).Nonempty then ghost (heaviestChild V w G b h) else b
+  if h : (children G b).Nonempty then ghost (heaviestChild V w G root b h) else b
 termination_by G.blocks.sup T.height - T.height b
-decreasing_by exact height_lt_of_mem_children (heaviestChild_spec V w G b h).1
+decreasing_by exact height_lt_of_mem_children (heaviestChild_spec V w G root b h).1
 
 theorem ghost_of_nonempty {b : β} (h : (children G b).Nonempty) :
-    ghost V w G b = ghost V w G (heaviestChild V w G b h) := by
+    ghost V w G root b = ghost V w G root (heaviestChild V w G root b h) := by
   rw [ghost]
   simp only [h, ↓reduceDIte]
 
-theorem ghost_of_not_nonempty {b : β} (h : ¬(children G b).Nonempty) : ghost V w G b = b := by
+theorem ghost_of_not_nonempty {b : β} (h : ¬(children G b).Nonempty) : ghost V w G root b = b := by
   rw [ghost]
   simp only [h, ↓reduceDIte]
 
 /-- The head is a leaf of the view. -/
-theorem children_ghost (b : β) : children G (ghost V w G b) = ∅ := by
-  induction b using ghost.induct V w G with
-  | case1 b h ih => rwa [ghost_of_nonempty V w G h]
+theorem children_ghost (b : β) : children G (ghost V w G root b) = ∅ := by
+  induction b using ghost.induct V w G root with
+  | case1 b h ih => rwa [ghost_of_nonempty V w G root h]
   | case2 b h =>
-    rw [ghost_of_not_nonempty V w G h]
+    rw [ghost_of_not_nonempty V w G root h]
     exact Finset.not_nonempty_iff_eq_empty.mp h
 
 /-- The head is in the subtree of the starting block. -/
-theorem ancestor_ghost (b : β) : T.Ancestor b (ghost V w G b) := by
-  induction b using ghost.induct V w G with
+theorem ancestor_ghost (b : β) : T.Ancestor b (ghost V w G root b) := by
+  induction b using ghost.induct V w G root with
   | case1 b h ih =>
-    rw [ghost_of_nonempty V w G h]
-    exact ((mem_children.mp (heaviestChild_spec V w G b h).1).2.ancestor).trans ih
-  | case2 b h => rw [ghost_of_not_nonempty V w G h]; exact .refl b
+    rw [ghost_of_nonempty V w G root h]
+    exact ((mem_children.mp (heaviestChild_spec V w G root b h).1).2.ancestor).trans ih
+  | case2 b h => rw [ghost_of_not_nonempty V w G root h]; exact .refl b
 
 /-- The head is in the view when the starting block is. -/
-theorem ghost_mem {b : β} (hb : b ∈ G.blocks) : ghost V w G b ∈ G.blocks := by
-  induction b using ghost.induct V w G with
+theorem ghost_mem {b : β} (hb : b ∈ G.blocks) : ghost V w G root b ∈ G.blocks := by
+  induction b using ghost.induct V w G root with
   | case1 b h ih =>
-    rw [ghost_of_nonempty V w G h]
-    exact ih (mem_children.mp (heaviestChild_spec V w G b h).1).1
-  | case2 b h => rwa [ghost_of_not_nonempty V w G h]
+    rw [ghost_of_nonempty V w G root h]
+    exact ih (mem_children.mp (heaviestChild_spec V w G root b h).1).1
+  | case2 b h => rwa [ghost_of_not_nonempty V w G root h]
 
 /-- The majority lemma.
 
@@ -256,17 +264,17 @@ Suppose that more than half of the stake of `V` has its latest message in the su
 
 Then LMD-GHOST from any block in the chain of `b` returns a block in the subtree of `b`. -/
 theorem ancestor_ghost_of_majority {a b : β} (hb : b ∈ G.blocks) (hab : T.Ancestor a b)
-    (hmaj : stake w V < 2 * weight V w G b) : T.Ancestor b (ghost V w G a) := by
-  induction a using ghost.induct V w G with
+    (hmaj : stake w V < 2 * weight V w G b) : T.Ancestor b (ghost V w G root a) := by
+  induction a using ghost.induct V w G root with
   | case1 a h ih =>
     by_cases hba : a = b
     · subst hba
-      exact ancestor_ghost V w G a
+      exact ancestor_ghost V w G root a
     obtain ⟨c, hc, hcb⟩ := hab.exists_child hba
     have hcmem : c ∈ children G a := mem_children.mpr ⟨G.mem_of_ancestor hb hcb, hc⟩
     -- The child towards `b` has more than half of the stake, so it outweighs every other child.
-    have hpick : heaviestChild V w G a h = c := by
-      obtain ⟨hmem, hmax⟩ := heaviestChild_spec V w G a h
+    have hpick : heaviestChild V w G root a h = c := by
+      obtain ⟨hmem, hmax⟩ := heaviestChild_spec V w G root a h
       by_contra hne
       have hsum := weight_add_le (V := V) (w := w) (G := G) hc (mem_children.mp hmem).2
         (Ne.symm hne)
@@ -274,12 +282,12 @@ theorem ancestor_ghost_of_majority {a b : β} (hb : b ∈ G.blocks) (hab : T.Anc
       have hle := hmax c hcmem
       rw [Prod.Lex.toLex_le_toLex] at hle
       rcases hle with hle | ⟨hle, -⟩ <;> dsimp only at hle <;> omega
-    rw [ghost_of_nonempty V w G h]
+    rw [ghost_of_nonempty V w G root h]
     exact hpick ▸ ih (hpick ▸ hcb)
   | case2 a h =>
     by_cases hba : a = b
     · subst hba
-      exact ancestor_ghost V w G a
+      exact ancestor_ghost V w G root a
     -- A block above `b` has a child in the view, so the rule does not stop there.
     obtain ⟨c, hc, hcb⟩ := hab.exists_child hba
     exact absurd ⟨c, mem_children.mpr ⟨G.mem_of_ancestor hb hcb, hc⟩⟩ h
