@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Address
 public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Base.Proofs.U256
 

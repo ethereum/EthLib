@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Address
 public import EthLib.Cryptography.Secp256k1.Encoding
 public import EthLib.Cryptography.Hash.Keccak
 
@@ -29,7 +30,7 @@ namespace EthLib.Cryptography.Secp256k1
 def publicKeyBytes (x y : Fp) : ByteArray := ⟨(x.toBytes ++ y.toBytes).toArray⟩
 
 /-- The address of the public key `(x, y)`: the last 20 bytes of the Keccak-256 hash of its 64 bytes. -/
-def address (x y : Fp) : Vector UInt8 20 :=
+def address (x y : Fp) : Base.Address :=
   let digest := Hash.Keccak.keccak256 (publicKeyBytes x y)
   -- Bytes 12 to 31 of the digest are its bits 96 to 255.
   Vector.ofFn fun i => digest[12 + i.val]'(by have := i.isLt; simp [Hash.Keccak.DIGEST_LEN]; omega)
@@ -39,7 +40,7 @@ def address (x y : Fp) : Vector UInt8 20 :=
 A private key lies in `[1, n - 1]`, by Appendix F, so `d G` is never `O`.
 
 `d = 0` gives `O`, which has no address, and `none`. -/
-def addressOfPrivateKey (d : Fn) : Option (Vector UInt8 20) :=
+def addressOfPrivateKey (d : Fn) : Option Base.Address :=
   match Point.mul d .generator with
   | .infinity => none
   | .affine x y => some (address x y)
