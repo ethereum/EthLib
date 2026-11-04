@@ -6,7 +6,6 @@ public import EthLib.Cryptography.Proofs.Hash.Keccak
 public import EthLib.Cryptography.Proofs.Hash.KeccakKernel
 public import EthLib.Cryptography.Proofs.Hash.Keccak256
 public import EthLib.Cryptography.Proofs.Hash.Sha256
-public import EthLib.Cryptography.Proofs.Hash.Sha256Kernel
 public import EthLib.Cryptography.Proofs.Hash.Ripemd160
 
 /-!
