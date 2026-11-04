@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports
+public import EthLib.Execution.Blocks.Block
 public import EthLib.Execution.State.Root
 public import EthLib.Execution.State.Errors
 
@@ -18,13 +19,19 @@ The storage is a list of pairs of a 32-byte key and a word.
 The code hash of an account is the Keccak-256 hash of its code.
 
 A malformed input, or an address given twice, comes back as the code and the message of its error.
+
+A failed change to the state has a code from 101.
+
+A fork name crosses the boundary as the name of its case in Lean, such as `shapella`.
+
+An unknown fork, a fork before Shapella, or a block that does not decode, has code 0.
 -/
 
 public section
 
 namespace EthLib.Execution.State.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result forkOfName)
 
 open EthLib.Base
 open EthLib.Execution.State
@@ -68,15 +75,37 @@ def ofEntries (entries : List Entry) : Except StateInputError State :=
       storage := state.storage.insert entry.address (.ofList entry.storage)
       code := state.code.insert codeHash entry.code }
 
+/-- The state that `input` encodes. -/
+def ofInput (input : ByteArray) : Except StateInputError State := do
+  let item ← (decode input).mapError .notAnItem
+  let items ← item.toItems.mapError .notAList
+  let entries ← (items.mapM ofEntryItem).mapError .badAccount
+  ofEntries entries
+
+/-- The 32-byte state root of a state, with Keccak-256, or the code and message of its error. -/
+def rootOf (state : State) : Result ByteArray :=
+  match stateRoot Cryptography.Hash.Keccak.keccak256 state with
+  | .ok root => return ⟨root.toArray⟩
+  | .error e => throw ((StateInputError.noRoot e).code, (StateInputError.noRoot e).message)
+
 /-- The 32-byte state root, with Keccak-256, of the state that `input` encodes. -/
 @[export eth_state_root]
-def stateRootExport (input : ByteArray) : Result ByteArray :=
-  Except.mapError (fun e => (e.code, e.message)) do
-    let item ← (decode input).mapError .notAnItem
-    let items ← item.toItems.mapError .notAList
-    let entries ← (items.mapM ofEntryItem).mapError .badAccount
-    let state ← ofEntries entries
-    let root ← (stateRoot Cryptography.Hash.Keccak.keccak256 state).mapError .noRoot
-    return ⟨root.toArray⟩
+def stateRootExport (input : ByteArray) : Result ByteArray := do
+  rootOf (← (ofInput input).mapError fun e => (e.code, e.message))
+
+/-- The state root after the withdrawals of a block, from the state that `input` encodes.
+
+The block is decoded at the fork, which must be Shapella or later. -/
+@[export eth_state_withdrawals_root]
+def withdrawalsRootExport (fork input block : ByteArray) : Result ByteArray := do
+  let fork ← forkOfName fork
+  let pre ← (ofInput input).mapError fun e => (e.code, e.message)
+  let b : Blocks.Block fork Item ← (Codec.decode block).mapError
+    fun e => (0, s!"block rejected: {reprStr e}")
+  if h : .shapella ≤ fork then
+    let post ← (Blocks.processWithdrawals fork ⟨pre, ∅, ∅, ∅, ∅⟩ (b.withdrawals h)).mapError
+      fun e => (e.code, s!"withdrawals failed: {reprStr e}")
+    rootOf post.applyChanges
+  else throw (0, "the fork is before Shapella")
 
 end EthLib.Execution.State.Exports

@@ -2888,6 +2888,28 @@
    "docstring":
    "The 32-byte state root, with Keccak-256, of the state that `input` encodes."},
   {"summary":
+   "The state root after the withdrawals of a block, from the state that `input` encodes.",
+   "signature": "(fork: str, state: bytes, block: bytes) -> bytes",
+   "operation": "EthLib.Execution.State.Exports.withdrawalsRootExport",
+   "method": "state_withdrawals_root",
+   "errors":
+   [{"type": "EthLib.Execution.State.StateInputError",
+     "codes":
+     [{"constructor": "notAnItem", "code": 1},
+      {"constructor": "notAList", "code": 2},
+      {"constructor": "badAccount", "code": 3},
+      {"constructor": "repeatedAddress", "code": 4},
+      {"constructor": "noRoot", "code": 5}]},
+    {"type": "EthLib.Execution.State.StateError",
+     "codes":
+     [{"constructor": "noAccount", "code": 101},
+      {"constructor": "missingCode", "code": 102},
+      {"constructor": "insufficientBalance", "code": 103},
+      {"constructor": "balanceOverflow", "code": 104}]}],
+   "error_class": "StateError",
+   "docstring":
+   "The state root after the withdrawals of a block, from the state that `input` encodes.\n\nThe block is decoded at the fork, which must be Shapella or later."},
+  {"summary":
    "The name of the active fork of mainnet at a block, or no bytes when no fork is active.",
    "signature": "(number: int, timestamp: int) -> bytes",
    "operation": "EthLib.Base.ChainConfig.Exports.mainnetActiveForkExport",
