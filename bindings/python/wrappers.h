@@ -127,6 +127,14 @@ run_io_into_pybool(
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
+/* A Python `int` in [0, 2^64), or -1 with an exception set. */
+int
+parse_uint64(
+  PyObject* obj,
+  const char* name,
+  uint64_t* out
+);
+
 const uint8_t*
 parse_bytes_of_size(
   PyObject* obj,
@@ -225,6 +233,13 @@ PyObject* py_block_reencode                               (PyObject* self, PyObj
 PyObject* py_rlp_encode                                   (PyObject* self, PyObject* args);
 PyObject* py_rlp_decode                                   (PyObject* self, PyObject* args);
 PyObject* py_rlp_decode_as                                (PyObject* self, PyObject* args);
+PyObject* py_snappy_decompress                            (PyObject* self, PyObject* args);
+PyObject* py_snappy_compress_literal                      (PyObject* self, PyObject* args);
+PyObject* py_snappy_decode_frames                         (PyObject* self, PyObject* args);
+PyObject* py_snappy_encode_frames_literal                 (PyObject* self, PyObject* args);
+PyObject* py_snappy_masked_crc                            (PyObject* self, PyObject* args);
+PyObject* py_varint_encode                                (PyObject* self, PyObject* args);
+PyObject* py_varint_decode                                (PyObject* self, PyObject* args);
 
 PyObject* py_rlpx_ecies_encrypt                           (PyObject* self, PyObject* args);
 PyObject* py_rlpx_ecies_decrypt                           (PyObject* self, PyObject* args);

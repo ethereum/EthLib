@@ -82,7 +82,7 @@ inductive VarintError where
 
 The recursion counts down a byte budget instead of shrinking `n`.
 
-The kernel unfolds such a definition directly, so every known answer is checked by `rfl`.
+The kernel unfolds such a definition directly, so proofs can compute with it.
 
 Encoding passes the ten-byte cap, which covers every 64-bit value.
 

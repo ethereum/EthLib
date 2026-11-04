@@ -1,10 +1,4 @@
-"""Recursive Length Prefix, from Appendix B of the Yellow Paper.
-
-- An item is a byte string, as `bytes`, or a list of items, as a `list`.
-- Decoding is strict: it accepts only the one canonical encoding of each item.
-
-A rejected input raises ValueError, whose message names the fault.
-"""
+"""Recursive Length Prefix, the strict encoding of byte strings and nested lists."""
 
 from typing import Union
 

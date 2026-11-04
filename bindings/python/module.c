@@ -389,6 +389,26 @@ run_io_into_pybool(
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
+/* A Python `int` in [0, 2^64), or -1 with an exception set. */
+int
+parse_uint64(
+  PyObject* obj,
+  const char* name,
+  uint64_t* out
+) {
+  if (!PyLong_Check(obj)) {
+    PyErr_Format(PyExc_TypeError, "%s must be int", name);
+    return -1;
+  }
+  unsigned long long value = PyLong_AsUnsignedLongLong(obj);
+  if (value == (unsigned long long) -1 && PyErr_Occurred()) {
+    PyErr_Format(PyExc_ValueError, "%s must be in [0, 2^64)", name);
+    return -1;
+  }
+  *out = (uint64_t) value;
+  return 0;
+}
+
 /* Validate that `obj` is a `bytes` of exactly `expected` length. Returns
  * a pointer to its data on success, NULL on failure (and sets an error). */
 const uint8_t*
@@ -518,6 +538,13 @@ static PyMethodDef methods[] = {
   {"rlp_decode_as", py_rlp_decode_as, METH_VARARGS, NULL},
   {"rlpx_ecies_encrypt", py_rlpx_ecies_encrypt, METH_VARARGS, NULL},
   {"rlpx_ecies_decrypt", py_rlpx_ecies_decrypt, METH_VARARGS, NULL},
+  {"snappy_decompress", py_snappy_decompress, METH_VARARGS, NULL},
+  {"snappy_compress_literal", py_snappy_compress_literal, METH_VARARGS, NULL},
+  {"snappy_decode_frames", py_snappy_decode_frames, METH_VARARGS, NULL},
+  {"snappy_encode_frames_literal", py_snappy_encode_frames_literal, METH_VARARGS, NULL},
+  {"snappy_masked_crc", py_snappy_masked_crc, METH_VARARGS, NULL},
+  {"varint_encode", py_varint_encode, METH_VARARGS, NULL},
+  {"varint_decode", py_varint_decode, METH_VARARGS, NULL},
   {"precompile_run", py_precompile_run, METH_VARARGS, NULL},
   {"state_root", py_state_root, METH_VARARGS, NULL},
   {NULL, NULL, 0, NULL},

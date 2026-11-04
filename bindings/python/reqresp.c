@@ -32,26 +32,6 @@ eth_reqresp_decode_response_chunk(
 
 /* ---- Wrappers --------------------------------------------------------- */
 
-/* A Python `int` in [0, 2^64), or -1 with an exception set. */
-static int
-parse_uint64(
-  PyObject* obj,
-  const char* name,
-  uint64_t* out
-) {
-  if (!PyLong_Check(obj)) {
-    PyErr_Format(PyExc_TypeError, "%s must be int", name);
-    return -1;
-  }
-  unsigned long long value = PyLong_AsUnsignedLongLong(obj);
-  if (value == (unsigned long long) -1 && PyErr_Occurred()) {
-    PyErr_Format(PyExc_ValueError, "%s must be in [0, 2^64)", name);
-    return -1;
-  }
-  *out = (uint64_t) value;
-  return 0;
-}
-
 /* The bytes of a `bytes` argument, or NULL with a TypeError set. */
 static lean_object*
 parse_data(

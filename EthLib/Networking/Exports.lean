@@ -4,6 +4,8 @@ public import EthLib.Networking.Exports.Discv5
 public import EthLib.Networking.Exports.Enr
 public import EthLib.Networking.Exports.ReqResp
 public import EthLib.Networking.Exports.Rlpx
+public import EthLib.Networking.Exports.Snappy
+public import EthLib.Networking.Exports.Varint
 
 /-!
 # `EthLib.Networking.Exports`
