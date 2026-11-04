@@ -245,6 +245,8 @@ PyObject* py_gossip_message_id_altair                     (PyObject* self, PyObj
 
 PyObject* py_rlpx_ecies_encrypt                           (PyObject* self, PyObject* args);
 PyObject* py_rlpx_ecies_decrypt                           (PyObject* self, PyObject* args);
+PyObject* py_receipt_reencode                             (PyObject* self, PyObject* args);
+PyObject* py_receipt_logs_bloom                           (PyObject* self, PyObject* args);
 
 PyObject* py_precompile_run                               (PyObject* self, PyObject* args);
 

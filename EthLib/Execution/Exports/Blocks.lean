@@ -10,7 +10,7 @@ C-ABI exports for headers and blocks, callable from the Python C extension.
 
 A fork crosses the boundary as the name of its case in Lean, such as `shapella`.
 
-A header or a block crosses it as its RLP bytes.
+A header, a block or a receipt crosses it as its bytes.
 
 Each operation decodes at the fork first, and a rejected input becomes an error.
 -/
@@ -49,5 +49,25 @@ def reencodeExport (fork block : ByteArray) : IO ByteArray := do
   let fork ← forkOfName fork
   let b : Block fork Item ← runRlp "block rejected" (Codec.decode block)
   runRlp "block has no encoding" (Codec.encode b)
+
+/-- The transaction type and the receipt that some bytes hold at the fork. -/
+def decodeReceiptIO (fork : Fork) (receipt : ByteArray) : IO (UInt8 × Receipt fork) :=
+  match decodeReceipt fork receipt with
+  | .ok r => pure r
+  | .error e => throw (IO.userError s!"receipt rejected: {reprStr e}")
+
+/-- The bytes of a receipt, decoded at the fork and encoded again with its transaction type. -/
+@[export eth_receipt_reencode]
+def receiptReencodeExport (fork receipt : ByteArray) : IO ByteArray := do
+  let fork ← forkOfName fork
+  let (type, r) ← decodeReceiptIO fork receipt
+  runRlp "receipt has no encoding" (encodeReceipt type r)
+
+/-- The logs Bloom filter of the logs of a receipt, decoded at the fork. -/
+@[export eth_receipt_logs_bloom]
+def receiptLogsBloomExport (fork receipt : ByteArray) : IO ByteArray := do
+  let fork ← forkOfName fork
+  let (_, r) ← decodeReceiptIO fork receipt
+  return ⟨(logsBloom r.logs).toArray⟩
 
 end EthLib.Execution.Blocks.Exports

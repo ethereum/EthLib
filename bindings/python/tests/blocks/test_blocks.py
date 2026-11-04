@@ -1,11 +1,4 @@
-"""Headers and blocks against the blockchain tests of execution-specs.
-
-The cases are in `tests/execution/blocks/blockchain_tests.json`, whose README gives their origin.
-Each case is one valid block of one fork, with the hash of its header.
-
-For each case, the decoder at the fork of the case must accept the block and encode it back
-byte for byte, and the header must hash to the hash that the fixture gives.
-"""
+"""Headers and blocks against the blockchain tests of execution-specs."""
 
 import json
 from pathlib import Path
@@ -43,10 +36,8 @@ BEFORE_LONDON = {"Frontier", "Homestead", "TangerineWhistle", "SpuriousDragon", 
 
 
 def _first_item(data: bytes) -> bytes:
-    """The encoding of the first item in the payload of the RLP list `data`.
-
-    A block and its header are long lists, so both prefixes are in the long form.
-    """
+    """The encoding of the first item in the payload of the RLP list `data`."""
+    # A block and its header are long lists, so both prefixes are in the long form.
     assert data[0] >= 0xF8
     start = 1 + data[0] - 0xF7
     head = data[start]
