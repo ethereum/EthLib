@@ -106,12 +106,13 @@ The `sha256/` cases are pinned too.
 Every pytest run rewrites them, and `SHA256SUMS` pins the tree.
 Most cases come from the NIST CAVP `SHA256ShortMsg` and `SHA256LongMsg` distributions, and two are the SHA-256 examples of FIPS 180-2, Appendix B.
 
-## Keccak-256
+## Keccak-256 and Keccak-512
 
 The `keccak/` cases are pinned too.
 Every pytest run rewrites them, and `SHA256SUMS` pins the tree.
-Most are the 256 byte-aligned cases of the Keccak team's `ShortMsgKAT_256.txt`, which `bindings/python/tests/keccak/kat/` vendors with its source.
+Most `hash` cases are the 256 byte-aligned cases of the Keccak team's `ShortMsgKAT_256.txt`, which `bindings/python/tests/keccak/kat/` vendors with its source.
 Two more come from the team's `LongMsgKAT_256.txt`, and one hashes `abc`.
+The `hash_512` cases are the 256 byte-aligned cases of the team's `ShortMsgKAT_512.txt`, vendored in the same directory, and two from its `LongMsgKAT_512.txt`.
 The `permutation` cases are the two examples of the team's `KeccakPermutationIntermediateValues.txt`.
 
 ## Checks

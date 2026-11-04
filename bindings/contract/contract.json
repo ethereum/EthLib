@@ -894,7 +894,16 @@
    "errors": [],
    "error_class": null,
    "docstring":
-   "Keccak-256 of a byte string: `Keccak[512](M, 256)` of FIPS 202 §5.2.\n\nIt is the sponge over Keccak-f[1600]."},
+   "Keccak-256 of a byte string: `Keccak[512](M, 256)` of FIPS 202 §5.2.\n\nIt absorbs at a rate of 136 bytes.\n\nOne block of output holds the 32 digest bytes, so no further permutation is needed."},
+  {"summary":
+   "Keccak-512 of a byte string: `Keccak[1024](M, 512)` of FIPS 202 §5.2.",
+   "signature": "(data: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.Hash.Keccak.keccak512",
+   "method": "keccak512",
+   "errors": [],
+   "error_class": null,
+   "docstring":
+   "Keccak-512 of a byte string: `Keccak[1024](M, 512)` of FIPS 202 §5.2.\n\nIt absorbs at a rate of 72 bytes, with the same permutation as Keccak-256.\n\nOne block of output holds the 64 digest bytes, so no further permutation is needed."},
   {"summary":
    "Keccak-f[1600], FIPS 202 §3.4: Keccak-p[1600, 24], rounds 0 to 23 in order.",
    "signature": "(state: bytes) -> bytes",

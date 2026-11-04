@@ -234,6 +234,7 @@ PyObject* py_modexp                                       (PyObject* self, PyObj
 PyObject* py_modexp_gas_cost                              (PyObject* self, PyObject* args);
 PyObject* py_sha256                                       (PyObject* self, PyObject* args);
 PyObject* py_keccak256                                    (PyObject* self, PyObject* args);
+PyObject* py_keccak512                                    (PyObject* self, PyObject* args);
 PyObject* py_keccak_f1600                                 (PyObject* self, PyObject* args);
 PyObject* py_trie_root                                    (PyObject* self, PyObject* args);
 PyObject* py_trie_verify_proof                            (PyObject* self, PyObject* args);

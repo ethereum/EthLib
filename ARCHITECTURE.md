@@ -21,7 +21,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 
 ### Cryptography
 
-- Hash functions: Keccak-256, SHA-256, RIPEMD-160, and the BLAKE2b compression function of EIP-152.
+- Hash functions: Keccak-256, Keccak-512, SHA-256, RIPEMD-160, and the BLAKE2b compression function of EIP-152.
 - Key derivation over SHA-256: HMAC, HKDF, and the Concatenation KDF.
 - secp256k1: ECDSA signatures with RFC 6979 nonces, public key recovery, the address of a public key, and ECDH.
 - secp256r1: signature verification for the P256VERIFY precompile of EIP-7951.

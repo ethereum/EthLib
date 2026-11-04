@@ -1,11 +1,14 @@
 """
-The Keccak team's Keccak-256 and Keccak-f[1600] test vectors.
+The Keccak team's Keccak-256, Keccak-512 and Keccak-f[1600] test vectors.
 
-The hash vectors are (message, digest) pairs:
+The Keccak-256 vectors are (message, digest) pairs:
 
 - the byte-aligned cases of `kat/ShortMsgKAT_256.txt`, 256 vectors from 0 to 255 bytes;
 - two cases of `LongMsgKAT_256.txt`, of 256 and 319 bytes, copied below;
 - the message `abc`.
+
+The Keccak-512 vectors are the byte-aligned cases of `kat/ShortMsgKAT_512.txt`, and the same two
+long messages with the digests of `LongMsgKAT_512.txt`.
 
 The permutation vectors are (input, output) pairs of 200-byte states, from
 `kat/KeccakPermutationIntermediateValues.txt`.
@@ -19,6 +22,7 @@ from pathlib import Path
 # The vendored files sit next to this module.
 _KAT_DIR = Path(__file__).resolve().parent / "kat"
 _KAT_FILE = _KAT_DIR / "ShortMsgKAT_256.txt"
+_KAT_512_FILE = _KAT_DIR / "ShortMsgKAT_512.txt"
 _PERMUTATION_FILE = _KAT_DIR / "KeccakPermutationIntermediateValues.txt"
 
 
@@ -121,6 +125,33 @@ CASE_NAMES: list[str] = [name for name, _, _ in _ALL_CASES]
 
 # The (message, digest) pairs, in the same order as the names.
 VECTORS: list[tuple[bytes, bytes]] = [(message, digest) for _, message, digest in _ALL_CASES]
+
+_CASES_512 = _parse_kat(_KAT_512_FILE)
+
+# Invariant: the file holds one byte-aligned case per byte length from 0 to 255.
+assert [len(message) for _, message, _ in _CASES_512] == list(range(256)), "unexpected cases"
+
+# The digests of the two long messages above, from `KeccakKAT/LongMsgKAT_512.txt`.
+_LONG_DIGESTS_512 = {
+    "hash_case_long_len_2048": bytes.fromhex(
+        "4E987768469F546296AD1A43D54C0A0A6C87E7E4E26B686612B1E5B1554B689B"
+        "FFD56D6A4B454CE4A5717625BBAD321F8D05F19C225259646F21416AA2D7C2ED"
+    ),
+    "hash_case_long_len_2552": bytes.fromhex(
+        "3D370DC850BC7E159CEE3F24D9E915B5B1306FF403C32C7A3A3844F3FC8D90E3"
+        "5F56D83BDD9C637BC45E440E1F27CCD56B6B3872EC19101BBE31845108DCE929"
+    ),
+}
+
+_ALL_CASES_512 = _CASES_512 + [
+    (name, message, _LONG_DIGESTS_512[name]) for name, message, _ in _LONG_CASES
+]
+
+# The Keccak-512 case names, one output directory each.
+CASE_NAMES_512: list[str] = [name for name, _, _ in _ALL_CASES_512]
+
+# The Keccak-512 (message, digest) pairs, in the same order as the names.
+VECTORS_512: list[tuple[bytes, bytes]] = [(m, digest) for _, m, digest in _ALL_CASES_512]
 
 
 def _parse_permutations(path: Path) -> list[tuple[bytes, bytes]]:

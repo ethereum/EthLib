@@ -1,3 +1,4 @@
 # Source: KeccakKAT-3.zip of the Keccak team
 db0947545a5d91c20b2105aac75fac430deafe0ccaecb660af60044244df30d4  KeccakPermutationIntermediateValues.txt
 741862f92342010311504202d7b304955fa28aa03a752633a5e83f971f014851  ShortMsgKAT_256.txt
+04164af3d89aa847b0dfe02d9c0be10c42fd72cdcdad0228566dac6143690a46  ShortMsgKAT_512.txt
