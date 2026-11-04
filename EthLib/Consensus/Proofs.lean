@@ -11,6 +11,7 @@ public import EthLib.Consensus.Proofs.Models.Ffg.AccountableSafety
 public import EthLib.Consensus.Proofs.Models.Ffg.PlausibleLiveness
 public import EthLib.Consensus.Proofs.Models.ForkChoice.LmdGhost
 public import EthLib.Consensus.Proofs.Shuffle
+public import EthLib.Consensus.Proofs.ShufflePermutation
 public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.Time
 
