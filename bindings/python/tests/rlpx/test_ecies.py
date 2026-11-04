@@ -1,9 +1,7 @@
-"""ECIES of RLPx against the handshake packets of EIP-8.
+"""ECIES of RLPx against the handshake packets of EIP-8."""
 
-Each packet in vectors.py is an ECIES ciphertext to node A or node B.
-An EIP-8 packet authenticates its 2-byte size prefix as shared data.
-A packet of the older format has no prefix and no shared data.
-"""
+# An EIP-8 packet authenticates its 2-byte size prefix as shared data.
+# A packet of the older format has no prefix and no shared data.
 
 import pytest
 
