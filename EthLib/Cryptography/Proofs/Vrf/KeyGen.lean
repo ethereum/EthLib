@@ -9,7 +9,7 @@ public import EthLib.Cryptography.Proofs.Vrf.Verify
 - A secret input is 49 bytes, so it is never a leaf, node or output input.
 - A secret input determines its seed and its index.
 - The tree of a seed verifies at every index, with the output of that index's secret.
-- Every valid opening of that tree gives that output, or Keccak-256 collides.
+- Every valid opening of that tree gives that output, or `findHashCollision` returns a Keccak-256 collision.
 -/
 
 @[expose] public section
@@ -96,9 +96,13 @@ theorem verify_prove (seed : Seed) (i : UInt32) :
     verify (keyGen seed) i (prove seed i) = some (evaluate seed i) :=
   verify_opening (secret seed) i
 
-/-- Every valid opening of a seed's tree at index `i` gives the output at `i`, or Keccak-256 collides. -/
+/-- Every valid opening of a seed's tree at index `i` gives the output at `i`.
+
+Otherwise `findHashCollision` returns a Keccak-256 collision with the honest opening. -/
 theorem verify_keyGen_unique {seed : Seed} {i : UInt32} {o : Opening} {y : Digest}
-    (h : verify (keyGen seed) i o = some y) : y = evaluate seed i ∨ HashCollision :=
+    (h : verify (keyGen seed) i o = some y) :
+    y = evaluate seed i ∨
+      ∃ p, findHashCollision i o (prove seed i) = some p ∧ IsHashCollision p :=
   verify_root_unique h
 
 end EthLib.Cryptography.Vrf

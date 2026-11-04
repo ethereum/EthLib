@@ -97,6 +97,15 @@ theorem findCollision_valid [DecidableEq α] :
         refine ⟨hvalid, k + 1, s', t', hs, ht, by omega, ?_, ?_, ?_⟩ <;>
           rw [div_two_div_pow] at * <;> assumption
 
+/-- One climb compared with itself runs into no collision. -/
+theorem findCollision_self [DecidableEq α] :
+    ∀ (p : List α) (level j : Nat) (a : α), findCollision hash level j a a p p = none
+  | [], _, _, _ => rfl
+  | s :: rest, level, j, a => by
+    -- The two pairs at each level are the same pair.
+    simp only [findCollision, ne_eq, not_true_eq_false, false_and, ↓reduceIte,
+      findCollision_self rest]
+
 /-- Binding: two climbs from `(level, j)` over equally many siblings that meet are equal.
 
 Otherwise `findCollision` finds a collision of the node hash, valid by `findCollision_valid`. -/
