@@ -959,6 +959,51 @@
    "docstring":
    "Keccak-512 of a byte string: `Keccak[1024](M, 512)` of FIPS 202 §5.2.\n\nIt absorbs at a rate of 72 bytes, with the same permutation as Keccak-256.\n\nOne block of output holds the 64 digest bytes, so no further permutation is needed."},
   {"summary":
+   "The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2.",
+   "signature": "(number: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.Ethash.cacheSize",
+   "method": "ethash_cache_size",
+   "errors": [],
+   "error_class": null,
+   "docstring":
+   "The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2.\n\nThe search starts one hash below the linear size."},
+  {"summary":
+   "The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2.",
+   "signature": "(number: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.Ethash.datasetSize",
+   "method": "ethash_dataset_size",
+   "errors": [],
+   "error_class": null,
+   "docstring":
+   "The bytes in the dataset of the epoch of a block: `d_size` of the Yellow Paper, J.2.\n\nThe search starts one mix below the linear size."},
+  {"summary":
+   "The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1.",
+   "signature": "(number: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.Ethash.seed",
+   "method": "ethash_seed",
+   "errors": [],
+   "error_class": null,
+   "docstring":
+   "The seed of the epoch of a block: `C_seedhash` of the Yellow Paper, J.3.1.\n\nIt is 32 zero bytes at epoch 0, and the Keccak-256 digest of the previous seed after."},
+  {"summary":
+   "The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2.",
+   "signature": "(number: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.Ethash.cache",
+   "method": "ethash_cache",
+   "errors": [],
+   "error_class": null,
+   "docstring":
+   "The cache of the epoch of a block: `c` of the Yellow Paper, J.3.2.\n\nIt has one item per 64 bytes of the cache size, after three rounds over the initial cache."},
+  {"summary":
+   "The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3.",
+   "signature": "(cache: bytes, index: bytes) -> bytes",
+   "operation": "EthLib.Cryptography.Ethash.datasetItem",
+   "method": "ethash_dataset_item",
+   "errors": [],
+   "error_class": "EthashError",
+   "docstring":
+   "The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3.\n\nThe mix starts as the Keccak-512 digest of a cache item whose first word is XORed with the index.\n\nEach of 256 parents is a cache item that the index and the mix choose, and FNV folds it in.\n\nThe item is the Keccak-512 digest of the last mix.\n\nThe appendix reads the cache by its size in bytes, and the specification by its count of items.\n\nThe definition follows the specification.\n\nThe index is below `2^32` while the dataset has fewer than `2^32` items."},
+  {"summary":
    "Keccak-f[1600], FIPS 202 §3.4: Keccak-p[1600, 24], rounds 0 to 23 in order.",
    "signature": "(state: bytes) -> bytes",
    "operation": "EthLib.Cryptography.Hash.Keccak.keccakF",

@@ -29,6 +29,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - BLS12-381: the fields, the curves, the pairing, hashing to the curve of RFC 9380, and BLS signatures with their aggregation.
 - KZG: commitments and proofs to blobs of EIP-4844, and to cells of EIP-7594.
 - Merkle trees: the binary trees of SSZ and of hash-based signatures, with their proofs.
+- Ethash: the proof of work of the execution layer before Paris.
 - Post-quantum signatures: hash-based schemes such as XMSS and SPHINCS, proposed to replace BLS signatures.
 
 ### Serialization

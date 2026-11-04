@@ -62,6 +62,7 @@ PyObject* SHA256_PRECOMPILE_ERROR;
 PyObject* PRECOMPILE_ERROR;
 PyObject* STATE_ERROR;
 PyObject* KECCAK_ERROR;
+PyObject* ETHASH_ERROR;
 PyObject* REQRESP_ERROR;
 PyObject* CONSENSUS_ERROR;
 PyObject* HKDF_ERROR;
@@ -552,6 +553,11 @@ static PyMethodDef methods[] = {
   {"sha256", py_sha256, METH_VARARGS, DOC_sha256},
   {"keccak256", py_keccak256, METH_VARARGS, DOC_keccak256},
   {"keccak512", py_keccak512, METH_VARARGS, DOC_keccak512},
+  {"ethash_cache_size", py_ethash_cache_size, METH_VARARGS, DOC_ethash_cache_size},
+  {"ethash_dataset_size", py_ethash_dataset_size, METH_VARARGS, DOC_ethash_dataset_size},
+  {"ethash_seed", py_ethash_seed, METH_VARARGS, DOC_ethash_seed},
+  {"ethash_cache", py_ethash_cache, METH_VARARGS, DOC_ethash_cache},
+  {"ethash_dataset_item", py_ethash_dataset_item, METH_VARARGS, DOC_ethash_dataset_item},
   {"keccak_f1600", py_keccak_f1600, METH_VARARGS, DOC_keccak_f1600},
   {"trie_root", py_trie_root, METH_VARARGS, DOC_trie_root},
   {"trie_verify_proof", py_trie_verify_proof, METH_VARARGS, DOC_trie_verify_proof},
@@ -697,6 +703,7 @@ PyInit__native(void) {
     PRECOMPILE_ERROR = PyObject_GetAttrString(errors, "PrecompileError");
     STATE_ERROR = PyObject_GetAttrString(errors, "StateError");
     KECCAK_ERROR = PyObject_GetAttrString(errors, "KeccakError");
+    ETHASH_ERROR = PyObject_GetAttrString(errors, "EthashError");
     REQRESP_ERROR = PyObject_GetAttrString(errors, "ReqRespError");
     CONSENSUS_ERROR = PyObject_GetAttrString(errors, "ConsensusError");
     HKDF_ERROR = PyObject_GetAttrString(errors, "HkdfError");
