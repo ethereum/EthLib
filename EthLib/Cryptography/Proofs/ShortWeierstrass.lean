@@ -7,22 +7,11 @@ public import Mathlib.FieldTheory.Finite.Basic
 /-!
 # Proofs: short Weierstrass curves
 
-A short Weierstrass curve is `y^2 = x^3 + a x + b` over a field.
+Mathlib proves a group law for every Weierstrass curve.
 
-Mathlib defines the general Weierstrass curve, proves that its points form a commutative group, and calls the group `W.Point`.
+This file restates it for `y^2 = x^3 + a x + b`, case by case as SEC 1 v2 §2.2.1 states it.
 
-This file restates that group law for `a_1 = a_2 = a_3 = 0`, in the form of the addition rule of SEC 1 v2 §2.2.1.
-
-A curve of the specification then proves its own law from these lemmas, one case of the rule at a time.
-
-- `add_of_x_ne`: rule 4, the chord through two points with different `x`.
-- `add_self_of_y_ne`: rule 5, the tangent at a point with `y != -y`.
-- `add_of_y_eq_neg`: rule 3, opposite points sum to `0`.
-
-Over `ZMod p`, for an odd prime `p`, it also bounds the number of points.
-
-- `card_point_le`: at most `2 p + 1` points.
-- `card_point_eq`: exactly `n` points, if a point has order `n`, `2 p + 1 < 3 n`, and `x^3 + a x + b` has no root.
+Over `ZMod p`, it also counts the points.
 -/
 
 @[expose] public section
@@ -53,7 +42,7 @@ theorem equation_iff (x y : F) : (curve a b).Equation x y ↔ y * y = x * x * x 
   simp only [curve]
   constructor <;> intro h <;> linear_combination h
 
-/-- `negY` is plain negation, since `a_1 = a_3 = 0`. -/
+/-- The negation of a point negates `y`, since `a_1 = a_3 = 0`. -/
 @[simp] theorem negY_eq (x y : F) : (curve a b).negY x y = -y := by
   simp [Affine.negY, curve]
 
@@ -72,7 +61,9 @@ theorem add_of_y_eq_neg {x y1 y2 : F} (h1 : (curve a b).Nonsingular x y1) (h2 : 
     (hy : y2 = -y1) : Point.some _ _ h1 + Point.some _ _ h2 = 0 :=
   Point.add_of_Y_eq rfl (by rw [negY_eq, hy, neg_neg])
 
-/-- Rule 4: the chord's slope `l = (y2 - y1) / (x2 - x1)` gives the sum of two points with different `x`. -/
+/-- Rule 4: two points with different `x` add along the chord.
+
+Its slope is `l = (y2 - y1) / (x2 - x1)`. -/
 theorem add_of_x_ne {x1 y1 x2 y2 : F} (h1 : (curve a b).Nonsingular x1 y1) (h2 : (curve a b).Nonsingular x2 y2)
     (hx : x1 ≠ x2) {l x3 y3 : F} (hl : l = (y2 - y1) * (x2 - x1)⁻¹) (hx3 : x3 = l * l - x1 - x2)
     (hy3 : y3 = l * (x1 - x3) - y1) : ∃ h3, Point.some _ _ h1 + Point.some _ _ h2 = Point.some x3 y3 h3 := by
@@ -89,7 +80,9 @@ theorem add_of_x_ne {x1 y1 x2 y2 : F} (h1 : (curve a b).Nonsingular x1 y1) (h2 :
   subst hX hY
   exact ⟨_, Point.add_of_X_ne hx⟩
 
-/-- Rule 5: the tangent's slope `l = (3 x^2 + a) / (2 y)` doubles a point with `y != -y`. -/
+/-- Rule 5: a point with `y != -y` doubles along the tangent.
+
+Its slope is `l = (3 x^2 + a) / (2 y)`. -/
 theorem add_self_of_y_ne {x y : F} (h : (curve a b).Nonsingular x y) (hy : y ≠ -y) {l x3 y3 : F}
     (hl : l = (3 * x * x + a) * (2 * y)⁻¹) (hx3 : x3 = l * l - x - x) (hy3 : y3 = l * (x - x3) - y) :
     ∃ h3, Point.some _ _ h + Point.some _ _ h = Point.some x3 y3 h3 := by
@@ -147,7 +140,7 @@ def pointCode : (curve a b).Point → Option (ZMod p × Bool)
   | 0 => none
   | .some x y _ => some (x, decide (y.val % 2 = 1))
 
-/-- A point is fixed by its `x` and the parity of its `y`, since `y` and `-y` have opposite parities. -/
+/-- A point is fixed by its `x` and the parity of its `y`. -/
 theorem pointCode_injective (hp : p % 2 = 1) : Function.Injective (pointCode (a := a) (b := b)) := by
   intro P Q h
   cases P with
@@ -185,7 +178,7 @@ theorem card_point_le (hp : p % 2 = 1) : Nat.card (curve a b).Point ≤ 2 * p + 
   rwa [Finite.card_option, Nat.card_prod, Nat.card_zmod, Nat.card_eq_fintype_card (α := Bool), Fintype.card_bool,
     mul_comm] at this
 
-/-- The group has exactly `n` points when a point has order `n`, `2 p + 1 < 3 n`, and the cubic has no root.
+/-- The group has `n` points, if a point has order `n`, `2 p + 1 < 3 n` and the cubic has no root.
 
 The order `n` divides the number of points, which is then `n` or `2 n`.
 

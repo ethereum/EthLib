@@ -6,30 +6,13 @@ public import Mathlib.Algebra.Module.ZMod
 /-!
 # Proofs: the order of secp256r1
 
-The group of secp256r1 has exactly `n` points, and `G` generates it.
+The group has exactly `n` points, and `G` generates it: the cofactor of SEC 2 v2 §2.4.2 is 1.
 
-SEC 2 v2 §2.4.2 states this as the order `n` of `G` and the cofactor `h = 1`.
+The kernel computes `n G = O`, and at most `2 p + 1 < 3 n` points exist.
 
-The proof has three steps.
+So the count is `n`, unless a point of order 2 exists.
 
-- The kernel runs `n G` and gets `O`, so `G` has order `n`, a prime.
-- So `n` divides the number of points.
-- At most `2 p + 1` points exist, fewer than `3 n`, so the count is `n` or `2 n`.
-
-A group of `2 n` points would hold a point of order 2, which is `(x, 0)` with `f(x) = 0` for `f = X^3 + a X + b`.
-
-No such `x` exists, since `X^p - X` and `f` have no common factor in `Fp[X]`.
-
-Every `x` of `Fp` is a root of `X^p - X`, so a root of `f` would be a common root.
-
-The kernel computes `X^p mod f` by square and multiply, and checks an inverse of `X^p - X` mod `f`.
-
-With `n` points, `n X = 0` for every point `X`, so the scalars of `Fn` act on the group.
-
-- `card_point`: the group has `n` points.
-- `nsmul_order`: `n X = 0` for every point.
-- `toPoint_mul'`: `mul k P` is `k P` with `k` in `ZMod n`.
-- `exists_eq_mul_generator`: every point on the curve is `k G` for some scalar `k`.
+Such a point is `(x, 0)` with `x^3 + a x + b = 0`, and the cubic has no root.
 -/
 
 @[expose] public section
@@ -65,13 +48,15 @@ end Point
 
 /-! ## No root of `f = X^3 + a X + b`
 
-A residue mod `f` is `c0 + c1 X + c2 X^2`, written as the triple `(c0, c1, c2)`.
+A residue mod `f` is the triple `(c0, c1, c2)` of `c0 + c1 X + c2 X^2`.
 
-The product reduces `X^3` to `-a X - b` and `X^4` to `-a X^2 - b X`.
+Every `x` of `Fp` is a root of `X^p - X`.
 
-At a root `x` of `f`, evaluation at `x` respects that product. -/
+So at a root of `f`, the residue of `X^p - X` would take the value 0.
 
-/-- The product of two residues mod `f`. -/
+The kernel checks an inverse of that residue, so `f` has no root. -/
+
+/-- The product of two residues mod `f`, with `X^3 = -a X - b` and `X^4 = -a X^2 - b X`. -/
 private def residueMul (s t : Fp × Fp × Fp) : Fp × Fp × Fp :=
   let c0 := s.1 * t.1
   let c1 := s.1 * t.2.1 + s.2.1 * t.1
