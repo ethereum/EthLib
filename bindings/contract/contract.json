@@ -1812,6 +1812,16 @@
    "docstring":
    "The RLP form of a block, decoded at the fork and encoded again.\n\nEach transaction stays the item that it is, so any transaction form passes."},
   {"summary":
+   "The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris.",
+   "signature":
+   "(fork: bytes, number: bytes, timestamp: bytes, parent_timestamp: bytes, parent_difficulty: bytes, parent_ommers: bytes) -> bytes",
+   "operation": "EthLib.Execution.Blocks.blockDifficulty",
+   "method": "pow_block_difficulty",
+   "errors": [],
+   "error_class": "BlockError",
+   "docstring":
+   "The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris.\n\n```text\n    D(H) = max(D_min, P_d + ⌊P_d / 2048⌋ · factor + ε)\n```\n\n`P_d` is the parent's difficulty, and `ε` is the bomb.\n\nThe factor is the one of the time since the parent.\n\nFrom Paris on, [EIP-3675](https://eips.ethereum.org/EIPS/eip-3675#block-structure) sets it to 0.\n\nThe genesis block has no parent, and its difficulty is part of the chain's configuration."},
+  {"summary":
    "The base fee per gas of a block, from its parent's gas limit, gas used and base fee.",
    "signature":
    "(parent_gas_limit: bytes, parent_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes",

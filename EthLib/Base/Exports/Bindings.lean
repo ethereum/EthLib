@@ -310,6 +310,10 @@ def bindings : List Binding := [
   ⟨"block_reencode", `EthLib.Execution.Blocks.Exports.reencodeExport,
     "(fork: str, block: bytes) -> bytes",
     [`EthLib.Serialization.Rlp.RlpError], some "BlockError"⟩,
+  ⟨"pow_block_difficulty", `EthLib.Execution.Blocks.blockDifficulty,
+    "(fork: bytes, number: bytes, timestamp: bytes, parent_timestamp: bytes, " ++
+      "parent_difficulty: bytes, parent_ommers: bytes) -> bytes",
+    [], some "BlockError"⟩,
   ⟨"fees_base_fee_per_gas", `EthLib.Execution.Fees.Exports.baseFeePerGasExport,
     "(parent_gas_limit: bytes, parent_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes",
     [], none⟩,

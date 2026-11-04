@@ -605,6 +605,7 @@ static PyMethodDef methods[] = {
   {"reqresp_decode_response_chunk", py_reqresp_decode_response_chunk, METH_VARARGS, DOC_reqresp_decode_response_chunk},
   {"block_header_hash", py_block_header_hash, METH_VARARGS, DOC_block_header_hash},
   {"block_reencode", py_block_reencode, METH_VARARGS, DOC_block_reencode},
+  {"pow_block_difficulty", py_pow_block_difficulty, METH_VARARGS, DOC_pow_block_difficulty},
   {"fees_base_fee_per_gas", py_fees_base_fee_per_gas, METH_VARARGS, DOC_fees_base_fee_per_gas},
   {"fees_fake_exponential", py_fees_fake_exponential, METH_VARARGS, DOC_fees_fake_exponential},
   {"fees_base_fee_per_blob_gas", py_fees_base_fee_per_blob_gas, METH_VARARGS, DOC_fees_base_fee_per_blob_gas},

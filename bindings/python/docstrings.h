@@ -275,6 +275,9 @@
 #define DOC_block_reencode \
   "The RLP form of a block, decoded at the fork and encoded again."
 
+#define DOC_pow_block_difficulty \
+  "The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris."
+
 #define DOC_fees_base_fee_per_gas \
   "The base fee per gas of a block, from its parent's gas limit, gas used and base fee."
 
