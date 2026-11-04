@@ -59,4 +59,13 @@ instance : LawfulSszType VoluntaryExit := .container (by decide) (fun _ => rfl) 
 instance : LawfulSszType SignedVoluntaryExit :=
   .container (by decide) (fun _ => rfl) (fun _ => rfl)
 
+instance : LawfulSszType HistoricalSummary :=
+  .container (by decide) (fun _ => rfl) (fun _ => rfl)
+
+instance : LawfulSszType BLSToExecutionChange :=
+  .container (by decide) (fun _ => rfl) (fun _ => rfl)
+
+instance : LawfulSszType SignedBLSToExecutionChange :=
+  .container (by decide) (fun _ => rfl) (fun _ => rfl)
+
 end EthLib.Consensus

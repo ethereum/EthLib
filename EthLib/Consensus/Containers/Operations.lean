@@ -69,4 +69,34 @@ instance : SszType SignedVoluntaryExit :=
   .container ["message", "signature"] (fun s => (s.message, s.signature))
     (fun (message, signature) => ⟨message, signature⟩)
 
+/-- From Capella: a request to replace the BLS withdrawal credentials of a validator by an address.
+
+The address receives the withdrawals of the validator from then on. -/
+structure BLSToExecutionChange where
+  /-- The validator. -/
+  validatorIndex : ValidatorIndex
+  /-- The BLS key that the current credentials commit to. -/
+  fromBlsPubkey : BLSPubkey
+  /-- The address of the new credentials. -/
+  toExecutionAddress : ExecutionAddress
+  deriving DecidableEq, Repr
+
+instance : SszType BLSToExecutionChange :=
+  .container ["validator_index", "from_bls_pubkey", "to_execution_address"]
+    (fun c => (c.validatorIndex, c.fromBlsPubkey, c.toExecutionAddress))
+    (fun (validatorIndex, fromBlsPubkey, toExecutionAddress) =>
+      ⟨validatorIndex, fromBlsPubkey, toExecutionAddress⟩)
+
+/-- From Capella: a change of credentials with the signature of the BLS key it names. -/
+structure SignedBLSToExecutionChange where
+  /-- The change. -/
+  message : BLSToExecutionChange
+  /-- The signature of the change by the BLS key. -/
+  signature : BLSSignature
+  deriving DecidableEq, Repr
+
+instance : SszType SignedBLSToExecutionChange :=
+  .container ["message", "signature"] (fun s => (s.message, s.signature))
+    (fun (message, signature) => ⟨message, signature⟩)
+
 end EthLib.Consensus

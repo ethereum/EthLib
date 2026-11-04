@@ -232,4 +232,17 @@ instance : SszType Eth1Block :=
     (fun b => (b.timestamp, b.depositRoot, b.depositCount))
     (fun (timestamp, depositRoot, depositCount) => ⟨timestamp, depositRoot, depositCount⟩)
 
+/-- From Capella: the roots of the block roots and the state roots of one span of slots. -/
+structure HistoricalSummary where
+  /-- The root of the block roots of the span. -/
+  blockSummaryRoot : Root
+  /-- The root of the state roots of the span. -/
+  stateSummaryRoot : Root
+  deriving DecidableEq, Repr
+
+instance : SszType HistoricalSummary :=
+  .container ["block_summary_root", "state_summary_root"]
+    (fun s => (s.blockSummaryRoot, s.stateSummaryRoot))
+    (fun (blockSummaryRoot, stateSummaryRoot) => ⟨blockSummaryRoot, stateSummaryRoot⟩)
+
 end EthLib.Consensus
