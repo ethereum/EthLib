@@ -66,7 +66,7 @@ this library rather than to `EthLib`. -/
 lean_lib «Exports» where
   requiresModuleSystem := true
   roots := #[`EthLib.Exports, `EthLib.Cryptography.Exports, `EthLib.Networking.Exports,
-    `EthLib.Execution.Exports]
+    `EthLib.Execution.Exports, `EthLib.Consensus.Exports]
   precompileModules := true
 
 /-- Checks the compiled declarations of every library: their axioms, and any

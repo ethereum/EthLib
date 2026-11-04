@@ -220,6 +220,11 @@ initialize_EthLib_EthLib_Execution_Exports(
   uint8_t builtin
 );
 
+extern lean_object*
+initialize_EthLib_EthLib_Consensus_Exports(
+  uint8_t builtin
+);
+
 /*
  * Note on linker hygiene:
  *   `lean_initialize()` and `initialize_Lean` live in libleancpp.a's
@@ -479,6 +484,9 @@ static PyMethodDef methods[] = {
   {"enr_seq", py_enr_seq, METH_VARARGS, NULL},
   {"enr_verify_v4", py_enr_verify_v4, METH_VARARGS, NULL},
   {"enr_node_id", py_enr_node_id, METH_VARARGS, NULL},
+  {"consensus_preset", py_consensus_preset, METH_VARARGS, NULL},
+  {"consensus_config", py_consensus_config, METH_VARARGS, NULL},
+  {"consensus_parameters", py_consensus_parameters, METH_VARARGS, NULL},
   {"precompile_run", py_precompile_run, METH_VARARGS, NULL},
   {"state_root", py_state_root, METH_VARARGS, NULL},
   {NULL, NULL, 0, NULL},
@@ -507,6 +515,10 @@ PyInit__native(void) {
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
       res = initialize_EthLib_EthLib_Execution_Exports(1);
+    }
+    if (lean_io_result_is_ok(res)) {
+      lean_dec_ref(res);
+      res = initialize_EthLib_EthLib_Consensus_Exports(1);
     }
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
