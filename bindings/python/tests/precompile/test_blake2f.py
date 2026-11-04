@@ -1,7 +1,7 @@
 """The BLAKE2F precompile against the test vectors of EIP-152 and of BLAKE2.
 
 The EIP-152 vectors are those of `EIPS/eip-152.md` in `ethereum/EIPs` at commit
-d386b29b5a31bd5cfd8d21bbf4e8a0c87734085e, copied byte for byte.
+0ce679f4654ba4d120c97113626f320475e22fa9, copied byte for byte.
 """
 
 import hashlib
