@@ -10,6 +10,10 @@ A container is a Lean structure whose fields are SSZ types.
 Its fields, in declaration order, form a tuple nested to the right, such as `α × (β × γ)`.
 
 The tuple gives the field types and values, and the structure converts to and from it.
+
+A progressive container also places its fields on a layout of active positions and gaps.
+
+That layout follows [EIP-7495](https://eips.ethereum.org/EIPS/eip-7495).
 -/
 
 @[expose] public section
@@ -52,6 +56,22 @@ The two conversions must undo each other, which the proofs of the instance check
 def SszType.container {σ β : Type} [SszFields β] (names : List String) (fields : σ → β)
     (build : β → σ) : SszType σ where
   desc := .container names (SszFields.descs β)
+  toValue s := .seq (SszFields.toValues (fields s))
+  ofValue
+    | .seq values => build <$> SszFields.ofValues values
+    | _ => .error .typeMismatch
+
+/--
+The progressive container with the given layout and field names.
+
+The layout holds one bit per position: a set bit holds the next field, a clear bit is a gap.
+
+The two conversions must undo each other, which the proofs of the instance check.
+-/
+@[instance_reducible]
+def SszType.progressiveContainer {σ β : Type} [SszFields β] (active : List Bool)
+    (names : List String) (fields : σ → β) (build : β → σ) : SszType σ where
+  desc := .progressiveContainer active names (SszFields.descs β)
   toValue s := .seq (SszFields.toValues (fields s))
   ofValue
     | .seq values => build <$> SszFields.ofValues values
