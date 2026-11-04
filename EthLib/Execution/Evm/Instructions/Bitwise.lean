@@ -5,7 +5,7 @@ public import EthLib.Base.U256
 /-!
 # `Evm.Instructions.Bitwise`
 
-The bitwise instructions of the EVM, from AND to SAR.
+The bitwise instructions of the EVM, from AND to CLZ.
 
 Source: Appendix H.2 of the Yellow Paper, Shanghai version, in `Paper.tex`:
 <https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>.
@@ -13,6 +13,8 @@ Source: Appendix H.2 of the Yellow Paper, Shanghai version, in `Paper.tex`:
 AND to BYTE date from Frontier.
 
 The shifts date from Constantinople, as in [EIP-145](https://eips.ethereum.org/EIPS/eip-145).
+
+CLZ dates from Fusaka, as in [EIP-7939](https://eips.ethereum.org/EIPS/eip-7939#specification).
 
 Every later fork computes the same results.
 
@@ -65,5 +67,13 @@ def bitwiseSar (shift value : U256) : U256 :=
     0
   else
     BitVec.allOnes 256
+
+/-- The number of bits of `n` without its leading zeros, which is 0 for 0. -/
+def bitLength (n : Nat) : Nat := if n = 0 then 0 else n.log2 + 1
+
+/-- `count_leading_zeros`: the zero bits of `x` above its highest one bit, or 256 for 0.
+
+EIP-7939 defines it as 256 minus the bit length of `x`. -/
+def countLeadingZeros (x : U256) : U256 := BitVec.ofNat 256 (256 - bitLength x.toNat)
 
 end EthLib.Execution.Evm.Instructions

@@ -13,6 +13,8 @@ public import EthLib.Execution.Evm.Errors
 public import EthLib.Execution.Evm.Op
 public import EthLib.Execution.Evm.Stack
 public import EthLib.Execution.Evm.Frame
+public import EthLib.Execution.Evm.Step
+public import EthLib.Execution.Evm.StackOnly
 
 /-!
 # `EthLib.Execution.Evm`

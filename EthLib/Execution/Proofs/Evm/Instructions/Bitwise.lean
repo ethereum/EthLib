@@ -122,4 +122,41 @@ example : bitwiseSar 0x0100 0x80000000000000000000000000000000000000000000000000
 example : bitwiseSar 0x0100 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff := by decide
 example : bitwiseSar 0x0101 0x8000000000000000000000000000000000000000000000000000000000000000 = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff := by decide
 
+/-- CLZ counts the leading zeros of the word, as core `BitVec` counts them. -/
+theorem countLeadingZeros_eq_clz (x : U256) : countLeadingZeros x = x.clz := by
+  by_cases hx : x = 0#256
+  · subst hx
+    rw [BitVec.clz_eq_iff_eq_zero.mpr rfl]
+    decide
+  · have hx0 : x.toNat ≠ 0 := fun h => hx (BitVec.eq_of_toNat_eq (by simpa using h))
+    have lo := BitVec.two_pow_sub_clz_le_toNat_of_ne_zero (by decide) hx
+    have hi := BitVec.toNat_lt_two_pow_sub_clz (x := x)
+    -- A nonzero word has a one bit, so it has fewer than 256 leading zeros.
+    have hc : x.clz.toNat < 256 := by
+      apply Nat.lt_of_not_le
+      intro h
+      rw [show 256 - x.clz.toNat = 0 by omega, Nat.pow_zero] at hi
+      omega
+    -- The highest one bit is at position `255 - clz x`.
+    have log : x.toNat.log2 = 255 - x.clz.toNat := by
+      apply Nat.le_antisymm
+      · have := (Nat.log2_lt hx0).mpr hi
+        omega
+      · exact (Nat.le_log2 hx0).mpr lo
+    apply BitVec.eq_of_toNat_eq
+    simp only [countLeadingZeros, bitLength, hx0, ite_false, log, BitVec.toNat_ofNat]
+    omega
+
+/-- CLZ is 256 for zero, and `256 - (log2 x + 1)` otherwise, as EIP-7939 states. -/
+theorem toNat_countLeadingZeros (x : U256) :
+    (countLeadingZeros x).toNat = if x = 0 then 256 else 255 - x.toNat.log2 := by
+  have : x.toNat < 2 ^ 256 := x.isLt
+  by_cases hx : x = 0
+  · subst hx
+    decide
+  · have hx0 : x.toNat ≠ 0 := fun h => hx (BitVec.eq_of_toNat_eq (by simpa using h))
+    have := (Nat.log2_lt hx0).mpr this
+    simp only [countLeadingZeros, bitLength, hx0, ite_false, hx, BitVec.toNat_ofNat]
+    omega
+
 end EthLib.Execution.Evm.Instructions
