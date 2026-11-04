@@ -13,7 +13,9 @@ The parent's gas target is half its gas limit, rounded down.
 
 A parent that used more gas than its target raises the fee, and one that used less never raises it.
 
-The fee moves by one eighth of the scaled distance `base_fee * |used - target| // target`, and rises by at least 1 above the target:
+The fee moves by one eighth of the scaled distance `base_fee * |used - target| // target`.
+
+Above the target, it rises by at least 1:
 
 ```text
     target = parent_gas_limit // 2
@@ -29,21 +31,19 @@ A rise is at most `max(base_fee // 8, 1)` if the parent used at most twice its t
 
 An odd gas limit lets the parent use one more unit of gas than twice its target.
 
-The rise can then exceed `max(base_fee // 8, 1)`, and is at most `max((base_fee + base_fee // target) // 8, 1)`.
+The rise can then exceed `max(base_fee // 8, 1)`.
 
-The executable source is `calculate_base_fee_per_gas`, in [`forks/london/fork.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/london/fork.py#L226) of execution-specs at `2c0c8e7`.
+It is at most `max((base_fee + base_fee // target) // 8, 1)`.
 
-Every later fork at that commit has the same function, BPO2 included.
+Every fork after London keeps this rule and its two constants.
 
-`ELASTICITY_MULTIPLIER`, `BASE_FEE_MAX_CHANGE_DENOMINATOR` and `check_gas_limit` are the same there too.
+Two validity rules of EIP-1559 are not here.
 
-Two validity rules of execution-specs are not here.
+The gas limit of the new block must be close to the parent's, and at least 5000.
 
-`calculate_base_fee_per_gas` checks the new block's gas limit with `check_gas_limit`, before its three branches.
+A block must not use more gas than its gas limit.
 
-`validate_header` rejects a block that used more gas than its gas limit.
-
-The first London block has no parent with a base fee, and takes `INITIAL_BASE_FEE` instead.
+The first London block has no parent with a base fee, and takes an initial base fee instead.
 
 That case is not here either.
 -/
@@ -52,7 +52,7 @@ That case is not here either.
 
 namespace EthLib.Execution.Fees.BaseFee
 
-/-- `ELASTICITY_MULTIPLIER`: the gas limit of a block over its gas target.
+/-- The gas limit of a block over its gas target.
 
 [EIP-1559](https://eips.ethereum.org/EIPS/eip-1559#specification), Specification.
 
@@ -61,28 +61,31 @@ The target is the gas limit over this, rounded down.
 So an odd gas limit lets a block use `2 * target + 1`. -/
 def ELASTICITY_MULTIPLIER : Nat := 2
 
-/-- `BASE_FEE_MAX_CHANGE_DENOMINATOR`: the base fee moves by one eighth of the scaled distance.
+/-- The base fee moves by one eighth of the scaled distance.
 
 [EIP-1559](https://eips.ethereum.org/EIPS/eip-1559#specification), Specification.
 
-For a parent between empty and twice its target, a change is then at most the larger of one eighth of the fee and 1. -/
+For a parent between empty and twice its target, a change is then at most `max(fee // 8, 1)`. -/
 def BASE_FEE_MAX_CHANGE_DENOMINATOR : Nat := 8
 
-/-- `calculate_base_fee_per_gas`: the base fee per gas of a block, from its parent's gas limit, gas used and base fee.
+/-- The base fee per gas of a block, from the gas limit, gas used and base fee of its parent.
 
-[EIP-1559](https://eips.ethereum.org/EIPS/eip-1559#specification), Specification, the base fee check in `validate_block`.
+Source: the base fee check in `validate_block` of EIP-1559, at
+<https://eips.ethereum.org/EIPS/eip-1559#specification>.
 
-The `max` with 1 raises the fee by at least 1 above the target, even when one eighth of the scaled distance rounds down to 0.
+The `max` with 1 raises the fee by at least 1 above the target.
 
-In execution-specs, the function also takes the new block's gas limit, `block_gas_limit`, and only passes it to `check_gas_limit`.
+It does so even when one eighth of the scaled distance rounds down to 0.
 
-That check runs before the three branches.
+The same function of EIP-1559 also checks the gas limit of the new block first.
 
-It accepts a gas limit only if it is less than `parent_gas_limit // 1024` away from the parent's, and at least 5000.
+It accepts a gas limit only if it is less than `parent_gas_limit // 1024` away from the parent's.
 
-It accepts no gas limit when the parent's is below 4997.
+It also requires a gas limit of at least 5000.
 
-So a target of 0 never reaches the division by the target there.
+So it accepts no gas limit when the parent's is below 4997.
+
+A target of 0 then never reaches the division.
 
 Here a target of 0 and `x / 0 = 0` make a parent above it give `base_fee + 1`. -/
 def calculateBaseFeePerGas (parentGasLimit parentGasUsed parentBaseFeePerGas : Nat) : Nat :=
