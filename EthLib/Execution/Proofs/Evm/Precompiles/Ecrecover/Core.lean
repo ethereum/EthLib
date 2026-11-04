@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Evm.Precompiles.Ecrecover.Core
 public import EthLib.Cryptography.Proofs.Secp256k1.Recovery
 public import EthLib.Cryptography.Proofs.Hash.Keccak256
+public import EthLib.Cryptography.Proofs.Hash.KeccakKernel
 
 /-!
 # Proofs: `Ecrecover.Core`

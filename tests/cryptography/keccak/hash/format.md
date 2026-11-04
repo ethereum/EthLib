@@ -25,5 +25,9 @@ Keccak-256 accepts every byte string, so the suite has no invalid cases.
 
 ## Sources
 
-The 256 cases are the byte-aligned cases of `ShortMsgKAT_256.txt` in the Keccak team's `KeccakKAT-3.zip`.
+256 cases are the byte-aligned cases of `ShortMsgKAT_256.txt` in the Keccak team's `KeccakKAT-3.zip`.
+Two cases are the cases `Len = 2048` and `Len = 2552` of `LongMsgKAT_256.txt` in the same archive.
 `bindings/python/tests/keccak/kat/README.md` gives the location and the digest of that archive.
+
+The case `hash_case_abc` hashes the three ASCII bytes `abc`.
+No file of the archive holds that message, so its digest does not come from the Keccak team.

@@ -1,4 +1,4 @@
-/* Python wrapper of the Keccak-256 export. */
+/* Python wrappers of the Keccak-256 and Keccak-f[1600] exports. */
 #include "wrappers.h"
 
 /* ---- Lean externs ----------------------------------------------------- */
@@ -7,6 +7,14 @@ extern lean_object*
 eth_keccak256(
   lean_object* data
 );
+
+extern lean_object*
+eth_keccak_f1600(
+  lean_object* state
+);
+
+/* The size of a Keccak-f[1600] state: 25 lanes of 8 bytes. */
+#define KECCAK_STATE_SIZE 200
 
 /* ---- Wrappers --------------------------------------------------------- */
 
@@ -35,4 +43,19 @@ py_keccak256(
    * On a failed copy, the result is NULL with a Python error already set. */
   lean_dec(res);
   return out;
+}
+
+PyObject*
+py_keccak_f1600(
+  PyObject* self,
+  PyObject* args
+) {
+  /* Take exactly one argument: `bytes` of the state size. */
+  PyObject* state_obj;
+  if (!PyArg_ParseTuple(args, "O", &state_obj)) return NULL;
+  const uint8_t* state = parse_bytes_of_size(state_obj, KECCAK_STATE_SIZE, "state");
+  if (!state) return NULL;
+  /* The export takes ownership of the copy, and returns the permuted state. */
+  lean_object* res = eth_keccak_f1600(mk_bytearray(state, KECCAK_STATE_SIZE));
+  return run_io_into_pybytes(res, "keccak_f1600");
 }

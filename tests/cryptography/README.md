@@ -99,7 +99,9 @@ Most cases come from the NIST CAVP `SHA256ShortMsg` and `SHA256LongMsg` distribu
 
 The `keccak/` cases are pinned too.
 Every pytest run rewrites them, and `SHA256SUMS` pins the tree.
-They are the 256 byte-aligned cases of the Keccak team's `ShortMsgKAT_256.txt`, which `bindings/python/tests/keccak/kat/` vendors with its source.
+Most are the 256 byte-aligned cases of the Keccak team's `ShortMsgKAT_256.txt`, which `bindings/python/tests/keccak/kat/` vendors with its source.
+Two more come from the team's `LongMsgKAT_256.txt`, and one hashes `abc`.
+The `permutation` cases are the two examples of the team's `KeccakPermutationIntermediateValues.txt`.
 
 ## Checks
 

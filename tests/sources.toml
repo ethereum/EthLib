@@ -45,7 +45,7 @@ commit = "b758df2bcaaa95c04d31e25c94fbfb8d6de756e7"
 # The pinned vector directories whose cases come from no repository, with their source.
 [other]
 "tests/cryptography/hash_to_curve" = "RFC 9380, Appendices J.10.1, K.1 and K.2"
-"tests/cryptography/keccak" = "ShortMsgKAT_256.txt of the Keccak team"
+"tests/cryptography/keccak" = "KeccakKAT-3.zip of the Keccak team, and the digest of abc"
 "tests/cryptography/sha256" = "NIST CAVP SHA256ShortMsg and SHA256LongMsg, and FIPS 180-2"
 "tests/cryptography/sphincs" = "EthLib"
 "tests/cryptography/xmss" = "EthLib, and an independent implementation for the known answers"
