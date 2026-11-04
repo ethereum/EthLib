@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Wots
 public import EthLib.Cryptography.Xmss.Encoding
 
 /-!
@@ -60,12 +61,7 @@ def chainStep (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
 The walk ends at position `start + steps`, which the bound keeps on the chain. -/
 def chain (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
     (start steps : Nat) (h : start + steps < CHAIN_LENGTH) (value : Digest) : m Digest :=
-  match steps, h with
-  | 0, _ => pure value
-  -- The last step leaves position `start + s`, having walked `s` before it.
-  | s + 1, h => do
-    let previous ← chain pp layer e i start s (by omega) value
-    chainStep H pp layer e i ⟨start + s, by simp only [CHAIN_LENGTH] at *; omega⟩ previous
+  Wots.chain (chainStep H pp layer e i) start steps (Nat.le_sub_one_of_lt h) value
 
 /-! ## The one-time key's leaf -/
 
@@ -111,15 +107,8 @@ Returns the first trial's randomizer whose digest is a codeword, with the codewo
 def findCodeword (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : ByteArray)
     (base : Randomizer) (c fuel : Nat) :
     m (Option (Randomizer × Vector (Fin CHAIN_LENGTH) V)) :=
-  match fuel with
-  | 0 => pure none
-  | fuel + 1 => do
-    let rho := trialRandomizer base c
-    match codeword? (← messageDigest H pp layer e msg rho) with
-    -- The least admissible trial wins.
-    | some x => pure (some (rho, x))
-    -- Otherwise move on to the next trial.
-    | none => findCodeword pp layer e msg base (c + 1) fuel
+  Wots.findFirst (trialRandomizer base)
+    (fun rho => codeword? <$> messageDigest H pp layer e msg rho) c fuel
 
 end Internal
 

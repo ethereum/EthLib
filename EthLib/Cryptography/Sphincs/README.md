@@ -112,7 +112,8 @@ The proofs are in `EthLib/Cryptography/Proofs/Sphincs/`.
 - What verification checks.
   `verify` accepts exactly when the three layers, from the recovered FORS key up, lead to the key's root (`verify_iff`, `Verify.lean`).
 - Signing.
-  The counter search returns the least counter whose encoding is a codeword (`findCounter_spec`, `Ots.lean`).
+  The counter search returns the least counter whose encoding is a codeword (`findFirst_spec`).
+  leanXMSS shares that search and the hash chains, in [`Wots.lean`](../Wots.lean).
   Signing fails only when a one-time key finds no codeword (`sign_error`, `Sign.lean`).
 - FORS (`Fors.lean`).
   An honest opening recovers its tree's two level-9 nodes, in order (`treeRecover_treeOpen`).
