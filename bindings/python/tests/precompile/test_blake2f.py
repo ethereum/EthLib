@@ -1,7 +1,10 @@
 """The BLAKE2F precompile against the test vectors of EIP-152 and of BLAKE2.
 
-The EIP-152 vectors are those of `EIPS/eip-152.md` in `ethereum/EIPs` at commit
-0ce679f4654ba4d120c97113626f320475e22fa9, copied byte for byte.
+The EIP-152 vectors are copied byte for byte.
+
+File: EIPS/eip-152.md
+Repository: ethereum/EIPs
+Commit: 0ce679f4654ba4d120c97113626f320475e22fa9
 """
 
 import hashlib
@@ -149,9 +152,12 @@ def test_oracle_agrees_with_eip152() -> None:
 
 
 def test_full_block() -> None:
-    # The unkeyed BLAKE2b-512 digest of the 128 bytes 0x00 to 0x7f, in which every word of m
-    # differs. The digest is that of `testvectors/blake2-kat.json` in `BLAKE2/BLAKE2` at commit
-    # ed1974ea83433eba7b2d95c5dcd9ac33cb847913.
+    # The unkeyed BLAKE2b-512 digest of the 128 bytes 0x00 to 0x7f.
+    # Every word of m differs.
+    #
+    # File: testvectors/blake2-kat.json
+    # Repository: BLAKE2/BLAKE2
+    # Commit: ed1974ea83433eba7b2d95c5dcd9ac33cb847913
     block = bytes(range(128))
     digest = bytes.fromhex(
         "2319e3789c47e2daa5fe807f61bec2a1a6537fa03f19ff32e87eecbfd64b7e0e"

@@ -19,9 +19,13 @@ def signed(value: int) -> int:
     return value % 2**256
 
 
-# The test cases of EIP-145, "Test Cases", in `EIPS/eip-145.md` of `ethereum/EIPs`
-# at commit `0ce679f4654ba4d120c97113626f320475e22fa9`, under CC0-1.0.
+# The test cases of EIP-145, "Test Cases".
 # Each case is the opcode, the shift, the value and the result.
+#
+# File: EIPS/eip-145.md
+# Repository: ethereum/EIPs
+# Commit: 0ce679f4654ba4d120c97113626f320475e22fa9
+# Licence: CC0-1.0
 EIP_145 = [
     ("SHL", 0x0,
      0x0000000000000000000000000000000000000000000000000000000000000001,

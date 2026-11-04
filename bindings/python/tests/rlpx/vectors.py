@@ -1,8 +1,12 @@
 """The RLPx handshake test vectors of EIP-8, and a reference secp256k1."""
 
-# The keys, nonces, packets and secrets come from "Test Vectors", "RLPx Handshake", in EIP-8,
-# at commit 0ce679f4654ba4d120c97113626f320475e22fa9 of ethereum/EIPs, under CC0-1.0.
+# The keys, nonces, packets and secrets of "Test Vectors", "RLPx Handshake", in EIP-8.
 # Node A initiates the connection, and node B accepts it.
+#
+# File: EIPS/eip-8.md
+# Repository: ethereum/EIPs
+# Commit: 0ce679f4654ba4d120c97113626f320475e22fa9
+# Licence: CC0-1.0
 
 
 def _hex(text: str) -> bytes:

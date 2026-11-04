@@ -102,6 +102,7 @@ class Pins(unittest.TestCase):
 
     def test_cited_commit_that_is_not_a_pin(self):
         for text in (f"at commit `{OTHER}`", f"at commit\n# {OTHER[:9]}",
+                     f"# Commit: {OTHER}",
                      f"https://github.com/org/vectors/blob/{OTHER}/case.json"):
             with self.subTest(text=text):
                 tree = Tree()
