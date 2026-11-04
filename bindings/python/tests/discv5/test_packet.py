@@ -1,9 +1,14 @@
-"""discv5 packets against discv5-wire-test-vectors.md of ethereum/devp2p, commit
-88f1c80800d622cc3a542a2125bbe33cc18c9f9c."""
+"""discv5 packets against the test vectors of the discv5 wire protocol."""
 
 import pytest
 
 from ethlib.networking import discv5
+
+# The test vectors of the discv5 wire protocol.
+#
+# File: discv5/discv5-wire-test-vectors.md
+# Repository: ethereum/devp2p
+# Commit: 88f1c80800d622cc3a542a2125bbe33cc18c9f9c
 
 H = bytes.fromhex
 
