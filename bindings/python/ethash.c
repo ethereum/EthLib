@@ -13,9 +13,11 @@ extern lean_object* eth_ethash_dataset_size(lean_object*);
 extern lean_object* eth_ethash_seed(lean_object*);
 extern lean_object* eth_ethash_cache(lean_object*);
 extern lean_object* eth_ethash_dataset_item(lean_object*, lean_object*);
+extern lean_object* eth_ethash_hashimoto_light(
+  lean_object*, lean_object*, lean_object*, lean_object*);
 
 /* The largest number of arguments of an Ethash export. */
-#define ETHASH_MAX_ARGS 2
+#define ETHASH_MAX_ARGS 4
 
 /* ---- Helpers ---------------------------------------------------------- */
 
@@ -97,4 +99,14 @@ py_ethash_dataset_item(
   lean_object* a[ETHASH_MAX_ARGS];
   if (!parse_bytes_args(args, 2, a)) return NULL;
   return except_into_pybytes(eth_ethash_dataset_item(a[0], a[1]), ETHASH_ERROR);
+}
+
+PyObject*
+py_ethash_hashimoto_light(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[ETHASH_MAX_ARGS];
+  if (!parse_bytes_args(args, 4, a)) return NULL;
+  return except_into_pybytes(eth_ethash_hashimoto_light(a[0], a[1], a[2], a[3]), ETHASH_ERROR);
 }

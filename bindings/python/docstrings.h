@@ -134,6 +134,9 @@
 #define DOC_ethash_dataset_item \
   "The dataset item at an index, from the cache: `E_datasetitem` of the Yellow Paper, J.3.3."
 
+#define DOC_ethash_hashimoto_light \
+  "The 32-byte mix digest and the 32-byte result of the proof-of-work function, from a cache."
+
 #define DOC_keccak_f1600 \
   "Keccak-f[1600], FIPS 202 §3.4: Keccak-p[1600, 24], rounds 0 to 23 in order."
 
@@ -307,6 +310,12 @@
 
 #define DOC_pow_block_difficulty \
   "The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris."
+
+#define DOC_pow_seal_hash \
+  "The seal hash of a header: the Keccak-256 hash of the header without mix digest and nonce."
+
+#define DOC_pow_check \
+  "Check the proof of work of a header, as section 4.3.4 of the Yellow Paper asks."
 
 #define DOC_block_transactions_root \
   "The transactions root of the transactions of a block, decoded at the fork."
