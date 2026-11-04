@@ -5,6 +5,8 @@ Download the release archives of `tests/sources.toml` into a cache, and unpack p
     uv run --no-project --python 3.12 python scripts/fetch_archives.py --cache DIR NAME \
         [--path PATH ...]
 
+An archive is a tar file, compressed or not, or a zip file when its URL ends in `.zip`.
+
 The cache is the directory that `ETHLIB_ARCHIVES` names.
 Without it, the cache is `ethlib/archives` in the user's cache directory, such as `~/.cache`.
 """
@@ -18,6 +20,7 @@ import sys
 import tarfile
 import tomllib
 import urllib.request
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -75,14 +78,20 @@ def _digest(path: Path) -> str:
     return h.hexdigest()
 
 
+def _is_zip(archive: Archive) -> bool:
+    return archive.url.endswith(".zip")
+
+
 def _download(archive: Archive, cache: Path) -> Path:
-    """The file `<sha256>.tar.gz` of the cache, checked against the pin."""
-    path = cache / f"{archive.sha256}.tar.gz"
+    """The file `<sha256>.tar.gz` or `<sha256>.zip` of the cache, checked against the pin."""
+    path = cache / (archive.sha256 + (".zip" if _is_zip(archive) else ".tar.gz"))
     if path.is_file() and path.stat().st_size == archive.size and _digest(path) == archive.sha256:
         return path
     part = path.with_suffix(".part")
     h, size = hashlib.sha256(), 0
-    with urllib.request.urlopen(archive.url) as response, part.open("wb") as out:
+    # Some hosts, such as csrc.nist.gov, refuse the default user agent of urllib.
+    request = urllib.request.Request(archive.url, headers={"User-Agent": "ethlib-fetch-archives"})
+    with urllib.request.urlopen(request) as response, part.open("wb") as out:
         for chunk in iter(lambda: response.read(CHUNK), b""):
             size += len(chunk)
             if size > archive.size:
@@ -116,6 +125,32 @@ def _prefixes_of(path: PurePosixPath, prefixes: set[PurePosixPath]) -> set[PureP
     return {ancestor for ancestor in (path, *path.parents) if ancestor in prefixes}
 
 
+# The kinds of member that an archive holds.
+FILE, DIRECTORY, OTHER = "file", "directory", "other"
+
+# The type bits of a symbolic link, in the Unix mode that a zip member may carry.
+_ZIP_LINK = 0o120000
+
+
+def _entries(archive: Archive, source: Path):
+    """Each member of the archive file: its name, its kind, and a function that opens it."""
+    if _is_zip(archive):
+        with zipfile.ZipFile(source) as zipped:
+            for info in zipped.infolist():
+                if info.is_dir():
+                    kind = DIRECTORY
+                elif (info.external_attr >> 16) & 0o170000 == _ZIP_LINK:
+                    kind = OTHER
+                else:
+                    kind = FILE
+                yield info.filename, kind, lambda info=info: zipped.open(info)
+        return
+    with tarfile.open(source, "r:*") as tar:
+        for member in tar:
+            kind = FILE if member.isfile() else DIRECTORY if member.isdir() else OTHER
+            yield member.name, kind, lambda member=member: tar.extractfile(member)
+
+
 def members(archive: Archive, cache: Path) -> list[str]:
     """The paths of the archive's regular files, listed once and then kept in the cache."""
     listing = cache / f"{archive.sha256}.members.json"
@@ -123,9 +158,8 @@ def members(archive: Archive, cache: Path) -> list[str]:
         if listing.is_file():
             return json.loads(listing.read_text())
         source = _download(archive, cache)
-        with tarfile.open(source, "r:*") as tar:
-            paths = (_member_path(member.name) for member in tar if member.isfile())
-            names = sorted(path.as_posix() for path in paths if path is not None)
+        paths = (_member_path(name) for name, kind, _ in _entries(archive, source) if kind == FILE)
+        names = sorted(path.as_posix() for path in paths if path is not None)
         listing.write_text(json.dumps(names))
     return names
 
@@ -149,26 +183,24 @@ def unpack(archive: Archive, cache: Path, paths: list[str]) -> Path:
             return target
         source = _download(archive, cache)
         matched = set()
-        with tarfile.open(source, "r:*") as tar:
-            for member in tar:
-                path = _member_path(member.name)
-                if path is None:
-                    if _prefixes_of(PurePosixPath(member.name), missing):
-                        raise ArchiveError(f"{archive.name}: unsafe member {member.name}")
-                    continue
-                holders = _prefixes_of(path, missing)
-                if not holders:
-                    continue
-                matched |= holders
-                if member.isdir():
-                    (target / path).mkdir(parents=True, exist_ok=True)
-                elif member.isfile():
-                    (target / path).parent.mkdir(parents=True, exist_ok=True)
-                    with tar.extractfile(member) as data, (target / path).open("wb") as out:
-                        shutil.copyfileobj(data, out, CHUNK)
-                else:
-                    raise ArchiveError(f"{archive.name}: {member.name} is not a file or a "
-                                       f"directory")
+        for name, kind, open_member in _entries(archive, source):
+            path = _member_path(name)
+            if path is None:
+                if _prefixes_of(PurePosixPath(name), missing):
+                    raise ArchiveError(f"{archive.name}: unsafe member {name}")
+                continue
+            holders = _prefixes_of(path, missing)
+            if not holders:
+                continue
+            matched |= holders
+            if kind == DIRECTORY:
+                (target / path).mkdir(parents=True, exist_ok=True)
+            elif kind == FILE:
+                (target / path).parent.mkdir(parents=True, exist_ok=True)
+                with open_member() as data, (target / path).open("wb") as out:
+                    shutil.copyfileobj(data, out, CHUNK)
+            else:
+                raise ArchiveError(f"{archive.name}: {name} is not a file or a directory")
         if unmatched := sorted(p.as_posix() for p in missing - matched):
             raise ArchiveError(f"{archive.name}: no member under {', '.join(unmatched)}")
         target.mkdir(parents=True, exist_ok=True)

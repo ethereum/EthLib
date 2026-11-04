@@ -171,6 +171,14 @@ class Archives(unittest.TestCase):
         self.assertEqual(tree.problems(),
                          ["tests/sources.toml: no test names the archive vectors/v1/all"])
 
+    def test_archive_from_no_repository(self):
+        archive = ARCHIVE.replace('repository = "org/vectors"', 'source = "NIST CAVP"')
+        self.assertEqual(self.tree(archive).problems(), [])
+        archive = ARCHIVE.replace('repository = "org/vectors"', 'source = ""')
+        problems = self.tree(archive).problems()
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("needs a recorded repository", problems[0])
+
     def test_malformed_archive(self):
         for old, new, text in (('"org/vectors"', '"org/other"', "a recorded repository"),
                                ("https://", "http://", "an https URL"),

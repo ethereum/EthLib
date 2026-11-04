@@ -9,6 +9,9 @@ from ethlib.errors import AesError
 
 CAVP = Path(__file__).resolve().parent / "cavp"
 
+# The archive that holds the whole files; the weekly job reads it.
+ARCHIVE = "nist-cavp/gcmtestvectors"
+
 # The encryption and decryption files for the two key sizes that EthLib implements.
 ENCRYPT = ["gcmEncryptExtIV128.rsp", "gcmEncryptExtIV256.rsp"]
 DECRYPT = ["gcmDecrypt128.rsp", "gcmDecrypt256.rsp"]
@@ -16,18 +19,48 @@ DECRYPT = ["gcmDecrypt128.rsp", "gcmDecrypt256.rsp"]
 # EthLib accepts tags of 96 to 128 bits, the lengths of SP 800-38D §5.2.1.2 without Appendix C.
 # The files also hold 32-bit and 64-bit tags, which EthLib rejects with its `shortTag` error.
 SHORT_TAGS = (32, 64)
+TAGS = {32, 64, 96, 104, 112, 120, 128}
+
+SECTION = ("Keylen", "IVlen", "PTlen", "AADlen", "Taglen")
+
+# The sections that the vendored excerpt of each file keeps, with every tag length.
+# Each IV length of the files is there, with a text and data that end in a partial block.
+EXCERPT = {"IVlen": {8, 96, 1024}, "PTlen": {104}, "AADlen": {160}}
 
 
-def _cases(name: str) -> list[dict]:
-    """Each case of one file, with the parameters of its section in bits."""
-    cases, section, case = [], {}, None
-    for line in (CAVP / name).read_text().splitlines():
+def _sections(text: str) -> tuple[str, list[tuple[dict, str]]]:
+    """The header of a file, and each section with its parameters and its text."""
+    lines = text.splitlines(keepends=True)
+    starts = [i for i, line in enumerate(lines) if line.startswith("[Keylen")]
+    header = "".join(lines[:starts[0]])
+    sections = []
+    for start, end in zip(starts, starts[1:] + [len(lines)]):
+        body = "".join(lines[start:end])
+        params = {}
+        for line in lines[start:end]:
+            line = line.strip()
+            if line.startswith("[") and " = " in line:
+                key, value = line[1:-1].split(" = ")
+                params[key] = int(value)
+        sections.append((params, body))
+    return header, sections
+
+
+def excerpt(text: str) -> str:
+    """The header of a file, and its sections that `EXCERPT` selects, unchanged."""
+    header, sections = _sections(text)
+    kept = [body for params, body in sections
+            if all(params[key] in values for key, values in EXCERPT.items())]
+    return header + "".join(kept)
+
+
+def _cases(params: dict, body: str) -> list[dict]:
+    """Each case of a section, with the parameters of the section in bits."""
+    cases, case = [], None
+    for line in body.splitlines():
         line = line.strip()
-        if line.startswith("[") and " = " in line:
-            key, value = line[1:-1].split(" = ")
-            section[key] = int(value)
-        elif line.startswith("Count = "):
-            case = dict(section, Count=int(line.split(" = ")[1]))
+        if line.startswith("Count = "):
+            case = dict(params, Count=int(line.split(" = ")[1]))
             cases.append(case)
         elif line == "FAIL":
             case["FAIL"] = True
@@ -39,48 +72,75 @@ def _cases(name: str) -> list[dict]:
     return cases
 
 
-SECTION = ("Keylen", "IVlen", "PTlen", "AADlen", "Taglen")
+def _excerpt_name(name: str) -> str:
+    return name.replace(".rsp", ".excerpt.rsp")
 
 
-def _sections(names: list[str]) -> list:
-    """The cases of each file, one test per section of 15 cases, to keep the run short."""
+def _params(names: list[str]) -> list:
+    """One test per section of each vendored excerpt."""
     params = []
     for name in names:
-        groups: dict[tuple, list] = {}
-        for case in _cases(name):
-            groups.setdefault(tuple(case.get(k) for k in SECTION), []).append(case)
-        params += [pytest.param(group, id=f"{name[:-4]}-" + "-".join(map(str, key)))
-                   for key, group in groups.items()]
+        _, sections = _sections((CAVP / _excerpt_name(name)).read_text())
+        for section in sections:
+            label = "-".join(str(section[0][key]) for key in SECTION)
+            params.append(pytest.param(name, section, id=f"{name[:-4]}-{label}"))
     return params
 
 
-ENCRYPT_SECTIONS = _sections(ENCRYPT)
-DECRYPT_SECTIONS = _sections(DECRYPT)
+ENCRYPT_SECTIONS = _params(ENCRYPT)
+DECRYPT_SECTIONS = _params(DECRYPT)
 
 
-def test_case_count() -> None:
-    # Each file has 7875 cases: 525 sections of 15, every pairing of the IV, text, data and tag
-    # lengths of the file.
+def test_excerpt_covers_every_tag_length() -> None:
     for sections in (ENCRYPT_SECTIONS, DECRYPT_SECTIONS):
-        assert len(sections) == 2 * 525
-        assert all(len(p.values[0]) == 15 for p in sections)
-        for case in (c for p in sections for c in p.values[0]):
-            assert len(case["Key"]) * 8 == case["Keylen"]
-            assert len(case["IV"]) * 8 == case["IVlen"]
-            assert len(case["Tag"]) * 8 == case["Taglen"]
-            assert len(case["AAD"]) * 8 == case["AADlen"]
+        # 3 IV lengths and 7 tag lengths for each of the 2 files, 15 cases a section.
+        assert len(sections) == 2 * 3 * 7
+        assert {p.values[1][0]["Taglen"] for p in sections} == TAGS
+        for p in sections:
+            cases = _cases(*p.values[1])
+            assert len(cases) == 15
+            for case in cases:
+                assert len(case["Key"]) * 8 == case["Keylen"]
+                assert len(case["IV"]) * 8 == case["IVlen"]
+                assert len(case["Tag"]) * 8 == case["Taglen"]
+                assert len(case["AAD"]) * 8 == case["AADlen"]
+    # The decryption excerpts hold tags that do not authenticate their input.
+    assert any(c.get("FAIL") for p in DECRYPT_SECTIONS for c in _cases(*p.values[1]))
 
 
-@pytest.mark.parametrize("section", ENCRYPT_SECTIONS)
-def test_encrypt(section: list) -> None:
-    for case in section:
+@pytest.mark.parametrize("name, section", ENCRYPT_SECTIONS)
+def test_encrypt(name: str, section: tuple) -> None:
+    for case in _cases(*section):
         _encrypt(case)
 
 
-@pytest.mark.parametrize("section", DECRYPT_SECTIONS)
-def test_decrypt(section: list) -> None:
-    for case in section:
+@pytest.mark.parametrize("name, section", DECRYPT_SECTIONS)
+def test_decrypt(name: str, section: tuple) -> None:
+    for case in _cases(*section):
         _decrypt(case)
+
+
+@pytest.mark.archive(ARCHIVE, *ENCRYPT, *DECRYPT)
+@pytest.mark.parametrize("name", ENCRYPT + DECRYPT)
+def test_excerpt_of_the_archive(archive: Path, name: str) -> None:
+    # Each vendored excerpt is the selected sections of the NIST file, byte for byte.
+    text = (archive / name).read_bytes().decode()
+    assert excerpt(text).encode() == (CAVP / _excerpt_name(name)).read_bytes()
+
+
+@pytest.mark.archive(ARCHIVE, *ENCRYPT, *DECRYPT)
+@pytest.mark.parametrize("name", ENCRYPT + DECRYPT)
+def test_whole_file(archive: Path, name: str) -> None:
+    # Each file has 7875 cases: 525 sections of 15, every pairing of the IV, text, data and tag
+    # lengths of the file.
+    _, sections = _sections((archive / name).read_text())
+    assert len(sections) == 525
+    check = _encrypt if name in ENCRYPT else _decrypt
+    for params, body in sections:
+        cases = _cases(params, body)
+        assert len(cases) == 15
+        for case in cases:
+            check(case)
 
 
 def _encrypt(case: dict) -> None:

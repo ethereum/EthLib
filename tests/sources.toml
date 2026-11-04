@@ -97,7 +97,7 @@ commit = "7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70"
 release = "v0.1.0"
 directories = ["tests/serialization/ssz"]
 
-# The release archives, each from a repository above.
+# The release archives, each from a repository above or from the source it names.
 [archives."consensus-specs/v1.7.0-alpha.12/general"]
 repository = "ethereum/consensus-specs"
 url = "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-alpha.12/general.tar.gz"
@@ -127,6 +127,12 @@ repository = "ethereum/execution-specs"
 url = "https://github.com/ethereum/execution-specs/releases/download/tests%40v21.0.2/fixtures.tar.gz"
 size = 939189561
 sha256 = "e2fa7ea2ea516459f9ab92284b2927892f318f4e1f78ca802cb05a6c3b479ed9"
+
+[archives."nist-cavp/gcmtestvectors"]
+source = "NIST CAVP"
+url = "https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/mac/gcmtestvectors.zip"
+size = 9154174
+sha256 = "f9fc479e134cde2980b3bb7cddbcb567b2cd96fd753835243ed067699f26a023"
 
 # The pinned vector directories whose cases come from no repository, with their source.
 [other]
