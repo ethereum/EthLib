@@ -150,6 +150,9 @@ Then the check of the pairs `(P_i, Q_i)` passes exactly when `sum_i a_i * b_i = 
 The law holds when the check tests `prod_i e(P_i, Q_i) = 1` for any bilinear map `e` with `e(g_1, g_2) != 1` into a group of order `r`.
 `pairingCheck_congr` (`Proofs/Bls/PairingCongr.lean`) proves that the check depends only on the group elements of valid points, so the law can quantify over representatives.
 
+The kernel computes the pairing of the two generators and finds the value that [draft-irtf-cfrg-pairing-friendly-curves-11](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-11) publishes in Appendix B (`pairing_generators`, `Proofs/Bls/PairingKnownAnswer.lean`).
+This known answer supports the pairing law but does not prove it.
+
 `keyValidatePoint_eq_ok_iff` (`Proofs/Bls/KeyValidate.lean`) proves that key validation accepts exactly the encodings of the nonzero points of order `r` in G1.
 The G1 and G2 subgroup checks accept exactly the valid points that represent a multiple of the generator.
 Every output of the map to G2 is a valid point of that subgroup (`Proofs/Bls/MapToCurve.lean`).
