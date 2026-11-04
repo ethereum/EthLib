@@ -374,11 +374,19 @@ They take two hypotheses on the setup.
 - `setup.Valid`: every point of the setup is on its curve.
   For the embedded setup, `TrustedSetup.ofHex_valid` proves it if the setup decodes.
 - `hsetup_tor`: the first 4032 monomial points of `G1` have an order that divides `r`.
-  No theorem proves it for the embedded setup, so it stays an assumption on that setup.
-  The Python suite checks it (`bindings/python/tests/kzg/test_trusted_setup.py`).
-  It decodes each point of the embedded setup, in `G1` and `G2`, and checks that it is in the subgroup.
+  For the embedded setup, `TrustedSetup.ofHex_torsion` (`Proofs/Kzg/SetupTorsion/Embedded.lean`) proves it for all 4096 monomial points of `G1`, if the setup decodes.
+  The kernel checks each point from its `x` coordinate.
+  This is a recorded exception to the rule of a few seconds for concrete facts in [CONTRIBUTING.md](CONTRIBUTING.md#known-answers).
+  It costs 15 to 20 CPU-minutes per build and about as much per replay, in 16 modules.
+  Each module takes about one minute, 2.4 GB to build and 2.9 GB to replay.
+  No theorem proves that the embedded setup decodes, so that stays an assumption.
+  The Python suite gives two checks of it, both on compiled code.
+  Each KZG vector runs an operation that first decodes the embedded setup.
+  `bindings/python/tests/kzg/test_trusted_setup.py` decodes each point of the setup, in `G1` and `G2`, and checks that it is in the subgroup.
 
 `TrustedSetup.WellFormed.valid` and `TrustedSetup.WellFormed.torsion` derive both from a well-formed setup.
+`computeCellsAndKzgProofs_blob_spec_ofHex` and `recoverCellsAndKzgProofs_spec_ofHex` state the two theorems for the embedded setup, with neither hypothesis.
+Of the setup, they assume only that it decodes.
 
 For a well-formed setup, `blobToKzgCommitment_represents` (`Proofs/Kzg/Commitment.lean`) proves that a blob's commitment holds its polynomial at the secret.
 Under the pairing law and for a well-formed setup, honest KZG proofs and blob proofs verify (`verifyKzgProof_computeKzgProof`, `verifyBlobKzgProof_computeBlobKzgProof`, `Proofs/Kzg/Verify.lean`).
@@ -894,8 +902,10 @@ The setup raises three separate assumptions, and each use of KZG relies on a dif
 - Algebraic consistency: the bytes decode to valid points, the monomial points are powers of one secret, and the Lagrange points are the matching basis.
   For the embedded bytes, only the first part is proved, and only in part.
   `TrustedSetup.ofHex_valid` (`Proofs/Kzg/TrustedSetup.lean`) proves that, if they decode, each point is on its curve.
-  No theorem says that they decode, or that the points lie in the subgroup.
-  The Python suite checks both for every point (`bindings/python/tests/kzg/test_trusted_setup.py`).
+  No theorem says that they decode.
+  If they decode, `TrustedSetup.ofHex_torsion` proves that each monomial point of `G1` has an order that divides `r`.
+  No theorem says this of the Lagrange points or of the points of `G2`.
+  The Python suite checks for every point that it decodes and lies in the subgroup (`bindings/python/tests/kzg/test_trusted_setup.py`).
   `checksSufficient` covers the ceremony's monomial points, under its hypotheses.
   `TrustedSetup.WellFormed s τ` (`Proofs/Kzg/Commitment.lean`) states the consistency of a setup `s` with a secret `τ`.
   The theorems on commitments and on honest proofs take it as a hypothesis.
