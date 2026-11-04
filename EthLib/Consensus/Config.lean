@@ -10,11 +10,13 @@ public import EthLib.Networking.Gossip.Parameters
 
 A configuration fixes the values of one network, such as its genesis and the epochs of its forks.
 
-It holds each value under the name of its source, from Phase 0 to Gloas.
+It holds each value under the name of its source, from Phase 0 to Heze.
 
 The values of Gloas come from EIP-7732, EIP-8061 and EIP-8261, in Last Call on 2026-11-03.
 
 They can change until the EIPs are final.
+
+The values of Heze come from EIP-7805, a Draft on 2026-11-03.
 
 The parameters of the attestation subnets come from the networking layer, which reads them too.
 
@@ -43,7 +45,7 @@ structure GasLimitScheduleEntry where
   GAS_LIMIT : UInt64
   deriving DecidableEq, Repr
 
-/-- The values of a configuration, from Phase 0 to Gloas. -/
+/-- The values of a configuration, from Phase 0 to Heze. -/
 structure Config extends Networking.Gossip.SubnetParameters where
   /-- The name of the preset that the configuration uses. -/
   PRESET_BASE : String
@@ -91,6 +93,10 @@ structure Config extends Networking.Gossip.SubnetParameters where
   GLOAS_FORK_VERSION : Version
   /-- The first epoch of Gloas. -/
   GLOAS_FORK_EPOCH : Epoch
+  /-- The version of Heze. -/
+  HEZE_FORK_VERSION : Version
+  /-- The first epoch of Heze. -/
+  HEZE_FORK_EPOCH : Epoch
   /-- The length of a slot, in milliseconds. -/
   SLOT_DURATION_MS : UInt64
   /-- The expected time between two blocks of the deposit chain, in seconds. -/
@@ -129,6 +135,12 @@ structure Config extends Networking.Gossip.SubnetParameters where
   PAYLOAD_DUE_BPS : UInt64
   /-- From Gloas: the part of a slot, in basis points, at which a payload attestation is due. -/
   PAYLOAD_ATTESTATION_DUE_BPS : UInt64
+  /-- From Heze: the part of a slot, in basis points, after which no new inclusion list is stored.
+
+  [EIP-7805](https://eips.ethereum.org/EIPS/eip-7805#validators) puts this deadline at 9 s.
+
+  That is 7500 of a 12-second slot, but both configurations below give 6667, that is 8 s. -/
+  INCLUSION_LIST_DUE_BPS : UInt64
   /-- From Altair: the inactivity score that a validator gains in each epoch that it misses. -/
   INACTIVITY_SCORE_BIAS : UInt64
   /-- From Altair: the most inactivity score that a validator loses in an epoch without a leak. -/
@@ -203,6 +215,16 @@ structure Config extends Networking.Gossip.SubnetParameters where
   MIN_EPOCHS_FOR_DATA_COLUMN_SIDECARS_REQUESTS : Epoch
   /-- From Gloas: the most execution payload envelopes in one request. -/
   MAX_REQUEST_PAYLOADS : UInt64
+  /-- From Heze: the most inclusion lists in one request. -/
+  MAX_REQUEST_INCLUSION_LIST : UInt64
+  /-- From Heze: the fewest recent slots whose inclusion lists a node serves. -/
+  MIN_SLOTS_FOR_INCLUSION_LISTS_REQUESTS : Slot
+  /-- From Heze: the most bytes of the transactions of one inclusion list.
+
+  [EIP-7805] names it `MAX_BYTES_PER_INCLUSION_LIST`.
+
+  [EIP-7805]: https://eips.ethereum.org/EIPS/eip-7805#il-building -/
+  MAX_TRANSACTIONS_BYTES_PER_INCLUSION_LIST : UInt64
   /-- From Fulu: the limits of blobs from given epochs, as EIP-7892 allows. -/
   BLOB_SCHEDULE : List BlobScheduleEntry
   /-- From Gloas: the gas limits that the schedule recommends from given epochs.
@@ -242,6 +264,8 @@ def mainnet : Config where
   FULU_FORK_EPOCH := 411392
   GLOAS_FORK_VERSION := #v[0x07, 0x00, 0x00, 0x00]
   GLOAS_FORK_EPOCH := FAR_FUTURE_EPOCH
+  HEZE_FORK_VERSION := #v[0x08, 0x00, 0x00, 0x00]
+  HEZE_FORK_EPOCH := FAR_FUTURE_EPOCH
   SLOT_DURATION_MS := 12000
   SECONDS_PER_ETH1_BLOCK := 14
   MIN_VALIDATOR_WITHDRAWABILITY_DELAY := 2 ^ 8
@@ -259,6 +283,7 @@ def mainnet : Config where
   CONTRIBUTION_DUE_BPS_GLOAS := 5000
   PAYLOAD_DUE_BPS := 5000
   PAYLOAD_ATTESTATION_DUE_BPS := 7500
+  INCLUSION_LIST_DUE_BPS := 6667
   INACTIVITY_SCORE_BIAS := 2 ^ 2
   INACTIVITY_SCORE_RECOVERY_RATE := 2 ^ 4
   EJECTION_BALANCE := 2 ^ 4 * 10 ^ 9
@@ -299,6 +324,9 @@ def mainnet : Config where
   BALANCE_PER_ADDITIONAL_CUSTODY_GROUP := 32 * 10 ^ 9
   MIN_EPOCHS_FOR_DATA_COLUMN_SIDECARS_REQUESTS := 2 ^ 12
   MAX_REQUEST_PAYLOADS := 2 ^ 7
+  MAX_REQUEST_INCLUSION_LIST := 2 ^ 4
+  MIN_SLOTS_FOR_INCLUSION_LISTS_REQUESTS := 1
+  MAX_TRANSACTIONS_BYTES_PER_INCLUSION_LIST := 2 ^ 13
   BLOB_SCHEDULE := [⟨412672, 15⟩, ⟨419072, 21⟩]
   GAS_LIMIT_SCHEDULE := []
   CONFIRMATION_BYZANTINE_THRESHOLD := 25
@@ -327,6 +355,7 @@ def minimal : Config :=
     FULU_FORK_VERSION := #v[0x06, 0x00, 0x00, 0x01]
     FULU_FORK_EPOCH := FAR_FUTURE_EPOCH
     GLOAS_FORK_VERSION := #v[0x07, 0x00, 0x00, 0x01]
+    HEZE_FORK_VERSION := #v[0x08, 0x00, 0x00, 0x01]
     SLOT_DURATION_MS := 6000
     MIN_BUILDER_WITHDRAWABILITY_DELAY := 2
     SHARD_COMMITTEE_PERIOD := 64

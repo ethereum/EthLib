@@ -70,13 +70,11 @@ def configOf : String → Result Config
   | "minimal" => return .minimal
   | name => throw (0, s!"no configuration is named {name}")
 
-/-- The fork of a name, for the forks from Phase 0 to Glamsterdam, whose beacon chain is Gloas.
+/-- The fork of a name, for the forks from Phase 0 to Hegotá, whose beacon chain is Heze.
 
-The configuration has no epoch for BPO3 to BPO5, and Heze is not yet specified.
-
-So BPO3 to BPO5 and Hegotá fail. -/
+The configuration has no epoch for BPO3 to BPO5, so they fail. -/
 def forkOf (name : ByteArray) : Result Fork := do
-  let fork ← forkUpTo .glamsterdam name
+  let fork ← forkUpTo .hegota name
   if .bpo3 ≤ fork ∧ fork ≤ .bpo5 then throw (0, s!"fork {fork.name} not yet specified")
   if .phase0 ≤ fork then return fork
   else throw (0, s!"{fork.name} is not a fork of the beacon chain")

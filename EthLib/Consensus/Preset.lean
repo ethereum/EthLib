@@ -15,6 +15,8 @@ The parameters at a fork take, for each such value, the field in force at that f
 The values of Gloas come from EIP-7732 and EIP-8282, in Last Call on 2026-11-03, and EIP-7688.
 
 EIP-7688 was in Review then, and it asks for the three message size bounds without fixing them.
+
+The values of Heze come from EIP-7805, a Draft then, and the same request of EIP-7688.
 -/
 
 @[expose] public section
@@ -23,7 +25,7 @@ namespace EthLib.Consensus
 
 open Base
 
-/-- The values of a preset, from Phase 0 to Gloas. -/
+/-- The values of a preset, from Phase 0 to Heze. -/
 structure Preset where
   /-- The most committees in one slot. -/
   MAX_COMMITTEES_PER_SLOT : UInt64
@@ -193,6 +195,14 @@ structure Preset where
   MAX_ATTESTER_SLASHING_SIZE : UInt64
   /-- From Gloas: the most bytes of a signed execution payload bid, before compression. -/
   MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE : UInt64
+  /-- From Heze: the number of members of the inclusion list committee of a slot.
+
+  [EIP-7805](https://eips.ethereum.org/EIPS/eip-7805#preset) names it `IL_COMMITTEE_SIZE`. -/
+  INCLUSION_LIST_COMMITTEE_SIZE : UInt64
+  /-- From Heze: the most bytes of a signed execution payload bid, which carries inclusion bits. -/
+  MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE_HEZE : UInt64
+  /-- From Heze: the most bytes of a signed inclusion list, before compression. -/
+  MAX_SIGNED_INCLUSION_LIST_SIZE : UInt64
   deriving DecidableEq, Repr
 
 namespace Preset
@@ -291,6 +301,9 @@ def mainnet : Preset where
   MAX_SIGNED_AGGREGATE_AND_PROOF_SIZE := 16829
   MAX_ATTESTER_SLASHING_SIZE := 2097616
   MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE := 196932
+  INCLUSION_LIST_COMMITTEE_SIZE := 2 ^ 4
+  MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE_HEZE := 196934
+  MAX_SIGNED_INCLUSION_LIST_SIZE := 41112
 
 /-- The minimal preset, which shrinks the mainnet preset for tests. -/
 def minimal : Preset :=
@@ -334,6 +347,10 @@ structure Parameters where
   MAX_ATTESTER_SLASHINGS : UInt64
   /-- The most attestations in one block. -/
   MAX_ATTESTATIONS : UInt64
+  /-- From Gloas: the most bytes of a signed execution payload bid, before compression.
+
+  Before Gloas no block has a bid, and the value is that of Gloas. -/
+  MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE : UInt64
   deriving DecidableEq, Repr
 
 /-- The parameters of a preset at a fork.
@@ -346,7 +363,9 @@ Electra also lowers the most attestations and attester slashings in one block.
 
 An attestation can then cover every committee of a slot, so it grows.
 
-[EIP-7549](https://eips.ethereum.org/EIPS/eip-7549#rationale) gives these limits. -/
+[EIP-7549](https://eips.ethereum.org/EIPS/eip-7549#rationale) gives these limits.
+
+Heze adds the inclusion bits of EIP-7805 to the bid, so its signed form grows by two bytes. -/
 def parameters (preset : Preset) (fork : Fork) : Parameters where
   INACTIVITY_PENALTY_QUOTIENT :=
     if fork ≥ .bellatrix then preset.INACTIVITY_PENALTY_QUOTIENT_BELLATRIX
@@ -369,5 +388,8 @@ def parameters (preset : Preset) (fork : Fork) : Parameters where
     else preset.MAX_ATTESTER_SLASHINGS
   MAX_ATTESTATIONS :=
     if fork ≥ .pectra then preset.MAX_ATTESTATIONS_ELECTRA else preset.MAX_ATTESTATIONS
+  MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE :=
+    if fork ≥ .hegota then preset.MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE_HEZE
+    else preset.MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE
 
 end EthLib.Consensus

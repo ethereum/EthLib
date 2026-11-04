@@ -21,7 +21,7 @@ The export decodes the bytes, then returns the root of the value and its bytes e
 
 A name with no container at the fork comes back as code 0, since no error type covers it.
 
-The containers of Gloas are not yet specified, so Glamsterdam fails with code 0 too.
+The containers of Gloas and Heze are not yet specified, so Glamsterdam and Hegotá fail too.
 -/
 
 public section

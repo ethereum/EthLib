@@ -76,6 +76,9 @@ AT_GLAMSTERDAM = {
     "consensus_parameters", "check_header", "state_rewards_root", "validate_ommers",
 }
 
+# The exports whose rules hold at Hegotá: the preset parameters of Heze.
+AT_HEGOTA = {"consensus_parameters"}
+
 
 def _rejects(export: str, fork: str) -> None:
     with pytest.raises(EthLibError, match=f"^fork {fork} not yet specified$") as error:
@@ -83,9 +86,18 @@ def _rejects(export: str, fork: str) -> None:
     assert error.value.code == 0
 
 
-@pytest.mark.parametrize("export", sorted(EXPORTS))
+@pytest.mark.parametrize("export", sorted(set(EXPORTS) - AT_HEGOTA))
 def test_hegota_is_not_yet_specified(export: str) -> None:
     _rejects(export, "hegota")
+
+
+@pytest.mark.parametrize("export", sorted(AT_HEGOTA))
+def test_hegota_passes_the_fork_check(export: str) -> None:
+    # The export reads the fork, then may reject the input for another reason.
+    try:
+        EXPORTS[export]("hegota")
+    except EthLibError as error:
+        assert "not yet specified" not in error.message
 
 
 @pytest.mark.parametrize("export", sorted(set(EXPORTS) - AT_GLAMSTERDAM))

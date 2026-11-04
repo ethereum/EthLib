@@ -29,7 +29,8 @@ namespace Config
 
 It is the latest consensus fork whose first epoch is at or before the epoch. -/
 def forkAtEpoch (config : Config) (epoch : Epoch) : Fork :=
-  if config.GLOAS_FORK_EPOCH ≤ epoch then .glamsterdam
+  if config.HEZE_FORK_EPOCH ≤ epoch then .hegota
+  else if config.GLOAS_FORK_EPOCH ≤ epoch then .glamsterdam
   else if config.FULU_FORK_EPOCH ≤ epoch then .fusaka
   else if config.ELECTRA_FORK_EPOCH ≤ epoch then .pectra
   else if config.DENEB_FORK_EPOCH ≤ epoch then .dencun
@@ -42,11 +43,10 @@ def forkAtEpoch (config : Config) (epoch : Epoch) : Fork :=
 
 A fork that changes only the execution layer, or only the blob schedule, keeps that version.
 
-The configuration lists the forks up to Gloas.
-
-So Hegotá gets the version of Gloas until Heze is specified. -/
+The configuration lists the forks up to Heze, the last fork on the timeline. -/
 def forkVersion (config : Config) (fork : Fork) : Version :=
-  if .glamsterdam ≤ fork then config.GLOAS_FORK_VERSION
+  if .hegota ≤ fork then config.HEZE_FORK_VERSION
+  else if .glamsterdam ≤ fork then config.GLOAS_FORK_VERSION
   else if .fusaka ≤ fork then config.FULU_FORK_VERSION
   else if .pectra ≤ fork then config.ELECTRA_FORK_VERSION
   else if .dencun ≤ fork then config.DENEB_FORK_VERSION

@@ -164,9 +164,15 @@ inductive Fork where
 
   [EIP-8081](https://eips.ethereum.org/EIPS/eip-8081) lists its EIPs.
 
-  They include EIP-7805 and EIP-8141.
+  It schedules EIP-7805 and EIP-8141.
 
-  EthLib does not hold its rules yet, so every export rejects it as not yet specified. -/
+  Heze also holds EIP-8015 and EIP-8365, which EIP-8081 only considers or proposes.
+
+  On 2026-11-03 all of these EIPs are Drafts, and so is EIP-8081.
+
+  EthLib holds only some of its rules.
+
+  An export whose rules at this fork are missing rejects it as not yet specified. -/
   | hegota
   deriving DecidableEq, Ord, Repr
 
