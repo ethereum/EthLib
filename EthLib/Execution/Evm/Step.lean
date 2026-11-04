@@ -46,6 +46,13 @@ def chargeGasAndMemory (evm : Evm Meter) (cost : Nat) (ranges : List (U256 × U2
   let evm ← chargeGas evm (cost + growth.cost)
   return { evm with memory := memoryExtend evm.memory growth.expandBy }
 
+/-- An instruction that pays `cost`, then pushes a word that it reads from the frame. -/
+def readFrame (cost : Nat) (value : Evm Meter → U256) (evm : Evm Meter) :
+    Except EvmError (Evm Meter) := do
+  let evm ← chargeGas evm cost
+  let evm ← pushWord evm (value evm)
+  return advance evm
+
 /-- An instruction that pops `x`, pays `cost` and pushes `f x`. -/
 def unaryOp (cost : Nat) (f : U256 → U256) (evm : Evm Meter) : Except EvmError (Evm Meter) := do
   let (x, evm) ← popWord evm

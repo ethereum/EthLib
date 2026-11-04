@@ -15,6 +15,7 @@ public import EthLib.Execution.Evm.Stack
 public import EthLib.Execution.Evm.Frame
 public import EthLib.Execution.Evm.Step
 public import EthLib.Execution.Evm.StackOnly
+public import EthLib.Execution.Evm.MemoryData
 
 /-!
 # `EthLib.Execution.Evm`
