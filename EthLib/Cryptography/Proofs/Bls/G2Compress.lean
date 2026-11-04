@@ -78,11 +78,6 @@ theorem projectiveEq_inf_iff {p q : G2} (hp : p.isInfinity = true) :
 
 /-! ## Compression and decompression -/
 
-/-- An `Fp2` element encodes as `c1` then `c0`, `48 + 48 = 96` bytes (Section C.1). -/
-@[simp] theorem size_fp2ToBytes (x : Fp2) : (G2.fp2ToBytes x).size = 96 := by
-  unfold G2.fp2ToBytes
-  rw [ByteArray.size_append, Fp.size_toBytesBE, Fp.size_toBytesBE]
-
 private theorem ba_get!_append_left {a b : ByteArray} {i : Nat} (hi : i < a.size) :
     (a ++ b).get! i = a.get! i := by
   show (a ++ b).data[i]! = a.data[i]!
@@ -161,18 +156,6 @@ private theorem compress_noninf {p : G2} (hinf : ¬ p.isInfinity = true)
 
 private theorem ba_size_set! (b : ByteArray) (j : Nat) (v : UInt8) :
     (b.set! j v).size = b.size := Array.size_setIfInBounds
-
-/-- Compression always gives 96 bytes (Section C.1). -/
-theorem size_compress (p : G2) : (G2.compress p).size = 96 := by
-  by_cases h : p.isInfinity = true
-  · rw [compress_inf h]
-    decide
-  · rcases hpa : p.toAffine with ⟨xa, ya⟩
-    rw [compress_noninf h hpa]
-    dsimp only
-    by_cases hs : Fp2.signBit ya = true
-    · rw [ite_eq_left hs, ba_size_set!, ba_size_set!, size_fp2ToBytes]
-    · rw [ite_eq_right hs, ba_size_set!, size_fp2ToBytes]
 
 /-- The 96-byte infinity encoding decodes to the zero point. -/
 theorem uncompress_infinityBytes : G2.uncompress G2.infinityBytes = .ok G2.zero := by

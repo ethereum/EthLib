@@ -56,59 +56,11 @@ def SecretKey.fromBytes (bytes : ByteArray) : Except BlsError SecretKey :=
   | .error _ => .error .invalidSecretKey
   | .ok sk => if h : sk = 0 then .error .invalidSecretKey else .ok ⟨sk, h⟩
 
-private theorem size_toBytesBE (x : Fp) : x.toBytesBE.size = 48 := by
-  simp only [Fp.toBytesBE, ByteArray.size, Array.size_ofFn]
-
-private theorem size_set! (b : ByteArray) (j : Nat) (v : UInt8) : (b.set! j v).size = b.size :=
-  Array.size_setIfInBounds
-
-/-- A compressed `G1` point has 48 bytes. -/
-theorem size_compressG1 (p : G1) : (G1.compress p).data.size = 48 := by
-  rcases hpa : p.toAffine with ⟨xa, ya⟩
-  by_cases h : p.isInfinity = true
-  · have he : G1.compress p = G1.infinityBytes := by
-      unfold G1.compress
-      simp only [Id.run, h, ↓reduceIte]
-      rfl
-    rw [he]
-    rfl
-  · have he : G1.compress p =
-        (let base := xa.toBytesBE.set! 0 (xa.toBytesBE.get! 0 ||| 0x80)
-         if Fp.signBit ya then base.set! 0 (base.get! 0 ||| 0x20) else base) := by
-      unfold G1.compress
-      simp only [Id.run, h, hpa]
-      rfl
-    rw [he]
-    show ByteArray.size _ = 48
-    dsimp only
-    split <;> simp only [size_set!, size_toBytesBE]
-
-/-- A compressed `G2` point has 96 bytes. -/
-theorem size_compressG2 (p : G2) : (G2.compress p).data.size = 96 := by
-  rcases hpa : p.toAffine with ⟨xa, ya⟩
-  by_cases h : p.isInfinity = true
-  · have he : G2.compress p = G2.infinityBytes := by
-      unfold G2.compress
-      simp only [Id.run, h, ↓reduceIte]
-      rfl
-    rw [he]
-    rfl
-  · have he : G2.compress p =
-        (let base := (G2.fp2ToBytes xa).set! 0 ((G2.fp2ToBytes xa).get! 0 ||| 0x80)
-         if Fp2.signBit ya then base.set! 0 (base.get! 0 ||| 0x20) else base) := by
-      unfold G2.compress
-      simp only [Id.run, h, hpa]
-      rfl
-    rw [he]
-    show ByteArray.size _ = 96
-    dsimp only
-    split <;> simp only [size_set!, G2.fp2ToBytes, ByteArray.size_append, size_toBytesBE]
-
 /-- The public key of a point, in the minimal-pubkey-size variant (§2.2). -/
-def pointToPubkey (p : G1) : BLSPubkey := ⟨(G1.compress p).data, size_compressG1 p⟩
+def pointToPubkey (p : G1) : BLSPubkey := ⟨(G1.compress p).data, G1.size_compress p⟩
 
 /-- The signature of a point, in the minimal-pubkey-size variant (§2.2). -/
-def pointToSignature (p : G2) : BLSSignature := ⟨(G2.compress p).data, size_compressG2 p⟩
+def pointToSignature (p : G2) : BLSSignature := ⟨(G2.compress p).data, G2.size_compress p⟩
 
 /-- The public key `SK * P` of a secret key (§2.4).
 

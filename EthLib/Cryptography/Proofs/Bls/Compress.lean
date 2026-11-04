@@ -126,9 +126,6 @@ private theorem bytesBEToNat_toBytesBE (x : Fp) :
 
 /-! ## Encoding size, byte 0, and the `fromBytesBE` round-trip -/
 
-theorem size_toBytesBE (x : Fp) : (Fp.toBytesBE x).size = 48 := by
-  simp only [Fp.toBytesBE, ByteArray.size, Array.size_ofFn]
-
 set_option maxHeartbeats 1000000 in
 /-- Byte 0 (most significant) of the big-endian encoding, via `.get!`
 (the form `compress` uses). -/
@@ -484,11 +481,7 @@ theorem uncompress_compress {p : G1} (h : Valid p) :
       by_cases hs : Fp.signBit ya
       · rw [ite_eq_left hs, ba_get!_set!_ne _ _ hi0, ba_get!_set!_ne _ _ hi0]
       · rw [ite_eq_right hs, ba_get!_set!_ne _ _ hi0]
-    have hsize : (compress p).size = 48 := by
-      rw [hcp]; dsimp only
-      by_cases hs : Fp.signBit ya
-      · rw [ite_eq_left hs, ba_size_set!, ba_size_set!, hsz48]
-      · rw [ite_eq_right hs, ba_size_set!, hsz48]
+    have hsize : (compress p).size = 48 := size_compress p
     refine ⟨⟨xa, ya, Fp.one⟩, ?_, ?_⟩
     · by_cases hs : Fp.signBit ya
       · have hhead : (compress p).get! 0 = B0 ||| 0x80 ||| 0x20 := by
