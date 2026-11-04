@@ -367,6 +367,10 @@ def block_reencode(fork: str, block: bytes) -> bytes:
     """The RLP form of a block, decoded at the fork and encoded again."""
     ...
 
+def pow_block_difficulty(fork: bytes, number: bytes, timestamp: bytes, parent_timestamp: bytes, parent_difficulty: bytes, parent_ommers: bytes) -> bytes:
+    """The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris."""
+    ...
+
 def fees_base_fee_per_gas(parent_gas_limit: bytes, parent_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes:
     """The base fee per gas of a block, from its parent's gas limit, gas used and base fee."""
     ...

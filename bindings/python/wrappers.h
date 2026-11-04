@@ -296,6 +296,7 @@ PyObject* py_reqresp_decode_payload                       (PyObject* self, PyObj
 PyObject* py_reqresp_decode_response_chunk                (PyObject* self, PyObject* args);
 PyObject* py_block_header_hash                            (PyObject* self, PyObject* args);
 PyObject* py_block_reencode                               (PyObject* self, PyObject* args);
+PyObject* py_pow_block_difficulty                         (PyObject* self, PyObject* args);
 PyObject* py_fees_base_fee_per_gas                        (PyObject* self, PyObject* args);
 PyObject* py_fees_fake_exponential                        (PyObject* self, PyObject* args);
 PyObject* py_fees_base_fee_per_blob_gas                   (PyObject* self, PyObject* args);
