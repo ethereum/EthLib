@@ -127,7 +127,11 @@ So the power of `m` by `−n` is the conjugate of its power by `n`.
 
 The hard part uses the BLS parameter `x = −|x|`, since `p` and `r` are polynomials in `x`.
 
-It equals `((|x| + 1)² / 3) (p − |x|) (|x|² + p² − 1) + 1`.
+Hayashida, Hayasaka and Teruya give `3 h = (x − 1)² (x + p) (x² + p² − 1) + 3`.
+
+See [eprint 2020/875](https://eprint.iacr.org/2020/875), §5, "BLS family with k = 12".
+
+With `x = −|x|`, this is `h = ((|x| + 1)² / 3) (p − |x|) (|x|² + p² − 1) + 1`.
 
 So `m^h` needs only powers by `|x|` and `(|x| + 1) / 3`, Frobenius maps and conjugates.
 
