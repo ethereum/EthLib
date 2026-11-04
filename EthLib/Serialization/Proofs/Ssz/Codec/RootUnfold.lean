@@ -77,4 +77,12 @@ theorem hashTreeRoot_unfold (shape : Desc) (value : Value) :
         | none => cases mixin <;> rfl
         | some c => cases merkleizeBoundedUnchecked rs.toArray (some c) <;> cases mixin <;> rfl
 
+/-- The root of a container does not read the names of its fields. -/
+theorem hashTreeRoot_container_names (names names' : List String) (fields : List Desc)
+    (value : Value) :
+    hashTreeRoot (.container names fields) value =
+      hashTreeRoot (.container names' fields) value := by
+  rw [hashTreeRoot_unfold, hashTreeRoot_unfold]
+  cases value <;> rfl
+
 end EthLib.Serialization.Ssz

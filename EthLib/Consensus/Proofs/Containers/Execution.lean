@@ -6,6 +6,8 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
 public import EthLib.Serialization.Proofs.Ssz.Typed.Root
 public import EthLib.Serialization.Proofs.Ssz.Typed.Since
 public import EthLib.Serialization.Proofs.Ssz.Type.Legality
+public import EthLib.Serialization.Proofs.Ssz.Codec.RootUnfold
+public import EthLib.Serialization.Proofs.Ssz.Codec.Summary
 
 /-!
 # Proofs: the execution payload encodes as the fields of its fork
@@ -15,6 +17,8 @@ At every fork, the payload is a lawful SSZ container, so its bytes decode back t
 Its SSZ type is the container of the fields that exist at that fork, in their order.
 
 So its bytes and its root are those of that plain list of fields.
+
+The header of a payload has the root of the payload, since each list gives way to its own root.
 -/
 
 @[expose] public section
@@ -108,5 +112,98 @@ theorem deserialize_serialize [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
   SszType.deserialize_serialize wrote
 
 end ExecutionPayload
+
+namespace ExecutionPayloadHeader
+
+variable {preset : Preset} {fork : Fork}
+
+/-- The field names of a header are distinct at every fork. -/
+theorem names_nodup : (names fork).Nodup := by
+  have all : (["parent_hash", "fee_recipient", "state_root", "receipts_root", "logs_bloom",
+      "prev_randao", "block_number", "gas_limit", "gas_used", "timestamp", "extra_data",
+      "base_fee_per_gas", "block_hash", "transactions_root", "withdrawals_root",
+      "blob_gas_used", "excess_blob_gas"] : List String).Nodup := by decide
+  refine all.sublist ?_
+  unfold names
+  exact (((List.Sublist.refl _).append (sinceNames_sublist _)).append
+    (sinceNames_sublist _))
+
+/-- At every fork, the header is a lawful SSZ container, when its logs bloom has a byte. -/
+instance [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] :
+    LawfulSszType (ExecutionPayloadHeader preset fork) :=
+  .container
+    ⟨by
+      by_cases capella : Fork.shapella ≤ fork <;> by_cases deneb : Fork.dencun ≤ fork <;>
+        simp [names, sinceNames, SszFields.descs, capella, deneb],
+     by simp [names],
+     firstDuplicate_of_nodup _ names_nodup⟩
+    (fun _ => rfl) (fun _ => rfl)
+
+end ExecutionPayloadHeader
+
+/-- At every fork, every payload has a header. -/
+theorem ExecutionPayload.header_total {preset : Preset} {fork : Fork}
+    (payload : ExecutionPayload preset fork) : ∃ header, payload.header = .ok header := by
+  obtain ⟨txRoot, tx⟩ := SszType.hashTreeRoot_total payload.transactions
+  by_cases capella : Fork.shapella ≤ fork
+  · obtain ⟨wRoot, w⟩ := SszType.hashTreeRoot_total (payload.withdrawals capella)
+    simp [ExecutionPayload.header, tx, w, capella, bind, Except.bind, pure, Except.pure]
+  · simp [ExecutionPayload.header, tx, capella, bind, Except.bind, pure, Except.pure]
+
+/-- At every fork, the header of a payload has the root of the payload.
+
+Each list of the payload gives way to its root, which leaves the root of the payload unchanged. -/
+theorem ExecutionPayload.hashTreeRoot_header {preset : Preset} {fork : Fork}
+    {payload : ExecutionPayload preset fork} {header : ExecutionPayloadHeader preset fork}
+    (made : payload.header = .ok header) :
+    SszType.hashTreeRoot header = SszType.hashTreeRoot payload := by
+  obtain ⟨txRoot, tx⟩ : ∃ r, SszType.hashTreeRoot payload.transactions = .ok r := by
+    cases h : SszType.hashTreeRoot payload.transactions with
+    | error e => simp [ExecutionPayload.header, h, bind, Except.bind] at made
+    | ok r => exact ⟨r, rfl⟩
+  -- The transactions sit at position 13, and from Capella the withdrawals at position 14.
+  by_cases capella : Fork.shapella ≤ fork
+  · obtain ⟨wRoot, w⟩ : ∃ r, SszType.hashTreeRoot (payload.withdrawals capella) = .ok r := by
+      cases h : SszType.hashTreeRoot (payload.withdrawals capella) with
+      | error e => simp [ExecutionPayload.header, tx, h, capella, bind, Except.bind] at made
+      | ok r => exact ⟨r, rfl⟩
+    simp [ExecutionPayload.header, tx, w, capella, bind, Except.bind, pure, Except.pure] at made
+    subst made
+    rw [SszType.hashTreeRoot_ok_iff] at tx w
+    simp only [SszType.hashTreeRoot]
+    rw [ExecutionPayload.desc_eq, ExecutionPayload.toValue_eq]
+    have one := hashTreeRoot_summary (names := ExecutionPayload.names fork) (position := 13)
+      (fields := ExecutionPayload.fieldDescs preset fork)
+      (values := ExecutionPayload.fieldValues payload)
+      (by by_cases deneb : Fork.dencun ≤ fork <;>
+        simp [ExecutionPayload.fieldDescs, ExecutionPayload.fieldValues, capella, deneb])
+      (by simp [ExecutionPayload.fieldDescs]) (by simp [ExecutionPayload.fieldValues]) tx
+    have two := hashTreeRoot_summary (names := ExecutionPayload.names fork) (position := 14)
+      (fields := (ExecutionPayload.fieldDescs preset fork).set 13 (.byteVector bytesPerChunk))
+      (values := (ExecutionPayload.fieldValues payload).set 13 (.bytes txRoot.toArray))
+      (by by_cases deneb : Fork.dencun ≤ fork <;>
+        simp [ExecutionPayload.fieldDescs, ExecutionPayload.fieldValues, capella, deneb])
+      (by simp [ExecutionPayload.fieldDescs, capella])
+      (by simp [ExecutionPayload.fieldValues, capella]) w
+    rw [← one, ← two, hashTreeRoot_container_names (ExecutionPayload.names fork)
+      (ExecutionPayloadHeader.names fork)]
+    by_cases deneb : Fork.dencun ≤ fork <;>
+      simp [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues,
+        ExecutionPayload.fieldDescs, ExecutionPayload.fieldValues, capella, deneb]
+  · have deneb : ¬Fork.dencun ≤ fork := fun later => capella (Nat.le_trans (by decide) later)
+    simp [ExecutionPayload.header, tx, capella, bind, Except.bind, pure, Except.pure] at made
+    subst made
+    rw [SszType.hashTreeRoot_ok_iff] at tx
+    simp only [SszType.hashTreeRoot]
+    rw [ExecutionPayload.desc_eq, ExecutionPayload.toValue_eq]
+    have one := hashTreeRoot_summary (names := ExecutionPayload.names fork) (position := 13)
+      (fields := ExecutionPayload.fieldDescs preset fork)
+      (values := ExecutionPayload.fieldValues payload)
+      (by simp [ExecutionPayload.fieldDescs, ExecutionPayload.fieldValues, capella, deneb])
+      (by simp [ExecutionPayload.fieldDescs]) (by simp [ExecutionPayload.fieldValues]) tx
+    rw [← one, hashTreeRoot_container_names (ExecutionPayload.names fork)
+      (ExecutionPayloadHeader.names fork)]
+    simp [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues,
+      ExecutionPayload.fieldDescs, ExecutionPayload.fieldValues, capella, deneb]
 
 end EthLib.Consensus
