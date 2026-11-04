@@ -114,6 +114,30 @@ No theorem bounds the probability of finding a collision or a second preimage.
 The VRF's `verify_unique`, SSZ's `verifyMerkleProof_binding` and the leanXMSS unforgeability proof use `climb_binding`.
 leanXMSS also states `fold_binding` with `climb_binding_node`, which its unforgeability proof does not use.
 
+### SSZ
+
+Four kinds of SSZ theorem say what a root binds, and each one reduces a conflict to a SHA-256 collision.
+Each collision is two different 64-byte inputs with one digest, returned by an explicit search.
+
+Branch binding is `verifyMerkleProof_binding` (`Proofs/Ssz/Merkle/Authentication.lean`).
+Two accepted branches at one index and root open one leaf, or `findBranchCollision` returns a collision.
+It rests on `climb_binding`, above.
+
+Multiproof binding is `verifyMerkleMultiproof_binding` and `verifyMerkleMultiproof_overlap_binding` (`Proofs/Ssz/Merkle/MultiproofBinding.lean`).
+Two accepted requests for one root agree on every position they both claim, or `findMessageCollision` returns a collision.
+That search tries each input one verifier hashes against each input the other hashes.
+
+Whole-value binding is `hashTreeRoot_binding` (`Proofs/Ssz/Codec/Binding.lean`).
+Two values of one type with one root are equal, or `findMessageCollision` returns a collision between the hash inputs of the two root computations.
+It has three hypotheses on each value.
+The type is well formed, the value fits the type, and the value is `CommitmentSized`: every variable-size count in it is below `2^256`.
+A larger count would be truncated in the 256-bit word mixed into the root, and the proof needs the exact count.
+
+Layout separation is `hashTreeRoot_progressiveContainer_layouts_separate` (`Proofs/Ssz/Codec/LayoutSeparation.lean`).
+Two legal progressive containers with one root have one layout, or `findMixinCollision` returns the inputs of the two last hashes.
+
+No theorem bounds the probability of finding any of these collisions.
+
 ### leanSPHINCS
 
 The correctness theorem is `verify_keyGen_sign` (`Proofs/Sphincs/Correctness.lean`).

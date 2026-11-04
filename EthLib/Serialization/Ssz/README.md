@@ -14,7 +14,7 @@ The executable specification and the proofs about it live in two separate trees,
 The proofs mirror the layout of the specification: what is proved about `Ssz.Codec.Serialize` sits in `Proofs.Ssz.Codec.Serialize`.
 An implementer reads `Ssz/` and stops there, and [Proven properties](#proven-properties) says in prose what the other tree establishes.
 
-The specification has three parts:
+The specification has four parts:
 
 | Directory | Contents |
 | --- | --- |
@@ -129,7 +129,8 @@ For [multiproofs](../Proofs/Ssz/Merkle/Multiproof.lean), the computed set of hel
 No parent equations are required below the leaves.
 
 The [multiproof size](../Proofs/Ssz/Merkle/MultiproofSize.lean) result counts the helpers exactly.
-The helper count plus twice the claim count equals the number of distinct ancestors of the claims plus two, which fixes the count for any set of claims at one depth.
+Take claims that all sit at one depth, and count the distinct nodes on their paths below the root, the claims included.
+The helper count plus twice the claim count equals that node count plus two.
 Claiming a whole level therefore needs no helpers, and claiming any `k` nodes of a level of depth `d` needs at most `k * (d - log2 k)`.
 A run of `k` consecutive claims still needs at least `d - log2 k`.
 By [single claims](../Proofs/Ssz/Merkle/Singleton.lean), the helpers of one claim are its branch in the same order, and a single-item proof gets the same verdict from the multi-item verifier.
