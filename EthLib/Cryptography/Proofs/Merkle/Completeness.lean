@@ -66,6 +66,23 @@ theorem climb_take_succ [LawfulMonad m] (j : Nat) (current : α) (p : List α) (
   unfold ordered
   split <;> rfl
 
+/-- Ordering two mapped children maps the ordered pair. -/
+theorem ordered_map {β : Type} (f : α → β) (j : Nat) (current sibling : α) :
+    ordered j (f current) (f sibling) = Prod.map f f (ordered j current sibling) := by
+  unfold ordered
+  split <;> rfl
+
+/-- A map that commutes with the node hash commutes with the climb. -/
+theorem climb_map [LawfulMonad m] {β : Type} (hash' : Nat → Nat → β → β → m β) (f : α → β)
+    (commute : ∀ level j left right,
+      hash' level j (f left) (f right) = f <$> hash level j left right) :
+    ∀ (siblings : List α) (level j : Nat) (current : α),
+      climb hash' level j (f current) (siblings.map f) = f <$> climb hash level j current siblings
+  | [], _, _, _ => by simp [climb]
+  | sibling :: rest, level, j, current => by
+    simp only [List.map_cons, climb, ordered_map, Prod.map_fst, Prod.map_snd, commute,
+      bind_map_left, map_bind, climb_map hash' f commute rest]
+
 /-! ## The levels a tree hashes at -/
 
 /-- A node on `level` hashes only at levels 1 to `level`.

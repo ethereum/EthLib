@@ -13,6 +13,7 @@ inductive BadEvent where
   | chain (chain : ChainIndex)
   | suffixCollision (step : Fin verificationChainHashes)
   | leaf
+  /-- Two paths collide below a parent on level `level + 1`, from 1 to 16. -/
   | merkle (level : Fin treeHeight)
 deriving DecidableEq, Fintype
 

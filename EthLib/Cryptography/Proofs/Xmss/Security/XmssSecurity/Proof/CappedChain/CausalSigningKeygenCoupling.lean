@@ -152,8 +152,8 @@ theorem Concrete.keygen_topSignature_run_eq_pure
     | some (randomness, encoding) =>
         ⟨randomness, Concrete.honestTopValues largerCache
           (SecretKey.withoutPrecomputation parameter secret topSecret result.2) key encoding,
-          fun level => Concrete.honestTopPath largerCache
-            (SecretKey.withoutPrecomputation parameter secret topSecret result.2) key level.val⟩
+          Concrete.honestTopPath largerCache
+            (SecretKey.withoutPrecomputation parameter secret topSecret result.2) key⟩
     | none => ⟨0, fun _ => 0, fun _ => 0⟩, largerCache)
   cases result.2 key with
   | none => simp
@@ -165,15 +165,16 @@ theorem Concrete.keygen_topSignature_run_eq_pure
           (SecretKey.withoutPrecomputation parameter secret topSecret result.2) key encoding)]
       · simp only [pure_bind]
         rw [simulateQ_bind, StateT.run_bind, sequenceFin_run_eq_pure _ largerCache
-          (fun level : Fin treeHeight => Concrete.honestTopPath largerCache
-            (SecretKey.withoutPrecomputation parameter secret topSecret result.2) key level.val)]
+          (Concrete.honestTopPath largerCache
+            (SecretKey.withoutPrecomputation parameter secret topSecret result.2) key)]
+
         · simp
         · intro level
           have hrb := Concrete.CacheReplay.honestKeygen_runsBelow_topTreeNode hrun level.val
             (Concrete.topPathNode key level) level.isLt.le (topPathNode_val_lt key level)
           rw [hrb.run_eq largerCache hle, hrb.eval_eq largerCache hle,
             Concrete.CacheReplay.eval_topTreeNode]
-          simp [Concrete.honestTopPath, level.isLt, SecretKey.withoutPrecomputation]
+          simp [Concrete.honestTopPath, SecretKey.withoutPrecomputation]
       · intro chain
         have hrb := Concrete.CacheReplay.honestKeygen_runsBelow_topChainWalk hrun key chain (encoding chain).val
           (Nat.le_pred_of_lt (encoding chain).isLt)

@@ -5,6 +5,8 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Statem
 
 @[expose] public section
 
+open EthLib.Cryptography
+
 open OracleSpec
 
 namespace XmssSecurity.Concrete
@@ -18,12 +20,12 @@ noncomputable def bottomRootFromCache (cache : QueryCache HashSpec)
         (message, signature.randomness)) with
   | none => none
   | some encoding =>
-      some (Merkle.ascend (CacheView.nodeHash cache publicKey.parameter leafIndex)
-        (signaturePath signature) 0 treeHeight
+      some ((Merkle.climb (CacheView.nodeAt cache publicKey.parameter .bottom) 0 leafIndex.val
         (CacheView.leafHash cache publicKey.parameter leafIndex
           (XmssSecurity.recoveredEndpoints
             (fun chain => CacheView.chainStep cache publicKey.parameter leafIndex chain)
-            encoding signature.chainValue)))
+            encoding signature.chainValue))
+        (List.ofFn signature.authPath)).run)
 
 /-- The top layer's check of a bottom root against the public root. -/
 noncomputable def verifyTopFromCache (cache : QueryCache HashSpec)
@@ -32,12 +34,12 @@ noncomputable def verifyTopFromCache (cache : QueryCache HashSpec)
       (CacheView.topEncodingHash cache publicKey.parameter key (root, part.randomness)) with
   | none => false
   | some encoding =>
-      decide (Merkle.ascend (CacheView.topNodeHash cache publicKey.parameter key)
-        (layerPath part) 0 treeHeight
+      decide ((Merkle.climb (CacheView.nodeAt cache publicKey.parameter .top) 0 key.val
         (CacheView.topLeafHash cache publicKey.parameter key
           (XmssSecurity.recoveredEndpoints
             (fun chain => CacheView.topChainStep cache publicKey.parameter key chain)
-            encoding part.chainValue)) = publicKey.root)
+            encoding part.chainValue))
+        (List.ofFn part.authPath)).run = publicKey.root)
 
 noncomputable def verifyFromCache (cache : QueryCache HashSpec)
     (publicKey : PublicKey) (leafIndex : LeafIndex) (message : Message)
@@ -53,12 +55,12 @@ theorem verifyTopFromCache_eq_true_iff (cache : QueryCache HashSpec)
         TargetSum.decodeDigest
           (CacheView.topEncodingHash cache publicKey.parameter key (root, part.randomness)) =
             some encoding ∧
-        Merkle.ascend (CacheView.topNodeHash cache publicKey.parameter key)
-          (layerPath part) 0 treeHeight
+        (Merkle.climb (CacheView.nodeAt cache publicKey.parameter .top) 0 key.val
           (CacheView.topLeafHash cache publicKey.parameter key
             (XmssSecurity.recoveredEndpoints
               (fun chain => CacheView.topChainStep cache publicKey.parameter key chain)
-              encoding part.chainValue)) = publicKey.root := by
+              encoding part.chainValue))
+          (List.ofFn part.authPath)).run = publicKey.root := by
   unfold verifyTopFromCache
   split <;> rename_i hdecode
   · simp only [Bool.false_eq_true, false_iff]
@@ -83,12 +85,12 @@ theorem verifyFromCache_eq_true_iff (cache : QueryCache HashSpec)
           (CacheView.encodingHash cache publicKey.parameter leafIndex
             (message, signature.randomness)) = some encoding ∧
         verifyTopFromCache cache publicKey (topKeyOf leafIndex)
-          (Merkle.ascend (CacheView.nodeHash cache publicKey.parameter leafIndex)
-            (signaturePath signature) 0 treeHeight
+          ((Merkle.climb (CacheView.nodeAt cache publicKey.parameter .bottom) 0 leafIndex.val
             (CacheView.leafHash cache publicKey.parameter leafIndex
               (XmssSecurity.recoveredEndpoints
                 (fun chain => CacheView.chainStep cache publicKey.parameter leafIndex chain)
-                encoding signature.chainValue))) signature.top = true := by
+                encoding signature.chainValue))
+            (List.ofFn signature.authPath)).run) signature.top = true := by
   unfold verifyFromCache bottomRootFromCache
   split <;> rename_i hroot
   · split at hroot <;> rename_i hdecode
