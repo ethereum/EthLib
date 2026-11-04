@@ -415,6 +415,10 @@ def ssz_deserialize(type: bytes, data: bytes) -> bytes:
     """The value, as JSON, that SSZ bytes hold for a type given as JSON."""
     ...
 
+def ssz_hash_tree_root(type: bytes, value: bytes) -> bytes:
+    """The 32-byte hash tree root of a value of a type, both given as JSON."""
+    ...
+
 def rlpx_ecies_encrypt(recipient: bytes, ephemeral: bytes, iv: bytes, shared_mac: bytes, message: bytes) -> bytes:
     """The ciphertext `R || iv || c || d` of `m` to the public key `recipient`."""
     ...

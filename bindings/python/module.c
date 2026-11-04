@@ -605,6 +605,7 @@ static PyMethodDef methods[] = {
   {"rlp_decode_as", py_rlp_decode_as, METH_VARARGS, DOC_rlp_decode_as},
   {"ssz_serialize", py_ssz_serialize, METH_VARARGS, DOC_ssz_serialize},
   {"ssz_deserialize", py_ssz_deserialize, METH_VARARGS, DOC_ssz_deserialize},
+  {"ssz_hash_tree_root", py_ssz_hash_tree_root, METH_VARARGS, DOC_ssz_hash_tree_root},
   {"rlpx_ecies_encrypt", py_rlpx_ecies_encrypt, METH_VARARGS, DOC_rlpx_ecies_encrypt},
   {"rlpx_ecies_decrypt", py_rlpx_ecies_decrypt, METH_VARARGS, DOC_rlpx_ecies_decrypt},
   {"devp2p_decode_message", py_devp2p_decode_message, METH_VARARGS, DOC_devp2p_decode_message},

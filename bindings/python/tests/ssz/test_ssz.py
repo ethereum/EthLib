@@ -1,4 +1,6 @@
-"""SSZ against values whose bytes are worked out by hand from the SSZ rules."""
+"""SSZ against values whose bytes and roots are worked out by hand from the SSZ rules."""
+
+import hashlib
 
 import pytest
 
@@ -79,3 +81,68 @@ def test_unknown_type_rejected() -> None:
     with pytest.raises(SszError) as caught:
         ssz.serialize({"float": 4}, {"uint": 1})
     assert caught.value.code == 0
+
+
+def _chunk(hex_bytes: str) -> bytes:
+    """A 32-byte chunk: the given bytes, then zero bytes."""
+    return bytes.fromhex(hex_bytes).ljust(32, b"\x00")
+
+
+def _node(left: bytes, right: bytes) -> bytes:
+    """The parent of two Merkle nodes, by the SHA-256 of hashlib."""
+    return hashlib.sha256(left + right).digest()
+
+
+ZERO = _chunk("")
+
+# Each type, value and its root, built by hand from the Merkleization rules of SSZ.
+ROOTS = [
+    # A basic value is its bytes, padded to one chunk, with no hashing.
+    (UINT16, {"uint": 0x0102}, _chunk("0201")),
+    ("bool", {"bool": True}, _chunk("01")),
+    # A container of two fields roots the two field roots as leaves.
+    (FIXED_PAIR, {"seq": [{"uint": 0x4567}, {"uint": 0x0123}]},
+     _node(_chunk("6745"), _chunk("2301"))),
+    # A List[uint16, 4] packs into one chunk, and mixes in its length 2.
+    ({"list": [UINT16, 4]}, {"seq": [{"uint": 2}, {"uint": 3}]},
+     _node(_chunk("02000300"), _chunk("02"))),
+    # A Bitlist[8] packs its bits without the closing bit, and mixes in the bit count 3.
+    ({"bitlist": 8}, {"bits": [True, False, True]}, _node(_chunk("05"), _chunk("03"))),
+    # A ByteList[33] has room for two chunks, so even an empty one roots a tree of depth 1.
+    ({"byte_list": 33}, {"bytes": "0x"}, _node(_node(ZERO, ZERO), ZERO)),
+    # A Vector[uint16, 17] fills two chunks: sixteen elements, then one.
+    ({"vector": [UINT16, 17]}, {"seq": [{"uint": 1}] * 17},
+     _node(_chunk("0100" * 16), _chunk("0100"))),
+    # The variable field of a container is rooted by its own rule, length included.
+    (MIXED_PAIR, {"seq": [{"uint": 1}, {"seq": [{"uint": 2}, {"uint": 3}]}]},
+     _node(_chunk("0100"), _node(_chunk("02000300"), _chunk("02")))),
+]
+
+
+@pytest.mark.parametrize(("ssz_type", "value", "root"), ROOTS)
+def test_hash_tree_root(ssz_type, value, root: bytes) -> None:
+    assert ssz.hash_tree_root(ssz_type, value) == root
+
+
+@pytest.mark.parametrize(
+    ("ssz_type", "value", "fault"),
+    [
+        # A ByteList[1] holds at most one byte.
+        ({"byte_list": 1}, {"bytes": "0xaabb"}, "overLimit 1 2"),
+        # A List[uint16, 4] holds at most four elements.
+        ({"list": [UINT16, 4]}, {"seq": [{"uint": 1}] * 5}, "overLimit 4 5"),
+        # A Bitvector[3] holds exactly three bits.
+        ({"bitvector": 3}, {"bits": [True]}, "scope 3 1"),
+        # Bytes are no unsigned integer.
+        (UINT16, {"bytes": "0x0000"}, "typeMismatch"),
+    ],
+)
+def test_hash_tree_root_rejects_value(ssz_type, value, fault: str) -> None:
+    with pytest.raises(SszError, match="value rejected.*" + fault + "$"):
+        ssz.hash_tree_root(ssz_type, value)
+
+
+def test_hash_tree_root_rejects_type() -> None:
+    # The root checks the type before it reads the value.
+    with pytest.raises(SszError, match="type rejected.*uintWidth 3$"):
+        ssz.hash_tree_root({"uint": 3}, {"uint": 0})

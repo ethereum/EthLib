@@ -306,6 +306,7 @@ PyObject* py_rlp_decode                                   (PyObject* self, PyObj
 PyObject* py_rlp_decode_as                                (PyObject* self, PyObject* args);
 PyObject* py_ssz_serialize                                (PyObject* self, PyObject* args);
 PyObject* py_ssz_deserialize                              (PyObject* self, PyObject* args);
+PyObject* py_ssz_hash_tree_root                           (PyObject* self, PyObject* args);
 PyObject* py_snappy_decompress                            (PyObject* self, PyObject* args);
 PyObject* py_snappy_compress_literal                      (PyObject* self, PyObject* args);
 PyObject* py_snappy_decode_frames                         (PyObject* self, PyObject* args);
