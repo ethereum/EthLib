@@ -9,6 +9,8 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Recovery
 Two parties with keys `a` and `b` derive the same secret: `a (b G) = b (a G)`.
 
 The equality holds for every pair of keys, the zero key included, with the same error.
+
+Two nonzero keys always derive a secret.
 -/
 
 @[expose] public section
@@ -63,5 +65,26 @@ theorem ecdh_comm (a b : Fn) : ecdh a (mul b generator) = ecdh b (mul a generato
     · subst hb
       simp only [ha, ite_false, ite_true, mul_zero_left (isOnCurve_mul _ hG)]
     · simp only [ha, hb, ite_false]
+
+/-- `k P` is not `O`, for a nonzero `k` and a point `P` of the curve other than `O`. -/
+theorem mul_ne_infinity {k : Fn} (hk : k ≠ 0) {p : Point} (hp : p.isOnCurve = true)
+    (hinf : p ≠ .infinity) : mul k p ≠ .infinity := by
+  intro h
+  have h0 := (toPoint_eq_zero (isOnCurve_mul _ hp)).mpr h
+  rw [toPoint_mul' _ hp, smul_eq_zero] at h0
+  rcases h0 with h0 | h0
+  · exact hk (Fn.toZMod.injective (by simpa using h0))
+  · exact hinf ((toPoint_eq_zero hp).mp h0)
+
+/-- Two nonzero keys always derive a secret. -/
+theorem exists_ecdh_eq_ok {a b : Fn} (ha : a ≠ 0) (hb : b ≠ 0) :
+    ∃ secret, ecdh a (mul b generator) = .ok secret := by
+  have hG := isOnCurve_generator
+  have hP := Ecdsa.mul_generator_ne_infinity hb
+  unfold ecdh
+  simp only [hP, isOnCurve_mul _ hG, Bool.not_true, Bool.false_eq_true, ite_false]
+  cases hm : mul a (mul b generator) with
+  | infinity => exact absurd hm (mul_ne_infinity ha (isOnCurve_mul _ hG) hP)
+  | affine x y => exact ⟨_, rfl⟩
 
 end EthLib.Cryptography.Secp256k1

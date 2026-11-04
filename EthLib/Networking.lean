@@ -11,6 +11,7 @@ public import EthLib.Networking.Gossip.MessageId
 public import EthLib.Networking.Gossip.Subnet
 public import EthLib.Networking.Gossip.Topic
 public import EthLib.Networking.ReqResp.Encoding
+public import EthLib.Networking.Rlpx.Ecies
 public import EthLib.Networking.Snappy.Block
 public import EthLib.Networking.Snappy.Frame
 

@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.Exports.Discv5
 public import EthLib.Networking.Exports.Enr
 public import EthLib.Networking.Exports.ReqResp
+public import EthLib.Networking.Exports.Rlpx
 
 /-!
 # `EthLib.Networking.Exports`
