@@ -71,3 +71,41 @@ def test_one_gas_short(address: int, case: dict) -> None:
 def test_error(address: int, case: dict) -> None:
     with pytest.raises(ValueError, match=rf"\.{ERROR[case['ExpectedError']]}\b"):
         run(address, bytes.fromhex(case["Input"]), AMPLE_GAS)
+
+
+# The MSM cases of EIP-2537 with more than 8 pairs, from the same directory.
+#
+# Files: msm_G1_bls.json, msm_G2_bls.json
+# File sha256: 9473ca855509a10238388355093e092fab46d80753e72a64b8c1accba8364f65 (G1)
+# File sha256: 198411e8e72830245866ad94e2f743fa2499ffb928ca7c2bd10a18ed842368ef (G2)
+#
+# Each input repeats one pair, the point at infinity with the scalar 0, from 9 to 149 times.
+# So the file keeps that pair once per precompile, and each case keeps its pair count.
+# The cases price the discount table of EIP-2537, which the smaller cases do not reach.
+LARGE_MSM = json.loads((Path(__file__).parent / "eip2537_msm_repeated.json").read_text())
+
+LARGE = [
+    pytest.param(ADDRESS[name], bytes.fromhex(group["Pair"]) * case["Count"], case,
+                 id=f"{name}:{case['Name']}")
+    for name, group in LARGE_MSM.items()
+    for case in group["Cases"]
+]
+
+
+def test_large_msm_count() -> None:
+    # 141 cases for each group, one for each pair count from 9 to 149.
+    for name, size in (("msm_G1_bls", 160), ("msm_G2_bls", 288)):
+        group = LARGE_MSM[name]
+        assert len(bytes.fromhex(group["Pair"])) == size
+        assert [c["Count"] for c in group["Cases"]] == list(range(9, 150))
+
+
+@pytest.mark.parametrize("address, data, case", LARGE)
+def test_large_msm_exact_price(address: int, data: bytes, case: dict) -> None:
+    assert run(address, data, case["Gas"]).hex() == case["Expected"]
+
+
+@pytest.mark.parametrize("address, data, case", LARGE)
+def test_large_msm_one_gas_short(address: int, data: bytes, case: dict) -> None:
+    with pytest.raises(ValueError, match="outOfGas"):
+        run(address, data, case["Gas"] - 1)
