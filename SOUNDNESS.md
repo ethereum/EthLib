@@ -129,8 +129,9 @@ No theorem links that model to this module.
 
 A VRF tree commits to secret outputs under one root, and later opens them one index at a time.
 Two theorems in `Proofs/Vrf/Verify.lean` describe it.
-`verify_unique` says that two openings that verify at one index under one root give one output, or Keccak-256 collides.
-It holds for every root, including one built to cheat.
+`verify_unique` says that two openings that verify at one index under one root give one output, or `findHashCollision` returns a collision of Keccak-256.
+That search reads only the index and the two openings.
+The theorem holds for every root, including one built to cheat.
 `verify_opening` says that the opening of an honest tree verifies, with the output of its secret.
 
 Uniqueness is reduced to a collision, and no theorem bounds the cost of finding one.
