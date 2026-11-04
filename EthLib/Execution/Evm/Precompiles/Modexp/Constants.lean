@@ -7,11 +7,10 @@ The fixed numbers of the MODEXP precompile at address `0x05`.
 
 Every value is the one in force as of the BPO2 fork.
 
-BPO2 is the latest fork activated on mainnet in `ethereum/execution-specs`.
-The commit is `2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1`.
 BPO2 activated at timestamp 1767747671, on 2026-01-07.
 
 BPO2 changes only blob parameters.
+
 So MODEXP behaves as in Osaka, the fork that introduced EIP-7823 and EIP-7883.
 -/
 
@@ -41,9 +40,7 @@ def MAX_LENGTH_BYTES : Nat := 1024
 
 /-- Number of leading exponent bytes that enter the gas formula.
 
-EIP-198, Specification, `ADJUSTED_EXPONENT_LENGTH`: "the first 32 bytes of `EXPONENT`".
-
-`iterations` in execution-specs reads the same 32 bytes. -/
+EIP-198, Specification, `ADJUSTED_EXPONENT_LENGTH`: "the first 32 bytes of `EXPONENT`". -/
 def EXPONENT_HEAD_BYTES : Nat := 32
 
 /-- Bytes per word in the multiplication complexity.

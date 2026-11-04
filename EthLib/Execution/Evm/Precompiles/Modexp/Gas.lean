@@ -13,16 +13,13 @@ It replaced the pricing of EIP-2565, which replaced the pricing of EIP-198.
 
 No older pricing is specified here.
 
-The executable source is `complexity`, `iterations` and `gas_cost`.
-They are in `forks/bpo2/vm/precompiled_contracts/modexp.py`, in execution-specs at `2c0c8e7`.
-
 ```text
     gas = max(500, complexity(len_base, len_mod) * iterations(len_exp, exp_head))
 ```
 
 ## Where the sources read differently
 
-EIP-198 and execution-specs take the exponent bits from the first 32 bytes of `EXPONENT`.
+EIP-198 takes the exponent bits from the first 32 bytes of `EXPONENT`.
 
 EIP-198 says: "the index of the highest bit in the first 32 bytes of `EXPONENT`".
 
@@ -37,7 +34,7 @@ The EIP-7883 pseudocode, read literally, differs in two ways for an exponent lon
 
 The EIP-2565 pseudocode is the same, with 8 in place of 16.
 
-This module follows EIP-198 and execution-specs, which agree with each other.
+This module follows EIP-198.
 -/
 
 @[expose] public section
@@ -49,8 +46,6 @@ open EthLib.Execution.Evm.Precompiles.Modexp.Constants
 /-- The multiplication complexity.
 
 EIP-7883, Specification, `calculate_multiplication_complexity`.
-
-`complexity` in execution-specs.
 
 - Operands of at most 32 bytes cost a flat 16.
 - Longer ones cost twice the square of their length in 8-byte words. -/
@@ -64,8 +59,6 @@ def complexity (baseLen modLen : Nat) : Nat :=
 /-- The iteration count: the adjusted exponent length, at least 1.
 
 EIP-7883, Specification, `calculate_iteration_count`, read as in EIP-198.
-
-`iterations` in execution-specs.
 
 `expHead` is the integer in the first `min 32 expLen` bytes of the exponent.
 
@@ -90,8 +83,6 @@ def iterations (expLen expHead : Nat) : Nat :=
 /-- The gas of one call, from the three lengths and the exponent head.
 
 EIP-7883, Specification, `calculate_gas_cost`.
-
-`gas_cost` in execution-specs.
 
 EIP-7883 removed the division by 3 that EIP-2565 applied. -/
 def gasCost (baseLen modLen expLen expHead : Nat) : Nat :=

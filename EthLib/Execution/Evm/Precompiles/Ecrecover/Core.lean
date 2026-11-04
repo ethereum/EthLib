@@ -12,9 +12,8 @@ The ECRECOVER precompile at address `0x01`, as of the BPO2 fork.
 
 It returns the address that signed a 32-byte hash, so contracts can check signatures.
 
-The executable source is `src/ethereum/forks/bpo2/vm/precompiled_contracts/ecrecover.py`, in `ethereum/execution-specs` at commit `b758df2bcaaa95c04d31e25c94fbfb8d6de756e7`.
-
-It is identical to the Osaka module.
+Source: Appendix E of the Yellow Paper, Shanghai version, in `Paper.tex`:
+<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>.
 
 The input has this layout:
 
@@ -30,9 +29,9 @@ The output is the address, left-padded with zero bytes to 32 bytes.
 
 Every rejection gives the empty output, and the call still succeeds and pays its gas:
 
-- `v` is neither 27 nor 28;
-- `r` or `s` is not in `[1, n - 1]`;
-- no key is recovered.
+- `v` is neither 27 nor 28.
+- `r` or `s` is not in `[1, n - 1]`.
+- No key is recovered.
 
 A high `s` is accepted: the low-s rule of EIP-2 is for transactions only.
 -/
@@ -44,20 +43,18 @@ namespace EthLib.Execution.Evm.Precompiles.Ecrecover
 open EthLib.Cryptography.Secp256k1
 open EthLib.Execution.Evm (byteAt)
 
-/-- The gas of a call, `GasCosts.PRECOMPILE_ECRECOVER` in `forks/bpo2/vm/gas.py`. -/
+/-- The gas of a call, from Appendix E of the Yellow Paper. -/
 def GAS_ECRECOVER : Nat := 3000
 
 /-- 32 bytes of the call data from `start`, zero-padded on the right. -/
 def word (data : ByteArray) (start : Nat) : Vector UInt8 32 :=
   Vector.ofFn fun i => byteAt data (start + i.val)
 
-/-- The output for a hash and the integers `v`, `r` and `s`.
-
-The `# OPERATION` part of `ecrecover` in execution-specs, after the reads. -/
+/-- The output for a hash and the integers `v`, `r` and `s`. -/
 def output (hash : Vector UInt8 32) (v r s : Nat) : ByteArray :=
   -- `v` is 27 or 28, the recovery id plus 27.
   if hv : v = 27 ∨ v = 28 then
-    -- `secp256k1_recover` rejects `r` and `s` outside `[1, n - 1]`, as the precompile does first.
+    -- The recovery rejects `r` and `s` outside `[1, n - 1]`, as the Yellow Paper does first.
     match Ecdsa.recover hash r s ⟨v - 27, by omega⟩ with
     | .ok (.affine x y) => ⟨(List.replicate 12 0 ++ (address x y).toList).toArray⟩
     | _ => ByteArray.empty
@@ -72,7 +69,7 @@ def compute (data : ByteArray) : ByteArray :=
 
 Returns the output, or the lack of gas that ends the call and consumes it all.
 
-`ecrecover` in execution-specs: `charge_gas` comes first, then the operation. -/
+The gas is charged first, then the operation runs. -/
 def ecrecover (data : ByteArray) (gas : Nat) : Except EcrecoverError ByteArray :=
   if gas < GAS_ECRECOVER then .error (.outOfGas GAS_ECRECOVER gas) else .ok (compute data)
 

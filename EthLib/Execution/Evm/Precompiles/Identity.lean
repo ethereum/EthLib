@@ -5,16 +5,19 @@ public import EthLib.Execution.Evm.Words
 /-!
 # `Evm.Precompiles.Identity`
 
-The IDENTITY precompile at address `0x04`: it returns its call data unchanged, so contracts can copy memory cheaply.
+The IDENTITY precompile at address `0x04`: it returns its call data unchanged.
+
+So contracts can copy memory cheaply.
 
 ```text
 gas:     15 + 3 * ceil(len(data) / 32)
 output:  data
 ```
 
-Source: [`forks/frontier/vm/precompiled_contracts/identity.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/frontier/vm/precompiled_contracts/identity.py#L22-L43) of execution-specs at `2c0c8e7`, function `identity`.
+Source: Appendix E of the Yellow Paper, Shanghai version, in `Paper.tex`:
+<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>.
 
-Every later fork there computes the same result with the same prices, up to Bogota.
+Every fork since Frontier computes the same result with the same prices.
 
 The call fails only when it runs out of gas.
 -/
@@ -25,10 +28,10 @@ namespace EthLib.Execution.Evm.Precompiles.Identity
 
 open EthLib.Execution.Evm (wordCount)
 
-/-- The price of every call, `GasCosts.PRECOMPILE_IDENTITY_BASE` in [`forks/frontier/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/frontier/vm/gas.py#L70). -/
+/-- The price of every call, from Appendix E of the Yellow Paper. -/
 def GAS_BASE : Nat := 15
 
-/-- The price of each word of call data, `GasCosts.PRECOMPILE_IDENTITY_PER_WORD` in [`forks/frontier/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/frontier/vm/gas.py#L71). -/
+/-- The price of each word of call data, from Appendix E of the Yellow Paper. -/
 def GAS_PER_WORD : Nat := 3
 
 /-- The gas a call with `size` bytes of call data is charged. -/
@@ -36,7 +39,7 @@ def gasCost (size : Nat) : Nat := GAS_BASE + GAS_PER_WORD * wordCount size
 
 /-- Why an IDENTITY call fails. -/
 inductive IdentityError where
-  /-- The gas given was below the price, so `charge_gas` raises `OutOfGasError` and the call consumes all its gas. -/
+  /-- The gas given was below the price, so the call consumes all its gas. -/
   | outOfGas (cost gas : Nat)
   deriving Repr, DecidableEq
 

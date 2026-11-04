@@ -25,15 +25,12 @@ The output is `BASE ^ EXPONENT mod MODULUS`, as exactly `len_mod` big-endian byt
 
 It is `len_mod` zero bytes when `MODULUS` is 0.
 
-The steps run in the order of `modexp` in `forks/bpo2/vm/precompiled_contracts/modexp.py`.
-That module is in execution-specs at `2c0c8e7`.
+The steps run in this order:
 
-```text
-    read the three lengths
-      -> reject any length above 1024     (no gas charged)
-      -> charge the gas                   (out of gas ends the call)
-      -> read BASE, EXPONENT, MODULUS and compute the output
-```
+1. Read the three lengths.
+2. Reject any length above 1024, before any gas is charged (EIP-7823).
+3. Charge the gas, and end the call when it runs out.
+4. Read `BASE`, `EXPONENT` and `MODULUS`, and compute the output.
 -/
 
 @[expose] public section
@@ -52,9 +49,7 @@ structure Lengths where
 
 /-- Read the three length headers.
 
-EIP-198, Specification.
-
-The first lines of `modexp` in execution-specs. -/
+EIP-198, Specification. -/
 def parseLengths (data : ByteArray) : Lengths where
   base := readNat data 0 LENGTH_HEADER_BYTES
   exponent := readNat data LENGTH_HEADER_BYTES LENGTH_HEADER_BYTES
@@ -64,9 +59,7 @@ def parseLengths (data : ByteArray) : Lengths where
 
 EIP-7823, Specification.
 
-These are the three `ExceptionalHalt` checks of `modexp` in execution-specs.
-
-They run in the order base, exponent, modulus, so the first oversized field is reported. -/
+The checks run in the order base, exponent, modulus, so the first oversized field is reported. -/
 def checkLengths (l : Lengths) : Except ModexpError Unit :=
   if l.base > MAX_LENGTH_BYTES then .error (.lengthTooLarge .base l.base)
   else if l.exponent > MAX_LENGTH_BYTES then .error (.lengthTooLarge .exponent l.exponent)
@@ -83,23 +76,21 @@ def Lengths.modulusStart (l : Lengths) : Nat :=
 
 /-- The first 32 bytes of `EXPONENT` as an integer, or all of it when shorter.
 
-`exp_head` in `modexp` in execution-specs. -/
+EIP-198 reads the highest bit of the exponent from these bytes. -/
 def exponentHead (data : ByteArray) (l : Lengths) : Nat :=
   readNat data l.exponentStart (min EXPONENT_HEAD_BYTES l.exponent)
 
 /-- The gas the call is charged, read from the input.
 
-`gas_cost(base_length, modulus_length, exp_length, exp_head)` in `modexp` in execution-specs. -/
+EIP-7883, Specification. -/
 def requiredGas (data : ByteArray) (l : Lengths) : Nat :=
   gasCost l.base l.modulus l.exponent (exponentHead data l)
 
 /-- The operation of the precompile: the output bytes, once the gas is paid.
 
-The `# OPERATION` part of `modexp` in execution-specs.
-
 - The power is computed by square-and-multiply, one step per bit of the exponent.
-- A zero modulus gives `len_mod` zero bytes.
-- An empty base and modulus give an empty output, the early return of execution-specs. -/
+- A zero modulus gives `len_mod` zero bytes, since the Yellow Paper takes `x mod 0 = 0`.
+- An empty base and modulus give an empty output. -/
 def compute (data : ByteArray) (l : Lengths) : ByteArray :=
   let base := readNat data BASE_OFFSET l.base
   let exponent := readNat data l.exponentStart l.exponent
@@ -117,9 +108,7 @@ def chargedGas (data : ByteArray) : Except ModexpError Nat :=
 
 /-- Run the precompile on `data` with `gas` available.
 
-Returns the output, or the error that consumes all the gas.
-
-`modexp` in execution-specs. -/
+Returns the output, or the error that consumes all the gas. -/
 def modexp (data : ByteArray) (gas : Nat) : Except ModexpError ByteArray :=
   let l := parseLengths data
   -- EIP-7823: bounds first, before any gas is charged.
