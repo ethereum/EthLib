@@ -7,7 +7,8 @@ public import EthLib.Serialization.Rlp.Item
 
 The RLP encoding of an item.
 
-Source: Appendix B of the Yellow Paper, Shanghai version, in [`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex), equations for `R_b`, `R_l` and `s`.
+Source: `R_b`, `R_l` and `s` in Appendix B of the Yellow Paper, Shanghai version, in
+[`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
 
 An encoding is a prefix, then a payload.
 
@@ -23,9 +24,9 @@ The first byte of an encoding tells a byte string from a list, and a short paylo
 
 - `0x00` to `0x7f`: a single byte below `0x80`, which is its own encoding.
 - `0x80` to `0xb7`: a short byte string, with `0x80 + length`.
-- `0xb8` to `0xbf`: a long byte string, with `0xb7` plus the size of `BE(length)`, then `BE(length)`.
+- `0xb8` to `0xbf`: a long byte string, with `0xb7 + k`, then `BE(length)` on its `k` bytes.
 - `0xc0` to `0xf7`: a short list, with `0xc0 + length`.
-- `0xf8` to `0xff`: a long list, with `0xf7` plus the size of `BE(length)`, then `BE(length)`.
+- `0xf8` to `0xff`: a long list, with `0xf7 + k`, then `BE(length)` on its `k` bytes.
 
 For example, the list of "cat" and "dog" encodes as:
 
@@ -53,7 +54,7 @@ inductive PayloadKind where
   /-- The encodings of the items of a list. -/
   | list
 
-/-- The first byte of the prefix of an empty payload: `0x80` for a byte string, `0xc0` for a list. -/
+/-- The prefix byte of an empty payload: `0x80` for a byte string, `0xc0` for a list. -/
 def PayloadKind.offset : PayloadKind → Nat
   | .bytes => 0x80
   | .list => 0xc0
@@ -71,7 +72,8 @@ def lengthPrefix (kind : PayloadKind) (length : Nat) : Except RlpError ByteArray
   if length < 56 then
     .ok ⟨#[UInt8.ofNat (kind.offset + length)]⟩
   else if length < 2 ^ 64 then
-    -- Below `2^64`, `BE(length)` has at most 8 bytes, so the first byte is at most `0xc0 + 55 + 8 = 0xff`.
+    -- Below `2^64`, `BE(length)` has at most 8 bytes.
+    -- So the first byte is at most `0xc0 + 55 + 8 = 0xff`.
     let lengthBytes := bigEndian length
     .ok (⟨#[UInt8.ofNat (kind.offset + 55 + lengthBytes.size)]⟩ ++ lengthBytes)
   else

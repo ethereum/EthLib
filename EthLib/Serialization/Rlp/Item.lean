@@ -5,15 +5,16 @@ module
 
 The values that Recursive Length Prefix (RLP) encodes, and the big-endian bytes of a number.
 
-Source: Appendix B of the Yellow Paper, Shanghai version, in [`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
+Source: Appendix B of the Yellow Paper, Shanghai version, in
+[`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
 
 An item is a byte string or a list of items, so the items form a tree.
 
 For example, `[ "cat", [ "dog" ], [] ]` is a list of three items:
 
-- the byte string `63 61 74`;
-- a list that holds the byte string `64 6f 67`;
-- the empty list.
+- The byte string `63 61 74`.
+- A list that holds the byte string `64 6f 67`.
+- The empty list.
 
 The empty byte string and the empty list are different items, with different encodings.
 -/
@@ -132,7 +133,7 @@ def bigEndianAux : Nat → Nat → ByteArray
       else
         (bigEndianAux (n / 256) fuel).push (UInt8.ofNat (n % 256))
 
-/-- `BE` of the Yellow Paper: `n` in base 256, most significant byte first, with no leading zero byte.
+/-- `BE` of the Yellow Paper: `n` in base 256, most significant byte first, with no leading zero.
 
 ```text
 BE(0) = []
@@ -146,7 +147,9 @@ def bigEndian (n : Nat) : ByteArray :=
 
 /-- The number that `bytes` writes in base 256, most significant byte first.
 
-The Yellow Paper defines `BE(x)` as the bytes `b` with `x = sum_n b_n * 256^(k - 1 - n)`, where `k` is their count.
+The Yellow Paper defines `BE(x)` as the bytes `b` with `x = sum_n b_n * 256^(k - 1 - n)`.
+
+Here `k` is the number of bytes.
 
 This is that sum, computed one byte at a time. -/
 def ofBigEndian (bytes : List UInt8) : Nat :=

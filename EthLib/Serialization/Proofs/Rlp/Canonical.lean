@@ -5,20 +5,22 @@ public import EthLib.Serialization.Proofs.Rlp.RoundTrip
 /-!
 # `Serialization.Proofs.Rlp.Canonical`
 
-The decoder accepts only canonical input: `encode_decode` proves `decode b = .ok x → encode x = .ok b`.
+The decoder accepts only canonical input: if `decode b = .ok x`, then `encode x = .ok b`.
 
-With the round trip, `decode_eq_ok_iff` makes `encode` a bijection between items and the inputs that `decode` accepts.
+With the round trip, the encoding is a bijection between items and the accepted inputs.
 
-So no item has two accepted encodings, and two decoders that follow this specification agree on every input.
+So no item has two accepted encodings, and two decoders that follow this specification agree.
 
-`decode_isOk_iff` proves that `decode` succeeds exactly on the encodings of items.
+The decoder succeeds exactly on the encodings of items.
 
-`decodeItem_append` proves that the parser reads the same item from a longer input, as a stream decoder needs.
+The parser reads the same item from a longer input, as a stream decoder needs.
 
-The proof runs the decoder backwards.
+The proof runs the decoder backwards:
 
-1. A prefix the decoder accepts is the prefix the encoding writes, because a length has no leading zero and is at least 56 in the long form.
-2. A byte string the decoder reads is not one byte below `0x80`, so the encoding writes it with that prefix.
+1. A prefix that the decoder accepts is the prefix that the encoding writes.
+   A length has no leading zero, and it is at least 56 in the long form.
+2. A byte string that the decoder reads is not one byte below `0x80`.
+   So the encoding writes it with that prefix.
 3. A list payload is shorter than its item, so induction on the number of bytes covers its items.
 -/
 
@@ -55,7 +57,7 @@ theorem byteArray_eq_of_toList (a b : ByteArray) (h : a.data.toList = b.data.toL
   simp only [Array.toList_inj] at h
   rw [h]
 
-/-- What a long length that `readLongLength` accepts is made of. -/
+/-- What an accepted length in the long form is made of. -/
 theorem readLongLength_ok (rest : List UInt8) (kind kind' : PayloadKind) (k k' length : Nat)
     (h : readPrefix.readLongLength rest kind k = .ok (kind', k', length)) :
     kind' = kind ∧ k' = k ∧ k ≤ rest.length ∧ 56 ≤ length ∧ length < 256 ^ k ∧
@@ -97,7 +99,7 @@ theorem lengthPrefix_long_toList (kind : PayloadKind) (length k : Nat) (lengthBy
   unfold lengthPrefix
   simp [show ¬ length < 56 by omega, h64, hSize, Except.map, hBytes]
 
-/-- A prefix that `readPrefix` accepts is the prefix that the encoding writes for its kind and length. -/
+/-- An accepted prefix is the prefix that the encoding writes for its kind and length. -/
 theorem readPrefix_ok (first : UInt8) (tail : List UInt8) (kind : PayloadKind) (k length : Nat)
     (hHigh : ¬ first < 0x80) (h : readPrefix first tail = .ok (kind, k, length)) :
     k ≤ tail.length ∧ (lengthPrefix kind length).map (·.data.toList) = .ok (first :: tail.take k) := by
@@ -171,7 +173,7 @@ theorem encode_bytes_of_prefix (data : ByteArray) (pre : ByteArray) (hNotSingle 
     encode (.bytes data) = .ok (pre ++ data) := by
   simp [encode, encodeBytes, hNotSingle, hPre, bind, Except.bind, pure, Except.pure]
 
-/-- One step of canonicity: an item that `readItem` reads is encoded as exactly the bytes it read.
+/-- One step of canonicity: an item that the parser reads is encoded as exactly the bytes it read.
 
 The step assumes the same of every list payload shorter than the input. -/
 theorem readItem_canonical (input : List UInt8)
@@ -224,7 +226,7 @@ theorem readItem_canonical (input : List UInt8)
             dsimp only at h
             -- The bytes of the payload, named, with their count.
             generalize hp : (tail.drop k).take length = payload at h hPayloadLen hSplit
-            -- A byte string whose bytes are the payload, and which is not one low byte, encodes as the input read.
+            -- A payload that is not one low byte encodes as the input read.
             have finish : ∀ data : ByteArray, data.data.toList = payload → isSingleLowByte data = false →
                 ∃ e, encode (.bytes data) = .ok e ∧
                   first :: tail = e.data.toList ++ (tail.drop k).drop length := by
@@ -280,7 +282,9 @@ theorem readItem_canonical (input : List UInt8)
                 simp [hPreBytes, hE]
         · rw [ite_eq_right hFit] at h
           simp [Except.map] at h
-/-- Canonicity up to `n` bytes: what the decoder reads from at most `n` bytes is encoded as exactly those bytes.
+/-- Canonicity up to `n` bytes.
+
+What the decoder reads from at most `n` bytes is encoded as exactly those bytes.
 
 - An item read from the front of an input is encoded as the bytes before the rest.
 - The items of a list payload are encoded, one after another, as the whole payload. -/
@@ -301,7 +305,7 @@ theorem canonical_upTo (n : Nat) :
     subst h
     exact ⟨.empty, rfl, rfl⟩
   | succ m ih =>
-    -- Items first: a list payload is shorter than its item, so the step for shorter payloads applies.
+    -- Items first: a list payload is shorter than its item, so induction applies.
     have hItem : ∀ input : List UInt8, input.length ≤ m + 1 → ∀ x rest, readItem input = .ok (x, rest) →
         ∃ e, encode x = .ok e ∧ input = e.data.toList ++ rest :=
       fun input hLen x rest h =>
@@ -379,7 +383,7 @@ So a decoder that reads a stream needs no end marker. -/
 theorem decodeItem_append (input rest more : List UInt8) (x : Item) (hRest : rest.length < input.length)
     (h : decodeItem input = .ok (x, ⟨rest, hRest⟩)) :
     ∃ hMore, decodeItem (input ++ more) = .ok (x, ⟨rest ++ more, hMore⟩) := by
-  -- The input is an encoding of `x`, then the rest, so the longer input is that encoding, then `rest ++ more`.
+  -- The input is an encoding of `x`, then the rest, so add `more` after the rest.
   obtain ⟨e, hEncode, hInput⟩ := encode_of_decodeItem input rest x hRest h
   rw [hInput, List.append_assoc]
   exact decodeItem_encode x e hEncode (rest ++ more)
@@ -392,7 +396,9 @@ def IsEncoding (b : ByteArray) : Prop :=
 
 /-- `decode` succeeds exactly on the encodings of items.
 
-With `decode_eq_ok_iff`, it is the declarative decoder of Coglio, Figure 6: the inverse of `encode` on its image. -/
+With the bijection, it is the declarative decoder of Coglio, Figure 6.
+
+That decoder is the inverse of the encoding on its image. -/
 theorem decode_isOk_iff (b : ByteArray) : (∃ x, decode b = .ok x) ↔ IsEncoding b := by
   constructor
   · rintro ⟨x, h⟩

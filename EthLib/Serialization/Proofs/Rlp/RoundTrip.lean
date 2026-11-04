@@ -6,15 +6,15 @@ public import EthLib.Serialization.Proofs.Rlp.Item
 /-!
 # `Serialization.Proofs.Rlp.RoundTrip`
 
-Decoding undoes encoding: `decode_encode` proves `encode x = .ok b → decode b = .ok x`, for every item `x`.
+Decoding undoes encoding: for every item `x`, if `encode x = .ok b`, then `decode b = .ok x`.
 
-So `encode` is injective: two items never share an encoding.
+So the encoding is injective: two items never share an encoding.
 
-`encode_prefix_free` proves that no encoding is a proper prefix of another.
+No encoding is a proper prefix of another.
 
 The proof follows the shape of an encoding.
 
-1. The first byte and the length bytes of a prefix read back as the kind and the length of the payload.
+1. The first byte and the length bytes of a prefix read back as the kind and the length.
 2. A byte string reads back from its prefix and its bytes.
 3. A list reads back from its prefix and the encodings of its items.
 4. Items read back one after another, by induction on the tree.
@@ -26,7 +26,7 @@ Each step holds with any bytes after the encoding, since a list holds more items
 
 namespace EthLib.Serialization.Rlp
 
-/-- The short prefix `offset + length` reads back as its kind and its length, with no length bytes. -/
+/-- The short prefix `offset + length` reads back as its kind and its length. -/
 theorem readPrefix_short (kind : PayloadKind) (length : Nat) (h : length < 56) (rest : List UInt8) :
     readPrefix (UInt8.ofNat (kind.offset + length)) rest = .ok (kind, 0, length) := by
   cases kind
@@ -55,7 +55,9 @@ theorem bigEndian_length_bounds (length : Nat) (h1 : 56 ≤ length) (h2 : length
     simp at hSize
     omega
 
-/-- The long prefix `offset + 55 + k`, then `BE(length)` on `k` bytes, reads back as its kind and its length. -/
+/-- The long prefix reads back as its kind and its length.
+
+That prefix is `offset + 55 + k`, then `BE(length)` on `k` bytes. -/
 theorem readPrefix_long (kind : PayloadKind) (length : Nat) (h1 : 56 ≤ length) (h2 : length < 2 ^ 64)
     (rest : List UInt8) :
     readPrefix (UInt8.ofNat (kind.offset + 55 + (bigEndian length).size))
@@ -86,7 +88,7 @@ theorem readPrefix_long (kind : PayloadKind) (length : Nat) (h1 : 56 ≤ length)
       show ¬ 247 + (bigEndian length).size < 192 by omega,
       show ¬ 247 + (bigEndian length).size < 248 by omega, hLong]
 
-/-- A prefix is a first byte of at least `0x80`, then the bytes that `readPrefix` reads back as the kind and the length. -/
+/-- A prefix is a first byte of at least `0x80`, then bytes that read back as kind and length. -/
 theorem lengthPrefix_readPrefix (kind : PayloadKind) (length : Nat) (pre : ByteArray)
     (h : lengthPrefix kind length = .ok pre) :
     ∃ first lengthBytes, pre.data.toList = first :: lengthBytes ∧ 0x80 ≤ first ∧
@@ -134,7 +136,7 @@ theorem readItem_list (payload rest : List UInt8) (items : List Item) (pre : Byt
   rw [hRead (payload ++ rest)]
   simp [bind, Except.bind, hItems, Except.map]
 
-/-- A byte string with a prefix reads back from that prefix and its bytes, with any bytes after them. -/
+/-- A byte string reads back from its prefix and its bytes, with any bytes after them. -/
 theorem readItem_bytes (data : ByteArray) (rest : List UInt8) (pre : ByteArray)
     (h : lengthPrefix .bytes data.size = .ok pre) (hNotSingle : isSingleLowByte data = false) :
     readItem (pre.data.toList ++ data.data.toList ++ rest) = .ok (.bytes data, rest) := by
@@ -227,7 +229,7 @@ theorem joinEncodings_cons_ok (item : Item) (rest : List Item) (e : ByteArray)
       simp [hHead, hTail, bind, Except.bind, pure, Except.pure] at h
       exact ⟨head, tail, by simp, by simp, h.symm⟩
 
-/-- When `readItem` succeeds, `decodeItem` succeeds with the same item and the same rest. -/
+/-- When the parser succeeds, the decoder of one item succeeds with the same item and rest. -/
 theorem decodeItem_of_readItem (input rest : List UInt8) (item : Item)
     (h : readItem input = .ok (item, rest)) :
     ∃ hRest, decodeItem input = .ok (item, ⟨rest, hRest⟩) := by
@@ -242,7 +244,7 @@ theorem decodeItem_of_readItem (input rest : List UInt8) (item : Item)
 
 mutual
 
-/-- Decoding the front of an encoding, then more bytes, gives back the item and the bytes after it. -/
+/-- An encoding, then more bytes, reads back as the item and the bytes after it. -/
 theorem readItem_encode : (x : Item) → (e : ByteArray) → encode x = .ok e → (rest : List UInt8) →
     readItem (e.data.toList ++ rest) = .ok (x, rest)
   | .bytes data, e, h, rest => by
@@ -305,7 +307,9 @@ theorem encode_injective (x y : Item) (b : ByteArray) (hx : encode x = .ok b) (h
 
 /-- The parser reads an encoding from the front of any input, and leaves exactly the bytes after it.
 
-This is the left-inverse property of Coglio's parser, `rlp-parse-tree-of-rlp-encode-tree`, with any bytes after the encoding. -/
+The theorem is the left-inverse property of Coglio's parser, with any bytes after the encoding.
+
+Coglio names it `rlp-parse-tree-of-rlp-encode-tree`. -/
 theorem decodeItem_encode (x : Item) (e : ByteArray) (h : encode x = .ok e) (rest : List UInt8) :
     ∃ hRest, decodeItem (e.data.toList ++ rest) = .ok (x, ⟨rest, hRest⟩) :=
   decodeItem_of_readItem _ _ _ (readItem_encode x e h rest)
@@ -314,7 +318,8 @@ theorem decodeItem_encode (x : Item) (e : ByteArray) (h : encode x = .ok e) (res
 
 So a stream of encodings, one after another, splits in only one way, with no end marker.
 
-This is `rlp-encode-tree-unamb-prefix` of Coglio, [Ethereum's Recursive Length Prefix in ACL2](https://doi.org/10.4204/EPTCS.327.11), Figure 5. -/
+The theorem is `rlp-encode-tree-unamb-prefix` in Figure 5 of Coglio,
+[Ethereum's Recursive Length Prefix in ACL2](https://doi.org/10.4204/EPTCS.327.11). -/
 theorem encode_prefix_free (x y : Item) (ex ey : ByteArray) (hx : encode x = .ok ex) (hy : encode y = .ok ey)
     (more : List UInt8) (hPrefix : ey.data.toList = ex.data.toList ++ more) : more = [] := by
   -- Read `ey` from the front in two ways: as `y` with nothing after, and as `x` with `more` after.
@@ -324,7 +329,9 @@ theorem encode_prefix_free (x y : Item) (ex ey : ByteArray) (hx : encode x = .ok
   cases hY
   rfl
 
-/-- An encoding followed by more bytes is not a whole encoding: `decode` reports the bytes left over. -/
+/-- An encoding followed by more bytes is not a whole encoding.
+
+The decoder reports the bytes left over. -/
 theorem decode_trailing (x : Item) (e : ByteArray) (h : encode x = .ok e) (more : ByteArray)
     (hMore : more.size ≠ 0) :
     decode (e ++ more) = .error (.trailingBytes more.size) := by
