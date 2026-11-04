@@ -235,6 +235,7 @@ PyObject* py_keccak256                                    (PyObject* self, PyObj
 PyObject* py_keccak_f1600                                 (PyObject* self, PyObject* args);
 PyObject* py_trie_root                                    (PyObject* self, PyObject* args);
 PyObject* py_trie_verify_proof                            (PyObject* self, PyObject* args);
+PyObject* py_trie_hex_prefix                              (PyObject* self, PyObject* args);
 PyObject* py_vrf_verify                                   (PyObject* self, PyObject* args);
 PyObject* py_vrf_secret                                   (PyObject* self, PyObject* args);
 PyObject* py_vrf_evaluate                                 (PyObject* self, PyObject* args);

@@ -1,4 +1,4 @@
-"""The Merkle Patricia trie of the execution layer: its root, and the check of a proof."""
+"""The Merkle Patricia trie of the execution layer: its root, its proofs and its path encoding."""
 
 # Both hash with Keccak-256, and a secured trie hashes each key before it becomes a path.
 
@@ -25,4 +25,12 @@ def verify_proof(
     return _native.trie_verify_proof(root, secured, key, rlp.encode(list(proof)))
 
 
-__all__ = ["root", "verify_proof", "TrieError"]
+def hex_prefix(nibbles: list[int], is_leaf: bool) -> bytes:
+    """The hex-prefix encoding of a path of nibbles, HP of Appendix C of the Yellow Paper."""
+    # A value outside a byte raises ValueError here, and a byte of 16 or more TrieError with code 0.
+    if any(not 0 <= n < 256 for n in nibbles):
+        raise ValueError("a nibble must be in [0, 16)")
+    return _native.trie_hex_prefix(bytes(nibbles), is_leaf)
+
+
+__all__ = ["root", "verify_proof", "hex_prefix", "TrieError"]
