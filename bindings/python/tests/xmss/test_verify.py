@@ -95,6 +95,28 @@ def test_tampered_top_last_sibling() -> None:
           expected=False)
 
 
+def test_zeroed_message_byte() -> None:
+    # The first byte of the message becomes 0x00, so the bottom layer signs another digest.
+    message = b"\x00" + F.MESSAGE_KNOWN_ANSWER[1:]
+    _emit(f"{HANDLER}_zeroed_message_byte",
+          _key(), message, _signature(), expected=False)
+
+
+def test_next_leaf_index() -> None:
+    # 0xA5C37E19 becomes 0xA5C37E1A, the next leaf: every bottom address changes.
+    # The leaf index is the first 4 bytes of the signature, least significant first.
+    signature = (F.LEAF_KNOWN_ANSWER + 1).to_bytes(4, "little") + _signature()[4:]
+    _emit(f"{HANDLER}_next_leaf_index",
+          _key(), F.MESSAGE_KNOWN_ANSWER, signature, expected=False)
+
+
+def test_zeroed_top_last_sibling() -> None:
+    # The sibling just below the key's root, the last 16 bytes, becomes all zero.
+    signature = _signature()[:-16] + bytes(16)
+    _emit(f"{HANDLER}_zeroed_top_last_sibling",
+          _key(), F.MESSAGE_KNOWN_ANSWER, signature, expected=False)
+
+
 def test_wrong_root() -> None:
     # The public key is the root, then the public parameter.
     _emit(f"{HANDLER}_wrong_root",
