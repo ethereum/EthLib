@@ -561,6 +561,8 @@ static PyMethodDef methods[] = {
   {"discv5_reencode_packet", py_discv5_reencode_packet, METH_VARARGS, NULL},
   {"discv5_encrypt_message", py_discv5_encrypt_message, METH_VARARGS, NULL},
   {"discv5_decrypt_message", py_discv5_decrypt_message, METH_VARARGS, NULL},
+  {"discv5_decode_message", py_discv5_decode_message, METH_VARARGS, NULL},
+  {"discv5_reencode_message", py_discv5_reencode_message, METH_VARARGS, NULL},
   {"consensus_preset", py_consensus_preset, METH_VARARGS, NULL},
   {"consensus_config", py_consensus_config, METH_VARARGS, NULL},
   {"consensus_parameters", py_consensus_parameters, METH_VARARGS, NULL},

@@ -71,6 +71,16 @@ eth_discv5_decrypt_message(
   lean_object* ad
 );
 
+extern lean_object*
+eth_discv5_decode_message(
+  lean_object* plaintext
+);
+
+extern lean_object*
+eth_discv5_reencode_message(
+  lean_object* plaintext
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* Parse `n` arguments that must all be `bytes` into Lean byte arrays.
@@ -190,4 +200,24 @@ py_discv5_decrypt_message(
   if (!parse_bytes_args(args, 4, a)) return NULL;
   return except_into_pybytes(
     eth_discv5_decrypt_message(a[0], a[1], a[2], a[3]), DISCV5_ERROR);
+}
+
+PyObject*
+py_discv5_decode_message(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[1];
+  if (!parse_bytes_args(args, 1, a)) return NULL;
+  return except_into_pybytes(eth_discv5_decode_message(a[0]), DISCV5_ERROR);
+}
+
+PyObject*
+py_discv5_reencode_message(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[1];
+  if (!parse_bytes_args(args, 1, a)) return NULL;
+  return except_into_pybytes(eth_discv5_reencode_message(a[0]), DISCV5_ERROR);
 }
