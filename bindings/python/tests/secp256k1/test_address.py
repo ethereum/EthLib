@@ -1,6 +1,8 @@
 """The address of a private key, against the definition of the Yellow Paper."""
 
+import json
 import random
+from pathlib import Path
 
 import pytest
 from py_ecc.secp256k1 import secp256k1 as reference
@@ -47,3 +49,20 @@ def test_address_rejects_zero() -> None:
 def test_address_rejects_n() -> None:
     with pytest.raises(ValueError, match="not below the group order"):
         secp256k1.address(N.to_bytes(32, "big"))
+
+
+# The key-address test of ethereum/tests.
+#
+# File: BasicTests/keyaddrtest.json
+# Repository: ethereum/tests
+# Commit: c67e485ff8b5be9abc8ad15345ec21aa22e290d9
+# Licence: MIT (keyaddr/README.md)
+KEYADDR = json.loads((Path(__file__).resolve().parent / "keyaddr" / "keyaddrtest.json").read_text())
+
+
+@pytest.mark.parametrize("case", KEYADDR, ids=lambda c: c["seed"])
+def test_keyaddr(case: dict) -> None:
+    # The field `sig_of_emptystring` is not read: the file does not name the hash it signs, and no
+    # candidate hash recovers the address (keyaddr/README.md).
+    assert len(KEYADDR) == 2
+    assert secp256k1.address(bytes.fromhex(case["key"])).hex() == case["addr"]

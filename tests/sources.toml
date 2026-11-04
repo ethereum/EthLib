@@ -54,6 +54,7 @@ commit = "be307c948f28897adb8f25afcc253c2c909de35d"
 commit = "c67e485ff8b5be9abc8ad15345ec21aa22e290d9"
 directories = [
   "bindings/python/tests/rlp/vectors",
+  "bindings/python/tests/secp256k1/keyaddr",
   "bindings/python/tests/state/genesis",
   "bindings/python/tests/trie/trietests",
 ]
