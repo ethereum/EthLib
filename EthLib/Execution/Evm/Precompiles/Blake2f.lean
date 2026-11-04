@@ -3,29 +3,13 @@ module
 public import EthLib.Cryptography.Hash.Blake2b
 
 /-!
-# `Precompiles.Blake2f`
+# `Evm.Precompiles.Blake2f`
 
-The BLAKE2F precompile at address `0x09`, [EIP-152](https://eips.ethereum.org/EIPS/eip-152).
+The BLAKE2F precompile at address `0x09`, from [EIP-152](https://eips.ethereum.org/EIPS/eip-152).
 
-It runs the compression function F of BLAKE2b, [RFC 7693](https://www.rfc-editor.org/rfc/rfc7693) §3.2, with as many rounds as the caller asks for.
+It runs F, the compression function of BLAKE2b in RFC 7693 §3.2, for the rounds asked for.
 
-The input is exactly 213 bytes:
-
-```text
-[ rounds: 4 | h: 64 | m: 128 | t0: 8 | t1: 8 | f: 1 ]
-```
-
-- The rounds field is a 32-bit big-endian word.
-- `h` is 8 words and `m` is 16 words.
-- `t0` and `t1` are the low and high words of the offset counter.
-- Every word is 64 bits, little-endian.
-- The flag byte is `1` for true and `0` for false.
-
-The output is the new state `h`, 64 bytes, in the same encoding.
-
-The price is one gas per round.
-
-The call checks the length, then charges the gas, then reads the flag.
+The input is exactly 213 bytes, and the output is the new 64-byte state.
 -/
 
 @[expose] public section
@@ -46,7 +30,7 @@ abbrev Input := Vector UInt8 INPUT_BYTES
 /-- Why a BLAKE2F call fails: the two errors of EIP-152, or too little gas. -/
 inductive Blake2fError where
   /-- The input is not exactly 213 bytes, EIP-152 test vectors 0 to 2. -/
-  | invalidLength (length : Nat)
+  | invalidInputLength (size : Nat)
   /-- The flag byte is neither `0` nor `1`, EIP-152 Specification. -/
   | invalidFlag (flag : UInt8)
   /-- The gas given was below the price, so the call consumes all its gas. -/
@@ -59,7 +43,7 @@ The code ignores the arguments of the constructor.
 
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def Blake2fError.code : Blake2fError → UInt32
-  | .invalidLength .. => 1
+  | .invalidInputLength .. => 1
   | .invalidFlag .. => 2
   | .outOfGas .. => 3
 
@@ -103,19 +87,19 @@ def compute (input : Input) (f : Bool) : Vector UInt8 OUTPUT_BYTES :=
   let t1 := readWord input 204 (by simp only [INPUT_BYTES]; omega)
   writeState (Blake2b.compress (readRounds input).toNat h m t0 t1 f)
 
-/-- The precompile: the 64 bytes of the new state, or the error the input raises.
+/-- The 64 bytes of the new state, or the error of the input, before any gas is charged.
 
 The length is checked before the flag.
 
 EIP-152 does not fix that order, so this module fixes it. -/
-def blake2f (data : ByteArray) : Except Blake2fError (Vector UInt8 OUTPUT_BYTES) :=
+def output (data : ByteArray) : Except Blake2fError (Vector UInt8 OUTPUT_BYTES) :=
   if hsize : data.size = INPUT_BYTES then
     let input : Input := ⟨data.data, hsize⟩
     -- The flag is byte 212, the last one.
     match readFlag (input[212]'(by simp only [INPUT_BYTES]; omega)) with
     | .error e => .error e
     | .ok f => .ok (compute input f)
-  else .error (.invalidLength data.size)
+  else .error (.invalidInputLength data.size)
 
 /-! ## The price -/
 
@@ -129,12 +113,12 @@ def gasCost (data : ByteArray) : Nat :=
   if hsize : data.size = INPUT_BYTES then GAS_PER_ROUND * (readRounds ⟨data.data, hsize⟩).toNat
   else 0
 
-/-- The call: the precompile, once the gas covers the price of the rounds.
+/-- The call: the length is checked, then the gas is charged, then the flag is read.
 
-The gas is charged after the length check and before the flag check. -/
-def call (data : ByteArray) (gas : Nat) : Except Blake2fError ByteArray :=
-  if data.size ≠ INPUT_BYTES then .error (.invalidLength data.size)
+EIP-152 does not order the two checks of the call data, so this module orders them. -/
+def blake2f (data : ByteArray) (gas : Nat) : Except Blake2fError ByteArray :=
+  if data.size ≠ INPUT_BYTES then .error (.invalidInputLength data.size)
   else if gas < gasCost data then .error (.outOfGas (gasCost data) gas)
-  else (blake2f data).map fun out => ⟨out.toArray⟩
+  else (output data).map fun out => ⟨out.toArray⟩
 
 end EthLib.Execution.Evm.Precompiles.Blake2f

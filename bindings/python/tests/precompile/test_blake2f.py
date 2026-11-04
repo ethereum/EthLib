@@ -37,9 +37,9 @@ def vector(rounds: str, flag: str) -> bytes:
 
 # Test vectors 0 to 3: the inputs the precompile rejects, with the error it names.
 REJECTED = [
-    (b"", "invalidLength"),
-    (vector("00000c", "01"), "invalidLength"),
-    (vector("000000000c", "01"), "invalidLength"),
+    (b"", "invalidInputLength"),
+    (vector("00000c", "01"), "invalidInputLength"),
+    (vector("000000000c", "01"), "invalidInputLength"),
     (vector("0000000c", "02"), "invalidFlag"),
 ]
 

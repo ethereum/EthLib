@@ -27,28 +27,28 @@ private theorem digest_size (data : ByteArray) : (Cryptography.Hash.ripemd160 da
   Ripemd160.hash_size data
 
 /-- The output is 32 bytes, whatever the call data. -/
-@[simp] theorem ripemd160_size (data : ByteArray) : (ripemd160 data).size = OUTPUT_BYTES := by
-  unfold ripemd160
+@[simp] theorem output_size (data : ByteArray) : (output data).size = OUTPUT_BYTES := by
+  unfold output
   rw [ByteArray.size_append, padding_size, digest_size]
   rfl
 
 /-- The first twelve bytes are zero. -/
-theorem ripemd160_leading_zeros (data : ByteArray) (i : Nat) (within : i < 12) :
-    (ripemd160 data)[i]'(by rw [ripemd160_size]; simp [OUTPUT_BYTES]; omega) = 0 := by
+theorem output_leading_zeros (data : ByteArray) (i : Nat) (within : i < 12) :
+    (output data)[i]'(by rw [output_size]; simp [OUTPUT_BYTES]; omega) = 0 := by
   -- Name the bound, so it unfolds together with the output.
-  have bound : i < (ripemd160 data).size := by rw [ripemd160_size]; simp [OUTPUT_BYTES]; omega
-  change (ripemd160 data)[i]'bound = 0
-  unfold EthLib.Execution.Evm.Precompiles.Ripemd160.ripemd160 at bound ⊢
+  have bound : i < (output data).size := by rw [output_size]; simp [OUTPUT_BYTES]; omega
+  change (output data)[i]'bound = 0
+  unfold EthLib.Execution.Evm.Precompiles.Ripemd160.output at bound ⊢
   -- The zeros are the left part of the concatenation.
   rw [ByteArray.getElem_append_left (by rw [padding_size]; exact within)]
   simp [ByteArray.getElem_eq_getElem_data]
 
 /-- The last twenty bytes are the RIPEMD-160 digest. -/
-theorem ripemd160_digest (data : ByteArray) (i : Nat) (within : i < 20) :
-    (ripemd160 data)[12 + i]'(by rw [ripemd160_size]; simp [OUTPUT_BYTES]; omega) =
+theorem output_digest (data : ByteArray) (i : Nat) (within : i < 20) :
+    (output data)[12 + i]'(by rw [output_size]; simp [OUTPUT_BYTES]; omega) =
       (Cryptography.Hash.ripemd160 data)[i]'(by rw [digest_size]; omega) := by
   -- Unfold the output with simp, which carries the index bound along.
-  simp only [EthLib.Execution.Evm.Precompiles.Ripemd160.ripemd160]
+  simp only [EthLib.Execution.Evm.Precompiles.Ripemd160.output]
   -- The digest is the right part of the concatenation, after the twelve zeros.
   rw [ByteArray.getElem_append_right (by rw [padding_size]; omega)]
   simp [padding_size]
@@ -61,9 +61,9 @@ theorem gasCost_eq (size : Nat) : gasCost size = 600 + 120 * ((size + 31) / 32) 
   rfl
 
 /-- A call succeeds exactly when the gas covers the price, and then returns the output. -/
-theorem call_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
-    call data gas = .ok out ↔ gasCost data.size ≤ gas ∧ out = ripemd160 data := by
-  unfold call
+theorem ripemd160_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
+    ripemd160 data gas = .ok out ↔ gasCost data.size ≤ gas ∧ out = output data := by
+  unfold ripemd160
   by_cases short : gas < gasCost data.size
   · simp only [short, ↓reduceIte, reduceCtorEq, false_iff, not_and]
     omega
@@ -71,9 +71,10 @@ theorem call_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
     exact ⟨fun h => ⟨by omega, h.symm⟩, fun h => h.2.symm⟩
 
 /-- A call fails exactly when the gas is below the price, and the error carries both. -/
-theorem call_eq_error_iff (data : ByteArray) (gas : Nat) (e : Ripemd160Error) :
-    call data gas = .error e ↔ gas < gasCost data.size ∧ e = .outOfGas (gasCost data.size) gas := by
-  unfold call
+theorem ripemd160_eq_error_iff (data : ByteArray) (gas : Nat) (e : Ripemd160Error) :
+    ripemd160 data gas = .error e ↔
+      gas < gasCost data.size ∧ e = .outOfGas (gasCost data.size) gas := by
+  unfold ripemd160
   by_cases short : gas < gasCost data.size
   · simp only [short, ↓reduceIte, Except.error.injEq, true_and]
     exact eq_comm

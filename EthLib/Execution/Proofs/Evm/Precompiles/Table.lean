@@ -80,8 +80,8 @@ theorem price_isSome_iff (fork : Fork) (address : Nat) (data : ByteArray) :
 
 /-- Unfold the call of every precompile of the table. -/
 local macro "unfold_calls" : tactic => `(tactic| simp only [run, Option.some.injEq,
-  Ecrecover.ecrecover, Sha256.sha256, Ripemd160.call, Identity.identity, Modexp.modexp,
-  AltBn128.ecadd, AltBn128.ecmul, AltBn128.ecpairing, Blake2f.call,
+  Ecrecover.ecrecover, Sha256.sha256, Ripemd160.ripemd160, Identity.identity, Modexp.modexp,
+  AltBn128.ecadd, AltBn128.ecmul, AltBn128.ecpairing, Blake2f.blake2f,
   PointEvaluation.pointEvaluation, Bls12381.bls12G1Add, Bls12381.bls12G1Msm,
   Bls12381.bls12G2Add, Bls12381.bls12G2Msm, Bls12381.bls12Pairing, Bls12381.bls12MapFpToG1,
   Bls12381.bls12MapFp2ToG2, P256Verify.p256Verify] at *)

@@ -151,7 +151,7 @@ def test_blake2f(fork: str) -> None:
 @pytest.mark.parametrize("fork", since("istanbul"))
 def test_blake2f_order_of_checks(fork: str) -> None:
     # The length is checked before the gas, and the gas before the flag.
-    with pytest.raises(ValueError, match="invalidLength"):
+    with pytest.raises(ValueError, match="invalidInputLength"):
         run(fork, 0x09, blake2f_input(12, b"abc", 1)[:-1], 0)
     with pytest.raises(ValueError, match="outOfGas"):
         run(fork, 0x09, blake2f_input(12, b"abc", 2), 11)

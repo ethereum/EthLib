@@ -4,24 +4,13 @@ public import EthLib.Cryptography.Hash.Ripemd160
 public import EthLib.Execution.Evm.Words
 
 /-!
-# `EthLib.Execution.Evm.Precompiles.Ripemd160`
+# `Evm.Precompiles.Ripemd160`
 
-The RIPEMD-160 precompile at address `0x03`: its price and its output.
+The RIPEMD-160 precompile at address `0x03`, from Appendix E of the Yellow Paper.
 
-The hash is RIPEMD-160 of the whole call data.
+It returns the RIPEMD-160 digest of the call data, left-padded with zero bytes to 32 bytes.
 
-The output is the 20-byte digest left-padded with twelve zero bytes to 32 bytes.
-
-```text
-output:  [ zeros: 12 | RIPEMD-160(data): 20 ]
-```
-
-Source: Appendix E of the Yellow Paper, Shanghai version, in `Paper.tex`:
-<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>.
-
-The price is 600, plus 120 for each 32-byte word of call data, a partial word counting as a whole one.
-
-A call with less gas fails, and it fails in no other case.
+The call fails only when the gas is below its price.
 -/
 
 @[expose] public section
@@ -37,7 +26,7 @@ def OUTPUT_BYTES : Nat := 32
 def DIGEST_BYTES : Nat := 20
 
 /-- The output on the call data: the digest, left-padded with zero bytes to 32 bytes. -/
-def ripemd160 (data : ByteArray) : ByteArray :=
+def output (data : ByteArray) : ByteArray :=
   ⟨Array.replicate (OUTPUT_BYTES - DIGEST_BYTES) 0⟩ ++ Cryptography.Hash.ripemd160 data
 
 /-- The price of every call, from Appendix E of the Yellow Paper. -/
@@ -64,8 +53,8 @@ def Ripemd160Error.code : Ripemd160Error → UInt32
   | .outOfGas .. => 1
 
 /-- The call: the output on the call data, once the gas covers the price. -/
-def call (data : ByteArray) (gas : Nat) : Except Ripemd160Error ByteArray :=
+def ripemd160 (data : ByteArray) (gas : Nat) : Except Ripemd160Error ByteArray :=
   let cost := gasCost data.size
-  if gas < cost then .error (.outOfGas cost gas) else .ok (ripemd160 data)
+  if gas < cost then .error (.outOfGas cost gas) else .ok (output data)
 
 end EthLib.Execution.Evm.Precompiles.Ripemd160

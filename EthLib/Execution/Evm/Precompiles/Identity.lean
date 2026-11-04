@@ -5,21 +5,11 @@ public import EthLib.Execution.Evm.Words
 /-!
 # `Evm.Precompiles.Identity`
 
-The IDENTITY precompile at address `0x04`: it returns its call data unchanged.
+The IDENTITY precompile at address `0x04`, from Appendix E of the Yellow Paper.
 
-So contracts can copy memory cheaply.
+It returns its call data unchanged, so contracts can copy memory cheaply.
 
-```text
-gas:     15 + 3 * ceil(len(data) / 32)
-output:  data
-```
-
-Source: Appendix E of the Yellow Paper, Shanghai version, in `Paper.tex`:
-<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>.
-
-Every fork since Frontier computes the same result with the same prices.
-
-The call fails only when it runs out of gas.
+The call fails only when the gas is below its price.
 -/
 
 @[expose] public section
