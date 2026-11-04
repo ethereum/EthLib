@@ -80,6 +80,7 @@ Against an honest tree, the statement is sharper.
 `findSecondPreimage` walks one climb against the honest tree.
 It returns the first level where the climb hashes a pair other than the honest children to an honest node.
 `climb_binding_node` and `findSecondPreimage_valid` state this.
+On the honest climb the search returns nothing (`findSecondPreimage_honest`), so the second case of `climb_binding_node` is not true for every climb.
 
 Both searches take one step per level of the climb, and each step hashes the pairs it compares.
 `findSecondPreimage` also computes the honest node that it compares against on each level.
