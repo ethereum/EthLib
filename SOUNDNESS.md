@@ -173,7 +173,9 @@ The alt_bn128 theorems check the constants and the group law of `G_1`, which the
 `instField` (`Proofs/AltBn128/Fp2.lean`) proves that `Fp2` is a field, and `toPoint_add` (`Proofs/AltBn128/Twist.lean`) proves the group law of the twist that holds `G_2`.
 `mulBits_order_eq_infinity_iff` proves that the `G_2` subgroup check of ECPAIRING accepts exactly the points `Q` on the twist with `q Q = O`.
 
-No theorem covers the pairing.
+The pairing law is a hypothesis, `AltBn128.PairingLaws` (`Proofs/AltBn128/PairingLaws.lean`), in the shape of the BLS one.
+It states the check of EIP-197: the pairs `(a_i P1, b_i g2)` pass exactly when `sum_i a_i b_i = 0`.
+No theorem proves it.
 
 ### secp256r1
 
@@ -284,7 +286,7 @@ Finally, the consistency theorems on the constants, listed under BLS12-381, catc
 
 A conditional theorem is only as strong as its hypotheses.
 `checksSufficient` is the main one today, and its four hypotheses are listed under KZG.
-`PairingLaws`, listed under BLS12-381, is the hypothesis of every theorem about the result of a pairing check.
+`PairingLaws`, listed under BLS12-381 and alt_bn128, is the hypothesis of every theorem about the result of a pairing check.
 It is a `Prop` passed as an explicit argument, never an axiom, so `lake exe check-decls` still sees only the standard axioms.
 If it were false, every theorem that assumes it would hold vacuously.
 Whatever those hypotheses leave unproved is part of what a reader trusts.
