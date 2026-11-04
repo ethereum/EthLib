@@ -34,8 +34,8 @@ Every failure consumes all the gas, so the error only says why the call failed.
 namespace EthLib.Execution.Evm.Precompiles.PointEvaluation
 
 open EthLib.Base (natToBytes)
-open EthLib.Cryptography.Bls (G1 G2 Fr pairingCheck)
-open EthLib.Cryptography.Kzg (validateKzgG1Point)
+open EthLib.Cryptography.Bls (G2 Fr)
+open EthLib.Cryptography.Kzg (validateKzgG1Point verifyKzgProofWith)
 
 /-- The size of the call data: a versioned hash, two field elements and two compressed G1 points. -/
 def INPUT_BYTES : Nat := 192
@@ -86,9 +86,11 @@ inductive PointEvaluationError where
 def kzgCommitmentToVersionedHash (commitment : ByteArray) : ByteArray :=
   ⟨#[VERSIONED_HASH_VERSION_KZG]⟩ ++ (Cryptography.Hash.sha256 commitment).extract 1 32
 
-/-- `verify_kzg_proof`: whether `proof` shows that the polynomial of `commitment` takes the value `y` at `z`.
+/-- Whether `proof` shows that the polynomial of `commitment` takes the value `y` at `z`.
 
-It checks `e(commitment - [y]_1, -[1]_2) * e(proof, [tau]_2 - [z]_2) = 1`, which holds when the quotient `(p(X) - y) / (X - z)` is a polynomial. -/
+It decodes the inputs and `[tau]_2`, then runs the KZG check with `[tau]_2` alone.
+
+The check holds when the quotient `(p(X) - y) / (X - z)` is a polynomial. -/
 def verifyKzgProof (commitment z y proof : ByteArray) : Except PointEvaluationError Bool := do
   -- The inputs are decoded in the order of the source.
   let commitmentPoint ← (validateKzgG1Point commitment).mapError fun _ => .invalidCommitment
@@ -96,10 +98,7 @@ def verifyKzgProof (commitment z y proof : ByteArray) : Except PointEvaluationEr
   let yField ← (Fr.fromBytesBE y).mapError fun _ => .invalidFieldElement
   let proofPoint ← (validateKzgG1Point proof).mapError fun _ => .invalidProof
   let tau ← (G2.uncompress KZG_SETUP_G2_MONOMIAL_1).mapError fun _ => .invalidTrustedSetup
-  -- `[tau - z]_2` and `[p(tau) - y]_1`, as the source computes them with `BLS_MODULUS - z` and `BLS_MODULUS - y`.
-  let xMinusZ := G2.add tau (G2.mul G2.generator (-zField))
-  let pMinusY := G1.add commitmentPoint (G1.mul G1.generator (-yField))
-  return pairingCheck #[(pMinusY, G2.neg G2.generator), (proofPoint, xMinusZ)]
+  return verifyKzgProofWith tau commitmentPoint zField yField proofPoint
 
 /-- The output of every successful call: `FIELD_ELEMENTS_PER_BLOB`, then `BLS_MODULUS`, each as a 32-byte big-endian word. -/
 def output : ByteArray :=
