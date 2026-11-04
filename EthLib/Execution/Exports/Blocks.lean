@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Blocks
+public import EthLib.Serialization.Exports.Rlp
 
 /-!
 # `Exports.Blocks`
@@ -20,6 +21,7 @@ namespace EthLib.Execution.Blocks.Exports
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
+open EthLib.Serialization.Rlp.Exports (runRlp)
 
 /-- The fork with the given name, or an error.
 
@@ -31,12 +33,6 @@ def forkOfName (name : ByteArray) : IO Fork := do
   match forks.find? (fun f => ((reprStr f).splitOn ".").getLast? == some name) with
   | some f => return f
   | none => throw (IO.userError s!"unknown fork {name}")
-
-/-- Run a fallible decoding or encoding down to `IO`. -/
-def runRlp {α : Type} (what : String) (act : Except RlpError α) : IO α :=
-  match act with
-  | .ok a => pure a
-  | .error e => throw (IO.userError s!"{what}: {reprStr e}")
 
 /-- The hash of a header in RLP form, after the decoder at the fork accepts it. -/
 @[export eth_block_header_hash]

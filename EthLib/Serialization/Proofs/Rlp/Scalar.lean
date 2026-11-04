@@ -3,7 +3,6 @@ module
 public import EthLib.Serialization.Rlp.Scalar
 public import EthLib.Serialization.Proofs.Rlp.Canonical
 public import EthLib.Serialization.Proofs.Rlp.Bound
-public import EthLib.Serialization.Proofs.Rlp.Vectors
 
 /-!
 # `Serialization.Proofs.Rlp.Scalar`
@@ -75,39 +74,5 @@ theorem encode_scalar_succeeds_iff (n : Nat) :
 theorem encode_scalar_succeeds (n : Nat) (h : n < 2 ^ 256) : ∃ e, encode (.scalar n) = .ok e := by
   have hSize := bigEndian_size_le n 32 (by simpa using h)
   exact (encode_scalar_succeeds_iff n).2 (by omega)
-
-/-! ## Known answers
-
-Each claim pins one input to the scalar it holds, or to the error that rejects it.
-
-`decide +kernel` has the kernel itself evaluate each claim. -/
-
-open Vectors
-
-/-- The error of a failure, or `none` for a success. -/
-def scalarError (result : Except RlpError Nat) : Option RlpError :=
-  match result with
-  | .error e => some e
-  | .ok _ => none
-
-/-- `82 04 00` holds 1024. -/
-theorem decodeScalar_1024 : (decodeScalar (byteArrayOf 3 0x820400)).toOption = some 1024 := by
-  decide +kernel
-
-/-- `80`, the empty byte string, holds 0. -/
-theorem decodeScalar_zero : (decodeScalar (byteArrayOf 1 0x80)).toOption = some 0 := by
-  decide +kernel
-
-/-- `00`, the byte string `[00]`, holds no scalar: 0 encodes as `80`. -/
-theorem decodeScalar_byte00 : scalarError (decodeScalar (byteArrayOf 1 0x00)) = some .leadingZeroInScalar := by
-  decide +kernel
-
-/-- `82 00 01` holds no scalar: 1 encodes as `01`. -/
-theorem decodeScalar_leadingZero : scalarError (decodeScalar (byteArrayOf 3 0x820001)) = some .leadingZeroInScalar := by
-  decide +kernel
-
-/-- `c0`, the empty list, holds no scalar. -/
-theorem decodeScalar_list : scalarError (decodeScalar (byteArrayOf 1 0xc0)) = some .listAsScalar := by
-  decide +kernel
 
 end EthLib.Serialization.Rlp

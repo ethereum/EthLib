@@ -319,7 +319,7 @@ lean_io_error_to_string(
  * The result is freed.
  *
  * `what` names the operation in the message. */
-static void
+void
 raise_io_error(
   lean_object* io_result,
   const char* what
@@ -510,6 +510,9 @@ static PyMethodDef methods[] = {
   {"reqresp_decode_response_chunk", py_reqresp_decode_response_chunk, METH_VARARGS, NULL},
   {"block_header_hash", py_block_header_hash, METH_VARARGS, NULL},
   {"block_reencode", py_block_reencode, METH_VARARGS, NULL},
+  {"rlp_encode", py_rlp_encode, METH_VARARGS, NULL},
+  {"rlp_decode", py_rlp_decode, METH_VARARGS, NULL},
+  {"rlp_decode_as", py_rlp_decode_as, METH_VARARGS, NULL},
   {"precompile_run", py_precompile_run, METH_VARARGS, NULL},
   {"state_root", py_state_root, METH_VARARGS, NULL},
   {NULL, NULL, 0, NULL},

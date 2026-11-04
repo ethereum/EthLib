@@ -81,6 +81,17 @@ run_io_into_bool(
   uint8_t* out_ok
 );
 
+/* Raise `ValueError` with the Lean error message of a failed IO action.
+ *
+ * The result is freed.
+ *
+ * `what` names the operation in the message. */
+void
+raise_io_error(
+  lean_object* io_result,
+  const char* what
+);
+
 /* Run an IO action and return its inner ByteArray as a Python `bytes`.
  *
  * On failure it sets a `ValueError` and returns NULL.
@@ -208,6 +219,9 @@ PyObject* py_reqresp_decode_payload                       (PyObject* self, PyObj
 PyObject* py_reqresp_decode_response_chunk                (PyObject* self, PyObject* args);
 PyObject* py_block_header_hash                            (PyObject* self, PyObject* args);
 PyObject* py_block_reencode                               (PyObject* self, PyObject* args);
+PyObject* py_rlp_encode                                   (PyObject* self, PyObject* args);
+PyObject* py_rlp_decode                                   (PyObject* self, PyObject* args);
+PyObject* py_rlp_decode_as                                (PyObject* self, PyObject* args);
 
 PyObject* py_precompile_run                               (PyObject* self, PyObject* args);
 

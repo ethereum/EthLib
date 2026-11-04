@@ -95,7 +95,6 @@ No other bytes have both properties, so the code computes the function `BE` of t
 A length below `2^64` writes a first byte that never wraps around 256.
 
 The encoding refuses every payload of `2^64` bytes or more, and succeeds on every other item.
-It matches every case of `RLPTests/rlptest.json` in [`ethereum/tests`](https://github.com/ethereum/tests/blob/c67e485ff8b5be9abc8ad15345ec21aa22e290d9/RLPTests/rlptest.json).
 
 The decoder rejects each of the five non-canonical forms in §4.2.1 of
 [Coglio](https://doi.org/10.4204/EPTCS.327.11), whatever bytes follow them.
@@ -120,4 +119,7 @@ Every scalar below `2^256` has an encoding.
 Each typed codec reads back every value it writes, and writes back every item it reads.
 So a typed decoder accepts a byte string for a value exactly when it encodes that value.
 
-Finally, the decoding matches every case of `RLPTests/rlptest.json`, and rejects every case of [`RLPTests/invalidRLPTest.json`](https://github.com/ethereum/tests/blob/c67e485ff8b5be9abc8ad15345ec21aa22e290d9/RLPTests/invalidRLPTest.json).
+The theorems hold for every input, so the test vectors are not part of them.
+The Python suite runs the vectors through the bindings, in `bindings/python/tests/rlp/`.
+It checks every case of `RLPTests/rlptest.json` in [`ethereum/tests`](https://github.com/ethereum/tests/blob/c67e485ff8b5be9abc8ad15345ec21aa22e290d9/RLPTests/rlptest.json) both ways.
+It checks that every case of [`RLPTests/invalidRLPTest.json`](https://github.com/ethereum/tests/blob/c67e485ff8b5be9abc8ad15345ec21aa22e290d9/RLPTests/invalidRLPTest.json) is rejected, with the error that names its fault.
