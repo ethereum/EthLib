@@ -17,6 +17,10 @@ public import EthLib.Serialization.Ssz.Merkle.Merkleize
 public import EthLib.Serialization.Ssz.Merkle.Tree
 public import EthLib.Serialization.Ssz.Merkle.Gindex
 public import EthLib.Serialization.Ssz.Merkle.Verify
+public import EthLib.Serialization.Ssz.Typed.Class
+public import EthLib.Serialization.Ssz.Typed.Basic
+public import EthLib.Serialization.Ssz.Typed.Collections
+public import EthLib.Serialization.Ssz.Typed.Container
 
 /-!
 # `EthLib.Serialization.Ssz`
@@ -26,6 +30,7 @@ Simple Serialize (SSZ), as `consensus-specs` defines it in `ssz/simple-serialize
     Ssz/Type    declarations, values, well-formedness, defaults, and paths
     Ssz/Codec   serialization, deserialization, layouts, roots, and proofs
     Ssz/Merkle  bounded and progressive trees, indices, and verification
+    Ssz/Typed   Lean types as SSZ types, encoded and rooted through the codec
 
 Hashing uses `EthLib.Cryptography.Hash.Sha256`.
 
