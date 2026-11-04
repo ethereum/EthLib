@@ -23,11 +23,6 @@ namespace EthLib.Cryptography.Secp256k1
 
 /-! ## Big-endian bytes -/
 
-theorem length_toBytesBE (k v : Nat) : (toBytesBE k v).length = k := by
-  induction k generalizing v with
-  | zero => rfl
-  | succ k ih => simp [toBytesBE, ih]
-
 theorem ofBytesBE_append_singleton (l : List UInt8) (b : UInt8) :
     ofBytesBE (l ++ [b]) = 256 * ofBytesBE l + b.toNat := by
   simp [ofBytesBE, List.foldl_append]
@@ -60,8 +55,6 @@ theorem ofBytesBE_lt (l : List UInt8) : ofBytesBE l < 256 ^ l.length := by
     rw [ofBytesBE_append_singleton, List.length_append, List.length_singleton, Nat.pow_succ]
     have := b.toNat_lt
     omega
-
-theorem Fp.length_toBytes (x : Fp) : x.toBytes.length = 32 := length_toBytesBE 32 x.val
 
 theorem Fp.ofBytes_toBytes (x : Fp) : Fp.ofBytes x.toBytes = .ok x := by
   have h : ofBytesBE x.toBytes = x.val := by

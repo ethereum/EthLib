@@ -30,6 +30,12 @@ inductive Secp256k1Error where
   | pointAtInfinity
   /-- An integer `r` or `s` of a signature was not in `[1, n - 1]`. -/
   | scalarOutOfRange
+  /-- A private key was zero, which is not in `[1, n - 1]`. -/
+  | zeroPrivateKey
+  /-- The point `R` of a signature had `x >= n`, which the recovery ids 0 and 1 cannot name. -/
+  | unrecoverableNonce
+  /-- The nonce generator gave no usable nonce within its bound on attempts. -/
+  | noNonce
 deriving DecidableEq, Repr
 
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
@@ -41,5 +47,8 @@ def Secp256k1Error.message : Secp256k1Error → String
   | .noPointWithX => "no point of the curve has this x"
   | .pointAtInfinity => "the point at infinity is not a public key"
   | .scalarOutOfRange => "signature integer is not in [1, n - 1]"
+  | .zeroPrivateKey => "private key is zero"
+  | .unrecoverableNonce => "nonce point has x >= n, so no recovery id 0 or 1 names it"
+  | .noNonce => "no usable nonce within the bound on attempts"
 
 end EthLib.Cryptography.Secp256k1

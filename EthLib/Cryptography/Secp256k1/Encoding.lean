@@ -31,12 +31,21 @@ def toBytesBE : Nat → Nat → List UInt8
   | 0, _ => []
   | k + 1, v => toBytesBE k (v / 256) ++ [UInt8.ofNat (v % 256)]
 
+/-- The bytes of `v` are `k` bytes long. -/
+theorem length_toBytesBE (k v : Nat) : (toBytesBE k v).length = k := by
+  induction k generalizing v with
+  | zero => rfl
+  | succ k ih => simp [toBytesBE, ih]
+
 /-- The integer that big-endian bytes write, by SEC 1 v2 §2.3.8. -/
 def ofBytesBE (bytes : List UInt8) : Nat :=
   bytes.foldl (fun acc b => 256 * acc + b.toNat) 0
 
 /-- A coordinate as 32 bytes, by SEC 1 v2 §2.3.5. -/
 def Fp.toBytes (x : Fp) : List UInt8 := toBytesBE 32 x.val
+
+/-- A coordinate is 32 bytes long. -/
+theorem Fp.length_toBytes (x : Fp) : x.toBytes.length = 32 := length_toBytesBE 32 x.val
 
 /-- 32 bytes as a coordinate, by SEC 1 v2 §2.3.6: the integer must be below `p`. -/
 def Fp.ofBytes (bytes : List UInt8) : Except Secp256k1Error Fp :=
