@@ -19,11 +19,6 @@ Both hold for every forward cipher, so for AES under every key.
 
 namespace EthLib.Cryptography.Aes.Gcm
 
-/-- A result that converts to `some a` is `.ok a`. -/
-theorem eq_ok_of_toOption {ε α : Type} {x : Except ε α} {a : α} (h : x.toOption = some a) :
-    x = .ok a := by
-  cases x <;> simp_all [Except.toOption]
-
 /-- The length checks read the text only through its length. -/
 theorem checkLengths_congr (t : Nat) (iv aad : ByteArray) {p c : ByteArray} (h : c.size = p.size) :
     checkLengths t iv c aad = checkLengths t iv p aad := by
@@ -111,5 +106,11 @@ theorem decrypt_eq_ok (ciph : Block → Block) (t : Nat) (iv p aad c T T' q : By
     · rw [gctr] at same
       simp only [same, ite_false] at h'
       split at h' <;> cases h'
+
+/-- Two errors with one code are the same error. -/
+theorem Error.code_injective (e₁ e₂ : Error) (h : e₁.code = e₂.code) : e₁ = e₂ := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [Error.code] at h; exact absurd h (by decide))
 
 end EthLib.Cryptography.Aes.Gcm

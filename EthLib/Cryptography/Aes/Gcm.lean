@@ -93,6 +93,15 @@ inductive Error where
   | authentication
   deriving DecidableEq, Repr
 
+/-- The code of each error, which the bindings report with its message. -/
+def Error.code : Error → UInt32
+  | .tagLength => 1
+  | .shortTag => 2
+  | .ivLength => 3
+  | .textLength => 4
+  | .aadLength => 5
+  | .authentication => 6
+
 /-- The supported tag lengths in bytes, for 128, 120, 112, 104 and 96 bits.
 
 SP 800-38D §5.2.1.2 lets an implementation support only some of its seven tag lengths. -/

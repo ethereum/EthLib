@@ -270,14 +270,14 @@ The AES theorems are correctness statements, and none states a security property
 `invCipher_cipher` and `ciphInv_ciph` (`Proofs/Aes/Block.lean`) prove that the inverse cipher of FIPS 197 undoes the cipher, for every key schedule and so for every key.
 `sbox_eq` proves that each entry of the S-box table equals the inverse in GF(2^8) followed by the affine map of FIPS 197 §5.1.1.
 `ctr_ctr` (`Proofs/Aes/Ctr.lean`) proves that CTR decryption of SP 800-38A returns the plaintext, for every forward cipher and initial counter.
-The kernel checks FIPS 197 Appendix B and the AES-128 and AES-256 vectors of its 2001 Appendix C.
-It also checks the first two blocks of the CTR examples F.5.1 and F.5.5 of SP 800-38A.
+The Python tests (`bindings/python/tests/aes/test_aes.py`) check FIPS 197 Appendix B and the AES-128 and AES-256 vectors of its 2001 Appendix C.
+They also check the CTR examples F.5.1, F.5.2, F.5.5 and F.5.6 of SP 800-38A.
 
 `decrypt_encrypt` (`Proofs/Aes/Gcm.lean`) proves that GCM decryption of SP 800-38D returns the plaintext of an honest ciphertext and tag.
 `decrypt_eq_ok` proves that decryption accepts no tag other than the honest one.
 Both hold for every forward cipher.
 `encrypt_shortTag` and `decrypt_shortTag` prove that both functions reject the 64-bit and 32-bit tags, which SP 800-38D Appendix C restricts.
-The kernel checks seven test cases of the NIST CAVP file `gcmtestvectors.zip`, one of them a forged tag that decryption rejects.
+The Python tests check seven test cases of the NIST CAVP file `gcmtestvectors.zip`, one of them a forged tag that decryption rejects.
 
 ### KZG
 
@@ -546,13 +546,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 118 operations and 39 size constants.
-The Python extension calls 118 of the operations and 30 of the constants.
+Lean exports 123 operations and 39 size constants.
+The Python extension calls 123 of the operations and 30 of the constants.
 Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_const_n`, `eth_sphincs_const_public_param_len`, `eth_sphincs_const_randomizer_len`, `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-4662 lines of hand-written C sit between them and Python: `blocks.c` (152), `bls.c` (342), `consensus.c` (126), `crc32c.c` (38), `devp2p.c` (59), `discv5.c` (223), `ecrecover.c` (34), `enr.c` (125), `evm.c` (136), `gossip.c` (63), `hmac.c` (102), `keccak.c` (61), `kzg.c` (511), `modexp.c` (61), `module.c` (768), `precompile.c` (43), `reqresp.c` (121), `ripemd160.c` (36), `rlp.c` (162), `rlpx.c` (158), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `snappy.c` (131), `sphincs.c` (85), `state.c` (28), `transactions.c` (132), `trie.c` (76), `vrf.c` (119), `wrappers.h` (325), `xmss.c` (134).
+4794 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (152), `bls.c` (342), `consensus.c` (126), `crc32c.c` (38), `devp2p.c` (59), `discv5.c` (223), `ecrecover.c` (34), `enr.c` (125), `evm.c` (136), `gossip.c` (63), `hmac.c` (102), `keccak.c` (61), `kzg.c` (511), `modexp.c` (61), `module.c` (775), `precompile.c` (43), `reqresp.c` (121), `ripemd160.c` (36), `rlp.c` (162), `rlpx.c` (158), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `snappy.c` (131), `sphincs.c` (85), `state.c` (28), `transactions.c` (132), `trie.c` (76), `vrf.c` (119), `wrappers.h` (331), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
