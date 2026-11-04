@@ -289,6 +289,19 @@ Run it without `--check` to regenerate them.
 It also fails when `pyproject.toml` declares a package version other than the one `SOUNDNESS.md` describes.
 Then review the whole document for the new version, and update its version line by hand.
 
+A release has one version, in the form `MAJOR.MINOR.PATCH`.
+It appears twice: in `pyproject.toml` for the Python package, and in `lakefile.lean` for Lake.
+A version bump changes both, and this check fails when they differ:
+
+```bash
+uv run --no-project --python 3.12 python scripts/release_manifest.py --check
+uv run --no-project --python 3.12 python -m unittest scripts/test_release_manifest.py
+```
+
+When a tag `v<version>` is pushed, `publish.yml` runs the same check against the tag.
+It then attaches `release-manifest.json` to the GitHub release.
+The manifest records the version, the Lean toolchain, the revision of each Lake package, the fixture pins of `tests/sources.toml` and the exported C symbols.
+
 Then check the imports of every Lean module:
 
 ```bash

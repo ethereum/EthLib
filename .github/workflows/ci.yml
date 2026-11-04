@@ -235,6 +235,11 @@ jobs:
 
       # Every test cites only the pinned commits of tests/sources.toml, and every pinned
       # vector directory names its sources.
+      # pyproject.toml and lakefile.lean declare one release version.
+      - run: uv run --no-project --python 3.12 python scripts/release_manifest.py --check
+
+      - run: uv run --no-project --python 3.12 python -m unittest scripts/test_release_manifest.py
+
       - run: uv run --no-project --python 3.12 python scripts/check_fixture_pins.py
 
       - run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_fixture_pins.py
