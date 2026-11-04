@@ -81,8 +81,8 @@ Ethereum signs 32-byte roots, but nothing in EthLib checks that length.
 
 | Handler | Cases | Source |
 | --- | ---: | --- |
-| `eth_aggregate_pubkeys` | 8 | consensus-specs `v1.7.0-alpha.12` |
-| `eth_fast_aggregate_verify` | 12 | consensus-specs `v1.7.0-alpha.12` |
+| `eth_aggregate_pubkeys` | 8 | consensus-specs `v1.7.0-beta.4` |
+| `eth_fast_aggregate_verify` | 12 | consensus-specs `v1.7.0-beta.4` |
 | `sign` | 10 | `ethereum/bls12-381-tests` `v0.1.2` |
 | `verify` | 29 | `ethereum/bls12-381-tests` `v0.1.2` |
 | `aggregate` | 6 | `ethereum/bls12-381-tests` `v0.1.2` |

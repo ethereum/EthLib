@@ -36,6 +36,7 @@ ROOT = Path(__file__).resolve().parent
 REQUIRED = ("bls", "kzg", "secp256k1", "secp256r1")
 
 # consensus-specs v1.7.0-alpha.12, the last release before consensus-specs#5398.
+# The cases come from this archive. The pins in tests/sources.toml hold the same bytes.
 UPSTREAM_URL = (
     "https://github.com/ethereum/consensus-specs/releases/download/"
     "v1.7.0-alpha.12/general.tar.gz"

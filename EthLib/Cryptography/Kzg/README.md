@@ -86,7 +86,7 @@ The C exports read untyped bytes into these types, and reject a wrong length the
 | `verify_cell_kzg_proof_batch` | 32 |
 | `verify_kzg_proof` | 122 |
 
-They match the consensus-specs `v1.7.0-alpha.12` general vectors byte for byte.
+They match the consensus-specs `v1.7.0-alpha.12` general vectors and the `ethereum/c-kzg-4844` cases byte for byte.
 Their expected values come from the Python specification, not from EthLib.
 `tests/cryptography/kzg/SHA256SUMS` pins each one, and CI checks the pins.
 

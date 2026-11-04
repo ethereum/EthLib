@@ -35,7 +35,7 @@ Gap D asks whether the use of EthLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match its source | Definitions named and shaped after the source; vectors pinned to consensus-specs `v1.7.0-alpha.12`; consistency theorems on the constants | P R B V |
+| A1 | A definition does not match its source | Definitions named and shaped after the source; vectors pinned to consensus-specs `v1.7.0-beta.4` and other upstream sources; consistency theorems on the constants | P R B V |
 | A2 | A theorem holds only under a hypothesis | Each conditional theorem below lists its hypotheses | P |
 | A3 | Timing reveals secret data | None: no constant-time claim | R B |
 | A4 | A security theorem idealises a primitive | Each idealisation is listed in A4 | P |
@@ -51,7 +51,7 @@ Gap D asks whether the use of EthLib holds together.
 | D1 | A client misuses an operation | Docstrings in Lean | R B |
 | D2 | A dependency changes | Pinned in `lake-manifest.json` | P R B |
 | D3 | The KZG trusted setup is not what it should be | Bytes match the consensus-specs setup | P R B V |
-| D4 | The vectors are wrong | They match consensus-specs `v1.7.0-alpha.12`, and CI checks their pinned digests | V |
+| D4 | The vectors are wrong | They match their pinned upstream sources, and CI checks their pinned digests | V |
 
 The sections after the next one explain each row.
 

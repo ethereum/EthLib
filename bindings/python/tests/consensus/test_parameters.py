@@ -56,7 +56,7 @@ NEW_WITH_SUFFIX = {"MAX_EFFECTIVE_BALANCE_ELECTRA"}
 
 # Configuration values that EthLib does not hold in the configuration.
 # The gossip message ID defines the two message domains as constants.
-# The rest belong to Gloas and Heze, the forks after Fulu.
+# The rest belong to forks after Fulu: Gloas, Heze, and the feature forks of EIP-8198 and EIP-8321.
 NOT_IN_CONFIG = {
     "MESSAGE_DOMAIN_INVALID_SNAPPY",
     "MESSAGE_DOMAIN_VALID_SNAPPY",
@@ -77,7 +77,15 @@ NOT_IN_CONFIG = {
     "MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS",
     "MAX_REQUEST_PAYLOADS",
     "MAX_REQUEST_INCLUSION_LIST",
-    "MAX_BYTES_PER_INCLUSION_LIST",
+    "MIN_SLOTS_FOR_INCLUSION_LISTS_REQUESTS",
+    "MAX_TRANSACTIONS_BYTES_PER_INCLUSION_LIST",
+    "GAS_LIMIT_SCHEDULE",
+    "EIP8198_FORK_VERSION",
+    "EIP8198_FORK_EPOCH",
+    "SLOT_DURATION_MS_EIP8198",
+    "MIN_BLOB_DATA_RETENTION_MS",
+    "EIP8321_FORK_VERSION",
+    "EIP8321_FORK_EPOCH",
 }
 
 
