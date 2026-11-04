@@ -121,6 +121,12 @@ So on a pull request, CI elaborates each Lean file that the pull request adds or
 The job summary gives the time and the peak memory of each of these files.
 A file that needs more than 4 GiB gets a warning, and a file that needs more than 6 GiB fails the job.
 
+A clean build runs as many Lean processes at once as `LEAN_NUM_THREADS` allows, so their memory adds up.
+On master `b001695`, a clean `lake build --wfail` peaked at 8.1 GiB of Lean processes with 4 at once, and at 9.2 GiB with 8.
+No file needed more than 3.8 GiB, and the largest is the order certificate of secp256k1.
+Known answers stay out of Lean, since one of them can need several GiB, and their vectors run in the Python suite, as [CONTRIBUTING.md](CONTRIBUTING.md#known-answers) asks.
+To build with fewer processes, set the thread count with the CPU affinity, as in `LEAN_NUM_THREADS=4 taskset -c 0-3 lake build --wfail`, because Lake ignores `taskset` when it sizes its pool.
+
 To measure files on your machine, build their imports first, then run:
 
 ```bash
