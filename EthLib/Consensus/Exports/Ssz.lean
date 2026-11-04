@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.Operations
 public import EthLib.Consensus.Containers.Signing
@@ -59,6 +60,12 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
   | "Deposit" => some ⟨Deposit⟩
   | "VoluntaryExit" => some ⟨VoluntaryExit⟩
   | "SignedVoluntaryExit" => some ⟨SignedVoluntaryExit⟩
+  | "Attestation" => some ⟨Attestation preset fork⟩
+  | "IndexedAttestation" => some ⟨IndexedAttestation preset fork⟩
+  | "AttesterSlashing" => some ⟨AttesterSlashing preset fork⟩
+  | "AggregateAndProof" => some ⟨AggregateAndProof preset fork⟩
+  | "SignedAggregateAndProof" => some ⟨SignedAggregateAndProof preset fork⟩
+  | "SingleAttestation" => if .pectra ≤ fork then some ⟨SingleAttestation⟩ else none
   | "Withdrawal" => if .shapella ≤ fork then some ⟨Withdrawal⟩ else none
   | "ExecutionPayload" =>
     if .bellatrix ≤ fork then some ⟨ExecutionPayload preset fork⟩ else none

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Proofs.Containers.Attestation
 public import EthLib.Consensus.Proofs.Containers.Execution
 public import EthLib.Consensus.Proofs.Containers.Misc
 public import EthLib.Consensus.Proofs.Containers.Signing

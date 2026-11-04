@@ -43,6 +43,12 @@ CONTAINERS = {
     "Deposit": ("phase0", None),
     "VoluntaryExit": ("phase0", None),
     "SignedVoluntaryExit": ("phase0", None),
+    "Attestation": ("phase0", None),
+    "IndexedAttestation": ("phase0", None),
+    "AttesterSlashing": ("phase0", None),
+    "AggregateAndProof": ("phase0", None),
+    "SignedAggregateAndProof": ("phase0", None),
+    "SingleAttestation": ("electra", None),
     "Withdrawal": ("capella", None),
     "ExecutionPayload": ("bellatrix", None),
 }
