@@ -38,6 +38,11 @@ lean_lib «EthLib» where
 on it. `precompileModules` is off: theorems produce no code, and this
 keeps proof object files out of the Python extension link.
 
+Lake loads the shared library of all of `EthLib` into each proof that imports the specification.
+`platformIndependent` keeps that library out of the proof's trace.
+Without it, a change to any specification module rebuilds every proof.
+The `.olean` files of the imported modules stay in the trace, so a proof still rebuilds when they change.
+
 Each domain's proof tree is also a root, so that its modules belong to
 this library rather than to `EthLib`. -/
 @[default_target]
@@ -46,6 +51,7 @@ lean_lib «Proofs» where
   roots := #[`EthLib.Proofs, `EthLib.Serialization.Proofs, `EthLib.Cryptography.Proofs, `EthLib.Networking.Proofs,
     `EthLib.Execution.Proofs, `EthLib.Base.Proofs]
   precompileModules := false
+  platformIndependent := true
 
 /-- The C exports the Python extension calls, and nothing else. A separate
 library (rooted at `EthLib/Exports.lean`), so that the specification never

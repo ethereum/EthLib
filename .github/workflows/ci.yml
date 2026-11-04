@@ -18,8 +18,9 @@ on:
         default: false
 
 # A new push to a pull request supersedes the run still in flight.
+# Each push to master has a group of its own, so that no master commit loses its run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
