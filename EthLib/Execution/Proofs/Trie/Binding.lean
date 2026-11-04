@@ -17,7 +17,11 @@ It returns the first two nodes at one place that differ but have one hash.
 
 Two proofs that verify against one root follow one path while their nodes agree.
 
-So when the search finds nothing, both proofs give the key one value.
+So when the search finds nothing, the two proofs are one proof, and give the key one value.
+
+Soundness follows: a proof that verifies against a trie's root is the trie's own proof.
+
+Otherwise the search finds a collision between the two.
 -/
 
 @[expose] public section
@@ -57,23 +61,30 @@ theorem findProofCollision_self (hash : ByteArray → Hash32) :
   | [] => rfl
   | a :: p => by simp [findProofCollision, findProofCollision_self hash p]
 
+/-- A common prefix of two proofs holds no collision. -/
+theorem findProofCollision_append (hash : ByteArray → Hash32) (p q : List ByteArray) :
+    (used : List ByteArray) →
+      findProofCollision hash (used ++ p) (used ++ q) = findProofCollision hash p q
+  | [] => rfl
+  | a :: used => by simp [findProofCollision, findProofCollision_append hash p q used]
+
 /-! ## Two proofs of one key -/
 
 /-- Two proofs with no collision follow one reference to one item.
 
-The proofs left after it have no collision either. -/
+They use the same proof nodes to reach it. -/
 theorem resolve_binding (hash : ByteArray → Hash32) {reference : Item} {p q p' q' : List ByteArray}
     {item item' : Item} (hp : resolve hash reference p = .ok (item, p'))
     (hq : resolve hash reference q = .ok (item', q'))
     (hcollision : findProofCollision hash p q = none) :
-    item = item' ∧ findProofCollision hash p' q' = none := by
+    item = item' ∧ ∃ used, p = used ++ p' ∧ q = used ++ q' := by
   unfold resolve at hp hq
   split at hp
   · -- A node held inside its parent takes no proof node.
     simp only [Except.ok.injEq, Prod.mk.injEq] at hp hq
     obtain ⟨rfl, rfl⟩ := hp
     obtain ⟨rfl, rfl⟩ := hq
-    exact ⟨rfl, hcollision⟩
+    exact ⟨rfl, [], rfl, rfl⟩
   · rename_i digest
     split at hp
     · -- The empty reference points to no node, and takes no proof node.
@@ -81,7 +92,7 @@ theorem resolve_binding (hash : ByteArray → Hash32) {reference : Item} {p q p'
       simp only [hsize, ↓reduceIte, Except.ok.injEq, Prod.mk.injEq] at hp hq
       obtain ⟨rfl, rfl⟩ := hp
       obtain ⟨rfl, rfl⟩ := hq
-      exact ⟨rfl, hcollision⟩
+      exact ⟨rfl, [], rfl, rfl⟩
     · rename_i hsize
       split at hp
       · -- A node held by hash is the next node of each proof, and both have the hash.
@@ -108,26 +119,30 @@ theorem resolve_binding (hash : ByteArray → Hash32) {reference : Item} {p q p'
                     Except.ok.injEq, Prod.mk.injEq] at hp hq
                   obtain ⟨rfl, rfl⟩ := hp
                   obtain ⟨rfl, rfl⟩ := hq
-                  exact ⟨rfl, hcollision⟩
+                  exact ⟨rfl, [a], rfl, rfl⟩
               · cases hcollision
             · simp [hb] at hq
           · simp [ha] at hp
       · cases hp
 
-/-- Two proofs with no collision that the walk accepts on one path from one item give one value. -/
+/-- Two proofs with no collision that the walk accepts on one path from one item give one value.
+
+They use the same proof nodes to reach it. -/
 theorem walk_binding (hash : ByteArray → Hash32) :
     (fuel : Nat) → (node : Item) → (path : List Nibble) → {p q p' q' : List ByteArray} →
       {v w : Option ByteArray} → walk hash fuel node path p = .ok (v, p') →
       walk hash fuel node path q = .ok (w, q') →
-      findProofCollision hash p q = none → v = w
+      findProofCollision hash p q = none → v = w ∧ ∃ used, p = used ++ p' ∧ q = used ++ q'
   | 0, _, _, _, _, _, _, _, _, hp, _, _ => by cases hp
   | fuel + 1, .bytes data, path, p, q, p', q', v, w, hp, hq, _ => by
-    -- The empty byte string is no node, so neither proof sets the key.
+    -- The empty byte string is no node, so neither proof sets the key or uses a node.
     simp only [walk] at hp hq
     split at hp
     · rename_i hsize
       simp only [hsize, ↓reduceIte, Except.ok.injEq, Prod.mk.injEq] at hp hq
-      rw [← hp.1, ← hq.1]
+      obtain ⟨rfl, rfl⟩ := hp
+      obtain ⟨rfl, rfl⟩ := hq
+      exact ⟨rfl, [], rfl, rfl⟩
     · cases hp
   | fuel + 1, .list items, path, p, q, p', q', v, w, hp, hq, hcollision => by
     cases hdecode : decodeNode (.list items) with
@@ -137,7 +152,7 @@ theorem walk_binding (hash : ByteArray → Hash32) :
       have hfollow : ∀ (reference : Item) (rest : List Nibble) {p q p' q' : List ByteArray}
           {v w : Option ByteArray}, follow hash fuel reference rest p = .ok (v, p') →
           follow hash fuel reference rest q = .ok (w, q') →
-          findProofCollision hash p q = none → v = w := by
+          findProofCollision hash p q = none → v = w ∧ ∃ used, p = used ++ p' ∧ q = used ++ q' := by
         intro reference rest p q p' q' v w hp hq hcollision
         simp only [follow] at hp hq
         cases hp' : resolve hash reference p with
@@ -146,15 +161,20 @@ theorem walk_binding (hash : ByteArray → Hash32) :
           cases hq' : resolve hash reference q with
           | error => simp [hq', Except.bind] at hq
           | ok next' =>
+            obtain ⟨item, after⟩ := next
+            obtain ⟨item', after'⟩ := next'
             simp only [hp', hq', Except.bind] at hp hq
-            obtain ⟨hitem, hnext⟩ := resolve_binding hash hp' hq' hcollision
-            rw [hitem] at hp
-            exact walk_binding hash fuel _ rest hp hq hnext
+            obtain ⟨rfl, used, rfl, rfl⟩ := resolve_binding hash hp' hq' hcollision
+            rw [findProofCollision_append] at hcollision
+            obtain ⟨hvalue, used', rfl, rfl⟩ := walk_binding hash fuel _ rest hp hq hcollision
+            exact ⟨hvalue, used ++ used', by simp, by simp⟩
       cases decoded with
       | leaf restOfKey value =>
         simp only [walk_decoded hash fuel hdecode] at hp hq
         simp only [Except.ok.injEq, Prod.mk.injEq] at hp hq
-        rw [← hp.1, ← hq.1]
+        obtain ⟨rfl, rfl⟩ := hp
+        obtain ⟨rfl, rfl⟩ := hq
+        exact ⟨rfl, [], rfl, rfl⟩
       | extension keySegment subnode =>
         simp only [walk_decoded hash fuel hdecode] at hp hq
         split at hp
@@ -164,23 +184,29 @@ theorem walk_binding (hash : ByteArray → Hash32) :
         · rename_i hsegment
           rw [ite_eq_right hsegment] at hq
           simp only [Except.ok.injEq, Prod.mk.injEq] at hp hq
-          rw [← hp.1, ← hq.1]
+          obtain ⟨rfl, rfl⟩ := hp
+          obtain ⟨rfl, rfl⟩ := hq
+          exact ⟨rfl, [], rfl, rfl⟩
       | branch subnodes value =>
         simp only [walk_decoded hash fuel hdecode] at hp hq
         cases path with
         | nil =>
           simp only [Except.ok.injEq, Prod.mk.injEq] at hp hq
-          rw [← hp.1, ← hq.1]
+          obtain ⟨rfl, rfl⟩ := hp
+          obtain ⟨rfl, rfl⟩ := hq
+          exact ⟨rfl, [], rfl, rfl⟩
         | cons nibble rest => exact hfollow _ _ hp hq hcollision
 
-/-- Binding of a proof: two proofs that verify one key against one root give one value.
+/-- Binding of a proof: two proofs that verify one key against one root are one proof.
+
+So they give one value.
 
 Otherwise the search finds a collision in the two proofs. -/
 theorem verifyProof_binding (hash : ByteArray → Hash32) {root : Hash32} {secured : Bool}
     {key : ByteArray} {p q : List ByteArray} {v w : Option ByteArray}
     (hp : verifyProof hash root secured key p = .ok v)
     (hq : verifyProof hash root secured key q = .ok w) :
-    v = w ∨ ∃ pair, findProofCollision hash p q = some pair ∧ IsCollision hash pair := by
+    (p = q ∧ v = w) ∨ ∃ pair, findProofCollision hash p q = some pair ∧ IsCollision hash pair := by
   cases hcollision : findProofCollision hash p q with
   | some pair => exact .inr ⟨pair, rfl, findProofCollision_valid hash p q hcollision⟩
   | none =>
@@ -195,7 +221,8 @@ theorem verifyProof_binding (hash : ByteArray → Hash32) {root : Hash32} {secur
       | ok next' =>
         obtain ⟨item, rest⟩ := next
         obtain ⟨item', rest'⟩ := next'
-        obtain ⟨rfl, hrest⟩ := resolve_binding hash hp' hq' hcollision
+        obtain ⟨rfl, used, rfl, rfl⟩ := resolve_binding hash hp' hq' hcollision
+        rw [findProofCollision_append] at hcollision
         simp only [hp', hq'] at hp hq
         generalize keyPath hash secured key = path at hp hq
         cases hp'' : walk hash (path.length + 1) item path rest with
@@ -206,14 +233,33 @@ theorem verifyProof_binding (hash : ByteArray → Hash32) {root : Hash32} {secur
           | ok outcome' =>
             obtain ⟨value, unused⟩ := outcome
             obtain ⟨value', unused'⟩ := outcome'
-            have hvalue := walk_binding hash _ _ _ hp'' hq'' hrest
+            obtain ⟨hvalue, used', rfl, rfl⟩ := walk_binding hash _ _ _ hp'' hq'' hcollision
             simp only [hp'', hq''] at hp hq
+            -- Each proof is the nodes that the walk used, with no node left.
             split at hp
             · split at hq
-              · simp only [pure, Except.pure, Except.ok.injEq] at hp hq
-                rw [← hp, ← hq, hvalue]
+              · rename_i hunused hunused'
+                simp only [pure, Except.pure, Except.ok.injEq] at hp hq
+                simp [List.isEmpty_iff.mp hunused, List.isEmpty_iff.mp hunused', ← hp, ← hq, hvalue]
               · cases hq
             · cases hp
+
+/-- Soundness: a proof that verifies against the trie's root is the proof that the trie builds.
+
+So it gives the trie's value of the key.
+
+Otherwise the search finds a collision between the proof and the honest proof.
+
+The keys of the trie must have distinct paths. -/
+theorem verifyProof_sound (hash : ByteArray → Hash32) {trie : Trie} {key : ByteArray}
+    {root' : Hash32}
+    {honestProof proof : List ByteArray} {result : Option ByteArray}
+    (hroot : root hash trie = .ok root') (hhonest : getProof hash trie key = .ok honestProof)
+    (hpaths : (trie.data.map fun entry => keyPath hash trie.secured entry.1).Nodup)
+    (hverify : verifyProof hash root' trie.secured key proof = .ok result) :
+    (proof = honestProof ∧ result = valueAt hash trie key) ∨
+      ∃ pair, findProofCollision hash proof honestProof = some pair ∧ IsCollision hash pair :=
+  verifyProof_binding hash hverify (verifyProof_getProof hash hroot hhonest hpaths)
 
 /-! ## Two tries with one root -/
 
@@ -263,7 +309,7 @@ theorem root_binding (hash : ByteArray → Hash32) {trie₁ trie₂ : Trie} {roo
   have hverify₁ := verifyProof_getProof hash hroot₁ hp hpaths₁
   have hverify₂ := verifyProof_getProof hash hroot₂ hq hpaths₂
   rw [hsecured] at hverify₁
-  rcases verifyProof_binding hash hverify₁ hverify₂ with hvalue | ⟨pair, hfind, hvalid⟩
+  rcases verifyProof_binding hash hverify₁ hverify₂ with ⟨-, hvalue⟩ | ⟨pair, hfind, hvalid⟩
   · exact .inl hvalue
   · exact .inr ⟨pair, by simp [findCollision, hp, hq, hfind], hvalid⟩
 

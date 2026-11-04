@@ -304,16 +304,17 @@ The trie commits to a map from byte keys to byte values under one 32-byte root.
 Two theorems in `Execution/Proofs/Trie/Binding.lean` describe what the root binds, for every hash.
 
 The first is `verifyProof_binding`, about two Merkle proofs of one key that verify against one root.
-They give the key one value, or `findProofCollision` returns two different nodes of the proofs with one hash.
+They are one proof and give the key one value.
+Otherwise `findProofCollision` returns two different nodes of the proofs with one hash.
 The second is `root_binding`, about two tries with one root.
 They give every key one value, or `findCollision` returns such a collision in the proofs of that key.
 Both searches are proved to return only collisions, and to return none for an input compared with itself.
 
-`verifyProof_sound` (`Execution/Proofs/Trie/Proof.lean`) states soundness against an honest trie in another way.
-It assumes `NoCollision`: no node of the proof has the hash of a different node of the honest proof.
-Under that assumption, the proof is the honest proof, and it gives the trie's value of the key.
+`verifyProof_sound`, in the same file, compares a proof with the proof that the trie builds for the key.
+The proof is that honest proof and gives the trie's value of the key.
+Otherwise `findProofCollision` returns a collision between the two proofs.
 
-`root_binding` and `verifyProof_sound` also assume that the keys of each trie have distinct paths.
+`root_binding` and `verifyProof_sound` assume that the keys of each trie have distinct paths.
 A secured trie hashes each key into its path, so there the assumption is that no two of its keys have one hash.
 No theorem bounds the probability of finding a collision.
 
