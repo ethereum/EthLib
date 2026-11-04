@@ -16,9 +16,9 @@ gas:     32600 * k + 37700
 output:  1 as a 32-byte word when the product of the pairings is 1, and 0 otherwise
 ```
 
-Source: [`forks/amsterdam/vm/precompiled_contracts/bls12_381/bls12_381_pairing.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/amsterdam/vm/precompiled_contracts/bls12_381/bls12_381_pairing.py#L25-L67), and `pairing_check` in [`crypto/bls12_381.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/crypto/bls12_381.py#L245-L266), of execution-specs at `2c0c8e7`.
+Source: EIP-2537, at <https://eips.ethereum.org/EIPS/eip-2537>.
 
-Prague introduced it, and every later fork there accepts the same inputs with the same price, up to Bogota.
+Prague introduced it, and every later fork accepts the same inputs with the same price.
 
 The product is checked with the pairing check of the BLS12-381 module.
 
@@ -36,10 +36,10 @@ open EthLib.Cryptography.Bls (G1 G2 pairingCheck)
 /-- The size of one pair: an encoded G1 point, then an encoded G2 point. -/
 def LENGTH_PER_PAIRING_PAIR : Nat := 384
 
-/-- The price of each pair, written in the source. -/
+/-- The price of each pair, from EIP-2537, Gas schedule. -/
 def GAS_PAIRING_PER_PAIR : Nat := 32600
 
-/-- The price of every call, written in the source. -/
+/-- The price of every call, from EIP-2537, Gas schedule. -/
 def GAS_PAIRING_BASE : Nat := 37700
 
 /-- The price of a pairing check on `k` pairs. -/

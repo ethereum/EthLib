@@ -20,11 +20,10 @@ check:   versioned hash = 0x01 ++ SHA-256(commitment)[1:]
 output:  [ FIELD_ELEMENTS_PER_BLOB: 32 | BLS_MODULUS: 32 ]
 ```
 
-Source: [`forks/cancun/vm/precompiled_contracts/point_evaluation.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/cancun/vm/precompiled_contracts/point_evaluation.py#L32-L72) of execution-specs at `2c0c8e7`, function `point_evaluation`.
+Source: "Point evaluation precompile" of EIP-4844, at
+<https://eips.ethereum.org/EIPS/eip-4844#point-evaluation-precompile>.
 
-It calls `kzg_commitment_to_versioned_hash` and `verify_kzg_proof` of [`crypto/kzg.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/crypto/kzg.py#L65-L176).
-
-Every later fork there computes the same result with the same price, up to Bogota.
+Every fork since Cancun computes the same result with the same price.
 
 Every failure consumes all the gas, so the error only says why the call failed.
 -/
@@ -40,7 +39,7 @@ open EthLib.Cryptography.Kzg (validateKzgG1Point verifyKzgProofWith)
 /-- The size of the call data: a versioned hash, two field elements and two compressed G1 points. -/
 def INPUT_BYTES : Nat := 192
 
-/-- The price of every call, `GasCosts.PRECOMPILE_POINT_EVALUATION` in [`forks/cancun/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/cancun/vm/gas.py#L76). -/
+/-- The price of every call, from EIP-4844, Parameters. -/
 def GAS_POINT_EVALUATION : Nat := 50000
 
 /-- `FIELD_ELEMENTS_PER_BLOB`: the number of field elements in a blob, which the output reports. -/
@@ -92,7 +91,7 @@ It decodes the inputs and `[tau]_2`, then runs the KZG check with `[tau]_2` alon
 
 The check holds when the quotient `(p(X) - y) / (X - z)` is a polynomial. -/
 def verifyKzgProof (commitment z y proof : ByteArray) : Except PointEvaluationError Bool := do
-  -- The inputs are decoded in the order of the source.
+  -- The inputs are decoded in the order of EIP-4844.
   let commitmentPoint ← (validateKzgG1Point commitment).mapError fun _ => .invalidCommitment
   let zField ← (Fr.fromBytesBE z).mapError fun _ => .invalidFieldElement
   let yField ← (Fr.fromBytesBE y).mapError fun _ => .invalidFieldElement

@@ -8,7 +8,7 @@ F processes one 128-byte block of a message, so a contract that hashes a longer 
 
 - [EIP-152](https://eips.ethereum.org/EIPS/eip-152) defines the input layout, the errors and the output.
 - [RFC 7693](https://www.rfc-editor.org/rfc/rfc7693) §3.2 defines F itself.
-- [`blake2f`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/bpo2/vm/precompiled_contracts/blake2f.py) in execution-specs fixes the order of the two checks.
+- Neither fixes the order of the two checks, so the module checks the length before the flag.
 
 ## Layout
 

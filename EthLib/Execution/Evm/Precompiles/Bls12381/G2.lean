@@ -12,9 +12,9 @@ The BLS12-381 G2 precompiles of EIP-2537.
 - G2MSM at `0x0e` sums the products of G2 points by 32-byte scalars, priced with a discount that grows with the number of pairs.
 - MAP_FP2_TO_G2 at `0x11` maps an element of `Fp2` to a point of G2.
 
-Source: [`forks/amsterdam/vm/precompiled_contracts/bls12_381/bls12_381_g2.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/amsterdam/vm/precompiled_contracts/bls12_381/bls12_381_g2.py) of execution-specs at `2c0c8e7`.
+Source: EIP-2537, at <https://eips.ethereum.org/EIPS/eip-2537>.
 
-Prague introduced them, and every later fork there accepts the same inputs with the same prices, up to Bogota.
+Prague introduced them, and every later fork accepts the same inputs with the same prices.
 -/
 
 @[expose] public section
@@ -24,7 +24,7 @@ namespace EthLib.Execution.Evm.Precompiles.Bls12381
 open EthLib.Base (bytesToNat)
 open EthLib.Cryptography.Bls (G2)
 
-/-- The price of G2ADD, `GasCosts.PRECOMPILE_BLS_G2ADD` in [`forks/amsterdam/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/amsterdam/vm/gas.py#L120). -/
+/-- The price of G2ADD, from EIP-2537, Gas schedule. -/
 def GAS_G2ADD : Nat := 600
 
 /-- `bls12_g2_add`: the sum of two G2 points, given as two encoded points.
@@ -46,12 +46,12 @@ def bls12G2Add (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray :
 /-- `LENGTH_PER_PAIR`: an encoded G2 point, then a 32-byte scalar. -/
 def LENGTH_PER_PAIR_G2 : Nat := 288
 
-/-- The price of one product, `GasCosts.PRECOMPILE_BLS_G2MUL` in [`forks/amsterdam/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/amsterdam/vm/gas.py#L121). -/
+/-- The price of one product, from EIP-2537, Gas schedule. -/
 def GAS_G2MUL : Nat := 22500
 
-/-- `G2_K_DISCOUNT`: the discount for `k` pairs, entry `k - 1`, in thousandths.
+/-- The discount for `k` pairs, entry `k - 1`, in thousandths.
 
-Source: [`bls12_381/__init__.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/amsterdam/vm/precompiled_contracts/bls12_381/__init__.py#L274). -/
+Source: the G2 discounts of EIP-2537, Gas schedule. -/
 def G2_K_DISCOUNT : Vector Nat 128 := #v[
   1000, 1000, 923, 884, 855, 832, 812, 796, 782, 770, 759, 749, 740, 732, 724, 717, 711, 704, 699, 693, 688,
   683, 679, 674, 670, 666, 663, 659, 655, 652, 649, 646, 643, 640, 637, 634, 632, 629, 627, 624, 622, 620, 618,
@@ -91,7 +91,7 @@ def bls12G2Msm (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray :
     return (← unpadG2 (pair.take 256), pair.drop 256)
   return ⟨(padG2 (g2ToBytes (← g2Msm pairs))).toArray⟩
 
-/-- The price of MAP_FP2_TO_G2, `GasCosts.PRECOMPILE_BLS_G2MAP` in [`forks/amsterdam/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/amsterdam/vm/gas.py#L122). -/
+/-- The price of MAP_FP2_TO_G2, from EIP-2537, Gas schedule. -/
 def GAS_G2MAP : Nat := 23800
 
 /-- `bls12_map_fp2_to_g2`: the point of G2 that RFC 9380 maps an element of `Fp2` to, `c0` given first. -/

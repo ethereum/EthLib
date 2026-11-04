@@ -19,9 +19,10 @@ G2 point:  [ x.c0: 64 | x.c1: 64 | y.c0: 64 | y.c1: 64 ]
 
 A G2 coordinate `c0 + c1 * i` is an element of `Fp2 = Fp[i] / (i^2 + 1)`.
 
-Source: `unpad_fp` to `pad_g2` in [`forks/amsterdam/vm/precompiled_contracts/bls12_381/__init__.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/amsterdam/vm/precompiled_contracts/bls12_381/__init__.py#L22-L140), and `bytes_to_field_element` to `g2_to_bytes` in [`crypto/bls12_381.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/crypto/bls12_381.py#L43-L146), of execution-specs at `2c0c8e7`.
+Source: "Fine points and encoding of base elements" of EIP-2537, at
+<https://eips.ethereum.org/EIPS/eip-2537>.
 
-Prague introduced the precompiles, and its decoding rejects the same inputs, as `Proofs.Evm.Precompiles.Bls12381.Encoding` shows.
+Prague introduced the precompiles, and its decoding rejects the same inputs, as the proofs show.
 -/
 
 @[expose] public section
