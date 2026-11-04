@@ -256,6 +256,10 @@ At London, the field holds nothing, and the RLP encoding of the header is a list
 At Shapella, the field holds the root of the withdrawals trie, and the list has 17 items, with that root last, as EIP-4895 shows.
 A function that builds a header at any fork writes the root as `fun _ => root`, and a reader passes a proof of `fork ≥ .shapella`.
 
+A field that a fork removes has the type `Until f fork α`, a function from a proof of `fork < f` to `α`.
+It holds one value before `f`, and nothing from `f` on.
+The attestations of a Phase 0 beacon state are one example, since Altair replaces them by participation flags.
+
 The codecs then see only the present fields.
 The RLP list of a header has only the fields whose fork is at or before `fork`, in their order.
 The SSZ container of a beacon state works the same way.
