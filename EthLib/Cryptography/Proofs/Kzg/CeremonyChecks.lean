@@ -10,15 +10,16 @@ public import EthLib.Cryptography.Proofs.Bls.PairingLaws
 /-!
 # Sufficiency of the ceremony pairing checks
 
-The [`kzg-ceremony-specs` sequencer](https://github.com/ethereum/kzg-ceremony-specs/blob/master/docs/sequencer/sequencer.md#pairing-checks) runs three pairing checks on each contribution.
+The KZG ceremony sequencer runs three pairing checks on each contribution.
 
-The theorems here are stated over the spec's own `Fr`, `G1`, `G2` and `pairingCheck`.
+The source is the sequencer document of `kzg-ceremony-specs`, section "Pairing checks":
+<https://github.com/ethereum/kzg-ceremony-specs/blob/master/docs/sequencer/sequencer.md#pairing-checks>
 
-They assume one law of the pairing, `ConcreteBlsLaws`, which follows from `PairingLaws`.
+Under one law of the pairing, the checks force each point to be a power of the new trapdoor.
 
-Under that law, the checks force every submitted point to be the expected power of the updated trapdoor.
+That law follows from the general pairing law.
 
-They concern the exact checks, not their random-linear-combination batching.
+The theorems cover the exact checks, not their batched form.
 -/
 
 @[expose] public section
@@ -516,7 +517,7 @@ theorem g2PowersFollowFromCrossGroup
   (checksSufficient laws contribution transcript checks exponents
     previousTauNonzero pubkeyNonzero).2
 
-/-- The scalar identity of `pairingEq`, over `ZMod`, where `linear_combination` applies. -/
+/-- The scalar identity of a pairing equality, stated over `ZMod` so that ring tactics apply. -/
 private theorem add_neg_mul_eq_zero_iff (a b c d : ZMod Fr.modulus) :
     a * b + -c * d = 0 ↔ a * b = c * d := by
   constructor <;> intro h <;> linear_combination h
