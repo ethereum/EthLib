@@ -118,7 +118,9 @@ def mul (k : Fn) (p : Point) : Point := mulBits 256 k.val p
 
 end Point
 
-/-- Whether `(r, s)` is a valid signature on the integer `e` of a hash under the public key `q`, by SEC 1 v2 §4.1.4.
+/-- Whether `(r, s)` is a valid signature on the hash integer `e` under the public key `q`.
+
+It is the verifying operation of SEC 1 v2 §4.1.4.
 
 `e` acts mod `n`, like every scalar.
 

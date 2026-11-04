@@ -8,12 +8,9 @@ public import EthLib.Cryptography.Secp256k1.Encoding
 
 C-ABI exports for secp256r1, callable from the Python C extension.
 
-A public key is 64 bytes, a hash is 32 bytes, and a signature is 64 bytes.
+A hash is 32 bytes.
 
-```text
-public key: [ x: 32 | y: 32 ]
-signature:  [ r: 32 | s: 32 ]
-```
+A public key is `x || y`, and a signature is `r || s`, with 32 bytes for each field.
 
 Each field is a big-endian integer.
 -/

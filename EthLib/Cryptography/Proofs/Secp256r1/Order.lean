@@ -148,7 +148,7 @@ theorem smul_eq_val_nsmul (k : ZMod Fn.modulus) (X : curve.Point) : k • X = k.
 
 namespace Point
 
-/-- `mul k P` is `k P`, with `k` in `ZMod n`. -/
+/-- Scalar multiplication computes `k P`, with `k` in `ZMod n`. -/
 theorem toPoint_mul' (k : Fn) {p : Point} (hp : p.isOnCurve = true) :
     toPoint (mul k p) = Fn.toZMod k • toPoint p :=
   toPoint_mul k hp
