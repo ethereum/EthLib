@@ -193,7 +193,7 @@ theorem decodeTransaction_encodeTransaction {fork : Fork} {t : Transaction} {byt
   | accessList tx | feeMarket tx | blob tx | setCode tx =>
     simp only [encodeTransaction, map_eq_ok] at h
     obtain ⟨payload, hPayload, rfl⟩ := h
-    simp only [Transaction.fork] at hFork
+    simp [Transaction.fork, Transaction.type, typeFork] at hFork
     simp [decodeTransaction, h0, typedBytes_getElem_zero, typeFork, hFork, decodePayload,
       extract_typedBytes, Codec.decode_encode hPayload, Functor.map, Except.map, Except.mapError]
 
@@ -222,7 +222,7 @@ theorem encodeTransaction_of_decodeTransaction {fork : Fork} {bytes : ByteArray}
             | cases h
             | obtain ⟨tx, hTx, rfl⟩ := map_mapError_eq_ok.mp h
               simp_all [encodeTransaction, Codec.encode_decode hTx, Functor.map, Except.map,
-                Transaction.fork]
+                Transaction.fork, Transaction.type, typeFork]
         · cases h
       · cases h
   · cases h

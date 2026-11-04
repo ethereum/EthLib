@@ -284,7 +284,11 @@ The theorems in `Execution/Proofs/Evm/Instructions/` prove that the two agree, a
 `sdiv_eq` covers the quotient of -2^255 by -1, the one signed quotient that does not fit in a word, and `bitwiseSar_eq` covers every shift up to 2^256 - 1.
 The 38 test cases of EIP-145 pin SHL, SHR and SAR.
 
-No theorem relates the definitions to the Yellow Paper, and the stack, gas and program counter are not modelled yet.
+No theorem relates the definitions to the Yellow Paper.
+The stack, the frame with its program counter and gas meter, and memory are modelled.
+So are the instructions that read only the stack, memory, call data, code and return data.
+They are in `Execution/Evm/StackOnly.lean` and `Execution/Evm/MemoryData.lean`.
+Storage, calls and the world state are not modelled yet.
 
 ### SHA-256 precompile
 

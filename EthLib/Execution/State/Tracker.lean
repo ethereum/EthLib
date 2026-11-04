@@ -23,9 +23,11 @@ From Paris, a change that leaves an account empty deletes it.
 
 [EIP-7523][eip7523] forbids an empty account after the Merge.
 
-Before Paris, an empty account stays until the end of its transaction.
+From Spurious Dragon to Paris, an empty account stays until the end of its transaction.
 
 Then [EIP-161][eip161] deletes it if the transaction touched it.
+
+Before Spurious Dragon, an empty account stays.
 
 [eip1153]: https://eips.ethereum.org/EIPS/eip-1153#specification
 [eip7523]: https://eips.ethereum.org/EIPS/eip-7523#specification
@@ -304,9 +306,12 @@ Before Paris, a transaction touches accounts in this way. -/
 def touchAccount (tx : TransactionState) (address : Address) : TransactionState :=
   if tx.accountExists address then tx else tx.setAccount address (some EMPTY_ACCOUNT)
 
-/-- Delete each touched account that is empty, as EIP-161 asks before Paris. -/
-def destroyTouchedEmptyAccounts (tx : TransactionState) (touched : List Address) :
+/-- Delete each touched account that is empty, as EIP-161 asks from Spurious Dragon.
+
+Before Spurious Dragon, nothing is deleted. -/
+def destroyTouchedEmptyAccounts (fork : Fork) (tx : TransactionState) (touched : List Address) :
     TransactionState :=
+  if fork < .spuriousDragon then tx else
   touched.foldl
     (fun tx address => if tx.accountExistsAndIsEmpty address then tx.destroyAccount address else tx)
     tx
