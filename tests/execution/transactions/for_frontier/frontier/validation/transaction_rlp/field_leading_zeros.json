@@ -1,0 +1,121 @@
+{
+    "tests/frontier/validation/test_transaction_rlp.py::test_field_leading_zeros[fork_Frontier-transaction_test-field_gas_limit-error_TransactionException.RLP_LEADING_ZEROS_GASLIMIT]": {
+        "result": {
+            "Frontier": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_LEADING_ZEROS_GASLIMIT"
+            }
+        },
+        "txbytes": "0xf860800a830075309495d1be958d22adf294428c13cc71d89ff320bfd301801ba0b7f0933e32fca8e83ecaf6c304302177973803d255606d5c3be9a968e303f403a04de0d9477173562352f7bb10124fdcf1a7dc4064b9793b3a7829b1a9aabb9b83",
+        "_info": {
+            "hash": "0xcc1800d8d4ed10f25204832da22627235951380df0d2ddac651536d2185698a5",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Prefix one integer field's payload with a zero byte; the\nnon-canonical encoding must be rejected. The base nonce is zero, so\nits variant is the classic zero-encoded-as-0x00 case.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L149"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_field_leading_zeros[fork_Frontier-transaction_test-field_gas_price-error_TransactionException.RLP_LEADING_ZEROS_GASPRICE]": {
+        "result": {
+            "Frontier": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_LEADING_ZEROS_GASPRICE"
+            }
+        },
+        "txbytes": "0xf8618082000a8275309495d1be958d22adf294428c13cc71d89ff320bfd301801ba0b7f0933e32fca8e83ecaf6c304302177973803d255606d5c3be9a968e303f403a04de0d9477173562352f7bb10124fdcf1a7dc4064b9793b3a7829b1a9aabb9b83",
+        "_info": {
+            "hash": "0x9dddf92215dab95365dc631b0d8f3e8b6c14347cfa6f33eeb072d08a7027dc45",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Prefix one integer field's payload with a zero byte; the\nnon-canonical encoding must be rejected. The base nonce is zero, so\nits variant is the classic zero-encoded-as-0x00 case.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L149"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_field_leading_zeros[fork_Frontier-transaction_test-field_nonce-error_TransactionException.RLP_LEADING_ZEROS_NONCE]": {
+        "result": {
+            "Frontier": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_LEADING_ZEROS_NONCE"
+            }
+        },
+        "txbytes": "0xf85f000a8275309495d1be958d22adf294428c13cc71d89ff320bfd301801ba0b7f0933e32fca8e83ecaf6c304302177973803d255606d5c3be9a968e303f403a04de0d9477173562352f7bb10124fdcf1a7dc4064b9793b3a7829b1a9aabb9b83",
+        "_info": {
+            "hash": "0x66bc87034aa3b635832457f4a02146867325f1b67a73672fdd6ffb3c51b97162",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Prefix one integer field's payload with a zero byte; the\nnon-canonical encoding must be rejected. The base nonce is zero, so\nits variant is the classic zero-encoded-as-0x00 case.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L149"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_field_leading_zeros[fork_Frontier-transaction_test-field_r-error_TransactionException.RLP_LEADING_ZEROS_R]": {
+        "result": {
+            "Frontier": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_LEADING_ZEROS_R"
+            }
+        },
+        "txbytes": "0xf860800a8275309495d1be958d22adf294428c13cc71d89ff320bfd301801ba100b7f0933e32fca8e83ecaf6c304302177973803d255606d5c3be9a968e303f403a04de0d9477173562352f7bb10124fdcf1a7dc4064b9793b3a7829b1a9aabb9b83",
+        "_info": {
+            "hash": "0x48fd9ae1e28a953e645da49fe3a52b05c4ca09704673539d1f4825c53641db5d",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Prefix one integer field's payload with a zero byte; the\nnon-canonical encoding must be rejected. The base nonce is zero, so\nits variant is the classic zero-encoded-as-0x00 case.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L149"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_field_leading_zeros[fork_Frontier-transaction_test-field_s-error_TransactionException.RLP_LEADING_ZEROS_S]": {
+        "result": {
+            "Frontier": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_LEADING_ZEROS_S"
+            }
+        },
+        "txbytes": "0xf860800a8275309495d1be958d22adf294428c13cc71d89ff320bfd301801ba0b7f0933e32fca8e83ecaf6c304302177973803d255606d5c3be9a968e303f403a1004de0d9477173562352f7bb10124fdcf1a7dc4064b9793b3a7829b1a9aabb9b83",
+        "_info": {
+            "hash": "0xc0ce349dec6213c14270a9e28375ebf0a919df706ebc3b2eba9ba911219576ee",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Prefix one integer field's payload with a zero byte; the\nnon-canonical encoding must be rejected. The base nonce is zero, so\nits variant is the classic zero-encoded-as-0x00 case.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L149"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_field_leading_zeros[fork_Frontier-transaction_test-field_v-error_TransactionException.RLP_LEADING_ZEROS_V]": {
+        "result": {
+            "Frontier": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_LEADING_ZEROS_V"
+            }
+        },
+        "txbytes": "0xf861800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018082001ba0b7f0933e32fca8e83ecaf6c304302177973803d255606d5c3be9a968e303f403a04de0d9477173562352f7bb10124fdcf1a7dc4064b9793b3a7829b1a9aabb9b83",
+        "_info": {
+            "hash": "0xf8d4ec032be3e61105f2fce51d73d63997392d63babaec660e9aac55f6d8542b",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Prefix one integer field's payload with a zero byte; the\nnon-canonical encoding must be rejected. The base nonce is zero, so\nits variant is the classic zero-encoded-as-0x00 case.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L149"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_field_leading_zeros[fork_Frontier-transaction_test-field_value-error_TransactionException.RLP_LEADING_ZEROS_VALUE]": {
+        "result": {
+            "Frontier": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_LEADING_ZEROS_VALUE"
+            }
+        },
+        "txbytes": "0xf861800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3820001801ba0b7f0933e32fca8e83ecaf6c304302177973803d255606d5c3be9a968e303f403a04de0d9477173562352f7bb10124fdcf1a7dc4064b9793b3a7829b1a9aabb9b83",
+        "_info": {
+            "hash": "0x96a03501c0051df4e4451983ffb148c4affb2b4b15dc34c7cba53a4b81c104b5",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Prefix one integer field's payload with a zero byte; the\nnon-canonical encoding must be rejected. The base nonce is zero, so\nits variant is the classic zero-encoded-as-0x00 case.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L149"
+        }
+    }
+}

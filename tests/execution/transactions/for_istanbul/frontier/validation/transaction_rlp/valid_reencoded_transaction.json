@@ -1,0 +1,20 @@
+{
+    "tests/frontier/validation/test_transaction_rlp.py::test_valid_reencoded_transaction[fork_Istanbul-transaction_test]": {
+        "result": {
+            "Istanbul": {
+                "hash": "0x5be02ea9c507ca3d18ad9175fa92462ea91f8e015b36626a73be3477854be6bd",
+                "intrinsicGas": "0x5208",
+                "sender": "0xf6c3a9edc1afa0ad5b720e4d42e1437c43d3b3ff"
+            }
+        },
+        "txbytes": "0xf85f800a82753094c0f6dc9e5836f54caadbf59cc69346c508e1992b018026a05620163c1c60b8e79c827610d50d89a9dbff17febe1e604c539f902de467f68da010bb198840c4c29c297d4b36b0c6d057cfa5df4d5b01ef8ab4e3ae12c1ccde59",
+        "_info": {
+            "hash": "0xa7039291441d0d9f26c3e6af3fd2209055d2252a1bd9e49025a663da8bcb7f2c",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Verify the local field encoder reproduces the framework encoding\nbyte for byte, anchoring the malformation tests to a valid baseline.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L134"
+        }
+    }
+}

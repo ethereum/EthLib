@@ -1,0 +1,87 @@
+{
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_signature_values[fork_London-transaction_test-r_zero]": {
+        "result": {
+            "London": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.INVALID_SIGNATURE_VRS"
+            }
+        },
+        "txbytes": "0xf83f800a8275309495d1be958d22adf294428c13cc71d89ff320bfd301802680a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0x5724c3ad2d655085b21a89399bd24084d489cddf198e013051456570ec44ac93",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Replace a signature field with a well-encoded but invalid value:\nzero r or s, or a v that is neither 27, 28 nor an EIP-155 value.\n\nBefore EIP-155 any v other than 27 or 28 is a plain invalid v;\nafterwards clients may instead derive a chain id from the invalid\nv and reject the transaction for the chain id mismatch.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L524"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_signature_values[fork_London-transaction_test-s_zero]": {
+        "result": {
+            "London": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.INVALID_SIGNATURE_VRS"
+            }
+        },
+        "txbytes": "0xf83f800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa71965980",
+        "_info": {
+            "hash": "0xdf28c66d7f1ef71c2979befe33517f53cc9c776836fe45ac7e7c6f7b722d7be5",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Replace a signature field with a well-encoded but invalid value:\nzero r or s, or a v that is neither 27, 28 nor an EIP-155 value.\n\nBefore EIP-155 any v other than 27 or 28 is a plain invalid v;\nafterwards clients may instead derive a chain id from the invalid\nv and reject the transaction for the chain id mismatch.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L524"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_signature_values[fork_London-transaction_test-v_255]": {
+        "result": {
+            "London": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.INVALID_SIGNATURE_VRS|TransactionException.INVALID_CHAINID"
+            }
+        },
+        "txbytes": "0xf860800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018081ffa0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0xa5542f63195f8b7c4b3e037008bb4b71b8a3d83be89e8ae7854747fc8809c17d",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Replace a signature field with a well-encoded but invalid value:\nzero r or s, or a v that is neither 27, 28 nor an EIP-155 value.\n\nBefore EIP-155 any v other than 27 or 28 is a plain invalid v;\nafterwards clients may instead derive a chain id from the invalid\nv and reject the transaction for the chain id mismatch.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L524"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_signature_values[fork_London-transaction_test-v_29]": {
+        "result": {
+            "London": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.INVALID_SIGNATURE_VRS|TransactionException.INVALID_CHAINID"
+            }
+        },
+        "txbytes": "0xf85f800a8275309495d1be958d22adf294428c13cc71d89ff320bfd301801da0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0xf7b2bb7583524b3b64b8f83be140eba61dcbd94300a226cd483c5d45b1bdd7b7",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Replace a signature field with a well-encoded but invalid value:\nzero r or s, or a v that is neither 27, 28 nor an EIP-155 value.\n\nBefore EIP-155 any v other than 27 or 28 is a plain invalid v;\nafterwards clients may instead derive a chain id from the invalid\nv and reject the transaction for the chain id mismatch.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L524"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_signature_values[fork_London-transaction_test-v_zero]": {
+        "result": {
+            "London": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.INVALID_SIGNATURE_VRS|TransactionException.INVALID_CHAINID"
+            }
+        },
+        "txbytes": "0xf85f800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018080a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0x3eea94bf2fd6ca8d88104431e9421f91cb8ea0f9183f20020ae05df18058137e",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Replace a signature field with a well-encoded but invalid value:\nzero r or s, or a v that is neither 27, 28 nor an EIP-155 value.\n\nBefore EIP-155 any v other than 27 or 28 is a plain invalid v;\nafterwards clients may instead derive a chain id from the invalid\nv and reject the transaction for the chain id mismatch.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L524"
+        }
+    }
+}

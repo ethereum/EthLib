@@ -1,0 +1,87 @@
+{
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_signature_values[fork_TangerineWhistle-transaction_test-r_zero]": {
+        "result": {
+            "TangerineWhistle": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.INVALID_SIGNATURE_VRS"
+            }
+        },
+        "txbytes": "0xf83f800a8275309495d1be958d22adf294428c13cc71d89ff320bfd301801b80a04de0d9477173562352f7bb10124fdcf1a7dc4064b9793b3a7829b1a9aabb9b83",
+        "_info": {
+            "hash": "0xc6d1fc2145ebcb1dc82deb62c8821ecee4b3cf49f01d0de2bc9bbfaecda50d00",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Replace a signature field with a well-encoded but invalid value:\nzero r or s, or a v that is neither 27, 28 nor an EIP-155 value.\n\nBefore EIP-155 any v other than 27 or 28 is a plain invalid v;\nafterwards clients may instead derive a chain id from the invalid\nv and reject the transaction for the chain id mismatch.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L524"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_signature_values[fork_TangerineWhistle-transaction_test-s_zero]": {
+        "result": {
+            "TangerineWhistle": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.INVALID_SIGNATURE_VRS"
+            }
+        },
+        "txbytes": "0xf83f800a8275309495d1be958d22adf294428c13cc71d89ff320bfd301801ba0b7f0933e32fca8e83ecaf6c304302177973803d255606d5c3be9a968e303f40380",
+        "_info": {
+            "hash": "0xc7b26d4cfd4a8e54ce2a97704e266b3e177b824ac26fd137ad076d101cd0804e",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Replace a signature field with a well-encoded but invalid value:\nzero r or s, or a v that is neither 27, 28 nor an EIP-155 value.\n\nBefore EIP-155 any v other than 27 or 28 is a plain invalid v;\nafterwards clients may instead derive a chain id from the invalid\nv and reject the transaction for the chain id mismatch.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L524"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_signature_values[fork_TangerineWhistle-transaction_test-v_255]": {
+        "result": {
+            "TangerineWhistle": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.INVALID_SIGNATURE_VRS|TransactionException.INVALID_CHAINID"
+            }
+        },
+        "txbytes": "0xf860800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018081ffa0b7f0933e32fca8e83ecaf6c304302177973803d255606d5c3be9a968e303f403a04de0d9477173562352f7bb10124fdcf1a7dc4064b9793b3a7829b1a9aabb9b83",
+        "_info": {
+            "hash": "0x2708b541e77b73ef42b1864aa6816d8b45a970eaa637775f8f9a6c5eb6e4b88d",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Replace a signature field with a well-encoded but invalid value:\nzero r or s, or a v that is neither 27, 28 nor an EIP-155 value.\n\nBefore EIP-155 any v other than 27 or 28 is a plain invalid v;\nafterwards clients may instead derive a chain id from the invalid\nv and reject the transaction for the chain id mismatch.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L524"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_signature_values[fork_TangerineWhistle-transaction_test-v_29]": {
+        "result": {
+            "TangerineWhistle": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.INVALID_SIGNATURE_VRS|TransactionException.INVALID_CHAINID"
+            }
+        },
+        "txbytes": "0xf85f800a8275309495d1be958d22adf294428c13cc71d89ff320bfd301801da0b7f0933e32fca8e83ecaf6c304302177973803d255606d5c3be9a968e303f403a04de0d9477173562352f7bb10124fdcf1a7dc4064b9793b3a7829b1a9aabb9b83",
+        "_info": {
+            "hash": "0x2bb7d09c27f6a6ac4c41f67bd87cd57a6dfb79a20477ec4fb552cc8fe73974d8",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Replace a signature field with a well-encoded but invalid value:\nzero r or s, or a v that is neither 27, 28 nor an EIP-155 value.\n\nBefore EIP-155 any v other than 27 or 28 is a plain invalid v;\nafterwards clients may instead derive a chain id from the invalid\nv and reject the transaction for the chain id mismatch.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L524"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_signature_values[fork_TangerineWhistle-transaction_test-v_zero]": {
+        "result": {
+            "TangerineWhistle": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.INVALID_SIGNATURE_VRS|TransactionException.INVALID_CHAINID"
+            }
+        },
+        "txbytes": "0xf85f800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018080a0b7f0933e32fca8e83ecaf6c304302177973803d255606d5c3be9a968e303f403a04de0d9477173562352f7bb10124fdcf1a7dc4064b9793b3a7829b1a9aabb9b83",
+        "_info": {
+            "hash": "0x761702253c15f66439561720483fc3c1d5ce532539e145968211df3be0a1c9b4",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Replace a signature field with a well-encoded but invalid value:\nzero r or s, or a v that is neither 27, 28 nor an EIP-155 value.\n\nBefore EIP-155 any v other than 27 or 28 is a plain invalid v;\nafterwards clients may instead derive a chain id from the invalid\nv and reject the transaction for the chain id mismatch.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L524"
+        }
+    }
+}

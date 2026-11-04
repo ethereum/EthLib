@@ -1,3 +1,3 @@
-"""The execution layer: blocks and their headers."""
+"""The execution layer: blocks, their headers and transactions."""
 
-__all__ = ["blocks"]
+__all__ = ["blocks", "transactions"]

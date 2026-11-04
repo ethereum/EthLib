@@ -1,0 +1,36 @@
+{
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_envelope[fork_Frontier-transaction_test-empty]": {
+        "result": {
+            "Frontier": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_ERROR_EOF|TransactionException.TYPE_NOT_SUPPORTED"
+            }
+        },
+        "txbytes": "0x",
+        "_info": {
+            "hash": "0xcdbd45e2c46dc3cc463b826ae1a64af1fd1241814ae2d825e2b31884484c3565",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Send an empty transaction, or one whose first byte is 0xff.\n\nNeither is a valid transaction under any fork. An empty input has\nno type byte or RLP header to read. Before EIP-2718, 0xff is the\nheader of a list whose 8-byte length runs past the input;\nafterwards it is the type byte EIP-2718 reserves, so clients may\nreport either an RLP error or an unsupported type.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L478"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_envelope[fork_Frontier-transaction_test-reserved_type_byte]": {
+        "result": {
+            "Frontier": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_INVALID_HEADER|TransactionException.RLP_ERROR_EOF|TransactionException.TYPE_NOT_SUPPORTED"
+            }
+        },
+        "txbytes": "0xfff85f800a8275309495d1be958d22adf294428c13cc71d89ff320bfd301801ba0b7f0933e32fca8e83ecaf6c304302177973803d255606d5c3be9a968e303f403a04de0d9477173562352f7bb10124fdcf1a7dc4064b9793b3a7829b1a9aabb9b83",
+        "_info": {
+            "hash": "0x82448f36ec56b7806b8f5086735efdc6e77b6eb932b3ad4f77950c785ea99b46",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Send an empty transaction, or one whose first byte is 0xff.\n\nNeither is a valid transaction under any fork. An empty input has\nno type byte or RLP header to read. Before EIP-2718, 0xff is the\nheader of a list whose 8-byte length runs past the input;\nafterwards it is the type byte EIP-2718 reserves, so clients may\nreport either an RLP error or an unsupported type.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L478"
+        }
+    }
+}

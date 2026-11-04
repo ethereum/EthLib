@@ -1,0 +1,19 @@
+{
+    "tests/frontier/validation/test_transaction_rlp.py::test_non_canonical_single_byte[fork_Frontier-transaction_test]": {
+        "result": {
+            "Frontier": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_LEADING_ZEROS_NONCE_SIZE"
+            }
+        },
+        "txbytes": "0xf86081010a8275309495d1be958d22adf294428c13cc71d89ff320bfd301801ba07536c8d59f9c7fb14bd952c997d6317cda503f638a2615470ef35be01e6fdaf1a018051a29e58ff69d216740d034a3f6a95866d780867f15491f6529e6c6dca95d",
+        "_info": {
+            "hash": "0x04480829676144a2ee3dc137116ab7a09986f16b3bba0a5238346c3a0a71092b",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Encode the single-byte nonce payload behind a one-byte string\nheader (0x8101) instead of as the byte itself; the non-canonical\nencoding must be rejected.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L201"
+        }
+    }
+}

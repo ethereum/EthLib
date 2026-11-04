@@ -1,0 +1,20 @@
+{
+    "tests/frontier/validation/test_transaction_rlp.py::test_valid_reencoded_transaction[fork_TangerineWhistle-transaction_test]": {
+        "result": {
+            "TangerineWhistle": {
+                "hash": "0x8b0d0a28ba0a98888f8c485c51f1f074f666616f9fc3e395013773bb54e61ce4",
+                "intrinsicGas": "0x5208",
+                "sender": "0xf6c3a9edc1afa0ad5b720e4d42e1437c43d3b3ff"
+            }
+        },
+        "txbytes": "0xf85f800a82753094c0f6dc9e5836f54caadbf59cc69346c508e1992b01801ca0c1f642ad8f2afbfadaa7e6602be9078c7b00b153561adf99e5a316a7a8bf1b3fa02c27ae50737a2deea87dc0c15b9c27b8b6823db5cb1dc0f4653fe10d3902a5ac",
+        "_info": {
+            "hash": "0x23c225ad2d85968fa7c6c95516e4e675dfa2ceead57afde4efc787fccce7e1d5",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Verify the local field encoder reproduces the framework encoding\nbyte for byte, anchoring the malformation tests to a valid baseline.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L134"
+        }
+    }
+}

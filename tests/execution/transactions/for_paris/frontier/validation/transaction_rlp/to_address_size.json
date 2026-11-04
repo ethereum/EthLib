@@ -1,0 +1,36 @@
+{
+    "tests/frontier/validation/test_transaction_rlp.py::test_to_address_size[fork_Paris-transaction_test-size_19-error_TransactionException.ADDRESS_TOO_SHORT]": {
+        "result": {
+            "Paris": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.ADDRESS_TOO_SHORT"
+            }
+        },
+        "txbytes": "0xf85e800a8275309395d1be958d22adf294428c13cc71d89ff320bf018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0x23a7d3100d884733391ff861c9ffe65b262725d890d669be6b8ee55a9b9f27ad",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Encode the to field with a truncated 19-byte address or a 21-byte\naddress made of a zero byte prefixing a valid address.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L309"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_to_address_size[fork_Paris-transaction_test-size_21-error_TransactionException.ADDRESS_TOO_LONG]": {
+        "result": {
+            "Paris": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.ADDRESS_TOO_LONG"
+            }
+        },
+        "txbytes": "0xf860800a827530950095d1be958d22adf294428c13cc71d89ff320bfd3018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0xc1c4b88873916d26a5eb5483d34c613f50ab14f288712e5bb3b41d25cffa2823",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Encode the to field with a truncated 19-byte address or a 21-byte\naddress made of a zero byte prefixing a valid address.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L309"
+        }
+    }
+}

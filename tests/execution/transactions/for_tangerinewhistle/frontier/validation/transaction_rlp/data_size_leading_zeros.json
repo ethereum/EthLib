@@ -1,0 +1,19 @@
+{
+    "tests/frontier/validation/test_transaction_rlp.py::test_data_size_leading_zeros[fork_TangerineWhistle-transaction_test]": {
+        "result": {
+            "TangerineWhistle": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_LEADING_ZEROS_DATA_SIZE"
+            }
+        },
+        "txbytes": "0xf8a1800a8275309495d1be958d22adf294428c13cc71d89ff320bfd301b90040ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff1ca04ac01b769dfab3254dee2578a05a3ed17338e024dbe562f8e83af221a6817cd5a014a4fc21416234d5f18c7c7f60ed7514c3f37bc164aa53584fba3fcfe7838e91",
+        "_info": {
+            "hash": "0x4bf545dfe7ef6cbd14974a8b44589bd35a868d872660e8b4f39b328092b18027",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Encode the size of the data field's long-form string header with a\nleading zero byte; the non-canonical encoding must be rejected.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L231"
+        }
+    }
+}

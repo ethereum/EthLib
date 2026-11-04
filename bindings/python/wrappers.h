@@ -247,6 +247,11 @@ PyObject* py_rlpx_ecies_encrypt                           (PyObject* self, PyObj
 PyObject* py_rlpx_ecies_decrypt                           (PyObject* self, PyObject* args);
 PyObject* py_receipt_reencode                             (PyObject* self, PyObject* args);
 PyObject* py_receipt_logs_bloom                           (PyObject* self, PyObject* args);
+PyObject* py_tx_type                                      (PyObject* self, PyObject* args);
+PyObject* py_tx_hash                                      (PyObject* self, PyObject* args);
+PyObject* py_tx_recover_sender                            (PyObject* self, PyObject* args);
+PyObject* py_tx_intrinsic_gas                             (PyObject* self, PyObject* args);
+PyObject* py_tx_check                                     (PyObject* self, PyObject* args);
 
 PyObject* py_precompile_run                               (PyObject* self, PyObject* args);
 
