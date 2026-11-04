@@ -109,6 +109,24 @@ class Pins(unittest.TestCase):
                 tree.write("tests/suite/a/format.md", text + "\n")
                 self.assertFails(tree, f"cites commit {OTHER[:9]}")
 
+    def test_hex_word_that_is_not_a_pin(self):
+        for text in ("execution-specs at `abc1234`", "execution-specs at abc1234, in gas.py",
+                     "the commit `abc1234cafe`"):
+            with self.subTest(text=text):
+                tree = Tree()
+                tree.write("bindings/python/tests/test_c.py", f'"""{text}."""\n')
+                self.assertFails(tree, "cites commit abc1234")
+
+    def test_hex_word_that_reads_as_no_commit(self):
+        # A digest is longer than a commit, even when it is cut short.
+        # A word needs a letter and a digit.
+        for text in (f"`{'ab12' * 16}`", "`deadbeef`", "`1234567`", "look at abc1234x",
+                     "sha256 `e2fa7ea2…`"):
+            with self.subTest(text=text):
+                tree = Tree()
+                tree.write("bindings/python/tests/test_c.py", f'"""{text}."""\n')
+                self.assertEqual(tree.problems(), [])
+
     def test_link_to_a_change_is_not_a_citation(self):
         tree = Tree()
         tree.write("tests/suite/a/format.md", f"https://github.com/org/lib/commit/{OTHER}\n")

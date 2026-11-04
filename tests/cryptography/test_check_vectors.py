@@ -77,7 +77,7 @@ class CheckLocal(unittest.TestCase):
 
     def test_source_line_is_skipped(self):
         sums = self.root / "kzg" / "SHA256SUMS"
-        sums.write_text("# Source: ethereum/consensus-specs at 84454a9\n" + sums.read_text())
+        sums.write_text("# Source: ethereum/consensus-specs at aa16bb4\n" + sums.read_text())
         self.assertEqual(self.errors(), [])
 
     def test_changed_case_fails(self):
