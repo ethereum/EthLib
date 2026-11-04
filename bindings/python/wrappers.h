@@ -185,6 +185,9 @@ PyObject* py_enr_from_text                                (PyObject* self, PyObj
 PyObject* py_enr_seq                                      (PyObject* self, PyObject* args);
 PyObject* py_enr_verify_v4                                (PyObject* self, PyObject* args);
 PyObject* py_enr_node_id                                  (PyObject* self, PyObject* args);
+PyObject* py_consensus_preset                             (PyObject* self, PyObject* args);
+PyObject* py_consensus_config                             (PyObject* self, PyObject* args);
+PyObject* py_consensus_parameters                         (PyObject* self, PyObject* args);
 
 PyObject* py_precompile_run                               (PyObject* self, PyObject* args);
 

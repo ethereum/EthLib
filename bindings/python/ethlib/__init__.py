@@ -1,1 +1,1 @@
-__all__ = ["cryptography", "networking"]
+__all__ = ["consensus", "cryptography", "networking"]

@@ -13,7 +13,9 @@
 [repositories."ethereum/consensus-specs"]
 commit = "84454a9d57f4f49f74c78e9f375347baf30474f2"
 release = "v1.7.0-alpha.12"
-directories = ["tests/cryptography/bls", "tests/cryptography/kzg"]
+directories = [
+  "tests/consensus/parameters", "tests/cryptography/bls", "tests/cryptography/kzg",
+]
 
 [repositories."ethereum/bls12-381-tests"]
 commit = "89ff3a86f1a9b89a555495f7535c853cda589320"
