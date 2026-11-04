@@ -158,7 +158,9 @@ The G1 and G2 subgroup checks accept exactly the valid points that represent a m
 Every output of the map to G2 is a valid point of that subgroup (`Proofs/Bls/MapToCurve.lean`).
 
 `sign_ok` and `popProve_ok` (`Proofs/Bls/Signatures.lean`) prove that BLS signing never fails.
-No theorem yet proves that an honest signature verifies.
+Under the pairing law, an honest signature, an honest proof of possession and an aggregate of honest signatures verify (`verify_sign`, `popVerify_popProve`, `aggregateVerify_aggregate`, `Proofs/Bls/SignaturesCorrect.lean`).
+For the fast aggregate verification on one message, `fastAggregateVerify_aggregate` also assumes that the secret keys do not sum to zero modulo `r`.
+Otherwise the aggregate key is the point at infinity, and key validation rejects it.
 
 ### secp256k1
 

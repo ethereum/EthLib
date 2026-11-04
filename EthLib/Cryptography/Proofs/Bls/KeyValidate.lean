@@ -69,17 +69,22 @@ theorem keyValidatePoint_eq_ok_iff {bytes : ByteArray} {P : G1} :
         rintro ⟨rfl, -, -, hr⟩
         exact hsub ((inSubgroup_iff_modulus_smul_eq_zero hp).mpr hr)
 
-/-- The compressed form of a nonzero multiple `a • g1` passes key validation. -/
-theorem keyValidatePoint_compress_mul {a : Fr} (ha : a ≠ 0) :
-    ∃ P, keyValidatePoint (compress (mul generator a)) = .ok P ∧ Represents P a := by
-  obtain ⟨q, hq, hqp⟩ := uncompress_compress (valid_mul valid_generator a)
+/-- A compressed representative of a nonzero multiple of `g1` passes key validation. -/
+theorem keyValidatePoint_compress_of_represents {P : G1} {a : Fr} (hP : Represents P a)
+    (ha : a ≠ 0) : ∃ Q, keyValidatePoint (compress P) = .ok Q ∧ Represents Q a := by
+  obtain ⟨q, hq, hqp⟩ := uncompress_compress hP.1
   have hv := uncompress_valid hq
-  refine ⟨q, keyValidatePoint_eq_ok_iff.mpr ⟨hq, hv, ?_, ?_⟩, hv, hqp⟩
-  · rw [hqp, Ne, ← isInfinity_eq_true_iff_toPoint_eq_zero (valid_mul valid_generator a),
+  refine ⟨q, keyValidatePoint_eq_ok_iff.mpr ⟨hq, hv, ?_, ?_⟩, hv, hqp.trans hP.2⟩
+  · rw [hqp, hP.2, Ne, ← isInfinity_eq_true_iff_toPoint_eq_zero (valid_mul valid_generator a),
       mul_generator_isInfinity_iff]
     exact ha
-  · rw [hqp]
+  · rw [hqp, hP.2]
     exact modulus_smul_toPoint_mul_generator a
+
+/-- The compressed form of a nonzero multiple `a • g1` passes key validation. -/
+theorem keyValidatePoint_compress_mul {a : Fr} (ha : a ≠ 0) :
+    ∃ P, keyValidatePoint (compress (mul generator a)) = .ok P ∧ Represents P a :=
+  keyValidatePoint_compress_of_represents (represents_mul_generator a) ha
 
 end G1
 
@@ -118,15 +123,20 @@ theorem valid_of_uncompress {bytes : ByteArray} {Q : G2} (h : uncompress bytes =
   · exact valid_zero
   · exact valid_of_isOnTwist_of_z_one hz ht
 
+/-- A compressed representative of `b • g2` decodes to a subgroup point that represents it. -/
+theorem uncompress_compress_of_represents {S : G2} {b : Fr} (hS : Represents S b) :
+    ∃ Q, uncompress (compress S) = .ok Q ∧ inSubgroup Q = true ∧ Represents Q b := by
+  obtain ⟨q, hq, hqp⟩ := uncompress_compress (isOnTwist_of_valid hS.1)
+  have hqv := valid_of_uncompress hq
+  have hrep : Represents q b :=
+    ⟨hqv, ((projectiveEq_eq_true_iff_toPoint_eq hqv hS.1).mp hqp).trans hS.2⟩
+  exact ⟨q, hq, (inSubgroup_iff_exists_represents hqv).mpr ⟨b, hrep⟩, hrep⟩
+
 /-- The compressed form of `b • g2` decodes to a point of the subgroup that represents `b • g2`. -/
 theorem uncompress_compress_mul_inSubgroup (b : Fr) :
     ∃ Q, uncompress (compress (mul generator b)) = .ok Q ∧ inSubgroup Q = true ∧
-      Represents Q b := by
-  have hv := valid_mul valid_generator b
-  obtain ⟨q, hq, hqp⟩ := uncompress_compress (isOnTwist_of_valid hv)
-  have hqv := valid_of_uncompress hq
-  have hrep : Represents q b := ⟨hqv, (projectiveEq_eq_true_iff_toPoint_eq hqv hv).mp hqp⟩
-  exact ⟨q, hq, (inSubgroup_iff_exists_represents hqv).mpr ⟨b, hrep⟩, hrep⟩
+      Represents Q b :=
+  uncompress_compress_of_represents (represents_mul_generator b)
 
 end G2
 
