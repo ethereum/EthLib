@@ -215,7 +215,7 @@ theorem sign_selected_valid {leafIndex : LeafIndex} {message : Message} {cache :
   rw [hfinal'] at hdecode
   exact ⟨encoding, hdecode⟩
 
-/-- After a signing request at `leafIndex`, every leaf index reads the same frozen cache. -/
+/-- After a signing request at a leaf index, every leaf index reads the same frozen cache. -/
 theorem frozen_sign_agree {request : SignRequest} {cache : QueryCache HashSpec}
     {trace : SigningCacheTrace} {r : Option Signature × QueryCache HashSpec}
     (hr : r ∈ support ((simulateQ romImpl (Concrete.scheme.sign secretKey request.leafIndex

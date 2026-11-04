@@ -48,9 +48,9 @@ noncomputable def enumerateSuffixPositions (x : Encoding) (hx : Valid x) :
 
 It is the 58 two-bit digits together with the top 12 bits.
 
-The statement's `decodeDigest` tests the top bits.
+The statement's digest decoding tests the top bits.
 
-`decodeDigest_eq_decodeView` restates it through this view. -/
+A lemma below restates that decoding through this view. -/
 
 /-- The top bits accompany the 58 two-bit digits. -/
 abbrev EncodingView := Encoding × BitVec zeroBits

@@ -6,9 +6,9 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded
 /-!
 # From the real experiment to the table game
 
-The real game from a uniform scheme seed `S` is `innerGame`.
+This file reaches the real game from a uniform scheme seed `S`, the inner game.
 
-`SchemeSeed` reaches it from the real experiment.
+The scheme-seed step reaches the inner game from the real experiment.
 
 Presampling every derivation and the model's key generation before it changes nothing.
 

@@ -21,7 +21,7 @@ theorem mem_chainSuffixValueIndices_iff
       candidateKey = key ∧ start ≤ candidate := by
   simp [chainSuffixValueIndices, and_comm, eq_comm]
 
-/-- The top coordinates a returned signature of `leafIndex` sends at a chain. -/
+/-- The top coordinates that a returned signature of the leaf index sends at a chain. -/
 noncomputable def topSuffixValueIndices (secretKey : SecretKey) (leafIndex : LeafIndex)
     (chain : ChainIndex) : List ChainValueIndex :=
   match secretKey.topSigned (topKeyOf leafIndex) with

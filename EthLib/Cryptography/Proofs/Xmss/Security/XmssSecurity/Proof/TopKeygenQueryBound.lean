@@ -19,7 +19,7 @@ open OracleComp OracleSpec
 
 namespace XmssSecurity
 
--- The top tree is fully concrete at `treeHeight`; keep elaboration from unfolding it.
+-- The top tree is fully concrete at the tree height, so keep elaboration from unfolding it.
 attribute [local irreducible] Concrete.topTreeNode
 
 def TopCovers (levels : Nat) (node : TopNode) (key : TopIndex) : Prop :=

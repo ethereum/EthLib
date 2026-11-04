@@ -44,7 +44,7 @@ def honestRun (d : Derivations) :
     OracleComp HashSpec (Digest × (TopIndex → Option (Randomness × Encoding))) :=
   Concrete.honestKeygen d.parameter d.secret d.topSecret fun key root => pure (d.topBase key root)
 
-/-- The model key a logged run of `honestRun` gives. -/
+/-- The model key that a logged honest run gives. -/
 noncomputable def modelSecretKey (d : Derivations)
     (result : (Digest × (TopIndex → Option (Randomness × Encoding))) × QueryLog HashSpec) :
     XmssSecurity.SecretKey :=

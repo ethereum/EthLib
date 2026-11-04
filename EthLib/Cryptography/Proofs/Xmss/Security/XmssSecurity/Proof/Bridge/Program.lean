@@ -7,7 +7,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge
 
 Answering every derivation of a seed up front is one uniform draw of a derivation table.
 
-`progCache` records that draw.
+The programmed cache records that draw.
 
 The cache holds only inputs naming the seed, and no tweakable input.
 -/

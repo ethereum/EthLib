@@ -34,7 +34,7 @@ def precomputedSignBoundedAttempts (secretKey : SecretKey) (leafIndex : LeafInde
 
 /-- `Sig(sk, idx, m)`: a uniform randomizer base `R0`, then at most `A_max` trials `R0 + c`.
 
-The once-per-leaf-index discipline is the game's, in `SigningTranscript.Valid`. -/
+The game, not the signer, allows one signature per leaf index. -/
 noncomputable def precomputedCappedSign (secretKey : SecretKey)
     (leafIndex : LeafIndex) (message : Message) :
     OracleComp OracleWorld (Option Signature) := do

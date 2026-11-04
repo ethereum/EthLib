@@ -10,16 +10,15 @@ A query at a fresh position `x` of the leaf index, its output `u` uniform.
 
 With `ex f` the mean of `f u`:
 
-* `line_cacheQuery_self`, `line_cacheQuery_of_ne`: the query sets the status of `x`.
-  The `outcome` of `u` decides the new status.
-* `nextRand_no_return`: the successor does not return within the attempt limit.
-* `probOutput_valid`, `probOutput_truncate`: `u` lands with probability `landing`.
+* The query sets the status of `x`, and the outcome of `u` decides the new status.
+* The successor does not return within the attempt limit.
+* The output `u` lands with probability `landing`.
   It hits a digest with probability `N^-1`.
-* `ex_W`, `ex_sum_W`: the reach to any position is a martingale.
-* `ex_Φ_le`: the partner step, `E[Φ'] <= Φ + (V * W x + H) * N^-1`.
-* `ex_V_mul_H`: the compensator step, `E[V' * H'] >= V * H + landing * (H + V * W x)`.
-* `landing_mul_H_le`: the mass bound, `landing * H <= landing * C + V * (1 - landing)`.
-* `potentials_cacheQuery_of_not_input`: other inputs change nothing.
+* The reach to any position is a martingale.
+* The partner step: `E[Φ'] <= Φ + (V * W x + H) * N^-1`.
+* The compensator step: `E[V' * H'] >= V * H + landing * (H + V * W x)`.
+* The mass bound: `landing * H <= landing * C + V * (1 - landing)`.
+* A query at another input changes no potential.
 -/
 
 @[expose] public section

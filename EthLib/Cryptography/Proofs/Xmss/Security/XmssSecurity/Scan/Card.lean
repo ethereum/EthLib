@@ -6,7 +6,9 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Code
 /-!
 # The number of codewords
 
-`validDigests` is in bijection with the digit words of sum `T`, which `Code.lean` counts.
+The valid digests are in bijection with the digit words of sum `T`.
+
+The code-size file counts those words.
 -/
 
 @[expose] public section

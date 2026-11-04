@@ -14,7 +14,9 @@ namespace XmssSecurity
 theorem hashOutputBits_eq : hashOutputBits = digestBits + digestBits := by
   decide
 
-/-- A 256-bit oracle output viewed as two digest halves; `truncateHash` keeps the low half. -/
+/-- A 256-bit oracle output viewed as two digest halves.
+
+Truncation keeps the low half. -/
 def splitHashOutput (output : HashOutput) : BitVec (digestBits + digestBits) :=
   output.cast hashOutputBits_eq
 

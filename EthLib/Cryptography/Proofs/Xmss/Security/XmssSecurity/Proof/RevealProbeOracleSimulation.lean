@@ -270,9 +270,9 @@ def tableHits
   decide (∃ index, table index ∈ state.pending index)
 
 omit [DecidableEq Index] in
-/-- `tableHits` as a proposition.
+/-- The table-hit test as a proposition.
 
-Rewrite with it rather than unfold `tableHits`.
+Rewrite with it rather than unfold the test.
 
 At a concrete index type, unfolding runs the `Fintype` decision procedure over every index. -/
 theorem tableHits_eq_true_iff
@@ -282,7 +282,7 @@ theorem tableHits_eq_true_iff
   exact decide_eq_true_iff
 
 omit [DecidableEq Index] in
-/-- `tableHits` is false exactly when no index hits; see `tableHits_eq_true_iff`. -/
+/-- The table-hit test is false exactly when no index hits. -/
 theorem tableHits_eq_false_iff
     (state : AdaptiveRevealMonitor.State Index) (table : Index → Digest) :
     tableHits state table = false ↔ ¬ ∃ index, table index ∈ state.pending index := by

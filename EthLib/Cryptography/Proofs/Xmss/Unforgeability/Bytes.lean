@@ -11,13 +11,13 @@ The security proof writes leanXMSS over bit vectors, EthLib over byte vectors.
 
 A bit vector is the integer its little-endian bytes encode.
 
-```text
-    x : BitVec (8 n)   <->   ofBV n x : Vector UInt8 n,   byte i = bits 8 i to 8 i + 7
-```
+A bit vector `x : BitVec (8 n)` becomes a byte vector of length `n`.
 
-The proof's own encoding is `bytesLE`, and `ofBV n x` has exactly those bytes.
+Byte `i` holds bits `8 i` to `8 i + 7`.
 
-So EthLib builds a hash input from `ofBV` values.
+The proof's own little-endian encoding has exactly those bytes.
+
+So EthLib builds a hash input from the converted values.
 
 The proof builds the same input from the values themselves.
 -/

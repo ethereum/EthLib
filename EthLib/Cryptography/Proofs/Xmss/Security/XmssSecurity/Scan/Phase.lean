@@ -9,15 +9,17 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Card
 
 The four potentials on the ghost state and their one-query steps.
 
-`Frame`'s `expectedFinal_le` and `expectedFinal_ge` use them:
+The bounds on the expected final value of the frame use them.
 
-* `f1 = N^2 1{PreBad} + N openΦ`.
-  It is raised by `aCost` on a fresh encoding query at an unsigned leaf index.
-* `f2 = hvSum`.
-  It is raised by at least `landing * aCost`.
-* `f3 = F3 (nCount, vCount, count)`.
+Write `a` for the cost of an encoding query, and `n` and `v` for the cached input and hit counts:
+
+* `f1 = N^2 1{early bad event} + N Φ`.
+  It is raised by `a` on a fresh encoding query at an unsigned leaf index.
+* `f2 = V * H`.
+  It is raised by at least `landing * a`.
+* `f3 = F3 (n, v, count)`.
   It is raised by `A` on the same queries, and is `top` past the budget.
-* `f4 = N^2 1{PostBad}`.
+* `f4 = N^2 1{late bad event}`.
   It is raised by `N` on an encoding query at a signed leaf index.
 -/
 

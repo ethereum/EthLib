@@ -134,7 +134,7 @@ def RejectsBottomTree (parameter : PublicParameter) (p : HashInput → Prop) : P
   ∀ domain payload, domain.isTop = false → (∀ leafIndex, domain ≠ .encoding leafIndex) →
     ¬ p (tweakableHashInput parameter domain payload)
 
--- The top tree is fully concrete at `treeHeight`; keep elaboration from unfolding it.
+-- The top tree is fully concrete at the tree height, so keep elaboration from unfolding it.
 attribute [local irreducible] Concrete.topTreeNode
 
 theorem Concrete.tweakableHash_queryBound_zero_of_not

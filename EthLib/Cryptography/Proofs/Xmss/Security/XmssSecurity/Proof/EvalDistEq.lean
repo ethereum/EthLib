@@ -5,13 +5,13 @@ public import VCVio.OracleComp.Constructions.SampleableType.Measure
 public import VCVio.OracleComp.EvalDist.Sum
 public import VCVio.EvalDist.Monad.UniformTable
 
-/-! Elaboration aids for equality in distribution (`EvalDistEq`). -/
+/-! Elaboration aids for equality in distribution. -/
 
 @[expose] public section
 
 universe v
 
-/-- Elaborate both sides of the `EvalDistEq` infix notation against a common type, as `=` does.
+/-- Elaborate both sides of the infix notation against a common type, as `=` does.
 
 So a side whose monad is only known from the other elaborates.
 

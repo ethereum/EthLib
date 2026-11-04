@@ -9,7 +9,9 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
 
 Lane 1 presamples the hidden chain values of both layers in one table.
 
-A `ChainKey` is a bottom leaf index or a top key; its chain steps differ only in their address.
+A chain key is a bottom leaf index or a top key.
+
+The chain steps of the two kinds differ only in their address.
 -/
 
 @[expose] public section
@@ -69,7 +71,7 @@ def keyChainHash (parameter : PublicParameter) (key : ChainKey) (chain : ChainIn
     (step : ChainStep) (value : Digest) : m Digest :=
   tweakableHash parameter (key.chainDomain chain step) (bytesLE 16 value)
 
-/-- A chain walk of a key of either layer, as `chainWalk`. -/
+/-- A chain walk of a key of either layer, as the model walks a chain. -/
 def keyChainWalk (parameter : PublicParameter) (key : ChainKey) (chain : ChainIndex) :
     Nat → Nat → Digest → m Digest
   | _, 0, value => pure value

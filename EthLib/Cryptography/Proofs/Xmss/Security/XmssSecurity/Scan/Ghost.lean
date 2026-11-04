@@ -7,17 +7,13 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scan.Frame
 /-!
 # The adversary phase with a ghost query count
 
-The traced handler of `cappedCacheTracedMappedAdversaryImpl`, extended with a count.
+The traced handler of the capped adversary phase, extended with a count.
 
 The count is of the adversary's own hash queries.
 
-Under a hash-query bound the count never reaches the budget.
+This file proves that, under a hash-query bound, the count never reaches the budget.
 
-`expectedSimulatedCost_overBudget_eq_zero` states this.
-
-The source game counts the adversary's encoding queries.
-
-`expectedSimulatedCost_advEncoding_le` states this.
+It also proves that the source game counts the adversary's encoding queries.
 -/
 
 @[expose] public section

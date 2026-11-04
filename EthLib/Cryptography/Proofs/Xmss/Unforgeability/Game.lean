@@ -7,9 +7,9 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge
 
 EthLib's signer gets the seed `S_0` and re-derives `S` and `P` with two hash calls.
 
-The real game of the security proof (`XmssSecurity.Bridge.realGame`) runs EthLib's algorithms too.
+The real game of the security proof runs EthLib's algorithms too.
 
-Its signer, `signDerived`, keeps `S` and `P` instead.
+Its signer keeps `S` and `P` instead.
 
 Key generation made those two calls first, so the random oracle has their answers cached.
 
@@ -45,7 +45,7 @@ open XmssSecurity.Seeded (Erases worldKnown run'_lift_sample_bind run'_query_bin
 
 /-! ## The two calls the signer repeats -/
 
-/-- The game's `H` is `queryH`, at the hash oracle. -/
+/-- The game's `H` is the query to the hash oracle. -/
 theorem H_eq_queryH : H = queryH (m := OracleComp HashSpec) :=
   rfl
 
@@ -107,8 +107,7 @@ theorem knownKeys_paramInput (S0 : MasterSeed) (S Pf : HashOutput) :
     knownKeys S0 S Pf (paramInput S) = some Pf := by
   rw [knownKeys, QueryCache.cacheQuery_self]
 
--- `S` is a hash value, `BitVec hashOutputBits`, and a seed is `BitVec 256`.
--- As in the vendored proof, definitional checks may unfold the width to match them.
+-- `S` is a hash value and a seed has 256 bits, so definitional checks may unfold the widths.
 set_option backward.isDefEq.respectTransparency false in
 /-- EthLib's signer erases to the real game's: the cache answers its calls for `S` and `P`. -/
 theorem erases_signWith (S0 : MasterSeed) (S Pf : HashOutput) (idx : LeafIndex) (msg : Message) :
@@ -290,8 +289,7 @@ noncomputable def topRoot (S Pf : HashOutput) : OracleComp OracleWorld Digest :=
   liftM (node (queryH (m := OracleComp HashSpec)) (ofParam (truncateHash Pf)) (ofSeed S) .top
     LAYER_HEIGHT 0)
 
--- `S` is a hash value, `BitVec hashOutputBits`, and a seed is `BitVec 256`.
--- As in the vendored proof, definitional checks may unfold the width to match them.
+-- `S` is a hash value and a seed has 256 bits, so definitional checks may unfold the widths.
 set_option backward.isDefEq.respectTransparency false in
 /-- EthLib's key generation in the game: the seed hash, the parameter's hash, then the top tree. -/
 theorem liftM_keyGenWith_bind {β : Type} (S0 : MasterSeed)
@@ -305,8 +303,7 @@ theorem liftM_keyGenWith_bind {β : Type} (S0 : MasterSeed)
   simp only [publicParamOf_queryH, liftM_bind, bind_assoc, liftM_pure, pure_bind]
   rfl
 
--- `S` is a hash value, `BitVec hashOutputBits`, and a seed is `BitVec 256`.
--- As in the vendored proof, definitional checks may unfold the width to match them.
+-- `S` is a hash value and a seed has 256 bits, so definitional checks may unfold the widths.
 set_option backward.isDefEq.respectTransparency false in
 /-- EthLib's key generation from `S`, as the real game runs it. -/
 theorem liftM_realKeygen_bind {β : Type} (S : HashOutput)
@@ -318,8 +315,7 @@ theorem liftM_realKeygen_bind {β : Type} (S : HashOutput)
   simp only [publicParamOf_queryH, liftM_bind, bind_assoc, liftM_pure, pure_bind]
   rfl
 
--- `S` is a hash value, `BitVec hashOutputBits`, and a seed is `BitVec 256`.
--- As in the vendored proof, definitional checks may unfold the width to match them.
+-- `S` is a hash value and a seed has 256 bits, so definitional checks may unfold the widths.
 set_option backward.isDefEq.respectTransparency false in
 /-- EthLib's game, as a game of that shape. -/
 theorem gameCore_eq_prefixGame (adversary : Adversary) :
@@ -333,8 +329,7 @@ theorem gameCore_eq_prefixGame (adversary : Adversary) :
   rw [liftM_keyGenWith_bind]
   rfl
 
--- `S` is a hash value, `BitVec hashOutputBits`, and a seed is `BitVec 256`.
--- As in the vendored proof, definitional checks may unfold the width to match them.
+-- `S` is a hash value and a seed has 256 bits, so definitional checks may unfold the widths.
 set_option backward.isDefEq.respectTransparency false in
 /-- The real game, as a game of that shape. -/
 theorem realGame_eq_prefixGame (adversary : Adversary) :
@@ -346,8 +341,7 @@ theorem realGame_eq_prefixGame (adversary : Adversary) :
   refine bind_congr fun S0 => bind_congr fun S => ?_
   rw [liftM_realKeygen_bind]
 
--- `S` is a hash value, `BitVec hashOutputBits`, and a seed is `BitVec 256`.
--- As in the vendored proof, definitional checks may unfold the width to match them.
+-- `S` is a hash value and a seed has 256 bits, so definitional checks may unfold the widths.
 set_option backward.isDefEq.respectTransparency false in
 theorem erases_after (adversary : Adversary) (S0 : MasterSeed) (S Pf : HashOutput) :
     Erases (worldKnown (knownKeys S0 S Pf))

@@ -5,7 +5,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Bytes
 /-!
 # Proofs: EthLib's addresses are the model's
 
-The model writes an address as four fields, `fieldBytes (tweakFields tau mu hi lo)`.
+The model writes an address as the bytes of four fields, `tau`, `mu`, `hi` and `lo`.
 
 EthLib's address of the same call has the same 16 bytes.
 
@@ -13,7 +13,7 @@ EthLib's address of the same call has the same 16 bytes.
     [ lo: 4 | hi: 3 | tau + 32 mu: 1 | zero: 8 ]     both
 ```
 
-The top layer sets bit 23 of `hi`, the model's `topFlag`.
+The top layer sets bit 23 of `hi`, the model's top flag.
 -/
 
 @[expose] public section
@@ -53,7 +53,9 @@ theorem toList_encodeAddress (tau : Fin 32) (mu : Fin 8) (hi : Fin (2 ^ 24)) (lo
 
 /-! ## The addresses of a key
 
-`2^23 l` is the flag of layer `l` in `hi`: zero at the bottom, the model's `topFlag` at the top. -/
+`2^23 l` is the flag of layer `l` in `hi`.
+
+It is zero at the bottom, and the model's top flag at the top. -/
 
 theorem toList_addrChain (layer : Layer) (e : UInt32) (mu : Fin (CHAIN_LENGTH - 1)) :
     (addrChain layer e mu).toList

@@ -5,7 +5,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Keygen
 /-!
 # Runs inside key generation's honest computation
 
-Take a lazy random-oracle run of `Concrete.honestKeygen`.
+Take a lazy random-oracle run of the honest key generation.
 
 It contains a run of every bottom tree and of the top tree.
 
@@ -24,7 +24,7 @@ open OracleComp OracleSpec
 
 namespace XmssSecurity.Concrete.CacheReplay
 
--- The top tree is fully concrete at `treeHeight`; keep elaboration from unfolding it.
+-- The top tree is fully concrete at the tree height, so keep elaboration from unfolding it.
 attribute [local irreducible] Concrete.topTreeNode
 
 /-- A run of a computation that ends below `cache`. -/
