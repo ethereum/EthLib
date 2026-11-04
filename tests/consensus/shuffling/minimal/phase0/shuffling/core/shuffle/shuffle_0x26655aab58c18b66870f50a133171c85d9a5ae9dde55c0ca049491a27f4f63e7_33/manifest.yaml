@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: shuffling
+handler: core
+suite: shuffle
+case: shuffle_0x26655aab58c18b66870f50a133171c85d9a5ae9dde55c0ca049491a27f4f63e7_33

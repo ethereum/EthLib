@@ -1715,6 +1715,27 @@
    "error_class": "SszError",
    "docstring":
    "The root of the value that the bytes encode, then the bytes of that value.\n\nThe preset, the fork and the container are named in UTF-8."},
+  {"summary": "The shuffled position of every index below the count.",
+   "signature": "(name: str, count: int, seed: bytes) -> bytes",
+   "operation": "EthLib.Consensus.Exports.computeShuffledPermutationExport",
+   "method": "consensus_compute_shuffled_permutation",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring": "The shuffled position of every index below the count."},
+  {"summary":
+   "The shuffled position of one index, which must be below the count.",
+   "signature": "(name: str, index: int, count: int, seed: bytes) -> int",
+   "operation": "EthLib.Consensus.computeShuffledIndex",
+   "method": "consensus_compute_shuffled_index",
+   "errors":
+   [{"type": "EthLib.Consensus.ShuffleError",
+     "codes":
+     [{"constructor": "indexOutOfRange", "code": 1},
+      {"constructor": "noCommittee", "code": 2},
+      {"constructor": "overflow", "code": 3}]}],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The shuffled position of one index, which must be below the count."},
   {"summary":
    "The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`.",
    "signature": "(n: int) -> int",
