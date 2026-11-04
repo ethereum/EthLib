@@ -7,6 +7,13 @@ import pytest
 
 from ethlib.precompiles import run
 
+from .forks import since
+
+# The prices change once, at Istanbul (EIP-1108), so the cases run on each side of that change
+# and at the latest fork.
+FORKS = ("byzantium", "petersburg", "istanbul", "bpo2")
+EIP_1108_FORKS = since("istanbul")
+
 # Every input and output case of the tests of EIP-196 and EIP-197.
 #
 # Directory: tests/byzantium
@@ -22,14 +29,20 @@ from ethlib.precompiles import run
 # A gas modifier of -1 marks a call given one unit of gas less than its price.
 #
 # Two kinds of test there are not read.
-# The `test_gas.py` files check the price at every fork from Byzantium, which needs a fork
-# argument that `run` does not take; the prices of Fusaka are checked below.
+# The `test_gas.py` files check the price at every fork from Byzantium; `test_alt_bn128.py`
+# checks those prices, from EIP-196, EIP-197 and EIP-1108.
 # The ported state test `stZeroKnowledge/test_pairing_test.py` calls the precompile from EVM code.
 CASES = json.loads((Path(__file__).parent / "alt_bn128_cases.json").read_text())
 
 
-def price(address: int, data: bytes) -> int:
-    """The price of EIP-1108, the price from Istanbul on."""
+def price(fork: str, address: int, data: bytes) -> int:
+    """The price of EIP-196 and EIP-197 before Istanbul, and of EIP-1108 from Istanbul on."""
+    if fork not in EIP_1108_FORKS:
+        if address == 0x06:
+            return 500
+        if address == 0x07:
+            return 40000
+        return 100000 + 80000 * (len(data) // 192)
     if address == 0x06:
         return 150
     if address == 0x07:
@@ -50,29 +63,33 @@ def test_case_count() -> None:
 
 
 @pytest.mark.parametrize("case", VALID)
-def test_valid(case: dict) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_valid(fork: str, case: dict) -> None:
     data = bytes.fromhex(case["input"])
-    assert run(case["address"], data, price(case["address"], data)).hex() == case["output"]
+    assert run(fork, case["address"], data, price(fork, case["address"], data)).hex() == case["output"]
 
 
 @pytest.mark.parametrize("case", VALID)
-def test_valid_one_gas_short(case: dict) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_valid_one_gas_short(fork: str, case: dict) -> None:
     data = bytes.fromhex(case["input"])
     with pytest.raises(ValueError, match="outOfGas"):
-        run(case["address"], data, price(case["address"], data) - 1)
+        run(fork, case["address"], data, price(fork, case["address"], data) - 1)
 
 
 @pytest.mark.parametrize("case", INVALID)
-def test_invalid(case: dict) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_invalid(fork: str, case: dict) -> None:
     # The call fails at its full price, so it fails for its input and not for lack of gas.
     data = bytes.fromhex(case["input"])
     with pytest.raises(ValueError, match=r"PrecompileError\.altBn128") as error:
-        run(case["address"], data, price(case["address"], data))
+        run(fork, case["address"], data, price(fork, case["address"], data))
     assert "outOfGas" not in str(error.value)
 
 
 @pytest.mark.parametrize("case", SHORT)
-def test_short_of_gas(case: dict) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_short_of_gas(fork: str, case: dict) -> None:
     data = bytes.fromhex(case["input"])
     with pytest.raises(ValueError, match="outOfGas"):
-        run(case["address"], data, price(case["address"], data) + case["gas_modifier"])
+        run(fork, case["address"], data, price(fork, case["address"], data) + case["gas_modifier"])

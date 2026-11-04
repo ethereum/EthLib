@@ -18,6 +18,11 @@ from ruamel.yaml import YAML
 
 from ethlib.precompiles import run
 
+from .forks import ends
+
+# The fork that adds the precompile, dencun, and the latest fork: no fork in between changes it.
+FORKS = ends("dencun")
+
 VECTORS = Path(__file__).parents[4] / "tests" / "cryptography" / "kzg" / "verify_kzg_proof"
 
 CASES = sorted(path.name for path in VECTORS.iterdir() if path.is_dir())
@@ -45,32 +50,36 @@ def test_found_vectors() -> None:
 
 
 @pytest.mark.parametrize("name", CASES)
-def test_vector(name: str) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_vector(fork: str, name: str) -> None:
     data, verifies = call_data(name)
     if verifies:
-        assert run(0x0A, data, 50000) == SUCCESS
+        assert run(fork, 0x0A, data, 50000) == SUCCESS
     else:
         with pytest.raises(ValueError):
-            run(0x0A, data, 50000)
+            run(fork, 0x0A, data, 50000)
 
 
-def test_versioned_hash_mismatch() -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_versioned_hash_mismatch(fork: str) -> None:
     # Flip the version byte of a call whose proof verifies.
     data, _ = call_data("verify_kzg_proof_case_correct_proof_0_0")
     with pytest.raises(ValueError, match="versionedHashMismatch"):
-        run(0x0A, b"\x02" + data[1:], 50000)
+        run(fork, 0x0A, b"\x02" + data[1:], 50000)
 
 
-def test_out_of_gas() -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_out_of_gas(fork: str) -> None:
     data, _ = call_data("verify_kzg_proof_case_correct_proof_0_0")
     with pytest.raises(ValueError, match="outOfGas"):
-        run(0x0A, data, 49999)
+        run(fork, 0x0A, data, 49999)
     # The gas is checked before the call data is decoded.
     with pytest.raises(ValueError, match="outOfGas"):
-        run(0x0A, bytes(192), 49999)
+        run(fork, 0x0A, bytes(192), 49999)
 
 
 @pytest.mark.parametrize("size", [0, 191, 193])
-def test_invalid_length(size: int) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_invalid_length(fork: str, size: int) -> None:
     with pytest.raises(ValueError, match="invalidInputLength"):
-        run(0x0A, bytes(size), 50000)
+        run(fork, 0x0A, bytes(size), 50000)

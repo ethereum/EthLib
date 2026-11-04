@@ -91,7 +91,7 @@ ADDR = {
 }
 for name, addr in ADDR.items():
     data = x(pc[name])
-    R.run("pc_" + name, lambda a=addr, d=data: precompile(a, d, 10**9))
+    R.run("pc_" + name, lambda a=addr, d=data: precompile("fusaka", a, d, 10**9))
 
 w = inp["words"]
 OPS = {

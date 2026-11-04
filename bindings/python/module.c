@@ -667,6 +667,7 @@ static PyMethodDef methods[] = {
   {"rlpx_finish", py_rlpx_finish, METH_VARARGS, DOC_rlpx_finish},
   {"block_validate_header", py_block_validate_header, METH_VARARGS, DOC_block_validate_header},
   {"precompile_run", py_precompile_run, METH_VARARGS, DOC_precompile_run},
+  {"precompile_price", py_precompile_price, METH_VARARGS, DOC_precompile_price},
   {"state_root", py_state_root, METH_VARARGS, DOC_state_root},
   {"state_withdrawals_root", py_state_withdrawals_root, METH_VARARGS, DOC_state_withdrawals_root},
   {"mainnet_active_fork", py_mainnet_active_fork, METH_VARARGS, DOC_mainnet_active_fork},

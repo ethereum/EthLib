@@ -1,4 +1,4 @@
-"""The 18 EVM precompiled contracts of Fusaka, by address."""
+"""The EVM precompiled contracts of every fork, by address."""
 
 from ..errors import PrecompileError
 
@@ -12,14 +12,14 @@ ADDRESSES = (
 )
 
 
-def run(address: int, data: bytes, gas: int) -> bytes:
-    """The output of the precompile at the address on the call data, with the gas given.
-
-    Raises PrecompileError, a ValueError, when the call fails or when no precompile has the address.
-
-    Its code names the precompile that failed, and code 0 means no precompile has the address.
-    """
-    return _native.precompile_run(address, data, gas)
+def run(fork: str, address: int, data: bytes, gas: int) -> bytes:
+    """The output of the precompile at the address, on the call data with the gas, at the fork."""
+    return _native.precompile_run(fork, address, data, gas)
 
 
-__all__ = ["ADDRESSES", "run", "ecrecover", "modexp", "ripemd160", "sha256", "PrecompileError"]
+def price(fork: str, address: int, data: bytes) -> int:
+    """The gas that the precompile at the address charges for the call data, at the fork."""
+    return int.from_bytes(_native.precompile_price(fork, address, data), "big")
+
+
+__all__ = ["ADDRESSES", "run", "price", "ecrecover", "modexp", "ripemd160", "sha256", "PrecompileError"]

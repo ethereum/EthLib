@@ -450,7 +450,10 @@
   "Check a header at a fork against its parent at the parent's fork, from Paris on."
 
 #define DOC_precompile_run \
-  "Run the precompile at the address on the call data, with the gas given."
+  "Run the precompile at the address on the call data, with the gas given, at the fork named."
+
+#define DOC_precompile_price \
+  "The price of the precompile at the address on the call data, at the fork named."
 
 #define DOC_state_root \
   "The 32-byte state root, with Keccak-256, of the state that `input` encodes."

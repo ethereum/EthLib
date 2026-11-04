@@ -2,14 +2,51 @@
 
 py_ecc 8.0.0 computes every expected point independently of EthLib.
 
-The prices are those of EIP-1108: 150 for an addition, 6000 for a multiplication,
-and `45000 + 34000 * k` for a pairing check on `k` pairs.
+Byzantium adds the precompiles, at the prices of EIP-196 and EIP-197: 500 for an addition,
+40000 for a multiplication, and `100000 + 80000 * k` for a pairing check on `k` pairs.
+From Istanbul, EIP-1108 lowers them to 150, 6000 and `45000 + 34000 * k`.
 """
 
 import pytest
 from py_ecc import bn128
 
-from ethlib.precompiles import run
+from ethlib.precompiles import price, run
+
+from .forks import since
+
+# The prices change once, at Istanbul, so the calls run on each side of that change and at the
+# latest fork. The price test runs at every fork.
+FORKS = ("byzantium", "petersburg", "istanbul", "bpo2")
+EIP_1108_FORKS = since("istanbul")
+
+
+def add_price(fork: str) -> int:
+    return 150 if fork in EIP_1108_FORKS else 500
+
+
+def mul_price(fork: str) -> int:
+    return 6000 if fork in EIP_1108_FORKS else 40000
+
+
+def pairing_price(fork: str, k: int) -> int:
+    if fork in EIP_1108_FORKS:
+        return 45000 + 34000 * k
+    return 100000 + 80000 * k
+
+
+@pytest.mark.parametrize("fork", since("byzantium"))
+def test_prices(fork: str) -> None:
+    assert price(fork, 0x06, b"") == add_price(fork)
+    assert price(fork, 0x07, b"") == mul_price(fork)
+    # A partial pair is not counted.
+    assert price(fork, 0x08, bytes(2 * 192 + 1)) == pairing_price(fork, 2)
+
+
+@pytest.mark.parametrize("address", [0x06, 0x07, 0x08])
+@pytest.mark.parametrize("fork", since("frontier", "byzantium"))
+def test_absent_before_byzantium(fork: str, address: int) -> None:
+    with pytest.raises(ValueError, match="no precompile"):
+        run(fork, address, b"", 10**6)
 
 
 def word(value: int) -> bytes:
@@ -36,25 +73,28 @@ def mul1(k: int):
 @pytest.mark.parametrize("a, b", [
     (1, 1), (1, 2), (1, bn128.curve_order - 1), (5, 7), (3, bn128.curve_order - 3), (0, 9), (0, 0),
 ])
-def test_ecadd(a: int, b: int) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_ecadd(fork: str, a: int, b: int) -> None:
     expected = g1(bn128.add(mul1(a), mul1(b)))
-    assert run(0x06, g1(mul1(a)) + g1(mul1(b)), 150) == expected
+    assert run(fork, 0x06, g1(mul1(a)) + g1(mul1(b)), add_price(fork)) == expected
 
 
-def test_ecadd_short_input_is_zero_padded() -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_ecadd_short_input_is_zero_padded(fork: str) -> None:
     # Missing bytes read as zero, so an empty input adds two points at infinity.
-    assert run(0x06, b"", 150) == bytes(64)
+    assert run(fork, 0x06, b"", add_price(fork)) == bytes(64)
     # Call data that stops after G adds the point at infinity to it.
-    assert run(0x06, g1(bn128.G1), 150) == g1(bn128.G1)
+    assert run(fork, 0x06, g1(bn128.G1), add_price(fork)) == g1(bn128.G1)
 
 
-def test_ecadd_errors() -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_ecadd_errors(fork: str) -> None:
     with pytest.raises(ValueError, match="notOnCurve"):
-        run(0x06, word(1) + word(3) + bytes(64), 150)
+        run(fork, 0x06, word(1) + word(3) + bytes(64), add_price(fork))
     with pytest.raises(ValueError, match="invalidFieldElement"):
-        run(0x06, word(bn128.field_modulus) + word(2) + bytes(64), 150)
+        run(fork, 0x06, word(bn128.field_modulus) + word(2) + bytes(64), add_price(fork))
     with pytest.raises(ValueError, match="outOfGas"):
-        run(0x06, b"", 149)
+        run(fork, 0x06, b"", add_price(fork) - 1)
 
 
 SCALARS = [
@@ -65,33 +105,33 @@ SCALARS = [
 
 @pytest.mark.parametrize("k", SCALARS)
 @pytest.mark.parametrize("base", [1, 7])
-def test_ecmul(base: int, k: int) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_ecmul(fork: str, base: int, k: int) -> None:
     # The scalar is not reduced, but the result wraps around the group of order q.
     point = mul1(base)
-    assert run(0x07, g1(point) + word(k), 6000) == g1(bn128.multiply(point, k % bn128.curve_order))
+    assert run(fork, 0x07, g1(point) + word(k), mul_price(fork)) == g1(bn128.multiply(point, k % bn128.curve_order))
 
 
-def test_ecmul_short_scalar() -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_ecmul_short_scalar(fork: str) -> None:
     # A missing scalar reads as 0, so the result is the point at infinity.
-    assert run(0x07, g1(bn128.G1), 6000) == bytes(64)
+    assert run(fork, 0x07, g1(bn128.G1), mul_price(fork)) == bytes(64)
 
 
-def test_ecmul_not_on_curve() -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_ecmul_not_on_curve(fork: str) -> None:
     with pytest.raises(ValueError, match="notOnCurve"):
-        run(0x07, word(1) + word(3) + word(2), 6000)
+        run(fork, 0x07, word(1) + word(3) + word(2), mul_price(fork))
 
 
-def test_ecmul_out_of_gas() -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_ecmul_out_of_gas(fork: str) -> None:
     with pytest.raises(ValueError, match="outOfGas"):
-        run(0x07, g1(bn128.G1) + word(2), 5999)
+        run(fork, 0x07, g1(bn128.G1) + word(2), mul_price(fork) - 1)
 
 
 def pairing_input(pairs) -> bytes:
     return b"".join(g1(p) + g2(q) for p, q in pairs)
-
-
-def pairing_price(k: int) -> int:
-    return 45000 + 34000 * k
 
 
 @pytest.mark.parametrize("pairs, holds", [
@@ -108,28 +148,32 @@ def pairing_price(k: int) -> int:
     # A pair with a point at infinity contributes 1.
     ([(None, bn128.G2), (bn128.G1, bn128.G2), (bn128.neg(bn128.G1), bn128.G2)], True),
 ])
-def test_ecpairing(pairs, holds: bool) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_ecpairing(fork: str, pairs, holds: bool) -> None:
     data = pairing_input(pairs)
-    assert run(0x08, data, pairing_price(len(pairs))) == word(int(holds))
+    assert run(fork, 0x08, data, pairing_price(fork, len(pairs))) == word(int(holds))
     with pytest.raises(ValueError, match="outOfGas"):
-        run(0x08, data, pairing_price(len(pairs)) - 1)
+        run(fork, 0x08, data, pairing_price(fork, len(pairs)) - 1)
 
 
-def test_ecpairing_invalid_length() -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_ecpairing_invalid_length(fork: str) -> None:
     with pytest.raises(ValueError, match="invalidInputLength"):
-        run(0x08, bytes(191), 10**6)
+        run(fork, 0x08, bytes(191), 10**6)
 
 
-def test_ecpairing_g2_x_is_p() -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_ecpairing_g2_x_is_p(fork: str) -> None:
     # The imaginary part of the G2 x coordinate is p, which is not a field element.
     data = bytearray(pairing_input([(bn128.G1, bn128.G2)]))
     data[64:96] = word(bn128.field_modulus)
     with pytest.raises(ValueError, match="invalidFieldElement"):
-        run(0x08, bytes(data), pairing_price(1))
+        run(fork, 0x08, bytes(data), pairing_price(fork, 1))
 
 
-def test_ecpairing_g2_not_on_curve() -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_ecpairing_g2_not_on_curve(fork: str) -> None:
     data = bytearray(pairing_input([(bn128.G1, bn128.G2)]))
     data[-1] ^= 1
     with pytest.raises(ValueError, match="notOnCurve"):
-        run(0x08, bytes(data), pairing_price(1))
+        run(fork, 0x08, bytes(data), pairing_price(fork, 1))

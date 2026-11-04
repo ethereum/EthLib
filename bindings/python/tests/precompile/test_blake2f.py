@@ -14,6 +14,11 @@ import pytest
 
 from ethlib.precompiles import run
 
+from .forks import ends
+
+# The fork that adds the precompile, istanbul, and the latest fork: no fork in between changes it.
+FORKS = ends("istanbul")
+
 ADDRESS = 0x09
 
 # The 208 bytes that every nonempty EIP-152 vector shares, after its rounds field:
@@ -56,22 +61,25 @@ ACCEPTED = [
 
 
 @pytest.mark.parametrize("data, error", REJECTED)
-def test_eip152_rejected(data: bytes, error: str) -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_eip152_rejected(fork: str, data: bytes, error: str) -> None:
     with pytest.raises(ValueError, match=error):
-        run(ADDRESS, data, 12)
+        run(fork, ADDRESS, data, 12)
 
 
 @pytest.mark.parametrize("rounds, flag, output", ACCEPTED)
-def test_eip152_accepted(rounds: str, flag: str, output: str) -> None:
-    assert run(ADDRESS, vector(rounds, flag), int(rounds, 16)) == bytes.fromhex(output)
+@pytest.mark.parametrize("fork", FORKS)
+def test_eip152_accepted(fork: str, rounds: str, flag: str, output: str) -> None:
+    assert run(fork, ADDRESS, vector(rounds, flag), int(rounds, 16)) == bytes.fromhex(output)
 
 
-def test_eip152_vector8_rounds() -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_eip152_vector8_rounds(fork: str) -> None:
     # Test vector 8 asks for 2^32 - 1 rounds, too many to run in a test.
     # One unit of gas short of that count, the call fails before any round.
     # So the rounds field reads as 2^32 - 1, big-endian.
     with pytest.raises(ValueError, match="outOfGas"):
-        run(ADDRESS, vector("ffffffff", "01"), 2**32 - 2)
+        run(fork, ADDRESS, vector("ffffffff", "01"), 2**32 - 2)
 
 
 # The rest leave the EIP-152 layout: they build h, m, t0 and t1 themselves.
@@ -151,7 +159,8 @@ def test_oracle_agrees_with_eip152() -> None:
         assert struct.pack("<8Q", *words) == bytes.fromhex(output)
 
 
-def test_full_block() -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_full_block(fork: str) -> None:
     # The unkeyed BLAKE2b-512 digest of the 128 bytes 0x00 to 0x7f.
     # Every word of m differs.
     #
@@ -163,10 +172,11 @@ def test_full_block() -> None:
         "2319e3789c47e2daa5fe807f61bec2a1a6537fa03f19ff32e87eecbfd64b7e0e"
         "8ccff439ac333b040f19b0c4ddd11a61e24ac1fe0f10a039806c5dcc0da3d115")
     assert hashlib.blake2b(block).digest() == digest
-    assert run(ADDRESS, encode(12, block, 128, 0, 1), 12) == digest
+    assert run(fork, ADDRESS, encode(12, block, 128, 0, 1), 12) == digest
 
 
-def test_high_offset() -> None:
+@pytest.mark.parametrize("fork", FORKS)
+def test_high_offset(fork: str) -> None:
     # Test vector 5 with t1 = 1, the high word of the offset counter.
     # A hash sets t1 only past 2^64 bytes, so no hash vector pins it.
     block = b"abc".ljust(128, b"\0")
@@ -175,4 +185,4 @@ def test_high_offset() -> None:
         "55e373dcd96b59e0e30efa21ed0c4110eeb8dc7a33d626ec6a2930a1808a5560")
     m = list(struct.unpack("<16Q", block))
     assert struct.pack("<8Q", *compress(12, H, m, 3, 1, True)) == expected
-    assert run(ADDRESS, encode(12, block, 3, 1, 1), 12) == expected
+    assert run(fork, ADDRESS, encode(12, block, 3, 1, 1), 12) == expected
