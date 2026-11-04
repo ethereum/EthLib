@@ -39,8 +39,7 @@ jobs:
       - name: Install elan (macOS host)
         if: runner.os == 'macOS'
         run: |
-          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
-            | sh -s -- -y --default-toolchain none
+          bash scripts/install_elan.sh
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
       - name: Build wheels
@@ -61,9 +60,7 @@ jobs:
           # Inside the manylinux container: install elan once, then
           # `setup.py`'s LakeThenBuild handler will call `lake build`
           # for each wheel.
-          CIBW_BEFORE_ALL_LINUX: |
-            curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
-              | sh -s -- -y --default-toolchain none
+          CIBW_BEFORE_ALL_LINUX: bash {project}/scripts/install_elan.sh
 
           # cibuildwheel expands $VAR at runtime in the container.
           CIBW_ENVIRONMENT_LINUX: PATH=$HOME/.elan/bin:$PATH
@@ -73,10 +70,9 @@ jobs:
           CIBW_BEFORE_BUILD: lake clean
 
           # cibuildwheel creates this ABI-specific test environment with uv.
+          # Each wheel runs the vector suites, then the check of the pinned vectors.
           CIBW_TEST_EXTRAS: test
-          CIBW_TEST_COMMAND: >-
-            python -c "from ethlib.cryptography import bls, kzg, sphincs, xmss;
-            print(kzg.BYTES_PER_BLOB, bls.BYTES_PER_PUBKEY, xmss.SIG_SIZE, sphincs.SIG_SIZE)"
+          CIBW_TEST_COMMAND: bash {project}/scripts/test_wheel.sh {project}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -109,9 +105,16 @@ jobs:
     environment: pypi
     permissions:
       id-token: write
+      attestations: write
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: dist
           merge-multiple: true
+
+      # A signed record that this workflow, at this commit, built each wheel and the sdist.
+      # `gh attestation verify <file> -R ethereum/EthLib` checks a downloaded file against it.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0

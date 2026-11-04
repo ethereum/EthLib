@@ -44,7 +44,7 @@ Gap D asks whether the use of EthLib holds together.
 | B3 | Elaboration runs native code | None | P |
 | B4 | The hand-written C boundary is wrong | Regenerating the vectors locally, then checking them against their pinned digests | B |
 | B5 | This repository substitutes compiled code | `lake exe check-decls` fails on any new substitution | R B |
-| B6 | The build or the published wheel differs from the source | Fresh build per wheel in CI | B |
+| B6 | The build or the published wheel differs from the source | Fresh build per wheel in CI, with a pinned elan. Each wheel runs the vector suites, and carries a build provenance attestation | B |
 | C1 | The Lean kernel or its axioms are unsound | None: `lake exe check-decls` checks which axioms a theorem uses, not that the kernel or the axioms are sound | P |
 | C2 | A proof trusts compiled code | `lake exe check-decls` fails on any new use; the remaining ones are listed in C2 | P |
 | C3 | A declaration reached the environment unchecked | leanchecker replays every declaration into the kernel every week, and on pushes to `master` | P |
@@ -475,6 +475,11 @@ The repository has none of the three today.
 
 `setup.py` runs `lake build Exports`, and links the objects under `.lake/build/ir/EthLib/` with `libleanshared`, `libgmp` and `libuv`.
 `.github/workflows/publish.yml` builds the wheels with `cibuildwheel`, cleans the build before each wheel, and publishes them to PyPI.
+
+The workflow installs elan from a pinned release, and checks the SHA-256 digest of the archive first.
+Then elan installs the Lean toolchain that `lean-toolchain` names.
+Each wheel runs the vector suites and the check of the pinned vectors before it is published.
+A build provenance attestation records which workflow run, at which commit, built each wheel and the sdist.
 
 ## Gap C: is the proof itself sound?
 
