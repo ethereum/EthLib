@@ -42,9 +42,8 @@ Any other length is an error. -/
 def keccakF1600 (state : ByteArray) : Result ByteArray := do
   if state.size ≠ 8 * LANES then
     throw (0, s!"Keccak-f[1600]: the state must be 200 bytes, got {state.size}")
-  let bytes := state.data.toList
   -- Lane `i` reads its own 8 bytes.
-  let lane (i : Nat) : UInt64 := Internal.laneAt (bytes.drop (8 * i))
+  let lane (i : Nat) : UInt64 := Internal.laneAt state (8 * i)
   let A : State := ⟨lane 0, lane 1, lane 2, lane 3, lane 4, lane 5, lane 6, lane 7, lane 8,
     lane 9, lane 10, lane 11, lane 12, lane 13, lane 14, lane 15, lane 16, lane 17, lane 18,
     lane 19, lane 20, lane 21, lane 22, lane 23, lane 24⟩

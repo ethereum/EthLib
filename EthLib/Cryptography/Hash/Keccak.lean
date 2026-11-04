@@ -277,7 +277,12 @@ def round (ir : Fin ROUNDS) (A : State) : State :=
 
 With `n_r = 24 = 12 + 2l` the rounds run from `12 + 2l - n_r = 0` to `23` (§3.3, Algorithm 7). -/
 def keccakF (A : State) : State :=
-  (List.finRange ROUNDS).foldl (fun A ir => round ir A) A
+  roundsFrom 0 A
+where
+  /-- Rounds `i` to 23, in order. -/
+  roundsFrom (i : Nat) (A : State) : State :=
+    if h : i < ROUNDS then roundsFrom (i + 1) (round ⟨i, h⟩ A) else A
+  termination_by ROUNDS - i
 
 /-! ## The sponge
 
@@ -352,52 +357,46 @@ def blockCount (rate len : Nat) : Nat :=
 
 namespace Internal
 
-/-- The 64-bit lane that 8 bytes spell, the first byte least significant.
+/-- Byte `i` of a string, or zero past its end. -/
+@[inline] def byteAt (bytes : ByteArray) (i : Nat) : UInt8 :=
+  if h : i < bytes.size then bytes[i] else 0
 
-So byte `j` carries bits `8j` to `8j + 7` of the lane, as in FIPS 202 §3.1.2. -/
-def laneOfBytes (bytes : List UInt8) : UInt64 :=
-  -- Horner's rule from the last byte: each earlier byte sits 8 bits lower.
-  bytes.foldr (fun byte acc => byte.toUInt64 ||| (acc <<< 8)) 0
+/-- The lane that the 8 bytes from index `i` spell, the first byte least significant.
 
-/-- Cut a string into `n` consecutive pieces of `k` bytes. -/
-def chunks (k : Nat) : Nat → List UInt8 → List (List UInt8)
-  | 0, _ => []
-  | n + 1, bytes => bytes.take k :: chunks k n (bytes.drop k)
+So byte `j` carries bits `8j` to `8j + 7` of the lane, as in FIPS 202 §3.1.2.
 
-/-- The lane that the first 8 bytes of a string spell, the first byte least significant.
-
-A shorter string reads as if zero bytes followed it, and bytes past the eighth are ignored. -/
-@[inline] def laneAt : List UInt8 → UInt64
-  | b0 :: b1 :: b2 :: b3 :: b4 :: b5 :: b6 :: b7 :: _ =>
-    b0.toUInt64 ||| b1.toUInt64 <<< 8 ||| b2.toUInt64 <<< 16 ||| b3.toUInt64 <<< 24 |||
-      b4.toUInt64 <<< 32 ||| b5.toUInt64 <<< 40 ||| b6.toUInt64 <<< 48 ||| b7.toUInt64 <<< 56
-  | bytes => laneOfBytes bytes
+Bytes past the end of the string read as zero. -/
+@[inline] def laneAt (bytes : ByteArray) (i : Nat) : UInt64 :=
+  (byteAt bytes i).toUInt64 ||| (byteAt bytes (i + 1)).toUInt64 <<< 8 |||
+    (byteAt bytes (i + 2)).toUInt64 <<< 16 ||| (byteAt bytes (i + 3)).toUInt64 <<< 24 |||
+    (byteAt bytes (i + 4)).toUInt64 <<< 32 ||| (byteAt bytes (i + 5)).toUInt64 <<< 40 |||
+    (byteAt bytes (i + 6)).toUInt64 <<< 48 ||| (byteAt bytes (i + 7)).toUInt64 <<< 56
 
 /-- The 8 bytes of a lane, the least significant first. -/
 def bytesOfLane (v : UInt64) : List UInt8 :=
   [v.toUInt8, (v >>> 8).toUInt8, (v >>> 16).toUInt8, (v >>> 24).toUInt8,
     (v >>> 32).toUInt8, (v >>> 40).toUInt8, (v >>> 48).toUInt8, (v >>> 56).toUInt8]
 
-/-- XOR one block of at most 136 bytes into the state.
+/-- Lane `i` of the block of `rate` bytes from index `start`, or zero past the rate. -/
+@[inline] def blockLane (rate : Nat) (bytes : ByteArray) (start i : Nat) : UInt64 :=
+  if 8 * i < rate then laneAt bytes (start + 8 * i) else 0
+
+/-- XOR the block of `rate` bytes from index `start` into the state, for a rate of at most 136.
 
 This is `S ^ (P_i || 0^c)` of FIPS 202 §4, Algorithm 8, step 6.
 
 A block of 136 bytes covers lanes 0 to 16, and a block of 72 bytes covers lanes 0 to 8.
 
 The lanes past the block are XORed with zero, so they are left alone. -/
-def absorbBlock (S : State) (block : List UInt8) : State :=
-  -- Lane `i` of the block starts at byte `8i`, and a missing lane is zero.
-  let b1 := block.drop 8; let b2 := b1.drop 8; let b3 := b2.drop 8; let b4 := b3.drop 8
-  let b5 := b4.drop 8; let b6 := b5.drop 8; let b7 := b6.drop 8; let b8 := b7.drop 8
-  let b9 := b8.drop 8; let b10 := b9.drop 8; let b11 := b10.drop 8; let b12 := b11.drop 8
-  let b13 := b12.drop 8; let b14 := b13.drop 8; let b15 := b14.drop 8; let b16 := b15.drop 8
+def absorbBlock (rate : Nat) (S : State) (bytes : ByteArray) (start : Nat) : State :=
+  let lane := blockLane rate bytes start
   { S with
-    a0 := S.a0 ^^^ laneAt block, a1 := S.a1 ^^^ laneAt b1, a2 := S.a2 ^^^ laneAt b2,
-    a3 := S.a3 ^^^ laneAt b3, a4 := S.a4 ^^^ laneAt b4, a5 := S.a5 ^^^ laneAt b5,
-    a6 := S.a6 ^^^ laneAt b6, a7 := S.a7 ^^^ laneAt b7, a8 := S.a8 ^^^ laneAt b8,
-    a9 := S.a9 ^^^ laneAt b9, a10 := S.a10 ^^^ laneAt b10, a11 := S.a11 ^^^ laneAt b11,
-    a12 := S.a12 ^^^ laneAt b12, a13 := S.a13 ^^^ laneAt b13, a14 := S.a14 ^^^ laneAt b14,
-    a15 := S.a15 ^^^ laneAt b15, a16 := S.a16 ^^^ laneAt b16 }
+    a0 := S.a0 ^^^ lane 0, a1 := S.a1 ^^^ lane 1, a2 := S.a2 ^^^ lane 2,
+    a3 := S.a3 ^^^ lane 3, a4 := S.a4 ^^^ lane 4, a5 := S.a5 ^^^ lane 5,
+    a6 := S.a6 ^^^ lane 6, a7 := S.a7 ^^^ lane 7, a8 := S.a8 ^^^ lane 8,
+    a9 := S.a9 ^^^ lane 9, a10 := S.a10 ^^^ lane 10, a11 := S.a11 ^^^ lane 11,
+    a12 := S.a12 ^^^ lane 12, a13 := S.a13 ^^^ lane 13, a14 := S.a14 ^^^ lane 14,
+    a15 := S.a15 ^^^ lane 15, a16 := S.a16 ^^^ lane 16 }
 
 /-- The first `d = 256` bits of the state: `Trunc_d(S)` of FIPS 202 §4, Algorithm 8, step 9.
 
@@ -416,9 +415,16 @@ def squeeze512 (S : State) : Vector UInt8 DIGEST_LEN_512 :=
   ⟨(bytesOfLane S.a0 ++ bytesOfLane S.a1 ++ bytesOfLane S.a2 ++ bytesOfLane S.a3 ++
     bytesOfLane S.a4 ++ bytesOfLane S.a5 ++ bytesOfLane S.a6 ++ bytesOfLane S.a7).toArray, rfl⟩
 
-/-- Absorb blocks in order, one permutation each: FIPS 202 §4, Algorithm 8, step 6. -/
-def absorbBlocks (f : State → State) (S : State) (blocks : List (List UInt8)) : State :=
-  blocks.foldl (fun S block => f (absorbBlock S block)) S
+/-- Absorb `n` blocks of `rate` bytes from index `start` on, in order, one permutation each.
+
+This is FIPS 202 §4, Algorithm 8, step 6.
+
+The blocks are read in place, so a long message is never copied block by block. -/
+def absorbBlocks (f : State → State) (rate : Nat) (bytes : ByteArray) :
+    Nat → Nat → State → State
+  | 0, _, S => S
+  | n + 1, start, S =>
+    absorbBlocks f rate bytes n (start + rate) (f (absorbBlock rate S bytes start))
 
 end Internal
 
@@ -437,11 +443,8 @@ The rate is at most 136 bytes, so each block fits in the lanes that it XORs.
 FIPS 202 §4 defines the sponge for any permutation `f`, so the permutation is an argument. -/
 def spongeAbsorb (f : State → State) (rate : Nat) (msg : ByteArray) : State :=
   -- Step 1: append the padding, so the length is a multiple of the rate.
-  let padded := (pad rate msg).data.toList
-  -- Steps 2 and 3: the blocks, in order.
-  let blocks := Internal.chunks rate (blockCount rate msg.size) padded
-  -- Steps 5 and 6: absorb the blocks in order, one permutation each.
-  Internal.absorbBlocks f State.zero blocks
+  -- Steps 2 to 6: from the zero state, absorb the blocks in order, one permutation each.
+  Internal.absorbBlocks f rate (pad rate msg) (blockCount rate msg.size) 0 State.zero
 
 /-- Keccak-256 of a byte string: `Keccak[512](M, 256)` of FIPS 202 §5.2.
 
@@ -472,24 +475,24 @@ structure Hasher where
   /-- The state after every whole block so far. -/
   state : State
   /-- The bytes after the last whole block, fewer than the rate. -/
-  pending : List UInt8
+  pending : ByteArray
 
 namespace Hasher
 
 /-- The hasher of the empty message. -/
-def empty : Hasher := ⟨State.zero, []⟩
+def empty : Hasher := ⟨State.zero, .empty⟩
 
 /-- Absorb more bytes: every block they complete goes through the permutation. -/
 def absorb (h : Hasher) (data : ByteArray) : Hasher :=
-  let bytes := h.pending ++ data.data.toList
-  let count := bytes.length / RATE
-  ⟨Internal.absorbBlocks keccakF h.state (Internal.chunks RATE count bytes),
-    bytes.drop (RATE * count)⟩
+  let bytes := h.pending ++ data
+  let count := bytes.size / RATE
+  ⟨Internal.absorbBlocks keccakF RATE bytes count 0 h.state,
+    bytes.extract (RATE * count) bytes.size⟩
 
 /-- The Keccak-256 digest of every byte absorbed so far: pad the last block, absorb it, squeeze. -/
 def digest (h : Hasher) : Vector UInt8 DIGEST_LEN :=
-  let last := h.pending ++ (padding RATE h.pending.length).data.toList
-  Internal.squeeze (Internal.absorbBlocks keccakF h.state [last])
+  let last := h.pending ++ padding RATE h.pending.size
+  Internal.squeeze (Internal.absorbBlocks keccakF RATE last 1 0 h.state)
 
 end Hasher
 
