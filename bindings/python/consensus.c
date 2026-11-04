@@ -99,11 +99,13 @@ py_consensus_get_custody_groups(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject* name_obj;
+  PyObject *name_obj, *count_obj;
   const uint8_t* node_id;
   Py_ssize_t node_id_len;
-  unsigned long long count;
-  if (!PyArg_ParseTuple(args, "Oy#K", &name_obj, &node_id, &node_id_len, &count)) return NULL;
+  if (!PyArg_ParseTuple(args, "Oy#O", &name_obj, &node_id, &node_id_len, &count_obj)) return NULL;
+  /* A count outside [0, 2^64) raises OverflowError. */
+  unsigned long long count = PyLong_AsUnsignedLongLong(count_obj);
+  if (PyErr_Occurred()) return NULL;
   lean_object* name = str_arg(name_obj, "name");
   if (!name) return NULL;
   lean_object* id = mk_bytearray(node_id, node_id_len);
@@ -116,9 +118,11 @@ py_consensus_compute_columns_for_custody_group(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject* name_obj;
-  unsigned long long group;
-  if (!PyArg_ParseTuple(args, "OK", &name_obj, &group)) return NULL;
+  PyObject *name_obj, *group_obj;
+  if (!PyArg_ParseTuple(args, "OO", &name_obj, &group_obj)) return NULL;
+  /* A group outside [0, 2^64) raises OverflowError. */
+  unsigned long long group = PyLong_AsUnsignedLongLong(group_obj);
+  if (PyErr_Occurred()) return NULL;
   lean_object* name = str_arg(name_obj, "name");
   if (!name) return NULL;
   return except_into_pybytes(

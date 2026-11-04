@@ -552,7 +552,7 @@ Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_co
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-4895 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (152), `bls.c` (342), `consensus.c` (126), `crc32c.c` (38), `devp2p.c` (59), `discv5.c` (223), `ecrecover.c` (34), `enr.c` (125), `evm.c` (136), `fees.c` (90), `gossip.c` (63), `hmac.c` (102), `keccak.c` (61), `kzg.c` (511), `modexp.c` (61), `module.c` (781), `precompile.c` (43), `reqresp.c` (121), `ripemd160.c` (36), `rlp.c` (162), `rlpx.c` (158), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `snappy.c` (131), `sphincs.c` (85), `state.c` (28), `transactions.c` (132), `trie.c` (76), `vrf.c` (119), `wrappers.h` (336), `xmss.c` (134).
+4899 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (152), `bls.c` (342), `consensus.c` (130), `crc32c.c` (38), `devp2p.c` (59), `discv5.c` (223), `ecrecover.c` (34), `enr.c` (125), `evm.c` (136), `fees.c` (90), `gossip.c` (63), `hmac.c` (102), `keccak.c` (61), `kzg.c` (511), `modexp.c` (61), `module.c` (781), `precompile.c` (43), `reqresp.c` (121), `ripemd160.c` (36), `rlp.c` (162), `rlpx.c` (158), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `snappy.c` (131), `sphincs.c` (85), `state.c` (28), `transactions.c` (132), `trie.c` (76), `vrf.c` (119), `wrappers.h` (336), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
