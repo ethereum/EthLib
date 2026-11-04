@@ -7,13 +7,12 @@ Since the result decides what a contract does, every client must return the same
 
 ## Source
 
-The executable source is `src/ethereum/forks/bpo2/vm/precompiled_contracts/ecrecover.py` in `ethereum/execution-specs`, at commit `b758df2bcaaa95c04d31e25c94fbfb8d6de756e7`.
-It is identical to the Osaka module.
+The source is Appendix E of the Yellow Paper, Shanghai version, in
+[`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
+The curve, the recovery and the address follow their own standards:
 
-That source calls a library for the cryptography, so the curve, the recovery and the address follow their own standards instead:
-
-- the recovery follows SEC 1 v2 §4.1.6, in `EthLib/Cryptography/Secp256k1/Recovery.lean`;
-- the address follows Appendix F of the Yellow Paper, in `EthLib/Cryptography/Secp256k1/Address.lean`.
+- The recovery follows SEC 1 v2 §4.1.6, in `EthLib/Cryptography/Secp256k1/Recovery.lean`.
+- The address follows Yellow Paper Appendix F, in `EthLib/Cryptography/Secp256k1/Address.lean`.
 
 The call reads four 32-byte words and returns one:
 
@@ -39,7 +38,9 @@ In Python, a lack of gas raises `ValueError`.
 
 ## Test vectors
 
-`bindings/python/tests/ecrecover/` runs all 52 cases of `test_precompiles` in `tests/frontier/precompiles/test_ecrecover.py` of execution-specs, at the same commit.
+`bindings/python/tests/ecrecover/` runs all 52 cases of `test_precompiles` in
+`tests/frontier/precompiles/test_ecrecover.py` of execution-specs.
+The file is at commit `b758df2bcaaa95c04d31e25c94fbfb8d6de756e7`.
 Eight of them also run in the kernel, at the end of `EthLib/Execution/Proofs/Evm/Precompiles/Ecrecover/Core.lean`.
 
 ## What is proved
@@ -62,8 +63,8 @@ Lastly, a call fails exactly when the gas is below 3000 (`ecrecover_out_of_gas`,
 
 ## What is not proved
 
-No theorem says that the module agrees with execution-specs on inputs other than the known answers.
-No theorem says either that `secp256k1_recover` in execution-specs, which calls a C library, computes SEC 1 recovery.
+No theorem relates the module to another implementation.
+The test vectors check the agreement only on their own inputs.
 
 One case falls outside the converse statement.
 When `r < p - n`, the point `R` of a signature may have the x-coordinate `r + n` instead of `r`.
