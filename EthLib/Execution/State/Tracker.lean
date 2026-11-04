@@ -351,4 +351,37 @@ def incorporateTxIntoBlock (tx : TransactionState) : TransactionState :=
 
 end TransactionState
 
+/-! ## The state after a block -/
+
+namespace BlockState
+
+/-- The words of `slots` written over those of `base`, where the word zero removes its key. -/
+def applySlots (base slots : Std.ExtTreeMap Bytes32 U256) : Std.ExtTreeMap Bytes32 U256 :=
+  slots.foldl (fun acc key value => if value = 0 then acc.erase key else acc.insert key value) base
+
+/-- The state after the block: the state before it, with every write of the block.
+
+A wipe drops the earlier storage of its address first.
+
+A deleted account leaves the state, and the code of each write joins the code of the state.
+
+A key with the word zero leaves the storage, and so does an address with no key left. -/
+def applyChanges (block : BlockState) : State :=
+  let pre := block.preState
+  let storage := block.storageClears.foldl (fun acc address => acc.erase address) pre.storage
+  { accounts := block.accountWrites.foldl
+      (fun acc address account =>
+        match account with
+        | some account => acc.insert address account
+        | none => acc.erase address)
+      pre.accounts
+    storage := block.storageWrites.foldl
+      (fun acc address slots =>
+        let merged := applySlots (acc.getD address ∅) slots
+        if merged.isEmpty then acc.erase address else acc.insert address merged)
+      storage
+    code := block.codeWrites.foldl (fun acc codeHash code => acc.insert codeHash code) pre.code }
+
+end BlockState
+
 end EthLib.Execution.State

@@ -14,6 +14,10 @@ Restoring a snapshot restores every read of the snapshot.
 A move of ether keeps the sum of the two balances, and fails when the sender lacks the amount.
 
 Each new transaction starts with an empty transient storage.
+
+The end of a transaction keeps every read of the transaction.
+
+The state after a block reads as the block does at the start of its next transaction.
 -/
 
 @[expose] public section
@@ -312,3 +316,238 @@ theorem moveEther_balance {fork : Fork} {tx tx' : TransactionState} {sender reci
       · cases hcredit
 
 end EthLib.Execution.State.TransactionState
+
+/-! ## Folds of writes -/
+
+namespace EthLib.Execution.State
+
+open Std
+
+section Fold
+
+variable {α β γ : Type} [Ord α] [TransOrd α] [LawfulEqOrd α] [DecidableEq α]
+
+/-- A fold over a list with distinct keys, whose step changes only the key it reads. -/
+private theorem getElem?_foldl_list
+    {step : ExtTreeMap α γ compare → α → β → ExtTreeMap α γ compare}
+    {F : α → β → Option γ → Option γ}
+    (hstep : ∀ acc k v k', (step acc k v)[k']? = if k = k' then F k v acc[k]? else acc[k']?)
+    (k : α) : ∀ (l : List (α × β)) (base : ExtTreeMap α γ compare),
+      l.Pairwise (fun a b => ¬ compare a.1 b.1 = .eq) →
+      (∀ v, (k, v) ∈ l → (l.foldl (fun acc p => step acc p.1 p.2) base)[k]? = F k v base[k]?) ∧
+      ((∀ v, (k, v) ∉ l) → (l.foldl (fun acc p => step acc p.1 p.2) base)[k]? = base[k]?)
+  | [], _, _ => ⟨by simp, fun _ => rfl⟩
+  | (k', v') :: rest, base, hl => by
+    obtain ⟨hhead, hrest⟩ := List.pairwise_cons.mp hl
+    have ih := getElem?_foldl_list hstep k rest (step base k' v') hrest
+    simp only [List.foldl_cons]
+    refine ⟨fun v hv => ?_, fun hv => ?_⟩
+    · rcases List.mem_cons.mp hv with hv | hv
+      · -- The key is the head, so the rest never changes it again.
+        obtain ⟨rfl, rfl⟩ := Prod.mk.inj hv
+        rw [ih.2 fun w hw => hhead _ hw (by simp), hstep]
+        simp
+      · -- The key is in the rest, so the head is another key.
+        have hne : k' ≠ k := fun h => hhead _ hv (by simp [h])
+        rw [ih.1 v hv, hstep]
+        simp [hne]
+    · have hne : k' ≠ k := fun h => hv v' (by simp [h])
+      rw [ih.2 fun w hw => hv w (List.mem_cons_of_mem _ hw), hstep]
+      simp [hne]
+
+/-- A fold whose step changes only the key it reads gives, at each key, the change of that key. -/
+theorem getElem?_foldl_of_step (m : ExtTreeMap α β compare) (base : ExtTreeMap α γ compare)
+    {step : ExtTreeMap α γ compare → α → β → ExtTreeMap α γ compare}
+    {F : α → β → Option γ → Option γ}
+    (hstep : ∀ acc k v k', (step acc k v)[k']? = if k = k' then F k v acc[k]? else acc[k']?)
+    (k : α) :
+    (m.foldl step base)[k]? = match m[k]? with
+      | some v => F k v base[k]?
+      | none => base[k]? := by
+  have h := getElem?_foldl_list hstep k m.toList base m.distinct_keys_toList
+  rw [ExtTreeMap.foldl_eq_foldl_toList]
+  split
+  · rename_i v hv
+    exact h.1 v (ExtTreeMap.mem_toList_iff_getElem?_eq_some.mpr hv)
+  · rename_i hv
+    exact h.2 fun v hmem => by simp [ExtTreeMap.mem_toList_iff_getElem?_eq_some.mp hmem] at hv
+
+/-- Erasing each key of a set from a map removes those keys and keeps every other. -/
+theorem getElem?_foldl_erase (s : ExtTreeSet α compare) (m : ExtTreeMap α γ compare) (k : α) :
+    (s.foldl (fun acc a => acc.erase a) m)[k]? = if k ∈ s then none else m[k]? := by
+  have h : ∀ (l : List α) (m : ExtTreeMap α γ compare),
+      (l.foldl (fun acc a => acc.erase a) m)[k]? = if k ∈ l then none else m[k]? := by
+    intro l
+    induction l with
+    | nil => simp
+    | cons a rest ih =>
+      intro m
+      by_cases h : a = k
+      · subst h
+        simp [ih]
+      · simp [ih, ExtTreeMap.getElem?_erase, h, Ne.symm h]
+  simp [ExtTreeSet.foldl_eq_foldl_toList, h]
+
+omit [DecidableEq α] in
+/-- Inserting each key of a set into another gives their union. -/
+theorem mem_foldl_insert (s t : ExtTreeSet α compare) (k : α) :
+    k ∈ s.foldl (fun acc a => acc.insert a) t ↔ k ∈ s ∨ k ∈ t := by
+  have h : ∀ (l : List α) (t : ExtTreeSet α compare),
+      k ∈ l.foldl (fun acc a => acc.insert a) t ↔ k ∈ l ∨ k ∈ t := by
+    intro l
+    induction l with
+    | nil => simp
+    | cons a rest ih =>
+      intro t
+      simp only [List.foldl_cons, ih, ExtTreeSet.mem_insert, List.mem_cons, compare_eq_iff_eq]
+      constructor
+      · rintro (h | h | h) <;> simp_all
+      · rintro ((h | h) | h) <;> simp_all
+  simp [ExtTreeSet.foldl_eq_foldl_toList, h]
+
+end Fold
+
+/-! ## The state after a block -/
+
+open EthLib.Base
+
+namespace BlockState
+
+/-- The words written by a block over a storage: each written key reads its word, zero or not. -/
+theorem getElem?_applySlots (base slots : Std.ExtTreeMap Bytes32 U256) (key : Bytes32) :
+    (applySlots base slots)[key]? = match slots[key]? with
+      | some value => if value = 0 then none else some value
+      | none => base[key]? := by
+  unfold applySlots
+  rw [getElem?_foldl_of_step (F := fun _ value _ =>
+    if value = 0 then none else some value)]
+  · cases slots[key]? <;> rfl
+  intro acc k v k'
+  by_cases hk : k = k' <;> split <;> simp_all [Std.ExtTreeMap.getElem?_erase,
+    Std.ExtTreeMap.getElem?_insert]
+
+/-- After a block, each account reads as it does at the start of a transaction of the block. -/
+theorem getAccountOptional_applyChanges (block : BlockState) (address : Address) :
+    block.applyChanges.getAccountOptional address =
+      (TransactionState.ofBlock block).getAccountOptional address := by
+  simp only [applyChanges, State.getAccountOptional, TransactionState.getAccountOptional,
+    TransactionState.ofBlock, Std.ExtTreeMap.getElem?_empty]
+  rw [getElem?_foldl_of_step (F := fun _ account _ => account)]
+  · cases block.accountWrites[address]? <;> rfl
+  · intro acc k v k'
+    by_cases hk : k = k' <;> cases v <;> simp_all [Std.ExtTreeMap.getElem?_erase,
+      Std.ExtTreeMap.getElem?_insert]
+
+/-- After a block, each code reads as it does at the start of a transaction of the block. -/
+theorem getCode_applyChanges (block : BlockState) (codeHash : Hash32) :
+    block.applyChanges.getCode codeHash = (TransactionState.ofBlock block).getCode codeHash := by
+  simp only [applyChanges, State.getCode, TransactionState.getCode, TransactionState.ofBlock,
+    Std.ExtTreeMap.getElem?_empty]
+  rw [getElem?_foldl_of_step (F := fun _ code _ => some code)]
+  · cases block.codeWrites[codeHash]? <;> split <;> simp_all
+  · intro acc k v k'
+    by_cases hk : k = k' <;> simp_all [Std.ExtTreeMap.getElem?_insert]
+
+/-- After a block, each word of storage reads as it does at the start of a transaction of it. -/
+theorem getStorage_applyChanges (block : BlockState) (address : Address) (key : Bytes32) :
+    block.applyChanges.getStorage address key =
+      (TransactionState.ofBlock block).getStorage address key := by
+  simp only [applyChanges, State.getStorage, TransactionState.getStorage,
+    TransactionState.ofBlock, StorageMap.slot, Std.ExtTreeMap.getElem?_empty, Option.bind_none,
+    Std.ExtTreeSet.not_mem_empty, ↓reduceIte]
+  rw [getElem?_foldl_of_step (F := fun _ slots old =>
+    let merged := applySlots (old.getD ∅) slots
+    if merged.isEmpty then none else some merged)]
+  · rw [getElem?_foldl_erase]
+    cases hw : block.storageWrites[address]? with
+    | none => by_cases hc : address ∈ block.storageClears <;> simp [hc]
+    | some slots =>
+      -- An address with no key left reads as no storage, which holds no word either.
+      have hbind : ∀ merged : Std.ExtTreeMap Bytes32 U256,
+          (if merged.isEmpty then none else some merged).bind (·[key]?) = merged[key]? := by
+        intro merged
+        split
+        · rename_i hempty
+          simp_all [Std.ExtTreeMap.isEmpty_iff]
+        · rfl
+      simp only [hbind, getElem?_applySlots]
+      cases hk : slots[key]? with
+      | some value =>
+        by_cases hv : value = 0
+        · simp [hv, hk]
+        · simp only [Option.bind_some, hk]
+          split <;> simp_all
+      | none =>
+        by_cases hc : address ∈ block.storageClears
+        · simp [hc, hk]
+        · cases block.preState.storage[address]? <;> simp [hc, hk]
+  · intro acc k v k'
+    by_cases hk : k = k' <;> split <;> simp_all [Std.ExtTreeMap.getElem?_erase,
+      Std.ExtTreeMap.getElem?_insert, Std.ExtTreeMap.getD_eq_getD_getElem?]
+
+/-- A block with no write leaves the state before it. -/
+theorem applyChanges_ofPreState (pre : State) :
+    (BlockState.mk pre ∅ ∅ ∅ ∅).applyChanges = pre := by
+  simp [applyChanges, Std.ExtTreeMap.foldl_eq_foldl_toList, Std.ExtTreeSet.foldl_eq_foldl_toList,
+    Std.ExtTreeMap.toList_eq_nil_iff.mpr, Std.ExtTreeSet.toList_eq_nil_iff.mpr]
+
+end BlockState
+
+namespace TransactionState
+
+/-- The words written over a storage: each written key reads its word. -/
+theorem getElem?_writeSlots (base slots : Std.ExtTreeMap Bytes32 U256) (key : Bytes32) :
+    (writeSlots base slots)[key]? = slots[key]?.or base[key]? := by
+  unfold writeSlots
+  rw [getElem?_foldl_of_step (F := fun _ value _ => some value)]
+  · cases slots[key]? <;> rfl
+  · intro acc k v k'
+    by_cases hk : k = k' <;> simp_all [Std.ExtTreeMap.getElem?_insert]
+
+/-- After the end of a transaction, each account reads as it did in the transaction. -/
+theorem getAccountOptional_incorporateTxIntoBlock (tx : TransactionState) (address : Address) :
+    tx.incorporateTxIntoBlock.getAccountOptional address = tx.getAccountOptional address := by
+  simp only [incorporateTxIntoBlock, ofBlock, getAccountOptional, Std.ExtTreeMap.getElem?_empty]
+  rw [getElem?_foldl_of_step (F := fun _ account _ => some account)]
+  · cases tx.accountWrites[address]? <;> rfl
+  · intro acc k v k'
+    by_cases hk : k = k' <;> simp_all [Std.ExtTreeMap.getElem?_insert]
+
+/-- After the end of a transaction, each code reads as it did in the transaction. -/
+theorem getCode_incorporateTxIntoBlock (tx : TransactionState) (codeHash : Hash32) :
+    tx.incorporateTxIntoBlock.getCode codeHash = tx.getCode codeHash := by
+  simp only [incorporateTxIntoBlock, ofBlock, getCode, Std.ExtTreeMap.getElem?_empty]
+  rw [getElem?_foldl_of_step (F := fun _ code _ => some code)]
+  · cases tx.codeWrites[codeHash]? <;> rfl
+  · intro acc k v k'
+    by_cases hk : k = k' <;> simp_all [Std.ExtTreeMap.getElem?_insert]
+
+/-- After the end of a transaction, each word of storage reads as it did in the transaction. -/
+theorem getStorage_incorporateTxIntoBlock (tx : TransactionState) (address : Address)
+    (key : Bytes32) :
+    tx.incorporateTxIntoBlock.getStorage address key = tx.getStorage address key := by
+  simp only [incorporateTxIntoBlock, ofBlock, getStorage, StorageMap.slot,
+    Std.ExtTreeMap.getElem?_empty, Option.bind_none, Std.ExtTreeSet.not_mem_empty, ↓reduceIte,
+    mem_foldl_insert]
+  rw [getElem?_foldl_of_step (F := fun _ slots old =>
+    some (writeSlots (old.getD ∅) slots))]
+  · rw [getElem?_foldl_erase]
+    -- A wipe in the transaction hides the block's words; otherwise they show through.
+    cases hw : tx.storageWrites[address]? with
+    | none =>
+      by_cases hc : address ∈ tx.storageClears <;> simp [hc]
+    | some slots =>
+      simp only [Option.bind_some, getElem?_writeSlots]
+      cases hk : slots[key]? with
+      | some value => simp
+      | none =>
+        by_cases hc : address ∈ tx.storageClears
+        · simp [hc]
+        · cases tx.parent.storageWrites[address]? <;> simp [hc]
+  · intro acc k v k'
+    by_cases hk : k = k' <;> simp_all [Std.ExtTreeMap.getElem?_insert,
+      Std.ExtTreeMap.getD_eq_getD_getElem?]
+
+end TransactionState
+
+end EthLib.Execution.State
