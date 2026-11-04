@@ -95,19 +95,17 @@ theorem topLeafHash_tweakable (parameter : PublicParameter) (key : TopIndex)
   rw [Concrete.topLeafHash_eq]
   exact tweakableHash_tweakable _ _ _
 
-theorem nodeHash_tweakable (parameter : PublicParameter) (level : MerkleLevel) (node : MerkleNode)
-    (left right : Digest) :
-    OnlyQueries Tweakable (Concrete.nodeHash parameter level node left right :
+theorem nodeAt_tweakable (parameter : PublicParameter) (layer : EthLib.Cryptography.Xmss.Layer)
+    (level j : Nat) (left right : Digest) :
+    OnlyQueries Tweakable (Concrete.nodeAt parameter layer level j left right :
       OracleComp HashSpec Digest) := by
-  rw [Concrete.nodeHash_eq]
-  exact tweakableHash_tweakable _ _ _
-
-theorem topNodeHash_tweakable (parameter : PublicParameter) (level : MerkleLevel) (node : TopNode)
-    (left right : Digest) :
-    OnlyQueries Tweakable (Concrete.topNodeHash parameter level node left right :
-      OracleComp HashSpec Digest) := by
-  rw [Concrete.topNodeHash_eq]
-  exact tweakableHash_tweakable _ _ _
+  rcases level with _ | level
+  · exact .pure _
+  · by_cases hlevel : level < treeHeight
+    · rw [show level = (⟨level, hlevel⟩ : MerkleLevel).val from rfl, Concrete.nodeAt_eq]
+      exact tweakableHash_tweakable _ _ _
+    · simp only [Concrete.nodeAt, hlevel, ↓reduceIte]
+      exact .pure _
 
 theorem topEncodingHash_tweakable (parameter : PublicParameter) (key : TopIndex) (root : Digest)
     (randomness : Randomness) :
@@ -145,33 +143,19 @@ theorem topChainWalk_tweakable (parameter : PublicParameter) (key : TopIndex) (c
 theorem treeNode_tweakable (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
     (levels : Nat) (node : MerkleNode) :
     OnlyQueries Tweakable (Concrete.treeNode parameter secret levels node : OracleComp HashSpec Digest) := by
-  induction levels generalizing node with
-  | zero =>
-      rw [Concrete.treeNode_zero_eq]
-      exact (OnlyQueries.sequenceFin fun chain => chainWalk_tweakable _ _ _ _ _ _).bind
-        fun _ => leafHash_tweakable _ _ _
-  | succ levels ih =>
-      rw [Concrete.treeNode_succ_eq]
-      refine (ih _).bind fun _ => (ih _).bind fun _ => ?_
-      split
-      · exact nodeHash_tweakable _ _ _ _ _
-      · exact .pure _
+  rw [Concrete.treeNode]
+  exact EthLib.Cryptography.Merkle.node_rec _ (OnlyQueries Tweakable) (fun hx hf => hx.bind hf) _
+    (fun _ => (OnlyQueries.sequenceFin fun _ => chainWalk_tweakable _ _ _ _ _ _).bind
+      fun _ => leafHash_tweakable _ _ _) (nodeAt_tweakable parameter .bottom) levels node.val
 
 theorem topTreeNode_tweakable (parameter : PublicParameter) (topSecret : TopIndex → ChainIndex → Digest)
     (levels : Nat) (node : TopNode) :
     OnlyQueries Tweakable (Concrete.topTreeNode parameter topSecret levels node :
       OracleComp HashSpec Digest) := by
-  induction levels generalizing node with
-  | zero =>
-      rw [Concrete.topTreeNode]
-      exact (OnlyQueries.sequenceFin fun chain => topChainWalk_tweakable _ _ _ _ _ _).bind
-        fun _ => topLeafHash_tweakable _ _ _
-  | succ levels ih =>
-      rw [Concrete.topTreeNode]
-      refine (ih _).bind fun _ => (ih _).bind fun _ => ?_
-      split
-      · exact topNodeHash_tweakable _ _ _ _ _
-      · exact .pure _
+  rw [Concrete.topTreeNode]
+  exact EthLib.Cryptography.Merkle.node_rec _ (OnlyQueries Tweakable) (fun hx hf => hx.bind hf) _
+    (fun _ => (OnlyQueries.sequenceFin fun _ => topChainWalk_tweakable _ _ _ _ _ _).bind
+      fun _ => topLeafHash_tweakable _ _ _) (nodeAt_tweakable parameter .top) levels node.val
 
 theorem topSignFrom_tweakable (parameter : PublicParameter) (key : TopIndex) (root : Digest)
     (base : Randomness) (attempts trial : Nat) :

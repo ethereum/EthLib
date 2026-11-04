@@ -79,7 +79,7 @@ theorem topTreeNode_children {cache : QueryCache HashSpec} {parameter : PublicPa
     Res cache (Concrete.topTreeNode parameter topSecret levels (Concrete.topChildNode node right) :
       OracleComp HashSpec Digest) := by
   obtain ⟨v, hv⟩ := h
-  rw [Concrete.topTreeNode] at hv
+  rw [Concrete.topTreeNode_succ_eq] at hv
   obtain ⟨left, hleft, hv⟩ := hv.of_bind
   obtain ⟨rightValue, hright, -⟩ := hv.of_bind
   cases right
@@ -219,7 +219,7 @@ theorem topChain (h : Prepared seed d result cache) (key : TopIndex) (chain : Ch
   have hnode : Concrete.topNodeOfNat key.val = key := by
     apply Fin.ext
     simp [Concrete.topNodeOfNat, Nat.mod_eq_of_lt key.isLt]
-  rw [hnode, Concrete.topTreeNode] at hleaf
+  rw [hnode, Concrete.topTreeNode_zero_eq] at hleaf
   obtain ⟨endpoints, hendpoints, -⟩ := hleaf.of_bind
   have hfull := hendpoints.of_sequenceFin chain
   have hsplit := topChainWalk_split d.parameter key chain 0 digit.val (chainLength - 1 - digit.val)

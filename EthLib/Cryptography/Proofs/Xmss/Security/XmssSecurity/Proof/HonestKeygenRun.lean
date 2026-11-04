@@ -130,101 +130,37 @@ theorem honestKeygen_runsBelow_topTree
 
 end HonestKeygen
 
-/-- A subtree of a tree runs inside the tree's run. -/
-theorem RunsBelow.treeNode_subtree (parameter : PublicParameter)
-    (secret : LeafIndex → ChainIndex → Digest) (levels : Nat) (node : MerkleNode)
-    (cache : QueryCache HashSpec) :
-    ∀ (height : Nat) (root : MerkleNode), height ≤ treeHeight → TreeSubtreeValid height root →
-      levels ≤ height → node.val / 2 ^ (height - levels) = root.val →
-      RunsBelow (Concrete.treeNode parameter secret height root : OracleComp HashSpec Digest) cache →
-      RunsBelow (Concrete.treeNode parameter secret levels node : OracleComp HashSpec Digest) cache := by
-  intro height
-  induction height with
-  | zero =>
-      intro root _ _ hle hnode hrun
-      obtain rfl : levels = 0 := by omega
-      obtain rfl : node = root := Fin.ext (by simpa using hnode)
-      exact hrun
-  | succ height ih =>
-      intro root hheight hvalid hle hnode hrun
-      by_cases hsame : levels = height + 1
-      · subst levels
-        obtain rfl : node = root := Fin.ext (by simpa using hnode)
-        exact hrun
-      have hlevel : height < treeHeight := by omega
-      obtain ⟨beforeCache, afterCache, digest, hmem, hafter⟩ := hrun
-      rw [Concrete.treeNode_succ_eq] at hmem
-      obtain ⟨left, leftCache, hleft, hrest, hleftLe⟩ := runsBelow_bind_left hmem
-      obtain ⟨right, rightCache, hright, _, hrightLe⟩ := runsBelow_bind_left hrest
-      have hhalf : node.val / 2 ^ (height - levels) / 2 = root.val := by
-        rw [Nat.div_div_eq_div_mul, ← pow_succ, ← hnode]
-        congr 2
-        omega
-      have hchild (right : Bool) := childNode_val_of_subtreeValid_succ height root right hvalid
-      by_cases hparity : node.val / 2 ^ (height - levels) % 2 = 0
-      · exact ih (Concrete.childNode root false) (by omega)
-          (childNode_subtreeValid height root false hvalid) (by omega)
-          (by rw [hchild false]; simp only [Bool.false_eq_true, ↓reduceIte]; omega)
-          ⟨beforeCache, leftCache, left, hleft, hleftLe.trans hafter⟩
-      · exact ih (Concrete.childNode root true) (by omega)
-          (childNode_subtreeValid height root true hvalid) (by omega)
-          (by rw [hchild true]; simp only [↓reduceIte]; omega)
-          ⟨leftCache, rightCache, right, hright, hrightLe.trans hafter⟩
+/-- A subtree of a tree runs inside the tree's run.
 
-theorem topChildNode_val (height : Nat) (root : TopNode) (right : Bool)
-    (hvalid : (root.val + 1) * 2 ^ (height + 1) ≤ topLifetime) :
-    (Concrete.topChildNode root right).val = 2 * root.val + if right then 1 else 0 := by
-  rw [Concrete.topChildNode, Concrete.topNodeOfNat]
-  apply Nat.mod_eq_of_lt
-  rw [pow_succ] at hvalid
-  have hpow : 0 < 2 ^ height := pow_pos (by omega) _
-  split <;> nlinarith
-
-/-- A subtree of the top tree runs inside the tree's run. -/
-theorem RunsBelow.topTreeNode_subtree (parameter : PublicParameter)
-    (topSecret : TopIndex → ChainIndex → Digest) (levels : Nat) (node : TopNode)
-    (cache : QueryCache HashSpec) :
-    ∀ (height : Nat) (root : TopNode), (root.val + 1) * 2 ^ height ≤ topLifetime →
-      levels ≤ height → node.val / 2 ^ (height - levels) = root.val →
-      RunsBelow (Concrete.topTreeNode parameter topSecret height root : OracleComp HashSpec Digest)
+Node `i` on `levels` lies below node `i / 2^(height - levels)` on `height`. -/
+theorem RunsBelow.node_subtree (hash : Nat → Nat → Digest → Digest → OracleComp HashSpec Digest)
+    (leaves : Nat → OracleComp HashSpec Digest) (levels i : Nat) (cache : QueryCache HashSpec) :
+    ∀ (height : Nat), levels ≤ height →
+      RunsBelow (EthLib.Cryptography.Merkle.node hash leaves height (i / 2 ^ (height - levels)))
         cache →
-      RunsBelow (Concrete.topTreeNode parameter topSecret levels node : OracleComp HashSpec Digest)
-        cache := by
-  intro height
-  induction height with
-  | zero =>
-      intro root _ hle hnode hrun
-      obtain rfl : levels = 0 := by omega
-      obtain rfl : node = root := Fin.ext (by simpa using hnode)
-      exact hrun
-  | succ height ih =>
-      intro root hvalid hle hnode hrun
-      by_cases hsame : levels = height + 1
-      · subst levels
-        obtain rfl : node = root := Fin.ext (by simpa using hnode)
-        exact hrun
-      obtain ⟨beforeCache, afterCache, digest, hmem, hafter⟩ := hrun
-      rw [Concrete.topTreeNode] at hmem
-      obtain ⟨left, leftCache, hleft, hrest, hleftLe⟩ := runsBelow_bind_left hmem
-      obtain ⟨right, rightCache, hright, _, hrightLe⟩ := runsBelow_bind_left hrest
-      have hhalf : node.val / 2 ^ (height - levels) / 2 = root.val := by
-        rw [Nat.div_div_eq_div_mul, ← pow_succ, ← hnode]
-        congr 2
-        omega
-      have hchildValid (right : Bool) :
-          ((Concrete.topChildNode root right).val + 1) * 2 ^ height ≤ topLifetime := by
-        rw [topChildNode_val height root right hvalid]
-        rw [pow_succ] at hvalid
-        have hpow : 0 < 2 ^ height := pow_pos (by omega) _
-        split <;> nlinarith
-      by_cases hparity : node.val / 2 ^ (height - levels) % 2 = 0
-      · exact ih (Concrete.topChildNode root false) (hchildValid false) (by omega)
-          (by rw [topChildNode_val height root false hvalid]; simp only [Bool.false_eq_true,
-            ↓reduceIte]; omega)
-          ⟨beforeCache, leftCache, left, hleft, hleftLe.trans hafter⟩
-      · exact ih (Concrete.topChildNode root true) (hchildValid true) (by omega)
-          (by rw [topChildNode_val height root true hvalid]; simp only [↓reduceIte]; omega)
-          ⟨leftCache, rightCache, right, hright, hrightLe.trans hafter⟩
+      RunsBelow (EthLib.Cryptography.Merkle.node hash leaves levels i) cache
+  | 0, hle, hrun => by
+    obtain rfl : levels = 0 := by omega
+    simpa using hrun
+  | height + 1, hle, hrun => by
+    by_cases hsame : levels = height + 1
+    · subst levels
+      simpa using hrun
+    obtain ⟨beforeCache, afterCache, digest, hmem, hafter⟩ := hrun
+    rw [EthLib.Cryptography.Merkle.node_succ] at hmem
+    obtain ⟨left, leftCache, hleft, hrest, hleftLe⟩ := runsBelow_bind_left hmem
+    obtain ⟨right, rightCache, hright, _, hrightLe⟩ := runsBelow_bind_left hrest
+    -- The node's ancestor one level lower is the left or the right child, by parity.
+    have hdiv : i / 2 ^ (height - levels) = 2 * (i / 2 ^ (height + 1 - levels)) +
+        i / 2 ^ (height - levels) % 2 := by
+      rw [show height + 1 - levels = height - levels + 1 by omega, pow_succ,
+        ← Nat.div_div_eq_div_mul]
+      omega
+    refine RunsBelow.node_subtree hash leaves levels i cache height (by omega) ?_
+    rcases Nat.mod_two_eq_zero_or_one (i / 2 ^ (height - levels)) with hbit | hbit <;>
+      rw [hdiv, hbit]
+    · exact ⟨beforeCache, leftCache, left, hleft, hleftLe.trans hafter⟩
+    · exact ⟨leftCache, rightCache, right, hright, hrightLe.trans hafter⟩
 
 /-- A prefix of a chain walk runs inside the walk's run. -/
 theorem RunsBelow.chainWalk_prefix (parameter : PublicParameter) (leafIndex : LeafIndex)
@@ -291,10 +227,10 @@ theorem honestKeygen_runsBelow_treeNode
     have hbound := hvalid.trans_eq hsplit
     have hpow : 0 < 2 ^ levels := pow_pos (by omega) _
     nlinarith
-  exact RunsBelow.treeNode_subtree parameter secret levels node cache treeHeight
-    (Concrete.bottomRootNode ⟨_, hkey⟩) le_rfl (treeSubtreeValid_bottomRootNode _) hlevels rfl
-    (honestKeygen_runsBelow_bottomTree parameter secret topSecret topBase initialCache cache result
-      hmem _)
+  have htree := honestKeygen_runsBelow_bottomTree parameter secret topSecret topBase initialCache
+    cache result hmem ⟨_, hkey⟩
+  rw [Concrete.treeNode] at htree ⊢
+  exact RunsBelow.node_subtree _ _ levels node.val cache treeHeight hlevels htree
 
 /-- Every top subtree runs inside key generation's honest computation. -/
 theorem honestKeygen_runsBelow_topTreeNode
@@ -304,11 +240,12 @@ theorem honestKeygen_runsBelow_topTreeNode
     (levels : Nat) (node : TopNode) (hlevels : levels ≤ treeHeight)
     (hnode : node.val < 2 ^ (treeHeight - levels)) :
     RunsBelow (Concrete.topTreeNode parameter topSecret levels node : OracleComp HashSpec Digest)
-      cache :=
-  RunsBelow.topTreeNode_subtree parameter topSecret levels node cache treeHeight Concrete.rootNode
-    (by simp [Concrete.rootNode, topLifetime]) hlevels
-    (by simp [Concrete.rootNode, Nat.div_eq_of_lt hnode])
-    (honestKeygen_runsBelow_topTree parameter secret topSecret topBase initialCache cache result hmem)
+      cache := by
+  have htree := honestKeygen_runsBelow_topTree parameter secret topSecret topBase initialCache cache
+    result hmem
+  rw [Concrete.topTreeNode] at htree ⊢
+  refine RunsBelow.node_subtree _ _ levels node.val cache treeHeight hlevels ?_
+  simpa [Concrete.rootNode, Nat.div_eq_of_lt hnode] using htree
 
 /-- Every bottom chain walk from its start runs inside key generation's honest computation. -/
 theorem honestKeygen_runsBelow_chainWalk
@@ -341,7 +278,7 @@ theorem honestKeygen_runsBelow_topChainWalk
       OracleComp HashSpec Digest) cache := by
   obtain ⟨beforeCache, afterCache, leaf, hleaf, hafter⟩ :=
     honestKeygen_runsBelow_topTreeNode hmem 0 key (by omega) (by rw [Nat.sub_zero]; exact key.isLt)
-  rw [Concrete.topTreeNode, Concrete.topLeafAt] at hleaf
+  rw [Concrete.topTreeNode_zero_eq, Concrete.topLeafAt] at hleaf
   obtain ⟨endpoints, endpointsCache, hendpoints, _, hendpointsLe⟩ := runsBelow_bind_left hleaf
   unfold Concrete.topOneTimePublicKey at hendpoints
   exact RunsBelow.topChainWalk_prefix parameter key chain 0 (topSecret key chain) cache

@@ -115,7 +115,7 @@ theorem Concrete.keygen_cache_has_keyLeafInput
       obtain ⟨beforeCache, afterCache, value, hrun, hafter⟩ :=
         Concrete.CacheReplay.honestKeygen_runsBelow_topTreeNode hroot 0 key (by omega)
           (by rw [Nat.sub_zero]; exact key.isLt)
-      rw [Concrete.topTreeNode, Concrete.topLeafAt] at hrun
+      rw [Concrete.topTreeNode_zero_eq, Concrete.topLeafAt] at hrun
       obtain ⟨endpoints, middleCache, hendpoints, hleaf, hmiddleLe⟩ :=
         Concrete.CacheReplay.runsBelow_bind_left hrun
       obtain ⟨output, hcached, _⟩ := Concrete.CacheReplay.tweakableHash_query_cached parameter

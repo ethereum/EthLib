@@ -107,13 +107,25 @@ def leafHash (parameter : PublicParameter) (leafIndex : LeafIndex)
   toDigest <$> EthLib.Cryptography.Xmss.otsLeafHash queryH (ofParam parameter) .bottom
     (ofLeafIndex leafIndex) (ofChains endpoints)
 
+/-- The number of leaves of a layer's tree, which bounds every node index on it. -/
+def layerLeaves : EthLib.Cryptography.Xmss.Layer → Nat
+  | .bottom => lifetime
+  | .top => topLifetime
+
 /-- The node at position `(level, j)` of a layer's tree, from its two children.
 
-It is EthLib's node hash, and its level is the parent's, from 1 to 16. -/
-def nodeAt (parameter : PublicParameter) (layer : EthLib.Cryptography.Xmss.Layer) (level j : Nat)
-    (left right : Digest) : m Digest :=
-  toDigest <$> EthLib.Cryptography.Xmss.nodeHash queryH (ofParam parameter) layer level j
-    (ofDigest left) (ofDigest right)
+Its level is the parent's, from 1 to 16, and its index is reduced modulo the layer's leaves.
+
+There it is EthLib's node hash, and elsewhere it is 0. -/
+def nodeAt (parameter : PublicParameter) (layer : EthLib.Cryptography.Xmss.Layer) :
+    (level j : Nat) → (left right : Digest) → m Digest
+  | level + 1, j, left, right =>
+      if level < treeHeight then
+        toDigest <$> EthLib.Cryptography.Xmss.nodeHash queryH (ofParam parameter) layer
+          (level + 1) (j % layerLeaves layer) (ofDigest left) (ofDigest right)
+      else
+        pure 0
+  | 0, _, _, _ => pure 0
 
 /-- `X_{level+1,node}` from its two children: EthLib's bottom node hash. -/
 def nodeHash (parameter : PublicParameter) (level : MerkleLevel) (node : MerkleNode)
@@ -245,16 +257,10 @@ def childNode (node : MerkleNode) (right : Bool) : MerkleNode :=
   merkleNodeOfNat (2 * node.val + if right then 1 else 0)
 
 /-- `X_{levels,node}`, the Merkle tree over the one-time leaves. -/
-def treeNode (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest) :
-    Nat → MerkleNode → m Digest
-  | 0, node => leafAt parameter secret node
-  | levels + 1, node => do
-      let left ← treeNode parameter secret levels (childNode node false)
-      let right ← treeNode parameter secret levels (childNode node true)
-      if hlevel : levels < treeHeight then
-        nodeHash parameter ⟨levels, hlevel⟩ node left right
-      else
-        pure 0
+def treeNode (parameter : PublicParameter) (secret : LeafIndex → ChainIndex → Digest)
+    (levels : Nat) (node : MerkleNode) : m Digest :=
+  EthLib.Cryptography.Merkle.node (nodeAt parameter .bottom)
+    (fun j => leafAt parameter secret (merkleNodeOfNat j)) levels node.val
 
 /-- The root of bottom tree `b`: node `b` of level `h`. -/
 def bottomRootNode (key : TopIndex) : MerkleNode :=
@@ -275,20 +281,20 @@ def topLeafAt (parameter : PublicParameter) (topSecret : TopIndex → ChainIndex
 def topNodeOfNat (value : Nat) : TopNode :=
   ⟨value % topLifetime, Nat.mod_lt _ (by simp [topLifetime])⟩
 
+/-- The address of node `j` above `level` in a layer's tree, with `j` reduced modulo its nodes. -/
+def nodeDomain : EthLib.Cryptography.Xmss.Layer → MerkleLevel → Nat → HashDomain
+  | .bottom, level, j => .merkle level (merkleNodeOfNat j)
+  | .top, level, j => .topMerkle level (topNodeOfNat j)
+
 def topChildNode (node : TopNode) (right : Bool) : TopNode :=
   topNodeOfNat (2 * node.val + if right then 1 else 0)
 
 /-- `X_{levels,node}` of the top tree. -/
-def topTreeNode (parameter : PublicParameter) (topSecret : TopIndex → ChainIndex → Digest) :
-    Nat → TopNode → m Digest
-  | 0, node => topLeafAt parameter topSecret node
-  | levels + 1, node => do
-      let left ← topTreeNode parameter topSecret levels (topChildNode node false)
-      let right ← topTreeNode parameter topSecret levels (topChildNode node true)
-      if hlevel : levels < treeHeight then
-        topNodeHash parameter ⟨levels, hlevel⟩ node left right
-      else
-        pure 0
+def topTreeNode (parameter : PublicParameter) (topSecret : TopIndex → ChainIndex → Digest)
+    (levels : Nat) (node : TopNode) : m Digest :=
+  EthLib.Cryptography.Merkle.node (nodeAt parameter .top)
+    (fun j => topLeafAt parameter topSecret (topNodeOfNat j)) levels node.val
+
 
 /-- The public root is node `0` of the top tree's level `h`. -/
 def rootNode : TopNode :=

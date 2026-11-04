@@ -359,7 +359,8 @@ theorem nodeHash_bottom (P : XmssSecurity.PublicParameter) (level : XmssSecurity
     (node : XmssSecurity.MerkleNode) (left right : XmssSecurity.Digest) :
     nodeHash (queryH (m := m)) (ofParam P) .bottom (level.val + 1) node.val (ofDigest left) (ofDigest right)
       = ofDigest <$> XmssSecurity.Concrete.nodeHash (m := m) P level node left right := by
-  rw [XmssSecurity.Concrete.nodeHash, XmssSecurity.Concrete.nodeAt, map_ofDigest_toDigest]
+  simp [XmssSecurity.Concrete.nodeHash, XmssSecurity.Concrete.nodeAt, level.isLt,
+    XmssSecurity.Concrete.layerLeaves, Nat.mod_eq_of_lt node.isLt]
 
 /-- A top node, from its two children.
 
@@ -388,7 +389,8 @@ theorem nodeHash_top (P : XmssSecurity.PublicParameter) (level : XmssSecurity.Me
     (node : XmssSecurity.TopNode) (left right : XmssSecurity.Digest) :
     nodeHash (queryH (m := m)) (ofParam P) .top (level.val + 1) node.val (ofDigest left) (ofDigest right)
       = ofDigest <$> XmssSecurity.Concrete.topNodeHash (m := m) P level node left right := by
-  rw [XmssSecurity.Concrete.topNodeHash, XmssSecurity.Concrete.nodeAt, map_ofDigest_toDigest]
+  simp [XmssSecurity.Concrete.topNodeHash, XmssSecurity.Concrete.nodeAt, level.isLt,
+    XmssSecurity.Concrete.layerLeaves, Nat.mod_eq_of_lt node.isLt]
 
 /-! ## The model's hashes
 
@@ -427,8 +429,8 @@ theorem _root_.XmssSecurity.Concrete.nodeHash_eq (P : XmssSecurity.PublicParamet
     XmssSecurity.Concrete.nodeHash (m := m) P level node left right
       = XmssSecurity.Concrete.tweakableHash P (.merkle level node)
           (XmssSecurity.Concrete.nodePayload left right) := by
-  rw [XmssSecurity.Concrete.nodeHash, XmssSecurity.Concrete.nodeAt, nodeHash_bottom_tweakable,
-    map_toDigest_ofDigest]
+  rw [← map_toDigest_ofDigest (XmssSecurity.Concrete.nodeHash P level node left right),
+    ← nodeHash_bottom, nodeHash_bottom_tweakable, map_toDigest_ofDigest]
 
 theorem _root_.XmssSecurity.Concrete.topEncodingHash_eq (P : XmssSecurity.PublicParameter)
     (key : XmssSecurity.TopIndex) (root : XmssSecurity.Digest) (rho : XmssSecurity.Randomness) :
@@ -461,13 +463,53 @@ theorem _root_.XmssSecurity.Concrete.topNodeHash_eq (P : XmssSecurity.PublicPara
     XmssSecurity.Concrete.topNodeHash (m := m) P level node left right
       = XmssSecurity.Concrete.tweakableHash P (.topMerkle level node)
           (XmssSecurity.Concrete.nodePayload left right) := by
-  rw [XmssSecurity.Concrete.topNodeHash, XmssSecurity.Concrete.nodeAt, nodeHash_top_tweakable,
-    map_toDigest_ofDigest]
+  rw [← map_toDigest_ofDigest (XmssSecurity.Concrete.topNodeHash P level node left right),
+    ← nodeHash_top, nodeHash_top_tweakable, map_toDigest_ofDigest]
+
+/-- A node of a layer's tree is a tweakable hash at its address. -/
+theorem _root_.XmssSecurity.Concrete.nodeAt_eq (P : XmssSecurity.PublicParameter) (layer : Layer)
+    (level : XmssSecurity.MerkleLevel) (j : Nat) (left right : XmssSecurity.Digest) :
+    XmssSecurity.Concrete.nodeAt (m := m) P layer (level.val + 1) j left right
+      = XmssSecurity.Concrete.tweakableHash P (XmssSecurity.Concrete.nodeDomain layer level j)
+          (XmssSecurity.Concrete.nodePayload left right) := by
+  -- The node hash reads its index modulo the layer's leaves, as the address does.
+  have hmod : XmssSecurity.Concrete.nodeAt (m := m) P layer (level.val + 1) j
+      = XmssSecurity.Concrete.nodeAt P layer (level.val + 1)
+          (j % XmssSecurity.Concrete.layerLeaves layer) := by
+    funext left right
+    simp [XmssSecurity.Concrete.nodeAt]
+  rw [hmod]
+  cases layer
+  · exact XmssSecurity.Concrete.nodeHash_eq P level (XmssSecurity.Concrete.merkleNodeOfNat j) _ _
+  · exact XmssSecurity.Concrete.topNodeHash_eq P level (XmssSecurity.Concrete.topNodeOfNat j) _ _
 
 /-! ## Climbing a path -/
 
+omit [LawfulMonad m] in
+/-- From a node index of a layer, a climb with EthLib's node hash is the model's climb.
+
+The climb only hashes at levels 1 to 16 and at indices of the layer, where the two agree. -/
+theorem climb_nodeAt (P : XmssSecurity.PublicParameter) (layer : Layer) :
+    ∀ (siblings : List XmssSecurity.Digest) (level j : Nat) (current : XmssSecurity.Digest),
+      level + siblings.length ≤ XmssSecurity.treeHeight →
+        j < XmssSecurity.Concrete.layerLeaves layer →
+      Merkle.climb (fun level j left right => toDigest <$>
+          nodeHash (queryH (m := m)) (ofParam P) layer level j (ofDigest left) (ofDigest right))
+          level j current siblings
+        = Merkle.climb (XmssSecurity.Concrete.nodeAt (m := m) P layer) level j current siblings
+  | [], _, _, _, _, _ => rfl
+  | _ :: rest, level, j, current, hlength, hj => by
+    have hlevel : level < XmssSecurity.treeHeight := by simp at hlength; omega
+    have hhalf : j / 2 < XmssSecurity.Concrete.layerLeaves layer :=
+      (Nat.div_le_self j 2).trans_lt hj
+    simp only [Merkle.climb, XmssSecurity.Concrete.nodeAt, hlevel, ↓reduceIte,
+      Nat.mod_eq_of_lt hhalf]
+    exact congrArg _ (funext fun parent =>
+      climb_nodeAt P layer rest (level + 1) (j / 2) parent (by simp at hlength; omega) hhalf)
+
 /-- EthLib's fold of a path is the model's climb of it, on the bytes of the model's values. -/
 theorem fold_eq (P : XmssSecurity.PublicParameter) (layer : Layer) (e : Nat)
+    (he : e < XmssSecurity.Concrete.layerLeaves layer)
     (path : Fin XmssSecurity.treeHeight → XmssSecurity.Digest) (leaf : XmssSecurity.Digest) :
     fold (queryH (m := m)) (ofParam P) layer e (ofDigest leaf) (ofPath path)
       = ofDigest <$> Merkle.climb (XmssSecurity.Concrete.nodeAt (m := m) P layer) 0 e leaf
@@ -475,8 +517,9 @@ theorem fold_eq (P : XmssSecurity.PublicParameter) (layer : Layer) (e : Nat)
   have hpath : (ofPath path).toList = (List.ofFn path).map ofDigest := by
     simp [ofPath, List.map_ofFn, Function.comp_def]
     rfl
-  rw [fold, hpath]
-  exact Merkle.climb_map _ _ ofDigest (fun _ _ _ _ => (map_ofDigest_toDigest _).symm) _ _ _ _
+  rw [fold, hpath, Merkle.climb_map _ _ ofDigest (fun _ _ _ _ => (map_ofDigest_toDigest _).symm),
+    climb_nodeAt P layer _ 0 e leaf (by simp) he]
+
 
 /-! ## A layer's root -/
 
@@ -584,7 +627,7 @@ theorem layerRoot_top (P : XmssSecurity.PublicParameter) (key : XmssSecurity.Top
       otsLeafHash_top, bind_map_left]
     refine bind_congr fun leaf => ?_
     simp only [pure_bind]
-    rw [fold_eq]
+    rw [fold_eq P .top key.val key.isLt]
     simp
 
 /-- Two digests are equal exactly when their bytes are. -/
@@ -639,7 +682,7 @@ theorem _root_.XmssSecurity.Concrete.verifyAfterLeaf_eq (pk : XmssSecurity.Publi
         (List.ofFn σ.authPath)
       XmssSecurity.Concrete.verifyTop pk (XmssSecurity.topKeyOf idx) root σ.top) := by
   unfold XmssSecurity.Concrete.verifyAfterLeaf
-  rw [fold_eq, bind_map_left]
+  rw [fold_eq pk.parameter .bottom idx.val idx.isLt, bind_map_left]
   simp only [toDigest_ofDigest]
 
 /-- `Ver(pk, idx, m, sigma)`, in the model's routines.

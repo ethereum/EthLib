@@ -18,7 +18,8 @@ A collision sits at the level of its parent, from 1 to 16, as the shared search 
 namespace XmssSecurity.Merkle
 
 open EthLib.Cryptography.Merkle (Collision climb climb_binding climb_take_succ div_two_div_pow
-  findCollision findCollision_valid ordered)
+  climb_siblings findCollision findCollision_valid node node_zero ofFn_take_siblings ordered
+  ordered_sibling)
 
 variable {α : Type} (hash : Nat → Nat → α → α → Id α)
 
@@ -44,6 +45,34 @@ theorem climb_take_succ_run (j : Nat) (path : Fin treeHeight → α) (leaf : α)
   rw [climb_take_succ hash j leaf _ level.val (by simp), pairAt, hparent]
   unfold ordered
   split <;> simp
+
+section Honest
+
+variable (leaves : Nat → Id α)
+
+/-- The honest path of leaf `j` climbs to the leaf's ancestor on each level.
+
+Its sibling on level `l` is node `floor(j / 2^l) xor 1`. -/
+theorem climb_honest (j : Nat) :
+    ∀ n, n ≤ treeHeight →
+      (climb hash 0 j (leaves j).run ((List.ofFn fun level : Fin treeHeight =>
+          (node hash leaves level ((j / 2 ^ level.val) ^^^ 1)).run).take n)).run =
+        (node hash leaves n (j / 2 ^ n)).run := fun n hn => by
+  -- The honest siblings are the shared tree's siblings, which climb to the ancestor.
+  rw [ofFn_take_siblings hash leaves j treeHeight n hn]
+  simpa [node_zero] using climb_siblings hash leaves n 0 j
+
+/-- The pair the honest path of leaf `j` hashes above `level` is the next ancestor's children. -/
+theorem pairAt_honest (j : Nat) (level : Fin treeHeight) :
+    pairAt hash j (fun level => (node hash leaves level ((j / 2 ^ level.val) ^^^ 1)).run)
+        (leaves j).run level =
+      ((node hash leaves level (2 * (j / 2 ^ (level.val + 1)))).run,
+        (node hash leaves level (2 * (j / 2 ^ (level.val + 1)) + 1)).run) := by
+  rw [pairAt, climb_honest hash leaves j level.val level.isLt.le,
+    ordered_sibling (fun i => (node hash leaves level i).run), Nat.pow_succ,
+    ← Nat.div_div_eq_div_mul]
+
+end Honest
 
 /-- A collision found with its parent on level `level + 1` is between the pairs of `level`.
 
