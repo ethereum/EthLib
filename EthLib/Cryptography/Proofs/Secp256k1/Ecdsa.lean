@@ -25,7 +25,7 @@ namespace Ecdsa
 open Point
 
 /-- The point the verifier rebuilds, in the group: `u1 G + u2 Q`. -/
-private theorem toPoint_rebuilt (u1 u2 : Fn) {q : Point} (hq : q.isOnCurve = true) :
+theorem toPoint_rebuilt (u1 u2 : Fn) {q : Point} (hq : q.isOnCurve = true) :
     toPoint (mul u1 generator + mul u2 q) = Fn.toZMod u1 • toPoint generator + Fn.toZMod u2 • toPoint q := by
   rw [toPoint_add (isOnCurve_mul _ isOnCurve_generator) (isOnCurve_mul _ hq), toPoint_mul' _ isOnCurve_generator,
     toPoint_mul' _ hq]
