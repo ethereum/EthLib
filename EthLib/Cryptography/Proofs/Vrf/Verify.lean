@@ -133,7 +133,9 @@ theorem verify_secret_unique {root : Digest} {i : UInt32} {o o' : Opening} {y y'
   obtain ⟨p, hp⟩ := Option.isSome_iff_exists.mp hsome
   exact ⟨p, hp, findHashCollision_valid hp⟩
 
-/-- Uniqueness: two openings that verify at one index under one root give one output, or `findHashCollision` returns a collision of Keccak-256. -/
+/-- Uniqueness: two openings that verify at one index under one root give one output, or `findHashCollision` returns a collision of Keccak-256.
+
+For a Merkle tree, the same property is usually called position binding: one index under one root opens to one leaf (`verify_secret_unique`). -/
 theorem verify_unique {root : Digest} {i : UInt32} {o o' : Opening} {y y' : Digest}
     (h : verify root i o = some y) (h' : verify root i o' = some y') :
     y = y' ∨ ∃ p, findHashCollision i o o' = some p ∧ IsHashCollision p := by

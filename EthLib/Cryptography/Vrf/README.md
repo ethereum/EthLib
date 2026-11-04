@@ -53,10 +53,14 @@ The opening of an honest tree at index `i` verifies, and gives the output of sec
 
 *Uniqueness* says that the holder cannot convince a verifier of two different outputs.
 Two openings that verify at one index under one root give the same output, or `findHashCollision` returns two different inputs with one Keccak-256 hash (`verify_unique`, `Verify.lean`).
-Such inputs exist for every hash with 32-byte outputs, so the theorem names the ones these two openings hash.
-The search reads only the index and the two openings.
 Uniqueness holds for every root, including one the holder built to cheat.
 Against an honest tree, every valid opening gives the honest output, or `findHashCollision` returns a collision with the honest opening (`verify_root_unique`).
+
+Every hash with 32-byte outputs has collisions, so the theorem names the one these two openings hash.
+The search reads only the index and the two openings.
+It is an efficient algorithm, so the theorem is a security reduction: whoever finds two outputs at one index also finds a Keccak-256 collision.
+The search makes at most 68 Keccak-256 calls, no more than verifying the two openings.
+The count is read from the definitions, and no theorem proves it.
 
 The third statement says exactly what verification checks.
 An opening verifies if and only if its path leads from its leaf to the root, and its output is the hash of its secret (`verify_eq_some_iff`).
