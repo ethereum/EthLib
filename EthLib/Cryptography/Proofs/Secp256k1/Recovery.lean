@@ -176,11 +176,7 @@ theorem recover_sign (d k : Fn) (hash : Vector UInt8 32) (hd : d ≠ 0) {x y : F
   have hG := isOnCurve_generator
   have hrr : 0 < x.val ∧ x.val < Fn.modulus := ⟨Nat.pos_of_ne_zero hx0, hx⟩
   have hss : 0 < sig.val ∧ sig.val < Fn.modulus := ⟨Nat.pos_of_ne_zero (fun h => hs (Fin.ext h)), sig.isLt⟩
-  have hk : k ≠ 0 := by
-    rintro rfl
-    apply hs
-    apply Fn.toZMod.injective
-    rw [hsig, map_mul, Fn.toZMod_inv, map_zero, inv_zero, zero_mul]
+  have hk : k ≠ 0 := ne_zero_of_inv_mul_ne_zero hs
   -- `R` is the point with `x` and the parity of `y`.
   have hxx : (Fin.ofNat _ x.val : Fp) = x := Fin.ext (Nat.mod_eq_of_lt x.isLt)
   have hd' : decompress (Fin.ofNat _ x.val) (parityId y == 1) = .ok (.affine x y) := by
