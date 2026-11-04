@@ -73,6 +73,12 @@ def test_repeated_key_rejected() -> None:
         enr.seq(_record([PAIRS[0], PAIRS[1], PAIRS[1], PAIRS[2], PAIRS[3]]))
 
 
+def test_missing_id_rejected() -> None:
+    # The key `id` is the one key that every record must have.
+    with pytest.raises(ValueError, match="record has no id"):
+        enr.seq(_record(PAIRS[1:]))
+
+
 def test_too_large_rejected() -> None:
     record = _record(PAIRS)
     with pytest.raises(ValueError):

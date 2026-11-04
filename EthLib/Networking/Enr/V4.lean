@@ -33,9 +33,6 @@ open EthLib.Serialization.Rlp
 open EthLib.Cryptography
 open EthLib.Cryptography.Secp256k1
 
-/-- The key `id`, in ASCII. -/
-def KEY_ID : ByteArray := ⟨#[0x69, 0x64]⟩
-
 /-- The name of the scheme, `v4`, in ASCII. -/
 def SCHEME_V4 : ByteArray := ⟨#[0x76, 0x34]⟩
 
