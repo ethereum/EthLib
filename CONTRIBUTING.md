@@ -351,6 +351,11 @@ The first run downloads each archive that the tests name, and checks its size an
 Each test then unpacks only the paths that it reads.
 The `vectors-slow` workflow runs these tests every Monday.
 
+The parity tests in `bindings/python/tests/parity` are archive tests too.
+They run every case of execution-spec-tests and consensus-spec-tests at the forks in scope.
+A case passes, fails, waits for a runner, or disagrees for a reason listed in `tests/parity/disagreements.toml`.
+Set `ETHLIB_PARITY_REPORT` to a file name to get the report of these outcomes for each fork and runner.
+
 Report what you ran and what it printed.
 If you skipped a check, say so.
 
