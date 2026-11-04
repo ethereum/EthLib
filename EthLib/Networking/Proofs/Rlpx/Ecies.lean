@@ -160,6 +160,21 @@ theorem decrypt_wrong_tag {key ephemeral : Fn} {iv : Aes.Block} {sharedMac m bod
     ((ecdh_comm _ _).trans hs) hkeys _ _ _ _ hd']
   simp [hne']
 
+/-- A ciphertext is its message and the 113 bytes of `R`, `iv` and `d`. -/
+theorem size_encrypt {key ephemeral : Fn} {iv : Aes.Block} {sharedMac m c : ByteArray}
+    (h : encrypt (mul key generator) ephemeral iv sharedMac m = .ok c) :
+    c.size = m.size + OVERHEAD := by
+  obtain ⟨secret, encKey, macKey, hs, -, rfl⟩ := encrypt_eq_ok h
+  have hR : (mul ephemeral generator).encodeUncompressed.size = EPHEMERAL_KEY_SIZE := by
+    cases hm : mul ephemeral generator with
+    | infinity => exact absurd hm (ephemeral_ne_infinity hs)
+    | affine x y => exact size_encodeUncompressed x y
+  have hiv : (⟨iv.toArray⟩ : ByteArray).size = IV_SIZE := by simp [ByteArray.size, IV_SIZE]
+  rw [ByteArray.size_append, ByteArray.size_append, ByteArray.size_append, hR, hiv, size_tag,
+    cipher, Aes.size_ctr]
+  simp only [OVERHEAD]
+  omega
+
 /-! ## Error codes -/
 
 section
@@ -173,6 +188,11 @@ theorem _root_.EthLib.Networking.Rlpx.Ecies.EciesError.code_injective
   -- Two distinct constructors have two distinct literal codes, which `decide` separates.
   cases e₁ <;> cases e₂ <;>
     first | rfl | (simp only [EciesError.code] at h; exact absurd h (by decide))
+
+/-- Every code of an ECIES error is from 1 to 5. -/
+theorem _root_.EthLib.Networking.Rlpx.Ecies.EciesError.code_le (e : EciesError) :
+    1 ≤ e.code.toNat ∧ e.code.toNat ≤ 5 := by
+  cases e <;> simp only [EciesError.code] <;> decide
 
 end
 

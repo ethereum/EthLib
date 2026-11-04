@@ -1,9 +1,8 @@
-"""The RLPx handshake test vectors of EIP-8, and a reference secp256k1 key derivation.
+"""The RLPx handshake test vectors of EIP-8, and a reference secp256k1."""
 
-The keys, nonces and packets come from "Test Vectors", "RLPx Handshake", in EIP-8, at
-commit 0ce679f4654ba4d120c97113626f320475e22fa9 of ethereum/EIPs, under CC0-1.0.
-Node A initiates the connection, and node B accepts it.
-"""
+# The keys, nonces, packets and secrets come from "Test Vectors", "RLPx Handshake", in EIP-8,
+# at commit 0ce679f4654ba4d120c97113626f320475e22fa9 of ethereum/EIPs, under CC0-1.0.
+# Node A initiates the connection, and node B accepts it.
 
 
 def _hex(text: str) -> bytes:
@@ -103,6 +102,14 @@ c8c2c5098dbdd28fca547b3f58c01a424ac05f869f49c6a34672ea2cbbc558428aa1fe48bbfd6115
 39a2336a61ef9fda549180d4ccde21514d117b6c6fd07a9102b5efe710a32af4eeacae2cb3b1dec0
 35b9593b48b9d3ca4c13d245d5f04169b0b1
 """)
+
+# The secrets that node B derives for (Auth₂, Ack₂).
+AES_SECRET = _hex("80e8632c05fed6fc2a13b0f8d31a3cf645366239170ea067065aba8e28bac487")
+MAC_SECRET = _hex("2ea74ec5dae199227dff1af715362700e989d889d7a493cb0639691efb8e5f98")
+
+# The digest of B's ingress MAC state after it absorbs "foo".
+INGRESS_MAC_FOO = _hex("0c7ec6340062cc46f5e9f1e3cf86f8c8c403c5a0964f5df0ebd34a75ddc86db5")
+
 
 # A reference secp256k1, from SEC 2 v2 §2.4.1, independent of the code under test.
 P = 2**256 - 2**32 - 977

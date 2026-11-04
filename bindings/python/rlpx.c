@@ -21,6 +21,49 @@ eth_rlpx_ecies_decrypt(
   lean_object* ciphertext
 );
 
+extern lean_object*
+eth_rlpx_make_auth(
+  lean_object* static_key,
+  lean_object* ephemeral_key,
+  lean_object* nonce,
+  lean_object* recipient,
+  lean_object* r,
+  lean_object* iv,
+  lean_object* padding
+);
+
+extern lean_object*
+eth_rlpx_respond(
+  lean_object* static_key,
+  lean_object* ephemeral_key,
+  lean_object* nonce,
+  lean_object* r,
+  lean_object* iv,
+  lean_object* padding,
+  lean_object* auth,
+  lean_object* probe
+);
+
+extern lean_object*
+eth_rlpx_recipient_secrets(
+  lean_object* static_key,
+  lean_object* ephemeral_key,
+  lean_object* nonce,
+  lean_object* auth,
+  lean_object* ack,
+  lean_object* probe
+);
+
+extern lean_object*
+eth_rlpx_finish(
+  lean_object* static_key,
+  lean_object* ephemeral_key,
+  lean_object* nonce,
+  lean_object* auth,
+  lean_object* ack,
+  lean_object* probe
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* Parse `n` arguments that must all be `bytes` into Lean byte arrays.
@@ -69,4 +112,47 @@ py_rlpx_ecies_decrypt(
   lean_object* a[3];
   if (!parse_bytes_args(args, 3, a)) return NULL;
   return except_into_pybytes(eth_rlpx_ecies_decrypt(a[0], a[1], a[2]), RLPX_ERROR);
+}
+
+PyObject*
+py_rlpx_make_auth(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[7];
+  if (!parse_bytes_args(args, 7, a)) return NULL;
+  lean_object* res = eth_rlpx_make_auth(a[0], a[1], a[2], a[3], a[4], a[5], a[6]);
+  return except_into_pybytes(res, RLPX_ERROR);
+}
+
+PyObject*
+py_rlpx_respond(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[8];
+  if (!parse_bytes_args(args, 8, a)) return NULL;
+  lean_object* res = eth_rlpx_respond(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]);
+  return except_into_pybytes(res, RLPX_ERROR);
+}
+
+PyObject*
+py_rlpx_recipient_secrets(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[6];
+  if (!parse_bytes_args(args, 6, a)) return NULL;
+  lean_object* res = eth_rlpx_recipient_secrets(a[0], a[1], a[2], a[3], a[4], a[5]);
+  return except_into_pybytes(res, RLPX_ERROR);
+}
+
+PyObject*
+py_rlpx_finish(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[6];
+  if (!parse_bytes_args(args, 6, a)) return NULL;
+  return except_into_pybytes(eth_rlpx_finish(a[0], a[1], a[2], a[3], a[4], a[5]), RLPX_ERROR);
 }

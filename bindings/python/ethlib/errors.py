@@ -119,7 +119,10 @@ class Discv5Error(EthLibError, ValueError):
 
 
 class RlpxError(EthLibError, ValueError):
-    """ECIES rejected its input, or a key or an iv of the binding was rejected with code 0."""
+    """ECIES or the RLPx handshake rejected its input.
+
+    ECIES errors have codes from 1, handshake errors codes from 101, and a bad argument code 0.
+    """
 
 
 class TransactionError(EthLibError, ValueError):
