@@ -402,27 +402,11 @@ theorem Concrete.precomputedKeygen_topTreeNode_eq_of_cache_le
         keyResult.1.2.topChainStart levels node =
       Concrete.CacheReplay.topTreeNode largerCache keyResult.1.2.parameter
         keyResult.1.2.topChainStart levels node := by
-  induction levels generalizing node with
-  | zero =>
-      obtain ⟨output, hcached⟩ :=
-        Concrete.precomputedKeygen_cache_has_topLeafInput keyResult hmem node
-      rw [Concrete.CacheReplay.topTreeNode_zero_eq, Concrete.CacheReplay.topTreeNode_zero_eq]
-      unfold Concrete.CacheReplay.topLeafAt Concrete.CacheView.topLeafHash
-      rw [← Concrete.precomputedKeygen_topOneTimePublicKey_eq_of_cache_le keyResult hmem
-          largerCache hle node,
-        Concrete.CacheView.digestAt_eq_of_cache_eq_some hcached,
-        Concrete.CacheView.digestAt_eq_of_cache_eq_some (hle hcached)]
-  | succ levels ih =>
-      have hlevel : levels < treeHeight := by omega
-      have hchild := fun right => Concrete.topChildNode_lt levels node hnode hlevel right
-      rw [Concrete.CacheReplay.topTreeNode_succ_eq, Concrete.CacheReplay.topTreeNode_succ_eq,
-        dite_eq_left hlevel, dite_eq_left hlevel]
-      obtain ⟨output, hcached⟩ := Concrete.precomputedKeygen_cache_has_topMerkleInput keyResult
-        hmem ⟨levels, hlevel⟩ node hnode
-      unfold Concrete.CacheView.topMerkleHash
-      rw [← ih (by omega) _ (hchild false), ← ih (by omega) _ (hchild true),
-        Concrete.CacheView.digestAt_eq_of_cache_eq_some hcached,
-        Concrete.CacheView.digestAt_eq_of_cache_eq_some (hle hcached)]
+  -- The node runs inside key generation, so a larger cache replays it alike.
+  obtain ⟨topBase, result, _, hrun⟩ := Concrete.precomputedKeygen_honestRun keyResult hmem
+  have heval := (Concrete.CacheReplay.honestKeygen_runsBelow_topTreeNode hrun levels node hlevels
+    hnode).eval_eq largerCache hle
+  rwa [Concrete.CacheReplay.eval_topTreeNode, Concrete.CacheReplay.eval_topTreeNode] at heval
 
 /-! ### Top message digests -/
 

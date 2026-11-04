@@ -252,103 +252,69 @@ theorem ofNat_topNodeOfNat {j : Nat} (hj : j < 2 ^ 16) :
   simp [Concrete.topNodeOfNat, topLifetime, treeHeight, Nat.mod_eq_of_lt (show j < 65536 by omega),
     Nat.mod_eq_of_lt (show j < 4294967296 by omega)]
 
-/-- A bottom node from `S` is the model's with its derivations erased. -/
-theorem erases_node_bottom (seed : MasterSeed) (d : Derivations) :
-    ∀ (level : Nat), level ≤ LAYER_HEIGHT → ∀ (j : Nat), j < 2 ^ (32 - level) →
-      Erases (progCache seed d) (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .bottom
+/-- A node of a layer from `S` is the model's with its derivations erased, when its leaves are.
+
+The hypothesis covers the first `2^bits` leaves, and the layer has at least that many leaves. -/
+theorem erases_node (seed : MasterSeed) (d : Derivations) (layer : Xmss.Layer) (bits : Nat)
+    (hheight : LAYER_HEIGHT ≤ bits) (hbits : 2 ^ bits ≤ Concrete.layerLeaves layer)
+    (leaves : Nat → OracleComp HashSpec Digest)
+    (hleaves : ∀ j < 2 ^ bits, Erases (progCache seed d)
+      (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) layer 0 j :
+        OracleComp HashSpec Xmss.Digest) (ofDigest <$> leaves j)) :
+    ∀ (level : Nat), level ≤ LAYER_HEIGHT → ∀ (j : Nat), j < 2 ^ (bits - level) →
+      Erases (progCache seed d) (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) layer
           level j : OracleComp HashSpec Xmss.Digest)
-        (ofDigest <$> Concrete.treeNode d.parameter d.secret level (Concrete.merkleNodeOfNat j))
+        (ofDigest <$> EthLib.Cryptography.Merkle.node (Concrete.nodeAt d.parameter layer) leaves
+          level j)
   | 0, _, j, hj => by
-    rw [Xmss.node_zero, Concrete.treeNode_zero_eq, ofNat_merkleNodeOfNat (by simpa using hj),
-      ← leaf_bottom]
-    unfold Xmss.otsPublicLeaf
-    exact (erases_pure_of_resolves (chainStarts_bottom seed d _)).bind_known _ _ (.refl _ _)
+    simpa [EthLib.Cryptography.Merkle.node_zero] using hleaves j (by simpa using hj)
   | l + 1, hlevel, j, hj => by
     have hl : l + 1 ≤ 16 := hlevel
-    have hj2 : 2 * j + 1 < 2 ^ (32 - l) := by
-      rw [show 32 - l = 32 - (l + 1) + 1 by omega, pow_succ]
+    have hj2 : 2 * j + 1 < 2 ^ (bits - l) := by
+      rw [show bits - l = bits - (l + 1) + 1 by omega, pow_succ]
       omega
-    have hjlt : j < 4294967296 := by
-      have := Nat.pow_le_pow_right (show 0 < 2 by decide) (show 32 - (l + 1) ≤ 32 by omega)
-      have : (2 : Nat) ^ 32 = 4294967296 := by norm_num
-      omega
-    rw [Xmss.node_succ, Concrete.treeNode_succ_eq]
-    simp only [show l < treeHeight by simp only [treeHeight]; omega, ↓reduceDIte]
+    have hjN : j < Concrete.layerLeaves layer :=
+      (hj.trans_le (Nat.pow_le_pow_right (by decide) (Nat.sub_le _ _))).trans_le hbits
+    rw [Xmss.node_succ, EthLib.Cryptography.Merkle.node_succ]
     -- The children of node `j` are nodes `2j` and `2j + 1`, in both.
-    have hleft : Concrete.childNode (Concrete.merkleNodeOfNat j) false
-        = Concrete.merkleNodeOfNat (2 * j) := by
-      apply Fin.ext
-      simp [Concrete.childNode, Concrete.merkleNodeOfNat, lifetime, treeHeight,
-        Nat.mod_eq_of_lt hjlt]
-    have hright : Concrete.childNode (Concrete.merkleNodeOfNat j) true
-        = Concrete.merkleNodeOfNat (2 * j + 1) := by
-      apply Fin.ext
-      simp [Concrete.childNode, Concrete.merkleNodeOfNat, lifetime, treeHeight,
-        Nat.mod_eq_of_lt hjlt]
-    have hval : (Concrete.merkleNodeOfNat j).val = j := by
-      simp [Concrete.merkleNodeOfNat, lifetime, treeHeight, Nat.mod_eq_of_lt hjlt]
-    rw [hleft, hright]
-    refine Erases.trans ((erases_node_bottom seed d l (by omega) (2 * j) (by omega)).bind _ _
-      fun left => (erases_node_bottom seed d l (by omega) (2 * j + 1) hj2).bind _ _
-        fun right => .refl _ _) ?_
+    refine Erases.trans ((erases_node seed d layer bits hheight hbits leaves hleaves l (by omega)
+      (2 * j) (by omega)).bind _ _ fun left => (erases_node seed d layer bits hheight hbits leaves
+        hleaves l (by omega) (2 * j + 1) hj2).bind _ _ fun right => .refl _ _) ?_
     rw [map_bind, bind_map_left]
     refine (Erases.refl _ _).bind _ _ fun left => ?_
     rw [map_bind, bind_map_left]
     refine (Erases.refl _ _).bind _ _ fun right => ?_
-    have hnode := Xmss.Unforgeability.nodeHash_bottom (m := OracleComp HashSpec) d.parameter
-      ⟨l, by simp only [treeHeight]; omega⟩ (Concrete.merkleNodeOfNat j) left right
-    rw [hval] at hnode
-    rw [hnode]
+    -- On the tree, the model's node hash is EthLib's.
+    simp only [Concrete.nodeAt, show l < treeHeight by simp only [treeHeight]; omega, ↓reduceIte,
+      Nat.mod_eq_of_lt hjN, Xmss.Unforgeability.map_ofDigest_toDigest]
     exact .refl _ _
 
+/-- A bottom node from `S` is the model's with its derivations erased. -/
+theorem erases_node_bottom (seed : MasterSeed) (d : Derivations) (level : Nat)
+    (hlevel : level ≤ LAYER_HEIGHT) (j : Nat) (hj : j < 2 ^ (32 - level)) :
+    Erases (progCache seed d) (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .bottom
+        level j : OracleComp HashSpec Xmss.Digest)
+      (ofDigest <$> Concrete.treeNode d.parameter d.secret level (Concrete.merkleNodeOfNat j)) := by
+  have hjN : j < lifetime := hj.trans_le (Nat.pow_le_pow_right (by decide) (Nat.sub_le _ _))
+  rw [Concrete.treeNode, show (Concrete.merkleNodeOfNat j).val = j from Nat.mod_eq_of_lt hjN]
+  refine erases_node seed d .bottom 32 (by decide) le_rfl _ (fun j hj => ?_) level hlevel j hj
+  rw [Xmss.node_zero, ofNat_merkleNodeOfNat hj, ← leaf_bottom]
+  unfold Xmss.otsPublicLeaf
+  exact (erases_pure_of_resolves (chainStarts_bottom seed d _)).bind_known _ _ (.refl _ _)
+
 /-- A top node from `S` is the model's with its derivations erased. -/
-theorem erases_node_top (seed : MasterSeed) (d : Derivations) :
-    ∀ (level : Nat), level ≤ LAYER_HEIGHT → ∀ (j : Nat), j < 2 ^ (16 - level) →
-      Erases (progCache seed d) (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .top
-          level j : OracleComp HashSpec Xmss.Digest)
-        (ofDigest <$> Concrete.topTreeNode d.parameter d.topSecret level (Concrete.topNodeOfNat j))
-  | 0, _, j, hj => by
-    rw [Xmss.node_zero, Concrete.topTreeNode_zero_eq, ofNat_topNodeOfNat (by simpa using hj),
-      ← leaf_top]
-    unfold Xmss.otsPublicLeaf
-    exact (erases_pure_of_resolves (chainStarts_top seed d _)).bind_known _ _ (.refl _ _)
-  | l + 1, hlevel, j, hj => by
-    have hl : l + 1 ≤ 16 := hlevel
-    have hj2 : 2 * j + 1 < 2 ^ (16 - l) := by
-      rw [show 16 - l = 16 - (l + 1) + 1 by omega, pow_succ]
-      omega
-    have hjlt : j < 65536 := by
-      have := Nat.pow_le_pow_right (show 0 < 2 by decide) (show 16 - (l + 1) ≤ 16 by omega)
-      have : (2 : Nat) ^ 16 = 65536 := by norm_num
-      omega
-    rw [Xmss.node_succ, Concrete.topTreeNode_succ_eq]
-    simp only [show l < treeHeight by simp only [treeHeight]; omega, ↓reduceDIte]
-    -- The children of node `j` are nodes `2j` and `2j + 1`, in both.
-    have hleft : Concrete.topChildNode (Concrete.topNodeOfNat j) false
-        = Concrete.topNodeOfNat (2 * j) := by
-      apply Fin.ext
-      simp [Concrete.topChildNode, Concrete.topNodeOfNat, topLifetime, treeHeight,
-        Nat.mod_eq_of_lt hjlt]
-    have hright : Concrete.topChildNode (Concrete.topNodeOfNat j) true
-        = Concrete.topNodeOfNat (2 * j + 1) := by
-      apply Fin.ext
-      simp [Concrete.topChildNode, Concrete.topNodeOfNat, topLifetime, treeHeight,
-        Nat.mod_eq_of_lt hjlt]
-    have hval : (Concrete.topNodeOfNat j).val = j := by
-      simp [Concrete.topNodeOfNat, topLifetime, treeHeight, Nat.mod_eq_of_lt hjlt]
-    rw [hleft, hright]
-    refine Erases.trans ((erases_node_top seed d l (by omega) (2 * j) (by omega)).bind _ _
-      fun left => (erases_node_top seed d l (by omega) (2 * j + 1) hj2).bind _ _
-        fun right => .refl _ _) ?_
-    rw [map_bind, bind_map_left]
-    refine (Erases.refl _ _).bind _ _ fun left => ?_
-    rw [map_bind, bind_map_left]
-    refine (Erases.refl _ _).bind _ _ fun right => ?_
-    have hnode := Xmss.Unforgeability.nodeHash_top (m := OracleComp HashSpec) d.parameter
-      ⟨l, by simp only [treeHeight]; omega⟩ (Concrete.topNodeOfNat j) left right
-    rw [hval] at hnode
-    rw [hnode]
-    exact .refl _ _
+theorem erases_node_top (seed : MasterSeed) (d : Derivations) (level : Nat)
+    (hlevel : level ≤ LAYER_HEIGHT) (j : Nat) (hj : j < 2 ^ (16 - level)) :
+    Erases (progCache seed d) (Xmss.node queryH (ofParam d.parameter) (ofSeed seed) .top
+        level j : OracleComp HashSpec Xmss.Digest)
+      (ofDigest <$> Concrete.topTreeNode d.parameter d.topSecret level
+        (Concrete.topNodeOfNat j)) := by
+  have hjN : j < topLifetime := hj.trans_le (Nat.pow_le_pow_right (by decide) (Nat.sub_le _ _))
+  rw [Concrete.topTreeNode, show (Concrete.topNodeOfNat j).val = j from Nat.mod_eq_of_lt hjN]
+  refine erases_node seed d .top 16 (by decide) le_rfl _ (fun j hj => ?_) level hlevel j hj
+  rw [Xmss.node_zero, ofNat_topNodeOfNat hj, ← leaf_top]
+  unfold Xmss.otsPublicLeaf
+  exact (erases_pure_of_resolves (chainStarts_top seed d _)).bind_known _ _ (.refl _ _)
 
 /-! ## Under the prepared cache -/
 

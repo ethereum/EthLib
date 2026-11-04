@@ -313,81 +313,85 @@ variable (hleftWarm : ChainsWarm parameter leftStart leftWarm)
   (hrightWarm : ChainsWarm parameter rightStart rightWarm)
 include hleftWarm hrightWarm
 
-theorem relTriple_treeNode_run :
-    ∀ (levels : Nat) (node : MerkleNode) (leftCache rightCache : QueryCache HashSpec),
+omit hleftWarm hrightWarm in
+/-- Two runs of a tree from related caches stay related, when the runs of their leaves do. -/
+theorem relTriple_node_run (layer : EthLib.Cryptography.Xmss.Layer)
+    (leftLeaves rightLeaves : Nat → OracleComp HashSpec Digest)
+    (hleaves : ∀ j leftCache rightCache,
+      KeygenRunRelation parameter leftStart rightStart leftWarm rightWarm leftCache rightCache →
+      RelTriple ((simulateQ randomOracle (leftLeaves j)).run leftCache)
+        ((simulateQ randomOracle (rightLeaves j)).run rightCache)
+        (KeygenRunResult parameter leftStart rightStart leftWarm rightWarm)) :
+    ∀ (levels j : Nat) (leftCache rightCache : QueryCache HashSpec),
       KeygenRunRelation parameter leftStart rightStart leftWarm rightWarm leftCache rightCache →
       RelTriple
-        ((simulateQ randomOracle
-          (Concrete.treeNode parameter (fun leafIndex => leftStart (.inl leafIndex)) levels node :
-            OracleComp HashSpec Digest)).run leftCache)
-        ((simulateQ randomOracle
-          (Concrete.treeNode parameter (fun leafIndex => rightStart (.inl leafIndex)) levels node :
-            OracleComp HashSpec Digest)).run rightCache)
-        (KeygenRunResult parameter leftStart rightStart leftWarm rightWarm) := by
-  intro levels
-  induction levels with
-  | zero =>
-      intro node leftCache rightCache hrel
-      rw [Concrete.treeNode_zero_eq, Concrete.treeNode_zero_eq, Concrete.leafAt,
-        Concrete.leafAt, simulateQ_bind, StateT.run_bind, simulateQ_bind, StateT.run_bind,
-        hleftWarm.oneTimePublicKey_run_eq hrel.1 node,
-        hrightWarm.oneTimePublicKey_run_eq hrel.2.1 node, pure_bind, pure_bind]
-      tweakable_hashes
-      exact relTriple_keyLeafHash hrel (.inl node)
-  | succ levels ih =>
-      intro node leftCache rightCache hrel
-      rw [Concrete.treeNode_succ_eq, Concrete.treeNode_succ_eq, simulateQ_bind,
-        StateT.run_bind, simulateQ_bind, StateT.run_bind]
-      apply relTriple_bind (ih _ leftCache rightCache hrel)
+        ((simulateQ randomOracle (EthLib.Cryptography.Merkle.node (Concrete.nodeAt parameter layer)
+          leftLeaves levels j : OracleComp HashSpec Digest)).run leftCache)
+        ((simulateQ randomOracle (EthLib.Cryptography.Merkle.node (Concrete.nodeAt parameter layer)
+          rightLeaves levels j : OracleComp HashSpec Digest)).run rightCache)
+        (KeygenRunResult parameter leftStart rightStart leftWarm rightWarm)
+  | 0, j, leftCache, rightCache, hrel => hleaves j leftCache rightCache hrel
+  | levels + 1, j, leftCache, rightCache, hrel => by
+      rw [EthLib.Cryptography.Merkle.node_succ, EthLib.Cryptography.Merkle.node_succ,
+        simulateQ_bind, StateT.run_bind, simulateQ_bind, StateT.run_bind]
+      apply relTriple_bind
+        (relTriple_node_run layer leftLeaves rightLeaves hleaves levels _ leftCache rightCache hrel)
       intro leftChild rightChild hchild
       obtain ⟨hchildEq, hchildRel⟩ := hchild
       rw [simulateQ_bind, StateT.run_bind, simulateQ_bind, StateT.run_bind, hchildEq]
-      apply relTriple_bind (ih _ leftChild.2 rightChild.2 hchildRel)
+      apply relTriple_bind (relTriple_node_run layer leftLeaves rightLeaves hleaves levels _
+        leftChild.2 rightChild.2 hchildRel)
       intro leftOther rightOther hother
       obtain ⟨hotherEq, hotherRel⟩ := hother
       rw [hotherEq]
-      split
-      · tweakable_hashes
-        exact relTriple_tweakableHash_retained hotherRel (.merkle _ node) trivial _
-      · exact relTriple_pure_pure ⟨rfl, hotherRel⟩
+      -- On the tree the node hash is a tweakable hash, and off the tree it is 0.
+      by_cases hlevel : levels < treeHeight
+      · rw [show levels = (⟨levels, hlevel⟩ : MerkleLevel).val from rfl, Concrete.nodeAt_eq]
+        exact relTriple_tweakableHash_retained hotherRel _ (by cases layer <;> trivial) _
+      · simp only [Concrete.nodeAt, hlevel, ↓reduceIte]
+        exact relTriple_pure_pure ⟨rfl, hotherRel⟩
 
-theorem relTriple_topTreeNode_run :
-    ∀ (levels : Nat) (node : TopNode) (leftCache rightCache : QueryCache HashSpec),
-      KeygenRunRelation parameter leftStart rightStart leftWarm rightWarm leftCache rightCache →
-      RelTriple
-        ((simulateQ randomOracle
-          (Concrete.topTreeNode parameter (fun key => leftStart (.inr key)) levels node :
-            OracleComp HashSpec Digest)).run leftCache)
-        ((simulateQ randomOracle
-          (Concrete.topTreeNode parameter (fun key => rightStart (.inr key)) levels node :
-            OracleComp HashSpec Digest)).run rightCache)
-        (KeygenRunResult parameter leftStart rightStart leftWarm rightWarm) := by
-  intro levels
-  induction levels with
-  | zero =>
-      intro node leftCache rightCache hrel
-      rw [Concrete.topTreeNode_zero_eq, Concrete.topTreeNode_zero_eq, Concrete.topLeafAt,
-        Concrete.topLeafAt, simulateQ_bind, StateT.run_bind, simulateQ_bind, StateT.run_bind,
-        hleftWarm.topOneTimePublicKey_run_eq hrel.1 node,
-        hrightWarm.topOneTimePublicKey_run_eq hrel.2.1 node, pure_bind, pure_bind]
-      tweakable_hashes
-      exact relTriple_keyLeafHash hrel (.inr node)
-  | succ levels ih =>
-      intro node leftCache rightCache hrel
-      rw [Concrete.topTreeNode_succ_eq, Concrete.topTreeNode_succ_eq, simulateQ_bind,
-        StateT.run_bind, simulateQ_bind, StateT.run_bind]
-      apply relTriple_bind (ih _ leftCache rightCache hrel)
-      intro leftChild rightChild hchild
-      obtain ⟨hchildEq, hchildRel⟩ := hchild
-      rw [simulateQ_bind, StateT.run_bind, simulateQ_bind, StateT.run_bind, hchildEq]
-      apply relTriple_bind (ih _ leftChild.2 rightChild.2 hchildRel)
-      intro leftOther rightOther hother
-      obtain ⟨hotherEq, hotherRel⟩ := hother
-      rw [hotherEq]
-      split
-      · tweakable_hashes
-        exact relTriple_tweakableHash_retained hotherRel (.topMerkle _ node) trivial _
-      · exact relTriple_pure_pure ⟨rfl, hotherRel⟩
+theorem relTriple_treeNode_run (levels : Nat) (node : MerkleNode)
+    (leftCache rightCache : QueryCache HashSpec)
+    (hrel : KeygenRunRelation parameter leftStart rightStart leftWarm rightWarm leftCache
+      rightCache) :
+    RelTriple
+      ((simulateQ randomOracle
+        (Concrete.treeNode parameter (fun leafIndex => leftStart (.inl leafIndex)) levels node :
+          OracleComp HashSpec Digest)).run leftCache)
+      ((simulateQ randomOracle
+        (Concrete.treeNode parameter (fun leafIndex => rightStart (.inl leafIndex)) levels node :
+          OracleComp HashSpec Digest)).run rightCache)
+      (KeygenRunResult parameter leftStart rightStart leftWarm rightWarm) := by
+  rw [Concrete.treeNode, Concrete.treeNode]
+  refine relTriple_node_run .bottom _ _ (fun j leftCache rightCache hrel => ?_) levels node.val
+    leftCache rightCache hrel
+  rw [Concrete.leafAt, Concrete.leafAt, simulateQ_bind, StateT.run_bind, simulateQ_bind,
+    StateT.run_bind, hleftWarm.oneTimePublicKey_run_eq hrel.1 _,
+    hrightWarm.oneTimePublicKey_run_eq hrel.2.1 _, pure_bind, pure_bind]
+  tweakable_hashes
+  exact relTriple_keyLeafHash hrel (.inl _)
+
+theorem relTriple_topTreeNode_run (levels : Nat) (node : TopNode)
+    (leftCache rightCache : QueryCache HashSpec)
+    (hrel : KeygenRunRelation parameter leftStart rightStart leftWarm rightWarm leftCache
+      rightCache) :
+    RelTriple
+      ((simulateQ randomOracle
+        (Concrete.topTreeNode parameter (fun key => leftStart (.inr key)) levels node :
+          OracleComp HashSpec Digest)).run leftCache)
+      ((simulateQ randomOracle
+        (Concrete.topTreeNode parameter (fun key => rightStart (.inr key)) levels node :
+          OracleComp HashSpec Digest)).run rightCache)
+      (KeygenRunResult parameter leftStart rightStart leftWarm rightWarm) := by
+  rw [Concrete.topTreeNode, Concrete.topTreeNode]
+  refine relTriple_node_run .top _ _ (fun j leftCache rightCache hrel => ?_) levels node.val
+    leftCache rightCache hrel
+  rw [Concrete.topLeafAt, Concrete.topLeafAt, simulateQ_bind, StateT.run_bind, simulateQ_bind,
+    StateT.run_bind, hleftWarm.topOneTimePublicKey_run_eq hrel.1 _,
+    hrightWarm.topOneTimePublicKey_run_eq hrel.2.1 _, pure_bind, pure_bind]
+  tweakable_hashes
+  exact relTriple_keyLeafHash hrel (.inr _)
 
 omit hleftWarm hrightWarm in
 theorem relTriple_topSignFrom_run (key : TopIndex) (root : Digest) (base : Randomness) :
