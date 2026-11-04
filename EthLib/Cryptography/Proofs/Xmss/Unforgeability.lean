@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Game
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Queries
 
 /-!
 # Proofs: leanXMSS as EthLib computes it is unforgeable
@@ -22,6 +22,12 @@ A signing request can make more than `2^33`, when its randomizer trials keep mis
 So the bound is never below about `2^-103.3`, and each signing request adds more than `2^-94`.
 
 With all `2^32` leaf indices signed, `q` exceeds `2^65`, and the bound exceeds `2^-62`.
+
+The same bound is restated with the adversary's hash queries `qH` and signing requests `qS` apart.
+
+It is at most `(qH + 8,630,239,199 * qS + 13,435,265) / 2^127`.
+
+A signing request is charged the most hash calls the signer can make, about `2^33.007`.
 
 The game runs EthLib's key generation, signing and verification.
 
@@ -53,3 +59,10 @@ info: 'EthLib.Cryptography.Xmss.Unforgeability.unforgeable' depends on axioms:
 -/
 #guard_msgs (whitespace := lax) in
 #print axioms EthLib.Cryptography.Xmss.Unforgeability.unforgeable
+
+/--
+info: 'EthLib.Cryptography.Xmss.Unforgeability.unforgeable_queries' depends on axioms:
+    [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms EthLib.Cryptography.Xmss.Unforgeability.unforgeable_queries
