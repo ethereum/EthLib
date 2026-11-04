@@ -578,13 +578,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 157 operations and 35 size constants.
-The Python extension calls 157 of the operations and 26 of the constants.
+Lean exports 159 operations and 35 size constants.
+The Python extension calls 159 of the operations and 26 of the constants.
 Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_const_n`, `eth_sphincs_const_public_param_len`, `eth_sphincs_const_randomizer_len`, `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-5602 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (281), `bls.c` (378), `chain.c` (28), `consensus.c` (223), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (223), `enr.c` (125), `ethash.c` (112), `evm.c` (163), `fees.c` (101), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (802), `pow.c` (80), `precompile.c` (95), `reqresp.c` (80), `rlp.c` (162), `rlpx.c` (158), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snappy.c` (131), `sphincs.c` (85), `ssz.c` (88), `state.c` (81), `transactions.c` (148), `trie.c` (96), `vrf.c` (119), `wrappers.h` (364), `xmss.c` (134).
+5645 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (320), `bls.c` (378), `chain.c` (28), `consensus.c` (223), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (223), `enr.c` (125), `ethash.c` (112), `evm.c` (163), `fees.c` (101), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (804), `pow.c` (80), `precompile.c` (95), `reqresp.c` (80), `rlp.c` (162), `rlpx.c` (158), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snappy.c` (131), `sphincs.c` (85), `ssz.c` (88), `state.c` (81), `transactions.c` (148), `trie.c` (96), `vrf.c` (119), `wrappers.h` (366), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

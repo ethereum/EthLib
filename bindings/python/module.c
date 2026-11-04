@@ -588,6 +588,8 @@ static PyMethodDef methods[] = {
   {"block_withdrawals_root", py_block_withdrawals_root, METH_VARARGS, DOC_block_withdrawals_root},
   {"block_deposit_requests", py_block_deposit_requests, METH_VARARGS, DOC_block_deposit_requests},
   {"block_requests_hash", py_block_requests_hash, METH_VARARGS, DOC_block_requests_hash},
+  {"block_access_list_hash", py_block_access_list_hash, METH_VARARGS, DOC_block_access_list_hash},
+  {"block_access_list_check", py_block_access_list_check, METH_VARARGS, DOC_block_access_list_check},
   {"block_validate_size", py_block_validate_size, METH_VARARGS, DOC_block_validate_size},
   {"fees_base_fee_per_gas", py_fees_base_fee_per_gas, METH_VARARGS, DOC_fees_base_fee_per_gas},
   {"fees_fake_exponential", py_fees_fake_exponential, METH_VARARGS, DOC_fees_fake_exponential},

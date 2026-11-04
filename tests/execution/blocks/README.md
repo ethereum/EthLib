@@ -31,4 +31,13 @@ It keeps at most two cases of the excess blob gas from each file.
 python -I extract_invalid_headers.py <directory of fixtures> invalid_headers.json
 ```
 
+`block_access_lists.json` holds the block access list of every Engine API payload of the Amsterdam tests of `eip7928_block_level_access_lists`.
+Each case keeps the RLP form of the list, the gas limit of its block and the validation error of the payload, if any.
+A valid payload also keeps the access list hash of its block, from the header of the matching blockchain test.
+`extract_block_access_lists.py` wrote the file from the archive, unpacked for these tests, and writes the same bytes again:
+
+```text
+python -I extract_block_access_lists.py <directory that holds fixtures> block_access_lists.json
+```
+
 The Python tests in `bindings/python/tests/blocks/` read these cases and never rewrite them.

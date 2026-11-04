@@ -42,6 +42,7 @@ jobs:
             run: >-
               uv run --no-sync pytest -n auto -m archive
               bindings/python/tests/blocks/test_archive.py
+              bindings/python/tests/blocks/test_block_access_lists_archive.py
               bindings/python/tests/transactions/test_archive.py
           # Every static SSZ case of the beacon containers that EthLib defines.
           - suite: consensus-spec-tests

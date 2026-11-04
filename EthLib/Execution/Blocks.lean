@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Blocks.Block
+public import EthLib.Execution.Blocks.BlockAccessList
 public import EthLib.Execution.Blocks.Bloom
 public import EthLib.Execution.Blocks.DaoFork
 public import EthLib.Execution.Blocks.Difficulty
