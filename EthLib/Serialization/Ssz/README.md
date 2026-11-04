@@ -21,6 +21,7 @@ The specification has three parts:
 | `Ssz/Type` | declarations, values, well-formedness, defaults, and paths |
 | `Ssz/Codec` | serialization, deserialization, the JSON mapping, layouts, roots, and proofs |
 | `Ssz/Merkle` | bounded and progressive trees, indices, and verification |
+| `Ssz/Typed` | Lean types as SSZ types, encoded and rooted through the codec |
 
 Hashing uses `EthLib.Cryptography.Hash.Sha256`.
 
@@ -161,6 +162,25 @@ By [summaries](../Proofs/Ssz/Codec/Summary.lean), replacing a value nested in a 
 A vector, list, or progressive list of composite elements has the same root as the same collection holding each element's root as a 32-byte array.
 Replacing a struct field by a 32-byte array holding its root is the special case, and deeper summaries follow by repeating the replacement.
 So a party holding only the summary computes the same root as a party holding the value, and a proof about anything inside the replaced value verifies against both.
+
+### Typed values
+
+A protocol states its objects as Lean structures, not as declarations and values.
+A *typed value* bridges the two.
+Its Lean type names a declaration, and each value converts to an untyped value and back.
+A length or a limit is part of the Lean type, so every typed value fits its declaration.
+Serialization, deserialization and the root then run the codec above, with no second codec.
+
+The basic types, byte vectors, byte lists, bitfields, vectors, lists and progressive lists have typed values.
+A container gets them from the types of its fields.
+A typed value is *lawful* when its declaration is well formed, every value fits it, and the two conversions undo each other.
+Collections and containers are lawful when their parts are, and fixed counts are positive.
+
+By [typed round trips](../Proofs/Ssz/Typed/Class.lean), a lawful value deserializes from its bytes.
+Conversely, bytes that deserialize are the bytes of the value they give.
+By [typed roots](../Proofs/Ssz/Typed/Root.lean), every lawful value has a root.
+Two values with one root are equal, or their root computations expose a SHA-256 collision.
+The typed binding theorem is the whole-value binding above, under the same length condition.
 
 ### The JSON mapping
 
