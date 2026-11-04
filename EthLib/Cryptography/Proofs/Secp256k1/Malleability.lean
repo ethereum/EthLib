@@ -22,32 +22,6 @@ namespace Ecdsa
 
 open Point
 
-/-- An `x` below `p` with `x mod n = r` is `r`, when `p <= r + n`. -/
-private theorem val_eq_of_mod {x : Fp} {r : Nat} (hx : x.val % Fn.modulus = r)
-    (hp : Fp.modulus ≤ r + Fn.modulus) : x.val = r := by
-  have hdiv := Nat.mod_add_div x.val Fn.modulus
-  have hlt := x.isLt
-  by_cases h0 : x.val / Fn.modulus = 0
-  · rw [h0, Nat.mul_zero, Nat.add_zero] at hdiv
-    omega
-  · have := Nat.le_mul_of_pos_right Fn.modulus (Nat.pos_of_ne_zero h0)
-    omega
-
-/-- A scalar in `[1, n - 1]` is a unit in `ZMod n`. -/
-private theorem toZMod_ne_zero' {s : Nat} (hs : 0 < s ∧ s < Fn.modulus) :
-    Fn.toZMod ⟨s, hs.2⟩ ≠ 0 := fun h0 => by
-  have h1 := congrArg Fin.val (Fn.toZMod.injective (h0.trans (map_zero _).symm))
-  simp at h1
-  omega
-
-/-- The rebuilt point is `s^(-1) (e G + r Q)`. -/
-private theorem toPoint_rebuilt' (e r s : Fn) {q : Point} (hq : q.isOnCurve = true) :
-    toPoint (mul (e * Fn.inv s) generator + mul (r * Fn.inv s) q)
-      = (Fn.toZMod s)⁻¹ • (Fn.toZMod e • toPoint generator + Fn.toZMod r • toPoint q) := by
-  rw [toPoint_add (isOnCurve_mul _ isOnCurve_generator) (isOnCurve_mul _ hq),
-    toPoint_mul' _ isOnCurve_generator, toPoint_mul' _ hq]
-  simp only [map_mul, Fn.toZMod_inv, smul_add, smul_smul, mul_comm]
-
 /-- Two signatures with the same `r` verify only if their `s` agree up to sign mod `n`.
 
 The bound `p <= r + n` makes both rebuilt points have `x = r`, so they are equal or opposite. -/
@@ -57,7 +31,7 @@ theorem verify_s_eq_or_neg {q : Point} {hash : Vector UInt8 32} {r s s' : Nat}
   obtain ⟨hr, hs, -, hqc, x, y, hR, hx⟩ := verify_rebuilt hv
   obtain ⟨hr', hs', -, -, x', y', hR', hx'⟩ := verify_rebuilt hv'
   -- Both rebuilt points have `x = r`.
-  obtain rfl : x' = x := Fin.ext ((val_eq_of_mod hx' hp).trans (val_eq_of_mod hx hp).symm)
+  obtain rfl : x' = x := Fin.ext ((val_eq_of_mod_eq hx' hp).trans (val_eq_of_mod_eq hx hp).symm)
   have hG := isOnCurve_generator
   have hc : (affine x' y).isOnCurve = true :=
     hR ▸ isOnCurve_add (isOnCurve_mul _ hG) (isOnCurve_mul _ hqc)
@@ -67,14 +41,14 @@ theorem verify_s_eq_or_neg {q : Point} {hash : Vector UInt8 32} {r s s' : Nat}
   set X := Fn.toZMod (Fin.ofNat _ (hashToInt hash)) • toPoint generator
     + Fn.toZMod ⟨r, hr.2⟩ • toPoint q
   have hP : toPoint (affine x' y) = (Fn.toZMod ⟨s, hs.2⟩)⁻¹ • X := by
-    rw [← hR, toPoint_rebuilt' _ _ _ hqc]
+    rw [← hR, toPoint_rebuilt _ _ hqc]
+    simp only [X, map_mul, Fn.toZMod_inv, smul_add, smul_smul, mul_comm]
   have hP' : toPoint (affine x' y') = (Fn.toZMod ⟨s', hs'.2⟩)⁻¹ • X := by
-    rw [← hR', toPoint_rebuilt' _ _ _ hqc]
+    rw [← hR', toPoint_rebuilt _ _ hqc]
+    simp only [X, map_mul, Fn.toZMod_inv, smul_add, smul_smul, mul_comm]
   have hX : X ≠ 0 := fun h0 => by
     rw [h0, smul_zero, toPoint_eq_zero hc] at hP
     cases hP
-  have hs0 := toZMod_ne_zero' hs
-  have hs0' := toZMod_ne_zero' hs'
   -- The two `y` agree up to sign.
   rcases Fp.eq_or_eq_neg_of_mul_self (((isOnCurve_affine _ _).mp hc').trans
     ((isOnCurve_affine _ _).mp hc).symm) with h | h
