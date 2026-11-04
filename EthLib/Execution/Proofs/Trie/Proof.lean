@@ -7,25 +7,13 @@ public import EthLib.Serialization.Proofs.Rlp.Canonical
 /-!
 # Proofs: `Trie.Proof`
 
-A proof checks one key against a root, so it must give the trie's value of that key:
+Completeness: the proof that the trie builds for a key verifies against the trie's root.
 
-- Completeness: the proof that `getProof` builds verifies against the trie's root.
-  It gives the value of the key, or `none` when the key is not set.
-- Soundness: a proof that verifies against the trie's root gives the same answer.
+It gives the value of the key, or `none` when the key is not set.
 
-Soundness holds only while the hash has no collision on the nodes involved.
+The proof rests on one induction down the key's path, at each node of the trie.
 
-The theorem takes that as a hypothesis.
-
-It says that no node of the proof has the hash of a node of the honest proof, unless it is that node.
-
-Then each node of the proof is the honest node, so the proof is the honest proof.
-
-Both rest on one induction down the path, at each node that `patricialize` builds:
-
-- The walk decodes the node from its encoding, since decoding inverts `unencoded`.
-- A child held by hash is the next node of the proof, and a child held inside its parent needs no node.
-- The value at the end is the value of the key whose path the walk followed.
+The walk decodes each node from its encoding, and finds a child held by hash as the next proof node.
 -/
 
 @[expose] public section
@@ -108,33 +96,6 @@ theorem resolve_hash (hash : ByteArray → Hash32) {node : Option InternalNode} 
     resolve hash (.bytes ⟨(hash encoded).toArray⟩) (encoded :: rest) = .ok (unencoded node, rest) := by
   have hdecode : decode encoded = .ok (unencoded node) := (decode_eq_ok_iff _ _).mpr h
   simp [resolve, size_hashBytes, hdecode, Except.mapError, Bind.bind, Except.bind, pure, Except.pure, Vector.toList]
-
-/-- The only proof nodes that a node held by hash accepts: one whose hash matches and that decodes. -/
-theorem resolve_hash_inv (hash : ByteArray → Hash32) {digest : Hash32} {proof rest : List ByteArray} {item : Item}
-    (h : resolve hash (.bytes ⟨digest.toArray⟩) proof = .ok (item, rest)) :
-    ∃ encoded, proof = encoded :: rest ∧ hash encoded = digest ∧ decode encoded = .ok item := by
-  simp only [resolve, size_hashBytes, show (32 : Nat) ≠ 0 by decide, ↓reduceIte] at h
-  match proof, h with
-  | [], h => cases h
-  | encoded :: rest', h =>
-    by_cases hmatch : (hash encoded).toList = digest.toArray.toList
-    · simp only [hmatch, ↓reduceIte] at h
-      cases hdecode : decode encoded with
-      | error => simp [hdecode, Except.mapError, Bind.bind, Except.bind] at h
-      | ok decoded =>
-        simp only [hdecode, Except.mapError, Bind.bind, Except.bind, pure, Except.pure, Except.ok.injEq,
-          Prod.mk.injEq] at h
-        obtain ⟨rfl, rfl⟩ := h
-        exact ⟨encoded, rfl, Vector.toList_inj.mp hmatch, hdecode⟩
-    · simp only [hmatch, ↓reduceIte] at h
-      cases h
-
-/-- Two encodings with the same item are equal. -/
-theorem decode_injective {a b : ByteArray} {item : Item} (ha : decode a = .ok item) (hb : decode b = .ok item) : a = b := by
-  have ea := (decode_eq_ok_iff _ _).mp ha
-  have eb := (decode_eq_ok_iff _ _).mp hb
-  rw [ea] at eb
-  exact Except.ok.inj eb
 
 /-! ## The nodes that `patricialize` builds -/
 
@@ -434,10 +395,6 @@ theorem walk_branch_cons (hash : ByteArray → Hash32) (fuel : Nat) (subnodes : 
 
 /-! ## Following a child -/
 
-/-- No node of `proof` has the hash of a node of `honest` unless it is that node. -/
-def NoCollision (hash : ByteArray → Hash32) (proof honest : List ByteArray) : Prop :=
-  ∀ node ∈ proof, ∀ honestNode ∈ honest, hash node = hash honestNode → node = honestNode
-
 /-- How a parent holds a node fixes the encoding of the node. -/
 theorem encode_of_encodeInternalNode {hash : ByteArray → Hash32} {node : Option InternalNode} {reference : Item}
     (h : encodeInternalNode hash node = .ok reference) :
@@ -449,53 +406,24 @@ theorem encode_of_encodeInternalNode {hash : ByteArray → Hash32} {node : Optio
     rw [encodeInternalNode_of_encode hencode] at h
     exact ⟨encoded, rfl, (Except.ok.inj h).symm⟩
 
-/-- The walk follows a child as it walks the child itself.
+/-- The walk follows a child with the honest proof as it walks the child itself.
 
-- With the honest proof, the walk gives the child's value and leaves the rest of the proof.
-- A proof that the walk accepts, with no collision against the honest proof, starts with the honest proof. -/
+It gives the child's value and leaves the rest of the proof. -/
 theorem follow_child (hash : ByteArray → Hash32) {fuel : Nat} {child : Option InternalNode} {encoded : ByteArray}
     {path : List Nibble} {below : List ByteArray} {value : Option ByteArray}
     (hencode : encode (unencoded child) = .ok encoded)
     (hcomplete : ∀ rest, walk hash fuel (unencoded child) path (below ++ rest) = .ok (value, rest))
-    (hsound : ∀ proof result rest, walk hash fuel (unencoded child) path proof = .ok (result, rest) →
-      NoCollision hash proof below → proof = below ++ rest) :
-    (∀ rest, follow hash fuel (if encoded.size < 32 then unencoded child else .bytes ⟨(hash encoded).toArray⟩) path
-        (((if encoded.size < 32 then [] else [encoded]) ++ below) ++ rest) = .ok (value, rest)) ∧
-    (∀ proof result rest,
-      follow hash fuel (if encoded.size < 32 then unencoded child else .bytes ⟨(hash encoded).toArray⟩) path proof
-        = .ok (result, rest) →
-      NoCollision hash proof ((if encoded.size < 32 then [] else [encoded]) ++ below) →
-      proof = ((if encoded.size < 32 then [] else [encoded]) ++ below) ++ rest) := by
+    (rest : List ByteArray) :
+    follow hash fuel
+      (if encoded.size < 32 then unencoded child else .bytes ⟨(hash encoded).toArray⟩) path
+      (((if encoded.size < 32 then [] else [encoded]) ++ below) ++ rest) = .ok (value, rest) := by
   split
   · -- Held inside its parent: no proof node.
-    simp only [List.nil_append]
-    refine ⟨fun rest => ?_, fun proof result rest h hcollision => ?_⟩
-    · simp only [follow, resolve_unencoded, Except.bind]
-      exact hcomplete rest
-    · simp only [follow, resolve_unencoded, Except.bind] at h
-      exact hsound proof result rest h hcollision
-  · -- Held by hash: the next proof node must be the encoding of the child.
-    refine ⟨fun rest => ?_, fun proof result rest h hcollision => ?_⟩
-    · simp only [follow, List.cons_append, resolve_hash hash hencode, Except.bind]
-      exact hcomplete rest
-    · simp only [follow] at h
-      cases hresolve : resolve hash (.bytes ⟨(hash encoded).toArray⟩) proof with
-      | error => simp [hresolve, Except.bind] at h
-      | ok next =>
-        obtain ⟨item, after⟩ := next
-        simp only [hresolve, Except.bind] at h
-        obtain ⟨first, rfl, hhash, hdecode⟩ := resolve_hash_inv hash hresolve
-        -- The first proof node has the hash of the encoding, so it is the encoding.
-        have hfirst : first = encoded :=
-          hcollision first List.mem_cons_self encoded (by simp) hhash
-        subst hfirst
-        have hitem : item = unencoded child :=
-          Except.ok.inj (hdecode.symm.trans ((decode_eq_ok_iff _ _).mpr hencode))
-        subst hitem
-        have hrest : NoCollision hash after below := fun node hnode honestNode hhonest =>
-          hcollision node (List.mem_cons_of_mem _ hnode) honestNode (by simp [hhonest])
-        rw [hsound after result rest h hrest]
-        simp
+    simp only [List.nil_append, follow, resolve_unencoded, Except.bind]
+    exact hcomplete rest
+  · -- Held by hash: the next proof node is the encoding of the child.
+    simp only [follow, List.cons_append, resolve_hash hash hencode, Except.bind]
+    exact hcomplete rest
 
 /-! ## The induction down the path -/
 
@@ -527,16 +455,16 @@ theorem Honest.filter {obj : List (List Nibble × ByteArray)} {level : Nat} (hon
 
 /-- The walk down the path of the node that `patricialize` builds, with the proof that `proofBelow` builds.
 
-- With that proof and any nodes after it, the walk gives the value of the path and leaves those nodes.
-- A proof that the walk accepts, with no collision against that proof, is that proof and the nodes left. -/
+With that proof and any nodes after it, the walk gives the value of the path.
+
+It leaves the nodes after the proof. -/
 theorem walk_honest (hash : ByteArray → Hash32) :
     (fuel fuel' : Nat) → {obj : List (List Nibble × ByteArray)} → {level : Nat} → {path : List Nibble} →
       {node : Option InternalNode} → {below : List ByteArray} →
       Honest obj level → path.length < fuel → path.length < fuel' →
       patricialize hash obj level = .ok node → proofBelow hash fuel' obj level path = .ok below →
-      (∀ rest, walk hash fuel (unencoded node) path (below ++ rest) = .ok (lookupAt obj level path, rest)) ∧
-      (∀ proof result rest, walk hash fuel (unencoded node) path proof = .ok (result, rest) →
-        NoCollision hash proof below → proof = below ++ rest)
+      ∀ rest,
+        walk hash fuel (unencoded node) path (below ++ rest) = .ok (lookupAt obj level path, rest)
   | 0, _, _, _, _, _, _, _, hfuel, _, _, _ => absurd hfuel (Nat.not_lt_zero _)
   | _, 0, _, _, _, _, _, _, _, hfuel', _, _ => absurd hfuel' (Nat.not_lt_zero _)
   | fuel + 1, fuel' + 1, obj, level, path, node, below, honest, hfuel, hfuel', hnode, hbelow => by
@@ -546,20 +474,14 @@ theorem walk_honest (hash : ByteArray → Hash32) :
       -- No node: no proof node, and the key is not set.
       simp only [pure, Except.pure, Except.ok.injEq] at hbelow
       subst hbelow hobj
-      refine ⟨fun rest => walk_none hash fuel path rest, fun proof result rest h _ => ?_⟩
-      simp only [walk_none, Except.ok.injEq, Prod.mk.injEq] at h
-      obtain ⟨-, rfl⟩ := h
-      simp
+      exact walk_none hash fuel path
     | leaf key value hobj =>
       -- A leaf: no proof node, and its value when the path is the rest of its key.
       simp only [pure, Except.pure, Except.ok.injEq] at hbelow
       subst hbelow hobj
-      refine ⟨fun rest => ?_, fun proof result rest h _ => ?_⟩
-      · rw [walk_leaf, lookupAt_single]
-        simp
-      · simp only [walk_leaf, Except.ok.injEq, Prod.mk.injEq] at h
-        obtain ⟨-, rfl⟩ := h
-        simp
+      intro rest
+      rw [walk_leaf, lookupAt_single]
+      simp
     | extension keySegment subnode child hsegment hcommon hchild hsubnode =>
       obtain ⟨encoded, hencode, rfl⟩ := encode_of_encodeInternalNode hsubnode
       dsimp only at hbelow
@@ -580,25 +502,18 @@ theorem walk_honest (hash : ByteArray → Hash32) :
           have hpositive : 0 < keySegment.length := List.length_pos_iff.mpr hsegment
           have ih := walk_honest hash fuel fuel' (honest.extension hcommon)
             (by simp only [List.length_drop]; omega) (by simp only [List.length_drop]; omega) hchild hrest
-          have hstep := follow_child hash hencode ih.1 ih.2
           rw [lookupAt_extension hcommon hfollow]
-          refine ⟨fun rest => ?_, fun proof result rest h hcollision => ?_⟩
-          · rw [walk_extension hash fuel hsegment, ite_eq_left_of_eq_true _ _ (eq_true hfollow)]
-            exact hstep.1 rest
-          · rw [walk_extension hash fuel hsegment, ite_eq_left_of_eq_true _ _ (eq_true hfollow)] at h
-            exact hstep.2 proof result rest h hcollision
+          intro rest
+          rw [walk_extension hash fuel hsegment, ite_eq_left_of_eq_true _ _ (eq_true hfollow)]
+          exact follow_child hash hencode ih rest
       · -- The path leaves the extension: no proof node, and the key is not set.
         rw [ite_eq_right_of_eq_false _ _ (eq_false hfollow)] at hbelow
         simp only [pure, Except.pure, Except.ok.injEq] at hbelow
         subst hbelow
         rw [lookupAt_extension_none hcommon hfollow]
-        refine ⟨fun rest => ?_, fun proof result rest h _ => ?_⟩
-        · rw [walk_extension hash fuel hsegment, ite_eq_right_of_eq_false _ _ (eq_false hfollow)]
-          rfl
-        · rw [walk_extension hash fuel hsegment, ite_eq_right_of_eq_false _ _ (eq_false hfollow)] at h
-          simp only [Except.ok.injEq, Prod.mk.injEq] at h
-          obtain ⟨-, rfl⟩ := h
-          simp
+        intro rest
+        rw [walk_extension hash fuel hsegment, ite_eq_right_of_eq_false _ _ (eq_false hfollow)]
+        rfl
     | branch subnodes hchildren value hvalue =>
       dsimp only at hbelow
       match path with
@@ -607,12 +522,9 @@ theorem walk_honest (hash : ByteArray → Hash32) :
         simp only [pure, Except.pure, Except.ok.injEq] at hbelow
         subst hbelow hvalue
         rw [lookupAt_branch_nil honest]
-        refine ⟨fun rest => ?_, fun proof result rest h _ => ?_⟩
-        · rw [walk_branch_nil]
-          rfl
-        · simp only [walk_branch_nil, Except.ok.injEq, Prod.mk.injEq] at h
-          obtain ⟨-, rfl⟩ := h
-          simp
+        intro rest
+        rw [walk_branch_nil]
+        rfl
       | nibble :: restOfPath =>
         -- The path continues: the child of its next nibble.
         obtain ⟨child, hchild, hsubnode⟩ := hchildren nibble
@@ -627,13 +539,10 @@ theorem walk_honest (hash : ByteArray → Hash32) :
           have ih := walk_honest hash fuel fuel' (honest.filter nibble)
             (by simp only [List.length_cons] at hfuel; omega) (by simp only [List.length_cons] at hfuel'; omega)
             hchild hrest
-          have hstep := follow_child hash hencode ih.1 ih.2
           rw [lookupAt_branch]
-          refine ⟨fun rest => ?_, fun proof result rest h hcollision => ?_⟩
-          · rw [walk_branch_cons, hreference]
-            exact hstep.1 rest
-          · rw [walk_branch_cons, hreference] at h
-            exact hstep.2 proof result rest h hcollision
+          intro rest
+          rw [walk_branch_cons, hreference]
+          exact follow_child hash hencode ih rest
 
 /-! ## Building a proof -/
 
@@ -699,13 +608,13 @@ theorem getProof_ok (hash : ByteArray → Hash32) {trie : Trie} {root' : Hash32}
         obtain ⟨below, hbelow⟩ := proofBelow_ok hash (path.length + 1) hnode path
         exact ⟨encoded :: below, by simp [hnode, hencode, hbelow, pure, Except.pure]⟩
 
-/-! ## Completeness and soundness -/
+/-! ## Completeness -/
 
 /-- The value that a trie gives a key: the value of the entry whose path is the key's path, or `none`. -/
 def valueAt (hash : ByteArray → Hash32) (trie : Trie) (key : ByteArray) : Option ByteArray :=
   (trie.data.find? fun entry => keyPath hash trie.secured entry.1 = keyPath hash trie.secured key).map Prod.snd
 
-/-- The facts that both theorems take from a trie with a root and a proof. -/
+/-- The facts that completeness takes from a trie with a root and a proof. -/
 theorem honest_root {hash : ByteArray → Hash32} {trie : Trie} {key : ByteArray} {root' : Hash32}
     {honestProof : List ByteArray}
     (hroot : root hash trie = .ok root') (hproof : getProof hash trie key = .ok honestProof)
@@ -762,60 +671,11 @@ theorem verifyProof_getProof (hash : ByteArray → Hash32) {trie : Trie} {key : 
     verifyProof hash root' trie.secured key proof = .ok (valueAt hash trie key) := by
   obtain ⟨rootNode, encoded, below, hnode, hencode, rfl, rfl, hbelow, honest, hlookup⟩ :=
     honest_root hroot hproof hpaths
-  have hwalk := (walk_honest hash _ _ honest (Nat.lt_succ_self _) (Nat.lt_succ_self _) hnode hbelow).1 []
+  have hwalk :=
+    walk_honest hash _ _ honest (Nat.lt_succ_self _) (Nat.lt_succ_self _) hnode hbelow []
   simp only [List.append_nil] at hwalk
   simp only [verifyProof, resolve_hash hash hencode, Bind.bind, Except.bind, hwalk, hlookup]
   rfl
-
-/-- Soundness: a proof that verifies against the trie's root is the proof that `getProof` builds, and gives the key's value.
-
-The hypothesis `hcollision` says that the hash has no collision between a node of the proof and a node of the honest proof. -/
-theorem verifyProof_sound (hash : ByteArray → Hash32) {trie : Trie} {key : ByteArray} {root' : Hash32}
-    {honestProof proof : List ByteArray} {result : Option ByteArray}
-    (hroot : root hash trie = .ok root') (hhonest : getProof hash trie key = .ok honestProof)
-    (hpaths : (trie.data.map fun entry => keyPath hash trie.secured entry.1).Nodup)
-    (hverify : verifyProof hash root' trie.secured key proof = .ok result)
-    (hcollision : NoCollision hash proof honestProof) :
-    proof = honestProof ∧ result = valueAt hash trie key := by
-  obtain ⟨rootNode, encoded, below, hnode, hencode, rfl, rfl, hbelow, honest, hlookup⟩ :=
-    honest_root hroot hhonest hpaths
-  simp only [verifyProof, Bind.bind, Except.bind] at hverify
-  cases hresolve : resolve hash (.bytes ⟨(hash encoded).toArray⟩) proof with
-  | error => simp [hresolve] at hverify
-  | ok next =>
-    obtain ⟨item, rest⟩ := next
-    obtain ⟨first, rfl, hhash, hdecode⟩ := resolve_hash_inv hash hresolve
-    -- The first node has the root's hash, so it is the encoding of the root node.
-    have hfirst : first = encoded := hcollision first List.mem_cons_self encoded List.mem_cons_self hhash
-    subst hfirst
-    have hitem : item = unencoded rootNode :=
-      Except.ok.inj (hdecode.symm.trans ((decode_eq_ok_iff _ _).mpr hencode))
-    subst hitem
-    simp only [hresolve] at hverify
-    cases hwalk : walk hash ((keyPath hash trie.secured key).length + 1) (unencoded rootNode)
-        (keyPath hash trie.secured key) rest with
-    | error => simp [hwalk] at hverify
-    | ok outcome =>
-      obtain ⟨value, unused⟩ := outcome
-      simp only [hwalk] at hverify
-      split at hverify
-      · rename_i hunused
-        simp only [pure, Except.pure, Except.ok.injEq] at hverify
-        subst hverify
-        have hempty : unused = [] := List.isEmpty_iff.mp hunused
-        subst hempty
-        have hpair := walk_honest hash _ _ honest (Nat.lt_succ_self _) (Nat.lt_succ_self _) hnode hbelow
-        -- The rest of the proof is the honest proof below the root.
-        have hrest : rest = below := by
-          have := hpair.2 rest value [] hwalk fun node hnode' honestNode hhonest' =>
-            hcollision node (List.mem_cons_of_mem _ hnode') honestNode (List.mem_cons_of_mem _ hhonest')
-          simpa using this
-        subst hrest
-        refine ⟨rfl, ?_⟩
-        have hcomplete := hpair.1 []
-        simp only [List.append_nil, hwalk, Except.ok.injEq, Prod.mk.injEq] at hcomplete
-        rw [hcomplete.1, hlookup]
-      · cases hverify
 
 /-- In a plain trie, the value that a proof gives is the value of the key itself, which `trieGet` reads. -/
 theorem valueAt_plain (hash : ByteArray → Hash32) (data : List (ByteArray × ByteArray)) (key : ByteArray) :
