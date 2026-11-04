@@ -4,13 +4,15 @@ public import EthLib.Cryptography.Proofs.Bls.G1Order
 public import Mathlib.GroupTheory.Index
 
 /-!
-# Proofs: elementary cardinality bound for `G1`
+# Proofs: an elementary bound on the size of `G1`
 
-Every finite point `(x, y)` on `E : y^2 = x^3 + 4` over `ZMod Fp.modulus` satisfies `y^2 = x^3 + 4`.
+Every finite point `(x, y)` of `E : y^2 = x^3 + 4` over `ZMod p` satisfies the equation.
 
-For each `x`, at most two values of `y` solve that quadratic equation, and `0` adds one point at infinity.
+For each `x`, at most two values of `y` solve it, and the point at infinity adds one point.
 
-Injecting `curve.toAffine.Point` into an optional pair of a residue mod `p` and a sign bit gives `#E(Fp) <= 2 * p + 1`.
+So a point is fixed by an optional pair of `x` and a sign bit.
+
+That gives `#E(Fp) <= 2 * p + 1`.
 -/
 
 @[expose] public section

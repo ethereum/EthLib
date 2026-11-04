@@ -4,13 +4,16 @@ public import EthLib.Cryptography.Proofs.Bls.G2Order
 public import EthLib.Cryptography.Proofs.Bls.G2Equiv
 
 /-!
-# Proofs: semantics of the `G2` subgroup check
+# Proofs: what the `G2` subgroup check decides
 
-On valid triples, `G2.inSubgroup` decides `[r] * P = 0` per `IRTF draft-irtf-cfrg-bls-signature-04 §1.3 and §2.2`.
+On valid triples, the subgroup check decides `[r] P = 0`.
 
-It accepts `G2.generator` and is closed under `mulNat`, `add`, and `neg`.
+The check is the one of draft-04, §1.3 and §2.2.
+<https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04>
 
-This file proves the `r`-torsion characterization without claiming that `E'(Fp2)[r]` is cyclic.
+It accepts the generator, and it is closed under scalar multiplication, addition and negation.
+
+This file does not claim that the points of order `r` of `E'(Fp2)` form a cyclic group.
 -/
 
 @[expose] public section

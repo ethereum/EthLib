@@ -6,12 +6,11 @@ public import EthLib.Cryptography.Bls.Fr
 /-!
 # `G2`
 
-The "twisted" curve `E' : y² = x³ + 4·(1 + i)` over `Fp2`. This is the
-same shape as `G1` but with `Fp2` coordinates and the constant `b' =
-4·(1 + i)` instead of `4`.
+The twisted curve `E' : y^2 = x^3 + 4 (1 + i)` over `Fp2`.
 
-The arithmetic formulas are identical to G1's; we just substitute `Fp`
-operations with `Fp2` ones.
+It has the shape of `G1`, with coordinates in `Fp2` and the constant `4 (1 + i)` instead of `4`.
+
+The formulas are those of `G1`, with the operations of `Fp2`.
 -/
 
 @[expose] public section

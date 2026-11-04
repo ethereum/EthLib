@@ -4,17 +4,19 @@ public import EthLib.Cryptography.Proofs.Bls.G2Validity
 public import EthLib.Cryptography.Proofs.Bls.FrZMod
 
 /-!
-# Proofs: the order of the `G2` generator and the `Fr` action
+# Proofs: the order of the `G2` generator and the action of `Fr`
 
-This file proves the prime order of `G2.generator` and the `Fr` scalar action on its span.
+The generator `g_2` has prime order `r`, and scalars mod `r` act on its span.
 
-Curve and subgroup parameters follow `IRTF draft-irtf-cfrg-bls-signature-04 §1.3 and Appendix A`.
+The curve and the subgroup follow draft-04, §1.3 and Appendix A.
+<https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04>
 
-Twist parameters also match `draft-irtf-cfrg-pairing-friendly-curves-07 §4.2.1`.
+The twist also matches draft-07, §4.2.1.
+<https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-07>
 
-- `modulus_smul_generator` checks `[r] * g_2 = 0` in the kernel via a structurally recursive fuel ladder `mulNatAux`.
-- Because `r` is prime (`Fr.modulus_prime`) and `g_2 != 0`, `addOrderOf_toPoint_generator` pins the order to `r`.
-- `ofFr` maps `s : Fr` to `[s.val] * g_2` and satisfies `Fr`-linearity modulo `r`.
+- The kernel checks `[r] g_2 = 0`, by double and add on a fuel argument.
+- Since `r` is prime and `g_2 != 0`, the order of `g_2` is exactly `r`.
+- The map `s ↦ [s] g_2` is linear in `s` modulo `r`.
 -/
 
 @[expose] public section

@@ -4,14 +4,14 @@ public import EthLib.Cryptography.Proofs.Bls.TwistFrobenius
 public import EthLib.Cryptography.Proofs.Bls.G2Subgroup
 
 /-!
-# Proofs: Algebra and endomorphism polynomial of `clearCofactor`
+# Proofs: the algebra of the cofactor clearing of `G2`
 
-Source: `RFC 9380 Appendix G.3`.
+The source is RFC 9380, Appendix G.3.
 
-- Applying `psi` twice gives `psi2`.
-- Applying `psi2` three times negates a point.
-- `clearCofactor` is a group homomorphism on the twist, since `psi` is one.
-- `clearCofactor` keeps a point of order `r` in the subgroup of order `r`.
+- The endomorphism `psi` applied twice is `psi2`.
+- `psi2` applied three times negates a point.
+- The cofactor clearing is a group homomorphism on the twist, since `psi` is one.
+- The cofactor clearing keeps a point of order `r` in the subgroup of order `r`.
 -/
 
 @[expose] public section

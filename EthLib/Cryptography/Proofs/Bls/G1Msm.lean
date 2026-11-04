@@ -4,19 +4,14 @@ public import EthLib.Cryptography.Proofs.Bls.G1Order
 public import EthLib.Cryptography.Proofs.IdLoops
 
 /-!
-# Proofs: the spec's Pippenger MSM computes `Σ [sᵢ]Pᵢ`
+# Proofs: the Pippenger multi-scalar multiplication computes `Σ [s_i] P_i`
 
-Two layers:
+The proof has two layers.
 
-1. **Mechanical**: `G1.msm` (a fold whose window sums run as tasks)
-   equals a pure `List.foldl` model (`msmModel`). Reading a spawned
-   task gives its value by definition. No group theory here.
-2. **Mathematical**: the model computes
-   `Σ i ∈ range n, [scalars[i]]points[i]` in the curve group, via the
-   bucket-partition and running-sum identities and the base-`2^w`
-   window recomposition of the scalars.
-
-The headline result is `toPoint_msm`.
+- The multi-scalar multiplication equals a plain fold, its model.
+  Its window sums run as tasks, and reading a task gives its value by definition.
+- The model computes `Σ i < n, [scalars[i]] points[i]` in the curve group.
+  The proof uses the bucket partition, the running sums, and the base-`2^w` digits of the scalars.
 -/
 
 @[expose] public section

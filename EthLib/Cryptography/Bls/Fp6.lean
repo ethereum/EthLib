@@ -5,18 +5,17 @@ public import EthLib.Cryptography.Bls.Fp2
 /-!
 # `Fp6`
 
-The cubic extension `Fp6 = Fp2[v] / (v³ − ξ)` where `ξ = 1 + i ∈ Fp2`.
-Elements are written `c0 + c1·v + c2·v²` with each coefficient in `Fp2`.
+The cubic extension `Fp6 = Fp2[v] / (v^3 - ξ)`, with `ξ = 1 + i` in `Fp2`.
 
-Multiplication uses the school-book formula plus the reduction
-`v³ = ξ`. Concretely, expanding `(a0 + a1·v + a2·v²)(b0 + b1·v + b2·v²)`
-and collecting:
+An element is `c0 + c1 v + c2 v^2`, with each coefficient in `Fp2`.
 
-  c0 = a0·b0 + ξ·(a1·b2 + a2·b1)
-  c1 = a0·b1 + a1·b0 + ξ·(a2·b2)
-  c2 = a0·b2 + a1·b1 + a2·b0
+The product is the schoolbook product, reduced with `v^3 = ξ`:
 
-Inversion uses the formula derived from the norm in `Fp6` over `Fp2`.
+- `c0 = a0 b0 + ξ (a1 b2 + a2 b1)`.
+- `c1 = a0 b1 + a1 b0 + ξ a2 b2`.
+- `c2 = a0 b2 + a1 b1 + a2 b0`.
+
+The inverse comes from the norm of `Fp6` over `Fp2`.
 -/
 
 @[expose] public section

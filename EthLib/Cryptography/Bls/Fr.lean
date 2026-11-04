@@ -6,22 +6,15 @@ public import EthLib.Cryptography.Hash.Sha256
 /-!
 # `Fr`
 
-The BLS12-381 *scalar* field. `Fr` elements live in `[0, r)` where
+The scalar field of BLS12-381, the integers mod the prime group order `r`.
 
-  r = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
+`r = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001`.
 
-`Fr` is `Fin Fr.modulus`, so canonicity (`val < modulus`) holds by
-construction. Same modulus story as `Fp`, just a different prime.
-Keeping scalars and base-field elements as distinct types prevents
-accidental mixing between them.
+`Fr` is `Fin r`, so every element is below `r` by construction.
 
-Lean core already equips `Fin n` with the modular arithmetic this spec
-needs: `+`, `*`, and `-` reduce modulo `n` (core's subtraction
-`((n - b) + a) % n` computes the same value as the previous spec's
-`(a + n - b) % n`), and negation is `(n - a) % n`. `OfNat`, `Inhabited`,
-`BEq` (via `DecidableEq`), and `Repr` instances come from core as well,
-given `NeZero Fr.modulus`. The definitions below are thin wrappers kept
-so the rest of the spec is unaffected by the representation change.
+Scalars and base-field elements have distinct types, so they cannot mix by accident.
+
+Core gives `Fin` its `+`, `-`, `*` and negation, all reduced mod `r`.
 -/
 
 @[expose] public section
@@ -63,20 +56,22 @@ def powNat (base : Fr) (e : Nat) : Fr :=
 termination_by e
 decreasing_by omega
 
-/-- Multiplicative inverse via Fermat's little theorem: computes
-`a^(modulus - 2)`, hence **`(0 : Fr).inverse = 0`** rather than an
-error. Call sites must therefore ensure the argument is nonzero, or
-document why it is. -/
+/-- Multiplicative inverse by Fermat's little theorem: `a^(r - 2)`.
+
+So the inverse of `0` is `0`, not an error.
+
+A caller must check that the argument is nonzero, or say why it is. -/
 @[inline] def inverse (a : Fr) : Fr := powNat a (modulus - 2)
 
-/-- Field division `a * b⁻¹`. Because `inverse` maps `0` to `0`,
-**every division by zero evaluates to `0` instead of failing**: `a / b`
-silently returns `0` when `b = 0`. Call sites must ensure the
-denominator is nonzero, or document why it is. Registered with high
-priority because core already has a `Div (Fin n)` instance that
-performs *`Nat` division* of the underlying values — silently picking
-that one up would be wrong for a field element, so this instance must
-shadow it. -/
+/-- Field division `a * b⁻¹`.
+
+The inverse of `0` is `0`, so a division by zero gives `0`, with no error.
+
+A caller must check that the denominator is nonzero, or say why it is.
+
+Core already has a division on `Fin n`, which divides the integers.
+
+That division is wrong for a field element, so this instance has high priority. -/
 instance (priority := high) : Div Fr := ⟨fun a b => a * b.inverse⟩
 
 /-- The inverses of `xs`, from a single inversion.
@@ -85,11 +80,11 @@ instance (priority := high) : Div Fr := ⟨fun a b => a * b.inverse⟩
 
 The result pairs the inverses of `xs` with `pre⁻¹`.
 
-```text
-    go pre []       = ([], pre⁻¹)
-    go pre (x :: t) = let (is, s) := go (pre * x) t      s = (pre * x)⁻¹
-                      (pre * s :: is, s * x)             x⁻¹ = pre * s,  pre⁻¹ = s * x
-```
+On the empty list, the result is the empty list and `pre⁻¹`.
+
+On `x :: t`, the recursion on `t` with `pre * x` gives the inverses of `t` and `s = (pre * x)⁻¹`.
+
+Then `x⁻¹ = pre * s` and `pre⁻¹ = s * x`.
 
 A zero is skipped and maps to zero, as `inverse` maps it. -/
 def batchInverseAux : Fr → List Fr → List Fr × Fr
@@ -110,7 +105,9 @@ One inversion costs about 380 multiplications.
 
 This takes one inversion in total, and three multiplications per element.
 
-See Montgomery, "Speeding the Pollard and elliptic curve methods of factorization", Math. Comp. 48 (1987). -/
+See Montgomery, "Speeding the Pollard and elliptic curve methods of factorization".
+
+It appeared in Mathematics of Computation 48 (1987). -/
 def batchInverse (xs : Array Fr) : Array Fr :=
   (batchInverseAux one xs.toList).1.toArray
 
@@ -122,13 +119,15 @@ def fromBytesBEAux (acc : Nat) : List UInt8 → Nat
   | [] => acc
   | b :: rest => fromBytesBEAux ((acc <<< 8) ||| b.toNat) rest
 
-/-- Decode big-endian bytes as a `Nat`. The single byte→field decoder
-shared by `fromBytesBE` and `hashToBlsField`. -/
+/-- Decode big-endian bytes as a natural number.
+
+Both decoders of field elements from bytes use it. -/
 @[inline] def bytesBEToNat (b : ByteArray) : Nat :=
   fromBytesBEAux 0 b.data.toList
 
-/-- Decode a 32-byte big-endian integer as an `Fr`. Throws if the input
-has the wrong size or the integer is `≥ r`. -/
+/-- Decode a 32-byte big-endian integer as an element of `Fr`.
+
+It rejects an input of the wrong size, and an integer of at least `r`. -/
 def fromBytesBE (b : ByteArray) : Except BlsError Fr :=
   if b.size ≠ 32 then .error .nonCanonicalFieldElement
   else
@@ -140,8 +139,9 @@ def toBytesBE (a : Fr) : ByteArray :=
   ByteArray.mk <| Array.ofFn (n := 32) fun i =>
     UInt8.ofNat ((a.val >>> ((31 - i.val) * 8)) &&& 0xff)
 
-/-- Hash `data` and convert the output to a BLS scalar field element.
-The output is not uniform over the BLS field. -/
+/-- Hash the data, and convert the digest to an element of `Fr`.
+
+The output is not uniform over `Fr`. -/
 def hashToBlsField (data : ByteArray) : Fr :=
   let hashedData := Hash.sha256 data
   Fr.ofNat (bytesBEToNat hashedData)

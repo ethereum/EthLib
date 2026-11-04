@@ -5,15 +5,13 @@ public import EthLib.Cryptography.Bls.Fp6
 /-!
 # `Fp12`
 
-The quadratic extension `Fp12 = Fp6[w] / (w² − v)`. Elements are written
-`c0 + c1·w` with each coefficient in `Fp6`. The reduction rule is
-`w² = v ∈ Fp6`, so multiplication is
+The quadratic extension `Fp12 = Fp6[w] / (w^2 - v)`, with elements `c0 + c1 w`.
 
-  (a₀ + a₁·w)(b₀ + b₁·w) = (a₀·b₀ + v·a₁·b₁) + (a₀·b₁ + a₁·b₀)·w
+With `w^2 = v`, the product is `(a0 + a1 w)(b0 + b1 w) = (a0 b0 + v a1 b1) + (a0 b1 + a1 b0) w`.
 
-Inversion comes from `(a₀ + a₁·w)·(a₀ − a₁·w) = a₀² − v·a₁²`, giving
+The inverse comes from `(a0 + a1 w)(a0 - a1 w) = a0^2 - v a1^2`.
 
-  (a₀ + a₁·w)⁻¹ = (a₀ − a₁·w) / (a₀² − v·a₁²)
+So `(a0 + a1 w)^(-1) = (a0 - a1 w) / (a0^2 - v a1^2)`.
 -/
 
 @[expose] public section

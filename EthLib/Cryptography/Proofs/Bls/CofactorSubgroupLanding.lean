@@ -8,17 +8,18 @@ public import EthLib.Cryptography.Proofs.Bls.CofactorPointQ262069
 public import EthLib.Cryptography.Proofs.Bls.CofactorPointLarge
 
 /-!
-# Proofs: `clearCofactor` and `hashToG2` land in the prime-order `G2` subgroup
+# Proofs: the cofactor clearing and the hash to `G2` land in the subgroup of order `r`
 
-Source: `RFC 9380 §8.8.2 and Appendix G.3` and `IRTF draft-irtf-cfrg-bls-signature-04`.
+The sources are RFC 9380, §8.8.2 and Appendix G.3, and draft-04.
+<https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04>
 
-`clearCofactor` sends every point on the twist into the subgroup of order `r`.
+The cofactor clearing sends every point of the twist into the subgroup of order `r`.
 
-The torsion witnesses all lie in the kernel of `[r] * clearCofactor`.
+The torsion witnesses all lie in the kernel of `[r]` after the cofactor clearing.
 
 So that kernel is the whole twist, by the size bound `2 * p^2 + 1`.
 
-Hence hash to curve always returns a point in the subgroup of order `r`.
+Hence the hash to curve always returns a point in the subgroup of order `r`.
 -/
 
 @[expose] public section
