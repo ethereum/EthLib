@@ -17,6 +17,7 @@ public import EthLib.Execution.Proofs.Evm.StackOnly
 public import EthLib.Execution.Proofs.Evm.MemoryData
 public import EthLib.Execution.Proofs.Evm.Return
 public import EthLib.Execution.Proofs.Evm.EnvironmentData
+public import EthLib.Execution.Proofs.Evm.AccountData
 public import EthLib.Execution.Proofs.Evm.JumpDest
 public import EthLib.Execution.Proofs.Evm.ControlFlow
 

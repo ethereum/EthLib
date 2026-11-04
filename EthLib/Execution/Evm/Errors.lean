@@ -1,11 +1,15 @@
 module
 
+public import EthLib.Execution.State.Tracker
+
 /-!
 # `Evm.Errors`
 
 The ways in which the execution of EVM code can stop before its end.
 
 A revert keeps the gas left and returns data.
+
+A state that lacks data it must hold stops the whole execution, and is no halt.
 
 Every other error is an exceptional halt, which consumes all the gas of the frame.
 
@@ -48,6 +52,8 @@ inductive EvmError where
   | kzgProofError
   /-- REVERT stops the frame, which keeps its gas left. -/
   | revert
+  /-- The state lacks data that it must hold, such as the code of a code hash. -/
+  | state (e : State.StateError)
   deriving DecidableEq, Repr
 
 end EthLib.Execution.Evm
