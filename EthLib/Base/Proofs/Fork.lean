@@ -11,6 +11,8 @@ The comparison agrees with that order, as an ordered map needs.
 
 The timeline pins each position, so a fork moved in the type fails the build.
 
+Each fork reads back from its name, and no two forks share a name.
+
 A field that appears at a fork holds nothing before it, and one value from it on.
 -/
 
@@ -69,6 +71,20 @@ theorem mem_timeline (f : Fork) :
       petersburg, istanbul, muirGlacier, phase0, berlin, london, altair, arrowGlacier, grayGlacier,
       bellatrix, paris, shapella, dencun, pectra, fusaka, bpo1, bpo2, glamsterdam, hegota] := by
   cases f <;> decide
+
+/-! ## Names -/
+
+/-- Each fork reads back from its name. -/
+theorem ofName?_name (f : Fork) : ofName? f.name = some f := by
+  cases f <;> rfl
+
+/-- A fork read from a name has that name. -/
+theorem name_of_ofName? {s : String} {f : Fork} (h : ofName? s = some f) : f.name = s := by
+  simpa using List.find?_some h
+
+/-- Two forks with one name are equal. -/
+theorem name_injective : Function.Injective name := fun a b h =>
+  Option.some.inj ((ofName?_name a).symm.trans (h ▸ ofName?_name b))
 
 end EthLib.Base.Fork
 

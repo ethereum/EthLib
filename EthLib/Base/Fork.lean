@@ -158,6 +158,39 @@ instance (a b : Fork) : Decidable (a < b) := Nat.decLt _ _
 
 instance (a b : Fork) : Decidable (a ≤ b) := Nat.decLe _ _
 
+/-- The name of a fork, as its case is written, such as `bellatrix`. -/
+def name : Fork → String
+  | frontier => "frontier"
+  | homestead => "homestead"
+  | daoFork => "daoFork"
+  | tangerineWhistle => "tangerineWhistle"
+  | spuriousDragon => "spuriousDragon"
+  | byzantium => "byzantium"
+  | constantinople => "constantinople"
+  | petersburg => "petersburg"
+  | istanbul => "istanbul"
+  | muirGlacier => "muirGlacier"
+  | phase0 => "phase0"
+  | berlin => "berlin"
+  | london => "london"
+  | altair => "altair"
+  | arrowGlacier => "arrowGlacier"
+  | grayGlacier => "grayGlacier"
+  | bellatrix => "bellatrix"
+  | paris => "paris"
+  | shapella => "shapella"
+  | dencun => "dencun"
+  | pectra => "pectra"
+  | fusaka => "fusaka"
+  | bpo1 => "bpo1"
+  | bpo2 => "bpo2"
+  | glamsterdam => "glamsterdam"
+  | hegota => "hegota"
+
+/-- The fork with a name, if one has it. -/
+def ofName? (s : String) : Option Fork :=
+  ((List.range (hegota.ctorIdx + 1)).map Fork.ofNat).find? (·.name == s)
+
 end Fork
 
 /-- A field that appears at fork `f`, in a type at fork `fork`.
