@@ -61,13 +61,12 @@ In Python, a length above 1024 and a lack of gas both raise `ValueError`.
 
 ## Test vectors
 
-`tests/` has no MODEXP vectors yet.
-The proofs pin known answers instead, all checked by the kernel:
+`bindings/python/tests/precompile/test_modexp.py` runs these cases through the bindings:
 
-- the five worked inputs of EIP-198, run through the whole precompile;
-- the smallest cases of `tests/byzantium/eip198_modexp_precompile/test_modexp.py` in execution-specs;
-- the 15 `modexp_nagydani_*` prices of the EIP-7883 table;
-- the five highest-bit examples of EIP-198.
+- The five worked inputs of EIP-198 run through the whole precompile.
+- Four small inputs have an empty base and exponent, so the output is `1 mod MODULUS`, or 0 for a zero modulus.
+- The 15 `modexp_nagydani_*` prices of the EIP-7883 table run through the price.
+- The five highest-bit examples of EIP-198 run through the price.
 
 ## What is proved
 
@@ -90,11 +89,10 @@ It is at most 528449536, so it fits in 64 bits (`gasCost_le`, `Gas.lean`, and `c
 ## What is not proved
 
 No theorem relates the module to another implementation.
-The known answers check the agreement only on their own inputs.
+The test vectors check the agreement only on their own inputs.
 
 Nothing is proved about the cost of computing the result, which the gas price is meant to cover.
 
 ## What the kernel cannot evaluate
 
 Nothing in this module.
-Every known answer uses `decide` or `decide +kernel`, and none uses `native_decide`.
