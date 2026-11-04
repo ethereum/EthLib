@@ -110,6 +110,10 @@ inductive RlpError where
   | scalarTooLarge (value bits : Nat)
   /-- A list of `actual` items, where the structure has exactly `expected` fields. -/
   | wrongFieldCount (expected actual : Nat)
+  /-- Field `index` of a structure holds no value, for the reason `error`.
+
+  Fields count from 0. -/
+  | inField (index : Nat) (error : RlpError)
   deriving Repr, DecidableEq
 
 /-- `n` in base 256, most significant byte first, using at most `fuel` bytes.
