@@ -6,18 +6,18 @@ public import EthLib.Cryptography.Bls.Fr
 /-!
 # `G1`
 
-The curve `E : y² = x³ + 4` over `Fp`. We represent points in **Jacobian
-projective** coordinates `(X, Y, Z)` with the affine map `(x, y) =
-(X/Z², Y/Z³)`. The point at infinity is encoded as any `(X, Y, 0)`.
+The curve `E : y^2 = x^3 + 4` over `Fp`.
 
-Why projective? Affine arithmetic needs an inversion per addition,
-which costs `O(log p)` muls. Jacobian doubling/adding is inversion-free,
-just polynomial in the coordinates. We pay one inversion at the end
-when we serialize.
+A point is a Jacobian triple `(X, Y, Z)`, for the affine point `(X / Z^2, Y / Z^3)`.
 
-Arithmetic formulas are the textbook ones from Bernstein–Lange's
-[explicit-formulas database](https://hyperelliptic.org/EFD/) for short
-Weierstrass curves with `a = 0`.
+A triple `(X, Y, 0)` is the point at infinity.
+
+Affine addition needs one inversion, which costs about `log p` multiplications.
+
+Jacobian doubling and addition need none, and one inversion at the end gives the affine form.
+
+The formulas are those of the explicit-formulas database, for short Weierstrass curves with `a = 0`:
+<https://hyperelliptic.org/EFD/>
 -/
 
 @[expose] public section
@@ -158,10 +158,8 @@ decreasing_by omega
 
 Pippenger's algorithm splits each scalar into 8-bit windows.
 
-```text
-    window k   : sum_v v * B_v,  B_v = the sum of the points whose digit k is v     independent of other windows
-    combine    : acc = 2^8 * acc + S_k, from the top window down
-```
+- Window `k` sums `v * B_v`, where `B_v` is the sum of the points whose digit `k` is `v`.
+- The windows combine as `acc = 2^8 * acc + S_k`, from the top window down.
 
 Each window's sum needs only the points and the scalars, so each one runs as its own task.
 -/
@@ -192,7 +190,9 @@ def msmBuckets (points : Array G1) (scalars : Array Fr) (n k : Nat) : Array G1 :
 
 The state is `(partialSum, running)`.
 
-`running` holds `sum_{u >= v} B_u`, and adding it at each step counts bucket `u` exactly `u` times. -/
+The running sum holds `sum_{u >= v} B_u`.
+
+Adding it at each step counts bucket `u` exactly `u` times. -/
 def msmRunning (bs : Array G1) : MProd G1 G1 :=
   (List.range' 0 (1 <<< 8 - 1)).foldl (fun rp vv =>
     ⟨add rp.1 (add rp.2 bs[1 <<< 8 - 1 - vv]!),

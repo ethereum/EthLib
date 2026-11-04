@@ -7,26 +7,22 @@ public import EthLib.Cryptography.Bls.Fp12
 /-!
 # `Pairing`
 
-The optimal-ate pairing for BLS12-381:
+The optimal ate pairing of BLS12-381: `e(P, Q) = Miller(|x|, Q', P')^((p^12 - 1) / r)`.
 
-  e(P, Q) = Miller(|x|, Q', P')^((p¹² − 1) / r)
+- `x = -0xd201000000010000` is the BLS parameter, which is negative.
+- `P` is in `G1`, and `Q` is in `G2`.
+- `Q'` is the untwisted image of `Q` on `E` over `Fp12`.
+- `P'` is `P` on `E` over `Fp12`, by the inclusion of `Fp` in `Fp12`.
 
-where:
-  * `x = -0xD201_0000_0001_0000` is the BLS curve parameter (negative).
-  * `P` ∈ G1, `Q` ∈ G2.
-  * `Q'` ∈ E(Fp12) is the untwisted image of Q.
-  * `P'` ∈ E(Fp12) is the trivial Fp ↪ Fp12 inclusion of P.
+The Miller loop walks the bits of `|x|` with a point `R` that starts at `Q'`.
 
-`Miller(s, R, T)` accumulates a value in Fp12 by walking the bits of
-`s`: at each step it doubles `R` (and multiplies the running product by
-the tangent line at the old `R`, evaluated at `T`); when a bit is set,
-it also adds the original input `R₀` to `R` (multiplying by the line
-through them, again evaluated at `T`).
+At each bit it doubles `R`, and multiplies the product by the tangent line at `P'`.
 
-For BLS curves with negative `x`, the final result is then conjugated.
+On a set bit it also adds `Q'` to `R`, and multiplies by the line through them at `P'`.
 
-The final exponentiation reduces the Miller output to the `r`-th roots
-of unity in `Fp12*`, where the bilinear pairing actually lives.
+Since `x` is negative, the result is then conjugated.
+
+The final exponentiation sends the result to the `r`-th roots of unity in `Fp12`.
 -/
 
 @[expose] public section

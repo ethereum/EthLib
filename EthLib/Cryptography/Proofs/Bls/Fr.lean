@@ -5,12 +5,13 @@ public import EthLib.Cryptography.Bls.Fr
 /-!
 # Proofs: `Fr`
 
-Algebraic facts about `Fr` multiplication and addition and `powNat`.
+Algebraic facts about multiplication, addition and powers in `Fr`.
 
-`Fr` is `Fin Fr.modulus`, so every value is canonical (`val < modulus`)
-by construction and the lemmas below hold unconditionally. Several are
-thin restatements of core `Fin` lemmas, kept under the `Fr` namespace so
-downstream proofs are unaffected by the representation change.
+`Fr` is `Fin r`, so every value is below `r` by construction.
+
+So the lemmas hold with no hypothesis.
+
+Several restate core lemmas on `Fin`, so later proofs do not depend on the representation.
 -/
 
 @[expose] public section

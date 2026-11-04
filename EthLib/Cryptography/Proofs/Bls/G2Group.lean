@@ -6,24 +6,31 @@ public import Mathlib.AlgebraicGeometry.EllipticCurve.Jacobian.Point
 public import Mathlib.Tactic.Module
 
 /-!
-# Proofs: the `G2` group structure
+# Proofs: the group structure of `G2`
 
-`G2` represents points on the twisted curve `E' : y^2 = x^3 + 4*(1 + i)` over `Fp2` in Jacobian coordinates.
+The points of `G2` are Jacobian triples on the twist `E' : y^2 = x^3 + 4 (1 + i)` over `Fp2`.
 
-Curve and subgroup parameters follow `IRTF draft-irtf-cfrg-bls-signature-04 §1.3 and Appendix A`.
+The curve and the subgroup follow draft-04, §1.3 and Appendix A.
+<https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04>
 
-Twist parameters also match `draft-irtf-cfrg-pairing-friendly-curves-07 §4.2.1`.
+The twist also matches draft-07, §4.2.1.
+<https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-07>
 
-This file links the library's `G2` arithmetic to Mathlib's elliptic-curve group law.
+This file links the arithmetic of `G2` to Mathlib's group law of elliptic curves.
 
-- `curve` is `y^2 = x^3 + bTwist` over `Fp2`, using the `Field Fp2` instance from `Proofs.Bls.Fp2`.
-- `rep P = ![P.x, P.y, P.z]` embeds a Jacobian triple, and `Valid P` states that `rep P` is nonsingular.
-- `toPoint` maps a Jacobian triple to Mathlib's affine curve group.
-- `valid_*` and `toPoint_*` show `zero`, `neg`, `double`, `add`, and `mulNat` preserve `Valid` and match the group law.
+The field structure of `Fp2` comes from the `Fp2` proofs.
 
-Doubling agrees with Mathlib's `dblXYZ` with unit weight `u = 1`.
+A triple is valid when it is nonsingular, and each valid triple maps to a point of the group.
 
-General addition matches `addXYZ` up to the nonzero Jacobian weight `u = -(2 * z_1 * z_2)` modulo the curve equations.
+Zero, negation, doubling, addition and scalar multiplication keep validity.
+
+They are the group law.
+
+Doubling agrees with Mathlib's doubling with the weight `u = 1`.
+
+Addition agrees with Mathlib's addition up to the weight `u = -(2 z_1 z_2)`.
+
+That agreement holds modulo the two curve equations.
 -/
 
 @[expose] public section

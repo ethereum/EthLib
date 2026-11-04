@@ -6,11 +6,13 @@ public import EthLib.Cryptography.Hash.Sha256
 /-!
 # `HashToCurve`
 
-Hash-to-curve for the BLS12-381 G2 suite
-`BLS12381G2_XMD:SHA-256_SSWU_RO_` per RFC 9380.
+The hash to `G2` of the suite `BLS12381G2_XMD:SHA-256_SSWU_RO_` of RFC 9380.
 
-The pipeline is `expand_message_xmd → hash_to_field → SSWU → 3-isogeny
-→ clear_cofactor`. Constants are reproduced verbatim from the RFC.
+The steps are the message expansion, the hash to the field, the SSWU map and the 3-isogeny.
+
+The cofactor clearing ends it.
+
+The constants are those of the RFC.
 -/
 
 @[expose] public section

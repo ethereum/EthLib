@@ -11,29 +11,28 @@ public import Mathlib.FieldTheory.Finite.Basic
 /-!
 # Proofs: `Fp` as a Mathlib finite field
 
-Connects `Fp` (= `Fin Fp.modulus`) to Mathlib's `ZMod Fp.modulus`,
-mirroring `Proofs.Bls.FrZMod` for the scalar field. See that file for
-the design notes on the scoped `Field` instance (its `Div` data must be
-the spec's own high-priority Fermat-inverse division) and the
-elaboration pitfalls of `Fin`-abbrev field types.
+This file maps `Fp`, which is `Fin p`, to Mathlib's `ZMod p`, as the scalar field proofs do.
+
+The notes of the scalar field proofs on the scoped field instance apply here too.
 
 ## Primality of the modulus
 
-Unlike `r - 1`, the factorization of `p - 1` contains primes far beyond
-`norm_num` range (up to 234 bits), so `modulus_prime` is proved by a
-*chain* of Lucas certificates (`lucas_primality`) — a Pratt tree:
+The factors of `p - 1` reach 234 bits, beyond the range of `norm_num`.
 
-  p - 1 = 2 · 3² · 11 · 23 · 47 · 10177 · 859267 · 52437899
-            · 2584487767265781317813
-            · 15778400344354997994418419698270088123916926905054652752758194827714659
+So the primality of `p` is a chain of Lucas certificates, a Pratt tree.
 
-and each of the two large factors recursively carries its own
-certificate, ten auxiliary primes in total. All modular exponentiations
-go through `EthLib.Cryptography.PowMod.powModAux`, so the entire tree
-is kernel-checked without `native_decide`.
+The factorization is `p - 1 = 2 * 3^2 * 11 * 23 * 47 * 10177 * 859267 * 52437899 * q1 * q2`.
 
-The square-root helper (`Fp.sqrt`) is *not* treated here; its
-correctness proof belongs with the decompression proofs that need it.
+The two large primes are these:
+
+- `q1 = 2584487767265781317813`.
+- `q2 = 15778400344354997994418419698270088123916926905054652752758194827714659`.
+
+Each of the two large factors carries its own certificate, with ten auxiliary primes in total.
+
+The kernel checks every modular power, so the whole tree needs no compiled code.
+
+The square root is not treated here, but with the decompression proofs that need it.
 -/
 
 @[expose] public section

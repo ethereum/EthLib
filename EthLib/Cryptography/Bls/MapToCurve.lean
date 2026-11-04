@@ -9,7 +9,7 @@ The maps of a field element to a point of G1 or G2, which EIP-2537 exposes as pr
 
 Each map has two steps, from [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380):
 
-- The simplified SWU map of §6.6.2 sends `u` to a point of a curve `E'` isogenous to the target curve.
+- The simplified SWU map of §6.6.2 sends `u` to a curve `E'` isogenous to the target curve.
 - The isogeny of §6.6.3 sends that point to the target curve.
 
 Clearing the cofactor of §7 then multiplies the point into the subgroup of prime order.
@@ -18,7 +18,9 @@ G1 uses the 11-isogeny of Appendix E.2 and the cofactor `h_eff` of §8.8.1.
 
 G2 reuses the SSWU map, the 3-isogeny and the cofactor clearing of the hash to G2.
 
-An input that sends a denominator of the isogeny to zero maps to the identity point, as §6.6.3 requires.
+An input that sends a denominator of the isogeny to zero maps to the identity point.
+
+§6.6.3 requires that.
 -/
 
 @[expose] public section

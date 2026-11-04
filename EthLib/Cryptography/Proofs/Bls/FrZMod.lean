@@ -12,50 +12,54 @@ public import Mathlib.RingTheory.RootsOfUnity.PrimitiveRoots
 /-!
 # Proofs: `Fr` as a Mathlib finite field
 
-Connects `Fr` (= `Fin Fr.modulus`) to Mathlib's `ZMod Fr.modulus`.
-Because `Fr.modulus` is a positive numeral, `ZMod Fr.modulus` reduces
-definitionally to `Fin Fr.modulus`, and Mathlib deliberately builds
-`ZMod`'s ring structure to be definitionally equal to the one on `Fin`,
-so the ring isomorphism below is the identity.
+This file maps `Fr`, which is `Fin r`, to Mathlib's `ZMod r`.
+
+Since `r` is a positive numeral, `ZMod r` reduces by definition to `Fin r`.
+
+Mathlib builds the ring structure of `ZMod` to agree by definition with that of `Fin`.
+
+So the ring isomorphism below is the identity.
 
 ## Primality of the modulus
 
-`modulus_prime` proves that the BLS12-381 scalar field order `r` is
-prime via a Lucas certificate (`lucas_primality`): `7` has order
-`r - 1` in `(ZMod r)ˣ`, which is checked from the full factorization
+The prime `r` has a Lucas certificate: `7` has order `r - 1` in the units of `ZMod r`.
 
-  r - 1 = 2³² · 3 · 11 · 19 · 10177 · 125527 · 859267 · 906349² ·
-          2508409 · 2529403 · 52437899 · 254760293²
+The certificate uses the full factorization of `r - 1`, which is the product of:
 
-by verifying `7 ^ (r-1) = 1` and `7 ^ ((r-1)/q) ≠ 1` for each prime
-factor `q` (`seven_pow_card_sub_one`, `seven_pow_div_prime_ne_one`).
-The modular exponentiations are carried out by the kernel through
-`powModAux`, a fuel-based square-and-multiply whose steps are
-GMP-accelerated `Nat` operations, so the whole certificate checks in
-seconds without `native_decide`.
+- `2^32 * 3 * 11 * 19 * 10177 * 125527 * 859267`.
+- `906349^2 * 2508409 * 2529403 * 52437899 * 254760293^2`.
 
-The same two facts pin down the multiplicative order of `7` exactly
-(`orderOf_seven`), making `7` a primitive `(r-1)`-th root of unity and
-`7 ^ ((r-1)/n)` a primitive `n`-th root of unity for every `n ∣ r - 1`
-(`isPrimitiveRoot_seven_pow`) — the algebraic backbone of the FFT and
-barycentric-evaluation domains.
+It checks `7^(r - 1) = 1`, and `7^((r - 1) / q) ≠ 1` for each prime factor `q`.
 
-## Bridge layer
+The kernel computes those powers by square and multiply on natural numbers, in seconds.
 
-The last section relates every arithmetic operation the executable spec
-defines on `Fr` to its Mathlib counterpart: `Fr.ofNat` is `Nat.cast`,
-`Fr.powNat` is monoid `^`, `Fr.inverse` is field `⁻¹` (by Fermat's
-little theorem, using primality), and spec division is `a * b⁻¹`.
-The `Field Fr` instance is `Field (ZMod Fr.modulus)` with one change:
-its `Div` data is the spec's own division (`Bls/Fr.lean` registers a
-high-priority Fermat-inverse `Div Fr`), so `a / b` written anywhere in
-the spec *is* the field's division — copying ZMod's gcd-based division
-data instead would leave two propositionally-but-not-definitionally
-equal `Div Fr` instances in scope, and the kernel rejects the resulting
-structure. Downstream proofs activate the field structure with
-`open scoped EthLib.Cryptography.Bls.Fr` — it is scoped, not global,
-for the same reason Mathlib keeps `Fin.instCommRing` scoped (see the
-note in `Mathlib.Data.ZMod.Defs` about coercion loops).
+The same two facts give the order of `7` exactly.
+
+So `7` is a primitive `(r - 1)`-th root of unity.
+
+And `7^((r - 1) / n)` is a primitive `n`-th root of unity for every `n` that divides `r - 1`.
+
+Those roots are the domains of the FFT and of barycentric evaluation.
+
+## The bridge to Mathlib
+
+The last section maps each operation of `Fr` to its Mathlib counterpart.
+
+The cast of a natural number, the power, the inverse and the division all agree.
+
+The inverse is Fermat's inverse, which equals the field inverse because `r` is prime.
+
+The field instance is the one of `ZMod r`, except for its division.
+
+Its division is the division of `Fr`, a product by Fermat's inverse.
+
+So `a / b` in the specification is the field's division, by definition.
+
+Two division instances that agree only up to proof would make the kernel reject the structure.
+
+Later proofs open the field structure with `open scoped EthLib.Cryptography.Bls.Fr`.
+
+It is scoped, as Mathlib scopes the ring instance of `Fin`, to avoid coercion loops.
 -/
 
 @[expose] public section
@@ -175,9 +179,9 @@ theorem seven_pow_div_prime_ne_one : ∀ q : Nat, q.Prime → q ∣ modulus - 1 
   · obtain rfl := heq 254760293 (by norm_num) (hq.dvd_of_dvd_pow hdvd)
     exact seven_pow_div_ne_one 254760293 (by decide)
 
-/-- The BLS12-381 scalar field modulus is prime, by a Lucas primality
-certificate with witness `7` (a primitive root mod `r`, the same
-generator the consensus specs use for roots of unity). -/
+/-- The scalar field modulus `r` is prime, by a Lucas certificate with witness `7`.
+
+`7` is a primitive root mod `r`, and KZG derives its roots of unity from it. -/
 theorem modulus_prime : Nat.Prime modulus :=
   lucas_primality modulus ((7 : ℕ) : ZMod modulus)
     seven_pow_card_sub_one seven_pow_div_prime_ne_one

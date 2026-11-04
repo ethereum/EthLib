@@ -7,22 +7,22 @@ public import EthLib.Cryptography.Bls.Errors
 /-!
 # `Compress`
 
-Compressed serialization for G1 and G2, plus `keyValidate`. We follow
-[IRTF draft-bls-signature-04 §2.5](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-2.5),
-the standard BLS12-381 compressed encoding.
+The compressed encodings of `G1` and `G2`, and key validation.
 
-The encoding stuffs three flag bits into the high bits of the first
-byte of the x-coordinate:
+They follow §2.5 of the BLS signature draft:
+<https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-2.5>
 
-  bit 7 (0x80) — *compressed*: always 1 here (we don't emit uncompressed)
-  bit 6 (0x40) — *infinity*: 1 iff the point is the identity
-  bit 5 (0x20) — *y-sign*: 1 iff `y` is the lexicographically larger of
-                 the two square roots of `x³ + b`
+The first byte of the `x` coordinate carries three flags in its top bits.
 
-`keyValidate` decompresses, checks the result is on the curve, checks
-subgroup membership by `[r]·P = O`, and rejects the identity point
-(per IRTF BLS §2.5). Callers that explicitly *allow* the identity
-(e.g. KZG's `validateKzgG1`) wrap `keyValidate` upstream.
+- Bit 7, `0x80`, marks a compressed point, and it is always set here.
+- Bit 6, `0x40`, marks the point at infinity.
+- Bit 5, `0x20`, is set when `y` is the larger of the two square roots of `x^3 + b`.
+
+Key validation decompresses the point, and checks that it is on the curve.
+
+It then checks `[r] P = O`, and rejects the point at infinity.
+
+KZG accepts the point at infinity, so it tests for that encoding before key validation.
 -/
 
 @[expose] public section
@@ -109,8 +109,9 @@ def compress (p : G1) : ByteArray := Id.run do
     bytes := bytes.set! 0 ((bytes.get! 0) ||| 0x20)
   return bytes
 
-/-- Decompress 48 bytes into a `G1` point, failing with `invalidG1Point`
-for malformed inputs or non-curve points. -/
+/-- Decompress 48 bytes into a point of `G1`.
+
+It fails on a malformed input and on a point off the curve. -/
 def uncompress (bytes : ByteArray) : Except BlsError G1 :=
   if bytes.size ≠ 48 then .error .invalidG1Point
   else
@@ -120,8 +121,7 @@ def uncompress (bytes : ByteArray) : Except BlsError G1 :=
     let ySign        := (head &&& 0x20) ≠ 0
     if !isCompressed then .error .invalidG1Point
     else if isInfinity then
-      -- Infinity must use the canonical encoding `0xc0` + 47 zero bytes
-      -- and the y-sign flag must be cleared.
+      -- Infinity must be the canonical encoding, `0xc0` then 47 zero bytes, with no sign flag.
       if ySign || head ≠ 0xc0 || !tailAllZero bytes 1 then .error .invalidG1Point
       else .ok G1.zero
     else
@@ -181,7 +181,7 @@ def keyValidatePoint (bytes : ByteArray) : Except BlsError G1 := do
   if !inSubgroup p then throw .notInSubgroup
   return p
 
-/-- Validate a compressed public key, as `KeyValidate` in the IRTF BLS signature draft, section 2.5.
+/-- Validate a compressed public key, by key validation of the BLS signature draft, §2.5.
 
 This runs the same checks as the point-returning version and discards the point.
 -/
@@ -236,8 +236,9 @@ theorem size_compress (p : G2) : (compress p).size = 96 := by
     dsimp only
     split <;> simp only [size_set!, size_fp2ToBytes]
 
-/-- Decompress 96 bytes into a `G2` point, failing with `invalidG2Point`
-for malformed inputs or non-curve points. -/
+/-- Decompress 96 bytes into a point of `G2`.
+
+It fails on a malformed input and on a point off the curve. -/
 def uncompress (bytes : ByteArray) : Except BlsError G2 :=
   if bytes.size ≠ 96 then .error .invalidG2Point
   else

@@ -4,19 +4,21 @@ public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.G2Group
 
 /-!
-# Proofs: `G2` twist membership and generator validity
+# Proofs: twist membership and the validity of the `G2` generator
 
-This file links `isOnTwist` to `G2.Valid` (Mathlib's `curve.Nonsingular`).
+A triple with `z = 1` on the twist is valid, that is, nonsingular in Mathlib's sense.
 
-Curve and subgroup parameters follow `IRTF draft-irtf-cfrg-bls-signature-04 §1.3 and Appendix A`.
+The curve and the subgroup follow draft-04, §1.3 and Appendix A.
+<https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04>
 
-Twist parameters also match `draft-irtf-cfrg-pairing-friendly-curves-07 §4.2.1`.
+The twist also matches draft-07, §4.2.1.
+<https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-07>
 
-`cube_add_bTwist_ne_zero` proves that `x^3 + 4*(1 + i)` has no root in `Fp2`.
+The cubic `x^3 + 4 (1 + i)` has no root in `Fp2`.
 
-Every affine solution `(x, y)` therefore has `y != 0` and nonzero `y`-derivative `2 * y`.
+So every affine solution `(x, y)` has `y != 0`, and its derivative `2 y` in `y` is nonzero.
 
-`valid_of_isOnTwist_of_z_one` deduces `Valid` for `z = 1` twist points, certifying `valid_generator` in the kernel.
+The kernel checks that the generator is on the twist, so the generator is valid.
 -/
 
 @[expose] public section

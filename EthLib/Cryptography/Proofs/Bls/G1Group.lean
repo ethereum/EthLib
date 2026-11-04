@@ -6,28 +6,31 @@ public import Mathlib.AlgebraicGeometry.EllipticCurve.Jacobian.Point
 public import Mathlib.Tactic.Module
 
 /-!
-# Proofs: the `G1` group structure
+# Proofs: the group structure of `G1`
 
-Bridges the spec's `G1` (Jacobian-coordinate points of `y² = x³ + 4`
-over `Fp`, with Bernstein–Lange arithmetic) to Mathlib's
-`WeierstrassCurve.Jacobian` machinery, which quotients nonsingular
-Jacobian representatives by weighted scaling and carries a *proven*
-`AddCommGroup` on the affine side.
+The points of `G1` are Jacobian triples on `y^2 = x^3 + 4` over `Fp`.
 
-* `curve` is `y² = x³ + 4` over `ZMod Fp.modulus` (all algebra here is
-  phrased over `ZMod`, where `ring`/`linear_combination` work — see the
-  instance notes in `Proofs.Bls.FrZMod`; `Fp` values cross over by
-  definitional equality).
-* `rep P = ![P.x, P.y, P.z]` is the Mathlib representative of a spec
-  point; `Valid P` says it is nonsingular (in particular on the curve —
-  for `P.z = 0` this pins the sentinel class `![1, 1, 0]`).
-* `toPoint` maps a spec point to Mathlib's affine point group.
-* `toPoint_zero`, `toPoint_neg`, `toPoint_double`, `toPoint_add` (and
-  the `Valid` preservation lemmas) say the spec's arithmetic *is* the
-  curve group law. The doubling formulas agree with Mathlib's
-  `dblXYZ` on the nose; the addition formulas agree with `addXYZ` up to
-  the weighted scaling `u = -(2·z₁·z₂)`, modulo the two curve
-  equations.
+Mathlib's Jacobian curves quotient the nonsingular triples by weighted scaling.
+
+Mathlib also proves that the affine points form a commutative group.
+
+This file links the two.
+
+The algebra is stated over `ZMod p`, where `ring` and `linear_combination` work.
+
+A triple is valid when it is nonsingular, and so on the curve.
+
+For `z = 0`, validity pins the triple to the class of `(1, 1, 0)`.
+
+Each valid triple maps to a point of Mathlib's affine group.
+
+Zero, negation, doubling and addition keep validity, and they are the group law.
+
+The doubling formulas agree with Mathlib's doubling exactly.
+
+The addition formulas agree with Mathlib's addition up to the scaling `u = -(2 z_1 z_2)`.
+
+That agreement holds modulo the two curve equations.
 -/
 
 @[expose] public section

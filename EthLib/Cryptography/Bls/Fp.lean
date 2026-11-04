@@ -5,27 +5,22 @@ public import EthLib.Cryptography.Bls.Errors
 /-!
 # `Fp`
 
-The BLS12-381 base field. `Fp` elements live in `[0, p)` where
+The base field of BLS12-381, the integers mod the prime `p`.
 
-  p = 0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f624
-      1eabfffeb153ffffb9feffffffffaaab
+In hexadecimal, `p` is the 96 digits of these two lines, joined:
 
-`Fp` is `Fin Fp.modulus`, so canonicity (`val < modulus`) holds by
-construction. Same modulus story as `Fr`, just a different prime.
+- `1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f624`
+- `1eabfffeb153ffffb9feffffffffaaab`
 
-Lean core already equips `Fin n` with the modular arithmetic this spec
-needs: `+`, `*`, and `-` reduce modulo `n` (core's subtraction
-`((n - b) + a) % n` computes the same value as the previous spec's
-`(a + n - b) % n`), and negation is `(n - a) % n`. `OfNat`, `Inhabited`,
-`BEq` (via `DecidableEq`), and `Repr` instances come from core as well,
-given `NeZero Fp.modulus`. The definitions below are thin wrappers kept
-so the rest of the spec is unaffected by the representation change.
+`Fp` is `Fin p`, so every element is below `p` by construction.
 
-Inversion uses Fermat's little theorem (`x^(p-2)`); square root uses
-the fact that `p ≡ 3 (mod 4)` so `sqrt(x) = x^((p+1)/4)`.
+Core gives `Fin` its `+`, `-`, `*` and negation, all reduced mod `p`.
 
-There's no Montgomery form, Barrett reduction, or other optimization
-here: the goal is clarity, not speed.
+The inverse is a power, by Fermat's little theorem: `x^(p - 2)`.
+
+Since `p = 3 mod 4`, a square root of a square `x` is `x^((p + 1) / 4)`.
+
+The code aims at clarity, so it has no Montgomery form and no other optimization.
 -/
 
 @[expose] public section
@@ -38,8 +33,7 @@ def Fp.modulus : Nat :=
 
 protected theorem Fp.modulus_pos : 0 < Fp.modulus := by decide
 
--- Named explicitly: the anonymous-instance name would collide with
--- `Fr`'s `NeZero` instance (both auto-generate `instNeZeroNatModulus`).
+-- Named explicitly, since the anonymous instances of `Fp` and `Fr` would get the same name.
 instance Fp.instNeZeroModulus : NeZero Fp.modulus := ⟨by decide⟩
 
 /-- An element of the BLS12-381 base field. -/
@@ -72,14 +66,16 @@ decreasing_by omega
 /-- Multiplicative inverse via Fermat's little theorem. -/
 @[inline] def inverse (a : Fp) : Fp := powNat a (modulus - 2)
 
-/-- Field division `a * b⁻¹`. Registered with high priority because core
-already has a `Div (Fin n)` instance that performs *`Nat` division* of
-the underlying values — silently picking that one up would be wrong for
-a field element, so this instance must shadow it. -/
+/-- Field division `a * b⁻¹`.
+
+Core already has a division on `Fin n`, which divides the integers.
+
+That division is wrong for a field element, so this instance has high priority. -/
 instance (priority := high) : Div Fp := ⟨fun a b => a * b.inverse⟩
 
-/-- Square root, valid for `p ≡ 3 (mod 4)`. Throws `notASquare` if `a`
-is not a square. -/
+/-- Square root, valid since `p = 3 mod 4`.
+
+It fails when `a` is not a square. -/
 def sqrt (a : Fp) : Except BlsError Fp :=
   let cand := powNat a ((modulus + 1) / 4)
   if (cand * cand).beq a then .ok cand else .error .notASquare
@@ -91,8 +87,9 @@ def bytesBEToNat (b : ByteArray) : Nat := Id.run do
     acc := (acc <<< 8) ||| b[i]!.toNat
   return acc
 
-/-- Decode a 48-byte big-endian integer as an `Fp`. Throws if the input
-has the wrong size or the integer is `≥ p`. -/
+/-- Decode a 48-byte big-endian integer as an element of `Fp`.
+
+It rejects an input of the wrong size, and an integer of at least `p`. -/
 def fromBytesBE (b : ByteArray) : Except BlsError Fp :=
   if b.size ≠ 48 then .error .nonCanonicalFieldElement
   else

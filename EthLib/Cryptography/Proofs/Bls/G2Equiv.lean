@@ -3,15 +3,15 @@ module
 public import EthLib.Cryptography.Proofs.Bls.G2Validity
 
 /-!
-# Proofs: `G2` projective equality and group laws
+# Proofs: projective equality and the group laws of `G2`
 
-Distinct Jacobian triples can represent the same point on `E'`.
+Different Jacobian triples can represent the same point of `E'`.
 
-`projectiveEq` tests Jacobian projective equivalence directly over `Fp2`, leaving structural `BEq G2` untouched.
+The projective equality of `G2` tests that equivalence over `Fp2`.
 
-On `Valid` triples, `projectiveEq` agrees with Mathlib's Jacobian quotient and equality in `curve.toAffine.Point`.
+On valid triples, it agrees with equality of the points in Mathlib's affine group.
 
-Associativity, commutativity, and right-inverse laws of `G2.add` follow immediately up to `projectiveEq`.
+So addition is associative and commutative, and has inverses, up to projective equality.
 -/
 
 @[expose] public section

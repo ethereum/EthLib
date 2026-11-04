@@ -10,15 +10,17 @@ import all Init.Data.Range.Basic
 import all Batteries.Data.Except
 
 /-!
-# Proofs: `Fp.sqrt` and the G1 compressed-encoding round-trip
+# Proofs: the square root in `Fp` and the compressed encoding of `G1`
 
-`Fp.sqrt` computes `a^((p+1)/4)`, which squares back to `a` exactly on
-quadratic residues (`p ≡ 3 (mod 4)`): soundness (`sqrt_ok`) is the
-spec's own final check, completeness (`sqrt_complete`) is Euler's
-criterion. On top of this, `uncompress_compress` shows that
-decompressing a compressed valid point recovers the same group
-element (the Jacobian representative changes — compression
-normalizes to `z = 1` — but its `toPoint` does not).
+The square root computes `a^((p + 1) / 4)`, since `p = 3 mod 4`.
+
+It squares back to `a` exactly on the squares.
+
+Soundness is the final check of the square root, and completeness is Euler's criterion.
+
+Decompressing the compression of a valid point gives back the same group element.
+
+The coordinates may change, since compression scales to `z = 1`, but the group element does not.
 
 The converse direction shows that the encoding is canonical.
 

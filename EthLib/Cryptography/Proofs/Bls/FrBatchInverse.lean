@@ -5,11 +5,11 @@ public import EthLib.Cryptography.Proofs.Bls.FrZMod
 /-!
 # Proofs: batch inversion computes every inverse
 
-`Fr.batchInverse` inverts a whole array with one inversion.
+Batch inversion inverts a whole array with one field inversion.
 
-The headline result is `batchInverse_eq_map`: it returns `xs.map inverse`, for every input.
+It returns the inverse of each entry, for every input.
 
-Zeros included, since both sides map zero to zero.
+That includes zeros, since both sides send zero to zero.
 -/
 
 @[expose] public section

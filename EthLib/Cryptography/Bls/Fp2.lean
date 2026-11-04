@@ -5,14 +5,11 @@ public import EthLib.Cryptography.Bls.Fp
 /-!
 # `Fp2`
 
-The quadratic extension `Fp2 = Fp[i] / (i² + 1)`. Elements look like
-`c0 + c1·i` and arithmetic is the obvious "complex-number" rules:
+The quadratic extension `Fp2 = Fp[i] / (i^2 + 1)`, with elements `c0 + c1 i`.
 
-  (a + b·i)(c + d·i) = (ac − bd) + (ad + bc)·i        (since i² = −1)
+The product follows from `i^2 = -1`: `(a + b i)(c + d i) = (ac - bd) + (ad + bc) i`.
 
-Inversion uses the conjugate identity:
-
-  (a + b·i)⁻¹ = (a − b·i) / (a² + b²)
+The inverse uses the conjugate: `(a + b i)^(-1) = (a - b i) / (a^2 + b^2)`.
 -/
 
 @[expose] public section

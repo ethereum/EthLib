@@ -18,10 +18,10 @@ Ethereum uses the proof-of-possession scheme of §3.3, with keys in `G1` and sig
 
 namespace EthLib.Cryptography.Bls
 
-/-- A compressed `G1` point, the public key type of consensus-specs phase0. -/
+/-- A public key: a compressed point of `G1`, 48 bytes. -/
 abbrev BLSPubkey := Vector UInt8 48
 
-/-- A compressed `G2` point, the signature type of consensus-specs phase0. -/
+/-- A signature: a compressed point of `G2`, 96 bytes. -/
 abbrev BLSSignature := Vector UInt8 96
 
 end EthLib.Cryptography.Bls
@@ -173,7 +173,7 @@ def fastAggregateVerify
 
 /-! ## Ethereum wrappers -/
 
-/-- The public key aggregation of consensus-specs altair: the sum of validated keys.
+/-- The aggregation of Ethereum public keys: the sum of the validated keys.
 
 It fails on an empty list and on any invalid key. -/
 def ethAggregatePubkeys (pubkeys : Array ByteArray) : Except BlsError ByteArray := do
@@ -191,7 +191,9 @@ def ethAggregatePubkeys (pubkeys : Array ByteArray) : Except BlsError ByteArray 
     | .ok p => agg := G1.add agg p
   return G1.compress agg
 
-/-- The fast aggregate verification of consensus-specs altair.
+/-- The fast aggregate verification of Ethereum.
+
+It is the fast aggregate verification of the draft, except on an empty key list.
 
 An empty key list passes exactly with the signature of the point at infinity. -/
 def ethFastAggregateVerify

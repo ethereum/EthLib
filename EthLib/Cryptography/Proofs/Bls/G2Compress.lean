@@ -11,23 +11,24 @@ import all Batteries.Data.Except
 import all Init.Data.Range.Basic
 
 /-!
-# Proofs: 96-byte `G2` compressed serialization
+# Proofs: the 96-byte compressed encoding of `G2`
 
-`G2` holds points on the twist `E' : y^2 = x^3 + 4*(1 + i)` over `Fp2`.
+`G2` holds points of the twist `E' : y^2 = x^3 + 4 (1 + i)` over `Fp2`.
 
-The format is `draft-irtf-cfrg-pairing-friendly-curves-07` Appendix C.
+The format is Appendix C of draft-07.
+<https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-07>
 
 Section C.1 encodes a point, and Section C.2 decodes it.
 
 - Encoding then decoding gives back the same projective point.
 - Every decoded point lies on the twist.
-- Bad lengths, bad flags, bad infinity encodings and field elements `>= p` are rejected.
+- Bad lengths, bad flags, bad encodings of infinity, and field elements `>= p` are rejected.
 - Decoding then encoding gives back the exact 96 input bytes.
 - So two different byte strings never decode to the same point.
 
 The last two facts need `y != 0` on the twist.
 
-That holds because `x^3 + 4*(1 + i)` has no root in `Fp2`.
+That holds because `x^3 + 4 (1 + i)` has no root in `Fp2`.
 -/
 
 @[expose] public section
