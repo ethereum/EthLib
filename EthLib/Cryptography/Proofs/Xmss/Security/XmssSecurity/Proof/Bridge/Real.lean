@@ -388,10 +388,10 @@ theorem realParam (h : Prepared seed d result cache) :
   -- The all-zero parameter is the bytes of the zero bit vector.
   have hzero : Vector.replicate PUBLIC_PARAM_LEN (0 : UInt8)
       = ofParam (0 : PublicParameter) := by
-    rw [Xmss.Unforgeability.ofParam, Xmss.Unforgeability.ofBV_eq_littleEndian]
+    rw [Xmss.Unforgeability.ofParam, Xmss.Unforgeability.ofBV_eq_uintToBytes]
     apply Vector.ext
     intro i hi
-    simp [Xmss.littleEndian]
+    simp [Xmss.uintToBytes]
   -- The input is `0^128 | A_param | S`, the programmed parameter's.
   have hinput : (Xmss.thInput (ofParam (0 : PublicParameter)) Xmss.addrParam
       (Xmss.packBytes (ofSeed seed))).data.toList

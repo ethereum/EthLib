@@ -45,7 +45,7 @@ theorem mod_eq_index_add_leaves (n : Nat) : ∀ k : Nat,
 
 /-- The digest's low 266 bits are its index and its 24 leaves, each in its own place. -/
 theorem digest_fields (d : MessageDigest) :
-    fromLittleEndian d % 2 ^ DIGEST_BITS
+    bytesToUint d % 2 ^ DIGEST_BITS
       = digestIndex d
         + ((List.finRange FORS_TREES).map fun kappa : Fin FORS_TREES =>
             ((digestLeaves d)[kappa] : Nat) * 2 ^ (HEIGHT + FORS_HEIGHT * kappa.val)).sum := by
@@ -57,7 +57,7 @@ theorem digest_fields (d : MessageDigest) :
 /-- Two digests with the same index and the same leaves agree on their low 266 bits. -/
 theorem digest_fields_inj {d d' : MessageDigest} (hidx : digestIndex d = digestIndex d')
     (hleaves : digestLeaves d = digestLeaves d') :
-    fromLittleEndian d % 2 ^ DIGEST_BITS = fromLittleEndian d' % 2 ^ DIGEST_BITS := by
+    bytesToUint d % 2 ^ DIGEST_BITS = bytesToUint d' % 2 ^ DIGEST_BITS := by
   rw [digest_fields, digest_fields, hidx, hleaves]
 
 end EthLib.Cryptography.Sphincs

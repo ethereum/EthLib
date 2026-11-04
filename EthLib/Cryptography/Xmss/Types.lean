@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.LittleEndian
 public import EthLib.Cryptography.Xmss.Constants
 
 /-!
@@ -71,21 +72,12 @@ def Layer.toNat : Layer → Nat
   | .bottom => 0
   | .top => 1
 
-/-! ## Little-endian integers -/
+/-! ## Little-endian integers
 
-/-- `LE_{8k}(z)`: the `k` low bytes of `z`, least significant first.
+The conversions `LE_{8k}` and `LE^-1` of the paper are the shared little-endian ones.
+-/
 
-Example: `littleEndian 2 0x1234 = #v[0x34, 0x12]`. -/
-def littleEndian (k z : Nat) : Vector UInt8 k :=
-  -- Byte `i` holds bits `8i` to `8i + 7`.
-  Vector.ofFn fun i => UInt8.ofNat (z / 256 ^ i.val)
-
-/-- `LE^-1`: the integer whose little-endian bytes these are.
-
-Example: `fromLittleEndian #v[0x34, 0x12] = 0x1234`. -/
-def fromLittleEndian {k : Nat} (bytes : Vector UInt8 k) : Nat :=
-  -- Horner's rule from the most significant byte down.
-  bytes.toArray.foldr (fun byte acc => byte.toNat + 256 * acc) 0
+export EthLib.Base (uintToBytes bytesToUint)
 
 /-! ## Crossing to and from untyped bytes -/
 

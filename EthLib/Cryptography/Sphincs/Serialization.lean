@@ -61,7 +61,7 @@ def encodeFors (openings : Vector TreeOpening FORS_TREES) : ByteArray :=
 - Siblings run from the leaf up to the root.
 -/
 def encodeLayerSignature {layer : Layer} (sig : LayerSignature layer) : ByteArray :=
-  packBytes (littleEndian COUNTER_LEN sig.counter.toNat) ++ packDigests sig.chainValues
+  packBytes (uintToBytes COUNTER_LEN sig.counter.toNat) ++ packDigests sig.chainValues
     ++ packDigests sig.path
 
 /-- Encode a signature as 7740 bytes.
@@ -111,7 +111,7 @@ def decodeFors (bytes : ByteArray) (offset : Nat)
 def decodeLayerSignature (layer : Layer) (bytes : ByteArray) (offset : Nat)
     (h : offset + layerSigSize layer.height ≤ bytes.size) : LayerSignature layer where
   -- The counter, then the chain values at 4, then the siblings at 1028.
-  counter := UInt32.ofNat (fromLittleEndian (readBytes bytes offset COUNTER_LEN
+  counter := UInt32.ofNat (bytesToUint (readBytes bytes offset COUNTER_LEN
     (by simp only [layerSigSize] at h; omega)))
   chainValues := splitDigests (readBytes bytes (offset + COUNTER_LEN) (V * N)
     (by simp only [layerSigSize] at h; omega))

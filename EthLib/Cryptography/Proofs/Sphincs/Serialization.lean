@@ -136,15 +136,15 @@ theorem decodeLayerSignature_middle {layer : Layer} {b a c : ByteArray}
     (h : offset + layerSigSize layer.height ≤ b.size) :
     decodeLayerSignature layer b offset h = sig := by
   -- Regroup so each field is the middle of its own concatenation.
-  have hr : b = a ++ packBytes (littleEndian COUNTER_LEN sig.counter.toNat)
+  have hr : b = a ++ packBytes (uintToBytes COUNTER_LEN sig.counter.toNat)
       ++ (packDigests sig.chainValues ++ packDigests sig.path ++ c) := by
     rw [hb, encodeLayerSignature]
     simp only [ByteArray.append_assoc]
-  have hc : b = (a ++ packBytes (littleEndian COUNTER_LEN sig.counter.toNat))
+  have hc : b = (a ++ packBytes (uintToBytes COUNTER_LEN sig.counter.toNat))
       ++ packBytes sig.chainValues.flatten ++ (packDigests sig.path ++ c) := by
     rw [hb, encodeLayerSignature]
     simp only [ByteArray.append_assoc, packDigests]
-  have hp : b = (a ++ packBytes (littleEndian COUNTER_LEN sig.counter.toNat)
+  have hp : b = (a ++ packBytes (uintToBytes COUNTER_LEN sig.counter.toNat)
       ++ packDigests sig.chainValues) ++ packBytes sig.path.flatten ++ c := by
     rw [hb, encodeLayerSignature]
     simp only [ByteArray.append_assoc, packDigests]
@@ -155,9 +155,9 @@ theorem decodeLayerSignature_middle {layer : Layer} {b a c : ByteArray}
   have p := Xmss.readBytes_middle hp (offset := offset + COUNTER_LEN + V * N)
     (by simp [ho]) (by simp only [layerSigSize] at h; omega)
   -- A 32-bit word survives its four bytes.
-  have word : UInt32.ofNat (fromLittleEndian (littleEndian COUNTER_LEN sig.counter.toNat))
+  have word : UInt32.ofNat (bytesToUint (uintToBytes COUNTER_LEN sig.counter.toNat))
       = sig.counter := by
-    rw [Xmss.fromLittleEndian_littleEndian, Nat.mod_eq_of_lt (by
+    rw [Base.bytesToUint_uintToBytes, Nat.mod_eq_of_lt (by
       have := sig.counter.toNat_lt_size
       simpa [COUNTER_LEN, UInt32.size] using this), UInt32.ofNat_toNat]
   obtain ⟨counter, chainValues, path⟩ := sig
@@ -241,14 +241,14 @@ theorem encodeLayerSignature_decodeLayerSignature (layer : Layer) (b : ByteArray
     encodeLayerSignature (decodeLayerSignature layer b offset h)
       = ⟨b.data.extract offset (offset + layerSigSize layer.height)⟩ := by
   -- Four bytes read as a word, and written back, are the same four bytes.
-  have hword : fromLittleEndian (readBytes b offset COUNTER_LEN
+  have hword : bytesToUint (readBytes b offset COUNTER_LEN
       (by simp only [layerSigSize] at h; omega)) < 2 ^ 32 := by
-    have := Xmss.fromLittleEndian_lt (readBytes b offset COUNTER_LEN
+    have := Base.bytesToUint_lt (readBytes b offset COUNTER_LEN
       (by simp only [layerSigSize] at h; omega))
     simpa [COUNTER_LEN] using this
   simp only [encodeLayerSignature, decodeLayerSignature, packDigests, splitDigests,
     flatten_splitChunks, Xmss.packBytes_readBytes, UInt32.toNat_ofNat_of_lt' hword,
-    Xmss.littleEndian_fromLittleEndian]
+    Base.uintToBytes_bytesToUint]
   rw [slice_append _ (by omega) (by omega), slice_append _ (by omega) (by omega)]
   simp only [layerSigSize, Nat.add_assoc]
 

@@ -63,12 +63,12 @@ def messageDigest (pp : PublicParam) (m : Message) (rho : Randomizer) : MessageD
 
 /-- `idx`: the low 26 bits of the digest. -/
 def digestIndex (d : MessageDigest) : Nat :=
-  fromLittleEndian d % 2 ^ HEIGHT
+  bytesToUint d % 2 ^ HEIGHT
 
 /-- The leaf of each FORS tree: bits `26 + 10 kappa` to `35 + 10 kappa` of the digest. -/
 def digestLeaves (d : MessageDigest) : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES :=
   -- The digest is read once, as one 512-bit little-endian integer.
-  let value := fromLittleEndian d
+  let value := bytesToUint d
   Vector.ofFn fun kappa =>
     ⟨value / 2 ^ (HEIGHT + FORS_HEIGHT * kappa.val) % 2 ^ FORS_HEIGHT, Nat.mod_lt _ (by decide)⟩
 

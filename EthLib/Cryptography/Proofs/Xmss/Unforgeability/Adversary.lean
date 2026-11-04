@@ -39,11 +39,11 @@ def toLeafIndex (idx : LeafIndex) : XmssSecurity.LeafIndex :=
 
 /-- A message as the model writes it. -/
 def toMessage (msg : Message) : XmssSecurity.Message :=
-  BitVec.ofNat _ (fromLittleEndian msg)
+  BitVec.ofNat _ (bytesToUint msg)
 
 /-- A randomizer as the model writes it. -/
 def toRandomness (r : Randomizer) : XmssSecurity.Randomness :=
-  BitVec.ofNat _ (fromLittleEndian r)
+  BitVec.ofNat _ (bytesToUint r)
 
 /-- One layer's signature as the model writes it. -/
 def toLayerSig (s : LayerSignature) : XmssSecurity.LayerSignature where
@@ -69,7 +69,7 @@ def toSignature (σ : Signature) : XmssSecurity.Signature where
   simp [toLeafIndex]
 
 @[simp] theorem ofMessage_toMessage (msg : Message) : ofMessage (toMessage msg) = msg :=
-  ofBV_ofNat_fromLittleEndian msg (by simp [MESSAGE_LEN, XmssSecurity.messageBits])
+  ofBV_ofNat_bytesToUint msg (by simp [MESSAGE_LEN, XmssSecurity.messageBits])
 
 @[simp] theorem toMessage_ofMessage (msg : XmssSecurity.Message) :
     toMessage (ofMessage msg) = msg :=
@@ -78,7 +78,7 @@ def toSignature (σ : Signature) : XmssSecurity.Signature where
 
 @[simp] theorem ofRandomizer_toRandomness (r : Randomizer) :
     ofRandomizer (toRandomness r) = r :=
-  ofBV_ofNat_fromLittleEndian r (by simp [RANDOMIZER_LEN, XmssSecurity.randomnessBits])
+  ofBV_ofNat_bytesToUint r (by simp [RANDOMIZER_LEN, XmssSecurity.randomnessBits])
 
 @[simp] theorem toRandomness_ofRandomizer (r : XmssSecurity.Randomness) :
     toRandomness (ofRandomizer r) = r :=

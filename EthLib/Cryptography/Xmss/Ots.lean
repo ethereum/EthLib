@@ -53,7 +53,7 @@ def chainStarts (pp : PublicParam) (seed : Seed) (layer : Layer) (e : UInt32) :
 The chain index follows the value, so every chain of a key shares the step's address. -/
 def chainStep (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
     (mu : Fin (CHAIN_LENGTH - 1)) (value : Digest) : m Digest :=
-  th H pp (addrChain layer e mu) (packBytes value ++ packBytes (littleEndian 16 i.val))
+  th H pp (addrChain layer e mu) (packBytes value ++ packBytes (uintToBytes 16 i.val))
 
 /-- Walk chain `i` for `steps` steps, starting at position `start`.
 
@@ -101,7 +101,7 @@ def randomizerBase (pp : PublicParam) (seed : Seed) (layer : Layer) (e : UInt32)
 
 A sum, not a hash, so each trial costs the one hash of its digest. -/
 def trialRandomizer (base : Randomizer) (c : Nat) : Randomizer :=
-  littleEndian RANDOMIZER_LEN ((fromLittleEndian base + c) % 2 ^ 128)
+  uintToBytes RANDOMIZER_LEN ((bytesToUint base + c) % 2 ^ 128)
 
 namespace Internal
 

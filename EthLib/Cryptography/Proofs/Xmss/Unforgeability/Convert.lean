@@ -89,10 +89,10 @@ def ofTopIndex (key : XmssSecurity.TopIndex) : UInt32 :=
 
 /-- A digest as the model writes it, from its bytes. -/
 def toDigest (d : Digest) : XmssSecurity.Digest :=
-  BitVec.ofNat _ (fromLittleEndian d)
+  BitVec.ofNat _ (bytesToUint d)
 
 @[simp] theorem ofDigest_toDigest (d : Digest) : ofDigest (toDigest d) = d :=
-  ofBV_ofNat_fromLittleEndian d (by simp [DIGEST_LEN, XmssSecurity.digestBits])
+  ofBV_ofNat_bytesToUint d (by simp [DIGEST_LEN, XmssSecurity.digestBits])
 
 @[simp] theorem toDigest_ofDigest (d : XmssSecurity.Digest) : toDigest (ofDigest d) = d :=
   ofBV_inj (n := DIGEST_LEN) (by simp [DIGEST_LEN, XmssSecurity.digestBits]) (ofDigest_toDigest _)

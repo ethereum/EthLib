@@ -157,7 +157,7 @@ theorem chainStep_bottom_tweakable (P : XmssSecurity.PublicParameter)
   refine th_queryH P _ _ _ _ ?_ ?_
   · rw [toList_addrChain]
     exact fieldBytes_congr rfl rfl (by simp [Layer.toNat]) (toNat_ofLeafIndex idx)
-  · simp only [toList_data_append, toList_data_packBytes, toList_ofDigest, toList_littleEndian]
+  · simp only [toList_data_append, toList_data_packBytes, toList_ofDigest, toList_uintToBytes]
     rfl
 
 /-- One step of a bottom chain. -/
@@ -182,7 +182,7 @@ theorem chainStep_top_tweakable (P : XmssSecurity.PublicParameter) (key : XmssSe
   · rw [toList_addrChain]
     exact fieldBytes_congr rfl rfl (by simp [Layer.toNat, XmssSecurity.topFlag])
       (toNat_ofTopIndex key)
-  · simp only [toList_data_append, toList_data_packBytes, toList_ofDigest, toList_littleEndian]
+  · simp only [toList_data_append, toList_data_packBytes, toList_ofDigest, toList_uintToBytes]
     rfl
 
 /-- One step of a top chain. -/

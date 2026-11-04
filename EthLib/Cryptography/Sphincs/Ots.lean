@@ -88,7 +88,7 @@ def otsPublicLeaf (pp : PublicParam) (seed : Seed) (key : OtsKey) : Digest :=
 The counter comes last, so all counter trials share every block before the last one. -/
 def encode (pp : PublicParam) (key : OtsKey) (msg : ByteArray) (counter : UInt32) :
     Option Codeword :=
-  codeword? (th pp (addrEncoding key) (msg ++ packBytes (littleEndian COUNTER_LEN counter.toNat)))
+  codeword? (th pp (addrEncoding key) (msg ++ packBytes (uintToBytes COUNTER_LEN counter.toNat)))
 
 namespace Internal
 

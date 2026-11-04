@@ -26,8 +26,8 @@ open EthLib.Cryptography.Xmss.Constants
 /-! ## The encoding -/
 
 /-- `LE_{8k}(z)`, listed, is the model's `bytesLE k` of `z` as a `8 k`-bit vector. -/
-theorem toList_littleEndian (k z : Nat) :
-    (littleEndian k z).toList = XmssSecurity.bytesLE k (BitVec.ofNat (8 * k) z) := by
+theorem toList_uintToBytes (k z : Nat) :
+    (uintToBytes k z).toList = XmssSecurity.bytesLE k (BitVec.ofNat (8 * k) z) := by
   rw [← ofBV_ofNat, toList_ofBV]
 
 /-- The byte that holds a type below 32 and a position below 8. -/
@@ -45,9 +45,9 @@ theorem toList_encodeAddress (tau : Fin 32) (mu : Fin 8) (hi : Fin (2 ^ 24)) (lo
     (encodeAddress tau mu hi lo).toList
       = XmssSecurity.fieldBytes (XmssSecurity.tweakFields tau.val mu.val hi.val lo.toNat) := by
   -- The address is a concatenation of 4 + 3 + 1 + 8 bytes, which is its length constant.
-  show (littleEndian 4 lo.toNat ++ littleEndian 3 hi.val ++ littleEndian 1 (tau.val + 32 * mu.val)
-    ++ littleEndian 8 0 : Vector UInt8 (4 + 3 + 1 + 8)).toList = _
-  simp only [Vector.toList_append, toList_littleEndian, XmssSecurity.fieldBytes,
+  show (uintToBytes 4 lo.toNat ++ uintToBytes 3 hi.val ++ uintToBytes 1 (tau.val + 32 * mu.val)
+    ++ uintToBytes 8 0 : Vector UInt8 (4 + 3 + 1 + 8)).toList = _
+  simp only [Vector.toList_append, toList_uintToBytes, XmssSecurity.fieldBytes,
     XmssSecurity.tweakFields, append_ofNat tau.val mu.val tau.isLt mu.isLt]
   rfl
 

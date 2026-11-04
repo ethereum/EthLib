@@ -68,10 +68,10 @@ theorem publicParamOf_queryH (S : MasterSeed) :
   -- The all-zero parameter is the bytes of the zero bit vector.
   have hzero : Vector.replicate PUBLIC_PARAM_LEN (0 : UInt8)
       = ofParam (0 : XmssSecurity.PublicParameter) := by
-    rw [ofParam, ofBV_eq_littleEndian]
+    rw [ofParam, ofBV_eq_uintToBytes]
     apply Vector.ext
     intro i hi
-    simp [littleEndian]
+    simp [uintToBytes]
   have hinput : (thInput (ofParam (0 : XmssSecurity.PublicParameter)) addrParam
       (packBytes (ofSeed S))).data.toList = paramInput S := by
     rw [XmssSecurity.Bridge.paramInput_eq]
