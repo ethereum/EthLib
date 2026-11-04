@@ -117,7 +117,7 @@ theorem joinEncodings_error : (xs : List Item) → (err : RlpError) → joinEnco
     ∃ length, err = .payloadTooLong length ∧ 2 ^ 64 ≤ length
   | [], err, h => by simp [joinEncodings] at h
   | x :: xs, err, h => by
-    rw [joinEncodings] at h
+    rw [joinEncodings_cons] at h
     cases hHead : encode x with
     | error e =>
       simp [hHead, bind, Except.bind] at h

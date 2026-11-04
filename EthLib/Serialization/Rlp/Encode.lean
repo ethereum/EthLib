@@ -111,11 +111,21 @@ def encode : Item → Except RlpError ByteArray
 It fails when the encoding of one of them fails. -/
 def joinEncodings : List Item → Except RlpError ByteArray
   | [] => .ok .empty
-  -- Each item's encoding, in order, and a failure if any of them fails.
+  -- The first item's encoding, then the encodings of the rest after it.
   | item :: rest => do
       let head ← encode item
-      let tail ← joinEncodings rest
-      return head ++ tail
+      joinEncodingsFrom rest head
+  termination_by structural items => items
+
+/-- The encodings so far, then the encodings of `items`, one after another.
+
+Each encoding is appended in place, and the loop runs in constant stack for any length. -/
+def joinEncodingsFrom : List Item → ByteArray → Except RlpError ByteArray
+  | [], out => .ok out
+  -- Each item's encoding, in order, and a failure if any of them fails.
+  | item :: rest, out => do
+      let head ← encode item
+      joinEncodingsFrom rest (out ++ head)
   termination_by structural items => items
 
 end
