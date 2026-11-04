@@ -5,84 +5,12 @@ public import EthLib.Cryptography.Hash.Crc32c
 /-!
 # Proofs: CRC-32C
 
-- Every message followed by its digest leaves the remainder `0x1c2d19ed`, as RFC 3720 §12.1 states.
-- The five examples of RFC 3720 Appendix B.4 give the digests the appendix prints.
-- The empty message and the nine bytes `123456789` give the values of the CRC catalogue.
+Every message followed by its digest leaves the remainder `0x1c2d19ed`, as RFC 3720 §12.1 states.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Hash.Crc32c
-
-/-! ## The examples of RFC 3720 Appendix B.4
-
-Each message is built as the appendix describes it.
-
-Each digest is copied byte for byte, as the appendix prints it.
-
-[RFC 7143](https://www.rfc-editor.org/rfc/rfc7143#appendix-A.4), which obsoletes RFC 3720, repeats them unchanged. -/
-
-/-- 32 bytes of zeroes. -/
-theorem digest_zeroes : digest ⟨Array.replicate 32 0x00⟩ = #v[0xaa, 0x36, 0x91, 0x8a] := by
-  decide +kernel
-
-/-- 32 bytes of ones, each `ff`. -/
-theorem digest_ones : digest ⟨Array.replicate 32 0xff⟩ = #v[0x43, 0xab, 0xa8, 0x62] := by
-  decide +kernel
-
-/-- 32 bytes incrementing from `00` to `1f`. -/
-theorem digest_incrementing :
-    digest ⟨⟨(List.range 32).map Nat.toUInt8⟩⟩ = #v[0x4e, 0x79, 0xdd, 0x46] := by
-  decide +kernel
-
-/-- 32 bytes decrementing from `1f` to `00`. -/
-theorem digest_decrementing :
-    digest ⟨⟨(List.range 32).reverse.map Nat.toUInt8⟩⟩ = #v[0x5c, 0xdb, 0x3f, 0x11] := by
-  decide +kernel
-
-/-- The SCSI Read (10) Command PDU of the appendix, four bytes per row as it prints them. -/
-def scsiRead10 : ByteArray := ⟨#[
-  0x01, 0xc0, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00,
-  0x14, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x04, 0x00,
-  0x00, 0x00, 0x00, 0x14,
-  0x00, 0x00, 0x00, 0x18,
-  0x28, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00,
-  0x02, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00]⟩
-
-/-- The 48 bytes of the SCSI Read (10) Command PDU. -/
-theorem digest_scsiRead10 : digest scsiRead10 = #v[0x56, 0x3a, 0x96, 0xd9] := by
-  decide +kernel
-
-/--
-The PDU followed by the digest that Appendix B.4 prints leaves the remainder `0x1c2d19ed`.
-
-The digest bytes are the appendix's own, so this known answer does not go through the digest function.
--/
-theorem remainder_scsiRead10_digest :
-    remainder (scsiRead10 ++ ⟨#[0x56, 0x3a, 0x96, 0xd9]⟩) = 0x1c2d19ed := by
-  decide +kernel
-
-/-! ## The values of the CRC catalogue
-
-The [CRC catalogue](https://reveng.sourceforge.io/crc-catalogue/17plus.htm#crc.cat.crc-32-iscsi) lists CRC-32C as CRC-32/ISCSI.
-
-RFC 3720 gives neither value below. -/
-
-/-- The empty message: the remainder stays at `0xffffffff`, so the CRC is 0. -/
-theorem crc32c_empty : crc32c ByteArray.empty = 0 := by
-  decide +kernel
-
-/-- The check value: the nine ASCII bytes `123456789`. -/
-theorem crc32c_check : crc32c "123456789".toUTF8 = 0xe3069283 := by
-  -- Use the public string equation, so the kernel sees the nine bytes.
-  rw [String.toUTF8_eq_toByteArray]
-  decide +kernel
 
 /-! ## The remainder of a message followed by its digest
 

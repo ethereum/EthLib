@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Exports.Bls
 public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Cryptography.Exports.Keccak
+public import EthLib.Cryptography.Exports.Crc32c
 public import EthLib.Cryptography.Exports.Sha256
 public import EthLib.Cryptography.Exports.Xmss
 public import EthLib.Cryptography.Exports.Sphincs
