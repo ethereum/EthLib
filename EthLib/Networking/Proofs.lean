@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Networking.Proofs.Discv5.Identity
 public import EthLib.Networking.Proofs.Encoding.Varint
 public import EthLib.Networking.Proofs.Enr.Base64
 public import EthLib.Networking.Proofs.Enr.Consensus
