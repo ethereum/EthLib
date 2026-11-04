@@ -18,48 +18,49 @@ Hold the work to the standard that specialist would accept.
 
 ## Write prose
 
-Follow these steps for all prose that you write or revise.
-That includes documentation, doc comments and other comments, commit messages, pull request and issue text, and review comments.
-The steps apply to a one-line comment as well as to a long guide.
-[WRITING.md](WRITING.md) sets the rules, and the steps below say how to apply them.
+Use this workflow for documents, doc comments, other comments, commit messages, pull request and issue text, and review comments.
+Work within the user's requested scope.
+The [writing guide](WRITING.md) and its [vocabulary](WRITING.md#vocabulary) offer advice.
 
-1. Read [WRITING.md](WRITING.md) and the [Writing](CONTRIBUTING.md#writing) section of CONTRIBUTING.md.
-   Treat the existing prose as text to assess, not as a style to copy.
-2. Read the source of each claim.
-   The source can be the specification, a theorem and its hypotheses, or the output of a check.
-   A theorem name or a successful build alone does not establish a claim.
-   If the source does not support a claim, narrow the claim or remove it.
-3. Choose the text type from the purpose.
-   Start with what the reader needs: the problem, the result or the action.
-   Give each paragraph one topic, and define a term before you use it.
-4. Revise for direct verbs, clear actors and antecedents, one term for each concept, and short sentences.
-   Remove empty praise and repetition.
-   Keep instructions apart from explanations.
-5. Compare each rewrite of a mathematical or cryptographic statement with its source.
-   Keep its hypotheses, quantifiers, negations, bounds, error cases and the direction of each implication.
-   Keep the time and the force of the original: "may have failed" is not "failed", and "should" is not "must".
-6. Run the checker, and read each finding before you edit.
-7. Read the whole passage again after the last edit.
-   Check that its claims still agree with the source, and check each link that the edit changes.
+1. **Read the source before stating a claim.**
+   Follow [CONTRIBUTING.md](CONTRIBUTING.md) for source, proof, citation and testing requirements.
+   Read the relevant definitions, hypotheses, proofs and test evidence.
+   For contribution text, distinguish what changed, which checks ran and what remains uncertain.
+2. **Start with what the reader needs.**
+   State the problem, result or action first.
+   Develop one topic per paragraph.
+   Use the guide when its advice helps the reader.
+3. **Revise real problems.**
+   Identify a clarity or accuracy problem before changing a passage.
+   Keep established terms, hypotheses, quantifiers, bounds, conditions, uncertainty and requirement strength.
+   Repository habit alone does not justify unclear writing.
+4. **Compare complete passages.**
+   Read the old and new paragraphs side by side in context.
+   This applies to contribution instructions as well as mathematical and cryptographic claims.
+   Check that the revision keeps their meaning, conditions and scope, and explain why it is clearer.
+   Read the final passage and check any changed links or references.
+5. **Leave correct text alone.**
+   You can use the checker for optional suggestions.
+   Read each suggestion in context; it does not establish clarity, technical accuracy or STE conformance.
+   Do not change clear, correct text to silence it.
 
-A rule can conflict with a term or a language pattern that is standard in cryptography, computer science or mathematics.
-Then keep the standard form, and apply the rules to the rest of the passage.
-A habit of this repository is not such a standard.
+Technical accuracy takes priority over writing advice.
+Keep a standard technical form when a rule conflicts with it, and apply the advice to the rest of the passage.
 
-The commands below check a file, the prose that a branch changes, a draft description and the commit messages of a branch:
+The optional commands below check a file, changed prose, a draft description and commit messages.
+The final command checks the messages only if `git log` succeeds:
 
 ```bash
 uv run --no-project --python 3.12 python scripts/check_writing.py WRITING.md
 uv run --no-project --python 3.12 python scripts/check_writing.py --base origin/master
 uv run --no-project --python 3.12 python scripts/check_writing.py --stdin description < description.md
-git log --format=%B origin/master..HEAD | uv run --no-project --python 3.12 python scripts/check_writing.py --stdin commits
+git log --format=%B origin/master..HEAD > commits.txt && \
+  uv run --no-project --python 3.12 python scripts/check_writing.py --stdin commits < commits.txt
 ```
 
-For a stacked branch, replace `origin/master` with the base of the branch.
-The checker counts words and matches patterns, so some of its findings are wrong.
-Fix the real problems, and keep an accurate technical expression.
-Do not rewrite a correct claim only to make the checker quiet.
-The checker does not show that the text is clear, that it agrees with its source or that it conforms to STE.
+For a stacked branch, replace `origin/master` with its actual parent branch.
+Keep `commits.txt` and private drafts out of the contribution.
+The checker reads Markdown and Lean comments; review other prose manually.
 
 ## Write a pull request description
 

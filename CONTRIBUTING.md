@@ -135,41 +135,30 @@ Never regenerate an expected value from the code under test and call it a check.
 ## Writing
 
 Developers all over the world read EthLib, many of them in their second language.
-[WRITING.md](WRITING.md) sets the standard for its English, based on ASD-STE100 Simplified Technical English (STE).
-The standard applies to every author, human or AI.
-It covers all prose: documentation, doc comments and other comments, commit messages, pull request and issue text, and review comments.
+The [writing guide](WRITING.md) offers advice for clear, precise and correct prose: documents, comments, commit messages, contribution descriptions and reviews.
+Its vocabulary helps distinguish technical meanings.
+For advice about sentence structure and punctuation, use the guide in context.
+The source, proof, citation and testing requirements elsewhere in this file still apply.
 
-WRITING.md gives the full rules and the vocabulary of EthLib.
-These rules matter most:
+Leave clear, correct text alone, even when it does not follow a writing rule.
+Read the surrounding passage before an edit, and preserve its meaning, conditions and requirement strength.
+Correct real clarity or accuracy problems; leave unrelated prose for a separate change.
+Technical accuracy and established terminology take priority.
+Repository habit alone does not justify unclear writing.
 
-- Write short sentences: 20 words or fewer in an instruction, and 25 words or fewer in a description.
-- Give each paragraph one topic, in six sentences or fewer.
-- Use the active voice, and name the actor, such as the decoder, the verifier or CI.
-- Use one term for one concept, with the meaning that the vocabulary gives it.
-- Do not use semicolons, contractions or Latin abbreviations such as "e.g." in prose.
-- Claim only what the code, a theorem or a check that you ran shows.
-  A style edit keeps every hypothesis, bound, condition and uncertainty of the claim.
-
-Technical accuracy comes first.
-If a rule conflicts with a term or a language pattern that is standard in cryptography, computer science or mathematics, keep the standard form.
-A habit of this repository is not such a standard.
-
-Existing prose is not a model to copy.
-When you change a passage, bring it to the standard.
-Leave unrelated prose for a separate pull request.
-
-`scripts/check_writing.py` finds some departures from the standard, such as long sentences and semicolons.
-Run it on the prose that your branch changes:
+The optional `scripts/check_writing.py` reports vocabulary, phrasal-verb, Latin-abbreviation, contraction, reference-history and approximate sentence-length suggestions.
+It reads Markdown and Lean comments; review other prose manually.
+For a local editing aid, run:
 
 ```bash
 uv run --no-project --python 3.12 python scripts/check_writing.py --base origin/master
 ```
 
-For a stacked pull request, give its base branch instead of `origin/master`.
-Each finding is a suggestion, so read it before you edit.
-Fix the real problems, and do not change a correct sentence only to make the checker quiet.
-CI runs the same check on the changed prose and on the pull request description.
-It reports the findings as warnings, and they do not fail CI.
+For a stacked pull request, give its actual parent branch.
+Read suggestions in context and leave clear, correct text alone.
+CI reports suggestions on changed prose and pull request descriptions as warnings.
+Suggestions and unsupported-input notices return success; Git, usage and configuration errors remain failures.
+The checker does not establish clarity, technical accuracy or STE conformance.
 
 When you change the checker, also run its tests:
 

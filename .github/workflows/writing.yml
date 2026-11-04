@@ -1,7 +1,7 @@
-# Check the prose of a pull request against WRITING.md.
+# Report optional wording suggestions for pull request prose.
 #
-# Prose findings are warnings, and the checker exits with status 0 when it runs.
-# Checker errors and failures of its tests fail the job.
+# Suggestions and unsupported-input notices return success.
+# Git, usage and configuration errors, and failures of the tests, fail the job.
 #
 # The description comes from the pull request author, so it reaches the script
 # through an environment variable and is never interpolated into a command.

@@ -1,94 +1,73 @@
-# Writing
+# Writing Guide
 
-This guide sets the standard for the English of EthLib.
-Developers all over the world read EthLib, many of them in their second language, so its prose must be clear on the first reading.
-The guide is based on ASD-STE100 Simplified Technical English (STE), Issue 9, January 2025.
+This guide helps you write clear, precise, correct technical text.
+Its rules are advice.
+If a passage is clear and correct, leave it alone, even if it does not follow a rule or the checker reports it.
+Accuracy comes first, then clarity.
+An existing repository convention is not a reason to keep unclear writing.
 
-STE is the reference for correcting prose, not for keeping it as it is.
-A habit of this repository is not a reason to keep an unclear sentence.
-Where EthLib departs from STE, the rule says so, and the [relation to STE](#relation-to-ste) gives the reason for each departure.
-
-[CONTRIBUTING.md](CONTRIBUTING.md#writing) sets the requirements for a contribution, and this guide gives the details.
-The [vocabulary](#vocabulary) records the technical terms of EthLib and the words to avoid.
-[AGENTS.md](AGENTS.md#write-prose) gives an agent the steps to apply this guide.
+[CONTRIBUTING.md](CONTRIBUTING.md) owns the contribution requirements.
+The [vocabulary](#vocabulary) clarifies technical meanings, and [Write prose](AGENTS.md#write-prose) describes the editing workflow.
+This guide adds no second set of requirements.
 
 ## Scope
 
-The guide applies to all prose in the repository and around it:
+Use this advice when you add or revise documents, doc comments, other comments, commit messages, pull request and issue text, and review comments.
+Read the surrounding text for context.
+Correct related defects that affect the passage, and keep unrelated rewrites in a separate change.
 
-- Markdown files, such as this one, `README.md` and the README of a module.
-- Lean doc comments and other comments.
-- Comments in Lean, Python, C, shell scripts and workflows.
-- Commit messages.
-- Pull request and issue descriptions, and review comments.
+Keep formulas, identifiers, commands, byte layouts, source quotations, generated output and test-vector data exact.
+Official titles and legal text also retain their wording.
+The legal text includes CONTRIBUTING's Licence, Copyright notices and Material from other projects sections.
+Headings and table labels can be fragments, with clear and consistent terms.
 
-Read the surrounding text before you change a passage.
-Correct the defects in the passage that you change.
-Rewrite unrelated prose in a separate pull request.
-
-Some text keeps its exact form, and the rules do not apply to it.
-Formulas, identifiers, commands, byte layouts, generated output and test-vector data stay exact.
-Quotations from a source, official titles and legal text also stay as they are.
-The legal text includes the sections of `CONTRIBUTING.md` on the license, copyright notices and material from other projects.
-A heading or a table label can be a fragment, but it uses the same terms as the text.
-
-A comment that copies the reference code of a specification is a quotation, so it keeps the wording of the specification.
-The text around it, and any explanation that EthLib adds, follows this guide.
+A quotation retains its source wording.
+Preserving a quotation does not make its source normative; CONTRIBUTING's [source policy](CONTRIBUTING.md#sources-of-truth) still governs citations.
+Apply writing advice to the surrounding explanation when it improves clarity.
 
 ## How to use STE
 
-STE has two parts: writing rules and a general dictionary.
-The dictionary gives each general word its approved meanings and its part of speech.
-A subject field adds its own technical nouns and technical verbs under STE rules 1.5 to 1.13.
-Cryptographic and mathematical terms add to the dictionary, but they do not replace it.
+This guide draws on ASD-STE100 Simplified Technical English (STE), Issue 9, and adapts it freely for EthLib.
+It claims no STE conformance and does not distribute or check the official dictionary.
+Use the project vocabulary to clarify meanings, not to decide which English words are permitted.
 
-Use the STE dictionary to find the approved meaning and part of speech of a general word.
-Use the [vocabulary](#vocabulary) for the technical terms of EthLib.
-A word that is missing from the vocabulary is not always a defect.
-A familiar English word is not always approved in STE.
-If a direct replacement changes the meaning, rewrite the sentence, or keep the technical term and explain it.
-
-Technical accuracy comes first.
-A rule can conflict with a term or a language pattern that is standard in cryptography research and engineering, in computer science or in mathematics.
-In that case, keep the standard form, and apply the rules to the rest of the sentence.
+Technical accuracy takes priority over the rules in this guide.
+A rule can conflict with a term or language pattern that is standard in cryptography, computer science or mathematics.
+In that case, keep the standard form and apply the rules to the rest of the sentence.
 A wording that is only a habit of this repository is not a standard form.
-
-This guide adapts STE for EthLib.
-It is not a complete copy of STE, and it does not claim that EthLib conforms to STE.
-It does not distribute or check the official dictionary.
 
 ## Text types
 
-The purpose of a text decides its type, not its Markdown form:
+Choose a text type from its purpose, not its Markdown form:
 
-| Type | Purpose | Examples | Sentence limit |
+| Type | Purpose | Examples | Suggested sentence length |
 | --- | --- | --- | --- |
-| Procedural | Tell the reader how to do a task | Build and test steps, the rules for a contribution, agent steps | 20 words |
-| Descriptive | Explain a definition, a result or a design | Doc comments, module READMEs, `SOUNDNESS.md`, commit and pull request bodies | 25 words |
+| Procedural | Tell the reader how to do a task | Build instructions, contributor tasks, agent steps | 20 words |
+| Descriptive | Explain a definition, result or observation | Doc comments, module READMEs, contribution bodies | 25 words |
 
 A numbered list can describe results, and a paragraph can contain an instruction.
-Apply the limit for the purpose of each sentence.
-Keep commands apart from explanations and warnings.
+Use these lengths as prompts to review a sentence, not targets that require a rewrite.
+Keep commands distinct from explanations and warnings.
 
 ## Rules
 
-The identifiers below, such as W1, are EthLib labels.
-The STE references give the source of each principle.
-They do not claim that this page reproduces each source rule.
-STE gives its general recommendations (GR) as advice.
-This guide makes the recommendations that it names into requirements for EthLib.
+The labels below, such as W1, belong to EthLib.
+STE references identify source principles, not exact equivalence to those rules.
+All the advice below serves clarity and correctness.
+A checker suggestion alone does not require an edit.
 
 ### Words
 
-- **W1.** Prefer an approved general word with the intended meaning and part of speech.
-  Use the established technical term when the subject needs it.
-  Rephrase the sentence before you make a replacement that changes the meaning.
+- **W1.** Prefer a common, simple word with the intended meaning.
+  Use an established technical term when the subject requires it.
+  Rephrase if a replacement would change the meaning.
   (STE 1.1 to 1.4, 9.1, 9.2)
 - **W2.** Use a technical term with its recorded meaning and part of speech.
   Qualify the term when the passage could give it more than one meaning: "KZG proof" or "Lean proof", "finite field" or "structure field".
   (STE 1.5 to 1.13)
-- **W3.** Use one term for one concept in a passage, and do not change between synonyms for variety.
-  Use the term of the specification: if consensus-specs says "blob", do not also write "payload".
+- **W3.** Use one term for one concept within a passage.
+  Do not rotate synonyms for variety.
+  Follow the normative source: if it says "blob", do not also write "payload".
   (STE 1.11, 9.4)
 - **W4.** Write a multi-word noun of three words or fewer.
   Split a longer noun group with a word such as "of", "for" or "on": "the batch verification of blob KZG proofs".
@@ -120,14 +99,9 @@ This guide makes the recommendations that it names into requirements for EthLib.
   Do not use a complex verb form when a simple form gives the same information.
   Keep a time span or an uncertainty that the sentence needs: "the build may have failed" does not mean "the build failed".
   (STE 3.1 to 3.4, EthLib adaptation)
-- **V2.** Use a verb form that ends in "-ing" only as a technical noun or as part of one.
-  "Decoding succeeds only on canonical input" uses "decoding" as the name of an operation.
-  Rewrite other uses, such as an "-ing" form with an object at the start of a sentence.
-  "During" is a preposition, so this rule does not apply to it.
-  (STE 3.5)
 - **V3.** Use the active voice.
-  Name the actor: a person, a tool, a protocol participant or a mathematical object, such as the decoder, the verifier, CI or the declaration check.
-  Do not invent an actor.
+  Name the person, tool, participant or mathematical object that performs the action.
+  Make clear who or what does each action, and do not invent an actor.
   (STE 3.6)
 - **V4.** In descriptive text, use the passive voice only when the actor is unknown.
   A past participle can describe a state without a passive construction: "the length is fixed".
@@ -141,9 +115,9 @@ This guide makes the recommendations that it names into requirements for EthLib.
 
 ### Sentences
 
-- **S1.** Keep each sentence within the limit for its [text type](#text-types).
-  Split a long sentence at a logical boundary, and keep all of its conditions and qualifications.
-  The [word count](#word-count) says what counts as one word.
+- **S1.** Review sentences longer than the suggested length for their text type.
+  Split at a logical boundary if that makes the sentence clearer, and keep its conditions and qualifications.
+  The [word count](#word-count) describes the checker's estimates.
   (STE 5.1, 6.3)
 - **S2.** Give a sentence one topic.
   Give a step one instruction, except for actions that must occur together.
@@ -216,46 +190,44 @@ This guide makes the recommendations that it names into requirements for EthLib.
 
 ### Word count
 
-STE 8.4 to 8.7 say how to count words.
-A number, or a number with its unit such as "48 bytes", counts as one word.
-So do an abbreviation, an alphanumeric identifier, quoted text, a title or label, a proper name and a group of hyphenated words.
-A formula counts as quoted text under STE, so it also counts as one word.
-Do not add hyphens or quotation marks to hide a long sentence.
+STE 8.4 to 8.7 describe word counting.
+Numbers with their units, abbreviations, alphanumeric identifiers, quoted text, titles, labels, proper names and hyphenated groups count as one word.
+A formula counts as quoted text, so it also counts as one word.
+Do not add quotation marks or hyphens to hide a long sentence.
 
-Text in parentheses counts as one word in the sentence around it.
-Check the text in the parentheses on its own for length.
-For the count, a list introduction ends at its colon, and each list item counts separately.
+Parenthetical text counts as one word in the sentence around it, and is also reviewed separately.
+A list introduction ends at its colon for the count, and each item counts separately.
 
-EthLib also counts a command, a URL and a citation key as one word.
-A citation of a document and its section, such as RFC 9380 §5.3.1, also counts as one word.
-This adaptation keeps exact references whole, so that the limit does not push a writer to shorten them.
-The text of an ordinary link keeps its words.
-The checker only approximates these rules, so read the sentence when its count is in doubt.
+EthLib also groups a Lean expression, command, URL, citation key, or document reference with its section as one word.
+For example, a reference such as RFC 9380 §5.3.1 stays whole.
+Ordinary link text retains its words.
+These conventions help review sentences; they are not a conformance test.
+The checker only approximates them.
 
 ### Claims and evidence
 
-EthLib adds these requirements to the STE principles:
+This advice helps authors describe claims and evidence accurately.
+The actual source, proof, citation and testing requirements remain in CONTRIBUTING:
 
-- **C1.** State only what the code, a theorem, a test or a check that you ran establishes.
-  Name each check that you did not run.
-- **C2.** Keep the strength of a claim.
-  Keep its hypotheses, quantifiers, negations, bounds and exceptional cases, such as the condition `r + n >= p` of a theorem on public key recovery.
-  Do not call a definition "verified" or "proved" when no theorem covers the property.
-  Name the theorem and the property that it states instead.
-- **C3.** Describe the library as it is in its reference documentation: the Markdown files, the module READMEs and the Lean comments.
-  The history of a change belongs in the commit message and the pull request description.
-- **C4.** Replace private session notes and planning codes with an explanation or a reference that a reader of the merged tree can follow.
-- **C5.** Replace a quality claim with the fact or the evidence behind it.
-  Words such as "robust" or "comprehensive" are not evidence.
-- **C6.** Give the argument or a precise reference instead of "obvious" or "trivial".
-  An established term such as "trivial group" can stay.
-- **C7.** Remove repetition that gives the reader nothing new.
-  Repeat a condition when the reader needs it at the point of use.
+- **C1.** State only what the code or recorded evidence establishes.
+  Identify conditional results and checks that you did not run.
+- **C2.** Preserve the strength of a claim: hypotheses, quantifiers, negations, bounds and exceptional cases.
+  For example, keep the condition `r + n >= p` in the public-key recovery result.
+  Name the theorem and property instead of calling an uncovered definition "verified" or "proved".
+- **C3.** Describe the present library in reference documentation.
+  Change history belongs in commit messages, contribution descriptions and documents whose purpose is to record history.
+- **C4.** Replace private session notes and temporary planning codes with explanations or maintained references that readers can find.
+- **C5.** Replace unsupported quality claims with facts or evidence.
+  Words such as "robust" or "comprehensive" do not supply evidence.
+- **C6.** Give an argument or a precise reference instead of "obvious" or "trivial".
+  Established technical names such as "trivial group" remain permitted.
+- **C7.** Remove repetition that adds no useful context.
+  Repeat a condition when readers need it at the point of use.
 - **C8.** Make the source of each definition, value and claim traceable.
-  Use the citation rules in [CONTRIBUTING.md](CONTRIBUTING.md#sources-of-truth).
-- **C9.** Describe test evidence by what it pins.
-  Say where the vectors come from, and which input and output a known answer fixes.
-  A value that the code under test generated is not evidence that the code agrees with the specification.
+  Follow [Sources of truth](CONTRIBUTING.md#sources-of-truth).
+- **C9.** Describe test evidence by what it pins and where its vectors come from.
+  Follow [Known answers](CONTRIBUTING.md#known-answers) for their placement and provenance.
+  A value generated by the code under test does not establish agreement with the specification.
 
 ### Mathematical and technical conventions
 
@@ -275,9 +247,9 @@ A cryptographic usage that is standard, such as "the signature verifies", stays 
 
 ## Vocabulary
 
-STE's general dictionary stays the reference for general words, their meanings and their parts of speech.
-This section adds the technical terms of EthLib, and the words to avoid.
-It is not a replacement for the dictionary, and it does not list every permitted word.
+Use this vocabulary to clarify technical meanings and wording.
+It is not a dictionary of permitted English words and does not list every established term.
+Qualify a term when two meanings can occur in the same passage.
 
 ### Terms and context
 
@@ -287,7 +259,7 @@ It does not forbid the ordinary meaning in a different context:
 
 | Term | Technical use | Qualify when necessary |
 | --- | --- | --- |
-| specification | The published source that a module implements, such as an EIP, an RFC or consensus-specs. Also the Lean definitions that implement it, as in "a Lean project that imports the specification". | Name the source, for example "consensus-specs `v1.7.0-alpha.12`", or write "the Lean definitions" when both meanings occur. |
+| specification | A published normative source, such as an EIP, RFC, NIST or SEC standard, or the executable Lean definitions of EthLib. | Name the document or write "the Lean definitions" when both meanings occur. Follow CONTRIBUTING for source authority. |
 | source | The primary document that a definition cites | Write "source code" or "Lean source" for the files. |
 | proof | A Lean proof, a mathematical proof, or a cryptographic object such as a KZG proof | Write "KZG proof" or "cell proof" for the object. Write "Lean proof" when both meanings occur. |
 | verify | The verification operation of a signature or proof scheme, as in "verify a signature" | "Formally verified" refers to Lean theorems about the code, so name the theorem when a claim depends on it. Use "check" for a repository check, such as `lake exe check-decls`. |
@@ -324,14 +296,14 @@ Keep the established term and its spelling, and introduce a long or unfamiliar t
 | Lean | definition, theorem, lemma, declaration, doc comment, module system, public import, exposed definition, Lake library, tactic, `sorry`, `native_decide` |
 | Repository | branch, commit, pull request, stacked pull request, build, check, CI, workflow |
 
-Use the name of the source for a key: consensus-specs and BLS write "secret key", and SEC 1 writes "private key".
+Use the key name from the applicable standard, and explain a qualifier when "secret key" and "private key" occur together.
 "Precompile" is a noun, short for a precompiled contract, and EthLib does not use it as a verb.
 
 ### Technical verbs
 
-Use these verbs for the actions of their field, with one meaning in a passage.
-They fit the technical verb categories of STE 1.12, mostly those for computer processes and for mathematical and scientific information.
-Name the declaration or explain the operation when the meaning is not clear:
+Use verbs with a clear meaning in their field.
+These examples are not a list of permitted uses.
+Name the declaration or explain the operation when its meaning is unclear:
 
 | Field | Examples of actions |
 | --- | --- |
@@ -343,7 +315,7 @@ Name the declaration or explain the operation when the meaning is not clear:
 | Lean | unfold a definition, elaborate a term, compile a module, expose a definition, import a module, export a function |
 | Repository | build a target, run a check, pin a test vector or a dependency, regenerate a generated fact, rebase a branch, review a pull request |
 
-Follow the specification for the verb: SSZ "serializes" a value, and RLP "encodes" one.
+Follow the applicable specification for the verb: SSZ "serializes" a value, and RLP "encodes" one.
 
 ### Words to avoid
 
@@ -375,53 +347,30 @@ Read their meaning before you delete them.
 
 ### How to add a term
 
-1. Find the term in the specification, in the Lean or Mathlib documentation, or in the mathematical source.
-2. Prefer the established term over a local synonym.
-3. Record its meaning and its part of speech when the word can be ambiguous.
-4. Add a qualifier when two technical meanings occur in the same passage.
-5. Add the term in the pull request that first needs it.
-
-A noun and a verb with the same spelling need separate entries.
-An entry for "hash" as a noun does not approve every use of "hash" as a verb.
-An example from a field is not a reason to reject another established term of that field.
+Find the term in its normative source, Lean or Mathlib documentation, or mathematical literature.
+Prefer the established term over a local synonym.
+Record its meaning and grammatical role when ambiguity matters, and add a qualifier when two technical meanings occur together.
+Noun and verb examples can help distinguish uses, but an example is not a reason to reject another established term.
 
 ## Examples
 
-These examples come from EthLib's own prose.
-They show when to revise a sentence and when to keep it:
+These examples show when a revision helps and when clear wording can stay:
 
 | Before | After | Reason |
 | --- | --- | --- |
-| "A type is described by a *declaration*, and the data it holds by a *value*; the two are separate pieces of data." | A *declaration* describes a type, and a *value* holds its data. They are two separate pieces of data. | Name the actor (V3), and write two sentences instead of a semicolon (U1). |
-| "Matching a client byte for byte is a useful test, not a justification." | A byte-for-byte match with a client is a useful test, not a justification. | An "-ing" form with an object is a verb, not a technical noun (V2). |
-| "- **P**, a Lean proof that imports the specification;" | - **P**: a Lean proof that imports the specification. | A list item does not end with a semicolon (L3, U1). |
-| "No theorem states what the signature functions return; in particular, none says that an honest aggregate signature verifies." | No theorem states what the signature functions return. In particular, no theorem says that an honest aggregate signature verifies. | Write two sentences (U1), and repeat the noun instead of "none" (S7). |
-| "i.e. because Z(x) vanishes on (part of) the FFT domain itself" | that is, because Z(x) vanishes on part of the FFT domain itself | EthLib added this clause to a copied comment, so the guide applies to it (W7). |
-| "This will be referred to as the FFT domain." | Keep as written. | The comment copies the reference code of consensus-specs, so it is a quotation. |
-| "Decoding succeeds exactly on strings of 1056 bytes" | Keep as written. | "Decoding" names an operation, so it is a technical noun (V2). |
-| "Since that release, `specs/altair/bls.md` has changed only in style." | Keep as written. | The perfect tense gives the time span from the release, and a simple tense would lose it (V1). |
-| "a signature from the signing operation of SEC 1 verifies" | Keep as written. | "The signature verifies" is a standard usage in cryptography. |
+| "We utilize the lemma." | We use the lemma. | Prefer the common word when the meaning stays the same. |
+| "Matching a client byte for byte is a useful test, not a justification." | Keep as written. | The sentence is clear and preserves the source-authority distinction. |
+| "The build may have failed." | Keep as written. | Preserve uncertainty and past time. |
+| "The following are equivalent." | Keep as written. | Keep a conventional mathematical introduction when its reference is clear. |
+| "This will be referred to as the FFT domain." | Keep as written when quoting the source. | A quotation keeps its wording; source authority still follows CONTRIBUTING. |
+| "a signature from the signing operation of SEC 1 verifies" | Keep as written. | "The signature verifies" is established cryptographic usage. |
 
-Compare each rewrite of a mathematical or cryptographic statement with its source.
+Use [Write prose](AGENTS.md#write-prose) to compare complete passages with their sources.
 A shorter sentence is not better if it changes the statement.
 
-## Relation to STE
+## STE source
 
-| Source | Use in EthLib |
-| --- | --- |
-| STE 1.1 to 1.4, general vocabulary | Kept as the reference for general meanings and parts of speech. This guide and its checker do not contain the dictionary. |
-| STE 1.5 to 1.13, technical terms | Applied through the vocabulary and the established usage of each subject field. |
-| STE 1.7, 1.12 and 1.13, noun and verb roles | Applied as written: a word such as "hash" can be a technical noun and a technical verb when each use belongs to its category. |
-| STE 1.14, spelling | STE 1.14 permits another official spelling directive. EthLib uses Oxford spelling and also accepts American spelling. Lean declaration names follow Mathlib. Legal text keeps its own spelling. |
-| All STE rules | Technical accuracy comes first. A term or a language pattern that is standard in cryptography, computer science or mathematics stays when a rule conflicts with it. |
-| STE 2 to 6, 8 and 9 | The source principles inform the rules above. Notation and the stated adaptations keep the technical meaning. |
-| STE 3.1 to 3.4, verb forms (V1) | Adapted: simple forms stay preferred, but a modal or complex form stays when a simple form would lose an uncertainty or a time span. |
-| STE 5.3, instructions (S4) | Adapted: a requirement keeps its "must", "may" or "can", because contribution rules state obligations as well as steps. |
-| STE 7, safety instructions | Applied to risky operations, such as a command that rewrites the test vectors: the condition or the instruction comes before the explanation of the result. |
-| STE 8.6, word count | STE counts alphanumeric identifiers and formulas as one word. EthLib also groups commands, URLs, citation keys and citations of a document and its section as one word. The grouping keeps exact references whole. |
-| STE general recommendations | The recommendations named above are requirements of this guide, not STE rules. |
-| EthLib additions | The claims and evidence rules (C1 to C9), the rule against dashes between clauses (U2) and the rule on emphasis (U5) are EthLib policies. |
-
-ASD owns the standard, and [ASD's official Issue 9](https://www.asd-ste100.org/assets/files/ASD-STE100_ISSUE9.pdf) gives the full rules and the dictionary.
-This guide paraphrases the rules and takes its examples from EthLib.
-It does not reproduce the dictionary or claim a certification.
+ASD owns ASD-STE100 Simplified Technical English.
+[ASD's official Issue 9](https://www.asd-ste100.org/assets/files/ASD-STE100_ISSUE9.pdf) contains the rules and dictionary.
+This guide adapts its principles for EthLib and claims no STE conformance.
+It does not reproduce or check the official dictionary.
