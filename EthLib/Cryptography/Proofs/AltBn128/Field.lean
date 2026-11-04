@@ -9,15 +9,11 @@ public import Mathlib.Tactic.NormNum.Prime
 /-!
 # Proofs: the fields of alt_bn128
 
-Both moduli are prime, so `ZMod p` and `ZMod q` are fields.
+Both moduli are prime, by Pratt certificates that the kernel checks.
 
-`Fp` is `Fin p`, which is `ZMod p` by definition, with the same ring operations.
+`Fp` is `Fin p`, which is `ZMod p` by definition, so a proof states its algebra over `ZMod p`.
 
-So a proof states its algebra over `ZMod p`, where `ring` and `field_simp` work, and an `Fp` crosses over unchanged.
-
-- `Fp.modulus_prime` and `Fr.modulus_prime`: Pratt certificates, which the kernel checks.
-- `Fp.toZMod_powBits`: square and multiply computes the power.
-- `Fp.toZMod_inv`: Fermat's inverse is the field inverse.
+Fermat's inverse in `Fp` is the field inverse.
 -/
 
 @[expose] public section
@@ -26,7 +22,7 @@ namespace EthLib.Cryptography.AltBn128
 
 namespace Fp
 
--- The certificates evaluate `powModAux` on 256-bit numbers, deeper than the default.
+-- The certificates compute powers of 256-bit numbers, deeper than the default.
 set_option maxRecDepth 8000
 
 /-- `405928799` is prime, with witness `22`. -/
@@ -176,7 +172,7 @@ theorem modulus_prime : Nat.Prime modulus :=
 
 instance : Fact (Nat.Prime modulus) := ⟨modulus_prime⟩
 
-/-- `Fp` is `ZMod modulus` as a ring.
+/-- `Fp` is `ZMod p` as a ring.
 
 The map is the identity, so it carries every operation over, and the algebra of `ZMod` applies. -/
 def toZMod : Fp ≃+* ZMod modulus := RingEquiv.refl _

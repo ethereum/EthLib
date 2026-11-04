@@ -7,18 +7,15 @@ public import Mathlib.AlgebraicGeometry.EllipticCurve.Affine.Point
 /-!
 # Proofs: the group law of alt_bn128
 
-The addition rule of SEC 1 v2 §2.2.1 is the group law of the elliptic curve `y^2 = x^3 + 3` of [EIP-196](https://eips.ethereum.org/EIPS/eip-196) §"Specification".
+[EIP-196](https://eips.ethereum.org/EIPS/eip-196) §"Specification" defines `y^2 = x^3 + 3`.
 
-Mathlib defines that curve over the field `ZMod p`, proves its points form a commutative group, and calls it `curve.Point`.
+Mathlib proves that the points of this curve over `ZMod p` form a commutative group.
 
-`toPoint` sends a point of the specification to that group.
+The addition rule of SEC 1 v2 §2.2.1 is that group law.
 
-- `toPoint_add`, `toPoint_neg`: addition and negation are the group's.
-- `toPoint_mulBits`: double and add computes `k P`.
-- `isOnCurve_add`, `isOnCurve_neg`, `isOnCurve_mulBits`: each operation stays on the curve.
-- `toPoint_inj`, `toPoint_surjective`: points on the curve and group elements correspond one to one.
+Points on the curve and group elements correspond one to one.
 
-So every fact about the group, such as associativity, holds for the specification's points.
+Addition, negation and double and add map to the group operations.
 -/
 
 @[expose] public section
@@ -48,7 +45,7 @@ theorem equation_iff (x y : ZMod Fp.modulus) : curve.Equation x y ↔ y * y = x 
 theorem nonsingular_of {x y : ZMod Fp.modulus} (h : y * y = x * x * x + 3) : curve.Nonsingular x y :=
   equation_iff_nonsingular.mp ((equation_iff x y).mpr h)
 
-/-- `negY` on this curve is plain negation, since `a_1 = a_3 = 0`. -/
+/-- The negation of `y` in Mathlib is plain negation here, since `a_1 = a_3 = 0`. -/
 @[simp] theorem negY_eq (x y : ZMod Fp.modulus) : curve.negY x y = -y := by
   simp [Affine.negY, curve]
 
@@ -64,7 +61,7 @@ def toPoint : Point → curve.Point
       .some _ _ (nonsingular_of h)
     else 0
 
-/-- The test `isOnCurve`, as an equation in `ZMod p`. -/
+/-- The curve test, as an equation in `ZMod p`. -/
 theorem isOnCurve_affine (x y : Fp) :
     (affine x y).isOnCurve = true ↔ Fp.toZMod y * Fp.toZMod y = Fp.toZMod x * Fp.toZMod x * Fp.toZMod x + 3 := by
   simp only [isOnCurve, beq_iff_eq]
