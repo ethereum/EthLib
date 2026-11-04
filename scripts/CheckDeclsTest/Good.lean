@@ -35,4 +35,12 @@ Its message is built from `String` operations the kernel cannot unfold, but the 
 def checked (n : Nat) : Nat :=
   if n < 10 then n else panic! s!"too large: {n}"
 
+/-- A recursive type with a derived `Repr`.
+
+Its formatting recursion is generated below the instance, and formatting is not a finding. -/
+inductive Nested where
+  | leaf (n : Nat)
+  | inside (index : Nat) (inner : Nested)
+  deriving Repr
+
 end CheckDeclsTest.Good
