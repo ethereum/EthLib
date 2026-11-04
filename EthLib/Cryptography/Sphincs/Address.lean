@@ -39,8 +39,8 @@ open EthLib.Cryptography.Sphincs.Constants
 def encodeAddress (type : Fin 32) (step : Fin 8) (layer : Fin 256) (tree : UInt32)
     (hi : Fin (2 ^ 24)) (lo : UInt32) : Address :=
   -- Type and step share one byte: the type in bits 0 to 4, the step in bits 5 to 7.
-  littleEndian 4 lo.toNat ++ littleEndian 3 hi.val ++ littleEndian 1 (type.val + 32 * step.val)
-    ++ littleEndian 1 layer.val ++ littleEndian 4 tree.toNat ++ littleEndian 3 0
+  uintToBytes 4 lo.toNat ++ uintToBytes 3 hi.val ++ uintToBytes 1 (type.val + 32 * step.val)
+    ++ uintToBytes 1 layer.val ++ uintToBytes 4 tree.toNat ++ uintToBytes 3 0
 
 /-! ## Address types -/
 

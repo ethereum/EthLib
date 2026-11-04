@@ -26,13 +26,13 @@ variable {d d' : Digest} {x y : Vector (Fin CHAIN_LENGTH) V}
 
 /-- Digit `i` of a digest, as a number. -/
 @[simp] theorem digits_getElem_val (d : Digest) (i : Nat) (hi : i < DIGITS) :
-    ((Internal.digits d)[i]'hi).val = fromLittleEndian d / 4 ^ i % 4 := by
+    ((Internal.digits d)[i]'hi).val = bytesToUint d / 4 ^ i % 4 := by
   simp [Internal.digits, CHAIN_LENGTH]
 
 /-- A codeword holds the digest's first 58 digits, its other 6 digits are zero, and it sums to `T`. -/
 theorem codeword?_eq_some (h : codeword? d = some x) :
-    (∀ i : Fin V, (x[i] : Nat) = fromLittleEndian d / 4 ^ i.val % 4) ∧
-      (∀ i, V ≤ i → i < DIGITS → fromLittleEndian d / 4 ^ i % 4 = 0) ∧
+    (∀ i : Fin V, (x[i] : Nat) = bytesToUint d / 4 ^ i.val % 4) ∧
+      (∀ i, V ≤ i → i < DIGITS → bytesToUint d / 4 ^ i % 4 = 0) ∧
       Internal.digitSum x = TARGET_SUM := by
   simp only [codeword?] at h
   obtain ⟨hcond, hx⟩ := Option.ite_none_right_eq_some.mp h
@@ -94,31 +94,31 @@ theorem sum_base_digits_eq_mod (b n : Nat) : ∀ k : Nat,
     LE^-1(D) = sum_{i < 58} x_i 4^i
 ```
 -/
-theorem fromLittleEndian_of_codeword (h : codeword? d = some x) :
-    fromLittleEndian d = ∑ i : Fin V, (x[i] : Nat) * 4 ^ i.val := by
+theorem bytesToUint_of_codeword (h : codeword? d = some x) :
+    bytesToUint d = ∑ i : Fin V, (x[i] : Nat) * 4 ^ i.val := by
   obtain ⟨hx, htail, -⟩ := codeword?_eq_some h
   -- A 16-byte number is below `256^16 = 4^64`, so its 64 digits spell it.
-  have hlt : fromLittleEndian d < 4 ^ DIGITS := by
-    have := fromLittleEndian_lt d
+  have hlt : bytesToUint d < 4 ^ DIGITS := by
+    have := Base.bytesToUint_lt d
     simpa [DIGEST_LEN, DIGITS] using this
-  have hall := sum_base_digits_eq_mod 4 (fromLittleEndian d) DIGITS
+  have hall := sum_base_digits_eq_mod 4 (bytesToUint d) DIGITS
   rw [Nat.mod_eq_of_lt hlt] at hall
   -- Digits 58 to 63 are zero, so only the first 58 contribute.
-  have hsplit : ∑ r ∈ Finset.range DIGITS, fromLittleEndian d / 4 ^ r % 4 * 4 ^ r
-      = ∑ r ∈ Finset.range V, fromLittleEndian d / 4 ^ r % 4 * 4 ^ r := by
+  have hsplit : ∑ r ∈ Finset.range DIGITS, bytesToUint d / 4 ^ r % 4 * 4 ^ r
+      = ∑ r ∈ Finset.range V, bytesToUint d / 4 ^ r % 4 * 4 ^ r := by
     rw [show DIGITS = V + (DIGITS - V) by decide, Finset.sum_range_add]
     simp only [add_eq_left]
     refine Finset.sum_eq_zero fun r hr => ?_
     rw [Finset.mem_range] at hr
     rw [htail (V + r) (by omega) (by simp only [DIGITS, V] at *; omega), zero_mul]
-  rw [← hall, hsplit, ← Fin.sum_univ_eq_sum_range (fun r => fromLittleEndian d / 4 ^ r % 4 * 4 ^ r)]
+  rw [← hall, hsplit, ← Fin.sum_univ_eq_sum_range (fun r => bytesToUint d / 4 ^ r % 4 * 4 ^ r)]
   exact Finset.sum_congr rfl fun i _ => by rw [hx i]
 
 /-- No two digests share a codeword. -/
 theorem eq_of_codeword (h : codeword? d = some x) (h' : codeword? d' = some x) : d = d' := by
   -- Both digests spell the same number, and a digest is its little-endian bytes.
-  have := (fromLittleEndian_of_codeword h).trans (fromLittleEndian_of_codeword h').symm
-  rw [← littleEndian_fromLittleEndian d, ← littleEndian_fromLittleEndian d', this]
+  have := (bytesToUint_of_codeword h).trans (bytesToUint_of_codeword h').symm
+  rw [← Base.uintToBytes_bytesToUint d, ← Base.uintToBytes_bytesToUint d', this]
 
 /-! ## Incomparability
 

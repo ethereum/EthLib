@@ -32,13 +32,6 @@ theorem vector_append_inj {n m : Nat} {a c : Vector UInt8 n} {b d : Vector UInt8
   obtain ⟨ha, hb⟩ := Array.append_inj this (by simp)
   exact ⟨Vector.toArray_inj.mp ha, Vector.toArray_inj.mp hb⟩
 
-/-- Equal little-endian encodings of two integers below `256^k` mean equal integers. -/
-theorem littleEndian_inj {k x y : Nat} (hx : x < 256 ^ k) (hy : y < 256 ^ k)
-    (h : littleEndian k x = littleEndian k y) : x = y := by
-  -- Reading the bytes back returns each integer, unchanged by the bound.
-  have := congrArg fromLittleEndian h
-  simpa [Xmss.fromLittleEndian_littleEndian, Nat.mod_eq_of_lt hx, Nat.mod_eq_of_lt hy] using this
-
 /-- The 16 bytes of an address determine all six of its fields.
 
 ```text
@@ -63,11 +56,11 @@ theorem encodeAddress_inj {type type' : Fin 32} {step step' : Fin 8} {layer laye
     obtain ⟨h, htype⟩ := vector_append_inj h
     obtain ⟨hlo, hhi⟩ := vector_append_inj h
     -- Each field is below the range its bytes cover.
-    have lo_eq := littleEndian_inj lo.toNat_lt_size lo'.toNat_lt_size hlo
-    have hi_eq := littleEndian_inj (k := 3) hi.isLt hi'.isLt hhi
-    have tree_eq := littleEndian_inj tree.toNat_lt_size tree'.toNat_lt_size htree
-    have layer_eq := littleEndian_inj (k := 1) layer.isLt layer'.isLt hlayer
-    have type_eq := littleEndian_inj (k := 1)
+    have lo_eq := Base.uintToBytes_inj lo.toNat_lt_size lo'.toNat_lt_size hlo
+    have hi_eq := Base.uintToBytes_inj (k := 3) hi.isLt hi'.isLt hhi
+    have tree_eq := Base.uintToBytes_inj tree.toNat_lt_size tree'.toNat_lt_size htree
+    have layer_eq := Base.uintToBytes_inj (k := 1) layer.isLt layer'.isLt hlayer
+    have type_eq := Base.uintToBytes_inj (k := 1)
       (by have := type.isLt; have := step.isLt; omega)
       (by have := type'.isLt; have := step'.isLt; omega) htype
     -- `type < 32` is the remainder by 32 and `step` the quotient.

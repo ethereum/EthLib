@@ -31,13 +31,6 @@ private theorem vector_append_inj {n m : Nat} {a c : Vector UInt8 n} {b d : Vect
   obtain ⟨ha, hb⟩ := Array.append_inj this (by simp)
   exact ⟨Vector.toArray_inj.mp ha, Vector.toArray_inj.mp hb⟩
 
-/-- Equal little-endian encodings of two integers below `256^k` mean equal integers. -/
-private theorem littleEndian_inj {k x y : Nat} (hx : x < 256 ^ k) (hy : y < 256 ^ k)
-    (h : littleEndian k x = littleEndian k y) : x = y := by
-  -- Reading the bytes back returns each integer, unchanged by the bound.
-  have := congrArg fromLittleEndian h
-  simpa [Nat.mod_eq_of_lt hx, Nat.mod_eq_of_lt hy] using this
-
 /-- The 16 bytes of an address determine its type, position and both fields.
 
 ```text
@@ -58,9 +51,9 @@ theorem encodeAddress_inj {tau tau' : Fin 32} {mu mu' : Fin 8} {hi hi' : Fin (2 
     obtain ⟨h, htype⟩ := vector_append_inj h
     obtain ⟨hlo, hhi⟩ := vector_append_inj h
     -- Each field is below the range its bytes cover.
-    have lo_eq := littleEndian_inj lo.toNat_lt_size lo'.toNat_lt_size hlo
-    have hi_eq := littleEndian_inj (k := 3) hi.isLt hi'.isLt hhi
-    have type_eq := littleEndian_inj (k := 1)
+    have lo_eq := Base.uintToBytes_inj lo.toNat_lt_size lo'.toNat_lt_size hlo
+    have hi_eq := Base.uintToBytes_inj (k := 3) hi.isLt hi'.isLt hhi
+    have type_eq := Base.uintToBytes_inj (k := 1)
       (by have := tau.isLt; have := mu.isLt; omega)
       (by have := tau'.isLt; have := mu'.isLt; omega) htype
     -- `tau < 32` is the remainder by 32 and `mu` the quotient.

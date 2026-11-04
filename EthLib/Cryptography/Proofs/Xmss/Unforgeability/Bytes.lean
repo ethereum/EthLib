@@ -60,10 +60,10 @@ private theorem mod_div_mod (z a b c : Nat) (h : a + c ≤ b) :
   · simp [hj]
 
 /-- The bytes of the `8 n`-bit vector of an integer are its `n` low little-endian bytes. -/
-theorem ofBV_ofNat (n z : Nat) : ofBV n (BitVec.ofNat (8 * n) z) = littleEndian n z := by
+theorem ofBV_ofNat (n z : Nat) : ofBV n (BitVec.ofNat (8 * n) z) = uintToBytes n z := by
   apply Vector.ext
   intro i hi
-  simp only [getElem_ofBV, littleEndian, Vector.getElem_ofFn]
+  simp only [getElem_ofBV, uintToBytes, Vector.getElem_ofFn]
   apply UInt8.toNat.inj
   simp only [UInt8.toNat_ofBitVec, BitVec.extractLsb'_toNat, BitVec.toNat_ofNat,
     Nat.shiftRight_eq_div_pow]
@@ -73,11 +73,11 @@ theorem ofBV_ofNat (n z : Nat) : ofBV n (BitVec.ofNat (8 * n) z) = littleEndian 
   simp
 
 /-- The bytes of a bit vector of any width are the little-endian bytes of its integer. -/
-theorem ofBV_eq_littleEndian (n : Nat) {w : Nat} (y : BitVec w) :
-    ofBV n y = littleEndian n y.toNat := by
+theorem ofBV_eq_uintToBytes (n : Nat) {w : Nat} (y : BitVec w) :
+    ofBV n y = uintToBytes n y.toNat := by
   apply Vector.ext
   intro i hi
-  simp only [getElem_ofBV, littleEndian, Vector.getElem_ofFn]
+  simp only [getElem_ofBV, uintToBytes, Vector.getElem_ofFn]
   apply UInt8.toNat.inj
   simp only [UInt8.toNat_ofBitVec, BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow]
   rw [show (256 : Nat) ^ i = 2 ^ (8 * i) by rw [pow_mul]; norm_num]
@@ -145,19 +145,19 @@ So it needs no cast between EthLib's length constants and the proof's widths. -/
 /-- Put the integer of `n` bytes in a bit vector at least `8 n` bits wide.
 
 Then its bytes are the bytes we started from. -/
-theorem ofBV_ofNat_fromLittleEndian {n w : Nat} (v : Vector UInt8 n) (hw : 8 * n ≤ w) :
-    ofBV n (BitVec.ofNat w (fromLittleEndian v)) = v := by
-  rw [ofBV_eq_littleEndian, BitVec.toNat_ofNat, Nat.mod_eq_of_lt, littleEndian_fromLittleEndian]
-  calc fromLittleEndian v < 256 ^ n := fromLittleEndian_lt v
+theorem ofBV_ofNat_bytesToUint {n w : Nat} (v : Vector UInt8 n) (hw : 8 * n ≤ w) :
+    ofBV n (BitVec.ofNat w (bytesToUint v)) = v := by
+  rw [ofBV_eq_uintToBytes, BitVec.toNat_ofNat, Nat.mod_eq_of_lt, Base.uintToBytes_bytesToUint]
+  calc bytesToUint v < 256 ^ n := Base.bytesToUint_lt v
     _ = 2 ^ (8 * n) := by rw [pow_mul]; norm_num
     _ ≤ 2 ^ w := Nat.pow_le_pow_right (by decide) hw
 
 /-- Two bit vectors of at most `8 n` bits with the same `n` bytes are equal. -/
 theorem ofBV_inj {n w : Nat} {x y : BitVec w} (hw : w ≤ 8 * n) (h : ofBV n x = ofBV n y) :
     x = y := by
-  rw [ofBV_eq_littleEndian, ofBV_eq_littleEndian] at h
-  have := congrArg fromLittleEndian h
-  rw [fromLittleEndian_littleEndian, fromLittleEndian_littleEndian] at this
+  rw [ofBV_eq_uintToBytes, ofBV_eq_uintToBytes] at h
+  have := congrArg bytesToUint h
+  rw [Base.bytesToUint_uintToBytes, Base.bytesToUint_uintToBytes] at this
   -- Both integers are below `2^w <= 256^n`, so the modulus does nothing.
   have hpow : 2 ^ w ≤ 256 ^ n := by
     calc 2 ^ w ≤ 2 ^ (8 * n) := Nat.pow_le_pow_right (by decide) hw

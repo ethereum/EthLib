@@ -44,8 +44,8 @@ open EthLib.Cryptography.Xmss.Constants
 def encodeAddress (tau : Fin 32) (mu : Fin 8) (hi : Fin (2 ^ 24)) (lo : UInt32) :
     Address :=
   -- Type and position share one byte: `tau` in bits 0 to 4, `mu` in bits 5 to 7.
-  littleEndian 4 lo.toNat ++ littleEndian 3 hi.val
-    ++ littleEndian 1 (tau.val + 32 * mu.val) ++ littleEndian 8 0
+  uintToBytes 4 lo.toNat ++ uintToBytes 3 hi.val
+    ++ uintToBytes 1 (tau.val + 32 * mu.val) ++ uintToBytes 8 0
 
 /-! ## Address types -/
 

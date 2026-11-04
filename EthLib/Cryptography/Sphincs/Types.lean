@@ -23,7 +23,7 @@ open EthLib.Cryptography.Sphincs.Constants
 
 /-! ## Byte conversions shared with leanXMSS -/
 
-export EthLib.Cryptography.Xmss (littleEndian fromLittleEndian packBytes readBytes unpackBytes?)
+export EthLib.Cryptography.Xmss (uintToBytes bytesToUint packBytes readBytes unpackBytes?)
 
 /-! ## Objects -/
 

@@ -37,7 +37,7 @@ namespace Internal
 /-- The 64 digits of a digest, codeword or not. -/
 def digits (d : Digest) : Codeword :=
   -- The digest is read once, as one 128-bit little-endian integer.
-  let value := fromLittleEndian d
+  let value := bytesToUint d
   -- Digit `i` is the base-4 digit of weight `4^i`: bits `2i` and `2i + 1`.
   Vector.ofFn fun i => ⟨value / 4 ^ i.val % CHAIN_LENGTH, Nat.mod_lt _ (by decide)⟩
 

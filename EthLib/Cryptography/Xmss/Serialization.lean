@@ -55,7 +55,7 @@ def encodeLayerSignature (sig : LayerSignature) : ByteArray :=
 The leaf index is a little-endian 32-bit word.
 -/
 def encodeSignature (sig : Signature) : ByteArray :=
-  packBytes (littleEndian LEAF_INDEX_SIZE sig.leafIndex.toNat)
+  packBytes (uintToBytes LEAF_INDEX_SIZE sig.leafIndex.toNat)
     ++ encodeLayerSignature sig.bottom ++ encodeLayerSignature sig.top
 
 /-! ## Decoding -/
@@ -88,7 +88,7 @@ def decodeLayerSignature (bytes : ByteArray) (offset : Nat)
 /-- Read the leaf index from the first 4 bytes of a buffer, as a little-endian word. -/
 def decodeLeafIndex (bytes : ByteArray) (h : LEAF_INDEX_SIZE ≤ bytes.size) : LeafIndex :=
   -- Four bytes hold at most `2^32 - 1`, so the conversion drops nothing.
-  UInt32.ofNat (fromLittleEndian (readBytes bytes 0 LEAF_INDEX_SIZE (by omega)))
+  UInt32.ofNat (bytesToUint (readBytes bytes 0 LEAF_INDEX_SIZE (by omega)))
 
 /-- Decode a signature from 2404 bytes.
 

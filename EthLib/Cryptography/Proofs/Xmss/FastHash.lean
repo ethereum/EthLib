@@ -82,7 +82,7 @@ def chain (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
   match steps, h with
   | 0, _ => value
   | s + 1, h => th pp (addrChain layer e ⟨start + s, by simp only [CHAIN_LENGTH] at *; omega⟩)
-      ((chain pp layer e i start s (by omega) value).toList ++ (littleEndian 16 i.val).toList)
+      ((chain pp layer e i start s (by omega) value).toList ++ (uintToBytes 16 i.val).toList)
 
 /-- A chain walk is the walk over the fast hash. -/
 theorem chain_eq (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V) (start : Nat) :

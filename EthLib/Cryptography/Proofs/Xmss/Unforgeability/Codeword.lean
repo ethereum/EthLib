@@ -27,21 +27,21 @@ open EthLib.Cryptography.Xmss.Constants
 open XmssSecurity.TargetSum (decodeDigest digestEncoding digestTop digitOffset zeroBits)
 
 /-- The integer the bytes of a bit vector encode is the bit vector's. -/
-theorem fromLittleEndian_ofBV (n : Nat) (x : BitVec (8 * n)) :
-    fromLittleEndian (ofBV n x) = x.toNat := by
-  rw [ofBV_eq_littleEndian, fromLittleEndian_littleEndian]
+theorem bytesToUint_ofBV (n : Nat) (x : BitVec (8 * n)) :
+    bytesToUint (ofBV n x) = x.toNat := by
+  rw [ofBV_eq_uintToBytes, Base.bytesToUint_uintToBytes]
   -- The integer is below `2^(8n) = 256^n`, so the modulus does nothing.
   exact Nat.mod_eq_of_lt (by simpa [pow_mul] using x.isLt)
 
 /-- A digest's integer is its bit vector's. -/
-@[simp] theorem fromLittleEndian_ofDigest (x : XmssSecurity.Digest) :
-    fromLittleEndian (ofDigest x) = x.toNat :=
-  fromLittleEndian_ofBV 16 x
+@[simp] theorem bytesToUint_ofDigest (x : XmssSecurity.Digest) :
+    bytesToUint (ofDigest x) = x.toNat :=
+  bytesToUint_ofBV 16 x
 
 /-- A randomizer's integer is its bit vector's. -/
-@[simp] theorem fromLittleEndian_ofRandomizer (x : XmssSecurity.Randomness) :
-    fromLittleEndian (ofRandomizer x) = x.toNat :=
-  fromLittleEndian_ofBV 16 x
+@[simp] theorem bytesToUint_ofRandomizer (x : XmssSecurity.Randomness) :
+    bytesToUint (ofRandomizer x) = x.toNat :=
+  bytesToUint_ofBV 16 x
 
 /-! ## The digits -/
 
@@ -100,7 +100,7 @@ theorem codeword?_ofDigest (x : XmssSecurity.Digest) :
       have := i.isLt; simp only [V, DIGITS] at *; omega))
       = ofEncoding (digestEncoding x) := by
     refine congrArg Vector.ofFn (funext fun i => Fin.ext ?_)
-    rw [digits_getElem_val, fromLittleEndian_ofDigest]
+    rw [digits_getElem_val, bytesToUint_ofDigest]
     exact (val_digestEncoding x (chainOf i)).symm
   -- The six digits without a chain are zero exactly when the model's top bits are.
   have htail : ((Internal.digits (ofDigest x)).toList.drop V).all (·.val == 0) = true ↔
@@ -112,13 +112,13 @@ theorem codeword?_ofDigest (x : XmssSecurity.Digest) :
       have := h (((Internal.digits (ofDigest x)).toList.drop V)[i - V]'(by
         simp only [List.length_drop, Vector.length_toList]; omega)) (List.getElem_mem _)
       simp only [List.getElem_drop, Vector.getElem_toList, Nat.add_sub_cancel' hlo,
-        digits_getElem_val, fromLittleEndian_ofDigest, beq_iff_eq] at this
+        digits_getElem_val, bytesToUint_ofDigest, beq_iff_eq] at this
       exact this
     · intro h d hd
       obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem hd
       simp only [List.length_drop, Vector.length_toList] at hk
       simp only [List.getElem_drop, Vector.getElem_toList, digits_getElem_val,
-        fromLittleEndian_ofDigest, beq_iff_eq]
+        bytesToUint_ofDigest, beq_iff_eq]
       exact h (V + k) (by omega) (by simp only [V, DIGITS] at *; omega)
   -- The digit sums agree.
   have hsum : Internal.digitSum (ofEncoding (digestEncoding x))
@@ -152,7 +152,7 @@ theorem trialRandomizer_ofRandomizer (base : XmssSecurity.Randomness) (c : Nat) 
       = ofRandomizer (base + BitVec.ofNat XmssSecurity.randomnessBits c) := by
   -- Both sides are the bytes of `(R0 + c) mod 2^128`.
   show _ = ofBV RANDOMIZER_LEN _
-  rw [trialRandomizer, fromLittleEndian_ofRandomizer, ofBV_eq_littleEndian, BitVec.toNat_add,
+  rw [trialRandomizer, bytesToUint_ofRandomizer, ofBV_eq_uintToBytes, BitVec.toNat_add,
     BitVec.toNat_ofNat]
   congr 1
   simp only [XmssSecurity.randomnessBits]
