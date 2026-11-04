@@ -7,14 +7,9 @@ public import EthLib.Cryptography.Proofs.Pratt
 /-!
 # Proofs: the fields of secp256r1
 
-Both moduli are prime, so `ZMod p` and `ZMod n` are fields.
+Both moduli are prime, by Pratt certificates that the kernel checks.
 
-`Fp` is `Fin p`, which is `ZMod p` by definition, with the same ring operations.
-
-So a proof states its algebra over `ZMod p`, and an `Fp` crosses over unchanged.
-
-- `Fp.modulus_prime` and `Fn.modulus_prime`: Pratt certificates, which the kernel checks.
-- `Fp.toZMod_inv` and `Fn.toZMod_inv`: Fermat's inverse is the field inverse.
+`Fp` is `ZMod p` by definition, so a proof states its algebra over `ZMod p`.
 -/
 
 @[expose] public section
@@ -23,7 +18,7 @@ namespace EthLib.Cryptography.Secp256r1
 
 namespace Fp
 
--- The certificates evaluate `powModAux` on 256-bit numbers, deeper than the default.
+-- The certificates compute powers mod 256-bit numbers, deeper than the default.
 set_option maxRecDepth 8000
 
 /-- `6700417` is prime, with witness `5`. -/

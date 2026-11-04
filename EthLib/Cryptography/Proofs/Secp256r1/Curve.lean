@@ -7,18 +7,11 @@ public import EthLib.Cryptography.Proofs.ShortWeierstrass
 /-!
 # Proofs: the group law of secp256r1
 
-The addition rule of SEC 1 v2 §2.2.1 is the group law of the elliptic curve `y^2 = x^3 + a x + b`.
+The addition rule of SEC 1 v2 §2.2.1 is the group law of `y^2 = x^3 + a x + b` over `ZMod p`.
 
-Mathlib proves that the points of that curve over the field `ZMod p` form a commutative group, `curve.Point`.
+Each point of the specification maps to an element of that group.
 
-`toPoint` sends a point of the specification to that group.
-
-- `toPoint_add`: addition is the group's.
-- `toPoint_mulBits`, `toPoint_mul`: double and add computes `k P`.
-- `isOnCurve_add`, `isOnCurve_mul`: each operation stays on the curve.
-- `toPoint_inj`, `toPoint_surjective`: points on the curve and group elements correspond one to one.
-
-So every fact about the group, such as associativity, holds for the specification's points.
+Addition and scalar multiplication commute with that map, which is one to one on the curve.
 -/
 
 @[expose] public section
@@ -52,7 +45,7 @@ def toPoint : Point → curve.Point
       .some _ _ (nonsingular_of h)
     else 0
 
-/-- The test `isOnCurve`, as an equation in `ZMod p`. -/
+/-- The curve test, as an equation in `ZMod p`. -/
 theorem isOnCurve_affine (x y : Fp) :
     (affine x y).isOnCurve = true ↔ Fp.toZMod y * Fp.toZMod y
       = Fp.toZMod x * Fp.toZMod x * Fp.toZMod x + Fp.toZMod a * Fp.toZMod x + Fp.toZMod b := by
@@ -173,7 +166,7 @@ theorem toPoint_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) (hk
 theorem isOnCurve_mul (k : Fn) {p : Point} (hp : p.isOnCurve = true) : (mul k p).isOnCurve = true :=
   isOnCurve_mulBits 256 k.val hp
 
-/-- `mul k P` is `k P`, with the value of `k` below `n`. -/
+/-- Scalar multiplication computes `k P`, with the value of `k` below `n`. -/
 theorem toPoint_mul (k : Fn) {p : Point} (hp : p.isOnCurve = true) :
     toPoint (mul k p) = k.val • toPoint p :=
   toPoint_mulBits 256 k.val hp (Nat.lt_trans k.isLt (by decide))
