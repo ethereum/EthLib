@@ -56,5 +56,6 @@ CONTAINERS = {
     "ExecutionRequests": ("electra", None),
     "Withdrawal": ("capella", None),
     "ExecutionPayload": ("bellatrix", None),
+    "ExecutionPayloadHeader": ("bellatrix", None),
 }
 

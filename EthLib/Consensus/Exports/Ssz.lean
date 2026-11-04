@@ -93,6 +93,8 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
   | "Withdrawal" => if .shapella ≤ fork then some ⟨Withdrawal⟩ else none
   | "ExecutionPayload" =>
     if .bellatrix ≤ fork then some ⟨ExecutionPayload preset fork⟩ else none
+  | "ExecutionPayloadHeader" =>
+    if .bellatrix ≤ fork then some ⟨ExecutionPayloadHeader preset fork⟩ else none
   | _ => none
 
 /-- The root of the value that the bytes encode, then the bytes of that value.
