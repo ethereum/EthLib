@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Sphincs.Digest
 
 /-!
-# Proofs: `Sphincs.Digest`
+# Proofs: the leanSPHINCS message digest
 
 The fields read from the message digest are its low 266 bits, with no overlap and no gap.
 

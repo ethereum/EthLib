@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Sphincs.Verify
 public import EthLib.Cryptography.Sphincs.Errors
 
 /-!
-# `Sphincs.Serialization`
+# leanSPHINCS byte encodings
 
 The byte encodings of the public key and the signature.
 
@@ -14,7 +14,8 @@ So an encoding is the fields concatenated, with no offsets and no length prefixe
 
 Decoding checks the total length, then reads each field at its fixed offset.
 
-Source: `serializeSignature` in [FORS/Scheme/Layout.lean](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme/Layout.lean).
+Source: `serializeSignature` in FORS/Scheme/Layout.lean.
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme/Layout.lean>
 -/
 
 @[expose] public section

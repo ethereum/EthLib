@@ -22,7 +22,5 @@ public import EthLib.Cryptography.Proofs.Sphincs.KnownAnswerTop
 public import EthLib.Cryptography.Proofs.Sphincs.KnownAnswerVerify
 
 /-!
-# `EthLib.Cryptography.Proofs.Sphincs`
-
-Proofs about leanSPHINCS.
+# Proofs: leanSPHINCS
 -/

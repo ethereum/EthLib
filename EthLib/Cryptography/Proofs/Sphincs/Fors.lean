@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Sphincs.Fors
 public import EthLib.Cryptography.Proofs.Sphincs.Tree
 
 /-!
-# Proofs: `Sphincs.Fors`
+# Proofs: FORS
 
 An honest FORS opening leads back to the instance's FORS key.
 

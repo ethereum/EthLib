@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Sphincs.Ots
 
 /-!
-# Proofs: `Sphincs.Ots`
+# Proofs: WOTS+C one-time signatures
 
 Correctness of the one-time signature.
 

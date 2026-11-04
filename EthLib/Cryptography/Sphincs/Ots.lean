@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Sphincs.Encoding
 
 /-!
-# `Sphincs.Ots`
+# WOTS+C one-time signatures
 
 The WOTS+C one-time signature: 64 hash chains of 4 positions.
 
@@ -27,7 +27,10 @@ The key signs a message `M` with the least counter `c` that makes this a codewor
 
 Source: [ePrint 2022/778](https://eprint.iacr.org/2022/778) for WOTS+C.
 
-The algorithms follow `otsSecrets`, `chainWalk`, `encode`, `otsSign` and `otsLeaf` in [FORS/Scheme.lean](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean).
+The algorithms follow five definitions of FORS/Scheme.lean:
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
+
+They are `otsSecrets`, `chainWalk`, `encode`, `otsSign` and `otsLeaf`.
 -/
 
 @[expose] public section

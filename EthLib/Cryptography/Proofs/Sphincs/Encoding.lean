@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Sphincs.Encoding
 public import EthLib.Cryptography.Proofs.Xmss.Encoding
 
 /-!
-# Proofs: `Sphincs.Encoding`
+# Proofs: the WOTS+C target-sum code
 
 What a codeword is, and what it guarantees.
 
@@ -28,7 +28,7 @@ variable {d d' : Digest} {x y : Codeword}
     ((Internal.digits d)[i]'hi).val = bytesToUint d / 4 ^ i % 4 := by
   unfold Internal.digits
   rw [Vector.getElem_ofFn]
-  -- `CHAIN_LENGTH` is 4 by definition.
+  -- The chain length is 4 by definition.
   rfl
 
 /-- A codeword holds the digest's 64 digits, and they sum to `T`. -/

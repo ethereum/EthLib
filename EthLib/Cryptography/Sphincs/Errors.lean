@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Sphincs.Types
 
 /-!
-# `Sphincs.Errors`
+# leanSPHINCS errors
 
 Typed failures for the leanSPHINCS surface.
 
@@ -38,8 +38,7 @@ def SphincsError.message : SphincsError → String
   -- One line per rejection, phrased for someone reading a Python traceback.
   | .noAdmissibleEncoding layer =>
       s!"no codeword within the counter limit on layer {layer.toNat}"
-  -- The expected length is fixed by the parameter set.
-  -- So it is read from there rather than carried in the error.
+  -- The parameter set fixes the expected length, so the message reads it, not the error.
   | .badPublicKeySize actual =>
       s!"bad public key size: {actual}, expected {PUB_KEY_SIZE}"
   | .badSignatureSize actual =>

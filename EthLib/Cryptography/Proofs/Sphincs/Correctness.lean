@@ -13,11 +13,13 @@ public import EthLib.Cryptography.Proofs.Sphincs.Digest
 A signature this specification produces is one it accepts.
 
 - The FORS openings recover the FORS key of instance `idx`.
-- The bottom layer leads to the root of bottom tree `idx >> 7`.
-- The middle layer leads to the root of middle tree `idx >> 14`.
+- The bottom layer leads to the root of bottom tree `idx >> 8`.
+- The middle layer leads to the root of middle tree `idx >> 16`.
 - The top layer leads to the root of the top tree, which is the public key's.
 
-Each layer's key signs exactly what the layer below leads to, so the verifier walks the signer's path back.
+Each layer's key signs exactly what the layer below leads to.
+
+So the verifier walks the signer's path back.
 
 # Assumption
 

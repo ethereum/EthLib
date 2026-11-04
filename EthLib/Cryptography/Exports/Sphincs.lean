@@ -7,11 +7,12 @@ public import EthLib.Cryptography.Sphincs.Sign
 public import EthLib.Cryptography.Sphincs.Serialization
 
 /-!
-# `Exports.Sphincs`
+# Exports: leanSPHINCS
 
 C-ABI exports for leanSPHINCS, callable from the Python C extension.
 
 Only key generation, signing and verification cross the boundary, with the sizes.
+
 The scheme is a black box to callers: no hash, chain, tree or FORS instance is exported.
 -/
 
@@ -34,7 +35,9 @@ def runSphincs {α : Type} (act : Except SphincsError α) : IO α :=
 
 /-! ## Sizes
 
-The Python C extension reads every size through these at module-init time, so the wrapper hardcodes no constant of its own.
+The Python C extension reads every size through these functions when it loads.
+
+So the wrapper hardcodes no constant of its own.
 
 Each takes a `Unit` to keep the C-ABI signature predictable. -/
 

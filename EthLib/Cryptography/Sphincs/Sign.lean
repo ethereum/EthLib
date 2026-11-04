@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Sphincs.Errors
 public import EthLib.Cryptography.Sphincs.KeyGen
 
 /-!
-# `Sphincs.Sign`
+# leanSPHINCS signing
 
 Signing.
 
@@ -22,7 +22,8 @@ A FORS instance stays secure over a few signatures, and its security falls with 
 
 So one key must sign at most `2^30` messages.
 
-Source: `Seeded.sign` in [FORS/Scheme.lean](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean).
+Source: `Seeded.sign` in FORS/Scheme.lean.
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
 -/
 
 @[expose] public section
@@ -51,8 +52,7 @@ The key is the layer's key on the way from `idx` up.
 def signLayer (pp : PublicParam) (seed : Seed) (layer : Layer) (idx : Nat) (msg : ByteArray) :
     Except SphincsError (LayerSignature layer) :=
   let key := OtsKey.ofIndex layer idx
-  -- No codeword is an error.
-  -- A one-time signature is packed with the key's path.
+  -- No codeword is an error, and a one-time signature is packed with the key's path.
   (otsSign pp seed key msg).elim (.error (.noAdmissibleEncoding layer)) fun ots =>
     .ok { counter := ots.1, chainValues := ots.2, path := path pp seed layer key.tree key.leaf }
 

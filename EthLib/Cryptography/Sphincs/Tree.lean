@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Merkle.Tree
 public import EthLib.Cryptography.Sphincs.Ots
 
 /-!
-# `Sphincs.Tree`
+# The trees of the leanSPHINCS hypertree
 
 The Merkle trees of the hypertree, whose leaves are one-time keys.
 
@@ -24,11 +24,14 @@ For example, in a tree of height 2 with leaves `l_0` to `l_3`, the path of `l_2`
 - `l_3`, its sibling on level 0.
 - `X_{1,0}`, the sibling of its parent on level 1.
 
-The trees of a layer are the Merkle trees of `Merkle.Tree`, whose node hash reads the node's position into its address.
+The trees of a layer are the shared Merkle trees of EthLib.
+
+Their node hash reads the position of the node into its address.
 
 They are pure, so they run in the identity monad.
 
-Source: `Seeded.treeNode`, `Seeded.treePath` and `treeFold` in [FORS/Scheme.lean](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean).
+Source: `Seeded.treeNode`, `Seeded.treePath` and `treeFold` in FORS/Scheme.lean.
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
 -/
 
 @[expose] public section

@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Sphincs.Constants
 public import EthLib.Cryptography.Xmss.Types
 
 /-!
-# `Sphincs.Types`
+# leanSPHINCS types
 
 Fixed-size byte objects, with the length carried in the type, and the layers of the hypertree.
 

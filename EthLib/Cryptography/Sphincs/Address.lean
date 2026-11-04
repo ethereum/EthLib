@@ -3,17 +3,20 @@ module
 public import EthLib.Cryptography.Sphincs.Types
 
 /-!
-# `Sphincs.Address`
+# leanSPHINCS addresses
 
 Addresses keep the hash inputs of a key distinct.
 
 Every hash call of a key is `H(P | A | M)`, and the address `A` names the call site.
 
-One hash for every call site would expose many targets at once, and a preimage among `M` targets costs `2^128 / M`.
+One hash for every call site would expose many targets at once.
+
+A preimage among `M` targets then costs `2^128 / M`.
 
 Giving each call site its own address removes that discount.
 
-Source: `fieldBytes`, `hashDomainFields` and `keygenDomainFields` in [FORS/Scheme.lean](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean).
+Source: `fieldBytes`, `hashDomainFields` and `keygenDomainFields` in FORS/Scheme.lean.
+<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
 -/
 
 @[expose] public section
@@ -169,7 +172,9 @@ def forsNodePosition (level : Fin 16) (j : Fin (2 ^ FORS_HEIGHT)) : Fin (16 * 2 
     simp only [FORS_HEIGHT] at *
     omega⟩
 
-/-- The secrets of leaves `2p` and `2p + 1` of tree `kappa` of instance `idx`: `hi = kappa + 64 p`. -/
+/-- The secrets of leaves `2p` and `2p + 1` of tree `kappa` of instance `idx`.
+
+The field `hi` is `kappa + 64 p`. -/
 def addrForsPrf (idx : Nat) (kappa : Fin FORS_TREES) (p : Fin (2 ^ FORS_HEIGHT / 2)) : Address :=
   encodeAddress AddressType.forsPrf.code 0 0 0
     (forsHi kappa (forsLeafPosition (p.castLE (by decide)))) (UInt32.ofNat idx)
