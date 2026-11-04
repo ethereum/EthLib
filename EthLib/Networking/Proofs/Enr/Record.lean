@@ -11,7 +11,9 @@ The decoder rejects a record over 300 bytes.
 
 The keys of every record it accepts strictly increase, so they are sorted and unique.
 
-It undoes the encoder on every record that fits and has increasing keys.
+Every record it accepts has the key `id`, and it rejects a record without it.
+
+It undoes the encoder on every record that fits, has increasing keys and has the key `id`.
 
 The same holds for the text form.
 -/
@@ -69,9 +71,9 @@ theorem checkKeys_of_pairwise :
     rw [ite_eq_left hpq]
     exact checkKeys_of_pairwise (q :: rest) (List.Pairwise.of_cons h)
 
-/-- The keys of a decoded record strictly increase: they are sorted, and no key repeats. -/
-theorem pairwise_of_decode {bytes : ByteArray} {r : Enr} (h : decode bytes = .ok r) :
-    r.pairs.Pairwise (fun p q => keyLt p.1 q.1) := by
+/-- A decoded record passed both checks on its pairs: the order of the keys, and the key `id`. -/
+theorem checks_of_decode {bytes : ByteArray} {r : Enr} (h : decode bytes = .ok r) :
+    checkKeys r.pairs = .ok () ∧ r.pairs.any (·.1 = KEY_ID) = true := by
   unfold decode at h
   simp only [bind, Except.bind, pure, Except.pure] at h
   split at h
@@ -87,9 +89,25 @@ theorem pairwise_of_decode {bytes : ByteArray} {r : Enr} (h : decode bytes = .ok
     split at h
     · cases h
     rename_i hk
-    cases h
-    exact pairwise_of_checkKeys pairs (by cases hc : checkKeys pairs <;> simp_all)
+    split at h
+    · -- The record has the key `id`, and its keys passed the check.
+      rename_i hid
+      cases h
+      exact ⟨by cases hc : checkKeys pairs <;> simp_all, hid⟩
+    · cases h
   all_goals cases h
+
+/-- The keys of a decoded record strictly increase: they are sorted, and no key repeats. -/
+theorem pairwise_of_decode {bytes : ByteArray} {r : Enr} (h : decode bytes = .ok r) :
+    r.pairs.Pairwise (fun p q => keyLt p.1 q.1) :=
+  pairwise_of_checkKeys r.pairs (checks_of_decode h).1
+
+/-- A decoded record has the key `id`. -/
+theorem has_id_of_decode {bytes : ByteArray} {r : Enr} (h : decode bytes = .ok r) :
+    ∃ value, (KEY_ID, value) ∈ r.pairs := by
+  obtain ⟨⟨key, value⟩, hmem, hkey⟩ := List.any_eq_true.mp (checks_of_decode h).2
+  simp only [decide_eq_true_eq] at hkey
+  exact ⟨value, hkey ▸ hmem⟩
 
 /-- No key repeats in a decoded record. -/
 theorem keys_nodup_of_decode {bytes : ByteArray} {r : Enr} (h : decode bytes = .ok r) :
@@ -109,20 +127,51 @@ theorem readPairs_flatten :
   | (key, value) :: rest => by
     simp only [flatten, readPairs, readPairs_flatten rest, bind, Except.bind, pure, Except.pure]
 
-/-- The decoder undoes the encoder on a record that fits in 300 bytes and has increasing keys. -/
-theorem decode_encode (r : Enr) (bytes : ByteArray) (he : r.encode = .ok bytes)
+/-- The pairs have the key `id` exactly when one of their keys is `id`. -/
+theorem any_id_iff (pairs : List (ByteArray × Item)) :
+    pairs.any (·.1 = KEY_ID) = true ↔ ∃ value, (KEY_ID, value) ∈ pairs := by
+  simp only [List.any_eq_true, decide_eq_true_eq, Prod.exists]
+  constructor
+  · rintro ⟨key, value, hmem, rfl⟩
+    exact ⟨value, hmem⟩
+  · rintro ⟨value, hmem⟩
+    exact ⟨KEY_ID, value, hmem, rfl⟩
+
+/-- On a record that fits and has increasing keys, only the key `id` decides the answer. -/
+theorem decode_of_encode (r : Enr) (bytes : ByteArray) (he : r.encode = .ok bytes)
     (hs : bytes.size ≤ MAX_RECORD_SIZE) (hk : r.pairs.Pairwise (fun p q => keyLt p.1 q.1)) :
-    decode bytes = .ok r := by
+    decode bytes = if r.pairs.any (·.1 = KEY_ID) then .ok r else .error .missingId := by
   unfold Enr.encode at he
   unfold decode
   simp only [Nat.not_lt.mpr hs, ↓reduceIte, Serialization.Rlp.decode_encode _ _ he,
     Except.mapError, LawfulCodec.ofItem_toItem, readPairs_flatten, checkKeys_of_pairwise _ hk, bind,
     Except.bind, pure, Except.pure]
+  split <;> rfl
+
+/-- The decoder undoes the encoder on a record that fits, has increasing keys and has `id`. -/
+theorem decode_encode (r : Enr) (bytes : ByteArray) (he : r.encode = .ok bytes)
+    (hs : bytes.size ≤ MAX_RECORD_SIZE) (hk : r.pairs.Pairwise (fun p q => keyLt p.1 q.1))
+    (hid : ∃ value, (KEY_ID, value) ∈ r.pairs) :
+    decode bytes = .ok r := by
+  rw [decode_of_encode r bytes he hs hk, ite_eq_left ((any_id_iff r.pairs).mpr hid)]
+
+/-- The decoder rejects a record without the key `id`, even if it fits and its keys increase. -/
+theorem decode_missingId (r : Enr) (bytes : ByteArray) (he : r.encode = .ok bytes)
+    (hs : bytes.size ≤ MAX_RECORD_SIZE) (hk : r.pairs.Pairwise (fun p q => keyLt p.1 q.1))
+    (hid : ∀ value, (KEY_ID, value) ∉ r.pairs) :
+    decode bytes = .error .missingId := by
+  have hany : r.pairs.any (·.1 = KEY_ID) = false := by
+    cases hc : r.pairs.any (·.1 = KEY_ID)
+    · rfl
+    · obtain ⟨value, hmem⟩ := (any_id_iff r.pairs).mp hc
+      exact absurd hmem (hid value)
+  rw [decode_of_encode r bytes he hs hk, hany]
+  rfl
 
 /-- The text form reads back as the record. -/
 theorem fromText_toText (r : Enr) (text : String) (bytes : ByteArray) (he : r.encode = .ok bytes)
     (ht : r.toText = .ok text) (hs : bytes.size ≤ MAX_RECORD_SIZE)
-    (hk : r.pairs.Pairwise (fun p q => keyLt p.1 q.1)) :
+    (hk : r.pairs.Pairwise (fun p q => keyLt p.1 q.1)) (hid : ∃ value, (KEY_ID, value) ∈ r.pairs) :
     fromText text = .ok r := by
   simp only [Enr.toText, he, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at ht
   subst ht
@@ -137,6 +186,6 @@ theorem fromText_toText (r : Enr) (text : String) (bytes : ByteArray) (he : r.en
   simp only [Except.ok.injEq] at hdec
   simp only [Base64.encode, String.toList_ofList] at hlist
   simp only [Base64.encode, String.toList_ofList, hlist, Except.mapError, bind, Except.bind,
-    hdec, decode_encode r bytes he hs hk]
+    hdec, decode_encode r bytes he hs hk hid]
 
 end EthLib.Networking.Enr

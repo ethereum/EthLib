@@ -17,6 +17,10 @@ It is the RLP list `[signature, seq, k1, v1, k2, v2, ...]`, at most 300 bytes lo
 
 The keys are byte strings, sorted and unique.
 
+Every record has the key `id`, which names its identity scheme.
+
+All other keys are optional.
+
 The EIP does not name the order, so the keys here increase in lexicographic byte order.
 
 A value is any RLP item.
@@ -81,6 +85,9 @@ inductive EnrError where
   | invalidPublicKey
   deriving DecidableEq
 
+/-- The key `id`, in ASCII. -/
+def KEY_ID : ByteArray := ⟨#[0x69, 0x64]⟩
+
 /-- Whether the key `a` comes before the key `b`, in lexicographic byte order. -/
 def keyLt (a b : ByteArray) : Prop := a.data.toList < b.data.toList
 
@@ -123,6 +130,8 @@ It fails on more than 300 bytes, which the EIP says implementations should rejec
 
 It fails on bytes that are not one RLP item, and on keys that do not strictly increase.
 
+It fails on a record without the key `id`, the one key that the EIP requires.
+
 It does not check the signature, which is the work of the identity scheme. -/
 def decode (bytes : ByteArray) : Except EnrError Enr := do
   if MAX_RECORD_SIZE < bytes.size then throw (.tooLarge bytes.size)
@@ -132,6 +141,7 @@ def decode (bytes : ByteArray) : Except EnrError Enr := do
     let seq ← (Codec.ofItem seqItem : Except RlpError UInt64).mapError .invalidSeq
     let pairs ← readPairs rest
     checkKeys pairs
+    unless pairs.any (·.1 = KEY_ID) do throw .missingId
     return ⟨signature, seq, pairs⟩
   | .list (.list _ :: _ :: _) => throw .signatureNotBytes
   | .list _ => throw .tooFewItems
