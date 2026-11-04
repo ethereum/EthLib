@@ -35,7 +35,11 @@ jobs:
       BUILD_TIMING_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
 
     steps:
+      # The first parent of a pull request's merge commit is the base branch.
+      # The memory step compares the two commits to find the changed Lean files.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 2
 
       - name: Set up uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
@@ -100,6 +104,18 @@ jobs:
       - name: proofs
         if: ${{ !cancelled() }}
         run: bash scripts/build_timing_report.sh run proofs_build "$BUILD_TIMING_RESULTS" -- lake build --wfail
+
+      # Elaborate each Lean file that the pull request adds or changes once more.
+      # The job summary shows its time and its peak memory.
+      # On the 16 GB runner, a file above 4 GiB warns, and a file above 6 GiB fails.
+      - name: memory of changed files
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        # An explicit bash sets pipefail, so a failed diff fails the step.
+        shell: bash
+        run: |
+          git diff --name-only --diff-filter=AMR -z HEAD^1 HEAD -- EthLib.lean 'EthLib/*.lean' \
+            | xargs -0 uv run --no-project --python 3.12 python scripts/check_memory.py \
+                --summary "$GITHUB_STEP_SUMMARY"
 
       # Every compiled declaration: its axioms, and anything the kernel cannot
       # unfold or the compiler runs differently. Only the findings that exist
