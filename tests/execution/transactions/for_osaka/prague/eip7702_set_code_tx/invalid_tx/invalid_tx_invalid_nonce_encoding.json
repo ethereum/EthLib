@@ -1,0 +1,40 @@
+{
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_nonce_encoding[fork_Osaka-transaction_test-non_zero_address]": {
+        "result": {
+            "Osaka": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c301808007830186a09400000000000000000000000000000000000000008080c0f85ef85c8094000000000000000000000000000000000000000182000001a0102f8433dce557de25f5459c65c55c37f04e38e8a3e1452ba7acdaac39aa3663a0772dc99ee2144c63fd630717676ae7828fcc5ab8604a62e7856bc48ce59d1ff680a09e6ce2dc936e7d6d98d954608301d5c640a4928a09848076f77f36ee1b6f9f4fa060e7220a371a1f530eeb7735e64c1b620939dfc2b835f05d9cb312682197d46f",
+        "_info": {
+            "hash": "0x3a256efcf496bd7ee20eb7db028a9d358668401bbfb3d45d833d4e212943dfe2",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the nonce field of an authorization has\nan incorrect encoding.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L360",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    },
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_nonce_encoding[fork_Osaka-transaction_test-reset_delegation_address]": {
+        "result": {
+            "Osaka": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c301808007830186a09400000000000000000000000000000000000000008080c0f85ef85c8094000000000000000000000000000000000000000082000080a0708f654f9477c39d92081fba6c1e6f597df6903d1abfe6b73d3eb21d0d0f4b06a05bafb1fe44b38562005b868a9cd97f360aa10a1e2bf6965cca4e31201e07a69a80a0f011ed7bec13d13e32f07b8dc5ca1b171dbbdbbc0227aedca962839dffc02177a063eb9ddae6d037f9dc33278c6ad11eb1fc5af07708232adbd41385101bbad320",
+        "_info": {
+            "hash": "0x407cc1c35481a076e95ab6553ddfec938372a3e093d5efb8ac384ef4be5cc435",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the nonce field of an authorization has\nan incorrect encoding.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L360",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    }
+}

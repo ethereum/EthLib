@@ -1,0 +1,138 @@
+{
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_structure[fork_Berlin-transaction_test-mutation_extra_byte-error_TransactionException.RLP_ERROR_SIZE]": {
+        "result": {
+            "Berlin": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_ERROR_SIZE"
+            }
+        },
+        "txbytes": "0xf85f800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf6776400",
+        "_info": {
+            "hash": "0xba564ecbccbe9e2ef7fc5436a38b8a0cffe670b9613e1018b0e3d85e71937647",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Corrupt the RLP structure of the whole transaction.\n\nA list header that declares less than the actual payload leaves\nboth a truncated final field and a trailing byte at the top level,\nso clients report it as either an EOF or a size error.\n\nEncoding the transaction as a byte string is a plain RLP error\nbefore EIP-2718; afterwards the string is read as a typed\ntransaction whose type byte is unsupported.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L394"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_structure[fork_Berlin-transaction_test-mutation_header_declares_less-error_[<TransactionException.RLP_ERROR_EOF: 30>, <TransactionException.RLP_ERROR_SIZE: 31>]]": {
+        "result": {
+            "Berlin": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_ERROR_EOF|TransactionException.RLP_ERROR_SIZE"
+            }
+        },
+        "txbytes": "0xf85e800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0xa5446712e3f8131cb7aabccba96da3ebf684729ecd4fc20b860bf4ca9fc7b88a",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Corrupt the RLP structure of the whole transaction.\n\nA list header that declares less than the actual payload leaves\nboth a truncated final field and a trailing byte at the top level,\nso clients report it as either an EOF or a size error.\n\nEncoding the transaction as a byte string is a plain RLP error\nbefore EIP-2718; afterwards the string is read as a typed\ntransaction whose type byte is unsupported.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L394"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_structure[fork_Berlin-transaction_test-mutation_header_declares_more-error_TransactionException.RLP_ERROR_EOF]": {
+        "result": {
+            "Berlin": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_ERROR_EOF"
+            }
+        },
+        "txbytes": "0xf860800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0xb4b0b45facc98bcb53362fe8e837772756bd9b197e9cab9993848ffb698a1c68",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Corrupt the RLP structure of the whole transaction.\n\nA list header that declares less than the actual payload leaves\nboth a truncated final field and a trailing byte at the top level,\nso clients report it as either an EOF or a size error.\n\nEncoding the transaction as a byte string is a plain RLP error\nbefore EIP-2718; afterwards the string is read as a typed\ntransaction whose type byte is unsupported.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L394"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_structure[fork_Berlin-transaction_test-mutation_list_size_leading_zeros-error_TransactionException.RLP_ERROR_SIZE_LEADING_ZEROS]": {
+        "result": {
+            "Berlin": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_ERROR_SIZE_LEADING_ZEROS"
+            }
+        },
+        "txbytes": "0xf9005f800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0x0149c913a63155b29a22b8e3a7c907d7a59e1ecb8d45b99026d75fd9ae0027c7",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Corrupt the RLP structure of the whole transaction.\n\nA list header that declares less than the actual payload leaves\nboth a truncated final field and a trailing byte at the top level,\nso clients report it as either an EOF or a size error.\n\nEncoding the transaction as a byte string is a plain RLP error\nbefore EIP-2718; afterwards the string is read as a typed\ntransaction whose type byte is unsupported.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L394"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_structure[fork_Berlin-transaction_test-mutation_too_few_elements-error_TransactionException.RLP_TOO_FEW_ELEMENTS]": {
+        "result": {
+            "Berlin": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_TOO_FEW_ELEMENTS"
+            }
+        },
+        "txbytes": "0xf83e800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659",
+        "_info": {
+            "hash": "0x585e83067ca5c10566d67e3d4e6beaecd11912f2d9f1d8240e704e5e80117e12",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Corrupt the RLP structure of the whole transaction.\n\nA list header that declares less than the actual payload leaves\nboth a truncated final field and a trailing byte at the top level,\nso clients report it as either an EOF or a size error.\n\nEncoding the transaction as a byte string is a plain RLP error\nbefore EIP-2718; afterwards the string is read as a typed\ntransaction whose type byte is unsupported.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L394"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_structure[fork_Berlin-transaction_test-mutation_too_many_elements-error_TransactionException.RLP_TOO_MANY_ELEMENTS]": {
+        "result": {
+            "Berlin": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_TOO_MANY_ELEMENTS"
+            }
+        },
+        "txbytes": "0xf860800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf6776480",
+        "_info": {
+            "hash": "0x6160ca4463b097929b2bdc64afb24b948386865b02afd854c7da5a62f107482e",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Corrupt the RLP structure of the whole transaction.\n\nA list header that declares less than the actual payload leaves\nboth a truncated final field and a trailing byte at the top level,\nso clients report it as either an EOF or a size error.\n\nEncoding the transaction as a byte string is a plain RLP error\nbefore EIP-2718; afterwards the string is read as a typed\ntransaction whose type byte is unsupported.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L394"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_structure[fork_Berlin-transaction_test-mutation_truncated-error_TransactionException.RLP_ERROR_EOF]": {
+        "result": {
+            "Berlin": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_ERROR_EOF"
+            }
+        },
+        "txbytes": "0xf85f800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf677",
+        "_info": {
+            "hash": "0xbc0a6a597a2e4b42c3c88b0d47a320ee37743e0b7364eb8b12c505d744d03c4c",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Corrupt the RLP structure of the whole transaction.\n\nA list header that declares less than the actual payload leaves\nboth a truncated final field and a trailing byte at the top level,\nso clients report it as either an EOF or a size error.\n\nEncoding the transaction as a byte string is a plain RLP error\nbefore EIP-2718; afterwards the string is read as a typed\ntransaction whose type byte is unsupported.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L394"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_invalid_structure[fork_Berlin-transaction_test-mutation_tx_as_byte_string-error_[<TransactionException.RLP_INVALID_HEADER: 42>, <TransactionException.TYPE_NOT_SUPPORTED: 1>]]": {
+        "result": {
+            "Berlin": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_INVALID_HEADER|TransactionException.TYPE_NOT_SUPPORTED"
+            }
+        },
+        "txbytes": "0xb85f800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0x5ffdf96372334af284deb4b02924a8d8f7496437716c43ccf186d4381c94af78",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Corrupt the RLP structure of the whole transaction.\n\nA list header that declares less than the actual payload leaves\nboth a truncated final field and a trailing byte at the top level,\nso clients report it as either an EOF or a size error.\n\nEncoding the transaction as a byte string is a plain RLP error\nbefore EIP-2718; afterwards the string is read as a typed\ntransaction whose type byte is unsupported.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L394"
+        }
+    }
+}

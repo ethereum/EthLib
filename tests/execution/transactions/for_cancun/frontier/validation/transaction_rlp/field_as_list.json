@@ -1,0 +1,121 @@
+{
+    "tests/frontier/validation/test_transaction_rlp.py::test_field_as_list[fork_Cancun-transaction_test-field_data-error_TransactionException.RLP_INVALID_DATA]": {
+        "result": {
+            "Cancun": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_INVALID_DATA"
+            }
+        },
+        "txbytes": "0xf860800a8275309495d1be958d22adf294428c13cc71d89ff320bfd301c18026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0x2743ec08d9efd3e68e48022f3f18d668ee73553846a9d68d11771223d1c32f64",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Encode one field as an RLP list instead of a byte string.\n\nThe gas price and v fields are equally rejected but have no\nfield-specific decoding exception, so they are not covered.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L349"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_field_as_list[fork_Cancun-transaction_test-field_gas_limit-error_TransactionException.RLP_INVALID_GASLIMIT]": {
+        "result": {
+            "Cancun": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_INVALID_GASLIMIT"
+            }
+        },
+        "txbytes": "0xf860800ac38275309495d1be958d22adf294428c13cc71d89ff320bfd3018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0x64e77f776001d133a44c99aacb9f76fbfcb20d1f64904f28488bb6304b888cb2",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Encode one field as an RLP list instead of a byte string.\n\nThe gas price and v fields are equally rejected but have no\nfield-specific decoding exception, so they are not covered.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L349"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_field_as_list[fork_Cancun-transaction_test-field_nonce-error_TransactionException.RLP_INVALID_NONCE]": {
+        "result": {
+            "Cancun": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_INVALID_NONCE"
+            }
+        },
+        "txbytes": "0xf860c1800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0x6a0236af57d7c35811d760cd5b3124c209c2d12844cdf1dce0fd66bb6378a7da",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Encode one field as an RLP list instead of a byte string.\n\nThe gas price and v fields are equally rejected but have no\nfield-specific decoding exception, so they are not covered.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L349"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_field_as_list[fork_Cancun-transaction_test-field_r-error_TransactionException.RLP_INVALID_SIGNATURE_R]": {
+        "result": {
+            "Cancun": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_INVALID_SIGNATURE_R"
+            }
+        },
+        "txbytes": "0xf860800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018026e1a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0xe97c16d0fd0d6849bcf15ed3992ebd1b694bda6312c08c148fc7331034f9032c",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Encode one field as an RLP list instead of a byte string.\n\nThe gas price and v fields are equally rejected but have no\nfield-specific decoding exception, so they are not covered.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L349"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_field_as_list[fork_Cancun-transaction_test-field_s-error_TransactionException.RLP_INVALID_SIGNATURE_S]": {
+        "result": {
+            "Cancun": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_INVALID_SIGNATURE_S"
+            }
+        },
+        "txbytes": "0xf860800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659e1a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0x19a592d990b5f6ac479cc691636d0f076dad5541e5ebfdc31ae1bc90e90163c9",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Encode one field as an RLP list instead of a byte string.\n\nThe gas price and v fields are equally rejected but have no\nfield-specific decoding exception, so they are not covered.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L349"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_field_as_list[fork_Cancun-transaction_test-field_to-error_TransactionException.RLP_INVALID_TO]": {
+        "result": {
+            "Cancun": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_INVALID_TO"
+            }
+        },
+        "txbytes": "0xf860800a827530d59495d1be958d22adf294428c13cc71d89ff320bfd3018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0x07f5b9af23f738722f0afb2b8774ee9327450b262a76713ccf9e8ce0104c3892",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Encode one field as an RLP list instead of a byte string.\n\nThe gas price and v fields are equally rejected but have no\nfield-specific decoding exception, so they are not covered.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L349"
+        }
+    },
+    "tests/frontier/validation/test_transaction_rlp.py::test_field_as_list[fork_Cancun-transaction_test-field_value-error_TransactionException.RLP_INVALID_VALUE]": {
+        "result": {
+            "Cancun": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.RLP_INVALID_VALUE"
+            }
+        },
+        "txbytes": "0xf860800a8275309495d1be958d22adf294428c13cc71d89ff320bfd3c1018026a0b08e73e275d6dc04d76348f5a7c00ac633b73677e2a3b105eab67d02aa719659a0093c70cecf02d5adec11e7e7b3e2f5581ae57c3e99c08fd6fc48098accf67764",
+        "_info": {
+            "hash": "0xa4276376b4bb36f0efcc05a8e3563d0e49d1893b1905bb179640d058e39ba87e",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Encode one field as an RLP list instead of a byte string.\n\nThe gas price and v fields are equally rejected but have no\nfield-specific decoding exception, so they are not covered.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L349"
+        }
+    }
+}

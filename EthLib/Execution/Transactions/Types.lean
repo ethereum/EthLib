@@ -11,7 +11,7 @@ The five kinds of transaction, and the fork that adds each kind.
 
 A transaction is legacy, or it is typed as [EIP-2718](https://eips.ethereum.org/EIPS/eip-2718) asks.
 
-Section 4.3 of the Yellow Paper, Shanghai version, bounds each integer field below 2^256.
+Section 4.2 of the Yellow Paper, Shanghai version, bounds each integer field below 2^256.
 
 Source: [`Paper.tex` at `efc5f9a`][yp].
 
@@ -55,7 +55,7 @@ structure Authorization where
 
 /-- A legacy transaction, the only kind before Berlin.
 
-Section 4.3 of the Yellow Paper lists its nine fields.
+Section 4.2 of the Yellow Paper lists its nine fields.
 
 From Spurious Dragon, the recovery id can also carry the chain.
 

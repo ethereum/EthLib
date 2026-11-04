@@ -1,0 +1,78 @@
+{
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_nonce[fork_Osaka-transaction_test-non_zero_address-nonce=2**256]": {
+        "result": {
+            "Osaka": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8e201808007830186a09400000000000000000000000000000000000000008080c0f87df87b80940000000000000000000000000000000000000001a101000000000000000000000000000000000000000000000000000000000000000080a085fbc2a4fe5f8925cf03c758c73e8729a4252e1b6856d14605d5fad273167933a04ba2bf75567d217ce732bd11b2b5cb44ab565aa240b728337b6ce60ca2e99aae80a0dd9ff1c31b4ae35e0e375ffdd88ff2ef6b63f26fd90e34798414ec76195b91a0a003c63e360cbe4812b9fc3844f9b6fe4da6cc575303a3ff013535442d5bd6ef5f",
+        "_info": {
+            "hash": "0x497b05ae6a6b29f259903ca10ec1b04b25f4e69ec9dda7df18990d986c6ab9de",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the nonce field of an authorization\noverflows the maximum value.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L258",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    },
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_nonce[fork_Osaka-transaction_test-non_zero_address-nonce=2**64]": {
+        "result": {
+            "Osaka": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8ca01808007830186a09400000000000000000000000000000000000000008080c0f865f863809400000000000000000000000000000000000000018901000000000000000001a05e9552e97fa6352cb88d96e159137b6b9eff45b107da18f18475f6569b406d86a06d23d6abfc6839396dc0a73d320e82b3681b2e38eb1e25a7b890d80f054d23a280a0548f7d7e158f572bf850fb92f60128346fd9c0a4761c9a3f1d3cb9ad184da885a019446c00c933915da81e2076a8f75df0c50e53368a22ac832172d6228d500257",
+        "_info": {
+            "hash": "0x43bd15510434b91335f7c2a25d9547f41d8a90a1c717f9212ce7a179678e4814",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the nonce field of an authorization\noverflows the maximum value.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L258",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    },
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_nonce[fork_Osaka-transaction_test-reset_delegation_address-nonce=2**256]": {
+        "result": {
+            "Osaka": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8e201808007830186a09400000000000000000000000000000000000000008080c0f87df87b80940000000000000000000000000000000000000000a101000000000000000000000000000000000000000000000000000000000000000001a0b451a46bdb9cbef5047370bd53bcb45d2933fb107b8fbb286c736c44f56b9981a02ac4e150f2026912b70030ad9237d65e5494c81904522c3c3a13c25eee2f2eb380a0968b0def55e54dd5d6710feb11c8b4d3b762d7e342cd2cb0964855635d37e686a025d3bbdb92f70db00be51cb91ae105c6916ddafe3bfe3b6cafd8361acaad6ffa",
+        "_info": {
+            "hash": "0x6dec7b2929e89f98c094c28208f8b9ad62fa26a00ad2843e144b346d2351b7b6",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the nonce field of an authorization\noverflows the maximum value.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L258",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    },
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_nonce[fork_Osaka-transaction_test-reset_delegation_address-nonce=2**64]": {
+        "result": {
+            "Osaka": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8ca01808007830186a09400000000000000000000000000000000000000008080c0f865f863809400000000000000000000000000000000000000008901000000000000000080a07bd803b15b91d3dc75908486d09f538d67c46173794a13db0afade0bb3f22ef3a016fb34b41b740ceabc8b0e9d87749682ed2c0bd1c9790b2ca596a7a5b143ae5d01a0810d4e3cbfc13f8a30c07397cb7a38bf6ec2c09b3bfaccf2f129b96de981cd6ca06b32898215295c7511c512a0b5c0ad9df6c7aaf8a6d2707df3fe02a4f7877cd3",
+        "_info": {
+            "hash": "0xc78ed344bd62ff682967e67ba01e7026107c8aeb6c29a7dc6ab452b57df89b67",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the nonce field of an authorization\noverflows the maximum value.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L258",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    }
+}

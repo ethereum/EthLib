@@ -1,0 +1,78 @@
+{
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_address[fork_Prague-transaction_test-non_zero_address-oversized]": {
+        "result": {
+            "Prague": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c201808007830186a09400000000000000000000000000000000000000008080c0f85df85b80950000000000000000000000000000000000000000018080a056993a2bdc389116854e72d75751bd65905c1f6c4a48427d8ce12795a2e4ad93a049621c190d70bc05bc23d31a9c64fe188ee34e39fdd5846508af6ab6500fb98201a067d9ceb81449335e8d302d0b4d47739df691186d62d4b514a6fc39b0a6c89ac9a01e012a83c5addbb82a0d1662a5d9bb0b33953edd1dcf878144369b5d7e19e196",
+        "_info": {
+            "hash": "0x70aa3d416c83cab4c9fc6c5eac1b5fac184b4ded843327010b4134fee4a084ed",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the address field of an authorization is\nincorrectly serialized.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L403",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    },
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_address[fork_Prague-transaction_test-non_zero_address-undersized]": {
+        "result": {
+            "Prague": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c001808007830186a09400000000000000000000000000000000000000008080c0f85bf8598093000000000000000000000000000000000000018001a0b941ec28ca17dba3880994f952347f5649eab11b4d0a9aa05f53ff0c48127693a03c8bfbe4c6ee6eba3e3b2a8a514ffe74d35a93a98c0eac4ec517bdb1d586be8780a01dadde68e8e739eaf8a48d14c3960a700f530c33f2caae495c17b4435b34540fa017f58c0513e1524038dd029655bd2c375a9b593df952e6eb951d7c26fa0ddd9c",
+        "_info": {
+            "hash": "0x5bb83b92a2ddc6f4339c6345d47d9b5d3c7b0967663f951461995b5aeee0a366",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the address field of an authorization is\nincorrectly serialized.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L403",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    },
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_address[fork_Prague-transaction_test-reset_delegation_address-oversized]": {
+        "result": {
+            "Prague": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c201808007830186a09400000000000000000000000000000000000000008080c0f85df85b80950000000000000000000000000000000000000000008001a028b2b83fbfa1e526ee03a3958deb4174e81d32e1bea23ffae5929259bf5d0a02a069e955724915b15efda3aa4321b81e0af05bc608236ce5b125169c488a8e8c8f80a0e18fa56c58c283bbe5662a4384fde69c27838a8a9826663a29476e368c4c0658a005e20fd40a0980bf70a1ab0de3ce570d5057d378106d10035e18dce9c0e7ac01",
+        "_info": {
+            "hash": "0xb0eccdc7c054888b3083b8d776fd0e3cdb60f337577ce73513175373c92c2df4",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the address field of an authorization is\nincorrectly serialized.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L403",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    },
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_address[fork_Prague-transaction_test-reset_delegation_address-undersized]": {
+        "result": {
+            "Prague": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c001808007830186a09400000000000000000000000000000000000000008080c0f85bf8598093000000000000000000000000000000000000008001a0043fbfb2e4414be52454641eef30f2cce27f327f8694e40dfac96244b34c0917a0183ef058d0229a4abb083e7b89c6ab144b097b01a46d7159d362f3ff9a3a5d2d80a09125a302d9f5d51babbe1e4497acdbf8ace18006389b335d27fe1da4266dd7dea0650a7e19e8eccd5a8ea786698989bb2193c864331419e23ed38fec13de864e56",
+        "_info": {
+            "hash": "0xb2fc40c0013cac0f35e69b30e1df8705299e01c9dfc07b00934e7573a2b8e5e2",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the address field of an authorization is\nincorrectly serialized.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L403",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    }
+}

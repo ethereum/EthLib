@@ -1,0 +1,116 @@
+{
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_nonce_as_list[fork_Prague-transaction_test-non_zero_address-nonce=empty-list]": {
+        "result": {
+            "Prague": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c101808007830186a09400000000000000000000000000000000000000008080c0f85cf85a80940000000000000000000000000000000000000001c001a0851d76341164c376c669eb7371a75422427ca4b09e1db16749b145f2f30df5eea0398373dc3fcd0a7a57dfea9167e32bd3365a0ffdb1bd8f8b8015cec7360a1ae480a09aaf469252d160948e27bdbe6fde8d1712fb8140181ae7aabd891304138effd6a074ddd834d9930bf593919f0ba8f8c3b60eab2389b0f7675c1f82ce0f91a3e0e0",
+        "_info": {
+            "hash": "0xd53f90af1f6722caf524f4b46068f8c5f4fa11013c2f0ce832f775f83da3c352",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the nonce field of an authorization is\nencoded as a list instead of a scalar.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L307",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    },
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_nonce_as_list[fork_Prague-transaction_test-non_zero_address-nonce=multi-element-list]": {
+        "result": {
+            "Prague": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c301808007830186a09400000000000000000000000000000000000000008080c0f85ef85c80940000000000000000000000000000000000000001c2808001a0b5f3d1ce39e26b7ae53cb3bb746bb2dedc068474ad22de5b93dd4d13280bca9aa059291d423bd74fb767c7a7f06839ffac1fecb0deb71e6451932379f9105137bb01a0d4e4ef957291ee8dfac5d38734c5c38995f7d934518adbf52458648f08c53c57a05b338df2eb398e46ac976153f631efc897f9fa5187606992b6461d4eba6acdf1",
+        "_info": {
+            "hash": "0x1d3ba52db494b6a55661e200bb9dc1adff945d43821b6ce26beca1debfae146c",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the nonce field of an authorization is\nencoded as a list instead of a scalar.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L307",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    },
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_nonce_as_list[fork_Prague-transaction_test-non_zero_address-nonce=non-empty-list]": {
+        "result": {
+            "Prague": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c201808007830186a09400000000000000000000000000000000000000008080c0f85df85b80940000000000000000000000000000000000000001c18080a084c668b2b1fe06212c6a1224010720e25d071124aeec5ef49ffc921d4577ca49a07dab1683591a468284ef2e88ec3e7d2b9319e401e46f7860a88c53bf742f4f2d01a0a23723efd4abd4a82557aaf4ccfac0c581dace517de0ffc1da0202e9c37ed67ba03cf05a9b0141d6ae2edc0f1dec889a864726f301bd2ae3d6f3dc7d1193381fe3",
+        "_info": {
+            "hash": "0xe4af21375a7bfbcfd8c3c008e888f4bedfff0989decbb1e69d463424a8173ae4",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the nonce field of an authorization is\nencoded as a list instead of a scalar.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L307",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    },
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_nonce_as_list[fork_Prague-transaction_test-reset_delegation_address-nonce=empty-list]": {
+        "result": {
+            "Prague": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c101808007830186a09400000000000000000000000000000000000000008080c0f85cf85a80940000000000000000000000000000000000000000c001a03cdb8c555b104cc8e2511f8f50647991f09a70fe1728a99c2de826d1b671dd6aa05770d0195ac912b2a8e0e38ea862d3c70dbfe459960674eda3eb703494f4296501a01688d5554a18a15db46c00983fbb57bbd724de93f6eef48f469a1aa493bf09ada067e063e980723247ab5e3a7f5b593480ee6681739278fd7b22d833b73f913b48",
+        "_info": {
+            "hash": "0x896f731d5f174f1f9ac28a9162ee38586c8505d6efb2c196ce68645fa7038b0d",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the nonce field of an authorization is\nencoded as a list instead of a scalar.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L307",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    },
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_nonce_as_list[fork_Prague-transaction_test-reset_delegation_address-nonce=multi-element-list]": {
+        "result": {
+            "Prague": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c301808007830186a09400000000000000000000000000000000000000008080c0f85ef85c80940000000000000000000000000000000000000000c2808080a05e6c9a915feafd69402e5d2dc82df8986a035819e6d9f438bd7a8189f9c77d8ca025e47cf3bdd09511c43454281e954a80f440a21c201a08511f613b36a0c9828d80a056334d99b2e30abaa077611453e95c3ba9b97a1f6a5f72cb44f28a2745c590e8a03f5a2287013902726983a2a3cadfa15dee45d653da77dde0fe6846691e723397",
+        "_info": {
+            "hash": "0x7c3abbbd6f2ee5173a71234121f53b49f81d8eb4c7b180818df88e12aa363c10",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the nonce field of an authorization is\nencoded as a list instead of a scalar.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L307",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    },
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_nonce_as_list[fork_Prague-transaction_test-reset_delegation_address-nonce=non-empty-list]": {
+        "result": {
+            "Prague": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c201808007830186a09400000000000000000000000000000000000000008080c0f85df85b80940000000000000000000000000000000000000000c18001a0c34a81d82dc8832a60dc6b24ec50d67b6bf63180fbe5cdd77d264f8a2becb7ada02b333845c36afd632d7d428791f810fd529f18ad5d441e6676969fb40f04531180a0bf0b891d7fd4d960c5675daf832ac3381036f2873aa53be6f0484dc67a7181e4a003876c526e09d4791a461e01aef8054be6836a125b6920dadcade57f642c43b3",
+        "_info": {
+            "hash": "0xcbbe4861e4719340274b7b011f167d77ab0711b6021326a5902857ae60800d23",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction where the nonce field of an authorization is\nencoded as a list instead of a scalar.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L307",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    }
+}

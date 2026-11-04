@@ -1,0 +1,21 @@
+{
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_empty_authorization_list[fork_Osaka-transaction_test]": {
+        "result": {
+            "Osaka": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_EMPTY_AUTHORIZATION_LIST"
+            }
+        },
+        "txbytes": "0x04f86401808007830186a09400000000000000000000000000000000000000008080c0c001a0884bf485199d5e86e675e79f17a710b754a36915a33a2838c24e1e53378699f1a074085ca12ad0f729b6bd6c37a7a23e925c7e1e87a557ad3100a9113786c98afd",
+        "_info": {
+            "hash": "0x7277f1e98b2275fcf4d01d73efd5a0764a883f78f588f3a74e426aaac6951582",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction with an empty authorization list.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L80",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    }
+}
