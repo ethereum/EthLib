@@ -439,7 +439,10 @@ def bindings : List Binding := [
     [`EthLib.Execution.Evm.Precompiles.PrecompileError], some "PrecompileError"⟩,
   ⟨"state_root", `EthLib.Execution.State.Exports.stateRootExport,
     "(state: bytes) -> bytes",
-    [`EthLib.Execution.State.StateInputError], some "StateError"⟩
+    [`EthLib.Execution.State.StateInputError], some "StateError"⟩,
+  ⟨"mainnet_active_fork", `EthLib.Base.ChainConfig.Exports.mainnetActiveForkExport,
+    "(number: int, timestamp: int) -> bytes",
+    [], none⟩
 ]
 
 /-- The table as plain data, which the generator reads without the structure.

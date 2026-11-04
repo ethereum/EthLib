@@ -339,4 +339,6 @@ PyObject* py_precompile_run                               (PyObject* self, PyObj
 
 PyObject* py_state_root                                   (PyObject* self, PyObject* args);
 
+PyObject* py_mainnet_active_fork                          (PyObject* self, PyObject* args);
+
 #endif /* ETHCS_WRAPPERS_H */

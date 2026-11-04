@@ -2665,4 +2665,13 @@
       {"constructor": "noRoot", "code": 5}]}],
    "error_class": "StateError",
    "docstring":
-   "The 32-byte state root, with Keccak-256, of the state that `input` encodes."}]}
+   "The 32-byte state root, with Keccak-256, of the state that `input` encodes."},
+  {"summary":
+   "The name of the active fork of mainnet at a block, or no bytes when no fork is active.",
+   "signature": "(number: int, timestamp: int) -> bytes",
+   "operation": "EthLib.Base.ChainConfig.Exports.mainnetActiveForkExport",
+   "method": "mainnet_active_fork",
+   "errors": [],
+   "error_class": null,
+   "docstring":
+   "The name of the active fork of mainnet at a block, or no bytes when no fork is active."}]}

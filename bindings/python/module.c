@@ -277,6 +277,11 @@ initialize_EthLib_EthLib_Serialization_Exports(
   uint8_t builtin
 );
 
+extern lean_object*
+initialize_EthLib_EthLib_Base_Exports_ChainConfig(
+  uint8_t builtin
+);
+
 /*
  * Note on linker hygiene:
  *   `lean_initialize()` and `initialize_Lean` live in libleancpp.a's
@@ -639,6 +644,7 @@ static PyMethodDef methods[] = {
   {"block_validate_header", py_block_validate_header, METH_VARARGS, DOC_block_validate_header},
   {"precompile_run", py_precompile_run, METH_VARARGS, DOC_precompile_run},
   {"state_root", py_state_root, METH_VARARGS, DOC_state_root},
+  {"mainnet_active_fork", py_mainnet_active_fork, METH_VARARGS, DOC_mainnet_active_fork},
   {NULL, NULL, 0, NULL},
 };
 
@@ -712,6 +718,10 @@ PyInit__native(void) {
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
       res = initialize_EthLib_EthLib_Serialization_Exports(1);
+    }
+    if (lean_io_result_is_ok(res)) {
+      lean_dec_ref(res);
+      res = initialize_EthLib_EthLib_Base_Exports_ChainConfig(1);
     }
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
