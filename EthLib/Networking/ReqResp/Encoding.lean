@@ -1,6 +1,5 @@
 module
 
-public import EthLib.Base.Fork
 public import EthLib.Base.Uint64
 public import EthLib.Networking.Encoding.Varint
 public import EthLib.Networking.Snappy.Frame
@@ -29,19 +28,14 @@ How many bytes it reads before it decides is not part of these definitions.
 
 namespace EthLib.Networking.ReqResp
 
-open EthLib.Base (ArithError Fork)
+open EthLib.Base (ArithError)
 open EthLib.Base.Uint64 (addChecked divChecked)
 open EthLib.Networking.Encoding
 
-/-- The largest payload a request or a response chunk may hold at a fork, in SSZ bytes.
+/-- The largest payload of a gossip message, a request or a response chunk, in SSZ bytes: 10 MiB.
 
-It is 1 MiB before Bellatrix.
-
-From Bellatrix on, a block carries an execution payload, which can exceed 1 MiB.
-
-So Bellatrix raises the cap to 10 MiB. -/
-def maxPayloadSize (fork : Fork) : UInt64 :=
-  if fork ≥ .bellatrix then 10485760 else 1048576
+The cap is the same at every fork. -/
+def MAX_PAYLOAD_SIZE : UInt64 := 10485760
 
 /-- The largest error message, in bytes. -/
 def MAX_ERROR_MESSAGE_SIZE : UInt64 := 256
@@ -58,8 +52,8 @@ def maxCompressedLen (n : UInt64) : Except ArithError UInt64 := do
 /-- The largest message a peer accepts on the gossip network, framing included.
 
 It allows 1024 bytes of overhead above the largest compressed payload, and at least 1 MiB. -/
-def maxMessageSize (fork : Fork) : Except ArithError UInt64 := do
-  let framed ← addChecked (← maxCompressedLen (maxPayloadSize fork)) 1024
+def maxMessageSize : Except ArithError UInt64 := do
+  let framed ← addChecked (← maxCompressedLen MAX_PAYLOAD_SIZE) 1024
   return max framed 1048576
 
 /-- The first byte of a response chunk. -/
@@ -144,7 +138,7 @@ def splitVarint (bs : List UInt8) : List UInt8 × List UInt8 :=
   let k := (bs.take Varint.maxLength).findIdx (·.toNat < Varint.continuation) + 1
   (bs.take k, bs.drop k)
 
-/-- The SSZ bytes of a payload at a fork, given the bound of its SSZ type.
+/-- The SSZ bytes of a payload, given the bound of its SSZ type.
 
 The declared length must be at most the smaller bound.
 
@@ -153,11 +147,11 @@ At most `32 + n + n / 6` bytes may follow a declared length `n`.
 The stream must decode to exactly `n` bytes, so a stream that ends early or runs on is rejected.
 
 The caller deserializes the bytes, since it knows their SSZ type. -/
-def decodePayload (fork : Fork) (typeBound : UInt64) (bs : ByteArray) :
+def decodePayload (typeBound : UInt64) (bs : ByteArray) :
     Except ReqRespError ByteArray := do
   let (header, rest) := splitVarint bs.data.toList
   let declared ← (Varint.decode header).mapError .varint
-  let bound := min typeBound (maxPayloadSize fork)
+  let bound := min typeBound MAX_PAYLOAD_SIZE
   if bound < declared then throw (.lengthOutOfBounds declared bound)
   let compressedBound ← (maxCompressedLen declared).mapError .arith
   if compressedBound.toNat < rest.length then
@@ -189,7 +183,7 @@ structure ResponseChunk where
 A success carries that many context bytes, and its payload has the bound of the message type.
 
 An error carries no context bytes, and its payload is an error message of at most 256 bytes. -/
-def decodeResponseChunk (fork : Fork) (contextBytes : Nat) (typeBound : UInt64)
+def decodeResponseChunk (contextBytes : Nat) (typeBound : UInt64)
     (bs : ByteArray) : Except ReqRespError ResponseChunk :=
   match bs.data.toList with
   | [] => throw .missingCode
@@ -197,10 +191,10 @@ def decodeResponseChunk (fork : Fork) (contextBytes : Nat) (typeBound : UInt64)
     match ResponseCode.ofByte b with
     | .success => do
       if rest.length < contextBytes then throw .contextTruncated
-      let payload ← decodePayload fork typeBound ⟨(rest.drop contextBytes).toArray⟩
+      let payload ← decodePayload typeBound ⟨(rest.drop contextBytes).toArray⟩
       return ⟨.success, ⟨(rest.take contextBytes).toArray⟩, payload⟩
     | code => do
-      let payload ← decodePayload fork MAX_ERROR_MESSAGE_SIZE ⟨rest.toArray⟩
+      let payload ← decodePayload MAX_ERROR_MESSAGE_SIZE ⟨rest.toArray⟩
       return ⟨code, ByteArray.empty, payload⟩
 
 /-- A response chunk that decodes to `chunk`, with its payload in uncompressed Snappy frames.

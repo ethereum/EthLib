@@ -5,6 +5,7 @@ public import Lean.Data.Json
 public import EthLib.Base.Hex
 public import EthLib.Consensus.Config
 public import EthLib.Consensus.Preset
+public import EthLib.Networking.ReqResp.Encoding
 
 /-!
 # `Exports.Parameters`
@@ -82,10 +83,15 @@ def jsonBytes (value : Json) : ByteArray := value.compress.toUTF8
 def presetExport (name : ByteArray) : Result ByteArray := do
   return jsonBytes (presetJson (← presetOf (← nameOf name)))
 
+/-- The configuration of a name, with the payload cap that every network shares. -/
+def configJson (config : Config) : Json :=
+  (toJson config).mergeObj <| Json.mkObj [
+    ("MAX_PAYLOAD_SIZE", toJson Networking.ReqResp.MAX_PAYLOAD_SIZE)]
+
 /-- The configuration of a name, as a JSON object. -/
 @[export eth_consensus_config]
 def configExport (name : ByteArray) : Result ByteArray := do
-  return jsonBytes (toJson (← configOf (← nameOf name)))
+  return jsonBytes (configJson (← configOf (← nameOf name)))
 
 /-- The parameters of a preset at a fork, as a JSON object. -/
 @[export eth_consensus_parameters]

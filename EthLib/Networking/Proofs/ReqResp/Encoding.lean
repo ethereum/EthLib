@@ -121,22 +121,17 @@ theorem size_encodeFramesLiteral_le (d : ByteArray) :
     Snappy.streamIdentifier, List.length_cons, List.length_nil]
   omega
 
-/-- The payload cap is at most 10 MiB at every fork. -/
-theorem maxPayloadSize_le (fork : Base.Fork) : (maxPayloadSize fork).toNat ≤ 10485760 := by
-  unfold maxPayloadSize
-  split <;> decide
-
 /-- A payload of the literal encoder decodes back, when it fits both bounds. -/
-theorem decodePayload_encodePayloadLiteral {fork : Base.Fork} {typeBound : UInt64} {d : ByteArray}
-    (hp : d.size ≤ (maxPayloadSize fork).toNat) (ht : d.size ≤ typeBound.toNat) :
-    decodePayload fork typeBound (encodePayloadLiteral d) = .ok d := by
-  have h : d.size < 2 ^ 63 := by have := maxPayloadSize_le fork; omega
+theorem decodePayload_encodePayloadLiteral {typeBound : UInt64} {d : ByteArray}
+    (hp : d.size ≤ MAX_PAYLOAD_SIZE.toNat) (ht : d.size ≤ typeBound.toNat) :
+    decodePayload typeBound (encodePayloadLiteral d) = .ok d := by
+  have h : d.size < 2 ^ 63 := by have : MAX_PAYLOAD_SIZE.toNat = 10485760 := rfl; omega
   have hs : (UInt64.ofNat d.size).toNat = d.size :=
     UInt64.toNat_ofNat_of_lt' (by unfold UInt64.size; omega)
   obtain ⟨b, hb, hbv⟩ := maxCompressedLen_eq (n := UInt64.ofNat d.size) (by omega)
   rw [hs] at hbv
   have hframes := size_encodeFramesLiteral_le d
-  have hbound : ¬ min typeBound (maxPayloadSize fork) < UInt64.ofNat d.size := by
+  have hbound : ¬ min typeBound MAX_PAYLOAD_SIZE < UInt64.ofNat d.size := by
     rw [UInt64.min_def]; split <;> rw [UInt64.lt_iff_toNat_lt, hs] <;> omega
   have hlen : ¬ b.toNat < (Snappy.encodeFramesLiteral d).data.toList.length := by
     have : (Snappy.encodeFramesLiteral d).data.toList.length =
@@ -157,10 +152,10 @@ theorem decodePayload_encodePayloadLiteral {fork : Base.Fork} {typeBound : UInt6
 /-- A payload that decodes has its declared length, and that length is within both bounds.
 
 The compressed bytes after the prefix are within the bound for that length. -/
-theorem decodePayload_ok {fork : Base.Fork} {typeBound : UInt64} {bs d : ByteArray}
-    (h : decodePayload fork typeBound bs = .ok d) :
+theorem decodePayload_ok {typeBound : UInt64} {bs d : ByteArray}
+    (h : decodePayload typeBound bs = .ok d) :
     ∃ declared b, decode (splitVarint bs.data.toList).1 = .ok declared ∧
-      d.size = declared.toNat ∧ declared ≤ typeBound ∧ declared ≤ maxPayloadSize fork ∧
+      d.size = declared.toNat ∧ declared ≤ typeBound ∧ declared ≤ MAX_PAYLOAD_SIZE ∧
       maxCompressedLen declared = .ok b ∧ (splitVarint bs.data.toList).2.length ≤ b.toNat := by
   simp only [decodePayload] at h
   generalize splitVarint bs.data.toList = sp at h ⊢
@@ -190,7 +185,7 @@ theorem decodePayload_ok {fork : Base.Fork} {typeBound : UInt64} {bs d : ByteArr
               simp only [pure, Except.pure, Except.ok.injEq] at h
               subst h
               have hle : declared.toNat ≤ typeBound.toNat ∧
-                  declared.toNat ≤ (maxPayloadSize fork).toNat := by
+                  declared.toNat ≤ MAX_PAYLOAD_SIZE.toNat := by
                 rw [UInt64.min_def] at hlt
                 split at hlt <;> rename_i hcond <;>
                   simp only [UInt64.not_lt, UInt64.le_iff_toNat_le] at hlt hcond <;> omega
@@ -199,12 +194,12 @@ theorem decodePayload_ok {fork : Base.Fork} {typeBound : UInt64} {bs d : ByteArr
                 by simpa using hc⟩
 
 /-- A payload with more compressed bytes than the bound for its declared length is rejected. -/
-theorem decodePayload_compressedTooLong {fork : Base.Fork} {typeBound declared b : UInt64}
+theorem decodePayload_compressedTooLong {typeBound declared b : UInt64}
     {bs : ByteArray} (hv : decode (splitVarint bs.data.toList).1 = .ok declared)
-    (hle : declared ≤ min typeBound (maxPayloadSize fork))
+    (hle : declared ≤ min typeBound MAX_PAYLOAD_SIZE)
     (hb : maxCompressedLen declared = .ok b)
     (hlong : b.toNat < (splitVarint bs.data.toList).2.length) :
-    decodePayload fork typeBound bs =
+    decodePayload typeBound bs =
       .error (.compressedTooLong (splitVarint bs.data.toList).2.length b.toNat) := by
   simp only [decodePayload]
   generalize splitVarint bs.data.toList = sp at hv hlong ⊢
@@ -213,11 +208,11 @@ theorem decodePayload_compressedTooLong {fork : Base.Fork} {typeBound declared b
     throwThe, MonadExceptOf.throw]
 
 /-- A payload whose declared length is above either bound is rejected. -/
-theorem decodePayload_lengthOutOfBounds {fork : Base.Fork} {typeBound declared : UInt64}
+theorem decodePayload_lengthOutOfBounds {typeBound declared : UInt64}
     {bs : ByteArray} (hv : decode (splitVarint bs.data.toList).1 = .ok declared)
-    (hgt : min typeBound (maxPayloadSize fork) < declared) :
-    decodePayload fork typeBound bs =
-      .error (.lengthOutOfBounds declared (min typeBound (maxPayloadSize fork))) := by
+    (hgt : min typeBound MAX_PAYLOAD_SIZE < declared) :
+    decodePayload typeBound bs =
+      .error (.lengthOutOfBounds declared (min typeBound MAX_PAYLOAD_SIZE)) := by
   simp only [decodePayload]
   generalize splitVarint bs.data.toList = sp at hv ⊢
   obtain ⟨header, rest⟩ := sp
@@ -243,13 +238,13 @@ A success carries the context bytes of the method, and an error carries none.
 
 The payload fits the bound of its code. -/
 theorem decodeResponseChunk_encodeResponseChunkLiteral {contextBytes : Nat}
-    {fork : Base.Fork} {typeBound : UInt64} {c : ResponseChunk}
+    {typeBound : UInt64} {c : ResponseChunk}
     (hc : ResponseCode.ofByte c.code.toByte = c.code)
     (hctx : c.context.size = if c.code = .success then contextBytes else 0)
-    (hp : c.payload.size ≤ (maxPayloadSize fork).toNat)
+    (hp : c.payload.size ≤ MAX_PAYLOAD_SIZE.toNat)
     (ht : c.payload.size ≤
       (if c.code = .success then typeBound else MAX_ERROR_MESSAGE_SIZE).toNat) :
-    decodeResponseChunk fork contextBytes typeBound (encodeResponseChunkLiteral c) =
+    decodeResponseChunk contextBytes typeBound (encodeResponseChunkLiteral c) =
       .ok c := by
   obtain ⟨code, context, payload⟩ := c
   simp only at hc hctx hp ht
@@ -287,7 +282,7 @@ theorem code_injective (e₁ e₂ : ReqRespError) (h : e₁.code = e₂.code) :
   cases e₁ <;> cases e₂ <;>
     first | rfl | (simp only [ReqRespError.code] at h; exact absurd h (by decide))
 
-/-- No error has code 0, which the export keeps for an unknown fork name. -/
+/-- No error has code 0, which the bindings keep for a failure with no error code. -/
 theorem code_ne_zero (e : ReqRespError) : e.code ≠ 0 := by
   cases e <;> simp only [ReqRespError.code] <;> decide
 
