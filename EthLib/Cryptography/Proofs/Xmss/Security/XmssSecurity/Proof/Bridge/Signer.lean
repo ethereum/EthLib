@@ -100,9 +100,9 @@ theorem erases_findCodeword_bottom {β : Type} (cache : QueryCache HashSpec)
       (Xmss.Internal.findCodeword queryH (ofParam sk.parameter) .bottom (ofLeafIndex index)
         (Xmss.packBytes (ofMessage message)) (ofRandomizer base) trial fuel >>= K)
       (tableSignFrom base sk index message fuel trial >>= K')
-  | 0, _ => by simpa [Xmss.Internal.findCodeword, tableSignFrom] using hnone
+  | 0, _ => by simpa [Xmss.Internal.findCodeword, Wots.findFirst, tableSignFrom] using hnone
   | fuel + 1, trial => by
-    unfold Xmss.Internal.findCodeword tableSignFrom
+    unfold Xmss.Internal.findCodeword Wots.findFirst tableSignFrom
     simp only [Xmss.Unforgeability.trialRandomizer_ofRandomizer,
       Xmss.Unforgeability.messageDigest_bottom, Concrete.precomputedSignAttempt, bind_assoc,
       bind_map_left]
@@ -110,8 +110,8 @@ theorem erases_findCodeword_bottom {β : Type} (cache : QueryCache HashSpec)
     rw [Xmss.Unforgeability.codeword?_ofDigest]
     cases TargetSum.decodeDigest digest with
     | none =>
-      simpa using erases_findCodeword_bottom cache sk index message base K K' hnone hsome fuel
-        (trial + 1)
+      simpa [Xmss.Internal.findCodeword] using
+        erases_findCodeword_bottom cache sk index message base K K' hnone hsome fuel (trial + 1)
     | some enc => simpa using hsome _ enc
 
 namespace Prepared
@@ -137,7 +137,7 @@ theorem realTopFind (h : Prepared seed d result cache) (key : TopIndex) (base : 
     exact .pure _
   | fuel + 1, trial, hmodel => by
     rw [Concrete.topSignFrom] at hmodel
-    unfold Xmss.Internal.findCodeword
+    unfold Xmss.Internal.findCodeword Wots.findFirst
     simp only [Xmss.Unforgeability.trialRandomizer_ofRandomizer,
       Xmss.Unforgeability.messageDigest_top, bind_map_left]
     obtain ⟨digest, hdigest, hrest⟩ := hmodel.of_bind

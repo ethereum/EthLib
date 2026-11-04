@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Sphincs.Encoding
+public import EthLib.Cryptography.Wots
 
 /-!
 # WOTS+C one-time signatures
@@ -65,11 +66,7 @@ def chainStep (pp : PublicParam) (key : OtsKey) (i : Fin V) (mu : Fin (CHAIN_LEN
 The walk ends at position `start + steps`, which the bound keeps on the chain. -/
 def chain (pp : PublicParam) (key : OtsKey) (i : Fin V) (start steps : Nat)
     (h : start + steps < CHAIN_LENGTH) (value : Digest) : Digest :=
-  match steps, h with
-  | 0, _ => value
-  -- The last step leaves position `start + s`, having walked `s` before it.
-  | s + 1, h => chainStep pp key i ⟨start + s, by simp only [CHAIN_LENGTH] at *; omega⟩
-      (chain pp key i start s (by omega) value)
+  (Wots.chain (m := Id) (chainStep pp key i) start steps (Nat.le_sub_one_of_lt h) value).run
 
 /-! ## The one-time key's leaf -/
 
@@ -100,12 +97,7 @@ namespace Internal
 Returns the first counter whose encoding is a codeword, with the codeword. -/
 def findCounter (pp : PublicParam) (key : OtsKey) (msg : ByteArray) (c fuel : Nat) :
     Option (UInt32 × Codeword) :=
-  match fuel with
-  | 0 => none
-  | fuel + 1 =>
-    -- The least admissible counter wins, and a failed one moves on to the next counter.
-    (encode pp key msg (UInt32.ofNat c)).elim (findCounter pp key msg (c + 1) fuel)
-      fun x => some (UInt32.ofNat c, x)
+  (Wots.findFirst (m := Id) UInt32.ofNat (encode pp key msg) c fuel).run
 
 end Internal
 

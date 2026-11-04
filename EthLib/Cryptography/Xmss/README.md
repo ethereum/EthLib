@@ -103,7 +103,8 @@ This turns the code of `verify` into a statement a reader can check against the 
 
 **Signing.**
 To sign, WOTS+C tries randomizers one after another until the digest of the message is a codeword, a step called grinding.
-Grinding returns the least trial whose digest is a codeword (`findCodeword_spec`, `Ots.lean`), and signing fails only when a one-time key finds no codeword (`sign_error`, `Sign.lean`).
+Grinding returns the least trial whose digest is a codeword (`findFirst_spec`), and signing fails only when a one-time key finds no codeword (`sign_error`, `Sign.lean`).
+leanSPHINCS shares that search and the hash chains, in [`Wots.lean`](../Wots.lean).
 
 **The code.**
 A codeword is a vector of digits whose sum is a fixed target, and the proofs establish the properties the security argument needs (`Encoding.lean`, `CodeSize.lean`).

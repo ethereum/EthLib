@@ -199,9 +199,12 @@ theorem chain_bottom (P : XmssSecurity.PublicParameter) (idx : XmssSecurity.Leaf
     (start : Nat) : ∀ (steps : Nat) (h : start + steps < CHAIN_LENGTH) (v : XmssSecurity.Digest),
     chain (queryH (m := m)) (ofParam P) .bottom (ofLeafIndex idx) i start steps h (ofDigest v)
       = ofDigest <$> XmssSecurity.Concrete.chainWalk (m := m) P idx (chainOf i) start steps v
-  | 0, _, v => by simp [chain, XmssSecurity.Concrete.chainWalk]
+  | 0, _, v => by simp [chain, Wots.chain, XmssSecurity.Concrete.chainWalk]
   | s + 1, h, v => by
-    rw [chain, chain_bottom P idx i start s (by omega) v, bind_map_left]
+    have ih := chain_bottom P idx i start s (by omega) v
+    unfold chain at ih
+    rw [chain, Wots.chain, ih, bind_map_left]
+    clear ih
     simp only [XmssSecurity.Concrete.chainWalk, map_bind]
     refine bind_congr fun prev => ?_
     -- The step stays on the chain, so the model takes the step too.
@@ -217,9 +220,12 @@ theorem chain_top (P : XmssSecurity.PublicParameter) (key : XmssSecurity.TopInde
     (start : Nat) : ∀ (steps : Nat) (h : start + steps < CHAIN_LENGTH) (v : XmssSecurity.Digest),
     chain (queryH (m := m)) (ofParam P) .top (ofTopIndex key) i start steps h (ofDigest v)
       = ofDigest <$> XmssSecurity.Concrete.topChainWalk (m := m) P key (chainOf i) start steps v
-  | 0, _, v => by simp [chain, XmssSecurity.Concrete.topChainWalk]
+  | 0, _, v => by simp [chain, Wots.chain, XmssSecurity.Concrete.topChainWalk]
   | s + 1, h, v => by
-    rw [chain, chain_top P key i start s (by omega) v, bind_map_left]
+    have ih := chain_top P key i start s (by omega) v
+    unfold chain at ih
+    rw [chain, Wots.chain, ih, bind_map_left]
+    clear ih
     simp only [XmssSecurity.Concrete.topChainWalk, map_bind]
     refine bind_congr fun prev => ?_
     -- The step stays on the chain, so the model takes the step too.
