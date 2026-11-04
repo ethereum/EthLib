@@ -24,7 +24,7 @@ VECTORS = [
         "b0e20b6e3116640286ed3a87a5713079b21f5189",
     ),
     (b"1234567890" * 8, "9b752e45573d4b39f4dbd3323cab82bf63326bfb"),
-    # The page's last vector, which the Lean kernel proofs leave out.
+    # The page's last vector: one million times `a`.
     (b"a" * 1_000_000, "52783243c1697bdbe16d37f97f68f08325dc1528"),
 ]
 
