@@ -4,8 +4,9 @@
 # The key generation and signing cases of leanXMSS and leanSPHINCS take minutes each.
 # A test marked `archive` reads a release archive that tests/sources.toml pins, which
 # scripts/fetch_archives.py downloads and checks.
-# This workflow runs both every Monday and on manual dispatch, one job per suite, so that
-# no job nears the time limit.
+# The parity jobs run every case of the official suites in scope, and report each case.
+# This workflow runs all of them every Monday and on manual dispatch, one job per suite, so
+# that no job nears the time limit.
 # A regenerated vector that differs from the committed one fails the job.
 
 name: vectors-slow
@@ -46,6 +47,14 @@ jobs:
           - suite: consensus-spec-tests
             bindings: true
             run: uv run --no-sync pytest -m archive bindings/python/tests/consensus/test_ssz_static.py
+          # Every case of execution-spec-tests and of consensus-spec-tests in scope, with a
+          # report of the cases that pass, disagree, fail or wait for a runner.
+          - suite: parity-execution
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_execution.py
+          - suite: parity-consensus
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_consensus.py
           # The pinned BLS and KZG digests against the releases that published them.
           - suite: cryptography
             bindings: false
@@ -90,7 +99,17 @@ jobs:
       - name: ${{ matrix.suite }}
         env:
           ETHLIB_ARCHIVES: ${{ runner.temp }}/archives
+          ETHLIB_PARITY_REPORT: ${{ runner.temp }}/parity.md
         run: ${{ matrix.run }}
+
+      # The parity report is also in the job summary.
+      - name: parity report
+        if: ${{ always() && startsWith(matrix.suite, 'parity') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ matrix.suite }}
+          path: ${{ runner.temp }}/parity.md
+          if-no-files-found: error
 
       # The suites write every case, so a changed or a new case shows up here.
       - name: unchanged vectors

@@ -1,0 +1,16 @@
+# The cases of the official test suites on which EthLib knowingly disagrees.
+#
+# The parity tests of bindings/python/tests/parity run every runnable case.
+# A case listed here must fail, and every other runnable case must pass.
+# So a fixed disagreement fails until its entry is removed.
+#
+# Each entry gives the suite, the case, the reason, and the source that supports the reason.
+# The case is the identifier that the parity report uses.
+# For execution-spec-tests, it is the test identifier of a fixture.
+# For consensus-spec-tests, it is the directory of a case in the archive.
+#
+#     [[disagreement]]
+#     suite = "execution-spec-tests"
+#     case = "tests/...::test_...[fork_Osaka-transaction_test-...]"
+#     reason = "..."
+#     source = "EIP-... section ..."

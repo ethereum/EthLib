@@ -90,6 +90,14 @@ class Fetch(unittest.TestCase):
         (self.root / "served.tar.gz").unlink()
         self.assertTrue(fetch.unpack(archive, self.cache, ["fixtures/a"]).is_dir())
 
+    def test_members_are_listed_once(self):
+        archive = self.archive(tar_gz(MEMBERS, {"fixtures/a/link": "one.json"}))
+        expected = ["fixtures/a/one.json", "fixtures/a/two.json", "fixtures/b/three.json"]
+        self.assertEqual(fetch.members(archive, self.cache), expected)
+        (self.cache / f"{archive.sha256}.tar.gz").unlink()
+        (self.root / "served.tar.gz").unlink()
+        self.assertEqual(fetch.members(archive, self.cache), expected)
+
     def test_path_without_member_fails(self):
         with self.assertRaisesRegex(fetch.ArchiveError, "no member under fixtures/c"):
             fetch.unpack(self.archive(tar_gz(MEMBERS)), self.cache, ["fixtures/c"])

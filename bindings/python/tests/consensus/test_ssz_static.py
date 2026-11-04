@@ -11,65 +11,9 @@ from ethlib import consensus
 from ethlib.errors import SszError
 from ethlib.networking import snappy
 
+from .containers import CONTAINERS, FORKS
+
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "ssz_static"
-
-# Each fork of the beacon chain up to Fulu, as consensus-specs names it, with its name in Lean.
-FORKS = {
-    "phase0": "phase0",
-    "altair": "altair",
-    "bellatrix": "bellatrix",
-    "capella": "shapella",
-    "deneb": "dencun",
-    "electra": "pectra",
-    "fulu": "fusaka",
-}
-
-# Each container that EthLib defines, with the first fork that has it and the first that drops it.
-CONTAINERS = {
-    "Fork": ("phase0", None),
-    "ForkData": ("phase0", None),
-    "SigningData": ("phase0", None),
-    "Checkpoint": ("phase0", None),
-    "Validator": ("phase0", None),
-    "AttestationData": ("phase0", None),
-    "PendingAttestation": ("phase0", "altair"),
-    "Eth1Data": ("phase0", None),
-    "HistoricalBatch": ("phase0", "capella"),
-    "DepositMessage": ("phase0", None),
-    "DepositData": ("phase0", None),
-    "BeaconBlockHeader": ("phase0", None),
-    "SignedBeaconBlockHeader": ("phase0", None),
-    "Eth1Block": ("phase0", None),
-    "ProposerSlashing": ("phase0", None),
-    "Deposit": ("phase0", None),
-    "VoluntaryExit": ("phase0", None),
-    "SignedVoluntaryExit": ("phase0", None),
-    "Attestation": ("phase0", None),
-    "IndexedAttestation": ("phase0", None),
-    "AttesterSlashing": ("phase0", None),
-    "AggregateAndProof": ("phase0", None),
-    "SignedAggregateAndProof": ("phase0", None),
-    "SingleAttestation": ("electra", None),
-    "SyncCommittee": ("altair", None),
-    "SyncAggregate": ("altair", None),
-    "SyncCommitteeMessage": ("altair", None),
-    "SyncCommitteeContribution": ("altair", None),
-    "ContributionAndProof": ("altair", None),
-    "SignedContributionAndProof": ("altair", None),
-    "SyncAggregatorSelectionData": ("altair", None),
-    "HistoricalSummary": ("capella", None),
-    "BLSToExecutionChange": ("capella", None),
-    "SignedBLSToExecutionChange": ("capella", None),
-    "PendingDeposit": ("electra", None),
-    "PendingPartialWithdrawal": ("electra", None),
-    "PendingConsolidation": ("electra", None),
-    "DepositRequest": ("electra", None),
-    "WithdrawalRequest": ("electra", None),
-    "ConsolidationRequest": ("electra", None),
-    "ExecutionRequests": ("electra", None),
-    "Withdrawal": ("capella", None),
-    "ExecutionPayload": ("bellatrix", None),
-}
 
 
 def _cases() -> list:

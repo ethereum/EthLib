@@ -51,10 +51,10 @@ def load(root: Path = ROOT) -> dict[str, Archive]:
 
 
 @contextlib.contextmanager
-def locked(cache: Path):
-    """Hold the lock of the cache, so that two processes do not write one file together."""
+def locked(cache: Path, archive: Archive):
+    """Hold the lock of one archive in the cache, so that two processes do not write one file."""
     cache.mkdir(parents=True, exist_ok=True)
-    with (cache / ".lock").open("w") as lock:
+    with (cache / f"{archive.sha256}.lock").open("w") as lock:
         try:
             import fcntl
         except ImportError:
@@ -99,7 +99,7 @@ def _download(archive: Archive, cache: Path) -> Path:
 
 def download(archive: Archive, cache: Path) -> Path:
     """The archive file in the cache, downloaded first if it is missing or differs from the pin."""
-    with locked(cache):
+    with locked(cache, archive):
         return _download(archive, cache)
 
 
@@ -111,8 +111,23 @@ def _member_path(name: str) -> PurePosixPath | None:
     return PurePosixPath(*[part for part in path.parts if part != "."])
 
 
-def _under(path: PurePosixPath, prefixes: list[PurePosixPath]) -> bool:
-    return any(path == prefix or prefix in path.parents for prefix in prefixes)
+def _prefixes_of(path: PurePosixPath, prefixes: set[PurePosixPath]) -> set[PurePosixPath]:
+    """The prefixes that hold `path`: the path itself, or one of its parents."""
+    return {ancestor for ancestor in (path, *path.parents) if ancestor in prefixes}
+
+
+def members(archive: Archive, cache: Path) -> list[str]:
+    """The paths of the archive's regular files, listed once and then kept in the cache."""
+    listing = cache / f"{archive.sha256}.members.json"
+    with locked(cache, archive):
+        if listing.is_file():
+            return json.loads(listing.read_text())
+        source = _download(archive, cache)
+        with tarfile.open(source, "r:*") as tar:
+            paths = (_member_path(member.name) for member in tar if member.isfile())
+            names = sorted(path.as_posix() for path in paths if path is not None)
+        listing.write_text(json.dumps(names))
+    return names
 
 
 def unpack(archive: Archive, cache: Path, paths: list[str]) -> Path:
@@ -125,10 +140,11 @@ def unpack(archive: Archive, cache: Path, paths: list[str]) -> Path:
     if not prefixes or any(p is None or not p.parts for p in prefixes):
         raise ArchiveError(f"{archive.name}: give paths inside the archive, without '..'")
     target = cache / archive.sha256
-    with locked(cache):
+    with locked(cache, archive):
         record = target / UNPACKED
         done = set(json.loads(record.read_text())) if record.is_file() else set()
-        missing = [p for p in prefixes if not _under(p, [PurePosixPath(d) for d in done])]
+        finished = {PurePosixPath(d) for d in done}
+        missing = {p for p in prefixes if not _prefixes_of(p, finished)}
         if not missing:
             return target
         source = _download(archive, cache)
@@ -137,12 +153,13 @@ def unpack(archive: Archive, cache: Path, paths: list[str]) -> Path:
             for member in tar:
                 path = _member_path(member.name)
                 if path is None:
-                    if _under(PurePosixPath(member.name), missing):
+                    if _prefixes_of(PurePosixPath(member.name), missing):
                         raise ArchiveError(f"{archive.name}: unsafe member {member.name}")
                     continue
-                if not _under(path, missing):
+                holders = _prefixes_of(path, missing)
+                if not holders:
                     continue
-                matched.update(p for p in missing if _under(path, [p]))
+                matched |= holders
                 if member.isdir():
                     (target / path).mkdir(parents=True, exist_ok=True)
                 elif member.isfile():
@@ -152,7 +169,7 @@ def unpack(archive: Archive, cache: Path, paths: list[str]) -> Path:
                 else:
                     raise ArchiveError(f"{archive.name}: {member.name} is not a file or a "
                                        f"directory")
-        if unmatched := sorted(p.as_posix() for p in set(missing) - matched):
+        if unmatched := sorted(p.as_posix() for p in missing - matched):
             raise ArchiveError(f"{archive.name}: no member under {', '.join(unmatched)}")
         target.mkdir(parents=True, exist_ok=True)
         record.write_text(json.dumps(sorted(done | {p.as_posix() for p in missing}), indent=1))
