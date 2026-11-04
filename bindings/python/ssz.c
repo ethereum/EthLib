@@ -17,6 +17,12 @@ eth_ssz_deserialize(
   lean_object* data
 );
 
+extern lean_object*
+eth_ssz_hash_tree_root(
+  lean_object* type,
+  lean_object* value
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* Parse two `bytes` arguments, or return -1 with a TypeError set.
@@ -68,4 +74,15 @@ py_ssz_deserialize(
   lean_object* data;
   if (parse_two_bytes(args, "type", "data", &type, &data)) return NULL;
   return except_into_pybytes(eth_ssz_deserialize(type, data), SSZ_ERROR);
+}
+
+PyObject*
+py_ssz_hash_tree_root(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* type;
+  lean_object* value;
+  if (parse_two_bytes(args, "type", "value", &type, &value)) return NULL;
+  return except_into_pybytes(eth_ssz_hash_tree_root(type, value), SSZ_ERROR);
 }

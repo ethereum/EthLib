@@ -3,6 +3,7 @@ module
 public import Lean.Data.Json
 public import EthLib.Base.Exports
 public import EthLib.Serialization.Ssz.Codec.Json
+public import EthLib.Serialization.Ssz.Codec.Root
 public import EthLib.Serialization.Ssz.Type.Valid
 
 /-!
@@ -154,5 +155,12 @@ def deserializeExport (type data : ByteArray) : Result ByteArray := do
   let shape ← readType type
   let value ← runSsz "input rejected" (deserialize shape data.data)
   return (jsonOfValue value).compress.toUTF8
+
+/-- The 32-byte hash tree root of a value of a type, both given as JSON. -/
+@[export eth_ssz_hash_tree_root]
+def hashTreeRootExport (type value : ByteArray) : Result ByteArray := do
+  let shape ← readType type
+  let value ← readJson "value" value (valueOfJson MAX_NESTING)
+  return ⟨← runSsz "value rejected" (hashTreeRoot shape value)⟩
 
 end EthLib.Serialization.Ssz.Exports

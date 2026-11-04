@@ -19,3 +19,8 @@ def serialize(ssz_type, value) -> bytes:
 def deserialize(ssz_type, data: bytes):
     """The value that SSZ bytes hold for a type, in the form that serialize takes."""
     return json.loads(_native.ssz_deserialize(_dump(ssz_type), data))
+
+
+def hash_tree_root(ssz_type, value) -> bytes:
+    """The 32-byte hash tree root of a value of a type, in the form that serialize takes."""
+    return _native.ssz_hash_tree_root(_dump(ssz_type), _dump(value))

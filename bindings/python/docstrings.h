@@ -311,6 +311,9 @@
 #define DOC_ssz_deserialize \
   "The value, as JSON, that SSZ bytes hold for a type given as JSON."
 
+#define DOC_ssz_hash_tree_root \
+  "The 32-byte hash tree root of a value of a type, both given as JSON."
+
 #define DOC_rlpx_ecies_encrypt \
   "The ciphertext `R || iv || c || d` of `m` to the public key `recipient`."
 
