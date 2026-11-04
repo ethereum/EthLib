@@ -492,6 +492,7 @@ static PyMethodDef methods[] = {
   {"enr_seq", py_enr_seq, METH_VARARGS, NULL},
   {"enr_verify_v4", py_enr_verify_v4, METH_VARARGS, NULL},
   {"enr_node_id", py_enr_node_id, METH_VARARGS, NULL},
+  {"enr_consensus_entries", py_enr_consensus_entries, METH_VARARGS, NULL},
   {"consensus_preset", py_consensus_preset, METH_VARARGS, NULL},
   {"consensus_config", py_consensus_config, METH_VARARGS, NULL},
   {"consensus_parameters", py_consensus_parameters, METH_VARARGS, NULL},

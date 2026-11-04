@@ -1,6 +1,8 @@
 module
 
+public import EthLib.Networking.Enr.Consensus
 public import EthLib.Networking.Enr.V4
+public import EthLib.Networking.Exports.Fork
 
 /-!
 # `Exports.Enr`
@@ -17,6 +19,9 @@ Booleans come back as `UInt8`.
 public section
 
 namespace EthLib.Networking.Enr.Exports
+
+open EthLib.Networking.Exports (forkAt)
+open EthLib.Serialization.Ssz (SszType)
 
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
 def message : EnrError → String
@@ -77,5 +82,38 @@ def nodeIdExport (record : ByteArray) : IO ByteArray := do
   let r ← runEnr (decode record)
   let id ← runEnr (nodeId r)
   return ⟨id.toArray⟩
+
+/-- A message for a refused consensus entry. -/
+def entryMessage : EntryError → String
+  | .missing key => s!"record has no {key.name} entry"
+  | .notBytes key => s!"the {key.name} entry is not a byte string"
+  | .ssz key _ => s!"the {key.name} entry is not valid SSZ"
+  | .cgc _ => "the cgc entry is not a big-endian integer below 2^64 without leading zeros"
+
+/-- The SSZ bytes of a value, or an error that names it. -/
+def sszBytes {α : Type} [SszType α] (a : α) : IO ByteArray :=
+  match SszType.serialize a with
+  | .ok bytes => pure bytes
+  | .error _ => throw (IO.userError "entry has no SSZ encoding")
+
+/-- An optional entry: the byte 0 when absent, else the byte 1 and its SSZ bytes. -/
+def optionBytes {α : Type} [SszType α] : Option α → IO ByteArray
+  | none => pure ⟨#[0]⟩
+  | some a => return ⟨#[1]⟩ ++ (← sszBytes a)
+
+/-- The consensus entries of a record at the named fork.
+
+They come back as the 16 SSZ bytes of `eth2`, then `attnets`, `syncnets`, `cgc` and `nfd`.
+
+Each of the four is the byte 0 when absent, or the byte 1 and its SSZ bytes. -/
+@[export eth_enr_consensus_entries]
+def consensusEntriesExport (fork record : ByteArray) : IO ByteArray := do
+  let fork ← forkAt fork
+  let r ← runEnr (decode record)
+  let e ← match readEntries fork r with
+    | .ok e => pure e
+    | .error err => throw (IO.userError (entryMessage err))
+  return (← sszBytes e.eth2) ++ (← optionBytes e.attnets) ++ (← optionBytes e.syncnets) ++
+    (← optionBytes e.cgc) ++ (← optionBytes e.nfd)
 
 end EthLib.Networking.Enr.Exports

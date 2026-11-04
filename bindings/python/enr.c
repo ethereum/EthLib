@@ -25,6 +25,12 @@ eth_enr_node_id(
   lean_object* record
 );
 
+extern lean_object*
+eth_enr_consensus_entries(
+  lean_object* fork,
+  lean_object* record
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* The bytes of a `bytes` argument, or NULL with a TypeError set. */
@@ -88,4 +94,28 @@ py_enr_node_id(
   lean_object* record = parse_record_arg(args, "record");
   if (!record) return NULL;
   return run_io_into_pybytes(eth_enr_node_id(record), "enr node_id");
+}
+
+PyObject*
+py_enr_consensus_entries(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *fork_obj, *record_obj;
+  if (!PyArg_ParseTuple(args, "OO", &fork_obj, &record_obj)) return NULL;
+  if (!PyUnicode_Check(fork_obj)) {
+    PyErr_SetString(PyExc_TypeError, "fork must be str");
+    return NULL;
+  }
+  if (!PyBytes_Check(record_obj)) {
+    PyErr_SetString(PyExc_TypeError, "record must be bytes");
+    return NULL;
+  }
+  Py_ssize_t len;
+  const char* utf8 = PyUnicode_AsUTF8AndSize(fork_obj, &len);
+  if (!utf8) return NULL;
+  lean_object* fork = mk_bytearray((const uint8_t*) utf8, len);
+  lean_object* record = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(record_obj), PyBytes_GET_SIZE(record_obj));
+  return run_io_into_pybytes(eth_enr_consensus_entries(fork, record), "enr consensus_entries");
 }
