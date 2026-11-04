@@ -47,12 +47,33 @@ def check(fork: str, chain_id: int, tx: bytes) -> Checked:
     return Checked(raw[:20], int.from_bytes(raw[20:28], "big"))
 
 
+class Settlement(NamedTuple):
+    """Where the wei of the gas limit of a transaction go, once it has run."""
+
+    gas_used: int
+    sender_refund: int
+    priority_fee: int
+    burned: int
+
+
+def _number(value: int) -> bytes:
+    return value.to_bytes(max(1, (value.bit_length() + 7) // 8), "big")
+
+
+def settle(fork: str, tx: bytes, base_fee: int, gas_left: int, refund_counter: int) -> Settlement:
+    """Settle the gas of a transaction, from its gas left and its refund counter."""
+    raw = _native.tx_settle(fork, tx, _number(base_fee), _number(gas_left), _number(refund_counter))
+    return Settlement(*(int.from_bytes(raw[i:i + 64], "big") for i in range(0, 256, 64)))
+
+
 __all__ = [
     "Checked",
+    "Settlement",
     "check",
     "intrinsic_gas",
     "network_check",
     "recover_sender",
+    "settle",
     "tx_hash",
     "tx_type",
     "TransactionError",

@@ -4,6 +4,7 @@ public import EthLib.Base.Exports
 public import EthLib.Execution.Exports.Blocks
 public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Execution.Transactions.Network
+public import EthLib.Execution.Transactions.Settlement
 public import EthLib.Execution.Transactions.Validity
 
 /-!
@@ -25,9 +26,11 @@ Its own errors about the blobs take codes from 101.
 
 The type, the hash and the sender hold up to Glamsterdam, which keeps the transaction forms.
 
-The intrinsic gas and the checks hold up to BPO5.
+The intrinsic gas, the checks and the settlement of the gas hold up to BPO5.
 
-Glamsterdam changes both, by EIP-2780 and EIP-8037, so a later fork is not yet specified.
+Glamsterdam changes them, by EIP-2780, EIP-7778 and EIP-8037.
+
+So a later fork is not yet specified.
 -/
 
 public section
@@ -103,6 +106,38 @@ def checkExport (fork : ByteArray) (chainId : UInt64) (bytes : ByteArray) : Resu
   let gas ← gasToUInt64 gas
   return ⟨sender.toArray ++ (List.range 8).reverse.toArray.map
     fun i => (gas >>> UInt64.ofNat (8 * i)).toUInt8⟩
+
+/-- The number that big-endian bytes encode. -/
+def numberOf (bytes : ByteArray) : Nat :=
+  bytesToNat bytes.toList
+
+/-- Settle the gas of a transaction that passes the gas, nonce and fee rules.
+
+It reads the base fee per gas of the block, the gas left and the refund counter.
+
+The base fee must be below 2^256, and 0 before London, which has none.
+
+The price per gas must cover the base fee, and the gas left must be at most the gas limit.
+
+It returns four numbers of 64 big-endian bytes each.
+
+They are the gas used, the refund of the sender, the priority fee and the burned fee. -/
+@[export eth_tx_settle]
+def settleExport (fork tx baseFee gasLeft refundCounter : ByteArray) : Result ByteArray := do
+  let (fork, tx) ← decodeAt .bpo5 fork tx
+  let _ ← runTx (validateTransaction fork tx)
+  let baseFee := numberOf baseFee
+  -- No error type covers these inputs of the binding, so their code is 0.
+  if fork < .london ∧ baseFee ≠ 0 then
+    throw (0, "a fork before london has no base fee")
+  if 2 ^ 256 ≤ baseFee then
+    throw (0, "base fee is 2^256 or more")
+  if tx.maxFeePerGas < baseFee then
+    throw (0, "the price per gas is below the base fee")
+  if tx.gas.toNat < numberOf gasLeft then
+    throw (0, "the gas left is above the gas limit")
+  let s := settlement fork baseFee tx (numberOf gasLeft) (numberOf refundCounter)
+  return ⟨([s.gasUsed, s.senderRefund, s.priorityFee, s.burned].flatMap (natToBytes 64)).toArray⟩
 
 /-! ## The network form of blob transactions -/
 

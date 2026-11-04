@@ -3092,6 +3092,33 @@
    "error_class": "TransactionError",
    "docstring":
    "Check a transaction alone on the chain `chainId`.\n\nIt returns 28 bytes: the 20-byte sender, then the intrinsic gas as 8 big-endian bytes."},
+  {"summary":
+   "Settle the gas of a transaction that passes the gas, nonce and fee rules.",
+   "signature":
+   "(fork: str, tx: bytes, base_fee: bytes, gas_left: bytes, refund_counter: bytes) -> bytes",
+   "operation": "EthLib.Execution.Transactions.Exports.settleExport",
+   "method": "tx_settle",
+   "errors":
+   [{"type": "EthLib.Execution.Transactions.TransactionError",
+     "codes":
+     [{"constructor": "emptyTransaction", "code": 1},
+      {"constructor": "unsupportedType", "code": 2},
+      {"constructor": "decoding", "code": 3},
+      {"constructor": "encoding", "code": 4},
+      {"constructor": "invalidSignature", "code": 5},
+      {"constructor": "insufficientGas", "code": 6},
+      {"constructor": "initCodeTooLarge", "code": 7},
+      {"constructor": "gasLimitExceeded", "code": 8},
+      {"constructor": "nonceOverflow", "code": 9},
+      {"constructor": "priorityFeeGreaterThanMaxFee", "code": 10},
+      {"constructor": "wrongChainId", "code": 11},
+      {"constructor": "noBlobData", "code": 12},
+      {"constructor": "blobCountExceeded", "code": 13},
+      {"constructor": "invalidBlobVersionedHash", "code": 14},
+      {"constructor": "emptyAuthorizationList", "code": 15}]}],
+   "error_class": "TransactionError",
+   "docstring":
+   "Settle the gas of a transaction that passes the gas, nonce and fee rules.\n\nIt reads the base fee per gas of the block, the gas left and the refund counter.\n\nThe base fee must be below 2^256, and 0 before London, which has none.\n\nThe price per gas must cover the base fee, and the gas left must be at most the gas limit.\n\nIt returns four numbers of 64 big-endian bytes each.\n\nThey are the gas used, the refund of the sender, the priority fee and the burned fee."},
   {"summary": "Check the network form of a blob transaction at the named fork.",
    "signature": "(fork: str, network: bytes) -> bytes",
    "operation": "EthLib.Execution.Transactions.Exports.networkCheckExport",

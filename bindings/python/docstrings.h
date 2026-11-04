@@ -452,6 +452,9 @@
 #define DOC_tx_check \
   "Check a transaction alone on the chain `chainId`."
 
+#define DOC_tx_settle \
+  "Settle the gas of a transaction that passes the gas, nonce and fee rules."
+
 #define DOC_tx_network_check \
   "Check the network form of a blob transaction at the named fork."
 

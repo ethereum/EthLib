@@ -351,6 +351,7 @@ PyObject* py_tx_hash                                      (PyObject* self, PyObj
 PyObject* py_tx_recover_sender                            (PyObject* self, PyObject* args);
 PyObject* py_tx_intrinsic_gas                             (PyObject* self, PyObject* args);
 PyObject* py_tx_check                                     (PyObject* self, PyObject* args);
+PyObject* py_tx_settle                                    (PyObject* self, PyObject* args);
 PyObject* py_tx_network_check                             (PyObject* self, PyObject* args);
 PyObject* py_rlpx_make_auth                               (PyObject* self, PyObject* args);
 PyObject* py_rlpx_respond                                 (PyObject* self, PyObject* args);
