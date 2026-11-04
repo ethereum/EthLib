@@ -128,6 +128,8 @@ def getBaseFeePerBlobGas (schedule : BlobSchedule) (excessBlobGas : Nat) : Nat :
 
 Fusaka keeps the values of Pectra, and the forks after BPO2 keep those of BPO2.
 
+No EIP gives BPO3, BPO4 or BPO5 other values yet.
+
 [EIP-7892][eip-7892] makes the schedule chain configuration, so a testnet can set others.
 
 [eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#parameters

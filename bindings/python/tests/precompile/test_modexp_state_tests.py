@@ -54,7 +54,8 @@ def test_call(call: dict) -> None:
 
 # The forks that no network of the fixtures names share the rules of the fork before them.
 BETWEEN = {"constantinople": "byzantium", "muirGlacier": "istanbul", "arrowGlacier": "london",
-           "grayGlacier": "london", "bpo1": "fusaka", "bpo2": "fusaka"}
+           "grayGlacier": "london", "bpo1": "fusaka", "bpo2": "fusaka", "bpo3": "fusaka",
+           "bpo4": "fusaka", "bpo5": "fusaka"}
 
 
 def test_forks_between():

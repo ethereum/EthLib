@@ -110,7 +110,10 @@ def test_large_quantities() -> None:
     assert calculate_base_fee_per_gas(30_000_000, 15_000_000, 2**300) == 2**300
 
 
-@pytest.mark.parametrize("fork, fraction", [("bpo1", 8346193), ("bpo2", 11684671)])
+@pytest.mark.parametrize("fork, fraction", [
+    ("bpo1", 8346193), ("bpo2", 11684671), ("bpo3", 11684671), ("bpo4", 11684671),
+    ("bpo5", 11684671),
+])
 def test_blob_parameter_only_forks(fork: str, fraction: int) -> None:
     # An excess equal to the update fraction of the fork gives about e, rounded down to 2.
     assert get_base_fee_per_blob_gas(fork, fraction) == 2

@@ -4,7 +4,7 @@ FORKS = (
     "frontier", "homestead", "daoFork", "tangerineWhistle", "spuriousDragon", "byzantium",
     "constantinople", "petersburg", "istanbul", "muirGlacier", "berlin", "london",
     "arrowGlacier", "grayGlacier", "paris", "shapella", "dencun", "pectra", "fusaka", "bpo1",
-    "bpo2",
+    "bpo2", "bpo3", "bpo4", "bpo5",
 )
 
 

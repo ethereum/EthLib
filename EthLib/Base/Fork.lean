@@ -138,17 +138,35 @@ inductive Fork where
 
   [EIP-8135](https://eips.ethereum.org/EIPS/eip-8135) specifies it. -/
   | bpo2
+  /-- BPO3 changes only the blob parameters, as EIP-7892 allows.
+
+  No EIP specifies it yet, and it keeps the blob parameters of BPO2. -/
+  | bpo3
+  /-- BPO4 changes only the blob parameters, as EIP-7892 allows.
+
+  No EIP specifies it yet, and it keeps the blob parameters of BPO2. -/
+  | bpo4
+  /-- BPO5 changes only the blob parameters, as EIP-7892 allows.
+
+  No EIP specifies it yet, and it keeps the blob parameters of BPO2. -/
+  | bpo5
   /-- Glamsterdam, Gloas with Amsterdam, changes both layers.
 
   [EIP-7773](https://eips.ethereum.org/EIPS/eip-7773) lists its EIPs.
 
-  They include EIP-7732 and EIP-7928. -/
+  They include EIP-7732 and EIP-7928.
+
+  EthLib does not hold all its rules yet.
+
+  An export whose rules at this fork are missing rejects it as not yet specified. -/
   | glamsterdam
   /-- Hegotá, Heze with Bogotá, changes both layers.
 
   [EIP-8081](https://eips.ethereum.org/EIPS/eip-8081) lists its EIPs.
 
-  They include EIP-7805 and EIP-8141. -/
+  They include EIP-7805 and EIP-8141.
+
+  EthLib does not hold its rules yet, so every export rejects it as not yet specified. -/
   | hegota
   deriving DecidableEq, Ord, Repr
 
@@ -190,6 +208,9 @@ def name : Fork → String
   | fusaka => "fusaka"
   | bpo1 => "bpo1"
   | bpo2 => "bpo2"
+  | bpo3 => "bpo3"
+  | bpo4 => "bpo4"
+  | bpo5 => "bpo5"
   | glamsterdam => "glamsterdam"
   | hegota => "hegota"
 

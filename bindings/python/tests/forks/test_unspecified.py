@@ -105,10 +105,23 @@ def test_glamsterdam_transaction_and_header() -> None:
     assert blocks.reencode("glamsterdam", AMSTERDAM_BLOCK) == AMSTERDAM_BLOCK
 
 
-def test_bpo2_is_specified() -> None:
-    # The last fork whose rules EthLib holds in full passes the fork check of every export.
-    for export in EXPORTS:
-        try:
-            EXPORTS[export]("bpo2")
-        except EthLibError as error:
-            assert "not yet specified" not in error.message
+# The exports of the consensus layer, whose configuration has no epoch for BPO3 to BPO5.
+CONSENSUS = {"consensus_entries", "consensus_parameters", "ssz_static"}
+
+
+@pytest.mark.parametrize("fork", ["bpo3", "bpo4", "bpo5"])
+@pytest.mark.parametrize("export", sorted(CONSENSUS))
+def test_consensus_stops_at_bpo2(export: str, fork: str) -> None:
+    _rejects(export, fork)
+
+
+@pytest.mark.parametrize("fork", ["bpo2", "bpo3", "bpo4", "bpo5"])
+@pytest.mark.parametrize("export", sorted(EXPORTS))
+def test_bpo_forks_are_specified(export: str, fork: str) -> None:
+    # The execution layer holds every rule of BPO2 to BPO5, and the consensus layer those of BPO2.
+    if fork != "bpo2" and export in CONSENSUS:
+        return
+    try:
+        EXPORTS[export](fork)
+    except EthLibError as error:
+        assert "not yet specified" not in error.message

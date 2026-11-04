@@ -25,7 +25,7 @@ Its own errors about the blobs take codes from 101.
 
 The type, the hash and the sender hold up to Glamsterdam, which keeps the transaction forms.
 
-The intrinsic gas and the checks hold up to BPO2.
+The intrinsic gas and the checks hold up to BPO5.
 
 Glamsterdam changes both, by EIP-2780 and EIP-8037, so a later fork is not yet specified.
 -/
@@ -90,7 +90,7 @@ def recoverSenderExport (fork bytes : ByteArray) : Result ByteArray := do
 /-- The intrinsic gas of a transaction, without the call data floor. -/
 @[export eth_tx_intrinsic_gas]
 def intrinsicGasExport (fork bytes : ByteArray) : Result UInt64 := do
-  let (fork, tx) ← decodeAt .bpo2 fork bytes
+  let (fork, tx) ← decodeAt .bpo5 fork bytes
   gasToUInt64 (intrinsicGas fork tx)
 
 /-- Check a transaction alone on the chain `chainId`.
@@ -98,7 +98,7 @@ def intrinsicGasExport (fork bytes : ByteArray) : Result UInt64 := do
 It returns 28 bytes: the 20-byte sender, then the intrinsic gas as 8 big-endian bytes. -/
 @[export eth_tx_check]
 def checkExport (fork : ByteArray) (chainId : UInt64) (bytes : ByteArray) : Result ByteArray := do
-  let (fork, tx) ← decodeAt .bpo2 fork bytes
+  let (fork, tx) ← decodeAt .bpo5 fork bytes
   let (sender, gas) ← runTx (checkTransaction fork chainId tx)
   let gas ← gasToUInt64 gas
   return ⟨sender.toArray ++ (List.range 8).reverse.toArray.map
@@ -127,7 +127,7 @@ It returns the bytes of the transaction alone, as a block holds it.
 -/
 @[export eth_tx_network_check]
 def networkCheckExport (fork bytes : ByteArray) : Result ByteArray := do
-  let fork ← forkUpTo .bpo2 fork
+  let fork ← forkUpTo .bpo5 fork
   let w ← runNetwork (decodeNetwork fork bytes)
   let setup ← runNetwork (Cryptography.Kzg.Exports.embeddedSetup.mapError .kzg)
   runNetwork (validateNetwork setup fork w)

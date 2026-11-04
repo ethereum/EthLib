@@ -71,7 +71,9 @@ def configOf : String → Result Config
 
 /-- The fork of a name, for the forks from Phase 0 to BPO2, the last fork up to Fulu.
 
-Gloas and Heze are not yet specified, so Glamsterdam and Hegotá fail. -/
+The configuration has no epoch for BPO3 to BPO5, and Gloas is not yet specified.
+
+So the forks after BPO2 fail. -/
 def forkOf (name : ByteArray) : Result Fork := do
   let fork ← forkUpTo .bpo2 name
   if .phase0 ≤ fork then return fork
