@@ -34,12 +34,12 @@ jobs:
           # Every vector suite, with the slow cases.
           - suite: slow
             bindings: true
-            run: ETHLIB_SLOW_VECTORS=1 uv run --no-sync pytest -m "not archive"
+            run: ETHLIB_SLOW_VECTORS=1 uv run --no-sync pytest -n auto -m "not archive"
           # The vendored blocks, receipts and transaction tests against their release.
           - suite: execution-spec-tests
             bindings: true
             run: >-
-              uv run --no-sync pytest -m archive
+              uv run --no-sync pytest -n auto -m archive
               bindings/python/tests/blocks/test_archive.py
               bindings/python/tests/transactions/test_archive.py
           # The pinned BLS and KZG digests against the releases that published them.

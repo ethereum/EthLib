@@ -99,9 +99,10 @@ Run the binding test suite:
 
 ```bash
 uv sync --frozen --extra test
-uv run --no-sync pytest
+uv run --no-sync pytest -n auto
 ```
 
+`-n auto` runs one test process per core.
 Run `uv sync --frozen --extra test` again after changing Lean or C sources.
 Sync rebuilds the native extension when its source or build inputs change.
 `uv run --no-sync` tests that build.

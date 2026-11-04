@@ -331,7 +331,7 @@ When you touch bindings or test vectors, also run the Python suite:
 
 ```bash
 uv sync --frozen --extra test
-uv run --no-sync pytest
+uv run --no-sync pytest -n auto
 ```
 
 The suite rewrites the vectors, so then check that the pinned ones are unchanged:
