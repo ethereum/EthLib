@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bytes32_typical[ssz_test]": {
+        "typeName": "Bytes32",
+        "value": "0xabababababababababababababababababababababababababababababababab",
+        "serialized": "0xabababababababababababababababababababababababababababababababab",
+        "root": "0xabababababababababababababababababababababababababababababababab",
+        "_info": {
+            "hash": "0x512b263e3e783133e86bcfbcaa863a54cebac3dbef43b84390bf8ddfa3397e33",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bytes32_typical",
+            "description": "A 32-byte array with uniform content round-trips unchanged.\n\n    Given\n    -----\n    - a 32-byte array of the repeated byte 0xab.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

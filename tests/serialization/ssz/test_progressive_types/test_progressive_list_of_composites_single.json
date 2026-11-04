@@ -1,0 +1,19 @@
+{
+    "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_of_composites_single[ssz_test]": {
+        "typeName": "SampleBytes32ProgressiveList",
+        "value": {
+            "data": [
+                "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ]
+        },
+        "serialized": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "root": "0xbb93b54e640d8bb22570653bf0423df16e94fb3a1652e9ee7b218e5fa8eaaf5c",
+        "_info": {
+            "hash": "0xd275796e09578ecfb6d9712d820ed1a28ea8fa61c02fe482272c5d8544a64493",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_of_composites_single",
+            "description": "A progressive list holding one composite element round-trips unchanged.\n\n    Given\n    -----\n    - a progressive list with a single 32-byte element.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the element's own root is the only leaf of the first level.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

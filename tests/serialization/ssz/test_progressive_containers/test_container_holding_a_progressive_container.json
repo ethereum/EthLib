@@ -1,0 +1,21 @@
+{
+    "tests/fillers/ssz/test_progressive_containers.py::test_container_holding_a_progressive_container[ssz_test]": {
+        "typeName": "SampleShapeContainer",
+        "value": {
+            "tag": 255,
+            "shape": {
+                "side": 4660,
+                "color": 86
+            }
+        },
+        "serialized": "0xff341256",
+        "root": "0x82a3af75922fff248c6e24745fc37f8946ce3e5af7b8bf4778f297ec48ea533c",
+        "_info": {
+            "hash": "0x7d1763071a09ef0ebca261b2923fef5b2c29afa7fb63b1e75724415ddade766d",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_containers.py::test_container_holding_a_progressive_container",
+            "description": "An ordinary container holding a progressive container round-trips unchanged.\n\n    Given\n    -----\n    - a container with a one-byte tag and a fixed-size progressive container field.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the progressive field inlines, so the container stays fixed-size.\n    - the container merkleizes the field's layout-mixed root as an ordinary leaf.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

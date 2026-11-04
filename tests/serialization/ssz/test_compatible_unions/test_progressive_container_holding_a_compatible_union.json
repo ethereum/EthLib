@@ -1,0 +1,24 @@
+{
+    "tests/fillers/ssz/test_compatible_unions.py::test_progressive_container_holding_a_compatible_union[ssz_test]": {
+        "typeName": "SampleShapeProgressiveContainer",
+        "value": {
+            "tag": 7,
+            "body": {
+                "selector": 1,
+                "data": {
+                    "side": 4660,
+                    "color": 66
+                }
+            }
+        },
+        "serialized": "0x07000000000000000c00000001341242",
+        "root": "0xe1b630215b89c55e14128c249464cb5fc28600b5ea10b96cde48f8a89fd165b0",
+        "_info": {
+            "hash": "0x866335ce262b3ff66b1bdb658d265a74038adc1308d4acddc1c4204d535c5a17",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_compatible_unions.py::test_progressive_container_holding_a_compatible_union",
+            "description": "A progressive container holding a union round-trips unchanged.\n\n    Given\n    -----\n    - a layout with a gap between the tag and the union field.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the gap costs no bytes, so the encoding matches the ordinary container's.\n    - the union's root is the leaf at position 2, under the mixed-in layout word.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

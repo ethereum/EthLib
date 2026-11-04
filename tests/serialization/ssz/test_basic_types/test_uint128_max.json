@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint128_max[ssz_test]": {
+        "typeName": "Uint128",
+        "value": "340282366920938463463374607431768211455",
+        "serialized": "0xffffffffffffffffffffffffffffffff",
+        "root": "0xffffffffffffffffffffffffffffffff00000000000000000000000000000000",
+        "_info": {
+            "hash": "0x845b250d49519bb4565200b8a1eeb9698ba26b7d91be05e623e8248bc65e6030",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint128_max",
+            "description": "A sixteen-byte uint at its upper bound round-trips unchanged.\n\n    Given\n    -----\n    - the largest sixteen-byte uint value (2^128 - 1).\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.\n    - the encoding is sixteen bytes of 0xff.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

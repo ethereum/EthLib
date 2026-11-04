@@ -1,0 +1,21 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint16_vector3_typical[ssz_test]": {
+        "typeName": "SampleUint16Vector3",
+        "value": {
+            "data": [
+                100,
+                200,
+                65535
+            ]
+        },
+        "serialized": "0x6400c800ffff",
+        "root": "0x6400c800ffff0000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0xd91e1181b85d04855a78e3b48a598cb8d56561a90ca5f6c0500cb7c1f7102c9f",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint16_vector3_typical",
+            "description": "A three-element uint vector with mixed values round-trips unchanged.\n\n    Given\n    -----\n    - a vector of three two-byte uints with mixed values.\n    - the last element at the maximum value (65535).\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

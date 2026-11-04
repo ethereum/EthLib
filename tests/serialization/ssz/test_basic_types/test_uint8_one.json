@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint8_one[ssz_test]": {
+        "typeName": "Uint8",
+        "value": "1",
+        "serialized": "0x01",
+        "root": "0x0100000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0xbdaa664820a11e5ace395a800ac0dee7bef028beabaadaa67f99109b912874c4",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint8_one",
+            "description": "The smallest non-zero one-byte uint round-trips unchanged.\n\n    Given\n    -----\n    - the value 1 as a one-byte uint.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

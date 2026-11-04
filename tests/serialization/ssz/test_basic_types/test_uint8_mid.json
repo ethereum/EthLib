@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint8_mid[ssz_test]": {
+        "typeName": "Uint8",
+        "value": "128",
+        "serialized": "0x80",
+        "root": "0x8000000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x094dd342d439f9caea4e60cc919e8fcd795ffe61a7de06e0265647aa51b3f8ee",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint8_mid",
+            "description": "A one-byte uint with its high bit set round-trips unchanged.\n\n    Given\n    -----\n    - the value 128 as a one-byte uint.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

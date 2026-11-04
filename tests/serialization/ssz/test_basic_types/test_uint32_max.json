@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint32_max[ssz_test]": {
+        "typeName": "Uint32",
+        "value": "4294967295",
+        "serialized": "0xffffffff",
+        "root": "0xffffffff00000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x957a44df8036132755d0eab92427b690f787391e5ebb01ead63ec35d6c42713e",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint32_max",
+            "description": "A four-byte uint at its upper bound round-trips unchanged.\n\n    Given\n    -----\n    - the largest four-byte uint value (2^32 - 1).\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

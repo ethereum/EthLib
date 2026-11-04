@@ -1,0 +1,18 @@
+{
+    "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_opens_the_fourth_level[ssz_test]": {
+        "typeName": "SampleLevelBoundary",
+        "value": {
+            "first": 4660,
+            "last": 86
+        },
+        "serialized": "0x341256",
+        "root": "0x4ced50eb70f7547000227b026e875c87dfe4d4daa3be3f308f570268c5a55dc7",
+        "_info": {
+            "hash": "0xcfd60ce5bb97aca8a42ca3860f73a6ca651d650ba166645516edafd3c10c9bca",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_opens_the_fourth_level",
+            "description": "A progressive container whose leaves cross a spine level round-trips unchanged.\n\n    Given\n    -----\n    - a layout of twenty-two positions, two of them occupied.\n    - twenty-two leaves, one past the cumulative capacity of the first three levels.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the width-64 level opens with a single occupant.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

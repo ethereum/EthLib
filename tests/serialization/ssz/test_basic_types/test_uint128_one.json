@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint128_one[ssz_test]": {
+        "typeName": "Uint128",
+        "value": "1",
+        "serialized": "0x01000000000000000000000000000000",
+        "root": "0x0100000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x589f77e16f99cc2628d3848b4ac8e0cb1c1ebbd5f53fbfe970f5be3a7e15f09a",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint128_one",
+            "description": "The smallest non-zero sixteen-byte uint round-trips unchanged.\n\n    Given\n    -----\n    - the value 1 as a sixteen-byte uint.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

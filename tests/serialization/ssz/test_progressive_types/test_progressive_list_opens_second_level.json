@@ -1,0 +1,23 @@
+{
+    "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_opens_second_level[ssz_test]": {
+        "typeName": "SampleUint64ProgressiveList",
+        "value": {
+            "data": [
+                0,
+                1,
+                2,
+                3,
+                4
+            ]
+        },
+        "serialized": "0x00000000000000000100000000000000020000000000000003000000000000000400000000000000",
+        "root": "0xb52da986d8c44ac58d43d54d5a6f27363363ad09e1249d211c38c21c5221e5f4",
+        "_info": {
+            "hash": "0x3702182477c25226fefc2d9d11ee40f1b4ca7e366b51ccd40ae2f63244511f53",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_opens_second_level",
+            "description": "A progressive list one element past the first chunk round-trips unchanged.\n\n    Given\n    -----\n    - a progressive list of five eight-byte elements.\n    - data occupying two chunks, so the four-wide second level opens.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the root pads the second level's lone chunk out to width four.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

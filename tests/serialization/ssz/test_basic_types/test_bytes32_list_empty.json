@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bytes32_list_empty[ssz_test]": {
+        "typeName": "SampleBytes32List8",
+        "value": {
+            "data": []
+        },
+        "serialized": "0x",
+        "root": "0xe8e527e84f666163a90ef900e013f56b0a4d020148b2224057b719f351b003a6",
+        "_info": {
+            "hash": "0xbfe4ab33da31f436d6f0435cb2a3055fbc38725700990d8825afa74190364047",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bytes32_list_empty",
+            "description": "An empty 32-byte-element list round-trips unchanged.\n\n    Given\n    -----\n    - a list of 32-byte elements with no entries.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

@@ -1,0 +1,39 @@
+{
+    "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_opens_third_level[ssz_test]": {
+        "typeName": "SampleUint64ProgressiveList",
+        "value": {
+            "data": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20
+            ]
+        },
+        "serialized": "0x00000000000000000100000000000000020000000000000003000000000000000400000000000000050000000000000006000000000000000700000000000000080000000000000009000000000000000a000000000000000b000000000000000c000000000000000d000000000000000e000000000000000f0000000000000010000000000000001100000000000000120000000000000013000000000000001400000000000000",
+        "root": "0x86a8ce9749021379ba7af31ac5d6f3b33e0e0791a5c9bb2e00580fe8d6aeb117",
+        "_info": {
+            "hash": "0x549a5c158eaa6209abdcb73ebdd7615ec0020513d8d5e86cea8d70122832fd23",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_types.py::test_progressive_list_opens_third_level",
+            "description": "A progressive list one element past the second level round-trips unchanged.\n\n    Given\n    -----\n    - a progressive list of twenty-one eight-byte elements.\n    - data occupying six chunks, so the sixteen-wide third level opens.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the root pads the third level's lone chunk out to width sixteen.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

@@ -1,0 +1,21 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bytes32_list_multiple[ssz_test]": {
+        "typeName": "SampleBytes32List8",
+        "value": {
+            "data": [
+                "0x0101010101010101010101010101010101010101010101010101010101010101",
+                "0x0202020202020202020202020202020202020202020202020202020202020202",
+                "0x0000000000000000000000000000000000000000000000000000000000000000"
+            ]
+        },
+        "serialized": "0x010101010101010101010101010101010101010101010101010101010101010102020202020202020202020202020202020202020202020202020202020202020000000000000000000000000000000000000000000000000000000000000000",
+        "root": "0x7248549abd0a6b2898dc656f323165dd1fd973bb3234727d384b0575fbeaa517",
+        "_info": {
+            "hash": "0x2b441cf7e5f2b244708cfd16c83aa99a620c8ec70527f8a7934fb026c70046de",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bytes32_list_multiple",
+            "description": "A 32-byte-element list with three entries round-trips unchanged.\n\n    Given\n    -----\n    - a list holding three distinct 32-byte elements.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

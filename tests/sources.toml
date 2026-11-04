@@ -66,6 +66,11 @@ commit = "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e"
 release = "tests@v21.0.2"
 directories = ["tests/execution/blocks", "tests/execution/transactions"]
 
+[repositories."ethereum/ssz-specs"]
+commit = "7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70"
+release = "v0.1.0"
+directories = ["tests/serialization/ssz"]
+
 # The pinned vector directories whose cases come from no repository, with their source.
 [other]
 "tests/cryptography/hash_to_curve" = "RFC 9380, Appendices J.10.1, K.1 and K.2"

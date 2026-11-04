@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint256_one[ssz_test]": {
+        "typeName": "Uint256",
+        "value": "1",
+        "serialized": "0x0100000000000000000000000000000000000000000000000000000000000000",
+        "root": "0x0100000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x103d4ec2849ef97caff6162dac154d342f77439e73276b2dc15ada62eef903c7",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint256_one",
+            "description": "The smallest non-zero thirty-two-byte uint round-trips unchanged.\n\n    Given\n    -----\n    - the value 1 as a thirty-two-byte uint.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

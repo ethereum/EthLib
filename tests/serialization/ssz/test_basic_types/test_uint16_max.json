@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint16_max[ssz_test]": {
+        "typeName": "Uint16",
+        "value": "65535",
+        "serialized": "0xffff",
+        "root": "0xffff000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x9a926f0230e4ca24a9338624ada0c81e146bc018db4da1849dac98129607406f",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint16_max",
+            "description": "A two-byte uint at its upper bound round-trips unchanged.\n\n    Given\n    -----\n    - the value 65535 as a two-byte uint.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

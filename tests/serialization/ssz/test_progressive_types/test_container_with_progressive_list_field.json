@@ -1,0 +1,25 @@
+{
+    "tests/fillers/ssz/test_progressive_types.py::test_container_with_progressive_list_field[ssz_test]": {
+        "typeName": "SampleContainerWithProgressiveList",
+        "value": {
+            "a": 43981,
+            "b": {
+                "data": [
+                    1,
+                    2,
+                    3
+                ]
+            },
+            "c": 255
+        },
+        "serialized": "0xcdab07000000ff010000000000000002000000000000000300000000000000",
+        "root": "0x74672f25a9fafa50effa21ab09753b79597c3c84c1d4604aee9d31b3452f7343",
+        "_info": {
+            "hash": "0x7d22b498817dd3080b3be65a7a503232602ee5a603025c8cd4bee9f6bd11f15d",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_types.py::test_container_with_progressive_list_field",
+            "description": "A container embedding a progressive list round-trips unchanged.\n\n    Given\n    -----\n    - a container with a fixed-size field, a progressive list, and another fixed field.\n    - a populated progressive list in the middle position.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the container writes one offset for the variable-size field.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

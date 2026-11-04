@@ -1,0 +1,21 @@
+{
+    "tests/fillers/ssz/test_progressive_types.py::test_container_with_empty_progressive_list_field[ssz_test]": {
+        "typeName": "SampleContainerWithProgressiveList",
+        "value": {
+            "a": 43981,
+            "b": {
+                "data": []
+            },
+            "c": 255
+        },
+        "serialized": "0xcdab07000000ff",
+        "root": "0xc889b4be0e0bca1fe0ffdd0235b1f6b4df7f356f1aa19a2743338a271843057e",
+        "_info": {
+            "hash": "0xf983cbe213d839f3a535e0072421b36a1846b3ed7c1bee622a1bcc937b3108e6",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_types.py::test_container_with_empty_progressive_list_field",
+            "description": "A container embedding an empty progressive list round-trips unchanged.\n\n    Given\n    -----\n    - a container whose progressive list field holds no elements.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the offset points past the end of the fixed part, with no body following it.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

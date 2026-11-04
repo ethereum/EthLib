@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bytes64_typical[ssz_test]": {
+        "typeName": "Bytes64",
+        "value": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+        "serialized": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+        "root": "0xbcc682bf21a9a12a4357a35453d9d87391f3418ca3c2d69f68567c93d3e1d142",
+        "_info": {
+            "hash": "0xecb0f8e9cf78388c962d868786ff6c5f203bd02e50964d96b1e458e4c4088572",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bytes64_typical",
+            "description": "A 64-byte array with uniform content round-trips unchanged.\n\n    Given\n    -----\n    - a 64-byte array of the repeated byte 0xef.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

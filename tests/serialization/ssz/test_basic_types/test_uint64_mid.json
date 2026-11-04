@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_uint64_mid[ssz_test]": {
+        "typeName": "Uint64",
+        "value": "9223372036854775808",
+        "serialized": "0x0000000000000080",
+        "root": "0x0000000000000080000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x45a918908297f6882017a90f66d608ea421949e71806eea6fa859c326b8666f7",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_uint64_mid",
+            "description": "An eight-byte uint with its high bit set round-trips unchanged.\n\n    Given\n    -----\n    - the value 2^63 as an eight-byte uint.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.\n    - the eight-byte little-endian layout is preserved.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

@@ -1,0 +1,21 @@
+{
+    "tests/fillers/ssz/test_progressive_types.py::test_progressive_bitlist_small[ssz_test]": {
+        "typeName": "ProgressiveBitList",
+        "value": {
+            "data": [
+                true,
+                false,
+                true
+            ]
+        },
+        "serialized": "0x0d",
+        "root": "0x45192380e83a4b9ee939ac3836a6dccc51d3451db8886d53668264ea2e2cb877",
+        "_info": {
+            "hash": "0x08efdd2691d7302c89ff31d52e20092a3cddded545c36b7020c581e64a7759b1",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_types.py::test_progressive_bitlist_small",
+            "description": "A short progressive bitlist round-trips unchanged.\n\n    Given\n    -----\n    - a progressive bitlist of three data bits.\n    - a delimiter bit immediately above them in the same byte.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the root hashes one chunk against the terminator and mixes in the bit count.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

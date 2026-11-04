@@ -1,0 +1,20 @@
+{
+    "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_with_empty_variable_field[ssz_test]": {
+        "typeName": "SampleBoundedListField",
+        "value": {
+            "head": 7,
+            "body": {
+                "data": []
+            }
+        },
+        "serialized": "0x07000000000000000c000000",
+        "root": "0xa1e6b73e491b250c41328bbff3f8bc31d3b44f3dd06cbed35ac370a2e386f69d",
+        "_info": {
+            "hash": "0xa41691bebedebdded72993d0d148f1e2b2897701968fedd4f03e5d6da5fc0f32",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_with_empty_variable_field",
+            "description": "A progressive container whose list field is empty round-trips unchanged.\n\n    Given\n    -----\n    - the same shape as above with no list elements at all.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the offset points past the end of the fixed part, with no body following it.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

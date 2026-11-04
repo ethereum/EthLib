@@ -1,0 +1,21 @@
+{
+    "tests/fillers/ssz/test_progressive_containers.py::test_nested_progressive_containers[ssz_test]": {
+        "typeName": "SampleOuterShape",
+        "value": {
+            "head": 1,
+            "inner": {
+                "x": 515,
+                "y": 4
+            }
+        },
+        "serialized": "0x01030204",
+        "root": "0xccf454ac88b0e70221c4458d2df7f53ff547eacfd8d15b00a3077bd611b7f6a1",
+        "_info": {
+            "hash": "0x35709db3852efe4dd44934d2b210a99303c207333ffb5f0520180e38207de44e",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_containers.py::test_nested_progressive_containers",
+            "description": "A progressive container holding another one round-trips unchanged.\n\n    Given\n    -----\n    - an outer layout with a gap, whose second field is a fixed-size progressive container.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the inner shape inlines, since it is fixed-size.\n    - the inner shape's own layout-mixed root is the outer leaf at position 2.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

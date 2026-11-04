@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bytes4_zero[ssz_test]": {
+        "typeName": "Bytes4",
+        "value": "0x00000000",
+        "serialized": "0x00000000",
+        "root": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "_info": {
+            "hash": "0x37f61df52969281becbce121c4aa2344673538823065dfa04372b628e506d087",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bytes4_zero",
+            "description": "A four-byte array of zeros round-trips unchanged.\n\n    Given\n    -----\n    - a four-byte array of all-zero bytes.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

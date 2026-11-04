@@ -1,0 +1,15 @@
+{
+    "tests/fillers/ssz/test_basic_types.py::test_bytes52_typical[ssz_test]": {
+        "typeName": "Bytes52",
+        "value": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+        "serialized": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+        "root": "0xc55931499577f470f743e23c7a02fbb6422a88a12954870d9509e3e70263de96",
+        "_info": {
+            "hash": "0x8cda70dc6cb5b2c7943c8ed1a56695cdcdbaa5c625f3fd04c6b6713d3a2c62c6",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_basic_types.py::test_bytes52_typical",
+            "description": "A 52-byte array with uniform content round-trips unchanged.\n\n    Given\n    -----\n    - a 52-byte array of the repeated byte 0xcd.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}

@@ -1,0 +1,17 @@
+{
+    "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_leading_gaps[ssz_test]": {
+        "typeName": "SampleLeadingGaps",
+        "value": {
+            "c": 287454020
+        },
+        "serialized": "0x44332211",
+        "root": "0xee417c8b5e7a3051945e454ee09fc3e3b32a26352332a2d669a8912bcf4383d2",
+        "_info": {
+            "hash": "0x9ce900f733005e28d6a4efff6d87c6d275a3a23954115595a8968c249eec0274",
+            "comment": "`ssz-specs` generated test",
+            "testId": "tests/fillers/ssz/test_progressive_containers.py::test_progressive_container_leading_gaps",
+            "description": "A progressive container behind two leading gaps round-trips unchanged.\n\n    Given\n    -----\n    - a layout whose first two positions are cleared.\n    - a four-byte field at position 2.\n\n    When\n    ----\n    - the value is encoded and then decoded.\n\n    Then\n    ----\n    - the encoding is the field alone, since gaps take no bytes.\n    - the first two leaves of the tree are zero chunks.\n    - the decoded value equals the original.",
+            "fixtureFormat": "ssz_test"
+        }
+    }
+}
