@@ -26,8 +26,8 @@ directories = ["tests/cryptography/bls"]
 [repositories."C2SP/wycheproof"]
 commit = "d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9"
 directories = [
-  "bindings/python/tests/aes/wycheproof", "tests/cryptography/secp256k1",
-  "tests/cryptography/secp256r1",
+  "bindings/python/tests/aes/wycheproof", "bindings/python/tests/hmac_kdf/wycheproof",
+  "tests/cryptography/secp256k1", "tests/cryptography/secp256r1",
 ]
 
 [repositories."BLAKE2/BLAKE2"]
