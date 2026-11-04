@@ -71,10 +71,11 @@ py_hkdf_sha256(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *salt_obj, *ikm_obj, *info_obj;
-  unsigned long long length;
-  /* `K` reads an unsigned 64-bit int; Lean rejects a length above 255 * 32. */
-  if (!PyArg_ParseTuple(args, "OOOK", &salt_obj, &ikm_obj, &info_obj, &length)) return NULL;
+  PyObject *salt_obj, *ikm_obj, *info_obj, *length_obj;
+  if (!PyArg_ParseTuple(args, "OOOO", &salt_obj, &ikm_obj, &info_obj, &length_obj)) return NULL;
+  /* A length outside [0, 2^64) raises OverflowError; Lean rejects one above 255 * 32. */
+  unsigned long long length = PyLong_AsUnsignedLongLong(length_obj);
+  if (PyErr_Occurred()) return NULL;
   lean_object *salt, *ikm, *info;
   if (parse_bytes(salt_obj, "salt", &salt)) return NULL;
   if (parse_bytes(ikm_obj, "ikm", &ikm)) { lean_dec(salt); return NULL; }
@@ -88,9 +89,11 @@ py_concat_kdf_sha256(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *z_obj, *info_obj;
-  unsigned long long length;
-  if (!PyArg_ParseTuple(args, "OOK", &z_obj, &info_obj, &length)) return NULL;
+  PyObject *z_obj, *info_obj, *length_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &z_obj, &info_obj, &length_obj)) return NULL;
+  /* A length outside [0, 2^64) raises OverflowError. */
+  unsigned long long length = PyLong_AsUnsignedLongLong(length_obj);
+  if (PyErr_Occurred()) return NULL;
   lean_object *z, *info;
   if (parse_bytes(z_obj, "z", &z)) return NULL;
   if (parse_bytes(info_obj, "fixed_info", &info)) { lean_dec(z); return NULL; }

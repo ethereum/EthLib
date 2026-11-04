@@ -88,3 +88,10 @@ def test_proof_of_possession(sk: int) -> None:
     # A signature on the public key under the signing DST is not a proof.
     assert not bls.pop_verify(F.sk_to_pk(sk), ref_bls.Sign(sk, F.sk_to_pk(sk)))
     assert not bls.pop_verify(F.sk_to_pk(sk + 1), proof)
+
+
+@pytest.mark.parametrize("length", [-1, 2**64, 2**64 + 32])
+def test_expand_message_xmd_length_out_of_range(length: int) -> None:
+    # A length that does not fit in 64 bits is an error, not a length modulo 2^64.
+    with pytest.raises(OverflowError):
+        bls.expand_message_xmd(b"msg", b"dst", length)

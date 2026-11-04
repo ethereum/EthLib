@@ -57,13 +57,8 @@ py_eth_fast_aggregate_verify(
   }
   Py_ssize_t n;
   uint8_t* pks = pack_bytes_sequence(pubkeys_obj, BYTES_PER_PUBKEY, &n, "pubkey");
-  if (!pks && PyErr_Occurred()) return NULL;
-  /* `pack_bytes_sequence` returns NULL with no error on an empty sequence. */
-  if (!pks) {
-    pks = (uint8_t*) PyMem_Malloc(1);
-    if (!pks) return PyErr_NoMemory();
-    n = 0;
-  }
+  /* An empty sequence gives a valid buffer with `n = 0`, so NULL always means an error. */
+  if (!pks) return NULL;
 
   Py_ssize_t msg_len = PyBytes_GET_SIZE(msg_obj);
   Py_ssize_t sig_len = PyBytes_GET_SIZE(sig_obj);
@@ -308,9 +303,11 @@ py_bls_expand_message_xmd(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *msg_obj, *dst_obj;
-  unsigned long long len;
-  if (!PyArg_ParseTuple(args, "OOK", &msg_obj, &dst_obj, &len)) return NULL;
+  PyObject *msg_obj, *dst_obj, *len_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &msg_obj, &dst_obj, &len_obj)) return NULL;
+  /* A length outside [0, 2^64) raises OverflowError. */
+  unsigned long long len = PyLong_AsUnsignedLongLong(len_obj);
+  if (PyErr_Occurred()) return NULL;
   lean_object *msg, *dst;
   if (parse_bytes(msg_obj, "message", &msg)) return NULL;
   if (parse_bytes(dst_obj, "dst", &dst)) { lean_dec(msg); return NULL; }
