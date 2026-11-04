@@ -190,6 +190,9 @@ PyObject* py_modexp_gas_cost                              (PyObject* self, PyObj
 PyObject* py_sha256                                       (PyObject* self, PyObject* args);
 PyObject* py_keccak256                                    (PyObject* self, PyObject* args);
 PyObject* py_keccak_f1600                                 (PyObject* self, PyObject* args);
+PyObject* py_vrf_verify                                   (PyObject* self, PyObject* args);
+PyObject* py_vrf_secret                                   (PyObject* self, PyObject* args);
+PyObject* py_vrf_evaluate                                 (PyObject* self, PyObject* args);
 PyObject* py_crc32c                                      (PyObject* self, PyObject* args);
 PyObject* py_hmac_sha256                                 (PyObject* self, PyObject* args);
 PyObject* py_hkdf_sha256                                 (PyObject* self, PyObject* args);

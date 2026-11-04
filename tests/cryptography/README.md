@@ -88,6 +88,13 @@ ETHLIB_SLOW_VECTORS=1 uv run --no-sync pytest bindings/python/tests/sphincs
 `verify_valid_scheme_seed` holds a public key and a signature that an independent implementation computed.
 The other cases come from the code under test.
 
+## VRF tree
+
+The `vrf/` cases are pinned too.
+Every pytest run rewrites them, and `SHA256SUMS` pins the tree.
+The two valid openings, and the secrets and outputs of one seed, come from an independent implementation of the specification.
+The rejections come from the code under test.
+
 ## SHA-256
 
 The `sha256/` cases are pinned too.
