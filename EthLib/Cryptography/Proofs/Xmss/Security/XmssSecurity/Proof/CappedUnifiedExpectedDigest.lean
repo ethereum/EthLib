@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedEncodingExpectedBound
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedUnifiedStructuralCollision
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ExactKeygenQueryCount
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.AfterKeygenQueryBound
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LossDecomposition
 
 @[expose] public section
