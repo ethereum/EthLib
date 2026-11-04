@@ -513,6 +513,8 @@ static PyMethodDef methods[] = {
   {"rlp_encode", py_rlp_encode, METH_VARARGS, NULL},
   {"rlp_decode", py_rlp_decode, METH_VARARGS, NULL},
   {"rlp_decode_as", py_rlp_decode_as, METH_VARARGS, NULL},
+  {"rlpx_ecies_encrypt", py_rlpx_ecies_encrypt, METH_VARARGS, NULL},
+  {"rlpx_ecies_decrypt", py_rlpx_ecies_decrypt, METH_VARARGS, NULL},
   {"precompile_run", py_precompile_run, METH_VARARGS, NULL},
   {"state_root", py_state_root, METH_VARARGS, NULL},
   {NULL, NULL, 0, NULL},

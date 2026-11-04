@@ -223,6 +223,9 @@ PyObject* py_rlp_encode                                   (PyObject* self, PyObj
 PyObject* py_rlp_decode                                   (PyObject* self, PyObject* args);
 PyObject* py_rlp_decode_as                                (PyObject* self, PyObject* args);
 
+PyObject* py_rlpx_ecies_encrypt                           (PyObject* self, PyObject* args);
+PyObject* py_rlpx_ecies_decrypt                           (PyObject* self, PyObject* args);
+
 PyObject* py_precompile_run                               (PyObject* self, PyObject* args);
 
 PyObject* py_state_root                                   (PyObject* self, PyObject* args);
