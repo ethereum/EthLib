@@ -77,11 +77,13 @@ An opening also travels as bytes (`Serialization.lean`).
 Decoding succeeds exactly on strings of 1056 bytes, and on those strings encoding and decoding are inverse bijections.
 Verification over bytes rejects a root that is not 32 bytes, an opening that is not 1056 bytes, and an index outside `[0, 2^32)`.
 
-Finally, known answers pin the definitions to concrete values (`KnownAnswerZero.lean`, `KnownAnswerLast.lean`).
+## Test vectors
+
+`tests/cryptography/vrf/` has cases for `verify`, `secret` and `evaluate`, which the Python suite checks through the bindings.
 One opening at index 0 and one at index `2^32 - 1` verify, with their outputs.
 Each is rejected with a wrong secret, with a wrong sibling, and at another index.
 The roots and outputs were computed outside EthLib, by an independent implementation of this specification.
-The secrets and outputs of one seed at the same two indices were computed outside EthLib too (`KnownAnswerSecret.lean`).
+The secrets and outputs of one seed at the same two indices were computed outside EthLib too.
 
 ## What is not proved
 
