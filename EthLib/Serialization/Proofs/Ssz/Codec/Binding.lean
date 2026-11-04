@@ -6,7 +6,11 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.BindingLayoutInjectivity
 public import EthLib.Serialization.Proofs.Ssz.Codec.BindingLeaves
 public import EthLib.Serialization.Proofs.Ssz.Codec.BindingShape
 
-/-! Whole-value binding reduces conflicting same-type SSZ commitments to a concrete SHA-256 collision. -/
+/-!
+Two values of one type with one root are equal, or a search finds a SHA-256 collision.
+
+The search reads only the hash inputs of the two root computations.
+-/
 
 @[expose] public section
 
@@ -76,9 +80,13 @@ theorem valueTreeAt_eq_of_noCollision (budget : Nat) {shape : Desc} {left right 
     exact otherLaid.trans (congrArg Except.ok layouts.symm)
 
 /--
-Conflicting values of the same well-formed type expose a collision in their expanded SSZ computations.
+Two values of one well-formed type with one root are equal, or a search finds a collision.
+
+The search compares the hash inputs of the two root computations.
+
+It returns two different 64-byte inputs with one SHA-256 digest, one hashed in each computation.
+
 Every nested variable-size count must fit its 256-bit mixing word.
-The witnesses are distinct 64-byte inputs with the same SHA-256 digest.
 -/
 theorem hashTreeRoot_binding {shape : Desc} {left right : Value} {root : Bytes}
     (sound : shape.wellFormed = .ok ()) (leftFits : Fits shape left) (rightFits : Fits shape right)
@@ -87,23 +95,25 @@ theorem hashTreeRoot_binding {shape : Desc} {left right : Value} {root : Bytes}
     (second : hashTreeRoot shape right = .ok root) :
     left = right ∨ ∃ leftTree rightTree,
       valueTree shape left = .ok leftTree ∧ valueTree shape right = .ok rightTree ∧
-      ∃ a ∈ leftTree.messages, ∃ b ∈ rightTree.messages,
-        a.size = 2 * bytesPerChunk ∧ b.size = 2 * bytesPerChunk ∧ a ≠ b ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk a) = Cryptography.Hash.Sha256.hash (ByteArray.mk b) := by
+      ∃ a b, findMessageCollision leftTree.messages rightTree.messages = some (a, b) ∧
+        a ∈ leftTree.messages ∧ b ∈ rightTree.messages ∧ MessageCollision a b := by
   -- Expand both executable roots into finite computations with the same results.
   obtain ⟨leftTree, leftTrace, leftRoot, leftComplete⟩ := valueTree_of_hashTreeRoot _ _ _ first
   obtain ⟨rightTree, rightTrace, rightRoot, rightComplete⟩ := valueTree_of_hashTreeRoot _ _ _ second
-  -- Either the computations contain a conflicting hash pair, or structural recovery gives equal values.
-  by_cases clean : NoCollision leftTree rightTree
-  · exact .inl (valueTreeAt_eq_of_noCollision shape.nesting (Nat.le_refl _) sound
-      leftFits rightFits leftSized rightSized leftTrace rightTrace clean
+  cases found : findMessageCollision leftTree.messages rightTree.messages with
+  | none =>
+    -- No collision between the computations: structural recovery gives equal values.
+    refine .inl (valueTreeAt_eq_of_noCollision shape.nesting (Nat.le_refl _) sound
+      leftFits rightFits leftSized rightSized leftTrace rightTrace ?_
       (leftRoot.trans rightRoot.symm))
-  · -- The collision witnesses come from the two computations rather than unrelated SHA-256 inputs.
-    obtain ⟨a, aMember, b, bMember, different, hashed⟩ : Collision leftTree rightTree :=
-      Classical.not_not.mp clean
-    -- Each witnessed message concatenates two 32-byte child nodes.
-    exact .inr ⟨leftTree, rightTree, leftTrace, rightTrace, a, aMember, b, bMember,
-      messages_size leftTree leftComplete a aMember,
-      messages_size rightTree rightComplete b bMember, different, hashed⟩
+    -- Every message of a complete computation has 64 bytes, so the search would see a collision.
+    rintro ⟨a, aMember, b, bMember, different, hashed⟩
+    exact findMessageCollision_eq_none_iff.mp found a aMember b bMember
+      ⟨messages_size leftTree leftComplete a aMember,
+        messages_size rightTree rightComplete b bMember, different, hashed⟩
+  | some pair =>
+    -- The search names the collision, with one message from each computation.
+    exact .inr ⟨leftTree, rightTree, leftTrace, rightTrace, pair.1, pair.2, found,
+      findMessageCollision_valid found⟩
 
 end EthLib.Serialization.Ssz

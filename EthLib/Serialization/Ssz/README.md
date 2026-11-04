@@ -145,10 +145,12 @@ The binding results show that a dishonest proof cannot verify unless SHA-256 has
 
 Two accepted branches at the same index and root open the same leaf, or `findBranchCollision` returns a collision ([authentication](../Proofs/Ssz/Merkle/Authentication.lean)).
 That collision is two 64-byte messages with one SHA-256 hash, each one hashed along its own branch.
-[Multiproof binding](../Proofs/Ssz/Merkle/MultiproofBinding.lean) gives the same guarantee for shared claims across different requests, with collision witnesses taken from the verifier's hash inputs.
+By [multiproof binding](../Proofs/Ssz/Merkle/MultiproofBinding.lean), two accepted requests for one root agree on every position they both claim, or a search returns a collision.
+The search tries every 64-byte input one verifier hashes against every input the other hashes.
 
 [Whole-value binding](../Proofs/Ssz/Codec/Binding.lean) lifts this to values.
-Admissible values of the same well-formed type with equal roots are equal, or their Merkle computations contain distinct 64-byte inputs with equal SHA-256 hashes.
+Admissible values of the same well-formed type with equal roots are equal, or the same search returns a collision.
+There it compares the hash inputs of the two root computations.
 It requires [CommitmentSized](../Proofs/Ssz/Codec/BindingDomain.lean), that every nested variable collection count fit its 256-bit mixing word.
 The proof recovers lengths, selectors, packed data, and nested values, and callers supply no assumption about tree alignment.
 

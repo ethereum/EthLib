@@ -41,9 +41,11 @@ theorem hashTreeRoot_total (a : α) : ∃ root, hashTreeRoot a = .ok root := by
   exact ⟨⟨root, width⟩, hashTreeRoot_ok_iff.mpr rooted⟩
 
 /--
-Two values with one root are equal, or their root computations contain a SHA-256 collision.
+Two values with one root are equal, or a search finds a SHA-256 collision.
 
-The collision is two distinct 64-byte messages, one hashed in each computation.
+The search compares the hash inputs of the two root computations.
+
+It returns two different 64-byte messages with one digest, one hashed in each computation.
 
 Every variable-size count in either value must fit the 256-bit word mixed into its root.
 -/
@@ -54,10 +56,8 @@ theorem hashTreeRoot_binding {a b : α} {root : Vector UInt8 32}
     a = b ∨ ∃ leftTree rightTree,
       valueTree (desc α) (toValue a) = .ok leftTree ∧
       valueTree (desc α) (toValue b) = .ok rightTree ∧
-      ∃ x ∈ leftTree.messages, ∃ y ∈ rightTree.messages,
-        x.size = 2 * bytesPerChunk ∧ y.size = 2 * bytesPerChunk ∧ x ≠ y ∧
-        Cryptography.Hash.Sha256.hash (ByteArray.mk x) =
-          Cryptography.Hash.Sha256.hash (ByteArray.mk y) := by
+      ∃ x y, findMessageCollision leftTree.messages rightTree.messages = some (x, y) ∧
+        x ∈ leftTree.messages ∧ y ∈ rightTree.messages ∧ MessageCollision x y := by
   rcases Ssz.hashTreeRoot_binding LawfulSszType.wellFormed (LawfulSszType.fits a)
       (LawfulSszType.fits b) leftSized rightSized (hashTreeRoot_ok_iff.mp left)
       (hashTreeRoot_ok_iff.mp right) with same | collision

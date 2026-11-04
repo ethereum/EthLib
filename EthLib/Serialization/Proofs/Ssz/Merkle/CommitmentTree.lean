@@ -17,6 +17,78 @@ inductive CommitmentTree where
   | fork (left right : CommitmentTree)
   deriving DecidableEq
 
+/-- Two different 64-byte messages with one SHA-256 digest: a collision of the node hash. -/
+def MessageCollision (a b : Bytes) : Prop :=
+  a.size = 2 * bytesPerChunk ∧ b.size = 2 * bytesPerChunk ∧ a ≠ b ∧
+    Cryptography.Hash.Sha256.hash (ByteArray.mk a) = Cryptography.Hash.Sha256.hash (ByteArray.mk b)
+
+instance (a b : Bytes) : Decidable (MessageCollision a b) := by
+  unfold MessageCollision
+  infer_instance
+
+/-- The first collision between a message of one list and a message of the other, if any.
+
+It tries each message of the first list in order, against each message of the second. -/
+def findMessageCollision : List Bytes → List Bytes → Option (Bytes × Bytes)
+  | [], _ => none
+  | a :: left, right =>
+    match right.find? fun b => decide (MessageCollision a b) with
+    | some b => some (a, b)
+    | none => findMessageCollision left right
+
+/-- The search returns a collision, with one message from each list. -/
+theorem findMessageCollision_valid :
+    ∀ {left right : List Bytes} {a b : Bytes}, findMessageCollision left right = some (a, b) →
+      a ∈ left ∧ b ∈ right ∧ MessageCollision a b
+  | [], _, _, _, found => by cases found
+  | c :: left, right, a, b, found => by
+    unfold findMessageCollision at found
+    split at found
+    · -- The first message collides with a message of the other list.
+      rename_i other hfind
+      cases found
+      have hother := List.find?_some hfind
+      exact ⟨List.mem_cons_self, List.mem_of_find?_eq_some hfind, of_decide_eq_true hother⟩
+    · -- The collision starts later in the first list.
+      obtain ⟨member, rest⟩ := findMessageCollision_valid found
+      exact ⟨List.mem_cons_of_mem _ member, rest⟩
+
+/-- The search comes back empty exactly when no two messages of the lists collide. -/
+theorem findMessageCollision_eq_none_iff :
+    ∀ {left right : List Bytes}, findMessageCollision left right = none ↔
+      ∀ a ∈ left, ∀ b ∈ right, ¬ MessageCollision a b
+  | [], _ => by simp [findMessageCollision]
+  | c :: left, right => by
+    unfold findMessageCollision
+    split
+    · -- A collision of the first message makes the search return it.
+      rename_i other hfind
+      have hother := List.find?_some hfind
+      simp only [reduceCtorEq, false_iff]
+      exact fun clean => clean c List.mem_cons_self other (List.mem_of_find?_eq_some hfind)
+        (of_decide_eq_true hother)
+    · rename_i hfind
+      rw [findMessageCollision_eq_none_iff]
+      simp only [List.mem_cons, forall_eq_or_imp, iff_and_self]
+      intro _ b member
+      simpa using List.find?_eq_none.mp hfind b member
+
+/-- Any collision between the two lists makes the search return one. -/
+theorem findMessageCollision_of_collision {left right : List Bytes} {a b : Bytes}
+    (aMember : a ∈ left) (bMember : b ∈ right) (collision : MessageCollision a b) :
+    ∃ a b, findMessageCollision left right = some (a, b) := by
+  cases found : findMessageCollision left right with
+  | none => exact absurd collision (findMessageCollision_eq_none_iff.mp found a aMember b bMember)
+  | some pair => exact ⟨pair.1, pair.2, rfl⟩
+
+/-- A list with no collision among its own messages yields none against itself.
+
+So the search can fail, and a theorem that returns it is not true by default. -/
+theorem findMessageCollision_self {messages : List Bytes}
+    (clean : ∀ a ∈ messages, ∀ b ∈ messages, ¬ MessageCollision a b) :
+    findMessageCollision messages messages = none :=
+  findMessageCollision_eq_none_iff.mpr clean
+
 namespace CommitmentTree
 
 /-- Execute precisely the binary hashes recorded by the tree. -/
