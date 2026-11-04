@@ -96,9 +96,37 @@ jobs:
           name: sdist
           path: dist/*.tar.gz
 
+  manifest:
+    name: release manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.13.6"
+          enable-cache: false
+
+      # pyproject.toml and lakefile.lean must declare one version, and a tag must be v<version>.
+      - name: check the version and write the manifest
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          args=(--check --output release-manifest.json)
+          if [ -n "$TAG" ]; then args+=(--tag "$TAG"); fi
+          uv run --no-project --python 3.12 python scripts/release_manifest.py "${args[@]}"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-manifest
+          path: release-manifest.json
+
   publish:
     name: publish to PyPI
-    needs: [build_wheels, build_sdist]
+    needs: [build_wheels, build_sdist, manifest]
     runs-on: ubuntu-latest
     # Only publish on a real tag push, not a manual dispatch.
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
@@ -118,3 +146,27 @@ jobs:
         with:
           subject-path: dist/*
       - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+
+  release:
+    name: attach the manifest to the GitHub release
+    needs: [manifest, publish]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-manifest
+
+      # Create the release of the tag if it does not exist yet, then attach the manifest.
+      - name: attach the manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view "$TAG" --repo "$REPO" > /dev/null; then
+            gh release create "$TAG" --repo "$REPO" --verify-tag --title "$TAG" --notes ""
+          fi
+          gh release upload "$TAG" release-manifest.json --repo "$REPO" --clobber
