@@ -74,6 +74,7 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.Totality
 public import EthLib.Serialization.Proofs.Ssz.Codec.WalkerClosure
 public import EthLib.Serialization.Proofs.Ssz.Codec.WalkerLaws
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Authentication
+public import EthLib.Serialization.Proofs.Ssz.Merkle.Branch
 public import EthLib.Serialization.Proofs.Ssz.Merkle.CommitmentTree
 public import EthLib.Serialization.Proofs.Ssz.Merkle.ClaimChecks
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Gindex
@@ -102,6 +103,7 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
 public import EthLib.Serialization.Proofs.Ssz.Typed.Container
 public import EthLib.Serialization.Proofs.Ssz.Typed.Root
+public import EthLib.Serialization.Proofs.Ssz.Typed.Gindex
 public import EthLib.Serialization.Proofs.Ssz.Typed.KnownAnswers
 
 /-!
