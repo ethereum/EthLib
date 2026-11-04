@@ -50,7 +50,7 @@ Each domain's proof tree is a root, so its modules belong here and not to `EthLi
 lean_lib «Proofs» where
   requiresModuleSystem := true
   roots := #[`EthLib.Proofs, `EthLib.Serialization.Proofs, `EthLib.Cryptography.Proofs, `EthLib.Networking.Proofs,
-    `EthLib.Execution.Proofs, `EthLib.Base.Proofs]
+    `EthLib.Execution.Proofs, `EthLib.Consensus.Proofs, `EthLib.Base.Proofs]
   precompileModules := false
   platformIndependent := true
 
