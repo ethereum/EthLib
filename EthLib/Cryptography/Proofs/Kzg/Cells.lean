@@ -166,8 +166,7 @@ theorem verifyCellKzgProofBatchImpl_duplicateCommitments (setup : TrustedSetup)
     (hcoset : cosetsEvals.size = commitmentIndices.size)
     (hproof : proofs.size = commitmentIndices.size)
     (hcidx : commitmentIndices.any (· ≥ commitments.size) = false)
-    (h : (Array.range commitments.size).any
-      (fun i => commitments.idxOf? commitments[i]! ≠ some i) = true) :
+    (h : commitments.zipIdx.any (fun (c, i) => commitments.idxOf? c ≠ some i) = true) :
     verifyCellKzgProofBatchImpl setup commitments commitmentIndices cellIndices
         cosetsEvals proofs
       = throw .duplicateCommitments := by

@@ -108,15 +108,16 @@ def computeQuotientEvalWithinDomain
   -- One batch inversion gives every `1 / (z * (z - omega_i))`.
   -- The skipped term has denominator zero, which inverts to zero and is never read.
   let inverses := Fr.batchInverse (domain.map fun omega_i => z * (z - omega_i))
-  (Array.range domain.size).foldl (init := Fr.zero) fun result i =>
-    let omega_i := domain[i]!
-    if omega_i == z then
-      result
-    else
-      let f_i := polynomial[i]! - y
-      let numerator := f_i * omega_i
-      -- Here `z` is in the domain, so `z ≠ 0`, and the skip gives `omega_i ≠ z`.
-      result + numerator * inverses[i]!
+  -- The caller passes 4096 values, so the zip drops no entry.
+  ((domain.zip polynomial).zip inverses).foldl (init := Fr.zero)
+    fun result ((omega_i, p_i), inverse_i) =>
+      if omega_i == z then
+        result
+      else
+        let f_i := p_i - y
+        let numerator := f_i * omega_i
+        -- Here `z` is in the domain, so `z ≠ 0`, and the skip gives `omega_i ≠ z`.
+        result + numerator * inverse_i
 
 /-- Returns the KZG proof at `z` and the evaluation `y = p(z)`. -/
 def computeKzgProofImpl (setup : TrustedSetup)
@@ -132,15 +133,14 @@ def computeKzgProofImpl (setup : TrustedSetup)
   let denominatorPoly := domain.map (· - z)
   let inverses := Fr.batchInverse denominatorPoly
 
-  -- Quotient polynomial directly in evaluation form.
-  let quotient : Array Fr := Array.ofFn (n := FIELD_ELEMENTS_PER_BLOB) fun i =>
-    let a := polynomialShifted[i.val]!
-    let b := denominatorPoly[i.val]!
-    if b.isZero then
-      -- z lands on a root of unity; use the special-case formula.
-      computeQuotientEvalWithinDomain domain[i.val]! polynomial y
-    else
-      a * inverses[i.val]!
+  -- The quotient in evaluation form, over the 4096 values that the evaluation above checked.
+  let quotient : Array Fr :=
+    (domain.zip (polynomialShifted.zip inverses)).map fun (omega_i, a, inverse_i) =>
+      if (omega_i - z).isZero then
+        -- `z` is the root of unity `omega_i`, so the special formula applies.
+        computeQuotientEvalWithinDomain omega_i polynomial y
+      else
+        a * inverse_i
 
   let proofG1 ← g1LincombPoints g1LagrangeBrp quotient
   return (compressG1 proofG1, y)
@@ -202,30 +202,34 @@ def verifyKzgProofBatch (setup : TrustedSetup)
     throw (.inputLengthMismatch "ys" commitments.size ys.size)
   if proofs.size ≠ commitments.size then
     throw (.inputLengthMismatch "proofs" commitments.size proofs.size)
+  if commitmentsG1.size ≠ commitments.size then
+    throw (.inputLengthMismatch "commitmentsG1" commitments.size commitmentsG1.size)
+  if proofsG1.size ≠ commitments.size then
+    throw (.inputLengthMismatch "proofsG1" commitments.size proofsG1.size)
 
-  -- Random challenge: deterministic via Fiat-Shamir.
+  -- The Fiat-Shamir challenge, over arrays of one length, so no zip drops an entry.
   let degreePoly := intToBytesBE FIELD_ELEMENTS_PER_BLOB 8
   let numCommitments := intToBytesBE commitments.size 8
-  let data := (Array.range commitments.size).foldl
+  let data := ((commitments.zip zs).zip (ys.zip proofs)).foldl
     (init := RANDOM_CHALLENGE_KZG_BATCH_DOMAIN ++ degreePoly ++ numCommitments)
-    fun data i => data
-        ++ ⟨commitments[i]!.toArray⟩
-        ++ ⟨(blsFieldToBytes zs[i]!).toArray⟩
-        ++ ⟨(blsFieldToBytes ys[i]!).toArray⟩
-        ++ ⟨proofs[i]!.toArray⟩
+    fun data ((commitment, z), (y, proof)) => data
+        ++ ⟨commitment.toArray⟩
+        ++ ⟨(blsFieldToBytes z).toArray⟩
+        ++ ⟨(blsFieldToBytes y).toArray⟩
+        ++ ⟨proof.toArray⟩
   let r := Fr.hashToBlsField data
   let rPowers := computePowers r commitments.size
 
   -- proof_lincomb = Σ_i r^i · proof_i
   let proofLincombG1 ← g1LincombPoints proofsG1 rPowers
   -- proof_z_lincomb = Σ_i (z_i · r^i) · proof_i
-  let zRPowers := Array.ofFn (n := zs.size) fun i => zs[i.val]! * rPowers[i.val]!
+  let zRPowers := Array.zipWith (· * ·) zs rPowers
   let proofZLincombG1 ← g1LincombPoints proofsG1 zRPowers
 
   -- C_minus_ys[i] = commitment_i - [y_i]
-  let cMinusYs : Array G1 := Array.ofFn (n := commitments.size) fun i =>
-    Bls.G1.add commitmentsG1[i.val]!
-               (Bls.G1.mul Bls.G1.generator (-ys[i.val]!))
+  let cMinusYs : Array G1 := Array.zipWith
+    (fun commitmentG1 y => Bls.G1.add commitmentG1 (Bls.G1.mul Bls.G1.generator (-y)))
+    commitmentsG1 ys
   let cMinusYLincombG1 ← g1LincombPoints cMinusYs rPowers
 
   let s := setup.g2Monomial[1]'(by decide)
@@ -281,14 +285,13 @@ def verifyBlobKzgProofBatch (setup : TrustedSetup)
   if proofsBytes.size ≠ blobs.size then
     throw (.inputLengthMismatch "proofsBytes" blobs.size proofsBytes.size)
 
+  -- The three arrays have one length here, so the zip drops no entry.
   let (commitments, commitmentsG1, challenges, ys, proofs, proofsG1) ←
-    (Array.range blobs.size).foldlM
+    (blobs.zip (commitmentsBytes.zip proofsBytes)).zipIdx.foldlM
       (init := ((#[] : Array KZGCommitment), (#[] : Array G1), (#[] : Array Fr),
                 (#[] : Array Fr), (#[] : Array KZGProof), (#[] : Array G1)))
-      fun (commitments, commitmentsG1, challenges, ys, proofs, proofsG1) i => do
-        let blob := blobs[i]!
-        let cb := commitmentsBytes[i]!
-        let pb := proofsBytes[i]!
+      fun (commitments, commitmentsG1, challenges, ys, proofs, proofsG1)
+          ((blob, cb, pb), i) => do
         let commitmentG1 ← match validateKzgG1Point cb with
                            | .ok c    => pure c
                            | .error _ => throw (.invalidCommitment (some i))

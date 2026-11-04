@@ -195,12 +195,14 @@ def computeVerifyCellKzgProofBatchChallenge
     ++ intToBytesBE commitments.size 8
     ++ intToBytesBE cellIndices.size 8
   let h := commitments.foldl (init := h) fun h c => h ++ ⟨c.toArray⟩
-  let h := (Array.range cosetsEvals.size).foldl (init := h) fun h k =>
-    let h := h ++ intToBytesBE commitmentIndices[k]! 8
-    let h := h ++ intToBytesBE cellIndices[k]! 8
-    let h := cosetsEvals[k]!.foldl (init := h) fun h ce =>
+  -- One entry per cell, from four arrays of one length, which the callers check.
+  let cells := (commitmentIndices.zip cellIndices).zip (cosetsEvals.zip proofs)
+  let h := cells.foldl (init := h) fun h ((commitmentIndex, cellIndex), (evals, proof)) =>
+    let h := h ++ intToBytesBE commitmentIndex 8
+    let h := h ++ intToBytesBE cellIndex 8
+    let h := evals.foldl (init := h) fun h ce =>
       h ++ ⟨(blsFieldToBytes ce).toArray⟩
-    h ++ ⟨proofs[k]!.toArray⟩
+    h ++ ⟨proof.toArray⟩
   Fr.hashToBlsField h
 
 /-- Verify that a set of cells belong to their commitments, given distinct commitments.
@@ -228,8 +230,7 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
   if commitmentIndices.any (· ≥ commitments.size) then
     throw .commitmentIndexOutOfBounds
   -- The commitments list must contain no duplicates
-  if (Array.range commitments.size).any
-      (fun i => commitments.idxOf? commitments[i]! ≠ some i) then
+  if commitments.zipIdx.any (fun (c, i) => commitments.idxOf? c ≠ some i) then
     throw .duplicateCommitments
 
   -- The verification equation that we will check is pairing (LL, LR) = pairing (RL, [1]), where
@@ -268,14 +269,10 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
   -- Step 3: LR = [s^n].
   let lr : G2 := setup.g2Monomial[FIELD_ELEMENTS_PER_CELL]'(by decide)
 
-  -- Step 4.1: weights[i] = Σ_{k : commitmentIndices[k] = i} r^k.
-  -- Note: we do that by iterating over all k and updating the correct
-  -- weights[i] accordingly.
-  let weights : Array Fr := (Array.range numCells).foldl
+  -- Step 4.1: weights[i] = Σ_{k : commitmentIndices[k] = i} r^k, each index checked above.
+  let weights : Array Fr := (commitmentIndices.zip rPowers).foldl
     (init := Array.replicate numCommitments Fr.zero)
-    fun weights k =>
-      let i := commitmentIndices[k]!
-      weights.set! i (weights[i]! + rPowers[k]!)
+    fun weights (i, rPower) => weights.modify i (· + rPower)
 
   -- Step 4.1b: RLC = Σ_i weights[i] commitments[i].
   let rlc : G1 ← g1LincombPoints (← commitments.mapM uncompressG1) weights
@@ -283,25 +280,25 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
   -- The coset shift h_k of every cell.
   -- The domain is computed once, not once per cell.
   let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_EXT_BLOB
-  let shifts : Array Fr ← cellIndices.mapM fun cellIndex => do
-    if cellIndex ≥ CELLS_PER_EXT_BLOB then
-      throw .cellIndexOutOfBounds
-    pure domain[n * cellIndex]!
+  -- The shift of cell `i` is entry `64 i` of the domain, which exists exactly when `i < 128`.
+  let shifts : Array Fr ← cellIndices.mapM fun cellIndex =>
+    if h : n * cellIndex < domain.size then pure domain[n * cellIndex]
+    else throw .cellIndexOutOfBounds
 
   -- Step 4.2: RLI = [Σ_k r^k I_k(s)], each I_k from one inverse FFT over its coset.
   --
   -- That is the inverse DFT method of the post on the universal verification equation.
-  let sumInterp : PolynomialCoeff ← (Array.range numCells).foldlM
+  let sumInterp : PolynomialCoeff ← (shifts.zip (cosetsEvals.zip rPowers)).foldlM
     (init := Array.replicate n Fr.zero)
-    fun sumInterp k => do
-      let interp ← interpolateCosetEvals shifts[k]! cosetsEvals[k]!
-      let scaled ← multiplyPolynomialcoeff #[rPowers[k]!] interp
+    fun sumInterp (shift, evals, rPower) => do
+      let interp ← interpolateCosetEvals shift evals
+      let scaled ← multiplyPolynomialcoeff #[rPower] interp
       pure (addPolynomialcoeff sumInterp scaled)
   let rli : G1 ← g1LincombPoints (setup.g1Monomial.toArray.extract 0 n) sumInterp
 
   -- Step 4.3: RLP = Σ_k (r^k * h_k^n) proofs[k].
-  let weightedRPowers : Array Fr := (Array.range numCells).map fun k =>
-    rPowers[k]! * (shifts[k]! ^ (Fr.ofNat n))
+  let weightedRPowers : Array Fr :=
+    Array.zipWith (fun rPower shift => rPower * shift ^ (Fr.ofNat n)) rPowers shifts
   let rlp : G1 ← g1LincombPoints proofsG1 weightedRPowers
 
   -- Step 4.4: RL = RLC - RLI + RLP.
@@ -341,10 +338,9 @@ def verifyCellKzgProofBatch (setup : TrustedSetup)
 
   -- Remove repeated commitments, keeping the first index, by a scan over the short list.
   let (deduped, commitmentIndices) ←
-    (Array.range commitmentsBytes.size).foldlM
+    commitmentsBytes.zipIdx.foldlM
       (init := ((#[] : Array KZGCommitment), (#[] : Array CommitmentIndex)))
-      fun (deduped, commitmentIndices) i => do
-        let cb := commitmentsBytes[i]!
+      fun (deduped, commitmentIndices) (cb, i) => do
         -- Validate the commitment, which also decodes it.
         let _ ← match bytesToKzgCommitment cb with
                 | .ok c    => pure c
@@ -359,8 +355,8 @@ def verifyCellKzgProofBatch (setup : TrustedSetup)
     cellToCosetEvals c
 
   -- Validate proofs.
-  let proofs : Array KZGProof ← (Array.range proofsBytes.size).mapM fun i =>
-    match bytesToKzgProof proofsBytes[i]! with
+  let proofs : Array KZGProof ← proofsBytes.zipIdx.mapM fun (pb, i) =>
+    match bytesToKzgProof pb with
     | .ok p    => pure p
     | .error _ => throw (.invalidProof (some i))
 
