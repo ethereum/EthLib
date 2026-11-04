@@ -59,6 +59,13 @@ CONTAINERS = {
     "HistoricalSummary": ("capella", None),
     "BLSToExecutionChange": ("capella", None),
     "SignedBLSToExecutionChange": ("capella", None),
+    "PendingDeposit": ("electra", None),
+    "PendingPartialWithdrawal": ("electra", None),
+    "PendingConsolidation": ("electra", None),
+    "DepositRequest": ("electra", None),
+    "WithdrawalRequest": ("electra", None),
+    "ConsolidationRequest": ("electra", None),
+    "ExecutionRequests": ("electra", None),
     "Withdrawal": ("capella", None),
     "ExecutionPayload": ("bellatrix", None),
 }
