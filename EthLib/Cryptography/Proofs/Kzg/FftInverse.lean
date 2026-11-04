@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Kzg.Fft
-public import EthLib.Cryptography.Proofs.Kzg.Fft
+public import EthLib.Cryptography.Proofs.Kzg.FftIter
 public import EthLib.Cryptography.Proofs.Bls.FrZMod
 public import Mathlib.Algebra.Field.GeomSum
 public import Mathlib.RingTheory.RootsOfUnity.PrimitiveRoots
@@ -129,39 +129,6 @@ theorem getElem!_fftHalve (xs : Array Fr) (start i : Nat)
     (fftHalve xs start)[i]! = xs[start + 2 * i]! := by
   rw [getElem!_pos (fftHalve xs start) i (by rw [size_fftHalve]; exact h),
       getElem_fftHalve]
-
-/-! ## One step of the Cooley–Tukey recursion
-
-`getElem_fftFieldAux_step` reads off a single output element of
-`fftFieldAux` in the recursive (`1 < size`) case as the butterfly
-combination of the even/odd sub-transforms. Isolating the `Array.ofFn`
-unfolding keeps the DFT induction below purely algebraic. -/
-
-theorem getElem_fftFieldAux_step (vals roots : Array Fr)
-    (hsz : 1 < vals.size) (p : Nat) (hp : p < vals.size) :
-    (fftFieldAux vals roots)[p]! =
-      (if p < vals.size / 2
-        then (fftFieldAux (fftHalve vals 0) (fftHalve roots 0))[p]!
-              + (fftFieldAux (fftHalve vals 1) (fftHalve roots 0))[p]!
-                * roots[p]!
-        else (fftFieldAux (fftHalve vals 0) (fftHalve roots 0))[p - vals.size / 2]!
-              - (fftFieldAux (fftHalve vals 1) (fftHalve roots 0))[p - vals.size / 2]!
-                * roots[p - vals.size / 2]!) := by
-  -- Fold the two sub-transforms so the RHS holds no bare `fftFieldAux`
-  -- application; `rw [fftFieldAux]` then unambiguously unfolds the LHS.
-  set l := fftFieldAux (fftHalve vals 0) (fftHalve roots 0) with hl
-  set r := fftFieldAux (fftHalve vals 1) (fftHalve roots 0) with hr
-  rw [fftFieldAux, ite_eq_right (by omega : ¬ vals.size ≤ 1)]
-  rw [getElem!_pos _ p (by simpa using hp)]
-  -- reduce the `let`s, apply `Array.getElem_ofFn`, and refold the
-  -- sub-transforms
-  simp only [Array.getElem_ofFn, ← hl, ← hr]
-  -- `l.size = vals.size / 2`, so both `if` conditions and the base index
-  -- agree; splitting on the condition collapses the inner `if`s.
-  have hlsize : l.size = vals.size / 2 := by
-    rw [hl, size_fftFieldAux, size_fftHalve]
-  rw [hlsize]
-  split <;> rfl
 
 /-! ## `Fr` algebra bridges
 
@@ -350,7 +317,7 @@ theorem fftField_fftField_inv {k : Nat} {ω : Fr}
   have hyval : ∀ j, j < 2 ^ k →
       y[j]! = ∑ i ∈ Finset.range (2 ^ k), vals[i]! * ω ^ (i * j) := by
     intro j hj
-    rw [hy, fftField_def]
+    rw [hy, fftField_def vals roots false hn hrs]
     exact getElem!_fftFieldAux_dft hω vals roots hn hrs hroots j hj
   -- element-wise: composing recovers `vals[m]`
   apply Array.ext
@@ -361,7 +328,7 @@ theorem fftField_fftField_inv {k : Nat} {ω : Fr}
     rw [← getElem!_pos _ m h1, ← getElem!_pos vals m (by rw [hn]; exact hm)]
     -- unfold the inverse transform
     rw [hy] at hysize ⊢
-    conv_lhs => rw [fftField_def]
+    conv_lhs => rw [fftField_def _ roots true (by rw [size_fftField, hn]) hrs]
     simp only [ite_eq_left]
     rw [getElem!_map_mul _ _ m (by rw [size_fftFieldAux, ← hy, hysize]; exact hm)]
     -- DFT of the inverse direction over the reversed (ω⁻¹) roots
@@ -428,7 +395,7 @@ theorem fftField_inv_fftField {k : Nat} {ω : Fr}
         = (∑ i ∈ Finset.range (2 ^ k), vals[i]! * (ω⁻¹) ^ (i * j))
             * (Fr.ofNat vals.size).inverse := by
     intro j hj
-    conv_lhs => rw [fftField_def]
+    conv_lhs => rw [fftField_def vals roots true hn hrs]
     simp only [ite_eq_left]
     rw [getElem!_map_mul _ _ j (by rw [size_fftFieldAux, hn]; exact hj),
         getElem!_fftFieldAux_dft hωinv vals _ hn (by rw [Array.size_ofFn]; exact hrs)
@@ -442,7 +409,7 @@ theorem fftField_inv_fftField {k : Nat} {ω : Fr}
     rw [← getElem!_pos _ m h1, ← getElem!_pos vals m (by rw [hn]; exact hm)]
     -- forward transform (the `false` branch of the unguarded body is
     -- definitionally `fftFieldAux`)
-    rw [fftField_def]
+    rw [fftField_def _ roots false (by rw [size_fftField, hn]) hrs]
     show (fftFieldAux (fftField vals roots true) roots)[m]! = vals[m]!
     rw [getElem!_fftFieldAux_dft hω (fftField vals roots true) roots
           (by rw [size_fftField, hn]) hrs hroots m hm]

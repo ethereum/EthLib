@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls
 public import EthLib.Cryptography.Kzg.Constants
+public import EthLib.Cryptography.Kzg.BitReversal
 
 /-!
 # `Fft`
@@ -16,57 +17,63 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)
 
 open EthLib.Cryptography.Kzg.Constants
+open EthLib.Cryptography.Kzg.BitReversal
 
 /-- Every other element of `xs`, starting at index `start`. -/
 def fftHalve (xs : Array Fr) (start : Nat) : Array Fr :=
   Array.ofFn (n := xs.size / 2) fun i => xs[start + 2 * i.val]!
 
-/-- The radix-2 Cooley-Tukey forward FFT.
+/-- One stage of the iterative FFT, on blocks of `2 h` values.
 
-The roots of unity must have the length of the values. -/
-def fftFieldAux
-    (vals : Array Fr) (rootsOfUnity : Array Fr)
-    : Array Fr :=
-  if vals.size ≤ 1 then
-    vals
-  else
-    let halfRoots := fftHalve rootsOfUnity 0
-    let l := fftFieldAux (fftHalve vals 0) halfRoots
-    let r := fftFieldAux (fftHalve vals 1) halfRoots
-    let n := vals.size
-    let halfL := l.size  -- = n / 2
-    -- Butterfly: for each `i ∈ [0, n/2)` let `t = r[i] * rootsOfUnity[i]`,
-    -- then write `l[i] + t` to `o[i]` and `l[i] - t` to `o[i + n/2]`.
-    -- The same root index `i` (not `i + n/2`) is used for both halves.
-    Array.ofFn (n := n) fun i =>
-      let baseIdx     := if i.val < halfL then i.val else i.val - halfL
-      let lAt         := l[baseIdx]!
-      let rAt         := r[baseIdx]!
-      let yTimesRoot  := rAt * rootsOfUnity[baseIdx]!
-      if i.val < halfL then lAt + yTimesRoot
-      else                  lAt - yTimesRoot
-termination_by vals.size
-decreasing_by all_goals (simp [fftHalve]; omega)
+In each block, value `r < h` pairs with value `r + h`.
+
+The second value is multiplied by a root of unity, once.
+
+The pair becomes the sum and the difference of the first value and that product.
+
+The root is entry `r * stride` of the roots, where `stride = n / (2 h)` for `n` values. -/
+def fftStage (roots x : Array Fr) (h : Nat) : Array Fr :=
+  let stride := x.size / (2 * h)
+  let t := Array.ofFn (n := x.size / 2) fun j =>
+    x[2 * h * (j.val / h) + h + j.val % h]! * roots[stride * (j.val % h)]!
+  Array.ofFn (n := x.size) fun i =>
+    let b := i.val / (2 * h)
+    let r := i.val % (2 * h)
+    if r < h then x[2 * h * b + r]! + t[h * b + r]!
+    else x[2 * h * b + r - h]! - t[h * b + r - h]!
+
+/-- The stages of the iterative FFT, for blocks of `2 h`, `4 h`, and so on. -/
+def fftStages (roots : Array Fr) : Nat → Array Fr → Nat → Array Fr
+  | 0, x, _ => x
+  | s + 1, x, h => fftStages roots s (fftStage roots x h) (2 * h)
+
+/-- The radix-2 Cooley-Tukey FFT, iterative.
+
+The values are put in bit-reversed order, then each of the `log2 n` stages doubles the block size.
+
+After stage `s`, each block of `2^s` values is the FFT of the values its indices select.
+
+The values and the roots of unity must have the same length, a power of two. -/
+def fftFieldIter (vals roots : Array Fr) : Array Fr :=
+  fftStages roots vals.size.log2 (bitReversalPermutation vals) 1
 
 /-- The forward FFT, or the inverse FFT when `inv` is true.
 
-The inverse reverses the roots of unity and divides each output by the length. -/
+The inverse reverses the roots of unity and divides each output by the length.
+
+The length must be a power of two; every caller passes one. -/
 def fftField
     (vals : Array Fr) (rootsOfUnity : Array Fr)
     (inv : Bool := false) : Array Fr :=
-  let out :=
-    if inv then
-      let invlen := (Fr.ofNat vals.size).inverse
-      -- Reverse: keep roots[0] then reverse roots[1..]
-      let reversed := Array.ofFn (n := rootsOfUnity.size) fun i =>
-        if i.val = 0 then rootsOfUnity[0]!
-        else rootsOfUnity[rootsOfUnity.size - i.val]!
-      (fftFieldAux vals reversed).map (· * invlen)
-    else
-      fftFieldAux vals rootsOfUnity
-  -- Only nonempty power-of-two lengths are valid, since halving would truncate an odd length.
-  if vals.size.isPowerOfTwo then out
-  else panicWith out s!"fftField: input length {vals.size} is not a power of two"
+  if inv then
+    let invlen := (Fr.ofNat vals.size).inverse
+    -- Reverse: keep roots[0] then reverse roots[1..]
+    let reversed := Array.ofFn (n := rootsOfUnity.size) fun i =>
+      if i.val = 0 then rootsOfUnity[0]!
+      else rootsOfUnity[rootsOfUnity.size - i.val]!
+    (fftFieldIter vals reversed).map (· * invlen)
+  else
+    fftFieldIter vals rootsOfUnity
 
 /-- Every other point of `xs`, starting at index `start`. -/
 def fftHalveG1 (xs : Array Bls.G1) (start : Nat) : Array Bls.G1 :=

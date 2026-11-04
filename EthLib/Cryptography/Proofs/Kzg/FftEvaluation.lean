@@ -40,7 +40,8 @@ theorem getElem!_fftField_eval {k : Nat} {ω : Fr}
     (hroots : ∀ i, i < 2 ^ k → roots[i]! = ω ^ i)
     (j : Nat) (hj : j < 2 ^ k) :
     (fftField vals roots false)[j]! = evalPolyAt vals (ω ^ j) := by
-  rw [show fftField vals roots false = fftFieldAux vals roots by exact fftField_def vals roots false]
+  rw [show fftField vals roots false = fftFieldAux vals roots from
+    fftField_def vals roots false hn hrs]
   rw [getElem!_fftFieldAux_dft hω vals roots hn hrs hroots j hj]
   rw [evalPolyAt, evalCoeffPoly, evalCoeffPolyAux_eq_sum, hn]
   apply Finset.sum_congr rfl
