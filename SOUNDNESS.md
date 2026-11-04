@@ -62,13 +62,14 @@ The list covers the main theorems and is not yet complete.
 
 Most of these theorems are about correctness: an honest run gives the expected answer, or malformed input is rejected.
 
-Five of them state a security property.
+Six of them state a security property.
 The unforgeability of leanXMSS holds for EthLib's own definitions.
 The unforgeability of BLS signatures holds for a scheme that EthLib's signing and verification compute.
 The accountable safety and the plausible liveness of Casper FFG hold for an abstract model of votes.
 The evaluation binding of single KZG proofs reduces to the strong Diffie–Hellman problem.
+The binding of the batch check of KZG openings reduces to the same problem, or to a challenge that is a root of a nonzero polynomial.
 
-No theorem states unforgeability for leanSPHINCS, or binding for KZG batch checks and cell proofs.
+No theorem states unforgeability for leanSPHINCS, or binding for the batch check of blobs and for cell proofs.
 No theorem covers the code that runs, the C boundary, or timing.
 
 ### XMSS
@@ -309,12 +310,25 @@ They take two hypotheses on the setup.
 For a well-formed setup, `blobToKzgCommitment_represents` (`Proofs/Kzg/Commitment.lean`) proves that a blob's commitment holds its polynomial at the secret.
 Under the pairing law and for a well-formed setup, honest KZG proofs and blob proofs verify (`verifyKzgProof_computeKzgProof`, `verifyBlobKzgProof_computeBlobKzgProof`, `Proofs/Kzg/Verify.lean`).
 `verifyKzgProofImpl_iff` states when the check accepts: `c - y = w (τ - z)`, for decoded points representing `c` and `w`.
-No theorem states what the batch checks return on accepted input.
+`verifyKzgProofBatch_root` (`Proofs/Kzg/BatchBinding.lean`) states what the batch check of openings returns on accepted input.
+Let opening `i` have commitment `c_i`, value `y_i`, point `z_i` and proof `w_i`.
+Then its challenge `r` is a root of `P(X) = sum_i X^i (c_i - y_i - w_i (τ - z_i))`.
+`P` is zero exactly when every opening satisfies the identity of the single check.
+No theorem states what the batch check of blobs, or of cells, returns on accepted input.
 
 `findSdh_valid_bytes` (`Proofs/Kzg/Binding.lean`) is the evaluation binding of single proofs.
 Let the check accept one commitment at one point with two different values.
 Then a search over the two openings returns a strong Diffie–Hellman solution for the secret.
 It needs the pairing law and a well-formed setup, and no model of a hash.
+
+`verifyKzgProofBatch_binding` and `verifyKzgProofBatch_binding_single` (`Proofs/Kzg/BatchBinding.lean`) are the binding of the batch check of openings.
+Let an accepted batch open one commitment at one point to two values, or let a single check accept a second value.
+Then the values agree, or the search on the two openings returns a strong Diffie–Hellman solution, or the challenge is a root of a nonzero `P`.
+They need the pairing law and a well-formed setup.
+`prEvent_batchErrorPoly_root_le` (`Proofs/Kzg/BatchChallenge.lean`) bounds the last case for one challenge.
+Let the adversary choose at most `n` openings, and let the challenge then be uniform, as a random oracle answers a new query.
+Then the challenge is a root of a nonzero `P` with probability at most `(n - 1) / r`.
+The game gives the adversary no access to the oracle, so it bounds one attempt and not `q` queries.
 
 `checksSufficient_of_subgroupChecks` (`Proofs/Kzg/CeremonyChecks.lean`) is about the ceremony that produced the trusted setup.
 It proves that the ceremony's pairing checks force each G1 and G2 point of a contribution to represent the expected power of the trapdoor.
@@ -498,7 +512,8 @@ The Python bindings expose the block cipher, CTR and GCM, as `encrypt_block`, `d
 ### A4. Idealisations
 
 A security theorem rests on a model, such as a random oracle for a hash.
-EthLib has four such theorems, and each rests on one idealisation:
+EthLib has five such theorems, and each rests on one idealisation.
+The two theorems of Casper FFG share one bullet:
 
 - leanXMSS: the hash `H`, Keccak-256, is a random oracle on byte strings.
   The theorem says nothing about an attack that uses the structure of Keccak.
@@ -507,6 +522,9 @@ EthLib has four such theorems, and each rests on one idealisation:
   Nothing in EthLib proves that the hash behaves as such an oracle.
 - Casper FFG: a vote names its signer, so no one can forge a vote.
   The theorems of accountable safety and plausible liveness say nothing about an attack on the signatures.
+- KZG batch check: the challenge hash `Fr.hashToBlsField` is a random oracle, so the challenge of new openings is uniform.
+  `prEvent_batchErrorPoly_root_le` draws one challenge after the openings are fixed.
+  Nothing covers grinding, where an adversary hashes many sets of openings and keeps one whose challenge is a root.
 
 ## Gap B: does the code that runs match the definitions?
 

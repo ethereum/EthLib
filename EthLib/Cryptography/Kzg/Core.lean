@@ -189,6 +189,22 @@ def verifyKzgProof (setup : TrustedSetup)
   let y ← bytesToBlsField yBytes
   return verifyKzgProofImpl setup commitmentG1 z y proofG1
 
+/-- The Fiat-Shamir challenge of a batch of openings.
+
+It hashes the domain, the degree bound, the number of openings, and each opening in order. -/
+def computeVerifyKzgProofBatchChallenge (commitments : Array KZGCommitment) (zs ys : Array Fr)
+    (proofs : Array KZGProof) : Fr :=
+  let degreePoly := intToBytesBE FIELD_ELEMENTS_PER_BLOB 8
+  let numCommitments := intToBytesBE commitments.size 8
+  let data := ((commitments.zip zs).zip (ys.zip proofs)).foldl
+    (init := RANDOM_CHALLENGE_KZG_BATCH_DOMAIN ++ degreePoly ++ numCommitments)
+    fun data ((commitment, z), (y, proof)) => data
+        ++ ⟨commitment.toArray⟩
+        ++ ⟨(blsFieldToBytes z).toArray⟩
+        ++ ⟨(blsFieldToBytes y).toArray⟩
+        ++ ⟨proof.toArray⟩
+  Fr.hashToBlsField data
+
 /-- Verify multiple KZG proofs efficiently using a random linear combination. -/
 def verifyKzgProofBatch (setup : TrustedSetup)
     (commitments : Array KZGCommitment)
@@ -208,16 +224,7 @@ def verifyKzgProofBatch (setup : TrustedSetup)
     throw (.inputLengthMismatch "proofsG1" commitments.size proofsG1.size)
 
   -- The Fiat-Shamir challenge, over arrays of one length, so no zip drops an entry.
-  let degreePoly := intToBytesBE FIELD_ELEMENTS_PER_BLOB 8
-  let numCommitments := intToBytesBE commitments.size 8
-  let data := ((commitments.zip zs).zip (ys.zip proofs)).foldl
-    (init := RANDOM_CHALLENGE_KZG_BATCH_DOMAIN ++ degreePoly ++ numCommitments)
-    fun data ((commitment, z), (y, proof)) => data
-        ++ ⟨commitment.toArray⟩
-        ++ ⟨(blsFieldToBytes z).toArray⟩
-        ++ ⟨(blsFieldToBytes y).toArray⟩
-        ++ ⟨proof.toArray⟩
-  let r := Fr.hashToBlsField data
+  let r := computeVerifyKzgProofBatchChallenge commitments zs ys proofs
   let rPowers := computePowers r commitments.size
 
   -- proof_lincomb = Σ_i r^i · proof_i
