@@ -2,7 +2,6 @@ module
 
 public import EthLib.Cryptography.Secp256k1.Ecdsa
 public import EthLib.Cryptography.Proofs.Secp256k1.Order
-public import EthLib.Cryptography.Proofs.Hash.Keccak256
 
 /-!
 # Proofs: ECDSA verification over secp256k1
@@ -157,29 +156,6 @@ theorem isLowS_neg (s : Nat) : isLowS (Fn.modulus - s) = !isLowS s := by
     omega
   · simp [h]
     omega
-
-/-! ## Known answer
-
-Test 1 of `ecdsa_secp256k1_sha256_p1363_test.json` in `C2SP/wycheproof` at commit `d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9`, under the Apache License 2.0.
-
-Its message `313233343030` has the SHA-256 digest below, and the signature is valid.
-
-The kernel runs the whole verification, both scalar multiplications included. -/
-
-/-- The 32 bytes a hex string spells. -/
-def hash32 (hex : String) : Vector UInt8 32 :=
-  if h : (Hash.Keccak.hexBytes hex).data.size = 32 then ⟨(Hash.Keccak.hexBytes hex).data, h⟩ else Vector.replicate 32 0
-
-/-- The public key of the test, as a point. -/
-def wycheproofKey : Point :=
-  .affine 0xb838ff44e5bc177bf21189d0766082fc9d843226887fc9760371100b7ee20a6f
-    0xf0c9d75bfba7b31a6bca1974496eeb56de357071955d83c4b1badaa0b21832e9
-
-theorem verify_wycheproof_p1363_1 :
-    verify wycheproofKey (hash32 "bb5a52f42f9c9261ed4361f59422a1e30036e7c32b270c8807a419feca605023")
-      0x813ef79ccefa9a56f7ba805f0e478584fe5f0dd5f567bc09b5123ccbc9832365
-      0x900e75ad233fcc908509dbff5922647db37c21f4afd3203ae8dc4ae7794b0f87 = true := by
-  decide +kernel
 
 end Ecdsa
 

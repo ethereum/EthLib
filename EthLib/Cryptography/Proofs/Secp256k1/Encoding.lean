@@ -2,7 +2,6 @@ module
 
 public import EthLib.Cryptography.Secp256k1.Encoding
 public import EthLib.Cryptography.Proofs.Secp256k1.Order
-public import EthLib.Cryptography.Proofs.Hash.Keccak256
 
 /-!
 # Proofs: the point encodings of secp256k1
@@ -258,63 +257,6 @@ theorem decode_notOnCurve {x y : Fp} (h : (affine x y).isOnCurve = false) :
   simp only [decode, List.cons_append, hlen, htake, hdrop, Fp.ofBytes_toBytes, h, bind,
     Except.bind, (by decide : ¬(64 : Nat) = 32), ite_true, ite_false, Bool.false_eq_true]
   rfl
-
-/-! ## Known answers
-
-The two encodings of `G` are printed in SEC 2 v2 §2.4.1.
-
-Each claim is evaluated by the kernel, square root included. -/
-
-open Hash.Keccak (hexBytes)
-
-/-- The result of a decoding, as an option: equality of options is decidable. -/
-def decoded (r : Except Secp256k1Error Point) : Option Point := r.toOption
-
-/-- The error of a decoding, or `none`. -/
-def decodeError (r : Except Secp256k1Error Point) : Option Secp256k1Error :=
-  match r with
-  | .error e => some e
-  | .ok _ => none
-
-/-- `G` compressed, as SEC 2 prints it. -/
-theorem encodeCompressed_generator :
-    generator.encodeCompressed.data = (hexBytes "0279BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798").data := by
-  decide +kernel
-
-/-- `G` uncompressed, as SEC 2 prints it. -/
-theorem encodeUncompressed_generator :
-    generator.encodeUncompressed.data = (hexBytes "0479BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8").data := by
-  decide +kernel
-
-/-- The compressed bytes of SEC 2 decode to `G`: the square root recovers its `y`. -/
-theorem decode_generator_compressed : decoded (decode (hexBytes "0279BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798")) = some generator := by
-  decide +kernel
-
-/-- The uncompressed bytes of SEC 2 decode to `G`. -/
-theorem decode_generator_uncompressed :
-    decoded (decode (hexBytes "0479BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8")) = some generator := by
-  decide +kernel
-
-/-- `G` with `y + 1` is off the curve. -/
-theorem decode_generator_y_plus_one :
-    decodeError (decode (hexBytes "0479BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B9")) = some .notOnCurve := by
-  decide +kernel
-
-/-- `x = 2^256 - 1` is not below `p`. -/
-theorem decode_x_too_large : decodeError (decode (hexBytes "02FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")) = some .coordinateTooLarge := by
-  decide +kernel
-
-/-- `x = 0` has no point: `7` is not a square mod `p`. -/
-theorem decode_x_zero : decodeError (decode (hexBytes "020000000000000000000000000000000000000000000000000000000000000000")) = some .noPointWithX := by
-  decide +kernel
-
-/-- `05` is no prefix. -/
-theorem decode_prefix_05 : decodeError (decode (hexBytes "0579BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798")) = some (.invalidPrefix 0x05) := by
-  decide +kernel
-
-/-- The 64 coordinate bytes alone, without a prefix, have no valid length. -/
-theorem decode_no_prefix : decodeError (decode (hexBytes "79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8")) = some (.invalidEncodingLength 64) := by
-  decide +kernel
 
 end Point
 

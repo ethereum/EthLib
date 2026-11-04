@@ -41,11 +41,11 @@ The files build on one another in this order:
 | `Address.lean` | the address of a public key |
 
 The proofs are in `EthLib/Cryptography/Proofs/Secp256k1/`, with one file for each of these.
-Besides those, `Order.lean` and `Malleability.lean` hold proofs, and two files hold known answers.
+Besides those, `Order.lean` and `Malleability.lean` hold proofs.
 
 ## Operations
 
-Three operations are exported to C, in `EthLib/Cryptography/Exports/Secp256k1.lean`.
+Six operations are exported to C, in `EthLib/Cryptography/Exports/Secp256k1.lean`.
 From there they reach Python:
 
 | Lean | C export | Python |
@@ -53,16 +53,20 @@ From there they reach Python:
 | `Ecdsa.verify` | `eth_secp256k1_verify` | `secp256k1.verify` |
 | `Ecdsa.isLowS` | `eth_secp256k1_is_low_s` | `secp256k1.is_low_s` |
 | `Ecdsa.recover` | `eth_secp256k1_recover` | `secp256k1.recover` |
+| `Ecdsa.sign` | `eth_secp256k1_sign` | `secp256k1.sign` |
+| `ecdh` | `eth_secp256k1_ecdh` | `secp256k1.ecdh` |
+| `addressOfPrivateKey` | `eth_secp256k1_address` | `secp256k1.address` |
 
 In Python, a malformed input raises `ValueError`.
 
 ## Test vectors
 
 `tests/cryptography/secp256k1/` holds 818 pinned cases from the Wycheproof sets of `C2SP/wycheproof`, in the format each `format.md` describes.
-The proofs also pin a few known answers, all checked by the kernel: both encodings of the generator `G`, from SEC 2; test 1 of the Wycheproof P1363 set; and the addresses of the private key 1 and of the two test keys of execution-specs.
-They also pin one signature, the first valid case of `tests/fixtures/ecdsa.json` in `bitcoinjs/tiny-secp256k1` at commit `e1fd7a77`, under the MIT License.
-RFC 6979 itself gives no vectors for secp256k1.
-The last known answer is test 1 of the Wycheproof ECDH set for secp256k1.
+The Python tests in `bindings/python/tests/secp256k1/` check the other operations through the bindings.
+RFC 6979 gives no vectors for secp256k1, so signing is checked against the 2020 valid cases of `tests/fixtures/ecdsa.json` in `bitcoinjs/tiny-secp256k1`, under the MIT License.
+ECDH is checked against the Wycheproof ECDH set for secp256k1, on the tests whose key is an uncompressed point under the standard header.
+The address is checked against the definition of Yellow Paper Appendix F, recomputed with `py_ecc` and the Keccak-256 that its own vectors pin.
+The encodings are checked on the generator `G`, as SEC 2 prints it, and on five malformed keys.
 
 ## What is proved
 

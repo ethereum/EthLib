@@ -11,6 +11,9 @@ from .._native import (
     secp256k1_verify,
     secp256k1_is_low_s,
     secp256k1_recover,
+    secp256k1_sign,
+    secp256k1_ecdh,
+    secp256k1_address,
     SECP256K1_HASH_LEN as HASH_LEN,
     SECP256K1_SIGNATURE_LEN as SIGNATURE_LEN,
 )
@@ -38,4 +41,21 @@ def recover(msg_hash: bytes, signature: bytes, recovery_id: int) -> bytes:
     return secp256k1_recover(msg_hash, signature, recovery_id)
 
 
-__all__ = ["verify", "is_low_s", "recover", "HASH_LEN", "SIGNATURE_LEN"]
+def sign(private_key: bytes, msg_hash: bytes) -> bytes:
+    """The 65-byte signature `r || s || v` of a hash, by RFC 6979 with the low `s` of EIP-2."""
+    return secp256k1_sign(private_key, msg_hash)
+
+
+def ecdh(private_key: bytes, public_key: bytes) -> bytes:
+    """The 32-byte ECDH shared secret of SEC 1 v2 §3.3.1, the `x` of `d Q`."""
+    return secp256k1_ecdh(private_key, public_key)
+
+
+def address(private_key: bytes) -> bytes:
+    """The 20-byte Ethereum address of a private key."""
+    return secp256k1_address(private_key)
+
+
+__all__ = [
+    "verify", "is_low_s", "recover", "sign", "ecdh", "address", "HASH_LEN", "SIGNATURE_LEN",
+]

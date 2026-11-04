@@ -193,6 +193,9 @@ PyObject* py_sha256_precompile_gas_cost                   (PyObject* self, PyObj
 PyObject* py_secp256k1_verify                             (PyObject* self, PyObject* args);
 PyObject* py_secp256k1_is_low_s                           (PyObject* self, PyObject* args);
 PyObject* py_secp256k1_recover                            (PyObject* self, PyObject* args);
+PyObject* py_secp256k1_sign                               (PyObject* self, PyObject* args);
+PyObject* py_secp256k1_ecdh                               (PyObject* self, PyObject* args);
+PyObject* py_secp256k1_address                            (PyObject* self, PyObject* args);
 
 PyObject* py_secp256r1_verify                             (PyObject* self, PyObject* args);
 
