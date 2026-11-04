@@ -196,7 +196,9 @@ def exports(root: Path) -> str:
 
 def c_lines(root: Path) -> str:
     bindings = root / "bindings" / "python"
-    files = sorted(list(bindings.glob("*.c")) + list(bindings.glob("*.h")))
+    # `docstrings.h` is written by `lake exe gen-bindings`, so it is not hand-written C.
+    files = sorted(p for p in list(bindings.glob("*.c")) + list(bindings.glob("*.h"))
+                   if p.name != "docstrings.h")
     counts = [(p.name, len(p.read_text().splitlines())) for p in files]
     total = sum(n for _, n in counts)
     each = ", ".join(f"`{name}` ({n})" for name, n in counts)

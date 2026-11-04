@@ -83,6 +83,16 @@ lean_exe «check-decls» where
   -- The checker loads private proof bodies to inspect their dependencies.
   allowNonModules := true
 
+/-- Writes the binding contract from the Lean docstrings and error codes.
+
+Run it after `lake build Exports` with `lake exe gen-bindings`.
+
+With `--check`, it fails when a generated file is stale. -/
+lean_exe «gen-bindings» where
+  srcDir := "scripts"
+  root := `GenBindings
+  supportInterpreter := true
+
 /-- Declarations the check must catch, and one module it must pass. Not a
 default target: `scripts/test_check_decls.sh` builds and checks it. -/
 lean_lib «CheckDeclsTest» where

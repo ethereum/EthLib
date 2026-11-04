@@ -8,6 +8,7 @@ include lean-toolchain
 include uv.lock
 include .python-version
 include bindings/python/wrappers.h
+include bindings/python/docstrings.h
 
 recursive-include EthLib *.lean
 include EthLib.lean

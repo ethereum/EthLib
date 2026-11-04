@@ -1,6 +1,7 @@
 """The consensus layer: its presets, configurations and parameters, and the custody of columns."""
 
 import json
+from typing import Any
 
 from ..errors import ConsensusError
 
@@ -9,7 +10,7 @@ from ..errors import ConsensusError
 from ..cryptography import _native
 
 
-def _value(value):
+def _value(value: Any) -> Any:
     # The export writes every integer as a string of decimal digits.
     if isinstance(value, str) and not value.startswith("0x") and value.isdigit():
         return int(value)

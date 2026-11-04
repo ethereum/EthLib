@@ -70,7 +70,7 @@ def Sha256Error.code : Sha256Error → UInt32
 
 Returns the 32-byte digest, or the error that consumes all the gas.
 
-`sha256` in execution-specs: the gas is charged first, then the whole call data is hashed. -/
+The gas is charged first, then the whole call data is hashed. -/
 def sha256 (data : ByteArray) (gas : Nat) : Except Sha256Error ByteArray :=
   let cost := gasCost data.size
   if gas < cost then .error (.outOfGas cost gas) else .ok (Cryptography.Hash.sha256 data)
