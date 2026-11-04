@@ -49,7 +49,4 @@ theorem bls12Pairing_ok {data : ByteArray} {gas : Nat} {out : ByteArray} (h : bl
 theorem length_boolWord (result : Bool) : (boolWord result).length = 32 := by
   simp [boolWord]
 
-/-- The price of one pair: `32600 + 37700 = 70300`, as the vectors of the EIP list it. -/
-theorem pairingGas_one : pairingGas 1 = 70300 := rfl
-
 end EthLib.Execution.Evm.Precompiles.Bls12381

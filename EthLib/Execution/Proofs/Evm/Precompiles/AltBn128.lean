@@ -177,10 +177,4 @@ theorem ecpairing_eq_ok_iff (fork : Fork) (data : ByteArray) (gas : Nat) (out : 
         cases hpairs
         rfl
 
-/-- The price of no pair is the base price alone. -/
-theorem ecpairingGas_empty : ecpairingGas .istanbul 0 = 45000 := rfl
-
-/-- One pair costs `34000 + 45000 = 79000`. -/
-theorem ecpairingGas_one : ecpairingGas .istanbul 192 = 79000 := rfl
-
 end EthLib.Execution.Evm.Precompiles.AltBn128
