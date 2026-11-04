@@ -1,7 +1,9 @@
 module
 
-public import EthLib.Base.Address
+public import EthLib.Execution.Blocks.Log
+public import EthLib.Execution.Evm.Environment
 public import EthLib.Execution.Evm.Stack
+public import EthLib.Execution.State.Tracker
 
 /-!
 # `Evm.Frame`
@@ -12,9 +14,13 @@ The gas meter is a parameter, because a fork can change how an instruction pays.
 
 Up to Fusaka, the meter is one counter of the gas left.
 
-The world state, the environments and the access sets are not here yet.
+A frame also holds the writes of its transaction so far, and the accrued substate.
 
-The subsection Machine State of the Yellow Paper, Shanghai version, defines this state.
+The substate gathers what the transaction acts on after its code runs.
+
+The subsections Machine State and Substate of the Yellow Paper, Shanghai version, define them.
+
+[EIP-2929](https://eips.ethereum.org/EIPS/eip-2929#specification) adds the accessed sets.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
@@ -25,7 +31,9 @@ Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Address U256)
+open EthLib.Base (Address Bytes32 Fork U256)
+open EthLib.Execution.Blocks (Log)
+open EthLib.Execution.State (TransactionState)
 
 /-- A gas meter: how an instruction pays its gas, and the gas left. -/
 class GasMeter (Meter : Type) where
@@ -39,8 +47,12 @@ instance : GasMeter Nat where
   charge gas amount := if gas < amount then .error .outOfGas else .ok (gas - amount)
   gasLeft gas := gas
 
-/-- A message: a call to an account, or the creation of a contract. -/
-structure Message where
+/-- A message at fork `fork`: a call to an account, or the creation of a contract. -/
+structure Message (fork : Fork) where
+  /-- The block that runs the code. -/
+  blockEnv : BlockEnvironment fork
+  /-- The transaction that runs the code. -/
+  txEnv : TransactionEnvironment fork
   /-- The account that sends the message. -/
   caller : Address
   /-- The account that the message calls, or none for a creation. -/
@@ -66,8 +78,26 @@ structure Message where
   /-- Whether a call to a precompile address runs its code instead, by EIP-7702. -/
   disablePrecompiles : Bool
 
-/-- The state of one frame of execution, with a gas meter of type `Meter`. -/
-structure Evm (Meter : Type) where
+/-- What a transaction accrues as its code runs, and acts on once the code ends. -/
+structure Substate where
+  /-- The accounts to delete at the end of the transaction. -/
+  accountsToDelete : Std.ExtTreeSet Address
+  /-- The logs, oldest first. -/
+  logs : Array Log
+  /-- The accounts that the transaction touched, whose empty ones EIP-161 deletes. -/
+  touchedAccounts : Std.ExtTreeSet Address
+  /-- The gas to give back at the end of the transaction, which can be negative within a frame. -/
+  refundCounter : Int
+  /-- The addresses that the transaction accessed. -/
+  accessedAddresses : Std.ExtTreeSet Address
+  /-- The storage keys that the transaction accessed, at each address. -/
+  accessedStorageKeys : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32)
+
+/-- The substate with no account, no log, no refund and no access. -/
+def Substate.empty : Substate := ⟨∅, #[], ∅, 0, ∅, ∅⟩
+
+/-- The state of one frame of execution at fork `fork`, with a gas meter of type `Meter`. -/
+structure Evm (fork : Fork) (Meter : Type) where
   /-- The program counter: the index in the code of the next opcode. -/
   pc : Nat
   /-- The stack. -/
@@ -85,19 +115,21 @@ structure Evm (Meter : Type) where
   /-- Whether the frame still runs. -/
   running : Bool
   /-- The message that starts the frame. -/
-  message : Message
+  message : Message fork
   /-- The data that RETURN or REVERT gives back. -/
   output : ByteArray
   /-- The data that the last call or creation of this frame gave back. -/
   returnData : ByteArray
-  /-- The gas to give back at the end of the transaction, which can be negative within a frame. -/
-  refundCounter : Int
+  /-- The writes of the transaction so far. -/
+  state : TransactionState
+  /-- The substate that the transaction has accrued so far. -/
+  substate : Substate
   /-- The error that stops the frame, if any. -/
   error : Option EvmError
 
 /-- The frame after a charge of `amount` gas, or out of gas. -/
-def chargeGas {Meter : Type} [GasMeter Meter] (evm : Evm Meter) (amount : Nat) :
-    Except EvmError (Evm Meter) := do
+def chargeGas {fork : Fork} {Meter : Type} [GasMeter Meter] (evm : Evm fork Meter)
+    (amount : Nat) : Except EvmError (Evm fork Meter) := do
   let gas ← GasMeter.charge evm.gas amount
   return { evm with gas }
 

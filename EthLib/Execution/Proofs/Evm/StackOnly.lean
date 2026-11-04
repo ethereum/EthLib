@@ -14,6 +14,8 @@ DUP and SWAP fail with an underflow exactly on a stack too short for their depth
 From Spurious Dragon, EXP costs 10 plus 50 per byte of the exponent.
 
 KECCAK256 pays 30, 6 per hashed word and the growth of memory.
+
+None of these instructions changes the message, the state or the substate of the frame.
 -/
 
 @[expose] public section
@@ -23,7 +25,7 @@ namespace EthLib.Execution.Evm
 open EthLib.Base (Fork U256)
 open GasCosts
 
-variable {Meter : Type} [GasMeter Meter]
+variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- PUSH reads the code past its end as zeros, so zeros appended to the code change nothing. -/
 theorem pushData_append_zeros (code : ByteArray) (pc n k : Nat) :
@@ -31,14 +33,14 @@ theorem pushData_append_zeros (code : ByteArray) (pc n k : Nat) :
   simp only [pushData, bufferRead, byteAt_append_zeros]
 
 /-- DUP(n + 1) that pays fails with an underflow on a stack of at most `n` words. -/
-theorem dupN_of_length_le {n : Fin 16} {evm : Evm Meter} {gas : Meter}
+theorem dupN_of_length_le {n : Fin 16} {evm : Evm fork Meter} {gas : Meter}
     (paid : GasMeter.charge evm.gas OPCODE_DUP = .ok gas) (h : evm.stack.val.length ≤ n) :
     dupN n evm = .error .stackUnderflow := by
   simp [dupN, chargeGas, paid, bind, Except.bind, pure, Except.pure,
     List.getElem?_eq_none_iff.mpr h]
 
 /-- DUP(n + 1) on a stack with `x` at depth `n` and room for one more word: pay, then push `x`. -/
-theorem dupN_of_getElem? {n : Fin 16} {evm : Evm Meter} {x : U256}
+theorem dupN_of_getElem? {n : Fin 16} {evm : Evm fork Meter} {x : U256}
     (h : evm.stack.val[n.val]? = some x) (room : evm.stack.val.length < STACK_LIMIT) :
     dupN n evm = (GasMeter.charge evm.gas OPCODE_DUP).map fun gas =>
       { evm with stack := ⟨x :: evm.stack.val, room⟩, gas, pc := evm.pc + 1 } := by
@@ -48,7 +50,7 @@ theorem dupN_of_getElem? {n : Fin 16} {evm : Evm Meter} {x : U256}
       Stack.push, full, advance]
 
 /-- SWAP(n + 1) that pays fails with an underflow on a stack of at most `n + 1` words. -/
-theorem swapN_of_length_le {n : Fin 16} {evm : Evm Meter} {gas : Meter}
+theorem swapN_of_length_le {n : Fin 16} {evm : Evm fork Meter} {gas : Meter}
     (paid : GasMeter.charge evm.gas OPCODE_SWAP = .ok gas) (h : evm.stack.val.length ≤ n + 1) :
     swapN n evm = .error .stackUnderflow := by
   rcases hs : evm.stack with ⟨_ | ⟨top, rest⟩, _⟩
@@ -59,7 +61,7 @@ theorem swapN_of_length_le {n : Fin 16} {evm : Evm Meter} {gas : Meter}
       List.getElem?_eq_none_iff.mpr (show rest.length ≤ n.val by omega)]
 
 /-- From Spurious Dragon, EXP costs 10 plus 50 per byte of the exponent, by EIP-160. -/
-theorem expStep_cons {fork : Fork} (hfork : fork ≥ .spuriousDragon) {evm : Evm Meter}
+theorem expStep_cons {fork : Fork} (hfork : fork ≥ .spuriousDragon) {evm : Evm fork Meter}
     {base exponent : U256} {rest : List U256} (h : evm.stack.val = base :: exponent :: rest) :
     expStep fork evm = (GasMeter.charge evm.gas (10 + 50 * exponentBytes exponent)).map fun gas =>
       { evm with
@@ -82,7 +84,7 @@ theorem expStep_cons {fork : Fork} (hfork : fork ≥ .spuriousDragon) {evm : Evm
     simp [hc, bind, Except.bind, pure, Except.pure, Except.map, room]
 
 /-- KECCAK256 pays 30, plus 6 per hashed word, plus the growth of memory to hold the bytes. -/
-theorem keccak256Step_cons {evm : Evm Meter} {start size : U256} {rest : List U256}
+theorem keccak256Step_cons {evm : Evm fork Meter} {start size : U256} {rest : List U256}
     (h : evm.stack.val = start :: size :: rest) :
     keccak256Step evm =
       (GasMeter.charge evm.gas (30 + 6 * wordCount size.toNat +
@@ -103,5 +105,56 @@ theorem keccak256Step_cons {evm : Evm Meter} {start size : U256} {rest : List U2
   rcases hc : GasMeter.charge evm.gas (30 + 6 * wordCount size.toNat +
       (extendMemory evm.memory.size [(start, size)]).cost) with _ | _ <;>
     simp [hc, bind, Except.bind, pure, Except.pure, Except.map, room]
+
+/-- Each stack instruction, and KECCAK256, keeps the message, the state and the substate. -/
+theorem stackOnlyStep_sameContext {op : Op}
+    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (hstep : stackOnlyStep fork op = some step) {evm after : Evm fork Meter}
+    (h : step evm = .ok after) : SameContext evm after := by
+  cases op <;> simp only [stackOnlyStep, Option.some.injEq, reduceCtorEq] at hstep <;>
+    subst hstep
+  all_goals first
+    | exact unaryOp_sameContext h
+    | exact binaryOp_sameContext h
+    | exact ternaryOp_sameContext h
+    | skip
+  case exp | keccak256 =>
+    simp only [expStep, keccak256Step] at h
+    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
+    obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+    obtain ⟨_, h4, h⟩ := except_bind_eq_ok h
+    cases h
+    first
+      | exact ((((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
+          (chargeGas_sameContext h3)).trans (pushWord_sameContext h4)).advance
+      | exact ((((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
+          (chargeGasAndMemory_sameContext h3)).trans (pushWord_sameContext h4)).advance
+  case pop =>
+    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
+    obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+    cases h
+    exact ((popWord_sameContext h1).trans (chargeGas_sameContext h2)).advance
+  case push =>
+    obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+    obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+    cases h
+    exact ((chargeGas_sameContext h1).trans (pushWord_sameContext h2)).advance _
+  case dup =>
+    obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+    split at h
+    · cases h
+    · obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+      cases h
+      exact ((chargeGas_sameContext h1).trans (pushWord_sameContext h2)).advance
+  case swap =>
+    obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+    split at h
+    · split at h
+      · cases h
+      · cases h
+        have := chargeGas_sameContext h1
+        exact ⟨this.message, this.state, this.substate⟩
+    · cases h
 
 end EthLib.Execution.Evm

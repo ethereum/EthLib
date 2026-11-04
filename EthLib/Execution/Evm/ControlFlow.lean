@@ -24,17 +24,17 @@ Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (U256)
+open EthLib.Base (Fork U256)
 open GasCosts
 
-variable {Meter : Type} [GasMeter Meter]
+variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- STOP: halt the frame, with no output and at no price. -/
-def stopStep (evm : Evm Meter) : Except EvmError (Evm Meter) :=
+def stopStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) :=
   .ok (advance { evm with running := false })
 
 /-- JUMP: move to `destination`, which must be a valid jump destination. -/
-def jumpStep (evm : Evm Meter) : Except EvmError (Evm Meter) := do
+def jumpStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (destination, evm) ← popWord evm
   let evm ← chargeGas evm OPCODE_JUMP
   if isValidJumpDest evm.validJumpDestinations destination.toNat then
@@ -43,7 +43,7 @@ def jumpStep (evm : Evm Meter) : Except EvmError (Evm Meter) := do
     throw .invalidJumpDest
 
 /-- JUMPI: jump to `destination` when the condition is not zero, else go to the next opcode. -/
-def jumpiStep (evm : Evm Meter) : Except EvmError (Evm Meter) := do
+def jumpiStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (destination, evm) ← popWord evm
   let (condition, evm) ← popWord evm
   let evm ← chargeGas evm OPCODE_JUMPI
@@ -55,7 +55,7 @@ def jumpiStep (evm : Evm Meter) : Except EvmError (Evm Meter) := do
     throw .invalidJumpDest
 
 /-- JUMPDEST: mark a jump destination, and do nothing else. -/
-def jumpdestStep (evm : Evm Meter) : Except EvmError (Evm Meter) := do
+def jumpdestStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let evm ← chargeGas evm OPCODE_JUMPDEST
   return advance evm
 
@@ -64,7 +64,7 @@ def jumpdestStep (evm : Evm Meter) : Except EvmError (Evm Meter) := do
 GAS reads the gas left after its own price.
 
 Other opcodes give none. -/
-def controlFlowStep : Op → Option (Evm Meter → Except EvmError (Evm Meter))
+def controlFlowStep : Op → Option (Evm fork Meter → Except EvmError (Evm fork Meter))
   | .stop => some stopStep
   | .jump => some jumpStep
   | .jumpi => some jumpiStep

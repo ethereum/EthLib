@@ -14,8 +14,10 @@ It then takes the charge from the gas left, and changes nothing else.
 
 namespace EthLib.Execution.Evm
 
+variable {fork : EthLib.Base.Fork}
+
 /-- With one counter of gas, a charge fails exactly when it is above the gas left. -/
-theorem chargeGas_eq_error_iff {evm : Evm Nat} {amount : Nat} {e : EvmError} :
+theorem chargeGas_eq_error_iff {evm : Evm fork Nat} {amount : Nat} {e : EvmError} :
     chargeGas evm amount = .error e ↔ evm.gas < amount ∧ e = .outOfGas := by
   simp only [chargeGas, GasMeter.charge]
   split
@@ -25,7 +27,7 @@ theorem chargeGas_eq_error_iff {evm : Evm Nat} {amount : Nat} {e : EvmError} :
     omega
 
 /-- With one counter of gas, a charge within the gas left takes it from the gas left. -/
-theorem chargeGas_eq_ok_iff {evm after : Evm Nat} {amount : Nat} :
+theorem chargeGas_eq_ok_iff {evm after : Evm fork Nat} {amount : Nat} :
     chargeGas evm amount = .ok after ↔
       amount ≤ evm.gas ∧ after = { evm with gas := evm.gas - amount } := by
   simp only [chargeGas, GasMeter.charge]
