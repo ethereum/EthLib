@@ -545,6 +545,8 @@ static PyMethodDef methods[] = {
   {"snappy_masked_crc", py_snappy_masked_crc, METH_VARARGS, NULL},
   {"varint_encode", py_varint_encode, METH_VARARGS, NULL},
   {"varint_decode", py_varint_decode, METH_VARARGS, NULL},
+  {"gossip_message_id_phase0", py_gossip_message_id_phase0, METH_VARARGS, NULL},
+  {"gossip_message_id_altair", py_gossip_message_id_altair, METH_VARARGS, NULL},
   {"precompile_run", py_precompile_run, METH_VARARGS, NULL},
   {"state_root", py_state_root, METH_VARARGS, NULL},
   {NULL, NULL, 0, NULL},

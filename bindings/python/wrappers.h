@@ -240,6 +240,8 @@ PyObject* py_snappy_encode_frames_literal                 (PyObject* self, PyObj
 PyObject* py_snappy_masked_crc                            (PyObject* self, PyObject* args);
 PyObject* py_varint_encode                                (PyObject* self, PyObject* args);
 PyObject* py_varint_decode                                (PyObject* self, PyObject* args);
+PyObject* py_gossip_message_id_phase0                     (PyObject* self, PyObject* args);
+PyObject* py_gossip_message_id_altair                     (PyObject* self, PyObject* args);
 
 PyObject* py_rlpx_ecies_encrypt                           (PyObject* self, PyObject* args);
 PyObject* py_rlpx_ecies_decrypt                           (PyObject* self, PyObject* args);
