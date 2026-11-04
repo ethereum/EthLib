@@ -10,7 +10,7 @@ A signature is a point of the group G2, encoded in 96 bytes.
 Many signatures over one message aggregate into a single signature.
 The aggregate of the signers' public keys verifies it with one check.
 
-This page was checked against EthLib commit `a0838f3`.
+This page was checked against EthLib commit `7485235`.
 Check it again when a definition it names changes.
 
 ## Source
@@ -97,10 +97,8 @@ Each directory has a `SHA256SUMS` that pins its cases, and CI checks the pins.
 ## What is proved
 
 The proofs are in `EthLib/Cryptography/Proofs/Bls/`.
-They cover the two fields and the group G1, which is what KZG commitments are built from.
-They say nothing yet about G2 or the pairing.
-Of the signature functions, they prove that signing never fails,
-and that honest signatures verify under the pairing law.
+They cover the two fields, the groups G1 and G2, hash-to-curve and the signature functions.
+The law of the pairing check is a hypothesis.
 
 Most statements concern valid points.
 A G1 point is stored as a representative in coordinates,
@@ -149,12 +147,48 @@ group element (`uncompress_compress`, `Compress.lean`).
 The theorem is about the group element, not the stored coordinates:
 the representation it returns may differ from that of `P`.
 
+**The group G2.**
+G2 lies on a twist of the curve over `Fp2`, and its proofs follow those of G1.
+For valid `P` and `Q`, `add P Q` is valid and denotes the sum of the two points
+(`valid_add`, `toPoint_add`, `G2Group.lean`).
+The G2 generator has order `r` (`addOrderOf_toPoint_generator`, `G2Order.lean`).
+The G2 subgroup check accepts exactly the valid points that represent a multiple of the generator
+(`inSubgroup_iff_exists_represents`, `KeyValidate.lean`).
+For a point on the twist, decompressing its 96-byte form gives back the same projective point
+(`uncompress_compress`, `G2Compress.lean`).
+
+**Hash to curve.**
+Hashing to G2 succeeds on every message and tag.
+It returns a valid point that passes the subgroup check
+(`hashToG2_total_inSubgroup`, `CofactorSubgroupLanding.lean`).
+Every output of the map to G2 is valid and passes the subgroup check too
+(`mapToG2_inSubgroup`, `MapToCurve.lean`).
+SHA-256, which the hash uses, agrees with a model of FIPS 180-4
+on every message shorter than `2^61` bytes (`EthLib/Cryptography/Proofs/Hash/Sha256.lean`).
+
+**The pairing.**
+The pairing check reads only the group elements of valid points
+(`pairingCheck_congr`, `PairingCongr.lean`).
+
+**Signatures.**
+Signing never fails (`sign_ok`, `popProve_ok`, `Signatures.lean`).
+Under the pairing law, honest signatures, proofs of possession and aggregates verify
+(`verify_sign`, `popVerify_popProve`, `aggregateVerify_aggregate`, `SignaturesCorrect.lean`).
+
+Under the same law, the core verification accepts exactly one kind of signature.
+Let the key validate to a representative of `a * g_1`, and the message hash to one of `b * g_2`.
+Then a signature passes exactly when it decodes to a representative of `(a * b) * g_2`
+(`coreVerify_iff`, `SignaturesUnique.lean`).
+So a key and a message have at most one signature that verifies, byte for byte (`verify_unique`).
+
 ## What is not proved
 
-- Nothing is proved about G2, the pairing, hash-to-curve or SHA-256.
+- No theorem proves that the pairing check computes a bilinear, non-degenerate pairing.
+  Theorems assume the pairing law below instead.
 - The map to G1 of EIP-2537 has no theorem:
   neither its validity nor its landing in the subgroup is proved.
-- No theorem says which signatures verification rejects, beyond malformed input.
+- Without the pairing law, no theorem says which signatures verification rejects,
+  beyond malformed input.
 - Unforgeability is proved only in the random oracle model, with the hash to G2 as the oracle.
   It covers signing and verification, not aggregation or proofs of possession.
   Its adversary works on group elements, and the step to a forger on bytes is not proved.
@@ -165,21 +199,8 @@ the representation it returns may differ from that of `P`.
   Theorems about the result of a pairing check take it as a hypothesis,
   among them the theorem on the KZG ceremony checks.
 
-## What the kernel cannot evaluate
+## What the kernel can evaluate
 
-This section is about a limit on computing results inside Lean,
-separate from the missing theorems in the previous section.
-
-`Fp2.powNat` and `Fp12.powNat` are `partial` definitions, which the kernel cannot unfold,
-and `scripts/check_decls_baseline.txt` lists both as `partial`.
-`millerLoop` is a subtler case.
-It is declared `partial`, but it does not call itself, so Lean makes it an ordinary definition.
-Its `while` loops, however, reach `Loop.forIn`, which Lean core defines with `partial`.
-The baseline therefore lists it as `reaches-opaque`: it reaches an opaque constant when unfolded,
-but is not opaque itself.
-
-These three definitions sit on the verification path.
-The pairing check runs `millerLoop`, then raises the result to a power with `Fp12.powNat`,
-and hash-to-curve clears the cofactor with constants computed by `Fp2.powNat`.
-So the kernel cannot compute the result of `ethFastAggregateVerify` once its input reaches
-hash-to-curve and the pairing check.
+No definition of this module is `partial`.
+`lake exe check-decls` reports a definition that is opaque or reaches an opaque constant,
+and its baseline, `scripts/check_decls_baseline.txt`, lists no finding at all.
