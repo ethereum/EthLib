@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Proofs.Kzg.BitReversal
 public import EthLib.Cryptography.Proofs.Kzg.Domain
 public import EthLib.Cryptography.Proofs.Kzg.Evaluation
 public import EthLib.Cryptography.Proofs.Kzg.Fft
+public import EthLib.Cryptography.Proofs.Kzg.FftIter
 public import EthLib.Cryptography.Proofs.Kzg.FftInverse
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
 public import EthLib.Cryptography.Proofs.Kzg.Division

@@ -2,6 +2,8 @@ module
 
 public import EthLib.Cryptography.Kzg.Fft
 public import EthLib.Cryptography.Proofs.Bls.Fr
+public import EthLib.Cryptography.Proofs.Kzg.BitReversal
+public import Mathlib.Tactic.Set
 
 /-!
 # Proofs: the shape of the FFT helpers
@@ -29,6 +31,35 @@ theorem getElem_fftHalve (xs : Array Fr) (start i : Nat)
     (fftHalve xs start)[i] = xs[start + 2 * i]! := by
   simp [fftHalve]
 
+/-- The recursive radix-2 Cooley-Tukey FFT, the model that the proofs compare against.
+
+It transforms the even and the odd values, then combines the two halves by butterflies.
+
+The roots of unity must have the length of the values. -/
+def fftFieldAux
+    (vals : Array Fr) (rootsOfUnity : Array Fr)
+    : Array Fr :=
+  if vals.size ≤ 1 then
+    vals
+  else
+    let halfRoots := fftHalve rootsOfUnity 0
+    let l := fftFieldAux (fftHalve vals 0) halfRoots
+    let r := fftFieldAux (fftHalve vals 1) halfRoots
+    let n := vals.size
+    let halfL := l.size  -- = n / 2
+    -- Butterfly: for `i < n / 2`, with `t = r[i] * root[i]`, output `i` is `l[i] + t`.
+
+    -- Output `i + n / 2` is `l[i] - t`, with the same root index `i`.
+    Array.ofFn (n := n) fun i =>
+      let baseIdx     := if i.val < halfL then i.val else i.val - halfL
+      let lAt         := l[baseIdx]!
+      let rAt         := r[baseIdx]!
+      let yTimesRoot  := rAt * rootsOfUnity[baseIdx]!
+      if i.val < halfL then lAt + yTimesRoot
+      else                  lAt - yTimesRoot
+termination_by vals.size
+decreasing_by all_goals (simp [fftHalve]; omega)
+
 @[simp] theorem size_fftFieldAux (vals rootsOfUnity : Array Fr) :
     (fftFieldAux vals rootsOfUnity).size = vals.size := by
   rw [fftFieldAux]
@@ -36,24 +67,48 @@ theorem getElem_fftHalve (xs : Array Fr) (start i : Nat)
   · rfl
   · simp
 
+@[simp] theorem size_fftStage (roots x : Array Fr) (h : Nat) :
+    (fftStage roots x h).size = x.size := by
+  simp [fftStage]
+
+@[simp] theorem size_fftStages (roots : Array Fr) (s : Nat) (x : Array Fr) (h : Nat) :
+    (fftStages roots s x h).size = x.size := by
+  induction s generalizing x h with
+  | zero => rfl
+  | succ s ih => rw [fftStages, ih, size_fftStage]
+
 @[simp] theorem size_fftField (vals rootsOfUnity : Array Fr) (inv : Bool) :
     (fftField vals rootsOfUnity inv).size = vals.size := by
-  cases inv <;> simp [fftField]
+  cases inv <;> simp [fftField, fftFieldIter, BitReversal.size_bitReversalPermutation]
 
-/-- The power-of-two guard in `fftField` is logically the identity:
-`fftField` always computes its unguarded body. -/
-theorem fftField_def (vals rootsOfUnity : Array Fr) (inv : Bool) :
-    fftField vals rootsOfUnity inv =
-      if inv then
-        (fftFieldAux vals (Array.ofFn (n := rootsOfUnity.size) fun i =>
-          if i.val = 0 then rootsOfUnity[0]!
-          else rootsOfUnity[rootsOfUnity.size - i.val]!)).map
-            (· * (Fr.ofNat vals.size).inverse)
-      else fftFieldAux vals rootsOfUnity := by
-  rw [fftField]
-  split
-  · rfl
-  · exact panicWith_eq _ _
+/-! ## One step of the Cooley–Tukey recursion
+
+One output of the model, for more than one value, is a butterfly of the two half transforms.
+
+Proofs by induction on the size then need no more unfolding of arrays. -/
+
+theorem getElem_fftFieldAux_step (vals roots : Array Fr)
+    (hsz : 1 < vals.size) (p : Nat) (hp : p < vals.size) :
+    (fftFieldAux vals roots)[p]! =
+      (if p < vals.size / 2
+        then (fftFieldAux (fftHalve vals 0) (fftHalve roots 0))[p]!
+              + (fftFieldAux (fftHalve vals 1) (fftHalve roots 0))[p]!
+                * roots[p]!
+        else (fftFieldAux (fftHalve vals 0) (fftHalve roots 0))[p - vals.size / 2]!
+              - (fftFieldAux (fftHalve vals 1) (fftHalve roots 0))[p - vals.size / 2]!
+                * roots[p - vals.size / 2]!) := by
+  -- Name the two half transforms, so that the unfolding below touches only the left side.
+  set l := fftFieldAux (fftHalve vals 0) (fftHalve roots 0) with hl
+  set r := fftFieldAux (fftHalve vals 1) (fftHalve roots 0) with hr
+  rw [fftFieldAux, ite_eq_right (by omega : ¬ vals.size ≤ 1)]
+  rw [getElem!_pos _ p (by simpa using hp)]
+  -- Read the entry of the array, and fold the half transforms back.
+  simp only [Array.getElem_ofFn, ← hl, ← hr]
+  -- The first half has `n / 2` values, so the two conditions agree.
+  have hlsize : l.size = vals.size / 2 := by
+    rw [hl, size_fftFieldAux, size_fftHalve]
+  rw [hlsize]
+  split <;> rfl
 
 @[simp] theorem length_shiftValsAux (factor shift : Fr) (l : List Fr) :
     (shiftValsAux factor shift l).length = l.length := by
