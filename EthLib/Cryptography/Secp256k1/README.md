@@ -26,6 +26,7 @@ Each part of the module follows the standard that defines it:
 
 The specification is written to be read rather than to be fast.
 Points are in affine coordinates, as SEC 1 prints them.
+Scalar multiplication works on Jacobian coordinates and converts back once, at the end.
 Inverses are computed by the extended Euclidean algorithm.
 The files build on one another in this order:
 

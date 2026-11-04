@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Secp256k1.Field
+public import EthLib.Cryptography.Jacobian
 
 /-!
 # `AltBn128.Curve`
@@ -94,15 +95,22 @@ def add : Point → Point → Point
 
 instance : Add Point := ⟨add⟩
 
+/-- The Jacobian form of a point. -/
+def toJacobian : Point → Jacobian Fp.modulus
+  | infinity => .infinity
+  | affine x y => .ofAffine x y
+
+/-- The point of a Jacobian form. -/
+def ofJacobian (p : Jacobian Fp.modulus) : Point :=
+  match p.toAffine with
+  | none => infinity
+  | some (x, y) => affine x y
+
 /-- `k P`, for `k < 2^fuel`, by double and add on the bits of `k`, low bit first.
 
-It recurses on `fuel`, so the kernel can run it. -/
-def mulBits : Nat → Nat → Point → Point
-  | 0, _, _ => infinity
-  | fuel + 1, k, p =>
-    -- `k P = (k mod 2) P + (k / 2) (2 P)`.
-    let rest := mulBits fuel (k / 2) (p + p)
-    if k % 2 = 1 then p + rest else rest
+The steps run in Jacobian coordinates, so only the conversion back takes an inverse. -/
+def mulBits (fuel k : Nat) (p : Point) : Point :=
+  ofJacobian (Jacobian.mulBits 0 fuel k (toJacobian p))
 
 end Point
 
