@@ -60,8 +60,7 @@ The bottom turns of an index, read as an index of a tree of their own.
 
 Undoes a splice, handing the rest of an index to the subtree it lands in.
 
-    splice 2 and 24  ->  40
-    read 40 back at the depth of 24  ->  24
+For example, the splice of 2 and 24 is 40, and 40 read back at the depth of 24 is 24.
 -/
 def gindexRebase (index depth : Nat) : Nat :=
   2 ^ depth + gindexBelow index depth
@@ -69,9 +68,7 @@ def gindexRebase (index depth : Nat) : Nat :=
 /--
 Position of one chunk on a progressive spine.
 
-    level 1  holds chunk 0
-    level 2  holds chunks 1 to 4
-    level 3  holds chunks 5 to 20
+Level 1 holds chunk 0, level 2 holds chunks 1 to 4, and level 3 holds chunks 5 to 20.
 
 A chunk keeps its place as the collection grows, so a proof of it outlives an append.
 

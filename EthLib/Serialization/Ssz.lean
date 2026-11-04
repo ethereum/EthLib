@@ -27,14 +27,22 @@ public import EthLib.Serialization.Ssz.Typed.Gindex
 /-!
 # `EthLib.Serialization.Ssz`
 
-Simple Serialize (SSZ), as `consensus-specs` defines it in `ssz/simple-serialize.md` and `ssz/merkle-proofs.md`.
+Simple Serialize (SSZ), the serialization and merkleization of the consensus layer.
 
-    Ssz/Type    declarations, values, well-formedness, defaults, and paths
-    Ssz/Codec   serialization, deserialization, layouts, roots, and proofs
-    Ssz/Merkle  bounded and progressive trees, indices, and verification
-    Ssz/Typed   Lean types as SSZ types, encoded and rooted through the codec
+Source: the SSZ specification in [`ethereum/ssz-specs`](https://github.com/ethereum/ssz-specs).
 
-Hashing uses `EthLib.Cryptography.Hash.Sha256`.
+Progressive lists follow [EIP-7916](https://eips.ethereum.org/EIPS/eip-7916).
 
-The properties proved of these definitions sit under `EthLib.Serialization.Proofs.Ssz`, mirroring this layout.
+Progressive containers follow [EIP-7495](https://eips.ethereum.org/EIPS/eip-7495).
+
+Compatible unions follow [EIP-8016](https://eips.ethereum.org/EIPS/eip-8016).
+
+- `Ssz/Type`: declarations, values, well-formedness, defaults and paths.
+- `Ssz/Codec`: serialization, deserialization, layouts, roots and proofs.
+- `Ssz/Merkle`: bounded and progressive trees, indices and verification.
+- `Ssz/Typed`: Lean types as SSZ types, encoded and rooted through the codec.
+
+Hashing uses SHA-256.
+
+The proofs about these definitions mirror this layout under `EthLib.Serialization.Proofs.Ssz`.
 -/

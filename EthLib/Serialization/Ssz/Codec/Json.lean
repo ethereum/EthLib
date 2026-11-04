@@ -15,16 +15,16 @@ open Lean
 /--
 Where a declaration spells a one-byte unsigned integer as the byte alias.
 
-SSZ gives the alias and the one-byte integer the same type, and the JSON mapping does not:
-the alias is written as hex, and the integer as decimal digits in a string.
+SSZ gives the alias and the one-byte integer the same type, and the JSON mapping does not.
 
-A spelling travels beside a declaration and holds one node for each node of it.
+The alias is written as hex, and the integer as decimal digits in a string.
 
-    declaration        spelling            document
-    Uint8              plain []            "255"
-    Byte               byte                "0xff"
-    Vector[Uint8, 2]   plain [plain []]    ["1", "2"]
-    Vector[Byte, 2]    plain [byte]        "0x0102"
+A spelling travels beside a declaration and holds one node for each node of it:
+
+- `Uint8`, spelled plain, is the document `"255"`.
+- `Byte`, spelled as a byte, is `"0xff"`.
+- `Vector[Uint8, 2]`, spelled plain, is `["1", "2"]`.
+- `Vector[Byte, 2]`, with bytes as elements, is `"0x0102"`.
 -/
 inductive Spelling where
   /-- The byte alias, written as hex where a plain integer is written as digits. -/
@@ -97,6 +97,7 @@ The number a document holds.
 An integer is digits in a string, so a wide one survives a parser using doubles.
 
 Only the digits the mapping writes are read back, with no sign, padding or separator.
+
 Writing the number again and comparing is what checks that.
 
 A bare number is accepted as well.

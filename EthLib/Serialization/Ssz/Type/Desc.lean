@@ -45,10 +45,14 @@ inductive Desc where
   | compatibleUnion (selectors : List Nat) (options : List Desc)
   deriving Inhabited
 
-/-- Zero is reserved for possible optional values, per [EIP-8016](https://eips.ethereum.org/EIPS/eip-8016). -/
+/-- Zero is reserved for possible optional values.
+
+Source: [EIP-8016](https://eips.ethereum.org/EIPS/eip-8016). -/
 abbrev minSelector : Nat := 1
 
-/-- The high bit is reserved for future extensions, per [EIP-8016](https://eips.ethereum.org/EIPS/eip-8016). -/
+/-- The high bit is reserved for future extensions.
+
+Source: [EIP-8016](https://eips.ethereum.org/EIPS/eip-8016). -/
 abbrev maxSelector : Nat := 127
 
 /-- Whether a count is within a capacity its shape declares only where it has one. -/

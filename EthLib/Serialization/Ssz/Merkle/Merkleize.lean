@@ -18,15 +18,7 @@ Leaves arrive as a function from position to node, not as a list.
 
 A tree wider than its data therefore needs no padding to describe.
 
-    depth 2:
-
-    parent hash
-     +-- left parent hash
-     |    +-- leaf 0
-     |    `-- leaf 1
-     `-- right parent hash
-          +-- leaf 2
-          `-- leaf 3
+For example, at depth 2 the root hashes two parents, of leaves 0 and 1, and of leaves 2 and 3.
 
 Nothing here reads a node, so this holds for any node type at all.
 
@@ -59,7 +51,9 @@ Positions past the end of the array read as zero.
 def padded (zero : α) (chunks : Array α) : Nat → α :=
   fun position => chunks[position]?.getD zero
 
-/-- A spine of perfect trees with capacities 1, 4, 16, and so on, per [EIP-7916](https://eips.ethereum.org/EIPS/eip-7916). -/
+/-- A spine of perfect trees with capacities 1, 4, 16, and so on.
+
+Source: [EIP-7916](https://eips.ethereum.org/EIPS/eip-7916). -/
 def progressiveRoot (combine : α → α → α) (zero : α) (chunks : List α)
     (level : Nat := 0) : α :=
   -- EIP-7916 closes an empty suffix with a single zero node.

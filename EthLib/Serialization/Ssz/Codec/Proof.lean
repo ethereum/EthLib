@@ -12,13 +12,9 @@ namespace EthLib.Serialization.Ssz
 /--
 Where a walk down the spine of a progressive shape stopped.
 
-    root
-     +-- level 1, holding leaf 0
-     `-- the rest of the spine
-          +-- level 2, holding leaves 1 to 4
-          `-- the rest of the spine
-               +-- level 3, holding leaves 5 to 20
-               `-- the zero node that closes it
+Level 1 of the spine holds leaf 0, level 2 holds leaves 1 to 4, and level 3 holds leaves 5 to 20.
+
+A zero node closes the spine.
 -/
 structure SpineStop where
   /-- Turns of the index still to take, once the spine has been left or exhausted. -/
@@ -83,8 +79,9 @@ termination_by budget => (budget, 0)
 /--
 Root of a node of the subtree a walk ended in, or of something inside one leaf.
 
-    turns left <= height   the index stops inside this subtree
-    turns left >  height   the index passes into one leaf's own tree
+If the turns left are at most the height, the index stops inside this subtree.
+
+Otherwise the index passes into the own tree of one leaf.
 -/
 def boundedNode (budget : Nat) (layout : MerkleLayout)
     (index depth leavesFrom capacity : Nat) : Except Err Bytes := do
@@ -129,8 +126,9 @@ end
 /--
 Root of the subtree at one generalized index of a value's own Merkle tree.
 
-The budget is the type's nesting plus the index, which is more than the walk can spend:
-each level enters one nested type or consumes one turn of the index.
+The budget is the nesting of the type plus the index, which is more than the walk can spend.
+
+Each level enters one nested type or consumes one turn of the index.
 -/
 def nodeRoot (shape : Desc) (value : Value) (index : Nat) : Except Err Bytes :=
   nodeRootAt (shape.nesting + index) shape value index

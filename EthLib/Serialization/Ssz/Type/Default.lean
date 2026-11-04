@@ -12,15 +12,14 @@ namespace EthLib.Serialization.Ssz
 mutual
 
 /--
-The default value of a type, which every type but one has.
+The default value of a type, which every type but one has:
 
-    unsigned integer, boolean          zero, false
-    fixed byte array                   every byte zero
-    bitvector                          every bit clear
-    vector                             the element default, once per position
-    container, progressive container   one field default per field
-    list, bitlist, progressive lists    empty
-    compatible union                   none, since no option is the one to take
+- An unsigned integer is zero, and a boolean is false.
+- A fixed byte array has every byte zero, and a bitvector every bit clear.
+- A vector holds the element default at each position.
+- A container or progressive container holds the default of each field.
+- A list, a bitlist or a progressive list is empty.
+- A compatible union has none, since no option is the one to take.
 
 A composite builds from its parts, so a part with no default leaves it none.
 -/
