@@ -61,7 +61,15 @@ structure Header (fork : Fork) : Type where
 
   From Paris, EIP-3675 fixes it to the hash of the RLP form of the empty list. -/
   ommersHash : Hash32
-  /-- The account that the block pays its fees to, called the beneficiary. -/
+  /-- The account that the block pays its fees to, called the beneficiary.
+
+  Before London, it receives the gas price times the gas used of each transaction.
+
+  From London, it receives only the priority fee, since EIP-1559 burns the base fee.
+
+  Before Paris, it also receives the block reward and a reward for each ommer it includes.
+
+  EIP-3675 ends both rewards at Paris. -/
   coinbase : Address
   /-- The root of the state trie after the block. -/
   stateRoot : Hash32
