@@ -3,6 +3,7 @@ module
 public import EthLib.Base
 public import EthLib.Consensus
 public import EthLib.Cryptography
+public import EthLib.Engine
 public import EthLib.Networking
 public import EthLib.Execution
 public import EthLib.Serialization
@@ -17,6 +18,7 @@ Each domain lives in its own subtree:
 - `EthLib.Base` holds the bytes and integers every layer uses.
 - `EthLib.Consensus` holds the consensus layer: the values and types of the beacon chain.
 - `EthLib.Cryptography` holds the cryptographic primitives.
+- `EthLib.Engine` holds what needs both layers, such as the block of an execution payload.
 - `EthLib.Networking` holds the wire formats of the networking layer.
 - `EthLib.Execution` holds the execution layer: the fees of a block, the EVM, its precompiled contracts and the Merkle Patricia Trie.
 - `EthLib.Serialization` holds the encodings of Ethereum data.

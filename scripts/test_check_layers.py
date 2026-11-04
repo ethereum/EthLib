@@ -36,6 +36,7 @@ ARCHITECTURE = """\
 
 | Layer | Holds | Directory |
 | --- | --- | --- |
+| Engine | g | `EthLib/Engine/` |
 | Consensus | c | `EthLib/Consensus/` |
 | Execution | e | `EthLib/Execution/` |
 | Networking | n | `EthLib/Networking/` |
@@ -47,7 +48,8 @@ ARCHITECTURE = """\
 # A tree that follows every rule: each module of a layer, with its imports.
 GOOD = {
     "EthLib": ["EthLib.Base.A", "EthLib.Cryptography.A", "EthLib.Serialization.A",
-               "EthLib.Networking.A", "EthLib.Execution.A", "EthLib.Consensus.A"],
+               "EthLib.Networking.A", "EthLib.Execution.A", "EthLib.Consensus.A",
+               "EthLib.Engine.A"],
     "EthLib.Proofs": ["EthLib.Execution.Proofs.A"],
     "EthLib.Exports": ["EthLib.Execution.Exports.A"],
     "EthLib.Base.A": ["Init.Data.List"],
@@ -56,6 +58,7 @@ GOOD = {
     "EthLib.Networking.A": ["EthLib.Serialization.A"],
     "EthLib.Execution.A": ["EthLib.Networking.A", "EthLib.Base.A"],
     "EthLib.Consensus.A": ["EthLib.Networking.A"],
+    "EthLib.Engine.A": ["EthLib.Execution.A", "EthLib.Consensus.A"],
     "EthLib.Execution.Proofs.A": ["EthLib.Execution.A", "Mathlib.Tactic"],
     "EthLib.Execution.Exports.A": ["EthLib.Execution.A"],
 }
@@ -121,6 +124,12 @@ class Rules(unittest.TestCase):
     def test_execution_and_consensus(self):
         self.assertFails(with_imports("EthLib.Consensus.A", "EthLib.Execution.A"),
                          "Consensus and Execution never import each other")
+
+    def test_engine_sits_above_execution_and_consensus(self):
+        self.assertFails(with_imports("EthLib.Execution.A", "EthLib.Engine.A"),
+                         "Execution sits below Engine")
+        self.assertFails(with_imports("EthLib.Consensus.A", "EthLib.Engine.A"),
+                         "Consensus sits below Engine")
 
     def test_specification_imports_a_property(self):
         self.assertFails(with_imports("EthLib.Execution.A", "EthLib.Base.Proofs.A")

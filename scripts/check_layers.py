@@ -4,8 +4,8 @@ Check the import rules of ARCHITECTURE.md on the header of every Lean module und
 The check fails on each of these, with the module and the import:
 
 - an import into a higher layer, by the order Base, Cryptography, Serialization, Networking,
-  then Execution and Consensus side by side;
-- an import between Execution and Consensus;
+  then Execution and Consensus side by side, then Engine;
+- an import between Execution and Consensus, which only Engine imports together;
 - an import of a property (a module with a `Proofs` component) or of a C export (a module with
   an `Exports` component) from a specification;
 - an import of anything outside `EthLib` and the Lean toolchain (`Init`, `Std` and `Lean`) from
@@ -48,6 +48,7 @@ LAYERS = {
     "Networking": 3,
     "Execution": 4,
     "Consensus": 4,
+    "Engine": 5,
 }
 AGGREGATORS = {"EthLib", "EthLib.Proofs", "EthLib.Exports"}
 TOOLCHAIN = {"Init", "Std", "Lean"}

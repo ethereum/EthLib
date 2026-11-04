@@ -1,0 +1,11 @@
+module
+
+/-!
+# `EthLib.Engine`
+
+The layer above the execution and the consensus layers, for what needs the types of both.
+
+An execution payload of a beacon block and the execution block that it stands for are one example.
+
+Neither of the two layers imports the other, so their meeting point lives here.
+-/
