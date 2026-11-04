@@ -40,6 +40,7 @@ public import EthLib.Cryptography.Proofs.Bls.CofactorSpan
 public import EthLib.Cryptography.Proofs.Bls.CofactorSubgroupLanding
 public import EthLib.Cryptography.Proofs.Bls.G2SubgroupSpan
 public import EthLib.Cryptography.Proofs.Bls.PairingCongr
+public import EthLib.Cryptography.Proofs.Bls.FinalExponentiation
 public import EthLib.Cryptography.Proofs.Bls.PairingLaws
 public import EthLib.Cryptography.Proofs.Bls.Represents
 public import EthLib.Cryptography.Proofs.Bls.KeyValidate

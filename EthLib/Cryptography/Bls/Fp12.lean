@@ -63,6 +63,27 @@ def inverse (a : Fp12) : Fp12 :=
 /-- Conjugation: `c0 + c1·w ↦ c0 − c1·w`. -/
 @[inline] def conjugate (a : Fp12) : Fp12 := ⟨a.c0, -a.c1⟩
 
+/-- The constant `γ = ξ^((p - 1) / 6)` of the Frobenius map, with `ξ = 1 + i`.
+
+Since `w^6 = ξ`, the `p`-th power of `w` is `γ w`. -/
+def frobeniusCoeff : Fp2 := Fp2.powNat ⟨Fp.one, Fp.one⟩ ((Fp.modulus - 1) / 6)
+
+/-- The Frobenius map `a ↦ a^p`.
+
+Write `a` as the sum of `a_k w^k` for `k < 6`, with each `a_k` in `Fp2`.
+
+The `p`-th power is a ring map, the `p`-th power of `a_k` is its conjugate, and `w^p = γ w`.
+
+So the `p`-th power of `a` is the sum of `conj(a_k) γ^k w^k`.
+
+In `c0 + c1 w`, the coefficient `a_k` sits in `c0` for even `k` and in `c1` for odd `k`. -/
+def frobenius (a : Fp12) : Fp12 :=
+  let g1 := frobeniusCoeff
+  let g2 := g1 * g1
+  let g3 := g2 * g1
+  ⟨⟨a.c0.c0.conjugate, a.c0.c1.conjugate * g2, a.c0.c2.conjugate * (g2 * g2)⟩,
+   ⟨a.c1.c0.conjugate * g1, a.c1.c1.conjugate * g3, a.c1.c2.conjugate * (g3 * g2)⟩⟩
+
 /-- Square-and-multiply modular exponentiation. -/
 def powNat (base : Fp12) (e : Nat) : Fp12 :=
   if e = 0 then one
