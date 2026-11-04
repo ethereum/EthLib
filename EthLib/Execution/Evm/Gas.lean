@@ -142,11 +142,6 @@ def TX_ACCESS_LIST_STORAGE_KEY : Nat := 1900
 /-- The largest gas of a transaction, `2^24`, from EIP-7825. -/
 def TX_MAX_GAS_LIMIT : Nat := 16777216
 
-/-- A block gas limit differs from its parent's by less than the parent's over this. -/
-def LIMIT_ADJUSTMENT_FACTOR : Nat := 1024
-/-- The smallest gas limit of a block. -/
-def LIMIT_MINIMUM : Nat := 5000
-
 /-- The price of ADD. -/
 def OPCODE_ADD : Nat := VERY_LOW
 /-- The price of SUB. -/
