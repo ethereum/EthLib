@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Secp256k1.Field
 public import EthLib.Cryptography.Proofs.Pratt
+public import EthLib.Cryptography.Proofs.Inverse
 public import Mathlib.FieldTheory.Finite.Basic
 public import Mathlib.Tactic.NormNum.Prime
 
@@ -18,7 +19,7 @@ An element of `Fp` crosses over unchanged.
 
 - Both moduli are prime, by Pratt certificates that the kernel checks.
 - Square and multiply computes the power.
-- Fermat's inverse is the field inverse.
+- The Euclidean inverse is the field inverse.
 - The square root succeeds exactly on the squares, and then returns a root.
 -/
 
@@ -206,15 +207,9 @@ def toZMod : Fp ≃+* ZMod modulus := RingEquiv.refl _
 theorem toZMod_pow (a : Fp) (e : Nat) (he : e < 2 ^ 256) : toZMod (a.pow e) = toZMod a ^ e :=
   Fin.powBits_eq_pow 256 a e he
 
-/-- Fermat's inverse is the field inverse, and both send `0` to `0`. -/
-@[simp] theorem toZMod_inv (a : Fp) : toZMod a.inv = (toZMod a)⁻¹ := by
-  rw [inv, toZMod_pow _ _ (by decide)]
-  by_cases h : toZMod a = 0
-  · rw [h, zero_pow (by decide), inv_zero]
-  · -- `a^(m - 2) * a = a^(m - 1) = 1`, by Fermat's little theorem.
-    refine eq_inv_of_mul_eq_one_left ?_
-    rw [← pow_succ, show modulus - 2 + 1 = modulus - 1 by decide]
-    exact ZMod.pow_card_sub_one_eq_one h
+/-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
+@[simp] theorem toZMod_inv (a : Fp) : toZMod a.inv = (toZMod a)⁻¹ :=
+  Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
 
 /-- `p = 3 mod 4`, which gives the square root its closed form. -/
 theorem modulus_mod_four : modulus % 4 = 3 := by decide
@@ -419,15 +414,9 @@ def toZMod : Fn ≃+* ZMod modulus := RingEquiv.refl _
 theorem toZMod_pow (a : Fn) (e : Nat) (he : e < 2 ^ 256) : toZMod (a.pow e) = toZMod a ^ e :=
   Fin.powBits_eq_pow 256 a e he
 
-/-- Fermat's inverse is the field inverse, and both send `0` to `0`. -/
-@[simp] theorem toZMod_inv (a : Fn) : toZMod a.inv = (toZMod a)⁻¹ := by
-  rw [inv, toZMod_pow _ _ (by decide)]
-  by_cases h : toZMod a = 0
-  · rw [h, zero_pow (by decide), inv_zero]
-  · -- `a^(m - 2) * a = a^(m - 1) = 1`, by Fermat's little theorem.
-    refine eq_inv_of_mul_eq_one_left ?_
-    rw [← pow_succ, show modulus - 2 + 1 = modulus - 1 by decide]
-    exact ZMod.pow_card_sub_one_eq_one h
+/-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
+@[simp] theorem toZMod_inv (a : Fn) : toZMod a.inv = (toZMod a)⁻¹ :=
+  Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
 
 end Fn
 

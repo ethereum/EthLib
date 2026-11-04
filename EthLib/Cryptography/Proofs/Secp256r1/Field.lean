@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Secp256r1.Curve
 public import EthLib.Cryptography.Proofs.Secp256k1.Field
 public import EthLib.Cryptography.Proofs.Pratt
+public import EthLib.Cryptography.Proofs.Inverse
 
 /-!
 # Proofs: the fields of secp256r1
@@ -169,15 +170,9 @@ theorem toZMod_powBits (a : Fp) (e : Nat) (he : e < 2 ^ 256) :
     toZMod (Secp256k1.Fin.powBits 256 a e) = toZMod a ^ e :=
   Secp256k1.Fin.powBits_eq_pow 256 a e he
 
-/-- Fermat's inverse is the field inverse, and both send `0` to `0`. -/
-@[simp] theorem toZMod_inv (a : Fp) : toZMod a.inv = (toZMod a)⁻¹ := by
-  rw [inv, toZMod_powBits _ _ (by decide)]
-  by_cases h : toZMod a = 0
-  · rw [h, zero_pow (by decide), inv_zero]
-  · -- `a^(m - 2) * a = a^(m - 1) = 1`, by Fermat's little theorem.
-    refine eq_inv_of_mul_eq_one_left ?_
-    rw [← pow_succ, show modulus - 2 + 1 = modulus - 1 by decide]
-    exact ZMod.pow_card_sub_one_eq_one h
+/-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
+@[simp] theorem toZMod_inv (a : Fp) : toZMod a.inv = (toZMod a)⁻¹ :=
+  Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
 
 end Fp
 
@@ -344,15 +339,9 @@ theorem toZMod_powBits (a : Fn) (e : Nat) (he : e < 2 ^ 256) :
     toZMod (Secp256k1.Fin.powBits 256 a e) = toZMod a ^ e :=
   Secp256k1.Fin.powBits_eq_pow 256 a e he
 
-/-- Fermat's inverse is the field inverse, and both send `0` to `0`. -/
-@[simp] theorem toZMod_inv (a : Fn) : toZMod a.inv = (toZMod a)⁻¹ := by
-  rw [inv, toZMod_powBits _ _ (by decide)]
-  by_cases h : toZMod a = 0
-  · rw [h, zero_pow (by decide), inv_zero]
-  · -- `a^(m - 2) * a = a^(m - 1) = 1`, by Fermat's little theorem.
-    refine eq_inv_of_mul_eq_one_left ?_
-    rw [← pow_succ, show modulus - 2 + 1 = modulus - 1 by decide]
-    exact ZMod.pow_card_sub_one_eq_one h
+/-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
+@[simp] theorem toZMod_inv (a : Fn) : toZMod a.inv = (toZMod a)⁻¹ :=
+  Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
 
 end Fn
 

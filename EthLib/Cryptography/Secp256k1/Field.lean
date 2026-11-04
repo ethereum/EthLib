@@ -1,6 +1,6 @@
 module
 
-
+public import EthLib.Cryptography.Inverse
 
 /-!
 # `Secp256k1.Field`
@@ -16,9 +16,7 @@ Each field is `Fin` of its modulus, so every element is below the modulus by con
 
 Core gives `Fin` its `+`, `-`, `*` and negation, all reduced mod the modulus.
 
-An inverse is a power, by Fermat's little theorem.
-
-For a prime `m` and `a != 0`, `a^(m - 2) = a^(-1)`.
+An inverse comes from the extended Euclidean algorithm.
 
 A square root is a power too, because `p = 3 mod 4`.
 
@@ -67,10 +65,10 @@ namespace Fp
 /-- `a^e`, for an exponent below `2^256`. -/
 def pow (a : Fp) (e : Nat) : Fp := Fin.powBits 256 a e
 
-/-- The inverse of `a`, by Fermat's little theorem: `a^(p - 2)`.
+/-- The inverse of `a`, by the extended Euclidean algorithm.
 
 It sends `0` to `0`. -/
-def inv (a : Fp) : Fp := a.pow (modulus - 2)
+def inv (a : Fp) : Fp := Fin.inverse a
 
 /-- A square root of `a`, or `none` when `a` is not a square.
 
@@ -90,10 +88,10 @@ namespace Fn
 /-- `a^e`, for an exponent below `2^256`. -/
 def pow (a : Fn) (e : Nat) : Fn := Fin.powBits 256 a e
 
-/-- The inverse of `a`, by Fermat's little theorem: `a^(n - 2)`.
+/-- The inverse of `a`, by the extended Euclidean algorithm.
 
 It sends `0` to `0`. -/
-def inv (a : Fn) : Fn := a.pow (modulus - 2)
+def inv (a : Fn) : Fn := Fin.inverse a
 
 end Fn
 

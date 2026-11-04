@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Evm.Precompiles.Bls12381.Encoding
 public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Cryptography.Proofs.Inverse
 
 /-!
 # Proofs: `Evm.Precompiles.Bls12381.Encoding`
@@ -160,20 +161,9 @@ theorem natToBytes_bytesToFq2 {raw : List UInt8} (hlength : raw.length = 96) {a 
 
 /-! ## G1 points -/
 
-/-- A power of one is one. -/
-private theorem one_powNat (e : Nat) : Fp.powNat Fp.one e = Fp.one := by
-  induction e using Nat.strongRecOn with
-  | _ e ih =>
-    rw [Fp.powNat]
-    split
-    · rfl
-    · have hone : Fp.one * Fp.one = Fp.one := by decide
-      rw [hone, ih (e / 2) (by omega)]
-      split <;> first | rfl | exact hone
-
 /-- The affine form of a point with `z = 1` is its `x` and `y`. -/
 theorem g1_toAffine_one (x y : Fp) : G1.toAffine ⟨x, y, Fp.one⟩ = (x, y) := by
-  have hinv : Fp.one.inverse = Fp.one := one_powNat _
+  have hinv : Fp.one.inverse = Fp.one := Cryptography.Fin.inverse_one
   have hz : Fp.one.isZero = false := by decide
   simp only [G1.toAffine, hz, hinv, Bool.false_eq_true, ↓reduceIte]
   have hone : Fp.one * Fp.one = Fp.one := by decide

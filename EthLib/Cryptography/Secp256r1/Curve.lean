@@ -39,11 +39,11 @@ abbrev Fp := Fin Fp.modulus
 /-- An element of the scalar field. -/
 abbrev Fn := Fin Fn.modulus
 
-/-- The inverse in `Fp`, by Fermat's little theorem: `a^(p - 2)`, and 0 for 0. -/
-def Fp.inv (a : Fp) : Fp := Secp256k1.Fin.powBits 256 a (Fp.modulus - 2)
+/-- The inverse in `Fp`, by the extended Euclidean algorithm, and 0 for 0. -/
+def Fp.inv (a : Fp) : Fp := Fin.inverse a
 
-/-- The inverse in `Fn`, by Fermat's little theorem: `a^(n - 2)`, and 0 for 0. -/
-def Fn.inv (a : Fn) : Fn := Secp256k1.Fin.powBits 256 a (Fn.modulus - 2)
+/-- The inverse in `Fn`, by the extended Euclidean algorithm, and 0 for 0. -/
+def Fn.inv (a : Fn) : Fn := Fin.inverse a
 
 /-- `a = -3`, from SEC 2 v2 §2.4.2. -/
 def a : Fp := 0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFC
