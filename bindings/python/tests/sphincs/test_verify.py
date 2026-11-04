@@ -68,6 +68,28 @@ def test_valid(case: str, key: str, message: bytes) -> None:
           _key(key), message, _signature(case), expected=True)
 
 
+def test_valid_scheme_seed() -> None:
+    # The independent key and signature: every hash of the verifier is fixed by them.
+    _emit(f"{HANDLER}_valid_scheme_seed",
+          F.PUBLIC_KEY_SCHEME_SEED, F.MESSAGE_KNOWN_ANSWER, F.SIGNATURE_SCHEME_SEED,
+          expected=True)
+
+
+def test_zeroed_scheme_seed_top_last_sibling() -> None:
+    # The sibling just below the key's root, the last 16 bytes, becomes all zero.
+    signature = F.SIGNATURE_SCHEME_SEED[:-16] + bytes(16)
+    _emit(f"{HANDLER}_zeroed_scheme_seed_top_last_sibling",
+          F.PUBLIC_KEY_SCHEME_SEED, F.MESSAGE_KNOWN_ANSWER, signature, expected=False)
+
+
+def test_zeroed_scheme_seed_fors_secret() -> None:
+    # The secret of FORS tree 0 becomes all zero, so the bottom layer signed another FORS key.
+    signature = F.SIGNATURE_SCHEME_SEED
+    signature = signature[:FORS] + bytes(16) + signature[FORS + 16:]
+    _emit(f"{HANDLER}_zeroed_scheme_seed_fors_secret",
+          F.PUBLIC_KEY_SCHEME_SEED, F.MESSAGE_KNOWN_ANSWER, signature, expected=False)
+
+
 # ---- Rejected: one changed input ------------------------------------------------
 
 def test_wrong_message() -> None:

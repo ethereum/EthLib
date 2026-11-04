@@ -1,6 +1,6 @@
 """Test-vector generator: `key_gen`."""
 
-from ethlib.cryptography import sphincs
+from ethlib.cryptography import keccak, sphincs
 
 from . import fixtures as F
 from dumper import hex_str, write_case
@@ -39,3 +39,9 @@ def test_short_seed() -> None:
 def test_long_seed() -> None:
     # 33 bytes: rejected, never truncated.
     _emit(f"{HANDLER}_long_seed", F.SEED_KNOWN_ANSWER + b"\x00")
+
+
+def test_scheme_seed() -> None:
+    # The hash of the name, then the seed, that key generation starts with.
+    # It checks the value through the Keccak-256 binding, not through key generation itself.
+    assert keccak.keccak256(b"leanSPHINCS" + F.SEED_KNOWN_ANSWER) == F.SCHEME_SEED_KNOWN_ANSWER
