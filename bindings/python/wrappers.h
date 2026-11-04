@@ -166,6 +166,7 @@ PyObject* py_sphincs_verify                               (PyObject* self, PyObj
 PyObject* py_modexp                                       (PyObject* self, PyObject* args);
 PyObject* py_modexp_gas_cost                              (PyObject* self, PyObject* args);
 PyObject* py_sha256                                       (PyObject* self, PyObject* args);
+PyObject* py_keccak256                                    (PyObject* self, PyObject* args);
 PyObject* py_ripemd160                                    (PyObject* self, PyObject* args);
 PyObject* py_sha256_precompile                            (PyObject* self, PyObject* args);
 PyObject* py_sha256_precompile_gas_cost                   (PyObject* self, PyObject* args);

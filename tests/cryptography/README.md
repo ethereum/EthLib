@@ -92,6 +92,12 @@ The `sha256/` cases are pinned too.
 Every pytest run rewrites them, and `SHA256SUMS` pins the tree.
 Most cases come from the NIST CAVP `SHA256ShortMsg` and `SHA256LongMsg` distributions, and two are the SHA-256 examples of FIPS 180-2, Appendix B.
 
+## Keccak-256
+
+The `keccak/` cases are pinned too.
+Every pytest run rewrites them, and `SHA256SUMS` pins the tree.
+They are the 256 byte-aligned cases of the Keccak team's `ShortMsgKAT_256.txt`, which `bindings/python/tests/keccak/kat/` vendors with its source.
+
 ## Checks
 
 The first check compares every pinned directory with its manifest:
