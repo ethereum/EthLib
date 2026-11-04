@@ -1,4 +1,4 @@
-"""The consensus layer: its presets, configurations, parameters, containers and custody."""
+"""The consensus layer: presets, configurations, containers, the shuffle and custody."""
 
 import json
 from typing import Any
@@ -60,6 +60,16 @@ def ssz_static(name: str, fork: str, type_name: str, data: bytes) -> tuple[bytes
     return out[:32], out[32:]
 
 
+def compute_shuffled_permutation(count: int, seed: bytes, name: str = "mainnet") -> list:
+    """The shuffled position of every index below the count."""
+    return _value(json.loads(_native.consensus_compute_shuffled_permutation(name, count, seed)))
+
+
+def compute_shuffled_index(index: int, count: int, seed: bytes, name: str = "mainnet") -> int:
+    """The shuffled position of one index, or ConsensusError when it is not below the count."""
+    return _native.consensus_compute_shuffled_index(name, index, count, seed)
+
+
 __all__ = [
     "preset",
     "config",
@@ -68,4 +78,6 @@ __all__ = [
     "get_custody_groups",
     "compute_columns_for_custody_group",
     "ssz_static",
+    "compute_shuffled_permutation",
+    "compute_shuffled_index",
 ]

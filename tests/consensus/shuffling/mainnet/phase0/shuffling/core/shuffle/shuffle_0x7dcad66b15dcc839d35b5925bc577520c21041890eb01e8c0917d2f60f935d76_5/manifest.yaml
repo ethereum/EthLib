@@ -1,0 +1,6 @@
+preset: mainnet
+fork: phase0
+runner: shuffling
+handler: core
+suite: shuffle
+case: shuffle_0x7dcad66b15dcc839d35b5925bc577520c21041890eb01e8c0917d2f60f935d76_5

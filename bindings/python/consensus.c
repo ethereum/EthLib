@@ -42,6 +42,21 @@ eth_consensus_ssz_static(
   lean_object* data
 );
 
+extern lean_object*
+eth_consensus_compute_shuffled_permutation(
+  lean_object* name,
+  uint64_t count,
+  lean_object* seed
+);
+
+extern lean_object*
+eth_consensus_compute_shuffled_index(
+  lean_object* name,
+  uint64_t index,
+  uint64_t count,
+  lean_object* seed
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* The UTF-8 bytes of a `str` argument, or NULL with a TypeError set. */
@@ -166,4 +181,43 @@ py_consensus_ssz_static(
   lean_object* data = mk_bytearray(
     (const uint8_t*) PyBytes_AS_STRING(data_obj), PyBytes_GET_SIZE(data_obj));
   return except_into_pybytes(eth_consensus_ssz_static(name, fork, type, data), SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_compute_shuffled_permutation(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *count_obj;
+  const uint8_t* seed;
+  Py_ssize_t seed_len;
+  if (!PyArg_ParseTuple(args, "OOy#", &name_obj, &count_obj, &seed, &seed_len)) return NULL;
+  uint64_t count;
+  if (parse_uint64(count_obj, "count", &count)) return NULL;
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  return except_into_pybytes(
+    eth_consensus_compute_shuffled_permutation(name, count, mk_bytearray(seed, seed_len)),
+    CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_compute_shuffled_index(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *index_obj, *count_obj;
+  const uint8_t* seed;
+  Py_ssize_t seed_len;
+  if (!PyArg_ParseTuple(args, "OOOy#", &name_obj, &index_obj, &count_obj, &seed, &seed_len)) {
+    return NULL;
+  }
+  uint64_t index, count;
+  if (parse_uint64(index_obj, "index", &index)) return NULL;
+  if (parse_uint64(count_obj, "count", &count)) return NULL;
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  return except_into_pyint(
+    eth_consensus_compute_shuffled_index(name, index, count, mk_bytearray(seed, seed_len)),
+    CONSENSUS_ERROR);
 }

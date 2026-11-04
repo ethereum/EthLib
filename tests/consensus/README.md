@@ -34,6 +34,12 @@ From each archive the directory keeps the first case of each suite.
 It keeps the files `serialized.ssz_snappy` and `roots.yaml` of each case, and leaves out `value.yaml`.
 `bindings/python/tests/consensus/test_ssz_static.py` decodes each case in Lean, then checks the root and the bytes encoded again.
 
+The directory `shuffling/` holds the shuffling cases of Phase 0 from the same test release, for the minimal and the mainnet presets.
+They are copied byte for byte under their path in `minimal.tar.gz` and `mainnet.tar.gz`.
+Each case gives a seed, a count of indices and the shuffled position of each index.
+The shuffle runs the 10 rounds of the minimal preset or the 90 rounds of the mainnet preset.
+`bindings/python/tests/consensus/test_shuffling.py` compares each list with the shuffle in Lean.
+
 The test release publishes its cases in three archives.
 Their SHA-256 digests are:
 

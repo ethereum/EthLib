@@ -351,6 +351,14 @@ def consensus_ssz_static(name: str, fork: str, type: str, data: bytes) -> bytes:
     """The root of the value that the bytes encode, then the bytes of that value."""
     ...
 
+def consensus_compute_shuffled_permutation(name: str, count: int, seed: bytes) -> bytes:
+    """The shuffled position of every index below the count."""
+    ...
+
+def consensus_compute_shuffled_index(name: str, index: int, count: int, seed: bytes) -> int:
+    """The shuffled position of one index, which must be below the count."""
+    ...
+
 def reqresp_max_compressed_len(n: int) -> int:
     """The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`."""
     ...

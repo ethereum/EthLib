@@ -263,6 +263,12 @@
 #define DOC_consensus_ssz_static \
   "The root of the value that the bytes encode, then the bytes of that value."
 
+#define DOC_consensus_compute_shuffled_permutation \
+  "The shuffled position of every index below the count."
+
+#define DOC_consensus_compute_shuffled_index \
+  "The shuffled position of one index, which must be below the count."
+
 #define DOC_reqresp_max_compressed_len \
   "The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`."
 
