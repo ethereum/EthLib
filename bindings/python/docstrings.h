@@ -326,6 +326,15 @@
 #define DOC_devp2p_encode_message \
   "The frame data of the message in the uncompressed frame data `plain`."
 
+#define DOC_discv4_decode \
+  "The hash, the sender's key and the content of the packet in the bytes `packet`."
+
+#define DOC_discv4_encode \
+  "The packet with the content `plain`, signed with the private key `key`."
+
+#define DOC_discv4_record_signed_by \
+  "Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`."
+
 #define DOC_snappy_decompress \
   "The bytes a Snappy block decompresses to, or why it is not a valid block."
 

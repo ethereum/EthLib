@@ -131,6 +131,10 @@ class Devp2pError(EthLibError, ValueError):
     """A message of the devp2p "p2p" capability was rejected."""
 
 
+class Discv4Error(EthLibError, ValueError):
+    """A discv4 packet was rejected, with the code of its error, or 0 for a bad argument."""
+
+
 class TransactionError(EthLibError, ValueError):
     """A transaction was rejected, or no fork has the name given."""
 
@@ -193,6 +197,7 @@ __all__ = [
     "Discv5Error",
     "RlpxError",
     "Devp2pError",
+    "Discv4Error",
     "TransactionError",
     "VrfError",
     "TrieError",
