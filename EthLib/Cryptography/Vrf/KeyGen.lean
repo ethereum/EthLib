@@ -52,9 +52,11 @@ def opening (secrets : UInt32 → Digest) (i : UInt32) : Opening where
 
 /-! ## The secrets of a seed -/
 
-/-- The bytes a secret hash reads: the secret prefix, the seed, then the index. -/
+/-- The bytes a secret hash reads: the secret prefix, the seed, then the index.
+
+The index is `LE32(i)`, its four bytes least significant first. -/
 def secretInput (seed : Seed) (i : UInt32) : ByteArray :=
-  packBytes VRF_SECRET_DST ++ packBytes seed ++ packBytes (indexBytes i)
+  packBytes VRF_SECRET_DST ++ packBytes seed ++ packBytes (uintToBytes 4 i.toNat)
 
 /-- `s_i`: the secret of leaf `i`. -/
 def secret (seed : Seed) (i : UInt32) : Digest :=

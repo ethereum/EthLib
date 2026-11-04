@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Bytes
 public import EthLib.Cryptography.Vrf.Hash
 
 /-!
@@ -46,9 +47,7 @@ theorem VRF_OPENING_SIZE_eq : VRF_OPENING_SIZE = VRF_HASH_SIZE * (1 + VRF_TREE_H
 
 /-! ## Sizes -/
 
-/-- An object packs to as many bytes as it has. -/
-@[simp] theorem size_packBytes {n : Nat} (v : Vector UInt8 n) : (packBytes v).size = n := by
-  simp [packBytes, ByteArray.size]
+export EthLib.Base (size_packBytes packBytes_injective)
 
 /-- A leaf hash reads 11 + 32 = 43 bytes. -/
 @[simp] theorem size_leafInput (s : Digest) : (leafInput s).size = 43 := by
@@ -66,11 +65,6 @@ theorem VRF_OPENING_SIZE_eq : VRF_OPENING_SIZE = VRF_HASH_SIZE * (1 + VRF_TREE_H
   rfl
 
 /-! ## Each input determines its arguments -/
-
-/-- Packing is injective. -/
-theorem packBytes_inj {n : Nat} {v w : Vector UInt8 n} (h : packBytes v = packBytes w) : v = w := by
-  simp only [packBytes, ByteArray.mk.injEq] at h
-  exact Vector.toArray_inj.mp h
 
 /-- Two packed objects of fixed sizes split back one way. -/
 private theorem packBytes_append_inj {m n : Nat} {a a' : Vector UInt8 m} {b b' : Vector UInt8 n}

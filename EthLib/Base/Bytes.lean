@@ -24,4 +24,30 @@ abbrev Bytes32 := Vector UInt8 32
 /-- `B_256`: exactly 256 bytes, such as the logs bloom of a block header. -/
 abbrev Bytes256 := Vector UInt8 256
 
+/-! ## Crossing to and from untyped bytes -/
+
+/-- The bytes of a fixed-size object, in order.
+
+Examples:
+* `(packBytes #v[10, 20]).data = #[10, 20]`
+* `(packBytes #v[10, 20]).size = 2`
+-/
+def packBytes {n : Nat} (v : Vector UInt8 n) : ByteArray :=
+  -- The length invariant is discarded, not checked: every object has one.
+  ⟨v.toArray⟩
+
+/-- Read the `n` bytes of a buffer that start at an offset.
+
+The caller proves the buffer has room, so the read needs no fallback byte.
+
+Example, with `b = ByteArray.mk #[10, 20, 30, 40]`:
+* `readBytes b 1 2 _ = #v[20, 30]`
+-/
+def readBytes (b : ByteArray) (offset n : Nat) (h : offset + n ≤ b.size) :
+    Vector UInt8 n :=
+  -- Every index below the object's length lands inside the buffer.
+  Vector.ofFn fun i => b.data[offset + i.val]'(by
+    simp only [ByteArray.size] at h
+    omega)
+
 end EthLib.Base

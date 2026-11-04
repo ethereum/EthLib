@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.LittleEndian
 public import EthLib.Cryptography.Vrf.KeyGen
 public import EthLib.Cryptography.Proofs.Vrf.Verify
 
@@ -32,28 +33,6 @@ theorem VRF_SECRET_DST_eq : VRF_SECRET_DST.toList = "PQ_VRF_SECRET".toUTF8.toLis
   simp only [secretInput, ByteArray.size_append, size_packBytes]
   rfl
 
-/-- Byte `k` of an index is `floor(i / 2^(8k)) mod 256`. -/
-private theorem indexBytes_toNat (x : UInt32) (k : Nat) (hk : k < 4) :
-    ((indexBytes x)[k]).toNat = x.toNat / 2 ^ (8 * k) % 256 := by
-  simp [indexBytes, Nat.shiftRight_eq_div_pow]
-
-/-- The four bytes of an index determine it. -/
-theorem indexBytes_inj {i j : UInt32} (h : indexBytes i = indexBytes j) : i = j := by
-  -- Read the same byte on both sides, for each of the four bytes.
-  have same : ∀ k (hk : k < 4), i.toNat / 2 ^ (8 * k) % 256 = j.toNat / 2 ^ (8 * k) % 256 :=
-    fun k hk => by rw [← indexBytes_toNat i k hk, ← indexBytes_toNat j k hk, h]
-  have h0 := same 0 (by decide)
-  have h1 := same 1 (by decide)
-  have h2 := same 2 (by decide)
-  have h3 := same 3 (by decide)
-  simp only [Nat.reduceMul, Nat.reducePow, Nat.pow_zero, Nat.div_one] at h0 h1 h2 h3
-  -- Four equal bytes of numbers below `2^32` make equal numbers.
-  have hi := i.toNat_lt
-  have hj := j.toNat_lt
-  apply UInt32.toNat_inj.mp
-  simp only [Nat.reducePow] at hi hj
-  omega
-
 /-- A secret input determines its seed and its index. -/
 theorem secretInput_inj {seed seed' : Seed} {i i' : UInt32} :
     secretInput seed i = secretInput seed' i' ↔ seed = seed' ∧ i = i' := by
@@ -65,7 +44,10 @@ theorem secretInput_inj {seed seed' : Seed} {i i' : UInt32} :
     obtain ⟨hps, hi⟩ := Array.append_inj hd (by simp)
     -- The seed starts at byte 13 on both sides.
     obtain ⟨-, hs⟩ := Array.append_inj hps (by simp)
-    exact ⟨Vector.toArray_inj.mp hs, indexBytes_inj (Vector.toArray_inj.mp hi)⟩
+    -- Both indices are below `2^32 = 256^4`, so their four little-endian bytes are exact.
+    exact ⟨Vector.toArray_inj.mp hs, UInt32.toNat_inj.mp (Base.uintToBytes_inj
+      (lt_of_lt_of_eq i.toNat_lt (by decide)) (lt_of_lt_of_eq i'.toNat_lt (by decide))
+      (Vector.toArray_inj.mp hi))⟩
   · rintro ⟨rfl, rfl⟩
     rfl
 
