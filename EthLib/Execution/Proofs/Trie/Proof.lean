@@ -635,6 +635,70 @@ theorem walk_honest (hash : ByteArray → Hash32) :
           · rw [walk_branch_cons, hreference] at h
             exact hstep.2 proof result rest h hcollision
 
+/-! ## Building a proof -/
+
+/-- Below a node that is built from some keys, the proof of every path can be built. -/
+theorem proofBelow_ok (hash : ByteArray → Hash32) :
+    (fuel : Nat) → {obj : List (List Nibble × ByteArray)} → {level : Nat} →
+      {node : Option InternalNode} → patricialize hash obj level = .ok node → (path : List Nibble) →
+        ∃ below, proofBelow hash fuel obj level path = .ok below
+  | 0, _, _, _, _, _ => ⟨[], rfl⟩
+  | fuel + 1, obj, level, node, h, path => by
+    -- A child that the path enters is built, so its encoding and the proof below it can be built.
+    have hchild : ∀ {sub : List (List Nibble × ByteArray)} {deeper : Nat}
+        {child : Option InternalNode} {subnode : Item}, patricialize hash sub deeper = .ok child →
+        encodeInternalNode hash child = .ok subnode → ∀ rest, ∃ below, (do
+          let encoded ← encode (unencoded (← patricialize hash sub deeper))
+          let below ← proofBelow hash fuel sub deeper rest
+          return (if encoded.size < 32 then [] else [encoded]) ++ below)
+            = Except.ok (ε := RlpError) below := by
+      intro sub deeper child subnode hpatricialize hsubnode rest
+      obtain ⟨encoded, hencode, -⟩ := encode_of_encodeInternalNode hsubnode
+      obtain ⟨below, hbelow⟩ := proofBelow_ok hash fuel hpatricialize rest
+      exact ⟨(if encoded.size < 32 then [] else [encoded]) ++ below,
+        by simp [hpatricialize, hencode, hbelow, Bind.bind, Except.bind, pure, Except.pure]⟩
+    cases built_of_patricialize hash h with
+    | none => exact ⟨[], by simp [proofBelow, h, Bind.bind, Except.bind, pure, Except.pure]⟩
+    | leaf => exact ⟨[], by simp [proofBelow, h, Bind.bind, Except.bind, pure, Except.pure]⟩
+    | extension keySegment subnode child _ _ hpatricialize hsubnode =>
+      by_cases hfollow : keySegment = path.take keySegment.length
+      · obtain ⟨below, hbelow⟩ := hchild hpatricialize hsubnode (path.drop keySegment.length)
+        refine ⟨below, ?_⟩
+        simp only [proofBelow, h, Bind.bind, Except.bind]
+        rw [ite_eq_left hfollow]
+        exact hbelow
+      · refine ⟨[], ?_⟩
+        simp only [proofBelow, h, Bind.bind, Except.bind]
+        rw [ite_eq_right hfollow]
+        rfl
+    | branch subnodes hchildren value _ =>
+      cases path with
+      | nil => exact ⟨[], by simp [proofBelow, h, Bind.bind, Except.bind, pure, Except.pure]⟩
+      | cons nibble rest =>
+        obtain ⟨child, hpatricialize, hsubnode⟩ := hchildren nibble
+        obtain ⟨below, hbelow⟩ := hchild hpatricialize hsubnode rest
+        exact ⟨below, by simp only [proofBelow, h, Bind.bind, Except.bind]; exact hbelow⟩
+
+/-- A trie with a root has a proof for every key. -/
+theorem getProof_ok (hash : ByteArray → Hash32) {trie : Trie} {root' : Hash32}
+    (hroot : root hash trie = .ok root') (key : ByteArray) :
+    ∃ proof, getProof hash trie key = .ok proof := by
+  simp only [root, Bind.bind, Except.bind, Except.mapError] at hroot
+  simp only [getProof, Bind.bind, Except.bind, Except.mapError]
+  -- The root's own steps succeed, and the proof below the root node can be built.
+  cases hobj : prepareData hash trie.data trie.secured with
+  | error => simp [hobj] at hroot
+  | ok obj =>
+    cases hnode : patricialize hash obj 0 with
+    | error => simp [hobj, hnode] at hroot
+    | ok node =>
+      cases hencode : encode (unencoded node) with
+      | error => simp [hobj, hnode, hencode] at hroot
+      | ok encoded =>
+        generalize keyPath hash trie.secured key = path
+        obtain ⟨below, hbelow⟩ := proofBelow_ok hash (path.length + 1) hnode path
+        exact ⟨encoded :: below, by simp [hnode, hencode, hbelow, pure, Except.pure]⟩
+
 /-! ## Completeness and soundness -/
 
 /-- The value that a trie gives a key: the value of the entry whose path is the key's path, or `none`. -/
