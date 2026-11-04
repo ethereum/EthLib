@@ -2717,6 +2717,36 @@
    "docstring":
    "Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`."},
   {"summary":
+   "The fork identifier, as RLP, of a node with the schedule `schedule` at a head.",
+   "signature": "(schedule: bytes, number: int, timestamp: int) -> bytes",
+   "operation": "EthLib.Networking.Devp2p.Exports.forkIdExport",
+   "method": "fork_id",
+   "errors": [],
+   "error_class": "ForkIdError",
+   "docstring":
+   "The fork identifier, as RLP, of a node with the schedule `schedule` at a head."},
+  {"summary": "The fork identifier, as RLP, of a mainnet node at a head.",
+   "signature": "(number: int, timestamp: int) -> bytes",
+   "operation": "EthLib.Networking.Devp2p.Exports.mainnetForkIdExport",
+   "method": "mainnet_fork_id",
+   "errors": [],
+   "error_class": "ForkIdError",
+   "docstring": "The fork identifier, as RLP, of a mainnet node at a head."},
+  {"summary":
+   "Whether a node at a head accepts the fork identifier of a peer, by the validation rules of [EIP-2124](https://eips.ethereum.org/EIPS/eip-2124#validation-rules).",
+   "signature":
+   "(schedule: bytes, number: int, timestamp: int, remote: bytes) -> bool",
+   "operation": "EthLib.Networking.Devp2p.Schedule.validate",
+   "method": "fork_id_validate",
+   "errors":
+   [{"type": "EthLib.Networking.Devp2p.ForkIdError",
+     "codes":
+     [{"constructor": "remoteStale", "code": 1},
+      {"constructor": "localIncompatibleOrStale", "code": 2}]}],
+   "error_class": "ForkIdError",
+   "docstring":
+   "Whether a node at a head accepts the fork identifier of a peer, by the validation rules of\n[EIP-2124](https://eips.ethereum.org/EIPS/eip-2124#validation-rules).\n\n- 1: the two hashes match, so the nodes are at one fork.\n  The node refuses only if it has passed the next fork that the peer announces (1a).\n- 2: the hash of the peer is one of the node's earlier hashes, so the peer is syncing.\n  The node accepts if the peer announces the fork that follows that hash, and refuses otherwise.\n- 3: the hash of the peer is one of the node's later hashes, so the node is syncing, and it accepts.\n- 4: the node refuses in every other case.\n\n[EIP-6122](https://eips.ethereum.org/EIPS/eip-6122#additional-rules) checks the forks by block\nbefore the forks by time, as the order of the forks does.\n\nThe node compares its earlier hashes from the first one, so the first match decides rule 2."},
+  {"summary":
    "The bytes a Snappy block decompresses to, or why it is not a valid block.",
    "signature": "(block: bytes) -> bytes",
    "operation": "EthLib.Networking.Snappy.decompress",

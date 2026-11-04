@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Networking.Discv5.Distance
+public import EthLib.Networking.Devp2p.ForkId
 public import EthLib.Networking.Devp2p.P2p
 public import EthLib.Networking.Discv4.Packet
 public import EthLib.Networking.Discv5.Identity
