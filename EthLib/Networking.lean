@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Networking.Discv5.Distance
+public import EthLib.Networking.Discv5.Identity
 public import EthLib.Networking.Encoding.Varint
 public import EthLib.Networking.Enr.Base64
 public import EthLib.Networking.Enr.Consensus
