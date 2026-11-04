@@ -81,6 +81,14 @@ def leValue : List UInt8 → Nat
   | [] => 0
   | b :: bs => b.toNat + 256 * leValue bs
 
+/-- The `k` low bytes of `n`, least significant first.
+
+Read back as a little-endian number, they give `n` when `n < 256^k`.
+-/
+def leBytes (n : Nat) : Nat → List UInt8
+  | 0 => []
+  | k + 1 => UInt8.ofNat n :: leBytes (n / 256) k
+
 /-- Read the preamble, at most `fuel` more bytes deep.
 
 Returns the length and the bytes after the preamble.
