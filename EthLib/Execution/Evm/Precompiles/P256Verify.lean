@@ -46,6 +46,14 @@ inductive P256VerifyError where
   | outOfGas (cost gas : Nat)
   deriving Repr, DecidableEq
 
+/-- The stable code of an error, one per constructor.
+
+The code ignores the arguments of the constructor.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def P256VerifyError.code : P256VerifyError → UInt32
+  | .outOfGas .. => 1
+
 /-- The output for a valid signature: 1 as a 32-byte word. -/
 def VALID : ByteArray := ⟨(List.replicate 31 (0 : UInt8) ++ [1]).toArray⟩
 

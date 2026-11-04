@@ -55,6 +55,14 @@ inductive Ripemd160Error where
   | outOfGas (cost gas : Nat)
   deriving Repr, DecidableEq
 
+/-- The stable code of an error, one per constructor.
+
+The code ignores the arguments of the constructor.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def Ripemd160Error.code : Ripemd160Error → UInt32
+  | .outOfGas .. => 1
+
 /-- The call: the output on the call data, once the gas covers the price. -/
 def call (data : ByteArray) (gas : Nat) : Except Ripemd160Error ByteArray :=
   let cost := gasCost data.size

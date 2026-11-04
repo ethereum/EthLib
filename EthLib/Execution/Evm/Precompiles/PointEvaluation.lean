@@ -79,6 +79,21 @@ inductive PointEvaluationError where
   | proofRejected
   deriving Repr, DecidableEq
 
+/-- The stable code of an error, one per constructor.
+
+The code ignores the arguments of the constructor.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def PointEvaluationError.code : PointEvaluationError → UInt32
+  | .invalidInputLength .. => 1
+  | .outOfGas .. => 2
+  | .versionedHashMismatch => 3
+  | .invalidCommitment => 4
+  | .invalidFieldElement => 5
+  | .invalidProof => 6
+  | .invalidTrustedSetup => 7
+  | .proofRejected => 8
+
 /-- Whether `proof` shows that the polynomial of `commitment` takes the value `y` at `z`.
 
 It decodes the inputs and `[tau]_2`, then runs the KZG check with `[tau]_2` alone.

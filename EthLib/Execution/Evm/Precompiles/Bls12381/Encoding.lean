@@ -66,6 +66,20 @@ inductive Bls12381Error where
   | notASquare
   deriving Repr, DecidableEq
 
+/-- The stable code of an error, one per constructor.
+
+The code ignores the arguments of the constructor.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def Bls12381Error.code : Bls12381Error → UInt32
+  | .invalidInputLength .. => 1
+  | .outOfGas .. => 2
+  | .invalidPadding => 3
+  | .invalidFieldElement => 4
+  | .notOnCurve => 5
+  | .notInSubgroup => 6
+  | .notASquare => 7
+
 /-- `unpad_fp`: the 48 bytes of a padded field element, once its 16 leading bytes are checked to be zero. -/
 def unpadFp (padded : List UInt8) : Except Bls12381Error (List UInt8) :=
   if padded.take PAD_BYTES = List.replicate PAD_BYTES 0 then .ok (padded.drop PAD_BYTES) else .error .invalidPadding

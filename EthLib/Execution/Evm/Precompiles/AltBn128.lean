@@ -61,6 +61,18 @@ inductive AltBn128Error where
   | notInSubgroup
   deriving Repr, DecidableEq
 
+/-- The stable code of an error, one per constructor.
+
+The code ignores the arguments of the constructor.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def AltBn128Error.code : AltBn128Error → UInt32
+  | .outOfGas .. => 1
+  | .invalidFieldElement => 2
+  | .notOnCurve => 3
+  | .invalidInputLength .. => 4
+  | .notInSubgroup => 5
+
 /-- `bytes_to_g1`: a point of `G_1` from 64 bytes, with `(0, 0)` for the point at infinity. -/
 def bytesToG1 (raw : List UInt8) : Except AltBn128Error Point := do
   let x := bytesToNat (raw.take 32)

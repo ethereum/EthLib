@@ -77,4 +77,11 @@ theorem output_eq :
        0x53, 0xbd, 0xa4, 0x02, 0xff, 0xfe, 0x5b, 0xfe, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01] := by
   decide +kernel
 
+/-- Two errors with one code come from one constructor. -/
+theorem PointEvaluationError.code_injective (e₁ e₂ : PointEvaluationError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [PointEvaluationError.code] at h; exact absurd h (by decide))
+
 end EthLib.Execution.Evm.Precompiles.PointEvaluation

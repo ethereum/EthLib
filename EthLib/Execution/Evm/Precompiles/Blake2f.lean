@@ -53,6 +53,16 @@ inductive Blake2fError where
   | outOfGas (cost gas : Nat)
   deriving Repr, DecidableEq
 
+/-- The stable code of an error, one per constructor.
+
+The code ignores the arguments of the constructor.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def Blake2fError.code : Blake2fError → UInt32
+  | .invalidLength .. => 1
+  | .invalidFlag .. => 2
+  | .outOfGas .. => 3
+
 /-! ## Reading the input -/
 
 /-- The number of rounds: bytes 0 to 3, a big-endian word. -/
