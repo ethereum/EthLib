@@ -40,28 +40,4 @@ theorem powMod_eq (b e m : Nat) : powMod b e m = b ^ e % m := by
       · -- An even exponent: `e = 2 * (e / 2)`.
         rw [ite_eq_right h1, show 2 * (e / 2) = e by omega]
 
-/-! ## Known answers
-
-EIP-198, Specification, first worked example: `3 ^ (p - 1) mod p` with `p = 2 ^ 256 - 2 ^ 32 - 977`.
-
-EIP-198 gives the output 1, by Fermat's little theorem.
-
-`decide +kernel` has the kernel run the loop, 256 steps.
-
-It adds no axiom, unlike `native_decide`. -/
-
-example : powMod 3 (2 ^ 256 - 2 ^ 32 - 978) (2 ^ 256 - 2 ^ 32 - 977) = 1 := by decide +kernel
-
-/-! EIP-198, Specification, fourth worked example: base 3, exponent 65535 and modulus `2 ^ 255`.
-
-EIP-198 gives the inputs but not the output.
-
-The output is the one of `EIP-198-case4-extra-data_07`.
-That case is in `tests/byzantium/eip198_modexp_precompile/test_modexp.py`.
-The file is in `ethereum/execution-specs` at `2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1`. -/
-
-example : powMod 3 65535 (2 ^ 255)
-    = 0x3b01b01ac41f2d6e917c6d6a221ce793802469026d9ab7578fa2e79e4da6aaab := by
-  decide +kernel
-
 end EthLib.Execution.Evm

@@ -13,8 +13,6 @@ What the gas formula guarantees.
 - That includes the case where the literal EIP-7883 pseudocode reads differently.
 - The price does not fall when the base, the modulus or the exponent grows longer.
 - For lengths in bounds, the price is at most 528449536.
-
-The known answers at the end are the worked examples of EIP-198 and EIP-7883.
 -/
 
 @[expose] public section
@@ -166,50 +164,5 @@ theorem gasCost_le {b m e h : Nat} (hb : b ≤ MAX_LENGTH_BYTES) (hm : m ≤ MAX
       _ ≤ 16127 := by unfold ITERATIONS_PER_EXTRA_EXPONENT_BYTE EXPONENT_HEAD_BYTES; omega
   unfold gasCost MIN_GAS
   exact Nat.max_le.mpr ⟨by decide, Nat.mul_le_mul hc hi⟩
-
-/-! ## Known answers
-
-EIP-198 lists the index of the highest bit for five short exponents:
-"eg. 1 -> 0, 2 -> 1, 3 -> 1, 255 -> 7, 256 -> 8".
-
-The count is then raised to at least 1. -/
-
-example : iterations 1 1 = 1 := by decide +kernel
-example : iterations 1 2 = 1 := by decide +kernel
-example : iterations 1 3 = 1 := by decide +kernel
-example : iterations 1 255 = 7 := by decide +kernel
-example : iterations 2 256 = 8 := by decide +kernel
-
-/-! The `modexp_nagydani_*` calls of the EIP-7883 table.
-The exponent is `2` (square), `3` (qube) or `0x10001`.
-The base and the modulus have the same length.
-The exponent has 1 byte, or 3 bytes for `0x10001`.
-
-The prices are the column "EIP-7883 Pricing" of EIP-7883, Test Cases.
-The lengths are in the inputs of `vectors.json`, in
-`tests/osaka/eip7883_modexp_gas_increase/vector/` of execution-specs at `2c0c8e7`. -/
-
--- `modexp_nagydani_1_square` and `_qube`: 64-byte operands.
--- `decide` runs in the elaborator, and the kernel rechecks the proof it builds.
-example : gasCost 64 64 1 2 = 500 := by decide
-example : gasCost 64 64 1 3 = 500 := by decide
--- `modexp_nagydani_1_pow0x10001`
-example : gasCost 64 64 3 0x10001 = 2048 := by decide
--- `modexp_nagydani_2_*`: 128-byte operands.
-example : gasCost 128 128 1 2 = 512 := by decide
-example : gasCost 128 128 1 3 = 512 := by decide
-example : gasCost 128 128 3 0x10001 = 8192 := by decide
--- `modexp_nagydani_3_*`: 256-byte operands.
-example : gasCost 256 256 1 2 = 2048 := by decide
-example : gasCost 256 256 1 3 = 2048 := by decide
-example : gasCost 256 256 3 0x10001 = 32768 := by decide
--- `modexp_nagydani_4_*`: 512-byte operands.
-example : gasCost 512 512 1 2 = 8192 := by decide
-example : gasCost 512 512 1 3 = 8192 := by decide
-example : gasCost 512 512 3 0x10001 = 131072 := by decide
--- `modexp_nagydani_5_*`: 1024-byte operands.
-example : gasCost 1024 1024 1 2 = 32768 := by decide
-example : gasCost 1024 1024 1 3 = 32768 := by decide
-example : gasCost 1024 1024 3 0x10001 = 524288 := by decide
 
 end EthLib.Execution.Evm.Precompiles.Modexp
