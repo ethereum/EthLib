@@ -99,16 +99,17 @@ def optionBytes {α : Type} [SszType α] : Option α → Result ByteArray
   | none => pure ⟨#[0]⟩
   | some a => return ⟨#[1]⟩ ++ (← sszBytes a)
 
-/-- The consensus entries of a record at the named fork.
+/-- The consensus entries of a record at the named fork, with `count` attestation subnets.
 
 They come back as the 16 SSZ bytes of `eth2`, then `attnets`, `syncnets`, `cgc` and `nfd`.
 
 Each of the four is the byte 0 when absent, or the byte 1 and its SSZ bytes. -/
 @[export eth_enr_consensus_entries]
-def consensusEntriesExport (fork record : ByteArray) : Result ByteArray := do
+def consensusEntriesExport (fork : ByteArray) (count : UInt64) (record : ByteArray) :
+    Result ByteArray := do
   let fork ← forkOfName fork
   let r ← runEnr (decode record)
-  let e ← (readEntries fork r).mapError fun err => (err.code, entryMessage err)
+  let e ← (readEntries count fork r).mapError fun err => (err.code, entryMessage err)
   return (← sszBytes e.eth2) ++ (← optionBytes e.attnets) ++ (← optionBytes e.syncnets) ++
     (← optionBytes e.cgc) ++ (← optionBytes e.nfd)
 

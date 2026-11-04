@@ -39,6 +39,7 @@ instance : ToJson U256 where
 
 deriving instance ToJson for Preset
 deriving instance ToJson for BlobScheduleEntry
+deriving instance ToJson for Networking.Gossip.SubnetParameters
 deriving instance ToJson for Config
 deriving instance ToJson for Parameters
 

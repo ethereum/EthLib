@@ -28,6 +28,7 @@ eth_enr_node_id(
 extern lean_object*
 eth_enr_consensus_entries(
   lean_object* fork,
+  uint64_t count,
   lean_object* record
 );
 
@@ -102,8 +103,10 @@ py_enr_consensus_entries(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *fork_obj, *record_obj;
-  if (!PyArg_ParseTuple(args, "OO", &fork_obj, &record_obj)) return NULL;
+  PyObject *fork_obj, *count_obj, *record_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &fork_obj, &count_obj, &record_obj)) return NULL;
+  uint64_t count;
+  if (parse_uint64(count_obj, "count", &count)) return NULL;
   if (!PyUnicode_Check(fork_obj)) {
     PyErr_SetString(PyExc_TypeError, "fork must be str");
     return NULL;
@@ -118,5 +121,5 @@ py_enr_consensus_entries(
   lean_object* fork = mk_bytearray((const uint8_t*) utf8, len);
   lean_object* record = mk_bytearray(
     (const uint8_t*) PyBytes_AS_STRING(record_obj), PyBytes_GET_SIZE(record_obj));
-  return except_into_pybytes(eth_enr_consensus_entries(fork, record), ENR_ERROR);
+  return except_into_pybytes(eth_enr_consensus_entries(fork, count, record), ENR_ERROR);
 }

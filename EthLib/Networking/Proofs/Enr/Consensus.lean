@@ -67,8 +67,9 @@ theorem readRequiredAt_isSome {α : Type} {fork : Fork} {key : ConsensusKey}
     simp [← ha]
 
 /-- The entries that a node reads, from the values of each step. -/
-theorem readEntries_ok {fork : Fork} {r : Enr} {e : ConsensusEntries}
-    (h : readEntries fork r = .ok e) :
+theorem readEntries_ok {count : UInt64} {fork : Fork} {r : Enr}
+    {e : ConsensusEntries count}
+    (h : readEntries count fork r = .ok e) :
     readAt fork .syncnets (readSsz Syncnets r .syncnets) = .ok e.syncnets ∧
       readRequiredAt fork .cgc (readCgc r) = .ok e.cgc ∧
       readRequiredAt fork .nfd (readSsz (Vector UInt8 4) r .nfd) = .ok e.nfd := by
@@ -86,13 +87,15 @@ theorem readEntries_ok {fork : Fork} {r : Enr} {e : ConsensusEntries}
     exact ⟨hs, hc, hn⟩
 
 /-- Before Altair, a node reads no sync committee subnets. -/
-theorem readEntries_syncnets {fork : Fork} {r : Enr} {e : ConsensusEntries}
-    (h : readEntries fork r = .ok e) (hf : fork < .altair) : e.syncnets = none :=
+theorem readEntries_syncnets {count : UInt64} {fork : Fork} {r : Enr}
+    {e : ConsensusEntries count}
+    (h : readEntries count fork r = .ok e) (hf : fork < .altair) : e.syncnets = none :=
   readAt_before (readEntries_ok h).1 hf
 
 /-- From Fulu on, a record that a node accepts has a custody group count and a next fork digest. -/
-theorem readEntries_fulu {fork : Fork} {r : Enr} {e : ConsensusEntries}
-    (h : readEntries fork r = .ok e) (hf : .fusaka ≤ fork) : e.cgc.isSome ∧ e.nfd.isSome :=
+theorem readEntries_fulu {count : UInt64} {fork : Fork} {r : Enr}
+    {e : ConsensusEntries count}
+    (h : readEntries count fork r = .ok e) (hf : .fusaka ≤ fork) : e.cgc.isSome ∧ e.nfd.isSome :=
   ⟨readRequiredAt_isSome (readEntries_ok h).2.1 hf, readRequiredAt_isSome (readEntries_ok h).2.2 hf⟩
 
 /-! ## Error codes -/

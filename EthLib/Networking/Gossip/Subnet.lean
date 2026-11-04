@@ -4,6 +4,7 @@ public import EthLib.Base.LittleEndian
 public import EthLib.Base.U256
 public import EthLib.Base.Uint64
 public import EthLib.Cryptography.Hash.Sha256
+public import EthLib.Networking.Gossip.Parameters
 public import EthLib.Networking.Gossip.Topic
 public import EthLib.Serialization.Ssz.Merkle.Merkleize
 
@@ -35,18 +36,6 @@ abbrev NodeID := Base.U256
 /-- The number of bits of a node ID. -/
 def NODE_ID_BITS : Nat := 256
 
-/-- The parameters of the attestation subnets that a node subscribes to. -/
-structure AttestationSubnetConfig where
-  /-- The number of attestation subnets. -/
-  subnetCount : UInt64
-  /-- The number of node ID bits in the prefix, beyond those that number the subnets. -/
-  extraBits : UInt64
-  /-- The number of epochs that one subscription lasts. -/
-  epochsPerSubscription : UInt64
-  /-- The number of subnets that a node subscribes to. -/
-  subnetsPerNode : UInt64
-  deriving Repr, DecidableEq
-
 /-- Every way the choice of subnets can fail.
 
 `ε` is the error type of the shuffle. -/
@@ -70,10 +59,12 @@ variable {ε : Type}
 /-- The number of node ID bits in the prefix.
 
 It is the smallest `b` with `2^b` at least the number of subnets, plus the extra bits. -/
-def computeAttestationSubnetPrefixBits (config : AttestationSubnetConfig) :
+def computeAttestationSubnetPrefixBits (config : SubnetParameters) :
     Except (SubnetError ε) Nat :=
-  if config.subnetCount = 0 then throw .zeroSubnetCount
-  else return Serialization.Ssz.depthFor config.subnetCount.toNat + config.extraBits.toNat
+  if config.ATTESTATION_SUBNET_COUNT = 0 then throw .zeroSubnetCount
+  else
+    return Serialization.Ssz.depthFor config.ATTESTATION_SUBNET_COUNT.toNat +
+      config.ATTESTATION_SUBNET_EXTRA_BITS.toNat
 
 /-- The subnet with a given index among the subnets of a node in an epoch.
 
@@ -91,26 +82,26 @@ The seed is the SHA-256 hash of the period as eight little-endian bytes.
 
 The subnet is the shuffled prefix plus the index, modulo the number of subnets.
 -/
-def computeSubscribedSubnet (config : AttestationSubnetConfig)
+def computeSubscribedSubnet (config : SubnetParameters)
     (shuffle : UInt64 → UInt64 → ByteArray → Except ε UInt64)
     (nodeId : NodeID) (epoch index : UInt64) : Except (SubnetError ε) SubnetID := do
   let bits ← computeAttestationSubnetPrefixBits config
   let nodePrefix := nodeId.toNat >>> (NODE_ID_BITS - bits)
-  if config.epochsPerSubscription = 0 then throw .zeroEpochsPerSubscription
-  let nodeOffset := (nodeId.toNat % config.epochsPerSubscription.toNat).toUInt64
+  if config.EPOCHS_PER_SUBNET_SUBSCRIPTION = 0 then throw .zeroEpochsPerSubscription
+  let nodeOffset := (nodeId.toNat % config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat).toUInt64
   let shifted ← (Base.Uint64.addChecked epoch nodeOffset).mapError fun _ => .epochOverflow
-  let period := shifted / config.epochsPerSubscription
+  let period := shifted / config.EPOCHS_PER_SUBNET_SUBSCRIPTION
   let seed := Cryptography.Hash.sha256 ⟨(Base.uintToBytes 8 period.toNat).toArray⟩
   if 64 ≤ bits then throw (.prefixBitsTooLarge bits)
   let permuted ← (shuffle nodePrefix.toUInt64 (2 ^ bits).toUInt64 seed).mapError .shuffle
   let subnet ← (Base.Uint64.addChecked permuted index).mapError fun _ => .subnetOverflow
-  return subnet % config.subnetCount
+  return subnet % config.ATTESTATION_SUBNET_COUNT
 
 /-- The subnets of a node in an epoch, one for each index below the subnets per node. -/
-def computeSubscribedSubnets (config : AttestationSubnetConfig)
+def computeSubscribedSubnets (config : SubnetParameters)
     (shuffle : UInt64 → UInt64 → ByteArray → Except ε UInt64)
     (nodeId : NodeID) (epoch : UInt64) : Except (SubnetError ε) (List SubnetID) :=
-  (List.range config.subnetsPerNode.toNat).mapM fun index =>
+  (List.range config.SUBNETS_PER_NODE.toNat).mapM fun index =>
     computeSubscribedSubnet config shuffle nodeId epoch index.toUInt64
 
 end EthLib.Networking.Gossip
