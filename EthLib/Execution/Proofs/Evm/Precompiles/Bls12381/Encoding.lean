@@ -11,7 +11,6 @@ public import EthLib.Base.Proofs.BigEndian
 - The point at infinity is all zero bytes, in both directions.
 - A decoded field element or G1 point encodes back to its bytes, so that encoding is canonical.
 - The padding check and the field check of Amsterdam reject exactly the inputs that Prague's single field check rejects.
-- The known answers state a result as an `Except` and check it through its bytes, which the kernel compares fast.
 -/
 
 @[expose] public section
@@ -294,28 +293,5 @@ theorem bind_eq_ok {α β : Type} {x : Except Bls12381Error α} {f : α → Exce
   cases x with
   | error => cases h
   | ok a => exact ⟨a, rfl, h⟩
-
-/-! ## Known answers through bytes -/
-
-/-- A result that the kernel computes as the bytes `out` is `.ok out`. -/
-theorem eq_ok_of_kernel {result : Except Bls12381Error ByteArray} {out : ByteArray}
-    (h : (result.toOption.map fun bytes => bytes.data.toList) = some out.data.toList) : result = .ok out := by
-  cases result with
-  | error => simp [Except.toOption] at h
-  | ok bytes =>
-    simp only [Except.toOption, Option.map_some, Option.some.injEq] at h
-    cases bytes; cases out
-    simp_all
-
-/-- The error of a result, or `none` when it succeeds. -/
-def errorOf (result : Except Bls12381Error ByteArray) : Option Bls12381Error :=
-  match result with
-  | .error e => some e
-  | .ok _ => none
-
-/-- A result whose error the kernel computes as `e` is `.error e`. -/
-theorem eq_error_of_kernel {result : Except Bls12381Error ByteArray} {e : Bls12381Error}
-    (h : errorOf result = some e) : result = .error e := by
-  cases result <;> simp_all [errorOf]
 
 end EthLib.Execution.Evm.Precompiles.Bls12381
