@@ -1,0 +1,5 @@
+# Imports that break a rule of ARCHITECTURE.md "Rules", each one on purpose.
+#
+# One import per line: the importing module, then the imported module.
+# Write the reason in a comment above the entry, and repeat it in the pull request.
+# A line that no longer matches an import that breaks a rule fails the check.
