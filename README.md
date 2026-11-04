@@ -34,7 +34,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Networking | [`Encoding`](EthLib/Networking/Encoding/) | the protobuf varint of req/resp messages |
 | Networking | [`Enr`](EthLib/Networking/Enr/) | Ethereum Node Records of EIP-778, their text form, the "v4" identity scheme, node IDs and the consensus entries |
 | Networking | [`Snappy`](EthLib/Networking/Snappy/) | Snappy block decompression, a literal block encoder and the framing format |
-| Networking | [`Gossip`](EthLib/Networking/Gossip/) | topic strings, the message ID of Phase 0 and Altair, and the attestation subnets of a node |
+| Networking | [`Gossip`](EthLib/Networking/Gossip/) | topic strings, the message ID, the size limits and gossipsub parameters, and the attestation subnets of a node |
 | Networking | [`Discv5`](EthLib/Networking/Discv5/) | the node distance, the "v4" handshake cryptography, the packets and the messages of discv5 |
 | Networking | [`ReqResp`](EthLib/Networking/ReqResp/) | the `ssz_snappy` encoding of requests and response chunks, with its size bounds |
 | Networking | [`Discv4`](EthLib/Networking/Discv4/) | the packets of discv4, with EIP-8 and EIP-868 |

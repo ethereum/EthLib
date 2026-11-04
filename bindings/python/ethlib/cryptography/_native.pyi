@@ -543,12 +543,12 @@ def varint_decode(data: bytes) -> int:
     """The 64-bit value a varint denotes, or why it is not a valid varint."""
     ...
 
-def gossip_message_id_phase0(data: bytes) -> bytes:
-    """The message ID of Phase 0: the first 20 bytes of a SHA-256 digest."""
+def gossip_message_id(fork: bytes, topic: bytes, data: bytes) -> bytes:
+    """The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest."""
     ...
 
-def gossip_message_id_altair(topic: bytes, data: bytes) -> bytes:
-    """The message ID from Altair on: the first 20 bytes of a SHA-256 digest."""
+def gossip_decode_payload(type_bound: int, data: bytes) -> bytes:
+    """The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type."""
     ...
 
 def receipt_reencode(fork: str, receipt: bytes) -> bytes:

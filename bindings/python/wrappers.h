@@ -153,6 +153,7 @@ extern PyObject* RLP_ERROR;
 extern PyObject* SSZ_ERROR;
 extern PyObject* SNAPPY_ERROR;
 extern PyObject* VARINT_ERROR;
+extern PyObject* GOSSIP_ERROR;
 extern PyObject* DISCV5_ERROR;
 extern PyObject* RLPX_ERROR;
 extern PyObject* DEVP2P_ERROR;
@@ -326,8 +327,8 @@ PyObject* py_snappy_encode_frames_literal                 (PyObject* self, PyObj
 PyObject* py_snappy_masked_crc                            (PyObject* self, PyObject* args);
 PyObject* py_varint_encode                                (PyObject* self, PyObject* args);
 PyObject* py_varint_decode                                (PyObject* self, PyObject* args);
-PyObject* py_gossip_message_id_phase0                     (PyObject* self, PyObject* args);
-PyObject* py_gossip_message_id_altair                     (PyObject* self, PyObject* args);
+PyObject* py_gossip_message_id                            (PyObject* self, PyObject* args);
+PyObject* py_gossip_decode_payload                        (PyObject* self, PyObject* args);
 
 PyObject* py_rlpx_ecies_encrypt                           (PyObject* self, PyObject* args);
 PyObject* py_rlpx_ecies_decrypt                           (PyObject* self, PyObject* args);

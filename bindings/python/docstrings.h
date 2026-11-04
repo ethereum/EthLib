@@ -407,11 +407,11 @@
 #define DOC_varint_decode \
   "The 64-bit value a varint denotes, or why it is not a valid varint."
 
-#define DOC_gossip_message_id_phase0 \
-  "The message ID of Phase 0: the first 20 bytes of a SHA-256 digest."
+#define DOC_gossip_message_id \
+  "The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest."
 
-#define DOC_gossip_message_id_altair \
-  "The message ID from Altair on: the first 20 bytes of a SHA-256 digest."
+#define DOC_gossip_decode_payload \
+  "The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type."
 
 #define DOC_receipt_reencode \
   "The bytes of a receipt, decoded at the fork and encoded again with its transaction type."

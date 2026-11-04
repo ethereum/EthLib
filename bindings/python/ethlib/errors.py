@@ -108,6 +108,10 @@ class VarintError(EthLibError, ValueError):
     """The bytes are not one minimal varint."""
 
 
+class GossipError(EthLibError, ValueError):
+    """A gossip message was rejected, or its fork has no name."""
+
+
 class Discv5Error(EthLibError, ValueError):
     """A discv5 input was rejected, with the code of a packet error, a message error, or 0."""
 
@@ -184,6 +188,7 @@ __all__ = [
     "SnappyError",
     "SszError",
     "VarintError",
+    "GossipError",
     "Discv5Error",
     "RlpxError",
     "Devp2pError",

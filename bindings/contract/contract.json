@@ -2753,23 +2753,29 @@
    "docstring":
    "The 64-bit value a varint denotes, or why it is not a valid varint.\n\nThe rules are checked in this order:\n\n1. The ten-byte cap, while reading, so the work stays bounded.\n2. Minimal encoding.\n3. The 64-bit range.\n\n# Why minimality is enforced\n\nThe specification only says SHOULD.\n\nRejecting padding means each length has exactly one encoding.\n\nSo a message cannot be re-sent with a different prefix that differs only in padding."},
   {"summary":
-   "The message ID of Phase 0: the first 20 bytes of a SHA-256 digest.",
-   "signature": "(data: bytes) -> bytes",
-   "operation": "EthLib.Networking.Gossip.Phase0.messageId",
-   "method": "gossip_message_id_phase0",
+   "The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest.",
+   "signature": "(fork: bytes, topic: bytes, data: bytes) -> bytes",
+   "operation": "EthLib.Networking.Gossip.messageId",
+   "method": "gossip_message_id",
    "errors": [],
-   "error_class": null,
+   "error_class": "GossipError",
    "docstring":
-   "The message ID of Phase 0: the first 20 bytes of a SHA-256 digest.\n\nData that decompresses is hashed as its payload, under the domain `01 00 00 00`.\n\nOther data is hashed as it is, under the domain `00 00 00 00`."},
+   "The message ID of a message on a topic of a fork: the first 20 bytes of a SHA-256 digest.\n\nData that decompresses is hashed as its payload, under the domain `01 00 00 00`.\n\nOther data is hashed as it is, under the domain `00 00 00 00`.\n\nBefore Altair the topic is not hashed.\n\nA missing topic or data field of the protobuf message is the empty byte string."},
   {"summary":
-   "The message ID from Altair on: the first 20 bytes of a SHA-256 digest.",
-   "signature": "(topic: bytes, data: bytes) -> bytes",
-   "operation": "EthLib.Networking.Gossip.Altair.messageId",
-   "method": "gossip_message_id_altair",
-   "errors": [],
-   "error_class": null,
+   "The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type.",
+   "signature": "(type_bound: int, data: bytes) -> bytes",
+   "operation": "EthLib.Networking.Gossip.decodePayload",
+   "method": "gossip_decode_payload",
+   "errors":
+   [{"type": "EthLib.Networking.Gossip.PayloadError",
+     "codes":
+     [{"constructor": "arith", "code": 1},
+      {"constructor": "compressedTooLong", "code": 2},
+      {"constructor": "snappy", "code": 3},
+      {"constructor": "payloadTooLong", "code": 4}]}],
+   "error_class": "GossipError",
    "docstring":
-   "The message ID from Altair on: the first 20 bytes of a SHA-256 digest.\n\nData that decompresses is hashed as its payload, under the domain `01 00 00 00`.\n\nOther data is hashed as it is, under the domain `00 00 00 00`.\n\nA missing topic or data field of the protobuf message is the empty byte string."},
+   "The SSZ bytes of the data of a gossip message, given the size bound of its SSZ type.\n\nThe data may be at most `32 + n + n / 6` bytes long, for the payload cap `n`.\n\nThe payload must decompress, and be at most the smaller of the cap and the bound.\n\nThe caller deserializes the bytes, since it knows their SSZ type."},
   {"summary":
    "The bytes of a receipt, decoded at the fork and encoded again with its transaction type.",
    "signature": "(fork: str, receipt: bytes) -> bytes",
