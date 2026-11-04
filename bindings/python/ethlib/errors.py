@@ -57,18 +57,6 @@ class EnrError(EthLibError, ValueError):
     """A node record, or its text form, was rejected."""
 
 
-class EcrecoverError(EthLibError, ValueError):
-    """The ECRECOVER precompile failed."""
-
-
-class ModexpError(EthLibError, ValueError):
-    """The MODEXP precompile failed."""
-
-
-class Sha256PrecompileError(EthLibError, ValueError):
-    """The SHA-256 precompile failed."""
-
-
 class KeccakError(EthLibError, ValueError):
     """The Keccak-f[1600] permutation rejected its state."""
 
@@ -182,9 +170,6 @@ __all__ = [
     "Secp256k1Error",
     "Secp256r1Error",
     "EnrError",
-    "EcrecoverError",
-    "ModexpError",
-    "Sha256PrecompileError",
     "PrecompileError",
     "StateError",
     "KeccakError",

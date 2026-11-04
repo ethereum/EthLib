@@ -37,18 +37,13 @@ extern size_t SPHINCS_SEED_LEN;
 extern size_t SPHINCS_PUB_KEY_SIZE;
 extern size_t SPHINCS_SIG_SIZE;
 
-extern size_t MODEXP_LENGTH_HEADER_BYTES;
-extern size_t MODEXP_MAX_LENGTH_BYTES;
 
-extern size_t RIPEMD160_OUTPUT_BYTES;
-extern size_t SHA256_PRECOMPILE_OUTPUT_BYTES;
 extern size_t SECP256K1_HASH_LEN;
 extern size_t SECP256K1_SIGNATURE_LEN;
 extern size_t SECP256R1_PUBLIC_KEY_LEN;
 extern size_t SECP256R1_HASH_LEN;
 extern size_t SECP256R1_SIGNATURE_LEN;
 
-extern size_t ECRECOVER_GAS;
 
 extern size_t ENR_MAX_RECORD_SIZE;
 extern size_t REQRESP_MAX_PAYLOAD_SIZE;
@@ -144,9 +139,6 @@ extern PyObject* SPHINCS_ERROR;
 extern PyObject* SECP256K1_ERROR;
 extern PyObject* SECP256R1_ERROR;
 extern PyObject* ENR_ERROR;
-extern PyObject* ECRECOVER_ERROR;
-extern PyObject* MODEXP_ERROR;
-extern PyObject* SHA256_PRECOMPILE_ERROR;
 extern PyObject* PRECOMPILE_ERROR;
 extern PyObject* STATE_ERROR;
 extern PyObject* KECCAK_ERROR;
@@ -234,8 +226,6 @@ PyObject* py_xmss_signature_index                         (PyObject* self, PyObj
 PyObject* py_sphincs_key_gen                              (PyObject* self, PyObject* args);
 PyObject* py_sphincs_sign                                 (PyObject* self, PyObject* args);
 PyObject* py_sphincs_verify                               (PyObject* self, PyObject* args);
-PyObject* py_modexp                                       (PyObject* self, PyObject* args);
-PyObject* py_modexp_gas_cost                              (PyObject* self, PyObject* args);
 PyObject* py_sha256                                       (PyObject* self, PyObject* args);
 PyObject* py_keccak256                                    (PyObject* self, PyObject* args);
 PyObject* py_keccak512                                    (PyObject* self, PyObject* args);
@@ -262,9 +252,6 @@ PyObject* py_aes_gcm_decrypt                              (PyObject* self, PyObj
 PyObject* py_hmac_sha256                                 (PyObject* self, PyObject* args);
 PyObject* py_hkdf_sha256                                 (PyObject* self, PyObject* args);
 PyObject* py_concat_kdf_sha256                           (PyObject* self, PyObject* args);
-PyObject* py_ripemd160                                    (PyObject* self, PyObject* args);
-PyObject* py_sha256_precompile                            (PyObject* self, PyObject* args);
-PyObject* py_sha256_precompile_gas_cost                   (PyObject* self, PyObject* args);
 
 PyObject* py_secp256k1_verify                             (PyObject* self, PyObject* args);
 PyObject* py_secp256k1_is_low_s                           (PyObject* self, PyObject* args);
@@ -275,7 +262,6 @@ PyObject* py_secp256k1_address                            (PyObject* self, PyObj
 
 PyObject* py_secp256r1_verify                             (PyObject* self, PyObject* args);
 
-PyObject* py_ecrecover                                    (PyObject* self, PyObject* args);
 
 PyObject* py_enr_from_text                                (PyObject* self, PyObject* args);
 PyObject* py_enr_seq                                      (PyObject* self, PyObject* args);

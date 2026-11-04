@@ -104,12 +104,6 @@
 #define DOC_sphincs_verify \
   "`Ver(pk, m, sigma)`: whether a signature signs a message under a public key."
 
-#define DOC_modexp \
-  "Run the precompile on `data` with `gas` available."
-
-#define DOC_modexp_gas_cost \
-  "The gas a call is charged, or the reason it fails before gas is charged."
-
 #define DOC_sha256 \
   "SHA-256 of a byte string shorter than 2^61 bytes, the bound of FIPS 180-4 §1."
 
@@ -188,15 +182,6 @@
 #define DOC_concat_kdf_sha256 \
   "The first `length` bytes of `K(1) | K(2) | ...`, SP 800-56C Rev. 2 §4.1."
 
-#define DOC_ripemd160 \
-  "The output on the call data: the digest, left-padded with zero bytes to 32 bytes."
-
-#define DOC_sha256_precompile \
-  "Run the precompile on the call data with `gas` available."
-
-#define DOC_sha256_precompile_gas_cost \
-  "The gas a call with `size` bytes of call data is charged."
-
 #define DOC_secp256k1_verify \
   "Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4."
 
@@ -217,9 +202,6 @@
 
 #define DOC_secp256r1_verify \
   "Whether `(r, s)` is a valid signature on the hash integer `e` under the public key `q`."
-
-#define DOC_ecrecover \
-  "Run the precompile on `data` with `gas` available."
 
 #define DOC_enr_from_text \
   "The record of a text form."

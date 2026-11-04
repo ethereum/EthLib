@@ -54,13 +54,9 @@ inductive Sha256Error where
   | outOfGas (cost gas : Nat)
   deriving Repr, DecidableEq
 
-/-- Human-readable description of the failure. -/
-def Sha256Error.message : Sha256Error → String
-  | .outOfGas cost gas => s!"out of gas: price {cost}, gas {gas}"
+/-- The stable code of an error, one per constructor.
 
-/-- The stable code of an error, one per constructor, for the C exports.
-
-The code ignores the arguments of the constructor, which the message carries.
+The code ignores the arguments of the constructor.
 
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def Sha256Error.code : Sha256Error → UInt32

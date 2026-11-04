@@ -30,10 +30,6 @@ size_t SPHINCS_SEED_LEN;
 size_t SPHINCS_PUB_KEY_SIZE;
 size_t SPHINCS_SIG_SIZE;
 
-size_t MODEXP_LENGTH_HEADER_BYTES;
-size_t MODEXP_MAX_LENGTH_BYTES;
-size_t RIPEMD160_OUTPUT_BYTES;
-size_t SHA256_PRECOMPILE_OUTPUT_BYTES;
 
 size_t ENR_MAX_RECORD_SIZE;
 size_t REQRESP_MAX_PAYLOAD_SIZE;
@@ -45,7 +41,6 @@ size_t SECP256R1_PUBLIC_KEY_LEN;
 size_t SECP256R1_HASH_LEN;
 size_t SECP256R1_SIGNATURE_LEN;
 
-size_t ECRECOVER_GAS;
 
 /* ---- Exception classes (looked up in `PyInit__native`) --------------- */
 
@@ -56,9 +51,6 @@ PyObject* SPHINCS_ERROR;
 PyObject* SECP256K1_ERROR;
 PyObject* SECP256R1_ERROR;
 PyObject* ENR_ERROR;
-PyObject* ECRECOVER_ERROR;
-PyObject* MODEXP_ERROR;
-PyObject* SHA256_PRECOMPILE_ERROR;
 PyObject* PRECOMPILE_ERROR;
 PyObject* STATE_ERROR;
 PyObject* KECCAK_ERROR;
@@ -176,26 +168,6 @@ eth_sphincs_const_sig_size(
 );
 
 extern uint64_t
-eth_modexp_const_length_header_bytes(
-  lean_object* unit
-);
-
-extern uint64_t
-eth_modexp_const_max_length_bytes(
-  lean_object* unit
-);
-
-extern uint64_t
-eth_ripemd160_const_output_bytes(
-  lean_object* unit
-);
-
-extern uint64_t
-eth_sha256_precompile_const_output_bytes(
-  lean_object* unit
-);
-
-extern uint64_t
 eth_secp256k1_const_hash_len(
   lean_object* unit
 );
@@ -217,11 +189,6 @@ eth_secp256r1_const_hash_len(
 
 extern uint64_t
 eth_secp256r1_const_signature_len(
-  lean_object* unit
-);
-
-extern uint64_t
-eth_ecrecover_const_gas(
   lean_object* unit
 );
 
@@ -548,8 +515,6 @@ static PyMethodDef methods[] = {
   {"sphincs_key_gen", py_sphincs_key_gen, METH_VARARGS, DOC_sphincs_key_gen},
   {"sphincs_sign", py_sphincs_sign, METH_VARARGS, DOC_sphincs_sign},
   {"sphincs_verify", py_sphincs_verify, METH_VARARGS, DOC_sphincs_verify},
-  {"modexp", py_modexp, METH_VARARGS, DOC_modexp},
-  {"modexp_gas_cost", py_modexp_gas_cost, METH_VARARGS, DOC_modexp_gas_cost},
   {"sha256", py_sha256, METH_VARARGS, DOC_sha256},
   {"keccak256", py_keccak256, METH_VARARGS, DOC_keccak256},
   {"keccak512", py_keccak512, METH_VARARGS, DOC_keccak512},
@@ -576,9 +541,6 @@ static PyMethodDef methods[] = {
   {"hmac_sha256", py_hmac_sha256, METH_VARARGS, DOC_hmac_sha256},
   {"hkdf_sha256", py_hkdf_sha256, METH_VARARGS, DOC_hkdf_sha256},
   {"concat_kdf_sha256", py_concat_kdf_sha256, METH_VARARGS, DOC_concat_kdf_sha256},
-  {"ripemd160", py_ripemd160, METH_VARARGS, DOC_ripemd160},
-  {"sha256_precompile", py_sha256_precompile, METH_VARARGS, DOC_sha256_precompile},
-  {"sha256_precompile_gas_cost", py_sha256_precompile_gas_cost, METH_VARARGS, DOC_sha256_precompile_gas_cost},
   {"secp256k1_verify", py_secp256k1_verify, METH_VARARGS, DOC_secp256k1_verify},
   {"secp256k1_is_low_s", py_secp256k1_is_low_s, METH_VARARGS, DOC_secp256k1_is_low_s},
   {"secp256k1_recover", py_secp256k1_recover, METH_VARARGS, DOC_secp256k1_recover},
@@ -586,7 +548,6 @@ static PyMethodDef methods[] = {
   {"secp256k1_ecdh", py_secp256k1_ecdh, METH_VARARGS, DOC_secp256k1_ecdh},
   {"secp256k1_address", py_secp256k1_address, METH_VARARGS, DOC_secp256k1_address},
   {"secp256r1_verify", py_secp256r1_verify, METH_VARARGS, DOC_secp256r1_verify},
-  {"ecrecover", py_ecrecover, METH_VARARGS, DOC_ecrecover},
   {"enr_from_text", py_enr_from_text, METH_VARARGS, DOC_enr_from_text},
   {"enr_seq", py_enr_seq, METH_VARARGS, DOC_enr_seq},
   {"enr_verify_v4", py_enr_verify_v4, METH_VARARGS, DOC_enr_verify_v4},
@@ -708,9 +669,6 @@ PyInit__native(void) {
     SECP256K1_ERROR = PyObject_GetAttrString(errors, "Secp256k1Error");
     SECP256R1_ERROR = PyObject_GetAttrString(errors, "Secp256r1Error");
     ENR_ERROR = PyObject_GetAttrString(errors, "EnrError");
-    ECRECOVER_ERROR = PyObject_GetAttrString(errors, "EcrecoverError");
-    MODEXP_ERROR = PyObject_GetAttrString(errors, "ModexpError");
-    SHA256_PRECOMPILE_ERROR = PyObject_GetAttrString(errors, "Sha256PrecompileError");
     PRECOMPILE_ERROR = PyObject_GetAttrString(errors, "PrecompileError");
     STATE_ERROR = PyObject_GetAttrString(errors, "StateError");
     KECCAK_ERROR = PyObject_GetAttrString(errors, "KeccakError");
@@ -794,20 +752,15 @@ PyInit__native(void) {
     SPHINCS_PUB_KEY_SIZE = (size_t) eth_sphincs_const_pub_key_size(lean_box(0));
     SPHINCS_SIG_SIZE     = (size_t) eth_sphincs_const_sig_size(lean_box(0));
 
-    MODEXP_LENGTH_HEADER_BYTES = (size_t) eth_modexp_const_length_header_bytes(lean_box(0));
-    MODEXP_MAX_LENGTH_BYTES    = (size_t) eth_modexp_const_max_length_bytes(lean_box(0));
     SECP256K1_HASH_LEN      = (size_t) eth_secp256k1_const_hash_len(lean_box(0));
     SECP256K1_SIGNATURE_LEN = (size_t) eth_secp256k1_const_signature_len(lean_box(0));
     SECP256R1_PUBLIC_KEY_LEN = (size_t) eth_secp256r1_const_public_key_len(lean_box(0));
     SECP256R1_HASH_LEN       = (size_t) eth_secp256r1_const_hash_len(lean_box(0));
     SECP256R1_SIGNATURE_LEN  = (size_t) eth_secp256r1_const_signature_len(lean_box(0));
-    ECRECOVER_GAS           = (size_t) eth_ecrecover_const_gas(lean_box(0));
     ENR_MAX_RECORD_SIZE     = (size_t) eth_enr_const_max_record_size(lean_box(0));
     REQRESP_MAX_PAYLOAD_SIZE = (size_t) eth_reqresp_const_max_payload_size(lean_box(0));
     REQRESP_MAX_ERROR_MESSAGE_SIZE = (size_t) eth_reqresp_const_max_error_message_size(lean_box(0));
 
-    RIPEMD160_OUTPUT_BYTES = (size_t) eth_ripemd160_const_output_bytes(lean_box(0));
-    SHA256_PRECOMPILE_OUTPUT_BYTES = (size_t) eth_sha256_precompile_const_output_bytes(lean_box(0));
 
     initialized = 1;
   }
@@ -834,16 +787,11 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "SPHINCS_SEED_LEN", SPHINCS_SEED_LEN);
   PyModule_AddIntConstant(m, "SPHINCS_PUB_KEY_SIZE", SPHINCS_PUB_KEY_SIZE);
   PyModule_AddIntConstant(m, "SPHINCS_SIG_SIZE", SPHINCS_SIG_SIZE);
-  PyModule_AddIntConstant(m, "MODEXP_LENGTH_HEADER_BYTES", MODEXP_LENGTH_HEADER_BYTES);
-  PyModule_AddIntConstant(m, "MODEXP_MAX_LENGTH_BYTES", MODEXP_MAX_LENGTH_BYTES);
-  PyModule_AddIntConstant(m, "RIPEMD160_OUTPUT_BYTES", RIPEMD160_OUTPUT_BYTES);
-  PyModule_AddIntConstant(m, "SHA256_PRECOMPILE_OUTPUT_BYTES", SHA256_PRECOMPILE_OUTPUT_BYTES);
   PyModule_AddIntConstant(m, "SECP256K1_HASH_LEN", SECP256K1_HASH_LEN);
   PyModule_AddIntConstant(m, "SECP256K1_SIGNATURE_LEN", SECP256K1_SIGNATURE_LEN);
   PyModule_AddIntConstant(m, "SECP256R1_PUBLIC_KEY_LEN", SECP256R1_PUBLIC_KEY_LEN);
   PyModule_AddIntConstant(m, "SECP256R1_HASH_LEN", SECP256R1_HASH_LEN);
   PyModule_AddIntConstant(m, "SECP256R1_SIGNATURE_LEN", SECP256R1_SIGNATURE_LEN);
-  PyModule_AddIntConstant(m, "ECRECOVER_GAS", ECRECOVER_GAS);
   PyModule_AddIntConstant(m, "ENR_MAX_RECORD_SIZE", ENR_MAX_RECORD_SIZE);
   PyModule_AddIntConstant(m, "REQRESP_MAX_PAYLOAD_SIZE", REQRESP_MAX_PAYLOAD_SIZE);
   PyModule_AddIntConstant(m, "REQRESP_MAX_ERROR_MESSAGE_SIZE", REQRESP_MAX_ERROR_MESSAGE_SIZE);
