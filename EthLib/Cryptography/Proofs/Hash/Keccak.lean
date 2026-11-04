@@ -10,6 +10,8 @@ import all Init.Data.Range.Basic
 
 The constants of Keccak-f[1600] agree with the algorithms that define them.
 
+Each step mapping, written lane by lane, is the formula of the standard for every lane.
+
 The padding cuts every message into whole blocks, and no two messages pad alike.
 -/
 
@@ -32,6 +34,55 @@ So no rotation offset is taken on trust. -/
 theorem rhoOffsets_eq : RHO.map UInt64.toNat = Internal.rhoOffsets := by
   -- The walk of 24 steps, run by the kernel.
   decide +kernel
+
+/-! ## The step mappings are the formulas of the standard
+
+Each theorem below states one step mapping for every lane, as FIPS 202 §3.2 writes it.
+
+The coordinates are in `Fin 5`, where addition and subtraction wrap mod 5, as in §3.1.4. -/
+
+/-- Lane `(x, y)` of a state, the field with the number `x + 5y`. -/
+def State.lane (A : State) (x y : Fin 5) : UInt64 :=
+  [A.a0, A.a1, A.a2, A.a3, A.a4, A.a5, A.a6, A.a7, A.a8, A.a9, A.a10, A.a11, A.a12, A.a13,
+    A.a14, A.a15, A.a16, A.a17, A.a18, A.a19, A.a20, A.a21, A.a22, A.a23,
+    A.a24][x.val + 5 * y.val]!
+
+/-- The state whose lane `(x, y)` is `f x y`. -/
+def State.ofLanes (f : Fin 5 → Fin 5 → UInt64) : State :=
+  ⟨f 0 0, f 1 0, f 2 0, f 3 0, f 4 0, f 0 1, f 1 1, f 2 1, f 3 1, f 4 1,
+    f 0 2, f 1 2, f 2 2, f 3 2, f 4 2, f 0 3, f 1 3, f 2 3, f 3 3, f 4 3,
+    f 0 4, f 1 4, f 2 4, f 3 4, f 4 4⟩
+
+/-- The parity `C[x]` of column `x`: the XOR of its five lanes. -/
+def State.column (A : State) (x : Fin 5) : UInt64 :=
+  A.lane x 0 ^^^ A.lane x 1 ^^^ A.lane x 2 ^^^ A.lane x 3 ^^^ A.lane x 4
+
+/-- Theta is `A'[x, y] = A[x, y] ^ C[x - 1] ^ rot(C[x + 1], 1)`, FIPS 202 §3.2.1. -/
+theorem theta_eq (A : State) :
+    theta A = State.ofLanes fun x y =>
+      A.lane x y ^^^ (A.column (x - 1) ^^^ rotl (A.column (x + 1)) 1) :=
+  rfl
+
+/-- Rho rotates lane `(x, y)` by the offset of index `x + 5y`, FIPS 202 §3.2.2. -/
+theorem rho_eq (A : State) :
+    rho A = State.ofLanes fun x y =>
+      rotl (A.lane x y) (RHO[x.val + 5 * y.val]'(by simp only [LANES]; omega)) :=
+  rfl
+
+/-- Pi is `A'[x, y] = A[(x + 3y) mod 5, x]`, FIPS 202 §3.2.3. -/
+theorem pi_eq (A : State) : pi A = State.ofLanes fun x y => A.lane (x + 3 * y) x :=
+  rfl
+
+/-- Chi is `A'[x, y] = A[x, y] ^ ((A[x + 1, y] ^ 1) & A[x + 2, y])`, FIPS 202 §3.2.4. -/
+theorem chi_eq (A : State) :
+    chi A = State.ofLanes fun x y => A.lane x y ^^^ (~~~A.lane (x + 1) y &&& A.lane (x + 2) y) :=
+  rfl
+
+/-- Iota XORs the round constant into lane `(0, 0)` and leaves the others, FIPS 202 §3.2.5. -/
+theorem iota_eq (ir : Fin ROUNDS) (A : State) :
+    iota ir A = State.ofLanes fun x y =>
+      if x = 0 ∧ y = 0 then A.lane x y ^^^ RC[ir] else A.lane x y :=
+  rfl
 
 /-! ## The padding
 
