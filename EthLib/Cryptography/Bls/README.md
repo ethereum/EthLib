@@ -155,7 +155,9 @@ the representation it returns may differ from that of `P`.
 - The map to G1 of EIP-2537 has no theorem:
   neither its validity nor its landing in the subgroup is proved.
 - No theorem says which signatures verification rejects, beyond malformed input.
-- No security property, such as unforgeability, is proved.
+- Unforgeability is proved only in the random oracle model, for a scheme over abstract groups.
+  No theorem yet links that scheme to EthLib's own signing and verification.
+  The proof rests on a co-Diffie-Hellman problem that no theorem proves hard.
 - `PairingLaws`, the law of the pairing check, is not proved:
   on representatives of `a_i * g_1` and `b_i * g_2`,
   the check passes exactly when `sum_i a_i * b_i = 0`.

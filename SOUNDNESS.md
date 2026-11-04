@@ -61,8 +61,10 @@ Before the risks, here is what is actually proved, primitive by primitive.
 The list covers the main theorems and is not yet complete.
 
 Most of these theorems are about correctness: an honest run gives the expected answer, or malformed input is rejected.
-Only one states a security property, the unforgeability of leanXMSS, for EthLib's own definitions.
-No theorem states unforgeability for leanSPHINCS or BLS, or binding for KZG.
+Two state a security property.
+The unforgeability of leanXMSS holds for EthLib's own definitions.
+The unforgeability of BLS signatures holds for a scheme over abstract groups.
+No theorem states unforgeability for leanSPHINCS, or binding for KZG.
 No theorem covers the code that runs, the C boundary, or timing.
 
 ### XMSS
@@ -165,6 +167,18 @@ Otherwise the aggregate key is the point at infinity, and key validation rejects
 Under the pairing law, a key and a message have at most one signature that verifies, byte for byte (`verify_unique`, `Proofs/Bls/SignaturesUnique.lean`).
 From a victim's key alone, an attacker builds a second key and a signature that passes the fast aggregate verification for both (`fastAggregateVerify_rogue`).
 So each key of that verification needs a verified proof of possession.
+
+`forgeAdvantage_le` (`Proofs/Bls/Security/Reduction.lean`) states unforgeability in the random oracle model.
+It follows Theorem 3.2 of [Boneh, Lynn, Shacham](https://hovav.net/ucsd/dist/sigs.pdf), with the simple guessing reduction.
+The scheme lives over two abstract groups, with keys `a • g1`, hashes in `G2` and signatures `a • H(m)`.
+Its verification is a test of co-Diffie-Hellman tuples, and the theorem assumes that the test is sound.
+
+Let every run of the game make at most `q` hash calls, counting signing and the final verification.
+Then a forger wins at most `q` times as often as a named solver of a co-Diffie-Hellman problem.
+That problem asks for `(a * c) • g2` from `a • g1`, `a • g2` and `c • g2`.
+It is stronger than the co-CDH of the source's §2, which omits `a • g2`.
+The source needs it when no computable map from `G1` to `G2` is known.
+The theorem does not yet speak about EthLib's own signing and verification.
 
 ### secp256k1
 
@@ -381,10 +395,12 @@ No binding exposes AES.
 ### A4. Idealisations
 
 A security theorem rests on a model, such as a random oracle for a hash.
-EthLib has one such theorem, and one idealisation:
+EthLib has two such theorems, each with one idealisation:
 
 - leanXMSS: the hash `H`, Keccak-256, is a random oracle on byte strings.
   The theorem says nothing about an attack that uses the structure of Keccak.
+- BLS: the hash into `G2` is a random oracle that answers each new message with a uniform multiple of `g2`.
+  The theorem is about abstract groups, so it says nothing yet about EthLib's hash to `G2`.
 
 ## Gap B: does the code that runs match the definitions?
 
