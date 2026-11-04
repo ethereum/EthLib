@@ -285,4 +285,26 @@ inductive TransactionError where
   | emptyAuthorizationList
   deriving DecidableEq, Repr
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def TransactionError.code : TransactionError → UInt32
+  | .emptyTransaction => 1
+  | .unsupportedType _ => 2
+  | .decoding _ => 3
+  | .encoding _ => 4
+  | .invalidSignature => 5
+  | .insufficientGas .. => 6
+  | .initCodeTooLarge _ => 7
+  | .gasLimitExceeded _ => 8
+  | .nonceOverflow => 9
+  | .priorityFeeGreaterThanMaxFee => 10
+  | .wrongChainId .. => 11
+  | .noBlobData => 12
+  | .blobCountExceeded _ => 13
+  | .invalidBlobVersionedHash => 14
+  | .emptyAuthorizationList => 15
+
 end EthLib.Execution.Transactions

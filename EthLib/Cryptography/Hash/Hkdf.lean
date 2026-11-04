@@ -29,6 +29,15 @@ inductive HkdfError where
   | outputTooLong (length : Nat)
 deriving DecidableEq, Repr
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def HkdfError.code : HkdfError → UInt32
+  | .keyTooShort _ => 1
+  | .outputTooLong _ => 2
+
 /--
 HKDF-Extract, RFC 5869 §2.2: the pseudorandom key `HMAC-Hash(salt, IKM)`.
 

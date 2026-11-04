@@ -1,5 +1,6 @@
 """The Keccak-256 hash function: FIPS 202 Keccak[r = 1088, c = 512] with Keccak's padding."""
 
+from ...errors import KeccakError
 from .._native import keccak256 as native_keccak256
 from .._native import keccak_f1600 as native_keccak_f1600
 
@@ -22,11 +23,13 @@ def keccak_f1600(state: bytes) -> bytes:
     Lane `i` is bytes `8i` to `8i + 7`, the first least significant, as in FIPS 202 §3.1.3.
 
     A state of another length raises `ValueError`, and a non-`bytes` argument raises `TypeError`.
+    The binding checks the length before Lean runs.
     """
     return native_keccak_f1600(state)
 
 
 __all__ = [
+    "KeccakError",
     "keccak256",
     "keccak_f1600",
 ]

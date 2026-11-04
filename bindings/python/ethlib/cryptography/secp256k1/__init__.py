@@ -4,9 +4,11 @@
 - A hash is 32 bytes.
 - A signature is 64 bytes: r then s, each a 32-byte big-endian integer.
 
-Malformed arguments raise TypeError or ValueError, and so does a public key the spec rejects.
+Arguments that are not bytes raise TypeError.
+Inputs the spec rejects raise Secp256k1Error, a ValueError with the code of the Lean error.
 """
 
+from ...errors import Secp256k1Error
 from .._native import (
     secp256k1_verify,
     secp256k1_is_low_s,
@@ -36,7 +38,7 @@ def recover(msg_hash: bytes, signature: bytes, recovery_id: int) -> bytes:
     """The public key that signed the hash, by SEC 1 v2 §4.1.6, as 65 uncompressed bytes.
 
     The recovery id is 0 or 1: the parity of the y of the signer's point R.
-    A signature with no key for that id raises ValueError.
+    A signature with no key for that id raises Secp256k1Error.
     """
     return secp256k1_recover(msg_hash, signature, recovery_id)
 
@@ -58,4 +60,5 @@ def address(private_key: bytes) -> bytes:
 
 __all__ = [
     "verify", "is_low_s", "recover", "sign", "ecdh", "address", "HASH_LEN", "SIGNATURE_LEN",
+    "Secp256k1Error",
 ]

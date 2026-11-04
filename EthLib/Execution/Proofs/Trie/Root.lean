@@ -270,4 +270,13 @@ theorem trieGet_trieSet_of_ne (trie : Trie) {key other : ByteArray} (value : Byt
         Bool.eq_false_iff.mpr fun hother => h ((sameBytes_iff key other).mp hother).symm
       simp [List.find?_append, hkey]
 
+/-! ## Error codes -/
+
+/-- Two errors with one code come from one constructor. -/
+theorem TrieError.code_injective (e₁ e₂ : TrieError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [TrieError.code] at h; exact absurd h (by decide))
+
 end EthLib.Execution.Trie

@@ -36,10 +36,7 @@ py_eth_aggregate_pubkeys(
   lean_object* res = eth_bls_aggregate_pubkeys(
     mk_bytearray_array(pks, n, BYTES_PER_PUBKEY));
   PyMem_Free(pks);
-  if (run_io_into_bytearray(res, out, BYTES_PER_PUBKEY)) {
-    PyErr_SetString(PyExc_RuntimeError, "eth_aggregate_pubkeys failed");
-    return NULL;
-  }
+  if (except_into_buffer(res, BLS_ERROR, out, BYTES_PER_PUBKEY)) return NULL;
   return PyBytes_FromStringAndSize((const char*) out, BYTES_PER_PUBKEY);
 }
 
@@ -79,10 +76,7 @@ py_eth_fast_aggregate_verify(
     mk_bytearray(msg, msg_len),
     mk_bytearray(sig, sig_len));
   PyMem_Free(pks);
-  if (run_io_into_bool(res, &ok)) {
-    PyErr_SetString(PyExc_RuntimeError, "eth_fast_aggregate_verify failed");
-    return NULL;
-  }
+  if (except_into_flag(res, BLS_ERROR, &ok)) return NULL;
   if (ok) Py_RETURN_TRUE; else Py_RETURN_FALSE;
 }
 
@@ -192,7 +186,7 @@ py_bls_key_gen(
   lean_object *ikm, *info;
   if (parse_bytes(ikm_obj, "input keying material", &ikm)) return NULL;
   if (parse_bytes(info_obj, "key info", &info)) { lean_dec(ikm); return NULL; }
-  return run_io_into_pybytes(eth_bls_key_gen(ikm, info), "key_gen");
+  return except_into_pybytes(eth_bls_key_gen(ikm, info), BLS_ERROR);
 }
 
 PyObject*
@@ -205,7 +199,7 @@ py_bls_sign(
   lean_object *sk, *msg;
   if (parse_bytes(sk_obj, "secret key", &sk)) return NULL;
   if (parse_bytes(msg_obj, "message", &msg)) { lean_dec(sk); return NULL; }
-  return run_io_into_pybytes(eth_bls_sign(sk, msg), "sign");
+  return except_into_pybytes(eth_bls_sign(sk, msg), BLS_ERROR);
 }
 
 PyObject*
@@ -219,7 +213,7 @@ py_bls_verify(
   if (parse_bytes(pk_obj, "pubkey", &pk)) return NULL;
   if (parse_bytes(msg_obj, "message", &msg)) { lean_dec(pk); return NULL; }
   if (parse_bytes(sig_obj, "signature", &sig)) { lean_dec(pk); lean_dec(msg); return NULL; }
-  return run_io_into_pybool(eth_bls_verify(pk, msg, sig), "verify");
+  return except_into_pybool(eth_bls_verify(pk, msg, sig), BLS_ERROR);
 }
 
 PyObject*
@@ -231,7 +225,7 @@ py_bls_aggregate(
   if (!PyArg_ParseTuple(args, "O", &sigs_obj)) return NULL;
   lean_object* sigs;
   if (parse_bytes_sequence(sigs_obj, "signature", &sigs)) return NULL;
-  return run_io_into_pybytes(eth_bls_aggregate(sigs), "aggregate");
+  return except_into_pybytes(eth_bls_aggregate(sigs), BLS_ERROR);
 }
 
 PyObject*
@@ -245,7 +239,7 @@ py_bls_aggregate_verify(
   if (parse_bytes_sequence(pks_obj, "pubkey", &pks)) return NULL;
   if (parse_bytes_sequence(msgs_obj, "message", &msgs)) { lean_dec(pks); return NULL; }
   if (parse_bytes(sig_obj, "signature", &sig)) { lean_dec(pks); lean_dec(msgs); return NULL; }
-  return run_io_into_pybool(eth_bls_aggregate_verify(pks, msgs, sig), "aggregate_verify");
+  return except_into_pybool(eth_bls_aggregate_verify(pks, msgs, sig), BLS_ERROR);
 }
 
 PyObject*
@@ -259,8 +253,8 @@ py_bls_fast_aggregate_verify(
   if (parse_bytes_sequence(pks_obj, "pubkey", &pks)) return NULL;
   if (parse_bytes(msg_obj, "message", &msg)) { lean_dec(pks); return NULL; }
   if (parse_bytes(sig_obj, "signature", &sig)) { lean_dec(pks); lean_dec(msg); return NULL; }
-  return run_io_into_pybool(
-    eth_bls_fast_aggregate_verify_core(pks, msg, sig), "fast_aggregate_verify");
+  return except_into_pybool(
+    eth_bls_fast_aggregate_verify_core(pks, msg, sig), BLS_ERROR);
 }
 
 PyObject*
@@ -272,7 +266,7 @@ py_bls_pop_prove(
   if (!PyArg_ParseTuple(args, "O", &sk_obj)) return NULL;
   lean_object* sk;
   if (parse_bytes(sk_obj, "secret key", &sk)) return NULL;
-  return run_io_into_pybytes(eth_bls_pop_prove(sk), "pop_prove");
+  return except_into_pybytes(eth_bls_pop_prove(sk), BLS_ERROR);
 }
 
 PyObject*
@@ -285,7 +279,7 @@ py_bls_pop_verify(
   lean_object *pk, *proof;
   if (parse_bytes(pk_obj, "pubkey", &pk)) return NULL;
   if (parse_bytes(proof_obj, "proof", &proof)) { lean_dec(pk); return NULL; }
-  return run_io_into_pybool(eth_bls_pop_verify(pk, proof), "pop_verify");
+  return except_into_pybool(eth_bls_pop_verify(pk, proof), BLS_ERROR);
 }
 
 /* ---- Hash to curve ---------------------------------------------------- */
@@ -314,8 +308,8 @@ py_bls_expand_message_xmd(
   lean_object *msg, *dst;
   if (parse_bytes(msg_obj, "message", &msg)) return NULL;
   if (parse_bytes(dst_obj, "dst", &dst)) { lean_dec(msg); return NULL; }
-  return run_io_into_pybytes(
-    eth_bls_expand_message_xmd(msg, dst, (uint64_t) len), "expand_message_xmd");
+  return except_into_pybytes(
+    eth_bls_expand_message_xmd(msg, dst, (uint64_t) len), BLS_ERROR);
 }
 
 PyObject*
@@ -328,5 +322,5 @@ py_bls_hash_to_g2(
   lean_object *msg, *dst;
   if (parse_bytes(msg_obj, "message", &msg)) return NULL;
   if (parse_bytes(dst_obj, "dst", &dst)) { lean_dec(msg); return NULL; }
-  return run_io_into_pybytes(eth_bls_hash_to_g2(msg, dst), "hash_to_g2");
+  return except_into_pybytes(eth_bls_hash_to_g2(msg, dst), BLS_ERROR);
 }

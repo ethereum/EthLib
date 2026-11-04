@@ -541,13 +541,17 @@ Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_co
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-4150 lines of hand-written C sit between them and Python: `blocks.c` (105), `bls.c` (332), `consensus.c` (82), `crc32c.c` (38), `discv5.c` (193), `ecrecover.c` (34), `enr.c` (121), `gossip.c` (63), `hmac.c` (99), `keccak.c` (61), `kzg.c` (533), `modexp.c` (61), `module.c` (686), `precompile.c` (43), `reqresp.c` (122), `ripemd160.c` (36), `rlp.c` (163), `rlpx.c` (73), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `snappy.c` (131), `sphincs.c` (94), `state.c` (28), `transactions.c` (132), `trie.c` (76), `vrf.c` (121), `wrappers.h` (269), `xmss.c` (143).
+4191 lines of hand-written C sit between them and Python: `blocks.c` (105), `bls.c` (326), `consensus.c` (82), `crc32c.c` (38), `discv5.c` (193), `ecrecover.c` (34), `enr.c` (122), `gossip.c` (63), `hmac.c` (99), `keccak.c` (61), `kzg.c` (503), `modexp.c` (61), `module.c` (747), `precompile.c` (43), `reqresp.c` (121), `ripemd160.c` (36), `rlp.c` (162), `rlpx.c` (72), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `snappy.c` (131), `sphincs.c` (85), `state.c` (28), `transactions.c` (132), `trie.c` (76), `vrf.c` (119), `wrappers.h` (307), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
 The vectors test this layer only through the regeneration and comparison of B1.
-Each typed Lean error becomes a `RuntimeError` with the operation's name, and the Lean message is dropped.
-A wrong argument size is caught in C first, and raises `ValueError`.
+
+An export that can fail returns the code and the message of its typed Lean error.
+The C layer raises them as an exception of `ethlib.errors`, one class for each primitive.
+C reads the code from the pair that the export returns.
+A wrong field offset in C would give a wrong code, and no theorem covers that read.
+Some wrong argument sizes are caught in C first, and raise `ValueError` with no code.
 
 ### B5. Compiler substitutions in this repository
 

@@ -45,6 +45,35 @@ size_t SECP256R1_SIGNATURE_LEN;
 
 size_t ECRECOVER_GAS;
 
+/* ---- Exception classes (looked up in `PyInit__native`) --------------- */
+
+PyObject* KZG_ERROR;
+PyObject* BLS_ERROR;
+PyObject* XMSS_ERROR;
+PyObject* SPHINCS_ERROR;
+PyObject* SECP256K1_ERROR;
+PyObject* SECP256R1_ERROR;
+PyObject* ENR_ERROR;
+PyObject* ECRECOVER_ERROR;
+PyObject* MODEXP_ERROR;
+PyObject* SHA256_PRECOMPILE_ERROR;
+PyObject* PRECOMPILE_ERROR;
+PyObject* STATE_ERROR;
+PyObject* KECCAK_ERROR;
+PyObject* REQRESP_ERROR;
+PyObject* CONSENSUS_ERROR;
+PyObject* HKDF_ERROR;
+PyObject* CONCAT_KDF_ERROR;
+PyObject* BLOCK_ERROR;
+PyObject* RLP_ERROR;
+PyObject* SNAPPY_ERROR;
+PyObject* VARINT_ERROR;
+PyObject* DISCV5_ERROR;
+PyObject* RLPX_ERROR;
+PyObject* TRANSACTION_ERROR;
+PyObject* VRF_ERROR;
+PyObject* TRIE_ERROR;
+
 /* ---- Lean externs: size accessors ------------------------------------ */
 
 extern uint64_t
@@ -267,124 +296,122 @@ mk_bytearray_array(
   return arr;
 }
 
-/* Run an IO action and copy its inner ByteArray into `out`/`out_len`.
- * `lean_io_result_get_value` returns a *borrowed* reference; do NOT
- * `lean_dec` the inner value separately. Returns 0 on success. */
+/* Raise the error of a failed result, and free the result.
+ *
+ * The error is the pair of a `UInt32` code and a `String` message.
+ *
+ * `Prod` is polymorphic, so the code is boxed. */
+void
+raise_lean_error(
+  lean_object* result,
+  PyObject* error_class
+) {
+  lean_object* pair = lean_ctor_get(result, 0);
+  uint32_t code = lean_unbox_uint32(lean_ctor_get(pair, 0));
+  const char* message = lean_string_cstr(lean_ctor_get(pair, 1));
+  PyObject* exc = PyObject_CallFunction(error_class, "Is", (unsigned int) code, message);
+  if (exc) {
+    PyErr_SetObject(error_class, exc);
+    Py_DECREF(exc);
+  }
+  lean_dec(result);
+}
+
+/* `Except.error` is the first constructor of `Except`, so its tag is 0. */
+static int
+is_error(
+  lean_object* result
+) {
+  return lean_obj_tag(result) == 0;
+}
+
+/* The value of `Except.ok` is borrowed, so only the result is freed. */
 int
-run_io_into_bytearray(
-  lean_object* io_result,
+except_into_buffer(
+  lean_object* result,
+  PyObject* error_class,
   uint8_t* out,
   size_t out_len
 ) {
-  if (!lean_io_result_is_ok(io_result)) {
-    lean_io_result_show_error(io_result);
-    lean_dec(io_result);
+  if (is_error(result)) {
+    raise_lean_error(result, error_class);
     return 1;
   }
-  lean_object* ba = lean_io_result_get_value(io_result);
+  lean_object* ba = lean_ctor_get(result, 0);
   size_t got = lean_sarray_size(ba);
   if (got != out_len) {
-    lean_dec(io_result);
+    lean_dec(result);
+    PyErr_Format(PyExc_RuntimeError, "Lean returned %zu bytes, expected %zu", got, out_len);
     return 1;
   }
   memcpy(out, lean_sarray_cptr(ba), out_len);
-  lean_dec(io_result);
+  lean_dec(result);
   return 0;
 }
 
-/* Run an IO action returning a UInt8 boolean. */
 int
-run_io_into_bool(
-  lean_object* io_result,
+except_into_flag(
+  lean_object* result,
+  PyObject* error_class,
   uint8_t* out_ok
 ) {
-  if (!lean_io_result_is_ok(io_result)) {
-    lean_io_result_show_error(io_result);
-    lean_dec(io_result);
+  if (is_error(result)) {
+    raise_lean_error(result, error_class);
     return 1;
   }
-  *out_ok = lean_unbox(lean_io_result_get_value(io_result));
-  lean_dec(io_result);
+  *out_ok = (uint8_t) lean_unbox(lean_ctor_get(result, 0));
+  lean_dec(result);
   return 0;
 }
 
-/* `IO.Error.toString`, exported by the Lean core but absent from `lean.h`. */
-extern lean_object*
-lean_io_error_to_string(
-  lean_object* err
-);
-
-/* Raise `ValueError` with the Lean error message of a failed IO action.
- *
- * The result is freed.
- *
- * `what` names the operation in the message. */
-void
-raise_io_error(
-  lean_object* io_result,
-  const char* what
-) {
-  lean_object* err = lean_io_result_get_error(io_result);
-  lean_inc(err);
-  lean_object* msg = lean_io_error_to_string(err);
-  PyErr_Format(PyExc_ValueError, "%s: %s", what, lean_string_cstr(msg));
-  lean_dec(msg);
-  lean_dec(io_result);
-}
-
-/* Run an IO action and return its inner ByteArray as a Python `bytes`.
- *
- * The inner value is borrowed, so only the result is freed.
- *
- * A failed action raises `ValueError` with the Lean error message. */
 PyObject*
-run_io_into_pybytes(
-  lean_object* io_result,
-  const char* what
+pybytes_of_bytearray(
+  lean_object* bytes
 ) {
-  if (!lean_io_result_is_ok(io_result)) {
-    raise_io_error(io_result, what);
-    return NULL;
-  }
-  lean_object* ba = lean_io_result_get_value(io_result);
   PyObject* out = PyBytes_FromStringAndSize(
-    (const char*) lean_sarray_cptr(ba), (Py_ssize_t) lean_sarray_size(ba));
-  lean_dec(io_result);
+    (const char*) lean_sarray_cptr(bytes), (Py_ssize_t) lean_sarray_size(bytes));
+  lean_dec(bytes);
   return out;
 }
 
-/* Run an IO action and return its inner UInt64 as a Python `int`.
- *
- * A failed action raises `ValueError` with the Lean error message. */
 PyObject*
-run_io_into_pyint(
-  lean_object* io_result,
-  const char* what
+except_into_pybytes(
+  lean_object* result,
+  PyObject* error_class
 ) {
-  if (!lean_io_result_is_ok(io_result)) {
-    raise_io_error(io_result, what);
+  if (is_error(result)) {
+    raise_lean_error(result, error_class);
     return NULL;
   }
-  uint64_t value = lean_unbox_uint64(lean_io_result_get_value(io_result));
-  lean_dec(io_result);
+  lean_object* ba = lean_ctor_get(result, 0);
+  PyObject* out = PyBytes_FromStringAndSize(
+    (const char*) lean_sarray_cptr(ba), (Py_ssize_t) lean_sarray_size(ba));
+  lean_dec(result);
+  return out;
+}
+
+PyObject*
+except_into_pyint(
+  lean_object* result,
+  PyObject* error_class
+) {
+  if (is_error(result)) {
+    raise_lean_error(result, error_class);
+    return NULL;
+  }
+  uint64_t value = lean_unbox_uint64(lean_ctor_get(result, 0));
+  lean_dec(result);
   return PyLong_FromUnsignedLongLong(value);
 }
 
-/* Run an IO action returning a `UInt8` boolean, as a Python `bool`.
- *
- * On failure it sets a `ValueError` with the Lean message and returns NULL. */
 PyObject*
-run_io_into_pybool(
-  lean_object* io_result,
-  const char* what
+except_into_pybool(
+  lean_object* result,
+  PyObject* error_class
 ) {
-  if (!lean_io_result_is_ok(io_result)) {
-    raise_io_error(io_result, what);
-    return NULL;
-  }
-  uint8_t value = lean_unbox(lean_io_result_get_value(io_result));
-  lean_dec(io_result);
-  if (value) Py_RETURN_TRUE; else Py_RETURN_FALSE;
+  uint8_t ok;
+  if (except_into_flag(result, error_class, &ok)) return NULL;
+  if (ok) Py_RETURN_TRUE; else Py_RETURN_FALSE;
 }
 
 /* ---- Argument parsing helpers ---------------------------------------- */
@@ -582,6 +609,40 @@ PyInit__native(void) {
   /* Boot the Lean runtime exactly once when the extension loads. */
   static int initialized = 0;
   if (!initialized) {
+    /* The exception classes are plain Python, in `ethlib.errors`.
+     * They are looked up before the Lean runtime boots, so a failed import boots nothing.
+     * That module imports nothing from this extension, so the import cannot loop. */
+    PyObject* errors = PyImport_ImportModule("ethlib.errors");
+    if (!errors) return NULL;
+    KZG_ERROR = PyObject_GetAttrString(errors, "KzgError");
+    BLS_ERROR = PyObject_GetAttrString(errors, "BlsError");
+    XMSS_ERROR = PyObject_GetAttrString(errors, "XmssError");
+    SPHINCS_ERROR = PyObject_GetAttrString(errors, "SphincsError");
+    SECP256K1_ERROR = PyObject_GetAttrString(errors, "Secp256k1Error");
+    SECP256R1_ERROR = PyObject_GetAttrString(errors, "Secp256r1Error");
+    ENR_ERROR = PyObject_GetAttrString(errors, "EnrError");
+    ECRECOVER_ERROR = PyObject_GetAttrString(errors, "EcrecoverError");
+    MODEXP_ERROR = PyObject_GetAttrString(errors, "ModexpError");
+    SHA256_PRECOMPILE_ERROR = PyObject_GetAttrString(errors, "Sha256PrecompileError");
+    PRECOMPILE_ERROR = PyObject_GetAttrString(errors, "PrecompileError");
+    STATE_ERROR = PyObject_GetAttrString(errors, "StateError");
+    KECCAK_ERROR = PyObject_GetAttrString(errors, "KeccakError");
+    REQRESP_ERROR = PyObject_GetAttrString(errors, "ReqRespError");
+    CONSENSUS_ERROR = PyObject_GetAttrString(errors, "ConsensusError");
+    HKDF_ERROR = PyObject_GetAttrString(errors, "HkdfError");
+    CONCAT_KDF_ERROR = PyObject_GetAttrString(errors, "ConcatKdfError");
+    BLOCK_ERROR = PyObject_GetAttrString(errors, "BlockError");
+    RLP_ERROR = PyObject_GetAttrString(errors, "RlpError");
+    SNAPPY_ERROR = PyObject_GetAttrString(errors, "SnappyError");
+    VARINT_ERROR = PyObject_GetAttrString(errors, "VarintError");
+    DISCV5_ERROR = PyObject_GetAttrString(errors, "Discv5Error");
+    RLPX_ERROR = PyObject_GetAttrString(errors, "RlpxError");
+    TRANSACTION_ERROR = PyObject_GetAttrString(errors, "TransactionError");
+    VRF_ERROR = PyObject_GetAttrString(errors, "VrfError");
+    TRIE_ERROR = PyObject_GetAttrString(errors, "TrieError");
+    Py_DECREF(errors);
+    if (PyErr_Occurred()) return NULL;
+
     lean_initialize_runtime_module();
     lean_object* res = initialize_EthLib_EthLib_Cryptography_Exports(1);
     if (lean_io_result_is_ok(res)) {

@@ -4,9 +4,11 @@
 - A hash is 32 bytes.
 - A signature is 64 bytes: r then s, each a 32-byte big-endian integer.
 
-Malformed arguments raise TypeError or ValueError.
+Arguments that are not bytes raise TypeError.
+Bytes of the wrong length or range raise Secp256r1Error, a ValueError with a code.
 """
 
+from ...errors import Secp256r1Error
 from .._native import (
     secp256r1_verify,
     SECP256R1_PUBLIC_KEY_LEN as PUBLIC_KEY_LEN,
@@ -23,4 +25,4 @@ def verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool:
     return secp256r1_verify(public_key, msg_hash, signature)
 
 
-__all__ = ["verify", "PUBLIC_KEY_LEN", "HASH_LEN", "SIGNATURE_LEN"]
+__all__ = ["verify", "PUBLIC_KEY_LEN", "HASH_LEN", "SIGNATURE_LEN", "Secp256r1Error"]

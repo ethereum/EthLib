@@ -12,6 +12,8 @@ It fails exactly when the gas is below that price, and otherwise returns the 32-
 
 The digest is the FIPS 180-4 hash of `Cryptography.Proofs.Hash.Sha256` whenever the call data is shorter than 2^61 bytes.
 Every call that succeeds with less than `60 + 12 * 2^56` gas has such call data.
+
+Two errors with one code come from one constructor.
 -/
 
 @[expose] public section
@@ -119,5 +121,14 @@ theorem sha256_ok_eq_spec_of_gas {data : ByteArray} {gas : Nat} {out : ByteArray
   intro long
   have := gasCost_mono long
   omega
+
+/-! ## Error codes -/
+
+/-- Two errors with one code come from one constructor. -/
+theorem Sha256Error.code_injective (e₁ e₂ : Sha256Error) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [Sha256Error.code] at h; exact absurd h (by decide))
 
 end EthLib.Execution.Evm.Precompiles.Sha256

@@ -58,6 +58,23 @@ inductive ProofError where
   | unusedNodes
   deriving Repr, DecidableEq
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+The codes start at 101, above every code of a trie error, so that the two never meet.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def ProofError.code : ProofError → UInt32
+  | .missingNode => 101
+  | .hashMismatch => 102
+  | .rlp _ => 103
+  | .hexPrefix _ => 104
+  | .invalidNode => 105
+  | .invalidReference => 106
+  | .emptyExtension => 107
+  | .unusedNodes => 108
+
 /-- The node that an item writes: the inverse of `unencoded` on a node. -/
 def decodeNode : Item → Except ProofError InternalNode
   -- A leaf or an extension: its path in hex-prefix encoding, then its value or its child.

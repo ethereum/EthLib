@@ -265,4 +265,20 @@ theorem decryptMessage_encryptMessage {key : Aes.Key .aes128} {nonce : Vector UI
       ByteArray.extract_append_eq_right rfl (by rw [ByteArray.size_append])]
     exact Aes.Gcm.decrypt_encrypt _ _ _ _ _ _ _ he
 
+/-! ## Error codes -/
+
+section
+
+open EthLib.Networking.Discv5
+
+/-- Two errors with one code come from one constructor. -/
+theorem _root_.EthLib.Networking.Discv5.PacketError.code_injective
+    (e₁ e₂ : PacketError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [PacketError.code] at h; exact absurd h (by decide))
+
+end
+
 end EthLib.Networking.Proofs.Discv5.Packet

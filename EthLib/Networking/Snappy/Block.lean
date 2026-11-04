@@ -84,6 +84,21 @@ inductive SnappyError where
   | lengthMismatch (declared actual : Nat)
   deriving Repr, DecidableEq
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def SnappyError.code : SnappyError → UInt32
+  | .preambleTruncated => 1
+  | .preambleTooLong => 2
+  | .preambleTooLarge _ => 3
+  | .literalPastEnd => 4
+  | .copyPastEnd => 5
+  | .copyOffsetZero => 6
+  | .copyOffsetTooLarge _ => 7
+  | .lengthMismatch .. => 8
+
 /-- Read the preamble, at most `fuel` more bytes deep.
 
 Returns the length and the bytes after the preamble.

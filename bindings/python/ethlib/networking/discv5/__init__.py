@@ -1,7 +1,12 @@
-"""Node distances, handshake cryptography and packets of discv5."""
+"""Node distances, handshake cryptography and packets of discv5.
+
+An invalid input raises Discv5Error, a ValueError.
+"""
 
 import json
 from typing import NamedTuple
+
+from ...errors import Discv5Error
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -95,4 +100,5 @@ __all__ = [
     "reencode_packet",
     "encrypt_message",
     "decrypt_message",
+    "Discv5Error",
 ]

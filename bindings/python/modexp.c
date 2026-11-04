@@ -39,7 +39,7 @@ py_modexp(
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(data_obj),
                  (size_t) PyBytes_GET_SIZE(data_obj)),
     gas);
-  return run_io_into_pybytes(res, "modexp");
+  return except_into_pybytes(res, MODEXP_ERROR);
 }
 
 PyObject*
@@ -57,5 +57,5 @@ py_modexp_gas_cost(
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(data_obj),
                  (size_t) PyBytes_GET_SIZE(data_obj)));
   /* The price is at most 528449536, so it always fits in a `UInt64`. */
-  return run_io_into_pyint(res, "modexp_gas_cost");
+  return except_into_pyint(res, MODEXP_ERROR);
 }

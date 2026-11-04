@@ -1,6 +1,8 @@
 module
 
+public import EthLib.Base.Exports
 public import EthLib.Execution.State.Root
+public import EthLib.Execution.State.Errors
 
 /-!
 # `Exports.State`
@@ -15,14 +17,17 @@ The storage is a list of pairs of a 32-byte key and a word.
 
 The code hash of an account is the Keccak-256 hash of its code.
 
-A malformed input, or an address given twice, is an `IO` error, which Python raises.
+A malformed input, or an address given twice, comes back as the code and the message of its error.
 -/
 
 public section
 
 namespace EthLib.Execution.State.Exports
 
+open EthLib.Exports (Result)
+
 open EthLib.Base
+open EthLib.Execution.State
 open EthLib.Serialization.Rlp
 
 /-- One account of the input: its address, nonce, balance, code and storage. -/
@@ -53,10 +58,10 @@ def ofEntryItem (item : Item) : Except RlpError Entry := do
   | items => .error (.wrongFieldCount 5 items.length)
 
 /-- The state that the accounts of the input hold, or an error for an address given twice. -/
-def ofEntries (entries : List Entry) : Except String State :=
+def ofEntries (entries : List Entry) : Except StateInputError State :=
   entries.foldlM (init := ⟨∅, ∅, ∅⟩) fun state entry => do
     if entry.address ∈ state.accounts then
-      throw "an address is given twice"
+      throw .repeatedAddress
     let codeHash := Cryptography.Hash.Keccak.keccak256 entry.code
     return {
       accounts := state.accounts.insert entry.address ⟨entry.nonce, entry.balance, codeHash⟩
@@ -65,14 +70,13 @@ def ofEntries (entries : List Entry) : Except String State :=
 
 /-- The 32-byte state root, with Keccak-256, of the state that `input` encodes. -/
 @[export eth_state_root]
-def stateRootExport (input : ByteArray) : IO ByteArray := do
-  let .ok item := decode input | throw (IO.userError "state is not one RLP item")
-  let .ok items := item.toItems | throw (IO.userError "state is not an RLP list")
-  let .ok entries := items.mapM ofEntryItem
-    | throw (IO.userError "an account is not a list of address, nonce, balance, code and storage")
-  let state ← IO.ofExcept (ofEntries entries)
-  let .ok root := stateRoot Cryptography.Hash.Keccak.keccak256 state
-    | throw (IO.userError "state has no root")
-  return ⟨root.toArray⟩
+def stateRootExport (input : ByteArray) : Result ByteArray :=
+  Except.mapError (fun e => (e.code, e.message)) do
+    let item ← (decode input).mapError .notAnItem
+    let items ← item.toItems.mapError .notAList
+    let entries ← (items.mapM ofEntryItem).mapError .badAccount
+    let state ← ofEntries entries
+    let root ← (stateRoot Cryptography.Hash.Keccak.keccak256 state).mapError .noRoot
+    return ⟨root.toArray⟩
 
 end EthLib.Execution.State.Exports

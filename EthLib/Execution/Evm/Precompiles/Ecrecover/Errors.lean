@@ -26,4 +26,12 @@ inductive EcrecoverError where
 def EcrecoverError.message : EcrecoverError → String
   | .outOfGas cost gas => s!"out of gas: price {cost}, gas {gas}"
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def EcrecoverError.code : EcrecoverError → UInt32
+  | .outOfGas .. => 1
+
 end EthLib.Execution.Evm.Precompiles.Ecrecover

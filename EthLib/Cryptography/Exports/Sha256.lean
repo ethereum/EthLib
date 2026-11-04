@@ -7,7 +7,7 @@ public import EthLib.Cryptography.Hash.Sha256
 
 The C export of SHA-256, FIPS 180-4 §6.2, for the Python bindings.
 
-SHA-256 is total, so the export has no `IO` error path.
+SHA-256 is total, so the export has no error path.
 -/
 
 public section

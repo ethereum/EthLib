@@ -90,6 +90,20 @@ inductive PacketError where
   | fieldTooLong
   deriving DecidableEq, Repr
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def PacketError.code : PacketError → UInt32
+  | .size _ => 1
+  | .protocolId => 2
+  | .headerTruncated => 3
+  | .flag _ => 4
+  | .authdata => 5
+  | .whoareyouMessage => 6
+  | .fieldTooLong => 7
+
 namespace Authdata
 
 /-- The flag of the authdata. -/

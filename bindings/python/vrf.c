@@ -104,8 +104,7 @@ py_vrf_secret(
   const uint8_t* seed;
   uint32_t index;
   if (parse_seed_index(args, &seed, &index)) return NULL;
-  return run_io_into_pybytes(eth_vrf_secret(mk_bytearray(seed, VRF_HASH_SIZE), index),
-                             "vrf_secret");
+  return except_into_pybytes(eth_vrf_secret(mk_bytearray(seed, VRF_HASH_SIZE), index), VRF_ERROR);
 }
 
 PyObject*
@@ -116,6 +115,5 @@ py_vrf_evaluate(
   const uint8_t* seed;
   uint32_t index;
   if (parse_seed_index(args, &seed, &index)) return NULL;
-  return run_io_into_pybytes(eth_vrf_evaluate(mk_bytearray(seed, VRF_HASH_SIZE), index),
-                             "vrf_evaluate");
+  return except_into_pybytes(eth_vrf_evaluate(mk_bytearray(seed, VRF_HASH_SIZE), index), VRF_ERROR);
 }

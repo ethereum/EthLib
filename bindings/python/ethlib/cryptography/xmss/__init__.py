@@ -1,8 +1,9 @@
 """leanXMSS signatures: key generation, signing, verification and the leaf index."""
 
 # Malformed arguments raise TypeError, ValueError or OverflowError.
-# Inputs that the specification rejects raise RuntimeError.
+# Inputs that the specification rejects raise XmssError, with the code of the Lean error.
 
+from ...errors import XmssError
 from .._native import (
     xmss_key_gen,
     xmss_sign,
@@ -48,4 +49,5 @@ __all__ = [
     "PUB_KEY_SIZE",
     "SEED_LEN",
     "SIG_SIZE",
+    "XmssError",
 ]

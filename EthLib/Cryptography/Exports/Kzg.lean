@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Exports
 public import EthLib.Cryptography.Bls
 public import EthLib.Cryptography.Kzg.Constants
 public import EthLib.Cryptography.Kzg.Polynomials
@@ -25,23 +26,23 @@ Each input is a `ByteArray` or an `Array`.
 A single output is a `ByteArray`, and several outputs are arrays of them, or pairs.
 
 Booleans come back as `UInt8`.
+
+An operation that can fail returns its value, or the code and the message of its error.
 -/
 
 public section
 
 namespace EthLib.Cryptography.Kzg.Exports
 
+open EthLib.Exports (Result)
+
 open EthLib.Cryptography.Kzg
 open EthLib.Base (Bytes32)
 open EthLib.Cryptography.Kzg.Constants
 
-/-- Run a KZG computation in `IO`.
-
-An error becomes the `IO` error that the C extension raises to the caller. -/
-def runKzg {α : Type} (act : Except KzgError α) : IO α :=
-  match act with
-  | .ok a    => pure a
-  | .error e => throw (IO.userError e.message)
+/-- Run a KZG computation, with its error as a code and a message. -/
+def runKzg {α : Type} (act : Except KzgError α) : Result α :=
+  act.mapError fun e => (e.code, e.message)
 
 /-- The embedded trusted setup, decoded.
 
@@ -51,7 +52,7 @@ So the 8257 points are decoded once, and every export reuses them. -/
 def embeddedSetup : Except KzgError TrustedSetup := TrustedSetup.ofHex
 
 /-- Run a KZG computation that reads the embedded trusted setup. -/
-def runKzgWithSetup {α : Type} (act : TrustedSetup → Except KzgError α) : IO α :=
+def runKzgWithSetup {α : Type} (act : TrustedSetup → Except KzgError α) : Result α :=
   runKzg (embeddedSetup >>= act)
 
 /-! ## Parsing
@@ -124,12 +125,12 @@ def constCellsPerExtBlob (_ : Unit) : UInt64 :=
 /-! ## Operations -/
 
 @[export eth_kzg_blob_to_kzg_commitment]
-def blobToKzgCommitmentExport (blob : ByteArray) : IO ByteArray :=
+def blobToKzgCommitmentExport (blob : ByteArray) : Result ByteArray :=
   unparse <$> runKzgWithSetup fun setup => do blobToKzgCommitment setup (← parseBlob blob)
 
 @[export eth_kzg_compute_challenge]
 def computeChallengeExport
-    (blob : ByteArray) (commitment : ByteArray) : IO ByteArray :=
+    (blob : ByteArray) (commitment : ByteArray) : Result ByteArray :=
   runKzg do
     let blob ← parseBlob blob
     let commitment ← parseCommitment commitment
@@ -140,7 +141,7 @@ def computeChallengeExport
 /-- An 80-byte buffer: the 48-byte proof, then the 32 bytes of `y`. -/
 @[export eth_kzg_compute_kzg_proof]
 def computeKzgProofExport
-    (blob : ByteArray) (z : ByteArray) : IO ByteArray := do
+    (blob : ByteArray) (z : ByteArray) : Result ByteArray := do
   let (proof, y) ← runKzgWithSetup fun setup => do
     computeKzgProof setup (← parseBlob blob) (← parseFieldElement z)
   return unparse proof ++ unparse y
@@ -148,7 +149,7 @@ def computeKzgProofExport
 @[export eth_kzg_verify_kzg_proof]
 def verifyKzgProofExport
     (commitment : ByteArray) (z : ByteArray)
-    (y : ByteArray) (proof : ByteArray) : IO UInt8 := do
+    (y : ByteArray) (proof : ByteArray) : Result UInt8 := do
   let ok ← runKzgWithSetup fun setup => do
     verifyKzgProof setup (← parseCommitment commitment) (← parseFieldElement z)
       (← parseFieldElement y) (← parseProof proof)
@@ -156,14 +157,14 @@ def verifyKzgProofExport
 
 @[export eth_kzg_compute_blob_kzg_proof]
 def computeBlobKzgProofExport
-    (blob : ByteArray) (commitment : ByteArray) : IO ByteArray :=
+    (blob : ByteArray) (commitment : ByteArray) : Result ByteArray :=
   unparse <$> runKzgWithSetup fun setup => do
     computeBlobKzgProof setup (← parseBlob blob) (← parseCommitment commitment)
 
 @[export eth_kzg_verify_blob_kzg_proof]
 def verifyBlobKzgProofExport
     (blob : ByteArray) (commitment : ByteArray) (proof : ByteArray)
-    : IO UInt8 := do
+    : Result UInt8 := do
   let ok ← runKzgWithSetup fun setup => do
     verifyBlobKzgProof setup (← parseBlob blob) (← parseCommitment commitment) (← parseProof proof)
   return if ok then 1 else 0
@@ -172,14 +173,14 @@ def verifyBlobKzgProofExport
 def verifyBlobKzgProofBatchExport
     (blobs : Array ByteArray)
     (commitments : Array ByteArray)
-    (proofs : Array ByteArray) : IO UInt8 := do
+    (proofs : Array ByteArray) : Result UInt8 := do
   let ok ← runKzgWithSetup fun setup => do
     verifyBlobKzgProofBatch setup (← blobs.mapM parseBlob) (← commitments.mapM parseCommitment)
       (← proofs.mapM parseProof)
   return if ok then 1 else 0
 
 @[export eth_kzg_compute_cells]
-def computeCellsExport (blob : ByteArray) : IO ByteArray := do
+def computeCellsExport (blob : ByteArray) : Result ByteArray := do
   let cells ← runKzg do computeCells (← parseBlob blob)
   return cells.foldl (· ++ unparse ·) ByteArray.empty
 
@@ -189,7 +190,7 @@ def computeVerifyCellKzgProofBatchChallengeExport
     (commitmentIndicesBE : ByteArray)
     (cellIndicesBE : ByteArray)
     (cosetsEvals : Array ByteArray)
-    (proofs : Array ByteArray) : IO ByteArray :=
+    (proofs : Array ByteArray) : Result ByteArray :=
   runKzg do
     let commitmentIndices ← unpackIndicesBE commitmentIndicesBE
     let cellIndices       ← unpackIndicesBE cellIndicesBE
@@ -220,7 +221,7 @@ def computeVerifyCellKzgProofBatchChallengeExport
         commitments commitmentIndices cellIndices evals proofs)
 
 @[export eth_kzg_compute_cells_and_kzg_proofs]
-def computeCellsAndKzgProofsExport (blob : ByteArray) : IO ByteArray := do
+def computeCellsAndKzgProofsExport (blob : ByteArray) : Result ByteArray := do
   let (cells, proofs) ← runKzgWithSetup fun setup => do
     computeCellsAndKzgProofs setup (← parseBlob blob)
   let cellsBuf  := cells.foldl  (· ++ unparse ·) ByteArray.empty
@@ -232,7 +233,7 @@ def verifyCellKzgProofBatchExport
     (commitments : Array ByteArray)
     (cellIndicesBE : ByteArray)
     (cells : Array ByteArray)
-    (proofs : Array ByteArray) : IO UInt8 := do
+    (proofs : Array ByteArray) : Result UInt8 := do
   let ok ← runKzgWithSetup fun setup => do
     let cellIndices ← unpackIndicesBE cellIndicesBE
     verifyCellKzgProofBatch setup (← commitments.mapM parseCommitment) cellIndices
@@ -241,7 +242,7 @@ def verifyCellKzgProofBatchExport
 
 @[export eth_kzg_recover_cells_and_kzg_proofs]
 def recoverCellsAndKzgProofsExport
-    (cellIndicesBE : ByteArray) (cells : Array ByteArray) : IO ByteArray := do
+    (cellIndicesBE : ByteArray) (cells : Array ByteArray) : Result ByteArray := do
   let (cells', proofs') ← runKzgWithSetup fun setup => do
     let cellIndices ← unpackIndicesBE cellIndicesBE
     recoverCellsAndKzgProofs setup cellIndices (← cells.mapM parseCell)

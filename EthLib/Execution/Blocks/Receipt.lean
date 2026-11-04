@@ -99,6 +99,19 @@ inductive ReceiptError where
   | decoding (error : RlpError)
   deriving DecidableEq, Repr
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+The codes start at 101, above every code of an RLP error, so that the two never meet.
+
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def ReceiptError.code : ReceiptError → UInt32
+  | .emptyReceipt => 101
+  | .unsupportedType _ => 102
+  | .decoding _ => 103
+
 /-- The bytes of the receipt of a transaction of type `type`, where type 0 is a legacy transaction.
 
 The receipt of a legacy transaction is its RLP form.

@@ -14,6 +14,7 @@ Properties of the consensus entries of a node record.
 - A key that exists at a fork exists at every later fork.
 - A node before Altair reads no sync committee subnets.
 - A node from Fulu on reads a custody group count and a next fork digest, or rejects the record.
+- Each entry error has its own code, and no record error has that code.
 -/
 
 @[expose] public section
@@ -93,5 +94,18 @@ theorem readEntries_syncnets {fork : Fork} {r : Enr} {e : ConsensusEntries}
 theorem readEntries_fulu {fork : Fork} {r : Enr} {e : ConsensusEntries}
     (h : readEntries fork r = .ok e) (hf : .fusaka ≤ fork) : e.cgc.isSome ∧ e.nfd.isSome :=
   ⟨readRequiredAt_isSome (readEntries_ok h).2.1 hf, readRequiredAt_isSome (readEntries_ok h).2.2 hf⟩
+
+/-! ## Error codes -/
+
+/-- Two entry errors with one code come from one constructor. -/
+theorem EntryError.code_injective (e₁ e₂ : EntryError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [EntryError.code] at h; exact absurd h (by decide))
+
+/-- An entry error never has the code of a record error, so one Python class carries both. -/
+theorem EntryError.code_ne_record (e : EntryError) (r : EnrError) : e.code ≠ r.code := by
+  cases e <;> cases r <;> simp only [EntryError.code, EnrError.code] <;> decide
 
 end EthLib.Networking.Proofs.Enr.Consensus

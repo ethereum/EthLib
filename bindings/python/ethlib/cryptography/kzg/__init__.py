@@ -1,3 +1,4 @@
+from ...errors import KzgError
 from .._native import (
     blob_to_kzg_commitment,
     compute_challenge,
@@ -42,4 +43,5 @@ __all__ = [
     "FIELD_ELEMENTS_PER_CELL",
     "BYTES_PER_CELL",
     "CELLS_PER_EXT_BLOB",
+    "KzgError",
 ]

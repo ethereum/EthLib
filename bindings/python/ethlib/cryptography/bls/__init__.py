@@ -1,3 +1,4 @@
+from ...errors import BlsError
 from .._native import (
     eth_aggregate_pubkeys,
     eth_fast_aggregate_verify,
@@ -39,4 +40,5 @@ __all__ = [
     "hash_to_g2",
     "BYTES_PER_PUBKEY",
     "BYTES_PER_SIGNATURE",
+    "BlsError",
 ]

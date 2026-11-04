@@ -79,8 +79,8 @@ py_hkdf_sha256(
   if (parse_bytes(salt_obj, "salt", &salt)) return NULL;
   if (parse_bytes(ikm_obj, "ikm", &ikm)) { lean_dec(salt); return NULL; }
   if (parse_bytes(info_obj, "info", &info)) { lean_dec(salt); lean_dec(ikm); return NULL; }
-  return run_io_into_pybytes(
-    eth_hkdf_sha256(salt, ikm, info, (uint64_t) length), "hkdf");
+  return except_into_pybytes(
+    eth_hkdf_sha256(salt, ikm, info, (uint64_t) length), HKDF_ERROR);
 }
 
 PyObject*
@@ -94,6 +94,6 @@ py_concat_kdf_sha256(
   lean_object *z, *info;
   if (parse_bytes(z_obj, "z", &z)) return NULL;
   if (parse_bytes(info_obj, "fixed_info", &info)) { lean_dec(z); return NULL; }
-  return run_io_into_pybytes(
-    eth_concat_kdf_sha256(z, info, (uint64_t) length), "concat_kdf");
+  return except_into_pybytes(
+    eth_concat_kdf_sha256(z, info, (uint64_t) length), CONCAT_KDF_ERROR);
 }

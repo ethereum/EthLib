@@ -64,7 +64,7 @@ py_snappy_decompress(
 ) {
   lean_object* block = parse_one_bytes(args, "block");
   if (!block) return NULL;
-  return run_io_into_pybytes(eth_snappy_decompress(block), "snappy decompress");
+  return except_into_pybytes(eth_snappy_decompress(block), SNAPPY_ERROR);
 }
 
 PyObject*
@@ -74,7 +74,7 @@ py_snappy_compress_literal(
 ) {
   lean_object* data = parse_one_bytes(args, "data");
   if (!data) return NULL;
-  return run_io_into_pybytes(eth_snappy_compress_literal(data), "snappy compress_literal");
+  return except_into_pybytes(eth_snappy_compress_literal(data), SNAPPY_ERROR);
 }
 
 PyObject*
@@ -84,7 +84,7 @@ py_snappy_decode_frames(
 ) {
   lean_object* stream = parse_one_bytes(args, "stream");
   if (!stream) return NULL;
-  return run_io_into_pybytes(eth_snappy_decode_frames(stream), "snappy decode_frames");
+  return except_into_pybytes(eth_snappy_decode_frames(stream), SNAPPY_ERROR);
 }
 
 PyObject*
@@ -94,8 +94,8 @@ py_snappy_encode_frames_literal(
 ) {
   lean_object* data = parse_one_bytes(args, "data");
   if (!data) return NULL;
-  return run_io_into_pybytes(
-    eth_snappy_encode_frames_literal(data), "snappy encode_frames_literal");
+  return except_into_pybytes(
+    eth_snappy_encode_frames_literal(data), SNAPPY_ERROR);
 }
 
 PyObject*
@@ -105,7 +105,7 @@ py_snappy_masked_crc(
 ) {
   lean_object* data = parse_one_bytes(args, "data");
   if (!data) return NULL;
-  return run_io_into_pyint(eth_snappy_masked_crc(data), "snappy masked_crc");
+  return except_into_pyint(eth_snappy_masked_crc(data), SNAPPY_ERROR);
 }
 
 PyObject*
@@ -117,7 +117,7 @@ py_varint_encode(
   if (!PyArg_ParseTuple(args, "O", &value_obj)) return NULL;
   uint64_t value;
   if (parse_uint64(value_obj, "value", &value)) return NULL;
-  return run_io_into_pybytes(eth_varint_encode(value), "varint encode");
+  return except_into_pybytes(eth_varint_encode(value), VARINT_ERROR);
 }
 
 PyObject*
@@ -127,5 +127,5 @@ py_varint_decode(
 ) {
   lean_object* data = parse_one_bytes(args, "data");
   if (!data) return NULL;
-  return run_io_into_pyint(eth_varint_decode(data), "varint decode");
+  return except_into_pyint(eth_varint_decode(data), VARINT_ERROR);
 }

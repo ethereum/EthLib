@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Exports
 public import Lean.Data.Json
 public import EthLib.Base.Hex
 public import EthLib.Consensus.Config
@@ -15,11 +16,15 @@ Each one comes back as a JSON object whose keys are the names of the source.
 An integer is a string of decimal digits, and a byte string is `0x` and lowercase hex.
 
 A preset or a configuration is named by `mainnet` or `minimal`, and a fork by its name in Lean.
+
+An unknown name comes back as code 0 and a message, since no error type covers it.
 -/
 
 public section
 
 namespace EthLib.Consensus.Exports
+
+open EthLib.Exports (Result)
 
 open Lean Base
 
@@ -46,24 +51,24 @@ def presetJson (preset : Preset) : Json :=
     ("NUMBER_OF_COLUMNS", toJson preset.NUMBER_OF_COLUMNS)]
 
 /-- The text of a name, or an error that a Python traceback shows. -/
-def nameOf (bytes : ByteArray) : IO String := do
-  let some name := String.fromUTF8? bytes | throw (IO.userError "name is not UTF-8")
+def nameOf (bytes : ByteArray) : Result String := do
+  let some name := String.fromUTF8? bytes | throw (0, "name is not UTF-8")
   return name
 
 /-- The preset of a name. -/
-def presetOf : String → IO Preset
+def presetOf : String → Result Preset
   | "mainnet" => return .mainnet
   | "minimal" => return .minimal
-  | name => throw (IO.userError s!"no preset is named {name}")
+  | name => throw (0, s!"no preset is named {name}")
 
 /-- The configuration of a name. -/
-def configOf : String → IO Config
+def configOf : String → Result Config
   | "mainnet" => return .mainnet
   | "minimal" => return .minimal
-  | name => throw (IO.userError s!"no configuration is named {name}")
+  | name => throw (0, s!"no configuration is named {name}")
 
 /-- The fork of a name, for the forks from the first fork of the beacon chain. -/
-def forkOf : String → IO Fork
+def forkOf : String → Result Fork
   | "phase0" => return .phase0
   | "berlin" => return .berlin
   | "london" => return .london
@@ -78,24 +83,24 @@ def forkOf : String → IO Fork
   | "fusaka" => return .fusaka
   | "bpo1" => return .bpo1
   | "bpo2" => return .bpo2
-  | name => throw (IO.userError s!"no fork of the beacon chain up to Fulu is named {name}")
+  | name => throw (0, s!"no fork of the beacon chain up to Fulu is named {name}")
 
 /-- The JSON text of a value, as UTF-8 bytes. -/
 def jsonBytes (value : Json) : ByteArray := value.compress.toUTF8
 
 /-- The preset of a name, as a JSON object. -/
 @[export eth_consensus_preset]
-def presetExport (name : ByteArray) : IO ByteArray := do
+def presetExport (name : ByteArray) : Result ByteArray := do
   return jsonBytes (presetJson (← presetOf (← nameOf name)))
 
 /-- The configuration of a name, as a JSON object. -/
 @[export eth_consensus_config]
-def configExport (name : ByteArray) : IO ByteArray := do
+def configExport (name : ByteArray) : Result ByteArray := do
   return jsonBytes (toJson (← configOf (← nameOf name)))
 
 /-- The parameters of a preset at a fork, as a JSON object. -/
 @[export eth_consensus_parameters]
-def parametersExport (name fork : ByteArray) : IO ByteArray := do
+def parametersExport (name fork : ByteArray) : Result ByteArray := do
   let preset ← presetOf (← nameOf name)
   return jsonBytes (toJson (parameters preset (← forkOf (← nameOf fork))))
 

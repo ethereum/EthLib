@@ -3,6 +3,7 @@
 # Malformed arguments raise TypeError, ValueError or OverflowError.
 # Verification never raises on bytes: it returns None for every input it rejects.
 
+from ...errors import VrfError
 from .._native import vrf_evaluate, vrf_secret, vrf_verify
 
 
@@ -24,6 +25,7 @@ def evaluate(seed: bytes, index: int) -> bytes:
 
 
 __all__ = [
+    "VrfError",
     "verify",
     "secret",
     "evaluate",

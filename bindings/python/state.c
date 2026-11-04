@@ -24,5 +24,5 @@ py_state_root(
     return NULL;
   }
   lean_object* state = mk_bytearray((const uint8_t*) PyBytes_AS_STRING(obj), PyBytes_GET_SIZE(obj));
-  return run_io_into_pybytes(eth_state_root(state), "state_root");
+  return except_into_pybytes(eth_state_root(state), STATE_ERROR);
 }

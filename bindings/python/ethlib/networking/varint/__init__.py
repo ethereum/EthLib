@@ -1,5 +1,7 @@
 """The unsigned protobuf varint of a 64-bit value."""
 
+from ...errors import VarintError
+
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
 from ...cryptography import _native
@@ -11,5 +13,5 @@ def encode(value: int) -> bytes:
 
 
 def decode(data: bytes) -> int:
-    """The value that the bytes encode; anything but one minimal varint raises ValueError."""
+    """The value that the bytes encode; anything but one minimal varint raises VarintError."""
     return _native.varint_decode(data)

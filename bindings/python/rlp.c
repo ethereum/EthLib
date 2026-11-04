@@ -87,18 +87,17 @@ py_of_item(
   return out;
 }
 
-/* Run an IO action that returns an item, as its Python form. */
+/* The item of a successful result as its Python form, or NULL with an RlpError set. */
 static PyObject*
-run_io_into_pyitem(
-  lean_object* io_result,
-  const char* what
+except_into_pyitem(
+  lean_object* result
 ) {
-  if (!lean_io_result_is_ok(io_result)) {
-    raise_io_error(io_result, what);
+  if (lean_obj_tag(result) == 0) {
+    raise_lean_error(result, RLP_ERROR);
     return NULL;
   }
-  PyObject* out = py_of_item(lean_io_result_get_value(io_result));
-  lean_dec(io_result);
+  PyObject* out = py_of_item(lean_ctor_get(result, 0));
+  lean_dec(result);
   return out;
 }
 
@@ -126,7 +125,7 @@ py_rlp_encode(
   if (!PyArg_ParseTuple(args, "O", &obj)) return NULL;
   lean_object* item = item_of_py(obj);
   if (!item) return NULL;
-  return run_io_into_pybytes(eth_rlp_encode(item), "rlp encode");
+  return except_into_pybytes(eth_rlp_encode(item), RLP_ERROR);
 }
 
 PyObject*
@@ -138,7 +137,7 @@ py_rlp_decode(
   if (!PyArg_ParseTuple(args, "O", &obj)) return NULL;
   lean_object* data = bytes_of_py(obj, "data");
   if (!data) return NULL;
-  return run_io_into_pyitem(eth_rlp_decode(data), "rlp decode");
+  return except_into_pyitem(eth_rlp_decode(data));
 }
 
 PyObject*
@@ -159,5 +158,5 @@ py_rlp_decode_as(
   lean_object* data = bytes_of_py(data_obj, "data");
   if (!data) return NULL;
   lean_object* kind = mk_bytearray((const uint8_t*) utf8, len);
-  return run_io_into_pyitem(eth_rlp_decode_as(kind, data), "rlp decode_as");
+  return except_into_pyitem(eth_rlp_decode_as(kind, data));
 }

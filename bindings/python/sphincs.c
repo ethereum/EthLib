@@ -37,10 +37,7 @@ py_sphincs_key_gen(
 
   uint8_t out[SPHINCS_PUB_KEY_SIZE];
   lean_object* res = eth_sphincs_key_gen(mk_bytearray(seed, SPHINCS_SEED_LEN));
-  if (run_io_into_bytearray(res, out, SPHINCS_PUB_KEY_SIZE)) {
-    PyErr_SetString(PyExc_RuntimeError, "key_gen failed");
-    return NULL;
-  }
+  if (except_into_buffer(res, SPHINCS_ERROR, out, SPHINCS_PUB_KEY_SIZE)) return NULL;
   return PyBytes_FromStringAndSize((const char*) out, SPHINCS_PUB_KEY_SIZE);
 }
 
@@ -60,10 +57,7 @@ py_sphincs_sign(
   lean_object* res = eth_sphincs_sign(
     mk_bytearray(seed, SPHINCS_SEED_LEN),
     mk_bytearray(msg, SPHINCS_MESSAGE_LEN));
-  if (run_io_into_bytearray(res, out, SPHINCS_SIG_SIZE)) {
-    PyErr_SetString(PyExc_RuntimeError, "sign failed");
-    return NULL;
-  }
+  if (except_into_buffer(res, SPHINCS_ERROR, out, SPHINCS_SIG_SIZE)) return NULL;
   return PyBytes_FromStringAndSize((const char*) out, SPHINCS_SIG_SIZE);
 }
 
@@ -86,9 +80,6 @@ py_sphincs_verify(
     mk_bytearray(pk, SPHINCS_PUB_KEY_SIZE),
     mk_bytearray(msg, SPHINCS_MESSAGE_LEN),
     mk_bytearray(sig, SPHINCS_SIG_SIZE));
-  if (run_io_into_bool(res, &ok)) {
-    PyErr_SetString(PyExc_RuntimeError, "verify failed");
-    return NULL;
-  }
+  if (except_into_flag(res, SPHINCS_ERROR, &ok)) return NULL;
   if (ok) Py_RETURN_TRUE; else Py_RETURN_FALSE;
 }

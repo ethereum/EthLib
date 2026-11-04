@@ -68,10 +68,7 @@ py_xmss_key_gen(
 
   uint8_t out[XMSS_PUB_KEY_SIZE];
   lean_object* res = eth_xmss_key_gen(mk_bytearray(seed, XMSS_SEED_LEN));
-  if (run_io_into_bytearray(res, out, XMSS_PUB_KEY_SIZE)) {
-    PyErr_SetString(PyExc_RuntimeError, "key_gen failed");
-    return NULL;
-  }
+  if (except_into_buffer(res, XMSS_ERROR, out, XMSS_PUB_KEY_SIZE)) return NULL;
   return PyBytes_FromStringAndSize((const char*) out, XMSS_PUB_KEY_SIZE);
 }
 
@@ -94,10 +91,7 @@ py_xmss_sign(
     mk_bytearray(seed, XMSS_SEED_LEN),
     (uint32_t) leaf_index,
     mk_bytearray(msg, XMSS_MESSAGE_LEN));
-  if (run_io_into_bytearray(res, out, XMSS_SIG_SIZE)) {
-    PyErr_SetString(PyExc_RuntimeError, "sign failed");
-    return NULL;
-  }
+  if (except_into_buffer(res, XMSS_ERROR, out, XMSS_SIG_SIZE)) return NULL;
   return PyBytes_FromStringAndSize((const char*) out, XMSS_SIG_SIZE);
 }
 
@@ -120,10 +114,7 @@ py_xmss_verify(
     mk_bytearray(pk, XMSS_PUB_KEY_SIZE),
     mk_bytearray(msg, XMSS_MESSAGE_LEN),
     mk_bytearray(sig, XMSS_SIG_SIZE));
-  if (run_io_into_bool(res, &ok)) {
-    PyErr_SetString(PyExc_RuntimeError, "verify failed");
-    return NULL;
-  }
+  if (except_into_flag(res, XMSS_ERROR, &ok)) return NULL;
   if (ok) Py_RETURN_TRUE; else Py_RETURN_FALSE;
 }
 
@@ -139,5 +130,5 @@ py_xmss_signature_index(
 
   /* The index is below 2^32, so it fits the `UInt64` the export returns. */
   lean_object* res = eth_xmss_signature_index(mk_bytearray(sig, XMSS_SIG_SIZE));
-  return run_io_into_pyint(res, "signature_index");
+  return except_into_pyint(res, XMSS_ERROR);
 }

@@ -160,4 +160,20 @@ theorem decrypt_wrong_tag {key ephemeral : Fn} {iv : Aes.Block} {sharedMac m bod
     ((ecdh_comm _ _).trans hs) hkeys _ _ _ _ hd']
   simp [hne']
 
+/-! ## Error codes -/
+
+section
+
+open EthLib.Networking.Rlpx.Ecies
+
+/-- Two errors with one code come from one constructor. -/
+theorem _root_.EthLib.Networking.Rlpx.Ecies.EciesError.code_injective
+    (e₁ e₂ : EciesError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [EciesError.code] at h; exact absurd h (by decide))
+
+end
+
 end EthLib.Networking.Rlpx.Ecies

@@ -106,6 +106,19 @@ inductive EntryError where
   | cgc (e : Rlp.RlpError)
   deriving DecidableEq
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+The codes start at 101, above every code of a record error, so that the two never meet.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def EntryError.code : EntryError → UInt32
+  | .missing _ => 101
+  | .notBytes _ => 102
+  | .ssz .. => 103
+  | .cgc _ => 104
+
 /-- The value of a key in a record, if the record has the key. -/
 def lookup (r : Enr) (key : ConsensusKey) : Option Rlp.Item :=
   (r.pairs.find? (·.1 = key.name.toUTF8)).map (·.2)

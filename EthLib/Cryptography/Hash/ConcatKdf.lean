@@ -31,6 +31,16 @@ inductive ConcatKdfError where
   | inputTooLong
 deriving DecidableEq, Repr
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def ConcatKdfError.code : ConcatKdfError → UInt32
+  | .emptyOutput => 1
+  | .outputTooLong _ => 2
+  | .inputTooLong => 3
+
 /-- The counter as four big-endian bytes. -/
 def counterBytes (counter : Nat) : ByteArray :=
   ⟨#[UInt8.ofNat (counter >>> 24), UInt8.ofNat (counter >>> 16), UInt8.ofNat (counter >>> 8),

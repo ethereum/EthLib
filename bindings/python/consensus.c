@@ -48,7 +48,7 @@ py_consensus_preset(
   if (!PyArg_ParseTuple(args, "O", &obj)) return NULL;
   lean_object* name = str_arg(obj, "name");
   if (!name) return NULL;
-  return run_io_into_pybytes(eth_consensus_preset(name), "consensus preset");
+  return except_into_pybytes(eth_consensus_preset(name), CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -60,7 +60,7 @@ py_consensus_config(
   if (!PyArg_ParseTuple(args, "O", &obj)) return NULL;
   lean_object* name = str_arg(obj, "name");
   if (!name) return NULL;
-  return run_io_into_pybytes(eth_consensus_config(name), "consensus config");
+  return except_into_pybytes(eth_consensus_config(name), CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -78,5 +78,5 @@ py_consensus_parameters(
     lean_dec(name);
     return NULL;
   }
-  return run_io_into_pybytes(eth_consensus_parameters(name, fork), "consensus parameters");
+  return except_into_pybytes(eth_consensus_parameters(name, fork), CONSENSUS_ERROR);
 }

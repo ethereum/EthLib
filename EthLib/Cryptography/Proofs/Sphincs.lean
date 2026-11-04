@@ -12,6 +12,7 @@ public import EthLib.Cryptography.Proofs.Sphincs.Verify
 public import EthLib.Cryptography.Proofs.Sphincs.Serialization
 public import EthLib.Cryptography.Proofs.Sphincs.Sign
 public import EthLib.Cryptography.Proofs.Sphincs.Correctness
+public import EthLib.Cryptography.Proofs.Sphincs.Errors
 
 /-!
 # Proofs: leanSPHINCS

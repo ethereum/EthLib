@@ -693,4 +693,17 @@ theorem valueAt_plain (hash : ByteArray → Hash32) (data : List (ByteArray × B
   · intro h
     rw [byteArray_eq_of_toList _ _ h]
 
+/-! ## Error codes -/
+
+/-- Two errors with one code come from one constructor. -/
+theorem ProofError.code_injective (e₁ e₂ : ProofError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [ProofError.code] at h; exact absurd h (by decide))
+
+/-- A proof error never has the code of a trie error, so one Python class carries both. -/
+theorem ProofError.code_ne_trie (e : ProofError) (r : TrieError) : e.code ≠ r.code := by
+  cases e <;> cases r <;> simp only [ProofError.code, TrieError.code] <;> decide
+
 end EthLib.Execution.Trie

@@ -116,6 +116,29 @@ inductive RlpError where
   | inField (index : Nat) (error : RlpError)
   deriving Repr, DecidableEq
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+An error inside a field has the code of that wrapper, and its message names the inner error.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def RlpError.code : RlpError → UInt32
+  | .payloadTooLong _ => 1
+  | .inputTooShort .. => 2
+  | .singleByteWithPrefix _ => 3
+  | .longFormForShortLength _ => 4
+  | .leadingZeroInLength => 5
+  | .trailingBytes _ => 6
+  | .leadingZeroInScalar => 7
+  | .listAsScalar => 8
+  | .listAsBytes => 9
+  | .bytesAsList => 10
+  | .wrongLength .. => 11
+  | .scalarTooLarge .. => 12
+  | .wrongFieldCount .. => 13
+  | .inField .. => 14
+
 /-- `n` in base 256, most significant byte first, using at most `fuel` bytes.
 
 # Why fuel

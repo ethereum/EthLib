@@ -3,8 +3,10 @@
 - A private key is 32 big-endian bytes, below the order of secp256k1.
 - A public key is a SEC 1 encoding, compressed or uncompressed.
 
-A rejected input raises ValueError.
+A rejected input raises RlpxError, a ValueError.
 """
+
+from ...errors import RlpxError
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -25,9 +27,9 @@ def ecies_encrypt(
 def ecies_decrypt(key: bytes, shared_mac: bytes, ciphertext: bytes) -> bytes:
     """The message of a ciphertext under the private key `key`.
 
-    A ciphertext whose tag does not match raises ValueError.
+    A ciphertext whose tag does not match raises RlpxError.
     """
     return _native.rlpx_ecies_decrypt(key, shared_mac, ciphertext)
 
 
-__all__ = ["ecies_encrypt", "ecies_decrypt"]
+__all__ = ["ecies_encrypt", "ecies_decrypt", "RlpxError"]

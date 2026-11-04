@@ -229,4 +229,20 @@ theorem decode_encode (v : UInt64) : decode (encode v) = .ok v := by
     ite_eq_right (by rw [hv]; have := v.toNat_lt_size; simp only [UInt64.size] at *; omega), hv]
   rw [UInt64.ofNat_toNat]
 
+/-! ## Error codes -/
+
+section
+
+open EthLib.Networking.Encoding.Varint
+
+/-- Two errors with one code come from one constructor. -/
+theorem _root_.EthLib.Networking.Encoding.Varint.VarintError.code_injective
+    (e₁ e₂ : VarintError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [VarintError.code] at h; exact absurd h (by decide))
+
+end
+
 end EthLib.Networking.Proofs.Encoding.Varint

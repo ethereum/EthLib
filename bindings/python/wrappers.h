@@ -68,62 +68,100 @@ mk_bytearray_array(
   size_t stride
 );
 
+/* Each export that can fail returns a Lean `Except (UInt32 × String) α`.
+ *
+ * The helpers below consume that result.
+ *
+ * On an error they raise `error_class` with the code and the message of the error. */
+
+/* Copy the bytes of a successful result into `out`, which holds `out_len` bytes.
+ *
+ * Returns 0 on success, and 1 with a Python exception set otherwise. */
 int
-run_io_into_bytearray(
-  lean_object* io_result,
+except_into_buffer(
+  lean_object* result,
+  PyObject* error_class,
   uint8_t* out,
   size_t out_len
 );
 
+/* Read the `UInt8` boolean of a successful result into `out_ok`.
+ *
+ * Returns 0 on success, and 1 with a Python exception set otherwise. */
 int
-run_io_into_bool(
-  lean_object* io_result,
+except_into_flag(
+  lean_object* result,
+  PyObject* error_class,
   uint8_t* out_ok
 );
 
-/* Raise `ValueError` with the Lean error message of a failed IO action.
+/* Raise the error of a failed result as `error_class`, with its code and message.
  *
- * The result is freed.
- *
- * `what` names the operation in the message. */
+ * The result is freed. */
 void
-raise_io_error(
-  lean_object* io_result,
-  const char* what
+raise_lean_error(
+  lean_object* result,
+  PyObject* error_class
 );
 
-/* Run an IO action and return its inner ByteArray as a Python `bytes`.
+/* The bytes of a `ByteArray` that a total export returns, as a Python `bytes`.
  *
- * On failure it sets a `ValueError` and returns NULL.
- *
- * `what` names the operation in the message. */
+ * The `ByteArray` is freed. */
 PyObject*
-run_io_into_pybytes(
-  lean_object* io_result,
-  const char* what
+pybytes_of_bytearray(
+  lean_object* bytes
 );
 
-/* Run an IO action and return its inner UInt64 as a Python `int`.
- *
- * On failure it sets a `ValueError` and returns NULL.
- *
- * `what` names the operation in the message. */
+/* The `ByteArray` of a successful result as a Python `bytes`, or NULL with an exception set. */
 PyObject*
-run_io_into_pyint(
-  lean_object* io_result,
-  const char* what
+except_into_pybytes(
+  lean_object* result,
+  PyObject* error_class
 );
 
-/* Run an IO action returning a `UInt8` boolean, as a Python `bool`.
- *
- * On failure it sets a `ValueError` and returns NULL.
- *
- * `what` names the operation in the message. */
+/* The `UInt64` of a successful result as a Python `int`, or NULL with an exception set. */
 PyObject*
-run_io_into_pybool(
-  lean_object* io_result,
-  const char* what
+except_into_pyint(
+  lean_object* result,
+  PyObject* error_class
 );
+
+/* The `UInt8` boolean of a successful result as a Python `bool`, or NULL with an exception set. */
+PyObject*
+except_into_pybool(
+  lean_object* result,
+  PyObject* error_class
+);
+
+/* ---- Exception classes (looked up in `PyInit__native`) --------------- */
+
+/* One class of `ethlib.errors` per primitive. */
+extern PyObject* KZG_ERROR;
+extern PyObject* BLS_ERROR;
+extern PyObject* XMSS_ERROR;
+extern PyObject* SPHINCS_ERROR;
+extern PyObject* SECP256K1_ERROR;
+extern PyObject* SECP256R1_ERROR;
+extern PyObject* ENR_ERROR;
+extern PyObject* ECRECOVER_ERROR;
+extern PyObject* MODEXP_ERROR;
+extern PyObject* SHA256_PRECOMPILE_ERROR;
+extern PyObject* PRECOMPILE_ERROR;
+extern PyObject* STATE_ERROR;
+extern PyObject* KECCAK_ERROR;
+extern PyObject* REQRESP_ERROR;
+extern PyObject* CONSENSUS_ERROR;
+extern PyObject* HKDF_ERROR;
+extern PyObject* CONCAT_KDF_ERROR;
+extern PyObject* BLOCK_ERROR;
+extern PyObject* RLP_ERROR;
+extern PyObject* SNAPPY_ERROR;
+extern PyObject* VARINT_ERROR;
+extern PyObject* DISCV5_ERROR;
+extern PyObject* RLPX_ERROR;
+extern PyObject* TRANSACTION_ERROR;
+extern PyObject* VRF_ERROR;
+extern PyObject* TRIE_ERROR;
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 

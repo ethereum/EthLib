@@ -5,6 +5,8 @@
 The subpackages expose some precompiles with their sizes and prices.
 """
 
+from ..errors import PrecompileError
+
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
 from ..cryptography import _native
@@ -18,9 +20,11 @@ ADDRESSES = (
 def run(address: int, data: bytes, gas: int) -> bytes:
     """The output of the precompile at the address on the call data, with the gas given.
 
-    Raises ValueError when the call fails, or when no precompile has the address.
+    Raises PrecompileError, a ValueError, when the call fails or when no precompile has the address.
+
+    Its code names the precompile that failed, and code 0 means no precompile has the address.
     """
     return _native.precompile_run(address, data, gas)
 
 
-__all__ = ["ADDRESSES", "run", "ecrecover", "modexp", "ripemd160", "sha256"]
+__all__ = ["ADDRESSES", "run", "ecrecover", "modexp", "ripemd160", "sha256", "PrecompileError"]

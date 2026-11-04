@@ -51,4 +51,13 @@ theorem hkdf_error {salt ikm info : ByteArray} {length : Nat} {e : HkdfError}
     exact ⟨(Except.error.inj h).symm, long⟩
   · simp [long] at h
 
+/-! ## Error codes -/
+
+/-- Two errors with one code come from one constructor. -/
+theorem HkdfError.code_injective (e₁ e₂ : HkdfError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [HkdfError.code] at h; exact absurd h (by decide))
+
 end EthLib.Cryptography.Hash.Hkdf

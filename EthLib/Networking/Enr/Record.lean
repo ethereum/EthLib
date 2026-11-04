@@ -88,6 +88,28 @@ inductive EnrError where
 /-- The key `id`, in ASCII. -/
 def KEY_ID : ByteArray := ⟨#[0x69, 0x64]⟩
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def EnrError.code : EnrError → UInt32
+  | .tooLarge _ => 1
+  | .rlp _ => 2
+  | .notAList => 3
+  | .tooFewItems => 4
+  | .signatureNotBytes => 5
+  | .invalidSeq _ => 6
+  | .keyNotBytes => 7
+  | .missingValue => 8
+  | .repeatedKey _ => 9
+  | .unsortedKeys .. => 10
+  | .missingPrefix => 11
+  | .base64 _ => 12
+  | .missingId => 13
+  | .unknownScheme => 14
+  | .invalidPublicKey => 15
+
 /-- Whether the key `a` comes before the key `b`, in lexicographic byte order. -/
 def keyLt (a b : ByteArray) : Prop := a.data.toList < b.data.toList
 

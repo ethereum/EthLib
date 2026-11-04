@@ -5,11 +5,9 @@ module
 
 Typed errors for the BLS surface.
 
-The BLS spec functions do no I/O, so the fallible ones return
-`Except BlsError` and report structured failures rather than
-stringly-typed `IO.userError`s. The C exports in
-`EthLib.Cryptography.Exports.Bls` turn a `BlsError` into the
-`IO.userError` the Python bindings expect.
+The BLS functions do no I/O, so a fallible one returns its result or one of these errors.
+
+The C exports pass the code and the message of an error to the bindings.
 -/
 
 @[expose] public section
@@ -74,6 +72,29 @@ def BlsError.message : BlsError → String
   | .keyGenIkmTooShort size     => s!"input keying material too short: {size} bytes"
   | .keyGenNoKey                => "key generation found no key"
   | .keyGenHkdf                 => "HKDF failed in key generation"
+
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def BlsError.code : BlsError → UInt32
+  | .emptyPubkeyList              => 1
+  | .badPubkeySize _              => 2
+  | .invalidPubkey _              => 3
+  | .invalidG1Point               => 4
+  | .invalidG2Point               => 5
+  | .pointAtInfinity              => 6
+  | .notInSubgroup                => 7
+  | .nonCanonicalFieldElement     => 8
+  | .notASquare                   => 9
+  | .expandMessageOutputTooLong _ => 10
+  | .expandMessageTooManyBlocks _ => 11
+  | .emptySignatureList           => 12
+  | .invalidSecretKey             => 13
+  | .keyGenIkmTooShort _          => 14
+  | .keyGenNoKey                  => 15
+  | .keyGenHkdf                   => 16
 
 end EthLib.Cryptography.Bls
 

@@ -58,6 +58,14 @@ inductive Sha256Error where
 def Sha256Error.message : Sha256Error → String
   | .outOfGas cost gas => s!"out of gas: price {cost}, gas {gas}"
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def Sha256Error.code : Sha256Error → UInt32
+  | .outOfGas .. => 1
+
 /-- Run the precompile on the call data with `gas` available.
 
 Returns the 32-byte digest, or the error that consumes all the gas.

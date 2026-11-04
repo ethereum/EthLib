@@ -68,7 +68,7 @@ py_block_header_hash(
   lean_object* fork;
   lean_object* header;
   if (!parse_fork_and_bytes(args, "header", &fork, &header)) return NULL;
-  return run_io_into_pybytes(eth_block_header_hash(fork, header), "block header_hash");
+  return except_into_pybytes(eth_block_header_hash(fork, header), BLOCK_ERROR);
 }
 
 PyObject*
@@ -79,7 +79,7 @@ py_block_reencode(
   lean_object* fork;
   lean_object* block;
   if (!parse_fork_and_bytes(args, "block", &fork, &block)) return NULL;
-  return run_io_into_pybytes(eth_block_reencode(fork, block), "block reencode");
+  return except_into_pybytes(eth_block_reencode(fork, block), BLOCK_ERROR);
 }
 
 PyObject*
@@ -90,7 +90,7 @@ py_receipt_reencode(
   lean_object* fork;
   lean_object* receipt;
   if (!parse_fork_and_bytes(args, "receipt", &fork, &receipt)) return NULL;
-  return run_io_into_pybytes(eth_receipt_reencode(fork, receipt), "receipt reencode");
+  return except_into_pybytes(eth_receipt_reencode(fork, receipt), BLOCK_ERROR);
 }
 
 PyObject*
@@ -101,5 +101,5 @@ py_receipt_logs_bloom(
   lean_object* fork;
   lean_object* receipt;
   if (!parse_fork_and_bytes(args, "receipt", &fork, &receipt)) return NULL;
-  return run_io_into_pybytes(eth_receipt_logs_bloom(fork, receipt), "receipt logs_bloom");
+  return except_into_pybytes(eth_receipt_logs_bloom(fork, receipt), BLOCK_ERROR);
 }

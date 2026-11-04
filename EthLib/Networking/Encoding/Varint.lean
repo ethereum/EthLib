@@ -76,6 +76,18 @@ inductive VarintError where
   | nonMinimal
   deriving Repr, DecidableEq
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def VarintError.code : VarintError → UInt32
+  | .unterminated => 1
+  | .trailingBytes => 2
+  | .tooLong => 3
+  | .overflow => 4
+  | .nonMinimal => 5
+
 /-- The varint bytes of `n`, using at most `fuel` bytes.
 
 # Why fuel

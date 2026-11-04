@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Exports
 public import EthLib.Execution.Evm.Precompiles.Modexp.Constants
 public import EthLib.Execution.Evm.Precompiles.Modexp.Errors
 public import EthLib.Execution.Evm.Precompiles.Modexp.Core
@@ -11,25 +12,21 @@ C-ABI exports for the MODEXP precompile, callable from the Python C extension.
 
 - Inputs are `ByteArray` or `UInt64`.
 - Outputs are `ByteArray` or `UInt64`.
-- Failures are `IO` errors, which Python raises.
+- A failure comes back as the code and the message of its error.
 -/
 
 public section
 
 namespace EthLib.Execution.Evm.Precompiles.Modexp.Exports
 
+open EthLib.Exports (Result)
+
 open EthLib.Execution.Evm.Precompiles.Modexp
 open EthLib.Execution.Evm.Precompiles.Modexp.Constants
 
-/-- Run a fallible MODEXP computation down to `IO`.
-
-The C-ABI layer turns an `IO` error into a Python exception. -/
-def runModexp {α : Type} (act : Except ModexpError α) : IO α :=
-  match act with
-  -- Success passes straight through.
-  | .ok a => pure a
-  -- Failure becomes the user error the Python bindings expect.
-  | .error e => throw (IO.userError e.message)
+/-- Run a fallible MODEXP computation, with its error as a code and a message. -/
+def runModexp {α : Type} (act : Except ModexpError α) : Result α :=
+  act.mapError fun e => (e.code, e.message)
 
 /-! ## Sizes
 
@@ -51,7 +48,7 @@ def constMaxLengthBytes (_ : Unit) : UInt64 :=
 
 EVM gas is a 64-bit integer, so the gas crosses the boundary as `UInt64`. -/
 @[export eth_modexp]
-def modexpExport (data : ByteArray) (gas : UInt64) : IO ByteArray :=
+def modexpExport (data : ByteArray) (gas : UInt64) : Result ByteArray :=
   runModexp (modexp data gas.toNat)
 
 /-- The gas the precompile charges for the call data.
@@ -60,7 +57,7 @@ The price is at most 528449536 once the lengths are in bounds.
 
 A proof in the proofs library shows this, so the conversion to `UInt64` drops nothing. -/
 @[export eth_modexp_gas_cost]
-def gasCostExport (data : ByteArray) : IO UInt64 :=
+def gasCostExport (data : ByteArray) : Result UInt64 :=
   runModexp ((chargedGas data).map UInt64.ofNat)
 
 end EthLib.Execution.Evm.Precompiles.Modexp.Exports

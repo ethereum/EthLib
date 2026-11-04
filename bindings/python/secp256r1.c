@@ -38,5 +38,5 @@ py_secp256r1_verify(
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(pk_obj), PyBytes_GET_SIZE(pk_obj)),
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(hash_obj), PyBytes_GET_SIZE(hash_obj)),
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(sig_obj), PyBytes_GET_SIZE(sig_obj)));
-  return run_io_into_pybool(res, "secp256r1 verify");
+  return except_into_pybool(res, SECP256R1_ERROR);
 }

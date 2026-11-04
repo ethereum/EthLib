@@ -10,6 +10,7 @@ public import EthLib.Cryptography.Proofs.Secp256k1.Address
 public import EthLib.Cryptography.Proofs.Secp256k1.Malleability
 public import EthLib.Cryptography.Proofs.Secp256k1.Sign
 public import EthLib.Cryptography.Proofs.Secp256k1.Ecdh
+public import EthLib.Cryptography.Proofs.Secp256k1.Errors
 
 /-!
 # `EthLib.Cryptography.Proofs.Secp256k1`

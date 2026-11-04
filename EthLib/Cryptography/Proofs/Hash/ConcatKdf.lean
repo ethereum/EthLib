@@ -38,4 +38,13 @@ theorem concatKdf_size {z fixedInfo key : ByteArray} {length : Nat}
   simp only [ByteArray.size_extract, blocks_size, HASH_LEN]
   omega
 
+/-! ## Error codes -/
+
+/-- Two errors with one code come from one constructor. -/
+theorem ConcatKdfError.code_injective (e₁ e₂ : ConcatKdfError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [ConcatKdfError.code] at h; exact absurd h (by decide))
+
 end EthLib.Cryptography.Hash.ConcatKdf

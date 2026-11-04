@@ -1,12 +1,14 @@
 """Snappy blocks and framed streams, as the consensus layer uses them."""
 
+from ...errors import SnappyError
+
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
 from ...cryptography import _native
 
 
 def decompress(block: bytes) -> bytes:
-    """The data of a Snappy block; a rejected block raises ValueError."""
+    """The data of a Snappy block; a rejected block raises SnappyError, a ValueError."""
     return _native.snappy_decompress(block)
 
 
@@ -16,7 +18,7 @@ def compress_literal(data: bytes) -> bytes:
 
 
 def decode_frames(stream: bytes) -> bytes:
-    """The data of a framed stream; a rejected stream raises ValueError."""
+    """The data of a framed stream; a rejected stream raises SnappyError, a ValueError."""
     return _native.snappy_decode_frames(stream)
 
 

@@ -31,6 +31,7 @@ public import EthLib.Cryptography.Proofs.Kzg.TrustedSetup
 public import EthLib.Cryptography.Proofs.Kzg.Commitment
 public import EthLib.Cryptography.Proofs.Kzg.Quotient
 public import EthLib.Cryptography.Proofs.Kzg.Verify
+public import EthLib.Cryptography.Proofs.Kzg.Errors
 
 /-!
 # `EthLib.Cryptography.Proofs.Kzg`

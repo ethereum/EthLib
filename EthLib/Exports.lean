@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Exports
 public import EthLib.Cryptography.Exports
 public import EthLib.Networking.Exports
 public import EthLib.Execution.Exports

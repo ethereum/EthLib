@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Exports
 public import EthLib.Cryptography.Hash.Keccak
 
 /-!
@@ -7,14 +8,18 @@ public import EthLib.Cryptography.Hash.Keccak
 
 The C exports of Keccak-256 and of the Keccak-f[1600] permutation, for the Python bindings.
 
-Keccak-256 is total, so its export has no `IO` error path.
+Keccak-256 is total, so its export has no error path.
 
 The permutation takes a state of exactly 200 bytes, and its export rejects any other length.
+
+Keccak has no error type, so that rejection has code 0.
 -/
 
 public section
 
 namespace EthLib.Cryptography.Hash.Exports
+
+open EthLib.Exports (Result)
 
 open EthLib.Cryptography.Hash.Keccak
 
@@ -29,9 +34,9 @@ Lane `i` is bytes `8i` to `8i + 7` of the string, the first least significant (F
 
 Any other length is an error. -/
 @[export eth_keccak_f1600]
-def keccakF1600 (state : ByteArray) : IO ByteArray := do
+def keccakF1600 (state : ByteArray) : Result ByteArray := do
   if state.size ≠ 8 * LANES then
-    throw (IO.userError s!"Keccak-f[1600]: the state must be 200 bytes, got {state.size}")
+    throw (0, s!"Keccak-f[1600]: the state must be 200 bytes, got {state.size}")
   let bytes := state.data.toList
   -- Lane `i` reads its own 8 bytes.
   let lane (i : Nat) : UInt64 := Internal.laneAt (bytes.drop (8 * i))
