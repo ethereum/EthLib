@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.LittleEndian
 public import EthLib.Networking.Encoding.Varint
 
 /-!
@@ -43,6 +44,8 @@ Proofs, tests and bindings use it as the inverse of decompression.
 
 namespace EthLib.Networking.Snappy
 
+open EthLib.Base (bytesToUint uintToBytes)
+
 /-- The most bytes the preamble may occupy.
 
 The length is at most 2^32 - 1, and five groups of seven bits hold 35 bits (§1).
@@ -79,19 +82,6 @@ inductive SnappyError where
   /-- The output length differs from the length the preamble declared. -/
   | lengthMismatch (declared actual : Nat)
   deriving Repr, DecidableEq
-
-/-- Bytes read as a little-endian number. -/
-def leValue : List UInt8 → Nat
-  | [] => 0
-  | b :: bs => b.toNat + 256 * leValue bs
-
-/-- The `k` low bytes of `n`, least significant first.
-
-Read back as a little-endian number, they give `n` when `n < 256^k`.
--/
-def leBytes (n : Nat) : Nat → List UInt8
-  | 0 => []
-  | k + 1 => UInt8.ofNat n :: leBytes (n / 256) k
 
 /-- Read the preamble, at most `fuel` more bytes deep.
 
@@ -170,7 +160,7 @@ def decompressElements : List UInt8 → List UInt8 → Nat → Except SnappyErro
           if rest.length < extra then
             .error .literalPastEnd
           else
-            let len := leValue (rest.take extra) + 1
+            let len := bytesToUint (rest.take extra).toArray.toVector + 1
             let rest := rest.drop extra
             if rest.length < len then
               .error .literalPastEnd
@@ -187,8 +177,8 @@ def decompressElements : List UInt8 → List UInt8 → Nat → Except SnappyErro
         else
           -- A one-byte-offset copy keeps the top three of its 11 offset bits in tag bits 5 to 7.
           let offset :=
-            if t == 1 then upper / 8 * 256 + leValue (rest.take 1)
-            else leValue (rest.take width)
+            if t == 1 then upper / 8 * 256 + bytesToUint (rest.take 1).toArray.toVector
+            else bytesToUint (rest.take width).toArray.toVector
           if offset == 0 then
             .error .copyOffsetZero
           else
@@ -232,7 +222,7 @@ def literal (data : List UInt8) : List UInt8 :=
     UInt8.ofNat (n * 4) :: data
   else
     let k := literalLengthBytes n
-    UInt8.ofNat ((59 + k) * 4) :: leBytes n k ++ data
+    UInt8.ofNat ((59 + k) * 4) :: (uintToBytes k n).toList ++ data
 
 /-- A Snappy block of `data`: the length as a varint, then the data as one literal.
 

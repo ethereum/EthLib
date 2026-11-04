@@ -92,6 +92,24 @@ theorem uintToBytes_inj {k x y : Nat} (hx : x < 256 ^ k) (hy : y < 256 ^ k)
   have := congrArg bytesToUint h
   simpa [Nat.mod_eq_of_lt hx, Nat.mod_eq_of_lt hy] using this
 
+/-! ## Bytes as a list
+
+A decoder that holds its input as a list reads a prefix of unknown length as a vector.
+
+The type of that vector depends on the list, so proofs first turn it into a fold over the list.
+-/
+
+/-- A list of bytes, read as a number, is a fold from its last byte down. -/
+theorem bytesToUint_toVector (l : List UInt8) :
+    bytesToUint l.toArray.toVector = l.foldr (fun byte acc => byte.toNat + 256 * acc) 0 := by
+  rw [bytesToUint_eq_foldr]
+  simp
+
+/-- The bytes of a number, folded back, keep its low `8k` bits. -/
+theorem foldr_uintToBytes (k n : Nat) :
+    (uintToBytes k n).toList.foldr (fun byte acc => byte.toNat + 256 * acc) 0 = n % 256 ^ k := by
+  rw [← bytesToUint_eq_foldr, bytesToUint_uintToBytes]
+
 /-- The `UInt64` read from at most eight bytes is the number they write. -/
 @[simp] theorem toNat_bytesToUint64 {k : Nat} (data : Vector UInt8 k) (h : k ≤ 8) :
     (bytesToUint64 data h).toNat = bytesToUint data := by

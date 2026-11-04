@@ -35,6 +35,7 @@ It gives proofs, tests and bindings a stream to decode, and it is not a compress
 
 namespace EthLib.Networking.Snappy
 
+open EthLib.Base (bytesToUint uintToBytes)
 open EthLib.Cryptography.Hash.Crc32c (crc32c)
 
 /-- The ten bytes every stream starts with (§4.1).
@@ -93,7 +94,7 @@ inductive FrameError where
 The checksum is four bytes, little-endian.
 -/
 def verifyChecksum (checksum data : List UInt8) : Except FrameError (List UInt8) :=
-  let stored := UInt32.ofNat (leValue checksum)
+  let stored := UInt32.ofNat (bytesToUint checksum.toArray.toVector)
   let computed := maskedCrc ⟨data.toArray⟩
   if stored == computed then .ok data else .error (.checksumMismatch stored computed)
 
@@ -141,7 +142,7 @@ Each chunk takes at least its four header bytes, so the input length is enough f
 def decodeChunks : List UInt8 → Nat → Except FrameError (List UInt8)
   | [], _ => .ok []
   | type :: l0 :: l1 :: l2 :: rest, fuel + 1 =>
-      let len := leValue [l0, l1, l2]
+      let len := bytesToUint #v[l0, l1, l2]
       if rest.length < len then
         .error .chunkPastEnd
       else
@@ -170,8 +171,8 @@ def decodeFrames (bs : ByteArray) : Except FrameError ByteArray :=
 Its length counts the four checksum bytes.
 -/
 def uncompressedChunk (data : List UInt8) : List UInt8 :=
-  uncompressedType :: leBytes (data.length + 4) 3 ++
-    leBytes (maskedCrc ⟨data.toArray⟩).toNat 4 ++ data
+  uncompressedType :: (uintToBytes 3 (data.length + 4)).toList ++
+    (uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ data
 
 /-- The data cut into uncompressed chunks of 65536 bytes, the last one shorter.
 
