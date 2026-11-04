@@ -9,6 +9,10 @@ public import EthLib.Execution.Evm.Memory
 public import EthLib.Execution.Evm.PowMod
 public import EthLib.Execution.Evm.Words
 public import EthLib.Execution.Evm.Gas
+public import EthLib.Execution.Evm.Errors
+public import EthLib.Execution.Evm.Op
+public import EthLib.Execution.Evm.Stack
+public import EthLib.Execution.Evm.Frame
 
 /-!
 # `EthLib.Execution.Evm`
@@ -23,5 +27,5 @@ The precompiled contracts are here too, because only the EVM calls them.
 
 The gas prices and the price of memory are here.
 
-The stack, the memory itself, the gas meter and the program counter are not here yet.
+The opcodes, the stack, the memory and the state of a frame are here, with the gas meter.
 -/
