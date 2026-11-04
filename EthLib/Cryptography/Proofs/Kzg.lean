@@ -9,6 +9,7 @@ public import EthLib.Cryptography.Proofs.Kzg.FftInverse
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
 public import EthLib.Cryptography.Proofs.Kzg.Division
 public import EthLib.Cryptography.Proofs.Kzg.Interpolation
+public import EthLib.Cryptography.Proofs.Kzg.LawfulIO
 public import EthLib.Cryptography.Proofs.Kzg.Core
 public import EthLib.Cryptography.Proofs.Kzg.Recovery
 public import EthLib.Cryptography.Proofs.Kzg.Cells
