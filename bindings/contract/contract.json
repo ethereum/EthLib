@@ -1955,6 +1955,46 @@
    "docstring":
    "Check the proof of work of a header, as section 4.3.4 of the Yellow Paper asks."},
   {"summary":
+   "Check the ommers of a block in RLP form, against recent blocks, all at one named fork.",
+   "signature":
+   "(fork: bytes, recent: bytes, block: bytes, check_seal: int) -> bool",
+   "operation": "EthLib.Execution.Blocks.Exports.validateOmmersExport",
+   "method": "pow_validate_ommers",
+   "errors":
+   [{"type": "EthLib.Serialization.Rlp.RlpError",
+     "codes":
+     [{"constructor": "payloadTooLong", "code": 1},
+      {"constructor": "inputTooShort", "code": 2},
+      {"constructor": "singleByteWithPrefix", "code": 3},
+      {"constructor": "longFormForShortLength", "code": 4},
+      {"constructor": "leadingZeroInLength", "code": 5},
+      {"constructor": "trailingBytes", "code": 6},
+      {"constructor": "leadingZeroInScalar", "code": 7},
+      {"constructor": "listAsScalar", "code": 8},
+      {"constructor": "listAsBytes", "code": 9},
+      {"constructor": "bytesAsList", "code": 10},
+      {"constructor": "wrongLength", "code": 11},
+      {"constructor": "scalarTooLarge", "code": 12},
+      {"constructor": "wrongFieldCount", "code": 13},
+      {"constructor": "inField", "code": 14}]},
+    {"type": "EthLib.Execution.Blocks.OmmerError",
+     "codes":
+     [{"constructor": "wrongOmmersHash", "code": 231},
+      {"constructor": "numberOutOfRange", "code": 232},
+      {"constructor": "parentMissing", "code": 233},
+      {"constructor": "invalidHeader", "code": 234},
+      {"constructor": "tooManyOmmers", "code": 235},
+      {"constructor": "duplicateOmmer", "code": 236},
+      {"constructor": "ommerInChain", "code": 237},
+      {"constructor": "ommerAlreadyIncluded", "code": 238},
+      {"constructor": "wrongAge", "code": 239},
+      {"constructor": "parentNotRecent", "code": 240},
+      {"constructor": "siblingOfBlock", "code": 241},
+      {"constructor": "encoding", "code": 242}]}],
+   "error_class": "BlockError",
+   "docstring":
+   "Check the ommers of a block in RLP form, against recent blocks, all at one named fork.\n\nThe recent blocks are an RLP list of blocks, the last seven of the chain, ending with the parent.\n\nA check seal of 0 leaves out the proof of work of the ommers, as for test chains."},
+  {"summary":
    "The transactions root of the transactions of a block, decoded at the fork.",
    "signature": "(fork: str, block: bytes) -> bytes",
    "operation": "EthLib.Execution.Blocks.Exports.transactionsRootExport",
@@ -3348,6 +3388,28 @@
    "error_class": "StateError",
    "docstring":
    "The state root after the DAO Fork moves the ether of its accounts, from the state of `input`."},
+  {"summary":
+   "The state root after the mining rewards of a block, from the state that `input` encodes.",
+   "signature": "(fork: str, state: bytes, block: bytes) -> bytes",
+   "operation": "EthLib.Execution.State.Exports.rewardsRootExport",
+   "method": "state_rewards_root",
+   "errors":
+   [{"type": "EthLib.Execution.State.StateInputError",
+     "codes":
+     [{"constructor": "notAnItem", "code": 1},
+      {"constructor": "notAList", "code": 2},
+      {"constructor": "badAccount", "code": 3},
+      {"constructor": "repeatedAddress", "code": 4},
+      {"constructor": "noRoot", "code": 5}]},
+    {"type": "EthLib.Execution.State.StateError",
+     "codes":
+     [{"constructor": "noAccount", "code": 101},
+      {"constructor": "missingCode", "code": 102},
+      {"constructor": "insufficientBalance", "code": 103},
+      {"constructor": "balanceOverflow", "code": 104}]}],
+   "error_class": "StateError",
+   "docstring":
+   "The state root after the mining rewards of a block, from the state that `input` encodes.\n\nThe block is decoded at the fork; from Paris on it pays no reward."},
   {"summary":
    "The name of the active fork of mainnet at a block, or no bytes when no fork is active.",
    "signature": "(number: int, timestamp: int) -> bytes",

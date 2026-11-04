@@ -33,4 +33,9 @@ def dao_fork_root(state: bytes) -> bytes:
     return _native.state_dao_fork_root(state)
 
 
-__all__ = ["state_root", "withdrawals_root", "dao_fork_root", "StateError"]
+def rewards_root(fork: str, state: bytes, block: bytes) -> bytes:
+    """The state root after the mining rewards of a block, from the state that the RLP bytes encode."""
+    return _native.state_rewards_root(fork, state, block)
+
+
+__all__ = ["state_root", "withdrawals_root", "dao_fork_root", "rewards_root", "StateError"]

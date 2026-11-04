@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Exports
 public import EthLib.Execution.Blocks.Block
 public import EthLib.Execution.Blocks.DaoFork
+public import EthLib.Execution.Blocks.Rewards
 public import EthLib.Execution.State.Root
 public import EthLib.Execution.State.Errors
 
@@ -117,6 +118,20 @@ def daoForkRootExport (input : ByteArray) : Result ByteArray := do
   let pre ← (ofInput input).mapError fun e => (e.code, e.message)
   let tx ← (Blocks.applyDaoFork .daoFork (.ofBlock ⟨pre, ∅, ∅, ∅, ∅⟩)).mapError
     fun e => (e.code, s!"the DAO Fork failed: {reprStr e}")
+  rootOf tx.incorporateTxIntoBlock.parent.applyChanges
+
+/-- The state root after the mining rewards of a block, from the state that `input` encodes.
+
+The block is decoded at the fork; from Paris on it pays no reward. -/
+@[export eth_state_rewards_root]
+def rewardsRootExport (fork input block : ByteArray) : Result ByteArray := do
+  let fork ← forkUpTo .glamsterdam fork
+  let pre ← (ofInput input).mapError fun e => (e.code, e.message)
+  let b : Blocks.Block fork Item ← (Codec.decode block).mapError
+    fun e => (0, s!"block rejected: {reprStr e}")
+  let ommers := b.ommers.map fun o => (o.coinbase, o.number)
+  let tx ← (Blocks.payRewards fork (.ofBlock ⟨pre, ∅, ∅, ∅, ∅⟩) b.header.coinbase b.header.number
+    ommers).mapError fun e => (e.code, s!"rewards failed: {reprStr e}")
   rootOf tx.incorporateTxIntoBlock.parent.applyChanges
 
 end EthLib.Execution.State.Exports

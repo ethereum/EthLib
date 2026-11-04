@@ -7,8 +7,10 @@ public import EthLib.Execution.Blocks.DaoFork
 public import EthLib.Execution.Blocks.Difficulty
 public import EthLib.Execution.Blocks.Header
 public import EthLib.Execution.Blocks.Log
+public import EthLib.Execution.Blocks.Ommers
 public import EthLib.Execution.Blocks.ProofOfWork
 public import EthLib.Execution.Blocks.Receipt
+public import EthLib.Execution.Blocks.Rewards
 public import EthLib.Execution.Blocks.Requests
 public import EthLib.Execution.Blocks.Roots
 public import EthLib.Execution.Blocks.Validate

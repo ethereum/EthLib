@@ -21,6 +21,15 @@ Each case keeps the state before the block, as the fixture gives it, and the sta
 `deposits.json` holds the valid Prague blocks of the `eip6110_deposits` tests that have at most 100 logs.
 Each case keeps the logs of the receipts of its block, in order, and the requests hash of its header.
 
+`rewards.json` holds, for each network from Frontier to Paris, the tests whose first block is valid and has no transaction.
+Each case keeps the state before the block, as the fixture gives it, and the state roots of the genesis header and of the block header.
+Before Paris the only change of such a block is the reward of its miner, so its root checks the reward.
+`extract_rewards.py` wrote the file from the archive, unpacked from Frontier to Paris, and writes the same bytes again:
+
+```text
+python -I extract_rewards.py <directory of fixtures> rewards.json
+```
+
 `invalid_headers.json` holds invalid blocks from Paris to Osaka whose exception is a header check.
 The checks are the excess blob gas, the gas limit and the base fee.
 Each case keeps the header of the block, the header of its parent and the exception of the fixture.

@@ -12,6 +12,7 @@ extern lean_object* eth_pow_block_difficulty(
   lean_object*, lean_object*, lean_object*, lean_object*, lean_object*, lean_object*);
 extern lean_object* eth_pow_seal_hash(lean_object*, lean_object*);
 extern lean_object* eth_pow_check(lean_object*, lean_object*);
+extern lean_object* eth_pow_validate_ommers(lean_object*, lean_object*, lean_object*, uint8_t);
 
 /* The largest number of arguments of a proof-of-work export: those of the difficulty. */
 #define POW_MAX_ARGS 6
@@ -77,4 +78,28 @@ py_pow_check(
   lean_object* a[POW_MAX_ARGS];
   if (!parse_bytes_args(args, 2, a)) return NULL;
   return except_into_pybool(eth_pow_check(a[0], a[1]), BLOCK_ERROR);
+}
+
+PyObject*
+py_pow_validate_ommers(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *fork_obj, *recent_obj, *block_obj;
+  int check_seal;
+  if (!PyArg_ParseTuple(args, "OOOp", &fork_obj, &recent_obj, &block_obj, &check_seal)) {
+    return NULL;
+  }
+  if (!PyBytes_Check(fork_obj) || !PyBytes_Check(recent_obj) || !PyBytes_Check(block_obj)) {
+    PyErr_SetString(PyExc_TypeError, "fork, recent and block must be bytes");
+    return NULL;
+  }
+  lean_object* fork = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(fork_obj), (size_t) PyBytes_GET_SIZE(fork_obj));
+  lean_object* recent = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(recent_obj), (size_t) PyBytes_GET_SIZE(recent_obj));
+  lean_object* block = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(block_obj), (size_t) PyBytes_GET_SIZE(block_obj));
+  return except_into_pybool(
+    eth_pow_validate_ommers(fork, recent, block, (uint8_t) check_seal), BLOCK_ERROR);
 }
