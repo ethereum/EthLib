@@ -85,3 +85,186 @@ py_eth_fast_aggregate_verify(
   }
   if (ok) Py_RETURN_TRUE; else Py_RETURN_FALSE;
 }
+
+/* ---- Draft operations ------------------------------------------------- */
+
+extern lean_object*
+eth_bls_sign(
+  lean_object* sk,
+  lean_object* msg
+);
+
+extern lean_object*
+eth_bls_verify(
+  lean_object* pk,
+  lean_object* msg,
+  lean_object* sig
+);
+
+extern lean_object*
+eth_bls_aggregate(
+  lean_object* sigs
+);
+
+extern lean_object*
+eth_bls_aggregate_verify(
+  lean_object* pks,
+  lean_object* msgs,
+  lean_object* sig
+);
+
+extern lean_object*
+eth_bls_fast_aggregate_verify_core(
+  lean_object* pks,
+  lean_object* msg,
+  lean_object* sig
+);
+
+extern lean_object*
+eth_bls_pop_prove(
+  lean_object* sk
+);
+
+extern lean_object*
+eth_bls_pop_verify(
+  lean_object* pk,
+  lean_object* proof
+);
+
+/* Read `bytes` of any length into a Lean `ByteArray`.
+ *
+ * Lean checks the length, so a wrong length gets the answer of the specification. */
+static int
+parse_bytes(
+  PyObject* obj,
+  const char* name,
+  lean_object** out
+) {
+  if (!PyBytes_Check(obj)) {
+    PyErr_Format(PyExc_TypeError, "%s: expected bytes", name);
+    return 1;
+  }
+  *out = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(obj), (size_t) PyBytes_GET_SIZE(obj));
+  return 0;
+}
+
+/* Read a sequence of `bytes` of any lengths into a Lean `Array ByteArray`. */
+static int
+parse_bytes_sequence(
+  PyObject* seq,
+  const char* name,
+  lean_object** out
+) {
+  PyObject* fast = PySequence_Fast(seq, "expected a sequence");
+  if (!fast) return 1;
+  Py_ssize_t n = PySequence_Fast_GET_SIZE(fast);
+  lean_object* arr = lean_alloc_array(n, n);
+  for (Py_ssize_t i = 0; i < n; i++) {
+    lean_object* item;
+    if (parse_bytes(PySequence_Fast_GET_ITEM(fast, i), name, &item)) {
+      /* Fill the unset slots, so that freeing the array is safe. */
+      for (Py_ssize_t j = i; j < n; j++) lean_array_set_core(arr, j, lean_box(0));
+      lean_dec(arr);
+      Py_DECREF(fast);
+      return 1;
+    }
+    lean_array_set_core(arr, i, item);
+  }
+  Py_DECREF(fast);
+  *out = arr;
+  return 0;
+}
+
+PyObject*
+py_bls_sign(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *sk_obj, *msg_obj;
+  if (!PyArg_ParseTuple(args, "OO", &sk_obj, &msg_obj)) return NULL;
+  lean_object *sk, *msg;
+  if (parse_bytes(sk_obj, "secret key", &sk)) return NULL;
+  if (parse_bytes(msg_obj, "message", &msg)) { lean_dec(sk); return NULL; }
+  return run_io_into_pybytes(eth_bls_sign(sk, msg), "sign");
+}
+
+PyObject*
+py_bls_verify(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *pk_obj, *msg_obj, *sig_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &pk_obj, &msg_obj, &sig_obj)) return NULL;
+  lean_object *pk, *msg, *sig;
+  if (parse_bytes(pk_obj, "pubkey", &pk)) return NULL;
+  if (parse_bytes(msg_obj, "message", &msg)) { lean_dec(pk); return NULL; }
+  if (parse_bytes(sig_obj, "signature", &sig)) { lean_dec(pk); lean_dec(msg); return NULL; }
+  return run_io_into_pybool(eth_bls_verify(pk, msg, sig), "verify");
+}
+
+PyObject*
+py_bls_aggregate(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject* sigs_obj;
+  if (!PyArg_ParseTuple(args, "O", &sigs_obj)) return NULL;
+  lean_object* sigs;
+  if (parse_bytes_sequence(sigs_obj, "signature", &sigs)) return NULL;
+  return run_io_into_pybytes(eth_bls_aggregate(sigs), "aggregate");
+}
+
+PyObject*
+py_bls_aggregate_verify(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *pks_obj, *msgs_obj, *sig_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &pks_obj, &msgs_obj, &sig_obj)) return NULL;
+  lean_object *pks, *msgs, *sig;
+  if (parse_bytes_sequence(pks_obj, "pubkey", &pks)) return NULL;
+  if (parse_bytes_sequence(msgs_obj, "message", &msgs)) { lean_dec(pks); return NULL; }
+  if (parse_bytes(sig_obj, "signature", &sig)) { lean_dec(pks); lean_dec(msgs); return NULL; }
+  return run_io_into_pybool(eth_bls_aggregate_verify(pks, msgs, sig), "aggregate_verify");
+}
+
+PyObject*
+py_bls_fast_aggregate_verify(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *pks_obj, *msg_obj, *sig_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &pks_obj, &msg_obj, &sig_obj)) return NULL;
+  lean_object *pks, *msg, *sig;
+  if (parse_bytes_sequence(pks_obj, "pubkey", &pks)) return NULL;
+  if (parse_bytes(msg_obj, "message", &msg)) { lean_dec(pks); return NULL; }
+  if (parse_bytes(sig_obj, "signature", &sig)) { lean_dec(pks); lean_dec(msg); return NULL; }
+  return run_io_into_pybool(
+    eth_bls_fast_aggregate_verify_core(pks, msg, sig), "fast_aggregate_verify");
+}
+
+PyObject*
+py_bls_pop_prove(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject* sk_obj;
+  if (!PyArg_ParseTuple(args, "O", &sk_obj)) return NULL;
+  lean_object* sk;
+  if (parse_bytes(sk_obj, "secret key", &sk)) return NULL;
+  return run_io_into_pybytes(eth_bls_pop_prove(sk), "pop_prove");
+}
+
+PyObject*
+py_bls_pop_verify(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *pk_obj, *proof_obj;
+  if (!PyArg_ParseTuple(args, "OO", &pk_obj, &proof_obj)) return NULL;
+  lean_object *pk, *proof;
+  if (parse_bytes(pk_obj, "pubkey", &pk)) return NULL;
+  if (parse_bytes(proof_obj, "proof", &proof)) { lean_dec(pk); return NULL; }
+  return run_io_into_pybool(eth_bls_pop_verify(pk, proof), "pop_verify");
+}

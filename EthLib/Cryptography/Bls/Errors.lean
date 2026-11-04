@@ -42,6 +42,10 @@ inductive BlsError where
   | expandMessageOutputTooLong (len : Nat)
   /-- `expand_message_xmd` would need more than 255 hash blocks. -/
   | expandMessageTooManyBlocks (ell : Nat)
+  /-- The aggregation got no signature. -/
+  | emptySignatureList
+  /-- Secret key bytes were not 32 bytes of an integer in `[1, r - 1]`. -/
+  | invalidSecretKey
 
 /-- Human-readable description, used at the C-ABI boundary. -/
 def BlsError.message : BlsError → String
@@ -59,6 +63,8 @@ def BlsError.message : BlsError → String
       s!"expand_message_xmd output too long: {len}"
   | .expandMessageTooManyBlocks ell =>
       s!"expand_message_xmd too many blocks: {ell}"
+  | .emptySignatureList         => "empty signature list"
+  | .invalidSecretKey           => "invalid secret key"
 
 end EthLib.Cryptography.Bls
 

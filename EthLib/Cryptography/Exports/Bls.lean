@@ -17,6 +17,7 @@ public section
 namespace EthLib.Cryptography.Bls.Exports
 
 open EthLib.Cryptography.Bls.Constants
+open EthLib.Cryptography.Bls
 open EthLib.Cryptography.Bls.Signatures
 
 /-- Run a fallible BLS computation down to `IO`.
@@ -53,5 +54,48 @@ def ethFastAggregateVerifyExport
     (pubkeys : Array ByteArray) (msg : ByteArray) (sig : ByteArray)
     : IO UInt8 := do
   return if ethFastAggregateVerify pubkeys msg sig then 1 else 0
+
+/-! ## Draft operations
+
+Secret keys arrive as 32 big-endian bytes.
+
+EthLib makes no constant-time claim, so these exports can leak a secret key through timing. -/
+
+/-- A Lean `Bool` as the `UInt8` that the C extension reads. -/
+def ofBool (b : Bool) : UInt8 := if b then 1 else 0
+
+@[export eth_bls_sign]
+def signExport (sk msg : ByteArray) : IO ByteArray := do
+  let sk ← runBls (SecretKey.fromBytes sk)
+  let sig ← runBls (sign sk msg)
+  return ⟨sig.toArray⟩
+
+@[export eth_bls_verify]
+def verifyExport (pk msg sig : ByteArray) : IO UInt8 :=
+  return ofBool (verify pk msg sig)
+
+@[export eth_bls_aggregate]
+def aggregateExport (sigs : Array ByteArray) : IO ByteArray := do
+  let sig ← runBls (aggregate sigs)
+  return ⟨sig.toArray⟩
+
+@[export eth_bls_aggregate_verify]
+def aggregateVerifyExport (pks msgs : Array ByteArray) (sig : ByteArray) : IO UInt8 :=
+  return ofBool (aggregateVerify pks msgs sig)
+
+/-- The draft's `FastAggregateVerify`, without the Ethereum rule for an empty key list. -/
+@[export eth_bls_fast_aggregate_verify_core]
+def fastAggregateVerifyExport (pks : Array ByteArray) (msg sig : ByteArray) : IO UInt8 :=
+  return ofBool (fastAggregateVerify pks msg sig)
+
+@[export eth_bls_pop_prove]
+def popProveExport (sk : ByteArray) : IO ByteArray := do
+  let sk ← runBls (SecretKey.fromBytes sk)
+  let proof ← runBls (popProve sk)
+  return ⟨proof.toArray⟩
+
+@[export eth_bls_pop_verify]
+def popVerifyExport (pk proof : ByteArray) : IO UInt8 :=
+  return ofBool (popVerify pk proof)
 
 end EthLib.Cryptography.Bls.Exports

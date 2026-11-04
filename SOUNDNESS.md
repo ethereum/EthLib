@@ -150,9 +150,8 @@ Then the check of the pairs `(P_i, Q_i)` passes exactly when `sum_i a_i * b_i = 
 The law holds when the check tests `prod_i e(P_i, Q_i) = 1` for any bilinear map `e` with `e(g_1, g_2) != 1` into a group of order `r`.
 `pairingCheck_congr` (`Proofs/Bls/PairingCongr.lean`) proves that the check depends only on the group elements of valid points, so the law can quantify over representatives.
 
-`keyValidatePoint_eq_ok_iff` (`Proofs/Bls/KeyValidate.lean`) proves that key validation accepts exactly the encodings of the nonzero points of order `r` in G1.
-The G1 and G2 subgroup checks accept exactly the valid points that represent a multiple of the generator.
-Every output of the map to G2 is a valid point of that subgroup (`Proofs/Bls/MapToCurve.lean`).
+`sign_ok` and `popProve_ok` (`Proofs/Bls/Signatures.lean`) prove that BLS signing never fails.
+No theorem yet proves that an honest signature verifies.
 
 ### secp256k1
 
@@ -171,10 +170,7 @@ The alt_bn128 theorems check the constants and the group law of `G_1`, which the
 `toPoint_add` and `toPoint_mulBits` (`Proofs/AltBn128/Curve.lean`) prove that addition and double and add agree with the group law of `y^2 = x^3 + 3` over `ZMod p`.
 `card_point` (`Proofs/AltBn128/Order.lean`) proves that this group has `q` points, so the cofactor is 1.
 
-`instField` (`Proofs/AltBn128/Fp2.lean`) proves that `Fp2` is a field, and `toPoint_add` (`Proofs/AltBn128/Twist.lean`) proves the group law of the twist that holds `G_2`.
-`mulBits_order_eq_infinity_iff` proves that the `G_2` subgroup check of ECPAIRING accepts exactly the points `Q` on the twist with `q Q = O`.
-
-No theorem covers the pairing.
+No theorem covers `G_2` or the pairing.
 
 ### secp256r1
 
@@ -294,6 +290,7 @@ EthLib makes no constant-time claim.
 This matters where secret data is handled.
 XMSS and leanSPHINCS `keyGen` and `sign` handle secret data.
 The Python bindings expose all four, as `key_gen` and `sign` in each module, which take the secret seed.
+BLS signing and the proof of possession take the secret key, and the Python bindings expose both.
 
 ### A4. Idealisations
 
@@ -351,13 +348,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 32 operations and 34 size constants.
-The Python extension calls 32 of the operations and 25 of the constants.
+Lean exports 39 operations and 34 size constants.
+The Python extension calls 39 of the operations and 25 of the constants.
 Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_const_n`, `eth_sphincs_const_public_param_len`, `eth_sphincs_const_randomizer_len`, `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-1930 lines of hand-written C sit between them and Python: `bls.c` (87), `ecrecover.c` (34), `kzg.c` (533), `modexp.c` (61), `module.c` (537), `precompile.c` (43), `ripemd160.c` (36), `secp256k1.c` (94), `sha256.c` (38), `sha256_precompile.c` (62), `sphincs.c` (94), `wrappers.h` (168), `xmss.c` (143).
+2127 lines of hand-written C sit between them and Python: `bls.c` (270), `ecrecover.c` (34), `kzg.c` (533), `modexp.c` (61), `module.c` (544), `precompile.c` (43), `ripemd160.c` (36), `secp256k1.c` (94), `sha256.c` (38), `sha256_precompile.c` (62), `sphincs.c` (94), `wrappers.h` (175), `xmss.c` (143).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

@@ -13,7 +13,6 @@ public import EthLib.Cryptography.Proofs.Kzg.Core
 public import EthLib.Cryptography.Proofs.Kzg.Recovery
 public import EthLib.Cryptography.Proofs.Kzg.Cells
 public import EthLib.Cryptography.Proofs.Kzg.CeremonyChecks
-public import EthLib.Cryptography.Proofs.Kzg.ValidateG1
 public import EthLib.Cryptography.Proofs.Kzg.CosetInverse
 public import EthLib.Cryptography.Proofs.Kzg.RecoveryCoset
 public import EthLib.Cryptography.Proofs.Kzg.RecoveryProduct
