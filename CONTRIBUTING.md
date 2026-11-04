@@ -277,6 +277,16 @@ Run it without `--check` to regenerate them.
 It also fails when `pyproject.toml` declares a package version other than the one `SOUNDNESS.md` describes.
 Then review the whole document for the new version, and update its version line by hand.
 
+Then check the layout of the Lean lines that your branch changes:
+
+```bash
+uv run --no-project --python 3.12 python scripts/check_lean_layout.py --base origin/master
+```
+
+It fails on a changed line longer than 100 characters, unless the line holds only a URL.
+It also fails when two sentence lines of a comment touch, and one of them is changed.
+Lines that your branch does not change are not checked.
+
 These commands use uv and Python 3.12, with only the standard library.
 See [prerequisites](README.md#prerequisites) for setup.
 
