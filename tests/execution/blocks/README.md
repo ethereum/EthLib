@@ -11,4 +11,7 @@ Four more tests add blocks with withdrawals, a beacon root, requests and a block
 Each case keeps the path of its file in the archive, the name of its test and its network.
 Its block and its header hash are copied from the fixture without change, so no code of EthLib computed them.
 
-The Python test `bindings/python/tests/blocks/test_blocks.py` reads these cases and never rewrites them.
+`receipts.json` holds receipts of valid blocks of the same release, with the Bloom filter that the fixture gives for each.
+For each fork, transaction type, and presence or absence of logs, it keeps the first four receipts in path order.
+
+The Python tests in `bindings/python/tests/blocks/` read these cases and never rewrite them.

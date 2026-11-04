@@ -1,11 +1,4 @@
-"""Block headers and blocks of the execution layer, at each fork.
-
-A fork is the name of its case in the Lean fork type, such as "london" or "shapella".
-A header or a block is its RLP bytes.
-
-Each function decodes at the fork first.
-An input that the decoder rejects raises ValueError, and so does an unknown fork.
-"""
+"""Block headers, blocks and receipts of the execution layer, at each fork."""
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -18,12 +11,18 @@ def header_hash(fork: str, header: bytes) -> bytes:
 
 
 def reencode(fork: str, block: bytes) -> bytes:
-    """The RLP bytes of a block, decoded at the fork and encoded again.
-
-    Each transaction stays an RLP item, so the result equals the input for every block that
-    the decoder accepts.
-    """
+    """The RLP bytes of a block, decoded at the fork and encoded again."""
     return _native.block_reencode(fork, block)
 
 
-__all__ = ["header_hash", "reencode"]
+def receipt_reencode(fork: str, receipt: bytes) -> bytes:
+    """The bytes of a receipt, decoded at the fork and encoded again."""
+    return _native.receipt_reencode(fork, receipt)
+
+
+def receipt_logs_bloom(fork: str, receipt: bytes) -> bytes:
+    """The 256-byte logs Bloom filter of the logs of a receipt, decoded at the fork."""
+    return _native.receipt_logs_bloom(fork, receipt)
+
+
+__all__ = ["header_hash", "reencode", "receipt_reencode", "receipt_logs_bloom"]

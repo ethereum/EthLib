@@ -17,6 +17,18 @@ eth_block_reencode(
   lean_object* block
 );
 
+extern lean_object*
+eth_receipt_reencode(
+  lean_object* fork,
+  lean_object* receipt
+);
+
+extern lean_object*
+eth_receipt_logs_bloom(
+  lean_object* fork,
+  lean_object* receipt
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* Read a fork name and RLP bytes, as Lean byte arrays.
@@ -68,4 +80,26 @@ py_block_reencode(
   lean_object* block;
   if (!parse_fork_and_bytes(args, "block", &fork, &block)) return NULL;
   return run_io_into_pybytes(eth_block_reencode(fork, block), "block reencode");
+}
+
+PyObject*
+py_receipt_reencode(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* fork;
+  lean_object* receipt;
+  if (!parse_fork_and_bytes(args, "receipt", &fork, &receipt)) return NULL;
+  return run_io_into_pybytes(eth_receipt_reencode(fork, receipt), "receipt reencode");
+}
+
+PyObject*
+py_receipt_logs_bloom(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* fork;
+  lean_object* receipt;
+  if (!parse_fork_and_bytes(args, "receipt", &fork, &receipt)) return NULL;
+  return run_io_into_pybytes(eth_receipt_logs_bloom(fork, receipt), "receipt logs_bloom");
 }

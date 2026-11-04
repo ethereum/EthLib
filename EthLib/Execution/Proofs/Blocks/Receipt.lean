@@ -1,0 +1,155 @@
+module
+
+public import EthLib.Execution.Blocks.Receipt
+public import EthLib.Execution.Proofs.Transactions.Envelope
+
+/-!
+# Proofs: logs and receipts
+
+The RLP codecs of a log, of an outcome and of a receipt are lawful at every fork.
+
+The bytes of a receipt decode back to its transaction type and the receipt.
+
+They do so at each fork that has the type, and only the encoding decodes to them.
+-/
+
+@[expose] public section
+
+namespace EthLib.Execution.Blocks
+
+open EthLib.Base
+open EthLib.Serialization.Rlp
+open EthLib.Execution.Transactions
+
+instance : LawfulCodec Log where
+  ofItem_toItem _ := Item.fields_bind_eq_ok.mpr
+    ⟨_, rfl, rfl, by simp [Item.field_toItem, bind, Except.bind, pure, Except.pure]⟩
+  toItem_of_ofItem h := by
+    obtain ⟨items, rfl, hLen, h⟩ := Item.fields_bind_eq_ok.mp h
+    match items, hLen, h with
+    | [x0, x1, x2], _, h =>
+      simp only [Item.field_bind_eq_ok, pure, Except.pure, Except.ok.injEq] at h
+      obtain ⟨y0, rfl, y1, rfl, y2, rfl, rfl⟩ := h
+      rfl
+
+variable {fork : Fork}
+
+/-- A map in `Except` succeeds exactly when the mapped computation succeeds. -/
+private theorem map_eq_ok {α β : Type} {f : α → β} {x : Except RlpError α} {y : β} :
+    f <$> x = .ok y ↔ ∃ a, x = .ok a ∧ f a = y := by
+  cases x <;> simp [Functor.map, Except.map]
+
+instance : LawfulCodec (Outcome fork) where
+  ofItem_toItem
+    | .postState before root => by
+      -- Before Byzantium, the decoder reads a state root.
+      have h : ¬Fork.byzantium ≤ fork := Nat.not_le_of_lt before
+      show Outcome.ofItem (Codec.toItem root) = _
+      simp [Outcome.ofItem, h, LawfulCodec.ofItem_toItem, Functor.map, Except.map]
+    | .status since succeeded => by
+      show Outcome.ofItem (Codec.toItem succeeded) = _
+      simp [Outcome.ofItem, since, LawfulCodec.ofItem_toItem, Functor.map, Except.map]
+  toItem_of_ofItem {item o} h := by
+    change Outcome.ofItem item = .ok o at h
+    unfold Outcome.ofItem at h
+    split at h
+    · obtain ⟨b, hb, rfl⟩ := map_eq_ok.mp h
+      exact LawfulCodec.toItem_of_ofItem (α := Bool) hb
+    · obtain ⟨root, hRoot, rfl⟩ := map_eq_ok.mp h
+      exact LawfulCodec.toItem_of_ofItem (α := Hash32) hRoot
+
+instance : LawfulCodec (Receipt fork) where
+  ofItem_toItem _ := Item.fields_bind_eq_ok.mpr
+    ⟨_, rfl, rfl, by simp [Item.field_toItem, bind, Except.bind, pure, Except.pure]⟩
+  toItem_of_ofItem h := by
+    obtain ⟨items, rfl, hLen, h⟩ := Item.fields_bind_eq_ok.mp h
+    match items, hLen, h with
+    | [x0, x1, x2, x3], _, h =>
+      simp only [Item.field_bind_eq_ok, pure, Except.pure, Except.ok.injEq] at h
+      obtain ⟨y0, rfl, y1, rfl, y2, rfl, y3, rfl, rfl⟩ := h
+      rfl
+
+/-- A type that some fork adds is below `0xc0`, so it never starts a legacy receipt. -/
+theorem not_le_of_typeFork {type : UInt8} {since : Fork} (h : typeFork type = some since) :
+    ¬(0xc0 : UInt8) ≤ type := by
+  unfold typeFork at h
+  split at h
+  · subst_vars; decide
+  split at h
+  · subst_vars; decide
+  split at h
+  · subst_vars; decide
+  split at h
+  · subst_vars; decide
+  · cases h
+
+/-- A type that some fork adds is not 0, the type of a legacy transaction. -/
+theorem ne_zero_of_typeFork {type : UInt8} {since : Fork} (h : typeFork type = some since) :
+    type ≠ 0 := by
+  rintro rfl
+  simp [typeFork] at h
+
+/-- The decoder gives back the type and the receipt from their bytes.
+
+It does so at each fork that has the type.
+
+Type 0, a legacy transaction, exists at every fork. -/
+theorem decodeReceipt_encodeReceipt {type : UInt8} {r : Receipt fork} {bytes : ByteArray}
+    (h : encodeReceipt type r = .ok bytes)
+    (hType : type = 0 ∨ ∃ since, typeFork type = some since ∧ since ≤ fork) :
+    decodeReceipt fork bytes = .ok (type, r) := by
+  unfold encodeReceipt at h
+  split at h
+  · rename_i hZero
+    subst hZero
+    obtain ⟨first, rest, hList, hFirst⟩ := encode_list_head _ _ h
+    obtain ⟨h0, hEq⟩ := getElem_zero_of_toList hList
+    simp [decodeReceipt, h0, hEq, hFirst, Codec.decode_encode h, Functor.map, Except.map,
+      Except.mapError]
+  · rename_i hNe
+    obtain ⟨since, hSince, hFork⟩ := hType.resolve_left hNe
+    cases hPayload : Codec.encode r with
+    | error e => simp [hPayload, Functor.map, Except.map] at h
+    | ok payload =>
+      simp only [hPayload, Functor.map, Except.map, Except.ok.injEq] at h
+      subst h
+      have h0 : 0 < (typedBytes type payload).size := by simp [size_typedBytes]
+      simp [decodeReceipt, h0, typedBytes_getElem_zero, not_le_of_typeFork hSince, hSince, hFork,
+        extract_typedBytes, Codec.decode_encode hPayload, Functor.map, Except.map,
+        Except.mapError]
+
+/-- Bytes that decode to a type and a receipt are the encoding of that receipt with that type.
+
+So two different byte strings never decode to the same type and receipt. -/
+theorem encodeReceipt_of_decodeReceipt {bytes : ByteArray} {type : UInt8} {r : Receipt fork}
+    (h : decodeReceipt fork bytes = .ok (type, r)) : encodeReceipt type r = .ok bytes := by
+  unfold decodeReceipt at h
+  split at h
+  · rename_i h0
+    dsimp only at h
+    split at h
+    · cases hd : (Codec.decode bytes : Except RlpError (Receipt fork)) with
+      | error e => simp [hd, Functor.map, Except.map, Except.mapError] at h
+      | ok r' =>
+        simp only [hd, Functor.map, Except.map, Except.mapError, Except.ok.injEq,
+          Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        simp [encodeReceipt, Codec.encode_decode hd]
+    · rename_i hLow
+      split at h
+      · rename_i since hSince
+        split at h
+        · cases hd : (Codec.decode (bytes.extract 1 bytes.size) : Except RlpError (Receipt fork))
+            with
+          | error e => simp [hd, Functor.map, Except.map, Except.mapError] at h
+          | ok r' =>
+            simp only [hd, Functor.map, Except.map, Except.mapError, Except.ok.injEq,
+              Prod.mk.injEq] at h
+            obtain ⟨rfl, rfl⟩ := h
+            simp [encodeReceipt, ne_zero_of_typeFork hSince, Codec.encode_decode hd,
+              Functor.map, Except.map, typedBytes_getElem_extract bytes h0]
+        · cases h
+      · cases h
+  · cases h
+
+end EthLib.Execution.Blocks
