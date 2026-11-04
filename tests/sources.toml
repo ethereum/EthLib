@@ -88,7 +88,8 @@ commit = "efc5f9a1f356cba376c978eedb63cb0363c2aa85"
 commit = "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e"
 release = "tests@v21.0.2"
 directories = [
-  "tests/execution/blocks", "tests/execution/fees", "tests/execution/transactions",
+  "tests/execution/blocks", "tests/execution/fees", "tests/execution/precompiles",
+  "tests/execution/transactions",
 ]
 
 [repositories."ethereum/ssz-specs"]
