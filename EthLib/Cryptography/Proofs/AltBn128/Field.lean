@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.AltBn128.Curve
 public import EthLib.Cryptography.Proofs.Secp256k1.Field
 public import EthLib.Cryptography.Proofs.Pratt
+public import EthLib.Cryptography.Proofs.Inverse
 public import Mathlib.FieldTheory.Finite.Basic
 public import Mathlib.Tactic.NormNum.Prime
 
@@ -13,7 +14,7 @@ Both moduli are prime, by Pratt certificates that the kernel checks.
 
 `Fp` is `Fin p`, which is `ZMod p` by definition, so a proof states its algebra over `ZMod p`.
 
-Fermat's inverse in `Fp` is the field inverse.
+The Euclidean inverse in `Fp` is the field inverse.
 -/
 
 @[expose] public section
@@ -190,15 +191,9 @@ theorem toZMod_powBits (a : Fp) (e : Nat) (he : e < 2 ^ 256) :
     toZMod (Secp256k1.Fin.powBits 256 a e) = toZMod a ^ e :=
   Secp256k1.Fin.powBits_eq_pow 256 a e he
 
-/-- Fermat's inverse is the field inverse, and both send `0` to `0`. -/
-@[simp] theorem toZMod_inv (a : Fp) : toZMod a.inv = (toZMod a)⁻¹ := by
-  rw [inv, toZMod_powBits _ _ (by decide)]
-  by_cases h : toZMod a = 0
-  · rw [h, zero_pow (by decide), inv_zero]
-  · -- `a^(p - 2) * a = a^(p - 1) = 1`, by Fermat's little theorem.
-    refine eq_inv_of_mul_eq_one_left ?_
-    rw [← pow_succ, show modulus - 2 + 1 = modulus - 1 by decide]
-    exact ZMod.pow_card_sub_one_eq_one h
+/-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
+@[simp] theorem toZMod_inv (a : Fp) : toZMod a.inv = (toZMod a)⁻¹ :=
+  Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
 
 /-- In a field, a square has at most two roots, `c` and `-c`. -/
 theorem eq_or_eq_neg_of_mul_self {c d : ZMod modulus} (h : d * d = c * c) : d = c ∨ d = -c := by

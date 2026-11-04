@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Bls.Errors
+public import EthLib.Cryptography.Inverse
 
 /-!
 # `Fp`
@@ -16,7 +17,7 @@ In hexadecimal, `p` is the 96 digits of these two lines, joined:
 
 Core gives `Fin` its `+`, `-`, `*` and negation, all reduced mod `p`.
 
-The inverse is a power, by Fermat's little theorem: `x^(p - 2)`.
+The inverse comes from the extended Euclidean algorithm.
 
 Since `p = 3 mod 4`, a square root of a square `x` is `x^((p + 1) / 4)`.
 
@@ -63,8 +64,10 @@ def powNat (base : Fp) (e : Nat) : Fp :=
 termination_by e
 decreasing_by omega
 
-/-- Multiplicative inverse via Fermat's little theorem. -/
-@[inline] def inverse (a : Fp) : Fp := powNat a (modulus - 2)
+/-- Multiplicative inverse by the extended Euclidean algorithm.
+
+The inverse of `0` is `0`. -/
+@[inline] def inverse (a : Fp) : Fp := Fin.inverse a
 
 /-- Field division `a * b⁻¹`.
 

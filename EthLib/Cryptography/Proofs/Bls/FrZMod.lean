@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Bls.Fr
 public import EthLib.Cryptography.Proofs.Bls.Fr
 public import EthLib.Cryptography.Proofs.PowMod
+public import EthLib.Cryptography.Proofs.Inverse
 public import Mathlib.Data.ZMod.Basic
 public import Mathlib.Algebra.Field.ZMod
 public import Mathlib.NumberTheory.LucasPrimality
@@ -48,11 +49,11 @@ The last section maps each operation of `Fr` to its Mathlib counterpart.
 
 The cast of a natural number, the power, the inverse and the division all agree.
 
-The inverse is Fermat's inverse, which equals the field inverse because `r` is prime.
+The inverse is the Euclidean inverse, which equals the field inverse because `r` is prime.
 
 The field instance is the one of `ZMod r`, except for its division.
 
-Its division is the division of `Fr`, a product by Fermat's inverse.
+Its division is the division of `Fr`, a product by the Euclidean inverse.
 
 So `a / b` in the specification is the field's division, by definition.
 
@@ -191,38 +192,25 @@ private theorem powNat_eq_zmod_pow (a : ZMod modulus) (n : Nat) :
   | zero => exact (powNat_zero a).trans (pow_zero a).symm
   | succ n ih => exact (powNat_succ a n).trans (by rw [ih, pow_succ']; rfl)
 
-/-- The spec's Fermat-little-theorem `Fr.inverse` is the field inverse
-of `ZMod Fr.modulus` (both send `0` to `0`), phrased over
-`ZMod Fr.modulus` for the same reason as `powNat_eq_zmod_pow`. Public
-`Fr`-facing version: `inverse_eq_inv`. -/
+/-- The Euclidean inverse is the field inverse of `ZMod r`, and both send `0` to `0`.
+
+It is stated over `ZMod r`, which the field instance below needs. -/
 private theorem inverse_eq_zmod_inv (a : ZMod modulus) :
-    Fr.inverse a = a⁻¹ := by
-  -- Unfold `inverse` by `show`, for the reason given in `powNat_eq_zmod_pow`.
-  show Fr.powNat a (modulus - 2) = a⁻¹
-  rw [powNat_eq_zmod_pow]
-  by_cases h : a = 0
-  · subst h
-    rw [zero_pow (by decide : modulus - 2 ≠ 0), inv_zero]
-  · have h2 : a ^ (modulus - 2) * a = 1 := by
-      rw [← pow_succ, show modulus - 2 + 1 = modulus - 1 by decide]
-      exact ZMod.pow_card_sub_one_eq_one h
-    exact eq_inv_of_mul_eq_one_left h2
+    Fr.inverse a = a⁻¹ :=
+  Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
 
 /-- The Mathlib field structure on `ZMod Fr.modulus`, named so it can be
 used as the source of the structure update in `instField` below. -/
 -- The exposed field instance reduces through this structure.
 @[reducible] def zmodField : Field (ZMod modulus) := inferInstance
 
-/-- Field structure on `Fr`, transported from `Field (ZMod Fr.modulus)`
-with one change: the `Div` data is the spec's own high-priority
-Fermat-inverse division from `Bls/Fr.lean`, so that `a / b` written
-anywhere in the spec is definitionally the field's division. (Copying
-ZMod's gcd-based division data instead makes the kernel reject the
-instance: the `div`-mentioning axioms would be stated with the spec's
-`Div Fr` but proved for ZMod's.) The three axioms whose statements
-mention `/` are re-proved via `inverse_eq_zmod_inv` — phrased over
-`ZMod Fr.modulus`, where all instances exist, and handed over by
-definitional equality; all other data and proofs are ZMod's.
+/-- The field structure of `ZMod r` on `Fr`, with the division of the specification.
+
+So `a / b` in the specification is the division of the field, by definition.
+
+The division of `ZMod` would not do: the axioms that mention `/` would then use two instances.
+
+Those three axioms are proved again from the inverse lemma above; all else is from `ZMod`.
 
 Scoped rather than global for the same reason Mathlib keeps
 `Fin.instCommRing` scoped (see `Mathlib.Data.ZMod.Defs`): the `NatCast`
@@ -279,8 +267,7 @@ theorem hpow_ofNat_eq_pow (a : Fr) {w : Nat} (hw : w < modulus) :
   show w % modulus = w
   exact Nat.mod_eq_of_lt hw
 
-/-- The spec's Fermat-little-theorem `Fr.inverse` is the field inverse.
-Both send `0` to `0`. -/
+/-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
 theorem inverse_eq_inv (a : Fr) : a.inverse = a⁻¹ :=
   inverse_eq_zmod_inv a
 

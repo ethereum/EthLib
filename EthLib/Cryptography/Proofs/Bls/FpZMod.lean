@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls.Fp
 public import EthLib.Cryptography.Proofs.PowMod
+public import EthLib.Cryptography.Proofs.Inverse
 public import Mathlib.Data.ZMod.Basic
 public import Mathlib.Algebra.Field.ZMod
 public import Mathlib.NumberTheory.LucasPrimality
@@ -491,33 +492,23 @@ theorem powNat_eq_zmod_pow (a : ZMod modulus) (n : Nat) :
         congr 1
         omega
 
-/-- The spec's Fermat-little-theorem `Fp.inverse` is the field inverse
-of `ZMod Fp.modulus` (both send `0` to `0`). Public `Fp`-facing
-version: `inverse_eq_inv`. -/
+/-- The Euclidean inverse is the field inverse of `ZMod p`, and both send `0` to `0`.
+
+It is stated over `ZMod p`, which the field instance below needs. -/
 private theorem inverse_eq_zmod_inv (a : ZMod modulus) :
-    Fp.inverse a = a⁻¹ := by
-  -- Unfold `inverse` by `show`, for the reason given in `powNat_eq_zmod_pow`.
-  show Fp.powNat a (modulus - 2) = a⁻¹
-  rw [powNat_eq_zmod_pow]
-  by_cases h : a = 0
-  · subst h
-    rw [zero_pow (by decide : modulus - 2 ≠ 0), inv_zero]
-  · have h2 : a ^ (modulus - 2) * a = 1 := by
-      rw [← pow_succ, show modulus - 2 + 1 = modulus - 1 by decide]
-      exact ZMod.pow_card_sub_one_eq_one h
-    exact eq_inv_of_mul_eq_one_left h2
+    Fp.inverse a = a⁻¹ :=
+  Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
 
 /-- The Mathlib field structure on `ZMod Fp.modulus`, named so it can be
 used as the source of the structure update in `instField` below. -/
 -- The exposed field instance reduces through this structure.
 @[reducible] def zmodField : Field (ZMod modulus) := inferInstance
 
-/-- Field structure on `Fp`, transported from `Field (ZMod Fp.modulus)`
-with one change: the `Div` data is the spec's own high-priority
-Fermat-inverse division from `Bls/Fp.lean`. See `Fr.instField` in
-`Proofs.Bls.FrZMod` for why this alignment is forced and why the
-instance is scoped. Activate with
-`open scoped EthLib.Cryptography.Bls.Fp`. -/
+/-- The field structure of `ZMod p` on `Fp`, with the division of the specification.
+
+The scalar field proofs explain why the division must be that one, and why the instance is scoped.
+
+Activate it with `open scoped EthLib.Cryptography.Bls.Fp`. -/
 scoped instance instField : Field Fp :=
   { zmodField with
     div := (· / ·)
@@ -552,8 +543,7 @@ theorem ofNat_eq_natCast (n : Nat) : Fp.ofNat n = (n : Fp) := by
 theorem powNat_eq_pow (a : Fp) (n : Nat) : a.powNat n = a ^ n :=
   powNat_eq_zmod_pow a n
 
-/-- The spec's Fermat-little-theorem `Fp.inverse` is the field inverse.
-Both send `0` to `0`. -/
+/-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
 theorem inverse_eq_inv (a : Fp) : a.inverse = a⁻¹ :=
   inverse_eq_zmod_inv a
 

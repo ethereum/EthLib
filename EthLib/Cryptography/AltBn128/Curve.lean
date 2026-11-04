@@ -36,8 +36,8 @@ instance Fr.instNeZeroModulus : NeZero Fr.modulus := ⟨by decide⟩
 /-- An element of the base field. -/
 abbrev Fp := Fin Fp.modulus
 
-/-- The inverse in `Fp`, by Fermat's little theorem: `a^(p - 2)`, and 0 for 0. -/
-def Fp.inv (a : Fp) : Fp := Secp256k1.Fin.powBits 256 a (Fp.modulus - 2)
+/-- The inverse in `Fp`, by the extended Euclidean algorithm, and 0 for 0. -/
+def Fp.inv (a : Fp) : Fp := Fin.inverse a
 
 /-- `b = 3`, from EIP-196. -/
 def b : Fp := 3
