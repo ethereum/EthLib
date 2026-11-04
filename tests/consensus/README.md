@@ -33,6 +33,8 @@ They are copied byte for byte under their path in `minimal.tar.gz` and `mainnet.
 From each archive the directory keeps the first case of each suite.
 It keeps the files `serialized.ssz_snappy` and `roots.yaml` of each case, and leaves out `value.yaml`.
 `bindings/python/tests/consensus/test_ssz_static.py` decodes each case in Lean, then checks the root and the bytes encoded again.
+Every week, the same test also runs every case of both archives for the containers that EthLib defines.
+It then checks that the vendored files are copies of the archived ones.
 
 The directory `shuffling/` holds the shuffling cases of Phase 0 from the same test release, for the minimal and the mainnet presets.
 They are copied byte for byte under their path in `minimal.tar.gz` and `mainnet.tar.gz`.

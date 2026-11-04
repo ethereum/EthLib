@@ -104,6 +104,18 @@ url = "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-alph
 size = 169611828
 sha256 = "329f3cf58927df2614ecafbce78eb3c5258a13e8731d2f410bb31d8e4a5b9eaf"
 
+[archives."consensus-specs/v1.7.0-beta.4/minimal"]
+repository = "ethereum/consensus-specs"
+url = "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.4/minimal.tar.gz"
+size = 468730308
+sha256 = "26d09aea70c62ed235a120a95082d544ab1c2e6fe36bd35ea1bd5da62f3b7b68"
+
+[archives."consensus-specs/v1.7.0-beta.4/mainnet"]
+repository = "ethereum/consensus-specs"
+url = "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.4/mainnet.tar.gz"
+size = 967886924
+sha256 = "67762986572372a08d3b182535aa760433c86e174e14e0bbd756f350dd19398c"
+
 [archives."bls12-381-tests/v0.1.2/bls_tests_yaml"]
 repository = "ethereum/bls12-381-tests"
 url = "https://github.com/ethereum/bls12-381-tests/releases/download/v0.1.2/bls_tests_yaml.tar.gz"
