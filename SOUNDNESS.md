@@ -47,7 +47,7 @@ Gap D asks whether the use of EthLib holds together.
 | B6 | The build or the published wheel differs from the source | Fresh build per wheel in CI | B |
 | C1 | The Lean kernel or its axioms are unsound | None: `lake exe check-decls` checks which axioms a theorem uses, not that the kernel or the axioms are sound | P |
 | C2 | A proof trusts compiled code | `lake exe check-decls` fails on any new use; the remaining ones are listed in C2 | P |
-| C3 | A declaration reached the environment unchecked | None yet | P |
+| C3 | A declaration reached the environment unchecked | leanchecker replays every declaration into the kernel every week, and on pushes to `master` | P |
 | D1 | A client misuses an operation | Docstrings in Lean | R B |
 | D2 | A dependency changes | Pinned in `lake-manifest.json` | P R B |
 | D3 | The KZG trusted setup is not what it should be | Bytes match the consensus-specs setup | P R B V |
@@ -464,7 +464,8 @@ Those three are the allowed set; a theorem may use fewer.
 
 `lake exe check-decls` checks dependencies: no declaration may depend on an axiom outside that set, apart from those in its baseline.
 It does not check the kernel, and it does not show that the axioms are consistent.
-That rests on Lean's own design and review, and no independent checker replays the environment yet (C3).
+That rests on Lean's own design and review.
+The replay of C3 uses Lean's own kernel, so no independent type checker covers EthLib yet.
 
 ### C2. Tactics that trust compiled code
 
@@ -481,7 +482,13 @@ No theorem uses them.
 ### C3. Declarations the kernel did not check
 
 A metaprogram can add a declaration to the environment without the kernel checking it.
-An independent checker that replays the environment, such as `lean4checker`, would catch it, but none runs yet.
+The `replay` workflow catches such a declaration with leanchecker.
+leanchecker replays every declaration of EthLib into Lean's kernel, proof bodies included.
+First, the workflow checks that leanchecker rejects a fixture theorem of `False` that the kernel never checked.
+The replay uses Lean's own kernel, so it does not protect against a bug in that kernel (C1).
+
+The workflow runs every Monday and on each push to `master`, but a newer push cancels a replay still in progress.
+So only the weekly run is sure to finish.
 
 ## Gap D: does the use of EthLib hold together?
 
