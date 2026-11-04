@@ -7,16 +7,17 @@ public import EthLib.Serialization.Rlp.Decode
 
 The decoder rejects every non-canonical form, whatever bytes follow it.
 
-Each theorem is stated on the front of an input, and `decode_eq_error` lifts it to a whole input.
+Each theorem is stated on the front of an input, and a lemma lifts it to a whole input.
 
-These are the five quasi-encodings of Coglio, [Ethereum's Recursive Length Prefix in ACL2](https://doi.org/10.4204/EPTCS.327.11), §4.2.1.
+The theorems cover the five quasi-encodings in §4.2.1 of Coglio,
+[Ethereum's Recursive Length Prefix in ACL2](https://doi.org/10.4204/EPTCS.327.11).
 
 Each one could be read as an item, but the encoding writes that item with fewer bytes:
 
-- `81 x`, with `x < 0x80`, for the byte string `[x]`, which encodes as `x`;
-- `b7 + k`, then a length with a leading zero byte, for a byte string;
-- `b8 l`, with `0 < l < 56`, for a byte string of `l` bytes, which encodes as `80 + l`;
-- `f7 + k`, then a length with a leading zero byte, for a list;
+- `81 x`, with `x < 0x80`, for the byte string `[x]`, which encodes as `x`.
+- `b7 + k`, then a length with a leading zero byte, for a byte string.
+- `b8 l`, with `0 < l < 56`, for a byte string of `l` bytes, which encodes as `80 + l`.
+- `f7 + k`, then a length with a leading zero byte, for a list.
 - `f8 l`, with `0 < l < 56`, for a list payload of `l` bytes, which encodes as `c0 + l`.
 -/
 

@@ -7,7 +7,8 @@ public import EthLib.Serialization.Rlp.Encode
 
 The strict RLP decoding: the inverse of the encoding, which rejects every other input.
 
-Source: Appendix B of the Yellow Paper, Shanghai version, in [`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
+Source: Appendix B of the Yellow Paper, Shanghai version, in
+[`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
 
 The Yellow Paper defines only the encoding.
 
@@ -19,9 +20,9 @@ A lax decoder would accept bytes that the encoding never writes.
 
 There are three such forms, each longer than the real encoding:
 
-- a byte below `0x80` written with a prefix, as `81 05` for `05`;
-- a length below 56 written in the long form, as `b8 03` for `83`;
-- a length written with a leading zero byte, as `b9 00 40` for `b8 40`.
+- A byte below `0x80` written with a prefix, as `81 05` for `05`.
+- A length below 56 written in the long form, as `b8 03` for `83`.
+- A length written with a leading zero byte, as `b9 00 40` for `b8 40`.
 
 The decoder rejects all three, and any input that ends early or has bytes left after the item.
 -/
@@ -30,7 +31,7 @@ The decoder rejects all three, and any input that ends early or has bytes left a
 
 namespace EthLib.Serialization.Rlp
 
-/-- What the first bytes of an encoding announce, from its first byte `first` and the bytes after it.
+/-- What the first bytes of an encoding announce, from its first byte `first` and the rest.
 
 The result is the kind of payload, the number `k` of bytes that write the length, and the length.
 

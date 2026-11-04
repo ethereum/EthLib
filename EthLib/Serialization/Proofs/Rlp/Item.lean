@@ -5,18 +5,18 @@ public import EthLib.Serialization.Rlp.Item
 /-!
 # `Serialization.Proofs.Rlp.Item`
 
-`bigEndian` is `BE` of the Yellow Paper.
+The big-endian bytes of the code are `BE` of the Yellow Paper.
 
 The Yellow Paper defines `BE(x)` by two properties of its bytes `b`:
 
-- `b_0` is not zero;
+- `b_0` is not zero.
 - `x = sum_n b_n * 256^(k - 1 - n)`, where `k` is the number of bytes.
 
-`bigEndian_value` and `bigEndian_head_ne_zero` prove both.
+The bytes of the code have both properties, and no other bytes have them.
 
-`bigEndian_unique` proves that no other bytes have them, so `BE` is well defined and `bigEndian` is it.
+So `BE` is well defined, and the code computes it.
 
-`bigEndian_size_le` bounds the number of bytes, which keeps the first byte of a prefix below 256.
+A bound on the number of bytes keeps the first byte of a prefix below 256.
 -/
 
 @[expose] public section
@@ -132,7 +132,9 @@ theorem bigEndian_size_le (n k : Nat) (h : n < 256 ^ k) : (bigEndian n).size ≤
         have := ih (n / 256) k (by rw [Nat.pow_succ] at h; omega)
         omega
 
-/-- Induction on a list of bytes from its last byte: a property of `[]` that survives appending a byte holds for every list. -/
+/-- Induction on a list of bytes from its last byte.
+
+A property of `[]` that survives the append of a byte holds for every list. -/
 private theorem snocInduction {motive : List UInt8 → Prop} (nil : motive [])
     (append_singleton : ∀ init last, motive init → motive (init ++ [last])) (bytes : List UInt8) :
     motive bytes := by

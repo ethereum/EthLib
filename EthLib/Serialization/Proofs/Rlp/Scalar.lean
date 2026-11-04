@@ -10,10 +10,11 @@ public import EthLib.Serialization.Proofs.Rlp.Vectors
 
 The decoding of a scalar is the inverse of its encoding, and accepts only canonical input.
 
-- `toScalar_scalar`: the item of a scalar holds that scalar.
-- `eq_scalar_of_toScalar`: an item that holds a scalar is the item of that scalar.
-- `decodeScalar_eq_ok_iff`: `decodeScalar b = .ok n` exactly when `b` is the encoding of `n`.
-- `encode_scalar_succeeds`: every scalar below `2^256` has an encoding, so every 256-bit word does.
+The item of a scalar holds that scalar, and an item that holds a scalar is its item.
+
+The bytes `b` decode to the scalar `n` exactly when `b` is the encoding of `n`.
+
+Every scalar below `2^256` has an encoding, so every 256-bit word does.
 -/
 
 @[expose] public section
@@ -49,7 +50,7 @@ theorem scalar_injective (m n : Nat) (h : Item.scalar m = Item.scalar n) : m = n
   cases this
   rfl
 
-/-- `decodeScalar` decodes exactly the encodings of scalars, and returns the scalar encoded. -/
+/-- The scalar decoder accepts exactly the encodings of scalars, and returns the scalar. -/
 theorem decodeScalar_eq_ok_iff (b : ByteArray) (n : Nat) :
     decodeScalar b = .ok n ↔ encode (.scalar n) = .ok b := by
   constructor

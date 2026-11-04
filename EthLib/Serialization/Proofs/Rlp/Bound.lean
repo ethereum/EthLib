@@ -7,14 +7,15 @@ public import EthLib.Serialization.Proofs.Rlp.Encode
 
 Exactly when the encoding fails.
 
-The Yellow Paper gives no encoding to a payload of `2^64` bytes or more, and every other payload has one:
+The Yellow Paper gives no encoding to a payload of `2^64` bytes or more.
 
-- `encode_bytes_succeeds_iff`: a byte string encodes exactly when it has fewer than `2^64` bytes;
-- `encode_list_succeeds_iff`: a list whose items encode, encodes exactly when their encodings total fewer than `2^64` bytes;
-- `encode_list_of_joinEncodings_error`: a list fails when one of its items fails;
-- `encode_error`: the only failure is a payload of `2^64` bytes or more.
+A byte string encodes exactly when it has fewer than `2^64` bytes.
 
-So `encode` fails exactly where the Yellow Paper gives no encoding, at some byte string or list of the tree.
+A list whose items encode, encodes exactly when their encodings total fewer than `2^64` bytes.
+
+A list fails when one of its items fails.
+
+So the encoding fails exactly where the Yellow Paper gives no encoding, at some node of the tree.
 -/
 
 @[expose] public section
@@ -30,7 +31,7 @@ theorem lengthPrefix_ok (kind : PayloadKind) (length : Nat) (h : length < 2 ^ 64
   · rw [ite_eq_right hShort, ite_eq_left h]
     exact ⟨_, rfl⟩
 
-/-- Every failure of `lengthPrefix` is a length of `2^64` or more. -/
+/-- The prefix of a length fails only on a length of `2^64` or more. -/
 theorem lengthPrefix_error (kind : PayloadKind) (length : Nat) (err : RlpError)
     (h : lengthPrefix kind length = .error err) : err = .payloadTooLong length ∧ 2 ^ 64 ≤ length := by
   by_cases hLong : length < 2 ^ 64
@@ -58,7 +59,7 @@ theorem encode_bytes_succeeds_iff (data : ByteArray) :
       exact ⟨pre ++ data, by simp [hPre, bind, Except.bind, pure, Except.pure]⟩
     · exact ⟨data, by simp⟩
 
-/-- A list whose items encode to `payload` encodes exactly when `payload` has fewer than `2^64` bytes. -/
+/-- A list whose items encode to `payload` encodes exactly when `payload` has under `2^64` bytes. -/
 theorem encode_list_succeeds_iff (items : List Item) (payload : ByteArray)
     (hJoin : joinEncodings items = .ok payload) :
     (∃ e, encode (.list items) = .ok e) ↔ payload.size < 2 ^ 64 := by
@@ -111,7 +112,7 @@ theorem encode_error : (x : Item) → (err : RlpError) → encode x = .error err
       | ok pre => simp [encode, hJoin, hPre, bind, Except.bind, pure, Except.pure] at h
 termination_by structural x => x
 
-/-- The only failure of `joinEncodings` is a payload of `2^64` bytes or more, in one of the items. -/
+/-- Joining the encodings of items fails only on a payload of `2^64` bytes or more in one item. -/
 theorem joinEncodings_error : (xs : List Item) → (err : RlpError) → joinEncodings xs = .error err →
     ∃ length, err = .payloadTooLong length ∧ 2 ^ 64 ≤ length
   | [], err, h => by simp [joinEncodings] at h

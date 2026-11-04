@@ -63,12 +63,12 @@ end Codec
 
 /-! ## The helpers -/
 
-/-- `toBytes` succeeds exactly on a byte string. -/
+/-- Reading the bytes of an item succeeds exactly on a byte string. -/
 theorem Item.toBytes_eq_ok {item : Item} {data : ByteArray} :
     item.toBytes = .ok data ↔ item = .bytes data := by
   cases item <;> simp [Item.toBytes]
 
-/-- `toItems` succeeds exactly on a list. -/
+/-- Reading the items of an item succeeds exactly on a list. -/
 theorem Item.toItems_eq_ok {item : Item} {items : List Item} :
     item.toItems = .ok items ↔ item = .list items := by
   cases item <;> simp [Item.toItems]
