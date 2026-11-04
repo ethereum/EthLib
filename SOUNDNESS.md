@@ -206,6 +206,11 @@ The AES theorems are correctness statements, and none states a security property
 The kernel checks FIPS 197 Appendix B and the AES-128 and AES-256 vectors of its 2001 Appendix C.
 It also checks the first two blocks of the CTR examples F.5.1 and F.5.5 of SP 800-38A.
 
+`decrypt_encrypt` (`Proofs/Aes/Gcm.lean`) proves that GCM decryption of SP 800-38D returns the plaintext of an honest ciphertext and tag.
+`decrypt_eq_ok` proves that decryption accepts no tag other than the honest one.
+Both hold for every forward cipher.
+The kernel checks seven test cases of the NIST CAVP file `gcmtestvectors.zip`, one of them a forged tag that decryption rejects.
+
 ### KZG
 
 `Proofs/Kzg/Core.lean` proves that the public operations reject malformed inputs, such as a wrong size or lists of different lengths.
