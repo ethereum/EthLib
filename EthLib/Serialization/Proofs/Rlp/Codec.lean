@@ -211,37 +211,41 @@ instance {α : Type} [Codec α] [LawfulCodec α] : LawfulCodec (List α) where
       rw [Item.toItems_eq_ok.mp hi]
       exact congrArg Item.list (map_toItem_of_mapM_ofItem items xs h)
 
-instance : LawfulCodec (Option Address) where
+instance {α : Type} [Codec α] [LawfulCodec α] [NeverEmpty α] : LawfulCodec (Option α) where
   ofItem_toItem
     | none => rfl
-    | some a => by
-      -- The 20 bytes of an address are not empty, and have the length of an address.
-      have hSize : ({ data := a.toArray } : ByteArray).size = 20 := by simp [ByteArray.size]
-      simp [Codec.ofItem, Codec.toItem, Item.toBytes, bind, Except.bind, hSize, Functor.map,
-        Except.map]
+    | some x => by
+      -- The item of a value is not the empty byte string, so it reads back as that value.
+      simp [Codec.ofItem, Codec.toItem, NeverEmpty.toItem_ne_empty x, LawfulCodec.ofItem_toItem x,
+        Functor.map, Except.map]
   toItem_of_ofItem {item x} h := by
-    simp only [Codec.ofItem, bind, Except.bind] at h
-    cases hb : item.toBytes with
-    | error e => simp [hb] at h
-    | ok data =>
-      simp only [hb] at h
-      split at h
-      · -- The empty byte string is the item of none.
-        cases h
-        rw [Item.toBytes_eq_ok.mp hb]
-        simp only [Codec.toItem, Item.bytes.injEq]
-        rename_i hEmpty
-        cases data with
-        | mk arr =>
-          simp only [ByteArray.size] at hEmpty
-          rw [Array.eq_empty_of_size_eq_zero hEmpty]
-          rfl
-      · -- Any other byte string must have the 20 bytes of an address.
-        split at h
-        · cases h
-          rw [Item.toBytes_eq_ok.mp hb]
-          rfl
-        · cases h
+    simp only [Codec.ofItem] at h
+    split at h
+    · -- The empty byte string is the item of none.
+      cases h
+      rename_i hEmpty
+      exact hEmpty.symm
+    · -- Any other item must hold a value of the type.
+      cases hy : (Codec.ofItem item : Except RlpError α) with
+      | error e => simp [hy, Functor.map, Except.map] at h
+      | ok y =>
+        simp only [hy, Functor.map, Except.map, Except.ok.injEq] at h
+        subst h
+        exact (LawfulCodec.toItem_of_ofItem hy : Codec.toItem y = item)
+
+/-- An integer has no optional form.
+
+The integer 0 is the empty byte string, so it would read back as none. -/
+theorem not_neverEmpty_nat : ¬ NeverEmpty Nat :=
+  fun h => h.toItem_ne_empty 0 rfl
+
+/-- None is written as the single byte `80`, and no other byte string reads back as none. -/
+theorem Codec.decode_eq_ok_none_iff {α : Type} [Codec α] [LawfulCodec α] [NeverEmpty α]
+    (b : ByteArray) : Codec.decode b = .ok (none : Option α) ↔ b = ⟨#[0x80]⟩ := by
+  rw [Codec.decode_eq_ok_iff]
+  have : Codec.encode (none : Option α) = .ok ⟨#[0x80]⟩ := rfl
+  rw [this]
+  exact ⟨fun h => (Except.ok.inj h).symm, fun h => h ▸ rfl⟩
 
 /-! ## Known answers
 

@@ -18,7 +18,8 @@ A codec writes a value as an item, and reads an item back as a value.
 - A byte string of a fixed length must have exactly that length.
 - A list holds the item of each element.
 - A structure is a list of its fields, in order, with exactly one item per field.
-- The recipient of a transaction is 20 bytes, or the empty byte string for a contract creation.
+- An optional value is the empty byte string for none, if no value has that item.
+- So the recipient of a transaction is 20 bytes, or the empty byte string for a contract creation.
 
 Decoding a value is strict: it accepts exactly the items that the codec writes.
 -/
@@ -110,17 +111,31 @@ instance {α : Type} [Codec α] : Codec (List α) where
   toItem xs := .list (xs.map Codec.toItem)
   ofItem item := do (← item.toItems).mapM Codec.ofItem
 
-/-- The recipient of a transaction: an address, or none for a contract creation.
+/-- A type none of whose values has the empty byte string as its item.
 
-None is the empty byte string, and an address is its 20 bytes.
+Only such a type can use the empty byte string for a missing value. -/
+class NeverEmpty (α : Type) [Codec α] : Prop where
+  /-- No value is written as the empty byte string. -/
+  toItem_ne_empty (x : α) : Codec.toItem x ≠ .bytes .empty
+
+/-- A byte string of a fixed nonzero length is never empty. -/
+instance {n : Nat} [NeZero n] : NeverEmpty (Vector UInt8 n) where
+  toItem_ne_empty v h := by
+    have hSize := congrArg ByteArray.size (Item.bytes.inj h)
+    simp [ByteArray.size] at hSize
+    exact NeZero.ne n hSize
+
+/-- An optional value: the empty byte string for none, and the item of the value otherwise.
+
+The type must never write a value as the empty byte string, so the two cases do not overlap.
+
+The recipient of a transaction is an example: none is a contract creation.
 
 The Yellow Paper writes the recipient as a member of `B_20`, or of `B_0` for a creation. -/
-instance : Codec (Option Address) where
+instance {α : Type} [Codec α] [NeverEmpty α] : Codec (Option α) where
   toItem
     | none => .bytes .empty
-    | some a => Codec.toItem a
-  ofItem item := do
-    let data ← item.toBytes
-    if data.size = 0 then .ok none else some <$> Codec.ofItem item
+    | some x => Codec.toItem x
+  ofItem item := if item = .bytes .empty then .ok none else some <$> Codec.ofItem item
 
 end EthLib.Serialization.Rlp
