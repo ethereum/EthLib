@@ -118,3 +118,12 @@ def test_rejects_non_bytes() -> None:
         hkdf(b"salt", "ikm", b"info", 32)  # type: ignore[arg-type]
     with pytest.raises(TypeError):
         concat_kdf(b"z", "info", 32)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("length", [-1, 2**64, 2**64 + 32])
+def test_length_out_of_range(length: int) -> None:
+    # A length that does not fit in 64 bits is an error, not a length modulo 2^64.
+    with pytest.raises(OverflowError):
+        hkdf(b"salt", b"ikm", b"info", length)
+    with pytest.raises(OverflowError):
+        concat_kdf(b"z", b"info", length)

@@ -22,23 +22,12 @@ def hkdf_extract(salt: bytes, ikm: bytes) -> bytes:
 
 
 def hkdf(salt: bytes, ikm: bytes, info: bytes, length: int) -> bytes:
-    """HKDF-SHA-256 of RFC 5869 §2: `length` bytes of output keying material.
-
-    A length above 255 * 32 = 8160 bytes raises `HkdfError`, a `ValueError`.
-
-    A non-`bytes` argument raises `TypeError`, and a negative length raises `OverflowError`.
-    """
+    """HKDF-SHA-256 of RFC 5869 §2: `length` bytes of output keying material."""
     return native_hkdf_sha256(salt, ikm, info, length)
 
 
 def concat_kdf(z: bytes, fixed_info: bytes, length: int) -> bytes:
-    """The Concatenation KDF of SP 800-56C Rev. 2 §4.1 with SHA-256: `length` bytes of key.
-
-    A length of zero, or one that needs more than 2^32 - 1 blocks, raises `ConcatKdfError`,
-    a `ValueError`.
-
-    A non-`bytes` argument raises `TypeError`, and a negative length raises `OverflowError`.
-    """
+    """The Concatenation KDF of SP 800-56C Rev. 2 §4.1 with SHA-256: `length` bytes of key."""
     return native_concat_kdf_sha256(z, fixed_info, length)
 
 

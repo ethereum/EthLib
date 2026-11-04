@@ -78,152 +78,152 @@ PyObject* TRIE_ERROR;
 
 extern uint64_t
 eth_bls_const_bytes_per_pubkey(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_bls_const_bytes_per_signature(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_kzg_const_bytes_per_field_element(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_kzg_const_bytes_per_commitment(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_kzg_const_bytes_per_proof(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_kzg_const_field_elements_per_blob(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_kzg_const_bytes_per_blob(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_kzg_const_field_elements_per_cell(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_kzg_const_bytes_per_cell(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_kzg_const_cells_per_ext_blob(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_xmss_const_message_len(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_xmss_const_seed_len(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_xmss_const_pub_key_size(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_xmss_const_sig_size(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_sphincs_const_message_len(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_sphincs_const_seed_len(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_sphincs_const_pub_key_size(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_sphincs_const_sig_size(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_modexp_const_length_header_bytes(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_modexp_const_max_length_bytes(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_ripemd160_const_output_bytes(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_sha256_precompile_const_output_bytes(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_secp256k1_const_hash_len(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_secp256k1_const_signature_len(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_secp256r1_const_public_key_len(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_secp256r1_const_hash_len(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_secp256r1_const_signature_len(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_ecrecover_const_gas(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_enr_const_max_record_size(
-  uint8_t unit
+  lean_object* unit
 );
 
 extern uint64_t
 eth_reqresp_const_max_error_message_size(
-  uint8_t unit
+  lean_object* unit
 );
 
 /* ---- Lean externs: runtime + module init ----------------------------- */
@@ -681,38 +681,38 @@ PyInit__native(void) {
     lean_init_task_manager();
 
     /* Pull the spec-preset sizes out of the linked Lean static archive */
-    BYTES_PER_PUBKEY        = (size_t) eth_bls_const_bytes_per_pubkey(0);
-    BYTES_PER_SIGNATURE     = (size_t) eth_bls_const_bytes_per_signature(0);
-    BYTES_PER_FIELD_ELEMENT = (size_t) eth_kzg_const_bytes_per_field_element(0);
-    BYTES_PER_COMMITMENT    = (size_t) eth_kzg_const_bytes_per_commitment(0);
-    BYTES_PER_PROOF         = (size_t) eth_kzg_const_bytes_per_proof(0);
-    FIELD_ELEMENTS_PER_BLOB = (size_t) eth_kzg_const_field_elements_per_blob(0);
-    BYTES_PER_BLOB          = (size_t) eth_kzg_const_bytes_per_blob(0);
-    FIELD_ELEMENTS_PER_CELL = (size_t) eth_kzg_const_field_elements_per_cell(0);
-    BYTES_PER_CELL          = (size_t) eth_kzg_const_bytes_per_cell(0);
-    CELLS_PER_EXT_BLOB      = (size_t) eth_kzg_const_cells_per_ext_blob(0);
-    XMSS_MESSAGE_LEN  = (size_t) eth_xmss_const_message_len(0);
-    XMSS_SEED_LEN     = (size_t) eth_xmss_const_seed_len(0);
-    XMSS_PUB_KEY_SIZE = (size_t) eth_xmss_const_pub_key_size(0);
-    XMSS_SIG_SIZE     = (size_t) eth_xmss_const_sig_size(0);
-    SPHINCS_MESSAGE_LEN  = (size_t) eth_sphincs_const_message_len(0);
-    SPHINCS_SEED_LEN     = (size_t) eth_sphincs_const_seed_len(0);
-    SPHINCS_PUB_KEY_SIZE = (size_t) eth_sphincs_const_pub_key_size(0);
-    SPHINCS_SIG_SIZE     = (size_t) eth_sphincs_const_sig_size(0);
+    BYTES_PER_PUBKEY        = (size_t) eth_bls_const_bytes_per_pubkey(lean_box(0));
+    BYTES_PER_SIGNATURE     = (size_t) eth_bls_const_bytes_per_signature(lean_box(0));
+    BYTES_PER_FIELD_ELEMENT = (size_t) eth_kzg_const_bytes_per_field_element(lean_box(0));
+    BYTES_PER_COMMITMENT    = (size_t) eth_kzg_const_bytes_per_commitment(lean_box(0));
+    BYTES_PER_PROOF         = (size_t) eth_kzg_const_bytes_per_proof(lean_box(0));
+    FIELD_ELEMENTS_PER_BLOB = (size_t) eth_kzg_const_field_elements_per_blob(lean_box(0));
+    BYTES_PER_BLOB          = (size_t) eth_kzg_const_bytes_per_blob(lean_box(0));
+    FIELD_ELEMENTS_PER_CELL = (size_t) eth_kzg_const_field_elements_per_cell(lean_box(0));
+    BYTES_PER_CELL          = (size_t) eth_kzg_const_bytes_per_cell(lean_box(0));
+    CELLS_PER_EXT_BLOB      = (size_t) eth_kzg_const_cells_per_ext_blob(lean_box(0));
+    XMSS_MESSAGE_LEN  = (size_t) eth_xmss_const_message_len(lean_box(0));
+    XMSS_SEED_LEN     = (size_t) eth_xmss_const_seed_len(lean_box(0));
+    XMSS_PUB_KEY_SIZE = (size_t) eth_xmss_const_pub_key_size(lean_box(0));
+    XMSS_SIG_SIZE     = (size_t) eth_xmss_const_sig_size(lean_box(0));
+    SPHINCS_MESSAGE_LEN  = (size_t) eth_sphincs_const_message_len(lean_box(0));
+    SPHINCS_SEED_LEN     = (size_t) eth_sphincs_const_seed_len(lean_box(0));
+    SPHINCS_PUB_KEY_SIZE = (size_t) eth_sphincs_const_pub_key_size(lean_box(0));
+    SPHINCS_SIG_SIZE     = (size_t) eth_sphincs_const_sig_size(lean_box(0));
 
-    MODEXP_LENGTH_HEADER_BYTES = (size_t) eth_modexp_const_length_header_bytes(0);
-    MODEXP_MAX_LENGTH_BYTES    = (size_t) eth_modexp_const_max_length_bytes(0);
-    SECP256K1_HASH_LEN      = (size_t) eth_secp256k1_const_hash_len(0);
-    SECP256K1_SIGNATURE_LEN = (size_t) eth_secp256k1_const_signature_len(0);
-    SECP256R1_PUBLIC_KEY_LEN = (size_t) eth_secp256r1_const_public_key_len(0);
-    SECP256R1_HASH_LEN       = (size_t) eth_secp256r1_const_hash_len(0);
-    SECP256R1_SIGNATURE_LEN  = (size_t) eth_secp256r1_const_signature_len(0);
-    ECRECOVER_GAS           = (size_t) eth_ecrecover_const_gas(0);
-    ENR_MAX_RECORD_SIZE     = (size_t) eth_enr_const_max_record_size(0);
-    REQRESP_MAX_ERROR_MESSAGE_SIZE = (size_t) eth_reqresp_const_max_error_message_size(0);
+    MODEXP_LENGTH_HEADER_BYTES = (size_t) eth_modexp_const_length_header_bytes(lean_box(0));
+    MODEXP_MAX_LENGTH_BYTES    = (size_t) eth_modexp_const_max_length_bytes(lean_box(0));
+    SECP256K1_HASH_LEN      = (size_t) eth_secp256k1_const_hash_len(lean_box(0));
+    SECP256K1_SIGNATURE_LEN = (size_t) eth_secp256k1_const_signature_len(lean_box(0));
+    SECP256R1_PUBLIC_KEY_LEN = (size_t) eth_secp256r1_const_public_key_len(lean_box(0));
+    SECP256R1_HASH_LEN       = (size_t) eth_secp256r1_const_hash_len(lean_box(0));
+    SECP256R1_SIGNATURE_LEN  = (size_t) eth_secp256r1_const_signature_len(lean_box(0));
+    ECRECOVER_GAS           = (size_t) eth_ecrecover_const_gas(lean_box(0));
+    ENR_MAX_RECORD_SIZE     = (size_t) eth_enr_const_max_record_size(lean_box(0));
+    REQRESP_MAX_ERROR_MESSAGE_SIZE = (size_t) eth_reqresp_const_max_error_message_size(lean_box(0));
 
-    RIPEMD160_OUTPUT_BYTES = (size_t) eth_ripemd160_const_output_bytes(0);
-    SHA256_PRECOMPILE_OUTPUT_BYTES = (size_t) eth_sha256_precompile_const_output_bytes(0);
+    RIPEMD160_OUTPUT_BYTES = (size_t) eth_ripemd160_const_output_bytes(lean_box(0));
+    SHA256_PRECOMPILE_OUTPUT_BYTES = (size_t) eth_sha256_precompile_const_output_bytes(lean_box(0));
 
     initialized = 1;
   }

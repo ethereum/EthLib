@@ -130,6 +130,38 @@ pack_indices(
   return buf;
 }
 
+/* A list of `n` byte strings of `size` bytes each, read from `buf`, or NULL with an error set. */
+static PyObject*
+bytes_list(
+  const uint8_t* buf,
+  size_t n,
+  size_t size
+) {
+  PyObject* list = PyList_New((Py_ssize_t) n);
+  if (!list) return NULL;
+  for (size_t i = 0; i < n; i++) {
+    PyObject* item = PyBytes_FromStringAndSize((const char*) (buf + i * size), (Py_ssize_t) size);
+    if (!item) { Py_DECREF(list); return NULL; }
+    PyList_SET_ITEM(list, (Py_ssize_t) i, item);
+  }
+  return list;
+}
+
+/* The pair (cells, proofs) of a buffer that holds every cell, then every proof. */
+static PyObject*
+cells_and_proofs(
+  const uint8_t* buf
+) {
+  PyObject* cells = bytes_list(buf, CELLS_PER_EXT_BLOB, BYTES_PER_CELL);
+  if (!cells) return NULL;
+  PyObject* proofs = bytes_list(buf + CELLS_PER_EXT_BLOB * BYTES_PER_CELL,
+                                CELLS_PER_EXT_BLOB, BYTES_PER_PROOF);
+  if (!proofs) { Py_DECREF(cells); return NULL; }
+  PyObject* tup = PyTuple_Pack(2, cells, proofs);
+  Py_DECREF(cells); Py_DECREF(proofs);
+  return tup;
+}
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 PyObject*
@@ -184,8 +216,10 @@ py_compute_kzg_proof(
     mk_bytearray(z, BYTES_PER_FIELD_ELEMENT));
   if (except_into_buffer(res, KZG_ERROR, buf, sizeof(buf))) return NULL;
   PyObject* proof = PyBytes_FromStringAndSize((const char*) buf, BYTES_PER_PROOF);
+  if (!proof) return NULL;
   PyObject* y = PyBytes_FromStringAndSize((const char*) (buf + BYTES_PER_PROOF),
                                               BYTES_PER_FIELD_ELEMENT);
+  if (!y) { Py_DECREF(proof); return NULL; }
   PyObject* tup = PyTuple_Pack(2, proof, y);
   Py_DECREF(proof); Py_DECREF(y);
   return tup;
@@ -304,13 +338,7 @@ py_compute_cells(
     PyMem_Free(out);
     return NULL;
   }
-  PyObject* list = PyList_New(CELLS_PER_EXT_BLOB);
-  if (!list) { PyMem_Free(out); return NULL; }
-  for (size_t i = 0; i < CELLS_PER_EXT_BLOB; i++) {
-    PyObject* cell = PyBytes_FromStringAndSize((const char*) (out + i * BYTES_PER_CELL),
-                                               BYTES_PER_CELL);
-    PyList_SET_ITEM(list, i, cell);
-  }
+  PyObject* list = bytes_list(out, CELLS_PER_EXT_BLOB, BYTES_PER_CELL);
   PyMem_Free(out);
   return list;
 }
@@ -333,18 +361,8 @@ py_compute_cells_and_kzg_proofs(
     PyMem_Free(buf);
     return NULL;
   }
-  PyObject* cells = PyList_New(CELLS_PER_EXT_BLOB);
-  PyObject* proofs = PyList_New(CELLS_PER_EXT_BLOB);
-  for (size_t i = 0; i < CELLS_PER_EXT_BLOB; i++) {
-    PyList_SET_ITEM(cells, i,
-      PyBytes_FromStringAndSize((const char*) (buf + i * BYTES_PER_CELL), BYTES_PER_CELL));
-    PyList_SET_ITEM(proofs, i,
-      PyBytes_FromStringAndSize((const char*) (buf + CELLS_PER_EXT_BLOB * BYTES_PER_CELL
-                                              + i * BYTES_PER_PROOF), BYTES_PER_PROOF));
-  }
+  PyObject* tup = cells_and_proofs(buf);
   PyMem_Free(buf);
-  PyObject* tup = PyTuple_Pack(2, cells, proofs);
-  Py_DECREF(cells); Py_DECREF(proofs);
   return tup;
 }
 
@@ -487,17 +505,7 @@ py_recover_cells_and_kzg_proofs(
     PyMem_Free(buf);
     return NULL;
   }
-  PyObject* out_cells = PyList_New(CELLS_PER_EXT_BLOB);
-  PyObject* out_proofs = PyList_New(CELLS_PER_EXT_BLOB);
-  for (size_t i = 0; i < CELLS_PER_EXT_BLOB; i++) {
-    PyList_SET_ITEM(out_cells, i,
-      PyBytes_FromStringAndSize((const char*) (buf + i * BYTES_PER_CELL), BYTES_PER_CELL));
-    PyList_SET_ITEM(out_proofs, i,
-      PyBytes_FromStringAndSize((const char*) (buf + CELLS_PER_EXT_BLOB * BYTES_PER_CELL
-                                              + i * BYTES_PER_PROOF), BYTES_PER_PROOF));
-  }
+  PyObject* tup = cells_and_proofs(buf);
   PyMem_Free(buf);
-  PyObject* tup = PyTuple_Pack(2, out_cells, out_proofs);
-  Py_DECREF(out_cells); Py_DECREF(out_proofs);
   return tup;
 }
