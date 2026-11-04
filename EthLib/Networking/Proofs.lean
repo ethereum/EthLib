@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Networking.Proofs.Discv5.Identity
+public import EthLib.Networking.Proofs.Discv5.Message
 public import EthLib.Networking.Proofs.Discv5.Packet
 public import EthLib.Networking.Proofs.Encoding.Varint
 public import EthLib.Networking.Proofs.Enr.Base64

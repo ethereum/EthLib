@@ -89,6 +89,25 @@ def decrypt_message(key: bytes, nonce: bytes, message: bytes, ad: bytes) -> byte
     return _native.discv5_decrypt_message(key, nonce, message, ad)
 
 
+def _bytes_of(value):
+    if isinstance(value, str):
+        return bytes.fromhex(value[2:])
+    if isinstance(value, list):
+        return [_bytes_of(v) for v in value]
+    return value
+
+
+def decode_message(plaintext: bytes) -> dict:
+    """The type and the fields of a message plaintext."""
+    fields = json.loads(_native.discv5_decode_message(plaintext))
+    return {k: _bytes_of(v) for k, v in fields.items()}
+
+
+def reencode_message(plaintext: bytes) -> bytes:
+    """The plaintext of the decoded message, written again by the encoder."""
+    return _native.discv5_reencode_message(plaintext)
+
+
 __all__ = [
     "SessionKeys",
     "log_distance",
@@ -100,5 +119,7 @@ __all__ = [
     "reencode_packet",
     "encrypt_message",
     "decrypt_message",
+    "decode_message",
+    "reencode_message",
     "Discv5Error",
 ]

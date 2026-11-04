@@ -4,6 +4,7 @@ public import EthLib.Base.Exports
 public import Lean.Data.Json
 public import EthLib.Serialization.Ssz.Codec.Json
 public import EthLib.Networking.Discv5.Identity
+public import EthLib.Networking.Discv5.Message
 public import EthLib.Networking.Discv5.Packet
 
 /-!
@@ -15,7 +16,7 @@ A private key crosses the boundary as 32 big-endian bytes, and a public key in a
 
 A node ID is 32 bytes.
 
-A packet error comes back with its code.
+A packet error or a message error comes back with its code.
 
 Any other rejected input comes back with code 0, including a failure of AES-GCM.
 -/
@@ -151,5 +152,63 @@ def decryptMessageExport (key nonce message ad : ByteArray) : Result ByteArray :
   match decryptMessage (← aesKeyOf key) (← nonceOf nonce) message ad with
   | .ok plaintext => pure plaintext
   | .error _ => throw (0, "message does not authenticate")
+
+/-! ## Messages -/
+
+/-- A message error, with its code and a message for a Python traceback. -/
+def runMessage {α : Type} (act : Except MessageError α) : Result α :=
+  act.mapError fun e => (e.code, match e with
+    | .empty => "invalid message: empty"
+    | .unknownType t => s!"invalid message: unknown type {t}"
+    | .rlp _ => "invalid message: not one RLP list, or a field of the wrong form"
+    | .fields t => s!"invalid message: wrong field count for type {t}"
+    | .invalid => "invalid message: a size or a distance is out of range")
+
+/-- The RLP bytes of an item, for a record inside a message. -/
+def itemHex (item : Serialization.Rlp.Item) : Json :=
+  match Serialization.Rlp.encode item with
+  | .ok bytes => hex bytes.data.toList
+  | .error _ => Json.null
+
+/-- The fields of a message, as JSON: byte strings in hex, integers as numbers. -/
+def messageJson : Message → List (String × Json)
+  | .ping id seq => [("request_id", hex id.data.toList), ("enr_seq", toJson seq.toNat)]
+  | .pong id seq ip port =>
+    [("request_id", hex id.data.toList), ("enr_seq", toJson seq.toNat),
+      ("recipient_ip", hex ip.data.toList), ("recipient_port", toJson port.toNat)]
+  | .findnode id ds => [("request_id", hex id.data.toList), ("distances", toJson ds)]
+  | .nodes id total rs =>
+    [("request_id", hex id.data.toList), ("total", toJson total.toNat),
+      ("records", Json.arr (rs.map itemHex).toArray)]
+  | .talkreq id p r =>
+    [("request_id", hex id.data.toList), ("protocol", hex p.data.toList),
+      ("request", hex r.data.toList)]
+  | .talkresp id r => [("request_id", hex id.data.toList), ("response", hex r.data.toList)]
+  | .regtopic id t rec ticket ds =>
+    [("request_id", hex id.data.toList), ("topic", hex t.toList), ("record", itemHex rec),
+      ("ticket", hex ticket.data.toList), ("distances", toJson ds)]
+  | .regconfirmation id total ticket wait =>
+    [("request_id", hex id.data.toList), ("total", toJson total.toNat),
+      ("ticket", hex ticket.data.toList), ("wait_time", toJson wait.toNat)]
+  | .topicquery id t ds =>
+    [("request_id", hex id.data.toList), ("topic", hex t.toList), ("distances", toJson ds)]
+  | .topicnodes id total rs =>
+    [("request_id", hex id.data.toList), ("total", toJson total.toNat),
+      ("records", Json.arr (rs.map itemHex).toArray)]
+
+/-- The message of a plaintext, as a JSON object with its type and its fields. -/
+@[export eth_discv5_decode_message]
+def decodeMessageExport (plaintext : ByteArray) : Result ByteArray := do
+  let m ← runMessage (Message.decode plaintext)
+  let json := Json.mkObj (("type", toJson m.type.toNat) :: messageJson m)
+  return json.compress.toUTF8
+
+/-- The plaintext of the decoded message, written again by the encoder. -/
+@[export eth_discv5_reencode_message]
+def reencodeMessageExport (plaintext : ByteArray) : Result ByteArray := do
+  let m ← runMessage (Message.decode plaintext)
+  match m.encode with
+  | .ok bytes => pure bytes
+  | .error _ => throw (0, "message has no RLP encoding")
 
 end EthLib.Networking.Discv5.Exports
