@@ -1,0 +1,71 @@
+# Regenerate every test vector through the bindings, the slow cases included.
+#
+# ci.yml runs the vector suites on each change, but skips the key generation and
+# signing cases of leanXMSS and leanSPHINCS, which take minutes each.
+# This workflow runs them every Monday and on manual dispatch.
+# A regenerated vector that differs from the committed one fails the job.
+
+name: vectors-slow
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  vectors:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.13.6"
+          enable-cache: false
+
+      # The latest build that ci.yml saved on master, read only.
+      - name: restore EthLib build
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: .lake/build
+          key: ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}
+          restore-keys: |
+            ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
+      - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
+        with:
+          auto-config: false
+          use-mathlib-cache: true
+          use-github-cache: false
+
+      - name: library
+        run: lake build --wfail EthLib Exports
+
+      - name: bindings
+        run: uv sync --frozen --extra test
+
+      - name: vector suites with the slow cases
+        env:
+          ETHLIB_SLOW_VECTORS: "1"
+        run: uv run --no-sync pytest
+
+      # The suites write every case, so a changed or a new case shows up here.
+      - name: unchanged vectors
+        run: |
+          git status --porcelain -- tests bindings/python/tests
+          test -z "$(git status --porcelain -- tests bindings/python/tests)"
+
+      - name: pinned digests
+        run: uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py

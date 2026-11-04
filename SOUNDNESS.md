@@ -39,10 +39,10 @@ Gap D asks whether the use of EthLib holds together.
 | A2 | A theorem holds only under a hypothesis | Each conditional theorem below lists its hypotheses | P |
 | A3 | Timing reveals secret data | None: no constant-time claim | R B |
 | A4 | A security theorem idealises a primitive | Each idealisation is listed in A4 | P |
-| B1 | The Lean compiler, the C compiler or the Lean runtime is wrong | Regenerating the vectors locally, then checking them against their pinned digests | R B |
+| B1 | The Lean compiler, the C compiler or the Lean runtime is wrong | CI regenerates the vectors on every change, and the slow cases every week, then compares them with the committed ones | R B |
 | B2 | Lean core runs code other than its definitions | Lean core is a declared baseline | R B |
 | B3 | Elaboration runs native code | None | P |
-| B4 | The hand-written C boundary is wrong | Regenerating the vectors locally, then checking them against their pinned digests | B |
+| B4 | The hand-written C boundary is wrong | The regeneration and comparison of B1 | B |
 | B5 | This repository substitutes compiled code | `lake exe check-decls` fails on any new substitution | R B |
 | B6 | The build or the published wheel differs from the source | Fresh build per wheel in CI, with a pinned elan. Each wheel runs the vector suites, and carries a build provenance attestation | B |
 | C1 | The Lean kernel or its axioms are unsound | None: `lake exe check-decls` checks which axioms a theorem uses, not that the kernel or the axioms are sound | P |
@@ -429,8 +429,12 @@ For most operations it does not compare the result with an expected answer, so a
 The check is that the regenerated files are identical to the committed ones, which match consensus-specs `v1.7.0-alpha.12`.
 `uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py` makes that comparison against the pinned digests.
 
-CI runs that check on the committed vectors on every change, but it does not regenerate them, which takes hours.
-So for B1 and B4 the regeneration is a local step, and only the check after it shows that the bindings still produce the committed answers.
+On every change, CI regenerates the vectors through the bindings.
+It fails when a file under `tests/cryptography` then differs from the committed one.
+That run skips the key generation and signing cases of leanXMSS and leanSPHINCS, which take minutes each.
+Every Monday, the `vectors-slow` workflow regenerates all cases, these included.
+It fails when a test file then differs from the committed one, or when a pinned digest does not match.
+So between two weekly runs, a change can alter the compiled key generation or signing of those two schemes unnoticed.
 
 ### B2. Lean core's own implementations
 
