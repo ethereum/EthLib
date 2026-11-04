@@ -14,7 +14,10 @@ So some directories are pinned: `bls/`, `kzg/`, `secp256k1/`, `secp256r1/`, and 
 Every case under a pinned directory is listed in that file with its digest, so regenerating a case that changes its answer is caught.
 A pinned directory without its `SHA256SUMS` is an error, so deleting the file cannot switch the check off.
 
-The `kzg/` cases and the `eth_*` cases of `bls/` are pinned to consensus-specs `v1.7.0-alpha.12`.
+Each upstream repository has one pinned commit, recorded in [`tests/sources.toml`](../sources.toml).
+A `SHA256SUMS` starts with one `# Source:` line for each source of its cases, and `sha256sum -c` skips these lines.
+
+The `kzg/` cases and the `eth_*` cases of `bls/` are pinned to consensus-specs `v1.7.0-alpha.12`, at commit `84454a9d57f4f49f74c78e9f375347baf30474f2`.
 They match the cases in its `general.tar.gz` byte for byte, and that archive has sha256 `329f3cf58927df2614ecafbce78eb3c5258a13e8731d2f410bb31d8e4a5b9eaf`.
 That release came out before consensus-specs#5398, which removed the KZG specification and its generators from consensus-specs and pointed to this repository.
 Its cases were written by the Python specification, not by EthLib, and the digests preserve that independent provenance for the cases committed here.

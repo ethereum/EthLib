@@ -1,7 +1,7 @@
 """Ethereum Node Records against the test vector of EIP-778.
 
 The record, its RLP structure and its node ID come from "Test Vectors" in EIP-778, at
-commit 7622abc1c6569b7e7ade9ed957dde4ed2271cc40 of ethereum/EIPs, under CC0-1.0.
+commit d386b29b5a31bd5cfd8d21bbf4e8a0c87734085e of ethereum/EIPs, under CC0-1.0.
 """
 
 import pytest

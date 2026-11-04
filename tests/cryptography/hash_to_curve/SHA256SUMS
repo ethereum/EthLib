@@ -1,3 +1,4 @@
+# Source: RFC 9380, Appendices J.10.1, K.1 and K.2
 5809d7554ac863d657f5faf65e3e86fc9ab2b735c01617fa936efae839fb4150  expand_message_xmd/expand_message_xmd_a512_128/data.yaml
 ec3be88bcf88f6de61871711e6e5ad658e66fcc03629fb85f1d2df58f597ed18  expand_message_xmd/expand_message_xmd_a512_32/data.yaml
 79f74f6358fc8a2f7683996770dc919285a51ce67cf6b51cddcc09b6c7311467  expand_message_xmd/expand_message_xmd_abc_128/data.yaml

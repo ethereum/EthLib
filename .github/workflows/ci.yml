@@ -233,6 +233,12 @@ jobs:
 
       - run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_layers.py
 
+      # Every test cites only the pinned commits of tests/sources.toml, and every pinned
+      # vector directory names its sources.
+      - run: uv run --no-project --python 3.12 python scripts/check_fixture_pins.py
+
+      - run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_fixture_pins.py
+
       # Each Lean line that a pull request changes has at most 100 characters, and no two
       # sentence lines of a comment touch. Lines that it does not change are not checked.
       - name: Lean layout of the changed lines

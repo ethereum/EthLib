@@ -1,7 +1,7 @@
 """The BLS12-381 precompiles against the vectors of EIP-2537 that the kernel does not run.
 
 `eip2537_cases.json` holds cases of `assets/eip-2537` in `ethereum/EIPs`, at commit
-`faaa35fff856a109c40d291e612447fadc2095fe`, under CC0-1.0:
+`d386b29b5a31bd5cfd8d21bbf4e8a0c87734085e`, under CC0-1.0:
 
 - every case of `pairing_check_bls.json`;
 - the cases of `msm_G1_bls.json` and `msm_G2_bls.json` with 5 to 8 pairs.

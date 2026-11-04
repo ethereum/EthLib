@@ -67,9 +67,13 @@ def sha256_file(path: Path) -> str:
 
 
 def read_sums(path: Path) -> dict[str, str]:
-    """The `SHA256SUMS` file at `path`, as a map from relative path to digest."""
+    """The `SHA256SUMS` file at `path`, as a map from relative path to digest.
+
+    A line that starts with `#` names a source, and `sha256sum -c` skips it too."""
     sums = {}
     for line in path.read_text().splitlines():
+        if line.startswith("#"):
+            continue
         digest, name = line.split(maxsplit=1)
         sums[name] = digest
     return sums
