@@ -16,16 +16,18 @@ MCOPY copies the old bytes of its source, also when the source and the destinati
 CALLDATALOAD reads the call data past its end as zeros.
 
 RETURNDATACOPY that pays fails exactly when its range ends past the return data.
+
+None of these instructions changes the message, the state or the substate of the frame.
 -/
 
 @[expose] public section
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (U256 bytesToNat natToBytes)
+open EthLib.Base (Fork U256 bytesToNat natToBytes)
 open GasCosts
 
-variable {Meter : Type} [GasMeter Meter]
+variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- A word has 32 bytes. -/
 theorem size_wordBytes (word : U256) : (wordBytes word).size = 32 := by
@@ -77,7 +79,7 @@ theorem loadWord_append_zeros (data : ByteArray) (start size k : Nat) :
   simp only [loadWord, bufferRead, byteAt_append_zeros]
 
 /-- RETURNDATACOPY that pays fails exactly when its range ends past the return data. -/
-theorem returndatacopyStep_eq_error_iff {evm : Evm Meter} {start offset size : U256}
+theorem returndatacopyStep_eq_error_iff {evm : Evm fork Meter} {start offset size : U256}
     {rest : List U256} {gas : Meter} (h : evm.stack.val = start :: offset :: size :: rest)
     (paid : GasMeter.charge evm.gas
       (OPCODE_RETURNDATACOPY_BASE + OPCODE_RETURNDATACOPY_PER_WORD * wordCount size.toNat +
@@ -89,5 +91,60 @@ theorem returndatacopyStep_eq_error_iff {evm : Evm Meter} {start offset size : U
   simp only [returndatacopyStep, popWord, chargeGas, hstack, Stack.pop]
   by_cases past : evm.returnData.size < offset.toNat + size.toNat <;>
     simp [paid, past, bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
+
+/-- Each instruction that moves bytes keeps the message, the state and the substate. -/
+theorem memoryDataStep_sameContext {op : Op}
+    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (hstep : memoryDataStep op = some step) {evm after : Evm fork Meter}
+    (h : step evm = .ok after) : SameContext evm after := by
+  cases op <;> simp only [memoryDataStep, Option.some.injEq, reduceCtorEq] at hstep <;>
+    subst hstep
+  case msize | calldatasize | codesize | returndatasize => exact readFrame_sameContext h
+  case mload =>
+    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
+    obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+    obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+    cases h
+    exact (((popWord_sameContext h1).trans (chargeGasAndMemory_sameContext h2)).trans
+      (pushWord_sameContext h3)).advance
+  case mstore | mstore8 =>
+    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
+    obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+    cases h
+    have := ((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
+      (chargeGasAndMemory_sameContext h3)
+    exact ⟨this.message, this.state, this.substate⟩
+  case calldataload =>
+    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
+    obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+    obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+    cases h
+    exact (((popWord_sameContext h1).trans (chargeGas_sameContext h2)).trans
+      (pushWord_sameContext h3)).advance
+  case mcopy | calldatacopy | codecopy =>
+    first
+      | simp only [mcopyStep] at h
+      | simp only [copyToMemory] at h
+    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h3, h⟩ := except_bind_eq_ok h
+    obtain ⟨_, h4, h⟩ := except_bind_eq_ok h
+    cases h
+    have := (((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
+      (popWord_sameContext h3)).trans (chargeGasAndMemory_sameContext h4)
+    exact ⟨this.message, this.state, this.substate⟩
+  case returndatacopy =>
+    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h3, h⟩ := except_bind_eq_ok h
+    obtain ⟨_, h4, h⟩ := except_bind_eq_ok h
+    simp only [throw, throwThe, MonadExceptOf.throw] at h
+    split at h
+    · cases h
+    · cases h
+      have := (((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
+        (popWord_sameContext h3)).trans (chargeGas_sameContext h4)
+      exact ⟨this.message, this.state, this.substate⟩
 
 end EthLib.Execution.Evm

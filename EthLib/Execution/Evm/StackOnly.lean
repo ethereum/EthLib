@@ -32,10 +32,10 @@ namespace EthLib.Execution.Evm
 open EthLib.Base (Fork U256 bytesToNat)
 open GasCosts
 
-variable {Meter : Type} [GasMeter Meter]
+variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- POP: drop the top word. -/
-def popStep (evm : Evm Meter) : Except EvmError (Evm Meter) := do
+def popStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (_, evm) ← popWord evm
   let evm ← chargeGas evm OPCODE_POP
   return advance evm
@@ -49,13 +49,13 @@ def pushData (code : ByteArray) (pc n : Nat) : U256 :=
 /-- PUSHn: push the next `n` bytes of code, then skip them.
 
 PUSH0 costs the base price, by EIP-3855, and the other pushes the very low price. -/
-def pushN (n : Fin 33) (evm : Evm Meter) : Except EvmError (Evm Meter) := do
+def pushN (n : Fin 33) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let evm ← chargeGas evm (if n.val = 0 then OPCODE_PUSH0 else OPCODE_PUSH)
   let evm ← pushWord evm (pushData evm.code evm.pc n)
   return advance evm (1 + n)
 
 /-- DUP(n + 1): push a copy of the word at depth `n`. -/
-def dupN (n : Fin 16) (evm : Evm Meter) : Except EvmError (Evm Meter) := do
+def dupN (n : Fin 16) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let evm ← chargeGas evm OPCODE_DUP
   match evm.stack.val[n.val]? with
   | none => .error .stackUnderflow
@@ -64,7 +64,7 @@ def dupN (n : Fin 16) (evm : Evm Meter) : Except EvmError (Evm Meter) := do
     return advance evm
 
 /-- SWAP(n + 1): exchange the top word with the word at depth `n + 1`. -/
-def swapN (n : Fin 16) (evm : Evm Meter) : Except EvmError (Evm Meter) := do
+def swapN (n : Fin 16) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let evm ← chargeGas evm OPCODE_SWAP
   match evm.stack with
   | ⟨top :: rest, h⟩ =>
@@ -81,7 +81,7 @@ def exponentBytes (exponent : U256) : Nat :=
   (Instructions.bitLength exponent.toNat + 7) / 8
 
 /-- EXP: the base price, plus a price per byte of the exponent that depends on the fork. -/
-def expStep (fork : Fork) (evm : Evm Meter) : Except EvmError (Evm Meter) := do
+def expStep (fork : Fork) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (base, evm) ← popWord evm
   let (exponent, evm) ← popWord evm
   let cost := OPCODE_EXP_BASE + (gasSchedule fork).OPCODE_EXP_PER_BYTE * exponentBytes exponent
@@ -90,7 +90,7 @@ def expStep (fork : Fork) (evm : Evm Meter) : Except EvmError (Evm Meter) := do
   return advance evm
 
 /-- KECCAK256: hash `size` bytes of memory from `start`, after the memory grows to hold them. -/
-def keccak256Step (evm : Evm Meter) : Except EvmError (Evm Meter) := do
+def keccak256Step (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (start, evm) ← popWord evm
   let (size, evm) ← popWord evm
   let cost := OPCODE_KECCAK256_BASE + OPCODE_KECCAK256_PER_WORD * wordCount size.toNat
@@ -104,7 +104,7 @@ def keccak256Step (evm : Evm Meter) : Except EvmError (Evm Meter) := do
 Other opcodes give none.
 
 The fork sets the price of EXP. -/
-def stackOnlyStep (fork : Fork) : Op → Option (Evm Meter → Except EvmError (Evm Meter))
+def stackOnlyStep (fork : Fork) : Op → Option (Evm fork Meter → Except EvmError (Evm fork Meter))
   | .add => some (binaryOp OPCODE_ADD Instructions.add)
   | .mul => some (binaryOp OPCODE_MUL Instructions.mul)
   | .sub => some (binaryOp OPCODE_SUB Instructions.sub)

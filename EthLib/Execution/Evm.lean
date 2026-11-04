@@ -12,6 +12,7 @@ public import EthLib.Execution.Evm.Gas
 public import EthLib.Execution.Evm.Errors
 public import EthLib.Execution.Evm.Op
 public import EthLib.Execution.Evm.Stack
+public import EthLib.Execution.Evm.Environment
 public import EthLib.Execution.Evm.Frame
 public import EthLib.Execution.Evm.Step
 public import EthLib.Execution.Evm.StackOnly
@@ -33,4 +34,6 @@ The precompiled contracts are here too, because only the EVM calls them.
 The gas prices and the price of memory are here.
 
 The opcodes, the stack, the memory and the state of a frame are here, with the gas meter.
+
+The environments of the block and of the transaction are here, with the substate.
 -/
