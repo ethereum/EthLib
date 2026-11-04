@@ -2,6 +2,8 @@ module
 
 public import EthLib.Networking.Encoding.Varint
 public import EthLib.Networking.Gossip.MessageId
+public import EthLib.Networking.Gossip.Subnet
+public import EthLib.Networking.Gossip.Topic
 public import EthLib.Networking.Snappy.Block
 public import EthLib.Networking.Snappy.Frame
 
