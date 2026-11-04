@@ -97,8 +97,9 @@ jobs:
       - name: bindings
         run: bash scripts/build_timing_report.sh run bindings_build "$BUILD_TIMING_RESULTS" -- uv sync --frozen --extra test
 
+      # One test process per core, and the 25 slowest tests in the log.
       - name: vector suites
-        run: bash scripts/build_timing_report.sh run test_path "$BUILD_TIMING_RESULTS" -- uv run --no-sync pytest
+        run: bash scripts/build_timing_report.sh run test_path "$BUILD_TIMING_RESULTS" -- uv run --no-sync pytest -n auto --durations=25
 
       # The generators rewrite every case, so a changed vector shows up as a diff.
       - name: unchanged vectors
