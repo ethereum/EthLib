@@ -162,7 +162,7 @@ the representation it returns may differ from that of `P`.
   on representatives of `a_i * g_1` and `b_i * g_2`,
   the check passes exactly when `sum_i a_i * b_i = 0`.
   Theorems about the result of a pairing check take it as a hypothesis,
-  and the KZG ceremony law `ConcreteBlsLaws` follows from it.
+  among them the theorem on the KZG ceremony checks.
 
 ## What the kernel cannot evaluate
 

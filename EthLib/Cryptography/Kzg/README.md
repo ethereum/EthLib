@@ -170,9 +170,12 @@ Then `msm` returns a valid point equal to `sum_i scalars_i * points_i` in the cu
 
 **The ceremony.**
 The trusted setup came from a ceremony in which many participants each mixed in a secret.
-`checksSufficient`, in `CeremonyChecks.lean`, is about the ceremony's pairing checks.
-They force each point of a contribution to be the expected power of the secret.
-It assumes `ConcreteBlsLaws`, `SubgroupExponents`, and that two points are not at infinity.
+
+`checksSufficient_of_subgroupChecks`, in `CeremonyChecks.lean`, is about the ceremony's pairing checks.
+They force each point of a contribution to represent the expected power of the secret.
+A point represents a scalar when its group element is that multiple of the generator.
+The coordinates of the point do not matter, so the theorem applies to decoded points.
+It assumes the pairing law, the subgroup checks, and that two points are not at infinity.
 
 ## What is not proved
 
@@ -186,9 +189,8 @@ It assumes `ConcreteBlsLaws`, `SubgroupExponents`, and that two points are not a
   if the setup decodes.
   No theorem says that it decodes, that its points lie in the subgroup,
   or that they are powers of one secret.
-- `ConcreteBlsLaws`, the law of the BLS pairing that `checksSufficient` assumes, is not proved.
-  It is `pairingEq_mul_iff`, bilinearity together with non-degeneracy.
-- `SubgroupExponents` stands in for the subgroup checks in `checksSufficient`, and is not proved.
+- The pairing law that the ceremony theorem assumes is not proved.
+  It is bilinearity together with non-degeneracy.
 
 ## What the kernel cannot evaluate
 
