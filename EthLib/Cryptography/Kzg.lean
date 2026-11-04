@@ -8,6 +8,7 @@ public import EthLib.Cryptography.Kzg.TrustedSetup
 public import EthLib.Cryptography.Kzg.Core
 public import EthLib.Cryptography.Kzg.Cells
 public import EthLib.Cryptography.Kzg.Recovery
+public import EthLib.Cryptography.Kzg.VersionedHash
 
 /-!
 # `EthLib.Cryptography.Kzg`

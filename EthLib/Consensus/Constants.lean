@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Hash32
 public import EthLib.Base.U256
+public import EthLib.Cryptography.Kzg.VersionedHash
 public import EthLib.Consensus.Types
 
 /-!
@@ -159,10 +160,10 @@ def SAFE_SLOTS_TO_IMPORT_OPTIMISTICALLY : UInt64 := 128
 /-- From Capella: the domain type of a change of withdrawal credentials to an execution address. -/
 def DOMAIN_BLS_TO_EXECUTION_CHANGE : DomainType := #v[0x0A, 0x00, 0x00, 0x00]
 
-/-- From Deneb: the first byte of the versioned hash of a KZG commitment.
+/-- From Deneb: the first byte of the versioned hash of a KZG commitment, as one byte string.
 
 [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#parameters) defines it. -/
-def VERSIONED_HASH_VERSION_KZG : Vector UInt8 1 := #v[0x01]
+def VERSIONED_HASH_VERSION_KZG : Vector UInt8 1 := #v[Cryptography.Kzg.VERSIONED_HASH_VERSION_KZG]
 
 /-- From Electra: the start index of deposit requests while none is known, `2^64 - 1`. -/
 def UNSET_DEPOSIT_REQUESTS_START_INDEX : UInt64 := UInt64.ofNat (2 ^ 64 - 1)

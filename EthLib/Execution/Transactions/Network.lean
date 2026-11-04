@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Kzg.Cells
+public import EthLib.Cryptography.Kzg.VersionedHash
 public import EthLib.Execution.Transactions.Validity
 
 /-!
@@ -130,7 +131,7 @@ def decodeNetwork (fork : Fork) (bytes : ByteArray) :
 
 /-- The versioned hash of a commitment: `0x01`, then the last 31 bytes of its SHA-256 hash. -/
 def versionedHash (commitment : KZGCommitment) : ByteArray :=
-  Evm.Precompiles.PointEvaluation.kzgCommitmentToVersionedHash ⟨commitment.toArray⟩
+  Cryptography.Kzg.kzgCommitmentToVersionedHash ⟨commitment.toArray⟩
 
 /-- Whether each commitment hashes to the versioned hash at its position. -/
 def hashesMatch (hashes : List Bytes32) (commitments : List KZGCommitment) : Bool :=
