@@ -6,7 +6,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Convert
 /-!
 # The leanXMSS model
 
-leanXMSS (`doc/lean_xmss`) with precomputed keys, a device of the proof.
+leanXMSS with precomputed keys, a device of the proof.
 
 It has two layers of XMSS of height 16.
 

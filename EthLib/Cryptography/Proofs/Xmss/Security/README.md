@@ -53,7 +53,7 @@ The argument, its units and its two lanes are explained in leanerVM's [`lean_xms
 ## Source
 
 The proof is adapted from [Verified-zkEVM/leanerVM](https://github.com/Verified-zkEVM/leanerVM) at commit [`c27abd774a274f745921dc1dd14a6a2c1728c3de`](https://github.com/Verified-zkEVM/leanerVM/tree/c27abd774a274f745921dc1dd14a6a2c1728c3de/lean_xmss), branch `mumbai`, directory `lean_xmss/XmssSecurity/`.
-The scheme it is about is the one of the leanXMSS note at leanVM commit `4af2cdddd7cd41b9df2cc7e123e314a91b0b4462`, the commit EthLib's leanXMSS implements.
+The scheme it is about is EthLib's leanXMSS, in `EthLib/Cryptography/Xmss/`.
 
 ## License
 

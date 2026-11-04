@@ -26,7 +26,9 @@ Its low `h + k a = 266` bits are the fields:
 - `leaf_kappa` is bits `26 + 10 kappa` to `35 + 10 kappa`.
   It is the leaf of FORS tree `kappa` that the signature opens.
 
-The index is in `D_0`, and leaf 23 straddles the two calls.
+The index and leaves 0 to 22 fill the 256 bits of `D_0` exactly.
+
+Leaf 23 is the low 10 bits of `D_1`.
 
 The public key's root is not hashed: `P` already binds the digest to the key.
 

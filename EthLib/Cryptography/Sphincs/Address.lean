@@ -93,7 +93,7 @@ def AddressType.code : AddressType → Fin 32
 
 A one-time key's calls carry its layer and tree, and its leaf in `lo`.
 
-The bottom layer has the most trees, `2^17`, so a tree number fits its 4 bytes. -/
+The bottom layer has the most trees, `2^18`, so a tree number fits its 4 bytes. -/
 
 /-- An address of a one-time key: its layer and tree, and its leaf in `lo`. -/
 def keyAddress (type : AddressType) (step : Fin 8) (key : OtsKey) (hi : Fin (2 ^ 24)) : Address :=
