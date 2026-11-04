@@ -44,6 +44,9 @@ extern size_t RIPEMD160_OUTPUT_BYTES;
 extern size_t SHA256_PRECOMPILE_OUTPUT_BYTES;
 extern size_t SECP256K1_HASH_LEN;
 extern size_t SECP256K1_SIGNATURE_LEN;
+extern size_t SECP256R1_PUBLIC_KEY_LEN;
+extern size_t SECP256R1_HASH_LEN;
+extern size_t SECP256R1_SIGNATURE_LEN;
 
 extern size_t ECRECOVER_GAS;
 
@@ -167,6 +170,8 @@ PyObject* py_sha256_precompile_gas_cost                   (PyObject* self, PyObj
 PyObject* py_secp256k1_verify                             (PyObject* self, PyObject* args);
 PyObject* py_secp256k1_is_low_s                           (PyObject* self, PyObject* args);
 PyObject* py_secp256k1_recover                            (PyObject* self, PyObject* args);
+
+PyObject* py_secp256r1_verify                             (PyObject* self, PyObject* args);
 
 PyObject* py_ecrecover                                    (PyObject* self, PyObject* args);
 
