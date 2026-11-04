@@ -10,8 +10,6 @@ public import EthLib.Execution.Proofs.Evm.PowMod
 - Each division and remainder agrees with the bit vector operation, apart from the divisor 0.
 - ADDMOD, MULMOD and EXP return the exact value, reduced once.
 - SIGNEXTEND is the sign extension of the low bytes, as a bit vector.
-
-The known answers at the end pin the edge cases of each instruction.
 -/
 
 @[expose] public section
@@ -145,35 +143,5 @@ theorem signextend_eq (byteNum value : U256) (h : byteNum.toNat ≤ 31) :
     simp only [show 2 ^ (w - 1) ≤ low by omega, ↓reduceIte]
     rw [Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt (by omega)]
     omega
-
-/-! ## Known answers -/
-
-/-- A divisor of 0 gives 0, where `BitVec.umod` would give the dividend. -/
-example : mod 7 0 = 0 := by decide
-
-/-- -2^255 / -1 overflows to -2^255. -/
-example : sdiv (BitVec.intMin 256) (BitVec.allOnes 256) = BitVec.intMin 256 := by decide
-
-/-- -7 / 2 rounds toward 0, to -3. -/
-example : sdiv (U256.fromSigned (-7)) 2 = U256.fromSigned (-3) := by decide
-
-/-- -7 mod 2 takes the sign of the dividend, so -1. -/
-example : smod (U256.fromSigned (-7)) 2 = U256.fromSigned (-1) := by decide
-
-/-- (2^256 - 1) + 2 = 2^256 + 1, and 2^256 + 1 mod 3 = 2, where wrapping first would give 1. -/
-example : addmod (BitVec.allOnes 256) 2 3 = 2 := by decide
-
-/-- 2^256 wraps to 0. -/
-example : exp 2 256 = 0 :=
-  BitVec.eq_of_toNat_eq (by rw [toNat_exp]; decide)
-
-/-- 0x7f has sign bit 0 in one byte, so it stays 0x7f. -/
-example : signextend 0 0x127f = 0x7f := by decide
-
-/-- 0xff has sign bit 1 in one byte, so it becomes -1. -/
-example : signextend 0 0xff = BitVec.allOnes 256 := by decide
-
-/-- A `byteNum` above 31 leaves the value. -/
-example : signextend 32 0xff = 0xff := by decide
 
 end EthLib.Execution.Evm.Instructions

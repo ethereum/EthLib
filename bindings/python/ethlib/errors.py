@@ -127,6 +127,10 @@ class VrfError(EthLibError, ValueError):
     """A VRF seed was not 32 bytes, with code 0."""
 
 
+class EvmError(EthLibError, ValueError):
+    """An opcode does not push a word of its operands alone, with code 0."""
+
+
 class TrieError(EthLibError, ValueError):
     """A trie has no root, a proof does not verify, or an RLP input is malformed.
 
@@ -173,4 +177,5 @@ __all__ = [
     "TransactionError",
     "VrfError",
     "TrieError",
+    "EvmError",
 ]

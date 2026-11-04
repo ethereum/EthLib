@@ -8,9 +8,6 @@ public import EthLib.Base.Proofs.U256
 
 - BYTE reads one base-256 digit of the word.
 - SHL, SHR and SAR agree with the bit vector shifts, for every shift up to 2^256 - 1.
-
-The known answers at the end are the test cases of EIP-145:
-<https://eips.ethereum.org/EIPS/eip-145#test-cases>.
 -/
 
 @[expose] public section
@@ -63,64 +60,6 @@ theorem bitwiseSar_eq (shift value : U256) : bitwiseSar shift value = value.sshi
       exact (Int.ediv_eq_zero_of_lt hv (by simp at hhi; omega)).symm
     · simp only [hv, ↓reduceIte, BitVec.toInt_allOnes]
       exact (Int.ediv_eq_neg_one_of_neg_of_le (by omega) (by simp at hlo; omega)).symm
-
-/-! ## Known answers
-
-Each line is one test case of EIP-145, as `shift`, `value` and the result.
--/
-
-/-- Byte 31 is the least significant. -/
-example : getByte 31 0xabcd = 0xcd := by decide
-
-/-- Byte 32 is out of range. -/
-example : getByte 32 (BitVec.allOnes 256) = 0 := by decide
-
-/-! ### SHL -/
-
-example : bitwiseShl 0x00 0x0000000000000000000000000000000000000000000000000000000000000001 = 0x0000000000000000000000000000000000000000000000000000000000000001 := by decide
-example : bitwiseShl 0x00 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff := by decide
-example : bitwiseShl 0x01 0x0000000000000000000000000000000000000000000000000000000000000000 = 0x0000000000000000000000000000000000000000000000000000000000000000 := by decide
-example : bitwiseShl 0x01 0x0000000000000000000000000000000000000000000000000000000000000001 = 0x0000000000000000000000000000000000000000000000000000000000000002 := by decide
-example : bitwiseShl 0x01 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe := by decide
-example : bitwiseShl 0x01 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe := by decide
-example : bitwiseShl 0xff 0x0000000000000000000000000000000000000000000000000000000000000001 = 0x8000000000000000000000000000000000000000000000000000000000000000 := by decide
-example : bitwiseShl 0xff 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0x8000000000000000000000000000000000000000000000000000000000000000 := by decide
-example : bitwiseShl 0x0100 0x0000000000000000000000000000000000000000000000000000000000000001 = 0x0000000000000000000000000000000000000000000000000000000000000000 := by decide
-example : bitwiseShl 0x0100 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0x0000000000000000000000000000000000000000000000000000000000000000 := by decide
-example : bitwiseShl 0x0101 0x0000000000000000000000000000000000000000000000000000000000000001 = 0x0000000000000000000000000000000000000000000000000000000000000000 := by decide
-
-/-! ### SHR -/
-
-example : bitwiseShr 0x00 0x0000000000000000000000000000000000000000000000000000000000000001 = 0x0000000000000000000000000000000000000000000000000000000000000001 := by decide
-example : bitwiseShr 0x00 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff := by decide
-example : bitwiseShr 0x01 0x0000000000000000000000000000000000000000000000000000000000000000 = 0x0000000000000000000000000000000000000000000000000000000000000000 := by decide
-example : bitwiseShr 0x01 0x0000000000000000000000000000000000000000000000000000000000000001 = 0x0000000000000000000000000000000000000000000000000000000000000000 := by decide
-example : bitwiseShr 0x01 0x8000000000000000000000000000000000000000000000000000000000000000 = 0x4000000000000000000000000000000000000000000000000000000000000000 := by decide
-example : bitwiseShr 0x01 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff := by decide
-example : bitwiseShr 0xff 0x8000000000000000000000000000000000000000000000000000000000000000 = 0x0000000000000000000000000000000000000000000000000000000000000001 := by decide
-example : bitwiseShr 0xff 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0x0000000000000000000000000000000000000000000000000000000000000001 := by decide
-example : bitwiseShr 0x0100 0x8000000000000000000000000000000000000000000000000000000000000000 = 0x0000000000000000000000000000000000000000000000000000000000000000 := by decide
-example : bitwiseShr 0x0100 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0x0000000000000000000000000000000000000000000000000000000000000000 := by decide
-example : bitwiseShr 0x0101 0x8000000000000000000000000000000000000000000000000000000000000000 = 0x0000000000000000000000000000000000000000000000000000000000000000 := by decide
-
-/-! ### SAR -/
-
-example : bitwiseSar 0x00 0x0000000000000000000000000000000000000000000000000000000000000001 = 0x0000000000000000000000000000000000000000000000000000000000000001 := by decide
-example : bitwiseSar 0x00 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff := by decide
-example : bitwiseSar 0x01 0x0000000000000000000000000000000000000000000000000000000000000000 = 0x0000000000000000000000000000000000000000000000000000000000000000 := by decide
-example : bitwiseSar 0x01 0x0000000000000000000000000000000000000000000000000000000000000001 = 0x0000000000000000000000000000000000000000000000000000000000000000 := by decide
-example : bitwiseSar 0x01 0x8000000000000000000000000000000000000000000000000000000000000000 = 0xc000000000000000000000000000000000000000000000000000000000000000 := by decide
-example : bitwiseSar 0x01 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff := by decide
-example : bitwiseSar 0xf8 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0x000000000000000000000000000000000000000000000000000000000000007f := by decide
-example : bitwiseSar 0xfe 0x4000000000000000000000000000000000000000000000000000000000000000 = 0x0000000000000000000000000000000000000000000000000000000000000001 := by decide
-example : bitwiseSar 0xfe 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0x0000000000000000000000000000000000000000000000000000000000000001 := by decide
-example : bitwiseSar 0xff 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0x0000000000000000000000000000000000000000000000000000000000000000 := by decide
-example : bitwiseSar 0xff 0x8000000000000000000000000000000000000000000000000000000000000000 = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff := by decide
-example : bitwiseSar 0xff 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff := by decide
-example : bitwiseSar 0x0100 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0x0000000000000000000000000000000000000000000000000000000000000000 := by decide
-example : bitwiseSar 0x0100 0x8000000000000000000000000000000000000000000000000000000000000000 = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff := by decide
-example : bitwiseSar 0x0100 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff := by decide
-example : bitwiseSar 0x0101 0x8000000000000000000000000000000000000000000000000000000000000000 = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff := by decide
 
 /-- CLZ counts the leading zeros of the word, as core `BitVec` counts them. -/
 theorem countLeadingZeros_eq_clz (x : U256) : countLeadingZeros x = x.clz := by

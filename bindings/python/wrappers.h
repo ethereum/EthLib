@@ -162,6 +162,7 @@ extern PyObject* RLPX_ERROR;
 extern PyObject* TRANSACTION_ERROR;
 extern PyObject* VRF_ERROR;
 extern PyObject* TRIE_ERROR;
+extern PyObject* EVM_ERROR;
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
@@ -282,6 +283,10 @@ PyObject* py_reqresp_decode_payload                       (PyObject* self, PyObj
 PyObject* py_reqresp_decode_response_chunk                (PyObject* self, PyObject* args);
 PyObject* py_block_header_hash                            (PyObject* self, PyObject* args);
 PyObject* py_block_reencode                               (PyObject* self, PyObject* args);
+PyObject* py_evm_word_op                                  (PyObject* self, PyObject* args);
+PyObject* py_evm_memory_gas_cost                          (PyObject* self, PyObject* args);
+PyObject* py_evm_extend_memory_cost                       (PyObject* self, PyObject* args);
+PyObject* py_evm_extend_memory_expand_by                  (PyObject* self, PyObject* args);
 PyObject* py_rlp_encode                                   (PyObject* self, PyObject* args);
 PyObject* py_rlp_decode                                   (PyObject* self, PyObject* args);
 PyObject* py_rlp_decode_as                                (PyObject* self, PyObject* args);
