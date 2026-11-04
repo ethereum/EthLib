@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Proofs.Transactions.Envelope
+public import EthLib.Execution.Proofs.Transactions.Signature
 
 /-!
 # `EthLib.Execution.Proofs.Transactions`

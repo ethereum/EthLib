@@ -261,6 +261,10 @@ inductive TransactionError where
   | unsupportedType (type : UInt8)
   /-- The RLP of the transaction holds no value of its kind. -/
   | decoding (error : RlpError)
+  /-- The fields that a signature covers have no RLP encoding, since a payload is too long. -/
+  | encoding (error : RlpError)
+  /-- The signature names no sender: a value is out of range, or no public key comes back. -/
+  | invalidSignature
   deriving DecidableEq, Repr
 
 end EthLib.Execution.Transactions
