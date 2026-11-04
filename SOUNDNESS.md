@@ -274,14 +274,15 @@ No theorem relates the module to the execution-specs code it follows.
 
 ### BLAKE2F
 
-The theorems pin down the input format exactly, and leave the compression function F to known answers.
+The theorems pin down the input format exactly, and leave the compression function F to test vectors.
 `blake2f_invalidLength`, `blake2f_invalidFlag` and `blake2f_ok` (`Execution/Proofs/Evm/Precompiles/Blake2f.lean`) prove that a call fails exactly when the input is not 213 bytes long, or its flag byte is neither `0` nor `1`.
 Otherwise it returns `compute` of the input, which decodes the fields and runs F of RFC 7693 on them.
 `readWord_toNat`, `readRounds_toNat` and `writeState_word` state the encoding of EIP-152 for every input: the rounds field big-endian, every word little-endian, and the output in the encoding of the input.
 
-F itself is checked by known answers only (`Cryptography/Proofs/Hash/Blake2b.lean` and `Execution/Proofs/Evm/Precompiles/Blake2f.lean`).
-They are RFC 7693 Appendix A, one full block of the BLAKE2 test vectors, test vectors 4 to 7 of EIP-152, the rounds field of test vector 8, and one call that sets `t1`.
-No theorem states the output of test vector 8, which asks for `2^32 - 1` rounds.
+F itself is checked by the Python tests only (`bindings/python/tests/precompile/test_blake2f.py`).
+They run test vectors 0 to 7 of EIP-152, and read the rounds field of test vector 8.
+They also run one full block of the BLAKE2 test vectors, and one call that sets `t1`.
+Test vector 8 asks for `2^32 - 1` rounds, so nothing checks its output.
 
 ### ECRECOVER
 

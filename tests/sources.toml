@@ -26,6 +26,9 @@ directories = ["tests/cryptography/bls"]
 commit = "d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9"
 directories = ["tests/cryptography/secp256k1", "tests/cryptography/secp256r1"]
 
+[repositories."BLAKE2/BLAKE2"]
+commit = "ed1974ea83433eba7b2d95c5dcd9ac33cb847913"
+
 [repositories."ethereum/EIPs"]
 commit = "d386b29b5a31bd5cfd8d21bbf4e8a0c87734085e"
 

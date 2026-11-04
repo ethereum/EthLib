@@ -39,19 +39,16 @@ The remaining statements check the constants of F against their definitions in R
 Each word of the initialization vector IV comes from the square root of its prime, as RFC 7693 §2.6 defines it.
 Each row of the message schedule is a permutation of the 16 message words, and round `i` uses row `i mod 10` of the schedule.
 
-## Known answers
+## Test vectors
 
-All of these are checked by the kernel:
-
-- test vectors 0 to 7 of EIP-152, run through the whole precompile;
-- the rounds field of test vector 8;
-- RFC 7693 Appendix A, on F;
-- BLAKE2b-512 of the 128 bytes `0x00` to `0x7f`, on F and through the precompile;
-- test vector 5 with `t1 = 1`.
+The Python tests in `bindings/python/tests/precompile/test_blake2f.py` run the precompile through the bindings.
+They check test vectors 0 to 7 of EIP-152, and the rounds field of test vector 8.
+They also check BLAKE2b-512 of the 128 bytes `0x00` to `0x7f`, and test vector 5 with `t1 = 1`.
+An independent Python transcription of F confirms the last value, which no published vector gives.
 
 ## Not proved
 
 No theorem relates F to another statement of RFC 7693 §3.2.
 The code transcribes §3.2 line by line instead.
 
-The output of test vector 8 is not checked, because it asks for `2^32 - 1` rounds, and the kernel cannot evaluate that many.
+The output of test vector 8 is not checked, because it asks for `2^32 - 1` rounds.
