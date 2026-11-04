@@ -1,0 +1,92 @@
+module
+
+public import EthLib.Cryptography.Aes.Gcm
+public import EthLib.Cryptography.Proofs.Aes.Ctr
+
+/-!
+# Proofs: `Aes.Gcm`
+
+Decryption of an honest ciphertext returns its plaintext.
+
+Decryption accepts no tag other than the honest one.
+
+Both hold for every forward cipher, so for AES under every key.
+-/
+
+@[expose] public section
+
+namespace EthLib.Cryptography.Aes.Gcm
+
+/-- A result that converts to `some a` is `.ok a`. -/
+theorem eq_ok_of_toOption {ε α : Type} {x : Except ε α} {a : α} (h : x.toOption = some a) :
+    x = .ok a := by
+  cases x <;> simp_all [Except.toOption]
+
+/-- The length checks read the text only through its length. -/
+theorem checkLengths_congr (t : Nat) (iv aad : ByteArray) {p c : ByteArray} (h : c.size = p.size) :
+    checkLengths t iv c aad = checkLengths t iv p aad := by
+  simp only [checkLengths, h]
+
+/-- A tag has `t` bytes for every tag length of §5.2.1.2. -/
+theorem size_tag (ciph : Block → Block) {t : Nat} (ht : t ∈ tagLengths) (H J0 : Block)
+    (aad c : ByteArray) : (tag ciph t H J0 aad c).size = t := by
+  have h16 : t ≤ 16 := by
+    simp only [tagLengths, List.mem_cons, List.not_mem_nil, or_false] at ht
+    omega
+  unfold tag
+  rw [ByteArray.size_extract, gctr, size_ctr]
+  -- The block `S` has 16 bytes, so the tag keeps the first `t` of them.
+  rw [show ∀ a : Array UInt8, (ByteArray.mk a).size = a.size from fun _ => rfl,
+    Vector.size_toArray]
+  omega
+
+theorem mem_of_checkLengths {t : Nat} {iv text aad : ByteArray}
+    (h : checkLengths t iv text aad = .ok ()) : t ∈ tagLengths := by
+  unfold checkLengths at h
+  by_cases ht : t ∈ tagLengths
+  · exact ht
+  · simp [ht] at h
+    contradiction
+
+/-- Decryption of an honest ciphertext and tag returns the plaintext, SP 800-38D §7.2. -/
+theorem decrypt_encrypt (ciph : Block → Block) (t : Nat) (iv p aad c T : ByteArray)
+    (h : encrypt ciph t iv p aad = .ok (c, T)) : decrypt ciph t iv c aad T = .ok p := by
+  unfold encrypt at h
+  cases hc : checkLengths t iv p aad with
+  | error e =>
+    rw [hc] at h
+    cases h
+  | ok u =>
+    rw [hc] at h
+    -- The ciphertext and the tag are the ones encryption computed.
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (Except.ok.inj h)
+    have hs := size_ctr ciph 32 (inc 32 (preCounter (ciph zeroBlock) iv)) p
+    unfold decrypt
+    rw [gctr, checkLengths_congr t iv aad hs, hc]
+    simp only [size_tag ciph (mem_of_checkLengths hc), gctr, ctr_ctr]
+    rfl
+
+/-- Decryption fails on every tag other than the honest one. -/
+theorem decrypt_eq_ok (ciph : Block → Block) (t : Nat) (iv p aad c T T' q : ByteArray)
+    (h : encrypt ciph t iv p aad = .ok (c, T)) (h' : decrypt ciph t iv c aad T' = .ok q) :
+    T' = T := by
+  unfold encrypt at h
+  cases hc : checkLengths t iv p aad with
+  | error e =>
+    rw [hc] at h
+    cases h
+  | ok u =>
+    rw [hc] at h
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj (Except.ok.inj h)
+    have hs := size_ctr ciph 32 (inc 32 (preCounter (ciph zeroBlock) iv)) p
+    unfold decrypt at h'
+    rw [gctr, checkLengths_congr t iv aad hs, hc] at h'
+    -- Decryption returns a plaintext only after its tag comparison succeeds.
+    by_cases same : T' = tag ciph t (ciph zeroBlock) (preCounter (ciph zeroBlock) iv) aad
+      (gctr ciph (inc 32 (preCounter (ciph zeroBlock) iv)) p)
+    · exact same
+    · rw [gctr] at same
+      simp only [same, ite_false] at h'
+      split at h' <;> cases h'
+
+end EthLib.Cryptography.Aes.Gcm
