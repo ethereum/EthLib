@@ -459,6 +459,14 @@ def evm_extend_memory_expand_by(current_size: bytes, ranges: bytes) -> bytes:
     """The number of bytes that a memory grows by for a list of ranges."""
     ...
 
+def evm_create_address(sender: bytes, nonce: bytes) -> bytes:
+    """The address of the contract that a sender makes with CREATE at a big-endian nonce."""
+    ...
+
+def evm_create2_address(sender: bytes, salt: bytes, init_code: bytes) -> bytes:
+    """The address of the contract that a sender makes with CREATE2, from a salt and init code."""
+    ...
+
 def rlp_encode(item: Any) -> bytes:
     """`RLP` of the Yellow Paper: the encoding of an item."""
     ...

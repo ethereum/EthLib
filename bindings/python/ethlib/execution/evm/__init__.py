@@ -1,4 +1,4 @@
-"""The words that EVM stack instructions push, and the price of EVM memory."""
+"""The words of EVM stack instructions, the price of EVM memory and created addresses."""
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -43,4 +43,14 @@ def extend_memory(current_size: int, ranges: list[tuple[int, int]]) -> tuple[int
     return cost, expand_by
 
 
-__all__ = ["word_op", "memory_gas_cost", "extend_memory"]
+def create_address(sender: bytes, nonce: int) -> bytes:
+    """The address of the contract that `sender` creates with CREATE at `nonce`."""
+    return _native.evm_create_address(sender, _number(nonce))
+
+
+def create2_address(sender: bytes, salt: bytes, init_code: bytes) -> bytes:
+    """The address of the contract that `sender` creates with CREATE2."""
+    return _native.evm_create2_address(sender, salt, init_code)
+
+
+__all__ = ["word_op", "memory_gas_cost", "extend_memory", "create_address", "create2_address"]

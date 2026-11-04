@@ -2125,6 +2125,40 @@
    "error_class": null,
    "docstring":
    "The number of bytes that a memory grows by for a list of ranges."},
+  {"summary":
+   "The address of the contract that a sender makes with CREATE at a big-endian nonce.",
+   "signature": "(sender: bytes, nonce: bytes) -> bytes",
+   "operation": "EthLib.Execution.Evm.Exports.createAddressExport",
+   "method": "evm_create_address",
+   "errors":
+   [{"type": "EthLib.Serialization.Rlp.RlpError",
+     "codes":
+     [{"constructor": "payloadTooLong", "code": 1},
+      {"constructor": "inputTooShort", "code": 2},
+      {"constructor": "singleByteWithPrefix", "code": 3},
+      {"constructor": "longFormForShortLength", "code": 4},
+      {"constructor": "leadingZeroInLength", "code": 5},
+      {"constructor": "trailingBytes", "code": 6},
+      {"constructor": "leadingZeroInScalar", "code": 7},
+      {"constructor": "listAsScalar", "code": 8},
+      {"constructor": "listAsBytes", "code": 9},
+      {"constructor": "bytesAsList", "code": 10},
+      {"constructor": "wrongLength", "code": 11},
+      {"constructor": "scalarTooLarge", "code": 12},
+      {"constructor": "wrongFieldCount", "code": 13},
+      {"constructor": "inField", "code": 14}]}],
+   "error_class": "RlpError",
+   "docstring":
+   "The address of the contract that a sender makes with CREATE at a big-endian nonce."},
+  {"summary":
+   "The address of the contract that a sender makes with CREATE2, from a salt and init code.",
+   "signature": "(sender: bytes, salt: bytes, init_code: bytes) -> bytes",
+   "operation": "EthLib.Execution.Evm.Exports.create2AddressExport",
+   "method": "evm_create2_address",
+   "errors": [],
+   "error_class": null,
+   "docstring":
+   "The address of the contract that a sender makes with CREATE2, from a salt and init code."},
   {"summary": "`RLP` of the Yellow Paper: the encoding of an item.",
    "signature": "(item: Any) -> bytes",
    "operation": "EthLib.Serialization.Rlp.encode",

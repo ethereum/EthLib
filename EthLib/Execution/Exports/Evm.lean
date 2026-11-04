@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports
+public import EthLib.Execution.Evm.ContractAddress
 public import EthLib.Execution.Evm.Gas
 public import EthLib.Execution.Evm.Op
 public import EthLib.Execution.Evm.Instructions.Arithmetic
@@ -10,7 +11,7 @@ public import EthLib.Execution.Evm.Instructions.Comparison
 /-!
 # `Exports.Evm`
 
-C-ABI exports of the word that a stack instruction pushes, and of the price of memory.
+C-ABI exports of the word of a stack instruction, the price of memory and created addresses.
 
 A word crosses the boundary as 32 big-endian bytes.
 
@@ -23,7 +24,7 @@ public section
 
 namespace EthLib.Execution.Evm.Exports
 
-open EthLib.Base (U256 bytesToNat natToBytes)
+open EthLib.Base (Address U256 bytesToNat natToBytes)
 open EthLib.Exports (Result)
 open EthLib.Execution.Evm.Instructions
 
@@ -106,5 +107,20 @@ def extendMemoryCostExport (size ranges : ByteArray) : ByteArray :=
 @[export eth_evm_extend_memory_expand_by]
 def extendMemoryExpandByExport (size ranges : ByteArray) : ByteArray :=
   bytesOfNat (extendMemory (bytesToNat size.toList) (rangesOf ranges)).expandBy
+
+/-- The address in the first 20 bytes, with zeros past the end; the caller passes 20 bytes. -/
+def addressOf (bytes : ByteArray) : Address :=
+  Vector.ofFn fun i => bytes.get! i
+
+/-- The address of the contract that a sender makes with CREATE at a big-endian nonce. -/
+@[export eth_evm_create_address]
+def createAddressExport (sender nonce : ByteArray) : Result ByteArray :=
+  (createAddress (addressOf sender) (bytesToNat nonce.toList)).map (fun a => ⟨a.toArray⟩)
+    |>.mapError fun e => (e.code, s!"create preimage rejected: {reprStr e}")
+
+/-- The address of the contract that a sender makes with CREATE2, from a salt and init code. -/
+@[export eth_evm_create2_address]
+def create2AddressExport (sender salt initCode : ByteArray) : ByteArray :=
+  ⟨(create2Address (addressOf sender) (wordOf salt) initCode).toArray⟩
 
 end EthLib.Execution.Evm.Exports

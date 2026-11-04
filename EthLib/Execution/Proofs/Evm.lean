@@ -19,6 +19,7 @@ public import EthLib.Execution.Proofs.Evm.Return
 public import EthLib.Execution.Proofs.Evm.CallGas
 public import EthLib.Execution.Proofs.Evm.EnvironmentData
 public import EthLib.Execution.Proofs.Evm.AccountData
+public import EthLib.Execution.Proofs.Evm.ContractAddress
 public import EthLib.Execution.Proofs.Evm.JumpDest
 public import EthLib.Execution.Proofs.Evm.ControlFlow
 

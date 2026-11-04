@@ -631,6 +631,8 @@ static PyMethodDef methods[] = {
   {"evm_memory_gas_cost", py_evm_memory_gas_cost, METH_VARARGS, DOC_evm_memory_gas_cost},
   {"evm_extend_memory_cost", py_evm_extend_memory_cost, METH_VARARGS, DOC_evm_extend_memory_cost},
   {"evm_extend_memory_expand_by", py_evm_extend_memory_expand_by, METH_VARARGS, DOC_evm_extend_memory_expand_by},
+  {"evm_create_address", py_evm_create_address, METH_VARARGS, DOC_evm_create_address},
+  {"evm_create2_address", py_evm_create2_address, METH_VARARGS, DOC_evm_create2_address},
   {"rlp_encode", py_rlp_encode, METH_VARARGS, DOC_rlp_encode},
   {"rlp_decode", py_rlp_decode, METH_VARARGS, DOC_rlp_decode},
   {"rlp_decode_as", py_rlp_decode_as, METH_VARARGS, DOC_rlp_decode_as},

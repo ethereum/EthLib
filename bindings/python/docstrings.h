@@ -344,6 +344,12 @@
 #define DOC_evm_extend_memory_expand_by \
   "The number of bytes that a memory grows by for a list of ranges."
 
+#define DOC_evm_create_address \
+  "The address of the contract that a sender makes with CREATE at a big-endian nonce."
+
+#define DOC_evm_create2_address \
+  "The address of the contract that a sender makes with CREATE2, from a salt and init code."
+
 #define DOC_rlp_encode \
   "`RLP` of the Yellow Paper: the encoding of an item."
 
