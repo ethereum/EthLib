@@ -119,6 +119,10 @@ class RlpxError(EthLibError, ValueError):
     """
 
 
+class Devp2pError(EthLibError, ValueError):
+    """A message of the devp2p "p2p" capability was rejected."""
+
+
 class TransactionError(EthLibError, ValueError):
     """A transaction was rejected, or no fork has the name given."""
 
@@ -174,6 +178,7 @@ __all__ = [
     "VarintError",
     "Discv5Error",
     "RlpxError",
+    "Devp2pError",
     "TransactionError",
     "VrfError",
     "TrieError",

@@ -159,6 +159,7 @@ extern PyObject* SNAPPY_ERROR;
 extern PyObject* VARINT_ERROR;
 extern PyObject* DISCV5_ERROR;
 extern PyObject* RLPX_ERROR;
+extern PyObject* DEVP2P_ERROR;
 extern PyObject* TRANSACTION_ERROR;
 extern PyObject* VRF_ERROR;
 extern PyObject* TRIE_ERROR;
@@ -302,6 +303,8 @@ PyObject* py_gossip_message_id_altair                     (PyObject* self, PyObj
 
 PyObject* py_rlpx_ecies_encrypt                           (PyObject* self, PyObject* args);
 PyObject* py_rlpx_ecies_decrypt                           (PyObject* self, PyObject* args);
+PyObject* py_devp2p_decode_message                        (PyObject* self, PyObject* args);
+PyObject* py_devp2p_encode_message                        (PyObject* self, PyObject* args);
 PyObject* py_receipt_reencode                             (PyObject* self, PyObject* args);
 PyObject* py_receipt_logs_bloom                           (PyObject* self, PyObject* args);
 PyObject* py_tx_type                                      (PyObject* self, PyObject* args);
