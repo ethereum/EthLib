@@ -2,6 +2,7 @@ module
 
 public import EthLib.Networking.Enr.V4
 public import EthLib.Cryptography.Proofs.Hash.Keccak256
+public import EthLib.Cryptography.Proofs.Hash.KeccakKernel
 
 /-!
 # Proofs: the test vector of EIP-778
