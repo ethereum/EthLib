@@ -22,15 +22,6 @@ open EthLib.Cryptography.Xmss.Constants
 
 /-! ## The encoding is injective -/
 
-/-- Two concatenations with first parts of the same length agree part by part. -/
-private theorem vector_append_inj {n m : Nat} {a c : Vector UInt8 n} {b d : Vector UInt8 m}
-    (h : a ++ b = c ++ d) : a = c ∧ b = d := by
-  -- Compare the underlying arrays, whose first parts have the same size.
-  have := congrArg Vector.toArray h
-  simp only [Vector.toArray_append] at this
-  obtain ⟨ha, hb⟩ := Array.append_inj this (by simp)
-  exact ⟨Vector.toArray_inj.mp ha, Vector.toArray_inj.mp hb⟩
-
 /-- The 16 bytes of an address determine its type, position and both fields.
 
 ```text
@@ -47,9 +38,9 @@ theorem encodeAddress_inj {tau tau' : Fin 32} {mu mu' : Fin 8} {hi hi' : Fin (2 
   constructor
   · intro h
     -- Peel the zero tail, then the type byte, then the two fields.
-    obtain ⟨h, -⟩ := vector_append_inj h
-    obtain ⟨h, htype⟩ := vector_append_inj h
-    obtain ⟨hlo, hhi⟩ := vector_append_inj h
+    obtain ⟨h, -⟩ := Vector.append_inj h
+    obtain ⟨h, htype⟩ := Vector.append_inj h
+    obtain ⟨hlo, hhi⟩ := Vector.append_inj h
     -- Each field is below the range its bytes cover.
     have lo_eq := Base.uintToBytes_inj lo.toNat_lt_size lo'.toNat_lt_size hlo
     have hi_eq := Base.uintToBytes_inj (k := 3) hi.isLt hi'.isLt hhi

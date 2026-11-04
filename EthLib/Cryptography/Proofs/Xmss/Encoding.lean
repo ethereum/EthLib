@@ -132,38 +132,38 @@ So a signature for one codeword reaches another only if that one dominates it.
 
 A constant digit sum rules that out. -/
 
-/-- Pointwise domination with equal sums forces equality. -/
-theorem eq_of_le_of_sum_eq
-    (hle : ∀ i : Fin V, (x[i] : Nat) ≤ (y[i] : Nat))
-    (hsum : ∑ i : Fin V, (x[i] : Nat) = ∑ i : Fin V, (y[i] : Nat)) : x = y := by
-  by_contra hne
-  -- Unequal vectors differ at some index.
-  obtain ⟨j, hj⟩ : ∃ j : Fin V, (x[j] : Nat) ≠ (y[j] : Nat) := by
-    by_contra hall
-    simp only [not_exists, not_not] at hall
-    exact hne (Vector.ext fun i hi => Fin.val_inj.mp (hall ⟨i, hi⟩))
-  -- One strict index among weak ones makes the whole sum strict.
-  have hlt : ∑ i : Fin V, (x[i] : Nat) < ∑ i : Fin V, (y[i] : Nat) :=
-    Finset.sum_lt_sum (fun i _ => hle i)
-      ⟨j, Finset.mem_univ j, lt_of_le_of_ne (hle j) hj⟩
-  omega
+/-- Pointwise domination with equal sums forces equality.
+
+It holds for any number of digits and any digit range, so leanSPHINCS uses it too. -/
+theorem eq_of_le_of_sum_eq {n k : Nat} {x y : Vector (Fin k) n}
+    (hle : ∀ i : Fin n, (x[i] : Nat) ≤ (y[i] : Nat))
+    (hsum : ∑ i : Fin n, (x[i] : Nat) = ∑ i : Fin n, (y[i] : Nat)) : x = y := by
+  -- Equal sums of dominated terms force every term to be equal.
+  have heq := (Finset.sum_eq_sum_iff_of_le fun i _ => hle i).mp hsum
+  exact Vector.ext fun i hi => Fin.val_inj.mp (heq ⟨i, hi⟩ (Finset.mem_univ _))
+
+/-- Two distinct digit vectors with equal sums are incomparable: each has a digit below the other's.
+
+It holds for any number of digits and any digit range, so leanSPHINCS uses it too. -/
+theorem incomparable_of_sum_eq {n k : Nat} {x y : Vector (Fin k) n}
+    (hsum : ∑ i : Fin n, (x[i] : Nat) = ∑ i : Fin n, (y[i] : Nat)) (hne : x ≠ y) :
+    (∃ i : Fin n, (x[i] : Nat) < (y[i] : Nat)) ∧ (∃ i : Fin n, (y[i] : Nat) < (x[i] : Nat)) := by
+  constructor
+  -- Were one never to exceed the other, equal sums would make them equal.
+  · by_contra hno
+    simp only [not_exists, Nat.not_lt] at hno
+    exact hne (eq_of_le_of_sum_eq hno hsum.symm).symm
+  · by_contra hno
+    simp only [not_exists, Nat.not_lt] at hno
+    exact hne (eq_of_le_of_sum_eq hno hsum)
 
 /-- Two distinct codewords are incomparable: each has a digit below the other's.
 
 Neither can be reached from the other by walking chains forward. -/
 theorem codeword_incomparable (hx : codeword? d = some x) (hy : codeword? d' = some y)
     (hne : x ≠ y) :
-    (∃ i : Fin V, (x[i] : Nat) < (y[i] : Nat)) ∧ (∃ i : Fin V, (y[i] : Nat) < (x[i] : Nat)) := by
+    (∃ i : Fin V, (x[i] : Nat) < (y[i] : Nat)) ∧ (∃ i : Fin V, (y[i] : Nat) < (x[i] : Nat)) :=
   -- Both sums are the target, so they agree.
-  have sx := sum_of_codeword hx
-  have sy := sum_of_codeword hy
-  constructor
-  -- Were one never to exceed the other, equal sums would make them equal.
-  · by_contra hno
-    simp only [not_exists, Nat.not_lt] at hno
-    exact hne (eq_of_le_of_sum_eq hno (sy.trans sx.symm)).symm
-  · by_contra hno
-    simp only [not_exists, Nat.not_lt] at hno
-    exact hne (eq_of_le_of_sum_eq hno (sx.trans sy.symm))
+  incomparable_of_sum_eq ((sum_of_codeword hx).trans (sum_of_codeword hy).symm) hne
 
 end EthLib.Cryptography.Xmss
