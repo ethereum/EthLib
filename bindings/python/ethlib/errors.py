@@ -136,7 +136,7 @@ class Discv4Error(EthLibError, ValueError):
 
 
 class TransactionError(EthLibError, ValueError):
-    """A transaction was rejected, or no fork has the name given."""
+    """A transaction or its network form was rejected, or a fork name is unknown."""
 
 
 class VrfError(EthLibError, ValueError):

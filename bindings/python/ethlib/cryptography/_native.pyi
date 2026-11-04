@@ -547,6 +547,10 @@ def tx_check(fork: str, chain_id: int, tx: bytes) -> bytes:
     """Check a transaction alone on the chain `chainId`."""
     ...
 
+def tx_network_check(fork: str, network: bytes) -> bytes:
+    """Check the network form of a blob transaction at the named fork."""
+    ...
+
 def rlpx_make_auth(static_key: bytes, ephemeral_key: bytes, nonce: bytes, recipient: bytes, r: bytes, iv: bytes, padding: bytes) -> bytes:
     """The packet `auth` from the initiator to the recipient's public key."""
     ...

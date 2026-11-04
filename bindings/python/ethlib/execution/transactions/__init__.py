@@ -29,6 +29,11 @@ def intrinsic_gas(fork: str, tx: bytes) -> int:
     return _native.tx_intrinsic_gas(fork, tx)
 
 
+def network_check(fork: str, network: bytes) -> bytes:
+    """Check the network form of a blob transaction, and return the transaction alone."""
+    return _native.tx_network_check(fork, network)
+
+
 class Checked(NamedTuple):
     """The sender and the intrinsic gas of a transaction that passes the checks."""
 
@@ -46,6 +51,7 @@ __all__ = [
     "Checked",
     "check",
     "intrinsic_gas",
+    "network_check",
     "recover_sender",
     "tx_hash",
     "tx_type",

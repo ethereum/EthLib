@@ -2,6 +2,8 @@ module
 
 public import EthLib.Base.Exports
 public import EthLib.Execution.Exports.Blocks
+public import EthLib.Cryptography.Exports.Kzg
+public import EthLib.Execution.Transactions.Network
 public import EthLib.Execution.Transactions.Validity
 
 /-!
@@ -16,6 +18,10 @@ Each operation decodes the transaction at the fork first.
 A rejection comes back as the code and the message of its error.
 
 The message of an error names the rule that failed, so a test can match it.
+
+The network form of a blob transaction keeps the codes of transaction errors.
+
+Its own errors about the blobs take codes from 101.
 -/
 
 public section
@@ -91,5 +97,34 @@ def checkExport (fork : ByteArray) (chainId : UInt64) (bytes : ByteArray) : Resu
   let gas ← gasToUInt64 gas
   return ⟨sender.toArray ++ (List.range 8).reverse.toArray.map
     fun i => (gas >>> UInt64.ofNat (8 * i)).toUInt8⟩
+
+/-! ## The network form of blob transactions -/
+
+/-- A message for a rejection of the network form, phrased for a Python traceback. -/
+def networkMessage : NetworkError → String
+  | .transaction e => message e
+  | .wrongVersion v => s!"wrapper version {v} is not {WRAPPER_VERSION}"
+  | .countMismatch h b c p =>
+    s!"{h} versioned hashes, {b} blobs, {c} commitments and {p} proofs do not match"
+  | .versionedHashMismatch => "a commitment does not hash to its versioned hash"
+  | .kzg e => s!"kzg: {e.message}"
+  | .proofRejected => "the proofs do not verify"
+
+/-- Run a fallible computation on the network form, with its error as a code and a message. -/
+def runNetwork {α : Type} (act : Except NetworkError α) : Result α :=
+  act.mapError fun e => (e.code, networkMessage e)
+
+/--
+Check the network form of a blob transaction at the named fork.
+
+It returns the bytes of the transaction alone, as a block holds it.
+-/
+@[export eth_tx_network_check]
+def networkCheckExport (fork bytes : ByteArray) : Result ByteArray := do
+  let fork ← forkOfName fork
+  let w ← runNetwork (decodeNetwork fork bytes)
+  let setup ← runNetwork (Cryptography.Kzg.Exports.embeddedSetup.mapError .kzg)
+  runNetwork (validateNetwork setup fork w)
+  runNetwork ((encodeTransaction (.blob w.tx)).mapError (.transaction ∘ .encoding))
 
 end EthLib.Execution.Transactions.Exports

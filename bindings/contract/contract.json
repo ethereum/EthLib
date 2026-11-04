@@ -2762,6 +2762,22 @@
    "error_class": "TransactionError",
    "docstring":
    "Check a transaction alone on the chain `chainId`.\n\nIt returns 28 bytes: the 20-byte sender, then the intrinsic gas as 8 big-endian bytes."},
+  {"summary": "Check the network form of a blob transaction at the named fork.",
+   "signature": "(fork: str, network: bytes) -> bytes",
+   "operation": "EthLib.Execution.Transactions.Exports.networkCheckExport",
+   "method": "tx_network_check",
+   "errors":
+   [{"type": "EthLib.Execution.Transactions.NetworkError",
+     "codes":
+     [{"constructor": "transaction", "code": null},
+      {"constructor": "wrongVersion", "code": 101},
+      {"constructor": "countMismatch", "code": 102},
+      {"constructor": "versionedHashMismatch", "code": 103},
+      {"constructor": "kzg", "code": 104},
+      {"constructor": "proofRejected", "code": 105}]}],
+   "error_class": "TransactionError",
+   "docstring":
+   "Check the network form of a blob transaction at the named fork.\n\nIt returns the bytes of the transaction alone, as a block holds it."},
   {"summary":
    "The packet `auth` from the initiator to the recipient's public key.",
    "signature":

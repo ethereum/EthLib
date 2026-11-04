@@ -652,6 +652,7 @@ static PyMethodDef methods[] = {
   {"tx_recover_sender", py_tx_recover_sender, METH_VARARGS, DOC_tx_recover_sender},
   {"tx_intrinsic_gas", py_tx_intrinsic_gas, METH_VARARGS, DOC_tx_intrinsic_gas},
   {"tx_check", py_tx_check, METH_VARARGS, DOC_tx_check},
+  {"tx_network_check", py_tx_network_check, METH_VARARGS, DOC_tx_network_check},
   {"rlpx_make_auth", py_rlpx_make_auth, METH_VARARGS, DOC_rlpx_make_auth},
   {"rlpx_respond", py_rlpx_respond, METH_VARARGS, DOC_rlpx_respond},
   {"rlpx_recipient_secrets", py_rlpx_recipient_secrets, METH_VARARGS, DOC_rlpx_recipient_secrets},
