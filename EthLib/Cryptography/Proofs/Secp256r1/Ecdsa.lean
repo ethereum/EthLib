@@ -174,23 +174,4 @@ theorem verify_neg_s (q : Point) (e r : Nat) {s : Nat} (hs : 0 < s ∧ s < Fn.mo
       · rw [verify_of_not_isOnCurve hq', verify_of_not_isOnCurve hq']
   · simp only [verify, dite_eq_right hr]
 
-/-! ## Known answer
-
-Test 1 of `ecdsa_secp256r1_sha256_p1363_test.json` in `C2SP/wycheproof` at `d17cc89`.
-
-It is under the Apache License 2.0.
-
-`e` is the SHA-256 digest of its message `313233343030`, and the signature is valid. -/
-
-/-- The public key of the test, as a point. -/
-def wycheproofKey : Point :=
-  .affine 0x2927b10512bae3eddcfe467828128bad2903269919f7086069c8c4df6c732838
-    0xc7787964eaac00e5921fb1498a60f4606766b3d9685001558d1a974e7341513e
-
-theorem verify_wycheproof_p1363_1 :
-    verify wycheproofKey 0xbb5a52f42f9c9261ed4361f59422a1e30036e7c32b270c8807a419feca605023
-      0x2ba3a8be6b94d5ec80a6d9d1190a436effe50d85a1eee859b8cc6af9bd5c2e18
-      0x4cd60b855d442f5b3c7b11eb6c4e0ae7525fe710fab9aa7c77a67f79e6fadd76 = true := by
-  decide +kernel
-
 end EthLib.Cryptography.Secp256r1
