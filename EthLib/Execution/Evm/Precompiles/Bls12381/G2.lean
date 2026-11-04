@@ -105,6 +105,7 @@ def bls12MapFp2ToG2 (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteAr
   let c0 ← unpadFp (data.data.toList.take 64)
   let c1 ← unpadFp (data.data.toList.drop 64)
   let u ← bytesToFq2 (c0 ++ c1)
-  return ⟨(padG2 (g2ToBytes (Cryptography.Bls.MapToCurve.mapToG2 u))).toArray⟩
+  let point ← (Cryptography.Bls.MapToCurve.mapToG2 u).mapError fun _ => .notASquare
+  return ⟨(padG2 (g2ToBytes point)).toArray⟩
 
 end EthLib.Execution.Evm.Precompiles.Bls12381

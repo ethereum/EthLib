@@ -18,7 +18,7 @@ Both denominators share a single root `x = -6 + 6*i`, where `swuG (-6 + 6*i) = 4
 
 `pole_not_on_curve` rules out `y^2 = 4 + 4*i` because `N(4 + 4*i) = 32` is not a square in `Fp`.
 
-Every point produced by `simpleSwu` therefore avoids the pole and lands on `G2.Valid`.
+So every output of `simpleSwu` avoids the pole, and `isoMapG2` sends it to a `G2.Valid` point.
 -/
 
 @[expose] public section
@@ -49,7 +49,7 @@ private theorem iso_poly (x : Fp2) :
   rw [h2, h3, h4, h5, h6, h7]
   ring
 
--- Checked definitionally against `isoMapG2` via `change` in `iso_normalized`.
+-- Each `Kij` unfolds to the coefficient `kij` of `isoMapG2`, which `change` checks below.
 private def K10 : Fp2 := ⟨Fp.ofNat 0x5c759507e8e333ebb5b7a9a47d7ed8532c52d39fd3a042a88b58423c50ae15d5c2638e343d9c71c6238aaaaaaaa97d6, Fp.ofNat 0x5c759507e8e333ebb5b7a9a47d7ed8532c52d39fd3a042a88b58423c50ae15d5c2638e343d9c71c6238aaaaaaaa97d6⟩
 private def K11 : Fp2 := ⟨Fp.ofNat 0, Fp.ofNat 0x11560bf17baa99bc32126fced787c88f984f87adf7ae0c7f9a208c6b4f20a4181472aaa9cb8d555526a9ffffffffc71a⟩
 private def K12 : Fp2 := ⟨Fp.ofNat 0x11560bf17baa99bc32126fced787c88f984f87adf7ae0c7f9a208c6b4f20a4181472aaa9cb8d555526a9ffffffffc71e, Fp.ofNat 0x8ab05f8bdd54cde190937e76bc3e447cc27c3d6fbd7063fcd104635a790520c0a395554e5c6aaaa9354ffffffffe38d⟩
@@ -78,28 +78,37 @@ private theorem k40_eq : K40 = -432 - 432 * I := by decide +kernel
 private theorem k41_eq : K41 = -216 * I := by decide +kernel
 private theorem k42_eq : K42 = 18 - 18 * I := by decide +kernel
 
-private theorem iso_normalized (x y : Fp2) :
-    isoMapG2 x y = (xn x / (9 * (d x) ^ 2), y * yn x / (27 * (d x) ^ 3)) := by
-  change ((K13 * (x * x * x) + K12 * (x * x) + K11 * x + K10) /
-      (x * x + K21 * x + K20),
-    y * (K33 * (x * x * x) + K32 * (x * x) + K31 * x + K30) /
-      (x * x * x + K42 * (x * x) + K41 * x + K40)) = _
-  simp only [k10_eq, k11_eq, k12_eq, k13_eq, k20_eq, k21_eq,
-    k30_eq, k31_eq, k32_eq, k33_eq, k40_eq, k41_eq, k42_eq]
-  have hd2 : x * x + (12 - 12 * I) * x - 72 * I = (d x) ^ 2 := by
-    unfold d
-    linear_combination -36 * Fp2.i_sq
-  have hd3 : x * x * x + (18 - 18 * I) * (x * x) + (-216 * I) * x + (-432 - 432 * I) = (d x) ^ 3 := by
-    unfold d
-    have hi3 : I ^ 3 = -I := by rw [pow_succ, pow_two, Fp2.i_sq]; ring
-    ring_nf
-    rw [show I ^ 2 = -1 by simpa [pow_two] using Fp2.i_sq, hi3]
-    ring
-  rw [show x * x + (12 - 12 * I) * x + -72 * I = (d x) ^ 2 by simpa [sub_eq_add_neg] using hd2, hd3]
-  unfold xn yn
-  apply Prod.ext <;> dsimp only
-  · ring
-  · ring
+-- The denominator `x_den` is `d(x)^2`.
+private theorem xDen_eq (x : Fp2) : x * x + k21 * x + k20 = (d x) ^ 2 := by
+  change x * x + K21 * x + K20 = _
+  rw [k21_eq, k20_eq]
+  unfold d
+  linear_combination -36 * Fp2.i_sq
+
+-- The denominator `y_den` is `d(x)^3`.
+private theorem yDen_eq (x : Fp2) :
+    x * x * x + k42 * (x * x) + k41 * x + k40 = (d x) ^ 3 := by
+  change x * x * x + K42 * (x * x) + K41 * x + K40 = _
+  rw [k42_eq, k41_eq, k40_eq]
+  unfold d
+  have hi3 : I ^ 3 = -I := by rw [pow_succ, pow_two, Fp2.i_sq]; ring
+  ring_nf
+  rw [show I ^ 2 = -1 by simpa [pow_two] using Fp2.i_sq, hi3]
+  ring
+
+private theorem xNum_eq (x : Fp2) :
+    k13 * (x * x * x) + k12 * (x * x) + k11 * x + k10 = xn x / 9 := by
+  change K13 * (x * x * x) + K12 * (x * x) + K11 * x + K10 = _
+  rw [k13_eq, k12_eq, k11_eq, k10_eq]
+  unfold xn
+  ring
+
+private theorem yNum_eq (x : Fp2) :
+    k33 * (x * x * x) + k32 * (x * x) + k31 * x + k30 = yn x / 27 := by
+  change K33 * (x * x * x) + K32 * (x * x) + K31 * x + K30 = _
+  rw [k33_eq, k32_eq, k31_eq, k30_eq]
+  unfold yn
+  ring
 
 open scoped EthLib.Cryptography.Bls.Fp
 
@@ -140,16 +149,27 @@ private theorem d_ne_zero {x y : Fp2} (h : y * y = swuG x) : d x ≠ 0 := by
   rw [hx, hc] at h
   exact pole_not_on_curve y h
 
-/-- `isoMapG2` preserves the curve equation (`RFC 9380 §8.8.2 and Appendix E.3`).
+-- Off the pole, `isoMapG2` is the affine point of the rational map.
+private theorem isoMapG2_eq {x y : Fp2} (hd : d x ≠ 0) :
+    isoMapG2 x y = ⟨xn x / (9 * (d x) ^ 2), y * yn x / (27 * (d x) ^ 3), Fp2.one⟩ := by
+  have h2 : ((d x) ^ 2).isZero = false :=
+    Bool.eq_false_iff.mpr fun h => pow_ne_zero 2 hd (Fp2.isZero_iff.mp h)
+  have h3 : ((d x) ^ 3).isZero = false :=
+    Bool.eq_false_iff.mpr fun h => pow_ne_zero 3 hd (Fp2.isZero_iff.mp h)
+  unfold isoMapG2
+  dsimp only
+  rw [xDen_eq, yDen_eq, xNum_eq, yNum_eq, h2, h3]
+  simp only [Bool.or_self, Bool.false_eq_true, ↓reduceIte, G2.mk.injEq]
+  exact ⟨by ring, by ring, trivial⟩
 
-Its rational denominators cannot vanish at any affine point on `E'`.
+/-- `isoMapG2` sends every affine point of `E'` to an affine point of the twist `E` (`RFC 9380 §8.8.2 and Appendix E.3`).
+
+Its rational denominators cannot vanish at any affine point on `E'`, so the map never takes its identity branch there.
 -/
 theorem isoMapG2_curve_eq {x y : Fp2} (h : y * y = swuG x) :
-    let p := isoMapG2 x y
-    p.2 * p.2 = p.1 * p.1 * p.1 + G2.bTwist := by
-  rw [iso_normalized]
-  dsimp only
+    ∃ a b, isoMapG2 x y = ⟨a, b, Fp2.one⟩ ∧ b * b = a * a * a + G2.bTwist := by
   have hd := d_ne_zero h
+  refine ⟨_, _, isoMapG2_eq hd, ?_⟩
   have h9 : (9 : Fp2) ≠ 0 := by decide
   have h27 : (27 : Fp2) ≠ 0 := by decide
   have hb : G2.bTwist = 4 + 4 * I := by decide +kernel
@@ -162,24 +182,15 @@ theorem isoMapG2_curve_eq {x y : Fp2} (h : y * y = swuG x) :
   have hp := iso_poly x
   linear_combination 729 * ((yn x) ^ 2 * h + hp)
 
-/-- Every `simpleSwu` output maps onto the BLS12-381 twist `E`. -/
-theorem simpleSwu_isoMapG2_curve_eq (u : Fp2) :
-    let p := simpleSwu u
-    let q := isoMapG2 p.1 p.2
-    q.2 * q.2 = q.1 * q.1 * q.1 + G2.bTwist :=
-  isoMapG2_curve_eq (simpleSwu_curve_eq u)
-
 /-- Mapping a source-curve point produces a nonsingular `G2` point. -/
-theorem isoMapG2_valid {x y : Fp2} (h : y * y = swuG x) :
-    let p := isoMapG2 x y
-    G2.Valid ⟨p.1, p.2, Fp2.one⟩ :=
-  G2.valid_of_affine_equation (isoMapG2_curve_eq h)
+theorem isoMapG2_valid {x y : Fp2} (h : y * y = swuG x) : G2.Valid (isoMapG2 x y) := by
+  obtain ⟨a, b, he, hc⟩ := isoMapG2_curve_eq h
+  rw [he]
+  exact G2.valid_of_affine_equation hc
 
-/-- `simpleSwu` followed by `isoMapG2` produces a nonsingular `G2` point for every `u : Fp2`. -/
-theorem simpleSwu_isoMapG2_valid (u : Fp2) :
-    let p := simpleSwu u
-    let q := isoMapG2 p.1 p.2
-    G2.Valid ⟨q.1, q.2, Fp2.one⟩ :=
-  isoMapG2_valid (simpleSwu_curve_eq u)
+/-- `isoMapG2` sends every output of `simpleSwu` to a nonsingular `G2` point. -/
+theorem simpleSwu_isoMapG2_valid {u : Fp2} {p : Fp2 × Fp2} (h : simpleSwu u = .ok p) :
+    G2.Valid (isoMapG2 p.1 p.2) :=
+  isoMapG2_valid (simpleSwu_curve_eq h)
 
 end EthLib.Cryptography.Bls.HashToCurve
