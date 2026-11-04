@@ -435,6 +435,18 @@ def devp2p_encode_message(snappy: bool, plain: bytes) -> bytes:
     """The frame data of the message in the uncompressed frame data `plain`."""
     ...
 
+def discv4_decode(packet: bytes) -> bytes:
+    """The hash, the sender's key and the content of the packet in the bytes `packet`."""
+    ...
+
+def discv4_encode(key: bytes, content: bytes) -> bytes:
+    """The packet with the content `plain`, signed with the private key `key`."""
+    ...
+
+def discv4_record_signed_by(sender: bytes, record: bytes) -> bool:
+    """Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`."""
+    ...
+
 def snappy_decompress(block: bytes) -> bytes:
     """The bytes a Snappy block decompresses to, or why it is not a valid block."""
     ...

@@ -2188,6 +2188,51 @@
    "docstring":
    "The frame data of the message in the uncompressed frame data `plain`."},
   {"summary":
+   "The hash, the sender's key and the content of the packet in the bytes `packet`.",
+   "signature": "(packet: bytes) -> bytes",
+   "operation": "EthLib.Networking.Discv4.Exports.decodeExport",
+   "method": "discv4_decode",
+   "errors":
+   [{"type": "EthLib.Networking.Discv4.Discv4Error",
+     "codes":
+     [{"constructor": "tooLarge", "code": 1},
+      {"constructor": "tooShort", "code": 2},
+      {"constructor": "hashMismatch", "code": 3},
+      {"constructor": "invalidSignature", "code": 4},
+      {"constructor": "secp256k1", "code": 5},
+      {"constructor": "unknownType", "code": 6},
+      {"constructor": "rlp", "code": 7}]}],
+   "error_class": "Discv4Error",
+   "docstring":
+   "The hash, the sender's key and the content of the packet in the bytes `packet`."},
+  {"summary":
+   "The packet with the content `plain`, signed with the private key `key`.",
+   "signature": "(key: bytes, content: bytes) -> bytes",
+   "operation": "EthLib.Networking.Discv4.Exports.encodeExport",
+   "method": "discv4_encode",
+   "errors":
+   [{"type": "EthLib.Networking.Discv4.Discv4Error",
+     "codes":
+     [{"constructor": "tooLarge", "code": 1},
+      {"constructor": "tooShort", "code": 2},
+      {"constructor": "hashMismatch", "code": 3},
+      {"constructor": "invalidSignature", "code": 4},
+      {"constructor": "secp256k1", "code": 5},
+      {"constructor": "unknownType", "code": 6},
+      {"constructor": "rlp", "code": 7}]}],
+   "error_class": "Discv4Error",
+   "docstring":
+   "The packet with the content `plain`, signed with the private key `key`."},
+  {"summary":
+   "Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`.",
+   "signature": "(sender: bytes, record: bytes) -> bool",
+   "operation": "EthLib.Networking.Discv4.Exports.recordSignedByExport",
+   "method": "discv4_record_signed_by",
+   "errors": [],
+   "error_class": "Discv4Error",
+   "docstring":
+   "Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`."},
+  {"summary":
    "The bytes a Snappy block decompresses to, or why it is not a valid block.",
    "signature": "(block: bytes) -> bytes",
    "operation": "EthLib.Networking.Snappy.decompress",

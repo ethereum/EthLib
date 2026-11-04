@@ -124,6 +124,11 @@ instance : Codec UInt64 where
   toItem x := .scalar x.toNat
   ofItem item := do return UInt64.ofNat (← item.toScalarBelow 64)
 
+/-- A 16-bit integer, such as a port, is a scalar below 2^16, so it has at most 2 bytes. -/
+instance : Codec UInt16 where
+  toItem x := .scalar x.toNat
+  ofItem item := do return UInt16.ofNat (← item.toScalarBelow 16)
+
 /-- A byte is a scalar below 2^8, so it has at most 1 byte. -/
 instance : Codec UInt8 where
   toItem x := .scalar x.toNat

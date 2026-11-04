@@ -4,6 +4,7 @@ public import EthLib.Networking.Proofs.Discv5.Identity
 public import EthLib.Networking.Proofs.Discv5.Message
 public import EthLib.Networking.Proofs.Discv5.Packet
 public import EthLib.Networking.Proofs.Devp2p.P2p
+public import EthLib.Networking.Proofs.Discv4.Packet
 public import EthLib.Networking.Proofs.Encoding.Varint
 public import EthLib.Networking.Proofs.Enr.Base64
 public import EthLib.Networking.Proofs.Enr.Consensus

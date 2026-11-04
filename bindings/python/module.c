@@ -75,6 +75,7 @@ PyObject* VARINT_ERROR;
 PyObject* DISCV5_ERROR;
 PyObject* RLPX_ERROR;
 PyObject* DEVP2P_ERROR;
+PyObject* DISCV4_ERROR;
 PyObject* TRANSACTION_ERROR;
 PyObject* VRF_ERROR;
 PyObject* TRIE_ERROR;
@@ -621,6 +622,9 @@ static PyMethodDef methods[] = {
   {"rlpx_ecies_decrypt", py_rlpx_ecies_decrypt, METH_VARARGS, DOC_rlpx_ecies_decrypt},
   {"devp2p_decode_message", py_devp2p_decode_message, METH_VARARGS, DOC_devp2p_decode_message},
   {"devp2p_encode_message", py_devp2p_encode_message, METH_VARARGS, DOC_devp2p_encode_message},
+  {"discv4_decode", py_discv4_decode, METH_VARARGS, DOC_discv4_decode},
+  {"discv4_encode", py_discv4_encode, METH_VARARGS, DOC_discv4_encode},
+  {"discv4_record_signed_by", py_discv4_record_signed_by, METH_VARARGS, DOC_discv4_record_signed_by},
   {"snappy_decompress", py_snappy_decompress, METH_VARARGS, DOC_snappy_decompress},
   {"snappy_compress_literal", py_snappy_compress_literal, METH_VARARGS, DOC_snappy_compress_literal},
   {"snappy_decode_frames", py_snappy_decode_frames, METH_VARARGS, DOC_snappy_decode_frames},
@@ -693,6 +697,7 @@ PyInit__native(void) {
     DISCV5_ERROR = PyObject_GetAttrString(errors, "Discv5Error");
     RLPX_ERROR = PyObject_GetAttrString(errors, "RlpxError");
     DEVP2P_ERROR = PyObject_GetAttrString(errors, "Devp2pError");
+    DISCV4_ERROR = PyObject_GetAttrString(errors, "Discv4Error");
     TRANSACTION_ERROR = PyObject_GetAttrString(errors, "TransactionError");
     VRF_ERROR = PyObject_GetAttrString(errors, "VrfError");
     TRIE_ERROR = PyObject_GetAttrString(errors, "TrieError");
