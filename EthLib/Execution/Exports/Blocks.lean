@@ -75,6 +75,14 @@ def receiptLogsBloomExport (fork receipt : ByteArray) : Result ByteArray := do
   let (_, r) ← decodeReceiptAt fork receipt
   return ⟨(logsBloom r.logs).toArray⟩
 
+/-- Check the RLP size of a block, decoded at the fork: from Fusaka, at most 8 MiB. -/
+@[export eth_block_validate_size]
+def validateSizeExport (fork block : ByteArray) : Result UInt8 := do
+  let fork ← forkOfName fork
+  let b : Block fork Item ← runRlp "block rejected" (Codec.decode block)
+  (validateBlockSize b).map (fun () => 1) |>.mapError
+    fun e => (e.code, s!"block invalid: {reprStr e}")
+
 /-- Check a header at a fork against its parent at the parent's fork, from Paris on. -/
 @[export eth_block_validate_header]
 def validateHeaderExport (parentFork fork parent header : ByteArray) : Result UInt8 := do

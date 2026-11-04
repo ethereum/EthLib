@@ -52,6 +52,12 @@ eth_receipt_logs_bloom(
 );
 
 extern lean_object*
+eth_block_validate_size(
+  lean_object* fork,
+  lean_object* block
+);
+
+extern lean_object*
 eth_block_validate_header(
   lean_object* parent_fork,
   lean_object* fork,
@@ -204,6 +210,17 @@ py_receipt_logs_bloom(
   lean_object* receipt;
   if (!parse_fork_and_bytes(args, "receipt", &fork, &receipt)) return NULL;
   return except_into_pybytes(eth_receipt_logs_bloom(fork, receipt), BLOCK_ERROR);
+}
+
+PyObject*
+py_block_validate_size(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* fork;
+  lean_object* block;
+  if (!parse_fork_and_bytes(args, "block", &fork, &block)) return NULL;
+  return except_into_pybool(eth_block_validate_size(fork, block), BLOCK_ERROR);
 }
 
 PyObject*

@@ -1,5 +1,8 @@
 """Header checks against consecutive fixture blocks and hand-made mutations."""
 
+import json
+from pathlib import Path
+
 import pytest
 
 from ethlib.execution import blocks
@@ -59,6 +62,63 @@ def test_mutated_header_is_invalid(index: int, value: bytes, code: int) -> None:
     with pytest.raises(blocks.BlockError) as error:
         blocks.validate_header(fork, fork, parent, _mutated(header, index, value))
     assert error.value.code == code
+
+
+_INVALID = json.loads(
+    (Path(__file__).resolve().parents[4] / "tests" / "execution" / "blocks"
+     / "invalid_headers.json").read_text())
+
+
+@pytest.mark.parametrize("case", _INVALID,
+                         ids=[f"{c['network']}-{c['test'].split('::')[-1][:70]}-{c['block']}"
+                              for c in _INVALID])
+def test_fixture_invalid_header(case) -> None:
+    fork = FORK_OF_NETWORK[case["network"]]
+    with pytest.raises(blocks.BlockError) as error:
+        blocks.validate_header(fork, fork, bytes.fromhex(case["parent"]),
+                               bytes.fromhex(case["header"]))
+    # The first failed check is the one that the fixture names.
+    assert error.value.code in case["codes"]
+
+
+def test_invalid_headers_cover_each_check() -> None:
+    assert {code for c in _INVALID for code in c["codes"]} == {202, 204, 205}
+
+
+# EIP-7934: from Fusaka, the RLP form of a block has at most 10 MiB minus 2 MiB.
+MAX_RLP_BLOCK_SIZE = 10_485_760 - 2_097_152
+
+
+def _block_of_size(size: int) -> bytes:
+    """A Fusaka fixture block whose one transaction is a byte string sized to give `size` bytes."""
+    case = next(c for c in CASES if c["network"] == "Osaka")
+    fields = rlp.decode(bytes.fromhex(case["rlp"]))
+    filler = size
+    while True:
+        fields[1] = [b"\x02" + b"\x00" * filler]
+        block = rlp.encode(fields)
+        if len(block) == size:
+            return block
+        filler -= len(block) - size
+
+
+def test_block_at_size_limit_is_valid() -> None:
+    blocks.validate_size("fusaka", _block_of_size(MAX_RLP_BLOCK_SIZE))
+
+
+def test_block_above_size_limit_is_invalid() -> None:
+    with pytest.raises(blocks.BlockError) as error:
+        blocks.validate_size("fusaka", _block_of_size(MAX_RLP_BLOCK_SIZE + 1))
+    assert error.value.code == 214
+
+
+def test_size_limit_starts_at_fusaka() -> None:
+    # The same oversized block passes at Pectra, which has no size limit.
+    block = _block_of_size(MAX_RLP_BLOCK_SIZE + 1)
+    case = next(c for c in CASES if c["network"] == "Prague")
+    fields = rlp.decode(bytes.fromhex(case["rlp"]))
+    fields[1] = rlp.decode(block)[1]
+    blocks.validate_size("pectra", rlp.encode(fields))
 
 
 def test_header_before_paris_is_rejected() -> None:

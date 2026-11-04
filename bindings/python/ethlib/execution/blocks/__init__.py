@@ -47,6 +47,11 @@ def receipt_logs_bloom(fork: str, receipt: bytes) -> bytes:
     return _native.receipt_logs_bloom(fork, receipt)
 
 
+def validate_size(fork: str, block: bytes) -> None:
+    """Check the RLP size of a block, from Fusaka, and raise BlockError if it is too large."""
+    _native.block_validate_size(fork, block)
+
+
 def validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -> None:
     """Check a header against its parent, from Paris on, and raise BlockError if it fails."""
     _native.block_validate_header(parent_fork, fork, parent, header)
@@ -54,4 +59,4 @@ def validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -
 
 __all__ = ["header_hash", "reencode", "transactions_root", "withdrawals_root",
            "deposit_requests", "requests_hash",
-           "receipt_reencode", "receipt_logs_bloom", "validate_header", "BlockError"]
+           "receipt_reencode", "receipt_logs_bloom", "validate_size", "validate_header", "BlockError"]

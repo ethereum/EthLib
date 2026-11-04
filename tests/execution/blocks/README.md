@@ -21,4 +21,14 @@ Each case keeps the state before the block, as the fixture gives it, and the sta
 `deposits.json` holds the valid Prague blocks of the `eip6110_deposits` tests that have at most 100 logs.
 Each case keeps the logs of the receipts of its block, in order, and the requests hash of its header.
 
+`invalid_headers.json` holds invalid blocks from Paris to Osaka whose exception is a header check.
+The checks are the excess blob gas, the gas limit and the base fee.
+Each case keeps the header of the block, the header of its parent and the exception of the fixture.
+It keeps at most two cases of the excess blob gas from each file.
+`extract_invalid_headers.py` wrote the file from the archive, unpacked from Paris to Osaka, and writes the same bytes again:
+
+```text
+python -I extract_invalid_headers.py <directory of fixtures> invalid_headers.json
+```
+
 The Python tests in `bindings/python/tests/blocks/` read these cases and never rewrite them.
