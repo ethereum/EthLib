@@ -50,4 +50,10 @@ def readBytes (b : ByteArray) (offset n : Nat) (h : offset + n ≤ b.size) :
     simp only [ByteArray.size] at h
     omega)
 
+/-! ## Bitwise operations -/
+
+/-- The exclusive or of two byte strings of one length, byte by byte. -/
+def xorBytes {n : Nat} (a b : Vector UInt8 n) : Vector UInt8 n :=
+  Vector.zipWith (· ^^^ ·) a b
+
 end EthLib.Base

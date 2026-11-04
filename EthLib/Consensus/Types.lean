@@ -56,7 +56,27 @@ abbrev ParticipationFlags := UInt8
 /-- From Capella: the index of a withdrawal, counted over all withdrawals. -/
 abbrev WithdrawalIndex := UInt64
 
+/-- An amount in ether, which the weak subjectivity period counts in. -/
+abbrev Ether := UInt64
+
+/-- From Bellatrix: the identifier of a payload that the execution engine is building. -/
+abbrev PayloadId := Base.Bytes8
+
+/-- From Bellatrix: what a node knows of the execution payload of a block, as one byte. -/
+abbrev PayloadValidationStatus := UInt8
+
 /-- From Deneb: the index of a blob in a block. -/
 abbrev BlobIndex := UInt64
+
+/-- From Deneb: the versioned hash of a KZG commitment, which names a blob.
+
+[EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#type-aliases) defines it. -/
+abbrev VersionedHash := Base.Bytes32
+
+/-- From Fulu: the index of a cell in an extended blob, below the number of cells. -/
+abbrev CellIndex := UInt64
+
+/-- From Fulu: the index of a row, one blob, in the matrix of cells of a block. -/
+abbrev RowIndex := UInt64
 
 end EthLib.Consensus

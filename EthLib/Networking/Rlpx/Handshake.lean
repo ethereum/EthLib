@@ -30,6 +30,7 @@ The keys and the nonces are secret, and EthLib makes no constant-time claim (SOU
 
 namespace EthLib.Networking.Rlpx
 
+open EthLib.Base (xorBytes)
 open EthLib.Cryptography
 open EthLib.Cryptography.Secp256k1
 open EthLib.Serialization.Rlp
@@ -78,10 +79,6 @@ def encodePublicKey : Point → Vector UInt8 64
 /-- The public key of 64 bytes `x || y`, which must lie on the curve. -/
 def decodePublicKey (bytes : Vector UInt8 64) : Except HandshakeError Point :=
   (Point.decode ⟨#[0x04] ++ bytes.toArray⟩).mapError .secp256k1
-
-/-- Byte-wise XOR of two 32-byte strings. -/
-def xor32 (a b : Vector UInt8 32) : Vector UInt8 32 :=
-  Vector.zipWith (· ^^^ ·) a b
 
 /-! ## Messages -/
 
@@ -220,7 +217,7 @@ The signature is `r || s || v`, in the low-s form, with the recovery id `v`.
 def makeAuth (keys : Keys) (recipient : Point) (sealing : Sealing) :
     Except HandshakeError ByteArray := do
   let shared ← (ecdh keys.staticKey recipient).mapError .secp256k1
-  let sig ← (Ecdsa.sign keys.ephemeralKey (xor32 shared keys.nonce)).mapError .secp256k1
+  let sig ← (Ecdsa.sign keys.ephemeralKey (xorBytes shared keys.nonce)).mapError .secp256k1
   let auth : AuthMessage := ⟨signatureBytes sig,
     encodePublicKey (Point.mul keys.staticKey .generator), keys.nonce, HANDSHAKE_VERSION⟩
   let body ← (Codec.encode auth).mapError .rlp
@@ -236,7 +233,7 @@ def readAuth (staticKey : Fn) (packet : ByteArray) :
   let auth : AuthMessage ← decodeBody (← openPacket staticKey packet)
   let remoteStatic ← decodePublicKey auth.initiatorPubkey
   let shared ← (ecdh staticKey remoteStatic).mapError .secp256k1
-  let remoteEphemeral ← recoverSigner (xor32 shared auth.initiatorNonce) auth.signature
+  let remoteEphemeral ← recoverSigner (xorBytes shared auth.initiatorNonce) auth.signature
   return (auth, remoteStatic, remoteEphemeral)
 
 /-- The packet `ack` of the recipient to the initiator with the static key `initiator`. -/
@@ -281,7 +278,7 @@ def deriveSecrets (initiator : Bool) (ephemeralKey initiatorNonce recipientNonce
   let aesSecret := keccak ephemeralKey sharedSecret
   let macSecret := keccak ephemeralKey aesSecret
   let start (nonce : Vector UInt8 32) (packet : ByteArray) :=
-    Hash.Keccak.Hasher.empty.absorb (⟨(xor32 macSecret nonce).toArray⟩ ++ packet)
+    Hash.Keccak.Hasher.empty.absorb (⟨(xorBytes macSecret nonce).toArray⟩ ++ packet)
   let authMac := start recipientNonce auth
   let ackMac := start initiatorNonce ack
   if initiator then ⟨aesSecret, macSecret, authMac, ackMac⟩
