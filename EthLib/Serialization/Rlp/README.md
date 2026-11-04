@@ -58,6 +58,20 @@ The decoder rejects each of the following, each with its own error:
 - an input that ends before the bytes its prefix announces;
 - bytes left after the item.
 
+## Typed values
+
+A transaction or a block header is not an item but a structure of typed fields.
+A *codec* gives each type its item, and reads an item back as a value of the type.
+An integer is a scalar whose size its type bounds, so a word has at most 32 bytes.
+A fixed-length byte string, such as an address, must have exactly its length.
+A list holds the item of each element, and a structure is the list of its fields in order.
+The recipient of a transaction is an address, or the empty byte string for a contract creation.
+
+Each typed decoder is strict as well.
+It rejects a value too large for its type and a byte string of the wrong length.
+It also rejects a list where a byte string belongs, and the reverse.
+So `02` holds the integer 2 but no boolean, and `81 ff` holds a byte but no address.
+
 ## Proven properties
 
 The proofs start with the big-endian bytes `BE(n)` of a number, the building block of every length and every scalar.
@@ -83,5 +97,8 @@ For streams, the parser reads the same item from a longer input and leaves the e
 
 For scalars, a scalar decodes exactly from its encoding, and a byte string with a leading zero byte holds no scalar.
 Every scalar below `2^256` has an encoding.
+
+Each typed codec reads back every value it writes, and writes back every item it reads.
+So a typed decoder accepts a byte string for a value exactly when it encodes that value.
 
 Finally, the decoding matches every case of `RLPTests/rlptest.json`, and rejects every case of [`RLPTests/invalidRLPTest.json`](https://github.com/ethereum/tests/blob/c67e485ff8b5be9abc8ad15345ec21aa22e290d9/RLPTests/invalidRLPTest.json).
