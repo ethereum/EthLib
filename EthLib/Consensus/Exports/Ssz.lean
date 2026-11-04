@@ -4,6 +4,7 @@ public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.Operations
 public import EthLib.Consensus.Containers.Signing
+public import EthLib.Consensus.Containers.SyncCommittee
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Serialization.Exports.Ssz
 
@@ -66,6 +67,21 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
   | "AggregateAndProof" => some ⟨AggregateAndProof preset fork⟩
   | "SignedAggregateAndProof" => some ⟨SignedAggregateAndProof preset fork⟩
   | "SingleAttestation" => if .pectra ≤ fork then some ⟨SingleAttestation⟩ else none
+  | "SyncCommittee" => if .altair ≤ fork then some ⟨SyncCommittee preset⟩ else none
+  | "SyncAggregate" => if .altair ≤ fork then some ⟨SyncAggregate preset⟩ else none
+  | "SyncCommitteeMessage" => if .altair ≤ fork then some ⟨SyncCommitteeMessage⟩ else none
+  | "SyncCommitteeContribution" =>
+    if .altair ≤ fork then some ⟨SyncCommitteeContribution preset⟩ else none
+  | "ContributionAndProof" =>
+    if .altair ≤ fork then some ⟨ContributionAndProof preset⟩ else none
+  | "SignedContributionAndProof" =>
+    if .altair ≤ fork then some ⟨SignedContributionAndProof preset⟩ else none
+  | "SyncAggregatorSelectionData" =>
+    if .altair ≤ fork then some ⟨SyncAggregatorSelectionData⟩ else none
+  | "HistoricalSummary" => if .shapella ≤ fork then some ⟨HistoricalSummary⟩ else none
+  | "BLSToExecutionChange" => if .shapella ≤ fork then some ⟨BLSToExecutionChange⟩ else none
+  | "SignedBLSToExecutionChange" =>
+    if .shapella ≤ fork then some ⟨SignedBLSToExecutionChange⟩ else none
   | "Withdrawal" => if .shapella ≤ fork then some ⟨Withdrawal⟩ else none
   | "ExecutionPayload" =>
     if .bellatrix ≤ fork then some ⟨ExecutionPayload preset fork⟩ else none
