@@ -38,7 +38,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Networking | [`ReqResp`](EthLib/Networking/ReqResp/) | the `ssz_snappy` encoding of requests and response chunks, with its size bounds |
 | Execution | [`Fees`](EthLib/Execution/Fees/) | the EIP-1559 base fee and the blob base fee |
 | Execution | [`Evm`](EthLib/Execution/Evm/) | the opcodes of each fork, the stack, frame and memory of the EVM, its stack and memory instructions, and the gas prices |
-| Execution | [`Precompiles`](EthLib/Execution/Evm/Precompiles/) | all 18 precompiles of Bogota, from ECRECOVER to P256VERIFY, run by address from one table |
+| Execution | [`Precompiles`](EthLib/Execution/Evm/Precompiles/) | all 18 precompiles, from ECRECOVER to P256VERIFY, each run by address from the fork that adds it |
 | Execution | [`State`](EthLib/Execution/State/) | accounts, the state, the state and storage roots, and the writes of a block and a transaction with their rollback |
 | Execution | [`Transactions`](EthLib/Execution/Transactions/) | the five kinds of transaction, their bytes and hashes, the sender at each fork, and the intrinsic gas and validity of one transaction |
 | Execution | [`Blocks`](EthLib/Execution/Blocks/) | the header, withdrawals, logs, receipts and block of each fork, the logs bloom filter and the header hash |

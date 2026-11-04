@@ -6,7 +6,7 @@ public import EthLib.Execution.Evm.Precompiles.Table
 /-!
 # `Exports.Precompiles`
 
-A C-ABI export that runs any of the 18 precompiles, callable from the Python C extension.
+A C-ABI export that runs any of the 18 precompiles of Fusaka, callable from the Python C extension.
 
 - The address and the gas are `UInt64`, and the call data is a `ByteArray`.
 - A failed call, or an address with no precompile, comes back as an error code and a message.
@@ -27,7 +27,7 @@ The code of a failed call names the precompile, and the message is its error, as
 An address with no precompile has code 0, which no error of a precompile has. -/
 @[export eth_precompile_run]
 def runExport (address : UInt64) (data : ByteArray) (gas : UInt64) : Result ByteArray :=
-  match run address.toNat data gas.toNat with
+  match run .fusaka address.toNat data gas.toNat with
   | some result => result.mapError fun e => (e.code, reprStr e)
   | none => .error (0, s!"no precompile at address {address}")
 

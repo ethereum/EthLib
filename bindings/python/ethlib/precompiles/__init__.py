@@ -1,9 +1,4 @@
-"""The EVM precompiled contracts.
-
-`run` calls any of the 18 precompiles of Bogota by its address.
-
-The subpackages expose some precompiles with their sizes and prices.
-"""
+"""The 18 EVM precompiled contracts of Fusaka, by address."""
 
 from ..errors import PrecompileError
 

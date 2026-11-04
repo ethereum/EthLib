@@ -1,8 +1,4 @@
-"""The MODEXP precompile at address `0x05`, as of the BPO2 fork.
-
-- A length above the bound raises ModexpError, a ValueError.
-- A call with too little gas raises ModexpError.
-"""
+"""The MODEXP precompile at address `0x05`, with the rules of Fusaka."""
 
 from ...errors import ModexpError
 

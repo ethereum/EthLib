@@ -14,9 +14,11 @@ public import EthLib.Execution.Evm.Precompiles.Sha256
 /-!
 # `Precompiles.Table`
 
-The 18 precompiled contracts of Bogota, by address.
+The precompiled contracts of every fork, by address.
 
-The source is `PRE_COMPILED_CONTRACTS` in [`forks/bogota/vm/precompiled_contracts/mapping.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/bogota/vm/precompiled_contracts/mapping.py#L59).
+A fork adds precompiles, so a call runs a precompile only from the fork that adds it.
+
+The EIP that adds each precompile names it, next to its fork.
 
 Every precompile takes the call data and the gas, and returns the output or an error.
 
@@ -28,6 +30,8 @@ A call that succeeds uses exactly its price.
 @[expose] public section
 
 namespace EthLib.Execution.Evm.Precompiles
+
+open EthLib.Base (Fork)
 
 /-- Why a precompile call fails: the error of the precompile at the address called. -/
 inductive PrecompileError where
@@ -72,23 +76,49 @@ def PrecompileError.code : PrecompileError → UInt32
   | .bls12381 _ => 9
   | .p256Verify _ => 10
 
-/-- The addresses of the 18 precompiles, in increasing order. -/
+/-- The addresses of the 18 precompiles of all forks, in increasing order. -/
 def ADDRESSES : List Nat :=
-  [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x100]
+  [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+    0x11, 0x100]
+
+/-- The fork that adds the precompile at `address`, or none when no fork adds one. -/
+def addedAt (address : Nat) : Option Fork :=
+  match address with
+  -- ECRECOVER, SHA-256, RIPEMD-160 and IDENTITY
+  | 0x01 | 0x02 | 0x03 | 0x04 => some .frontier
+  -- MODEXP (EIP-198), and the alt_bn128 precompiles (EIP-196 and EIP-197)
+  | 0x05 | 0x06 | 0x07 | 0x08 => some .byzantium
+  -- BLAKE2F (EIP-152)
+  | 0x09 => some .istanbul
+  -- The point evaluation (EIP-4844)
+  | 0x0a => some .dencun
+  -- The BLS12-381 precompiles (EIP-2537)
+  | 0x0b | 0x0c | 0x0d | 0x0e | 0x0f | 0x10 | 0x11 => some .pectra
+  -- P256VERIFY (EIP-7951)
+  | 0x100 => some .fusaka
+  | _ => none
+
+/-- Whether a fork has a precompile at `address`. -/
+def isPrecompile (fork : Fork) (address : Nat) : Bool :=
+  match addedAt address with
+  | some added => added ≤ fork
+  | none => false
 
 /-- The call of the precompile at `address` on the call data with the gas given.
 
-It is `none` when no precompile has that address. -/
-def run (address : Nat) (data : ByteArray) (gas : Nat) : Option (Except PrecompileError ByteArray) :=
+It is `none` when the fork has no precompile at that address. -/
+def run (fork : Fork) (address : Nat) (data : ByteArray) (gas : Nat) :
+    Option (Except PrecompileError ByteArray) :=
+  if !isPrecompile fork address then none else
   match address with
   | 0x01 => some ((Ecrecover.ecrecover data gas).mapError .ecrecover)
   | 0x02 => some ((Sha256.sha256 data gas).mapError .sha256)
   | 0x03 => some ((Ripemd160.call data gas).mapError .ripemd160)
   | 0x04 => some ((Identity.identity data gas).mapError .identity)
-  | 0x05 => some ((Modexp.modexp data gas).mapError .modexp)
-  | 0x06 => some ((AltBn128.ecadd data gas).mapError .altBn128)
-  | 0x07 => some ((AltBn128.ecmul data gas).mapError .altBn128)
-  | 0x08 => some ((AltBn128.ecpairing data gas).mapError .altBn128)
+  | 0x05 => some ((Modexp.modexp fork data gas).mapError .modexp)
+  | 0x06 => some ((AltBn128.ecadd fork data gas).mapError .altBn128)
+  | 0x07 => some ((AltBn128.ecmul fork data gas).mapError .altBn128)
+  | 0x08 => some ((AltBn128.ecpairing fork data gas).mapError .altBn128)
   | 0x09 => some ((Blake2f.call data gas).mapError .blake2f)
   | 0x0a => some ((PointEvaluation.pointEvaluation data gas).mapError .pointEvaluation)
   | 0x0b => some ((Bls12381.bls12G1Add data gas).mapError .bls12381)
@@ -103,19 +133,20 @@ def run (address : Nat) (data : ByteArray) (gas : Nat) : Option (Except Precompi
 
 /-- The gas that the precompile at `address` charges for the call data.
 
-It is `none` when no precompile has that address.
+It is `none` when the fork has no precompile at that address.
 
 Some precompiles check the call data before the charge, and such a check can fail with any gas. -/
-def price (address : Nat) (data : ByteArray) : Option Nat :=
+def price (fork : Fork) (address : Nat) (data : ByteArray) : Option Nat :=
+  if !isPrecompile fork address then none else
   match address with
   | 0x01 => some Ecrecover.GAS_ECRECOVER
   | 0x02 => some (Sha256.gasCost data.size)
   | 0x03 => some (Ripemd160.gasCost data.size)
   | 0x04 => some (Identity.gasCost data.size)
-  | 0x05 => some (Modexp.requiredGas data (Modexp.parseLengths data))
-  | 0x06 => some AltBn128.GAS_ECADD
-  | 0x07 => some AltBn128.GAS_ECMUL
-  | 0x08 => some (AltBn128.ecpairingGas data.size)
+  | 0x05 => some (Modexp.requiredGas fork data (Modexp.parseLengths data))
+  | 0x06 => some (gasSchedule fork).PRECOMPILE_ECADD
+  | 0x07 => some (gasSchedule fork).PRECOMPILE_ECMUL
+  | 0x08 => some (AltBn128.ecpairingGas fork data.size)
   | 0x09 => some (Blake2f.gasCost data)
   | 0x0a => some PointEvaluation.GAS_POINT_EVALUATION
   | 0x0b => some Bls12381.GAS_G1ADD

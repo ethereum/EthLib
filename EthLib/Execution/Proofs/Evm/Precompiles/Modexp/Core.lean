@@ -100,8 +100,8 @@ theorem parseLengths_append_zeros (data : ByteArray) (n : Nat) :
   simp [parseLengths, readNat_append_zeros]
 
 /-- Padding the call data with zeros does not change the gas. -/
-theorem requiredGas_append_zeros (data : ByteArray) (n : Nat) (l : Lengths) :
-    requiredGas (data ++ ByteArray.mk (Array.replicate n 0)) l = requiredGas data l := by
+theorem requiredGas_append_zeros (fork : Fork) (data : ByteArray) (n : Nat) (l : Lengths) :
+    requiredGas fork (data ++ ByteArray.mk (Array.replicate n 0)) l = requiredGas fork data l := by
   simp [requiredGas, exponentHead, readNat_append_zeros]
 
 /-- Padding the call data with zeros does not change the output. -/
@@ -112,8 +112,8 @@ theorem compute_append_zeros (data : ByteArray) (n : Nat) (l : Lengths) :
 /-- Padding the call data with zeros does not change the result of the precompile.
 
 EIP-198: "Call data is assumed to be infinitely right-padded with zero bytes". -/
-theorem modexp_append_zeros (data : ByteArray) (n gas : Nat) :
-    modexp (data ++ ByteArray.mk (Array.replicate n 0)) gas = modexp data gas := by
+theorem modexp_append_zeros (fork : Fork) (data : ByteArray) (n gas : Nat) :
+    modexp fork (data ++ ByteArray.mk (Array.replicate n 0)) gas = modexp fork data gas := by
   simp [modexp, parseLengths_append_zeros, requiredGas_append_zeros, compute_append_zeros]
 
 /-- Two inputs that agree on the bytes the lengths describe give the same result.
@@ -121,10 +121,10 @@ theorem modexp_append_zeros (data : ByteArray) (n gas : Nat) :
 The bytes described are the three headers, `BASE`, `EXPONENT` and `MODULUS`.
 A byte past the end counts as zero.
 This covers excess data, which EIP-198 says "is ignored", and short input. -/
-theorem modexp_congr {d₁ d₂ : ByteArray} (gas : Nat)
+theorem modexp_congr (fork : Fork) {d₁ d₂ : ByteArray} (gas : Nat)
     (h : ∀ i, i < BASE_OFFSET + (parseLengths d₁).base + (parseLengths d₁).exponent
                 + (parseLengths d₁).modulus → byteAt d₁ i = byteAt d₂ i) :
-    modexp d₁ gas = modexp d₂ gas := by
+    modexp fork d₁ gas = modexp fork d₂ gas := by
   -- The lengths come from the first 96 bytes, which lie inside the covered range.
   have hl : parseLengths d₁ = parseLengths d₂ := by
     have hh : ∀ i, i < 96 → byteAt d₁ i = byteAt d₂ i := fun i hi => h i (by
@@ -149,7 +149,7 @@ theorem modexp_congr {d₁ d₂ : ByteArray} (gas : Nat)
     readNat_congr fun i h1 h2 => h i (by
       unfold Lengths.exponentStart BASE_OFFSET LENGTH_HEADER_BYTES EXPONENT_HEAD_BYTES at *
       omega)
-  have hg : requiredGas d₁ (parseLengths d₁) = requiredGas d₂ (parseLengths d₁) := by
+  have hg : requiredGas fork d₁ (parseLengths d₁) = requiredGas fork d₂ (parseLengths d₁) := by
     simp [requiredGas, hx]
   have hc : compute d₁ (parseLengths d₁) = compute d₂ (parseLengths d₁) := by
     simp [compute, hb, he, hm]
@@ -160,10 +160,10 @@ theorem modexp_congr {d₁ d₂ : ByteArray} (gas : Nat)
 /-- Data after the last byte the lengths describe is ignored.
 
 EIP-198: "excess data is ignored". -/
-theorem modexp_append_excess (data extra : ByteArray) (gas : Nat)
+theorem modexp_append_excess (fork : Fork) (data extra : ByteArray) (gas : Nat)
     (h : BASE_OFFSET + (parseLengths data).base + (parseLengths data).exponent
           + (parseLengths data).modulus ≤ data.size) :
-    modexp (data ++ extra) gas = modexp data gas := by
+    modexp fork (data ++ extra) gas = modexp fork data gas := by
   symm
   apply modexp_congr
   intro i hi
@@ -174,55 +174,61 @@ theorem modexp_append_excess (data extra : ByteArray) (gas : Nat)
 
 /-! ## Bounds and gas -/
 
-/-- A base length above 1024 fails before gas is charged, whatever the gas.
+/-- From Fusaka, a base length above 1024 fails before gas is charged, whatever the gas.
 
 EIP-7823: "If any of these inputs are larger than the limit, the precompile execution stops, returns an error, and consumes all gas". -/
-theorem modexp_base_too_large (data : ByteArray) (gas : Nat)
-    (h : MAX_LENGTH_BYTES < (parseLengths data).base) :
-    modexp data gas = .error (.lengthTooLarge .base (parseLengths data).base) := by
-  simp [modexp, checkLengths, h]
+theorem modexp_base_too_large {fork : Fork} (hfork : fork ≥ .fusaka) (data : ByteArray)
+    (gas : Nat) (h : MAX_LENGTH_BYTES < (parseLengths data).base) :
+    modexp fork data gas = .error (.lengthTooLarge .base (parseLengths data).base) := by
+  simp [modexp, checkLengthsAt, hfork, checkLengths, h]
 
-/-- An exponent length above 1024 fails before gas is charged, whatever the gas.
+/-- From Fusaka, an exponent length above 1024 fails before gas is charged, whatever the gas.
 
 The base length is in bounds, so its check passes first. -/
-theorem modexp_exponent_too_large (data : ByteArray) (gas : Nat)
-    (hb : (parseLengths data).base ≤ MAX_LENGTH_BYTES)
+theorem modexp_exponent_too_large {fork : Fork} (hfork : fork ≥ .fusaka) (data : ByteArray)
+    (gas : Nat) (hb : (parseLengths data).base ≤ MAX_LENGTH_BYTES)
     (h : MAX_LENGTH_BYTES < (parseLengths data).exponent) :
-    modexp data gas = .error (.lengthTooLarge .exponent (parseLengths data).exponent) := by
-  simp [modexp, checkLengths, Nat.not_lt.mpr hb, h]
+    modexp fork data gas = .error (.lengthTooLarge .exponent (parseLengths data).exponent) := by
+  simp [modexp, checkLengthsAt, hfork, checkLengths, Nat.not_lt.mpr hb, h]
 
-/-- A modulus length above 1024 fails before gas is charged, whatever the gas.
+/-- From Fusaka, a modulus length above 1024 fails before gas is charged, whatever the gas.
 
 The base and exponent lengths are in bounds, so their checks pass first. -/
-theorem modexp_modulus_too_large (data : ByteArray) (gas : Nat)
-    (hb : (parseLengths data).base ≤ MAX_LENGTH_BYTES)
+theorem modexp_modulus_too_large {fork : Fork} (hfork : fork ≥ .fusaka) (data : ByteArray)
+    (gas : Nat) (hb : (parseLengths data).base ≤ MAX_LENGTH_BYTES)
     (he : (parseLengths data).exponent ≤ MAX_LENGTH_BYTES)
     (h : MAX_LENGTH_BYTES < (parseLengths data).modulus) :
-    modexp data gas = .error (.lengthTooLarge .modulus (parseLengths data).modulus) := by
-  simp [modexp, checkLengths, Nat.not_lt.mpr hb, Nat.not_lt.mpr he, h]
+    modexp fork data gas = .error (.lengthTooLarge .modulus (parseLengths data).modulus) := by
+  simp [modexp, checkLengthsAt, hfork, checkLengths, Nat.not_lt.mpr hb, Nat.not_lt.mpr he, h]
 
-/-- With every length in bounds, the call fails exactly when the gas is below the price. -/
-theorem modexp_out_of_gas (data : ByteArray) (gas : Nat)
+/-- With every length in bounds, the call fails exactly when the gas is below the price.
+
+This holds at every fork, with the bound or without it. -/
+theorem modexp_out_of_gas (fork : Fork) (data : ByteArray) (gas : Nat)
     (hb : (parseLengths data).base ≤ MAX_LENGTH_BYTES)
     (he : (parseLengths data).exponent ≤ MAX_LENGTH_BYTES)
     (hm : (parseLengths data).modulus ≤ MAX_LENGTH_BYTES)
-    (hg : gas < requiredGas data (parseLengths data)) :
-    modexp data gas = .error (.outOfGas (requiredGas data (parseLengths data)) gas) := by
-  simp [modexp, checkLengths, Nat.not_lt.mpr hb, Nat.not_lt.mpr he, Nat.not_lt.mpr hm, hg]
+    (hg : gas < requiredGas fork data (parseLengths data)) :
+    modexp fork data gas = .error (.outOfGas (requiredGas fork data (parseLengths data)) gas) := by
+  unfold modexp checkLengthsAt
+  by_cases hf : fork ≥ .fusaka <;>
+    simp [hf, checkLengths, Nat.not_lt.mpr hb, Nat.not_lt.mpr he, Nat.not_lt.mpr hm, hg]
 
 /-- With every length in bounds and enough gas, the call returns the computed output. -/
-theorem modexp_ok (data : ByteArray) (gas : Nat)
+theorem modexp_ok (fork : Fork) (data : ByteArray) (gas : Nat)
     (hb : (parseLengths data).base ≤ MAX_LENGTH_BYTES)
     (he : (parseLengths data).exponent ≤ MAX_LENGTH_BYTES)
     (hm : (parseLengths data).modulus ≤ MAX_LENGTH_BYTES)
-    (hg : requiredGas data (parseLengths data) ≤ gas) :
-    modexp data gas = .ok (compute data (parseLengths data)) := by
-  simp [modexp, checkLengths, Nat.not_lt.mpr hb, Nat.not_lt.mpr he, Nat.not_lt.mpr hm,
-    Nat.not_lt.mpr hg]
+    (hg : requiredGas fork data (parseLengths data) ≤ gas) :
+    modexp fork data gas = .ok (compute data (parseLengths data)) := by
+  unfold modexp checkLengthsAt
+  by_cases hf : fork ≥ .fusaka <;>
+    simp [hf, checkLengths, Nat.not_lt.mpr hb, Nat.not_lt.mpr he, Nat.not_lt.mpr hm,
+      Nat.not_lt.mpr hg]
 
 /-- A successful call returns exactly `len_mod` bytes. -/
-theorem modexp_ok_size {data : ByteArray} {gas : Nat} {out : ByteArray}
-    (h : modexp data gas = .ok out) : out.size = (parseLengths data).modulus := by
+theorem modexp_ok_size {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArray}
+    (h : modexp fork data gas = .ok out) : out.size = (parseLengths data).modulus := by
   unfold modexp at h
   dsimp only at h
   -- The only success path returns the computed output.
@@ -243,13 +249,13 @@ theorem exponentHead_lt (data : ByteArray) (l : Lengths) : exponentHead data l <
       _ = 2 ^ 256 := by decide
   exact Nat.lt_of_lt_of_le h hle
 
-/-- A price is charged only for lengths in bounds, and it is at most 528449536.
+/-- From Fusaka, a price is charged only for lengths in bounds, and it is at most 528449536.
 
 So the price always fits in a 64-bit integer, the width of EVM gas. -/
-theorem chargedGas_le {data : ByteArray} {cost : Nat} (h : chargedGas data = .ok cost) :
-    cost ≤ 528449536 := by
-  unfold chargedGas at h
-  dsimp only at h
+theorem chargedGas_le {fork : Fork} (hfork : fork ≥ .fusaka) {data : ByteArray} {cost : Nat}
+    (h : chargedGas fork data = .ok cost) : cost ≤ 528449536 := by
+  unfold chargedGas checkLengthsAt at h
+  simp only [hfork, ite_true] at h
   -- The only success path is the one where every length passed its check.
   split at h
   · cases h
@@ -265,7 +271,7 @@ theorem chargedGas_le {data : ByteArray} {cost : Nat} (h : chargedGas data = .ok
     split at hc
     · cases hc
     next h3 =>
-    exact gasCost_le (Nat.le_of_not_lt h1) (Nat.le_of_not_lt h3) (Nat.le_of_not_lt h2)
+    exact gasCost_le hfork (Nat.le_of_not_lt h1) (Nat.le_of_not_lt h3) (Nat.le_of_not_lt h2)
       (exponentHead_lt _ _)
 
 end EthLib.Execution.Evm.Precompiles.Modexp
