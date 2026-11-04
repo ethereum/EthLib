@@ -3,8 +3,7 @@ module
 /-!
 # The BLAKE2b compression function
 
-The compression function F of BLAKE2b,
-[RFC 7693](https://www.rfc-editor.org/rfc/rfc7693) §3.2.
+The compression function F of BLAKE2b, [RFC 7693][rfc7693] §3.2.
 
 BLAKE2b runs F once per 128-byte block, with 12 rounds (§3.3).
 
@@ -19,6 +18,8 @@ Each step of the RFC is one definition:
 - One round of F, and F itself, §3.2.
 
 The code is a direct transcription of the RFC, not a constant-time implementation.
+
+[rfc7693]: https://www.rfc-editor.org/rfc/rfc7693
 -/
 
 @[expose] public section
