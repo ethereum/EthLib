@@ -4,21 +4,15 @@ public import EthLib.Cryptography.Proofs.Bls.HashToCurve
 public import EthLib.Cryptography.Proofs.Bls.G2Validity
 
 /-!
-# Proofs: The degree-3 BLS12-381 rational isogeny
+# Proofs: the 3-isogeny sends `E'` onto the twist
 
-Source: `RFC 9380 §8.8.2 and Appendix E.3`.
+Source: RFC 9380 §8.8.2 and Appendix E.3.
 
-`isoMapG2` maps affine points from `E' : y^2 = x^3 + A'*x + B'` to `E : y^2 = x^3 + 4*(1 + i)`.
+The kernel checks the 13 coefficients of Appendix E.3 against closed rational forms.
 
-The kernel checks the 13 `RFC 9380 Appendix E.3` polynomial coefficients against closed rational formulas.
+Both denominators vanish only at `x = -6 + 6 * i`, and no point of `E'` has that abscissa.
 
-`iso_poly` proves the degree-9 polynomial identity clearing denominators between `E'` and `E`.
-
-Both denominators share a single root `x = -6 + 6*i`, where `swuG (-6 + 6*i) = 4 + 4*i`.
-
-`pole_not_on_curve` rules out `y^2 = 4 + 4*i` because `N(4 + 4*i) = 32` is not a square in `Fp`.
-
-So every output of `simpleSwu` avoids the pole, and `isoMapG2` sends it to a `G2.Valid` point.
+So the isogeny sends every point of `E'` to a valid affine point of the twist.
 -/
 
 @[expose] public section
@@ -49,7 +43,7 @@ private theorem iso_poly (x : Fp2) :
   rw [h2, h3, h4, h5, h6, h7]
   ring
 
--- Each `Kij` unfolds to the coefficient `kij` of `isoMapG2`, which `change` checks below.
+-- The coefficients of Appendix E.3, written out so that `change` can check them below.
 private def K10 : Fp2 := ⟨Fp.ofNat 0x5c759507e8e333ebb5b7a9a47d7ed8532c52d39fd3a042a88b58423c50ae15d5c2638e343d9c71c6238aaaaaaaa97d6, Fp.ofNat 0x5c759507e8e333ebb5b7a9a47d7ed8532c52d39fd3a042a88b58423c50ae15d5c2638e343d9c71c6238aaaaaaaa97d6⟩
 private def K11 : Fp2 := ⟨Fp.ofNat 0, Fp.ofNat 0x11560bf17baa99bc32126fced787c88f984f87adf7ae0c7f9a208c6b4f20a4181472aaa9cb8d555526a9ffffffffc71a⟩
 private def K12 : Fp2 := ⟨Fp.ofNat 0x11560bf17baa99bc32126fced787c88f984f87adf7ae0c7f9a208c6b4f20a4181472aaa9cb8d555526a9ffffffffc71e, Fp.ofNat 0x8ab05f8bdd54cde190937e76bc3e447cc27c3d6fbd7063fcd104635a790520c0a395554e5c6aaaa9354ffffffffe38d⟩
@@ -149,7 +143,7 @@ private theorem d_ne_zero {x y : Fp2} (h : y * y = swuG x) : d x ≠ 0 := by
   rw [hx, hc] at h
   exact pole_not_on_curve y h
 
--- Off the pole, `isoMapG2` is the affine point of the rational map.
+-- Off the pole, the isogeny gives the affine point of its rational map.
 private theorem isoMapG2_eq {x y : Fp2} (hd : d x ≠ 0) :
     isoMapG2 x y = ⟨xn x / (9 * (d x) ^ 2), y * yn x / (27 * (d x) ^ 3), Fp2.one⟩ := by
   have h2 : ((d x) ^ 2).isZero = false :=
@@ -162,9 +156,9 @@ private theorem isoMapG2_eq {x y : Fp2} (hd : d x ≠ 0) :
   simp only [Bool.or_self, Bool.false_eq_true, ↓reduceIte, G2.mk.injEq]
   exact ⟨by ring, by ring, trivial⟩
 
-/-- `isoMapG2` sends every affine point of `E'` to an affine point of the twist `E` (`RFC 9380 §8.8.2 and Appendix E.3`).
+/-- The isogeny sends every affine point of `E'` to an affine point of the twist.
 
-Its rational denominators cannot vanish at any affine point on `E'`, so the map never takes its identity branch there.
+Its denominators never vanish on `E'`, so it never returns the identity there.
 -/
 theorem isoMapG2_curve_eq {x y : Fp2} (h : y * y = swuG x) :
     ∃ a b, isoMapG2 x y = ⟨a, b, Fp2.one⟩ ∧ b * b = a * a * a + G2.bTwist := by
@@ -188,7 +182,7 @@ theorem isoMapG2_valid {x y : Fp2} (h : y * y = swuG x) : G2.Valid (isoMapG2 x y
   rw [he]
   exact G2.valid_of_affine_equation hc
 
-/-- `isoMapG2` sends every output of `simpleSwu` to a nonsingular `G2` point. -/
+/-- The isogeny sends every output of the SSWU map to a nonsingular `G2` point. -/
 theorem simpleSwu_isoMapG2_valid {u : Fp2} {p : Fp2 × Fp2} (h : simpleSwu u = .ok p) :
     G2.Valid (isoMapG2 p.1 p.2) :=
   isoMapG2_valid (simpleSwu_curve_eq h)

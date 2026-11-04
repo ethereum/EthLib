@@ -3,15 +3,15 @@ module
 public import EthLib.Cryptography.Proofs.Bls.Isogeny
 
 /-!
-# Proofs: Twist curve validity of `hashToG2`
+# Proofs: the hash to G2 returns a valid point
 
-Source: `RFC 9380 §8.8.2 and Appendix G.3`.
+Source: RFC 9380 §8.8.2 and Appendix G.3.
 
-`psi`, `psi2`, `mulNegX`, and `clearCofactor` preserve `G2.Valid` on the BLS12-381 twist.
+The endomorphisms and the cofactor clearing keep a point on the twist.
 
-Together with `simpleSwu_ok` and `simpleSwu_isoMapG2_valid`, every `hashToG2 msg dst` call succeeds and returns a `G2.Valid` point.
+So the hash to G2 succeeds on every input and returns a nonsingular point.
 
-This file proves nonsingular curve membership (`G2.Valid`), not `r`-torsion subgroup membership.
+Subgroup membership is proved elsewhere.
 -/
 
 @[expose] public section

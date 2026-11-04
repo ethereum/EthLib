@@ -4,25 +4,13 @@ public import EthLib.Cryptography.Bls.HashToCurve
 public import EthLib.Cryptography.Proofs.Bls.Fp2
 
 /-!
-# Proofs: Simplified SWU map onto the 3-isogenous curve
+# Proofs: the SSWU map of the hash to G2 never fails
 
-Source: `RFC 9380 §6.6.2, §6.6.3 and §8.8.2`.
+Source: RFC 9380 §6.6.2, §6.6.3 and §8.8.2.
 
-`simpleSwu` maps every `u : Fp2` onto the 3-isogenous curve `E' : y^2 = x^3 + A'*x + B'`.
+`Z` is not a square, so `g(x1)` or `g(x2)` is a square, and the map finds a square root.
 
-`swuG_x2_eq` proves the algebraic SSWU relation `g(x2(u)) = (Z * u^2)^3 * g(x1(u))` when `Z^2 * u^4 + Z * u^2 != 0`.
-
-Because `p = 3 mod 4`, an element `a : Fp2` is a square whenever its `Fp` norm `N(a)` is a square in `Fp`.
-
-`N(Z) = 5` is a quadratic non-residue in `Fp`, with `-N(Z)` a square.
-
-Therefore at least one of `N(g(x1(u)))` or `N(g(x2(u)))` is a square in `Fp`.
-
-At the exceptional denominator `Z^2 * u^4 + Z * u^2 = 0`, `g(B' / (Z * A'))` has a square norm in `Fp` directly.
-
-Hence `Fp2.sqrt` succeeds on `gx1` or `gx2` for every `u : Fp2`.
-
-So `simpleSwu u` never returns its error, and its output `(x, y)` satisfies `y^2 = swuG x`.
+Each output `(x, y)` of the map lies on `E' : y^2 = x^3 + A' * x + B'`.
 -/
 
 @[expose] public section
@@ -258,10 +246,7 @@ private theorem norm_gx2_sq_zmod {nz nu ng sz sg : ZMod Fp.modulus}
     nz * nz * nu ^ 6 * sg * sg * hsz
     - nz ^ 3 * nu ^ 6 * hsg
 
-/-- For every `u : Fp2`, at least one of `g(x1(u))` or `g(x2(u))` has a square root in `Fp2`.
-
-So `simpleSwu` never returns its error.
--/
+/-- For every `u`, at least one of `g(x1(u))` and `g(x2(u))` has a square root in `Fp2`. -/
 theorem simpleSwu_sqrt_complete (u : Fp2) :
     (∃ y, Fp2.sqrt (swuG (swuX1 u)) = .ok y) ∨
     (∃ y, Fp2.sqrt (swuG (swuX2 u)) = .ok y) := by
@@ -297,7 +282,7 @@ theorem simpleSwu_sqrt_complete (u : Fp2) :
         exact norm_gx2_sq_zmod sqrtNegNormZ_sq hs2
       exact sqrt_of_norm_sq hw_sq
 
-/-- `simpleSwu` succeeds on every `u : Fp2` (`RFC 9380 §6.6.2`). -/
+/-- The SSWU map succeeds on every `u` (RFC 9380 §6.6.2). -/
 theorem simpleSwu_ok (u : Fp2) : ∃ p, simpleSwu u = .ok p := by
   have hor := simpleSwu_sqrt_complete u
   revert hor
@@ -315,7 +300,7 @@ theorem simpleSwu_ok (u : Fp2) : ∃ p, simpleSwu u = .ok p := by
       rw [hy2]
       exact ⟨_, rfl⟩
 
-/-- Every output of `simpleSwu` lies on `E' : y^2 = x^3 + A'*x + B'` (`RFC 9380 §6.6.2 and §8.8.2`). -/
+/-- Every output of the SSWU map lies on `E' : y^2 = x^3 + A' * x + B'`. -/
 theorem simpleSwu_curve_eq {u : Fp2} {p : Fp2 × Fp2} (h : simpleSwu u = .ok p) :
     p.2 * p.2 = swuG p.1 := by
   have hsqrt : ∀ {a c : Fp2}, Fp2.sqrt a = .ok c → c * c = a := fun hs => Fp2.sqrt_ok hs
