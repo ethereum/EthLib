@@ -1,0 +1,76 @@
+# Time EthLib against the Python specifications, on manual dispatch only.
+#
+# The job runs one round of benchmarks/run.sh, each side pinned to one core,
+# and uploads the table and the raw results. It never gates a merge.
+
+name: bench
+
+on:
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: Number of rounds of the three sides
+        type: string
+        default: "1"
+      only:
+        description: Comma-separated rows to run, or empty for all
+        type: string
+        default: ""
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.13.6"
+          enable-cache: false
+
+      # The latest build that ci.yml saved on master, read only.
+      - name: restore EthLib build
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: .lake/build
+          key: ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}
+          restore-keys: |
+            ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
+      - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
+        with:
+          auto-config: false
+          use-mathlib-cache: true
+          use-github-cache: false
+
+      - name: bindings
+        run: uv sync --frozen --extra test
+
+      - name: reference specifications and inputs
+        run: benchmarks/setup.sh
+
+      - name: benchmarks
+        env:
+          ROUNDS: ${{ inputs.rounds }}
+          BENCH_ONLY: ${{ inputs.only }}
+          CORE: "1"
+        run: benchmarks/run.sh
+
+      - name: upload results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bench-results
+          path: benchmarks/results/
