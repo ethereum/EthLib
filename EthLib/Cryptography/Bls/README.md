@@ -27,6 +27,7 @@ A client calls the proof-of-possession scheme of the draft and the two Ethereum 
 
 | Source | Lean | C export |
 | --- | --- | --- |
+| `KeyGen` | `keyGen` | `eth_bls_key_gen` |
 | `Sign` | `sign` | `eth_bls_sign` |
 | `Verify` | `verify` | `eth_bls_verify` |
 | `Aggregate` | `aggregate` | `eth_bls_aggregate` |
@@ -37,11 +38,13 @@ A client calls the proof-of-possession scheme of the draft and the two Ethereum 
 | `eth_aggregate_pubkeys` | `ethAggregatePubkeys` | `eth_bls_aggregate_pubkeys` |
 | `eth_fast_aggregate_verify` | `ethFastAggregateVerify` | `eth_bls_fast_aggregate_verify` |
 
-All of them live in `Signatures.lean`, on top of the core operations of the draft.
+All of them but key generation live in `Signatures.lean`, on top of the core operations of the draft.
 Key validation and the subgroup checks live in `Compress.lean`.
 
 A secret key is an element of `Fr` other than zero, and the exports read it as 32 big-endian bytes.
-EthLib has no key generation yet, and no function here runs in constant time.
+No function here runs in constant time.
+Key generation, in `KeyGen.lean`, tries at most 16 salts.
+It fails only if each salt gives a multiple of `r`.
 As in the draft, aggregation does not check the subgroup of a signature.
 Verification checks it.
 

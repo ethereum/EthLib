@@ -89,6 +89,12 @@ py_eth_fast_aggregate_verify(
 /* ---- Draft operations ------------------------------------------------- */
 
 extern lean_object*
+eth_bls_key_gen(
+  lean_object* ikm,
+  lean_object* key_info
+);
+
+extern lean_object*
 eth_bls_sign(
   lean_object* sk,
   lean_object* msg
@@ -174,6 +180,19 @@ parse_bytes_sequence(
   Py_DECREF(fast);
   *out = arr;
   return 0;
+}
+
+PyObject*
+py_bls_key_gen(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *ikm_obj, *info_obj;
+  if (!PyArg_ParseTuple(args, "OO", &ikm_obj, &info_obj)) return NULL;
+  lean_object *ikm, *info;
+  if (parse_bytes(ikm_obj, "input keying material", &ikm)) return NULL;
+  if (parse_bytes(info_obj, "key info", &info)) { lean_dec(ikm); return NULL; }
+  return run_io_into_pybytes(eth_bls_key_gen(ikm, info), "key_gen");
 }
 
 PyObject*

@@ -320,7 +320,7 @@ EthLib makes no constant-time claim.
 This matters where secret data is handled.
 XMSS and leanSPHINCS `keyGen` and `sign` handle secret data.
 The Python bindings expose all four, as `key_gen` and `sign` in each module, which take the secret seed.
-BLS signing and the proof of possession take the secret key, and the Python bindings expose both.
+BLS key generation, signing and the proof of possession handle secret data, and the Python bindings expose all three.
 
 Every AES function that takes a key handles secret data.
 Its S-box is a table, and the cipher reads it at indices that depend on the key.
@@ -382,13 +382,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 42 operations and 37 size constants.
-The Python extension calls 42 of the operations and 28 of the constants.
+Lean exports 43 operations and 37 size constants.
+The Python extension calls 43 of the operations and 28 of the constants.
 Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_const_n`, `eth_sphincs_const_public_param_len`, `eth_sphincs_const_randomizer_len`, `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-2247 lines of hand-written C sit between them and Python: `bls.c` (313), `ecrecover.c` (34), `kzg.c` (533), `modexp.c` (61), `module.c` (572), `precompile.c` (43), `ripemd160.c` (36), `secp256k1.c` (94), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `sphincs.c` (94), `wrappers.h` (182), `xmss.c` (143).
+2268 lines of hand-written C sit between them and Python: `bls.c` (332), `ecrecover.c` (34), `kzg.c` (533), `modexp.c` (61), `module.c` (573), `precompile.c` (43), `ripemd160.c` (36), `secp256k1.c` (94), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `sphincs.c` (94), `wrappers.h` (183), `xmss.c` (143).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

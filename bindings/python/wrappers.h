@@ -132,6 +132,7 @@ pack_bytes_sequence(
 
 PyObject* py_eth_aggregate_pubkeys                        (PyObject* self, PyObject* args);
 PyObject* py_eth_fast_aggregate_verify                    (PyObject* self, PyObject* args);
+PyObject* py_bls_key_gen                                  (PyObject* self, PyObject* args);
 PyObject* py_bls_sign                                     (PyObject* self, PyObject* args);
 PyObject* py_bls_verify                                   (PyObject* self, PyObject* args);
 PyObject* py_bls_aggregate                                (PyObject* self, PyObject* args);
