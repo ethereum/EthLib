@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Proofs.Kzg.ExtendedCells
 public import EthLib.Cryptography.Proofs.Kzg.CosetInterpolation
 public import EthLib.Cryptography.Proofs.Kzg.Core
 public import EthLib.Cryptography.Proofs.Kzg.Division
+public import EthLib.Cryptography.Proofs.Kzg.TrustedSetup
 public import EthLib.Cryptography.Proofs.Kzg.RecoveryDomain
 public import EthLib.Cryptography.Proofs.Kzg.RecoveryReconstruction
 public import EthLib.Cryptography.Proofs.Bls.G1Msm
@@ -695,7 +696,8 @@ def fk20CellsAndProofs (setup : TrustedSetup) (polynomialCoeff : PolynomialCoeff
   let proofs := (Task.spawn fun _ =>
     let tasks := (Array.range shifts).map fun e => Task.spawn fun _ =>
       let d := e + 1
-      Bls.G1.msm (setup.g1Monomial.extract 0 (size - n * d)) (polynomialCoeff.extract (n * d) size)
+      Bls.G1.msm (setup.g1Monomial.toArray.extract 0 (size - n * d))
+        (polynomialCoeff.extract (n * d) size)
     let hs := tasks.map Task.get
     let padded := hs ++ Array.replicate (CELLS_PER_EXT_BLOB - hs.size) Bls.G1.zero
     bitReversalPermutation (fftG1 padded (computeRootsOfUnity CELLS_PER_EXT_BLOB))).get
@@ -953,29 +955,29 @@ Then for every cell `cosetForCell cellIndex = .ok coset`:
 
 - `vanishingPolynomialcoeff coset` returns `vanishing`.
 - `dividePolynomialcoeff polynomialCoeff vanishing` returns `quotient`.
-- `g1LincombPoints` on `setup.g1Monomial.extract 0 quotient.size` and `quotient` returns `Bls.G1.msm`.
+- `g1LincombPoints` on `setup.g1Monomial.toArray.extract 0 quotient.size` and `quotient` returns `Bls.G1.msm`.
 - Cell `cellIndex` equals `cosetEvalsToCell (coset.map (evaluatePolynomialcoeff polynomialCoeff))`.
-- Proof `cellIndex` equals `Bls.G1.compress (Bls.G1.msm (setup.g1Monomial.extract 0 quotient.size) quotient)`.
+- Proof `cellIndex` equals `Bls.G1.compress (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient)`.
 -/
 theorem fk20CellsAndProofs_eq_perCellSpec
     {setup : TrustedSetup} {polynomialCoeff : PolynomialCoeff}
     {cellIndex : CellIndex} {coset : Coset}
     (hp : polynomialCoeff.size ≤ FIELD_ELEMENTS_PER_EXT_BLOB)
-    (hsetup_sz : polynomialCoeff.size - FIELD_ELEMENTS_PER_CELL ≤ setup.g1Monomial.size)
+    (hsetup_sz : polynomialCoeff.size - FIELD_ELEMENTS_PER_CELL ≤ setup.g1Monomial.toArray.size)
     (hsetup_valid : ∀ t < polynomialCoeff.size - FIELD_ELEMENTS_PER_CELL,
-      G1.Valid setup.g1Monomial[t]!)
+      G1.Valid setup.g1Monomial.toArray[t]!)
     (hsetup_tor : ∀ t < polynomialCoeff.size - FIELD_ELEMENTS_PER_CELL,
-      Fr.modulus • G1.toPoint setup.g1Monomial[t]! = 0)
+      Fr.modulus • G1.toPoint setup.g1Monomial.toArray[t]! = 0)
     (hcoset : cosetForCell cellIndex = .ok coset) :
     ∃ vanishing quotient,
       vanishingPolynomialcoeff coset = .ok vanishing ∧
       dividePolynomialcoeff polynomialCoeff vanishing = .ok quotient ∧
-      g1LincombPoints (setup.g1Monomial.extract 0 quotient.size) quotient =
-        pure (Bls.G1.msm (setup.g1Monomial.extract 0 quotient.size) quotient) ∧
+      g1LincombPoints (setup.g1Monomial.toArray.extract 0 quotient.size) quotient =
+        pure (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient) ∧
       (fk20CellsAndProofs setup polynomialCoeff).1[cellIndex]! =
         cosetEvalsToCell (coset.map (evaluatePolynomialcoeff polynomialCoeff)) ∧
       (fk20CellsAndProofs setup polynomialCoeff).2[cellIndex]! =
-        Bls.G1.compress (Bls.G1.msm (setup.g1Monomial.extract 0 quotient.size) quotient) := by
+        Bls.G1.compress (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient) := by
   have hci : cellIndex < CELLS_PER_EXT_BLOB := cosetForCell_ok_iff.mp ⟨coset, hcoset⟩
   let n := FIELD_ELEMENTS_PER_CELL
   let N := CELLS_PER_EXT_BLOB
@@ -989,7 +991,7 @@ theorem fk20CellsAndProofs_eq_perCellSpec
     shifts_le_cells_per_ext_blob hp
   have hq_sz : (toeplitzQuotient polynomialCoeff n c).size = polynomialCoeff.size - n :=
     size_toeplitzQuotient polynomialCoeff n c
-  have hex_sz : (setup.g1Monomial.extract 0 (toeplitzQuotient polynomialCoeff n c).size).size =
+  have hex_sz : (setup.g1Monomial.toArray.extract 0 (toeplitzQuotient polynomialCoeff n c).size).size =
       (toeplitzQuotient polynomialCoeff n c).size := by
     rw [Array.size_extract, hq_sz, Nat.min_eq_left hsetup_sz, Nat.sub_zero]
   -- Witness `vanishing` and `quotient` from the algebraic characterizations proved above.
@@ -1001,12 +1003,12 @@ theorem fk20CellsAndProofs_eq_perCellSpec
   -- Unpack the spawned tasks inside `fk20CellsAndProofs`.
   let shifts := (polynomialCoeff.size + n - 1) / n - 1
   let hs := (Array.range shifts).map fun e =>
-    Bls.G1.msm (setup.g1Monomial.extract 0 (polynomialCoeff.size - n * (e + 1)))
+    Bls.G1.msm (setup.g1Monomial.toArray.extract 0 (polynomialCoeff.size - n * (e + 1)))
       (polynomialCoeff.extract (n * (e + 1)) polynomialCoeff.size)
   let padded := hs ++ Array.replicate (N - hs.size) Bls.G1.zero
   have htasks_eq :
       (((Array.range shifts).map fun e => Task.spawn fun _ =>
-        Bls.G1.msm (setup.g1Monomial.extract 0 (polynomialCoeff.size - n * (e + 1)))
+        Bls.G1.msm (setup.g1Monomial.toArray.extract 0 (polynomialCoeff.size - n * (e + 1)))
           (polynomialCoeff.extract (n * (e + 1)) polynomialCoeff.size)).map Task.get) = hs := by
     rw [Array.map_map]
     rfl
@@ -1025,7 +1027,7 @@ theorem fk20CellsAndProofs_eq_perCellSpec
       getElem_computeRootsOfUnity]
   -- Apply `sum_padded_msm_eq_msm_toeplitz`.
   obtain ⟨hpad_valid, hpad_tor, hv_msm_q, hsum_eq⟩ :=
-    sum_padded_msm_eq_msm_toeplitz (pts := setup.g1Monomial) (f := polynomialCoeff)
+    sum_padded_msm_eq_msm_toeplitz (pts := setup.g1Monomial.toArray) (f := polynomialCoeff)
       (n := n) (N := N) hshifts_le hsetup_sz hsetup_valid hsetup_tor c
   have hpad_sz : padded.size = 2 ^ 7 := by
     have hhs_sz : hs.size = shifts := by simp [hs]
@@ -1044,7 +1046,7 @@ theorem fk20CellsAndProofs_eq_perCellSpec
   have hv_fft : G1.Valid (fftG1 padded (computeRootsOfUnity N))[r]! :=
     valid_getElem!_fftG1 padded (computeRootsOfUnity N) hpad_sz hpad_valid r hr_lt7
   have hpt_fft : G1.toPoint (fftG1 padded (computeRootsOfUnity N))[r]! =
-      G1.toPoint (Bls.G1.msm (setup.g1Monomial.extract 0 (polynomialCoeff.size - n))
+      G1.toPoint (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 (polynomialCoeff.size - n))
         (toeplitzQuotient polynomialCoeff n c)) := by
     rw [toPoint_getElem!_fftG1 hω_prim padded (computeRootsOfUnity N)
       hpad_sz hroots_sz hroots_elem hpad_valid hpad_tor r hr_lt7]
@@ -1085,29 +1087,27 @@ theorem computeCellsAndKzgProofs_blob_spec
     {setup : TrustedSetup} {blob : Blob} {poly : Polynomial}
     {cellIndex : CellIndex} {coset : Coset}
     (hblob : blobToPolynomial blob = .ok poly)
-    (hsetup_sz : FIELD_ELEMENTS_PER_BLOB - FIELD_ELEMENTS_PER_CELL ≤ setup.g1Monomial.size)
-    (hsetup_valid : ∀ t < FIELD_ELEMENTS_PER_BLOB - FIELD_ELEMENTS_PER_CELL,
-      G1.Valid setup.g1Monomial[t]!)
+    (hvalid : setup.Valid)
     (hsetup_tor : ∀ t < FIELD_ELEMENTS_PER_BLOB - FIELD_ELEMENTS_PER_CELL,
-      Fr.modulus • G1.toPoint setup.g1Monomial[t]! = 0)
+      Fr.modulus • G1.toPoint setup.g1Monomial.toArray[t]! = 0)
     (hcoset : cosetForCell cellIndex = .ok coset) :
     let polynomialCoeff := polynomialEvalToCoeff poly
     ∃ vanishing quotient,
       vanishingPolynomialcoeff coset = .ok vanishing ∧
       dividePolynomialcoeff polynomialCoeff vanishing = .ok quotient ∧
-      g1LincombPoints (setup.g1Monomial.extract 0 quotient.size) quotient =
-        pure (Bls.G1.msm (setup.g1Monomial.extract 0 quotient.size) quotient) ∧
+      g1LincombPoints (setup.g1Monomial.toArray.extract 0 quotient.size) quotient =
+        pure (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient) ∧
       (fk20CellsAndProofs setup polynomialCoeff).1[cellIndex]! =
         cosetEvalsToCell (coset.map (evaluatePolynomialcoeff polynomialCoeff)) ∧
       (fk20CellsAndProofs setup polynomialCoeff).2[cellIndex]! =
-        Bls.G1.compress (Bls.G1.msm (setup.g1Monomial.extract 0 quotient.size) quotient) := by
+        Bls.G1.compress (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient) := by
   intro polynomialCoeff
   have hp_sz : polynomialCoeff.size = FIELD_ELEMENTS_PER_BLOB := by
     rw [size_polynomialEvalToCoeff, size_blobToPolynomial blob poly hblob]
   exact fk20CellsAndProofs_eq_perCellSpec
     (hp_sz ▸ (by decide : FIELD_ELEMENTS_PER_BLOB ≤ FIELD_ELEMENTS_PER_EXT_BLOB))
-    (hp_sz.symm ▸ hsetup_sz)
-    (hp_sz.symm ▸ hsetup_valid)
+    (by rw [hp_sz, Vector.size_toArray]; decide)
+    (fun t ht => hvalid.g1Monomial_getElem! (by rw [hp_sz] at ht; omega))
     (hp_sz.symm ▸ hsetup_tor)
     hcoset
 
@@ -1264,27 +1264,25 @@ theorem recoverCellsAndKzgProofs_spec
       (fun i => cellIndices[i + 1]! ≤ cellIndices[i]!) = false)
     (hdec : cells.mapM cellToCosetEvals = .ok cosetsEvals)
     (hmatch : RecoverySamplesMatch p cellIndices cosetsEvals)
-    (hsetup_sz : FIELD_ELEMENTS_PER_BLOB - FIELD_ELEMENTS_PER_CELL ≤ setup.g1Monomial.size)
-    (hsetup_valid : ∀ t < FIELD_ELEMENTS_PER_BLOB - FIELD_ELEMENTS_PER_CELL,
-      G1.Valid setup.g1Monomial[t]!)
+    (hvalid : setup.Valid)
     (hsetup_tor : ∀ t < FIELD_ELEMENTS_PER_BLOB - FIELD_ELEMENTS_PER_CELL,
-      Fr.modulus • G1.toPoint setup.g1Monomial[t]! = 0)
+      Fr.modulus • G1.toPoint setup.g1Monomial.toArray[t]! = 0)
     (hcoset : cosetForCell cellIndex = .ok coset) :
     recoverCellsAndKzgProofs setup cellIndices cells = .ok (fk20CellsAndProofs setup p) ∧
     ∃ vanishing quotient,
       vanishingPolynomialcoeff coset = .ok vanishing ∧
       dividePolynomialcoeff p vanishing = .ok quotient ∧
-      g1LincombPoints (setup.g1Monomial.extract 0 quotient.size) quotient =
-        pure (Bls.G1.msm (setup.g1Monomial.extract 0 quotient.size) quotient) ∧
+      g1LincombPoints (setup.g1Monomial.toArray.extract 0 quotient.size) quotient =
+        pure (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient) ∧
       (fk20CellsAndProofs setup p).1[cellIndex]! =
         cosetEvalsToCell (coset.map (evaluatePolynomialcoeff p)) ∧
       (fk20CellsAndProofs setup p).2[cellIndex]! =
-        Bls.G1.compress (Bls.G1.msm (setup.g1Monomial.extract 0 quotient.size) quotient) :=
+        Bls.G1.compress (Bls.G1.msm (setup.g1Monomial.toArray.extract 0 quotient.size) quotient) :=
   ⟨recoverCellsAndKzgProofs_ok_eq setup hp hlen hmin hbound hasc hdec hmatch,
    fk20CellsAndProofs_eq_perCellSpec
      (hp ▸ (by decide : FIELD_ELEMENTS_PER_BLOB ≤ FIELD_ELEMENTS_PER_EXT_BLOB))
-     (hp.symm ▸ hsetup_sz)
-     (hp.symm ▸ hsetup_valid)
+     (by rw [hp, Vector.size_toArray]; decide)
+     (fun t ht => hvalid.g1Monomial_getElem! (by rw [hp] at ht; omega))
      (hp.symm ▸ hsetup_tor)
      hcoset⟩
 

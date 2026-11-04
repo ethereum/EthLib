@@ -176,7 +176,8 @@ def computeCellsAndKzgProofsPolynomialcoeff (setup : TrustedSetup)
   let proofs := (Task.spawn fun _ =>
     let tasks := (Array.range shifts).map fun e => Task.spawn fun _ =>
       let d := e + 1
-      Bls.G1.msm (setup.g1Monomial.extract 0 (size - n * d)) (polynomialCoeff.extract (n * d) size)
+      Bls.G1.msm (setup.g1Monomial.toArray.extract 0 (size - n * d))
+        (polynomialCoeff.extract (n * d) size)
     let hs := tasks.map Task.get
 
     -- Phase 2: evaluate sum_d H_d * Y^(d - 1) at the 128-th roots of unity.
@@ -274,10 +275,12 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
   let rPowers := computePowers r numCells
 
   -- Step 2: LL = Σ_k r^k proofs[k].
-  let ll : G1 ← uncompressG1 (← g1Lincomb proofs rPowers)
+  -- The proofs are decoded once, for this sum and for RLP.
+  let proofsG1 ← proofs.mapM uncompressG1
+  let ll : G1 ← g1LincombPoints proofsG1 rPowers
 
   -- Step 3: LR = [s^n].
-  let lr : G2 := setup.g2Monomial[n]!
+  let lr : G2 := setup.g2Monomial[FIELD_ELEMENTS_PER_CELL]'(by decide)
 
   -- Step 4.1: weights[i] = Σ_{k : commitmentIndices[k] = i} r^k.
   -- Note: we do that by iterating over all k and updating the correct
@@ -289,7 +292,7 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
       weights.set! i (weights[i]! + rPowers[k]!)
 
   -- Step 4.1b: RLC = Σ_i weights[i] commitments[i].
-  let rlc : G1 ← uncompressG1 (← g1Lincomb commitments weights)
+  let rlc : G1 ← g1LincombPoints (← commitments.mapM uncompressG1) weights
 
   -- The coset shift h_k of every cell.
   -- The domain is computed once, not once per cell.
@@ -308,12 +311,12 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
       let interp ← interpolateCosetEvals shifts[k]! cosetsEvals[k]!
       let scaled ← multiplyPolynomialcoeff #[rPowers[k]!] interp
       pure (addPolynomialcoeff sumInterp scaled)
-  let rli : G1 ← g1LincombPoints (setup.g1Monomial.extract 0 n) sumInterp
+  let rli : G1 ← g1LincombPoints (setup.g1Monomial.toArray.extract 0 n) sumInterp
 
   -- Step 4.3: RLP = Σ_k (r^k * h_k^n) proofs[k].
   let weightedRPowers : Array Fr := (Array.range numCells).map fun k =>
     rPowers[k]! * (shifts[k]! ^ (Fr.ofNat n))
-  let rlp : G1 ← uncompressG1 (← g1Lincomb proofs weightedRPowers)
+  let rlp : G1 ← g1LincombPoints proofsG1 weightedRPowers
 
   -- Step 4.4: RL = RLC - RLI + RLP.
   let rl : G1 := Bls.G1.add (Bls.G1.add rlc (Bls.G1.neg rli)) rlp
@@ -321,7 +324,7 @@ def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
   -- Step 5: pairing(LL, LR) = pairing(RL, [1]).
   return Bls.pairingCheck #[
     (ll, lr),
-    (rl, Bls.G2.neg setup.g2Monomial[0]!)
+    (rl, Bls.G2.neg (setup.g2Monomial[0]'(by decide)))
   ]
 
 /-- Verify that a set of cells belong to their corresponding commitments.

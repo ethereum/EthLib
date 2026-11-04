@@ -85,9 +85,9 @@ def computeChallenge (blob : Blob) (commitment : KZGCommitment) : Fr :=
 
 /-- The linear combination `sum_i scalars_i * points_i` of decoded points.
 
-This is `g1_lincomb` from the Deneb polynomial commitments specification, without the decoding step.
+This is `g1_lincomb` from the Deneb polynomial commitments specification, on decoded points.
 
-Callers that already hold points skip a compress and decompress round trip.
+The setup and the inputs are decoded once, so no point goes through bytes in between.
 -/
 def g1LincombPoints
     (points : Array G1) (scalars : Array Fr) : Except KzgError G1 := do
@@ -96,19 +96,6 @@ def g1LincombPoints
   if points.size = 0 then
     return Bls.G1.zero
   return Bls.G1.msm points scalars
-
-/-- BLS multi-scalar multiplication in G1, on compressed-point inputs. -/
-def g1Lincomb
-    (points : Array KZGCommitment) (scalars : Array Fr) : Except KzgError KZGCommitment := do
-  if points.size ≠ scalars.size then
-    throw (.lincombLengthMismatch points.size scalars.size)
-  if points.size = 0 then
-    return Bls.G1.compress Bls.G1.zero
-  -- An undecodable 48-byte input must fail: the `Inhabited` default of
-  -- `G1` is the point at infinity, so it would silently drop out of the
-  -- multi-scalar multiplication.
-  let pointsG1 ← points.mapM uncompressG1
-  return Bls.G1.compress (Bls.G1.msm pointsG1 scalars)
 
 /-- Given `y == p(z)` for a polynomial `p(x)`, compute `q(z)`: the KZG
 quotient polynomial evaluated at `z` for the special case where `z` is in
@@ -140,7 +127,7 @@ def computeQuotientEvalWithinDomain
 /-- Returns the KZG proof at `z` and the evaluation `y = p(z)`. -/
 def computeKzgProofImpl (setup : TrustedSetup)
     (polynomial : Polynomial) (z : Fr) : Except KzgError (KZGProof × Fr) := do
-  let g1LagrangeBrp := bitReversalPermutation setup.g1Lagrange
+  let g1LagrangeBrp := setup.g1LagrangeBrp.toArray
   let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB
 
   -- For all x_i, compute p(x_i) - p(z).
@@ -198,7 +185,7 @@ def verifyKzgProofWith (s : G2)
 The Deneb specification calls it `verify_kzg_proof_impl`. -/
 def verifyKzgProofImpl (setup : TrustedSetup)
     (commitmentG1 : G1) (z y : Fr) (proofG1 : G1) : Bool :=
-  verifyKzgProofWith setup.g2Monomial[1]! commitmentG1 z y proofG1
+  verifyKzgProofWith (setup.g2Monomial[1]'(by decide)) commitmentG1 z y proofG1
 
 /-- Verify a KZG proof, taking inputs as raw bytes. -/
 def verifyKzgProof (setup : TrustedSetup)
@@ -261,7 +248,7 @@ def verifyKzgProofBatch (setup : TrustedSetup)
                (Bls.G1.mul Bls.G1.generator (-ys[i.val]!))
   let cMinusYLincombG1 ← g1LincombPoints cMinusYs rPowers
 
-  let s := setup.g2Monomial[1]!
+  let s := setup.g2Monomial[1]'(by decide)
   let pairs : Array (G1 × G2) := #[
     ( proofLincombG1, Bls.G2.neg s ),
     ( Bls.G1.add cMinusYLincombG1 proofZLincombG1
@@ -275,8 +262,7 @@ def blobToKzgCommitment (setup : TrustedSetup) (blob : Blob) :
   if blob.size ≠ BYTES_PER_BLOB then
     throw (.badBlobSize blob.size)
   let polynomial ← blobToPolynomial blob
-  let lagrangeBrp := bitReversalPermutation setup.g1Lagrange
-  let commitmentG1 ← g1LincombPoints lagrangeBrp polynomial
+  let commitmentG1 ← g1LincombPoints setup.g1LagrangeBrp.toArray polynomial
   return Bls.G1.compress commitmentG1
 
 /-- Compute the KZG proof verifying `blob` against `commitment`. Does

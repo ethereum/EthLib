@@ -27,6 +27,7 @@ public import EthLib.Cryptography.Proofs.Kzg.ExtendedCells
 public import EthLib.Cryptography.Proofs.Kzg.CosetInterpolation
 public import EthLib.Cryptography.Proofs.Kzg.FftG1
 public import EthLib.Cryptography.Proofs.Kzg.Fk20Proofs
+public import EthLib.Cryptography.Proofs.Kzg.TrustedSetup
 
 /-!
 # `EthLib.Cryptography.Proofs.Kzg`

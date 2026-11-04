@@ -136,38 +136,6 @@ theorem g1LincombPoints_eq_msm {points : Array Bls.G1} {scalars : Array Fr}
     rw [hm]
   · rw [ite_eq_right h0]
 
-/-- `g1Lincomb` rejects mismatched input lengths. -/
-theorem g1Lincomb_length_mismatch {points : Array KZGCommitment}
-    {scalars : Array Fr} (h : points.size ≠ scalars.size) :
-    g1Lincomb points scalars
-      = throw (.lincombLengthMismatch points.size scalars.size) := by
-  simp [g1Lincomb, h, throw_bind]
-
-/-- `g1Lincomb` of nothing is the identity (the point at infinity). -/
-theorem g1Lincomb_empty :
-    g1Lincomb #[] #[] = pure (Bls.G1.compress Bls.G1.zero) := by
-  simp [g1Lincomb]
-
-/-- When every commitment in `pointsBytes` decompresses via `uncompressG1` to
-`pointsG1` (`pointsG1.size = pointsBytes.size`), `g1Lincomb pointsBytes scalars`
-agrees with compressing the output of `g1LincombPoints pointsG1 scalars`. -/
-theorem g1LincombPoints_of_uncompress {pointsBytes : Array KZGCommitment}
-    {pointsG1 : Array Bls.G1} (scalars : Array Fr)
-    (hsz : pointsG1.size = pointsBytes.size)
-    (h : pointsBytes.mapM uncompressG1 = pure pointsG1) :
-    g1Lincomb pointsBytes scalars =
-      (g1LincombPoints pointsG1 scalars >>= fun p => pure (Bls.G1.compress p)) := by
-  unfold g1Lincomb g1LincombPoints
-  rw [hsz]
-  by_cases hne : pointsBytes.size ≠ scalars.size
-  · simp [hne, throw_bind]
-    rfl
-  · rw [ite_eq_right hne, ite_eq_right hne]
-    by_cases h0 : pointsBytes.size = 0
-    · simp [h0]
-    · rw [ite_eq_right h0, ite_eq_right h0, h]
-      simp only [pure_bind]
-
 /-- `computeKzgProof` rejects a wrongly-sized blob. -/
 theorem computeKzgProof_badBlobSize (setup : TrustedSetup) {blob : Blob} (zBytes : Bytes32)
     (h : blob.size ≠ BYTES_PER_BLOB) :
