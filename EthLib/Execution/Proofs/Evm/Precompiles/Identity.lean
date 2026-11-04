@@ -44,24 +44,4 @@ theorem identity_eq_error_iff (data : ByteArray) (gas : Nat) (e : IdentityError)
     exact eq_comm
   · simp [short]
 
-/-! ## Known answers
-
-Each price is worked out by hand from `15 + 3 * ceil(len / 32)`. -/
-
-/-- Empty call data costs the base price alone, and gives empty output. -/
-theorem identity_empty : identity .empty 15 = .ok .empty := rfl
-
-/-- One gas below the base price runs out of gas. -/
-theorem identity_empty_out_of_gas : identity .empty 14 = .error (.outOfGas 15 14) := rfl
-
-/-- Thirty-three bytes take two words: `15 + 3 * 2 = 21` gas, and the bytes come back unchanged. -/
-theorem identity_33 :
-    identity ⟨.replicate 33 0xab⟩ 21 = .ok ⟨.replicate 33 0xab⟩ :=
-  (identity_eq_ok_iff _ _ _).mpr ⟨by decide, rfl⟩
-
-/-- Thirty-three bytes with 20 gas run out of gas. -/
-theorem identity_33_out_of_gas :
-    identity ⟨.replicate 33 0xab⟩ 20 = .error (.outOfGas 21 20) :=
-  (identity_eq_error_iff _ _ _).mpr ⟨by decide, by decide⟩
-
 end EthLib.Execution.Evm.Precompiles.Identity

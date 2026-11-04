@@ -64,12 +64,13 @@ def test_ripemd160(data: bytes, digest: str | None, price: int) -> None:
         run(0x03, data, price - 1)
 
 
-def test_identity() -> None:
+@pytest.mark.parametrize("size, price", [(0, 15), (33, 21)])
+def test_identity(size: int, price: int) -> None:
     # The price is 15, plus 3 per started 32-byte word.
-    data = bytes(range(33))
-    assert run(0x04, data, 21) == data
+    data = bytes(range(size))
+    assert run(0x04, data, price) == data
     with pytest.raises(ValueError, match="outOfGas"):
-        run(0x04, data, 20)
+        run(0x04, data, price - 1)
 
 
 def test_modexp() -> None:
