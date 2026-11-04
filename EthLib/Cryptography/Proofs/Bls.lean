@@ -39,6 +39,7 @@ public import EthLib.Cryptography.Proofs.Bls.CofactorPrimes
 public import EthLib.Cryptography.Proofs.Bls.CofactorSpan
 public import EthLib.Cryptography.Proofs.Bls.CofactorSubgroupLanding
 public import EthLib.Cryptography.Proofs.Bls.G2SubgroupSpan
+public import EthLib.Cryptography.Proofs.Bls.PairingCongr
 
 /-!
 # `EthLib.Cryptography.Proofs.Bls`
