@@ -13,6 +13,7 @@ C-ABI exports for the MODEXP precompile, callable from the Python C extension.
 - Inputs are `ByteArray` or `UInt64`.
 - Outputs are `ByteArray` or `UInt64`.
 - A failure comes back as the code and the message of its error.
+- The precompile runs at Fusaka, whose rules hold through BPO2.
 -/
 
 public section
@@ -49,15 +50,15 @@ def constMaxLengthBytes (_ : Unit) : UInt64 :=
 EVM gas is a 64-bit integer, so the gas crosses the boundary as `UInt64`. -/
 @[export eth_modexp]
 def modexpExport (data : ByteArray) (gas : UInt64) : Result ByteArray :=
-  runModexp (modexp data gas.toNat)
+  runModexp (modexp .fusaka data gas.toNat)
 
 /-- The gas the precompile charges for the call data.
 
-The price is at most 528449536 once the lengths are in bounds.
+At Fusaka, the price is at most 528449536 once the lengths are in bounds.
 
 A proof in the proofs library shows this, so the conversion to `UInt64` drops nothing. -/
 @[export eth_modexp_gas_cost]
 def gasCostExport (data : ByteArray) : Result UInt64 :=
-  runModexp ((chargedGas data).map UInt64.ofNat)
+  runModexp ((chargedGas .fusaka data).map UInt64.ofNat)
 
 end EthLib.Execution.Evm.Precompiles.Modexp.Exports

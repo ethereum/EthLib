@@ -21,16 +21,19 @@ The Python suite checks the outputs against py_ecc.
 namespace EthLib.Execution.Evm.Precompiles.AltBn128
 
 open EthLib.Cryptography.AltBn128
-open EthLib.Execution.Evm (bufferRead)
+open EthLib.Base (Fork)
+open EthLib.Execution.Evm (bufferRead gasSchedule)
 
 /-- ECADD runs out of gas below its price. -/
-theorem ecadd_outOfGas (data : ByteArray) {gas : Nat} (hgas : gas < GAS_ECADD) :
-    ecadd data gas = .error (.outOfGas GAS_ECADD gas) := by
+theorem ecadd_outOfGas (fork : Fork) (data : ByteArray) {gas : Nat}
+    (hgas : gas < (gasSchedule fork).PRECOMPILE_ECADD) :
+    ecadd fork data gas = .error (.outOfGas (gasSchedule fork).PRECOMPILE_ECADD gas) := by
   simp [ecadd, hgas, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- ECMUL runs out of gas below its price. -/
-theorem ecmul_outOfGas (data : ByteArray) {gas : Nat} (hgas : gas < GAS_ECMUL) :
-    ecmul data gas = .error (.outOfGas GAS_ECMUL gas) := by
+theorem ecmul_outOfGas (fork : Fork) (data : ByteArray) {gas : Nat}
+    (hgas : gas < (gasSchedule fork).PRECOMPILE_ECMUL) :
+    ecmul fork data gas = .error (.outOfGas (gasSchedule fork).PRECOMPILE_ECMUL gas) := by
   simp [ecmul, hgas, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- The 64 bytes of a point. -/
@@ -46,7 +49,8 @@ theorem bind_eq_ok {α β : Type} {x : Except AltBn128Error α} {f : α → Exce
   | ok a => exact ⟨a, rfl, h⟩
 
 /-- Every output of ECADD has 64 bytes. -/
-theorem ecadd_size {data : ByteArray} {gas : Nat} {out : ByteArray} (h : ecadd data gas = .ok out) :
+theorem ecadd_size {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArray}
+    (h : ecadd fork data gas = .ok out) :
     out.size = 64 := by
   simp only [ecadd, bind, throw, throwThe, MonadExceptOf.throw] at h
   split at h
@@ -57,7 +61,8 @@ theorem ecadd_size {data : ByteArray} {gas : Nat} {out : ByteArray} (h : ecadd d
   simp [ByteArray.size, length_g1ToBytes]
 
 /-- Every output of ECMUL has 64 bytes. -/
-theorem ecmul_size {data : ByteArray} {gas : Nat} {out : ByteArray} (h : ecmul data gas = .ok out) :
+theorem ecmul_size {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArray}
+    (h : ecmul fork data gas = .ok out) :
     out.size = 64 := by
   simp only [ecmul, bind, throw, throwThe, MonadExceptOf.throw] at h
   split at h
@@ -91,25 +96,25 @@ theorem bytesToG1_isOnCurve {raw : List UInt8} {p : Point} (h : bytesToG1 raw = 
   · cases h
 
 /-- ECADD succeeds exactly when the gas covers the price and both points decode. -/
-theorem ecadd_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
-    ecadd data gas = .ok out ↔ GAS_ECADD ≤ gas ∧ ∃ p0 p1,
+theorem ecadd_eq_ok_iff (fork : Fork) (data : ByteArray) (gas : Nat) (out : ByteArray) :
+    ecadd fork data gas = .ok out ↔ (gasSchedule fork).PRECOMPILE_ECADD ≤ gas ∧ ∃ p0 p1,
       bytesToG1 (bufferRead data 0 64) = .ok p0 ∧ bytesToG1 (bufferRead data 64 64) = .ok p1 ∧
       out = ⟨(g1ToBytes (p0 + p1)).toArray⟩ := by
-  by_cases hgas : gas < GAS_ECADD
-  · simp [ecadd_outOfGas data hgas, Nat.not_le.mpr hgas]
+  by_cases hgas : gas < (gasSchedule fork).PRECOMPILE_ECADD
+  · simp [ecadd_outOfGas fork data hgas, Nat.not_le.mpr hgas]
   · simp only [ecadd, hgas, bind, Except.bind, pure, Except.pure, throw, throwThe,
       MonadExceptOf.throw]
     cases h0 : bytesToG1 (bufferRead data 0 64) <;>
       cases h1 : bytesToG1 (bufferRead data 64 64) <;> simp [Nat.not_lt.mp hgas, eq_comm]
 
 /-- ECMUL succeeds exactly when the gas covers the price and the point decodes. -/
-theorem ecmul_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
-    ecmul data gas = .ok out ↔ GAS_ECMUL ≤ gas ∧ ∃ p0,
+theorem ecmul_eq_ok_iff (fork : Fork) (data : ByteArray) (gas : Nat) (out : ByteArray) :
+    ecmul fork data gas = .ok out ↔ (gasSchedule fork).PRECOMPILE_ECMUL ≤ gas ∧ ∃ p0,
       bytesToG1 (bufferRead data 0 64) = .ok p0 ∧
       out = ⟨(g1ToBytes
         (Point.mulBits 256 (Base.bytesToNat (bufferRead data 64 32)) p0)).toArray⟩ := by
-  by_cases hgas : gas < GAS_ECMUL
-  · simp [ecmul_outOfGas data hgas, Nat.not_le.mpr hgas]
+  by_cases hgas : gas < (gasSchedule fork).PRECOMPILE_ECMUL
+  · simp [ecmul_outOfGas fork data hgas, Nat.not_le.mpr hgas]
   · simp only [ecmul, hgas, bind, Except.bind, pure, Except.pure, throw, throwThe,
       MonadExceptOf.throw]
     cases h0 : bytesToG1 (bufferRead data 0 64) <;> simp [Nat.not_lt.mp hgas, eq_comm]
@@ -117,18 +122,21 @@ theorem ecmul_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
 /-! ## ECPAIRING -/
 
 /-- ECPAIRING runs out of gas below its price, before it checks the length. -/
-theorem ecpairing_outOfGas (data : ByteArray) {gas : Nat} (hgas : gas < ecpairingGas data.size) :
-    ecpairing data gas = .error (.outOfGas (ecpairingGas data.size) gas) := by
+theorem ecpairing_outOfGas (fork : Fork) (data : ByteArray) {gas : Nat}
+    (hgas : gas < ecpairingGas fork data.size) :
+    ecpairing fork data gas = .error (.outOfGas (ecpairingGas fork data.size) gas) := by
   simp [ecpairing, hgas, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- With enough gas, a length that is not a whole number of pairs fails. -/
-theorem ecpairing_invalidInputLength {data : ByteArray} {gas : Nat} (hgas : ecpairingGas data.size ≤ gas)
+theorem ecpairing_invalidInputLength {fork : Fork} {data : ByteArray} {gas : Nat}
+    (hgas : ecpairingGas fork data.size ≤ gas)
     (hsize : data.size % 192 ≠ 0) :
-    ecpairing data gas = .error (.invalidInputLength data.size) := by
+    ecpairing fork data gas = .error (.invalidInputLength data.size) := by
   simp [ecpairing, Nat.not_lt.mpr hgas, hsize, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- Every output of ECPAIRING is the word 0 or 1. -/
-theorem ecpairing_ok {data : ByteArray} {gas : Nat} {out : ByteArray} (h : ecpairing data gas = .ok out) :
+theorem ecpairing_ok {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArray}
+    (h : ecpairing fork data gas = .ok out) :
     ∃ result : Bool, out = ⟨(List.replicate 31 (0 : UInt8) ++ [if result then 1 else 0]).toArray⟩ := by
   simp only [ecpairing, bind, throw, throwThe, MonadExceptOf.throw] at h
   split at h
@@ -142,13 +150,13 @@ theorem ecpairing_ok {data : ByteArray} {gas : Nat} {out : ByteArray} (h : ecpai
 /-- ECPAIRING succeeds exactly when the gas covers the price and every pair decodes.
 
 The call data must be a whole number of pairs. -/
-theorem ecpairing_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
-    ecpairing data gas = .ok out ↔ ecpairingGas data.size ≤ gas ∧ data.size % 192 = 0 ∧
+theorem ecpairing_eq_ok_iff (fork : Fork) (data : ByteArray) (gas : Nat) (out : ByteArray) :
+    ecpairing fork data gas = .ok out ↔ ecpairingGas fork data.size ≤ gas ∧ data.size % 192 = 0 ∧
       ∃ pairs, (List.range (data.size / 192)).mapM (decodePair data) = .ok pairs ∧
         out = ⟨(List.replicate 31 (0 : UInt8) ++
           [if pairingCheck pairs then 1 else 0]).toArray⟩ := by
-  by_cases hgas : gas < ecpairingGas data.size
-  · simp [ecpairing_outOfGas data hgas, Nat.not_le.mpr hgas]
+  by_cases hgas : gas < ecpairingGas fork data.size
+  · simp [ecpairing_outOfGas fork data hgas, Nat.not_le.mpr hgas]
   by_cases hsize : data.size % 192 ≠ 0
   · simp [ecpairing_invalidInputLength (Nat.not_lt.mp hgas) hsize, hsize]
   · have hwhole : data.size % 192 = 0 := Decidable.not_not.mp hsize
@@ -170,9 +178,9 @@ theorem ecpairing_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
         rfl
 
 /-- The price of no pair is the base price alone. -/
-theorem ecpairingGas_empty : ecpairingGas 0 = 45000 := rfl
+theorem ecpairingGas_empty : ecpairingGas .istanbul 0 = 45000 := rfl
 
 /-- One pair costs `34000 + 45000 = 79000`. -/
-theorem ecpairingGas_one : ecpairingGas 192 = 79000 := rfl
+theorem ecpairingGas_one : ecpairingGas .istanbul 192 = 79000 := rfl
 
 end EthLib.Execution.Evm.Precompiles.AltBn128

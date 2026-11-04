@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.BigEndian
 public import EthLib.Cryptography.AltBn128.Pairing
+public import EthLib.Execution.Evm.Gas
 public import EthLib.Execution.Evm.Memory
 
 /-!
@@ -27,11 +28,11 @@ The call data reads as if padded with zeros, so a short input is padded and byte
 
 Sources: EIP-196 for addition and multiplication, and EIP-197 for the pairing check.
 
-EIP-1108 sets the prices: <https://eips.ethereum.org/EIPS/eip-1108>.
-
 Byzantium introduced the precompiles, and Istanbul lowered their prices with EIP-1108.
 
-Every later fork computes the same results with the same prices.
+So each call takes the fork, and reads its price from the gas schedule of that fork.
+
+Every fork computes the same results.
 
 An invalid point makes the call fail, and the call consumes all its gas.
 -/
@@ -40,15 +41,9 @@ An invalid point makes the call fail, and the call consumes all its gas.
 
 namespace EthLib.Execution.Evm.Precompiles.AltBn128
 
-open EthLib.Base (bytesToNat natToBytes)
-open EthLib.Execution.Evm (bufferRead)
+open EthLib.Base (Fork bytesToNat natToBytes)
+open EthLib.Execution.Evm (bufferRead gasSchedule)
 open EthLib.Cryptography.AltBn128
-
-/-- The price of ECADD, from EIP-1108. -/
-def GAS_ECADD : Nat := 150
-
-/-- The price of ECMUL, from EIP-1108. -/
-def GAS_ECMUL : Nat := 6000
 
 /-- Why an alt_bn128 call fails.
 
@@ -85,9 +80,10 @@ def g1ToBytes : Point → List UInt8
   | .affine x y => natToBytes 32 x.val ++ natToBytes 32 y.val
 
 /-- `alt_bn128_add`: the sum of the two points in the call data. -/
-def ecadd (data : ByteArray) (gas : Nat) : Except AltBn128Error ByteArray := do
-  if gas < GAS_ECADD then
-    throw (.outOfGas GAS_ECADD gas)
+def ecadd (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error ByteArray := do
+  let cost := (gasSchedule fork).PRECOMPILE_ECADD
+  if gas < cost then
+    throw (.outOfGas cost gas)
   let p0 ← bytesToG1 (bufferRead data 0 64)
   let p1 ← bytesToG1 (bufferRead data 64 64)
   return ⟨(g1ToBytes (p0 + p1)).toArray⟩
@@ -95,22 +91,19 @@ def ecadd (data : ByteArray) (gas : Nat) : Except AltBn128Error ByteArray := do
 /-- `alt_bn128_mul`: the point in the call data times the scalar after it.
 
 The scalar is the full 32-byte integer, not reduced. -/
-def ecmul (data : ByteArray) (gas : Nat) : Except AltBn128Error ByteArray := do
-  if gas < GAS_ECMUL then
-    throw (.outOfGas GAS_ECMUL gas)
+def ecmul (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error ByteArray := do
+  let cost := (gasSchedule fork).PRECOMPILE_ECMUL
+  if gas < cost then
+    throw (.outOfGas cost gas)
   let p0 ← bytesToG1 (bufferRead data 0 64)
   let n := bytesToNat (bufferRead data 64 32)
   -- A 32-byte scalar is below `2^256`, so 256 bits cover it.
   return ⟨(g1ToBytes (Point.mulBits 256 n p0)).toArray⟩
 
-/-- The price of every pairing check, from EIP-1108. -/
-def GAS_ECPAIRING_BASE : Nat := 45000
-
-/-- The price of each pair, from EIP-1108. -/
-def GAS_ECPAIRING_PER_POINT : Nat := 34000
-
 /-- The price of a pairing check on `size` bytes: one pair per whole 192 bytes. -/
-def ecpairingGas (size : Nat) : Nat := GAS_ECPAIRING_PER_POINT * (size / 192) + GAS_ECPAIRING_BASE
+def ecpairingGas (fork : Fork) (size : Nat) : Nat :=
+  (gasSchedule fork).PRECOMPILE_ECPAIRING_PER_POINT * (size / 192) +
+    (gasSchedule fork).PRECOMPILE_ECPAIRING_BASE
 
 /-- An element of `Fp` from 32 bytes. -/
 def bytesToFp (raw : List UInt8) : Except AltBn128Error Fp :=
@@ -144,9 +137,9 @@ def decodePair (data : ByteArray) (index : Nat) : Except AltBn128Error (Point ×
 /-- `alt_bn128_pairing_check`: 1 as a 32-byte word when the product of the pairings of the pairs is 1, and 0 otherwise.
 
 The gas is charged before the length is checked. -/
-def ecpairing (data : ByteArray) (gas : Nat) : Except AltBn128Error ByteArray := do
-  if gas < ecpairingGas data.size then
-    throw (.outOfGas (ecpairingGas data.size) gas)
+def ecpairing (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error ByteArray := do
+  if gas < ecpairingGas fork data.size then
+    throw (.outOfGas (ecpairingGas fork data.size) gas)
   if data.size % 192 ≠ 0 then
     throw (.invalidInputLength data.size)
   let pairs ← (List.range (data.size / 192)).mapM (decodePair data)

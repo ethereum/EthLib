@@ -5,13 +5,9 @@ module
 
 The fixed numbers of the MODEXP precompile at address `0x05`.
 
-Every value is the one in force as of the BPO2 fork.
+The numbers of EIP-7823 and EIP-7883 hold from Fusaka.
 
-BPO2 activated at timestamp 1767747671, on 2026-01-07.
-
-BPO2 changes only blob parameters.
-
-So MODEXP behaves as in Osaka, the fork that introduced EIP-7823 and EIP-7883.
+The price rule writes the older numbers at the fork that set them.
 -/
 
 @[expose] public section

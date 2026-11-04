@@ -8,7 +8,7 @@ public import EthLib.Execution.Evm.PowMod
 /-!
 # `Modexp.Core`
 
-The MODEXP precompile at address `0x05`, as of the BPO2 fork.
+The MODEXP precompile at address `0x05`, which Byzantium adds.
 
 The input has this layout, from EIP-198:
 
@@ -19,7 +19,7 @@ The input has this layout, from EIP-198:
 - Each length is a 32-byte big-endian integer, counted in bytes.
 - The call data reads as if followed by infinitely many zero bytes.
 - So a short input is padded, and data past the last field is ignored.
-- Each length must be at most 1024 (EIP-7823).
+- From Fusaka, each length must be at most 1024 (EIP-7823).
 
 The output is `BASE ^ EXPONENT mod MODULUS`, as exactly `len_mod` big-endian bytes.
 
@@ -28,7 +28,7 @@ It is `len_mod` zero bytes when `MODULUS` is 0.
 The steps run in this order:
 
 1. Read the three lengths.
-2. Reject any length above 1024, before any gas is charged (EIP-7823).
+2. From Fusaka, reject any length above 1024, before any gas is charged (EIP-7823).
 3. Charge the gas, and end the call when it runs out.
 4. Read `BASE`, `EXPONENT` and `MODULUS`, and compute the output.
 -/
@@ -80,11 +80,13 @@ EIP-198 reads the highest bit of the exponent from these bytes. -/
 def exponentHead (data : ByteArray) (l : Lengths) : Nat :=
   readNat data l.exponentStart (min EXPONENT_HEAD_BYTES l.exponent)
 
-/-- The gas the call is charged, read from the input.
+/-- The gas the call is charged, read from the input. -/
+def requiredGas (fork : Fork) (data : ByteArray) (l : Lengths) : Nat :=
+  gasCost fork l.base l.modulus l.exponent (exponentHead data l)
 
-EIP-7883, Specification. -/
-def requiredGas (data : ByteArray) (l : Lengths) : Nat :=
-  gasCost l.base l.modulus l.exponent (exponentHead data l)
+/-- The bound of EIP-7823 on the lengths, which holds from Fusaka. -/
+def checkLengthsAt (fork : Fork) (l : Lengths) : Except ModexpError Unit :=
+  if fork ≥ .fusaka then checkLengths l else .ok ()
 
 /-- The operation of the precompile: the output bytes, once the gas is paid.
 
@@ -100,23 +102,23 @@ def compute (data : ByteArray) (l : Lengths) : ByteArray :=
   ByteArray.mk (natToBytes l.modulus result).toArray
 
 /-- The gas a call is charged, or the reason it fails before gas is charged. -/
-def chargedGas (data : ByteArray) : Except ModexpError Nat :=
+def chargedGas (fork : Fork) (data : ByteArray) : Except ModexpError Nat :=
   let l := parseLengths data
-  match checkLengths l with
+  match checkLengthsAt fork l with
   | .error e => .error e
-  | .ok () => .ok (requiredGas data l)
+  | .ok () => .ok (requiredGas fork data l)
 
 /-- Run the precompile on `data` with `gas` available.
 
 Returns the output, or the error that consumes all the gas. -/
-def modexp (data : ByteArray) (gas : Nat) : Except ModexpError ByteArray :=
+def modexp (fork : Fork) (data : ByteArray) (gas : Nat) : Except ModexpError ByteArray :=
   let l := parseLengths data
   -- EIP-7823: bounds first, before any gas is charged.
-  match checkLengths l with
+  match checkLengthsAt fork l with
   | .error e => .error e
   | .ok () =>
     -- Gas is charged before the base, exponent and modulus are read.
-    let cost := requiredGas data l
+    let cost := requiredGas fork data l
     if gas < cost then .error (.outOfGas cost gas) else .ok (compute data l)
 
 end EthLib.Execution.Evm.Precompiles.Modexp
