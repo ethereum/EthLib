@@ -12,6 +12,7 @@ public import EthLib.Networking.Proofs.Gossip.Subnet
 public import EthLib.Networking.Proofs.Gossip.Topic
 public import EthLib.Networking.Proofs.ReqResp.Encoding
 public import EthLib.Networking.Proofs.Rlpx.Ecies
+public import EthLib.Networking.Proofs.Rlpx.Frame
 public import EthLib.Networking.Proofs.Rlpx.Handshake
 public import EthLib.Networking.Proofs.Snappy.Block
 public import EthLib.Networking.Proofs.Snappy.Frame
