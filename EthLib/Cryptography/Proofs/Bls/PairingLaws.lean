@@ -9,27 +9,21 @@ public import EthLib.Cryptography.Proofs.Bls.G2Validity
 /-!
 # Proofs: the pairing law as one hypothesis
 
-[draft-irtf-cfrg-bls-signature-04](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04) §1.3 asks for a non-degenerate bilinear map `e : G1 × G2 → GT`.
+A BLS pairing is a non-degenerate bilinear map `e : G1 × G2 → GT`.
 
-[EIP-2537](https://eips.ethereum.org/EIPS/eip-2537) "ABI for pairing check" defines the pairing check: it accepts exactly when the product of the `e(P_i, Q_i)` is 1.
+See [draft-04](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04), §1.3.
 
-`pairingCheck` implements that check, but EthLib does not prove that its Miller loop and final exponentiation compute such a map.
+The check of [EIP-2537](https://eips.ethereum.org/EIPS/eip-2537) tests `prod_i e(P_i, Q_i) = 1`.
 
-`PairingLaws` states, as one hypothesis, the consequence that the theorems need.
+EthLib does not prove that its pairing check computes such a map.
+
+So it states the law it needs as one hypothesis, never an axiom.
 
 Let `P_i` represent `a_i * g_1` and `Q_i` represent `b_i * g_2`.
 
-Bilinearity gives `prod_i e(P_i, Q_i) = e(g_1, g_2)^(sum_i a_i * b_i)`.
+Then `prod_i e(P_i, Q_i) = e(g_1, g_2)^(sum_i a_i * b_i)`, and `e(g_1, g_2)` has prime order `r`.
 
-Non-degeneracy gives `e(g_1, g_2) != 1`, and `GT` has prime order `r`.
-
-So the product is 1 exactly when `sum_i a_i * b_i = 0` in `Fr`, whichever such map `e` is.
-
-A representative of `0 * g_1` or `0 * g_2` is a point at infinity, so the law also covers the pairs that the check skips.
-
-`PairingLaws` is a `Prop`, never an axiom.
-
-Each theorem that relies on it takes it as an explicit argument.
+So the check passes exactly when `sum_i a_i * b_i = 0` in `Fr`.
 -/
 
 @[expose] public section
@@ -48,19 +42,20 @@ def G2.Represents (Q : G2) (b : Fr) : Prop :=
 
 /-- The law of the concrete pairing check, on points of the prime-order subgroups.
 
-The check of the pairs `(P_i, Q_i)` passes exactly when `sum_i a_i * b_i = 0`.
+Let `P_i` represent `a_i • g1` and `Q_i` represent `b_i • g2`.
 
-Here `P_i` represents `a_i • g1` and `Q_i` represents `b_i • g2`. -/
+The check of the pairs `(P_i, Q_i)` passes exactly when `sum_i a_i * b_i = 0`. -/
 structure PairingLaws : Prop where
   pairingCheck_iff :
     ∀ (pairs : List (G1 × G2)) (a b : List Fr),
       a.length = pairs.length → b.length = pairs.length →
-      (∀ i (h : i < pairs.length), G1.Represents (pairs[i]).1 a[i]! ∧ G2.Represents (pairs[i]).2 b[i]!) →
+      (∀ i (h : i < pairs.length),
+        G1.Represents (pairs[i]).1 a[i]! ∧ G2.Represents (pairs[i]).2 b[i]!) →
       (pairingCheck pairs.toArray = true ↔ (List.zipWith (· * ·) a b).sum = 0)
 
 namespace G1
 
-/-- `a • g1`, as the spec computes it, represents `a • g1`. -/
+/-- The spec's multiple `a • g1` represents `a • g1`. -/
 theorem represents_mul_generator (a : Fr) : Represents (mul generator a) a :=
   ⟨valid_mul valid_generator a, rfl⟩
 
@@ -72,7 +67,7 @@ theorem represents_generator : Represents generator 1 := by
 /-- Negation of a representative of `a • g1` represents `(-a) • g1`. -/
 theorem Represents.neg {P : G1} {a : Fr} (h : Represents P a) : Represents (neg P) (-a) := by
   refine ⟨valid_neg h.1, ?_⟩
-  -- `exact` closes the step up to the two definitionally equal `Fr` instances.
+  -- The step holds up to two definitionally equal instances on `Fr`.
   have h0 : ofFr (-a) + ofFr a = 0 := by
     rw [← ofFr_add]
     exact (congrArg ofFr (neg_add_cancel a)).trans ofFr_zero
@@ -83,7 +78,7 @@ end G1
 
 namespace G2
 
-/-- `b • g2`, as the spec computes it, represents `b • g2`. -/
+/-- The spec's multiple `b • g2` represents `b • g2`. -/
 theorem represents_mul_generator (b : Fr) : Represents (mul generator b) b :=
   ⟨valid_mul valid_generator b, rfl⟩
 
@@ -116,7 +111,7 @@ theorem two_pairs (laws : PairingLaws) {P P' : G1} {Q Q' : G2} {a b c d : Fr}
     | 0, _ => exact ⟨hP, hQ⟩
     | 1, _ => exact ⟨hP', hQ'⟩)
   simp only [List.zipWith_cons_cons, List.zipWith_nil_left, List.sum_cons, List.sum_nil] at h
-  -- The trailing `+ 0` of the sum uses the spec's `Fin` addition, so `Fin.add_zero` removes it.
+  -- The trailing `+ 0` of the sum uses the addition of `Fin`, so the lemma of `Fin` removes it.
   exact h.trans (iff_of_eq (congrArg (a * b + · = 0) (Fin.add_zero (c * d))))
 
 /-- A sanity consequence: the generators do not pair to 1. -/

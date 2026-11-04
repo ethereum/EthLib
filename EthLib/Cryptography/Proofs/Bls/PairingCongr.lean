@@ -5,17 +5,15 @@ public import EthLib.Cryptography.Proofs.Bls.G1Group
 public import EthLib.Cryptography.Proofs.Bls.G2Group
 
 /-!
-# Proofs: `pairingCheck` depends only on the affine points
+# Proofs: the pairing check depends only on affine points
 
-A point of `G1` or `G2` has many Jacobian representatives `(X, Y, Z)`.
+A point has many Jacobian representatives `(X, Y, Z)`.
 
 They all scale to one affine point `(X / Z^2, Y / Z^3)`.
 
-`pairingCheck` reads a point only through `isInfinity` and `toAffine`, so it gives the same answer for every valid representative.
+The pairing check reads only that affine point, so every representative gives the same answer.
 
-This file proves that, and writes the loop of `pairingCheck` as a fold over a list.
-
-A pair with a point at infinity adds no factor to the product, so it does not change the result.
+A pair with a point at infinity adds no factor, so it does not change the answer.
 -/
 
 @[expose] public section
@@ -53,7 +51,7 @@ namespace G1
 
 open scoped EthLib.Cryptography.Bls.Fp
 
-/-- `toAffine` multiplies by the inverse of `z` where Mathlib divides by `z`. -/
+/-- The spec multiplies by the inverse of `z` where Mathlib divides by `z`. -/
 private theorem mul_inverse_sq (x z w : ZMod Fp.modulus) (hw : z * w = 1) :
     x * (w * w) = x / z ^ 2 := by
   rw [eq_inv_of_mul_eq_one_right hw]
@@ -118,14 +116,14 @@ end G2
 
 namespace Embedded
 
-/-- The embedding of a valid `G1` point depends only on its group element. -/
+/-- The embedding of a valid point of `G1` depends only on its group element. -/
 theorem ofG1_congr {P P' : G1} (hP : G1.Valid P) (hP' : G1.Valid P')
     (h : G1.toPoint P = G1.toPoint P') : ofG1 P = ofG1 P' := by
   obtain ⟨hi, ha⟩ := G1.toAffine_congr hP hP' h
   unfold ofG1
   rw [hi, ha]
 
-/-- The embedding of a valid `G2` point depends only on its group element. -/
+/-- The embedding of a valid point of `G2` depends only on its group element. -/
 theorem ofG2_congr {Q Q' : G2} (hQ : G2.Valid Q) (hQ' : G2.Valid Q')
     (h : G2.toPoint Q = G2.toPoint Q') : ofG2 Q = ofG2 Q' := by
   obtain ⟨hi, ha⟩ := G2.toAffine_congr hQ hQ' h
@@ -134,14 +132,14 @@ theorem ofG2_congr {Q Q' : G2} (hQ : G2.Valid Q) (hQ' : G2.Valid Q')
 
 end Embedded
 
-/-- The factor that one pair adds to the product of `pairingCheck`.
+/-- The factor that one pair adds to the product of the pairing check.
 
-A pair with a point at infinity adds no factor, and gives `none`. -/
+A pair with a point at infinity adds no factor. -/
 def pairFactor (pq : G1 × G2) : Option Fp12 :=
   if pq.1.isInfinity || pq.2.isInfinity then none
   else some (millerLoop blsX (Embedded.ofG2 pq.2) (Embedded.ofG1 pq.1)).conjugate
 
-/-- The loop of `pairingCheck`, as a fold over the factors of the pairs. -/
+/-- The loop of the pairing check, as a fold over the factors of the pairs. -/
 private theorem forIn_eq_foldl (l : List (G1 × G2)) (acc : Fp12) :
     (forIn (m := Id) l acc fun x r =>
         match x with
@@ -162,13 +160,13 @@ private theorem forIn_eq_foldl (l : List (G1 × G2)) (acc : Fp12) :
     · simp only [h, Bool.false_eq_true, ↓reduceIte, List.foldl_cons]
       exact ih _
 
-/-- `pairingCheck` is the final exponentiation of the product of the factors, in order. -/
+/-- The pairing check is the final exponentiation of the product of the factors, in order. -/
 theorem pairingCheck_eq_finalExp_prod (pairs : Array (G1 × G2)) :
     pairingCheck pairs =
       (finalExponentiation ((pairs.toList.filterMap pairFactor).foldl (· * ·) Fp12.one)).isOne := by
   unfold pairingCheck
   rw [← forIn_eq_foldl, Array.forIn_toList]
-  -- The two sides differ only in the `Id` plumbing of the `do` block.
+  -- The two sides differ only in the monadic plumbing of the loop.
   rfl
 
 /-- Pairs whose points have the same group elements have the same factor. -/
@@ -181,7 +179,7 @@ theorem pairFactor_congr {p p' : G1} {q q' : G2}
   rw [(G1.toAffine_congr hp hp' hpp).1, (G2.toAffine_congr hq hq' hqq).1,
     Embedded.ofG1_congr hp hp' hpp, Embedded.ofG2_congr hq hq' hqq]
 
-/-- `pairingCheck` depends only on the group elements of valid points. -/
+/-- The pairing check depends only on the group elements of valid points. -/
 theorem pairingCheck_congr {ps qs : Array (G1 × G2)} (hsize : ps.size = qs.size)
     (h : ∀ i (hi : i < ps.size),
       G1.Valid ps[i].1 ∧ G1.Valid (qs[i]'(hsize ▸ hi)).1 ∧
@@ -195,12 +193,12 @@ theorem pairingCheck_congr {ps qs : Array (G1 × G2)} (hsize : ps.size = qs.size
     simp only [List.length_map, Array.length_toList] at hi
     obtain ⟨hp, hp', hpp, hq, hq', hqq⟩ := h i hi
     simpa using pairFactor_congr hp hp' hpp hq hq' hqq
-  -- Both sides drop the `none` factors of the same list.
+  -- Both sides drop the missing factors of the same list.
   have hid : ∀ l : List (G1 × G2), l.filterMap pairFactor = (l.map pairFactor).filterMap id :=
     fun l => by rw [List.filterMap_map]; rfl
   rw [pairingCheck_eq_finalExp_prod, pairingCheck_eq_finalExp_prod, hid, hid, hmap]
 
-/-- Appending pairs that each hold a point at infinity does not change `pairingCheck`. -/
+/-- Appending pairs that each hold a point at infinity does not change the pairing check. -/
 theorem pairingCheck_append_infinity (ps qs : Array (G1 × G2))
     (h : ∀ pq ∈ qs, (pq.1.isInfinity || pq.2.isInfinity) = true) :
     pairingCheck (ps ++ qs) = pairingCheck ps := by
