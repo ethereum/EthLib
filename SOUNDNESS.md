@@ -317,8 +317,13 @@ Both searches are proved to return only collisions, and to return none for an in
 The proof is that honest proof and gives the trie's value of the key.
 Otherwise `findProofCollision` returns a collision between the two proofs.
 
-`root_binding` and `verifyProof_sound` assume that the keys of each trie have distinct paths.
-A secured trie hashes each key into its path, so there the assumption is that no two of its keys have one hash.
+A secured trie hashes each key into its path, so two of its keys can have one path.
+`root_binding` and `verifyProof_sound` name that case too.
+There `findPathCollision` returns two different keys of the trie with one hash.
+It searches only a secured trie, and it is proved to return only collisions.
+`findKeyCollision_of_nodup` proves that the key search returns none for keys with distinct hashes.
+
+Both theorems still assume that the keys of each trie are distinct, as the keys of a map are.
 No theorem bounds the probability of finding a collision.
 
 ### What cannot be proved yet
