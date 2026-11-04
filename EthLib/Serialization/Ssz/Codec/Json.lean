@@ -1,6 +1,7 @@
 module
 
 public import Lean.Data.Json
+public import EthLib.Base.Hex
 public import EthLib.Serialization.Ssz.Codec.Deserialize
 
 /-! The JSON document a value is written as, which an SSZ schema defines alongside its bytes. -/
@@ -45,14 +46,10 @@ def Spelling.isByte : Spelling → Bool
   | .byte => true
   | .plain _ => false
 
-/-- The sixteen hex digits, in the lowercase the mapping uses. -/
-def hexAlphabet : Array Char :=
-  #['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
-
 /-- Bytes as the mapping writes them: lowercase hex behind a two-character marker. -/
 def toHex (data : Bytes) : String :=
   data.foldl (init := "0x") fun text byte =>
-    (text.push hexAlphabet[byte.toNat >>> 4]!).push hexAlphabet[byte.toNat &&& 0xF]!
+    (text.push Base.hexAlphabet[byte.toNat >>> 4]!).push Base.hexAlphabet[byte.toNat &&& 0xF]!
 
 /-- The value of one hex digit, in either letter case. -/
 def hexDigit (character : Char) : Except Err Nat :=

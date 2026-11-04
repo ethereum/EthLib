@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Cryptography.Proofs.Kzg.FftG1
 public import EthLib.Cryptography.Proofs.Kzg.ExtendedCells
 public import EthLib.Cryptography.Proofs.Kzg.CosetInterpolation
@@ -1113,38 +1114,6 @@ theorem computeCellsAndKzgProofs_blob_spec
 
 /-! ## End-to-end cell and proof recovery -/
 
-private theorem list_mapM_ok_mem_and_len {cs : List Cell} {es : List CosetEvals}
-    (h : cs.mapM cellToCosetEvals = .ok es) :
-    es.length = cs.length ∧ ∀ c ∈ cs, ∃ y, cellToCosetEvals c = .ok y := by
-  induction cs generalizing es with
-  | nil =>
-    have hnil : ([] : List Cell).mapM cellToCosetEvals = .ok [] := rfl
-    rw [hnil] at h
-    injection h with h'
-    subst h'
-    exact ⟨rfl, fun _ hc => nomatch hc⟩
-  | cons hd tl ih =>
-    rw [List.mapM_cons] at h
-    cases hhd : cellToCosetEvals hd with
-    | error e =>
-      rw [hhd] at h
-      cases h
-    | ok y =>
-      rw [hhd] at h
-      cases htl : tl.mapM cellToCosetEvals with
-      | error e =>
-        rw [htl] at h
-        cases h
-      | ok ys =>
-        rw [htl] at h
-        injection h with h'
-        subst h'
-        obtain ⟨hlen_tl, hmem_tl⟩ := ih htl
-        refine ⟨by simp [hlen_tl], fun c hc => ?_⟩
-        rcases List.mem_cons.mp hc with rfl | hc_tl
-        · exact ⟨y, hhd⟩
-        · exact hmem_tl c hc_tl
-
 private theorem nodup_of_ascending {xs : Array Nat}
     (hasc : (Array.range (xs.size - 1)).any (fun i => xs[i + 1]! ≤ xs[i]!) = false) :
     xs.toList.Nodup := by
@@ -1216,7 +1185,8 @@ theorem recoverCellsAndKzgProofs_ok_eq (setup : TrustedSetup)
     | error e => rw [hm] at hdec'; cases hdec'
     | ok es => rw [hm] at hdec'; exact ⟨es, rfl, Except.ok.inj hdec'⟩
   obtain ⟨es, hes, hes_arr⟩ := hlist_ok
-  obtain ⟨hlen_es, hmem_es⟩ := list_mapM_ok_mem_and_len hes
+  have hlen_es := Base.mapM_ok_length hes
+  have hmem_es := Base.mapM_ok_of_mem hes
   have hfind : cells.find? (fun c => c.size != BYTES_PER_CELL) = none := by
     rw [Array.find?_eq_none]
     intro c hc

@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.Address
 public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.U256
 public import EthLib.Base.Proofs.Uint64
 

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Serialization.Ssz.Codec.Root
 public import EthLib.Serialization.Proofs.Ssz.Codec.LayoutLaws
+public import EthLib.Base.Proofs.MapM
 
 /-! Type depth bounds rooting, and materialized leaves preserve positions and intervals. -/
 
@@ -141,16 +142,6 @@ theorem layoutChunksAt_budget_eq (layout : MerkleLayout) (left right : Nat)
         (List.mem_of_mem_drop (List.mem_of_mem_take member))
       exact hashTreeRootAt_budget_eq pair.1 pair.2 left right bounds.1 bounds.2
 
-private theorem mapM_length {α β ε : Type} (f : α → Except ε β)
-    {xs : List α} {ys : List β} (success : xs.mapM f = .ok ys) :
-    ys.length = xs.length := by
-  -- A successful traversal replaces each input by exactly one output.
-  induction xs generalizing ys with
-  | nil => simp_all [Pure.pure, Except.pure]
-  | cons x xs ih =>
-    cases hx : f x <;> cases ht : xs.mapM f <;>
-      simp_all [List.mapM_cons, Bind.bind, Except.bind, Pure.pure, Except.pure, eq_comm (b := ys)]
-
 /-- Successful materialization produces one node per leaf, including empty positions. -/
 theorem layoutChunksAt_size (budget : Nat) (layout : MerkleLayout)
     (chunks : Array Bytes) (success : layoutChunksAt budget layout = .ok chunks) :
@@ -176,18 +167,7 @@ theorem layoutChunksAt_size (budget : Nat) (layout : MerkleLayout)
     | ok ys =>
       simp only [bind, Except.bind, h, pure, Except.pure, Except.ok.injEq] at success
       subst chunks
-      exact mapM_length f h
-
-private theorem mapM_success_member {α β ε : Type} (f : α → Except ε β)
-    {xs : List α} {ys : List β} (success : xs.mapM f = .ok ys)
-    (x : α) (member : x ∈ xs) : ∃ y, f x = .ok y := by
-  -- A successful complete traversal cannot hide an error at any included position.
-  induction xs generalizing ys with
-  | nil => simp at member
-  | cons first rest ih =>
-    cases head : f first <;> cases tail : rest.mapM f <;>
-      simp_all [List.mapM_cons, Bind.bind, Except.bind]
-    rcases member with rfl | member <;> simp_all
+      exact Base.mapM_ok_length h
 
 /-- Every present leaf of a successfully materialized layout has a successful root. -/
 theorem layoutChunksAt_child_root (budget : Nat) (layout : MerkleLayout)
@@ -205,7 +185,7 @@ theorem layoutChunksAt_child_root (budget : Nat) (layout : MerkleLayout)
   change (do let ys ← slots.mapM f; pure ys.toArray) = .ok chunks at success
   cases h : slots.mapM f with
   | error e => simp [h, Bind.bind, Except.bind] at success
-  | ok ys => exact mapM_success_member f h (some (child, inner)) member
+  | ok ys => exact Base.mapM_ok_of_mem h (some (child, inner)) member
 
 /-- Rooting an interval agrees with slicing a successful materialization of all leaves. -/
 theorem layoutChunksAt_window (budget : Nat) (layout : MerkleLayout)

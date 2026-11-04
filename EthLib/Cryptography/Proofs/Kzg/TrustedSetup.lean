@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Cryptography.Kzg.TrustedSetup
 public import EthLib.Cryptography.Proofs.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.G2Compress
@@ -30,28 +31,6 @@ structure TrustedSetup.Valid (s : TrustedSetup) : Prop where
   g1Monomial : ∀ i : Fin FIELD_ELEMENTS_PER_BLOB, G1.Valid s.g1Monomial[i]
   g2Monomial : ∀ i : Fin KZG_SETUP_G2_LENGTH, G2.Valid s.g2Monomial[i]
 
-/-- Every output of a successful map over a list is the image of some input. -/
-private theorem list_mem_of_mapM_ok {ε α β : Type} {f : α → Except ε β} :
-    ∀ {xs : List α} {ys : List β}, xs.mapM f = .ok ys → ∀ y ∈ ys, ∃ x, f x = .ok y
-  | [], ys, h, y, hy => by
-    have hnil : ([] : List α).mapM f = .ok [] := rfl
-    rw [hnil] at h
-    cases h
-    cases hy
-  | a :: rest, ys, h, y, hy => by
-    rw [List.mapM_cons] at h
-    cases ha : f a with
-    | error e => rw [ha] at h; cases h
-    | ok b =>
-      cases hr : rest.mapM f with
-      | error e => rw [ha, hr] at h; cases h
-      | ok bs =>
-        rw [ha, hr] at h
-        cases h
-        rcases List.mem_cons.mp hy with rfl | hy
-        · exact ⟨a, ha⟩
-        · exact list_mem_of_mapM_ok hr y hy
-
 /-- Every output of a successful map over an array is the image of some input. -/
 private theorem mem_of_mapM_ok {ε α β : Type} {f : α → Except ε β} {xs : Array α}
     {ys : Array β} (h : xs.mapM f = .ok ys) : ∀ y ∈ ys, ∃ x, f x = .ok y := by
@@ -63,7 +42,8 @@ private theorem mem_of_mapM_ok {ε α β : Type} {f : α → Except ε β} {xs :
     have hys : zs.toArray = ys := Except.ok.inj h
     subst hys
     intro y hy
-    exact list_mem_of_mapM_ok hl y (List.mem_toArray.mp hy)
+    obtain ⟨x, _, hx⟩ := Base.mapM_ok_mem hl y (List.mem_toArray.mp hy)
+    exact ⟨x, hx⟩
 
 /-- A point that decodes to a G1 point of the setup is valid. -/
 private theorem valid_of_toG1 {b : ByteArray} {p : G1}

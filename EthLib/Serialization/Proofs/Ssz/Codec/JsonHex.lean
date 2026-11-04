@@ -12,7 +12,7 @@ open Lean
 
 /-- The two digits one byte is written as, high half first. -/
 private def hexPair (byte : UInt8) : List Char :=
-  [hexAlphabet[byte.toNat >>> 4]!, hexAlphabet[byte.toNat &&& 0xF]!]
+  [Base.hexAlphabet[byte.toNat >>> 4]!, Base.hexAlphabet[byte.toNat &&& 0xF]!]
 
 /-- The digits a byte string is written as, behind no marker. -/
 private def hexDigitsOf (data : Bytes) : List Char :=
@@ -24,8 +24,8 @@ private theorem toHex_eq (data : Bytes) :
   -- The fold starts from the marker and pushes two characters per byte.
   have general : ∀ (bytes : List UInt8) (text : String),
       (bytes.foldl (fun text byte =>
-        (text.push hexAlphabet[byte.toNat >>> 4]!).push
-          hexAlphabet[byte.toNat &&& 0xF]!) text).toList
+        (text.push Base.hexAlphabet[byte.toNat >>> 4]!).push
+          Base.hexAlphabet[byte.toNat &&& 0xF]!) text).toList
         = text.toList ++ bytes.flatMap hexPair := by
     intro bytes
     induction bytes <;> simp [*, hexPair]
@@ -33,7 +33,7 @@ private theorem toHex_eq (data : Bytes) :
 
 /-- Each of the sixteen digits reads back as its own value. -/
 private theorem hexDigit_alphabet {value : Nat} (small : value < 16) :
-    hexDigit hexAlphabet[value]! = .ok value := by
+    hexDigit Base.hexAlphabet[value]! = .ok value := by
   -- Sixteen characters, each checked against the three ranges the reader tests.
   rcases value with _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | _ | value
   all_goals first | rfl | omega
