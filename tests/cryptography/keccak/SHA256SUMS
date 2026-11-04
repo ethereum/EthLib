@@ -1,3 +1,4 @@
+# Source: ShortMsgKAT_256.txt of the Keccak team
 060ef1cf638c33059ab23a3cecbcc45feb93eb7a3c7849aa0a8832697829ecc5  hash/hash_case_short_len_0/data.yaml
 e94be351a8e42634e4a6dc18270b57188fc2ebac8641a1daffbe81949f742073  hash/hash_case_short_len_1000/data.yaml
 200c0e35e45598b0e889f21515bae7028cd15b9265379f68d0da5108253553bc  hash/hash_case_short_len_1008/data.yaml

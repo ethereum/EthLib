@@ -75,6 +75,11 @@ class CheckLocal(unittest.TestCase):
         (self.root / "kzg").rmdir()
         self.assertEqual(self.errors(), ["kzg/SHA256SUMS: missing, so nothing in kzg is checked"])
 
+    def test_source_line_is_skipped(self):
+        sums = self.root / "kzg" / "SHA256SUMS"
+        sums.write_text("# Source: ethereum/consensus-specs at 84454a9\n" + sums.read_text())
+        self.assertEqual(self.errors(), [])
+
     def test_changed_case_fails(self):
         (self.root / "kzg" / "blob" / "case_0" / "data.yaml").write_bytes(b"changed")
         self.assertEqual(self.errors(), ["kzg/blob/case_0/data.yaml: digest differs from SHA256SUMS"])

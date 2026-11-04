@@ -287,7 +287,7 @@ A contributor may read execution-specs and consensus-specs to understand a rule 
 Test vectors are the exception, because a test must say what it checks against.
 Each fixture keeps its pinned origin and digests in `tests/`.
 Two tests that pin two commits of one repository can disagree without anyone noticing.
-So each repository that fixtures come from has one pinned commit, recorded in one file, and every test that reads from the repository uses it.
+So each repository that fixtures come from has one pinned commit, recorded in `tests/sources.toml`, and every test that reads from the repository uses it.
 Update the pin in one pull request, and check every test that reads from the repository.
 
 ## Packages

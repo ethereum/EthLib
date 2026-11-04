@@ -305,6 +305,15 @@ It fails on an import that breaks a rule of [`ARCHITECTURE.md`](ARCHITECTURE.md#
 An import that must break a rule goes in `scripts/check_layers_baseline.txt`, with the reason in a comment and in the pull request.
 An entry that no longer breaks a rule fails the check, so remove it with the import.
 
+When you touch test vectors or fixtures, also check their sources:
+
+```bash
+uv run --no-project --python 3.12 python scripts/check_fixture_pins.py
+```
+
+`tests/sources.toml` records one pinned commit for each repository that tests read from.
+The check fails when a test cites another commit, and when a directory with a `SHA256SUMS` file does not name its sources.
+
 Then check the layout of the Lean lines that your branch changes:
 
 ```bash

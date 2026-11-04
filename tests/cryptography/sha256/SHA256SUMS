@@ -1,3 +1,4 @@
+# Source: NIST CAVP SHA256ShortMsg and SHA256LongMsg, and FIPS 180-2
 50f494683dc9bfabd8b43f5ae63ca5b81dab4c30feb16148315d0b9b3168148d  hash/hash_case_fips_56_bytes/data.yaml
 e57295118ce8a83316f326b6671dd103c7fc9f29d06fd98c76d7e51994258469  hash/hash_case_fips_abc/data.yaml
 6522e4743472a16419166d5103e569dd3098ff0a9bc8d55a72dcb8805ba1e05c  hash/hash_case_long_len_10016/data.yaml
