@@ -26,7 +26,7 @@ open TwistFrobenius
 namespace Fp12
 
 /-- An element is the sum of its six `Fp2` coefficients times the powers of `w`. -/
-private theorem eq_sum (a : Fp12) :
+theorem eq_sum (a : Fp12) :
     a = fp2ToFp12 a.c0.c0 + fp2ToFp12 a.c1.c0 * w + fp2ToFp12 a.c0.c1 * w ^ 2 +
       fp2ToFp12 a.c1.c1 * w ^ 3 + fp2ToFp12 a.c0.c2 * w ^ 4 + fp2ToFp12 a.c1.c2 * w ^ 5 := by
   have hw2 : w ^ 2 = ⟨Fp6.v, 0⟩ := w_squared
@@ -60,7 +60,7 @@ theorem frobenius_eq_pow (a : Fp12) : a.frobenius = a ^ Fp.modulus := by
 /-- `ξ` is not a square in `Fp2`, so by Euler's criterion this power is `-1`.
 
 The kernel computes it. -/
-private theorem xi_pow_half : Fp2.xi ^ ((Fp.modulus ^ 2 - 1) / 2) = -1 := by
+theorem xi_pow_half : Fp2.xi ^ ((Fp.modulus ^ 2 - 1) / 2) = -1 := by
   rw [← Fp2.powNat_eq_pow]
   decide +kernel
 
@@ -124,5 +124,35 @@ theorem finalExponentiation_eq_pow (f : Fp12) : finalExponentiation f = f ^ fina
     Fp12.powNat_eq_pow, ← pow_mul, ← pow_add]
   -- Both exponents are numbers; the kernel compares them modulo `p^12 - 1`.
   exact Fp12.pow_eq_pow_of_mod (by decide +kernel) (by decide +kernel) (by decide +kernel)
+
+/-- The final exponentiation is multiplicative. -/
+theorem finalExponentiation_mul (a b : Fp12) :
+    finalExponentiation (a * b) = finalExponentiation a * finalExponentiation b := by
+  rw [finalExponentiation_eq_pow, finalExponentiation_eq_pow, finalExponentiation_eq_pow,
+    mul_pow]
+
+/-- The final exponentiation sends `c w^3` to 1, for every nonzero `c` in `Fp2`.
+
+Both factors are units of the subfield `Fp2[w^3]` of `p^4` elements.
+
+And `p^4 - 1` divides the final exponent. -/
+theorem finalExponentiation_fp2_mul_w_cube {c : Fp2} (hc : c ≠ 0) :
+    finalExponentiation (fp2ToFp12 c * w ^ 3) = 1 := by
+  have hc2 : c ^ (Fp.modulus ^ 2 - 1) = 1 := by
+    rw [← card_fp2]
+    exact FiniteField.pow_card_sub_one_eq_one c hc
+  have hc4 : c ^ (Fp.modulus ^ 4 - 1) = 1 := by
+    rw [show Fp.modulus ^ 4 - 1 = (Fp.modulus ^ 2 - 1) * (Fp.modulus ^ 2 + 1) by decide,
+      pow_mul, hc2, one_pow]
+  have hw4 : (w ^ 3) ^ (Fp.modulus ^ 4 - 1) = 1 := by
+    have h4 : Fp.modulus ^ 4 - 1 =
+        4 * ((Fp.modulus ^ 2 - 1) / 2 * ((Fp.modulus ^ 2 + 1) / 2)) := by decide
+    have h12 : 3 * (4 * ((Fp.modulus ^ 2 - 1) / 2 * ((Fp.modulus ^ 2 + 1) / 2))) =
+        6 * ((Fp.modulus ^ 2 - 1) / 2 * (2 * ((Fp.modulus ^ 2 + 1) / 2))) := by ring
+    rw [h4, ← pow_mul, h12, pow_mul, w_sixth, ← map_pow, pow_mul, Fp12.xi_pow_half, pow_mul,
+      neg_one_sq, one_pow, map_one]
+  rw [finalExponentiation_eq_pow, show finalExpExponent = (Fp.modulus ^ 4 - 1) *
+      (finalExpExponent / (Fp.modulus ^ 4 - 1)) by decide +kernel, pow_mul, mul_pow, ← map_pow,
+    hc4, hw4, map_one, one_mul, one_pow]
 
 end EthLib.Cryptography.Bls

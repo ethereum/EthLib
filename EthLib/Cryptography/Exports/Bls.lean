@@ -170,7 +170,7 @@ def pairingExport (p q : ByteArray) : Result ByteArray := do
   if !G1.inSubgroup P || !G2.inSubgroup Q then runBls (.error .notInSubgroup)
   if P.isInfinity || Q.isInfinity then return fp12Bytes Fp12.one
   -- The same Miller loop and final exponentiation as one pair of the pairing check.
-  let f := millerLoop blsX (Embedded.ofG2 Q) (Embedded.ofG1 P)
+  let f := millerLoop blsX Q.toAffine P.toAffine
   return fp12Bytes (finalExponentiation f.conjugate)
 
 end EthLib.Cryptography.Bls.Exports

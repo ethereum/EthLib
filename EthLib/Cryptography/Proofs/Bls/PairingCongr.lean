@@ -114,30 +114,12 @@ theorem toAffine_congr {P Q : G2} (hP : Valid P) (hQ : Valid Q) (h : toPoint P =
 
 end G2
 
-namespace Embedded
-
-/-- The embedding of a valid point of `G1` depends only on its group element. -/
-theorem ofG1_congr {P P' : G1} (hP : G1.Valid P) (hP' : G1.Valid P')
-    (h : G1.toPoint P = G1.toPoint P') : ofG1 P = ofG1 P' := by
-  obtain ⟨hi, ha⟩ := G1.toAffine_congr hP hP' h
-  unfold ofG1
-  rw [hi, ha]
-
-/-- The embedding of a valid point of `G2` depends only on its group element. -/
-theorem ofG2_congr {Q Q' : G2} (hQ : G2.Valid Q) (hQ' : G2.Valid Q')
-    (h : G2.toPoint Q = G2.toPoint Q') : ofG2 Q = ofG2 Q' := by
-  obtain ⟨hi, ha⟩ := G2.toAffine_congr hQ hQ' h
-  unfold ofG2
-  rw [hi, ha]
-
-end Embedded
-
 /-- The factor that one pair adds to the product of the pairing check.
 
 A pair with a point at infinity adds no factor. -/
 def pairFactor (pq : G1 × G2) : Option Fp12 :=
   if pq.1.isInfinity || pq.2.isInfinity then none
-  else some (millerLoop blsX (Embedded.ofG2 pq.2) (Embedded.ofG1 pq.1)).conjugate
+  else some (millerLoop blsX pq.2.toAffine pq.1.toAffine).conjugate
 
 /-- The loop of the pairing check, as a fold over the factors of the pairs. -/
 private theorem forIn_eq_foldl (l : List (G1 × G2)) (acc : Fp12) :
@@ -145,8 +127,7 @@ private theorem forIn_eq_foldl (l : List (G1 × G2)) (acc : Fp12) :
         match x with
         | (p, q) =>
           if (p.isInfinity || q.isInfinity) = true then pure (ForInStep.yield r)
-          else pure (ForInStep.yield (r * (millerLoop blsX (Embedded.ofG2 q)
-            (Embedded.ofG1 p)).conjugate))) =
+          else pure (ForInStep.yield (r * (millerLoop blsX q.toAffine p.toAffine).conjugate))) =
       (l.filterMap pairFactor).foldl (· * ·) acc := by
   induction l generalizing acc with
   | nil => rfl
@@ -178,7 +159,7 @@ theorem pairFactor_congr {p p' : G1} {q q' : G2}
   unfold pairFactor
   dsimp only
   rw [(G1.toAffine_congr hp hp' hpp).1, (G2.toAffine_congr hq hq' hqq).1,
-    Embedded.ofG1_congr hp hp' hpp, Embedded.ofG2_congr hq hq' hqq]
+    (G1.toAffine_congr hp hp' hpp).2, (G2.toAffine_congr hq hq' hqq).2]
 
 /-- The pairing check depends only on the group elements of valid points. -/
 theorem pairingCheck_congr {ps qs : Array (G1 × G2)} (hsize : ps.size = qs.size)
