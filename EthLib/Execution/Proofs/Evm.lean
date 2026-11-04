@@ -9,6 +9,9 @@ public import EthLib.Execution.Proofs.Evm.Memory
 public import EthLib.Execution.Proofs.Evm.PowMod
 public import EthLib.Execution.Proofs.Evm.Words
 public import EthLib.Execution.Proofs.Evm.Gas
+public import EthLib.Execution.Proofs.Evm.Op
+public import EthLib.Execution.Proofs.Evm.Stack
+public import EthLib.Execution.Proofs.Evm.Frame
 
 /-!
 # `EthLib.Execution.Proofs.Evm`
