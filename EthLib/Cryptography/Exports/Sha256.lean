@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Hash.Sha256
 
 /-!
-# `Exports.Sha256`
+# Exports: SHA-256
 
 The C export of SHA-256, FIPS 180-4 §6.2, for the Python bindings.
 

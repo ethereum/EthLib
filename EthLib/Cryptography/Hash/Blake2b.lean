@@ -1,9 +1,10 @@
 module
 
 /-!
-# `Hash.Blake2b`
+# The BLAKE2b compression function
 
-The compression function F of BLAKE2b, [RFC 7693](https://www.rfc-editor.org/rfc/rfc7693) §3.2.
+The compression function F of BLAKE2b,
+[RFC 7693](https://www.rfc-editor.org/rfc/rfc7693) §3.2.
 
 BLAKE2b runs F once per 128-byte block, with 12 rounds (§3.3).
 
@@ -11,11 +12,11 @@ The BLAKE2F precompile lets the caller choose the number of rounds, so here it i
 
 Each step of the RFC is one definition:
 
-- the initialization vector, §2.6;
-- the message schedule, §2.7;
-- the rotation of a word, §2.3;
-- the mixing function G, §3.1;
-- one round of F, and F itself, §3.2.
+- The initialization vector, §2.6.
+- The message schedule, §2.7.
+- The rotation of a word, §2.3.
+- The mixing function G, §3.1.
+- One round of F, and F itself, §3.2.
 
 The code is a direct transcription of the RFC, not a constant-time implementation.
 -/
@@ -28,8 +29,8 @@ namespace EthLib.Cryptography.Hash.Blake2b
 
 RFC 7693 §2.1 fixes the parameters of BLAKE2b:
 
-- a word has `w = 64` bits;
-- F runs `r = 12` rounds;
+- A word has `w = 64` bits.
+- F runs `r = 12` rounds.
 - G rotates by `(R1, R2, R3, R4) = (32, 24, 16, 63)`.
 
 A word is a `UInt64`, so `+` is the addition modulo `2^64` of §3.1.
@@ -78,7 +79,8 @@ Lean's `>>>` is the RFC's shift `>>`, so the rotation is spelled out. -/
 
 /-- The mixing function G, RFC 7693 §3.1.
 
-It mixes the two message words `x` and `y` into the words `a`, `b`, `c` and `d` of the work vector. -/
+It mixes the message words `x` and `y` into the words `a`, `b`, `c` and `d` of the work vector.
+-/
 def mix (v : Vector UInt64 16) (a b c d : Fin 16) (x y : UInt64) : Vector UInt64 16 :=
   let v := v.set a (v[a] + v[b] + x)
   let v := v.set d (rotr (v[d] ^^^ v[a]) 32)

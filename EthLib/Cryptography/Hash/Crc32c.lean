@@ -1,11 +1,13 @@
 module
 
 /-!
-# `Hash.Crc32c`
+# CRC-32C
 
-CRC-32C, the Castagnoli CRC of [RFC 3720 §12.1](https://www.rfc-editor.org/rfc/rfc3720#section-12.1).
+CRC-32C, the Castagnoli CRC of
+[RFC 3720 §12.1](https://www.rfc-editor.org/rfc/rfc3720#section-12.1).
 
-The [Snappy framing format](https://github.com/google/snappy/blob/f82bff66afe0de4c9ae22f8c4ef84e3c2233e799/framing_format.txt) §3 checks each data chunk with it.
+The Snappy framing format §3 checks each data chunk with it:
+<https://github.com/google/snappy/blob/f82bff66afe0de4c9ae22f8c4ef84e3c2233e799/framing_format.txt>
 
 It detects errors and authenticates nothing: anyone can recompute it.
 
@@ -21,7 +23,8 @@ The CRC is the complemented remainder of a division by a generator G(x):
 
 A polynomial of degree below 32 is a `UInt32`, with bit i holding the coefficient of x^i.
 
-The RFC numbers the bits of a byte the other way: bit 0 is the most significant ([RFC 3720 §2.3.3](https://www.rfc-editor.org/rfc/rfc3720#section-2.3.3)).
+The RFC numbers the bits of a byte the other way: bit 0 is the most significant
+([RFC 3720 §2.3.3](https://www.rfc-editor.org/rfc/rfc3720#section-2.3.3)).
 
 The division runs one coefficient at a time, to be read against the RFC, not for speed.
 -/
@@ -69,13 +72,14 @@ The remainder R(x) of RFC 3720 §12.1.
 
 The RFC complements the 32 highest coefficients of M(x), multiplies by x^32 and divides by G(x).
 
-Starting the division from `0xffffffff` instead of 0 has the same effect on a message of 32 bits or more.
+On a message of 32 bits or more, a division from `0xffffffff` instead of 0 has the same effect.
 
 The RFC never divides a shorter message.
 
 A shorter message, such as an empty Snappy chunk, also starts from `0xffffffff`.
 
-That is the initial value of [CRC-32/ISCSI](https://reveng.sourceforge.io/crc-catalogue/17plus.htm#crc.cat.crc-32-iscsi) in the CRC catalogue.
+That is the initial value of CRC-32/ISCSI in the CRC catalogue:
+<https://reveng.sourceforge.io/crc-catalogue/17plus.htm#crc.cat.crc-32-iscsi>
 -/
 def remainder (data : ByteArray) : UInt32 :=
   data.data.toList.foldl shiftByte 0xffffffff

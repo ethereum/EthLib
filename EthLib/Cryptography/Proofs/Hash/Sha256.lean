@@ -3,11 +3,13 @@ module
 public import EthLib.Cryptography.Hash.Sha256
 
 /-!
-# Proofs: `Hash.Sha256`
+# Proofs: SHA-256
 
 SHA-256 agrees with FIPS 180-4 on every message shorter than 2^61 bytes.
 
-The standard is restated below as a model over 32-bit bit vectors, independent of the executable code.
+The file restates the standard as a model over 32-bit bit vectors.
+
+The model is independent of the executable code.
 -/
 
 @[expose] public section
@@ -85,7 +87,7 @@ def rounds (input : Vector Word 16) (initial : State) : Nat → State
   | 0 => initial
   | n + 1 => step (rounds input initial n) (K[n]!).toBitVec (messageWord input n)
 
-/-- One block: sixty-four rounds, then the intermediate hash value added in, FIPS 180-4 §6.2.2, step 4. -/
+/-- One block: 64 rounds, then the intermediate hash value added in, FIPS 180-4 §6.2.2, step 4. -/
 def compression (input : Vector Word 16) (initial : State) : State :=
   let w := rounds input initial 64
   ⟨initial.a + w.a, initial.b + w.b, initial.c + w.c, initial.d + w.d,
@@ -98,7 +100,11 @@ def initial : State :=
 /-- The number of zero bytes after the `0x80` byte, FIPS 180-4 §5.1.1. -/
 def zeroCount (size : Nat) : Nat := (119 - size % 64) % 64
 
-/-- The padded message, FIPS 180-4 §5.1.1: the message, `0x80`, zeros, and the bit length in eight big-endian bytes. -/
+/--
+The padded message, FIPS 180-4 §5.1.1.
+
+It is the message, `0x80`, zeros, and the bit length in eight big-endian bytes.
+-/
 def padded (message : ByteArray) : ByteArray :=
   ⟨message.data ++ #[0x80] ++ Array.replicate (zeroCount message.size) 0 ++
     Array.ofFn fun i : Fin 8 => UInt8.ofNat ((message.size * 8 / 2 ^ (56 - 8 * i.val)) % 256)⟩
@@ -164,7 +170,9 @@ def cubeRootFraction (prime word : Nat) : Bool :=
   root ^ 3 ≤ prime * 2 ^ 96 && prime * 2 ^ 96 < (root + 1) ^ 3
 
 /--
-The initial hash value is what FIPS 180-4 §5.3.3 derives: the square roots of the first eight primes.
+The initial hash value is the one that FIPS 180-4 §5.3.3 derives.
+
+It comes from the square roots of the first 8 primes.
 
 So no initial word is taken on trust.
 -/
@@ -175,7 +183,9 @@ theorem IV_from_primes :
   decide +kernel
 
 /--
-The round constants are what FIPS 180-4 §4.2.2 derives: the cube roots of the first sixty-four primes.
+The round constants are the ones that FIPS 180-4 §4.2.2 derives.
+
+They come from the cube roots of the first 64 primes.
 
 So no round constant is taken on trust.
 -/
@@ -187,20 +197,20 @@ theorem K_from_primes :
 
 /-! ## The functions on words -/
 
-/-- `smallSigma0` is σ0 of FIPS 180-4 §4.1.2. -/
+/-- The executable σ0 is σ0 of FIPS 180-4 §4.1.2. -/
 theorem smallSigma0_toBitVec (x : UInt32) : (smallSigma0 x).toBitVec = Spec.small0 x.toBitVec := by
   -- Each pair of shifts joined by an or is a rotation.
   simp [smallSigma0, rotr, shr, Spec.small0, BitVec.rotateRight_def]
 
-/-- `smallSigma1` is σ1 of FIPS 180-4 §4.1.2. -/
+/-- The executable σ1 is σ1 of FIPS 180-4 §4.1.2. -/
 theorem smallSigma1_toBitVec (x : UInt32) : (smallSigma1 x).toBitVec = Spec.small1 x.toBitVec := by
   simp [smallSigma1, rotr, shr, Spec.small1, BitVec.rotateRight_def]
 
-/-- `bigSigma0` is Σ0 of FIPS 180-4 §4.1.2. -/
+/-- The executable Σ0 is Σ0 of FIPS 180-4 §4.1.2. -/
 theorem bigSigma0_toBitVec (x : UInt32) : (bigSigma0 x).toBitVec = Spec.large0 x.toBitVec := by
   simp [bigSigma0, rotr, Spec.large0, BitVec.rotateRight_def]
 
-/-- `bigSigma1` is Σ1 of FIPS 180-4 §4.1.2. -/
+/-- The executable Σ1 is Σ1 of FIPS 180-4 §4.1.2. -/
 theorem bigSigma1_toBitVec (x : UInt32) : (bigSigma1 x).toBitVec = Spec.large1 x.toBitVec := by
   simp [bigSigma1, rotr, Spec.large1, BitVec.rotateRight_def]
 

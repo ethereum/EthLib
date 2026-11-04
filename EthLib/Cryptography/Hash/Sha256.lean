@@ -1,7 +1,7 @@
 module
 
 /-!
-# `Sha256`
+# SHA-256
 
 SHA-256, as FIPS 180-4 defines it, for messages of whole bytes.
 
@@ -52,7 +52,7 @@ namespace EthLib.Cryptography.Hash.Sha256
 /--
 The round constants K₀ to K₆₃, FIPS 180-4 §4.2.2.
 
-Each is the first 32 bits of the fractional part of the cube root of one of the first sixty-four primes.
+Each is the first 32 bits of the fractional part of the cube root of one of the first 64 primes.
 -/
 def K : Vector UInt32 64 := #v[
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -67,7 +67,7 @@ def K : Vector UInt32 64 := #v[
 /--
 The initial hash value H⁽⁰⁾, FIPS 180-4 §5.3.3.
 
-Each word is the first 32 bits of the fractional part of the square root of one of the first eight primes.
+Each is the first 32 bits of the fractional part of the square root of one of the first 8 primes.
 -/
 def IV : Vector UInt32 8 := #v[
   0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19 ]
@@ -182,7 +182,7 @@ end EthLib.Cryptography.Hash.Sha256
 
 namespace EthLib.Cryptography.Hash
 
-/-- SHA-256 of an arbitrary-length `ByteArray`. -/
+/-- SHA-256 of a byte string of any length. -/
 @[inline] def sha256 (data : ByteArray) : ByteArray := Sha256.hash data
 
 end EthLib.Cryptography.Hash
