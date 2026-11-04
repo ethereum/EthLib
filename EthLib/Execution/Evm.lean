@@ -17,6 +17,7 @@ public import EthLib.Execution.Evm.Frame
 public import EthLib.Execution.Evm.Step
 public import EthLib.Execution.Evm.StackOnly
 public import EthLib.Execution.Evm.MemoryData
+public import EthLib.Execution.Evm.EnvironmentData
 public import EthLib.Execution.Evm.JumpDest
 public import EthLib.Execution.Evm.ControlFlow
 
