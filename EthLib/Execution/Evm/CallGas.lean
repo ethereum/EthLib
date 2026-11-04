@@ -74,6 +74,12 @@ The callee gets the stipend on top when the call sends value.
 
 From Tangerine Whistle, the gas passed on is at most all but one 64th of what is left.
 
+The cap of Appendix H.2 of the Yellow Paper applies this bound to every call.
+
+EIP-150 applies it only when the call asks for more than it can pay.
+
+They differ for a request above the bound that the frame can pay, and this follows the Yellow Paper.
+
 When the frame cannot even pay the extra price, the call asks for its whole gas, and fails. -/
 def messageCallGas (fork : Fork) (value : U256) (gas gasLeft memoryCost extraGas : Nat)
     (stipend : Nat := CALL_STIPEND) : MessageCallGas :=

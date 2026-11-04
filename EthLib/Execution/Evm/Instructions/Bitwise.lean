@@ -61,7 +61,7 @@ From 256 bits on, the result is 0 for a nonnegative value and -1 for a negative 
 def bitwiseSar (shift value : U256) : U256 :=
   let signedValue := U256.toSigned value
   if shift.toNat < 256 then
-    -- Python's `>>` on an `int` rounds down, as `>>>` on an `Int` does.
+    -- The shift of an `Int` rounds toward negative infinity, as the sign fill of EIP-145 does.
     U256.fromSigned (signedValue >>> shift.toNat)
   else if signedValue ≥ 0 then
     0
@@ -71,7 +71,7 @@ def bitwiseSar (shift value : U256) : U256 :=
 /-- The number of bits of `n` without its leading zeros, which is 0 for 0. -/
 def bitLength (n : Nat) : Nat := if n = 0 then 0 else n.log2 + 1
 
-/-- `count_leading_zeros`: the zero bits of `x` above its highest one bit, or 256 for 0.
+/-- The count of leading zeros: the zero bits of `x` above its highest one bit, or 256 for 0.
 
 EIP-7939 defines it as 256 minus the bit length of `x`. -/
 def countLeadingZeros (x : U256) : U256 := BitVec.ofNat 256 (256 - bitLength x.toNat)
