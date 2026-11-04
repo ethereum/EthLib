@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Kzg.Recovery
 public import EthLib.Cryptography.Proofs.Kzg.Fft
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
 -- Validation uses the public laws of `ExceptT` and `IO`, rather than their hidden bodies.
-import Batteries.Lean.LawfulMonad
+import EthLib.Cryptography.Proofs.Kzg.LawfulIO
 import Init.Control.Lawful.Instances
 
 /-!
