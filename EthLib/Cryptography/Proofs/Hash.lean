@@ -14,7 +14,7 @@ public import EthLib.Cryptography.Proofs.Hash.Hkdf
 public import EthLib.Cryptography.Proofs.Hash.ConcatKdf
 
 /-!
-# `EthLib.Cryptography.Proofs.Hash`
+# Proofs: hash functions
 
 Proofs for the shared hash functions and checksums.
 -/

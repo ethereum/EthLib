@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Hash.Keccak
 
 /-!
-# `Exports.Keccak`
+# Exports: Keccak-256
 
 The C export of Keccak-256, for the Python bindings.
 

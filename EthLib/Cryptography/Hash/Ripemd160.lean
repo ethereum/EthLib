@@ -1,29 +1,26 @@
 module
 
 /-!
-# `Ripemd160`
+# RIPEMD-160
 
-RIPEMD-160, as Dobbertin, Bosselaers and Preneel define it in "RIPEMD-160: A strengthened version of RIPEMD" (FSE 1996), for messages of whole bytes.
+RIPEMD-160 of a message of whole bytes.
 
-The names below follow the authors' pseudo-code, `rmd160.txt` on Bosselaers' RIPEMD-160 page.
-Its sections are named `definitions` and `pseudo-code`.
+Dobbertin, Bosselaers and Preneel define it in "RIPEMD-160: A strengthened version of RIPEMD"
+(FSE 1996).
 
-```text
-pad        padding is identical to that of MD4 (RFC 1320 §3.1 and §3.2)
-f          definitions: the five nonlinear functions
-K, K'      definitions: the added constants of the left and the right line
-r, r'      definitions: the message word each step reads
-s, s'      definitions: the amount each step rotates by
-IV         definitions: the initial value
-line       pseudo-code: the eighty steps of one line
-compress   pseudo-code: one block absorbed into the chaining variable
-digest     the final chaining variable as twenty bytes
-hash       every block of the padded message, in order
-```
+The notation follows the authors' pseudo-code, `rmd160.txt` on Bosselaers' RIPEMD-160 page:
 
-Words are little-endian, unlike SHA-256: the message words, the length and the digest all put the least significant byte first.
+- Section `definitions` gives the functions `f`, the constants `K` and `K'`, and the initial value.
+- The same section gives the word orders `r` and `r'`, and the rotations `s` and `s'`.
+- Section `pseudo-code` gives the eighty steps of a line and the compression of one block.
+- The padding is the one of MD4 (RFC 1320 §3.1 and §3.2).
 
-Used by the precompile at address `0x03`, which returns the digest left-padded to 32 bytes.
+Words are little-endian, unlike SHA-256.
+
+The message words, the length and the digest all put the least significant byte first.
+
+The precompile at address `0x03` uses it, and pads the digest on the left to 32 bytes.
+
 This specification makes no constant-time guarantee.
 -/
 
@@ -33,21 +30,22 @@ namespace EthLib.Cryptography.Hash.Ripemd160
 
 /-! ## Words -/
 
-/-- Rotate left by `n` bits, `rol_n` of the pseudo-code. `n` is between 1 and 31. -/
+/--
+Rotate left by `n` bits, `rol_n` of the pseudo-code.
+
+The amount `n` is between 1 and 31.
+-/
 @[inline] def rol (x : UInt32) (n : UInt32) : UInt32 :=
   (x <<< n) ||| (x >>> (32 - n))
 
 /--
 The nonlinear function `f(j, x, y, z)` of the group of sixteen steps `group = j / 16`.
 
-```text
-    group   f(j, x, y, z)
-      0     x XOR y XOR z
-      1     (x AND y) OR (NOT(x) AND z)
-      2     (x OR NOT(y)) XOR z
-      3     (x AND z) OR (y AND NOT(z))
-      4     x XOR (y OR NOT(z))
-```
+- Group 0: `x XOR y XOR z`.
+- Group 1: `(x AND y) OR (NOT(x) AND z)`.
+- Group 2: `(x OR NOT(y)) XOR z`.
+- Group 3: `(x AND z) OR (y AND NOT(z))`.
+- Group 4: `x XOR (y OR NOT(z))`.
 -/
 @[inline] def f (group : Fin 5) (x y z : UInt32) : UInt32 :=
   match group with
@@ -110,13 +108,14 @@ def IV : Vector UInt32 5 := #v[0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0
 
 /-! ## Padding -/
 
-/-- The zero bytes between the `0x80` byte and the length, so that the padded message fills whole blocks. -/
+/-- The zero bytes between the `0x80` byte and the length, so that the blocks are whole. -/
 def paddingZeros (size : Nat) : Nat := (64 - (size + 9) % 64) % 64
 
 /--
 The length of a message in bits, as eight little-endian bytes.
 
 RFC 1320 section 3.2 appends the low 64 bits of the bit length.
+
 The conversion and multiplication below implement that reduction modulo 2^64.
 -/
 def lengthBytes (size : Nat) : ByteArray :=
@@ -151,12 +150,19 @@ One step of a line on the variables (A, B, C, D, E).
   let T := rol (state[0] + f group state[1] state[2] state[3] + word + constant) amount + state[4]
   #v[state[4], T, state[1], rol state[2] 10, state[3]]
 
-/-- One line of eighty steps. `index` and `rotation` are the line's `r` and `s`, `constants` its `K`, and `reversed` says whether `f` runs backwards. -/
+/--
+One line of eighty steps.
+
+- The index table and the rotation table are the line's `r` and `s`.
+- The constants are the line's `K`.
+- The flag says whether the groups of `f` run backwards.
+-/
 def line (X : Vector UInt32 16) (start : Vector UInt32 5) (constants : Vector UInt32 5)
     (index : Vector (Fin 16) 80) (rotation : Vector UInt32 80) (reversed : Bool) : Vector UInt32 5 :=
   (List.finRange 80).foldl
     (fun state j =>
-      -- The left line uses f(j), the right line f(79 - j); the constant changes every sixteen steps.
+      -- The left line uses f(j), and the right line f(79 - j).
+      -- The constant changes every sixteen steps.
       let group : Fin 5 := if reversed then ⟨4 - j.val / 16, by omega⟩ else ⟨j.val / 16, by omega⟩
       step group state X[index[j]] constants[(⟨j.val / 16, by omega⟩ : Fin 5)] rotation[j])
     start
@@ -165,6 +171,7 @@ def line (X : Vector UInt32 16) (start : Vector UInt32 5) (constants : Vector UI
 The chaining variable after one more block.
 
 Both lines start from the chaining variable.
+
 Their results are mixed with it in a rotated order:
 
 ```text
@@ -194,7 +201,7 @@ end EthLib.Cryptography.Hash.Ripemd160
 
 namespace EthLib.Cryptography.Hash
 
-/-- RIPEMD-160 of an arbitrary-length `ByteArray`. -/
+/-- RIPEMD-160 of a byte string of any length. -/
 @[inline] def ripemd160 (data : ByteArray) : ByteArray := Ripemd160.hash data
 
 end EthLib.Cryptography.Hash

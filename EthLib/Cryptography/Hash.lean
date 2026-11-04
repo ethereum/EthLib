@@ -10,7 +10,7 @@ public import EthLib.Cryptography.Hash.Hkdf
 public import EthLib.Cryptography.Hash.ConcatKdf
 
 /-!
-# `EthLib.Cryptography.Hash`
+# Hash functions
 
 General-purpose hash functions and checksums shared by the other modules.
 -/
