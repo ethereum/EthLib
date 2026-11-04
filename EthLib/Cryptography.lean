@@ -10,6 +10,7 @@ public import EthLib.Cryptography.Vrf
 public import EthLib.Cryptography.Secp256k1
 public import EthLib.Cryptography.Secp256r1
 public import EthLib.Cryptography.AltBn128
+public import EthLib.Cryptography.Aes
 
 /-!
 # `EthLib.Cryptography`
