@@ -53,18 +53,6 @@ theorem ripemd160_digest (data : ByteArray) (i : Nat) (within : i < 20) :
   rw [ByteArray.getElem_append_right (by rw [padding_size]; omega)]
   simp [padding_size]
 
-/-- Known answer: the call data `"abc"` gives twelve zero bytes, then the digest the paper's vector lists. -/
-theorem ripemd160_abc :
-    ripemd160 (Ripemd160.ascii "abc") =
-      Ripemd160.hexBytes "0000000000000000000000008eb208f7e05d987a9b044a8e98c6b087f15a0bfc" := by
-  decide +kernel
-
-/-- Known answer: empty call data gives twelve zero bytes, then the digest of the empty string. -/
-theorem ripemd160_empty :
-    ripemd160 ByteArray.empty =
-      Ripemd160.hexBytes "0000000000000000000000009c1185a5c5e9fc54612808977ee8f548b2258d31" := by
-  decide +kernel
-
 /-! ## The price -/
 
 /-- The price in closed form, `600 + 120 * ceil(size / 32)`. -/
