@@ -56,7 +56,11 @@ inductive Fork where
 
   [EIP-1013](https://eips.ethereum.org/EIPS/eip-1013) lists its EIPs.
 
-  They are EIP-145, EIP-1014, EIP-1052, EIP-1234 and EIP-1283. -/
+  They are EIP-145, EIP-1014, EIP-1052, EIP-1234 and EIP-1283.
+
+  Mainnet never ran EIP-1283, because Petersburg removed it at the same block.
+
+  So EthLib gives Constantinople the rules of Petersburg, without EIP-1283. -/
   | constantinople
   /-- Petersburg removes EIP-1283 from the execution layer.
 
