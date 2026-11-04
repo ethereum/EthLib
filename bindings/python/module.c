@@ -34,6 +34,7 @@ size_t MODEXP_MAX_LENGTH_BYTES;
 size_t RIPEMD160_OUTPUT_BYTES;
 size_t SHA256_PRECOMPILE_OUTPUT_BYTES;
 
+size_t ENR_MAX_RECORD_SIZE;
 size_t SECP256K1_HASH_LEN;
 size_t SECP256K1_SIGNATURE_LEN;
 
@@ -185,6 +186,11 @@ eth_ecrecover_const_gas(
   uint8_t unit
 );
 
+extern uint64_t
+eth_enr_const_max_record_size(
+  uint8_t unit
+);
+
 /* ---- Lean externs: runtime + module init ----------------------------- */
 
 extern void
@@ -201,6 +207,11 @@ lean_initialize_runtime_module(void);
  * So booting the export roots boots the specification too. */
 extern lean_object*
 initialize_EthLib_EthLib_Cryptography_Exports(
+  uint8_t builtin
+);
+
+extern lean_object*
+initialize_EthLib_EthLib_Networking_Exports(
   uint8_t builtin
 );
 
@@ -464,6 +475,10 @@ static PyMethodDef methods[] = {
   {"secp256k1_recover", py_secp256k1_recover, METH_VARARGS, NULL},
   {"secp256r1_verify", py_secp256r1_verify, METH_VARARGS, NULL},
   {"ecrecover", py_ecrecover, METH_VARARGS, NULL},
+  {"enr_from_text", py_enr_from_text, METH_VARARGS, NULL},
+  {"enr_seq", py_enr_seq, METH_VARARGS, NULL},
+  {"enr_verify_v4", py_enr_verify_v4, METH_VARARGS, NULL},
+  {"enr_node_id", py_enr_node_id, METH_VARARGS, NULL},
   {"precompile_run", py_precompile_run, METH_VARARGS, NULL},
   {NULL, NULL, 0, NULL},
 };
@@ -484,6 +499,10 @@ PyInit__native(void) {
   if (!initialized) {
     lean_initialize_runtime_module();
     lean_object* res = initialize_EthLib_EthLib_Cryptography_Exports(1);
+    if (lean_io_result_is_ok(res)) {
+      lean_dec_ref(res);
+      res = initialize_EthLib_EthLib_Networking_Exports(1);
+    }
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
       res = initialize_EthLib_EthLib_Execution_Exports(1);
@@ -531,6 +550,7 @@ PyInit__native(void) {
     SECP256R1_HASH_LEN       = (size_t) eth_secp256r1_const_hash_len(0);
     SECP256R1_SIGNATURE_LEN  = (size_t) eth_secp256r1_const_signature_len(0);
     ECRECOVER_GAS           = (size_t) eth_ecrecover_const_gas(0);
+    ENR_MAX_RECORD_SIZE     = (size_t) eth_enr_const_max_record_size(0);
 
     RIPEMD160_OUTPUT_BYTES = (size_t) eth_ripemd160_const_output_bytes(0);
     SHA256_PRECOMPILE_OUTPUT_BYTES = (size_t) eth_sha256_precompile_const_output_bytes(0);
@@ -570,5 +590,6 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "SECP256R1_HASH_LEN", SECP256R1_HASH_LEN);
   PyModule_AddIntConstant(m, "SECP256R1_SIGNATURE_LEN", SECP256R1_SIGNATURE_LEN);
   PyModule_AddIntConstant(m, "ECRECOVER_GAS", ECRECOVER_GAS);
+  PyModule_AddIntConstant(m, "ENR_MAX_RECORD_SIZE", ENR_MAX_RECORD_SIZE);
   return m;
 }

@@ -50,6 +50,8 @@ extern size_t SECP256R1_SIGNATURE_LEN;
 
 extern size_t ECRECOVER_GAS;
 
+extern size_t ENR_MAX_RECORD_SIZE;
+
 /* ---- Lean ↔ C marshalling helpers ------------------------------------ */
 
 lean_object*
@@ -178,6 +180,11 @@ PyObject* py_secp256k1_recover                            (PyObject* self, PyObj
 PyObject* py_secp256r1_verify                             (PyObject* self, PyObject* args);
 
 PyObject* py_ecrecover                                    (PyObject* self, PyObject* args);
+
+PyObject* py_enr_from_text                                (PyObject* self, PyObject* args);
+PyObject* py_enr_seq                                      (PyObject* self, PyObject* args);
+PyObject* py_enr_verify_v4                                (PyObject* self, PyObject* args);
+PyObject* py_enr_node_id                                  (PyObject* self, PyObject* args);
 
 PyObject* py_precompile_run                               (PyObject* self, PyObject* args);
 
