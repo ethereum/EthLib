@@ -415,6 +415,14 @@ def block_requests_hash(requests: bytes) -> bytes:
     """The requests hash of request lists, given as an RLP list of byte strings."""
     ...
 
+def block_access_list_hash(block_access_list: bytes) -> bytes:
+    """The hash of a block access list in RLP form, after the decoder accepts it."""
+    ...
+
+def block_access_list_check(block_access_list: bytes, gas_limit: int) -> bool:
+    """Check a block access list in RLP form alone, in a block with a gas limit."""
+    ...
+
 def block_validate_size(fork: str, block: bytes) -> bool:
     """Check the RLP size of a block, decoded at the fork: from Fusaka, at most 8 MiB."""
     ...

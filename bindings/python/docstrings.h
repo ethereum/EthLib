@@ -311,6 +311,12 @@
 #define DOC_block_requests_hash \
   "The requests hash of request lists, given as an RLP list of byte strings."
 
+#define DOC_block_access_list_hash \
+  "The hash of a block access list in RLP form, after the decoder accepts it."
+
+#define DOC_block_access_list_check \
+  "Check a block access list in RLP form alone, in a block with a gas limit."
+
 #define DOC_block_validate_size \
   "Check the RLP size of a block, decoded at the fork: from Fusaka, at most 8 MiB."
 

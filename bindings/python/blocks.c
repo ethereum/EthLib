@@ -40,6 +40,17 @@ eth_block_requests_hash(
 );
 
 extern lean_object*
+eth_block_access_list_hash(
+  lean_object* block_access_list
+);
+
+extern lean_object*
+eth_block_access_list_check(
+  lean_object* block_access_list,
+  uint64_t gas_limit
+);
+
+extern lean_object*
 eth_receipt_reencode(
   lean_object* fork,
   lean_object* receipt
@@ -196,6 +207,34 @@ py_block_requests_hash(
   lean_object* requests = parse_one_bytes(args, "requests");
   if (!requests) return NULL;
   return except_into_pybytes(eth_block_requests_hash(requests), BLOCK_ERROR);
+}
+
+PyObject*
+py_block_access_list_hash(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* bal = parse_one_bytes(args, "block_access_list");
+  if (!bal) return NULL;
+  return except_into_pybytes(eth_block_access_list_hash(bal), BLOCK_ERROR);
+}
+
+PyObject*
+py_block_access_list_check(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *bal_obj, *gas_obj;
+  if (!PyArg_ParseTuple(args, "OO", &bal_obj, &gas_obj)) return NULL;
+  if (!PyBytes_Check(bal_obj)) {
+    PyErr_SetString(PyExc_TypeError, "block_access_list must be bytes");
+    return NULL;
+  }
+  uint64_t gas_limit;
+  if (parse_uint64(gas_obj, "gas_limit", &gas_limit)) return NULL;
+  lean_object* bal =
+    mk_bytearray((const uint8_t*) PyBytes_AS_STRING(bal_obj), PyBytes_GET_SIZE(bal_obj));
+  return except_into_pybool(eth_block_access_list_check(bal, gas_limit), BLOCK_ERROR);
 }
 
 PyObject*

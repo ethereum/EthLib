@@ -302,6 +302,8 @@ PyObject* py_block_transactions_root                      (PyObject* self, PyObj
 PyObject* py_block_withdrawals_root                       (PyObject* self, PyObject* args);
 PyObject* py_block_deposit_requests                       (PyObject* self, PyObject* args);
 PyObject* py_block_requests_hash                          (PyObject* self, PyObject* args);
+PyObject* py_block_access_list_hash                       (PyObject* self, PyObject* args);
+PyObject* py_block_access_list_check                      (PyObject* self, PyObject* args);
 PyObject* py_block_validate_size                          (PyObject* self, PyObject* args);
 PyObject* py_fees_base_fee_per_gas                        (PyObject* self, PyObject* args);
 PyObject* py_fees_fake_exponential                        (PyObject* self, PyObject* args);

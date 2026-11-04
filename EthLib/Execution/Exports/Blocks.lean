@@ -26,6 +26,8 @@ So does a transaction of a block that does not decode, and a trie with an empty 
 
 A deposit log in another layout has a code from 301.
 
+A block access list that breaks a rule of its form has a code from 401.
+
 Every operation here holds up to Glamsterdam, and Hegotá is not yet specified.
 
 Glamsterdam adds two header fields, by EIP-7928 and EIP-7843.
@@ -164,5 +166,18 @@ Each list is its type byte, then its data. -/
 def requestsHashExport (requests : ByteArray) : Result ByteArray := do
   let requests : List ByteArray ← runRlp "requests rejected" (Codec.decode requests)
   return requestsHash requests
+
+/-- The hash of a block access list in RLP form, after the decoder accepts it. -/
+@[export eth_block_access_list_hash]
+def blockAccessListHashExport (bal : ByteArray) : Result ByteArray := do
+  let bal : BlockAccessList ← runRlp "block access list rejected" (Codec.decode bal)
+  return ⟨(← runRlp "block access list has no encoding" (BlockAccessList.hash bal)).toArray⟩
+
+/-- Check a block access list in RLP form alone, in a block with a gas limit. -/
+@[export eth_block_access_list_check]
+def blockAccessListCheckExport (bal : ByteArray) (gasLimit : UInt64) : Result UInt8 := do
+  let bal : BlockAccessList ← runRlp "block access list rejected" (Codec.decode bal)
+  (BlockAccessList.check bal gasLimit.toNat).map (fun () => 1) |>.mapError
+    fun e => (e.code, s!"block access list invalid: {reprStr e}")
 
 end EthLib.Execution.Blocks.Exports

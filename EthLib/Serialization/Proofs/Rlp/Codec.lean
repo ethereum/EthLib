@@ -181,6 +181,20 @@ instance : LawfulCodec UInt64 where
       subst h
       simp [Codec.toItem, UInt64.toNat_ofNat_of_lt' hn]
 
+instance : LawfulCodec UInt32 where
+  ofItem_toItem x := by
+    simp [Codec.ofItem, Codec.toItem, Item.toScalarBelow_scalar x.toNat_lt, bind, Except.bind,
+      pure, Except.pure]
+  toItem_of_ofItem {item x} h := by
+    simp only [Codec.ofItem, bind, Except.bind] at h
+    cases hs : item.toScalarBelow 32 with
+    | error e => simp [hs] at h
+    | ok n =>
+      simp only [hs, pure, Except.pure, Except.ok.injEq] at h
+      obtain ⟨rfl, hn⟩ := Item.eq_scalar_of_toScalarBelow hs
+      subst h
+      simp [Codec.toItem, UInt32.toNat_ofNat_of_lt' hn]
+
 instance : LawfulCodec UInt16 where
   ofItem_toItem x := by
     simp [Codec.ofItem, Codec.toItem, Item.toScalarBelow_scalar x.toNat_lt, bind, Except.bind,

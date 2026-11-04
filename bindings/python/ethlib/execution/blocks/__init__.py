@@ -37,6 +37,16 @@ def requests_hash(requests: bytes) -> bytes:
     return _native.block_requests_hash(requests)
 
 
+def block_access_list_hash(block_access_list: bytes) -> bytes:
+    """The hash of a block access list in RLP form, from Glamsterdam on."""
+    return _native.block_access_list_hash(block_access_list)
+
+
+def check_block_access_list(block_access_list: bytes, gas_limit: int) -> None:
+    """Check the order and the size of a block access list, and raise BlockError if it fails."""
+    _native.block_access_list_check(block_access_list, gas_limit)
+
+
 def receipt_reencode(fork: str, receipt: bytes) -> bytes:
     """The bytes of a receipt, decoded at the fork and encoded again."""
     return _native.receipt_reencode(fork, receipt)
@@ -63,5 +73,6 @@ def check_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -> N
 
 
 __all__ = ["header_hash", "reencode", "transactions_root", "withdrawals_root",
-           "deposit_requests", "requests_hash",
-           "receipt_reencode", "receipt_logs_bloom", "validate_size", "validate_header", "check_header", "BlockError"]
+           "deposit_requests", "requests_hash", "block_access_list_hash",
+           "check_block_access_list", "receipt_reencode", "receipt_logs_bloom", "validate_size",
+           "validate_header", "check_header", "BlockError"]
