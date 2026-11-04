@@ -563,6 +563,14 @@ def fork_id_validate(schedule: bytes, number: int, timestamp: int, remote: bytes
     """Whether a node at a head accepts the fork identifier of a peer, by the validation rules of [EIP-2124](https://eips.ethereum.org/EIPS/eip-2124#validation-rules)."""
     ...
 
+def eth_message_decode(version: int, id: int, data: bytes) -> bytes:
+    """The canonical data of the message with the ID `id` and the data `data`, on a version."""
+    ...
+
+def eth_check_status(version: int, schedule: bytes, number: int, timestamp: int, data: bytes) -> bool:
+    """Whether a node accepts the Status of a peer, on the negotiated version `version`."""
+    ...
+
 def snappy_decompress(block: bytes) -> bytes:
     """The bytes a Snappy block decompresses to, or why it is not a valid block."""
     ...

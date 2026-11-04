@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Exports.Blocks
 public import EthLib.Execution.Exports.Evm
 public import EthLib.Execution.Exports.Fees
+public import EthLib.Execution.Exports.Network
 public import EthLib.Execution.Exports.Pow
 public import EthLib.Execution.Exports.Precompiles
 public import EthLib.Execution.Exports.State

@@ -132,6 +132,13 @@ class ForkIdError(EthLibError, ValueError):
     """A node refused the fork identifier of a peer, or an input was malformed, with code 0."""
 
 
+class EthWireError(EthLibError, ValueError):
+    """An eth message or Status was rejected.
+
+    Message errors have codes from 1, Status errors codes from 101, and a bad argument code 0.
+    """
+
+
 class TransactionError(EthLibError, ValueError):
     """A transaction or its network form was rejected, or a fork name is unknown."""
 
@@ -199,6 +206,7 @@ __all__ = [
     "Devp2pError",
     "Discv4Error",
     "ForkIdError",
+    "EthWireError",
     "TransactionError",
     "VrfError",
     "TrieError",

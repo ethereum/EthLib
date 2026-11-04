@@ -2890,6 +2890,38 @@
    "docstring":
    "Whether a node at a head accepts the fork identifier of a peer, by the validation rules of\n[EIP-2124](https://eips.ethereum.org/EIPS/eip-2124#validation-rules).\n\n- 1: the two hashes match, so the nodes are at one fork.\n  The node refuses only if it has passed the next fork that the peer announces (1a).\n- 2: the hash of the peer is one of the node's earlier hashes, so the peer is syncing.\n  The node accepts if the peer announces the fork that follows that hash, and refuses otherwise.\n- 3: the hash of the peer is one of the node's later hashes, so the node is syncing, and it accepts.\n- 4: the node refuses in every other case.\n\n[EIP-6122](https://eips.ethereum.org/EIPS/eip-6122#additional-rules) checks the forks by block\nbefore the forks by time, as the order of the forks does.\n\nThe node compares its earlier hashes from the first one, so the first match decides rule 2."},
   {"summary":
+   "The canonical data of the message with the ID `id` and the data `data`, on a version.",
+   "signature": "(version: int, id: int, data: bytes) -> bytes",
+   "operation": "EthLib.Execution.Network.Exports.decodeExport",
+   "method": "eth_message_decode",
+   "errors":
+   [{"type": "EthLib.Execution.Network.EthError",
+     "codes":
+     [{"constructor": "unknownId", "code": 1},
+      {"constructor": "rlp", "code": 2}]}],
+   "error_class": "EthWireError",
+   "docstring":
+   "The canonical data of the message with the ID `id` and the data `data`, on a version.\n\nIt reads the message, then writes it back."},
+  {"summary":
+   "Whether a node accepts the Status of a peer, on the negotiated version `version`.",
+   "signature":
+   "(version: int, schedule: bytes, number: int, timestamp: int, data: bytes) -> bool",
+   "operation": "EthLib.Execution.Network.checkStatus",
+   "method": "eth_check_status",
+   "errors":
+   [{"type": "EthLib.Execution.Network.EthError",
+     "codes":
+     [{"constructor": "unknownId", "code": 1},
+      {"constructor": "rlp", "code": 2}]},
+    {"type": "EthLib.Execution.Network.StatusError",
+     "codes":
+     [{"constructor": "version", "code": 101},
+      {"constructor": "forkId", "code": 102},
+      {"constructor": "range", "code": 103}]}],
+   "error_class": "EthWireError",
+   "docstring":
+   "Whether a node accepts the Status of a peer, on the negotiated version `version`.\n\nThe node has the schedule `s`, and its head has a block number and a timestamp.\n\n- The announced version must be the negotiated one.\n- The fork identifier must pass the rules of EIP-2124.\n- From eth/69 on, the announced range must be valid.\n\nThe network ID and the genesis hash are left to the node, since no rule of the specification\nreads them."},
+  {"summary":
    "The bytes a Snappy block decompresses to, or why it is not a valid block.",
    "signature": "(block: bytes) -> bytes",
    "operation": "EthLib.Networking.Snappy.decompress",
