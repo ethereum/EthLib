@@ -1,7 +1,7 @@
 """P256VERIFY against every vector of EIP-7951.
 
 `eip7951_cases.json` holds every case of `assets/eip-7951/test-vectors.json` in `ethereum/EIPs`,
-at commit `d386b29b5a31bd5cfd8d21bbf4e8a0c87734085e`.
+at commit `0ce679f4654ba4d120c97113626f320475e22fa9`.
 
 The EIP derives them from `ecdsa_secp256r1_sha256_p1363_test.json` of `C2SP/wycheproof`,
 under the Apache License 2.0, a copy of which is `scripts/Apache-2.0.txt`.

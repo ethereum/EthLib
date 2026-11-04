@@ -1,7 +1,7 @@
 """The RLPx handshake test vectors of EIP-8, and a reference secp256k1 key derivation.
 
 The keys, nonces and packets come from "Test Vectors", "RLPx Handshake", in EIP-8, at
-commit d386b29b5a31bd5cfd8d21bbf4e8a0c87734085e of ethereum/EIPs, under CC0-1.0.
+commit 0ce679f4654ba4d120c97113626f320475e22fa9 of ethereum/EIPs, under CC0-1.0.
 Node A initiates the connection, and node B accepts it.
 """
 
