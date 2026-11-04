@@ -21,7 +21,9 @@ One suffixed value is new rather than a replacement: `MAX_EFFECTIVE_BALANCE_ELEC
 The suite fails on any other suffixed value, so a replacement that Lean does not hold cannot pass unnoticed.
 
 The directory `networking/` holds the custody vectors of Fulu from the test release `v1.7.0-beta.4` of `ethereum/consensus-specs`, built at the same commit.
-They are the cases of the handlers `get_custody_groups` and `compute_columns_for_custody_group`, copied byte for byte under their path in `mainnet.tar.gz`.
+They are the cases of the handlers `get_custody_groups` and `compute_columns_for_custody_group`, copied byte for byte under their path in `mainnet.tar.gz` and `minimal.tar.gz`.
+The minimal cases hold the same values as the mainnet ones, because the two presets share every custody parameter.
+They still run the Lean definitions on the minimal preset.
 The release repeats the same cases for Gloas and Heze, with only the fork name changed, so the directory keeps those of Fulu.
 `bindings/python/tests/consensus/test_custody.py` runs each case through the Lean definitions.
 
