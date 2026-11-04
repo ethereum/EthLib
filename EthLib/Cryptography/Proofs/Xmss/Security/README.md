@@ -77,7 +77,8 @@ The changes that follow from this are:
 - `Bridge/Real.lean`, `Bridge/Signer.lean` and `Bridge/Game.lean` are rewritten to reason about EthLib's `publicKeyOf`, `signDerived` and `verifyWith`.
 - `Bridge/Derivation.lean` names its inputs by the model's byte layout.
 - `Bridge/SchemeSeed.lean`, `Reduction.lean`, `Seed.lean`, `Model.lean` and `Security.lean` take EthLib's adversary and state the real game (`realGame`) directly.
-- The codeword count of `LeanXmss/Code.lean`, which `Scan/Card.lean` needs, moves to `XmssSecurity/Code.lean`.
+- The codeword count of `LeanXmss/Code.lean`, which `Scan/Card.lean` needs, is not copied.
+  `XmssSecurity/Code.lean` reads it from the size of the code that `Proofs/Xmss/CodeSize.lean` proves.
 - The Lean documentation follows EthLib's rules for doc comments: one sentence per line, at most 100 characters, and ASCII math.
 
 leanerVM also proves the theorem in the random-permutation model, where Keccak-256 is a sponge over a random permutation.
