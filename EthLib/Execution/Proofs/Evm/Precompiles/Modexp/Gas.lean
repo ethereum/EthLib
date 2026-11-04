@@ -1,6 +1,5 @@
 module
 
-public import Mathlib.Tactic.SplitIfs
 public import EthLib.Execution.Evm.Precompiles.Modexp.Gas
 
 /-!
@@ -81,18 +80,21 @@ theorem complexity_mono_base {b b' : Nat} (m : Nat) (h : b ≤ b') :
     complexity b m ≤ complexity b' m := by
   unfold complexity WORD_BYTES SMALL_LENGTH_BYTES MIN_COMPLEXITY
   simp only
-  split_ifs with h1 h2 h2
-  · -- Both operands are long: the word counts compare, and so do their squares.
+  by_cases h1 : max b m > 32 <;> by_cases h2 : max b' m > 32
+  · rw [ite_eq_left h1, ite_eq_left h2]
+    -- Both operands are long: the word counts compare, and so do their squares.
     have : (max b m + 8 - 1) / 8 ≤ (max b' m + 8 - 1) / 8 := by omega
     exact Nat.mul_le_mul_left 2 (Nat.pow_le_pow_left this 2)
   · -- A longer base cannot be short when the shorter one is long.
     omega
-  · -- The short side is 16.
+  · rw [ite_eq_right h1, ite_eq_left h2]
+    -- The short side is 16.
     -- A long operand has at least 5 words, so its complexity is at least 50.
     have : 5 ≤ (max b' m + 8 - 1) / 8 := by omega
     have : 5 ^ 2 ≤ ((max b' m + 8 - 1) / 8) ^ 2 := Nat.pow_le_pow_left this 2
     omega
-  · -- Both operands are short: both cost 16.
+  · rw [ite_eq_right h1, ite_eq_right h2]
+    -- Both operands are short: both cost 16.
     exact Nat.le_refl _
 
 /-- A longer modulus does not lower the complexity. -/
@@ -110,7 +112,7 @@ theorem iterations_mono {l l' : Nat} (expHead : Nat) (h : l ≤ l') :
     iterations l expHead ≤ iterations l' expHead := by
   unfold iterations ITERATIONS_PER_EXTRA_EXPONENT_BYTE EXPONENT_HEAD_BYTES
   simp only
-  split_ifs <;> omega
+  split <;> split <;> omega
 
 /-- The price does not fall when the base grows longer. -/
 theorem gasCost_mono_base {b b' : Nat} (m e h : Nat) (hb : b ≤ b') :
