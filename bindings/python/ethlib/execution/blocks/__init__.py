@@ -27,6 +27,16 @@ def withdrawals_root(fork: str, block: bytes) -> bytes:
     return _native.block_withdrawals_root(fork, block)
 
 
+def deposit_requests(logs: bytes) -> bytes:
+    """The data of the deposit requests of logs, given as the RLP list of the logs, in order."""
+    return _native.block_deposit_requests(logs)
+
+
+def requests_hash(requests: bytes) -> bytes:
+    """The requests hash of request lists, given as an RLP list of byte strings."""
+    return _native.block_requests_hash(requests)
+
+
 def receipt_reencode(fork: str, receipt: bytes) -> bytes:
     """The bytes of a receipt, decoded at the fork and encoded again."""
     return _native.receipt_reencode(fork, receipt)
@@ -43,4 +53,5 @@ def validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -
 
 
 __all__ = ["header_hash", "reencode", "transactions_root", "withdrawals_root",
+           "deposit_requests", "requests_hash",
            "receipt_reencode", "receipt_logs_bloom", "validate_header", "BlockError"]

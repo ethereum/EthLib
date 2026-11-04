@@ -419,6 +419,14 @@ def block_withdrawals_root(fork: str, block: bytes) -> bytes:
     """The withdrawals root of the withdrawals of a block, decoded at a fork from Shapella."""
     ...
 
+def block_deposit_requests(logs: bytes) -> bytes:
+    """The data of the deposit requests of logs, given as the RLP list of the logs, in order."""
+    ...
+
+def block_requests_hash(requests: bytes) -> bytes:
+    """The requests hash of request lists, given as an RLP list of byte strings."""
+    ...
+
 def fees_base_fee_per_gas(parent_gas_limit: bytes, parent_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes:
     """The base fee per gas of a block, from its parent's gas limit, gas used and base fee."""
     ...

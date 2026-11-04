@@ -5,6 +5,7 @@ public import EthLib.Execution.Proofs.Blocks.Bloom
 public import EthLib.Execution.Proofs.Blocks.Difficulty
 public import EthLib.Execution.Proofs.Blocks.Header
 public import EthLib.Execution.Proofs.Blocks.Receipt
+public import EthLib.Execution.Proofs.Blocks.Requests
 public import EthLib.Execution.Proofs.Blocks.Roots
 public import EthLib.Execution.Proofs.Blocks.Validate
 public import EthLib.Execution.Proofs.Blocks.Withdrawal

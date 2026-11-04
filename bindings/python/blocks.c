@@ -30,6 +30,16 @@ eth_block_withdrawals_root(
 );
 
 extern lean_object*
+eth_block_deposit_requests(
+  lean_object* logs
+);
+
+extern lean_object*
+eth_block_requests_hash(
+  lean_object* requests
+);
+
+extern lean_object*
 eth_receipt_reencode(
   lean_object* fork,
   lean_object* receipt
@@ -137,6 +147,41 @@ py_block_withdrawals_root(
   lean_object* block;
   if (!parse_fork_and_bytes(args, "block", &fork, &block)) return NULL;
   return except_into_pybytes(eth_block_withdrawals_root(fork, block), BLOCK_ERROR);
+}
+
+/* Read one bytes argument as a Lean byte array, or NULL with a TypeError set. */
+static lean_object*
+parse_one_bytes(
+  PyObject* args,
+  const char* name
+) {
+  PyObject* obj;
+  if (!PyArg_ParseTuple(args, "O", &obj)) return NULL;
+  if (!PyBytes_Check(obj)) {
+    PyErr_Format(PyExc_TypeError, "%s must be bytes", name);
+    return NULL;
+  }
+  return mk_bytearray((const uint8_t*) PyBytes_AS_STRING(obj), PyBytes_GET_SIZE(obj));
+}
+
+PyObject*
+py_block_deposit_requests(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* logs = parse_one_bytes(args, "logs");
+  if (!logs) return NULL;
+  return except_into_pybytes(eth_block_deposit_requests(logs), BLOCK_ERROR);
+}
+
+PyObject*
+py_block_requests_hash(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* requests = parse_one_bytes(args, "requests");
+  if (!requests) return NULL;
+  return except_into_pybytes(eth_block_requests_hash(requests), BLOCK_ERROR);
 }
 
 PyObject*

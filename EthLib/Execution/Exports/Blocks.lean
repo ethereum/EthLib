@@ -23,6 +23,8 @@ A receipt error has a code from 101, and a failed header check a code from 201.
 An unknown fork name, or forks out of order, has code 0, since no error type covers it.
 
 So does a transaction of a block that does not decode, and a trie with an empty value.
+
+A deposit log in another layout has a code from 301.
 -/
 
 public section
@@ -122,5 +124,19 @@ def withdrawalsRootExport (fork block : ByteArray) : Result ByteArray := do
   let b : Block fork Item ← runRlp "block rejected" (Codec.decode block)
   if h : .shapella ≤ fork then runTrie (withdrawalsRoot (b.withdrawals h))
   else throw (0, "the fork is before Shapella")
+
+/-- The data of the deposit requests of logs, given as the RLP list of the logs, in order. -/
+@[export eth_block_deposit_requests]
+def depositRequestsExport (logs : ByteArray) : Result ByteArray := do
+  let logs : List Log ← runRlp "logs rejected" (Codec.decode logs)
+  (depositRequests logs).mapError fun e => (e.code, s!"deposit log rejected: {reprStr e}")
+
+/-- The requests hash of request lists, given as an RLP list of byte strings.
+
+Each list is its type byte, then its data. -/
+@[export eth_block_requests_hash]
+def requestsHashExport (requests : ByteArray) : Result ByteArray := do
+  let requests : List ByteArray ← runRlp "requests rejected" (Codec.decode requests)
+  return requestsHash requests
 
 end EthLib.Execution.Blocks.Exports
