@@ -31,13 +31,19 @@ A plausible guess merged into this library costs far more.
 ## Sources of truth
 
 Each module implements a published specification.
-It can be an EIP, an RFC, an ePrint paper, an ethresear.ch post, a specification repository such as `ethereum/consensus-specs`, or any other primary source.
+It can be an EIP, an RFC, a NIST or SEC standard, an ePrint paper, an ethresear.ch post, or any other primary source.
 When several exist, use the most authoritative one.
 That specification is normative.
 When the code and the specification disagree, the code is wrong until someone shows otherwise.
 
 Cite the exact document and section in the code that implements it.
-For example: `RFC 9380 §5.3.1`, or the fork and function name in `consensus-specs`.
+For example: `RFC 9380 §5.3.1`, or `EIP-4844` with the name of its section.
+
+EthLib is a specification at the same level as `ethereum/execution-specs` and `ethereum/consensus-specs`.
+So do not cite them in the code.
+You can read them to understand a rule and to check your work.
+If no primary source states a rule, state the rule itself in the doc comment.
+Test vectors keep their pinned origin, as [`ARCHITECTURE.md`](ARCHITECTURE.md#sources) explains.
 
 Do not cite another implementation as the authority for a behaviour.
 A byte-for-byte match with a client is a useful test, not a justification.
