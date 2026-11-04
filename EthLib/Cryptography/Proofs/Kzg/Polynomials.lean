@@ -21,6 +21,13 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 
+/-- A thrown error skips the rest of an `Except` computation.
+
+The rejection theorems of the KZG operations rewrite with it. -/
+theorem throw_bind {ε α β : Type} (e : ε) (f : α → Except ε β) :
+    (throw e >>= f : Except ε β) = throw e :=
+  rfl
+
 /-- `bytesBEToNatAux` coincides with `Fr.fromBytesBEAux` (they implement
 the same fold). -/
 private theorem bytesBEToNatAux_eq_fromBytesBEAux (acc : Nat)

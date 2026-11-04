@@ -9,9 +9,6 @@ public import EthLib.Cryptography.Proofs.Kzg.RecoveryDomain
 public import EthLib.Cryptography.Proofs.Kzg.RecoveryReconstruction
 public import EthLib.Cryptography.Proofs.Bls.G1Msm
 public import EthLib.Cryptography.Proofs.Bls.Compress
--- Lifted successful results are simplified with the public monad laws.
-import Batteries.Lean.LawfulMonad
-import Init.Control.Lawful.Instances
 
 /-!
 # Proofs: FK20 cell proofs equal per-cell quotient commitments
@@ -36,11 +33,7 @@ See Feist and Khovratovich, "Fast amortized KZG proofs", ePrint 2023/033.
     proof_k  : compress( sum_{e < shifts} c_k^e * H_(e+1) )
 ```
 
-`TrustedSetup.globalRef` is an opaque module-init `IO.Ref`.
-
-`computeCellsAndKzgProofsPolynomialcoeff` is stated through its pure body `fk20CellsAndProofs setup polynomialCoeff`.
-
-`computeCellsAndKzgProofsPolynomialcoeff_eq_bind` equates the `IO` wrapper to binding `TrustedSetup.get!`.
+The operation is stated through its body, a plain function of the setup and the coefficients.
 
 This file proves:
 
@@ -61,13 +54,6 @@ open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
 attribute [-instance] Fin.instNatPow
-
-/-- A successful lifted result passes its value to the continuation.
-This is `pure_bind` from Lean v4.35.0, `Init.Control.Lawful.Basic`. -/
-private theorem bind_mk_ok {α β : Type} (value : α) (next : α → KzgM β) :
-    (ExceptT.mk (pure (Except.ok value)) >>= next) = next value := by
-  change (pure value >>= next) = next value
-  exact pure_bind value next
 
 private theorem fr_pow_zero (a : Fr) : a ^ 0 = 1 := pow_zero a
 private theorem fr_pow_succ (a : Fr) (n : Nat) : a ^ (n + 1) = a ^ n * a := pow_succ a n
@@ -696,9 +682,9 @@ theorem dividePolynomialcoeff_binomialVanishing {f : PolynomialCoeff} {n : Nat}
 
 /-! ## FK20 quotient commitment equivalence -/
 
-/-- Pure body of `computeCellsAndKzgProofsPolynomialcoeff`, parameterized by `setup`.
+/-- The cells and proofs of a polynomial in coefficient form, as a plain value.
 
-`Task.spawn` and `Task.get` reduce to the identity, so the `IO` wrapper binds `TrustedSetup.get!` into this function.
+Tasks reduce to the identity, so the operation returns this value.
 -/
 def fk20CellsAndProofs (setup : TrustedSetup) (polynomialCoeff : PolynomialCoeff) :
     Array Cell × Array KZGProof :=
@@ -715,31 +701,25 @@ def fk20CellsAndProofs (setup : TrustedSetup) (polynomialCoeff : PolynomialCoeff
     bitReversalPermutation (fftG1 padded (computeRootsOfUnity CELLS_PER_EXT_BLOB))).get
   (cells, proofs.map Bls.G1.compress)
 
-/-- `computeCellsAndKzgProofsPolynomialcoeff` reads `TrustedSetup.get!` and returns `fk20CellsAndProofs`. -/
-theorem computeCellsAndKzgProofsPolynomialcoeff_eq_bind (polynomialCoeff : PolynomialCoeff) :
-    computeCellsAndKzgProofsPolynomialcoeff polynomialCoeff =
-      (do
-        let setup ← TrustedSetup.get!
-        return fk20CellsAndProofs setup polynomialCoeff) :=
+/-- The cell operation on coefficients returns its plain body. -/
+theorem computeCellsAndKzgProofsPolynomialcoeff_eq (setup : TrustedSetup)
+    (polynomialCoeff : PolynomialCoeff) :
+    computeCellsAndKzgProofsPolynomialcoeff setup polynomialCoeff =
+      .ok (fk20CellsAndProofs setup polynomialCoeff) :=
   rfl
 
-/-- On a valid blob, `computeCellsAndKzgProofs` decodes `blob` and runs `fk20CellsAndProofs` on `TrustedSetup.get!`. -/
-theorem computeCellsAndKzgProofs_ok_eq_bind {blob : Blob} {poly : Polynomial}
+/-- On a valid blob, the cell operation returns the cells and proofs of its polynomial. -/
+theorem computeCellsAndKzgProofs_ok_eq (setup : TrustedSetup) {blob : Blob} {poly : Polynomial}
     (hblob : blobToPolynomial blob = .ok poly) :
-    computeCellsAndKzgProofs blob =
-      (do
-        let setup ← TrustedSetup.get!
-        return fk20CellsAndProofs setup (polynomialEvalToCoeff poly)) := by
+    computeCellsAndKzgProofs setup blob =
+      .ok (fk20CellsAndProofs setup (polynomialEvalToCoeff poly)) := by
   have hbsize : blob.size = BYTES_PER_BLOB := by
     by_contra hne
     have herr := (blobToPolynomial_error_badBlobSize blob blob.size).mpr ⟨hne, rfl⟩
     rw [hblob] at herr
     cases herr
   unfold computeCellsAndKzgProofs
-  rw [ite_eq_right (not_not.mpr hbsize)]
-  change (ExceptT.mk (pure (blobToPolynomial blob)) >>= fun polynomial =>
-    computeCellsAndKzgProofsPolynomialcoeff (polynomialEvalToCoeff polynomial)) = _
-  rw [hblob, bind_mk_ok]
+  rw [ite_eq_right (not_not.mpr hbsize), hblob]
   rfl
 
 private theorem getElem!_extract {α : Type} [Inhabited α] (xs : Array α)
@@ -1165,82 +1145,6 @@ private theorem list_mapM_ok_mem_and_len {cs : List Cell} {es : List CosetEvals}
         · exact ⟨y, hhd⟩
         · exact hmem_tl c hc_tl
 
-private theorem mapM_lift_cellToCosetEvals {cells : Array Cell} {cosetsEvals : Array CosetEvals}
-    (hdec : cells.mapM cellToCosetEvals = .ok cosetsEvals) :
-    (cells.mapM fun c => (cellToCosetEvals c : KzgM CosetEvals)) = pure cosetsEvals := by
-  rw [Array.mapM_eq_mapM_toList] at hdec
-  obtain ⟨es, hes, rfl⟩ : ∃ es, cells.toList.mapM cellToCosetEvals = .ok es ∧ es.toArray = cosetsEvals := by
-    cases hm : cells.toList.mapM cellToCosetEvals with
-    | error e =>
-      rw [hm] at hdec
-      cases hdec
-    | ok es =>
-      rw [hm] at hdec
-      exact ⟨es, rfl, Except.ok.inj hdec⟩
-  unfold Array.mapM
-  suffices ∀ (i : Nat) (acc : Array CosetEvals) (rem : List Cell) (out : List CosetEvals),
-      cells.toList.drop i = rem →
-      rem.mapM cellToCosetEvals = .ok out →
-      Array.mapM.map (fun c => (cellToCosetEvals c : KzgM CosetEvals)) cells i acc =
-        pure (acc ++ out.toArray) by
-    simpa using this 0 (Array.emptyWithCapacity cells.size) cells.toList es (by simp) hes
-  intro i acc rem
-  induction rem generalizing i acc with
-  | nil =>
-    intro out hdrop hrem
-    have hnil : ([] : List Cell).mapM cellToCosetEvals = .ok [] := rfl
-    rw [hnil] at hrem
-    injection hrem with h'
-    subst h'
-    have hge : ¬ i < cells.size := by
-      intro hlt
-      have hlen := congrArg List.length hdrop
-      simp [Array.length_toList] at hlen
-      omega
-    rw [Array.mapM.map.eq_1, dite_eq_right hge]
-    simp
-  | cons hd tl ih =>
-    intro out hdrop hrem
-    have hlt : i < cells.size := by
-      by_contra hge
-      have hlen := congrArg List.length hdrop
-      simp [Array.length_toList] at hlen
-      omega
-    have hhd_eq : cells[i] = hd := by
-      have hget : (cells.toList.drop i)[0]? = (hd :: tl)[0]? := congrArg (·[0]?) hdrop
-      rw [List.getElem?_drop, Nat.add_zero, Array.getElem?_toList,
-        Array.getElem?_eq_getElem hlt] at hget
-      exact Option.some.inj hget
-    have hdrop_next : cells.toList.drop (i + 1) = tl := by
-      rw [← List.drop_drop, hdrop]
-      rfl
-    rw [List.mapM_cons] at hrem
-    cases hhd : cellToCosetEvals hd with
-    | error e =>
-      rw [hhd] at hrem
-      cases hrem
-    | ok y =>
-      rw [hhd] at hrem
-      cases htl : tl.mapM cellToCosetEvals with
-      | error e =>
-        rw [htl] at hrem
-        cases hrem
-      | ok ys =>
-        rw [htl] at hrem
-        injection hrem with h'
-        subst h'
-        rw [Array.mapM.map.eq_1, dite_eq_left hlt, hhd_eq]
-        have hstep : (cellToCosetEvals hd : KzgM CosetEvals) = ExceptT.mk (pure (.ok y)) := by
-          rw [hhd]
-          rfl
-        rw [hstep, bind_mk_ok]
-        change Array.mapM.map (fun c => (cellToCosetEvals c : KzgM CosetEvals)) cells (i + 1)
-          (acc.push y) = pure (acc ++ (y :: ys).toArray)
-        rw [ih (i + 1) (acc.push y) ys hdrop_next htl]
-        congr 1
-        apply Array.ext'
-        simp [Array.toList_append]
-
 private theorem nodup_of_ascending {xs : Array Nat}
     (hasc : (Array.range (xs.size - 1)).any (fun i => xs[i + 1]! ≤ xs[i]!) = false) :
     xs.toList.Nodup := by
@@ -1279,8 +1183,8 @@ private theorem nodup_of_ascending {xs : Array Nat}
     simpa using heq
   exact Nat.ne_of_lt (hlt_all i j hij hj_sz) heq_bang
 
-/-- On valid samples of a blob polynomial `p`, `recoverCellsAndKzgProofs` runs `fk20CellsAndProofs setup p`. -/
-theorem recoverCellsAndKzgProofs_ok_eq_bind
+/-- On valid samples of a blob polynomial `p`, recovery returns the cells and proofs of `p`. -/
+theorem recoverCellsAndKzgProofs_ok_eq (setup : TrustedSetup)
     {p : PolynomialCoeff} {cellIndices : Array CellIndex}
     {cells : Array Cell} {cosetsEvals : Array CosetEvals}
     (hp : p.size = FIELD_ELEMENTS_PER_BLOB)
@@ -1291,10 +1195,7 @@ theorem recoverCellsAndKzgProofs_ok_eq_bind
       (fun i => cellIndices[i + 1]! ≤ cellIndices[i]!) = false)
     (hdec : cells.mapM cellToCosetEvals = .ok cosetsEvals)
     (hmatch : RecoverySamplesMatch p cellIndices cosetsEvals) :
-    recoverCellsAndKzgProofs cellIndices cells =
-      (do
-        let setup ← TrustedSetup.get!
-        return fk20CellsAndProofs setup p) := by
+    recoverCellsAndKzgProofs setup cellIndices cells = .ok (fk20CellsAndProofs setup p) := by
   have hnd : cellIndices.toList.Nodup := nodup_of_ascending hasc
   have hbound_mem : ∀ ci ∈ cellIndices.toList, ci < CELLS_PER_EXT_BLOB := by
     intro ci hci
@@ -1335,10 +1236,14 @@ theorem recoverCellsAndKzgProofs_ok_eq_bind
     ite_eq_right (Nat.not_lt.mpr hmax),
     ite_eq_right (by simp [hbound]),
     ite_eq_right (by simpa [Array.size_range] using hasc)]
-  simp only [hfind, mapM_lift_cellToCosetEvals hdec, pure_bind]
-  change (ExceptT.mk (pure (recoverPolynomialcoeff cellIndices cosetsEvals)) >>=
-    computeCellsAndKzgProofsPolynomialcoeff) = _
-  rw [hrec, bind_mk_ok]
+  simp only [hfind]
+  change (cells.mapM cellToCosetEvals >>= fun cosetsEvals =>
+    recoverPolynomialcoeff cellIndices cosetsEvals >>=
+      computeCellsAndKzgProofsPolynomialcoeff setup) = _
+  rw [hdec]
+  change (recoverPolynomialcoeff cellIndices cosetsEvals >>=
+    computeCellsAndKzgProofsPolynomialcoeff setup) = _
+  rw [hrec]
   rfl
 
 /-- End-to-end recovery specification for `recoverCellsAndKzgProofs`.
@@ -1365,10 +1270,7 @@ theorem recoverCellsAndKzgProofs_spec
     (hsetup_tor : ∀ t < FIELD_ELEMENTS_PER_BLOB - FIELD_ELEMENTS_PER_CELL,
       Fr.modulus • G1.toPoint setup.g1Monomial[t]! = 0)
     (hcoset : cosetForCell cellIndex = .ok coset) :
-    recoverCellsAndKzgProofs cellIndices cells =
-      (do
-        let setup ← TrustedSetup.get!
-        return fk20CellsAndProofs setup p) ∧
+    recoverCellsAndKzgProofs setup cellIndices cells = .ok (fk20CellsAndProofs setup p) ∧
     ∃ vanishing quotient,
       vanishingPolynomialcoeff coset = .ok vanishing ∧
       dividePolynomialcoeff p vanishing = .ok quotient ∧
@@ -1378,7 +1280,7 @@ theorem recoverCellsAndKzgProofs_spec
         cosetEvalsToCell (coset.map (evaluatePolynomialcoeff p)) ∧
       (fk20CellsAndProofs setup p).2[cellIndex]! =
         Bls.G1.compress (Bls.G1.msm (setup.g1Monomial.extract 0 quotient.size) quotient) :=
-  ⟨recoverCellsAndKzgProofs_ok_eq_bind hp hlen hmin hbound hasc hdec hmatch,
+  ⟨recoverCellsAndKzgProofs_ok_eq setup hp hlen hmin hbound hasc hdec hmatch,
    fk20CellsAndProofs_eq_perCellSpec
      (hp ▸ (by decide : FIELD_ELEMENTS_PER_BLOB ≤ FIELD_ELEMENTS_PER_EXT_BLOB))
      (hp.symm ▸ hsetup_sz)

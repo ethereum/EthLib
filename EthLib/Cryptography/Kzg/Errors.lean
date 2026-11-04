@@ -5,15 +5,9 @@ module
 
 Typed errors for the KZG surface.
 
-The implementation functions are written in `KzgM` (`ExceptT KzgError IO`):
-they can still perform the I/O they need (reading the loaded trusted
-setup) while reporting domain failures as structured `KzgError` values
-rather than stringly-typed `IO.userError`s. Pure helpers that cannot do
-I/O return `Except KzgError` and lift transparently into `KzgM`.
+Every operation returns its result or one of these errors, so a failure names its cause.
 
-The C exports in `EthLib.Cryptography.Exports.Kzg` run a `KzgM` action
-back down to `IO`, turning a `KzgError` into the `IO.userError` that the
-Python bindings expect.
+The C exports turn an error into the message of a Python exception.
 -/
 
 @[expose] public section
@@ -74,6 +68,8 @@ inductive KzgError where
   | tooManyMissingCells
   /-- A buffer of packed 8-byte indices has a length that is not a multiple of 8. -/
   | badIndicesBytesSize (actual : Nat)
+  /-- A list of the trusted setup had the wrong length, or one of its points did not decode. -/
+  | invalidTrustedSetup
 
 /-- Human-readable description, used at the C-ABI boundary. -/
 def KzgError.message : KzgError → String
@@ -106,9 +102,6 @@ def KzgError.message : KzgError → String
   | .tooManyMissingCells        => "too many missing cells"
   | .badIndicesBytesSize actual =>
       s!"bad indices byte buffer size: {actual} (must be a multiple of 8)"
-
-/-- The KZG implementation monad: `IO` (for the trusted setup) with
-typed `KzgError` domain failures. -/
-abbrev KzgM := ExceptT KzgError IO
+  | .invalidTrustedSetup        => "invalid trusted setup"
 
 end EthLib.Cryptography.Kzg

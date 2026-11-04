@@ -46,9 +46,10 @@ The two documents mark these ten functions as public methods:
 Two internal functions, `compute_challenge` and `compute_verify_cell_kzg_proof_batch_challenge`, also have test vectors and C exports.
 Each of the twelve has a C export named `eth_kzg_` followed by its consensus-specs name.
 
-Each of the ten operations returns in `KzgM`, an `ExceptT` over `IO`, so it can fail with a typed error.
-All of them except `computeCells` read the trusted setup, with `TrustedSetup.get!`.
-The two challenge helpers are pure: each returns a field element.
+Each of the ten operations returns `Except KzgError`, so it can fail with a typed error.
+All of them except `computeCells` read the trusted setup, which they take as their first argument.
+`TrustedSetup.ofHex` decodes the embedded setup, and the C exports decode it once, when their module is initialized.
+The two challenge helpers return a field element.
 
 ## Test vectors
 
@@ -142,13 +143,7 @@ It assumes `ConcreteBlsLaws`, `SubgroupExponents`, and that two points are not a
 
 This is a limit on computing results inside Lean, separate from the missing theorems in the previous section.
 
-The operations are ordinary definitions, and the kernel can unfold them.
-The setup, though, lives in `TrustedSetup.globalRef`, an `IO.Ref` created when the module is initialized, and that reference is opaque to the kernel.
-So the kernel cannot compute the result of an operation that reads the setup, for example to check a known answer.
-`computeCells` and the two challenge helpers do not read it.
-
-`scripts/check_decls_baseline.txt` lists `TrustedSetup.globalRef` as `opaque`, and `TrustedSetup.get!` and `KzgM` as `reaches-opaque`.
-That second kind means a definition reaches an opaque constant when unfolded, not that it is opaque itself.
-
-The pairing that verification uses comes from the BLS module.
-The baseline lists its `Fp2.powNat` and `Fp12.powNat` as `partial`, and its `millerLoop` as `reaches-opaque`.
+The operations are ordinary definitions, and the trusted setup is an argument of each one that reads it.
+So the kernel can unfold an operation, and `scripts/check_decls_baseline.txt` lists nothing for KZG.
+To compute a known answer on the embedded setup, though, the kernel must first decode its 8257 points, and no theorem does that yet.
+`computeCells` and the two challenge helpers do not read the setup.

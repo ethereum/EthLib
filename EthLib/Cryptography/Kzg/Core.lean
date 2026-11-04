@@ -10,10 +10,11 @@ public import EthLib.Cryptography.Kzg.Errors
 /-!
 # `Kzg.Core`
 
-The blob-commitment surface of KZG. Public methods live in `KzgM`
-(`ExceptT KzgError IO`) because they read the loaded trusted setup and
-report typed domain errors; internal helpers that only manipulate field
-elements remain pure.
+The blob-commitment surface of KZG.
+
+Each operation that reads the trusted setup takes it as its first argument.
+
+Each operation that can reject its input returns `Except KzgError`.
 -/
 
 @[expose] public section
@@ -63,7 +64,7 @@ A failed decompression must stop the computation.
 
 Falling back to a default point would silently replace the input with the point at infinity.
 -/
-def uncompressG1 (b : Bytes48) : KzgM G1 :=
+def uncompressG1 (b : Bytes48) : Except KzgError G1 :=
   match Bls.G1.uncompress b with
   | .ok g    => pure g
   | .error _ => throw .invalidG1Point
@@ -89,7 +90,7 @@ This is `g1_lincomb` from the Deneb polynomial commitments specification, withou
 Callers that already hold points skip a compress and decompress round trip.
 -/
 def g1LincombPoints
-    (points : Array G1) (scalars : Array Fr) : KzgM G1 := do
+    (points : Array G1) (scalars : Array Fr) : Except KzgError G1 := do
   if points.size ≠ scalars.size then
     throw (.lincombLengthMismatch points.size scalars.size)
   if points.size = 0 then
@@ -98,7 +99,7 @@ def g1LincombPoints
 
 /-- BLS multi-scalar multiplication in G1, on compressed-point inputs. -/
 def g1Lincomb
-    (points : Array KZGCommitment) (scalars : Array Fr) : KzgM KZGCommitment := do
+    (points : Array KZGCommitment) (scalars : Array Fr) : Except KzgError KZGCommitment := do
   if points.size ≠ scalars.size then
     throw (.lincombLengthMismatch points.size scalars.size)
   if points.size = 0 then
@@ -137,9 +138,8 @@ def computeQuotientEvalWithinDomain
       result + numerator * inverses[i]!
 
 /-- Returns the KZG proof at `z` and the evaluation `y = p(z)`. -/
-def computeKzgProofImpl
-    (polynomial : Polynomial) (z : Fr) : KzgM (KZGProof × Fr) := do
-  let setup ← TrustedSetup.get!
+def computeKzgProofImpl (setup : TrustedSetup)
+    (polynomial : Polynomial) (z : Fr) : Except KzgError (KZGProof × Fr) := do
   let g1LagrangeBrp := bitReversalPermutation setup.g1Lagrange
   let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB
 
@@ -167,36 +167,43 @@ def computeKzgProofImpl
 /-- Compute a KZG proof at `z` for the polynomial represented by `blob`.
 Returns `(proof, y_bytes)`, where `y_bytes` is the 32-byte big-endian
 encoding of `p(z)`. -/
-def computeKzgProof (blob : Blob) (zBytes : Bytes32) : KzgM (KZGProof × Bytes32) := do
+def computeKzgProof (setup : TrustedSetup) (blob : Blob) (zBytes : Bytes32) :
+    Except KzgError (KZGProof × Bytes32) := do
   if blob.size ≠ BYTES_PER_BLOB then
     throw (.badBlobSize blob.size)
   if zBytes.size ≠ BYTES_PER_FIELD_ELEMENT then
     throw (.badFieldElementSize zBytes.size)
   let polynomial ← blobToPolynomial blob
   let z ← bytesToBlsField zBytes
-  let (proof, y) ← computeKzgProofImpl polynomial z
+  let (proof, y) ← computeKzgProofImpl setup polynomial z
   return (proof, blsFieldToBytes y)
 
-/-- Verify a KZG proof that `p(z) == y`, where `p(x)` is the polynomial
-committed to in `commitmentG1`. Checks the pairing equation
-`e(P - [y], -[1]) * e(proof, [s] - [z]) == 1`. -/
-def verifyKzgProofImpl
-    (commitmentG1 : G1) (z y : Fr) (proofG1 : G1)
-    : KzgM Bool := do
-  let setup ← TrustedSetup.get!
-  let s := setup.g2Monomial[1]!
+/-- Verify a KZG proof that `p(z) == y`, given only the setup point `[s]_2`.
+
+It checks `e(P - [y], -[1]) * e(proof, [s] - [z]) == 1`, where `P` commits to `p`.
+
+A caller that holds only `[s]_2`, such as the point evaluation precompile, can use it. -/
+def verifyKzgProofWith (s : G2)
+    (commitmentG1 : G1) (z y : Fr) (proofG1 : G1) : Bool :=
   let X_minus_z : G2 := Bls.G2.add s (Bls.G2.mul Bls.G2.generator (-z))
   let P_minus_y : G1 := Bls.G1.add commitmentG1 (Bls.G1.mul Bls.G1.generator (-y))
   let pairs : Array (G1 × G2) := #[
     (P_minus_y, Bls.G2.neg Bls.G2.generator),
     (proofG1, X_minus_z)
   ]
-  return Bls.pairingCheck pairs
+  Bls.pairingCheck pairs
+
+/-- Verify a KZG proof that `p(z) == y` for the polynomial committed to in `commitmentG1`.
+
+The Deneb specification calls it `verify_kzg_proof_impl`. -/
+def verifyKzgProofImpl (setup : TrustedSetup)
+    (commitmentG1 : G1) (z y : Fr) (proofG1 : G1) : Bool :=
+  verifyKzgProofWith setup.g2Monomial[1]! commitmentG1 z y proofG1
 
 /-- Verify a KZG proof, taking inputs as raw bytes. -/
-def verifyKzgProof
+def verifyKzgProof (setup : TrustedSetup)
     (commitmentBytes : Bytes48) (zBytes yBytes : Bytes32) (proofBytes : Bytes48)
-    : KzgM Bool := do
+    : Except KzgError Bool := do
   if commitmentBytes.size ≠ BYTES_PER_COMMITMENT then
     throw (.badCommitmentSize commitmentBytes.size)
   if zBytes.size ≠ BYTES_PER_FIELD_ELEMENT then
@@ -213,22 +220,21 @@ def verifyKzgProof
                 | .error _ => throw (.invalidProof none)
   let z ← bytesToBlsField zBytes
   let y ← bytesToBlsField yBytes
-  verifyKzgProofImpl commitmentG1 z y proofG1
+  return verifyKzgProofImpl setup commitmentG1 z y proofG1
 
 /-- Verify multiple KZG proofs efficiently using a random linear combination. -/
-def verifyKzgProofBatch
+def verifyKzgProofBatch (setup : TrustedSetup)
     (commitments : Array KZGCommitment)
     (commitmentsG1 : Array G1)
     (zs ys : Array Fr)
     (proofs : Array KZGProof)
-    (proofsG1 : Array G1) : KzgM Bool := do
+    (proofsG1 : Array G1) : Except KzgError Bool := do
   if zs.size ≠ commitments.size then
     throw (.inputLengthMismatch "zs" commitments.size zs.size)
   if ys.size ≠ commitments.size then
     throw (.inputLengthMismatch "ys" commitments.size ys.size)
   if proofs.size ≠ commitments.size then
     throw (.inputLengthMismatch "proofs" commitments.size proofs.size)
-  let setup ← TrustedSetup.get!
 
   -- Random challenge: deterministic via Fiat-Shamir.
   let degreePoly := intToBytesBE FIELD_ELEMENTS_PER_BLOB 8
@@ -264,10 +270,10 @@ def verifyKzgProofBatch
   return Bls.pairingCheck pairs
 
 /-- Compute a KZG commitment from a blob. -/
-def blobToKzgCommitment (blob : Blob) : KzgM KZGCommitment := do
+def blobToKzgCommitment (setup : TrustedSetup) (blob : Blob) :
+    Except KzgError KZGCommitment := do
   if blob.size ≠ BYTES_PER_BLOB then
     throw (.badBlobSize blob.size)
-  let setup ← TrustedSetup.get!
   let polynomial ← blobToPolynomial blob
   let lagrangeBrp := bitReversalPermutation setup.g1Lagrange
   let commitmentG1 ← g1LincombPoints lagrangeBrp polynomial
@@ -275,7 +281,8 @@ def blobToKzgCommitment (blob : Blob) : KzgM KZGCommitment := do
 
 /-- Compute the KZG proof verifying `blob` against `commitment`. Does
 not check that `commitment` is correct for `blob`. -/
-def computeBlobKzgProof (blob : Blob) (commitmentBytes : Bytes48) : KzgM KZGProof := do
+def computeBlobKzgProof (setup : TrustedSetup) (blob : Blob) (commitmentBytes : Bytes48) :
+    Except KzgError KZGProof := do
   if blob.size ≠ BYTES_PER_BLOB then
     throw (.badBlobSize blob.size)
   if commitmentBytes.size ≠ BYTES_PER_COMMITMENT then
@@ -283,13 +290,13 @@ def computeBlobKzgProof (blob : Blob) (commitmentBytes : Bytes48) : KzgM KZGProo
   let commitment ← bytesToKzgCommitment commitmentBytes
   let polynomial ← blobToPolynomial blob
   let evaluationChallenge := computeChallenge blob commitment
-  let (proof, _) ← computeKzgProofImpl polynomial evaluationChallenge
+  let (proof, _) ← computeKzgProofImpl setup polynomial evaluationChallenge
   return proof
 
 /-- Verify that `blob` corresponds to `commitment` via `proof`. -/
-def verifyBlobKzgProof
+def verifyBlobKzgProof (setup : TrustedSetup)
     (blob : Blob) (commitmentBytes : Bytes48) (proofBytes : Bytes48)
-    : KzgM Bool := do
+    : Except KzgError Bool := do
   if blob.size ≠ BYTES_PER_BLOB then
     throw (.badBlobSize blob.size)
   if commitmentBytes.size ≠ BYTES_PER_COMMITMENT then
@@ -305,14 +312,14 @@ def verifyBlobKzgProof
   let proofG1 ← match validateKzgG1Point proofBytes with
                 | .ok p    => pure p
                 | .error _ => throw (.invalidProof none)
-  verifyKzgProofImpl commitmentG1 evaluationChallenge y proofG1
+  return verifyKzgProofImpl setup commitmentG1 evaluationChallenge y proofG1
 
 /-- Verify a batch of (blob, commitment, proof) triples. Returns `true`
 for the empty input. -/
-def verifyBlobKzgProofBatch
+def verifyBlobKzgProofBatch (setup : TrustedSetup)
     (blobs : Array Blob)
     (commitmentsBytes : Array Bytes48)
-    (proofsBytes : Array Bytes48) : KzgM Bool := do
+    (proofsBytes : Array Bytes48) : Except KzgError Bool := do
   if commitmentsBytes.size ≠ blobs.size then
     throw (.inputLengthMismatch "commitmentsBytes" blobs.size commitmentsBytes.size)
   if proofsBytes.size ≠ blobs.size then
@@ -347,6 +354,6 @@ def verifyBlobKzgProofBatch
         pure (commitments.push cb, commitmentsG1.push commitmentG1,
               challenges.push challenge, ys.push y, proofs.push pb, proofsG1.push proofG1)
 
-  verifyKzgProofBatch commitments commitmentsG1 challenges ys proofs proofsG1
+  verifyKzgProofBatch setup commitments commitmentsG1 challenges ys proofs proofsG1
 
 end EthLib.Cryptography.Kzg
