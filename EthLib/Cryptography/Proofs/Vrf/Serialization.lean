@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Vrf.Serialization
 public import EthLib.Cryptography.Proofs.Vrf.Verify
 
 /-!
-# Proofs: `Vrf.Serialization`
+# Proofs: VRF openings as bytes
 
 The encoding is a bijection between openings and 1056-byte strings.
 
@@ -12,7 +12,9 @@ The encoding is a bijection between openings and 1056-byte strings.
 - Every 1056-byte string is an encoding.
 - Every string of another length is rejected.
 
-Verification over bytes rejects malformed input, and agrees with typed verification on the rest.
+Verification over bytes rejects malformed input.
+
+On the rest, it agrees with typed verification.
 -/
 
 @[expose] public section

@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Vrf.Hash
 public import EthLib.Cryptography.Merkle.Tree
 
 /-!
-# `Vrf.KeyGen`
+# VRF key generation
 
 The tree over the `2^32` leaf secrets, and the secrets from one 32-byte seed.
 
@@ -22,7 +22,9 @@ Verification never sees the seed, so this derivation is not consensus-critical.
 
 It is specified so that any implementation rebuilds the same tree from the same seed.
 
-Keccak-256, keyed by the seed and separated by its prefix, acts as a pseudorandom function of the index.
+Keccak-256 acts as a pseudorandom function of the index.
+
+The seed is its key, and the prefix separates it from the other hashes.
 -/
 
 @[expose] public section

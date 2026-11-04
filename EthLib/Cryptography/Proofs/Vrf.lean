@@ -11,7 +11,5 @@ public import EthLib.Cryptography.Proofs.Vrf.KnownAnswerLast
 public import EthLib.Cryptography.Proofs.Vrf.KnownAnswerSecret
 
 /-!
-# `EthLib.Cryptography.Proofs.Vrf`
-
-Proofs about the VRF tree.
+# Proofs: the VRF tree
 -/

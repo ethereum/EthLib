@@ -8,7 +8,9 @@ public import EthLib.Cryptography.Vrf.Verify
 public import EthLib.Cryptography.Vrf.Serialization
 
 /-!
-# `EthLib.Cryptography.Vrf`
+# The VRF tree
 
-The VRF tree: a Merkle tree over `2^32` leaf secrets that fixes one verifiable random output per index.
+The VRF tree is a Merkle tree over `2^32` leaf secrets.
+
+It fixes one verifiable random output per index.
 -/

@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Vrf.Hash
 
 /-!
-# Proofs: `Vrf.Hash`
+# Proofs: VRF hashes
 
 The three hash inputs are separated.
 
@@ -11,7 +11,7 @@ The three hash inputs are separated.
 - Each input determines its arguments.
 - No input of one hash is an input of another: they are 43, 75 and 45 bytes long.
 
-So a collision found among the tree's hashes is a collision of Keccak-256 on two inputs of one kind.
+So a collision among the hashes of the tree is a Keccak-256 collision on two inputs of one kind.
 -/
 
 @[expose] public section

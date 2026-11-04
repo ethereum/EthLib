@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Vrf.Constants
 
 /-!
-# `Vrf.Types`
+# VRF types
 
 The objects of the VRF tree, with their sizes in their types.
 -/
@@ -44,7 +44,7 @@ def readBytes (b : ByteArray) (offset n : Nat) (h : offset + n ≤ b.size) : Vec
 
 /-- `LE32(i)`: the four bytes of an index, least significant first.
 
-Example: `indexBytes 0x01020304 = #v[0x04, 0x03, 0x02, 0x01]`. -/
+For example, the index `0x01020304` gives the bytes `0x04, 0x03, 0x02, 0x01`. -/
 def indexBytes (i : UInt32) : Vector UInt8 4 :=
   -- Byte `k` holds bits `8k` to `8k + 7`.
   Vector.ofFn fun k => UInt8.ofNat (i.toNat >>> (8 * k.val))

@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Cryptography.Vrf.Types
 
 /-!
-# `Vrf.Hash`
+# VRF hashes
 
 The three hashes of the tree.
 
@@ -27,7 +27,7 @@ namespace EthLib.Cryptography.Vrf
 
 open EthLib.Cryptography.Vrf.Constants
 
-/-- `keccak256`: Ethereum's hash, FIPS 202's 256-bit hash with Keccak's original padding. -/
+/-- Keccak-256: the 256-bit hash of FIPS 202, with Keccak's original padding. -/
 def hash (input : ByteArray) : Digest :=
   Hash.Keccak.keccak256 input
 
