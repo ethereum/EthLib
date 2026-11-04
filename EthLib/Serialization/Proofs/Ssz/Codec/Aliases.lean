@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Uint
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
 public import EthLib.Serialization.Ssz.Codec.Root
 
@@ -19,8 +20,8 @@ theorem serializeEach_bytes (data : List UInt8) :
       .ok (data.map fun byte => #[byte]) := by
   -- Encoding proceeds one byte at a time and preserves both its value and its position.
   have bound (byte : UInt8) : byte.toNat < 256 := byte.toNat_lt
-  induction data <;> simp_all [serializeEach, serialize, uintBytes, Nat.mod_eq_of_lt,
-    Bind.bind, Except.bind, pure, Except.pure]
+  induction data <;> simp_all [serializeEach, serialize, uintBytes_zero, uintBytes_succ,
+    Nat.mod_eq_of_lt, Bind.bind, Except.bind, pure, Except.pure]
 
 /-- Singleton fixed slots contribute one byte each, all in the fixed part. -/
 private theorem byteSlots_width (data : List UInt8) :
@@ -87,8 +88,8 @@ private theorem deserializeEach_bytes :
     -- Each slice passes the width check and reads back as its only byte.
     have tail := deserializeEach_bytes rest fun other member =>
       single other (List.mem_cons_of_mem _ member)
-    simp [deserializeEach, deserialize, single slice List.mem_cons_self, readUint, tail,
-      Bind.bind, Except.bind, pure, Except.pure]
+    simp [deserializeEach, deserialize, single slice List.mem_cons_self, readUint_zero,
+      readUint_succ, tail, Bind.bind, Except.bind, pure, Except.pure]
 
 /-- Cutting bytes into one-byte slices and decoding each gives the integer spelling. -/
 private theorem deserializeEach_byteSlices (data : Bytes) :

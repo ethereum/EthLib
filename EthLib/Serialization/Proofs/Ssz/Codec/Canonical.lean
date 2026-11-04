@@ -22,10 +22,10 @@ theorem uintBytes_readUint (data : Bytes) :
       have split : ({ toList := byte :: bytes } : Bytes) = #[byte] ++ ({ toList := bytes } : Bytes) := by simp
       rw [split]
       simp only [Array.size_append, Array.size_singleton]
-      rw [Nat.add_comm 1, readUint]
+      rw [Nat.add_comm 1, readUint_succ]
       have first : (#[byte] ++ ({ toList := bytes } : Bytes))[0]?.getD 0 = byte := by simp
       have low := UInt8.toNat_lt byte
-      rw [first, readUint_shift, uintBytes]
+      rw [first, readUint_shift, uintBytes_succ]
       -- Reduction modulo 256 recovers the low byte without interference from higher digits.
       have remainder : (byte.toNat + 256 * readUint ({ toList := bytes } : Bytes) 0 ({ toList := bytes } : Bytes).size) % 256 =
           byte.toNat := by omega

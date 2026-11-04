@@ -120,6 +120,23 @@ theorem foldr_uintToBytes (k n : Nat) :
       (by simpa [show (2 : Nat) ^ 64 = 256 ^ 8 from rfl] using Nat.pow_le_pow_right (by decide) h)
   simp [bytesToUint64, UInt64.toNat_ofNat', Nat.mod_eq_of_lt hlt]
 
+/-! ## Bytes as an array
+
+A codec that holds its bytes as an array writes and reads a number one byte at a time.
+-/
+
+/-- The bytes of a number are its low byte, then the bytes of its quotient by 256. -/
+theorem uintToBytes_toArray_succ (k n : Nat) :
+    (uintToBytes (k + 1) n).toArray = #[UInt8.ofNat n] ++ (uintToBytes k (n / 256)).toArray := by
+  apply Array.toList_inj.mp
+  simpa [Vector.toList] using uintToBytes_toList_succ k n
+
+/-- A number read from bytes is the first byte plus 256 times the number the rest write. -/
+theorem bytesToUint_ofFn_succ {k : Nat} (f : Fin (k + 1) → UInt8) :
+    bytesToUint (Vector.ofFn f)
+      = (f 0).toNat + 256 * bytesToUint (Vector.ofFn fun i => f i.succ) := by
+  simp [bytesToUint_eq_foldr, Vector.toList_ofFn, List.ofFn_succ]
+
 /-- Writing a `UInt64` on eight bytes and reading them back returns it. -/
 @[simp] theorem bytesToUint64_uintToBytes (n : UInt64) :
     bytesToUint64 (uintToBytes 8 n.toNat) = n := by

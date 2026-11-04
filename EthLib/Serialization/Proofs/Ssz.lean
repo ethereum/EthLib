@@ -71,6 +71,7 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.StructOrder
 public import EthLib.Serialization.Proofs.Ssz.Codec.Summary
 public import EthLib.Serialization.Proofs.Ssz.Codec.Table
 public import EthLib.Serialization.Proofs.Ssz.Codec.Totality
+public import EthLib.Serialization.Proofs.Ssz.Codec.Uint
 public import EthLib.Serialization.Proofs.Ssz.Codec.WalkerClosure
 public import EthLib.Serialization.Proofs.Ssz.Codec.WalkerLaws
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Authentication

@@ -24,12 +24,12 @@ def Slot.held : Slot → Bytes
 /--
 Little-endian bytes read back as an unsigned integer.
 
-The low byte comes first, so each later byte is worth a further factor of 256.
+The read takes `width` bytes from `start`.
+
+A byte past the end of the data reads as zero.
 -/
-def readUint (data : Bytes) (start : Nat) : (width : Nat) → Nat
-  | 0 => 0
-  -- Combine the low byte with the remaining digits, each shifted by one base-256 position.
-  | width + 1 => (data[start]?.getD 0).toNat + 256 * readUint data (start + 1) width
+def readUint (data : Bytes) (start width : Nat) : Nat :=
+  Base.bytesToUint (Vector.ofFn fun i : Fin width => data[start + i.val]?.getD 0)
 
 /-- The offset table at the front of an encoding, one entry per variable-size part. -/
 def readOffsets (data : Bytes) (count : Nat) : List Nat :=

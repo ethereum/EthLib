@@ -50,7 +50,7 @@ theorem readUint_extract (data : Bytes) (start stop : Nat) :
     -- Both reads take the same first byte and advance by one position.
     have inside : offset < (data.extract start stop).size := by simp; omega
     have source : start + offset < data.size := by omega
-    simp only [readUint, Array.getElem?_eq_getElem inside,
+    simp only [readUint_succ, Array.getElem?_eq_getElem inside,
       Array.getElem?_eq_getElem source, Option.getD_some, Array.getElem_extract]
     rw [ih (offset + 1) (by omega) bounded]
     congr 2
@@ -245,6 +245,8 @@ private theorem readOffsets_first (data : Bytes) (count : Nat) (positive : 0 < c
   | zero => omega
   | succ count => simp [readOffsets, List.range_succ_eq_map]
 
+-- The proof reads offsets only through lemmas, and unfolding the reader would be slow.
+attribute [local irreducible] readUint in
 /-- Every accepted list can be reconstructed from its decoded slices. -/
 theorem listSlices_assemble {element : Desc} {limit : Option Nat} {data : Bytes}
     {slices : List Bytes} (read : listSlices element limit data = .ok slices) :

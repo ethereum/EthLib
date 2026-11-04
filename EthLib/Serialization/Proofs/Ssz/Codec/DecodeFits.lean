@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Uint
 public import EthLib.Serialization.Proofs.Ssz.Codec.Admits
 public import EthLib.Serialization.Proofs.Ssz.Codec.StructOrder
 public import EthLib.Serialization.Ssz.Codec.Deserialize
@@ -14,14 +15,14 @@ namespace EthLib.Serialization.Ssz
 theorem readUint_lt (data : Bytes) (start width : Nat) :
     readUint data start width < 2 ^ (8 * width) := by
   induction width generalizing start with
-  | zero => simp [readUint]
+  | zero => simp [readUint_zero]
   | succ width ih =>
     -- A byte contributes at most 255, and each remaining digit has weight 256.
     have low := UInt8.toNat_lt (data[start]?.getD 0)
     have tail := ih (start + 1)
     have power : 2 ^ (8 * (width + 1)) = 2 ^ (8 * width) * 256 := by
       rw [Nat.mul_succ, Nat.pow_add]
-    simp only [readUint, power]
+    simp only [readUint_succ, power]
     omega
 
 /-- Unpacking produces exactly the requested number of bits. -/

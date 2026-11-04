@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.LittleEndian
 public import EthLib.Serialization.Ssz.Type.Value
 public import EthLib.Serialization.Ssz.Codec.Error
 
@@ -12,15 +13,11 @@ namespace EthLib.Serialization.Ssz
 /--
 An unsigned integer as little-endian bytes of the given width.
 
-The low byte is written first, so each step drops the byte it just wrote.
-
 A value wider than the given width is truncated.
 
 A caller needing exact recovery has to check the range itself.
 -/
-def uintBytes : (width : Nat) → (value : Nat) → Bytes
-  | 0, _ => #[]
-  | width + 1, value => #[UInt8.ofNat (value % 256)] ++ uintBytes width (value / 256)
+def uintBytes (width value : Nat) : Bytes := (Base.uintToBytes width value).toArray
 
 /-- The eight bits that land in one byte, gathered into it. -/
 def packByte (bits : Array Bool) (byteIndex : Nat) : UInt8 :=
