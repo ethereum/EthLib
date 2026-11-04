@@ -7,21 +7,23 @@ module
 
 The two prime fields of secp256k1, from SEC 2 v2 §2.4.1.
 
-- `Fp` is the base field, integers mod `p = 2^256 - 2^32 - 977`.
-  The coordinates of a point live there.
-
+- `Fp` is the base field, integers mod `p = 2^256 - 2^32 - 977`, for the coordinates.
 - `Fn` is the scalar field, integers mod the order `n` of the generator.
-  Private keys and the integers `r` and `s` of a signature live there.
+
+The private key and the integers `r` and `s` of a signature live in `Fn`.
 
 Each field is `Fin` of its modulus, so every element is below the modulus by construction.
 
 Core gives `Fin` its `+`, `-`, `*` and negation, all reduced mod the modulus.
 
-An inverse is a power, by Fermat's little theorem: `a^(m - 2) = a^(-1)` when `a != 0` and `m` is prime.
+An inverse is a power, by Fermat's little theorem.
+
+For a prime `m` and `a != 0`, `a^(m - 2) = a^(-1)`.
 
 A square root is a power too, because `p = 3 mod 4`.
 
 No division is defined.
+
 Core's `/` on `Fin` divides the integers, so the specification never writes it.
 -/
 
@@ -72,8 +74,9 @@ def inv (a : Fp) : Fp := a.pow (modulus - 2)
 
 /-- A square root of `a`, or `none` when `a` is not a square.
 
-Since `p = 3 mod 4`, a square `a` has the root `c = a^((p + 1) / 4)`:
-`c^2 = a^((p + 1) / 2) = a * a^((p - 1) / 2) = a`, by Euler's criterion.
+Since `p = 3 mod 4`, a square `a` has the root `c = a^((p + 1) / 4)`.
+
+By Euler's criterion, `c^2 = a^((p + 1) / 2) = a * a^((p - 1) / 2) = a`.
 
 When `a` is not a square, `c^2 != a`, so the check rejects it. -/
 def sqrt (a : Fp) : Option Fp :=

@@ -7,11 +7,11 @@ public import EthLib.Cryptography.Proofs.Hash.Keccak256
 /-!
 # Proofs: ECDSA verification over secp256k1
 
-- `verify_sign`: a signature made by the signing operation of SEC 1 v2 §4.1.3 verifies.
-- `verify_range`: a valid signature has `r` and `s` in `[1, n - 1]`.
-- `verify_infinity`, `verify_of_not_isOnCurve`: an invalid public key verifies nothing.
-- `verify_neg_s`: `(r, s)` and `(r, n - s)` are valid together, the malleability that EIP-2 removes.
-- `isLowS_neg`: exactly one of `s` and `n - s` passes the low-s rule.
+- A signature made by the signing operation of SEC 1 v2 §4.1.3 verifies.
+- A valid signature has `r` and `s` in `[1, n - 1]`.
+- An invalid public key verifies nothing.
+- `(r, s)` and `(r, n - s)` are valid together, the malleability that EIP-2 removes.
+- Exactly one of `s` and `n - s` passes the low-s rule.
 
 So the low-s rule keeps exactly one of the two signatures that every valid signature comes with.
 -/
@@ -63,7 +63,9 @@ theorem verify_of_not_isOnCurve {q : Point} (hq : q.isOnCurve = false) (hash : V
 
 The signer has the private key `d` and the nonce `k`, both nonzero.
 
-`R = k G` has coordinate `x`, `r = x mod n`, and `s = k^(-1) (e + r d)`, and neither is zero. -/
+`R = k G` has coordinate `x`, `r = x mod n`, and `s = k^(-1) (e + r d)`.
+
+Neither `r` nor `s` is zero. -/
 theorem verify_sign (d k : Fn) (hash : Vector UInt8 32) (hd : d ≠ 0) (hk : k ≠ 0) {x y : Fp}
     (hR : mul k generator = .affine x y) (hr : x.val % Fn.modulus ≠ 0)
     (hs : k.inv * (Fin.ofNat _ (hashToInt hash) + Fin.ofNat _ (x.val % Fn.modulus) * d) ≠ 0) :
@@ -121,7 +123,7 @@ theorem verify_neg_s (q : Point) (hash : Vector UInt8 32) (r : Nat) {s : Nat} (h
     · rw [verify, verify, dite_eq_left hr, dite_eq_left hr, dite_eq_left hs, dite_eq_left hs', ite_eq_left hq,
         ite_eq_left hq]
       dsimp only
-      -- `n - s` is `-s` mod `n`, so both `u1` and `u2` change sign, and so does the rebuilt point.
+      -- `n - s` is `-s` mod `n`, so `u1`, `u2` and the rebuilt point change sign.
       have hneg : (⟨Fn.modulus - s, hs'.2⟩ : Fn) = -⟨s, hs.2⟩ := Fin.ext (by simp only [Fin.neg_def]; exact (Nat.mod_eq_of_lt hs'.2).symm)
       rw [hneg]
       have hG := isOnCurve_generator

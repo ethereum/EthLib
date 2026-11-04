@@ -6,10 +6,12 @@ public import EthLib.Cryptography.Secp256k1.Errors
 /-!
 # `Secp256k1.Encoding`
 
-The two encodings of a point as bytes, from SEC 1 v2 §2.3.3, and their decoding, from SEC 1 v2 §2.3.4.
+The two encodings of a point as bytes, from SEC 1 v2 §2.3.3.
 
-- Compressed, 33 bytes: `[ 02 or 03: 1 | x: 32 ]`.
-- Uncompressed, 65 bytes: `[ 04: 1 | x: 32 | y: 32 ]`.
+Their decoding is from SEC 1 v2 §2.3.4.
+
+- Compressed, 33 bytes: the prefix `02` or `03`, then `x`.
+- Uncompressed, 65 bytes: the prefix `04`, then `x`, then `y`.
 
 A coordinate is written as 32 big-endian bytes, by SEC 1 v2 §2.3.5 and §2.3.7.
 

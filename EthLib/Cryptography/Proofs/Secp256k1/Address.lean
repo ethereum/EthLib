@@ -7,8 +7,8 @@ public import EthLib.Cryptography.Proofs.Hash.Keccak256
 /-!
 # Proofs: Ethereum addresses
 
-- `encodeUncompressed_eq`: the 64 hashed bytes are the uncompressed SEC 1 encoding without its `04` prefix.
-- `addressOfPrivateKey_ne_none`: every private key in `[1, n - 1]` has an address.
+- The 64 hashed bytes are the uncompressed SEC 1 encoding without its `04` prefix.
+- Every private key in `[1, n - 1]` has an address.
 - Three known answers, run by the kernel: the address of a private key, Keccak-256 and the scalar multiplication included.
 -/
 

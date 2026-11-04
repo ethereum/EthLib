@@ -10,9 +10,11 @@ The curve `E: y^2 = x^3 + 7` over `Fp`, from SEC 2 v2 §2.4.1, where `a = 0` and
 A point is the point at infinity `O`, or a pair `(x, y)` that satisfies the equation.
 
 The points form a group under the addition rule of SEC 1 v2 §2.2.1.
+
 `O` is its zero, and `-(x, y) = (x, -y)`.
 
 The rule is written in affine coordinates, as SEC 1 prints it.
+
 Each addition then takes one inverse, which costs about 256 multiplications.
 -/
 
@@ -25,7 +27,7 @@ def b : Fp := 7
 
 /-- A point of the curve: the point at infinity, or a pair of coordinates.
 
-A pair is a point of the curve only when it satisfies the equation, which `isOnCurve` tests. -/
+A pair is a point of the curve only when it satisfies the equation. -/
 inductive Point where
   /-- The point at infinity `O`, the zero of the group. -/
   | infinity

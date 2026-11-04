@@ -21,11 +21,16 @@ s R = e G + r Q, so Q = r^(-1) (s R - e G)
 
 The recovery id picks one: `0` for an even `y`, `1` for an odd `y`.
 
-That is the recovery identifier of Appendix F of the Yellow Paper, Shanghai version, in [`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex), which declares the ids 2 and 3 invalid.
+That is the recovery identifier of Appendix F of the Yellow Paper, Shanghai version.
+
+The source is `Paper.tex` at `efc5f9a`:
+<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>
+
+It declares the ids 2 and 3 invalid.
 
 SEC 1 also tries `x = r + j n` for `j` up to the cofactor `h = 1`, for the rare `x_R >= n`.
 
-Ethereum uses only the ids 0 and 1, so it never tries `x = r + n`, and neither does `recover`.
+Ethereum uses only the ids 0 and 1, so it never tries `x = r + n`, and neither does recovery here.
 -/
 
 @[expose] public section
@@ -34,7 +39,9 @@ namespace EthLib.Cryptography.Secp256k1
 
 namespace Ecdsa
 
-/-- The public key whose signature on `hash` is `(r, s)`, with `R` of parity `recoveryId`, by SEC 1 v2 §4.1.6. -/
+/-- The public key whose signature on `hash` is `(r, s)`, by SEC 1 v2 §4.1.6.
+
+The recovery id gives the parity of the `y` of `R`. -/
 def recover (hash : Vector UInt8 32) (r s : Nat) (recoveryId : Fin 2) : Except Secp256k1Error Point :=
   -- `r` and `s` lie in `[1, n - 1]`, as verification requires.
   if hr : 0 < r ∧ r < Fn.modulus then
