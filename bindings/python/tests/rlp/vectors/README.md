@@ -2,10 +2,13 @@
 
 `rlptest.json` holds 28 items and their RLP encodings.
 `invalidRLPTest.json` holds 26 byte strings that encode no item.
+`example.json` holds one byte string that must decode.
 
-- Source: `RLPTests/rlptest.json` and `RLPTests/invalidRLPTest.json` in [`ethereum/tests`](https://github.com/ethereum/tests) at commit `c67e485ff8b5be9abc8ad15345ec21aa22e290d9`.
-- Authors: the Ethereum Foundation.
-- Licence: the MIT License, under the notice below.
+- Repository: [`ethereum/tests`](https://github.com/ethereum/tests)
+- Commit: `c67e485ff8b5be9abc8ad15345ec21aa22e290d9`
+- Files: `RLPTests/rlptest.json`, `RLPTests/invalidRLPTest.json`, `RLPTests/RandomRLPTests/example.json`
+- Authors: the Ethereum Foundation
+- Licence: MIT, under the notice below
 
 The files are copied byte for byte, and `SHA256SUMS` pins them.
 To check the pins, run this from the directory:

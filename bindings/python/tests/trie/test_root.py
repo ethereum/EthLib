@@ -13,12 +13,13 @@ from ethlib.execution import trie
 
 _DIR = Path(__file__).resolve().parent / "trietests"
 
-# The four files, with whether the trie of each hashes its keys.
+# The five files, with whether the trie of each hashes its keys.
 _FILES = {
     "trietest.json": False,
     "trieanyorder.json": False,
     "trietest_secureTrie.json": True,
     "trieanyorder_secureTrie.json": True,
+    "hex_encoded_securetrie_test.json": True,
 }
 
 
@@ -45,8 +46,8 @@ def _cases() -> list[tuple[str, bool, list[tuple[bytes, bytes]], bytes]]:
 
 _CASES = _cases()
 
-# Invariant: the 22 cases of the four files.
-assert len(_CASES) == 22, "unexpected cases"
+# Invariant: the 25 cases of the five files.
+assert len(_CASES) == 25, "unexpected cases"
 
 
 @pytest.mark.parametrize("name, secured, pairs, expected", _CASES, ids=[c[0] for c in _CASES])
