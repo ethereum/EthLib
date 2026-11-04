@@ -4,6 +4,7 @@ public import EthLib.Serialization.Rlp.Item
 public import EthLib.Serialization.Rlp.Encode
 public import EthLib.Serialization.Rlp.Decode
 public import EthLib.Serialization.Rlp.Scalar
+public import EthLib.Serialization.Rlp.Codec
 
 /-!
 # `EthLib.Serialization.Rlp`
@@ -16,6 +17,7 @@ Source: Appendix B of the Yellow Paper, Shanghai version, in [`Paper.tex` at `ef
 - `Rlp/Encode` holds the encoding.
 - `Rlp/Decode` holds the strict decoding.
 - `Rlp/Scalar` holds the strict decoding of a scalar.
+- `Rlp/Codec` holds the RLP form of typed values.
 
 The properties proved of these definitions sit under `EthLib.Serialization.Proofs.Rlp`, mirroring this layout.
 -/

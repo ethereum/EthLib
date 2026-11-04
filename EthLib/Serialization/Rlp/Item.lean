@@ -99,6 +99,16 @@ inductive RlpError where
   | leadingZeroInScalar
   /-- A list where a scalar was expected. -/
   | listAsScalar
+  /-- A list where a byte string was expected. -/
+  | listAsBytes
+  /-- A byte string where a list was expected. -/
+  | bytesAsList
+  /-- A byte string of `actual` bytes, where the type has exactly `expected`. -/
+  | wrongLength (expected actual : Nat)
+  /-- A scalar `value` of `2 ^ bits` or more, where the type holds only smaller values. -/
+  | scalarTooLarge (value bits : Nat)
+  /-- A list of `actual` items, where the structure has exactly `expected` fields. -/
+  | wrongFieldCount (expected actual : Nat)
   deriving Repr, DecidableEq
 
 /-- `n` in base 256, most significant byte first, using at most `fuel` bytes.
