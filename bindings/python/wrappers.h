@@ -298,6 +298,8 @@ PyObject* py_reqresp_decode_response_chunk                (PyObject* self, PyObj
 PyObject* py_block_header_hash                            (PyObject* self, PyObject* args);
 PyObject* py_block_reencode                               (PyObject* self, PyObject* args);
 PyObject* py_pow_block_difficulty                         (PyObject* self, PyObject* args);
+PyObject* py_block_transactions_root                      (PyObject* self, PyObject* args);
+PyObject* py_block_withdrawals_root                       (PyObject* self, PyObject* args);
 PyObject* py_fees_base_fee_per_gas                        (PyObject* self, PyObject* args);
 PyObject* py_fees_fake_exponential                        (PyObject* self, PyObject* args);
 PyObject* py_fees_base_fee_per_blob_gas                   (PyObject* self, PyObject* args);

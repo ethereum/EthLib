@@ -6,6 +6,7 @@ public import EthLib.Execution.Blocks.Difficulty
 public import EthLib.Execution.Blocks.Header
 public import EthLib.Execution.Blocks.Log
 public import EthLib.Execution.Blocks.Receipt
+public import EthLib.Execution.Blocks.Roots
 public import EthLib.Execution.Blocks.Validate
 public import EthLib.Execution.Blocks.Withdrawal
 

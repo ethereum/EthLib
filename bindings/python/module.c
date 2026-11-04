@@ -607,6 +607,8 @@ static PyMethodDef methods[] = {
   {"block_header_hash", py_block_header_hash, METH_VARARGS, DOC_block_header_hash},
   {"block_reencode", py_block_reencode, METH_VARARGS, DOC_block_reencode},
   {"pow_block_difficulty", py_pow_block_difficulty, METH_VARARGS, DOC_pow_block_difficulty},
+  {"block_transactions_root", py_block_transactions_root, METH_VARARGS, DOC_block_transactions_root},
+  {"block_withdrawals_root", py_block_withdrawals_root, METH_VARARGS, DOC_block_withdrawals_root},
   {"fees_base_fee_per_gas", py_fees_base_fee_per_gas, METH_VARARGS, DOC_fees_base_fee_per_gas},
   {"fees_fake_exponential", py_fees_fake_exponential, METH_VARARGS, DOC_fees_fake_exponential},
   {"fees_base_fee_per_blob_gas", py_fees_base_fee_per_blob_gas, METH_VARARGS, DOC_fees_base_fee_per_blob_gas},

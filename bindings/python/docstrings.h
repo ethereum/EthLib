@@ -281,6 +281,12 @@
 #define DOC_pow_block_difficulty \
   "The difficulty of a block at a fork: `D(H)` of the Yellow Paper, 4.3.4, before Paris."
 
+#define DOC_block_transactions_root \
+  "The transactions root of the transactions of a block, decoded at the fork."
+
+#define DOC_block_withdrawals_root \
+  "The withdrawals root of the withdrawals of a block, decoded at a fork from Shapella."
+
 #define DOC_fees_base_fee_per_gas \
   "The base fee per gas of a block, from its parent's gas limit, gas used and base fee."
 

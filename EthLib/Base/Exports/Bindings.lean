@@ -317,6 +317,12 @@ def bindings : List Binding := [
     "(fork: bytes, number: bytes, timestamp: bytes, parent_timestamp: bytes, " ++
       "parent_difficulty: bytes, parent_ommers: bytes) -> bytes",
     [], some "BlockError"⟩,
+  ⟨"block_transactions_root", `EthLib.Execution.Blocks.Exports.transactionsRootExport,
+    "(fork: str, block: bytes) -> bytes",
+    [`EthLib.Serialization.Rlp.RlpError], some "BlockError"⟩,
+  ⟨"block_withdrawals_root", `EthLib.Execution.Blocks.Exports.withdrawalsRootExport,
+    "(fork: str, block: bytes) -> bytes",
+    [`EthLib.Serialization.Rlp.RlpError], some "BlockError"⟩,
   ⟨"fees_base_fee_per_gas", `EthLib.Execution.Fees.Exports.baseFeePerGasExport,
     "(parent_gas_limit: bytes, parent_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes",
     [], none⟩,

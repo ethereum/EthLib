@@ -7,6 +7,7 @@ Its archive `fixtures.tar.gz` has sha256 `e2fa7ea2ea516459f9ab92284b2927892f318f
 The cases cover every fork that the release fills, from Frontier to Amsterdam.
 For each fork, they hold the genesis block and every valid block of the test `block_intermediate_state`.
 Four more tests add blocks with withdrawals, a beacon root, requests and a block access list.
+Four more add the first valid block with a typed transaction of type 1, 2, 3 or 4, from the test of that type at its fork.
 
 Each case keeps the path of its file in the archive, the name of its test and its network.
 Its block and its header hash are copied from the fixture without change, so no code of EthLib computed them.
