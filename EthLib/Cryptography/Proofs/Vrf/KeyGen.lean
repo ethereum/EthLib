@@ -4,12 +4,13 @@ public import EthLib.Cryptography.Vrf.KeyGen
 public import EthLib.Cryptography.Proofs.Vrf.Verify
 
 /-!
-# Proofs: `Vrf.KeyGen`
+# Proofs: VRF key generation
 
 - A secret input is 49 bytes, so it is never a leaf, node or output input.
 - A secret input determines its seed and its index.
 - The tree of a seed verifies at every index, with the output of that index's secret.
-- Every valid opening of that tree gives that output, or `findHashCollision` returns a Keccak-256 collision.
+- Every valid opening of that tree gives that output.
+  Otherwise the collision search returns a Keccak-256 collision.
 -/
 
 @[expose] public section
@@ -98,7 +99,7 @@ theorem verify_prove (seed : Seed) (i : UInt32) :
 
 /-- Every valid opening of a seed's tree at index `i` gives the output at `i`.
 
-Otherwise `findHashCollision` returns a Keccak-256 collision with the honest opening. -/
+Otherwise the collision search returns a Keccak-256 collision with the honest opening. -/
 theorem verify_keyGen_unique {seed : Seed} {i : UInt32} {o : Opening} {y : Digest}
     (h : verify (keyGen seed) i o = some y) :
     y = evaluate seed i ∨
