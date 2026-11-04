@@ -6,24 +6,27 @@ public import EthLib.Serialization.Rlp.Decode
 /-!
 # `Trie.Proof`
 
-A Merkle proof for one key: the nodes on the key's path, which let a client check the key's value against a root alone.
+A Merkle proof for one key: the nodes on the path of the key.
 
-Source: `accountProof` and `storageProof` in [EIP-1186](https://github.com/ethereum/EIPs/blob/7622abc1c6569b7e7ade9ed957dde4ed2271cc40/EIPS/eip-1186.md), which `eth_getProof` of `ethereum/execution-apis` returns.
+A client checks the value of the key against a root alone.
 
-The EIP describes a proof as an "array of rlp-serialized MerkleTree-Nodes, starting with the stateRoot-Node, following the path" of the key.
+Source: the account and storage proofs of EIP-1186, at
+<https://github.com/ethereum/EIPs/blob/7622abc1c6569b7e7ade9ed957dde4ed2271cc40/EIPS/eip-1186.md>.
 
-A parent holds a child either inside its own encoding, when the child's encoding is short, or by the hash of that encoding.
+The EIP describes a proof as the RLP-serialized nodes from the root, along the path of the key.
 
-So the proof lists the root node, then each node on the path that its parent holds by hash, from the top down.
+A parent holds a short child inside its own encoding, and a long child by the hash of its encoding.
+
+So the proof lists the root node, then each node on the path that its parent holds by hash.
 
 A child held inside its parent is read from the parent, not from the proof.
 
 A proof shows either the value of the key or its absence:
 
-- The path ends at a leaf with the rest of the key, or at a branch that holds a value: the key is set.
+- The path ends at a leaf with the rest of the key, or at a branch with a value: the key is set.
 - The path leaves the trie: the key is not set.
 
-`verifyProof` checks a proof, and `getProof` builds the proof of a key from a trie.
+The module checks a proof, and builds the proof of a key from a trie.
 -/
 
 @[expose] public section
@@ -132,7 +135,7 @@ def walk (hash : ByteArray → Hash32) :
           let (child, rest) ← resolve hash subnodes[nibble] proof
           walk hash fuel child restOfPath rest
 
-/-- `verifyProof`: the value of `key` in the trie of `root`, or `none` when `key` is not set, as `proof` shows.
+/-- The value of `key` in the trie of `root`, or `none` when `key` is not set, as `proof` shows.
 
 `secured` says whether the trie hashes its keys, as the state and storage tries do.
 
@@ -174,7 +177,7 @@ def proofBelow (hash : ByteArray → Hash32) :
     -- No node or a leaf: the path ends here.
     | _ => return []
 
-/-- `eth_getProof`, for one key of a trie: the encoding of the root node, then the proof below it. -/
+/-- The proof of one key of a trie: the encoding of the root node, then the proof below it. -/
 def getProof (hash : ByteArray → Hash32) (trie : Trie) (key : ByteArray) : Except TrieError (List ByteArray) := do
   let obj ← prepareData hash trie.data trie.secured
   let path := keyPath hash trie.secured key

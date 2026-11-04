@@ -7,17 +7,21 @@ public import EthLib.Serialization.Rlp.Encode
 /-!
 # `Trie.Root`
 
-The root of the Merkle Patricia Trie: one 32-byte hash that commits to a map from byte keys to byte values.
+The root of the Merkle Patricia Trie.
 
-Source: [`merkle_patricia_trie.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/merkle_patricia_trie.py) of execution-specs at `2c0c8e7`.
+It is one 32-byte hash that commits to a map from byte keys to byte values.
 
-Every fork from Frontier to Bogota imports the trie from that one file.
+Source: `TRIE` in Appendix D of the Yellow Paper, Shanghai version, in `Paper.tex`:
+<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>.
+
+Every fork since Frontier uses this trie.
 
 The trie reads each key as a path of nibbles, and it has three kinds of node:
 
 - A leaf holds the rest of one key's path and that key's value.
 - An extension holds a run of nibbles that every path below it shares, then one child.
-- A branch holds 16 children, one for each next nibble, and the value of a key whose path ends there.
+- A branch holds 16 children, one for each next nibble.
+  It also holds the value of a key whose path ends there.
 
 A parent holds a child by its RLP structure when the child's encoding has fewer than 32 bytes.
 
@@ -25,7 +29,9 @@ Otherwise the parent holds the hash of the child's encoding.
 
 The root is always the hash of the root node's encoding.
 
-So the empty map has a fixed root, the hash of `0x80`, which is the RLP encoding of the empty byte string.
+So the empty map has a fixed root, the hash of `0x80`.
+
+`0x80` is the RLP encoding of the empty byte string.
 
 Ethereum hashes with Keccak-256.
 
@@ -41,13 +47,13 @@ namespace EthLib.Execution.Trie
 open EthLib.Base
 open EthLib.Serialization.Rlp
 
-/-- `InternalNode`: a leaf, an extension or a branch, with its children already encoded. -/
+/-- A leaf, an extension or a branch, with its children already encoded. -/
 inductive InternalNode where
-  /-- `LeafNode`: the nibbles of the key that the nodes above leave, and its value. -/
+  /-- A leaf: the nibbles of the key that the nodes above leave, and its value. -/
   | leaf (restOfKey : List Nibble) (value : ByteArray)
-  /-- `ExtensionNode`: the nibbles that every key below shares, and the encoded child after them. -/
+  /-- An extension: the nibbles that every key below shares, and the encoded child after them. -/
   | extension (keySegment : List Nibble) (subnode : Item)
-  /-- `BranchNode`: one encoded child for each next nibble, and the value of a key that ends here.
+  /-- A branch: one encoded child for each next nibble, and the value of a key that ends here.
 
   An absent child is the empty byte string, and so is the value when no key ends here. -/
   | branch (subnodes : Vector Item 16) (value : ByteArray)
@@ -56,13 +62,13 @@ inductive InternalNode where
 inductive TrieError where
   /-- A value is the empty byte string.
 
-  The trie stores an absent key as no entry at all, so the source asserts that no value is empty. -/
+  The trie stores an absent key as no entry at all, so no value is empty. -/
   | emptyValue
   /-- The RLP encoding of a node failed, because a payload has `2^64` bytes or more. -/
   | rlp (error : RlpError)
   deriving Repr, DecidableEq
 
-/-- The RLP structure of a node before it is encoded: `unencoded` in `encode_internal_node`.
+/-- The RLP structure of a node before it is encoded: `c` of the Yellow Paper.
 
 No node is the empty byte string. -/
 def unencoded : Option InternalNode → Item
@@ -72,7 +78,7 @@ def unencoded : Option InternalNode → Item
   -- The 16 children, then the value.
   | some (.branch subnodes value) => .list (subnodes.toList ++ [.bytes value])
 
-/-- `encode_internal_node`: how a parent holds a node.
+/-- How a parent holds a node: `n` of the Yellow Paper.
 
 - An encoding shorter than 32 bytes is held as the node's RLP structure, inside the parent.
 - A longer encoding is held as its hash. -/
@@ -83,9 +89,11 @@ def encodeInternalNode (hash : ByteArray → Hash32) (node : Option InternalNode
   else
     return .bytes ⟨(hash encoded).toArray⟩
 
-/-- `f` on each entry of `xs` in order, or the first error, with the length of `xs` kept in the type.
+/-- `f` on each entry of `xs` in order, or the first error.
 
-The kernel can unfold this definition, so it evaluates a branch's 16 children in the known answers. -/
+The length of `xs` stays in the type.
+
+The kernel can unfold this definition, so it evaluates the 16 children of a branch. -/
 def mapMVector {α β ε : Type} (f : α → Except ε β) : (xs : List α) → Except ε (Vector β xs.length)
   | [] => .ok ⟨#[], rfl⟩
   | x :: rest => do
@@ -93,14 +101,16 @@ def mapMVector {α β ε : Type} (f : α → Except ε β) : (xs : List α) → 
     let ys ← mapMVector f rest
     return ⟨⟨y :: ys.toList⟩, by simp⟩
 
-/-- `common_prefix_length`: the number of leading nibbles that two paths share. -/
+/-- The number of leading nibbles that two paths share. -/
 def commonPrefixLength : List Nibble → List Nibble → Nat
   | a :: restA, b :: restB => if a = b then commonPrefixLength restA restB + 1 else 0
   | _, _ => 0
 
-/-- One call of `patricialize`, with each nested call made through `recurse`.
+/-- One step of the node composition, with each nested step made through `recurse`.
 
-`obj` lists each key's full path with its value, and `level` nibbles of every path are already consumed.
+`obj` lists the full path of each key with its value.
+
+The first `level` nibbles of every path are already consumed.
 
 - With no key, there is no node.
 - With one key, the node is a leaf.
@@ -124,13 +134,13 @@ def patricializeStep (hash : ByteArray → Hash32)
     else
       -- The value of the key whose path ends here, or the empty byte string.
       let value := obj.foldl (fun value (key, keyValue) => if key.length = level then keyValue else value) .empty
-      -- The child of each next nibble holds the keys whose path continues with it, in their order.
+      -- The child of each next nibble holds the keys whose path continues with it, in order.
       let subnodes ← mapMVector (fun nibble => do
           encodeInternalNode hash (← recurse (obj.filter fun (key, _) => key[level]? = some nibble) (level + 1)))
         (List.finRange 16)
       return some (.branch (subnodes.cast (by simp)) value)
 
-/-- `patricialize`, with a budget of `fuel` levels of nested calls.
+/-- The node composition, with a budget of `fuel` levels of nested calls.
 
 # Why fuel
 
@@ -142,7 +152,7 @@ When the budget runs out, a nested call gives no node.
 
 Each level of nested calls on two keys or more consumes more nibbles of the paths.
 
-So a budget of one more than the longest path never runs out, which `Proofs.Trie.Root` proves. -/
+So a budget of one more than the longest path never runs out, as the proofs show. -/
 def patricializeAux (hash : ByteArray → Hash32) :
     Nat → List (List Nibble × ByteArray) → Nat → Except RlpError (Option InternalNode)
   | 0 => patricializeStep hash fun _ _ => .ok none
@@ -152,28 +162,29 @@ def patricializeAux (hash : ByteArray → Hash32) :
 def longestPath (obj : List (List Nibble × ByteArray)) : Nat :=
   obj.foldl (fun longest (key, _) => max longest key.length) 0
 
-/-- `patricialize`: the node for the keys of `obj`, `level` nibbles into their paths. -/
+/-- `c` of the Yellow Paper: the node for the keys of `obj`, `level` nibbles into their paths. -/
 def patricialize (hash : ByteArray → Hash32) (obj : List (List Nibble × ByteArray)) (level : Nat) :
     Except RlpError (Option InternalNode) :=
   patricializeAux hash (longestPath obj + 1) obj level
 
-/-- `Trie`, for byte values whose default is the empty byte string.
+/-- A trie of byte values whose default is the empty byte string.
 
-- `secured` says whether each key is hashed before it becomes a path.
-- `data` lists the keys and their values, in the order they were first set.
+It records whether each key is hashed before it becomes a path.
 
-The source keeps the entries in a Python dictionary, which keeps that order too. -/
+It lists the keys and their values, in the order they were first set. -/
 structure Trie where
   /-- Whether each key is hashed before it becomes a path. -/
   secured : Bool
   /-- The keys and their values, in the order they were first set. -/
   data : List (ByteArray × ByteArray)
 
-/-- Whether two byte strings are equal, compared as lists of bytes, which the kernel does in linear time. -/
+/-- Whether two byte strings are equal.
+
+They are compared as lists of bytes, which the kernel does in linear time. -/
 def sameBytes (a b : ByteArray) : Bool :=
   decide (a.data.toList = b.data.toList)
 
-/-- `trie_set`: set `key` to `value`, or remove `key` when `value` is the default, the empty byte string.
+/-- Set `key` to `value`, or remove `key` when `value` is the empty byte string.
 
 A key already present keeps its place, and a new key goes last. -/
 def trieSet (trie : Trie) (key value : ByteArray) : Trie :=
@@ -184,7 +195,7 @@ def trieSet (trie : Trie) (key value : ByteArray) : Trie :=
   else
     { trie with data := trie.data ++ [(key, value)] }
 
-/-- `trie_get`: the value of `key`, or the default, the empty byte string, when `key` is not set. -/
+/-- The value of `key`, or the empty byte string when `key` is not set. -/
 def trieGet (trie : Trie) (key : ByteArray) : ByteArray :=
   ((trie.data.find? fun (k, _) => sameBytes k key).map Prod.snd).getD .empty
 
@@ -192,9 +203,9 @@ def trieGet (trie : Trie) (key : ByteArray) : ByteArray :=
 def keyPath (hash : ByteArray → Hash32) (secured : Bool) (key : ByteArray) : List Nibble :=
   bytesToNibbleList (if secured then ⟨(hash key).toArray⟩ else key)
 
-/-- `_prepare_data`, for values that are already bytes: each key as its path, after hashing it in a secured trie.
+/-- Each key as its path, after hashing it in a secured trie.
 
-The source encodes each value first, and leaves a byte string unchanged. -/
+The values are already bytes, so they stay as they are. -/
 def prepareData (hash : ByteArray → Hash32) (data : List (ByteArray × ByteArray)) (secured : Bool) :
     Except TrieError (List (List Nibble × ByteArray)) :=
   data.mapM fun (preimage, value) =>
@@ -203,14 +214,14 @@ def prepareData (hash : ByteArray → Hash32) (data : List (ByteArray × ByteArr
     else
       .ok (keyPath hash secured preimage, value)
 
-/-- `root`: the hash of the encoding of the root node.
+/-- `TRIE` of the Yellow Paper: the hash of the encoding of the root node.
 
-The source returns the root node as its parent would hold it, then hashes its encoding when that is short.
+The root node is first held as a parent would hold it, and then hashed if its encoding is short.
 
-Both cases give the hash of the root node's encoding:
+Both cases give the hash of the encoding of the root node:
 
-- A short encoding is hashed by `root` itself.
-- A long encoding is replaced by its hash already, and `root` returns that hash. -/
+- A short encoding is hashed here.
+- A long encoding is replaced by its hash already, and that hash is the root. -/
 def root (hash : ByteArray → Hash32) (trie : Trie) : Except TrieError Hash32 := do
   let obj ← prepareData hash trie.data trie.secured
   let rootNode ← (patricialize hash obj 0).mapError .rlp
