@@ -49,9 +49,9 @@ jobs:
       - name: build
         run: lake build --wfail
 
-      # Each replay loads all imports of its module, Mathlib included.
-      # At most two parallel replays bound the memory on the 16 GB runner.
+      # Each module replays in its own process, which loads all its imports, Mathlib included.
+      # The largest measured 5.4 GB with GNU time, so two at a time fit the 16 GB runner.
       - name: replay with leanchecker
         env:
-          LEAN_NUM_THREADS: "2"
+          REPLAY_JOBS: "2"
         run: bash scripts/replay.sh

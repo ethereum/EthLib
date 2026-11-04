@@ -89,7 +89,10 @@ theorem coreVerify_coreSign (laws : PairingLaws) (sk : SecretKey) (msg dst : Byt
   obtain ⟨Q, hQ, hv, hs⟩ := HashToCurve.hashToG2_total_inSubgroup msg dst
   obtain ⟨b, hb⟩ := (G2.inSubgroup_iff_exists_represents hv).mp hs
   refine ⟨pointToSignature (G2.mul Q sk.val), ?_, ?_⟩
-  · simp only [coreSign, hQ, bind, Except.bind, pure, Except.pure]
+  · -- Rewrite the hash first, so the kernel never evaluates the hash to `G2`.
+    unfold coreSign
+    rw [hQ]
+    rfl
   unfold skToPk pointToPubkey pointToSignature
   rw [bytes_of_vector, bytes_of_vector]
   exact coreVerify_of_represents laws (G1.represents_mul_generator sk.val) sk.property hQ hb
@@ -129,7 +132,10 @@ private theorem sum_map_mul {α : Type} (l : List α) (f : α → ZMod Fr.modulu
 /-- Signing on one message is the multiple of its hash by the key. -/
 private theorem sign_eq {msg : ByteArray} {Q : G2} (hQ : HashToCurve.hashToG2 msg DST = .ok Q)
     (sk : SecretKey) : sign sk msg = .ok (pointToSignature (G2.mul Q sk.val)) := by
-  simp only [sign, coreSign, hQ, bind, Except.bind, pure, Except.pure]
+  -- Rewrite the hash first, so the kernel never evaluates the hash to `G2`.
+  unfold sign coreSign
+  rw [hQ]
+  rfl
 
 /-- Signing each key of a list succeeds with the multiples of the hash. -/
 private theorem mapM_sign {msg : ByteArray} {Q : G2} (hQ : HashToCurve.hashToG2 msg DST = .ok Q)
@@ -153,8 +159,9 @@ private theorem foldlM_aggregate {α : Type} (pt : α → G2) (sc : α → Fr)
     obtain ⟨r, hr, -, hrep⟩ := G2.uncompress_compress_of_represents (hpt x)
     obtain ⟨R, hR, hRrep⟩ := ih (hacc.add hrep)
     refine ⟨R, ?_, ?_⟩
-    · simp only [List.map_cons, List.foldlM_cons, sigBytes, pointToSignature, hr,
-        bind, Except.bind, pure, Except.pure]
+    · -- Rewrite the decoding first, so the kernel never evaluates it.
+      simp only [List.map_cons, List.foldlM_cons, sigBytes, pointToSignature]
+      rw [hr]
       exact hR
     · rw [List.map_cons]
       exact (add_sum_cons a (sc x) _) ▸ hRrep
@@ -168,7 +175,9 @@ private theorem pkBytes_checks (sk : SecretKey) :
   refine ⟨P, ?_, ?_, (G1.keyValidatePoint_eq_ok_iff.mp (hb ▸ hP)).1, hrep⟩
   · rw [hb]
     exact G1.size_compress _
-  · simp only [G1.keyValidate, hb, hP, bind, Except.bind, pure, Except.pure]
+  · -- Rewrite the validation first, so the kernel never evaluates it.
+    unfold G1.keyValidate
+    rw [hb, hP]
     rfl
 
 /-- The loop of the fast aggregate verification sums honest public keys without stopping. -/
@@ -290,9 +299,10 @@ private theorem mapM_pairs (l : List (SecretKey × ByteArray)) :
   induction l with
   | nil => rfl
   | cons p l ih =>
-    simp only [List.map_cons, List.mapM_cons, (keyPoint_spec p.1).1, (hashPoint_spec p.2).1,
-      bind, Except.bind, pure, Except.pure] at ih ⊢
-    rw [ih]
+    -- Rewrite the key and the hash first, so the kernel never evaluates them.
+    simp only [List.map_cons, List.mapM_cons]
+    rw [(keyPoint_spec p.1).1, (hashPoint_spec p.2).1, ih]
+    rfl
 
 /-- Over `ZMod`, the scalars of an aggregate verification cancel. -/
 private theorem aggregate_scalars {α : Type} (l : List α) (f g : α → ZMod Fr.modulus) :
