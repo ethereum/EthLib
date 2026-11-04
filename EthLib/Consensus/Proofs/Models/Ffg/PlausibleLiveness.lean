@@ -10,7 +10,9 @@ Honest validators with two thirds of the stake can always finalize a new checkpo
 
 They do so without making any honest validator slashable.
 
-The result is Theorem 2 of Casper FFG §2.1 and Theorem 6.1 of Gasper.
+The result is Theorem 2 of Casper FFG §2.1.
+
+Gasper Theorem 6.1 reaches it through its protocol under synchrony, which this model lacks.
 
 An honest validator votes only from a justified source, as Casper FFG §2, Table 1, asks.
 -/
