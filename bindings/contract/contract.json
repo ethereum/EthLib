@@ -2191,6 +2191,16 @@
    "docstring":
    "The base fee per blob gas at an excess, under the blob schedule of a fork."},
   {"summary":
+   "The fee of the blobs of a transaction, decoded at a fork, at an excess blob gas.",
+   "signature":
+   "(fork: bytes, excess_blob_gas: bytes, transaction: bytes) -> bytes",
+   "operation": "EthLib.Execution.Fees.Exports.blobDataFeeExport",
+   "method": "fees_blob_data_fee",
+   "errors": [],
+   "error_class": "FeesError",
+   "docstring":
+   "The fee of the blobs of a transaction, decoded at a fork, at an excess blob gas."},
+  {"summary":
    "The excess blob gas of a block at a fork, from its parent's excess, blob gas and base fee.",
    "signature":
    "(fork: bytes, parent_excess_blob_gas: bytes, parent_blob_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes",

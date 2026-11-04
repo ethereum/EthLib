@@ -46,9 +46,15 @@ def calc_excess_blob_gas(
     return _int(_native.fees_excess_blob_gas(fork.encode(), *map(_number, args)))
 
 
+def calculate_data_fee(fork: str, excess_blob_gas: int, transaction: bytes) -> int:
+    """The fee of the blobs of a transaction, decoded at a fork, at an excess blob gas."""
+    return _int(_native.fees_blob_data_fee(fork.encode(), _number(excess_blob_gas), transaction))
+
+
 __all__ = [
     "calculate_base_fee_per_gas",
     "fake_exponential",
     "get_base_fee_per_blob_gas",
     "calc_excess_blob_gas",
+    "calculate_data_fee",
 ]

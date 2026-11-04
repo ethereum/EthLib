@@ -380,6 +380,9 @@ def bindings : List Binding := [
   ⟨"fees_base_fee_per_blob_gas", `EthLib.Execution.Fees.Exports.baseFeePerBlobGasExport,
     "(fork: bytes, excess_blob_gas: bytes) -> bytes",
     [], some "FeesError"⟩,
+  ⟨"fees_blob_data_fee", `EthLib.Execution.Fees.Exports.blobDataFeeExport,
+    "(fork: bytes, excess_blob_gas: bytes, transaction: bytes) -> bytes",
+    [], some "FeesError"⟩,
   ⟨"fees_excess_blob_gas", `EthLib.Execution.Fees.Exports.excessBlobGasExport,
     "(fork: bytes, parent_excess_blob_gas: bytes, parent_blob_gas_used: bytes, " ++
       "parent_base_fee_per_gas: bytes) -> bytes",
