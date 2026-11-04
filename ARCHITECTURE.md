@@ -189,8 +189,10 @@ So one fork such as Pectra stands for Prague on the execution layer and Electra 
 Both layers read the same fork, so they cannot disagree on which fork is active.
 
 The type holds only the order.
-When a fork activates, by block number, timestamp or epoch, on mainnet or on a testnet, is chain configuration, which a separate module defines.
-That configuration gives the activations in the order of the timeline.
+When a fork activates, by block number, timestamp or epoch, on mainnet or on a testnet, is chain configuration.
+`EthLib/Base/ChainConfig.lean` gives the activations on an execution chain, in the order of the timeline.
+A fork activates there by block number up to Paris, and by timestamp from Shapella on.
+The configuration of the consensus layer, in `EthLib/Consensus/Config.lean`, gives the epochs of its forks.
 At each point of a chain, the active fork is the latest fork whose activation is at or before that point.
 Two forks can activate at one block.
 Constantinople and Petersburg did so on mainnet, and Petersburg is then the active fork, as EIP-1716 requires.
