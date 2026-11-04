@@ -1,0 +1,64 @@
+module
+
+public import EthLib.Base.Fork
+
+/-!
+# Proofs: `Fork`
+
+Forks are ordered by their position in the type, and the order is linear.
+
+The comparison agrees with that order, as an ordered map needs.
+
+The timeline pins each position, so a fork moved in the type fails the build.
+-/
+
+@[expose] public section
+
+namespace EthLib.Base.Fork
+
+open Std
+
+/-- Two forks at the same position are equal. -/
+theorem ctorIdx_injective : Function.Injective Fork.ctorIdx := by
+  intro a b h
+  rw [← Fork.ofNat_ctorIdx a, ← Fork.ofNat_ctorIdx b, h]
+
+instance : IsLinearOrder Fork := by
+  apply IsLinearOrder.of_le
+  case le_antisymm => exact ⟨fun _ _ h h' => ctorIdx_injective (Nat.le_antisymm h h')⟩
+  case le_trans => exact ⟨fun h h' => Nat.le_trans h h'⟩
+  case le_total => exact ⟨fun a b => Nat.le_total a.ctorIdx b.ctorIdx⟩
+
+instance : LawfulOrderLT Fork where
+  lt_iff a b := Nat.lt_iff_le_and_not_ge (m := a.ctorIdx) (n := b.ctorIdx)
+
+instance : LawfulOrderOrd Fork where
+  isLE_compare a b := LawfulOrderOrd.isLE_compare a.ctorIdx b.ctorIdx
+  isGE_compare a b := LawfulOrderOrd.isGE_compare a.ctorIdx b.ctorIdx
+
+/-! ## The comparison
+
+Core derives these laws from the three instances above. -/
+
+example : TransOrd Fork := inferInstance
+
+example : LawfulEqOrd Fork := inferInstance
+
+/-! ## The timeline -/
+
+/-- Each fork of the timeline comes before the next. -/
+theorem pairwise_lt_timeline :
+    [frontier, homestead, daoFork, tangerineWhistle, spuriousDragon, byzantium, constantinople,
+      petersburg, istanbul, muirGlacier, phase0, berlin, london, altair, arrowGlacier, grayGlacier,
+      bellatrix, paris, shapella, dencun, pectra, fusaka, bpo1, bpo2, glamsterdam,
+      hegota].Pairwise (· < ·) := by
+  decide
+
+/-- The timeline lists every fork. -/
+theorem mem_timeline (f : Fork) :
+    f ∈ [frontier, homestead, daoFork, tangerineWhistle, spuriousDragon, byzantium, constantinople,
+      petersburg, istanbul, muirGlacier, phase0, berlin, london, altair, arrowGlacier, grayGlacier,
+      bellatrix, paris, shapella, dencun, pectra, fusaka, bpo1, bpo2, glamsterdam, hegota] := by
+  cases f <;> decide
+
+end EthLib.Base.Fork

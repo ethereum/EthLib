@@ -76,7 +76,8 @@ A client is out of scope.
 Peer management, storage, sync strategies, the mempool and the RPC are choices each client makes, and no specification fixes them.
 A client can build on EthLib, and the bindings exist so that clients can run its definitions.
 
-An optimised implementation is in scope only as a refinement: a second definition, with a theorem that it computes the same function as the specification.
+There is one definition of each function, and clients run that definition.
+When a definition is too slow, a change makes that definition fast and keeps its theorems.
 
 ## Three kinds of content
 
@@ -111,7 +112,7 @@ Each layer is a directory under `EthLib/`, which `CONTRIBUTING.md` calls a domai
 | Networking | the messages peers exchange, with their framing and compression | `EthLib/Networking/` |
 | Serialization | the encodings the protocol sends and hashes | `EthLib/Serialization/` |
 | Cryptography | hashes and Merkle trees, then the schemes built on them | `EthLib/Cryptography/` |
-| Base | the bytes and integers every layer uses | `EthLib/Base/` |
+| Base | the bytes, the integers and the forks that every layer uses | `EthLib/Base/` |
 
 Models sit above all of them, in their own package, described under [Packages](#packages).
 
@@ -163,6 +164,7 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
   An unbounded integer is a `Nat`, and a 64-bit one is a `UInt64`.
   Where the source makes overflow invalid, an operation that would overflow is an error, never a silent wrap.
   The 256-bit words of the EVM are one `U256` type, with arithmetic modulo 2^256, defined in Base.
+- A fork is a `Fork`, one type for both layers, defined in Base, as [Forks](#forks) describes.
 - A function that can fail returns `Except E α`, with one error type per module whose constructors name each reason.
   No specification runs in `IO` or panics.
 - A construction that is generic in its hash, such as a Merkle tree or a hash-based signature, takes the hash as an argument.
@@ -171,26 +173,119 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
 
 ## Forks
 
-Ethereum changes its rules at forks.
-A specification can restate every rule at each fork, or write each fork as its differences from the one before.
-EthLib does neither: a rule is written once, and again only when a fork changes it.
+Ethereum changes its rules at forks, and EthLib specifies every fork of both layers, from Frontier and Phase 0 to the latest.
+It does not restate the specification at each fork.
+Each rule is written once, takes the fork as an argument, and branches only at the forks that changed it.
 
-- A rule that no fork has changed carries no fork in its name.
-  Its doc comment names the fork that introduced it and the latest fork checked, at a pinned commit.
-- A rule that a fork changed keeps both versions, in namespaces named after the forks that introduced them.
-  The gossip message ID is one: Phase 0 and Altair compute it differently, and messages on a Phase 0 topic still use the Phase 0 rule.
-- A constant whose value differs between presets, such as `SLOTS_PER_EPOCH` on mainnet and on the minimal preset, is a field of a preset structure that the specification takes as an argument.
-  A constant with one value is a definition named as in its source.
+### One timeline
 
-Each fork has one module that assembles the rules active in it, such as the set of precompiles at that fork.
-That module is the place to read a fork as a whole.
+The type `Fork`, in `EthLib/Base/Fork.lean`, lists the forks of both layers in the order in which they activate on mainnet.
+Before the Merge, the execution chain and the beacon chain forked apart, so their forks interleave: Muir Glacier, Phase 0, Berlin, London, Altair, Arrow Glacier.
+From Shapella on, one upgrade changes both layers at once.
+So one fork such as Pectra stands for Prague on the execution layer and Electra on the consensus layer.
+Both layers read the same fork, so they cannot disagree on which fork is active.
+
+The type holds only the order.
+When a fork activates, by block number, timestamp or epoch, on mainnet or on a testnet, is chain configuration, which a separate module defines.
+That configuration gives the activations in the order of the timeline.
+At each point of a chain, the active fork is the latest fork whose activation is at or before that point.
+Two forks can activate at one block.
+Constantinople and Petersburg did so on mainnet, and Petersburg is then the active fork, as EIP-1716 requires.
+
+Some forks change little, and each of them is still a fork of the type, so the timeline matches the meta EIPs.
+The DAO Fork changes no rule: at its first block, it moves the ether of a list of accounts to one contract.
+Muir Glacier, Arrow Glacier and Gray Glacier only delay the difficulty bomb.
+Bellatrix and Paris, the two halves of the Merge, are two forks, because Bellatrix activated on 6 September 2022 and Paris on 15 September.
+A rule that none of these forks changed never mentions them.
+
+### A rule takes the fork
+
+A rule that no fork changes, such as SHA-256 or the RLP encoding, takes no fork.
+A rule that forks change takes the fork as an argument, and compares it with those forks, the latest first.
+The order on `Fork` is decidable, so `fork ≥ .berlin` is a test in a rule and a hypothesis in a theorem.
+
+The gas cost of SLOAD is one example.
+It is 50 at Frontier, 200 from Tangerine Whistle (EIP-150) and 800 from Istanbul (EIP-1884).
+From Berlin, EIP-2929 charges 2100 for a slot that the transaction has not accessed before, and 100 for a slot that it has:
+
+```lean
+def sloadCost (fork : Fork) (cold : Bool) : Nat :=
+  if fork ≥ .berlin then (if cold then 2100 else 100)
+  else if fork ≥ .istanbul then 800
+  else if fork ≥ .tangerineWhistle then 200
+  else 50
+```
+
+A theorem can then quantify over forks.
+"At every fork from Berlin on, a warm SLOAD costs 100" reads `∀ fork, fork ≥ .berlin → sloadCost fork false = 100`.
+
+A rule of one layer does not branch at a fork that changes only the other layer.
+At Altair, an execution rule behaves as at London.
+The beacon chain starts at Phase 0, so a theorem about the consensus layer assumes `fork ≥ .phase0` where it needs to.
+
+### Constants that change at forks
+
+A constant whose value changes at forks is a field of one structure, the parameters of the forks of its layer.
+One function of the fork computes that structure, and branches at the forks that change a field, as a rule does.
+Each value is then written once, at the fork that set it.
+
+The blob schedule is one example.
+The target and the maximum are 3 and 6 blobs per block from Dencun (EIP-4844), and 6 and 9 from Pectra (EIP-7691).
+They are 10 and 15 from BPO1 (EIP-8134), and 14 and 21 from BPO2 (EIP-8135).
+EIP-7892 makes this schedule chain configuration, so a testnet can set other values.
+A rule therefore takes the blob schedule as an argument, and the function of the fork gives the mainnet values.
+
+A constant with one value at every fork is a definition, named as in its source.
+
+### Fields that appear at a fork
+
+This subsection is a proposal, which the first type that needs it will test.
+
+A type whose fields appear at forks, such as the execution block header, is one type indexed by the fork.
+A field that appears at fork `f` has the type `Since f fork α`, a function from a proof of `f ≤ fork` to `α`.
+Before `f`, no such proof exists, so the field has exactly one value and holds nothing.
+From `f` on, the field holds one value of `α`.
+Mathlib's `Part` uses the same idea for any proposition.
+
+The withdrawals root of the header shows how this works.
+EIP-4895 adds it at Shanghai, so in `Header fork` it has the type `Since .shapella fork Hash32`.
+At London, the field holds nothing, and the RLP encoding of the header is a list of 16 items, with the base fee last.
+At Shapella, the field holds the root of the withdrawals trie, and the list has 17 items, with that root last, as EIP-4895 shows.
+A function that builds a header at any fork writes the root as `fun _ => root`, and a reader passes a proof of `fork ≥ .shapella`.
+
+The codecs then see only the present fields.
+The RLP list of a header has only the fields whose fork is at or before `fork`, in their order.
+The SSZ container of a beacon state works the same way.
+
+The simpler form `if f ≤ fork then α else Unit` reduces to `α` or to `Unit` at a known fork.
+At a fork variable, it needs a cast at each read and each write, and the function form needs none.
+
+### The existing modules
+
+Two rules keep one version for each fork in a namespace named after the fork.
+The gossip message ID has one in `Phase0` and one in `Altair`, and the excess blob gas has one in `Cancun` and one in `Osaka`.
+A later pull request makes each pair one function of the fork, which branches at Altair and at Fusaka.
+For the message ID, the argument is the fork of the topic, not the fork of the chain head.
+A message on a topic with the Phase 0 fork digest keeps the Phase 0 rule.
+
+A preset, such as the mainnet or the minimal preset of the consensus layer, is independent of the fork.
+A constant that differs between presets, such as `SLOTS_PER_EPOCH` (32 on mainnet, 8 on minimal), stays a field of a preset structure that the rule takes as an argument.
+When a constant depends on both, the function of the fork takes the preset as an argument too.
+No module defines a preset yet, so the first one that needs it adds the structure.
 
 ## Sources
 
-Every definition cites its source with a link pinned to a commit.
-Two modules that pin two commits of one repository can disagree without anyone noticing.
-So each source repository has one pinned commit, recorded in one file, and every module that cites the repository uses it.
-Update the pin in one pull request. Check every module that cites the repository.
+EthLib is a specification at the same level as execution-specs and consensus-specs, so its code stands on its own.
+The code cites only primary sources: an EIP or an RFC with its section, a NIST or SEC standard, or a paper.
+Where no primary source states a rule, the doc comment states the rule itself, in words and in mathematics.
+A reader then needs no other specification.
+A contributor may read execution-specs and consensus-specs to understand a rule and to check the work, but the code does not cite them.
+
+Test vectors are the exception, because a test must say what it checks against.
+Each fixture keeps its pinned origin and digests in `tests/`.
+Two tests that pin two commits of one repository can disagree without anyone noticing.
+So each repository that fixtures come from has one pinned commit, recorded in one file, and every test that reads from the repository uses it.
+Update the pin in one pull request, and check every test that reads from the repository.
 
 ## Packages
 
