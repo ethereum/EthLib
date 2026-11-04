@@ -41,7 +41,6 @@ In Python, a lack of gas raises `ValueError`.
 `bindings/python/tests/ecrecover/` runs all 52 cases of `test_precompiles` in
 `tests/frontier/precompiles/test_ecrecover.py` of execution-specs.
 The file is at commit `b758df2bcaaa95c04d31e25c94fbfb8d6de756e7`.
-Eight of them also run in the kernel, at the end of `EthLib/Execution/Proofs/Evm/Precompiles/Ecrecover/Core.lean`.
 
 ## What is proved
 
