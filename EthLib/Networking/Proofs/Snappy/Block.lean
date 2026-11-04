@@ -99,6 +99,24 @@ theorem readPreamble_le {bs rest : List UInt8} {len : Nat}
     · cases h
     · cases h; omega
 
+/-! ## Little-endian bytes -/
+
+/-- Writing `k` little-endian bytes gives exactly `k` bytes. -/
+@[simp] theorem length_leBytes (n k : Nat) : (leBytes n k).length = k := by
+  induction k generalizing n with
+  | zero => rfl
+  | succ k ih => simp [leBytes, ih]
+
+/-- Reading `k` little-endian bytes back gives the number modulo 256^k. -/
+theorem leValue_leBytes (n k : Nat) : leValue (leBytes n k) = n % 256 ^ k := by
+  induction k generalizing n with
+  | zero => simp [leBytes, leValue, Nat.mod_one]
+  | succ k ih =>
+      simp only [leBytes, leValue, ih, UInt8.toNat_ofNat']
+      -- n mod 256^(k+1) = (n mod 256) + 256 * ((n / 256) mod 256^k)
+      show n % 256 + 256 * (n / 256 % 256 ^ k) = n % 256 ^ (k + 1)
+      rw [Nat.pow_succ', Nat.mod_mul]
+
 /-! ## Copies (§2.2)
 
 The output is held most recent byte first, so a forward list `o` is stored as its reverse.

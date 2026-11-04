@@ -31,7 +31,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Serialization | [`Rlp`](EthLib/Serialization/Rlp/) | Recursive Length Prefix, the encoding of the execution layer |
 | Serialization | [`Ssz`](EthLib/Serialization/Ssz/) | Simple Serialize and its merkleization, the encoding of the consensus layer |
 | Networking | [`Encoding`](EthLib/Networking/Encoding/) | the protobuf varint of req/resp messages |
-| Networking | [`Snappy`](EthLib/Networking/Snappy/) | Snappy block decompression |
+| Networking | [`Snappy`](EthLib/Networking/Snappy/) | Snappy block decompression and the framing format |
 | Networking | [`Gossip`](EthLib/Networking/Gossip/) | the gossip message ID of Phase 0 and Altair |
 | Execution | [`Fees`](EthLib/Execution/Fees/) | the EIP-1559 base fee and the blob base fee |
 | Execution | [`Evm`](EthLib/Execution/Evm/) | the arithmetic, comparison and bitwise instructions of the EVM |
