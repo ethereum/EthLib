@@ -6,6 +6,8 @@ public import EthLib.Cryptography.Secp256k1.Encoding
 public import EthLib.Cryptography.Secp256k1.Ecdsa
 public import EthLib.Cryptography.Secp256k1.Recovery
 public import EthLib.Cryptography.Secp256k1.Address
+public import EthLib.Cryptography.Secp256k1.Sign
+public import EthLib.Cryptography.Secp256k1.Ecdh
 
 /-!
 # `EthLib.Cryptography.Secp256k1`

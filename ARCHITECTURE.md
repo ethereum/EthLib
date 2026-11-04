@@ -23,7 +23,7 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 
 - Hash functions: Keccak-256, SHA-256, RIPEMD-160, and the BLAKE2b compression function of EIP-152.
 - Key derivation over SHA-256: HMAC, HKDF, and the Concatenation KDF.
-- secp256k1: ECDSA signatures, public key recovery, and the address of a public key.
+- secp256k1: ECDSA signatures with RFC 6979 nonces, public key recovery, the address of a public key, and ECDH.
 - secp256r1: signature verification for the P256VERIFY precompile of EIP-7951.
 - alt_bn128: the curve operations and the pairing of EIP-196 and EIP-197.
 - BLS12-381: the fields, the curves, the pairing, hashing to the curve of RFC 9380, and BLS signatures with their aggregation.
