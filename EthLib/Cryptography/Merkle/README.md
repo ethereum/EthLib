@@ -69,7 +69,7 @@ So the theorems in `Binding.lean` name an algorithm that computes the collision 
 `findCollision` walks two climbs from one position up.
 It returns the first level where they hash two different pairs to one parent.
 `climb_binding` says that two climbs over equally many siblings that meet are equal, or `findCollision` returns a collision.
-`findCollision_valid` says that every collision it returns is valid.
+`findCollision_valid` says that every collision it returns is valid, and that its pairs are the ones the two climbs hash there.
 The collision sits at an ancestor of the starting node, so a hash tweaked by its position collides under one tweak.
 
 Against an honest tree, the statement is sharper.

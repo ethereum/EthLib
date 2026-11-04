@@ -107,8 +107,8 @@ Both searches are explicit algorithms, proved to return valid answers.
 So the statements say something, even though every compressing hash has collisions.
 No theorem bounds the probability of finding a collision or a second preimage.
 
-The VRF's `verify_unique` uses `climb_binding`.
-leanXMSS states `fold_binding` with `climb_binding_node`, but its unforgeability proof does not use either theorem.
+The VRF's `verify_unique` and the leanXMSS unforgeability proof use `climb_binding`.
+leanXMSS also states `fold_binding` with `climb_binding_node`, which its unforgeability proof does not use.
 SSZ uses neither.
 
 ### leanSPHINCS
