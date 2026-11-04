@@ -1,6 +1,6 @@
 """RLP against the RLP tests of ethereum/tests, and the typed decoders against hand-built cases.
 
-`vectors/README.md` gives the origin of the two JSON files and their licence.
+`vectors/README.md` gives the origin of the JSON files and their licence.
 """
 
 import json
@@ -49,6 +49,27 @@ def test_valid_case(name: str) -> None:
     out = _bytes(case["out"])
     assert rlp.encode(item) == out
     assert rlp.decode(out) == item
+
+
+_RANDOM = json.loads((_VECTORS / "example.json").read_text())
+
+# The item of each case of `RandomRLPTests`, read by hand from its bytes.
+# c7 opens a list of 7 bytes: c0 is [], c1 c0 is [[]], and c3 c0 c1 c0 is [[], [[]]].
+_RANDOM_ITEMS = {"listsoflists2": [[], [[]], [[], [[]]]]}
+
+
+def test_every_random_case_has_an_item() -> None:
+    assert set(_RANDOM_ITEMS) == set(_RANDOM)
+
+
+@pytest.mark.parametrize("name", list(_RANDOM))
+def test_random_case(name: str) -> None:
+    # A random case gives only bytes that must decode, and so must encode back to themselves.
+    case = _RANDOM[name]
+    assert case["in"] == "VALID"
+    out = _bytes(case["out"])
+    assert rlp.decode(out) == _RANDOM_ITEMS[name]
+    assert rlp.encode(_RANDOM_ITEMS[name]) == out
 
 
 # The fault of each invalid case, as the error names it.

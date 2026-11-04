@@ -1,13 +1,18 @@
 # Vendored trie tests
 
-Each case of these four files sets keys one after another, starting from an empty trie, and gives the root.
-`trietest.json` and `trieanyorder.json` are for the plain trie, and the two `secureTrie` files for the secured trie.
+Each case of these five files sets keys one after another, starting from an empty trie, and gives the root.
+`trietest.json` and `trieanyorder.json` are for the plain trie.
+The two `secureTrie` files and `hex_encoded_securetrie_test.json` are for the secured trie.
 
 `hexencodetest.json` gives twelve paths of nibbles, each with its leaf flag and its hex-prefix encoding.
 
-- Source: `TrieTests/` and `BasicTests/hexencodetest.json` in [`ethereum/tests`](https://github.com/ethereum/tests) at commit `c67e485ff8b5be9abc8ad15345ec21aa22e290d9`.
-- Authors: the Ethereum Foundation.
-- Licence: the MIT License, under the notice below.
+- Repository: [`ethereum/tests`](https://github.com/ethereum/tests)
+- Commit: `c67e485ff8b5be9abc8ad15345ec21aa22e290d9`
+- Files: every file of `TrieTests/` but `trietestnextprev.json`, and `BasicTests/hexencodetest.json`
+- Authors: the Ethereum Foundation
+- Licence: MIT, under the notice below
+
+`trietestnextprev.json` tests the iteration of a client's trie, which no specification defines.
 
 The files are copied byte for byte, and `SHA256SUMS` pins them.
 To check the pins, run this from the directory:
