@@ -90,6 +90,10 @@ jobs:
       - name: exports
         run: bash scripts/build_timing_report.sh run exports_build "$BUILD_TIMING_RESULTS" -- lake build --wfail Exports
 
+      # The C docstrings, the contract and the type stub must match the Lean docstrings and codes.
+      - name: binding contract
+        run: lake exe gen-bindings --check
+
       - name: bindings
         run: bash scripts/build_timing_report.sh run bindings_build "$BUILD_TIMING_RESULTS" -- uv sync --frozen --extra test
 

@@ -223,6 +223,8 @@ setup(
         "ethlib.serialization.rlp",
         "ethlib.serialization.ssz",
     ],
+    # The type stub of the extension, which `lake exe gen-bindings` writes from Lean.
+    package_data={"ethlib": ["py.typed"], "ethlib.cryptography": ["_native.pyi"]},
     ext_modules=[_make_extension()],
     cmdclass={"build_ext": LakeThenBuild},
 )
