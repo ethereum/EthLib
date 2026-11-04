@@ -44,7 +44,7 @@ theorem gasCost_lt_two_pow_64 {size : Nat} (bounded : size < 2 ^ 63) : gasCost s
 /-! ## The call -/
 
 /-- With less gas than the price, the call runs out of gas. -/
-theorem sha256_out_of_gas (data : ByteArray) (gas : Nat) (short : gas < gasCost data.size) :
+theorem sha256_outOfGas (data : ByteArray) (gas : Nat) (short : gas < gasCost data.size) :
     sha256 data gas = .error (.outOfGas (gasCost data.size) gas) := by
   simp only [sha256, short, ↓reduceIte]
 
@@ -57,7 +57,7 @@ theorem sha256_ok (data : ByteArray) (gas : Nat) (enough : gasCost data.size ≤
 theorem sha256_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
     sha256 data gas = .ok out ↔ gasCost data.size ≤ gas ∧ out = Cryptography.Hash.sha256 data := by
   by_cases short : gas < gasCost data.size
-  · rw [sha256_out_of_gas data gas short]
+  · rw [sha256_outOfGas data gas short]
     constructor
     · intro wrong
       simp at wrong
@@ -75,7 +75,7 @@ theorem sha256_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
 theorem sha256_eq_error_iff (data : ByteArray) (gas : Nat) (e : Sha256Error) :
     sha256 data gas = .error e ↔ gas < gasCost data.size ∧ e = .outOfGas (gasCost data.size) gas := by
   by_cases short : gas < gasCost data.size
-  · rw [sha256_out_of_gas data gas short]
+  · rw [sha256_outOfGas data gas short]
     constructor
     · intro same
       exact ⟨short, (Except.error.inj same).symm⟩

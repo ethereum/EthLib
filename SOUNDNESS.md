@@ -379,7 +379,7 @@ No theorem relates the module to the execution-specs code it follows.
 ### BLAKE2F
 
 The theorems pin down the input format exactly, and leave the compression function F to test vectors.
-`blake2f_invalidLength`, `blake2f_invalidFlag` and `blake2f_ok` (`Execution/Proofs/Evm/Precompiles/Blake2f.lean`) prove that a call fails exactly when the input is not 213 bytes long, or its flag byte is neither `0` nor `1`.
+`output_invalidInputLength`, `output_invalidFlag` and `output_ok` (`Execution/Proofs/Evm/Precompiles/Blake2f.lean`) prove that a call fails exactly when the input is not 213 bytes long, or its flag byte is neither `0` nor `1`.
 Otherwise it returns `compute` of the input, which decodes the fields and runs F of RFC 7693 on them.
 `readWord_toNat`, `readRounds_toNat` and `writeState_word` state the encoding of EIP-152 for every input: the rounds field big-endian, every word little-endian, and the output in the encoding of the input.
 
@@ -390,7 +390,7 @@ Test vector 8 asks for `2^32 - 1` rounds, so nothing checks its output.
 
 ### ECRECOVER
 
-The ECRECOVER theorems rest on the secp256k1 ones, and all three are in `Execution/Proofs/Evm/Precompiles/Ecrecover/Core.lean`.
+The ECRECOVER theorems rest on the secp256k1 ones, and all three are in `Execution/Proofs/Evm/Precompiles/Ecrecover.lean`.
 `output_sign` proves that a signature made with a private key returns that key's address.
 `output_verify` proves that a nonempty output is the address of a key that verifies the signature.
 `output_of_verify` proves that every key that verifies a signature has its address returned for `v = 27` or `v = 28`, when `r + n >= p`.
