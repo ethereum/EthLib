@@ -220,6 +220,10 @@ PyObject* py_discv5_ecdh                                  (PyObject* self, PyObj
 PyObject* py_discv5_derive_keys                           (PyObject* self, PyObject* args);
 PyObject* py_discv5_id_sign                               (PyObject* self, PyObject* args);
 PyObject* py_discv5_id_verify                             (PyObject* self, PyObject* args);
+PyObject* py_discv5_decode_packet                         (PyObject* self, PyObject* args);
+PyObject* py_discv5_reencode_packet                       (PyObject* self, PyObject* args);
+PyObject* py_discv5_encrypt_message                       (PyObject* self, PyObject* args);
+PyObject* py_discv5_decrypt_message                       (PyObject* self, PyObject* args);
 PyObject* py_consensus_preset                             (PyObject* self, PyObject* args);
 PyObject* py_consensus_config                             (PyObject* self, PyObject* args);
 PyObject* py_consensus_parameters                         (PyObject* self, PyObject* args);

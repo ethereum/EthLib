@@ -1,6 +1,9 @@
 module
 
+public import Lean.Data.Json
+public import EthLib.Serialization.Ssz.Codec.Json
 public import EthLib.Networking.Discv5.Identity
+public import EthLib.Networking.Discv5.Packet
 
 /-!
 # `Exports.Discv5`
@@ -17,6 +20,7 @@ public section
 namespace EthLib.Networking.Discv5.Exports
 
 open EthLib.Cryptography.Secp256k1
+open Lean (Json ToJson toJson)
 
 /-- A node ID of 32 bytes. -/
 def nodeIdOf (bytes : ByteArray) : IO NodeId :=
@@ -74,5 +78,73 @@ def idVerifyExport (pubkey challengeData ephemeralPubkey nodeIdB signature : Byt
   let ok := idVerify (← publicKeyOf pubkey) challengeData ephemeralPubkey (← nodeIdOf nodeIdB)
     signature
   return if ok then 1 else 0
+
+/-! ## Packets -/
+
+/-- Bytes as a `0x`-prefixed lowercase hex string. -/
+def hex (bytes : List UInt8) : Json :=
+  Json.str (Serialization.Ssz.toHex bytes.toArray)
+
+/-- Run a packet operation down to `IO`. -/
+def runPacket {α : Type} (act : Except PacketError α) : IO α :=
+  match act with
+  | .ok a => pure a
+  | .error e => throw (IO.userError s!"invalid packet: {repr e}")
+
+/-- The fields of an authdata, as JSON. -/
+def authdataJson : Authdata → List (String × Json)
+  | .message srcId => [("src_id", hex srcId.toList)]
+  | .whoareyou idNonce enrSeq =>
+    [("id_nonce", hex idNonce.toList), ("enr_seq", toJson enrSeq.toNat)]
+  | .handshake srcId idSignature ephemeralPubkey record =>
+    [("src_id", hex srcId.toList), ("id_signature", hex idSignature.data.toList),
+      ("ephemeral_pubkey", hex ephemeralPubkey.data.toList), ("record", hex record.data.toList)]
+
+/-- The packet that a destination node reads, as a JSON object of hex strings.
+
+It holds the flag, the masking IV, the nonce, the authdata fields and the message.
+
+It also holds the additional data of the message. -/
+@[export eth_discv5_decode_packet]
+def decodePacketExport (destId bytes : ByteArray) : IO ByteArray := do
+  let p ← runPacket (Packet.decode (← nodeIdOf destId) bytes)
+  let ad ← runPacket p.messageAd
+  let json := Json.mkObj <| [
+    ("flag", toJson p.header.authdata.flag.toNat),
+    ("masking_iv", hex p.maskingIv.toList),
+    ("nonce", hex p.header.nonce.toList),
+    ("message", hex p.message.data.toList),
+    ("message_ad", hex ad.data.toList)] ++ authdataJson p.header.authdata
+  return json.compress.toUTF8
+
+/-- The bytes of the packet that the decoder reads, written again by the encoder. -/
+@[export eth_discv5_reencode_packet]
+def reencodePacketExport (destId bytes : ByteArray) : IO ByteArray := do
+  let id ← nodeIdOf destId
+  runPacket ((Packet.decode id bytes).bind (Packet.encode id))
+
+/-- An AES-128 key of 16 bytes. -/
+def aesKeyOf (bytes : ByteArray) : IO (Cryptography.Aes.Key .aes128) :=
+  if h : bytes.size = 16 then pure ⟨bytes.data, h⟩
+  else throw (IO.userError "key is not 16 bytes")
+
+/-- A nonce of 12 bytes. -/
+def nonceOf (bytes : ByteArray) : IO (Vector UInt8 12) :=
+  if h : bytes.size = 12 then pure ⟨bytes.data, h⟩
+  else throw (IO.userError "nonce is not 12 bytes")
+
+/-- The encrypted message, the ciphertext then the 16-byte tag. -/
+@[export eth_discv5_encrypt_message]
+def encryptMessageExport (key nonce plaintext ad : ByteArray) : IO ByteArray := do
+  match encryptMessage (← aesKeyOf key) (← nonceOf nonce) plaintext ad with
+  | .ok message => pure message
+  | .error _ => throw (IO.userError "encryption failed")
+
+/-- The plaintext of an encrypted message, or an error if it does not authenticate. -/
+@[export eth_discv5_decrypt_message]
+def decryptMessageExport (key nonce message ad : ByteArray) : IO ByteArray := do
+  match decryptMessage (← aesKeyOf key) (← nonceOf nonce) message ad with
+  | .ok plaintext => pure plaintext
+  | .error _ => throw (IO.userError "message does not authenticate")
 
 end EthLib.Networking.Discv5.Exports
