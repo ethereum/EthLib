@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Fees.GasLimit
+public import EthLib.Base.Proofs.Fork
 
 /-!
 # Proofs: the gas limit rule
@@ -10,6 +11,10 @@ The rule holds exactly when the gas limit is within a 1024th of the parent's, an
 Each block then multiplies the gas limit by less than `1025 / 1024`, and by more than `1023 / 1024`.
 
 So `k` blocks multiply it by at most `(1025 / 1024)^k`.
+
+At the first London block, the rule reads twice the parent's gas limit.
+
+So that block may double the gas limit, which no other block may do.
 -/
 
 @[expose] public section
@@ -57,5 +62,53 @@ theorem pow_mul_le_of_checkGasLimit (limit : Nat → Nat) :
       _ = 1025 * (1024 ^ k * limit k) := by rw [Nat.mul_left_comm]
       _ ≤ 1025 * (1025 ^ k * limit 0) := Nat.mul_le_mul_left _ ih
       _ = 1025 ^ (k + 1) * limit 0 := by rw [Nat.pow_succ, ← Nat.mul_assoc, Nat.mul_comm 1025]
+
+/-! ## The first London block -/
+
+open EthLib.Base
+
+variable {parentFork fork : Fork}
+
+/-- At the first London block, the rule reads twice the parent's gas limit. -/
+theorem parentGasLimitForCheck_of_first_london (hParent : parentFork < .london)
+    (hFork : .london ≤ fork) (parentGasLimit : Nat) :
+    parentGasLimitForCheck parentFork fork parentGasLimit = 2 * parentGasLimit := by
+  simp [parentGasLimitForCheck, hParent, hFork, BaseFee.ELASTICITY_MULTIPLIER, Nat.mul_comm]
+
+/-- At any other block, the rule reads the parent's gas limit. -/
+theorem parentGasLimitForCheck_of_not_first_london
+    (h : ¬(parentFork < .london ∧ .london ≤ fork)) (parentGasLimit : Nat) :
+    parentGasLimitForCheck parentFork fork parentGasLimit = parentGasLimit := by
+  simp only [parentGasLimitForCheck, h, ↓reduceIte]
+
+/-- Once the parent is at London or later, the rule is the plain rule. -/
+theorem checkGasLimitAcross_of_london_le (h : .london ≤ parentFork)
+    (gasLimit parentGasLimit : Nat) :
+    checkGasLimitAcross parentFork fork gasLimit parentGasLimit =
+      checkGasLimit gasLimit parentGasLimit := by
+  rw [checkGasLimitAcross, parentGasLimitForCheck_of_not_first_london]
+  exact fun ⟨hlt, _⟩ => absurd h (Nat.not_le_of_lt hlt)
+
+/-- The first London block may double the gas limit of a parent of at least 2500. -/
+theorem checkGasLimitAcross_double (hParent : parentFork < .london) (hFork : .london ≤ fork)
+    {parentGasLimit : Nat} (h : 2500 ≤ parentGasLimit) :
+    checkGasLimitAcross parentFork fork (2 * parentGasLimit) parentGasLimit = true := by
+  rw [checkGasLimitAcross, parentGasLimitForCheck_of_first_london hParent hFork,
+    checkGasLimit_iff]
+  -- A 1024th of twice the limit is at least 4, so the doubled limit is strictly inside.
+  have : 4 ≤ 2 * parentGasLimit / 1024 := (Nat.le_div_iff_mul_le (by decide)).mpr (by omega)
+  omega
+
+/-- No block after a London parent may double a positive gas limit. -/
+theorem checkGasLimitAcross_double_of_london_le (h : .london ≤ parentFork)
+    {parentGasLimit : Nat} (hPos : 0 < parentGasLimit) :
+    checkGasLimitAcross parentFork fork (2 * parentGasLimit) parentGasLimit = false := by
+  rw [checkGasLimitAcross_of_london_le h]
+  -- A 1024th of the limit is below the limit, so twice the limit is too far above it.
+  have : parentGasLimit / 1024 < parentGasLimit := Nat.div_lt_self hPos (by decide)
+  cases hc : checkGasLimit (2 * parentGasLimit) parentGasLimit
+  · rfl
+  · have := ((checkGasLimit_iff _ _).mp hc).1
+    omega
 
 end EthLib.Execution.Fees.GasLimit
