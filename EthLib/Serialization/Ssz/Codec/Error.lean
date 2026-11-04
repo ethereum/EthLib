@@ -249,4 +249,86 @@ def Err.reason : Err → String
   | .capacityNegative => "CAPACITY_NEGATIVE"
   | .layoutNotBits => "LAYOUT_NOT_BITS"
 
+/--
+The code of a refusal, for the C exports: one number for each constructor, from 1.
+
+The codes follow the order of the constructors, and a new constructor takes the next number.
+-/
+def Err.code : Err → UInt32
+  | .typeMismatch => 1
+  | .overLimit .. => 2
+  | .scope .. => 3
+  | .scopeTooSmall .. => 4
+  | .scopeUndivided .. => 5
+  | .scopeWidthless => 6
+  | .firstOffset .. => 7
+  | .offsetUnordered => 8
+  | .offsetPastScope => 9
+  | .offsetUnaligned => 10
+  | .offsetBelowTable => 11
+  | .truncated => 12
+  | .notABit .. => 13
+  | .count .. => 14
+  | .paddingBits => 15
+  | .emptyEncoding => 16
+  | .noDelimiter => 17
+  | .trailingZeros => 18
+  | .noSelector => 19
+  | .unknownSelector .. => 20
+  | .badDeclaration => 21
+  | .notAPosition => 22
+  | .notEntitled => 23
+  | .undeclared => 24
+  | .capacityNegative => 25
+  | .layoutNotBits => 26
+  | .notAGindex .. => 27
+  | .rootHasNoBranch => 28
+  | .emptyRequest => 29
+  | .repeatedIndex => 30
+  | .nestedIndex .. => 31
+  | .branchLength .. => 32
+  | .leafCount .. => 33
+  | .proofLength .. => 34
+  | .proofIncomplete => 35
+  | .pathIntoMixin => 36
+  | .pathIntoPacked => 37
+  | .pathIntoGap => 38
+  | .pathPastSpine => 39
+  | .noParts => 40
+  | .noPartsMixin => 41
+  | .noMixin => 42
+  | .noChunkCount => 43
+  | .notSteppable => 44
+  | .noSuchField .. => 45
+  | .noSuchOption .. => 46
+  | .noSuchPosition .. => 47
+  | .merkleizeLimit .. => 48
+  | .zeroTreeWidth .. => 49
+  | .vectorEmpty => 50
+  | .layoutWidth => 51
+  | .layoutTrailingGap => 52
+  | .layoutTooWide .. => 53
+  | .layoutFieldCount .. => 54
+  | .unionEmpty => 55
+  | .unionSelectorRange .. => 56
+  | .unionIncompatible .. => 57
+  | .unionSelectorRepeated .. => 58
+  | .uintWidth .. => 59
+  | .offsetOverflow .. => 60
+  | .containerEmpty => 61
+  | .hexPrefix => 62
+  | .hexDigits => 63
+  | .hexLength .. => 64
+  | .bitfieldPadding => 65
+  | .bitfieldDelimiter => 66
+  | .bitfieldTrailingZeros => 67
+  | .uintRange .. => 68
+  | .documentOverLimit .. => 69
+  | .elementKind => 70
+  | .noDefault => 71
+  | .undeclaredField .. => 72
+  | .missingField .. => 73
+  | .structNotAnObject => 74
+  | .undeclaredSelector .. => 75
+
 end EthLib.Serialization.Ssz

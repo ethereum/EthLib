@@ -156,6 +156,7 @@ extern PyObject* AES_ERROR;
 extern PyObject* CONCAT_KDF_ERROR;
 extern PyObject* BLOCK_ERROR;
 extern PyObject* RLP_ERROR;
+extern PyObject* SSZ_ERROR;
 extern PyObject* SNAPPY_ERROR;
 extern PyObject* VARINT_ERROR;
 extern PyObject* DISCV5_ERROR;
@@ -303,6 +304,8 @@ PyObject* py_evm_extend_memory_expand_by                  (PyObject* self, PyObj
 PyObject* py_rlp_encode                                   (PyObject* self, PyObject* args);
 PyObject* py_rlp_decode                                   (PyObject* self, PyObject* args);
 PyObject* py_rlp_decode_as                                (PyObject* self, PyObject* args);
+PyObject* py_ssz_serialize                                (PyObject* self, PyObject* args);
+PyObject* py_ssz_deserialize                              (PyObject* self, PyObject* args);
 PyObject* py_snappy_decompress                            (PyObject* self, PyObject* args);
 PyObject* py_snappy_compress_literal                      (PyObject* self, PyObject* args);
 PyObject* py_snappy_decode_frames                         (PyObject* self, PyObject* args);

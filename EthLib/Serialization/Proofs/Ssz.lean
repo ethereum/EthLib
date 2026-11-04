@@ -31,6 +31,7 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalBits
 public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalComposite
 public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalStruct
 public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalTable
+public import EthLib.Serialization.Proofs.Ssz.Codec.Error
 public import EthLib.Serialization.Proofs.Ssz.Codec.Canonicality
 public import EthLib.Serialization.Proofs.Ssz.Codec.DecodeFits
 public import EthLib.Serialization.Proofs.Ssz.Codec.Fits
@@ -106,7 +107,6 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Container
 public import EthLib.Serialization.Proofs.Ssz.Typed.Root
 public import EthLib.Serialization.Proofs.Ssz.Typed.Gindex
 public import EthLib.Serialization.Proofs.Ssz.Typed.Since
-public import EthLib.Serialization.Proofs.Ssz.Typed.KnownAnswers
 
 /-!
 # `EthLib.Serialization.Proofs.Ssz`

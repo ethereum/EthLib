@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Exports.Rlp
+public import EthLib.Serialization.Exports.Ssz
 
 /-!
 # `EthLib.Serialization.Exports`
