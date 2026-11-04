@@ -33,18 +33,19 @@ lean_lib «EthLib» where
   requiresModuleSystem := true
   precompileModules := true
 
-/-- Proofs about the specification. A separate library (rooted at
-`EthLib/Proofs.lean`) so the executable spec never depends
-on it. `precompileModules` is off: theorems produce no code, and this
-keeps proof object files out of the Python extension link.
+/-- Proofs about the specification.
 
-Lake loads the shared library of all of `EthLib` into each proof that imports the specification.
-`platformIndependent` keeps that library out of the proof's trace.
-Without it, a change to any specification module rebuilds every proof.
-The `.olean` files of the imported modules stay in the trace, so a proof still rebuilds when they change.
+The executable specification never depends on this library.
 
-Each domain's proof tree is also a root, so that its modules belong to
-this library rather than to `EthLib`. -/
+Theorems produce no code, so `precompileModules` is off.
+
+Proof object files then stay out of the Python extension link.
+
+`platformIndependent` keeps the specification's shared library out of each proof's trace.
+
+A proof then rebuilds only when a module it imports changes.
+
+Each domain's proof tree is a root, so its modules belong here and not to `EthLib`. -/
 @[default_target]
 lean_lib «Proofs» where
   requiresModuleSystem := true
