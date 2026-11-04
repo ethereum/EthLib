@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Trie.Binding
 public import EthLib.Execution.Proofs.Trie.HexPrefix
 public import EthLib.Execution.Proofs.Trie.Order
 public import EthLib.Execution.Proofs.Trie.Proof
