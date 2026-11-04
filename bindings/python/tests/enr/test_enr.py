@@ -64,12 +64,12 @@ def test_changed_signature_fails() -> None:
 
 
 def test_unsorted_keys_rejected() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="the keys are not sorted"):
         enr.seq(_record([PAIRS[1], PAIRS[0], PAIRS[2], PAIRS[3]]))
 
 
 def test_repeated_key_rejected() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="a key is repeated"):
         enr.seq(_record([PAIRS[0], PAIRS[1], PAIRS[1], PAIRS[2], PAIRS[3]]))
 
 
@@ -88,6 +88,13 @@ def test_too_large_rejected() -> None:
 def test_text_without_prefix_rejected() -> None:
     with pytest.raises(ValueError):
         enr.from_text(TEXT[len("enr:"):])
+
+
+def test_nonzero_pad_bits_rejected() -> None:
+    # The last character goes from 8 to 9, which sets a bit past the end of the bytes.
+    assert TEXT.endswith("8")
+    with pytest.raises(ValueError, match="base64"):
+        enr.from_text(TEXT[:-1] + "9")
 
 
 def test_padded_text_rejected() -> None:
