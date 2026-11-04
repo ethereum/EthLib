@@ -53,10 +53,15 @@ def validate_size(fork: str, block: bytes) -> None:
 
 
 def validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -> None:
-    """Check a header against its parent, from Paris on, and raise BlockError if it fails."""
+    """Check a header against its parent at any fork, and raise BlockError if it fails."""
     _native.block_validate_header(parent_fork, fork, parent, header)
+
+
+def check_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -> None:
+    """Check a header against its parent, every check but the proof of work."""
+    _native.block_check_header(parent_fork, fork, parent, header)
 
 
 __all__ = ["header_hash", "reencode", "transactions_root", "withdrawals_root",
            "deposit_requests", "requests_hash",
-           "receipt_reencode", "receipt_logs_bloom", "validate_size", "validate_header", "BlockError"]
+           "receipt_reencode", "receipt_logs_bloom", "validate_size", "validate_header", "check_header", "BlockError"]

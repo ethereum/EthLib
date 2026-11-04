@@ -1,6 +1,7 @@
 """Header checks against consecutive fixture blocks and hand-made mutations."""
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -121,10 +122,62 @@ def test_size_limit_starts_at_fusaka() -> None:
     blocks.validate_size("pectra", rlp.encode(fields))
 
 
-def test_header_before_paris_is_rejected() -> None:
+def test_paris_header_fails_the_difficulty_before_paris() -> None:
     # A Paris header has the 16 fields of London, so it decodes at London too.
+    # Its difficulty is 0, below the minimum of 131,072 that London asks.
     paris = next(p for p in PAIRS if p[0]["network"] == "Paris")
     parent, header, _ = _headers(paris)
     with pytest.raises(blocks.BlockError) as error:
         blocks.validate_header("london", "london", parent, header)
-    assert error.value.code == 0
+    assert error.value.code == 215
+
+
+def _chain_pairs():
+    """Each pair of consecutive fixture blocks of one test, at every fork."""
+    by_test = {}
+    for case in CASES:
+        by_test.setdefault((case["source"], case["test"]), []).append(case)
+    for cases in by_test.values():
+        order = {"genesis": -1}
+        cases = sorted(cases, key=lambda c: order.get(c["block"], c["block"]))
+        for parent, child in zip(cases, cases[1:]):
+            if parent["block"] == "genesis" or child["block"] == parent["block"] + 1:
+                yield parent, child
+
+
+CHAIN_PAIRS = list(_chain_pairs())
+
+
+@pytest.mark.parametrize("pair", CHAIN_PAIRS,
+                         ids=[f"{p[0]['network']}-{p[0]['test'][-40:]}-{p[1]['block']}"
+                              for p in CHAIN_PAIRS])
+def test_fixture_chain_passes_the_header_checks(pair) -> None:
+    # The fixtures run without proof of work, so every check but the seal applies.
+    parent, header, fork = _headers(pair)
+    blocks.check_header(fork, fork, parent, header)
+
+
+def test_chain_pairs_cover_every_fork() -> None:
+    assert {p[0]["network"] for p in CHAIN_PAIRS} == set(FORK_OF_NETWORK)
+
+
+def test_wrong_difficulty_before_paris_is_rejected() -> None:
+    # A Frontier block with its difficulty raised by one fails the difficulty rule.
+    pair = next(p for p in CHAIN_PAIRS if p[0]["network"] == "Frontier")
+    parent, header, fork = _headers(pair)
+    difficulty = int.from_bytes(rlp.decode(header)[7], "big") + 1
+    with pytest.raises(blocks.BlockError) as error:
+        blocks.check_header(fork, fork, parent, _mutated(header, 7, difficulty.to_bytes(8, "big")
+                                                         .lstrip(b"\x00")))
+    assert error.value.code == 215
+
+
+@pytest.mark.skipif(os.environ.get("ETHLIB_SLOW_VECTORS") != "1",
+                    reason="the Ethash cache of epoch 0, run weekly")
+def test_unsealed_header_fails_the_proof_of_work() -> None:
+    # The fixtures carry no proof of work, so the full check rejects them before Paris.
+    pair = next(p for p in CHAIN_PAIRS if p[0]["network"] == "Frontier")
+    parent, header, fork = _headers(pair)
+    with pytest.raises(blocks.BlockError) as error:
+        blocks.validate_header(fork, fork, parent, header)
+    assert error.value.code == 216

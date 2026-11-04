@@ -1,6 +1,8 @@
 module
 
 public import EthLib.Execution.Blocks.Block
+public import EthLib.Execution.Blocks.Difficulty
+public import EthLib.Execution.Blocks.ProofOfWork
 public import EthLib.Execution.Fees.BaseFee
 public import EthLib.Execution.Fees.BlobBaseFee
 public import EthLib.Execution.Fees.GasLimit
@@ -8,15 +10,19 @@ public import EthLib.Execution.Fees.GasLimit
 /-!
 # `Blocks.Validate`
 
-The checks that a header must pass against the header of its parent, from Paris on.
-
-Before Paris, a header also needs a valid proof of work, which is not here.
+The checks that a header must pass against the header of its parent, at every fork.
 
 Each check reads only the two headers.
 
 The checks that need the body or the state of the parent are elsewhere.
 
 Section 4.4.4 of the Yellow Paper, Shanghai version, states the checks: [`Paper.tex`][yp].
+
+Before Paris, the difficulty and the proof of work also count.
+
+Section 4.3.4 of the Berlin version states them: [`Paper.tex`][yp-berlin].
+
+[EIP-1559][eip-1559] adds the base fee at London, and sets it at the first London block.
 
 [EIP-3675][eip-3675] fixes the difficulty, the nonce and the ommers hash from Paris.
 
@@ -25,6 +31,8 @@ Section 4.4.4 of the Yellow Paper, Shanghai version, states the checks: [`Paper.
 [EIP-7934][eip-7934] bounds the RLP size of a block from Fusaka.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
+[yp-berlin]: https://github.com/ethereum/yellowpaper/blob/beacfbd29ccc04dfd790f2282d4c4b1c0afc9b5a/Paper.tex
+[eip-1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
 [eip-3675]: https://eips.ethereum.org/EIPS/eip-3675#block-structure
 [eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#header-extension
 [eip-7934]: https://eips.ethereum.org/EIPS/eip-7934#specification
@@ -41,6 +49,10 @@ open EthLib.Cryptography.Hash.Keccak (keccak256)
 
 /-- The hash of the empty list of ommers: the Keccak-256 hash of `c0`, the RLP form of `[]`. -/
 def EMPTY_OMMER_HASH : Hash32 := keccak256 ⟨#[0xc0]⟩
+
+/-- The base fee of the first London block, whose parent has none: `INITIAL_BASE_FEE` of EIP-1559.
+-/
+def INITIAL_BASE_FEE : Nat := 1000000000
 
 /-- The most bytes of the extra data of a header. -/
 def MAX_EXTRA_DATA_BYTES : Nat := 32
@@ -78,6 +90,12 @@ inductive BlockError where
   | encoding (error : RlpError)
   /-- The RLP form of the block has more than the most bytes. -/
   | blockTooLarge (size : Nat)
+  /-- Before Paris, the difficulty is not the one that the parent gives. -/
+  | wrongDifficulty (expected actual : Nat)
+  /-- Before Paris, the proof of work fails. -/
+  | proofOfWork (error : PowError)
+  /-- From Paris on, the parent is before London, so it has no base fee. -/
+  | parentBeforeLondon
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -102,6 +120,9 @@ def BlockError.code : BlockError → UInt32
   | .wrongParentHash => 212
   | .encoding _ => 213
   | .blockTooLarge _ => 214
+  | .wrongDifficulty _ _ => 215
+  | .proofOfWork _ => 216
+  | .parentBeforeLondon => 217
 
 /-- The first error whose condition fails, in order, or success when every condition holds. -/
 def firstFailure : List (Bool × BlockError) → Except BlockError Unit
@@ -127,43 +148,80 @@ def expectedBaseFee {parentFork : Fork} (hLondon : .london ≤ parentFork)
     (parent : Header parentFork) : Nat :=
   BaseFee.calculateBaseFeePerGas parent.gasLimit parent.gasUsed (parent.baseFeePerGas hLondon)
 
-/-- The checks of a header at `fork` against its parent, in order, each with its error. -/
-def headerChecks {parentFork fork : Fork} (hLondon : .london ≤ parentFork)
-    (hFork : parentFork ≤ fork) (parent : Header parentFork) (header : Header fork) :
-    List (Bool × BlockError) :=
+/-- The base fee that a parent gives to a header at London or later.
+
+The parent of the first London block has no base fee, and the header takes the initial base fee.
+-/
+def expectedBaseFeeAcross {parentFork : Fork} (parent : Header parentFork) : Nat :=
+  if hLondon : .london ≤ parentFork then expectedBaseFee hLondon parent else INITIAL_BASE_FEE
+
+/-- The difficulty that a parent gives to a header at `fork`, before Paris.
+
+A parent has ommers when its ommers hash is not the hash of the empty list. -/
+def expectedDifficulty {parentFork fork : Fork} (parent : Header parentFork)
+    (header : Header fork) : Nat :=
+  blockDifficulty fork header.number header.timestamp.toNat parent.timestamp.toNat
+    parent.difficulty (parent.ommersHash != EMPTY_OMMER_HASH)
+
+/-- The checks of a header at `fork` against its parent, in order, each with its error.
+
+From Paris on, the parent must be from London on, as the base fee and the blob gas need.
+
+Before Paris, the difficulty follows its rule; from Paris on, the proof-of-work fields are fixed.
+-/
+def headerChecks {parentFork fork : Fork} (_hFork : parentFork ≤ fork)
+    (parent : Header parentFork) (header : Header fork) : List (Bool × BlockError) :=
+  let parentCheck :=
+    if .paris ≤ fork then [(decide (.london ≤ parentFork), BlockError.parentBeforeLondon)] else []
   let excessCheck :=
     if h : .dencun ≤ fork then
-      let expected := expectedExcessBlobGas hLondon h parent
-      let actual := (header.excessBlobGas h).toNat
-      [(decide (actual = expected), BlockError.wrongExcessBlobGas expected actual)]
+      if hLondon : .london ≤ parentFork then
+        let expected := expectedExcessBlobGas hLondon h parent
+        let actual := (header.excessBlobGas h).toNat
+        [(decide (actual = expected), BlockError.wrongExcessBlobGas expected actual)]
+      else []
     else []
-  let baseFee := header.baseFeePerGas (Nat.le_trans hLondon hFork)
+  let baseFeeCheck :=
+    if h : .london ≤ fork then
+      let baseFee := header.baseFeePerGas h
+      [(decide (baseFee = expectedBaseFeeAcross parent),
+        BlockError.wrongBaseFee (expectedBaseFeeAcross parent) baseFee)]
+    else []
+  let workChecks :=
+    if fork < .paris then
+      [(decide (header.difficulty = expectedDifficulty parent header),
+        BlockError.wrongDifficulty (expectedDifficulty parent header) header.difficulty)]
+    else
+      [(decide (header.difficulty = 0), BlockError.nonzeroDifficulty),
+        (decide (header.nonce = Vector.replicate 8 0), .nonzeroNonce),
+        (decide (header.ommersHash = EMPTY_OMMER_HASH), .wrongOmmersHash)]
   let parentHashCheck :=
     match parent.hash with
     | .ok parentHash => (decide (header.parentHash = parentHash), BlockError.wrongParentHash)
     | .error e => (false, BlockError.encoding e)
-  [(decide (1 ≤ header.number), .genesisNumber)] ++ excessCheck ++
+  parentCheck ++ [(decide (1 ≤ header.number), .genesisNumber)] ++ excessCheck ++
     [(decide (header.gasUsed ≤ header.gasLimit), .gasUsedAboveLimit),
-      (GasLimit.checkGasLimit header.gasLimit parent.gasLimit, .invalidGasLimit),
-      (decide (baseFee = expectedBaseFee hLondon parent),
-        .wrongBaseFee (expectedBaseFee hLondon parent) baseFee),
-      (decide (parent.timestamp.toNat < header.timestamp.toNat), .timestampNotAfterParent),
+      (GasLimit.checkGasLimitAcross parentFork fork header.gasLimit parent.gasLimit,
+        .invalidGasLimit)] ++ baseFeeCheck ++
+    [(decide (parent.timestamp.toNat < header.timestamp.toNat), .timestampNotAfterParent),
       (decide (header.number = parent.number + 1), .wrongNumber),
-      (decide (header.extraData.size ≤ MAX_EXTRA_DATA_BYTES), .extraDataTooLong),
-      (decide (header.difficulty = 0), .nonzeroDifficulty),
-      (decide (header.nonce = Vector.replicate 8 0), .nonzeroNonce),
-      (decide (header.ommersHash = EMPTY_OMMER_HASH), .wrongOmmersHash),
-      parentHashCheck]
+      (decide (header.extraData.size ≤ MAX_EXTRA_DATA_BYTES), .extraDataTooLong)] ++
+    workChecks ++ [parentHashCheck]
 
-/-- Check a header at `fork` against its parent at `parentFork`, from Paris on.
+/-- Check a header against its parent, every check but the proof of work.
 
-The parent can be at an earlier fork, when the header is the first of a fork.
+The parent can be at an earlier fork, when the header is the first of a fork. -/
+def checkHeader {parentFork fork : Fork} (hFork : parentFork ≤ fork)
+    (parent : Header parentFork) (header : Header fork) : Except BlockError Unit :=
+  firstFailure (headerChecks hFork parent header)
 
-The parent of the first Paris block is a proof-of-work block, from London on. -/
-def validateHeader {parentFork fork : Fork} (hLondon : .london ≤ parentFork)
-    (hFork : parentFork ≤ fork) (_hParis : .paris ≤ fork) (parent : Header parentFork)
-    (header : Header fork) : Except BlockError Unit :=
-  firstFailure (headerChecks hLondon hFork parent header)
+/-- Check a header at `fork` against its parent at `parentFork`, at every fork.
+
+Before Paris, the proof of work is checked last, after every other check passes. -/
+def validateHeader {parentFork fork : Fork} (hFork : parentFork ≤ fork)
+    (parent : Header parentFork) (header : Header fork) : Except BlockError Unit := do
+  checkHeader hFork parent header
+  if fork < .paris then (checkProofOfWork header).mapError .proofOfWork
 
 /-- Check the RLP size of a block: from Fusaka, at most the most bytes. -/
 def validateBlockSize {fork : Fork} {Tx : Type} [Codec Tx] (block : Block fork Tx) :

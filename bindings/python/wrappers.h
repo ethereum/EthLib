@@ -363,6 +363,7 @@ PyObject* py_rlpx_respond                                 (PyObject* self, PyObj
 PyObject* py_rlpx_recipient_secrets                       (PyObject* self, PyObject* args);
 PyObject* py_rlpx_finish                                  (PyObject* self, PyObject* args);
 PyObject* py_block_validate_header                        (PyObject* self, PyObject* args);
+PyObject* py_block_check_header                           (PyObject* self, PyObject* args);
 
 PyObject* py_precompile_run                               (PyObject* self, PyObject* args);
 PyObject* py_precompile_price                             (PyObject* self, PyObject* args);
