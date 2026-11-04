@@ -275,6 +275,24 @@ theorem findSecondPreimage_valid [DecidableEq α] (leaves : Nat → Id α) :
       refine ⟨hvalid, k + 1, by simpa using hk, by omega, ?_⟩
       rw [hj, div_two_div_pow]
 
+/-- The honest climb from `(level, j)` runs into no second preimage. -/
+theorem findSecondPreimage_honest [DecidableEq α] (leaves : Nat → Id α) :
+    ∀ (n level j : Nat), findSecondPreimage hash leaves level j (node hash leaves level j).run
+      (siblings hash leaves level j n).run.toList = none := by
+  intro n
+  induction n with
+  | zero => intro level j; simp [siblings, findSecondPreimage]
+  | succ n ih =>
+    intro level j
+    rw [siblings_succ_toList]
+    simp only [findSecondPreimage]
+    -- On each level the climb hashes the honest children, so the first condition fails.
+    rw [ordered_sibling (fun i => (node hash leaves level i).run) j]
+    simp only [ne_eq, not_true_eq_false, false_and, ↓reduceIte]
+    -- One level up, the climb holds the honest parent.
+    rw [← node_succ_run]
+    exact ih (level + 1) (j / 2)
+
 /-- Binding against an honest tree: a climb from `(level, j)` over `n` siblings that reaches the honest ancestor is honest.
 
 Otherwise `findSecondPreimage` finds a second preimage, valid by `findSecondPreimage_valid`. -/

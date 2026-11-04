@@ -110,6 +110,7 @@ The second is `climb_binding_node`, about a climb that reaches an honest node bu
 Then `findSecondPreimage` returns a second preimage of an honest ancestor.
 
 Both searches are explicit algorithms, proved to return valid answers.
+Each can return nothing: on one climb compared with itself (`findCollision_self`), and on the honest climb (`findSecondPreimage_honest`).
 So the statements say something, even though every compressing hash has collisions.
 No theorem bounds the probability of finding a collision or a second preimage.
 
