@@ -60,6 +60,17 @@ Proofs live in their own Lake library, so the library code builds and links with
 The C exports live in a third library, `Exports`, so a Lean project that imports the specification gets no `@[export]` symbol.
 A new domain with exports adds its export root to the `Exports` library.
 
+These three libraries belong to the core package `EthLib`, which must need nothing beyond the Lean toolchain.
+The properties that need Mathlib go in a second package, `EthLibMathlib`, in `mathlib/`.
+The models go in a third package, `EthLibModels`, in `models/`.
+Each package has its own module root, so a module in either package keeps the layout above, with the package root in place of `EthLib`.
+For example, a property in `EthLibMathlib` goes in `mathlib/EthLibMathlib/<Domain>/Proofs/<Module>/`.
+[`ARCHITECTURE.md`](ARCHITECTURE.md#packages) gives the reasons for this split.
+
+The repository does not have the two packages yet.
+Until the split, put a property or a model that needs Mathlib, Batteries or VCVio in `EthLib/<Domain>/Proofs/<Module>/`.
+The split then moves it to its package.
+
 ## Lean
 
 ### Library code
