@@ -20,6 +20,8 @@ It recomputes a secret, or a subtree, when it opens an index.
 
 Verification never sees the seed, so this derivation is not consensus-critical.
 
+So a verifier cannot tell whether the secrets came from a seed, or were chosen by the holder.
+
 It is specified so that any implementation rebuilds the same tree from the same seed.
 
 Keccak-256 acts as a pseudorandom function of the index.

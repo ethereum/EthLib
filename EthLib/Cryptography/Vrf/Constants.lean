@@ -21,7 +21,9 @@ Uniqueness must hold against the validator that built the tree.
 
 That validator only needs a collision, which costs about `2^(4n)` hashes for `n` bytes.
 
-So 32 bytes give `2^128`, where 16 bytes would give only `2^64`. -/
+So 32 bytes give `2^128`, where 16 bytes would give only `2^64`.
+
+These costs are classical: a quantum search for collisions needs about `2^(8n/3)` queries. -/
 def VRF_HASH_SIZE : Nat := 32
 
 /-- The size in bytes of an opening: the secret, then one sibling per level.

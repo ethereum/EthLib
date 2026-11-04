@@ -1,7 +1,7 @@
 # VRF tree
 
 A verifiable random function (VRF) gives one random-looking output per input, together with a proof that anyone can check.
-What makes it useful is that the holder of the key cannot choose the outputs: each one is fixed before it is revealed.
+What makes it useful is that each output is fixed before it is revealed, and the holder cannot change it afterwards.
 
 The VRF tree is a hash-based VRF over `2^32` indices.
 Its holder commits to one 32-byte secret per index, by placing the secrets as the leaves of a Merkle tree of height 32 and publishing the root.
@@ -41,6 +41,22 @@ The holder recomputes a secret, or a whole subtree, when it opens an index.
 
 Verification never reads the seed, so this derivation is not consensus-critical.
 It is specified anyway, so that every implementation rebuilds the same tree from the same seed.
+
+## The holder chooses the outputs
+
+Verification cannot tell a tree built from a seed from a tree whose secrets the holder chose.
+So a dishonest holder can pick every secret before it publishes the root, and keep only secrets whose output it likes.
+The output hashes the secret alone, not the index, so one good secret serves every leaf.
+
+For example, about 256 random secrets give one whose output starts with a zero byte.
+The holder places that secret at all `2^32` leaves.
+Each level of the tree then has one node value, so the tree costs 33 Keccak-256 calls.
+Every index opens to that same output, and every opening verifies.
+With about `2^40` tries instead, every output starts with five zero bytes.
+
+So the outputs are fixed once the root is published, but the holder chose them.
+A protocol that compares outputs with a threshold, as a lottery does, must not use them alone.
+It must first mix each output with randomness that becomes known only after the root is registered.
 
 ## What is proved
 
@@ -89,6 +105,9 @@ The secrets and outputs of one seed at the same two indices were computed outsid
 
 Pseudorandomness is not proved: that an output stays unpredictable until it is opened.
 It rests on Keccak-256 being a pseudorandom function keyed by the seed, and on its preimage resistance, and both need a model of the hash.
+It could hold only for a tree built from a secret seed, because the holder of any other tree chose its outputs.
 
 No bound on the cost of a Keccak-256 collision is proved either.
 Uniqueness turns a second output into a collision, but how hard a collision is to find depends on the hash.
+The generic cost of `2^128` hashes for a collision holds against a classical adversary.
+A quantum search for collisions needs about `2^85` queries.
