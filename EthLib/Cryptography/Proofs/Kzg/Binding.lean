@@ -67,6 +67,24 @@ private theorem sdh_scalar (c y y' w w' t z : ZMod Fr.modulus) (hne : y ≠ y')
   field_simp
   linear_combination h' - h
 
+/-- Two openings of one commitment at `z` whose scalars satisfy the opening identity.
+
+Let the proofs represent `w` and `w'`, and let the values `y` and `y'` differ.
+
+Then the search returns a strong Diffie–Hellman solution for `τ`. -/
+theorem findSdh_valid_of_identity {τ c w w' z y y' : Fr} {P P' : G1}
+    (hP : G1.Represents P w) (hP' : G1.Represents P' w') (hne : y ≠ y')
+    (hid : c - y = w * (τ - z)) (hid' : c - y' = w' * (τ - z)) :
+    ∃ sol, findSdh z y y' P P' = some sol ∧ IsSdhSolution τ sol := by
+  obtain ⟨htz, hinv⟩ := sdh_scalar c y y' w w' τ z hne hid hid'
+  refine ⟨(-z, G1.mul (G1.add P (G1.neg P')) (y' - y).inverse), by simp [findSdh, hne], htz, ?_⟩
+  have hscalar : (y' - y).inverse * (w + -w') = (τ + -z)⁻¹ := by
+    rw [Bls.Fr.inverse_eq_inv]
+    exact hinv
+  show G1.Represents (G1.mul (G1.add P (G1.neg P')) (y' - y).inverse) (τ + -z)⁻¹
+  rw [← hscalar]
+  exact (hP.add hP'.neg).mul (y' - y).inverse
+
 /-- **Evaluation binding, with a named solution.**
 
 Assume the pairing law and a well-formed setup of the secret `τ`.
@@ -83,17 +101,9 @@ theorem findSdh_valid (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
     y = y' ∨ ∃ sol, findSdh z y y' P P' = some sol ∧ IsSdhSolution τ sol := by
   by_cases hne : y = y'
   · exact Or.inl hne
-  · right
-    have hid := (verifyKzgProofImpl_iff laws hs hC hP z y).mp h
-    have hid' := (verifyKzgProofImpl_iff laws hs hC hP' z y').mp h'
-    obtain ⟨htz, hinv⟩ := sdh_scalar c y y' w w' τ z hne hid hid'
-    refine ⟨(-z, G1.mul (G1.add P (G1.neg P')) (y' - y).inverse), by simp [findSdh, hne], htz, ?_⟩
-    have hscalar : (y' - y).inverse * (w + -w') = (τ + -z)⁻¹ := by
-      rw [Bls.Fr.inverse_eq_inv]
-      exact hinv
-    show G1.Represents (G1.mul (G1.add P (G1.neg P')) (y' - y).inverse) (τ + -z)⁻¹
-    rw [← hscalar]
-    exact (hP.add hP'.neg).mul (y' - y).inverse
+  · exact Or.inr (findSdh_valid_of_identity hP hP' hne
+      ((verifyKzgProofImpl_iff laws hs hC hP z y).mp h)
+      ((verifyKzgProofImpl_iff laws hs hC hP' z y').mp h'))
 
 /-- A point that passes KZG validation represents some scalar. -/
 theorem represents_of_validateKzgG1Point {b : Bytes48} {P : G1}
