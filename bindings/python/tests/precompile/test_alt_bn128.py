@@ -33,7 +33,9 @@ def mul1(k: int):
     return bn128.multiply(bn128.G1, k)
 
 
-@pytest.mark.parametrize("a, b", [(1, 1), (1, 2), (5, 7), (3, bn128.curve_order - 3), (0, 9), (0, 0)])
+@pytest.mark.parametrize("a, b", [
+    (1, 1), (1, 2), (5, 7), (1, bn128.curve_order - 1), (3, bn128.curve_order - 3), (0, 9), (0, 0),
+])
 def test_ecadd(a: int, b: int) -> None:
     expected = g1(bn128.add(mul1(a), mul1(b)))
     assert run(0x06, g1(mul1(a)) + g1(mul1(b)), 150) == expected
@@ -42,6 +44,8 @@ def test_ecadd(a: int, b: int) -> None:
 def test_ecadd_short_input_is_zero_padded() -> None:
     # Missing bytes read as zero, so an empty input adds two points at infinity.
     assert run(0x06, b"", 150) == bytes(64)
+    # A lone G is added to the point at infinity.
+    assert run(0x06, g1(bn128.G1), 150) == g1(bn128.G1)
 
 
 def test_ecadd_errors() -> None:
@@ -53,10 +57,24 @@ def test_ecadd_errors() -> None:
         run(0x06, b"", 149)
 
 
-@pytest.mark.parametrize("k", [0, 1, 2, 3, 2**128 + 1, bn128.curve_order - 1, bn128.curve_order, 2**256 - 1])
-def test_ecmul(k: int) -> None:
-    point = mul1(7)
+@pytest.mark.parametrize("m", [1, 7])
+@pytest.mark.parametrize("k", [
+    0, 1, 2, 3, 2**128 + 1, bn128.curve_order - 1, bn128.curve_order, bn128.curve_order + 1, 2**256 - 1,
+])
+def test_ecmul(m: int, k: int) -> None:
+    point = mul1(m)
     assert run(0x07, g1(point) + word(k), 6000) == g1(bn128.multiply(point, k % bn128.curve_order))
+
+
+def test_ecmul_short_input_is_zero_padded() -> None:
+    # The missing scalar reads as 0, and 0 G is the point at infinity.
+    assert run(0x07, g1(bn128.G1), 6000) == bytes(64)
+
+
+def test_ecmul_not_on_curve() -> None:
+    # (1, 3) is not on the curve, since 9 != 1 + 3, whatever the scalar.
+    with pytest.raises(ValueError, match="notOnCurve"):
+        run(0x07, word(1) + word(3) + word(2), 6000)
 
 
 def test_ecmul_out_of_gas() -> None:
@@ -102,4 +120,15 @@ def test_ecpairing_g2_not_on_curve() -> None:
     data = bytearray(pairing_input([(bn128.G1, bn128.G2)]))
     data[-1] ^= 1
     with pytest.raises(ValueError, match="notOnCurve"):
+        run(0x08, bytes(data), pairing_price(1))
+    # (1, 1, 1, 1) is not on the twist.
+    with pytest.raises(ValueError, match="notOnCurve"):
+        run(0x08, g1(bn128.G1) + word(1) * 4, pairing_price(1))
+
+
+def test_ecpairing_g2_field_element() -> None:
+    # A G2 coordinate equal to p is not a field element.
+    data = bytearray(pairing_input([(bn128.G1, bn128.G2)]))
+    data[64:96] = word(bn128.field_modulus)
+    with pytest.raises(ValueError, match="invalidFieldElement"):
         run(0x08, bytes(data), pairing_price(1))
