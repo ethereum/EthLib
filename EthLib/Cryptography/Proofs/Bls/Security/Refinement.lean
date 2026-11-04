@@ -197,7 +197,10 @@ theorem sign_eq (sk : SecretKey) (msg : ByteArray) :
       G2.toPoint (G2.mul (hashRep msg) sk.val) = (Scalar.ofFr sk.val • hashPoint msg : G2Sub) := by
   obtain ⟨hQ, hv, -⟩ := hashRep_spec msg
   refine ⟨?_, G2.toPoint_mul hv sk.val⟩
-  simp [Signatures.sign, coreSign, hQ, bind, Except.bind, pure, Except.pure]
+  -- Rewrite the hash first, so the kernel never evaluates the hash to `G2`.
+  unfold Signatures.sign coreSign
+  rw [hQ]
+  rfl
 
 /-- Under the pairing law, EthLib accepts exactly the signatures that decode to `sk • H(msg)`. -/
 theorem verify_iff (laws : PairingLaws) (sk : SecretKey) (msg sig : ByteArray) :

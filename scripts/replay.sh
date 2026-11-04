@@ -6,9 +6,10 @@
 # It finds a declaration that a metaprogram added without the kernel check.
 # It uses the same kernel as Lean, so it does not check the kernel itself.
 #
-# leanchecker replays all modules of a prefix in parallel, and each replay loads all imports
-# of its module. So the script replays one layer at a time, and `LEAN_NUM_THREADS` caps the
-# number of parallel replays.
+# leanchecker replays every module whose name starts with its argument, in one process.
+# Each replay loads all imports of its module, Mathlib included, and the process keeps that
+# memory until it exits: one call for a whole layer reached 15 GB on the 16 GB runner.
+# So the script replays each module in its own process, `REPLAY_JOBS` at a time.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -31,12 +32,42 @@ if ! grep -q "$expected" "$fixture_dir/fixture.log"; then
 fi
 echo "leanchecker rejects the unchecked fixture theorem"
 
-# The library roots only import, so the layers under them hold every declaration.
-for dir in EthLib/*/; do
-  prefix="EthLib.$(basename "$dir")"
-  echo "::group::$prefix"
-  start=$SECONDS
-  lake env leanchecker "$prefix"
-  echo "$prefix: replayed in $((SECONDS - start)) s"
-  echo "::endgroup::"
-done
+# A module that only imports declares nothing, so it is not replayed.
+# A module with other content and submodules is replayed with its submodules.
+jobs="${REPLAY_JOBS:-2}"
+modules="$(mktemp)"
+targets="$(mktemp)"
+trap 'rm -rf "$fixture_dir" "$modules" "$targets"' EXIT
+find EthLib -name '*.lean' | sed 's/\.lean$//; s#/#.#g' | LC_ALL=C sort > "$modules"
+while read -r m; do
+  if grep -q "^${m//./\\.}\\." "$modules"; then
+    file="$(echo "$m" | tr . /).lean"
+    # Comments, imports, sections and commands such as `#print` declare nothing.
+    # One awk reads the whole file, so no pipe can end early.
+    if awk '
+        { line = $0 }
+        inner { k = index(line, "-/"); if (!k) next; line = substr(line, k + 2); inner = 0 }
+        { while ((k = index(line, "/-")) > 0) {
+            rest = substr(line, k + 2); e = index(rest, "-/")
+            if (e) line = substr(line, 1, k - 1) substr(rest, e + 2)
+            else { line = substr(line, 1, k - 1); inner = 1 } } }
+        { sub(/--.*/, "", line) }
+        line ~ /^[ \t]*$/ { next }
+        line ~ /^[ \t]*(module|end|(@\[expose\] )?(public )?section)([ \t]|$)/ { next }
+        line ~ /^[ \t]*(public )?import / { next }
+        line ~ /^[ \t]*(namespace|open) / { next }
+        line ~ /^[ \t]*#[a-z_]+/ { next }
+        { found = 1; exit }
+        END { exit !found }' "$file"; then
+      echo "$m" >> "$targets"
+    fi
+  else
+    echo "$m" >> "$targets"
+  fi
+done < "$modules"
+echo "replaying $(wc -l < "$targets") of $(wc -l < "$modules") modules, $jobs at a time"
+start=$SECONDS
+# `xargs` runs every module and fails if one fails.
+# leanchecker names the module that fails.
+LEAN_NUM_THREADS=1 lake env xargs -P "$jobs" -n 1 leanchecker < "$targets"
+echo "replayed in $((SECONDS - start)) s"
