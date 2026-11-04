@@ -24,22 +24,11 @@ public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result forkOfName)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
 open EthLib.Serialization.Rlp.Exports (runRlp)
-
-/-- The fork with the given name, or an error.
-
-The cases of the fork type are read through their positions, so no name is written twice. -/
-def forkOfName (name : ByteArray) : Result Fork := do
-  let some name := String.fromUTF8? name | throw (0, "fork name is not UTF-8")
-  -- Positions past the last case map to the last case, so 256 positions cover them all.
-  let forks := (List.range 256).map Fork.ofNat
-  match forks.find? (fun f => ((reprStr f).splitOn ".").getLast? == some name) with
-  | some f => return f
-  | none => throw (0, s!"unknown fork {name}")
 
 /-- Run a fallible decoding or encoding, with its error as a code and a message. -/
 def runRlp {α : Type} (what : String) (act : Except RlpError α) : Result α :=

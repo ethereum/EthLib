@@ -24,7 +24,7 @@ public section
 
 namespace EthLib.Consensus.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result forkOfName)
 
 open Lean Base
 
@@ -67,23 +67,11 @@ def configOf : String → Result Config
   | "minimal" => return .minimal
   | name => throw (0, s!"no configuration is named {name}")
 
-/-- The fork of a name, for the forks from the first fork of the beacon chain. -/
-def forkOf : String → Result Fork
-  | "phase0" => return .phase0
-  | "berlin" => return .berlin
-  | "london" => return .london
-  | "altair" => return .altair
-  | "arrowGlacier" => return .arrowGlacier
-  | "grayGlacier" => return .grayGlacier
-  | "bellatrix" => return .bellatrix
-  | "paris" => return .paris
-  | "shapella" => return .shapella
-  | "dencun" => return .dencun
-  | "pectra" => return .pectra
-  | "fusaka" => return .fusaka
-  | "bpo1" => return .bpo1
-  | "bpo2" => return .bpo2
-  | name => throw (0, s!"no fork of the beacon chain up to Fulu is named {name}")
+/-- The fork of a name, for the forks from Phase 0 to BPO2, the last fork up to Fulu. -/
+def forkOf (name : ByteArray) : Result Fork := do
+  let fork ← forkOfName name
+  if .phase0 ≤ fork ∧ fork ≤ .bpo2 then return fork
+  else throw (0, s!"{fork.name} is not a fork of the beacon chain up to Fulu")
 
 /-- The JSON text of a value, as UTF-8 bytes. -/
 def jsonBytes (value : Json) : ByteArray := value.compress.toUTF8
@@ -102,6 +90,6 @@ def configExport (name : ByteArray) : Result ByteArray := do
 @[export eth_consensus_parameters]
 def parametersExport (name fork : ByteArray) : Result ByteArray := do
   let preset ← presetOf (← nameOf name)
-  return jsonBytes (toJson (parameters preset (← forkOf (← nameOf fork))))
+  return jsonBytes (toJson (parameters preset (← forkOf fork)))
 
 end EthLib.Consensus.Exports

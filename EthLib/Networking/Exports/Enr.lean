@@ -3,7 +3,6 @@ module
 public import EthLib.Base.Exports
 public import EthLib.Networking.Enr.Consensus
 public import EthLib.Networking.Enr.V4
-public import EthLib.Networking.Exports.Fork
 
 /-!
 # `Exports.Enr`
@@ -23,9 +22,8 @@ public section
 
 namespace EthLib.Networking.Enr.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result forkOfName)
 
-open EthLib.Networking.Exports (forkAt)
 open EthLib.Serialization.Ssz (SszType)
 
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
@@ -108,7 +106,7 @@ They come back as the 16 SSZ bytes of `eth2`, then `attnets`, `syncnets`, `cgc` 
 Each of the four is the byte 0 when absent, or the byte 1 and its SSZ bytes. -/
 @[export eth_enr_consensus_entries]
 def consensusEntriesExport (fork record : ByteArray) : Result ByteArray := do
-  let fork ← forkAt fork
+  let fork ← forkOfName fork
   let r ← runEnr (decode record)
   let e ← (readEntries fork r).mapError fun err => (err.code, entryMessage err)
   return (← sszBytes e.eth2) ++ (← optionBytes e.attnets) ++ (← optionBytes e.syncnets) ++

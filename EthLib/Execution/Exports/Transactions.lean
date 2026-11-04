@@ -22,11 +22,10 @@ public section
 
 namespace EthLib.Execution.Transactions.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result forkOfName)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
-open EthLib.Execution.Blocks.Exports (forkOfName)
 
 /-- A value printed on one line, however long its numbers are. -/
 def oneLine {α : Type} [Repr α] (a : α) : String :=
