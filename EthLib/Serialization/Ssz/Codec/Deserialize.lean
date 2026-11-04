@@ -61,9 +61,7 @@ def highestBit (byte : UInt8) : Nat :=
 /--
 Width of each body, from the table and the budget it closes over.
 
-    offsets       12       17       20
-    boundaries    12       17       20       27
-    spans         12..17   17..20   20..27
+For example, offsets 12, 17 and 20 in 27 bytes give the spans `12..17`, `17..20` and `20..27`.
 
 The whole table is settled before any body is read.
 
@@ -211,8 +209,7 @@ Bits recovered from a delimited encoding.
 
 The highest set bit closes the sequence, and everything below it is data.
 
-    byte 0 : 0 0 0 0 [1] 1 0 1     the closing bit at position 3
-    bits   : 1, 0, 1               three bits of data
+For example, the byte `0000_1101` has its closing bit at position 3, and it holds the bits 1, 0, 1.
 -/
 def unpackDelimited (limit : Option Nat) (data : Bytes) : Except Err (Array Bool) := do
   -- Even an empty value carries its closing bit, so no encoding is empty.
@@ -284,19 +281,18 @@ def deserializeEach (element : Desc) : List Bytes → Except Err (List Value)
 termination_by slices => (sizeOf element, slices.length + 1)
 
 /--
-Each field of a struct, decoded in the order the specification reads them.
+Each field of a struct, decoded in the order the specification reads them:
 
-    budget        the input against the width of the fixed part
-    fixed part    each fixed field, read in place
-    table         the offsets, as a whole
-    bodies        each variable field, in declaration order
+1. The budget: the input against the width of the fixed part.
+2. The fixed part: each fixed field, read in place.
+3. The table: the offsets, as a whole.
+4. The bodies: each variable field, in declaration order.
 
 An input breaking several rules is refused for the first one met in that order.
 -/
 def deserializeStruct (fields : List Desc) (data : Bytes) : Except Err (List Value) := do
   let (slots, leading) ← structSlots fields data
-  -- Fixed fields are checked before any offset is trusted.
-  -- Without offsets, declaration order is already reading order, so nothing is checked ahead.
+  -- Fixed fields are checked before any offset is trusted, if there are offsets at all.
   if !(bodyStarts slots).isEmpty then checkInline fields slots
   let slices ← structBodies data slots leading
   -- A fixed field checked above decodes the same way here, so only a body can refuse now.

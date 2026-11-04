@@ -167,6 +167,7 @@ inductive Err where
 The name the specification records for a refusal.
 
 The reference tests carry this name for every encoding they expect to be refused.
+
 A refusal is then checked for its reason, and not merely for happening.
 -/
 def Err.reason : Err → String

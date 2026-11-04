@@ -123,13 +123,11 @@ A right-leaning spine of binary subtrees, closed by a zero node.
 
 Successive levels hold 1, 4, 16, then 64 nodes, so the capacity grows with the data.
 
-    root
-     +-- chunks 0 ..< 1, as a binary subtree of width 1
-     `-- everything past them
-          +-- chunks 1 ..< 5, as a binary subtree of width 4
-          `-- everything past them
-               +-- chunks 5 ..< 21, as a binary subtree of width 16
-               `-- the zero node that closes the spine
+The root holds chunk 0 in a subtree of width 1 on its left, and everything past it on its right.
+
+That right child holds chunks 1 to 4 in a subtree of width 4, and so on.
+
+A zero node closes the spine.
 
 A node keeps its index as later ones are appended.
 

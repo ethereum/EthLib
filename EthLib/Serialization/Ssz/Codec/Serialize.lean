@@ -88,8 +88,11 @@ Parts laid out as a struct or a sequence encodes them.
 
 Fixed parts sit in place, variable ones leave an offset behind and follow after.
 
-    fields    u64      list     u8
-    encoding  [8 bytes][offset ][1 byte][list body]
+For the fields `u64`, a list and `u8`:
+
+```text
+    [ u64: 8 bytes | offset of the list: 4 bytes | u8: 1 byte | list body ]
+```
 -/
 def assemble (inline : List Bool) (parts : List Bytes) : Except Err Bytes := do
   let slots := inline.zip parts

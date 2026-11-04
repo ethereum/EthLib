@@ -45,12 +45,11 @@ def Leaves.count : Leaves → Nat
 /--
 The subtree one value merkleizes into, before any of it is hashed.
 
-    shape                 leaves               tree                        mixed in
-    container             fields               bounded by the field count  -
-    list                  elements or packing  bounded by the limit        count
-    progressiveList       elements or packing  progressive spine           count
-    progressiveContainer  layout positions     progressive spine           layout
-    compatibleUnion       the option it holds  bounded by one              selector
+- A container: its fields, in a tree bounded by the field count.
+- A list: its elements or their packing, bounded by the limit, with the count mixed in.
+- A progressive list: its elements or their packing on a progressive spine, with the count.
+- A progressive container: its layout positions on a progressive spine, with the layout.
+- A compatible union: the option it holds, in a tree bounded by one, with the selector.
 
 Stating the tree rather than building it lets a root and a proof share one rule.
 -/

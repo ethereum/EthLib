@@ -9,7 +9,9 @@ public import EthLib.Serialization.Ssz.Codec.Error
 
 namespace EthLib.Serialization.Ssz
 
-/-- A layout fits one 256-bit hash operand, as required by [EIP-7495](https://eips.ethereum.org/EIPS/eip-7495). -/
+/-- A layout fits one 256-bit hash operand.
+
+Source: [EIP-7495](https://eips.ethereum.org/EIPS/eip-7495). -/
 abbrev maxActiveFields : Nat := 256
 
 /-- The byte-array shape a type spells, either spelling, or none for any other shape. -/
@@ -169,9 +171,11 @@ Whether a declaration names a real type, and what it broke if it does not.
 Most rules here are ones the specification lists under illegal types.
 
 The others come from the EIPs for progressive containers and unions.
+
 A few more keep one field name or selector from meaning two things.
 
 The proofs of the codec and the trees assume these rules.
+
 For example, a shape encoding to nothing at every value would let two values share one encoding.
 -/
 def Desc.wellFormed : Desc → Except Err Unit
