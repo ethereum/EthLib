@@ -33,11 +33,16 @@ def keccakF1600 (state : ByteArray) : IO ByteArray := do
   if state.size ≠ 8 * LANES then
     throw (IO.userError s!"Keccak-f[1600]: the state must be 200 bytes, got {state.size}")
   let bytes := state.data.toList
-  -- Each lane reads its own 8 bytes.
-  let lanes : State := Vector.ofFn fun i => Internal.laneOfBytes ((bytes.drop (8 * i.val)).take 8)
+  -- Lane `i` reads its own 8 bytes.
+  let lane (i : Nat) : UInt64 := Internal.laneAt (bytes.drop (8 * i))
+  let A : State := ⟨lane 0, lane 1, lane 2, lane 3, lane 4, lane 5, lane 6, lane 7, lane 8,
+    lane 9, lane 10, lane 11, lane 12, lane 13, lane 14, lane 15, lane 16, lane 17, lane 18,
+    lane 19, lane 20, lane 21, lane 22, lane 23, lane 24⟩
+  let B := keccakF A
   -- Each output lane writes 8 bytes, the least significant first.
-  let out := (keccakF lanes).toList.flatMap fun lane =>
-    (List.range 8).map fun j => (lane >>> UInt64.ofNat (8 * j)).toUInt8
+  let out := [B.a0, B.a1, B.a2, B.a3, B.a4, B.a5, B.a6, B.a7, B.a8, B.a9, B.a10, B.a11, B.a12,
+    B.a13, B.a14, B.a15, B.a16, B.a17, B.a18, B.a19, B.a20, B.a21, B.a22, B.a23,
+    B.a24].flatMap Internal.bytesOfLane
   return ⟨out.toArray⟩
 
 end EthLib.Cryptography.Hash.Exports

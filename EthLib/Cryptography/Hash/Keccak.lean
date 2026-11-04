@@ -11,7 +11,11 @@ Keccak-256 is the sponge over that permutation with capacity 512 bits and Keccak
 
 It is Ethereum's hash, the function `KEC` of the Yellow Paper.
 
-It is written as a direct transcription of the standard, to be read against it.
+Each definition follows a section of the standard, to be read against it.
+
+The state is a record of 25 lanes, and each step mapping is written out lane by lane.
+
+So the compiled code keeps the lanes in machine words, and allocates at most one state per round.
 
 It is not intended to be constant-time.
 -/
@@ -24,18 +28,17 @@ namespace EthLib.Cryptography.Hash.Keccak
 
 FIPS 202 §3.1.2 views the 1600-bit state as a 5 x 5 array of lanes, each of `w = 64` bits.
 
-Lane `(x, y)` is stored at index `x + 5 * y`, so the 25 lanes run row by row:
-
-```text
-    index   0   1   2   3   4 |  5   6   7   8   9 | ... | 20  21  22  23  24
-    (x, y) 00  10  20  30  40 | 01  11  21  31  41 | ... | 04  14  24  34  44
-```
+Lane `(x, y)` has the index `x + 5 * y`, so the 25 lanes run row by row.
 
 Bit `z` of a lane is bit `z` of its 64-bit word.
 
-That is the standard's own order: bit `64 * (x + 5y) + z` of the state string is `A[x, y, z]` (§3.1.2).
+That is the standard's own order: bit `64 * (x + 5y) + z` of the state string is `A[x, y, z]`.
 
-So byte `k` of the state string is byte `k mod 8` of lane `k / 8`, least significant first (§3.1.3 and Appendix B.1).
+So byte `k` of the state string is byte `k mod 8` of lane `k / 8`, least significant first.
+
+FIPS 202 §3.1.3 and Appendix B.1 give that byte order.
+
+The state is a record with one field per lane, so each step mapping below names its lanes.
 -/
 
 /-- Lanes in the state: 1600 bits of 64-bit lanes. -/
@@ -46,18 +49,17 @@ def LANES : Nat := 25
 FIPS 202 §3.4 sets `n_r = 12 + 2l`, with `l = 6` because `w = 2^6`. -/
 def ROUNDS : Nat := 24
 
-/-- The Keccak-f[1600] state: 25 lanes of 64 bits, lane `(x, y)` at index `x + 5 * y`. -/
-abbrev State := Vector UInt64 LANES
+/-- The Keccak-f[1600] state: 25 lanes of 64 bits.
+
+The field with the number `x + 5y` holds lane `(x, y)`. -/
+structure State where
+  (a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23 a24 :
+    UInt64)
+  deriving DecidableEq
 
 /-- The all-zero state, where every sponge starts (FIPS 202 §4, Algorithm 8, step 5). -/
-def State.zero : State := Vector.replicate LANES 0
-
-/-- Lane `(x, y)` of the state, the coordinates taken mod 5 as in FIPS 202 §3.1.4.
-
-So `x - 1` can be written `x + 4`, and `x + 1` needs no wrap of its own. -/
-@[inline] def lane (A : State) (x y : Nat) : UInt64 :=
-  -- Row `y mod 5` starts at index `5 * (y mod 5)`, and `x mod 5` counts along it.
-  A[x % 5 + 5 * (y % 5)]'(by simp only [LANES]; omega)
+def State.zero : State :=
+  ⟨0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0⟩
 
 /-- Rotate a lane towards its high bits by `n` positions, `n < 64`.
 
@@ -179,60 +181,87 @@ def RHO : Vector UInt64 LANES := #v[
 
 /-! ## The step mappings
 
-The five step mappings of FIPS 202 §3.2, each on whole lanes.
+The five step mappings of FIPS 202 §3.2, each written out for the 25 lanes.
 
-Lane coordinates are taken mod 5, as the standard does (§3.1.4). -/
+`A[x, y]` is lane `(x, y)` of the input, and the coordinates are taken mod 5 (§3.1.4).
+
+`Proofs/Hash/Keccak.lean` proves that each mapping is the formula of the standard. -/
 
 /-- Theta, FIPS 202 §3.2.1, Algorithm 1.
 
-Each bit is XORed with the parities of two nearby columns.
+Each lane is XORed with the parities of two nearby columns.
 
-```text
-    C[x]       = A[x, 0] ^ A[x, 1] ^ A[x, 2] ^ A[x, 3] ^ A[x, 4]
-    D[x]       = C[x - 1] ^ rot(C[x + 1], 1)
-    A'[x, y]   = A[x, y] ^ D[x]
-```
--/
-def theta (A : State) : State :=
-  -- Step 1: the parity of each column, one lane per x.
-  let C : Vector UInt64 5 := Vector.ofFn fun x =>
-    lane A x 0 ^^^ lane A x 1 ^^^ lane A x 2 ^^^ lane A x 3 ^^^ lane A x 4
-  -- Step 2: x - 1 is x + 4 mod 5, and the bit shift z - 1 is a rotation by 1.
-  let D : Vector UInt64 5 := Vector.ofFn fun x =>
-    C[(x.val + 4) % 5]'(by omega) ^^^ rotl (C[(x.val + 1) % 5]'(by omega)) 1
-  -- Step 3: lane x + 5y lies in column x, the index mod 5.
-  Vector.ofFn fun i => A[i] ^^^ D[i.val % 5]'(by omega)
+The parity of column `x` is `C[x] = A[x, 0] ^ A[x, 1] ^ A[x, 2] ^ A[x, 3] ^ A[x, 4]`.
+
+Lane `(x, y)` becomes `A[x, y] ^ D[x]`, with `D[x] = C[x - 1] ^ rot(C[x + 1], 1)`. -/
+@[inline] def theta (A : State) : State :=
+  -- Step 1: the parity of each column.
+  let c0 := A.a0 ^^^ A.a5 ^^^ A.a10 ^^^ A.a15 ^^^ A.a20
+  let c1 := A.a1 ^^^ A.a6 ^^^ A.a11 ^^^ A.a16 ^^^ A.a21
+  let c2 := A.a2 ^^^ A.a7 ^^^ A.a12 ^^^ A.a17 ^^^ A.a22
+  let c3 := A.a3 ^^^ A.a8 ^^^ A.a13 ^^^ A.a18 ^^^ A.a23
+  let c4 := A.a4 ^^^ A.a9 ^^^ A.a14 ^^^ A.a19 ^^^ A.a24
+  -- Step 2: `x - 1` is `x + 4` mod 5, and the bit shift `z - 1` is a rotation by 1.
+  let d0 := c4 ^^^ rotl c1 1
+  let d1 := c0 ^^^ rotl c2 1
+  let d2 := c1 ^^^ rotl c3 1
+  let d3 := c2 ^^^ rotl c4 1
+  let d4 := c3 ^^^ rotl c0 1
+  -- Step 3: every lane of column `x` takes the same `D[x]`.
+  ⟨A.a0 ^^^ d0, A.a1 ^^^ d1, A.a2 ^^^ d2, A.a3 ^^^ d3, A.a4 ^^^ d4,
+   A.a5 ^^^ d0, A.a6 ^^^ d1, A.a7 ^^^ d2, A.a8 ^^^ d3, A.a9 ^^^ d4,
+   A.a10 ^^^ d0, A.a11 ^^^ d1, A.a12 ^^^ d2, A.a13 ^^^ d3, A.a14 ^^^ d4,
+   A.a15 ^^^ d0, A.a16 ^^^ d1, A.a17 ^^^ d2, A.a18 ^^^ d3, A.a19 ^^^ d4,
+   A.a20 ^^^ d0, A.a21 ^^^ d1, A.a22 ^^^ d2, A.a23 ^^^ d3, A.a24 ^^^ d4⟩
 
 /-- Rho, FIPS 202 §3.2.2, Algorithm 2.
 
-Each lane is rotated by its own offset. -/
-def rho (A : State) : State :=
-  Vector.ofFn fun i => rotl A[i] RHO[i]
+Each lane is rotated by its own offset from the table above. -/
+@[inline] def rho (A : State) : State :=
+  ⟨rotl A.a0 RHO[0], rotl A.a1 RHO[1], rotl A.a2 RHO[2], rotl A.a3 RHO[3], rotl A.a4 RHO[4],
+   rotl A.a5 RHO[5], rotl A.a6 RHO[6], rotl A.a7 RHO[7], rotl A.a8 RHO[8], rotl A.a9 RHO[9],
+   rotl A.a10 RHO[10], rotl A.a11 RHO[11], rotl A.a12 RHO[12], rotl A.a13 RHO[13],
+   rotl A.a14 RHO[14], rotl A.a15 RHO[15], rotl A.a16 RHO[16], rotl A.a17 RHO[17],
+   rotl A.a18 RHO[18], rotl A.a19 RHO[19], rotl A.a20 RHO[20], rotl A.a21 RHO[21],
+   rotl A.a22 RHO[22], rotl A.a23 RHO[23], rotl A.a24 RHO[24]⟩
 
 /-- Pi, FIPS 202 §3.2.3, Algorithm 3.
 
 The lanes are rearranged: `A'[x, y] = A[(x + 3y) mod 5, x]`. -/
-def pi (A : State) : State :=
-  -- The output lane at index i is lane (x, y) = (i mod 5, i / 5).
-  Vector.ofFn fun i => lane A (i.val % 5 + 3 * (i.val / 5)) (i.val % 5)
+@[inline] def pi (A : State) : State :=
+  -- Output row `y` takes, for each `x`, lane `x` of input column `(x + 3y) mod 5`.
+  ⟨A.a0, A.a6, A.a12, A.a18, A.a24,
+   A.a3, A.a9, A.a10, A.a16, A.a22,
+   A.a1, A.a7, A.a13, A.a19, A.a20,
+   A.a4, A.a5, A.a11, A.a17, A.a23,
+   A.a2, A.a8, A.a14, A.a15, A.a21⟩
 
 /-- Chi, FIPS 202 §3.2.4, Algorithm 4.
 
 The only nonlinear step: `A'[x, y] = A[x, y] ^ ((A[x + 1, y] ^ 1) & A[x + 2, y])`.
 
 XOR with an all-ones lane is the complement. -/
-def chi (A : State) : State :=
-  -- Lane (x, y) at index i combines with the next two lanes of its row.
-  Vector.ofFn fun i =>
-    let x := i.val % 5
-    let y := i.val / 5
-    A[i] ^^^ (~~~lane A (x + 1) y &&& lane A (x + 2) y)
+@[inline] def chi (A : State) : State :=
+  -- Each lane combines with the next two lanes of its row, which wraps around.
+  ⟨A.a0 ^^^ (~~~A.a1 &&& A.a2), A.a1 ^^^ (~~~A.a2 &&& A.a3), A.a2 ^^^ (~~~A.a3 &&& A.a4),
+   A.a3 ^^^ (~~~A.a4 &&& A.a0), A.a4 ^^^ (~~~A.a0 &&& A.a1),
+   A.a5 ^^^ (~~~A.a6 &&& A.a7), A.a6 ^^^ (~~~A.a7 &&& A.a8), A.a7 ^^^ (~~~A.a8 &&& A.a9),
+   A.a8 ^^^ (~~~A.a9 &&& A.a5), A.a9 ^^^ (~~~A.a5 &&& A.a6),
+   A.a10 ^^^ (~~~A.a11 &&& A.a12), A.a11 ^^^ (~~~A.a12 &&& A.a13),
+   A.a12 ^^^ (~~~A.a13 &&& A.a14), A.a13 ^^^ (~~~A.a14 &&& A.a10),
+   A.a14 ^^^ (~~~A.a10 &&& A.a11),
+   A.a15 ^^^ (~~~A.a16 &&& A.a17), A.a16 ^^^ (~~~A.a17 &&& A.a18),
+   A.a17 ^^^ (~~~A.a18 &&& A.a19), A.a18 ^^^ (~~~A.a19 &&& A.a15),
+   A.a19 ^^^ (~~~A.a15 &&& A.a16),
+   A.a20 ^^^ (~~~A.a21 &&& A.a22), A.a21 ^^^ (~~~A.a22 &&& A.a23),
+   A.a22 ^^^ (~~~A.a23 &&& A.a24), A.a23 ^^^ (~~~A.a24 &&& A.a20),
+   A.a24 ^^^ (~~~A.a20 &&& A.a21)⟩
 
 /-- Iota, FIPS 202 §3.2.5, Algorithm 6.
 
 The round constant is XORed into lane `(0, 0)`, the only lane it touches. -/
-def iota (ir : Fin ROUNDS) (A : State) : State :=
-  A.set 0 (A[0] ^^^ RC[ir]) (by decide)
+@[inline] def iota (ir : Fin ROUNDS) (A : State) : State :=
+  { A with a0 := A.a0 ^^^ RC[ir] }
 
 /-! ## The permutation -/
 
@@ -319,24 +348,46 @@ def chunks (k : Nat) : Nat → List UInt8 → List (List UInt8)
   | 0, _ => []
   | n + 1, bytes => bytes.take k :: chunks k n (bytes.drop k)
 
+/-- The lane that the first 8 bytes of a string spell, the first byte least significant.
+
+A shorter string reads as if zero bytes followed it, and bytes past the eighth are ignored. -/
+@[inline] def laneAt : List UInt8 → UInt64
+  | b0 :: b1 :: b2 :: b3 :: b4 :: b5 :: b6 :: b7 :: _ =>
+    b0.toUInt64 ||| b1.toUInt64 <<< 8 ||| b2.toUInt64 <<< 16 ||| b3.toUInt64 <<< 24 |||
+      b4.toUInt64 <<< 32 ||| b5.toUInt64 <<< 40 ||| b6.toUInt64 <<< 48 ||| b7.toUInt64 <<< 56
+  | bytes => laneOfBytes bytes
+
+/-- The 8 bytes of a lane, the least significant first. -/
+def bytesOfLane (v : UInt64) : List UInt8 :=
+  [v.toUInt8, (v >>> 8).toUInt8, (v >>> 16).toUInt8, (v >>> 24).toUInt8,
+    (v >>> 32).toUInt8, (v >>> 40).toUInt8, (v >>> 48).toUInt8, (v >>> 56).toUInt8]
+
 /-- XOR one 136-byte block into the rate part of the state.
 
 This is `S ^ (P_i || 0^c)` of FIPS 202 §4, Algorithm 8, step 6.
 
 The block's 17 lanes cover lanes 0 to 16, and the 8 capacity lanes are left alone. -/
 def absorbBlock (S : State) (block : List UInt8) : State :=
-  -- Lane `i` of the block is its bytes `8i` to `8i + 7`.
-  let lanes := (chunks 8 (RATE / 8) block).map laneOfBytes
-  -- Past lane 16 the block has no lane, and XOR with zero leaves the capacity alone.
-  Vector.ofFn fun i => S[i] ^^^ lanes.getD i.val 0
+  -- Lane `i` of the block starts at byte `8i`, and a missing lane is zero.
+  let b1 := block.drop 8; let b2 := b1.drop 8; let b3 := b2.drop 8; let b4 := b3.drop 8
+  let b5 := b4.drop 8; let b6 := b5.drop 8; let b7 := b6.drop 8; let b8 := b7.drop 8
+  let b9 := b8.drop 8; let b10 := b9.drop 8; let b11 := b10.drop 8; let b12 := b11.drop 8
+  let b13 := b12.drop 8; let b14 := b13.drop 8; let b15 := b14.drop 8; let b16 := b15.drop 8
+  { S with
+    a0 := S.a0 ^^^ laneAt block, a1 := S.a1 ^^^ laneAt b1, a2 := S.a2 ^^^ laneAt b2,
+    a3 := S.a3 ^^^ laneAt b3, a4 := S.a4 ^^^ laneAt b4, a5 := S.a5 ^^^ laneAt b5,
+    a6 := S.a6 ^^^ laneAt b6, a7 := S.a7 ^^^ laneAt b7, a8 := S.a8 ^^^ laneAt b8,
+    a9 := S.a9 ^^^ laneAt b9, a10 := S.a10 ^^^ laneAt b10, a11 := S.a11 ^^^ laneAt b11,
+    a12 := S.a12 ^^^ laneAt b12, a13 := S.a13 ^^^ laneAt b13, a14 := S.a14 ^^^ laneAt b14,
+    a15 := S.a15 ^^^ laneAt b15, a16 := S.a16 ^^^ laneAt b16 }
 
 /-- The first `d = 256` bits of the state: `Trunc_d(S)` of FIPS 202 §4, Algorithm 8, step 9.
 
-The digest fits in the first block of output, so no further permutation is needed. -/
+The digest fits in the first block of output, so no further permutation is needed.
+
+Its 32 bytes are the bytes of lanes 0 to 3, in order. -/
 def squeeze (S : State) : Vector UInt8 DIGEST_LEN :=
-  -- Byte k of the state string is byte k mod 8 of lane k / 8.
-  Vector.ofFn fun k =>
-    (S[k.val / 8]'(by simp only [LANES, DIGEST_LEN] at *; omega) >>> UInt64.ofNat (8 * (k.val % 8))).toUInt8
+  ⟨(bytesOfLane S.a0 ++ bytesOfLane S.a1 ++ bytesOfLane S.a2 ++ bytesOfLane S.a3).toArray, rfl⟩
 
 /-- Absorb blocks in order, one permutation each: FIPS 202 §4, Algorithm 8, step 6. -/
 def absorbBlocks (f : State → State) (S : State) (blocks : List (List UInt8)) : State :=
