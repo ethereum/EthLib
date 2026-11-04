@@ -7,8 +7,8 @@ A proof links a Lean definition to a theorem, and both are assumed to match some
 Each of those links is an assumption, and this document names them one by one.
 It follows the structure of s2n-bignum's [`SOUNDNESS.md`](https://github.com/awslabs/s2n-bignum/blob/main/SOUNDNESS.md), adapted to a specification library.
 
-This document describes the development tree that declares package version `0.2.0` in `pyproject.toml`.
-It does not describe the tag `v0.2.0`, which points to an earlier commit, without the declaration check or the exports library.
+This document describes the development tree that declares package version `0.3.0` in `pyproject.toml`.
+It does not describe the tags `v0.1.0` and `v0.2.0`, which point to earlier commits.
 
 The prose was reviewed by hand for that package version.
 CI fails when `pyproject.toml` declares another version, so each version bump forces a new review of the document and an update of the line above.
@@ -479,7 +479,7 @@ The Python bindings expose them as `hmac_sha256`, `hkdf_extract`, `hkdf` and `co
 
 Every AES function that takes a key handles secret data.
 Its S-box is a table, and the cipher reads it at indices that depend on the key.
-No binding exposes AES.
+The Python bindings expose the block cipher, CTR and GCM, as `encrypt_block`, `decrypt_block`, `ctr`, `gcm_encrypt` and `gcm_decrypt`.
 
 ### A4. Idealisations
 
