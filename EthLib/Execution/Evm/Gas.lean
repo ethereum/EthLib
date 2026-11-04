@@ -53,6 +53,16 @@ A price that an EIP adds or changes names that EIP:
 - [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702#parameters), authorizations
 - [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825#specification), the gas cap of a transaction
 - [EIP-7939](https://eips.ethereum.org/EIPS/eip-7939#specification), CLZ
+- [EIP-2780](https://eips.ethereum.org/EIPS/eip-2780#parameters), the parts of a transaction
+- [EIP-7976](https://eips.ethereum.org/EIPS/eip-7976#specification), the call data floor
+- [EIP-8037](https://eips.ethereum.org/EIPS/eip-8037#specification), authorizations, gas limit
+- [EIP-8038](https://eips.ethereum.org/EIPS/eip-8038#parameters), accounts and access lists
+
+The last four are in Last Call, so their prices may still change.
+
+This file holds their prices for accounts and transactions only.
+
+The Glamsterdam prices of storage writes, calls, creations and SELFDESTRUCT are not here yet.
 
 The precompiles keep their prices, and the blob prices are with the blob fees.
 
@@ -85,8 +95,6 @@ def HIGH : Nat := 10
 
 From EIP-2929. -/
 def WARM_ACCESS : Nat := 100
-/-- The price of the first access to an account in a transaction, from EIP-2929. -/
-def COLD_ACCOUNT_ACCESS : Nat := 2600
 /-- The price of the first access to a storage slot in a transaction, from EIP-2929. -/
 def COLD_STORAGE_ACCESS : Nat := 2100
 
@@ -128,14 +136,21 @@ def TX_BASE : Nat := 21000
 def TX_DATA_PER_ZERO : Nat := 4
 /-- The standard price per token of call data, from EIP-7623. -/
 def TX_DATA_TOKEN_STANDARD : Nat := 4
-/-- The floor price per token of call data, from EIP-7623. -/
-def TX_DATA_TOKEN_FLOOR : Nat := 10
-/-- The price per address of an access list, from EIP-2930. -/
-def TX_ACCESS_LIST_ADDRESS : Nat := 2400
-/-- The price per storage key of an access list, from EIP-2930. -/
-def TX_ACCESS_LIST_STORAGE_KEY : Nat := 1900
-/-- The largest gas of a transaction, `2^24`, from EIP-7825. -/
+/-- The largest gas of a transaction, `2^24`, from EIP-7825.
+
+From Glamsterdam it bounds the gas that the transaction itself costs, by EIP-8037. -/
 def TX_MAX_GAS_LIMIT : Nat := 16777216
+
+/-- The price of the sender of a transaction, from EIP-2780, at Glamsterdam. -/
+def TX_BASE_COST : Nat := 12000
+/-- The price of a transaction that sends value to another account, from EIP-2780. -/
+def TX_VALUE_COST : Nat := 6000
+/-- The price to access and write the account that a contract creation deploys, from EIP-8038. -/
+def CREATE_ACCESS : Nat := 12000
+/-- The price of each authorization of a transaction, from EIP-8037, at Glamsterdam. -/
+def EXECUTION_PER_AUTH_BASE_COST : Nat := 7816
+/-- The largest gas limit of a transaction, `2^32 - 1`, from EIP-8037. -/
+def TX_MAX_TOTAL_GAS_LIMIT : Nat := 4294967295
 
 /-- The price of ADD. -/
 def OPCODE_ADD : Nat := VERY_LOW
@@ -303,6 +318,14 @@ structure GasSchedule where
   TX_CREATE : Nat
   /-- The price per nonzero byte of call data. -/
   TX_DATA_PER_NON_ZERO : Nat
+  /-- The floor price per token of call data, from Pectra. -/
+  TX_DATA_TOKEN_FLOOR : Nat
+  /-- The price per address of an access list, from Berlin. -/
+  TX_ACCESS_LIST_ADDRESS : Nat
+  /-- The price per storage key of an access list, from Berlin. -/
+  TX_ACCESS_LIST_STORAGE_KEY : Nat
+  /-- The price of the first access to an account in a transaction, from Berlin. -/
+  COLD_ACCOUNT_ACCESS : Nat
   /-- The refund to clear a storage slot whose value is not zero. -/
   REFUND_STORAGE_CLEAR : Nat
   /-- The refund for each account that SELFDESTRUCT destroys. -/
@@ -323,16 +346,26 @@ def gasSchedule (fork : Fork) : GasSchedule where
   TX_CREATE := if fork ≥ .homestead then 32000 else 0
   -- EIP-2028 lowers the price from 68 to 16.
   TX_DATA_PER_NON_ZERO := if fork ≥ .istanbul then 16 else 68
+  -- EIP-7623 sets the price at 10, and EIP-7976 raises it to 16.
+  TX_DATA_TOKEN_FLOOR := if fork ≥ .glamsterdam then 16 else 10
+  -- EIP-2930 sets the price at 2400, and EIP-8038 raises it to 2900.
+  TX_ACCESS_LIST_ADDRESS := if fork ≥ .glamsterdam then 2900 else 2400
+  -- EIP-2930 sets the price at 1900, and EIP-8038 raises it to 2000.
+  TX_ACCESS_LIST_STORAGE_KEY := if fork ≥ .glamsterdam then 2000 else 1900
+  -- EIP-2929 sets the price at 2600, and EIP-8038 raises it to 3000.
+  COLD_ACCOUNT_ACCESS := if fork ≥ .glamsterdam then 3000 else 2600
   -- EIP-3529 lowers the refund from 15000, the value in EIP-2200, to 4800.
   REFUND_STORAGE_CLEAR := if fork ≥ .london then 4800 else 15000
   -- EIP-3529 removes the refund, which is 24000 in the Berlin version of the Yellow Paper.
   REFUND_SELF_DESTRUCT := if fork ≥ .london then 0 else 24000
 
-/-- The price of an access to an account, from EIP-2929.
+/-- The price of an access to an account at `fork`, from EIP-2929.
 
-The first access to an account in a transaction is cold, and a later one is warm. -/
-def accountAccessCost (cold : Bool) : Nat :=
-  if cold then COLD_ACCOUNT_ACCESS else WARM_ACCESS
+The first access to an account in a transaction is cold, and a later one is warm.
+
+EIP-8038 raises the cold price from 2600 to 3000 at Glamsterdam. -/
+def accountAccessCost (fork : Fork) (cold : Bool) : Nat :=
+  if cold then (gasSchedule fork).COLD_ACCOUNT_ACCESS else WARM_ACCESS
 
 /-- The price of SLOAD.
 
@@ -359,7 +392,7 @@ Before Berlin, it does not depend on the access. -/
 def balanceCost (fork : Fork) (cold : Bool) : Nat :=
   if fork ≥ .berlin then
     -- EIP-2929 replaces the price of 700 with the price of the access.
-    accountAccessCost cold
+    accountAccessCost fork cold
   else if fork ≥ .istanbul then
     -- EIP-1884 raises the price from 400 to 700.
     700
@@ -372,11 +405,16 @@ def balanceCost (fork : Fork) (cold : Bool) : Nat :=
 
 From Berlin, it is the price of a cold or a warm access to the account.
 
+From Glamsterdam, it adds the price of a warm access for the read of the code.
+
 Before Berlin, it does not depend on the access. -/
 def externalBaseCost (fork : Fork) (cold : Bool) : Nat :=
-  if fork ≥ .berlin then
+  if fork ≥ .glamsterdam then
+    -- EIP-8038 adds a warm access for the second read.
+    accountAccessCost fork cold + WARM_ACCESS
+  else if fork ≥ .berlin then
     -- EIP-2929 replaces the price of 700 with the price of the access.
-    accountAccessCost cold
+    accountAccessCost fork cold
   else if fork ≥ .tangerineWhistle then
     -- EIP-150 raises the price from 20 to 700.
     700
@@ -390,7 +428,7 @@ Before Berlin, it does not depend on the access. -/
 def extcodehashCost (fork : Fork) (cold : Bool) : Nat :=
   if fork ≥ .berlin then
     -- EIP-2929 replaces the price of 700 with the price of the access.
-    accountAccessCost cold
+    accountAccessCost fork cold
   else if fork ≥ .istanbul then
     -- EIP-1884 raises the price from 400 to 700.
     700
@@ -404,7 +442,7 @@ Before Berlin, it does not depend on the access. -/
 def callBaseCost (fork : Fork) (cold : Bool) : Nat :=
   if fork ≥ .berlin then
     -- EIP-2929 replaces the price of 700 with the price of the access.
-    accountAccessCost cold
+    accountAccessCost fork cold
   else if fork ≥ .tangerineWhistle then
     -- EIP-150 raises the price from 40 to 700.
     700

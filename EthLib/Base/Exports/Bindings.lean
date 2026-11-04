@@ -507,7 +507,7 @@ def bindings : List Binding := [
   ⟨"tx_recover_sender", `EthLib.Execution.Transactions.recoverSender,
     "(fork: str, tx: bytes) -> bytes",
     [`EthLib.Execution.Transactions.TransactionError], some "TransactionError"⟩,
-  ⟨"tx_intrinsic_gas", `EthLib.Execution.Transactions.intrinsicGas,
+  ⟨"tx_intrinsic_gas", `EthLib.Execution.Transactions.Exports.intrinsicGasExport,
     "(fork: str, tx: bytes) -> int",
     [`EthLib.Execution.Transactions.TransactionError], some "TransactionError"⟩,
   ⟨"tx_check", `EthLib.Execution.Transactions.Exports.checkExport,

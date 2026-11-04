@@ -165,14 +165,14 @@ theorem validateNetwork_eq_ok_iff (setup : TrustedSetup) (fork : Fork)
 
 /-! ## Error codes -/
 
-/-- A transaction error has a code of at most 15. -/
-theorem TransactionError.code_le (e : TransactionError) : e.code ≤ 15 := by
+/-- A transaction error has a code of at most 16. -/
+theorem TransactionError.code_le (e : TransactionError) : e.code ≤ 16 := by
   cases e <;> simp only [TransactionError.code] <;> decide
 
 /-- Two errors with the same code come from the same constructor. -/
 theorem NetworkError.code_injective (e₁ e₂ : NetworkError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- A transaction error has a code of at most 15, and the other codes start at 101.
+  -- A transaction error has a code of at most 16, and the other codes start at 101.
   cases e₁ <;> cases e₂ <;> simp only [NetworkError.code] at h <;>
     first
     | rfl

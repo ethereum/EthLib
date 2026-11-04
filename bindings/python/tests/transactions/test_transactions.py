@@ -27,6 +27,7 @@ FORK_OF_NETWORK = {
     "Cancun": "dencun",
     "Prague": "pectra",
     "Osaka": "fusaka",
+    "Amsterdam": "glamsterdam",
 }
 
 # The fixtures run on chain 1.
@@ -116,7 +117,7 @@ VECTORS = list(_vectors())
 
 
 def test_every_fork_is_covered():
-    """The copy holds vectors for each fork from Frontier to Osaka."""
+    """The copy holds vectors for each fork from Frontier to Amsterdam."""
     assert {vector.values[0] for vector in VECTORS} == set(FORK_OF_NETWORK)
 
 

@@ -145,19 +145,19 @@ theorem popTopics_pays {evm after : Evm fork Meter} {n : Nat} {topics : List Byt
 
 /-- The price of BALANCE is at least 1 at every fork. -/
 theorem one_le_balanceCost (fork : Fork) (cold : Bool) : 1 ≤ balanceCost fork cold := by
-  unfold balanceCost accountAccessCost
+  unfold balanceCost accountAccessCost gasSchedule
   repeat' split
   all_goals decide
 
 /-- The price of EXTCODESIZE is at least 1 at every fork. -/
 theorem one_le_externalBaseCost (fork : Fork) (cold : Bool) : 1 ≤ externalBaseCost fork cold := by
-  unfold externalBaseCost accountAccessCost
+  unfold externalBaseCost accountAccessCost gasSchedule
   repeat' split
   all_goals decide
 
 /-- The price of EXTCODEHASH is at least 1 at every fork. -/
 theorem one_le_extcodehashCost (fork : Fork) (cold : Bool) : 1 ≤ extcodehashCost fork cold := by
-  unfold extcodehashCost accountAccessCost
+  unfold extcodehashCost accountAccessCost gasSchedule
   repeat' split
   all_goals decide
 
