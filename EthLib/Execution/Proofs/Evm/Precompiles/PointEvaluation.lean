@@ -66,7 +66,7 @@ theorem pointEvaluation_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArra
       · intro h
         exact h.2.2.2.symm
 
-/-- `BLS_MODULUS`: the order of the BLS12-381 groups, as `crypto/kzg.py` of execution-specs writes it. -/
+/-- The order of the BLS12-381 groups, the value of `BLS_MODULUS` in EIP-4844. -/
 theorem Fr_modulus : Fr.modulus = 52435875175126190479447740508185965837690552500527637822603658699938581184513 :=
   rfl
 

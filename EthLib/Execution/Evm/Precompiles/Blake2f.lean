@@ -49,7 +49,7 @@ inductive Blake2fError where
   | invalidLength (length : Nat)
   /-- The flag byte is neither `0` nor `1`, EIP-152 Specification. -/
   | invalidFlag (flag : UInt8)
-  /-- The gas given was below the price, so `charge_gas` raises `OutOfGasError` and the call consumes all its gas. -/
+  /-- The gas given was below the price, so the call consumes all its gas. -/
   | outOfGas (cost gas : Nat)
   deriving Repr, DecidableEq
 
@@ -97,9 +97,7 @@ def compute (input : Input) (f : Bool) : Vector UInt8 OUTPUT_BYTES :=
 
 The length is checked before the flag.
 
-That order is the one of [`blake2f`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/bpo2/vm/precompiled_contracts/blake2f.py) in execution-specs.
-
-EIP-152 does not fix it. -/
+EIP-152 does not fix that order, so this module fixes it. -/
 def blake2f (data : ByteArray) : Except Blake2fError (Vector UInt8 OUTPUT_BYTES) :=
   if hsize : data.size = INPUT_BYTES then
     let input : Input := ⟨data.data, hsize⟩
@@ -111,7 +109,7 @@ def blake2f (data : ByteArray) : Except Blake2fError (Vector UInt8 OUTPUT_BYTES)
 
 /-! ## The price -/
 
-/-- The price of each round, `GasCosts.PRECOMPILE_BLAKE2F_PER_ROUND` in [`forks/istanbul/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/istanbul/vm/gas.py#L71). -/
+/-- The price of each round, from EIP-152. -/
 def GAS_PER_ROUND : Nat := 1
 
 /-- The gas a call is charged: one gas per round, for a 213-byte input.
@@ -123,7 +121,7 @@ def gasCost (data : ByteArray) : Nat :=
 
 /-- The call: the precompile, once the gas covers the price of the rounds.
 
-The gas is charged after the length check and before the flag check, as in [`blake2f`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/bogota/vm/precompiled_contracts/blake2f.py). -/
+The gas is charged after the length check and before the flag check. -/
 def call (data : ByteArray) (gas : Nat) : Except Blake2fError ByteArray :=
   if data.size ≠ INPUT_BYTES then .error (.invalidLength data.size)
   else if gas < gasCost data then .error (.outOfGas (gasCost data) gas)

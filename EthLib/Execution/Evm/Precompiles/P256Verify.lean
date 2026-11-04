@@ -14,11 +14,11 @@ gas:     6900
 output:  1 as a 32-byte word for a valid signature, and no bytes otherwise
 ```
 
-Source: [`forks/osaka/vm/precompiled_contracts/p256verify.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/osaka/vm/precompiled_contracts/p256verify.py#L31-L90) of execution-specs at `2c0c8e7`, function `p256verify`.
+Source: EIP-7951, at <https://eips.ethereum.org/EIPS/eip-7951>.
 
-It checks the signature with a cryptography library, so the check follows the verification algorithm of [EIP-7951](https://eips.ethereum.org/EIPS/eip-7951), which is SEC 1 v2 §4.1.4.
+The check follows the verification algorithm of EIP-7951, which is SEC 1 v2 §4.1.4.
 
-Every later fork there computes the same result with the same price, up to Bogota.
+Every later fork computes the same result with the same price.
 
 The call fails only when it runs out of gas.
 
@@ -37,7 +37,7 @@ open EthLib.Cryptography.Secp256r1
 /-- The size of the call data: the hash, the signature and the public key, 32 bytes each. -/
 def INPUT_BYTES : Nat := 160
 
-/-- The price of every call, `GasCosts.PRECOMPILE_P256VERIFY` in [`forks/osaka/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/osaka/vm/gas.py#L74). -/
+/-- The price of every call, from EIP-7951, Gas Schedule. -/
 def GAS_P256VERIFY : Nat := 6900
 
 /-- Why a P256VERIFY call fails. -/

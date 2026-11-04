@@ -25,13 +25,15 @@ G_2 point:    [ x.c1: 32 | x.c0: 32 | y.c1: 32 | y.c0: 32 ]
 
 The call data reads as if padded with zeros, so a short input is padded and bytes past the input are ignored.
 
-Source: [`forks/istanbul/vm/precompiled_contracts/alt_bn128.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/istanbul/vm/precompiled_contracts/alt_bn128.py#L39-L234) of execution-specs at `2c0c8e7`.
+Sources: EIP-196 for addition and multiplication, and EIP-197 for the pairing check.
+
+EIP-1108 sets the prices: <https://eips.ethereum.org/EIPS/eip-1108>.
 
 Byzantium introduced the precompiles, and Istanbul lowered their prices with EIP-1108.
 
-Every later fork there computes the same results with the same prices, up to Bogota.
+Every later fork computes the same results with the same prices.
 
-An invalid point makes the source raise `OutOfGasError`, so the call fails and consumes all its gas.
+An invalid point makes the call fail, and the call consumes all its gas.
 -/
 
 @[expose] public section
@@ -42,10 +44,10 @@ open EthLib.Base (bytesToNat natToBytes)
 open EthLib.Execution.Evm (bufferRead)
 open EthLib.Cryptography.AltBn128
 
-/-- The price of ECADD, `GasCosts.PRECOMPILE_ECADD` in [`forks/istanbul/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/istanbul/vm/gas.py#L72). -/
+/-- The price of ECADD, from EIP-1108. -/
 def GAS_ECADD : Nat := 150
 
-/-- The price of ECMUL, `GasCosts.PRECOMPILE_ECMUL` in [`forks/istanbul/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/istanbul/vm/gas.py#L73). -/
+/-- The price of ECMUL, from EIP-1108. -/
 def GAS_ECMUL : Nat := 6000
 
 /-- Why an alt_bn128 call fails.
@@ -101,10 +103,10 @@ def ecmul (data : ByteArray) (gas : Nat) : Except AltBn128Error ByteArray := do
   -- A 32-byte scalar is below `2^256`, so 256 bits cover it.
   return ⟨(g1ToBytes (Point.mulBits 256 n p0)).toArray⟩
 
-/-- The price of every pairing check, `GasCosts.PRECOMPILE_ECPAIRING_BASE` in [`forks/istanbul/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/istanbul/vm/gas.py#L74). -/
+/-- The price of every pairing check, from EIP-1108. -/
 def GAS_ECPAIRING_BASE : Nat := 45000
 
-/-- The price of each pair, `GasCosts.PRECOMPILE_ECPAIRING_PER_POINT` in [`forks/istanbul/vm/gas.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/istanbul/vm/gas.py#L75). -/
+/-- The price of each pair, from EIP-1108. -/
 def GAS_ECPAIRING_PER_POINT : Nat := 34000
 
 /-- The price of a pairing check on `size` bytes: one pair per whole 192 bytes. -/

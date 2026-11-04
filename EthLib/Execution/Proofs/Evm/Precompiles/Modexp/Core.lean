@@ -54,7 +54,8 @@ theorem compute_size (data : ByteArray) (l : Lengths) : (compute data l).size = 
 
 EIP-198: "returns an output `(BASE**EXPONENT) % MODULUS`".
 The case of a zero modulus is not in EIP-198.
-It is the `modulus == 0` branch of `modexp` in the execution-specs module. -/
+
+Appendix E of the Yellow Paper takes `x mod 0` to be zero. -/
 theorem compute_eq_pow_mod (data : ByteArray) (l : Lengths) :
     outputNat (compute data l)
       = if readNat data l.modulusStart l.modulus = 0 then 0
