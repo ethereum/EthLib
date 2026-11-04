@@ -1,9 +1,7 @@
 module
 
 /-!
-# `Merkle.Tree`
-
-Perfect binary Merkle trees.
+# Perfect binary Merkle trees
 
 A tree of height `h` commits to `2^h` leaves with a single node, its root.
 
