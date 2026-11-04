@@ -7,9 +7,10 @@ public import EthLib.Base.Proofs.U256
 # Proofs: `Evm.Instructions.Bitwise`
 
 - BYTE reads one base-256 digit of the word.
-- SHL, SHR and SAR agree with the shifts of `BitVec`, for every shift up to 2^256 - 1.
+- SHL, SHR and SAR agree with the bit vector shifts, for every shift up to 2^256 - 1.
 
-The known answers at the end are the test cases of [EIP-145](https://eips.ethereum.org/EIPS/eip-145#test-cases).
+The known answers at the end are the test cases of EIP-145:
+<https://eips.ethereum.org/EIPS/eip-145#test-cases>.
 -/
 
 @[expose] public section
@@ -25,21 +26,23 @@ theorem toNat_getByte (byteIndex word : U256) (h : byteIndex.toNat < 32) :
     BitVec.toNat_ushiftRight, Nat.shiftRight_eq_div_pow]
   exact Nat.and_two_pow_sub_one_eq_mod _ 8
 
-/-- SHL is `BitVec.shiftLeft`, which also gives 0 from 256 bits on. -/
+/-- SHL is the bit vector shift left, which also gives 0 from 256 bits on. -/
 theorem bitwiseShl_eq (shift value : U256) : bitwiseShl shift value = value <<< shift.toNat := by
   unfold bitwiseShl
   split
   · rfl
   · exact (BitVec.shiftLeft_eq_zero (by omega)).symm
 
-/-- SHR is `BitVec.ushiftRight`, which also gives 0 from 256 bits on. -/
+/-- SHR is the unsigned bit vector shift right, which also gives 0 from 256 bits on. -/
 theorem bitwiseShr_eq (shift value : U256) : bitwiseShr shift value = value >>> shift.toNat := by
   unfold bitwiseShr
   split
   · rfl
   · exact (BitVec.ushiftRight_eq_zero (by omega)).symm
 
-/-- SAR is `BitVec.sshiftRight`, which also fills every bit with the sign from 256 bits on. -/
+/-- SAR is the signed bit vector shift right.
+
+It also fills every bit with the sign from 256 bits on. -/
 theorem bitwiseSar_eq (shift value : U256) : bitwiseSar shift value = value.sshiftRight shift.toNat := by
   apply BitVec.eq_of_toInt_eq
   rw [BitVec.toInt_sshiftRight]

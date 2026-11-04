@@ -7,9 +7,9 @@ public import EthLib.Execution.Proofs.Evm.PowMod
 /-!
 # Proofs: `Evm.Instructions.Arithmetic`
 
-- Each division and remainder agrees with the `BitVec` operation of Lean, apart from the divisor 0.
+- Each division and remainder agrees with the bit vector operation, apart from the divisor 0.
 - ADDMOD, MULMOD and EXP return the exact value, reduced once.
-- SIGNEXTEND is `BitVec.signExtend` of the low bytes.
+- SIGNEXTEND is the sign extension of the low bytes, as a bit vector.
 
 The known answers at the end pin the edge cases of each instruction.
 -/
@@ -20,7 +20,7 @@ namespace EthLib.Execution.Evm.Instructions
 
 open EthLib.Base
 
-/-- Truncated integer division is the sign of the product times the quotient of the absolute values. -/
+/-- Truncated division is the sign of the product times the quotient of the absolute values. -/
 private theorem tdiv_eq_sign_mul (x y : Int) : x.tdiv y = (x * y).sign * ((x.natAbs / y.natAbs : Nat) : Int) := by
   have h := Int.sign_mul_natAbs (x.tdiv y)
   rw [Int.natAbs_tdiv, Int.sign_tdiv, ← Int.sign_mul] at h
@@ -32,7 +32,7 @@ private theorem tdiv_eq_sign_mul (x y : Int) : x.tdiv y = (x * y).sign * ((x.nat
     simp
   · rfl
 
-/-- The truncated remainder is the sign of the dividend times the remainder of the absolute values. -/
+/-- The truncated remainder is the sign of the dividend times the remainder of absolute values. -/
 private theorem tmod_eq_sign_mul (x y : Int) : x.tmod y = x.sign * ((x.natAbs % y.natAbs : Nat) : Int) := by
   have h := Int.sign_mul_natAbs (x.tmod y)
   rw [Int.natAbs_tmod, Int.sign_tmod] at h
@@ -44,7 +44,7 @@ private theorem tmod_eq_sign_mul (x y : Int) : x.tmod y = x.sign * ((x.natAbs % 
     simp [this]
   · rfl
 
-/-- DIV is `BitVec.udiv`, which also gives 0 for a divisor of 0. -/
+/-- DIV is unsigned bit vector division, which also gives 0 for a divisor of 0. -/
 theorem div_eq (x y : U256) : div x y = x / y := by
   unfold div
   split
@@ -54,7 +54,9 @@ theorem div_eq (x y : U256) : div x y = x / y := by
     rw [BitVec.toNat_ofNat, BitVec.toNat_udiv]
     exact Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.div_le_self _ _) x.isLt)
 
-/-- MOD is `BitVec.umod`, except for a divisor of 0, where `umod` returns the dividend. -/
+/-- MOD is the unsigned bit vector remainder, except for a divisor of 0.
+
+There the bit vector remainder returns the dividend. -/
 theorem mod_eq (x y : U256) : mod x y = if y = 0 then 0 else x % y := by
   unfold mod
   split
@@ -63,7 +65,7 @@ theorem mod_eq (x y : U256) : mod x y = if y = 0 then 0 else x % y := by
     rw [BitVec.toNat_ofNat, BitVec.toNat_umod]
     exact Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt (Nat.mod_le _ _) x.isLt)
 
-/-- SDIV is `BitVec.sdiv`, including the divisor 0 and the quotient of -2^255 by -1. -/
+/-- SDIV is signed bit vector division, including the divisor 0 and the quotient of -2^255 by -1. -/
 theorem sdiv_eq (x y : U256) : sdiv x y = x.sdiv y := by
   apply BitVec.eq_of_toInt_eq
   rw [BitVec.toInt_sdiv]
@@ -78,7 +80,9 @@ theorem sdiv_eq (x y : U256) : sdiv x y = x.sdiv y := by
     decide
   · rw [BitVec.toInt_ofInt, tdiv_eq_sign_mul]
 
-/-- SMOD is `BitVec.srem`, except for a divisor of 0, where `srem` returns the dividend. -/
+/-- SMOD is the signed bit vector remainder, except for a divisor of 0.
+
+There the bit vector remainder returns the dividend. -/
 theorem smod_eq (x y : U256) : smod x y = if y = 0 then 0 else x.srem y := by
   simp only [smod, U256.toSigned_eq_toInt, U256.fromSigned]
   have hy : y.toInt = 0 ↔ y = 0 := by
@@ -118,7 +122,7 @@ theorem toNat_mulmod (x y z : U256) :
 theorem toNat_exp (base exponent : U256) : (exp base exponent).toNat = base.toNat ^ exponent.toNat % 2 ^ 256 := by
   rw [exp, BitVec.toNat_ofNat, powMod_eq, Nat.mod_mod]
 
-/-- For `byteNum <= 31`, SIGNEXTEND is `BitVec.signExtend` of the low `byteNum + 1` bytes. -/
+/-- For `byteNum <= 31`, SIGNEXTEND is the sign extension of the low `byteNum + 1` bytes. -/
 theorem signextend_eq (byteNum value : U256) (h : byteNum.toNat ≤ 31) :
     signextend byteNum value = (value.setWidth (8 * (byteNum.toNat + 1))).signExtend 256 := by
   apply BitVec.eq_of_toNat_eq

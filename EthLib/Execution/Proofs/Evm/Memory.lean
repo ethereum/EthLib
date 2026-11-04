@@ -6,7 +6,8 @@ public import EthLib.Execution.Evm.Memory
 # Proofs: `Evm.Memory`
 
 - A read gives exactly the bytes asked for.
-- Past the end of the buffer every byte reads as zero, so padding the buffer with zeros changes no byte.
+- Past the end of the buffer every byte reads as zero.
+- So padding the buffer with zeros changes no byte.
 -/
 
 @[expose] public section

@@ -8,9 +8,10 @@ public import EthLib.Execution.Evm.PowMod
 
 The arithmetic instructions of the EVM, from ADD to SIGNEXTEND.
 
-Source: [`forks/frontier/vm/instructions/arithmetic.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/frontier/vm/instructions/arithmetic.py) of execution-specs at `2c0c8e7`.
+Source: Appendix H.2 of the Yellow Paper, Shanghai version, in `Paper.tex`:
+<https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex>.
 
-Every later fork there computes the same results, up to Bogota.
+Every fork since Frontier computes the same results.
 
 Each function takes the operands in the order the instruction pops them.
 -/
@@ -21,22 +22,24 @@ namespace EthLib.Execution.Evm.Instructions
 
 open EthLib.Base
 
-/-- `add`: the sum, modulo 2^256. -/
+/-- The sum, modulo 2^256. -/
 def add (x y : U256) : U256 := x + y
 
-/-- `sub`: the difference, modulo 2^256. -/
+/-- The difference, modulo 2^256. -/
 def sub (x y : U256) : U256 := x - y
 
-/-- `mul`: the product, modulo 2^256. -/
+/-- The product, modulo 2^256. -/
 def mul (x y : U256) : U256 := x * y
 
-/-- `div`: the quotient, rounded down, or 0 for a divisor of 0. -/
+/-- The quotient, rounded down, or 0 for a divisor of 0. -/
 def div (dividend divisor : U256) : U256 :=
   if divisor = 0 then 0 else BitVec.ofNat 256 (dividend.toNat / divisor.toNat)
 
-/-- `sdiv`: the signed quotient, rounded toward 0, or 0 for a divisor of 0.
+/-- The signed quotient, rounded toward 0, or 0 for a divisor of 0.
 
-The quotient of -2^255 by -1 is 2^255, one above the largest signed word, so the source returns -2^255. -/
+The quotient of -2^255 by -1 is 2^255, one above the largest signed word.
+
+So the Yellow Paper gives -2^255. -/
 def sdiv (x y : U256) : U256 :=
   -- The operands, read in two's complement.
   let dividend := U256.toSigned x
@@ -49,11 +52,11 @@ def sdiv (x y : U256) : U256 :=
     -- `get_sign(dividend * divisor) * (abs(dividend) // abs(divisor))`
     U256.fromSigned ((dividend * divisor).sign * (dividend.natAbs / divisor.natAbs : Nat))
 
-/-- `mod`: the remainder, or 0 for a divisor of 0. -/
+/-- The remainder, or 0 for a divisor of 0. -/
 def mod (x y : U256) : U256 :=
   if y = 0 then 0 else BitVec.ofNat 256 (x.toNat % y.toNat)
 
-/-- `smod`: the signed remainder, with the sign of the dividend, or 0 for a divisor of 0. -/
+/-- The signed remainder, with the sign of the dividend, or 0 for a divisor of 0. -/
 def smod (x y : U256) : U256 :=
   -- The operands, read in two's complement.
   let dividend := U256.toSigned x
@@ -64,21 +67,23 @@ def smod (x y : U256) : U256 :=
     -- `get_sign(x) * (abs(x) % abs(y))`
     U256.fromSigned (dividend.sign * (dividend.natAbs % divisor.natAbs : Nat))
 
-/-- `addmod`: the sum modulo `z`, without wrapping first, or 0 for `z = 0`. -/
+/-- The sum modulo `z`, without wrapping first, or 0 for `z = 0`. -/
 def addmod (x y z : U256) : U256 :=
   if z = 0 then 0 else BitVec.ofNat 256 ((x.toNat + y.toNat) % z.toNat)
 
-/-- `mulmod`: the product modulo `z`, without wrapping first, or 0 for `z = 0`. -/
+/-- The product modulo `z`, without wrapping first, or 0 for `z = 0`. -/
 def mulmod (x y z : U256) : U256 :=
   if z = 0 then 0 else BitVec.ofNat 256 ((x.toNat * y.toNat) % z.toNat)
 
-/-- `exp`: the power, modulo 2^256.
+/-- The power, modulo 2^256.
 
-Square-and-multiply keeps every step below 2^512, where `base^exponent` alone can have 2^264 bits. -/
+Square-and-multiply keeps every step below 2^512.
+
+The power `base^exponent` alone can have 2^264 bits. -/
 def exp (base exponent : U256) : U256 :=
   BitVec.ofNat 256 (powMod base.toNat exponent.toNat (2 ^ 256))
 
-/-- `signextend`: the low `byteNum + 1` bytes of `value`, read as a signed integer and widened to 32 bytes.
+/-- The low `byteNum + 1` bytes of `value`, read as a signed integer, widened to 32 bytes.
 
 A `byteNum` above 31 leaves `value` as it is. -/
 def signextend (byteNum value : U256) : U256 :=

@@ -18,9 +18,9 @@ namespace EthLib.Execution.Evm
 def byteAt (data : ByteArray) (i : Nat) : UInt8 :=
   data.data.getD i 0
 
-/-- `buffer_read`: `size` bytes of the buffer from `start`, padded with zeros on the right.
+/-- `size` bytes of the buffer from `start`, padded with zeros on the right.
 
-Source: [`forks/frontier/vm/memory.py`](https://github.com/ethereum/execution-specs/blob/2c0c8e7d2010771621e9ae34f68a0d2d3e738aa1/src/ethereum/forks/frontier/vm/memory.py#L63) of execution-specs at `2c0c8e7`. -/
+Appendix H.2 of the Yellow Paper reads call data this way, as zero past its end. -/
 def bufferRead (data : ByteArray) (start size : Nat) : List UInt8 :=
   (List.range size).map fun i => byteAt data (start + i)
 
