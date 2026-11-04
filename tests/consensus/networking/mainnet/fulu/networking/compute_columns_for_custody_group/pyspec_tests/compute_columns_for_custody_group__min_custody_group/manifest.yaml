@@ -1,0 +1,6 @@
+preset: mainnet
+fork: fulu
+runner: networking
+handler: compute_columns_for_custody_group
+suite: pyspec_tests
+case: compute_columns_for_custody_group__min_custody_group

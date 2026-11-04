@@ -21,6 +21,19 @@ eth_consensus_parameters(
   lean_object* fork
 );
 
+extern lean_object*
+eth_consensus_get_custody_groups(
+  lean_object* name,
+  lean_object* node_id,
+  uint64_t count
+);
+
+extern lean_object*
+eth_consensus_compute_columns_for_custody_group(
+  lean_object* name,
+  uint64_t group
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* The UTF-8 bytes of a `str` argument, or NULL with a TypeError set. */
@@ -79,4 +92,35 @@ py_consensus_parameters(
     return NULL;
   }
   return except_into_pybytes(eth_consensus_parameters(name, fork), CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_get_custody_groups(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject* name_obj;
+  const uint8_t* node_id;
+  Py_ssize_t node_id_len;
+  unsigned long long count;
+  if (!PyArg_ParseTuple(args, "Oy#K", &name_obj, &node_id, &node_id_len, &count)) return NULL;
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  lean_object* id = mk_bytearray(node_id, node_id_len);
+  return except_into_pybytes(
+    eth_consensus_get_custody_groups(name, id, (uint64_t) count), CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_compute_columns_for_custody_group(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject* name_obj;
+  unsigned long long group;
+  if (!PyArg_ParseTuple(args, "OK", &name_obj, &group)) return NULL;
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  return except_into_pybytes(
+    eth_consensus_compute_columns_for_custody_group(name, (uint64_t) group), CONSENSUS_ERROR);
 }
