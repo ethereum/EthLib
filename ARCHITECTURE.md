@@ -110,6 +110,7 @@ Each layer is a directory under `EthLib/`, which `CONTRIBUTING.md` calls a domai
 
 | Layer | Holds | Directory |
 | --- | --- | --- |
+| Engine | what needs the types of both protocol layers, such as the execution block of an execution payload | `EthLib/Engine/` |
 | Consensus | the state transition and the fork choice of the consensus layer | `EthLib/Consensus/` |
 | Execution | the EVM with its precompiles, the fees, and the state transition of the execution layer | `EthLib/Execution/` |
 | Networking | the messages peers exchange, with their framing and compression | `EthLib/Networking/` |
@@ -135,8 +136,14 @@ The consensus layer needs one fact from the execution layer: whether an executio
 So the execution engine that answers it is a parameter of the consensus state transition, not an import.
 The consensus state transition can then be proved about with any engine, and instantiated with the Execution layer's.
 
+Some definitions need the types of both layers.
+The execution payload of a beacon block stands for an execution block, and the conversion between them reads both.
+Such a definition lives in the Engine layer, the only layer that imports both Execution and Consensus.
+
 The Networking layer holds formats that need no chain state.
 A gossip validation rule that reads the beacon state, such as the checks on a `beacon_block` message, belongs to Consensus, which imports Networking.
+In the same way, the eth wire protocol of devp2p carries blocks, transactions and receipts.
+So its messages live in `EthLib/Execution/Network/`, which has those types and imports Networking.
 
 ## Rules
 
@@ -145,7 +152,7 @@ A pull request that breaks one says why in its description.
 `scripts/check_layers.py` checks every rule that the import lines decide.
 
 - A module imports only from its own layer or from a lower one.
-- Execution and Consensus never import each other.
+- Execution and Consensus never import each other; only Engine imports both.
 - A cryptographic module never imports Serialization.
 - A specification never imports a property, a C export or a model.
 - A specification imports nothing outside the Lean toolchain, which ships `Init`, `Std` and `Lean`.
