@@ -115,7 +115,7 @@ def Aprime : Fp2 := ⟨Fp.zero, Fp.ofNat 240⟩
 /-- `B' = 1012 * (1 + I)`. -/
 def Bprime : Fp2 := ⟨Fp.ofNat 1012, Fp.ofNat 1012⟩
 
-/-- Simplified SWU onto `E' : y^2 = x^3 + A'*x + B'` (RFC 9380 §6.6.2).
+/-- Simplified SWU onto `E' : y^2 = x^3 + A' * x + B'` (RFC 9380 §6.6.2).
 
 `Z` is not a square in `Fp2`, so one of `g(x1)` and `g(x2)` is a square.
 
@@ -193,12 +193,12 @@ def k42 : Fp2 := fp2
   0x12
   0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaa99
 
-/-- The 3-isogeny of RFC 9380 Appendix E.3, from the SSWU curve `E'` to the BLS twist `E`.
+/-- The 3-isogeny of RFC 9380 Appendix E.3, from `E'` to the twist `E`.
 
 - `x = x_num / x_den`, where `x_den` is monic of degree 2.
 - `y = y' * y_num / y_den`, where `y_den` is monic of degree 3.
 
-An input that sends a denominator to zero maps to the identity point, as RFC 9380 §6.6.3 requires. -/
+A zero denominator gives the identity point, as RFC 9380 §6.6.3 requires. -/
 def isoMapG2 (xp yp : Fp2) : G2 :=
   let xp2 := xp * xp
   let xp3 := xp2 * xp
