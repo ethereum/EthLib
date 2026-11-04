@@ -141,6 +141,7 @@ A gossip validation rule that reads the beacon state, such as the checks on a `b
 
 These rules follow from the layers.
 A pull request that breaks one says why in its description.
+`scripts/check_layers.py` checks every rule that the import lines decide.
 
 - A module imports only from its own layer or from a lower one.
 - Execution and Consensus never import each other.

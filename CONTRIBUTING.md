@@ -295,6 +295,16 @@ Run it without `--check` to regenerate them.
 It also fails when `pyproject.toml` declares a package version other than the one `SOUNDNESS.md` describes.
 Then review the whole document for the new version, and update its version line by hand.
 
+Then check the imports of every Lean module:
+
+```bash
+uv run --no-project --python 3.12 python scripts/check_layers.py
+```
+
+It fails on an import that breaks a rule of [`ARCHITECTURE.md`](ARCHITECTURE.md#rules), and on a module that no library root imports.
+An import that must break a rule goes in `scripts/check_layers_baseline.txt`, with the reason in a comment and in the pull request.
+An entry that no longer breaks a rule fails the check, so remove it with the import.
+
 Then check the layout of the Lean lines that your branch changes:
 
 ```bash
