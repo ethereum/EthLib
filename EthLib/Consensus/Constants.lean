@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Hash32
+public import EthLib.Base.U256
 public import EthLib.Consensus.Types
 
 /-!
@@ -19,6 +20,26 @@ namespace EthLib.Consensus
 
 /-- The largest 64-bit unsigned integer, `2^64 - 1`. -/
 def UINT64_MAX : UInt64 := UInt64.ofNat (2 ^ 64 - 1)
+
+/-- The integer square root of the largest 64-bit unsigned integer, `2^32 - 1`. -/
+def UINT64_MAX_SQRT : UInt64 := 4294967295
+
+/-- The number of Gwei in one ether. -/
+def ETH_TO_GWEI : UInt64 := 10 ^ 9
+
+/-- The weak subjectivity period tolerates this loss, in percent, of the safety margin of finality.
+
+An attack on the period then has a margin of at least `1/3 - SAFETY_DECAY/100`. -/
+def SAFETY_DECAY : UInt64 := 10
+
+/-- The number of basis points in a whole, which fork choice measures parts of a slot in. -/
+def BASIS_POINTS : UInt64 := 10000
+
+/-- The number of aggregators that each committee aims to select. -/
+def TARGET_AGGREGATORS_PER_COMMITTEE : UInt64 := 16
+
+/-- The most requests that a node sends at once under one request and response protocol. -/
+def MAX_CONCURRENT_REQUESTS : UInt64 := 2
 
 /-- The slot of genesis. -/
 def GENESIS_SLOT : Slot := 0
@@ -113,6 +134,28 @@ def DOMAIN_CONTRIBUTION_AND_PROOF : DomainType := #v[0x09, 0x00, 0x00, 0x00]
 /-- From Bellatrix: the block hash of no execution payload, 32 zero bytes. -/
 def EMPTY_BLOCK_HASH : Base.Hash32 := Vector.replicate 32 0
 
+/-- From Altair: the number of aggregators that each sync subcommittee aims to select. -/
+def TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE : UInt64 := 16
+
+/-- From Altair: the most light client updates in one response. -/
+def MAX_REQUEST_LIGHT_CLIENT_UPDATES : UInt64 := 128
+
+/-- From Bellatrix: the execution payload of the block is valid. -/
+def PAYLOAD_STATUS_VALID : PayloadValidationStatus := 0
+
+/-- From Bellatrix: the execution engine found the execution payload of the block invalid. -/
+def PAYLOAD_STATUS_INVALIDATED : PayloadValidationStatus := 1
+
+/-- From Bellatrix: the execution engine has not yet validated the execution payload. -/
+def PAYLOAD_STATUS_NOT_VALIDATED : PayloadValidationStatus := 2
+
+/-- From Bellatrix: a block whose parent has no execution payload waits this many slots.
+
+After them, a node may import it optimistically, before the execution layer validates it.
+
+A node must let its user set another value. -/
+def SAFE_SLOTS_TO_IMPORT_OPTIMISTICALLY : UInt64 := 128
+
 /-- From Capella: the domain type of a change of withdrawal credentials to an execution address. -/
 def DOMAIN_BLS_TO_EXECUTION_CHANGE : DomainType := #v[0x0A, 0x00, 0x00, 0x00]
 
@@ -144,5 +187,8 @@ def WITHDRAWAL_REQUEST_TYPE : Vector UInt8 1 := #v[0x01]
 
 [EIP-7251](https://eips.ethereum.org/EIPS/eip-7251#execution-layer) defines it. -/
 def CONSOLIDATION_REQUEST_TYPE : Vector UInt8 1 := #v[0x02]
+
+/-- From Fulu: the largest 256-bit unsigned integer, `2^256 - 1`. -/
+def UINT256_MAX : Base.U256 := BitVec.allOnes 256
 
 end EthLib.Consensus

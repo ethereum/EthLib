@@ -19,6 +19,7 @@ Two errors with one code come from one constructor.
 
 namespace EthLib.Networking.Rlpx
 
+open EthLib.Base (xorBytes)
 open EthLib.Cryptography
 open EthLib.Cryptography.Secp256k1
 open EthLib.Cryptography.Secp256k1.Point
@@ -115,7 +116,7 @@ theorem AckMessage.ofItem_toItem (m : AckMessage) :
 theorem makeAuth_eq_ok {keys : Keys} {recipient : Point} {sealing : Sealing} {auth : ByteArray}
     (h : makeAuth keys recipient sealing = .ok auth) :
     ∃ shared sig body, ecdh keys.staticKey recipient = .ok shared ∧
-      Ecdsa.sign keys.ephemeralKey (xor32 shared keys.nonce) = .ok sig ∧
+      Ecdsa.sign keys.ephemeralKey (xorBytes shared keys.nonce) = .ok sig ∧
       Codec.encode (⟨signatureBytes sig, encodePublicKey (mul keys.staticKey generator), keys.nonce,
         HANDSHAKE_VERSION⟩ : AuthMessage) = .ok body ∧
       sealPacket recipient sealing.r sealing.iv body sealing.padding = .ok auth := by
@@ -123,7 +124,7 @@ theorem makeAuth_eq_ok {keys : Keys} {recipient : Point} {sealing : Sealing} {au
   cases hs : ecdh keys.staticKey recipient with
   | error e => simp [hs, Except.mapError, bind, Except.bind] at h
   | ok shared =>
-  cases hg : Ecdsa.sign keys.ephemeralKey (xor32 shared keys.nonce) with
+  cases hg : Ecdsa.sign keys.ephemeralKey (xorBytes shared keys.nonce) with
   | error e => simp [hs, hg, Except.mapError, bind, Except.bind] at h
   | ok sig =>
   cases hb : Codec.encode (⟨signatureBytes sig, encodePublicKey (mul keys.staticKey generator),
