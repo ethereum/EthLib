@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Bls.Signatures
 public import EthLib.Cryptography.Proofs.Bls.KeyValidate
 public import EthLib.Cryptography.Proofs.Bls.CofactorSubgroupLanding
+public import EthLib.Base.Proofs.MapM
 
 /-!
 # Proofs: honest BLS signatures verify
@@ -122,8 +123,8 @@ private theorem add_sum_cons (a x : ZMod Fr.modulus) (l : List (ZMod Fr.modulus)
 
 /-- Over `ZMod`, a sum of multiples of `b` is the sum of the factors times `b`. -/
 private theorem sum_map_mul {α : Type} (l : List α) (f : α → ZMod Fr.modulus)
-    (b : ZMod Fr.modulus) : 0 + (l.map fun x => f x * b).sum = (0 + (l.map f).sum) * b := by
-  rw [zero_add, zero_add, List.sum_map_mul_right]
+    (b : ZMod Fr.modulus) : 0 + (l.map fun x => f x * b).sum = (l.map f).sum * b := by
+  rw [zero_add, List.sum_map_mul_right]
 
 /-- Signing on one message is the multiple of its hash by the key. -/
 private theorem sign_eq {msg : ByteArray} {Q : G2} (hQ : HashToCurve.hashToG2 msg DST = .ok Q)
@@ -134,13 +135,8 @@ private theorem sign_eq {msg : ByteArray} {Q : G2} (hQ : HashToCurve.hashToG2 ms
 private theorem mapM_sign {msg : ByteArray} {Q : G2} (hQ : HashToCurve.hashToG2 msg DST = .ok Q)
     (sks : List SecretKey) :
     sks.mapM (fun sk => sign sk msg) =
-      .ok (sks.map fun sk => pointToSignature (G2.mul Q sk.val)) := by
-  induction sks with
-  | nil => rfl
-  | cons sk sks ih =>
-    simp only [List.mapM_cons, sign_eq hQ, bind, Except.bind, pure, Except.pure] at ih ⊢
-    rw [ih]
-    rfl
+      .ok (sks.map fun sk => pointToSignature (G2.mul Q sk.val)) :=
+  EthLib.Base.mapM_eq_ok_map fun sk _ => sign_eq hQ sk
 
 /-- Aggregation of honest signatures from an accumulator represents the running sum. -/
 private theorem foldlM_aggregate {α : Type} (pt : α → G2) (sc : α → Fr)
@@ -200,6 +196,27 @@ private theorem forIn_pkBytes (sks : List SecretKey) {acc : G1} {a : Fr}
     · rw [List.map_cons]
       exact (add_sum_cons a sk.val _) ▸ hRrep
 
+/-- The fast aggregate verification accepts honest keys and a signature for their sum.
+
+The signature must represent `(sum_i sk_i * b) • g2`, where the message hashes to `b • g2`. -/
+theorem fastAggregateVerify_of_represents (laws : PairingLaws) {sks : List SecretKey}
+    (hne : sks ≠ []) (hsum : (sks.map (·.val)).sum ≠ 0) {msg : ByteArray} {Q S : G2} {b : Fr}
+    (hQ : HashToCurve.hashToG2 msg DST = .ok Q) (hb : G2.Represents Q b)
+    (hS : G2.Represents S ((sks.map (·.val)).sum * b)) :
+    fastAggregateVerify (sks.map pkBytes).toArray msg (G2.compress S) = true := by
+  obtain ⟨P, hP, hPrep⟩ := forIn_pkBytes sks G1.represents_zero
+  unfold fastAggregateVerify
+  rw [ite_eq_right (by cases sks with
+    | nil => exact absurd rfl hne
+    | cons _ _ => exact Bool.false_ne_true)]
+  simp only [List.forIn_toArray]
+  rw [Id.run_bind]
+  erw [hP]
+  -- The loop starts from the point at infinity, so its sum carries a leading `0 +`.
+  have hPrep' : G1.Represents P (sks.map (·.val)).sum :=
+    (congrArg (G1.Represents P) (Fin.zero_add _)).mp hPrep
+  exact coreVerify_of_represents laws hPrep' hsum hQ hb hS
+
 /-- Honest signatures on one message aggregate to a signature that verifies under the key sum.
 
 The secret keys must not sum to zero.
@@ -215,7 +232,6 @@ theorem fastAggregateVerify_aggregate (laws : PairingLaws) (sks : List SecretKey
   have hpt : ∀ sk : SecretKey, G2.Represents (G2.mul Q sk.val) (sk.val * b) :=
     fun sk => hb.mul sk.val
   obtain ⟨S, hS, hSrep⟩ := foldlM_aggregate _ _ hpt sks G2.represents_zero
-  obtain ⟨P, hP, hPrep⟩ := forIn_pkBytes sks G1.represents_zero
   refine ⟨_, mapM_sign hQ sks, pointToSignature S, ?_, ?_⟩
   · unfold aggregate
     rw [ite_eq_right (by cases sks with
@@ -225,19 +241,9 @@ theorem fastAggregateVerify_aggregate (laws : PairingLaws) (sks : List SecretKey
     rw [show (List.map (sigBytes ∘ fun sk => pointToSignature (G2.mul Q sk.val)) sks) =
       List.map (fun sk => sigBytes (pointToSignature (G2.mul Q sk.val))) sks from rfl, hS]
     rfl
-  · unfold fastAggregateVerify
-    rw [ite_eq_right (by cases sks with
-      | nil => exact absurd rfl hne
-      | cons _ _ => exact Bool.false_ne_true)]
-    simp only [List.forIn_toArray]
-    rw [Id.run_bind]
-    erw [hP]
-    -- The sum of the keys and the sum of the signatures fit one verification.
-    have hS' : G2.Represents S ((0 + (sks.map (·.val)).sum) * b) :=
-      (sum_map_mul sks (·.val) b) ▸ hSrep
-    have ha : 0 + (sks.map (·.val)).sum ≠ 0 := fun h => hsum ((Fin.zero_add _).symm.trans h)
-    exact coreVerify_of_represents laws hPrep ha hQ hb hS'
-
+  · -- The sum of the signatures is the sum of the keys times the discrete logarithm of the hash.
+    exact fastAggregateVerify_of_represents laws hne hsum hQ hb
+      ((sum_map_mul sks (·.val) b) ▸ hSrep)
 
 /-! ## Aggregation on several messages -/
 
@@ -271,14 +277,8 @@ private theorem keyPoint_spec (sk : SecretKey) :
 /-- Signing each pair of a key and a message succeeds with the multiple of its hash. -/
 private theorem mapM_sign_pairs (l : List (SecretKey × ByteArray)) :
     l.mapM (fun p => sign p.1 p.2) =
-      .ok (l.map fun p => pointToSignature (G2.mul (hashPoint p.2) p.1.val)) := by
-  induction l with
-  | nil => rfl
-  | cons p l ih =>
-    simp only [List.mapM_cons, sign_eq (hashPoint_spec p.2).1, bind, Except.bind, pure,
-      Except.pure] at ih ⊢
-    rw [ih]
-    rfl
+      .ok (l.map fun p => pointToSignature (G2.mul (hashPoint p.2) p.1.val)) :=
+  EthLib.Base.mapM_eq_ok_map fun p _ => sign_eq (hashPoint_spec p.2).1 p.1
 
 /-- The pairs that the aggregate verification builds from honest keys and messages. -/
 private theorem mapM_pairs (l : List (SecretKey × ByteArray)) :
