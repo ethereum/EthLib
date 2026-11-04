@@ -8,6 +8,8 @@ Only the standard library is used, like the check.
 """
 import hashlib
 import importlib.util
+import io
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -91,6 +93,22 @@ class CheckLocal(unittest.TestCase):
         write_suite(self.root, "xmss", {"sign/case_0": b"xmss 0"})
         (self.root / "xmss" / "sign" / "case_0" / "data.yaml").write_bytes(b"changed")
         self.assertEqual(self.errors(), ["xmss/sign/case_0/data.yaml: digest differs from SHA256SUMS"])
+
+
+class BlsTestsDigests(unittest.TestCase):
+
+    def test_layout_maps_to_pinned_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp) / "bls.tar.gz"
+            with tarfile.open(archive, "w:gz") as tar:
+                for name, data in (("./sign/case_0.yaml", b"sign 0"),
+                                   ("./hash_to_G2/case_0.yaml", b"not pinned")):
+                    info = tarfile.TarInfo(name)
+                    info.size = len(data)
+                    tar.addfile(info, io.BytesIO(data))
+            digests = check_vectors.bls_tests_digests(archive)
+        expected = {("bls", "sign/case_0/data.yaml"): hashlib.sha256(b"sign 0").hexdigest()}
+        self.assertEqual(digests, expected)
 
 
 if __name__ == "__main__":

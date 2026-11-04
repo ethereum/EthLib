@@ -9,12 +9,15 @@ listed digest.
 Regenerating a vector that changes its answer then fails this check.
 
 With `--upstream`, also check that the pinned digests are the ones
-consensus-specs published, in the general test archive of its last
-release before the KZG specification moved here (consensus-specs#5398).
+upstream published. consensus-specs published most of them, in the general
+test archive of its last release before the KZG specification moved here
+(consensus-specs#5398). That archive has no BLS signing or verification
+cases, so those come from the ethereum/bls12-381-tests release archive.
 
     uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py
     uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py --upstream
-    uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py --upstream --archive general.tar.gz
+    uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py --upstream \
+        --archive general.tar.gz --bls-archive bls_tests_yaml.tar.gz
 
 Only the standard library is used, so the check needs no Lean and no
 install step.
@@ -38,6 +41,16 @@ UPSTREAM_URL = (
     "v1.7.0-alpha.12/general.tar.gz"
 )
 UPSTREAM_SHA256 = "329f3cf58927df2614ecafbce78eb3c5258a13e8731d2f410bb31d8e4a5b9eaf"
+
+# ethereum/bls12-381-tests v0.1.2, at commit 89ff3a86f1a9b89a555495f7535c853cda589320.
+BLS_TESTS_URL = (
+    "https://github.com/ethereum/bls12-381-tests/releases/download/"
+    "v0.1.2/bls_tests_yaml.tar.gz"
+)
+BLS_TESTS_SHA256 = "a4ef909b6248395094949a3bcdeb4e1b5b999733d4436f2c5006edba99d29279"
+
+# The handlers of that archive that are pinned here, under `bls/`.
+BLS_TESTS_HANDLERS = ("aggregate", "aggregate_verify", "fast_aggregate_verify", "sign", "verify")
 
 
 def sha256(data: bytes) -> str:
@@ -112,16 +125,37 @@ def upstream_digests(archive: Path) -> dict[tuple[str, str], str]:
     return digests
 
 
-def check_upstream(archive: Path, root: Path = ROOT) -> tuple[list[str], int]:
+def bls_tests_digests(archive: Path) -> dict[tuple[str, str], str]:
+    """Digests of the pinned bls12-381-tests cases, keyed as `upstream_digests` keys them.
+
+    That archive lays a case out as `./<handler>/<case>.yaml`, and this
+    repository as `bls/<handler>/<case>/data.yaml`.
+    """
+    digests = {}
+    with tarfile.open(archive, "r:gz") as tar:
+        for member in tar:
+            parts = member.name.split("/")
+            if not member.isfile() or len(parts) != 3 or parts[1] not in BLS_TESTS_HANDLERS:
+                continue
+            _, handler, leaf = parts
+            if not leaf.endswith(".yaml"):
+                continue
+            data = tar.extractfile(member).read()
+            digests[("bls", f"{handler}/{leaf[:-len('.yaml')]}/data.yaml")] = sha256(data)
+    return digests
+
+
+def check_upstream(archive: Path, bls_archive: Path, root: Path = ROOT) -> tuple[list[str], int]:
     """Every upstream case is pinned here, with the upstream digest.
 
-    A case that exists only here is allowed, and counted: its expected value
-    is EthLib's own, so it is not a check against anything independent.
+    A case that exists in no upstream archive is allowed, and counted.
     Returns the errors and the number of such cases.
     """
     if sha256_file(archive) != UPSTREAM_SHA256:
         return [f"{archive}: not the pinned upstream archive"], 0
-    upstream = upstream_digests(archive)
+    if sha256_file(bls_archive) != BLS_TESTS_SHA256:
+        return [f"{bls_archive}: not the pinned bls12-381-tests archive"], 0
+    upstream = upstream_digests(archive) | bls_tests_digests(bls_archive)
     errors, own = [], 0
     # A missing manifest is reported by `check_local`, which always runs.
     for d in pinned_dirs(root):
@@ -143,18 +177,22 @@ def main() -> int:
     parser.add_argument("--upstream", action="store_true",
                         help="also compare the pinned digests with the upstream archive")
     parser.add_argument("--archive", type=Path,
-                        help="a local copy of the upstream archive, instead of downloading it")
+                        help="a local copy of the consensus-specs archive, not downloaded")
+    parser.add_argument("--bls-archive", type=Path,
+                        help="a local copy of the bls12-381-tests archive, not downloaded")
     args = parser.parse_args()
 
     errors, own = check_local(), 0
     if args.upstream:
-        if args.archive:
-            upstream_errors, own = check_upstream(args.archive)
-        else:
-            with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp:
+            archive, bls_archive = args.archive, args.bls_archive
+            if archive is None:
                 archive = Path(tmp) / "general.tar.gz"
                 urllib.request.urlretrieve(UPSTREAM_URL, archive)
-                upstream_errors, own = check_upstream(archive)
+            if bls_archive is None:
+                bls_archive = Path(tmp) / "bls_tests_yaml.tar.gz"
+                urllib.request.urlretrieve(BLS_TESTS_URL, bls_archive)
+            upstream_errors, own = check_upstream(archive, bls_archive)
         errors += upstream_errors
 
     for error in errors:
@@ -166,7 +204,7 @@ def main() -> int:
         return 1
     print(f"{count} pinned vectors match their digests")
     if args.upstream:
-        print(f"upstream: {count - own} match, {own} not upstream (EthLib's own)")
+        print(f"upstream: {count - own} match, {own} in no upstream archive")
     return 0
 
 

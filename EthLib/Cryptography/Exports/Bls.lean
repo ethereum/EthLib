@@ -98,4 +98,23 @@ def popProveExport (sk : ByteArray) : IO ByteArray := do
 def popVerifyExport (pk proof : ByteArray) : IO UInt8 :=
   return ofBool (popVerify pk proof)
 
+/-! ## Hash to curve
+
+These exports let a client check the hash to `G2` against RFC 9380. -/
+
+/-- The uniform bytes of RFC 9380 §5.3.1. -/
+@[export eth_bls_expand_message_xmd]
+def expandMessageXmdExport (msg dst : ByteArray) (len : UInt64) : IO ByteArray :=
+  runBls (HashToCurve.expandMessageXmd msg dst len.toNat)
+
+/-- The hash of a message to `G2`, as the affine `x.c0 ‖ x.c1 ‖ y.c0 ‖ y.c1`, 48 bytes each.
+
+The point at infinity has no affine form, so it is an error. -/
+@[export eth_bls_hash_to_g2]
+def hashToG2Export (msg dst : ByteArray) : IO ByteArray := do
+  let p ← runBls (HashToCurve.hashToG2 msg dst)
+  if p.isInfinity then runBls (.error .pointAtInfinity)
+  let (x, y) := p.toAffine
+  return x.c0.toBytesBE ++ x.c1.toBytesBE ++ y.c0.toBytesBE ++ y.c1.toBytesBE
+
 end EthLib.Cryptography.Bls.Exports
