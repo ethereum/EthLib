@@ -141,7 +141,10 @@ The third check goes back to the source:
 uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py --upstream
 ```
 
-It downloads the two upstream archives, checks their digests, and checks that every upstream case is pinned here with the upstream digest.
+It downloads the two upstream archives that [`tests/sources.toml`](../sources.toml) pins, and checks their digests.
+Then it checks that every upstream case is pinned here with the upstream digest.
+The archives stay in the cache of `scripts/fetch_archives.py` for the next run: the directory that `ETHLIB_ARCHIVES` names, or else `~/.cache/ethlib/archives`.
+The `vectors-slow` workflow runs this check every Monday.
 Pass `--archive` and `--bls-archive` with local copies to skip the downloads.
 A case that exists in no upstream archive is allowed, and is counted.
 Most such cases have expected values from the code under test, so they are not a check against anything independent.

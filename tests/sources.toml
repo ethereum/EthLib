@@ -1,12 +1,19 @@
 # The sources of the test vectors and fixtures, with one pinned commit per repository.
 #
-# Every test that reads from a repository uses its pin, so two tests cannot check against two
-# versions of one source. To move a pin, change it here, then update and check every test that
-# cites the repository, in one pull request.
+# Every test that reads from a repository uses its pin.
+# So two tests cannot check against two versions of one source.
+# To move a pin, change it here and update every test that cites the repository.
+# Do both in one pull request.
 #
-# A pinned vector directory is a directory that holds a SHA256SUMS file. Its SHA256SUMS starts
-# with one "# Source:" line for each source below that lists the directory, and the README that
-# describes the directory names the pinned commit of each repository.
+# A pinned vector directory holds a SHA256SUMS file.
+# That file starts with one "# Source:" line for each source below that lists the directory.
+# The README of the directory names the pinned commit of each repository.
+#
+# A release archive that is too large to vendor is pinned in the table `archives`.
+# Its entry gives the URL, the size in bytes and the sha256 of the file.
+# An archive can come from an older release than the pin of its repository.
+# A test names the archive by its key, and reads it through scripts/fetch_archives.py.
+# The fetcher checks the size and the digest.
 #
 #     uv run --no-project --python 3.12 python scripts/check_fixture_pins.py
 
@@ -79,6 +86,25 @@ directories = ["tests/execution/blocks", "tests/execution/transactions"]
 commit = "7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70"
 release = "v0.1.0"
 directories = ["tests/serialization/ssz"]
+
+# The release archives, each from a repository above.
+[archives."consensus-specs/v1.7.0-alpha.12/general"]
+repository = "ethereum/consensus-specs"
+url = "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-alpha.12/general.tar.gz"
+size = 169611828
+sha256 = "329f3cf58927df2614ecafbce78eb3c5258a13e8731d2f410bb31d8e4a5b9eaf"
+
+[archives."bls12-381-tests/v0.1.2/bls_tests_yaml"]
+repository = "ethereum/bls12-381-tests"
+url = "https://github.com/ethereum/bls12-381-tests/releases/download/v0.1.2/bls_tests_yaml.tar.gz"
+size = 8319
+sha256 = "a4ef909b6248395094949a3bcdeb4e1b5b999733d4436f2c5006edba99d29279"
+
+[archives."execution-specs/tests@v21.0.2/fixtures"]
+repository = "ethereum/execution-specs"
+url = "https://github.com/ethereum/execution-specs/releases/download/tests%40v21.0.2/fixtures.tar.gz"
+size = 939189561
+sha256 = "e2fa7ea2ea516459f9ab92284b2927892f318f4e1f78ca802cb05a6c3b479ed9"
 
 # The pinned vector directories whose cases come from no repository, with their source.
 [other]

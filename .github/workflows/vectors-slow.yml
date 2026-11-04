@@ -1,8 +1,11 @@
-# Regenerate every test vector through the bindings, the slow cases included.
+# Run the vector suites that are too slow or too large for each change.
 #
-# ci.yml runs the vector suites on each change, but skips the key generation and
-# signing cases of leanXMSS and leanSPHINCS, which take minutes each.
-# This workflow runs them every Monday and on manual dispatch.
+# ci.yml runs the vector suites on each change, but skips two kinds of test.
+# The key generation and signing cases of leanXMSS and leanSPHINCS take minutes each.
+# A test marked `archive` reads a release archive that tests/sources.toml pins, which
+# scripts/fetch_archives.py downloads and checks.
+# This workflow runs both every Monday and on manual dispatch, one job per suite, so that
+# no job nears the time limit.
 # A regenerated vector that differs from the committed one fails the job.
 
 name: vectors-slow
@@ -21,8 +24,28 @@ permissions:
 
 jobs:
   vectors:
+    name: ${{ matrix.suite }}
     runs-on: ubuntu-24.04
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Every vector suite, with the slow cases.
+          - suite: slow
+            bindings: true
+            run: ETHLIB_SLOW_VECTORS=1 uv run --no-sync pytest -m "not archive"
+          # The vendored blocks, receipts and transaction tests against their release.
+          - suite: execution-spec-tests
+            bindings: true
+            run: >-
+              uv run --no-sync pytest -m archive
+              bindings/python/tests/blocks/test_archive.py
+              bindings/python/tests/transactions/test_archive.py
+          # The pinned BLS and KZG digests against the releases that published them.
+          - suite: cryptography
+            bindings: false
+            run: uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py --upstream
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -37,6 +60,7 @@ jobs:
 
       # The latest build that ci.yml saved on master, read only.
       - name: restore EthLib build
+        if: matrix.bindings
         uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: .lake/build
@@ -44,22 +68,25 @@ jobs:
           restore-keys: |
             ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
-      - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
+      - if: matrix.bindings
+        uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
         with:
           auto-config: false
           use-mathlib-cache: true
           use-github-cache: false
 
       - name: library
+        if: matrix.bindings
         run: lake build --wfail EthLib Exports
 
       - name: bindings
+        if: matrix.bindings
         run: uv sync --frozen --extra test
 
-      - name: vector suites with the slow cases
+      - name: ${{ matrix.suite }}
         env:
-          ETHLIB_SLOW_VECTORS: "1"
-        run: uv run --no-sync pytest
+          ETHLIB_ARCHIVES: ${{ runner.temp }}/archives
+        run: ${{ matrix.run }}
 
       # The suites write every case, so a changed or a new case shows up here.
       - name: unchanged vectors
