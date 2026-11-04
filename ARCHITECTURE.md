@@ -295,13 +295,15 @@ Update the pin in one pull request, and check every test that reads from the rep
 
 ## Packages
 
-EthLib is one Lake package, with three libraries.
+EthLib is one Lake package, and three libraries hold its code.
 
 - The library `EthLib` holds the specifications.
 - The library `Proofs` holds the properties and the models, in the `Proofs/` directory of each layer.
 - The library `Exports` holds the C exports that the Python bindings call.
 
 The package also builds the `check-decls` executable.
+A fourth library, `CheckDeclsTest`, holds the test cases of that executable, in `scripts/`.
+It is not a default target, and `scripts/test_check_decls.sh` builds it.
 
 The package requires Mathlib and VCVio, a library of probabilistic computations.
 Only the properties and the models may import them, or Batteries.
