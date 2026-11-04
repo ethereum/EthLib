@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Fork
 public import EthLib.Serialization.Rlp.Codec
 public import EthLib.Serialization.Proofs.Rlp.Canonical
 public import EthLib.Serialization.Proofs.Rlp.Scalar
@@ -81,6 +82,11 @@ theorem Item.fields_eq_ok {count : Nat} {item : Item} {items : List Item} :
   | list xs =>
     simp only [Item.fields, Item.toItems, bind, Except.bind, Item.list.injEq]
     split <;> simp_all [eq_comm]
+
+/-- A list of `count` items holds the fields of a structure with `count` fields. -/
+theorem Item.fields_list {count : Nat} {items : List Item} (h : items.length = count) :
+    (Item.list items).fields count = .ok items :=
+  Item.fields_eq_ok.mpr ⟨rfl, h⟩
 
 /-- A scalar below `2 ^ bits` reads back as itself. -/
 theorem Item.toScalarBelow_scalar {bits n : Nat} (h : n < 2 ^ bits) :
@@ -302,6 +308,76 @@ theorem Codec.decode_eq_ok_none_iff {α : Type} [Codec α] [LawfulCodec α] [Nev
   have : Codec.encode (none : Option α) = .ok ⟨#[0x80]⟩ := rfl
   rw [this]
   exact ⟨fun h => (Except.ok.inj h).symm, fun h => h ▸ rfl⟩
+
+instance : LawfulCodec Item where
+  ofItem_toItem _ := rfl
+  toItem_of_ofItem h := (Except.ok.inj h).symm
+
+/-! ## Structures
+
+A decoder of a structure reads its fields one after another.
+
+Each read takes the item of one field, so the items are the items of the fields, in order. -/
+
+/-- A step of a decoder succeeds exactly when it and the rest succeed. -/
+theorem bind_eq_ok {α β : Type} {x : Except RlpError α} {f : α → Except RlpError β} {y : β} :
+    x >>= f = .ok y ↔ ∃ a, x = .ok a ∧ f a = .ok y := by
+  cases x <;> simp [bind, Except.bind]
+
+section Fields
+
+variable {α : Type} [Codec α] [LawfulCodec α]
+
+/-- A field reads back from its item. -/
+theorem Item.readField_cons (count : Nat) (x : α) (rest : List Item) :
+    Item.readField count (Codec.toItem x :: rest) = .ok (x, rest) := by
+  simp [Item.readField, Item.field_toItem, bind, Except.bind, pure, Except.pure]
+
+/-- A field that reads from some items is the first of them. -/
+theorem Item.eq_of_readField {count : Nat} {items rest : List Item} {x : α}
+    (h : Item.readField count items = .ok (x, rest)) : items = Codec.toItem x :: rest := by
+  cases items with
+  | nil => simp [Item.readField] at h
+  | cons item tail =>
+    obtain ⟨y, hItem, h⟩ := Item.field_bind_eq_ok.mp h
+    simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    rw [hItem]
+
+omit [LawfulCodec α] in
+/-- A field that appears at a fork has one item from that fork on, and none before. -/
+theorem Item.length_ofSince {f fork : Fork} (x : Since f fork α) :
+    (Item.ofSince x).length = Item.sinceCount f fork := by
+  unfold Item.ofSince Item.sinceCount
+  split <;> rfl
+
+/-- A field that appears at a fork reads back from its items. -/
+theorem Item.readSince_append {f fork : Fork} (count : Nat) (x : Since f fork α)
+    (rest : List Item) : Item.readSince count (Item.ofSince x ++ rest) = .ok (x, rest) := by
+  unfold Item.readSince Item.ofSince
+  by_cases h : f ≤ fork
+  · simp only [h, ↓reduceDIte, List.singleton_append, Item.readField_cons, bind, Except.bind,
+      pure, Except.pure]
+  · simp only [h, ↓reduceDIte, List.nil_append, Except.ok.injEq]
+    -- Before its fork, the field has only one value.
+    exact Prod.ext (Since.eq_of_not_le h _ _) rfl
+
+/-- A field that appears at a fork, read from some items, has its items first among them. -/
+theorem Item.eq_of_readSince {f fork : Fork} {count : Nat} {items rest : List Item}
+    {x : Since f fork α} (h : Item.readSince count items = .ok (x, rest)) :
+    items = Item.ofSince x ++ rest := by
+  unfold Item.readSince at h
+  unfold Item.ofSince
+  by_cases hf : f ≤ fork
+  · simp only [hf, ↓reduceDIte] at h ⊢
+    obtain ⟨⟨y, tail⟩, hy, h⟩ := bind_eq_ok.mp h
+    simp only [pure, Except.pure, Except.ok.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    exact Item.eq_of_readField hy
+  · simp only [hf, ↓reduceDIte, Except.ok.injEq] at h ⊢
+    exact congrArg Prod.snd h
+
+end Fields
 
 /-! ## Known answers
 

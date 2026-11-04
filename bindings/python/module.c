@@ -503,6 +503,8 @@ static PyMethodDef methods[] = {
   {"reqresp_max_payload_size", py_reqresp_max_payload_size, METH_VARARGS, NULL},
   {"reqresp_decode_payload", py_reqresp_decode_payload, METH_VARARGS, NULL},
   {"reqresp_decode_response_chunk", py_reqresp_decode_response_chunk, METH_VARARGS, NULL},
+  {"block_header_hash", py_block_header_hash, METH_VARARGS, NULL},
+  {"block_reencode", py_block_reencode, METH_VARARGS, NULL},
   {"precompile_run", py_precompile_run, METH_VARARGS, NULL},
   {"state_root", py_state_root, METH_VARARGS, NULL},
   {NULL, NULL, 0, NULL},

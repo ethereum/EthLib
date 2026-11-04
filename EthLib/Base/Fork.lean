@@ -12,6 +12,8 @@ Before the Merge the two layers forked apart, so their forks interleave by date.
 From Shapella on, one upgrade changes both layers, and it is one fork.
 
 When a fork activates is chain configuration, so the type holds only the order.
+
+A field that a fork adds to a type holds a value only from that fork on.
 -/
 
 @[expose] public section
@@ -157,5 +159,14 @@ instance (a b : Fork) : Decidable (a < b) := Nat.decLt _ _
 instance (a b : Fork) : Decidable (a ≤ b) := Nat.decLe _ _
 
 end Fork
+
+/-- A field that appears at fork `f`, in a type at fork `fork`.
+
+It maps a proof of `f ≤ fork` to a value.
+
+Before `f` no such proof exists, so the field has one value and holds nothing.
+
+From `f` on, the field holds one value of `α`. -/
+def Since (f fork : Fork) (α : Type) : Type := f ≤ fork → α
 
 end EthLib.Base

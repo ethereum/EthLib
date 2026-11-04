@@ -77,6 +77,10 @@ A fixed-length byte string, such as an address, must have exactly its length.
 A list holds the item of each element, and a structure is the list of its fields in order.
 The recipient of a transaction is an address, or the empty byte string for a contract creation.
 
+Some structures gain fields at forks, such as the block header at London.
+A field that a fork adds has an item only from that fork on.
+So the count of items of a block header depends on the fork.
+
 Each typed decoder is strict as well.
 It rejects a value too large for its type and a byte string of the wrong length.
 It also rejects a list where a byte string belongs, and the reverse.

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Exports.Blocks
 public import EthLib.Execution.Exports.Modexp
 public import EthLib.Execution.Exports.Ripemd160
 public import EthLib.Execution.Exports.Sha256

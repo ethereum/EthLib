@@ -242,8 +242,6 @@ A constant with one value at every fork is a definition, named as in its source.
 
 ### Fields that appear at a fork
 
-This subsection is a proposal, which the first type that needs it will test.
-
 A type whose fields appear at forks, such as the execution block header, is one type indexed by the fork.
 A field that appears at fork `f` has the type `Since f fork α`, a function from a proof of `f ≤ fork` to `α`.
 Before `f`, no such proof exists, so the field has exactly one value and holds nothing.
@@ -259,6 +257,9 @@ A function that builds a header at any fork writes the root as `fun _ => root`, 
 The codecs then see only the present fields.
 The RLP list of a header has only the fields whose fork is at or before `fork`, in their order.
 The SSZ container of a beacon state works the same way.
+
+The execution block header, in `EthLib/Execution/Blocks/Header.lean`, uses this design.
+Its RLP codec is lawful at every fork, which validates the design for RLP.
 
 The simpler form `if f ≤ fork then α else Unit` reduces to `α` or to `Unit` at a known fork.
 At a fork variable, it needs a cast at each read and each write, and the function form needs none.
