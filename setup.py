@@ -145,6 +145,7 @@ def _make_extension() -> Extension:
             "bindings/python/sphincs.c",
             "bindings/python/modexp.c",
             "bindings/python/sha256.c",
+            "bindings/python/keccak.c",
             "bindings/python/ripemd160.c",
             "bindings/python/sha256_precompile.c",
             "bindings/python/secp256k1.c",

@@ -455,6 +455,7 @@ static PyMethodDef methods[] = {
   {"modexp", py_modexp, METH_VARARGS, NULL},
   {"modexp_gas_cost", py_modexp_gas_cost, METH_VARARGS, NULL},
   {"sha256", py_sha256, METH_VARARGS, NULL},
+  {"keccak256", py_keccak256, METH_VARARGS, NULL},
   {"ripemd160", py_ripemd160, METH_VARARGS, NULL},
   {"sha256_precompile", py_sha256_precompile, METH_VARARGS, NULL},
   {"sha256_precompile_gas_cost", py_sha256_precompile_gas_cost, METH_VARARGS, NULL},

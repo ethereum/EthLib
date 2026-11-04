@@ -18,6 +18,10 @@ All but `abc` come from the Keccak team's KAT files for Keccak[r = 1088, c = 512
 
 They are `ShortMsgKAT_256.txt` and `LongMsgKAT_256.txt`, in `KeccakKAT-3.zip` of the third round of the SHA-3 competition.
 
+The archive is at <https://keccak.team/obsolete/KeccakKAT-3.zip>.
+
+Its sha256 is `af92d22d23527a0d168a6bbe70b28c840a43bba5bcea828a6d9a5e7ad79378ce`.
+
 Those files list messages by their length in bits.
 
 The cases below are the byte-aligned ones that reach every way a message can end against the 136-byte rate:
