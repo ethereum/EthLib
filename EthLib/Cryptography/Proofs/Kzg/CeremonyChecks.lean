@@ -5,26 +5,20 @@ public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.FrZMod
 public import EthLib.Cryptography.Proofs.Bls.G1Group
 public import EthLib.Cryptography.Proofs.Bls.G1Order
+public import EthLib.Cryptography.Proofs.Bls.PairingLaws
 
 /-!
 # Sufficiency of the ceremony pairing checks
 
-This file formalizes the algebraic soundness argument behind the
-`kzg-ceremony-specs` sequencer pairing checks:
-https://github.com/ethereum/kzg-ceremony-specs/blob/master/docs/sequencer/sequencer.md#pairing-checks
+The [`kzg-ceremony-specs` sequencer](https://github.com/ethereum/kzg-ceremony-specs/blob/master/docs/sequencer/sequencer.md#pairing-checks) runs three pairing checks on each contribution.
 
-Unlike an exponent-only model, the statement below is phrased over this repository's
-actual `Bls.Fr`, `Bls.G1`, `Bls.G2`, `Bls.G1.mul`, `Bls.G2.mul`, and
-`Bls.pairingCheck` definitions.
+The theorems here are stated over the spec's own `Fr`, `G1`, `G2` and `pairingCheck`.
 
-The repository does not yet prove bilinearity, non-degeneracy, or scalar-multiplication
-faithfulness for its executable BLS12-381 implementation. Those concrete implementation
-properties are therefore collected in `ConcreteBlsLaws`. The main theorem proves that,
-once those exact missing laws are supplied, the three concrete pairing checks force every
-submitted point to be the expected power of the updated trapdoor.
+They assume one law of the pairing, `ConcreteBlsLaws`, which follows from `PairingLaws`.
 
-The theorem concerns the exact, unbatched checks. Soundness of random-linear-combination
-batching is a separate probabilistic statement.
+Under that law, the checks force every submitted point to be the expected power of the updated trapdoor.
+
+They concern the exact checks, not their random-linear-combination batching.
 -/
 
 @[expose] public section
@@ -521,5 +515,36 @@ theorem g2PowersFollowFromCrossGroup
         G2.mul G2.generator (Fr.powNat (exponents.s * exponents.x) i) :=
   (checksSufficient laws contribution transcript checks exponents
     previousTauNonzero pubkeyNonzero).2
+
+/-- The scalar identity of `pairingEq`, over `ZMod`, where `linear_combination` applies. -/
+private theorem add_neg_mul_eq_zero_iff (a b c d : ZMod Fr.modulus) :
+    a * b + -c * d = 0 ↔ a * b = c * d := by
+  constructor <;> intro h <;> linear_combination h
+
+/-- The general pairing law gives the law of the ceremony checks. -/
+theorem _root_.EthLib.Cryptography.Bls.PairingLaws.concrete (laws : Bls.PairingLaws) :
+    ConcreteBlsLaws := by
+  refine ⟨fun a b c d => ?_⟩
+  unfold pairingEq
+  rw [laws.two_pairs (Bls.G1.represents_mul_generator a) (Bls.G2.represents_mul_generator b)
+    (Bls.G1.represents_mul_generator c).neg (Bls.G2.represents_mul_generator d)]
+  exact add_neg_mul_eq_zero_iff a b c d
+
+/-- **Sufficiency of all three concrete pairing checks**, under the general pairing law. -/
+theorem checksSufficient_of_pairingLaws
+    (laws : Bls.PairingLaws)
+    (contribution : Contribution) (transcript : Transcript)
+    (checks : Checks contribution transcript)
+    (exponents : SubgroupExponents contribution transcript)
+    (previousTauNonzero : G1.isInfinity transcript.previousTau = false)
+    (pubkeyNonzero : G2.isInfinity contribution.potPubkey = false) :
+    (∀ i (hi : i < contribution.g1Powers.size),
+      contribution.g1Powers[i]'hi =
+        G1.mul G1.generator (Fr.powNat (exponents.s * exponents.x) i)) ∧
+    (∀ i (hi : i < contribution.g2Powers.size),
+      contribution.g2Powers[i]'hi =
+        G2.mul G2.generator (Fr.powNat (exponents.s * exponents.x) i)) :=
+  checksSufficient laws.concrete contribution transcript checks exponents
+    previousTauNonzero pubkeyNonzero
 
 end EthLib.Cryptography.Kzg.CeremonyChecks

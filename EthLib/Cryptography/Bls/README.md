@@ -114,7 +114,8 @@ The theorem is about the group element, not the stored coordinates: the represen
 - No theorem says that `KeyValidate` and the subgroup checks accept exactly the points of the prime-order subgroups.
 - No theorem states what the signature functions return; in particular, none says that an honest aggregate signature verifies.
 - No security property, such as unforgeability, is proved.
-- `ConcreteBlsLaws`, the law of the pairing that the KZG ceremony theorem assumes, is not proved: it is `pairingEq_mul_iff`, bilinearity together with non-degeneracy.
+- `PairingLaws`, the law of the pairing check, is not proved: on representatives of `a_i * g_1` and `b_i * g_2`, the check passes exactly when `sum_i a_i * b_i = 0`.
+  Theorems about the result of a pairing check take it as a hypothesis, and the KZG ceremony law `ConcreteBlsLaws` follows from it.
 
 ## What the kernel cannot evaluate
 

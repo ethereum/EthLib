@@ -143,6 +143,13 @@ The BLS theorems check the constants, because a wrong digit in a modulus or in t
 `seven_pow_card_sub_one` and `seven_pow_div_prime_ne_one` (`Proofs/Bls/FrZMod.lean`) prove that `7` generates the multiplicative group of the scalar field; `7` is also the KZG constant `PRIMITIVE_ROOT_OF_UNITY`.
 `addOrderOf_toPoint_generator` (`Proofs/Bls/G1Order.lean`) proves that the G1 generator has order `r`.
 
+No theorem proves that `pairingCheck` computes a bilinear, non-degenerate pairing.
+`PairingLaws` (`Proofs/Bls/PairingLaws.lean`) states the consequence that verification needs, as one hypothesis.
+Let `P_i` represent `a_i * g_1` and `Q_i` represent `b_i * g_2`, where a representative is any valid point with that group element.
+Then the check of the pairs `(P_i, Q_i)` passes exactly when `sum_i a_i * b_i = 0` in `Fr`.
+The law holds when the check tests `prod_i e(P_i, Q_i) = 1` for any bilinear map `e` with `e(g_1, g_2) != 1` into a group of order `r`.
+`pairingCheck_congr` (`Proofs/Bls/PairingCongr.lean`) proves that the check depends only on the group elements of valid points, so the law can quantify over representatives.
+
 ### secp256k1
 
 The secp256k1 theorems are correctness statements.
@@ -185,6 +192,9 @@ It holds under four hypotheses besides the checks themselves:
 - `SubgroupExponents`, exponents witnessing that every point involved is a multiple of its group's generator, which stands in for the subgroup checks;
 - `previousTauNonzero`, that the previous transcript's tau point is not at infinity;
 - `pubkeyNonzero`, that the contributor's public key is not at infinity.
+
+`ConcreteBlsLaws` follows from the pairing law `PairingLaws` (`PairingLaws.concrete`).
+`checksSufficient_of_pairingLaws` states the same theorem with `PairingLaws` in its place.
 
 ### EVM instructions
 
@@ -267,6 +277,9 @@ Finally, the consistency theorems on the constants, listed under BLS12-381, catc
 
 A conditional theorem is only as strong as its hypotheses.
 `checksSufficient` is the main one today, and its four hypotheses are listed under KZG.
+`PairingLaws`, listed under BLS12-381, is the hypothesis of every theorem about the result of a pairing check.
+It is a `Prop` passed as an explicit argument, never an axiom, so `lake exe check-decls` still sees only the standard axioms.
+If it were false, every theorem that assumes it would hold vacuously.
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
 ### A3. Side channels
