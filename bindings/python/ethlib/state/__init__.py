@@ -23,4 +23,9 @@ def state_root(state: bytes) -> bytes:
     return _native.state_root(state)
 
 
-__all__ = ["state_root", "StateError"]
+def withdrawals_root(fork: str, state: bytes, block: bytes) -> bytes:
+    """The state root after the withdrawals of a block, from the state that the RLP bytes encode."""
+    return _native.state_withdrawals_root(fork, state, block)
+
+
+__all__ = ["state_root", "withdrawals_root", "StateError"]

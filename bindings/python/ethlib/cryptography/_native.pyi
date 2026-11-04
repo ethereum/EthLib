@@ -567,6 +567,10 @@ def state_root(state: bytes) -> bytes:
     """The 32-byte state root, with Keccak-256, of the state that `input` encodes."""
     ...
 
+def state_withdrawals_root(fork: str, state: bytes, block: bytes) -> bytes:
+    """The state root after the withdrawals of a block, from the state that `input` encodes."""
+    ...
+
 def mainnet_active_fork(number: int, timestamp: int) -> bytes:
     """The name of the active fork of mainnet at a block, or no bytes when no fork is active."""
     ...

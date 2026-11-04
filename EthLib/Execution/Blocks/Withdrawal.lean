@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Address
+public import EthLib.Execution.State.Tracker
 public import EthLib.Serialization.Rlp.Codec
 
 /-!
@@ -11,6 +12,12 @@ A withdrawal moves ether from the consensus layer to an account of the execution
 [EIP-4895](https://eips.ethereum.org/EIPS/eip-4895#specification) adds withdrawals at Shapella.
 
 Its RLP form is the list of its four fields, in order.
+
+After the transactions of a block, each withdrawal adds its amount to the balance of its account.
+
+The amount is in Gwei, so the balance grows by the amount times `10^9` wei.
+
+A withdrawal costs no gas.
 -/
 
 @[expose] public section
@@ -51,5 +58,22 @@ def ofItem (item : Item) : Except RlpError Withdrawal := do
 end Withdrawal
 
 instance : Codec Withdrawal := ⟨Withdrawal.toItem, Withdrawal.ofItem⟩
+
+open EthLib.Execution.State
+
+/-- The wei in one Gwei. -/
+def GWEI_TO_WEI : Nat := 10 ^ 9
+
+/-- Add the amount of each withdrawal, in wei, to the balance of its account, in order.
+
+The writes join the block, as the writes of a transaction do.
+
+It fails only when a balance would reach `2^256`, which EIP-4895 leaves out. -/
+def processWithdrawals (fork : Fork) (block : BlockState) (withdrawals : List Withdrawal) :
+    Except StateError BlockState := do
+  let tx ← withdrawals.foldlM
+    (fun tx w => tx.createEther fork w.address (BitVec.ofNat 256 (w.amount.toNat * GWEI_TO_WEI)))
+    (TransactionState.ofBlock block)
+  return tx.incorporateTxIntoBlock.parent
 
 end EthLib.Execution.Blocks

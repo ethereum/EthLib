@@ -425,6 +425,9 @@
 #define DOC_state_root \
   "The 32-byte state root, with Keccak-256, of the state that `input` encodes."
 
+#define DOC_state_withdrawals_root \
+  "The state root after the withdrawals of a block, from the state that `input` encodes."
+
 #define DOC_mainnet_active_fork \
   "The name of the active fork of mainnet at a block, or no bytes when no fork is active."
 

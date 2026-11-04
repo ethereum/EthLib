@@ -15,4 +15,7 @@ Its block and its header hash are copied from the fixture without change, so no 
 `receipts.json` holds receipts of valid blocks of the same release, with the Bloom filter that the fixture gives for each.
 For each fork, transaction type, and presence or absence of logs, it keeps the first four receipts in path order.
 
+`withdrawals.json` holds the Shanghai tests of `eip4895_withdrawals` whose first block is valid and has no transaction.
+Each case keeps the state before the block, as the fixture gives it, and the state roots of the genesis header and of the block header.
+
 The Python tests in `bindings/python/tests/blocks/` read these cases and never rewrite them.

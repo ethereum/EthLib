@@ -59,6 +59,17 @@ inductive StateError where
   | balanceOverflow (address : Address)
   deriving DecidableEq, Repr
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The codes start at 101, above every code of an error of a state given as bytes.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def StateError.code : StateError → UInt32
+  | .noAccount _ => 101
+  | .missingCode _ => 102
+  | .insufficientBalance _ => 103
+  | .balanceOverflow _ => 104
+
 /-! ## The state before a block -/
 
 /-- The account at an address, or none if the address has no account. -/

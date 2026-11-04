@@ -472,6 +472,10 @@ def bindings : List Binding := [
   ⟨"state_root", `EthLib.Execution.State.Exports.stateRootExport,
     "(state: bytes) -> bytes",
     [`EthLib.Execution.State.StateInputError], some "StateError"⟩,
+  ⟨"state_withdrawals_root", `EthLib.Execution.State.Exports.withdrawalsRootExport,
+    "(fork: str, state: bytes, block: bytes) -> bytes",
+    [`EthLib.Execution.State.StateInputError, `EthLib.Execution.State.StateError],
+    some "StateError"⟩,
   ⟨"mainnet_active_fork", `EthLib.Base.ChainConfig.Exports.mainnetActiveForkExport,
     "(number: int, timestamp: int) -> bytes",
     [], none⟩
