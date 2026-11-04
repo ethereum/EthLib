@@ -133,9 +133,9 @@ https://ethresear.ch/t/reed-solomon-erasure-code-recovery-in-n-log-2-n-time-with
 
 A faster version thanks to Qi Zhou can be found here:
 https://github.com/ethereum/research/blob/51b530a53bd4147d123ab3e390a9d08605c2cdb8/polynomial_reconstruction/polynomial_reconstruction_danksharding.py -/
-def recoverCellsAndKzgProofs
+def recoverCellsAndKzgProofs (setup : TrustedSetup)
     (cellIndices : Array CellIndex) (cells : Array Cell)
-    : KzgM (Array Cell × Array KZGProof) := do
+    : Except KzgError (Array Cell × Array KZGProof) := do
 
   -- There must be an equal number of cells and indices.
   if cells.size ≠ cellIndices.size then
@@ -168,6 +168,6 @@ def recoverCellsAndKzgProofs
     cellToCosetEvals c
 
   let polyCoeff ← recoverPolynomialcoeff cellIndices cosetsEvals
-  computeCellsAndKzgProofsPolynomialcoeff polyCoeff
+  computeCellsAndKzgProofsPolynomialcoeff setup polyCoeff
 
 end EthLib.Cryptography.Kzg

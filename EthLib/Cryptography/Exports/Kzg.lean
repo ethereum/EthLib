@@ -37,13 +37,24 @@ namespace EthLib.Cryptography.Kzg.Exports
 open EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Kzg.Constants
 
-/-- Run a `KzgM` action down to `IO`.
+/-- Run a KZG computation in `IO`.
 
-A `KzgError` becomes the `IO.userError` that the C extension surfaces to callers. -/
-def runKzg {α : Type} (act : KzgM α) : IO α := do
-  match ← act.run with
+An error becomes the `IO` error that the C extension raises to the caller. -/
+def runKzg {α : Type} (act : Except KzgError α) : IO α :=
+  match act with
   | .ok a    => pure a
   | .error e => throw (IO.userError e.message)
+
+/-- The embedded trusted setup, decoded.
+
+A constant of compiled Lean is evaluated once, when its module is initialized.
+
+So the 8257 points are decoded once, and every export reuses them. -/
+def embeddedSetup : Except KzgError TrustedSetup := TrustedSetup.ofHex
+
+/-- Run a KZG computation that reads the embedded trusted setup. -/
+def runKzgWithSetup {α : Type} (act : TrustedSetup → Except KzgError α) : IO α :=
+  runKzg (embeddedSetup >>= act)
 
 /-! ## Sizes
 
@@ -94,7 +105,7 @@ def constCellsPerExtBlob (_ : Unit) : UInt64 :=
 
 @[export eth_kzg_blob_to_kzg_commitment]
 def blobToKzgCommitmentExport (blob : ByteArray) : IO ByteArray :=
-  runKzg (blobToKzgCommitment blob)
+  runKzgWithSetup (blobToKzgCommitment · blob)
 
 @[export eth_kzg_compute_challenge]
 def computeChallengeExport
@@ -112,26 +123,26 @@ def computeChallengeExport
 @[export eth_kzg_compute_kzg_proof]
 def computeKzgProofExport
     (blob : ByteArray) (z : ByteArray) : IO ByteArray := do
-  let (proof, y) ← runKzg (computeKzgProof blob z)
+  let (proof, y) ← runKzgWithSetup (computeKzgProof · blob z)
   return proof ++ y
 
 @[export eth_kzg_verify_kzg_proof]
 def verifyKzgProofExport
     (commitment : ByteArray) (z : ByteArray)
     (y : ByteArray) (proof : ByteArray) : IO UInt8 := do
-  let ok ← runKzg (verifyKzgProof commitment z y proof)
+  let ok ← runKzgWithSetup (verifyKzgProof · commitment z y proof)
   return if ok then 1 else 0
 
 @[export eth_kzg_compute_blob_kzg_proof]
 def computeBlobKzgProofExport
     (blob : ByteArray) (commitment : ByteArray) : IO ByteArray :=
-  runKzg (computeBlobKzgProof blob commitment)
+  runKzgWithSetup (computeBlobKzgProof · blob commitment)
 
 @[export eth_kzg_verify_blob_kzg_proof]
 def verifyBlobKzgProofExport
     (blob : ByteArray) (commitment : ByteArray) (proof : ByteArray)
     : IO UInt8 := do
-  let ok ← runKzg (verifyBlobKzgProof blob commitment proof)
+  let ok ← runKzgWithSetup (verifyBlobKzgProof · blob commitment proof)
   return if ok then 1 else 0
 
 @[export eth_kzg_verify_blob_kzg_proof_batch]
@@ -139,7 +150,7 @@ def verifyBlobKzgProofBatchExport
     (blobs : Array ByteArray)
     (commitments : Array ByteArray)
     (proofs : Array ByteArray) : IO UInt8 := do
-  let ok ← runKzg (verifyBlobKzgProofBatch blobs commitments proofs)
+  let ok ← runKzgWithSetup (verifyBlobKzgProofBatch · blobs commitments proofs)
   return if ok then 1 else 0
 
 @[export eth_kzg_compute_cells]
@@ -187,7 +198,7 @@ def computeVerifyCellKzgProofBatchChallengeExport
 
 @[export eth_kzg_compute_cells_and_kzg_proofs]
 def computeCellsAndKzgProofsExport (blob : ByteArray) : IO ByteArray := do
-  let (cells, proofs) ← runKzg (computeCellsAndKzgProofs blob)
+  let (cells, proofs) ← runKzgWithSetup (computeCellsAndKzgProofs · blob)
   let cellsBuf  := cells.foldl  (· ++ ·) ByteArray.empty
   let proofsBuf := proofs.foldl (· ++ ·) ByteArray.empty
   return cellsBuf ++ proofsBuf
@@ -198,17 +209,17 @@ def verifyCellKzgProofBatchExport
     (cellIndicesBE : ByteArray)
     (cells : Array ByteArray)
     (proofs : Array ByteArray) : IO UInt8 := do
-  let ok ← runKzg do
+  let ok ← runKzgWithSetup fun setup => do
     let cellIndices ← unpackIndicesBE cellIndicesBE
-    verifyCellKzgProofBatch commitments cellIndices cells proofs
+    verifyCellKzgProofBatch setup commitments cellIndices cells proofs
   return if ok then 1 else 0
 
 @[export eth_kzg_recover_cells_and_kzg_proofs]
 def recoverCellsAndKzgProofsExport
     (cellIndicesBE : ByteArray) (cells : Array ByteArray) : IO ByteArray := do
-  let (cells', proofs') ← runKzg do
+  let (cells', proofs') ← runKzgWithSetup fun setup => do
     let cellIndices ← unpackIndicesBE cellIndicesBE
-    recoverCellsAndKzgProofs cellIndices cells
+    recoverCellsAndKzgProofs setup cellIndices cells
   let cellsBuf  := cells'.foldl  (· ++ ·) ByteArray.empty
   let proofsBuf := proofs'.foldl (· ++ ·) ByteArray.empty
   return cellsBuf ++ proofsBuf

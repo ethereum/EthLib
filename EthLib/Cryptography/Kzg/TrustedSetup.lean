@@ -2,27 +2,30 @@ module
 
 public import EthLib.Cryptography.Bls
 public import EthLib.Cryptography.Kzg.Constants
+public import EthLib.Cryptography.Kzg.Errors
 public import EthLib.Cryptography.Kzg.TrustedSetupData
 
 /-!
 # `TrustedSetup`
 
-Holder for the KZG trusted setup (Lagrange-basis G1, monomial-basis
-G1, monomial-basis G2).
+The KZG trusted setup: Lagrange-basis G1 points, monomial-basis G1 points and G2 points.
 
-The compressed bytes are embedded directly in `TrustedSetupData` as
-hex strings. At module-init we decode them, decompress to projective
-points, and stash both forms in a global ref accessed via
-`TrustedSetup.get!`.
+Every operation that reads the setup takes it as an argument.
+
+A setup decodes from compressed points, or from the embedded hex strings of the ceremony.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Kzg
 
-/-- The KZG trusted setup. Each entry is stored as both the projective
-G1/G2 point and its compressed-byte form; a few callers consume the
-bytes directly. -/
+open EthLib.Cryptography.Kzg.Constants
+
+/-- The KZG trusted setup.
+
+Each entry is stored as both the decoded point and its compressed bytes.
+
+A few callers consume the bytes directly. -/
 structure TrustedSetup where
   g1Lagrange       : Array Bls.G1
   g1LagrangeBytes  : Array ByteArray
@@ -34,52 +37,60 @@ deriving Inhabited
 
 namespace TrustedSetup
 
-private def nibble (c : Char) : UInt8 :=
+/-- The value of one hexadecimal digit, in either case. -/
+def nibble? (c : Char) : Option UInt8 :=
   let n := c.toNat
-  if 0x30 ≤ n ∧ n ≤ 0x39 then UInt8.ofNat (n - 0x30)
-  else if 0x61 ≤ n ∧ n ≤ 0x66 then UInt8.ofNat (n - 0x57)
-  else if 0x41 ≤ n ∧ n ≤ 0x46 then UInt8.ofNat (n - 0x37)
-  else panic! "invalid hex"
+  if 0x30 ≤ n ∧ n ≤ 0x39 then some (UInt8.ofNat (n - 0x30))
+  else if 0x61 ≤ n ∧ n ≤ 0x66 then some (UInt8.ofNat (n - 0x57))
+  else if 0x41 ≤ n ∧ n ≤ 0x46 then some (UInt8.ofNat (n - 0x37))
+  else none
 
-private def hexToBytesAux : List Char → ByteArray → ByteArray
-  | [], acc => acc
-  | [_], _ => panic! "invalid hex"
-  | hi :: lo :: rest, acc =>
-    hexToBytesAux rest (acc.push ((nibble hi <<< 4) ||| nibble lo))
+/-- Decode pairs of hexadecimal digits onto `acc`.
 
-private def hexToByteArray (s : String) : ByteArray :=
+An odd number of digits, or a character that is not a digit, gives `none`. -/
+def hexToBytesAux : List Char → ByteArray → Option ByteArray
+  | [], acc => some acc
+  | [_], _ => none
+  | hi :: lo :: rest, acc => do
+    hexToBytesAux rest (acc.push (((← nibble? hi) <<< 4) ||| (← nibble? lo)))
+
+/-- Decode a hexadecimal string without a `0x` prefix. -/
+def hexToBytes? (s : String) : Option ByteArray :=
   hexToBytesAux s.toList ByteArray.empty
 
-private def buildEmbedded : TrustedSetup :=
-  let toG1 (b : ByteArray) : Bls.G1 :=
-    match Bls.G1.uncompress b with
-    | .ok p    => p
-    | .error _ => panic! "trusted setup contains invalid G1 point"
-  let toG2 (b : ByteArray) : Bls.G2 :=
-    match Bls.G2.uncompress b with
-    | .ok p    => p
-    | .error _ => panic! "trusted setup contains invalid G2 point"
-  let g1LagrangeBytes := TrustedSetupData.g1LagrangeHex.map hexToByteArray
-  let g1MonomialBytes := TrustedSetupData.g1MonomialHex.map hexToByteArray
-  let g2MonomialBytes := TrustedSetupData.g2MonomialHex.map hexToByteArray
-  let g1Lagrange := g1LagrangeBytes.map toG1
-  let g1Monomial := g1MonomialBytes.map toG1
-  let g2Monomial := g2MonomialBytes.map toG2
-  {
-    g1Lagrange, g1LagrangeBytes,
-    g1Monomial, g1MonomialBytes,
-    g2Monomial, g2MonomialBytes,
+/-- Decode a trusted setup from compressed points.
+
+The Deneb specification fixes the lengths of the three lists: 4096, 4096 and 65.
+
+A list of another length, or a point that does not decompress, is rejected.
+
+Decompression checks that a point is on its curve, not that it is in the subgroup. -/
+def ofBytes (g1LagrangeBytes g1MonomialBytes g2MonomialBytes : Array ByteArray) :
+    Except KzgError TrustedSetup := do
+  if g1LagrangeBytes.size ≠ FIELD_ELEMENTS_PER_BLOB ∨
+      g1MonomialBytes.size ≠ FIELD_ELEMENTS_PER_BLOB ∨
+      g2MonomialBytes.size ≠ KZG_SETUP_G2_LENGTH then
+    throw .invalidTrustedSetup
+  let toG1 (b : ByteArray) : Except KzgError Bls.G1 :=
+    (Bls.G1.uncompress b).mapError fun _ => .invalidTrustedSetup
+  let toG2 (b : ByteArray) : Except KzgError Bls.G2 :=
+    (Bls.G2.uncompress b).mapError fun _ => .invalidTrustedSetup
+  return {
+    g1Lagrange := ← g1LagrangeBytes.mapM toG1, g1LagrangeBytes,
+    g1Monomial := ← g1MonomialBytes.mapM toG1, g1MonomialBytes,
+    g2Monomial := ← g2MonomialBytes.mapM toG2, g2MonomialBytes,
   }
 
-/-! ## Global slot
+/-- Decode the embedded setup of the mainnet ceremony.
 
-Seeded eagerly at module-init from the embedded bytes; callers never
-have to check whether the setup is loaded. -/
-
-initialize globalRef : IO.Ref TrustedSetup ← IO.mkRef buildEmbedded
-
-/-- Retrieve the loaded setup. -/
-@[inline] def get! : IO TrustedSetup := globalRef.get
+A string that is not hexadecimal is rejected. -/
+def ofHex : Except KzgError TrustedSetup := do
+  let decode (hex : Array String) : Except KzgError (Array ByteArray) :=
+    hex.mapM fun s => match hexToBytes? s with
+      | some b => .ok b
+      | none   => .error .invalidTrustedSetup
+  ofBytes (← decode TrustedSetupData.g1LagrangeHex) (← decode TrustedSetupData.g1MonomialHex)
+    (← decode TrustedSetupData.g2MonomialHex)
 
 end TrustedSetup
 

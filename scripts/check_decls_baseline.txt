@@ -6,8 +6,3 @@
 # always the exact list of findings that exist.
 # Remove an entry in the pull request that removes its finding.
 # Never add one: a new finding is fixed, not listed.
-
-# The KZG trusted setup is read through `IO`, from a reference set at initialization.
-opaque EthLib.Cryptography.Kzg.TrustedSetup.globalRef
-reaches-opaque EthLib.Cryptography.Kzg.TrustedSetup.get!
-reaches-opaque EthLib.Cryptography.Kzg.KzgM

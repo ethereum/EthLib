@@ -3,9 +3,6 @@ module
 public import EthLib.Cryptography.Proofs.Kzg.ExtendedFft
 public import EthLib.Cryptography.Proofs.Kzg.CoefficientPadding
 public import EthLib.Cryptography.Proofs.Kzg.Cells
--- The successful computation is simplified with the public monad laws.
-import Batteries.Lean.LawfulMonad
-import Init.Control.Lawful.Instances
 
 /-!
 # Proofs: extended evaluations and cells via FFT
@@ -236,12 +233,7 @@ theorem computeCells_ok_spec {blob : Blob} {poly : Polynomial}
       getElem!_cellsOfExtendedEvaluations_extendedEvaluations hp_le hcoset⟩
   unfold computeCells
   rw [ite_eq_right (not_not.mpr hbsize)]
-  change (ExceptT.mk (pure (blobToPolynomial blob)) >>= fun polynomial =>
-    pure (cellsOfExtendedEvaluations (extendedEvaluations (polynomialEvalToCoeff polynomial)))) = _
   rw [hblob]
-  -- Read the successful lift as a pure `KzgM` value before applying its bind law.
-  change (pure poly >>= fun polynomial =>
-    pure (cellsOfExtendedEvaluations (extendedEvaluations (polynomialEvalToCoeff polynomial)))) = _
-  simp only [pure_bind]
+  rfl
 
 end EthLib.Cryptography.Kzg

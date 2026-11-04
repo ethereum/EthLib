@@ -2,9 +2,6 @@ module
 
 public import EthLib.Cryptography.Kzg.Core
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
--- Validation uses the public laws of `ExceptT` and `IO`, rather than their hidden bodies.
-import EthLib.Cryptography.Proofs.Kzg.LawfulIO
-import Init.Control.Lawful.Instances
 
 /-!
 # Proofs: `Core`
@@ -117,7 +114,7 @@ theorem g1LincombPoints_length_mismatch {points : Array Bls.G1}
     {scalars : Array Fr} (h : points.size ≠ scalars.size) :
     g1LincombPoints points scalars
       = throw (.lincombLengthMismatch points.size scalars.size) := by
-  simp [g1LincombPoints, h]
+  simp [g1LincombPoints, h, throw_bind]
 
 /-- `g1LincombPoints` of nothing is the identity (the point at infinity). -/
 theorem g1LincombPoints_empty :
@@ -144,7 +141,7 @@ theorem g1Lincomb_length_mismatch {points : Array KZGCommitment}
     {scalars : Array Fr} (h : points.size ≠ scalars.size) :
     g1Lincomb points scalars
       = throw (.lincombLengthMismatch points.size scalars.size) := by
-  simp [g1Lincomb, h]
+  simp [g1Lincomb, h, throw_bind]
 
 /-- `g1Lincomb` of nothing is the identity (the point at infinity). -/
 theorem g1Lincomb_empty :
@@ -163,7 +160,8 @@ theorem g1LincombPoints_of_uncompress {pointsBytes : Array KZGCommitment}
   unfold g1Lincomb g1LincombPoints
   rw [hsz]
   by_cases hne : pointsBytes.size ≠ scalars.size
-  · simp [hne]
+  · simp [hne, throw_bind]
+    rfl
   · rw [ite_eq_right hne, ite_eq_right hne]
     by_cases h0 : pointsBytes.size = 0
     · simp [h0]
@@ -171,68 +169,68 @@ theorem g1LincombPoints_of_uncompress {pointsBytes : Array KZGCommitment}
       simp only [pure_bind]
 
 /-- `computeKzgProof` rejects a wrongly-sized blob. -/
-theorem computeKzgProof_badBlobSize {blob : Blob} (zBytes : Bytes32)
+theorem computeKzgProof_badBlobSize (setup : TrustedSetup) {blob : Blob} (zBytes : Bytes32)
     (h : blob.size ≠ BYTES_PER_BLOB) :
-    computeKzgProof blob zBytes = throw (.badBlobSize blob.size) := by
-  simp [computeKzgProof, h]
+    computeKzgProof setup blob zBytes = throw (.badBlobSize blob.size) := by
+  simp [computeKzgProof, h, throw_bind]
 
 /-- `computeKzgProof` rejects a wrongly-sized evaluation point. -/
-theorem computeKzgProof_badFieldElementSize {blob : Blob} {zBytes : Bytes32}
+theorem computeKzgProof_badFieldElementSize (setup : TrustedSetup) {blob : Blob} {zBytes : Bytes32}
     (hb : blob.size = BYTES_PER_BLOB)
     (h : zBytes.size ≠ BYTES_PER_FIELD_ELEMENT) :
-    computeKzgProof blob zBytes
+    computeKzgProof setup blob zBytes
       = throw (.badFieldElementSize zBytes.size) := by
-  simp [computeKzgProof, hb, h]
+  simp [computeKzgProof, hb, h, throw_bind]
 
 /-- `verifyKzgProof` rejects a wrongly-sized commitment. -/
-theorem verifyKzgProof_badCommitmentSize {commitmentBytes : Bytes48}
+theorem verifyKzgProof_badCommitmentSize (setup : TrustedSetup) {commitmentBytes : Bytes48}
     (zBytes yBytes : Bytes32) (proofBytes : Bytes48)
     (h : commitmentBytes.size ≠ BYTES_PER_COMMITMENT) :
-    verifyKzgProof commitmentBytes zBytes yBytes proofBytes
+    verifyKzgProof setup commitmentBytes zBytes yBytes proofBytes
       = throw (.badCommitmentSize commitmentBytes.size) := by
-  simp [verifyKzgProof, h]
+  simp [verifyKzgProof, h, throw_bind]
 
 /-- `blobToKzgCommitment` rejects a wrongly-sized blob. -/
-theorem blobToKzgCommitment_badBlobSize {blob : Blob}
+theorem blobToKzgCommitment_badBlobSize (setup : TrustedSetup) {blob : Blob}
     (h : blob.size ≠ BYTES_PER_BLOB) :
-    blobToKzgCommitment blob = throw (.badBlobSize blob.size) := by
-  simp [blobToKzgCommitment, h]
+    blobToKzgCommitment setup blob = throw (.badBlobSize blob.size) := by
+  simp [blobToKzgCommitment, h, throw_bind]
 
 /-- `computeBlobKzgProof` rejects a wrongly-sized blob. -/
-theorem computeBlobKzgProof_badBlobSize {blob : Blob}
+theorem computeBlobKzgProof_badBlobSize (setup : TrustedSetup) {blob : Blob}
     (commitmentBytes : Bytes48) (h : blob.size ≠ BYTES_PER_BLOB) :
-    computeBlobKzgProof blob commitmentBytes
+    computeBlobKzgProof setup blob commitmentBytes
       = throw (.badBlobSize blob.size) := by
-  simp [computeBlobKzgProof, h]
+  simp [computeBlobKzgProof, h, throw_bind]
 
 /-- `verifyBlobKzgProof` rejects a wrongly-sized blob. -/
-theorem verifyBlobKzgProof_badBlobSize {blob : Blob}
+theorem verifyBlobKzgProof_badBlobSize (setup : TrustedSetup) {blob : Blob}
     (commitmentBytes proofBytes : Bytes48)
     (h : blob.size ≠ BYTES_PER_BLOB) :
-    verifyBlobKzgProof blob commitmentBytes proofBytes
+    verifyBlobKzgProof setup blob commitmentBytes proofBytes
       = throw (.badBlobSize blob.size) := by
-  simp [verifyBlobKzgProof, h]
+  simp [verifyBlobKzgProof, h, throw_bind]
 
 /-- `verifyBlobKzgProofBatch` rejects a commitments array whose length
 does not match the blobs array. -/
-theorem verifyBlobKzgProofBatch_commitments_mismatch
+theorem verifyBlobKzgProofBatch_commitments_mismatch (setup : TrustedSetup)
     {blobs : Array Blob} {commitmentsBytes : Array Bytes48}
     (proofsBytes : Array Bytes48)
     (h : commitmentsBytes.size ≠ blobs.size) :
-    verifyBlobKzgProofBatch blobs commitmentsBytes proofsBytes
+    verifyBlobKzgProofBatch setup blobs commitmentsBytes proofsBytes
       = throw (.inputLengthMismatch "commitmentsBytes" blobs.size
           commitmentsBytes.size) := by
-  simp [verifyBlobKzgProofBatch, h]
+  simp [verifyBlobKzgProofBatch, h, throw_bind]
 
 /-- `verifyBlobKzgProofBatch` rejects a proofs array whose length does
 not match the blobs array. -/
-theorem verifyBlobKzgProofBatch_proofs_mismatch
+theorem verifyBlobKzgProofBatch_proofs_mismatch (setup : TrustedSetup)
     {blobs : Array Blob} {commitmentsBytes proofsBytes : Array Bytes48}
     (hc : commitmentsBytes.size = blobs.size)
     (h : proofsBytes.size ≠ blobs.size) :
-    verifyBlobKzgProofBatch blobs commitmentsBytes proofsBytes
+    verifyBlobKzgProofBatch setup blobs commitmentsBytes proofsBytes
       = throw (.inputLengthMismatch "proofsBytes" blobs.size
           proofsBytes.size) := by
-  simp [verifyBlobKzgProofBatch, hc, h]
+  simp [verifyBlobKzgProofBatch, hc, h, throw_bind]
 
 end EthLib.Cryptography.Kzg

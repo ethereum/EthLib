@@ -115,7 +115,7 @@ def cellsOfExtendedEvaluations (evals : Array Fr) : Array Cell :=
     cosetEvalsToCell (evals.extract (i * FIELD_ELEMENTS_PER_CELL) ((i + 1) * FIELD_ELEMENTS_PER_CELL))
 
 /-- Reed-Solomon-extend `blob` and return its cells. -/
-def computeCells (blob : Blob) : KzgM (Array Cell) := do
+def computeCells (blob : Blob) : Except KzgError (Array Cell) := do
   if blob.size ≠ BYTES_PER_BLOB then
     throw (.badBlobSize blob.size)
   let polynomial ← blobToPolynomial blob
@@ -156,9 +156,8 @@ This is the Toeplitz structure of FK20.
 See Feist and Khovratovich, "Fast amortized KZG proofs", ePrint 2023/033.
 
 The polynomial has at most 4096 coefficients, the size of the monomial setup. -/
-def computeCellsAndKzgProofsPolynomialcoeff
-    (polynomialCoeff : PolynomialCoeff) : KzgM (Array Cell × Array KZGProof) := do
-  let setup ← TrustedSetup.get!
+def computeCellsAndKzgProofsPolynomialcoeff (setup : TrustedSetup)
+    (polynomialCoeff : PolynomialCoeff) : Except KzgError (Array Cell × Array KZGProof) := do
   let n := FIELD_ELEMENTS_PER_CELL
   let size := polynomialCoeff.size
   let cells := cellsOfExtendedEvaluations (extendedEvaluations polynomialCoeff)
@@ -188,13 +187,13 @@ def computeCellsAndKzgProofsPolynomialcoeff
 
 /-- Compute all cell proofs for an extended blob. Naive O(n²);
 optimal implementations use FK20. -/
-def computeCellsAndKzgProofs
-    (blob : Blob) : KzgM (Array Cell × Array KZGProof) := do
+def computeCellsAndKzgProofs (setup : TrustedSetup)
+    (blob : Blob) : Except KzgError (Array Cell × Array KZGProof) := do
   if blob.size ≠ BYTES_PER_BLOB then
     throw (.badBlobSize blob.size)
   let polynomial ← blobToPolynomial blob
   let polynomialCoeff := polynomialEvalToCoeff polynomial
-  computeCellsAndKzgProofsPolynomialcoeff polynomialCoeff
+  computeCellsAndKzgProofsPolynomialcoeff setup polynomialCoeff
 
 /-- Random challenge `r` used in the universal verification equation. -/
 def computeVerifyCellKzgProofBatchChallenge
@@ -226,12 +225,12 @@ polynomial associated with `commitments[commitmentIndex]`, evaluated over the
 domain specified by `cellIndex`.
 
 This function is the internal implementation of `verifyCellKzgProofBatch`. -/
-def verifyCellKzgProofBatchImpl
+def verifyCellKzgProofBatchImpl (setup : TrustedSetup)
     (commitments : Array KZGCommitment)
     (commitmentIndices : Array CommitmentIndex)
     (cellIndices : Array CellIndex)
     (cosetsEvals : Array CosetEvals)
-    (proofs : Array KZGProof) : KzgM Bool := do
+    (proofs : Array KZGProof) : Except KzgError Bool := do
   -- Length and bounds checks.
   if cellIndices.size ≠ commitmentIndices.size then
     throw (.inputLengthMismatch "cellIndices" commitmentIndices.size cellIndices.size)
@@ -265,7 +264,6 @@ def verifyCellKzgProofBatchImpl
   -- - interpolation_poly_k is the interpolation polynomial for the kth cell
   -- - h_k is the coset shift specifying the evaluation domain of the kth cell
 
-  let setup ← TrustedSetup.get!
   let numCells := cellIndices.size
   let n := FIELD_ELEMENTS_PER_CELL
   let numCommitments := commitments.size
@@ -339,11 +337,11 @@ https://ethresear.ch/t/a-universal-verification-equation-for-data-availability-s
 
 Deduplicates `commitmentsBytes` and forwards into
 `verifyCellKzgProofBatchImpl`. -/
-def verifyCellKzgProofBatch
+def verifyCellKzgProofBatch (setup : TrustedSetup)
     (commitmentsBytes : Array Bytes48)
     (cellIndices : Array CellIndex)
     (cells : Array Cell)
-    (proofsBytes : Array Bytes48) : KzgM Bool := do
+    (proofsBytes : Array Bytes48) : Except KzgError Bool := do
 
   if cells.size ≠ commitmentsBytes.size then
     throw (.inputLengthMismatch "cells" commitmentsBytes.size cells.size)
@@ -388,7 +386,7 @@ def verifyCellKzgProofBatch
     | .ok p    => pure p
     | .error _ => throw (.invalidProof (some i))
 
-  verifyCellKzgProofBatchImpl deduped commitmentIndices cellIndices cosetsEvals proofs
+  verifyCellKzgProofBatchImpl setup deduped commitmentIndices cellIndices cosetsEvals proofs
 
 /-- Decode a buffer of packed indices.
 

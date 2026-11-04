@@ -181,8 +181,9 @@ The kernel checks it by an inverse of `X^p - X` modulo the cubic.
 ### KZG
 
 `Proofs/Kzg/Core.lean` proves that the public operations reject malformed inputs, such as a wrong size or lists of different lengths.
-No theorem says what an accepted input returns.
-The operations run in `IO` to read the trusted setup, so the kernel cannot evaluate them, and their results on success are unproved.
+Each operation takes the trusted setup as an argument and returns `Except KzgError`, so the kernel can unfold it.
+`computeCellsAndKzgProofs_blob_spec` and `recoverCellsAndKzgProofs_spec` (`Proofs/Kzg/Fk20Proofs.lean`) state the cells and proofs that two operations return, under hypotheses on the setup.
+No theorem states what a verification operation returns on accepted input.
 
 `checksSufficient` (`Proofs/Kzg/CeremonyChecks.lean`) is about the ceremony that produced the trusted setup.
 It proves that the ceremony's pairing checks force each G1 and G2 point of a contribution to be the expected power of the trapdoor.
@@ -251,16 +252,13 @@ No theorem relates the module to the execution-specs code it follows, which call
 Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate them, and their intended computational properties remain unproved.
 They come in three kinds.
 A `partial` definition is defined by `partial` recursion.
-An `opaque` one is an opaque constant, such as the global reference that holds the KZG trusted setup.
-A `reaches-opaque` one unfolds to an opaque constant, such as `Loop.forIn`, which `while` compiles to, or the `IO` that reads that reference.
+An `opaque` one is an opaque constant.
+A `reaches-opaque` one unfolds to an opaque constant, such as `Loop.forIn`, which `while` compiles to.
 
 `lake exe check-decls` reports each one, and `scripts/check_decls_baseline.txt` lists those that remain, with the reason for each group.
-Today they are:
+The list below is generated from that file, and it is empty when none remains.
 
 <!-- generated: unfoldable -->
-- `EthLib.Cryptography.Kzg.KzgM`, `reaches-opaque`
-- `EthLib.Cryptography.Kzg.TrustedSetup.get!`, `reaches-opaque`
-- `EthLib.Cryptography.Kzg.TrustedSetup.globalRef`, `opaque`
 <!-- end generated -->
 
 ## Gap A: does the definition say what the source and the client need?

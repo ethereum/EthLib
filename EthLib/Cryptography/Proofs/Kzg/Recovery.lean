@@ -3,9 +3,6 @@ module
 public import EthLib.Cryptography.Kzg.Recovery
 public import EthLib.Cryptography.Proofs.Kzg.Fft
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
--- Validation uses the public laws of `ExceptT` and `IO`, rather than their hidden bodies.
-import EthLib.Cryptography.Proofs.Kzg.LawfulIO
-import Init.Control.Lawful.Instances
 
 /-!
 # Proofs: `Recovery`
@@ -531,44 +528,44 @@ theorem recoverPolynomialcoeff_ok_iff
 
 /-- `recoverCellsAndKzgProofs` rejects a cells array whose length does
 not match the indices array. -/
-theorem recoverCellsAndKzgProofs_length_mismatch
+theorem recoverCellsAndKzgProofs_length_mismatch (setup : TrustedSetup)
     {cellIndices : Array CellIndex} {cells : Array Cell}
     (h : cells.size ≠ cellIndices.size) :
-    recoverCellsAndKzgProofs cellIndices cells
+    recoverCellsAndKzgProofs setup cellIndices cells
       = throw (.inputLengthMismatch "cells" cellIndices.size cells.size) := by
-  simp [recoverCellsAndKzgProofs, h]
+  simp [recoverCellsAndKzgProofs, h, throw_bind]
 
 /-- `recoverCellsAndKzgProofs` rejects fewer than 50% of the cells. -/
-theorem recoverCellsAndKzgProofs_notEnoughCells
+theorem recoverCellsAndKzgProofs_notEnoughCells (setup : TrustedSetup)
     {cellIndices : Array CellIndex} {cells : Array Cell}
     (hlen : cells.size = cellIndices.size)
     (h : cellIndices.size < CELLS_PER_EXT_BLOB / 2) :
-    recoverCellsAndKzgProofs cellIndices cells = throw .notEnoughCells := by
-  simp [recoverCellsAndKzgProofs, hlen, h]
+    recoverCellsAndKzgProofs setup cellIndices cells = throw .notEnoughCells := by
+  simp [recoverCellsAndKzgProofs, hlen, h, throw_bind]
 
 /-- `recoverCellsAndKzgProofs` rejects more cells than exist. -/
-theorem recoverCellsAndKzgProofs_tooManyCells
+theorem recoverCellsAndKzgProofs_tooManyCells (setup : TrustedSetup)
     {cellIndices : Array CellIndex} {cells : Array Cell}
     (hlen : cells.size = cellIndices.size)
     (hmin : ¬cellIndices.size < CELLS_PER_EXT_BLOB / 2)
     (h : cellIndices.size > CELLS_PER_EXT_BLOB) :
-    recoverCellsAndKzgProofs cellIndices cells = throw .tooManyCells := by
-  simp [recoverCellsAndKzgProofs, hlen, hmin, h]
+    recoverCellsAndKzgProofs setup cellIndices cells = throw .tooManyCells := by
+  simp [recoverCellsAndKzgProofs, hlen, hmin, h, throw_bind]
 
 /-- `recoverCellsAndKzgProofs` rejects an out-of-bounds cell index. -/
-theorem recoverCellsAndKzgProofs_cellIndexOutOfBounds
+theorem recoverCellsAndKzgProofs_cellIndexOutOfBounds (setup : TrustedSetup)
     {cellIndices : Array CellIndex} {cells : Array Cell}
     (hlen : cells.size = cellIndices.size)
     (hmin : ¬cellIndices.size < CELLS_PER_EXT_BLOB / 2)
     (hmax : ¬cellIndices.size > CELLS_PER_EXT_BLOB)
     (h : cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) = true) :
-    recoverCellsAndKzgProofs cellIndices cells
+    recoverCellsAndKzgProofs setup cellIndices cells
       = throw .cellIndexOutOfBounds := by
-  simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, h]
+  simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, h, throw_bind]
 
 /-- `recoverCellsAndKzgProofs` rejects cell indices that are not
 strictly ascending. -/
-theorem recoverCellsAndKzgProofs_indicesNotAscending
+theorem recoverCellsAndKzgProofs_indicesNotAscending (setup : TrustedSetup)
     {cellIndices : Array CellIndex} {cells : Array Cell}
     (hlen : cells.size = cellIndices.size)
     (hmin : ¬cellIndices.size < CELLS_PER_EXT_BLOB / 2)
@@ -576,14 +573,14 @@ theorem recoverCellsAndKzgProofs_indicesNotAscending
     (hbound : cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) = false)
     (h : (Array.range (cellIndices.size - 1)).any
       (fun i => cellIndices[i + 1]! ≤ cellIndices[i]!) = true) :
-    recoverCellsAndKzgProofs cellIndices cells
+    recoverCellsAndKzgProofs setup cellIndices cells
       = throw .indicesNotAscending := by
   simp only [Array.size_range] at h
-  simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, hbound, h]
+  simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, hbound, h, throw_bind]
 
 /-- `recoverCellsAndKzgProofs` rejects a wrongly-sized cell, reporting
 the first offender's size. -/
-theorem recoverCellsAndKzgProofs_badCellSize
+theorem recoverCellsAndKzgProofs_badCellSize (setup : TrustedSetup)
     {cellIndices : Array CellIndex} {cells : Array Cell} {c : Cell}
     (hlen : cells.size = cellIndices.size)
     (hmin : ¬cellIndices.size < CELLS_PER_EXT_BLOB / 2)
@@ -592,10 +589,10 @@ theorem recoverCellsAndKzgProofs_badCellSize
     (hasc : (Array.range (cellIndices.size - 1)).any
       (fun i => cellIndices[i + 1]! ≤ cellIndices[i]!) = false)
     (h : cells.find? (fun c => c.size != BYTES_PER_CELL) = some c) :
-    recoverCellsAndKzgProofs cellIndices cells
+    recoverCellsAndKzgProofs setup cellIndices cells
       = throw (.badCellSize c.size) := by
   simp only [Array.size_range] at hasc
-  simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, hbound, hasc, h]
+  simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, hbound, hasc, h, throw_bind]
 
 /-- The recovery vanishing polynomial has no coefficient above its mathematical degree bound. -/
 theorem constructVanishingPolynomial_high_zero
