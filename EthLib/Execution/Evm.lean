@@ -7,6 +7,7 @@ public import EthLib.Execution.Evm.Instructions.Keccak
 public import EthLib.Execution.Evm.Precompiles
 public import EthLib.Execution.Evm.Memory
 public import EthLib.Execution.Evm.Words
+public import EthLib.Execution.Evm.Gas
 
 /-!
 # `EthLib.Execution.Evm`
@@ -19,5 +20,7 @@ KECCAK256 reads bytes from memory instead, so it is the word it pushes, as a fun
 
 The precompiled contracts are here too, because only the EVM calls them.
 
-The stack, the memory, the gas and the program counter are not here yet.
+The gas prices and the price of memory are here.
+
+The stack, the memory itself, the gas meter and the program counter are not here yet.
 -/
