@@ -555,6 +555,7 @@ static PyMethodDef methods[] = {
   {"enr_verify_v4", py_enr_verify_v4, METH_VARARGS, DOC_enr_verify_v4},
   {"enr_node_id", py_enr_node_id, METH_VARARGS, DOC_enr_node_id},
   {"enr_consensus_entries", py_enr_consensus_entries, METH_VARARGS, DOC_enr_consensus_entries},
+  {"enr_eth_fork_id", py_enr_eth_fork_id, METH_VARARGS, DOC_enr_eth_fork_id},
   {"discv5_log_distance", py_discv5_log_distance, METH_VARARGS, DOC_discv5_log_distance},
   {"discv5_ecdh", py_discv5_ecdh, METH_VARARGS, DOC_discv5_ecdh},
   {"discv5_derive_keys", py_discv5_derive_keys, METH_VARARGS, DOC_discv5_derive_keys},

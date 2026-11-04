@@ -291,6 +291,10 @@ def enr_consensus_entries(fork: str, count: int, record: bytes) -> bytes:
     """The consensus entries of a record at the named fork, with `count` attestation subnets."""
     ...
 
+def enr_eth_fork_id(record: bytes) -> bytes:
+    """The fork identifier of the "eth" entry of a record, as RLP, or no bytes without the entry."""
+    ...
+
 def discv5_log_distance(a: bytes, b: bytes) -> int:
     """The logarithmic distance: the number of bits of the distance, and 0 for equal IDs."""
     ...

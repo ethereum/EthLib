@@ -1494,6 +1494,32 @@
    "docstring":
    "The consensus entries of a record at the named fork, with `count` attestation subnets.\n\nThey come back as the 16 SSZ bytes of `eth2`, then `attnets`, `syncnets`, `cgc` and `nfd`.\n\nEach of the four is the byte 0 when absent, or the byte 1 and its SSZ bytes."},
   {"summary":
+   "The fork identifier of the \"eth\" entry of a record, as RLP, or no bytes without the entry.",
+   "signature": "(record: bytes) -> bytes",
+   "operation": "EthLib.Networking.Enr.Exports.ethForkIdExport",
+   "method": "enr_eth_fork_id",
+   "errors":
+   [{"type": "EthLib.Networking.Enr.EnrError",
+     "codes":
+     [{"constructor": "tooLarge", "code": 1},
+      {"constructor": "rlp", "code": 2},
+      {"constructor": "notAList", "code": 3},
+      {"constructor": "tooFewItems", "code": 4},
+      {"constructor": "signatureNotBytes", "code": 5},
+      {"constructor": "invalidSeq", "code": 6},
+      {"constructor": "keyNotBytes", "code": 7},
+      {"constructor": "missingValue", "code": 8},
+      {"constructor": "repeatedKey", "code": 9},
+      {"constructor": "unsortedKeys", "code": 10},
+      {"constructor": "missingPrefix", "code": 11},
+      {"constructor": "base64", "code": 12},
+      {"constructor": "missingId", "code": 13},
+      {"constructor": "unknownScheme", "code": 14},
+      {"constructor": "invalidPublicKey", "code": 15}]}],
+   "error_class": "EnrError",
+   "docstring":
+   "The fork identifier of the \"eth\" entry of a record, as RLP, or no bytes without the entry.\n\nAn entry that is not a list starting with a fork identifier has code 0."},
+  {"summary":
    "The logarithmic distance: the number of bits of the distance, and 0 for equal IDs.",
    "signature": "(a: bytes, b: bytes) -> int",
    "operation": "EthLib.Networking.Discv5.logDistance",

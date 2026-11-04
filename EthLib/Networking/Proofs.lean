@@ -9,6 +9,7 @@ public import EthLib.Networking.Proofs.Discv4.Packet
 public import EthLib.Networking.Proofs.Encoding.Varint
 public import EthLib.Networking.Proofs.Enr.Base64
 public import EthLib.Networking.Proofs.Enr.Consensus
+public import EthLib.Networking.Proofs.Enr.Eth
 public import EthLib.Networking.Proofs.Enr.Record
 public import EthLib.Networking.Proofs.Gossip.MessageId
 public import EthLib.Networking.Proofs.Gossip.Payload
