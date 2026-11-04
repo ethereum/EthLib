@@ -99,6 +99,16 @@ def isOnCurve : Point2 → Bool
   | infinity => true
   | affine x y => y * y == x * x * x + b2
 
+/-- The generator `P2` of `G_2`, from EIP-197 §"Definition of the groups".
+
+EIP-197 writes each coordinate as `c1 i + c0`. -/
+def generator : Point2 :=
+  affine
+    ⟨10857046999023057135944570762232829481370756359578518086990519993285655852781,
+      11559732032986387107991004021392285783925812861821192530917403151452391805634⟩
+    ⟨8495653923123431417604973247489272438418190587263600148770280649306958101930,
+      4082367875863433681332203403145435568316851327593401208105741076214120093531⟩
+
 /-- The sum of two points, by the same rule as on `G_1`, over `Fp2`. -/
 def add : Point2 → Point2 → Point2
   | infinity, q => q
