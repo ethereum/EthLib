@@ -18,4 +18,7 @@ For each fork, transaction type, and presence or absence of logs, it keeps the f
 `withdrawals.json` holds the Shanghai tests of `eip4895_withdrawals` whose first block is valid and has no transaction.
 Each case keeps the state before the block, as the fixture gives it, and the state roots of the genesis header and of the block header.
 
+`deposits.json` holds the valid Prague blocks of the `eip6110_deposits` tests that have at most 100 logs.
+Each case keeps the logs of the receipts of its block, in order, and the requests hash of its header.
+
 The Python tests in `bindings/python/tests/blocks/` read these cases and never rewrite them.

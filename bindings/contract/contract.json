@@ -2001,6 +2001,61 @@
    "docstring":
    "The withdrawals root of the withdrawals of a block, decoded at a fork from Shapella."},
   {"summary":
+   "The data of the deposit requests of logs, given as the RLP list of the logs, in order.",
+   "signature": "(logs: bytes) -> bytes",
+   "operation": "EthLib.Execution.Blocks.Exports.depositRequestsExport",
+   "method": "block_deposit_requests",
+   "errors":
+   [{"type": "EthLib.Serialization.Rlp.RlpError",
+     "codes":
+     [{"constructor": "payloadTooLong", "code": 1},
+      {"constructor": "inputTooShort", "code": 2},
+      {"constructor": "singleByteWithPrefix", "code": 3},
+      {"constructor": "longFormForShortLength", "code": 4},
+      {"constructor": "leadingZeroInLength", "code": 5},
+      {"constructor": "trailingBytes", "code": 6},
+      {"constructor": "leadingZeroInScalar", "code": 7},
+      {"constructor": "listAsScalar", "code": 8},
+      {"constructor": "listAsBytes", "code": 9},
+      {"constructor": "bytesAsList", "code": 10},
+      {"constructor": "wrongLength", "code": 11},
+      {"constructor": "scalarTooLarge", "code": 12},
+      {"constructor": "wrongFieldCount", "code": 13},
+      {"constructor": "inField", "code": 14}]},
+    {"type": "EthLib.Execution.Blocks.DepositError",
+     "codes":
+     [{"constructor": "wrongLength", "code": 301},
+      {"constructor": "wrongOffset", "code": 302},
+      {"constructor": "wrongSize", "code": 303}]}],
+   "error_class": "BlockError",
+   "docstring":
+   "The data of the deposit requests of logs, given as the RLP list of the logs, in order."},
+  {"summary":
+   "The requests hash of request lists, given as an RLP list of byte strings.",
+   "signature": "(requests: bytes) -> bytes",
+   "operation": "EthLib.Execution.Blocks.Exports.requestsHashExport",
+   "method": "block_requests_hash",
+   "errors":
+   [{"type": "EthLib.Serialization.Rlp.RlpError",
+     "codes":
+     [{"constructor": "payloadTooLong", "code": 1},
+      {"constructor": "inputTooShort", "code": 2},
+      {"constructor": "singleByteWithPrefix", "code": 3},
+      {"constructor": "longFormForShortLength", "code": 4},
+      {"constructor": "leadingZeroInLength", "code": 5},
+      {"constructor": "trailingBytes", "code": 6},
+      {"constructor": "leadingZeroInScalar", "code": 7},
+      {"constructor": "listAsScalar", "code": 8},
+      {"constructor": "listAsBytes", "code": 9},
+      {"constructor": "bytesAsList", "code": 10},
+      {"constructor": "wrongLength", "code": 11},
+      {"constructor": "scalarTooLarge", "code": 12},
+      {"constructor": "wrongFieldCount", "code": 13},
+      {"constructor": "inField", "code": 14}]}],
+   "error_class": "BlockError",
+   "docstring":
+   "The requests hash of request lists, given as an RLP list of byte strings.\n\nEach list is its type byte, then its data."},
+  {"summary":
    "The base fee per gas of a block, from its parent's gas limit, gas used and base fee.",
    "signature":
    "(parent_gas_limit: bytes, parent_gas_used: bytes, parent_base_fee_per_gas: bytes) -> bytes",

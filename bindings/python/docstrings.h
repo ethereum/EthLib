@@ -314,6 +314,12 @@
 #define DOC_block_withdrawals_root \
   "The withdrawals root of the withdrawals of a block, decoded at a fork from Shapella."
 
+#define DOC_block_deposit_requests \
+  "The data of the deposit requests of logs, given as the RLP list of the logs, in order."
+
+#define DOC_block_requests_hash \
+  "The requests hash of request lists, given as an RLP list of byte strings."
+
 #define DOC_fees_base_fee_per_gas \
   "The base fee per gas of a block, from its parent's gas limit, gas used and base fee."
 
