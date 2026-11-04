@@ -22,16 +22,19 @@ output:  [ h: 64 ]
 The rounds field is big-endian, while every 64-bit word of `h`, `m`, `t0` and `t1` is little-endian, as in BLAKE2b.
 The flag byte `f` is `1` for true and `0` for false.
 
-A call fails when the input is not 213 bytes long, or when the flag byte is neither `0` nor `1`.
-The length is checked first.
+A call costs one gas per round, as EIP-152 sets.
+A call fails on an input length other than 213 bytes, on too little gas, or on a flag byte other than `0` and `1`.
+The call checks the length first, then the gas, then the flag byte.
 
-The gas cost, one per round, is not part of the module, and neither is a C export or a Python binding.
+The precompile table runs the call at address `0x09`, and the Python bindings reach it through that table.
 
 ## What is proved
 
 The proofs are in `EthLib/Execution/Proofs/Evm/Precompiles/Blake2f.lean` and `EthLib/Cryptography/Proofs/Hash/Blake2b.lean`.
 
-The main statement describes the whole precompile: a call fails exactly on a wrong length or a wrong flag byte, and otherwise returns F applied to the decoded fields.
+The main statement describes the whole precompile.
+A call fails exactly on a wrong length, too little gas or a wrong flag byte, in that order.
+Otherwise it returns F applied to the decoded fields.
 Two further statements make sure the bytes are read and written correctly.
 Every field is decoded with its own endianness, for every input, and the output words are encoded in the same way as the input words.
 

@@ -223,6 +223,16 @@ inductive Transaction where
   | setCode (tx : SetCodeTransaction)
   deriving DecidableEq
 
+/-- The fork that adds the typed transactions of type `type`, or none for a type that no fork has.
+
+The type is the first byte of a typed transaction. -/
+def typeFork (type : UInt8) : Option Fork :=
+  if type = 1 then some .berlin
+  else if type = 2 then some .london
+  else if type = 3 then some .dencun
+  else if type = 4 then some .pectra
+  else none
+
 namespace Transaction
 
 /-- The type of a transaction: 0 for a legacy transaction, else its EIP-2718 type. -/
@@ -233,25 +243,13 @@ def type : Transaction → UInt8
   | .blob _ => 3
   | .setCode _ => 4
 
-/-- The fork that adds the kind of a transaction. -/
-def fork : Transaction → Fork
-  | .legacy _ => .frontier
-  | .accessList _ => .berlin
-  | .feeMarket _ => .london
-  | .blob _ => .dencun
-  | .setCode _ => .pectra
+/-- The fork that adds the kind of a transaction.
+
+A legacy transaction exists from Frontier. -/
+def fork (t : Transaction) : Fork :=
+  (typeFork t.type).getD .frontier
 
 end Transaction
-
-/-- The fork that adds the typed transactions of type `type`, or none for a type that no fork has.
-
-The type is the first byte of a typed transaction. -/
-def typeFork (type : UInt8) : Option Fork :=
-  if type = 1 then some .berlin
-  else if type = 2 then some .london
-  else if type = 3 then some .dencun
-  else if type = 4 then some .pectra
-  else none
 
 /-- Why a transaction is not valid. -/
 inductive TransactionError where
