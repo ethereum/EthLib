@@ -25,7 +25,10 @@ directories = ["tests/cryptography/bls"]
 
 [repositories."C2SP/wycheproof"]
 commit = "d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9"
-directories = ["tests/cryptography/secp256k1", "tests/cryptography/secp256r1"]
+directories = [
+  "bindings/python/tests/aes/wycheproof", "tests/cryptography/secp256k1",
+  "tests/cryptography/secp256r1",
+]
 
 [repositories."BLAKE2/BLAKE2"]
 commit = "ed1974ea83433eba7b2d95c5dcd9ac33cb847913"
@@ -71,5 +74,6 @@ directories = ["tests/execution/blocks", "tests/execution/transactions"]
 "tests/cryptography/vrf" = "An independent implementation for the known answers, and EthLib"
 "tests/cryptography/sphincs" = "EthLib, and an independent implementation for the known answers"
 "tests/cryptography/xmss" = "EthLib, and an independent implementation for the known answers"
+"bindings/python/tests/aes/cavp" = "KAT_AES.zip of NIST CAVP"
 "bindings/python/tests/keccak/kat" = "KeccakKAT-3.zip of the Keccak team"
 "bindings/python/tests/sha256/cavp" = "shabytetestvectors.zip of NIST CAVP"
