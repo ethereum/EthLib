@@ -1,0 +1,6 @@
+preset: general
+fork: phase0
+runner: ssz_generic
+handler: bitvector
+suite: valid
+case: bitvec_4_random

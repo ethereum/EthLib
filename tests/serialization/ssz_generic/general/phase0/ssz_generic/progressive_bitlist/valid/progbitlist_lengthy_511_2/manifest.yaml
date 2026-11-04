@@ -1,0 +1,6 @@
+preset: general
+fork: phase0
+runner: ssz_generic
+handler: progressive_bitlist
+suite: valid
+case: progbitlist_lengthy_511_2

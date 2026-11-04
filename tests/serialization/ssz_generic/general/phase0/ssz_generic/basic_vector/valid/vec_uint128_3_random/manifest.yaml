@@ -1,0 +1,6 @@
+preset: general
+fork: phase0
+runner: ssz_generic
+handler: basic_vector
+suite: valid
+case: vec_uint128_3_random
