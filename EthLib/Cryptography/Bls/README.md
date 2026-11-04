@@ -56,16 +56,22 @@ Nothing in EthLib checks that length.
 
 ## Test vectors
 
-`tests/cryptography/bls/` holds 20 cases:
+`tests/cryptography/bls/` holds 82 cases:
 
-| Handler | Cases |
-| --- | ---: |
-| `eth_aggregate_pubkeys` | 8 |
-| `eth_fast_aggregate_verify` | 12 |
+| Handler | Cases | Source |
+| --- | ---: | --- |
+| `eth_aggregate_pubkeys` | 8 | consensus-specs `v1.7.0-alpha.12` |
+| `eth_fast_aggregate_verify` | 12 | consensus-specs `v1.7.0-alpha.12` |
+| `sign` | 10 | `ethereum/bls12-381-tests` `v0.1.2` |
+| `verify` | 29 | `ethereum/bls12-381-tests` `v0.1.2` |
+| `aggregate` | 6 | `ethereum/bls12-381-tests` `v0.1.2` |
+| `fast_aggregate_verify` | 12 | `ethereum/bls12-381-tests` `v0.1.2` |
+| `aggregate_verify` | 5 | `ethereum/bls12-381-tests` `v0.1.2` |
 
-They match the consensus-specs `v1.7.0-alpha.12` general vectors byte for byte, and their expected values come from the Python specification, not from EthLib.
-`tests/cryptography/bls/SHA256SUMS` pins each one, and CI checks the pins.
-[`tests/cryptography/README.md`](../../../tests/cryptography/README.md) explains the pins and the check against the upstream archive.
+Each case matches its source byte for byte, and no case's expected value comes from EthLib.
+`tests/cryptography/hash_to_curve/` adds the hash to G2 and `expand_message_xmd` cases of RFC 9380.
+Each directory has a `SHA256SUMS` that pins its cases, and CI checks the pins.
+[`tests/cryptography/README.md`](../../../tests/cryptography/README.md) explains the pins and the check against the upstream archives.
 
 ## What is proved
 

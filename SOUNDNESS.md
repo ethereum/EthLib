@@ -279,7 +279,7 @@ The list below is generated from that file, and it is empty when none remains.
 A definition can differ from its source while every theorem about it holds, because the theorems are proved about the definition, not about the source.
 Three things guard against that.
 Each definition is named and shaped after its source, so that a reader can compare them line by line.
-The KZG and BLS vectors in `tests/cryptography/` match the consensus-specs `v1.7.0-alpha.12` general vectors byte for byte, and those were produced by the Python specification, not by EthLib.
+The KZG and BLS vectors in `tests/cryptography/` match consensus-specs `v1.7.0-alpha.12` and `ethereum/bls12-381-tests` `v0.1.2` byte for byte, and EthLib produced none of them.
 Finally, the consistency theorems on the constants, listed under BLS12-381, catch a wrong digit.
 
 ### A2. Hypotheses inside theorems
@@ -356,13 +356,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 40 operations and 37 size constants.
-The Python extension calls 40 of the operations and 28 of the constants.
+Lean exports 42 operations and 37 size constants.
+The Python extension calls 42 of the operations and 28 of the constants.
 Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_const_n`, `eth_sphincs_const_public_param_len`, `eth_sphincs_const_randomizer_len`, `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-2200 lines of hand-written C sit between them and Python: `bls.c` (270), `ecrecover.c` (34), `kzg.c` (533), `modexp.c` (61), `module.c` (570), `precompile.c` (43), `ripemd160.c` (36), `secp256k1.c` (94), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `sphincs.c` (94), `wrappers.h` (180), `xmss.c` (143).
+2247 lines of hand-written C sit between them and Python: `bls.c` (313), `ecrecover.c` (34), `kzg.c` (533), `modexp.c` (61), `module.c` (572), `precompile.c` (43), `ripemd160.c` (36), `secp256k1.c` (94), `secp256r1.c` (42), `sha256.c` (38), `sha256_precompile.c` (62), `sphincs.c` (94), `wrappers.h` (182), `xmss.c` (143).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
@@ -453,5 +453,6 @@ The setup raises three separate assumptions, and each use of KZG relies on a dif
 ### D4. The vectors
 
 A client that tests against the vectors trusts whatever produced their expected values.
-The KZG and BLS vectors match the consensus-specs `v1.7.0-alpha.12` general vectors byte for byte.
+The KZG vectors and the `eth_*` BLS vectors match the consensus-specs `v1.7.0-alpha.12` general vectors byte for byte.
+The other BLS vectors match `ethereum/bls12-381-tests` `v0.1.2`, and the hash-to-curve vectors come from RFC 9380.
 `v1.7.0-alpha.12` was the last release before consensus-specs removed its KZG specification, in ethereum/consensus-specs#5398.

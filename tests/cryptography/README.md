@@ -14,7 +14,7 @@ So some directories are pinned: `bls/`, `kzg/`, `secp256k1/`, `secp256r1/`, and 
 Every case under a pinned directory is listed in that file with its digest, so regenerating a case that changes its answer is caught.
 A pinned directory without its `SHA256SUMS` is an error, so deleting the file cannot switch the check off.
 
-The `kzg/` and `bls/` cases are pinned to consensus-specs `v1.7.0-alpha.12`.
+The `kzg/` cases and the `eth_*` cases of `bls/` are pinned to consensus-specs `v1.7.0-alpha.12`.
 They match the cases in its `general.tar.gz` byte for byte, and that archive has sha256 `329f3cf58927df2614ecafbce78eb3c5258a13e8731d2f410bb31d8e4a5b9eaf`.
 That release came out before consensus-specs#5398, which removed the KZG specification and its generators from consensus-specs and pointed to this repository.
 Its cases were written by the Python specification, not by EthLib, and the digests preserve that independent provenance for the cases committed here.
@@ -24,6 +24,24 @@ Only the path of a case differs from upstream:
 upstream:  tests/general/<fork>/<kind>/<handler>/<suite>/<case>/data.yaml
 here:      tests/cryptography/<kind>/<handler>/<case>/data.yaml
 ```
+
+## BLS signatures and hash to curve
+
+The general archive of consensus-specs `v1.7.0-alpha.12` has no BLS signing or verification cases.
+So the `sign`, `verify`, `aggregate`, `fast_aggregate_verify` and `aggregate_verify` cases of `bls/` come from `ethereum/bls12-381-tests` `v0.1.2`, at commit `89ff3a86f1a9b89a555495f7535c853cda589320`.
+Its archive `bls_tests_yaml.tar.gz` has sha256 `a4ef909b6248395094949a3bcdeb4e1b5b999733d4436f2c5006edba99d29279`.
+A case keeps its upstream bytes, and only its path differs:
+
+```text
+upstream:  <handler>/<case>.yaml
+here:      tests/cryptography/bls/<handler>/<case>/data.yaml
+```
+
+The `hash_to_curve/` cases come from RFC 9380, Appendices J.10.1, K.1 and K.2.
+A script transcribed them from the text of the RFC, so no code computed their expected values.
+
+The Python tests read these cases and compare EthLib with them.
+They never rewrite them.
 
 ## secp256k1
 
@@ -100,10 +118,11 @@ The third check goes back to the source:
 uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py --upstream
 ```
 
-It downloads the upstream archive, checks its digest, and checks that every upstream case is pinned here with the upstream digest.
-Pass `--archive` with a local copy to skip the download.
-A case that exists only here is allowed, and is reported as EthLib's own.
-Its expected value comes from the code under test, so it is not a check against anything independent.
+It downloads the two upstream archives, checks their digests, and checks that every upstream case is pinned here with the upstream digest.
+Pass `--archive` and `--bls-archive` with local copies to skip the downloads.
+A case that exists in no upstream archive is allowed, and is counted.
+Most such cases have expected values from the code under test, so they are not a check against anything independent.
+The RFC 9380 cases are the exception: they come from the RFC, which no archive holds.
 
 ## Changing a pinned case
 

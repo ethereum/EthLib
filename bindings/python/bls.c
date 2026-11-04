@@ -268,3 +268,46 @@ py_bls_pop_verify(
   if (parse_bytes(proof_obj, "proof", &proof)) { lean_dec(pk); return NULL; }
   return run_io_into_pybool(eth_bls_pop_verify(pk, proof), "pop_verify");
 }
+
+/* ---- Hash to curve ---------------------------------------------------- */
+
+extern lean_object*
+eth_bls_expand_message_xmd(
+  lean_object* msg,
+  lean_object* dst,
+  uint64_t len
+);
+
+extern lean_object*
+eth_bls_hash_to_g2(
+  lean_object* msg,
+  lean_object* dst
+);
+
+PyObject*
+py_bls_expand_message_xmd(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *msg_obj, *dst_obj;
+  unsigned long long len;
+  if (!PyArg_ParseTuple(args, "OOK", &msg_obj, &dst_obj, &len)) return NULL;
+  lean_object *msg, *dst;
+  if (parse_bytes(msg_obj, "message", &msg)) return NULL;
+  if (parse_bytes(dst_obj, "dst", &dst)) { lean_dec(msg); return NULL; }
+  return run_io_into_pybytes(
+    eth_bls_expand_message_xmd(msg, dst, (uint64_t) len), "expand_message_xmd");
+}
+
+PyObject*
+py_bls_hash_to_g2(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *msg_obj, *dst_obj;
+  if (!PyArg_ParseTuple(args, "OO", &msg_obj, &dst_obj)) return NULL;
+  lean_object *msg, *dst;
+  if (parse_bytes(msg_obj, "message", &msg)) return NULL;
+  if (parse_bytes(dst_obj, "dst", &dst)) { lean_dec(msg); return NULL; }
+  return run_io_into_pybytes(eth_bls_hash_to_g2(msg, dst), "hash_to_g2");
+}

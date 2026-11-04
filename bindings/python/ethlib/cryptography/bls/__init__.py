@@ -8,6 +8,8 @@ from .._native import (
     bls_fast_aggregate_verify as fast_aggregate_verify,
     bls_pop_prove as pop_prove,
     bls_pop_verify as pop_verify,
+    bls_expand_message_xmd as expand_message_xmd,
+    bls_hash_to_g2 as hash_to_g2,
     BYTES_PER_PUBKEY,
     BYTES_PER_SIGNATURE,
 )
@@ -22,6 +24,8 @@ __all__ = [
     "fast_aggregate_verify",
     "pop_prove",
     "pop_verify",
+    "expand_message_xmd",
+    "hash_to_g2",
     "BYTES_PER_PUBKEY",
     "BYTES_PER_SIGNATURE",
 ]
