@@ -1,8 +1,7 @@
-"""The trie root against the trie tests of ethereum/tests.
+"""The trie root against the trie tests of ethereum/tests."""
 
-Each case sets its keys one after another, starting from an empty trie, and gives the root.
-`trietests/README.md` gives the origin of the files and their licence.
-"""
+# Each case sets its keys one after another, starting from an empty trie, and gives the root.
+# `trietests/README.md` gives the origin of the files and their licence.
 
 import json
 from pathlib import Path

@@ -1,8 +1,7 @@
-"""leanXMSS signatures: key generation, signing, verification and the leaf index.
+"""leanXMSS signatures: key generation, signing, verification and the leaf index."""
 
-- Malformed arguments raise TypeError, ValueError or OverflowError.
-- Inputs the spec rejects raise RuntimeError.
-"""
+# Malformed arguments raise TypeError, ValueError or OverflowError.
+# Inputs that the specification rejects raise RuntimeError.
 
 from .._native import (
     xmss_key_gen,
@@ -17,34 +16,26 @@ from .._native import (
 
 
 def key_gen(seed: bytes) -> bytes:
-    """The public key grown from a 32-byte seed.
-
-    It builds the whole top tree, 2^16 one-time keys, so it takes a while.
-    """
+    """The public key grown from a 32-byte seed."""
+    # It builds the whole top tree, 2^16 one-time keys, so it takes a while.
     return xmss_key_gen(seed)
 
 
 def sign(seed: bytes, leaf_index: int, message: bytes) -> bytes:
-    """Sign a 32-byte message at a leaf index below 2^32, with the key grown from a seed.
-
-    Never sign two different messages at one leaf index: it breaks the key.
-    """
+    """Sign a 32-byte message at a leaf index below 2^32, never reused for another message."""
+    # The key grows from the seed. Two different messages at one leaf index break the key.
     return xmss_sign(seed, leaf_index, message)
 
 
 def verify(public_key: bytes, message: bytes, signature: bytes) -> bool:
-    """Whether a signature signs a message under a public key.
-
-    The leaf index travels inside the signature.
-    """
+    """Whether a signature signs a message under a public key."""
+    # The leaf index travels inside the signature.
     return xmss_verify(public_key, message, signature)
 
 
 def signature_index(signature: bytes) -> int:
-    """The leaf index a 2404-byte signature carries.
-
-    It reads the first 4 bytes, little-endian, and does not verify the signature.
-    """
+    """The leaf index that a 2404-byte signature carries, read without verifying it."""
+    # It reads the first 4 bytes, little-endian.
     return xmss_signature_index(signature)
 
 
