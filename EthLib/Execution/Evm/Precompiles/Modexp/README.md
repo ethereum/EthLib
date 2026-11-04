@@ -72,7 +72,7 @@ The proofs pin known answers instead, all checked by the kernel:
 The proofs are in `EthLib/Execution/Proofs/Evm/Precompiles/Modexp/`.
 
 The arithmetic comes first.
-The code computes the power by square-and-multiply, and that loop equals `b ^ e % m` for every modulus (`powMod_eq`, `PowMod.lean`).
+The code computes the power by square-and-multiply, and that loop equals `b ^ e % m` for every modulus (`powMod_eq`, `EthLib/Execution/Proofs/Evm/PowMod.lean`).
 So the output is `BASE ^ EXPONENT mod MODULUS`, or 0 for a zero modulus (`compute_eq_pow_mod`, `Core.lean`), and a successful call returns exactly `len_mod` bytes (`modexp_ok_size`, `Core.lean`).
 
 The next statements, all in `Core.lean`, pin how the input is read.

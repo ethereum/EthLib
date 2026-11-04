@@ -28,16 +28,19 @@ namespace EthLib.Execution.Evm.Precompiles.Blake2f
 
 /-! ## The errors and the result -/
 
+/-- The price of a 213-byte input is one gas per round. -/
+theorem gasCost_of_size (data : ByteArray) (h : data.size = INPUT_BYTES) :
+    gasCost data = GAS_PER_ROUND * (readRounds ⟨data.data, h⟩).toNat := by
+  simp [gasCost, h]
+
 /-- A call with a 213-byte input and too little gas runs out of gas, whatever its flag byte. -/
 theorem call_outOfGas (data : ByteArray) (h : data.size = INPUT_BYTES) {gas : Nat}
-    (hgas : gas < GAS_PER_ROUND * (readRounds ⟨data.data, h⟩).toNat) :
-    call data gas = .error (.outOfGas (GAS_PER_ROUND * (readRounds ⟨data.data, h⟩).toNat) gas) := by
+    (hgas : gas < gasCost data) : call data gas = .error (.outOfGas (gasCost data) gas) := by
   simp [call, h, hgas]
 
 /-- A call with a 213-byte input and enough gas returns the result of the precompile, as bytes. -/
 theorem call_of_gas (data : ByteArray) (h : data.size = INPUT_BYTES) {gas : Nat}
-    (hgas : GAS_PER_ROUND * (readRounds ⟨data.data, h⟩).toNat ≤ gas) :
-    call data gas = (blake2f data).map fun out => ⟨out.toArray⟩ := by
+    (hgas : gasCost data ≤ gas) : call data gas = (blake2f data).map fun out => ⟨out.toArray⟩ := by
   simp [call, h, Nat.not_lt.mpr hgas]
 
 /-- A call with an input that is not 213 bytes long is rejected before any gas is charged. -/
@@ -73,6 +76,45 @@ theorem blake2f_ok (data : ByteArray) (h : data.size = INPUT_BYTES) {f : Bool}
   -- Byte 212 is in range, so reading it with a default gives the byte itself.
   rw [getElem!_pos data 212 (by simp only [h, INPUT_BYTES]; omega), ByteArray.getElem_eq_getElem_data] at hf
   simp [blake2f, h, hf]
+
+/-- The three errors of a call, in the order the call checks them.
+
+The length comes first, so a wrong length fails whatever the gas.
+
+The gas comes next, so too little gas fails whatever the flag byte.
+
+The flag byte comes last, so a bad flag fails only a call that pays its price. -/
+theorem call_eq_error_iff (data : ByteArray) (gas : Nat) (e : Blake2fError) :
+    call data gas = .error e ↔
+      (data.size ≠ INPUT_BYTES ∧ e = .invalidLength data.size) ∨
+      (data.size = INPUT_BYTES ∧ gas < gasCost data ∧ e = .outOfGas (gasCost data) gas) ∨
+      (data.size = INPUT_BYTES ∧ gasCost data ≤ gas ∧ (1 : UInt8) < data[212]! ∧
+        e = .invalidFlag data[212]!) := by
+  by_cases hsize : data.size = INPUT_BYTES
+  · by_cases hgas : gas < gasCost data
+    · rw [call_outOfGas data hsize hgas]
+      simp [hsize, hgas, eq_comm]
+      -- Enough gas contradicts too little gas.
+      intro h
+      omega
+    · have henough := Nat.le_of_not_lt hgas
+      rw [call_of_gas data hsize henough]
+      by_cases hf : (1 : UInt8) < data[212]!
+      · rw [blake2f_invalidFlag data hsize hf]
+        simp [hsize, hgas, henough, hf, eq_comm, Except.map]
+      · -- A flag byte of `0` or `1` decodes, so the call succeeds.
+        have h01 : ∀ x : UInt8, ¬(1 : UInt8) < x → x = 0 ∨ x = 1 := by
+          intro x hx
+          rw [UInt8.lt_iff_toNat_lt] at hx
+          rcases (by simp at hx; omega : x.toNat = 0 ∨ x.toNat = 1) with h | h
+          · exact .inl (UInt8.toNat_inj.mp h)
+          · exact .inr (UInt8.toNat_inj.mp h)
+        obtain ⟨f, hok⟩ : ∃ f, readFlag data[212]! = .ok f := by
+          rcases h01 _ hf with h | h <;> rw [h] <;> exact ⟨_, rfl⟩
+        rw [blake2f_ok data hsize hok]
+        simp [hsize, hgas, hf, Except.map]
+  · rw [call_invalidLength data hsize]
+    simp [hsize, eq_comm]
 
 /-! ## Decoding
 

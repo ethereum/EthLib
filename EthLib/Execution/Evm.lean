@@ -6,6 +6,7 @@ public import EthLib.Execution.Evm.Instructions.Bitwise
 public import EthLib.Execution.Evm.Instructions.Keccak
 public import EthLib.Execution.Evm.Precompiles
 public import EthLib.Execution.Evm.Memory
+public import EthLib.Execution.Evm.PowMod
 public import EthLib.Execution.Evm.Words
 public import EthLib.Execution.Evm.Gas
 

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.U256
-public import EthLib.Execution.Evm.Precompiles.Modexp.Core
+public import EthLib.Execution.Evm.PowMod
 
 /-!
 # `Evm.Instructions.Arithmetic`
@@ -76,7 +76,7 @@ def mulmod (x y z : U256) : U256 :=
 
 Square-and-multiply keeps every step below 2^512, where `base^exponent` alone can have 2^264 bits. -/
 def exp (base exponent : U256) : U256 :=
-  BitVec.ofNat 256 (Precompiles.Modexp.powMod base.toNat exponent.toNat (2 ^ 256))
+  BitVec.ofNat 256 (powMod base.toNat exponent.toNat (2 ^ 256))
 
 /-- `signextend`: the low `byteNum + 1` bytes of `value`, read as a signed integer and widened to 32 bytes.
 

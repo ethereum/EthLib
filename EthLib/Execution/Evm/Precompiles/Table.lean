@@ -21,6 +21,8 @@ The source is `PRE_COMPILED_CONTRACTS` in [`forks/bogota/vm/precompiled_contract
 Every precompile takes the call data and the gas, and returns the output or an error.
 
 An error halts the call, which then consumes all its gas.
+
+A call that succeeds uses exactly its price.
 -/
 
 @[expose] public section
@@ -78,6 +80,33 @@ def run (address : Nat) (data : ByteArray) (gas : Nat) : Option (Except Precompi
   | 0x10 => some ((Bls12381.bls12MapFpToG1 data gas).mapError .bls12381)
   | 0x11 => some ((Bls12381.bls12MapFp2ToG2 data gas).mapError .bls12381)
   | 0x100 => some ((P256Verify.p256Verify data gas).mapError .p256Verify)
+  | _ => none
+
+/-- The gas that the precompile at `address` charges for the call data.
+
+It is `none` when no precompile has that address.
+
+Some precompiles check the call data before the charge, and such a check can fail with any gas. -/
+def price (address : Nat) (data : ByteArray) : Option Nat :=
+  match address with
+  | 0x01 => some Ecrecover.GAS_ECRECOVER
+  | 0x02 => some (Sha256.gasCost data.size)
+  | 0x03 => some (Ripemd160.gasCost data.size)
+  | 0x04 => some (Identity.gasCost data.size)
+  | 0x05 => some (Modexp.requiredGas data (Modexp.parseLengths data))
+  | 0x06 => some AltBn128.GAS_ECADD
+  | 0x07 => some AltBn128.GAS_ECMUL
+  | 0x08 => some (AltBn128.ecpairingGas data.size)
+  | 0x09 => some (Blake2f.gasCost data)
+  | 0x0a => some PointEvaluation.GAS_POINT_EVALUATION
+  | 0x0b => some Bls12381.GAS_G1ADD
+  | 0x0c => some (Bls12381.msmGasG1 (data.size / Bls12381.LENGTH_PER_PAIR_G1))
+  | 0x0d => some Bls12381.GAS_G2ADD
+  | 0x0e => some (Bls12381.msmGasG2 (data.size / Bls12381.LENGTH_PER_PAIR_G2))
+  | 0x0f => some (Bls12381.pairingGas (data.size / Bls12381.LENGTH_PER_PAIRING_PAIR))
+  | 0x10 => some Bls12381.GAS_G1MAP
+  | 0x11 => some Bls12381.GAS_G2MAP
+  | 0x100 => some P256Verify.GAS_P256VERIFY
   | _ => none
 
 end EthLib.Execution.Evm.Precompiles
