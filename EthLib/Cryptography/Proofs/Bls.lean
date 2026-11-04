@@ -42,6 +42,10 @@ public import EthLib.Cryptography.Proofs.Bls.G2SubgroupSpan
 public import EthLib.Cryptography.Proofs.Bls.PairingCongr
 public import EthLib.Cryptography.Proofs.Bls.PairingLaws
 public import EthLib.Cryptography.Proofs.Bls.KeyValidate
+public import EthLib.Cryptography.Proofs.Bls.MapToG1
+public import EthLib.Cryptography.Proofs.Bls.G1Rotation
+public import EthLib.Cryptography.Proofs.Bls.G1CofactorPoints
+public import EthLib.Cryptography.Proofs.Bls.G1CofactorClearing
 public import EthLib.Cryptography.Proofs.Bls.MapToCurve
 public import EthLib.Cryptography.Proofs.Bls.Signatures
 public import EthLib.Cryptography.Proofs.Bls.KeyGen

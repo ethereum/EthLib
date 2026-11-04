@@ -181,12 +181,16 @@ Then a signature passes exactly when it decodes to a representative of `(a * b) 
 (`coreVerify_iff`, `SignaturesUnique.lean`).
 So a key and a message have at most one signature that verifies, byte for byte (`verify_unique`).
 
+**The map to G1.**
+The map of EIP-2537 sends every element of `Fp` to a valid point of the subgroup of order `r`
+(`mapToG1_ok`, `mapToG1_inSubgroup`, `Proofs/Bls/MapToCurve.lean`).
+Cofactor clearing multiplies by `h_eff = 1 - x`,
+which kills every torsion point of the cofactor (`clearCofactorG1_inSubgroup`).
+
 ## What is not proved
 
 - No theorem proves that the pairing check computes a bilinear, non-degenerate pairing.
   Theorems assume the pairing law below instead.
-- The map to G1 of EIP-2537 has no theorem:
-  neither its validity nor its landing in the subgroup is proved.
 - Without the pairing law, no theorem says which signatures verification rejects,
   beyond malformed input.
 - Unforgeability is proved only in the random oracle model, with the hash to G2 as the oracle.

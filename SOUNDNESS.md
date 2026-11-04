@@ -186,7 +186,7 @@ This known answer supports the pairing law but does not prove it.
 
 `keyValidatePoint_eq_ok_iff` (`Proofs/Bls/KeyValidate.lean`) proves that key validation accepts exactly the encodings of the nonzero points of order `r` in G1.
 The G1 and G2 subgroup checks accept exactly the valid points that represent a multiple of the generator.
-Every output of the map to G2 is a valid point of that subgroup (`Proofs/Bls/MapToCurve.lean`).
+Every output of the maps to G1 and G2 is a valid point of that subgroup (`Proofs/Bls/MapToCurve.lean`).
 
 `sign_ok` and `popProve_ok` (`Proofs/Bls/Signatures.lean`) prove that BLS signing never fails.
 Under the pairing law, an honest signature, an honest proof of possession and an aggregate of honest signatures verify (`verify_sign`, `popVerify_popProve`, `aggregateVerify_aggregate`, `Proofs/Bls/SignaturesCorrect.lean`).

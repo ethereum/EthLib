@@ -40,7 +40,7 @@ theorem valid_generator : Valid generator := by
 /-- Fuel-based double-and-add, structurally recursive so the kernel
 can evaluate it (the spec's `mulNat` is well-founded recursion, which
 does not reduce definitionally). Correctness: `mulNatAux_eq`. -/
-private def mulNatAux : Nat → G1 → Nat → G1
+def mulNatAux : Nat → G1 → Nat → G1
   | 0, _, _ => zero
   | fuel + 1, p, k =>
     if k = 0 then zero
@@ -48,7 +48,7 @@ private def mulNatAux : Nat → G1 → Nat → G1
       let half := mulNatAux fuel (double p) (k / 2)
       if k % 2 = 1 then add p half else half
 
-private theorem mulNatAux_eq (fuel : Nat) (p : G1) (k : Nat)
+theorem mulNatAux_eq (fuel : Nat) (p : G1) (k : Nat)
     (hk : k < 2 ^ fuel) : mulNatAux fuel p k = mulNat p k := by
   induction fuel generalizing p k with
   | zero =>
