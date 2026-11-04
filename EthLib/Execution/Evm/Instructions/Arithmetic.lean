@@ -90,14 +90,14 @@ def signextend (byteNum value : U256) : U256 :=
   if byteNum.toNat > 31 then
     value
   else
-    -- The low bytes that the source keeps, as a number below `2^width`.
+    -- The low bytes that the result keeps, as a number below `2^width`.
     let width := 8 * (byteNum.toNat + 1)
     let low := value.toNat % 2 ^ width
     -- Their top bit is the sign bit.
     if low < 2 ^ (width - 1) then
       BitVec.ofNat 256 low
     else
-      -- The source prepends `0xff` bytes up to 32 bytes.
+      -- Every bit above the sign bit copies it, so the high bytes are all `0xff`.
       BitVec.ofNat 256 (2 ^ 256 - 2 ^ width + low)
 
 end EthLib.Execution.Evm.Instructions
