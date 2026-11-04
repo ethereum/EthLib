@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.Fits
 public import EthLib.Serialization.Ssz.Type.Valid
 
@@ -177,11 +178,17 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     (motive3 := fun fields values => Desc.allWellFormed fields = .ok () →
       (∃ parts, serializeFields fields values = .ok parts) →
         fields.length = values.length ∧ ∀ pair ∈ fields.zip values, Fits pair.1 pair.2)
-    (motive4 := fun element elements => element.wellFormed = .ok () →
+    (motive4 := fun fields values done => Desc.allWellFormed fields = .ok () →
+      (∃ parts, serializeFieldsFrom fields values done = .ok parts) →
+        fields.length = values.length ∧ ∀ pair ∈ fields.zip values, Fits pair.1 pair.2)
+    (motive5 := fun element elements => element.wellFormed = .ok () →
       (∃ bytes, serializeSequence element elements = .ok bytes) →
         ∀ held ∈ elements, Fits element held)
-    (motive5 := fun element elements => element.wellFormed = .ok () →
+    (motive6 := fun element elements => element.wellFormed = .ok () →
       (∃ parts, serializeEach element elements = .ok parts) →
+        ∀ held ∈ elements, Fits element held)
+    (motive7 := fun element elements done => element.wellFormed = .ok () →
+      (∃ parts, serializeEachFrom element elements done = .ok parts) →
         ∀ held ∈ elements, Fits element held) with
   -- Each accepted scalar check supplies exactly the admissibility condition.
   | case1 | case2 | case5 | case7 | case8 | case10 =>
@@ -261,9 +268,8 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     rename_i sound made
     obtain ⟨_, wrote⟩ := made
     rw [serializeFields] at wrote
-    obtain ⟨head, wroteHead, -⟩ := checksPassed wrote
-    obtain ⟨tail, wroteTail⟩ := secondCheckPassed wrote
-    obtain ⟨paired, each⟩ := ihTail (allWellFormed_tail sound) ⟨tail, wroteTail⟩
+    obtain ⟨head, wroteHead, wroteTail⟩ := checksPassed wrote
+    obtain ⟨paired, each⟩ := ihTail head (allWellFormed_tail sound) ⟨_, wroteTail⟩
     refine ⟨by simp [paired], ?_⟩
     intro pair member
     -- The pairs are this field with its own value, and then the pairs of the rest.
@@ -278,23 +284,51 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     cases fields <;> cases values <;> simp_all [serializeFields]
     -- A field list and a value list of different lengths pair with nothing.
     all_goals (rename_i notMatch; exact absurd rfl (notMatch _ _ _ _ rfl rfl rfl))
-  | case26 _ _ ih =>
+  | case26 => exact ⟨rfl, by simp⟩
+  -- The loop over the fields proves the same, one field at a time.
+  | case27 field fields value values done ihHead ihTail =>
+    rename_i sound made
+    obtain ⟨_, wrote⟩ := made
+    rw [serializeFieldsFrom] at wrote
+    obtain ⟨head, wroteHead, wroteTail⟩ := checksPassed wrote
+    obtain ⟨paired, each⟩ := ihTail head (allWellFormed_tail sound) ⟨_, wroteTail⟩
+    refine ⟨by simp [paired], ?_⟩
+    intro pair member
+    rw [List.zip_cons_cons] at member
+    rcases List.mem_cons.mp member with here | later
+    · exact here ▸ ihHead (allWellFormed_mem (field :: fields) sound field List.mem_cons_self)
+        ⟨head, wroteHead⟩
+    · exact each pair later
+  | case28 fields values done _ _ =>
+    rename_i made
+    obtain ⟨_, wrote⟩ := made
+    cases fields <;> cases values <;> simp_all [serializeFieldsFrom]
+    all_goals (rename_i notMatch; exact absurd rfl (notMatch _ _ _ _ rfl rfl rfl))
+  | case29 _ _ ih =>
     rename_i sound made held member
     obtain ⟨_, wrote⟩ := made
     -- A sequence writes its elements before it lays them out, so the elements were written.
     rw [serializeSequence] at wrote
     obtain ⟨parts, encoded, -⟩ := checksPassed wrote
     exact ih sound ⟨parts, encoded⟩ held member
-  | case27 => simp_all
-  -- Every collected sequence value is either the first element or belongs to the successfully encoded suffix.
-  | case28 _ _ _ ihHead ihTail =>
+  | case30 => simp_all
+  -- Every collected sequence value is either the first element or belongs to the encoded suffix.
+  | case31 _ _ _ ihHead ihTail =>
     rename_i sound made held member
     obtain ⟨_, wrote⟩ := made
     rw [serializeEach] at wrote
-    obtain ⟨head, wroteHead, -⟩ := checksPassed wrote
-    obtain ⟨tail, wroteTail⟩ := secondCheckPassed wrote
+    obtain ⟨head, wroteHead, wroteTail⟩ := checksPassed wrote
     rcases List.mem_cons.mp member with here | later
     · exact here ▸ ihHead sound ⟨head, wroteHead⟩
-    · exact ihTail sound ⟨tail, wroteTail⟩ held later
+    · exact ihTail head sound ⟨_, wroteTail⟩ held later
+  | case32 => simp_all
+  | case33 _ _ _ _ ihHead ihTail =>
+    rename_i sound made held member
+    obtain ⟨_, wrote⟩ := made
+    rw [serializeEachFrom] at wrote
+    obtain ⟨head, wroteHead, wroteTail⟩ := checksPassed wrote
+    rcases List.mem_cons.mp member with here | later
+    · exact here ▸ ihHead sound ⟨head, wroteHead⟩
+    · exact ihTail head sound ⟨_, wroteTail⟩ held later
 
 end EthLib.Serialization.Ssz

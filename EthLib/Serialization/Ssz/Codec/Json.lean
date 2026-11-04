@@ -58,13 +58,19 @@ def hexDigit (character : Char) : Except Err Nat :=
   else if 'A' ≤ character && character ≤ 'F' then .ok (character.toNat - 'A'.toNat + 10)
   else .error .hexDigits
 
-/-- Two digits at a time, folded into the byte each pair holds. -/
-def hexBytes : List Char → Except Err Bytes
-  | [] => .ok #[]
-  | [_] => .error .hexDigits
-  | high :: low :: rest => do
+/-- Two digits at a time, each pair's byte pushed after the bytes so far.
+
+The loop runs in constant stack for any length. -/
+def hexBytesFrom : List Char → Bytes → Except Err Bytes
+  | [], out => .ok out
+  | [_], _ => .error .hexDigits
+  | high :: low :: rest, out => do
     let byte := 16 * (← hexDigit high) + (← hexDigit low)
-    return #[UInt8.ofNat byte] ++ (← hexBytes rest)
+    hexBytesFrom rest (out.push (UInt8.ofNat byte))
+
+/-- Two digits at a time, folded into the byte each pair holds. -/
+def hexBytes (digits : List Char) : Except Err Bytes :=
+  hexBytesFrom digits #[]
 
 /--
 The bytes a hex string holds.
@@ -76,13 +82,19 @@ def ofHex (text : String) : Except Err Bytes := do
   if characters.take 2 != ['0', 'x'] then throw .hexPrefix
   hexBytes (characters.drop 2)
 
-/-- The bytes a run of one-byte integer values holds, in order. -/
-def byteRun : List Value → Except Err Bytes
-  | [] => .ok #[]
-  | .uint n :: rest => do
+/-- The bytes so far, then the bytes a run of one-byte integer values holds, in order.
+
+The loop runs in constant stack for any length. -/
+def byteRunFrom : List Value → Bytes → Except Err Bytes
+  | [], out => .ok out
+  | .uint n :: rest, out => do
     if n ≥ 256 then throw (.uintRange 256 n)
-    return #[UInt8.ofNat n] ++ (← byteRun rest)
-  | _ => .error .typeMismatch
+    byteRunFrom rest (out.push (UInt8.ofNat n))
+  | _, _ => .error .typeMismatch
+
+/-- The bytes a run of one-byte integer values holds, in order. -/
+def byteRun (values : List Value) : Except Err Bytes :=
+  byteRunFrom values #[]
 
 /-- One-byte integer values for a run of bytes, which reads a byte-alias sequence back. -/
 def byteElements (data : Bytes) : List Value :=

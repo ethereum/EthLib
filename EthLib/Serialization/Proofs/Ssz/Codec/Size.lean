@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.Admits
 public import EthLib.Serialization.Proofs.Ssz.Codec.Table
 
@@ -99,7 +100,8 @@ private theorem sequence_width (element : Desc) (parts : List Bytes) :
       bodyWidth ((parts.map fun _ => element.isFixed).zip parts) =
       (parts.map fun part => fieldSize element part.size).sum := by
   -- Each element adds its payload, plus an offset when its width varies.
-  induction parts <;> cases fixed : element.isFixed <;> simp_all [headWidth, bodyWidth, fieldSize] <;> omega
+  induction parts <;> cases fixed : element.isFixed <;> simp_all [headWidth_nil, headWidth_cons,
+      bodyWidth_nil, bodyWidth_cons_inline, bodyWidth_cons_variable, fieldSize] <;> omega
 
 /-- Measuring struct slots is the sum of each paired field's bytes and possible offset. -/
 private theorem fields_width (fields : List Desc) (parts : List Bytes) :
@@ -107,13 +109,14 @@ private theorem fields_width (fields : List Desc) (parts : List Bytes) :
       ((fields.zip parts).map fun (field, part) => fieldSize field part.size).sum := by
   -- Pair each declared field kind with the width of its encoded payload.
   induction fields generalizing parts with
-  | nil => simp [headWidth, bodyWidth]
+  | nil => simp [headWidth_nil, bodyWidth_nil]
   | cons field fields ih =>
     cases parts with
-    | nil => simp [headWidth, bodyWidth]
+    | nil => simp [headWidth_nil, bodyWidth_nil]
     | cons part parts =>
       have tail := ih parts
-      cases fixed : field.isFixed <;> simp [headWidth, bodyWidth, fieldSize, fixed] at tail ⊢ <;> omega
+      cases fixed : field.isFixed <;> simp [headWidth_cons, bodyWidth_cons_inline,
+          bodyWidth_cons_variable, fieldSize, fixed] at tail ⊢ <;> omega
 
 /-- Successful child encodings retain their mathematical size contributions when collected. -/
 private theorem collect_each (element : Desc) (sizes : Value → Nat) :
@@ -125,11 +128,12 @@ private theorem collect_each (element : Desc) (sizes : Value → Nat) :
   intro values each
   -- Collect successful child encodings while retaining the sum of their mathematical sizes.
   induction values with
-  | nil => exact ⟨[], by simp [serializeEach], rfl⟩
+  | nil => exact ⟨[], by simp [serializeEach_nil], rfl⟩
   | cons value values ih =>
     obtain ⟨head, encoded, headSize⟩ := each value List.mem_cons_self
     obtain ⟨tail, collected, tailSize⟩ := ih fun held member => each held (List.mem_cons_of_mem _ member)
-    exact ⟨head :: tail, by simp [serializeEach, encoded, collected, Bind.bind, Except.bind, pure, Except.pure],
+    exact ⟨head :: tail, by simp [serializeEach_cons, encoded, collected, Bind.bind, Except.bind,
+        pure, Except.pure],
       by simp [headSize, tailSize]⟩
 
 /-- An admissible sequence of sized child encodings assembles within its structural bound. -/
@@ -156,7 +160,7 @@ private theorem collect_fields (sizes : Desc → Value → Nat) :
   intro fields
   -- Equal declaration and value counts let the proof advance through both lists together.
   induction fields with
-  | nil => intro values paired _; cases values <;> simp_all [serializeFields]
+  | nil => intro values paired _; cases values <;> simp_all [serializeFields_nil]
   | cons field fields ih =>
     intro values paired each
     cases values with
@@ -166,7 +170,8 @@ private theorem collect_fields (sizes : Desc → Value → Nat) :
       obtain ⟨head, encoded, headSize⟩ := each (field, value) List.mem_cons_self
       obtain ⟨tail, collected, tailSize⟩ := ih values (by simpa using paired)
         (fun pair member => each pair (List.mem_cons_of_mem _ member))
-      exact ⟨head :: tail, by simp [serializeFields, encoded, collected, Bind.bind, Except.bind, pure, Except.pure],
+      exact ⟨head :: tail, by simp [serializeFields_cons, encoded, collected, Bind.bind,
+          Except.bind, pure, Except.pure],
         by simp [headSize, tailSize]⟩
 
 /-- An admissible struct assembles when its child encodings and its total layout fit their bounds. -/
@@ -197,12 +202,12 @@ private theorem each_representable (element : Desc) (sizes : Value → Nat)
   intro values
   -- Reflect successful element encodings back into structural size witnesses.
   induction values with
-  | nil => intro parts wrote; simp_all [serializeEach]
+  | nil => intro parts wrote; simp_all [serializeEach_nil]
   | cons value values ih =>
     intro parts wrote
     -- Composite success rules out a failed element encoding.
     cases head : serialize element value <;> cases tail : serializeEach element values <;>
-      simp [serializeEach, head, tail, Bind.bind, Except.bind, pure, Except.pure] at wrote
+      simp [serializeEach_cons, head, tail, Bind.bind, Except.bind, pure, Except.pure] at wrote
     subst parts
     -- The suffix supplies its child witnesses, and the current element adds its own.
     obtain ⟨children, counted⟩ := ih _ tail
@@ -250,15 +255,16 @@ private theorem fields_representable (sizes : Desc → Value → Nat)
   intro fields
   -- Recover child size witnesses while following each field-value pair.
   induction fields with
-  | nil => intro values parts _ wrote; cases values <;> simp_all [serializeFields]
+  | nil => intro values parts _ wrote; cases values <;> simp_all [serializeFields_nil,
+      serializeFields_nil_cons]
   | cons field fields ih =>
     intro values parts reflect wrote
     cases values with
-    | nil => simp [serializeFields] at wrote
+    | nil => simp [serializeFields_cons_nil] at wrote
     | cons value values =>
       -- Any failed field encoding would contradict the assumed successful collection.
       cases head : serialize field value <;> cases tail : serializeFields fields values <;>
-        simp [serializeFields, head, tail, Bind.bind, Except.bind, pure, Except.pure] at wrote
+        simp [serializeFields_cons, head, tail, Bind.bind, Except.bind, pure, Except.pure] at wrote
       subst parts
       -- The remaining pairs supply their witnesses, and the current pair adds its own.
       obtain ⟨children, counted⟩ := ih values _

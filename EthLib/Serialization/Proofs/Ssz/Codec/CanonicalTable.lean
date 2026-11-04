@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalBits
 
 /-! Reassembling the byte ranges accepted by composite decoders. -/
@@ -118,7 +119,7 @@ theorem headOf_offsets (parts : List Bytes) (start : Nat) :
   induction parts generalizing start with
   | nil => rfl
   | cons part rest ih =>
-    simp [offsetSlots_cons, headOf, runningOffsets, concatParts, ih]
+    simp [offsetSlots_cons, headOf_cons_variable, runningOffsets, concatParts, ih]
 
 /-- Reading and rewriting a bounded offset table preserves every header byte. -/
 theorem readOffsets_bytes (data : Bytes) (count : Nat)
@@ -257,7 +258,8 @@ theorem listSlices_assemble {element : Desc} {limit : Option Nat} {data : Bytes}
   all_goals repeat' split at read
   all_goals simp_all
   -- An empty input reconstructs directly as an empty list encoding.
-  all_goals try (subst slices; simp [assemble, headWidth, bodyWidth, headOf, bodiesOf]; rfl)
+  all_goals try (subst slices; simp [assemble, headWidth_nil, bodyWidth_nil, headOf_nil,
+      bodiesOf_nil]; rfl)
   all_goals
     subst slices
     simp only [Desc.isFixed, fixed, Option.isSome_none, Option.isSome_some]

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalTable
 
 /-! Accepted container slices reconstruct their original header and bodies. -/
@@ -102,7 +103,7 @@ private theorem takeSlots_reassembles (data : Bytes) (scope : Nat) (bounded : sc
   | nil =>
     intro spans parts read taken
     obtain rfl := by simpa [takeSlots] using taken
-    simp [bodyStarts, slotFlags, slotEncoding, headOf, bodiesOf]
+    simp [bodyStarts, slotFlags, slotEncoding, headOf_nil, bodiesOf_nil]
     omega
   | cons slot slots ih =>
     intro spans parts read taken
@@ -113,7 +114,8 @@ private theorem takeSlots_reassembles (data : Bytes) (scope : Nat) (bounded : sc
         simp [takeSlots, tail, Bind.bind, Except.bind, pure, Except.pure] at taken
       subst parts
       obtain ⟨within, header, bodies⟩ := ih spans _ read tail
-      simp only [bodyStarts, slotFlags, slotEncoding, List.zip_cons_cons, headOf, bodiesOf]
+      simp only [bodyStarts, slotFlags, slotEncoding, List.zip_cons_cons, headOf_cons_inline,
+          bodiesOf_cons_inline]
       exact ⟨within, congrArg (bytes ++ ·) header, bodies⟩
     | body start =>
       -- A body ends at the next offset, or at the end of the whole message.
@@ -127,7 +129,7 @@ private theorem takeSlots_reassembles (data : Bytes) (scope : Nat) (bounded : sc
         simp only [Array.size_extract]
         omega
       simp only [bodyStarts, List.headD_cons, slotFlags, List.zip_cons_cons,
-        headOf, bodiesOf, slotEncoding]
+        headOf_cons_variable, bodiesOf_cons_variable, slotEncoding]
       rw [sliced, finish, header, bodies]
       exact ⟨by omega, rfl, extract_join data ordered nextBound⟩
 

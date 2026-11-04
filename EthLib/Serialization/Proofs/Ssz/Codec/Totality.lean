@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.Fits
 
 /-! Admissible values encode successfully unless a composite exceeds the offset budget. -/
@@ -38,10 +39,10 @@ private theorem overflow_each {element : Desc} : ∀ values,
   intro values
   -- A sequence inherits its possible failures from the encodings of its elements.
   induction values with
-  | nil => intro _ fault failed; simp [serializeEach] at failed
+  | nil => intro _ fault failed; simp [serializeEach_nil] at failed
   | cons value rest ih =>
     intro each
-    rw [serializeEach]
+    rw [serializeEach_cons]
     -- First account for a failure in the current element.
     apply overflow_bind (each value List.mem_cons_self)
     intro head _
@@ -69,13 +70,13 @@ private theorem overflow_fields : ∀ fields values,
   | nil =>
     intro values paired _ fault failed
     -- No declarations means no values, so there is nothing left that could fail.
-    simp [List.eq_nil_of_length_eq_zero paired.symm, serializeFields] at failed
+    simp [List.eq_nil_of_length_eq_zero paired.symm, serializeFields_nil] at failed
   | cons field fields ih =>
     intro values paired each
     cases values with
     | nil => simp at paired
     | cons value values =>
-      rw [serializeFields]
+      rw [serializeFields_cons]
       -- A field can fail only through the overflow already established for its own encoding.
       apply overflow_bind (each (field, value) List.mem_cons_self)
       intro head _

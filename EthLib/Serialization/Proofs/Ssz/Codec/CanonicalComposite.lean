@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalTable
 
 /-! Canonicality is preserved when decoded elements are assembled into composites. -/
@@ -30,7 +31,7 @@ theorem serializeEach_of_deserializeEach {element : Desc}
   induction slices with
   | nil =>
     intro values read
-    simp_all [deserializeEach, serializeEach]
+    simp_all [deserializeEach, serializeEach_nil]
   | cons slice slices ih =>
     intro values read
     rw [deserializeEach] at read
@@ -38,7 +39,7 @@ theorem serializeEach_of_deserializeEach {element : Desc}
     obtain ⟨value, head, read⟩ := checksPassed read
     obtain ⟨rest, tail, ⟨⟩⟩ := checksPassed read
     -- Re-encode the first value and the remaining values using their individual canonicality proofs.
-    simp [serializeEach, canonical slice value head, ih rest tail,
+    simp [serializeEach_cons, canonical slice value head, ih rest tail,
       Bind.bind, Except.bind, pure, Except.pure]
 
 /-- Re-encoding canonical field values recovers each field's original slice. -/
@@ -54,7 +55,7 @@ theorem serializeFields_of_deserializeFields : ∀ fields slices values,
     intro slices values _ read
     cases slices <;> simp [deserializeFields] at read
     subst values
-    simp [serializeFields]
+    simp [serializeFields_nil]
   | cons field fields ih =>
     intro slices values canonical read
     cases slices with
@@ -67,7 +68,7 @@ theorem serializeFields_of_deserializeFields : ∀ fields slices values,
       -- Re-encode the first value and the remaining values using their individual canonicality proofs.
       have later := ih slices rest
         (fun item member => canonical item (List.mem_cons_of_mem _ member)) tail
-      simp [serializeFields, canonical field List.mem_cons_self slice value head, later,
+      simp [serializeFields_cons, canonical field List.mem_cons_self slice value head, later,
         Bind.bind, Except.bind, pure, Except.pure]
 
 /-- Decoding a union retains its selector and reconstructs its option's exact encoding. -/

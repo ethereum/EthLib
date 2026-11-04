@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.RoundTripScalar
 
 /-! Round-trip laws for sequences, fields, and selected union options. -/
@@ -70,14 +71,16 @@ theorem serializeFields_length :
   intro fields
   -- Each successful field encoding contributes one output part in declaration order.
   induction fields with
-  | nil => intro values parts wrote; cases values <;> simp_all [serializeFields]
+  | nil => intro values parts wrote; cases values <;> simp_all [serializeFields_nil,
+      serializeFields_nil_cons]
   | cons field fields ih =>
     intro values parts wrote
     cases values with
-    | nil => simp [serializeFields] at wrote
+    | nil => simp [serializeFields_cons_nil] at wrote
     | cons value values =>
       cases head : serialize field value <;> cases tail : serializeFields fields values <;>
-        simp [serializeFields, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
+        simp [serializeFields_cons, head, tail, Bind.bind, Except.bind, Pure.pure,
+            Except.pure] at wrote
       -- The returned list contains the current part followed by the inductively counted remainder.
       subst wrote
       simp [ih values _ tail]
@@ -97,10 +100,11 @@ theorem serializeFields_widths :
   | cons field fields ih =>
     intro values parts wrote widths pair member
     cases values with
-    | nil => simp [serializeFields] at wrote
+    | nil => simp [serializeFields_cons_nil] at wrote
     | cons value values =>
       cases head : serialize field value <;> cases tail : serializeFields fields values <;>
-        simp [serializeFields, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
+        simp [serializeFields_cons, head, tail, Bind.bind, Except.bind, Pure.pure,
+            Except.pure] at wrote
       subst wrote
       -- Either this is the field just written, or one of those behind it.
       rcases List.mem_cons.mp member with rfl | later
@@ -119,14 +123,15 @@ theorem deserializeFields_reads_back :
   induction fields with
   | nil =>
     intro values parts wrote _
-    cases values <;> simp_all [serializeFields, deserializeFields]
+    cases values <;> simp_all [serializeFields_nil, serializeFields_nil_cons, deserializeFields]
   | cons field fields ih =>
     intro values parts wrote reads
     cases values with
-    | nil => simp [serializeFields] at wrote
+    | nil => simp [serializeFields_cons_nil] at wrote
     | cons value values =>
       cases head : serialize field value <;> cases tail : serializeFields fields values <;>
-        simp [serializeFields, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
+        simp [serializeFields_cons, head, tail, Bind.bind, Except.bind, Pure.pure,
+            Except.pure] at wrote
       subst wrote
       -- The first field decodes to its original value and the suffix follows by induction.
       simp only [deserializeFields, reads (field, value) (by simp) _ head,
@@ -215,11 +220,11 @@ theorem serializeEach_length :
   intro element elements
   -- Every successful element encoding adds one part, so sequence length is preserved.
   induction elements with
-  | nil => intro parts wrote; simp_all [serializeEach]
+  | nil => intro parts wrote; simp_all [serializeEach_nil]
   | cons value values ih =>
     intro parts wrote
     cases head : serialize element value <;> cases tail : serializeEach element values <;>
-      simp [serializeEach, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
+      simp [serializeEach_cons, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
     subst wrote
     simp [ih _ tail]
 
@@ -233,11 +238,11 @@ theorem serializeEach_widths :
   intro element elements
   -- Transport the common declared width from element encodings to the collected parts.
   induction elements with
-  | nil => intro parts _ _ wrote _ part member; simp_all [serializeEach]
+  | nil => intro parts _ _ wrote _ part member; simp_all [serializeEach_nil]
   | cons value values ih =>
     intro parts width fixed wrote widths part member
     cases head : serialize element value <;> cases tail : serializeEach element values <;>
-      simp [serializeEach, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
+      simp [serializeEach_cons, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
     subst wrote
     -- The selected part is either the first successful encoding or belongs to the remaining parts.
     rcases List.mem_cons.mp member with rfl | later
@@ -254,11 +259,11 @@ theorem deserializeEach_reads_back :
   intro element elements
   -- Use the per-element round trip in the same order that the encoder collected the parts.
   induction elements with
-  | nil => intro parts wrote _; simp_all [serializeEach, deserializeEach]
+  | nil => intro parts wrote _; simp_all [serializeEach_nil, deserializeEach]
   | cons value values ih =>
     intro parts wrote reads
     cases head : serialize element value <;> cases tail : serializeEach element values <;>
-      simp [serializeEach, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
+      simp [serializeEach_cons, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
     subst wrote
     -- Combine the first recovered value with the recursively recovered sequence.
     simp only [deserializeEach, reads value (by simp) _ head,

@@ -49,17 +49,34 @@ def packBitsDelimited (bits : Array Bool) : Bytes :=
   -- One bit more than the data is carried, so the width follows from the count plus one.
   packBits (bits.push true) ((bits.size + 8) / 8)
 
+/-- The width so far, plus the bytes the fixed part of `parts` occupies.
+
+The loops below carry what they have built so far, so they run in constant stack. -/
+def headWidthFrom : List (Bool × Bytes) → Nat → Nat
+  | [], width => width
+  | (isInline, part) :: rest, width =>
+      headWidthFrom rest (width + if isInline then part.size else bytesPerOffset)
+
 /-- Bytes the fixed part occupies, before any body follows it. -/
-def headWidth : List (Bool × Bytes) → Nat
-  | [] => 0
-  | (isInline, part) :: rest =>
-      (if isInline then part.size else bytesPerOffset) + headWidth rest
+def headWidth (parts : List (Bool × Bytes)) : Nat :=
+  headWidthFrom parts 0
+
+/-- The width so far, plus the bytes the bodies of `parts` occupy. -/
+def bodyWidthFrom : List (Bool × Bytes) → Nat → Nat
+  | [], width => width
+  | (true, _) :: rest, width => bodyWidthFrom rest width
+  | (false, part) :: rest, width => bodyWidthFrom rest (width + part.size)
 
 /-- Bytes the bodies occupy, which is every part not written in place. -/
-def bodyWidth : List (Bool × Bytes) → Nat
-  | [] => 0
-  | (true, _) :: rest => bodyWidth rest
-  | (false, part) :: rest => part.size + bodyWidth rest
+def bodyWidth (parts : List (Bool × Bytes)) : Nat :=
+  bodyWidthFrom parts 0
+
+/-- The fixed part so far, then the fixed part of `parts`, whose first body begins at `start`. -/
+def headOfFrom : Nat → List (Bool × Bytes) → Bytes → Bytes
+  | _, [], out => out
+  | start, (true, part) :: rest, out => headOfFrom start rest (out ++ part)
+  | start, (false, part) :: rest, out =>
+      headOfFrom (start + part.size) rest (out ++ uintBytes bytesPerOffset start)
 
 /--
 The fixed part, given where the first body begins.
@@ -68,17 +85,18 @@ An inline part sits here in full.
 
 Anything else leaves the offset of its body, and the next body begins past its end.
 -/
-def headOf (start : Nat) : List (Bool × Bytes) → Bytes
-  | [] => #[]
-  | (true, part) :: rest => part ++ headOf start rest
-  | (false, part) :: rest =>
-      uintBytes bytesPerOffset start ++ headOf (start + part.size) rest
+def headOf (start : Nat) (parts : List (Bool × Bytes)) : Bytes :=
+  headOfFrom start parts #[]
+
+/-- The bodies so far, then the bodies of `parts`. -/
+def bodiesOfFrom : List (Bool × Bytes) → Bytes → Bytes
+  | [], out => out
+  | (true, _) :: rest, out => bodiesOfFrom rest out
+  | (false, part) :: rest, out => bodiesOfFrom rest (out ++ part)
 
 /-- The bodies, in the order their offsets name them. -/
-def bodiesOf : List (Bool × Bytes) → Bytes
-  | [] => #[]
-  | (true, _) :: rest => bodiesOf rest
-  | (false, part) :: rest => part ++ bodiesOf rest
+def bodiesOf (parts : List (Bool × Bytes)) : Bytes :=
+  bodiesOfFrom parts #[]
 
 /--
 Parts laid out as a struct or a sequence encodes them.
@@ -181,18 +199,31 @@ def serializeEach (element : Desc) : List Value → Except Err (List Bytes)
   | [] => .ok []
   | value :: rest => do
     let head ← serialize element value
-    let tail ← serializeEach element rest
-    return head :: tail
+    serializeEachFrom element rest [head]
+
+/-- The encodings so far, in reverse order, then each element of `values` encoded on its own. -/
+def serializeEachFrom (element : Desc) : List Value → List Bytes → Except Err (List Bytes)
+  | [], done => .ok done.reverse
+  | value :: rest, done => do
+    let head ← serialize element value
+    serializeEachFrom element rest (head :: done)
 
 /-- Each field of a struct encoded on its own, paired with the type it was declared as. -/
 def serializeFields : List Desc → List Value → Except Err (List Bytes)
   | [], [] => .ok []
   | field :: fields, value :: values => do
     let head ← serialize field value
-    let tail ← serializeFields fields values
-    return head :: tail
+    serializeFieldsFrom fields values [head]
   -- A struct given a different number of values than it has fields fits no type.
   | _, _ => .error .typeMismatch
+
+/-- The encodings so far, in reverse order, then each field encoded on its own. -/
+def serializeFieldsFrom : List Desc → List Value → List Bytes → Except Err (List Bytes)
+  | [], [], done => .ok done.reverse
+  | field :: fields, value :: values, done => do
+    let head ← serialize field value
+    serializeFieldsFrom fields values (head :: done)
+  | _, _, _ => .error .typeMismatch
 
 end
 
