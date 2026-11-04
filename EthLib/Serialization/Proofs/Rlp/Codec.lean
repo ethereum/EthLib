@@ -4,7 +4,6 @@ public import EthLib.Base.Proofs.Fork
 public import EthLib.Serialization.Rlp.Codec
 public import EthLib.Serialization.Proofs.Rlp.Canonical
 public import EthLib.Serialization.Proofs.Rlp.Scalar
-public import EthLib.Serialization.Proofs.Rlp.Vectors
 
 /-!
 # Proofs: typed RLP codecs
@@ -378,66 +377,5 @@ theorem Item.eq_of_readSince {f fork : Fork} {count : Nat} {items rest : List It
     exact congrArg Prod.snd h
 
 end Fields
-
-/-! ## Known answers
-
-Each claim pins one typed decoding, and the kernel evaluates it.
-
-The inputs are worked out by hand from the rules of the codecs. -/
-
-open Vectors
-
-/-- The error of a failed decoding, or `none` for a success. -/
-def decodeError {α : Type} (result : Except RlpError α) : Option RlpError :=
-  match result with
-  | .error e => some e
-  | .ok _ => none
-
-/-- `82 04 00` holds the word 1024. -/
-theorem decode_u256_1024 :
-    (Codec.decode (byteArrayOf 3 0x820400) : Except RlpError U256).toOption = some 1024 := by
-  decide +kernel
-
-/-- `80` holds false, and `01` holds true. -/
-theorem decode_bool :
-    (Codec.decode (byteArrayOf 1 0x80) : Except RlpError Bool).toOption = some false ∧
-      (Codec.decode (byteArrayOf 1 0x01) : Except RlpError Bool).toOption = some true := by
-  decide +kernel
-
-/-- `02` holds no boolean: 2 is not below 2^1. -/
-theorem decode_bool_two :
-    decodeError (Codec.decode (byteArrayOf 1 0x02) : Except RlpError Bool) =
-      some (.scalarTooLarge 2 1) := by
-  decide +kernel
-
-/-- `89 01` then 8 zero bytes holds 2^64, which is no 64-bit integer. -/
-theorem decode_uint64_overflow :
-    decodeError (Codec.decode (byteArrayOf 10 0x89010000000000000000) : Except RlpError UInt64) =
-      some (.scalarTooLarge (2 ^ 64) 64) := by
-  decide +kernel
-
-/-- `80`, the empty byte string, is the recipient of a contract creation. -/
-theorem decode_recipient_none :
-    (Codec.decode (byteArrayOf 1 0x80) : Except RlpError (Option Address)).toOption =
-      some none := by
-  decide +kernel
-
-/-- `81 ff` is one byte, which is no address. -/
-theorem decode_recipient_short :
-    decodeError (Codec.decode (byteArrayOf 2 0x81ff) : Except RlpError (Option Address)) =
-      some (.wrongLength 20 1) := by
-  decide +kernel
-
-/-- `c2 01 02` holds the list of the integers 1 and 2. -/
-theorem decode_list :
-    (Codec.decode (byteArrayOf 3 0xc20102) : Except RlpError (List Nat)).toOption =
-      some [1, 2] := by
-  decide +kernel
-
-/-- `c2 01 02` is a list, so it holds no word. -/
-theorem decode_u256_list :
-    decodeError (Codec.decode (byteArrayOf 3 0xc20102) : Except RlpError U256) =
-      some .listAsScalar := by
-  decide +kernel
 
 end EthLib.Serialization.Rlp

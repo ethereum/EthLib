@@ -40,7 +40,7 @@ commit = "be307c948f28897adb8f25afcc253c2c909de35d"
 
 [repositories."ethereum/tests"]
 commit = "c67e485ff8b5be9abc8ad15345ec21aa22e290d9"
-directories = ["bindings/python/tests/state/genesis"]
+directories = ["bindings/python/tests/rlp/vectors", "bindings/python/tests/state/genesis"]
 
 [repositories."ethereum/execution-specs"]
 commit = "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e"
