@@ -24,6 +24,7 @@ public import EthLib.Execution.Evm.AccountData
 public import EthLib.Execution.Evm.ContractAddress
 public import EthLib.Execution.Evm.LogData
 public import EthLib.Execution.Evm.TransientStorage
+public import EthLib.Execution.Evm.Storage
 public import EthLib.Execution.Evm.JumpDest
 public import EthLib.Execution.Evm.ControlFlow
 
