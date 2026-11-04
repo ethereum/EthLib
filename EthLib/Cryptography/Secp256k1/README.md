@@ -29,7 +29,7 @@ The files build on one another in this order:
 | `Recovery.lean` | public key recovery |
 | `Address.lean` | the address of a public key |
 
-The proofs are in `EthLib/Cryptography/Proofs/Secp256k1/`, with one file for each of these, plus `Order.lean`.
+The proofs are in `EthLib/Cryptography/Proofs/Secp256k1/`, with one file for each of these, plus `Order.lean` and `Malleability.lean`.
 
 ## Operations
 

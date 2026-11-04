@@ -197,7 +197,7 @@ theorem recover_sign (d k : Fn) (hash : Vector UInt8 32) (hd : d ≠ 0) {x y : F
   ring
 
 /-- What a valid signature gives: the ranges, a valid key, and the rebuilt point `R` with `x_R mod n = r`. -/
-private theorem verify_rebuilt {q : Point} {hash : Vector UInt8 32} {r s : Nat} (hv : verify q hash r s = true) :
+theorem verify_rebuilt {q : Point} {hash : Vector UInt8 32} {r s : Nat} (hv : verify q hash r s = true) :
     ∃ (hr : 0 < r ∧ r < Fn.modulus) (hs : 0 < s ∧ s < Fn.modulus), q ≠ .infinity ∧ q.isOnCurve = true ∧
       ∃ x y : Fp, mul (Fin.ofNat _ (hashToInt hash) * Fn.inv ⟨s, hs.2⟩) generator
         + mul ((⟨r, hr.2⟩ : Fn) * Fn.inv ⟨s, hs.2⟩) q = .affine x y ∧ x.val % Fn.modulus = r := by
