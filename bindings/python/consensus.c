@@ -43,6 +43,12 @@ eth_consensus_ssz_static(
 );
 
 extern lean_object*
+eth_pq_keys_ssz(
+  lean_object* type,
+  lean_object* data
+);
+
+extern lean_object*
 eth_consensus_compute_shuffled_permutation(
   lean_object* name,
   uint64_t count,
@@ -254,6 +260,20 @@ py_consensus_ssz_static(
   lean_object* data = mk_bytearray(
     (const uint8_t*) PyBytes_AS_STRING(data_obj), PyBytes_GET_SIZE(data_obj));
   return except_into_pybytes(eth_consensus_ssz_static(name, fork, type, data), SSZ_ERROR);
+}
+
+PyObject*
+py_pq_keys_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *type_obj;
+  const uint8_t* data;
+  Py_ssize_t data_len;
+  if (!PyArg_ParseTuple(args, "Oy#", &type_obj, &data, &data_len)) return NULL;
+  lean_object* type = str_arg(type_obj, "type");
+  if (!type) return NULL;
+  return except_into_pybytes(eth_pq_keys_ssz(type, mk_bytearray(data, data_len)), SSZ_ERROR);
 }
 
 PyObject*

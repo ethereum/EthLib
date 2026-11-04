@@ -60,6 +60,12 @@ def ssz_static(name: str, fork: str, type_name: str, data: bytes) -> tuple[bytes
     return out[:32], out[32:]
 
 
+def pq_keys_ssz(type_name: str, data: bytes) -> tuple[bytes, bytes]:
+    """The root of the EIP-8450 container that SSZ bytes encode, and its bytes encoded again."""
+    out = _native.pq_keys_ssz(type_name, data)
+    return out[:32], out[32:]
+
+
 def compute_shuffled_permutation(count: int, seed: bytes, name: str = "mainnet") -> list:
     """The shuffled position of every index below the count."""
     return _value(json.loads(_native.consensus_compute_shuffled_permutation(name, count, seed)))
@@ -143,6 +149,7 @@ __all__ = [
     "get_custody_groups",
     "compute_columns_for_custody_group",
     "ssz_static",
+    "pq_keys_ssz",
     "compute_shuffled_permutation",
     "compute_shuffled_index",
     "reqresp_protocol_ids",
