@@ -246,17 +246,17 @@ Each operation takes the trusted setup as an argument and returns `Except KzgErr
 `computeCellsAndKzgProofs_blob_spec` and `recoverCellsAndKzgProofs_spec` (`Proofs/Kzg/Fk20Proofs.lean`) state the cells and proofs that two operations return, under hypotheses on the setup.
 No theorem states what a verification operation returns on accepted input.
 
-`checksSufficient` (`Proofs/Kzg/CeremonyChecks.lean`) is about the ceremony that produced the trusted setup.
-It proves that the ceremony's pairing checks force each G1 and G2 point of a contribution to be the expected power of the trapdoor.
-It holds under four hypotheses besides the checks themselves:
+`checksSufficient_of_subgroupChecks` (`Proofs/Kzg/CeremonyChecks.lean`) is about the ceremony that produced the trusted setup.
+It proves that the ceremony's pairing checks force each G1 and G2 point of a contribution to represent the expected power of the trapdoor.
+A point represents a scalar when its group element is that multiple of the generator, whatever its coordinates.
+It holds under these hypotheses besides the checks themselves:
 
-- `ConcreteBlsLaws`, one law the repository does not prove yet, `pairingEq_mul_iff`: on multiples of the generators, the concrete pairing check holds exactly when the scalar products agree, which is bilinearity and non-degeneracy;
-- `SubgroupExponents`, exponents witnessing that every point involved is a multiple of its group's generator, which stands in for the subgroup checks;
-- `previousTauNonzero`, that the previous transcript's tau point is not at infinity;
-- `pubkeyNonzero`, that the contributor's public key is not at infinity.
+- `PairingLaws`, the pairing law of A2.
+- Every point is valid and passes the subgroup check of its group.
+- `previousTauNonzero`: the previous transcript's tau point is not at infinity.
+- `pubkeyNonzero`: the contributor's public key is not at infinity.
 
-`ConcreteBlsLaws` follows from the pairing law `PairingLaws` (`PairingLaws.concrete`).
-`checksSufficient_of_pairingLaws` states the same theorem with `PairingLaws` in its place.
+`checksSufficient` states the same with the exponents of the points given, in `SubgroupExponents`.
 
 ### EVM instructions
 
@@ -369,7 +369,7 @@ Finally, the consistency theorems on the constants, listed under BLS12-381, catc
 ### A2. Hypotheses inside theorems
 
 A conditional theorem is only as strong as its hypotheses.
-`checksSufficient` is the main one today, and its four hypotheses are listed under KZG.
+The ceremony theorem `checksSufficient_of_subgroupChecks` is one, and its hypotheses are listed under KZG.
 `PairingLaws`, listed under BLS12-381 and alt_bn128, is the hypothesis of every theorem about the result of a pairing check.
 It is a `Prop` passed as an explicit argument, never an axiom, so `lake exe check-decls` still sees only the standard axioms.
 If it were false, every theorem that assumes it would hold vacuously.
