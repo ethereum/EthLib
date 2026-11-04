@@ -906,31 +906,6 @@
    "error_class": "SphincsError",
    "docstring":
    "`Ver(pk, m, sigma)`: whether a signature signs a message under a public key.\n\nA yes or a no, never a reason.\n\nWhich step rejected a well-formed signature carries no meaning for the caller."},
-  {"summary": "Run the precompile on `data` with `gas` available.",
-   "signature": "(data: bytes, gas: int) -> bytes",
-   "operation": "EthLib.Execution.Evm.Precompiles.Modexp.modexp",
-   "method": "modexp",
-   "errors":
-   [{"type": "EthLib.Execution.Evm.Precompiles.Modexp.ModexpError",
-     "codes":
-     [{"constructor": "lengthTooLarge", "code": 1},
-      {"constructor": "outOfGas", "code": 2}]}],
-   "error_class": "ModexpError",
-   "docstring":
-   "Run the precompile on `data` with `gas` available.\n\nReturns the output, or the error that consumes all the gas."},
-  {"summary":
-   "The gas a call is charged, or the reason it fails before gas is charged.",
-   "signature": "(data: bytes) -> int",
-   "operation": "EthLib.Execution.Evm.Precompiles.Modexp.chargedGas",
-   "method": "modexp_gas_cost",
-   "errors":
-   [{"type": "EthLib.Execution.Evm.Precompiles.Modexp.ModexpError",
-     "codes":
-     [{"constructor": "lengthTooLarge", "code": 1},
-      {"constructor": "outOfGas", "code": 2}]}],
-   "error_class": "ModexpError",
-   "docstring":
-   "The gas a call is charged, or the reason it fails before gas is charged."},
   {"summary":
    "SHA-256 of a byte string shorter than 2^61 bytes, the bound of FIPS 180-4 §1.",
    "signature": "(data: bytes) -> bytes",
@@ -1214,32 +1189,6 @@
    "docstring":
    "The first `length` bytes of `K(1) | K(2) | ...`, SP 800-56C Rev. 2 §4.1.\n\nThe shared secret is secret, and this function makes no constant-time claim."},
   {"summary":
-   "The output on the call data: the digest, left-padded with zero bytes to 32 bytes.",
-   "signature": "(data: bytes) -> bytes",
-   "operation": "EthLib.Execution.Evm.Precompiles.Ripemd160.ripemd160",
-   "method": "ripemd160",
-   "errors": [],
-   "error_class": null,
-   "docstring":
-   "The output on the call data: the digest, left-padded with zero bytes to 32 bytes."},
-  {"summary": "Run the precompile on the call data with `gas` available.",
-   "signature": "(data: bytes, gas: int) -> bytes",
-   "operation": "EthLib.Execution.Evm.Precompiles.Sha256.sha256",
-   "method": "sha256_precompile",
-   "errors":
-   [{"type": "EthLib.Execution.Evm.Precompiles.Sha256.Sha256Error",
-     "codes": [{"constructor": "outOfGas", "code": 1}]}],
-   "error_class": "Sha256PrecompileError",
-   "docstring":
-   "Run the precompile on the call data with `gas` available.\n\nReturns the 32-byte digest, or the error that consumes all the gas.\n\nThe gas is charged first, then the whole call data is hashed."},
-  {"summary": "The gas a call with `size` bytes of call data is charged.",
-   "signature": "(data: bytes) -> int",
-   "operation": "EthLib.Execution.Evm.Precompiles.Sha256.gasCost",
-   "method": "sha256_precompile_gas_cost",
-   "errors": [],
-   "error_class": null,
-   "docstring": "The gas a call with `size` bytes of call data is charged."},
-  {"summary":
    "Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4.",
    "signature":
    "(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool",
@@ -1411,16 +1360,6 @@
    "error_class": "Secp256r1Error",
    "docstring":
    "Whether `(r, s)` is a valid signature on the hash integer `e` under the public key `q`.\n\nIt is the verifying operation of SEC 1 v2 §4.1.4.\n\n`e` acts mod `n`, like every scalar.\n\nThe signature is valid when `R = (e / s) G + (r / s) q` is not `O` and its `x` is `r` mod `n`."},
-  {"summary": "Run the precompile on `data` with `gas` available.",
-   "signature": "(data: bytes, gas: int) -> bytes",
-   "operation": "EthLib.Execution.Evm.Precompiles.Ecrecover.ecrecover",
-   "method": "ecrecover",
-   "errors":
-   [{"type": "EthLib.Execution.Evm.Precompiles.Ecrecover.EcrecoverError",
-     "codes": [{"constructor": "outOfGas", "code": 1}]}],
-   "error_class": "EcrecoverError",
-   "docstring":
-   "Run the precompile on `data` with `gas` available.\n\nReturns the output, or the lack of gas that ends the call and consumes it all.\n\nThe gas is charged first, then the operation runs."},
   {"summary": "The record of a text form.",
    "signature": "(text: str) -> bytes",
    "operation": "EthLib.Networking.Enr.fromText",

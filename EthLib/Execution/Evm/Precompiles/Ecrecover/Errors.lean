@@ -22,13 +22,9 @@ inductive EcrecoverError where
   | outOfGas (cost gas : Nat)
   deriving Repr, DecidableEq
 
-/-- Human-readable description of the failure. -/
-def EcrecoverError.message : EcrecoverError → String
-  | .outOfGas cost gas => s!"out of gas: price {cost}, gas {gas}"
+/-- The stable code of an error, one per constructor.
 
-/-- The stable code of an error, one per constructor, for the C exports.
-
-The code ignores the arguments of the constructor, which the message carries.
+The code ignores the arguments of the constructor.
 
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def EcrecoverError.code : EcrecoverError → UInt32

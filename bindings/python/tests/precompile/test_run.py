@@ -10,7 +10,6 @@ import struct
 import pytest
 
 from ethlib.precompiles import ADDRESSES, price, run
-from ethlib.precompiles import ecrecover as ecrecover_precompile
 
 from .forks import FORKS, since
 
@@ -75,9 +74,9 @@ def test_rejects_bad_arguments() -> None:
 
 @pytest.mark.parametrize("fork", FORKS)
 def test_ecrecover(fork: str) -> None:
-    # The same call through the dedicated binding gives the same output.
+    # The word `v` is bytes 32 to 63, which is neither 27 nor 28, so the output is empty.
     data = bytes(range(128))
-    assert run(fork, 0x01, data, 3000) == ecrecover_precompile.ecrecover(data, 3000)
+    assert run(fork, 0x01, data, 3000) == b""
     with pytest.raises(ValueError, match="outOfGas"):
         run(fork, 0x01, data, 2999)
 

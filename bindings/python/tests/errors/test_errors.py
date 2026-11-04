@@ -9,7 +9,7 @@ from ethlib import consensus, errors
 from ethlib.cryptography import bls, kdf, kzg, secp256k1, secp256r1
 from ethlib.execution import blocks, transactions
 from ethlib.networking import discv5, enr, reqresp, snappy, varint
-from ethlib.precompiles import ecrecover, modexp, run, sha256
+from ethlib.precompiles import run
 from ethlib.serialization import rlp
 from ethlib.state import StateError, state_root
 
@@ -46,15 +46,6 @@ def test_secp256r1_error_code() -> None:
     with pytest.raises(secp256r1.Secp256r1Error) as info:
         secp256r1.verify(bytes(63), bytes(32), bytes(64))
     assert info.value.code == 1
-
-
-def test_modexp_error_code() -> None:
-    # Lengths 1, 1 and 1, then the base, the exponent and the modulus: the price is above 0.
-    data = (1).to_bytes(32, "big") * 3 + b"\x02\x03\x05"
-    with pytest.raises(modexp.ModexpError) as info:
-        modexp.modexp(data, 0)
-    # The code of a lack of gas.
-    assert info.value.code == 2
 
 
 def test_precompile_error_names_the_precompile() -> None:
@@ -96,14 +87,22 @@ def test_concat_kdf_error_code() -> None:
     assert info.value.code == 1
 
 
-def test_gas_error_codes() -> None:
-    # Each of these precompiles fails only for lack of gas, with code 1.
-    with pytest.raises(ecrecover.EcrecoverError) as info:
-        ecrecover.ecrecover(b"", 0)
-    assert info.value.code == 1
-    with pytest.raises(sha256.Sha256PrecompileError) as info:
-        sha256.sha256(b"", 0)
-    assert info.value.code == 1
+@pytest.mark.parametrize("address, code", [(0x01, 1), (0x02, 2), (0x03, 3), (0x04, 4)])
+def test_precompile_codes_of_frontier(address: int, code: int) -> None:
+    # Each of these precompiles fails only for lack of gas, and the code names the precompile.
+    with pytest.raises(errors.PrecompileError) as info:
+        run("frontier", address, b"", 0)
+    assert info.value.code == code
+    assert "outOfGas" in info.value.message
+
+
+def test_modexp_length_too_large() -> None:
+    # From Fusaka, a length above 1024 bytes fails before any gas is charged.
+    data = (1025).to_bytes(32, "big") + bytes(64)
+    with pytest.raises(errors.PrecompileError) as info:
+        run("fusaka", 0x05, data, 10**6)
+    assert info.value.code == 5
+    assert "lengthTooLarge" in info.value.message
 
 
 def test_enr_error_code() -> None:
@@ -187,9 +186,6 @@ def test_unknown_names_have_code_zero() -> None:
         (errors.Secp256k1Error, (ValueError,)),
         (errors.Secp256r1Error, (ValueError,)),
         (errors.EnrError, (ValueError,)),
-        (errors.EcrecoverError, (ValueError,)),
-        (errors.ModexpError, (ValueError,)),
-        (errors.Sha256PrecompileError, (ValueError,)),
         (errors.PrecompileError, (ValueError,)),
         (errors.StateError, (ValueError,)),
         (errors.KeccakError, (ValueError,)),

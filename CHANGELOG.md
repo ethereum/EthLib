@@ -38,6 +38,16 @@ Some checks on the type or the length of an argument run in C first, and raise `
 The C signatures of the fallible exports change too.
 Each one returns the code and the message of its error, in place of a Lean `IO` error.
 
+### Precompiles
+
+The module `ethlib.precompiles` reaches every precompile by its address, at a fork named by the caller.
+`run(fork, address, data, gas)` returns the output, and `price(fork, address, data)` returns the gas that the call charges ([#459](https://github.com/ethereum/EthLib/pull/459)).
+A failed call raises `PrecompileError`, whose code names the precompile.
+
+Before the release, master also had the modules `ethlib.precompiles.ecrecover`, `modexp`, `sha256` and `ripemd160`, with the classes `EcrecoverError`, `ModexpError` and `Sha256PrecompileError`.
+They are removed, and 0.3.0 does not have them.
+A caller of `modexp.modexp(data, gas)` now calls `run(fork, 0x05, data, gas)`, and a caller of `modexp.gas_cost(data)` calls `price(fork, 0x05, data)`.
+
 ### Other changes that break callers
 
 - The KZG operations take the trusted setup as an argument and no longer run in `IO` ([#235](https://github.com/ethereum/EthLib/pull/235)), and their byte inputs are typed ([#346](https://github.com/ethereum/EthLib/pull/346)).

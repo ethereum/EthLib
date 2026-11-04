@@ -139,14 +139,6 @@ def sphincs_verify(public_key: bytes, message: bytes, signature: bytes) -> bool:
     """`Ver(pk, m, sigma)`: whether a signature signs a message under a public key."""
     ...
 
-def modexp(data: bytes, gas: int) -> bytes:
-    """Run the precompile on `data` with `gas` available."""
-    ...
-
-def modexp_gas_cost(data: bytes) -> int:
-    """The gas a call is charged, or the reason it fails before gas is charged."""
-    ...
-
 def sha256(data: bytes) -> bytes:
     """SHA-256 of a byte string shorter than 2^61 bytes, the bound of FIPS 180-4 §1."""
     ...
@@ -251,18 +243,6 @@ def concat_kdf_sha256(z: bytes, fixed_info: bytes, length: int) -> bytes:
     """The first `length` bytes of `K(1) | K(2) | ...`, SP 800-56C Rev. 2 §4.1."""
     ...
 
-def ripemd160(data: bytes) -> bytes:
-    """The output on the call data: the digest, left-padded with zero bytes to 32 bytes."""
-    ...
-
-def sha256_precompile(data: bytes, gas: int) -> bytes:
-    """Run the precompile on the call data with `gas` available."""
-    ...
-
-def sha256_precompile_gas_cost(data: bytes) -> int:
-    """The gas a call with `size` bytes of call data is charged."""
-    ...
-
 def secp256k1_verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool:
     """Whether `(r, s)` is a valid signature on `hash` under the public key `q`, by SEC 1 v2 §4.1.4."""
     ...
@@ -289,10 +269,6 @@ def secp256k1_address(private_key: bytes) -> bytes:
 
 def secp256r1_verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool:
     """Whether `(r, s)` is a valid signature on the hash integer `e` under the public key `q`."""
-    ...
-
-def ecrecover(data: bytes, gas: int) -> bytes:
-    """Run the precompile on `data` with `gas` available."""
     ...
 
 def enr_from_text(text: str) -> bytes:

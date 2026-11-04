@@ -30,17 +30,15 @@ A high `s` is accepted, because the low-s rule of EIP-2 applies to transactions 
 
 ## Operations
 
-| Lean | File | C export | Python |
-| --- | --- | --- | --- |
-| `ecrecover` | `Core.lean` | `eth_ecrecover` | `ecrecover.ecrecover` |
-
-In Python, a lack of gas raises `ValueError`.
+The call is `ecrecover`, in `Core.lean`.
+Python reaches it through `ethlib.precompiles.run` at address `0x01`, as every precompile.
+A lack of gas raises `PrecompileError`, a `ValueError`.
 
 ## Test vectors
 
-`bindings/python/tests/ecrecover/` runs all 52 cases of `test_precompiles` in
+`bindings/python/tests/precompile/test_ecrecover.py` runs all 52 cases of `test_precompiles` in
 `tests/frontier/precompiles/test_ecrecover.py` of execution-specs.
-The file is at commit `b758df2bcaaa95c04d31e25c94fbfb8d6de756e7`.
+The file is at commit `e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e`.
 
 ## What is proved
 

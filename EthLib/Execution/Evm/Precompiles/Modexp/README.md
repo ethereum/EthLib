@@ -52,15 +52,10 @@ The theorem `iterations_long_zero_head` (`EthLib/Execution/Proofs/Evm/Precompile
 
 ## Operations
 
-The exports are in `EthLib/Execution/Exports/Modexp.lean`.
-
-| Lean | File | C export | Python |
-| --- | --- | --- | --- |
-| `modexp` | `Core.lean` | `eth_modexp` | `modexp.modexp` |
-| `chargedGas` | `Core.lean` | `eth_modexp_gas_cost` | `modexp.gas_cost` |
-
-The exports run the rules of Fusaka, which hold through BPO2.
-In Python, a length above 1024 and a lack of gas both raise `ValueError`.
+The call is `modexp`, in `Core.lean`.
+Python reaches it through `ethlib.precompiles.run` and `ethlib.precompiles.price` at address `0x05`.
+Both take the fork, so they apply the rules of that fork.
+A length above 1024 from Fusaka, and a lack of gas, raise `PrecompileError`, a `ValueError`.
 
 ## Test vectors
 
@@ -68,7 +63,7 @@ In Python, a length above 1024 and a lack of gas both raise `ValueError`.
 
 - The five worked inputs of EIP-198 run through the whole precompile.
 - Four small inputs have an empty base and exponent, so the output is `1 mod MODULUS`, or 0 for a zero modulus.
-- The 15 `modexp_nagydani_*` prices of the EIP-7883 table run through the price of Fusaka.
+- The 15 `modexp_nagydani_*` prices of the EIP-2565 and EIP-7883 tables run at every fork.
 - The five highest-bit examples of EIP-198 run through the price.
 
 ## What is proved

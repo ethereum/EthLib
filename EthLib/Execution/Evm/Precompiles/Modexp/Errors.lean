@@ -40,19 +40,9 @@ inductive ModexpError where
   | outOfGas (cost gas : Nat)
   deriving Repr, DecidableEq
 
-/-- Human-readable description of the failure. -/
-def ModexpError.message : ModexpError → String
-  | .lengthTooLarge .base length =>
-      s!"base length {length} exceeds {Constants.MAX_LENGTH_BYTES}"
-  | .lengthTooLarge .exponent length =>
-      s!"exponent length {length} exceeds {Constants.MAX_LENGTH_BYTES}"
-  | .lengthTooLarge .modulus length =>
-      s!"modulus length {length} exceeds {Constants.MAX_LENGTH_BYTES}"
-  | .outOfGas cost gas => s!"out of gas: price {cost}, gas {gas}"
+/-- The stable code of an error, one per constructor.
 
-/-- The stable code of an error, one per constructor, for the C exports.
-
-The code ignores the arguments of the constructor, which the message carries.
+The code ignores the arguments of the constructor.
 
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def ModexpError.code : ModexpError → UInt32

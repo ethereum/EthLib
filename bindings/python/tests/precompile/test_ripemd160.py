@@ -7,7 +7,11 @@ The precompile left-pads each 20-byte digest with twelve zero bytes.
 
 import pytest
 
-from ethlib.precompiles import ripemd160 as precompile
+from ethlib.precompiles import price, run
+
+from .forks import FORKS, ends
+
+ADDRESS = 0x03
 
 VECTORS = [
     (b"", "9c1185a5c5e9fc54612808977ee8f548b2258d31"),
@@ -40,20 +44,24 @@ PADDING_VECTORS = [
 ]
 
 
-def test_output_size() -> None:
-    assert precompile.RIPEMD160_OUTPUT_BYTES == 32
+def cost(size: int) -> int:
+    """The price of Appendix E of the Yellow Paper: 600, and 120 per started 32-byte word."""
+    return 600 + 120 * ((size + 31) // 32)
+
+
+@pytest.mark.parametrize("size", [0, 1, 32, 33, 64, 65])
+@pytest.mark.parametrize("fork", FORKS)
+def test_price(fork: str, size: int) -> None:
+    assert price(fork, ADDRESS, bytes(size)) == cost(size)
 
 
 @pytest.mark.parametrize("data, digest", VECTORS)
-def test_paper_vectors(data: bytes, digest: str) -> None:
-    assert precompile.ripemd160(data) == bytes(12) + bytes.fromhex(digest)
+@pytest.mark.parametrize("fork", ends("frontier"))
+def test_paper_vectors(fork: str, data: bytes, digest: str) -> None:
+    assert run(fork, ADDRESS, data, cost(len(data))) == bytes(12) + bytes.fromhex(digest)
 
 
 @pytest.mark.parametrize("count, digest", PADDING_VECTORS)
-def test_padding_boundaries(count: int, digest: str) -> None:
-    assert precompile.ripemd160(b"a" * count) == bytes(12) + bytes.fromhex(digest)
-
-
-def test_rejects_non_bytes() -> None:
-    with pytest.raises(TypeError):
-        precompile.ripemd160("abc")  # type: ignore[arg-type]
+@pytest.mark.parametrize("fork", ends("frontier"))
+def test_padding_boundaries(fork: str, count: int, digest: str) -> None:
+    assert run(fork, ADDRESS, b"a" * count, cost(count)) == bytes(12) + bytes.fromhex(digest)
