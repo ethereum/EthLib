@@ -265,6 +265,26 @@ inductive TransactionError where
   | encoding (error : RlpError)
   /-- The signature names no sender: a value is out of range, or no public key comes back. -/
   | invalidSignature
+  /-- The gas limit `gas` is below `needed`, the intrinsic gas or the call data floor. -/
+  | insufficientGas (needed gas : Nat)
+  /-- A contract creation carries `size` bytes of init code, more than the limit. -/
+  | initCodeTooLarge (size : Nat)
+  /-- The gas limit `gas` is above the limit of a transaction. -/
+  | gasLimitExceeded (gas : Nat)
+  /-- The nonce is `2^64 - 1` or more. -/
+  | nonceOverflow
+  /-- The priority fee per gas is above the maximum fee per gas. -/
+  | priorityFeeGreaterThanMaxFee
+  /-- The transaction signs the chain `actual`, not the chain `expected` of the network. -/
+  | wrongChainId (expected actual : Nat)
+  /-- A blob transaction carries no blob. -/
+  | noBlobData
+  /-- A blob transaction carries `count` blobs, more than the limit. -/
+  | blobCountExceeded (count : Nat)
+  /-- A versioned hash of a blob does not start with the version of a KZG commitment. -/
+  | invalidBlobVersionedHash
+  /-- A set code transaction carries no authorization. -/
+  | emptyAuthorizationList
   deriving DecidableEq, Repr
 
 end EthLib.Execution.Transactions
