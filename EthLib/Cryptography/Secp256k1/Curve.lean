@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Secp256k1.Field
+public import EthLib.Cryptography.Jacobian
 
 /-!
 # `Secp256k1.Curve`
@@ -15,7 +16,7 @@ The points form a group under the addition rule of SEC 1 v2 §2.2.1.
 
 The rule is written in affine coordinates, as SEC 1 prints it.
 
-Each addition then takes one inverse, which costs about 256 multiplications.
+Scalar multiplication runs in Jacobian coordinates instead, with one inverse at the end.
 -/
 
 @[expose] public section
@@ -86,15 +87,22 @@ instance : Add Point := ⟨add⟩
 
 instance : Neg Point := ⟨neg⟩
 
+/-- The Jacobian form of a point. -/
+def toJacobian : Point → Jacobian Fp.modulus
+  | infinity => .infinity
+  | affine x y => .ofAffine x y
+
+/-- The point of a Jacobian form. -/
+def ofJacobian (p : Jacobian Fp.modulus) : Point :=
+  match p.toAffine with
+  | none => infinity
+  | some (x, y) => affine x y
+
 /-- `k P`, for `k < 2^fuel`, by double and add on the bits of `k`, low bit first.
 
-It recurses on `fuel`, so the kernel can run it. -/
-def mulBits : Nat → Nat → Point → Point
-  | 0, _, _ => infinity
-  | fuel + 1, k, p =>
-    -- `k P = (k mod 2) P + (k / 2) (2 P)`.
-    let rest := mulBits fuel (k / 2) (p + p)
-    if k % 2 = 1 then p + rest else rest
+The steps run in Jacobian coordinates, so only the conversion back takes an inverse. -/
+def mulBits (fuel k : Nat) (p : Point) : Point :=
+  ofJacobian (Jacobian.mulBits 0 fuel k (toJacobian p))
 
 /-- `k P`, the scalar multiplication of SEC 1 v2 §2.2.1, for a scalar mod `n`.
 

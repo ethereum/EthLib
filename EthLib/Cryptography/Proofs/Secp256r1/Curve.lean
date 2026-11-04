@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Secp256r1.Curve
 public import EthLib.Cryptography.Proofs.Secp256r1.Field
 public import EthLib.Cryptography.Proofs.ShortWeierstrass
+public import EthLib.Cryptography.Proofs.Jacobian
 
 /-!
 # Proofs: the group law of secp256r1
@@ -130,38 +131,59 @@ theorem toPoint_add {p q : Point} (hp : p.isOnCurve = true) (hq : q.isOnCurve = 
 
 /-! ## Scalar multiplication -/
 
+private theorem toZ_eq (x : Fp) : Jacobian.toZ x = Fp.toZMod x :=
+  ZMod.natCast_zmod_val (Fp.toZMod x)
+
+private theorem toZ_a : Jacobian.toZ (a : Fp) = Fp.toZMod a := toZ_eq _
+
+/-- A point of the curve has a Jacobian form on the curve, with the same group element. -/
+theorem toJacobian_spec {p : Point} (hp : p.isOnCurve = true) :
+    Jacobian.OnCurve (Fp.toZMod a) (Fp.toZMod b) (toJacobian p) ∧
+      (Jacobian.toPoint (Fp.toZMod a) (Fp.toZMod b) (toJacobian p) : curve.Point) = toPoint p := by
+  cases p with
+  | infinity => exact ⟨Jacobian.onCurve_infinity, Jacobian.toPoint_of_z_eq_zero rfl⟩
+  | affine x y =>
+    have h := (isOnCurve_affine x y).mp hp
+    have hx : Jacobian.affX (Jacobian.ofAffine x y) = Fp.toZMod x := by
+      simp [Jacobian.affX, Jacobian.ofAffine, toZ_eq]
+    have hy : Jacobian.affY (Jacobian.ofAffine x y) = Fp.toZMod y := by
+      simp [Jacobian.affY, Jacobian.ofAffine, toZ_eq]
+    have hz : (Jacobian.ofAffine x y).z ≠ 0 :=
+      Jacobian.toZ_eq_zero.not.mp (by simp [Jacobian.ofAffine])
+    have hs := Jacobian.spec_of_eq (A := Fp.toZMod a) (B := Fp.toZMod b) (nonsingular_of h) hz hx hy
+    exact ⟨hs.1, hs.2.trans (toPoint_affine hp).symm⟩
+
+/-- A Jacobian form on the curve gives a point of the curve, with the same group element. -/
+theorem ofJacobian_spec {p : Jacobian Fp.modulus}
+    (hp : Jacobian.OnCurve (Fp.toZMod a) (Fp.toZMod b) p) :
+    (ofJacobian p).isOnCurve = true ∧
+      toPoint (ofJacobian p) = Jacobian.toPoint (Fp.toZMod a) (Fp.toZMod b) p := by
+  by_cases hz : p.z = 0
+  · simp only [ofJacobian, Jacobian.toAffine_of_z_eq_zero hz]
+    exact ⟨rfl, (Jacobian.toPoint_of_z_eq_zero hz).symm⟩
+  · obtain ⟨x, y, h, hx, hy⟩ := Jacobian.toAffine_of_z_ne_zero hz
+    rw [toZ_eq] at hx hy
+    have he := hp hz
+    rw [← hx, ← hy] at he
+    have hon : (affine x y).isOnCurve = true :=
+      (isOnCurve_affine x y).mpr (by linear_combination he)
+    simp only [ofJacobian, h]
+    refine ⟨hon, ?_⟩
+    rw [toPoint_affine hon, Jacobian.toPoint_of_z_ne_zero hp hz]
+    simp only [hx, hy]
+
 theorem isOnCurve_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) :
-    (mulBits fuel k p).isOnCurve = true := by
-  induction fuel generalizing k p with
-  | zero => rfl
-  | succ fuel ih =>
-    have hrest := ih (k / 2) (isOnCurve_add hp hp)
-    simp only [mulBits]
-    split
-    · exact isOnCurve_add hp hrest
-    · exact hrest
+    (mulBits fuel k p).isOnCurve = true :=
+  (ofJacobian_spec (Jacobian.onCurve_mulBits toZ_a two_ne_zero' fuel k
+    (toJacobian_spec hp).1)).1
 
 /-- Double and add computes `k P`, when `k < 2^fuel`. -/
 theorem toPoint_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) (hk : k < 2 ^ fuel) :
     toPoint (mulBits fuel k p) = k • toPoint p := by
-  induction fuel generalizing k p with
-  | zero =>
-    obtain rfl : k = 0 := by simpa using hk
-    simp [mulBits]
-  | succ fuel ih =>
-    have hk2 : k / 2 < 2 ^ fuel := by rw [Nat.pow_succ] at hk; omega
-    have hrest := ih (k / 2) (isOnCurve_add hp hp) hk2
-    rw [toPoint_add hp hp] at hrest
-    simp only [mulBits]
-    split
-    · -- An odd `k` is `2 (k / 2) + 1`.
-      rw [toPoint_add hp (isOnCurve_mulBits fuel _ (isOnCurve_add hp hp)), hrest]
-      conv_rhs => rw [show k = 2 * (k / 2) + 1 by omega]
-      module
-    · -- An even `k` is `2 (k / 2)`.
-      rw [hrest]
-      conv_rhs => rw [show k = 2 * (k / 2) by omega]
-      module
+  have hJ := toJacobian_spec hp
+  rw [mulBits, (ofJacobian_spec (Jacobian.onCurve_mulBits toZ_a two_ne_zero' fuel k hJ.1)).2,
+    Jacobian.toPoint_mulBits toZ_a two_ne_zero' fuel k hJ.1 hk]
+  exact congrArg (k • ·) hJ.2
 
 theorem isOnCurve_mul (k : Fn) {p : Point} (hp : p.isOnCurve = true) : (mul k p).isOnCurve = true :=
   isOnCurve_mulBits 256 k.val hp
