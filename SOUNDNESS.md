@@ -68,9 +68,10 @@ The unforgeability of BLS signatures holds for a scheme that EthLib's signing an
 The accountable safety and the plausible liveness of Casper FFG hold for an abstract model of votes.
 The evaluation binding of single KZG proofs reduces to the strong Diffie–Hellman problem.
 The binding of the batch check of KZG openings reduces to the same problem, or to a challenge that is a root of a nonzero polynomial.
+The binding of the batch check of KZG cells reduces to the bilinear variant of that problem, or to such a root.
+That reduction holds in a model of the target group of the pairing.
 
 No theorem states unforgeability for leanSPHINCS, or binding for the batch check of blobs.
-No theorem reduces the binding of cell proofs to the bilinear variant of the strong Diffie–Hellman problem.
 No theorem covers the code that runs, the C boundary, or timing.
 
 ### XMSS
@@ -328,9 +329,13 @@ Then the challenge is a root of `sum_k X^k (c_{i_k} - I_k(τ) - w_k (τ^64 - h_k
 That polynomial is zero exactly when every cell is valid.
 `prEvent_cellErrorPoly_root_le` bounds the root case by `(q + 1) (n - 1) / r`, for at most `n` cells.
 Its game is the one of the openings below.
-No theorem reduces two accepted cells with different values at one index to a hard problem.
-That reduction gives a solution of the bilinear variant of the strong Diffie–Hellman problem.
-The solution is an element of the target group of the pairing, which EthLib does not model.
+`verifyCellKzgProofBatchImpl_binding` (`Proofs/Kzg/CellBinding.lean`) is the binding of the batch check of cells.
+Let an accepted batch hold two cells of 64 values at one cell index below 128, for commitments that represent one scalar.
+Then the values agree, or the challenge is a root of a nonzero error polynomial.
+Otherwise a search on the two cells returns a solution of the bilinear strong Diffie–Hellman problem.
+The problem is Definition 2.4 of the extended KZG paper.
+The solution is `(c, x)` with `x` the element `e(g_1, g_2)^(1 / (τ + c))` of the target group.
+The theorem holds in any model of that group, `TargetGroup`, such as the pairing itself under `PairingLaws`.
 No theorem states what the batch check of blobs returns on accepted input.
 
 `findSdh_valid_bytes` (`Proofs/Kzg/Binding.lean`) is the evaluation binding of single proofs.
