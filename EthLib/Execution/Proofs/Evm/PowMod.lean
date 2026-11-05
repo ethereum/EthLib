@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Evm.Instructions.PowMod
+public import EthLib.Execution.Evm.PowMod
 
 /-!
 # Proofs: square-and-multiply

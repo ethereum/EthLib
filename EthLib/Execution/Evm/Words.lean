@@ -1,7 +1,7 @@
 module
 
 /-!
-# `Evm.Machine.Words`
+# `Evm.Words`
 
 The EVM prices many operations per 32-byte word, so it rounds byte counts up to whole words.
 

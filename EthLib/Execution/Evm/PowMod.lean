@@ -1,7 +1,7 @@
 module
 
 /-!
-# `Evm.Instructions.PowMod`
+# `Evm.PowMod`
 
 Modular exponentiation by square-and-multiply.
 

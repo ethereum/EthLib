@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Evm.Machine.Words
+public import EthLib.Execution.Evm.Words
 
 /-!
 # `Evm.Precompiles.Identity`

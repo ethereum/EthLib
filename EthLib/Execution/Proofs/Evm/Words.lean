@@ -1,9 +1,9 @@
 module
 
-public import EthLib.Execution.Evm.Machine.Words
+public import EthLib.Execution.Evm.Words
 
 /-!
-# Proofs: `Evm.Machine.Words`
+# Proofs: `Evm.Words`
 
 - `ceil32` is the least multiple of 32 at or above its argument.
 - The word count is `ceil(size / 32)`: the least number of words that cover the bytes.

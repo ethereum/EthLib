@@ -2,7 +2,7 @@ module
 
 public import EthLib.Execution.Evm.Instructions.Arithmetic
 public import EthLib.Base.Proofs.U256
-public import EthLib.Execution.Proofs.Evm.Instructions.PowMod
+public import EthLib.Execution.Proofs.Evm.PowMod
 
 /-!
 # Proofs: `Evm.Instructions.Arithmetic`

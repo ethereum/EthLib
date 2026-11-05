@@ -3,7 +3,7 @@ module
 public import EthLib.Execution.Evm.Precompiles.Modexp.Encoding
 public import EthLib.Execution.Evm.Precompiles.Modexp.Gas
 public import EthLib.Execution.Evm.Precompiles.Modexp.Errors
-public import EthLib.Execution.Evm.Instructions.PowMod
+public import EthLib.Execution.Evm.PowMod
 
 /-!
 # `Evm.Precompiles.Modexp.Core`

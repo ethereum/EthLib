@@ -532,7 +532,7 @@ It holds under these hypotheses besides the checks themselves:
 
 Each instruction follows execution-specs, which computes with Python integers.
 Lean core defines the same operations on `BitVec`, independently of EthLib.
-The theorems in `Execution/Proofs/Evm/Instructions/` prove that the two agree, apart from the divisor 0, where the EVM returns 0.
+The theorems in `Arithmetic.lean`, `Comparison.lean` and `Bitwise.lean` of `Execution/Proofs/Evm/Instructions/` prove that the two agree, apart from the divisor 0, where the EVM returns 0.
 `sdiv_eq` covers the quotient of -2^255 by -1, the one signed quotient that does not fit in a word, and `bitwiseSar_eq` covers every shift up to 2^256 - 1.
 The 38 test cases of EIP-145 pin SHL, SHR and SAR.
 
@@ -540,7 +540,6 @@ No theorem relates the definitions to the Yellow Paper.
 The stack, the frame with its program counter and gas meter, and memory are modelled.
 So are the instructions that read only the stack, memory, call data, code and return data.
 They are in `Execution/Evm/Instructions/StackOnly.lean` and `Execution/Evm/Instructions/MemoryData.lean`.
-Storage, calls and the world state are not modelled yet.
 
 ### SHA-256 precompile
 
@@ -557,7 +556,7 @@ No theorem relates the module to the execution-specs code it follows, which call
 
 These theorems state agreement with EIP-198 and EIP-7823.
 `compute_eq_pow_mod` (`Execution/Proofs/Evm/Precompiles/Modexp/Core.lean`) proves that the output is `BASE ^ EXPONENT mod MODULUS`, or 0 for a zero modulus.
-It rests on `powMod_eq` (`Execution/Proofs/Evm/Instructions/PowMod.lean`), which proves that the square-and-multiply loop equals `b ^ e % m`.
+It rests on `powMod_eq` (`Execution/Proofs/Evm/PowMod.lean`), which proves that the square-and-multiply loop equals `b ^ e % m`.
 `modexp_outOfGas` and `modexp_ok` (`Execution/Proofs/Evm/Precompiles/Modexp/Core.lean`) prove that, with every length within the EIP-7823 bound, a call fails exactly when the gas is below the price.
 
 No theorem relates the module to the execution-specs code it follows.

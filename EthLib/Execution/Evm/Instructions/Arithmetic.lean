@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.U256
-public import EthLib.Execution.Evm.Instructions.PowMod
+public import EthLib.Execution.Evm.PowMod
 
 /-!
 # `Evm.Instructions.Arithmetic`
