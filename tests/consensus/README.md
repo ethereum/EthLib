@@ -140,8 +140,14 @@ The directory `transition/` holds cases of the whole state transition from `mini
 A `sanity/slots` case advances a state by some slots.
 A `sanity/blocks`, `finality` or `random` case runs a list of signed blocks, and must be rejected when it has no state after it.
 The directory keeps two cases of each group at each fork whose whole transition EthLib holds.
-These forks are Phase 0, Altair, Bellatrix and Capella.
+These forks are Phase 0, Altair, Bellatrix, Capella and Deneb.
 `bindings/python/tests/consensus/test_transition.py` runs each case through the Lean transition and compares the state after it.
+
+The directory `fork/` holds upgrade cases from `minimal.tar.gz` in the same way.
+A case gives a state of one fork and the state that the upgrade to the next fork makes of it.
+The directory keeps at least two cases of each upgrade from Altair to Heze.
+It keeps more where the upgrade has steps of its own: the attestations of Altair, the queues of Electra and the builders of Gloas.
+`bindings/python/tests/consensus/test_fork.py` runs each case through the Lean upgrade and compares the state after it.
 
 The directory `fork_choice/` holds cases of the fork choice from `minimal.tar.gz` in the same way.
 A case starts a store from an anchor state and an anchor block, then runs a list of steps.

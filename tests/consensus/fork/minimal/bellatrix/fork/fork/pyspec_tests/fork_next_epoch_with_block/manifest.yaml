@@ -1,0 +1,6 @@
+preset: minimal
+fork: bellatrix
+runner: fork
+handler: fork
+suite: pyspec_tests
+case: fork_next_epoch_with_block

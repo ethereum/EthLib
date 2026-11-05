@@ -29,6 +29,10 @@ structure SyncCommittee (preset : Preset) where
   aggregatePubkey : BLSPubkey
   deriving DecidableEq
 
+/-- The sync committee whose keys are all zero, which stands for an unknown committee. -/
+def SyncCommittee.empty (preset : Preset) : SyncCommittee preset :=
+  ⟨Vector.replicate _ (Vector.replicate 48 0), Vector.replicate 48 0⟩
+
 instance {preset : Preset} : SszType (SyncCommittee preset) :=
   .container ["pubkeys", "aggregate_pubkey"] (fun c => (c.pubkeys, c.aggregatePubkey))
     (fun (pubkeys, aggregatePubkey) => ⟨pubkeys, aggregatePubkey⟩)

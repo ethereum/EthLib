@@ -252,7 +252,7 @@ def stateTransitionExport (name fork pre block replacements : ByteArray) (verify
 
 The preset, the configuration and the target fork are named in UTF-8.
 
-The upgrades are the ones to Gloas and to Heze.
+The upgrades are those from Altair to Heze, each from the consensus fork before it.
 
 The signature checks of the deposits at the upgrade to Gloas run unless the last argument is false.
 -/
@@ -263,15 +263,33 @@ def upgradeStateExport (name fork pre replacements : ByteArray) (verify : Bool) 
   let fork ← forkOf fork
   let config ← configWith name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
+  let serialize {fork : Fork} (post : BeaconState preset fork) : Result ByteArray :=
+    (SszType.serialize post).mapError fun e => (0, s!"state rejected: {reprStr e}")
   match fork with
+  | .altair =>
+    serialize (← runTransition (upgradeToAltair config
+      (← decodeInput (BeaconState preset .phase0) pre)))
+  | .bellatrix =>
+    let state ← decodeInput (BeaconState preset .altair) pre
+    serialize (carryFields config .bellatrix state (by decide) (by decide))
+  | .shapella =>
+    let state ← decodeInput (BeaconState preset .bellatrix) pre
+    serialize (carryFields config .shapella state (by decide) (by decide))
+  | .dencun =>
+    let state ← decodeInput (BeaconState preset .shapella) pre
+    serialize (carryFields config .dencun state (by decide) (by decide))
+  | .pectra =>
+    serialize (← runTransition (upgradeToElectra config
+      (← decodeInput (BeaconState preset .dencun) pre)))
+  | .fusaka =>
+    serialize (← runTransition (upgradeToFulu config
+      (← decodeInput (BeaconState preset .pectra) pre)))
   | .glamsterdam =>
-    let state ← decodeInput (BeaconState preset .fusaka) pre
-    let post ← runTransition (upgradeToGloas config checks state)
-    (SszType.serialize post).mapError fun e => (0, s!"state rejected: {reprStr e}")
+    serialize (← runTransition (upgradeToGloas config checks
+      (← decodeInput (BeaconState preset .fusaka) pre)))
   | .hegota =>
-    let state ← decodeInput (BeaconState preset .glamsterdam) pre
-    let post ← runTransition (upgradeToHeze config state)
-    (SszType.serialize post).mapError fun e => (0, s!"state rejected: {reprStr e}")
+    serialize (← runTransition (upgradeToHeze config
+      (← decodeInput (BeaconState preset .glamsterdam) pre)))
   | fork => throw (0, s!"no upgrade to {fork.name}")
 
 end EthLib.Consensus.Exports

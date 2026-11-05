@@ -144,10 +144,6 @@ def sameSszValue {α : Type} [SszType α] (a b : α) : Bool :=
 /-- The 32 zero bytes. -/
 def zeroBytes32 : Bytes32 := Vector.replicate 32 0
 
-/-- The sync committee whose keys are all zero, which stands for an unknown committee. -/
-def SyncCommittee.empty (preset : Preset) : SyncCommittee preset :=
-  ⟨Vector.replicate _ (Vector.replicate 48 0), Vector.replicate 48 0⟩
-
 /-- The execution payload header of Capella with the fields that a later header shares. -/
 def ExecutionPayloadHeader.toCapella {preset : Preset} {fork : Fork} (capella : .shapella ≤ fork)
     (header : ExecutionPayloadHeader preset fork) : ExecutionPayloadHeader preset .shapella where

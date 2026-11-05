@@ -1,12 +1,31 @@
 module
 
+public import EthLib.Consensus.Credentials
+public import EthLib.Consensus.ForkSchedule
 public import EthLib.Consensus.PayloadTimeliness
+public import EthLib.Consensus.Proposers
+public import EthLib.Consensus.SyncCommittee
 public import EthLib.Consensus.Transition.BuilderRequests
+public import EthLib.Consensus.Transition.EpochJustification
 
 /-!
 # `Consensus.Transition.Upgrade`
 
-From Gloas: the upgrade of a Fulu state to a Gloas state, at the first slot of the fork epoch.
+The upgrade of a state to the next consensus fork, at the first slot of the fork epoch.
+
+Up to Fulu, an upgrade carries every field and starts each new one at zero or empty.
+
+Altair then turns the pending attestations of the previous epoch into flags.
+
+It also fills both sync committees with the next sync committee.
+
+Electra sets its churns and queues the balances of the validators that are not yet active.
+
+It also queues the excess balance of each validator with compounding credentials.
+
+Fulu computes the proposers of the current epoch and of the lookahead.
+
+From Gloas: the upgrade of a Fulu state to a Gloas state.
 
 From Heze: the upgrade of a Gloas state to a Heze state, at the first slot of its fork epoch.
 
@@ -57,6 +76,249 @@ namespace EthLib.Consensus
 open Base Uint64 Cryptography.Bls Serialization.Ssz
 
 variable {preset : Preset}
+
+/-- A list of a state as the same list at a later fork before Gloas. -/
+def carryList {fork post : Fork} {α : Type} {limit : Nat} (upgrade : fork < post)
+    (list : ForkList .glamsterdam fork α limit) : ForkList .glamsterdam post α limit :=
+  ⟨list.data, fun before => list.bound (Nat.lt_trans upgrade before)⟩
+
+/-- A list with one zero for each validator of a state, at a later fork before Gloas. -/
+def zeroPerValidator {fork post : Fork} {α : Type} [OfNat α 0] {limit : Nat}
+    (upgrade : fork < post) (validators : ForkList .glamsterdam fork Validator limit) :
+    ForkList .glamsterdam post α limit :=
+  ⟨Array.replicate validators.data.size 0, fun before => by
+    simpa using validators.bound (Nat.lt_trans upgrade before)⟩
+
+/-- The state of a later fork before Gloas, with the fields of a state of an earlier fork.
+
+The fork version moves to that of the later fork, at the current epoch.
+
+Every field that both forks hold carries over.
+
+A field that only the later fork holds starts at its initial value.
+
+The flags and inactivity scores start at zero for each validator.
+
+The latest payload header has zero in each field that the earlier header lacks.
+
+The index of the first deposit request starts unset, as `2^64 - 1`.
+
+Every other new field is zero or empty, and the upgrade to each fork computes those it needs. -/
+def carryFields (config : Config) (post : Fork) {fork : Fork} (pre : BeaconState preset fork)
+    (upgrade : fork < post) (before : post < .glamsterdam) : BeaconState preset post :=
+  have early : fork < .glamsterdam := Nat.lt_trans upgrade before
+  have beforeHeze : fork < .hegota := Nat.lt_trans early (by decide)
+  { genesisTime := pre.genesisTime
+    genesisValidatorsRoot := pre.genesisValidatorsRoot
+    slot := pre.slot
+    forkVersions :=
+      { previousVersion := pre.forkVersions.currentVersion
+        currentVersion := config.forkVersion post
+        epoch := getCurrentEpoch pre }
+    latestBlockHeader := pre.latestBlockHeader
+    blockRoots := pre.blockRoots
+    stateRoots := pre.stateRoots
+    historicalRoots := pre.historicalRoots
+    eth1Data := fun _ => pre.eth1Data beforeHeze
+    eth1DataVotes := fun _ => pre.eth1DataVotes beforeHeze
+    eth1DepositIndex := fun _ => pre.eth1DepositIndex beforeHeze
+    validators := carryList upgrade pre.validators
+    balances := carryList upgrade pre.balances
+    randaoMixes := pre.randaoMixes
+    slashings := pre.slashings
+    previousEpochAttestations := fun phase0 =>
+      pre.previousEpochAttestations (Nat.lt_trans upgrade phase0)
+    currentEpochAttestations := fun phase0 =>
+      pre.currentEpochAttestations (Nat.lt_trans upgrade phase0)
+    previousEpochParticipation := fun _ =>
+      if altair : .altair ≤ fork then carryList upgrade (pre.previousEpochParticipation altair)
+      else zeroPerValidator upgrade pre.validators
+    currentEpochParticipation := fun _ =>
+      if altair : .altair ≤ fork then carryList upgrade (pre.currentEpochParticipation altair)
+      else zeroPerValidator upgrade pre.validators
+    justificationBits := pre.justificationBits
+    previousJustifiedCheckpoint := pre.previousJustifiedCheckpoint
+    currentJustifiedCheckpoint := pre.currentJustifiedCheckpoint
+    finalizedCheckpoint := pre.finalizedCheckpoint
+    inactivityScores := fun _ =>
+      if altair : .altair ≤ fork then carryList upgrade (pre.inactivityScores altair)
+      else zeroPerValidator upgrade pre.validators
+    currentSyncCommittee := fun _ =>
+      if altair : .altair ≤ fork then pre.currentSyncCommittee altair
+      else SyncCommittee.empty preset
+    nextSyncCommittee := fun _ =>
+      if altair : .altair ≤ fork then pre.nextSyncCommittee altair
+      else SyncCommittee.empty preset
+    latestExecutionPayloadHeader := fun _ =>
+      if bellatrix : .bellatrix ≤ fork then
+        (pre.latestExecutionPayloadHeader ⟨bellatrix, early⟩).upgrade post
+      else ExecutionPayloadHeader.empty preset post
+    latestBlockHash := fun gloas => absurd gloas (Nat.not_le_of_lt before)
+    nextWithdrawalIndex := fun _ =>
+      if capella : .shapella ≤ fork then pre.nextWithdrawalIndex capella else 0
+    nextWithdrawalValidatorIndex := fun _ =>
+      if capella : .shapella ≤ fork then pre.nextWithdrawalValidatorIndex capella else 0
+    historicalSummaries := fun _ =>
+      if capella : .shapella ≤ fork then pre.historicalSummaries capella
+      else ⟨#[], Nat.zero_le _⟩
+    depositRequestsStartIndex := fun _ =>
+      if electra : .pectra ≤ fork then pre.depositRequestsStartIndex ⟨electra, beforeHeze⟩
+      else UNSET_DEPOSIT_REQUESTS_START_INDEX
+    depositBalanceToConsume := fun _ =>
+      if electra : .pectra ≤ fork then pre.depositBalanceToConsume electra else 0
+    exitBalanceToConsume := fun _ =>
+      if electra : .pectra ≤ fork then pre.exitBalanceToConsume electra else 0
+    earliestExitEpoch := fun _ =>
+      if electra : .pectra ≤ fork then pre.earliestExitEpoch electra else 0
+    consolidationBalanceToConsume := fun _ =>
+      if electra : .pectra ≤ fork then pre.consolidationBalanceToConsume electra else 0
+    earliestConsolidationEpoch := fun _ =>
+      if electra : .pectra ≤ fork then pre.earliestConsolidationEpoch electra else 0
+    pendingDeposits := fun _ =>
+      if electra : .pectra ≤ fork then carryList upgrade (pre.pendingDeposits electra)
+      else ⟨#[], fun _ => Nat.zero_le _⟩
+    pendingPartialWithdrawals := fun _ =>
+      if electra : .pectra ≤ fork then carryList upgrade (pre.pendingPartialWithdrawals electra)
+      else ⟨#[], fun _ => Nat.zero_le _⟩
+    pendingConsolidations := fun _ =>
+      if electra : .pectra ≤ fork then carryList upgrade (pre.pendingConsolidations electra)
+      else ⟨#[], fun _ => Nat.zero_le _⟩
+    proposerLookahead := fun _ =>
+      if fulu : .fusaka ≤ fork then pre.proposerLookahead fulu else Vector.replicate _ 0
+    builders := fun gloas => absurd gloas (Nat.not_le_of_lt before)
+    nextWithdrawalBuilderIndex := fun gloas => absurd gloas (Nat.not_le_of_lt before)
+    executionPayloadAvailability := fun gloas => absurd gloas (Nat.not_le_of_lt before)
+    builderPendingPayments := fun gloas => absurd gloas (Nat.not_le_of_lt before)
+    builderPendingWithdrawals := fun gloas => absurd gloas (Nat.not_le_of_lt before)
+    latestExecutionPayloadBid := fun gloas => absurd gloas (Nat.not_le_of_lt before)
+    payloadExpectedWithdrawals := fun gloas => absurd gloas (Nat.not_le_of_lt before)
+    ptcWindow := fun gloas => absurd gloas (Nat.not_le_of_lt before) }
+
+/-- From Altair: the state with the flags that one pending attestation of Phase 0 earned.
+
+The attestation earns the flags of its source, target and head, at its inclusion delay.
+
+Each member of its committee whose bit is set gets those flags for the previous epoch. -/
+def translateAttestation {fork : Fork} (state : BeaconState preset fork)
+    (altair : .altair ≤ fork) (attestation : PendingAttestation preset) :
+    Except TransitionError (BeaconState preset fork) := do
+  let flags ← liftAccessor (getAttestationParticipationFlagIndices state attestation.data
+    attestation.inclusionDelay)
+  let attesters ← liftAccessor (getPendingAttestingIndices state attestation)
+  let participation ← attesters.foldlM (init := state.previousEpochParticipation altair)
+    fun participation index => do
+      let some old := participation.data[index.toNat]?
+        | throw (.accessor (.indexOutOfRange index))
+      return ⟨participation.data.set! index.toNat (flags.foldl addFlag old),
+        fun before => by simpa using participation.bound before⟩
+  return { state with previousEpochParticipation := fun _ => participation }
+
+/-- The Altair state of a Phase 0 state, at the first slot of the fork epoch.
+
+The fields carry over, and the pending attestations of the previous epoch become flags.
+
+Both sync committees are then the next sync committee of that state. -/
+def upgradeToAltair (config : Config) (pre : BeaconState preset .phase0) :
+    Except TransitionError (BeaconState preset .altair) := do
+  let post := carryFields config .altair pre (by decide) (by decide)
+  let post ← (pre.previousEpochAttestations (by decide)).data.foldlM
+    (fun state attestation => translateAttestation state (by decide) attestation) post
+  let committee ← liftAccessor (getNextSyncCommittee post)
+  return { post with
+    currentSyncCommittee := fun _ => committee
+    nextSyncCommittee := fun _ => committee }
+
+/-- From Electra: the state in which a validator that is not yet active waits as a deposit.
+
+Its balance and its effective balance become zero, and its eligibility is reset.
+
+Its whole balance waits as a pending deposit, with the signature of the point at infinity.
+
+The genesis slot tells that deposit apart from one that comes as a request. -/
+def queuePreActivation {fork : Fork} (state : BeaconState preset fork) (electra : .pectra ≤ fork)
+    (index : ValidatorIndex) : Except TransitionError (BeaconState preset fork) := do
+  let validator ← liftAccessor (getValidator state index)
+  let balance ← liftAccessor (getBalance state index)
+  let deposit : PendingDeposit := ⟨validator.pubkey, validator.withdrawalCredentials, balance,
+    Cryptography.Bls.Signatures.infinitySignature, GENESIS_SLOT⟩
+  let pending ← liftAccessor (appendWithinLimit (state.pendingDeposits electra) deposit)
+  let validator := { validator with
+    effectiveBalance := 0, activationEligibilityEpoch := FAR_FUTURE_EPOCH }
+  return { (state.setBalance index.toNat 0).setValidator index.toNat validator with
+    pendingDeposits := fun _ => pending }
+
+/-- The validators of a state that are not yet active.
+
+They come in order of their eligibility epoch, and of their index within one epoch. -/
+def preActivationIndices {fork : Fork} (state : BeaconState preset fork) : List ValidatorIndex :=
+  let waiting := state.validators.data.toList.zipIdx.filter
+    fun (validator, _) => validator.activationEpoch = FAR_FUTURE_EPOCH
+  let sorted := waiting.mergeSort fun (first, i) (second, j) =>
+    first.activationEligibilityEpoch < second.activationEligibilityEpoch ||
+      (first.activationEligibilityEpoch == second.activationEligibilityEpoch && i ≤ j)
+  sorted.map (·.2.toUInt64)
+
+/-- From Electra: the state after the queueing of the excess balance of one validator.
+
+Only a validator with compounding credentials queues its balance above the activation balance.
+-/
+def queueCompoundingExcess {fork : Fork} (state : BeaconState preset fork)
+    (electra : .pectra ≤ fork) (index : Nat) : Except TransitionError (BeaconState preset fork) :=
+  match state.validators.data[index]? with
+  | some validator =>
+    if hasCompoundingWithdrawalCredential validator then
+      liftAccessor (queueExcessActiveBalance state electra index.toUInt64)
+    else pure state
+  | none => pure state
+
+/-- The Electra state of a Deneb state, at the first slot of the fork epoch.
+
+The earliest exit epoch is one after the latest of the activation exit epoch and every exit.
+
+The earliest consolidation epoch is the activation exit epoch.
+
+The churns of exits and of consolidations start full.
+
+Each validator that is not yet active then waits as a pending deposit, in order of eligibility.
+
+Last, each validator with compounding credentials queues its balance above the activation balance.
+
+[EIP-7251] specifies these steps, and [EIP-6110] the unset index of the first deposit request.
+
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
+[EIP-6110]: https://eips.ethereum.org/EIPS/eip-6110#consensus-layer -/
+def upgradeToElectra (config : Config) (pre : BeaconState preset .dencun) :
+    Except TransitionError (BeaconState preset .pectra) := do
+  let activationExit ← liftAccessor (liftArith (computeActivationExitEpoch preset
+    (getCurrentEpoch pre)))
+  let latestExit := pre.validators.data.foldl (init := activationExit) fun latest validator =>
+    if validator.exitEpoch = FAR_FUTURE_EPOCH then latest else max latest validator.exitEpoch
+  let earliestExit ← liftAccessor (liftArith (addChecked latestExit 1))
+  let post := carryFields config .pectra pre (by decide) (by decide)
+  let post := { post with
+    earliestExitEpoch := fun _ => earliestExit
+    earliestConsolidationEpoch := fun _ => activationExit }
+  let exitChurn ← liftAccessor (getActivationExitChurnLimit config post)
+  let post := { post with exitBalanceToConsume := fun _ => exitChurn }
+  let consolidationChurn ← liftAccessor (getConsolidationChurnLimit config post)
+  let post := { post with consolidationBalanceToConsume := fun _ => consolidationChurn }
+  let post ← (preActivationIndices post).foldlM
+    (fun state index => queuePreActivation state (by decide) index) post
+  (List.range post.validators.data.size).foldlM
+    (fun state index => queueCompoundingExcess state (by decide) index) post
+
+/-- The Fulu state of an Electra state, at the first slot of the fork epoch.
+
+The fields carry over, and the proposers of the current epoch and the lookahead are computed.
+
+[EIP-7917] specifies the lookahead.
+
+[EIP-7917]: https://eips.ethereum.org/EIPS/eip-7917#specification -/
+def upgradeToFulu (config : Config) (pre : BeaconState preset .pectra) :
+    Except TransitionError (BeaconState preset .fusaka) := do
+  let post := carryFields config .fusaka pre (by decide) (by decide)
+  let lookahead ← liftAccessor (initializeProposerLookahead post)
+  return { post with proposerLookahead := fun _ => lookahead }
 
 /-- Whether a queue of deposits holds one for a key with a valid signature. -/
 def isPendingValidator (config : Config) (checks : SignatureChecks)

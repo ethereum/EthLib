@@ -55,30 +55,6 @@ def normalizeBranch {depth : Nat} (branch : Vector Bytes32 depth) (gindex : Nat)
     simp [normalizeMerkleBranch]
     omega⟩
 
-/-- The execution payload header of a later fork, with the fields of an earlier one.
-
-A field that the earlier fork does not have is zero. -/
-def ExecutionPayloadHeader.upgrade {pre : Fork} (post : Fork)
-    (header : ExecutionPayloadHeader preset pre) : ExecutionPayloadHeader preset post where
-  parentHash := header.parentHash
-  feeRecipient := header.feeRecipient
-  stateRoot := header.stateRoot
-  receiptsRoot := header.receiptsRoot
-  logsBloom := header.logsBloom
-  prevRandao := header.prevRandao
-  blockNumber := header.blockNumber
-  gasLimit := header.gasLimit
-  gasUsed := header.gasUsed
-  timestamp := header.timestamp
-  extraData := header.extraData
-  baseFeePerGas := header.baseFeePerGas
-  blockHash := header.blockHash
-  transactionsRoot := header.transactionsRoot
-  withdrawalsRoot := fun _ =>
-    if capella : .shapella ≤ pre then header.withdrawalsRoot capella else zeroBytes32
-  blobGasUsed := fun _ => if deneb : .dencun ≤ pre then header.blobGasUsed deneb else 0
-  excessBlobGas := fun _ => if deneb : .dencun ≤ pre then header.excessBlobGas deneb else 0
-
 /-- A light client header of a later fork before Gloas, with the fields of an earlier one.
 
 A header before Capella has no execution data, so it gets the empty header and zero nodes. -/

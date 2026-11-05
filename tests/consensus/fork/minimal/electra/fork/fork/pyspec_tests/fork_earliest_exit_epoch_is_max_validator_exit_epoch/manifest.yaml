@@ -1,0 +1,6 @@
+preset: minimal
+fork: electra
+runner: fork
+handler: fork
+suite: pyspec_tests
+case: fork_earliest_exit_epoch_is_max_validator_exit_epoch

@@ -4,9 +4,15 @@ public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Transition.Upgrade
 
 /-!
-# Proofs: the upgrade of a Fulu state to Gloas
+# Proofs: the upgrades of the state
 
-The upgrade keeps the Fulu fields, with each list unchanged as a sequence.
+The carry-over to a later fork before Gloas keeps the registry, balances, slot and checkpoints.
+
+After the upgrade to Altair, each list of flags and scores has one entry for each validator.
+
+The upgrade to Electra keeps the number of validators and of balances.
+
+The upgrade to Gloas keeps the Fulu fields, with each list unchanged as a sequence.
 
 The latest block hash and the block hash of the latest bid are the hash of the latest payload.
 
@@ -32,6 +38,177 @@ namespace EthLib.Consensus
 open Base Uint64 Cryptography.Bls Serialization.Ssz
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
+
+/-- An upgrade before Gloas carries the registry, the balances, the slot and the checkpoints.
+
+The fork version moves to that of the later fork at the current epoch. -/
+theorem carryFields_spec {fork post : Fork} (pre : BeaconState preset fork)
+    (upgrade : fork < post) (before : post < .glamsterdam) :
+    (carryFields config post pre upgrade before).validators.data = pre.validators.data ∧
+      (carryFields config post pre upgrade before).balances.data = pre.balances.data ∧
+      (carryFields config post pre upgrade before).slot = pre.slot ∧
+      (carryFields config post pre upgrade before).finalizedCheckpoint =
+        pre.finalizedCheckpoint ∧
+      (carryFields config post pre upgrade before).currentJustifiedCheckpoint =
+        pre.currentJustifiedCheckpoint ∧
+      (carryFields config post pre upgrade before).forkVersions =
+        ⟨pre.forkVersions.currentVersion, config.forkVersion post, getCurrentEpoch pre⟩ :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+/-- An upgrade from Phase 0 gives each validator zero flags and a zero inactivity score. -/
+theorem carryFields_of_lt_altair {fork post : Fork} (pre : BeaconState preset fork)
+    (upgrade : fork < post) (before : post < .glamsterdam) (phase0 : fork < .altair)
+    (altair : .altair ≤ post) :
+    ((carryFields config post pre upgrade before).previousEpochParticipation altair).data =
+        Array.replicate pre.validators.data.size 0 ∧
+      ((carryFields config post pre upgrade before).currentEpochParticipation altair).data =
+        Array.replicate pre.validators.data.size 0 ∧
+      ((carryFields config post pre upgrade before).inactivityScores altair).data =
+        Array.replicate pre.validators.data.size 0 := by
+  have early : ¬Fork.altair ≤ fork := Nat.not_le_of_lt phase0
+  simp [carryFields, early, zeroPerValidator]
+
+/-- One translated attestation changes only the flags of the previous epoch, and keeps their count.
+-/
+theorem translateAttestation_spec {fork : Fork} {state after : BeaconState preset fork}
+    {altair : .altair ≤ fork} {attestation : PendingAttestation preset}
+    (computed : translateAttestation state altair attestation = .ok after) :
+    ∃ participation : EpochParticipation preset fork,
+      after = { state with previousEpochParticipation := fun _ => participation } ∧
+        participation.data.size = (state.previousEpochParticipation altair).data.size := by
+  simp only [translateAttestation, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, -, _, -, participation, folded, rfl⟩ := computed
+  refine ⟨participation, rfl, ?_⟩
+  refine foldlM_ok_invariant
+    (fun (list : EpochParticipation preset fork) =>
+      list.data.size = (state.previousEpochParticipation altair).data.size)
+    (fun list index list' same step => ?_) rfl folded
+  split at step
+  · cases step
+    simpa using same
+  · cases step
+
+/-- A fold of translated attestations keeps every field but the flags of the previous epoch.
+
+Those flags keep their count. -/
+theorem foldlM_translateAttestation {fork : Fork} {altair : .altair ≤ fork}
+    {attestations : List (PendingAttestation preset)} {state after : BeaconState preset fork}
+    (computed : attestations.foldlM (fun state attestation =>
+      translateAttestation state altair attestation) state = .ok after) :
+    ∃ participation : EpochParticipation preset fork,
+      after = { state with previousEpochParticipation := fun _ => participation } ∧
+        participation.data.size = (state.previousEpochParticipation altair).data.size := by
+  refine foldlM_ok_invariant
+    (fun (middle : BeaconState preset fork) => ∃ participation : EpochParticipation preset fork,
+      middle = { state with previousEpochParticipation := fun _ => participation } ∧
+        participation.data.size = (state.previousEpochParticipation altair).data.size)
+    (fun middle attestation next holds step => ?_) ⟨_, rfl, rfl⟩ computed
+  obtain ⟨participation, rfl, same⟩ := holds
+  obtain ⟨participation', rfl, same'⟩ := translateAttestation_spec step
+  exact ⟨participation', rfl, same'.trans same⟩
+
+/-- The upgrade to Altair keeps the registry and the balances.
+
+Each list of flags and of inactivity scores has one entry for each validator.
+
+Both sync committees are the same committee, and the fork version moves to Altair. -/
+theorem upgradeToAltair_spec {pre : BeaconState preset .phase0}
+    {after : BeaconState preset .altair} (computed : upgradeToAltair config pre = .ok after) :
+    after.validators.data = pre.validators.data ∧ after.balances.data = pre.balances.data ∧
+      (after.previousEpochParticipation (by decide)).data.size = pre.validators.data.size ∧
+      (after.currentEpochParticipation (by decide)).data.size = pre.validators.data.size ∧
+      (after.inactivityScores (by decide)).data.size = pre.validators.data.size ∧
+      after.currentSyncCommittee (by decide) = after.nextSyncCommittee (by decide) ∧
+      after.forkVersions =
+        ⟨pre.forkVersions.currentVersion, config.ALTAIR_FORK_VERSION, getCurrentEpoch pre⟩ := by
+  simp only [upgradeToAltair, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, folded, _, -, rfl⟩ := computed
+  rw [← Array.foldlM_toList] at folded
+  obtain ⟨participation, rfl, same⟩ := foldlM_translateAttestation folded
+  obtain ⟨previous, current, scores⟩ := carryFields_of_lt_altair (config := config)
+    (post := .altair) pre (by decide) (by decide) (by decide) (by decide)
+  refine ⟨rfl, rfl, ?_, ?_, ?_, rfl, rfl⟩
+  · show participation.data.size = _
+    rw [same, previous, Array.size_replicate]
+  · show (_ : EpochParticipation preset .altair).data.size = _
+    rw [current, Array.size_replicate]
+  · show (_ : InactivityScores preset .altair).data.size = _
+    rw [scores, Array.size_replicate]
+
+/-- What each step of the Electra upgrade keeps.
+
+It keeps the number of validators and of balances, the fork versions and the deposit start index.
+-/
+def ElectraKept {fork : Fork} (state after : BeaconState preset fork) : Prop :=
+  SameSizes state after ∧ after.forkVersions = state.forkVersions ∧
+    after.depositRequestsStartIndex = state.depositRequestsStartIndex
+
+theorem ElectraKept.trans {fork : Fork} {first second third : BeaconState preset fork}
+    (one : ElectraKept first second) (two : ElectraKept second third) :
+    ElectraKept first third :=
+  ⟨one.1.trans two.1, two.2.1.trans one.2.1, two.2.2.trans one.2.2⟩
+
+theorem electraKept_queuePreActivation {fork : Fork} {state after : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : ValidatorIndex}
+    (computed : queuePreActivation state electra index = .ok after) : ElectraKept state after := by
+  simp only [queuePreActivation, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, -, _, -, _, -, rfl⟩ := computed
+  exact ⟨(sameSizes_setBalance _ _ _).trans (sameSizes_setValidator _ _ _), rfl, rfl⟩
+
+theorem electraKept_queueCompoundingExcess {fork : Fork} {state after : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : Nat}
+    (computed : queueCompoundingExcess state electra index = .ok after) :
+    ElectraKept state after := by
+  unfold queueCompoundingExcess at computed
+  split at computed
+  · split at computed
+    · have queued := liftAccessor_ok.mp computed
+      refine ⟨sameSizes_queueExcessActiveBalance queued, ?_⟩
+      simp only [queueExcessActiveBalance, bind_ok_iff] at queued
+      obtain ⟨_, _, queued⟩ := queued
+      split at queued
+      · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at queued
+        obtain ⟨_, _, _, _, rfl⟩ := queued
+        exact ⟨rfl, rfl⟩
+      · cases queued
+        exact ⟨rfl, rfl⟩
+    · cases computed
+      exact ⟨SameSizes.refl _, rfl, rfl⟩
+  · cases computed
+    exact ⟨SameSizes.refl _, rfl, rfl⟩
+
+/-- The upgrade to Electra keeps the number of validators and of balances.
+
+The index of the first deposit request starts unset, and the fork version moves to Electra. -/
+theorem upgradeToElectra_spec {pre : BeaconState preset .dencun}
+    {after : BeaconState preset .pectra} (computed : upgradeToElectra config pre = .ok after) :
+    after.validators.data.size = pre.validators.data.size ∧
+      after.balances.data.size = pre.balances.data.size ∧
+      after.depositRequestsStartIndex (by decide) = UNSET_DEPOSIT_REQUESTS_START_INDEX ∧
+      after.forkVersions =
+        ⟨pre.forkVersions.currentVersion, config.ELECTRA_FORK_VERSION, getCurrentEpoch pre⟩ := by
+  simp only [upgradeToElectra, bind_ok_iff] at computed
+  obtain ⟨_, -, _, -, _, -, _, -, middle, queued, compounded⟩ := computed
+  have first := foldlM_ok_invariant (ElectraKept _)
+    (fun _ _ _ before step => before.trans (electraKept_queuePreActivation step))
+    ⟨SameSizes.refl _, rfl, rfl⟩ queued
+  have kept := foldlM_ok_invariant (ElectraKept _)
+    (fun _ _ _ before step => before.trans (electraKept_queueCompoundingExcess step))
+    first compounded
+  obtain ⟨⟨validators, balances⟩, versions, start⟩ := kept
+  exact ⟨validators, balances, congrFun start _, versions⟩
+
+/-- The upgrade to Fulu keeps the registry and the balances.
+
+The fork version moves to Fulu. -/
+theorem upgradeToFulu_spec {pre : BeaconState preset .pectra}
+    {after : BeaconState preset .fusaka} (computed : upgradeToFulu config pre = .ok after) :
+    after.validators.data = pre.validators.data ∧ after.balances.data = pre.balances.data ∧
+      after.forkVersions =
+        ⟨pre.forkVersions.currentVersion, config.FULU_FORK_VERSION, getCurrentEpoch pre⟩ := by
+  simp only [upgradeToFulu, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, -, rfl⟩ := computed
+  exact ⟨rfl, rfl, rfl⟩
 
 /-- The upgrade carries the registry, the balances and the queues as the same sequences. -/
 theorem upgradeFields_lists (pre : BeaconState preset .fusaka) (requestsRoot : Root) :

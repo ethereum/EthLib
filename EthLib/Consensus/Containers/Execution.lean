@@ -239,6 +239,31 @@ def ExecutionPayloadHeader.empty (preset : Preset) (fork : Fork) :
   blobGasUsed := fun _ => 0
   excessBlobGas := fun _ => 0
 
+/-- The execution payload header of a later fork, with the fields of an earlier one.
+
+A field that the earlier fork does not have is zero. -/
+def ExecutionPayloadHeader.upgrade {preset : Preset} {pre : Fork} (post : Fork)
+    (header : ExecutionPayloadHeader preset pre) : ExecutionPayloadHeader preset post where
+  parentHash := header.parentHash
+  feeRecipient := header.feeRecipient
+  stateRoot := header.stateRoot
+  receiptsRoot := header.receiptsRoot
+  logsBloom := header.logsBloom
+  prevRandao := header.prevRandao
+  blockNumber := header.blockNumber
+  gasLimit := header.gasLimit
+  gasUsed := header.gasUsed
+  timestamp := header.timestamp
+  extraData := header.extraData
+  baseFeePerGas := header.baseFeePerGas
+  blockHash := header.blockHash
+  transactionsRoot := header.transactionsRoot
+  withdrawalsRoot := fun _ =>
+    if capella : .shapella ≤ pre then header.withdrawalsRoot capella
+    else Vector.replicate 32 0
+  blobGasUsed := fun _ => if deneb : .dencun ≤ pre then header.blobGasUsed deneb else 0
+  excessBlobGas := fun _ => if deneb : .dencun ≤ pre then header.excessBlobGas deneb else 0
+
 /-- The header of a payload: its fields, with the transactions and withdrawals as their roots. -/
 def ExecutionPayload.header {preset : Preset} {fork : Fork}
     (payload : ExecutionPayload preset fork) : Except Err (ExecutionPayloadHeader preset fork) := do
