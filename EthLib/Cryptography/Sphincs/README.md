@@ -182,6 +182,10 @@ Definitions that derive a secret take the derivation function as an argument too
   Distinct nodes, or one node at distinct children values, have distinct points (`pointBytes_inj`), so the graph is an input of VCVio's canonical relabelling (`graph`).
   A point at a node's address that ends with the node's suffix is at that node's key (`nodeKeys`, `nodeAt_thInput`).
   Each honest call is at the point of its node, at the values its payload is made of (`pointBytes_chain` and its siblings).
+- What an accepted FORS opening contains (`Unforgeability/ForsForgery.lean`).
+  Under any hash, FORS openings that recover the honest FORS key of their instance are its honest openings at the leaves the digest picked (`forsRecover_binding`).
+  Otherwise an explicit search finds a FORS leaf or a FORS node where verification hashed other children values to the honest value (`findForsPreimage_valid`).
+  The search finds nothing in honest openings (`findForsPreimage_honest`).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
 
