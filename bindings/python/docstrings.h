@@ -296,6 +296,9 @@
 #define DOC_consensus_upgrade_state \
   "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."
 
+#define DOC_consensus_fork_choice \
+  "The outcome of each step of a fork choice case, from an anchor state and an anchor block."
+
 #define DOC_consensus_light_client_sync \
   "The headers of a sync, step by step, from a bootstrap for a trusted block root."
 

@@ -130,6 +130,37 @@ inductive ForkChoiceError where
   | forkNotYetSpecified (fork : Fork)
   deriving Repr
 
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def ForkChoiceError.code : ForkChoiceError → UInt32
+  | .anchorStateMismatch => 1
+  | .unknownBlock _ => 2
+  | .unknownCheckpointState _ => 3
+  | .unknownBlockState _ => 4
+  | .unknownUnrealizedJustification _ => 5
+  | .parentSlotNotLower _ => 6
+  | .arith _ => 7
+  | .ssz _ => 8
+  | .accessor _ => 9
+  | .transition _ => 10
+  | .unknownBlockTimeliness _ => 11
+  | .futureBlock _ => 12
+  | .blockNotAfterFinalized _ => 13
+  | .notDescendantOfFinalized _ => 14
+  | .targetEpochNotRecent _ => 15
+  | .targetEpochMismatch _ => 16
+  | .futureVote _ => 17
+  | .targetNotCheckpointBlock _ => 18
+  | .attestationNotYetDue _ => 19
+  | .invalidIndexedAttestation => 20
+  | .notSlashable => 21
+  | .boostNotWornOff _ => 22
+  | .tickNotAdvancing _ => 23
+  | .forkNotYetSpecified _ => 24
+
 variable (preset : Preset) (fork : Fork)
 
 /-- The store of the fork choice at one fork. -/

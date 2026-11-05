@@ -233,6 +233,9 @@ extern lean_object* eth_consensus_light_client_sync(
   lean_object* name, lean_object* fork, lean_object* bootstrap_fork, lean_object* config,
   lean_object* trusted, lean_object* genesis_validators_root, lean_object* bootstrap,
   lean_object* steps);
+extern lean_object* eth_consensus_fork_choice(
+  lean_object* name, lean_object* fork, lean_object* anchor_state, lean_object* anchor_block,
+  lean_object* steps, lean_object* config, uint8_t verify);
 extern lean_object* eth_consensus_block_to_light_client_header(
   lean_object* name, lean_object* fork, lean_object* config, lean_object* block);
 extern lean_object* eth_consensus_light_client_update_proofs(
@@ -941,6 +944,28 @@ py_consensus_light_client_sync(
   return except_into_pybytes(
     eth_consensus_light_client_sync(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]),
     LIGHT_CLIENT_ERROR);
+}
+
+PyObject*
+py_consensus_fork_choice(
+  PyObject* self,
+  PyObject* args
+) {
+  if (PyTuple_Size(args) != 7) {
+    PyErr_SetString(PyExc_TypeError, "expected 7 arguments");
+    return NULL;
+  }
+  int verify = PyObject_IsTrue(PyTuple_GET_ITEM(args, 6));
+  if (verify < 0) return NULL;
+  PyObject* inputs = PyTuple_GetSlice(args, 0, 6);
+  if (!inputs) return NULL;
+  lean_object* a[6];
+  int read = strs_bytes_args(inputs, 2, 4, a);
+  Py_DECREF(inputs);
+  if (!read) return NULL;
+  return except_into_pybytes(
+    eth_consensus_fork_choice(a[0], a[1], a[2], a[3], a[4], a[5], (uint8_t) verify),
+    FORK_CHOICE_ERROR);
 }
 
 PyObject*

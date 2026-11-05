@@ -14,6 +14,8 @@ from consensus.containers import FORKS as CONSENSUS_FORK
 from consensus.test_epoch_processing import HANDLERS as EPOCH_STEPS
 from consensus.test_epoch_processing import runs as runs_epoch_step
 from consensus.test_fork import runs as runs_upgrade
+from consensus.test_fork_choice import HANDLERS as FORK_CHOICE
+from consensus.test_fork_choice import runs as runs_fork_choice
 from consensus.test_operations import HANDLERS as OPERATIONS
 from consensus.test_light_client_data_collection import runs_data_collection
 from consensus.test_light_client_sync import SPECIFIED as LIGHT_CLIENT_FORKS
@@ -42,7 +44,7 @@ NOT_YET = {
     "random": "the state transition after Phase 0 (consensus track C26 to C40)",
     "sanity": "the state transition after Phase 0 (consensus track C26 to C40)",
     "transition": "beacon state transition (consensus track C13 to C40)",
-    "fork_choice": "the Altair state transition (C27), then the Bellatrix to Fulu blocks (C47)",
+    "fork_choice": "the Bellatrix to Fulu blocks (C47)",
     "fast_confirmation": "fast confirmation rule (consensus track, decision 9)",
     "sync": "optimistic sync (consensus track C48)",
     "networking": "gossip validation (consensus track C63 and C64)",
@@ -538,6 +540,13 @@ def _transition(root: Path, case: Case) -> None:
     run_case(case.preset, case.fork, case.group, root / case.path)
 
 
+def _fork_choice(root: Path, case: Case) -> None:
+    from consensus.test_fork_choice import run_case
+
+    # tests/<preset>/<fork>/fork_choice/<handler>/<suite>/<case>
+    run_case(case.preset, case.fork, root / case.path)
+
+
 def _upgrade(root: Path, case: Case) -> None:
     from consensus.test_fork import run_case
 
@@ -577,6 +586,7 @@ RUNNERS = {
     **{f"epoch_processing/{handler}": _epoch_step for handler in EPOCH_STEPS},
     **{f"rewards/{handler}": _rewards for handler in REWARDS},
     "fork/fork": _upgrade,
+    **{f"fork_choice/{handler}": _fork_choice for handler in FORK_CHOICE},
     **{group: _transition for group in TRANSITION_GROUPS},
     "legacy_ommers": legacy.run_ommers,
     "legacy_dao": legacy.run_dao,
@@ -623,6 +633,8 @@ def runner(case: Case):
     if run is _rewards and not runs_rewards(case.fork):
         return None
     if run is _upgrade and not runs_upgrade(case.fork):
+        return None
+    if run is _fork_choice and not runs_fork_choice(case.fork, case.group.split("/")[1]):
         return None
     if run is _transition and not runs_transition(case.fork, case.group):
         return None

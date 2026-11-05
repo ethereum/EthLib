@@ -3,7 +3,7 @@
 import json
 from typing import Any
 
-from ..errors import ConsensusError, LightClientError, TransitionError
+from ..errors import ConsensusError, ForkChoiceError, LightClientError, TransitionError
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -348,6 +348,64 @@ def state_transition(name: str, fork: str, pre: bytes, block: bytes, verify: boo
     return _native.consensus_state_transition(name, fork, pre, block, replacements, verify)
 
 
+_FORK_CHOICE_STEPS = {"tick": 0, "block": 1, "attestation": 2, "attester_slashing": 3,
+                      "checks": 4}
+
+
+def fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list,
+                verify: bool = True, config: dict | None = None) -> list:
+    """The outcome of each step of a fork choice case, from an anchor state and block."""
+    # A step is (kind, data): the tick in seconds, the SSZ bytes of a block, an attestation or
+    # an attester slashing, or for "checks" whether to read the head of the next proposer.
+    records = b""
+    for kind, data in steps:
+        if kind == "tick":
+            data = data.to_bytes(8, "little")
+        elif kind == "checks":
+            data = bytes([bool(data)])
+        records += bytes([_FORK_CHOICE_STEPS[kind]]) + len(data).to_bytes(4, "little") + data
+    replacements = json.dumps(config).encode() if config else b""
+    out = _native.consensus_fork_choice(name, fork, anchor_state, anchor_block, records,
+                                        replacements, verify)
+    outcomes, offset = [], 0
+    for kind, data in steps:
+        status, offset = out[offset], offset + 1
+        if status == 1:
+            code = int.from_bytes(out[offset:offset + 4], "little")
+            length = int.from_bytes(out[offset + 4:offset + 8], "little")
+            message = out[offset + 8:offset + 8 + length].decode()
+            outcomes.append(ForkChoiceError(code, message))
+            offset += 8 + length
+        elif kind != "checks":
+            outcomes.append(None)
+        else:
+            size = 168 + 32 * bool(data)
+            outcomes.append(_store_record(out[offset:offset + size]))
+            offset += size
+    return outcomes
+
+
+def _store_record(record: bytes) -> dict:
+    """A read of the store, from its bytes."""
+    def number(start: int) -> int:
+        return int.from_bytes(record[start:start + 8], "little")
+
+    def checkpoint(start: int) -> dict:
+        return {"epoch": number(start), "root": record[start + 8:start + 40]}
+
+    read = {
+        "head": {"slot": number(0), "root": record[8:40]},
+        "time_ms": number(40),
+        "genesis_time_ms": number(48),
+        "justified_checkpoint": checkpoint(56),
+        "finalized_checkpoint": checkpoint(96),
+        "proposer_boost_root": record[136:168],
+    }
+    if len(record) > 168:
+        read["proposer_head"] = record[168:200]
+    return read
+
+
 def upgrade_state(name: str, fork: str, pre: bytes, verify: bool = True,
                   config: dict | None = None) -> bytes:
     """The SSZ bytes of a state upgraded to a fork from the fork before, or TransitionError."""
@@ -391,6 +449,8 @@ __all__ = [
     "TransitionError",
     "process_operation",
     "LightClientError",
+    "ForkChoiceError",
+    "fork_choice",
     "light_client_sync",
     "block_to_light_client_header",
     "light_client_update_proofs",

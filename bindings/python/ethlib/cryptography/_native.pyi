@@ -395,6 +395,10 @@ def consensus_upgrade_state(name: str, fork: str, pre: bytes, config: bytes, ver
     """The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."""
     ...
 
+def consensus_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: bytes, config: bytes, verify: bool) -> bytes:
+    """The outcome of each step of a fork choice case, from an anchor state and an anchor block."""
+    ...
+
 def consensus_light_client_sync(name: str, fork: str, bootstrap_fork: str, config: bytes, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: bytes) -> bytes:
     """The headers of a sync, step by step, from a bootstrap for a trusted block root."""
     ...

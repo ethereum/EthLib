@@ -25,11 +25,9 @@ An attestation updates the latest vote of each of its validators, if the vote is
 
 An attester slashing marks the validators in both of its attestations as equivocators.
 
-So far a block runs at Phase 0 only.
+A node also runs the attestations and the attester slashings of a block through their handlers.
 
-From Altair the state transition and the pull-up are not yet specified here, so a new block fails.
-
-From Bellatrix a block also checks its payload, which is not yet specified here either.
+From Bellatrix a block also checks its payload, which is not yet specified here.
 -/
 
 @[expose] public section
@@ -321,8 +319,6 @@ def addBlock (checks : SignatureChecks) (signed : SignedBeaconBlock preset fork)
 
 /-- The store after a signed block: a known block changes nothing, and a new one is added.
 
-From Altair the state transition and the pull-up are not yet specified here, so a new block fails.
-
 From Bellatrix the rule also checks the payload, and it fails there as not yet specified. -/
 def onBlock (checks : SignatureChecks) (signed : SignedBeaconBlock preset fork) :
     Except ForkChoiceError (Store preset fork) := do
@@ -330,6 +326,19 @@ def onBlock (checks : SignatureChecks) (signed : SignedBeaconBlock preset fork) 
   let blockRoot ← (SszType.hashTreeRoot signed.message).mapError .ssz
   if store.blocks.contains blockRoot then pure store
   else store.addBlock config checks signed blockRoot
+
+/-- The store after a signed block and the votes that it carries.
+
+The block comes first, then its attestations, then its attester slashings.
+
+The attestations come from a block, so the clock does not bound their epoch. -/
+def onBlockWithVotes (checks : SignatureChecks) (signed : SignedBeaconBlock preset fork) :
+    Except ForkChoiceError (Store preset fork) := do
+  let store ← store.onBlock config checks signed
+  let store ← signed.message.body.attestations.data.foldlM
+    (fun store attestation => store.onAttestation config checks attestation true) store
+  signed.message.body.attesterSlashings.data.foldlM
+    (fun store slashing => store.onAttesterSlashing config checks slashing) store
 
 end Store
 
