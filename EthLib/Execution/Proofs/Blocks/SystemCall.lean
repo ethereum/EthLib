@@ -17,7 +17,11 @@ Each list holds its type byte and at least one byte of data.
 
 Before Pectra a block reads no request.
 
-From Glamsterdam a system call fails as not yet specified.
+A system call has 30,000,000 gas at every fork.
+
+Up to BPO5 it has no reservoir and runs with one counter of the gas left.
+
+From Glamsterdam it has a reservoir of 1,566,720 state gas, and runs with the meter of EIP-8037.
 -/
 
 @[expose] public section
@@ -27,17 +31,45 @@ namespace EthLib.Execution.Blocks
 open EthLib.Base
 open EthLib.Execution.Evm
 open EthLib.Execution.State (BlockState)
+open EthLib.Execution.Transactions (processMessageCall)
 
 variable {fork : Fork} {env : BlockEnvironment fork} {block : BlockState} {target : Address}
   {data : ByteArray}
 
 /-! ## The call -/
 
-/-- From Glamsterdam, a system call fails, since the rules of that fork are not here yet. -/
-theorem systemCall_of_glamsterdam_le (h : .glamsterdam ≤ fork) :
-    systemCall env block target data = .error (.forkNotYetSpecified fork) := by
-  simp only [systemCall, h, ↓reduceIte]
+/-- A system call has 30,000,000 gas at every fork. -/
+theorem gas_systemMessage : (systemMessage env target data).gas = 30000000 := rfl
+
+/-- Up to BPO5, a system call has no reservoir of state gas. -/
+theorem systemReservoir_of_lt_glamsterdam (h : fork < .glamsterdam) : systemReservoir fork = 0 := by
+  have hpre : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
+  simp only [systemReservoir, hpre, ↓reduceIte]
+
+/-- From Glamsterdam, a system call has the state gas of 16 new slots: 1,566,720. -/
+theorem systemReservoir_of_glamsterdam (h : .glamsterdam ≤ fork) :
+    systemReservoir fork = 1566720 := by
+  simp only [systemReservoir, h, ↓reduceIte]
   rfl
+
+/-- Up to BPO5, a system call runs its message with one counter of the gas left. -/
+theorem systemCall_of_lt_glamsterdam (h : fork < .glamsterdam) :
+    systemCall env block target data =
+      (processMessageCall (Meter := Nat) env.chainId (systemMessage env target data)
+        (.ofBlock block) Substate.empty).map fun out => ⟨out.state, out.output, out.error⟩ := by
+  have hpre : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
+  simp only [systemCall, hpre, ↓reduceIte]
+  cases processMessageCall (Meter := Nat) env.chainId (systemMessage env target data)
+    (.ofBlock block) Substate.empty <;> rfl
+
+/-- From Glamsterdam, a system call runs its message with the meter of EIP-8037. -/
+theorem systemCall_of_glamsterdam (h : .glamsterdam ≤ fork) :
+    systemCall env block target data =
+      (processMessageCall (Meter := StateGasMeter) env.chainId (systemMessage env target data)
+        (.ofBlock block) Substate.empty).map fun out => ⟨out.state, out.output, out.error⟩ := by
+  simp only [systemCall, h, ↓reduceIte]
+  cases processMessageCall (Meter := StateGasMeter) env.chainId (systemMessage env target data)
+    (.ofBlock block) Substate.empty <;> rfl
 
 /-- A checked system call to a contract with no code makes the block invalid. -/
 theorem checkedSystemCall_of_size_eq_zero {code : ByteArray}
