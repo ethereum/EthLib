@@ -217,6 +217,12 @@ Definitions that derive a secret take the derivation function as an argument too
   Two Merkle computations whose leaves and parent steps are related have related nodes and paths (`node_eqDistTriple`, `siblings_eqDistTriple`).
   The lab tree runs each key's lab leaf and reads each parent's cell.
   Its nodes, roots and paths have the law of the honest ones (`node_labTriple`, `treeRoot_labTriple`, `path_labTriple`).
+- FORS in the eager game (`Unforgeability/LabFors.lean`).
+  The lab leaf of a FORS tree touches both halves of its secret's derivation and reads the leaf.
+  The lab nodes, keys and paths of FORS have the law of the honest ones (`forsNode_labTriple`, `forsKey_labTriple`, `forsPath_labTriple`).
+  The lab opening reads the secret it reveals and touches the other half of the derivation.
+  The honest and lab openings have one law (`treeOpen_labTriple`, `forsSign_labTriple`).
+  The secrets of the leaves that no signature opens are never read, so a later game can defer them.
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
 
