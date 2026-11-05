@@ -620,7 +620,7 @@ def tx_recover_sender(fork: str, tx: bytes) -> bytes:
     ...
 
 def tx_intrinsic_gas(fork: str, tx: bytes) -> int:
-    """The intrinsic gas of a transaction at `fork`."""
+    """The intrinsic gas of a transaction, without the call data floor."""
     ...
 
 def tx_check(fork: str, chain_id: int, tx: bytes) -> bytes:

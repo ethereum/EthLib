@@ -130,22 +130,29 @@ theorem sloadCost_of_berlin_le {fork : Fork} (h : fork ≥ .berlin) (cold : Bool
 
 /-- From Berlin, BALANCE pays the price of a cold or a warm access to the account. -/
 theorem balanceCost_of_berlin_le {fork : Fork} (h : fork ≥ .berlin) (cold : Bool) :
-    balanceCost fork cold = accountAccessCost cold := by
+    balanceCost fork cold = accountAccessCost fork cold := by
   simp [balanceCost, h]
 
-/-- From Berlin, EXTCODESIZE and EXTCODECOPY pay the price of a cold or a warm access. -/
-theorem externalBaseCost_of_berlin_le {fork : Fork} (h : fork ≥ .berlin) (cold : Bool) :
-    externalBaseCost fork cold = accountAccessCost cold := by
+/-- From Berlin to Glamsterdam, EXTCODESIZE and EXTCODECOPY pay the price of an access. -/
+theorem externalBaseCost_of_berlin_le {fork : Fork} (h : fork ≥ .berlin)
+    (h' : fork < .glamsterdam) (cold : Bool) :
+    externalBaseCost fork cold = accountAccessCost fork cold := by
+  have hn : ¬ fork ≥ Fork.glamsterdam := Nat.not_le.mpr h'
+  simp [externalBaseCost, h, hn]
+
+/-- From Glamsterdam, EXTCODESIZE and EXTCODECOPY also pay a warm access to read the code. -/
+theorem externalBaseCost_of_glamsterdam_le {fork : Fork} (h : fork ≥ .glamsterdam)
+    (cold : Bool) : externalBaseCost fork cold = accountAccessCost fork cold + WARM_ACCESS := by
   simp [externalBaseCost, h]
 
 /-- From Berlin, EXTCODEHASH pays the price of a cold or a warm access to the account. -/
 theorem extcodehashCost_of_berlin_le {fork : Fork} (h : fork ≥ .berlin) (cold : Bool) :
-    extcodehashCost fork cold = accountAccessCost cold := by
+    extcodehashCost fork cold = accountAccessCost fork cold := by
   simp [extcodehashCost, h]
 
 /-- From Berlin, the calls pay the price of a cold or a warm access to the account. -/
 theorem callBaseCost_of_berlin_le {fork : Fork} (h : fork ≥ .berlin) (cold : Bool) :
-    callBaseCost fork cold = accountAccessCost cold := by
+    callBaseCost fork cold = accountAccessCost fork cold := by
   simp [callBaseCost, h]
 
 /-- From Istanbul, a byte of call data costs the standard price of its tokens.
@@ -156,12 +163,16 @@ theorem txData_of_istanbul_le {fork : Fork} (h : fork ≥ .istanbul) :
       (gasSchedule fork).TX_DATA_PER_NON_ZERO = 4 * TX_DATA_TOKEN_STANDARD := by
   simp [gasSchedule, h, TX_DATA_PER_ZERO, TX_DATA_TOKEN_STANDARD]
 
-/-- From London, the refund to clear a slot is the reset price plus the price of a listed key.
+/-- Before Glamsterdam, from London, the refund to clear a slot adds the reset and a listed key.
+
+The reset price is the price to change a slot, and the key is the price of a key of an access list.
 
 EIP-3529 defines it so, with the reset price of EIP-2929, which excludes the cold access. -/
-theorem refundStorageClear_of_london_le {fork : Fork} (h : fork ≥ .london) :
+theorem refundStorageClear_of_london_le {fork : Fork} (h : fork ≥ .london)
+    (h' : fork < .glamsterdam) :
     (gasSchedule fork).REFUND_STORAGE_CLEAR =
-      COLD_STORAGE_WRITE - COLD_STORAGE_ACCESS + TX_ACCESS_LIST_STORAGE_KEY := by
-  simp [gasSchedule, h, COLD_STORAGE_WRITE, COLD_STORAGE_ACCESS, TX_ACCESS_LIST_STORAGE_KEY]
+      COLD_STORAGE_WRITE - COLD_STORAGE_ACCESS + (gasSchedule fork).TX_ACCESS_LIST_STORAGE_KEY := by
+  have h'' : ¬ fork ≥ Fork.glamsterdam := Nat.not_le.mpr h'
+  simp [gasSchedule, h, h'', COLD_STORAGE_WRITE, COLD_STORAGE_ACCESS]
 
 end EthLib.Execution.Evm

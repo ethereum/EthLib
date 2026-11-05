@@ -283,6 +283,8 @@ inductive TransactionError where
   | invalidBlobVersionedHash
   /-- A set code transaction carries no authorization. -/
   | emptyAuthorizationList
+  /-- The intrinsic gas or the floor, `gas`, is above the limit of the gas of a transaction. -/
+  | intrinsicGasAboveLimit (gas : Nat)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -306,5 +308,6 @@ def TransactionError.code : TransactionError → UInt32
   | .blobCountExceeded _ => 13
   | .invalidBlobVersionedHash => 14
   | .emptyAuthorizationList => 15
+  | .intrinsicGasAboveLimit _ => 16
 
 end EthLib.Execution.Transactions

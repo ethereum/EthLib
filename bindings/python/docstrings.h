@@ -465,7 +465,7 @@
   "The sender of a transaction at `fork`: the address of the key that its signature recovers."
 
 #define DOC_tx_intrinsic_gas \
-  "The intrinsic gas of a transaction at `fork`."
+  "The intrinsic gas of a transaction, without the call data floor."
 
 #define DOC_tx_check \
   "Check a transaction alone on the chain `chainId`."

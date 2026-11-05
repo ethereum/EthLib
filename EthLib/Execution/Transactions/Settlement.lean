@@ -122,10 +122,11 @@ def gasRefund (fork : Fork) (used refundCounter : Nat) : Nat :=
 It is the gas limit minus the gas left, minus the refund.
 
 From Pectra, it is at least the call data floor. -/
-def gasUsed (fork : Fork) (tx : Transaction) (gasLeft refundCounter : Nat) : Nat :=
+def gasUsed (fork : Fork) (sender : Address) (tx : Transaction) (gasLeft refundCounter : Nat) :
+    Nat :=
   let used := tx.gas.toNat - gasLeft
   let afterRefund := used - gasRefund fork used refundCounter
-  if fork ≥ .pectra then max afterRefund (calldataFloor tx.data) else afterRefund
+  if fork ≥ .pectra then max afterRefund (calldataFloor fork sender tx) else afterRefund
 
 /-! ## The payments -/
 
@@ -141,10 +142,10 @@ structure Settlement where
   burned : Nat
   deriving DecidableEq, Repr
 
-/-- Where the wei of a transaction go at `fork` and at a base fee per gas of `baseFee`. -/
-def settlement (fork : Fork) (baseFee : Nat) (tx : Transaction) (gasLeft refundCounter : Nat) :
-    Settlement :=
-  let used := gasUsed fork tx gasLeft refundCounter
+/-- Where the wei of a transaction from `sender` go at `fork` and at a base fee of `baseFee`. -/
+def settlement (fork : Fork) (baseFee : Nat) (sender : Address) (tx : Transaction)
+    (gasLeft refundCounter : Nat) : Settlement :=
+  let used := gasUsed fork sender tx gasLeft refundCounter
   let price := effectiveGasPrice baseFee tx
   { gasUsed := used
     senderRefund := (tx.gas.toNat - used) * price
@@ -200,7 +201,7 @@ It returns the state and the gas used. -/
 def settleGas {fork : Fork} (env : BlockEnvironment fork) (state : TransactionState)
     (sender : Address) (tx : Transaction) (gasLeft refundCounter : Nat) :
     Except StateError (TransactionState × Nat) := do
-  let s := settlement fork (baseFeeOf env) tx gasLeft refundCounter
+  let s := settlement fork (baseFeeOf env) sender tx gasLeft refundCounter
   let state ← creditEther fork state sender s.senderRefund
   let state ← payBeneficiary fork state env.coinbase s.priorityFee
   return (state, s.gasUsed)

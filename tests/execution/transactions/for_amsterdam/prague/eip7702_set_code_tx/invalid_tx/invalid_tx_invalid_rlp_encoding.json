@@ -1,0 +1,78 @@
+{
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_rlp_encoding[fork_Amsterdam-transaction_test-non_zero_address-extra_bytes]": {
+        "result": {
+            "Amsterdam": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c101808007830186a09400000000000000000000000000000000000000008080c0f85cf85a809400000000000000000000000000000000000000018001a0bd85b1e84a4bb5d161e65c31b216c77d686ac97deebbbd79a8ee780a79693759a019f911b87741efb3140f3b107036d44724d392b779fe9e56ae8c903580e2560e01a076974d4ec9c663df062b6fa2ddc71bce27f7e316ac41812f6493e9ccaf56658ea03600e1f488150443c4abd85c86190f465fa9b718b74100cafab3abcc38f89ce700",
+        "_info": {
+            "hash": "0x3c4279ab8366e16d8e9958567dd550c400f611dec98f27a1b1530e12e2f6b1e9",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction type-4 where the RLP encoding of the transaction\nis invalid.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L627",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    },
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_rlp_encoding[fork_Amsterdam-transaction_test-non_zero_address-truncated_rlp]": {
+        "result": {
+            "Amsterdam": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c101808007830186a09400000000000000000000000000000000000000008080c0f85cf85a809400000000000000000000000000000000000000018001a0bd85b1e84a4bb5d161e65c31b216c77d686ac97deebbbd79a8ee780a79693759a019f911b87741efb3140f3b107036d44724d392b779fe9e56ae8c903580e2560e01a076974d4ec9c663df062b6fa2ddc71bce27f7e316ac41812f6493e9ccaf56658ea03600e1f488150443c4abd85c86190f465fa9b718b74100cafab3abcc38f89c",
+        "_info": {
+            "hash": "0x19dfdea9ce59558d77682cd756a11a32e5adecbccbbb0c5917540663cdcb7111",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction type-4 where the RLP encoding of the transaction\nis invalid.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L627",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    },
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_rlp_encoding[fork_Amsterdam-transaction_test-reset_delegation_address-extra_bytes]": {
+        "result": {
+            "Amsterdam": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c101808007830186a09400000000000000000000000000000000000000008080c0f85cf85a809400000000000000000000000000000000000000008080a0c339fe9636a46ed76513a1d052d3cc22246384f37aef610f59d4cfd8cbdf6df8a034665d9747ed639620a6e8067672e593d55b1b78f02a452b2ef9ec0c430734bc80a02c0fe2a3af0eebb8934b3045a528d853360d7eb04ebc08c89549b2c173ba7234a073fe08dd1e8fa0214255b6c2815c00bbe3d4733630a97584c114d7ae25b53c2b00",
+        "_info": {
+            "hash": "0xdc6e516e87415597c7204e0753bac0a74816eb178aa58e9ff49f408f0eb1efb0",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction type-4 where the RLP encoding of the transaction\nis invalid.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L627",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    },
+    "tests/prague/eip7702_set_code_tx/test_invalid_tx.py::test_invalid_tx_invalid_rlp_encoding[fork_Amsterdam-transaction_test-reset_delegation_address-truncated_rlp]": {
+        "result": {
+            "Amsterdam": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.TYPE_4_INVALID_AUTHORIZATION_FORMAT"
+            }
+        },
+        "txbytes": "0x04f8c101808007830186a09400000000000000000000000000000000000000008080c0f85cf85a809400000000000000000000000000000000000000008080a0c339fe9636a46ed76513a1d052d3cc22246384f37aef610f59d4cfd8cbdf6df8a034665d9747ed639620a6e8067672e593d55b1b78f02a452b2ef9ec0c430734bc80a02c0fe2a3af0eebb8934b3045a528d853360d7eb04ebc08c89549b2c173ba7234a073fe08dd1e8fa0214255b6c2815c00bbe3d4733630a97584c114d7ae25b53c",
+        "_info": {
+            "hash": "0x3aa8fbe3c8ebdbffd548d2c999a7109138cbd891b2a714b67eaf4557833c78fe",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test sending a transaction type-4 where the RLP encoding of the transaction\nis invalid.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/prague/eip7702_set_code_tx/test_invalid_tx.py#L627",
+            "reference-spec": "https://github.com/ethereum/EIPs/blob/master/EIPS/eip-7702.md",
+            "reference-spec-version": "99f1be49f37c034bdd5c082946f5968710dbfc87"
+        }
+    }
+}

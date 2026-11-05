@@ -26,11 +26,13 @@ Its own errors about the blobs take codes from 101.
 
 The type, the hash and the sender hold up to Glamsterdam, which keeps the transaction forms.
 
-The intrinsic gas, the checks and the settlement of the gas hold up to BPO5.
+The intrinsic gas and the checks hold up to Glamsterdam.
 
-Glamsterdam changes them, by EIP-2780, EIP-7778 and EIP-8037.
+The settlement of the gas and the network form of a blob transaction hold up to BPO5.
 
-So a later fork is not yet specified.
+Glamsterdam settles the gas by EIP-7778 and EIP-8037, which are not here yet.
+
+Hegotá is not yet specified.
 -/
 
 public section
@@ -90,18 +92,23 @@ def recoverSenderExport (fork bytes : ByteArray) : Result ByteArray := do
   let (fork, tx) ← decodeAt .glamsterdam fork bytes
   return ⟨(← runTx (recoverSender fork tx)).toArray⟩
 
-/-- The intrinsic gas of a transaction, without the call data floor. -/
+/-- The intrinsic gas of a transaction, without the call data floor.
+
+From Glamsterdam it reads the sender, so the signature must name one.
+
+Before Glamsterdam the sender changes nothing, so any address stands in for it. -/
 @[export eth_tx_intrinsic_gas]
 def intrinsicGasExport (fork bytes : ByteArray) : Result UInt64 := do
-  let (fork, tx) ← decodeAt .bpo5 fork bytes
-  gasToUInt64 (intrinsicGas fork tx)
+  let (fork, tx) ← decodeAt .glamsterdam fork bytes
+  let sender ← if fork ≥ .glamsterdam then runTx (recoverSender fork tx) else pure default
+  gasToUInt64 (intrinsicGas fork sender tx)
 
 /-- Check a transaction alone on the chain `chainId`.
 
 It returns 28 bytes: the 20-byte sender, then the intrinsic gas as 8 big-endian bytes. -/
 @[export eth_tx_check]
 def checkExport (fork : ByteArray) (chainId : UInt64) (bytes : ByteArray) : Result ByteArray := do
-  let (fork, tx) ← decodeAt .bpo5 fork bytes
+  let (fork, tx) ← decodeAt .glamsterdam fork bytes
   let (sender, gas) ← runTx (checkTransaction fork chainId tx)
   let gas ← gasToUInt64 gas
   return ⟨sender.toArray ++ (List.range 8).reverse.toArray.map
@@ -125,7 +132,9 @@ They are the gas used, the refund of the sender, the priority fee and the burned
 @[export eth_tx_settle]
 def settleExport (fork tx baseFee gasLeft refundCounter : ByteArray) : Result ByteArray := do
   let (fork, tx) ← decodeAt .bpo5 fork tx
-  let _ ← runTx (validateTransaction fork tx)
+  -- Before Glamsterdam the sender changes nothing, so any address stands in for it.
+  let sender : Address := default
+  let _ ← runTx (validateTransaction fork sender tx)
   let baseFee := numberOf baseFee
   -- No error type covers these inputs of the binding, so their code is 0.
   if fork < .london ∧ baseFee ≠ 0 then
@@ -136,7 +145,7 @@ def settleExport (fork tx baseFee gasLeft refundCounter : ByteArray) : Result By
     throw (0, "the price per gas is below the base fee")
   if tx.gas.toNat < numberOf gasLeft then
     throw (0, "the gas left is above the gas limit")
-  let s := settlement fork baseFee tx (numberOf gasLeft) (numberOf refundCounter)
+  let s := settlement fork baseFee sender tx (numberOf gasLeft) (numberOf refundCounter)
   return ⟨([s.gasUsed, s.senderRefund, s.priorityFee, s.burned].flatMap (natToBytes 64)).toArray⟩
 
 /-! ## The network form of blob transactions -/

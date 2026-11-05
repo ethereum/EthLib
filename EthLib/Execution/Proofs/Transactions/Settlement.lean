@@ -52,20 +52,20 @@ theorem gasRefund_le_counter (fork : Fork) (used refundCounter : Nat) :
 /-! ## The gas used -/
 
 /-- From Pectra, a transaction uses at least its call data floor. -/
-theorem calldataFloor_le_gasUsed {fork : Fork} (hFork : fork ≥ .pectra) (tx : Transaction)
-    (gasLeft refundCounter : Nat) :
-    calldataFloor tx.data ≤ gasUsed fork tx gasLeft refundCounter := by
+theorem calldataFloor_le_gasUsed {fork : Fork} (hFork : fork ≥ .pectra) (sender : Address)
+    (tx : Transaction) (gasLeft refundCounter : Nat) :
+    calldataFloor fork sender tx ≤ gasUsed fork sender tx gasLeft refundCounter := by
   simp only [gasUsed, hFork, ↓reduceIte]
   exact Nat.le_max_right _ _
 
 /-- A transaction whose gas limit covers its least gas limit uses at most its gas limit. -/
-theorem gasUsed_le_gas {fork : Fork} {tx : Transaction} (hGas : minimumGas fork tx ≤ tx.gas.toNat)
-    (gasLeft refundCounter : Nat) :
-    gasUsed fork tx gasLeft refundCounter ≤ tx.gas.toNat := by
+theorem gasUsed_le_gas {fork : Fork} {sender : Address} {tx : Transaction}
+    (hGas : minimumGas fork sender tx ≤ tx.gas.toNat) (gasLeft refundCounter : Nat) :
+    gasUsed fork sender tx gasLeft refundCounter ≤ tx.gas.toNat := by
   simp only [gasUsed]
   split
   · rename_i hFork
-    have := calldataFloor_le_minimumGas hFork tx
+    have := calldataFloor_le_minimumGas hFork sender tx
     exact Nat.max_le.mpr ⟨by omega, by omega⟩
   · omega
 
@@ -111,21 +111,22 @@ theorem le_effectiveGasPrice {baseFee : Nat} {tx : Transaction}
 /-- The wei of the gas limit split into the refund, the priority fee and the burned fee.
 
 The gas limit must cover the least gas limit, and the price per gas must cover the base fee. -/
-theorem settlement_conserves {fork : Fork} {tx : Transaction} {baseFee : Nat}
-    (hGas : minimumGas fork tx ≤ tx.gas.toNat) (hPrice : baseFee ≤ effectiveGasPrice baseFee tx)
-    (gasLeft refundCounter : Nat) :
-    let s := settlement fork baseFee tx gasLeft refundCounter
+theorem settlement_conserves {fork : Fork} {sender : Address} {tx : Transaction} {baseFee : Nat}
+    (hGas : minimumGas fork sender tx ≤ tx.gas.toNat)
+    (hPrice : baseFee ≤ effectiveGasPrice baseFee tx) (gasLeft refundCounter : Nat) :
+    let s := settlement fork baseFee sender tx gasLeft refundCounter
     s.senderRefund + s.priorityFee + s.burned = tx.gas.toNat * effectiveGasPrice baseFee tx := by
   have hUsed := gasUsed_le_gas hGas gasLeft refundCounter
   simp only [settlement]
-  generalize gasUsed fork tx gasLeft refundCounter = used at hUsed
+  generalize gasUsed fork sender tx gasLeft refundCounter = used at hUsed
   generalize effectiveGasPrice baseFee tx = price at hPrice
   rw [Nat.add_assoc, ← Nat.mul_add, Nat.sub_add_cancel hPrice,
     ← Nat.add_mul, Nat.sub_add_cancel hUsed]
 
 /-- With a base fee of 0, as before London, nothing is burned and the beneficiary gets the price. -/
-theorem settlement_zero_baseFee (fork : Fork) (tx : Transaction) (gasLeft refundCounter : Nat) :
-    let s := settlement fork 0 tx gasLeft refundCounter
+theorem settlement_zero_baseFee (fork : Fork) (sender : Address) (tx : Transaction)
+    (gasLeft refundCounter : Nat) :
+    let s := settlement fork 0 sender tx gasLeft refundCounter
     s.burned = 0 ∧ s.priorityFee = s.gasUsed * effectiveGasPrice 0 tx := by
   simp [settlement]
 

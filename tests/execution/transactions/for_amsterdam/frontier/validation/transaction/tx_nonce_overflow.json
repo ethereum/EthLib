@@ -1,0 +1,19 @@
+{
+    "tests/frontier/validation/test_transaction.py::test_tx_nonce_overflow[fork_Amsterdam-transaction_test]": {
+        "result": {
+            "Amsterdam": {
+                "intrinsicGas": "0x00",
+                "exception": "TransactionException.NONCE_OVERFLOW"
+            }
+        },
+        "txbytes": "0xf868890100000000000000000a823a9894c0f6dc9e5836f54caadbf59cc69346c508e1992b80801ba0bf2ba5dd0f68362bb6ea41d43637000b87d08e87dc3526f908cd1e29e4a8e4cea06ad6835e31dc175a93f661d9080a44ca82d0818277956c341d84a1dc3eeeb4e1",
+        "_info": {
+            "hash": "0x1e74d60fc2d5c02421c809c5ba6c565b60617ef51b038df3ac0c29ec5059a1a1",
+            "fixture-format": "transaction_test",
+            "comment": "`execution-specs` generated test",
+            "filling-transition-tool": "2.19.0",
+            "description": "Test that a transaction with a nonce that does not fit in 64 bits is\nrejected at deserialization.",
+            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction.py#L146"
+        }
+    }
+}
