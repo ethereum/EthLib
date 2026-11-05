@@ -21,9 +21,13 @@ A slashed validator exits, loses part of its balance, and pays a reward to whoev
 
 A read past the end of a list, a full list, or a 64-bit overflow is an error.
 
-Gloas also cancels the builder payments of a slashed proposer.
+From Gloas, a slashing also cancels the pending builder payments of some blocks.
 
-That rule is not yet in EthLib, so slashing fails from Gloas instead of applying older rules.
+Those are the blocks that the slashed validator proposed.
+
+[EIP-7732] adds the builder payments.
+
+[EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#beacon-chain-changes
 -/
 
 @[expose] public section
@@ -167,6 +171,15 @@ def proposerShare (preset : Preset) (fork : Base.Fork) (whistleblowerReward : Gw
     return (← liftArith (mulChecked whistleblowerReward PROPOSER_WEIGHT)) / WEIGHT_DENOMINATOR
   else return whistleblowerReward / preset.PROPOSER_REWARD_QUOTIENT
 
+/-- From Gloas: the state without the pending builder payments of the blocks of a proposer.
+
+Each of those payments becomes the payment of no bid. -/
+def cancelProposerPayments (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
+    (proposer : ValidatorIndex) : BeaconState preset fork :=
+  let cancel (payment : BuilderPendingPayment) :=
+    if payment.proposerIndex = proposer then .empty else payment
+  { state with builderPendingPayments := fun _ => (state.builderPendingPayments gloas).map cancel }
+
 /-- The state after a validator is slashed.
 
 The validator exits, cannot withdraw before a fixed number of epochs, and pays a first penalty.
@@ -175,11 +188,10 @@ Its effective balance joins the slashed balance of the epoch, which sets a later
 
 The proposer and the whistleblower share a reward, and the proposer is the whistleblower by default.
 
-Gloas also cancels the builder payments of the validator, which EthLib does not yet have. -/
+From Gloas the pending builder payments of the blocks it proposed are cancelled. -/
 def slashValidator (config : Config) (state : BeaconState preset fork)
     (slashedIndex : ValidatorIndex) (whistleblowerIndex : Option ValidatorIndex := none) :
     Except AccessorError (BeaconState preset fork) := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
   let epoch := getCurrentEpoch state
   let state ← initiateValidatorExit config state slashedIndex
   let validator ← getValidator state slashedIndex
@@ -199,6 +211,8 @@ def slashValidator (config : Config) (state : BeaconState preset fork)
   let whistleblowerReward := validator.effectiveBalance / parameters.WHISTLEBLOWER_REWARD_QUOTIENT
   let proposerReward ← proposerShare preset fork whistleblowerReward
   let state ← increaseBalance state proposerIndex proposerReward
-  increaseBalance state whistleblowerIndex (whistleblowerReward - proposerReward)
+  let state ← increaseBalance state whistleblowerIndex (whistleblowerReward - proposerReward)
+  return if gloas : .glamsterdam ≤ fork then cancelProposerPayments state gloas slashedIndex
+    else state
 
 end EthLib.Consensus

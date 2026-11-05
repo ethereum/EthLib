@@ -151,18 +151,25 @@ theorem frame_slashings (state : BeaconState preset fork) (slashings : Vector Gw
     Frame state { state with slashings } :=
   Frame.of_validators ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl
 
+/-- The last step of a slashing, which from Gloas cancels builder payments, keeps the frame. -/
+theorem frame_slashValidatorLast {last : BeaconState preset fork} {index : ValidatorIndex}
+    (done : (pure (if gloas : .glamsterdam ≤ fork then cancelProposerPayments last gloas index
+      else last) : Except AccessorError (BeaconState preset fork)) = .ok after) :
+    Frame last after := by
+  simp only [pure, Except.pure, Except.ok.injEq] at done
+  subst done
+  split
+  · exact Frame.of_validators ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl
+  · exact Frame.refl _
+
 /-- Slashing a validator only delays its withdrawal. -/
 theorem frame_slashValidator {slashedIndex : ValidatorIndex}
     {whistleblowerIndex : Option ValidatorIndex}
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     Frame state after := by
-  by_cases gloas : Fork.glamsterdam ≤ fork
-  · simp [slashValidator, gloas, throw, throwThe, MonadExcept.throw, MonadExceptOf.throw, bind,
-      Except.bind] at computed
-  simp only [slashValidator, gloas, ↓reduceIte, bind_ok_iff, liftArith,
-    mapError_ok_iff] at computed
+  simp only [slashValidator, bind_ok_iff, liftArith, mapError_ok_iff] at computed
   obtain ⟨exited, exitedOk, validator, found, delay, _, _, _, _, _, lowered, loweredOk,
-    proposer, _, _, _, raised, raisedOk, last⟩ := computed
+    proposer, _, _, _, raised, raisedOk, last, lastOk, done⟩ := computed
   refine (frame_initiateValidatorExit exitedOk).trans <|
     ((frame_setValidator (index := slashedIndex.toNat)
       (validator := { validator with
@@ -170,7 +177,7 @@ theorem frame_slashValidator {slashedIndex : ValidatorIndex}
       fun ordered => ?_).trans
       (frame_slashings _ _)).trans <|
     (frame_decreaseBalance loweredOk).trans <| (frame_increaseBalance raisedOk).trans <|
-    frame_increaseBalance last
+    (frame_increaseBalance lastOk).trans (frame_slashValidatorLast done)
   refine UInt64.le_trans (ordered validator (mem_of_getValidator found)) ?_
   rw [UInt64.max_def]
   split

@@ -81,6 +81,10 @@ instance : SszType BuilderPendingPayment :=
     (fun p => (p.weight, p.withdrawal, p.proposerIndex))
     (fun (weight, withdrawal, proposerIndex) => ⟨weight, withdrawal, proposerIndex⟩)
 
+/-- The payment of no bid: every field is zero. -/
+def BuilderPendingPayment.empty : BuilderPendingPayment :=
+  ⟨0, ⟨Vector.replicate 20 0, 0, 0⟩, 0⟩
+
 /-- A deposit to a builder, as the execution layer reports it.
 
 It has the fields of a deposit request of a validator, without the index. -/

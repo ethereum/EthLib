@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: operations
+handler: attester_slashing
+suite: pyspec_tests
+case: invalid_too_many_attesting_indices

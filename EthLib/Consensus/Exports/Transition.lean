@@ -134,7 +134,7 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
 /-- The operations whose Gloas rule EthLib holds. -/
 def gloasOperations : List String :=
   ["payload_attestation", "execution_payload_bid", "builder_deposit_request",
-    "builder_exit_request", "withdrawals"]
+    "builder_exit_request", "withdrawals", "proposer_slashing", "attester_slashing"]
 
 /-- The preset and the fork that UTF-8 names name, at a fork up to Gloas. -/
 def transitionPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do

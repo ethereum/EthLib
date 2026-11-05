@@ -19,6 +19,8 @@ Before Electra, an exit epoch other than the far future held fewer exits than th
 
 Slashing a validator sets its slashed flag and changes no flag of another validator.
 
+From Gloas, slashing a validator cancels exactly the builder payments of the blocks it proposed.
+
 From Electra, the balance of a validator above the activation balance moves to the pending deposits.
 
 The balance and the amounts added to the queue keep their sum.
@@ -123,22 +125,27 @@ theorem sameSizes_initiateValidatorExit {config : Config} {state after : BeaconS
     refine (?_ : SameSizes state queued).trans (sameSizes_setValidator _ _ _)
     exact ⟨by rw [validators], by rw [balances]⟩
 
+/-- The last step of a slashing keeps the registry and the balances. -/
+theorem slashValidator_last {last after : BeaconState preset fork} {index : ValidatorIndex}
+    (done : (pure (if gloas : .glamsterdam ≤ fork then cancelProposerPayments last gloas index
+      else last) : Except AccessorError (BeaconState preset fork)) = .ok after) :
+    after.validators = last.validators ∧ after.balances = last.balances := by
+  simp only [pure, Except.pure, Except.ok.injEq] at done
+  subst done
+  split <;> exact ⟨rfl, rfl⟩
+
 /-- Slashing a validator keeps the sizes. -/
 theorem sameSizes_slashValidator {config : Config} {state after : BeaconState preset fork}
     {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     SameSizes state after := by
-  simp only [slashValidator, bind, Except.bind] at computed
-  split at computed
-  · simp [throw, throwThe, MonadExcept.throw, MonadExceptOf.throw] at computed
-  split at computed
-  · cases computed
-  rename_i exited exitedOk
-  have one := sameSizes_initiateValidatorExit exitedOk
-  repeat' (split at computed; · cases computed)
-  rename_i lowered _ _ _ _ _ _ _ raised raisedOk
-  refine one.trans (SameSizes.trans ?_ ((sameSizes_decreaseBalance lowered).trans
-    ((sameSizes_increaseBalance raisedOk).trans (sameSizes_increaseBalance computed))))
+  simp only [slashValidator, bind_ok_iff, liftArith, mapError_ok_iff] at computed
+  obtain ⟨exited, exitedOk, _, _, _, _, _, _, _, _, _, lowered, _, _, _, _, _, raised, _, final,
+    done⟩ := computed
+  have cancelled := slashValidator_last done
+  refine (sameSizes_initiateValidatorExit exitedOk).trans (SameSizes.trans ?_
+    ((sameSizes_decreaseBalance lowered).trans ((sameSizes_increaseBalance raised).trans
+      ((sameSizes_increaseBalance final).trans ⟨by rw [cancelled.1], by rw [cancelled.2]⟩))))
   simp [SameSizes, BeaconState.setValidator]
 
 /-- The running maximum of the exit epochs is at least its start and each exit epoch it reads. -/
@@ -291,17 +298,15 @@ theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState 
     slashedFlag after slashedIndex = .ok true ∧
       ∀ other, other ≠ slashedIndex → slashedFlag after other = slashedFlag state other := by
   unfold slashValidator at computed
-  split at computed
-  · simp [throw, throwThe, MonadExcept.throw, MonadExceptOf.throw, bind, Except.bind] at computed
   simp only [bind_ok_iff, liftArith, mapError_ok_iff] at computed
   obtain ⟨exited, exitedOk, validator, found, withdrawable, _, _, _, _, _, _, lowered, _, _, _, _,
-    _, raised, final⟩ := computed
+    _, raised, _, final, done⟩ := computed
   -- The balance steps keep the registry in which the validator is marked slashed.
   let marked : Validator :=
     { validator with
       slashed := true, withdrawableEpoch := max validator.withdrawableEpoch withdrawable }
-  have same := (increaseBalance_validators final).trans ((increaseBalance_validators raised).trans
-    (decreaseBalance_validators lowered))
+  have same := (slashValidator_last done).1.trans ((increaseBalance_validators final).trans
+    ((increaseBalance_validators raised).trans (decreaseBalance_validators lowered)))
   replace same : after.validators = (exited.setValidator slashedIndex.toNat marked).validators :=
     same
   refine ⟨?_, fun other distinct => ?_⟩
@@ -309,6 +314,76 @@ theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState 
       Except.map, marked]
   · rw [slashedFlag, getValidator_of_validators_eq same, getValidator_setValidator_of_ne distinct]
     exact slashedFlag_initiateValidatorExit exitedOk other
+
+/-! ## The builder payments of a slashing -/
+
+/-- Raising a balance leaves the builder payments. -/
+theorem increaseBalance_payments {state after : BeaconState preset fork}
+    {index : ValidatorIndex} {delta : Gwei}
+    (computed : increaseBalance state index delta = .ok after) :
+    after.builderPendingPayments = state.builderPendingPayments := by
+  simp only [increaseBalance, bind, Except.bind, pure, Except.pure] at computed
+  repeat' (split at computed; · cases computed)
+  cases computed
+  rfl
+
+/-- Lowering a balance leaves the builder payments. -/
+theorem decreaseBalance_payments {state after : BeaconState preset fork}
+    {index : ValidatorIndex} {delta : Gwei}
+    (computed : decreaseBalance state index delta = .ok after) :
+    after.builderPendingPayments = state.builderPendingPayments := by
+  simp only [decreaseBalance, bind, Except.bind, pure, Except.pure] at computed
+  repeat' (split at computed; · cases computed)
+  cases computed
+  rfl
+
+/-- The exit queue leaves the builder payments. -/
+theorem exitQueue_payments {config : Config} {state after : BeaconState preset fork}
+    {exitBalance : Gwei} {exitEpoch : Epoch}
+    (computed : exitQueue config state exitBalance = .ok (after, exitEpoch)) :
+    after.builderPendingPayments = state.builderPendingPayments := by
+  unfold exitQueue at computed
+  split at computed
+  · simp only [computeExitEpochAndUpdateChurn, bind_ok_iff, liftArith, mapError_ok_iff, pure,
+      Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
+    obtain ⟨_, _, _, _, _, _, rfl, _⟩ := computed
+    rfl
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
+    obtain ⟨_, _, rfl, _⟩ := computed
+    rfl
+
+/-- Starting an exit leaves the builder payments. -/
+theorem initiateValidatorExit_payments {config : Config} {state after : BeaconState preset fork}
+    {index : ValidatorIndex} (computed : initiateValidatorExit config state index = .ok after) :
+    after.builderPendingPayments = state.builderPendingPayments := by
+  obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, _, _, _, queue, _, rfl⟩⟩ := initiateValidatorExit_ok computed
+  · rfl
+  · have kept := exitQueue_payments queue
+    exact kept
+
+/-- From Gloas, a slashing cancels exactly the pending builder payments of the slashed proposer.
+
+Each payment whose proposer is the slashed validator becomes the payment of no bid.
+
+Every other payment stays. -/
+theorem slashValidator_payments {config : Config} {state after : BeaconState preset fork}
+    {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
+    (gloas : .glamsterdam ≤ fork)
+    (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
+    after.builderPendingPayments gloas = (state.builderPendingPayments gloas).map fun payment =>
+      if payment.proposerIndex = slashedIndex then .empty else payment := by
+  unfold slashValidator at computed
+  simp only [bind_ok_iff, liftArith, mapError_ok_iff] at computed
+  obtain ⟨exited, exitedOk, _, _, _, _, _, _, _, _, _, lowered, _, _, _, _, _, raised, _, final,
+    done⟩ := computed
+  simp only [pure, Except.pure, Except.ok.injEq, gloas, ↓reduceDIte] at done
+  subst done
+  simp only [cancelProposerPayments]
+  rw [increaseBalance_payments final, increaseBalance_payments raised,
+    decreaseBalance_payments lowered]
+  have kept := initiateValidatorExit_payments exitedOk
+  show (exited.builderPendingPayments gloas).map _ = _
+  rw [kept]
 
 /-- A read of a replaced balance returns the new balance. -/
 theorem getBalance_setBalance_self {state : BeaconState preset fork} {index : ValidatorIndex}

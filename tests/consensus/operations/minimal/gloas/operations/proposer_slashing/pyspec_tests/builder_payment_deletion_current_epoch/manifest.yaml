@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: operations
+handler: proposer_slashing
+suite: pyspec_tests
+case: builder_payment_deletion_current_epoch
