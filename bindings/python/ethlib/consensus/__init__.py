@@ -169,11 +169,11 @@ def _list_items(data: bytes) -> list:
     return [data[a:b] for a, b in zip(offsets, offsets[1:] + [len(data)])]
 
 
-def verify_data_column_sidecar(name: str, fork: str, data: bytes,
-                               config: dict | None = None) -> bool:
-    """Whether a data column sidecar has a valid shape under the blob limit of its epoch."""
+def verify_data_column_sidecar(name: str, fork: str, data: bytes, config: dict | None = None,
+                               block: bytes = b"") -> bool:
+    """Whether a data column sidecar has a valid shape; from Gloas, against its signed block."""
     replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_verify_data_column_sidecar(name, fork, data, replacements)
+    return _native.consensus_verify_data_column_sidecar(name, fork, data, block, replacements)
 
 
 def verify_data_column_sidecar_inclusion_proof(name: str, fork: str, data: bytes) -> bool:
@@ -181,9 +181,10 @@ def verify_data_column_sidecar_inclusion_proof(name: str, fork: str, data: bytes
     return _native.consensus_verify_data_column_sidecar_inclusion_proof(name, fork, data)
 
 
-def verify_data_column_sidecar_kzg_proofs(name: str, fork: str, data: bytes) -> bool:
+def verify_data_column_sidecar_kzg_proofs(name: str, fork: str, data: bytes,
+                                          block: bytes = b"") -> bool:
     """Whether the cells of a data column sidecar match its commitments by their proofs."""
-    return _native.consensus_verify_data_column_sidecar_kzg_proofs(name, fork, data)
+    return _native.consensus_verify_data_column_sidecar_kzg_proofs(name, fork, data, block)
 
 
 def light_client_sync(name: str, fork: str, bootstrap_fork: str, trusted_block_root: bytes,

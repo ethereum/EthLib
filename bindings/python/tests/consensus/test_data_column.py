@@ -1,4 +1,4 @@
-"""The data column sidecars and the matrix of Fulu against the vectors of consensus-specs."""
+"""The data column sidecars and the matrix, from Fulu, against the vectors of consensus-specs."""
 
 import hashlib
 import json
@@ -12,6 +12,8 @@ from ethlib.cryptography import _native
 from ethlib.errors import KzgError
 from ethlib.networking import snappy
 
+from .containers import FORKS
+
 TESTS = Path(__file__).resolve().parents[4] / "tests"
 FILES = TESTS / "consensus" / "data_columns"
 PROOFS = TESTS / "consensus" / "merkle_proof"
@@ -23,6 +25,17 @@ REASONS = {
     "invalid sidecar inclusion proof": "inclusion",
     "invalid sidecar kzg proofs": "kzg",
 }
+
+# From Gloas, the gossip reasons that gossip validation gives before it reads the block.
+BEFORE_BLOCK = {
+    "already seen sidecar for this block root and index",
+    "sidecar is for wrong subnet",
+    "sidecar is from a future slot",
+    "block for sidecar's beacon block root has not been seen",
+}
+
+# The forks from Gloas on, where a sidecar names its block by root.
+GLOAS = ("glamsterdam", "hegota")
 
 # The bytes of a cell, of a proof, of a commitment and of a matrix entry.
 CELL = 2048
@@ -72,28 +85,61 @@ def _sidecar_parts(data: bytes) -> dict:
     }
 
 
+def _gloas_sidecar_parts(data: bytes) -> dict:
+    """The fields of a sidecar from Gloas, read at their SSZ offsets."""
+    column, proofs = (int.from_bytes(data[i:i + 4], "little") for i in (8, 12))
+    return {
+        "index": int.from_bytes(data[:8], "little"),
+        "cells": [data[i:i + CELL] for i in range(column, proofs, CELL)],
+        "proofs": [data[i:i + PROOF] for i in range(proofs, len(data), PROOF)],
+        "slot": data[16:24],
+        "root": data[24:56],
+    }
+
+
+def case_blocks(case: Path, preset: str, fork: str) -> dict:
+    """The signed blocks of a gossip case, by the root of their message."""
+    blocks = {}
+    for entry in _yaml(case / "meta.yaml").get("blocks", []):
+        signed = snappy.decompress((case / f"{entry['block']}.ssz_snappy").read_bytes())
+        offset = int.from_bytes(signed[:4], "little")
+        root, _ = consensus.ssz_static(preset, fork, "BeaconBlock", signed[offset:])
+        blocks[root] = signed
+    return blocks
+
+
 def run_gossip_case(case: Path, preset: str) -> None:
     """Run the sidecar checks of each message of a gossip case.
 
     A message rejected for a reason that names one check fails that check.
-    Every other message passes all three, since the rest of gossip validation reads the store.
+    Every other message passes them all, since the rest of gossip validation reads the store.
     """
+    fork = FORKS[case.parts[-5]]
     meta = _yaml(case / "meta.yaml")
     config_file = case / "config.yaml"
     config = replacements(_yaml(config_file), preset) if config_file.exists() else None
+    blocks = case_blocks(case, preset, fork) if fork in GLOAS else {}
     for message in meta["messages"]:
         data = snappy.decompress((case / f"{message['message']}.ssz_snappy").read_bytes())
+        block = b""
+        if fork in GLOAS:
+            # From Gloas the commitments are in the bid of the block that the sidecar names.
+            block = blocks.get(_gloas_sidecar_parts(data)["root"])
+            if block is None:
+                assert message.get("reason") in BEFORE_BLOCK, message
+                continue
         try:
-            kzg = consensus.verify_data_column_sidecar_kzg_proofs(preset, "fusaka", data)
+            kzg = consensus.verify_data_column_sidecar_kzg_proofs(preset, fork, data, block)
         except KzgError:
             # The batch check raises on inputs it cannot read, which rejects the sidecar.
             kzg = False
         results = {
-            "shape": consensus.verify_data_column_sidecar(preset, "fusaka", data, config),
-            "inclusion":
-                consensus.verify_data_column_sidecar_inclusion_proof(preset, "fusaka", data),
+            "shape": consensus.verify_data_column_sidecar(preset, fork, data, config, block),
             "kzg": kzg,
         }
+        if fork not in GLOAS:
+            results["inclusion"] = \
+                consensus.verify_data_column_sidecar_inclusion_proof(preset, fork, data)
         failing = REASONS.get(message.get("reason"))
         if failing is None:
             assert all(results.values()), (message, results)
@@ -101,9 +147,10 @@ def run_gossip_case(case: Path, preset: str) -> None:
             assert not results[failing], (message, results)
 
 
-def _gossip_cases() -> list:
-    return [pytest.param(case.parts[-6], case, id=f"{case.parts[-6]}-{case.name}")
-            for case in sorted(FILES.glob("*/fulu/networking/gossip_data_column_sidecar/*/*"))]
+def _gossip_cases(fork: str = "*") -> list:
+    return [pytest.param(case.parts[-6], case,
+                         id=f"{case.parts[-6]}-{case.parts[-5]}-{case.name}")
+            for case in sorted(FILES.glob(f"*/{fork}/networking/gossip_data_column_sidecar/*/*"))]
 
 
 def test_digests():
@@ -120,7 +167,7 @@ def test_gossip_sidecar_checks(preset, case):
     run_gossip_case(case, preset)
 
 
-@pytest.mark.parametrize("preset, case", _gossip_cases())
+@pytest.mark.parametrize("preset, case", _gossip_cases("fulu"))
 def test_sidecars_from_column_sidecar(preset, case):
     # One sidecar and the cells of each blob give back every sidecar, the first one among them.
     meta = _yaml(case / "meta.yaml")
@@ -141,6 +188,63 @@ def test_sidecars_from_column_sidecar(preset, case):
         other = _sidecar_parts(sidecar)
         assert other["index"] == index
         assert (other["header"], other["branch"]) == (parts["header"], parts["branch"])
+
+
+def _valid_gloas_messages() -> list:
+    params = []
+    for gloas in ("gloas", "heze"):
+        for param in _gossip_cases(gloas):
+            preset, case = param.values
+            for message in _yaml(case / "meta.yaml")["messages"]:
+                if message["expected"] == "valid":
+                    params.append(pytest.param(preset, case, message["message"],
+                                               id=f"{param.id}-{message['message'][-8:]}"))
+    return params
+
+
+@pytest.mark.parametrize("preset, case, name", _valid_gloas_messages())
+def test_gloas_sidecars_from_block_and_sidecar(preset, case, name):
+    # From Gloas the block, or one sidecar, and the cells of a column give back that sidecar.
+    fork = FORKS[case.parts[-5]]
+    data = snappy.decompress((case / f"{name}.ssz_snappy").read_bytes())
+    parts = _gloas_sidecar_parts(data)
+    rows = []
+    for cell, proof in zip(parts["cells"], parts["proofs"]):
+        cells = [bytes(CELL)] * 128
+        proofs = [bytes(PROOF)] * 128
+        cells[parts["index"]], proofs[parts["index"]] = cell, proof
+        rows.append((cells, proofs))
+    block = case_blocks(case, preset, fork)[parts["root"]]
+    from_block = consensus.get_data_column_sidecars_from_block(preset, fork, block, rows)
+    from_sidecar = consensus.get_data_column_sidecars_from_column_sidecar(preset, fork, data, rows)
+    assert len(from_block) == 128
+    assert from_block == from_sidecar
+    assert from_block[parts["index"]] == data
+    for index, sidecar in enumerate(from_block):
+        other = _gloas_sidecar_parts(sidecar)
+        assert other["index"] == index
+        assert (other["slot"], other["root"]) == (parts["slot"], parts["root"])
+
+
+def _first_message(case: Path) -> bytes:
+    meta = _yaml(case / "meta.yaml")
+    return snappy.decompress((case / f"{meta['messages'][0]['message']}.ssz_snappy").read_bytes())
+
+
+def test_sidecar_and_block_must_match():
+    gloas = _first_message(_gossip_cases("gloas")[0].values[1])
+    # From Gloas a block of another root, or no block, is not the block of the sidecar.
+    with pytest.raises(Exception):
+        consensus.verify_data_column_sidecar("minimal", "glamsterdam", gloas, None, bytes(200))
+    with pytest.raises(Exception):
+        consensus.verify_data_column_sidecar_kzg_proofs("minimal", "glamsterdam", gloas)
+    # No sidecar from Gloas has an inclusion proof.
+    with pytest.raises(Exception):
+        consensus.verify_data_column_sidecar_inclusion_proof("minimal", "glamsterdam", gloas)
+    # Before Gloas the sidecar carries its commitments, so a block is refused.
+    fulu = _first_message(_gossip_cases("fulu")[0].values[1])
+    with pytest.raises(Exception):
+        consensus.verify_data_column_sidecar_kzg_proofs("minimal", "fusaka", fulu, b"\x00")
 
 
 def _fulu_proof_cases() -> list:

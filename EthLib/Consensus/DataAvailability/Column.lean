@@ -134,6 +134,13 @@ def DataColumnSidecar.commitments {preset : Preset} {fork : Fork}
   if beforeGloas : fork < .glamsterdam then sidecar.kzgCommitments beforeGloas
   else bidCommitments (not_lt_glamsterdam beforeGloas)
 
+/-- From Gloas, the commitments in the bid of a block.
+
+The sidecars that name the block by its root answer to them. -/
+def BeaconBlock.bidCommitments {preset : Preset} {fork : Fork} (block : BeaconBlock preset fork) :
+    Since .glamsterdam fork (BlobKZGCommitments preset fork) :=
+  fun gloas => (block.body.signedExecutionPayloadBid gloas).message.blobKzgCommitments
+
 /-- Whether a sidecar has a valid shape.
 
 Its index names a column, and it has at least one commitment, one cell and one proof each.

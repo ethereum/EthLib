@@ -456,11 +456,10 @@ RUNNERS = {
 
 # The runners that stop before a fork, with the first fork that they do not run.
 # Processing a transaction is not yet specified from Amsterdam on.
-# The sidecar gossip checks and the light client proofs read the forms of Fulu.
+# The light client proofs read the forms of Fulu.
 _STOPS = {
     "state_test": "BPO2ToAmsterdamAtTime15k",
     "blockchain_test": "BPO2ToAmsterdamAtTime15k",
-    "networking/gossip_data_column_sidecar": "gloas",
     "light_client/single_merkle_proof": "gloas",
 }
 

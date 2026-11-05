@@ -69,13 +69,17 @@ The other cases upgrade the bootstrap or the store to a later fork, which EthLib
 An `update_ranking` case lists updates from the best to the worst.
 `bindings/python/tests/consensus/test_light_client_sync.py` runs both kinds of cases in Lean.
 
-The directory `data_columns/` holds the Fulu cases of the gossip handler `gossip_data_column_sidecar`, in both archives.
+The directory `data_columns/` holds the Fulu, Gloas and Heze cases of the gossip handler `gossip_data_column_sidecar`, in both archives.
 Each case keeps its files under its path in the archive, except the state, which the checks of a sidecar alone do not read.
 A case gives some sidecars, each with the verdict of gossip validation and the reason for a rejection.
-`bindings/python/tests/consensus/test_data_column.py` runs the three checks of a sidecar alone: its shape, its branch and its cell proofs.
+`bindings/python/tests/consensus/test_data_column.py` runs the three checks of a sidecar alone at Fulu: its shape, its branch and its cell proofs.
 A sidecar rejected for one of them fails that check, and every other sidecar passes all three.
+From Gloas a sidecar has no branch, and its commitments are in the bid of the block whose root it names.
+So from Gloas the file finds that block among the blocks of the case, and runs the two other checks against it.
+A sidecar whose block the case does not give must be rejected before gossip validation reads the block.
 The rest of gossip validation reads the store of the fork choice, which EthLib does not hold yet.
 The same file rebuilds every sidecar of a block from one sidecar, and from the bodies of `merkle_proof/` for Fulu.
+From Gloas it rebuilds each valid sidecar from its block, and from itself.
 It also builds the matrix of two blobs of the KZG vectors under `tests/cryptography/kzg/`, and recovers it from half of its columns.
 
 The directory `operations/` holds block operation cases of `minimal.tar.gz`, copied byte for byte under their path in the archive.

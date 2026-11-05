@@ -415,15 +415,15 @@ def pq_keys_is_valid_possession_proof(name: str, genesis_validators_root: bytes,
     """Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."""
     ...
 
-def consensus_verify_data_column_sidecar(name: str, fork: str, data: bytes, config: bytes) -> bool:
-    """Whether a sidecar, given as bytes, has a valid shape under the blob limit of its epoch."""
+def consensus_verify_data_column_sidecar(name: str, fork: str, data: bytes, block: bytes, config: bytes) -> bool:
+    """Whether a sidecar, given as bytes, has a valid shape."""
     ...
 
 def consensus_verify_data_column_sidecar_inclusion_proof(name: str, fork: str, data: bytes) -> bool:
     """Whether the branch of a sidecar, given as bytes, climbs to the body root of its header."""
     ...
 
-def consensus_verify_data_column_sidecar_kzg_proofs(name: str, fork: str, data: bytes) -> bool:
+def consensus_verify_data_column_sidecar_kzg_proofs(name: str, fork: str, data: bytes, block: bytes) -> bool:
     """Whether the cells of a sidecar, given as bytes, match its commitments by their proofs."""
     ...
 

@@ -1,0 +1,12 @@
+topic: data_column_sidecar
+blocks:
+- {block: 
+    block_0x145e890b76c2dceda51d95c60002772b9246660612c5bb44dfbe1d6914d50f03}
+- {block: 
+    block_0x075803c949f9b6f45661d71ce86dd0c545b9b81de145b3cc4a2294835a542c65, 
+    failed: true}
+messages:
+- {subnet_id: 0, current_time_ms: 12500, message: 
+    data_column_sidecar_0x3d1c089308d8b47cc4019b7df77ff02f22035d749b3191935b3bf768248f7044,
+  expected: reject, reason: block for sidecar's beacon block root failed 
+    validation}

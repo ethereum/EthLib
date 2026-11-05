@@ -1,0 +1,8 @@
+topic: data_column_sidecar
+blocks:
+- {block: 
+    block_0xebac5acc92dd93a165d245cffb5838299e70e47813fad4947b8121605c928b7b}
+messages:
+- {subnet_id: 0, current_time_ms: 11499, message: 
+    data_column_sidecar_0x9a19371e27cb5ccce563da84964375fe65f79101e1391233146d99fd4bd1797a,
+  expected: ignore, reason: sidecar is from a future slot}
