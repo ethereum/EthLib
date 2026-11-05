@@ -733,6 +733,7 @@ static PyMethodDef methods[] = {
   {"block_check_header", py_block_check_header, METH_VARARGS, DOC_block_check_header},
   {"block_dao_extra_data_valid", py_block_dao_extra_data_valid, METH_VARARGS,
    DOC_block_dao_extra_data_valid},
+  {"state_transition", py_state_transition, METH_VARARGS, DOC_state_transition},
   {"precompile_run", py_precompile_run, METH_VARARGS, DOC_precompile_run},
   {"precompile_price", py_precompile_price, METH_VARARGS, DOC_precompile_price},
   {"state_root", py_state_root, METH_VARARGS, DOC_state_root},

@@ -1,5 +1,6 @@
 """Block headers, blocks and receipts of the execution layer, at each fork."""
 
+import json
 from collections.abc import Sequence
 
 from ...errors import BlockError
@@ -100,8 +101,23 @@ def dao_extra_data_valid(dao_block: int, fork: str, header: bytes) -> bool:
     return _native.block_dao_extra_data_valid(dao_block, fork, header)
 
 
+# A recent block of a chain: its fork, its header and the headers of its ommers.
+RecentBlock = tuple[str, bytes, Sequence[bytes]]
+
+
+def state_transition(config: dict, state: bytes, recent: Sequence[RecentBlock], fork: str,
+                     block: bytes, check_seal: bool = True) -> tuple[bytes, list]:
+    """Run a block on a chain, and return the state root and the accounts after it."""
+    # Each header is already RLP, so it enters the list of the recent blocks as a raw item.
+    items = [[name.encode(), rlp.decode(header), [rlp.decode(o) for o in ommers]]
+             for name, header, ommers in recent]
+    root, accounts = rlp.decode(_native.state_transition(
+        json.dumps(config).encode(), state, rlp.encode(items), fork, block, check_seal))
+    return root, accounts
+
+
 __all__ = ["header_hash", "reencode", "transactions_root", "withdrawals_root",
            "deposit_requests", "requests_hash", "block_access_list_hash",
            "check_block_access_list", "make_receipts", "receipt_reencode", "receipt_logs_bloom",
            "validate_size", "validate_header", "check_header", "dao_extra_data_valid",
-           "BlobSchedule", "BlockError"]
+           "state_transition", "BlobSchedule", "RecentBlock", "BlockError"]

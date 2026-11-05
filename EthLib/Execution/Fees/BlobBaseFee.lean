@@ -132,7 +132,7 @@ Without one, it is the schedule of the fork.
 
 The header check reads it for the excess blob gas.
 
-The blob gas limit of a block and the price of its blob gas still read the fork's schedule.
+The block environment holds it, for the blob gas limit, the blob gas price and BLOBBASEFEE.
 
 [EIP-7892][eip-7892] links each schedule of the configuration to an activation.
 

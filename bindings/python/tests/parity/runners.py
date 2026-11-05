@@ -1,6 +1,7 @@
 """The runner of each group of cases that EthLib can run, and the plan for every other group."""
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -26,7 +27,6 @@ from .catalogue import CONSENSUS_FORKS, EXECUTION_FORKS, Case
 # A key is a runner, or a runner and a handler, of consensus-spec-tests, or a format of
 # execution-spec-tests.
 NOT_YET = {
-    "blockchain_test": "block state transition (E36), then T19",
     "blockchain_test_engine": "the Engine API on the Engine layer (T26), after E36",
     "blockchain_test_engine_x": "the Engine API on the Engine layer (T26), after E36",
     "epoch_processing": "beacon state transition (consensus track C13 to C40)",
@@ -229,6 +229,101 @@ def _state_test(root: Path, case: Case) -> None:
         assert run.succeeded == receipt["status"]
 
 
+# The forks of a network of the blockchain tests, in order, and how each activates.
+_BLOCK_FORKS = ["frontier", "homestead", "tangerineWhistle", "spuriousDragon", "byzantium",
+                "constantinople", "petersburg", "istanbul", "berlin", "london", "paris"]
+_TIME_FORKS = ["shapella", "dencun", "pectra", "fusaka", "bpo1", "bpo2"]
+_NETWORK_FORK = {**FORK_OF_NETWORK, "BPO1": "bpo1", "BPO2": "bpo2"}
+
+# The block exceptions of the blockchain tests, by the error of the state transition.
+_BLOCK_EXCEPTIONS = {
+    "INCORRECT_EXCESS_BLOB_GAS": r"wrongExcessBlobGas",
+    "INCORRECT_BLOB_GAS_USED": r"wrongBlobGasUsed",
+    "INVALID_REQUESTS": r"wrongRequestsHash",
+    "INVALID_DEPOSIT_EVENT_LAYOUT": r"deposit",
+    "INVALID_GASLIMIT": r"invalidGasLimit",
+    "INVALID_BASEFEE_PER_GAS": r"wrongBaseFee",
+    "INVALID_WITHDRAWALS_ROOT": r"wrongWithdrawalsRoot",
+    "SYSTEM_CONTRACT_EMPTY": r"systemContractEmpty",
+    "SYSTEM_CONTRACT_CALL_FAILED": r"system call to .* failed",
+    "RLP_STRUCTURES_ENCODING": r"does not decode|block rejected",
+    "RLP_BLOCK_LIMIT_EXCEEDED": r"blockTooLarge",
+    "INCORRECT_BLOCK_FORMAT": r"block rejected",
+}
+
+
+def _names_block_error(exception: str, message: str) -> bool:
+    kind, _, name = exception.partition(".")
+    if kind == "BlockException":
+        return name in _BLOCK_EXCEPTIONS and re.search(_BLOCK_EXCEPTIONS[name], message) is not None
+    return names_in_block(exception, message)
+
+
+def _chain(fixture: dict) -> tuple[dict, list]:
+    """The chain configuration of a blockchain test, and its activations as tuples."""
+    before, _, after = fixture["network"].removesuffix("AtTime15k").partition("To")
+    first = _NETWORK_FORK[before]
+    forks = _BLOCK_FORKS + _TIME_FORKS
+    activations = [(fork, "block" if fork in _BLOCK_FORKS else "time", 0)
+                   for fork in forks[:forks.index(first) + 1]]
+    if after:
+        activations.append((_NETWORK_FORK[after], "time", 15_000))
+    # The fixture names each blob schedule by its network, which gives its activation.
+    schedules = []
+    for network, schedule in fixture["config"].get("blobSchedule", {}).items():
+        for fork, kind, number in activations:
+            if fork == _NETWORK_FORK.get(network, network.lower()):
+                schedules.append([kind, number, int(schedule["target"], 16),
+                                  int(schedule["max"], 16),
+                                  int(schedule["baseFeeUpdateFraction"], 16)])
+    config = {"chainId": int(fixture["config"]["chainid"], 16),
+              "activations": [list(a) for a in activations],
+              "blobSchedules": sorted(schedules, key=lambda s: s[1])}
+    return config, activations
+
+
+def _active_fork(activations: list, header: list) -> str:
+    """The fork of a header: the last one whose activation its number or its time reached."""
+    number, timestamp = int.from_bytes(header[8], "big"), int.from_bytes(header[11], "big")
+    reached = [fork for fork, kind, n in activations
+               if (number if kind == "block" else timestamp) >= n]
+    return reached[-1]
+
+
+def _blockchain_test(root: Path, case: Case) -> None:
+    from ethlib.cryptography.keccak import keccak256
+    from ethlib.execution import blocks
+    from ethlib.serialization import rlp
+
+    fixture = _fixtures(root / case.path)[case.id]
+    config, activations = _chain(fixture)
+    seal = fixture.get("sealEngine", "NoProof") != "NoProof"
+    genesis = rlp.decode(_hex(fixture["genesisRLP"]))[0]
+    recent = [(_active_fork(activations, genesis), rlp.encode(genesis), [])]
+    state = _pre_state(fixture["pre"])
+    for block in fixture["blocks"]:
+        raw = _hex(block["rlp"])
+        expected = block.get("expectException")
+        try:
+            item = rlp.decode(raw)
+            fork = _active_fork(activations, item[0])
+        except Exception:
+            # A block that is not even an RLP list of headers is invalid.
+            assert expected, block
+            continue
+        if expected:
+            with pytest.raises(ValueError) as error:
+                blocks.state_transition(config, state, recent, fork, raw, seal)
+            names = expected.split("|")
+            assert any(_names_block_error(e, str(error.value)) for e in names), \
+                (names, str(error.value))
+            continue
+        _, accounts = blocks.state_transition(config, state, recent, fork, raw, seal)
+        state = rlp.encode(accounts)
+        recent = (recent + [(fork, rlp.encode(item[0]), [rlp.encode(o) for o in item[2]])])[-256:]
+    assert "0x" + keccak256(recent[-1][1]).hex() == fixture["lastblockhash"]
+
+
 def _shuffle(root: Path, case: Case) -> None:
     from ethlib import consensus
 
@@ -331,6 +426,7 @@ def _container_forks(container: str) -> tuple[str, ...]:
 RUNNERS = {
     "transaction_test": _transaction,
     "state_test": _state_test,
+    "blockchain_test": _blockchain_test,
     "shuffling/core": _shuffle,
     "networking/get_custody_groups": _custody_groups,
     "networking/compute_columns_for_custody_group": _custody_columns,
@@ -355,6 +451,7 @@ RUNNERS = {
 # The sidecar gossip checks and the light client proofs read the forms of Fulu.
 _STOPS = {
     "state_test": "BPO2ToAmsterdamAtTime15k",
+    "blockchain_test": "BPO2ToAmsterdamAtTime15k",
     "networking/gossip_data_column_sidecar": "gloas",
     "light_client/single_merkle_proof": "gloas",
 }

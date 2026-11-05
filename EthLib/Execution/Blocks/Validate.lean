@@ -3,7 +3,10 @@ module
 public import EthLib.Execution.Blocks.Block
 public import EthLib.Execution.Blocks.Difficulty
 public import EthLib.Execution.Blocks.ProofOfWork
+public import EthLib.Execution.Blocks.Requests
 public import EthLib.Execution.Evm.Errors
+public import EthLib.Execution.Transactions.Inclusion
+public import EthLib.Execution.Trie.Root
 public import EthLib.Execution.Fees.BaseFee
 public import EthLib.Execution.Fees.BlobBaseFee
 public import EthLib.Execution.Fees.GasLimit
@@ -61,6 +64,8 @@ def MAX_EXTRA_DATA_BYTES : Nat := 32
 /-- From Fusaka, the most bytes of the RLP form of a block: 10 MiB minus a margin of 2 MiB. -/
 def MAX_RLP_BLOCK_SIZE : Nat := 10485760 - 2097152
 
+mutual
+
 /-- Why a header or a block is not valid. -/
 inductive BlockError where
   /-- The header has number 0, which only the genesis block has. -/
@@ -105,7 +110,185 @@ inductive BlockError where
 
   The state lacks data that it must hold, or the rules of the fork are not yet specified. -/
   | aborted (error : Evm.EvmError)
-  deriving DecidableEq, Repr
+  /-- The transaction `index`, counted from 0, cannot enter the block, by `error`. -/
+  | invalidTransaction (index : Nat) (error : Transactions.InclusionError)
+  /-- The fork of the block is not the active fork of its chain at its number and its time. -/
+  | wrongFork
+  /-- The chain holds no parent for the block. -/
+  | noParent
+  /-- From Paris, the block holds ommers. -/
+  | ommersAfterParis
+  /-- A block of the DAO Fork's first ten lacks the extra data `dao-hard-fork`. -/
+  | wrongDaoExtraData
+  /-- A deposit log of the block has no deposit request. -/
+  | deposit (error : DepositError)
+  /-- A root of the block has no trie. -/
+  | trie (error : Trie.TrieError)
+  /-- The gas used `actual` of the body is not the gas used `expected` of the header. -/
+  | wrongGasUsed (expected actual : Nat)
+  /-- The transactions root is not the root of the transactions. -/
+  | wrongTransactionsRoot
+  /-- The state root is not the root of the state after the block. -/
+  | wrongStateRoot
+  /-- The receipts root is not the root of the receipts. -/
+  | wrongReceiptRoot
+  /-- The Bloom filter is not the filter of the logs of the block. -/
+  | wrongBloom
+  /-- From Shapella, the withdrawals root is not the root of the withdrawals. -/
+  | wrongWithdrawalsRoot
+  /-- From Dencun, the blob gas used `actual` of the body is not `expected` of the header. -/
+  | wrongBlobGasUsed (expected actual : Nat)
+  /-- From Pectra, the requests hash is not the hash of the requests. -/
+  | wrongRequestsHash
+  /-- Before Paris, the ommers are not valid, by `error`. -/
+  | ommers (error : OmmerError)
+  /-- A balance would reach `2^256`, which no rule of a block allows for. -/
+  | state (error : State.StateError)
+  /-- The transaction `index`, counted from 0, of the body does not decode at the fork. -/
+  | undecodableTransaction (index : Nat) (error : Transactions.TransactionError)
+
+/-- Why the ommers of a block are not valid. -/
+inductive OmmerError where
+  /-- The ommers hash of the header is not the hash of the ommers. -/
+  | wrongOmmersHash
+  /-- An ommer's number is 0, or not below the block's. -/
+  | numberOutOfRange
+  /-- The recent chain holds no block with the number of an ommer's parent. -/
+  | parentMissing
+  /-- An ommer is not a valid header against its parent. -/
+  | invalidHeader (error : BlockError)
+  /-- The block holds more than two ommers. -/
+  | tooManyOmmers
+  /-- The block holds one ommer twice. -/
+  | duplicateOmmer
+  /-- An ommer is the block itself, or a block of the recent chain. -/
+  | ommerInChain
+  /-- An ommer is already an ommer of a recent block. -/
+  | ommerAlreadyIncluded
+  /-- An ommer is not one to six blocks older than the block. -/
+  | wrongAge
+  /-- The parent of an ommer is not a block of the recent chain. -/
+  | parentNotRecent
+  /-- An ommer has the parent of the block, so it is a sibling, not an ommer. -/
+  | siblingOfBlock
+  /-- A header has no RLP form. -/
+  | encoding (error : RlpError)
+  /-- An ommer in the first ten blocks of the DAO Fork lacks the extra data of that fork. -/
+  | wrongDaoExtraData
+
+end
+
+deriving instance DecidableEq for BlockError, OmmerError
+
+
+/-- A constructor, named in full, applied to its arguments, in Lean syntax. -/
+def constructorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  let applied : Std.Format := .group (.nest 2 (args.foldl (fun f a => f ++ .line ++ a) name))
+  -- An argument position puts the application in parentheses, as `Repr.addAppParen` does.
+  if prec ≥ max_prec then .group (.nest 1 (.text "(" ++ applied ++ .text ")")) else applied
+
+mutual
+
+/-- The form of a block error in Lean syntax, with its arguments. -/
+def BlockError.reprPrec' : BlockError → Nat → Std.Format
+  | .genesisNumber, _ => "EthLib.Execution.Blocks.BlockError.genesisNumber"
+  | .wrongExcessBlobGas expected actual, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.wrongExcessBlobGas"
+      [reprArg expected, reprArg actual] prec
+  | .gasUsedAboveLimit, _ => "EthLib.Execution.Blocks.BlockError.gasUsedAboveLimit"
+  | .invalidGasLimit, _ => "EthLib.Execution.Blocks.BlockError.invalidGasLimit"
+  | .wrongBaseFee expected actual, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.wrongBaseFee"
+      [reprArg expected, reprArg actual] prec
+  | .timestampNotAfterParent, _ => "EthLib.Execution.Blocks.BlockError.timestampNotAfterParent"
+  | .wrongNumber, _ => "EthLib.Execution.Blocks.BlockError.wrongNumber"
+  | .extraDataTooLong, _ => "EthLib.Execution.Blocks.BlockError.extraDataTooLong"
+  | .nonzeroDifficulty, _ => "EthLib.Execution.Blocks.BlockError.nonzeroDifficulty"
+  | .nonzeroNonce, _ => "EthLib.Execution.Blocks.BlockError.nonzeroNonce"
+  | .wrongOmmersHash, _ => "EthLib.Execution.Blocks.BlockError.wrongOmmersHash"
+  | .wrongParentHash, _ => "EthLib.Execution.Blocks.BlockError.wrongParentHash"
+  | .encoding error, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.encoding"
+      [reprArg error] prec
+  | .blockTooLarge size, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.blockTooLarge"
+      [reprArg size] prec
+  | .wrongDifficulty expected actual, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.wrongDifficulty"
+      [reprArg expected, reprArg actual] prec
+  | .proofOfWork error, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.proofOfWork"
+      [reprArg error] prec
+  | .parentBeforeLondon, _ => "EthLib.Execution.Blocks.BlockError.parentBeforeLondon"
+  | .systemContractEmpty address, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.systemContractEmpty"
+      [reprArg address] prec
+  | .systemCallFailed address error, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.systemCallFailed"
+      [reprArg address, reprArg error] prec
+  | .aborted error, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.aborted"
+      [reprArg error] prec
+  | .invalidTransaction index error, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.invalidTransaction"
+      [reprArg index, reprArg error] prec
+  | .wrongFork, _ => "EthLib.Execution.Blocks.BlockError.wrongFork"
+  | .noParent, _ => "EthLib.Execution.Blocks.BlockError.noParent"
+  | .ommersAfterParis, _ => "EthLib.Execution.Blocks.BlockError.ommersAfterParis"
+  | .wrongDaoExtraData, _ => "EthLib.Execution.Blocks.BlockError.wrongDaoExtraData"
+  | .deposit error, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.deposit"
+      [reprArg error] prec
+  | .trie error, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.trie"
+      [reprArg error] prec
+  | .wrongGasUsed expected actual, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.wrongGasUsed"
+      [reprArg expected, reprArg actual] prec
+  | .wrongTransactionsRoot, _ => "EthLib.Execution.Blocks.BlockError.wrongTransactionsRoot"
+  | .wrongStateRoot, _ => "EthLib.Execution.Blocks.BlockError.wrongStateRoot"
+  | .wrongReceiptRoot, _ => "EthLib.Execution.Blocks.BlockError.wrongReceiptRoot"
+  | .wrongBloom, _ => "EthLib.Execution.Blocks.BlockError.wrongBloom"
+  | .wrongWithdrawalsRoot, _ => "EthLib.Execution.Blocks.BlockError.wrongWithdrawalsRoot"
+  | .wrongBlobGasUsed expected actual, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.wrongBlobGasUsed"
+      [reprArg expected, reprArg actual] prec
+  | .wrongRequestsHash, _ => "EthLib.Execution.Blocks.BlockError.wrongRequestsHash"
+  | .ommers error, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.ommers"
+      [OmmerError.reprPrec' error max_prec] prec
+  | .state error, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.state"
+      [reprArg error] prec
+  | .undecodableTransaction index error, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.undecodableTransaction"
+      [reprArg index, reprArg error] prec
+
+/-- The form of an ommer error in Lean syntax, with its arguments. -/
+def OmmerError.reprPrec' : OmmerError → Nat → Std.Format
+  | .wrongOmmersHash, _ => "EthLib.Execution.Blocks.OmmerError.wrongOmmersHash"
+  | .numberOutOfRange, _ => "EthLib.Execution.Blocks.OmmerError.numberOutOfRange"
+  | .parentMissing, _ => "EthLib.Execution.Blocks.OmmerError.parentMissing"
+  | .invalidHeader error, prec =>
+    constructorFormat "EthLib.Execution.Blocks.OmmerError.invalidHeader"
+      [BlockError.reprPrec' error max_prec] prec
+  | .tooManyOmmers, _ => "EthLib.Execution.Blocks.OmmerError.tooManyOmmers"
+  | .duplicateOmmer, _ => "EthLib.Execution.Blocks.OmmerError.duplicateOmmer"
+  | .ommerInChain, _ => "EthLib.Execution.Blocks.OmmerError.ommerInChain"
+  | .ommerAlreadyIncluded, _ => "EthLib.Execution.Blocks.OmmerError.ommerAlreadyIncluded"
+  | .wrongAge, _ => "EthLib.Execution.Blocks.OmmerError.wrongAge"
+  | .parentNotRecent, _ => "EthLib.Execution.Blocks.OmmerError.parentNotRecent"
+  | .siblingOfBlock, _ => "EthLib.Execution.Blocks.OmmerError.siblingOfBlock"
+  | .encoding error, prec =>
+    constructorFormat "EthLib.Execution.Blocks.OmmerError.encoding"
+      [reprArg error] prec
+  | .wrongDaoExtraData, _ => "EthLib.Execution.Blocks.OmmerError.wrongDaoExtraData"
+
+end
+
+instance : Repr BlockError := ⟨BlockError.reprPrec'⟩
+
+instance : Repr OmmerError := ⟨OmmerError.reprPrec'⟩
 
 /-- The stable code of an error, one per constructor, for the C exports.
 
@@ -113,7 +296,7 @@ The code ignores the arguments of the constructor, which the message carries.
 
 The codes start at 201, above the codes of RLP and receipt errors, so that none of them meet.
 
-Proof-of-work errors hold the codes 221 to 223, so no constructor here takes them.
+Proof-of-work errors hold the codes 221 to 223, and ommer errors the codes 231 to 243.
 
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def BlockError.code : BlockError → UInt32
@@ -137,6 +320,42 @@ def BlockError.code : BlockError → UInt32
   | .systemContractEmpty _ => 218
   | .systemCallFailed .. => 219
   | .aborted _ => 220
+  | .invalidTransaction .. => 224
+  | .wrongFork => 225
+  | .noParent => 226
+  | .ommersAfterParis => 227
+  | .wrongDaoExtraData => 228
+  | .deposit _ => 229
+  | .trie _ => 230
+  | .wrongGasUsed .. => 244
+  | .wrongTransactionsRoot => 245
+  | .wrongStateRoot => 246
+  | .wrongReceiptRoot => 247
+  | .wrongBloom => 248
+  | .wrongWithdrawalsRoot => 249
+  | .wrongBlobGasUsed .. => 250
+  | .wrongRequestsHash => 251
+  | .ommers _ => 252
+  | .state _ => 253
+  | .undecodableTransaction .. => 254
+
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The codes start at 231, above the codes of the header and proof-of-work errors. -/
+def OmmerError.code : OmmerError → UInt32
+  | .wrongOmmersHash => 231
+  | .numberOutOfRange => 232
+  | .parentMissing => 233
+  | .invalidHeader _ => 234
+  | .tooManyOmmers => 235
+  | .duplicateOmmer => 236
+  | .ommerInChain => 237
+  | .ommerAlreadyIncluded => 238
+  | .wrongAge => 239
+  | .parentNotRecent => 240
+  | .siblingOfBlock => 241
+  | .encoding _ => 242
+  | .wrongDaoExtraData => 243
 
 /-- The first error whose condition fails, in order, or success when every condition holds. -/
 def firstFailure : List (Bool × BlockError) → Except BlockError Unit

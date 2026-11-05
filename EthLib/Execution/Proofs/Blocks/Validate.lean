@@ -182,6 +182,14 @@ theorem BlockError.code_ne_rlp (e : BlockError) (r : Serialization.Rlp.RlpError)
     e.code ≠ r.code := by
   cases e <;> cases r <;> simp only [BlockError.code, Serialization.Rlp.RlpError.code] <;> decide
 
+/-- A block error never has the code of a proof-of-work error, which shares its Python class. -/
+theorem BlockError.code_ne_pow (e : BlockError) (p : PowError) : e.code ≠ p.code := by
+  cases e <;> cases p <;> simp only [BlockError.code, PowError.code] <;> decide
+
+/-- A block error never has the code of an ommer error, which shares its Python class. -/
+theorem BlockError.code_ne_ommer (e : BlockError) (o : OmmerError) : e.code ≠ o.code := by
+  cases e <;> cases o <;> simp only [BlockError.code, OmmerError.code] <;> decide
+
 /-- A block error never has the code of a receipt error. -/
 theorem BlockError.code_ne_receipt (e : BlockError) (r : ReceiptError) : e.code ≠ r.code := by
   cases e <;> cases r <;> simp only [BlockError.code, ReceiptError.code] <;> decide

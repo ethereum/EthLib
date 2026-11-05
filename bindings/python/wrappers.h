@@ -411,6 +411,7 @@ PyObject* py_rlpx_read_frames                             (PyObject* self, PyObj
 PyObject* py_block_validate_header                        (PyObject* self, PyObject* args);
 PyObject* py_block_check_header                           (PyObject* self, PyObject* args);
 PyObject* py_block_dao_extra_data_valid                   (PyObject* self, PyObject* args);
+PyObject* py_state_transition                             (PyObject* self, PyObject* args);
 
 PyObject* py_precompile_run                               (PyObject* self, PyObject* args);
 PyObject* py_precompile_price                             (PyObject* self, PyObject* args);

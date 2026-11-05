@@ -86,7 +86,7 @@ def baseFeeOf {fork : Fork} (env : BlockEnvironment fork) : Nat :=
 /-- The base fee per blob gas of a block at `fork`, or 0 before Dencun, which has no blobs. -/
 def blobGasPriceOf {fork : Fork} (env : BlockEnvironment fork) : Nat :=
   if h : .dencun ≤ fork then
-    getBaseFeePerBlobGas (blobSchedule fork h) (env.excessBlobGas h).toNat
+    getBaseFeePerBlobGas (env.blobSchedule h) (env.excessBlobGas h).toNat
   else 0
 
 /-! ## The price per gas -/

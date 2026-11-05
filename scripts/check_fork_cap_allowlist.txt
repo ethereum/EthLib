@@ -8,4 +8,4 @@ EthLib/Networking/Exports/Gossip.lean messageIdExport: the message ID of every f
 EthLib/Consensus/Exports/Gossip.lean gossipTopicsExport: the topics already reject each fork whose topics are not specified
 EthLib/Consensus/Exports/Gossip.lean computeSubnetForBlobSidecarExport: no fork from Fulu on has blob sidecar subnets, so it rejects every later fork
 EthLib/Networking/Exports/ForkId.lean readActivation: a fork name only places an activation, and the identifier hashes the activation numbers
-EthLib/Engine/Exports/NewPayload.lean activationOfJson: a fork name only places an activation, and the payload check rejects each fork from Glamsterdam
+EthLib/Base/Exports/ChainConfig.lean activationOfJson: a fork name only places an activation, and each check that runs at a fork rejects the forks it does not specify

@@ -61,54 +61,6 @@ structure RecentBlock where
   /-- The headers of the ommers of the block, each with the fork of its own number. -/
   ommers : List ((f : Fork) × Header f)
 
-/-- Why the ommers of a block are not valid. -/
-inductive OmmerError where
-  /-- The ommers hash of the header is not the hash of the ommers. -/
-  | wrongOmmersHash
-  /-- An ommer's number is 0, or not below the block's. -/
-  | numberOutOfRange
-  /-- The recent chain holds no block with the number of an ommer's parent. -/
-  | parentMissing
-  /-- An ommer is not a valid header against its parent. -/
-  | invalidHeader (error : BlockError)
-  /-- The block holds more than two ommers. -/
-  | tooManyOmmers
-  /-- The block holds one ommer twice. -/
-  | duplicateOmmer
-  /-- An ommer is the block itself, or a block of the recent chain. -/
-  | ommerInChain
-  /-- An ommer is already an ommer of a recent block. -/
-  | ommerAlreadyIncluded
-  /-- An ommer is not one to six blocks older than the block. -/
-  | wrongAge
-  /-- The parent of an ommer is not a block of the recent chain. -/
-  | parentNotRecent
-  /-- An ommer has the parent of the block, so it is a sibling, not an ommer. -/
-  | siblingOfBlock
-  /-- A header has no RLP form. -/
-  | encoding (error : RlpError)
-  /-- An ommer in the first ten blocks of the DAO Fork lacks the extra data of that fork. -/
-  | wrongDaoExtraData
-  deriving Repr
-
-/-- The stable code of an error, one per constructor, for the C exports.
-
-The codes start at 231, above the codes of the header and proof-of-work errors. -/
-def OmmerError.code : OmmerError → UInt32
-  | .wrongOmmersHash => 231
-  | .numberOutOfRange => 232
-  | .parentMissing => 233
-  | .invalidHeader _ => 234
-  | .tooManyOmmers => 235
-  | .duplicateOmmer => 236
-  | .ommerInChain => 237
-  | .ommerAlreadyIncluded => 238
-  | .wrongAge => 239
-  | .parentNotRecent => 240
-  | .siblingOfBlock => 241
-  | .encoding _ => 242
-  | .wrongDaoExtraData => 243
-
 /-- The hash of a header, with its encoding error as an ommer error. -/
 def headerHash {fork : Fork} (h : Header fork) : Except OmmerError Hash32 :=
   h.hash.mapError .encoding
