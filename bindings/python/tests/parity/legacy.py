@@ -1,6 +1,7 @@
 """The runners of the legacy blockchain tests of ethereum/legacytests, from Frontier to London."""
 
 import json
+from collections import Counter
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -11,6 +12,7 @@ from ethlib.errors import BlockError
 from ethlib.execution import blocks
 from ethlib.execution.pow import validate_ommers
 from ethlib.serialization import rlp
+from ethlib.state import rewards_root, state_root
 
 from .catalogue import LEGACY_FORKS, Case
 
@@ -213,3 +215,147 @@ def run_headers(root: Path, case: Case) -> None:
             _header_error(network, test, chain, parent, block, expected)
         checked += 1
     assert checked > 0
+
+
+# The ommer errors that each exception names, with the codes of the ommer check.
+# The fillers name a case by the client's first failed check, and EthLib checks in another order.
+# A sibling of the block has the block's number, so its number is out of range first.
+# An ommer of age 7 has its parent outside the seven recent blocks, so that parent is missing first.
+# An ommer numbered 0 is the genesis block, out of range before it is found in the chain.
+# The newer fillers name an ommer twice in the block as a brother.
+OMMER_CODES = {
+    "InvalidUnclesHash": {231},
+    "TooManyUncles": {235},
+    "UncleInChain": {236, 237, 238},
+    "UncleIsAncestor": {232, 237},
+    "UncleIsBrother": {232, 236},
+    "UncleParentIsNotAncestor": {232, 233},
+    "UncleTooOld": {233},
+    "InvalidUncleParentHash": {232, 233, 234},
+}
+
+# The block reward before Byzantium, from Byzantium, and from Constantinople, in wei.
+ETHER = 10**18
+BLOCK_REWARDS = (("constantinople", 2 * ETHER), ("byzantium", 3 * ETHER), ("frontier", 5 * ETHER))
+FORK_ORDER = ("frontier", "homestead", "daoFork", "tangerineWhistle", "spuriousDragon",
+              "byzantium", "constantinople", "petersburg", "istanbul", "berlin", "london")
+
+
+def _block_reward(fork: str) -> int:
+    rank = FORK_ORDER.index(fork)
+    return next(r for first, r in BLOCK_REWARDS if rank >= FORK_ORDER.index(first))
+
+
+def _quantity(n: int) -> bytes:
+    return n.to_bytes((n.bit_length() + 7) // 8, "big")
+
+
+def _rewards(fork: str, block: list) -> Counter:
+    """The rewards of a block by address, as section 11.3 of the Yellow Paper gives them."""
+    header, _, ommers = block
+    reward, number = _block_reward(fork), _number(header)
+    paid = Counter({header[2]: reward + len(ommers) * (reward // 32)})
+    for ommer in ommers:
+        paid[ommer[2]] += (8 - (number - _number(ommer))) * reward // 8
+    return paid
+
+
+def run_ommers(root: Path, case: Case) -> None:
+    """Check the ommers of each block, and the rewards of each valid block that holds some."""
+    test = fixture(root, case)
+    network = test["network"]
+    chain: dict[str, Block] = {}
+    checked = 0
+    for data, entry in [(test["genesisRLP"], None)] + [(e["rlp"], e) for e in test["blocks"]]:
+        data = bytes.fromhex(data.removeprefix("0x"))
+        decoded = rlp.decode(data)
+        fork = fork_at(network, _number(decoded[0]))
+        if len(decoded[0]) != header_fields(fork):
+            continue
+        header = rlp.encode(decoded[0])
+        block = Block(fork, "0x" + blocks.header_hash(fork, header).hex(), header, data)
+        if entry is None:
+            chain[block.hash] = block
+            continue
+        expected = exception(network, entry)
+        parent = chain.get(block.parent_hash)
+        if expected is None:
+            chain[block.hash] = block
+            if decoded[2]:
+                assert validate_ommers(fork, recent(chain, parent), data, sealed(test))
+                _check_rewards(fork, decoded, data)
+                checked += 1
+        elif expected in OMMER_CODES:
+            with pytest.raises(BlockError) as error:
+                validate_ommers(fork, recent(chain, parent), data, sealed(test))
+            assert error.value.code in OMMER_CODES[expected], (expected, str(error.value))
+            checked += 1
+    _check_post_state(test, chain)
+    assert checked > 0
+
+
+def _state(balances: Counter) -> bytes:
+    """A state whose accounts hold only the given balances."""
+    return rlp.encode([[address, b"", _quantity(value), b"", []]
+                       for address, value in balances.items()])
+
+
+def _check_rewards(fork: str, decoded: list, data: bytes) -> None:
+    # From a state with no account, the rewards create one account for each address they pay.
+    assert rewards_root(fork, _state(Counter()), data) == state_root(_state(_rewards(fork, decoded)))
+
+
+def _fee(fork: str, decoded: list) -> int | None:
+    """The fees of a block's miner, or `None` when the header and transactions do not give them.
+
+    Before London, a block whose legacy transactions share one gas price pays its gas used at
+    that price.
+    """
+    header, transactions, _ = decoded
+    if not transactions:
+        return 0
+    if fork == "london" or not all(isinstance(tx, list) for tx in transactions):
+        return None
+    prices = {tx[1] for tx in transactions}
+    if len(prices) != 1:
+        return None
+    return int.from_bytes(header[10], "big") * int.from_bytes(prices.pop(), "big")
+
+
+def _check_post_state(test: dict, chain: dict[str, Block]) -> None:
+    """Check the rewards of the canonical chain against the balances of the post state.
+
+    An address that only rewards pay holds exactly its rewards.
+    A miner that no transaction pays holds its balance before, its rewards and its fees.
+    """
+    canonical = []
+    head = test["lastblockhash"]
+    while head in chain and chain[head].parent_hash in chain:
+        canonical.append(chain[head])
+        head = chain[head].parent_hash
+    if "postState" not in test or not any(rlp.decode(b.block)[2] for b in canonical):
+        return
+    pre = {bytes.fromhex(a[2:]): int(v["balance"], 16) for a, v in test["pre"].items()}
+    post = {bytes.fromhex(a[2:]): int(v["balance"], 16) for a, v in test["postState"].items()}
+    paid, fees, recipients, miners = Counter(), Counter(), set(), set()
+    fees_known = True
+    for b in canonical:
+        decoded = rlp.decode(b.block)
+        paid += _rewards(b.fork, decoded)
+        miners.add(decoded[0][2])
+        recipients |= {tx[3] for tx in decoded[1] if isinstance(tx, list)}
+        fee = _fee(b.fork, decoded)
+        fees_known = fees_known and fee is not None
+        fees[decoded[0][2]] += fee or 0
+    anchored = 0
+    for address, value in paid.items():
+        if address in recipients:
+            continue
+        if address in miners:
+            if fees_known:
+                assert post[address] == pre.get(address, 0) + value + fees[address], address.hex()
+                anchored += 1
+        elif address not in pre:
+            assert post[address] == value, address.hex()
+            anchored += 1
+    assert anchored > 0

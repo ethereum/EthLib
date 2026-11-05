@@ -137,7 +137,7 @@ def legacy_networks(root: Path) -> set[str]:
 def legacy_cases(root: Path) -> list[Case]:
     """Every legacy blockchain test from Frontier to London under `root`, once per group.
 
-    Every test checks its headers.
+    Every test checks its headers, and a test whose blocks hold or name an ommer checks those.
     """
     return [Case("legacytests", "", network, group, f"{path}::{name}", path)
             for path, name, network, groups in _legacy_index(root)
@@ -146,6 +146,17 @@ def legacy_cases(root: Path) -> list[Case]:
 
 
 def _legacy_groups(fixture: dict) -> tuple[str, ...]:
+    """The headers of every test, and the ommers of a test with a valid ommer or an ommer error.
+
+    An error in the header of an ommer belongs to the header checks.
+    """
+    def ommers(entry: dict) -> bool:
+        named = any("Uncle" in value for key, value in entry.items()
+                    if key.startswith("expectException"))
+        return named or ("blockHeader" in entry and bool(entry.get("uncleHeaders")))
+
+    if any(ommers(entry) for entry in fixture["blocks"]):
+        return ("legacy_header", "legacy_ommers")
     return ("legacy_header",)
 
 
