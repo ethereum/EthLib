@@ -141,19 +141,6 @@ theorem samePoint_fftGlv (k : Nat) {vals vals' : Vector G1 (2 ^ k)} (roots : Vec
 
 /-! ## The check -/
 
-/-- A test of every element reads the same on a vector and on its list.
-
-The kernel computes the test on the list, by structural recursion. -/
-theorem toList_all {α : Type} {n : Nat} (xs : Vector α n) (p : α → Bool) :
-    xs.toList.all p = xs.all p := by
-  rw [Bool.eq_iff_iff, List.all_eq_true, Vector.all_eq_true]
-  constructor
-  · intro h i hi
-    exact h _ (Vector.mem_toList_iff.mpr (Vector.getElem_mem hi))
-  · intro h x hx
-    obtain ⟨i, hi, rfl⟩ := Vector.mem_iff_getElem.mp (Vector.mem_toList_iff.mp hx)
-    exact h i hi
-
 /-- The check of one transform: each pair is on the curve, and each output matches.
 
 Input `i` is first multiplied by its scalar `tw[i]`. -/
@@ -180,7 +167,7 @@ theorem toPoint_of_dftCheck {k : Nat} {ω : Fr} (hω : IsPrimitiveRoot ω (2 ^ k
     G1.toPoint (affinePoint outs[j].1 outs[j].2) =
       ∑ i : Fin (2 ^ k), (ω ^ (i.val * j.val)).val •
         tw[i] • G1.toPoint (affinePoint ins[i].1 ins[i].2) := by
-  simp only [dftCheck, toList_all, Bool.and_eq_true, Vector.all_eq_true, id_eq,
+  simp only [dftCheck, Vector.all_toList, Bool.and_eq_true, Vector.all_eq_true, id_eq,
     Vector.getElem_ofFn, Fin.getElem_fin] at h
   obtain ⟨⟨hin, hout⟩, hcmp⟩ := h
   -- The FFT of `G1` on the points `tw[i] • P_i` and the roots of `Fr`, and its split form.
