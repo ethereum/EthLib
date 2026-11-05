@@ -23,6 +23,8 @@ Each member of a committee, and each validator that an attestation shows, is act
 
 The indices of an attestation increase strictly, as the check of an indexed attestation asks.
 
+An attestation has at most as many signers as bits, so its indexed form never exceeds its limit.
+
 Before Fulu, the proposer is active in the epoch of the state.
 
 A signature domain always has a value.
@@ -482,6 +484,142 @@ theorem getIndexedAttestation_sorted {state : BeaconState preset fork}
   · cases computed
     simpa using getAttestingIndices_sorted attestersOk
   · cases computed
+
+/-- The pass that drops repeats adds at most one index for each index it reads. -/
+theorem length_foldl_keepNew_le (indices kept : List ValidatorIndex) :
+    (indices.foldl keepNew kept).length ≤ kept.length + indices.length := by
+  induction indices generalizing kept with
+  | nil => simp
+  | cons first rest ih =>
+    have step : (keepNew kept first).length ≤ kept.length + 1 := by
+      unfold keepNew
+      split
+      · split <;> simp
+      · simp
+    have := ih (keepNew kept first)
+    simp only [List.foldl_cons, List.length_cons]
+    omega
+
+/-- The set of a list has at most as many indices as the list. -/
+theorem length_sortedSet_le (indices : List ValidatorIndex) :
+    (sortedSet indices).length ≤ indices.length := by
+  have := length_foldl_keepNew_le (indices.mergeSort (· ≤ ·)) []
+  simpa [sortedSet, List.length_mergeSort] using this
+
+/-- The attesters of a committee read one bit each, from an offset.
+
+So they end before the last bit, and an empty committee has none, wherever its bits start. -/
+theorem length_committeeAttesters {bits : Array Bool} {offset : Nat}
+    {committee : Array ValidatorIndex} {attesters : List ValidatorIndex}
+    (computed : committeeAttesters bits offset committee = .ok attesters) :
+    attesters.length ≤ committee.size ∧
+      (0 < committee.size → offset + committee.size ≤ bits.size) := by
+  unfold committeeAttesters at computed
+  split at computed
+  · cases computed
+  rename_i inRange
+  cases computed
+  refine ⟨Nat.le_trans (List.length_filterMap_le _ _) (by simp), fun nonempty => ?_⟩
+  omega
+
+/-- From Electra: the attesters of a list of committees end before the last bit. -/
+theorem length_committeesAttesters {state : BeaconState preset fork} {slot : Slot}
+    {bits : Array Bool} {committees : List CommitteeIndex} {offset : Nat}
+    {attesters : List ValidatorIndex}
+    (computed : committeesAttesters state slot bits committees offset = .ok attesters) :
+    offset + attesters.length ≤ max offset bits.size := by
+  induction committees generalizing offset attesters with
+  | nil =>
+    cases computed
+    simp only [List.length_nil, Nat.add_zero]
+    omega
+  | cons index rest ih =>
+    simp only [committeesAttesters, bind, Except.bind, pure, Except.pure] at computed
+    split at computed
+    · cases computed
+    rename_i committee _
+    split at computed
+    · cases computed
+    rename_i here hereOk
+    split at computed
+    · cases computed
+    rename_i later laterOk
+    cases computed
+    obtain ⟨hereLe, reach⟩ := length_committeeAttesters hereOk
+    have second := ih laterOk
+    simp only [List.length_append]
+    -- An empty committee moves no offset; a nonempty one ends before the last bit.
+    by_cases empty : committee.size = 0
+    · simp only [empty, Nat.add_zero] at second
+      omega
+    · have := reach (Nat.pos_of_ne_zero empty)
+      omega
+
+/-- The validators that an attestation shows as signers are at most its bits. -/
+theorem length_getAttestingIndices_le {state : BeaconState preset fork}
+    {attestation : Attestation preset fork} {attesters : List ValidatorIndex}
+    (computed : getAttestingIndices state attestation = .ok attesters) :
+    attesters.length ≤ attestation.aggregationBits.bits.size := by
+  unfold getAttestingIndices at computed
+  split at computed
+  · simp only [bind, Except.bind, pure, Except.pure] at computed
+    split at computed
+    · cases computed
+    rename_i listed listedOk
+    cases computed
+    have := length_committeesAttesters listedOk
+    have := length_sortedSet_le listed
+    omega
+  · simp only [bind, Except.bind, pure, Except.pure] at computed
+    split at computed
+    · cases computed
+    split at computed
+    · cases computed
+    rename_i committee _ _ listed listedOk
+    cases computed
+    obtain ⟨short, reach⟩ := length_committeeAttesters listedOk
+    have := length_sortedSet_le listed
+    by_cases empty : committee.size = 0
+    · omega
+    · have := reach (Nat.pos_of_ne_zero empty)
+      omega
+
+/-- The check of the limit on an indexed attestation never fails.
+
+Before Gloas the signers are at most the bits, and the bits are at most the limit.
+
+From Gloas the list has no limit.
+
+So the indexed form fails exactly when the signers do, with the same error. -/
+theorem getIndexedAttestation_eq_error_iff {state : BeaconState preset fork}
+    {attestation : Attestation preset fork} {error : AccessorError} :
+    getIndexedAttestation state attestation = .error error ↔
+      getAttestingIndices state attestation = .error error := by
+  simp only [getIndexedAttestation, bind, Except.bind]
+  split
+  · rename_i failure
+    simp [failure]
+  · rename_i attesters attestersOk
+    simp only [attestersOk, reduceCtorEq, iff_false]
+    split
+    · simp [pure, Except.pure]
+    · rename_i over
+      exact absurd (fun before => Nat.le_trans (length_getAttestingIndices_le attestersOk)
+        (attestation.aggregationBits.bound before)) over
+
+/-- When the signers of an attestation have a value, its indexed form lists them in order. -/
+theorem getIndexedAttestation_of_getAttestingIndices {state : BeaconState preset fork}
+    {attestation : Attestation preset fork} {attesters : List ValidatorIndex}
+    (computed : getAttestingIndices state attestation = .ok attesters) :
+    ∃ indexed, getIndexedAttestation state attestation = .ok indexed ∧
+      indexed.attestingIndices.data = attesters.toArray ∧ indexed.data = attestation.data ∧
+      indexed.signature = attestation.signature := by
+  simp only [getIndexedAttestation, bind, Except.bind, computed]
+  split
+  · exact ⟨_, rfl, rfl, rfl, rfl⟩
+  · rename_i over
+    exact absurd (fun before => Nat.le_trans (length_getAttestingIndices_le computed)
+      (attestation.aggregationBits.bound before)) over
 
 /-- The proposer search returns one of the indices, when each shuffled position is in range. -/
 theorem mem_of_proposerSearch {preset : Preset} {fork : Base.Fork}
