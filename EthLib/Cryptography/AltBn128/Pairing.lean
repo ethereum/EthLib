@@ -389,6 +389,15 @@ def finalExponentiation (f : Fp12) : Fp12 :=
   let y2 := small fu2 6 * f
   y0 * Fp12.frobenius y1 * Fp12.frobeniusPow 2 y2 * Fp12.frobeniusPow 3 f
 
+/-- The pairing `e(P, Q)` of a point of `G_1` and a point of `G_2`, an element of `Fp12`.
+
+It is the final exponentiation of the Miller loop.
+
+A point at infinity gives 1. -/
+def pairing : Point → Point2 → Fp12
+  | .affine xp yp, q@(.affine _ _) => finalExponentiation (millerLoop q xp yp)
+  | _, _ => Fp12.one
+
 /-- Whether the product of the pairings of the pairs is 1.
 
 A pair with a point at infinity contributes 1.
