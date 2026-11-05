@@ -208,6 +208,11 @@ Definitions that derive a secret take the derivation function as an argument too
   The honest walk of a chain from its start and the lab chain have one law of output and state (`labChain_labTriple`).
   The lab chain touches every value below the position it reads, so those values can stay hidden.
   The same holds for a key's leaf, from the ends of its chains (`otsLeafHash_labTriple`).
+- A key's leaf in the eager game (`Unforgeability/LabLeaf.lean`).
+  In the eager game a derivation reads the cells of its two halves.
+  The lab leaf touches the starts of the key's chains, runs each lab chain to its end and reads the leaf.
+  It leaves the state as the honest leaf does, so the honest leaf and the lab leaf have one law of output and state (`otsPublicLeaf_labTriple`).
+  The lab leaf reads no start and no value inside a chain, so a later game can defer those draws.
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
 
