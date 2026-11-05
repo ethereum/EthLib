@@ -86,15 +86,13 @@ theorem deriveKeys_ok (secret challengeData : ByteArray) (nodeIdA nodeIdB : Node
     ∃ keys, deriveKeys secret challengeData nodeIdA nodeIdB = .ok keys ∧
       keys.initiatorKey.size = 16 ∧ keys.recipientKey.size = 16 := by
   unfold deriveKeys
-  cases hk : Cryptography.Hash.Hkdf.hkdf challengeData secret
-      (asciiBytes "discovery v5 key agreement" ++ ⟨nodeIdA.toArray⟩ ++ ⟨nodeIdB.toArray⟩) 32 with
-  | error e =>
-    have := (Cryptography.Hash.Hkdf.hkdf_error hk).2
-    simp [Cryptography.Hash.Hkdf.HASH_LEN] at this
-  | ok okm =>
-    have hs : okm.size = 32 := Cryptography.Hash.Hkdf.expand_size hk
-    refine ⟨⟨okm.extract 0 16, okm.extract 16 32⟩, by simp only [hk]; rfl, ?_, ?_⟩ <;>
-      simp only [ByteArray.size_extract, hs] <;> omega
+  -- HKDF accepts an output of 32 bytes, and returns exactly that many.
+  obtain ⟨okm, hk, hs⟩ := Cryptography.Hash.Hkdf.hkdf_ok
+    (salt := challengeData) (ikm := secret)
+    (info := asciiBytes "discovery v5 key agreement" ++ ⟨nodeIdA.toArray⟩ ++ ⟨nodeIdB.toArray⟩)
+    (length := 32) (by simp [Cryptography.Hash.Hkdf.HASH_LEN])
+  refine ⟨⟨okm.extract 0 16, okm.extract 16 32⟩, by simp only [hk]; rfl, ?_, ?_⟩ <;>
+    simp only [ByteArray.size_extract, hs] <;> omega
 
 /-! ## ID signatures -/
 
