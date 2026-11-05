@@ -23,6 +23,12 @@ The setup is any well-formed setup of `τ`, so the setup of the PeerDAS games is
 - The proof of cell `j` represents `q(τ)`, where `q` is the quotient of `f` by `X^64 - h^64`.
 - The remainder of that division takes the values of the cell on its coset.
   It has degree below 64, so it is the polynomial that interpolates the cell.
+
+Under the pairing law, the batch check of cells accepts every batch of valid openings.
+
+Their error polynomial is zero, so the challenge is a root of it.
+
+So the batch check accepts the cells and proofs of blobs, and so does the verifier of the games.
 -/
 
 @[expose] public section
@@ -203,5 +209,160 @@ theorem cellOpeningValid_computeCellsAndKzgProofs {s : TrustedSetup} {τ : Fr}
       exact cellToCosetEvals_codewordCell _ _
     · rw [hproof]
       exact hPv
+
+/-! ## The batch check accepts valid openings -/
+
+/-- **The batch check of cells accepts valid openings.**
+
+Assume the pairing law and a well-formed setup of the secret `τ`.
+
+Take a batch with one commitment, one cell index, one cell and one proof per entry.
+
+Let each entry be a valid opening at `τ`.
+
+Then the batch check of cells accepts.
+
+The commitments may repeat, as when several cells come from one blob. -/
+theorem verifyCellKzgProofBatch_of_cellOpeningValid (laws : Bls.PairingLaws) {s : TrustedSetup}
+    {τ : Fr} (hs : s.WellFormed τ) {bs : Array Bytes48} {cellIndices : Array CellIndex}
+    {cells : Array Cell} {ps : Array Bytes48} (h₁ : cells.size = bs.size)
+    (h₂ : ps.size = bs.size) (h₃ : cellIndices.size = bs.size)
+    (hv : ∀ k < bs.size, CellOpeningValid τ bs[k]! cellIndices[k]! cells[k]! ps[k]!) :
+    verifyCellKzgProofBatch s bs cellIndices cells ps = .ok true := by
+  -- Each entry of an array of the batch is the entry of some index.
+  have hmem : ∀ {α : Type} [Inhabited α] {xs : Array α}, xs.size = bs.size →
+      ∀ x ∈ xs, ∃ k < bs.size, xs[k]! = x := fun hsz x hx => by
+    obtain ⟨k, hk, rfl⟩ := Array.getElem_of_mem hx
+    exact ⟨k, hsz ▸ hk, getElem!_pos _ k hk⟩
+  obtain ⟨b, hb⟩ := verifyCellKzgProofBatch_exists_ok (s := s) h₁ h₂ h₃
+    (fun i hi => by
+      obtain ⟨k, hk, rfl⟩ := hmem h₃ i hi
+      exact (hv k hk).1)
+    (fun x hx => by
+      obtain ⟨k, hk, rfl⟩ := hmem rfl x hx
+      obtain ⟨-, _, _, _, _, _, -, hC, -⟩ := hv k hk
+      exact validateKzgG1_of_validateKzgG1Point hC)
+    (fun x hx => by
+      obtain ⟨k, hk, rfl⟩ := hmem h₂ x hx
+      obtain ⟨-, _, _, _, _, _, -, -, -, hP, -⟩ := hv k hk
+      exact validateKzgG1_of_validateKzgG1Point hP)
+    (fun x hx => by
+      obtain ⟨k, hk, rfl⟩ := hmem h₁ x hx
+      obtain ⟨-, e, -, -, -, -, he, -⟩ := hv k hk
+      exact ⟨e, he⟩)
+  -- One scalar for each byte string that decodes to a point with a scalar.
+  obtain ⟨c, hc⟩ : ∃ c : Bytes48 → Fr, ∀ x,
+      (∃ a, ∀ P, uncompressG1 x = .ok P → G1.Represents P a) →
+        ∀ P, uncompressG1 x = .ok P → G1.Represents P (c x) :=
+    ⟨fun x => Classical.epsilon fun a => ∀ P, uncompressG1 x = .ok P → G1.Represents P a,
+      fun _ hx => Classical.epsilon_spec hx⟩
+  -- Bytes that decode to a point with a scalar get that scalar.
+  have hscalar : ∀ {x : Bytes48} {P : G1} {a : Fr}, validateKzgG1Point x = .ok P →
+      G1.Represents P a → c x = a := fun {x P a} hx ha => by
+    have hu := uncompressG1_of_validateKzgG1Point hx
+    refine (hc _ ⟨a, fun P' hP' => ?_⟩ _ hu).unique ha
+    rw [hu] at hP'
+    cases hP'
+    exact ha
+  have hrep : ∀ {x : Bytes48} {P P' : G1} {a : Fr}, validateKzgG1Point x = .ok P →
+      G1.Represents P a → uncompressG1 x = .ok P' → G1.Represents P' (c x) :=
+    fun hx ha hu => by
+      rw [uncompressG1_of_validateKzgG1Point hx] at hu
+      cases hu
+      rw [hscalar hx ha]
+      exact ha
+  let y : CellBatchInput := ⟨bs, cellIndices, cells, ps⟩
+  have hC : ∀ k < y.commitments.size, ∀ P, uncompressG1 y.commitments[k]! = .ok P →
+      G1.Represents P (c y.commitments[k]!) := fun k hk _ hu => by
+    obtain ⟨-, _, _, _, _, _, -, hCv, hCr, -⟩ := hv k hk
+    exact hrep hCv hCr hu
+  have hP : ∀ k < y.proofs.size, ∀ P, uncompressG1 y.proofs[k]! = .ok P →
+      G1.Represents P (c y.proofs[k]!) := fun k hk _ hu => by
+    obtain ⟨-, _, _, _, _, _, -, -, -, hWv, hWr, -⟩ := hv k (h₂ ▸ hk)
+    exact hrep hWv hWr hu
+  rw [hb, (verifyCellKzgProofBatch_ok_iff_root laws hs y hC hP hb).mpr ?_]
+  -- Every cell is valid, so the error polynomial is zero.
+  obtain ⟨evals, hev⟩ := array_mapM_exists_ok (f := cellToCosetEvals) (xs := cells)
+    fun x hx => by
+      obtain ⟨k, hk, rfl⟩ := hmem h₁ x hx
+      obtain ⟨-, e, -, -, -, -, he, -⟩ := hv k hk
+      exact ⟨e, he⟩
+  obtain ⟨-, hevk⟩ := array_mapM_ok hev
+  obtain ⟨-, hdidx, -⟩ := dedupCommitments_spec bs
+  have hzero : y.toCellBatch.errorPoly τ c c = 0 := by
+    refine (cellErrorPoly_eq_zero_iff τ _ _ _ _ _).mpr fun k hk => ?_
+    have hk' : k < bs.size := h₃ ▸ hk
+    obtain ⟨-, e, C, a, W, w, he, hCv, hCr, hWv, hWr, hval⟩ := hv k hk'
+    have hek : evals[k]! = e := Except.ok.inj ((hevk k (h₁ ▸ hk')).symm.trans he)
+    simp only [y, CellBatchInput.toCellBatch, decodeCells_of_ok hev, hek,
+      (hdidx k hk').2, hscalar hCv hCr, hscalar hWv hWr]
+    exact hval
+  rw [hzero, Polynomial.eval_zero]
+
+/-- **The batch check of cells accepts the cells and proofs of blobs.**
+
+Assume the pairing law and a well-formed setup of the secret `τ`.
+
+Take a batch where each entry comes from a blob.
+
+The commitment of the entry is the commitment of its blob.
+
+The cell and the proof of the entry are those of its cell index, below 128.
+
+Then the batch check of cells accepts. -/
+theorem verifyCellKzgProofBatch_computeCellsAndKzgProofs (laws : Bls.PairingLaws)
+    {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ) {bs : Array Bytes48}
+    {cellIndices : Array CellIndex} {cells : Array Cell} {ps : Array Bytes48}
+    (h₁ : cells.size = bs.size) (h₂ : ps.size = bs.size) (h₃ : cellIndices.size = bs.size)
+    (hblobs : ∀ k < bs.size, ∃ blob cs qs, blobToKzgCommitment s blob = .ok bs[k]! ∧
+      computeCellsAndKzgProofs s blob = .ok (cs, qs) ∧ cellIndices[k]! < CELLS_PER_EXT_BLOB ∧
+      cells[k]! = cs[cellIndices[k]!]! ∧ ps[k]! = qs[cellIndices[k]!]!) :
+    verifyCellKzgProofBatch s bs cellIndices cells ps = .ok true := by
+  refine verifyCellKzgProofBatch_of_cellOpeningValid laws hs h₁ h₂ h₃ fun k hk => ?_
+  obtain ⟨blob, cs, qs, hC, hP, hj, hcell, hproof⟩ := hblobs k hk
+  rw [hcell, hproof]
+  exact cellOpeningValid_computeCellsAndKzgProofs hs hC hP hj
+
+/-! ## One cell -/
+
+/-- **An opening of one cell verifies exactly when it is valid.**
+
+Assume the pairing law and a well-formed setup of the secret `τ`.
+
+The verifier of the games accepts an opening for a commitment exactly when it is valid at `τ`. -/
+theorem CellOpening.verifies_iff (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+    (hs : s.WellFormed τ) {commitment : Bytes48} {o : CellOpening} :
+    o.Verifies s commitment ↔ CellOpeningValid τ commitment o.cellIndex o.cell o.proof := by
+  constructor
+  · intro h
+    obtain ⟨hci, e, C, c, P, w, he, hC, hc, hP, hw, hval⟩ := h.valid laws hs
+    obtain ⟨hvc, hvp⟩ := validateKzgG1_of_verifyCellKzgProofBatch h
+    obtain ⟨C', hC'⟩ := exists_validateKzgG1Point_of_validateKzgG1 hvc
+    obtain ⟨P', hP'⟩ := exists_validateKzgG1Point_of_validateKzgG1 hvp
+    have hCC : C' = C := Except.ok.inj ((uncompressG1_of_validateKzgG1Point hC').symm.trans hC)
+    have hPP : P' = P := Except.ok.inj ((uncompressG1_of_validateKzgG1Point hP').symm.trans hP)
+    subst hCC hPP
+    exact ⟨hci, e, C', c, P', w, he, hC', hc, hP', hw, hval⟩
+  · intro h
+    refine verifyCellKzgProofBatch_of_cellOpeningValid laws hs rfl rfl rfl fun k hk => ?_
+    obtain rfl : k = 0 := by simpa using hk
+    exact h
+
+/-- **The verifier of the games accepts the cells and proofs of a blob.**
+
+Assume the pairing law, and take the setup of the games for the secret `τ`.
+
+Let the code compute the commitment of a blob, and its cells and proofs, with this setup.
+
+Then the opening of cell `j` by cell `j` and proof `j` verifies, for every `j` below 128. -/
+theorem CellOpening.verifies_computeCellsAndKzgProofs (laws : Bls.PairingLaws) (τ : Fr)
+    {blob : Blob} {commitment : Bytes48} {cells : Array Cell} {proofs : Array Bytes48}
+    (hC : blobToKzgCommitment (TrustedSetup.ofPowers (setupPowers τ)) blob = .ok commitment)
+    (hP : computeCellsAndKzgProofs (TrustedSetup.ofPowers (setupPowers τ)) blob =
+      .ok (cells, proofs)) {j : Nat} (hj : j < CELLS_PER_EXT_BLOB) :
+    (⟨j, cells[j]!, proofs[j]!⟩ : CellOpening).Verifies (TrustedSetup.ofPowers (setupPowers τ))
+      commitment :=
+  (CellOpening.verifies_iff laws (wellFormed_ofPowers τ)).mpr
+    (cellOpeningValid_computeCellsAndKzgProofs (wellFormed_ofPowers τ) hC hP hj)
 
 end EthLib.Cryptography.Kzg

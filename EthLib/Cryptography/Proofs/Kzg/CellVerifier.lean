@@ -15,6 +15,8 @@ So an accepted outer check is an accepted core check.
 
 The theorems of the core check then hold for the outer check, each cell with its own commitment.
 
+- On well-formed input, the outer check returns a verdict, with no error.
+- The verdict is true exactly when the challenge is a root of the error polynomial of the batch.
 - An accepted batch has every cell valid, or its challenge is a root of a nonzero polynomial.
 - Two cells at one index, with commitments of one scalar, are equal.
   Otherwise a search returns a bilinear strong Diffie–Hellman solution, or the challenge is a root.
@@ -102,6 +104,44 @@ theorem dedupCommitments_spec (bs : Array Bytes48) :
       · exact ⟨n, by omega, hbn.symm⟩
       · obtain ⟨k, hk, h⟩ := hmem i (by omega)
         exact ⟨k, by omega, h⟩
+
+/-- The removal keeps no commitment twice. -/
+theorem dedupCommitments_distinct (bs : Array Bytes48) :
+    ∀ i < (dedupCommitments bs).1.size, ∀ j < i,
+      (dedupCommitments bs).1[j]! ≠ (dedupCommitments bs).1[i]! := by
+  unfold dedupCommitments
+  refine Array.foldl_induction
+    (motive := fun _ (acc : Array KZGCommitment × Array CommitmentIndex) =>
+      ∀ i < acc.1.size, ∀ j < i, acc.1[j]! ≠ acc.1[i]!)
+    (fun i hi => by simp at hi) ?_
+  intro n acc hacc
+  unfold dedupStep
+  split
+  · exact hacc
+  · rename_i hnone
+    have hnot : bs[n] ∉ acc.1 := Array.idxOf?_eq_none_iff.mp hnone
+    intro i hi j hji
+    rw [Array.size_push] at hi
+    rw [getElem!_push', getElem!_push', ite_eq_right (by omega)]
+    by_cases hin : i = acc.1.size
+    · rw [ite_eq_left hin, getElem!_pos acc.1 j (by omega)]
+      exact fun h => hnot (h ▸ Array.getElem_mem _)
+    · rw [ite_eq_right hin]
+      exact hacc i (by omega) j hji
+
+/-- The core check finds no repeated commitment among the commitments that the removal keeps. -/
+theorem any_idxOf?_dedupCommitments (bs : Array Bytes48) :
+    ((dedupCommitments bs).1.zipIdx.any fun (c, i) =>
+      (dedupCommitments bs).1.idxOf? c ≠ some i) = false := by
+  refine Array.any_eq_false'.mpr fun p hp => ?_
+  obtain ⟨i, hi, rfl⟩ := Array.getElem_of_mem hp
+  have hi' : i < (dedupCommitments bs).1.size := by rwa [Array.size_zipIdx] at hi
+  rw [Array.getElem_zipIdx]
+  simp only [ne_eq, decide_eq_true_eq, Decidable.not_not, Nat.zero_add]
+  rw [Array.idxOf?_eq_map_finIdxOf?_val, Option.map_eq_some_iff]
+  refine ⟨⟨i, hi'⟩, Array.finIdxOf?_eq_some_iff.mpr ⟨rfl, fun j hj => ?_⟩, rfl⟩
+  have := dedupCommitments_distinct bs i hi' j hj
+  rwa [getElem!_pos _ j.1 j.isLt, getElem!_pos _ i hi'] at this
 
 /-! ## The outer check as the core check -/
 
@@ -224,6 +264,145 @@ theorem verifyCellKzgProofBatchImpl_decodes {s : TrustedSetup}
       repeat' split at h
       all_goals cases h
 
+/-! ## The core check returns a verdict -/
+
+/-- A map over an array succeeds when the function succeeds on every entry. -/
+theorem array_mapM_exists_ok {ε α β : Type} {f : α → Except ε β} {xs : Array α}
+    (h : ∀ x ∈ xs, ∃ y, f x = .ok y) : ∃ ys, xs.mapM f = .ok ys := by
+  obtain ⟨ys, hys⟩ := Base.mapM_exists_ok (f := f) (xs := xs.toList)
+    fun x hx => h x (Array.mem_toList_iff.mp hx)
+  refine ⟨ys.toArray, ?_⟩
+  rw [Array.mapM_eq_mapM_toList, hys]
+  rfl
+
+/-- A map over an array that succeeds on every entry returns no error. -/
+theorem array_mapM_ne_error {ε α β : Type} {f : α → Except ε β} {xs : Array α} {e : ε}
+    (h : ∀ x ∈ xs, ∃ y, f x = .ok y) : xs.mapM f ≠ .error e := by
+  obtain ⟨ys, hys⟩ := array_mapM_exists_ok h
+  rw [hys]
+  exact fun h => nomatch h
+
+/-- The interpolation of 64 values on a coset succeeds. -/
+theorem interpolateCosetEvals_ok {h : Fr} {evals : CosetEvals}
+    (hsz : evals.size = FIELD_ELEMENTS_PER_CELL) :
+    ∃ p, interpolateCosetEvals h evals = .ok p := by
+  unfold interpolateCosetEvals
+  rw [ite_eq_right (not_not.mpr hsz)]
+  exact ⟨_, rfl⟩
+
+/-- The sum of the interpolations succeeds when every cell has 64 values. -/
+theorem sumInterp_ok :
+    ∀ (L : List (Fr × CosetEvals × Fr)) (init : PolynomialCoeff),
+      init.size = FIELD_ELEMENTS_PER_CELL → (∀ e ∈ L, e.2.1.size = FIELD_ELEMENTS_PER_CELL) →
+      ∃ acc, L.foldlM (fun sumInterp (e : Fr × CosetEvals × Fr) => do
+          let interp ← interpolateCosetEvals e.1 e.2.1
+          let scaled ← multiplyPolynomialcoeff #[e.2.2] interp
+          pure (addPolynomialcoeff sumInterp scaled)) init = .ok acc
+  | [], init, _, _ => ⟨init, rfl⟩
+  | e :: L, init, hinit, hL => by
+    obtain ⟨interp, hi⟩ := interpolateCosetEvals_ok (h := e.1) (hL e List.mem_cons_self)
+    obtain ⟨hisz, -⟩ := size_of_interpolateCosetEvals hi
+    obtain ⟨scaled, hs, hssz⟩ := multiplyPolynomialcoeff_ok_of_le (a := #[e.2.2]) (b := interp)
+      (by simp [hisz]; decide)
+    have hnext : (addPolynomialcoeff init scaled).size = FIELD_ELEMENTS_PER_CELL := by
+      rw [size_addPolynomialcoeff, hinit, hssz, hisz]
+      simp; decide
+    obtain ⟨acc, hacc⟩ := sumInterp_ok L _ hnext fun e' he' => hL e' (List.mem_cons_of_mem e he')
+    refine ⟨acc, ?_⟩
+    simp only [List.foldlM_cons, bind, Except.bind, hi, hs, pure, Except.pure]
+    exact hacc
+
+/-- **The core check returns a verdict.**
+
+The cells, their values and the proofs are as many as the commitment indices.
+
+Each commitment index names a commitment, and no commitment repeats.
+
+The commitments and the proofs decode, each cell index is below 128, and each cell has 64 values.
+
+Then the core check returns a verdict, with no error. -/
+theorem verifyCellKzgProofBatchImpl_ok {s : TrustedSetup} {commitments : Array KZGCommitment}
+    {commitmentIndices : Array CommitmentIndex} {cellIndices : Array CellIndex}
+    {cosetsEvals : Array CosetEvals} {proofs : Array KZGProof} {G Q : Array G1}
+    (h₁ : cellIndices.size = commitmentIndices.size)
+    (h₂ : cosetsEvals.size = commitmentIndices.size) (h₃ : proofs.size = commitmentIndices.size)
+    (h₄ : ∀ i ∈ commitmentIndices, i < commitments.size)
+    (h₅ : (commitments.zipIdx.any fun (c, i) => commitments.idxOf? c ≠ some i) = false)
+    (hG : commitments.mapM uncompressG1 = .ok G) (hQ : proofs.mapM uncompressG1 = .ok Q)
+    (hci : ∀ i ∈ cellIndices, i < CELLS_PER_EXT_BLOB)
+    (hev : ∀ e ∈ cosetsEvals, e.size = FIELD_ELEMENTS_PER_CELL) :
+    ∃ b, verifyCellKzgProofBatchImpl s commitments commitmentIndices cellIndices cosetsEvals
+      proofs = .ok b := by
+  have h₄' : commitmentIndices.any (· ≥ commitments.size) = false :=
+    Array.any_eq_false'.mpr fun i hi => by simpa using h₄ i hi
+  cases hI : verifyCellKzgProofBatchImpl s commitments commitmentIndices cellIndices cosetsEvals
+    proofs with
+  | ok b => exact ⟨b, rfl⟩
+  | error e =>
+  exfalso
+  unfold verifyCellKzgProofBatchImpl at hI
+  simp only [h₁, h₂, h₃, h₄', h₅, ne_eq, not_true_eq_false, ↓reduceIte, Bool.false_eq_true,
+    bind, Except.bind, hG, hQ] at hI
+  set n := commitmentIndices.size
+  set r := computeVerifyCellKzgProofBatchChallenge commitments commitmentIndices cellIndices
+    cosetsEvals proofs
+  have hrp : (computePowers r n).size = n := size_computePowers r n
+  obtain ⟨hQsz, -⟩ := array_mapM_ok hQ
+  obtain ⟨hGsz, -⟩ := array_mapM_ok hG
+  have hWsz : (Array.foldl (fun weights (e : Nat × Fr) => weights.modify e.1 (· + e.2))
+      (Array.replicate commitments.size Fr.zero) (commitmentIndices.zip (computePowers r n))).size =
+      commitments.size := by
+    rw [← Array.foldl_toList]
+    generalize (commitmentIndices.zip (computePowers r n)).toList = L
+    suffices ∀ (L : List (Nat × Fr)) (W : Array Fr),
+        (L.foldl (fun weights (e : Nat × Fr) => weights.modify e.1 (· + e.2)) W).size = W.size by
+      rw [this, Array.size_replicate]
+    intro L
+    induction L with
+    | nil => intro W; rfl
+    | cons e L ih => intro W; rw [List.foldl_cons, ih, Array.size_modify]
+  have lincomb : ∀ {P : Array G1} {a : Array Fr}, P.size = a.size →
+      g1LincombPoints P a = .ok (G1.msm P a) := fun h => g1LincombPoints_eq_msm h
+  rw [lincomb (hQsz.trans (h₃.trans hrp.symm)), lincomb (hGsz.trans hWsz.symm)] at hI
+  dsimp only at hI
+  -- The shifts exist, since every cell index is below 128.
+  split at hI
+  · rename_i err hsh
+    refine array_mapM_ne_error (fun i hi => ?_) hsh
+    have hlt :
+        FIELD_ELEMENTS_PER_CELL * i < (rootsOfUnityBrp FIELD_ELEMENTS_PER_EXT_BLOB).size := by
+      have := hci i hi
+      rw [size_rootsOfUnityBrp]
+      change 64 * i < 8192
+      change i < 128 at this
+      omega
+    exact ⟨_, by simp only [hlt, ↓reduceDIte]; rfl⟩
+  rename_i shifts hsh
+  have hshsz : shifts.size = n := (array_mapM_ok hsh).1.trans h₁
+  -- The sum of the interpolations exists, since every cell has 64 values.
+  have hall : ∀ e ∈ (shifts.zip (cosetsEvals.zip (computePowers r n))).toList,
+      e.2.1.size = FIELD_ELEMENTS_PER_CELL := fun e he =>
+    hev _ (Array.of_mem_zip (Array.of_mem_zip (Array.mem_toList_iff.mp he)).2).1
+  split at hI
+  · rename_i err hsum
+    obtain ⟨acc, hacc⟩ := sumInterp_ok _ (Array.replicate FIELD_ELEMENTS_PER_CELL Fr.zero)
+      Array.size_replicate hall
+    rw [Array.foldlM_toList] at hacc
+    exact absurd (hsum.symm.trans hacc) fun h => nomatch h
+  rename_i sumInterp hsum
+  obtain ⟨hsisz, -, -⟩ := sumInterp_spec 0 (shifts.zip (cosetsEvals.zip (computePowers r n))).toList
+    (Array.replicate FIELD_ELEMENTS_PER_CELL Fr.zero) sumInterp Array.size_replicate
+    (by rw [Array.foldlM_toList]; exact hsum)
+  have hmono : (s.g1Monomial.toArray.extract 0 FIELD_ELEMENTS_PER_CELL).size = sumInterp.size := by
+    rw [hsisz, Array.size_extract, Vector.size_toArray]
+    rfl
+  have hwrp : Q.size =
+      (Array.zipWith (fun rPower shift => rPower * shift ^ Fr.ofNat FIELD_ELEMENTS_PER_CELL)
+        (computePowers r n) shifts).size := by
+    rw [Array.size_zipWith, hrp, hshsz, hQsz, h₃, Nat.min_self]
+  rw [lincomb hmono, lincomb hwrp] at hI
+  cases hI
+
 /-! ## The decoding of cells -/
 
 /-- A decoded field element encodes back to its bytes. -/
@@ -273,6 +452,148 @@ theorem cellToCosetEvals_inj {a a' : Cell} {e : CosetEvals} (h : cellToCosetEval
     (h' : cellToCosetEvals a' = .ok e) : a = a' :=
   (cosetEvalsToCell_of_cellToCosetEvals h).symm.trans (cosetEvalsToCell_of_cellToCosetEvals h')
 
+/-! ## The outer check returns a verdict -/
+
+/-- Bytes that pass KZG validation decode to a point of the subgroup. -/
+theorem exists_validateKzgG1Point_of_validateKzgG1 {b : Bytes48} (h : validateKzgG1 b = true) :
+    ∃ P, validateKzgG1Point b = .ok P := by
+  unfold validateKzgG1 at h
+  unfold validateKzgG1Point
+  by_cases hb : (b == G1_POINT_AT_INFINITY) = true
+  · exact ⟨_, ite_eq_left hb⟩
+  · rw [ite_eq_right hb] at h ⊢
+    cases hk : G1.keyValidatePoint ⟨b.toArray⟩ with
+    | error e =>
+      simp [G1.keyValidate, hk, bind, Except.bind, Except.isOk, Except.toBool] at h
+    | ok q => exact ⟨q, rfl⟩
+
+/-- Bytes that decode to a point of the subgroup pass KZG validation. -/
+theorem validateKzgG1_of_validateKzgG1Point {b : Bytes48} {P : G1}
+    (h : validateKzgG1Point b = .ok P) : validateKzgG1 b = true := by
+  unfold validateKzgG1Point at h
+  unfold validateKzgG1
+  by_cases hb : (b == G1_POINT_AT_INFINITY) = true
+  · rw [ite_eq_left hb]
+  · rw [ite_eq_right hb] at h ⊢
+    cases hk : G1.keyValidatePoint ⟨b.toArray⟩ with
+    | error e => rw [hk] at h; cases h
+    | ok q =>
+      simp only [G1.keyValidate, hk, bind, Except.bind, Except.isOk, Except.toBool]
+      rfl
+
+/-- Bytes that decode to a point of the subgroup decompress to that point. -/
+theorem uncompressG1_of_validateKzgG1Point {b : Bytes48} {P : G1}
+    (h : validateKzgG1Point b = .ok P) : uncompressG1 b = .ok P := by
+  unfold uncompressG1
+  rw [(validateKzgG1Point_eq_ok_iff.mp h).1]
+  rfl
+
+/-- A fold whose steps all succeed returns no error. -/
+theorem list_foldlM_ne_error {ε σ α : Type} {f : σ → α → Except ε σ} {e : ε} :
+    ∀ (L : List α) (init : σ), (∀ acc, ∀ p ∈ L, ∃ r, f acc p = .ok r) →
+      L.foldlM f init ≠ .error e
+  | [], _, _ => fun h => nomatch h
+  | p :: L, init, h => by
+    obtain ⟨r, hr⟩ := h init p List.mem_cons_self
+    simp only [List.foldlM_cons, bind, Except.bind, hr]
+    exact list_foldlM_ne_error L r fun acc q hq => h acc q (List.mem_cons_of_mem p hq)
+
+/-- **The outer check returns a verdict.**
+
+The cells, the proofs and the cell indices are as many as the commitments.
+
+Each cell index is below 128, and each cell decodes to field elements.
+
+Each commitment and each proof passes KZG validation.
+
+Then the outer check returns a verdict, with no error. -/
+theorem verifyCellKzgProofBatch_exists_ok {s : TrustedSetup} {bs : Array Bytes48}
+    {cellIndices : Array CellIndex} {cells : Array Cell} {ps : Array Bytes48}
+    (h₁ : cells.size = bs.size) (h₂ : ps.size = bs.size) (h₃ : cellIndices.size = bs.size)
+    (hci : ∀ i ∈ cellIndices, i < CELLS_PER_EXT_BLOB)
+    (hbs : ∀ b ∈ bs, validateKzgG1 b = true) (hps : ∀ p ∈ ps, validateKzgG1 p = true)
+    (hcells : ∀ c ∈ cells, ∃ e, cellToCosetEvals c = .ok e) :
+    ∃ b, verifyCellKzgProofBatch s bs cellIndices cells ps = .ok b := by
+  have h₄ : cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) = false :=
+    Array.any_eq_false'.mpr fun i hi => by simpa using hci i hi
+  cases hO : verifyCellKzgProofBatch s bs cellIndices cells ps with
+  | ok b => exact ⟨b, rfl⟩
+  | error err =>
+  exfalso
+  unfold verifyCellKzgProofBatch at hO
+  simp only [h₄, Bool.false_eq_true, ↓reduceIte] at hO
+  simp only [h₁, h₂, h₃, ne_eq, not_true_eq_false, ↓reduceIte, bind, Except.bind] at hO
+  -- The removal of repeated commitments returns, since every commitment is valid.
+  split at hO
+  · rename_i e hdd
+    rw [← Array.foldlM_toList] at hdd
+    refine list_foldlM_ne_error _ _ (fun acc p hp => ?_) hdd
+    · have hv : validateKzgG1 p.1 = true :=
+        hbs _ (Array.fst_mem_of_mem_zipIdx (Array.mem_toList_iff.mp hp))
+      have hb : bytesToKzgCommitment p.1 = .ok p.1 := bytesToKzgCommitment_ok_iff.mpr ⟨hv, rfl⟩
+      simp only [hb, pure, Except.pure]
+      split <;> exact ⟨_, rfl⟩
+  rename_i dd hdd
+  -- The cells decode.
+  split at hO
+  · rename_i e hev
+    exact array_mapM_ne_error hcells hev
+  rename_i evals hev
+  -- The proofs are valid.
+  split at hO
+  · rename_i e hqs
+    refine array_mapM_ne_error (fun p hp => ?_) hqs
+    have hv := hps _ (Array.fst_mem_of_mem_zipIdx hp)
+    have hb : bytesToKzgProof p.1 = .ok p.1 := by
+      unfold bytesToKzgProof
+      rw [ite_eq_left hv]
+    simp only [hb, pure, Except.pure]
+    exact ⟨_, rfl⟩
+  rename_i qs hqs
+  -- The inputs of the core check are the removal and the proofs, as in an accepted check.
+  have hdd' := zipIdx_foldlM_eq_ok_dedup (fun acc p r hr => by
+    unfold dedupStep
+    cases hb : bytesToKzgCommitment p.1 <;> cases hi : acc.1.idxOf? p.1 <;>
+      simp [hb, hi, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at hr ⊢ <;>
+      exact hr.symm) hdd
+  have hqs' := zipIdx_mapM_eq_ok (fun p r hr => by
+    cases hb : bytesToKzgProof p.1 <;>
+      simp [hb, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at hr
+    rw [← hr]
+    unfold bytesToKzgProof at hb
+    split at hb <;> cases hb
+    rfl) hqs
+  subst hdd'
+  rw [hqs'] at hO
+  obtain ⟨hdsz, hdidx, hdmem⟩ := dedupCommitments_spec bs
+  obtain ⟨hevsz, hevk⟩ := array_mapM_ok hev
+  have hdec : ∀ b ∈ bs, ∃ P, uncompressG1 b = .ok P := fun b hb => by
+    obtain ⟨P, hP⟩ := exists_validateKzgG1Point_of_validateKzgG1 (hbs b hb)
+    exact ⟨P, uncompressG1_of_validateKzgG1Point hP⟩
+  obtain ⟨G, hG⟩ := array_mapM_exists_ok (f := uncompressG1)
+    (xs := (dedupCommitments bs).1) fun x hx => by
+      obtain ⟨i, hi, rfl⟩ := Array.getElem_of_mem hx
+      obtain ⟨k, hk, hkd⟩ := hdmem i hi
+      rw [← getElem!_pos _ i hi, ← hkd, getElem!_pos bs k hk]
+      exact hdec _ (Array.getElem_mem hk)
+  obtain ⟨Q, hQ⟩ := array_mapM_exists_ok (f := uncompressG1) (xs := ps) fun p hp => by
+    obtain ⟨P, hP⟩ := exists_validateKzgG1Point_of_validateKzgG1 (hps p hp)
+    exact ⟨P, uncompressG1_of_validateKzgG1Point hP⟩
+  obtain ⟨b, hb⟩ := verifyCellKzgProofBatchImpl_ok (s := s) (h₃.trans hdsz.symm)
+    (hevsz.trans (h₁.trans hdsz.symm)) (h₂.trans hdsz.symm)
+    (fun i hi => by
+      obtain ⟨k, hk, rfl⟩ := Array.getElem_of_mem hi
+      rw [← getElem!_pos _ k hk]
+      exact (hdidx k (hdsz ▸ hk)).1)
+    (any_idxOf?_dedupCommitments bs) hG hQ hci
+    (fun e he => by
+      obtain ⟨k, hk, rfl⟩ := Array.getElem_of_mem he
+      have := hevk k (hevsz ▸ hk)
+      rw [← getElem!_pos _ k hk]
+      exact size_bytesToBlsFields this)
+  rw [hb] at hO
+  cases hO
+
 /-! ## Validity and binding of the outer check -/
 
 /-- The inputs of the outer batch check of cells, as the caller gives them. -/
@@ -287,6 +608,13 @@ def decodeCells (cells : Array Cell) : Array CosetEvals :=
   match cells.mapM cellToCosetEvals with
   | .ok evals => evals
   | .error _ => #[]
+
+/-- Cells that decode have their values as their decoding.
+
+It is stated on variable cells, so the kernel never evaluates the decoding. -/
+theorem decodeCells_of_ok {cells : Array Cell} {evals : Array CosetEvals}
+    (h : cells.mapM cellToCosetEvals = .ok evals) : decodeCells cells = evals := by
+  simp only [decodeCells, h]
 
 /-- The inputs that the outer check passes to the core check, which hashes them. -/
 def CellBatchInput.toCellBatch (y : CellBatchInput) : CellBatch where
@@ -307,6 +635,42 @@ Cell `k` has the scalar of its commitment's bytes and the scalar of its proof's 
 noncomputable def CellBatch.errorPoly (x : CellBatch) (τ : Fr) (c w : Bytes48 → Fr) : Fr[X] :=
   cellErrorPoly τ (fun i => c x.commitments[i]!) (fun k => w x.proofs[k]!) x.commitmentIndices
     x.cellIndices x.cosetsEvals
+
+/-- **The verdict of the outer check, as a root.**
+
+Assume the pairing law and a well-formed setup of the secret `τ`.
+
+Let each commitment decode to a point that represents the scalar `c` of its bytes.
+
+Let each proof decode to a point that represents the scalar `w` of its bytes.
+
+Let the outer check return the verdict `b`.
+
+Then `b` is true exactly when the challenge is a root of the error polynomial of the batch. -/
+theorem verifyCellKzgProofBatch_ok_iff_root (laws : Bls.PairingLaws) {s : TrustedSetup}
+    {τ : Fr} (hs : s.WellFormed τ) (y : CellBatchInput) {c w : Bytes48 → Fr}
+    (hC : ∀ k < y.commitments.size, ∀ P, uncompressG1 y.commitments[k]! = .ok P →
+      G1.Represents P (c y.commitments[k]!))
+    (hP : ∀ k < y.proofs.size, ∀ P, uncompressG1 y.proofs[k]! = .ok P →
+      G1.Represents P (w y.proofs[k]!)) {b : Bool}
+    (h : verifyCellKzgProofBatch s y.commitments y.cellIndices y.cells y.proofs = .ok b) :
+    b = true ↔ (y.toCellBatch.errorPoly τ c w).eval y.toCellBatch.challenge = 0 := by
+  obtain ⟨-, -, -, -, evals, hev, hI⟩ := verifyCellKzgProofBatch_eq_ok h
+  have hx : decodeCells y.cells = evals := decodeCells_of_ok hev
+  obtain ⟨⟨G, hG⟩, ⟨Q, hQ⟩⟩ := verifyCellKzgProofBatchImpl_decodes hI
+  obtain ⟨-, -, hdmem⟩ := dedupCommitments_spec y.commitments
+  obtain ⟨hGsz, hGk⟩ := array_mapM_ok hG
+  obtain ⟨hQsz, hQk⟩ := array_mapM_ok hQ
+  have hC' : ∀ i < G.size,
+      G1.Represents G[i]! ((fun i => c (dedupCommitments y.commitments).1[i]!) i) := by
+    intro i hi
+    obtain ⟨k, hk, hkd⟩ := hdmem i (hGsz ▸ hi)
+    have := hC k hk _ (hkd ▸ hGk i (hGsz ▸ hi))
+    rwa [hkd] at this
+  have hP' : ∀ k < Q.size, G1.Represents Q[k]! ((fun k => w y.proofs[k]!) k) :=
+    fun k hk => hP k (hQsz ▸ hk) _ (hQk k (hQsz ▸ hk))
+  have := verifyCellKzgProofBatchImpl_ok_iff_root laws hs hG hQ hC' hP' hI
+  simpa only [CellBatch.errorPoly, CellBatch.challenge, CellBatchInput.toCellBatch, hx] using this
 
 /-- **An accepted batch of cells is valid, or its challenge is a root.**
 
@@ -333,28 +697,17 @@ theorem verifyCellKzgProofBatch_valid_or_root (laws : Bls.PairingLaws) {s : Trus
           cellShift y.cellIndices[k]! ^ FIELD_ELEMENTS_PER_CELL)) ∨
       (y.toCellBatch.errorPoly τ c w ≠ 0 ∧
         (y.toCellBatch.errorPoly τ c w).eval y.toCellBatch.challenge = 0) := by
-  obtain ⟨h₁, h₂, h₃, -, evals, hev, hI⟩ := verifyCellKzgProofBatch_eq_ok h
-  have hx : decodeCells y.cells = evals := by simp only [decodeCells, hev]
-  obtain ⟨⟨G, hG⟩, ⟨Q, hQ⟩⟩ := verifyCellKzgProofBatchImpl_decodes hI
-  obtain ⟨hdsz, hdidx, hdmem⟩ := dedupCommitments_spec y.commitments
-  obtain ⟨hGsz, hGk⟩ := array_mapM_ok hG
-  obtain ⟨hQsz, hQk⟩ := array_mapM_ok hQ
-  have hC' : ∀ i < G.size,
-      G1.Represents G[i]! ((fun i => c (dedupCommitments y.commitments).1[i]!) i) := by
-    intro i hi
-    obtain ⟨k, hk, hkd⟩ := hdmem i (hGsz ▸ hi)
-    have := hC k hk _ (hkd ▸ hGk i (hGsz ▸ hi))
-    rwa [hkd] at this
-  have hP' : ∀ k < Q.size, G1.Represents Q[k]! ((fun k => w y.proofs[k]!) k) :=
-    fun k hk => hP k (hQsz ▸ hk) _ (hQk k (hQsz ▸ hk))
-  rcases verifyCellKzgProofBatchImpl_valid_or_root laws hs hG hQ hC' hP' hI with hall | hroot
-  · refine Or.inl fun k hk => ?_
-    have hv := hall k (by omega)
-    rw [(hdidx k (by omega)).2] at hv
-    simpa only [CellBatchInput.toCellBatch, hx] using hv
-  · refine Or.inr ?_
-    simpa only [CellBatch.errorPoly, CellBatch.challenge, CellBatchInput.toCellBatch, hx]
-      using hroot
+  by_cases hzero : y.toCellBatch.errorPoly τ c w = 0
+  · obtain ⟨h₁, -, h₃, -⟩ := verifyCellKzgProofBatch_eq_ok h
+    obtain ⟨-, hdidx, -⟩ := dedupCommitments_spec y.commitments
+    refine Or.inl fun k hk => ?_
+    have hv := (cellErrorPoly_eq_zero_iff τ _ _ _ _ _).mp hzero k (by
+      simp only [CellBatchInput.toCellBatch]
+      omega)
+    have hd := (hdidx k (by omega)).2
+    simp only [CellBatchInput.toCellBatch] at hv ⊢
+    rwa [hd] at hv
+  · exact Or.inr ⟨hzero, (verifyCellKzgProofBatch_ok_iff_root laws hs y hC hP h).mp rfl⟩
 
 /-- **Binding of the outer batch check of cells.**
 
@@ -389,8 +742,7 @@ theorem verifyCellKzgProofBatch_binding {GT : Type} [CommMonoid GT] (M : TargetG
       (y.toCellBatch.errorPoly τ c w ≠ 0 ∧
         (y.toCellBatch.errorPoly τ c w).eval y.toCellBatch.challenge = 0) := by
   obtain ⟨h₁, h₂, h₃, hci, evals, hev, -⟩ := verifyCellKzgProofBatch_eq_ok h
-  have hx : y.toCellBatch.cosetsEvals = evals := by
-    simp only [CellBatchInput.toCellBatch, decodeCells, hev]
+  have hx : y.toCellBatch.cosetsEvals = evals := decodeCells_of_ok hev
   obtain ⟨hesz, hek⟩ := array_mapM_ok hev
   have hdec := hek k hk
   have hdec' := hek k' hk'
