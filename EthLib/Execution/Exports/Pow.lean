@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Exports
 public import EthLib.Execution.Blocks.Difficulty
 public import EthLib.Execution.Blocks.ProofOfWork
+public import EthLib.Execution.Blocks.Ommers
 public import EthLib.Execution.Exports.Evm
 
 /-!
@@ -61,5 +62,27 @@ def checkExport (fork header : ByteArray) : Result UInt8 := do
   if .paris ≤ fork then throw (0, "a header from Paris on has no proof of work")
   (checkProofOfWork header).map (fun () => 1) |>.mapError
     fun e => (e.code, s!"proof of work invalid: {reprStr e}")
+
+/-- Check the ommers of a block in RLP form, against recent blocks, all at one named fork.
+
+The recent blocks are an RLP list of blocks, the last seven of the chain, ending with the parent.
+
+A check seal of 0 leaves out the proof of work of the ommers, as for test chains. -/
+@[export eth_pow_validate_ommers]
+def validateOmmersExport (fork recent block : ByteArray) (checkSeal : UInt8) :
+    Result UInt8 := do
+  let fork ← forkUpTo .glamsterdam fork
+  let rlpError (what : String) (e : Serialization.Rlp.RlpError) := (e.code, s!"{what}: {reprStr e}")
+  let items ← match (← (Serialization.Rlp.decode recent).mapError (rlpError "recent rejected")) with
+    | .list items => pure items
+    | .bytes _ => throw (0, "recent blocks are not a list")
+  let recentBlocks ← items.mapM fun item => do
+    let b : Block fork Serialization.Rlp.Item ←
+      (Serialization.Rlp.Codec.ofItem item).mapError (rlpError "recent block rejected")
+    pure (RecentBlock.mk fork b.header b.ommers)
+  let b : Block fork Serialization.Rlp.Item ←
+    (Serialization.Rlp.Codec.decode block).mapError (rlpError "block rejected")
+  (validateOmmers (checkSeal != 0) recentBlocks b.header b.ommers).map (fun () => 1) |>.mapError
+    fun e => (e.code, s!"ommers invalid: {reprStr e}")
 
 end EthLib.Execution.Blocks.Exports

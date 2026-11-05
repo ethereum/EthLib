@@ -299,6 +299,9 @@
 #define DOC_pow_check \
   "Check the proof of work of a header, as section 4.3.4 of the Yellow Paper asks."
 
+#define DOC_pow_validate_ommers \
+  "Check the ommers of a block in RLP form, against recent blocks, all at one named fork."
+
 #define DOC_block_transactions_root \
   "The transactions root of the transactions of a block, decoded at the fork."
 
@@ -484,6 +487,9 @@
 
 #define DOC_state_dao_fork_root \
   "The state root after the DAO Fork moves the ether of its accounts, from the state of `input`."
+
+#define DOC_state_rewards_root \
+  "The state root after the mining rewards of a block, from the state that `input` encodes."
 
 #define DOC_mainnet_active_fork \
   "The name of the active fork of mainnet at a block, or no bytes when no fork is active."

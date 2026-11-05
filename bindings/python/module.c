@@ -585,6 +585,7 @@ static PyMethodDef methods[] = {
   {"pow_block_difficulty", py_pow_block_difficulty, METH_VARARGS, DOC_pow_block_difficulty},
   {"pow_seal_hash", py_pow_seal_hash, METH_VARARGS, DOC_pow_seal_hash},
   {"pow_check", py_pow_check, METH_VARARGS, DOC_pow_check},
+  {"pow_validate_ommers", py_pow_validate_ommers, METH_VARARGS, DOC_pow_validate_ommers},
   {"block_transactions_root", py_block_transactions_root, METH_VARARGS, DOC_block_transactions_root},
   {"block_withdrawals_root", py_block_withdrawals_root, METH_VARARGS, DOC_block_withdrawals_root},
   {"block_deposit_requests", py_block_deposit_requests, METH_VARARGS, DOC_block_deposit_requests},
@@ -647,6 +648,7 @@ static PyMethodDef methods[] = {
   {"state_root", py_state_root, METH_VARARGS, DOC_state_root},
   {"state_withdrawals_root", py_state_withdrawals_root, METH_VARARGS, DOC_state_withdrawals_root},
   {"state_dao_fork_root", py_state_dao_fork_root, METH_VARARGS, DOC_state_dao_fork_root},
+  {"state_rewards_root", py_state_rewards_root, METH_VARARGS, DOC_state_rewards_root},
   {"mainnet_active_fork", py_mainnet_active_fork, METH_VARARGS, DOC_mainnet_active_fork},
   {NULL, NULL, 0, NULL},
 };

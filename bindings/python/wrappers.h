@@ -299,6 +299,7 @@ PyObject* py_block_reencode                               (PyObject* self, PyObj
 PyObject* py_pow_block_difficulty                         (PyObject* self, PyObject* args);
 PyObject* py_pow_seal_hash                                (PyObject* self, PyObject* args);
 PyObject* py_pow_check                                    (PyObject* self, PyObject* args);
+PyObject* py_pow_validate_ommers                          (PyObject* self, PyObject* args);
 PyObject* py_block_transactions_root                      (PyObject* self, PyObject* args);
 PyObject* py_block_withdrawals_root                       (PyObject* self, PyObject* args);
 PyObject* py_block_deposit_requests                       (PyObject* self, PyObject* args);
@@ -364,6 +365,7 @@ PyObject* py_precompile_price                             (PyObject* self, PyObj
 PyObject* py_state_root                                   (PyObject* self, PyObject* args);
 PyObject* py_state_withdrawals_root                       (PyObject* self, PyObject* args);
 PyObject* py_state_dao_fork_root                         (PyObject* self, PyObject* args);
+PyObject* py_state_rewards_root                           (PyObject* self, PyObject* args);
 
 PyObject* py_mainnet_active_fork                          (PyObject* self, PyObject* args);
 

@@ -11,7 +11,7 @@ from ethlib.execution import blocks, fees, pow, transactions
 from ethlib.networking import enr
 from ethlib.precompiles import price, run
 from ethlib.serialization import rlp
-from ethlib.state import withdrawals_root
+from ethlib.state import rewards_root, withdrawals_root
 
 _REPO = Path(__file__).resolve().parents[4]
 _FILE = _REPO / "tests" / "execution" / "blocks" / "blockchain_tests.json"
@@ -46,15 +46,18 @@ EXPORTS = {
     "transactions_root": lambda f: blocks.transactions_root(f, AMSTERDAM_BLOCK),
     "withdrawals_root": lambda f: blocks.withdrawals_root(f, AMSTERDAM_BLOCK),
     "validate_header": lambda f: blocks.validate_header(f, f, HEADER, HEADER),
+    "check_header": lambda f: blocks.check_header(f, f, HEADER, HEADER),
     "validate_size": lambda f: blocks.validate_size(f, AMSTERDAM_BLOCK),
     "receipt_reencode": lambda f: blocks.receipt_reencode(f, b""),
     "receipt_logs_bloom": lambda f: blocks.receipt_logs_bloom(f, b""),
     "state_withdrawals_root": lambda f: withdrawals_root(f, EMPTY_STATE, AMSTERDAM_BLOCK),
+    "state_rewards_root": lambda f: rewards_root(f, EMPTY_STATE, AMSTERDAM_BLOCK),
     "base_fee_per_blob_gas": lambda f: fees.get_base_fee_per_blob_gas(f, 0),
     "excess_blob_gas": lambda f: fees.calc_excess_blob_gas(f, 0, 0, 1),
     "block_difficulty": lambda f: pow.block_difficulty(f, 1, 1, 0, 1, 0),
     "seal_hash": lambda f: pow.seal_hash(f, HEADER),
     "check_proof_of_work": lambda f: pow.check_proof_of_work(f, HEADER),
+    "validate_ommers": lambda f: pow.validate_ommers(f, [], AMSTERDAM_BLOCK, check_seal=False),
     "precompile_run": lambda f: run(f, IDENTITY, b"", 10**6),
     "precompile_price": lambda f: price(f, IDENTITY, b""),
     "consensus_entries": lambda f: enr.consensus_entries(f, b""),
@@ -70,7 +73,7 @@ AT_GLAMSTERDAM = {
     "withdrawals_root", "validate_header", "validate_size", "receipt_reencode",
     "receipt_logs_bloom", "state_withdrawals_root", "base_fee_per_blob_gas", "excess_blob_gas",
     "block_difficulty", "seal_hash", "check_proof_of_work", "precompile_run", "precompile_price",
-    "consensus_parameters",
+    "consensus_parameters", "check_header", "state_rewards_root", "validate_ommers",
 }
 
 
