@@ -278,6 +278,9 @@
 #define DOC_consensus_verify_blob_sidecar_inclusion_proof \
   "Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header."
 
+#define DOC_consensus_process_operation \
+  "The state after a block operation of a handler of the vectors, as SSZ bytes."
+
 #define DOC_pq_keys_ssz \
   "The root of the value that the bytes encode, then the bytes of that value."
 

@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: operations
+handler: block_header
+suite: pyspec_tests
+case: basic_block_header

@@ -31,6 +31,8 @@ public import EthLib.Consensus.ReqResp.Messages
 public import EthLib.Consensus.Shuffle
 public import EthLib.Consensus.Signing
 public import EthLib.Consensus.Time
+public import EthLib.Consensus.Transition.Basic
+public import EthLib.Consensus.Transition.Block
 public import EthLib.Consensus.Types
 
 /-!

@@ -167,6 +167,7 @@ extern PyObject* TRIE_ERROR;
 extern PyObject* EVM_ERROR;
 extern PyObject* FEES_ERROR;
 extern PyObject* ENGINE_ERROR;
+extern PyObject* TRANSITION_ERROR;
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
@@ -294,6 +295,7 @@ PyObject* py_consensus_compute_columns_for_custody_group  (PyObject* self, PyObj
 PyObject* py_consensus_ssz_static                         (PyObject* self, PyObject* args);
 PyObject* py_consensus_merkle_proof                       (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_blob_sidecar_inclusion_proof (PyObject* self, PyObject* args);
+PyObject* py_consensus_process_operation (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_ssz                                  (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_possession_signing_root              (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_is_valid_possession_proof            (PyObject* self, PyObject* args);

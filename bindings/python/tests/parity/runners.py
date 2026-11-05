@@ -9,6 +9,8 @@ from ruamel.yaml import YAML
 
 from consensus.containers import CONTAINERS
 from consensus.containers import FORKS as CONSENSUS_FORK
+from consensus.test_operations import HANDLERS as OPERATIONS
+from consensus.test_operations import runs as runs_operation
 from transactions.test_transactions import CHAIN_ID, FORK_OF_NETWORK, names
 
 from . import legacy
@@ -124,6 +126,13 @@ def _single_merkle_proof(root: Path, case: Case) -> None:
     _check(case.preset, case.fork, container, root / case.path)
 
 
+def _operation(root: Path, case: Case) -> None:
+    from consensus.test_operations import run_case
+
+    # tests/<preset>/<fork>/operations/<handler>/<suite>/<case>
+    run_case(case.preset, case.fork, case.group.split("/")[1], root / case.path)
+
+
 def _container_forks(container: str) -> tuple[str, ...]:
     first, dropped = CONTAINERS[container]
     forks = list(CONSENSUS_FORK)
@@ -141,6 +150,7 @@ RUNNERS = {
     **{f"ssz_static/{container}": _ssz_static for container in CONTAINERS},
     "light_client/single_merkle_proof": _single_merkle_proof,
     "legacy_header": legacy.run_headers,
+    **{f"operations/{handler}": _operation for handler in OPERATIONS},
 }
 
 
@@ -148,6 +158,8 @@ def runner(case: Case):
     """The runner of a case, or `None` if EthLib cannot run it yet."""
     run = RUNNERS.get(case.group)
     if run is _ssz_static and case.fork not in _container_forks(case.group.split("/")[1]):
+        return None
+    if run is _operation and not runs_operation(case.fork, case.group.split("/")[1]):
         return None
     return run
 

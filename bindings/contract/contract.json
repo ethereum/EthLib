@@ -1964,6 +1964,35 @@
    "docstring":
    "Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header."},
   {"summary":
+   "The state after a block operation of a handler of the vectors, as SSZ bytes.",
+   "signature":
+   "(name: str, fork: str, handler: str, pre: bytes, operation: bytes, verify: bool) -> bytes",
+   "operation": "EthLib.Consensus.Exports.processOperationExport",
+   "method": "consensus_process_operation",
+   "errors":
+   [{"type": "EthLib.Consensus.TransitionError",
+     "codes":
+     [{"constructor": "accessor", "code": 1},
+      {"constructor": "ssz", "code": 2},
+      {"constructor": "slotMismatch", "code": 3},
+      {"constructor": "notNewer", "code": 4},
+      {"constructor": "wrongProposer", "code": 5},
+      {"constructor": "wrongParent", "code": 6},
+      {"constructor": "proposerSlashed", "code": 7},
+      {"constructor": "invalidRandaoReveal", "code": 8},
+      {"constructor": "tooManyEth1Votes", "code": 9},
+      {"constructor": "headerSlotsDiffer", "code": 10},
+      {"constructor": "headerProposersDiffer", "code": 11},
+      {"constructor": "sameHeaders", "code": 12},
+      {"constructor": "notSlashable", "code": 13},
+      {"constructor": "invalidHeaderSignature", "code": 14},
+      {"constructor": "notSlashableData", "code": 15},
+      {"constructor": "invalidIndexedAttestation", "code": 16},
+      {"constructor": "noneSlashed", "code": 17}]}],
+   "error_class": "TransitionError",
+   "docstring":
+   "The state after a block operation of a handler of the vectors, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8, and the handler too.\n\nThe signature checks run unless the last argument is false."},
+  {"summary":
    "The root of the value that the bytes encode, then the bytes of that value.",
    "signature": "(type: str, data: bytes) -> bytes",
    "operation": "EthLib.Consensus.Exports.pqKeysSszExport",

@@ -8,6 +8,7 @@ public import EthLib.Consensus.Exports.PqKeys
 public import EthLib.Consensus.Exports.ReqResp
 public import EthLib.Consensus.Exports.Shuffle
 public import EthLib.Consensus.Exports.Ssz
+public import EthLib.Consensus.Exports.Transition
 
 /-!
 # `EthLib.Consensus.Exports`
