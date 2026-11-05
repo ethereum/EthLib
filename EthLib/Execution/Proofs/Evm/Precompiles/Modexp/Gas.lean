@@ -20,7 +20,6 @@ What the gas formula guarantees.
 namespace EthLib.Execution.Evm.Precompiles.Modexp
 
 open EthLib.Base (Fork)
-open EthLib.Execution.Evm.Precompiles.Modexp.Constants
 
 /-- The iteration count is at least 1. -/
 theorem one_le_iterations (fork : Fork) (expLen expHead : Nat) :

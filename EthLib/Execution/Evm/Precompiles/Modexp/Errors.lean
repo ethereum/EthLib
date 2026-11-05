@@ -30,13 +30,9 @@ inductive LengthField where
 inductive ModexpError where
   /-- A length header exceeded 1024 bytes.
 
-  EIP-7823, Specification: "the precompile execution stops, returns an error, and consumes all gas".
-
-  `ExceptionalHalt` in `forks/bpo2/vm/precompiled_contracts/modexp.py`. -/
+  EIP-7823: "the precompile execution stops, returns an error, and consumes all gas". -/
   | lengthTooLarge (field : LengthField) (length : Nat)
-  /-- The gas given was below the price.
-
-  `charge_gas` raises `OutOfGasError` in `forks/bpo2/vm/gas.py`. -/
+  /-- The gas given was below the price, so the call consumes all its gas. -/
   | outOfGas (cost gas : Nat)
   deriving Repr, DecidableEq
 

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.Modexp.Constants
-public import EthLib.Execution.Evm.Precompiles.Modexp.Bytes
+public import EthLib.Execution.Evm.Precompiles.Modexp.Encoding
 public import EthLib.Execution.Evm.Precompiles.Modexp.Gas
 public import EthLib.Execution.Evm.Precompiles.Modexp.Errors
 public import EthLib.Execution.Evm.Precompiles.Modexp.Core

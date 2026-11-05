@@ -41,7 +41,7 @@ A new constructor takes a new code, so that each code keeps its meaning. -/
 def IdentityError.code : IdentityError → UInt32
   | .outOfGas .. => 1
 
-/-- `identity`: the call data itself, once the gas covers the price. -/
+/-- The call: the call data itself, once the gas covers the price. -/
 def identity (data : ByteArray) (gas : Nat) : Except IdentityError ByteArray :=
   let cost := gasCost data.size
   if gas < cost then .error (.outOfGas cost gas) else .ok data

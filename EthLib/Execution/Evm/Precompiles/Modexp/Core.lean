@@ -1,29 +1,14 @@
 module
 
-public import EthLib.Execution.Evm.Precompiles.Modexp.Bytes
+public import EthLib.Execution.Evm.Precompiles.Modexp.Encoding
 public import EthLib.Execution.Evm.Precompiles.Modexp.Gas
 public import EthLib.Execution.Evm.Precompiles.Modexp.Errors
 public import EthLib.Execution.Evm.PowMod
 
 /-!
-# `Modexp.Core`
+# `Evm.Precompiles.Modexp.Core`
 
-The MODEXP precompile at address `0x05`, which Byzantium adds.
-
-The input has this layout, from EIP-198:
-
-```text
-    [ len_base: 32 | len_exp: 32 | len_mod: 32 | BASE | EXPONENT | MODULUS ]
-```
-
-- Each length is a 32-byte big-endian integer, counted in bytes.
-- The call data reads as if followed by infinitely many zero bytes.
-- So a short input is padded, and data past the last field is ignored.
-- From Fusaka, each length must be at most 1024 (EIP-7823).
-
-The output is `BASE ^ EXPONENT mod MODULUS`, as exactly `len_mod` big-endian bytes.
-
-It is `len_mod` zero bytes when `MODULUS` is 0.
+The MODEXP precompile at address `0x05`, from EIP-198: `BASE ^ EXPONENT mod MODULUS`.
 
 The steps run in this order:
 
@@ -39,7 +24,6 @@ namespace EthLib.Execution.Evm.Precompiles.Modexp
 
 open EthLib.Base
 open EthLib.Execution.Evm (byteAt bufferRead powMod)
-open EthLib.Execution.Evm.Precompiles.Modexp.Constants
 
 /-- The three length headers of an input, in bytes. -/
 structure Lengths where

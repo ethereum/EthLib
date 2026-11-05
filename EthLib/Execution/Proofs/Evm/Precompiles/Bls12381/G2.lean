@@ -63,8 +63,9 @@ theorem bls12G2Msm_invalidInputLength {data : ByteArray}
 
 /-- G2MSM runs out of gas below its price. -/
 theorem bls12G2Msm_outOfGas {data : ByteArray} (hsize : ¬(data.size = 0 ∨ data.size % LENGTH_PER_PAIR_G2 ≠ 0))
-    {gas : Nat} (hgas : gas < msmGasG2 (data.size / LENGTH_PER_PAIR_G2)) :
-    bls12G2Msm data gas = .error (.outOfGas (msmGasG2 (data.size / LENGTH_PER_PAIR_G2)) gas) := by
+    {gas : Nat} (hgas : gas < bls12G2MsmGas (data.size / LENGTH_PER_PAIR_G2)) :
+    bls12G2Msm data gas =
+      .error (.outOfGas (bls12G2MsmGas (data.size / LENGTH_PER_PAIR_G2)) gas) := by
   unfold bls12G2Msm
   rw [ite_eq_right_of_eq_false _ _ (eq_false hsize)]
   dsimp only
@@ -96,8 +97,8 @@ theorem discountG2_le (k : Nat) : discountG2 k ≤ MULTIPLIER := by
   · decide
 
 /-- The price of `k` pairs is at most the price of `k` separate products. -/
-theorem msmGasG2_le (k : Nat) : msmGasG2 k ≤ k * GAS_G2MUL := by
-  unfold msmGasG2
+theorem bls12G2MsmGas_le (k : Nat) : bls12G2MsmGas k ≤ k * GAS_G2MUL := by
+  unfold bls12G2MsmGas
   have := discountG2_le k
   calc k * GAS_G2MUL * discountG2 k / MULTIPLIER
       ≤ k * GAS_G2MUL * MULTIPLIER / MULTIPLIER := Nat.div_le_div_right (Nat.mul_le_mul_left _ this)

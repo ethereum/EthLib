@@ -12,7 +12,7 @@ The price rule writes the older numbers at the fork that set them.
 
 @[expose] public section
 
-namespace EthLib.Execution.Evm.Precompiles.Modexp.Constants
+namespace EthLib.Execution.Evm.Precompiles.Modexp
 
 /-- Width in bytes of each of the three length headers.
 
@@ -68,4 +68,4 @@ EIP-7883, Specification, `calculate_gas_cost`.
 EIP-2565 charged at least 200. -/
 def MIN_GAS : Nat := 500
 
-end EthLib.Execution.Evm.Precompiles.Modexp.Constants
+end EthLib.Execution.Evm.Precompiles.Modexp

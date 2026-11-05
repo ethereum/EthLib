@@ -1,11 +1,11 @@
 module
 
 public import EthLib.Base.Proofs.BigEndian
-public import EthLib.Execution.Evm.Precompiles.Modexp.Bytes
+public import EthLib.Execution.Evm.Precompiles.Modexp.Encoding
 public import EthLib.Execution.Proofs.Evm.Memory
 
 /-!
-# Proofs: `Bytes`
+# Proofs: `Modexp.Encoding`
 
 How the call data is read.
 

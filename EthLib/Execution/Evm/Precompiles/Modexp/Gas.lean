@@ -20,7 +20,7 @@ EIP-198 takes the exponent bits from the first 32 bytes of `EXPONENT`.
 
 EIP-198 says: "the index of the highest bit in the first 32 bytes of `EXPONENT`".
 
-It adds: "If all of the first 32 bytes of `EXPONENT` are zero, return exactly `8 * (length_of_EXPONENT - 32)`".
+When those 32 bytes are all zero, it returns exactly `8 * (length_of_EXPONENT - 32)`.
 
 EIP-7883 scales that 8 to 16.
 
@@ -39,7 +39,6 @@ This module follows EIP-198.
 namespace EthLib.Execution.Evm.Precompiles.Modexp
 
 open EthLib.Base (Fork)
-open EthLib.Execution.Evm.Precompiles.Modexp.Constants
 
 /-- The multiplication complexity, set by the longer of the base and the modulus. -/
 def complexity (fork : Fork) (baseLen modLen : Nat) : Nat :=
