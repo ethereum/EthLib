@@ -42,6 +42,15 @@ eth_tx_check(
   lean_object* tx
 );
 
+extern lean_object*
+eth_tx_settle(
+  lean_object* fork,
+  lean_object* tx,
+  lean_object* base_fee,
+  lean_object* gas_left,
+  lean_object* refund_counter
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* Read a fork name and the bytes of a transaction, as Lean byte arrays.
@@ -135,6 +144,28 @@ py_tx_check(
   lean_object *fork, *tx;
   if (!parse_fork_and_tx(fork_obj, tx_obj, &fork, &tx)) return NULL;
   return except_into_pybytes(eth_tx_check(fork, chain_id, tx), TRANSACTION_ERROR);
+}
+
+PyObject*
+py_tx_settle(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *fork_obj, *tx_obj;
+  const char *base_fee, *gas_left, *refund_counter;
+  Py_ssize_t base_fee_len, gas_left_len, refund_counter_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#y#", &fork_obj, &tx_obj, &base_fee, &base_fee_len,
+                        &gas_left, &gas_left_len, &refund_counter, &refund_counter_len)) {
+    return NULL;
+  }
+  lean_object *fork, *tx;
+  if (!parse_fork_and_tx(fork_obj, tx_obj, &fork, &tx)) return NULL;
+  return except_into_pybytes(
+    eth_tx_settle(fork, tx,
+                  mk_bytearray((const uint8_t*) base_fee, (size_t) base_fee_len),
+                  mk_bytearray((const uint8_t*) gas_left, (size_t) gas_left_len),
+                  mk_bytearray((const uint8_t*) refund_counter, (size_t) refund_counter_len)),
+    TRANSACTION_ERROR);
 }
 
 PyObject*

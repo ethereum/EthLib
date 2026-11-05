@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Proofs.Transactions.Envelope
 public import EthLib.Execution.Proofs.Transactions.Network
+public import EthLib.Execution.Proofs.Transactions.Settlement
 public import EthLib.Execution.Proofs.Transactions.Types
 public import EthLib.Execution.Proofs.Transactions.Signature
 public import EthLib.Execution.Proofs.Transactions.Validity
