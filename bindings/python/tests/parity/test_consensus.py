@@ -28,12 +28,22 @@ def test_every_group_has_a_runner_or_a_plan() -> None:
     harness.check_groups(CASES)
 
 
+# Runnable groups that keep no vendored case, each with the reason.
+# A mainnet state case is a few megabytes, so the weekly archive run alone reads them; the
+# minimal state cases are vendored, and test_ssz_static decodes an empty mainnet state.
+NOT_VENDORED = {f"mainnet/{fork}/ssz_static/BeaconState" for fork in
+                ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu")}
+
+
 def test_every_runnable_group_has_vendored_cases() -> None:
     # The run on each change reads vendored cases, so each preset, fork and handler that a
     # runner covers keeps some of its cases under tests/consensus, at their path in the archive.
     vendored = archives.REPO / "tests" / "consensus"
     groups = {"/".join(case.path.split("/")[1:5]) for case in harness.runnable(CASES)}
-    missing = sorted(group for group in groups if not any(vendored.glob(f"*/{group}/*/*")))
+    # An exception for a group that no longer runs is stale.
+    assert NOT_VENDORED <= groups
+    missing = sorted(group for group in groups - NOT_VENDORED
+                     if not any(vendored.glob(f"*/{group}/*/*")))
     assert missing == []
 
 
