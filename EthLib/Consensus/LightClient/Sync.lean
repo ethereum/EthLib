@@ -394,6 +394,31 @@ def validateNextSyncCommitteeBranch (config : Config) (update : LightClientUpdat
       update.attestedHeader.beacon.stateRoot))
     .invalidNextSyncCommitteeBranch
 
+/-- The committee that signs an update: the current one in the period of the store.
+
+An update signed in the next period is signed by the next committee. -/
+def LightClientStore.signatureCommittee (store : LightClientStore preset fork)
+    (update : LightClientUpdate preset fork) : SyncCommittee preset :=
+  let period := computeSyncCommitteePeriodAtSlot preset
+  if period update.signatureSlot = period store.finalizedHeader.beacon.slot then
+    store.currentSyncCommittee
+  else store.nextSyncCommittee
+
+/-- The root that the sync committee signs for an update.
+
+It is the root of the attested beacon header, in the domain of the sync committee.
+
+The fork of that domain is the fork of the slot before the signature slot.
+
+An update signed at slot 0 takes the fork of slot 0. -/
+def syncCommitteeSigningRoot (config : Config) (update : LightClientUpdate preset fork)
+    (genesisValidatorsRoot : Root) : Except LightClientError Root := do
+  let forkVersionSlot := if update.signatureSlot = 0 then 0 else update.signatureSlot - 1
+  let forkVersion := config.computeForkVersion (computeEpochAtSlot preset forkVersionSlot)
+  let domain ← liftRoot
+    (computeDomain config DOMAIN_SYNC_COMMITTEE forkVersion genesisValidatorsRoot)
+  liftRoot (computeSigningRoot update.attestedHeader.beacon domain)
+
 /-- The checks of an update against a store, at a slot of the local clock.
 
 At least the minimum of members must sign it, in a period whose committee the store knows.
@@ -437,14 +462,8 @@ def validateLightClientUpdate (config : Config) (checks : SignatureChecks)
     if attestedPeriod = storePeriod ∧ store.isNextSyncCommitteeKnown then
       require (update.nextSyncCommittee = store.nextSyncCommittee) .conflictingNextSyncCommittee
     validateNextSyncCommitteeBranch config update
-  let committee := if signaturePeriod = storePeriod then store.currentSyncCommittee
-    else store.nextSyncCommittee
-  let keys := committee.participantKeys aggregate
-  let forkVersionSlot := if update.signatureSlot = 0 then 0 else update.signatureSlot - 1
-  let forkVersion := config.computeForkVersion (computeEpochAtSlot preset forkVersionSlot)
-  let domain ← liftRoot
-    (computeDomain config DOMAIN_SYNC_COMMITTEE forkVersion genesisValidatorsRoot)
-  let signingRoot ← liftRoot (computeSigningRoot update.attestedHeader.beacon domain)
+  let keys := (store.signatureCommittee update).participantKeys aggregate
+  let signingRoot ← syncCommitteeSigningRoot config update genesisValidatorsRoot
   require (checks.fastAggregateVerify (keys.map packBytes) (packBytes signingRoot)
     (packBytes aggregate.syncCommitteeSignature) = true) .invalidSignature
 

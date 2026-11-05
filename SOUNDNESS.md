@@ -602,6 +602,30 @@ It searches only a secured trie, and it is proved to return only collisions.
 Both theorems still assume that the keys of each trie are distinct, as the keys of a map are.
 No theorem bounds the probability of finding a collision.
 
+### Light client
+
+A light client accepts an update that the sync committee signed, and moves its store by it.
+`Consensus/Proofs/LightClient/Authenticate.lean` states what an accepted update proves.
+
+`validateLightClientUpdate_proves` lists the checks that an accepted update passed.
+At least the minimum of bits of its aggregate are set.
+The signature check accepts the keys of those members on the signing root of the attested header.
+The finality branch and the branch of a carried next committee verify against the state root of that header.
+
+`validateLightClientUpdate_finalized` takes any value whose root is that state root, such as the beacon state of the attested block.
+Its node at the index of the finality branch is the root that the update proves.
+That root is the root of the finalized beacon header, or zero at the genesis slot.
+Otherwise the search `findBranchCollision` over the two climbs returns two different messages with one SHA-256 hash.
+`validateLightClientUpdate_nextSyncCommittee` states the same for the root of the next committee.
+`lightClientGindices_eq` shows that each index is the generalized index of the path of its field in the type of the beacon state, from Altair to Fulu.
+No theorem yet reads the node at that index of a beacon state as the value of the field.
+
+The signature theorems assume `SignatureChecks.AggregateSound`, listed in A4.
+Under it, `validateLightClientUpdate_signed` shows that every member whose bit is set signed the signing root.
+`validateLightClientUpdate_signed_outside` adds that a set of keys holding fewer seats of the committee than there are signers leaves a signer outside the set.
+`SignatureChecks.not_aggregateSound_acceptAll` shows that the assumption has content: the checks that accept every signature do not meet it.
+No theorem links an honest signer to the canonical chain; that is a property of the validators, not of the protocol text.
+
 ### Casper FFG
 
 Casper FFG finalizes checkpoints, each a block with an epoch, from the votes of validators.
@@ -685,7 +709,7 @@ The Python bindings expose the block cipher, CTR and GCM, as `encrypt_block`, `d
 
 A security theorem rests on a model, such as a random oracle for a hash.
 Each such theorem of EthLib rests on one idealisation, listed below.
-The two theorems of Casper FFG share one bullet, and the binding of a proof of possession and the codeword searches share that of leanXMSS:
+The two theorems of Casper FFG share one bullet, as do the signature theorems of the light client, and the binding of a proof of possession and the codeword searches share that of leanXMSS:
 
 - leanXMSS: the hash `H`, Keccak-256, is a random oracle on byte strings.
   The theorem says nothing about an attack that uses the structure of Keccak.
@@ -697,6 +721,9 @@ The two theorems of Casper FFG share one bullet, and the binding of a proof of p
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
   Nothing in EthLib proves that the hash behaves as such an oracle.
+- Light client: an aggregate signature check accepts a message only if every key in its set signed it (`SignatureChecks.AggregateSound`).
+  BLS signatures with proofs of possession are meant to give this, except with negligible probability, and EthLib proves no such bound.
+  The theorems say nothing about a forged aggregate signature.
 - Casper FFG: a vote names its signer, so no one can forge a vote.
   The theorems of accountable safety and plausible liveness say nothing about an attack on the signatures.
 - KZG batch checks: the challenge hash `Fr.hashToBlsField` is a random oracle from the inputs of the batch onto `Fr`.

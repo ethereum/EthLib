@@ -209,4 +209,26 @@ theorem isValidNormalizedMerkleBranch_iff {leaf root : Vector UInt8 32}
   rw [isValidMerkleBranch_iff_verifyMerkleProof (log2_pos named) reduced,
     two_pow_log2_add_mod (by omega)]
 
+/-- Two normalized branches that verify at one index and one root open one leaf.
+
+Otherwise the search over the two climbs names two different 64-byte messages with one hash. -/
+theorem isValidNormalizedMerkleBranch_binding {leaf other root : Vector UInt8 32}
+    {branch otherBranch : List (Vector UInt8 32)} {gindex : Nat} (named : 2 ≤ gindex)
+    (first : isValidNormalizedMerkleBranch leaf branch gindex root = .ok true)
+    (second : isValidNormalizedMerkleBranch other otherBranch gindex root = .ok true) :
+    leaf = other ∨ ∃ a b,
+      findBranchCollision gindex 0 leaf.toArray other.toArray
+          ((branch.drop (branch.length - Nat.log2 gindex)).map Vector.toArray)
+          ((otherBranch.drop (otherBranch.length - Nat.log2 gindex)).map Vector.toArray) =
+        some (a, b) ∧
+      a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
+      Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
+        Cryptography.Hash.Sha256.hash (ByteArray.mk b) := by
+  have firstVerified := ((isValidNormalizedMerkleBranch_iff named).mp first).2
+  have secondVerified := ((isValidNormalizedMerkleBranch_iff named).mp second).2
+  rcases verifyMerkleProof_binding firstVerified secondVerified with same | collision
+  · exact .inl (Vector.toArray_inj.mp same)
+  · obtain ⟨a, b, found, -, -, rest⟩ := collision
+    exact .inr ⟨a, b, found, rest⟩
+
 end EthLib.Serialization.Ssz
