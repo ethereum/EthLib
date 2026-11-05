@@ -23,6 +23,8 @@ A wipe of the storage records the keys it drops as reads.
 
 Clearing an account keeps its balance, and zeroes its nonce, its code and its storage.
 
+Setting the code or the nonce of an account changes no other field and no other account.
+
 The state after a block reads as the block does at the start of its next transaction.
 -/
 
@@ -282,6 +284,64 @@ theorem getAccountOptional_modifyState {fork : Fork} {tx tx' : TransactionState}
     Bool.false_and, Bool.false_eq_true, ↓reduceIte, Except.ok.injEq] at h
   subst h
   exact getAccountOptional_setAccount_self _ _ _
+
+/-- A change succeeds whenever `f` succeeds on the account. -/
+theorem modifyState_isOk {fork : Fork} {tx : TransactionState} {address : Address}
+    {f : Account → Except StateError Account} {account : Account}
+    (hf : f (tx.getAccount address) = .ok account) :
+    ∃ tx', tx.modifyState fork address f = .ok tx' := by
+  simp only [modifyState, hf, bind, Except.bind, pure, Except.pure]
+  split <;> exact ⟨_, rfl⟩
+
+/-- A change leaves the account at every other address, or its absence. -/
+theorem getAccountOptional_modifyState_of_ne {fork : Fork} {tx tx' : TransactionState}
+    {address other : Address} {f : Account → Except StateError Account}
+    (h : tx.modifyState fork address f = .ok tx') (hne : other ≠ address) :
+    tx'.getAccountOptional other = tx.getAccountOptional other := by
+  unfold modifyState at h
+  cases hf : f (tx.getAccount address) with
+  | error e => simp [hf, bind, Except.bind] at h
+  | ok account =>
+    simp only [hf, bind, Except.bind, pure, Except.pure] at h
+    split at h <;> cases h <;>
+      simp only [destroyAccount, getAccountOptional_setAccount_of_ne _ _ hne,
+        getAccountOptional_destroyStorage]
+
+/-- Setting the code of an address gives it the hash of that code.
+
+Every other field and every other account is unchanged. -/
+theorem getAccount_setCode {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {code : ByteArray} (h : tx.setCode fork address code = .ok tx') :
+    tx'.getAccount address =
+        { tx.getAccount address with codeHash := Cryptography.Hash.Keccak.keccak256 code } ∧
+      ∀ other, other ≠ address → tx'.getAccountOptional other = tx.getAccountOptional other := by
+  dsimp only [setCode] at h
+  -- Storing the code changes no account, so both branches read as `tx` does.
+  split at h <;>
+  · obtain ⟨account, hf, hself, -⟩ := modifyState_eq_ok h
+    cases hf
+    exact ⟨hself, fun other hne => by rw [getAccountOptional_modifyState_of_ne h hne] <;> rfl⟩
+
+/-- Setting the code of an address never fails. -/
+theorem setCode_isOk (fork : Fork) (tx : TransactionState) (address : Address)
+    (code : ByteArray) : ∃ tx', tx.setCode fork address code = .ok tx' := by
+  dsimp only [setCode]
+  split <;> exact modifyState_isOk rfl
+
+/-- Adding one to the nonce of an address changes no other field and no other account. -/
+theorem getAccount_incrementNonce {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    (h : tx.incrementNonce fork address = .ok tx') :
+    tx'.getAccount address =
+        { tx.getAccount address with nonce := (tx.getAccount address).nonce + 1 } ∧
+      ∀ other, other ≠ address → tx'.getAccountOptional other = tx.getAccountOptional other := by
+  obtain ⟨account, hf, hself, -⟩ := modifyState_eq_ok h
+  cases hf
+  exact ⟨hself, fun other hne => getAccountOptional_modifyState_of_ne h hne⟩
+
+/-- Adding one to the nonce of an address never fails. -/
+theorem incrementNonce_isOk (fork : Fork) (tx : TransactionState) (address : Address) :
+    ∃ tx', tx.incrementNonce fork address = .ok tx' :=
+  modifyState_isOk rfl
 
 /-! ## The record of reads -/
 
