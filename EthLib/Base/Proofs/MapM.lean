@@ -10,6 +10,7 @@ What a successful map over a list in `Except` returns.
 Lean core proves no such facts for `Except`, and every layer needs them.
 
 - The map has one output for each input.
+- A run of checks passes exactly when each check passes.
 - The function succeeds on every input.
 - Each output is the image of an input.
 - The map succeeds when the function succeeds on every input.
@@ -46,6 +47,15 @@ theorem mapM_ok_length {xs : List α} {ys : List β} (h : xs.mapM f = .ok ys) :
   | cons x xs ih =>
     obtain ⟨_, rest, _, tail, rfl⟩ := mapM_cons_ok.mp h
     simp [ih tail]
+
+/-- A run of checks over a list passes exactly when each check passes. -/
+theorem forM_ok_iff {xs : List α} {check : α → Except ε Unit} :
+    xs.forM check = .ok () ↔ ∀ x ∈ xs, check x = .ok () := by
+  induction xs with
+  | nil => simp [List.forM, pure, Except.pure]
+  | cons x xs ih =>
+    simp only [List.forM, bind_unit_ok_iff, List.forall_mem_cons]
+    exact and_congr_right fun _ => ih
 
 /-- A successful map succeeds on every input. -/
 theorem mapM_ok_of_mem {xs : List α} {ys : List β} (h : xs.mapM f = .ok ys) :

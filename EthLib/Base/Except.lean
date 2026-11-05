@@ -21,6 +21,11 @@ theorem bind_ok_iff {ε α β : Type} {x : Except ε α} {g : α → Except ε �
     x >>= g = .ok y ↔ ∃ a, x = .ok a ∧ g a = .ok y := by
   cases x <;> simp [bind, Except.bind]
 
+/-- A check followed by a step succeeds exactly when the check passes and the step succeeds. -/
+theorem bind_unit_ok_iff {ε β : Type} {x : Except ε Unit} {g : Unit → Except ε β} {y : β} :
+    x >>= g = .ok y ↔ x = .ok () ∧ g () = .ok y := by
+  cases x <;> simp [bind, Except.bind]
+
 /-- A map succeeds exactly when the step under it succeeds with some value.
 
 The map then sends that value to the result. -/

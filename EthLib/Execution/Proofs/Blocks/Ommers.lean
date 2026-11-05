@@ -31,37 +31,6 @@ theorem ensure_eq_ok {condition : Bool} {error : OmmerError} :
   unfold ensure
   cases condition <;> simp
 
-/-- A check over a list passes exactly when it passes for each element. -/
-theorem forM_eq_ok {α : Type} (f : α → Except OmmerError Unit) :
-    ∀ l : List α, l.forM f = .ok () ↔ ∀ x ∈ l, f x = .ok () := by
-  intro l
-  induction l with
-  | nil => simp [List.forM, pure, Except.pure]
-  | cons x rest ih =>
-    simp only [List.forM, List.mem_cons, forall_eq_or_imp]
-    cases hx : f x with
-    | error e => exact ⟨(fun h => nomatch h), fun ⟨h, _⟩ => nomatch h⟩
-    | ok u => exact ⟨fun h => ⟨rfl, ih.mp h⟩, fun ⟨_, h⟩ => ih.mpr h⟩
-
-/-- A map in `Except` that succeeds keeps the length of the list. -/
-private theorem length_of_mapM_eq_ok {ε α β : Type} (f : α → Except ε β) :
-    ∀ (l : List α) (r : List β), l.mapM f = .ok r → r.length = l.length := by
-  intro l
-  induction l with
-  | nil =>
-    intro r h
-    simp only [List.mapM_nil, pure, Except.pure, Except.ok.injEq] at h
-    rw [← h]
-    rfl
-  | cons x rest ih =>
-    intro r h
-    rw [List.mapM_cons] at h
-    obtain ⟨b, -, h⟩ := bind_ok_iff.mp h
-    obtain ⟨bs, hbs, h⟩ := bind_ok_iff.mp h
-    simp only [pure, Except.pure, Except.ok.injEq] at h
-    rw [← h]
-    simp [ih bs hbs]
-
 /-- The facts that valid ommers give about a block. -/
 theorem validateOmmers_spec {fork : Fork} {config : ChainConfig} {checkSeal : Bool}
     {recent : List RecentBlock} {header : Header fork} {ommers : List ((f : Fork) × Header f)}
@@ -85,10 +54,10 @@ theorem validateOmmers_spec {fork : Fork} {config : ChainConfig} {checkSeal : Bo
   obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
   have hhash := ensure_eq_ok.mp hhash
   have hcount := ensure_eq_ok.mp hcount
-  have hfirst := (forM_eq_ok _ ommers).mp hfirst
-  have hlast := (forM_eq_ok _ (ommers.zip ommerHashes)).mp h
+  have hfirst := forM_ok_iff.mp hfirst
+  have hlast := forM_ok_iff.mp h
   -- One hash per ommer, so each ommer meets its hash in the pairs.
-  have hlen : ommerHashes.length = ommers.length := length_of_mapM_eq_ok _ _ _ hhashes
+  have hlen : ommerHashes.length = ommers.length := mapM_ok_length hhashes
   refine ⟨⟨encoded, mapError_ok_iff.mp henc, eq_of_beq hhash⟩, by simpa using hcount,
     ⟨ommerHashes, hhashes, by simpa using ensure_eq_ok.mp hnodup⟩, fun ommer hm => ?_⟩
   obtain ⟨_, hrange, -⟩ := bind_ok_iff.mp (hfirst ommer hm)
@@ -119,7 +88,7 @@ theorem validateOmmers_daoExtraData {fork : Fork} {config : ChainConfig} {checkS
   obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
   obtain ⟨_, hfirst, -⟩ := bind_ok_iff.mp h
   intro ommer hm
-  obtain ⟨_, -, hcheck⟩ := bind_ok_iff.mp ((forM_eq_ok _ ommers).mp hfirst ommer hm)
+  obtain ⟨_, -, hcheck⟩ := bind_ok_iff.mp (forM_ok_iff.mp hfirst ommer hm)
   unfold checkOmmerHeader at hcheck
   -- The extra data check is the last step of the header check of the ommer.
   cases hfind : recent.find? (·.header.number + 1 = ommer.2.number) with

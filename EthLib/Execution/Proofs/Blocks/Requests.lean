@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Blocks.Requests
 
 /-!
@@ -68,25 +69,6 @@ theorem depositRequestOfEvent_depositEvent (pubkey : Vector UInt8 48) (credentia
     bytesToNat_natToBytes_of_lt, List.take_of_length_le, List.drop_of_length_le]
   rfl
 
-/-- A run of checks succeeds exactly when each check does. -/
-private theorem forM_eq_ok_iff {α ε : Type} (f : α → Except ε Unit) :
-    (l : List α) → l.forM f = .ok () ↔ ∀ a ∈ l, f a = .ok ()
-  | [] => by simp [List.forM, pure, Except.pure]
-  | a :: l => by
-    have ih := forM_eq_ok_iff f l
-    unfold List.forM
-    simp only [List.mem_cons, forall_eq_or_imp]
-    cases f a with
-    | error e => simp [bind, Except.bind]
-    | ok u =>
-      simp only [bind, Except.bind, true_and]
-      exact ih
-
-/-- A check followed by a step succeeds exactly when both do. -/
-private theorem bind_unit_eq_ok {ε β : Type} (x : Except ε Unit) (y : Unit → Except ε β) (b : β) :
-    x.bind y = .ok b ↔ x = .ok () ∧ y () = .ok b := by
-  cases x <;> simp [Except.bind]
-
 /-- One check succeeds exactly when its condition holds. -/
 private theorem check_eq_ok {ε : Type} (c : Prop) [Decidable c] (e : ε) :
     (if c then (Except.ok () : Except ε Unit) else throw e) = .ok () ↔ c := by
@@ -109,8 +91,8 @@ theorem depositRequestOfEvent_eq_ok_iff (data request : ByteArray) :
   dsimp only
   rw [hsize]
   by_cases hlen : data.size = DEPOSIT_EVENT_LENGTH
-  · simp only [hlen, ne_eq, not_true_eq_false, ↓reduceIte, true_and, bind, bind_unit_eq_ok,
-      forM_eq_ok_iff, check_eq_ok, pure, Except.pure, Except.ok.injEq]
+  · simp only [hlen, ne_eq, not_true_eq_false, ↓reduceIte, true_and, bind_unit_ok_iff,
+      forM_ok_iff, check_eq_ok, pure, Except.pure, Except.ok.injEq]
     constructor
     · rintro ⟨h1, h2, rfl⟩
       exact ⟨fun p hp => ⟨h1 p hp, h2 p hp⟩, rfl⟩
