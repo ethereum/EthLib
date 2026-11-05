@@ -21,6 +21,10 @@ Kind 1 adds a signed block with its votes, kind 2 an attestation and kind 3 an a
 
 Kind 4 reads the store, and a byte of 1 also asks where the proposer of the slot builds.
 
+Kind 5 makes a block of proof of work known, in SSZ, for the merge check of later blocks.
+
+The execution layer accepts every payload, as in the vectors.
+
 After each step comes one byte: 0 when the store takes the step, 1 when it rejects it.
 
 A rejection leaves the store as it was, and carries its error code, a length and a message.
@@ -89,14 +93,14 @@ def storeRecord {preset : Preset} {fork : Fork} (config : Config) (store : Store
 
 /-- The store after a step and the bytes that the step reports, or the error that rejects it. -/
 def runForkChoiceStep {preset : Preset} {fork : Fork} (config : Config) (checks : SignatureChecks)
-    (store : Store preset fork) :
+    (sources : BlockSources preset fork) (store : Store preset fork) :
     ForkChoiceStep → Result (Except ForkChoiceError (Store preset fork × ByteArray))
   | (0, data) => do
     let seconds ← decodeInput UInt64 data
     return (·, .empty) <$> store.onTick config (secondsToMilliseconds seconds)
   | (1, data) => do
     let signed ← decodeInput (SignedBeaconBlock preset fork) data
-    return (·, .empty) <$> store.onBlockWithVotes config checks signed
+    return (·, .empty) <$> store.onBlockWithVotes config checks sources signed
   | (2, data) => do
     let attestation ← decodeInput (Attestation preset fork) data
     return (·, .empty) <$> store.onAttestation config checks attestation false
@@ -117,7 +121,7 @@ The preset, the configuration and the fork are named in UTF-8.
 
 The signature checks run unless the last argument is false.
 
-From Bellatrix a block is not yet specified here, and from Gloas neither is the store. -/
+From Deneb a block is not yet specified here, and from Gloas neither is the store. -/
 @[export eth_consensus_fork_choice]
 def forkChoiceExport (name fork anchorState anchorBlock steps replacements : ByteArray)
     (verify : Bool) : Result ByteArray := do
@@ -129,8 +133,16 @@ def forkChoiceExport (name fork anchorState anchorBlock steps replacements : Byt
   let anchorBlock ← decodeInput (BeaconBlock preset fork) anchorBlock
   let mut store ← runForkChoice (getForkchoiceStore config anchorState anchorBlock)
   let mut out := ByteArray.empty
+  let mut powBlocks : List PowBlock := []
   for step in ← readForkChoiceSteps (steps.size + 1) steps 0 do
-    match ← runForkChoiceStep config checks store step with
+    if step.1 = 5 then
+      powBlocks := (← decodeInput PowBlock step.2) :: powBlocks
+      out := out.push 0
+      continue
+    let known := powBlocks
+    let sources : BlockSources preset fork :=
+      ⟨.constant true, fun hash => known.find? (·.blockHash = hash)⟩
+    match ← runForkChoiceStep config checks sources store step with
     | .ok (next, record) =>
       store := next
       out := out.push 0 ++ record

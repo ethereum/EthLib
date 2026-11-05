@@ -1,0 +1,6 @@
+preset: minimal
+fork: bellatrix
+runner: fork_choice
+handler: on_block
+suite: pyspec_tests
+case: on_block_bad_parent_root

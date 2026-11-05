@@ -1,0 +1,6 @@
+preset: minimal
+fork: capella
+runner: fork_choice
+handler: get_head
+suite: pyspec_tests
+case: discard_equivocations_on_attester_slashing

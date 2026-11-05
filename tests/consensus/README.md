@@ -145,8 +145,11 @@ These forks are Phase 0, Altair, Bellatrix and Capella.
 
 The directory `fork_choice/` holds cases of the fork choice from `minimal.tar.gz` in the same way.
 A case starts a store from an anchor state and an anchor block, then runs a list of steps.
-A step moves the clock, adds a block, an attestation or an attester slashing, or checks the store.
-The directory keeps one case of each handler of Altair, and two of `on_block`, one of which a store must reject.
+A step moves the clock, adds a block, an attestation, an attester slashing or a block of proof of work, or checks the store.
+The directory keeps one case of each handler at Altair, Bellatrix and Capella, and two of `on_block`, one of which a store must reject.
+At Bellatrix it also keeps two `on_merge_block` cases.
+In the first, the first payload follows a terminal block of proof of work.
+In the second, the store does not know the parent of the block that the payload follows.
 `bindings/python/tests/consensus/test_fork_choice.py` runs each case on one store in Lean and compares each step with the case.
 
 The directory `genesis/` holds every genesis case of `minimal.tar.gz` in the same way.

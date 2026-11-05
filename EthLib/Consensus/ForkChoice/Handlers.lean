@@ -27,7 +27,11 @@ An attester slashing marks the validators in both of its attestations as equivoc
 
 A node also runs the attestations and the attester slashings of a block through their handlers.
 
-From Bellatrix a block also checks its payload, which is not yet specified here.
+The execution layer judges the payload of a block, and an argument stands for it.
+
+At Bellatrix the first payload must follow a terminal block of proof of work, as EIP-3675 defines.
+
+From Deneb a block also needs its blob data, which is not yet specified here.
 -/
 
 @[expose] public section
@@ -37,6 +41,56 @@ namespace EthLib.Consensus
 open Base Uint64 Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork}
+
+/-- A block of the proof-of-work chain, with the total difficulty of its chain. -/
+structure PowBlock where
+  /-- The hash of the block. -/
+  blockHash : Hash32
+  /-- The hash of its parent. -/
+  parentHash : Hash32
+  /-- The total difficulty of the chain up to the block. -/
+  totalDifficulty : U256
+  deriving DecidableEq, Repr
+
+instance : SszType PowBlock :=
+  .container ["block_hash", "parent_hash", "total_difficulty"]
+    (fun b => (b.blockHash, b.parentHash, b.totalDifficulty))
+    (fun (blockHash, parentHash, totalDifficulty) => ⟨blockHash, parentHash, totalDifficulty⟩)
+
+/-- What a node asks outside the beacon chain to judge a block. -/
+structure BlockSources (preset : Preset) (fork : Fork) where
+  /-- The execution layer, which judges the payload. -/
+  engine : ExecutionEngine preset fork
+  /-- The proof-of-work block of a hash, if the node knows it. -/
+  powBlock : Hash32 → Option PowBlock
+
+/-- Whether a proof-of-work block is terminal, by the definition of EIP-3675.
+
+Its total difficulty reaches the terminal total difficulty, and that of its parent does not.
+
+The source is [EIP-3675](https://eips.ethereum.org/EIPS/eip-3675#definitions). -/
+def isValidTerminalPowBlock (config : Config) (block parent : PowBlock) : Bool :=
+  decide (config.TERMINAL_TOTAL_DIFFICULTY ≤ block.totalDifficulty) &&
+    decide (parent.totalDifficulty < config.TERMINAL_TOTAL_DIFFICULTY)
+
+/-- Check that the first payload of the chain follows a terminal block of proof of work.
+
+A configured terminal block hash replaces the test, from its activation epoch on.
+
+Otherwise the parent of the payload and its own parent must be known, and the first terminal. -/
+def validateMergeBlock (config : Config) (powBlock : Hash32 → Option PowBlock)
+    (block : BeaconBlock preset fork) (bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam) :
+    Except ForkChoiceError Unit := do
+  let parentHash := (block.body.executionPayload bellatrix).parentHash
+  if config.TERMINAL_BLOCK_HASH ≠ Vector.replicate 32 0 then
+    let epoch := computeEpochAtSlot preset block.slot
+    if epoch < config.TERMINAL_BLOCK_HASH_ACTIVATION_EPOCH then
+      throw (.terminalBlockHashNotActive epoch)
+    if parentHash ≠ config.TERMINAL_BLOCK_HASH then throw (.notTerminalBlockHash parentHash)
+    return
+  let some terminal := powBlock parentHash | throw (.unknownPowBlock parentHash)
+  let some parent := powBlock terminal.parentHash | throw (.unknownPowBlock terminal.parentHash)
+  unless isValidTerminalPowBlock config terminal parent do throw (.notTerminalPowBlock parentHash)
 
 /-- The number of slots between the start of the epoch of a slot and the slot. -/
 def computeSlotsSinceEpochStart (preset : Preset) (slot : Slot) : Except ArithError Slot := do
@@ -286,9 +340,12 @@ The parent must be known, and the block must not be from the future.
 
 The block must be after the finalized slot, and its chain must hold the finalized block.
 
-The state transition must accept the block, with its signatures and its state root. -/
-def validateOnBlock (checks : SignatureChecks) (signed : SignedBeaconBlock preset fork)
-    (blockRoot : Root) : Except ForkChoiceError (BeaconState preset fork) := do
+The state transition must accept the block, with its signatures and its state root.
+
+At Bellatrix the block with the first payload of the chain must follow a terminal block. -/
+def validateOnBlock (checks : SignatureChecks) (sources : BlockSources preset fork)
+    (signed : SignedBeaconBlock preset fork) (blockRoot : Root) :
+    Except ForkChoiceError (BeaconState preset fork) := do
   let block := signed.message
   let preState ← store.blockState block.parentRoot
   if (← store.getCurrentSlot config) < block.slot then throw (.futureBlock block.slot)
@@ -299,15 +356,21 @@ def validateOnBlock (checks : SignatureChecks) (signed : SignedBeaconBlock prese
     store.getCheckpointBlock block.parentRoot store.finalizedCheckpoint.epoch
   if store.finalizedCheckpoint.root ≠ finalizedCheckpointBlock then
     throw (.notDescendantOfFinalized blockRoot)
-  -- The block handler stops before Bellatrix, so no block here carries a payload to check.
-  (stateTransition config checks (.constant true) preState signed true).mapError .transition
+  let state ←
+    (stateTransition config checks sources.engine preState signed true).mapError .transition
+  if bellatrix : fork = .bellatrix then
+    have range : .bellatrix ≤ fork ∧ fork < .glamsterdam := by subst bellatrix; decide
+    if isMergeTransitionBlock preState block.body range then
+      validateMergeBlock config sources.powBlock block range
+  return state
 
 /-- The store with a new block, the state after it, and the updates that the block brings.
 
 Those are its timeliness, the boost and the checkpoints. -/
-def addBlock (checks : SignatureChecks) (signed : SignedBeaconBlock preset fork)
-    (blockRoot : Root) : Except ForkChoiceError (Store preset fork) := do
-  let state ← store.validateOnBlock config checks signed blockRoot
+def addBlock (checks : SignatureChecks) (sources : BlockSources preset fork)
+    (signed : SignedBeaconBlock preset fork) (blockRoot : Root) :
+    Except ForkChoiceError (Store preset fork) := do
+  let state ← store.validateOnBlock config checks sources signed blockRoot
   let head ← store.getHead config
   let store := { store with
     blocks := store.blocks.insert blockRoot signed.message
@@ -319,22 +382,22 @@ def addBlock (checks : SignatureChecks) (signed : SignedBeaconBlock preset fork)
 
 /-- The store after a signed block: a known block changes nothing, and a new one is added.
 
-From Bellatrix the rule also checks the payload, and it fails there as not yet specified. -/
-def onBlock (checks : SignatureChecks) (signed : SignedBeaconBlock preset fork) :
-    Except ForkChoiceError (Store preset fork) := do
-  if .bellatrix ≤ fork then throw (.forkNotYetSpecified fork)
+From Deneb the rule also needs the blob data, and it fails there as not yet specified. -/
+def onBlock (checks : SignatureChecks) (sources : BlockSources preset fork)
+    (signed : SignedBeaconBlock preset fork) : Except ForkChoiceError (Store preset fork) := do
+  if .dencun ≤ fork then throw (.forkNotYetSpecified fork)
   let blockRoot ← (SszType.hashTreeRoot signed.message).mapError .ssz
   if store.blocks.contains blockRoot then pure store
-  else store.addBlock config checks signed blockRoot
+  else store.addBlock config checks sources signed blockRoot
 
 /-- The store after a signed block and the votes that it carries.
 
 The block comes first, then its attestations, then its attester slashings.
 
 The attestations come from a block, so the clock does not bound their epoch. -/
-def onBlockWithVotes (checks : SignatureChecks) (signed : SignedBeaconBlock preset fork) :
-    Except ForkChoiceError (Store preset fork) := do
-  let store ← store.onBlock config checks signed
+def onBlockWithVotes (checks : SignatureChecks) (sources : BlockSources preset fork)
+    (signed : SignedBeaconBlock preset fork) : Except ForkChoiceError (Store preset fork) := do
+  let store ← store.onBlock config checks sources signed
   let store ← signed.message.body.attestations.data.foldlM
     (fun store attestation => store.onAttestation config checks attestation true) store
   signed.message.body.attesterSlashings.data.foldlM
