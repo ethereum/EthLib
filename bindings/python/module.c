@@ -597,6 +597,8 @@ static PyMethodDef methods[] = {
    DOC_consensus_compute_fork_digest},
   {"consensus_process_epoch", py_consensus_process_epoch, METH_VARARGS,
    DOC_consensus_process_epoch},
+  {"consensus_upgrade_state", py_consensus_upgrade_state, METH_VARARGS,
+   DOC_consensus_upgrade_state},
   {"pq_keys_ssz", py_pq_keys_ssz, METH_VARARGS, DOC_pq_keys_ssz},
   {"pq_keys_possession_signing_root", py_pq_keys_possession_signing_root, METH_VARARGS,
    DOC_pq_keys_possession_signing_root},

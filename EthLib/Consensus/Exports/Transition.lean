@@ -6,6 +6,7 @@ public import EthLib.Consensus.Proposers
 public import EthLib.Consensus.Transition.Block
 public import EthLib.Consensus.Transition.BuilderRequests
 public import EthLib.Consensus.Transition.Payload
+public import EthLib.Consensus.Transition.Upgrade
 
 /-!
 # `Exports.Transition`
@@ -129,5 +130,25 @@ def processEpochExport (name fork handler pre replacements : ByteArray) : Result
   let state ← decodeInput (BeaconState preset fork) pre
   let after ← runEpochStep (← nameOf handler) state
   (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
+
+/-- The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.
+
+The preset, the configuration and the target fork are named in UTF-8.
+
+So far the only upgrade is the one to Gloas.
+
+The signature checks of the deposits run unless the last argument is false. -/
+@[export eth_consensus_upgrade_state]
+def upgradeStateExport (name fork pre replacements : ByteArray) (verify : Bool) :
+    Result ByteArray := do
+  let (preset, fork) ← transitionPresetAndFork name fork
+  let config ← configWith name replacements
+  let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
+  match fork with
+  | .glamsterdam =>
+    let state ← decodeInput (BeaconState preset .fusaka) pre
+    let post ← runTransition (upgradeToGloas config checks state)
+    (SszType.serialize post).mapError fun e => (0, s!"state rejected: {reprStr e}")
+  | fork => throw (0, s!"no upgrade to {fork.name}")
 
 end EthLib.Consensus.Exports

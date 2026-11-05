@@ -259,6 +259,13 @@ def process_epoch(name: str, fork: str, handler: str, pre: bytes,
     return _native.consensus_process_epoch(name, fork, handler, pre, replacements)
 
 
+def upgrade_state(name: str, fork: str, pre: bytes, verify: bool = True,
+                  config: dict | None = None) -> bytes:
+    """The SSZ bytes of a state upgraded to a fork from the fork before, or TransitionError."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_upgrade_state(name, fork, pre, replacements, verify)
+
+
 __all__ = [
     "preset",
     "config",
@@ -297,4 +304,5 @@ __all__ = [
     "is_better_update",
     "compute_fork_digest",
     "process_epoch",
+    "upgrade_state",
 ]

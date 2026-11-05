@@ -43,6 +43,7 @@ public import EthLib.Consensus.Transition.Basic
 public import EthLib.Consensus.Transition.Block
 public import EthLib.Consensus.Transition.BuilderRequests
 public import EthLib.Consensus.Transition.Payload
+public import EthLib.Consensus.Transition.Upgrade
 public import EthLib.Consensus.Types
 
 /-!
