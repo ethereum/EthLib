@@ -66,10 +66,6 @@ open EthLib.Execution.Transactions (processCall)
 
 /-! ## Addresses and gas -/
 
-/-- The address that system calls come from: `0xff…fe`. -/
-def SYSTEM_ADDRESS : Address :=
-  toAddressMasked (BitVec.ofNat 256 0xfffffffffffffffffffffffffffffffffffffffe)
-
 /-- The gas of a system call. -/
 def SYSTEM_TRANSACTION_GAS : Nat := 30000000
 

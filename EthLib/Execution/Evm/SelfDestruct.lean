@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Measure
+public import EthLib.Execution.Evm.TransferLog
 
 /-!
 # `Evm.SelfDestruct`
@@ -31,6 +32,8 @@ An account created in the transaction that names itself as beneficiary keeps its
 
 At the end of the transaction, such an account loses its nonce, code and storage, not its balance.
 
+From Glamsterdam, a move of ether to another beneficiary writes a transfer log, by EIP-7708.
+
 From Glamsterdam, SELFDESTRUCT also checks for a static frame before it pops the beneficiary.
 
 A new account for the beneficiary then costs 9000, the write of an account, by EIP-8038.
@@ -49,6 +52,7 @@ The EIPs that change the instruction define it:
 - [EIP-2929][eip2929], the cold access
 - [EIP-3529][eip3529], no refund
 - [EIP-6780][eip6780], deletion only in the transaction that creates the account
+- [EIP-7708][eip7708], the transfer log, in Last Call
 - [EIP-8037][eip8037], the state gas of a new account, in Last Call
 - [EIP-8038][eip8038], the write of the new account, in Last Call
 - [EIP-8246][eip8246], no ether gone, in Last Call
@@ -60,6 +64,7 @@ The EIPs that change the instruction define it:
 [eip2929]: https://eips.ethereum.org/EIPS/eip-2929#selfdestruct-changes
 [eip3529]: https://eips.ethereum.org/EIPS/eip-3529#specification
 [eip6780]: https://eips.ethereum.org/EIPS/eip-6780#specification
+[eip7708]: https://eips.ethereum.org/EIPS/eip-7708#specification
 [eip8037]: https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-new-accounts
 [eip8038]: https://eips.ethereum.org/EIPS/eip-8038#selfdestruct
 [eip8246]: https://eips.ethereum.org/EIPS/eip-8246#specification
@@ -126,12 +131,15 @@ It fails in a static frame.
 
 It records the account to delete: before Cancun always, and from Cancun when created here.
 
+From Glamsterdam, it writes a transfer log when ether goes to another account.
+
 From Spurious Dragon to Paris, an empty beneficiary counts as touched. -/
 def finishSelfdestruct (fork : Fork) (beneficiary : Address) (refund : Nat)
     (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) :=
   if evm.message.isStatic then .error .writeInStaticContext
   else do
     let originator := evm.message.currentTarget
+    let balance := (evm.state.getAccount originator).balance
     let state ← (selfdestructTransfer fork evm.state originator beneficiary).mapError .state
     let deletes := fork < .dencun ∨ originator ∈ state.createdAccounts
     let touched := evm.substate.touchedAccounts
@@ -144,6 +152,7 @@ def finishSelfdestruct (fork : Fork) (beneficiary : Address) (refund : Nat)
         accountsToDelete :=
           if deletes then evm.substate.accountsToDelete.insert originator
           else evm.substate.accountsToDelete
+        logs := pushTransferLog fork evm.substate.logs originator beneficiary balance
         refundCounter := evm.substate.refundCounter + refund
         touchedAccounts := if touchesBeneficiary then touched.insert beneficiary else touched } }
 
