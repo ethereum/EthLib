@@ -14,6 +14,8 @@ public import EthLib.Cryptography.Kzg.Errors
 
 Cell proofs over a blob extended by a Reed-Solomon code.
 
+EIP-7594 adds these operations at the Fusaka fork.
+
 The values of the extended polynomial split into 128 cosets of 64 values each.
 
 Each cell carries its own KZG multi-evaluation proof.

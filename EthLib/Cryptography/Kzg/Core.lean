@@ -12,6 +12,8 @@ public import EthLib.Cryptography.Kzg.Errors
 
 The blob-commitment surface of KZG.
 
+EIP-4844 adds these operations at the Dencun fork.
+
 Each operation that reads the trusted setup takes it as its first argument.
 
 Each operation that can reject its input returns `Except KzgError`.
