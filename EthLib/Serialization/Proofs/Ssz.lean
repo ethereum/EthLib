@@ -105,6 +105,7 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Class
 public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
 public import EthLib.Serialization.Proofs.Ssz.Typed.Container
+public import EthLib.Serialization.Proofs.Ssz.Typed.ForkKind
 public import EthLib.Serialization.Proofs.Ssz.Typed.Root
 public import EthLib.Serialization.Proofs.Ssz.Typed.Gindex
 public import EthLib.Serialization.Proofs.Ssz.Typed.Since
