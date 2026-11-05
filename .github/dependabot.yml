@@ -1,0 +1,35 @@
+# Propose weekly updates for the pinned GitHub Actions and the Python test dependencies.
+#
+# Each minor and patch update joins one grouped pull request per ecosystem.
+# Each major update gets its own pull request.
+# The commit prefixes follow the types in CONTRIBUTING.md.
+# Dependabot has no Lake ecosystem, so Mathlib and the Lean toolchain stay out.
+
+version: 2
+updates:
+  # The workflows pin each action to a commit SHA with a version comment.
+  # Dependabot rewrites the SHA and the comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: ci
+    groups:
+      actions-minor:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # pyproject.toml pins the test dependencies, and uv.lock records the resolution.
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: build
+    groups:
+      python-minor:
+        patterns: ["*"]
+        update-types: [minor, patch]
