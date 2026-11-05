@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Proofs.Evm.Precompiles.AltBn128
+public import EthLib.Execution.Proofs.Evm.Precompiles.AltBn128.Basic
 public import EthLib.Cryptography.Proofs.AltBn128.Curve
 
 /-!

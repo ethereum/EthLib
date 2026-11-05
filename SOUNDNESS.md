@@ -260,7 +260,7 @@ The pairing law is a hypothesis, `AltBn128.PairingLaws` (`Proofs/AltBn128/Pairin
 It states the check of EIP-197: the pairs `(a_i P1, b_i P2)` pass exactly when `sum_i a_i b_i = 0`.
 No theorem proves it.
 
-`ecadd_toPoint` and `ecmul_toPoint` (`Execution/Proofs/Evm/Precompiles/AltBn128Group.lean`) carry this group law to the precompiles.
+`ecadd_toPoint` and `ecmul_toPoint` (`Execution/Proofs/Evm/Precompiles/AltBn128/Group.lean`) carry this group law to the precompiles.
 A call of ECADD that succeeds returns the sum of its two points, and a call of ECMUL returns its point times its 32-byte scalar.
 
 ### secp256r1

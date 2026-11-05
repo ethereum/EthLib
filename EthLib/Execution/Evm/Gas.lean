@@ -31,12 +31,9 @@ A price that an EIP adds or changes names that EIP:
 - [EIP-145](https://eips.ethereum.org/EIPS/eip-145#specification), SHL, SHR and SAR
 - [EIP-150](https://eips.ethereum.org/EIPS/eip-150#specification), IO, calls and all but one 64th
 - [EIP-160](https://eips.ethereum.org/EIPS/eip-160#specification), EXP
-- [EIP-196](https://eips.ethereum.org/EIPS/eip-196), alt_bn128 addition and multiplication
-- [EIP-197](https://eips.ethereum.org/EIPS/eip-197), alt_bn128 pairing check
 - [EIP-211](https://eips.ethereum.org/EIPS/eip-211#specification), RETURNDATASIZE, RETURNDATACOPY
 - [EIP-1014](https://eips.ethereum.org/EIPS/eip-1014#specification), CREATE2
 - [EIP-1052](https://eips.ethereum.org/EIPS/eip-1052#specification), EXTCODEHASH
-- [EIP-1108](https://eips.ethereum.org/EIPS/eip-1108#specification), alt_bn128
 - [EIP-1153](https://eips.ethereum.org/EIPS/eip-1153), TLOAD and TSTORE
 - [EIP-1344](https://eips.ethereum.org/EIPS/eip-1344#specification), CHAINID
 - [EIP-1884](https://eips.ethereum.org/EIPS/eip-1884#specification), SLOAD, BALANCE, EXTCODEHASH
@@ -57,9 +54,7 @@ A price that an EIP adds or changes names that EIP:
 - [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825#specification), the gas cap of a transaction
 - [EIP-7939](https://eips.ethereum.org/EIPS/eip-7939#specification), CLZ
 
-The prices of alt_bn128 are here, because a fork changed them.
-
-The other precompiles keep their prices, and the blob prices are with the blob fees.
+The precompiles keep their prices, and the blob prices are with the blob fees.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [yp-berlin]: https://github.com/ethereum/yellowpaper/blob/beacfbd29ccc04dfd790f2282d4c4b1c0afc9b5a/Paper.tex
@@ -312,14 +307,6 @@ structure GasSchedule where
   REFUND_STORAGE_CLEAR : Nat
   /-- The refund for each account that SELFDESTRUCT destroys. -/
   REFUND_SELF_DESTRUCT : Nat
-  /-- The price of the alt_bn128 addition, from Byzantium. -/
-  PRECOMPILE_ECADD : Nat
-  /-- The price of the alt_bn128 multiplication, from Byzantium. -/
-  PRECOMPILE_ECMUL : Nat
-  /-- The base price of the alt_bn128 pairing check, from Byzantium. -/
-  PRECOMPILE_ECPAIRING_BASE : Nat
-  /-- The price per pair of the alt_bn128 pairing check, from Byzantium. -/
-  PRECOMPILE_ECPAIRING_PER_POINT : Nat
   deriving DecidableEq, Repr
 
 /-- The gas prices of a fork that depend only on the fork.
@@ -340,14 +327,6 @@ def gasSchedule (fork : Fork) : GasSchedule where
   REFUND_STORAGE_CLEAR := if fork ≥ .london then 4800 else 15000
   -- EIP-3529 removes the refund, which is 24000 in the Berlin version of the Yellow Paper.
   REFUND_SELF_DESTRUCT := if fork ≥ .london then 0 else 24000
-  -- EIP-1108 lowers the price from 500, the value in EIP-196, to 150.
-  PRECOMPILE_ECADD := if fork ≥ .istanbul then 150 else 500
-  -- EIP-1108 lowers the price from 40000, the value in EIP-196, to 6000.
-  PRECOMPILE_ECMUL := if fork ≥ .istanbul then 6000 else 40000
-  -- EIP-1108 lowers the price from 100000, the value in EIP-197, to 45000.
-  PRECOMPILE_ECPAIRING_BASE := if fork ≥ .istanbul then 45000 else 100000
-  -- EIP-1108 lowers the price from 80000, the value in EIP-197, to 34000.
-  PRECOMPILE_ECPAIRING_PER_POINT := if fork ≥ .istanbul then 34000 else 80000
 
 /-- The price of an access to an account, from EIP-2929.
 

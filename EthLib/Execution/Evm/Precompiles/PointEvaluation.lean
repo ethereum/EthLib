@@ -9,23 +9,9 @@ public import EthLib.Cryptography.Kzg.VersionedHash
 
 The point evaluation precompile at address `0x0a`, from EIP-4844.
 
-A blob transaction commits to each blob with a KZG commitment, and names it by a versioned hash.
+It checks a KZG proof that the polynomial of a blob takes a value `y` at a point `z`.
 
-The precompile checks a KZG proof that the blob's polynomial `p` takes the value `y` at the point `z`:
-
-```text
-input:   [ versioned hash: 32 | z: 32 | y: 32 | commitment: 48 | proof: 48 ]
-check:   versioned hash = 0x01 ++ SHA-256(commitment)[1:]
-         e(commitment - [y]_1, -[1]_2) * e(proof, [tau]_2 - [z]_2) = 1
-output:  [ FIELD_ELEMENTS_PER_BLOB: 32 | BLS_MODULUS: 32 ]
-```
-
-Source: "Point evaluation precompile" of EIP-4844, at
-<https://eips.ethereum.org/EIPS/eip-4844#point-evaluation-precompile>.
-
-Every fork since Cancun computes the same result with the same price.
-
-Every failure consumes all the gas, so the error only says why the call failed.
+The call data names the blob by the versioned hash of its commitment.
 -/
 
 @[expose] public section
@@ -46,7 +32,7 @@ def GAS_POINT_EVALUATION : Nat := 50000
 /-- `FIELD_ELEMENTS_PER_BLOB`: the number of field elements in a blob, which the output reports. -/
 def FIELD_ELEMENTS_PER_BLOB : Nat := 4096
 
-/-- `KZG_SETUP_G2_MONOMIAL_1`: `[tau]_2`, the trusted setup's G2 point for the secret `tau`, compressed.
+/-- `[tau]_2`, the compressed G2 point of the trusted setup for the secret `tau`.
 
 It is entry 1 of `g2_monomial` in the KZG trusted setup, which `Kzg.TrustedSetupData` holds too. -/
 def KZG_SETUP_G2_MONOMIAL_1 : ByteArray := ⟨#[
@@ -111,11 +97,13 @@ def verifyKzgProof (commitment z y proof : ByteArray) : Except PointEvaluationEr
   let tau ← (G2.uncompress KZG_SETUP_G2_MONOMIAL_1).mapError fun _ => .invalidTrustedSetup
   return verifyKzgProofWith tau commitmentPoint zField yField proofPoint
 
-/-- The output of every successful call: `FIELD_ELEMENTS_PER_BLOB`, then `BLS_MODULUS`, each as a 32-byte big-endian word. -/
+/-- The output of every successful call: two 32-byte big-endian words.
+
+They are the number of field elements in a blob, then the order of the scalar field. -/
 def output : ByteArray :=
   ⟨(natToBytes 32 FIELD_ELEMENTS_PER_BLOB ++ natToBytes 32 Fr.modulus).toArray⟩
 
-/-- `point_evaluation`: the length is checked first, then the gas is charged, then the hash and the proof are checked. -/
+/-- The call: it checks the length, charges the gas, then checks the hash and the proof. -/
 def pointEvaluation (data : ByteArray) (gas : Nat) : Except PointEvaluationError ByteArray := do
   if data.size ≠ INPUT_BYTES then
     throw (.invalidInputLength data.size)

@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Execution.Proofs.Evm.Precompiles.AltBn128
-public import EthLib.Execution.Proofs.Evm.Precompiles.AltBn128Group
 public import EthLib.Execution.Proofs.Evm.Precompiles.Blake2f
 public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381
 public import EthLib.Execution.Proofs.Evm.Precompiles.Modexp
