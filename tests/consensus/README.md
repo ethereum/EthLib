@@ -143,6 +143,12 @@ The directory keeps two cases of each group at each fork whose whole transition 
 These forks are Phase 0, Altair, Bellatrix and Capella.
 `bindings/python/tests/consensus/test_transition.py` runs each case through the Lean transition and compares the state after it.
 
+The directory `fork_choice/` holds cases of the fork choice from `minimal.tar.gz` in the same way.
+A case starts a store from an anchor state and an anchor block, then runs a list of steps.
+A step moves the clock, adds a block, an attestation or an attester slashing, or checks the store.
+The directory keeps one case of each handler of Altair, and two of `on_block`, one of which a store must reject.
+`bindings/python/tests/consensus/test_fork_choice.py` runs each case on one store in Lean and compares each step with the case.
+
 The test release publishes its cases in three archives.
 Their SHA-256 digests are:
 

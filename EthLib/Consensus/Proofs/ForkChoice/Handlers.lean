@@ -10,6 +10,8 @@ public import EthLib.Consensus.Proofs.Time
 
 No handler lowers the epoch of the justified or of the finalized checkpoint.
 
+Nor does a block together with the votes that it carries.
+
 A tick sets the clock to its time, and the catch-up loop never stalls.
 
 A new block enters the store with the state that the transition computes for it.
@@ -425,6 +427,20 @@ theorem onBlock_epochsLe {checks : SignatureChecks} {signed : SignedBeaconBlock 
       cases added
       exact EpochsLe.refl _
     · exact (onBlock_new root known added).1
+
+/-- A block and the votes that it carries lower no epoch. -/
+theorem onBlockWithVotes_epochsLe {checks : SignatureChecks}
+    {signed : SignedBeaconBlock preset fork} {after : Store preset fork}
+    (added : store.onBlockWithVotes config checks signed = .ok after) : store.EpochsLe after := by
+  unfold onBlockWithVotes at added
+  simp only [bind_ok_iff, ← Array.foldlM_toList] at added
+  obtain ⟨blocked, block, voted, attested, slashed⟩ := added
+  -- Each fold keeps the epochs of the store it starts from at or below those of its store.
+  have votes := foldlM_ok_invariant blocked.EpochsLe
+    (fun _ _ _ le step => le.trans (onAttestation_frame step).1) (EpochsLe.refl _) attested
+  have slashings := foldlM_ok_invariant voted.EpochsLe
+    (fun _ _ _ le step => le.trans (onAttesterSlashing_frame step).1) (EpochsLe.refl _) slashed
+  exact (onBlock_epochsLe block).trans (votes.trans slashings)
 
 /-- A vote keeps every other vote at or after its epoch at or after it. -/
 theorem recordVote_keeps {equivocating : List ValidatorIndex} {message : LatestMessage}

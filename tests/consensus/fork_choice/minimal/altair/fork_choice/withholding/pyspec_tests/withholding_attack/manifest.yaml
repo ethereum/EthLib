@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: fork_choice
+handler: withholding
+suite: pyspec_tests
+case: withholding_attack

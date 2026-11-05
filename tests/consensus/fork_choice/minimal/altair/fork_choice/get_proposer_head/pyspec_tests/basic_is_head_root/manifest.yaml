@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: fork_choice
+handler: get_proposer_head
+suite: pyspec_tests
+case: basic_is_head_root

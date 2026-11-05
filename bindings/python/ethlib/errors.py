@@ -83,6 +83,10 @@ class LightClientError(EthLibError, ValueError):
     """A light client rejected a bootstrap or an update."""
 
 
+class ForkChoiceError(EthLibError, ValueError):
+    """The fork choice rejected its anchor, or a step could not be read."""
+
+
 class HkdfError(EthLibError, ValueError):
     """HKDF rejected its input."""
 
@@ -210,6 +214,7 @@ __all__ = [
     "ConsensusError",
     "TransitionError",
     "LightClientError",
+    "ForkChoiceError",
     "HkdfError",
     "ConcatKdfError",
     "AesError",

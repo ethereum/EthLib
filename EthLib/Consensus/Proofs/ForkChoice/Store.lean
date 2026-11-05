@@ -6,6 +6,8 @@ public import EthLib.Consensus.Proofs.Time
 /-!
 # Proofs: the store of the fork choice
 
+Each error of the fork choice has its own code.
+
 A new store holds its anchor, justified and finalized, and its clock is at the anchor's slot.
 
 The ancestor of a node at a slot is a known block at or below that slot.
@@ -20,6 +22,15 @@ namespace EthLib.Consensus
 open Base Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork}
+
+/-- Two errors with one code come from one constructor. -/
+theorem ForkChoiceError.code_injective (e₁ e₂ : ForkChoiceError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Each code is one more than the index of its constructor.
+  have back : ∀ e : ForkChoiceError, e.code.toNat - 1 = e.ctorIdx := by
+    intro e
+    cases e <;> rfl
+  rw [← back e₁, ← back e₂, h]
 
 namespace Store
 

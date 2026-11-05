@@ -81,6 +81,7 @@ PyObject* EVM_ERROR;
 PyObject* FEES_ERROR;
 PyObject* TRANSITION_ERROR;
 PyObject* LIGHT_CLIENT_ERROR;
+PyObject* FORK_CHOICE_ERROR;
 
 /* ---- Lean externs: size accessors ------------------------------------ */
 
@@ -615,6 +616,7 @@ static PyMethodDef methods[] = {
    DOC_consensus_process_slots},
   {"consensus_state_transition", py_consensus_state_transition, METH_VARARGS,
    DOC_consensus_state_transition},
+  {"consensus_fork_choice", py_consensus_fork_choice, METH_VARARGS, DOC_consensus_fork_choice},
   {"pq_keys_ssz", py_pq_keys_ssz, METH_VARARGS, DOC_pq_keys_ssz},
   {"pq_keys_possession_signing_root", py_pq_keys_possession_signing_root, METH_VARARGS,
    DOC_pq_keys_possession_signing_root},
@@ -829,6 +831,7 @@ PyInit__native(void) {
     ENGINE_ERROR = PyObject_GetAttrString(errors, "EngineError");
     TRANSITION_ERROR = PyObject_GetAttrString(errors, "TransitionError");
     LIGHT_CLIENT_ERROR = PyObject_GetAttrString(errors, "LightClientError");
+    FORK_CHOICE_ERROR = PyObject_GetAttrString(errors, "ForkChoiceError");
     Py_DECREF(errors);
     if (PyErr_Occurred()) return NULL;
 
