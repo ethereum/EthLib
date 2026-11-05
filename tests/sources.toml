@@ -95,6 +95,9 @@ directories = [
   "tests/execution/precompiles", "tests/execution/transactions",
 ]
 
+[repositories."eth-clients/hoodi"]
+commit = "2a7efb3c530cce7c71702cc98d0f965df2411c11"
+
 [repositories."ethereum/ssz-specs"]
 commit = "7bce07ff7d51b1a3c66ff4e2bd3233ac248ede70"
 release = "v0.1.0"

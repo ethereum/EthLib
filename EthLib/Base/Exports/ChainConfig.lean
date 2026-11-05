@@ -3,9 +3,9 @@ module
 public import EthLib.Base.ChainConfig
 
 /-!
-# Exports: the active fork of mainnet
+# Exports: the active fork of a network
 
-The C export of the active fork of mainnet, for the Python bindings.
+The C exports of the active fork of mainnet and of Hoodi, for the Python bindings.
 
 A block number and a timestamp cross the boundary as 64-bit integers, as EIP-6122 reads them.
 
@@ -20,6 +20,13 @@ namespace EthLib.Base.ChainConfig.Exports
 @[export eth_mainnet_active_fork]
 def mainnetActiveForkExport (number timestamp : UInt64) : ByteArray :=
   match mainnet.activeFork number.toNat timestamp.toNat with
+  | some fork => fork.name.toUTF8
+  | none => .empty
+
+/-- The name of the active fork of Hoodi at a block, or no bytes when no fork is active. -/
+@[export eth_hoodi_active_fork]
+def hoodiActiveForkExport (number timestamp : UInt64) : ByteArray :=
+  match hoodi.activeFork number.toNat timestamp.toNat with
   | some fork => fork.name.toUTF8
   | none => .empty
 

@@ -4059,6 +4059,15 @@
    "docstring":
    "The name of the active fork of mainnet at a block, or no bytes when no fork is active."},
   {"summary":
+   "The name of the active fork of Hoodi at a block, or no bytes when no fork is active.",
+   "signature": "(number: int, timestamp: int) -> bytes",
+   "operation": "EthLib.Base.ChainConfig.Exports.hoodiActiveForkExport",
+   "method": "hoodi_active_fork",
+   "errors": [],
+   "error_class": null,
+   "docstring":
+   "The name of the active fork of Hoodi at a block, or no bytes when no fork is active."},
+  {"summary":
    "The payload status of an `engine_newPayload` request, without the parent's state.",
    "signature": "(config: bytes, request: bytes) -> bytes",
    "operation": "EthLib.Engine.Exports.newPayloadExport",

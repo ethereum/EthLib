@@ -140,6 +140,43 @@ def mainnet : ChainConfig where
     (.bpo1, .time 1765290071),
     (.bpo2, .time 1767747671)]
 
+/-- The configuration of the Hoodi test network, from Frontier to Glamsterdam.
+
+Its chain ID is 560048, as its [genesis file][hoodi] gives.
+
+The genesis file activates every fork up to London at block 0.
+
+Its terminal total difficulty is 0, so Paris activates at block 0 too.
+
+Shapella and Dencun activate at time 0, so Hoodi starts with the rules of Dencun.
+
+The genesis file lists no DAO fork and no fork that only delays the difficulty bomb.
+
+The meta EIP of each later fork gives its time: EIP-7600, EIP-7607 (BPO1, BPO2) and EIP-7773.
+
+[hoodi]: https://github.com/eth-clients/hoodi/blob/2a7efb3c530cce7c71702cc98d0f965df2411c11/metadata/genesis.json -/
+def hoodi : ChainConfig where
+  chainId := 560048
+  activations := [
+    (.frontier, .block 0),
+    (.homestead, .block 0),
+    (.tangerineWhistle, .block 0),
+    (.spuriousDragon, .block 0),
+    (.byzantium, .block 0),
+    (.constantinople, .block 0),
+    (.petersburg, .block 0),
+    (.istanbul, .block 0),
+    (.berlin, .block 0),
+    (.london, .block 0),
+    (.paris, .block 0),
+    (.shapella, .time 0),
+    (.dencun, .time 0),
+    (.pectra, .time 1742999832),
+    (.fusaka, .time 1761677592),
+    (.bpo1, .time 1762365720),
+    (.bpo2, .time 1762955544),
+    (.glamsterdam, .time 1793036568)]
+
 end ChainConfig
 
 end EthLib.Base

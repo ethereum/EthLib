@@ -391,6 +391,7 @@ PyObject* py_state_dao_fork_root                         (PyObject* self, PyObje
 PyObject* py_state_rewards_root                           (PyObject* self, PyObject* args);
 
 PyObject* py_mainnet_active_fork                          (PyObject* self, PyObject* args);
+PyObject* py_hoodi_active_fork                            (PyObject* self, PyObject* args);
 
 PyObject* py_engine_new_payload                          (PyObject* self, PyObject* args);
 PyObject* py_engine_forkchoice_updated                   (PyObject* self, PyObject* args);
