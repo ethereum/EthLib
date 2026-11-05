@@ -15,7 +15,7 @@ from transactions.test_inclusion_archive import names_in_block
 from transactions.test_transactions import CHAIN_ID, FORK_OF_NETWORK, names
 
 from . import legacy
-from .catalogue import Case
+from .catalogue import CONSENSUS_FORKS, EXECUTION_FORKS, Case
 
 # The groups that no runner covers yet, with the pull requests of the plan that bring them.
 # A key is a runner, or a runner and a handler, of consensus-spec-tests, or a format of
@@ -39,6 +39,70 @@ NOT_YET = {
     "light_client": "light client (consensus track C54 to C56)",
     "networking": "gossip validation (consensus track C63 and C64)",
     "ssz_static": "the remaining beacon containers (consensus track C2, C6 to C12)",
+}
+
+# The plan at Gloas, Heze and the Amsterdam networks, by the steps of the track for Glamsterdam
+# and Hegotá. A key is a runner, a runner and a handler, or a format, as in NOT_YET.
+# At these forks an entry here comes before the entry of NOT_YET.
+_GLOAS = {
+    "epoch_processing": "the Gloas slot and epoch processing (G51)",
+    "rewards": "the Gloas slot and epoch processing (G51)",
+    "finality": "the Gloas block processing and state transition (G52)",
+    "random": "the Gloas block processing and state transition (G52)",
+    "sanity": "the Gloas block processing and state transition (G52)",
+    "fork": "the upgrade of a Fulu state to Gloas (G53)",
+    "transition": "the upgrade to Gloas (G53) and the Gloas state transition (G52)",
+    "operations": "the Gloas attestations, slashings and operations (G50)",
+    "operations/builder_deposit_request": "the builder deposit and exit requests (G46)",
+    "operations/builder_exit_request": "the builder deposit and exit requests (G46)",
+    "operations/execution_payload_bid": "the execution payload bid and payload attestations (G47)",
+    "operations/payload_attestation": "the execution payload bid and payload attestations (G47)",
+    "operations/parent_execution_payload": "the parent execution payload (G48)",
+    "operations/deposit_request": "the parent execution payload (G48)",
+    "operations/withdrawal_request": "the parent execution payload (G48)",
+    "operations/consolidation_request": "the parent execution payload (G48)",
+    "operations/withdrawals": "the Gloas withdrawals (G49)",
+    "fork_choice": "the Gloas block and payload handlers (G70)",
+    "fast_confirmation": "the Gloas fast confirmation (G73)",
+    "light_client": "the Gloas light client (G54, G55)",
+    "networking": "the Gloas data columns and unchanged topics (G77)",
+    "networking/gossip_execution_payload_bid": "bids and proposer preferences (G74)",
+    "networking/gossip_proposer_preferences": "bids and proposer preferences (G74)",
+    "networking/gossip_execution_payload_envelope": "envelopes and payload attestations (G75)",
+    "networking/gossip_payload_attestation_message": "envelopes and payload attestations (G75)",
+    "networking/gossip_beacon_block": "Gloas blocks and attestations (G76)",
+    "networking/gossip_beacon_attestation": "Gloas blocks and attestations (G76)",
+    "networking/gossip_beacon_aggregate_and_proof": "Gloas blocks and attestations (G76)",
+    "networking/gossip_partial_data_column_sidecar": "Gloas partial data columns (G78)",
+    "ssz_static": "the remaining Gloas containers (G36 to G41, G54, G65)",
+}
+_HEZE = {
+    "epoch_processing": "Heze blocks and epochs (G84)",
+    "rewards": "Heze blocks and epochs (G84)",
+    "finality": "Heze blocks and epochs (G84)",
+    "random": "Heze blocks and epochs (G84)",
+    "sanity": "Heze blocks and epochs (G84)",
+    "operations": "Heze blocks and epochs (G84)",
+    "fork": "the Heze fork upgrade (G83)",
+    "transition": "the Heze fork upgrade (G83) and Heze blocks and epochs (G84)",
+    "fork_choice": "inclusion lists in the Heze fork choice (G86)",
+    "fast_confirmation": "the Gloas fast confirmation (G73) on the Heze fork choice (G86)",
+    "light_client": "the Gloas light client (G54) on the Heze state (G81)",
+    "networking": "the Heze gossip and req/resp rules (G87)",
+    "ssz_static": "the Heze containers (G80, G81)",
+}
+_AMSTERDAM = {
+    "state_test": "the pre-execution phase and block transition of Amsterdam (G20, G23), then G24",
+    "blockchain_test": "the Amsterdam block transition (G23), then G24",
+    "blockchain_test_engine": "the Amsterdam payload on the Engine layer (G39), after G23",
+    "blockchain_test_engine_x": "the Amsterdam payload on the Engine layer (G39), after G23",
+}
+NOT_YET_AT = {
+    "gloas": _GLOAS,
+    "heze": _HEZE,
+    **{network: _AMSTERDAM for network in (
+        "BPO2ToAmsterdamAtTime15k", "Amsterdam", "AmsterdamToBPOIncreaseAtTime15k",
+        "AmsterdamBPOIncrease", "AmsterdamToBPODecreaseAtTime15k", "AmsterdamBPODecrease")},
 }
 
 _YAML = YAML(typ="safe")
@@ -256,8 +320,28 @@ RUNNERS = {
 }
 
 
+# The runners that stop before a fork, with the first fork that they do not run.
+# Processing a transaction is not yet specified from Amsterdam on.
+# The sidecar gossip checks and the light client proofs read the forms of Fulu.
+_STOPS = {
+    "state_test": "BPO2ToAmsterdamAtTime15k",
+    "networking/gossip_data_column_sidecar": "gloas",
+    "light_client/single_merkle_proof": "gloas",
+}
+
+
+def _stopped(case: Case) -> bool:
+    stop = _STOPS.get(case.group)
+    if stop is None:
+        return False
+    forks = (EXECUTION_FORKS if case.suite == "execution-spec-tests" else CONSENSUS_FORKS)
+    return case.rank >= forks.index(stop)
+
+
 def runner(case: Case):
     """The runner of a case, or `None` if EthLib cannot run it yet."""
+    if _stopped(case):
+        return None
     run = RUNNERS.get(case.group)
     if run is _ssz_static and case.fork not in _container_forks(case.group.split("/")[1]):
         return None
@@ -267,5 +351,8 @@ def runner(case: Case):
 
 
 def plan(case: Case) -> str | None:
-    """The plan for a case that no runner covers: its handler's entry, or else its runner's."""
-    return NOT_YET.get(case.group) or NOT_YET.get(case.group.split("/")[0])
+    """The plan for a case that no runner covers: its fork's entry first, then the general one."""
+    for table in (NOT_YET_AT.get(case.fork, {}), NOT_YET):
+        if entry := table.get(case.group) or table.get(case.group.split("/")[0]):
+            return entry
+    return None

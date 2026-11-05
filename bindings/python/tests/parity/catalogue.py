@@ -63,18 +63,22 @@ LEGACY_OUT_OF_SCOPE = {
 FORMATS = ("state_test", "blockchain_test", "blockchain_test_engine",
            "blockchain_test_engine_x", "transaction_test")
 
-# The networks of execution-spec-tests from Frontier to BPO2.
+# The networks of execution-spec-tests from Frontier to Amsterdam.
 # Each transition comes after the fork that it leaves.
+# The BPO scenario networks after Amsterdam change only the blob schedule of the chain.
 EXECUTION_FORKS = (
     "Frontier", "Homestead", "TangerineWhistle", "SpuriousDragon", "Byzantium",
     "ConstantinopleFix", "Istanbul", "Berlin", "London", "Paris", "ParisToShanghaiAtTime15k",
     "Shanghai", "ShanghaiToCancunAtTime15k", "Cancun", "CancunToPragueAtTime15k", "Prague",
     "PragueToOsakaAtTime15k", "Osaka", "OsakaToBPO1AtTime15k", "BPO1", "BPO1ToBPO2AtTime15k",
-    "BPO2",
+    "BPO2", "BPO2ToAmsterdamAtTime15k", "Amsterdam",
+    "AmsterdamToBPOIncreaseAtTime15k", "AmsterdamBPOIncrease",
+    "AmsterdamToBPODecreaseAtTime15k", "AmsterdamBPODecrease",
 )
 
-# The forks of consensus-specs from Phase 0 to Fulu.
-CONSENSUS_FORKS = ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu")
+# The forks of consensus-specs from Phase 0 to Heze.
+CONSENSUS_FORKS = ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu",
+                   "gloas", "heze")
 
 
 @dataclass(frozen=True)
@@ -115,7 +119,7 @@ def execution_cases() -> list[Case]:
 
 
 def consensus_cases() -> list[Case]:
-    """Every case directory of both presets, at the forks from Phase 0 to Fulu."""
+    """Every case directory of both presets, at the forks from Phase 0 to Heze."""
     cases = set()
     for preset, name in CONSENSUS.items():
         archive = archives.fetch_archives.load(archives.REPO)[name]

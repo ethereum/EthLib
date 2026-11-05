@@ -1,4 +1,4 @@
-"""Every case of consensus-spec-tests from Phase 0 to Fulu, through the runners of EthLib."""
+"""Every case of consensus-spec-tests from Phase 0 to Heze, through the runners of EthLib."""
 
 import pytest
 
@@ -34,10 +34,16 @@ def test_every_group_has_a_runner_or_a_plan() -> None:
 # A mainnet state case is a few megabytes, so the weekly archive run alone reads them; the
 # minimal state cases are vendored, and test_ssz_static decodes an empty mainnet state.
 # A mainnet operation case holds two states of a few hundred kilobytes, for the same reason.
+# The custody cases of Gloas and Heze repeat those of Fulu, and only the fork name in their
+# manifest differs, so only the Fulu cases are vendored.
 NOT_VENDORED = {f"mainnet/{fork}/ssz_static/BeaconState" for fork in
-                ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu")} | {
+                ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu",
+                 "gloas")} | {
     f"mainnet/{fork}/operations/{handler}" for handler, (_, forks) in OPERATIONS.items()
-    for fork in forks}
+    for fork in forks} | {
+    f"{preset}/{fork}/networking/{handler}" for preset in ("mainnet", "minimal")
+    for fork in ("gloas", "heze")
+    for handler in ("get_custody_groups", "compute_columns_for_custody_group")}
 
 
 def test_every_runnable_group_has_vendored_cases() -> None:
