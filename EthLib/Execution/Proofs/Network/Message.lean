@@ -3,16 +3,19 @@ module
 public import EthLib.Execution.Network.Message
 public import EthLib.Execution.Proofs.Network.Blocks
 public import EthLib.Execution.Proofs.Network.Status
+public import EthLib.Execution.Proofs.Network.Transactions
 
 /-!
 # Proofs: the messages of the eth capability
 
 Each message reads back from its ID and its RLP item, on every version that uses its form.
 
-eth/68 rejects BlockRangeUpdate.
+eth/68 rejects BlockRangeUpdate, and every version rejects an announcement whose lists differ in
+length.
 
-A response answers a request only when it repeats the request ID, and a BlockHeaders that passes
-the check of its GetBlockHeaders answers it.
+A response answers a request only when it repeats the request ID.
+
+A BlockHeaders or a PooledTransactions that passes the check of its request answers it.
 -/
 
 @[expose] public section
@@ -25,8 +28,10 @@ open EthLib.Serialization.Rlp
 namespace Message
 
 -- The message IDs are numbers, so each case of the decoder is decided by their values.
-attribute [local simp] STATUS_ID NEW_BLOCK_HASHES_ID GET_BLOCK_HEADERS_ID BLOCK_HEADERS_ID
-  GET_BLOCK_BODIES_ID BLOCK_BODIES_ID NEW_BLOCK_ID BLOCK_RANGE_UPDATE_ID
+attribute [local simp] STATUS_ID NEW_BLOCK_HASHES_ID TRANSACTIONS_ID GET_BLOCK_HEADERS_ID
+  BLOCK_HEADERS_ID GET_BLOCK_BODIES_ID BLOCK_BODIES_ID NEW_BLOCK_ID
+  NEW_POOLED_TRANSACTION_HASHES_ID GET_POOLED_TRANSACTIONS_ID POOLED_TRANSACTIONS_ID
+  BLOCK_RANGE_UPDATE_ID
 
 /-- The envelope `[request-id, payload]` reads back as its request ID and its payload. -/
 theorem readEnvelope_envelope {α : Type} [Codec α] [LawfulCodec α] (i : UInt64) (x : α) :
@@ -42,12 +47,16 @@ theorem list_eq_toItem (items : List Item) : Item.list items = Codec.toItem item
 
 /-- A message has the form of a version.
 
-Status has the form of its version, BlockRangeUpdate exists from eth/69 on, and the other
-messages have one form at every version. -/
+Status and announcements have the form of their version, and an announcement has as many
+types and sizes as hashes.
+
+BlockRangeUpdate exists from eth/69 on, and the other messages have one form at every version. -/
 def FitsVersion (version : EthVersion) : Message → Prop
   | .status (.eth68 ..) => version = .eth68
   | .status (.eth69 ..) => version ≠ .eth68
   | .blockRangeUpdate _ => EthVersion.eth69 ≤ version
+  | .newPooledTransactionHashes a@(.eth68 ..) => version < .eth72 ∧ a.lengthsAgree
+  | .newPooledTransactionHashes a@(.eth72 ..) => version = .eth72 ∧ a.lengthsAgree
   | _ => True
 
 /-- A message of the form of a version reads back from its ID and its item on that version. -/
@@ -65,37 +74,58 @@ theorem ofItem_toItem {version : EthVersion} {m : Message} (hm : m.FitsVersion v
         Except.mapError]
   | blockRangeUpdate r =>
     have hm : EthVersion.eth69 ≤ version := hm
-    simp [ofItem, Message.id, toItem, hm, BLOCK_RANGE_UPDATE_ID,
-      LawfulCodec.ofItem_toItem, Functor.map, Except.map, Except.mapError]
+    simp [ofItem, Message.id, toItem, hm, LawfulCodec.ofItem_toItem, Functor.map, Except.map,
+      Except.mapError]
   | newBlockHashes bs =>
-    simp [ofItem, Message.id, toItem, LawfulCodec.ofItem_toItem,
+    simp [ofItem, Message.id, toItem, LawfulCodec.ofItem_toItem, Functor.map, Except.map,
+      Except.mapError]
+  | transactions txs =>
+    simp [ofItem, Message.id, toItem, list_eq_toItem txs, LawfulCodec.ofItem_toItem,
       Functor.map, Except.map, Except.mapError]
   | getBlockHeaders i r =>
-    simp [ofItem, Message.id, toItem, GET_BLOCK_HEADERS_ID,
-      readEnvelope_envelope, Functor.map, Except.map, Except.mapError]
-  | blockHeaders i hs =>
-    simp [ofItem, Message.id, toItem, GET_BLOCK_HEADERS_ID,
-      list_eq_toItem hs, readEnvelope_envelope, Functor.map, Except.map,
+    simp [ofItem, Message.id, toItem, readEnvelope_envelope, Functor.map, Except.map,
       Except.mapError]
+  | blockHeaders i hs =>
+    simp [ofItem, Message.id, toItem, list_eq_toItem hs, readEnvelope_envelope, Functor.map,
+      Except.map, Except.mapError]
   | getBlockBodies i hs =>
-    simp [ofItem, Message.id, toItem, GET_BLOCK_HEADERS_ID,
-      readEnvelope_envelope, Functor.map, Except.map,
+    simp [ofItem, Message.id, toItem, readEnvelope_envelope, Functor.map, Except.map,
       Except.mapError]
   | blockBodies i bs =>
-    simp [ofItem, Message.id, toItem, GET_BLOCK_HEADERS_ID,
-      list_eq_toItem bs,
-      readEnvelope_envelope, Functor.map, Except.map, Except.mapError]
+    simp [ofItem, Message.id, toItem, list_eq_toItem bs, readEnvelope_envelope, Functor.map,
+      Except.map, Except.mapError]
   | newBlock b td =>
-    simp [ofItem, Message.id, toItem, GET_BLOCK_HEADERS_ID,
-      Item.fields,
-      Item.toItems, Item.field_toItem, bind, Except.bind, pure, Except.pure, Except.mapError]
+    simp [ofItem, Message.id, toItem, Item.fields, Item.toItems, Item.field_toItem, bind,
+      Except.bind, pure, Except.pure, Except.mapError]
+  | newPooledTransactionHashes a =>
+    cases a with
+    | eth68 t sz h =>
+      obtain ⟨hv, hl⟩ := hm
+      simp [ofItem, Message.id, toItem, Announcement.ofItem_eth68 hv, hl, Except.mapError, bind,
+        Except.bind, pure, Except.pure]
+    | eth72 t sz h c =>
+      obtain ⟨rfl, hl⟩ := hm
+      simp [ofItem, Message.id, toItem, Announcement.ofItem_eth72, hl, Except.mapError, bind,
+        Except.bind, pure, Except.pure]
+  | getPooledTransactions i hs =>
+    simp [ofItem, Message.id, toItem, readEnvelope_envelope, Functor.map, Except.map,
+      Except.mapError]
+  | pooledTransactions i txs =>
+    simp [ofItem, Message.id, toItem, list_eq_toItem txs, readEnvelope_envelope, Functor.map,
+      Except.map, Except.mapError]
 
 /-- eth/68 rejects BlockRangeUpdate, which eth/69 adds. -/
 theorem ofItem_blockRangeUpdate_eth68 (item : Item) :
     ofItem .eth68 BLOCK_RANGE_UPDATE_ID item = .error (.unknownId BLOCK_RANGE_UPDATE_ID) := by
   have : ¬ EthVersion.eth69 ≤ .eth68 := by decide
-  simp [ofItem, BLOCK_HEADERS_ID,
-    this]
+  simp [ofItem, this]
+
+/-- A reader refuses an announcement whose types and sizes are not as many as its hashes. -/
+theorem ofItem_unequalLengths {version : EthVersion} {a : Announcement}
+    (hv : Announcement.ofItem version a.toItem = .ok a) (hl : a.lengthsAgree = false) :
+    ofItem version NEW_POOLED_TRANSACTION_HASHES_ID a.toItem
+      = .error (.unequalLengths a.lists.1.size a.lists.2.1.length a.lists.2.2.length) := by
+  simp [ofItem, hv, hl, Except.mapError, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- A response that answers a request is a response with the request ID of the request. -/
 theorem requestId_of_answers {request response : Message} (h : answers request response) :
@@ -104,17 +134,29 @@ theorem requestId_of_answers {request response : Message} (h : answers request r
 
 /-- Every response type answers its request type when it repeats the request ID. -/
 theorem answers_of_requestId (i : UInt64) (r : HeaderRequest) (hs : List Item)
-    (hashes : List Hash32) (bs : List Item) :
+    (hashes : List Hash32) (bs txs : List Item) :
     answers (getBlockHeaders i r) (blockHeaders i hs) ∧
-      answers (getBlockBodies i hashes) (blockBodies i bs) := by
+      answers (getBlockBodies i hashes) (blockBodies i bs) ∧
+      answers (getPooledTransactions i hashes) (pooledTransactions i txs) := by
   simp [answers]
 
-/-- A response that passes the check answers the request, with its request ID. -/
+/-- A response of headers that passes the check answers the request, with its request ID. -/
 theorem answers_of_checkHeaderResponse {request response : Message}
     (h : checkHeaderResponse request response = .ok ()) : answers request response := by
   unfold checkHeaderResponse at h
   split at h
   · rename_i i r j hs
+    by_cases hij : i = j
+    · simp [answers, hij]
+    · simp [hij, throw, throwThe, MonadExceptOf.throw] at h
+  · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- A response of transactions that passes the check answers the request, with its request ID. -/
+theorem answers_of_checkPooledResponse {request response : Message}
+    (h : checkPooledResponse request response = .ok ()) : answers request response := by
+  unfold checkPooledResponse at h
+  split at h
+  · rename_i i hs j txs
     by_cases hij : i = j
     · simp [answers, hij]
     · simp [hij, throw, throwThe, MonadExceptOf.throw] at h

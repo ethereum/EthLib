@@ -28,6 +28,18 @@ eth_check_headers(
   lean_object* response
 );
 
+extern lean_object*
+eth_check_pooled(
+  uint64_t version,
+  lean_object* request,
+  lean_object* response
+);
+
+extern lean_object*
+eth_wire_hash(
+  lean_object* tx
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* Copy the Python `bytes` object `obj` into a Lean `ByteArray`, or set a TypeError naming it. */
@@ -93,4 +105,31 @@ py_eth_check_headers(
   if (parse_bytes(request_obj, "request", &request)) return NULL;
   if (parse_bytes(response_obj, "response", &response)) { lean_dec(request); return NULL; }
   return except_into_pybool(eth_check_headers(version, request, response), ETH_WIRE_ERROR);
+}
+
+PyObject*
+py_eth_check_pooled(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *version_obj, *request_obj, *response_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &version_obj, &request_obj, &response_obj)) return NULL;
+  uint64_t version;
+  if (parse_uint64(version_obj, "version", &version)) return NULL;
+  lean_object *request, *response;
+  if (parse_bytes(request_obj, "request", &request)) return NULL;
+  if (parse_bytes(response_obj, "response", &response)) { lean_dec(request); return NULL; }
+  return except_into_pybool(eth_check_pooled(version, request, response), ETH_WIRE_ERROR);
+}
+
+PyObject*
+py_eth_wire_hash(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject* tx_obj;
+  if (!PyArg_ParseTuple(args, "O", &tx_obj)) return NULL;
+  lean_object* tx;
+  if (parse_bytes(tx_obj, "tx", &tx)) return NULL;
+  return except_into_pybytes(eth_wire_hash(tx), ETH_WIRE_ERROR);
 }

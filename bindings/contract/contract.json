@@ -3268,7 +3268,8 @@
    [{"type": "EthLib.Execution.Network.EthError",
      "codes":
      [{"constructor": "unknownId", "code": 1},
-      {"constructor": "rlp", "code": 2}]}],
+      {"constructor": "rlp", "code": 2},
+      {"constructor": "unequalLengths", "code": 3}]}],
    "error_class": "EthWireError",
    "docstring":
    "The canonical data of the message with the ID `id` and the data `data`, on a version.\n\nIt reads the message, then writes it back."},
@@ -3282,7 +3283,8 @@
    [{"type": "EthLib.Execution.Network.EthError",
      "codes":
      [{"constructor": "unknownId", "code": 1},
-      {"constructor": "rlp", "code": 2}]},
+      {"constructor": "rlp", "code": 2},
+      {"constructor": "unequalLengths", "code": 3}]},
     {"type": "EthLib.Execution.Network.StatusError",
      "codes":
      [{"constructor": "version", "code": 101},
@@ -3300,7 +3302,8 @@
    [{"type": "EthLib.Execution.Network.EthError",
      "codes":
      [{"constructor": "unknownId", "code": 1},
-      {"constructor": "rlp", "code": 2}]},
+      {"constructor": "rlp", "code": 2},
+      {"constructor": "unequalLengths", "code": 3}]},
     {"type": "EthLib.Execution.Network.HeadersError",
      "codes":
      [{"constructor": "tooMany", "code": 201},
@@ -3312,6 +3315,33 @@
    "error_class": "EthWireError",
    "docstring":
    "Whether `response` is BlockHeaders that answers the GetBlockHeaders `request`.\n\nIt must repeat the request ID, and its headers must pass the check of the request."},
+  {"summary":
+   "Whether `response` is PooledTransactions that answers the GetPooledTransactions `request`.",
+   "signature": "(version: int, request: bytes, response: bytes) -> bool",
+   "operation": "EthLib.Execution.Network.Message.checkPooledResponse",
+   "method": "eth_check_pooled",
+   "errors":
+   [{"type": "EthLib.Execution.Network.EthError",
+     "codes":
+     [{"constructor": "unknownId", "code": 1},
+      {"constructor": "rlp", "code": 2},
+      {"constructor": "unequalLengths", "code": 3}]},
+    {"type": "EthLib.Execution.Network.PoolError",
+     "codes":
+     [{"constructor": "rlp", "code": 301},
+      {"constructor": "notRequested", "code": 302},
+      {"constructor": "notAnswer", "code": 303}]}],
+   "error_class": "EthWireError",
+   "docstring":
+   "Whether `response` is PooledTransactions that answers the GetPooledTransactions `request`.\n\nIt must repeat the request ID, and its transactions must be requested ones, in order."},
+  {"summary": "The hash of a transaction as it crosses the wire.",
+   "signature": "(tx: bytes) -> bytes",
+   "operation": "EthLib.Execution.Network.wireHash",
+   "method": "eth_wire_hash",
+   "errors": [],
+   "error_class": "EthWireError",
+   "docstring":
+   "The hash of a transaction as it crosses the wire.\n\nA legacy transaction hashes its RLP list, and a typed one its bytes `tx-type || tx-data`.\n\nA blob transaction in PooledTransactions can come in its network form, the type 3 followed by\n`rlp([tx_payload_body, ...])`, as\n[EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#networking) says.\n\nIts hash is the hash of `0x03 || rlp(tx_payload_body)`, the transaction without its blobs.\n\nThe payload of a canonical blob transaction starts with the chain ID, a scalar, and the network\nform with the body, a list, so the first item tells the two apart."},
   {"summary":
    "The bytes a Snappy block decompresses to, or why it is not a valid block.",
    "signature": "(block: bytes) -> bytes",
