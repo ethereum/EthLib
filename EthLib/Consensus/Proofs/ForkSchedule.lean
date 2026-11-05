@@ -11,6 +11,8 @@ The fork at an epoch is the latest consensus fork that has started by then.
 
 So it never moves back as the epoch grows, whatever the order of the configured epochs.
 
+Heze changes neither the fork nor the version of anything before it.
+
 The blob limit at an epoch is that of the latest schedule entry that has started by then.
 
 So is the gas limit that the schedule of Gloas recommends.
@@ -72,6 +74,7 @@ def activationEpoch (config : Config) : Fork → Option Epoch
   | .pectra => some config.ELECTRA_FORK_EPOCH
   | .fusaka => some config.FULU_FORK_EPOCH
   | .glamsterdam => some config.GLOAS_FORK_EPOCH
+  | .hegota => some config.HEZE_FORK_EPOCH
   | _ => none
 
 variable {config : Config}
@@ -125,10 +128,43 @@ theorem getBlobParameters_spec (epoch : Epoch) :
 
 /-- The fork at an epoch is Gloas exactly from the first epoch of Gloas. -/
 theorem forkAtEpoch_eq_glamsterdam_iff (epoch : Epoch) :
-    config.forkAtEpoch epoch = .glamsterdam ↔ config.GLOAS_FORK_EPOCH ≤ epoch := by
+    config.forkAtEpoch epoch = .glamsterdam ↔
+      config.GLOAS_FORK_EPOCH ≤ epoch ∧ epoch < config.HEZE_FORK_EPOCH := by
+  unfold forkAtEpoch
+  repeat' split
+  all_goals simp_all [UInt64.not_le]
+
+/-- The fork at an epoch is Heze exactly from the first epoch of Heze. -/
+theorem forkAtEpoch_eq_hegota_iff (epoch : Epoch) :
+    config.forkAtEpoch epoch = .hegota ↔ config.HEZE_FORK_EPOCH ≤ epoch := by
   unfold forkAtEpoch
   repeat' split
   all_goals simp_all
+
+/-- Before the first epoch of Heze, the fork is the one of a configuration where Heze never starts.
+
+So adding Heze changes no fork before it. -/
+theorem forkAtEpoch_of_lt_heze {epoch : Epoch} (before : epoch < config.HEZE_FORK_EPOCH) :
+    config.forkAtEpoch epoch =
+      { config with HEZE_FORK_EPOCH := FAR_FUTURE_EPOCH }.forkAtEpoch epoch := by
+  -- No epoch is below the first epoch of Heze and at the largest epoch.
+  have never : ¬FAR_FUTURE_EPOCH ≤ epoch := by
+    intro far
+    have := config.HEZE_FORK_EPOCH.toNat_lt
+    rw [UInt64.le_iff_toNat_le] at far
+    rw [UInt64.lt_iff_toNat_lt] at before
+    have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+    omega
+  simp only [forkAtEpoch, UInt64.not_le.mpr before, never, ite_false]
+
+/-- The version of Heze is the one the configuration names. -/
+theorem forkVersion_hegota : config.forkVersion .hegota = config.HEZE_FORK_VERSION := rfl
+
+/-- A fork before Heze does not read the version of Heze. -/
+theorem forkVersion_of_lt_hegota {fork : Fork} (before : fork < .hegota) (version : Version) :
+    config.forkVersion fork = { config with HEZE_FORK_VERSION := version }.forkVersion fork := by
+  have : ¬Fork.hegota ≤ fork := fun le => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le before le)
+  simp only [forkVersion, this, ite_false]
 
 /-- The gas limit that the schedule recommends at an epoch.
 

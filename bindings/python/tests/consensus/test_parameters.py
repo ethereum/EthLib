@@ -1,6 +1,6 @@
 """The presets, configurations and parameters of EthLib against the files of consensus-specs.
 
-The files are the mainnet and minimal presets from Phase 0 to Gloas, and the two configurations.
+The files are the mainnet and minimal presets from Phase 0 to Heze, and the two configurations.
 They are copied byte for byte from ethereum/consensus-specs, at the pin that `tests/sources.toml`
 records, into `tests/consensus/parameters/`, and `SHA256SUMS` there fixes their digests.
 """
@@ -17,8 +17,8 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "parameter
 
 PRESETS = ("mainnet", "minimal")
 
-# The forks of the beacon chain up to Gloas, in order, as consensus-specs names them.
-FORKS = ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas")
+# The forks of the beacon chain up to Heze, in order, as consensus-specs names them.
+FORKS = ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas", "heze")
 
 # Each fork of the shared timeline from Phase 0 on, with the fork of the beacon chain in force.
 TIMELINE = {
@@ -37,6 +37,7 @@ TIMELINE = {
     "bpo1": "fulu",
     "bpo2": "fulu",
     "glamsterdam": "gloas",
+    "hegota": "heze",
 }
 
 # The preset values that a fork replaces. A replacement carries the name of its fork as a suffix,
@@ -48,6 +49,7 @@ REPLACED = (
     "WHISTLEBLOWER_REWARD_QUOTIENT",
     "MAX_ATTESTER_SLASHINGS",
     "MAX_ATTESTATIONS",
+    "MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE",
 )
 
 # A suffixed preset value that is a new value, not a replacement: from Electra, the largest
@@ -57,16 +59,10 @@ NEW_WITH_SUFFIX = {"MAX_EFFECTIVE_BALANCE_ELECTRA"}
 
 # Configuration values that EthLib does not hold in the configuration.
 # The gossip message ID defines the two message domains as constants.
-# The rest belong to forks after Gloas: Heze, and the feature forks of EIP-8198 and EIP-8321.
+# The rest belong to the feature forks of EIP-8198 and EIP-8321, which no fork schedules.
 NOT_IN_CONFIG = {
     "MESSAGE_DOMAIN_INVALID_SNAPPY",
     "MESSAGE_DOMAIN_VALID_SNAPPY",
-    "HEZE_FORK_VERSION",
-    "HEZE_FORK_EPOCH",
-    "INCLUSION_LIST_DUE_BPS",
-    "MAX_REQUEST_INCLUSION_LIST",
-    "MIN_SLOTS_FOR_INCLUSION_LISTS_REQUESTS",
-    "MAX_TRANSACTIONS_BYTES_PER_INCLUSION_LIST",
     "EIP8198_FORK_VERSION",
     "EIP8198_FORK_EPOCH",
     "SLOT_DURATION_MS_EIP8198",
@@ -138,8 +134,10 @@ def test_parameters(name: str, fork: str) -> None:
     expected = {}
     for key in REPLACED:
         # The value in force is the one of the latest fork up to this one that names it.
-        expected[key] = files["phase0"][key]
-        for earlier in FORKS[1:FORKS.index(TIMELINE[fork]) + 1]:
+        # Before the fork that adds a value, the value of that fork stands in.
+        first = next(name for name in FORKS if key in files[name])
+        expected[key] = files[first][key]
+        for earlier in FORKS[FORKS.index(first) + 1:FORKS.index(TIMELINE[fork]) + 1]:
             replacement = f"{key}_{earlier.upper()}"
             if replacement in files[earlier]:
                 expected[key] = files[earlier][replacement]
@@ -161,5 +159,3 @@ def test_unknown_names_are_rejected() -> None:
         consensus.config("holesky")
     with pytest.raises(ValueError):
         consensus.parameters("mainnet", "frontier")
-    with pytest.raises(ValueError):
-        consensus.parameters("mainnet", "hegota")

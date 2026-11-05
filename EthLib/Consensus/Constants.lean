@@ -17,6 +17,8 @@ A constant that a fork adds names that fork.
 The constants of Gloas come from EIP-7732 and EIP-8282, both in Last Call on 2026-11-03.
 
 They can change until the EIPs are final.
+
+The constant of Heze comes from EIP-7805, a Draft on 2026-11-03.
 -/
 
 @[expose] public section
@@ -249,5 +251,14 @@ def BUILDER_DEPOSIT_REQUEST_TYPE : Vector UInt8 1 := #v[0x03]
 
 [EIP-8282](https://eips.ethereum.org/EIPS/eip-8282#constants) defines it. -/
 def BUILDER_EXIT_REQUEST_TYPE : Vector UInt8 1 := #v[0x04]
+
+/-- From Heze: the domain type of an inclusion list.
+
+[EIP-7805](https://eips.ethereum.org/EIPS/eip-7805#preset) names it `DOMAIN_IL_COMMITTEE`.
+
+It gives the value `0x0C000000`, which Gloas has since given to the payload timeliness committee.
+
+So Heze takes `0x10000000`. -/
+def DOMAIN_INCLUSION_LIST_COMMITTEE : DomainType := #v[0x10, 0x00, 0x00, 0x00]
 
 end EthLib.Consensus
