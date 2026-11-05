@@ -29,13 +29,11 @@ The low two bits of an element's first byte, its tag, name its kind:
 
 A peer controls every byte, so decompression is total and names each way a block can be malformed.
 
-The output is kept most recent byte first.
+The output is a byte array, so a copy reads each of its bytes in one step.
 
-A copy that reaches k bytes back then reads index k - 1.
+A copy then costs its length, amortized, however far back it reaches.
 
-The result is reversed once at the end.
-
-The code is written for clarity, not speed.
+The array grows as bytes arrive, and never reserves the declared length, which a peer controls.
 
 The encoder writes the data as one literal, so it never compresses.
 
@@ -135,39 +133,32 @@ def readPreamble (bs : List UInt8) : Except SnappyError (Nat × List UInt8) :=
       else
         .ok (len, rest)
 
-/-- Copy `len` bytes from `offset` back onto the output, most recent byte first (§2.2).
+/-- Copy `len` bytes from `offset` back onto the end of the output (§2.2).
 
-The last `offset` bytes written form a window.
+Each byte is read `offset` back from the current end.
 
-A copy no longer than the window takes the oldest bytes of it, in order.
-
-A longer copy takes the whole window, which then repeats after itself, as §2.2 allows.
-
-So each step moves up to `offset` bytes at once, and a copy costs its length plus its offset.
+So a copy longer than its offset reads bytes it has written, and repeats itself, as §2.2 allows.
 
 An offset of 0 reads the most recent byte, as an offset of 1 does. -/
-def copyBytes (out : List UInt8) (offset len : Nat) : Except SnappyError (List UInt8) :=
-  if len = 0 then .ok out
-  else
-    let period := max offset 1
-    let window := out.take period
-    -- Fewer than `offset` bytes are written so far.
-    if window.length < period then .error (.copyOffsetTooLarge offset)
-    else if len ≤ period then .ok (window.drop (period - len) ++ out)
-    else copyBytes (window ++ out) offset (len - period)
-termination_by len
-decreasing_by omega
+def copyBytes (out : ByteArray) (offset : Nat) : Nat → Except SnappyError ByteArray
+  | 0 => .ok out
+  | len + 1 =>
+      if h : max offset 1 ≤ out.size then
+        copyBytes (out.push out[out.size - max offset 1]) offset len
+      else
+        -- Fewer than `offset` bytes are written so far.
+        .error (.copyOffsetTooLarge offset)
 
 -- Each length an element declares is checked in as many steps as that length.
 attribute [local instance high] Base.Length.decideLeLength Base.Length.decideLengthLt
 
-/-- Decode the elements of a block onto the output, most recent byte first.
+/-- Decode the elements of a block onto the end of the output.
 
 The fuel bounds the number of elements.
 
 Each element takes at least its tag byte, so the input length is enough fuel.
 -/
-def decompressElements : List UInt8 → List UInt8 → Nat → Except SnappyError (List UInt8)
+def decompressElements : List UInt8 → ByteArray → Nat → Except SnappyError ByteArray
   | [], out, _ => .ok out
   -- Out of fuel: unreachable when the fuel is at least the input length.
   | _ :: _, _, 0 => .error .literalPastEnd
@@ -182,7 +173,7 @@ def decompressElements : List UInt8 → List UInt8 → Nat → Except SnappyErro
           if rest.length < len then
             .error .literalPastEnd
           else
-            decompressElements (rest.drop len) ((rest.take len).reverse ++ out) fuel
+            decompressElements (rest.drop len) ((rest.take len).foldl ByteArray.push out) fuel
         -- Tags 60 to 63 say that 1 to 4 little-endian bytes hold the length minus one (§2.1).
         else
           let extra := upper - 59
@@ -194,7 +185,7 @@ def decompressElements : List UInt8 → List UInt8 → Nat → Except SnappyErro
             if rest.length < len then
               .error .literalPastEnd
             else
-              decompressElements (rest.drop len) ((rest.take len).reverse ++ out) fuel
+              decompressElements (rest.drop len) ((rest.take len).foldl ByteArray.push out) fuel
       else
         -- A copy: the tag fixes the width of the offset (§2.2.1 to §2.2.3).
         let width := if t == 1 then 1 else if t == 2 then 2 else 4
@@ -214,23 +205,27 @@ def decompressElements : List UInt8 → List UInt8 → Nat → Except SnappyErro
             | .error e => .error e
             | .ok out => decompressElements (rest.drop width) out fuel
 
-/-- The bytes a Snappy block decompresses to, or why it is not a valid block. -/
-def decompressList (bs : List UInt8) : Except SnappyError (List UInt8) :=
+/-- The bytes a Snappy block, given as a list, decompresses to, or why it is not a valid block. -/
+def decompressBytes (bs : List UInt8) : Except SnappyError ByteArray :=
   match readPreamble bs with
   | .error e => .error e
   | .ok (declared, rest) =>
-      match decompressElements rest [] rest.length with
+      match decompressElements rest ByteArray.empty rest.length with
       | .error e => .error e
       | .ok out =>
           -- The output must have exactly the declared length: no truncation, no padding.
-          if out.length == declared then
-            .ok out.reverse
+          if out.size == declared then
+            .ok out
           else
-            .error (.lengthMismatch declared out.length)
+            .error (.lengthMismatch declared out.size)
+
+/-- The bytes a Snappy block decompresses to, as a list, or why it is not a valid block. -/
+def decompressList (bs : List UInt8) : Except SnappyError (List UInt8) :=
+  (decompressBytes bs).map fun out => out.data.toList
 
 /-- The bytes a Snappy block decompresses to, or why it is not a valid block. -/
 def decompress (bs : ByteArray) : Except SnappyError ByteArray :=
-  (decompressList bs.toList).map fun out => ⟨out.toArray⟩
+  decompressBytes bs.toList
 
 /-- The fewest bytes that hold `n` little-endian, for `n < 2^32` (§2.1). -/
 def literalLengthBytes (n : Nat) : Nat :=
