@@ -100,6 +100,21 @@ def setEpochParticipation (state : BeaconState preset fork) (current : Bool)
   if current then { state with currentEpochParticipation := fun _ => participation }
   else { state with previousEpochParticipation := fun _ => participation }
 
+/-- Before Deneb: an attestation must be included at most one epoch after its slot.
+
+A 64-bit overflow of that last slot is an error.
+
+From Deneb there is no such bound, as [EIP-7045] says, and nothing is computed.
+
+[EIP-7045]: https://eips.ethereum.org/EIPS/eip-7045#specification
+-/
+def checkInclusionDeadline (state : BeaconState preset fork) (slot : Slot) :
+    Except TransitionError Unit :=
+  if fork < .dencun then do
+    let latest ← liftAccessor (liftArith (addChecked slot preset.SLOTS_PER_EPOCH))
+    ensure (state.slot ≤ latest) (.attestationTooLate slot state.slot)
+  else pure ()
+
 /-- From Altair to Deneb: the state after an attestation.
 
 Its target must be the current or the previous epoch, and the epoch of its slot.
@@ -136,8 +151,7 @@ def processAttestationAltair (config : Config) (checks : SignatureChecks)
     let earliest ←
       liftAccessor (liftArith (addChecked data.slot preset.MIN_ATTESTATION_INCLUSION_DELAY))
     ensure (earliest ≤ state.slot) (.attestationTooEarly data.slot state.slot)
-    let latest ← liftAccessor (liftArith (addChecked data.slot preset.SLOTS_PER_EPOCH))
-    ensure (fork < .dencun → state.slot ≤ latest) (.attestationTooLate data.slot state.slot)
+    checkInclusionDeadline state data.slot
     let count := getCommitteeCountPerSlot state data.target.epoch
     ensure (data.index < count) (.committeeIndexOutOfRange data.index count)
     let committee ← liftAccessor (getBeaconCommittee state data.slot data.index)
