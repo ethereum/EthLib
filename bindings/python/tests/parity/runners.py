@@ -42,7 +42,7 @@ NOT_YET = {
     "random": "the state transition after Phase 0 (consensus track C26 to C40)",
     "sanity": "the state transition after Phase 0 (consensus track C26 to C40)",
     "transition": "beacon state transition (consensus track C13 to C40)",
-    "fork_choice": "fork choice (consensus track C43 to C50)",
+    "fork_choice": "the Altair state transition (C27), then the Bellatrix to Fulu blocks (C47)",
     "fast_confirmation": "fast confirmation rule (consensus track, decision 9)",
     "sync": "optimistic sync (consensus track C48)",
     "networking": "gossip validation (consensus track C63 and C64)",

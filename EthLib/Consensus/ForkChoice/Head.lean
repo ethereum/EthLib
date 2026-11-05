@@ -98,7 +98,7 @@ def getSupportedNode (_store : Store preset fork) (message : LatestMessage) :
   if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
   return ⟨message.root, .pending⟩
 
-/-- The votes for a node: the balance of the validators whose latest vote descends from it.
+/-- The votes for a node: the effective balance of the validators that vote in its subtree.
 
 Only the validators active and not slashed in the given state count, and no equivocator does. -/
 def getAttestationScore (node : ForkChoiceNode) (state : BeaconState preset fork) :
