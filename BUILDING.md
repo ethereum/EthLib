@@ -70,7 +70,8 @@ GitHub keeps one waiting run for each group, so a newer push replaces the older 
 
 The Mathlib cache does not hold the builds of VCVio, PolyFun and cslib, which the proofs import.
 So CI caches their `.lake/build` directories separately, under a key of the operating system, the architecture, the toolchain and the dependency manifest.
-A successful push to `master` saves this cache only when no entry with its key exists.
+Each successful push to `master` saves this cache under a new key, and a run restores the newest entry for its toolchain and manifest.
+So a module of these packages that EthLib starts to import is cached after the next push to `master`.
 Lake compares content hashes, so it rebuilds a restored module whose inputs differ.
 
 The cache saves the most time when a change rebuilds only the proofs that it affects.
