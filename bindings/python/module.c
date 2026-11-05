@@ -584,6 +584,7 @@ static PyMethodDef methods[] = {
   {"consensus_merkle_proof", py_consensus_merkle_proof, METH_VARARGS, DOC_consensus_merkle_proof},
   {"consensus_verify_blob_sidecar_inclusion_proof", py_consensus_verify_blob_sidecar_inclusion_proof,
    METH_VARARGS, DOC_consensus_verify_blob_sidecar_inclusion_proof},
+  {"pq_keys_ssz", py_pq_keys_ssz, METH_VARARGS, DOC_pq_keys_ssz},
   {"consensus_compute_shuffled_permutation", py_consensus_compute_shuffled_permutation,
    METH_VARARGS, DOC_consensus_compute_shuffled_permutation},
   {"consensus_compute_shuffled_index", py_consensus_compute_shuffled_index, METH_VARARGS,
