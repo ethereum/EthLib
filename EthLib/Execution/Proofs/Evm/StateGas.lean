@@ -275,7 +275,7 @@ theorem repaid_repay (meter : StateGasMeter) : meter.repay.Repaid := by
 theorem cancel_enter (meter : StateGasMeter) (gas : Nat) :
     cancel (meter.enter gas).1 (meter.enter gas).2 =
       { meter with gasLeft := meter.gasLeft + gas } := by
-  simp only [enter, cancel, start, Nat.zero_add]
+  simp only [enter, drain, cancel, start, Nat.zero_add]
 
 /-- The net state gas of a merge is that of the caller plus that of the child.
 
@@ -287,9 +287,9 @@ theorem stateGasUsed_absorb (meter child : StateGasMeter) (gas : Nat) (succeeded
   unfold absorb
   split
   · rw [stateGasUsed_repay]
-    simp only [enter, stateGasUsed]
+    simp only [enter, drain, stateGasUsed]
     omega
-  · simp only [enter, stateGasUsed]
+  · simp only [enter, drain, stateGasUsed]
     omega
 
 /-- A merge returns the execution gas and the spill of the child to the caller. -/

@@ -13,7 +13,9 @@ public import EthLib.Execution.Evm.TransientStorage
 /-!
 # `Evm.Measure`
 
-The measure of a frame is twice its gas left, plus one while it runs.
+The measure of a frame is twice the execution gas it holds, plus one while it runs.
+
+The gas it holds is its gas left, plus the gas that a rollback of its state gas gives back.
 
 Each instruction that succeeds lowers the measure of a running frame.
 
@@ -39,9 +41,9 @@ open GasCosts
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
-/-- The measure of a frame: twice its gas left, plus one while it runs. -/
+/-- The measure of a frame: twice the execution gas it holds, plus one while it runs. -/
 def measure (evm : Evm fork Meter) : Nat :=
-  2 * GasMeter.gasLeft evm.gas + evm.running.toNat
+  2 * GasMeter.gasHeld evm.gas + evm.running.toNat
 
 /-- A step lowers the measure of the frame `evm`.
 
@@ -51,14 +53,14 @@ Any frame that ends the message with at most its gas lets the frame go on with a
 def StepResult.Decreases (evm : Evm fork Meter) : StepResult fork Meter → Prop
   | .next after => measure after < measure evm
   | .child _ message resume =>
-    message.gas < GasMeter.gasLeft evm.gas ∧
-      ∀ child after, GasMeter.gasLeft child.gas ≤ message.gas → resume child = .ok after →
+    message.gas < GasMeter.gasHeld evm.gas ∧
+      ∀ child after, GasMeter.gasHeld child.gas ≤ message.gas → resume child = .ok after →
         measure after < measure evm
 
-/-- The second frame has at least `amount` less gas than the first, and runs as the first does. -/
+/-- The second frame holds at least `amount` less gas than the first, and runs as the first does. -/
 structure Pays (amount : Nat) (before after : Evm fork Meter) : Prop where
-  /-- The gas left drops by at least `amount`. -/
-  gasLeft : GasMeter.gasLeft after.gas + amount ≤ GasMeter.gasLeft before.gas
+  /-- The gas held drops by at least `amount`. -/
+  gasHeld : GasMeter.gasHeld after.gas + amount ≤ GasMeter.gasHeld before.gas
   /-- The frame runs after exactly when it runs before. -/
   running : after.running = before.running
 
@@ -70,28 +72,33 @@ theorem Pays.of_eq {before after : Evm fork Meter} (gas : after.gas = before.gas
 /-- Two payments in a row pay their sum. -/
 theorem Pays.trans {a b c : Evm fork Meter} {m n : Nat} (hab : Pays m a b) (hbc : Pays n b c) :
     Pays (m + n) a c :=
-  ⟨by have := hab.gasLeft; have := hbc.gasLeft; omega, hbc.running.trans hab.running⟩
+  ⟨by have := hab.gasHeld; have := hbc.gasHeld; omega, hbc.running.trans hab.running⟩
 
 /-- A payment of `n` is a payment of any `m ≤ n`. -/
 theorem Pays.mono {a b : Evm fork Meter} {m n : Nat} (h : Pays n a b) (hle : m ≤ n := by decide) :
     Pays m a b :=
-  ⟨by have := h.gasLeft; omega, h.running⟩
+  ⟨by have := h.gasHeld; omega, h.running⟩
 
 /-- A payment to a frame is a payment to any frame with the same gas and running flag. -/
 theorem Pays.congr {a b c : Evm fork Meter} {n : Nat} (h : Pays n a b) (gas : c.gas = b.gas)
     (running : c.running = b.running) : Pays n a c :=
-  ⟨gas ▸ h.gasLeft, running.trans h.running⟩
+  ⟨gas ▸ h.gasHeld, running.trans h.running⟩
+
+/-- A payment to a frame is a payment to that frame once it passes on its reservoir. -/
+theorem Pays.drain [LawfulGasMeter Meter] {a b : Evm fork Meter} {n : Nat} (h : Pays n a b) :
+    Pays n a { b with gas := GasMeter.drain b.gas } :=
+  ⟨by simp only [LawfulGasMeter.gasHeld_drain]; exact h.gasHeld, h.running⟩
 
 /-- A frame that pays at least 1 gas and still runs has a lower measure. -/
 theorem Pays.measure_lt {a b : Evm fork Meter} (h : Pays 1 a b) (running : a.running = true) :
     measure b < measure a := by
-  have := h.gasLeft
+  have := h.gasHeld
   simp only [measure, h.running, running]
   omega
 
 /-- A running frame that stops, with no more gas, has a lower measure. -/
 theorem measure_lt_of_stop {a b : Evm fork Meter}
-    (gas : GasMeter.gasLeft b.gas ≤ GasMeter.gasLeft a.gas) (stops : b.running = false)
+    (gas : GasMeter.gasHeld b.gas ≤ GasMeter.gasHeld a.gas) (stops : b.running = false)
     (running : a.running = true) : measure b < measure a := by
   simp only [measure, stops, running]
   simp only [Bool.toNat_false, Bool.toNat_true]
@@ -118,7 +125,7 @@ theorem chargeGas_pays [LawfulGasMeter Meter] {evm after : Evm fork Meter} {amou
     (h : chargeGas evm amount = .ok after) : Pays amount evm after := by
   obtain ⟨_, hc, h⟩ := except_bind_eq_ok h
   cases h
-  exact ⟨LawfulGasMeter.gasLeft_charge hc, rfl⟩
+  exact ⟨LawfulGasMeter.gasHeld_charge hc, rfl⟩
 
 /-- A charge of a price and of the growth of memory pays at least the price. -/
 theorem chargeGasAndMemory_pays [LawfulGasMeter Meter] {evm after : Evm fork Meter}
@@ -500,12 +507,12 @@ theorem memoryDataStep_measure_lt {op : Op}
 
 /-- A halt with output stops the frame, with no more gas. -/
 theorem haltWithOutput_stops {evm after : Evm fork Meter} (h : haltWithOutput evm = .ok after) :
-    GasMeter.gasLeft after.gas ≤ GasMeter.gasLeft evm.gas ∧ after.running = false := by
+    GasMeter.gasHeld after.gas ≤ GasMeter.gasHeld evm.gas ∧ after.running = false := by
   obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
   obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
   obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
   cases h
-  have := (((popWord_pays h1).trans (popWord_pays h2)).trans (chargeGasAndMemory_pays h3)).gasLeft
+  have := (((popWord_pays h1).trans (popWord_pays h2)).trans (chargeGasAndMemory_pays h3)).gasHeld
   exact ⟨by simp only at this ⊢; omega, rfl⟩
 
 /-- RETURN and REVERT lower the measure. -/

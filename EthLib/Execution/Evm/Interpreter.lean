@@ -136,8 +136,8 @@ theorem step_decreases [LawfulGasMeter Meter] (fork : Fork) {evm : Evm fork Mete
     exact measure_lt_of_stop (Nat.le_refl _) rfl running
 
 /-- A frame whose measure drops has no more gas. -/
-theorem gasLeft_le_of_measure_lt {a b : Evm fork Meter} (h : measure b < measure a) :
-    GasMeter.gasLeft b.gas ≤ GasMeter.gasLeft a.gas := by
+theorem gasHeld_le_of_measure_lt {a b : Evm fork Meter} (h : measure b < measure a) :
+    GasMeter.gasHeld b.gas ≤ GasMeter.gasHeld a.gas := by
   unfold measure at h
   have := Bool.toNat_le a.running
   omega
@@ -149,7 +149,7 @@ From a calling frame, it runs a message and gives the frame that ends it, with a
 It fails only with an error that aborts the run. -/
 abbrev MessageRunner (fork : Fork) (Meter : Type) [GasMeter Meter] (bound : Nat) : Type :=
   (caller : Evm fork Meter) → (message : Message fork) → message.gas < bound →
-    Except EvmError { child : Evm fork Meter // GasMeter.gasLeft child.gas ≤ message.gas }
+    Except EvmError { child : Evm fork Meter // GasMeter.gasHeld child.gas ≤ message.gas }
 
 /-- The frame after an exceptional halt: it stops with no gas, no output and the error. -/
 def exceptionalHalt (evm : Evm fork Meter) (error : EvmError) : Evm fork Meter :=
@@ -171,7 +171,7 @@ def runFrame (step : Evm fork Meter → Except EvmError (StepResult fork Meter))
       result.Decreases evm)
     (bound : Nat)
     (runChild : MessageRunner fork Meter bound)
-    (evm : Evm fork Meter) (within : GasMeter.gasLeft evm.gas ≤ bound) :
+    (evm : Evm fork Meter) (within : GasMeter.gasHeld evm.gas ≤ bound) :
     Except EvmError (Evm fork Meter) :=
   if running : evm.running then
     match result : step evm with
@@ -179,7 +179,7 @@ def runFrame (step : Evm fork Meter → Except EvmError (StepResult fork Meter))
     | .ok (.next after) =>
       have lower : measure after < measure evm := decreases running result
       runFrame step decreases bound runChild after
-        (Nat.le_trans (gasLeft_le_of_measure_lt lower) within)
+        (Nat.le_trans (gasHeld_le_of_measure_lt lower) within)
     | .ok (.child caller message resume) =>
       have lower := decreases running result
       match runChild caller message (Nat.lt_of_lt_of_le lower.1 within) with
@@ -190,27 +190,27 @@ def runFrame (step : Evm fork Meter → Except EvmError (StepResult fork Meter))
         | .ok after =>
           have lower : measure after < measure evm := lower.2 child after used resumed
           runFrame step decreases bound runChild after
-            (Nat.le_trans (gasLeft_le_of_measure_lt lower) within)
+            (Nat.le_trans (gasHeld_le_of_measure_lt lower) within)
   else .ok evm
 termination_by measure evm
 
 /-- A run ends with no more gas than the frame it starts from.
 
 The recursion of messages needs this bound, so that a message gives back at most its own gas. -/
-theorem gasLeft_runFrame_le [LawfulGasMeter Meter]
+theorem gasHeld_runFrame_le [LawfulGasMeter Meter]
     {step : Evm fork Meter → Except EvmError (StepResult fork Meter)}
     {decreases : ∀ {evm result}, evm.running = true → step evm = .ok result →
       result.Decreases evm}
     {bound : Nat}
     {runChild : MessageRunner fork Meter bound}
-    {evm after : Evm fork Meter} {within : GasMeter.gasLeft evm.gas ≤ bound}
+    {evm after : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound}
     (h : runFrame step decreases bound runChild evm within = .ok after) :
-    GasMeter.gasLeft after.gas ≤ GasMeter.gasLeft evm.gas := by
+    GasMeter.gasHeld after.gas ≤ GasMeter.gasHeld evm.gas := by
   fun_induction runFrame step decreases bound runChild evm within
   all_goals first
     | (cases h; done)
-    | (cases h; simp only [exceptionalHalt, LawfulGasMeter.gasLeft_exhaust]; omega)
+    | (cases h; simp only [exceptionalHalt, LawfulGasMeter.gasHeld_exhaust]; omega)
     | (cases h; exact Nat.le_refl _)
-    | (rename_i lower ih; exact Nat.le_trans (ih h) (gasLeft_le_of_measure_lt lower))
+    | (rename_i lower ih; exact Nat.le_trans (ih h) (gasHeld_le_of_measure_lt lower))
 
 end EthLib.Execution.Evm

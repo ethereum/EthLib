@@ -8,6 +8,8 @@ public import EthLib.Execution.Evm.Frame
 With one counter of gas, a charge succeeds exactly when the frame has the gas.
 
 It then takes the charge from the gas left, and changes nothing else.
+
+From Glamsterdam, a message that never runs gives its caller back its reservoir.
 -/
 
 @[expose] public section
@@ -41,5 +43,14 @@ theorem chargeGas_eq_ok_iff {evm after : Evm fork Nat} {amount : Nat} :
       exact ⟨by omega, rfl⟩
     · rintro ⟨-, rfl⟩
       rfl
+
+/-- From Glamsterdam, a call whose message never runs leaves the meter of the caller as before.
+
+The caller passes on its reservoir, then gets it back with the execution gas of the message. -/
+theorem credit_drain (meter : StateGasMeter) (gas : Nat) :
+    GasMeter.credit (GasMeter.drain meter) gas (GasMeter.reservoir meter) =
+      { meter with gasLeft := meter.gasLeft + gas } := by
+  simp only [GasMeter.credit, GasMeter.drain, GasMeter.reservoir, StateGasMeter.cancel,
+    StateGasMeter.drain, StateGasMeter.start, Nat.zero_add]
 
 end EthLib.Execution.Evm
