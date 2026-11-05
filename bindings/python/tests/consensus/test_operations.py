@@ -19,7 +19,8 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "operation
 # Gloas also cancels the builder payments of a slashed proposer, which EthLib does not hold yet,
 # so the slashings stop at Fulu.
 # Electra changes attestations and new validators, and Deneb the signature of exits.
-# Gloas changes the withdrawals, and moves the execution payload out of the block.
+# Gloas moves the execution payload out of the block.
+# From Gloas the withdrawals take no payload, so their cases have no operation file.
 HANDLERS = {
     "block_header": ("block", ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
                                "fulu")),
@@ -35,7 +36,7 @@ HANDLERS = {
                                           "fulu")),
     "voluntary_exit": ("voluntary_exit", ("phase0", "altair", "bellatrix", "capella")),
     "execution_payload": ("body", ("bellatrix", "capella", "deneb", "electra", "fulu")),
-    "withdrawals": ("execution_payload", ("capella", "deneb", "electra", "fulu")),
+    "withdrawals": ("execution_payload", ("capella", "deneb", "electra", "fulu", "gloas")),
     "bls_to_execution_change": ("address_change", ("capella", "deneb", "electra", "fulu")),
     "payload_attestation": ("payload_attestation", ("gloas",)),
     "execution_payload_bid": ("execution_payload_bid", ("gloas",)),
@@ -59,7 +60,10 @@ def runs(fork: str, handler: str) -> bool:
 def run_case(preset: str, fork: str, handler: str, case: Path) -> None:
     """Run one case: the state after the operation, or a rejection when the case has no post."""
     pre = snappy.decompress((case / "pre.ssz_snappy").read_bytes())
-    operation = snappy.decompress((case / f"{HANDLERS[handler][0]}.ssz_snappy").read_bytes())
+    if handler == "withdrawals" and fork in ("gloas", "heze"):
+        operation = b""
+    else:
+        operation = snappy.decompress((case / f"{HANDLERS[handler][0]}.ssz_snappy").read_bytes())
     meta = case / "meta.yaml"
     # Setting 2 marks placeholder signatures, which the case must not check.
     setting = YAML(typ="safe").load(meta.read_text()).get("bls_setting", 0) if meta.exists() else 0

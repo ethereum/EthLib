@@ -20,16 +20,25 @@ From Electra, the queued partial withdrawals come first.
 
 From Electra too, the largest effective balance depends on the credentials.
 
-The payload of the block must carry exactly the withdrawals that the state expects.
+Before Gloas, the payload of the block must carry exactly the withdrawals that the state expects.
+
+From Gloas the block carries no payload.
+
+The state then records the withdrawals that the next payload must carry.
+
+From Gloas too, the builders withdraw: their queued payments first, then a sweep of builders.
+
+A block whose parent has no payload withdraws nothing.
 
 A validator with BLS credentials may change them once to an address, signed by its BLS key.
 
-Gloas changes the withdrawals, and there they fail as not yet specified.
-
 [EIP-4895] adds the withdrawals to the payload, and [EIP-7251] the queue and the larger balances.
+
+[EIP-7732] adds the withdrawals of builders.
 
 [EIP-4895]: https://eips.ethereum.org/EIPS/eip-4895#new-field-in-the-execution-payload-withdrawals
 [EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
+[EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#beacon-chain-changes
 -/
 
 @[expose] public section
@@ -101,27 +110,113 @@ def getBalanceAfterWithdrawals (state : BeaconState preset fork) (index : Valida
 
 /-- From Capella: the withdrawals that a state expects of the next payload.
 
-It also counts the queued partial withdrawals read and the validators visited. -/
+It also counts the entries that each part of the computation read. -/
 structure ExpectedWithdrawals where
   /-- The withdrawals, in their order. -/
   withdrawals : Array Withdrawal
+  /-- From Gloas: the queued builder withdrawals that were read; zero before. -/
+  processedBuilderWithdrawalsCount : Nat
   /-- From Electra: the queued partial withdrawals that were read, paid or not. -/
   processedPartialWithdrawalsCount : Nat
+  /-- From Gloas: the builders that the sweep of builders visited; zero before. -/
+  processedBuildersSweepCount : Nat
   /-- The validators that the sweep visited. -/
   processedSweepWithdrawalsCount : Nat
   deriving Repr
 
 /-- The withdrawals with one more at their end, at the next withdrawal index, which then grows.
 
-The amount goes to the address of the credentials of the validator.
-
 An index of 2^64 is an error. -/
 def appendWithdrawal (withdrawals : Array Withdrawal) (withdrawalIndex : WithdrawalIndex)
-    (index : ValidatorIndex) (validator : Validator) (amount : Gwei) :
+    (index : ValidatorIndex) (address : ExecutionAddress) (amount : Gwei) :
     Except AccessorError (Array Withdrawal × WithdrawalIndex) := do
   let next ← liftArith (addChecked withdrawalIndex 1)
-  return (withdrawals.push
-    ⟨withdrawalIndex, index, credentialAddress validator.withdrawalCredentials, amount⟩, next)
+  return (withdrawals.push ⟨withdrawalIndex, index, address, amount⟩, next)
+
+/-- From Gloas: the queued builder withdrawals that the next payload pays, in their order.
+
+Each pays its amount to its address, under the index that names its builder.
+
+The reading stops when the withdrawals leave only one place in the payload.
+
+The prior withdrawals must leave that place.
+
+The result is the withdrawals, the next withdrawal index and the number of queued ones read. -/
+def getBuilderWithdrawals (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
+    (withdrawalIndex : WithdrawalIndex) (prior : Array Withdrawal) :
+    Except TransitionError (Array Withdrawal × WithdrawalIndex × Nat) := do
+  let limit ← liftAccessor (liftArith (subChecked preset.MAX_WITHDRAWALS_PER_PAYLOAD 1))
+  ensure (prior.size ≤ limit.toNat) (.priorWithdrawalsAtLimit prior.size limit.toNat)
+  let rec loop (queue : List BuilderPendingWithdrawal) (withdrawals : Array Withdrawal)
+      (withdrawalIndex : WithdrawalIndex) (processed : Nat) :
+      Except TransitionError (Array Withdrawal × WithdrawalIndex × Nat) :=
+    match queue with
+    | [] => return (withdrawals, withdrawalIndex, processed)
+    | pending :: rest =>
+      if limit.toNat ≤ prior.size + withdrawals.size then
+        return (withdrawals, withdrawalIndex, processed)
+      else do
+        let (withdrawals, withdrawalIndex) ← liftAccessor (appendWithdrawal withdrawals
+          withdrawalIndex (convertBuilderIndexToValidatorIndex pending.builderIndex)
+          pending.feeRecipient pending.amount)
+        loop rest withdrawals withdrawalIndex (processed + 1)
+  loop (state.builderPendingWithdrawals gloas).data.toList #[] withdrawalIndex 0
+
+/-- From Gloas: the balance of a builder less what some withdrawals already take from it.
+
+The result is zero when they take more.
+
+A sum of 2^64 or more is an error. -/
+def getBuilderBalanceAfterWithdrawals (state : BeaconState preset fork)
+    (gloas : .glamsterdam ≤ fork) (index : BuilderIndex) (withdrawals : Array Withdrawal) :
+    Except AccessorError Gwei := do
+  let named := convertBuilderIndexToValidatorIndex index
+  let withdrawn ← withdrawals.foldlM (init := 0) fun sum withdrawal =>
+    if withdrawal.validatorIndex = named then liftArith (addChecked sum withdrawal.amount)
+    else pure sum
+  return saturatingSub (← getBuilder state gloas index).balance withdrawn
+
+/-- From Gloas: the withdrawals of the sweep of builders, from the next builder of the state.
+
+The sweep visits at most the most builders per sweep, and at most the whole registry once.
+
+It stops when the withdrawals leave only one place in the payload.
+
+The prior withdrawals must leave that place.
+
+A withdrawable builder with a balance left gives that balance to its address.
+
+The balance is the one left after the earlier withdrawals of the payload.
+
+The result is the withdrawals, the next withdrawal index and the number of builders visited. -/
+def getBuildersSweepWithdrawals (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
+    (withdrawalIndex : WithdrawalIndex) (prior : Array Withdrawal) :
+    Except TransitionError (Array Withdrawal × WithdrawalIndex × Nat) := do
+  let epoch := getCurrentEpoch state
+  let count := (state.builders gloas).data.size
+  let limit ← liftAccessor (liftArith (subChecked preset.MAX_WITHDRAWALS_PER_PAYLOAD 1))
+  ensure (prior.size ≤ limit.toNat) (.priorWithdrawalsAtLimit prior.size limit.toNat)
+  let rec loop (visits : Nat) (withdrawals : Array Withdrawal) (withdrawalIndex : WithdrawalIndex)
+      (index : BuilderIndex) (processed : Nat) :
+      Except TransitionError (Array Withdrawal × WithdrawalIndex × Nat) :=
+    match visits with
+    | 0 => return (withdrawals, withdrawalIndex, processed)
+    | visits + 1 =>
+      if limit.toNat ≤ prior.size + withdrawals.size then
+        return (withdrawals, withdrawalIndex, processed)
+      else do
+        let builder ← liftAccessor (getBuilder state gloas index)
+        let balance ← liftAccessor
+          (getBuilderBalanceAfterWithdrawals state gloas index (prior ++ withdrawals))
+        let (withdrawals, withdrawalIndex) ←
+          if builder.withdrawableEpoch ≤ epoch ∧ 0 < balance then
+            liftAccessor (appendWithdrawal withdrawals withdrawalIndex
+              (convertBuilderIndexToValidatorIndex index) builder.executionAddress balance)
+          else pure (withdrawals, withdrawalIndex)
+        let next ← liftAccessor (liftArith (addChecked index 1))
+        loop visits withdrawals withdrawalIndex (next.toNat % count).toUInt64 (processed + 1)
+  loop (min count preset.MAX_BUILDERS_PER_WITHDRAWALS_SWEEP.toNat) #[] withdrawalIndex
+    (state.nextWithdrawalBuilderIndex gloas) 0
 
 /-- From Electra: the queued partial withdrawals that the next payload pays, read in their order.
 
@@ -161,8 +256,8 @@ def getPendingPartialWithdrawals (state : BeaconState preset fork) (electra : .p
           liftAccessor (getBalanceAfterWithdrawals state index (prior ++ withdrawals))
         if isEligibleForPartialWithdrawals preset validator balance then
           let amount := min (balance - preset.MIN_ACTIVATION_BALANCE) pending.amount
-          let (withdrawals, withdrawalIndex) ←
-            liftAccessor (appendWithdrawal withdrawals withdrawalIndex index validator amount)
+          let (withdrawals, withdrawalIndex) ← liftAccessor (appendWithdrawal withdrawals
+            withdrawalIndex index (credentialAddress validator.withdrawalCredentials) amount)
           loop rest withdrawals withdrawalIndex (processed + 1)
         else loop rest withdrawals withdrawalIndex (processed + 1)
   loop (state.pendingPartialWithdrawals electra).data.toList #[] withdrawalIndex 0
@@ -201,11 +296,12 @@ def getValidatorsSweepWithdrawals (state : BeaconState preset fork) (capella : .
         let validator ← liftAccessor (getValidator state index)
         let balance ←
           liftAccessor (getBalanceAfterWithdrawals state index (prior ++ withdrawals))
+        let address := credentialAddress validator.withdrawalCredentials
         let (withdrawals, withdrawalIndex) ←
           if isFullyWithdrawableValidator fork validator balance epoch then
-            liftAccessor (appendWithdrawal withdrawals withdrawalIndex index validator balance)
+            liftAccessor (appendWithdrawal withdrawals withdrawalIndex index address balance)
           else if isPartiallyWithdrawableValidator preset fork validator balance then
-            liftAccessor (appendWithdrawal withdrawals withdrawalIndex index validator
+            liftAccessor (appendWithdrawal withdrawals withdrawalIndex index address
               (balance - withdrawalMaxEffectiveBalance preset fork validator))
           else pure (withdrawals, withdrawalIndex)
         let next ← liftAccessor (liftArith (addChecked index 1))
@@ -215,28 +311,51 @@ def getValidatorsSweepWithdrawals (state : BeaconState preset fork) (capella : .
 
 /-- From Capella: the withdrawals that the state expects of the next payload.
 
-From Electra the queued partial withdrawals come first, then those of the sweep.
+From Gloas the queued builder withdrawals come first.
 
-From Gloas the rule changes, and it fails as not yet specified. -/
+From Electra the queued partial withdrawals follow.
+
+From Gloas the sweep of builders follows, and the sweep of validators always comes last.
+
+Each part continues the withdrawal indices of the part before it. -/
 def getExpectedWithdrawals (state : BeaconState preset fork) (capella : .shapella ≤ fork) :
-    Except TransitionError ExpectedWithdrawals :=
-  if .glamsterdam ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
-  else do
-    let start := state.nextWithdrawalIndex capella
-    let (partials, withdrawalIndex, partialCount) ←
-      if electra : .pectra ≤ fork then getPendingPartialWithdrawals state electra start #[]
-      else pure (#[], start, 0)
-    let (sweep, _, sweepCount) ←
-      getValidatorsSweepWithdrawals state capella withdrawalIndex partials
-    return ⟨partials ++ sweep, partialCount, sweepCount⟩
+    Except TransitionError ExpectedWithdrawals := do
+  let start := state.nextWithdrawalIndex capella
+  let (builders, withdrawalIndex, builderCount) ←
+    (if gloas : .glamsterdam ≤ fork then getBuilderWithdrawals state gloas start #[]
+    else pure (#[], start, 0))
+  let (partials, withdrawalIndex, partialCount) ←
+    (if electra : .pectra ≤ fork then
+      getPendingPartialWithdrawals state electra withdrawalIndex builders
+    else pure (#[], withdrawalIndex, 0))
+  let prior := builders ++ partials
+  let (buildersSweep, withdrawalIndex, buildersSweepCount) ←
+    (if gloas : .glamsterdam ≤ fork then
+      getBuildersSweepWithdrawals state gloas withdrawalIndex prior
+    else pure (#[], withdrawalIndex, 0))
+  let prior := prior ++ buildersSweep
+  let (sweep, _, sweepCount) ←
+    getValidatorsSweepWithdrawals state capella withdrawalIndex prior
+  return ⟨prior ++ sweep, builderCount, partialCount, buildersSweepCount, sweepCount⟩
 
 /-! ## Processing the withdrawals -/
+
+/-- The state with the balance that a withdrawal names lowered by its amount, to at least zero.
+
+From Gloas an index with the builder flag names the balance of a builder. -/
+def applyWithdrawal (state : BeaconState preset fork) (withdrawal : Withdrawal) :
+    Except AccessorError (BeaconState preset fork) :=
+  if gloas : .glamsterdam ≤ fork ∧ isBuilderIndex withdrawal.validatorIndex = true then do
+    let index := convertValidatorIndexToBuilderIndex withdrawal.validatorIndex
+    let builder ← getBuilder state gloas.1 index
+    return state.setBuilder index.toNat
+      { builder with balance := saturatingSub builder.balance withdrawal.amount }
+  else decreaseBalance state withdrawal.validatorIndex withdrawal.amount
 
 /-- The state with the balances lowered by the withdrawals, each to at least zero. -/
 def applyWithdrawals (state : BeaconState preset fork) (withdrawals : Array Withdrawal) :
     Except AccessorError (BeaconState preset fork) :=
-  withdrawals.foldlM (fun state withdrawal =>
-    decreaseBalance state withdrawal.validatorIndex withdrawal.amount) state
+  withdrawals.foldlM applyWithdrawal state
 
 /-- The state whose next withdrawal index follows the last withdrawal, if there is one.
 
@@ -288,28 +407,88 @@ def updatePendingPartialWithdrawals (state : BeaconState preset fork) (electra :
         simp only [Array.size_extract]
         omega⟩ }
 
-/-- From Capella: the state after the withdrawals of a payload.
+/-- From Gloas: the state that records the withdrawals that the next payload must carry. -/
+def updatePayloadExpectedWithdrawals (state : BeaconState preset fork)
+    (gloas : .glamsterdam ≤ fork) (withdrawals : Array Withdrawal) : BeaconState preset fork :=
+  { state with
+    payloadExpectedWithdrawals := fun _ =>
+      ⟨withdrawals, fun before => absurd gloas (Nat.not_le_of_lt before)⟩ }
 
-The payload must carry exactly the withdrawals that the state expects.
+/-- From Gloas: the state without the queued builder withdrawals that were read. -/
+def updateBuilderPendingWithdrawals (state : BeaconState preset fork)
+    (gloas : .glamsterdam ≤ fork) (count : Nat) : BeaconState preset fork :=
+  let queue := (state.builderPendingWithdrawals gloas).data
+  { state with builderPendingWithdrawals := fun _ => ⟨queue.extract count queue.size⟩ }
 
-Each lowers the balance of its validator.
+/-- From Gloas: the state whose next sweep of builders starts after the builders visited.
+
+The index wraps around the registry, and stays when the registry is empty.
+
+A sum of 2^64 or more is an error. -/
+def updateNextWithdrawalBuilderIndex (state : BeaconState preset fork)
+    (gloas : .glamsterdam ≤ fork) (count : Nat) :
+    Except AccessorError (BeaconState preset fork) := do
+  let size := (state.builders gloas).data.size
+  if size = 0 then return state
+  let next ← liftArith (addChecked (state.nextWithdrawalBuilderIndex gloas) count.toUInt64)
+  return { state with nextWithdrawalBuilderIndex := fun _ => (next.toNat % size).toUInt64 }
+
+/-- From Gloas: whether the parent of the next block has its payload.
+
+The latest payload then has the block hash of the latest bid. -/
+def isParentBlockFull (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) : Bool :=
+  state.latestBlockHash gloas == (state.latestExecutionPayloadBid gloas).blockHash
+
+/-- The state after the withdrawals that the state expects, once they are known.
+
+Each withdrawal lowers the balance of its validator, or from Gloas of its builder.
 
 The next withdrawal index and the start of the next sweep then move on.
 
-From Electra, the queued partial withdrawals that were read leave the queue.
+From Gloas the state records the withdrawals for the next payload.
 
-From Gloas the rule changes, and it fails as not yet specified. -/
-def processWithdrawals (state : BeaconState preset fork) (capella : .shapella ≤ fork)
-    (payload : ExecutionPayload preset fork) : Except TransitionError (BeaconState preset fork) :=
-  do
-  let expected ← getExpectedWithdrawals state capella
-  ensure ((payload.withdrawals capella).data = expected.withdrawals) .wrongWithdrawals
-  let state ← liftAccessor (applyWithdrawals state expected.withdrawals)
-  let state ← liftAccessor (updateNextWithdrawalIndex state expected.withdrawals)
+From Gloas too, the queued builder withdrawals that were read leave the queue.
+
+From Electra, so do the queued partial withdrawals that were read.
+
+From Gloas the sweep of builders moves on. -/
+def applyExpectedWithdrawals (state : BeaconState preset fork) (capella : .shapella ≤ fork)
+    (expected : ExpectedWithdrawals) : Except AccessorError (BeaconState preset fork) := do
+  let state ← applyWithdrawals state expected.withdrawals
+  let state ← updateNextWithdrawalIndex state expected.withdrawals
+  let state := if gloas : .glamsterdam ≤ fork then
+      updateBuilderPendingWithdrawals
+        (updatePayloadExpectedWithdrawals state gloas expected.withdrawals) gloas
+        expected.processedBuilderWithdrawalsCount
+    else state
   let state := if electra : .pectra ≤ fork then
       updatePendingPartialWithdrawals state electra expected.processedPartialWithdrawalsCount
     else state
-  liftAccessor (updateNextWithdrawalValidatorIndex state capella expected.withdrawals)
+  let state ← (if gloas : .glamsterdam ≤ fork then
+      updateNextWithdrawalBuilderIndex state gloas expected.processedBuildersSweepCount
+    else pure state)
+  updateNextWithdrawalValidatorIndex state capella expected.withdrawals
+
+/-- From Capella: the state after the withdrawals that the state expects.
+
+Before Gloas, the payload of the block must carry exactly those withdrawals.
+
+From Gloas the block carries no payload.
+
+A block whose parent has no payload then changes nothing. -/
+def processWithdrawals (state : BeaconState preset fork) (capella : .shapella ≤ fork)
+    (payload : Until .glamsterdam fork (ExecutionPayload preset fork)) :
+    Except TransitionError (BeaconState preset fork) :=
+  if gloas : .glamsterdam ≤ fork then
+    if isParentBlockFull state gloas then do
+      let expected ← getExpectedWithdrawals state capella
+      liftAccessor (applyExpectedWithdrawals state capella expected)
+    else pure state
+  else do
+    let expected ← getExpectedWithdrawals state capella
+    ensure (((payload (Nat.lt_of_not_le gloas)).withdrawals capella).data = expected.withdrawals)
+      .wrongWithdrawals
+    liftAccessor (applyExpectedWithdrawals state capella expected)
 
 /-! ## Changes of BLS credentials -/
 

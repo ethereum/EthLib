@@ -157,7 +157,7 @@ def processBlockExecution (config : Config) (engine : ExecutionEngine preset for
     (bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam) :
     Except TransitionError (BeaconState preset fork) :=
   if capella : .shapella ≤ fork then do
-    let state ← processWithdrawals state capella (body.executionPayload bellatrix)
+    let state ← processWithdrawals state capella fun _ => body.executionPayload bellatrix
     processExecutionPayload config engine state body bellatrix
   else if isExecutionEnabled state body bellatrix then
     processExecutionPayload config engine state body bellatrix
