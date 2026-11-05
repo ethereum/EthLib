@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Evm.Precompiles.AltBn128
 public import EthLib.Execution.Proofs.Evm.Memory
 public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.MapM
 
 /-!
 # Proofs: `Evm.Precompiles.AltBn128`
@@ -21,7 +22,7 @@ The Python suite checks the outputs against py_ecc.
 namespace EthLib.Execution.Evm.Precompiles.AltBn128
 
 open EthLib.Cryptography.AltBn128
-open EthLib.Base (Fork)
+open EthLib.Base (Fork bind_ok_iff)
 open EthLib.Execution.Evm (bufferRead)
 
 /-- ECADD runs out of gas below its price. -/
@@ -41,14 +42,6 @@ theorem length_g1ToBytes : (point : Point) → (g1ToBytes point).length = 64
   | .infinity => by simp [g1ToBytes]
   | .affine _ _ => by simp [g1ToBytes, EthLib.Base.natToBytes_length]
 
-/-- A chain of steps that succeeds succeeded at its first step. -/
-theorem bind_eq_ok {α β : Type} {x : Except AltBn128Error α}
-    {f : α → Except AltBn128Error β} {y : β}
-    (h : x >>= f = .ok y) : ∃ a, x = .ok a ∧ f a = .ok y := by
-  cases x with
-  | error => cases h
-  | ok a => exact ⟨a, rfl, h⟩
-
 /-- Every output of ECADD has 64 bytes. -/
 theorem ecadd_size {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArray}
     (h : ecadd fork data gas = .ok out) :
@@ -56,8 +49,8 @@ theorem ecadd_size {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArray
   simp only [ecadd, bind, throw, throwThe, MonadExceptOf.throw] at h
   split at h
   · cases h
-  obtain ⟨_, _, h⟩ := bind_eq_ok h
-  obtain ⟨_, _, h⟩ := bind_eq_ok h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
   cases h
   simp [ByteArray.size, length_g1ToBytes]
 
@@ -68,7 +61,7 @@ theorem ecmul_size {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArray
   simp only [ecmul, bind, throw, throwThe, MonadExceptOf.throw] at h
   split at h
   · cases h
-  obtain ⟨_, _, h⟩ := bind_eq_ok h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
   cases h
   simp [ByteArray.size, length_g1ToBytes]
 
@@ -146,7 +139,7 @@ theorem ecpairing_ok {fork : Fork} {data : ByteArray} {gas : Nat} {out : ByteArr
   · cases h
   split at h
   · cases h
-  obtain ⟨_, _, h⟩ := bind_eq_ok h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
   cases h
   exact ⟨_, rfl⟩
 

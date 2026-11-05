@@ -17,7 +17,7 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
-open EthLib.Base (natToBytes_length)
+open EthLib.Base (bind_ok_iff natToBytes_length)
 open EthLib.Cryptography.Bls (G1)
 
 /-- The raw bytes of a G1 point have 96 bytes, and its padded encoding 128. -/
@@ -44,10 +44,10 @@ theorem bls12G1Add_size {data : ByteArray} {gas : Nat} {out : ByteArray} (h : bl
   · cases h
   split at h
   · cases h
-  obtain ⟨_, _, h⟩ := bind_eq_ok h
-  obtain ⟨_, _, h⟩ := bind_eq_ok h
-  obtain ⟨_, _, h⟩ := bind_eq_ok h
-  obtain ⟨_, _, h⟩ := bind_eq_ok h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
   cases h
   simp [ByteArray.size, length_padG1_g1ToBytes]
 
@@ -80,8 +80,8 @@ theorem bls12G1Msm_size {data : ByteArray} {gas : Nat} {out : ByteArray} (h : bl
   · cases h
   split at h
   · cases h
-  obtain ⟨_, _, h⟩ := bind_eq_ok h
-  obtain ⟨_, _, h⟩ := bind_eq_ok h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
   cases h
   simp [ByteArray.size, length_padG1_g1ToBytes]
 
@@ -133,7 +133,7 @@ theorem bls12MapFpToG1_size {data : ByteArray} {gas : Nat} {out : ByteArray} (h 
   · cases h
   split at h
   · cases h
-  repeat obtain ⟨_, _, h⟩ := bind_eq_ok h
+  repeat obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
   cases h
   simp [ByteArray.size, length_padG1_g1ToBytes]
 

@@ -14,6 +14,8 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
+open EthLib.Base (bind_ok_iff)
+
 /-- The pairing check rejects an empty input or a length that is not a whole number of pairs, whatever the gas. -/
 theorem bls12Pairing_invalidInputLength {data : ByteArray}
     (hsize : data.size = 0 ∨ data.size % LENGTH_PER_PAIRING_PAIR ≠ 0) (gas : Nat) :
@@ -41,8 +43,8 @@ theorem bls12Pairing_ok {data : ByteArray} {gas : Nat} {out : ByteArray} (h : bl
   · cases h
   split at h
   · cases h
-  obtain ⟨_, _, h⟩ := bind_eq_ok h
-  obtain ⟨_, _, h⟩ := bind_eq_ok h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
   cases h
   exact ⟨_, rfl⟩
 
