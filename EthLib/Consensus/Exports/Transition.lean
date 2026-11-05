@@ -11,6 +11,7 @@ public import EthLib.Consensus.Transition.EpochRewards
 public import EthLib.Consensus.Transition.EpochUpdates
 public import EthLib.Consensus.Transition.Operations
 public import EthLib.Consensus.Transition.Payload
+public import EthLib.Consensus.Transition.StateTransition
 public import EthLib.Consensus.Transition.Upgrade
 public import EthLib.Consensus.Transition.Withdrawals
 
@@ -21,7 +22,9 @@ C-ABI exports of the steps of the beacon state transition, for the consensus tes
 
 One export runs a block operation on a state, and another one step of the epoch transition.
 
-Both take and return states as SSZ bytes, and accept forks up to Gloas.
+Two more advance a state by some slots, and run the whole transition of a signed block.
+
+They take and return states as SSZ bytes, and accept forks up to Gloas.
 
 At Gloas, only the steps whose Gloas rule EthLib holds run.
 
@@ -174,6 +177,37 @@ def processEpochExport (name fork handler pre replacements : ByteArray) : Result
   let config ← configWith name replacements
   let state ← decodeInput (BeaconState preset fork) pre
   let after ← runEpochStep config (← nameOf handler) state
+  (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
+
+/-- The state some slots later, as SSZ bytes.
+
+The preset, the configuration and the fork are named in UTF-8.
+
+A target slot that reaches `2^64` is an error. -/
+@[export eth_consensus_process_slots]
+def processSlotsExport (name fork pre replacements : ByteArray) (slots : UInt64) :
+    Result ByteArray := do
+  let (preset, fork) ← transitionPresetAndFork name fork
+  let config ← configWith name replacements
+  let state ← decodeInput (BeaconState preset fork) pre
+  let target ← runTransition (liftAccessor (liftArith (Uint64.addChecked state.slot slots)))
+  let after ← runTransition (processSlots config state target)
+  (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
+
+/-- The state after a signed block, as SSZ bytes, with the signature and the state root checked.
+
+The preset, the configuration and the fork are named in UTF-8.
+
+The signature checks run unless the last argument is false. -/
+@[export eth_consensus_state_transition]
+def stateTransitionExport (name fork pre block replacements : ByteArray) (verify : Bool) :
+    Result ByteArray := do
+  let (preset, fork) ← transitionPresetAndFork name fork
+  let config ← configWith name replacements
+  let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
+  let state ← decodeInput (BeaconState preset fork) pre
+  let signed ← decodeInput (SignedBeaconBlock preset fork) block
+  let after ← runTransition (stateTransition config checks state signed)
   (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
 
 /-- The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.

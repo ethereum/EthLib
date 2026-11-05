@@ -128,6 +128,12 @@ The directory keeps one case of each group at each fork from Phase 0 to Gloas.
 The groups are `basic`, `leak` and `random`, and from Altair also `inactivity_scores`.
 `bindings/python/tests/consensus/test_rewards.py` computes each kind of deltas in Lean and compares them with the case.
 
+The directory `transition/` holds cases of the whole state transition from `minimal.tar.gz` in the same way.
+A `sanity/slots` case advances a state by some slots.
+A `sanity/blocks`, `finality` or `random` case runs a list of signed blocks, and must be rejected when it has no state after it.
+The directory keeps two cases of each group at Phase 0, the only fork whose whole transition EthLib holds.
+`bindings/python/tests/consensus/test_transition.py` runs each case through the Lean transition and compares the state after it.
+
 The test release publishes its cases in three archives.
 Their SHA-256 digests are:
 

@@ -176,6 +176,25 @@ eth_consensus_rewards_deltas(
 );
 
 extern lean_object*
+eth_consensus_process_slots(
+  lean_object* name,
+  lean_object* fork,
+  lean_object* pre,
+  lean_object* config,
+  uint64_t slots
+);
+
+extern lean_object*
+eth_consensus_state_transition(
+  lean_object* name,
+  lean_object* fork,
+  lean_object* pre,
+  lean_object* block,
+  lean_object* config,
+  uint8_t verify
+);
+
+extern lean_object*
 eth_consensus_upgrade_state(
   lean_object* name,
   lean_object* fork,
@@ -1073,4 +1092,74 @@ py_consensus_upgrade_state(
     (const uint8_t*) PyBytes_AS_STRING(config_obj), PyBytes_GET_SIZE(config_obj));
   return except_into_pybytes(
     eth_consensus_upgrade_state(name, fork, pre, config, (uint8_t) verify), TRANSITION_ERROR);
+}
+
+PyObject*
+py_consensus_process_slots(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *pre_obj, *config_obj;
+  unsigned long long slots;
+  if (!PyArg_ParseTuple(args, "OOOOK", &name_obj, &fork_obj, &pre_obj, &config_obj, &slots))
+    return NULL;
+  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
+  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name and fork must be str");
+    return NULL;
+  }
+  if (!PyBytes_Check(pre_obj) || !PyBytes_Check(config_obj)) {
+    PyErr_SetString(PyExc_TypeError, "pre and config must be bytes");
+    return NULL;
+  }
+  Py_ssize_t name_len, fork_len;
+  const char* name_utf8 = PyUnicode_AsUTF8AndSize(name_obj, &name_len);
+  if (!name_utf8) return NULL;
+  const char* fork_utf8 = PyUnicode_AsUTF8AndSize(fork_obj, &fork_len);
+  if (!fork_utf8) return NULL;
+  lean_object* name = mk_bytearray((const uint8_t*) name_utf8, name_len);
+  lean_object* fork = mk_bytearray((const uint8_t*) fork_utf8, fork_len);
+  lean_object* pre = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(pre_obj), PyBytes_GET_SIZE(pre_obj));
+  lean_object* config = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(config_obj), PyBytes_GET_SIZE(config_obj));
+  return except_into_pybytes(
+    eth_consensus_process_slots(name, fork, pre, config, (uint64_t) slots), TRANSITION_ERROR);
+}
+
+PyObject*
+py_consensus_state_transition(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *pre_obj, *block_obj, *config_obj;
+  int verify;
+  if (!PyArg_ParseTuple(args, "OOOOOp", &name_obj, &fork_obj, &pre_obj, &block_obj, &config_obj,
+                        &verify))
+    return NULL;
+  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
+  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name and fork must be str");
+    return NULL;
+  }
+  if (!PyBytes_Check(pre_obj) || !PyBytes_Check(block_obj) || !PyBytes_Check(config_obj)) {
+    PyErr_SetString(PyExc_TypeError, "pre, block and config must be bytes");
+    return NULL;
+  }
+  Py_ssize_t name_len, fork_len;
+  const char* name_utf8 = PyUnicode_AsUTF8AndSize(name_obj, &name_len);
+  if (!name_utf8) return NULL;
+  const char* fork_utf8 = PyUnicode_AsUTF8AndSize(fork_obj, &fork_len);
+  if (!fork_utf8) return NULL;
+  lean_object* name = mk_bytearray((const uint8_t*) name_utf8, name_len);
+  lean_object* fork = mk_bytearray((const uint8_t*) fork_utf8, fork_len);
+  lean_object* pre = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(pre_obj), PyBytes_GET_SIZE(pre_obj));
+  lean_object* block = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(block_obj), PyBytes_GET_SIZE(block_obj));
+  lean_object* config = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(config_obj), PyBytes_GET_SIZE(config_obj));
+  return except_into_pybytes(
+    eth_consensus_state_transition(name, fork, pre, block, config, (uint8_t) verify),
+    TRANSITION_ERROR);
 }

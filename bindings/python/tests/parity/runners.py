@@ -22,6 +22,8 @@ from consensus.test_operations import runs as runs_operation
 from consensus.test_rewards import HANDLERS as REWARDS
 from consensus.test_rewards import runs as runs_rewards
 from engine.cases import EXCEPTIONS as ENGINE_EXCEPTIONS
+from consensus.test_transition import GROUPS as TRANSITION_GROUPS
+from consensus.test_transition import runs as runs_transition
 from transactions.test_inclusion_archive import names_in_block
 from transactions.test_transactions import CHAIN_ID, FORK_OF_NETWORK, names
 
@@ -33,12 +35,12 @@ from .catalogue import CONSENSUS_FORKS, EXECUTION_FORKS, Case
 # execution-spec-tests.
 NOT_YET = {
     "epoch_processing": "beacon state transition (consensus track C13 to C40)",
-    "finality": "beacon state transition (consensus track C13 to C40)",
+    "finality": "the state transition after Phase 0 (consensus track C26 to C40)",
     "fork": "beacon state transition (consensus track C13 to C40)",
     "genesis": "beacon state transition (consensus track C13 to C40)",
     "operations": "beacon state transition (consensus track C13 to C40)",
-    "random": "beacon state transition (consensus track C13 to C40)",
-    "sanity": "beacon state transition (consensus track C13 to C40)",
+    "random": "the state transition after Phase 0 (consensus track C26 to C40)",
+    "sanity": "the state transition after Phase 0 (consensus track C26 to C40)",
     "transition": "beacon state transition (consensus track C13 to C40)",
     "fork_choice": "fork choice (consensus track C43 to C50)",
     "fast_confirmation": "fast confirmation rule (consensus track, decision 9)",
@@ -510,6 +512,13 @@ def _rewards(root: Path, case: Case) -> None:
     run_case(case.preset, case.fork, root / case.path)
 
 
+def _transition(root: Path, case: Case) -> None:
+    from consensus.test_transition import run_case
+
+    # tests/<preset>/<fork>/<runner>/<handler>/<suite>/<case>
+    run_case(case.preset, case.fork, case.group, root / case.path)
+
+
 def _upgrade(root: Path, case: Case) -> None:
     from consensus.test_fork import run_case
 
@@ -549,6 +558,7 @@ RUNNERS = {
     **{f"epoch_processing/{handler}": _epoch_step for handler in EPOCH_STEPS},
     **{f"rewards/{handler}": _rewards for handler in REWARDS},
     "fork/fork": _upgrade,
+    **{group: _transition for group in TRANSITION_GROUPS},
     "legacy_ommers": legacy.run_ommers,
     "legacy_dao": legacy.run_dao,
 }
@@ -594,6 +604,8 @@ def runner(case: Case):
     if run is _rewards and not runs_rewards(case.fork):
         return None
     if run is _upgrade and not runs_upgrade(case.fork):
+        return None
+    if run is _transition and not runs_transition(case.fork, case.group):
         return None
     return run
 
