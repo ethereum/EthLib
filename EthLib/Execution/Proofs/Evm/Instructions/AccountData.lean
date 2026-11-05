@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Proofs.Fork
 public import EthLib.Execution.Evm.Instructions.AccountData
+public import EthLib.Execution.Proofs.Evm.Machine.Memory
 public import EthLib.Execution.Proofs.Evm.Step
 
 /-!
@@ -18,13 +19,17 @@ BALANCE pays the price of its access, then pushes the balance of the account.
 EXTCODEHASH gives 0 for an address with no account.
 
 Each instruction exists exactly from the fork that adds its opcode.
+
+EXTCODECOPY sets each byte of its range to the byte of the code, and keeps every other byte.
+
+Each instruction keeps the size of memory a multiple of 32.
 -/
 
 @[expose] public section
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Address Fork U256 toAddressMasked)
+open EthLib.Base (Address Fork U256 byteAt toAddressMasked)
 open EthLib.Execution.State (EMPTY_ACCOUNT)
 
 variable {fork : Fork} {Meter : Type}
@@ -106,5 +111,166 @@ theorem isSome_accountStep [GasMeter Meter] {op : Op} :
       op ∈ [.balance, .selfbalance, .extcodesize, .extcodecopy, .extcodehash] ∧
       op.since ≤ fork := by
   cases op <;> simp [accountStep, Op.since, Fork.frontier_le] <;> split <;> simp_all
+
+/-- An access keeps memory. -/
+theorem memory_accessAddress (evm : Evm fork Meter) (a : Address) :
+    (accessAddress evm a).2.memory = evm.memory := by
+  obtain ⟨_, h⟩ := accessAddress_snd evm a
+  rw [h]
+
+/-- EXTCODECOPY sets each byte of its range to the byte of the code of the account from the offset.
+
+Past the end of the code, the byte is zero.
+
+It keeps every other byte.
+
+The code is the one that the step reads for the account, in the frame before the step.
+
+Memory must start at a size that is a multiple of 32. -/
+theorem byteAt_extcodecopyStep [GasMeter Meter] {evm after : Evm fork Meter}
+    {word start offset size : U256} {rest : List U256}
+    (hstack : evm.stack.val = word :: start :: offset :: size :: rest)
+    (hmod : evm.memory.size % 32 = 0) (h : extcodecopyStep evm = .ok after) :
+    ∃ code, accountCode evm (toAddressMasked word) = .ok code ∧ ∀ i,
+      byteAt after.memory i =
+        if start.toNat ≤ i ∧ i < start.toNat + size.toNat then
+          byteAt code (offset.toNat + (i - start.toNat))
+        else byteAt evm.memory i := by
+  unfold extcodecopyStep at h
+  obtain ⟨⟨x, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨y, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨z, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨w, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨s1, m1, -⟩ := popWord_eq_ok h1
+  obtain ⟨s2, m2, -⟩ := popWord_eq_ok h2
+  obtain ⟨s3, m3, -⟩ := popWord_eq_ok h3
+  obtain ⟨s4, m4, -⟩ := popWord_eq_ok h4
+  rw [hstack] at s1
+  obtain ⟨rfl, r1⟩ := List.cons.inj s1
+  rw [← r1] at s2
+  obtain ⟨rfl, r2⟩ := List.cons.inj s2
+  rw [← r2] at s3
+  obtain ⟨rfl, r3⟩ := List.cons.inj s3
+  rw [← r3] at s4
+  obtain ⟨rfl, -⟩ := List.cons.inj s4
+  have c4 := (((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
+    (popWord_sameContext h3)).trans (popWord_sameContext h4)
+  obtain ⟨accessed, ha⟩ := accessAddress_snd e4 (toAddressMasked word)
+  dsimp only at h
+  rw [show accessAddress e4 (toAddressMasked word) = ((accessAddress e4 (toAddressMasked word)).1,
+      { e4 with substate := { e4.substate with accessedAddresses := accessed } }) from
+      Prod.ext rfl ha] at h
+  dsimp only at h
+  obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
+  have c5 := chargeGasAndMemory_sameContext h5
+  obtain ⟨code, h6, h⟩ := Base.bind_ok_iff.mp h
+  simp only [pure, Except.pure, Except.ok.injEq] at h
+  subst h
+  have hcode : accountCode evm (toAddressMasked word) = .ok code := by
+    rw [← h6]
+    simp only [accountCode, recordAccountRead, c5.state, c4.state]
+    rfl
+  refine ⟨code, hcode, fun i => ?_⟩
+  have hm4 : e4.memory = evm.memory := by rw [m4, m3, m2, m1]
+  have hmem : ∀ j, byteAt e5.memory j = byteAt evm.memory j := fun j => by
+    rw [byteAt_chargeGasAndMemory h5]
+    exact congrArg (byteAt · j) hm4
+  have hlen : ({ data := (bufferRead code offset.toNat size.toNat).toArray } : ByteArray).size =
+      size.toNat := by simp [ByteArray.size, bufferRead_length]
+  simp only [advance, recordAccountRead]
+  by_cases hz : size = 0
+  · subst hz
+    have hw : memoryWrite e5.memory start.toNat
+        ⟨(bufferRead code offset.toNat (0 : U256).toNat).toArray⟩ = e5.memory := by
+      unfold memoryWrite
+      rw [ite_eq_left_of_eq_true _ _ (eq_true (by rw [hlen]; rfl))]
+    rw [hw, hmem, ite_eq_right_iff.mpr (fun hc => absurd hc.2 (by have := hc.1; simp; omega))]
+  · have hmod4 : e4.memory.size % 32 = 0 := by rw [hm4]; exact hmod
+    have fit := le_size_chargeGasAndMemory (evm := { e4 with
+      substate := { e4.substate with accessedAddresses := accessed } }) hmod4 h5 (start, size)
+      (by simp) hz
+    simp only at fit
+    rw [byteAt_memoryWrite (by rw [hlen]; exact fit), hlen]
+    split
+    · rename_i hin
+      rw [byteAt_bufferRead, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc)]
+    · exact hmem i
+
+/-- EXTCODEHASH keeps the size of memory a multiple of 32. -/
+theorem size_extcodehashStep_mod [GasMeter Meter] {evm after : Evm fork Meter}
+    (hmod : evm.memory.size % 32 = 0) (h : extcodehashStep evm = .ok after) :
+    after.memory.size % 32 = 0 := by
+  obtain ⟨⟨x, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨e2, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  simp only [advance]
+  rw [memory_pushWord h3]
+  simp only [recordAccountRead]
+  rw [memory_chargeGas h2]
+  exact (congrArg (fun m : ByteArray => m.size % 32)
+    ((memory_accessAddress e1 (toAddressMasked x)).trans (popWord_eq_ok h1).2.1)).trans hmod
+
+/-- Each instruction that reads another account keeps the size of memory a multiple of 32. -/
+theorem size_accountStep_mod [GasMeter Meter] {op : Op}
+    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (hstep : accountStep fork op = some step) {evm after : Evm fork Meter}
+    (hmod : evm.memory.size % 32 = 0) (h : step evm = .ok after) :
+    after.memory.size % 32 = 0 := by
+  cases op <;> simp only [accountStep, Option.some.injEq, reduceCtorEq] at hstep
+  case extcodehash | selfbalance =>
+    split at hstep
+    · simp only [Option.some.injEq] at hstep
+      subst hstep
+      first
+        | (rw [memory_readFrame h]; exact hmod)
+        | exact size_extcodehashStep_mod hmod h
+    · cases hstep
+  all_goals subst hstep
+  case balance =>
+    obtain ⟨⟨x, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e2, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    simp only [advance]
+    rw [memory_pushWord h3]
+    simp only [recordAccountRead]
+    rw [memory_chargeGas h2]
+    exact (congrArg (fun m : ByteArray => m.size % 32)
+      ((memory_accessAddress e1 (toAddressMasked x)).trans (popWord_eq_ok h1).2.1)).trans hmod
+  case extcodesize =>
+    obtain ⟨⟨x, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e2, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    simp only [advance]
+    rw [memory_pushWord h3]
+    simp only [recordAccountRead]
+    rw [memory_chargeGas h2]
+    exact (congrArg (fun m : ByteArray => m.size % 32)
+      ((memory_accessAddress e1 (toAddressMasked x)).trans (popWord_eq_ok h1).2.1)).trans hmod
+  case extcodecopy =>
+    obtain ⟨⟨x, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨accessed, ha⟩ := accessAddress_snd e4 (toAddressMasked x)
+    dsimp only at h
+    rw [show accessAddress e4 (toAddressMasked x) = ((accessAddress e4 (toAddressMasked x)).1,
+        { e4 with substate := { e4.substate with accessedAddresses := accessed } }) from
+        Prod.ext rfl ha] at h
+    dsimp only at h
+    obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨code, -, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    have m4 : e4.memory.size % 32 = 0 := by
+      rw [(popWord_eq_ok h4).2.1, (popWord_eq_ok h3).2.1, (popWord_eq_ok h2).2.1,
+        (popWord_eq_ok h1).2.1]
+      exact hmod
+    simp only [advance, recordAccountRead]
+    refine size_memoryWrite_chargeGasAndMemory_mod (evm := { e4 with
+      substate := { e4.substate with accessedAddresses := accessed } }) m4 h5 ?_
+    simp [ByteArray.size, bufferRead_length]
 
 end EthLib.Execution.Evm

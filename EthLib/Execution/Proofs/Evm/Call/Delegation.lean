@@ -33,15 +33,12 @@ theorem isValidDelegation_delegationIndicator (address : Address) :
 /-- The indicator of an address gives that address back. -/
 theorem delegatedAddress_delegationIndicator (address : Address) :
     delegatedAddress (delegationIndicator address) = some address := by
-  simp only [delegatedAddress, isValidDelegation_delegationIndicator, ↓reduceIte,
+  simp only [delegatedAddress, isValidDelegation_delegationIndicator, ↓reduceDIte,
     Option.some.injEq]
   apply Vector.ext
   intro i hi
-  have hlt : 3 + i < (delegationIndicator address).size := by
-    rw [size_delegationIndicator, DELEGATION_SIZE]; omega
   rw [Vector.getElem_ofFn]
-  show (delegationIndicator address)[3 + i]! = address[i]
-  rw [getElem!_pos (delegationIndicator address) (3 + i) hlt]
+  show (delegationIndicator address)[3 + i]'_ = address[i]
   simp only [delegationIndicator]
   rw [ByteArray.getElem_append_right (by show 3 ≤ 3 + i; omega)]
   simp only [DELEGATION_MARKER, ByteArray.size, Array.size, List.length, Nat.add_sub_cancel_left]

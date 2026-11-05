@@ -9,6 +9,8 @@ A message that fails leaves the writes of the transaction as they were before th
 
 Only the record of the created accounts may differ.
 
+Its state is a rollback to the state it started from, which keeps the reads of its last frame.
+
 A message that succeeds appends its logs to those of the caller and adds its refund.
 
 A message that fails passes on no log, no refund and no account to delete.
@@ -56,6 +58,25 @@ theorem processMessage_sameWrites_of_error [LawfulGasMeter Meter] {message : Mes
   unfold rollbackOnError at failed ⊢
   split
   · exact sameWrites_restoreTxState _ _
+  · simp_all
+
+/-- A message that fails ends with a state that rolls back to the state it started from.
+
+It is a rollback, so it keeps the reads of the state that it rolls back. -/
+theorem processMessage_state_of_error [LawfulGasMeter Meter] {message : Message fork}
+    {state : TransactionState} {substate : Substate} {evm : Evm fork Meter}
+    {used : GasMeter.gasHeld evm.gas ≤ message.gas}
+    (h : processMessage fork message state substate = .ok ⟨evm, used⟩)
+    (failed : evm.error.isSome) :
+    ∃ ended : TransactionState, evm.state = ended.restoreTxState state := by
+  rw [processMessage] at h
+  obtain ⟨ended, -, rolled⟩ := Base.map_ok_iff.mp h
+  have hval := congrArg Subtype.val rolled
+  simp only at hval
+  subst hval
+  unfold rollbackOnError at failed ⊢
+  split
+  · exact ⟨_, rfl⟩
   · simp_all
 
 /-- A message ends with at most the execution gas it was given. -/

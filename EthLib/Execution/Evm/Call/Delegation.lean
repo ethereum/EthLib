@@ -42,8 +42,12 @@ def isValidDelegation (code : ByteArray) : Bool :=
 
 /-- The address that a delegation indicator delegates to, or none for any other code. -/
 def delegatedAddress (code : ByteArray) : Option Address :=
-  if isValidDelegation code then
-    some (Vector.ofFn fun i : Fin 20 => code[3 + i.val]!)
+  if h : isValidDelegation code then
+    -- An indicator has 23 bytes, so the 20 bytes after the marker are in bounds.
+    some (Vector.ofFn fun i : Fin 20 => code[3 + i.val]'(by
+      simp only [isValidDelegation, Bool.and_eq_true, decide_eq_true_eq] at h
+      rw [h.1, DELEGATION_SIZE]
+      omega))
   else none
 
 end EthLib.Execution.Evm

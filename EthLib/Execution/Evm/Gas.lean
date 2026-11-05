@@ -53,17 +53,25 @@ A price that an EIP adds or changes names that EIP:
 - [EIP-7702](https://eips.ethereum.org/EIPS/eip-7702#parameters), authorizations
 - [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825#specification), the gas cap of a transaction
 - [EIP-7939](https://eips.ethereum.org/EIPS/eip-7939#specification), CLZ
-- [EIP-2780](https://eips.ethereum.org/EIPS/eip-2780#parameters), the parts of a transaction
-- [EIP-7976](https://eips.ethereum.org/EIPS/eip-7976#specification), the call data floor
-- [EIP-8037](https://eips.ethereum.org/EIPS/eip-8037#specification), authorizations, gas limit
-- [EIP-8038](https://eips.ethereum.org/EIPS/eip-8038#parameters), accounts, calls and access lists
+- [EIP-2780][eip-2780], the parts of a transaction
+- [EIP-7843][eip-7843], SLOTNUM
+- [EIP-7976][eip-7976], the call data floor
+- [EIP-8024][eip-8024], DUPN, SWAPN and EXCHANGE
+- [EIP-8037][eip-8037], authorizations, gas limit
+- [EIP-8038][eip-8038], accounts, calls and access lists
 
-The last four are in Last Call, so their prices may still change.
+The last six are in Last Call, so their prices may still change.
 
 The precompiles keep their prices, and the blob prices are with the blob fees.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [yp-berlin]: https://github.com/ethereum/yellowpaper/blob/beacfbd29ccc04dfd790f2282d4c4b1c0afc9b5a/Paper.tex
+[eip-2780]: https://eips.ethereum.org/EIPS/eip-2780#parameters
+[eip-7843]: https://eips.ethereum.org/EIPS/eip-7843#gas-cost
+[eip-7976]: https://eips.ethereum.org/EIPS/eip-7976#specification
+[eip-8024]: https://eips.ethereum.org/EIPS/eip-8024#specification
+[eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#specification
+[eip-8038]: https://eips.ethereum.org/EIPS/eip-8038#parameters
 -/
 
 @[expose] public section
@@ -98,7 +106,13 @@ def COLD_STORAGE_ACCESS : Nat := 2100
 def STORAGE_SET : Nat := 20000
 /-- The price to change a storage slot whose value is not zero.
 
-From Berlin, it includes the price of a cold access to the slot, by EIP-2929. -/
+From Berlin, it includes the price of a cold access to the slot, by EIP-2929.
+
+It is `SSTORE_RESET_GAS` as EIP-2200 sets it, which EIP-8038 calls `GAS_STORAGE_UPDATE`.
+
+The `COLD_STORAGE_WRITE` of the rationale of EIP-8038 is a gas estimate from measured run times.
+
+It is not this price. -/
 def COLD_STORAGE_WRITE : Nat := 5000
 
 /-- The price of a write that moves a slot away from its original value, by EIP-8038. -/
@@ -148,9 +162,18 @@ def TX_MAX_GAS_LIMIT : Nat := 16777216
 def TX_BASE_COST : Nat := 12000
 /-- The price of a transaction that sends value to another account, from EIP-2780. -/
 def TX_VALUE_COST : Nat := 6000
-/-- The price to access and write the account that a contract creation deploys, from EIP-8038. -/
-def CREATE_ACCESS : Nat := 12000
-/-- The price of each authorization of a transaction, from EIP-8037, at Glamsterdam. -/
+/-- The price of each authorization of a transaction, from EIP-8037, at Glamsterdam.
+
+EIP-8037 defines it as a sum of four parts:
+
+- 1616 for the 101 bytes of an authorization of EIP-7702, at 16 gas per byte
+- 3000 for ECRECOVER, which recovers the authority
+- 3000 for a cold access to the authority, the price of EIP-8038
+- 200 for two warm accesses to store values in the authority
+
+The price of ECRECOVER is in the precompiles, and this file does not import them.
+
+So the definition keeps the number, and a proof checks the sum. -/
 def EXECUTION_PER_AUTH_BASE_COST : Nat := 7816
 /-- The largest gas limit of a transaction, `2^32 - 1`, from EIP-8037. -/
 def TX_MAX_TOTAL_GAS_LIMIT : Nat := 4294967295
@@ -345,32 +368,64 @@ structure GasSchedule where
 
 /-- The gas prices of a fork that depend only on the fork.
 
-Each price changes only at the forks that the comments name. -/
-def gasSchedule (fork : Fork) : GasSchedule where
-  -- EIP-160 raises the price from 10 to 50.
-  OPCODE_EXP_PER_BYTE := if fork ≥ .spuriousDragon then 50 else 10
-  -- EIP-150 raises the price from 0 to 5000.
-  OPCODE_SELFDESTRUCT_BASE := if fork ≥ .tangerineWhistle then 5000 else 0
-  -- EIP-150 adds the price, and EIP-8038 replaces it with the write of an account.
-  OPCODE_SELFDESTRUCT_NEW_ACCOUNT :=
-    if fork ≥ .glamsterdam then ACCOUNT_WRITE else if fork ≥ .tangerineWhistle then 25000 else 0
-  -- EIP-2 raises the price of a contract creation from 21000 to 53000.
-  TX_CREATE := if fork ≥ .homestead then 32000 else 0
-  -- EIP-2028 lowers the price from 68 to 16.
-  TX_DATA_PER_NON_ZERO := if fork ≥ .istanbul then 16 else 68
-  -- EIP-7623 sets the price at 10, and EIP-7976 raises it to 16.
-  TX_DATA_TOKEN_FLOOR := if fork ≥ .glamsterdam then 16 else 10
-  -- EIP-2930 sets the price at 2400, and EIP-8038 raises it to 2900.
-  TX_ACCESS_LIST_ADDRESS := if fork ≥ .glamsterdam then 2900 else 2400
-  -- EIP-2930 sets the price at 1900, and EIP-8038 raises it to 2000.
-  TX_ACCESS_LIST_STORAGE_KEY := if fork ≥ .glamsterdam then 2000 else 1900
+Each price changes only at the forks that the comments name.
+
+From Glamsterdam, the prices of an access list and the refund to clear a slot derive from others.
+
+The section Conversion to gas costs of [EIP-8038][eip-8038] gives their formulas.
+
+It gives the refund as `(STORAGE_WRITE + COLD_STORAGE_ACCESS) * (4800/5000)`.
+
+The code multiplies before it divides, so the division in `Nat` is exact.
+
+It is exact since `12100 * 4800 = 11616 * 5000`.
+
+[eip-8038]: https://eips.ethereum.org/EIPS/eip-8038#conversion-to-gas-costs
+-/
+def gasSchedule (fork : Fork) : GasSchedule :=
   -- EIP-2929 sets the price at 2600, and EIP-8038 raises it to 3000.
-  COLD_ACCOUNT_ACCESS := if fork ≥ .glamsterdam then 3000 else 2600
-  -- EIP-3529 lowers the refund from 15000 (EIP-2200) to 4800, and EIP-8038 raises it to 11616.
-  REFUND_STORAGE_CLEAR :=
-    if fork ≥ .glamsterdam then 11616 else if fork ≥ .london then 4800 else 15000
-  -- EIP-3529 removes the refund, which is 24000 in the Berlin version of the Yellow Paper.
-  REFUND_SELF_DESTRUCT := if fork ≥ .london then 0 else 24000
+  let coldAccountAccess := if fork ≥ .glamsterdam then 3000 else 2600
+  { -- EIP-160 raises the price from 10 to 50.
+    OPCODE_EXP_PER_BYTE := if fork ≥ .spuriousDragon then 50 else 10
+    -- EIP-150 raises the price from 0 to 5000.
+    OPCODE_SELFDESTRUCT_BASE := if fork ≥ .tangerineWhistle then 5000 else 0
+    -- EIP-150 adds the price, and EIP-8038 replaces it with the write of an account.
+    OPCODE_SELFDESTRUCT_NEW_ACCOUNT :=
+      if fork ≥ .glamsterdam then ACCOUNT_WRITE
+      else if fork ≥ .tangerineWhistle then 25000 else 0
+    -- EIP-2 raises the price of a contract creation from 21000 to 53000.
+    TX_CREATE := if fork ≥ .homestead then 32000 else 0
+    -- EIP-2028 lowers the price from 68 to 16.
+    TX_DATA_PER_NON_ZERO := if fork ≥ .istanbul then 16 else 68
+    -- EIP-7623 sets the price at 10, and EIP-7976 raises it to 16.
+    TX_DATA_TOKEN_FLOOR := if fork ≥ .glamsterdam then 16 else 10
+    -- EIP-2930 sets the price at 2400, and EIP-8038 at the cold minus the warm price, 2900.
+    TX_ACCESS_LIST_ADDRESS :=
+      if fork ≥ .glamsterdam then coldAccountAccess - WARM_ACCESS else 2400
+    -- EIP-2930 sets the price at 1900, and EIP-8038 at the cold minus the warm price, 2000.
+    TX_ACCESS_LIST_STORAGE_KEY :=
+      if fork ≥ .glamsterdam then COLD_STORAGE_ACCESS - WARM_ACCESS else 1900
+    COLD_ACCOUNT_ACCESS := coldAccountAccess
+    -- EIP-3529 lowers the refund from 15000 (EIP-2200) to 4800, and EIP-8038 raises it to 11616.
+    REFUND_STORAGE_CLEAR :=
+      if fork ≥ .glamsterdam then (STORAGE_WRITE + COLD_STORAGE_ACCESS) * 4800 / 5000
+      else if fork ≥ .london then 4800 else 15000
+    -- EIP-3529 removes the refund, which is 24000 in the Berlin version of the Yellow Paper.
+    REFUND_SELF_DESTRUCT := if fork ≥ .london then 0 else 24000 }
+
+namespace GasCosts
+
+/-- The price to access and write the account that a contract creation deploys, from EIP-8038.
+
+It is the write of an account plus a cold access to it at Glamsterdam, 9000 + 3000 = 12000.
+
+The section Conversion to gas costs of [EIP-8038][eip-8038] gives this formula.
+
+[eip-8038]: https://eips.ethereum.org/EIPS/eip-8038#conversion-to-gas-costs
+-/
+def CREATE_ACCESS : Nat := ACCOUNT_WRITE + (gasSchedule .glamsterdam).COLD_ACCOUNT_ACCESS
+
+end GasCosts
 
 /-- The price of an access to an account at `fork`, from EIP-2929.
 
@@ -530,7 +585,8 @@ def initCodeCost (initCodeLength : Nat) : Nat :=
 
 [EIP-7954][eip-7954] raises it to 65536 at Glamsterdam.
 
-[eip-7954]: https://eips.ethereum.org/EIPS/eip-7954#specification -/
+[eip-7954]: https://eips.ethereum.org/EIPS/eip-7954#specification
+-/
 def maxCodeSize (fork : Fork) : Option Nat :=
   if fork ≥ .glamsterdam then some 65536
   else if fork ≥ .spuriousDragon then some 24576
@@ -542,7 +598,14 @@ def maxCodeSize (fork : Fork) : Option Nat :=
 
 [EIP-7954][eip-7954] raises it to 131072 at Glamsterdam.
 
-[eip-7954]: https://eips.ethereum.org/EIPS/eip-7954#specification -/
+From Shapella, EIP-3860 defines it as twice the code limit, and EIP-7954 keeps that ratio.
+
+A proof checks that ratio at every fork that has a code limit.
+
+The definition keeps its own numbers, since no code limit exists before Spurious Dragon.
+
+[eip-7954]: https://eips.ethereum.org/EIPS/eip-7954#specification
+-/
 def maxInitCodeSize (fork : Fork) : Nat :=
   if fork ≥ .glamsterdam then 131072 else 49152
 

@@ -21,6 +21,10 @@ A call passes on at most the gas it has, and at least 63 64ths of it.
 From Berlin, an access to an account or a slot pays the cold or the warm price.
 
 The token prices of EIP-7623 and the refund of EIP-3529 agree with the prices they derive from.
+
+The prices that EIP-8038 derives from other prices have the values of its table.
+
+The limit of init code is twice the limit of code, as EIP-3860 defines it.
 -/
 
 @[expose] public section
@@ -198,5 +202,35 @@ theorem refundStorageClear_of_london_le {fork : Fork} (h : fork ≥ .london)
       COLD_STORAGE_WRITE - COLD_STORAGE_ACCESS + (gasSchedule fork).TX_ACCESS_LIST_STORAGE_KEY := by
   have h'' : ¬ fork ≥ Fork.glamsterdam := Nat.not_le.mpr h'
   simp [gasSchedule, h, h'', COLD_STORAGE_WRITE, COLD_STORAGE_ACCESS]
+
+/-- From Glamsterdam, four prices of the gas schedule have the values that EIP-8038 lists.
+
+An address of an access list costs 2900, and a storage key costs 2000.
+
+A cold access to an account costs 3000, and the refund to clear a slot is 11616. -/
+theorem gasSchedule_of_glamsterdam_le {fork : Fork} (h : fork ≥ .glamsterdam) :
+    (gasSchedule fork).TX_ACCESS_LIST_ADDRESS = 2900 ∧
+      (gasSchedule fork).TX_ACCESS_LIST_STORAGE_KEY = 2000 ∧
+      (gasSchedule fork).COLD_ACCOUNT_ACCESS = 3000 ∧
+      (gasSchedule fork).REFUND_STORAGE_CLEAR = 11616 := by
+  simp [gasSchedule, h, WARM_ACCESS, COLD_STORAGE_ACCESS, STORAGE_WRITE]
+
+/-- The price to access and write the account of a creation is 12000, as EIP-8038 lists it. -/
+theorem createAccess_eq : CREATE_ACCESS = 12000 := by
+  decide
+
+/-- At every fork with a limit of code, the limit of init code is twice that limit, by EIP-3860. -/
+theorem maxInitCodeSize_eq_two_mul {fork : Fork} {n : Nat} (h : maxCodeSize fork = some n) :
+    maxInitCodeSize fork = 2 * n := by
+  unfold maxCodeSize at h
+  unfold maxInitCodeSize
+  split at h
+  · cases h
+    simp [*]
+  · split at h
+    · cases h
+      have : ¬ fork ≥ Fork.glamsterdam := by assumption
+      simp [this]
+    · cases h
 
 end EthLib.Execution.Evm

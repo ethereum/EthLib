@@ -35,6 +35,14 @@ theorem size_memoryWrite {memory value : ByteArray} {start : Nat}
   · simp only [ByteArray.size_append, ByteArray.size_extract]
     omega
 
+/-- A write keeps the size of memory when its value is empty or fits within memory. -/
+theorem size_memoryWrite_of_fit {memory value : ByteArray} {start : Nat}
+    (h : value.size ≠ 0 → start + value.size ≤ memory.size) :
+    (memoryWrite memory start value).size = memory.size := by
+  by_cases hz : value.size = 0
+  · simp [memoryWrite, hz]
+  · exact size_memoryWrite (h hz)
+
 /-- A read within memory gives as many bytes as it asks for. -/
 theorem size_memoryReadBytes {memory : ByteArray} {start size : Nat}
     (h : start + size ≤ memory.size) : (memoryReadBytes memory start size).size = size := by

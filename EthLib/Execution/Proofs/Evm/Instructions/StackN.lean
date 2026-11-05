@@ -15,6 +15,12 @@ So each decoder is a bijection from the bytes it accepts onto its depths, invers
 SWAPN and EXCHANGE keep the items of the stack and only reorder them.
 
 DUPN pushes a copy of the item at its depth.
+
+Each of the three instructions fails first when it cannot pay its gas.
+
+It then fails with an invalid parameter when its immediate byte encodes no depth or pair.
+
+Last, it fails when the stack has no item at a depth, or when DUPN pushes onto a full stack.
 -/
 
 @[expose] public section
@@ -234,5 +240,134 @@ theorem exchangeStep_sameContext {evm after : Evm fork Meter} (h : exchangeStep 
       exact ⟨this.message, this.state, this.substate⟩
     · cases h
   · cases h
+
+/-! ## The order of the failures -/
+
+/-- DUPN fails first when the meter cannot pay its 3 gas, whatever its immediate byte and stack.
+
+It fails with the error of the charge. -/
+theorem dupnStep_of_charge_eq_error {evm : Evm fork Meter} {e : EvmError}
+    (hc : GasMeter.charge evm.gas OPCODE_DUPN = .error e) : dupnStep evm = .error e := by
+  simp [dupnStep, chargeGas, hc, bind, Except.bind]
+
+/-- SWAPN fails first when the meter cannot pay its 3 gas, whatever its immediate byte and stack.
+
+It fails with the error of the charge. -/
+theorem swapnStep_of_charge_eq_error {evm : Evm fork Meter} {e : EvmError}
+    (hc : GasMeter.charge evm.gas OPCODE_SWAPN = .error e) : swapnStep evm = .error e := by
+  simp [swapnStep, chargeGas, hc, bind, Except.bind]
+
+/-- EXCHANGE fails first when the meter cannot pay its 3 gas, whatever its immediate byte and stack.
+
+It fails with the error of the charge. -/
+theorem exchangeStep_of_charge_eq_error {evm : Evm fork Meter} {e : EvmError}
+    (hc : GasMeter.charge evm.gas OPCODE_EXCHANGE = .error e) : exchangeStep evm = .error e := by
+  simp [exchangeStep, chargeGas, hc, bind, Except.bind]
+
+/-- After DUPN pays its gas, it fails in exactly three cases, which it checks in this order.
+
+Its immediate byte encodes no depth, and the error is an invalid parameter.
+
+Or the byte encodes a depth `n`, and the stack has fewer than `n` items, so it underflows.
+
+Or the stack has at least `n` items but is full, so the push overflows it. -/
+theorem dupnStep_eq_error_iff {evm : Evm fork Meter} {g : Meter} {e : EvmError}
+    (hc : GasMeter.charge evm.gas OPCODE_DUPN = .ok g) :
+    dupnStep evm = .error e ↔
+      (decodeSingle (immediateByte evm.code evm.pc) = none ∧ e = .invalidParameter) ∨
+      ∃ n, decodeSingle (immediateByte evm.code evm.pc) = some n ∧
+        ((evm.stack.val.length < n ∧ e = .stackUnderflow) ∨
+          (n ≤ evm.stack.val.length ∧ evm.stack.val.length = STACK_LIMIT ∧
+            e = .stackOverflow)) := by
+  simp only [dupnStep, chargeGas, hc, bind, Except.bind, pure, Except.pure]
+  cases hd : decodeSingle (immediateByte evm.code evm.pc) with
+  | none => simp [eq_comm]
+  | some n =>
+    have h17 := (encodeSingle_of_decodeSingle hd).2.1
+    simp only [reduceCtorEq, false_and, false_or, Option.some.injEq, exists_eq_left']
+    cases hx : evm.stack.val[n - 1]? with
+    | none =>
+      have : evm.stack.val.length < n := by
+        have := List.getElem?_eq_none_iff.mp hx; omega
+      simp [this, eq_comm, Nat.not_le_of_lt this]
+    | some x =>
+      have : n ≤ evm.stack.val.length := by
+        have := (List.getElem?_eq_some_iff.mp hx).1; omega
+      by_cases hl : evm.stack.val.length = STACK_LIMIT
+      · rw [hl] at this
+        simp [pushWord, Stack.push, hl, bind, Except.bind, Nat.not_lt_of_le this, this, eq_comm]
+      · simp [pushWord, Stack.push, hl, bind, Except.bind, pure, Except.pure,
+          Nat.not_lt_of_le this]
+
+/-- After SWAPN pays its gas, it fails in exactly two cases, which it checks in this order.
+
+Its immediate byte encodes no depth, and the error is an invalid parameter.
+
+Or the byte encodes a depth `n`, and the stack has at most `n` items, so it underflows. -/
+theorem swapnStep_eq_error_iff {evm : Evm fork Meter} {g : Meter} {e : EvmError}
+    (hc : GasMeter.charge evm.gas OPCODE_SWAPN = .ok g) :
+    swapnStep evm = .error e ↔
+      (decodeSingle (immediateByte evm.code evm.pc) = none ∧ e = .invalidParameter) ∨
+      ∃ n, decodeSingle (immediateByte evm.code evm.pc) = some n ∧
+        evm.stack.val.length ≤ n ∧ e = .stackUnderflow := by
+  simp only [swapnStep, chargeGas, hc, bind, Except.bind, pure, Except.pure]
+  cases hd : decodeSingle (immediateByte evm.code evm.pc) with
+  | none => simp [eq_comm]
+  | some n =>
+    have h17 := (encodeSingle_of_decodeSingle hd).2.1
+    simp only [reduceCtorEq, false_and, false_or, Option.some.injEq, exists_eq_left']
+    have hs := exchangeItems_isSome (stack := evm.stack) (i := 0) (j := n)
+    cases hx : exchangeItems evm.stack 0 n with
+    | none =>
+      simp only [hx, Option.isSome_none, Bool.false_eq_true, false_iff, not_and] at hs
+      have : evm.stack.val.length ≤ n := Nat.not_lt.mp fun hlt => hs (by omega) hlt
+      simp [this, eq_comm]
+    | some s =>
+      simp only [hx, Option.isSome_some, true_iff] at hs
+      simp [Nat.not_le_of_lt hs.2]
+
+/-- After EXCHANGE pays its gas, it fails in exactly two cases, which it checks in this order.
+
+Its immediate byte encodes no pair, and the error is an invalid parameter.
+
+Or the byte encodes a pair `n < m`, and the stack has at most `m` items, so it underflows. -/
+theorem exchangeStep_eq_error_iff {evm : Evm fork Meter} {g : Meter} {e : EvmError}
+    (hc : GasMeter.charge evm.gas OPCODE_EXCHANGE = .ok g) :
+    exchangeStep evm = .error e ↔
+      (decodePair (immediateByte evm.code evm.pc) = none ∧ e = .invalidParameter) ∨
+      ∃ n m, decodePair (immediateByte evm.code evm.pc) = some (n, m) ∧
+        evm.stack.val.length ≤ m ∧ e = .stackUnderflow := by
+  simp only [exchangeStep, chargeGas, hc, bind, Except.bind, pure, Except.pure]
+  cases hd : decodePair (immediateByte evm.code evm.pc) with
+  | none => simp [eq_comm]
+  | some p =>
+    obtain ⟨n, m⟩ := p
+    have hnm := (encodePair_of_decodePair hd).2.2.1
+    simp only [reduceCtorEq, false_and, false_or, Option.some.injEq, Prod.mk.injEq]
+    have hs := exchangeItems_isSome (stack := evm.stack) (i := n) (j := m)
+    cases hx : exchangeItems evm.stack n m with
+    | none =>
+      simp only [hx, Option.isSome_none, Bool.false_eq_true, false_iff, not_and] at hs
+      have : evm.stack.val.length ≤ m := Nat.not_lt.mp fun hlt => hs (by omega) hlt
+      simp only [Except.error.injEq, eq_comm (a := EvmError.stackUnderflow)]
+      exact ⟨fun h => ⟨n, m, ⟨rfl, rfl⟩, this, h⟩, fun ⟨_, _, _, _, h⟩ => h⟩
+    | some s =>
+      simp only [hx, Option.isSome_some, true_iff] at hs
+      simp [Nat.not_le_of_lt hs.2]
+
+/-- With one counter of gas, DUPN fails out of gas when it has less than 3 gas. -/
+theorem dupnStep_of_gas_lt {evm : Evm fork Nat} (h : evm.gas < OPCODE_DUPN) :
+    dupnStep evm = .error .outOfGas :=
+  dupnStep_of_charge_eq_error (by simp [GasMeter.charge, h])
+
+/-- With one counter of gas, SWAPN fails out of gas when it has less than 3 gas. -/
+theorem swapnStep_of_gas_lt {evm : Evm fork Nat} (h : evm.gas < OPCODE_SWAPN) :
+    swapnStep evm = .error .outOfGas :=
+  swapnStep_of_charge_eq_error (by simp [GasMeter.charge, h])
+
+/-- With one counter of gas, EXCHANGE fails out of gas when it has less than 3 gas. -/
+theorem exchangeStep_of_gas_lt {evm : Evm fork Nat} (h : evm.gas < OPCODE_EXCHANGE) :
+    exchangeStep evm = .error .outOfGas :=
+  exchangeStep_of_charge_eq_error (by simp [GasMeter.charge, h])
 
 end EthLib.Execution.Evm

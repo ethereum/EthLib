@@ -14,6 +14,8 @@ Conversely, a signature made with a private key returns that key's address.
 Each documented cause of an empty output gives one, and only the first 128 bytes count.
 
 A call fails exactly when the gas is below 3000.
+
+The price of an authorization of EIP-8037 is the sum of its parts, ECRECOVER among them.
 -/
 
 @[expose] public section
@@ -239,3 +241,18 @@ theorem EcrecoverError.code_injective (e₁ e₂ : EcrecoverError) (h : e₁.cod
   cases e₁; cases e₂; rfl
 
 end EthLib.Execution.Evm.Precompiles.Ecrecover
+
+namespace EthLib.Execution.Evm
+
+open GasCosts
+
+/-- The price of an authorization is the sum that EIP-8037 gives.
+
+It adds 101 bytes of call data at 16 gas each, ECRECOVER, a cold access and two warm accesses. -/
+theorem executionPerAuthBaseCost_eq :
+    EXECUTION_PER_AUTH_BASE_COST =
+      101 * 16 + Precompiles.Ecrecover.GAS_ECRECOVER +
+        (gasSchedule .glamsterdam).COLD_ACCOUNT_ACCESS + 2 * WARM_ACCESS := by
+  decide
+
+end EthLib.Execution.Evm

@@ -18,11 +18,15 @@ Each part of an instruction keeps the message, the state and the substate of the
 
 A pop takes the top word of the stack and keeps memory and the return data.
 
+A push, a charge and an instruction that reads the frame keep memory too.
+
 A charge for gas and memory grows memory to hold each range that is not empty.
 
 That needs a size of memory that is a multiple of 32, and the charge keeps it so.
 
 The charge keeps every byte of memory.
+
+A write of a range that the charge covers keeps the size a multiple of 32.
 -/
 
 @[expose] public section
@@ -242,6 +246,30 @@ theorem popWord_of_stack {evm after : Evm fork Meter} {a x : U256} {rest : List 
   obtain ⟨rfl, hr⟩ := List.cons.inj s
   exact ⟨rfl, hr.symm, m, d⟩
 
+omit [GasMeter Meter] in
+/-- A push keeps memory. -/
+theorem memory_pushWord {evm after : Evm fork Meter} {x : U256}
+    (h : pushWord evm x = .ok after) : after.memory = evm.memory := by
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  rfl
+
+/-- A charge keeps memory. -/
+theorem memory_chargeGas {evm after : Evm fork Meter} {amount : Nat}
+    (h : chargeGas evm amount = .ok after) : after.memory = evm.memory := by
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  rfl
+
+/-- An instruction that reads the frame keeps memory. -/
+theorem memory_readFrame {cost : Nat} {value : Evm fork Meter → U256}
+    {evm after : Evm fork Meter} (h : readFrame cost value evm = .ok after) :
+    after.memory = evm.memory := by
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  simp only [advance, memory_pushWord h2, memory_chargeGas h1]
+
 /-! ## A charge for gas and memory -/
 
 /-- A charge for gas and memory grows memory by the growth for its ranges. -/
@@ -277,5 +305,18 @@ theorem size_chargeGasAndMemory_mod {evm after : Evm fork Meter} {cost : Nat}
     (h : chargeGasAndMemory evm cost ranges = .ok after) : after.memory.size % 32 = 0 := by
   rw [memory_chargeGasAndMemory h]
   exact size_memoryExtend_mod hmod ranges
+
+/-- A write of the range that a charge for gas and memory covers keeps the size a multiple of 32.
+
+The value must have as many bytes as the range has. -/
+theorem size_memoryWrite_chargeGasAndMemory_mod {evm after : Evm fork Meter} {cost : Nat}
+    {start size : U256} {value : ByteArray} (hmod : evm.memory.size % 32 = 0)
+    (h : chargeGasAndMemory evm cost [(start, size)] = .ok after)
+    (hsize : value.size = size.toNat) :
+    (memoryWrite after.memory start.toNat value).size % 32 = 0 := by
+  rw [size_memoryWrite_of_fit fun hz =>
+    hsize ▸ le_size_chargeGasAndMemory hmod h (start, size) (by simp)
+      (fun e => hz (by simp only at e; rw [hsize, e]; rfl))]
+  exact size_chargeGasAndMemory_mod hmod h
 
 end EthLib.Execution.Evm
