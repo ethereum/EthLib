@@ -32,6 +32,10 @@ The algorithms follow five definitions of FORS/Scheme.lean:
 <https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
 
 They are `otsSecrets`, `chainWalk`, `encode`, `otsSign` and `otsLeaf`.
+
+Every definition takes the hash `H` and makes its calls in a fixed order.
+
+Chains go by index, and each chain is walked step by step from its start.
 -/
 
 @[expose] public section
@@ -40,17 +44,18 @@ namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
 
+variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+
 /-! ## Chains -/
 
 /-- The 32 hashes of the seed that start the 64 chains of one key.
 
 Chains `2j` and `2j + 1` start at the two halves of hash `j`. -/
-def chainStarts (pp : PublicParam) (seed : Seed) (key : OtsKey) : Vector Digest V :=
+def chainStarts (pp : PublicParam) (seed : Seed) (key : OtsKey) : m (Vector Digest V) := do
   -- One hash per pair of chains, so 32 hashes for 64 chains.
-  let pairs : Vector HashOutput (V / 2) :=
-    Vector.ofFn fun j => thFull pp (addrPrf key j) (packBytes seed)
+  let pairs ← ofFnInOrder (V / 2) fun j => thFull H pp (addrPrf key j) (packBytes seed)
   -- Chain `i` takes half `i mod 2` of hash `floor(i / 2)`.
-  Vector.ofFn fun i =>
+  return Vector.ofFn fun i =>
     halfOf ⟨i.val % 2, Nat.mod_lt _ (by decide)⟩
       (pairs[i.val / 2]'(by have := i.isLt; simp only [V] at *; omega))
 
@@ -58,28 +63,28 @@ def chainStarts (pp : PublicParam) (seed : Seed) (key : OtsKey) : Vector Digest 
 
 The chain index is in the address, so the payload is the value alone. -/
 def chainStep (pp : PublicParam) (key : OtsKey) (i : Fin V) (mu : Fin (CHAIN_LENGTH - 1))
-    (value : Digest) : Digest :=
-  th pp (addrChain key i mu) (packBytes value)
+    (value : Digest) : m Digest :=
+  th H pp (addrChain key i mu) (packBytes value)
 
 /-- Walk chain `i` for `steps` steps, starting at position `start`.
 
 The walk ends at position `start + steps`, which the bound keeps on the chain. -/
 def chain (pp : PublicParam) (key : OtsKey) (i : Fin V) (start steps : Nat)
-    (h : start + steps < CHAIN_LENGTH) (value : Digest) : Digest :=
-  (Wots.chain (m := Id) (chainStep pp key i) start steps (Nat.le_sub_one_of_lt h) value).run
+    (h : start + steps < CHAIN_LENGTH) (value : Digest) : m Digest :=
+  Wots.chain (chainStep H pp key i) start steps (Nat.le_sub_one_of_lt h) value
 
 /-! ## The one-time key's leaf -/
 
 /-- The Merkle leaf of a one-time key, from the ends of its 64 chains. -/
-def otsLeafHash (pp : PublicParam) (key : OtsKey) (ends : Vector Digest V) : Digest :=
-  th pp (addrLeaf key) (packDigests ends)
+def otsLeafHash (pp : PublicParam) (key : OtsKey) (ends : Vector Digest V) : m Digest :=
+  th H pp (addrLeaf key) (packDigests ends)
 
 /-- The leaf of a key, computed from the seed. -/
-def otsPublicLeaf (pp : PublicParam) (seed : Seed) (key : OtsKey) : Digest :=
-  let starts := chainStarts pp seed key
-  -- Every chain walked from position 0 to position 3.
-  otsLeafHash pp key
-    (Vector.ofFn fun i => chain pp key i 0 (CHAIN_LENGTH - 1) (by decide) starts[i])
+def otsPublicLeaf (pp : PublicParam) (seed : Seed) (key : OtsKey) : m Digest := do
+  let starts ← chainStarts H pp seed key
+  -- Every chain walked from position 0 to position 3, chain 0 first.
+  let ends ← ofFnInOrder V fun i => chain H pp key i 0 (CHAIN_LENGTH - 1) (by decide) starts[i]
+  otsLeafHash H pp key ends
 
 /-! ## The encoding -/
 
@@ -87,8 +92,9 @@ def otsPublicLeaf (pp : PublicParam) (seed : Seed) (key : OtsKey) : Digest :=
 
 The counter comes last, so all counter trials share every block before the last one. -/
 def encode (pp : PublicParam) (key : OtsKey) (msg : ByteArray) (counter : UInt32) :
-    Option Codeword :=
-  codeword? (th pp (addrEncoding key) (msg ++ packBytes (uintToBytes COUNTER_LEN counter.toNat)))
+    m (Option Codeword) :=
+  codeword? <$>
+    th H pp (addrEncoding key) (msg ++ packBytes (uintToBytes COUNTER_LEN counter.toNat))
 
 namespace Internal
 
@@ -96,8 +102,8 @@ namespace Internal
 
 Returns the first counter whose encoding is a codeword, with the codeword. -/
 def findCounter (pp : PublicParam) (key : OtsKey) (msg : ByteArray) (c fuel : Nat) :
-    Option (UInt32 × Codeword) :=
-  (Wots.findFirst (m := Id) UInt32.ofNat (encode pp key msg) c fuel).run
+    m (Option (UInt32 × Codeword)) :=
+  Wots.findFirst UInt32.ofNat (encode H pp key msg) c fuel
 
 end Internal
 
@@ -113,24 +119,26 @@ Returns nothing when no counter gives a codeword.
 
 Deterministic, so signing one message again gives the same signature. -/
 def otsSign (pp : PublicParam) (seed : Seed) (key : OtsKey) (msg : ByteArray) :
-    Option (UInt32 × Vector Digest V) := do
+    m (Option (UInt32 × Vector Digest V)) := do
   -- Step 1: search the counter until the encoding is a codeword.
-  let (counter, x) ← Internal.findCounter pp key msg 0 MAX_COUNTER_TRIALS
-  -- Step 2: reveal each chain at the position its digit names.
-  let starts := chainStarts pp seed key
-  return (counter, Vector.ofFn fun i => chain pp key i 0 x[i] (by simp) starts[i])
+  let some (counter, x) ← Internal.findCounter H pp key msg 0 MAX_COUNTER_TRIALS
+    | return none
+  -- Step 2: reveal each chain at the position its digit names, chain 0 first.
+  let starts ← chainStarts H pp seed key
+  let y ← ofFnInOrder V fun i => chain H pp key i 0 x[i] (by simp) starts[i]
+  return some (counter, y)
 
 /-- `Ots.leaf(K, M, c, y)`: the leaf a claimed one-time signature leads to.
 
 Returns nothing when the counter does not encode the message as a codeword. -/
 def otsLeaf (pp : PublicParam) (key : OtsKey) (msg : ByteArray) (counter : UInt32)
-    (y : Vector Digest V) : Option Digest := do
+    (y : Vector Digest V) : m (Option Digest) := do
   -- Step 1: recompute the codeword.
-  let x ← encode pp key msg counter
-  -- Step 2: walk chain `i` from position `x_i` to position 3.
-  let ends := Vector.ofFn fun i =>
-    chain pp key i x[i] (CHAIN_LENGTH - 1 - x[i]) (by have := x[i].isLt; omega) y[i]
+  let some x ← encode H pp key msg counter | return none
+  -- Step 2: walk chain `i` from position `x_i` to position 3, chain 0 first.
+  let ends ← ofFnInOrder V fun i =>
+    chain H pp key i x[i] (CHAIN_LENGTH - 1 - x[i]) (by have := x[i].isLt; omega) y[i]
   -- Step 3: hash the ends into the leaf.
-  return otsLeafHash pp key ends
+  return some (← otsLeafHash H pp key ends)
 
 end EthLib.Cryptography.Sphincs

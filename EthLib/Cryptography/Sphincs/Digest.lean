@@ -42,6 +42,8 @@ namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
 
+variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+
 /-! ## The randomizer -/
 
 /-- `R`: the randomizer of a message, the first half of one hash of the seed and the message.
@@ -53,8 +55,8 @@ Every index is a leaf of this key, so the first randomizer is always kept.
 The note's signer would try `R + i delta` for `i = 1, 2, ...`.
 
 It does so only if an index could miss the key. -/
-def randomizer (pp : PublicParam) (seed : Seed) (m : Message) : Randomizer :=
-  th pp addrRnd (packBytes seed ++ packBytes m)
+def randomizer (pp : PublicParam) (seed : Seed) (msg : Message) : m Randomizer :=
+  th H pp addrRnd (packBytes seed ++ packBytes msg)
 
 /-! ## The digest -/
 
@@ -63,10 +65,14 @@ abbrev MessageDigest := Vector UInt8 (DIGEST_CALLS * HASH_LEN)
 
 /-- `D = D_0 | D_1`, with `D_c = H(P | A_msg(c) | m | R)`.
 
-Each call's input is 80 bytes, one Keccak-256 block. -/
-def messageDigest (pp : PublicParam) (m : Message) (rho : Randomizer) : MessageDigest :=
+Each call's input is 80 bytes, one Keccak-256 block.
+
+Call 0 is made first. -/
+def messageDigest (pp : PublicParam) (msg : Message) (rho : Randomizer) : m MessageDigest := do
   -- The calls hash the same payload, and only their address differs.
-  (Vector.ofFn fun call => thFull pp (addrMsg call) (packBytes m ++ packBytes rho)).flatten
+  let calls ← ofFnInOrder DIGEST_CALLS fun call =>
+    thFull H pp (addrMsg call) (packBytes msg ++ packBytes rho)
+  return calls.flatten
 
 /-- `idx`: the low 26 bits of the digest. -/
 def digestIndex (d : MessageDigest) : Nat :=

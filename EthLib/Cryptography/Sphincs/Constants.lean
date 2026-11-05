@@ -141,14 +141,11 @@ def DIGEST_CALLS : Nat := (DIGEST_BITS + 8 * HASH_LEN - 1) / (8 * HASH_LEN)
 
 /-- The signatures one key may make: the lifetime `2^30`.
 
-The model proves more, up to `N = 1,182,000,000` signatures, about `2^30.14`.
+The parameters target their security level only up to this many signatures.
 
-Up to `N`, a forgery has probability at most `q / 2^127` for `q` hash queries.
+Each signature from a reused FORS instance weakens it, so the level falls past the limit.
 
-That bound holds in the random-oracle model.
-
-That is `h26_layered` in FORS/Main.lean.
-<https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Main.lean> -/
+The signer does not count its signatures, so the caller must. -/
 def SIGNATURE_LIMIT : Nat := 2 ^ 30
 
 /-! ## Serialized sizes -/
