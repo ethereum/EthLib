@@ -125,10 +125,6 @@ def appendWithinLimit {switch : Base.Fork} {α : Type} {limit : Nat}
     .ok ⟨list.data.push item, fun before => by simpa using fits before⟩
   else .error (.listFull limit)
 
-/-- The signature that encodes the point at infinity, which no key produces. -/
-def infinitySignature : Cryptography.Bls.BLSSignature :=
-  Cryptography.Bls.Signatures.pointToSignature Cryptography.Bls.G2.zero
-
 /-- From Electra: the state in which the excess balance of a validator waits as a pending deposit.
 
 The excess is the balance above the activation balance.
@@ -142,7 +138,8 @@ def queueExcessActiveBalance (state : BeaconState preset fork) (electra : .pectr
   if preset.MIN_ACTIVATION_BALANCE < balance then
     let validator ← getValidator state index
     let deposit : PendingDeposit := ⟨validator.pubkey, validator.withdrawalCredentials,
-      balance - preset.MIN_ACTIVATION_BALANCE, infinitySignature, GENESIS_SLOT⟩
+      balance - preset.MIN_ACTIVATION_BALANCE,
+      Cryptography.Bls.Signatures.infinitySignature, GENESIS_SLOT⟩
     let pending ← appendWithinLimit (state.pendingDeposits electra) deposit
     return { state.setBalance index.toNat preset.MIN_ACTIVATION_BALANCE with
       pendingDeposits := fun _ => pending }

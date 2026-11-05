@@ -43,6 +43,12 @@ def POP_DST : ByteArray :=
 /-- The compressed encoding of the `G2` point at infinity. -/
 def G2_POINT_AT_INFINITY : ByteArray := G2.infinityBytes
 
+/-- The same encoding, as a signature.
+
+The beacon chain uses it where a message carries no signature. -/
+def infinitySignature : BLSSignature :=
+  ⟨G2_POINT_AT_INFINITY.data, by simp [G2_POINT_AT_INFINITY, G2.infinityBytes]⟩
+
 /-! ## Keys and encodings -/
 
 /-- A secret key: an integer `SK` with `1 <= SK < r` (§2.3). -/

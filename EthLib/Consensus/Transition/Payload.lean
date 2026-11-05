@@ -75,10 +75,6 @@ def verifyExecutionPayloadEnvelopeSignature (config : Config) (checks : Signatur
   let signingRoot ← builderSigningRoot config state signed.message
   return checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signed.signature)
 
-/-- Whether a signature is the encoding of the point at infinity, which no key produces. -/
-def isInfinitySignature (signature : BLSSignature) : Bool :=
-  signature.toArray == Signatures.G2_POINT_AT_INFINITY.data
-
 /-- The position in the pending payments of a bid for a slot, in the second epoch of the list.
 
 A preset with no slot in an epoch has no position, and is an error. -/
@@ -101,7 +97,8 @@ def checkBidBuilder (config : Config) (checks : SignatureChecks)
   let bid := signed.message
   let builder := bid.builderIndex
   if builder = BUILDER_INDEX_SELF_BUILD then
-    ensure (bid.value = 0 ∧ isInfinitySignature signed.signature = true) .selfBuildBidPaid
+    ensure (bid.value = 0 ∧ signed.signature = Signatures.infinitySignature)
+      .selfBuildBidPaid
   else
     let active ← liftAccessor (isActiveBuilder state gloas builder)
     ensure (active = true) (.builderNotActive builder)
