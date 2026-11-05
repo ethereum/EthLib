@@ -85,6 +85,14 @@ The specification and the exports import nothing beyond the Lean toolchain.
 - Put invariants in types, such as `Vector` lengths and `Fin` bounds.
 - Avoid `partial def` in new code.
   A function the kernel cannot unfold is a function nobody can prove anything about.
+- Do not use `panic!` or the `!` accessors, such as `xs[i]!`, `get!` and `set!`.
+  Each one hides a failure: it returns a default value, or it changes nothing.
+  Index with `Fin` or a `Vector`, walk arrays of equal length together with `zip`, or return a typed error.
+  Older modules still use these accessors, and pull requests remove them module by module.
+  #106 tracks the ones in KZG.
+- Prefer structural recursion, `map` and folds to `Id.run do` with mutable variables.
+  A proof then follows the shape of the definition.
+  This is advice, not a rule: a loop whose speed matters can keep `do`.
 
 ### Proofs
 
@@ -96,6 +104,8 @@ The specification and the exports import nothing beyond the Lean toolchain.
   `lake exe check-decls` fails on any use.
 - After a proof change, check its axioms with `lake exe check-decls`.
   The goal is `propext`, `Classical.choice` and `Quot.sound`, nothing else.
+- Name each theorem by the [naming conventions of Mathlib](https://leanprover-community.github.io/contribute/naming.html).
+  The name is in `snake_case` and describes the statement: the conclusion first, then `_of_` and the hypotheses.
 - Prove what a reader cares about: round trips, injectivity, the rejection of bad input and the invariants of a state transition.
   Above all, prove agreement with the specification.
 
