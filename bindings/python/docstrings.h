@@ -405,7 +405,7 @@
   "The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`."
 
 #define DOC_reqresp_decode_payload \
-  "The SSZ bytes of a payload, given the bound of its SSZ type."
+  "The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type."
 
 #define DOC_reqresp_decode_response_chunk \
   "One response chunk, given the number of context bytes that the method sends."

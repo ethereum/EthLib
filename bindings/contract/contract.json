@@ -3876,6 +3876,7 @@
      "codes":
      [{"constructor": "varint", "code": 1},
       {"constructor": "lengthOutOfBounds", "code": 2},
+      {"constructor": "lengthBelowMinimum", "code": 9},
       {"constructor": "arith", "code": 3},
       {"constructor": "compressedTooLong", "code": 4},
       {"constructor": "frame", "code": 5},
@@ -3885,8 +3886,9 @@
    "error_class": "ReqRespError",
    "docstring":
    "The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`.\n\nIt is the worst-case size of a Snappy block of `n` bytes, from `snappy.cc` of `google/snappy`:\n<https://github.com/google/snappy/blob/32ded457c0b1fe78ceb8397632c416568d6714a0/snappy.cc#L218>\n\nThe sum is a 64-bit integer, so a value of 2^64 or more is an error."},
-  {"summary": "The SSZ bytes of a payload, given the bound of its SSZ type.",
-   "signature": "(type_bound: int, data: bytes) -> bytes",
+  {"summary":
+   "The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.",
+   "signature": "(type_min: int, type_bound: int, data: bytes) -> bytes",
    "operation": "EthLib.Networking.ReqResp.decodePayload",
    "method": "reqresp_decode_payload",
    "errors":
@@ -3894,6 +3896,7 @@
      "codes":
      [{"constructor": "varint", "code": 1},
       {"constructor": "lengthOutOfBounds", "code": 2},
+      {"constructor": "lengthBelowMinimum", "code": 9},
       {"constructor": "arith", "code": 3},
       {"constructor": "compressedTooLong", "code": 4},
       {"constructor": "frame", "code": 5},
@@ -3902,10 +3905,11 @@
       {"constructor": "contextTruncated", "code": 8}]}],
    "error_class": "ReqRespError",
    "docstring":
-   "The SSZ bytes of a payload, given the bound of its SSZ type.\n\nThe declared length must be at most the smaller bound.\n\nAt most `32 + n + n / 6` bytes may follow a declared length `n`.\n\nThe stream must decode to exactly `n` bytes, so a stream that ends early or runs on is rejected.\n\nThe caller deserializes the bytes, since it knows their SSZ type."},
+   "The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.\n\nThe declared length must be at most the smaller of the largest encoding and the payload cap.\n\nIt must also be at least the smallest encoding, since a shorter payload cannot be of that type.\n\nThe length prefix must be the shortest varint of its value.\n\nThe specification only recommends this; requiring it gives each length exactly one prefix.\n\nAt most `32 + n + n / 6` bytes may follow a declared length `n`.\n\nThe stream must decode to exactly `n` bytes, so a stream that ends early or runs on is rejected.\n\nThe caller deserializes the bytes, since it knows their SSZ type."},
   {"summary":
    "One response chunk, given the number of context bytes that the method sends.",
-   "signature": "(context_bytes: int, type_bound: int, data: bytes) -> bytes",
+   "signature":
+   "(context_bytes: int, type_min: int, type_bound: int, data: bytes) -> bytes",
    "operation": "EthLib.Networking.ReqResp.decodeResponseChunk",
    "method": "reqresp_decode_response_chunk",
    "errors":
@@ -3913,6 +3917,7 @@
      "codes":
      [{"constructor": "varint", "code": 1},
       {"constructor": "lengthOutOfBounds", "code": 2},
+      {"constructor": "lengthBelowMinimum", "code": 9},
       {"constructor": "arith", "code": 3},
       {"constructor": "compressedTooLong", "code": 4},
       {"constructor": "frame", "code": 5},
@@ -3921,7 +3926,7 @@
       {"constructor": "contextTruncated", "code": 8}]}],
    "error_class": "ReqRespError",
    "docstring":
-   "One response chunk, given the number of context bytes that the method sends.\n\nA success carries that many context bytes, and its payload has the bound of the message type.\n\nAn error carries no context bytes, and its payload is an error message of at most 256 bytes."},
+   "One response chunk, given the number of context bytes that the method sends.\n\nA success carries that many context bytes, and its payload has the bounds of the message type.\n\nAn error carries no context bytes, and its payload is an error message of at most 256 bytes."},
   {"summary":
    "The hash of a header in RLP form, after the decoder at the fork accepts it.",
    "signature": "(fork: str, header: bytes) -> bytes",

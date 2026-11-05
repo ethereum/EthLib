@@ -539,11 +539,11 @@ def reqresp_max_compressed_len(n: int) -> int:
     """The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`."""
     ...
 
-def reqresp_decode_payload(type_bound: int, data: bytes) -> bytes:
-    """The SSZ bytes of a payload, given the bound of its SSZ type."""
+def reqresp_decode_payload(type_min: int, type_bound: int, data: bytes) -> bytes:
+    """The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type."""
     ...
 
-def reqresp_decode_response_chunk(context_bytes: int, type_bound: int, data: bytes) -> bytes:
+def reqresp_decode_response_chunk(context_bytes: int, type_min: int, type_bound: int, data: bytes) -> bytes:
     """One response chunk, given the number of context bytes that the method sends."""
     ...
 

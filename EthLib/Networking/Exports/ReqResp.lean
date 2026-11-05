@@ -26,6 +26,7 @@ open EthLib.Exports (Result)
 def message : ReqRespError → String
   | .varint _ => "length prefix is not a valid varint"
   | .lengthOutOfBounds declared bound => s!"declared length {declared} is above {bound}"
+  | .lengthBelowMinimum declared minimum => s!"declared length {declared} is below {minimum}"
   | .arith _ => "bound on the compressed size is 2^64 or more"
   | .compressedTooLong size bound => s!"{size} compressed bytes, more than {bound}"
   | .frame _ => "payload is not a valid Snappy framed stream"
@@ -54,14 +55,14 @@ def maxCompressedLenExport (n : UInt64) : Result UInt64 :=
 
 /-- The SSZ bytes of a request or response payload. -/
 @[export eth_reqresp_decode_payload]
-def decodePayloadExport (typeBound : UInt64) (bs : ByteArray) : Result ByteArray :=
-  runReqResp (decodePayload typeBound bs)
+def decodePayloadExport (typeMin typeBound : UInt64) (bs : ByteArray) : Result ByteArray :=
+  runReqResp (decodePayload typeMin typeBound bs)
 
 /-- The code, the context bytes and the payload of one response chunk, as one byte string. -/
 @[export eth_reqresp_decode_response_chunk]
-def decodeResponseChunkExport (contextBytes typeBound : UInt64) (bs : ByteArray) :
+def decodeResponseChunkExport (contextBytes typeMin typeBound : UInt64) (bs : ByteArray) :
     Result ByteArray := do
-  let chunk ← runReqResp (decodeResponseChunk contextBytes.toNat typeBound bs)
+  let chunk ← runReqResp (decodeResponseChunk contextBytes.toNat typeMin typeBound bs)
   return ⟨#[chunk.code.toByte]⟩ ++ chunk.context ++ chunk.payload
 
 end EthLib.Networking.ReqResp.Exports

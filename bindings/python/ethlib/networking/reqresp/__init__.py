@@ -32,18 +32,20 @@ def max_compressed_len(n: int) -> int:
     return _native.reqresp_max_compressed_len(n)
 
 
-def decode_payload(type_bound: int, data: bytes) -> bytes:
-    """The SSZ bytes of a payload whose SSZ type allows at most type_bound bytes."""
-    return _native.reqresp_decode_payload(type_bound, data)
+def decode_payload(type_min: int, type_bound: int, data: bytes) -> bytes:
+    """The SSZ bytes of a payload whose SSZ type encodes to type_min through type_bound bytes."""
+    return _native.reqresp_decode_payload(type_min, type_bound, data)
 
 
-def decode_response_chunk(context_bytes: int, type_bound: int, data: bytes) -> ResponseChunk:
+def decode_response_chunk(
+    context_bytes: int, type_min: int, type_bound: int, data: bytes
+) -> ResponseChunk:
     """
     One response chunk, for a method that sends context_bytes context bytes on success.
 
     An error chunk carries no context bytes, and its payload is the error message.
     """
-    raw = _native.reqresp_decode_response_chunk(context_bytes, type_bound, data)
+    raw = _native.reqresp_decode_response_chunk(context_bytes, type_min, type_bound, data)
     code = raw[0]
     n = context_bytes if code == 0 else 0
     return ResponseChunk(code, raw[1 : 1 + n], raw[1 + n :])

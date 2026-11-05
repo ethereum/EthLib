@@ -161,7 +161,7 @@ def test_enr_error_code() -> None:
 def test_reqresp_error_code() -> None:
     # A lone byte 0xff starts a varint and never ends it.
     with raises(reqresp.ReqRespError, "length prefix is not a valid varint") as info:
-        reqresp.decode_payload(100, b"\xff")
+        reqresp.decode_payload(0, 100, b"\xff")
     # The code of a bad varint prefix.
     assert info.value.code == 1
 
