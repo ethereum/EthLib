@@ -101,4 +101,48 @@ theorem natToBytes_bytesToNat (bytes : List UInt8) :
     rw [hv, natToBytes, hdiv, hmod, ih front hf]
     simp
 
+/-- The first byte is worth `256` to the power of the number of bytes after it. -/
+theorem bytesToNat_cons (b : UInt8) (rest : List UInt8) :
+    bytesToNat (b :: rest) = b.toNat * 256 ^ rest.length + bytesToNat rest := by
+  simpa [bytesToNat] using foldl_bytesToNat rest b.toNat
+
+/-- Two bytes compare as the numbers they hold. -/
+theorem _root_.UInt8.compare_eq_compare_toNat (a b : UInt8) :
+    compare a b = compare a.toNat b.toNat := by
+  simp only [compare, compareOfLessAndEq, UInt8.lt_iff_toNat_lt, ← UInt8.toNat_inj]
+
+/-- Two lists of bytes of one length compare, byte after byte, as the numbers they write. -/
+theorem compare_eq_compare_bytesToNat {a b : List UInt8} (h : a.length = b.length) :
+    compare a b = compare (bytesToNat a) (bytesToNat b) := by
+  induction a generalizing b with
+  | nil =>
+    rw [List.length_nil, eq_comm, List.length_eq_zero_iff] at h
+    subst h
+    rfl
+  | cons x a ih =>
+    obtain ⟨y, b, rfl⟩ := List.exists_cons_of_length_eq_add_one h.symm
+    have hlen : a.length = b.length := by simpa using h
+    have ha := bytesToNat_lt a
+    have hb := bytesToNat_lt b
+    rw [← hlen] at hb
+    rw [List.compare_cons_cons, ih hlen, bytesToNat_cons, bytesToNat_cons, ← hlen,
+      UInt8.compare_eq_compare_toNat]
+    -- The first bytes decide, since each tail is worth less than one unit of the first byte.
+    generalize 256 ^ a.length = unit at ha hb ⊢
+    rcases Nat.lt_trichotomy x.toNat y.toNat with hxy | hxy | hxy
+    · have : x.toNat * unit + bytesToNat a < y.toNat * unit + bytesToNat b := by
+        have := Nat.mul_le_mul_right unit (Nat.succ_le_of_lt hxy)
+        rw [Nat.succ_mul] at this
+        omega
+      rw [Nat.compare_eq_lt.mpr hxy, Nat.compare_eq_lt.mpr this]
+      rfl
+    · rw [hxy, Nat.compare_eq_eq.mpr rfl]
+      simp only [Ordering.then, Nat.compare_eq_ite_lt, Nat.add_lt_add_iff_left]
+    · have : y.toNat * unit + bytesToNat b < x.toNat * unit + bytesToNat a := by
+        have := Nat.mul_le_mul_right unit (Nat.succ_le_of_lt hxy)
+        rw [Nat.succ_mul] at this
+        omega
+      rw [Nat.compare_eq_gt.mpr hxy, Nat.compare_eq_gt.mpr this]
+      rfl
+
 end EthLib.Base
