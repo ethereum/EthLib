@@ -169,8 +169,8 @@ def _list_items(data: bytes) -> list:
     return [data[a:b] for a, b in zip(offsets, offsets[1:] + [len(data)])]
 
 
-def verify_data_column_sidecar(name: str, fork: str, data: bytes, config: dict | None = None,
-                               block: bytes = b"") -> bool:
+def verify_data_column_sidecar(name: str, fork: str, data: bytes, block: bytes = b"",
+                               config: dict | None = None) -> bool:
     """Whether a data column sidecar has a valid shape; from Gloas, against its signed block."""
     replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_verify_data_column_sidecar(name, fork, data, block, replacements)

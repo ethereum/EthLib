@@ -3335,13 +3335,14 @@
    "error_class": "ConsensusError",
    "docstring":
    "The shuffled position of one index, which must be below the count."},
-  {"summary": "The protocol IDs of a fork.",
+  {"summary": "The protocol IDs of a fork, up to Fulu.",
    "signature": "(fork: str) -> bytes",
    "operation": "EthLib.Consensus.protocolIds",
    "method": "consensus_reqresp_protocol_ids",
    "errors": [],
    "error_class": "ConsensusError",
-   "docstring": "The protocol IDs of a fork."},
+   "docstring":
+   "The protocol IDs of a fork, up to Fulu.\n\nGloas adds the protocols of execution payload envelopes, which EthLib does not hold yet.\n\nSo from Gloas there is no list."},
   {"summary": "The protocol and the version that an ID names, if it names one.",
    "signature": "(text: str) -> bytes",
    "operation": "EthLib.Consensus.ProtocolId.parse?",

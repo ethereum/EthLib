@@ -14,7 +14,8 @@ Properties of the request and response messages of the consensus layer.
 
 - Each protocol ID parses back to its protocol and its version.
 - So no two protocol IDs of a fork are one string.
-- A protocol ID of a fork is a protocol ID of every later fork.
+- A protocol ID of a fork is a protocol ID of every later fork up to Fulu.
+- From Gloas a fork has no list of protocol IDs yet.
 - The status, the metadata and the container requests are lawful SSZ containers at every fork.
 - A goodbye code is recovered from the reason it names.
 -/
@@ -83,12 +84,23 @@ theorem parse?_toString (protocol : ReqRespProtocol) {version : Nat} (positive :
   simp only [Option.bind_eq_bind, Option.bind_some, dropSuffix?_append, find?_name, drop, digits,
     nonzero, ite_false, back]
 
+/-- The protocol IDs of a fork are missing exactly from Gloas on. -/
+theorem protocolIds_eq_none_iff {fork : Fork} :
+    protocolIds fork = none ↔ .glamsterdam ≤ fork := by
+  unfold protocolIds
+  split <;> simp_all
+
 /-- Every protocol ID of a fork parses back to itself. -/
-theorem parse?_protocolIds {fork : Fork} {id : ProtocolId} (listed : id ∈ protocolIds fork) :
+theorem parse?_protocolIds {fork : Fork} {ids : List ProtocolId} {id : ProtocolId}
+    (listed : protocolIds fork = some ids) (mem : id ∈ ids) :
     ProtocolId.parse? id.toString = some id := by
   have bounds : 0 < id.version ∧ id.version ≤ 3 := by
-    simp only [protocolIds, List.mem_flatMap, List.mem_map] at listed
-    obtain ⟨protocol, _, version, member, rfl⟩ := listed
+    unfold protocolIds at listed
+    split at listed
+    · cases listed
+    cases listed
+    simp only [List.mem_flatMap, List.mem_map] at mem
+    obtain ⟨protocol, _, version, member, rfl⟩ := mem
     show 0 < version ∧ version ≤ 3
     cases protocol <;> simp only [ReqRespProtocol.versions] at member <;>
       repeat' (split at member)
@@ -96,11 +108,19 @@ theorem parse?_protocolIds {fork : Fork} {id : ProtocolId} (listed : id ∈ prot
     all_goals omega
   exact parse?_toString id.protocol bounds.1 (by omega)
 
-/-- A protocol ID of a fork is a protocol ID of every later fork. -/
-theorem mem_protocolIds_of_le {fork later : Fork} (le : fork ≤ later) {id : ProtocolId}
-    (listed : id ∈ protocolIds fork) : id ∈ protocolIds later := by
-  simp only [protocolIds, List.mem_flatMap, List.mem_map] at listed ⊢
-  obtain ⟨protocol, all, version, member, rfl⟩ := listed
+/-- A protocol ID of a fork is a protocol ID of every later fork that has a list. -/
+theorem mem_protocolIds_of_le {fork later : Fork} (le : fork ≤ later) {ids ids' : List ProtocolId}
+    (listed : protocolIds fork = some ids) (listed' : protocolIds later = some ids')
+    {id : ProtocolId} (mem : id ∈ ids) : id ∈ ids' := by
+  unfold protocolIds at listed listed'
+  split at listed
+  · cases listed
+  split at listed'
+  · cases listed'
+  cases listed
+  cases listed'
+  simp only [List.mem_flatMap, List.mem_map] at mem ⊢
+  obtain ⟨protocol, all, version, member, rfl⟩ := mem
   refine ⟨protocol, all, version, ?_, rfl⟩
   have up : ∀ {first : Fork}, first ≤ fork → first ≤ later := fun h => Nat.le_trans h le
   -- A version is listed under the forks from some fork on, which then holds later too.
@@ -110,10 +130,11 @@ theorem mem_protocolIds_of_le {fork later : Fork} (le : fork ≤ later) {id : Pr
   all_goals omega
 
 /-- Two protocol IDs of a fork with one string are one ID. -/
-theorem toString_injective {fork : Fork} {a b : ProtocolId} (left : a ∈ protocolIds fork)
-    (right : b ∈ protocolIds fork) (same : a.toString = b.toString) : a = b := by
-  have := parse?_protocolIds left
-  rw [same, parse?_protocolIds right] at this
+theorem toString_injective {fork : Fork} {ids : List ProtocolId} {a b : ProtocolId}
+    (listed : protocolIds fork = some ids) (left : a ∈ ids) (right : b ∈ ids)
+    (same : a.toString = b.toString) : a = b := by
+  have := parse?_protocolIds listed left
+  rw [same, parse?_protocolIds listed right] at this
   exact (Option.some.inj this).symm
 
 /-- A goodbye code is recovered from the reason it names. -/

@@ -29,7 +29,8 @@ open Serialization.Ssz.Exports (runSsz)
 @[export eth_consensus_reqresp_protocol_ids]
 def reqRespProtocolIdsExport (fork : ByteArray) : Result ByteArray := do
   let fork ← forkUpTo .bpo5 fork
-  return jsonBytes (toJson ((protocolIds fork).map ProtocolId.toString))
+  let some ids := protocolIds fork | throw (0, s!"fork {fork.name} not yet specified")
+  return jsonBytes (toJson (ids.map ProtocolId.toString))
 
 /-- The protocol name and the version that an ID names, as a JSON pair. -/
 @[export eth_consensus_reqresp_parse_protocol_id]

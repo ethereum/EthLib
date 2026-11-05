@@ -123,9 +123,14 @@ def ReqRespProtocol.versions (fork : Fork) : ReqRespProtocol → List Nat
   | .dataColumnSidecarsByRange | .dataColumnSidecarsByRoot | .beaconBlocksByHead =>
     if .fusaka ≤ fork then [1] else []
 
-/-- The protocol IDs of a fork. -/
-def protocolIds (fork : Fork) : List ProtocolId :=
-  ReqRespProtocol.all.flatMap fun protocol =>
+/-- The protocol IDs of a fork, up to Fulu.
+
+Gloas adds the protocols of execution payload envelopes, which EthLib does not hold yet.
+
+So from Gloas there is no list. -/
+def protocolIds (fork : Fork) : Option (List ProtocolId) :=
+  if .glamsterdam ≤ fork then none
+  else some <| ReqRespProtocol.all.flatMap fun protocol =>
     (protocol.versions fork).map fun version => ⟨protocol, version⟩
 
 /-- The protocol and the version that an ID names, if it names one.
