@@ -59,6 +59,7 @@ public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Glv
 public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Dft
 public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Roots
 public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Rounds
+public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Embedded
 
 /-!
 # `EthLib.Cryptography.Proofs.Kzg`
