@@ -47,7 +47,7 @@ A module imports only from its own layer or from those below it, and the executi
 | Execution | [`Transactions`](EthLib/Execution/Transactions/) | the five kinds of transaction, their bytes and hashes, the sender at each fork, and the intrinsic gas and validity of one transaction |
 | Execution | [`Blocks`](EthLib/Execution/Blocks/) | the header, withdrawals, logs, receipts and block of each fork, the logs bloom filter, the header hash, and before Paris the difficulty, the proof of work, the ommers, the rewards and the DAO Fork |
 | Execution | [`Trie`](EthLib/Execution/Trie/) | the root of the Merkle Patricia Trie, plain and secured, its Merkle proofs, and the hex-prefix encoding of its paths |
-| Consensus | [`Consensus`](EthLib/Consensus/) | the configuration, presets and constants, slots and epochs, the fork of an epoch, signing domains, the swap-or-not shuffle and committees, containers with the execution payload, the custody of data columns, the gossip topics of each fork and the subnets of messages, and models of Casper FFG and the LMD-GHOST fork choice |
+| Consensus | [`Consensus`](EthLib/Consensus/) | the configuration, presets and constants, slots and epochs, the fork of an epoch, signing domains, the swap-or-not shuffle and committees, containers with the execution payload, the custody of data columns, the gossip topics of each fork and the subnets of messages, the request and response messages, and models of Casper FFG and the LMD-GHOST fork choice |
 
 The theorems about a module live under `Proofs/` in its layer, and the C exports that the bindings call under `Exports/`.
 

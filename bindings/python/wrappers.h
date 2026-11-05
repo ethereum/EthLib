@@ -293,6 +293,10 @@ PyObject* py_consensus_compute_columns_for_custody_group  (PyObject* self, PyObj
 PyObject* py_consensus_ssz_static                         (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_shuffled_permutation      (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_shuffled_index            (PyObject* self, PyObject* args);
+PyObject* py_consensus_reqresp_protocol_ids               (PyObject* self, PyObject* args);
+PyObject* py_consensus_reqresp_parse_protocol_id          (PyObject* self, PyObject* args);
+PyObject* py_consensus_reqresp_message                    (PyObject* self, PyObject* args);
+PyObject* py_consensus_compute_min_epochs_for_block_requests(PyObject* self, PyObject* args);
 PyObject* py_consensus_gossip_topics                      (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_subnet_for_attestation     (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_subnet_for_blob_sidecar    (PyObject* self, PyObject* args);

@@ -278,6 +278,18 @@
 #define DOC_consensus_compute_shuffled_index \
   "The shuffled position of one index, which must be below the count."
 
+#define DOC_consensus_reqresp_protocol_ids \
+  "The protocol IDs of a fork."
+
+#define DOC_consensus_reqresp_parse_protocol_id \
+  "The protocol and the version that an ID names, if it names one."
+
+#define DOC_consensus_reqresp_message \
+  "The root of the message that the bytes encode, then the bytes of that message."
+
+#define DOC_consensus_compute_min_epochs_for_block_requests \
+  "The fewest epochs back from the current one over which a node must serve blocks."
+
 #define DOC_consensus_gossip_topics \
   "The gossip topics of a fork, in the order of the fork that adds each one."
 
