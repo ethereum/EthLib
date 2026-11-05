@@ -14,16 +14,17 @@ from .containers import FORKS
 
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "light_client"
 
-# The cases of the release: a sync committee, the finalized root or the execution payload.
+# The cases of the release, one for each node that a light client proves.
 CASE_NAMES = {
     "current_sync_committee_merkle_proof",
     "next_sync_committee_merkle_proof",
     "finality_root_merkle_proof",
     "execution_merkle_proof",
+    "execution_block_hash_merkle_proof",
 }
 
-# The forks whose states and block bodies EthLib defines; those of Gloas and Heze are not yet.
-SPECIFIED = ["altair", "bellatrix", "capella", "deneb", "electra", "fulu"]
+# The forks that have a light client.
+SPECIFIED = ["altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas", "heze"]
 
 
 def _cases(base: Path) -> list:

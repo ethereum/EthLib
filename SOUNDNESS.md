@@ -617,7 +617,7 @@ Its node at the index of the finality branch is the root that the update proves.
 That root is the root of the finalized beacon header, or zero at the genesis slot.
 Otherwise the search `findBranchCollision` over the two climbs returns two different messages with one SHA-256 hash.
 `validateLightClientUpdate_nextSyncCommittee` states the same for the root of the next committee.
-`lightClientGindices_eq` shows that each index is the generalized index of the path of its field in the type of the beacon state, from Altair to Fulu.
+`lightClientGindices_eq` shows that each index is the generalized index of the path of its field in the type of the beacon state, at every fork from Altair.
 No theorem yet reads the node at that index of a beacon state as the value of the field.
 
 The signature theorems assume `SignatureChecks.AggregateSound`, listed in A4.

@@ -1,0 +1,19 @@
+beacon:
+  slot: 14075933128072178970
+  proposer_index: 4955241204672129132
+  parent_root: '0x21920c572d7ae21c27b29c5dc31713c5f9af97d4eebb21413f0094ab4395157e'
+  state_root: '0x04fdab41c1c6efd538a9176deff4228b499d4da96ab868ac0b9dd2018ac73312'
+  body_root: '0xe6f0cd3dff3b0e182dda7b077cd87e005bde063a82b27fba2347e0a73b46f7cf'
+execution_block_hash: '0x5dbb44f0d74f1ee9913ad2f32e52825ae38a53c07f2b080feedf20f937b6c288'
+execution_branch:
+- '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+- '0x8b8ee285f26ae8ca96520311c6537ed15896bded07d1a4abb3fd9ace6c231fdc'
+- '0x94c148dcccf000e33e85d89cc3c9540ff8d099e9134af67f8399dc3c51463490'
+- '0x3ce3ca037e8d3ce5b44da553c94cafc5213a1224a2b5ac03b5e4e430b6fa7c96'
+- '0xd0af843412e0eeb8734cf39f92835adfed8a6bf2e80d12c33b2d2be9998d2bec'
+- '0xf7a7f43c4e089379af8ed6335e64ff6605f773241263d0c20d73e28fe82d5d82'
+- '0x0000000000000000000000000000000000000000000000000000000000000000'
+- '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+- '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+- '0xff243315960e31a79c2984314c107fee2941e055370c2dbb64a0a3a1660686af'
+- '0x8e2ac8fe71dda88c703e54b3977746ceebed280282048573796950f9cc5c6711'

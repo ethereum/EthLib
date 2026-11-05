@@ -28,11 +28,13 @@ The rules depend on the fork of the store, and on the fork of each header's slot
 
 The configuration gives the fork of a slot.
 
-EthLib specifies the light client from Altair to Fulu.
+From Gloas, a header proves the parent execution block hash instead of an execution header.
 
-Before Altair there is none, and the light client of Gloas changes rules that are not yet here.
+A header of Gloas form can stand for a block of an earlier slot.
 
-So every check of a store, a header or an update fails outside that range.
+Its branch then climbs from the block hash through the execution header of that block.
+
+Before Altair there is no light client, so every check of a store, a header or an update fails.
 -/
 
 @[expose] public section
@@ -75,7 +77,7 @@ inductive LightClientError where
   | finalizedPeriodMismatch
   /-- The slot after which an update is forced leaves the 64-bit range. -/
   | slotOverflow
-  /-- The fork has no light client, before Altair, or its light client is not yet specified. -/
+  /-- The fork has no light client: it comes before Altair. -/
   | forkNotSpecified (fork : Fork)
   /-- A full node derives data from a state before Altair. -/
   | beforeAltair
@@ -124,16 +126,14 @@ def LightClientError.require (condition : Prop) [Decidable condition] (error : L
 def LightClientError.liftRoot {α : Type} (result : Except Err α) : Except LightClientError α :=
   result.mapError .ssz
 
-/-- The forks whose light client EthLib specifies: from Altair to Fulu.
-
-Gloas changes the generalized indices and the checks of a header, which are not yet specified. -/
+/-- The forks that have a light client: from Altair on. -/
 def LightClientError.requireFork (fork : Fork) : Except LightClientError Unit :=
-  if .altair ≤ fork ∧ fork < .glamsterdam then .ok () else .error (.forkNotSpecified fork)
+  if .altair ≤ fork then .ok () else .error (.forkNotSpecified fork)
 
-/-- The proof that a fork has a specified light client, or the error that it has none. -/
+/-- The proof that a fork has a light client, or the error that it has none. -/
 def LightClientError.specifiedFork (fork : Fork) :
-    Except LightClientError (PLift (.altair ≤ fork ∧ fork < .glamsterdam)) :=
-  if h : .altair ≤ fork ∧ fork < .glamsterdam then .ok ⟨h⟩ else .error (.forkNotSpecified fork)
+    Except LightClientError (PLift (.altair ≤ fork)) :=
+  if h : .altair ≤ fork then .ok ⟨h⟩ else .error (.forkNotSpecified fork)
 
 open LightClientError (require liftRoot requireFork)
 
@@ -194,21 +194,55 @@ def ExecutionPayloadHeader.toCapella {preset : Preset} {fork : Fork} (capella : 
 def LightClientHeader.empty (preset : Preset) (fork : Fork) : LightClientHeader preset fork where
   beacon := ⟨0, 0, zeroBytes32, zeroBytes32, zeroBytes32⟩
   execution := fun _ => ExecutionPayloadHeader.empty preset fork
+  executionBlockHash := fun _ => zeroBytes32
   executionBranch := fun _ => Vector.replicate _ zeroBytes32
 
 variable {preset : Preset} {fork : Fork}
 
-/-- From Capella: the root of the execution payload header that a light client header carries.
+/-- The root of the execution payload header of a block, from the block hash in a Gloas header.
+
+The header is of a slot from Capella to Fulu, whose header fork is given.
+
+At the genesis slot the execution header is the empty one.
+
+Otherwise the block hash climbs to that root by the inner part of the branch.
+
+That part comes before the nodes from the execution payload up to the body root. -/
+def rebuildLcExecutionRoot (slot : Slot) (blockHash : Hash32) (branch : List Bytes32)
+    (payloadFork : Fork) : Except LightClientError Root := do
+  if slot = GENESIS_SLOT then
+    return ← liftRoot (SszType.hashTreeRoot (ExecutionPayloadHeader.empty preset payloadFork))
+  let gindex := payloadHeaderBlockHashGindex payloadFork
+  let inner := branch.take (branch.length - Nat.log2 EXECUTION_PAYLOAD_GINDEX)
+  liftRoot (computeMerkleBranchRoot blockHash (inner.drop (inner.length - Nat.log2 gindex))
+    (Nat.log2 gindex) (← liftRoot (getSubtreeIndex gindex)))
+
+/-- From Capella: the root of the execution data that a light client header carries.
+
+Before Gloas it is the root of the execution payload header.
 
 From Deneb, a header of an earlier fork drops the fields of Deneb before it is hashed.
+
+From Gloas, a header of a slot from Gloas gives its block hash as the root.
+
+A Gloas header of a slot from Capella to Fulu rebuilds the root of the execution header.
 
 Before Capella, and for a header of a slot before Capella, the root is zero. -/
 def getLcExecutionRoot (config : Config) (header : LightClientHeader preset fork) :
     Except LightClientError Root := do
   requireFork fork
   let epoch := computeEpochAtSlot preset header.beacon.slot
-  if capella : .shapella ≤ fork then
-    let execution := header.execution capella
+  if gloas : .glamsterdam ≤ fork then
+    let blockHash := header.executionBlockHash gloas
+    let branch := (header.executionBranch (Nat.le_trans (by decide) gloas)).toList
+    if config.GLOAS_FORK_EPOCH ≤ epoch then return blockHash
+    else if config.DENEB_FORK_EPOCH ≤ epoch then
+      rebuildLcExecutionRoot (preset := preset) header.beacon.slot blockHash branch .dencun
+    else if config.CAPELLA_FORK_EPOCH ≤ epoch then
+      rebuildLcExecutionRoot (preset := preset) header.beacon.slot blockHash branch .shapella
+    else return zeroBytes32
+  else if capella : .shapella ≤ fork then
+    let execution := header.execution ⟨capella, Nat.lt_of_not_le gloas⟩
     if .dencun ≤ fork ∧ config.DENEB_FORK_EPOCH ≤ epoch then
       liftRoot (SszType.hashTreeRoot execution)
     else if config.CAPELLA_FORK_EPOCH ≤ epoch then
@@ -218,17 +252,28 @@ def getLcExecutionRoot (config : Config) (header : LightClientHeader preset fork
 
 /-- Whether a light client header is valid for the fork of its slot.
 
-From Capella, its execution header must climb to the body root by its branch.
+From Capella, its execution data must climb to the body root by its branch.
 
-For a slot before Capella, the execution header and its branch must be zero instead.
+For a slot before Capella, the execution data and its branch must be zero instead.
 
-From Deneb, a header of a slot before Deneb must use no blob gas. -/
+From Deneb, a header of a slot before Deneb must use no blob gas.
+
+From Gloas, the block hash climbs by a normalized branch, to the index of the fork of the slot. -/
 def isValidLightClientHeader (config : Config) (header : LightClientHeader preset fork) :
     Except LightClientError Bool := do
   requireFork fork
-  if capella : .shapella ≤ fork then
-    let epoch := computeEpochAtSlot preset header.beacon.slot
-    let execution := header.execution capella
+  let epoch := computeEpochAtSlot preset header.beacon.slot
+  if gloas : .glamsterdam ≤ fork then
+    let blockHash := header.executionBlockHash gloas
+    let branch := (header.executionBranch (Nat.le_trans (by decide) gloas)).toList
+    let climbs (gindex : Nat) : Except LightClientError Bool :=
+      liftRoot (isValidNormalizedMerkleBranch blockHash branch gindex header.beacon.bodyRoot)
+    if config.GLOAS_FORK_EPOCH ≤ epoch then climbs EXECUTION_BLOCK_HASH_GINDEX_GLOAS
+    else if config.DENEB_FORK_EPOCH ≤ epoch then climbs EXECUTION_BLOCK_HASH_GINDEX_DENEB
+    else if config.CAPELLA_FORK_EPOCH ≤ epoch then climbs EXECUTION_BLOCK_HASH_GINDEX
+    else return blockHash == zeroBytes32 && branch.all (· == zeroBytes32)
+  else if capella : .shapella ≤ fork then
+    let execution := header.execution ⟨capella, Nat.lt_of_not_le gloas⟩
     let branch := header.executionBranch capella
     if deneb : .dencun ≤ fork then
       if epoch < config.DENEB_FORK_EPOCH ∧
@@ -242,15 +287,16 @@ def isValidLightClientHeader (config : Config) (header : LightClientHeader prese
       (← liftRoot (getSubtreeIndex EXECUTION_PAYLOAD_GINDEX)) header.beacon.bodyRoot
   else return true
 
-/-- The fork whose state layout holds at a slot, for a light client from Altair to Fulu.
+/-- The fork whose state layout holds at a slot, for a light client from Altair.
 
-From Electra, the layout of Electra holds from its first epoch.
+From Electra, the layout of Electra holds from its first epoch, and from Gloas that of Gloas.
 
 A client before Electra reads every state with the layout of Altair. -/
 def stateForkAtSlot (config : Config) (slot : Slot) : Except LightClientError Fork := do
   requireFork fork
-  if .pectra ≤ fork ∧ config.ELECTRA_FORK_EPOCH ≤ computeEpochAtSlot preset slot then
-    return .pectra
+  let epoch := computeEpochAtSlot preset slot
+  if .glamsterdam ≤ fork ∧ config.GLOAS_FORK_EPOCH ≤ epoch then return .glamsterdam
+  if .pectra ≤ fork ∧ config.ELECTRA_FORK_EPOCH ≤ epoch then return .pectra
   return .altair
 
 /-- The generalized index of the finalized root, in the state at a slot. -/

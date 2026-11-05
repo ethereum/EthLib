@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: light_client
+handler: single_merkle_proof
+suite: BeaconState
+case: next_sync_committee_merkle_proof

@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: ssz_static
+handler: LightClientHeader
+suite: ssz_random
+case: case_0

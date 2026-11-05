@@ -13,6 +13,8 @@ A header of the light client comes from a block alone.
 
 From Capella, it also carries the header of the execution payload, with its branch to the body root.
 
+From Gloas, it carries the parent execution block hash from the bid instead, with its branch.
+
 A bootstrap comes from a block and its post state, which proves the current sync committee.
 
 An update comes from a block, its parent and the post state of the parent.
@@ -23,7 +25,7 @@ The state of the attested block proves the next sync committee and the finalized
 
 The finality update and the optimistic update keep parts of an update.
 
-These rules hold from Altair to Fulu, as the sync protocol does.
+These rules hold from Altair, as the sync protocol does.
 -/
 
 @[expose] public section
@@ -49,7 +51,9 @@ def branchVector (depth : Nat) (branch : List Bytes32) : Except LightClientError
 
 /-- The light client header of a block.
 
-From Capella, a block of a slot from Capella on also gives its execution payload header.
+From Gloas, a block gives the parent block hash of its bid, with a branch to the body root.
+
+From Capella to Fulu, a block of a slot from Capella on gives its execution payload header.
 
 Its branch proves that header against the body root.
 
@@ -58,26 +62,33 @@ From Deneb, a block of a slot before Deneb gives zero blob gas in that header.
 A block of a slot before Capella gives the empty header and a branch of zeros. -/
 def blockToLightClientHeader (config : Config) (block : SignedBeaconBlock preset fork) :
     Except LightClientError (LightClientHeader preset fork) := do
-  let ⟨range⟩ ← specifiedFork fork
+  let _ ← specifiedFork fork
   let message := block.message
   let epoch := computeEpochAtSlot preset message.slot
   let beacon : BeaconBlockHeader := ⟨message.slot, message.proposerIndex, message.parentRoot,
     message.stateRoot, ← liftRoot (SszType.hashTreeRoot message.body)⟩
-  if before : ¬.shapella ≤ fork then
-    return ⟨beacon, fun later => absurd later before, fun later => absurd later before⟩
+  if gloas : .glamsterdam ≤ fork then
+    let bid := (message.body.signedExecutionPayloadBid gloas).message
+    let branch ← branchVector _
+      (← liftRoot (computeMerkleProof message.body EXECUTION_BLOCK_HASH_GINDEX_GLOAS))
+    return ⟨beacon, fun during => absurd gloas (Nat.not_le_of_lt during.2),
+      fun _ => bid.parentBlockHash, fun _ => branch⟩
+  else if before : ¬.shapella ≤ fork then
+    return ⟨beacon, fun during => absurd during.1 before, fun later => absurd later gloas,
+      fun later => absurd later before⟩
   else if epoch < config.CAPELLA_FORK_EPOCH then
     return ⟨beacon, fun _ => ExecutionPayloadHeader.empty preset fork,
-      fun _ => Vector.replicate _ zeroBytes32⟩
+      fun later => absurd later gloas, fun _ => Vector.replicate _ zeroBytes32⟩
   else
     let payload := message.body.executionPayload
-      ⟨Nat.le_trans (by decide) (Classical.not_not.mp before), range.2⟩
+      ⟨Nat.le_trans (by decide) (Classical.not_not.mp before), Nat.lt_of_not_le gloas⟩
     let header ← liftRoot payload.header
     let header := if epoch < config.DENEB_FORK_EPOCH then
       { header with blobGasUsed := fun _ => 0, excessBlobGas := fun _ => 0 }
     else header
     let branch ← branchVector _
       (← liftRoot (computeMerkleProof message.body EXECUTION_PAYLOAD_GINDEX))
-    return ⟨beacon, fun _ => header, fun _ => branch⟩
+    return ⟨beacon, fun _ => header, fun later => absurd later gloas, fun _ => branch⟩
 
 /-- The header of the block whose post state is given, with the root of that state. -/
 def BeaconState.blockHeader (state : BeaconState preset fork) :
@@ -92,7 +103,7 @@ Its branch proves the current sync committee. -/
 def createLightClientBootstrap (config : Config) (state : BeaconState preset fork)
     (block : SignedBeaconBlock preset fork) :
     Except LightClientError (LightClientBootstrap preset fork) := do
-  let ⟨range⟩ ← specifiedFork fork
+  let ⟨altair⟩ ← specifiedFork fork
   require (computeEpochAtSlot preset state.slot ≥ config.ALTAIR_FORK_EPOCH) .beforeAltair
   require (state.slot = state.latestBlockHeader.slot) .stateNotAtBlock
   require ((← liftRoot (SszType.hashTreeRoot (← state.blockHeader))) =
@@ -101,7 +112,7 @@ def createLightClientBootstrap (config : Config) (state : BeaconState preset for
     state.slot
   return {
     header := ← blockToLightClientHeader config block
-    currentSyncCommittee := state.currentSyncCommittee range.1
+    currentSyncCommittee := state.currentSyncCommittee altair
     currentSyncCommitteeBranch := ← branchVector _ (← liftRoot (computeMerkleProof state gindex)) }
 
 /-- The update that a block gives, from the block, its parent and their post states.
@@ -118,9 +129,9 @@ def createLightClientUpdate (config : Config) (state : BeaconState preset fork)
     (attestedBlock : SignedBeaconBlock preset fork)
     (finalizedBlock : Option (SignedBeaconBlock preset fork)) :
     Except LightClientError (LightClientUpdate preset fork) := do
-  let ⟨range⟩ ← specifiedFork fork
+  let ⟨altair⟩ ← specifiedFork fork
   require (computeEpochAtSlot preset attestedState.slot ≥ config.ALTAIR_FORK_EPOCH) .beforeAltair
-  let aggregate := block.message.body.syncAggregate range.1
+  let aggregate := block.message.body.syncAggregate altair
   require (aggregate.participants ≥ preset.MIN_SYNC_COMMITTEE_PARTICIPANTS.toNat)
     .tooFewParticipants
   require (state.slot = state.latestBlockHeader.slot) .stateNotAtBlock
@@ -136,7 +147,7 @@ def createLightClientUpdate (config : Config) (state : BeaconState preset fork)
     if period attestedBlock.message.slot = period block.message.slot then do
       let gindex ← nextSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config
         attestedState.slot
-      pure (attestedState.nextSyncCommittee range.1,
+      pure (attestedState.nextSyncCommittee altair,
         ← branchVector _ (← liftRoot (computeMerkleProof attestedState gindex)))
     else pure (SyncCommittee.empty preset, Vector.replicate _ zeroBytes32)
   let (finalizedHeader, finalityBranch) ← match finalizedBlock with

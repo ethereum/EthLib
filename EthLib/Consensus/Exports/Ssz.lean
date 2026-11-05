@@ -49,8 +49,8 @@ structure Container where
 
 attribute [instance] Container.codec
 
-/-- Whether EthLib holds the light client containers at a fork: from Altair until Gloas. -/
-def lightClientAt (fork : Fork) : Bool := .altair ≤ fork ∧ fork < .glamsterdam
+/-- Whether EthLib holds the light client containers at a fork: from Altair. -/
+def lightClientAt (fork : Fork) : Bool := .altair ≤ fork
 
 /-- The container of a name at a preset and a fork, if the fork has one.
 
@@ -192,7 +192,8 @@ def specifiedFromGlamsterdam : List String := [
   "ExecutionPayloadEnvelope", "SignedExecutionPayloadEnvelope", "PayloadAttestation",
   "IndexedPayloadAttestation", "DataColumnSidecar", "DataColumnsByRootIdentifier",
   "MatrixEntry", "ExecutionPayloadBid", "SignedExecutionPayloadBid", "BeaconBlockBody",
-  "BeaconBlock", "SignedBeaconBlock", "BeaconState"]
+  "BeaconBlock", "SignedBeaconBlock", "BeaconState", "LightClientHeader", "LightClientBootstrap",
+  "LightClientUpdate", "LightClientFinalityUpdate", "LightClientOptimisticUpdate"]
 
 /-- Whether EthLib holds the form of a container at a fork. -/
 def specifiedAt (fork : Fork) (type : String) : Bool :=
@@ -227,10 +228,13 @@ def sszStaticExport (name fork type data : ByteArray) : Result ByteArray := do
 The branch lists the sibling of each node on the path, from the node up to the root. -/
 @[export eth_consensus_merkle_proof]
 def merkleProofExport (name fork type data : ByteArray) (gindex : UInt64) : Result ByteArray := do
-  let (preset, fork) ← presetAndFork name fork
+  let preset ← presetOf (← nameOf name)
+  let fork ← forkOf fork
   let type ← nameOf type
   let some container := containerOf preset fork type
     | throw (0, s!"no container {type} at {fork.name}")
+  if !specifiedAt fork type then
+    throw (0, s!"{type} not yet specified at {fork.name}")
   let value ← runSsz "input rejected" (SszType.deserialize container.type data)
   let shape := SszType.desc container.type
   let node ← runSsz "node rejected" (nodeRoot shape (SszType.toValue value) gindex.toNat)

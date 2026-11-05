@@ -125,7 +125,7 @@ theorem finalizedRootGindexAtSlot_named {config : Config} {slot : Slot} {gindex 
     simp only [forked, Functor.map, Except.map, Except.ok.injEq] at indexed
     subst indexed
     unfold finalizedRootGindex
-    split <;> decide
+    split <;> (try split) <;> decide
 
 /-- The index of the next committee at a slot names a node below the root. -/
 theorem nextSyncCommitteeGindexAtSlot_named {config : Config} {slot : Slot} {gindex : Nat}
@@ -138,7 +138,7 @@ theorem nextSyncCommitteeGindexAtSlot_named {config : Config} {slot : Slot} {gin
     simp only [forked, Functor.map, Except.map, Except.ok.injEq] at indexed
     subst indexed
     unfold nextSyncCommitteeGindex
-    split <;> decide
+    split <;> (try split) <;> decide
 
 /-- What an accepted update proves, before any assumption on the signature.
 
