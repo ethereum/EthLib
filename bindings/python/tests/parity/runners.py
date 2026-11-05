@@ -158,6 +158,7 @@ RUNNERS = {
     "legacy_header": legacy.run_headers,
     **{f"operations/{handler}": _operation for handler in OPERATIONS},
     "legacy_ommers": legacy.run_ommers,
+    "legacy_dao": legacy.run_dao,
 }
 
 

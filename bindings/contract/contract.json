@@ -4294,7 +4294,7 @@
       {"constructor": "missingCode", "code": 209}]}],
    "error_class": "TransactionError",
    "docstring":
-   "Check that a transaction may enter its block at `fork`, on the chain `chainId`.\n\nThe block has used `gasUsed` gas and `blobGasUsed` blob gas before it, and `state` is the state.\n\nThe chain and the sender come first, then the rules that need no state.\n\nThen come the rules of the block, and last those of the sender."},
+   "Check that a transaction may enter its block at `fork`, on the chain `chainId`.\n\nThe block has used the gas `used` before it, and `state` is the state.\n\nThe chain and the sender come first, then the rules that need no state.\n\nThen come the rules of the block, and last those of the sender."},
   {"summary":
    "Settle the gas of a transaction that passes the gas, nonce and fee rules.",
    "signature":
@@ -4561,6 +4561,31 @@
    "error_class": "BlockError",
    "docstring":
    "Check a header against its parent at two named forks, every check but the proof of work.\n\nTest chains that run without proof of work check their headers this way.\n\nThe header's blob schedule is the last given one that it has reached, else that of its fork."},
+  {"summary":
+   "Whether a header has the extra data that the DAO Fork asks of its first ten blocks.",
+   "signature": "(dao_block: int, fork: str, header: bytes) -> bool",
+   "operation": "EthLib.Execution.Blocks.Exports.daoExtraDataValidExport",
+   "method": "block_dao_extra_data_valid",
+   "errors":
+   [{"type": "EthLib.Serialization.Rlp.RlpError",
+     "codes":
+     [{"constructor": "payloadTooLong", "code": 1},
+      {"constructor": "inputTooShort", "code": 2},
+      {"constructor": "singleByteWithPrefix", "code": 3},
+      {"constructor": "longFormForShortLength", "code": 4},
+      {"constructor": "leadingZeroInLength", "code": 5},
+      {"constructor": "trailingBytes", "code": 6},
+      {"constructor": "leadingZeroInScalar", "code": 7},
+      {"constructor": "listAsScalar", "code": 8},
+      {"constructor": "listAsBytes", "code": 9},
+      {"constructor": "bytesAsList", "code": 10},
+      {"constructor": "wrongLength", "code": 11},
+      {"constructor": "scalarTooLarge", "code": 12},
+      {"constructor": "wrongFieldCount", "code": 13},
+      {"constructor": "inField", "code": 14}]}],
+   "error_class": "BlockError",
+   "docstring":
+   "Whether a header has the extra data that the DAO Fork asks of its first ten blocks.\n\nThe chain activates the DAO Fork at block `daoBlock`, which is 1,920,000 on mainnet.\n\nA header outside those ten blocks passes."},
   {"summary":
    "Run the precompile at the address on the call data, with the gas given, at the fork named.",
    "signature": "(fork: str, address: int, data: bytes, gas: int) -> bytes",

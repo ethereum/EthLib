@@ -92,6 +92,13 @@ eth_block_check_header(
   lean_object* blob_schedules
 );
 
+extern lean_object*
+eth_block_dao_extra_data_valid(
+  uint64_t dao_block,
+  lean_object* fork,
+  lean_object* header
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* A fork name as a Lean byte array, or NULL with a TypeError set. */
@@ -341,4 +348,24 @@ py_block_check_header(
   lean_object* a[5];
   if (!parse_header_args(args, a)) return NULL;
   return except_into_pybool(eth_block_check_header(a[0], a[1], a[2], a[3], a[4]), BLOCK_ERROR);
+}
+
+PyObject*
+py_block_dao_extra_data_valid(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *dao_block_obj, *fork_obj, *header_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &dao_block_obj, &fork_obj, &header_obj)) return NULL;
+  uint64_t dao_block;
+  if (parse_uint64(dao_block_obj, "dao_block", &dao_block)) return NULL;
+  if (!PyBytes_Check(header_obj)) {
+    PyErr_SetString(PyExc_TypeError, "header must be bytes");
+    return NULL;
+  }
+  lean_object* fork = parse_fork(fork_obj);
+  if (!fork) return NULL;
+  lean_object* header =
+    mk_bytearray((const uint8_t*) PyBytes_AS_STRING(header_obj), PyBytes_GET_SIZE(header_obj));
+  return except_into_pybool(eth_block_dao_extra_data_valid(dao_block, fork, header), BLOCK_ERROR);
 }

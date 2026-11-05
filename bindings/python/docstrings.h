@@ -596,6 +596,9 @@
 #define DOC_block_check_header \
   "Check a header against its parent at two named forks, every check but the proof of work."
 
+#define DOC_block_dao_extra_data_valid \
+  "Whether a header has the extra data that the DAO Fork asks of its first ten blocks."
+
 #define DOC_precompile_run \
   "Run the precompile at the address on the call data, with the gas given, at the fork named."
 

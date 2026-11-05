@@ -95,7 +95,13 @@ def check_header(parent_fork: str, fork: str, parent: bytes, header: bytes,
                                _blob_schedules(blob_schedules))
 
 
+def dao_extra_data_valid(dao_block: int, fork: str, header: bytes) -> bool:
+    """Whether a header has the extra data of the DAO Fork, on a chain that starts it at `dao_block`."""
+    return _native.block_dao_extra_data_valid(dao_block, fork, header)
+
+
 __all__ = ["header_hash", "reencode", "transactions_root", "withdrawals_root",
            "deposit_requests", "requests_hash", "block_access_list_hash",
            "check_block_access_list", "make_receipts", "receipt_reencode", "receipt_logs_bloom",
-           "validate_size", "validate_header", "check_header", "BlobSchedule", "BlockError"]
+           "validate_size", "validate_header", "check_header", "dao_extra_data_valid",
+           "BlobSchedule", "BlockError"]
