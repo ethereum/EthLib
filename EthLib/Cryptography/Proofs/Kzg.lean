@@ -56,6 +56,8 @@ public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Points
 public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.FourStep
 public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Glv
 public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Dft
+public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Roots
+public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Rounds
 
 /-!
 # `EthLib.Cryptography.Proofs.Kzg`
