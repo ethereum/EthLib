@@ -365,6 +365,12 @@ That check takes one commitment per cell, keeps the first copy of each, and runs
 `verifyCellKzgProofBatch_binding` concludes that the two cells are equal as bytes, or one of the two other cases holds.
 `prEvent_cellInput_root_le` keeps the bound `(q + 1) (n - 1) / r`, where the adversary outputs the inputs of the outer check.
 In these three theorems, the scalar of a commitment or a proof is a function of its bytes.
+Wagner and Zapico, ePrint 2025/1683, Definition 1, write the bilinear strong Diffie–Hellman problem with `1 / (τ - c)`.
+`isBsdhSolution_iff_sub` (`Proofs/Kzg/Arsdh.lean`) proves that this form and the one of the extended KZG paper differ only by the sign of `c`.
+`IsArsdhSolution` in the same file is the winning condition of adaptive rational strong Diffie–Hellman, Definition 2 there.
+These are winning conditions for a fixed secret, not the assumptions.
+They model neither the adversary's input nor its advantage, and the hardness of each problem stays an informal hypothesis.
+No theorem in this version reduces a property to ARSDH.
 No theorem states what the batch check of blobs returns on accepted input.
 
 `findSdh_valid_bytes` (`Proofs/Kzg/Binding.lean`) is the evaluation binding of single proofs.

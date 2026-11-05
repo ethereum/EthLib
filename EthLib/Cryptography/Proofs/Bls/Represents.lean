@@ -36,6 +36,17 @@ theorem Represents.mul {P : G1} {a : Fr} (hP : Represents P a) (s : Fr) :
   refine ⟨valid_mul hP.1 s, ?_⟩
   rw [toPoint_mul hP.1 s, hP.2, toPoint_mul_generator, toPoint_mul_generator, ofFr_mul]
 
+/-- A point represents at most one scalar, since the generator has order `r`. -/
+theorem Represents.unique {P : G1} {a b : Fr} (ha : Represents P a) (hb : Represents P b) :
+    a = b := by
+  have h : ofFr a = ofFr b := by
+    rw [← toPoint_mul_generator, ← toPoint_mul_generator, ← ha.2, ← hb.2]
+  have hfin : IsOfFinAddOrder (toPoint generator) :=
+    addOrderOf_pos_iff.mp (addOrderOf_toPoint_generator ▸ Fr.modulus_pos)
+  rw [ofFr, ofFr, hfin.nsmul_inj_mod, addOrderOf_toPoint_generator, Nat.mod_eq_of_lt a.isLt,
+    Nat.mod_eq_of_lt b.isLt] at h
+  exact Fin.ext h
+
 /-- The point of a sum of products is the sum of the multiples of the points. -/
 theorem sum_nsmul_ofFr (n : Nat) (s a : Nat → Fr) :
     ∑ j ∈ Finset.range n, (s j).val • ofFr (a j) =
