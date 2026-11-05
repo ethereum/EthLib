@@ -317,6 +317,13 @@ def bindings : List Binding := [
   ⟨"pq_keys_ssz", `EthLib.Consensus.Exports.pqKeysSszExport,
     "(type: str, data: bytes) -> bytes",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
+  ⟨"pq_keys_possession_signing_root", `EthLib.Consensus.PqKeys.possessionSigningRoot,
+    "(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes) -> bytes",
+    [], some "ConsensusError"⟩,
+  ⟨"pq_keys_is_valid_possession_proof", `EthLib.Consensus.PqKeys.isValidPqPossessionProof,
+    "(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes, " ++
+      "proof: bytes) -> bool",
+    [], some "ConsensusError"⟩,
   ⟨"consensus_compute_shuffled_permutation",
     `EthLib.Consensus.Exports.computeShuffledPermutationExport,
     "(name: str, count: int, seed: bytes) -> bytes",
