@@ -661,6 +661,9 @@ def bindings : List Binding := [
     "(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) " ++
       "-> bool",
     [`EthLib.Serialization.Rlp.RlpError, `EthLib.Execution.Blocks.BlockError], some "BlockError"⟩,
+  ⟨"block_dao_extra_data_valid", `EthLib.Execution.Blocks.Exports.daoExtraDataValidExport,
+    "(dao_block: int, fork: str, header: bytes) -> bool",
+    [`EthLib.Serialization.Rlp.RlpError], some "BlockError"⟩,
   ⟨"precompile_run", `EthLib.Execution.Evm.Precompiles.Exports.runExport,
     "(fork: str, address: int, data: bytes, gas: int) -> bytes",
     [`EthLib.Execution.Evm.Precompiles.PrecompileError], some "PrecompileError"⟩,

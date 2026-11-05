@@ -15,7 +15,8 @@ The directory `Constantinople` fills the networks from Frontier to Constantinopl
 These files are a small part of the repository, chosen so that each change runs every kind of header and ommer check.
 They hold a header error of each kind, and an error in the header of an ommer.
 They hold valid ommers, whose rewards are checked, and an ommer error of each kind that the tests fill.
-They also hold two transitions to London, and three tests whose blocks carry a proof of work.
+They also hold two transitions to London, and every test of the transition to the DAO Fork.
+Three tests seal their blocks with a proof of work.
 The weekly parity job runs every test from Frontier to London, from the archive that `tests/sources.toml` pins.
 That job also checks that each file here is the file of the archive.
 
@@ -34,6 +35,12 @@ EthLib rejects valid blocks 5 to 10 of `londonUncles.json`, at the transition fr
 Each holds the ommer number 4, a Berlin header of 15 fields, while the block is a London header of 16 fields.
 EthLib reads the ommers of a block, and the recent blocks of the ommer check, in the form of the block's fork.
 EIP-1559 adds the base fee to the headers from the fork block on, so the header of block 4 has none.
+
+The tests of the DAO Fork start it at block 5, so blocks 5 to 14 must carry the extra data `dao-hard-fork`.
+`DaoTransactions_UncleExtradata.json` rejects blocks 7, 8 and 10, whose own headers carry it.
+Each holds an ommer numbered in that window whose extra data is another value.
+EthLib checks the extra data of a block's header, and its ommer check does not yet apply the rule.
+EIP-779 asks the extra data of the blocks of the window, and does not mention ommers.
 
 ## Licence
 

@@ -12,7 +12,8 @@ from ethlib.errors import BlockError
 from ethlib.execution import blocks
 from ethlib.execution.pow import validate_ommers
 from ethlib.serialization import rlp
-from ethlib.state import rewards_root, state_root
+from ethlib.state import dao_fork_root, rewards_root, state_root
+from state.test_dao_fork import DAO_ACCOUNTS, DAO_RECOVERY
 
 from .catalogue import LEGACY_FORKS, Case
 
@@ -58,6 +59,9 @@ HEADER_CODES = {
     "InvalidBlockNonce": {216},
 }
 
+# The exception of a block in the first ten blocks of the DAO Fork without its extra data.
+DAO_EXTRA_DATA = "BlockException.EXTRA_DATA_INVALID_DAO"
+
 # The exceptions of a block whose parent is in no test chain.
 UNKNOWN_PARENT = {"UnknownParent", "UnknownParent2", "BlockException.UNKNOWN_PARENT"}
 
@@ -69,7 +73,7 @@ NOT_IN_HEADER = {
     "InvalidGasUsed", "BlockGasLimitReached", "BlockException.INVALID_GAS_USED",
     "InvalidUnclesHash", "InvalidUncleParentHash", "TooManyUncles", "UncleInChain",
     "UncleIsAncestor", "UncleIsBrother", "UncleParentIsNotAncestor", "UncleTooOld",
-    "BlockException.UNCLE_PARENT_INCORRECT", "BlockException.EXTRA_DATA_INVALID_DAO",
+    "BlockException.UNCLE_PARENT_INCORRECT", DAO_EXTRA_DATA,
     # An ommer in the header form of the other side of the London transition.
     "BlockException.IMPORT_IMPOSSIBLE_LONDON_WRONG_PARENT",
     "BlockException.IMPORT_IMPOSSIBLE_LEGACY_WRONG_PARENT",
@@ -359,3 +363,49 @@ def _check_post_state(test: dict, chain: dict[str, Block]) -> None:
             assert post[address] == value, address.hex()
             anchored += 1
     assert anchored > 0
+
+
+def _dao_accounts(test: dict, accounts: str) -> bytes:
+    """The DAO accounts and the recovery contract of a state of the test, as a state input."""
+    wanted = set(DAO_ACCOUNTS) | {DAO_RECOVERY}
+
+    def scalar(value: str) -> bytes:
+        return _quantity(int(value, 16))
+
+    return rlp.encode([
+        [address, scalar(a["nonce"]), scalar(a["balance"]), bytes.fromhex(a["code"][2:]),
+         [[int(k, 16).to_bytes(32, "big"), scalar(v)] for k, v in a["storage"].items()]]
+        for address, a in ((bytes.fromhex(k[2:]), a) for k, a in test[accounts].items())
+        if address in wanted])
+
+
+def run_dao(root: Path, case: Case) -> None:
+    """Check the extra data of the DAO Fork in each header, and the move of the DAO's ether."""
+    test = fixture(root, case)
+    network = test["network"]
+    checked = 0
+    for entry in test["blocks"]:
+        expected = exception(network, entry)
+        if expected not in (None, DAO_EXTRA_DATA):
+            continue
+        fields = rlp.decode(bytes.fromhex(entry["rlp"].removeprefix("0x")))[0]
+        fork = fork_at(network, _number(fields))
+        valid = blocks.dao_extra_data_valid(TRANSITION_BLOCK, fork, rlp.encode(fields))
+        assert valid == (expected is None), (_number(fields), expected)
+        checked += 1
+    assert checked > 0
+    # No transaction pays a DAO account or the recovery contract, so only the fork moves their
+    # ether.
+    paid = {tx[3] for entry in test["blocks"] if "blockHeader" in entry
+            for tx in rlp.decode(bytes.fromhex(entry["rlp"].removeprefix("0x")))[1]
+            if isinstance(tx, list)}
+    assert not paid & (set(DAO_ACCOUNTS) | {DAO_RECOVERY})
+    pre, post = _dao_accounts(test, "pre"), _dao_accounts(test, "postState")
+    # The DAO accounts hold ether, so the move changes the state.
+    assert dao_fork_root(pre) != state_root(pre)
+    last = next(entry["blockHeader"] for entry in test["blocks"]
+                if entry.get("blockHeader", {}).get("hash") == test["lastblockhash"])
+    if int(last["number"], 16) >= TRANSITION_BLOCK:
+        assert dao_fork_root(pre) == state_root(post)
+    else:
+        assert state_root(pre) == state_root(post)

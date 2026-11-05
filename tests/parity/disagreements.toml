@@ -101,3 +101,15 @@ case = "Cancun/BlockchainTests/TransitionTests/bcBerlinToLondon/londonUncles.jso
 group = "legacy_ommers"
 reason = "EthLib cannot read a Berlin ommer, or a Berlin recent block, in a London block"
 source = "EIP-1559, Specification: the base fee field is added to headers from the fork block on"
+
+# The DAO Fork starts at block 5, so blocks 5 to 14 carry the extra data dao-hard-fork.
+# Blocks 7, 8 and 10 of this test have that extra data, but each holds an ommer of the window
+# without it, and the test rejects them.
+# EthLib checks the extra data of a block's own header, and does not yet apply the rule to ommers.
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/TransitionTests/bcHomesteadToDao/DaoTransactions_UncleExtradata.json::DaoTransactions_UncleExtradata_HomesteadToDaoAt5"
+group = "legacy_dao"
+reason = "EthLib does not yet apply the extra data rule of the DAO Fork to the ommers of a block"
+source = "EIP-779, Specification: blocks 1,920,000 to 1,920,009 must have the extra data dao-hard-fork"

@@ -27,12 +27,12 @@ def test_case(case, request, record_property) -> None:
     harness.run(VENDORED, case, DISAGREEMENTS, request, record_property)
 
 
-def test_vendored_cases_cover_both_seal_engines_a_transition_and_ommers() -> None:
+def test_vendored_cases_cover_every_group_and_both_seal_engines() -> None:
     tests = [legacy.fixture(VENDORED, case) for case in CASES]
     assert any(legacy.sealed(test) for test in tests)
     assert any(not legacy.sealed(test) for test in tests)
     assert any(len(catalogue.LEGACY_FORKS[case.fork]) == 2 for case in CASES)
-    assert {case.group for case in CASES} == {"legacy_header", "legacy_ommers"}
+    assert {case.group for case in CASES} == {"legacy_header", "legacy_ommers", "legacy_dao"}
 
 
 def test_digests() -> None:

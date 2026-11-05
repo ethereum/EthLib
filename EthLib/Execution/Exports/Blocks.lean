@@ -153,6 +153,18 @@ def checkHeaderExport (parentFork fork parent header schedules : ByteArray) : Re
       fun e => (e.code, s!"header invalid: {reprStr e}")
   else throw (0, "the parent's fork is after the fork")
 
+/-- Whether a header has the extra data that the DAO Fork asks of its first ten blocks.
+
+The chain activates the DAO Fork at block `daoBlock`, which is 1,920,000 on mainnet.
+
+A header outside those ten blocks passes. -/
+@[export eth_block_dao_extra_data_valid]
+def daoExtraDataValidExport (daoBlock : UInt64) (fork header : ByteArray) : Result UInt8 := do
+  let fork ← forkUpTo .glamsterdam fork
+  let header : Header fork ← runRlp "header rejected" (Codec.decode header)
+  let config : ChainConfig := { chainId := 1, activations := [(.daoFork, .block daoBlock.toNat)] }
+  pure (if daoExtraDataValid config header then 1 else 0)
+
 /-- The transaction that an item of a block holds at the fork. -/
 def transactionOfItem (fork : Fork) (item : Item) : Result Transactions.Transaction :=
   (Transactions.decodeBodyTransaction fork item).mapError
