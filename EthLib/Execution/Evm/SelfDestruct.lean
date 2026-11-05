@@ -25,6 +25,18 @@ From Cancun, only an account created in the same transaction is deleted.
 
 Any other account just sends its balance, and keeps its code and storage.
 
+From Glamsterdam, no ether is gone, by EIP-8246.
+
+An account created in the transaction that names itself as beneficiary keeps its balance.
+
+At the end of the transaction, such an account loses its nonce, code and storage, not its balance.
+
+From Glamsterdam, SELFDESTRUCT also checks for a static frame before it pops the beneficiary.
+
+A new account for the beneficiary then costs 9000, the write of an account, by EIP-8038.
+
+It also costs the state gas of a new account, by EIP-8037, after the execution gas.
+
 Appendix H.2 of the Yellow Paper, Shanghai version, defines the instruction.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
@@ -37,6 +49,9 @@ The EIPs that change the instruction define it:
 - [EIP-2929][eip2929], the cold access
 - [EIP-3529][eip3529], no refund
 - [EIP-6780][eip6780], deletion only in the transaction that creates the account
+- [EIP-8037][eip8037], the state gas of a new account, in Last Call
+- [EIP-8038][eip8038], the write of the new account, in Last Call
+- [EIP-8246][eip8246], no ether gone, in Last Call
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [eip150]: https://eips.ethereum.org/EIPS/eip-150#specification
@@ -45,6 +60,9 @@ The EIPs that change the instruction define it:
 [eip2929]: https://eips.ethereum.org/EIPS/eip-2929#selfdestruct-changes
 [eip3529]: https://eips.ethereum.org/EIPS/eip-3529#specification
 [eip6780]: https://eips.ethereum.org/EIPS/eip-6780#specification
+[eip8037]: https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-new-accounts
+[eip8038]: https://eips.ethereum.org/EIPS/eip-8038#selfdestruct
+[eip8246]: https://eips.ethereum.org/EIPS/eip-8246#specification
 -/
 
 @[expose] public section
@@ -64,6 +82,12 @@ def selfdestructCost (fork : Fork) (cold createsAccount : Bool) : Nat :=
   schedule.OPCODE_SELFDESTRUCT_BASE + (if cold then schedule.COLD_ACCOUNT_ACCESS else 0) +
     (if createsAccount then schedule.OPCODE_SELFDESTRUCT_NEW_ACCOUNT else 0)
 
+/-- The state gas of SELFDESTRUCT at fork `fork`.
+
+From Glamsterdam, a beneficiary that gets a new account costs the state gas of that account. -/
+def selfdestructStateGas (fork : Fork) (createsAccount : Bool) : Nat :=
+  if fork ≥ .glamsterdam ∧ createsAccount then GasCosts.NEW_ACCOUNT_STATE_GAS else 0
+
 /-- Whether SELFDESTRUCT from `originator` gives `beneficiary` an account at fork `fork`.
 
 Before Spurious Dragon, it does when the beneficiary has no account.
@@ -81,13 +105,16 @@ Before Cancun, the beneficiary gains the balance, then the originator's balance 
 
 So the ether is gone when the two are the same account.
 
-From Cancun, the balance moves, and then only an account created in the transaction drops to 0. -/
+From Cancun, the balance moves, and then only an account created in the transaction drops to 0.
+
+From Glamsterdam, the balance moves, and nothing drops to 0. -/
 def selfdestructTransfer (fork : Fork) (state : TransactionState)
     (originator beneficiary : Address) : Except State.StateError TransactionState := do
   let balance := (state.getAccount originator).balance
   if fork ≥ .dencun then
     let state ← state.moveEther fork originator beneficiary balance
-    if originator ∈ state.createdAccounts then state.setAccountBalance fork originator 0
+    if fork < .glamsterdam ∧ originator ∈ state.createdAccounts then
+      state.setAccountBalance fork originator 0
     else return state
   else
     let state ← state.createEther fork beneficiary balance
@@ -122,8 +149,11 @@ def finishSelfdestruct (fork : Fork) (beneficiary : Address) (refund : Nat)
 
 /-- SELFDESTRUCT at fork `fork`: pop the beneficiary, pay, move the balance and stop.
 
-The refund before London is for an account that this frame and its callers do not yet delete. -/
+The refund before London is for an account that this frame and its callers do not yet delete.
+
+From Glamsterdam, it fails in a static frame before the pop, and pays state gas last. -/
 def selfdestructStep (fork : Fork) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
+  if fork ≥ .glamsterdam ∧ evm.message.isStatic then throw .writeInStaticContext
   let (word, evm) ← popWord evm
   let beneficiary := toAddressMasked word
   let (cold, evm) := accessAddress evm beneficiary
@@ -133,6 +163,7 @@ def selfdestructStep (fork : Fork) (evm : Evm fork Meter) : Except EvmError (Evm
     if originator ∈ evm.substate.accountsToDelete then 0
     else (gasSchedule fork).REFUND_SELF_DESTRUCT
   let evm ← chargeGas evm (selfdestructCost fork cold createsAccount)
+  let evm ← chargeStateGas evm (selfdestructStateGas fork createsAccount)
   finishSelfdestruct fork beneficiary refund evm
 
 /-- The instruction of SELFDESTRUCT at fork `fork`, and none for any other opcode. -/
@@ -148,16 +179,23 @@ theorem selfdestructOpStep_measure_lt [LawfulGasMeter Meter] {op : Op}
     (running : evm.running = true) : measure after < measure evm := by
   cases op <;> simp only [selfdestructOpStep, Option.some.injEq, reduceCtorEq] at hf
   subst hf
+  unfold selfdestructStep at h
+  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
+  · simp only [hs, and_self, ↓reduceIte] at h
+    cases h
+  simp only [hs, ↓reduceIte] at h
   obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   dsimp only at h
   obtain ⟨e2, h2, h⟩ := Base.bind_ok_iff.mp h
-  have paid := ((popWord_pays h1).trans (accessAddress_pays _ _)).trans (chargeGas_pays h2)
+  obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
+  have paid := (((popWord_pays h1).trans (accessAddress_pays _ _)).trans (chargeGas_pays h2)).trans
+    (chargeStateGas_pays h3)
   have := paid.gasHeld
   unfold finishSelfdestruct at h
   split at h
   · cases h
   · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
     cases h
-    exact measure_lt_of_stop (show GasMeter.gasHeld e2.gas ≤ _ by omega) rfl running
+    exact measure_lt_of_stop (show GasMeter.gasHeld e3.gas ≤ _ by omega) rfl running
 
 end EthLib.Execution.Evm

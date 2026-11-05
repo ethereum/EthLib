@@ -60,10 +60,6 @@ A price that an EIP adds or changes names that EIP:
 
 The last four are in Last Call, so their prices may still change.
 
-This file holds their prices for accounts, storage writes, calls and transactions only.
-
-The Glamsterdam price of SELFDESTRUCT is not here yet.
-
 The precompiles keep their prices, and the blob prices are with the blob fees.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
@@ -327,7 +323,7 @@ structure GasSchedule where
   OPCODE_EXP_PER_BYTE : Nat
   /-- The base price of SELFDESTRUCT. -/
   OPCODE_SELFDESTRUCT_BASE : Nat
-  /-- The extra price of a SELFDESTRUCT that creates an account. -/
+  /-- The extra price in execution gas of a SELFDESTRUCT that creates an account. -/
   OPCODE_SELFDESTRUCT_NEW_ACCOUNT : Nat
   /-- The extra price of a transaction that creates a contract. -/
   TX_CREATE : Nat
@@ -355,8 +351,9 @@ def gasSchedule (fork : Fork) : GasSchedule where
   OPCODE_EXP_PER_BYTE := if fork ≥ .spuriousDragon then 50 else 10
   -- EIP-150 raises the price from 0 to 5000.
   OPCODE_SELFDESTRUCT_BASE := if fork ≥ .tangerineWhistle then 5000 else 0
-  -- EIP-150 adds the price.
-  OPCODE_SELFDESTRUCT_NEW_ACCOUNT := if fork ≥ .tangerineWhistle then 25000 else 0
+  -- EIP-150 adds the price, and EIP-8038 replaces it with the write of an account.
+  OPCODE_SELFDESTRUCT_NEW_ACCOUNT :=
+    if fork ≥ .glamsterdam then ACCOUNT_WRITE else if fork ≥ .tangerineWhistle then 25000 else 0
   -- EIP-2 raises the price of a contract creation from 21000 to 53000.
   TX_CREATE := if fork ≥ .homestead then 32000 else 0
   -- EIP-2028 lowers the price from 68 to 16.
