@@ -111,8 +111,9 @@ jobs:
         run: bash scripts/build_timing_report.sh run bindings_build "$BUILD_TIMING_RESULTS" -- uv sync --frozen --extra test
 
       # One test process per core, and the 25 slowest tests in the log.
+      # An idle process takes queued tests from a busy one, so a few long consensus cases do not run alone at the end.
       - name: vector suites
-        run: bash scripts/build_timing_report.sh run test_path "$BUILD_TIMING_RESULTS" -- uv run --no-sync pytest -n auto --durations=25
+        run: bash scripts/build_timing_report.sh run test_path "$BUILD_TIMING_RESULTS" -- uv run --no-sync pytest -n auto --dist worksteal --durations=25
 
       # The generators rewrite every case, so a changed vector shows up as a diff.
       - name: unchanged vectors
