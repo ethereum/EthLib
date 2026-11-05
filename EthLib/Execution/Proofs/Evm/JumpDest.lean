@@ -10,6 +10,12 @@ A position is a valid jump destination exactly when a JUMPDEST opcode starts the
 So each valid destination holds the byte `0x5b`.
 
 No position between an opcode and the next one is valid, so the data of a PUSH holds none.
+
+A relation states the opcode boundaries by the step rule alone, and the scan lists exactly them.
+
+So a position is a valid jump destination exactly when it is a boundary that holds JUMPDEST.
+
+The step past a PUSH1 to PUSH32 skips its data, by the byte alone.
 -/
 
 @[expose] public section
@@ -110,5 +116,97 @@ theorem not_isValidJumpDest_of_lt_nextOpcode {code : ByteArray} {p q : Nat}
   cases h : isValidJumpDest (validJumpDestinations code) q
   · rfl
   · exact absurd (isValidJumpDest_iff.mp h).1 this
+
+/-! ## Boundaries by the step rule -/
+
+/-- The opcode boundaries of the code from `start`, by the step rule alone.
+
+The start is a boundary, and so is each position that the next opcode reaches in the code. -/
+inductive BoundaryFrom (code : ByteArray) : Nat → Nat → Prop
+  | here {start : Nat} : start < code.size → BoundaryFrom code start start
+  | step {start pc : Nat} : start < code.size → BoundaryFrom code (nextOpcode code start) pc →
+      BoundaryFrom code start pc
+
+/-- A boundary lies in the code, at or after the start. -/
+theorem BoundaryFrom.bounds {code : ByteArray} {start pc : Nat} (h : BoundaryFrom code start pc) :
+    start ≤ pc ∧ pc < code.size := by
+  induction h with
+  | here h => exact ⟨Nat.le_refl _, h⟩
+  | @step start pc _ _ ih =>
+    have := lt_nextOpcode code start
+    exact ⟨by omega, ih.2⟩
+
+/-- Each position that the scan lists is a boundary. -/
+theorem boundaryFrom_of_mem {code : ByteArray} {fuel start pc : Nat}
+    (h : pc ∈ opcodePositionsFrom code fuel start) : BoundaryFrom code start pc := by
+  induction fuel generalizing start with
+  | zero => simp [opcodePositionsFrom] at h
+  | succ fuel ih =>
+    unfold opcodePositionsFrom at h
+    split at h
+    · rename_i hs
+      rcases List.mem_cons.mp h with rfl | h
+      · exact .here hs
+      · exact .step hs (ih h)
+    · simp at h
+
+/-- The scan lists each boundary that lies fewer than `fuel` bytes past the start. -/
+theorem mem_of_boundaryFrom {code : ByteArray} {start pc : Nat} (h : BoundaryFrom code start pc)
+    {fuel : Nat} (hfuel : pc - start < fuel) : pc ∈ opcodePositionsFrom code fuel start := by
+  induction h generalizing fuel with
+  | here hs =>
+    obtain ⟨fuel, rfl⟩ : ∃ f, fuel = f + 1 := ⟨fuel - 1, by omega⟩
+    simp [opcodePositionsFrom, hs]
+  | @step start pc hs rest ih =>
+    obtain ⟨fuel, rfl⟩ : ∃ f, fuel = f + 1 := ⟨fuel - 1, by omega⟩
+    have hlt := lt_nextOpcode code start
+    have hb := rest.bounds
+    unfold opcodePositionsFrom
+    simp only [hs, ↓reduceIte]
+    exact List.mem_cons_of_mem _ (ih (by omega))
+
+/-- The scan of the code lists exactly the boundaries from position 0. -/
+theorem mem_opcodePositions_iff {code : ByteArray} {pc : Nat} :
+    pc ∈ opcodePositions code ↔ BoundaryFrom code 0 pc := by
+  constructor
+  · exact boundaryFrom_of_mem
+  · intro h
+    exact mem_of_boundaryFrom h (by have := h.bounds; omega)
+
+/-- A position is a valid jump destination exactly when it is a boundary that holds JUMPDEST.
+
+The boundaries start at position 0. -/
+theorem isValidJumpDest_iff_boundary {code : ByteArray} {i : Nat} :
+    isValidJumpDest (validJumpDestinations code) i = true ↔
+      BoundaryFrom code 0 i ∧ byteAt code i = JUMPDEST := by
+  rw [isValidJumpDest_iff, mem_opcodePositions_iff]
+
+/-- The next opcode follows the byte at `pc`, and the data of a PUSH1 to PUSH32.
+
+The bytes `0x60` to `0x7f` are PUSH1 to PUSH32, with 1 to 32 bytes of data.
+
+So the rule needs no decoder. -/
+theorem nextOpcode_eq (code : ByteArray) (pc : Nat) :
+    nextOpcode code pc =
+      pc + 1 + if 0x60 ≤ (byteAt code pc).toNat ∧ (byteAt code pc).toNat ≤ 0x7f then
+        (byteAt code pc).toNat - 0x5f else 0 := by
+  unfold nextOpcode
+  generalize byteAt code pc = b
+  have key : ∀ k, k < 256 → (match Op.decode (UInt8.ofNat k) with
+      | some (.push n) => n.val + 1
+      | _ => 1) = 1 + if 0x60 ≤ k ∧ k ≤ 0x7f then k - 0x5f else 0 := by
+    decide +kernel
+  have := key b.toNat b.toNat_lt
+  rw [UInt8.ofNat_toNat] at this
+  have hm : (match Op.decode b with
+      | some (.push n) => pc + n.val + 1
+      | _ => pc + 1) =
+      pc + (match Op.decode b with
+      | some (.push n) => n.val + 1
+      | _ => 1) := by
+    split <;> rfl
+  refine hm.trans ?_
+  rw [this]
+  omega
 
 end EthLib.Execution.Evm
