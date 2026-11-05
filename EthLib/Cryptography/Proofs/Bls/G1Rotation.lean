@@ -46,14 +46,14 @@ theorem beta_sq_pow_six : (fpToFp12 beta ^ 2) ^ 6 = 1 := by
 
 /-- The inclusion of `E(Fp)` in `E(Fp12)`. -/
 noncomputable def embed : curve.toAffine.Point →+ ambientCurve.Point :=
-  scaledHom fpToFp12 1 one_ne_zero (map_four (one_pow 6))
+  ShortWeierstrass.scaledHom fpToFp12 one_ne_zero (map_four (one_pow 6))
 
 /-- The rotation `(x, y) ↦ (β * x, y)`, with values in `E(Fp12)`. -/
 noncomputable def rotate : curve.toAffine.Point →+ ambientCurve.Point :=
-  scaledHom fpToFp12 (fpToFp12 beta ^ 2) (pow_ne_zero 2 beta_ne_zero) (map_four beta_sq_pow_six)
+  ShortWeierstrass.scaledHom fpToFp12 (pow_ne_zero 2 beta_ne_zero) (map_four beta_sq_pow_six)
 
 theorem embed_injective : Function.Injective embed :=
-  scaledHom_injective _ _ _ _
+  ShortWeierstrass.scaledHom_injective _ _ _
 
 /-- The rotation of an affine point is the inclusion of the point `(β * x, y)`. -/
 theorem rotate_toPoint {x y x' : F} (hv : Valid ⟨x, y, Fp.one⟩) (hv' : Valid ⟨x', y, Fp.one⟩)

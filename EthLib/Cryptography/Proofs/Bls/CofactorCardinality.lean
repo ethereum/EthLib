@@ -31,8 +31,9 @@ private theorem chosenY_valid {x y : Fp2} (h : curve.toAffine.Nonsingular x y) :
 
 private theorem y_eq_or_neg_chosen {x y : Fp2} (h : curve.toAffine.Nonsingular x y) :
     y = chosenY x ∨ y = -(chosenY x) := by
-  have h1 := (TwistFrobenius.short_equation bTwist x y).mp h.1
-  have h2 := (TwistFrobenius.short_equation bTwist x (chosenY x)).mp (chosenY_valid h).1
+  have h1 := (ShortWeierstrass.equation_iff (a := 0) (b := bTwist) x y).mp h.1
+  have h2 :=
+    (ShortWeierstrass.equation_iff (a := 0) (b := bTwist) x (chosenY x)).mp (chosenY_valid h).1
   apply sq_eq_sq_iff_eq_or_eq_neg.mp
   linear_combination h1 - h2
 
