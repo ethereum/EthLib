@@ -13,6 +13,8 @@ public import EthLib.Cryptography.Kzg.Errors
 # `Recovery`
 
 The Reed-Solomon recovery routine for cell proofs.
+
+EIP-7594 adds it at the Fusaka fork.
 -/
 
 @[expose] public section
