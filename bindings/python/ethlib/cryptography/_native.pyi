@@ -391,6 +391,10 @@ def consensus_state_transition(name: str, fork: str, pre: bytes, block: bytes, c
     """The state after a signed block, as SSZ bytes, with the signature and the state root checked."""
     ...
 
+def consensus_state_transition_across(name: str, fork: str, pre: bytes, block_fork: str, block: bytes, config: bytes, verify: bool) -> bytes:
+    """The state after a signed block of a fork, from a state of that fork or an earlier one."""
+    ...
+
 def consensus_initialize_genesis(name: str, fork: str, eth1_block_hash: bytes, deposits: bytes, config: bytes, eth1_timestamp: int, verify: bool) -> bytes:
     """The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes."""
     ...

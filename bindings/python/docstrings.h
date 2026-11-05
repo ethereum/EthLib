@@ -293,6 +293,9 @@
 #define DOC_consensus_state_transition \
   "The state after a signed block, as SSZ bytes, with the signature and the state root checked."
 
+#define DOC_consensus_state_transition_across \
+  "The state after a signed block of a fork, from a state of that fork or an earlier one."
+
 #define DOC_consensus_initialize_genesis \
   "The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes."
 

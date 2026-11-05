@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: transition
+handler: core
+suite: pyspec_tests
+case: transition_with_proposer_slashing_right_before_fork

@@ -61,6 +61,20 @@ def forkVersion (config : Config) (fork : Fork) : Version :=
 def computeForkVersion (config : Config) (epoch : Epoch) : Version :=
   config.forkVersion (config.forkAtEpoch epoch)
 
+/-- The consensus fork after a consensus fork, with its first epoch.
+
+Heze has no next fork yet, and a fork of the execution layer or of the blob schedule has none. -/
+def nextFork (config : Config) : Fork → Option (Fork × Epoch)
+  | .phase0 => some (.altair, config.ALTAIR_FORK_EPOCH)
+  | .altair => some (.bellatrix, config.BELLATRIX_FORK_EPOCH)
+  | .bellatrix => some (.shapella, config.CAPELLA_FORK_EPOCH)
+  | .shapella => some (.dencun, config.DENEB_FORK_EPOCH)
+  | .dencun => some (.pectra, config.ELECTRA_FORK_EPOCH)
+  | .pectra => some (.fusaka, config.FULU_FORK_EPOCH)
+  | .fusaka => some (.glamsterdam, config.GLOAS_FORK_EPOCH)
+  | .glamsterdam => some (.hegota, config.HEZE_FORK_EPOCH)
+  | _ => none
+
 end Config
 
 /-- From Fulu: the blob limit in force at an epoch, with the epoch from which it holds. -/

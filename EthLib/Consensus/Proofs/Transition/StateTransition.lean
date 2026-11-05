@@ -128,6 +128,28 @@ theorem processSlots_slot {slot : Slot} (computed : processSlots config state sl
   have := UInt64.lt_iff_toNat_lt.mp later
   omega
 
+/-- A valid signed block ran on the state at its slot.
+
+When the result is validated, the block carries its proposer's signature on that state.
+
+Its state root is then the root of the state after it. -/
+theorem applySignedBlock_ok {signed : SignedBeaconBlock preset fork} {validateResult : Bool}
+    (computed : applySignedBlock config checks engine state signed validateResult = .ok after) :
+    (validateResult = true → verifyBlockSignature config checks state signed = .ok true) ∧
+      processBlock config checks engine state signed.message = .ok after ∧
+      (validateResult = true → hashTreeRoot after = .ok signed.message.stateRoot) := by
+  simp only [applySignedBlock, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, signatureOk, processed, blockOk, _, rootOk, rfl⟩ := computed
+  refine ⟨fun validate => ?_, blockOk, fun validate => ?_⟩
+  · simp only [checkBlockSignature, validate, ↓reduceIte, bind_ok_iff, ensure_ok_iff]
+      at signatureOk
+    obtain ⟨verified, verifiedOk, _, rfl, _⟩ := signatureOk
+    exact verifiedOk
+  · simp only [checkStateRoot, validate, ↓reduceIte, bind_ok_iff, ensure_ok_iff, liftSsz_ok]
+      at rootOk
+    obtain ⟨root, rootOk, same⟩ := rootOk
+    rw [rootOk, same]
+
 /-- A valid signed block ran on the state advanced to its slot.
 
 When the result is validated, the block carries its proposer's signature on that state.
@@ -140,17 +162,8 @@ theorem stateTransition_ok {signed : SignedBeaconBlock preset fork} {validateRes
       (validateResult = true → verifyBlockSignature config checks advanced signed = .ok true) ∧
       processBlock config checks engine advanced signed.message = .ok after ∧
       (validateResult = true → hashTreeRoot after = .ok signed.message.stateRoot) := by
-  simp only [stateTransition, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨advanced, slotsOk, _, signatureOk, processed, blockOk, _, rootOk, rfl⟩ := computed
-  refine ⟨advanced, slotsOk, (processSlots_slot slotsOk).2, fun validate => ?_, blockOk,
-    fun validate => ?_⟩
-  · simp only [checkBlockSignature, validate, ↓reduceIte, bind_ok_iff, ensure_ok_iff]
-      at signatureOk
-    obtain ⟨verified, verifiedOk, _, rfl, _⟩ := signatureOk
-    exact verifiedOk
-  · simp only [checkStateRoot, validate, ↓reduceIte, bind_ok_iff, ensure_ok_iff, liftSsz_ok]
-      at rootOk
-    obtain ⟨root, rootOk, same⟩ := rootOk
-    rw [rootOk, same]
+  simp only [stateTransition, bind_ok_iff] at computed
+  obtain ⟨advanced, slotsOk, applied⟩ := computed
+  exact ⟨advanced, slotsOk, (processSlots_slot slotsOk).2, applySignedBlock_ok applied⟩
 
 end EthLib.Consensus

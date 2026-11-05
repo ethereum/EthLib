@@ -1,4 +1,4 @@
-"""The slots and blocks of EthLib against the sanity, finality and random vectors."""
+"""The slots and blocks of EthLib against the sanity, finality, random and transition vectors."""
 
 import hashlib
 from pathlib import Path
@@ -21,6 +21,8 @@ GROUPS = {
     "sanity/blocks": ("phase0", "altair", "bellatrix", "capella", "deneb"),
     "finality/finality": ("phase0", "altair", "bellatrix", "capella", "deneb"),
     "random/random": ("phase0", "altair", "bellatrix", "capella", "deneb"),
+    # A transition case lies under the fork after its fork epoch.
+    "transition/core": ("altair", "bellatrix", "capella", "deneb"),
 }
 
 # The Gloas slot cases that stay inside one epoch.
@@ -45,6 +47,13 @@ def _load(path: Path):
     return YAML(typ="safe").load(path.read_text())
 
 
+def _fork_epochs(post_fork: str, fork_epoch: int) -> dict:
+    """The fork epochs of a transition case: every fork before the post fork at 0."""
+    earlier = list(FORKS)[1:list(FORKS).index(post_fork)]
+    return {f"{name.upper()}_FORK_EPOCH": 0 for name in earlier} | {
+        f"{post_fork.upper()}_FORK_EPOCH": fork_epoch}
+
+
 def run_case(preset: str, fork: str, group: str, case: Path) -> None:
     """Run one case: the state after its slots or blocks, or a rejection when it has no post."""
     state = snappy.decompress((case / "pre.ssz_snappy").read_bytes())
@@ -59,9 +68,25 @@ def run_case(preset: str, fork: str, group: str, case: Path) -> None:
         if group == "sanity/slots":
             return consensus.process_slots(preset, FORKS[fork], state,
                                            int(_load(case / "slots.yaml")), config)
+        if group == "transition/core":
+            return across(state)
         for index in range(meta["blocks_count"]):
             block = snappy.decompress((case / f"blocks_{index}.ssz_snappy").read_bytes())
             state = consensus.state_transition(preset, FORKS[fork], state, block, verify, config)
+        return state
+
+    def across(state: bytes) -> bytes:
+        # The state starts at the fork before the post fork, and the blocks up to the index
+        # `fork_block` belong to it; with no such index, every block belongs to the post fork.
+        pre_fork = list(FORKS)[list(FORKS).index(fork) - 1]
+        epochs = replacements(_fork_epochs(fork, meta["fork_epoch"]), preset)
+        state_fork = pre_fork
+        for index in range(meta["blocks_count"]):
+            block = snappy.decompress((case / f"blocks_{index}.ssz_snappy").read_bytes())
+            block_fork = pre_fork if index <= meta.get("fork_block", -1) else fork
+            state = consensus.state_transition_across(preset, FORKS[state_fork], state,
+                                                      FORKS[block_fork], block, verify, epochs)
+            state_fork = block_fork
         return state
 
     if post.exists():

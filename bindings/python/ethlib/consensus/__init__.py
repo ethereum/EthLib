@@ -348,6 +348,14 @@ def state_transition(name: str, fork: str, pre: bytes, block: bytes, verify: boo
     return _native.consensus_state_transition(name, fork, pre, block, replacements, verify)
 
 
+def state_transition_across(name: str, fork: str, pre: bytes, block_fork: str, block: bytes,
+                            verify: bool = True, config: dict | None = None) -> bytes:
+    """The SSZ bytes of a state after a block of the same or a later fork, or TransitionError."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_state_transition_across(name, fork, pre, block_fork, block,
+                                                     replacements, verify)
+
+
 _FORK_CHOICE_STEPS = {"tick": 0, "block": 1, "attestation": 2, "attester_slashing": 3,
                       "checks": 4, "pow_block": 5}
 
@@ -480,4 +488,5 @@ __all__ = [
     "upgrade_state",
     "process_slots",
     "state_transition",
+    "state_transition_across",
 ]
