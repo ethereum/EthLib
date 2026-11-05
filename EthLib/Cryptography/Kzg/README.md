@@ -196,7 +196,8 @@ It assumes the pairing law, the subgroup checks, and that two points are not at 
 - No theorem states what the batch check of blobs returns on valid input.
   For the batch check of openings, `Proofs/Kzg/BatchBinding.lean` states it and proves binding.
   An accepted batch has every opening valid, or its challenge is a root of a nonzero polynomial.
-  `Proofs/Kzg/BatchChallenge.lean` bounds the probability of that root for one uniform challenge.
+  `Proofs/Kzg/BatchChallenge.lean` bounds the probability of that root with the hash as a random oracle.
+  The adversary may query the oracle `q` times, and the bound is `(q + 1) (n - 1) / r` for `n` openings.
   `Proofs/Kzg/CellBatchBinding.lean` states what the batch check of cells returns on accepted input, with the bound.
 - Binding of the batch check of blobs and of cell proofs is not proved.
   The cell case would give a solution of the bilinear variant of the problem, in the target group.

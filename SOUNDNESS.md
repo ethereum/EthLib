@@ -321,7 +321,8 @@ Then its challenge `r` is a root of `P(X) = sum_i X^i (c_i - y_i - w_i (τ - z_i
 Let cell `k` have commitment `c_{i_k}` at commitment index `i_k`, proof `w_k`, coset shift `h_k`, and values that interpolate to `I_k` of degree below 64.
 Then the challenge is a root of `sum_k X^k (c_{i_k} - I_k(τ) - w_k (τ^64 - h_k^64))`.
 That polynomial is zero exactly when every cell is valid.
-`prEvent_cellErrorPoly_root_le` bounds the root case for one uniform challenge by `(n - 1) / r`, for at most `n` cells.
+`prEvent_cellErrorPoly_root_le` bounds the root case by `(q + 1) (n - 1) / r`, for at most `n` cells.
+Its game is the one of the openings below.
 No theorem reduces two accepted cells with different values at one index to a hard problem.
 That reduction gives a solution of the bilinear variant of the strong Diffie–Hellman problem.
 The solution is an element of the target group of the pairing, which EthLib does not model.
@@ -336,10 +337,14 @@ It needs the pairing law and a well-formed setup, and no model of a hash.
 Let an accepted batch open one commitment at one point to two values, or let a single check accept a second value.
 Then the values agree, or the search on the two openings returns a strong Diffie–Hellman solution, or the challenge is a root of a nonzero `P`.
 They need the pairing law and a well-formed setup.
-`prEvent_batchErrorPoly_root_le` (`Proofs/Kzg/BatchChallenge.lean`) bounds the last case for one challenge.
-Let the adversary choose at most `n` openings, and let the challenge then be uniform, as a random oracle answers a new query.
-Then the challenge is a root of a nonzero `P` with probability at most `(n - 1) / r`.
-The game gives the adversary no access to the oracle, so it bounds one attempt and not `q` queries.
+`prEvent_batchErrorPoly_root_le` (`Proofs/Kzg/BatchChallenge.lean`) bounds the last case.
+Its game takes the hash of the challenge as a random oracle on the inputs of the batch.
+The adversary makes at most `q` queries to that oracle, then outputs a batch of at most `n` openings.
+The verifier then hashes that batch to its challenge.
+So the adversary may hash many batches and keep one whose challenge is a root of its `P`.
+The challenge is a root of a nonzero `P` with probability at most `(q + 1) (n - 1) / r`.
+The one extra query is the verifier's.
+The scalars `c_i` and `w_i` are functions of the batch, as the discrete logarithms of its points are.
 
 `checksSufficient_of_subgroupChecks` (`Proofs/Kzg/CeremonyChecks.lean`) is about the ceremony that produced the trusted setup.
 It proves that the ceremony's pairing checks force each G1 and G2 point of a contribution to represent the expected power of the trapdoor.
@@ -533,9 +538,14 @@ The two theorems of Casper FFG share one bullet:
   Nothing in EthLib proves that the hash behaves as such an oracle.
 - Casper FFG: a vote names its signer, so no one can forge a vote.
   The theorems of accountable safety and plausible liveness say nothing about an attack on the signatures.
-- KZG batch checks: the challenge hash `Fr.hashToBlsField` is a random oracle, so the challenge of new openings or cells is uniform.
-  `prEvent_batchErrorPoly_root_le` and `prEvent_cellErrorPoly_root_le` draw one challenge after the openings or cells are fixed.
-  Nothing covers grinding, where an adversary hashes many sets of openings and keeps one whose challenge is a root.
+- KZG batch checks: the challenge hash `Fr.hashToBlsField` is a random oracle from the inputs of the batch onto `Fr`.
+  That hash reduces a SHA-256 digest modulo `r`, so it is not exactly uniform even if SHA-256 is a random oracle.
+  Then each value has probability at most `3 / 2^256`, which is below `1.36 / r`, and the bounds grow by that factor.
+  The real hash reads an encoding of those inputs.
+  The encoding is injective on the batches that the checks accept: their arrays have matching lengths, and each cell has 64 values.
+  In `prEvent_batchErrorPoly_root_le` and `prEvent_cellErrorPoly_root_le`, the adversary queries that oracle `q` times.
+  So the bound `(q + 1) (n - 1) / r` covers grinding, where the adversary hashes many batches and keeps one whose challenge is a root.
+  The theorems say nothing about an attack that uses the structure of SHA-256.
 
 ## Gap B: does the code that runs match the definitions?
 
