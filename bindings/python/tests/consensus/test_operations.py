@@ -31,7 +31,7 @@ HANDLERS = {
     "builder_exit_request": ("builder_exit_request", ("gloas",)),
 }
 
-# The release archives that hold the cases of the forks that the repository does not vendor.
+# The release archives, and the forks whose archived cases this file runs.
 ARCHIVES = {
     "minimal": "consensus-specs/v1.7.0-beta.4/minimal",
     "mainnet": "consensus-specs/v1.7.0-beta.4/mainnet",

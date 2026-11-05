@@ -1,0 +1,6 @@
+preset: minimal
+fork: fulu
+runner: epoch_processing
+handler: proposer_lookahead
+suite: pyspec_tests
+case: proposer_lookahead_does_not_contain_exited_validators

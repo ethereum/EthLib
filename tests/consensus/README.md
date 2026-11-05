@@ -81,11 +81,22 @@ It also builds the matrix of two blobs of the KZG vectors under `tests/cryptogra
 The directory `operations/` holds block operation cases of `minimal.tar.gz`, copied byte for byte under their path in the archive.
 A case gives a state before the operation, the operation, and the state after it when the operation is valid.
 A case without a state after it must be rejected.
-The directory keeps one valid and one invalid case of each handler that EthLib runs, at each fork where it runs.
+The directory keeps two cases of each handler that EthLib runs, at each fork where it runs.
+Where the handler has both, one is valid and one invalid.
+Every builder deposit or exit request case of the release has a state after it.
+So the second case of these two handlers is a request that leaves the state as it was.
 These are the block header from Phase 0 to Fulu, and the proposer and attester slashings from Phase 0 to Deneb.
+At Gloas they are the payload attestation, the execution payload bid, and the builder deposit and exit requests.
 From Electra a slashing starts an exit counted in balance, which EthLib does not hold yet.
 A mainnet state is a few hundred kilobytes, so only the weekly parity job reads the mainnet cases.
 `bindings/python/tests/consensus/test_operations.py` runs each case through the Lean transition and compares the state after it.
+
+The directory `epoch_processing/` holds epoch step cases of `minimal.tar.gz` in the same way.
+A case gives a state before the step and the state after it.
+The directory keeps two cases of each step that EthLib runs, at each fork where it runs.
+These are the proposer lookahead at Fulu and Gloas, and the builder pending payments and the window of payload committees at Gloas.
+The release has a single case of the window, so the directory keeps that one.
+`bindings/python/tests/consensus/test_epoch_processing.py` runs each case through the Lean step and compares the state after it.
 
 The test release publishes its cases in three archives.
 Their SHA-256 digests are:

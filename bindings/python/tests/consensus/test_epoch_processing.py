@@ -1,5 +1,8 @@
 """The steps of the epoch transition of EthLib against the epoch_processing vectors."""
 
+import hashlib
+from pathlib import Path
+
 import archives
 import pytest
 from ruamel.yaml import YAML
@@ -9,6 +12,8 @@ from ethlib.networking import snappy
 
 from .containers import FORKS
 from .test_data_column import replacements
+
+FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "epoch_processing"
 
 # The forks at which EthLib runs each handler.
 HANDLERS = {
@@ -44,6 +49,17 @@ def run_case(preset: str, fork: str, handler: str, case) -> None:
             consensus.process_epoch(preset, FORKS[fork], handler, pre, config)
 
 
+def _cases() -> list:
+    """Every vendored case, as its preset, fork, handler and directory."""
+    cases = []
+    for pre in sorted(FILES.rglob("pre.ssz_snappy")):
+        case = pre.parent
+        preset, fork, _, handler = case.relative_to(FILES).parts[:4]
+        cases.append(pytest.param(preset, fork, handler, case,
+                                  id=case.relative_to(FILES).as_posix()))
+    return cases
+
+
 def _archive_cases() -> list:
     """Every case of the archives for a handler that EthLib runs, when the cache is set."""
     if archives.CACHE is None:
@@ -64,6 +80,21 @@ def _archive_cases() -> list:
     if not cases:
         raise LookupError("the archives hold no epoch_processing case that EthLib runs")
     return cases
+
+
+def test_digests():
+    lines = (FILES / "SHA256SUMS").read_text().splitlines()
+    entries = [line.split() for line in lines if not line.startswith("#")]
+    assert len(entries) == sum(1 for path in FILES.rglob("*") if path.is_file()
+                               and path.name != "SHA256SUMS")
+    for digest, name in entries:
+        assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name
+
+
+@pytest.mark.parametrize("preset, fork, handler, case", _cases())
+def test_case(preset, fork, handler, case):
+    assert runs(fork, handler)
+    run_case(preset, fork, handler, case)
 
 
 @pytest.mark.parametrize("preset, fork, handler, case", _archive_cases())
