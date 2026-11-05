@@ -22,6 +22,7 @@ public import EthLib.Cryptography.Proofs.MillerDivisor
 public import EthLib.Cryptography.Proofs.MillerLines
 public import EthLib.Cryptography.Proofs.MillerReciprocity
 public import EthLib.Cryptography.Proofs.MillerUnique
+public import EthLib.Cryptography.Proofs.MillerAte
 public import EthLib.Cryptography.Proofs.ScaledCurve
 
 /-!

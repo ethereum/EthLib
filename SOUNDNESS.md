@@ -249,7 +249,13 @@ The units of the coordinate ring are the nonzero constants, and every line has t
 `weil_reciprocity` (`Proofs/MillerReciprocity.lean`) proves Weil reciprocity for two quotients of products of lines whose lines share no finite point: `f(div g) = ε g(div f)`.
 The sign `ε` is -1 to the product of the multiplicities of `O` in the divisors assigned to the lines.
 Each function is taken as 1 at `O`.
-No theorem yet proves bilinearity.
+`pow_ratioAt_add_left` and `pow_ratioAt_add_right` (`Proofs/MillerAte.lean`) prove the linearity of an ate-type pairing, on any curve and field.
+The pairing evaluates a quotient of products of lines at `P`, then raises the value to a power `N`.
+Let `pi` be the map `(x, y) -> (x^q, y^q)`, and let the quotient for `Q` have the divisor `sum_j c_j ((pi^j Q) - (O))`.
+Let `z^(N n)` be 1 for every nonzero `z`, with `n = sum_j c_j q^j`.
+Then the pairing is linear in a point `P` fixed by `pi`, when `N` is even, and linear in `Q`.
+`Q` lies in a group that `pi` maps into itself, and where `pi` fixes only `O`.
+No theorem yet applies these results to BLS12-381 or alt_bn128, so no theorem yet proves their bilinearity.
 
 The pairing of the two generators equals the value that [draft-irtf-cfrg-pairing-friendly-curves-11](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-11) publishes in Appendix B.
 The Python suite checks it through the bindings (`bindings/python/tests/bls/test_pairing.py`), with a few bilinearity checks.
