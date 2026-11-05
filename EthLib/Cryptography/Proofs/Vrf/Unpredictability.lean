@@ -35,9 +35,7 @@ Source: "Verifiable Random Functions", [FOCS 1999](https://doi.org/10.1109/SFFCS
 
 There the adversary chooses the index after its queries; here the index is fixed in advance.
 
-An adaptive index would cost at most a factor `2^32`, by guessing it.
-
-That step is not proved.
+A separate theorem covers an adaptive index, with uniform secrets, at the cost of a factor `2^32`.
 
 A challenge secret derived from a seed is not covered.
 

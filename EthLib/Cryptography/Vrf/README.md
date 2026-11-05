@@ -105,9 +105,14 @@ Its guess of the output at the challenge index is right with probability at most
 With `q_H = 2^64` and `q_O = 2^32`, that is below `2^-189`.
 The game computes the root and the openings with the tree of this module, with the hash as an oracle (`rootWith_hash`, `openingWith_hash`).
 
-The theorem does not cover a holder who chooses its own secrets: such a holder can bias its outputs.
-It fixes the challenge index before the game, where Micali, Rabin and Vadhan let the adversary choose it.
-Guessing the index would cover the adaptive choice with a loss of up to `2^32`, but that step is not proved.
+That theorem fixes the challenge index before the game, where Micali, Rabin and Vadhan let the adversary choose it.
+A second theorem lets the adversary choose it (`prEvent_adaptiveGame_le`, `AdaptiveIndex.lean`).
+There all `2^32` secrets are uniform, and the adversary may ask for the opening at any index.
+It wins if it names an index whose opening it never asked for, and guesses the output there.
+The proof splits a win by the index named, so its bound is `2^32` times the first: `2^32 (1 + 2 Q) / 2^256`.
+With `q_H = 2^64` and `q_O = 2^32`, that is below `2^-157`.
+
+Neither theorem covers a holder who chooses its own secrets: such a holder can bias its outputs.
 
 ## Test vectors
 
