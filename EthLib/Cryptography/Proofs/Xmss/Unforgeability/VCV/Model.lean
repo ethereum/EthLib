@@ -9,19 +9,27 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 # The leanXMSS strong-forgery experiment
 
 Source: the leanXMSS specification draft, section "Security".
+
 The draft is pinned to leanVM commit `4af2cdddd7cd41b9df2cc7e123e314a91b0b4462`.
 
 The algorithms are EthLib's actual `keyGenWith`, `signWith` and `verifyWith`.
+
 The signer computes the full bottom tree root before the top layer.
+
 VCVio supplies the raw-reply interface and the counted experiment.
+
 The winning condition also requires distinct signing-request leaf indices.
 
 One random oracle answers every hash call of every party.
+
 Its answers are 256-bit words, read as 32 little-endian bytes.
+
 Every hash call is charged, including repeated inputs.
+
 Private uniform sampling is free.
 
 This module states the experiment and its winning condition.
+
 It does not assert a security bound.
 -/
 
@@ -64,6 +72,7 @@ def readback : Reply → Option Signature
 /-- EthLib's actual algorithms with separate signing-reply and forgery carriers.
 
 A signing error is a normal reply, so the adversary may continue after it.
+
 All attempted leaf indices remain reserved by the final winning predicate.
 -/
 noncomputable def view :
@@ -74,7 +83,8 @@ noncomputable def view :
     return (pk, sk)
   sign _ sk request := EthLib.Cryptography.Xmss.signWith H sk request.leafIndex request.message
   verify pk request signature :=
-    if signature.leafIndex = request.leafIndex then EthLib.Cryptography.Xmss.verifyWith H pk request.message signature
+    if signature.leafIndex = request.leafIndex then
+      EthLib.Cryptography.Xmss.verifyWith H pk request.message signature
     else pure false
   readback := readback
 
@@ -86,12 +96,14 @@ theorem view_keygen_eq : view.keygen = (do
 
 /-- The view exposes the complete actual signing result without converting errors. -/
 theorem view_sign_eq (pk : PublicKey) (sk : SecretKey) (request : Request) :
-    view.sign pk sk request = EthLib.Cryptography.Xmss.signWith H sk request.leafIndex request.message := rfl
+    view.sign pk sk request =
+      EthLib.Cryptography.Xmss.signWith H sk request.leafIndex request.message := rfl
 
 /-- The view uses the actual verifier when the candidate carries its requested index. -/
 theorem view_verify_eq (pk : PublicKey) (request : Request) (signature : Signature)
     (h : signature.leafIndex = request.leafIndex) :
-    view.verify pk request signature = EthLib.Cryptography.Xmss.verifyWith H pk request.message signature := by
+    view.verify pk request signature =
+      EthLib.Cryptography.Xmss.verifyWith H pk request.message signature := by
   simp [view, h]
 
 /-- Successful readback identifies the exact successful raw reply. -/
@@ -116,6 +128,7 @@ noncomputable def wins (transcript : Transcript) : Bool := by
     SignatureAlg.SigningView.Wins readback transcript)
 
 /-- Every attempted index is distinct and verification accepts.
+
 No successful reply returned the candidate pair.
 -/
 theorem wins_eq_true_iff (transcript : Transcript) :
