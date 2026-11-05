@@ -68,9 +68,14 @@ open GasCosts
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
-/-- The substate that a message starts from: no log, no refund, and the accesses so far. -/
+/-- The substate that a message starts from: no log and no refund.
+
+It keeps the accesses so far, and the accounts that its callers will delete.
+
+Before London, SELFDESTRUCT gives a refund only for an account outside that set. -/
 def Substate.child (substate : Substate) : Substate :=
   { Substate.empty with
+    accountsToDelete := substate.accountsToDelete
     accessedAddresses := substate.accessedAddresses
     accessedStorageKeys := substate.accessedStorageKeys }
 

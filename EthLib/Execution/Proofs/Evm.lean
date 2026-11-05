@@ -28,6 +28,7 @@ public import EthLib.Execution.Proofs.Evm.JumpDest
 public import EthLib.Execution.Proofs.Evm.ControlFlow
 public import EthLib.Execution.Proofs.Evm.Interpreter
 public import EthLib.Execution.Proofs.Evm.MessageCall
+public import EthLib.Execution.Proofs.Evm.SelfDestruct
 
 /-!
 # `EthLib.Execution.Proofs.Evm`
