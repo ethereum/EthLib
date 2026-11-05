@@ -188,6 +188,38 @@ def powBits : Nat → Fp12 → Nat → Fp12
     let half := powBits fuel (a * a) (e / 2)
     if e % 2 = 1 then a * half else half
 
+/-- `c a`, coefficient by coefficient. -/
+def scale (c : Fp) (a : Fp12) : Fp12 := Vector.ofFn fun k => c * a[k]
+
+/-- The powers `(w^p)^k` for `k < 12`, which are also `(w^k)^p`. -/
+def frobeniusCoefficients : Array Fp12 :=
+  let wp := powBits 256 (wPow 1) Fp.modulus
+  (List.range 11).foldl (fun powers _ => powers.push (powers.back! * wp)) #[one]
+
+/-- The `p`-th power.
+
+Each coefficient `a_k` lies in `Fp`, so `a_k^p = a_k`.
+
+So `(sum_k a_k w^k)^p = sum_k a_k (w^p)^k`. -/
+def frobenius (a : Fp12) : Fp12 :=
+  (List.range 12).foldl (fun acc k => acc + scale a[k]! frobeniusCoefficients[k]!) (ofFp 0)
+
+/-- The `p^n`-th power, by `n` applications of the `p`-th power. -/
+def frobeniusPow : Nat → Fp12 → Fp12
+  | 0, a => a
+  | n + 1, a => frobeniusPow n (frobenius a)
+
+/-- The inverse, and 0 for 0.
+
+The product `g` of the conjugates `a^p, ..., a^(p^11)` makes `a g` the norm of `a`, in `Fp`.
+
+So `a^(-1) = g / (a g)`, with one inverse in `Fp`. -/
+def inverse (a : Fp12) : Fp12 :=
+  let (g, _) := (List.range 11).foldl (fun (g, c) _ =>
+    let c := frobenius c
+    (g * c, c)) (one, a)
+  scale (a * g)[0].inv g
+
 end Fp12
 
 /-! ## The pairing -/
@@ -258,6 +290,42 @@ def millerLoop (q : Point2) (xp yp : Fp) : Fp12 :=
 /-- The final exponent `(p^12 - 1) / q`. -/
 def FINAL_EXPONENT : Nat := (Fp.modulus ^ 12 - 1) / Fr.modulus
 
+/-- The BN parameter `u`, with `p = 36 u^4 + 36 u^3 + 24 u^2 + 6 u + 1`. -/
+def BN_U : Nat := 4965661367192848881
+
+/-- `f^((p^12 - 1) / q)`, the final exponentiation.
+
+[Scott et al.](https://eprint.iacr.org/2008/490), §3, split the exponent.
+
+It is `(p^6 - 1) (p^2 + 1) (p^4 - p^2 + 1) / q`.
+
+The first two factors cost a few Frobenius maps and one inverse.
+
+After them, `f^(p^6) = f^(-1)`, so a power by a negative number is a power of the conjugate.
+
+Their §5 writes `(p^4 - p^2 + 1) / q` in base `p`, with digits `l0` to `l3` in `u`.
+
+- `l3 = 1` and `l2 = 6 u^2 + 1`.
+- `l1 = -36 u^3 - 18 u^2 - 12 u + 1`.
+- `l0 = -36 u^3 - 30 u^2 - 18 u - 2`.
+
+So the last factor needs three powers by `u` and a few by small numbers. -/
+def finalExponentiation (f : Fp12) : Fp12 :=
+  -- `f^((p^6 - 1) (p^2 + 1))`.
+  let f := Fp12.frobeniusPow 6 f * f.inverse
+  let f := Fp12.frobeniusPow 2 f * f
+  -- `f^u`, `f^(u^2)` and `f^(u^3)`, each below `2^64`.
+  let fu := Fp12.powBits 64 f BN_U
+  let fu2 := Fp12.powBits 64 fu BN_U
+  let fu3 := Fp12.powBits 64 fu2 BN_U
+  -- The four digits, with the conjugate for each negative part.
+  let conj := Fp12.frobeniusPow 6
+  let small (a : Fp12) (e : Nat) := Fp12.powBits 6 a e
+  let y0 := conj (small fu3 36 * small fu2 30 * small fu 18 * small f 2)
+  let y1 := conj (small fu3 36 * small fu2 18 * small fu 12) * f
+  let y2 := small fu2 6 * f
+  y0 * Fp12.frobenius y1 * Fp12.frobeniusPow 2 y2 * Fp12.frobeniusPow 3 f
+
 /-- Whether the product of the pairings of the pairs is 1.
 
 A pair with a point at infinity contributes 1.
@@ -270,7 +338,6 @@ def pairingCheck (pairs : List (Point × Point2)) : Bool :=
     match pair with
     | (.affine xp yp, q@(.affine _ _)) => f * millerLoop q xp yp
     | _ => f) Fp12.one
-  -- The final exponent has fewer than 3072 bits.
-  Fp12.powBits 3072 product FINAL_EXPONENT == Fp12.one
+  finalExponentiation product == Fp12.one
 
 end EthLib.Cryptography.AltBn128
