@@ -150,6 +150,10 @@ Definitions that derive a secret take the derivation function as an argument too
   Verification makes at most 466 calls, with any hash that makes at most one oracle call (`verifyWith_isTotalQueryBound`, `verifyCalls_eq`).
   When a fixed function answers the oracle, verification computes EthLib's verification with that function as its hash (`evalWithAnswerFn_verifyWith`).
   Two answer functions that agree on the inputs verification hashes give the same verdict (`verifyWith_congr`).
+- The hash calls of key generation and signing (`Unforgeability/HonestQueries.lean`).
+  Key generation, signing and verification commute with every map of monads that keeps `pure` and `bind` (`keyGenWith_map_monad`, `signWith_map_monad`).
+  Outside the derivations from the seed, every call hashes at an address of another type, with a payload of at least 16 bytes (`signDerived_isQueryBoundP_zero`, `publicKeyOf_isQueryBoundP_zero`, `verifyWith_isQueryBoundP_zero`).
+  So in the game, the honest algorithms query a 43-byte input only to grow the scheme seed (`keyGenWith_H_isQueryBoundP_seedLength`, `signWith_H_isQueryBoundP_seedLength`, `size_seedInput`).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
 
