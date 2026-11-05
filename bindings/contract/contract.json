@@ -3743,4 +3743,18 @@
       {"constructor": "invalidForkchoiceState", "code": 38002}]}],
    "error_class": "EngineError",
    "docstring":
-   "The payload status of an `engine_newPayload` request, without the parent's state."}]}
+   "The payload status of an `engine_newPayload` request, without the parent's state."},
+  {"summary":
+   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads.",
+   "signature": "(tree: bytes, request: bytes) -> bytes",
+   "operation": "EthLib.Engine.Exports.forkchoiceUpdatedExport",
+   "method": "engine_forkchoice_updated",
+   "errors":
+   [{"type": "EthLib.Engine.EngineError",
+     "codes":
+     [{"constructor": "invalidParams", "code": 32602},
+      {"constructor": "unsupportedFork", "code": 38005},
+      {"constructor": "invalidForkchoiceState", "code": 38002}]}],
+   "error_class": "EngineError",
+   "docstring":
+   "The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."}]}

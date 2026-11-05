@@ -9,6 +9,12 @@ eth_engine_new_payload(
   lean_object* request
 );
 
+extern lean_object*
+eth_engine_forkchoice_updated(
+  lean_object* tree,
+  lean_object* request
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 PyObject*
@@ -28,4 +34,23 @@ py_engine_new_payload(
   lean_object* request_obj =
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(request), PyBytes_GET_SIZE(request));
   return except_into_pybytes(eth_engine_new_payload(config_obj, request_obj), ENGINE_ERROR);
+}
+
+PyObject*
+py_engine_forkchoice_updated(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *tree, *request;
+  if (!PyArg_ParseTuple(args, "OO", &tree, &request)) return NULL;
+  /* Both arguments are JSON text in UTF-8, as bytes. */
+  if (!PyBytes_Check(tree) || !PyBytes_Check(request)) {
+    PyErr_SetString(PyExc_TypeError, "tree and request must be bytes");
+    return NULL;
+  }
+  lean_object* tree_obj =
+    mk_bytearray((const uint8_t*) PyBytes_AS_STRING(tree), PyBytes_GET_SIZE(tree));
+  lean_object* request_obj =
+    mk_bytearray((const uint8_t*) PyBytes_AS_STRING(request), PyBytes_GET_SIZE(request));
+  return except_into_pybytes(eth_engine_forkchoice_updated(tree_obj, request_obj), ENGINE_ERROR);
 }

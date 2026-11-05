@@ -19,5 +19,15 @@ Its method, its parameters, its expected exception and its expected error code a
 python -I extract_new_payload.py <directory blockchain_tests_engine> new_payload.json
 ```
 
+`forkchoice.json` holds chains of the same directory, for `engine_forkchoiceUpdated`.
+For each network, it keeps the three tests with the most payloads, among those with at least three payloads or an invalid one.
+Each chain keeps the hash of its genesis block, the hash and the parent hash of each payload, and the last block hash of the test.
+A payload counts as valid when the fixture expects neither an exception nor an error code.
+`extract_forkchoice.py` wrote the file in the same way:
+
+```text
+python -I extract_forkchoice.py <directory blockchain_tests_engine> forkchoice.json
+```
+
 The Python tests in `bindings/python/tests/engine/` read these cases and never rewrite them.
 A test marked `archive` runs every payload of the directory.
