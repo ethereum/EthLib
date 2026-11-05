@@ -13,6 +13,18 @@ Restoring a snapshot restores every read of the snapshot.
 
 A move of ether keeps the sum of the two balances, and fails when the sender lacks the amount.
 
+A move of ether between two addresses fails exactly in two cases.
+
+The sender lacks the amount, or the recipient's balance would reach 2^256.
+
+Otherwise it moves the amount exactly.
+
+A change of an account keeps every code.
+
+It keeps the storage too, unless it deletes the account.
+
+An account that the transaction created has zero words before the transaction.
+
 Each new transaction starts with an empty transient storage.
 
 The end of a transaction keeps every read of the transaction.
@@ -577,6 +589,331 @@ theorem moveEther_self {fork : Fork} {tx tx' : TransactionState} {address : Addr
         rw [hread']
         exact BitVec.sub_add_cancel _ _
       · cases hcredit
+
+/-! ## Failure, storage and code of a change of an account -/
+
+/-- A change fails exactly when `f` fails on the account, with the same error. -/
+theorem modifyState_eq_error {fork : Fork} {tx : TransactionState} {address : Address}
+    {f : Account → Except StateError Account} {e : StateError} :
+    tx.modifyState fork address f = .error e ↔ f (tx.getAccount address) = .error e := by
+  unfold modifyState
+  simp only [getAccount_recordAccountRead]
+  cases hf : f (tx.getAccount address) with
+  | error e' => simp [bind, Except.bind]
+  | ok account =>
+    simp only [bind, Except.bind, pure, Except.pure]
+    split <;> simp
+
+/-- A record of an account read changes no word of the storage. -/
+@[simp] theorem getStorage_recordAccountRead (tx : TransactionState) (address : Address) :
+    (tx.recordAccountRead address).getStorage = tx.getStorage := rfl
+
+/-- Setting an account changes no word of the storage, even when it removes the account. -/
+@[simp] theorem getStorage_setAccount (tx : TransactionState) (address : Address)
+    (account : Option Account) : (tx.setAccount address account).getStorage = tx.getStorage := rfl
+
+/-- A wipe of the storage of an address leaves the storage of every other address. -/
+theorem getStorage_destroyStorage_of_ne (tx : TransactionState) {address other : Address}
+    (hne : other ≠ address) (key : Bytes32) :
+    (tx.destroyStorage address).getStorage other key = tx.getStorage other key := by
+  have hcmp : compare address other ≠ .eq := fun h => hne (Std.LawfulEqCmp.eq_of_compare h).symm
+  simp [destroyStorage, getStorage, StorageMap.slot, Std.ExtTreeMap.getElem?_erase, hcmp,
+    Std.ExtTreeSet.mem_insert]
+  rfl
+
+/-- Deleting an account zeroes its storage and leaves the storage of every other address. -/
+theorem getStorage_destroyAccount (tx : TransactionState) (address other : Address)
+    (key : Bytes32) :
+    (tx.destroyAccount address).getStorage other key =
+      if other = address then 0 else tx.getStorage other key := by
+  unfold destroyAccount
+  rw [getStorage_setAccount]
+  split
+  · subst other; exact getStorage_destroyStorage _ _ _
+  · rename_i hne; exact getStorage_destroyStorage_of_ne _ hne _
+
+/-- A change of an account keeps every word of the storage, unless it deletes the account.
+
+From Paris, a change that leaves the account empty deletes it, and its storage reads as zero. -/
+theorem getStorage_modifyState {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx')
+    (other : Address) (key : Bytes32) :
+    tx'.getStorage other key =
+      if other = address ∧ tx'.getAccountOptional address = none then 0
+      else tx.getStorage other key := by
+  unfold modifyState at h
+  simp only [getAccount_recordAccountRead] at h
+  cases hf : f (tx.getAccount address) with
+  | error e => simp [hf, bind, Except.bind] at h
+  | ok account =>
+    simp only [hf, bind, Except.bind, pure, Except.pure] at h
+    split at h
+    · cases h
+      have hnone :
+          (((tx.recordAccountRead address).setAccount address (some account)).destroyAccount
+            address).getAccountOptional address = none := by
+        simp [destroyAccount, getAccountOptional_setAccount_self]
+      rw [getStorage_destroyAccount]
+      by_cases ho : other = address <;> simp [ho, hnone]
+    · cases h
+      simp [getAccountOptional_setAccount_self]
+
+/-- A change of an account changes no code. -/
+theorem getCode_modifyState {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
+    tx'.getCode = tx.getCode := by
+  unfold modifyState at h
+  simp only [getAccount_recordAccountRead] at h
+  cases hf : f (tx.getAccount address) with
+  | error e => simp [hf, bind, Except.bind] at h
+  | ok account =>
+    simp only [hf, bind, Except.bind, pure, Except.pure] at h
+    split at h <;> cases h <;> rfl
+
+/-- Setting the code of an address keeps the code under its hash. -/
+theorem getCode_setCode_self {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {code : ByteArray} (h : tx.setCode fork address code = .ok tx')
+    (hne : Cryptography.Hash.Keccak.keccak256 code ≠ EMPTY_CODE_HASH) :
+    tx'.getCode (Cryptography.Hash.Keccak.keccak256 code) = .ok code := by
+  dsimp only [setCode] at h
+  split at h
+  · contradiction
+  · rw [getCode_modifyState h]
+    unfold getCode
+    split
+    · rename_i he
+      exact absurd he hne
+    · dsimp only
+      erw [Std.ExtTreeMap.getElem?_insert_self]
+
+/-- Setting the code of an address leaves the code under every other hash. -/
+theorem getCode_setCode_of_ne {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {code : ByteArray} (h : tx.setCode fork address code = .ok tx') {codeHash : Hash32}
+    (hne : codeHash ≠ Cryptography.Hash.Keccak.keccak256 code) :
+    tx'.getCode codeHash = tx.getCode codeHash := by
+  dsimp only [setCode] at h
+  obtain ⟨k, hk⟩ : ∃ k : Hash32, k = Cryptography.Hash.Keccak.keccak256 code := ⟨_, rfl⟩
+  rw [← hk] at h hne
+  split at h
+  · rw [getCode_modifyState h]
+  · rw [getCode_modifyState h]
+    simp [getCode, Std.ExtTreeMap.getElem?_insert, Ne.symm hne]
+
+/-! ## The words before the transaction -/
+
+/-- A created account has zero words before the transaction, and other accounts keep theirs. -/
+theorem getStorageOriginal_markAccountCreated (tx : TransactionState) (address other : Address)
+    (key : Bytes32) :
+    (tx.markAccountCreated address).getStorageOriginal other key =
+      if other = address then 0 else tx.getStorageOriginal other key := by
+  by_cases ho : other = address
+  · subst ho; simp [markAccountCreated, getStorageOriginal]
+  · have hcmp : compare address other ≠ .eq := fun h => ho (Std.LawfulEqCmp.eq_of_compare h).symm
+    simp [markAccountCreated, getStorageOriginal, Std.ExtTreeSet.mem_insert, hcmp, ho]
+    rfl
+
+/-- A change of an account keeps every word before the transaction. -/
+theorem getStorageOriginal_modifyState {fork : Fork} {tx tx' : TransactionState}
+    {address : Address} {f : Account → Except StateError Account}
+    (h : tx.modifyState fork address f = .ok tx') :
+    tx'.getStorageOriginal = tx.getStorageOriginal := by
+  unfold modifyState at h
+  simp only [getAccount_recordAccountRead] at h
+  cases hf : f (tx.getAccount address) with
+  | error e => simp [hf, bind, Except.bind] at h
+  | ok account =>
+    simp only [hf, bind, Except.bind, pure, Except.pure] at h
+    split at h <;> cases h <;> rfl
+
+/-- A rollback keeps every word before the transaction. -/
+theorem getStorageOriginal_restoreTxState (tx snapshot : TransactionState) :
+    (tx.restoreTxState snapshot).getStorageOriginal = tx.getStorageOriginal := rfl
+
+/-- A wipe of the storage keeps every word before the transaction. -/
+theorem getStorageOriginal_destroyStorage (tx : TransactionState) (address : Address) :
+    (tx.destroyStorage address).getStorageOriginal = tx.getStorageOriginal := rfl
+
+/-! ## The outcomes of moving ether -/
+
+/-- The debit of the sender in a move of ether, named for the proofs below. -/
+private abbrev debit (sender : Address) (amount : U256) (account : Account) :
+    Except StateError Account :=
+  if account.balance < amount then .error (.insufficientBalance sender)
+  else .ok { account with balance := account.balance - amount }
+
+/-- A move of ether between two addresses that succeeds meets two conditions.
+
+The sender held the amount, and the recipient's balance stays below 2^256.
+
+The two accounts then hold the moved balances and keep every other field.
+
+Every other account is unchanged. -/
+theorem moveEther_eq_ok {fork : Fork} {tx tx' : TransactionState} {sender recipient : Address}
+    {amount : U256} (hne : sender ≠ recipient)
+    (h : tx.moveEther fork sender recipient amount = .ok tx') :
+    ¬ (tx.getAccount sender).balance < amount ∧
+      (tx.getAccount recipient).balance.toNat + amount.toNat < 2 ^ 256 ∧
+      tx'.getAccount sender =
+        { tx.getAccount sender with balance := (tx.getAccount sender).balance - amount } ∧
+      tx'.getAccount recipient =
+        { tx.getAccount recipient with balance := (tx.getAccount recipient).balance + amount } ∧
+      ∀ other, other ≠ sender → other ≠ recipient → tx'.getAccount other = tx.getAccount other := by
+  unfold moveEther at h
+  cases hmid : tx.modifyState fork sender (debit sender amount) with
+  | error e => simp [hmid, bind, Except.bind] at h
+  | ok mid =>
+    simp only [hmid, bind, Except.bind] at h
+    obtain ⟨debited, hdebit, hsender, hrest⟩ := modifyState_eq_ok hmid
+    obtain ⟨credited, hcredit, hrecipient, hrest'⟩ := modifyState_eq_ok h
+    simp only [debit] at hdebit
+    split at hdebit
+    · cases hdebit
+    · rename_i hfunds
+      cases hdebit
+      rw [hrest recipient (Ne.symm hne)] at hcredit
+      split at hcredit
+      · rename_i hfit
+        cases hcredit
+        refine ⟨hfunds, hfit, ?_, hrecipient, fun other hs hr => ?_⟩
+        · rw [hrest' sender hne, hsender]
+        · rw [hrest' other hr, hrest other hs]
+      · cases hcredit
+
+/-- Moving ether between two addresses fails exactly in two cases, each with its error.
+
+The sender holds less than the amount.
+
+Or the sender holds the amount, and the recipient's balance would reach 2^256. -/
+theorem moveEther_eq_error {fork : Fork} {tx : TransactionState} {sender recipient : Address}
+    {amount : U256} {e : StateError} (hne : sender ≠ recipient) :
+    tx.moveEther fork sender recipient amount = .error e ↔
+      ((tx.getAccount sender).balance < amount ∧ e = .insufficientBalance sender) ∨
+      (¬ (tx.getAccount sender).balance < amount ∧
+        2 ^ 256 ≤ (tx.getAccount recipient).balance.toNat + amount.toNat ∧
+        e = .balanceOverflow recipient) := by
+  unfold moveEther
+  cases hmid : tx.modifyState fork sender (debit sender amount) with
+  | error e' =>
+    have hf := modifyState_eq_error.mp hmid
+    simp only [debit] at hf
+    simp only [bind, Except.bind, Except.error.injEq]
+    split at hf
+    · rename_i hlt
+      cases hf
+      constructor
+      · rintro rfl
+        exact Or.inl ⟨hlt, rfl⟩
+      · rintro (⟨-, rfl⟩ | ⟨hge, -⟩)
+        · rfl
+        · exact absurd hlt hge
+    · cases hf
+  | ok mid =>
+    obtain ⟨debited, hdebit, -, hrest⟩ := modifyState_eq_ok hmid
+    simp only [bind, Except.bind]
+    rw [modifyState_eq_error, hrest recipient (Ne.symm hne)]
+    simp only [debit] at hdebit
+    split at hdebit
+    · cases hdebit
+    · rename_i hfunds
+      by_cases hfit : (tx.getAccount recipient).balance.toNat + amount.toNat < 2 ^ 256
+      · simp only [hfit, ↓reduceIte, reduceCtorEq, false_iff, not_or, not_and]
+        exact ⟨fun h _ => hfunds h, fun _ h _ => Nat.not_le_of_gt hfit h⟩
+      · simp only [hfit, ↓reduceIte, Except.error.injEq]
+        constructor
+        · rintro rfl
+          exact Or.inr ⟨hfunds, Nat.le_of_not_gt hfit, rfl⟩
+        · rintro (⟨hlt, -⟩ | ⟨-, -, rfl⟩)
+          · exact absurd hlt hfunds
+          · rfl
+
+/-- Moving ether between two addresses succeeds exactly when two conditions hold.
+
+The sender holds the amount, and the recipient's balance stays below 2^256. -/
+theorem moveEther_isOk_iff {fork : Fork} {tx : TransactionState} {sender recipient : Address}
+    {amount : U256} (hne : sender ≠ recipient) :
+    (∃ tx', tx.moveEther fork sender recipient amount = .ok tx') ↔
+      ¬ (tx.getAccount sender).balance < amount ∧
+        (tx.getAccount recipient).balance.toNat + amount.toNat < 2 ^ 256 := by
+  cases hm : tx.moveEther fork sender recipient amount with
+  | ok tx' =>
+    obtain ⟨hfunds, hfit, -⟩ := moveEther_eq_ok hne hm
+    exact ⟨fun _ => ⟨hfunds, hfit⟩, fun _ => ⟨tx', rfl⟩⟩
+  | error e =>
+    simp only [reduceCtorEq, exists_false, false_iff, not_and]
+    intro hfunds hfit
+    rcases (moveEther_eq_error hne).mp hm with ⟨hlt, -⟩ | ⟨-, hover, -⟩
+    · exact hfunds hlt
+    · exact Nat.not_le_of_gt hfit hover
+
+/-- Moving ether from an address to itself fails exactly when its balance is below the amount. -/
+theorem moveEther_self_eq_error {fork : Fork} {tx : TransactionState} {address : Address}
+    {amount : U256} {e : StateError} :
+    tx.moveEther fork address address amount = .error e ↔
+      (tx.getAccount address).balance < amount ∧ e = .insufficientBalance address := by
+  unfold moveEther
+  cases hmid : tx.modifyState fork address (debit address amount) with
+  | error e' =>
+    have hf := modifyState_eq_error.mp hmid
+    simp only [debit] at hf
+    simp only [bind, Except.bind, Except.error.injEq]
+    split at hf
+    · rename_i hlt
+      cases hf
+      exact ⟨fun h => ⟨hlt, h.symm⟩, fun h => h.2.symm⟩
+    · cases hf
+  | ok mid =>
+    obtain ⟨debited, hdebit, hread, -⟩ := modifyState_eq_ok hmid
+    simp only [bind, Except.bind]
+    rw [modifyState_eq_error, hread]
+    simp only [debit] at hdebit
+    split at hdebit
+    · cases hdebit
+    · rename_i hfunds
+      cases hdebit
+      have hle : amount.toNat ≤ (tx.getAccount address).balance.toNat := by
+        simpa [BitVec.lt_def] using hfunds
+      have hfit :
+          ((tx.getAccount address).balance - amount).toNat + amount.toNat < 2 ^ 256 := by
+        rw [BitVec.toNat_sub_of_le (BitVec.le_def.mpr hle)]
+        have := (tx.getAccount address).balance.isLt
+        omega
+      simp only [hfit, ↓reduceIte, reduceCtorEq, false_iff, not_and]
+      exact fun h => absurd h hfunds
+
+/-- Moving ether from an address to itself succeeds exactly when the address holds the amount. -/
+theorem moveEther_self_isOk_iff {fork : Fork} {tx : TransactionState} {address : Address}
+    {amount : U256} :
+    (∃ tx', tx.moveEther fork address address amount = .ok tx') ↔
+      ¬ (tx.getAccount address).balance < amount := by
+  cases hm : tx.moveEther fork address address amount with
+  | ok tx' =>
+    refine ⟨fun _ hlt => ?_, fun _ => ⟨tx', rfl⟩⟩
+    have herr := (moveEther_self_eq_error (fork := fork)).mpr ⟨hlt, rfl⟩
+    rw [hm] at herr
+    cases herr
+  | error e =>
+    simp only [reduceCtorEq, exists_false, false_iff, Classical.not_not]
+    exact (moveEther_self_eq_error.mp hm).1
+
+/-- Moving ether keeps every code and every word before the transaction.
+
+It also keeps the storage of every address other than the two parties. -/
+theorem moveEther_preserves {fork : Fork} {tx tx' : TransactionState}
+    {sender recipient : Address} {amount : U256}
+    (h : tx.moveEther fork sender recipient amount = .ok tx') :
+    tx'.getCode = tx.getCode ∧ tx'.getStorageOriginal = tx.getStorageOriginal ∧
+      ∀ other, other ≠ sender → other ≠ recipient → ∀ key,
+        tx'.getStorage other key = tx.getStorage other key := by
+  unfold moveEther at h
+  cases hmid : tx.modifyState fork sender (debit sender amount) with
+  | error e => simp [hmid, bind, Except.bind] at h
+  | ok mid =>
+    simp only [hmid, bind, Except.bind] at h
+    refine ⟨by rw [getCode_modifyState h, getCode_modifyState hmid],
+      by rw [getStorageOriginal_modifyState h, getStorageOriginal_modifyState hmid],
+      fun other hs hr key => ?_⟩
+    rw [getStorage_modifyState h, getStorage_modifyState hmid]
+    simp [hs, hr]
 
 end EthLib.Execution.State.TransactionState
 
