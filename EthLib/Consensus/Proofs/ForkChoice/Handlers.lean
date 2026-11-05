@@ -16,7 +16,9 @@ A tick sets the clock to its time, and the catch-up loop never stalls.
 
 A new block enters the store with the state that the transition computes for it.
 
-From Deneb its blobs were available, and their proofs matched its commitments.
+At Deneb and Electra the node held its blobs, and their proofs matched its commitments.
+
+From Fulu the node got every column that it samples, and each column was valid.
 
 At Bellatrix the first payload passes exactly when it follows a terminal block of proof of work.
 
@@ -322,7 +324,7 @@ theorem updateProposerBoostRoot_frame {head root : Root} {after : Store preset f
   split at updated <;> simp only [pure, Except.pure, Except.ok.injEq] at updated <;>
     subst updated <;> exact ⟨EpochsLe.of_eq (by rfl) (by rfl), rfl, rfl⟩
 
-/-- A new block that passes the checks has a known parent, and its blobs are available.
+/-- A new block that passes the checks has a known parent, and its data is available.
 
 Its state is the one that the state transition computes from the parent's. -/
 theorem validateOnBlock_ok {checks : SignatureChecks} {sources : BlockSources preset fork}
@@ -330,7 +332,7 @@ theorem validateOnBlock_ok {checks : SignatureChecks} {sources : BlockSources pr
     {blockRoot : Root} {state : BeaconState preset fork}
     (valid : store.validateOnBlock config checks sources signed blockRoot = .ok state) :
     ∃ pre, store.blockStates[signed.message.parentRoot]? = some pre ∧
-      validateDataAvailability sources signed.message blockRoot = .ok () ∧
+      validateDataAvailability config sources signed.message blockRoot = .ok () ∧
       stateTransition config checks sources.engine pre signed true = .ok state := by
   unfold validateOnBlock at valid
   dsimp only at valid
@@ -370,26 +372,27 @@ theorem validateOnBlock_ok {checks : SignatureChecks} {sources : BlockSources pr
 /-- Before Deneb a block has no blobs, and the check of their availability passes. -/
 theorem validateDataAvailability_of_lt {sources : BlockSources preset fork}
     {block : BeaconBlock preset fork} {blockRoot : Root} (before : fork < .dencun) :
-    validateDataAvailability sources block blockRoot = .ok () := by
+    validateDataAvailability config sources block blockRoot = .ok () := by
   have early : ¬ .dencun ≤ fork := Nat.not_le_of_lt before
-  have later : ¬ .fusaka ≤ fork := fun fulu => early (Nat.le_trans (by decide) fulu)
+  have later : ¬ .glamsterdam ≤ fork := fun gloas => early (Nat.le_trans (by decide) gloas)
   simp [validateDataAvailability, early, later, pure, Except.pure]
 
-/-- From Deneb and before Fulu, the check passes exactly when the node holds the blobs and proofs.
+/-- At Deneb and Electra, the check passes exactly when the node holds the blobs and proofs.
 
 The proofs must also show that the blobs match the commitments of the block. -/
 theorem validateDataAvailability_ok {sources : BlockSources preset fork}
     {block : BeaconBlock preset fork} {blockRoot : Root}
     (deneb : .dencun ≤ fork) (before : fork < .fusaka) :
-    validateDataAvailability sources block blockRoot = .ok () ↔
+    validateDataAvailability config sources block blockRoot = .ok () ↔
       ∃ blobs proofs, sources.blobsAndProofs blockRoot = some (blobs, proofs) ∧
         Cryptography.Kzg.verifyBlobKzgProofBatch sources.setup blobs
           (block.body.blobKzgCommitments ⟨deneb, Nat.lt_trans before (by decide)⟩).data proofs =
           .ok true := by
-  have later : ¬ .fusaka ≤ fork := Nat.not_le_of_lt before
+  have fulu : ¬ .fusaka ≤ fork := Nat.not_le_of_lt before
+  have gloas : ¬ .glamsterdam ≤ fork := fun later => fulu (Nat.le_trans (by decide) later)
   unfold validateDataAvailability isDataAvailable
   cases found : sources.blobsAndProofs blockRoot with
-  | none => simp [later, deneb, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  | none => simp [fulu, gloas, deneb, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
   | some data =>
     obtain ⟨blobs, proofs⟩ := data
     cases verified : Cryptography.Kzg.verifyBlobKzgProofBatch sources.setup blobs
@@ -399,7 +402,67 @@ theorem validateDataAvailability_ok {sources : BlockSources preset fork}
       cases result
       · simp_all [throw, throwThe, MonadExceptOf.throw, bind, Except.bind, Except.mapError]
       · refine iff_of_true ?_ ⟨blobs, proofs, rfl, verified⟩
-        simp [later, deneb, verified, bind, Except.bind, Except.mapError, pure, Except.pure]
+        simp [fulu, gloas, deneb, verified, bind, Except.bind, Except.mapError, pure, Except.pure]
+
+/-- A check of each item of a list returns true exactly when each item returns true. -/
+private theorem allM_ok_true {ε α : Type} {f : α → Except ε Bool} :
+    ∀ l : List α, l.allM f = .ok true ↔ ∀ x ∈ l, f x = .ok true
+  | [] => by simp [pure, Except.pure]
+  | a :: l => by
+    rw [List.allM_cons]
+    cases h : f a with
+    | error e => simp [h, bind, Except.bind]
+    | ok b =>
+      cases b
+      · simp [h, bind, Except.bind, pure, Except.pure]
+      · simp [h, bind, Except.bind, allM_ok_true l]
+
+/-- At Fulu, the check passes exactly when the node gets every column that it samples.
+
+Each column must have a valid shape, and the proofs of its cells must match its commitments. -/
+theorem validateDataAvailability_ok_of_fulu {sources : BlockSources preset fork}
+    {block : BeaconBlock preset fork} {blockRoot : Root}
+    (fulu : .fusaka ≤ fork) (before : fork < .glamsterdam) :
+    validateDataAvailability config sources block blockRoot = .ok () ↔
+      ∃ sidecars, sources.columns blockRoot = some sidecars ∧ ∀ sidecar ∈ sidecars,
+        verifyDataColumnSidecar preset config sidecar
+            (fun gloas => absurd gloas (not_glamsterdam_le before)) = true ∧
+          verifyDataColumnSidecarKzgProofs sources.setup sidecar
+            (fun gloas => absurd gloas (not_glamsterdam_le before)) = .ok true := by
+  have deneb : .dencun ≤ fork := Nat.le_trans (by decide) fulu
+  have gloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  unfold validateDataAvailability isDataAvailable
+  cases found : sources.columns blockRoot with
+  | none => simp [fulu, gloas, deneb, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  | some sidecars =>
+    simp only [gloas, deneb, fulu, dite_false, dite_true, ite_true, Option.some.injEq,
+      exists_eq_left', bind_ok_iff, ← Array.allM_toList]
+    -- One column passes exactly when its shape is valid and its proofs match.
+    have each : ∀ sidecar : DataColumnSidecar preset fork,
+        (if verifyDataColumnSidecar preset config sidecar
+            (fun gloas => absurd gloas (not_glamsterdam_le before)) then
+          (verifyDataColumnSidecarKzgProofs sources.setup sidecar
+            (fun gloas => absurd gloas (not_glamsterdam_le before))).mapError ForkChoiceError.kzg
+        else pure false) = .ok true ↔
+        verifyDataColumnSidecar preset config sidecar
+            (fun gloas => absurd gloas (not_glamsterdam_le before)) = true ∧
+          verifyDataColumnSidecarKzgProofs sources.setup sidecar
+            (fun gloas => absurd gloas (not_glamsterdam_le before)) = .ok true := by
+      intro sidecar
+      split
+      · cases verifyDataColumnSidecarKzgProofs sources.setup sidecar
+            (fun gloas => absurd gloas (not_glamsterdam_le before)) <;>
+          simp_all [Except.mapError]
+      · simp_all [pure, Except.pure]
+    constructor
+    · rintro ⟨b, all, rest⟩
+      cases b
+      · simp [throw, throwThe, MonadExceptOf.throw] at rest
+      intro sidecar mem
+      exact (each sidecar).mp ((allM_ok_true _).mp all sidecar (Array.mem_toList_iff.mpr mem))
+    · intro valid
+      exact ⟨true, (allM_ok_true _).mpr fun sidecar mem =>
+        (each sidecar).mpr (valid sidecar (Array.mem_toList_iff.mp mem)), rfl⟩
 
 /-- The first payload passes exactly when it follows a terminal block of proof of work.
 
@@ -497,21 +560,21 @@ theorem addBlock_ok {checks : SignatureChecks} {sources : BlockSources preset fo
     rw [bs3, updateCheckpoints_blockStates, bs2, bs1]
     simp
 
-/-- From Fulu columns of data replace the blobs, which is not yet specified here. -/
-theorem onBlock_of_fulu {checks : SignatureChecks} {sources : BlockSources preset fork}
+/-- From Gloas the rule for a block is not yet specified here. -/
+theorem onBlock_of_gloas {checks : SignatureChecks} {sources : BlockSources preset fork}
     {signed : SignedBeaconBlock preset fork}
-    (fulu : .fusaka ≤ fork) :
+    (gloas : .glamsterdam ≤ fork) :
     store.onBlock config checks sources signed = .error (.forkNotYetSpecified fork) := by
-  simp [onBlock, fulu, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  simp [onBlock, gloas, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
 /-- A block that the store holds already leaves the store as it was. -/
 theorem onBlock_known {checks : SignatureChecks} {sources : BlockSources preset fork}
     {signed : SignedBeaconBlock preset fork}
-    {blockRoot : Root} (before : fork < .fusaka)
+    {blockRoot : Root} (before : fork < .glamsterdam)
     (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
     (known : store.blocks.contains blockRoot) :
     store.onBlock config checks sources signed = .ok store := by
-  have later : ¬ .fusaka ≤ fork := Nat.not_le_of_lt before
+  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
   simp [onBlock, later, root, known, bind, Except.bind, Except.mapError, pure, Except.pure]
 
 /-- A new block enters the store with the state after it, and no epoch falls.
@@ -527,10 +590,10 @@ theorem onBlock_new {checks : SignatureChecks} {sources : BlockSources preset fo
       ∃ pre state, store.blockStates[signed.message.parentRoot]? = some pre ∧
         stateTransition config checks sources.engine pre signed true = .ok state ∧
         after.blockStates[blockRoot]? = some state := by
-  by_cases fulu : .fusaka ≤ fork
-  · rw [onBlock_of_fulu fulu] at added
+  by_cases gloas : .glamsterdam ≤ fork
+  · rw [onBlock_of_gloas gloas] at added
     cases added
-  simp only [onBlock, fulu, root, new, bind, Except.bind, Except.mapError, ↓reduceIte,
+  simp only [onBlock, gloas, root, new, bind, Except.bind, Except.mapError, ↓reduceIte,
     Bool.false_eq_true] at added
   exact addBlock_ok added
 
@@ -547,10 +610,10 @@ theorem onBlock_epochsLe {checks : SignatureChecks} {sources : BlockSources pres
     · simp [root, bind, Except.bind, Except.mapError] at added
   | ok blockRoot =>
     by_cases known : store.blocks.contains blockRoot
-    · by_cases fulu : .fusaka ≤ fork
-      · rw [onBlock_of_fulu fulu] at added
+    · by_cases gloas : .glamsterdam ≤ fork
+      · rw [onBlock_of_gloas gloas] at added
         cases added
-      rw [onBlock_known (Nat.lt_of_not_le fulu) root known] at added
+      rw [onBlock_known (Nat.lt_of_not_le gloas) root known] at added
       cases added
       exact EpochsLe.refl _
     · exact (onBlock_new root known added).1

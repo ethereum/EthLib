@@ -371,16 +371,23 @@ def fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, 
     # A step is (kind, data): the tick in seconds, the SSZ bytes of a block, an attestation, an
     # attester slashing or a PoW block, or for "checks" whether to read the proposer head.
     # From Deneb a block may come as (block, blobs, proofs): the node holds those for it.
+    # From Fulu a block may come as (block, columns): the node samples those SSZ columns for it,
+    # and an empty list means that it cannot get them.
     records = b""
     for kind, data in steps:
         if kind == "tick":
             data = data.to_bytes(8, "little")
         elif kind == "checks":
             data = bytes([bool(data)])
-        elif kind == "block" and isinstance(data, tuple):
+        elif kind == "block" and isinstance(data, tuple) and len(data) == 3:
             data, blobs, proofs = data
             held = len(blobs).to_bytes(4, "little") + b"".join(blobs) + b"".join(proofs)
             records += bytes([6]) + len(held).to_bytes(4, "little") + held
+        elif kind == "block" and isinstance(data, tuple):
+            data, columns = data
+            held = len(columns).to_bytes(4, "little") + b"".join(
+                len(column).to_bytes(4, "little") + column for column in columns)
+            records += bytes([7]) + len(held).to_bytes(4, "little") + held
         records += bytes([_FORK_CHOICE_STEPS[kind]]) + len(data).to_bytes(4, "little") + data
     replacements = json.dumps(config).encode() if config else b""
     out = _native.consensus_fork_choice(name, fork, anchor_state, anchor_block, records,
@@ -388,7 +395,7 @@ def fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, 
     outcomes, offset = [], 0
     for kind, data in steps:
         if kind == "block" and isinstance(data, tuple):
-            # The blobs that the node holds take no part in the outcome.
+            # The blobs or the columns that the node holds take no part in the outcome.
             offset += 1
         status, offset = out[offset], offset + 1
         if status == 1:
