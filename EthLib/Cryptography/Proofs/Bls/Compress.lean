@@ -92,7 +92,7 @@ private theorem byteArray_getElem! (b : ByteArray) (i : Nat) :
 
 open EthLib.Cryptography.IdLoops in
 /-- The spec's byte-decoding loop, as a fold over the byte list. -/
-private theorem bytesBEToNat_eq_list (b : ByteArray) :
+theorem bytesBEToNat_eq_list (b : ByteArray) :
     Fp.bytesBEToNat b
       = b.data.toList.foldl (fun acc u => (acc <<< 8) ||| u.toNat) 0 := by
   unfold Fp.bytesBEToNat
@@ -252,7 +252,7 @@ theorem signBit_neg {y : Fp} (hy : y ≠ 0) :
 
 /-- `yPos = ±ya`: any square root of `ya²` is `ya` or `-ya`
 (`ZMod Fp.modulus` is a domain, as `p` is prime). -/
-private theorem sqrt_pm {ya yPos : ZMod Fp.modulus}
+theorem sqrt_pm {ya yPos : ZMod Fp.modulus}
     (h : yPos * yPos = ya * ya) : yPos = ya ∨ yPos = -ya := by
   have hfac : (yPos - ya) * (yPos + ya) = 0 := by linear_combination h
   rcases mul_eq_zero.mp hfac with h1 | h2
@@ -662,6 +662,34 @@ theorem uncompress_valid {b : ByteArray} {q : G1}
             -- The returned point is (x, y, 1) with y = yPos or y = -yPos.
             apply valid_of_affine_eq
             -- Either sign squares to yPos^2, and the square root guarantees yPos^2 = x^3 + 4.
+            rw [sq_select]
+            exact Fp.sqrt_ok hsqrt
+
+/-- A point that decompression returns is the point at infinity, or `(x, y, 1)`.
+
+Here `x` decodes from the input without its three flag bits, and `y^2 = x^3 + 4`. -/
+theorem uncompress_eq_zero_or {b : ByteArray} {q : G1} (h : G1.uncompress b = .ok q) :
+    q = zero ∨ ∃ x y : Fp, Fp.fromBytesBE (b.set! 0 (b.get! 0 &&& 0x1f)) = .ok x ∧
+      (y : ZMod Fp.modulus) * y = x * x * x + Fp.ofNat 4 ∧ q = ⟨x, y, Fp.one⟩ := by
+  rw [uncompress] at h
+  split at h
+  · cases h
+  · dsimp only at h
+    split at h
+    · cases h
+    · split at h
+      · split at h
+        · cases h
+        · cases h
+          exact Or.inl rfl
+      · split at h
+        · cases h
+        · rename_i x hx
+          split at h
+          · cases h
+          · rename_i yPos hsqrt
+            cases h
+            refine Or.inr ⟨x, _, hx, ?_, rfl⟩
             rw [sq_select]
             exact Fp.sqrt_ok hsqrt
 

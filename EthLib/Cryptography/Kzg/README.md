@@ -208,9 +208,13 @@ It assumes the pairing law, the subgroup checks, and that two points are not at 
   Its bytes match the pinned file that `TrustedSetupData.lean` names.
   `TrustedSetup.ofHex_valid` proves that each point of the embedded setup is on its curve,
   if the setup decodes.
-  No theorem says that it decodes, that its points lie in the subgroup,
-  or that they are powers of one secret.
-  The Python suite checks that each point decodes and lies in the subgroup,
+  `TrustedSetup.ofHex_torsion` proves that each monomial point of `G1` has an order that divides `r`,
+  if the setup decodes.
+  The kernel checks each of the 4096 points from its `x` coordinate.
+  No theorem says that the setup decodes, or that its points are powers of one secret.
+  No theorem says that its Lagrange points or its points of `G2` lie in the subgroup.
+  Each KZG vector of the Python suite runs an operation that first decodes the setup.
+  The Python suite also checks that each point decodes and lies in the subgroup,
   in `bindings/python/tests/kzg/test_trusted_setup.py`.
 - The pairing law that the ceremony theorem assumes is not proved.
   It is bilinearity together with non-degeneracy.

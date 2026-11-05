@@ -50,6 +50,7 @@ public import EthLib.Cryptography.Proofs.Kzg.PeerDasCodeword
 public import EthLib.Cryptography.Proofs.Kzg.HonestCells
 public import EthLib.Cryptography.Proofs.Kzg.PeerDasBatchGames
 public import EthLib.Cryptography.Proofs.Kzg.PeerDasColumnGames
+public import EthLib.Cryptography.Proofs.Kzg.SetupTorsion.Embedded
 
 /-!
 # `EthLib.Cryptography.Proofs.Kzg`

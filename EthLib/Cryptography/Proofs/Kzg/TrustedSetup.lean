@@ -32,8 +32,8 @@ structure TrustedSetup.Valid (s : TrustedSetup) : Prop where
   g2Monomial : ∀ i : Fin KZG_SETUP_G2_LENGTH, G2.Valid s.g2Monomial[i]
 
 /-- Every output of a successful map over an array is the image of some input. -/
-private theorem mem_of_mapM_ok {ε α β : Type} {f : α → Except ε β} {xs : Array α}
-    {ys : Array β} (h : xs.mapM f = .ok ys) : ∀ y ∈ ys, ∃ x, f x = .ok y := by
+theorem mem_of_mapM_ok {ε α β : Type} {f : α → Except ε β} {xs : Array α}
+    {ys : Array β} (h : xs.mapM f = .ok ys) : ∀ y ∈ ys, ∃ x ∈ xs, f x = .ok y := by
   rw [Array.mapM_eq_mapM_toList] at h
   cases hl : xs.toList.mapM f with
   | error e => rw [hl] at h; cases h
@@ -42,8 +42,8 @@ private theorem mem_of_mapM_ok {ε α β : Type} {f : α → Except ε β} {xs :
     have hys : zs.toArray = ys := Except.ok.inj h
     subst hys
     intro y hy
-    obtain ⟨x, _, hx⟩ := Base.mapM_ok_mem hl y (List.mem_toArray.mp hy)
-    exact ⟨x, hx⟩
+    obtain ⟨x, hmem, hx⟩ := Base.mapM_ok_mem hl y (List.mem_toArray.mp hy)
+    exact ⟨x, Array.mem_toList_iff.mp hmem, hx⟩
 
 /-- A point that decodes to a G1 point of the setup is valid. -/
 private theorem valid_of_toG1 {b : ByteArray} {p : G1}
@@ -109,15 +109,52 @@ theorem TrustedSetup.ofBytes_valid {g1LagrangeBytes g1MonomialBytes g2MonomialBy
               rw [hsz]
               exact reverseBits_lt_two_pow _ _
             rw [getElem!_pos lagrange _ hr]
-            obtain ⟨b, hb⟩ := mem_of_mapM_ok h₁ _ (Array.getElem_mem hr)
+            obtain ⟨b, -, hb⟩ := mem_of_mapM_ok h₁ _ (Array.getElem_mem hr)
             exact valid_of_toG1 hb
           exact key i.val (by rw [size_bitReversalPermutation, hl]; exact i.isLt)
         · have hi : i.val < monomial.size := by rw [hm]; exact i.isLt
-          obtain ⟨b, hb⟩ := mem_of_mapM_ok h₂ _ (Array.getElem_mem hi)
+          obtain ⟨b, -, hb⟩ := mem_of_mapM_ok h₂ _ (Array.getElem_mem hi)
           exact valid_of_toG1 hb
         · have hi : i.val < monomial2.size := by rw [hm2]; exact i.isLt
-          obtain ⟨b, hb⟩ := mem_of_mapM_ok h₃ _ (Array.getElem_mem hi)
+          obtain ⟨b, -, hb⟩ := mem_of_mapM_ok h₃ _ (Array.getElem_mem hi)
           exact valid_of_toG2 hb
+      · cases h
+    · cases h
+  · cases h
+
+/-- Each monomial point of `G1` in a decoded setup decodes from one of the given encodings. -/
+theorem TrustedSetup.ofBytes_g1Monomial_mem
+    {g1LagrangeBytes g1MonomialBytes g2MonomialBytes : Array ByteArray} {s : TrustedSetup}
+    (h : TrustedSetup.ofBytes g1LagrangeBytes g1MonomialBytes g2MonomialBytes = .ok s)
+    (i : Fin FIELD_ELEMENTS_PER_BLOB) :
+    ∃ b ∈ g1MonomialBytes, G1.uncompress b = .ok s.g1Monomial[i] := by
+  unfold TrustedSetup.ofBytes at h
+  dsimp only at h
+  cases h₁ : g1LagrangeBytes.mapM fun b =>
+      (Bls.G1.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup with
+  | error e => rw [h₁] at h; cases h
+  | ok lagrange =>
+  cases h₂ : g1MonomialBytes.mapM fun b =>
+      (Bls.G1.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup with
+  | error e => rw [h₁, h₂] at h; cases h
+  | ok monomial =>
+  cases h₃ : g2MonomialBytes.mapM fun b =>
+      (Bls.G2.uncompress b).mapError fun _ => KzgError.invalidTrustedSetup with
+  | error e => rw [h₁, h₂, h₃] at h; cases h
+  | ok monomial2 =>
+  rw [h₁, h₂, h₃] at h
+  dsimp only [bind, Except.bind] at h
+  split at h
+  · split at h
+    · rename_i hm
+      split at h
+      · cases h
+        have hi : i.val < monomial.size := by rw [hm]; exact i.isLt
+        obtain ⟨b, hmem, hb⟩ := mem_of_mapM_ok h₂ _ (Array.getElem_mem hi)
+        refine ⟨b, hmem, ?_⟩
+        cases hu : Bls.G1.uncompress b with
+        | error e => rw [hu] at hb; cases hb
+        | ok q => rw [hu] at hb; cases hb; rfl
       · cases h
     · cases h
   · cases h
