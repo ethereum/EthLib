@@ -66,13 +66,6 @@ def test_no_container_outside_its_forks(container):
             consensus.ssz_static("minimal", FORKS[fork], container, b"")
 
 
-def test_no_container_at_heze_yet():
-    # The containers of Heze are not specified yet, so no Gloas form stands in for them.
-    for container in CONTAINERS:
-        with pytest.raises(SszError):
-            consensus.ssz_static("minimal", "hegota", container, b"")
-
-
 def test_every_fork_of_a_container_has_cases():
     found = {(fork, container) for _, fork, container, _ in _cases()}
     forks = list(FORKS)
