@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Proofs
 public import EthLib.Networking.Proofs
 public import EthLib.Execution.Proofs
 public import EthLib.Consensus.Proofs
+public import EthLib.Engine.Proofs
 
 /-!
 # `EthLib.Proofs`

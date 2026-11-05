@@ -54,7 +54,7 @@ Each domain's proof tree is a root, so its modules belong here and not to `EthLi
 lean_lib «Proofs» where
   requiresModuleSystem := true
   roots := #[`EthLib.Proofs, `EthLib.Serialization.Proofs, `EthLib.Cryptography.Proofs, `EthLib.Networking.Proofs,
-    `EthLib.Execution.Proofs, `EthLib.Consensus.Proofs, `EthLib.Base.Proofs]
+    `EthLib.Execution.Proofs, `EthLib.Consensus.Proofs, `EthLib.Base.Proofs, `EthLib.Engine.Proofs]
   precompileModules := false
   platformIndependent := true
 
@@ -70,7 +70,7 @@ lean_lib «Exports» where
   requiresModuleSystem := true
   roots := #[`EthLib.Exports, `EthLib.Base.Exports, `EthLib.Cryptography.Exports,
     `EthLib.Networking.Exports, `EthLib.Execution.Exports, `EthLib.Consensus.Exports,
-    `EthLib.Serialization.Exports]
+    `EthLib.Serialization.Exports, `EthLib.Engine.Exports]
   precompileModules := true
 
 /-- Checks the compiled declarations of every library: their axioms, and any

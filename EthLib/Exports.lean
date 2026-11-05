@@ -8,6 +8,7 @@ public import EthLib.Networking.Exports
 public import EthLib.Execution.Exports
 public import EthLib.Consensus.Exports
 public import EthLib.Serialization.Exports
+public import EthLib.Engine.Exports
 
 /-!
 # `EthLib.Exports`

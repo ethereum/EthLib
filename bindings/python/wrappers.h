@@ -164,6 +164,7 @@ extern PyObject* VRF_ERROR;
 extern PyObject* TRIE_ERROR;
 extern PyObject* EVM_ERROR;
 extern PyObject* FEES_ERROR;
+extern PyObject* ENGINE_ERROR;
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
@@ -377,5 +378,7 @@ PyObject* py_state_dao_fork_root                         (PyObject* self, PyObje
 PyObject* py_state_rewards_root                           (PyObject* self, PyObject* args);
 
 PyObject* py_mainnet_active_fork                          (PyObject* self, PyObject* args);
+
+PyObject* py_engine_new_payload                          (PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */

@@ -61,6 +61,7 @@ PyObject* HKDF_ERROR;
 PyObject* AES_ERROR;
 PyObject* CONCAT_KDF_ERROR;
 PyObject* BLOCK_ERROR;
+PyObject* ENGINE_ERROR;
 PyObject* RLP_ERROR;
 PyObject* SSZ_ERROR;
 PyObject* SNAPPY_ERROR;
@@ -250,6 +251,11 @@ initialize_EthLib_EthLib_Serialization_Exports(
 
 extern lean_object*
 initialize_EthLib_EthLib_Base_Exports_ChainConfig(
+  uint8_t builtin
+);
+
+extern lean_object*
+initialize_EthLib_EthLib_Engine_Exports(
   uint8_t builtin
 );
 
@@ -665,6 +671,7 @@ static PyMethodDef methods[] = {
   {"state_dao_fork_root", py_state_dao_fork_root, METH_VARARGS, DOC_state_dao_fork_root},
   {"state_rewards_root", py_state_rewards_root, METH_VARARGS, DOC_state_rewards_root},
   {"mainnet_active_fork", py_mainnet_active_fork, METH_VARARGS, DOC_mainnet_active_fork},
+  {"engine_new_payload", py_engine_new_payload, METH_VARARGS, DOC_engine_new_payload},
   {NULL, NULL, 0, NULL},
 };
 
@@ -719,6 +726,7 @@ PyInit__native(void) {
     TRIE_ERROR = PyObject_GetAttrString(errors, "TrieError");
     EVM_ERROR = PyObject_GetAttrString(errors, "EvmError");
     FEES_ERROR = PyObject_GetAttrString(errors, "FeesError");
+    ENGINE_ERROR = PyObject_GetAttrString(errors, "EngineError");
     Py_DECREF(errors);
     if (PyErr_Occurred()) return NULL;
 
@@ -743,6 +751,10 @@ PyInit__native(void) {
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
       res = initialize_EthLib_EthLib_Base_Exports_ChainConfig(1);
+    }
+    if (lean_io_result_is_ok(res)) {
+      lean_dec_ref(res);
+      res = initialize_EthLib_EthLib_Engine_Exports(1);
     }
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
