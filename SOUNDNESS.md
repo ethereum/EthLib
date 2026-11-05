@@ -81,6 +81,11 @@ The correctness theorem is `verify_keyGen_sign` (`Proofs/Xmss/Correctness.lean`)
 If `keyGen seed` returns a key pair, and `sign` returns a signature for a message at a leaf index, then `verify` accepts that signature under that public key.
 It says nothing about unforgeability.
 
+In the random oracle model, signing fails with probability at most `2 exp(-4000)` (`prEvent_signWith_error_le`, `Proofs/Xmss/SignatureFailure.lean`).
+The theorem assumes that the oracle's cache holds no trial input of the two keys that sign when signing starts, as an empty cache does.
+It proves that the signer's own calls before each search add none.
+In the unforgeability game the adversary's queries fill the cache first, and no theorem bounds the failure there.
+
 Unforgeability is `Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability.lean`).
 In the random oracle model, an adversary whose experiment makes at most `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
 Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash `H` a query to the random oracle.

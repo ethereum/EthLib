@@ -118,6 +118,14 @@ Exactly that many 16-byte digests are codewords (`card_codeword`, `CodewordSearc
 In the random oracle model, all `2^32` trials of one search miss the code with probability exactly `(1 - |C| / 2^128)^(2^32)`, which is below `exp(-4000)` (`prEvent_findCodeword_none`, `prEvent_findCodeword_none_le`).
 The theorem assumes that the oracle's cache holds none of the trial inputs when the search starts, as an empty cache does.
 
+A whole signature fails with probability at most `2 exp(-4000)` (`prEvent_signWith_error_le`, `SignatureFailure.lean`).
+A trial input of a key carries the key's message address and a payload of one length.
+That length is 48 bytes on the bottom layer and 32 on the top.
+Before a key's search, the signer hashes no such input.
+Its other calls carry other addresses, and the input that grows the scheme seed has 40 bytes, too short to be a trial input.
+The theorem assumes that the cache holds no trial input of the two keys when signing starts, as an empty cache does (`prEvent_signWith_error_le_empty`).
+Then the cache still holds none when each search starts, so each search fails with probability at most `exp(-4000)`.
+
 **Domain separation.**
 Every hash call carries an address that says where in the key it happens, so that two calls never hash the same input by accident (`Address.lean`, `TweakableHash.lean`).
 An address determines its type, its position and both fields (`encodeAddress_inj`), and the two layers never share an address (`layerHi_inj`).
@@ -145,7 +153,7 @@ The proof, adapted from leanerVM's, reasons over these same definitions (`Proofs
 
 - No security property is proved beyond the random oracle model, so the theorem says nothing about an attack that uses the structure of Keccak-256.
 - Security against a quantum adversary is not proved.
-- No theorem bounds the failure of a whole signature.
-  The search bound covers one search, and no theorem shows that the signer's cache holds none of its trial inputs.
+- The failure bound of a whole signature assumes a starting cache with no trial input of its two keys.
+  In the unforgeability game the adversary's queries fill the cache first, and no theorem bounds the failure there.
 - No theorem says that this module and any other implementation compute the same keys and signatures.
   The test vectors check one key and one signature against an independent implementation.
