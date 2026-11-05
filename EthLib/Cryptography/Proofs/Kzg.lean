@@ -53,6 +53,7 @@ public import EthLib.Cryptography.Proofs.Kzg.PeerDasBatchGames
 public import EthLib.Cryptography.Proofs.Kzg.PeerDasColumnGames
 public import EthLib.Cryptography.Proofs.Kzg.SetupTorsion.Embedded
 public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Points
+public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.FourStep
 
 /-!
 # `EthLib.Cryptography.Proofs.Kzg`
