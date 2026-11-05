@@ -25,7 +25,9 @@ The challenge is a hash of the openings, so `P` is fixed before `r` is drawn.
 
 A nonzero `P` has at most `n - 1` roots.
 
-So a uniform `r` is a root with probability at most `(n - 1) / |Fr|`.
+Let the hash be a random oracle, which the adversary queries `q` times.
+
+It finds a root with probability at most `(q + 1) (n - 1) / |Fr|`.
 -/
 
 @[expose] public section

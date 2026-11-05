@@ -2,28 +2,26 @@ module
 
 public import EthLib.Cryptography.Proofs.Kzg.BatchBinding
 public import VCVio.OracleComp.Constructions.SampleableType.Measure
-public import VCVio.EvalDist.ProbabilityBounds
+public import VCVio.OracleComp.QueryTracking.RandomOracle.FreshQuery
 
 /-!
-# Proofs: a random challenge is rarely a root of the error polynomial
+# Proofs: a batch challenge from a random oracle is rarely a root of the error polynomial
 
 The batch check hashes its openings to the challenge `r`.
 
-With the hash as a random oracle, a query on new openings returns a uniform `r`.
+Here the hash is a random oracle, and the adversary may query it.
 
-The openings, and so the error polynomial, are fixed before that query.
+It may hash many batches and keep one whose challenge is a root of its error polynomial.
 
 A nonzero polynomial of degree at most `d` has at most `d` roots in `Fr`.
 
-So a uniform `r` is a root with probability at most `d / |Fr|`.
+So each new query lands on a root with probability at most `d / |Fr|`.
 
-For a batch of at most `n` openings, the degree is below `n`, so the bound is `(n - 1) / |Fr|`.
+The adversary makes at most `q` queries, and the verifier makes one more.
 
-The game below draws one challenge after the adversary has chosen its openings.
+So the adversary wins with probability at most `(q + 1) d / |Fr|`.
 
-It does not let the adversary query the oracle itself, so it bounds one attempt.
-
-An adversary that tries `q` sets of openings gets `q` such chances, which this file does not state.
+For a batch of at most `n` openings, `d` is `n - 1`.
 -/
 
 @[expose] public section
@@ -31,14 +29,19 @@ An adversary that tries `q` sets of openings gets `q` such chances, which this f
 namespace EthLib.Cryptography.Kzg
 
 open EthLib.Cryptography.Bls (Fr)
-open OracleComp ENNReal Polynomial
+open OracleComp OracleSpec ENNReal Polynomial
 open scoped EthLib.Cryptography.Bls.Fr
 
-/-- The adversary chooses openings `x`, with error polynomial `errorPoly x`.
+/-- The game of the batch challenge, with the hash as an oracle from batches `X` to `Fr`.
 
-Then the challenge is drawn uniformly, as a random oracle answers a new query. -/
-def batchRootExperiment {X : Type} (adversary : ProbComp X) : ProbComp (X × Fr) :=
-  adversary >>= fun x => Prod.mk x <$> ($ᵗ Fr)
+The adversary queries the oracle as it likes, then outputs a batch.
+
+The verifier hashes that batch to its challenge. -/
+def batchRomExperiment {X : Type} (adversary : OracleComp (X →ₒ Fr) X) :
+    OracleComp (X →ₒ Fr) (X × Fr) := do
+  let x ← adversary
+  let r ← liftM ((X →ₒ Fr).query x)
+  return (x, r)
 
 /-- A nonzero polynomial of degree at most `d` has at most `d` roots in `Fr`. -/
 theorem card_roots_filter_le (P : Fr[X]) {d : Nat} (hd : P.natDegree ≤ d) [DecidablePred
@@ -55,40 +58,82 @@ theorem card_roots_filter_le (P : Fr[X]) {d : Nat} (hd : P.natDegree ≤ d) [Dec
     _ ≤ P.natDegree := card_roots' P
     _ ≤ d := hd
 
-/-- **One challenge is a root with probability at most `d / |Fr|`.**
+/-- **The adversary of `q` queries wins with probability at most `(q + 1) d / r`.**
 
-Let every error polynomial have degree at most `d`.
+The hash is a lazily sampled random oracle.
 
-The event is that the polynomial of the openings is not zero, and has the challenge as a root.
+Each admissible batch has an error polynomial of degree at most `d`.
 
-Its probability is at most `d / r`, for the modulus `r` of `Fr`. -/
-theorem prEvent_batchRoot_le {X : Type} (errorPoly : X → Fr[X]) (adversary : ProbComp X)
-    {d : Nat} (hdeg : ∀ x, (errorPoly x).natDegree ≤ d) :
-    Pr{let y ← batchRootExperiment adversary}[errorPoly y.1 ≠ 0 ∧ (errorPoly y.1).eval y.2 = 0] ≤
-      d / Fr.modulus := by
-  unfold batchRootExperiment
-  refine prEvent_bind_le_of_forall_le adversary _ _ fun x => ?_
-  classical
-  rw [prEvent_map, SampleableType.prEvent_uniformSample, Fintype.card_fin]
-  gcongr
-  exact_mod_cast card_roots_filter_le (errorPoly x) (hdeg x)
+The adversary wins when its batch is admissible, and its error polynomial is not zero.
+
+It must also have the challenge of the batch as a root.
+
+The bound counts the `q` queries of the adversary and the one of the verifier. -/
+theorem prEvent_batchRomRoot_le {X : Type} [DecidableEq X] (errorPoly : X → Fr[X])
+    (admissible : X → Prop) {d : Nat} (hdeg : ∀ x, admissible x → (errorPoly x).natDegree ≤ d)
+    (adversary : OracleComp (X →ₒ Fr) X) {q : Nat} (hq : IsTotalQueryBound adversary q) :
+    Pr{let p ← (simulateQ randomOracle (batchRomExperiment adversary)).run' ∅}[
+        admissible p.1 ∧ errorPoly p.1 ≠ 0 ∧ (errorPoly p.1).eval p.2 = 0] ≤
+      (q + 1) * (d / Fr.modulus) := by
+  have hbound : IsTotalQueryBound (batchRomExperiment adversary) (q + 1) :=
+    isTotalQueryBound_bind hq fun _ =>
+      isTotalQueryBound_query_bind_iff.mpr ⟨Nat.one_pos, fun _ => trivial⟩
+  have h := prEvent_randomOracle_le_of_bad_queries (batchRomExperiment adversary) (q + 1) hbound
+    (fun p => admissible p.1 ∧ errorPoly p.1 ≠ 0 ∧ (errorPoly p.1).eval p.2 = 0)
+    (fun x g => admissible x ∧ errorPoly x ≠ 0 ∧ (errorPoly x).eval (g x) = 0)
+    (d / Fr.modulus) ?_ ?_
+  · simpa using h
+  · -- A new query is uniform, so it is a root with probability at most `d / r`.
+    intro x g
+    classical
+    simp only [Function.update_self]
+    by_cases ha : admissible x
+    · calc _ ≤ Pr{let u ← $ᵗ Fr}[errorPoly x ≠ 0 ∧ (errorPoly x).eval u = 0] :=
+            prEvent_mono _ _ _ fun _ h => h.2
+        _ ≤ _ := by
+          rw [SampleableType.prEvent_uniformSample, Fintype.card_fin]
+          gcongr
+          exact_mod_cast card_roots_filter_le _ (hdeg x ha)
+    · simp [ha]
+  · -- A winning batch is the last query of the game.
+    intro g hev
+    refine ⟨⟨evalWithAnswerFn (QueryImpl.ofFn g) adversary, g _⟩, ?_, ?_⟩
+    · rw [batchRomExperiment, tableQueryLog_bind, tableQueryLog_query_bind]
+      simp
+    · simpa [batchRomExperiment, evalWithAnswerFn_bind] using hev
+
+/-- The inputs of the hash of a batch of openings. -/
+structure OpeningBatch where
+  commitments : Array KZGCommitment
+  zs : Array Fr
+  ys : Array Fr
+  proofs : Array KZGProof
+deriving DecidableEq
 
 /-- **The bound for batches of at most `n` openings.**
 
-The adversary chooses the values and points of a batch.
+The hash of the batch check is a random oracle on its inputs.
 
-It also chooses the scalars `c` and `w` that the commitments and proofs represent.
+In a batch `x`, let commitment `i` represent `c x i`, and proof `i` represent `w x i`.
 
-Then a uniform challenge is a root of a nonzero error polynomial.
+The adversary makes `q` queries, then outputs a batch of at most `n` openings.
 
-Its probability is at most `(n - 1) / r`. -/
-theorem prEvent_batchErrorPoly_root_le {X : Type} (τ : Fr) (c y w z : X → Nat → Fr)
-    (size : X → Nat) {n : Nat} (hsize : ∀ x, size x ≤ n) (adversary : ProbComp X) :
-    Pr{let p ← batchRootExperiment adversary}[
-        batchErrorPoly τ (c p.1) (y p.1) (w p.1) (z p.1) (size p.1) ≠ 0 ∧
-        (batchErrorPoly τ (c p.1) (y p.1) (w p.1) (z p.1) (size p.1)).eval p.2 = 0] ≤
-      (n - 1 : Nat) / Fr.modulus :=
-  prEvent_batchRoot_le (fun x => batchErrorPoly τ (c x) (y x) (w x) (z x) (size x)) adversary
-    fun x => (natDegree_batchErrorPoly_le τ _ _ _ _ _).trans (Nat.sub_le_sub_right (hsize x) 1)
+The event is that the challenge of that batch is a root of its error polynomial, which is not zero.
+
+Its probability is at most `(q + 1) (n - 1) / r`. -/
+theorem prEvent_batchErrorPoly_root_le (τ : Fr) (c w : OpeningBatch → Nat → Fr) {n : Nat}
+    (adversary : OracleComp (OpeningBatch →ₒ Fr) OpeningBatch) {q : Nat}
+    (hq : IsTotalQueryBound adversary q) :
+    Pr{let p ← (simulateQ randomOracle (batchRomExperiment adversary)).run' ∅}[
+        p.1.commitments.size ≤ n ∧
+        batchErrorPoly τ (c p.1) (p.1.ys[·]!) (w p.1) (p.1.zs[·]!) p.1.commitments.size ≠ 0 ∧
+        (batchErrorPoly τ (c p.1) (p.1.ys[·]!) (w p.1) (p.1.zs[·]!)
+          p.1.commitments.size).eval p.2 = 0] ≤
+      (q + 1) * ((n - 1 : Nat) / Fr.modulus) :=
+  prEvent_batchRomRoot_le
+    (fun x => batchErrorPoly τ (c x) (x.ys[·]!) (w x) (x.zs[·]!) x.commitments.size)
+    (fun x => x.commitments.size ≤ n)
+    (fun _ hx => (natDegree_batchErrorPoly_le τ _ _ _ _ _).trans (Nat.sub_le_sub_right hx 1))
+    adversary hq
 
 end EthLib.Cryptography.Kzg

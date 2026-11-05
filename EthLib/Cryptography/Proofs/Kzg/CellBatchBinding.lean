@@ -523,29 +523,40 @@ theorem verifyCellKzgProofBatchImpl_valid_or_root (laws : Bls.PairingLaws) {s : 
   · exact Or.inl ((cellErrorPoly_eq_zero_iff τ c w _ _ _).mp hzero)
   · exact Or.inr ⟨hzero, verifyCellKzgProofBatchImpl_root laws hs hCd hPd hC hP h⟩
 
-/-! ## One uniform challenge -/
+/-! ## The challenge from a random oracle -/
+
+/-- The inputs of the hash of a batch of cells. -/
+structure CellBatch where
+  commitments : Array KZGCommitment
+  commitmentIndices : Array CommitmentIndex
+  cellIndices : Array CellIndex
+  cosetsEvals : Array CosetEvals
+  proofs : Array KZGProof
+deriving DecidableEq
 
 /-- **The bound for batches of at most `n` cells.**
 
-The adversary chooses the cells of a batch.
+The hash of the batch check is a random oracle on its inputs.
 
-It also chooses the scalars that the commitments and proofs represent.
+In a batch `x`, let commitment `i` represent `c x i`, and proof `k` represent `w x k`.
 
-Then a uniform challenge is a root of a nonzero error polynomial of the cells.
+The adversary makes `q` queries, then outputs a batch of at most `n` cells.
 
-Its probability is at most `(n - 1) / r`. -/
-theorem prEvent_cellErrorPoly_root_le {X : Type} (τ : Fr) (c w : X → Nat → Fr)
-    (commitmentIndices : X → Array CommitmentIndex) (cellIndices : X → Array CellIndex)
-    (cosetsEvals : X → Array CosetEvals) {n : Nat} (hsize : ∀ x, (cellIndices x).size ≤ n)
-    (adversary : ProbComp X) :
-    Pr{let p ← batchRootExperiment adversary}[
-        cellErrorPoly τ (c p.1) (w p.1) (commitmentIndices p.1) (cellIndices p.1)
-          (cosetsEvals p.1) ≠ 0 ∧
-        (cellErrorPoly τ (c p.1) (w p.1) (commitmentIndices p.1) (cellIndices p.1)
-          (cosetsEvals p.1)).eval p.2 = 0] ≤
-      (n - 1 : Nat) / Fr.modulus :=
-  prEvent_batchRoot_le (fun x => cellErrorPoly τ (c x) (w x) (commitmentIndices x) (cellIndices x)
-    (cosetsEvals x)) adversary
-    fun x => (natDegree_errorPoly_le _ _).trans (Nat.sub_le_sub_right (hsize x) 1)
+The event is that the challenge of that batch is a root of its error polynomial, which is not zero.
+
+Its probability is at most `(q + 1) (n - 1) / r`. -/
+theorem prEvent_cellErrorPoly_root_le (τ : Fr) (c w : CellBatch → Nat → Fr) {n : Nat}
+    (adversary : OracleComp (CellBatch →ₒ Fr) CellBatch) {q : Nat}
+    (hq : OracleComp.IsTotalQueryBound adversary q) :
+    Pr{let p ← (simulateQ OracleSpec.randomOracle (batchRomExperiment adversary)).run' ∅}[
+        p.1.cellIndices.size ≤ n ∧
+        cellErrorPoly τ (c p.1) (w p.1) p.1.commitmentIndices p.1.cellIndices p.1.cosetsEvals ≠ 0 ∧
+        (cellErrorPoly τ (c p.1) (w p.1) p.1.commitmentIndices p.1.cellIndices
+          p.1.cosetsEvals).eval p.2 = 0] ≤
+      (q + 1) * ((n - 1 : Nat) / Fr.modulus) :=
+  prEvent_batchRomRoot_le
+    (fun x => cellErrorPoly τ (c x) (w x) x.commitmentIndices x.cellIndices x.cosetsEvals)
+    (fun x => x.cellIndices.size ≤ n)
+    (fun _ hx => (natDegree_errorPoly_le _ _).trans (Nat.sub_le_sub_right hx 1)) adversary hq
 
 end EthLib.Cryptography.Kzg
