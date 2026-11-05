@@ -185,6 +185,26 @@ theorem mainnet_activeFork_ne_consensus (h : mainnet.activeFork n t = some f) :
   revert hf
   cases f <;> decide
 
+/-! ## Hoodi -/
+
+/-- Hoodi lists its forks in the order of the timeline, with activations in order. -/
+theorem hoodi_ordered : hoodi.Ordered := by
+  decide
+
+/-- Some fork is active at every block of Hoodi, since Frontier holds from block 0. -/
+theorem hoodi_activeFork_isSome (n t : Nat) : ∃ f, hoodi.activeFork n t = some f := by
+  cases h : hoodi.activeFork n t with
+  | none =>
+    have := activeFork_eq_none_iff.mp h .frontier (.block 0) (by decide)
+    simp [Activation.reached] at this
+  | some f => exact ⟨f, rfl⟩
+
+/-- Every block of Hoodi has at least the rules of Dencun. -/
+theorem hoodi_dencun_le (h : hoodi.activeFork n t = some f) : .dencun ≤ f := by
+  have hDencun : (Fork.dencun, Activation.time 0) ∈ hoodi.activations := by decide
+  obtain ⟨-, hmax⟩ := activeFork_eq_some_iff.mp h
+  exact hmax .dencun (.time 0) hDencun (by simp [Activation.reached])
+
 end ChainConfig
 
 end EthLib.Base
