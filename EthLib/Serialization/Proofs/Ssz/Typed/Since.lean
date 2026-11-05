@@ -125,6 +125,14 @@ instance {last fork : Fork} {α : Type} [SszType α] [LawfulSszType α] :
     LawfulSszFields (Until last fork α) :=
   lawful_presentFields (fork < last) α
 
+instance {first last fork : Fork} {α β : Type} [SszType α] [LawfulSszType α] [SszFields β]
+    [LawfulSszFields β] : LawfulSszFields (During first last fork α × β) :=
+  lawful_presentFieldsProd (first ≤ fork ∧ fork < last) α β
+
+instance {first last fork : Fork} {α : Type} [SszType α] [LawfulSszType α] :
+    LawfulSszFields (During first last fork α) :=
+  lawful_presentFields (first ≤ fork ∧ fork < last) α
+
 /-- Fields that appear at a fork keep their names distinct, when all their names are distinct. -/
 theorem sinceNames_sublist {first fork : Fork} (names : List String) :
     (sinceNames first fork names).Sublist names := by
@@ -137,6 +145,14 @@ theorem sinceNames_sublist {first fork : Fork} (names : List String) :
 theorem untilNames_sublist {last fork : Fork} (names : List String) :
     (untilNames last fork names).Sublist names := by
   unfold untilNames
+  split
+  · exact List.Sublist.refl names
+  · exact List.nil_sublist names
+
+/-- Fields present between two forks keep their names distinct, when all their names are. -/
+theorem duringNames_sublist {first last fork : Fork} (names : List String) :
+    (duringNames first last fork names).Sublist names := by
+  unfold duringNames
   split
   · exact List.Sublist.refl names
   · exact List.nil_sublist names

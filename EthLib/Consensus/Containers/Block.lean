@@ -1,8 +1,10 @@
 module
 
 public import EthLib.Consensus.Containers.Attestation
+public import EthLib.Consensus.Containers.Bid
 public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.Operations
+public import EthLib.Consensus.Containers.PayloadAttestation
 public import EthLib.Consensus.Containers.Requests
 public import EthLib.Consensus.Containers.SyncCommittee
 public import EthLib.Cryptography.Kzg.Core
@@ -15,6 +17,14 @@ The beacon block, its body and its signed form, at every fork.
 The body is one type for every fork, and each fork adds its fields after those of the forks before.
 
 A field that a later fork adds holds nothing at the forks before it, and its codec skips it.
+
+So does a field that a later fork removes, from that fork on.
+
+From Gloas the body is a progressive container, and its lists have no limit in their type.
+
+[EIP-7688] makes that change.
+
+[EIP-7688]: https://eips.ethereum.org/EIPS/eip-7688#converted-types
 -/
 
 @[expose] public section
@@ -22,6 +32,33 @@ A field that a later fork adds holds nothing at the forks before it, and its cod
 namespace EthLib.Consensus
 
 open Base Cryptography.Bls Cryptography.Kzg Serialization.Ssz
+
+/-- The proposer slashings of a block. -/
+abbrev ProposerSlashings (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork ProposerSlashing preset.MAX_PROPOSER_SLASHINGS.toNat
+
+/-- The attester slashings of a block. -/
+abbrev AttesterSlashings (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork (AttesterSlashing preset fork)
+    (parameters preset fork).MAX_ATTESTER_SLASHINGS.toNat
+
+/-- The attestations of a block. -/
+abbrev Attestations (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork (Attestation preset fork)
+    (parameters preset fork).MAX_ATTESTATIONS.toNat
+
+/-- The deposits of a block. -/
+abbrev Deposits (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork Deposit preset.MAX_DEPOSITS.toNat
+
+/-- The voluntary exits of a block. -/
+abbrev VoluntaryExits (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork SignedVoluntaryExit preset.MAX_VOLUNTARY_EXITS.toNat
+
+/-- From Capella: the changes of withdrawal credentials of a block. -/
+abbrev BLSToExecutionChanges (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork SignedBLSToExecutionChange
+    preset.MAX_BLS_TO_EXECUTION_CHANGES.toNat
 
 /-- The body of a beacon block: the operations and data that the proposer includes.
 
@@ -31,8 +68,15 @@ Capella adds the changes of withdrawal credentials.
 
 Deneb adds the commitments to the blobs of [EIP-4844], and Electra the requests of [EIP-7685].
 
+Gloas moves the payload, the commitments and the requests to the envelope of the builder.
+
+In their place it adds the bid of the builder, the payload votes and the parent's requests.
+
+[EIP-7732] specifies these changes.
+
 [EIP-4844]: https://eips.ethereum.org/EIPS/eip-4844#consensus-layer-validation
 [EIP-7685]: https://eips.ethereum.org/EIPS/eip-7685#consensus-layer
+[EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#modified-containers
 -/
 structure BeaconBlockBody (preset : Preset) (fork : Fork) where
   /-- The proposer's signature of the epoch, which feeds the RANDAO mix. -/
@@ -42,29 +86,31 @@ structure BeaconBlockBody (preset : Preset) (fork : Fork) where
   /-- Free bytes that the proposer chooses. -/
   graffiti : Bytes32
   /-- The proposer slashings. -/
-  proposerSlashings : SszList ProposerSlashing preset.MAX_PROPOSER_SLASHINGS.toNat
+  proposerSlashings : ProposerSlashings preset fork
   /-- The attester slashings. -/
-  attesterSlashings :
-    SszList (AttesterSlashing preset fork) (parameters preset fork).MAX_ATTESTER_SLASHINGS.toNat
+  attesterSlashings : AttesterSlashings preset fork
   /-- The attestations. -/
-  attestations : SszList (Attestation preset fork) (parameters preset fork).MAX_ATTESTATIONS.toNat
+  attestations : Attestations preset fork
   /-- The deposits. -/
-  deposits : SszList Deposit preset.MAX_DEPOSITS.toNat
+  deposits : Deposits preset fork
   /-- The voluntary exits. -/
-  voluntaryExits : SszList SignedVoluntaryExit preset.MAX_VOLUNTARY_EXITS.toNat
+  voluntaryExits : VoluntaryExits preset fork
   /-- From Altair: the signature of the sync committee on the parent block. -/
   syncAggregate : Since .altair fork (SyncAggregate preset)
-  /-- From Bellatrix: the execution payload. -/
-  executionPayload : Since .bellatrix fork (ExecutionPayload preset fork)
+  /-- From Bellatrix to Fulu: the execution payload. -/
+  executionPayload : During .bellatrix .glamsterdam fork (ExecutionPayload preset fork)
   /-- From Capella: the changes of withdrawal credentials. -/
-  blsToExecutionChanges :
-    Since .shapella fork
-      (SszList SignedBLSToExecutionChange preset.MAX_BLS_TO_EXECUTION_CHANGES.toNat)
-  /-- From Deneb: the commitments to the blobs of the block. -/
-  blobKzgCommitments :
-    Since .dencun fork (SszList KZGCommitment preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat)
-  /-- From Electra: the requests of the execution payload. -/
-  executionRequests : Since .pectra fork (ExecutionRequests preset fork)
+  blsToExecutionChanges : Since .shapella fork (BLSToExecutionChanges preset fork)
+  /-- From Deneb to Fulu: the commitments to the blobs of the block. -/
+  blobKzgCommitments : During .dencun .glamsterdam fork (BlobKZGCommitments preset fork)
+  /-- From Electra to Fulu: the requests of the execution payload. -/
+  executionRequests : During .pectra .glamsterdam fork (ExecutionRequests preset fork)
+  /-- From Gloas: the bid of the builder whose payload the block takes. -/
+  signedExecutionPayloadBid : Since .glamsterdam fork (SignedExecutionPayloadBid preset fork)
+  /-- From Gloas: the payload votes on the parent block. -/
+  payloadAttestations : Since .glamsterdam fork (PayloadAttestations preset)
+  /-- From Gloas: the requests of the payload of the parent block. -/
+  parentExecutionRequests : Since .glamsterdam fork (ExecutionRequests preset fork)
 
 namespace BeaconBlockBody
 
@@ -73,22 +119,30 @@ def names (fork : Fork) : List String :=
   ["randao_reveal", "eth1_data", "graffiti", "proposer_slashings", "attester_slashings",
     "attestations", "deposits", "voluntary_exits"] ++
   sinceNames .altair fork ["sync_aggregate"] ++
-  sinceNames .bellatrix fork ["execution_payload"] ++
+  duringNames .bellatrix .glamsterdam fork ["execution_payload"] ++
   sinceNames .shapella fork ["bls_to_execution_changes"] ++
-  sinceNames .dencun fork ["blob_kzg_commitments"] ++
-  sinceNames .pectra fork ["execution_requests"]
+  duringNames .dencun .glamsterdam fork ["blob_kzg_commitments"] ++
+  duringNames .pectra .glamsterdam fork ["execution_requests"] ++
+  sinceNames .glamsterdam fork
+    ["signed_execution_payload_bid", "payload_attestations", "parent_execution_requests"]
+
+/-- From Gloas: the layout of a body, its thirteen fields in their order. -/
+def activeFields : List Bool := List.replicate 13 true
 
 instance {preset : Preset} {fork : Fork} : SszType (BeaconBlockBody preset fork) :=
-  .container (names fork)
+  .forkContainer .glamsterdam fork activeFields (names fork)
     (fun b => (b.randaoReveal, b.eth1Data, b.graffiti, b.proposerSlashings, b.attesterSlashings,
       b.attestations, b.deposits, b.voluntaryExits, b.syncAggregate, b.executionPayload,
-      b.blsToExecutionChanges, b.blobKzgCommitments, b.executionRequests))
+      b.blsToExecutionChanges, b.blobKzgCommitments, b.executionRequests,
+      b.signedExecutionPayloadBid, b.payloadAttestations, b.parentExecutionRequests))
     (fun (randaoReveal, eth1Data, graffiti, proposerSlashings, attesterSlashings, attestations,
         deposits, voluntaryExits, syncAggregate, executionPayload, blsToExecutionChanges,
-        blobKzgCommitments, executionRequests) =>
+        blobKzgCommitments, executionRequests, signedExecutionPayloadBid, payloadAttestations,
+        parentExecutionRequests) =>
       ⟨randaoReveal, eth1Data, graffiti, proposerSlashings, attesterSlashings, attestations,
         deposits, voluntaryExits, syncAggregate, executionPayload, blsToExecutionChanges,
-        blobKzgCommitments, executionRequests⟩)
+        blobKzgCommitments, executionRequests, signedExecutionPayloadBid, payloadAttestations,
+        parentExecutionRequests⟩)
 
 end BeaconBlockBody
 

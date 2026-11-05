@@ -29,6 +29,10 @@ def sinceNames (first fork : Fork) (names : List String) : List String :=
 def untilNames (last fork : Fork) (names : List String) : List String :=
   if fork < last then names else []
 
+/-- The names of fields that one fork adds and a later fork removes. -/
+def duringNames (first last fork : Fork) (names : List String) : List String :=
+  if first ≤ fork ∧ fork < last then names else []
+
 /-- A field present when `p` holds, in front of the fields that follow it. -/
 abbrev presentFieldsProd (p : Prop) [Decidable p] (α β : Type) [SszType α] [SszFields β] :
     SszFields ((p → α) × β) where
@@ -78,5 +82,15 @@ instance {last fork : Fork} {α β : Type} [SszType α] [SszFields β] :
 /-- A field that a fork removes, as the last field of a container. -/
 instance {last fork : Fork} {α : Type} [SszType α] : SszFields (Until last fork α) :=
   presentFields (fork < last) α
+
+/-- A field that one fork adds and a later fork removes, in front of the fields that follow it. -/
+instance {first last fork : Fork} {α β : Type} [SszType α] [SszFields β] :
+    SszFields (During first last fork α × β) :=
+  presentFieldsProd (first ≤ fork ∧ fork < last) α β
+
+/-- A field that one fork adds and a later fork removes, as the last field of a container. -/
+instance {first last fork : Fork} {α : Type} [SszType α] :
+    SszFields (During first last fork α) :=
+  presentFields (first ≤ fork ∧ fork < last) α
 
 end EthLib.Serialization.Ssz
