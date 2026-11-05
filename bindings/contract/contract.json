@@ -4369,10 +4369,16 @@
    "signature": "(opcode: int, a: bytes, b: bytes, c: bytes) -> bytes",
    "operation": "EthLib.Execution.Evm.Exports.wordOpExport",
    "method": "evm_word_op",
-   "errors": [],
+   "errors":
+   [{"type": "EthLib.Execution.Evm.Exports.ArgumentError",
+     "codes":
+     [{"constructor": "operandLength", "code": 101},
+      {"constructor": "rangesLength", "code": 102},
+      {"constructor": "senderLength", "code": 103},
+      {"constructor": "saltLength", "code": 104}]}],
    "error_class": "EvmError",
    "docstring":
-   "The word that the instruction of an opcode pushes.\n\nEach opcode is read at a fork that has it.\n\nAn opcode outside the table fails with code 0, since no Lean error type covers it."},
+   "The word that the instruction of an opcode pushes.\n\nEach opcode is read at a fork that has it.\n\nEach operand is a word of 32 bytes.\n\nAn opcode outside the table fails with code 0, since no Lean error type covers it."},
   {"summary":
    "The depths, counted from 1 at the top, that the immediate byte of an opcode encodes.",
    "signature": "(opcode: int, immediate: int) -> bytes",
@@ -4393,18 +4399,31 @@
    "signature": "(current_size: bytes, ranges: bytes) -> bytes",
    "operation": "EthLib.Execution.Evm.Exports.extendMemoryCostExport",
    "method": "evm_extend_memory_cost",
-   "errors": [],
-   "error_class": null,
-   "docstring": "The price of growing a memory for a list of ranges."},
+   "errors":
+   [{"type": "EthLib.Execution.Evm.Exports.ArgumentError",
+     "codes":
+     [{"constructor": "operandLength", "code": 101},
+      {"constructor": "rangesLength", "code": 102},
+      {"constructor": "senderLength", "code": 103},
+      {"constructor": "saltLength", "code": 104}]}],
+   "error_class": "EvmError",
+   "docstring":
+   "The price of growing a memory for a list of ranges.\n\nEach range is a start word, then a size word, so the ranges are a multiple of 64 bytes."},
   {"summary":
    "The number of bytes that a memory grows by for a list of ranges.",
    "signature": "(current_size: bytes, ranges: bytes) -> bytes",
    "operation": "EthLib.Execution.Evm.Exports.extendMemoryExpandByExport",
    "method": "evm_extend_memory_expand_by",
-   "errors": [],
-   "error_class": null,
+   "errors":
+   [{"type": "EthLib.Execution.Evm.Exports.ArgumentError",
+     "codes":
+     [{"constructor": "operandLength", "code": 101},
+      {"constructor": "rangesLength", "code": 102},
+      {"constructor": "senderLength", "code": 103},
+      {"constructor": "saltLength", "code": 104}]}],
+   "error_class": "EvmError",
    "docstring":
-   "The number of bytes that a memory grows by for a list of ranges."},
+   "The number of bytes that a memory grows by for a list of ranges.\n\nEach range is a start word, then a size word, so the ranges are a multiple of 64 bytes."},
   {"summary":
    "The address of the contract that a sender makes with CREATE at a big-endian nonce.",
    "signature": "(sender: bytes, nonce: bytes) -> bytes",
@@ -4426,19 +4445,31 @@
       {"constructor": "wrongLength", "code": 11},
       {"constructor": "scalarTooLarge", "code": 12},
       {"constructor": "wrongFieldCount", "code": 13},
-      {"constructor": "inField", "code": 14}]}],
-   "error_class": "RlpError",
+      {"constructor": "inField", "code": 14}]},
+    {"type": "EthLib.Execution.Evm.Exports.ArgumentError",
+     "codes":
+     [{"constructor": "operandLength", "code": 101},
+      {"constructor": "rangesLength", "code": 102},
+      {"constructor": "senderLength", "code": 103},
+      {"constructor": "saltLength", "code": 104}]}],
+   "error_class": "EvmError",
    "docstring":
-   "The address of the contract that a sender makes with CREATE at a big-endian nonce."},
+   "The address of the contract that a sender makes with CREATE at a big-endian nonce.\n\nThe sender is an address of 20 bytes."},
   {"summary":
    "The address of the contract that a sender makes with CREATE2, from a salt and init code.",
    "signature": "(sender: bytes, salt: bytes, init_code: bytes) -> bytes",
    "operation": "EthLib.Execution.Evm.Exports.create2AddressExport",
    "method": "evm_create2_address",
-   "errors": [],
-   "error_class": null,
+   "errors":
+   [{"type": "EthLib.Execution.Evm.Exports.ArgumentError",
+     "codes":
+     [{"constructor": "operandLength", "code": 101},
+      {"constructor": "rangesLength", "code": 102},
+      {"constructor": "senderLength", "code": 103},
+      {"constructor": "saltLength", "code": 104}]}],
+   "error_class": "EvmError",
    "docstring":
-   "The address of the contract that a sender makes with CREATE2, from a salt and init code."},
+   "The address of the contract that a sender makes with CREATE2, from a salt and init code.\n\nThe sender is an address of 20 bytes, and the salt is a word of 32 bytes."},
   {"summary": "`RLP` of the Yellow Paper: the encoding of an item.",
    "signature": "(item: Any) -> bytes",
    "operation": "EthLib.Serialization.Rlp.encode",

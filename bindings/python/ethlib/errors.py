@@ -172,7 +172,7 @@ class VrfError(EthLibError, ValueError):
 
 
 class EvmError(EthLibError, ValueError):
-    """An opcode does not push a word of its operands alone, with code 0."""
+    """An EVM export rejected an opcode, an immediate byte, a length or a CREATE preimage."""
 
 
 class FeesError(EthLibError, ValueError):

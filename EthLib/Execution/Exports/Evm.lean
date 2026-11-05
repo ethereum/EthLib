@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Bytes
 public import EthLib.Base.Exports
 public import EthLib.Execution.Evm.Call.ContractAddress
 public import EthLib.Execution.Evm.Gas
@@ -21,19 +22,59 @@ A size or a price crosses it as its shortest big-endian bytes, so no value is tr
 An opcode outside the table of words fails with code 0.
 
 So does an immediate byte that encodes no depth of DUPN, SWAPN or EXCHANGE.
+
+An argument of the wrong length fails with a code from 101, above every code of an RLP error.
 -/
 
-public section
+@[expose] public section
 
 namespace EthLib.Execution.Evm.Exports
 
-open EthLib.Base (Address U256 bytesToNat natToBytes)
+open EthLib.Base (Address U256 bytesToNat natToBytes readBytes)
 open EthLib.Exports (Result)
 open EthLib.Execution.Evm.Instructions
+
+/-- Why an export rejects an argument: the argument has the wrong length. -/
+inductive ArgumentError where
+  /-- An operand of an instruction is not a word of 32 bytes. -/
+  | operandLength
+  /-- A list of memory ranges is not a whole number of pairs of words, of 64 bytes each. -/
+  | rangesLength
+  /-- A sender is not an address of 20 bytes. -/
+  | senderLength
+  /-- A salt of CREATE2 is not a word of 32 bytes. -/
+  | saltLength
+  deriving Repr, DecidableEq
+
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The codes start at 101, above every code of an RLP error, so that the two never meet.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def ArgumentError.code : ArgumentError → UInt32
+  | .operandLength => 101
+  | .rangesLength => 102
+  | .senderLength => 103
+  | .saltLength => 104
+
+/-- The message of an error, as the bindings raise it. -/
+def ArgumentError.message : ArgumentError → String
+  | .operandLength => "each operand must be 32 bytes"
+  | .rangesLength => "the ranges must be a whole number of 64-byte pairs"
+  | .senderLength => "the sender must be 20 bytes"
+  | .saltLength => "the salt must be 32 bytes"
+
+/-- The code and the message of an error, as an export returns them. -/
+def ArgumentError.toResult (e : ArgumentError) : UInt32 × String :=
+  (e.code, e.message)
 
 /-- The word of big-endian bytes, reduced modulo `2^256`. -/
 def wordOf (bytes : ByteArray) : U256 :=
   BitVec.ofNat 256 (bytesToNat bytes.toList)
+
+/-- The word of exactly 32 big-endian bytes, or the given error for any other length. -/
+def readWord (error : ArgumentError) (bytes : ByteArray) : Result U256 :=
+  if bytes.size = 32 then .ok (wordOf bytes) else .error error.toResult
 
 /-- The 32 big-endian bytes of a word. -/
 def bytesOfWord (w : U256) : ByteArray :=
@@ -82,10 +123,16 @@ def wordOp (op : Op) (a b c : U256) : Option U256 :=
 
 Each opcode is read at a fork that has it.
 
+Each operand is a word of 32 bytes.
+
 An opcode outside the table fails with code 0, since no Lean error type covers it. -/
 @[export eth_evm_word_op]
-def wordOpExport (opcode : UInt8) (a b c : ByteArray) : Result ByteArray :=
-  match (Op.decode opcode).bind fun op => wordOp op (wordOf a) (wordOf b) (wordOf c) with
+def wordOpExport (opcode : UInt8) (a b c : ByteArray) : Result ByteArray := do
+  -- The lengths come first, so a bad operand fails even with an opcode outside the table.
+  let a ← readWord .operandLength a
+  let b ← readWord .operandLength b
+  let c ← readWord .operandLength c
+  match (Op.decode opcode).bind fun op => wordOp op a b c with
   | some w => .ok (bytesOfWord w)
   | none => .error (0, s!"opcode {opcode} does not push a word of its operands alone")
 
@@ -118,29 +165,46 @@ def rangesOf (ranges : ByteArray) : List (U256 × U256) :=
     let size := ranges.extract (64 * i + 32) (64 * i + 64)
     (wordOf start, wordOf size)
 
-/-- The price of growing a memory for a list of ranges. -/
+/-- The ranges of a memory access, or the error for a length that is not a multiple of 64. -/
+def readRanges (ranges : ByteArray) : Result (List (U256 × U256)) :=
+  if ranges.size % 64 = 0 then .ok (rangesOf ranges)
+  else .error ArgumentError.rangesLength.toResult
+
+/-- The price of growing a memory for a list of ranges.
+
+Each range is a start word, then a size word, so the ranges are a multiple of 64 bytes. -/
 @[export eth_evm_extend_memory_cost]
-def extendMemoryCostExport (size ranges : ByteArray) : ByteArray :=
-  bytesOfNat (extendMemory (bytesToNat size.toList) (rangesOf ranges)).cost
+def extendMemoryCostExport (size ranges : ByteArray) : Result ByteArray := do
+  return bytesOfNat (extendMemory (bytesToNat size.toList) (← readRanges ranges)).cost
 
-/-- The number of bytes that a memory grows by for a list of ranges. -/
+/-- The number of bytes that a memory grows by for a list of ranges.
+
+Each range is a start word, then a size word, so the ranges are a multiple of 64 bytes. -/
 @[export eth_evm_extend_memory_expand_by]
-def extendMemoryExpandByExport (size ranges : ByteArray) : ByteArray :=
-  bytesOfNat (extendMemory (bytesToNat size.toList) (rangesOf ranges)).expandBy
+def extendMemoryExpandByExport (size ranges : ByteArray) : Result ByteArray := do
+  return bytesOfNat (extendMemory (bytesToNat size.toList) (← readRanges ranges)).expandBy
 
-/-- The address in the first 20 bytes, with zeros past the end; the caller passes 20 bytes. -/
-def addressOf (bytes : ByteArray) : Address :=
-  Vector.ofFn fun i => bytes.get! i
+/-- The address of exactly 20 bytes, or the error for any other length. -/
+def readAddress (bytes : ByteArray) : Result Address :=
+  if h : bytes.size = 20 then .ok (readBytes bytes 0 20 (by omega))
+  else .error ArgumentError.senderLength.toResult
 
-/-- The address of the contract that a sender makes with CREATE at a big-endian nonce. -/
+/-- The address of the contract that a sender makes with CREATE at a big-endian nonce.
+
+The sender is an address of 20 bytes. -/
 @[export eth_evm_create_address]
-def createAddressExport (sender nonce : ByteArray) : Result ByteArray :=
-  (createAddress (addressOf sender) (bytesToNat nonce.toList)).map (fun a => ⟨a.toArray⟩)
+def createAddressExport (sender nonce : ByteArray) : Result ByteArray := do
+  let sender ← readAddress sender
+  (createAddress sender (bytesToNat nonce.toList)).map (fun a => ⟨a.toArray⟩)
     |>.mapError fun e => (e.code, s!"create preimage rejected: {reprStr e}")
 
-/-- The address of the contract that a sender makes with CREATE2, from a salt and init code. -/
+/-- The address of the contract that a sender makes with CREATE2, from a salt and init code.
+
+The sender is an address of 20 bytes, and the salt is a word of 32 bytes. -/
 @[export eth_evm_create2_address]
-def create2AddressExport (sender salt initCode : ByteArray) : ByteArray :=
-  ⟨(create2Address (addressOf sender) (wordOf salt) initCode).toArray⟩
+def create2AddressExport (sender salt initCode : ByteArray) : Result ByteArray := do
+  let sender ← readAddress sender
+  let salt ← readWord .saltLength salt
+  return ⟨(create2Address sender salt initCode).toArray⟩
 
 end EthLib.Execution.Evm.Exports
