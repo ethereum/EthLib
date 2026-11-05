@@ -4,7 +4,6 @@ public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Xmss.CodeSize
 public import EthLib.Cryptography.Proofs.Xmss.TweakableHash
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Convert
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.RandomOracle
 
 /-!
 # Proofs: the codeword search rarely fails, in the random-oracle model
@@ -92,22 +91,8 @@ theorem card_not_codeword : Nat.card {d : Digest // codeword? d = none} = 2 ^ 12
 theorem prEvent_halfOf_ofOutput (P : Digest → Prop) :
     Pr{let u ← $ᵗ XmssSecurity.HashOutput}[P (halfOf 0 (Unforgeability.ofOutput u))]
       = (Nat.card {d : Digest // P d} : ℝ≥0∞) / 2 ^ 128 := by
-  classical
   simp only [Unforgeability.halfOf_zero_ofOutput]
-  rw [← prEvent_map ($ᵗ XmssSecurity.HashOutput) XmssSecurity.truncateHash
-      (fun b => P (Unforgeability.ofDigest b)),
-    EvalDistEq.prEvent_eq XmssSecurity.Rom.evalDist_truncate_uniformHashOutput,
-    SampleableType.prEvent_uniformSample, ← Fintype.card_subtype, ← Nat.card_eq_fintype_card]
-  have hc : Nat.card {b : XmssSecurity.Digest // P (Unforgeability.ofDigest b)} =
-      Nat.card {d : Digest // P d} :=
-    Nat.card_congr
-      { toFun := fun b => ⟨Unforgeability.ofDigest b.1, b.2⟩
-        invFun := fun d => ⟨Unforgeability.toDigest d.1, by simpa using d.2⟩
-        left_inv := fun b => by simp
-        right_inv := fun d => by simp }
-  rw [hc]
-  congr 1
-  norm_num [XmssSecurity.digestBits]
+  exact HashSig.prEvent_ofBV_truncateHash P
 
 /-- One fresh trial misses the code with probability `1 - |C| / 2^128`. -/
 theorem prEvent_not_codeword :
@@ -152,18 +137,6 @@ theorem prEvent_findCodeword_none (pp : PublicParam) (layer : Layer) (e : UInt32
     exact trialRandomizer_inj base (by simpa [MAX_RANDOMIZER_TRIALS] using hj)
       (by simpa [MAX_RANDOMIZER_TRIALS] using hj') hrho
 
-/-- The fraction `(2^n - C) / 2^n` is `1 - C / 2^n`, as an extended real. -/
-theorem ofReal_one_sub_div (C n : ℕ) (hC : C ≤ 2 ^ n) :
-    (((2 ^ n - C : ℕ) : ℝ≥0∞) / 2 ^ n) = ENNReal.ofReal (1 - (C : ℝ) / 2 ^ n) := by
-  have hpos : (0 : ℝ) < 2 ^ n := by positivity
-  have h : (1 : ℝ) - C / 2 ^ n = ((2 ^ n - C : ℕ) : ℝ) / 2 ^ n := by
-    rw [Nat.cast_sub hC]
-    field_simp
-    push_cast
-    ring
-  rw [h, ENNReal.ofReal_div_of_pos hpos, ENNReal.ofReal_natCast, ENNReal.ofReal_pow (by norm_num)]
-  norm_num
-
 /-- With uniform digests, all `2^32` trials miss the code with probability below `exp(-4000)`.
 
 `(1 - p)^(2^32) <= exp(-p)^(2^32) = exp(-2^32 p)`, and `2^32 p >= 4000`. -/
@@ -198,7 +171,8 @@ theorem prEvent_findCodeword_none_le (pp : PublicParam) (layer : Layer) (e : UIn
         Unforgeability.queryH pp layer e msg base 0 MAX_RANDOMIZER_TRIALS)).run' cache}[z = none]
       ≤ ENNReal.ofReal (Real.exp (-4000)) := by
   rw [prEvent_findCodeword_none pp layer e msg base cache hfresh,
-    ofReal_one_sub_div _ _ (by simp [CODE_SIZE]), ← ENNReal.ofReal_pow (by norm_num [CODE_SIZE])]
+    HashSig.ofReal_one_sub_div _ _ (by simp [CODE_SIZE]),
+    ← ENNReal.ofReal_pow (by norm_num [CODE_SIZE])]
   exact ENNReal.ofReal_le_ofReal all_trials_fail_probability
 
 /-- From an empty cache, all `2^32` trials miss the code with probability below `exp(-4000)`. -/

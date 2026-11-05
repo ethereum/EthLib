@@ -1,12 +1,13 @@
 module
 
-public import VCVio.OracleComp.QueryTracking.LoggingOracle.Core
-public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
+public import EthLib.Cryptography.Proofs.HashSig.Bytes
 
 /-!
 # The leanXMSS model: parameters, types and hash inputs
 
 The model writes values as bit vectors and hash inputs as byte lists.
+
+The oracle, its inputs and answers, and the byte encoding are shared with leanSPHINCS.
 
 Every hash input is byte for byte the one of EthLib's algorithms.
 
@@ -19,10 +20,11 @@ open OracleComp OracleSpec ENNReal
 
 namespace XmssSecurity
 
+export EthLib.Cryptography.HashSig
+  (digestBits hashOutputBits HashInput HashOutput HashSpec OracleWorld truncateHash bytesLE)
+
 /-! ## The instance: parameters, types, and hash-input layout -/
 
-def digestBits : Nat := 128
-def hashOutputBits : Nat := 256
 def messageBits : Nat := 256
 def publicParameterBits : Nat := 128
 def randomnessBits : Nat := 128
@@ -44,7 +46,6 @@ def targetSum : Nat := 106
 abbrev MasterSeed := BitVec 256
 
 abbrev Digest := BitVec digestBits
-abbrev HashOutput := BitVec hashOutputBits
 abbrev Message := BitVec messageBits
 abbrev PublicParameter := BitVec publicParameterBits
 abbrev Randomness := BitVec randomnessBits
@@ -71,11 +72,6 @@ abbrev TopNode := Fin topLifetime
 /-- A pair of chains `(2t, 2t + 1)`, `t < 29`: one seed derivation. -/
 abbrev ChainPair := Fin (numChains / 2)
 abbrev Encoding := ChainIndex → Digit
-abbrev HashInput := List UInt8
-
-/-- Keep the first 128 output bits, the low bits of the little-endian bit vector. -/
-def truncateHash (output : HashOutput) : Digest :=
-  output.extractLsb' 0 digestBits
 
 /-- The second 16 bytes of a hash output.
 
@@ -137,11 +133,6 @@ structure Signature where
   authPath : Fin treeHeight → Digest
   top : LayerSignature
 deriving DecidableEq
-
-/-- Serialize a bit vector into a fixed number of bytes, least significant byte first. -/
-def bytesLE (byteCount : Nat) (value : BitVec (8 * byteCount)) : List UInt8 :=
-  List.ofFn fun index : Fin byteCount =>
-    UInt8.ofBitVec (value.extractLsb' (8 * index.val) 8)
 
 /-- The address of a hash call: its type `tag < 32` and a chain step `step < 8`.
 
@@ -307,20 +298,9 @@ The experiment samples the master seed and charges every hash call, including re
 
 Out-of-range branches only make the definitions total; honest algorithms never reach them. -/
 
-/-- A hash query takes an arbitrary byte string and returns 32 bytes. -/
-abbrev HashSpec := HashInput →ₒ HashOutput
-
-/-- Private uniform sampling and the shared hash oracle.
-
-Only hash calls count toward the query budget. -/
-abbrev OracleWorld := unifSpec + HashSpec
-
 namespace Concrete
 
-/-- One query to the random oracle `H`. -/
-def oracleHash {m : Type → Type} [Monad m] [HasQuery HashSpec m] (input : HashInput) :
-    m HashOutput :=
-  HasQuery.query (spec := HashSpec) (m := m) input
+export EthLib.Cryptography.HashSig (oracleHash)
 
 end Concrete
 

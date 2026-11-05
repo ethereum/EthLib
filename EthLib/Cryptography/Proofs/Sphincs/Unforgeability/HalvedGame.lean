@@ -26,7 +26,7 @@ In that game, a value that feeds a hash is one answer of the oracle, not a part 
 namespace EthLib.Cryptography.Sphincs.Unforgeability
 
 open EthLib.Cryptography.Sphincs.Constants
-open EthLib.Cryptography.Xmss.Unforgeability (ofOutput)
+open EthLib.Cryptography.HashSig (ofOutput)
 open OracleSpec OracleComp
 
 /-! ## A 32-byte answer is two halves -/
@@ -44,12 +44,12 @@ theorem natCard_digest : Nat.card Digest = 2 ^ 128 := by
     Fintype.card_fin, ← pow_mul]
 
 /-- The halves of an answer of the oracle. -/
-def halvesOf (x : XmssSecurity.HashOutput) : Digest × Digest :=
+def halvesOf (x : HashSig.HashOutput) : Digest × Digest :=
   (halfOf 0 (ofOutput x), halfOf 1 (ofOutput x))
 
 /-- An answer of the oracle is fixed by its halves. -/
 theorem halvesOf_injective : Function.Injective halvesOf := fun x y h =>
-  Xmss.Unforgeability.ofBV_inj (by decide)
+  HashSig.ofBV_inj (by decide)
     (eq_of_halfOf_eq (Prod.ext_iff.1 h).1 (Prod.ext_iff.1 h).2)
 
 /-- Every pair of halves is the halves of one answer: both sides have `2^256` elements. -/
@@ -58,7 +58,7 @@ theorem halvesOf_bijective : Function.Bijective halvesOf := by
   rw [Nat.card_prod, natCard_digest, natCard_hashOutput, ← pow_add]
 
 /-- An answer of the oracle as its two halves. -/
-noncomputable def hashHalves : XmssSecurity.HashOutput ≃ Digest × Digest :=
+noncomputable def hashHalves : HashSig.HashOutput ≃ Digest × Digest :=
   Equiv.ofBijective halvesOf halvesOf_bijective
 
 /-- The first half of the answer joined from two halves is the first. -/

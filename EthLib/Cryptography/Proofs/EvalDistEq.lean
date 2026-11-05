@@ -5,7 +5,13 @@ public import VCVio.OracleComp.Constructions.SampleableType.Measure
 public import VCVio.OracleComp.EvalDist.Sum
 public import VCVio.EvalDist.Monad.UniformTable
 
-/-! Elaboration aids for equality in distribution. -/
+/-!
+# Proofs: equality in distribution
+
+Elaboration aids and small lemmas for two computations with the same output distribution.
+
+Uniform samplers and uniform tables are the main cases.
+-/
 
 @[expose] public section
 

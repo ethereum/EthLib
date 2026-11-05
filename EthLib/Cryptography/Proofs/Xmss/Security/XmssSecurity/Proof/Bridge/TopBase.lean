@@ -1,7 +1,7 @@
 module
 
 public import VCVio.OracleComp.SimSemantics.StateT.Measure
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
+public import EthLib.Cryptography.Proofs.EvalDistEq
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Naturality
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Program
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.FreshRequests

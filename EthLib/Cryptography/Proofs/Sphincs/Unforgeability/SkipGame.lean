@@ -30,7 +30,7 @@ The scheme here means key generation, signing and the final verification.
 namespace EthLib.Cryptography.Sphincs.Unforgeability
 
 open EthLib.Cryptography.Sphincs.Constants
-open EthLib.Cryptography.Xmss.Unforgeability (ofOutput)
+open EthLib.Cryptography.HashSig (ofOutput)
 open OracleSpec OracleComp
 
 /-! ## The scheme reads a tweakable hash only through half 0

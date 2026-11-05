@@ -817,7 +817,7 @@ theorem thInput_ne_seedInput {payload : ByteArray} (h : 16 ≤ payload.size) (pp
 /-! ## In the game -/
 
 /-- A query of the game's oracle at an input of 43 bytes, the length of the seed input. -/
-def IsSeedLengthQuery : XmssSecurity.OracleWorld.Domain → Prop
+def IsSeedLengthQuery : HashSig.OracleWorld.Domain → Prop
   | .inl _ => False
   | .inr x => x.length = 43
 

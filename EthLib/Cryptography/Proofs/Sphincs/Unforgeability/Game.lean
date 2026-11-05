@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Sphincs
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Convert
+public import EthLib.Cryptography.Proofs.HashSig.Bytes
 public import VCVio.CryptoFoundations.SignatureAlg.RomQueryCount
 
 /-!
@@ -18,7 +18,7 @@ One random oracle answers every hash call.
 
 The algorithms are EthLib's own: `keyGenWith`, `signWith` and `verifyWith`.
 
-Their `H` is a query to the oracle of leanXMSS's game.
+Their `H` is a query to the random oracle that leanXMSS's game also uses.
 
 The oracle is lazily sampled, from an empty cache.
 
@@ -71,8 +71,8 @@ namespace EthLib.Cryptography.Sphincs.Unforgeability
 open OracleSpec OracleComp ENNReal MeasureTheory
 
 /-- `H` in the game: a query to the random oracle. -/
-abbrev H : ByteArray → OracleComp XmssSecurity.OracleWorld (Vector UInt8 32) :=
-  Xmss.Unforgeability.queryH
+abbrev H : ByteArray → OracleComp HashSig.OracleWorld (Vector UInt8 32) :=
+  HashSig.queryH
 
 /-- A uniform 32-byte seed `S_0`. -/
 noncomputable def sampleSeed : ProbComp Seed :=
@@ -85,7 +85,7 @@ noncomputable def sampleSeed : ProbComp Seed :=
 - Signing runs `signWith`, and answers nothing when it fails.
 - Verification runs `verifyWith`, and rejects nothing. -/
 noncomputable def scheme :
-    SignatureAlg (OracleComp XmssSecurity.OracleWorld) Message PublicKey SecretKey
+    SignatureAlg (OracleComp HashSig.OracleWorld) Message PublicKey SecretKey
       (Option Signature) where
   keygen := do
     let seed ← liftM sampleSeed
@@ -101,7 +101,7 @@ abbrev Adversary := SignatureAlg.StrongUnforgeableAdversary scheme
 
 /-- The probability that the adversary returns a valid pair that no request returned. -/
 noncomputable def forgeAdvantage (adversary : Adversary) : ℝ≥0∞ :=
-  SignatureAlg.strongUnforgeableAdvantage (ProbCompRuntime.rom XmssSecurity.HashSpec) adversary
+  SignatureAlg.strongUnforgeableAdvantage (ProbCompRuntime.rom HashSig.HashSpec) adversary
 
 /-! ## What the game checks -/
 
