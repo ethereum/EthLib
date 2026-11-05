@@ -161,6 +161,36 @@ theorem getForkchoiceStore_anchor {config : Config} {anchorState : BeaconState p
           subst made
           exact ⟨anchorRoot, rfl, by simp, by simp, rfl, rfl⟩
 
+/-- A new store knows only its anchor block, and only the anchor state. -/
+theorem getForkchoiceStore_maps {config : Config} {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
+    (made : getForkchoiceStore config anchorState anchorBlock = .ok store) :
+    ∃ anchorRoot, SszType.hashTreeRoot anchorBlock = .ok anchorRoot ∧
+      store.blocks =
+        (∅ : Std.TreeMap Root (BeaconBlock preset fork)).insert anchorRoot anchorBlock ∧
+      store.blockStates =
+        (∅ : Std.TreeMap Root (BeaconState preset fork)).insert anchorRoot anchorState := by
+  unfold getForkchoiceStore at made
+  split at made
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at made
+  cases stateRoot : SszType.hashTreeRoot anchorState with
+  | error e => simp [stateRoot, bind, Except.bind, Except.mapError] at made
+  | ok stateRoot' =>
+    simp only [stateRoot, Except.mapError, bind, Except.bind] at made
+    split at made
+    · simp [throw, throwThe, MonadExceptOf.throw] at made
+    · cases blockRoot : SszType.hashTreeRoot anchorBlock with
+      | error e => simp [blockRoot] at made
+      | ok anchorRoot =>
+        simp only [blockRoot] at made
+        cases time : computeTimeAtSlotMs config (secondsToMilliseconds anchorState.genesisTime)
+            anchorState.slot with
+        | error e => simp [time] at made
+        | ok timeMs =>
+          simp only [time, pure, Except.pure, Except.ok.injEq] at made
+          subst made
+          exact ⟨anchorRoot, rfl, rfl, rfl⟩
+
 /-- A new store fails when the anchor block does not commit to the anchor state. -/
 theorem getForkchoiceStore_mismatch {config : Config} {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork} {stateRoot : Root} (before : fork < .glamsterdam)
