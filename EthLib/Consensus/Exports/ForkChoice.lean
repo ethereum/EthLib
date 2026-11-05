@@ -30,6 +30,14 @@ It is a 4-byte count of blobs, then the blobs, then the proofs of 48 bytes each.
 
 Without it the node holds no blob and no proof for a block.
 
+Kind 7 gives the columns that the node samples for the next block.
+
+It is a 4-byte count, then each column as a 4-byte length and its SSZ bytes.
+
+A count of zero means that the node cannot get the columns.
+
+Without it the node samples no column for a block.
+
 The execution layer accepts every payload, as in the vectors.
 
 After each step comes one byte: 0 when the store takes the step, 1 when it rejects it.
@@ -140,13 +148,35 @@ def readBlobData (data : ByteArray) : Result (Array Cryptography.Kzg.Blob ×
       (data.extract (4 + blobBytes + i * 48) (4 + blobBytes + (i + 1) * 48))
   return (blobs, proofs)
 
+/-- The columns of a step: a count, then each column as a length and its SSZ bytes.
+
+A count of zero means that the node cannot get the columns. -/
+def readColumnData {preset : Preset} {fork : Fork} (data : ByteArray) :
+    Result (Option (Array (DataColumnSidecar preset fork))) := do
+  if data.size < 4 then throw (0, "the count of columns is cut short")
+  let count := (← decodeInput UInt32 (data.extract 0 4)).toNat
+  let mut offset := 4
+  let mut columns := #[]
+  for _ in [0:count] do
+    if data.size < offset + 4 then throw (0, "the length of a column is cut short")
+    let length := (← decodeInput UInt32 (data.extract offset (offset + 4))).toNat
+    let stop := offset + 4 + length
+    if data.size < stop then throw (0, "a column is cut short")
+    columns := columns.push (← decodeInput (DataColumnSidecar preset fork)
+      (data.extract (offset + 4) stop))
+    offset := stop
+  if offset ≠ data.size then throw (0, "bytes follow the last column")
+  return if count = 0 then none else some columns
+
 /-- The outcome of each step of a fork choice case, from an anchor state and an anchor block.
 
 The preset, the configuration and the fork are named in UTF-8.
 
 The signature checks run unless the last argument is false.
 
-From Fulu a block is not yet specified here, and from Gloas neither is the store. -/
+From Electra the state transition does not yet take a block.
+
+From Gloas the store is not specified here. -/
 @[export eth_consensus_fork_choice]
 def forkChoiceExport (name fork anchorState anchorBlock steps replacements : ByteArray)
     (verify : Bool) : Result ByteArray := do
@@ -160,6 +190,7 @@ def forkChoiceExport (name fork anchorState anchorBlock steps replacements : Byt
   let mut out := ByteArray.empty
   let mut powBlocks : List PowBlock := []
   let mut blobData : Array Cryptography.Kzg.Blob × Array Cryptography.Kzg.KZGProof := (#[], #[])
+  let mut columnData : Option (Array (DataColumnSidecar preset fork)) := some #[]
   let setup ← Cryptography.Kzg.Exports.embeddedSetup.mapError fun e => (0, e.message)
   for step in ← readForkChoiceSteps (steps.size + 1) steps 0 do
     if step.1 = 5 then
@@ -170,12 +201,23 @@ def forkChoiceExport (name fork anchorState anchorBlock steps replacements : Byt
       blobData ← readBlobData step.2
       out := out.push 0
       continue
+    if step.1 = 7 then
+      columnData ← readColumnData step.2
+      out := out.push 0
+      continue
     let known := powBlocks
     let held := blobData
-    let sources : BlockSources preset fork :=
-      ⟨.constant true, fun hash => known.find? (·.blockHash = hash), fun _ => some held, setup⟩
-    -- The blobs of a step serve only the block that follows it.
-    if step.1 = 1 then blobData := (#[], #[])
+    let sampled := columnData
+    let sources : BlockSources preset fork := {
+      engine := .constant true
+      powBlock := fun hash => known.find? (·.blockHash = hash)
+      blobsAndProofs := fun _ => some held
+      columns := fun _ => sampled
+      setup }
+    -- The blobs and the columns of a step serve only the block that follows it.
+    if step.1 = 1 then
+      blobData := (#[], #[])
+      columnData := some #[]
     match ← runForkChoiceStep config checks sources store step with
     | .ok (next, record) =>
       store := next

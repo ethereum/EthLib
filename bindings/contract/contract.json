@@ -2657,10 +2657,12 @@
       {"constructor": "notTerminalBlockHash", "code": 28},
       {"constructor": "blobsUnavailable", "code": 29},
       {"constructor": "kzg", "code": 30},
-      {"constructor": "blobsNotMatching", "code": 31}]}],
+      {"constructor": "blobsNotMatching", "code": 31},
+      {"constructor": "columnsUnavailable", "code": 32},
+      {"constructor": "invalidColumns", "code": 33}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe signature checks run unless the last argument is false.\n\nFrom Fulu a block is not yet specified here, and from Gloas neither is the store."},
+   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe signature checks run unless the last argument is false.\n\nFrom Electra the state transition does not yet take a block.\n\nFrom Gloas the store is not specified here."},
   {"summary":
    "The headers of a sync, step by step, from a bootstrap for a trusted block root.",
    "signature":

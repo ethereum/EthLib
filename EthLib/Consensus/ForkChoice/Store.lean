@@ -142,6 +142,10 @@ inductive ForkChoiceError where
   | kzg (error : Cryptography.Kzg.KzgError)
   /-- The proofs do not show that the blobs of the block with the root match its commitments. -/
   | blobsNotMatching (root : Root)
+  /-- The node cannot get every column that it samples for the block with the root. -/
+  | columnsUnavailable (root : Root)
+  /-- A column of the block with the root has a wrong shape, or its proofs do not match. -/
+  | invalidColumns (root : Root)
   deriving Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -181,6 +185,8 @@ def ForkChoiceError.code : ForkChoiceError → UInt32
   | .blobsUnavailable _ => 29
   | .kzg _ => 30
   | .blobsNotMatching _ => 31
+  | .columnsUnavailable _ => 32
+  | .invalidColumns _ => 33
 
 variable (preset : Preset) (fork : Fork)
 
