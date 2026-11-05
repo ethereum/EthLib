@@ -23,6 +23,7 @@ public import EthLib.Consensus.Proofs.Containers.SyncCommittee
 public import EthLib.Consensus.Proofs.DataAvailability.Blob
 public import EthLib.Consensus.Proofs.DataAvailability.Column
 public import EthLib.Consensus.Proofs.DataAvailability.Custody
+public import EthLib.Consensus.Proofs.ForkChoice.Head
 public import EthLib.Consensus.Proofs.ForkChoice.Store
 public import EthLib.Consensus.Proofs.ForkSchedule
 public import EthLib.Consensus.Proofs.Gossip.Topics

@@ -25,6 +25,7 @@ public import EthLib.Consensus.Credentials
 public import EthLib.Consensus.DataAvailability.Blob
 public import EthLib.Consensus.DataAvailability.Column
 public import EthLib.Consensus.DataAvailability.Custody
+public import EthLib.Consensus.ForkChoice.Head
 public import EthLib.Consensus.ForkChoice.Store
 public import EthLib.Consensus.ForkSchedule
 public import EthLib.Consensus.Gossip.Topics

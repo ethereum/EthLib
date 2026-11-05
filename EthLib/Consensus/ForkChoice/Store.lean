@@ -85,6 +85,10 @@ inductive ForkChoiceError where
   | unknownBlock (root : Root)
   /-- The store holds no state for the checkpoint. -/
   | unknownCheckpointState (checkpoint : Checkpoint)
+  /-- The store holds no state after the block with the root. -/
+  | unknownBlockState (root : Root)
+  /-- The store holds no unrealized justified checkpoint for the block with the root. -/
+  | unknownUnrealizedJustification (root : Root)
   /-- A block of the store has a parent at a slot no lower than its own. -/
   | parentSlotNotLower (root : Root)
   /-- A time or a slot leaves the 64-bit range. -/
