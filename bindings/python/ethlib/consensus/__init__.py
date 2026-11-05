@@ -253,6 +253,29 @@ def is_better_update(name: str, fork: str, new_update: bytes, old_update: bytes)
     return _native.consensus_is_better_update(name, fork, new_update, old_update)
 
 
+def genesis_block(name: str, fork: str, state: bytes) -> bytes:
+    """The SSZ bytes of the genesis block of a state, signed with zero bytes."""
+    return _native.consensus_genesis_block(name, fork, state)
+
+
+def create_light_client_bootstrap(name: str, fork: str, state: bytes, block: bytes,
+                                  config: dict | None = None) -> bytes:
+    """The SSZ bytes of the bootstrap that a full node serves for a block and its post state."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_create_light_client_bootstrap(name, fork, replacements, state, block)
+
+
+def create_light_client_update(name: str, fork: str, type_name: str, state: bytes, block: bytes,
+                               attested_state: bytes, attested_block: bytes,
+                               finalized_block: bytes | None,
+                               config: dict | None = None) -> bytes:
+    """The SSZ bytes of the update of a type that a full node serves for a block."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_create_light_client_update(
+        name, fork, type_name, replacements, state, block, attested_state, attested_block,
+        finalized_block or b"")
+
+
 def compute_fork_digest(name: str, genesis_validators_root: bytes, epoch: int,
                         config: dict | None = None) -> bytes:
     """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
@@ -372,6 +395,9 @@ __all__ = [
     "block_to_light_client_header",
     "light_client_update_proofs",
     "is_better_update",
+    "genesis_block",
+    "create_light_client_bootstrap",
+    "create_light_client_update",
     "compute_fork_digest",
     "process_epoch",
     "rewards_deltas",

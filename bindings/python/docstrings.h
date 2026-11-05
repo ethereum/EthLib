@@ -308,6 +308,15 @@
 #define DOC_consensus_is_better_update \
   "Whether a new update, given as bytes, ranks above an old one for a forced update."
 
+#define DOC_consensus_genesis_block \
+  "The genesis block of a state, given as bytes, with a signature of zero bytes."
+
+#define DOC_consensus_create_light_client_bootstrap \
+  "The bootstrap that a full node serves for a block, from the block and its post state."
+
+#define DOC_consensus_create_light_client_update \
+  "The update that a full node serves for a block, from the blocks and their post states."
+
 #define DOC_consensus_compute_fork_digest \
   "The fork digest at an epoch, on the chain with the given root of the genesis validators."
 

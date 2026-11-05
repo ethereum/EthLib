@@ -411,6 +411,18 @@ def consensus_is_better_update(name: str, fork: str, new_update: bytes, old_upda
     """Whether a new update, given as bytes, ranks above an old one for a forced update."""
     ...
 
+def consensus_genesis_block(name: str, fork: str, state: bytes) -> bytes:
+    """The genesis block of a state, given as bytes, with a signature of zero bytes."""
+    ...
+
+def consensus_create_light_client_bootstrap(name: str, fork: str, config: bytes, state: bytes, block: bytes) -> bytes:
+    """The bootstrap that a full node serves for a block, from the block and its post state."""
+    ...
+
+def consensus_create_light_client_update(name: str, fork: str, type: str, config: bytes, state: bytes, block: bytes, attested_state: bytes, attested_block: bytes, finalized_block: bytes) -> bytes:
+    """The update that a full node serves for a block, from the blocks and their post states."""
+    ...
+
 def consensus_compute_fork_digest(name: str, config: bytes, genesis_validators_root: bytes, epoch: int) -> bytes:
     """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
     ...
