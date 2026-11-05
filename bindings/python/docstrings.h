@@ -290,6 +290,12 @@
 #define DOC_consensus_light_client_sync \
   "The headers of a sync, step by step, from a bootstrap for a trusted block root."
 
+#define DOC_consensus_block_to_light_client_header \
+  "The root of a block, given as bytes, then the bytes of its light client header."
+
+#define DOC_consensus_light_client_update_proofs \
+  "Whether the proofs of an update or a finality update, given as bytes, verify."
+
 #define DOC_consensus_is_better_update \
   "Whether a new update, given as bytes, ranks above an old one for a forced update."
 

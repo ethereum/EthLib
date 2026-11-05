@@ -31,7 +31,9 @@ public import EthLib.Consensus.InclusionList
 public import EthLib.Consensus.HonestBuilder
 public import EthLib.Consensus.InclusionListCommittee
 public import EthLib.Consensus.LightClient.Containers
+public import EthLib.Consensus.LightClient.FullNode
 public import EthLib.Consensus.LightClient.Sync
+public import EthLib.Consensus.LightClient.Upgrade
 public import EthLib.Consensus.PqKeys.Containers
 public import EthLib.Consensus.PqKeys.Gossip
 public import EthLib.Consensus.PqKeys.Possession

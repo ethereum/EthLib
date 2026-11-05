@@ -14,6 +14,7 @@ from consensus.test_epoch_processing import HANDLERS as EPOCH_STEPS
 from consensus.test_epoch_processing import runs as runs_epoch_step
 from consensus.test_fork import runs as runs_upgrade
 from consensus.test_operations import HANDLERS as OPERATIONS
+from consensus.test_light_client_data_collection import runs_data_collection
 from consensus.test_light_client_sync import SPECIFIED as LIGHT_CLIENT_FORKS
 from consensus.test_light_client_sync import runs_sync
 from consensus.test_operations import runs as runs_operation
@@ -41,7 +42,7 @@ NOT_YET = {
     "fork_choice": "fork choice (consensus track C43 to C50)",
     "fast_confirmation": "fast confirmation rule (consensus track, decision 9)",
     "sync": "optimistic sync (consensus track C48)",
-    "light_client": "light client fork upgrades, data collection and Gloas (consensus track C56)",
+    "light_client": "the light client cases that reach Gloas data (G54, G55)",
     "networking": "gossip validation (consensus track C63 and C64)",
     "ssz_static": "the remaining beacon containers (consensus track C2, C6 to C12)",
 }
@@ -388,6 +389,12 @@ def _update_ranking(root: Path, case: Case) -> None:
     run_ranking_case(root / case.path, case.preset, case.fork)
 
 
+def _data_collection(root: Path, case: Case) -> None:
+    from consensus.test_light_client_data_collection import run_data_collection_case
+
+    run_data_collection_case(root / case.path, case.preset)
+
+
 def _merkle_proof(root: Path, case: Case) -> None:
     from consensus.test_merkle_proof import run_case
 
@@ -436,6 +443,8 @@ RUNNERS = {
     "merkle_proof/single_merkle_proof": _merkle_proof,
     "light_client/sync": _light_client_sync,
     "light_client/update_ranking": _update_ranking,
+    # The served data against the blocks; choosing it needs the state transition (C23).
+    "light_client/data_collection": _data_collection,
     "legacy_header": legacy.run_headers,
     **{f"operations/{handler}": _operation for handler in OPERATIONS},
     **{f"epoch_processing/{handler}": _epoch_step for handler in EPOCH_STEPS},
@@ -474,6 +483,8 @@ def runner(case: Case):
     if run is _operation and not runs_operation(case.fork, case.group.split("/")[1]):
         return None
     if run is _light_client_sync and not runs_sync(case.fork, Path(case.path).name):
+        return None
+    if run is _data_collection and not runs_data_collection(case.fork, Path(case.path).name):
         return None
     if run is _update_ranking and case.fork not in LIGHT_CLIENT_FORKS:
         return None

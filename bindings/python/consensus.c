@@ -195,8 +195,14 @@ extern lean_object* eth_consensus_get_data_column_sidecars_from_block(
 extern lean_object* eth_consensus_get_data_column_sidecars_from_column_sidecar(
   lean_object* name, lean_object* fork, lean_object* sidecar, lean_object* rows);
 extern lean_object* eth_consensus_light_client_sync(
-  lean_object* name, lean_object* fork, lean_object* config, lean_object* trusted,
-  lean_object* genesis_validators_root, lean_object* bootstrap, lean_object* steps);
+  lean_object* name, lean_object* fork, lean_object* bootstrap_fork, lean_object* config,
+  lean_object* trusted, lean_object* genesis_validators_root, lean_object* bootstrap,
+  lean_object* steps);
+extern lean_object* eth_consensus_block_to_light_client_header(
+  lean_object* name, lean_object* fork, lean_object* config, lean_object* block);
+extern lean_object* eth_consensus_light_client_update_proofs(
+  lean_object* name, lean_object* fork, lean_object* type, lean_object* config,
+  lean_object* data);
 extern lean_object* eth_consensus_is_better_update(
   lean_object* name, lean_object* fork, lean_object* new_update, lean_object* old_update);
 extern lean_object* eth_consensus_compute_fork_digest(
@@ -813,39 +819,72 @@ py_consensus_process_operation(
     TRANSITION_ERROR);
 }
 
+/* Read `strings` str arguments, then `count` byte strings, or set an error and return 0. */
+static int
+strs_bytes_args(
+  PyObject* args,
+  int strings,
+  int count,
+  lean_object** out
+) {
+  Py_ssize_t total = PyTuple_Size(args);
+  if (total != strings + count) {
+    PyErr_Format(PyExc_TypeError, "expected %d arguments", strings + count);
+    return 0;
+  }
+  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
+  for (Py_ssize_t i = 0; i < total; i++) {
+    PyObject* item = PyTuple_GET_ITEM(args, i);
+    if (i < strings ? !PyUnicode_Check(item) : !PyBytes_Check(item)) {
+      PyErr_SetString(PyExc_TypeError,
+                      i < strings ? "the names must be str" : "the data must be bytes");
+      return 0;
+    }
+  }
+  for (Py_ssize_t i = 0; i < total; i++) {
+    PyObject* item = PyTuple_GET_ITEM(args, i);
+    if (i >= strings) {
+      out[i] = bytes_arg(item);
+    } else if (!(out[i] = str_arg(item, "name"))) {
+      for (Py_ssize_t j = 0; j < i; j++) lean_dec(out[j]);
+      return 0;
+    }
+  }
+  return 1;
+}
+
 PyObject*
 py_consensus_light_client_sync(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *data_obj[5];
-  if (!PyArg_ParseTuple(args, "OOOOOOO", &name_obj, &fork_obj, &data_obj[0], &data_obj[1],
-                        &data_obj[2], &data_obj[3], &data_obj[4])) {
-    return NULL;
-  }
-  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
-  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj)) {
-    PyErr_SetString(PyExc_TypeError, "name and fork must be str");
-    return NULL;
-  }
-  for (int i = 0; i < 5; i++) {
-    if (!PyBytes_Check(data_obj[i])) {
-      PyErr_SetString(PyExc_TypeError, "the data must be bytes");
-      return NULL;
-    }
-  }
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) return NULL;
-  lean_object* fork = str_arg(fork_obj, "fork");
-  if (!fork) {
-    lean_dec(name);
-    return NULL;
-  }
-  lean_object* data[5];
-  for (int i = 0; i < 5; i++) data[i] = bytes_arg(data_obj[i]);
+  lean_object* a[8];
+  if (!strs_bytes_args(args, 3, 5, a)) return NULL;
   return except_into_pybytes(
-    eth_consensus_light_client_sync(name, fork, data[0], data[1], data[2], data[3], data[4]),
+    eth_consensus_light_client_sync(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]),
     LIGHT_CLIENT_ERROR);
+}
+
+PyObject*
+py_consensus_block_to_light_client_header(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[4];
+  if (!strs_bytes_args(args, 2, 2, a)) return NULL;
+  return except_into_pybytes(
+    eth_consensus_block_to_light_client_header(a[0], a[1], a[2], a[3]), LIGHT_CLIENT_ERROR);
+}
+
+PyObject*
+py_consensus_light_client_update_proofs(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[5];
+  if (!strs_bytes_args(args, 3, 2, a)) return NULL;
+  return except_into_pybool(
+    eth_consensus_light_client_update_proofs(a[0], a[1], a[2], a[3], a[4]), LIGHT_CLIENT_ERROR);
 }
 
 PyObject*

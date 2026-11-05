@@ -383,8 +383,16 @@ def consensus_upgrade_state(name: str, fork: str, pre: bytes, config: bytes, ver
     """The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."""
     ...
 
-def consensus_light_client_sync(name: str, fork: str, config: bytes, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: bytes) -> bytes:
+def consensus_light_client_sync(name: str, fork: str, bootstrap_fork: str, config: bytes, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: bytes) -> bytes:
     """The headers of a sync, step by step, from a bootstrap for a trusted block root."""
+    ...
+
+def consensus_block_to_light_client_header(name: str, fork: str, config: bytes, block: bytes) -> bytes:
+    """The root of a block, given as bytes, then the bytes of its light client header."""
+    ...
+
+def consensus_light_client_update_proofs(name: str, fork: str, type: str, config: bytes, data: bytes) -> bool:
+    """Whether the proofs of an update or a finality update, given as bytes, verify."""
     ...
 
 def consensus_is_better_update(name: str, fork: str, new_update: bytes, old_update: bytes) -> bool:
