@@ -90,7 +90,7 @@ private theorem eval_divisionSubtract (a b : PolynomialCoeff) (x quot : Fr)
   | zero =>
     change evalPolyAt a x = evalPolyAt a x - Fr.zero * quot * Fr.powNat x shift
     exact (sub_zero _).symm.trans (congrArg (fun z => evalPolyAt a x - z)
-      (by simp only [Fr.zero_def, Fin.zero_mul])).symm
+      (by simp only [Fr.zero_def, zero_mul])).symm
   | succ n ih =>
     rw [divisionSubtract_succ, evalPolyAt_set _ _ _ _ (by rw [size_divisionSubtract]; omega),
       ih (by omega), Fr.powNat_add, evalCoeffPolyAux]

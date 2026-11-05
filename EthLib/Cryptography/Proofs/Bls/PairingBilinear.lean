@@ -98,12 +98,35 @@ private theorem prod_pairing (h : PairingBilinear) :
     rw [List.map_cons, List.prod_cons, ih, List.zipWith_cons_cons, List.sum_cons, pow_add,
       pairing_congr hP hQ, h]
 
+/-- A sum of products of values is zero in `Fr` exactly when `r` divides it.
+
+It is the statement over `ZMod r`, carried to `Fr` by the isomorphism. -/
+private theorem dvd_sum_zipWith_val_iff_fr (a b : List Fr) :
+    Fr.modulus ∣ (List.zipWith (fun x y => x.val * y.val) a b).sum ↔
+      (List.zipWith (· * ·) a b).sum = 0 := by
+  have h := dvd_sum_zipWith_val_iff (n := Fr.modulus) (a.map Fr.toZMod) (b.map Fr.toZMod)
+  have e1 : List.zipWith (fun x y => x.val * y.val) (a.map Fr.toZMod) (b.map Fr.toZMod) =
+      List.zipWith (fun x y => x.val * y.val) a b := by
+    rw [List.zipWith_map]
+    congr
+    funext x y
+    rw [Fr.val_eq x, Fr.val_eq y]
+    rfl
+  have e2 : List.zipWith (· * ·) (a.map Fr.toZMod) (b.map Fr.toZMod) =
+      (List.zipWith (· * ·) a b).map Fr.toZMod := by
+    rw [List.zipWith_map, List.map_zipWith]
+    congr
+    funext x y
+    exact (map_mul Fr.toZMod x y).symm
+  rw [e1, e2, ← map_list_sum, map_eq_zero_iff _ Fr.toZMod.injective] at h
+  exact h
+
 /-- Bilinearity gives the pairing law of the check. -/
 theorem PairingLaws.of_bilinear (h : PairingBilinear) : PairingLaws where
   pairingCheck_iff pairs a b ha hb hr := by
     rw [pairingCheck_toArray_iff, prod_pairing h pairs a b ha hb hr]
     have hord := orderOf_pairing_generators
     exact (hord ▸ orderOf_dvd_iff_pow_eq_one).symm.trans
-      (dvd_sum_zipWith_val_iff (n := Fr.modulus) a b)
+      (dvd_sum_zipWith_val_iff_fr a b)
 
 end EthLib.Cryptography.Bls

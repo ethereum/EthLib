@@ -31,7 +31,6 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Fin.instNatPow
 
 private theorem fr_pow_add (a : Fr) (m n : Nat) : a ^ (m + n) = a ^ m * a ^ n := pow_add a m n
 private theorem fr_pow_mul (a : Fr) (m n : Nat) : a ^ (m * n) = (a ^ m) ^ n := pow_mul a m n
@@ -98,9 +97,11 @@ theorem domainRoot_extended_pow_cells :
   unfold domainRoot
   rw [Bls.Fr.hpow_eq_pow, Bls.Fr.hpow_eq_pow]
   have h1 : (Fr.ofNat ((BLS_MODULUS - 1) / FIELD_ELEMENTS_PER_EXT_BLOB)).val =
-      (BLS_MODULUS - 1) / FIELD_ELEMENTS_PER_EXT_BLOB := by decide
+      (BLS_MODULUS - 1) / FIELD_ELEMENTS_PER_EXT_BLOB :=
+    Bls.Fr.val_ofNat_of_lt (by decide)
   have h2 : (Fr.ofNat ((BLS_MODULUS - 1) / FIELD_ELEMENTS_PER_CELL)).val =
-      (BLS_MODULUS - 1) / FIELD_ELEMENTS_PER_CELL := by decide
+      (BLS_MODULUS - 1) / FIELD_ELEMENTS_PER_CELL :=
+    Bls.Fr.val_ofNat_of_lt (by decide)
   rw [h1, h2, ← fr_pow_mul]
   congr 1
 

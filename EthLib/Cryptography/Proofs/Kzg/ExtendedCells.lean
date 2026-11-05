@@ -27,7 +27,6 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Fin.instNatPow
 
 private theorem fr_pow_zero (a : Fr) : a ^ 0 = 1 := pow_zero a
 private theorem fr_mul_one (a : Fr) : a * 1 = a := mul_one a

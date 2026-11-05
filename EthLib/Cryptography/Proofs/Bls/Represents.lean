@@ -43,9 +43,9 @@ theorem Represents.unique {P : G1} {a b : Fr} (ha : Represents P a) (hb : Repres
     rw [← toPoint_mul_generator, ← toPoint_mul_generator, ← ha.2, ← hb.2]
   have hfin : IsOfFinAddOrder (toPoint generator) :=
     addOrderOf_pos_iff.mp (addOrderOf_toPoint_generator ▸ Fr.modulus_pos)
-  rw [ofFr, ofFr, hfin.nsmul_inj_mod, addOrderOf_toPoint_generator, Nat.mod_eq_of_lt a.isLt,
-    Nat.mod_eq_of_lt b.isLt] at h
-  exact Fin.ext h
+  rw [ofFr, ofFr, hfin.nsmul_inj_mod, addOrderOf_toPoint_generator,
+    Nat.mod_eq_of_lt (Fr.val_lt a), Nat.mod_eq_of_lt (Fr.val_lt b)] at h
+  exact Fr.ext h
 
 /-- The point of a sum of products is the sum of the multiples of the points. -/
 theorem sum_nsmul_ofFr (n : Nat) (s a : Nat → Fr) :

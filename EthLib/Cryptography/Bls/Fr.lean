@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Bls.Errors
-public import EthLib.Cryptography.Inverse
+public import EthLib.Cryptography.Montgomery
 public import EthLib.Cryptography.Hash.Sha256
 
 /-!
@@ -11,11 +11,13 @@ The scalar field of BLS12-381, the integers mod the prime group order `r`.
 
 `r = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001`.
 
-`Fr` is `Fin r`, so every element is below `r` by construction.
+An element is held in Montgomery form, as eight limbs of 32 bits.
+
+The limbs hold `a R mod r` for the element `a`, with `R = 2 ^ 256`.
+
+So a product needs no division by `r`, and an element reads and writes its bytes directly.
 
 Scalars and base-field elements have distinct types, so they cannot mix by accident.
-
-Core gives `Fin` its `+`, `-`, `*` and negation, all reduced mod `r`.
 -/
 
 @[expose] public section
@@ -30,39 +32,55 @@ protected theorem Fr.modulus_pos : 0 < Fr.modulus := by decide
 
 instance : NeZero Fr.modulus := ⟨by decide⟩
 
+/-- The modulus `r` with the constants of its Montgomery arithmetic. -/
+def Fr.params : Montgomery.Modulus where
+  p := modulus
+  pLimbs := ⟨1, 4294967295, 4294859774, 1404937218, 161601541, 859428872, 698187080, 1944954707⟩
+  pinv := 4294967295
+  r1 := ⟨4294967294, 1, 215042, 1485092858, 3971764213, 2576109551, 2898593135, 405057881⟩
+  r2 := ⟨4092763245, 3382307216, 2274516003, 728559051, 1918122383, 97719446, 2673475345,
+    122214873⟩
+  pm2 := ⟨4294967295, 4294967294, 4294859774, 1404937218, 161601541, 859428872, 698187080,
+    1944954707⟩
+  pLimbs_spec := by decide
+  pinv_spec := by decide
+  r1_spec := by decide
+  r2_spec := by decide
+  pm2_spec := by decide
+
 /-- An element of the BLS12-381 scalar field. -/
-abbrev Fr := Fin Fr.modulus
+abbrev Fr := Montgomery Fr.params
 
 namespace Fr
 
-@[inline] def ofNat (n : Nat) : Fr := Fin.ofNat modulus n
+/-- The element that stands for `n mod r`. -/
+@[inline] def ofNat (n : Nat) : Fr := Montgomery.ofNat n
 
-@[inline] def zero : Fr := ⟨0, Fr.modulus_pos⟩
-@[inline] def one  : Fr := ⟨1, by decide⟩
+/-- The integer below `r` that the element stands for.
+
+Proofs use its lemmas, never its unfolding, which runs a Montgomery reduction. -/
+@[inline, irreducible] def val (a : Fr) : Nat := Montgomery.toNat a
+
+@[inline] def zero : Fr := Montgomery.zero
+@[inline] def one  : Fr := Montgomery.one
 
 @[inline] def add (a b : Fr) : Fr := a + b
 @[inline] def sub (a b : Fr) : Fr := a - b
 @[inline] def neg (a : Fr)   : Fr := -a
 @[inline] def mul (a b : Fr) : Fr := a * b
 
-@[inline] def beq (a b : Fr) : Bool := a.val == b.val
-@[inline] def isZero (a : Fr) : Bool := a.val == 0
+@[inline] def beq (a b : Fr) : Bool := a == b
+@[inline] def isZero (a : Fr) : Bool := a == zero
 
 /-- Square-and-multiply modular exponentiation. -/
-def powNat (base : Fr) (e : Nat) : Fr :=
-  if e = 0 then one
-  else
-    let half := powNat (base * base) (e / 2)
-    if e % 2 = 1 then base * half else half
-termination_by e
-decreasing_by omega
+@[inline] def powNat (base : Fr) (e : Nat) : Fr := Montgomery.pow base e
 
-/-- Multiplicative inverse by the extended Euclidean algorithm.
+/-- Multiplicative inverse, by Fermat's little theorem: `a ^ (r - 2)`.
 
 The inverse of `0` is `0`, not an error.
 
 A caller must check that the argument is nonzero, or say why it is. -/
-@[inline] def inverse (a : Fr) : Fr := Fin.inverse a
+@[inline] def inverse (a : Fr) : Fr := Montgomery.inv a
 
 /-- Field division `a * b⁻¹`.
 
@@ -70,10 +88,8 @@ The inverse of `0` is `0`, so a division by zero gives `0`, with no error.
 
 A caller must check that the denominator is nonzero, or say why it is.
 
-Core already has a division on `Fin n`, which divides the integers.
-
-That division is wrong for a field element, so this instance has high priority. -/
-instance (priority := high) : Div Fr := ⟨fun a b => a * b.inverse⟩
+-/
+instance : Div Fr := ⟨fun a b => a * b.inverse⟩
 
 /-- The inverses of `xs`, from a single inversion.
 
@@ -128,17 +144,18 @@ Both decoders of field elements from bytes use it. -/
 
 /-- Decode a 32-byte big-endian integer as an element of `Fr`.
 
-It rejects an input of the wrong size, and an integer of at least `r`. -/
+It rejects an input of the wrong size, and an integer of at least `r`.
+
+The bytes go straight into limbs, with no integer between. -/
 def fromBytesBE (b : ByteArray) : Except BlsError Fr :=
   if b.size ≠ 32 then .error .nonCanonicalFieldElement
   else
-    let acc := bytesBEToNat b
-    if h : acc < modulus then .ok ⟨acc, h⟩ else .error .nonCanonicalFieldElement
+    match Montgomery.ofBytesBE b 0 with
+    | some a => .ok a
+    | none => .error .nonCanonicalFieldElement
 
 /-- Encode as 32 big-endian bytes. -/
-def toBytesBE (a : Fr) : ByteArray :=
-  ByteArray.mk <| Array.ofFn (n := 32) fun i =>
-    UInt8.ofNat ((a.val >>> ((31 - i.val) * 8)) &&& 0xff)
+@[inline] def toBytesBE (a : Fr) : ByteArray := Montgomery.toBytesBE a
 
 /-- Hash the data, and convert the digest to an element of `Fr`.
 

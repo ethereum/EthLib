@@ -67,7 +67,6 @@ theorem represents_generator : Represents generator 1 := by
 /-- Negation of a representative of `a • g1` represents `(-a) • g1`. -/
 theorem Represents.neg {P : G1} {a : Fr} (h : Represents P a) : Represents (neg P) (-a) := by
   refine ⟨valid_neg h.1, ?_⟩
-  -- The step holds up to two definitionally equal instances on `Fr`.
   have h0 : ofFr (-a) + ofFr a = 0 := by
     rw [← ofFr_add]
     exact (congrArg ofFr (neg_add_cancel a)).trans ofFr_zero
@@ -111,8 +110,7 @@ theorem two_pairs (laws : PairingLaws) {P P' : G1} {Q Q' : G2} {a b c d : Fr}
     | 0, _ => exact ⟨hP, hQ⟩
     | 1, _ => exact ⟨hP', hQ'⟩)
   simp only [List.zipWith_cons_cons, List.zipWith_nil_left, List.sum_cons, List.sum_nil] at h
-  -- The trailing `+ 0` of the sum uses the addition of `Fin`, so the lemma of `Fin` removes it.
-  exact h.trans (iff_of_eq (congrArg (a * b + · = 0) (Fin.add_zero (c * d))))
+  exact h.trans (iff_of_eq (congrArg (a * b + · = 0) (add_zero (c * d))))
 
 /-- A sanity consequence: the generators do not pair to 1. -/
 theorem nondegenerate (laws : PairingLaws) :
@@ -122,7 +120,7 @@ theorem nondegenerate (laws : PairingLaws) :
     match i, hi with
     | 0, _ => exact ⟨G1.represents_generator, G2.represents_generator⟩)
   simp only [List.zipWith_cons_cons, List.zipWith_nil_left, List.sum_cons, List.sum_nil] at h
-  exact Bool.eq_false_iff.mpr fun ht => absurd (h.mp ht) (by decide)
+  exact Bool.eq_false_iff.mpr fun ht => absurd (h.mp ht) (by simp)
 
 end PairingLaws
 

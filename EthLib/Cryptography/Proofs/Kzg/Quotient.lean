@@ -23,9 +23,6 @@ open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial
 
--- Core's power instance on `Fin` hides Mathlib's power on `Fr`, as in `Proofs.Bls.FrZMod`.
-attribute [-instance] Fin.instNatPow
-
 /-- The quotient `(p(X) - p(z)) / (X - z)`, for `p` the interpolant of the values. -/
 noncomputable def quotientPoly (poly : Polynomial) (z : Fr) : _root_.Polynomial Fr :=
   (interpolant poly - C ((interpolant poly).eval z)) /ₘ (X - C z)
@@ -172,14 +169,14 @@ theorem computeQuotientEvalWithinDomain_eq_sum (z y : Fr) {poly : Polynomial}
   simp only [beq_iff_eq]
 
 /-- The term of a domain point other than `z`, written through the quotient at that point. -/
-private theorem term_ne (p y w z : ZMod Fr.modulus) (hz : z ≠ 0) (hw : w - z ≠ 0) :
+private theorem term_ne (p y w z : Fr) (hz : z ≠ 0) (hw : w - z ≠ 0) :
     (p - y) * w * (z * (z - w))⁻¹ = -z⁻¹ * ((p - y) * (w - z)⁻¹ * w) + 0 := by
   have hw' : z - w ≠ 0 := fun h => hw (by rw [← neg_sub, h, neg_zero])
   field_simp
   ring
 
 /-- The term of the point `z` itself, which the formula skips. -/
-private theorem term_eq (q z : ZMod Fr.modulus) (hz : z ≠ 0) : 0 = -z⁻¹ * (q * z) + q := by
+private theorem term_eq (q z : Fr) (hz : z ≠ 0) : 0 = -z⁻¹ * (q * z) + q := by
   field_simp
   ring
 
@@ -215,11 +212,6 @@ theorem computeQuotientEvalWithinDomain_eq {poly : Polynomial}
   rw [Finset.sum_congr rfl fun j _ => hterm j, Finset.sum_add_distrib, ← Finset.mul_sum, hsum]
   simp only [Finset.sum_ite_eq', Finset.mem_univ, ↓reduceIte]
   exact (congrArg (· + _) (mul_zero _)).trans (zero_add _)
-
-/-- A field element is zero exactly when its value is. -/
-private theorem isZero_iff (a : Fr) : a.isZero = true ↔ a = 0 := by
-  rw [Fr.isZero, beq_iff_eq]
-  exact ⟨fun h => Fin.ext h, fun h => by rw [h]; rfl⟩
 
 /-- Values that a polynomial of degree below 4096 takes on the domain interpolate back to it. -/
 theorem interpolant_eq_of_eval {Q : Polynomial} {g : _root_.Polynomial Fr}
@@ -260,12 +252,12 @@ theorem computeKzgProofImpl_eq (s : TrustedSetup) {poly : Polynomial}
     rw [show domain[i.val] = evalDomain i from rfl, Bls.Fr.inverse_eq_inv,
       ← getElem!_pos poly i.val (by rw [hsize]; exact i.isLt)]
     by_cases hz : evalDomain i = z
-    · have h0 : (evalDomain i - z).isZero = true := (isZero_iff _).mpr (sub_eq_zero.mpr hz)
+    · have h0 : (evalDomain i - z).isZero = true := (Bls.Fr.isZero_iff _).mpr (sub_eq_zero.mpr hz)
       simp only [h0, ↓reduceIte]
       subst hz
       exact computeQuotientEvalWithinDomain_eq hsize i
     · have h0 : (evalDomain i - z).isZero = false :=
-        Bool.eq_false_iff.mpr fun h => hz (sub_eq_zero.mp ((isZero_iff _).mp h))
+        Bool.eq_false_iff.mpr fun h => hz (sub_eq_zero.mp ((Bls.Fr.isZero_iff _).mp h))
       simp only [h0, Bool.false_eq_true, ↓reduceIte]
       exact (eval_quotientPoly_evalDomain hz).symm
   · unfold computeKzgProofImpl

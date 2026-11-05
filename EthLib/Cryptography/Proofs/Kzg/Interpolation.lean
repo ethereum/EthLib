@@ -21,16 +21,12 @@ open scoped EthLib.Cryptography.Bls.Fr
 private theorem eval_singleton (y x : Fr) : evalPolyAt #[y] x = y := by
   simp [evalPolyAt, evalCoeffPoly, evalCoeffPolyAux, Fr.powNat_zero,
     Fr.zero_def, Fr.one_def]
-  exact mul_one y
-
-private theorem linear_identity {R : Type*} [CommRing R] (w a x : R) :
-    -(w*a*1) + w*(x*1) = w*(x-a) := by ring
 
 private theorem eval_linear (w a x : Fr) :
     evalPolyAt #[(-w)*a,w] x = w * (x-a) := by
   simp [evalPolyAt, evalCoeffPoly, evalCoeffPolyAux, Fr.powNat_zero,
     Fr.powNat_succ, Fr.zero_def, Fr.one_def]
-  exact linear_identity w a x
+  ring
 
 private def interpolationStep (xs : Array Fr) (i : Nat)
     (s : PolynomialCoeff) (j : Nat) : Except KzgError PolynomialCoeff :=
@@ -78,7 +74,7 @@ private theorem weight_self (xs : Array Fr) (i j : Nat)
 
 private theorem weight_other (xs : Array Fr) (i k : Nat) (hik : i ≠ k) :
     weight xs i k xs[k]! = 0 := by
-  simp [weight, Ne.symm hik, Fin.mul_zero]
+  simp [weight, Ne.symm hik]
 
 private theorem inner_at_node (xs ys : Array Fr) (i k : Nat)
     (hi : i < xs.size) (hk : k < xs.size)
@@ -101,8 +97,7 @@ private theorem inner_at_node (xs ys : Array Fr) (i k : Nat)
     have hp : ((List.range xs.size).map (fun j => weight xs i j xs[k]!)).prod = 0 := by
       apply List.prod_eq_zero
       exact List.mem_map.mpr ⟨k,List.mem_range.mpr hk,weight_other xs i k hik⟩
-    -- The `0` is `Fin`'s, which core's `Fin.mul_zero` matches and Mathlib's `mul_zero` does not.
-    rw [hp, Fin.mul_zero]
+    rw [hp, mul_zero]
 
 private def outerStep (xs ys : Array Fr) (r : PolynomialCoeff) (i : Nat) :
     Except KzgError PolynomialCoeff := do
@@ -176,10 +171,8 @@ theorem interpolatePolynomialcoeff_eval_at_of_distinct
     simpa only [← Array.foldlM_toList, Array.toList_range] using h
   rw [outer_eval xs ys k hk hsz hdistinct (List.range xs.size) #[Fr.zero] out
     (fun i hi => List.mem_range.mp hi) hfold, eval_singleton]
-  -- The `0` in this sum is `Fin`'s, not the monoid's, so `sum_delta` goes in by `erw`.
-  erw [sum_delta _ k _ List.nodup_range]
-  rw [ite_eq_left (List.mem_range.mpr hk)]
-  exact Fin.zero_add _
+  rw [sum_delta _ k _ List.nodup_range, ite_eq_left (List.mem_range.mpr hk)]
+  exact zero_add _
 
 private theorem inner_range_size_and_bound (xs : Array Fr) (i : Nat)
     (init : PolynomialCoeff) (hinit : init.size = 1) :

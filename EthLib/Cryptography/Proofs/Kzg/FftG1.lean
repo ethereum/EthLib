@@ -27,7 +27,6 @@ namespace EthLib.Cryptography.Kzg
 
 open EthLib.Cryptography.Bls (Fr G1)
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Fin.instNatPow
 
 private theorem fr_pow_zero (a : Fr) : a ^ 0 = 1 := pow_zero a
 private theorem fr_pow_add (a : Fr) (m n : Nat) : a ^ (m + n) = a ^ m * a ^ n := pow_add a m n
@@ -47,8 +46,7 @@ theorem nsmul_val_add_of_torsion {P : G1.curve.toAffine.Point}
     conv_rhs => rw [← Nat.div_add_mod m Fr.modulus]
     rw [add_nsmul, Nat.mul_comm Fr.modulus (m / Fr.modulus), mul_nsmul',
       htor, nsmul_zero, zero_add]
-  change ((a.val + b.val) % Fr.modulus) • P = a.val • P + b.val • P
-  rw [hmod, add_nsmul]
+  rw [Bls.Fr.val_add, hmod, add_nsmul]
 
 /-- Multiplying an `r`-torsion curve point by `(a * b).val` composes the two scalar multiplications. -/
 theorem nsmul_val_mul_of_torsion {P : G1.curve.toAffine.Point}
@@ -58,15 +56,14 @@ theorem nsmul_val_mul_of_torsion {P : G1.curve.toAffine.Point}
     conv_rhs => rw [← Nat.div_add_mod m Fr.modulus]
     rw [add_nsmul, Nat.mul_comm Fr.modulus (m / Fr.modulus), mul_nsmul',
       htor, nsmul_zero, zero_add]
-  change ((a.val * b.val) % Fr.modulus) • P = a.val • (b.val • P)
-  rw [hmod, mul_nsmul']
+  rw [Bls.Fr.val_mul, hmod, mul_nsmul']
 
 /-- Multiplying an `r`-torsion curve point by `(-a).val` negates `a.val * P`. -/
 theorem nsmul_val_neg_of_torsion {P : G1.curve.toAffine.Point}
     (htor : Fr.modulus • P = 0) (a : Fr) :
     (-a).val • P = -(a.val • P) := by
   apply eq_neg_of_add_eq_zero_left
-  rw [← nsmul_val_add_of_torsion htor (-a) a, fr_neg_add_cancel]
+  rw [← nsmul_val_add_of_torsion htor (-a) a, fr_neg_add_cancel, Bls.Fr.val_zero]
   exact zero_nsmul P
 
 /-! ## Shape and butterfly step of `fftHalveG1` and `fftG1` -/
@@ -197,9 +194,7 @@ theorem toPoint_getElem!_fftG1 {k : Nat} {ω : Fr}
     rw [fftG1, ite_eq_left (by omega : vals.size ≤ 1)]
     have hj0 : j = 0 := by omega
     subst hj0
-    rw [Finset.sum_range_one, Nat.zero_mul, fr_pow_zero]
-    change (1 : Nat) • G1.toPoint vals[0]! = G1.toPoint vals[0]!
-    exact (one_nsmul _).symm
+    rw [Finset.sum_range_one, Nat.zero_mul, fr_pow_zero, Bls.Fr.val_one, one_nsmul]
   | succ k ih =>
     have hpk : 0 < 2 ^ k := Nat.two_pow_pos k
     have h2 : 2 ^ (k + 1) = 2 * 2 ^ k := by rw [pow_succ]; ring
@@ -260,8 +255,7 @@ theorem toPoint_getElem!_fftG1 {k : Nat} {ω : Fr}
       have hvr := valid_getElem!_fftG1 (fftHalveG1 vals 1) (fftHalve roots 0) hsize1 hv1 j hjk
       rw [ite_eq_left hjk, G1.toPoint_add hvl (G1.valid_mul hvr _),
         G1.toPoint_mul hvr, hl j hjk, hr j hjk, hroots j (by rw [h2]; omega), Finset.smul_sum]
-      congr 1
-      refine Finset.sum_congr rfl fun i hi => ?_
+      refine congrArg₂ (· + ·) rfl (Finset.sum_congr rfl fun i hi => ?_)
       rw [Finset.mem_range] at hi
       have hti := htor (2 * i + 1) (by rw [h2]; omega)
       rw [← nsmul_val_mul_of_torsion hti (ω ^ j) (ω ^ (2 * i * j)),

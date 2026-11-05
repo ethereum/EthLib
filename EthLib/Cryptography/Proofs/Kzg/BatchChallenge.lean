@@ -32,6 +32,10 @@ open EthLib.Cryptography.Bls (Fr)
 open OracleComp OracleSpec ENNReal Polynomial
 open scoped EthLib.Cryptography.Bls.Fr
 
+/-- Uniform sampling of `Fr`, through its `r` elements. -/
+noncomputable instance : SampleableType Fr :=
+  SampleableType.ofEquiv (Fintype.equivFinOfCardEq Bls.Fr.card_eq).symm
+
 /-- The game of the batch challenge, with the hash as an oracle from batches `X` to `Fr`.
 
 The adversary queries the oracle as it likes, then outputs a batch.
@@ -91,10 +95,11 @@ theorem prEvent_batchRomRoot_le {X : Type} [DecidableEq X] (errorPoly : X → Fr
     · calc _ ≤ Pr{let u ← $ᵗ Fr}[errorPoly x ≠ 0 ∧ (errorPoly x).eval u = 0] :=
             prEvent_mono _ _ _ fun _ h => h.2
         _ ≤ _ := by
-          rw [SampleableType.prEvent_uniformSample, Fintype.card_fin]
+          rw [SampleableType.prEvent_uniformSample, Bls.Fr.card_eq]
           gcongr
           exact_mod_cast card_roots_filter_le _ (hdeg x ha)
-    · simp [ha]
+    · simp only [ha, false_and, prEvent_false]
+      exact zero_le
   · -- A winning batch is the last query of the game.
     intro g hev
     refine ⟨⟨evalWithAnswerFn (QueryImpl.ofFn g) adversary, g _⟩, ?_, ?_⟩

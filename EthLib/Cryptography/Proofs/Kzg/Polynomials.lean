@@ -204,24 +204,20 @@ theorem bytesToBlsField_ok {b : Bytes32} {f : Fr}
     rw [hval, bytesBEToNat, bytesBEToNatAux_eq_fromBytesBEAux]
   · cases h
 
+/-- A field element that the bytes decode to is the result of the KZG decoder. -/
+private theorem bytesToBlsField_of_fromBytesBE {y : Bytes32} {x : Fr}
+    (h : Fr.fromBytesBE ⟨y.toArray⟩ = .ok x) : bytesToBlsField y = .ok x := by
+  unfold bytesToBlsField
+  rw [h]
+
 /-- Decoding the encoding of a field element gives it back. -/
 @[simp] theorem bytesToBlsField_blsFieldToBytes (x : Fr) :
     bytesToBlsField (blsFieldToBytes x) = .ok x := by
-  have heq : (⟨(blsFieldToBytes x).toArray⟩ : ByteArray) = intToBytesBE x.val 32 := rfl
-  have hlt256 : x.val < 256 ^ 32 :=
-    Nat.lt_trans x.isLt (by decide : Fr.modulus < 256 ^ 32)
-  have hdec : Bls.Fr.bytesBEToNat ⟨(blsFieldToBytes x).toArray⟩ = x.val := by
-    rw [Bls.Fr.bytesBEToNat, ← bytesBEToNatAux_eq_fromBytesBEAux,
-        ← bytesBEToNat, heq, bytesBEToNat_intToBytesBE_of_lt hlt256]
-  have hfrom : Bls.Fr.fromBytesBE ⟨(blsFieldToBytes x).toArray⟩ = .ok x := by
-    unfold Bls.Fr.fromBytesBE
-    have hsz : ¬ (⟨(blsFieldToBytes x).toArray⟩ : ByteArray).size ≠ 32 := by
-      simp [ByteArray.size]
-    rw [ite_eq_right hsz]
-    dsimp only []
-    simp only [hdec, dite_eq_ite, ite_eq_left x.isLt, Fin.eta]
-  unfold bytesToBlsField
-  rw [hfrom]
+  -- The decoder is opened on a variable, so the kernel never evaluates the encoding.
+  have heta : ∀ b : ByteArray, (⟨b.data⟩ : ByteArray) = b := fun _ => rfl
+  apply bytesToBlsField_of_fromBytesBE
+  rw [show (blsFieldToBytes x).toArray = x.toBytesBE.data from rfl, heta,
+    Bls.Fr.fromBytesBE_toBytesBE]
 
 /-- Field element `i` of a flattened vector of 32-byte chunks is chunk `i`. -/
 @[simp] theorem fieldElementBytes_flatten {k : Nat} (v : Vector Bytes32 k) (i : Fin k) :
@@ -463,7 +459,7 @@ private theorem ite_lt_size_getElem! (p : PolynomialCoeff) (i : Nat) :
     · have hib : ¬ i < b.size := by omega
       rw [getElem!_of_ge_size _ (by simp [hi]),
           getElem!_of_ge_size a hi, getElem!_of_ge_size b hib]
-      rfl
+      exact (Fr.add_zero _).symm
   · rw [ite_eq_right hab]
     dsimp only []
     by_cases hi : i < b.size
@@ -472,21 +468,8 @@ private theorem ite_lt_size_getElem! (p : PolynomialCoeff) (i : Nat) :
     · have hia : ¬ i < a.size := by omega
       rw [getElem!_of_ge_size _ (by simp [hi]),
           getElem!_of_ge_size a hia, getElem!_of_ge_size b hi]
-      rfl
+      exact (Fr.add_zero _).symm
 
-private theorem fr_add_zero (a : Fr) : a + Fr.zero = a :=
-  Fin.add_zero a
-
-private theorem fr_zero_add (a : Fr) : Fr.zero + a = a :=
-  Fin.zero_add a
-
-private theorem fr_zero_mul (a : Fr) : Fr.zero * a = Fr.zero :=
-  Fin.zero_mul a
-
-private theorem fr_add_mul (a b c : Fr) : (a + b) * c = a * c + b * c := by
-  apply Fin.ext
-  simp only [Fin.val_add, Fin.val_mul, Nat.add_mod_mod, Nat.mod_add_mod,
-    Nat.mod_mul_mod, Nat.add_mul]
 
 /-- Direct monomial sum evaluation `∑_{i < n} p[i] * x^i` of the first `n`
 coefficients of `p` at `x`. -/
@@ -503,9 +486,9 @@ private theorem evalCoeffPolyAux_addPolynomialcoeff (a b : PolynomialCoeff)
     evalCoeffPolyAux (addPolynomialcoeff a b) x n =
       evalCoeffPolyAux a x n + evalCoeffPolyAux b x n := by
   induction n with
-  | zero => rfl
+  | zero => exact (Fr.add_zero _).symm
   | succ n ih =>
-    simp only [evalCoeffPolyAux, ih, addPolynomialcoeff_getElem!, fr_add_mul]
+    simp only [evalCoeffPolyAux, ih, addPolynomialcoeff_getElem!, Fr.add_mul]
     rw [← Fr.add_assoc, ← Fr.add_assoc,
         Fr.add_right_comm (evalCoeffPolyAux a x n) (evalCoeffPolyAux b x n)]
 
@@ -521,7 +504,7 @@ private theorem evalCoeffPolyAux_of_le (p : PolynomialCoeff) (x : Fr) {n : Nat}
       rfl
     · have hn : p.size ≤ n := by omega
       rw [evalCoeffPolyAux, ih hn, getElem!_of_ge_size p (by omega),
-          fr_zero_mul, fr_add_zero]
+          Fr.zero_mul, Fr.add_zero]
 
 /-- Evaluating the sum of two coefficient-form polynomials equals the sum of
 their evaluations. -/
@@ -578,7 +561,7 @@ private theorem addPolynomialcoeff_replicate_zero (m n : Nat) :
       · exact getElem!_of_ge_size _ (by simp [h])
     have hmn : (Array.replicate (max m n) Fr.zero)[i]! = Fr.zero := by
       rw [getElem!_pos _ i hi2, Array.getElem_replicate]
-    rw [hm, hn, hmn, fr_add_zero]
+    rw [hm, hn, hmn, Fr.add_zero]
 
 /-- `multiplyPolynomialcoeff` rejects polynomials whose combined length
 exceeds `FIELD_ELEMENTS_PER_EXT_BLOB`. -/
@@ -714,7 +697,7 @@ theorem leadingCoeff_multiplyPolynomialcoeff {a b p : PolynomialCoeff}
     have hidx : k + 1 + b.size - 2 = k + b.size - 1 := by omega
     have hsub : k + 1 - 1 = k := by omega
     rw [hidx, hsub, mulFoldStep, addPolynomialcoeff_getElem!,
-        getElem!_foldl_mulFoldStep_before_top a b hb0 k, fr_zero_add]
+        getElem!_foldl_mulFoldStep_before_top a b hb0 k, Fr.zero_add]
     have hpos : k + b.size - 1 <
         (Array.replicate k Fr.zero ++ b.map (· * a[k]!)).size := by
       simp [Array.size_append]
@@ -753,10 +736,11 @@ private theorem foldlM_vanishing_size_and_lead (xs : List Fr)
         have hidx : q.size - 1 = init.size + (#[-x, Fr.one] : PolynomialCoeff).size - 2 := by
           simp [hq_sz]
         rw [hidx, hlead, hinit_lead]
-        rfl
+        exact Fr.one_mul _
       obtain ⟨hsz, hld⟩ := ih q (by omega) hq_lead h
       refine ⟨?_, hld⟩
-      simp [hsz, hq_sz, Nat.add_right_comm, Nat.add_assoc]
+      simp only [hsz, hq_sz, List.length_cons]
+      omega
 
 /-- A successful `vanishingPolynomialcoeff xs` produces a polynomial of size
 `xs.size + 1` with leading coefficient `Fr.one`. -/
@@ -874,20 +858,11 @@ theorem vanishingPolynomialcoeff_ok_iff {xs : Array Fr} :
   ⟨fun ⟨_, hp⟩ => vanishingPolynomialcoeff_lt_of_ok hp,
    fun h => let ⟨p, hp, _, _⟩ := vanishingPolynomialcoeff_ok_of_lt h; ⟨p, hp⟩⟩
 
-private theorem fr_mul_zero (a : Fr) : a * Fr.zero = Fr.zero :=
-  Fin.mul_zero a
-
-private theorem fr_mul_one (a : Fr) : a * Fr.one = a :=
-  Fin.mul_one a
-
-private theorem fr_one_mul (a : Fr) : Fr.one * a = a :=
-  Fin.one_mul a
-
 private theorem fr_powNat_add (x : Fr) (a b : Nat) :
     Fr.powNat x (a + b) = Fr.powNat x a * Fr.powNat x b := by
   induction b with
   | zero =>
-    rw [Nat.add_zero, Fr.powNat_zero, fr_mul_one]
+    rw [Nat.add_zero, Fr.powNat_zero, Fr.mul_one]
   | succ b ih =>
     rw [Nat.add_succ, Fr.powNat_succ, Fr.powNat_succ, ih,
         ← Fr.mul_assoc, Fr.mul_comm x (Fr.powNat x a), Fr.mul_assoc]
@@ -896,16 +871,16 @@ private theorem map_mul_getElem! (b : PolynomialCoeff) (c : Fr) (n : Nat) :
     (b.map (· * c))[n]! = b[n]! * c := by
   by_cases hn : n < b.size
   · rw [getElem!_pos _ n (by simp [hn]), getElem!_pos b n hn, Array.getElem_map]
-  · rw [getElem!_of_ge_size _ (by simp [hn]), getElem!_of_ge_size b hn, fr_zero_mul]
+  · rw [getElem!_of_ge_size _ (by simp [hn]), getElem!_of_ge_size b hn, Fr.zero_mul]
 
 private theorem evalCoeffPolyAux_scale_right (b : PolynomialCoeff) (c x : Fr) (n : Nat) :
     evalCoeffPolyAux (b.map (· * c)) x n = evalCoeffPolyAux b x n * c := by
   induction n with
   | zero =>
-    simp [evalCoeffPolyAux, fr_zero_mul]
+    simp [evalCoeffPolyAux, Fr.zero_mul]
   | succ n ih =>
     simp only [evalCoeffPolyAux, ih, map_mul_getElem!]
-    rw [fr_add_mul, Fr.mul_assoc, Fr.mul_comm c (Fr.powNat x n), ← Fr.mul_assoc]
+    rw [Fr.add_mul, Fr.mul_assoc, Fr.mul_comm c (Fr.powNat x n), ← Fr.mul_assoc]
 
 private theorem evalCoeffPoly_scale_right (b : PolynomialCoeff) (c x : Fr) :
     evalCoeffPoly (b.map (· * c)) x = evalCoeffPoly b x * c := by
@@ -922,7 +897,7 @@ private theorem evalCoeffPolyAux_replicate_zero_append_le (q : PolynomialCoeff) 
       simp [Array.size_append]; omega
     rw [evalCoeffPolyAux, ih (by omega), getElem!_pos _ n hlt,
         Array.getElem_append_left (by simp [hn]), Array.getElem_replicate,
-        fr_zero_mul, fr_add_zero]
+        Fr.zero_mul, Fr.add_zero]
 
 private theorem replicate_zero_append_getElem!_add (q : PolynomialCoeff) (k m : Nat) :
     (Array.replicate k Fr.zero ++ q)[k + m]! = q[m]! := by
@@ -943,10 +918,10 @@ private theorem evalCoeffPolyAux_replicate_zero_append_add (q : PolynomialCoeff)
   induction m with
   | zero =>
     rw [Nat.add_zero, evalCoeffPolyAux_replicate_zero_append_le q x k k (Nat.le_refl k),
-        evalCoeffPolyAux, fr_zero_mul]
+        evalCoeffPolyAux, Fr.zero_mul]
   | succ m ih =>
     rw [Nat.add_succ, evalCoeffPolyAux, ih, evalCoeffPolyAux,
-        replicate_zero_append_getElem!_add, fr_add_mul,
+        replicate_zero_append_getElem!_add, Fr.add_mul,
         fr_powNat_add x k m, Fr.mul_comm (Fr.powNat x k) (Fr.powNat x m),
         ← Fr.mul_assoc]
 
@@ -961,19 +936,19 @@ private theorem evalCoeffPoly_zero_singleton (x : Fr) :
     evalCoeffPoly #[Fr.zero] x = Fr.zero := by
   show Fr.zero + (#[Fr.zero] : PolynomialCoeff)[0]! * Fr.powNat x 0 = Fr.zero
   have h0 : (#[Fr.zero] : PolynomialCoeff)[0]! = Fr.zero := rfl
-  rw [h0, fr_zero_mul, fr_add_zero]
+  rw [h0, Fr.zero_mul, Fr.add_zero]
 
 private theorem evalCoeffPoly_foldl_mulFoldStep (a b : PolynomialCoeff) (x : Fr) (k : Nat) :
     evalCoeffPoly ((List.range k).foldl (mulFoldStep a b) #[Fr.zero]) x =
       evalCoeffPolyAux a x k * evalCoeffPoly b x := by
   induction k with
   | zero =>
-    simp [evalCoeffPoly_zero_singleton, evalCoeffPolyAux, fr_zero_mul]
+    simp [evalCoeffPoly_zero_singleton, evalCoeffPolyAux, Fr.zero_mul]
   | succ k ih =>
     rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
         mulFoldStep, evalCoeffPoly_addPolynomialcoeff, ih,
         evalCoeffPoly_replicate_zero_append, evalCoeffPoly_scale_right,
-        evalCoeffPolyAux, fr_add_mul]
+        evalCoeffPolyAux, Fr.add_mul]
     congr 1
     rw [Fr.mul_assoc, Fr.mul_comm (evalCoeffPoly b x)]
 
@@ -1004,16 +979,8 @@ private theorem evalPolyAt_linear_factor_self (z : Fr) :
   have h0 : (#[-z, Fr.one] : PolynomialCoeff)[0]! = -z := rfl
   have h1 : (#[-z, Fr.one] : PolynomialCoeff)[1]! = Fr.one := rfl
   have hp1 : Fr.powNat z 1 = z := by
-    rw [Fr.powNat_succ, Fr.powNat_zero, fr_mul_one]
-  rw [h0, h1, Fr.powNat_zero, hp1, fr_zero_add, fr_mul_one, fr_one_mul]
-  apply Fin.ext
-  have hzlt := z.isLt
-  simp only [Fin.val_add, Fin.val_neg]
-  by_cases hz : z = 0
-  · subst hz; rfl
-  · rw [ite_eq_right hz]
-    show (Fr.modulus - z.val + z.val) % Fr.modulus = 0
-    rw [Nat.sub_add_cancel (Nat.le_of_lt hzlt), Nat.mod_self]
+    rw [Fr.powNat_succ, Fr.powNat_zero, Fr.mul_one]
+  rw [h0, h1, Fr.powNat_zero, hp1, Fr.zero_add, Fr.mul_one, Fr.one_mul, Fr.neg_add_cancel]
 
 private theorem foldlM_vanishing_eval_zero_of_init_zero (xs : List Fr)
     (init v : PolynomialCoeff) (z : Fr)
@@ -1030,7 +997,7 @@ private theorem foldlM_vanishing_eval_zero_of_init_zero (xs : List Fr)
     · cases h
     · rename_i q hq
       have hqz : evalPolyAt q z = Fr.zero := by
-        rw [evalPolyAt_mulPoly z hq, hz, fr_zero_mul]
+        rw [evalPolyAt_mulPoly z hq, hz, Fr.zero_mul]
       exact ih q hqz h
 
 private theorem foldlM_vanishing_eval_root (xs : List Fr)
@@ -1046,7 +1013,7 @@ private theorem foldlM_vanishing_eval_root (xs : List Fr)
     · rename_i q hq
       rcases List.mem_cons.mp hz with rfl | hmem
       · have hqz : evalPolyAt q z = Fr.zero := by
-          rw [evalPolyAt_mulPoly z hq, evalPolyAt_linear_factor_self, fr_mul_zero]
+          rw [evalPolyAt_mulPoly z hq, evalPolyAt_linear_factor_self, Fr.mul_zero]
         exact foldlM_vanishing_eval_zero_of_init_zero rest q v z hqz h
       · exact ih q hmem h
 

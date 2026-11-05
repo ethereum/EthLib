@@ -33,6 +33,13 @@ theorem keyGen_ikmTooShort {ikm : ByteArray} (h : ikm.size < 32) (keyInfo : Byte
   unfold keyGen
   simp only [h, ↓reduceIte]
 
+/-- A success relabelled and passed on is the value passed on.
+
+It is stated on variables, so the kernel never reduces a field element to compare two forms. -/
+private theorem mapError_ok_bind {ε ε' α β : Type} (f : ε → ε') (a : α)
+    (k : α → Except ε' β) : (Except.mapError f (.ok a) >>= k) = k a :=
+  rfl
+
 /-- HKDF never fails in an attempt: its pseudorandom key has 32 bytes, and its output 48. -/
 theorem keyGenLoop_ne_hkdf (ikm keyInfo salt : ByteArray) (attempts : Nat) :
     keyGenLoop ikm keyInfo salt attempts ≠ .error .keyGenHkdf := by
@@ -48,13 +55,12 @@ theorem keyGenLoop_ne_hkdf (ikm keyInfo salt : ByteArray) (attempts : Nat) :
       have := Hkdf.hkdf_error hx
       simp [KEYGEN_L, Hkdf.HASH_LEN] at this
     | ok okm =>
-      simp only [Except.mapError, bind, Except.bind] at h
+      rw [mapError_ok_bind] at h
       generalize Fr.ofNat (Fr.bytesBEToNat okm) = sk at h
-      by_cases hs : sk = 0
-      · simp only [hs, ↓reduceDIte] at h
-        exact ih _ h
-      · simp only [hs, ↓reduceDIte] at h
-        cases h
+      dsimp only at h
+      split at h
+      · exact ih _ h
+      · cases h
 
 /-- Key generation never fails inside HKDF. -/
 theorem keyGen_ne_hkdf (ikm keyInfo : ByteArray) :

@@ -33,9 +33,6 @@ open EthLib.Cryptography.Bls (G1 Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr Polynomial
 
--- Core's power instance on `Fin` hides Mathlib's power on `Fr`, as in `Proofs.Bls.FrZMod`.
-attribute [-instance] Fin.instNatPow
-
 /-- **A valid opening of one cell, at the secret `τ`.**
 
 The cell index is below 128, and the cell decodes to values `e`.

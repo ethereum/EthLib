@@ -23,11 +23,8 @@ open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial
 
--- Core's power instance on `Fin` hides Mathlib's power on `Fr`, as in `Proofs.Bls.FrZMod`.
-attribute [-instance] Fin.instNatPow
-
 /-- The scalar identity of the opening check. -/
-private theorem opening_iff (c y w t z : ZMod Fr.modulus) :
+private theorem opening_iff (c y w t z : Fr) :
     (c + -y) * -1 + w * (t + -z) = 0 ↔ c - y = w * (t - z) := by
   constructor <;> intro h <;> linear_combination -h
 

@@ -55,9 +55,9 @@ theorem Represents.unique {M : TargetGroup GT} {x : GT} {s t : Fr} (hs : M.Repre
   have h := hs.symm.trans ht
   have hfin : IsOfFinOrder M.generator :=
     orderOf_pos_iff.mp (M.orderOf_generator ▸ Fr.modulus_pos)
-  rw [hfin.pow_inj_mod, M.orderOf_generator, Nat.mod_eq_of_lt s.isLt,
-    Nat.mod_eq_of_lt t.isLt] at h
-  exact Fin.ext h
+  rw [hfin.pow_inj_mod, M.orderOf_generator, Nat.mod_eq_of_lt (Fr.val_lt s),
+    Nat.mod_eq_of_lt (Fr.val_lt t)] at h
+  exact Fr.ext h
 
 /-- The pairing of representatives represents the product of their scalars. -/
 theorem represents_pair {P : G1} {Q : G2} {a b : Fr} (hP : G1.Represents P a)
@@ -73,7 +73,7 @@ theorem Represents.mul {M : TargetGroup GT} {x y : GT} {s t : Fr} (hx : M.Repres
     (hy : M.Represents y t) : M.Represents (x * y) (s + t) := by
   have h := pow_mod_orderOf M.generator (s.val + t.val)
   rw [M.orderOf_generator] at h
-  rw [Represents, hx, hy, ← pow_add, Fin.val_add, h]
+  rw [Represents, hx, hy, ← pow_add, Fr.val_add, h]
 
 /-- A product of pairings of representatives represents the sum of the products of scalars. -/
 theorem represents_prod_pair {ι : Type} (s : Finset ι) {P : ι → G1} {Q : ι → G2} {a b : ι → Fr}
@@ -102,19 +102,19 @@ private theorem pairing_mul_eq_one (laws : PairingLaws) (l : List (G1 × G2)) (a
     (l.map fun pq => pairing pq.1 pq.2).prod = 1 :=
   (pairingCheck_toArray_iff l).mp ((laws.pairingCheck_iff l a b ha hb hr).mpr hsum)
 
-/-- The scalars of the check on `(P, Q)` and `(-(a b) g1, g2)`, over `ZMod r`. -/
-private theorem sum_two (a b : ZMod Fr.modulus) :
+/-- The scalars of the check on `(P, Q)` and `(-(a b) g1, g2)`. -/
+private theorem sum_two (a b : Fr) :
     (List.zipWith (· * ·) [a, -(a * b)] [b, 1]).sum = 0 := by
   simp only [List.zipWith_cons_cons, List.zipWith_nil_right, List.sum_cons, List.sum_nil]
   ring
 
 /-- The scalars of the check on `c` copies of `(g1, g2)` and on `(-c g1, g2)`. -/
-private theorem sum_replicate (c : ZMod Fr.modulus) :
+private theorem sum_replicate (c : Fr) :
     (List.zipWith (· * ·) (List.replicate c.val 1 ++ [-c])
       (List.replicate c.val 1 ++ [1])).sum = 0 := by
   rw [List.zipWith_append (by simp), List.zipWith_replicate, List.sum_append, List.sum_replicate]
   simp only [List.zipWith_cons_cons, List.zipWith_nil_right, List.sum_cons, List.sum_nil,
-    nsmul_eq_mul, min_self, ZMod.natCast_zmod_val, mul_one]
+    nsmul_eq_mul, min_self, Fr.natCast_val, mul_one]
   ring
 
 /-- Entry `i` of `n` copies of `x` followed by `y` is `x` below `n`, and `y` at `n`. -/

@@ -30,9 +30,6 @@ open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial
 
--- Core's power instance on `Fin` hides Mathlib's power on `Fr`, as in `Proofs.Bls.FrZMod`.
-attribute [-instance] Fin.instNatPow
-
 /-! ## The removal of repeated commitments -/
 
 /-- One step of the removal of repeated commitments. -/
@@ -233,12 +230,17 @@ theorem verifyCellKzgProofBatchImpl_decodes {s : TrustedSetup}
 theorem blsFieldToBytes_of_bytesToBlsField {b : Base.Bytes32} {f : Fr}
     (h : bytesToBlsField b = .ok f) : blsFieldToBytes f = b := by
   have hval := (bytesToBlsField_ok h).1
+  have hval' := (bytesToBlsField_ok (bytesToBlsField_blsFieldToBytes f)).1
   have harr : (⟨(blsFieldToBytes f).toArray⟩ : ByteArray) = ⟨b.toArray⟩ := by
+    -- Both byte strings have 32 bytes and decode to the value of `f`.
     have h32 : (⟨b.toArray⟩ : ByteArray).size = 32 := by simp [ByteArray.size]
-    show intToBytesBE f.val 32 = _
-    rw [hval]
-    have := intToBytesBE_bytesBEToNat (⟨b.toArray⟩ : ByteArray)
-    rwa [h32] at this
+    have h32' : (⟨(blsFieldToBytes f).toArray⟩ : ByteArray).size = 32 := by
+      simp [ByteArray.size]
+    have e := intToBytesBE_bytesBEToNat (⟨b.toArray⟩ : ByteArray)
+    have e' := intToBytesBE_bytesBEToNat (⟨(blsFieldToBytes f).toArray⟩ : ByteArray)
+    rw [h32, ← hval] at e
+    rw [h32', ← hval'] at e'
+    rw [← e, ← e']
   apply Vector.toArray_inj.mp
   exact congrArg ByteArray.data harr
 

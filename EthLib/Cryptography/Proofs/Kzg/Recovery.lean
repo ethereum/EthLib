@@ -248,7 +248,7 @@ private theorem fr_powNat_mul (x : Fr) (c i : Nat) :
     have hpow_add : ∀ a b : Nat, Fr.powNat x (a + b) = Fr.powNat x a * Fr.powNat x b := by
       intro a b
       induction b with
-      | zero => rw [Nat.add_zero, Fr.powNat_zero]; exact (Fin.mul_one _).symm
+      | zero => rw [Nat.add_zero, Fr.powNat_zero]; exact (Bls.Fr.mul_one _).symm
       | succ b ihb =>
         rw [Nat.add_succ, Fr.powNat_succ, Fr.powNat_succ, ihb,
             ← Fr.mul_assoc, Fr.mul_comm x (Fr.powNat x a), Fr.mul_assoc]
@@ -288,8 +288,8 @@ private theorem evalCoeffPolyAux_extend_block
       rw [hcell] at hr2 ⊢
       omega
     rw [ite_eq_right (fun h => hmod h.1)] at hget
-    have h0mul (y : Fr) : Fr.zero * y = Fr.zero := Fin.zero_mul y
-    have hadd0 (y : Fr) : y + Fr.zero = y := Fin.add_zero y
+    have h0mul (y : Fr) : Fr.zero * y = Fr.zero := Bls.Fr.zero_mul y
+    have hadd0 (y : Fr) : y + Fr.zero = y := Bls.Fr.add_zero y
     change evalCoeffPolyAux p x (i * FIELD_ELEMENTS_PER_CELL) +
         shortZeroPoly[i]! * (x.powNat FIELD_ELEMENTS_PER_CELL).powNat i +
         p[i * FIELD_ELEMENTS_PER_CELL + (d + 1)]! * x.powNat (i * FIELD_ELEMENTS_PER_CELL + (d + 1)) = _
@@ -338,8 +338,8 @@ private theorem evalCoeffPolyAux_extend_tail
       rw [hcell] at hlt
       omega
     rw [ite_eq_right hnot] at hget
-    have h0mul (y : Fr) : Fr.zero * y = Fr.zero := Fin.zero_mul y
-    have hadd0 (y : Fr) : y + Fr.zero = y := Fin.add_zero y
+    have h0mul (y : Fr) : Fr.zero * y = Fr.zero := Bls.Fr.zero_mul y
+    have hadd0 (y : Fr) : y + Fr.zero = y := Bls.Fr.add_zero y
     change evalCoeffPolyAux p x (k * FIELD_ELEMENTS_PER_CELL) +
         p[k * FIELD_ELEMENTS_PER_CELL + d]! * x.powNat (k * FIELD_ELEMENTS_PER_CELL + d) = _
     rw [hget, h0mul, hadd0]

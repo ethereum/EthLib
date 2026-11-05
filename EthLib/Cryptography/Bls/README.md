@@ -110,6 +110,8 @@ BLS12-381 uses two prime fields: `Fp`, over which the curve is defined, and `Fr`
 whose order `r` is the order of the groups.
 The proofs show that both moduli are prime (`modulus_prime`, in `FpZMod.lean` and `FrZMod.lean`),
 so each type is a Mathlib field and every lemma of field theory applies to it.
+`Fr` stores each element in Montgomery form, and a ring isomorphism to `ZMod r` gives it that field structure.
+The field operations are the sum, product, power and inverse of the specification.
 They also show that 7 generates the multiplicative group of `Fr`,
 which has order `r - 1` (`isPrimitiveRoot_seven`, `FrZMod.lean`).
 KZG derives its roots of unity from that generator.

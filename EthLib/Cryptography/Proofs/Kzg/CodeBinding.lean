@@ -54,9 +54,6 @@ open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial Lagrange
 
--- Core's power instance on `Fin` hides Mathlib's power on `Fr`, as in `Proofs.Bls.FrZMod`.
-attribute [-instance] Fin.instNatPow
-
 /-! ## Points from the setup -/
 
 /-- The commitment to a polynomial: its first 4096 coefficients times the monomial points. -/
@@ -81,7 +78,6 @@ theorem represents_commitPoly_of_monomial {s : TrustedSetup} {τ : Fr}
   rw [eval_eq_sum_range' hp, Vector.size_toArray]
   refine Finset.sum_congr rfl fun j hj => ?_
   rw [getElem!_pos _ j (by simpa using hj), Array.getElem_ofFn]
-  rfl
 
 /-- The commitment to a polynomial of degree below 4096 represents its value at the secret. -/
 theorem represents_commitPoly {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ) {p : Fr[X]}
@@ -164,7 +160,6 @@ theorem vanishingAt_cells {J : Finset Nat} (hJ : ∀ j ∈ J, j < CELLS_PER_EXT_
   rw [nodal_biUnion (cellNodes_pairwiseDisjoint J), eval_prod]
   refine Finset.prod_congr rfl fun j hj => ?_
   rw [nodal_cellNodes (hJ j hj), eval_sub, eval_pow, eval_X, eval_C]
-  rfl
 
 /-! ## The searches of the reductions -/
 
@@ -197,8 +192,8 @@ noncomputable def arsdhCandidate (s : TrustedSetup) (J : Finset Nat) (ev : Nat �
 theorem cellVanishing_monic (cellIndex : Nat) : (cellVanishing cellIndex).Monic :=
   monic_X_pow_sub_C _ (by decide)
 
-/-- A sum with a zero term, over `ZMod r` where the lemmas of rings apply. -/
-private theorem add_zero_mul_zmod {a b c : ZMod Fr.modulus} (h : a + 0 * b = c) : a = c := by
+/-- A sum with a zero term. -/
+private theorem add_zero_mul_fr {a b c : Fr} (h : a + 0 * b = c) : a = c := by
   rw [← h, zero_mul, add_zero]
 
 /-- The honest values of cell `jx` interpolate to a remainder.
@@ -215,24 +210,23 @@ theorem cellInterpolant_honestEvals {J : Finset Nat} (ev : Nat → CosetEvals) {
   · have hm' := Finset.mem_range.mp hm
     have hz : (cellVanishing jx).eval (cellPoint jx m) = 0 := by
       rw [cellVanishing, eval_sub, eval_pow, eval_X, eval_C, cellPoint_pow hjx hm', sub_self]
-      rfl
     have h := congrArg (eval (cellPoint jx m))
       (modByMonic_add_div (cellsInterpolant J ev) (cellVanishing jx))
     rw [eval_add, eval_mul, hz] at h
-    rw [add_zero_mul_zmod h, honestEvals, getElem!_pos _ m (by simpa using hm'), Array.getElem_ofFn]
+    rw [add_zero_mul_fr h, honestEvals, getElem!_pos _ m (by simpa using hm'), Array.getElem_ofFn]
 
-/-- The honest opening, over `ZMod r` where the lemmas of rings apply. -/
-private theorem honest_zmod {r z q c : ZMod Fr.modulus} (h : r + z * q = c) : c - r = q * z := by
+/-- The honest opening. -/
+private theorem honest_fr {r z q c : Fr} (h : r + z * q = c) : c - r = q * z := by
   rw [← h]
   ring
 
-/-- A difference that is not zero, over `ZMod r`. -/
-private theorem add_neg_ne_zero_zmod {c x : ZMod Fr.modulus} (h : x ≠ c) : c + -x ≠ 0 := by
+/-- A difference that is not zero. -/
+private theorem add_neg_ne_zero_fr {c x : Fr} (h : x ≠ c) : c + -x ≠ 0 := by
   rw [← sub_eq_add_neg]
   exact sub_ne_zero.mpr (Ne.symm h)
 
-/-- A difference as a sum with the negation, over `ZMod r`. -/
-private theorem add_neg_eq_zmod {c x y : ZMod Fr.modulus} (h : c - x = y) : c + -x = y :=
+/-- A difference as a sum with the negation. -/
+private theorem add_neg_eq_fr {c x y : Fr} (h : c - x = y) : c + -x = y :=
   (sub_eq_add_neg c x).symm.trans h
 
 /-- **Code-binding of the PeerDAS commitment, deterministic form (Lemma 4 of ePrint 2025/1683).**
@@ -291,7 +285,7 @@ theorem code_binding {GT : Type} [CommMonoid GT] (M : TargetGroup GT) {s : Trust
       rw [eval_add, eval_mul, hc] at h
       rw [cellInterpolant_honestEvals ev hjx]
       rw [cellVanishing, eval_sub, eval_pow, eval_X, eval_C] at h
-      exact honest_zmod h
+      exact honest_fr h
   · -- The batched opening of the cells of `J` is an ARSDH solution.
     refine Or.inr ?_
     have hφ := represents_weightedSum (J := J) (P := P) (w := w)
@@ -301,6 +295,6 @@ theorem code_binding {GT : Type} [CommMonoid GT] (M : TargetGroup GT) {s : Trust
       (domainPoint_injOn_cells hJ), card_biUnion_cellNodes, hJcard, vanishingAt_cells hJ]
     have hb := cell_multiproof_batching hJ hJne ev (c := c) (τ := τ) (φ := w)
       fun j hj => hv j (Finset.mem_insert_of_mem hj)
-    exact ⟨rfl, add_neg_ne_zero_zmod hc, add_neg_eq_zmod hb⟩
+    exact ⟨rfl, add_neg_ne_zero_fr hc, add_neg_eq_fr hb⟩
 
 end EthLib.Cryptography.Kzg

@@ -36,11 +36,6 @@ open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial
 
--- See the note in `Proofs.Bls.FrZMod`: core's `NatPow` instance on `Fin`
--- shadows Mathlib's monoid power on `Fr` and breaks
--- `rw` with Mathlib `pow` lemmas. File-local, so repeated here.
-attribute [-instance] Fin.instNatPow
-
 -- A few unification problems below (e.g. seeing through
 -- `Lagrange.nodal` to its `Finset.prod`) exceed the default depth.
 set_option maxRecDepth 4000
@@ -108,12 +103,8 @@ theorem nodalWeight_evalDomain (i : Fin FIELD_ELEMENTS_PER_BLOB) :
       show FIELD_ELEMENTS_PER_BLOB - 1 + 1 = FIELD_ELEMENTS_PER_BLOB by decide]
     exact evalDomain_pow_width i
   rw [mul_inv, hvpow, inv_inv, mul_comm]
-  rfl
 
-/-- Pure commutativity shuffle used in the slow-path sum below. Stated
-over variables so it can be applied with `exact` (which is robust
-against the `Fin`-vs-Mathlib instance-path mismatches that break
-`ring` on `Fr` goals). -/
+/-- Pure commutativity shuffle used in the slow-path sum below. -/
 private theorem mul_shuffle (a b c q : Fr) :
     a * c * b * q = q * a * b * c := by
   rw [mul_comm, ← mul_assoc, ← mul_assoc, mul_right_comm]
@@ -161,7 +152,6 @@ theorem evaluatePolynomialInEvaluationForm_eq_interpolate
     have hnodal : Polynomial.eval z (Lagrange.nodal Finset.univ evalDomain)
         = z ^ FIELD_ELEMENTS_PER_BLOB - 1 := by
       rw [nodal_evalDomain, eval_sub, eval_pow, eval_X, eval_one]
-      rfl
     have hsum : ∑ j : Fin FIELD_ELEMENTS_PER_BLOB,
           Lagrange.nodalWeight Finset.univ evalDomain j
             * (z - evalDomain j)⁻¹ * p[j.val]!

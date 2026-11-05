@@ -89,17 +89,17 @@ theorem nsmul_generator_mod (k : Nat) :
 noncomputable def ofFr (s : Fr) : curve.toAffine.Point :=
   s.val • toPoint generator
 
-theorem ofFr_zero : ofFr 0 = 0 := zero_nsmul _
+theorem ofFr_zero : ofFr 0 = 0 := by rw [ofFr, Fr.val_zero, zero_nsmul]
 
-theorem ofFr_one : ofFr 1 = toPoint generator := one_nsmul _
+theorem ofFr_one : ofFr 1 = toPoint generator := by rw [ofFr, Fr.val_one, one_nsmul]
 
 /-- Reduction modulo `r` in `Fr` agrees with curve addition because `[r] * g_2 = 0`. -/
 theorem ofFr_add (s t : Fr) : ofFr (s + t) = ofFr s + ofFr t := by
-  rw [ofFr, ofFr, ofFr, show (s + t).val = (s.val + t.val) % Fr.modulus from rfl,
+  rw [ofFr, ofFr, ofFr, Fr.val_add,
       ← nsmul_generator_mod, add_nsmul]
 
 theorem ofFr_mul (s t : Fr) : ofFr (s * t) = s.val • ofFr t := by
-  rw [ofFr, ofFr, show (s * t).val = s.val * t.val % Fr.modulus from rfl,
+  rw [ofFr, ofFr, Fr.val_mul,
       ← nsmul_generator_mod, mul_nsmul']
 
 theorem toPoint_mul_generator (s : Fr) :

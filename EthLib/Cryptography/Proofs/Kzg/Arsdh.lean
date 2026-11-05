@@ -65,8 +65,8 @@ def IsBsdhSolutionSub {GT : Type} [CommMonoid GT] (M : TargetGroup GT) (τ : Fr)
     (sol : Fr × GT) : Prop :=
   sol.1 ≠ τ ∧ M.Represents sol.2 (τ - sol.1)⁻¹
 
-/-- The two signs of `c`, over `ZMod r` where the lemmas of rings apply. -/
-private theorem sign_zmod (τ c : ZMod Fr.modulus) :
+/-- The two signs of `c`. -/
+private theorem sign_fr (τ c : Fr) :
     τ - -c = τ + c ∧ (-c ≠ τ ↔ τ + c ≠ 0) := by
   refine ⟨sub_neg_eq_add τ c, not_congr ⟨fun h => ?_, fun h => ?_⟩⟩
   · rw [← h]
@@ -77,7 +77,7 @@ private theorem sign_zmod (τ c : ZMod Fr.modulus) :
 -/
 theorem isBsdhSolution_iff_sub {GT : Type} [CommMonoid GT] (M : TargetGroup GT) (τ c : Fr)
     (x : GT) : IsBsdhSolution M τ (c, x) ↔ IsBsdhSolutionSub M τ (-c, x) := by
-  obtain ⟨h, hne⟩ := sign_zmod τ c
+  obtain ⟨h, hne⟩ := sign_fr τ c
   simp only [IsBsdhSolution, IsBsdhSolutionSub]
   rw [show (τ - -c : Fr) = τ + c from h]
   exact and_congr_left' hne.symm
@@ -106,8 +106,8 @@ theorem isArsdhSolution_iff {d : Nat} {τ : Fr} {S : Finset Fr} {g φ : G1} {a b
   rw [hg.unique hg', hφ.unique hφ']
   exact ⟨h0, h⟩
 
-/-- The scalar form of the pairing equation, over `ZMod r` where `linear_combination` applies. -/
-private theorem pairing_form_zmod (a b v : ZMod Fr.modulus) :
+/-- The scalar form of the pairing equation. -/
+private theorem pairing_form_fr (a b v : Fr) :
     a = b * v ↔ a * -1 + b * v = 0 :=
   ⟨fun h => by linear_combination -h, fun h => by linear_combination -h⟩
 
@@ -124,6 +124,6 @@ theorem isArsdhSolution_iff_pairingCheck (laws : Bls.PairingLaws) {d : Nat} {τ 
     IsArsdhSolution d τ (S, g, φ) ↔ S.card = d + 1 ∧ a ≠ 0 ∧
       Bls.pairingCheck #[(g, G2.neg G2.generator), (φ, Q)] = true := by
   rw [isArsdhSolution_iff hg hφ, laws.two_pairs hg G2.represents_generator.neg hφ hQ]
-  exact and_congr_right' (and_congr_right' (pairing_form_zmod a b _))
+  exact and_congr_right' (and_congr_right' (pairing_form_fr a b _))
 
 end EthLib.Cryptography.Kzg

@@ -72,7 +72,7 @@ def bytesToBlsField (b : Bytes32) : Except KzgError Fr :=
   | .error _ => .error (.invalidFieldElement none)
 
 /-- Encode `x` as 32 big-endian bytes. -/
-@[inline] def blsFieldToBytes (x : Fr) : Bytes32 := ⟨x.toBytesBE.data, Array.size_ofFn⟩
+@[inline] def blsFieldToBytes (x : Fr) : Bytes32 := ⟨x.toBytesBE.data, rfl⟩
 
 /-- The 32 bytes of field element `i`, in bytes that hold `k` field elements in a row. -/
 def fieldElementBytes {k : Nat} (bytes : Vector UInt8 (k * BYTES_PER_FIELD_ELEMENT))

@@ -30,9 +30,6 @@ open EthLib.Cryptography.Bls (G1 G2 Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 
--- Core's power instance on `Fin` hides Mathlib's power on `Fr`, as in `Proofs.Bls.FrZMod`.
-attribute [-instance] Fin.instNatPow
-
 /-- A solution `(c, P)` of the strong Diffie–Hellman problem for the secret `τ`.
 
 The point `P` represents `1 / (τ + c)` times the generator, and `τ + c ≠ 0`.
@@ -54,7 +51,7 @@ theorem findSdh_self (z y : Fr) (π π' : G1) : findSdh z y y π π' = none := b
   simp [findSdh]
 
 /-- The scalar step: two accepting openings to different values give `1 / (τ - z)`. -/
-private theorem sdh_scalar (c y y' w w' t z : ZMod Fr.modulus) (hne : y ≠ y')
+private theorem sdh_scalar (c y y' w w' t z : Fr) (hne : y ≠ y')
     (h : c - y = w * (t - z)) (h' : c - y' = w' * (t - z)) :
     t + -z ≠ 0 ∧ (y' - y)⁻¹ * (w + -w') = (t + -z)⁻¹ := by
   have htz : t + -z ≠ 0 := by

@@ -121,7 +121,7 @@ theorem exists_mul_generator_of_inSubgroup {P : G1} (hP : Valid P)
     (hsub : inSubgroup P = true) :
     ∃ a : Fr, toPoint P = toPoint (mul generator a) := by
   obtain ⟨n, hn, he⟩ := exists_mulNat_generator_of_inSubgroup hP hsub
-  exact ⟨⟨n, hn⟩, he⟩
+  exact ⟨Fr.ofNat n, by rw [he, mul, Fr.val_ofNat_of_lt hn]⟩
 
 /-- Because `g_1` has order `r` and `s.val < r`, `[s] * g_1` vanishes only at `s = 0`. -/
 theorem mul_generator_isInfinity_iff (s : Fr) :
@@ -131,8 +131,9 @@ theorem mul_generator_isInfinity_iff (s : Fr) :
     addOrderOf_toPoint_generator]
   constructor
   · intro h
-    exact Fin.ext (Nat.eq_zero_of_dvd_of_lt h s.isLt)
+    exact Fr.ext (by rw [Fr.val_zero]; exact Nat.eq_zero_of_dvd_of_lt h (Fr.val_lt s))
   · rintro rfl
+    rw [Fr.val_zero]
     exact Nat.dvd_zero _
 
 /-- `KeyValidate` (`IRTF draft-irtf-cfrg-bls-signature-04 §2.5`) rejects `0` and requires `inSubgroup` so `a != 0`. -/
@@ -162,7 +163,7 @@ theorem exists_mul_generator_of_keyValidatePoint {bytes : ByteArray} {P : G1}
         intro ha0
         subst ha0
         have hp0 : toPoint P = 0 := by
-          rw [ha, mul, show (0 : Fr).val = 0 from rfl, mulNat_def, ite_eq_left rfl, toPoint_zero]
+          rw [ha, mul, Fr.val_zero, mulNat_def, ite_eq_left rfl, toPoint_zero]
         exact hinf ((isInfinity_eq_true_iff_toPoint_eq_zero hvalid).mpr hp0)
       · rw [show (!inSubgroup p) = true by simp [hsub]] at h
         cases h

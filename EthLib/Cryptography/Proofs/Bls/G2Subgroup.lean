@@ -65,8 +65,9 @@ theorem mul_generator_isInfinity_iff (s : Fr) :
     addOrderOf_toPoint_generator]
   constructor
   · intro h
-    exact Fin.ext (Nat.eq_zero_of_dvd_of_lt h s.isLt)
+    exact Fr.ext (by rw [Fr.val_zero]; exact Nat.eq_zero_of_dvd_of_lt h (Fr.val_lt s))
   · rintro rfl
+    rw [Fr.val_zero]
     exact Nat.dvd_zero _
 
 theorem inSubgroup_add {p q : G2} (hp : Valid p) (hq : Valid q)

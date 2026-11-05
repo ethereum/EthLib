@@ -1,6 +1,5 @@
 module
 
-public import EthLib.Cryptography.Inverse
 
 /-!
 # Montgomery arithmetic
@@ -648,13 +647,13 @@ structure Modulus where
   r1 : Limbs
   /-- `R ^ 2 mod p`, which puts an integer into Montgomery form. -/
   r2 : Limbs
-  /-- `R ^ 3 mod p`, which puts an inverse into Montgomery form. -/
-  r3 : Limbs
+  /-- `p - 2`, the exponent of the inverse. -/
+  pm2 : Limbs
   pLimbs_spec : pLimbs.val = p
   pinv_spec : (pLimbs.l0.toNat * pinv.toNat + 1) % 2 ^ 32 = 0
   r1_spec : r1.val = 2 ^ 256 % p
   r2_spec : r2.val = 2 ^ 256 * 2 ^ 256 % p
-  r3_spec : r3.val = 2 ^ 256 * 2 ^ 256 * 2 ^ 256 % p
+  pm2_spec : pm2.val = p - 2
 
 end Montgomery
 
@@ -692,11 +691,6 @@ theorem Modulus.r2_lt (M : Modulus) : M.r2.val < M.p := by
   rw [M.r2_spec]
   exact Nat.mod_lt _ M.pos
 
-/-- `R ^ 3 mod p` is below `p`. -/
-theorem Modulus.r3_lt (M : Modulus) : M.r3.val < M.p := by
-  rw [M.r3_spec]
-  exact Nat.mod_lt _ M.pos
-
 /-- The Montgomery product of `a`, below `p`, and `b`: `a b R⁻¹ mod p`. -/
 @[inline] def mulLimbs (M : Modulus) (a : Limbs) (ha : a.val < M.p) (b : Limbs) :
     Montgomery M :=
@@ -708,6 +702,8 @@ theorem Modulus.r3_lt (M : Modulus) : M.r3.val < M.p := by
 /-- Zero. -/
 @[inline] def zero : Montgomery M :=
   ⟨⟨0, 0, 0, 0, 0, 0, 0, 0⟩, M.pos⟩
+
+instance : Inhabited (Montgomery M) := ⟨zero⟩
 
 /-- One, whose form is `R mod p`. -/
 @[inline] def one : Montgomery M :=
@@ -751,15 +747,6 @@ The Montgomery product with `1` turns `a R` into `a`. -/
 def toNat (a : Montgomery M) : Nat :=
   (mulLimbs M a.limbs a.lt Limbs.one).limbs.val
 
-/-- The inverse of `a`, and `0` for `0`.
-
-The Euclidean algorithm inverts the form `a R`, which gives `a⁻¹ R⁻¹`.
-
-The Montgomery product with `R ^ 3 mod p` turns it into `a⁻¹ R`. -/
-def inv (a : Montgomery M) : Montgomery M :=
-  haveI : NeZero M.p := ⟨Nat.pos_iff_ne_zero.mp M.pos⟩
-  mulLimbs M M.r3 M.r3_lt (Limbs.ofNat (Fin.inverse (⟨a.limbs.val, a.lt⟩ : Fin M.p)).val)
-
 /-- `a ^ n`, by square and multiply. -/
 def pow (a : Montgomery M) (n : Nat) : Montgomery M :=
   if n = 0 then one
@@ -768,6 +755,47 @@ def pow (a : Montgomery M) (n : Nat) : Montgomery M :=
     if n % 2 = 1 then mul a half else half
 termination_by n
 decreasing_by omega
+
+/-- The powers `a ^ 0` to `a ^ 15`, from `t` holding the first powers. -/
+def powTableAux (a : Montgomery M) : Nat → Array (Montgomery M) → Array (Montgomery M)
+  | 0, t => t
+  | k + 1, t => powTableAux a k (t.push (mul t.back! a))
+
+/-- The powers `a ^ 0` to `a ^ 15`. -/
+def powTable (a : Montgomery M) : Array (Montgomery M) :=
+  powTableAux a 15 #[one]
+
+/-- `acc ^ 16 * a ^ d` for a digit `d` below 16, with the powers `t` of `a`. -/
+@[inline] def window (t : Array (Montgomery M)) (acc : Montgomery M) (d : UInt32) :
+    Montgomery M :=
+  let s := mul acc acc
+  let s := mul s s
+  let s := mul s s
+  let s := mul s s
+  mul s t[d.toNat]!
+
+/-- `acc ^ (2 ^ 32) * a ^ w`, four bits of `w` at a time, with the powers `t` of `a`. -/
+@[inline] def powWord (t : Array (Montgomery M)) (acc : Montgomery M) (w : UInt32) :
+    Montgomery M :=
+  let acc := window t acc (w >>> 28)
+  let acc := window t acc (w >>> 24 &&& 15)
+  let acc := window t acc (w >>> 20 &&& 15)
+  let acc := window t acc (w >>> 16 &&& 15)
+  let acc := window t acc (w >>> 12 &&& 15)
+  let acc := window t acc (w >>> 8 &&& 15)
+  let acc := window t acc (w >>> 4 &&& 15)
+  window t acc (w &&& 15)
+
+/-- `a ^ e` for the integer `e` that the limbs write, by a window of four bits. -/
+def powLimbs (a : Montgomery M) (e : Limbs) : Montgomery M :=
+  let t := powTable a
+  [e.l7, e.l6, e.l5, e.l4, e.l3, e.l2, e.l1, e.l0].foldl (powWord t) one
+
+/-- The inverse of `a`, and `0` for `0`, by Fermat's little theorem: `a ^ (p - 2)`.
+
+It is the inverse only when `p` is prime. -/
+def inv (a : Montgomery M) : Montgomery M :=
+  powLimbs a M.pm2
 
 /-- The element of the 32 bytes of `b` from `off`, read big-endian.
 
@@ -789,9 +817,14 @@ instance : Mul (Montgomery M) := ⟨mul⟩
 instance : Inv (Montgomery M) := ⟨inv⟩
 instance : Pow (Montgomery M) Nat := ⟨pow⟩
 instance : NatCast (Montgomery M) := ⟨ofNat⟩
-instance : Inhabited (Montgomery M) := ⟨zero⟩
 
 end Montgomery
+
+-- The limb arithmetic is long straight-line code, whose terms share their intermediate words.
+--
+-- Unfolded on symbolic limbs, it grows exponentially, so proofs use the specification lemmas.
+attribute [irreducible] Montgomery.step Montgomery.mulWords Montgomery.subWords Montgomery.reduce
+  Montgomery.addWords Montgomery.subLimbs
 
 
 end EthLib.Cryptography
