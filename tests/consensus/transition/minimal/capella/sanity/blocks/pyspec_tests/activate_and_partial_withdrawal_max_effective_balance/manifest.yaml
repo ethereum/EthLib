@@ -1,0 +1,6 @@
+preset: minimal
+fork: capella
+runner: sanity
+handler: blocks
+suite: pyspec_tests
+case: activate_and_partial_withdrawal_max_effective_balance

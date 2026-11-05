@@ -99,7 +99,7 @@ theorem sameSizes_recordPendingAttestation {before : fork < .altair} {current : 
     simp only [recordPendingAttestation, Bool.false_eq_true, ↓reduceIte] at computed <;>
     split at computed <;> cases computed <;> exact SameSizes.refl _
 
-/-- An attestation is valid only before Altair.
+/-- Before Altair, what a valid attestation satisfies.
 
 Its target is the current or the previous epoch, and the epoch of its slot.
 
@@ -109,8 +109,8 @@ It names a committee of its slot, with one bit for each member.
 
 Its source is the justified checkpoint that the state holds for its target epoch. -/
 theorem processAttestation_checks {attestation : Attestation preset fork}
+    (before : fork < .altair)
     (computed : processAttestation config checks state attestation = .ok after) :
-    fork < .altair ∧
       (attestation.data.target.epoch = getPreviousEpoch state ∨
         attestation.data.target.epoch = getCurrentEpoch state) ∧
       attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
@@ -126,28 +126,28 @@ theorem processAttestation_checks {attestation : Attestation preset fork}
         else state.previousJustifiedCheckpoint := by
   unfold processAttestation at computed
   split at computed
-  · cases computed
-  rename_i altair
+  · exact absurd ‹_› (Nat.not_le_of_lt before)
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff] at computed
   obtain ⟨_, recent, _, slotEpoch, earliest, ⟨_, earliestSum⟩, _, early, latest,
     ⟨_, latestSum⟩, _, late, _, index, committee, found, _, bits, _, _, _, source, _⟩ :=
     computed
-  refine ⟨Nat.lt_of_not_le altair, recent, slotEpoch, ?_, ?_, index, ⟨committee, found, bits⟩, ?_⟩
+  refine ⟨recent, slotEpoch, ?_, ?_, index, ⟨committee, found, bits⟩, ?_⟩
   · rw [← earliestSum]
     exact UInt64.le_iff_toNat_le.mp early
   · rw [← latestSum]
     exact UInt64.le_iff_toNat_le.mp late
   · simpa [beq_iff_eq] using source
 
-/-- A valid attestation joins the pending attestations of its target epoch.
+/-- Before Altair, a valid attestation joins the pending attestations of its target epoch.
 
 The pending attestation holds its bits and data, its inclusion delay and the current proposer.
 
 The signature of the attestation is valid on the state that holds it. -/
 theorem processAttestation_records {attestation : Attestation preset fork}
+    (before : fork < .altair)
     (computed : processAttestation config checks state attestation = .ok after) :
-    ∃ (before : fork < .altair) (pending : PendingAttestation preset),
+    ∃ pending : PendingAttestation preset,
       pending.aggregationBits.bits = attestation.aggregationBits.bits ∧
       pending.data = attestation.data ∧
       pending.inclusionDelay = state.slot - attestation.data.slot ∧
@@ -158,21 +158,44 @@ theorem processAttestation_records {attestation : Attestation preset fork}
         isValidIndexedAttestation config checks after indexed = .ok true := by
   unfold processAttestation at computed
   split at computed
-  · cases computed
-  rename_i altair
+  · exact absurd ‹_› (Nat.not_le_of_lt before)
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposer, proposerOk, _, _,
     updated, recorded, indexed, indexedOk, valid, validOk, _, validTrue, rfl⟩ := computed
   subst validTrue
-  exact ⟨Nat.lt_of_not_le altair, _, rfl, rfl, rfl, proposerOk, recorded, indexed, indexedOk,
-    validOk⟩
+  exact ⟨_, rfl, rfl, rfl, proposerOk, recorded, indexed, indexedOk, validOk⟩
+
+/-- From Altair, writing the flags of an epoch keeps the sizes of the registry and the balances.
+-/
+theorem sameSizes_setEpochParticipation (current : Bool)
+    (participation : EpochParticipation preset fork) :
+    SameSizes state (setEpochParticipation state current participation) := by
+  unfold setEpochParticipation
+  split <;> exact SameSizes.refl _
+
+/-- From Altair, an attestation keeps the sizes of the registry and the balances. -/
+theorem sameSizes_processAttestationAltair {attestation : Attestation preset fork}
+    {altair : .altair ≤ fork}
+    (computed : processAttestationAltair config checks state attestation altair = .ok after) :
+    SameSizes state after := by
+  unfold processAttestationAltair at computed
+  split at computed
+  · cases computed
+  simp only [bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
+    _, _, _, _, _, _, _, _, raised⟩ := computed
+  exact (sameSizes_setEpochParticipation _ _).trans (sameSizes_increaseBalance raised)
 
 theorem sameSizes_processAttestation {attestation : Attestation preset fork}
     (computed : processAttestation config checks state attestation = .ok after) :
     SameSizes state after := by
-  obtain ⟨_, _, _, _, _, _, recorded, _⟩ := processAttestation_records computed
-  exact sameSizes_recordPendingAttestation recorded
+  by_cases altair : Fork.altair ≤ fork
+  · simp only [processAttestation, altair, ↓reduceDIte] at computed
+    exact sameSizes_processAttestationAltair computed
+  · obtain ⟨_, _, _, _, _, recorded, _⟩ :=
+      processAttestation_records (Nat.lt_of_not_le altair) computed
+    exact sameSizes_recordPendingAttestation recorded
 
 /-! ## Deposits -/
 
@@ -191,17 +214,62 @@ theorem applyDeposit_known {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32
   simp only [known, liftAccessor_ok] at computed
   exact ⟨balanceSum_increaseBalance computed, increaseBalance_validators computed⟩
 
+/-- A set or an append adds one entry exactly when the index is the size of the list. -/
+theorem setOrAppendList_size {switch : Base.Fork} {α : Type} {limit : Nat}
+    {list list' : ForkList switch fork α limit} {index : UInt64} {value : α}
+    (computed : setOrAppendList list index value = .ok list') :
+    list'.data.size = if index.toNat = list.data.size then list.data.size + 1
+      else list.data.size := by
+  unfold setOrAppendList at computed
+  split at computed
+  · rename_i atEnd
+    unfold appendWithinLimit at computed
+    split at computed
+    · cases computed
+      simp [atEnd]
+    · cases computed
+  · rename_i notEnd
+    split at computed
+    · cases computed
+      simp [notEnd]
+    · cases computed
+
+/-- From Altair, a new validator keeps the deposit data and the next deposit index. -/
+theorem addValidatorToRegistryAltair_eth1 {altair : .altair ≤ fork} {pubkey : BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistryAltair state altair pubkey withdrawalCredentials amount =
+      .ok after) :
+    after.eth1DepositIndex = state.eth1DepositIndex ∧ after.eth1Data = state.eth1Data := by
+  unfold addValidatorToRegistryAltair at computed
+  split at computed
+  · cases computed
+  simp only [liftAccessor_ok, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
+  exact ⟨rfl, rfl⟩
+
+/-- From Altair, a new validator keeps one balance for each validator. -/
+theorem balancesMatch_addValidatorToRegistryAltair {altair : .altair ≤ fork} {pubkey : BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistryAltair state altair pubkey withdrawalCredentials amount =
+      .ok after) (holds : BalancesMatch state) : BalancesMatch after := by
+  unfold addValidatorToRegistryAltair at computed
+  split at computed
+  · cases computed
+  simp only [liftAccessor_ok, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨validators, validatorsOk, balances, balancesOk, _, _, _, _, _, _, rfl⟩ := computed
+  unfold BalancesMatch at holds ⊢
+  rw [setOrAppendList_size validatorsOk, setOrAppendList_size balancesOk, holds]
+
 /-- Before Altair, a deposit to a new key with a valid signature adds a validator and its balance.
 -/
 theorem applyDeposit_new_valid {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
-    {amount : Gwei} {signature : BLSSignature}
+    {amount : Gwei} {signature : BLSSignature} (before : fork < .altair)
     (new : state.validators.data.findIdx? (·.pubkey == pubkey) = none)
     (valid : isValidDepositSignature config checks pubkey withdrawalCredentials amount signature =
       .ok true)
     (computed :
       applyDeposit config checks state pubkey withdrawalCredentials amount signature = .ok after) :
-    fork < .altair ∧
-      after.validators.data = state.validators.data.push
+    after.validators.data = state.validators.data.push
         (getValidatorFromDeposit preset pubkey withdrawalCredentials amount) ∧
       after.balances.data = state.balances.data.push amount := by
   unfold applyDeposit at computed
@@ -210,11 +278,10 @@ theorem applyDeposit_new_valid {pubkey : BLSPubkey} {withdrawalCredentials : Byt
   simp only [new, valid, bind, Except.bind, ↓reduceIte] at computed
   unfold addValidatorToRegistry at computed
   split at computed
-  · cases computed
-  rename_i altair
+  · exact absurd ‹_› (Nat.not_le_of_lt before)
   split at computed
   · cases computed
-    exact ⟨Nat.lt_of_not_le altair, rfl, rfl⟩
+    exact ⟨rfl, rfl⟩
   · cases computed
 
 /-- Before Electra, a deposit to a new key with an invalid signature changes nothing. -/
@@ -251,9 +318,17 @@ theorem balancesMatch_applyDeposit {pubkey : BLSPubkey} {withdrawalCredentials :
     | ok valid =>
       cases valid with
       | true =>
-        obtain ⟨_, validators, balances⟩ := applyDeposit_new_valid found signed computed
-        unfold BalancesMatch at holds ⊢
-        rw [validators, balances, Array.size_push, Array.size_push, holds]
+        by_cases altair : Fork.altair ≤ fork
+        · unfold applyDeposit at computed
+          split at computed
+          · cases computed
+          simp only [found, signed, bind, Except.bind, ↓reduceIte, addValidatorToRegistry,
+            altair, ↓reduceDIte] at computed
+          exact balancesMatch_addValidatorToRegistryAltair computed holds
+        · obtain ⟨validators, balances⟩ :=
+            applyDeposit_new_valid (Nat.lt_of_not_le altair) found signed computed
+          unfold BalancesMatch at holds ⊢
+          rw [validators, balances, Array.size_push, Array.size_push, holds]
       | false =>
         unfold applyDeposit at computed
         split at computed
@@ -278,7 +353,7 @@ theorem applyDeposit_eth1 {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
     split at computed
     · unfold addValidatorToRegistry at computed
       split at computed
-      · cases computed
+      · exact addValidatorToRegistryAltair_eth1 computed
       split at computed
       · cases computed
         exact ⟨rfl, rfl⟩

@@ -34,6 +34,7 @@ namespace EthLib.Consensus
 open Base Uint64 Serialization.Ssz Cryptography.Bls
 
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
+  {engine : ExecutionEngine preset fork}
   {state after : BeaconState preset fork}
 
 /-- Each validator may withdraw no earlier than it exits. -/
@@ -222,12 +223,12 @@ theorem frame_processAttesterSlashing {slashing : AttesterSlashing preset fork}
     (fun _ _ _ before ok => before.trans (frame_slashIfSlashable ok))
     (show Frame state (state, false).1 from Frame.refl state) folded
 
-theorem frame_processAttestation {attestation : Attestation preset fork}
+theorem frame_processAttestation (altair : fork < .altair) {attestation : Attestation preset fork}
     (computed : processAttestation config checks state attestation = .ok after) :
     Frame state after := by
   unfold processAttestation at computed
   split at computed
-  · cases computed
+  · exact absurd ‹_› (Nat.not_le_of_lt altair)
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, 
@@ -242,13 +243,13 @@ theorem frame_processAttestation {attestation : Attestation preset fork}
       (by rw [← rest]) (by rw [← rest]) (by rw [← rest]) (by rw [← rest])
 
 /-- A new validator exits and withdraws at the far future epoch. -/
-theorem frame_addValidatorToRegistry {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
-    {amount : Gwei}
+theorem frame_addValidatorToRegistry (altair : fork < .altair) {pubkey : BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
     Frame state after := by
   unfold addValidatorToRegistry at computed
   split at computed
-  · cases computed
+  · exact absurd ‹_› (Nat.not_le_of_lt altair)
   split at computed
   · cases computed
     refine ⟨rfl, rfl, rfl, rfl, fun holds => ?_, fun ordered validator member => ?_⟩
@@ -259,7 +260,8 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey} {withdrawalCredentials
       · exact UInt64.le_refl _
   · cases computed
 
-theorem frame_applyDeposit {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
+theorem frame_applyDeposit (altair : fork < .altair) {pubkey : BLSPubkey}
+    {withdrawalCredentials : Bytes32}
     {amount : Gwei} {signature : BLSSignature}
     (computed :
       applyDeposit config checks state pubkey withdrawalCredentials amount signature = .ok after) :
@@ -271,19 +273,20 @@ theorem frame_applyDeposit {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32
   · simp only [bind_ok_iff] at computed
     obtain ⟨valid, _, computed⟩ := computed
     split at computed
-    · exact frame_addValidatorToRegistry computed
+    · exact frame_addValidatorToRegistry altair computed
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
       exact computed ▸ Frame.refl _
   · rw [liftAccessor_ok] at computed
     exact frame_increaseBalance computed
 
-theorem frame_processDeposit {before : fork < .hegota} {deposit : Deposit}
+theorem frame_processDeposit (altair : fork < .altair) {before : fork < .hegota}
+    {deposit : Deposit}
     (computed : processDeposit config checks before state deposit = .ok after) :
     Frame state after := by
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
   exact (Frame.of_validators (state := state)
     (after := { state with eth1DepositIndex := fun _ => next })
-    ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl).trans (frame_applyDeposit applied)
+    ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl).trans (frame_applyDeposit altair applied)
 
 theorem frame_processVoluntaryExit {signed : SignedVoluntaryExit}
     (computed : processVoluntaryExit config checks state signed = .ok after) :
@@ -311,13 +314,13 @@ theorem frame_processOperations (altair : fork < .altair) {body : BeaconBlockBod
   subst changesOk
   exact (Frame.foldlM (fun _ _ _ ok => frame_processProposerSlashing ok) proposersOk).trans <|
     (Frame.foldlM (fun _ _ _ ok => frame_processAttesterSlashing ok) attestersOk).trans <|
-    (Frame.foldlM (fun _ _ _ ok => frame_processAttestation ok) attestedOk).trans <|
-    (Frame.foldlM (fun _ _ _ ok => frame_processDeposit ok) depositedOk).trans <|
+    (Frame.foldlM (fun _ _ _ ok => frame_processAttestation altair ok) attestedOk).trans <|
+    (Frame.foldlM (fun _ _ _ ok => frame_processDeposit altair ok) depositedOk).trans <|
     Frame.foldlM (fun _ _ _ ok => frame_processVoluntaryExit ok) exitsOk
 
 /-- Before Altair, a block forms a frame. -/
 theorem frame_processBlock (altair : fork < .altair) {block : BeaconBlock preset fork}
-    (computed : processBlock config checks state block = .ok after) : Frame state after := by
+    (computed : processBlock config checks engine state block = .ok after) : Frame state after := by
   have notAltair : ¬Fork.altair ≤ fork := fun le => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le altair le)
   simp only [processBlock, notAltair, ↓reduceDIte, bind_ok_iff] at computed
   obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := computed
@@ -703,7 +706,7 @@ The checkpoints stay in order, and the current justified epoch stays at most the
 This holds for every signature check and with or without validating the result. -/
 theorem stateTransition_invariant (altair : fork < .altair)
     {signed : SignedBeaconBlock preset fork} {validateResult : Bool} (holds : Invariant state)
-    (computed : stateTransition config checks state signed validateResult = .ok after) :
+    (computed : stateTransition config checks engine state signed validateResult = .ok after) :
     Invariant after ∧ state.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch := by
   obtain ⟨advanced, slotsOk, _, _, blockOk, _⟩ := stateTransition_ok computed
   obtain ⟨advancedHolds, finalized⟩ := processSlots_invariant altair holds slotsOk

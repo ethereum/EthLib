@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Participation
 public import EthLib.Consensus.Transition.Block
 public import EthLib.Consensus.Transition.BuilderRequests
 public import EthLib.Consensus.Transition.Withdrawals
@@ -15,6 +16,8 @@ From Capella a block also changes BLS credentials to addresses.
 A block runs them in that order, each kind in the order of the block.
 
 Before Altair an attestation joins the pending attestations of its target epoch.
+
+From Altair it sets the participation flags of its attesters, and pays the proposer for new flags.
 
 A deposit must lie in the deposit tree that the chain has agreed on, at the next deposit index.
 
@@ -63,6 +66,100 @@ def recordPendingAttestation (state : BeaconState preset fork) (before : fork < 
     else .ok { state with previousEpochAttestations := fun _ => list }
   else .error .tooManyPendingAttestations
 
+/-- From Altair: one flag of one attester, set if the attestation earns it and it is not yet set.
+
+A newly set flag adds the attester's base reward times the flag's weight to the numerator. -/
+def addFlagReward (state : BeaconState preset fork) (total : Gwei) (earned : List UInt64)
+    (index : ValidatorIndex) (step : ParticipationFlags × Gwei)
+    (flag : Fin PARTICIPATION_FLAG_WEIGHTS.length) :
+    Except TransitionError (ParticipationFlags × Gwei) := do
+  let (flags, numerator) := step
+  let flagIndex := flag.val.toUInt64
+  if flagIndex ∈ earned ∧ hasFlag flags flagIndex = false then
+    let reward ← liftAccessor (getBaseReward state total index)
+    let weighted ← liftAccessor (liftArith (mulChecked reward PARTICIPATION_FLAG_WEIGHTS[flag]))
+    return (addFlag flags flagIndex, ← liftAccessor (liftArith (addChecked numerator weighted)))
+  else return (flags, numerator)
+
+/-- From Altair: the flags of the epoch with those of one attester set, and the numerator. -/
+def addAttesterFlags (state : BeaconState preset fork) (total : Gwei) (earned : List UInt64)
+    (step : EpochParticipation preset fork × Gwei) (index : ValidatorIndex) :
+    Except TransitionError (EpochParticipation preset fork × Gwei) := do
+  let (participation, numerator) := step
+  let some flags := participation.data[index.toNat]?
+    | throw (.accessor (.indexOutOfRange index))
+  let (flags, numerator) ← (List.finRange PARTICIPATION_FLAG_WEIGHTS.length).foldlM
+    (addFlagReward state total earned index) (flags, numerator)
+  return (⟨participation.data.set! index.toNat flags,
+    fun before => by simpa using participation.bound before⟩, numerator)
+
+/-- From Altair: the state with the flags of the current epoch, or else of the previous epoch.
+-/
+def setEpochParticipation (state : BeaconState preset fork) (current : Bool)
+    (participation : EpochParticipation preset fork) : BeaconState preset fork :=
+  if current then { state with currentEpochParticipation := fun _ => participation }
+  else { state with previousEpochParticipation := fun _ => participation }
+
+/-- From Altair to Deneb: the state after an attestation.
+
+Its target must be the current or the previous epoch, and the epoch of its slot.
+
+It must be included at least the least inclusion delay after its slot.
+
+Before Deneb it must also be included at most one epoch after its slot, as [EIP-7045] removes.
+
+It must name a committee of its slot, with one bit for each member.
+
+Its source, target and head earn flags by its inclusion delay, and its source must be justified.
+
+Its signature must be the aggregate signature of the members whose bit is set.
+
+Each attester gets the flags it earned in the epoch of the target.
+
+The proposer earns a share of the base rewards of the flags newly set.
+
+Electra changes the committees of an attestation, which EthLib does not yet have here.
+
+[EIP-7045]: https://eips.ethereum.org/EIPS/eip-7045#specification
+-/
+def processAttestationAltair (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) (attestation : Attestation preset fork)
+    (altair : .altair ≤ fork) : Except TransitionError (BeaconState preset fork) :=
+  if .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  else do
+    let data := attestation.data
+    let currentEpoch := getCurrentEpoch state
+    ensure (data.target.epoch = getPreviousEpoch state ∨ data.target.epoch = currentEpoch)
+      (.attestationTargetNotRecent data.target.epoch currentEpoch)
+    ensure (data.target.epoch = computeEpochAtSlot preset data.slot)
+      (.attestationTargetNotSlotEpoch data.target.epoch (computeEpochAtSlot preset data.slot))
+    let earliest ←
+      liftAccessor (liftArith (addChecked data.slot preset.MIN_ATTESTATION_INCLUSION_DELAY))
+    ensure (earliest ≤ state.slot) (.attestationTooEarly data.slot state.slot)
+    let latest ← liftAccessor (liftArith (addChecked data.slot preset.SLOTS_PER_EPOCH))
+    ensure (fork < .dencun → state.slot ≤ latest) (.attestationTooLate data.slot state.slot)
+    let count := getCommitteeCountPerSlot state data.target.epoch
+    ensure (data.index < count) (.committeeIndexOutOfRange data.index count)
+    let committee ← liftAccessor (getBeaconCommittee state data.slot data.index)
+    let bits := attestation.aggregationBits.bits
+    ensure (bits.size = committee.size) (.aggregationBitsLength bits.size committee.size)
+    let earned ← liftAccessor
+      (getAttestationParticipationFlagIndices state data (state.slot - data.slot))
+    let indexed ← liftAccessor (getIndexedAttestation state attestation)
+    let valid ← isValidIndexedAttestation config checks state indexed
+    ensure (valid = true) .invalidAttestation
+    let current := data.target.epoch == currentEpoch
+    let participation := if current then state.currentEpochParticipation altair
+      else state.previousEpochParticipation altair
+    let total ← liftAccessor (getTotalActiveBalance state)
+    let attesters ← liftAccessor (getAttestingIndices state attestation)
+    let (participation, numerator) ←
+      attesters.foldlM (addAttesterFlags state total earned) (participation, 0)
+    let state := setEpochParticipation state current participation
+    let denominator := (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR / PROPOSER_WEIGHT
+    let proposer ← liftAccessor (getBeaconProposerIndex state)
+    liftAccessor (increaseBalance state proposer (numerator / denominator))
+
 /-- The state after an attestation.
 
 Its target must be the current or the previous epoch, and the epoch of its slot.
@@ -79,11 +176,11 @@ Its signature must be the aggregate signature of the members whose bit is set.
 
 A 64-bit overflow is an error.
 
-From Altair the rule records participation flags instead, which EthLib does not yet have. -/
+From Altair the rule records participation flags instead. -/
 def processAttestation (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (attestation : Attestation preset fork) :
     Except TransitionError (BeaconState preset fork) :=
-  if altair : .altair ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if altair : .altair ≤ fork then processAttestationAltair config checks state attestation altair
   else do
     have before : fork < .altair := Nat.lt_of_not_le altair
     let data := attestation.data
@@ -135,17 +232,41 @@ def getValidatorFromDeposit (preset : Preset) (pubkey : BLSPubkey)
   exitEpoch := FAR_FUTURE_EPOCH
   withdrawableEpoch := FAR_FUTURE_EPOCH
 
+/-- From Altair to Deneb: the state with a new validator at the index for a new validator.
+
+It gets its balance, no participation flag in either epoch, and an inactivity score of zero.
+
+A list at its limit is an error.
+
+Electra changes the validator that a deposit creates, which EthLib does not yet have here. -/
+def addValidatorToRegistryAltair (state : BeaconState preset fork) (altair : .altair ≤ fork)
+    (pubkey : BLSPubkey) (withdrawalCredentials : Bytes32) (amount : Gwei) :
+    Except TransitionError (BeaconState preset fork) :=
+  if .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  else liftAccessor do
+    let index := getIndexForNewValidator state
+    let validator := getValidatorFromDeposit preset pubkey withdrawalCredentials amount
+    let validators ← setOrAppendList state.validators index validator
+    let balances ← setOrAppendList state.balances index amount
+    let previous ← setOrAppendList (state.previousEpochParticipation altair) index 0
+    let current ← setOrAppendList (state.currentEpochParticipation altair) index 0
+    let scores ← setOrAppendList (state.inactivityScores altair) index 0
+    return { state with
+      validators, balances
+      previousEpochParticipation := fun _ => previous
+      currentEpochParticipation := fun _ => current
+      inactivityScores := fun _ => scores }
+
 /-- The state with a new validator at the end of the registry, and its balance.
 
 A registry at its limit is an error.
 
-From Altair a new validator also gets participation flags and an inactivity score.
-
-EthLib does not yet have that rule. -/
+From Altair a new validator also gets participation flags and an inactivity score. -/
 def addValidatorToRegistry (state : BeaconState preset fork) (pubkey : BLSPubkey)
     (withdrawalCredentials : Bytes32) (amount : Gwei) :
     Except TransitionError (BeaconState preset fork) :=
-  if altair : .altair ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if altair : .altair ≤ fork then
+    addValidatorToRegistryAltair state altair pubkey withdrawalCredentials amount
   else
     if fits : state.validators.data.size < preset.VALIDATOR_REGISTRY_LIMIT.toNat ∧
         state.balances.data.size < preset.VALIDATOR_REGISTRY_LIMIT.toNat then

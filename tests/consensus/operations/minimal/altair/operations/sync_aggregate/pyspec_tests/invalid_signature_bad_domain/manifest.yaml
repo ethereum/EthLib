@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: operations
+handler: sync_aggregate
+suite: pyspec_tests
+case: invalid_signature_bad_domain
