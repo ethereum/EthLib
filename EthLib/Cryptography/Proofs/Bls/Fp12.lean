@@ -217,7 +217,8 @@ private theorem sq_ne_two_zmod (z : ZMod Fp.modulus) : z * z ≠ 2 := by
     (by decide) (by decide) hfermat
 
 open scoped EthLib.Cryptography.Bls.Fp in
-private theorem sq_eq_two_mul_sq_zmod {u w nxi : ZMod Fp.modulus}
+/-- If `u^2 = 2 w^2` in `Fp`, then `w = 0`, because 2 is not a square. -/
+theorem sq_eq_two_mul_sq_zmod {u w nxi : ZMod Fp.modulus}
     (hnxi : nxi = 2) (h : u * u = w * w * nxi) : w = 0 := by
   by_contra hw
   have hinv : w * w⁻¹ = 1 := mul_inv_cancel₀ hw

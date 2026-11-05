@@ -469,7 +469,8 @@ noncomputable def hom : G2.curve.toAffine.Point →+ G2.curve.toAffine.Point whe
 
 @[simp] theorem hom_apply (P : G2.curve.toAffine.Point) : hom P = mapPoint P := rfl
 
-private theorem toAffine_eq_div (p : G2) (hi : p.z.isZero = false) :
+/-- The affine coordinates of a finite point are `(X / Z^2, Y / Z^3)`. -/
+theorem toAffine_eq_div (p : G2) (hi : p.z.isZero = false) :
     p.toAffine = (p.x / p.z ^ 2, p.y / p.z ^ 3) := by
   have hz : ¬p.z.isZero = true := by simp [hi]
   simp only [G2.toAffine, ite_eq_right hz]

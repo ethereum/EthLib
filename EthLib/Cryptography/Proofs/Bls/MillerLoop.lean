@@ -14,8 +14,6 @@ Each step here multiplies by that line times `c w^3`, with `c` in `Fp2`.
 The theorems need `T` finite, and `Y ≠ 0` to double or an `x` other than that of `Q` to add.
 
 Then `c` is not zero, and the final exponentiation sends `c w^3` to 1.
-
-No theorem here chains the steps over the whole loop.
 -/
 
 @[expose] public section
