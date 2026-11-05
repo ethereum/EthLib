@@ -374,7 +374,7 @@ theorem decompressElements_literal {data : List UInt8} (hne : data ≠ [])
       rw [UInt8.toNat_ofNat']; omega
     have hv : (uintToBytes k (data.length - 1)).toList.foldr
         (fun byte acc => byte.toNat + 256 * acc) 0 = data.length - 1 := by
-      rw [EthLib.Base.foldr_uintToBytes, Nat.mod_eq_of_lt hlt]
+      simpa using EthLib.Base.foldr_uintToBytes_of_lt hlt
     rw [List.cons_append]
     simp only [decompressElements, ht, EthLib.Base.bytesToUint_toVector]
     simp [show ¬ 59 + k < 60 by omega, show 59 + k - 59 = k by omega, hv,

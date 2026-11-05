@@ -111,6 +111,11 @@ theorem foldr_uintToBytes (k n : Nat) :
     (uintToBytes k n).toList.foldr (fun byte acc => byte.toNat + 256 * acc) 0 = n % 256 ^ k := by
   rw [← bytesToUint_eq_foldr, bytesToUint_uintToBytes]
 
+/-- The bytes of a number below `256^k`, folded back, give the number. -/
+theorem foldr_uintToBytes_of_lt {k n : Nat} (h : n < 256 ^ k) :
+    (uintToBytes k n).foldr (fun byte acc => byte.toNat + 256 * acc) 0 = n := by
+  rw [← Vector.foldr_toList, foldr_uintToBytes, Nat.mod_eq_of_lt h]
+
 /-- The `UInt64` read from at most eight bytes is the number they write. -/
 @[simp] theorem toNat_bytesToUint64 {k : Nat} (data : Vector UInt8 k) (h : k ≤ 8) :
     (bytesToUint64 data h).toNat = bytesToUint data := by
