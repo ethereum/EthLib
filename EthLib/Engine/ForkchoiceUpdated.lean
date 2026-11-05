@@ -37,12 +37,15 @@ The method specifications state these rules, at commit `3284ee8` of execution-ap
 
 Each version has its payload attributes: [version 1][a1], [version 2][a2] and [version 3][a3].
 
+From Glamsterdam, [version 4][a4] adds the slot number of EIP-7843 and a target gas limit.
+
 [v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_forkchoiceupdatedv1
 [v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_forkchoiceupdatedv2
 [v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#engine_forkchoiceupdatedv3
 [a1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payloadattributesv1
 [a2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#payloadattributesv2
 [a3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#payloadattributesv3
+[a4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#payloadattributesv4
 -/
 
 @[expose] public section
@@ -66,6 +69,10 @@ structure PayloadAttributes (fork : Fork) : Type where
   withdrawals : Since .shapella fork (List Withdrawal)
   /-- The root of the parent beacon block, from Dencun. -/
   parentBeaconBlockRoot : Since .dencun fork Hash32
+  /-- The slot of the payload, from Glamsterdam. -/
+  slotNumber : Since .glamsterdam fork UInt64
+  /-- The target of the gas limit of the payload, from Glamsterdam. -/
+  targetGasLimit : Since .glamsterdam fork UInt64
 
 /-- A payload that the execution layer holds: its parent and whether it is valid. -/
 structure KnownPayload where
