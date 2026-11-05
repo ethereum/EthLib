@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Networking.Enr.Consensus
 public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
@@ -21,7 +22,7 @@ Properties of the consensus entries of a node record.
 
 namespace EthLib.Networking.Proofs.Enr.Consensus
 
-open EthLib.Base (Fork)
+open EthLib.Base (Fork bind_ok_iff)
 open EthLib.Networking.Enr
 open EthLib.Serialization.Ssz
 
@@ -39,13 +40,6 @@ theorem keysAt_mono {f g : Fork} {k : ConsensusKey} (hfg : f ≤ g) (hk : k ∈ 
   simp only [keysAt, List.mem_filter, decide_eq_true_eq] at hk ⊢
   exact ⟨hk.1, Nat.le_trans hk.2 hfg⟩
 
-/-- A step of `Except` that succeeds came from a first step that succeeds. -/
-theorem bind_ok {ε α β : Type} {x : Except ε α} {f : α → Except ε β} {b : β}
-    (h : (x >>= f) = .ok b) : ∃ a, x = .ok a ∧ f a = .ok b := by
-  cases x with
-  | error e => simp [bind, Except.bind] at h
-  | ok a => exact ⟨a, rfl, h⟩
-
 /-- A key that the fork does not know reads as absent. -/
 theorem readAt_before {α : Type} {fork : Fork} {key : ConsensusKey}
     {read : Except EntryError (Option α)} {v : Option α} (h : readAt fork key read = .ok v)
@@ -59,7 +53,7 @@ theorem readRequiredAt_isSome {α : Type} {fork : Fork} {key : ConsensusKey}
     {read : Except EntryError (Option α)} {v : Option α} (h : readRequiredAt fork key read = .ok v)
     (hf : key.since ≤ fork) : v.isSome := by
   simp only [readRequiredAt, hf, ite_true] at h
-  obtain ⟨a, _, ha⟩ := bind_ok h
+  obtain ⟨a, _, ha⟩ := bind_ok_iff.mp h
   cases a with
   | none => simp [throw, throwThe, MonadExceptOf.throw] at ha
   | some x =>
@@ -74,14 +68,14 @@ theorem readEntries_ok {count : UInt64} {fork : Fork} {r : Enr}
       readRequiredAt fork .cgc (readCgc r) = .ok e.cgc ∧
       readRequiredAt fork .nfd (readSsz (Vector UInt8 4) r .nfd) = .ok e.nfd := by
   simp only [readEntries] at h
-  obtain ⟨eth2?, _, h⟩ := bind_ok h
+  obtain ⟨eth2?, _, h⟩ := bind_ok_iff.mp h
   cases eth2? with
   | none => simp [throw, throwThe, MonadExceptOf.throw] at h
   | some eth2 =>
-    obtain ⟨_, _, h⟩ := bind_ok h
-    obtain ⟨syncnets, hs, h⟩ := bind_ok h
-    obtain ⟨cgc, hc, h⟩ := bind_ok h
-    obtain ⟨nfd, hn, h⟩ := bind_ok h
+    obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
+    obtain ⟨syncnets, hs, h⟩ := bind_ok_iff.mp h
+    obtain ⟨cgc, hc, h⟩ := bind_ok_iff.mp h
+    obtain ⟨nfd, hn, h⟩ := bind_ok_iff.mp h
     simp only [pure, Except.pure, Except.ok.injEq] at h
     subst h
     exact ⟨hs, hc, hn⟩

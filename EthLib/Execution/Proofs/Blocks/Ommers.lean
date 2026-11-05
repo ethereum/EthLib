@@ -23,13 +23,6 @@ open EthLib.Base
 open EthLib.Serialization.Rlp
 open EthLib.Cryptography.Hash.Keccak (keccak256)
 
-/-- A bound computation that succeeds has a first step that succeeds. -/
-private theorem bind_eq_ok {ε α β : Type} {x : Except ε α} {f : α → Except ε β} {b : β}
-    (h : (x >>= f) = .ok b) : ∃ a, x = .ok a ∧ f a = .ok b := by
-  cases x with
-  | error e => exact nomatch h
-  | ok a => exact ⟨a, rfl, h⟩
-
 /-- A check passes exactly when its condition holds. -/
 theorem ensure_eq_ok {condition : Bool} {error : OmmerError} :
     ensure condition error = .ok () ↔ condition = true := by
@@ -61,8 +54,8 @@ private theorem length_of_mapM_eq_ok {ε α β : Type} (f : α → Except ε β)
   | cons x rest ih =>
     intro r h
     rw [List.mapM_cons] at h
-    obtain ⟨b, -, h⟩ := bind_eq_ok h
-    obtain ⟨bs, hbs, h⟩ := bind_eq_ok h
+    obtain ⟨b, -, h⟩ := bind_ok_iff.mp h
+    obtain ⟨bs, hbs, h⟩ := bind_ok_iff.mp h
     simp only [pure, Except.pure, Except.ok.injEq] at h
     rw [← h]
     simp [ih bs hbs]
@@ -79,15 +72,15 @@ theorem validateOmmers_spec {fork : Fork} {checkSeal : Bool} {recent : List Rece
       1 ≤ header.number - ommer.number ∧ header.number - ommer.number ≤ MAX_OMMER_DEPTH ∧
       ommer.parentHash ≠ header.parentHash := by
   unfold validateOmmers at h
-  obtain ⟨encoded, henc, h⟩ := bind_eq_ok h
-  obtain ⟨_, hhash, h⟩ := bind_eq_ok h
-  obtain ⟨_, hfirst, h⟩ := bind_eq_ok h
-  obtain ⟨_, hcount, h⟩ := bind_eq_ok h
-  obtain ⟨ommerHashes, hhashes, h⟩ := bind_eq_ok h
-  obtain ⟨_, hnodup, h⟩ := bind_eq_ok h
-  obtain ⟨_, -, h⟩ := bind_eq_ok h
-  obtain ⟨_, -, h⟩ := bind_eq_ok h
-  obtain ⟨_, -, h⟩ := bind_eq_ok h
+  obtain ⟨encoded, henc, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, hhash, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, hfirst, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, hcount, h⟩ := bind_ok_iff.mp h
+  obtain ⟨ommerHashes, hhashes, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, hnodup, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
   have hhash := ensure_eq_ok.mp hhash
   have hcount := ensure_eq_ok.mp hcount
   have hfirst := (forM_eq_ok _ ommers).mp hfirst
@@ -96,7 +89,7 @@ theorem validateOmmers_spec {fork : Fork} {checkSeal : Bool} {recent : List Rece
   have hlen : ommerHashes.length = ommers.length := length_of_mapM_eq_ok _ _ _ hhashes
   refine ⟨⟨encoded, mapError_ok_iff.mp henc, eq_of_beq hhash⟩, by simpa using hcount,
     ⟨ommerHashes, hhashes, by simpa using ensure_eq_ok.mp hnodup⟩, fun ommer hm => ?_⟩
-  obtain ⟨_, hrange, -⟩ := bind_eq_ok (hfirst ommer hm)
+  obtain ⟨_, hrange, -⟩ := bind_ok_iff.mp (hfirst ommer hm)
   have hrange := ensure_eq_ok.mp hrange
   simp only [Bool.and_eq_true, decide_eq_true_eq] at hrange
   obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem hm
@@ -104,10 +97,10 @@ theorem validateOmmers_spec {fork : Fork} {checkSeal : Bool} {recent : List Rece
     rw [List.mem_iff_getElem]
     exact ⟨i, by simp [hlen, hi], by simp⟩
   have hp := hlast _ hpair
-  obtain ⟨_, -, hp⟩ := bind_eq_ok hp
-  obtain ⟨_, -, hp⟩ := bind_eq_ok hp
-  obtain ⟨_, hage, hp⟩ := bind_eq_ok hp
-  obtain ⟨_, -, hp⟩ := bind_eq_ok hp
+  obtain ⟨_, -, hp⟩ := bind_ok_iff.mp hp
+  obtain ⟨_, -, hp⟩ := bind_ok_iff.mp hp
+  obtain ⟨_, hage, hp⟩ := bind_ok_iff.mp hp
+  obtain ⟨_, -, hp⟩ := bind_ok_iff.mp hp
   have hage := ensure_eq_ok.mp hage
   have hsib := ensure_eq_ok.mp hp
   simp only [Bool.and_eq_true, decide_eq_true_eq] at hage
