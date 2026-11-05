@@ -17,6 +17,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - A part of each output that its input fixes comes out in the order of the inputs.
 - Output `i` is the image of input `i`, for a list or a vector.
 - A failed map fails on some input, and succeeds on every input before it.
+- A property that each step keeps holds after a successful fold.
 
 A mapped error leaves a success unchanged.
 -/
@@ -158,5 +159,17 @@ theorem mapM_error {xs : List α} {e : ε} (h : xs.mapM f = .error e) :
 theorem mapError_ok_iff {ε' : Type} {g : ε → ε'} {result : Except ε α} {value : α} :
     result.mapError g = .ok value ↔ result = .ok value := by
   cases result <;> simp [Except.mapError]
+
+/-- A property that each successful step keeps holds after a successful fold. -/
+theorem foldlM_ok_invariant {g : β → α → Except ε β} (P : β → Prop)
+    (step : ∀ b x b', P b → g b x = .ok b' → P b') :
+    ∀ {xs : List α} {b b' : β}, P b → xs.foldlM g b = .ok b' → P b'
+  | [], _, _, holds, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    exact computed ▸ holds
+  | x :: _, b, _, holds, computed => by
+    rw [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨middle, first, rest⟩ := computed
+    exact foldlM_ok_invariant P step (step b x middle holds first) rest
 
 end EthLib.Base

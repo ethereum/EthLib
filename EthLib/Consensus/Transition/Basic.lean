@@ -87,6 +87,40 @@ inductive TransitionError where
   | bidWrongRandao
   /-- From Heze: at the upgrade, the state has not processed every deposit of the contract. -/
   | depositIndicesDiffer (eth1DepositIndex depositRequestsStartIndex : UInt64)
+  /-- The target of an attestation is neither the current nor the previous epoch. -/
+  | attestationTargetNotRecent (target currentEpoch : Epoch)
+  /-- The target of an attestation is not the epoch of its slot. -/
+  | attestationTargetNotSlotEpoch (target slotEpoch : Epoch)
+  /-- An attestation is included before the least inclusion delay has passed. -/
+  | attestationTooEarly (slot stateSlot : Slot)
+  /-- An attestation is included more than one epoch of slots after its slot. -/
+  | attestationTooLate (slot stateSlot : Slot)
+  /-- An attestation names a committee past the committees of its slot. -/
+  | committeeIndexOutOfRange (index count : UInt64)
+  /-- An attestation does not have one bit for each member of its committee. -/
+  | aggregationBitsLength (bits committee : Nat)
+  /-- The source of an attestation is not the justified checkpoint of its target epoch. -/
+  | wrongAttestationSource
+  /-- The pending attestations of an epoch are at their list limit. -/
+  | tooManyPendingAttestations
+  /-- The indexed form of an attestation is not a valid indexed attestation. -/
+  | invalidAttestation
+  /-- A block does not hold the number of deposits that the state expects. -/
+  | wrongDepositCount (count expected : Nat)
+  /-- The Merkle branch of a deposit does not lead to the deposit root. -/
+  | invalidDepositProof
+  /-- The registry of validators is at its list limit. -/
+  | registryFull
+  /-- The validator of a voluntary exit is not active. -/
+  | exitingValidatorNotActive (index : ValidatorIndex)
+  /-- The validator of a voluntary exit has already started to exit. -/
+  | exitAlreadyInitiated (index : ValidatorIndex)
+  /-- A voluntary exit is for an epoch after the current epoch. -/
+  | exitNotYetValid (epoch currentEpoch : Epoch)
+  /-- The validator of a voluntary exit has not been active for long enough. -/
+  | exitTooSoon (index : ValidatorIndex)
+  /-- A voluntary exit is not signed by its validator. -/
+  | invalidExitSignature
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -128,6 +162,23 @@ def TransitionError.code : TransitionError → UInt32
   | .bidWrongParentRoot => 31
   | .bidWrongRandao => 32
   | .depositIndicesDiffer .. => 33
+  | .attestationTargetNotRecent .. => 34
+  | .attestationTargetNotSlotEpoch .. => 35
+  | .attestationTooEarly .. => 36
+  | .attestationTooLate .. => 37
+  | .committeeIndexOutOfRange .. => 38
+  | .aggregationBitsLength .. => 39
+  | .wrongAttestationSource => 40
+  | .tooManyPendingAttestations => 41
+  | .invalidAttestation => 42
+  | .wrongDepositCount .. => 43
+  | .invalidDepositProof => 44
+  | .registryFull => 45
+  | .exitingValidatorNotActive _ => 46
+  | .exitAlreadyInitiated _ => 47
+  | .exitNotYetValid .. => 48
+  | .exitTooSoon _ => 49
+  | .invalidExitSignature => 50
 
 /-- An assertion of the rule: success when the condition holds, and the error otherwise. -/
 def ensure (condition : Prop) [Decidable condition] (error : TransitionError) :

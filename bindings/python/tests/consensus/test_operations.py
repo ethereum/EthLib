@@ -18,6 +18,7 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "operation
 # The file of the operation of each handler, and the forks whose rule EthLib holds.
 # Gloas also cancels the builder payments of a slashed proposer, which EthLib does not hold yet,
 # so the slashings stop at Fulu.
+# Altair changes attestations and new validators, and Deneb the signature of exits.
 HANDLERS = {
     "block_header": ("block", ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
                                "fulu")),
@@ -27,6 +28,9 @@ HANDLERS = {
     "attester_slashing": ("attester_slashing",
                           ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
                            "fulu")),
+    "attestation": ("attestation", ("phase0",)),
+    "deposit": ("deposit", ("phase0",)),
+    "voluntary_exit": ("voluntary_exit", ("phase0", "altair", "bellatrix", "capella")),
     "payload_attestation": ("payload_attestation", ("gloas",)),
     "execution_payload_bid": ("execution_payload_bid", ("gloas",)),
     "builder_deposit_request": ("builder_deposit_request", ("gloas",)),

@@ -6,6 +6,7 @@ public import EthLib.Consensus.Proposers
 public import EthLib.Consensus.Transition.Block
 public import EthLib.Consensus.Transition.BuilderPayments
 public import EthLib.Consensus.Transition.BuilderRequests
+public import EthLib.Consensus.Transition.Operations
 public import EthLib.Consensus.Transition.Payload
 public import EthLib.Consensus.Transition.Upgrade
 
@@ -57,6 +58,16 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
   | "attester_slashing" => do
     runTransition (processAttesterSlashing config checks state
       (← decodeInput (AttesterSlashing preset fork) operation))
+  | "attestation" => do
+    runTransition (processAttestation config checks state
+      (← decodeInput (Attestation preset fork) operation))
+  | "deposit" =>
+    if before : fork < .hegota then do
+      runTransition (processDeposit config checks before state (← decodeInput Deposit operation))
+    else throw (0, s!"no operation deposit at {fork.name}")
+  | "voluntary_exit" => do
+    runTransition (processVoluntaryExit config checks state
+      (← decodeInput SignedVoluntaryExit operation))
   | "payload_attestation" =>
     if gloas : .glamsterdam ≤ fork then do
       runTransition (processPayloadAttestation config checks state gloas
