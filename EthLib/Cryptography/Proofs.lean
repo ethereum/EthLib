@@ -16,6 +16,7 @@ public import EthLib.Cryptography.Proofs.Aes
 public import EthLib.Cryptography.Proofs.Ethash
 public import EthLib.Cryptography.Proofs.Montgomery
 public import EthLib.Cryptography.Proofs.MillerFunction
+public import EthLib.Cryptography.Proofs.ScaledCurve
 
 /-!
 # `EthLib.Cryptography.Proofs`
