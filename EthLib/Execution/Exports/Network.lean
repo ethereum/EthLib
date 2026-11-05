@@ -15,7 +15,8 @@ A message crosses it as its ID within the capability, and the RLP encoding of it
 
 A schedule crosses it as the fork identifier exports read it.
 
-Message errors have codes from 1, Status errors codes from 101, and a bad argument code 0.
+Message errors have codes from 1, Status errors from 101, header errors from 201, and a bad
+argument code 0.
 -/
 
 public section
@@ -34,6 +35,15 @@ def statusMessage : StatusError → String
   | .version v => s!"Status announces version {v}, not the negotiated one"
   | .forkId e => s!"fork identifier refused: {Networking.Devp2p.Exports.forkIdMessage e}"
   | .range e l => s!"block range starts at {e}, after its end {l}"
+
+/-- A message for a refused answer of headers, phrased for someone reading a Python traceback. -/
+def headersMessage : HeadersError → String
+  | .tooMany c l => s!"answer holds {c} headers, more than the limit {l}"
+  | .rlp _ => "a header is not a list with a parent hash and a number"
+  | .wrongStart => "first header is not the start block"
+  | .wrongNumber e g => s!"header has number {g}, not {e}"
+  | .notChained n => s!"header {n} does not chain to the header before it"
+  | .notAnswer => "response is not BlockHeaders with the request ID of the request"
 
 /-- The version with a number, or code 0 when EthLib does not specify it. -/
 def readVersion (number : UInt64) : Result EthVersion :=
@@ -65,5 +75,18 @@ def checkStatusExport (version : UInt64) (schedule : ByteArray) (number timestam
     (checkStatus v s number.toNat timestamp.toNat status).map (fun _ => true)
       |>.mapError fun e => (e.code, statusMessage e)
   | .ok _ => throw (0, "message is not Status")
+
+/-- Whether the BlockHeaders data `response` answers the GetBlockHeaders data `request`.
+
+It returns true on acceptance, and raises the code of the refusal otherwise. -/
+@[export eth_check_headers]
+def checkHeadersExport (version : UInt64) (request response : ByteArray) : Result Bool := do
+  let v ← readVersion version
+  let run {α : Type} (act : Except EthError α) : Result α :=
+    act.mapError fun e => (e.code, ethMessage e)
+  let req ← run (Message.decode v GET_BLOCK_HEADERS_ID request)
+  let resp ← run (Message.decode v BLOCK_HEADERS_ID response)
+  (Message.checkHeaderResponse req resp).map (fun _ => true)
+    |>.mapError fun e => (e.code, headersMessage e)
 
 end EthLib.Execution.Network.Exports

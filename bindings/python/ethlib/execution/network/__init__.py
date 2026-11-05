@@ -8,6 +8,12 @@ from ...cryptography import _native
 
 # The message IDs within the capability.
 STATUS = 0x00
+NEW_BLOCK_HASHES = 0x01
+GET_BLOCK_HEADERS = 0x03
+BLOCK_HEADERS = 0x04
+GET_BLOCK_BODIES = 0x05
+BLOCK_BODIES = 0x06
+NEW_BLOCK = 0x07
 BLOCK_RANGE_UPDATE = 0x11
 
 
@@ -21,4 +27,22 @@ def check_status(version: int, schedule: bytes, number: int, timestamp: int, dat
     _native.eth_check_status(version, schedule, number, timestamp, data)
 
 
-__all__ = ["BLOCK_RANGE_UPDATE", "STATUS", "EthWireError", "check_status", "decode_message"]
+def check_headers(version: int, request: bytes, response: bytes) -> None:
+    """Accept the BlockHeaders data `response` as an answer to the GetBlockHeaders `request`."""
+    _native.eth_check_headers(version, request, response)
+
+
+__all__ = [
+    "BLOCK_BODIES",
+    "BLOCK_HEADERS",
+    "BLOCK_RANGE_UPDATE",
+    "GET_BLOCK_BODIES",
+    "GET_BLOCK_HEADERS",
+    "NEW_BLOCK",
+    "NEW_BLOCK_HASHES",
+    "STATUS",
+    "EthWireError",
+    "check_headers",
+    "check_status",
+    "decode_message",
+]

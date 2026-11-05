@@ -654,6 +654,7 @@ static PyMethodDef methods[] = {
   {"fork_id_validate", py_fork_id_validate, METH_VARARGS, DOC_fork_id_validate},
   {"eth_message_decode", py_eth_message_decode, METH_VARARGS, DOC_eth_message_decode},
   {"eth_check_status", py_eth_check_status, METH_VARARGS, DOC_eth_check_status},
+  {"eth_check_headers", py_eth_check_headers, METH_VARARGS, DOC_eth_check_headers},
   {"snappy_decompress", py_snappy_decompress, METH_VARARGS, DOC_snappy_decompress},
   {"snappy_compress_literal", py_snappy_compress_literal, METH_VARARGS, DOC_snappy_compress_literal},
   {"snappy_decode_frames", py_snappy_decode_frames, METH_VARARGS, DOC_snappy_decode_frames},

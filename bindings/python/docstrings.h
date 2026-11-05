@@ -449,6 +449,9 @@
 #define DOC_eth_check_status \
   "Whether a node accepts the Status of a peer, on the negotiated version `version`."
 
+#define DOC_eth_check_headers \
+  "Whether `response` is BlockHeaders that answers the GetBlockHeaders `request`."
+
 #define DOC_snappy_decompress \
   "The bytes a Snappy block decompresses to, or why it is not a valid block."
 

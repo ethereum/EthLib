@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Network.Message
+public import EthLib.Execution.Network.Status
 public import EthLib.Networking.Proofs.Devp2p.ForkId
 
 /-!
@@ -10,8 +10,6 @@ Each message reads back from its RLP item on the versions that use its form.
 
 The decoder of eth/68 rejects the Status of eth/69, and the decoder of each later version rejects
 the Status of eth/68.
-
-eth/68 rejects BlockRangeUpdate.
 
 A node accepts a Status that carries its own version, its own fork identifier and a valid range.
 -/
@@ -66,38 +64,6 @@ theorem ofItem_of_eth68 {version : EthVersion} (hv : version ≠ .eth68) (v n td
 
 end Status
 
-/-- A message has the form of a version: Status in the form of that version, and
-BlockRangeUpdate from eth/69 on. -/
-def Message.FitsVersion (version : EthVersion) : Message → Prop
-  | .status (.eth68 ..) => version = .eth68
-  | .status (.eth69 ..) => version ≠ .eth68
-  | .blockRangeUpdate _ => EthVersion.eth69 ≤ version
-
-/-- A message of the form of a version reads back from its ID and its item on that version. -/
-theorem Message.ofItem_toItem {version : EthVersion} {m : Message}
-    (hm : m.FitsVersion version) : Message.ofItem version m.id m.toItem = .ok m := by
-  cases m with
-  | status s =>
-    cases s with
-    | eth68 v n td h g id =>
-      subst hm
-      simp [ofItem, Message.id, toItem, Status.ofItem_eth68, Functor.map, Except.map,
-        Except.mapError]
-    | eth69 v n g id r =>
-      simp [ofItem, Message.id, toItem, Status.ofItem_eth69 hm, Functor.map, Except.map,
-        Except.mapError]
-  | blockRangeUpdate r =>
-    have hm : EthVersion.eth69 ≤ version := hm
-    simp [ofItem, Message.id, toItem, hm, STATUS_ID, BLOCK_RANGE_UPDATE_ID,
-      LawfulCodec.ofItem_toItem, Functor.map, Except.map, Except.mapError]
-
-/-- eth/68 rejects BlockRangeUpdate, which eth/69 adds. -/
-theorem Message.ofItem_blockRangeUpdate_eth68 (item : Item) :
-    Message.ofItem .eth68 BLOCK_RANGE_UPDATE_ID item
-      = .error (.unknownId BLOCK_RANGE_UPDATE_ID) := by
-  have : ¬ EthVersion.eth69 ≤ .eth68 := by decide
-  simp [ofItem, STATUS_ID, BLOCK_RANGE_UPDATE_ID, this]
-
 /-- The multiplexing of RLPx gives an eth capability the message count of its version. -/
 theorem ethLength_capability (v : EthVersion) : ethLength v.capability = v.messageCount := by
   cases v <;> rfl
@@ -107,12 +73,6 @@ theorem StatusError.code_injective (e₁ e₂ : StatusError) (h : e₁.code = e�
     e₁.ctorIdx = e₂.ctorIdx := by
   cases e₁ <;> cases e₂ <;>
     first | rfl | (simp only [StatusError.code] at h; exact absurd h (by decide))
-
-/-- Two errors with one code come from one constructor. -/
-theorem EthError.code_injective (e₁ e₂ : EthError) (h : e₁.code = e₂.code) :
-    e₁.ctorIdx = e₂.ctorIdx := by
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [EthError.code] at h; exact absurd h (by decide))
 
 /--
 A node accepts a Status from eth/69 on that carries the negotiated version, the node's own fork
