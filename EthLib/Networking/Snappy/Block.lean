@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Length
 public import EthLib.Base.LittleEndian
 public import EthLib.Networking.Encoding.Varint
 
@@ -134,19 +135,31 @@ def readPreamble (bs : List UInt8) : Except SnappyError (Nat × List UInt8) :=
       else
         .ok (len, rest)
 
-/-- Copy `n` bytes from `offset` back onto the output, most recent byte first.
+/-- Copy `len` bytes from `offset` back onto the output, most recent byte first (§2.2).
 
-Each byte is read after the previous one is written.
+The last `offset` bytes written form a window.
 
-So a copy longer than its offset repeats its own output, as §2.2 allows.
--/
-def copyBytes (out : List UInt8) (offset : Nat) : Nat → Except SnappyError (List UInt8)
-  | 0 => .ok out
-  | n + 1 =>
-      match out[offset - 1]? with
-      -- Fewer than `offset` bytes are written so far.
-      | none => .error (.copyOffsetTooLarge offset)
-      | some b => copyBytes (b :: out) offset n
+A copy no longer than the window takes the oldest bytes of it, in order.
+
+A longer copy takes the whole window, which then repeats after itself, as §2.2 allows.
+
+So each step moves up to `offset` bytes at once, and a copy costs its length plus its offset.
+
+An offset of 0 reads the most recent byte, as an offset of 1 does. -/
+def copyBytes (out : List UInt8) (offset len : Nat) : Except SnappyError (List UInt8) :=
+  if len = 0 then .ok out
+  else
+    let period := max offset 1
+    let window := out.take period
+    -- Fewer than `offset` bytes are written so far.
+    if window.length < period then .error (.copyOffsetTooLarge offset)
+    else if len ≤ period then .ok (window.drop (period - len) ++ out)
+    else copyBytes (window ++ out) offset (len - period)
+termination_by len
+decreasing_by omega
+
+-- Each length an element declares is checked in as many steps as that length.
+attribute [local instance high] Base.Length.decideLeLength Base.Length.decideLengthLt
 
 /-- Decode the elements of a block onto the output, most recent byte first.
 

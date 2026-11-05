@@ -7,6 +7,7 @@ public import EthLib.Base.ChainConfig
 public import EthLib.Base.Fork
 public import EthLib.Base.Hash32
 public import EthLib.Base.Hex
+public import EthLib.Base.Length
 public import EthLib.Base.LittleEndian
 public import EthLib.Base.U256
 public import EthLib.Base.Uint64
