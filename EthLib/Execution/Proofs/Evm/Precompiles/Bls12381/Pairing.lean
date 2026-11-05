@@ -24,8 +24,9 @@ theorem bls12Pairing_invalidInputLength {data : ByteArray}
 
 /-- The pairing check runs out of gas below its price. -/
 theorem bls12Pairing_outOfGas {data : ByteArray} (hsize : ¬(data.size = 0 ∨ data.size % LENGTH_PER_PAIRING_PAIR ≠ 0))
-    {gas : Nat} (hgas : gas < pairingGas (data.size / LENGTH_PER_PAIRING_PAIR)) :
-    bls12Pairing data gas = .error (.outOfGas (pairingGas (data.size / LENGTH_PER_PAIRING_PAIR)) gas) := by
+    {gas : Nat} (hgas : gas < bls12PairingGas (data.size / LENGTH_PER_PAIRING_PAIR)) :
+    bls12Pairing data gas =
+      .error (.outOfGas (bls12PairingGas (data.size / LENGTH_PER_PAIRING_PAIR)) gas) := by
   unfold bls12Pairing
   rw [ite_eq_right_of_eq_false _ _ (eq_false hsize)]
   dsimp only

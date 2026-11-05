@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Proofs.Evm.Precompiles.Modexp.Bytes
+public import EthLib.Execution.Proofs.Evm.Precompiles.Modexp.Encoding
 public import EthLib.Execution.Proofs.Evm.PowMod
 public import EthLib.Execution.Proofs.Evm.Precompiles.Modexp.Gas
 public import EthLib.Execution.Evm.Precompiles.Modexp.Core
@@ -25,7 +25,6 @@ namespace EthLib.Execution.Evm.Precompiles.Modexp
 
 open EthLib.Base
 open EthLib.Execution.Evm
-open EthLib.Execution.Evm.Precompiles.Modexp.Constants
 
 /-- The big-endian integer held by the output bytes. -/
 def outputNat (bytes : ByteArray) : Nat :=
@@ -177,7 +176,7 @@ theorem modexp_append_excess (fork : Fork) (data extra : ByteArray) (gas : Nat)
 /-- From Fusaka, a base length above 1024 fails before gas is charged, whatever the gas.
 
 EIP-7823: "If any of these inputs are larger than the limit, the precompile execution stops, returns an error, and consumes all gas". -/
-theorem modexp_base_too_large {fork : Fork} (hfork : fork ≥ .fusaka) (data : ByteArray)
+theorem modexp_lengthTooLarge_base {fork : Fork} (hfork : fork ≥ .fusaka) (data : ByteArray)
     (gas : Nat) (h : MAX_LENGTH_BYTES < (parseLengths data).base) :
     modexp fork data gas = .error (.lengthTooLarge .base (parseLengths data).base) := by
   simp [modexp, checkLengthsAt, hfork, checkLengths, h]
@@ -185,7 +184,7 @@ theorem modexp_base_too_large {fork : Fork} (hfork : fork ≥ .fusaka) (data : B
 /-- From Fusaka, an exponent length above 1024 fails before gas is charged, whatever the gas.
 
 The base length is in bounds, so its check passes first. -/
-theorem modexp_exponent_too_large {fork : Fork} (hfork : fork ≥ .fusaka) (data : ByteArray)
+theorem modexp_lengthTooLarge_exponent {fork : Fork} (hfork : fork ≥ .fusaka) (data : ByteArray)
     (gas : Nat) (hb : (parseLengths data).base ≤ MAX_LENGTH_BYTES)
     (h : MAX_LENGTH_BYTES < (parseLengths data).exponent) :
     modexp fork data gas = .error (.lengthTooLarge .exponent (parseLengths data).exponent) := by
@@ -194,7 +193,7 @@ theorem modexp_exponent_too_large {fork : Fork} (hfork : fork ≥ .fusaka) (data
 /-- From Fusaka, a modulus length above 1024 fails before gas is charged, whatever the gas.
 
 The base and exponent lengths are in bounds, so their checks pass first. -/
-theorem modexp_modulus_too_large {fork : Fork} (hfork : fork ≥ .fusaka) (data : ByteArray)
+theorem modexp_lengthTooLarge_modulus {fork : Fork} (hfork : fork ≥ .fusaka) (data : ByteArray)
     (gas : Nat) (hb : (parseLengths data).base ≤ MAX_LENGTH_BYTES)
     (he : (parseLengths data).exponent ≤ MAX_LENGTH_BYTES)
     (h : MAX_LENGTH_BYTES < (parseLengths data).modulus) :
@@ -204,7 +203,7 @@ theorem modexp_modulus_too_large {fork : Fork} (hfork : fork ≥ .fusaka) (data 
 /-- With every length in bounds, the call fails exactly when the gas is below the price.
 
 This holds at every fork, with the bound or without it. -/
-theorem modexp_out_of_gas (fork : Fork) (data : ByteArray) (gas : Nat)
+theorem modexp_outOfGas (fork : Fork) (data : ByteArray) (gas : Nat)
     (hb : (parseLengths data).base ≤ MAX_LENGTH_BYTES)
     (he : (parseLengths data).exponent ≤ MAX_LENGTH_BYTES)
     (hm : (parseLengths data).modulus ≤ MAX_LENGTH_BYTES)

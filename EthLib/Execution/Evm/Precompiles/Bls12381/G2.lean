@@ -6,15 +6,11 @@ public import EthLib.Cryptography.Bls.MapToCurve
 /-!
 # `Evm.Precompiles.Bls12381.G2`
 
-The BLS12-381 G2 precompiles of EIP-2537.
+The BLS12-381 G2 precompiles of EIP-2537: G2ADD, G2MSM and the map to G2.
 
-- G2ADD at `0x0d` adds two G2 points.
-- G2MSM at `0x0e` sums the products of G2 points by 32-byte scalars, priced with a discount that grows with the number of pairs.
-- MAP_FP2_TO_G2 at `0x11` maps an element of `Fp2` to a point of G2.
+They sit at `0x0d`, `0x0e` and `0x11`.
 
-Source: EIP-2537, at <https://eips.ethereum.org/EIPS/eip-2537>.
-
-Prague introduced them, and every later fork accepts the same inputs with the same prices.
+Every fork from Pectra accepts the same inputs at the same prices.
 -/
 
 @[expose] public section
@@ -27,7 +23,7 @@ open EthLib.Cryptography.Bls (G2)
 /-- The price of G2ADD, from EIP-2537, Gas schedule. -/
 def GAS_G2ADD : Nat := 600
 
-/-- `bls12_g2_add`: the sum of two G2 points, given as two encoded points.
+/-- The sum of two G2 points, given as two encoded points.
 
 The points need not be in the subgroup, only on the curve. -/
 def bls12G2Add (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray := do
@@ -53,12 +49,14 @@ def GAS_G2MUL : Nat := 22500
 
 Source: the G2 discounts of EIP-2537, Gas schedule. -/
 def G2_K_DISCOUNT : Vector Nat 128 := #v[
-  1000, 1000, 923, 884, 855, 832, 812, 796, 782, 770, 759, 749, 740, 732, 724, 717, 711, 704, 699, 693, 688,
-  683, 679, 674, 670, 666, 663, 659, 655, 652, 649, 646, 643, 640, 637, 634, 632, 629, 627, 624, 622, 620, 618,
-  615, 613, 611, 609, 607, 606, 604, 602, 600, 598, 597, 595, 593, 592, 590, 589, 587, 586, 584, 583, 582, 580,
-  579, 578, 576, 575, 574, 573, 571, 570, 569, 568, 567, 566, 565, 563, 562, 561, 560, 559, 558, 557, 556, 555,
-  554, 553, 552, 552, 551, 550, 549, 548, 547, 546, 545, 545, 544, 543, 542, 541, 541, 540, 539, 538, 537, 537,
-  536, 535, 535, 534, 533, 532, 532, 531, 530, 530, 529, 528, 528, 527, 526, 526, 525, 524, 524]
+  1000, 1000, 923, 884, 855, 832, 812, 796, 782, 770, 759, 749, 740, 732, 724, 717,
+  711, 704, 699, 693, 688, 683, 679, 674, 670, 666, 663, 659, 655, 652, 649, 646,
+  643, 640, 637, 634, 632, 629, 627, 624, 622, 620, 618, 615, 613, 611, 609, 607,
+  606, 604, 602, 600, 598, 597, 595, 593, 592, 590, 589, 587, 586, 584, 583, 582,
+  580, 579, 578, 576, 575, 574, 573, 571, 570, 569, 568, 567, 566, 565, 563, 562,
+  561, 560, 559, 558, 557, 556, 555, 554, 553, 552, 552, 551, 550, 549, 548, 547,
+  546, 545, 545, 544, 543, 542, 541, 541, 540, 539, 538, 537, 537, 536, 535, 535,
+  534, 533, 532, 532, 531, 530, 530, 529, 528, 528, 527, 526, 526, 525, 524, 524]
 
 /-- `G2_MAX_DISCOUNT`: the discount for more than 128 pairs. -/
 def G2_MAX_DISCOUNT : Nat := 524
@@ -68,9 +66,9 @@ def discountG2 (k : Nat) : Nat :=
   if h : 0 < k ∧ k ≤ 128 then G2_K_DISCOUNT[k - 1] else G2_MAX_DISCOUNT
 
 /-- The price of G2MSM on `k` pairs: `k * 22500 * discount / 1000`, rounded down. -/
-def msmGasG2 (k : Nat) : Nat := k * GAS_G2MUL * discountG2 k / MULTIPLIER
+def bls12G2MsmGas (k : Nat) : Nat := k * GAS_G2MUL * discountG2 k / MULTIPLIER
 
-/-- `g2_msm`: the sum of `[m]P` over the pairs, each point checked to be in the subgroup.
+/-- The sum of `[m]P` over the pairs, each point checked to be in the subgroup.
 
 The scalar `m` is the full 32-byte integer, not reduced. -/
 def g2Msm (pairs : List (List UInt8 × List UInt8)) : Except Bls12381Error G2 :=
@@ -78,14 +76,14 @@ def g2Msm (pairs : List (List UInt8 × List UInt8)) : Except Bls12381Error G2 :=
     let point ← bytesToG2 raw true
     return G2.add sum (G2.mulNat point (bytesToNat scalar))
 
-/-- `bls12_g2_msm`: the multi-scalar multiplication of the pairs in the call data. -/
+/-- The multi-scalar multiplication of the pairs in the call data. -/
 def bls12G2Msm (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray := do
   -- The length is checked before the gas is charged.
   if data.size = 0 ∨ data.size % LENGTH_PER_PAIR_G2 ≠ 0 then
     throw (.invalidInputLength data.size)
   let k := data.size / LENGTH_PER_PAIR_G2
-  if gas < msmGasG2 k then
-    throw (.outOfGas (msmGasG2 k) gas)
+  if gas < bls12G2MsmGas k then
+    throw (.outOfGas (bls12G2MsmGas k) gas)
   -- Every padding is checked before any point is decoded.
   let pairs ← (chunks LENGTH_PER_PAIR_G2 k data.data.toList).mapM fun pair => do
     return (← unpadG2 (pair.take 256), pair.drop 256)
@@ -94,7 +92,7 @@ def bls12G2Msm (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray :
 /-- The price of MAP_FP2_TO_G2, from EIP-2537, Gas schedule. -/
 def GAS_G2MAP : Nat := 23800
 
-/-- `bls12_map_fp2_to_g2`: the point of G2 that RFC 9380 maps an element of `Fp2` to, `c0` given first. -/
+/-- The point of G2 that RFC 9380 maps an element of `Fp2` to, `c0` given first. -/
 def bls12MapFp2ToG2 (data : ByteArray) (gas : Nat) : Except Bls12381Error ByteArray := do
   -- The length is checked before the gas is charged.
   if data.size ≠ 128 then

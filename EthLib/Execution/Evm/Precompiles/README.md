@@ -310,6 +310,87 @@ A call succeeds exactly when the gas covers the price, and then returns its call
 `bindings/python/tests/precompile/test_identity_absence.py` runs the IDENTITY calls of the
 execution-specs tests, and the calls of addresses that have no precompile.
 
+## MODEXP
+
+MODEXP at `0x05` computes `BASE ^ EXPONENT mod MODULUS` for integers of up to 1024 bytes each.
+RSA verification and other number-theoretic checks use it, because the same work in EVM code would
+cost far more gas.
+For example, with `BASE = 3`, `EXPONENT = 5` and `MODULUS = 7`, the output is `243 mod 7 = 5`.
+
+### Source
+
+Four EIPs define MODEXP:
+
+- [EIP-198](https://eips.ethereum.org/EIPS/eip-198) defines the input, the output, the arithmetic
+  and the first price, from Byzantium.
+- [EIP-2565](https://eips.ethereum.org/EIPS/eip-2565) replaces the price from Berlin.
+- [EIP-7883](https://eips.ethereum.org/EIPS/eip-7883) replaces it again from Fusaka.
+- [EIP-7823](https://eips.ethereum.org/EIPS/eip-7823) bounds each length by 1024 bytes, from Fusaka.
+
+So the call and the price take the fork.
+The files follow the README: `Constants.lean`, `Encoding.lean`, `Errors.lean`, `Gas.lean` and
+`Core.lean`.
+
+### Input and output
+
+```text
+input:   [ len_base: 32 | len_exp: 32 | len_mod: 32 | BASE | EXPONENT | MODULUS ]
+output:  BASE ^ EXPONENT mod MODULUS, on len_mod bytes
+```
+
+The call data reads as if followed by zero bytes, so a short input is padded, and data past the
+last field is ignored.
+A zero modulus gives `len_mod` zero bytes, since Appendix E of the Yellow Paper takes `x mod 0` to
+be zero.
+
+### Errors and price
+
+From Fusaka, a length above 1024 fails with `lengthTooLarge`, before any gas is charged.
+Otherwise the call fails only with `outOfGas`, when the gas is below the price.
+
+The price multiplies a complexity of the longer of the base and the modulus by an iteration count
+of the exponent:
+
+- EIP-198 divides that product by 20.
+- EIP-2565 squares the 8-byte words of the longer operand, divides by 3, and charges at least 200.
+- EIP-7883 doubles the iterations per exponent byte past the first 32, drops the division, and
+  charges at least 500.
+
+The pseudocode of EIP-2565 and of EIP-7883, read literally, differs for an exponent longer than
+32 bytes.
+It reads the low 256 bits of the exponent, and counts one iteration less when they are zero.
+The code follows EIP-198, which takes the first 32 bytes of the exponent and counts no iteration
+less.
+`iterations_long_zero_head` pins the zero case from Fusaka.
+
+### Proofs
+
+The proofs are in `EthLib/Execution/Proofs/Evm/Precompiles/Modexp/`.
+The loop of square-and-multiply equals `b ^ e % m` (`powMod_eq`, in `Proofs/Evm/PowMod.lean`).
+So the output is `BASE ^ EXPONENT mod MODULUS`, or 0 for a zero modulus (`compute_eq_pow_mod`), on
+exactly `len_mod` bytes (`modexp_ok_size`).
+Zero bytes appended to the input change nothing (`modexp_append_zeros`), and neither does data past
+the last field (`modexp_append_excess`, `modexp_congr`).
+From Fusaka, each oversized length fails the call whatever the gas (`modexp_lengthTooLarge_base`,
+`modexp_lengthTooLarge_exponent`, `modexp_lengthTooLarge_modulus`).
+With every length in bounds, a call fails exactly when the gas is below the price, at every fork
+(`modexp_outOfGas`, `modexp_ok`).
+
+The price of each fork has its theorem (`gasCost_of_lt_berlin`, `gasCost_of_berlin_le`).
+From Fusaka, the price is at least 500, does not fall when a length grows, and is at most
+528449536 (`min_gas_le_gasCost`, `gasCost_le`, `chargedGas_le`).
+
+No theorem bounds the cost of computing the result, which the price is meant to cover.
+
+### Test vectors
+
+`bindings/python/tests/precompile/test_modexp.py` runs the worked examples of EIP-198 at every fork
+from Byzantium.
+It checks the prices of the 15 `modexp_nagydani_*` cases from the tables of EIP-2565 and EIP-7883,
+at the forks of each.
+`test_execution_specs_vectors.py` and `test_modexp_state_tests.py` run the MODEXP vectors of
+execution-specs and of the state tests.
+
 ## alt_bn128
 
 The three alt_bn128 precompiles let zkSNARK verifiers work on the curve alt_bn128, also called
@@ -464,6 +545,66 @@ Every successful call returns the same 64 bytes (`output_eq`).
 
 `bindings/python/tests/precompile/test_point_evaluation.py` turns each of the 122
 `verify_kzg_proof` vectors of `tests/cryptography/kzg` into a call.
+
+## BLS12-381
+
+The seven BLS12-381 precompiles of EIP-2537 work on the curve of the consensus layer's signatures:
+
+- BLS12_G1ADD at `0x0b` and BLS12_G2ADD at `0x0d` add two points.
+- BLS12_G1MSM at `0x0c` and BLS12_G2MSM at `0x0e` sum the products of points by 32-byte scalars.
+- BLS12_PAIRING_CHECK at `0x0f` checks that the product of the pairings of pairs of points is 1.
+- BLS12_MAP_FP_TO_G1 at `0x10` and BLS12_MAP_FP2_TO_G2 at `0x11` map a field element to a point,
+  by RFC 9380.
+
+### Source
+
+[EIP-2537](https://eips.ethereum.org/EIPS/eip-2537), from Pectra.
+Every later fork accepts the same inputs at the same prices.
+The files follow the README: `Errors.lean`, `Encoding.lean`, and one file for each group of calls,
+`G1.lean`, `G2.lean` and `Pairing.lean`.
+
+### Input and output
+
+A field element takes 64 bytes: 16 zero bytes, then its 48 bytes, big-endian.
+A point takes its coordinates in order, and the point at infinity is all zeros:
+
+```text
+G1 point:  [ x: 64 | y: 64 ]
+G2 point:  [ x.c0: 64 | x.c1: 64 | y.c0: 64 | y.c1: 64 ]
+MSM pair:  [ point | scalar: 32 ]
+pairing:   k pairs of [ G1 point: 128 | G2 point: 256 ], and the word 1 or 0
+```
+
+The additions accept any points on the curve, and the multiplications and the pairing check require
+points in the subgroup of prime order.
+
+### Errors and price
+
+Each call checks the length before it charges the gas.
+The errors are `invalidInputLength`, `outOfGas`, `invalidPadding`, `invalidFieldElement`,
+`notOnCurve`, `notInSubgroup` and `notASquare`.
+
+The additions cost 375 for G1 and 600 for G2, and the maps 5500 and 23800.
+The pairing check costs `32600 * k + 37700` on `k` pairs.
+An MSM on `k` pairs costs `k * 12000` for G1, or `k * 22500` for G2, times a discount of EIP-2537,
+in thousandths.
+
+### Proofs
+
+The proofs are in `EthLib/Execution/Proofs/Evm/Precompiles/Bls12381/`.
+Each call rejects a wrong length before it charges the gas, then runs out of gas below its price
+(`bls12G1Add_invalidInputLength`, `bls12G1Add_outOfGas`, and the same for the other calls).
+Every output has the length of a point, or of the word (`bls12G1Add_size`, `bls12Pairing_ok`).
+The discount never raises the price of an MSM above that of `k` separate products
+(`bls12G1MsmGas_le`, `bls12G2MsmGas_le`).
+Decoding undoes encoding for points on the curve, and every decoded point has one encoding
+(`bytesToG1_g1ToBytes`, `g1ToBytes_bytesToG1`, and the same for G2).
+
+### Test vectors
+
+`bindings/python/tests/precompile/test_eip2537.py` runs the test vectors of EIP-2537, with the MSM
+cases above 8 pairs.
+`test_execution_specs_vectors.py` runs the EIP-2537 vectors of execution-specs.
 
 ## P256VERIFY
 

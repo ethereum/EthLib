@@ -5,7 +5,7 @@ public import EthLib.Execution.Evm.Memory
 public import EthLib.Execution.Evm.Precompiles.Modexp.Constants
 
 /-!
-# `Modexp.Bytes`
+# `Modexp.Encoding`
 
 Reading big-endian integers out of the call data.
 
