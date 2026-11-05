@@ -17,6 +17,7 @@ HERE = Path(__file__).resolve().parent
 
 # Load the script by path: `scripts` is not a package.
 spec = importlib.util.spec_from_file_location("soundness_facts", HERE / "soundness_facts.py")
+assert spec and spec.loader
 facts = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(facts)
 

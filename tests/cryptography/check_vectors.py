@@ -41,6 +41,7 @@ REQUIRED = ("bls", "kzg", "secp256k1", "secp256r1")
 _spec = importlib.util.spec_from_file_location(
     "fetch_archives", ROOT.parents[1] / "scripts" / "fetch_archives.py"
 )
+assert _spec and _spec.loader
 fetch_archives = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(fetch_archives)
 
@@ -137,7 +138,9 @@ def upstream_digests(archive: Path) -> dict[tuple[str, str], str]:
             _, _, _fork, kind, handler, _suite, case, leaf = parts
             if leaf != "data.yaml":
                 continue
-            data = tar.extractfile(member).read()
+            file = tar.extractfile(member)
+            assert file
+            data = file.read()
             digests[(kind, f"{handler}/{case}/data.yaml")] = sha256(data)
     return digests
 
@@ -157,7 +160,9 @@ def bls_tests_digests(archive: Path) -> dict[tuple[str, str], str]:
             _, handler, leaf = parts
             if not leaf.endswith(".yaml"):
                 continue
-            data = tar.extractfile(member).read()
+            file = tar.extractfile(member)
+            assert file
+            data = file.read()
             digests[("bls", f"{handler}/{leaf[: -len('.yaml')]}/data.yaml")] = sha256(data)
     return digests
 

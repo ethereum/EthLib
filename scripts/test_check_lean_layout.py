@@ -13,11 +13,13 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 
 # Load the script by path: `scripts` is not a package.
 spec = importlib.util.spec_from_file_location("check_lean_layout", HERE / "check_lean_layout.py")
+assert spec and spec.loader
 layout = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(layout)
 
@@ -138,17 +140,13 @@ class ChangedLines(unittest.TestCase):
             self.git(root, "add", ".")
             self.git(root, "commit", "-q", "-m", "topic")
 
-            saved = layout.ROOT
-            layout.ROOT = root
-            try:
+            with mock.patch.object(layout, "ROOT", root):
                 self.assertEqual(
                     layout.changed_lines("base"), {"New.lean": {1, 2}, "Old.lean": {5}}
                 )
                 out = io.StringIO()
                 with contextlib.redirect_stdout(out):
                     status = layout.main(["check_lean_layout.py", "--base", "base"])
-            finally:
-                layout.ROOT = saved
             self.assertEqual(status, 1)
             self.assertIn("New.lean:2:", out.getvalue())
             self.assertNotIn("Old.lean", out.getvalue())

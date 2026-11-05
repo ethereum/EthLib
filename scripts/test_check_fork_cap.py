@@ -9,6 +9,7 @@ HERE = Path(__file__).resolve().parent
 
 # Load the script by path: `scripts` is not a package.
 spec = importlib.util.spec_from_file_location("check_fork_cap", HERE / "check_fork_cap.py")
+assert spec and spec.loader
 cap = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cap)
 

@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 from module_times import empty_table, load_table, parse_logs, update_table
 
@@ -35,7 +36,7 @@ class BuildTimingTests(unittest.TestCase):
             source = self.root / "EthLib" / f"{module}.lean"
             source.parent.mkdir(parents=True, exist_ok=True)
             source.touch()
-        self.base = {
+        self.base: dict[str, Any] = {
             "schema_version": 1,
             "commit": "a" * 40,
             "modules": {

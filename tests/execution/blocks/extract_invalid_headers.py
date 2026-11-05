@@ -4,6 +4,7 @@ import collections
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 NETWORKS = ["Paris", "Shanghai", "Cancun", "Prague", "Osaka"]
 CODES = {
@@ -27,7 +28,7 @@ def first_item(data: bytes) -> bytes:
     return data[start : start + 1 + size + length]
 
 
-cases = []
+cases: list[dict[str, Any]] = []
 for path in sorted(root.rglob("*.json")):
     data = json.loads(path.read_text())
     kept = 0

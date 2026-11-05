@@ -175,8 +175,9 @@ def unpack(archive: Archive, cache: Path, paths: list[str]) -> Path:
     # The archive comes from outside the repository.
     # So only regular files and directories are written.
     # A member whose path leaves the directory is refused.
-    prefixes = [_member_path(p) for p in paths]
-    if not prefixes or any(p is None or not p.parts for p in prefixes):
+    members = [_member_path(p) for p in paths]
+    prefixes = [p for p in members if p is not None and p.parts]
+    if not prefixes or len(prefixes) != len(members):
         raise ArchiveError(f"{archive.name}: give paths inside the archive, without '..'")
     target = cache / archive.sha256
     with locked(cache, archive):

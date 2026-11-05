@@ -128,7 +128,7 @@ error-on-warning = true
 
 # Findings in the code today, each directory removed from this list by the change that fixes it.
 [[tool.ty.overrides]]
-include = ["bindings/python/ethlib/**", "bindings/python/tests/**", "scripts/**", "tests/**"]
+include = ["bindings/python/ethlib/**", "bindings/python/tests/**"]
 
 [tool.ty.overrides.rules]
 invalid-argument-type = "ignore"

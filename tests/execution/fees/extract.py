@@ -3,6 +3,7 @@
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 FIELDS = ("gasLimit", "gasUsed", "baseFeePerGas", "blobGasUsed", "excessBlobGas", "timestamp")
 NEGATIVE = "BlockException.INCORRECT_EXCESS_BLOB_GAS"
@@ -14,7 +15,7 @@ def fee_fields(header: dict) -> dict:
 
 
 root, out = Path(sys.argv[1]), Path(sys.argv[2])
-cases = []
+cases: list[dict[str, Any]] = []
 # The fixtures of the EIP-1559, EIP-4844 excess blob gas and EIP-7918 tests, at every network.
 FAMILIES = (
     "*/london/eip1559_fee_market_change/**/*.json",
