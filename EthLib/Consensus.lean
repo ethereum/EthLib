@@ -9,6 +9,7 @@ public import EthLib.Consensus.Containers.Misc
 public import EthLib.Consensus.Containers.Operations
 public import EthLib.Consensus.Containers.Requests
 public import EthLib.Consensus.Containers.Signing
+public import EthLib.Consensus.Containers.State
 public import EthLib.Consensus.Containers.SyncCommittee
 public import EthLib.Consensus.DataAvailability.Custody
 public import EthLib.Consensus.ForkSchedule

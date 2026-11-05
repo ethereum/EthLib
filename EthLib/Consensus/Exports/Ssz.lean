@@ -6,6 +6,7 @@ public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.Operations
 public import EthLib.Consensus.Containers.Requests
 public import EthLib.Consensus.Containers.Signing
+public import EthLib.Consensus.Containers.State
 public import EthLib.Consensus.Containers.SyncCommittee
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Serialization.Exports.Ssz
@@ -96,6 +97,7 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
   | "BeaconBlockBody" => some ⟨BeaconBlockBody preset fork⟩
   | "BeaconBlock" => some ⟨BeaconBlock preset fork⟩
   | "SignedBeaconBlock" => some ⟨SignedBeaconBlock preset fork⟩
+  | "BeaconState" => some ⟨BeaconState preset fork⟩
   | "Withdrawal" => if .shapella ≤ fork then some ⟨Withdrawal⟩ else none
   | "ExecutionPayload" =>
     if .bellatrix ≤ fork then some ⟨ExecutionPayload preset fork⟩ else none

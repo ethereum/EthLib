@@ -52,9 +52,18 @@ structure ProgressiveBitlist where
 
 namespace SszType
 
+/-- Each element read back as a typed value, in order, pushed onto the elements read so far. -/
+def ofElementsOnto {α : Type} [SszType α] : List Value → Array α → Except Err (Array α)
+  | [], read => .ok read
+  | element :: rest, read =>
+    -- A match, not a bind, keeps the call in tail position, so a long list needs no deep stack.
+    match ofValue element with
+    | .ok item => ofElementsOnto rest (read.push item)
+    | .error fault => .error fault
+
 /-- Each element read back as a typed value, in order. -/
 def ofElements {α : Type} [SszType α] (elements : List Value) : Except Err (Array α) :=
-  List.toArray <$> elements.mapM ofValue
+  ofElementsOnto elements #[]
 
 end SszType
 
