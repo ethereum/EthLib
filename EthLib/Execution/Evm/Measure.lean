@@ -43,6 +43,18 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 def measure (evm : Evm fork Meter) : Nat :=
   2 * GasMeter.gasLeft evm.gas + evm.running.toNat
 
+/-- A step lowers the measure of the frame `evm`.
+
+A message to run first has less gas than the frame.
+
+Any frame that ends the message with at most its gas lets the frame go on with a lower measure. -/
+def StepResult.Decreases (evm : Evm fork Meter) : StepResult fork Meter → Prop
+  | .next after => measure after < measure evm
+  | .child _ message resume =>
+    message.gas < GasMeter.gasLeft evm.gas ∧
+      ∀ child after, GasMeter.gasLeft child.gas ≤ message.gas → resume child = .ok after →
+        measure after < measure evm
+
 /-- The second frame has at least `amount` less gas than the first, and runs as the first does. -/
 structure Pays (amount : Nat) (before after : Evm fork Meter) : Prop where
   /-- The gas left drops by at least `amount`. -/

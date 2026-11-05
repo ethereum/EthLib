@@ -29,6 +29,7 @@ public import EthLib.Execution.Evm.Storage
 public import EthLib.Execution.Evm.JumpDest
 public import EthLib.Execution.Evm.ControlFlow
 public import EthLib.Execution.Evm.Measure
+public import EthLib.Execution.Evm.Call
 public import EthLib.Execution.Evm.Interpreter
 public import EthLib.Execution.Evm.MessageCall
 

@@ -11,6 +11,8 @@ A step on a byte that is no opcode at the fork fails with that byte.
 
 The loop leaves a stopped frame as it is.
 
+A step on a call opcode runs the call.
+
 A step on an opcode with no instruction yet fails with an error that aborts the run.
 
 A step that fails halts the frame with no gas and no output, unless its error aborts the run.
@@ -41,12 +43,15 @@ theorem step_of_ofByte_eq_none {evm : Evm fork Meter} (h : evm.pc < evm.code.siz
     step fork evm = .error (.invalidOpcode evm.code[evm.pc]) := by
   simp [step, h, none, throw, throwThe, MonadExceptOf.throw]
 
-/-- A step on an opcode with no instruction yet fails with an error that aborts the run. -/
+/-- A step on a call opcode runs the call.
+
+A step on an opcode with no instruction yet fails with an error that aborts the run. -/
 theorem step_of_instruction_eq_none {evm : Evm fork Meter} {op : Op}
     (h : evm.pc < evm.code.size) (decoded : Op.ofByte fork evm.code[evm.pc] = some op)
-    (none : instruction (Meter := Meter) fork op = none) :
+    (noInstruction : instruction (Meter := Meter) fork op = none)
+    (noCall : callInstruction (Meter := Meter) fork op = none) :
     step fork evm = .error (.unspecifiedOpcode evm.code[evm.pc]) := by
-  simp [step, h, decoded, none, throw, throwThe, MonadExceptOf.throw]
+  simp [step, h, decoded, noInstruction, noCall, throw, throwThe, MonadExceptOf.throw]
 
 /-- A step on an opcode with an instruction runs that instruction. -/
 theorem step_of_instruction {evm : Evm fork Meter} {op : Op}
@@ -54,6 +59,15 @@ theorem step_of_instruction {evm : Evm fork Meter} {op : Op}
     (decoded : Op.ofByte fork evm.code[evm.pc] = some op) (hrun : instruction fork op = some run) :
     step fork evm = .next <$> run evm := by
   simp [step, h, decoded, hrun]
+
+/-- A step on a call opcode runs the call, which may give a message to run first. -/
+theorem step_of_callInstruction {evm : Evm fork Meter} {op : Op}
+    {run : Evm fork Meter → Except EvmError (StepResult fork Meter)} (h : evm.pc < evm.code.size)
+    (decoded : Op.ofByte fork evm.code[evm.pc] = some op)
+    (noInstruction : instruction (Meter := Meter) fork op = none)
+    (hrun : callInstruction fork op = some run) :
+    step fork evm = run evm := by
+  simp [step, h, decoded, noInstruction, hrun]
 
 section Loop
 
