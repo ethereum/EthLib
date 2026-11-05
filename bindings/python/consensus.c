@@ -57,6 +57,40 @@ eth_consensus_compute_shuffled_index(
   lean_object* seed
 );
 
+extern lean_object*
+eth_consensus_gossip_topics(
+  lean_object* name,
+  lean_object* fork
+);
+
+extern lean_object*
+eth_consensus_compute_subnet_for_attestation(
+  lean_object* name,
+  uint64_t committees_per_slot,
+  uint64_t slot,
+  uint64_t committee_index
+);
+
+extern lean_object*
+eth_consensus_compute_subnet_for_blob_sidecar(
+  lean_object* name,
+  lean_object* fork,
+  uint64_t blob_index
+);
+
+extern lean_object*
+eth_consensus_compute_subnet_for_data_column_sidecar(
+  lean_object* name,
+  uint64_t column_index
+);
+
+extern lean_object*
+eth_consensus_compute_subscribed_subnets(
+  lean_object* name,
+  lean_object* node_id,
+  uint64_t epoch
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* The UTF-8 bytes of a `str` argument, or NULL with a TypeError set. */
@@ -219,5 +253,94 @@ py_consensus_compute_shuffled_index(
   if (!name) return NULL;
   return except_into_pyint(
     eth_consensus_compute_shuffled_index(name, index, count, mk_bytearray(seed, seed_len)),
+    CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_gossip_topics(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj;
+  if (!PyArg_ParseTuple(args, "OO", &name_obj, &fork_obj)) return NULL;
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  lean_object* fork = str_arg(fork_obj, "fork");
+  if (!fork) {
+    lean_dec(name);
+    return NULL;
+  }
+  return except_into_pybytes(eth_consensus_gossip_topics(name, fork), CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_compute_subnet_for_attestation(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *committees_obj, *slot_obj, *index_obj;
+  if (!PyArg_ParseTuple(args, "OOOO", &name_obj, &committees_obj, &slot_obj, &index_obj)) {
+    return NULL;
+  }
+  uint64_t committees, slot, index;
+  if (parse_uint64(committees_obj, "committees_per_slot", &committees)) return NULL;
+  if (parse_uint64(slot_obj, "slot", &slot)) return NULL;
+  if (parse_uint64(index_obj, "committee_index", &index)) return NULL;
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  return except_into_pyint(
+    eth_consensus_compute_subnet_for_attestation(name, committees, slot, index), CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_compute_subnet_for_blob_sidecar(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *index_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &name_obj, &fork_obj, &index_obj)) return NULL;
+  uint64_t index;
+  if (parse_uint64(index_obj, "blob_index", &index)) return NULL;
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  lean_object* fork = str_arg(fork_obj, "fork");
+  if (!fork) {
+    lean_dec(name);
+    return NULL;
+  }
+  return except_into_pyint(
+    eth_consensus_compute_subnet_for_blob_sidecar(name, fork, index), CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_compute_subnet_for_data_column_sidecar(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *index_obj;
+  if (!PyArg_ParseTuple(args, "OO", &name_obj, &index_obj)) return NULL;
+  uint64_t index;
+  if (parse_uint64(index_obj, "column_index", &index)) return NULL;
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  return except_into_pyint(
+    eth_consensus_compute_subnet_for_data_column_sidecar(name, index), CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_compute_subscribed_subnets(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *epoch_obj;
+  const uint8_t* node_id;
+  Py_ssize_t node_id_len;
+  if (!PyArg_ParseTuple(args, "Oy#O", &name_obj, &node_id, &node_id_len, &epoch_obj)) return NULL;
+  uint64_t epoch;
+  if (parse_uint64(epoch_obj, "epoch", &epoch)) return NULL;
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  return except_into_pybytes(
+    eth_consensus_compute_subscribed_subnets(name, mk_bytearray(node_id, node_id_len), epoch),
     CONSENSUS_ERROR);
 }

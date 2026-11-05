@@ -12,6 +12,7 @@ public import EthLib.Consensus.Containers.Signing
 public import EthLib.Consensus.Containers.SyncCommittee
 public import EthLib.Consensus.DataAvailability.Custody
 public import EthLib.Consensus.ForkSchedule
+public import EthLib.Consensus.Gossip.Topics
 public import EthLib.Consensus.Preset
 public import EthLib.Consensus.Shuffle
 public import EthLib.Consensus.Signing

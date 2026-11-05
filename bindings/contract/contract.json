@@ -1811,6 +1811,83 @@
    "docstring":
    "The shuffled position of one index, which must be below the count."},
   {"summary":
+   "The gossip topics of a fork, in the order of the fork that adds each one.",
+   "signature": "(name: str, fork: str) -> bytes",
+   "operation": "EthLib.Consensus.Config.gossipTopics",
+   "method": "consensus_gossip_topics",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The gossip topics of a fork, in the order of the fork that adds each one.\n\nA fork before Altair has the topics of Phase 0.\n\nGloas and Heze have none yet, since their topics are not yet specified here."},
+  {"summary":
+   "The subnet of an attestation, from the committees per slot, its slot and its committee index.",
+   "signature":
+   "(name: str, committees_per_slot: int, slot: int, committee_index: int) -> int",
+   "operation": "EthLib.Consensus.computeSubnetForAttestation",
+   "method": "consensus_compute_subnet_for_attestation",
+   "errors":
+   [{"type": "EthLib.Networking.Gossip.SubnetError",
+     "codes":
+     [{"constructor": "zeroSubnetCount", "code": 101},
+      {"constructor": "zeroEpochsPerSubscription", "code": 102},
+      {"constructor": "epochOverflow", "code": 103},
+      {"constructor": "prefixBitsTooLarge", "code": 104},
+      {"constructor": "subnetOverflow", "code": 105},
+      {"constructor": "shuffle", "code": 106}]}],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The subnet of an attestation, from the committees per slot, its slot and its committee index.\n\nThe committees before it in its epoch, plus its index, modulo the number of subnets.\n\nA product or a sum of 2^64 or more is an error, as in 64-bit arithmetic."},
+  {"summary":
+   "From Deneb to Electra: the subnet of a blob sidecar, its blob index modulo the number of subnets.",
+   "signature": "(name: str, fork: str, blob_index: int) -> int",
+   "operation": "EthLib.Consensus.computeSubnetForBlobSidecar",
+   "method": "consensus_compute_subnet_for_blob_sidecar",
+   "errors":
+   [{"type": "EthLib.Networking.Gossip.SubnetError",
+     "codes":
+     [{"constructor": "zeroSubnetCount", "code": 101},
+      {"constructor": "zeroEpochsPerSubscription", "code": 102},
+      {"constructor": "epochOverflow", "code": 103},
+      {"constructor": "prefixBitsTooLarge", "code": 104},
+      {"constructor": "subnetOverflow", "code": 105},
+      {"constructor": "shuffle", "code": 106}]}],
+   "error_class": "ConsensusError",
+   "docstring":
+   "From Deneb to Electra: the subnet of a blob sidecar, its blob index modulo the number of subnets.\n\nA fork with no blob sidecar subnets has no subnet for it."},
+  {"summary":
+   "From Fulu: the subnet of a data column sidecar, its column modulo the number of subnets.",
+   "signature": "(name: str, column_index: int) -> int",
+   "operation": "EthLib.Consensus.computeSubnetForDataColumnSidecar",
+   "method": "consensus_compute_subnet_for_data_column_sidecar",
+   "errors":
+   [{"type": "EthLib.Networking.Gossip.SubnetError",
+     "codes":
+     [{"constructor": "zeroSubnetCount", "code": 101},
+      {"constructor": "zeroEpochsPerSubscription", "code": 102},
+      {"constructor": "epochOverflow", "code": 103},
+      {"constructor": "prefixBitsTooLarge", "code": 104},
+      {"constructor": "subnetOverflow", "code": 105},
+      {"constructor": "shuffle", "code": 106}]}],
+   "error_class": "ConsensusError",
+   "docstring":
+   "From Fulu: the subnet of a data column sidecar, its column modulo the number of subnets."},
+  {"summary": "The attestation subnets that a node subscribes to in an epoch.",
+   "signature": "(name: str, node_id: bytes, epoch: int) -> bytes",
+   "operation": "EthLib.Consensus.computeSubscribedSubnets",
+   "method": "consensus_compute_subscribed_subnets",
+   "errors":
+   [{"type": "EthLib.Networking.Gossip.SubnetError",
+     "codes":
+     [{"constructor": "zeroSubnetCount", "code": 101},
+      {"constructor": "zeroEpochsPerSubscription", "code": 102},
+      {"constructor": "epochOverflow", "code": 103},
+      {"constructor": "prefixBitsTooLarge", "code": 104},
+      {"constructor": "subnetOverflow", "code": 105},
+      {"constructor": "shuffle", "code": 106}]}],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The attestation subnets that a node subscribes to in an epoch.\n\nThe swap-or-not shuffle of the preset permutes the prefix of the node ID."},
+  {"summary":
    "The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`.",
    "signature": "(n: int) -> int",
    "operation": "EthLib.Networking.ReqResp.maxCompressedLen",

@@ -371,6 +371,26 @@ def consensus_compute_shuffled_index(name: str, index: int, count: int, seed: by
     """The shuffled position of one index, which must be below the count."""
     ...
 
+def consensus_gossip_topics(name: str, fork: str) -> bytes:
+    """The gossip topics of a fork, in the order of the fork that adds each one."""
+    ...
+
+def consensus_compute_subnet_for_attestation(name: str, committees_per_slot: int, slot: int, committee_index: int) -> int:
+    """The subnet of an attestation, from the committees per slot, its slot and its committee index."""
+    ...
+
+def consensus_compute_subnet_for_blob_sidecar(name: str, fork: str, blob_index: int) -> int:
+    """From Deneb to Electra: the subnet of a blob sidecar, its blob index modulo the number of subnets."""
+    ...
+
+def consensus_compute_subnet_for_data_column_sidecar(name: str, column_index: int) -> int:
+    """From Fulu: the subnet of a data column sidecar, its column modulo the number of subnets."""
+    ...
+
+def consensus_compute_subscribed_subnets(name: str, node_id: bytes, epoch: int) -> bytes:
+    """The attestation subnets that a node subscribes to in an epoch."""
+    ...
+
 def reqresp_max_compressed_len(n: int) -> int:
     """The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`."""
     ...

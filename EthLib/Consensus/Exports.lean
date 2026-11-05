@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Exports.Custody
+public import EthLib.Consensus.Exports.Gossip
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Consensus.Exports.Shuffle
 public import EthLib.Consensus.Exports.Ssz
