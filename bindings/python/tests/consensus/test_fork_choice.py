@@ -8,6 +8,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from ethlib import consensus
+from ethlib.cryptography.kzg import BYTES_PER_BLOB
 from ethlib.networking import snappy
 
 from .containers import FORKS
@@ -18,7 +19,7 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "fork_choi
 # The handlers that EthLib runs, and the forks at which it runs them.
 HANDLERS = ("ex_ante", "get_head", "get_proposer_head", "on_block", "on_merge_block", "reorg",
             "withholding")
-SPECIFIED = ("altair", "bellatrix", "capella")
+SPECIFIED = ("altair", "bellatrix", "capella", "deneb")
 
 # The release archives that hold the cases.
 ARCHIVES = {
@@ -57,6 +58,12 @@ def _input(case: Path, step: dict) -> tuple:
         return "tick", step["tick"]
     if "checks" in step:
         return "checks", "get_proposer_head" in step["checks"]
+    if "blobs" in step:
+        # The file holds the blobs one after another.
+        data = _read(case, step["blobs"])
+        blobs = [data[i:i + BYTES_PER_BLOB] for i in range(0, len(data), BYTES_PER_BLOB)]
+        proofs = [_hex(proof) for proof in step.get("proofs", [])]
+        return "block", (_read(case, step["block"]), blobs, proofs)
     for kind in _FILE_STEPS:
         if kind in step:
             return kind, _read(case, step[kind])

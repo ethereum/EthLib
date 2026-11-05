@@ -31,14 +31,16 @@ The execution layer judges the payload of a block, and an argument stands for it
 
 At Bellatrix the first payload must follow a terminal block of proof of work, as EIP-3675 defines.
 
-From Deneb a block also needs its blob data, which is not yet specified here.
+From Deneb the node must hold the blobs of a block, and they must match its commitments.
+
+From Fulu columns of data replace the blobs, and a block is not yet specified here.
 -/
 
 @[expose] public section
 
 namespace EthLib.Consensus
 
-open Base Uint64 Serialization.Ssz
+open Base Uint64 Serialization.Ssz Cryptography.Kzg
 
 variable {preset : Preset} {fork : Fork}
 
@@ -63,6 +65,10 @@ structure BlockSources (preset : Preset) (fork : Fork) where
   engine : ExecutionEngine preset fork
   /-- The proof-of-work block of a hash, if the node knows it. -/
   powBlock : Hash32 → Option PowBlock
+  /-- The blobs of the block with a root and their proofs, if the node holds them all. -/
+  blobsAndProofs : Root → Option (Array Blob × Array KZGProof)
+  /-- The trusted setup of KZG, with which the node checks the blobs. -/
+  setup : TrustedSetup
 
 /-- Whether a proof-of-work block is terminal, by the definition of EIP-3675.
 
@@ -91,6 +97,32 @@ def validateMergeBlock (config : Config) (powBlock : Hash32 → Option PowBlock)
   let some terminal := powBlock parentHash | throw (.unknownPowBlock parentHash)
   let some parent := powBlock terminal.parentHash | throw (.unknownPowBlock terminal.parentHash)
   unless isValidTerminalPowBlock config terminal parent do throw (.notTerminalPowBlock parentHash)
+
+/-- From Deneb: whether the blobs of a block are available, as EIP-4844 asks of the node.
+
+The node must hold the blobs of the block and a proof for each.
+
+Each proof must show that its blob matches the commitment at its position.
+
+The source is [EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#consensus-layer-validation). -/
+def isDataAvailable (sources : BlockSources preset fork) (root : Root)
+    (commitments : Array KZGCommitment) : Except ForkChoiceError Bool := do
+  let some (blobs, proofs) := sources.blobsAndProofs root | throw (.blobsUnavailable root)
+  (verifyBlobKzgProofBatch sources.setup blobs commitments proofs).mapError .kzg
+
+/-- Check that the blobs of a block are available.
+
+Before Deneb a block has no blobs, and the check passes.
+
+From Fulu columns of data replace the blobs, which is not yet specified here, so it fails. -/
+def validateDataAvailability (sources : BlockSources preset fork) (block : BeaconBlock preset fork)
+    (blockRoot : Root) : Except ForkChoiceError Unit := do
+  if fulu : .fusaka ≤ fork then throw (.forkNotYetSpecified fork)
+  else if deneb : .dencun ≤ fork then
+    have range : .dencun ≤ fork ∧ fork < .glamsterdam :=
+      ⟨deneb, Nat.lt_trans (Nat.lt_of_not_le fulu) (by decide)⟩
+    unless ← isDataAvailable sources blockRoot (block.body.blobKzgCommitments range).data do
+      throw (.blobsNotMatching blockRoot)
 
 /-- The number of slots between the start of the epoch of a slot and the slot. -/
 def computeSlotsSinceEpochStart (preset : Preset) (slot : Slot) : Except ArithError Slot := do
@@ -340,6 +372,8 @@ The parent must be known, and the block must not be from the future.
 
 The block must be after the finalized slot, and its chain must hold the finalized block.
 
+From Deneb its blobs must be available.
+
 The state transition must accept the block, with its signatures and its state root.
 
 At Bellatrix the block with the first payload of the chain must follow a terminal block. -/
@@ -356,6 +390,7 @@ def validateOnBlock (checks : SignatureChecks) (sources : BlockSources preset fo
     store.getCheckpointBlock block.parentRoot store.finalizedCheckpoint.epoch
   if store.finalizedCheckpoint.root ≠ finalizedCheckpointBlock then
     throw (.notDescendantOfFinalized blockRoot)
+  validateDataAvailability sources block blockRoot
   let state ←
     (stateTransition config checks sources.engine preState signed true).mapError .transition
   if bellatrix : fork = .bellatrix then
@@ -382,10 +417,10 @@ def addBlock (checks : SignatureChecks) (sources : BlockSources preset fork)
 
 /-- The store after a signed block: a known block changes nothing, and a new one is added.
 
-From Deneb the rule also needs the blob data, and it fails there as not yet specified. -/
+From Fulu the rule reads columns of data, and it fails there as not yet specified. -/
 def onBlock (checks : SignatureChecks) (sources : BlockSources preset fork)
     (signed : SignedBeaconBlock preset fork) : Except ForkChoiceError (Store preset fork) := do
-  if .dencun ≤ fork then throw (.forkNotYetSpecified fork)
+  if .fusaka ≤ fork then throw (.forkNotYetSpecified fork)
   let blockRoot ← (SszType.hashTreeRoot signed.message).mapError .ssz
   if store.blocks.contains blockRoot then pure store
   else store.addBlock config checks sources signed blockRoot

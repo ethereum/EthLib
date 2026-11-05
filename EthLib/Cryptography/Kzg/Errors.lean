@@ -66,6 +66,7 @@ inductive KzgError where
   | badIndicesBytesSize (actual : Nat)
   /-- A list of the trusted setup had the wrong length, or one of its points did not decode. -/
   | invalidTrustedSetup
+  deriving Repr
 
 /-- Human-readable description, used at the C-ABI boundary. -/
 def KzgError.message : KzgError → String

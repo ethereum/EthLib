@@ -46,7 +46,7 @@ NOT_YET = {
     "random": "the state transition after Phase 0 (consensus track C26 to C40)",
     "sanity": "the state transition after Phase 0 (consensus track C26 to C40)",
     "transition": "the Electra and Fulu blocks (consensus track C35 to C40)",
-    "fork_choice": "the Deneb to Fulu blocks, with their blob data (C47)",
+    "fork_choice": "the Electra state transition (C26 to C40) and the Fulu data columns (C47)",
     "fast_confirmation": "fast confirmation rule (consensus track, decision 9)",
     "sync": "optimistic sync (consensus track C48)",
     "networking": "gossip validation (consensus track C63 and C64)",

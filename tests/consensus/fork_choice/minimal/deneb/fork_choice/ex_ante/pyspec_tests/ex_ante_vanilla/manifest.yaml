@@ -1,0 +1,6 @@
+preset: minimal
+fork: deneb
+runner: fork_choice
+handler: ex_ante
+suite: pyspec_tests
+case: ex_ante_vanilla
