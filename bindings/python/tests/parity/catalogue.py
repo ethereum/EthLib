@@ -17,16 +17,23 @@ CONSENSUS = {
 LEGACY = "legacytests@1f581b8c/source"
 LEGACY_ROOT = "legacytests-1f581b8ccdc4c63acf5f2c5c1b155c690c32a8eb"
 
+# The state tests of ethereum/tests in the form of blockchain tests.
+# Each runs its one block through the state transition only.
+LEGACY_STATE_DIRECTORIES = (
+    "Constantinople/BlockchainTests/GeneralStateTests",
+    "Cancun/BlockchainTests/GeneralStateTests",
+)
+
 # The blockchain tests of ethereum/legacytests.
 # The directory Constantinople holds the networks up to Constantinople Fix,
 # and Cancun the later ones.
-# The state tests in blockchain form need the state transition, so they are left out.
 LEGACY_DIRECTORIES = (
     "Constantinople/BlockchainTests/ValidBlocks",
     "Constantinople/BlockchainTests/InvalidBlocks",
     "Cancun/BlockchainTests/ValidBlocks",
     "Cancun/BlockchainTests/InvalidBlocks",
     "Cancun/BlockchainTests/TransitionTests",
+    *LEGACY_STATE_DIRECTORIES,
 )
 
 # The forged blocks name no exception, so no check can tell why a client rejects them.
@@ -54,6 +61,11 @@ LEGACY_FORKS = {
     "London": ("london",),
 }
 
+# The network Constantinople runs EIP-1283, which EIP-1716 removed before the fork reached mainnet.
+# EthLib treats Constantinople as Petersburg, so the state transition leaves that network out.
+# Its headers, ommers and rewards are those of Petersburg, so the other groups run it.
+LEGACY_EIP1283 = "Constantinople"
+
 # The networks of the legacy blockchain tests that are out of scope.
 # From Paris on, execution-spec-tests covers each fork.
 # The transition to Paris at a total difficulty needs a rule that EthLib leaves out (decision 39).
@@ -62,6 +74,7 @@ LEGACY_OUT_OF_SCOPE = {
     "Shanghai",
     "Cancun",
     "ParisToShanghaiAtTime15k",
+    "ShanghaiToCancunAtTime15k",
     "ArrowGlacierToParisAtDiffC0000",
 }
 
@@ -206,8 +219,8 @@ def legacy_cases(root: Path) -> list[Case]:
     ]
 
 
-def _legacy_groups(fixture: dict) -> tuple[str, ...]:
-    """The groups of runners of a test: headers, ommers and the DAO Fork."""
+def _legacy_groups(directory: str, fixture: dict) -> tuple[str, ...]:
+    """The groups of runners of a test: the state transition, headers, ommers and the DAO Fork."""
 
     # An error in the header of an ommer belongs to the header checks.
     def ommers(entry: dict) -> bool:
@@ -216,10 +229,14 @@ def _legacy_groups(fixture: dict) -> tuple[str, ...]:
         )
         return named or ("blockHeader" in entry and bool(entry.get("uncleHeaders")))
 
-    groups = ("legacy_header",)
+    network = fixture["network"]
+    transition = () if network == LEGACY_EIP1283 else ("legacy_blockchain",)
+    if directory in LEGACY_STATE_DIRECTORIES:
+        return transition
+    groups = (*transition, "legacy_header")
     if any(ommers(entry) for entry in fixture["blocks"]):
         groups += ("legacy_ommers",)
-    if "daoFork" in LEGACY_FORKS.get(fixture["network"], ()):
+    if "daoFork" in LEGACY_FORKS.get(network, ()):
         groups += ("legacy_dao",)
     return groups
 
@@ -236,7 +253,7 @@ def _legacy_index(root: Path) -> tuple[tuple[str, str, str, tuple[str, ...]], ..
                         path.relative_to(root).as_posix(),
                         name,
                         fixture["network"],
-                        _legacy_groups(fixture),
+                        _legacy_groups(directory, fixture),
                     )
                 )
     return tuple(index)

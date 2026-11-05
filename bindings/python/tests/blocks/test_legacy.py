@@ -32,7 +32,12 @@ def test_vendored_cases_cover_every_group_and_both_seal_engines() -> None:
     assert any(legacy.sealed(test) for test in tests)
     assert any(not legacy.sealed(test) for test in tests)
     assert any(len(catalogue.LEGACY_FORKS[case.fork]) == 2 for case in CASES)
-    assert {case.group for case in CASES} == {"legacy_header", "legacy_ommers", "legacy_dao"}
+    assert {case.group for case in CASES} == {
+        "legacy_blockchain",
+        "legacy_header",
+        "legacy_ommers",
+        "legacy_dao",
+    }
 
 
 def test_digests() -> None:
