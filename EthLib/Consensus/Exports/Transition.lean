@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Exports.Ssz
 public import EthLib.Consensus.PayloadTimeliness
 public import EthLib.Consensus.Transition.Block
+public import EthLib.Consensus.Transition.BuilderRequests
 public import EthLib.Consensus.Transition.Payload
 
 /-!
@@ -61,10 +62,22 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
       runTransition (processExecutionPayloadBid config checks state gloas
         (← decodeInput (SignedExecutionPayloadBid preset fork) operation))
     else throw (0, s!"no operation execution_payload_bid at {fork.name}")
+  | "builder_deposit_request" =>
+    if gloas : .glamsterdam ≤ fork then do
+      runTransition (processBuilderDepositRequest config checks state gloas
+        (← decodeInput BuilderDepositRequest operation))
+    else throw (0, s!"no operation builder_deposit_request at {fork.name}")
+  | "builder_exit_request" =>
+    if gloas : .glamsterdam ≤ fork then do
+      runTransition (processBuilderExitRequest config state gloas
+        (← decodeInput BuilderExitRequest operation))
+    else throw (0, s!"no operation builder_exit_request at {fork.name}")
   | handler => throw (0, s!"no operation {handler}")
 
 /-- The operations whose Gloas rule EthLib holds. -/
-def gloasOperations : List String := ["payload_attestation", "execution_payload_bid"]
+def gloasOperations : List String :=
+  ["payload_attestation", "execution_payload_bid", "builder_deposit_request",
+    "builder_exit_request"]
 
 /-- The preset and the fork that UTF-8 names name, at a fork up to Gloas. -/
 def transitionPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
