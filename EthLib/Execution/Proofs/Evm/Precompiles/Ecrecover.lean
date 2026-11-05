@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Evm.Precompiles.Ecrecover
 public import EthLib.Cryptography.Proofs.Secp256k1.Recovery
+public import EthLib.Execution.Proofs.Evm.Memory
 
 /-!
 # Proofs: `Evm.Precompiles.Ecrecover`
@@ -33,7 +34,7 @@ private theorem word_toList (l : List UInt8) (start : Nat) (h : start + 32 ≤ l
   · simp
     omega
   · intro i h1 h2
-    simp [word, byteAt]
+    simp [word, byteAt_eq_getD]
     rw [List.getElem?_eq_getElem (by simp at h1; omega)]
     rfl
 

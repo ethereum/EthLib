@@ -40,7 +40,7 @@ theorem bufferRead_zero_size (data : ByteArray) :
   · simp [bufferRead]
   · intro i _ h
     have hi : i < data.data.size := by simpa using h
-    simp [bufferRead, byteAt, Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem hi]
+    simp [bufferRead, byteAt_eq_getD, Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem hi]
 
 /-- The word of 32 bytes that a write of a word puts in memory is that word. -/
 theorem loadWord_memoryWrite_wordBytes {memory : ByteArray} {start : Nat} (word : U256)
@@ -65,9 +65,7 @@ theorem memoryReadBytes_memoryWrite_memoryReadBytes {memory : ByteArray}
     memoryReadBytes (memoryWrite memory destination (memoryReadBytes memory source length))
         destination length =
       memoryReadBytes memory source length := by
-  have hsize : (memoryReadBytes memory source length).size = length := by
-    simp only [memoryReadBytes, ByteArray.size_extract]
-    omega
+  have hsize := size_memoryReadBytes hs
   have := memoryReadBytes_memoryWrite (memory := memory) (start := destination)
     (value := memoryReadBytes memory source length) (by omega)
   rwa [hsize] at this

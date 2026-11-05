@@ -6,6 +6,7 @@ public import EthLib.Execution.Exports.State
 public import EthLib.Cryptography.Exports.Kzg
 public import EthLib.Execution.Transactions.Inclusion
 public import EthLib.Execution.Transactions.Network
+public import EthLib.Execution.Transactions.Process
 public import EthLib.Execution.Transactions.Settlement
 public import EthLib.Execution.Transactions.Validity
 
@@ -30,7 +31,7 @@ The type, the hash and the sender hold up to Glamsterdam, which keeps the transa
 
 The intrinsic gas and the checks hold up to Glamsterdam.
 
-The settlement of the gas, the checks against the block and the network form hold up to BPO5.
+The settlement, the checks against the block, the run and the network form hold up to BPO5.
 
 The settlement of Glamsterdam, by EIP-7778 and EIP-8037, has no export yet.
 
@@ -192,6 +193,87 @@ def checkInBlockExport (fork : ByteArray) (chainId : UInt64)
   let blobGas ← gasToUInt64 inc.blobGasUsed
   return ⟨inc.sender.toArray ++ (natToBytes 32 inc.gasPrice).toArray ++
     (List.range 8).reverse.toArray.map fun i => (blobGas >>> UInt64.ofNat (8 * i)).toUInt8⟩
+
+/-! ## The run of a transaction -/
+
+/-- The fields of a block that a run reads: a list of exactly nine items.
+
+They are the beneficiary, the gas limit, the number, the time and the difficulty.
+
+Then come the base fee per gas, the randomness of the beacon chain and the excess blob gas.
+
+Last come the hashes of the blocks before, oldest first, which BLOCKHASH reads.
+
+A field that the fork does not have is ignored. -/
+def ofEnvironmentItem (fork : Fork) (chainId : UInt64) (item : Item) :
+    Except RlpError (Evm.BlockEnvironment fork) := do
+  match ← item.fields 9 with
+  | [coinbase, gasLimit, number, timestamp, difficulty, baseFee, prevRandao, excessBlobGas,
+      blockHashes] =>
+    let baseFee : Nat ← Codec.ofItem baseFee
+    let prevRandao : Bytes32 ← Codec.ofItem prevRandao
+    let excessBlobGas : UInt64 ← Codec.ofItem excessBlobGas
+    return {
+      chainId := chainId.toNat, coinbase := ← Codec.ofItem coinbase,
+      number := ← Codec.ofItem number, gasLimit := ← Codec.ofItem gasLimit,
+      timestamp := ← Codec.ofItem timestamp, difficulty := ← Codec.ofItem difficulty,
+      blockHashes := ← Codec.ofItem blockHashes, baseFeePerGas := fun _ => baseFee,
+      prevRandao := fun _ => prevRandao,
+      excessBlobGas := fun _ => excessBlobGas, parentBeaconBlockRoot := fun _ => 0,
+      slotNumber := fun _ => 0 }
+  | items => .error (.wrongFieldCount 9 items.length)
+
+/-- An account of a state as an item: its address, nonce, balance, code and storage. -/
+def stateEntryItem (state : State.State) (address : Address) (account : State.Account) : Item :=
+  let code := (state.code[account.codeHash]?).getD .empty
+  let storage := ((state.storage[address]?).getD ∅).toList.map fun (key, value) =>
+    Item.list [Codec.toItem key, Codec.toItem value]
+  .list [Codec.toItem address, Codec.toItem account.nonce, Codec.toItem account.balance,
+    Codec.toItem code, .list storage]
+
+/-- A message for an error that aborts a run, phrased for a Python traceback. -/
+def abortMessage (error : Evm.EvmError) : String :=
+  s!"the run aborted: {(oneLine error).replace "EthLib.Execution.Evm.EvmError." ""}"
+
+/-- Run one transaction on the state that `state` encodes, in a block with no transaction before.
+
+The state takes the form of the state root export, and the block is a list of nine items.
+
+A transaction that may not enter the block fails with the code of its inclusion error.
+
+An error that aborts the run has the code of its state error, or 0.
+
+It returns a list of five items, about the transaction and the state after it.
+
+They are the state root, the hash of the encoding of the logs, and the gas used.
+
+Then come whether the message succeeded, and the accounts of the state.
+
+The state after it has no beneficiary reward, since a block pays that. -/
+@[export eth_tx_run]
+def runExport (fork : ByteArray) (chainId : UInt64) (tx state env : ByteArray) :
+    Result ByteArray := do
+  let (fork, tx) ← decodeAt .bpo5 fork tx
+  let pre ← (State.Exports.ofInput state).mapError fun e => (e.code, e.message)
+  let env ← (decode env >>= ofEnvironmentItem fork chainId).mapError
+    fun e => (0, s!"block environment rejected: {rlpMessage e}")
+  let block : State.BlockState := ⟨pre, ∅, ∅, ∅, ∅⟩
+  let inc ← (checkInclusion chainId env ⟨0, 0, 0⟩ (.ofBlock block) tx).mapError
+    fun e => (e.code, inclusionMessage e)
+  let out ← (processTransaction env block inc tx).mapError fun e =>
+    match e with
+    | .state s => (s.code, abortMessage e)
+    | _ => (0, abortMessage e)
+  let post := out.block.applyChanges
+  let root ← State.Exports.rootOf post
+  let logs ← (encode (Codec.toItem out.logs.toList)).mapError
+    fun e => (0, s!"logs: {rlpMessage e}")
+  let accounts := post.accounts.toList.map fun (address, account) =>
+    stateEntryItem post address account
+  let logsHash := Cryptography.Hash.Keccak.keccak256 logs
+  let result := Item.list [Codec.toItem root, Codec.toItem logsHash, Codec.toItem out.gasUsed,
+    Codec.toItem out.error.isNone, .list accounts]
+  (encode result).mapError fun e => (0, s!"result: {rlpMessage e}")
 
 /-! ## The network form of blob transactions -/
 

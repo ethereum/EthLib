@@ -18,9 +18,11 @@ So a read or a write of memory stays within its size.
 
 namespace EthLib.Execution.Evm
 
-/-- The byte at index `i` of the buffer, or `0` past its end. -/
+/-- The byte at index `i` of the buffer, or `0` past its end.
+
+It reads the byte in place, since the array of all the bytes would cost a copy of the buffer. -/
 def byteAt (data : ByteArray) (i : Nat) : UInt8 :=
-  data.data.getD i 0
+  if h : i < data.size then data[i] else 0
 
 /-- `size` bytes of the buffer from `start`, padded with zeros on the right.
 
@@ -30,15 +32,22 @@ def bufferRead (data : ByteArray) (start size : Nat) : List UInt8 :=
 
 /-- The memory with `value` written from `start`.
 
-The memory must hold the whole range, so the size does not change. -/
+The memory must hold the whole range, so the size does not change.
+
+An empty value changes nothing, whatever its start.
+
+That start can reach 2^256, which no compiled index of a byte array holds, so it is never read. -/
 def memoryWrite (memory : ByteArray) (start : Nat) (value : ByteArray) : ByteArray :=
-  memory.extract 0 start ++ value ++ memory.extract (start + value.size) memory.size
+  if value.size = 0 then memory
+  else memory.extract 0 start ++ value ++ memory.extract (start + value.size) memory.size
 
 /-- The `size` bytes of memory from `start`.
 
-The memory must hold the whole range. -/
+The memory must hold the whole range.
+
+An empty range reads nothing, and its start is never read, as for a write. -/
 def memoryReadBytes (memory : ByteArray) (start size : Nat) : ByteArray :=
-  memory.extract start (start + size)
+  if size = 0 then .empty else memory.extract start (start + size)
 
 /-- The memory grown by `n` zero bytes. -/
 def memoryExtend (memory : ByteArray) (n : Nat) : ByteArray :=

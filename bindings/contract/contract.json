@@ -4323,6 +4323,34 @@
    "error_class": "TransactionError",
    "docstring":
    "Settle the gas of a transaction that passes the gas, nonce and fee rules.\n\nIt reads the base fee per gas of the block, the gas left and the refund counter.\n\nThe base fee must be below 2^256, and 0 before London, which has none.\n\nThe price per gas must cover the base fee, and the gas left must be at most the gas limit.\n\nIt returns four numbers of 64 big-endian bytes each.\n\nThey are the gas used, the refund of the sender, the priority fee and the burned fee."},
+  {"summary":
+   "Run one transaction on the state that `state` encodes, in a block with no transaction before.",
+   "signature":
+   "(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> bytes",
+   "operation": "EthLib.Execution.Transactions.Exports.runExport",
+   "method": "tx_run",
+   "errors":
+   [{"type": "EthLib.Execution.Transactions.InclusionError",
+     "codes":
+     [{"constructor": "transaction", "code": null},
+      {"constructor": "gasAllowanceExceeded", "code": 201},
+      {"constructor": "blobGasLimitExceeded", "code": 202},
+      {"constructor": "insufficientMaxFeePerGas", "code": 203},
+      {"constructor": "insufficientMaxFeePerBlobGas", "code": 204},
+      {"constructor": "nonceTooLow", "code": 205},
+      {"constructor": "nonceTooHigh", "code": 206},
+      {"constructor": "insufficientBalance", "code": 207},
+      {"constructor": "senderNotEoa", "code": 208},
+      {"constructor": "missingCode", "code": 209}]},
+    {"type": "EthLib.Execution.State.StateError",
+     "codes":
+     [{"constructor": "noAccount", "code": 101},
+      {"constructor": "missingCode", "code": 102},
+      {"constructor": "insufficientBalance", "code": 103},
+      {"constructor": "balanceOverflow", "code": 104}]}],
+   "error_class": "TransactionError",
+   "docstring":
+   "Run one transaction on the state that `state` encodes, in a block with no transaction before.\n\nThe state takes the form of the state root export, and the block is a list of nine items.\n\nA transaction that may not enter the block fails with the code of its inclusion error.\n\nAn error that aborts the run has the code of its state error, or 0.\n\nIt returns a list of five items, about the transaction and the state after it.\n\nThey are the state root, the hash of the encoding of the logs, and the gas used.\n\nThen come whether the message succeeded, and the accounts of the state.\n\nThe state after it has no beneficiary reward, since a block pays that."},
   {"summary": "Check the network form of a blob transaction at the named fork.",
    "signature": "(fork: str, network: bytes) -> bytes",
    "operation": "EthLib.Execution.Transactions.Exports.networkCheckExport",

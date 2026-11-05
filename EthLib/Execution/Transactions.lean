@@ -1,8 +1,10 @@
 module
 
+public import EthLib.Execution.Transactions.Authorization
 public import EthLib.Execution.Transactions.Envelope
 public import EthLib.Execution.Transactions.Inclusion
 public import EthLib.Execution.Transactions.Network
+public import EthLib.Execution.Transactions.Process
 public import EthLib.Execution.Transactions.Settlement
 public import EthLib.Execution.Transactions.Signature
 public import EthLib.Execution.Transactions.Types
