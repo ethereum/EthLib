@@ -69,7 +69,8 @@ The accountable safety and the plausible liveness of Casper FFG hold for an abst
 The evaluation binding of single KZG proofs reduces to the strong Diffie–Hellman problem.
 The binding of the batch check of KZG openings reduces to the same problem, or to a challenge that is a root of a nonzero polynomial.
 
-No theorem states unforgeability for leanSPHINCS, or binding for the batch check of blobs and for cell proofs.
+No theorem states unforgeability for leanSPHINCS, or binding for the batch check of blobs.
+No theorem reduces the binding of cell proofs to the bilinear variant of the strong Diffie–Hellman problem.
 No theorem covers the code that runs, the C boundary, or timing.
 
 ### XMSS
@@ -314,7 +315,15 @@ Under the pairing law and for a well-formed setup, honest KZG proofs and blob pr
 Let opening `i` have commitment `c_i`, value `y_i`, point `z_i` and proof `w_i`.
 Then its challenge `r` is a root of `P(X) = sum_i X^i (c_i - y_i - w_i (τ - z_i))`.
 `P` is zero exactly when every opening satisfies the identity of the single check.
-No theorem states what the batch check of blobs, or of cells, returns on accepted input.
+`verifyCellKzgProofBatchImpl_root` (`Proofs/Kzg/CellBatchBinding.lean`) states the same for the batch check of cells.
+Let cell `k` have commitment `c_{i_k}` at commitment index `i_k`, proof `w_k`, coset shift `h_k`, and values that interpolate to `I_k` of degree below 64.
+Then the challenge is a root of `sum_k X^k (c_{i_k} - I_k(τ) - w_k (τ^64 - h_k^64))`.
+That polynomial is zero exactly when every cell is valid.
+`prEvent_cellErrorPoly_root_le` bounds the root case for one uniform challenge by `(n - 1) / r`, for at most `n` cells.
+No theorem reduces two accepted cells with different values at one index to a hard problem.
+That reduction gives a solution of the bilinear variant of the strong Diffie–Hellman problem.
+The solution is an element of the target group of the pairing, which EthLib does not model.
+No theorem states what the batch check of blobs returns on accepted input.
 
 `findSdh_valid_bytes` (`Proofs/Kzg/Binding.lean`) is the evaluation binding of single proofs.
 Let the check accept one commitment at one point with two different values.
@@ -522,8 +531,8 @@ The two theorems of Casper FFG share one bullet:
   Nothing in EthLib proves that the hash behaves as such an oracle.
 - Casper FFG: a vote names its signer, so no one can forge a vote.
   The theorems of accountable safety and plausible liveness say nothing about an attack on the signatures.
-- KZG batch check: the challenge hash `Fr.hashToBlsField` is a random oracle, so the challenge of new openings is uniform.
-  `prEvent_batchErrorPoly_root_le` draws one challenge after the openings are fixed.
+- KZG batch checks: the challenge hash `Fr.hashToBlsField` is a random oracle, so the challenge of new openings or cells is uniform.
+  `prEvent_batchErrorPoly_root_le` and `prEvent_cellErrorPoly_root_le` draw one challenge after the openings or cells are fixed.
   Nothing covers grinding, where an adversary hashes many sets of openings and keeps one whose challenge is a root.
 
 ## Gap B: does the code that runs match the definitions?

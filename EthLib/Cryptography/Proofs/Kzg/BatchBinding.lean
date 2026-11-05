@@ -40,52 +40,76 @@ open Polynomial
 -- Core's power instance on `Fin` hides Mathlib's power on `Fr`, as in `Proofs.Bls.FrZMod`.
 attribute [-instance] Fin.instNatPow
 
+/-- The polynomial `sum_{i < n} e_i X^i` of the errors `e_i` of `n` checks. -/
+noncomputable def errorPoly (e : Nat → Fr) (n : Nat) : Fr[X] :=
+  ∑ i ∈ Finset.range n, C (e i) * X ^ i
+
+/-- Coefficient `i` of the error polynomial is the error of check `i`, below `n`. -/
+theorem coeff_errorPoly (e : Nat → Fr) (n i : Nat) :
+    (errorPoly e n).coeff i = if i < n then e i else 0 := by
+  simp only [errorPoly, finsetSum_coeff, coeff_C_mul_X_pow]
+  rw [Finset.sum_ite_eq (Finset.range n) i]
+  simp only [Finset.mem_range]
+  rfl
+
+/-- The error polynomial is zero exactly when every error is zero. -/
+theorem errorPoly_eq_zero_iff (e : Nat → Fr) (n : Nat) :
+    errorPoly e n = 0 ↔ ∀ i < n, e i = 0 := by
+  constructor
+  · intro h i hi
+    have := coeff_errorPoly e n i
+    rw [h, coeff_zero, ite_eq_left hi] at this
+    exact this.symm
+  · intro h
+    ext i
+    rw [coeff_errorPoly, coeff_zero]
+    split
+    · rename_i hi
+      rw [h i hi]
+      rfl
+    · rfl
+
+/-- The error polynomial has degree at most `n - 1`. -/
+theorem natDegree_errorPoly_le (e : Nat → Fr) (n : Nat) : (errorPoly e n).natDegree ≤ n - 1 := by
+  refine natDegree_le_iff_coeff_eq_zero.mpr fun i hi => ?_
+  rw [coeff_errorPoly, ite_eq_right (by omega)]
+  rfl
+
+/-- The value of the error polynomial at `r`, as a sum. -/
+theorem eval_errorPoly (e : Nat → Fr) (n : Nat) (r : Fr) :
+    (errorPoly e n).eval r = ∑ i ∈ Finset.range n, e i * r ^ i := by
+  simp [errorPoly, eval_finsetSum]
+  rfl
+
 /-- The error of an opening: zero exactly when `c - y = w (τ - z)`. -/
 def openingError (τ c y w z : Fr) : Fr := c - y - w * (τ - z)
 
 /-- The error polynomial of a batch: `P(X) = sum_{i < n} X^i (c_i - y_i - w_i (τ - z_i))`. -/
 noncomputable def batchErrorPoly (τ : Fr) (c y w z : Nat → Fr) (n : Nat) : Fr[X] :=
-  ∑ i ∈ Finset.range n, C (openingError τ (c i) (y i) (w i) (z i)) * X ^ i
+  errorPoly (fun i => openingError τ (c i) (y i) (w i) (z i)) n
 
 /-- Coefficient `i` of the error polynomial is the error of opening `i`, below `n`. -/
 theorem coeff_batchErrorPoly (τ : Fr) (c y w z : Nat → Fr) (n i : Nat) :
     (batchErrorPoly τ c y w z n).coeff i =
-      if i < n then openingError τ (c i) (y i) (w i) (z i) else 0 := by
-  simp only [batchErrorPoly, finsetSum_coeff, coeff_C_mul_X_pow]
-  rw [Finset.sum_ite_eq (Finset.range n) i]
-  simp only [Finset.mem_range]
-  rfl
+      if i < n then openingError τ (c i) (y i) (w i) (z i) else 0 :=
+  coeff_errorPoly _ n i
 
 /-- The error polynomial is zero exactly when every opening is valid. -/
 theorem batchErrorPoly_eq_zero_iff (τ : Fr) (c y w z : Nat → Fr) (n : Nat) :
     batchErrorPoly τ c y w z n = 0 ↔ ∀ i < n, c i - y i = w i * (τ - z i) := by
-  constructor
-  · intro h i hi
-    have := coeff_batchErrorPoly τ c y w z n i
-    rw [h, coeff_zero, ite_eq_left hi, openingError] at this
-    exact sub_eq_zero.mp this.symm
-  · intro h
-    ext i
-    rw [coeff_batchErrorPoly, coeff_zero]
-    split
-    · rename_i hi
-      simp [openingError, h i hi]
-      rfl
-    · rfl
+  rw [batchErrorPoly, errorPoly_eq_zero_iff]
+  exact forall₂_congr fun i _ => sub_eq_zero
 
 /-- The error polynomial has degree at most `n - 1`. -/
 theorem natDegree_batchErrorPoly_le (τ : Fr) (c y w z : Nat → Fr) (n : Nat) :
-    (batchErrorPoly τ c y w z n).natDegree ≤ n - 1 := by
-  refine natDegree_le_iff_coeff_eq_zero.mpr fun i hi => ?_
-  rw [coeff_batchErrorPoly, ite_eq_right (by omega)]
-  rfl
+    (batchErrorPoly τ c y w z n).natDegree ≤ n - 1 :=
+  natDegree_errorPoly_le _ n
 
 /-- The value of the error polynomial at `r`, as a sum. -/
 theorem eval_batchErrorPoly (τ : Fr) (c y w z : Nat → Fr) (n : Nat) (r : Fr) :
     (batchErrorPoly τ c y w z n).eval r =
-      ∑ i ∈ Finset.range n, openingError τ (c i) (y i) (w i) (z i) * r ^ i := by
-  simp [batchErrorPoly, eval_finsetSum]
-  rfl
+      ∑ i ∈ Finset.range n, openingError τ (c i) (y i) (w i) (z i) * r ^ i :=
+  eval_errorPoly _ n r
 
 /-! ## The batch check -/
 
