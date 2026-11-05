@@ -84,7 +84,9 @@ It says nothing about unforgeability.
 In the random oracle model, signing fails with probability at most `2 exp(-4000)` (`prEvent_signWith_error_le`, `Proofs/Xmss/SignatureFailure.lean`).
 The theorem assumes that the oracle's cache holds no trial input of the two keys that sign when signing starts, as an empty cache does.
 It proves that the signer's own calls before each search add none.
-In the unforgeability game the adversary's queries fill the cache first, and no theorem bounds the failure there.
+The bound covers one signature from such a cache.
+An earlier signature under the same key caches the trial inputs of its keys, and in the unforgeability game the adversary's queries can too.
+So no theorem bounds the failure of a later signature, or of signing inside the game.
 
 Unforgeability is `Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability.lean`).
 In the random oracle model, an adversary whose experiment makes at most `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
@@ -178,7 +180,13 @@ The Python suite checks one signature that an independent implementation compute
 
 In the random oracle model, all `2^32` counters of one search miss the code with probability below `exp(-2^18)` (`prEvent_findCounter_none_le`, `Proofs/Sphincs/CodewordSearch.lean`).
 The theorem assumes that the oracle's cache holds none of the counters' inputs when the search starts.
-No theorem shows that the signer's cache satisfies this, so the failure of a whole signature is not bounded.
+
+In the random oracle model, signing fails with probability at most `3 exp(-2^18)` (`prEvent_signWith_error_le`, `Proofs/Sphincs/SignatureFailure.lean`).
+The theorem assumes that the oracle's cache holds no trial input of any key when signing starts, as an empty cache does.
+It proves that the signer's own calls before each search add none of that layer's trial inputs.
+The bound covers one signature from such a cache.
+An earlier signature under the same key caches the trial inputs of its keys, and in the unforgeability game the adversary's queries can too.
+So no theorem bounds the failure of a later signature, or of signing inside the game.
 
 The 127-bit unforgeability bound of the configuration is a theorem about the specification's own Lean model, outside EthLib.
 No theorem links that model to this module.
