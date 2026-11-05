@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Bls.Nondegenerate
 public import EthLib.Cryptography.Proofs.Bls.PairingLaws
+public import EthLib.Cryptography.Proofs.ZModSum
 
 /-!
 # Proofs: the pairing law from bilinearity
@@ -97,33 +98,12 @@ private theorem prod_pairing (h : PairingBilinear) :
     rw [List.map_cons, List.prod_cons, ih, List.zipWith_cons_cons, List.sum_cons, pow_add,
       pairing_congr hP hQ, h]
 
-/-- A sum of products of values is zero in `Fr` exactly when `r` divides it. -/
-private theorem dvd_iff_sum_eq_zero (a b : List Fr) :
-    Fr.modulus ∣ (List.zipWith (fun x y => x.val * y.val) a b).sum ↔
-      (List.zipWith (· * ·) a b).sum = 0 := by
-  have hcast : ∀ a b : List Fr,
-      (((List.zipWith (fun x y => x.val * y.val) a b).sum : Nat) : Fr) =
-        (List.zipWith (· * ·) a b).sum := by
-    intro a b
-    induction a generalizing b with
-    | nil => simp
-    | cons x xs ih =>
-      cases b with
-      | nil => simp
-      | cons y ys =>
-        rw [List.zipWith_cons_cons, List.zipWith_cons_cons, List.sum_cons, List.sum_cons,
-          Nat.cast_add, Nat.cast_mul, ih]
-        congr 1
-        exact congrArg₂ (· * ·) (ZMod.natCast_zmod_val (n := Fr.modulus) x)
-          (ZMod.natCast_zmod_val (n := Fr.modulus) y)
-  rw [← hcast]
-  exact (ZMod.natCast_eq_zero_iff _ _).symm
-
 /-- Bilinearity gives the pairing law of the check. -/
 theorem PairingLaws.of_bilinear (h : PairingBilinear) : PairingLaws where
   pairingCheck_iff pairs a b ha hb hr := by
-    rw [pairingCheck_toArray_iff, prod_pairing h pairs a b ha hb hr, ← dvd_iff_sum_eq_zero]
+    rw [pairingCheck_toArray_iff, prod_pairing h pairs a b ha hb hr]
     have hord := orderOf_pairing_generators
-    exact (hord ▸ orderOf_dvd_iff_pow_eq_one).symm
+    exact (hord ▸ orderOf_dvd_iff_pow_eq_one).symm.trans
+      (dvd_sum_zipWith_val_iff (n := Fr.modulus) a b)
 
 end EthLib.Cryptography.Bls
