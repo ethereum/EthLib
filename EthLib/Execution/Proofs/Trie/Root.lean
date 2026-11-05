@@ -214,7 +214,7 @@ theorem prepareData_ok (hash : ByteArray → Hash32) (secured : Bool) :
 /-- The trie compares two keys by their bytes, so it finds them equal exactly when they are. -/
 theorem sameBytes_iff (a b : ByteArray) : sameBytes a b = true ↔ a = b := by
   cases a; cases b
-  simp [sameBytes, Array.toList_inj]
+  simp [sameBytes]
 
 /-- A key that was just set has the value it was set to. -/
 theorem trieGet_trieSet_self (trie : Trie) (key value : ByteArray) :

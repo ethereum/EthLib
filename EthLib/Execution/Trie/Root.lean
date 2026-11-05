@@ -185,11 +185,9 @@ structure Trie where
   /-- The keys and their values, in the order they were first set. -/
   data : List (ByteArray × ByteArray)
 
-/-- Whether two byte strings are equal.
-
-They are compared as lists of bytes, which the kernel does in linear time. -/
+/-- Whether two byte strings are equal, compared byte by byte in place. -/
 def sameBytes (a b : ByteArray) : Bool :=
-  decide (a.data.toList = b.data.toList)
+  a.data == b.data
 
 /-- Set `key` to `value`, or remove `key` when `value` is the empty byte string.
 
