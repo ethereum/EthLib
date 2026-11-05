@@ -177,6 +177,14 @@ theorem pairwise_of_ascending : ∀ {l : List Nat}, ascending l = true → l.Pai
     · exact h.1
     · exact Nat.lt_trans h.1 (List.rel_of_pairwise_cons ih hx)
 
+/-- A list in strictly ascending order passes the order test. -/
+theorem ascending_of_pairwise : ∀ {l : List Nat}, l.Pairwise (· < ·) → ascending l = true
+  | [], _ => rfl
+  | [_], _ => rfl
+  | a :: b :: rest, h => by
+    simp only [ascending, Bool.and_eq_true, decide_eq_true_eq]
+    exact ⟨List.rel_of_pairwise_cons h (List.mem_cons_self ..), ascending_of_pairwise h.of_cons⟩
+
 /-- A list that passes the order test has no number twice. -/
 theorem nodup_of_ascending {l : List Nat} (h : ascending l = true) : l.Nodup :=
   (pairwise_of_ascending h).imp Nat.ne_of_lt
