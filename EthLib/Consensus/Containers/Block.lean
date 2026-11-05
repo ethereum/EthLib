@@ -64,7 +64,7 @@ structure BeaconBlockBody (preset : Preset) (fork : Fork) where
   blobKzgCommitments :
     Since .dencun fork (SszList KZGCommitment preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat)
   /-- From Electra: the requests of the execution payload. -/
-  executionRequests : Since .pectra fork (ExecutionRequests preset)
+  executionRequests : Since .pectra fork (ExecutionRequests preset fork)
 
 namespace BeaconBlockBody
 

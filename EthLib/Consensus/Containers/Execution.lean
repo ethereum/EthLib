@@ -5,6 +5,7 @@ public import EthLib.Base.Fork
 public import EthLib.Consensus.Preset
 public import EthLib.Serialization.Ssz.Typed.Basic
 public import EthLib.Serialization.Ssz.Typed.Collections
+public import EthLib.Serialization.Ssz.Typed.ForkKind
 public import EthLib.Serialization.Ssz.Typed.Since
 
 /-!
@@ -15,6 +16,14 @@ The execution payload of a beacon block from Bellatrix on, its withdrawals, and 
 The payload is one type for every fork, and so is its header.
 
 A field that a later fork adds holds nothing at the forks before it, and its codec skips it.
+
+From Gloas the payload is a progressive container, as [EIP-7688] specifies.
+
+Its lists then have no limit in their type.
+
+Gloas drops the header, since the beacon state then keeps a bid in its place.
+
+[EIP-7688]: https://eips.ethereum.org/EIPS/eip-7688#converted-types
 -/
 
 @[expose] public section
@@ -41,7 +50,21 @@ instance : SszType Withdrawal :=
     (fun (index, validatorIndex, address, amount) => ⟨index, validatorIndex, address, amount⟩)
 
 /-- From Bellatrix: a transaction of the execution layer, as opaque bytes. -/
-abbrev Transaction (preset : Preset) := SszList UInt8 preset.MAX_BYTES_PER_TRANSACTION.toNat
+abbrev Transaction (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork UInt8 preset.MAX_BYTES_PER_TRANSACTION.toNat
+
+/-- From Bellatrix: the transactions of an execution block, in their order. -/
+abbrev Transactions (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork (Transaction preset fork) preset.MAX_TRANSACTIONS_PER_PAYLOAD.toNat
+
+/-- From Capella: the withdrawals of an execution block, in their order. -/
+abbrev Withdrawals (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork Withdrawal preset.MAX_WITHDRAWALS_PER_PAYLOAD.toNat
+
+/-- From Gloas: the block access list of an execution block, as opaque bytes.
+
+[EIP-7928] defines its content and its encoding. -/
+abbrev BlockAccessList := ProgressiveList UInt8
 
 /-- From Bellatrix: the execution block that a beacon block carries.
 
@@ -49,10 +72,12 @@ Capella adds the withdrawals of [EIP-4895].
 
 Deneb adds the two fields of blob gas of [EIP-4844].
 
-This type does not yet have the changes of Gloas, so from Glamsterdam on it keeps the shape of Fulu.
+Gloas adds the block access list of [EIP-7928] and the slot number of [EIP-7843].
 
 [EIP-4895]: https://eips.ethereum.org/EIPS/eip-4895#new-field-in-the-execution-payload-withdrawals
 [EIP-4844]: https://eips.ethereum.org/EIPS/eip-4844#header-extension
+[EIP-7928]: https://eips.ethereum.org/EIPS/eip-7928#specification
+[EIP-7843]: https://eips.ethereum.org/EIPS/eip-7843#specification
 -/
 structure ExecutionPayload (preset : Preset) (fork : Fork) where
   /-- The hash of the parent execution block. -/
@@ -82,13 +107,17 @@ structure ExecutionPayload (preset : Preset) (fork : Fork) where
   /-- The hash of the block. -/
   blockHash : Hash32
   /-- The transactions of the block. -/
-  transactions : SszList (Transaction preset) preset.MAX_TRANSACTIONS_PER_PAYLOAD.toNat
+  transactions : Transactions preset fork
   /-- From Capella: the withdrawals that the block applies. -/
-  withdrawals : Since .shapella fork (SszList Withdrawal preset.MAX_WITHDRAWALS_PER_PAYLOAD.toNat)
+  withdrawals : Since .shapella fork (Withdrawals preset fork)
   /-- From Deneb: the blob gas that the transactions of the block use. -/
   blobGasUsed : Since .dencun fork UInt64
   /-- From Deneb: the blob gas above the target, summed over the blocks before this one. -/
   excessBlobGas : Since .dencun fork UInt64
+  /-- From Gloas: the accounts and storage slots that the block touches, with its changes. -/
+  blockAccessList : Since .glamsterdam fork BlockAccessList
+  /-- From Gloas: the slot of the beacon chain at which the block is proposed. -/
+  slotNumber : Since .glamsterdam fork UInt64
 
 namespace ExecutionPayload
 
@@ -100,24 +129,28 @@ def names (fork : Fork) : List String :=
     "block_number", "gas_limit", "gas_used", "timestamp", "extra_data", "base_fee_per_gas",
     "block_hash", "transactions"] ++
   sinceNames .shapella fork ["withdrawals"] ++
-  sinceNames .dencun fork ["blob_gas_used", "excess_blob_gas"]
+  sinceNames .dencun fork ["blob_gas_used", "excess_blob_gas"] ++
+  sinceNames .glamsterdam fork ["block_access_list", "slot_number"]
+
+/-- From Gloas: the layout of a payload, its nineteen fields in their order. -/
+def activeFields : List Bool := List.replicate 19 true
 
 instance : SszType (ExecutionPayload preset fork) :=
-  .container (names fork)
+  .forkContainer .glamsterdam fork activeFields (names fork)
     (fun p => (p.parentHash, p.feeRecipient, p.stateRoot, p.receiptsRoot, p.logsBloom,
       p.prevRandao, p.blockNumber, p.gasLimit, p.gasUsed, p.timestamp, p.extraData,
       p.baseFeePerGas, p.blockHash, p.transactions, p.withdrawals, p.blobGasUsed,
-      p.excessBlobGas))
+      p.excessBlobGas, p.blockAccessList, p.slotNumber))
     (fun (parentHash, feeRecipient, stateRoot, receiptsRoot, logsBloom, prevRandao, blockNumber,
         gasLimit, gasUsed, timestamp, extraData, baseFeePerGas, blockHash, transactions,
-        withdrawals, blobGasUsed, excessBlobGas) =>
+        withdrawals, blobGasUsed, excessBlobGas, blockAccessList, slotNumber) =>
       ⟨parentHash, feeRecipient, stateRoot, receiptsRoot, logsBloom, prevRandao, blockNumber,
         gasLimit, gasUsed, timestamp, extraData, baseFeePerGas, blockHash, transactions,
-        withdrawals, blobGasUsed, excessBlobGas⟩)
+        withdrawals, blobGasUsed, excessBlobGas, blockAccessList, slotNumber⟩)
 
 end ExecutionPayload
 
-/-- From Bellatrix: an execution payload with each list replaced by its root.
+/-- From Bellatrix to Fulu: an execution payload with each list replaced by its root.
 
 The beacon state keeps the header of the latest payload.
 

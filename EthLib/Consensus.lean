@@ -5,6 +5,7 @@ public import EthLib.Consensus.Mutators
 public import EthLib.Consensus.Config
 public import EthLib.Consensus.Constants
 public import EthLib.Consensus.Containers.Attestation
+public import EthLib.Consensus.Containers.Bid
 public import EthLib.Consensus.Containers.Block
 public import EthLib.Consensus.Containers.Builder
 public import EthLib.Consensus.Containers.Execution

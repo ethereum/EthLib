@@ -81,4 +81,44 @@ The length is the number of recent block roots that the state keeps. -/
 abbrev ExecutionPayloadAvailability (preset : Preset) :=
   Bitvector preset.SLOTS_PER_HISTORICAL_ROOT.toNat
 
+/-- The votes of the members of the committee on one payload, aggregated.
+
+The block of the next slot includes it. -/
+structure PayloadAttestation (preset : Preset) where
+  /-- One bit for each member of the committee, in committee order, set when it signed. -/
+  aggregationBits : PayloadTimelinessCommitteeBits preset
+  /-- The vote. -/
+  data : PayloadAttestationData
+  /-- The aggregate signature of the members whose bit is set. -/
+  signature : BLSSignature
+
+/-- The layout of an aggregated vote, its three fields in their order. -/
+def PayloadAttestation.activeFields : List Bool := [true, true, true]
+
+instance {preset : Preset} : SszType (PayloadAttestation preset) :=
+  .progressiveContainer PayloadAttestation.activeFields ["aggregation_bits", "data", "signature"]
+    (fun a => (a.aggregationBits, a.data, a.signature))
+    (fun (aggregationBits, data, signature) => ⟨aggregationBits, data, signature⟩)
+
+/-- The aggregated votes that a beacon block includes. -/
+abbrev PayloadAttestations (preset : Preset) := ProgressiveList (PayloadAttestation preset)
+
+/-- An aggregated vote with the indices of the members that signed, in place of their bits. -/
+structure IndexedPayloadAttestation (preset : Preset) where
+  /-- The indices of the members that signed. -/
+  attestingIndices : PayloadTimelinessCommitteeIndices preset
+  /-- The vote. -/
+  data : PayloadAttestationData
+  /-- The aggregate signature of those members. -/
+  signature : BLSSignature
+
+/-- The layout of an indexed vote, its three fields in their order. -/
+def IndexedPayloadAttestation.activeFields : List Bool := [true, true, true]
+
+instance {preset : Preset} : SszType (IndexedPayloadAttestation preset) :=
+  .progressiveContainer IndexedPayloadAttestation.activeFields
+    ["attesting_indices", "data", "signature"]
+    (fun a => (a.attestingIndices, a.data, a.signature))
+    (fun (attestingIndices, data, signature) => ⟨attestingIndices, data, signature⟩)
+
 end EthLib.Consensus
