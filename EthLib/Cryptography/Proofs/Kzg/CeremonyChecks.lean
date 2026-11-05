@@ -61,15 +61,15 @@ theorem g2Validate_isInfinity_eq_false {p : G2} (h : g2Validate p = true) :
 /-- Adding from `G1.zero` on the left returns the right operand. -/
 @[simp] theorem G1.zero_add (q : G1) : G1.add G1.zero q = q := by
   unfold Bls.G1.add
-  have hz : G1.zero.z.isZero = true := by decide
+  have hz : BaseField.isZero (G1.zero : G1).z = true := by decide
   simp [hz]
 
 /-- Adding `G1.zero` on the right of a non-infinity point returns the point unchanged. -/
 @[simp] theorem G1.add_zero {p : G1} (hp : p.isInfinity = false) :
     G1.add p G1.zero = p := by
   unfold Bls.G1.add
-  have hpz : p.z.isZero = false := hp
-  have hz : G1.zero.z.isZero = true := by decide
+  have hpz : BaseField.isZero p.z = false := hp
+  have hz : BaseField.isZero (G1.zero : G1).z = true := by decide
   simp [hpz, hz]
 
 /-- Scalar multiplication of any `G1` point by `0` gives `G1.zero`. -/
@@ -89,7 +89,7 @@ theorem g2Validate_isInfinity_eq_false {p : G2} (h : g2Validate p = true) :
 /-- Adding from `G2.zero` on the left returns the right operand. -/
 @[simp] theorem G2.zero_add (q : G2) : G2.add G2.zero q = q := by
   unfold Bls.G2.add
-  have hz : G2.zero.z.isZero = true := by decide
+  have hz : (G2.zero : G2).z.isZero = true := by decide
   simp [hz]
 
 /-- Adding `G2.zero` on the right of a non-infinity point returns the point unchanged. -/
@@ -97,7 +97,7 @@ theorem g2Validate_isInfinity_eq_false {p : G2} (h : g2Validate p = true) :
     G2.add p G2.zero = p := by
   unfold Bls.G2.add
   have hpz : p.z.isZero = false := hp
-  have hz : G2.zero.z.isZero = true := by decide
+  have hz : (G2.zero : G2).z.isZero = true := by decide
   simp [hpz, hz]
 
 /-- Unfolding equation for the executable G2 double-and-add multiplication. -/
@@ -138,7 +138,7 @@ theorem isInfinity_eq_true_iff_toPoint_eq_zero {p : G1} (hp : G1.Valid p) :
 Discharges the `G1` non-infinity law unconditionally using the kernel-verified
 generator order (`G1.addOrderOf_toPoint_generator`). -/
 theorem g1Mul_nonzero_iff (s : Fr) :
-    G1.isInfinity (G1.mul G1.generator s) = false ↔ s ≠ 0 := by
+    G1.isInfinity (G1.mul (G1.generator : G1) s) = false ↔ s ≠ 0 := by
   rw [Bool.eq_false_iff, Ne, isInfinity_eq_true_iff_toPoint_eq_zero
       (G1.valid_mul G1.valid_generator s), G1.toPoint_mul_generator, G1.ofFr]
   refine not_congr ?_

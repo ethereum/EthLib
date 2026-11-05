@@ -33,7 +33,14 @@ That holds because `x^3 + 4 (1 + i)` has no root in `Fp2`.
 
 @[expose] public section
 
-deriving instance DecidableEq for EthLib.Cryptography.Bls.G2
+/-- Equality of `G2` points, coordinate by coordinate.
+
+The derived instance would ask for equality on every base field, so this one is written for `Fp`. -/
+instance : DecidableEq EthLib.Cryptography.Bls.G2 := fun a b =>
+  match a, b with
+  | ⟨ax, ay, az⟩, ⟨bx, bY, bz⟩ =>
+    if h : ax = bx ∧ ay = bY ∧ az = bz then isTrue (by obtain ⟨rfl, rfl, rfl⟩ := h; rfl)
+    else isFalse (fun e => h (by cases e; exact ⟨rfl, rfl, rfl⟩))
 
 namespace EthLib.Cryptography.Bls
 
@@ -74,7 +81,7 @@ theorem projectiveEq_inf_iff {p q : G2} (hp : p.isInfinity = true) :
   unfold projectiveEq isInfinity at *
   rw [ite_eq_left hp]
 
-@[simp] theorem isInfinity_zero : G2.zero.isInfinity = true := by
+@[simp] theorem isInfinity_zero : (G2.zero : G2).isInfinity = true := by
   decide
 
 /-! ## Compression and decompression -/
@@ -320,7 +327,7 @@ private theorem isOnTwist_of_z_one {x y : Fp2} (h : y * y = x * x * x + bTwist) 
   rw [ite_eq_right (by rw [hinf]; decide)]
   dsimp only
   have h1 : (Fp2.one : Fp2) * Fp2.one = Fp2.one := by decide
-  have hb : bTwist * Fp2.one = bTwist := mul_one bTwist
+  have hb : (bTwist : Fp2) * Fp2.one = bTwist := mul_one (bTwist : Fp2)
   rw [h1, h1, h1, hb, h]
   exact beq_self_eq_true _
 

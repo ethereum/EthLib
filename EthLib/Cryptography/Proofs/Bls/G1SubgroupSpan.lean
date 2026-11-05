@@ -125,7 +125,7 @@ theorem exists_mul_generator_of_inSubgroup {P : G1} (hP : Valid P)
 
 /-- Because `g_1` has order `r` and `s.val < r`, `[s] * g_1` vanishes only at `s = 0`. -/
 theorem mul_generator_isInfinity_iff (s : Fr) :
-    (mul generator s).isInfinity = true ↔ s = 0 := by
+    (mul (generator : G1) s).isInfinity = true ↔ s = 0 := by
   rw [isInfinity_eq_true_iff_toPoint_eq_zero (valid_mul valid_generator s),
     toPoint_mul valid_generator, ← addOrderOf_dvd_iff_nsmul_eq_zero,
     addOrderOf_toPoint_generator]

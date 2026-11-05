@@ -81,6 +81,7 @@ instance (priority := high) : Div Fp := ⟨fun a b => a * b.inverse⟩
 instance : BaseField Fp where
   zero := zero
   one := one
+  ofNat := ofNat
   beq := beq
   isZero := isZero
   inverse := inverse

@@ -151,14 +151,14 @@ private theorem beq_eq (a b : Nat) : Nat.beq a b = (a == b) :=
 
 theorem coords_double (q : G1) : coords (G1.double q) = double (coords q) := by
   unfold G1.double double
-  simp only [beq_eq, Bool.cond_eq_ite]
+  simp only [beq_eq, Bool.cond_eq_ite, Fp.baseField_isZero]
   rw [show ((coords q).2.2 == 0) = q.z.isZero from rfl]
   by_cases h : q.z.isZero = true <;> simp only [h, ↓reduceIte]
   rfl
 
 theorem coords_addMixed (p q : G1) : coords (G1.addMixed p q) = addMixed (coords p) (coords q) := by
   unfold G1.addMixed addMixed
-  simp only [beq_eq, Bool.cond_eq_ite]
+  simp only [beq_eq, Bool.cond_eq_ite, Fp.baseField_beq]
   rw [show ((coords p).1 == fmul (coords q).1 (fmul (coords p).2.2 (coords p).2.2)) =
       p.x.beq (q.x * (p.z * p.z)) from rfl,
     show ((coords p).2.1 == fmul (fmul (coords q).2.1 (coords p).2.2)
@@ -174,7 +174,7 @@ theorem coords_addMixed (p q : G1) : coords (G1.addMixed p q) = addMixed (coords
 theorem coords_addGeneral (p q : G1) :
     coords (G1.addGeneral p q) = addGeneral (coords p) (coords q) := by
   unfold G1.addGeneral addGeneral
-  simp only [beq_eq, Bool.cond_eq_ite]
+  simp only [beq_eq, Bool.cond_eq_ite, Fp.baseField_beq]
   rw [show (fmul (coords p).1 (fmul (coords q).2.2 (coords q).2.2) ==
       fmul (coords q).1 (fmul (coords p).2.2 (coords p).2.2)) =
       (p.x * (q.z * q.z)).beq (q.x * (p.z * p.z)) from rfl,
@@ -191,7 +191,8 @@ theorem coords_addGeneral (p q : G1) :
 
 theorem coords_add (p q : G1) : coords (G1.add p q) = add (coords p) (coords q) := by
   unfold G1.add add
-  simp only [beq_eq, Bool.cond_eq_ite]
+  simp only [beq_eq, Bool.cond_eq_ite, Fp.baseField_isZero, Fp.baseField_beq,
+    show (BaseField.one : Fp) = Fp.one from rfl]
   rw [show ((coords p).2.2 == 0) = p.z.isZero from rfl,
     show ((coords q).2.2 == 0) = q.z.isZero from rfl,
     show ((coords q).2.2 == 1) = q.z.beq Fp.one from rfl]
