@@ -20,6 +20,7 @@ A call fails exactly when the gas is below 3000.
 
 namespace EthLib.Execution.Evm.Precompiles.Ecrecover
 
+open EthLib.Base (byteAt byteAt_eq_getD)
 open EthLib.Cryptography.Secp256k1
 open EthLib.Cryptography.Secp256k1.Ecdsa
 

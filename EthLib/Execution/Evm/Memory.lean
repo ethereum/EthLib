@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Base.Bytes
+
 /-!
 # `Evm.Memory`
 
@@ -18,11 +20,7 @@ So a read or a write of memory stays within its size.
 
 namespace EthLib.Execution.Evm
 
-/-- The byte at index `i` of the buffer, or `0` past its end.
-
-It reads the byte in place, since the array of all the bytes would cost a copy of the buffer. -/
-def byteAt (data : ByteArray) (i : Nat) : UInt8 :=
-  if h : i < data.size then data[i] else 0
+open EthLib.Base (byteAt)
 
 /-- `size` bytes of the buffer from `start`, padded with zeros on the right.
 

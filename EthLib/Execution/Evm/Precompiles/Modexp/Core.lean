@@ -23,7 +23,7 @@ The steps run in this order:
 namespace EthLib.Execution.Evm.Precompiles.Modexp
 
 open EthLib.Base
-open EthLib.Execution.Evm (byteAt bufferRead powMod)
+open EthLib.Execution.Evm (bufferRead powMod)
 
 /-- The three length headers of an input, in bytes. -/
 structure Lengths where

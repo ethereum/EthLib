@@ -29,7 +29,7 @@ The charge keeps every byte of memory.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork U256)
+open EthLib.Base (Fork U256 byteAt)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 

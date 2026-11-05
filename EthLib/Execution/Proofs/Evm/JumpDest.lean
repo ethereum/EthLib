@@ -23,6 +23,8 @@ The step past a PUSH1 to PUSH32 skips its data, by the byte alone.
 
 namespace EthLib.Execution.Evm
 
+open EthLib.Base (byteAt)
+
 /-- The next opcode starts after the current one. -/
 theorem lt_nextOpcode (code : ByteArray) (pc : Nat) : pc < nextOpcode code pc := by
   unfold nextOpcode

@@ -9,6 +9,8 @@ Source: section 3 of the Yellow Paper, Shanghai version, in
 [`Paper.tex` at `efc5f9a`](https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex).
 
 It writes `B_n` for the byte strings of length `n`.
+
+A read of one byte of an untyped string gives zero past its end.
 -/
 
 @[expose] public section
@@ -49,6 +51,12 @@ def readBytes (b : ByteArray) (offset n : Nat) (h : offset + n ≤ b.size) :
   Vector.ofFn fun i => b.data[offset + i.val]'(by
     simp only [ByteArray.size] at h
     omega)
+
+/-- The byte at index `i` of the buffer, or `0` past its end.
+
+It reads the byte in place, since the array of all the bytes would cost a copy of the buffer. -/
+@[inline] def byteAt (data : ByteArray) (i : Nat) : UInt8 :=
+  if h : i < data.size then data[i] else 0
 
 /-! ## Bitwise operations -/
 
