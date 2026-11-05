@@ -48,6 +48,14 @@ eth_receipts_match(
   lean_object* receipts
 );
 
+extern lean_object*
+eth_access_lists_answer(
+  uint64_t version,
+  lean_object* request,
+  lean_object* response,
+  lean_object* expected
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* Copy the Python `bytes` object `obj` into a Lean `ByteArray`, or set a TypeError naming it. */
@@ -165,4 +173,30 @@ py_eth_receipts_match(
   lean_object* fork = mk_bytearray((const uint8_t*) utf8, (size_t) len);
   return except_into_pybool(
     eth_receipts_match(version, fork, root, receipts), ETH_WIRE_ERROR);
+}
+
+PyObject*
+py_eth_access_lists_answer(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *version_obj, *request_obj, *response_obj, *expected_obj;
+  if (!PyArg_ParseTuple(args, "OOOO", &version_obj, &request_obj, &response_obj, &expected_obj))
+    return NULL;
+  uint64_t version;
+  if (parse_uint64(version_obj, "version", &version)) return NULL;
+  Py_ssize_t n;
+  uint8_t* hashes = pack_bytes_sequence(expected_obj, 32, &n, "access list hash");
+  if (!hashes) return NULL;
+  lean_object *request, *response;
+  if (parse_bytes(request_obj, "request", &request)) { PyMem_Free(hashes); return NULL; }
+  if (parse_bytes(response_obj, "response", &response)) {
+    lean_dec(request);
+    PyMem_Free(hashes);
+    return NULL;
+  }
+  lean_object* expected = mk_bytearray_array(hashes, n, 32);
+  PyMem_Free(hashes);
+  return except_into_pybool(
+    eth_access_lists_answer(version, request, response, expected), ETH_WIRE_ERROR);
 }

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Network.Message
 public import EthLib.Execution.Proofs.Network.Blocks
+public import EthLib.Execution.Proofs.Network.Cells
 public import EthLib.Execution.Proofs.Network.Receipts
 public import EthLib.Execution.Proofs.Network.Status
 public import EthLib.Execution.Proofs.Network.Transactions
@@ -32,7 +33,8 @@ namespace Message
 attribute [local simp] STATUS_ID NEW_BLOCK_HASHES_ID TRANSACTIONS_ID GET_BLOCK_HEADERS_ID
   BLOCK_HEADERS_ID GET_BLOCK_BODIES_ID BLOCK_BODIES_ID NEW_BLOCK_ID
   NEW_POOLED_TRANSACTION_HASHES_ID GET_POOLED_TRANSACTIONS_ID POOLED_TRANSACTIONS_ID
-  GET_RECEIPTS_ID RECEIPTS_ID BLOCK_RANGE_UPDATE_ID
+  GET_RECEIPTS_ID RECEIPTS_ID BLOCK_RANGE_UPDATE_ID GET_BLOCK_ACCESS_LISTS_ID BLOCK_ACCESS_LISTS_ID
+  GET_CELLS_ID CELLS_ID
 
 /-- The envelope `[request-id, payload]` reads back as its request ID and its payload. -/
 theorem readEnvelope_envelope {α : Type} [Codec α] [LawfulCodec α] (i : UInt64) (x : α) :
@@ -90,6 +92,8 @@ def FitsVersion (version : EthVersion) : Message → Prop
   | .newPooledTransactionHashes a@(.eth72 ..) => version = .eth72 ∧ a.lengthsAgree
   | .getReceipts _ k _ => (k.isSome ↔ EthVersion.eth70 ≤ version)
   | .receipts _ b _ => (b.isSome ↔ EthVersion.eth70 ≤ version)
+  | .getBlockAccessLists .. | .blockAccessLists .. => EthVersion.eth71 ≤ version
+  | .getCells .. | .cells .. => EthVersion.eth72 ≤ version
   | _ => True
 
 /-- A message of the form of a version reads back from its ID and its item on that version. -/
@@ -152,6 +156,24 @@ theorem ofItem_toItem {version : EthVersion} {m : Message} (hm : m.FitsVersion v
   | receipts i b ls =>
     simp [ofItem, Message.id, toItem, lists_eq_toItem ls, readWithPart_withPart i b ls hm,
       Functor.map, Except.map, Except.mapError]
+  | getBlockAccessLists i hs =>
+    have hm : EthVersion.eth71 ≤ version := hm
+    simp [ofItem, Message.id, toItem, hm, readEnvelope_envelope, Functor.map, Except.map,
+      Except.mapError]
+  | blockAccessLists i ls =>
+    have hm : EthVersion.eth71 ≤ version := hm
+    simp [ofItem, Message.id, toItem, hm, list_eq_toItem ls, readEnvelope_envelope, Functor.map,
+      Except.map, Except.mapError]
+  | getCells i hs m =>
+    have hm : EthVersion.eth72 ≤ version := hm
+    have h71 : EthVersion.eth71 ≤ version := Nat.le_trans (by decide) hm
+    simp [ofItem, Message.id, toItem, hm, h71, Item.fields, Item.toItems, Item.field_toItem,
+      bind, Except.bind, pure, Except.pure, Except.mapError]
+  | cells i hs gs m =>
+    have hm : EthVersion.eth72 ≤ version := hm
+    have h71 : EthVersion.eth71 ≤ version := Nat.le_trans (by decide) hm
+    simp [ofItem, Message.id, toItem, hm, h71, Item.fields, Item.toItems, Item.field_toItem,
+      bind, Except.bind, pure, Except.pure, Except.mapError]
 
 /-- eth/68 rejects BlockRangeUpdate, which eth/69 adds. -/
 theorem ofItem_blockRangeUpdate_eth68 (item : Item) :

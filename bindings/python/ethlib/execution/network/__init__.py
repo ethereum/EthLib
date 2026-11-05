@@ -20,6 +20,10 @@ GET_POOLED_TRANSACTIONS = 0x09
 POOLED_TRANSACTIONS = 0x0A
 GET_RECEIPTS = 0x0F
 RECEIPTS = 0x10
+GET_BLOCK_ACCESS_LISTS = 0x12
+BLOCK_ACCESS_LISTS = 0x13
+GET_CELLS = 0x14
+CELLS = 0x15
 BLOCK_RANGE_UPDATE = 0x11
 
 
@@ -53,7 +57,19 @@ def receipts_match(version: int, fork: str, receipts_root: bytes, receipts: byte
     return _native.eth_receipts_match(version, fork, receipts_root, receipts)
 
 
+def access_lists_answer(
+    version: int, request: bytes, response: bytes, expected: list[bytes]
+) -> bool:
+    """Whether the BlockAccessLists `response` answers the request, with these header hashes."""
+    return _native.eth_access_lists_answer(version, request, response, expected)
+
+
 __all__ = [
+    "BLOCK_ACCESS_LISTS",
+    "CELLS",
+    "GET_BLOCK_ACCESS_LISTS",
+    "GET_CELLS",
+    "access_lists_answer",
     "BLOCK_BODIES",
     "BLOCK_HEADERS",
     "BLOCK_RANGE_UPDATE",

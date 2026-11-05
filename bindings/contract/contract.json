@@ -3373,6 +3373,21 @@
    "docstring":
    "Whether the receipts of a block, as a version sends them, match the receipts root of its header.\n\nThe root is computed over the consensus forms, as \"Receipt Encoding and Validity\" says.\n\nReceipts that do not read, or that have no root, do not match."},
   {"summary":
+   "Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request` of eth/71 on, given the access list hash of each requested block.",
+   "signature":
+   "(version: int, request: bytes, response: bytes, expected: list[bytes]) -> bool",
+   "operation": "EthLib.Execution.Network.Exports.accessListsAnswerExport",
+   "method": "eth_access_lists_answer",
+   "errors":
+   [{"type": "EthLib.Execution.Network.EthError",
+     "codes":
+     [{"constructor": "unknownId", "code": 1},
+      {"constructor": "rlp", "code": 2},
+      {"constructor": "unequalLengths", "code": 3}]}],
+   "error_class": "EthWireError",
+   "docstring":
+   "Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request`\nof eth/71 on, given the access list hash of each requested block."},
+  {"summary":
    "The canonical data of the message with the ID `id` and the data `data`, on a version.",
    "signature": "(version: int, id: int, data: bytes) -> bytes",
    "operation": "EthLib.Execution.Network.Snap.Exports.decodeExport",
