@@ -216,7 +216,7 @@ theorem gasHeld_depositCode_le [LawfulGasMeter Meter] {snapshot : TransactionSta
         · cases h
           simp only [LawfulGasMeter.gasHeld_exhaust]
           exact Nat.zero_le _
-        · obtain ⟨_, -, h⟩ := except_bind_eq_ok h
+        · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
           cases h
           exact Nat.le_trans (Nat.le_add_right _ _) (LawfulGasMeter.gasHeld_charge hc)
 

@@ -108,12 +108,12 @@ theorem controlFlowStep_sameContext {op : Op}
     cases h
     exact ⟨rfl, rfl, rfl⟩
   case jumpdest =>
-    obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+    obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
     cases h
     exact (chargeGas_sameContext h1).advance
   case jump =>
-    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-    obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
     simp only [throw, throwThe, MonadExceptOf.throw] at h
     split at h
     · cases h
@@ -121,9 +121,9 @@ theorem controlFlowStep_sameContext {op : Op}
       exact ⟨this.message, this.state, this.substate⟩
     · cases h
   case jumpi =>
-    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-    obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-    obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
     have := ((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
       (chargeGas_sameContext h3)
     simp only [throw, throwThe, MonadExceptOf.throw] at h

@@ -343,13 +343,13 @@ def callInstruction (fork : Fork) :
 theorem popCallOperands_pays {kind : CallKind} {evm after : Evm fork Meter}
     {call : CallOperands} (h : popCallOperands kind evm = .ok (call, after)) :
     Pays 0 evm after := by
-  obtain ⟨⟨_, e1⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, e2⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, e3⟩, h3, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, e4⟩, h4, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, e5⟩, h5, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, e6⟩, h6, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, e7⟩, h7, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e5⟩, h5, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e6⟩, h6, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e7⟩, h7, h⟩ := Base.bind_ok_iff.mp h
   cases h
   have p3 : Pays 0 e2 e3 := by
     unfold popCallValue at h3
@@ -363,10 +363,10 @@ theorem popCallOperands_pays {kind : CallKind} {evm after : Evm fork Meter}
 /-- The access to a delegate pays nothing. -/
 theorem accessDelegation_pays {evm after : Evm fork Meter} {address : Address} {callee : Callee}
     (h : accessDelegation evm address = .ok (callee, after)) : Pays 0 evm after := by
-  obtain ⟨code, -, h⟩ := except_bind_eq_ok h
+  obtain ⟨code, -, h⟩ := Base.bind_ok_iff.mp h
   dsimp only at h
   split at h
-  · obtain ⟨_, -, h⟩ := except_bind_eq_ok h
+  · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
     cases h
     exact accessAddress_pays _ _
   · cases h
@@ -376,9 +376,9 @@ theorem accessDelegation_pays {evm after : Evm fork Meter} {address : Address} {
 theorem skipCall_gasHeld [LawfulGasMeter Meter] {evm after : Evm fork Meter}
     {gas reservoir : Nat} (h : skipCall evm gas reservoir = .ok after) :
     GasMeter.gasHeld after.gas = GasMeter.gasHeld evm.gas + gas ∧ after.running = evm.running := by
-  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
   cases h
-  obtain ⟨_, -, h1⟩ := except_bind_eq_ok h1
+  obtain ⟨_, -, h1⟩ := Base.bind_ok_iff.mp h1
   cases h1
   exact ⟨LawfulGasMeter.gasHeld_credit _ _ _, rfl⟩
 
@@ -388,9 +388,9 @@ theorem resumeCall_gasHeld [LawfulGasMeter Meter] {caller child after : Evm fork
     (h : resumeCall fork caller outputStart outputSize child = .ok after) :
     GasMeter.gasHeld after.gas = GasMeter.gasHeld caller.gas + GasMeter.gasHeld child.gas ∧
       after.running = caller.running := by
-  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
   cases h
-  obtain ⟨_, -, h1⟩ := except_bind_eq_ok h1
+  obtain ⟨_, -, h1⟩ := Base.bind_ok_iff.mp h1
   cases h1
   exact ⟨gasHeld_incorporateChild caller child, running_incorporateChild caller child⟩
 
@@ -476,7 +476,7 @@ theorem subCall_lt_cost_callExtraGas {kind : CallKind} {state : State.Transactio
 theorem callStep_decreases [LawfulGasMeter Meter] {kind : CallKind} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (running : evm.running = true)
     (h : callStep kind evm = .ok result) : result.Decreases evm := by
-  obtain ⟨⟨call, e1⟩, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨call, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   dsimp only at h
   rcases hacc : accessAddress e1 call.address with ⟨cold, e2⟩
   have p2 : Pays 0 e1 e2 := by
@@ -484,8 +484,8 @@ theorem callStep_decreases [LawfulGasMeter Meter] {kind : CallKind} {evm : Evm f
     rwa [hacc] at this
   rw [hacc] at h
   dsimp only at h
-  obtain ⟨⟨callee, e3⟩, h3, h⟩ := except_bind_eq_ok h
-  obtain ⟨e4, h4, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨callee, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
   have paid := (((popCallOperands_pays h1).trans p2).trans (accessDelegation_pays h3)).trans
     (chargeGas_pays h4)
   refine finishCall_decreases ?_ subCall_lt_cost_callExtraGas running h

@@ -94,8 +94,8 @@ variable [GasMeter Meter]
 theorem sstoreStep_ne_ok_of_isStatic {evm after : Evm fork Meter}
     (static : evm.message.isStatic = true) : sstoreStep evm ≠ .ok after := by
   intro h
-  obtain ⟨⟨k, e1⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨n, e2⟩, h2, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨k, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨n, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
   have m2 : e2.message = evm.message :=
     (popWord_sameContext h2).message.trans (popWord_sameContext h1).message
   simp only [] at h
@@ -106,7 +106,7 @@ theorem sstoreStep_ne_ok_of_isStatic {evm after : Evm fork Meter}
       ⟨cold, e3⟩
     rw [hpair] at hacc
     simp only [hpair] at h
-    obtain ⟨e4, h4, h⟩ := except_bind_eq_ok h
+    obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
     have m4 : e4.message = evm.message := by
       rw [(chargeGas_sameContext h4).message]
       cases hacc

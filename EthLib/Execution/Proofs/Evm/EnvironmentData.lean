@@ -131,18 +131,18 @@ theorem environmentStep_sameContext {op : Op}
     split at hstep
     · simp only [Option.some.injEq] at hstep
       subst hstep
-      obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-      obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
-      obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+      obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+      obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+      obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
       cases h
       exact (((popWord_sameContext h1).trans (chargeGas_sameContext h2)).trans
         (pushWord_sameContext h3)).advance
     · cases hstep
   case blockhash =>
     subst hstep
-    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-    obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
-    obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
     cases h
     exact (((popWord_sameContext h1).trans (chargeGas_sameContext h2)).trans
       (pushWord_sameContext h3)).advance

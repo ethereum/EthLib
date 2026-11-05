@@ -225,9 +225,9 @@ theorem resumeCreate_gasHeld [LawfulGasMeter Meter] {caller child after : Evm fo
     {address : Address} (h : resumeCreate fork caller address child = .ok after) :
     GasMeter.gasHeld after.gas = GasMeter.gasHeld caller.gas + GasMeter.gasHeld child.gas ∧
       after.running = caller.running := by
-  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
   cases h
-  obtain ⟨_, -, h1⟩ := except_bind_eq_ok h1
+  obtain ⟨_, -, h1⟩ := Base.bind_ok_iff.mp h1
   cases h1
   exact ⟨gasHeld_incorporateChild caller child, running_incorporateChild caller child⟩
 
@@ -247,8 +247,8 @@ theorem launchCreate_decreases [LawfulGasMeter Meter] {before evm : Evm fork Met
       subst h
       refine skipCall_measure_lt ?_ lt running hs
       exact paid.congr rfl rfl
-  · obtain ⟨address, -, h⟩ := except_bind_eq_ok h
-    obtain ⟨state, -, h⟩ := except_bind_eq_ok h
+  · obtain ⟨address, -, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨state, -, h⟩ := Base.bind_ok_iff.mp h
     have access := accessAddress_pays { evm with returnData := .empty } address
     have paid' : Pays cost before
         { (accessAddress { evm with returnData := .empty } address).2 with state } :=
@@ -257,7 +257,7 @@ theorem launchCreate_decreases [LawfulGasMeter Meter] {before evm : Evm fork Met
     split at h
     · cases h
       exact child_decreases paid'.drain lt running resumeCreate_gasHeld
-    · obtain ⟨_, hp, h⟩ := except_bind_eq_ok h
+    · obtain ⟨_, hp, h⟩ := Base.bind_ok_iff.mp h
       cases h
       show measure _ < measure before
       exact Pays.measure_lt
@@ -285,7 +285,7 @@ theorem popSalt_pays {create2 : Bool} {evm after : Evm fork Meter} {salt : Optio
     (h : popSalt create2 evm = .ok (salt, after)) : Pays 0 evm after := by
   unfold popSalt at h
   split at h
-  · obtain ⟨⟨_, _⟩, hp, h⟩ := except_bind_eq_ok h
+  · obtain ⟨⟨_, _⟩, hp, h⟩ := Base.bind_ok_iff.mp h
     cases h
     exact popWord_pays hp
   · cases h
@@ -295,11 +295,11 @@ theorem popSalt_pays {create2 : Bool} {evm after : Evm fork Meter} {salt : Optio
 theorem createStep_decreases [LawfulGasMeter Meter] {create2 : Bool} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (running : evm.running = true)
     (h : createStep create2 evm = .ok result) : result.Decreases evm := by
-  obtain ⟨⟨_, e1⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, e2⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, e3⟩, h3, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, e4⟩, h4, h⟩ := except_bind_eq_ok h
-  obtain ⟨e5, h5, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
   have paid := ((((popWord_pays h1).trans (popWord_pays h2)).trans (popWord_pays h3)).trans
     (popSalt_pays h4)).trans (chargeGasAndMemory_pays h5)
   refine genericCreate_decreases paid ?_ running h
