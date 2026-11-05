@@ -309,6 +309,8 @@ PyObject* py_consensus_compute_matrix                     (PyObject* self, PyObj
 PyObject* py_consensus_recover_matrix                     (PyObject* self, PyObject* args);
 PyObject* py_consensus_light_client_sync                 (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_better_update                  (PyObject* self, PyObject* args);
+PyObject* py_consensus_block_to_light_client_header      (PyObject* self, PyObject* args);
+PyObject* py_consensus_light_client_update_proofs        (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_fork_digest               (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_data_column_sidecars_from_block(PyObject* self, PyObject* args);
 PyObject* py_consensus_get_data_column_sidecars_from_column_sidecar(PyObject* self, PyObject* args);

@@ -77,6 +77,14 @@ inductive LightClientError where
   | slotOverflow
   /-- The fork has no light client, before Altair, or its light client is not yet specified. -/
   | forkNotSpecified (fork : Fork)
+  /-- A full node derives data from a state before Altair. -/
+  | beforeAltair
+  /-- A full node derives data from a state that is not at the slot of its latest block. -/
+  | stateNotAtBlock
+  /-- A full node derives data from a state that is not the post state of the block. -/
+  | stateNotOfBlock
+  /-- The finalized block that a full node gives is not the finalized block of the state. -/
+  | finalizedNotOfState
   deriving DecidableEq, Repr
 
 namespace LightClientError
@@ -100,6 +108,10 @@ def code : LightClientError → UInt32
   | .finalizedPeriodMismatch => 15
   | .slotOverflow => 16
   | .forkNotSpecified _ => 17
+  | .beforeAltair => 18
+  | .stateNotAtBlock => 19
+  | .stateNotOfBlock => 20
+  | .finalizedNotOfState => 21
 
 end LightClientError
 
@@ -117,6 +129,11 @@ def LightClientError.liftRoot {α : Type} (result : Except Err α) : Except Ligh
 Gloas changes the generalized indices and the checks of a header, which are not yet specified. -/
 def LightClientError.requireFork (fork : Fork) : Except LightClientError Unit :=
   if .altair ≤ fork ∧ fork < .glamsterdam then .ok () else .error (.forkNotSpecified fork)
+
+/-- The proof that a fork has a specified light client, or the error that it has none. -/
+def LightClientError.specifiedFork (fork : Fork) :
+    Except LightClientError (PLift (.altair ≤ fork ∧ fork < .glamsterdam)) :=
+  if h : .altair ≤ fork ∧ fork < .glamsterdam then .ok ⟨h⟩ else .error (.forkNotSpecified fork)
 
 open LightClientError (require liftRoot requireFork)
 
@@ -338,6 +355,45 @@ def SyncCommittee.participantKeys (committee : SyncCommittee preset)
   ((aggregate.syncCommitteeBits.bits.toList.zip committee.pubkeys.toList).filterMap
     fun (bit, key) => if bit then some key else none).toArray
 
+/-- The finality check of an update, which reads no store.
+
+An update that proves no finalized header must carry the zero header.
+
+So must an update whose finalized slot is the genesis slot, whose root is zero.
+
+Otherwise its finalized header must be valid for the fork of its slot.
+
+In each case, the finality branch must prove the root against the attested state root. -/
+def validateFinality (config : Config) (update : LightClientUpdate preset fork) :
+    Except LightClientError Unit := do
+  if !update.isFinalityUpdate then
+    require (sameSszValue update.finalizedHeader (LightClientHeader.empty preset fork))
+      .unexpectedFinalizedHeader
+  else
+    let finalizedRoot ← if update.finalizedHeader.beacon.slot = GENESIS_SLOT then do
+        require (sameSszValue update.finalizedHeader (LightClientHeader.empty preset fork))
+          .unexpectedFinalizedHeader
+        pure zeroBytes32
+      else do
+        require (← isValidLightClientHeader config update.finalizedHeader)
+          .invalidHeader
+        liftRoot (SszType.hashTreeRoot update.finalizedHeader.beacon)
+    require (← liftRoot (isValidNormalizedMerkleBranch finalizedRoot update.finalityBranch.toList
+        (← finalizedRootGindexAtSlot (preset := preset) (fork := fork) config
+          update.attestedHeader.beacon.slot)
+        update.attestedHeader.beacon.stateRoot))
+      .invalidFinalityBranch
+
+/-- The branch check of the next sync committee of an update, against the attested state root. -/
+def validateNextSyncCommitteeBranch (config : Config) (update : LightClientUpdate preset fork) :
+    Except LightClientError Unit := do
+  let leaf ← liftRoot (SszType.hashTreeRoot update.nextSyncCommittee)
+  require (← liftRoot (isValidNormalizedMerkleBranch leaf update.nextSyncCommitteeBranch.toList
+      (← nextSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config
+        update.attestedHeader.beacon.slot)
+      update.attestedHeader.beacon.stateRoot))
+    .invalidNextSyncCommitteeBranch
+
 /-- The checks of an update against a store, at a slot of the local clock.
 
 At least the minimum of members must sign it, in a period whose committee the store knows.
@@ -374,32 +430,13 @@ def validateLightClientUpdate (config : Config) (checks : SignatureChecks)
     (update.isSyncCommitteeUpdate && attestedPeriod == storePeriod)
   require (attestedSlot > store.finalizedHeader.beacon.slot ∨ hasNextSyncCommittee)
     .irrelevantUpdate
-  if !update.isFinalityUpdate then
-    require (sameSszValue update.finalizedHeader (LightClientHeader.empty preset fork))
-      .unexpectedFinalizedHeader
-  else
-    let finalizedRoot ← if finalizedSlot = GENESIS_SLOT then do
-        require (sameSszValue update.finalizedHeader (LightClientHeader.empty preset fork))
-          .unexpectedFinalizedHeader
-        pure zeroBytes32
-      else do
-        require (← isValidLightClientHeader config update.finalizedHeader)
-          .invalidHeader
-        liftRoot (SszType.hashTreeRoot update.finalizedHeader.beacon)
-    require (← liftRoot (isValidNormalizedMerkleBranch finalizedRoot update.finalityBranch.toList
-        (← finalizedRootGindexAtSlot (preset := preset) (fork := fork) config attestedSlot)
-        update.attestedHeader.beacon.stateRoot))
-      .invalidFinalityBranch
+  validateFinality config update
   if !update.isSyncCommitteeUpdate then
     require (update.nextSyncCommittee = SyncCommittee.empty preset) .unexpectedNextSyncCommittee
   else
     if attestedPeriod = storePeriod ∧ store.isNextSyncCommitteeKnown then
       require (update.nextSyncCommittee = store.nextSyncCommittee) .conflictingNextSyncCommittee
-    let leaf ← liftRoot (SszType.hashTreeRoot update.nextSyncCommittee)
-    require (← liftRoot (isValidNormalizedMerkleBranch leaf update.nextSyncCommitteeBranch.toList
-        (← nextSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config attestedSlot)
-        update.attestedHeader.beacon.stateRoot))
-      .invalidNextSyncCommitteeBranch
+    validateNextSyncCommitteeBranch config update
   let committee := if signaturePeriod = storePeriod then store.currentSyncCommittee
     else store.nextSyncCommittee
   let keys := committee.participantKeys aggregate

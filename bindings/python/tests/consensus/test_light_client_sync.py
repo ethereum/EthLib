@@ -23,10 +23,16 @@ SHAPE = {"altair": "altair", "bellatrix": "altair", "capella": "capella", "deneb
 _YAML = YAML(typ="safe")
 
 
+def store_fork(version_fork: str, fork: str) -> str:
+    """The fork of a store: a version names the fork of its containers, which a later fork shares."""
+    if SHAPE[version_fork] == SHAPE[fork] and SPECIFIED.index(fork) > SPECIFIED.index(version_fork):
+        return fork
+    return version_fork
+
+
 def runs_sync(fork: str, name: str) -> bool:
-    """Whether a sync case keeps one fork throughout, so it needs no upgrade of the store."""
-    # A case of a fork transition, or of a store of a later fork, upgrades its data first.
-    return fork in SPECIFIED and not name.endswith(("_fork", "_store_with_legacy_data"))
+    """Whether EthLib runs a sync case: every case from Altair to Fulu that reaches no Gloas data."""
+    return fork in SPECIFIED and "gloas" not in name
 
 
 def _read(case: Path, name: str) -> bytes:
@@ -37,46 +43,62 @@ def _hex(text: str) -> bytes:
     return bytes.fromhex(text[2:])
 
 
-def _fork_digests(case_config: dict, preset: str, fork: str, root: bytes,
-                  config: dict | None) -> set:
-    """The digests that a fork takes over its epochs, which change at each blob schedule entry."""
-    first = case_config.get(f"{fork.upper()}_FORK_EPOCH", 0)
-    later = [case_config.get(f"{name.upper()}_FORK_EPOCH") for name in SPECIFIED[1:] + ["gloas"]]
-    end = min([epoch for epoch in later if epoch is not None and epoch > first], default=2 ** 64)
-    epochs = {first} | {entry["EPOCH"] for entry in case_config.get("BLOB_SCHEDULE", [])
-                        if first < entry["EPOCH"] < end}
-    return {"0x" + consensus.compute_fork_digest(preset, root, epoch, config).hex()
-            for epoch in epochs}
+def fork_digests(case_config: dict, preset: str, root: bytes, config: dict | None) -> dict:
+    """The fork of each digest that a fork takes over its epochs, from Altair to Fulu."""
+    # From Fulu the digest also changes at each blob schedule entry.
+    starts = {fork: case_config[f"{fork.upper()}_FORK_EPOCH"] for fork in SPECIFIED + ["gloas"]}
+    digests = {}
+    for fork in SPECIFIED:
+        first = starts[fork]
+        end = min([epoch for epoch in starts.values() if epoch > first], default=2 ** 64)
+        epochs = {first} | {entry["EPOCH"] for entry in case_config["BLOB_SCHEDULE"]
+                            if first < entry["EPOCH"] < end}
+        for epoch in epochs:
+            digest = consensus.compute_fork_digest(preset, root, epoch, config)
+            # Two forks that start at one epoch share its digest, which the later one takes.
+            digests["0x" + digest.hex()] = fork
+    return digests
+
+
+def case_config(case: Path, preset: str) -> tuple[dict, dict | None]:
+    """The configuration of a case with the named one under it, and the case's replacements."""
+    config_file = case / "config.yaml"
+    values = _YAML.load(config_file.read_text()) if config_file.exists() else {}
+    return {**consensus.config(preset), **values}, replacements(values, preset) if values else None
+
+
+def version(value: int | str) -> int:
+    """A fork version, which YAML reads as an integer and the named configuration as hex."""
+    return int(value, 16) if isinstance(value, str) else value
 
 
 def run_sync_case(case: Path, preset: str, fork: str) -> None:
     """Sync a store from the bootstrap of a case, and compare its headers after each step."""
     meta = _YAML.load((case / "meta.yaml").read_text())
     steps = _YAML.load((case / "steps.yaml").read_text())
-    config_file = case / "config.yaml"
-    case_config = _YAML.load(config_file.read_text()) if config_file.exists() else {}
-    config = replacements(case_config, preset) if case_config else None
+    values, config = case_config(case, preset)
     root = _hex(meta["genesis_validators_root"])
-    # The bootstrap and every update carry a digest of the fork of the case.
-    digests = _fork_digests(case_config, preset, fork, root, config)
-    assert meta["bootstrap_fork_digest"] in digests
-    # The store uses the light client containers of the fork of the case.
+    # Each digest names the fork of the data that it marks.
+    digests = fork_digests(values, preset, root, config)
     # YAML reads the unquoted versions of the configuration as integers.
-    versions = {case_config.get(f"{name.upper()}_FORK_VERSION"): name for name in SPECIFIED}
-    store_fork = versions.get(int(meta["store_fork_version"], 16))
-    assert store_fork is not None and SHAPE[store_fork] == SHAPE[fork]
+    versions = {version(values[f"{name.upper()}_FORK_VERSION"]): name for name in SPECIFIED}
+    start = store_fork(versions[int(meta["store_fork_version"], 16)], fork)
     inputs, checks = [], []
     for step in steps:
         (kind, body), = step.items()
         if kind == "process_update":
-            assert body["update_fork_digest"] in digests
-            inputs.append((body["current_slot"], _read(case, body["update"])))
+            inputs.append(("update", FORKS[digests[body["update_fork_digest"]]],
+                           body["current_slot"], _read(case, body["update"])))
+        elif kind == "force_update":
+            inputs.append(("force", body["current_slot"]))
         else:
-            assert kind == "force_update"
-            inputs.append((body["current_slot"], None))
+            assert kind == "upgrade_store"
+            target = store_fork(versions[int(body["store_fork_version"], 16)], fork)
+            inputs.append(("upgrade", FORKS[target]))
         checks.append(body["checks"])
-    headers = consensus.light_client_sync(preset, FORKS[fork], _hex(meta["trusted_block_root"]),
-                                          root, _read(case, "bootstrap"), inputs, config)
+    headers = consensus.light_client_sync(
+        preset, FORKS[start], FORKS[digests[meta["bootstrap_fork_digest"]]],
+        _hex(meta["trusted_block_root"]), root, _read(case, "bootstrap"), inputs, config)
     assert len(headers) == len(checks)
     for (finalized, optimistic), expected in zip(headers, checks):
         for (slot, beacon, execution), want in ((finalized, expected["finalized_header"]),
@@ -123,6 +145,8 @@ def test_ranking_case(preset, fork, case):
 
 
 def test_every_fork_has_cases():
-    for handler, per_fork in (("sync", 4), ("update_ranking", 1)):
+    # Each fork has its four single-fork sync cases, and the earlier ones add upgrade cases.
+    counts = {"altair": 7, "bellatrix": 10, "capella": 8, "deneb": 6, "electra": 4, "fulu": 4}
+    for handler, per_fork in (("sync", counts), ("update_ranking", dict.fromkeys(SPECIFIED, 1))):
         forks = [param.values[1] for param in _cases(handler)]
-        assert {fork: forks.count(fork) for fork in SPECIFIED} == dict.fromkeys(SPECIFIED, per_fork)
+        assert {fork: forks.count(fork) for fork in SPECIFIED} == per_fork

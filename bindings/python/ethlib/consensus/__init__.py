@@ -186,22 +186,53 @@ def verify_data_column_sidecar_kzg_proofs(name: str, fork: str, data: bytes) -> 
     return _native.consensus_verify_data_column_sidecar_kzg_proofs(name, fork, data)
 
 
-def light_client_sync(name: str, fork: str, trusted_block_root: bytes,
+def light_client_sync(name: str, fork: str, bootstrap_fork: str, trusted_block_root: bytes,
                       genesis_validators_root: bytes, bootstrap: bytes, steps: list,
                       config: dict | None = None) -> list:
     """The finalized and optimistic headers, as slot and two roots, after each step of a sync."""
-    # A step is a slot and an update, or a slot and None to force an update at that slot.
+    # A step is ("update", fork, slot, update), ("force", slot) or ("upgrade", fork).
     replacements = json.dumps(config).encode() if config else b""
-    records = b"".join(slot.to_bytes(8, "little") + len(update or b"").to_bytes(4, "little")
-                       + (update or b"") for slot, update in steps)
-    out = _native.consensus_light_client_sync(name, fork, replacements, trusted_block_root,
-                                              genesis_validators_root, bootstrap, records)
+    records = b"".join(_sync_step(*step) for step in steps)
+    out = _native.consensus_light_client_sync(name, fork, bootstrap_fork, replacements,
+                                              trusted_block_root, genesis_validators_root,
+                                              bootstrap, records)
 
     def header(record: bytes) -> tuple:
         return int.from_bytes(record[:8], "little"), record[8:40], record[40:72]
 
     return [(header(out[i:i + 72]), header(out[i + 72:i + 144]))
             for i in range(0, len(out), 144)]
+
+
+def _sync_step(kind: str, *fields) -> bytes:
+    """The bytes of a step of a sync: kind, slot, fork name and data."""
+    match kind, fields:
+        case "update", (fork, slot, data):
+            code = 0
+        case "force", (slot,):
+            code, fork, data = 1, "", b""
+        case "upgrade", (fork,):
+            code, slot, data = 2, 0, b""
+        case _:
+            raise ValueError(f"no sync step {kind} {fields}")
+    name = fork.encode()
+    return (bytes([code]) + slot.to_bytes(8, "little") + bytes([len(name)]) + name
+            + len(data).to_bytes(4, "little") + data)
+
+
+def block_to_light_client_header(name: str, fork: str, block: bytes,
+                                 config: dict | None = None) -> tuple[bytes, bytes]:
+    """The root of a signed block, and the SSZ bytes of its light client header."""
+    replacements = json.dumps(config).encode() if config else b""
+    out = _native.consensus_block_to_light_client_header(name, fork, replacements, block)
+    return out[:32], out[32:]
+
+
+def light_client_update_proofs(name: str, fork: str, type_name: str, data: bytes,
+                               config: dict | None = None) -> bool:
+    """Check the attested header and the branches of a light client update."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_light_client_update_proofs(name, fork, type_name, replacements, data)
 
 
 def is_better_update(name: str, fork: str, new_update: bytes, old_update: bytes) -> bool:
@@ -301,6 +332,8 @@ __all__ = [
     "process_operation",
     "LightClientError",
     "light_client_sync",
+    "block_to_light_client_header",
+    "light_client_update_proofs",
     "is_better_update",
     "compute_fork_digest",
     "process_epoch",
