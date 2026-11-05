@@ -107,7 +107,7 @@ def check_header(
 
 
 def dao_extra_data_valid(dao_block: int, fork: str, header: bytes) -> bool:
-    """Whether a header has the extra data of the DAO Fork, on a chain that starts it at `dao_block`."""
+    """Whether a header has the DAO Fork extra data, on a chain that starts it at `dao_block`."""
     return _native.block_dao_extra_data_valid(dao_block, fork, header)
 
 

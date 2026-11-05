@@ -36,7 +36,7 @@ def dao_fork_root(state: bytes) -> bytes:
 
 
 def rewards_root(forks: str | Sequence[tuple[str, int]], state: bytes, block: bytes) -> bytes:
-    """The state root after the mining rewards of a block, from the state that the RLP bytes encode."""
+    """The state root after the mining rewards of a block, from the state the RLP bytes encode."""
     return _native.state_rewards_root(chain_forks(forks), state, block)
 
 

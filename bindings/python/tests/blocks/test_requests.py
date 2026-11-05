@@ -38,7 +38,8 @@ def _case_id(case) -> str:
 @pytest.mark.parametrize("case", CASES, ids=[_case_id(c) for c in CASES])
 def test_requests_hash_of_block(case) -> None:
     deposits = blocks.deposit_requests(_logs(case["logs"]))
-    # The withdrawal and consolidation queues of these tests are empty, so their lists hold only a type.
+    # The withdrawal and consolidation queues of these tests are empty,
+    # so their lists hold only a type.
     requests = [b"\x00" + deposits, b"\x01", b"\x02"]
     assert blocks.requests_hash(rlp.encode(requests)) == bytes.fromhex(case["requestsHash"])
 

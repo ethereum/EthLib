@@ -13,7 +13,7 @@ def pattern_opening(sa: int, sb: int, pa: int, pb: int, pc: int) -> bytes:
     # Byte k of the secret is (sa k + sb) mod 256, and byte k of sibling l is
     # (pa l + pb k + pc) mod 256. The siblings follow the secret, from the leaf up to the root.
     secret = bytes((sa * k + sb) % 256 for k in range(32))
-    path = b"".join(bytes((pa * l + pb * k + pc) % 256 for k in range(32)) for l in range(32))
+    path = b"".join(bytes((pa * row + pb * k + pc) % 256 for k in range(32)) for row in range(32))
     return secret + path
 
 

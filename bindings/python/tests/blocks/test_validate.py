@@ -2,6 +2,7 @@
 
 import json
 import os
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,7 @@ def _pairs():
     by_test = {}
     for case in CASES:
         by_test.setdefault((case["source"], case["test"]), {})[case["block"]] = case
-    for (_, test), blocks_of_test in sorted(by_test.items()):
+    for _, blocks_of_test in sorted(by_test.items()):
         if "genesis" in blocks_of_test and 0 in blocks_of_test:
             genesis, child = blocks_of_test["genesis"], blocks_of_test[0]
             if genesis["network"] in AFTER_MERGE:
@@ -155,7 +156,7 @@ def _chain_pairs():
     for cases in by_test.values():
         order = {"genesis": -1}
         cases = sorted(cases, key=lambda c: order.get(c["block"], c["block"]))
-        for parent, child in zip(cases, cases[1:]):
+        for parent, child in pairwise(cases):
             if parent["block"] == "genesis" or child["block"] == parent["block"] + 1:
                 yield parent, child
 

@@ -114,7 +114,7 @@ def _reference_hashimoto(
     for i in range(64):
         p = _fnv(i ^ s[0], mix[i % 32]) % pairs * 2
         new = _words(_reference_item(cache, p)) + _words(_reference_item(cache, p + 1))
-        mix = [_fnv(a, b) for a, b in zip(mix, new)]
+        mix = [_fnv(a, b) for a, b in zip(mix, new, strict=True)]
     cmix = [_fnv(_fnv(_fnv(mix[i], mix[i + 1]), mix[i + 2]), mix[i + 3]) for i in range(0, 32, 4)]
     return _bytes(cmix), keccak256(_bytes(s) + _bytes(cmix))
 

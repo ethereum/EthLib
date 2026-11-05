@@ -5,7 +5,7 @@ import pytest
 from dumper import hex_list, hex_str, write_case
 from ethlib.cryptography import bls
 
-from . import fixtures as F
+from . import fixtures
 
 HANDLER = "eth_aggregate_pubkeys"
 
@@ -37,14 +37,14 @@ def _emit_invalid(case: str, pubkeys: list[bytes]) -> None:
     )
 
 
-@pytest.mark.parametrize("i", range(len(F.PRIVKEYS)))
+@pytest.mark.parametrize("i", range(len(fixtures.PRIVKEYS)))
 def test_valid_single(i: int) -> None:
-    pk = F.sk_to_pk(F.PRIVKEYS[i])
+    pk = fixtures.sk_to_pk(fixtures.PRIVKEYS[i])
     _emit_valid(f"{HANDLER}_valid_{i}", [pk])
 
 
 def test_valid_pubkeys() -> None:
-    pubkeys = [F.sk_to_pk(sk) for sk in F.PRIVKEYS]
+    pubkeys = [fixtures.sk_to_pk(sk) for sk in fixtures.PRIVKEYS]
     _emit_valid(f"{HANDLER}_valid_pubkeys", pubkeys)
 
 
@@ -53,11 +53,11 @@ def test_empty_list() -> None:
 
 
 def test_zero_pubkey() -> None:
-    _emit_invalid(f"{HANDLER}_zero_pubkey", [F.ZERO_PUBKEY])
+    _emit_invalid(f"{HANDLER}_zero_pubkey", [fixtures.ZERO_PUBKEY])
 
 
 def test_infinity_pubkey() -> None:
-    _emit_invalid(f"{HANDLER}_infinity_pubkey", [F.G1_POINT_AT_INFINITY])
+    _emit_invalid(f"{HANDLER}_infinity_pubkey", [fixtures.G1_POINT_AT_INFINITY])
 
 
 def test_x40_pubkey() -> None:

@@ -41,7 +41,7 @@ blobs = [x(b) for b in inp["blobs"]]
 z = x(inp["kzg_z"])
 ts = ckzg.load_trusted_setup(str(Path(sys.argv[1]).resolve() / "trusted_setup_4096.txt"), 0)
 commits = [ckzg.blob_to_kzg_commitment(b, ts) for b in blobs]
-proofs = [ckzg.compute_blob_kzg_proof(b, c, ts) for b, c in zip(blobs, commits)]
+proofs = [ckzg.compute_blob_kzg_proof(b, c, ts) for b, c in zip(blobs, commits, strict=True)]
 R.run("kzg_blob_to_commitment@ckzg", lambda: ckzg.blob_to_kzg_commitment(blobs[0], ts))
 R.run("kzg_compute_kzg_proof@ckzg", lambda: ckzg.compute_kzg_proof(blobs[0], z, ts))
 pz, yz = ckzg.compute_kzg_proof(blobs[0], z, ts)

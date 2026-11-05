@@ -1,13 +1,11 @@
 """Recursive Length Prefix, the strict encoding of byte strings and nested lists."""
 
-from typing import Union
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
 from ethlib.cryptography import _native
 from ethlib.errors import RlpError as RlpError
 
-Item = Union[bytes, list["Item"]]
+Item = bytes | list["Item"]
 
 
 def encode(item: Item) -> bytes:

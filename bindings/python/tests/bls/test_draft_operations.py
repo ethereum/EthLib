@@ -4,11 +4,11 @@ These tests write no vectors.
 """
 
 import pytest
-from py_ecc.bls import G2ProofOfPossession as ref_bls
+from py_ecc.bls import G2ProofOfPossession as RefBls
 
 from ethlib.cryptography import bls
 
-from . import fixtures as F
+from . import fixtures
 
 
 def sk_bytes(sk: int) -> bytes:
@@ -18,76 +18,82 @@ def sk_bytes(sk: int) -> bytes:
 R = 0x73EDA753299D7D483339D80809A1D80553BDA402FFFE5BFEFFFFFFFF00000001
 
 
-@pytest.mark.parametrize("sk", F.PRIVKEYS)
-@pytest.mark.parametrize("msg", F.MESSAGES + [b"", b"abc" * 50])
+@pytest.mark.parametrize("sk", fixtures.PRIVKEYS)
+@pytest.mark.parametrize("msg", fixtures.MESSAGES + [b"", b"abc" * 50])
 def test_sign_matches_reference(sk: int, msg: bytes) -> None:
     sig = bls.sign(sk_bytes(sk), msg)
-    assert sig == ref_bls.Sign(sk, msg)
-    assert bls.verify(F.sk_to_pk(sk), msg, sig)
+    assert sig == RefBls.Sign(sk, msg)
+    assert bls.verify(fixtures.sk_to_pk(sk), msg, sig)
 
 
 @pytest.mark.parametrize("sk", [0, R, R + 1])
 def test_sign_rejects_out_of_range_key(sk: int) -> None:
     with pytest.raises(ValueError, match="invalid secret key"):
-        bls.sign(sk_bytes(sk), F.SAMPLE_MESSAGE)
+        bls.sign(sk_bytes(sk), fixtures.SAMPLE_MESSAGE)
 
 
 def test_sign_rejects_short_key() -> None:
     with pytest.raises(ValueError, match="invalid secret key"):
-        bls.sign(b"\x01" * 31, F.SAMPLE_MESSAGE)
+        bls.sign(b"\x01" * 31, fixtures.SAMPLE_MESSAGE)
 
 
 def test_verify_rejects() -> None:
-    sk = F.PRIVKEYS[0]
-    pk = F.sk_to_pk(sk)
-    sig = ref_bls.Sign(sk, F.SAMPLE_MESSAGE)
-    assert not bls.verify(pk, F.MESSAGES[0], sig)
-    assert not bls.verify(F.sk_to_pk(F.PRIVKEYS[1]), F.SAMPLE_MESSAGE, sig)
-    assert not bls.verify(pk[:-1], F.SAMPLE_MESSAGE, sig)
-    assert not bls.verify(pk, F.SAMPLE_MESSAGE, sig[:-1])
-    assert not bls.verify(F.G1_POINT_AT_INFINITY, F.SAMPLE_MESSAGE, F.G2_POINT_AT_INFINITY)
+    sk = fixtures.PRIVKEYS[0]
+    pk = fixtures.sk_to_pk(sk)
+    sig = RefBls.Sign(sk, fixtures.SAMPLE_MESSAGE)
+    assert not bls.verify(pk, fixtures.MESSAGES[0], sig)
+    assert not bls.verify(fixtures.sk_to_pk(fixtures.PRIVKEYS[1]), fixtures.SAMPLE_MESSAGE, sig)
+    assert not bls.verify(pk[:-1], fixtures.SAMPLE_MESSAGE, sig)
+    assert not bls.verify(pk, fixtures.SAMPLE_MESSAGE, sig[:-1])
+    assert not bls.verify(
+        fixtures.G1_POINT_AT_INFINITY, fixtures.SAMPLE_MESSAGE, fixtures.G2_POINT_AT_INFINITY
+    )
 
 
 def test_aggregate_matches_reference() -> None:
-    sigs = [ref_bls.Sign(sk, msg) for sk, msg in zip(F.PRIVKEYS, F.MESSAGES)]
+    sigs = [
+        RefBls.Sign(sk, msg) for sk, msg in zip(fixtures.PRIVKEYS, fixtures.MESSAGES, strict=True)
+    ]
     for n in range(1, len(sigs) + 1):
-        assert bls.aggregate(sigs[:n]) == ref_bls.Aggregate(sigs[:n])
-    assert bls.aggregate([F.G2_POINT_AT_INFINITY]) == F.G2_POINT_AT_INFINITY
+        assert bls.aggregate(sigs[:n]) == RefBls.Aggregate(sigs[:n])
+    assert bls.aggregate([fixtures.G2_POINT_AT_INFINITY]) == fixtures.G2_POINT_AT_INFINITY
 
 
 def test_aggregate_rejects() -> None:
     with pytest.raises(ValueError, match="empty signature list"):
         bls.aggregate([])
     with pytest.raises(ValueError, match="invalid G2 point"):
-        bls.aggregate([F.ZERO_SIGNATURE])
+        bls.aggregate([fixtures.ZERO_SIGNATURE])
 
 
 def test_aggregate_verify() -> None:
-    pks = [F.sk_to_pk(sk) for sk in F.PRIVKEYS]
-    sig = ref_bls.Aggregate([ref_bls.Sign(sk, m) for sk, m in zip(F.PRIVKEYS, F.MESSAGES)])
-    assert bls.aggregate_verify(pks, F.MESSAGES, sig)
-    assert not bls.aggregate_verify(pks, F.MESSAGES[::-1], sig)
-    assert not bls.aggregate_verify(pks[:-1], F.MESSAGES, sig)
-    assert not bls.aggregate_verify([], [], F.G2_POINT_AT_INFINITY)
+    pks = [fixtures.sk_to_pk(sk) for sk in fixtures.PRIVKEYS]
+    sig = RefBls.Aggregate(
+        [RefBls.Sign(sk, m) for sk, m in zip(fixtures.PRIVKEYS, fixtures.MESSAGES, strict=True)]
+    )
+    assert bls.aggregate_verify(pks, fixtures.MESSAGES, sig)
+    assert not bls.aggregate_verify(pks, fixtures.MESSAGES[::-1], sig)
+    assert not bls.aggregate_verify(pks[:-1], fixtures.MESSAGES, sig)
+    assert not bls.aggregate_verify([], [], fixtures.G2_POINT_AT_INFINITY)
 
 
 def test_fast_aggregate_verify() -> None:
-    pks = [F.sk_to_pk(sk) for sk in F.PRIVKEYS]
-    sig = ref_bls.Aggregate([ref_bls.Sign(sk, F.SAMPLE_MESSAGE) for sk in F.PRIVKEYS])
-    assert bls.fast_aggregate_verify(pks, F.SAMPLE_MESSAGE, sig)
-    assert not bls.fast_aggregate_verify(pks[:-1], F.SAMPLE_MESSAGE, sig)
+    pks = [fixtures.sk_to_pk(sk) for sk in fixtures.PRIVKEYS]
+    sig = RefBls.Aggregate([RefBls.Sign(sk, fixtures.SAMPLE_MESSAGE) for sk in fixtures.PRIVKEYS])
+    assert bls.fast_aggregate_verify(pks, fixtures.SAMPLE_MESSAGE, sig)
+    assert not bls.fast_aggregate_verify(pks[:-1], fixtures.SAMPLE_MESSAGE, sig)
     # Unlike the Ethereum wrapper, the draft rejects an empty key list.
-    assert not bls.fast_aggregate_verify([], F.SAMPLE_MESSAGE, F.G2_POINT_AT_INFINITY)
+    assert not bls.fast_aggregate_verify([], fixtures.SAMPLE_MESSAGE, fixtures.G2_POINT_AT_INFINITY)
 
 
-@pytest.mark.parametrize("sk", F.PRIVKEYS)
+@pytest.mark.parametrize("sk", fixtures.PRIVKEYS)
 def test_proof_of_possession(sk: int) -> None:
     proof = bls.pop_prove(sk_bytes(sk))
-    assert proof == ref_bls.PopProve(sk)
-    assert bls.pop_verify(F.sk_to_pk(sk), proof)
+    assert proof == RefBls.PopProve(sk)
+    assert bls.pop_verify(fixtures.sk_to_pk(sk), proof)
     # A signature on the public key under the signing DST is not a proof.
-    assert not bls.pop_verify(F.sk_to_pk(sk), ref_bls.Sign(sk, F.sk_to_pk(sk)))
-    assert not bls.pop_verify(F.sk_to_pk(sk + 1), proof)
+    assert not bls.pop_verify(fixtures.sk_to_pk(sk), RefBls.Sign(sk, fixtures.sk_to_pk(sk)))
+    assert not bls.pop_verify(fixtures.sk_to_pk(sk + 1), proof)
 
 
 @pytest.mark.parametrize("length", [-1, 2**64, 2**64 + 32])

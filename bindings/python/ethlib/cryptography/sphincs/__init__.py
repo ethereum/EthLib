@@ -29,7 +29,8 @@ def sign(seed: bytes, message: bytes) -> bytes:
 
     The message digest picks the FORS instance, so signing needs no index and keeps no state.
 
-    Never sign more than 2^30 messages with one key: each signature weakens the FORS instance it uses.
+    Never sign more than 2^30 messages with one key:
+    each signature weakens the FORS instance it uses.
     """
     return sphincs_sign(seed, message)
 

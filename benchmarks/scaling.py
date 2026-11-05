@@ -35,7 +35,7 @@ def h(b):
 
 def show(name, sizes, times):
     """Print the times and the growth exponent between the last two sizes."""
-    row = "  ".join(f"{n}:{x * 1e3:.3f}ms" for n, x in zip(sizes, times))
+    row = "  ".join(f"{n}:{x * 1e3:.3f}ms" for n, x in zip(sizes, times, strict=True))
     k = (
         math.log(times[-1] / times[-2]) / math.log(sizes[-1] / sizes[-2])
         if times[-2] > 0
@@ -66,7 +66,7 @@ def far_copies(data):
 if want("hash"):
     for name, f in [("keccak", keccak.keccak256), ("sha256", sha256.sha256)]:
         sizes = [1_000, 10_000, 100_000, 1_000_000]
-        show(name, sizes, [t(lambda n=n: f(bytes(n))) for n in sizes])
+        show(name, sizes, [t(lambda n=n, f=f: f(bytes(n))) for n in sizes])
 
 if want("rlp"):
     sizes = [100, 200, 400, 800, 1600]

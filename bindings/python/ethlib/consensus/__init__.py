@@ -172,7 +172,7 @@ def _list_items(data: bytes) -> list:
         return []
     first = int.from_bytes(data[:4], "little")
     offsets = [int.from_bytes(data[i : i + 4], "little") for i in range(0, first, 4)]
-    return [data[a:b] for a, b in zip(offsets, offsets[1:] + [len(data)])]
+    return [data[a:b] for a, b in zip(offsets, offsets[1:] + [len(data)], strict=True)]
 
 
 def verify_data_column_sidecar(
@@ -398,7 +398,7 @@ def process_operation(
 def process_epoch(
     name: str, fork: str, handler: str, pre: bytes, config: dict | None = None
 ) -> bytes:
-    """The SSZ bytes of a beacon state after one step of the epoch transition, or TransitionError."""
+    """The SSZ bytes of a beacon state after one epoch transition step, or TransitionError."""
     replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_process_epoch(name, fork, handler, pre, replacements)
 

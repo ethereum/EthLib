@@ -133,13 +133,13 @@ out["snappy_framed"] = (c.add_chunk(raw)).hex()
 cases = {}
 st = make_state(N_VALIDATORS)
 # (type, value, whether the EthLib side times the serialization of the case)
-cases["beacon_state_mainnet_%dv" % N_VALIDATORS] = (spec.BeaconState, st, False)
+cases[f"beacon_state_mainnet_{N_VALIDATORS}v"] = (spec.BeaconState, st, False)
 st_min = make_state(1000, spec_min)
 cases["beacon_state_minimal_1000v"] = (spec_min.BeaconState, st_min, True)
 VL = spec.BeaconState.model_fields["validators"].annotation
 cases["validators_1000"] = (VL, VL(data=list(st.validators)[:1000]), True)
 BL = spec.BeaconState.model_fields["balances"].annotation
-cases["balances_%d" % N_VALIDATORS] = (BL, st.balances, True)
+cases[f"balances_{N_VALIDATORS}"] = (BL, st.balances, True)
 ssz_out = {}
 for name, (T, v, ser) in cases.items():
     ssz_out[name] = {

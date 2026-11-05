@@ -3,7 +3,7 @@
 from dumper import hex_str, write_case
 from ethlib.cryptography import xmss
 
-from . import fixtures as F
+from . import fixtures
 
 HANDLER = "sign"
 
@@ -29,34 +29,60 @@ def _emit(case: str, seed: bytes, leaf_index: int, message: bytes) -> None:
     )
 
 
-@F.slow
+@fixtures.slow
 def test_known_answer() -> None:
     _emit(
-        f"{HANDLER}_known_answer", F.SEED_KNOWN_ANSWER, F.LEAF_KNOWN_ANSWER, F.MESSAGE_KNOWN_ANSWER
+        f"{HANDLER}_known_answer",
+        fixtures.SEED_KNOWN_ANSWER,
+        fixtures.LEAF_KNOWN_ANSWER,
+        fixtures.MESSAGE_KNOWN_ANSWER,
     )
 
 
-@F.slow
+@fixtures.slow
 def test_first_leaf() -> None:
-    _emit(f"{HANDLER}_first_leaf", F.SEED_KNOWN_ANSWER, F.LEAF_FIRST, F.MESSAGE_KNOWN_ANSWER)
+    _emit(
+        f"{HANDLER}_first_leaf",
+        fixtures.SEED_KNOWN_ANSWER,
+        fixtures.LEAF_FIRST,
+        fixtures.MESSAGE_KNOWN_ANSWER,
+    )
 
 
-@F.slow
+@fixtures.slow
 def test_second_tree() -> None:
-    _emit(f"{HANDLER}_second_tree", F.SEED_KNOWN_ANSWER, F.LEAF_SECOND_TREE, F.MESSAGE_KNOWN_ANSWER)
+    _emit(
+        f"{HANDLER}_second_tree",
+        fixtures.SEED_KNOWN_ANSWER,
+        fixtures.LEAF_SECOND_TREE,
+        fixtures.MESSAGE_KNOWN_ANSWER,
+    )
 
 
-@F.slow
+@fixtures.slow
 def test_last_leaf() -> None:
-    _emit(f"{HANDLER}_last_leaf", F.SEED_KNOWN_ANSWER, F.LEAF_LAST, F.MESSAGE_KNOWN_ANSWER)
+    _emit(
+        f"{HANDLER}_last_leaf",
+        fixtures.SEED_KNOWN_ANSWER,
+        fixtures.LEAF_LAST,
+        fixtures.MESSAGE_KNOWN_ANSWER,
+    )
 
 
 def test_short_message() -> None:
     # 31 bytes: rejected before any tree is built.
     _emit(
-        f"{HANDLER}_short_message", F.SEED_KNOWN_ANSWER, F.LEAF_FIRST, F.MESSAGE_KNOWN_ANSWER[:31]
+        f"{HANDLER}_short_message",
+        fixtures.SEED_KNOWN_ANSWER,
+        fixtures.LEAF_FIRST,
+        fixtures.MESSAGE_KNOWN_ANSWER[:31],
     )
 
 
 def test_short_seed() -> None:
-    _emit(f"{HANDLER}_short_seed", F.SEED_KNOWN_ANSWER[:31], F.LEAF_FIRST, F.MESSAGE_KNOWN_ANSWER)
+    _emit(
+        f"{HANDLER}_short_seed",
+        fixtures.SEED_KNOWN_ANSWER[:31],
+        fixtures.LEAF_FIRST,
+        fixtures.MESSAGE_KNOWN_ANSWER,
+    )

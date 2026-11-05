@@ -53,13 +53,11 @@ void use(void) {
 }
 """
 
-DOC = """\
-# Soundness
-
-This document describes the development tree that declares package version `1.0.0` in `pyproject.toml`.
-""" + "".join(
-    f"\n<!-- generated: {name} -->\n<!-- end generated -->\n" for name in facts.GENERATORS
-)
+DOC = (
+    "# Soundness\n\n"
+    "This document describes the development tree that declares package version "
+    "`1.0.0` in `pyproject.toml`.\n"
+) + "".join(f"\n<!-- generated: {name} -->\n<!-- end generated -->\n" for name in facts.GENERATORS)
 
 
 class SoundnessFacts(unittest.TestCase):
@@ -160,7 +158,8 @@ class SoundnessFacts(unittest.TestCase):
         c = self.root / "bindings" / "python" / "foo.c"
         c.write_text(C_SOURCE.replace("  eth_foo_op_two(0);\n", ""))
         self.assertIn(
-            "generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py",
+            "generated blocks are out of date: run "
+            "uv run --no-project --python 3.12 python scripts/soundness_facts.py",
             self.check(),
         )
 
@@ -174,7 +173,8 @@ class SoundnessFacts(unittest.TestCase):
     def test_changed_mathlib_commit_fails(self):
         self.write_manifest("0000000000000000000000000000000000000000")
         self.assertIn(
-            "generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py",
+            "generated blocks are out of date: run "
+            "uv run --no-project --python 3.12 python scripts/soundness_facts.py",
             self.check(),
         )
 
@@ -215,7 +215,8 @@ class SoundnessFacts(unittest.TestCase):
     def test_changed_baseline_fails(self):
         (self.root / "scripts" / "check_decls_baseline.txt").write_text("partial Foo.spin\n")
         self.assertIn(
-            "generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py",
+            "generated blocks are out of date: run "
+            "uv run --no-project --python 3.12 python scripts/soundness_facts.py",
             self.check(),
         )
 

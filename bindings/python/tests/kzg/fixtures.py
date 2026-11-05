@@ -3,7 +3,7 @@ Constant inputs (blobs, field elements, points, cells) shared by every
 KZG test-vector generator.
 """
 
-from functools import lru_cache
+from functools import cache
 
 from py_ecc import optimized_bls12_381 as bls
 from py_ecc.bls.g2_primitives import G1_to_pubkey, pubkey_to_G1
@@ -13,23 +13,23 @@ from ethlib.cryptography import kzg
 # ---- Memoized spec calls --------------------------------------------------
 
 
-@lru_cache(maxsize=None)
+@cache
 def cached_cells_and_proofs(blob: bytes) -> tuple[tuple[bytes, ...], tuple[bytes, ...]]:
     cells, proofs = kzg.compute_cells_and_kzg_proofs(blob)
     return tuple(cells), tuple(proofs)
 
 
-@lru_cache(maxsize=None)
+@cache
 def cached_commitment(blob: bytes) -> bytes:
     return kzg.blob_to_kzg_commitment(blob)
 
 
-@lru_cache(maxsize=None)
+@cache
 def cached_kzg_proof(blob: bytes, z: bytes) -> tuple[bytes, bytes]:
     return kzg.compute_kzg_proof(blob, z)
 
 
-@lru_cache(maxsize=None)
+@cache
 def cached_blob_kzg_proof(blob: bytes, commitment: bytes) -> bytes:
     return kzg.compute_blob_kzg_proof(blob, commitment)
 

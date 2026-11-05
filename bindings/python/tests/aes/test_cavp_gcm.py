@@ -34,7 +34,7 @@ def _sections(text: str) -> tuple[str, list[tuple[dict, str]]]:
     starts = [i for i, line in enumerate(lines) if line.startswith("[Keylen")]
     header = "".join(lines[: starts[0]])
     sections = []
-    for start, end in zip(starts, starts[1:] + [len(lines)]):
+    for start, end in zip(starts, starts[1:] + [len(lines)], strict=True):
         body = "".join(lines[start:end])
         params = {}
         for line in lines[start:end]:

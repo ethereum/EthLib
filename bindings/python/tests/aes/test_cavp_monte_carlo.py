@@ -63,4 +63,4 @@ def test_monte_carlo(bits: int, direction: str) -> None:
             previous, text = text, run(key, text)
         assert text == target, f"checkpoint {i}"
         tail = text if bits == 128 else previous + text
-        key = bytes(a ^ b for a, b in zip(key, tail))
+        key = bytes(a ^ b for a, b in zip(key, tail, strict=True))

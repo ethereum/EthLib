@@ -10,7 +10,7 @@ import pytest
 from dumper import hex_str, write_case
 from ethlib.cryptography import xmss
 
-from . import fixtures as F
+from . import fixtures
 
 HANDLER = "signature_index"
 
@@ -39,16 +39,18 @@ def _emit(case: str, signature: bytes, expected: int | None) -> None:
 @pytest.mark.parametrize(
     "case, leaf_index",
     [
-        ("sign_known_answer", F.LEAF_KNOWN_ANSWER),
-        ("sign_first_leaf", F.LEAF_FIRST),
-        ("sign_second_tree", F.LEAF_SECOND_TREE),
-        ("sign_last_leaf", F.LEAF_LAST),
+        ("sign_known_answer", fixtures.LEAF_KNOWN_ANSWER),
+        ("sign_first_leaf", fixtures.LEAF_FIRST),
+        ("sign_second_tree", fixtures.LEAF_SECOND_TREE),
+        ("sign_last_leaf", fixtures.LEAF_LAST),
     ],
 )
 def test_signed(case: str, leaf_index: int) -> None:
     # The committed signature of each sign case, read back as the index it was signed at.
     _emit(
-        f"{HANDLER}_{case.removeprefix('sign_')}", F.read_output("sign", case), expected=leaf_index
+        f"{HANDLER}_{case.removeprefix('sign_')}",
+        fixtures.read_output("sign", case),
+        expected=leaf_index,
     )
 
 
@@ -59,8 +61,8 @@ def test_tampered() -> None:
     # A flipped bit in the bottom randomizer, at byte 4, breaks the signature.
     #
     # The index is bytes 0 to 3, so it reads the same.
-    tampered = F.flip(F.read_output("sign", "sign_known_answer"), 4)
-    _emit(f"{HANDLER}_tampered", tampered, expected=F.LEAF_KNOWN_ANSWER)
+    tampered = fixtures.flip(fixtures.read_output("sign", "sign_known_answer"), 4)
+    _emit(f"{HANDLER}_tampered", tampered, expected=fixtures.LEAF_KNOWN_ANSWER)
 
 
 def test_byte_order() -> None:
@@ -77,13 +79,15 @@ def test_byte_order() -> None:
 def test_short_signature() -> None:
     # One byte short: the index bytes are there, but the signature is not whole.
     _emit(
-        f"{HANDLER}_short_signature", F.read_output("sign", "sign_known_answer")[:-1], expected=None
+        f"{HANDLER}_short_signature",
+        fixtures.read_output("sign", "sign_known_answer")[:-1],
+        expected=None,
     )
 
 
 def test_long_signature() -> None:
     _emit(
         f"{HANDLER}_long_signature",
-        F.read_output("sign", "sign_known_answer") + b"\x00",
+        fixtures.read_output("sign", "sign_known_answer") + b"\x00",
         expected=None,
     )

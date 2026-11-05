@@ -179,7 +179,7 @@ def test_sidecars_from_column_sidecar(preset, case):
     if parts["index"] >= 128 or len(parts["cells"]) * COMMITMENT != len(parts["commitments"]):
         pytest.skip("the sidecar has no valid column to rebuild")
     rows = []
-    for cell, proof in zip(parts["cells"], parts["proofs"]):
+    for cell, proof in zip(parts["cells"], parts["proofs"], strict=True):
         cells = [bytes(CELL)] * 128
         proofs = [bytes(PROOF)] * 128
         cells[parts["index"]], proofs[parts["index"]] = cell, proof
@@ -218,7 +218,7 @@ def test_gloas_sidecars_from_block_and_sidecar(preset, case, name):
     data = snappy.decompress((case / f"{name}.ssz_snappy").read_bytes())
     parts = _gloas_sidecar_parts(data)
     rows = []
-    for cell, proof in zip(parts["cells"], parts["proofs"]):
+    for cell, proof in zip(parts["cells"], parts["proofs"], strict=True):
         cells = [bytes(CELL)] * 128
         proofs = [bytes(PROOF)] * 128
         cells[parts["index"]], proofs[parts["index"]] = cell, proof

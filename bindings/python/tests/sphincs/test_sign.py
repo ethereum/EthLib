@@ -3,7 +3,7 @@
 from dumper import hex_str, write_case
 from ethlib.cryptography import sphincs
 
-from . import fixtures as F
+from . import fixtures
 
 HANDLER = "sign"
 
@@ -28,27 +28,29 @@ def _emit(case: str, seed: bytes, message: bytes) -> None:
     )
 
 
-@F.slow
+@fixtures.slow
 def test_known_answer() -> None:
-    _emit(f"{HANDLER}_known_answer", F.SEED_KNOWN_ANSWER, F.MESSAGE_KNOWN_ANSWER)
+    _emit(f"{HANDLER}_known_answer", fixtures.SEED_KNOWN_ANSWER, fixtures.MESSAGE_KNOWN_ANSWER)
 
 
-@F.slow
+@fixtures.slow
 def test_zero_message() -> None:
     # Another message under the same key: another FORS instance and other leaves.
-    _emit(f"{HANDLER}_zero_message", F.SEED_KNOWN_ANSWER, F.MESSAGE_ZERO)
+    _emit(f"{HANDLER}_zero_message", fixtures.SEED_KNOWN_ANSWER, fixtures.MESSAGE_ZERO)
 
 
-@F.slow
+@fixtures.slow
 def test_zero_seed() -> None:
     # The same message under another key.
-    _emit(f"{HANDLER}_zero_seed", F.SEED_ZERO, F.MESSAGE_KNOWN_ANSWER)
+    _emit(f"{HANDLER}_zero_seed", fixtures.SEED_ZERO, fixtures.MESSAGE_KNOWN_ANSWER)
 
 
 def test_short_message() -> None:
     # 31 bytes: rejected before any tree is built.
-    _emit(f"{HANDLER}_short_message", F.SEED_KNOWN_ANSWER, F.MESSAGE_KNOWN_ANSWER[:31])
+    _emit(
+        f"{HANDLER}_short_message", fixtures.SEED_KNOWN_ANSWER, fixtures.MESSAGE_KNOWN_ANSWER[:31]
+    )
 
 
 def test_short_seed() -> None:
-    _emit(f"{HANDLER}_short_seed", F.SEED_KNOWN_ANSWER[:31], F.MESSAGE_KNOWN_ANSWER)
+    _emit(f"{HANDLER}_short_seed", fixtures.SEED_KNOWN_ANSWER[:31], fixtures.MESSAGE_KNOWN_ANSWER)

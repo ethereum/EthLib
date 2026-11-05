@@ -5,15 +5,15 @@ import pytest
 from dumper import hex_list, hex_str, write_case
 from ethlib.cryptography import kzg
 
-from . import fixtures as F
+from . import fixtures
 
 HANDLER = "compute_cells_and_kzg_proofs"
 
 
-@pytest.mark.parametrize("i", range(len(F.VALID_BLOBS)))
+@pytest.mark.parametrize("i", range(len(fixtures.VALID_BLOBS)))
 def test_valid(i: int) -> None:
-    blob = F.VALID_BLOBS[i]
-    cells, proofs = F.cached_cells_and_proofs(blob)
+    blob = fixtures.VALID_BLOBS[i]
+    cells, proofs = fixtures.cached_cells_and_proofs(blob)
     write_case(
         "kzg",
         HANDLER,
@@ -25,10 +25,10 @@ def test_valid(i: int) -> None:
     )
 
 
-@pytest.mark.parametrize("i", range(len(F.INVALID_BLOBS)))
+@pytest.mark.parametrize("i", range(len(fixtures.INVALID_BLOBS)))
 def test_invalid_blob(i: int) -> None:
-    blob = F.INVALID_BLOBS[i]
-    with pytest.raises(F.invalid_blob_error(blob)):
+    blob = fixtures.INVALID_BLOBS[i]
+    with pytest.raises(fixtures.invalid_blob_error(blob)):
         kzg.compute_cells_and_kzg_proofs(blob)
     write_case(
         "kzg",

@@ -58,7 +58,7 @@ class Tree:
 
 
 class Pins(unittest.TestCase):
-    def assertFails(self, tree: Tree, text: str) -> None:
+    def assert_fails(self, tree: Tree, text: str) -> None:
         problems = tree.problems()
         self.assertEqual(len(problems), 1, problems)
         self.assertIn(text, problems[0])
@@ -72,17 +72,17 @@ class Pins(unittest.TestCase):
     def test_unlisted_directory(self):
         tree = Tree()
         tree.write("bindings/python/tests/c/SHA256SUMS", SUMS)
-        self.assertFails(tree, "bindings/python/tests/c: a pinned vector directory that")
+        self.assert_fails(tree, "bindings/python/tests/c: a pinned vector directory that")
 
     def test_listed_directory_without_manifest(self):
         tree = Tree()
         (tree.root / "tests/suite/b/SHA256SUMS").unlink()
-        self.assertFails(tree, "tests/suite/b holds no SHA256SUMS")
+        self.assert_fails(tree, "tests/suite/b holds no SHA256SUMS")
 
     def test_missing_source_line(self):
         tree = Tree()
         tree.write("tests/suite/a/SHA256SUMS", SUMS)
-        self.assertFails(tree, f"missing the line '# Source: org/vectors at {PIN}'")
+        self.assert_fails(tree, f"missing the line '# Source: org/vectors at {PIN}'")
 
     def test_source_line_of_another_commit(self):
         tree = Tree()
@@ -96,12 +96,12 @@ class Pins(unittest.TestCase):
     def test_readme_without_the_pin(self):
         tree = Tree()
         tree.write("tests/suite/README.md", "The cases of `a/` come from org/vectors.\n")
-        self.assertFails(tree, f"tests/suite/README.md: does not name org/vectors at {PIN}")
+        self.assert_fails(tree, f"tests/suite/README.md: does not name org/vectors at {PIN}")
 
     def test_own_readme_comes_first(self):
         tree = Tree()
         tree.write("tests/suite/a/README.md", "No commit here.\n")
-        self.assertFails(tree, "tests/suite/a/README.md: does not name")
+        self.assert_fails(tree, "tests/suite/a/README.md: does not name")
 
     def test_cited_commit_that_is_not_a_pin(self):
         for text in (
@@ -113,7 +113,7 @@ class Pins(unittest.TestCase):
             with self.subTest(text=text):
                 tree = Tree()
                 tree.write("tests/suite/a/format.md", text + "\n")
-                self.assertFails(tree, f"cites commit {OTHER[:9]}")
+                self.assert_fails(tree, f"cites commit {OTHER[:9]}")
 
     def test_hex_word_that_is_not_a_pin(self):
         for text in (
@@ -124,7 +124,7 @@ class Pins(unittest.TestCase):
             with self.subTest(text=text):
                 tree = Tree()
                 tree.write("bindings/python/tests/test_c.py", f'"""{text}."""\n')
-                self.assertFails(tree, "cites commit abc1234")
+                self.assert_fails(tree, "cites commit abc1234")
 
     def test_hex_word_that_reads_as_no_commit(self):
         # A digest is longer than a commit, even when it is cut short.
@@ -151,7 +151,7 @@ class Pins(unittest.TestCase):
         tree.write(
             "tests/sources.toml", SOURCES + f'\n[repositories."org/unused"]\ncommit = "{OTHER}"\n'
         )
-        self.assertFails(tree, "no test cites the pin of org/unused")
+        self.assert_fails(tree, "no test cites the pin of org/unused")
 
     def test_short_pin(self):
         tree = Tree()

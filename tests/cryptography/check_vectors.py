@@ -12,8 +12,8 @@ With `--upstream`, also check that the pinned digests are the ones
 upstream published, in the archives that `tests/sources.toml` pins.
 The archives are downloaded into the cache of scripts/fetch_archives.py.
 consensus-specs published most of the digests, in the general test archive of its last release
-before the KZG specification moved here (consensus-specs#5398). That archive has no BLS signing or verification
-cases, so those come from the ethereum/bls12-381-tests release archive.
+before the KZG specification moved here (consensus-specs#5398). That archive has no BLS signing
+or verification cases, so those come from the ethereum/bls12-381-tests release archive.
 
     uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py
     uv run --no-project --python 3.12 python tests/cryptography/check_vectors.py --upstream
@@ -99,7 +99,7 @@ def pinned_dirs(root: Path) -> list[Path]:
 
 
 def check_local(root: Path = ROOT) -> list[str]:
-    """Every pinned directory has a manifest, and every vector in it is listed, with the listed digest."""
+    """Every pinned directory has a manifest, which lists every vector in it with its digest."""
     errors = []
     for d in pinned_dirs(root):
         if not (d / "SHA256SUMS").is_file():

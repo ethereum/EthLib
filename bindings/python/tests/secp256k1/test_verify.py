@@ -14,7 +14,7 @@ import pytest
 from dumper import hex_str, write_case
 from ethlib.cryptography import secp256k1
 
-from . import wycheproof as W
+from . import wycheproof
 
 
 def _verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool | None:
@@ -48,8 +48,8 @@ def _write(
     )
 
 
-P1363 = list(W.cases(W.P1363))
-BITCOIN = list(W.cases(W.BITCOIN))
+P1363 = list(wycheproof.cases(wycheproof.P1363))
+BITCOIN = list(wycheproof.cases(wycheproof.BITCOIN))
 
 
 @pytest.mark.parametrize(
@@ -66,7 +66,7 @@ def test_p1363(tc_id, public_key, msg_hash, signature, valid) -> None:
     "tc_id, public_key, msg_hash, der, valid", BITCOIN, ids=[f"tc{c[0]}" for c in BITCOIN]
 )
 def test_bitcoin(tc_id, public_key, msg_hash, der, valid) -> None:
-    signature = W.der_signature(der)
+    signature = wycheproof.der_signature(der)
     if signature is None:
         # Not strict DER: no signature to check, so Wycheproof must reject it.
         assert not valid

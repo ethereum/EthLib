@@ -73,69 +73,69 @@ def test_ctr(key: str, ciphertext: str) -> None:
 GCM = [
     # gcmEncryptExtIV128.rsp, Count = 0, in the section
     # `Keylen = 128, IVlen = 96, PTlen = 0, AADlen = 0, Taglen = 128`.
-    dict(
-        key="11754cd72aec309bf52f7687212e8957",
-        iv="3c819d9a9bed087615030b65",
-        pt="",
-        aad="",
-        ct="",
-        tag="250327c674aaf477aef2675748cf6971",
-    ),
+    {
+        "key": "11754cd72aec309bf52f7687212e8957",
+        "iv": "3c819d9a9bed087615030b65",
+        "pt": "",
+        "aad": "",
+        "ct": "",
+        "tag": "250327c674aaf477aef2675748cf6971",
+    },
     # gcmEncryptExtIV128.rsp, Count = 0, in the section
     # `Keylen = 128, IVlen = 96, PTlen = 128, AADlen = 128, Taglen = 128`.
-    dict(
-        key="c939cc13397c1d37de6ae0e1cb7c423c",
-        iv="b3d8cc017cbb89b39e0f67e2",
-        pt="c3b3c41f113a31b73d9a5cd432103069",
-        aad="24825602bd12a984e0092d3e448eda5f",
-        ct="93fe7d9e9bfd10348a5606e5cafa7354",
-        tag="0032a1dc85f1c9786925a2e71d8272dd",
-    ),
+    {
+        "key": "c939cc13397c1d37de6ae0e1cb7c423c",
+        "iv": "b3d8cc017cbb89b39e0f67e2",
+        "pt": "c3b3c41f113a31b73d9a5cd432103069",
+        "aad": "24825602bd12a984e0092d3e448eda5f",
+        "ct": "93fe7d9e9bfd10348a5606e5cafa7354",
+        "tag": "0032a1dc85f1c9786925a2e71d8272dd",
+    },
     # gcmEncryptExtIV128.rsp, Count = 0, in the section
     # `Keylen = 128, IVlen = 96, PTlen = 128, AADlen = 128, Taglen = 96`.
-    dict(
-        key="562ae8aadb8d23e0f271a99a7d1bd4d1",
-        iv="f7a5e2399413b89b6ad31aff",
-        pt="bbdc3504d803682aa08a773cde5f231a",
-        aad="2b9680b886b3efb7c6354b38c63b5373",
-        ct="e2b7e5ed5ff27fc8664148f5a628a46d",
-        tag="cbf2015184fffb82f2651c36",
-    ),
+    {
+        "key": "562ae8aadb8d23e0f271a99a7d1bd4d1",
+        "iv": "f7a5e2399413b89b6ad31aff",
+        "pt": "bbdc3504d803682aa08a773cde5f231a",
+        "aad": "2b9680b886b3efb7c6354b38c63b5373",
+        "ct": "e2b7e5ed5ff27fc8664148f5a628a46d",
+        "tag": "cbf2015184fffb82f2651c36",
+    },
     # gcmEncryptExtIV128.rsp, Count = 0, in the section
     # `Keylen = 128, IVlen = 96, PTlen = 104, AADlen = 160, Taglen = 128`.
-    dict(
-        key="fe0121f42e599f88ff02a985403e19bb",
-        iv="3bb9eb7724cbe1943d43de21",
-        pt="fd331ca8646091c29f21e5f0a1",
-        aad="2662d895035b6519f3510eae0faa3900ad23cfdf",
-        ct="59fe29b07b0de8d869efbbd9b4",
-        tag="d24c3e9c1c73c0af1097e26061c857de",
-    ),
+    {
+        "key": "fe0121f42e599f88ff02a985403e19bb",
+        "iv": "3bb9eb7724cbe1943d43de21",
+        "pt": "fd331ca8646091c29f21e5f0a1",
+        "aad": "2662d895035b6519f3510eae0faa3900ad23cfdf",
+        "ct": "59fe29b07b0de8d869efbbd9b4",
+        "tag": "d24c3e9c1c73c0af1097e26061c857de",
+    },
     # gcmEncryptExtIV128.rsp, Count = 0, in the section
     # `Keylen = 128, IVlen = 1024, PTlen = 128, AADlen = 128, Taglen = 128`.
-    dict(
-        key="ca91e2414409a439b06573d772f90afb",
-        iv=(
+    {
+        "key": "ca91e2414409a439b06573d772f90afb",
+        "iv": (
             "177008f920a06169ccdf753a338553fefd46845869c9244da44997f83d4ce805"
             "a18707c84d114f9c68427b22841591e6caecf5c3e72a25167aa860c51bdc1aa5"
             "6dcd69f29a2f35e70a322b9eba092a98d66a956b4d294383a0ebab26f7c4df1a"
             "5d4060dfc45a14155100ea7d9e32debb6537406b757291710505142e7659fc77"
         ),
-        pt="28003e30c4a4ca9e41aafefac1e1c3de",
-        aad="bfeb15fcf7b15f0e14c04439b67950bd",
-        ct="00e472971f3a7770aa7158fd92f17bb7",
-        tag="16661b85eb51646c94cf2be4e42d7a8e",
-    ),
+        "pt": "28003e30c4a4ca9e41aafefac1e1c3de",
+        "aad": "bfeb15fcf7b15f0e14c04439b67950bd",
+        "ct": "00e472971f3a7770aa7158fd92f17bb7",
+        "tag": "16661b85eb51646c94cf2be4e42d7a8e",
+    },
     # gcmEncryptExtIV256.rsp, Count = 0, in the section
     # `Keylen = 256, IVlen = 96, PTlen = 128, AADlen = 128, Taglen = 128`.
-    dict(
-        key=("92e11dcdaa866f5ce790fd24501f92509aacf4cb8b1339d50c9c1240935dd08b"),
-        iv="ac93a1a6145299bde902f21a",
-        pt="2d71bcfa914e4ac045b2aa60955fad24",
-        aad="1e0889016f67601c8ebea4943bc23ad6",
-        ct="8995ae2e6df3dbf96fac7b7137bae67f",
-        tag="eca5aa77d51d4a0a14d9c51e1da474ab",
-    ),
+    {
+        "key": ("92e11dcdaa866f5ce790fd24501f92509aacf4cb8b1339d50c9c1240935dd08b"),
+        "iv": "ac93a1a6145299bde902f21a",
+        "pt": "2d71bcfa914e4ac045b2aa60955fad24",
+        "aad": "1e0889016f67601c8ebea4943bc23ad6",
+        "ct": "8995ae2e6df3dbf96fac7b7137bae67f",
+        "tag": "eca5aa77d51d4a0a14d9c51e1da474ab",
+    },
 ]
 
 

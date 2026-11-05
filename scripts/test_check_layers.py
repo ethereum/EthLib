@@ -110,7 +110,7 @@ def with_imports(module: str, *imported: str) -> dict[str, list[str] | str]:
 
 
 class Rules(unittest.TestCase):
-    def assertFails(self, tree: dict, text: str) -> None:
+    def assert_fails(self, tree: dict, text: str) -> None:
         problems = Tree(tree).problems()
         self.assertEqual(len(problems), 1, problems)
         self.assertIn(text, problems[0])
@@ -122,63 +122,63 @@ class Rules(unittest.TestCase):
         self.assertEqual(layers.check(HERE.parent), [])
 
     def test_higher_layer(self):
-        self.assertFails(
+        self.assert_fails(
             with_imports("EthLib.Base.A", "EthLib.Cryptography.A"), "Base sits below Cryptography"
         )
 
     def test_cryptography_never_imports_serialization(self):
-        self.assertFails(
+        self.assert_fails(
             with_imports("EthLib.Cryptography.A", "EthLib.Serialization.A"),
             "Cryptography sits below Serialization",
         )
 
     def test_higher_layer_from_a_property(self):
         tree = with_imports("EthLib.Execution.Proofs.A", "EthLib.Consensus.A")
-        self.assertFails(tree, "Execution and Consensus never import each other")
+        self.assert_fails(tree, "Execution and Consensus never import each other")
 
     def test_execution_and_consensus(self):
-        self.assertFails(
+        self.assert_fails(
             with_imports("EthLib.Consensus.A", "EthLib.Execution.A"),
             "Consensus and Execution never import each other",
         )
 
     def test_engine_sits_above_execution_and_consensus(self):
-        self.assertFails(
+        self.assert_fails(
             with_imports("EthLib.Execution.A", "EthLib.Engine.A"), "Execution sits below Engine"
         )
-        self.assertFails(
+        self.assert_fails(
             with_imports("EthLib.Consensus.A", "EthLib.Engine.A"), "Consensus sits below Engine"
         )
 
     def test_specification_imports_a_property(self):
-        self.assertFails(
+        self.assert_fails(
             with_imports("EthLib.Execution.A", "EthLib.Base.Proofs.A")
             | {"EthLib.Base.Proofs.A": []},
             "a specification never imports a property",
         )
 
     def test_specification_imports_an_export(self):
-        self.assertFails(
+        self.assert_fails(
             with_imports("EthLib", "EthLib.Execution.Exports.A"),
             "a specification never imports a C export",
         )
 
     def test_outside_the_toolchain(self):
-        self.assertFails(
+        self.assert_fails(
             with_imports("EthLib.Base.A", "Batteries.Data.List"),
             "a specification imports only EthLib",
         )
-        self.assertFails(
+        self.assert_fails(
             with_imports("EthLib.Execution.Exports.A", "Mathlib.Tactic"),
             "a C export imports only EthLib",
         )
 
     def test_orphan(self):
-        self.assertFails(GOOD | {"EthLib.Base.B": []}, "EthLib/Base/B.lean: no library root")
+        self.assert_fails(GOOD | {"EthLib.Base.B": []}, "EthLib/Base/B.lean: no library root")
 
     def test_outside_a_layer(self):
         tree = with_imports("EthLib", "EthLib.Chain.A") | {"EthLib.Chain.A": []}
-        self.assertFails(tree, "EthLib/Chain/A.lean: not in a layer")
+        self.assert_fails(tree, "EthLib/Chain/A.lean: not in a layer")
 
     def test_aggregators_import_every_layer(self):
         tree = with_imports("EthLib.Proofs", "EthLib.Consensus.A", "EthLib.Base.A")

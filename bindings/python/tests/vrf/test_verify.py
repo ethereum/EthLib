@@ -7,14 +7,14 @@ import pytest
 from dumper import hex_str, write_case
 from ethlib.cryptography import vrf
 
-from . import fixtures as F
+from . import fixtures
 
 HANDLER = "verify"
 
 # The two openings, by the name of their index.
 CASES = {
-    "zero": (F.ROOT_ZERO, F.INDEX_ZERO, F.OPENING_ZERO, F.OUTPUT_ZERO),
-    "last": (F.ROOT_LAST, F.INDEX_LAST, F.OPENING_LAST, F.OUTPUT_LAST),
+    "zero": (fixtures.ROOT_ZERO, fixtures.INDEX_ZERO, fixtures.OPENING_ZERO, fixtures.OUTPUT_ZERO),
+    "last": (fixtures.ROOT_LAST, fixtures.INDEX_LAST, fixtures.OPENING_LAST, fixtures.OUTPUT_LAST),
 }
 
 
@@ -43,14 +43,20 @@ def test_valid(name: str) -> None:
 def test_wrong_secret(name: str) -> None:
     # The first byte of the secret: the leaf changes, so the path reaches another root.
     root, index, opening, _ = CASES[name]
-    _emit(f"{HANDLER}_wrong_secret_{name}", root, index, F.flip(opening, 0), None)
+    _emit(f"{HANDLER}_wrong_secret_{name}", root, index, fixtures.flip(opening, 0), None)
 
 
 @pytest.mark.parametrize("name", CASES)
 def test_wrong_sibling(name: str) -> None:
     # The last byte of the top sibling, the last byte of the opening.
     root, index, opening, _ = CASES[name]
-    _emit(f"{HANDLER}_wrong_sibling_{name}", root, index, F.flip(opening, len(opening) - 1), None)
+    _emit(
+        f"{HANDLER}_wrong_sibling_{name}",
+        root,
+        index,
+        fixtures.flip(opening, len(opening) - 1),
+        None,
+    )
 
 
 @pytest.mark.parametrize("name, other", [("zero", 1), ("last", 0xFFFF_FFFE)])
@@ -62,17 +68,17 @@ def test_other_index(name: str, other: int) -> None:
 
 def test_index_out_of_range() -> None:
     # Index 2^32 is outside the tree, so even the valid opening at index 0 is rejected.
-    _emit(f"{HANDLER}_index_out_of_range", F.ROOT_ZERO, 1 << 32, F.OPENING_ZERO, None)
+    _emit(f"{HANDLER}_index_out_of_range", fixtures.ROOT_ZERO, 1 << 32, fixtures.OPENING_ZERO, None)
 
 
 @pytest.mark.parametrize("field, size", [("root", 31), ("opening", 1055)])
 def test_wrong_length(field: str, size: int) -> None:
     # A root or an opening of another length is rejected, never padded or truncated.
-    root = F.ROOT_ZERO[:size] if field == "root" else F.ROOT_ZERO
-    opening = F.OPENING_ZERO[:size] if field == "opening" else F.OPENING_ZERO
-    _emit(f"{HANDLER}_short_{field}", root, F.INDEX_ZERO, opening, None)
+    root = fixtures.ROOT_ZERO[:size] if field == "root" else fixtures.ROOT_ZERO
+    opening = fixtures.OPENING_ZERO[:size] if field == "opening" else fixtures.OPENING_ZERO
+    _emit(f"{HANDLER}_short_{field}", root, fixtures.INDEX_ZERO, opening, None)
 
 
 def test_rejects_non_bytes() -> None:
     with pytest.raises(TypeError):
-        vrf.verify(bytearray(F.ROOT_ZERO), 0, F.OPENING_ZERO)  # type: ignore[arg-type]
+        vrf.verify(bytearray(fixtures.ROOT_ZERO), 0, fixtures.OPENING_ZERO)  # type: ignore[arg-type]

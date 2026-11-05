@@ -1,6 +1,7 @@
 """The state root against the genesis tests of ethereum/tests.
 
-Each case of `genesis/basic_genesis_tests.json` gives an allocation and the RLP of its genesis block.
+Each case of `genesis/basic_genesis_tests.json` gives an allocation
+and the RLP of its genesis block.
 The state root of the allocation must be the fourth field of the block header.
 `genesis/README.md` gives the origin of the file and its licence.
 """

@@ -40,7 +40,7 @@ def _rlp_list(items: list[bytes]) -> bytes:
 
 
 def _xor(a: bytes, b: bytes) -> bytes:
-    return bytes(x ^ y for x, y in zip(a, b))
+    return bytes(x ^ y for x, y in zip(a, b, strict=True))
 
 
 class Direction:

@@ -7,7 +7,7 @@ import pytest
 
 from ethlib import consensus
 from ethlib.errors import EthLibError
-from ethlib.execution import blocks, fees, pow, transactions
+from ethlib.execution import blocks, fees, pow as proof_of_work, transactions
 from ethlib.networking import enr
 from ethlib.precompiles import price, run
 from ethlib.serialization import rlp
@@ -59,10 +59,12 @@ EXPORTS = {
     "state_rewards_root": lambda f: rewards_root(f, EMPTY_STATE, AMSTERDAM_BLOCK),
     "base_fee_per_blob_gas": lambda f: fees.get_base_fee_per_blob_gas(f, 0),
     "excess_blob_gas": lambda f: fees.calc_excess_blob_gas(f, 0, 0, 1),
-    "block_difficulty": lambda f: pow.block_difficulty(f, 1, 1, 0, 1, 0),
-    "seal_hash": lambda f: pow.seal_hash(f, HEADER),
-    "check_proof_of_work": lambda f: pow.check_proof_of_work(f, HEADER),
-    "validate_ommers": lambda f: pow.validate_ommers(f, [], AMSTERDAM_BLOCK, check_seal=False),
+    "block_difficulty": lambda f: proof_of_work.block_difficulty(f, 1, 1, 0, 1, 0),
+    "seal_hash": lambda f: proof_of_work.seal_hash(f, HEADER),
+    "check_proof_of_work": lambda f: proof_of_work.check_proof_of_work(f, HEADER),
+    "validate_ommers": lambda f: proof_of_work.validate_ommers(
+        f, [], AMSTERDAM_BLOCK, check_seal=False
+    ),
     "precompile_run": lambda f: run(f, IDENTITY, b"", 10**6),
     "precompile_price": lambda f: price(f, IDENTITY, b""),
     "consensus_entries": lambda f: enr.consensus_entries(f, b""),

@@ -55,7 +55,7 @@ def _blobs() -> tuple[list[bytes], list[bytes]]:
 @cache
 def _blob_proofs() -> list[bytes]:
     blobs, commitments = _blobs()
-    return [kzg.compute_blob_kzg_proof(b, c) for b, c in zip(blobs, commitments)]
+    return [kzg.compute_blob_kzg_proof(b, c) for b, c in zip(blobs, commitments, strict=True)]
 
 
 @cache

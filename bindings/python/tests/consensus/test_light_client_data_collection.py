@@ -79,7 +79,8 @@ class Shapes:
                 at += size
         # Each variable field runs from its offset to the next offset, or to the end.
         ends = [parts[i] for i in offsets[1:]] + [len(data)]
-        for i, end in zip(offsets, ends):
+        # With no variable field, `ends` holds only the end of the data, and nothing is cut.
+        for i, end in zip(offsets, ends, strict=False):
             parts[i] = data[parts[i] : end]
         return parts
 

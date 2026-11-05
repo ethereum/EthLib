@@ -1,6 +1,7 @@
 """Test-vector generator: `recover`.
 
-For each valid signature of the Wycheproof P1363 set, one of the recovery ids 0 and 1 must return the test's public key.
+For each valid signature of the Wycheproof P1363 set,
+one of the recovery ids 0 and 1 must return the test's public key.
 
 The exception is a signature whose `R` has `x = r + n`, possible only when `r + n < p`.
 Only the ids 2 and 3 reach that `R`, and Ethereum does not use them.
@@ -14,9 +15,9 @@ import pytest
 from dumper import hex_str, write_case
 from ethlib.cryptography import secp256k1
 
-from . import wycheproof as W
+from . import wycheproof
 
-VALID = [c for c in W.cases(W.P1363) if c[4]]
+VALID = [c for c in wycheproof.cases(wycheproof.P1363) if c[4]]
 
 # The field modulus and the group order, from SEC 2 v2 §2.4.1.
 P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F

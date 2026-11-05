@@ -90,7 +90,7 @@ def _reference_item(cache: list[list[int]], i: int) -> bytes:
     mix = _words(keccak512(_bytes(mix)))
     for j in range(256):
         parent = cache[_fnv(i ^ j, mix[j % 16]) % n]
-        mix = [_fnv(a, b) for a, b in zip(mix, parent)]
+        mix = [_fnv(a, b) for a, b in zip(mix, parent, strict=True)]
     return keccak512(_bytes(mix))
 
 

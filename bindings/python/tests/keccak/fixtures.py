@@ -18,6 +18,7 @@ The files are parsed at import time, so a parsing bug fails collection, not a si
 No independent Keccak-256 is in the Python standard library, so the digests are the files' own.
 """
 
+from itertools import pairwise
 from pathlib import Path
 
 # The vendored files sit next to this module.
@@ -173,7 +174,7 @@ def _parse_permutations(path: Path) -> list[tuple[bytes, bytes]]:
     pairs = []
     lines = path.read_text().splitlines()
     state_in: bytes | None = None
-    for label, value in zip(lines, lines[1:]):
+    for label, value in pairwise(lines):
         if label.strip() == "Input of permutation:":
             state_in = bytes.fromhex(value)
         elif label.strip() == "State after permutation:":

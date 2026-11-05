@@ -1,4 +1,4 @@
-"""BLAKE2b-512 of the BLAKE2 known answers, with the BLAKE2F precompile as its compression function."""
+"""BLAKE2b-512 of the BLAKE2 known answers, with the BLAKE2F precompile as compression function."""
 
 import hashlib
 import json

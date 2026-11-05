@@ -2,7 +2,7 @@
 Reference operations come from `py_ecc.bls.G2ProofOfPossession`.
 """
 
-from py_ecc.bls import G2ProofOfPossession as ref_bls
+from py_ecc.bls import G2ProofOfPossession as RefBls
 
 # ---- Messages -------------------------------------------------------------
 
@@ -35,12 +35,12 @@ G2_POINT_AT_INFINITY = b"\xc0" + b"\x00" * 95
 
 
 def sk_to_pk(sk: int) -> bytes:
-    return ref_bls.SkToPk(sk)
+    return RefBls.SkToPk(sk)
 
 
 def sign(sk: int, msg: bytes) -> bytes:
-    return ref_bls.Sign(sk, msg)
+    return RefBls.Sign(sk, msg)
 
 
 def aggregate(sigs: list[bytes]) -> bytes:
-    return ref_bls.Aggregate(sigs)
+    return RefBls.Aggregate(sigs)
