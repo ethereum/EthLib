@@ -293,6 +293,12 @@
 #define DOC_consensus_state_transition \
   "The state after a signed block, as SSZ bytes, with the signature and the state root checked."
 
+#define DOC_consensus_initialize_genesis \
+  "The candidate genesis state of a block of the proof-of-work chain, as SSZ bytes."
+
+#define DOC_consensus_is_valid_genesis_state \
+  "Whether a candidate genesis state launches the chain."
+
 #define DOC_consensus_upgrade_state \
   "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."
 

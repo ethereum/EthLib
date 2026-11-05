@@ -330,6 +330,13 @@ def bindings : List Binding := [
   ⟨"consensus_state_transition", `EthLib.Consensus.Exports.stateTransitionExport,
     "(name: str, fork: str, pre: bytes, block: bytes, config: bytes, verify: bool) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
+  ⟨"consensus_initialize_genesis", `EthLib.Consensus.Exports.initializeGenesisExport,
+    "(name: str, fork: str, eth1_block_hash: bytes, deposits: bytes, config: bytes, " ++
+      "eth1_timestamp: int, verify: bool) -> bytes",
+    [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
+  ⟨"consensus_is_valid_genesis_state", `EthLib.Consensus.Exports.isValidGenesisStateExport,
+    "(name: str, fork: str, state: bytes, config: bytes) -> bool",
+    [], some "TransitionError"⟩,
   ⟨"consensus_upgrade_state", `EthLib.Consensus.Exports.upgradeStateExport,
     "(name: str, fork: str, pre: bytes, config: bytes, verify: bool) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,

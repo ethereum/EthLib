@@ -406,6 +406,22 @@ def _store_record(record: bytes) -> dict:
     return read
 
 
+def initialize_genesis(name: str, fork: str, eth1_block_hash: bytes, eth1_timestamp: int,
+                       deposits: list[bytes], verify: bool = True,
+                       config: dict | None = None) -> bytes:
+    """The SSZ bytes of the candidate genesis state of a block and its deposits."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_initialize_genesis(name, fork, eth1_block_hash, b"".join(deposits),
+                                                replacements, eth1_timestamp, verify)
+
+
+def is_valid_genesis_state(name: str, fork: str, state: bytes,
+                           config: dict | None = None) -> bool:
+    """Whether a candidate genesis state launches the chain."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_is_valid_genesis_state(name, fork, state, replacements)
+
+
 def upgrade_state(name: str, fork: str, pre: bytes, verify: bool = True,
                   config: dict | None = None) -> bytes:
     """The SSZ bytes of a state upgraded to a fork from the fork before, or TransitionError."""

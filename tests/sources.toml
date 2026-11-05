@@ -26,6 +26,7 @@ directories = [
   "tests/consensus/epoch_processing",
   "tests/consensus/fork",
   "tests/consensus/fork_choice",
+  "tests/consensus/genesis",
   "tests/consensus/light_client",
   "tests/consensus/merkle_proof", "tests/consensus/networking", "tests/consensus/operations",
   "tests/consensus/parameters",

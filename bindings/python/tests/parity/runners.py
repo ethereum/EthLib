@@ -21,6 +21,8 @@ from consensus.test_light_client_data_collection import runs_data_collection
 from consensus.test_light_client_sync import SPECIFIED as LIGHT_CLIENT_FORKS
 from consensus.test_light_client_sync import runs_sync
 from consensus.test_operations import runs as runs_operation
+from consensus.test_genesis import HANDLERS as GENESIS
+from consensus.test_genesis import runs as runs_genesis
 from consensus.test_rewards import HANDLERS as REWARDS
 from consensus.test_rewards import runs as runs_rewards
 from engine.cases import EXCEPTIONS as ENGINE_EXCEPTIONS
@@ -39,7 +41,7 @@ NOT_YET = {
     "epoch_processing": "beacon state transition (consensus track C13 to C40)",
     "finality": "the state transition after Phase 0 (consensus track C26 to C40)",
     "fork": "beacon state transition (consensus track C13 to C40)",
-    "genesis": "beacon state transition (consensus track C13 to C40)",
+    "genesis": "the genesis after Phase 0 (consensus track C26 to C40)",
     "operations": "beacon state transition (consensus track C13 to C40)",
     "random": "the state transition after Phase 0 (consensus track C26 to C40)",
     "sanity": "the state transition after Phase 0 (consensus track C26 to C40)",
@@ -547,6 +549,13 @@ def _fork_choice(root: Path, case: Case) -> None:
     run_case(case.preset, case.fork, root / case.path)
 
 
+def _genesis(root: Path, case: Case) -> None:
+    from consensus.test_genesis import run_case
+
+    # tests/<preset>/<fork>/genesis/<handler>/<suite>/<case>
+    run_case(case.preset, case.fork, case.group.split("/")[1], root / case.path)
+
+
 def _upgrade(root: Path, case: Case) -> None:
     from consensus.test_fork import run_case
 
@@ -588,6 +597,7 @@ RUNNERS = {
     "fork/fork": _upgrade,
     **{f"fork_choice/{handler}": _fork_choice for handler in FORK_CHOICE},
     **{group: _transition for group in TRANSITION_GROUPS},
+    **{f"genesis/{handler}": _genesis for handler in GENESIS},
     "legacy_ommers": legacy.run_ommers,
     "legacy_dao": legacy.run_dao,
 }
@@ -637,6 +647,8 @@ def runner(case: Case):
     if run is _fork_choice and not runs_fork_choice(case.fork, case.group.split("/")[1]):
         return None
     if run is _transition and not runs_transition(case.fork, case.group):
+        return None
+    if run is _genesis and not runs_genesis(case.fork, case.group.split("/")[1]):
         return None
     return run
 

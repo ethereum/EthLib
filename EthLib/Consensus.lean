@@ -57,6 +57,7 @@ public import EthLib.Consensus.Transition.EpochParticipation
 public import EthLib.Consensus.Transition.EpochRewards
 public import EthLib.Consensus.Transition.EpochUpdates
 public import EthLib.Consensus.Transition.Execution
+public import EthLib.Consensus.Transition.Genesis
 public import EthLib.Consensus.Transition.Operations
 public import EthLib.Consensus.Transition.Payload
 public import EthLib.Consensus.Transition.StateTransition
