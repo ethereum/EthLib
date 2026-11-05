@@ -19,7 +19,7 @@ slow = pytest.mark.skipif(not SLOW, reason="the Ethash cache of epoch 0, run wee
 
 def _param(case: catalogue.Case):
     marks = [slow] if legacy.sealed(legacy.fixture(VENDORED, case)) else []
-    return pytest.param(case, marks=marks, id=case.id)
+    return pytest.param(case, marks=marks, id=f"{case.group}:{case.id}")
 
 
 @pytest.mark.parametrize("case", [_param(case) for case in CASES])
@@ -27,11 +27,12 @@ def test_case(case, request, record_property) -> None:
     harness.run(VENDORED, case, DISAGREEMENTS, request, record_property)
 
 
-def test_vendored_cases_cover_both_seal_engines_and_a_transition() -> None:
+def test_vendored_cases_cover_both_seal_engines_a_transition_and_ommers() -> None:
     tests = [legacy.fixture(VENDORED, case) for case in CASES]
     assert any(legacy.sealed(test) for test in tests)
     assert any(not legacy.sealed(test) for test in tests)
     assert any(len(catalogue.LEGACY_FORKS[case.fork]) == 2 for case in CASES)
+    assert {case.group for case in CASES} == {"legacy_header", "legacy_ommers"}
 
 
 def test_digests() -> None:

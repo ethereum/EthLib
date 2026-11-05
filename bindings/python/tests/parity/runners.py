@@ -157,6 +157,7 @@ RUNNERS = {
     "merkle_proof/single_merkle_proof": _merkle_proof,
     "legacy_header": legacy.run_headers,
     **{f"operations/{handler}": _operation for handler in OPERATIONS},
+    "legacy_ommers": legacy.run_ommers,
 }
 
 

@@ -90,3 +90,14 @@ case = "Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherT
 group = "legacy_header"
 reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
 source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+
+# The first London blocks of a chain hold ommers numbered before London, in the 15-field form.
+# EthLib reads every ommer, and every recent block, in the form of the block's own fork.
+# So it rejects valid blocks 5 to 10 of this test, which each hold the Berlin ommer number 4.
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/TransitionTests/bcBerlinToLondon/londonUncles.json::londonUncles_BerlinToLondonAt5"
+group = "legacy_ommers"
+reason = "EthLib cannot read a Berlin ommer, or a Berlin recent block, in a London block"
+source = "EIP-1559, Specification: the base fee field is added to headers from the fork block on"

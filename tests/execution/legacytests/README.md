@@ -12,9 +12,10 @@ A test gives a genesis block and a chain of blocks for one network.
 Each block is valid, or names the exception with which a client rejects it.
 The directory `Constantinople` fills the networks from Frontier to Constantinople Fix, and the directory `Cancun` fills the later ones.
 
-These files are a small part of the repository, chosen so that each change runs every kind of header check.
+These files are a small part of the repository, chosen so that each change runs every kind of header and ommer check.
 They hold a header error of each kind, and an error in the header of an ommer.
-They also hold a transition to London, and two tests whose blocks carry a proof of work.
+They hold valid ommers, whose rewards are checked, and an ommer error of each kind that the tests fill.
+They also hold two transitions to London, and three tests whose blocks carry a proof of work.
 The weekly parity job runs every test from Frontier to London, from the archive that `tests/sources.toml` pins.
 That job also checks that each file here is the file of the archive.
 
@@ -28,6 +29,11 @@ Its gas limit is 2^63, just above the gas limit of its parent, 2^63 - 1.
 Clients cap the gas limit at 2^63 - 1.
 The Yellow Paper (Shanghai version, sections 4.4.3 and 4.4.4) makes the gas limit a natural number, bounded only by the gas limit of the parent and by 5000 from below.
 `tests/parity/disagreements.toml` lists each of these cases, so a test fails if EthLib starts to reject them.
+
+EthLib rejects valid blocks 5 to 10 of `londonUncles.json`, at the transition from Berlin to London at block 5.
+Each holds the ommer number 4, a Berlin header of 15 fields, while the block is a London header of 16 fields.
+EthLib reads the ommers of a block, and the recent blocks of the ommer check, in the form of the block's fork.
+EIP-1559 adds the base fee to the headers from the fork block on, so the header of block 4 has none.
 
 ## Licence
 
