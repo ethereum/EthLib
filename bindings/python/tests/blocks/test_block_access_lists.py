@@ -127,8 +127,9 @@ def test_cases_cover_each_kind() -> None:
 
 @pytest.mark.parametrize("case", NEEDS_EXECUTION, ids=_id)
 def test_needs_execution(case) -> None:
-    # Until EthLib executes blocks, the form check rejects exactly the payloads that also break
-    # the form, and lets the others through.
+    # The blockchain tests of the same names run each of these blocks in the parity suite.
+    # EthLib rejects each block there, since its list differs from the one that the body builds.
+    # Here the form check alone rejects exactly the payloads that also break the form.
     bal = bytes.fromhex(case["bal"])
     if _form_also(case):
         with pytest.raises(blocks.BlockError) as error:

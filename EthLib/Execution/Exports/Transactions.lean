@@ -196,23 +196,26 @@ def checkInBlockExport (fork : ByteArray) (chainId : UInt64)
 
 /-! ## The run of a transaction -/
 
-/-- The fields of a block that a run reads: a list of exactly nine items.
+/-- The fields of a block that a run reads: a list of exactly ten items.
 
 They are the beneficiary, the gas limit, the number, the time and the difficulty.
 
 Then come the base fee per gas, the randomness of the beacon chain and the excess blob gas.
 
-Last come the hashes of the blocks before, oldest first, which BLOCKHASH reads.
+Then come the hashes of the blocks before, oldest first, which BLOCKHASH reads.
+
+Last comes the slot number, which SLOTNUM reads from Glamsterdam.
 
 A field that the fork does not have is ignored. -/
 def ofEnvironmentItem (fork : Fork) (chainId : UInt64) (item : Item) :
     Except RlpError (Evm.BlockEnvironment fork) := do
-  match ← item.fields 9 with
+  match ← item.fields 10 with
   | [coinbase, gasLimit, number, timestamp, difficulty, baseFee, prevRandao, excessBlobGas,
-      blockHashes] =>
+      blockHashes, slotNumber] =>
     let baseFee : Nat ← Codec.ofItem baseFee
     let prevRandao : Bytes32 ← Codec.ofItem prevRandao
     let excessBlobGas : UInt64 ← Codec.ofItem excessBlobGas
+    let slotNumber : UInt64 ← Codec.ofItem slotNumber
     return {
       chainId := chainId.toNat, coinbase := ← Codec.ofItem coinbase,
       number := ← Codec.ofItem number, gasLimit := ← Codec.ofItem gasLimit,
@@ -220,8 +223,8 @@ def ofEnvironmentItem (fork : Fork) (chainId : UInt64) (item : Item) :
       blockHashes := ← Codec.ofItem blockHashes, baseFeePerGas := fun _ => baseFee,
       prevRandao := fun _ => prevRandao,
       excessBlobGas := fun _ => excessBlobGas, parentBeaconBlockRoot := fun _ => 0,
-      slotNumber := fun _ => 0 }
-  | items => .error (.wrongFieldCount 9 items.length)
+      slotNumber := fun _ => slotNumber }
+  | items => .error (.wrongFieldCount 10 items.length)
 
 /-- An account of a state as an item: its address, nonce, balance, code and storage. -/
 def stateEntryItem (state : State.State) (address : Address) (account : State.Account) : Item :=
@@ -237,7 +240,7 @@ def abortMessage (error : Evm.EvmError) : String :=
 
 /-- Run one transaction on the state that `state` encodes, in a block with no transaction before.
 
-The state takes the form of the state root export, and the block is a list of nine items.
+The state takes the form of the state root export, and the block is a list of ten items.
 
 A transaction that may not enter the block fails with the code of its inclusion error.
 
@@ -253,7 +256,7 @@ The state after it has no beneficiary reward, since a block pays that. -/
 @[export eth_tx_run]
 def runExport (fork : ByteArray) (chainId : UInt64) (tx state env : ByteArray) :
     Result ByteArray := do
-  let (fork, tx) ← decodeAt .bpo5 fork tx
+  let (fork, tx) ← decodeAt .glamsterdam fork tx
   let pre ← (State.Exports.ofInput state).mapError fun e => (e.code, e.message)
   let env ← (decode env >>= ofEnvironmentItem fork chainId).mapError
     fun e => (0, s!"block environment rejected: {rlpMessage e}")

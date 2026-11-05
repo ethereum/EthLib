@@ -20,7 +20,9 @@ The sender then keeps its higher nonce and its fee, and gets back the whole rese
 
 Up to BPO5, a transaction runs with one counter of the gas left.
 
-From Glamsterdam, a run fails as not yet specified, so no caller gets the rules of BPO5 there.
+At Glamsterdam, it runs with the meter of EIP-8037.
+
+From Hegotá, a run fails as not yet specified, so no caller gets the rules of Glamsterdam there.
 -/
 
 @[expose] public section
@@ -99,12 +101,20 @@ theorem startAccessedAddresses_of_lt_berlin (h : fork < .berlin) :
   have berlin : ¬Fork.berlin ≤ fork := Nat.not_le_of_lt h
   simp only [startAccessedAddresses, berlin, ↓reduceIte]
 
-/-- From Glamsterdam, a transaction fails to run, since the rules of that fork are not here yet. -/
-theorem processTransaction_of_glamsterdam_le {env : BlockEnvironment fork}
-    {block : State.BlockState} {included : Included} (h : .glamsterdam ≤ fork) :
+/-- From Hegotá, a transaction fails to run, since the rules of that fork are not here yet. -/
+theorem processTransaction_of_hegota_le {env : BlockEnvironment fork}
+    {block : State.BlockState} {included : Included} (h : .hegota ≤ fork) :
     processTransaction env block included tx = .error (.forkNotYetSpecified fork) := by
   simp only [processTransaction, h, ↓reduceIte]
-  rfl
+
+/-- At Glamsterdam, a transaction runs with the meter of EIP-8037. -/
+theorem processTransaction_of_glamsterdam {env : BlockEnvironment fork}
+    {block : State.BlockState} {included : Included} (h : .glamsterdam ≤ fork)
+    (hlt : fork < .hegota) :
+    processTransaction env block included tx =
+      runTransaction StateGasMeter env block included tx := by
+  have hpre : ¬Fork.hegota ≤ fork := Nat.not_le_of_lt hlt
+  simp only [processTransaction, hpre, h, ↓reduceIte, GE.ge]
 
 /-! ## The first frame -/
 
@@ -140,6 +150,7 @@ theorem processTransaction_of_lt_glamsterdam {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} (h : fork < .glamsterdam) :
     processTransaction env block included tx = runTransaction Nat env block included tx := by
   have hpre : ¬Fork.glamsterdam ≤ fork := Nat.not_le_of_lt h
-  simp only [processTransaction, hpre, ↓reduceIte, GE.ge]
+  have hlate : ¬Fork.hegota ≤ fork := fun hh => hpre (Nat.le_trans (by decide) hh)
+  simp only [processTransaction, hlate, hpre, ↓reduceIte, GE.ge]
 
 end EthLib.Execution.Transactions
