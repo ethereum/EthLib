@@ -22,6 +22,7 @@ public import EthLib.Consensus.ForkSchedule
 public import EthLib.Consensus.Gossip.Topics
 public import EthLib.Consensus.InclusionList
 public import EthLib.Consensus.PqKeys.Containers
+public import EthLib.Consensus.PqKeys.Gossip
 public import EthLib.Consensus.PqKeys.Possession
 public import EthLib.Consensus.Preset
 public import EthLib.Consensus.ReqResp.Messages
