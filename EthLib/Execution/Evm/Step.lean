@@ -13,6 +13,8 @@ The parts that every instruction is made of: pop words, charge gas, grow memory,
 An instruction pops its operands first, then pays, then computes, then moves the program counter.
 
 The gas meter is a parameter, so these parts serve every meter.
+
+A step gives the next frame, or a message to run first, for a call.
 -/
 
 @[expose] public section
@@ -79,6 +81,16 @@ def ternaryOp (cost : Nat) (f : U256 → U256 → U256 → U256) (evm : Evm fork
   let evm ← chargeGas evm cost
   let evm ← pushWord evm (f x y z)
   return advance evm
+
+/-- What one step of a frame gives. -/
+inductive StepResult (fork : Fork) (Meter : Type) where
+  /-- The frame after the step. -/
+  | next (evm : Evm fork Meter)
+  /-- A message to run first, from the frame `caller`.
+
+  The frame goes on with `resume` applied to the frame that ends the message. -/
+  | child (caller : Evm fork Meter) (message : Message fork)
+      (resume : Evm fork Meter → Except EvmError (Evm fork Meter))
 
 /-- A chain of steps that succeeds succeeded at its first step. -/
 theorem except_bind_eq_ok {α β : Type} {x : Except EvmError α} {f : α → Except EvmError β}

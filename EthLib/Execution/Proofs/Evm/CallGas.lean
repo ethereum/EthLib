@@ -6,9 +6,7 @@ public import EthLib.Execution.Proofs.Evm.Gas
 /-!
 # Proofs: `Evm.CallGas`
 
-The callee gets less gas than the call pays, when the extra price exceeds the stipend.
-
-So a callee always gets less gas than its caller had before the call.
+A callee gets less gas than its caller had before a call that it could pay.
 
 From Tangerine Whistle, a call passes on at most all but one 64th of the gas left.
 
@@ -21,28 +19,6 @@ namespace EthLib.Execution.Evm
 
 open EthLib.Base (Fork U256)
 open GasCosts
-
-/-- The price to send value exceeds the stipend. -/
-theorem stipend_lt_callValueCost {value : U256} (h : value ≠ 0) :
-    CALL_STIPEND < callValueCost value := by
-  unfold callValueCost
-  simp only [h, ite_false]
-  decide
-
-/-- The callee gets less gas than the call pays.
-
-That holds when the extra price is positive, and exceeds the stipend of a call with value. -/
-theorem subCall_lt_cost {fork : Fork} {value : U256} {gas gasLeft memoryCost extraGas : Nat}
-    {stipend : Nat} (pos : 0 < extraGas) (above : value ≠ 0 → stipend < extraGas) :
-    (messageCallGas fork value gas gasLeft memoryCost extraGas stipend).subCall <
-      (messageCallGas fork value gas gasLeft memoryCost extraGas stipend).cost := by
-  unfold messageCallGas
-  by_cases hv : value = 0
-  · simp only [hv, ite_true]
-    omega
-  · simp only [hv, ite_false]
-    have := above hv
-    omega
 
 /-- A callee gets less gas than its caller had before a call that it could pay. -/
 theorem subCall_lt_gasLeft {fork : Fork} {value : U256} {gas gasLeft memoryCost extraGas : Nat}

@@ -90,4 +90,26 @@ def messageCallGas (fork : Fork) (value : U256) (gas gasLeft memoryCost extraGas
     else gas
   ⟨gas + extraGas, gas + stipend⟩
 
+/-- The price to send value exceeds the stipend. -/
+theorem stipend_lt_callValueCost {value : U256} (h : value ≠ 0) :
+    CALL_STIPEND < callValueCost value := by
+  unfold callValueCost
+  simp only [h, ite_false]
+  decide
+
+/-- The callee gets less gas than the call pays.
+
+That holds when the extra price is positive, and exceeds the stipend of a call with value. -/
+theorem subCall_lt_cost {fork : Fork} {value : U256} {gas gasLeft memoryCost extraGas : Nat}
+    {stipend : Nat} (pos : 0 < extraGas) (above : value ≠ 0 → stipend < extraGas) :
+    (messageCallGas fork value gas gasLeft memoryCost extraGas stipend).subCall <
+      (messageCallGas fork value gas gasLeft memoryCost extraGas stipend).cost := by
+  unfold messageCallGas
+  by_cases hv : value = 0
+  · simp only [hv, ite_true]
+    omega
+  · simp only [hv, ite_false]
+    have := above hv
+    omega
+
 end EthLib.Execution.Evm

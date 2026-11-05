@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Evm.Measure
+public import EthLib.Execution.Evm.Call
 
 /-!
 # `Evm.Interpreter`
@@ -13,7 +13,7 @@ A position past the end of the code holds STOP.
 
 A byte that is no opcode at the fork halts the frame.
 
-CALL, CALLCODE, DELEGATECALL, STATICCALL, CREATE, CREATE2 and SELFDESTRUCT have no instruction yet.
+CREATE, CREATE2 and SELFDESTRUCT have no instruction yet.
 
 A step on one of them aborts the whole run, since nothing here gives its result.
 
@@ -52,24 +52,16 @@ open EthLib.Base (Fork)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
-/-- The instruction of an opcode at fork `fork`, or none.
+/-- The instruction of an opcode at fork `fork` that gives the next frame, or none.
 
-The calls, the creations and SELFDESTRUCT have no instruction yet, so they give none. -/
+The calls give a message to run first, so they are not here.
+
+The creations and SELFDESTRUCT have no instruction yet, so they give none. -/
 def instruction (fork : Fork) (op : Op) :
     Option (Evm fork Meter → Except EvmError (Evm fork Meter)) :=
   stackOnlyStep fork op <|> controlFlowStep op <|> memoryDataStep op <|> returnOpStep fork op <|>
     environmentStep fork op <|> accountStep fork op <|> storageStep op <|>
     transientStorageStep fork op <|> logOpStep op
-
-/-- What one step of a frame gives. -/
-inductive StepResult (fork : Fork) (Meter : Type) where
-  /-- The frame after the step. -/
-  | next (evm : Evm fork Meter)
-  /-- A message to run first, from the frame `caller`.
-
-  The frame goes on with `resume` applied to the frame that ends the message. -/
-  | child (caller : Evm fork Meter) (message : Message fork)
-      (resume : Evm fork Meter → Except EvmError (Evm fork Meter))
 
 /-- The step of a frame at fork `fork`: run the opcode at the program counter.
 
@@ -84,20 +76,11 @@ def step (fork : Fork) (evm : Evm fork Meter) : Except EvmError (StepResult fork
     | some op =>
       match instruction fork op with
       | some run => .next <$> run evm
-      | none => throw (.unspecifiedOpcode byte)
+      | none =>
+        match callInstruction fork op with
+        | some run => run evm
+        | none => throw (.unspecifiedOpcode byte)
   else .next <$> stopStep evm
-
-/-- A step lowers the measure of the frame `evm`.
-
-A message to run first has less gas than the frame.
-
-Any frame that ends the message with at most its gas lets the frame go on with a lower measure. -/
-def StepResult.Decreases (evm : Evm fork Meter) : StepResult fork Meter → Prop
-  | .next after => measure after < measure evm
-  | .child _ message resume =>
-    message.gas < GasMeter.gasLeft evm.gas ∧
-      ∀ child after, GasMeter.gasLeft child.gas ≤ message.gas → resume child = .ok after →
-        measure after < measure evm
 
 /-- A choice among two instructions gives one of them. -/
 private theorem orElse_eq_some {α : Type} {a b : Option α} {x : α}
@@ -145,7 +128,10 @@ theorem step_decreases [LawfulGasMeter Meter] (fork : Fork) {evm : Evm fork Mete
           simp only [hr, Functor.map, Except.map, Except.ok.injEq] at h
           subst h
           exact instruction_measure_lt hop hr running
-      · cases h
+      · split at h
+        · rename_i hcall
+          exact callInstruction_decreases hcall h running
+        · cases h
   · simp only [stopStep, Functor.map, Except.map, Except.ok.injEq] at h
     subst h
     exact measure_lt_of_stop (Nat.le_refl _) rfl running
