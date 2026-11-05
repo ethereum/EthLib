@@ -72,15 +72,15 @@ class Shapes:
         for size in sizes:
             if size is None:
                 offsets.append(len(parts))
-                parts.append(_uint(data[at:at + 4]))
+                parts.append(_uint(data[at : at + 4]))
                 at += 4
             else:
-                parts.append(data[at:at + size])
+                parts.append(data[at : at + size])
                 at += size
         # Each variable field runs from its offset to the next offset, or to the end.
         ends = [parts[i] for i in offsets[1:]] + [len(data)]
         for i, end in zip(offsets, ends):
-            parts[i] = data[parts[i]:end]
+            parts[i] = data[parts[i] : end]
         return parts
 
 
@@ -96,12 +96,14 @@ class Chain:
         self.genesis_validators_root = root
         # The block of the initial state is not in the case, so its header comes from the state.
         epoch = _uint(state[40:48]) // consensus.preset(preset)["SLOTS_PER_EPOCH"]
-        self.state_fork = [fork for fork in SPECIFIED
-                           if self.values[f"{fork.upper()}_FORK_EPOCH"] <= epoch][-1]
-        latest = state[64:64 + BEACON]
+        self.state_fork = [
+            fork for fork in SPECIFIED if self.values[f"{fork.upper()}_FORK_EPOCH"] <= epoch
+        ][-1]
+        latest = state[64 : 64 + BEACON]
         if not any(latest[48:80]):
-            state_root = consensus.ssz_static(preset, FORKS[self.state_fork], "BeaconState",
-                                              state)[0]
+            state_root = consensus.ssz_static(preset, FORKS[self.state_fork], "BeaconState", state)[
+                0
+            ]
             latest = latest[:48] + state_root + latest[80:]
         self.initial_state, self.initial_root = state, self.beacon_root(latest)
         self.headers = {self.initial_root: (None, latest)}
@@ -113,7 +115,8 @@ class Chain:
     def add_block(self, fork: str, name: str) -> None:
         """Derive the header of a block, and index it by its root and its slot."""
         root, header = consensus.block_to_light_client_header(
-            self.preset, FORKS[fork], _read(self.case, name), self.config)
+            self.preset, FORKS[fork], _read(self.case, name), self.config
+        )
         assert self.beacon_root(header[:BEACON]) == root
         self.headers[root] = (header, header[:BEACON])
         self.slots.setdefault(_uint(header[:8]), []).append(header[:BEACON])
@@ -142,7 +145,7 @@ class Block:
         self.fork, self.signed, self.post = fork, signed, post
         message = signed[100:]
         self.slot, self.parent = _uint(message[:8]), message[16:48]
-        self.body = message[_uint(message[80:84]):]
+        self.body = message[_uint(message[80:84]) :]
         self.bootstrap = None
 
 
@@ -157,10 +160,27 @@ class FullNode:
         self.committee_size = preset["SYNC_COMMITTEE_SIZE"]
         self.min_participants = preset["MIN_SYNC_COMMITTEE_PARTICIPANTS"]
         # The finalized checkpoint follows the fields that every fork keeps from Phase 0.
-        self.finalized_at = (8 + 32 + 8 + 16 + BEACON + 2 * 32 * preset["SLOTS_PER_HISTORICAL_ROOT"]
-                             + 4 + 72 + 4 + 8 + 4 + 4
-                             + 32 * preset["EPOCHS_PER_HISTORICAL_VECTOR"]
-                             + 8 * preset["EPOCHS_PER_SLASHINGS_VECTOR"] + 4 + 4 + 1 + 40 + 40)
+        self.finalized_at = (
+            8
+            + 32
+            + 8
+            + 16
+            + BEACON
+            + 2 * 32 * preset["SLOTS_PER_HISTORICAL_ROOT"]
+            + 4
+            + 72
+            + 4
+            + 8
+            + 4
+            + 4
+            + 32 * preset["EPOCHS_PER_HISTORICAL_VECTOR"]
+            + 8 * preset["EPOCHS_PER_SLASHINGS_VECTOR"]
+            + 4
+            + 4
+            + 1
+            + 40
+            + 40
+        )
         fork, state = chain.state_fork, chain.initial_state
         genesis = consensus.genesis_block(chain.preset, FORKS[fork], state)
         root = consensus.ssz_static(chain.preset, FORKS[fork], "BeaconBlock", genesis[100:])[0]
@@ -175,12 +195,12 @@ class FullNode:
 
     def finalized(self, state: bytes) -> tuple[int, bytes]:
         """The epoch and the root of the finalized checkpoint of a state."""
-        checkpoint = state[self.finalized_at:self.finalized_at + 40]
+        checkpoint = state[self.finalized_at : self.finalized_at + 40]
         return _uint(checkpoint[:8]), checkpoint[8:]
 
     def participants(self, block: Block) -> int:
         """The number of members of the sync committee that signed a block."""
-        bits = block.body[220:220 + self.committee_size // 8]
+        bits = block.body[220 : 220 + self.committee_size // 8]
         return sum(bin(byte).count("1") for byte in bits)
 
     def period(self, slot: int) -> int:
@@ -191,11 +211,16 @@ class FullNode:
         signed = _read(self.chain.case, name)
         parent = self.blocks[signed[100:][16:48]]
         # The parent's state upgrades at each fork epoch between the two blocks.
-        post = consensus.state_transition_across(self.chain.preset, FORKS[parent.fork],
-                                                 parent.post, FORKS[fork], signed, True,
-                                                 config=self.chain.config)
-        root = consensus.ssz_static(self.chain.preset, FORKS[fork], "BeaconBlock",
-                                    signed[100:])[0]
+        post = consensus.state_transition_across(
+            self.chain.preset,
+            FORKS[parent.fork],
+            parent.post,
+            FORKS[fork],
+            signed,
+            True,
+            config=self.chain.config,
+        )
+        root = consensus.ssz_static(self.chain.preset, FORKS[fork], "BeaconBlock", signed[100:])[0]
         self.blocks[root] = Block(fork, signed, post)
 
     def ancestry(self, root: bytes) -> list:
@@ -213,25 +238,36 @@ class FullNode:
             attested = self.blocks[signature.parent]
             epoch, root = self.finalized(attested.post)
             # A zero root is the genesis checkpoint, whose block is at the genesis slot.
-            finalized = (self.blocks[self.chain.initial_root] if not any(root)
-                         else self.blocks.get(root))
+            finalized = (
+                self.blocks[self.chain.initial_root] if not any(root) else self.blocks.get(root)
+            )
             # The update is of the attested block's fork, which may precede the signature's.
             self.updates[key] = consensus.create_light_client_update(
-                self.chain.preset, FORKS[signature.fork], kind, signature.post,
-                signature.signed, attested.post, attested.signed,
-                finalized.signed if finalized else None, config=self.chain.config,
+                self.chain.preset,
+                FORKS[signature.fork],
+                kind,
+                signature.post,
+                signature.signed,
+                attested.post,
+                attested.signed,
+                finalized.signed if finalized else None,
+                config=self.chain.config,
                 attested_fork=FORKS[attested.fork],
-                finalized_fork=FORKS[finalized.fork] if finalized else None)
+                finalized_fork=FORKS[finalized.fork] if finalized else None,
+            )
         return self.updates[key]
 
     def candidates(self, head: list, period: int) -> list:
         """The blocks of the head's chain whose update can be the best of a period."""
-        return [block for block in head[:-1]
-                if block.parent in self.blocks
-                and self.blocks[block.parent].slot >= self.tail
-                and self.period(self.blocks[block.parent].slot) == period
-                and self.period(block.slot) == period
-                and self.participants(block) >= self.min_participants]
+        return [
+            block
+            for block in head[:-1]
+            if block.parent in self.blocks
+            and self.blocks[block.parent].slot >= self.tail
+            and self.period(self.blocks[block.parent].slot) == period
+            and self.period(block.slot) == period
+            and self.participants(block) >= self.min_participants
+        ]
 
     def check_head(self, head_root: bytes, checks: dict) -> None:
         """Check the data served after a new head against what the post states give."""
@@ -250,7 +286,8 @@ class FullNode:
             fork = self.chain.digests[entry["bootstrap"]["fork_digest"]]
             if block.bootstrap is None:
                 block.bootstrap = consensus.create_light_client_bootstrap(
-                    preset, FORKS[fork], block.post, block.signed, config=self.chain.config)
+                    preset, FORKS[fork], block.post, block.signed, config=self.chain.config
+                )
             assert _read(self.chain.case, entry["bootstrap"]["data"]) == block.bootstrap
         for entry in checks["best_updates"]:
             candidates = self.candidates(head, entry["period"])
@@ -262,21 +299,28 @@ class FullNode:
             # The served update is that of a block of the head's chain, and none ranks above it.
             # Each update is of its attested block's fork, and ranks at the later of two forks.
             assert data in [self.update("LightClientUpdate", block) for block in candidates]
-            assert not any(consensus.is_better_update(
-                preset, FORKS[self.blocks[block.parent].fork],
-                self.update("LightClientUpdate", block), data, old_fork=FORKS[fork],
-                config=self.chain.config)
-                for block in candidates)
+            assert not any(
+                consensus.is_better_update(
+                    preset,
+                    FORKS[self.blocks[block.parent].fork],
+                    self.update("LightClientUpdate", block),
+                    data,
+                    old_fork=FORKS[fork],
+                    config=self.chain.config,
+                )
+                for block in candidates
+            )
         # The latest updates come from the latest block of the head's chain with enough
         # signatures, after the finalized block, and from its parent as the attested block.
         low = max(self.tail, old_slot)
-        signed = [block for block in head[:-1]
-                  if self.participants(block) >= self.min_participants]
+        signed = [block for block in head[:-1] if self.participants(block) >= self.min_participants]
         latest = signed[0] if signed and signed[0].slot > low else None
         if latest is not None and self.blocks[latest.parent].slot < low:
             latest = None
-        for key, kind in (("latest_finality_update", "LightClientFinalityUpdate"),
-                          ("latest_optimistic_update", "LightClientOptimisticUpdate")):
+        for key, kind in (
+            ("latest_finality_update", "LightClientFinalityUpdate"),
+            ("latest_optimistic_update", "LightClientOptimisticUpdate"),
+        ):
             assert (key in checks) == (latest is not None)
             if latest is not None:
                 assert _read(self.chain.case, checks[key]["data"]) == self.update(kind, latest)
@@ -291,21 +335,22 @@ def _check_new_head(chain: Chain, checks: dict) -> None:
         data = _read(chain.case, entry["bootstrap"]["data"])
         # A store starts from the bootstrap only if it proves its committee for that block.
         root = bytes.fromhex(entry["block_root"][2:])
-        consensus.light_client_sync(preset, FORKS[fork], FORKS[fork], root,
-                                    chain.genesis_validators_root, data, [], config)
-        header, _, _ = Shapes(preset, fork).split(data, ["header", "committee",
-                                                         "committee_branch"])
+        consensus.light_client_sync(
+            preset, FORKS[fork], FORKS[fork], root, chain.genesis_validators_root, data, [], config
+        )
+        header, _, _ = Shapes(preset, fork).split(data, ["header", "committee", "committee_branch"])
         assert chain.check_header(header) == root
     for entry in checks["best_updates"]:
         if "update" not in entry:
             continue
         fork = chain.digests[entry["update"]["fork_digest"]]
         data = _read(chain.case, entry["update"]["data"])
-        consensus.light_client_update_proofs(preset, FORKS[fork], "LightClientUpdate", data,
-                                             config)
+        consensus.light_client_update_proofs(preset, FORKS[fork], "LightClientUpdate", data, config)
         attested, _, _, finalized, _, _, slot = Shapes(preset, fork).split(
-            data, ["header", "committee", "committee_branch", "header", "finality_branch",
-                   "aggregate"] + ["slot"])
+            data,
+            ["header", "committee", "committee_branch", "header", "finality_branch", "aggregate"]
+            + ["slot"],
+        )
         root = chain.check_header(attested)
         chain.check_header(finalized, empty_allowed=True)
         chain.check_signature_slot(root, _uint(slot))
@@ -315,10 +360,12 @@ def _check_new_head(chain: Chain, checks: dict) -> None:
     if "latest_finality_update" in checks:
         fork = chain.digests[checks["latest_finality_update"]["fork_digest"]]
         data = _read(chain.case, checks["latest_finality_update"]["data"])
-        consensus.light_client_update_proofs(preset, FORKS[fork], "LightClientFinalityUpdate",
-                                             data, config)
+        consensus.light_client_update_proofs(
+            preset, FORKS[fork], "LightClientFinalityUpdate", data, config
+        )
         attested, finalized, _, _, slot = Shapes(preset, fork).split(
-            data, ["header", "header", "finality_branch", "aggregate", "slot"])
+            data, ["header", "header", "finality_branch", "aggregate", "slot"]
+        )
         chain.check_signature_slot(chain.check_header(attested), _uint(slot))
         chain.check_header(finalized, empty_allowed=True)
     if "latest_optimistic_update" in checks:
@@ -342,7 +389,7 @@ def run_data_collection_case(case: Path, preset: str) -> None:
     chain = Chain(case, preset)
     node = FullNode(chain) if _transition_runs(case.parts[-5], case.name) else None
     for step in _YAML.load((case / "steps.yaml").read_text()):
-        (kind, body), = step.items()
+        ((kind, body),) = step.items()
         if kind == "new_block":
             chain.add_block(chain.digests[body["fork_digest"]], body["data"])
             if node is not None:

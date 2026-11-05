@@ -32,8 +32,11 @@ PAIRS = list(_pairs())
 
 def _headers(pair):
     genesis, child = pair
-    return (_first_item(bytes.fromhex(genesis["rlp"])), _first_item(bytes.fromhex(child["rlp"])),
-            FORK_OF_NETWORK[genesis["network"]])
+    return (
+        _first_item(bytes.fromhex(genesis["rlp"])),
+        _first_item(bytes.fromhex(child["rlp"])),
+        FORK_OF_NETWORK[genesis["network"]],
+    )
 
 
 PAIR_IDS = [f"{p[0]['network']}-{p[0]['test'][-50:]}" for p in PAIRS]
@@ -52,12 +55,15 @@ def _mutated(header: bytes, index: int, value: bytes) -> bytes:
 
 
 # Field positions in the header list: gas limit 9, gas used 10, timestamp 11, extra data 12.
-@pytest.mark.parametrize("index,value,code", [
-    (11, b"", 206),                             # timestamp 0, not after the parent
-    (12, b"\x00" * 33, 208),                    # 33 bytes of extra data
-    (10, (2 ** 63).to_bytes(8, "big"), 203),    # gas used above the gas limit
-    (9, (2 ** 40).to_bytes(6, "big"), 204),     # a gas limit far above the parent's
-])
+@pytest.mark.parametrize(
+    "index,value,code",
+    [
+        (11, b"", 206),  # timestamp 0, not after the parent
+        (12, b"\x00" * 33, 208),  # 33 bytes of extra data
+        (10, (2**63).to_bytes(8, "big"), 203),  # gas used above the gas limit
+        (9, (2**40).to_bytes(6, "big"), 204),  # a gas limit far above the parent's
+    ],
+)
 def test_mutated_header_is_invalid(index: int, value: bytes, code: int) -> None:
     parent, header, fork = _headers(PAIRS[0])
     with pytest.raises(blocks.BlockError) as error:
@@ -66,18 +72,27 @@ def test_mutated_header_is_invalid(index: int, value: bytes, code: int) -> None:
 
 
 _INVALID = json.loads(
-    (Path(__file__).resolve().parents[4] / "tests" / "execution" / "blocks"
-     / "invalid_headers.json").read_text())
+    (
+        Path(__file__).resolve().parents[4]
+        / "tests"
+        / "execution"
+        / "blocks"
+        / "invalid_headers.json"
+    ).read_text()
+)
 
 
-@pytest.mark.parametrize("case", _INVALID,
-                         ids=[f"{c['network']}-{c['test'].split('::')[-1][:70]}-{c['block']}"
-                              for c in _INVALID])
+@pytest.mark.parametrize(
+    "case",
+    _INVALID,
+    ids=[f"{c['network']}-{c['test'].split('::')[-1][:70]}-{c['block']}" for c in _INVALID],
+)
 def test_fixture_invalid_header(case) -> None:
     fork = FORK_OF_NETWORK[case["network"]]
     with pytest.raises(blocks.BlockError) as error:
-        blocks.validate_header(fork, fork, bytes.fromhex(case["parent"]),
-                               bytes.fromhex(case["header"]))
+        blocks.validate_header(
+            fork, fork, bytes.fromhex(case["parent"]), bytes.fromhex(case["header"])
+        )
     # The first failed check is the one that the fixture names.
     assert error.value.code in case["codes"]
 
@@ -148,9 +163,11 @@ def _chain_pairs():
 CHAIN_PAIRS = list(_chain_pairs())
 
 
-@pytest.mark.parametrize("pair", CHAIN_PAIRS,
-                         ids=[f"{p[0]['network']}-{p[0]['test'][-40:]}-{p[1]['block']}"
-                              for p in CHAIN_PAIRS])
+@pytest.mark.parametrize(
+    "pair",
+    CHAIN_PAIRS,
+    ids=[f"{p[0]['network']}-{p[0]['test'][-40:]}-{p[1]['block']}" for p in CHAIN_PAIRS],
+)
 def test_fixture_chain_passes_the_header_checks(pair) -> None:
     # The fixtures run without proof of work, so every check but the seal applies.
     parent, header, fork = _headers(pair)
@@ -167,13 +184,15 @@ def test_wrong_difficulty_before_paris_is_rejected() -> None:
     parent, header, fork = _headers(pair)
     difficulty = int.from_bytes(rlp.decode(header)[7], "big") + 1
     with pytest.raises(blocks.BlockError) as error:
-        blocks.check_header(fork, fork, parent, _mutated(header, 7, difficulty.to_bytes(8, "big")
-                                                         .lstrip(b"\x00")))
+        blocks.check_header(
+            fork, fork, parent, _mutated(header, 7, difficulty.to_bytes(8, "big").lstrip(b"\x00"))
+        )
     assert error.value.code == 215
 
 
-@pytest.mark.skipif(os.environ.get("ETHLIB_SLOW_VECTORS") != "1",
-                    reason="the Ethash cache of epoch 0, run weekly")
+@pytest.mark.skipif(
+    os.environ.get("ETHLIB_SLOW_VECTORS") != "1", reason="the Ethash cache of epoch 0, run weekly"
+)
 def test_unsealed_header_fails_the_proof_of_work() -> None:
     # The fixtures carry no proof of work, so the full check rejects them before Paris.
     pair = next(p for p in CHAIN_PAIRS if p[0]["network"] == "Frontier")

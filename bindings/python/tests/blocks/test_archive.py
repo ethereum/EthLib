@@ -41,7 +41,8 @@ def test_block(archive, case) -> None:
 
 
 @pytest.mark.parametrize(
-    "case", RECEIPTS, ids=lambda c: f"{c['source']}-{c['block']}-{c['receipt']}")
+    "case", RECEIPTS, ids=lambda c: f"{c['source']}-{c['block']}-{c['receipt']}"
+)
 def test_receipt(archive, case) -> None:
     fixture = _fixture(archive, case["source"], case["test"])
     assert case["network"] == fixture["network"]

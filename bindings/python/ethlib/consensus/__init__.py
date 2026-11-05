@@ -66,19 +66,26 @@ def pq_keys_ssz(type_name: str, data: bytes) -> tuple[bytes, bytes]:
     return out[:32], out[32:]
 
 
-def pq_keys_possession_signing_root(genesis_validators_root: bytes, pubkey: bytes,
-                                    xmss_public_key: bytes, name: str = "mainnet") -> bytes:
+def pq_keys_possession_signing_root(
+    genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes, name: str = "mainnet"
+) -> bytes:
     """The root that an EIP-8450 proof of possession signs."""
-    return _native.pq_keys_possession_signing_root(name, genesis_validators_root, pubkey,
-                                                   xmss_public_key)
+    return _native.pq_keys_possession_signing_root(
+        name, genesis_validators_root, pubkey, xmss_public_key
+    )
 
 
-def pq_keys_is_valid_possession_proof(genesis_validators_root: bytes, pubkey: bytes,
-                                      xmss_public_key: bytes, proof: bytes,
-                                      name: str = "mainnet") -> bool:
+def pq_keys_is_valid_possession_proof(
+    genesis_validators_root: bytes,
+    pubkey: bytes,
+    xmss_public_key: bytes,
+    proof: bytes,
+    name: str = "mainnet",
+) -> bool:
     """Whether an EIP-8450 proof of possession is valid."""
-    return _native.pq_keys_is_valid_possession_proof(name, genesis_validators_root, pubkey,
-                                                     xmss_public_key, proof)
+    return _native.pq_keys_is_valid_possession_proof(
+        name, genesis_validators_root, pubkey, xmss_public_key, proof
+    )
 
 
 def compute_shuffled_permutation(count: int, seed: bytes, name: str = "mainnet") -> list:
@@ -148,7 +155,7 @@ def compute_subscribed_subnets(node_id: int, epoch: int, name: str = "mainnet") 
 def merkle_proof(name: str, fork: str, type_name: str, data: bytes, gindex: int) -> tuple:
     """The node at a generalized index of a beacon container, and its branch up to the root."""
     out = _native.consensus_merkle_proof(name, fork, type_name, data, gindex)
-    return out[:32], [out[i:i + 32] for i in range(32, len(out), 32)]
+    return out[:32], [out[i : i + 32] for i in range(32, len(out), 32)]
 
 
 def verify_blob_sidecar_inclusion_proof(name: str, fork: str, data: bytes) -> bool:
@@ -165,12 +172,13 @@ def _list_items(data: bytes) -> list:
     if not data:
         return []
     first = int.from_bytes(data[:4], "little")
-    offsets = [int.from_bytes(data[i:i + 4], "little") for i in range(0, first, 4)]
+    offsets = [int.from_bytes(data[i : i + 4], "little") for i in range(0, first, 4)]
     return [data[a:b] for a, b in zip(offsets, offsets[1:] + [len(data)])]
 
 
-def verify_data_column_sidecar(name: str, fork: str, data: bytes, block: bytes = b"",
-                               config: dict | None = None) -> bool:
+def verify_data_column_sidecar(
+    name: str, fork: str, data: bytes, block: bytes = b"", config: dict | None = None
+) -> bool:
     """Whether a data column sidecar has a valid shape; from Gloas, against its signed block."""
     replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_verify_data_column_sidecar(name, fork, data, block, replacements)
@@ -181,8 +189,9 @@ def verify_data_column_sidecar_inclusion_proof(name: str, fork: str, data: bytes
     return _native.consensus_verify_data_column_sidecar_inclusion_proof(name, fork, data)
 
 
-def verify_data_column_sidecar_kzg_proofs(name: str, fork: str, data: bytes,
-                                          block: bytes = b"") -> bool:
+def verify_data_column_sidecar_kzg_proofs(
+    name: str, fork: str, data: bytes, block: bytes = b""
+) -> bool:
     """Whether the cells of a data column sidecar match its commitments by their proofs."""
     return _native.consensus_verify_data_column_sidecar_kzg_proofs(name, fork, data, block)
 
@@ -192,29 +201,46 @@ def verify_partial_data_column_header_inclusion_proof(name: str, fork: str, data
     return _native.consensus_verify_partial_data_column_header_inclusion_proof(name, fork, data)
 
 
-def verify_partial_data_column_sidecar_kzg_proofs(name: str, fork: str, data: bytes,
-                                                  commitments: bytes, column_index: int) -> bool:
+def verify_partial_data_column_sidecar_kzg_proofs(
+    name: str, fork: str, data: bytes, commitments: bytes, column_index: int
+) -> bool:
     """Whether the cells of a partial data column sidecar match their commitments."""
     return _native.consensus_verify_partial_data_column_sidecar_kzg_proofs(
-        name, fork, data, commitments, column_index)
+        name, fork, data, commitments, column_index
+    )
 
 
-def light_client_sync(name: str, fork: str, bootstrap_fork: str, trusted_block_root: bytes,
-                      genesis_validators_root: bytes, bootstrap: bytes, steps: list,
-                      config: dict | None = None) -> list:
+def light_client_sync(
+    name: str,
+    fork: str,
+    bootstrap_fork: str,
+    trusted_block_root: bytes,
+    genesis_validators_root: bytes,
+    bootstrap: bytes,
+    steps: list,
+    config: dict | None = None,
+) -> list:
     """The finalized and optimistic headers, as slot and two roots, after each step of a sync."""
     # A step is ("update", fork, slot, update), ("force", slot) or ("upgrade", fork).
     replacements = json.dumps(config).encode() if config else b""
     records = b"".join(_sync_step(*step) for step in steps)
-    out = _native.consensus_light_client_sync(name, fork, bootstrap_fork, replacements,
-                                              trusted_block_root, genesis_validators_root,
-                                              bootstrap, records)
+    out = _native.consensus_light_client_sync(
+        name,
+        fork,
+        bootstrap_fork,
+        replacements,
+        trusted_block_root,
+        genesis_validators_root,
+        bootstrap,
+        records,
+    )
 
     def header(record: bytes) -> tuple:
         return int.from_bytes(record[:8], "little"), record[8:40], record[40:72]
 
-    return [(header(out[i:i + 72]), header(out[i + 72:i + 144]))
-            for i in range(0, len(out), 144)]
+    return [
+        (header(out[i : i + 72]), header(out[i + 72 : i + 144])) for i in range(0, len(out), 144)
+    ]
 
 
 def _sync_step(kind: str, *fields) -> bytes:
@@ -229,31 +255,46 @@ def _sync_step(kind: str, *fields) -> bytes:
         case _:
             raise ValueError(f"no sync step {kind} {fields}")
     name = fork.encode()
-    return (bytes([code]) + slot.to_bytes(8, "little") + bytes([len(name)]) + name
-            + len(data).to_bytes(4, "little") + data)
+    return (
+        bytes([code])
+        + slot.to_bytes(8, "little")
+        + bytes([len(name)])
+        + name
+        + len(data).to_bytes(4, "little")
+        + data
+    )
 
 
-def block_to_light_client_header(name: str, fork: str, block: bytes,
-                                 config: dict | None = None) -> tuple[bytes, bytes]:
+def block_to_light_client_header(
+    name: str, fork: str, block: bytes, config: dict | None = None
+) -> tuple[bytes, bytes]:
     """The root of a signed block, and the SSZ bytes of its light client header."""
     replacements = json.dumps(config).encode() if config else b""
     out = _native.consensus_block_to_light_client_header(name, fork, replacements, block)
     return out[:32], out[32:]
 
 
-def light_client_update_proofs(name: str, fork: str, type_name: str, data: bytes,
-                               config: dict | None = None) -> bool:
+def light_client_update_proofs(
+    name: str, fork: str, type_name: str, data: bytes, config: dict | None = None
+) -> bool:
     """Check the attested header and the branches of a light client update."""
     replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_light_client_update_proofs(name, fork, type_name, replacements, data)
 
 
-def is_better_update(name: str, fork: str, new_update: bytes, old_update: bytes,
-                     old_fork: str | None = None, config: dict | None = None) -> bool:
+def is_better_update(
+    name: str,
+    fork: str,
+    new_update: bytes,
+    old_update: bytes,
+    old_fork: str | None = None,
+    config: dict | None = None,
+) -> bool:
     """Whether a new light client update ranks above an old one, both at the later fork."""
     replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_is_better_update(name, fork, old_fork or fork, replacements,
-                                              new_update, old_update)
+    return _native.consensus_is_better_update(
+        name, fork, old_fork or fork, replacements, new_update, old_update
+    )
 
 
 def genesis_block(name: str, fork: str, state: bytes) -> bytes:
@@ -261,112 +302,167 @@ def genesis_block(name: str, fork: str, state: bytes) -> bytes:
     return _native.consensus_genesis_block(name, fork, state)
 
 
-def create_light_client_bootstrap(name: str, fork: str, state: bytes, block: bytes,
-                                  config: dict | None = None) -> bytes:
+def create_light_client_bootstrap(
+    name: str, fork: str, state: bytes, block: bytes, config: dict | None = None
+) -> bytes:
     """The SSZ bytes of the bootstrap that a full node serves for a block and its post state."""
     replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_create_light_client_bootstrap(name, fork, replacements, state, block)
 
 
-def create_light_client_update(name: str, fork: str, type_name: str, state: bytes, block: bytes,
-                               attested_state: bytes, attested_block: bytes,
-                               finalized_block: bytes | None,
-                               config: dict | None = None, attested_fork: str | None = None,
-                               finalized_fork: str | None = None) -> bytes:
+def create_light_client_update(
+    name: str,
+    fork: str,
+    type_name: str,
+    state: bytes,
+    block: bytes,
+    attested_state: bytes,
+    attested_block: bytes,
+    finalized_block: bytes | None,
+    config: dict | None = None,
+    attested_fork: str | None = None,
+    finalized_fork: str | None = None,
+) -> bytes:
     """The SSZ bytes of the update of a type that a full node serves for a block."""
     replacements = json.dumps(config).encode() if config else b""
     attested_fork = attested_fork or fork
     return _native.consensus_create_light_client_update(
-        name, fork, attested_fork, finalized_fork or attested_fork, type_name, replacements,
-        state, block, attested_state, attested_block, finalized_block or b"")
+        name,
+        fork,
+        attested_fork,
+        finalized_fork or attested_fork,
+        type_name,
+        replacements,
+        state,
+        block,
+        attested_state,
+        attested_block,
+        finalized_block or b"",
+    )
 
 
-def compute_fork_digest(name: str, genesis_validators_root: bytes, epoch: int,
-                        config: dict | None = None) -> bytes:
+def compute_fork_digest(
+    name: str, genesis_validators_root: bytes, epoch: int, config: dict | None = None
+) -> bytes:
     """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
     replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_compute_fork_digest(name, replacements, genesis_validators_root,
-                                                 epoch)
+    return _native.consensus_compute_fork_digest(name, replacements, genesis_validators_root, epoch)
 
 
 def compute_matrix(blobs: list) -> list:
     """The entries of the matrix of the blobs, each in its SSZ encoding."""
     out = _native.consensus_compute_matrix(b"".join(blobs))
-    return [out[i:i + MATRIX_ENTRY_BYTES] for i in range(0, len(out), MATRIX_ENTRY_BYTES)]
+    return [out[i : i + MATRIX_ENTRY_BYTES] for i in range(0, len(out), MATRIX_ENTRY_BYTES)]
 
 
 def recover_matrix(entries: list, blob_count: int) -> list:
     """The entries of the full matrix of `blob_count` rows, recovered from some of its entries."""
     out = _native.consensus_recover_matrix(b"".join(entries), blob_count)
-    return [out[i:i + MATRIX_ENTRY_BYTES] for i in range(0, len(out), MATRIX_ENTRY_BYTES)]
+    return [out[i : i + MATRIX_ENTRY_BYTES] for i in range(0, len(out), MATRIX_ENTRY_BYTES)]
 
 
 def get_data_column_sidecars_from_block(name: str, fork: str, block: bytes, rows: list) -> list:
     """The data column sidecars of a signed block, from the cells and proofs of each blob."""
     joined = b"".join(b"".join(cells) + b"".join(proofs) for cells, proofs in rows)
     return _list_items(
-        _native.consensus_get_data_column_sidecars_from_block(name, fork, block, joined))
+        _native.consensus_get_data_column_sidecars_from_block(name, fork, block, joined)
+    )
 
 
-def get_data_column_sidecars_from_column_sidecar(name: str, fork: str, sidecar: bytes,
-                                                 rows: list) -> list:
+def get_data_column_sidecars_from_column_sidecar(
+    name: str, fork: str, sidecar: bytes, rows: list
+) -> list:
     """All the data column sidecars of a block, from one of them and the cells of each blob."""
     joined = b"".join(b"".join(cells) + b"".join(proofs) for cells, proofs in rows)
-    return _list_items(_native.consensus_get_data_column_sidecars_from_column_sidecar(
-        name, fork, sidecar, joined))
+    return _list_items(
+        _native.consensus_get_data_column_sidecars_from_column_sidecar(name, fork, sidecar, joined)
+    )
 
 
-def process_operation(name: str, fork: str, handler: str, pre: bytes, operation: bytes,
-                      verify: bool = True, config: dict | None = None,
-                      execution_valid: bool = True) -> bytes:
+def process_operation(
+    name: str,
+    fork: str,
+    handler: str,
+    pre: bytes,
+    operation: bytes,
+    verify: bool = True,
+    config: dict | None = None,
+    execution_valid: bool = True,
+) -> bytes:
     """The SSZ bytes of a beacon state after one block operation, or TransitionError."""
     replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_process_operation(name, fork, handler, pre, operation, replacements,
-                                               verify, execution_valid)
+    return _native.consensus_process_operation(
+        name, fork, handler, pre, operation, replacements, verify, execution_valid
+    )
 
 
-def process_epoch(name: str, fork: str, handler: str, pre: bytes,
-                  config: dict | None = None) -> bytes:
+def process_epoch(
+    name: str, fork: str, handler: str, pre: bytes, config: dict | None = None
+) -> bytes:
     """The SSZ bytes of a beacon state after one step of the epoch transition, or TransitionError."""
     replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_process_epoch(name, fork, handler, pre, replacements)
 
 
-def rewards_deltas(name: str, fork: str, component: str, pre: bytes,
-                   config: dict | None = None) -> bytes:
+def rewards_deltas(
+    name: str, fork: str, component: str, pre: bytes, config: dict | None = None
+) -> bytes:
     """The SSZ bytes of the reward and penalty deltas of one kind of vote, or TransitionError."""
     replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_rewards_deltas(name, fork, component, pre, replacements)
 
 
-def process_slots(name: str, fork: str, pre: bytes, slots: int,
-                  config: dict | None = None) -> bytes:
+def process_slots(
+    name: str, fork: str, pre: bytes, slots: int, config: dict | None = None
+) -> bytes:
     """The SSZ bytes of a beacon state some slots later, or TransitionError."""
     replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_process_slots(name, fork, pre, replacements, slots)
 
 
-def state_transition(name: str, fork: str, pre: bytes, block: bytes, verify: bool = True,
-                     config: dict | None = None) -> bytes:
+def state_transition(
+    name: str, fork: str, pre: bytes, block: bytes, verify: bool = True, config: dict | None = None
+) -> bytes:
     """The SSZ bytes of a beacon state after a signed block, or TransitionError."""
     replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_state_transition(name, fork, pre, block, replacements, verify)
 
 
-def state_transition_across(name: str, fork: str, pre: bytes, block_fork: str, block: bytes,
-                            verify: bool = True, config: dict | None = None) -> bytes:
+def state_transition_across(
+    name: str,
+    fork: str,
+    pre: bytes,
+    block_fork: str,
+    block: bytes,
+    verify: bool = True,
+    config: dict | None = None,
+) -> bytes:
     """The SSZ bytes of a state after a block of the same or a later fork, or TransitionError."""
     replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_state_transition_across(name, fork, pre, block_fork, block,
-                                                     replacements, verify)
+    return _native.consensus_state_transition_across(
+        name, fork, pre, block_fork, block, replacements, verify
+    )
 
 
-_FORK_CHOICE_STEPS = {"tick": 0, "block": 1, "attestation": 2, "attester_slashing": 3,
-                      "checks": 4, "pow_block": 5}
+_FORK_CHOICE_STEPS = {
+    "tick": 0,
+    "block": 1,
+    "attestation": 2,
+    "attester_slashing": 3,
+    "checks": 4,
+    "pow_block": 5,
+}
 
 
-def fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list,
-                verify: bool = True, config: dict | None = None) -> list:
+def fork_choice(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list,
+    verify: bool = True,
+    config: dict | None = None,
+) -> list:
     """The outcome of each step of a fork choice case, from an anchor state and block."""
     # A step is (kind, data): the tick in seconds, the SSZ bytes of a block, an attestation, an
     # attester slashing or a PoW block, or for "checks" whether to read the proposer head.
@@ -386,12 +482,14 @@ def fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, 
         elif kind == "block" and isinstance(data, tuple):
             data, columns = data
             held = len(columns).to_bytes(4, "little") + b"".join(
-                len(column).to_bytes(4, "little") + column for column in columns)
+                len(column).to_bytes(4, "little") + column for column in columns
+            )
             records += bytes([7]) + len(held).to_bytes(4, "little") + held
         records += bytes([_FORK_CHOICE_STEPS[kind]]) + len(data).to_bytes(4, "little") + data
     replacements = json.dumps(config).encode() if config else b""
-    out = _native.consensus_fork_choice(name, fork, anchor_state, anchor_block, records,
-                                        replacements, verify)
+    out = _native.consensus_fork_choice(
+        name, fork, anchor_state, anchor_block, records, replacements, verify
+    )
     outcomes, offset = [], 0
     for kind, data in steps:
         if kind == "block" and isinstance(data, tuple):
@@ -399,27 +497,28 @@ def fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, 
             offset += 1
         status, offset = out[offset], offset + 1
         if status == 1:
-            code = int.from_bytes(out[offset:offset + 4], "little")
-            length = int.from_bytes(out[offset + 4:offset + 8], "little")
-            message = out[offset + 8:offset + 8 + length].decode()
+            code = int.from_bytes(out[offset : offset + 4], "little")
+            length = int.from_bytes(out[offset + 4 : offset + 8], "little")
+            message = out[offset + 8 : offset + 8 + length].decode()
             outcomes.append(ForkChoiceError(code, message))
             offset += 8 + length
         elif kind != "checks":
             outcomes.append(None)
         else:
             size = 168 + 32 * bool(data)
-            outcomes.append(_store_record(out[offset:offset + size]))
+            outcomes.append(_store_record(out[offset : offset + size]))
             offset += size
     return outcomes
 
 
 def _store_record(record: bytes) -> dict:
     """A read of the store, from its bytes."""
+
     def number(start: int) -> int:
-        return int.from_bytes(record[start:start + 8], "little")
+        return int.from_bytes(record[start : start + 8], "little")
 
     def checkpoint(start: int) -> dict:
-        return {"epoch": number(start), "root": record[start + 8:start + 40]}
+        return {"epoch": number(start), "root": record[start + 8 : start + 40]}
 
     read = {
         "head": {"slot": number(0), "root": record[8:40]},
@@ -434,24 +533,31 @@ def _store_record(record: bytes) -> dict:
     return read
 
 
-def initialize_genesis(name: str, fork: str, eth1_block_hash: bytes, eth1_timestamp: int,
-                       deposits: list[bytes], verify: bool = True,
-                       config: dict | None = None) -> bytes:
+def initialize_genesis(
+    name: str,
+    fork: str,
+    eth1_block_hash: bytes,
+    eth1_timestamp: int,
+    deposits: list[bytes],
+    verify: bool = True,
+    config: dict | None = None,
+) -> bytes:
     """The SSZ bytes of the candidate genesis state of a block and its deposits."""
     replacements = json.dumps(config).encode() if config else b""
-    return _native.consensus_initialize_genesis(name, fork, eth1_block_hash, b"".join(deposits),
-                                                replacements, eth1_timestamp, verify)
+    return _native.consensus_initialize_genesis(
+        name, fork, eth1_block_hash, b"".join(deposits), replacements, eth1_timestamp, verify
+    )
 
 
-def is_valid_genesis_state(name: str, fork: str, state: bytes,
-                           config: dict | None = None) -> bool:
+def is_valid_genesis_state(name: str, fork: str, state: bytes, config: dict | None = None) -> bool:
     """Whether a candidate genesis state launches the chain."""
     replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_is_valid_genesis_state(name, fork, state, replacements)
 
 
-def upgrade_state(name: str, fork: str, pre: bytes, verify: bool = True,
-                  config: dict | None = None) -> bytes:
+def upgrade_state(
+    name: str, fork: str, pre: bytes, verify: bool = True, config: dict | None = None
+) -> bytes:
     """The SSZ bytes of a state upgraded to a fork from the fork before, or TransitionError."""
     replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_upgrade_state(name, fork, pre, replacements, verify)

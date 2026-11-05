@@ -18,10 +18,15 @@ def _emit(case: str, blob: bytes, commitment: bytes, valid: bool) -> None:
     except Exception:
         proof = None
     assert (proof is not None) == valid
-    write_case("kzg", HANDLER, case, {
-        "input":  {"blob": hex_str(blob), "commitment": hex_str(commitment)},
-        "output": hex_str(proof) if proof is not None else None,
-    })
+    write_case(
+        "kzg",
+        HANDLER,
+        case,
+        {
+            "input": {"blob": hex_str(blob), "commitment": hex_str(commitment)},
+            "output": hex_str(proof) if proof is not None else None,
+        },
+    )
 
 
 @pytest.mark.parametrize("i", range(len(F.VALID_BLOBS)))
@@ -32,11 +37,14 @@ def test_valid_blob(i: int) -> None:
 
 @pytest.mark.parametrize("i", range(len(F.INVALID_BLOBS)))
 def test_invalid_blob(i: int) -> None:
-    _emit(f"{HANDLER}_case_invalid_blob_{i}",
-          F.INVALID_BLOBS[i], F.G1, valid=False)
+    _emit(f"{HANDLER}_case_invalid_blob_{i}", F.INVALID_BLOBS[i], F.G1, valid=False)
 
 
 @pytest.mark.parametrize("i", range(len(F.INVALID_G1_POINTS)))
 def test_invalid_commitment(i: int) -> None:
-    _emit(f"{HANDLER}_case_invalid_commitment_{i}",
-          F.VALID_BLOBS[1], F.INVALID_G1_POINTS[i], valid=False)
+    _emit(
+        f"{HANDLER}_case_invalid_commitment_{i}",
+        F.VALID_BLOBS[1],
+        F.INVALID_G1_POINTS[i],
+        valid=False,
+    )

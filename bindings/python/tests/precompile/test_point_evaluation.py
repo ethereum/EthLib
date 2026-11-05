@@ -42,8 +42,10 @@ def call_data(name: str) -> tuple[bytes, bool | None]:
     data = YAML(typ="safe").load((VECTORS / name / "data.yaml").read_text())
     fields = {key: bytes.fromhex(value[2:]) for key, value in data["input"].items()}
     commitment = fields["commitment"]
-    return (versioned_hash(commitment) + fields["z"] + fields["y"] + commitment + fields["proof"],
-            data["output"])
+    return (
+        versioned_hash(commitment) + fields["z"] + fields["y"] + commitment + fields["proof"],
+        data["output"],
+    )
 
 
 def test_found_vectors() -> None:

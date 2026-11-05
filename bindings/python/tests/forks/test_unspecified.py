@@ -19,13 +19,18 @@ _CASES = json.loads(_FILE.read_text())
 
 # The first Amsterdam block of the fixtures after a genesis block, and its header.
 AMSTERDAM_BLOCK = next(
-    bytes.fromhex(c["rlp"]) for c in _CASES if c["network"] == "Amsterdam" and c["block"] == 0)
+    bytes.fromhex(c["rlp"]) for c in _CASES if c["network"] == "Amsterdam" and c["block"] == 0
+)
 HEADER = rlp.encode(rlp.decode(AMSTERDAM_BLOCK)[0])
 
 # The first typed transaction of a Prague block, a form that Amsterdam keeps.
 TRANSACTION = next(
-    t for c in _CASES if c["network"] == "Prague"
-    for t in rlp.decode(bytes.fromhex(c["rlp"]))[1] if isinstance(t, bytes))
+    t
+    for c in _CASES
+    if c["network"] == "Prague"
+    for t in rlp.decode(bytes.fromhex(c["rlp"]))[1]
+    if isinstance(t, bytes)
+)
 
 # The empty state, as the list of its accounts.
 EMPTY_STATE = rlp.encode([])
@@ -69,12 +74,32 @@ EXPORTS = {
 # the checks of a header and of a transaction, the blob schedule, proof of work, the precompiles,
 # the preset parameters of Gloas, and the containers that Gloas keeps, such as a checkpoint.
 AT_GLAMSTERDAM = {
-    "tx_type", "tx_hash", "recover_sender", "header_hash", "reencode", "transactions_root",
-    "withdrawals_root", "validate_header", "validate_size", "receipt_reencode",
-    "receipt_logs_bloom", "state_withdrawals_root", "base_fee_per_blob_gas", "excess_blob_gas",
-    "block_difficulty", "seal_hash", "check_proof_of_work", "precompile_run", "precompile_price",
-    "consensus_parameters", "check_header", "state_rewards_root", "validate_ommers",
-    "intrinsic_gas", "check", "ssz_static",
+    "tx_type",
+    "tx_hash",
+    "recover_sender",
+    "header_hash",
+    "reencode",
+    "transactions_root",
+    "withdrawals_root",
+    "validate_header",
+    "validate_size",
+    "receipt_reencode",
+    "receipt_logs_bloom",
+    "state_withdrawals_root",
+    "base_fee_per_blob_gas",
+    "excess_blob_gas",
+    "block_difficulty",
+    "seal_hash",
+    "check_proof_of_work",
+    "precompile_run",
+    "precompile_price",
+    "consensus_parameters",
+    "check_header",
+    "state_rewards_root",
+    "validate_ommers",
+    "intrinsic_gas",
+    "check",
+    "ssz_static",
 }
 
 # The exports whose rules hold at Hegotá: the preset parameters of Heze, and the containers that

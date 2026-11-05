@@ -9,11 +9,18 @@ from ethlib.errors import FeesError
 from ethlib.execution import fees
 from ethlib.serialization import rlp
 
-_BLOCKS = json.loads((Path(__file__).resolve().parents[4] / "tests" / "execution" / "blocks"
-                      / "blockchain_tests.json").read_text())
+_BLOCKS = json.loads(
+    (
+        Path(__file__).resolve().parents[4]
+        / "tests"
+        / "execution"
+        / "blocks"
+        / "blockchain_tests.json"
+    ).read_text()
+)
 
 # EIP-4844 "Parameters": the blob gas of one blob.
-GAS_PER_BLOB = 2 ** 17
+GAS_PER_BLOB = 2**17
 
 # The update fraction of each fork, from EIP-4844, EIP-7691, EIP-8134 and EIP-8135.
 UPDATE_FRACTION = {"dencun": 3338477, "pectra": 5007716, "bpo1": 8346193, "bpo2": 11684671}
@@ -50,7 +57,7 @@ def test_fixture_has_blobs() -> None:
 
 
 @pytest.mark.parametrize("fork", sorted(UPDATE_FRACTION))
-@pytest.mark.parametrize("excess", [0, 1, 393216, 2 ** 20, 10 ** 8])
+@pytest.mark.parametrize("excess", [0, 1, 393216, 2**20, 10**8])
 def test_data_fee_of_blob_transaction(fork: str, excess: int) -> None:
     price = fake_exponential(1, excess, UPDATE_FRACTION[fork])
     assert fees.calculate_data_fee(fork, excess, BLOB_TX) == GAS_PER_BLOB * BLOB_COUNT * price
@@ -61,7 +68,7 @@ def test_transactions_without_blobs_pay_nothing(network: str, fork: str) -> None
     others = [tx for tx in _transactions(network) if tx[0] != 3]
     assert others
     for tx in others:
-        assert fees.calculate_data_fee(fork, 10 ** 8, tx) == 0
+        assert fees.calculate_data_fee(fork, 10**8, tx) == 0
 
 
 def test_fork_before_dencun_rejected() -> None:

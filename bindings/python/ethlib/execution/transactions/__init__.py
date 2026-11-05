@@ -70,13 +70,25 @@ class Included(NamedTuple):
 
 
 def check_in_block(
-    fork: str, chain_id: int, tx: bytes, state: bytes, *, gas_limit: int, gas_used: int,
-    blob_gas_used: int, base_fee: int, excess_blob_gas: int,
+    fork: str,
+    chain_id: int,
+    tx: bytes,
+    state: bytes,
+    *,
+    gas_limit: int,
+    gas_used: int,
+    blob_gas_used: int,
+    base_fee: int,
+    excess_blob_gas: int,
 ) -> Included:
     """Check that a transaction may enter its block, against a state in the form of `state_root`."""
     raw = _native.tx_check_in_block(
-        fork, chain_id, tx, state, *map(_number, (gas_limit, gas_used, blob_gas_used, base_fee,
-                                                  excess_blob_gas)))
+        fork,
+        chain_id,
+        tx,
+        state,
+        *map(_number, (gas_limit, gas_used, blob_gas_used, base_fee, excess_blob_gas)),
+    )
     return Included(raw[:20], int.from_bytes(raw[20:52], "big"), int.from_bytes(raw[52:60], "big"))
 
 
@@ -93,14 +105,15 @@ class Run(NamedTuple):
 def run(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> Run:
     """Run one transaction on a state in the form of `state_root`, in a block that `env` encodes."""
     root, logs, gas_used, succeeded, accounts = rlp.decode(
-        _native.tx_run(fork, chain_id, tx, state, env))
+        _native.tx_run(fork, chain_id, tx, state, env)
+    )
     return Run(root, logs, int.from_bytes(gas_used, "big"), succeeded == b"\x01", accounts)
 
 
 def settle(fork: str, tx: bytes, base_fee: int, gas_left: int, refund_counter: int) -> Settlement:
     """Settle the gas of a transaction, from its gas left and its refund counter."""
     raw = _native.tx_settle(fork, tx, _number(base_fee), _number(gas_left), _number(refund_counter))
-    return Settlement(*(int.from_bytes(raw[i:i + 64], "big") for i in range(0, 256, 64)))
+    return Settlement(*(int.from_bytes(raw[i : i + 64], "big") for i in range(0, 256, 64)))
 
 
 __all__ = [

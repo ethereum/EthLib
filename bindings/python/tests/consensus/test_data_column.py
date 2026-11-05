@@ -73,13 +73,13 @@ def replacements(case_config: dict, name: str) -> dict:
 
 def _sidecar_parts(data: bytes) -> dict:
     """The fields of a sidecar that the tests compare, read at their SSZ offsets."""
-    column, commitments, proofs = (int.from_bytes(data[i:i + 4], "little") for i in (8, 12, 16))
+    column, commitments, proofs = (int.from_bytes(data[i : i + 4], "little") for i in (8, 12, 16))
     header = data[20:228]
     return {
         "index": int.from_bytes(data[:8], "little"),
-        "cells": [data[i:i + CELL] for i in range(column, commitments, CELL)],
+        "cells": [data[i : i + CELL] for i in range(column, commitments, CELL)],
         "commitments": data[commitments:proofs],
-        "proofs": [data[i:i + PROOF] for i in range(proofs, len(data), PROOF)],
+        "proofs": [data[i : i + PROOF] for i in range(proofs, len(data), PROOF)],
         "header": header,
         "branch": data[228:356],
     }
@@ -87,11 +87,11 @@ def _sidecar_parts(data: bytes) -> dict:
 
 def _gloas_sidecar_parts(data: bytes) -> dict:
     """The fields of a sidecar from Gloas, read at their SSZ offsets."""
-    column, proofs = (int.from_bytes(data[i:i + 4], "little") for i in (8, 12))
+    column, proofs = (int.from_bytes(data[i : i + 4], "little") for i in (8, 12))
     return {
         "index": int.from_bytes(data[:8], "little"),
-        "cells": [data[i:i + CELL] for i in range(column, proofs, CELL)],
-        "proofs": [data[i:i + PROOF] for i in range(proofs, len(data), PROOF)],
+        "cells": [data[i : i + CELL] for i in range(column, proofs, CELL)],
+        "proofs": [data[i : i + PROOF] for i in range(proofs, len(data), PROOF)],
         "slot": data[16:24],
         "root": data[24:56],
     }
@@ -138,8 +138,9 @@ def run_gossip_case(case: Path, preset: str) -> None:
             "kzg": kzg,
         }
         if fork not in GLOAS:
-            results["inclusion"] = \
-                consensus.verify_data_column_sidecar_inclusion_proof(preset, fork, data)
+            results["inclusion"] = consensus.verify_data_column_sidecar_inclusion_proof(
+                preset, fork, data
+            )
         failing = REASONS.get(message.get("reason"))
         if failing is None:
             assert all(results.values()), (message, results)
@@ -148,16 +149,18 @@ def run_gossip_case(case: Path, preset: str) -> None:
 
 
 def _gossip_cases(fork: str = "*") -> list:
-    return [pytest.param(case.parts[-6], case,
-                         id=f"{case.parts[-6]}-{case.parts[-5]}-{case.name}")
-            for case in sorted(FILES.glob(f"*/{fork}/networking/gossip_data_column_sidecar/*/*"))]
+    return [
+        pytest.param(case.parts[-6], case, id=f"{case.parts[-6]}-{case.parts[-5]}-{case.name}")
+        for case in sorted(FILES.glob(f"*/{fork}/networking/gossip_data_column_sidecar/*/*"))
+    ]
 
 
 def test_digests():
     lines = (FILES / "SHA256SUMS").read_text().splitlines()
     entries = [line.split() for line in lines if not line.startswith("#")]
-    assert len(entries) == sum(1 for path in FILES.rglob("*") if path.is_file()
-                               and path.name != "SHA256SUMS")
+    assert len(entries) == sum(
+        1 for path in FILES.rglob("*") if path.is_file() and path.name != "SHA256SUMS"
+    )
     for digest, name in entries:
         assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name
 
@@ -197,8 +200,14 @@ def _valid_gloas_messages() -> list:
             preset, case = param.values
             for message in _yaml(case / "meta.yaml")["messages"]:
                 if message["expected"] == "valid":
-                    params.append(pytest.param(preset, case, message["message"],
-                                               id=f"{param.id}-{message['message'][-8:]}"))
+                    params.append(
+                        pytest.param(
+                            preset,
+                            case,
+                            message["message"],
+                            id=f"{param.id}-{message['message'][-8:]}",
+                        )
+                    )
     return params
 
 
@@ -280,8 +289,10 @@ def test_block_of_another_root():
 
 
 def _fulu_proof_cases() -> list:
-    return [pytest.param(case.parts[-6], case, id=f"{case.parts[-6]}-{case.name}")
-            for case in sorted(PROOFS.glob("*/fulu/merkle_proof/*/BeaconBlockBody/*"))]
+    return [
+        pytest.param(case.parts[-6], case, id=f"{case.parts[-6]}-{case.name}")
+        for case in sorted(PROOFS.glob("*/fulu/merkle_proof/*/BeaconBlockBody/*"))
+    ]
 
 
 @pytest.mark.parametrize("preset, case", _fulu_proof_cases())
@@ -289,11 +300,18 @@ def test_sidecars_from_block(preset, case):
     # A block around a vendored body: the branch of each sidecar is the branch of the case.
     proof = _yaml(case / "proof.yaml")
     body = snappy.decompress((case / "object.ssz_snappy").read_bytes())
-    length, _ = consensus.merkle_proof(preset, "fusaka", "BeaconBlockBody", body,
-                                       2 * proof["leaf_index"] + 1)
+    length, _ = consensus.merkle_proof(
+        preset, "fusaka", "BeaconBlockBody", body, 2 * proof["leaf_index"] + 1
+    )
     count = int.from_bytes(length, "little")
-    message = (7).to_bytes(8, "little") + (3).to_bytes(8, "little") + bytes([1]) * 32 + \
-        bytes([2]) * 32 + (84).to_bytes(4, "little") + body
+    message = (
+        (7).to_bytes(8, "little")
+        + (3).to_bytes(8, "little")
+        + bytes([1]) * 32
+        + bytes([2]) * 32
+        + (84).to_bytes(4, "little")
+        + body
+    )
     block = (100).to_bytes(4, "little") + bytes(96) + message
     rows = [([bytes(CELL)] * 128, [bytes(PROOF)] * 128)] * count
     sidecars = consensus.get_data_column_sidecars_from_block(preset, "fusaka", block, rows)
@@ -328,9 +346,12 @@ def _kzg_case(i: int) -> tuple:
 
 
 def _entry(entry: bytes) -> tuple:
-    return (entry[:CELL], entry[CELL:CELL + PROOF],
-            int.from_bytes(entry[CELL + PROOF:CELL + PROOF + 8], "little"),
-            int.from_bytes(entry[CELL + PROOF + 8:], "little"))
+    return (
+        entry[:CELL],
+        entry[CELL : CELL + PROOF],
+        int.from_bytes(entry[CELL + PROOF : CELL + PROOF + 8], "little"),
+        int.from_bytes(entry[CELL + PROOF + 8 :], "little"),
+    )
 
 
 def test_compute_and_recover_matrix():

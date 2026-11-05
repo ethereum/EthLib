@@ -10,9 +10,9 @@ import pytest
 from ethlib import errors
 from ethlib.cryptography import _native
 
-CONTRACT = json.loads(
-    (Path(__file__).parents[3] / "contract" / "contract.json").read_text()
-)["methods"]
+CONTRACT = json.loads((Path(__file__).parents[3] / "contract" / "contract.json").read_text())[
+    "methods"
+]
 
 
 # The C body of each wrapper, from its name to the closing brace at the start of a line.

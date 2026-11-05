@@ -16,15 +16,18 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "pq_keys" 
 CASES = sorted(path.name for path in FILES.iterdir())
 
 # Signing builds two trees of 2^16 one-time keys, which takes minutes, so it runs only on request.
-slow = pytest.mark.skipif(os.environ.get("ETHLIB_SLOW_VECTORS") != "1",
-                          reason="set ETHLIB_SLOW_VECTORS=1 to sign again")
+slow = pytest.mark.skipif(
+    os.environ.get("ETHLIB_SLOW_VECTORS") != "1", reason="set ETHLIB_SLOW_VECTORS=1 to sign again"
+)
 
 
 def _load(path: Path) -> dict:
     """The values of a YAML file, with each hex string as bytes."""
     data = YAML(typ="safe").load(path.read_text())
-    return {key: bytes.fromhex(value[2:]) if value.startswith("0x") else value
-            for key, value in data.items()}
+    return {
+        key: bytes.fromhex(value[2:]) if value.startswith("0x") else value
+        for key, value in data.items()
+    }
 
 
 @cache
@@ -36,16 +39,23 @@ def _case(name: str) -> dict:
 def _valid(case: dict, proof: bytes, pubkey: bytes | None = None, name: str | None = None) -> bool:
     """Whether Lean accepts a proof for a case, for its BLS key and configuration or others."""
     return consensus.pq_keys_is_valid_possession_proof(
-        case["genesis_validators_root"], case["pubkey"] if pubkey is None else pubkey,
-        case["xmss_public_key"], proof, case["config"] if name is None else name)
+        case["genesis_validators_root"],
+        case["pubkey"] if pubkey is None else pubkey,
+        case["xmss_public_key"],
+        proof,
+        case["config"] if name is None else name,
+    )
 
 
 @pytest.mark.parametrize("name", CASES)
 def test_signing_root(name):
     case = _case(name)
-    assert consensus.pq_keys_possession_signing_root(
-        case["genesis_validators_root"], case["pubkey"], case["xmss_public_key"],
-        case["config"]) == case["signing_root"]
+    assert (
+        consensus.pq_keys_possession_signing_root(
+            case["genesis_validators_root"], case["pubkey"], case["xmss_public_key"], case["config"]
+        )
+        == case["signing_root"]
+    )
 
 
 @pytest.mark.parametrize("name", CASES)
@@ -110,7 +120,8 @@ def test_wrong_lengths_are_rejected():
         _valid(case, proof, pubkey=case["pubkey"][:-1])
     with pytest.raises(ConsensusError):
         consensus.pq_keys_possession_signing_root(
-            case["genesis_validators_root"], case["pubkey"] + b"\x00", case["xmss_public_key"])
+            case["genesis_validators_root"], case["pubkey"] + b"\x00", case["xmss_public_key"]
+        )
     with pytest.raises(ConsensusError):
         _valid(case, proof, name="holesky")
 

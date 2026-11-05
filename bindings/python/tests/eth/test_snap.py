@@ -33,6 +33,7 @@ from ethlib.serialization import rlp
 
 _BALS = Path(__file__).resolve().parents[4] / "tests/execution/blocks/block_access_lists.json"
 
+
 def _distinct_valid(cases: list) -> list:
     """The first three valid access lists with distinct hashes."""
     seen, kept = set(), []

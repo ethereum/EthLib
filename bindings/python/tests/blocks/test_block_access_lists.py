@@ -14,12 +14,18 @@ VALID = [c for c in CASES if c["error"] is None]
 INVALID = [c for c in CASES if c["error"] is not None]
 
 # The tests whose payloads break a rule of the form of the list: order, uniqueness or empty slots.
-FORM = {"test_bal_invalid_ordering", "test_bal_invalid_duplicate_entries",
-        "test_bal_invalid_empty_slot_changes", "test_bal_invalid_account_order",
-        "test_bal_invalid_duplicate_account"}
+FORM = {
+    "test_bal_invalid_ordering",
+    "test_bal_invalid_duplicate_entries",
+    "test_bal_invalid_empty_slot_changes",
+    "test_bal_invalid_account_order",
+    "test_bal_invalid_duplicate_account",
+}
 # The tests whose payloads hold bytes that are no RLP form of a list.
-ENCODING = {"test_bal_invalid_non_minimal_scalar_encoding",
-            "test_bal_invalid_engine_payload_encoding"}
+ENCODING = {
+    "test_bal_invalid_non_minimal_scalar_encoding",
+    "test_bal_invalid_engine_payload_encoding",
+}
 # The codes of the rules of the form: order, uniqueness and empty slots.
 FORM_CODES = range(401, 410)
 TOO_MANY_ITEMS = 410
@@ -59,8 +65,10 @@ def test_encoding_rejected(case) -> None:
 
 
 @pytest.mark.parametrize(
-    "case", [c for c in INVALID if c["error"].endswith("BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED")],
-    ids=_id)
+    "case",
+    [c for c in INVALID if c["error"].endswith("BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED")],
+    ids=_id,
+)
 def test_too_many_items(case) -> None:
     with pytest.raises(blocks.BlockError) as error:
         blocks.check_block_access_list(bytes.fromhex(case["bal"]), case["gasLimit"])
@@ -71,33 +79,53 @@ def test_too_many_items(case) -> None:
 # They record an access that the block does not make, miss one that it makes, or carry a wrong
 # value, so only executing the block can reject them.
 EXECUTION = {
-    "test_bal_cross_tx_coinbase_funds_sender", "test_bal_cross_tx_funding_chain",
-    "test_bal_invalid_account", "test_bal_invalid_balance_value",
-    "test_bal_invalid_coinbase_balance_value", "test_bal_invalid_complex_corruption",
-    "test_bal_invalid_extraneous_coinbase", "test_bal_invalid_extraneous_entries",
-    "test_bal_invalid_field_entries", "test_bal_invalid_hash_mismatch",
-    "test_bal_invalid_missing_account", "test_bal_invalid_missing_coinbase",
-    "test_bal_invalid_missing_created_code", "test_bal_invalid_missing_nonce",
+    "test_bal_cross_tx_coinbase_funds_sender",
+    "test_bal_cross_tx_funding_chain",
+    "test_bal_invalid_account",
+    "test_bal_invalid_balance_value",
+    "test_bal_invalid_coinbase_balance_value",
+    "test_bal_invalid_complex_corruption",
+    "test_bal_invalid_extraneous_coinbase",
+    "test_bal_invalid_extraneous_entries",
+    "test_bal_invalid_field_entries",
+    "test_bal_invalid_hash_mismatch",
+    "test_bal_invalid_missing_account",
+    "test_bal_invalid_missing_coinbase",
+    "test_bal_invalid_missing_created_code",
+    "test_bal_invalid_missing_nonce",
     "test_bal_invalid_missing_pre_block_system_call_read",
     "test_bal_invalid_missing_request_predeploy_accesses",
-    "test_bal_invalid_missing_storage_write", "test_bal_invalid_missing_system_contract_entry",
+    "test_bal_invalid_missing_storage_write",
+    "test_bal_invalid_missing_system_contract_entry",
     "test_bal_invalid_missing_withdrawal_account",
-    "test_bal_invalid_missing_withdrawal_account_empty_block", "test_bal_invalid_nonce_value",
-    "test_bal_invalid_noop_storage_change", "test_bal_invalid_noop_system_call_write_as_change",
-    "test_bal_invalid_noop_value_change", "test_bal_invalid_omitted_slot_change_at_index",
+    "test_bal_invalid_missing_withdrawal_account_empty_block",
+    "test_bal_invalid_nonce_value",
+    "test_bal_invalid_noop_storage_change",
+    "test_bal_invalid_noop_system_call_write_as_change",
+    "test_bal_invalid_noop_value_change",
+    "test_bal_invalid_omitted_slot_change_at_index",
     "test_bal_invalid_phantom_read_on_request_predeploy",
-    "test_bal_invalid_phantom_read_on_selfdestruct", "test_bal_invalid_storage_value",
-    "test_bal_invalid_surplus_system_address_from_system_call", "test_bal_invalid_tx_order",
+    "test_bal_invalid_phantom_read_on_selfdestruct",
+    "test_bal_invalid_storage_value",
+    "test_bal_invalid_surplus_system_address_from_system_call",
+    "test_bal_invalid_tx_order",
     "test_bal_invalid_withdrawal_balance_value",
 }
 
 
 # The payloads of those tests that also break the form: an extra or reordered entry lands out of
 # order, or reads and writes one slot.
-FORM_ALSO = {"test_bal_invalid_account", "test_bal_invalid_complex_corruption",
-             "test_bal_invalid_tx_order"}
-FORM_ALSO_EXTRA = ("extra_account_access]", "extra_balance]", "extra_storage_write_touched]",
-                   "extra_storage_write_uninvolved_account]")
+FORM_ALSO = {
+    "test_bal_invalid_account",
+    "test_bal_invalid_complex_corruption",
+    "test_bal_invalid_tx_order",
+}
+FORM_ALSO_EXTRA = (
+    "extra_account_access]",
+    "extra_balance]",
+    "extra_storage_write_touched]",
+    "extra_storage_write_uninvolved_account]",
+)
 
 
 def _form_also(case) -> bool:
@@ -119,8 +147,11 @@ def test_cases_cover_each_kind() -> None:
     # Every other invalid case belongs to a test that needs block execution, so a new kind of
     # case that no test reads fails here.
     read = FORM | ENCODING
-    rest = [c for c in INVALID if _function(c) not in read
-            and not c["error"].endswith("GAS_LIMIT_EXCEEDED")]
+    rest = [
+        c
+        for c in INVALID
+        if _function(c) not in read and not c["error"].endswith("GAS_LIMIT_EXCEEDED")
+    ]
     assert rest == NEEDS_EXECUTION
     assert (len(rest), sum(map(_form_also, rest))) == (80, 15)
 

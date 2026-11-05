@@ -88,12 +88,15 @@ def test_sha256(fork: str) -> None:
         run(fork, 0x02, b"abc", 71)
 
 
-@pytest.mark.parametrize("data, digest, cost", [
-    # The digests are those of the RIPEMD-160 paper, Appendix B.
-    (b"", "9c1185a5c5e9fc54612808977ee8f548b2258d31", 600),
-    (b"abc", "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc", 720),
-    (b"a" * 33, None, 840),
-])
+@pytest.mark.parametrize(
+    "data, digest, cost",
+    [
+        # The digests are those of the RIPEMD-160 paper, Appendix B.
+        (b"", "9c1185a5c5e9fc54612808977ee8f548b2258d31", 600),
+        (b"abc", "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc", 720),
+        (b"a" * 33, None, 840),
+    ],
+)
 @pytest.mark.parametrize("fork", FORKS)
 def test_ripemd160(fork: str, data: bytes, digest: str | None, cost: int) -> None:
     # The price is 600, plus 120 per started 32-byte word.
@@ -129,14 +132,25 @@ def test_modexp(fork: str) -> None:
 def blake2f_input(rounds: int, message: bytes, final: int) -> bytes:
     """The 213-byte BLAKE2F input that compresses one block of an unkeyed 64-byte BLAKE2b hash."""
     iv = [
-        0x6A09E667F3BCC908, 0xBB67AE8584CAA73B, 0x3C6EF372FE94F82B, 0xA54FF53A5F1D36F1,
-        0x510E527FADE682D1, 0x9B05688C2B3E6C1F, 0x1F83D9ABFB41BD6B, 0x5BE0CD19137E2179,
+        0x6A09E667F3BCC908,
+        0xBB67AE8584CAA73B,
+        0x3C6EF372FE94F82B,
+        0xA54FF53A5F1D36F1,
+        0x510E527FADE682D1,
+        0x9B05688C2B3E6C1F,
+        0x1F83D9ABFB41BD6B,
+        0x5BE0CD19137E2179,
     ]
     # The parameter block of RFC 7693 §2.5: digest length 64, no key, fanout 1, depth 1.
     h = [iv[0] ^ 0x01010040] + iv[1:]
     block = message.ljust(128, b"\0")
-    return (struct.pack(">I", rounds) + struct.pack("<8Q", *h) + block
-            + struct.pack("<2Q", len(message), 0) + bytes([final]))
+    return (
+        struct.pack(">I", rounds)
+        + struct.pack("<8Q", *h)
+        + block
+        + struct.pack("<2Q", len(message), 0)
+        + bytes([final])
+    )
 
 
 @pytest.mark.parametrize("fork", since("istanbul"))
@@ -159,11 +173,14 @@ def test_blake2f_order_of_checks(fork: str) -> None:
         run(fork, 0x09, blake2f_input(12, b"abc", 2), 12)
 
 
-@pytest.mark.parametrize("address, size, cost, out_size", [
-    # The sum of two points at infinity is the point at infinity.
-    (0x0B, 256, 375, 128),
-    (0x0D, 512, 600, 256),
-])
+@pytest.mark.parametrize(
+    "address, size, cost, out_size",
+    [
+        # The sum of two points at infinity is the point at infinity.
+        (0x0B, 256, 375, 128),
+        (0x0D, 512, 600, 256),
+    ],
+)
 @pytest.mark.parametrize("fork", since("pectra"))
 def test_bls12_add_infinity(fork: str, address: int, size: int, cost: int, out_size: int) -> None:
     assert run(fork, address, bytes(size), cost) == bytes(out_size)
@@ -171,10 +188,13 @@ def test_bls12_add_infinity(fork: str, address: int, size: int, cost: int, out_s
         run(fork, address, bytes(size), cost - 1)
 
 
-@pytest.mark.parametrize("address, size, cost, out_size", [
-    (0x10, 64, 5500, 128),
-    (0x11, 128, 23800, 256),
-])
+@pytest.mark.parametrize(
+    "address, size, cost, out_size",
+    [
+        (0x10, 64, 5500, 128),
+        (0x11, 128, 23800, 256),
+    ],
+)
 @pytest.mark.parametrize("fork", since("pectra"))
 def test_bls12_map_zero(fork: str, address: int, size: int, cost: int, out_size: int) -> None:
     # The zero field element maps to a point, which the EIP-2537 vectors fix.

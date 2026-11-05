@@ -20,8 +20,13 @@ SPECIFIED = ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fu
 HANDLERS = ("basic", "leak", "inactivity_scores", "random")
 
 # The deltas that a case holds before Altair; from Altair it has no inclusion delay deltas.
-COMPONENTS = ("source_deltas", "target_deltas", "head_deltas", "inclusion_delay_deltas",
-              "inactivity_penalty_deltas")
+COMPONENTS = (
+    "source_deltas",
+    "target_deltas",
+    "head_deltas",
+    "inclusion_delay_deltas",
+    "inactivity_penalty_deltas",
+)
 
 # The release archives that hold the cases.
 ARCHIVES = {
@@ -70,9 +75,15 @@ def _archive_cases() -> list:
             case = pre.parent
             fork = case.relative_to(base).parts[0]
             if runs(fork):
-                cases.append(pytest.param(preset, fork, case,
-                                          id=f"{preset}/{case.relative_to(base).as_posix()}",
-                                          marks=pytest.mark.archive(name)))
+                cases.append(
+                    pytest.param(
+                        preset,
+                        fork,
+                        case,
+                        id=f"{preset}/{case.relative_to(base).as_posix()}",
+                        marks=pytest.mark.archive(name),
+                    )
+                )
     # An empty list would skip the test in silence, so a wrong path in an archive fails here.
     if not cases:
         raise LookupError("the archives hold no rewards case that EthLib runs")
@@ -82,8 +93,9 @@ def _archive_cases() -> list:
 def test_digests():
     lines = (FILES / "SHA256SUMS").read_text().splitlines()
     entries = [line.split() for line in lines if not line.startswith("#")]
-    assert len(entries) == sum(1 for path in FILES.rglob("*") if path.is_file()
-                               and path.name != "SHA256SUMS")
+    assert len(entries) == sum(
+        1 for path in FILES.rglob("*") if path.is_file() and path.name != "SHA256SUMS"
+    )
     for digest, name in entries:
         assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name
 
@@ -108,8 +120,9 @@ def _pre(fork: str) -> bytes:
 def test_inclusion_delay_from_altair():
     # From Altair, the inclusion delay is no longer a kind of deltas.
     with pytest.raises(consensus.TransitionError) as info:
-        consensus.rewards_deltas("minimal", FORKS["altair"], "inclusion_delay_deltas",
-                                 _pre("altair"))
+        consensus.rewards_deltas(
+            "minimal", FORKS["altair"], "inclusion_delay_deltas", _pre("altair")
+        )
     assert info.value.code == 0
 
 

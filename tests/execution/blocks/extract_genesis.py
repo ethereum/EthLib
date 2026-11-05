@@ -4,9 +4,23 @@ import json
 import sys
 from pathlib import Path
 
-NETWORKS = ["Frontier", "Homestead", "TangerineWhistle", "SpuriousDragon", "Byzantium",
-            "ConstantinopleFix", "Istanbul", "Berlin", "London", "Paris", "Shanghai", "Cancun",
-            "Prague", "Osaka", "Amsterdam"]
+NETWORKS = [
+    "Frontier",
+    "Homestead",
+    "TangerineWhistle",
+    "SpuriousDragon",
+    "Byzantium",
+    "ConstantinopleFix",
+    "Istanbul",
+    "Berlin",
+    "London",
+    "Paris",
+    "Shanghai",
+    "Cancun",
+    "Prague",
+    "Osaka",
+    "Amsterdam",
+]
 
 root = Path(sys.argv[1])  # the directory that holds the unpacked `fixtures`
 out = Path(sys.argv[2])

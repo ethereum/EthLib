@@ -5,6 +5,7 @@ Check `check_layers.py` itself, on small repositories built in a temporary direc
 
 Only the standard library is used, like the script.
 """
+
 import importlib.util
 import tempfile
 import unittest
@@ -47,9 +48,15 @@ ARCHITECTURE = """\
 
 # A tree that follows every rule: each module of a layer, with its imports.
 GOOD = {
-    "EthLib": ["EthLib.Base.A", "EthLib.Cryptography.A", "EthLib.Serialization.A",
-               "EthLib.Networking.A", "EthLib.Execution.A", "EthLib.Consensus.A",
-               "EthLib.Engine.A"],
+    "EthLib": [
+        "EthLib.Base.A",
+        "EthLib.Cryptography.A",
+        "EthLib.Serialization.A",
+        "EthLib.Networking.A",
+        "EthLib.Execution.A",
+        "EthLib.Consensus.A",
+        "EthLib.Engine.A",
+    ],
     "EthLib.Proofs": ["EthLib.Execution.Proofs.A"],
     "EthLib.Exports": ["EthLib.Execution.Exports.A"],
     "EthLib.Base.A": ["Init.Data.List"],
@@ -71,8 +78,13 @@ def header(imported: list[str]) -> str:
 class Tree:
     """A temporary repository with the given modules and imports."""
 
-    def __init__(self, modules: dict[str, list[str] | str], lakefile: str = LAKEFILE,
-                 baseline: str = "", architecture: str = ARCHITECTURE):
+    def __init__(
+        self,
+        modules: dict[str, list[str] | str],
+        lakefile: str = LAKEFILE,
+        baseline: str = "",
+        architecture: str = ARCHITECTURE,
+    ):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         (self.root / "lakefile.lean").write_text(lakefile)
@@ -110,41 +122,56 @@ class Rules(unittest.TestCase):
         self.assertEqual(layers.check(HERE.parent), [])
 
     def test_higher_layer(self):
-        self.assertFails(with_imports("EthLib.Base.A", "EthLib.Cryptography.A"),
-                         "Base sits below Cryptography")
+        self.assertFails(
+            with_imports("EthLib.Base.A", "EthLib.Cryptography.A"), "Base sits below Cryptography"
+        )
 
     def test_cryptography_never_imports_serialization(self):
-        self.assertFails(with_imports("EthLib.Cryptography.A", "EthLib.Serialization.A"),
-                         "Cryptography sits below Serialization")
+        self.assertFails(
+            with_imports("EthLib.Cryptography.A", "EthLib.Serialization.A"),
+            "Cryptography sits below Serialization",
+        )
 
     def test_higher_layer_from_a_property(self):
         tree = with_imports("EthLib.Execution.Proofs.A", "EthLib.Consensus.A")
         self.assertFails(tree, "Execution and Consensus never import each other")
 
     def test_execution_and_consensus(self):
-        self.assertFails(with_imports("EthLib.Consensus.A", "EthLib.Execution.A"),
-                         "Consensus and Execution never import each other")
+        self.assertFails(
+            with_imports("EthLib.Consensus.A", "EthLib.Execution.A"),
+            "Consensus and Execution never import each other",
+        )
 
     def test_engine_sits_above_execution_and_consensus(self):
-        self.assertFails(with_imports("EthLib.Execution.A", "EthLib.Engine.A"),
-                         "Execution sits below Engine")
-        self.assertFails(with_imports("EthLib.Consensus.A", "EthLib.Engine.A"),
-                         "Consensus sits below Engine")
+        self.assertFails(
+            with_imports("EthLib.Execution.A", "EthLib.Engine.A"), "Execution sits below Engine"
+        )
+        self.assertFails(
+            with_imports("EthLib.Consensus.A", "EthLib.Engine.A"), "Consensus sits below Engine"
+        )
 
     def test_specification_imports_a_property(self):
-        self.assertFails(with_imports("EthLib.Execution.A", "EthLib.Base.Proofs.A")
-                         | {"EthLib.Base.Proofs.A": []},
-                         "a specification never imports a property")
+        self.assertFails(
+            with_imports("EthLib.Execution.A", "EthLib.Base.Proofs.A")
+            | {"EthLib.Base.Proofs.A": []},
+            "a specification never imports a property",
+        )
 
     def test_specification_imports_an_export(self):
-        self.assertFails(with_imports("EthLib", "EthLib.Execution.Exports.A"),
-                         "a specification never imports a C export")
+        self.assertFails(
+            with_imports("EthLib", "EthLib.Execution.Exports.A"),
+            "a specification never imports a C export",
+        )
 
     def test_outside_the_toolchain(self):
-        self.assertFails(with_imports("EthLib.Base.A", "Batteries.Data.List"),
-                         "a specification imports only EthLib")
-        self.assertFails(with_imports("EthLib.Execution.Exports.A", "Mathlib.Tactic"),
-                         "a C export imports only EthLib")
+        self.assertFails(
+            with_imports("EthLib.Base.A", "Batteries.Data.List"),
+            "a specification imports only EthLib",
+        )
+        self.assertFails(
+            with_imports("EthLib.Execution.Exports.A", "Mathlib.Tactic"),
+            "a C export imports only EthLib",
+        )
 
     def test_orphan(self):
         self.assertFails(GOOD | {"EthLib.Base.B": []}, "EthLib/Base/B.lean: no library root")
@@ -160,18 +187,22 @@ class Rules(unittest.TestCase):
 
 class Header(unittest.TestCase):
     def test_import_forms(self):
-        text = ("/- import EthLib.Commented -/\nmodule\n\n-- import EthLib.Line\n"
-                "public import EthLib.A\nimport all EthLib.B\n/- between -/\nmeta import EthLib.C\n"
-                "public meta import «EthLib».D\nimport EthLib.E\n\n/-! import EthLib.Doc -/\n")
-        self.assertEqual(layers.imports(text), ["EthLib.A", "EthLib.B", "EthLib.C", "EthLib.D",
-                                                "EthLib.E"])
+        text = (
+            "/- import EthLib.Commented -/\nmodule\n\n-- import EthLib.Line\n"
+            "public import EthLib.A\nimport all EthLib.B\n/- between -/\nmeta import EthLib.C\n"
+            "public meta import «EthLib».D\nimport EthLib.E\n\n/-! import EthLib.Doc -/\n"
+        )
+        self.assertEqual(
+            layers.imports(text), ["EthLib.A", "EthLib.B", "EthLib.C", "EthLib.D", "EthLib.E"]
+        )
 
     def test_header_ends_at_the_first_command(self):
         self.assertEqual(layers.imports("module\nimport A\ndef x := 1\nimport B\n"), ["A"])
 
     def test_library_roots(self):
-        self.assertEqual(layers.library_roots(LAKEFILE),
-                         ["EthLib", "EthLib.Proofs", "EthLib.Exports"])
+        self.assertEqual(
+            layers.library_roots(LAKEFILE), ["EthLib", "EthLib.Proofs", "EthLib.Exports"]
+        )
 
 
 class Baseline(unittest.TestCase):

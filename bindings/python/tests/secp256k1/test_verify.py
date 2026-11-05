@@ -25,24 +25,36 @@ def _verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool | None
         return None
 
 
-def _write(handler: str, case: str, public_key: bytes, msg_hash: bytes, signature: bytes,
-           result: bool | None) -> None:
-    write_case("secp256k1", handler, case, {
-        "input": {
-            "public_key": hex_str(public_key),
-            "msg_hash": hex_str(msg_hash),
-            "signature": hex_str(signature),
+def _write(
+    handler: str,
+    case: str,
+    public_key: bytes,
+    msg_hash: bytes,
+    signature: bytes,
+    result: bool | None,
+) -> None:
+    write_case(
+        "secp256k1",
+        handler,
+        case,
+        {
+            "input": {
+                "public_key": hex_str(public_key),
+                "msg_hash": hex_str(msg_hash),
+                "signature": hex_str(signature),
+            },
+            "output": result,
         },
-        "output": result,
-    })
+    )
 
 
 P1363 = list(W.cases(W.P1363))
 BITCOIN = list(W.cases(W.BITCOIN))
 
 
-@pytest.mark.parametrize("tc_id, public_key, msg_hash, signature, valid", P1363,
-                         ids=[f"tc{c[0]}" for c in P1363])
+@pytest.mark.parametrize(
+    "tc_id, public_key, msg_hash, signature, valid", P1363, ids=[f"tc{c[0]}" for c in P1363]
+)
 def test_p1363(tc_id, public_key, msg_hash, signature, valid) -> None:
     result = _verify(public_key, msg_hash, signature)
     # A rejection, whether by length or by ECDSA, matches an invalid test.
@@ -50,8 +62,9 @@ def test_p1363(tc_id, public_key, msg_hash, signature, valid) -> None:
     _write("verify", f"verify_wycheproof_p1363_{tc_id}", public_key, msg_hash, signature, result)
 
 
-@pytest.mark.parametrize("tc_id, public_key, msg_hash, der, valid", BITCOIN,
-                         ids=[f"tc{c[0]}" for c in BITCOIN])
+@pytest.mark.parametrize(
+    "tc_id, public_key, msg_hash, der, valid", BITCOIN, ids=[f"tc{c[0]}" for c in BITCOIN]
+)
 def test_bitcoin(tc_id, public_key, msg_hash, der, valid) -> None:
     signature = W.der_signature(der)
     if signature is None:
@@ -60,7 +73,14 @@ def test_bitcoin(tc_id, public_key, msg_hash, der, valid) -> None:
         return
     result = secp256k1.verify(public_key, msg_hash, signature) and secp256k1.is_low_s(signature)
     assert result == valid
-    _write("verify_low_s", f"verify_low_s_wycheproof_bitcoin_{tc_id}", public_key, msg_hash, signature, result)
+    _write(
+        "verify_low_s",
+        f"verify_low_s_wycheproof_bitcoin_{tc_id}",
+        public_key,
+        msg_hash,
+        signature,
+        result,
+    )
 
 
 def test_high_s_verifies() -> None:

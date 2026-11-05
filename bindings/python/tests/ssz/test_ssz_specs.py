@@ -69,12 +69,18 @@ UNION_SHAPE = {"compatible_union": [[1, UNION_SQUARE], [2, UNION_CIRCLE], [127, 
 UNIONS = {
     "SampleShape": UNION_SHAPE,
     "SampleNumbers": {"compatible_union": [[1, UNION_LIST4], [2, UNION_LIST4]]},
-    "SampleEmptyProne": {"compatible_union": [
-        [1, _progressive_list(UNION_SQUARE)], [2, _progressive_list(UNION_CIRCLE)],
-    ]},
-    "SampleNestedShape": {"compatible_union": [
-        [1, UNION_SHAPE], [2, {"compatible_union": [[5, UNION_SQUARE]]}],
-    ]},
+    "SampleEmptyProne": {
+        "compatible_union": [
+            [1, _progressive_list(UNION_SQUARE)],
+            [2, _progressive_list(UNION_CIRCLE)],
+        ]
+    },
+    "SampleNestedShape": {
+        "compatible_union": [
+            [1, UNION_SHAPE],
+            [2, {"compatible_union": [[5, UNION_SQUARE]]}],
+        ]
+    },
     "SampleShapeContainer": {"container": [["tag", UINT64], ["body", UNION_SHAPE]]},
     "SampleShapeProgressiveContainer": _progressive_container(
         [1, 0, 1], [("tag", UINT64), ("body", UNION_SHAPE)]
@@ -106,15 +112,21 @@ CONTAINERS = {
     "SampleBoundedListField": _progressive_container(
         [1, 0, 1], [("head", UINT64), ("body", {"list": [UINT16, 4]})]
     ),
-    "SampleProgressiveFields": _progressive_container([1, 1, 1], [
-        ("head", UINT64),
-        ("numbers", _progressive_list(UINT64)),
-        ("flags", {"progressive_bitlist": None}),
-    ]),
-    "SampleOuterShape": _progressive_container([1, 0, 1], [
-        ("head", UINT8),
-        ("inner", _progressive_container([1, 0, 1], [("x", UINT16), ("y", UINT8)])),
-    ]),
+    "SampleProgressiveFields": _progressive_container(
+        [1, 1, 1],
+        [
+            ("head", UINT64),
+            ("numbers", _progressive_list(UINT64)),
+            ("flags", {"progressive_bitlist": None}),
+        ],
+    ),
+    "SampleOuterShape": _progressive_container(
+        [1, 0, 1],
+        [
+            ("head", UINT8),
+            ("inner", _progressive_container([1, 0, 1], [("x", UINT16), ("y", UINT8)])),
+        ],
+    ),
     "SampleSquareProgressiveList": _progressive_list(SQUARE),
     "SampleShapeContainer": {"container": [["tag", UINT8], ["shape", SQUARE]]},
 }
@@ -124,9 +136,13 @@ PROGRESSIVE = {
     "SampleUint64ProgressiveList": _progressive_list(UINT64),
     "SampleBytes32ProgressiveList": _progressive_list(BYTES32),
     "SampleNestedProgressiveList": _progressive_list(_progressive_list(UINT16)),
-    "SampleContainerWithProgressiveList": {"container": [
-        ["a", UINT16], ["b", _progressive_list(UINT64)], ["c", UINT8],
-    ]},
+    "SampleContainerWithProgressiveList": {
+        "container": [
+            ["a", UINT16],
+            ["b", _progressive_list(UINT64)],
+            ["c", UINT8],
+        ]
+    },
 }
 
 TYPES = {
@@ -138,11 +154,14 @@ TYPES = {
     "test_progressive_types": PROGRESSIVE,
 }
 
+
 def _scope(compare):
     """Whether a Lean error is a byte budget, other than the width, that passes `compare`."""
+
     def check(fault: str) -> bool:
         match = re.fullmatch(r"scope (\d+) (\d+)", fault)
         return match is not None and compare(int(match.group(2)), int(match.group(1)))
+
     return check
 
 
@@ -165,7 +184,7 @@ def _tagged(ssz_type, value):
     """The tagged form that the binding takes of a value that a fixture writes."""
     if ssz_type == BOOL:
         return {"bool": value}
-    (kind, body), = ssz_type.items()
+    ((kind, body),) = ssz_type.items()
     if kind == "uint":
         return {"uint": int(value)}
     if kind == "byte_vector":

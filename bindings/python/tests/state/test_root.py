@@ -12,7 +12,9 @@ import pytest
 
 from ethlib.state import state_root
 
-_CASES = json.loads((Path(__file__).resolve().parent / "genesis" / "basic_genesis_tests.json").read_text())
+_CASES = json.loads(
+    (Path(__file__).resolve().parent / "genesis" / "basic_genesis_tests.json").read_text()
+)
 
 # The root of the empty trie: the Keccak-256 hash of `0x80`.
 EMPTY_TRIE_ROOT = bytes.fromhex("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
@@ -82,13 +84,15 @@ def encode_alloc(alloc: dict) -> bytes:
             [_int(key).to_bytes(32, "big"), _int(value)]
             for key, value in account.get("storage", {}).items()
         ]
-        accounts.append([
-            bytes.fromhex(address.removeprefix("0x")),
-            _int(account.get("nonce", "0")),
-            _int(account.get("balance", account.get("wei", "0"))),
-            bytes.fromhex(account.get("code", "0x").removeprefix("0x")),
-            storage,
-        ])
+        accounts.append(
+            [
+                bytes.fromhex(address.removeprefix("0x")),
+                _int(account.get("nonce", "0")),
+                _int(account.get("balance", account.get("wei", "0"))),
+                bytes.fromhex(account.get("code", "0x").removeprefix("0x")),
+                storage,
+            ]
+        )
     return rlp_encode(accounts)
 
 
@@ -131,14 +135,17 @@ def test_rejects_repeated_address() -> None:
 ACCOUNT_ERROR = "an account is not a list of address, nonce, balance, code and storage"
 
 
-@pytest.mark.parametrize("state, error", [
-    (b"", "state is not one RLP item"),
-    (rlp_encode(b"\x01\x02"), "state is not an RLP list"),
-    (rlp_encode([[ADDRESS_A, 0, 0, b""]]), ACCOUNT_ERROR),
-    (rlp_encode([[ADDRESS_A[:19], 0, 0, b"", []]]), ACCOUNT_ERROR),
-    (rlp_encode([[ADDRESS_A, 0, 2**256, b"", []]]), ACCOUNT_ERROR),
-    (rlp_encode([[ADDRESS_A, 0, 0, b"", [[b"\x03", 7]]]]), ACCOUNT_ERROR),
-])
+@pytest.mark.parametrize(
+    "state, error",
+    [
+        (b"", "state is not one RLP item"),
+        (rlp_encode(b"\x01\x02"), "state is not an RLP list"),
+        (rlp_encode([[ADDRESS_A, 0, 0, b""]]), ACCOUNT_ERROR),
+        (rlp_encode([[ADDRESS_A[:19], 0, 0, b"", []]]), ACCOUNT_ERROR),
+        (rlp_encode([[ADDRESS_A, 0, 2**256, b"", []]]), ACCOUNT_ERROR),
+        (rlp_encode([[ADDRESS_A, 0, 0, b"", [[b"\x03", 7]]]]), ACCOUNT_ERROR),
+    ],
+)
 def test_rejects_malformed_state(state: bytes, error: str) -> None:
     with pytest.raises(ValueError, match=error):
         state_root(state)

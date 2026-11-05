@@ -11,7 +11,9 @@ from ethlib.state import rewards_root, state_root
 from .test_blocks import FORK_OF_NETWORK
 from .test_withdrawals import _state
 
-_CASES_FILE = Path(__file__).resolve().parents[4] / "tests" / "execution" / "blocks" / "rewards.json"
+_CASES_FILE = (
+    Path(__file__).resolve().parents[4] / "tests" / "execution" / "blocks" / "rewards.json"
+)
 CASES = json.loads(_CASES_FILE.read_text())
 
 

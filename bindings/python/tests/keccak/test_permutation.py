@@ -18,7 +18,9 @@ def test_permutation(i: int) -> None:
     assert keccak.keccak_f1600(state_in) == state_out
     # Write the checked vector as one case of the committed suite.
     write_case(
-        "keccak", HANDLER, F.PERMUTATION_NAMES[i],
+        "keccak",
+        HANDLER,
+        F.PERMUTATION_NAMES[i],
         {"input": {"state": hex_str(state_in)}, "output": hex_str(state_out)},
     )
 

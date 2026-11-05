@@ -12,23 +12,34 @@ from ethlib.errors import SszError
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "pq_keys"
 
 CONTAINERS = {
-    "PQKeyMaterial", "PQKeyRegistration", "PQKeyPossession", "SignedPQKeyRegistration",
-    "ValidatorPQKeyMaterial", "ValidatorPQKeyChangeEpochs", "BuilderPQKeyMaterial",
-    "BuilderPQKeyChangeEpochs", "PQKeyRegistrations",
+    "PQKeyMaterial",
+    "PQKeyRegistration",
+    "PQKeyPossession",
+    "SignedPQKeyRegistration",
+    "ValidatorPQKeyMaterial",
+    "ValidatorPQKeyChangeEpochs",
+    "BuilderPQKeyMaterial",
+    "BuilderPQKeyChangeEpochs",
+    "PQKeyRegistrations",
 }
 
 
 def _cases() -> list:
     """Every case, as its container and directory."""
-    return [(case.parent.parent.name, case.parent)
-            for case in sorted((FILES / "ssz").rglob("data.yaml"))]
+    return [
+        (case.parent.parent.name, case.parent)
+        for case in sorted((FILES / "ssz").rglob("data.yaml"))
+    ]
 
 
 def test_digests():
     lines = (FILES / "SHA256SUMS").read_text().splitlines()
     entries = [line.split() for line in lines if not line.startswith("#")]
-    pinned = {path for path in FILES.rglob("*")
-              if path.is_file() and path.name not in ("SHA256SUMS", "README.md")}
+    pinned = {
+        path
+        for path in FILES.rglob("*")
+        if path.is_file() and path.name not in ("SHA256SUMS", "README.md")
+    }
     assert {FILES / name for _, name in entries} == pinned
     for digest, name in entries:
         assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name
@@ -39,7 +50,8 @@ def test_every_container_has_cases():
 
 
 @pytest.mark.parametrize(
-    "container, case", _cases(),
+    "container, case",
+    _cases(),
     ids=lambda value: value.relative_to(FILES).as_posix() if isinstance(value, Path) else None,
 )
 def test_case(container, case):

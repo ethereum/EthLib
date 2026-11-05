@@ -20,13 +20,16 @@ def test_hexencodetest(name: str) -> None:
     assert trie.hex_prefix(case["seq"], case["term"]).hex() == case["out"]
 
 
-@pytest.mark.parametrize("nibbles, out", [
-    # Worked by hand from HP of Appendix C of the Yellow Paper.
-    # An even leaf path: the flag 2 and a padding nibble 0 make the first byte.
-    ([0, 0xF, 1, 0xC, 0xB, 8], "200f1cb8"),
-    # An odd leaf path: the flag 3 and the first nibble share the first byte.
-    ([0xF, 1, 0xC, 0xB, 8], "3f1cb8"),
-])
+@pytest.mark.parametrize(
+    "nibbles, out",
+    [
+        # Worked by hand from HP of Appendix C of the Yellow Paper.
+        # An even leaf path: the flag 2 and a padding nibble 0 make the first byte.
+        ([0, 0xF, 1, 0xC, 0xB, 8], "200f1cb8"),
+        # An odd leaf path: the flag 3 and the first nibble share the first byte.
+        ([0xF, 1, 0xC, 0xB, 8], "3f1cb8"),
+    ],
+)
 def test_leaf_paths(nibbles: list[int], out: str) -> None:
     assert trie.hex_prefix(nibbles, True).hex() == out
 

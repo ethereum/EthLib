@@ -7,6 +7,7 @@
 
 # ---- Openings ----------------------------------------------------------------
 
+
 def pattern_opening(sa: int, sb: int, pa: int, pb: int, pc: int) -> bytes:
     """The 1056 bytes of an opening whose secret and siblings follow two byte patterns."""
     # Byte k of the secret is (sa k + sb) mod 256, and byte k of sibling l is

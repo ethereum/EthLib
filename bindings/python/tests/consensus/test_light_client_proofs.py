@@ -57,8 +57,9 @@ def _check(preset: str, fork: str, container: str, case: Path) -> None:
 def test_digests():
     lines = (FILES / "SHA256SUMS").read_text().splitlines()
     entries = [line.split() for line in lines if not line.startswith("#")]
-    assert len(entries) == sum(1 for path in FILES.rglob("*") if path.name != "SHA256SUMS"
-                               and path.is_file())
+    assert len(entries) == sum(
+        1 for path in FILES.rglob("*") if path.name != "SHA256SUMS" and path.is_file()
+    )
     for digest, name in entries:
         assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name
 
@@ -73,7 +74,8 @@ def test_every_preset_and_fork_has_cases():
 
 
 @pytest.mark.parametrize(
-    "preset, fork, container, case", _cases(FILES),
+    "preset, fork, container, case",
+    _cases(FILES),
     ids=lambda value: value.relative_to(FILES).as_posix() if isinstance(value, Path) else None,
 )
 def test_case(preset, fork, container, case):
@@ -101,9 +103,16 @@ def _archive_cases() -> list:
     for preset, name in ARCHIVES.items():
         base = _unpack(preset)
         for preset_, fork, container, case in _cases(base):
-            cases.append(pytest.param(preset_, fork, container, case,
-                                      id=case.relative_to(base).as_posix(),
-                                      marks=pytest.mark.archive(name)))
+            cases.append(
+                pytest.param(
+                    preset_,
+                    fork,
+                    container,
+                    case,
+                    id=case.relative_to(base).as_posix(),
+                    marks=pytest.mark.archive(name),
+                )
+            )
     # An empty list would skip the test in silence, so a wrong path in an archive fails here.
     if not cases:
         raise LookupError("the archives hold no single_merkle_proof case")
@@ -116,8 +125,9 @@ def test_archive_case(preset, fork, container, case):
 
 
 @pytest.mark.parametrize(
-    "preset", [pytest.param(preset, marks=pytest.mark.archive(name))
-               for preset, name in ARCHIVES.items()])
+    "preset",
+    [pytest.param(preset, marks=pytest.mark.archive(name)) for preset, name in ARCHIVES.items()],
+)
 def test_vendored_cases_are_copies(preset):
     # Each vendored file is the file of the release, byte for byte.
     base = _unpack(preset)

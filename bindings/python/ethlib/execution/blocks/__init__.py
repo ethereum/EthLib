@@ -78,22 +78,33 @@ BlobSchedule = tuple[int, int, int, int]
 
 def _blob_schedules(schedules: Sequence[BlobSchedule]) -> bytes:
     # Each integer crosses as its minimal big-endian bytes, in one RLP list per schedule.
-    return rlp.encode([[v.to_bytes((v.bit_length() + 7) // 8, "big") for v in schedule]
-                       for schedule in schedules])
+    return rlp.encode(
+        [[v.to_bytes((v.bit_length() + 7) // 8, "big") for v in schedule] for schedule in schedules]
+    )
 
 
-def validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes,
-                    blob_schedules: Sequence[BlobSchedule] = ()) -> None:
+def validate_header(
+    parent_fork: str,
+    fork: str,
+    parent: bytes,
+    header: bytes,
+    blob_schedules: Sequence[BlobSchedule] = (),
+) -> None:
     """Check a header against its parent at any fork, and raise BlockError if it fails."""
-    _native.block_validate_header(parent_fork, fork, parent, header,
-                                  _blob_schedules(blob_schedules))
+    _native.block_validate_header(
+        parent_fork, fork, parent, header, _blob_schedules(blob_schedules)
+    )
 
 
-def check_header(parent_fork: str, fork: str, parent: bytes, header: bytes,
-                 blob_schedules: Sequence[BlobSchedule] = ()) -> None:
+def check_header(
+    parent_fork: str,
+    fork: str,
+    parent: bytes,
+    header: bytes,
+    blob_schedules: Sequence[BlobSchedule] = (),
+) -> None:
     """Check a header against its parent, every check but the proof of work."""
-    _native.block_check_header(parent_fork, fork, parent, header,
-                               _blob_schedules(blob_schedules))
+    _native.block_check_header(parent_fork, fork, parent, header, _blob_schedules(blob_schedules))
 
 
 def dao_extra_data_valid(dao_block: int, fork: str, header: bytes) -> bool:
@@ -105,14 +116,25 @@ def dao_extra_data_valid(dao_block: int, fork: str, header: bytes) -> bool:
 RecentBlock = tuple[str, bytes, Sequence[bytes]]
 
 
-def state_transition(config: dict, state: bytes, recent: Sequence[RecentBlock], fork: str,
-                     block: bytes, check_seal: bool = True) -> tuple[bytes, list]:
+def state_transition(
+    config: dict,
+    state: bytes,
+    recent: Sequence[RecentBlock],
+    fork: str,
+    block: bytes,
+    check_seal: bool = True,
+) -> tuple[bytes, list]:
     """Run a block on a chain, and return the state root and the accounts after it."""
     # Each header is already RLP, so it enters the list of the recent blocks as a raw item.
-    items = [[name.encode(), rlp.decode(header), [rlp.decode(o) for o in ommers]]
-             for name, header, ommers in recent]
-    root, accounts = rlp.decode(_native.state_transition(
-        json.dumps(config).encode(), state, rlp.encode(items), fork, block, check_seal))
+    items = [
+        [name.encode(), rlp.decode(header), [rlp.decode(o) for o in ommers]]
+        for name, header, ommers in recent
+    ]
+    root, accounts = rlp.decode(
+        _native.state_transition(
+            json.dumps(config).encode(), state, rlp.encode(items), fork, block, check_seal
+        )
+    )
     return root, accounts
 
 
@@ -120,22 +142,61 @@ def state_transition(config: dict, state: bytes, recent: Sequence[RecentBlock], 
 INITIAL_BASE_FEE = 1_000_000_000
 
 
-def genesis_block(fork: str, state: bytes, *, coinbase: bytes, difficulty: int, gas_limit: int,
-                  timestamp: int, extra_data: bytes, mix_hash: bytes, nonce: bytes,
-                  base_fee: int = INITIAL_BASE_FEE, excess_blob_gas: int = 0,
-                  slot_number: int = 0) -> bytes:
+def genesis_block(
+    fork: str,
+    state: bytes,
+    *,
+    coinbase: bytes,
+    difficulty: int,
+    gas_limit: int,
+    timestamp: int,
+    extra_data: bytes,
+    mix_hash: bytes,
+    nonce: bytes,
+    base_fee: int = INITIAL_BASE_FEE,
+    excess_blob_gas: int = 0,
+    slot_number: int = 0,
+) -> bytes:
     """The genesis block at a fork of a chain with the header fields it chooses and its state."""
+
     def scalar(n: int) -> bytes:
         return n.to_bytes((n.bit_length() + 7) // 8, "big")
 
-    params = [coinbase, scalar(difficulty), scalar(gas_limit), scalar(timestamp), extra_data,
-              mix_hash, nonce, scalar(base_fee), scalar(excess_blob_gas), scalar(slot_number)]
+    params = [
+        coinbase,
+        scalar(difficulty),
+        scalar(gas_limit),
+        scalar(timestamp),
+        extra_data,
+        mix_hash,
+        nonce,
+        scalar(base_fee),
+        scalar(excess_blob_gas),
+        scalar(slot_number),
+    ]
     return _native.genesis_block(fork, rlp.encode(params), state)
 
 
-__all__ = ["header_hash", "reencode", "transactions_root", "withdrawals_root",
-           "deposit_requests", "requests_hash", "block_access_list_hash",
-           "check_block_access_list", "make_receipts", "receipt_reencode", "receipt_logs_bloom",
-           "validate_size", "validate_header", "check_header", "dao_extra_data_valid",
-           "state_transition", "genesis_block", "INITIAL_BASE_FEE", "BlobSchedule", "RecentBlock",
-           "BlockError"]
+__all__ = [
+    "header_hash",
+    "reencode",
+    "transactions_root",
+    "withdrawals_root",
+    "deposit_requests",
+    "requests_hash",
+    "block_access_list_hash",
+    "check_block_access_list",
+    "make_receipts",
+    "receipt_reencode",
+    "receipt_logs_bloom",
+    "validate_size",
+    "validate_header",
+    "check_header",
+    "dao_extra_data_valid",
+    "state_transition",
+    "genesis_block",
+    "INITIAL_BASE_FEE",
+    "BlobSchedule",
+    "RecentBlock",
+    "BlockError",
+]

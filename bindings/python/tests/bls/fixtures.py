@@ -18,21 +18,22 @@ SAMPLE_MESSAGE = b"\x12" * 32
 # ---- Private keys ---------------------------------------------------------
 
 PRIVKEYS = [
-    0x263dbd792f5b1be47ed85f8938c0f29586af0d3ac7b977f21c278fe1462040e3,
-    0x47b8192d77bf871b62e87859d653922725724a5c031afeabc60bcef5ff665138,
-    0x328388aff0d4a5b7dc9205abd374e7e98f3cd9f3418edb4eafda5fb16473d216,
+    0x263DBD792F5B1BE47ED85F8938C0F29586AF0D3AC7B977F21C278FE1462040E3,
+    0x47B8192D77BF871B62E87859D653922725724A5C031AFEABC60BCEF5FF665138,
+    0x328388AFF0D4A5B7DC9205ABD374E7E98F3CD9F3418EDB4EAFDA5FB16473D216,
 ]
 
 
 # ---- Compressed-G group encodings ----------------------------------------
 
-ZERO_PUBKEY          = b"\x00" * 48
+ZERO_PUBKEY = b"\x00" * 48
 G1_POINT_AT_INFINITY = b"\xc0" + b"\x00" * 47
-ZERO_SIGNATURE       = b"\x00" * 96
+ZERO_SIGNATURE = b"\x00" * 96
 G2_POINT_AT_INFINITY = b"\xc0" + b"\x00" * 95
 
 
 # ---- Helpers --------------------------------------------------------------
+
 
 def sk_to_pk(sk: int) -> bytes:
     return ref_bls.SkToPk(sk)

@@ -29,8 +29,21 @@ def _p(n: int) -> bytes:
 def _header(parent: bytes, number: int) -> list:
     # The fifteen fields of a Frontier header, with the parent hash first and the number ninth.
     return [
-        parent, bytes(32), bytes(20), bytes(32), bytes(32), bytes(32), bytes(256),
-        _p(131072), _p(number), _p(5000), b"", _p(number), b"", bytes(32), bytes(8),
+        parent,
+        bytes(32),
+        bytes(20),
+        bytes(32),
+        bytes(32),
+        bytes(32),
+        bytes(256),
+        _p(131072),
+        _p(number),
+        _p(5000),
+        b"",
+        _p(number),
+        b"",
+        bytes(32),
+        bytes(8),
     ]
 
 

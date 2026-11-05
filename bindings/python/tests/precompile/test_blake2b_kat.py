@@ -27,15 +27,26 @@ KAT = Path(__file__).resolve().parent / "blake2" / "blake2b-kat.jsonl"
 CASES = [json.loads(line) for line in KAT.read_text().splitlines()]
 
 IV = [
-    0x6A09E667F3BCC908, 0xBB67AE8584CAA73B, 0x3C6EF372FE94F82B, 0xA54FF53A5F1D36F1,
-    0x510E527FADE682D1, 0x9B05688C2B3E6C1F, 0x1F83D9ABFB41BD6B, 0x5BE0CD19137E2179,
+    0x6A09E667F3BCC908,
+    0xBB67AE8584CAA73B,
+    0x3C6EF372FE94F82B,
+    0xA54FF53A5F1D36F1,
+    0x510E527FADE682D1,
+    0x9B05688C2B3E6C1F,
+    0x1F83D9ABFB41BD6B,
+    0x5BE0CD19137E2179,
 ]
 
 
 def precompile(h: list[int], block: bytes, t: int, last: bool) -> list[int]:
     """F through the precompile, with the 12 rounds of BLAKE2b."""
-    call = (struct.pack(">I", 12) + struct.pack("<8Q", *h) + block
-            + struct.pack("<2Q", t, 0) + bytes([last]))
+    call = (
+        struct.pack(">I", 12)
+        + struct.pack("<8Q", *h)
+        + block
+        + struct.pack("<2Q", t, 0)
+        + bytes([last])
+    )
     return list(struct.unpack("<8Q", run(FORK, ADDRESS, call, 12)))
 
 
@@ -50,7 +61,7 @@ def blake2b(data: bytes, key: bytes, f) -> bytes:
     h = [IV[0] ^ 0x01010000 ^ (len(key) << 8) ^ 64] + IV[1:]
     # A key is padded to one block and hashed before the data.
     message = (key.ljust(128, b"\0") if key else b"") + data
-    blocks = [message[i:i + 128] for i in range(0, len(message), 128)] or [b""]
+    blocks = [message[i : i + 128] for i in range(0, len(message), 128)] or [b""]
     for i, block in enumerate(blocks):
         last = i == len(blocks) - 1
         # The offset counter t counts the bytes hashed so far, this block included.

@@ -32,8 +32,9 @@ def _recover(msg_hash: bytes, signature: bytes, recovery_id: int) -> bytes | Non
         return None
 
 
-@pytest.mark.parametrize("tc_id, public_key, msg_hash, signature, valid", VALID,
-                         ids=[f"tc{c[0]}" for c in VALID])
+@pytest.mark.parametrize(
+    "tc_id, public_key, msg_hash, signature, valid", VALID, ids=[f"tc{c[0]}" for c in VALID]
+)
 def test_recover(tc_id, public_key, msg_hash, signature, valid) -> None:
     keys = [_recover(msg_hash, signature, i) for i in (0, 1)]
     # The signer's key is among the two, unless `R` may have `x = r + n`.
@@ -45,14 +46,19 @@ def test_recover(tc_id, public_key, msg_hash, signature, valid) -> None:
     for key in keys:
         assert key is None or secp256k1.verify(key, msg_hash, signature)
     for i, key in enumerate(keys):
-        write_case("secp256k1", "recover", f"recover_wycheproof_p1363_{tc_id}_{i}", {
-            "input": {
-                "msg_hash": hex_str(msg_hash),
-                "signature": hex_str(signature),
-                "recovery_id": i,
+        write_case(
+            "secp256k1",
+            "recover",
+            f"recover_wycheproof_p1363_{tc_id}_{i}",
+            {
+                "input": {
+                    "msg_hash": hex_str(msg_hash),
+                    "signature": hex_str(signature),
+                    "recovery_id": i,
+                },
+                "output": None if key is None else hex_str(key),
             },
-            "output": None if key is None else hex_str(key),
-        })
+        )
 
 
 def test_recovery_id_out_of_range() -> None:

@@ -34,8 +34,15 @@ def test_every_payload(archive) -> None:
     for fixture in _fixtures(archive):
         for payload in fixture["engineNewPayloads"]:
             method = f"engine_newPayloadV{payload['newPayloadVersion']}"
-            kinds[check(fixture["network"], method, payload["params"],
-                        payload.get("validationError"), payload.get("errorCode"))] += 1
+            kinds[
+                check(
+                    fixture["network"],
+                    method,
+                    payload["params"],
+                    payload.get("validationError"),
+                    payload.get("errorCode"),
+                )
+            ] += 1
     # Without the parent's state, a payload that fails only in execution is syncing.
     assert kinds == {"valid": 63256, "error": 46, "invalid": 51, "execution": 4991}
 
@@ -51,10 +58,14 @@ def test_every_chain(archive) -> None:
             if payload.get("validationError") or "errorCode" in payload:
                 continue
             block = payload["params"][0]
-            tree.append({"blockHash": block["blockHash"], "parentHash": block["parentHash"],
-                         "valid": True})
-            state = {"headBlockHash": block["blockHash"], "safeBlockHash": genesis,
-                     "finalizedBlockHash": genesis}
+            tree.append(
+                {"blockHash": block["blockHash"], "parentHash": block["parentHash"], "valid": True}
+            )
+            state = {
+                "headBlockHash": block["blockHash"],
+                "safeBlockHash": genesis,
+                "finalizedBlockHash": genesis,
+            }
             method = f"engine_forkchoiceUpdatedV{payload['forkchoiceUpdatedVersion']}"
             response = engine.forkchoice_updated(tree, method, [state, None])
             assert response["payloadStatus"]["status"] == "VALID"

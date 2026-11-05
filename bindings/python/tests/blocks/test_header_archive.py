@@ -13,8 +13,15 @@ ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
 
 # The directories of the release that fill a network from Frontier to Paris.
 DIRECTORIES = [
-    "for_frontier", "for_homestead", "for_tangerinewhistle", "for_spuriousdragon",
-    "for_byzantium", "for_constantinoplefix", "for_istanbul", "for_berlin", "for_london",
+    "for_frontier",
+    "for_homestead",
+    "for_tangerinewhistle",
+    "for_spuriousdragon",
+    "for_byzantium",
+    "for_constantinoplefix",
+    "for_istanbul",
+    "for_berlin",
+    "for_london",
     "for_paris",
 ]
 SOURCES = [f"fixtures/blockchain_tests/{d}" for d in DIRECTORIES]
@@ -46,8 +53,9 @@ def test_headers_of_every_fixture(archive: Path, directory: str) -> None:
                 if not exception:
                     # A valid block passes every check but the proof of work, which the
                     # fixtures do not carry.
-                    blocks.check_header(fork, fork, headers[block["blockHeader"]["parentHash"]],
-                                        header)
+                    blocks.check_header(
+                        fork, fork, headers[block["blockHeader"]["parentHash"]], header
+                    )
                     headers[block["blockHeader"]["hash"]] = header
                     checked += 1
                     continue

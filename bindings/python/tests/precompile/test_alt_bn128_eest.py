@@ -74,7 +74,9 @@ def test_case_count() -> None:
 @pytest.mark.parametrize("fork", FORKS)
 def test_valid(fork: str, case: dict) -> None:
     data = bytes.fromhex(case["input"])
-    assert run(fork, case["address"], data, price(fork, case["address"], data)).hex() == case["output"]
+    assert (
+        run(fork, case["address"], data, price(fork, case["address"], data)).hex() == case["output"]
+    )
 
 
 @pytest.mark.parametrize("case", VALID)

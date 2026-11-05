@@ -17,8 +17,13 @@ def _hash(n: int) -> str:
     return "0x" + n.to_bytes(32, "big").hex()
 
 
-def _update(tree: list, head: str, safe: str = ZERO, finalized: str = ZERO,
-            method: str = "engine_forkchoiceUpdatedV3") -> dict:
+def _update(
+    tree: list,
+    head: str,
+    safe: str = ZERO,
+    finalized: str = ZERO,
+    method: str = "engine_forkchoiceUpdatedV3",
+) -> dict:
     state = {"headBlockHash": head, "safeBlockHash": safe, "finalizedBlockHash": finalized}
     return engine.forkchoice_updated(tree, method, [state, None])
 
@@ -36,14 +41,19 @@ def test_chain(chain: dict) -> None:
             response = _update(tree, payload["blockHash"], method=method)
             assert response["payloadStatus"]["status"] == "SYNCING"
             continue
-        tree.append({"blockHash": payload["blockHash"], "parentHash": payload["parentHash"],
-                     "valid": True})
+        tree.append(
+            {"blockHash": payload["blockHash"], "parentHash": payload["parentHash"], "valid": True}
+        )
         # The genesis block is final, so it is both the safe and the finalized block.
         response = _update(tree, payload["blockHash"], genesis, genesis, method)
         assert response == {
-            "payloadStatus": {"status": "VALID", "latestValidHash": payload["blockHash"],
-                              "validationError": None},
-            "payloadId": None}
+            "payloadStatus": {
+                "status": "VALID",
+                "latestValidHash": payload["blockHash"],
+                "validationError": None,
+            },
+            "payloadId": None,
+        }
         head = payload["blockHash"]
     assert head == chain["lastblockhash"]
 
@@ -87,8 +97,11 @@ def test_ancestors() -> None:
 def test_wrong_fields() -> None:
     """A forkchoice state with a missing field is an invalid parameter."""
     with pytest.raises(engine.EngineError) as error:
-        engine.forkchoice_updated(TREE, "engine_forkchoiceUpdatedV3",
-                                  [{"headBlockHash": _hash(3), "safeBlockHash": ZERO}, None])
+        engine.forkchoice_updated(
+            TREE,
+            "engine_forkchoiceUpdatedV3",
+            [{"headBlockHash": _hash(3), "safeBlockHash": ZERO}, None],
+        )
     assert error.value.code == 32602
 
 

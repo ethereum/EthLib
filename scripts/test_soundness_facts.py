@@ -6,6 +6,7 @@ directory.
 
 Only the standard library is used, like the script.
 """
+
 import importlib.util
 import json
 import tempfile
@@ -56,11 +57,12 @@ DOC = """\
 # Soundness
 
 This document describes the development tree that declares package version `1.0.0` in `pyproject.toml`.
-""" + "".join(f"\n<!-- generated: {name} -->\n<!-- end generated -->\n" for name in facts.GENERATORS)
+""" + "".join(
+    f"\n<!-- generated: {name} -->\n<!-- end generated -->\n" for name in facts.GENERATORS
+)
 
 
 class SoundnessFacts(unittest.TestCase):
-
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = self.root = Path(self.tmp.name)
@@ -70,7 +72,8 @@ class SoundnessFacts(unittest.TestCase):
         (root / "bindings" / "python" / "foo.c").write_text(C_SOURCE)
         (root / "scripts").mkdir()
         (root / "scripts" / "check_decls_baseline.txt").write_text(
-            "# comment\nnative Foo.known_answer\npartial Foo.spin\n")
+            "# comment\nnative Foo.known_answer\npartial Foo.spin\n"
+        )
         self.write_manifest("5e932f97dd25535344f80f9dd8da3aab83df0fe6")
         (root / "lean-toolchain").write_text("leanprover/lean4:v4.29.1\n")
         (root / "pyproject.toml").write_text('[project]\nname = "foo"\nversion = "1.0.0"\n')
@@ -81,9 +84,15 @@ class SoundnessFacts(unittest.TestCase):
         self.tmp.cleanup()
 
     def write_manifest(self, mathlib_rev: str) -> None:
-        (self.root / "lake-manifest.json").write_text(json.dumps({"packages": [
-            {"name": "mathlib", "rev": mathlib_rev, "inputRev": "v4.29.1"},
-        ]}))
+        (self.root / "lake-manifest.json").write_text(
+            json.dumps(
+                {
+                    "packages": [
+                        {"name": "mathlib", "rev": mathlib_rev, "inputRev": "v4.29.1"},
+                    ]
+                }
+            )
+        )
 
     def check(self) -> list[str]:
         return facts.run(self.root, check=True)
@@ -97,8 +106,10 @@ class SoundnessFacts(unittest.TestCase):
 
     def test_exports_are_counted_however_written(self):
         # One-line, multi-line and `attribute` forms count; a comment does not.
-        self.assertEqual(facts.lean_exports(self.root),
-                         {"eth_foo_op_one", "eth_foo_op_two", "eth_foo_op_three", "eth_foo_const_size"})
+        self.assertEqual(
+            facts.lean_exports(self.root),
+            {"eth_foo_op_one", "eth_foo_op_two", "eth_foo_op_three", "eth_foo_const_size"},
+        )
 
     def test_a_declared_but_uncalled_export_is_not_called(self):
         # eth_foo_op_three is declared `extern` and named in a comment, but never called.
@@ -115,7 +126,8 @@ class SoundnessFacts(unittest.TestCase):
             'def msg : String := "@[export eth_foo_in_a_string]"\n'
             'def raw : String := r#"@[export eth_foo_in_a_raw_string] "quoted" "#\n'
             "def quote : Char := '\"'\n"
-            "@[export eth_foo_op_after] def after (_ : Unit) : UInt8 := 0\n")
+            "@[export eth_foo_op_after] def after (_ : Unit) : UInt8 := 0\n"
+        )
         found = facts.lean_exports(self.root)
         self.assertNotIn("eth_foo_not_an_export", found)
         self.assertNotIn("eth_foo_in_a_string", found)
@@ -124,14 +136,21 @@ class SoundnessFacts(unittest.TestCase):
 
     def test_a_call_inside_a_string_is_not_a_call(self):
         c = self.root / "bindings" / "python" / "foo.c"
-        c.write_text(C_SOURCE.replace(
-            "  eth_foo_const_size(0);\n",
-            '  report("eth_foo_const_size(0) failed");\n  char q = \'\\\'\';\n'))
-        self.assertNotIn("eth_foo_const_size", facts.c_calls(self.root, facts.lean_exports(self.root)))
+        c.write_text(
+            C_SOURCE.replace(
+                "  eth_foo_const_size(0);\n",
+                "  report(\"eth_foo_const_size(0) failed\");\n  char q = '\\'';\n",
+            )
+        )
+        self.assertNotIn(
+            "eth_foo_const_size", facts.c_calls(self.root, facts.lean_exports(self.root))
+        )
 
     def test_partly_used_constants_are_named_one_by_one(self):
         lean = self.root / "EthLib" / "Exports" / "Foo.lean"
-        lean.write_text(EXPORTS + "\n@[export eth_foo_const_other]\ndef other (_ : Unit) : UInt64 := 5\n")
+        lean.write_text(
+            EXPORTS + "\n@[export eth_foo_const_other]\ndef other (_ : Unit) : UInt64 := 5\n"
+        )
         text = facts.exports(self.root)
         self.assertIn("calls 2 of the operations and 1 of the constants.", text)
         self.assertIn("Exported constants it does not call: `eth_foo_const_other`.", text)
@@ -140,33 +159,65 @@ class SoundnessFacts(unittest.TestCase):
     def test_removed_call_fails(self):
         c = self.root / "bindings" / "python" / "foo.c"
         c.write_text(C_SOURCE.replace("  eth_foo_op_two(0);\n", ""))
-        self.assertIn("generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py", self.check())
+        self.assertIn(
+            "generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py",
+            self.check(),
+        )
 
     def test_reformatted_export_keeps_its_count(self):
         lean = self.root / "EthLib" / "Exports" / "Foo.lean"
-        lean.write_text(EXPORTS.replace("@[export eth_foo_op_one]", "@[export\n    eth_foo_op_one]"))
+        lean.write_text(
+            EXPORTS.replace("@[export eth_foo_op_one]", "@[export\n    eth_foo_op_one]")
+        )
         self.assertEqual(self.check(), [])
 
     def test_changed_mathlib_commit_fails(self):
         self.write_manifest("0000000000000000000000000000000000000000")
-        self.assertIn("generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py", self.check())
+        self.assertIn(
+            "generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py",
+            self.check(),
+        )
 
     def test_direct_requirements_are_named_and_inherited_ones_are_not(self):
-        (self.root / "lake-manifest.json").write_text(json.dumps({"packages": [
-            {"name": "mathlib", "rev": "5e932f97dd25535344f80f9dd8da3aab83df0fe6", "inputRev": "v4.29.1",
-             "inherited": False},
-            {"name": "Foo", "rev": "1234567890abcdef1234567890abcdef12345678",
-             "inputRev": "1234567890abcdef1234567890abcdef12345678", "inherited": False},
-            {"name": "batteries", "rev": "abcdef0123456789abcdef0123456789abcdef01", "inherited": True},
-        ]}))
+        (self.root / "lake-manifest.json").write_text(
+            json.dumps(
+                {
+                    "packages": [
+                        {
+                            "name": "mathlib",
+                            "rev": "5e932f97dd25535344f80f9dd8da3aab83df0fe6",
+                            "inputRev": "v4.29.1",
+                            "inherited": False,
+                        },
+                        {
+                            "name": "Foo",
+                            "rev": "1234567890abcdef1234567890abcdef12345678",
+                            "inputRev": "1234567890abcdef1234567890abcdef12345678",
+                            "inherited": False,
+                        },
+                        {
+                            "name": "batteries",
+                            "rev": "abcdef0123456789abcdef0123456789abcdef01",
+                            "inherited": True,
+                        },
+                    ]
+                }
+            )
+        )
         text = facts.pins(self.root)
-        self.assertIn("The package requires Foo, at `1234567`.\n"
-                      "The package requires Mathlib, at `v4.29.1`, commit `5e932f9`.\n", text)
+        self.assertIn(
+            "The package requires Foo, at `1234567`.\n"
+            "The package requires Mathlib, at `v4.29.1`, commit `5e932f9`.\n",
+            text,
+        )
         self.assertNotIn("batteries", text)
 
     def test_changed_baseline_fails(self):
         (self.root / "scripts" / "check_decls_baseline.txt").write_text("partial Foo.spin\n")
-        self.assertIn("generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py", self.check())
+        self.assertIn(
+            "generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py",
+            self.check(),
+        )
 
     def test_version_bump_fails(self):
         (self.root / "pyproject.toml").write_text('[project]\nname = "foo"\nversion = "1.1.0"\n')

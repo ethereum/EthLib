@@ -14,8 +14,11 @@ from ethlib.serialization import rlp
 _FILE = Path(__file__).resolve().parent / "getproof" / "get-account-proof-with-storage.io"
 
 # The response is the line after `<< `.
-_RESPONSE = next(json.loads(line[3:])["result"]
-                 for line in _FILE.read_text().splitlines() if line.startswith("<< "))
+_RESPONSE = next(
+    json.loads(line[3:])["result"]
+    for line in _FILE.read_text().splitlines()
+    if line.startswith("<< ")
+)
 
 # The state root that the account proof starts from: the hash of its first node.
 # The file holds no state root, so this test states it, as block 60 of `tests/chain.rlp` gives it.
@@ -34,8 +37,14 @@ def _scalar(text: str) -> bytes:
 
 def test_account_proof() -> None:
     # The value of an account is the RLP list of its nonce, balance, storage root and code hash.
-    account = rlp.encode([_scalar(_RESPONSE["nonce"]), _scalar(_RESPONSE["balance"]),
-                          _hex(_RESPONSE["storageHash"]), _hex(_RESPONSE["codeHash"])])
+    account = rlp.encode(
+        [
+            _scalar(_RESPONSE["nonce"]),
+            _scalar(_RESPONSE["balance"]),
+            _hex(_RESPONSE["storageHash"]),
+            _hex(_RESPONSE["codeHash"]),
+        ]
+    )
     proof = [_hex(node) for node in _RESPONSE["accountProof"]]
     assert trie.verify_proof(STATE_ROOT, _hex(_RESPONSE["address"]), proof, secured=True) == account
 

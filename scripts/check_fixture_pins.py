@@ -28,6 +28,7 @@ An archive from no repository, such as a NIST zip file, gives a `source` in plac
 
 Only the standard library is used, so the check needs no Lean and no install step.
 """
+
 import re
 import sys
 import tomllib
@@ -87,8 +88,13 @@ def check(root: Path) -> list[str]:
     for directory, description in others.items():
         expected.setdefault(directory, set()).add(description)
 
-    pinned = sorted({p.parent.relative_to(root).as_posix()
-                     for tree in TREES for p in (root / tree).rglob("SHA256SUMS")})
+    pinned = sorted(
+        {
+            p.parent.relative_to(root).as_posix()
+            for tree in TREES
+            for p in (root / tree).rglob("SHA256SUMS")
+        }
+    )
     for directory in sorted(set(pinned) - set(expected)):
         problems.append(f"{directory}: a pinned vector directory that {SOURCES} does not list")
     for directory in sorted(set(expected) - set(pinned)):
@@ -96,16 +102,23 @@ def check(root: Path) -> list[str]:
 
     for directory in sorted(set(pinned) & set(expected)):
         sums = root / directory / "SHA256SUMS"
-        named = {line[len(SOURCE_LINE):].strip()
-                 for line in sums.read_text(encoding="utf-8").splitlines()
-                 if line.startswith(SOURCE_LINE)}
+        named = {
+            line[len(SOURCE_LINE) :].strip()
+            for line in sums.read_text(encoding="utf-8").splitlines()
+            if line.startswith(SOURCE_LINE)
+        }
         for source in sorted(expected[directory] - named):
             problems.append(f"{directory}/SHA256SUMS: missing the line '{SOURCE_LINE}{source}'")
         for source in sorted(named - expected[directory]):
-            problems.append(f"{directory}/SHA256SUMS: '{SOURCE_LINE}{source}' is not a source "
-                            f"that {SOURCES} lists for this directory")
-        commits = {name: pins[name] for name, entry in repositories.items()
-                   if name in pins and directory in entry.get("directories", [])}
+            problems.append(
+                f"{directory}/SHA256SUMS: '{SOURCE_LINE}{source}' is not a source "
+                f"that {SOURCES} lists for this directory"
+            )
+        commits = {
+            name: pins[name]
+            for name, entry in repositories.items()
+            if name in pins and directory in entry.get("directories", [])
+        }
         if commits:
             document = readme(root / directory, root)
             text = document.read_text(encoding="utf-8") if document else ""
@@ -119,8 +132,10 @@ def check(root: Path) -> list[str]:
     for name, entry in archives.items():
         if "repository" in entry or not entry.get("source"):
             if entry.get("repository") not in repositories:
-                problems.append(f"{SOURCES}: the archive {name} needs a recorded repository, "
-                                "or a source that is no repository")
+                problems.append(
+                    f"{SOURCES}: the archive {name} needs a recorded repository, "
+                    "or a source that is no repository"
+                )
         if not str(entry.get("url", "")).startswith("https://"):
             problems.append(f"{SOURCES}: the archive {name} needs an https URL")
         size = entry.get("size")
@@ -143,8 +158,10 @@ def check(root: Path) -> list[str]:
             if owners:
                 cited.add(owners[0])
             else:
-                problems.append(f"{path.relative_to(root)}:{line}: cites commit {short}, "
-                                f"which is not a pin of {SOURCES}")
+                problems.append(
+                    f"{path.relative_to(root)}:{line}: cites commit {short}, "
+                    f"which is not a pin of {SOURCES}"
+                )
         for name, commit in pins.items():
             if commit in text:
                 cited.add(name)

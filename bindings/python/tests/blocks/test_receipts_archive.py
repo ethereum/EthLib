@@ -13,9 +13,22 @@ from transactions.test_transactions import FORK_OF_NETWORK
 ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
 
 _ROOT = "fixtures/blockchain_tests"
-_FORKS = ["frontier", "homestead", "tangerinewhistle", "spuriousdragon", "byzantium",
-          "constantinoplefix", "istanbul", "berlin", "london", "paris", "shanghai", "cancun",
-          "prague", "osaka"]
+_FORKS = [
+    "frontier",
+    "homestead",
+    "tangerinewhistle",
+    "spuriousdragon",
+    "byzantium",
+    "constantinoplefix",
+    "istanbul",
+    "berlin",
+    "london",
+    "paris",
+    "shanghai",
+    "cancun",
+    "prague",
+    "osaka",
+]
 
 # Logs before and after Byzantium, failed transactions, and every transaction type.
 SOURCES = [
@@ -54,8 +67,14 @@ def _results(receipts: list[dict]) -> bytes:
         else:
             outcome = b"\x01" if receipt["status"] else b""
         gas = int(receipt["cumulativeGasUsed"], 16)
-        results.append([_scalar(int(receipt["type"], 16)), outcome, _scalar(gas - cumulative),
-                        [_log(log) for log in receipt["logs"]]])
+        results.append(
+            [
+                _scalar(int(receipt["type"], 16)),
+                outcome,
+                _scalar(gas - cumulative),
+                [_log(log) for log in receipt["logs"]],
+            ]
+        )
         cumulative = gas
     return rlp.encode(results)
 

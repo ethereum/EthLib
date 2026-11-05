@@ -23,8 +23,8 @@ def first_item(data: bytes) -> bytes:
     start = 1 + data[0] - 0xF7
     head = data[start]
     size = head - 0xF7
-    length = int.from_bytes(data[start + 1:start + 1 + size], "big")
-    return data[start:start + 1 + size + length]
+    length = int.from_bytes(data[start + 1 : start + 1 + size], "big")
+    return data[start : start + 1 + size + length]
 
 
 cases = []
@@ -52,16 +52,18 @@ for path in sorted(root.rglob("*.json")):
             if parent_hash not in headers:
                 continue
             parent = first_item(bytes.fromhex(headers[parent_hash].removeprefix("0x")))
-            cases.append({
-                "source": str(path.relative_to(root)),
-                "test": test,
-                "network": fixture["network"],
-                "block": number,
-                "exception": exception,
-                "codes": codes,
-                "parent": parent.hex(),
-                "header": header.hex(),
-            })
+            cases.append(
+                {
+                    "source": str(path.relative_to(root)),
+                    "test": test,
+                    "network": fixture["network"],
+                    "block": number,
+                    "exception": exception,
+                    "codes": codes,
+                    "parent": parent.hex(),
+                    "header": header.hex(),
+                }
+            )
             kept += codes == [202]
 out.write_text(json.dumps(cases, indent=1))
 print(len(cases), "cases", out.stat().st_size, "bytes")

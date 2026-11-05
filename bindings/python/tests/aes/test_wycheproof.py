@@ -36,7 +36,8 @@ def _fields(test: dict) -> tuple[bytes, ...]:
 
 
 @pytest.mark.parametrize(
-    "test", [t for _, t in SUPPORTED if t["result"] == "valid"], ids=lambda t: t["tcId"])
+    "test", [t for _, t in SUPPORTED if t["result"] == "valid"], ids=lambda t: t["tcId"]
+)
 def test_valid(test: dict) -> None:
     key, iv, aad, msg, ct, tag = _fields(test)
     assert aes.gcm_encrypt(key, iv, msg, aad, len(tag)) == ct + tag
@@ -44,7 +45,8 @@ def test_valid(test: dict) -> None:
 
 
 @pytest.mark.parametrize(
-    "test", [t for _, t in SUPPORTED if t["flags"] == ["ModifiedTag"]], ids=lambda t: t["tcId"])
+    "test", [t for _, t in SUPPORTED if t["flags"] == ["ModifiedTag"]], ids=lambda t: t["tcId"]
+)
 def test_modified_tag(test: dict) -> None:
     key, iv, aad, _, ct, tag = _fields(test)
     assert test["result"] == "invalid"
@@ -54,7 +56,8 @@ def test_modified_tag(test: dict) -> None:
 
 
 @pytest.mark.parametrize(
-    "test", [t for _, t in SUPPORTED if t["flags"] == ["ZeroLengthIv"]], ids=lambda t: t["tcId"])
+    "test", [t for _, t in SUPPORTED if t["flags"] == ["ZeroLengthIv"]], ids=lambda t: t["tcId"]
+)
 def test_zero_length_iv(test: dict) -> None:
     # SP 800-38D §5.2.1.1 requires an IV of at least one bit, for encryption and decryption.
     key, iv, aad, msg, ct, tag = _fields(test)

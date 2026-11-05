@@ -75,7 +75,7 @@ def _fnv(a: int, b: int) -> int:
 
 
 def _words(data: bytes) -> list[int]:
-    return [int.from_bytes(data[i:i + 4], "little") for i in range(0, len(data), 4)]
+    return [int.from_bytes(data[i : i + 4], "little") for i in range(0, len(data), 4)]
 
 
 def _bytes(words: list[int]) -> bytes:
@@ -99,7 +99,7 @@ def test_dataset_item_against_the_specification(items: int) -> None:
     # A random cache of a few items, fixed by its seed, and a spread of indices.
     rng = random.Random(items)
     raw = bytes(rng.getrandbits(8) for _ in range(64 * items))
-    cache = [_words(raw[64 * k:64 * k + 64]) for k in range(items)]
+    cache = [_words(raw[64 * k : 64 * k + 64]) for k in range(items)]
     for index in (0, 1, items, 12345, 2**26 - 1):
         assert ethash.dataset_item(raw, index) == _reference_item(cache, index)
 

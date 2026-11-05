@@ -17,8 +17,15 @@ from .test_data_column import replacements
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "fork_choice"
 
 # The handlers that EthLib runs, and the forks at which it runs them.
-HANDLERS = ("ex_ante", "get_head", "get_proposer_head", "on_block", "on_merge_block", "reorg",
-            "withholding")
+HANDLERS = (
+    "ex_ante",
+    "get_head",
+    "get_proposer_head",
+    "on_block",
+    "on_merge_block",
+    "reorg",
+    "withholding",
+)
 SPECIFIED = ("altair", "bellatrix", "capella", "deneb")
 
 # The Fulu cases that judge the columns of a block, which EthLib checks before the state
@@ -75,12 +82,14 @@ def _input(case: Path, step: dict) -> tuple:
     if "checks" in step:
         return "checks", "get_proposer_head" in step["checks"]
     if "columns" in step:
-        return "block", (_read(case, step["block"]),
-                         [_read(case, name) for name in step["columns"]])
+        return "block", (
+            _read(case, step["block"]),
+            [_read(case, name) for name in step["columns"]],
+        )
     if "blobs" in step:
         # The file holds the blobs one after another.
         data = _read(case, step["blobs"])
-        blobs = [data[i:i + BYTES_PER_BLOB] for i in range(0, len(data), BYTES_PER_BLOB)]
+        blobs = [data[i : i + BYTES_PER_BLOB] for i in range(0, len(data), BYTES_PER_BLOB)]
         proofs = [_hex(proof) for proof in step.get("proofs", [])]
         return "block", (_read(case, step["block"]), blobs, proofs)
     for kind in _FILE_STEPS:
@@ -119,9 +128,15 @@ def run_case(preset: str, fork: str, case: Path) -> None:
     meta = _load(case / "meta.yaml") if (case / "meta.yaml").exists() else {}
     # Setting 2 marks placeholder signatures, which the case must not check.
     verify = (meta or {}).get("bls_setting", 0) != 2
-    outcomes = consensus.fork_choice(preset, FORKS[fork], _read(case, "anchor_state"),
-                                     _read(case, "anchor_block"),
-                                     [_input(case, step) for step in steps], verify, config)
+    outcomes = consensus.fork_choice(
+        preset,
+        FORKS[fork],
+        _read(case, "anchor_state"),
+        _read(case, "anchor_block"),
+        [_input(case, step) for step in steps],
+        verify,
+        config,
+    )
     for index, (step, outcome) in enumerate(zip(steps, outcomes, strict=True)):
         if "checks" in step:
             assert isinstance(outcome, dict), (index, outcome)
@@ -160,9 +175,15 @@ def _archive_cases() -> list:
             case = steps.parent
             fork, _, handler = case.relative_to(base).parts[:3]
             if runs(fork, handler) or checks_columns(fork, case):
-                cases.append(pytest.param(preset, fork, case,
-                                          id=f"{preset}/{case.relative_to(base).as_posix()}",
-                                          marks=pytest.mark.archive(name)))
+                cases.append(
+                    pytest.param(
+                        preset,
+                        fork,
+                        case,
+                        id=f"{preset}/{case.relative_to(base).as_posix()}",
+                        marks=pytest.mark.archive(name),
+                    )
+                )
     # An empty list would skip the test in silence, so a wrong path in an archive fails here.
     if not cases:
         raise LookupError("the archives hold no fork choice case")
@@ -172,8 +193,9 @@ def _archive_cases() -> list:
 def test_digests():
     lines = (FILES / "SHA256SUMS").read_text().splitlines()
     entries = [line.split() for line in lines if not line.startswith("#")]
-    assert len(entries) == sum(1 for path in FILES.rglob("*") if path.is_file()
-                               and path.name != "SHA256SUMS")
+    assert len(entries) == sum(
+        1 for path in FILES.rglob("*") if path.is_file() and path.name != "SHA256SUMS"
+    )
     for digest, name in entries:
         assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name
 

@@ -15,9 +15,19 @@ def cost(size: int) -> int:
     return 60 + 12 * ((size + 31) // 32)
 
 
-@pytest.mark.parametrize("size, expected", [
-    (0, 60), (1, 72), (31, 72), (32, 72), (33, 84), (64, 84), (65, 96), (1024, 444),
-])
+@pytest.mark.parametrize(
+    "size, expected",
+    [
+        (0, 60),
+        (1, 72),
+        (31, 72),
+        (32, 72),
+        (33, 84),
+        (64, 84),
+        (65, 96),
+        (1024, 444),
+    ],
+)
 @pytest.mark.parametrize("fork", FORKS)
 def test_gas_boundaries(fork: str, size: int, expected: int) -> None:
     assert price(fork, ADDRESS, bytes(size)) == expected

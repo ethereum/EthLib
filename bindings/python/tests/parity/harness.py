@@ -21,8 +21,9 @@ def disagreements(suite: str) -> dict[tuple[str, str | None], dict]:
     An entry without a group holds for every group of its case.
     """
     entries = tomllib.loads(DISAGREEMENTS_FILE.read_text()).get("disagreement", [])
-    return {(entry["case"], entry.get("group")): entry
-            for entry in entries if entry["suite"] == suite}
+    return {
+        (entry["case"], entry.get("group")): entry for entry in entries if entry["suite"] == suite
+    }
 
 
 def runnable(cases: list[Case]) -> list[Case]:
@@ -41,8 +42,9 @@ def unpack(name: str, cases: list[Case], depth: int) -> Path:
 def run(root: Path, case: Case, suite_disagreements: dict, request, record_property) -> None:
     """Run one case, which must fail with the listed reason if it is a disagreement."""
     record_property("parity row", case.row)
-    entry = (suite_disagreements.get((case.id, case.group))
-             or suite_disagreements.get((case.id, None)))
+    entry = suite_disagreements.get((case.id, case.group)) or suite_disagreements.get(
+        (case.id, None)
+    )
     if entry is not None:
         request.applymarker(pytest.mark.xfail(strict=True, reason=entry["reason"]))
     runner(case)(root, case)
@@ -59,16 +61,24 @@ def catalogue(cases: list[Case]) -> str:
             entry["runnable"] += 1
         else:
             entry["plans"].add(plan(case) or "no plan")
-    return json.dumps({row: {"rank": entry["rank"], "cases": entry["cases"],
-                             "runnable": entry["runnable"],
-                             "plan": "; ".join(sorted(entry["plans"]))}
-                       for row, entry in rows.items()})
+    return json.dumps(
+        {
+            row: {
+                "rank": entry["rank"],
+                "cases": entry["cases"],
+                "runnable": entry["runnable"],
+                "plan": "; ".join(sorted(entry["plans"])),
+            }
+            for row, entry in rows.items()
+        }
+    )
 
 
 def check_groups(cases: list[Case]) -> None:
     """Every group has a runner or a plan, so that a new upstream group cannot go unnoticed."""
-    missing = sorted({case.group for case in cases
-                      if case.group not in RUNNERS and plan(case) is None})
+    missing = sorted(
+        {case.group for case in cases if case.group not in RUNNERS and plan(case) is None}
+    )
     assert missing == []
 
 

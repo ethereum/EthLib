@@ -17,9 +17,9 @@ A = b"\x41"
 # Each block and its data.
 BLOCKS = [
     # A literal of two bytes, its length in the tag.
-    ("020441" "42", b"AB"),
+    ("02044142", b"AB"),
     # Two literals in a row, which §2 permits.
-    ("02004100" "42", b"AB"),
+    ("0200410042", b"AB"),
     # A literal of 61 bytes, the shortest whose length takes one extra byte (tag 60).
     ("3df03c" + "41" * 61, A * 61),
     # A literal of one byte whose length is written in four extra bytes (tag 63).
@@ -33,7 +33,7 @@ BLOCKS = [
     # A copy with a four-byte offset: offset 4, length 4.
     ("080c414243440f04000000", b"ABCDABCD"),
     # The example of §2.2: "xab" then a copy of offset 2 and length 4 gives "xababab".
-    ("070878616" "20e0200", b"xababab"),
+    ("07087861620e0200", b"xababab"),
     # An overlapping copy of offset 1 and length 10: a run of one byte.
     ("0b00411901", A * 11),
     # An empty block: a preamble of zero and no elements.
@@ -130,7 +130,7 @@ def test_framed_digits() -> None:
 def test_framed_zeros() -> None:
     # 32 zero bytes in one compressed chunk, as python-snappy frames them.
     # The block is the length 32, a literal of one zero byte, and a copy of 31 bytes from 1 back.
-    stream = STREAM_IDENTIFIER + bytes.fromhex("000a0000faffd70f" "2000007a0100")
+    stream = STREAM_IDENTIFIER + bytes.fromhex("000a0000faffd70f2000007a0100")
     assert snappy.decode_frames(stream) == bytes(32)
 
 
@@ -142,7 +142,7 @@ def test_framed_empty() -> None:
 
 def test_skipped_chunks() -> None:
     # A second stream identifier, then a padding chunk and a reserved skippable chunk, add nothing.
-    stream = STREAM_IDENTIFIER * 2 + bytes.fromhex("fe0200000000" "8001000041")
+    stream = STREAM_IDENTIFIER * 2 + bytes.fromhex("fe02000000008001000041")
     assert snappy.decode_frames(stream) == b""
 
 
@@ -161,13 +161,17 @@ BAD_STREAMS = [
     # An uncompressed chunk of three bytes, too short for its checksum.
     (STREAM_IDENTIFIER + bytes.fromhex("01030000000000"), "checksumTruncated"),
     # The digits chunk with its last checksum byte changed from c7 to c6.
-    (FRAMED_DIGITS[:17] + b"\xc6" + FRAMED_DIGITS[18:],
-     f"checksumMismatch {0xC68AB0E5} {0xC78AB0E5}"),
+    (
+        FRAMED_DIGITS[:17] + b"\xc6" + FRAMED_DIGITS[18:],
+        f"checksumMismatch {0xC68AB0E5} {0xC78AB0E5}",
+    ),
     # A compressed chunk whose block declares 65537 bytes.
     (STREAM_IDENTIFIER + bytes.fromhex("0007000000000000818004"), "chunkTooLarge 65537"),
     # A compressed chunk whose block starts with a copy.
-    (STREAM_IDENTIFIER + bytes.fromhex("0007000000000000040101"),
-     "block (EthLib.Networking.Snappy.SnappyError.copyOffsetTooLarge 1)"),
+    (
+        STREAM_IDENTIFIER + bytes.fromhex("0007000000000000040101"),
+        "block (EthLib.Networking.Snappy.SnappyError.copyOffsetTooLarge 1)",
+    ),
     # A chunk of type 0x02, the first reserved unskippable type.
     (STREAM_IDENTIFIER + bytes.fromhex("02000000"), "reservedUnskippable 2"),
 ]

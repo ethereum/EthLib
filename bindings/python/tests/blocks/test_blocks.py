@@ -32,8 +32,16 @@ FORK_OF_NETWORK = {
 }
 
 # The networks before London, whose headers have the 15 fields of Frontier.
-BEFORE_LONDON = {"Frontier", "Homestead", "TangerineWhistle", "SpuriousDragon", "Byzantium",
-                 "ConstantinopleFix", "Istanbul", "Berlin"}
+BEFORE_LONDON = {
+    "Frontier",
+    "Homestead",
+    "TangerineWhistle",
+    "SpuriousDragon",
+    "Byzantium",
+    "ConstantinopleFix",
+    "Istanbul",
+    "Berlin",
+}
 
 
 def _first_item(data: bytes) -> bytes:
@@ -44,8 +52,8 @@ def _first_item(data: bytes) -> bytes:
     head = data[start]
     assert head >= 0xF8
     length_bytes = head - 0xF7
-    length = int.from_bytes(data[start + 1:start + 1 + length_bytes], "big")
-    return data[start:start + 1 + length_bytes + length]
+    length = int.from_bytes(data[start + 1 : start + 1 + length_bytes], "big")
+    return data[start : start + 1 + length_bytes + length]
 
 
 def _case_id(case) -> str:
@@ -75,8 +83,7 @@ def test_header_rejected_at_other_fork(case) -> None:
 BEFORE_SHANGHAI = BEFORE_LONDON | {"London", "Paris"}
 
 # The empty trie has this root, the Keccak-256 hash of 0x80.
-EMPTY_TRIE_ROOT = bytes.fromhex(
-    "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+EMPTY_TRIE_ROOT = bytes.fromhex("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 
 
 @pytest.mark.parametrize("case", CASES, ids=[_case_id(c) for c in CASES])
@@ -117,8 +124,12 @@ def test_legacy_transaction_in_bytes_before_glamsterdam() -> None:
 
 
 def test_legacy_transaction_in_bytes_from_glamsterdam() -> None:
-    cases = [c for c in CASES if c["network"] == "Amsterdam"
-             and any(isinstance(tx, list) for tx in rlp.decode(bytes.fromhex(c["rlp"]))[1])]
+    cases = [
+        c
+        for c in CASES
+        if c["network"] == "Amsterdam"
+        and any(isinstance(tx, list) for tx in rlp.decode(bytes.fromhex(c["rlp"]))[1])
+    ]
     assert cases, "no vendored Amsterdam block holds a legacy transaction"
     case = cases[0]
     block = rlp.decode(bytes.fromhex(case["rlp"]))

@@ -21,18 +21,23 @@ for path in sorted(root.glob("state_tests/*/byzantium/eip198_modexp_precompile/m
             caller = state[tx["to"]]
             success = int(caller["storage"].get("0x00", "0x00"), 16) == 1
             # The contract that the caller creates holds the output of a successful call.
-            created = [address for address in state
-                       if address not in test["pre"] and address != tx["sender"]]
+            created = [
+                address
+                for address in state
+                if address not in test["pre"] and address != tx["sender"]
+            ]
             output = state[created[0]]["code"] if success else None
-            cases.append({
-                "file": path.relative_to(root.parent).as_posix(),
-                "test": name.split("::")[-1],
-                "network": network,
-                "input": data,
-                "gasLimit": int(gas_limit, 16),
-                "success": success,
-                "output": output,
-            })
+            cases.append(
+                {
+                    "file": path.relative_to(root.parent).as_posix(),
+                    "test": name.split("::")[-1],
+                    "network": network,
+                    "input": data,
+                    "gasLimit": int(gas_limit, 16),
+                    "success": success,
+                    "output": output,
+                }
+            )
 lines = (json.dumps(case, sort_keys=True, separators=(",", ":")) for case in cases)
 out.write_text("[\n" + ",\n".join(lines) + "\n]\n")
 print(len(cases), sum(case["success"] for case in cases))

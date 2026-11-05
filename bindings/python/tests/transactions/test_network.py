@@ -29,8 +29,20 @@ def _int(n: int) -> bytes:
 def _body(hashes: list[bytes]) -> list:
     """The fourteen fields of a blob transaction, with a dummy signature."""
     return [
-        _int(1), _int(0), _int(1), _int(10), _int(21000), b"\x11" * 20, _int(0), b"", [],
-        _int(1), hashes, _int(0), _int(1), _int(1),
+        _int(1),
+        _int(0),
+        _int(1),
+        _int(10),
+        _int(21000),
+        b"\x11" * 20,
+        _int(0),
+        b"",
+        [],
+        _int(1),
+        hashes,
+        _int(0),
+        _int(1),
+        _int(1),
     ]
 
 
@@ -56,8 +68,9 @@ def _dencun(body: list, blobs: list[bytes], commitments: list[bytes], proofs: li
     return b"\x03" + rlp.encode([body, blobs, commitments, proofs])
 
 
-def _fusaka(body: list, blobs: list[bytes], commitments: list[bytes], proofs: list[bytes],
-            version: int = 1) -> bytes:
+def _fusaka(
+    body: list, blobs: list[bytes], commitments: list[bytes], proofs: list[bytes], version: int = 1
+) -> bytes:
     return b"\x03" + rlp.encode([body, _int(version), blobs, commitments, proofs])
 
 
@@ -109,8 +122,11 @@ def test_count_mismatch() -> None:
     body = _body([_versioned_hash(c) for c in commitments])
     _check_raises("dencun", _dencun(body, blobs, commitments, _blob_proofs()[:1]), 102)
     _check_raises("fusaka", _fusaka(body, blobs, commitments, _cell_proofs()[:-1]), 102)
-    _check_raises("dencun", _dencun(_body([_versioned_hash(commitments[0])]), blobs, commitments,
-                                    _blob_proofs()), 102)
+    _check_raises(
+        "dencun",
+        _dencun(_body([_versioned_hash(commitments[0])]), blobs, commitments, _blob_proofs()),
+        102,
+    )
 
 
 def test_versioned_hash_mismatch() -> None:

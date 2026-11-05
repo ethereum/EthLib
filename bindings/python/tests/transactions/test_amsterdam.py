@@ -17,24 +17,37 @@ def _int(n: int) -> bytes:
     return n.to_bytes((n.bit_length() + 7) // 8, "big")
 
 
-def _fee_market(to: bytes, value: int = 0, data: bytes = b"", gas: int = 10**6,
-                access_list: list | None = None) -> bytes:
+def _fee_market(
+    to: bytes, value: int = 0, data: bytes = b"", gas: int = 10**6, access_list: list | None = None
+) -> bytes:
     """A signed type 2 transaction of the sender on chain 1."""
-    fields = [_int(CHAIN_ID), b"", _int(1), _int(10), _int(gas), to, _int(value), data,
-              access_list or []]
+    fields = [
+        _int(CHAIN_ID),
+        b"",
+        _int(1),
+        _int(10),
+        _int(gas),
+        to,
+        _int(value),
+        data,
+        access_list or [],
+    ]
     signature = sign(KEY, keccak256(b"\x02" + rlp.encode(fields)))
     r, s, v = signature[:32], signature[32:64], signature[64]
     return b"\x02" + rlp.encode(fields + [_int(v), r.lstrip(b"\0"), s.lstrip(b"\0")])
 
 
 # The reference cases of EIP-2780, "Transaction reference cases": the intrinsic part.
-@pytest.mark.parametrize("to, value, intrinsic", [
-    (SENDER, 1, 12_000),   # ETH transfer to self
-    (OTHER, 0, 15_000),    # no transfer to another account
-    (OTHER, 1, 21_000),    # ETH transfer to another account
-    (b"", 0, 24_000),      # create transaction
-    (b"", 1, 24_000),      # create transaction with value
-])
+@pytest.mark.parametrize(
+    "to, value, intrinsic",
+    [
+        (SENDER, 1, 12_000),  # ETH transfer to self
+        (OTHER, 0, 15_000),  # no transfer to another account
+        (OTHER, 1, 21_000),  # ETH transfer to another account
+        (b"", 0, 24_000),  # create transaction
+        (b"", 1, 24_000),  # create transaction with value
+    ],
+)
 def test_eip2780_reference_cases(to: bytes, value: int, intrinsic: int) -> None:
     tx = _fee_market(to, value)
     assert transactions.intrinsic_gas("glamsterdam", tx) == intrinsic

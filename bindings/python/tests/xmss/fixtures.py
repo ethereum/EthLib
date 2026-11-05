@@ -55,6 +55,7 @@ LEAF_LAST = (1 << 32) - 1
 
 # ---- Committed cases -------------------------------------------------------
 
+
 def read_output(handler: str, case: str) -> bytes:
     """The output bytes of a committed case."""
     data = YAML(typ="safe").load((ROOT / "xmss" / handler / case / "data.yaml").read_text())

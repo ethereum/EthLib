@@ -56,8 +56,9 @@ FORKS = since("byzantium")
 
 
 @pytest.mark.parametrize("fork", FORKS)
-@pytest.mark.parametrize(("data", "gas", "succeeds"), [c[1:] for c in CALLS],
-                         ids=[c[0] for c in CALLS])
+@pytest.mark.parametrize(
+    ("data", "gas", "succeeds"), [c[1:] for c in CALLS], ids=[c[0] for c in CALLS]
+)
 def test_identity_call(fork: str, data: bytes, gas: int, succeeds: bool) -> None:
     assert price(fork, IDENTITY, data) == PRICES[len(data)]
     if succeeds:

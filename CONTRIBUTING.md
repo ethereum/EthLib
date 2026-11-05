@@ -378,10 +378,11 @@ They run every case of execution-spec-tests and consensus-spec-tests at the fork
 A case passes, fails, waits for a runner, or disagrees for a reason listed in `tests/parity/disagreements.toml`.
 Set `ETHLIB_PARITY_REPORT` to a file name to get the report of these outcomes for each fork and runner.
 
-When you change Python code, lint it and check its types and its spelling:
+When you change Python code, format it, lint it and check its types and its spelling:
 
 ```bash
 uv sync --frozen --extra test --group lint
+uv run --no-sync ruff format
 uv run --no-sync ruff check
 uv run --no-sync ty check
 git ls-files -z '*.py' | xargs -0 uv run --no-sync codespell

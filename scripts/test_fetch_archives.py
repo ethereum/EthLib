@@ -5,6 +5,7 @@ Check `fetch_archives.py` itself, on small archives built in a temporary directo
 
 Only the standard library is used, like the script.
 """
+
 import hashlib
 import importlib.util
 import io
@@ -66,8 +67,9 @@ class Fetch(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def archive(self, data: bytes, sha256: str | None = None,
-                name: str = "served.tar.gz") -> "fetch.Archive":
+    def archive(
+        self, data: bytes, sha256: str | None = None, name: str = "served.tar.gz"
+    ) -> "fetch.Archive":
         """An archive served from a local file, pinned to `sha256` or else to its own digest."""
         path = self.root / name
         path.write_bytes(data)
@@ -149,8 +151,9 @@ class Fetch(unittest.TestCase):
         self.assertFalse((self.root / "escape").exists())
 
     def test_zip_link_fails(self):
-        archive = self.archive(zip_file(MEMBERS, {"fixtures/a/link": "/etc/passwd"}),
-                               name="served.zip")
+        archive = self.archive(
+            zip_file(MEMBERS, {"fixtures/a/link": "/etc/passwd"}), name="served.zip"
+        )
         with self.assertRaisesRegex(fetch.ArchiveError, "not a file or a directory"):
             fetch.unpack(archive, self.cache, ["fixtures/a"])
 

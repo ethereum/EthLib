@@ -1,7 +1,8 @@
 """Check that every C export which reads a fork name rejects the forks whose rules it lacks.
 
-    uv run --no-project --python 3.12 python scripts/check_fork_cap.py
+uv run --no-project --python 3.12 python scripts/check_fork_cap.py
 """
+
 import importlib.util
 import re
 import sys
@@ -12,7 +13,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # Load the comment stripper of `soundness_facts.py` by path: `scripts` is not a package.
 _spec = importlib.util.spec_from_file_location(
-    "soundness_facts", Path(__file__).resolve().parent / "soundness_facts.py")
+    "soundness_facts", Path(__file__).resolve().parent / "soundness_facts.py"
+)
 _facts = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_facts)
 strip_lean = _facts.strip_lean
@@ -25,7 +27,9 @@ CAPPED = re.compile(r"\bforkUpTo\b")
 UNCAPPED = re.compile(r"\bforkOfName\b|\bFork\.ofName\?")
 DECL = re.compile(
     r"^(?:@\[[^\]]*\]\s*)*(?:(?:private|protected|noncomputable|partial|unsafe|public)\s+)*"
-    r"(?:def|abbrev|theorem|instance|opaque)\b\s*([^\s(:{\[]*)", re.M)
+    r"(?:def|abbrev|theorem|instance|opaque)\b\s*([^\s(:{\[]*)",
+    re.M,
+)
 ATTRIBUTE = re.compile(r"^@\[([^\]]*)\]", re.M)
 BLOCK_END = re.compile(r"^(?:end|namespace|section|open|variable|@\[)\b", re.M)
 IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_'!?]*(?:\.[A-Za-z_][A-Za-z0-9_'!?]*)*")
@@ -50,8 +54,8 @@ def declarations(path: str, text: str) -> list[Decl]:
         stop = starts[index + 1].start() if index + 1 < len(starts) else len(code)
         if end := BLOCK_END.search(code, match.end(), stop):
             stop = end.start()
-        attributes = " ".join(ATTRIBUTE.findall(code[match.start():match.end()]))
-        body = code[match.end():stop]
+        attributes = " ".join(ATTRIBUTE.findall(code[match.start() : match.end()]))
+        body = code[match.end() : stop]
         header = re.split(r":=|\bwhere\b", body, maxsplit=1)[0]
         name = match.group(1).split(".")[-1]
         export = re.search(r"\bexport\b", attributes) is not None
@@ -61,8 +65,11 @@ def declarations(path: str, text: str) -> list[Decl]:
 
 def takes_fork(decl: Decl) -> bool:
     """Whether a binder of the declaration names a fork."""
-    return any("fork" in name.lower()
-               for names in FORK_BINDER.findall(decl.header) for name in names.split())
+    return any(
+        "fork" in name.lower()
+        for names in FORK_BINDER.findall(decl.header)
+        for name in names.split()
+    )
 
 
 def read_allowlist(path: Path) -> tuple[dict[tuple[str, str], str], list[str]]:
@@ -99,8 +106,10 @@ def check(root: Path) -> list[str]:
             if key in allowed:
                 used.add(key)
             else:
-                problems.append(f"{decl.path}: {decl.name} reads a fork name without a cap; "
-                                "use forkUpTo, or list it in the allowlist with a reason")
+                problems.append(
+                    f"{decl.path}: {decl.name} reads a fork name without a cap; "
+                    "use forkUpTo, or list it in the allowlist with a reason"
+                )
 
     def capped(start: Decl) -> bool:
         seen, todo = set(), [start]
@@ -117,8 +126,9 @@ def check(root: Path) -> list[str]:
 
     for decl in decls:
         if decl.export and takes_fork(decl) and not capped(decl):
-            problems.append(f"{decl.path}: export {decl.name} takes a fork but never caps it "
-                            "with forkUpTo")
+            problems.append(
+                f"{decl.path}: export {decl.name} takes a fork but never caps it with forkUpTo"
+            )
     for path, name in sorted(set(allowed) - used):
         problems.append(f"{ALLOWLIST}: {path} {name} reads no fork name; remove the entry")
     return problems

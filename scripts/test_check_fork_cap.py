@@ -1,4 +1,5 @@
 """Tests of `check_fork_cap.py` on small repositories in a temporary directory."""
+
 import importlib.util
 import tempfile
 import unittest
@@ -73,13 +74,15 @@ class CheckForkCap(unittest.TestCase):
         self.assertEqual(self.run_check({"X/Exports/C.lean": UNCAPPED}, allowlist), [])
 
     def test_entry_without_reason_fails(self):
-        problems = self.run_check({"X/Exports/C.lean": UNCAPPED},
-                                  "EthLib/X/Exports/C.lean cExport:\n")
+        problems = self.run_check(
+            {"X/Exports/C.lean": UNCAPPED}, "EthLib/X/Exports/C.lean cExport:\n"
+        )
         self.assertTrue(any("path name: reason" in p for p in problems))
 
     def test_stale_entry_fails(self):
-        problems = self.run_check({"X/Exports/A.lean": CAPPED},
-                                  "EthLib/X/Exports/A.lean aExport: no longer needed\n")
+        problems = self.run_check(
+            {"X/Exports/A.lean": CAPPED}, "EthLib/X/Exports/A.lean aExport: no longer needed\n"
+        )
         self.assertEqual(len(problems), 1)
         self.assertIn("remove the entry", problems[0])
 

@@ -38,9 +38,14 @@ def _cases() -> list[tuple[str, bool, list[tuple[bytes, bytes]], bytes]]:
         for name, case in json.loads((_DIR / file).read_text()).items():
             # The ordered files list pairs; the other files map keys to values, in file order.
             pairs = case["in"] if isinstance(case["in"], list) else list(case["in"].items())
-            cases.append((f"{file}:{name}", secured,
-                          [(_bytes(key), _bytes(value)) for key, value in pairs],
-                          bytes.fromhex(case["root"][2:])))
+            cases.append(
+                (
+                    f"{file}:{name}",
+                    secured,
+                    [(_bytes(key), _bytes(value)) for key, value in pairs],
+                    bytes.fromhex(case["root"][2:]),
+                )
+            )
     return cases
 
 

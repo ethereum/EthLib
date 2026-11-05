@@ -50,7 +50,7 @@ def test_pop_verify(pk: bytes, test: dict) -> None:
 
 def _compress(affine: bytes) -> bytes:
     """The compressed form of an affine `x.c0 ‖ x.c1 ‖ y.c0 ‖ y.c1`, computed by py_ecc."""
-    c = [int.from_bytes(affine[48 * i:48 * (i + 1)], "big") for i in range(4)]
+    c = [int.from_bytes(affine[48 * i : 48 * (i + 1)], "big") for i in range(4)]
     z1, z2 = compress_G2((FQ2([c[0], c[1]]), FQ2([c[2], c[3]]), FQ2.one()))
     return z1.to_bytes(48, "big") + z2.to_bytes(48, "big")
 

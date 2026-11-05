@@ -306,6 +306,7 @@ SIGNATURE_SCHEME_SEED = bytes.fromhex(
 
 # ---- Committed cases -------------------------------------------------------
 
+
 def read_output(handler: str, case: str) -> bytes:
     """The output bytes of a committed case."""
     data = YAML(typ="safe").load((ROOT / "sphincs" / handler / case / "data.yaml").read_text())

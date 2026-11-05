@@ -15,13 +15,18 @@ def _emit(case: str, seed: bytes, message: bytes) -> None:
         result = hex_str(sphincs.sign(seed, message))
     except (ValueError, RuntimeError):
         result = None
-    write_case("sphincs", HANDLER, case, {
-        "input": {
-            "seed":    hex_str(seed),
-            "message": hex_str(message),
+    write_case(
+        "sphincs",
+        HANDLER,
+        case,
+        {
+            "input": {
+                "seed": hex_str(seed),
+                "message": hex_str(message),
+            },
+            "output": result,
         },
-        "output": result,
-    })
+    )
 
 
 @F.slow

@@ -86,7 +86,9 @@ def manifest(root: Path) -> dict[str, object]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Check the release version and write the manifest.")
+    parser = argparse.ArgumentParser(
+        description="Check the release version and write the manifest."
+    )
     parser.add_argument("--check", action="store_true", help="check that the versions agree")
     parser.add_argument("--tag", help="the release tag, which must be v<version>")
     parser.add_argument("--output", type=Path, help="write the manifest to this file")

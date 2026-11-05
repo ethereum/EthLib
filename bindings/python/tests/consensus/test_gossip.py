@@ -23,7 +23,12 @@ ALTAIR = [
     "light_client_optimistic_update",
 ]
 CAPELLA = ["bls_to_execution_change"]
-GLOAS = ["execution_payload_bid", "execution_payload", "payload_attestation_message", "proposer_preferences"]
+GLOAS = [
+    "execution_payload_bid",
+    "execution_payload",
+    "payload_attestation_message",
+    "proposer_preferences",
+]
 
 
 def _blobs(count: int) -> list:

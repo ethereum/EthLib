@@ -27,8 +27,12 @@ GROUPS = {
 
 # The Gloas slot cases that stay inside one epoch.
 # EthLib runs only these at Gloas until the epoch transition runs there.
-GLOAS_SLOTS = ("slots_1", "slots_2", "execution_payload_availability_reset_from_set",
-               "execution_payload_availability_reset_from_unset")
+GLOAS_SLOTS = (
+    "slots_1",
+    "slots_2",
+    "execution_payload_availability_reset_from_set",
+    "execution_payload_availability_reset_from_unset",
+)
 
 # The release archives that hold the cases.
 ARCHIVES = {
@@ -49,9 +53,10 @@ def _load(path: Path):
 
 def _fork_epochs(post_fork: str, fork_epoch: int) -> dict:
     """The fork epochs of a transition case: every fork before the post fork at 0."""
-    earlier = list(FORKS)[1:list(FORKS).index(post_fork)]
+    earlier = list(FORKS)[1 : list(FORKS).index(post_fork)]
     return {f"{name.upper()}_FORK_EPOCH": 0 for name in earlier} | {
-        f"{post_fork.upper()}_FORK_EPOCH": fork_epoch}
+        f"{post_fork.upper()}_FORK_EPOCH": fork_epoch
+    }
 
 
 def run_case(preset: str, fork: str, group: str, case: Path) -> None:
@@ -66,8 +71,9 @@ def run_case(preset: str, fork: str, group: str, case: Path) -> None:
 
     def advance(state: bytes) -> bytes:
         if group == "sanity/slots":
-            return consensus.process_slots(preset, FORKS[fork], state,
-                                           int(_load(case / "slots.yaml")), config)
+            return consensus.process_slots(
+                preset, FORKS[fork], state, int(_load(case / "slots.yaml")), config
+            )
         if group == "transition/core":
             return across(state)
         for index in range(meta["blocks_count"]):
@@ -84,8 +90,9 @@ def run_case(preset: str, fork: str, group: str, case: Path) -> None:
         for index in range(meta["blocks_count"]):
             block = snappy.decompress((case / f"blocks_{index}.ssz_snappy").read_bytes())
             block_fork = pre_fork if index <= meta.get("fork_block", -1) else fork
-            state = consensus.state_transition_across(preset, FORKS[state_fork], state,
-                                                      FORKS[block_fork], block, verify, epochs)
+            state = consensus.state_transition_across(
+                preset, FORKS[state_fork], state, FORKS[block_fork], block, verify, epochs
+            )
             state_fork = block_fork
         return state
 
@@ -102,8 +109,11 @@ def _cases() -> list:
     for pre in sorted(FILES.rglob("pre.ssz_snappy")):
         case = pre.parent
         preset, fork, runner, handler = case.relative_to(FILES).parts[:4]
-        cases.append(pytest.param(preset, fork, f"{runner}/{handler}", case,
-                                  id=case.relative_to(FILES).as_posix()))
+        cases.append(
+            pytest.param(
+                preset, fork, f"{runner}/{handler}", case, id=case.relative_to(FILES).as_posix()
+            )
+        )
     return cases
 
 
@@ -113,22 +123,37 @@ def _archive_cases() -> list:
         return []
     cases = []
     for preset, name in ARCHIVES.items():
-        paths = [f"tests/{preset}/{fork}/{group}" for group, forks in GROUPS.items()
-                 for fork in forks]
+        paths = [
+            f"tests/{preset}/{fork}/{group}" for group, forks in GROUPS.items() for fork in forks
+        ]
         base = archives.unpack(name, *paths) / "tests" / preset
         for path in paths:
             for pre in sorted((base / path.split("/", 2)[2]).rglob("pre.ssz_snappy")):
                 case = pre.parent
                 fork, runner, handler = case.relative_to(base).parts[:3]
-                cases.append(pytest.param(preset, fork, f"{runner}/{handler}", case,
-                                          id=f"{preset}/{case.relative_to(base).as_posix()}",
-                                          marks=pytest.mark.archive(name)))
+                cases.append(
+                    pytest.param(
+                        preset,
+                        fork,
+                        f"{runner}/{handler}",
+                        case,
+                        id=f"{preset}/{case.relative_to(base).as_posix()}",
+                        marks=pytest.mark.archive(name),
+                    )
+                )
         base = archives.unpack(name, f"tests/{preset}/gloas/sanity/slots") / "tests" / preset
         for slot_case in GLOAS_SLOTS:
             case = base / "gloas" / "sanity" / "slots" / "pyspec_tests" / slot_case
-            cases.append(pytest.param(preset, "gloas", "sanity/slots", case,
-                                      id=f"{preset}/{case.relative_to(base).as_posix()}",
-                                      marks=pytest.mark.archive(name)))
+            cases.append(
+                pytest.param(
+                    preset,
+                    "gloas",
+                    "sanity/slots",
+                    case,
+                    id=f"{preset}/{case.relative_to(base).as_posix()}",
+                    marks=pytest.mark.archive(name),
+                )
+            )
     # An empty list would skip the test in silence, so a wrong path in an archive fails here.
     if not cases:
         raise LookupError("the archives hold no sanity, finality or random case")
@@ -138,16 +163,18 @@ def _archive_cases() -> list:
 def test_digests():
     lines = (FILES / "SHA256SUMS").read_text().splitlines()
     entries = [line.split() for line in lines if not line.startswith("#")]
-    assert len(entries) == sum(1 for path in FILES.rglob("*") if path.is_file()
-                               and path.name != "SHA256SUMS")
+    assert len(entries) == sum(
+        1 for path in FILES.rglob("*") if path.is_file() and path.name != "SHA256SUMS"
+    )
     for digest, name in entries:
         assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name
 
 
 @pytest.mark.parametrize("preset, fork, group, case", _cases())
 def test_case(preset, fork, group, case):
-    assert runs(fork, group) or (fork == "gloas" and group == "sanity/slots"
-                                 and case.name in GLOAS_SLOTS)
+    assert runs(fork, group) or (
+        fork == "gloas" and group == "sanity/slots" and case.name in GLOAS_SLOTS
+    )
     run_case(preset, fork, group, case)
 
 

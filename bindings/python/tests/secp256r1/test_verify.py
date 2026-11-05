@@ -38,8 +38,13 @@ def _cases():
             # The set has no "acceptable" result, only valid and invalid.
             assert test["result"] in ("valid", "invalid")
             msg_hash = sha256(bytes.fromhex(test["msg"]))
-            yield (test["tcId"], public_key, msg_hash, bytes.fromhex(test["sig"]),
-                   test["result"] == "valid")
+            yield (
+                test["tcId"],
+                public_key,
+                msg_hash,
+                bytes.fromhex(test["sig"]),
+                test["result"] == "valid",
+            )
 
 
 CASES = list(_cases())
@@ -53,20 +58,26 @@ def _verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool | None
         return None
 
 
-@pytest.mark.parametrize("tc_id, public_key, msg_hash, signature, valid", CASES,
-                         ids=[f"tc{c[0]}" for c in CASES])
+@pytest.mark.parametrize(
+    "tc_id, public_key, msg_hash, signature, valid", CASES, ids=[f"tc{c[0]}" for c in CASES]
+)
 def test_p1363(tc_id, public_key, msg_hash, signature, valid) -> None:
     result = _verify(public_key, msg_hash, signature)
     # A rejection, whether by length or by ECDSA, matches an invalid test.
     assert bool(result) == valid
-    write_case("secp256r1", "verify", f"verify_wycheproof_p1363_{tc_id}", {
-        "input": {
-            "public_key": hex_str(public_key),
-            "msg_hash": hex_str(msg_hash),
-            "signature": hex_str(signature),
+    write_case(
+        "secp256r1",
+        "verify",
+        f"verify_wycheproof_p1363_{tc_id}",
+        {
+            "input": {
+                "public_key": hex_str(public_key),
+                "msg_hash": hex_str(msg_hash),
+                "signature": hex_str(signature),
+            },
+            "output": result,
         },
-        "output": result,
-    })
+    )
 
 
 def test_high_s_verifies() -> None:

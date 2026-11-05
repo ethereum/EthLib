@@ -31,8 +31,13 @@ def cases(name: str):
             # These sets have no "acceptable" result, only valid and invalid.
             assert test["result"] in ("valid", "invalid")
             msg_hash = sha256(bytes.fromhex(test["msg"]))
-            yield (test["tcId"], public_key, msg_hash, bytes.fromhex(test["sig"]),
-                   test["result"] == "valid")
+            yield (
+                test["tcId"],
+                public_key,
+                msg_hash,
+                bytes.fromhex(test["sig"]),
+                test["result"] == "valid",
+            )
 
 
 def der_signature(der: bytes) -> bytes | None:
@@ -47,6 +52,7 @@ def der_signature(der: bytes) -> bytes | None:
 
     An integer that needs more than 32 bytes is also None: it cannot be below `n`.
     """
+
     def length(buf: bytes, at: int) -> tuple[int, int] | None:
         # Every length here is below 128, so it takes the short form.
         if at >= len(buf) or buf[at] >= 0x80:
@@ -60,7 +66,7 @@ def der_signature(der: bytes) -> bytes | None:
         if got is None:
             return None
         size, at = got
-        body = buf[at:at + size]
+        body = buf[at : at + size]
         if size == 0 or len(body) != size:
             return None
         # Negative, or a zero byte the next byte does not need.

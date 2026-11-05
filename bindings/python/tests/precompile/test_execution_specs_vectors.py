@@ -112,8 +112,9 @@ def test_bls_counts():
     assert (len(_new(BLS_SUCCESS, BLS_EIP)), len(_new(BLS_FAILURE, BLS_FAIL_EIP))) == (1, 1)
 
 
-@pytest.mark.parametrize("params, eip", [(BLS_SUCCESS, BLS_EIP), (BLS_FAILURE, BLS_FAIL_EIP)],
-                         ids=["success", "failure"])
+@pytest.mark.parametrize(
+    "params, eip", [(BLS_SUCCESS, BLS_EIP), (BLS_FAILURE, BLS_FAIL_EIP)], ids=["success", "failure"]
+)
 def test_bls_repeats_agree(params: list, eip: dict) -> None:
     # A repeated input expects the same output, price or error in both sources.
     for param in params:
@@ -151,8 +152,10 @@ P256_CASES = [
 ]
 
 # The cases of EIP-7951 that `test_p256verify.py` runs, by input.
-EIP7951 = {_hex(case["Input"]): case["Expected"]
-           for case in _load(Path(__file__).parent / "eip7951_cases.json")}
+EIP7951 = {
+    _hex(case["Input"]): case["Expected"]
+    for case in _load(Path(__file__).parent / "eip7951_cases.json")
+}
 
 
 def test_p256_count():
@@ -198,6 +201,7 @@ def test_modexp_output(fork: str, case: dict) -> None:
 
 # ---- Point evaluation (EIP-4844) -------------------------------------------------------------
 
+
 def _kzg_key(case: dict) -> tuple:
     fields = case["input"]
     return (fields["commitment"], fields["z"], fields["y"], fields["proof"], case["output"])
@@ -208,8 +212,11 @@ def test_point_evaluation_vectors_already_run():
     # `test_point_evaluation.py` runs through the precompile; this test checks that they agree.
     # Both repeat 12 inputs under a second name, so each holds 110 distinct cases.
     vectors = ROOT / "tests" / "cryptography" / "kzg" / "verify_kzg_proof"
-    ours = {_kzg_key(YAML(typ="safe").load((case / "data.yaml").read_text()))
-            for case in vectors.iterdir() if case.is_dir()}
+    ours = {
+        _kzg_key(YAML(typ="safe").load((case / "data.yaml").read_text()))
+        for case in vectors.iterdir()
+        if case.is_dir()
+    }
     theirs = [_kzg_key(case) for case in _load(KZG / "go_kzg_4844_verify_kzg_proof.json")]
     assert (len(theirs), len(set(theirs))) == (122, 110)
     assert set(theirs) == ours

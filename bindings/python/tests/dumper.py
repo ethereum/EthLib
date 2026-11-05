@@ -7,6 +7,7 @@ generators.
 with `default_flow_style=None` and a `0x…`-string representer forcing
 single-quotes.
 """
+
 import io
 from pathlib import Path
 
@@ -35,6 +36,7 @@ _DATA_YAML = _build_data_yaml()
 
 # ---- Hex encoding ---------------------------------------------------------
 
+
 def hex_str(b: bytes) -> str:
     return "0x" + b.hex()
 
@@ -47,7 +49,7 @@ def hex_list(bs) -> list[str]:
 
 # Output goes to the repo's top-level `tests/` directory.
 _REPO = Path(__file__).resolve().parents[3]
-ROOT  = _REPO / "tests" / "cryptography"
+ROOT = _REPO / "tests" / "cryptography"
 
 
 def _dump(yaml: YAML, data) -> str:

@@ -18,6 +18,8 @@ def test_hash(i: int) -> None:
     assert sha256.sha256(message) == digest
     # Write the checked vector as one case of the committed suite.
     write_case(
-        "sha256", HANDLER, F.CASE_NAMES[i],
+        "sha256",
+        HANDLER,
+        F.CASE_NAMES[i],
         {"input": {"message": hex_str(message)}, "output": hex_str(digest)},
     )

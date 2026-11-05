@@ -100,9 +100,17 @@ _AMSTERDAM = {
 NOT_YET_AT = {
     "gloas": _GLOAS,
     "heze": _HEZE,
-    **{network: _AMSTERDAM for network in (
-        "BPO2ToAmsterdamAtTime15k", "Amsterdam", "AmsterdamToBPOIncreaseAtTime15k",
-        "AmsterdamBPOIncrease", "AmsterdamToBPODecreaseAtTime15k", "AmsterdamBPODecrease")},
+    **{
+        network: _AMSTERDAM
+        for network in (
+            "BPO2ToAmsterdamAtTime15k",
+            "Amsterdam",
+            "AmsterdamToBPOIncreaseAtTime15k",
+            "AmsterdamBPOIncrease",
+            "AmsterdamToBPODecreaseAtTime15k",
+            "AmsterdamBPODecrease",
+        )
+    },
 }
 
 _YAML = YAML(typ="safe")
@@ -150,10 +158,18 @@ def _pre_state(pre: dict) -> bytes:
     """The state in the form of the state root export: address, nonce, balance, code, storage."""
     from ethlib.serialization import rlp
 
-    return rlp.encode([
-        [_hex(address), _scalar(a["nonce"]), _scalar(a["balance"]), _hex(a["code"]),
-         [[int(k, 16).to_bytes(32, "big"), _scalar(v)] for k, v in a["storage"].items()]]
-        for address, a in pre.items()])
+    return rlp.encode(
+        [
+            [
+                _hex(address),
+                _scalar(a["nonce"]),
+                _scalar(a["balance"]),
+                _hex(a["code"]),
+                [[int(k, 16).to_bytes(32, "big"), _scalar(v)] for k, v in a["storage"].items()],
+            ]
+            for address, a in pre.items()
+        ]
+    )
 
 
 def _block_hashes(number: int) -> list[bytes]:
@@ -170,35 +186,54 @@ def _environment(env: dict) -> bytes:
     from ethlib.serialization import rlp
 
     random = int(env.get("currentRandom", "0x0"), 16).to_bytes(32, "big")
-    return rlp.encode([
-        _hex(env["currentCoinbase"]), _scalar(env["currentGasLimit"]),
-        _scalar(env["currentNumber"]), _scalar(env["currentTimestamp"]),
-        _scalar(env["currentDifficulty"]), _scalar(env.get("currentBaseFee", "0x0")), random,
-        _scalar(env.get("currentExcessBlobGas", "0x0")),
-        _block_hashes(int(env["currentNumber"], 16)), _scalar(env.get("slotNumber", "0x0"))])
+    return rlp.encode(
+        [
+            _hex(env["currentCoinbase"]),
+            _scalar(env["currentGasLimit"]),
+            _scalar(env["currentNumber"]),
+            _scalar(env["currentTimestamp"]),
+            _scalar(env["currentDifficulty"]),
+            _scalar(env.get("currentBaseFee", "0x0")),
+            random,
+            _scalar(env.get("currentExcessBlobGas", "0x0")),
+            _block_hashes(int(env["currentNumber"], 16)),
+            _scalar(env.get("slotNumber", "0x0")),
+        ]
+    )
 
 
 def _accounts(accounts: list) -> dict:
     """The accounts of a run, by address, in the form of the post state of a fixture."""
-    return {"0x" + address.hex(): {
-        "nonce": int.from_bytes(nonce, "big"), "balance": int.from_bytes(balance, "big"),
-        "code": "0x" + code.hex(),
-        "storage": {int.from_bytes(k, "big"): int.from_bytes(v, "big") for k, v in storage}}
-        for address, nonce, balance, code, storage in accounts}
+    return {
+        "0x" + address.hex(): {
+            "nonce": int.from_bytes(nonce, "big"),
+            "balance": int.from_bytes(balance, "big"),
+            "code": "0x" + code.hex(),
+            "storage": {int.from_bytes(k, "big"): int.from_bytes(v, "big") for k, v in storage},
+        }
+        for address, nonce, balance, code, storage in accounts
+    }
 
 
 def _expected_accounts(state: dict) -> dict:
-    return {address: {
-        "nonce": int(a["nonce"], 16), "balance": int(a["balance"], 16), "code": a["code"],
-        "storage": {int(k, 16): int(v, 16) for k, v in a["storage"].items() if int(v, 16)}}
-        for address, a in state.items()}
+    return {
+        address: {
+            "nonce": int(a["nonce"], 16),
+            "balance": int(a["balance"], 16),
+            "code": a["code"],
+            "storage": {int(k, 16): int(v, 16) for k, v in a["storage"].items() if int(v, 16)},
+        }
+        for address, a in state.items()
+    }
 
 
 def _state_diff(got: dict, expected: dict) -> list:
     """The accounts where a run and a fixture differ, for the message of a failure."""
-    return [(address, got.get(address), expected.get(address))
-            for address in sorted(set(got) | set(expected))
-            if got.get(address) != expected.get(address)]
+    return [
+        (address, got.get(address), expected.get(address))
+        for address in sorted(set(got) | set(expected))
+        if got.get(address) != expected.get(address)
+    ]
 
 
 def _state_test(root: Path, case: Case) -> None:
@@ -207,14 +242,21 @@ def _state_test(root: Path, case: Case) -> None:
     fixture = _fixtures(root / case.path)[case.id]
     (post,) = fixture["post"][case.fork]
     fork = FORK_OF_NETWORK[case.fork]
-    args = (fork, int(fixture["config"]["chainid"], 16), _hex(post["txbytes"]),
-            _pre_state(fixture["pre"]), _environment(fixture["env"]))
+    args = (
+        fork,
+        int(fixture["config"]["chainid"], 16),
+        _hex(post["txbytes"]),
+        _pre_state(fixture["pre"]),
+        _environment(fixture["env"]),
+    )
     if "expectException" in post:
         with pytest.raises(ValueError) as error:
             transactions.run(*args)
         expected = post["expectException"].split("|")
-        assert any(names_in_block(e, str(error.value)) for e in expected), \
-            (expected, str(error.value))
+        assert any(names_in_block(e, str(error.value)) for e in expected), (
+            expected,
+            str(error.value),
+        )
         return
     run = transactions.run(*args)
     if run.state_root != _hex(post["hash"]):
@@ -230,10 +272,31 @@ def _state_test(root: Path, case: Case) -> None:
 
 
 # The forks of a network of the blockchain tests, in order, and how each activates.
-_BLOCK_FORKS = ["frontier", "homestead", "tangerineWhistle", "spuriousDragon", "byzantium",
-                "constantinople", "petersburg", "istanbul", "berlin", "london", "paris"]
-_TIME_FORKS = ["shapella", "dencun", "pectra", "fusaka", "bpo1", "bpo2", "bpo3", "bpo4", "bpo5",
-               "glamsterdam"]
+_BLOCK_FORKS = [
+    "frontier",
+    "homestead",
+    "tangerineWhistle",
+    "spuriousDragon",
+    "byzantium",
+    "constantinople",
+    "petersburg",
+    "istanbul",
+    "berlin",
+    "london",
+    "paris",
+]
+_TIME_FORKS = [
+    "shapella",
+    "dencun",
+    "pectra",
+    "fusaka",
+    "bpo1",
+    "bpo2",
+    "bpo3",
+    "bpo4",
+    "bpo5",
+    "glamsterdam",
+]
 _NETWORK_FORK = {**FORK_OF_NETWORK, "BPO1": "bpo1", "BPO2": "bpo2"}
 
 # The block exceptions of the blockchain tests, by the error of the state transition.
@@ -285,8 +348,10 @@ def chain_of(fixture: dict) -> tuple[dict, list]:
     before, _, after = network.removesuffix("AtTime15k").partition("To")
     first = _NETWORK_FORK[before]
     forks = _BLOCK_FORKS + _TIME_FORKS
-    activations = [(fork, "block" if fork in _BLOCK_FORKS else "time", 0)
-                   for fork in forks[:forks.index(first) + 1]]
+    activations = [
+        (fork, "block" if fork in _BLOCK_FORKS else "time", 0)
+        for fork in forks[: forks.index(first) + 1]
+    ]
     if after:
         activations.append((_NETWORK_FORK[after], "time", 15_000))
     # The fixture names each blob schedule by its network, which gives its activation.
@@ -294,25 +359,41 @@ def chain_of(fixture: dict) -> tuple[dict, list]:
     for network, schedule in fixture["config"].get("blobSchedule", {}).items():
         for fork, kind, number in activations:
             if fork == _NETWORK_FORK.get(network, network.lower()):
-                schedules.append([kind, number, int(schedule["target"], 16),
-                                  int(schedule["max"], 16),
-                                  int(schedule["baseFeeUpdateFraction"], 16)])
+                schedules.append(
+                    [
+                        kind,
+                        number,
+                        int(schedule["target"], 16),
+                        int(schedule["max"], 16),
+                        int(schedule["baseFeeUpdateFraction"], 16),
+                    ]
+                )
     if scenario:
         name, time = scenario
         own = fixture["config"]["blobSchedule"][name]
-        schedules.append(["time", time, int(own["target"], 16), int(own["max"], 16),
-                          int(own["baseFeeUpdateFraction"], 16)])
-    config = {"chainId": int(fixture["config"]["chainid"], 16),
-              "activations": [list(a) for a in activations],
-              "blobSchedules": sorted(schedules, key=lambda s: s[1])}
+        schedules.append(
+            [
+                "time",
+                time,
+                int(own["target"], 16),
+                int(own["max"], 16),
+                int(own["baseFeeUpdateFraction"], 16),
+            ]
+        )
+    config = {
+        "chainId": int(fixture["config"]["chainid"], 16),
+        "activations": [list(a) for a in activations],
+        "blobSchedules": sorted(schedules, key=lambda s: s[1]),
+    }
     return config, activations
 
 
 def active_fork(activations: list, header: list) -> str:
     """The fork of a header: the last one whose activation its number or its time reached."""
     number, timestamp = int.from_bytes(header[8], "big"), int.from_bytes(header[11], "big")
-    reached = [fork for fork, kind, n in activations
-               if (number if kind == "block" else timestamp) >= n]
+    reached = [
+        fork for fork, kind, n in activations if (number if kind == "block" else timestamp) >= n
+    ]
     return reached[-1]
 
 
@@ -324,12 +405,19 @@ def genesis_of(fork: str, header: dict, pre: dict) -> bytes:
         return int(header[name], 16) if name in header else default
 
     return blocks.genesis_block(
-        fork, _pre_state(pre), coinbase=_hex(header["coinbase"]),
-        difficulty=number("difficulty"), gas_limit=number("gasLimit"),
-        timestamp=number("timestamp"), extra_data=_hex(header["extraData"]),
-        mix_hash=_hex(header["mixHash"]), nonce=_hex(header["nonce"]),
+        fork,
+        _pre_state(pre),
+        coinbase=_hex(header["coinbase"]),
+        difficulty=number("difficulty"),
+        gas_limit=number("gasLimit"),
+        timestamp=number("timestamp"),
+        extra_data=_hex(header["extraData"]),
+        mix_hash=_hex(header["mixHash"]),
+        nonce=_hex(header["nonce"]),
         base_fee=number("baseFeePerGas", blocks.INITIAL_BASE_FEE),
-        excess_blob_gas=number("excessBlobGas"), slot_number=number("slotNumber"))
+        excess_blob_gas=number("excessBlobGas"),
+        slot_number=number("slotNumber"),
+    )
 
 
 def _blockchain_test(root: Path, case: Case) -> None:
@@ -343,8 +431,9 @@ def _blockchain_test(root: Path, case: Case) -> None:
     genesis = rlp.decode(_hex(fixture["genesisRLP"]))[0]
     recent = [(active_fork(activations, genesis), rlp.encode(genesis), [])]
     # The genesis block follows from the fields of its header that the chain chooses, and the state.
-    assert genesis_of(recent[0][0], fixture["genesisBlockHeader"], fixture["pre"]) == \
-        _hex(fixture["genesisRLP"])
+    assert genesis_of(recent[0][0], fixture["genesisBlockHeader"], fixture["pre"]) == _hex(
+        fixture["genesisRLP"]
+    )
     state = _pre_state(fixture["pre"])
     for block in fixture["blocks"]:
         raw = _hex(block["rlp"])
@@ -360,8 +449,10 @@ def _blockchain_test(root: Path, case: Case) -> None:
             with pytest.raises(ValueError) as error:
                 blocks.state_transition(config, state, recent, fork, raw, seal)
             names = expected.split("|")
-            assert any(names_block_error(e, str(error.value)) for e in names), \
-                (names, str(error.value))
+            assert any(names_block_error(e, str(error.value)) for e in names), (
+                names,
+                str(error.value),
+            )
             continue
         _, accounts = blocks.state_transition(config, state, recent, fork, raw, seal)
         state = rlp.encode(accounts)
@@ -370,14 +461,41 @@ def _blockchain_test(root: Path, case: Case) -> None:
 
 
 # The fields of a header in the order of its RLP form; a header holds those of its fork.
-HEADER_FIELDS = ["parentHash", "uncleHash", "coinbase", "stateRoot", "transactionsTrie",
-                 "receiptTrie", "bloom", "difficulty", "number", "gasLimit", "gasUsed",
-                 "timestamp", "extraData", "mixHash", "nonce", "baseFeePerGas", "withdrawalsRoot",
-                 "blobGasUsed", "excessBlobGas", "parentBeaconBlockRoot", "requestsHash"]
+HEADER_FIELDS = [
+    "parentHash",
+    "uncleHash",
+    "coinbase",
+    "stateRoot",
+    "transactionsTrie",
+    "receiptTrie",
+    "bloom",
+    "difficulty",
+    "number",
+    "gasLimit",
+    "gasUsed",
+    "timestamp",
+    "extraData",
+    "mixHash",
+    "nonce",
+    "baseFeePerGas",
+    "withdrawalsRoot",
+    "blobGasUsed",
+    "excessBlobGas",
+    "parentBeaconBlockRoot",
+    "requestsHash",
+]
 
 # The fields that are numbers, which RLP writes without leading zeros.
-NUMBERS = {"difficulty", "number", "gasLimit", "gasUsed", "timestamp", "baseFeePerGas",
-           "blobGasUsed", "excessBlobGas"}
+NUMBERS = {
+    "difficulty",
+    "number",
+    "gasLimit",
+    "gasUsed",
+    "timestamp",
+    "baseFeePerGas",
+    "blobGasUsed",
+    "excessBlobGas",
+}
 
 
 def _header_of_json(fields: dict) -> bytes:
@@ -405,8 +523,9 @@ def _engine_payload(fixture: dict, payload: dict, state: bytes, recent: list) ->
             engine.new_payload_on_chain(config, state, recent, method, payload["params"])
         assert -error.value.code == int(payload["errorCode"])
         return "error", state, recent
-    status, header, accounts = engine.new_payload_on_chain(config, state, recent, method,
-                                                           payload["params"])
+    status, header, accounts = engine.new_payload_on_chain(
+        config, state, recent, method, payload["params"]
+    )
     expected = payload.get("validationError")
     if not expected:
         assert status["status"] == "VALID", status
@@ -459,16 +578,19 @@ def _shuffle(root: Path, case: Case) -> None:
 
     vector = _yaml(root / case.path / "mapping.yaml")
     seed = bytes.fromhex(vector["seed"].removeprefix("0x"))
-    assert consensus.compute_shuffled_permutation(vector["count"], seed, case.preset) == \
-        vector["mapping"]
+    assert (
+        consensus.compute_shuffled_permutation(vector["count"], seed, case.preset)
+        == vector["mapping"]
+    )
 
 
 def _custody_groups(root: Path, case: Case) -> None:
     from ethlib import consensus
 
     meta = _yaml(root / case.path / "meta.yaml")
-    groups = consensus.get_custody_groups(int(meta["node_id"]), meta["custody_group_count"],
-                                          case.preset)
+    groups = consensus.get_custody_groups(
+        int(meta["node_id"]), meta["custody_group_count"], case.preset
+    )
     assert groups == meta["result"]
 
 
@@ -476,8 +598,10 @@ def _custody_columns(root: Path, case: Case) -> None:
     from ethlib import consensus
 
     meta = _yaml(root / case.path / "meta.yaml")
-    assert consensus.compute_columns_for_custody_group(meta["custody_group"], case.preset) == \
-        meta["result"]
+    assert (
+        consensus.compute_columns_for_custody_group(meta["custody_group"], case.preset)
+        == meta["result"]
+    )
 
 
 def _gossip_data_column_sidecar(root: Path, case: Case) -> None:
@@ -499,8 +623,9 @@ def _ssz_static(root: Path, case: Case) -> None:
     container = case.group.split("/")[1]
     data = snappy.decompress((root / case.path / "serialized.ssz_snappy").read_bytes())
     expected = _yaml(root / case.path / "roots.yaml")["root"]
-    got_root, encoded = consensus.ssz_static(case.preset, CONSENSUS_FORK[case.fork], container,
-                                             data)
+    got_root, encoded = consensus.ssz_static(
+        case.preset, CONSENSUS_FORK[case.fork], container, data
+    )
     assert "0x" + got_root.hex() == expected
     assert encoded == data
 
@@ -589,7 +714,7 @@ def _upgrade(root: Path, case: Case) -> None:
 def _container_forks(container: str) -> tuple[str, ...]:
     first, dropped = CONTAINERS[container]
     forks = list(CONSENSUS_FORK)
-    return tuple(forks[forks.index(first):forks.index(dropped) if dropped else len(forks)])
+    return tuple(forks[forks.index(first) : forks.index(dropped) if dropped else len(forks)])
 
 
 # The runner of each group, by format or by runner and handler.
@@ -640,7 +765,7 @@ def _stopped(case: Case) -> bool:
     stop = _STOPS.get(case.group)
     if stop is None:
         return False
-    forks = (EXECUTION_FORKS if case.suite == "execution-spec-tests" else CONSENSUS_FORKS)
+    forks = EXECUTION_FORKS if case.suite == "execution-spec-tests" else CONSENSUS_FORKS
     return case.rank >= forks.index(stop)
 
 

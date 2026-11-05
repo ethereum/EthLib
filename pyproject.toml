@@ -56,8 +56,12 @@ markers = [
 
 [tool.ruff]
 line-length = 100
-# `lake exe gen-bindings` writes this stub, and its check compares it byte for byte.
-extend-exclude = ["bindings/python/ethlib/cryptography/_native.pyi"]
+# `lake exe gen-bindings` writes the stub, and its check compares it byte for byte.
+# tests/consensus/pq_keys/SHA256SUMS pins the key generator by its digest.
+extend-exclude = [
+  "bindings/python/ethlib/cryptography/_native.pyi",
+  "tests/consensus/pq_keys/generate.py",
+]
 
 [tool.ruff.format]
 docstring-code-format = true
@@ -91,8 +95,9 @@ known-first-party = ["ethlib"]
 "tests/**" = ["D"]
 
 [tool.codespell]
-# Names in the code: a re-encoding, plural data, a serializer, a truncated status and a regex.
-ignore-words-list = "datas,ommit,reencode,ser,statu"
+# Names in the code: a re-encoding, plural data, a serializer, a truncated status, a regex,
+# and "Caf" before the escaped byte of "Café".
+ignore-words-list = "caf,datas,ommit,reencode,ser,statu"
 
 [tool.ty.environment]
 python-version = "3.12"

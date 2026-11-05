@@ -58,4 +58,11 @@ def create2_address(sender: bytes, salt: bytes, init_code: bytes) -> bytes:
     return _native.evm_create2_address(sender, salt, init_code)
 
 
-__all__ = ["immediate_depths", "word_op", "memory_gas_cost", "extend_memory", "create_address", "create2_address"]
+__all__ = [
+    "immediate_depths",
+    "word_op",
+    "memory_gas_cost",
+    "extend_memory",
+    "create_address",
+    "create2_address",
+]
