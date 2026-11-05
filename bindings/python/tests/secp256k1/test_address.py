@@ -38,7 +38,8 @@ def test_address(d: int) -> None:
 def test_address_of_key_one() -> None:
     # The key 1 has the public key G, so its address is the hash of G: pin it byte for byte.
     assert secp256k1.address((1).to_bytes(32, "big")).hex() == (
-        "7e5f4552091a69125d5dfcb7b8c2659029395bdf")
+        "7e5f4552091a69125d5dfcb7b8c2659029395bdf"
+    )
 
 
 def test_address_rejects_zero() -> None:

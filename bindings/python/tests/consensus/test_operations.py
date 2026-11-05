@@ -22,18 +22,24 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "operation
 # Gloas moves the execution payload out of the block.
 # From Gloas the withdrawals take no payload, so their cases have no operation file.
 HANDLERS = {
-    "block_header": ("block", ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
-                               "fulu")),
-    "proposer_slashing": ("proposer_slashing",
-                          ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
-                           "fulu")),
-    "attester_slashing": ("attester_slashing",
-                          ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
-                           "fulu")),
+    "block_header": (
+        "block",
+        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
+    ),
+    "proposer_slashing": (
+        "proposer_slashing",
+        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
+    ),
+    "attester_slashing": (
+        "attester_slashing",
+        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
+    ),
     "attestation": ("attestation", ("phase0", "altair", "bellatrix", "capella", "deneb")),
     "deposit": ("deposit", ("phase0", "altair", "bellatrix", "capella", "deneb")),
-    "sync_aggregate": ("sync_aggregate", ("altair", "bellatrix", "capella", "deneb", "electra",
-                                          "fulu")),
+    "sync_aggregate": (
+        "sync_aggregate",
+        ("altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
+    ),
     "voluntary_exit": ("voluntary_exit", ("phase0", "altair", "bellatrix", "capella", "deneb")),
     "execution_payload": ("body", ("bellatrix", "capella", "deneb", "electra", "fulu")),
     "withdrawals": ("execution_payload", ("capella", "deneb", "electra", "fulu", "gloas")),
@@ -68,21 +74,29 @@ def run_case(preset: str, fork: str, handler: str, case: Path) -> None:
     # Setting 2 marks placeholder signatures, which the case must not check.
     setting = YAML(typ="safe").load(meta.read_text()).get("bls_setting", 0) if meta.exists() else 0
     config_file = case / "config.yaml"
-    config = (replacements(YAML(typ="safe").load(config_file.read_text()), preset)
-              if config_file.exists() else None)
+    config = (
+        replacements(YAML(typ="safe").load(config_file.read_text()), preset)
+        if config_file.exists()
+        else None
+    )
     # The answer of the execution layer to a payload, which the case fixes.
     execution = case / "execution.yaml"
-    valid = (YAML(typ="safe").load(execution.read_text())["execution_valid"]
-             if execution.exists() else True)
+    valid = (
+        YAML(typ="safe").load(execution.read_text())["execution_valid"]
+        if execution.exists()
+        else True
+    )
     post = case / "post.ssz_snappy"
     if post.exists():
-        got = consensus.process_operation(preset, FORKS[fork], handler, pre, operation,
-                                          setting != 2, config, valid)
+        got = consensus.process_operation(
+            preset, FORKS[fork], handler, pre, operation, setting != 2, config, valid
+        )
         assert got == snappy.decompress(post.read_bytes())
     else:
         with pytest.raises(consensus.TransitionError):
-            consensus.process_operation(preset, FORKS[fork], handler, pre, operation, setting != 2,
-                                        config, valid)
+            consensus.process_operation(
+                preset, FORKS[fork], handler, pre, operation, setting != 2, config, valid
+            )
 
 
 def _cases() -> list:
@@ -91,8 +105,9 @@ def _cases() -> list:
     for pre in sorted(FILES.rglob("pre.ssz_snappy")):
         case = pre.parent
         preset, fork, _, handler = case.relative_to(FILES).parts[:4]
-        cases.append(pytest.param(preset, fork, handler, case,
-                                  id=case.relative_to(FILES).as_posix()))
+        cases.append(
+            pytest.param(preset, fork, handler, case, id=case.relative_to(FILES).as_posix())
+        )
     return cases
 
 
@@ -102,16 +117,27 @@ def _archive_cases() -> list:
         return []
     cases = []
     for preset, name in ARCHIVES.items():
-        paths = [f"tests/{preset}/{fork}/operations/{handler}"
-                 for fork in ARCHIVE_FORKS for handler in HANDLERS if runs(fork, handler)]
+        paths = [
+            f"tests/{preset}/{fork}/operations/{handler}"
+            for fork in ARCHIVE_FORKS
+            for handler in HANDLERS
+            if runs(fork, handler)
+        ]
         base = archives.unpack(name, *paths) / "tests" / preset
         for path in paths:
             for pre in sorted((base / path.split("/", 2)[2]).rglob("pre.ssz_snappy")):
                 case = pre.parent
                 fork, _, handler = case.relative_to(base).parts[:3]
-                cases.append(pytest.param(preset, fork, handler, case,
-                                          id=f"{preset}/{case.relative_to(base).as_posix()}",
-                                          marks=pytest.mark.archive(name)))
+                cases.append(
+                    pytest.param(
+                        preset,
+                        fork,
+                        handler,
+                        case,
+                        id=f"{preset}/{case.relative_to(base).as_posix()}",
+                        marks=pytest.mark.archive(name),
+                    )
+                )
     # An empty list would skip the test in silence, so a wrong path in an archive fails here.
     if not cases:
         raise LookupError("the archives hold no operations case of a handler that EthLib runs")
@@ -121,8 +147,11 @@ def _archive_cases() -> list:
 def test_digests():
     lines = (FILES / "SHA256SUMS").read_text().splitlines()
     entries = [line.split() for line in lines if not line.startswith("#")]
-    assert len(entries) == sum(1 for path in FILES.rglob("*") if path.is_file()
-                               and path.name not in ("SHA256SUMS", "README.md"))
+    assert len(entries) == sum(
+        1
+        for path in FILES.rglob("*")
+        if path.is_file() and path.name not in ("SHA256SUMS", "README.md")
+    )
     for digest, name in entries:
         assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name
 
@@ -154,13 +183,21 @@ def test_undecodable_state():
 
 def test_payload_rejected_by_the_execution_layer():
     # A payload that every check of the beacon chain accepts fails when the execution layer says no.
-    case = (FILES / "minimal" / "bellatrix" / "operations" / "execution_payload" / "pyspec_tests"
-            / "success_regular_payload")
+    case = (
+        FILES
+        / "minimal"
+        / "bellatrix"
+        / "operations"
+        / "execution_payload"
+        / "pyspec_tests"
+        / "success_regular_payload"
+    )
     pre = snappy.decompress((case / "pre.ssz_snappy").read_bytes())
     body = snappy.decompress((case / "body.ssz_snappy").read_bytes())
     with pytest.raises(consensus.TransitionError) as info:
-        consensus.process_operation("minimal", "bellatrix", "execution_payload", pre, body,
-                                    execution_valid=False)
+        consensus.process_operation(
+            "minimal", "bellatrix", "execution_payload", pre, body, execution_valid=False
+        )
     assert info.value.code == 69
 
 

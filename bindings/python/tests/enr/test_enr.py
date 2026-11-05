@@ -91,7 +91,7 @@ def test_too_large_rejected() -> None:
 
 def test_text_without_prefix_rejected() -> None:
     with pytest.raises(ValueError, match="text does not start with enr:"):
-        enr.from_text(TEXT[len("enr:"):])
+        enr.from_text(TEXT[len("enr:") :])
 
 
 def test_nonzero_pad_bits_rejected() -> None:

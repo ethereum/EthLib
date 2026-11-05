@@ -59,6 +59,13 @@ def address(private_key: bytes) -> bytes:
 
 
 __all__ = [
-    "verify", "is_low_s", "recover", "sign", "ecdh", "address", "HASH_LEN", "SIGNATURE_LEN",
+    "verify",
+    "is_low_s",
+    "recover",
+    "sign",
+    "ecdh",
+    "address",
+    "HASH_LEN",
+    "SIGNATURE_LEN",
     "Secp256k1Error",
 ]

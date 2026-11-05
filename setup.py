@@ -11,6 +11,7 @@ the runtime library path configured below.
 The build runs `lake build Exports` first to (re-)generate the Lean
 object files, then hands the full list to setuptools.Extension.
 """
+
 import platform
 import subprocess
 from glob import glob
@@ -21,8 +22,8 @@ from setuptools.command.build_ext import build_ext
 
 
 REPO_ROOT = Path(__file__).parent.resolve()
-BINDINGS  = REPO_ROOT / "bindings" / "python"
-LAKE_IR   = REPO_ROOT / ".lake" / "build" / "ir"
+BINDINGS = REPO_ROOT / "bindings" / "python"
+LAKE_IR = REPO_ROOT / ".lake" / "build" / "ir"
 
 
 def _lean_sysroot() -> Path | None:
@@ -76,8 +77,7 @@ def _lean_runtime_link(sysroot: Path) -> tuple[list[str], list[str], list[str]]:
     elan or any Lean toolchain on their machine. `libgmp.a` /
     `libuv.a` stay as static inputs."""
     gmp_uv = [
-        str(p) for p in (sysroot / "lib" / "libgmp.a",
-                         sysroot / "lib" / "libuv.a") if p.exists()
+        str(p) for p in (sysroot / "lib" / "libgmp.a", sysroot / "lib" / "libuv.a") if p.exists()
     ]
     return gmp_uv, [str(sysroot / "lib" / "lean")], ["leanshared"]
 
@@ -95,8 +95,7 @@ class LakeThenBuild(build_ext):
         sysroot = _lean_sysroot()
         if sysroot is None:
             raise RuntimeError(
-                "lean toolchain not found on PATH; install elan before "
-                "building the C extension"
+                "lean toolchain not found on PATH; install elan before building the C extension"
             )
         # Re-resolve include_dirs and link inputs lazily: at metadata time
         # (e.g. `uv build --sdist`) Lean may not be installed.

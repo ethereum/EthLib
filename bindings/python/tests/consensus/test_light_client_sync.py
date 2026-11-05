@@ -17,8 +17,16 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "light_cli
 SPECIFIED = ["altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas", "heze"]
 
 # The fork whose light client containers each fork uses.
-SHAPE = {"altair": "altair", "bellatrix": "altair", "capella": "capella", "deneb": "deneb",
-         "electra": "electra", "fulu": "electra", "gloas": "gloas", "heze": "gloas"}
+SHAPE = {
+    "altair": "altair",
+    "bellatrix": "altair",
+    "capella": "capella",
+    "deneb": "deneb",
+    "electra": "electra",
+    "fulu": "electra",
+    "gloas": "gloas",
+    "heze": "gloas",
+}
 
 _YAML = YAML(typ="safe")
 
@@ -50,9 +58,10 @@ def fork_digests(case_config: dict, preset: str, root: bytes, config: dict | Non
     digests = {}
     for fork in SPECIFIED:
         first = starts[fork]
-        end = min([epoch for epoch in starts.values() if epoch > first], default=2 ** 64)
-        epochs = {first} | {entry["EPOCH"] for entry in case_config["BLOB_SCHEDULE"]
-                            if first < entry["EPOCH"] < end}
+        end = min([epoch for epoch in starts.values() if epoch > first], default=2**64)
+        epochs = {first} | {
+            entry["EPOCH"] for entry in case_config["BLOB_SCHEDULE"] if first < entry["EPOCH"] < end
+        }
         for epoch in epochs:
             digest = consensus.compute_fork_digest(preset, root, epoch, config)
             # Two forks that start at one epoch share its digest, which the later one takes.
@@ -85,10 +94,16 @@ def run_sync_case(case: Path, preset: str, fork: str) -> None:
     start = store_fork(versions[int(meta["store_fork_version"], 16)], fork)
     inputs, checks = [], []
     for step in steps:
-        (kind, body), = step.items()
+        ((kind, body),) = step.items()
         if kind == "process_update":
-            inputs.append(("update", FORKS[digests[body["update_fork_digest"]]],
-                           body["current_slot"], _read(case, body["update"])))
+            inputs.append(
+                (
+                    "update",
+                    FORKS[digests[body["update_fork_digest"]]],
+                    body["current_slot"],
+                    _read(case, body["update"]),
+                )
+            )
         elif kind == "force_update":
             inputs.append(("force", body["current_slot"]))
         else:
@@ -97,12 +112,21 @@ def run_sync_case(case: Path, preset: str, fork: str) -> None:
             inputs.append(("upgrade", FORKS[target]))
         checks.append(body["checks"])
     headers = consensus.light_client_sync(
-        preset, FORKS[start], FORKS[digests[meta["bootstrap_fork_digest"]]],
-        _hex(meta["trusted_block_root"]), root, _read(case, "bootstrap"), inputs, config)
+        preset,
+        FORKS[start],
+        FORKS[digests[meta["bootstrap_fork_digest"]]],
+        _hex(meta["trusted_block_root"]),
+        root,
+        _read(case, "bootstrap"),
+        inputs,
+        config,
+    )
     assert len(headers) == len(checks)
     for (finalized, optimistic), expected in zip(headers, checks):
-        for (slot, beacon, execution), want in ((finalized, expected["finalized_header"]),
-                                                (optimistic, expected["optimistic_header"])):
+        for (slot, beacon, execution), want in (
+            (finalized, expected["finalized_header"]),
+            (optimistic, expected["optimistic_header"]),
+        ):
             assert slot == want["slot"]
             assert "0x" + beacon.hex() == want["beacon_root"]
             if "execution_root" in want:
@@ -115,7 +139,7 @@ def run_ranking_case(case: Path, preset: str, fork: str) -> None:
     updates = [_read(case, f"updates_{index}") for index in range(count)]
     better = 0
     for i, first in enumerate(updates):
-        for second in updates[i + 1:]:
+        for second in updates[i + 1 :]:
             assert not consensus.is_better_update(preset, FORKS[fork], second, first)
             better += consensus.is_better_update(preset, FORKS[fork], first, second)
     # The order is not only ties: most pairs rank strictly.
@@ -129,8 +153,7 @@ def _cases(handler: str) -> list:
         case = meta.parent
         preset, fork = case.relative_to(FILES).parts[:2]
         if handler != "sync" or runs_sync(fork, case.name):
-            cases.append(pytest.param(preset, fork, case,
-                                      id=case.relative_to(FILES).as_posix()))
+            cases.append(pytest.param(preset, fork, case, id=case.relative_to(FILES).as_posix()))
     return cases
 
 
@@ -147,8 +170,16 @@ def test_ranking_case(preset, fork, case):
 def test_every_fork_has_cases():
     # Each fork to Gloas has its four single-fork sync cases, and the earlier ones add upgrades.
     # Heze has no case of its own.
-    counts = {"altair": 8, "bellatrix": 11, "capella": 10, "deneb": 8, "electra": 5, "fulu": 6,
-              "gloas": 4, "heze": 0}
+    counts = {
+        "altair": 8,
+        "bellatrix": 11,
+        "capella": 10,
+        "deneb": 8,
+        "electra": 5,
+        "fulu": 6,
+        "gloas": 4,
+        "heze": 0,
+    }
     rankings = {**dict.fromkeys(SPECIFIED, 1), "heze": 0}
     for handler, per_fork in (("sync", counts), ("update_ranking", rankings)):
         forks = [param.values[1] for param in _cases(handler)]

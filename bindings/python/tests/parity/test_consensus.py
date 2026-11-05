@@ -17,8 +17,14 @@ from . import catalogue, harness
 
 SUITE = "consensus-spec-tests"
 CASES = catalogue.consensus_cases() if archives.CACHE else []
-ROOTS = {preset: harness.unpack(name, [c for c in CASES if c.preset == preset], 5)
-         for preset, name in catalogue.CONSENSUS.items()} if archives.CACHE else {}
+ROOTS = (
+    {
+        preset: harness.unpack(name, [c for c in CASES if c.preset == preset], 5)
+        for preset, name in catalogue.CONSENSUS.items()
+    }
+    if archives.CACHE
+    else {}
+)
 DISAGREEMENTS = harness.disagreements(SUITE)
 
 pytestmark = pytest.mark.archive(catalogue.CONSENSUS["mainnet"])
@@ -46,25 +52,56 @@ def test_every_group_has_a_runner_or_a_plan() -> None:
 # reorg or withholding case, and merge blocks only at Bellatrix.
 # The custody cases of Gloas and Heze repeat those of Fulu, and only the fork name in their
 # manifest differs, so only the Fulu cases are vendored.
-NOT_VENDORED = {f"mainnet/{fork}/ssz_static/BeaconState" for fork in
-                ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu",
-                 "gloas")} | {
-    f"mainnet/{fork}/fork/fork" for fork in
-    ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas", "heze")} | {
-    f"mainnet/{fork}/operations/{handler}" for handler, (_, forks) in OPERATIONS.items()
-    for fork in forks} | {
-    f"mainnet/{fork}/epoch_processing/{handler}" for handler, forks in EPOCH_STEPS.items()
-    if handler not in EPOCH_MINIMAL_ONLY for fork in forks} | {
-    f"mainnet/{fork}/rewards/{handler}" for handler in REWARDS for fork in REWARDS_FORKS
-    if fork != "phase0" or handler != "inactivity_scores"} | {
-    f"mainnet/{fork}/{group}" for group, forks in TRANSITION_GROUPS.items()
-    for fork in forks} | {
-    f"mainnet/{fork}/fork_choice/{handler}" for handler in FORK_CHOICE
-    for fork in FORK_CHOICE_FORKS if handler not in ("reorg", "withholding")
-    and (handler != "on_merge_block" or fork == "bellatrix")} | {
-    f"{preset}/{fork}/networking/{handler}" for preset in ("mainnet", "minimal")
-    for fork in ("gloas", "heze")
-    for handler in ("get_custody_groups", "compute_columns_for_custody_group")}
+NOT_VENDORED = (
+    {
+        f"mainnet/{fork}/ssz_static/BeaconState"
+        for fork in (
+            "phase0",
+            "altair",
+            "bellatrix",
+            "capella",
+            "deneb",
+            "electra",
+            "fulu",
+            "gloas",
+        )
+    }
+    | {
+        f"mainnet/{fork}/fork/fork"
+        for fork in ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas", "heze")
+    }
+    | {
+        f"mainnet/{fork}/operations/{handler}"
+        for handler, (_, forks) in OPERATIONS.items()
+        for fork in forks
+    }
+    | {
+        f"mainnet/{fork}/epoch_processing/{handler}"
+        for handler, forks in EPOCH_STEPS.items()
+        if handler not in EPOCH_MINIMAL_ONLY
+        for fork in forks
+    }
+    | {
+        f"mainnet/{fork}/rewards/{handler}"
+        for handler in REWARDS
+        for fork in REWARDS_FORKS
+        if fork != "phase0" or handler != "inactivity_scores"
+    }
+    | {f"mainnet/{fork}/{group}" for group, forks in TRANSITION_GROUPS.items() for fork in forks}
+    | {
+        f"mainnet/{fork}/fork_choice/{handler}"
+        for handler in FORK_CHOICE
+        for fork in FORK_CHOICE_FORKS
+        if handler not in ("reorg", "withholding")
+        and (handler != "on_merge_block" or fork == "bellatrix")
+    }
+    | {
+        f"{preset}/{fork}/networking/{handler}"
+        for preset in ("mainnet", "minimal")
+        for fork in ("gloas", "heze")
+        for handler in ("get_custody_groups", "compute_columns_for_custody_group")
+    }
+)
 
 
 def test_every_runnable_group_has_vendored_cases() -> None:
@@ -74,8 +111,9 @@ def test_every_runnable_group_has_vendored_cases() -> None:
     groups = {"/".join(case.path.split("/")[1:5]) for case in harness.runnable(CASES)}
     # An exception for a group that no longer runs is stale.
     assert NOT_VENDORED <= groups
-    missing = sorted(group for group in groups - NOT_VENDORED
-                     if not any(vendored.glob(f"*/{group}/*/*")))
+    missing = sorted(
+        group for group in groups - NOT_VENDORED if not any(vendored.glob(f"*/{group}/*/*"))
+    )
     assert missing == []
 
 

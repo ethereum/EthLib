@@ -7,9 +7,17 @@ import archives
 from . import catalogue, harness
 
 SUITE = "legacytests"
-ROOT = (archives.unpack(catalogue.LEGACY, *(f"{catalogue.LEGACY_ROOT}/{d}"
-                                            for d in catalogue.LEGACY_DIRECTORIES))
-        / catalogue.LEGACY_ROOT) if archives.CACHE else None
+ROOT = (
+    (
+        archives.unpack(
+            catalogue.LEGACY,
+            *(f"{catalogue.LEGACY_ROOT}/{d}" for d in catalogue.LEGACY_DIRECTORIES),
+        )
+        / catalogue.LEGACY_ROOT
+    )
+    if archives.CACHE
+    else None
+)
 CASES = catalogue.legacy_cases(ROOT) if ROOT else []
 DISAGREEMENTS = harness.disagreements(SUITE)
 
@@ -19,7 +27,9 @@ VENDORED = archives.REPO / "tests" / "execution" / "legacytests"
 pytestmark = pytest.mark.archive(catalogue.LEGACY)
 
 
-@pytest.mark.parametrize("case", harness.runnable(CASES), ids=lambda case: f"{case.group}:{case.id}")
+@pytest.mark.parametrize(
+    "case", harness.runnable(CASES), ids=lambda case: f"{case.group}:{case.id}"
+)
 def test_case(case, request, record_property) -> None:
     harness.run(ROOT, case, DISAGREEMENTS, request, record_property)
 

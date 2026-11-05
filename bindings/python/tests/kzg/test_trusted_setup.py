@@ -10,8 +10,15 @@ from ethlib.cryptography import bls
 
 ROOT = Path(__file__).resolve().parents[4]
 DATA = ROOT / "EthLib" / "Cryptography" / "Kzg" / "TrustedSetupData.lean"
-NOT_IN_G1 = (ROOT / "tests" / "cryptography" / "bls" / "deserialization_G1"
-             / "deserialization_fails_not_in_G1" / "data.yaml")
+NOT_IN_G1 = (
+    ROOT
+    / "tests"
+    / "cryptography"
+    / "bls"
+    / "deserialization_G1"
+    / "deserialization_fails_not_in_G1"
+    / "data.yaml"
+)
 
 # The arrays of the embedded setup, with their lengths in the KZG constants.
 ARRAYS = {"g1LagrangeHex": 4096, "g1MonomialHex": 4096, "g2MonomialHex": 65}

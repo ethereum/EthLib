@@ -58,8 +58,9 @@ def test_eip_case(opcode: int, immediate: int, expected) -> None:
     assert _depths(opcode, immediate) == expected
 
 
-@pytest.mark.parametrize("opcode,decode", [(DUPN, decode_single), (SWAPN, decode_single),
-                                           (EXCHANGE, decode_pair)])
+@pytest.mark.parametrize(
+    "opcode,decode", [(DUPN, decode_single), (SWAPN, decode_single), (EXCHANGE, decode_pair)]
+)
 def test_every_byte_as_the_eip(opcode: int, decode) -> None:
     for immediate in range(256):
         assert _depths(opcode, immediate) == decode(immediate), immediate

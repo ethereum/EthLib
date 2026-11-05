@@ -17,28 +17,81 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "epoch_pro
 
 # The forks at which EthLib runs each handler.
 HANDLERS = {
-    "justification_and_finalization": ("phase0", "altair", "bellatrix", "capella", "deneb",
-                                       "electra", "fulu", "gloas"),
-    "inactivity_updates": ("altair", "bellatrix", "capella", "deneb", "electra", "fulu",
-                           "gloas"),
-    "rewards_and_penalties": ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
-                              "fulu", "gloas"),
+    "justification_and_finalization": (
+        "phase0",
+        "altair",
+        "bellatrix",
+        "capella",
+        "deneb",
+        "electra",
+        "fulu",
+        "gloas",
+    ),
+    "inactivity_updates": ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas"),
+    "rewards_and_penalties": (
+        "phase0",
+        "altair",
+        "bellatrix",
+        "capella",
+        "deneb",
+        "electra",
+        "fulu",
+        "gloas",
+    ),
     "registry_updates": ("phase0", "altair", "bellatrix", "capella", "deneb"),
     "slashings": ("phase0", "altair", "bellatrix", "capella", "deneb"),
-    "eth1_data_reset": ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu",
-                        "gloas"),
+    "eth1_data_reset": (
+        "phase0",
+        "altair",
+        "bellatrix",
+        "capella",
+        "deneb",
+        "electra",
+        "fulu",
+        "gloas",
+    ),
     "effective_balance_updates": ("phase0", "altair", "bellatrix", "capella", "deneb"),
-    "slashings_reset": ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu",
-                        "gloas"),
-    "randao_mixes_reset": ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
-                           "fulu", "gloas"),
+    "slashings_reset": (
+        "phase0",
+        "altair",
+        "bellatrix",
+        "capella",
+        "deneb",
+        "electra",
+        "fulu",
+        "gloas",
+    ),
+    "randao_mixes_reset": (
+        "phase0",
+        "altair",
+        "bellatrix",
+        "capella",
+        "deneb",
+        "electra",
+        "fulu",
+        "gloas",
+    ),
     "historical_roots_update": ("phase0", "altair", "bellatrix"),
     "historical_summaries_update": ("capella", "deneb", "electra", "fulu", "gloas"),
     "participation_record_updates": ("phase0",),
-    "participation_flag_updates": ("altair", "bellatrix", "capella", "deneb", "electra", "fulu",
-                                   "gloas"),
-    "sync_committee_updates": ("altair", "bellatrix", "capella", "deneb", "electra", "fulu",
-                               "gloas"),
+    "participation_flag_updates": (
+        "altair",
+        "bellatrix",
+        "capella",
+        "deneb",
+        "electra",
+        "fulu",
+        "gloas",
+    ),
+    "sync_committee_updates": (
+        "altair",
+        "bellatrix",
+        "capella",
+        "deneb",
+        "electra",
+        "fulu",
+        "gloas",
+    ),
     "ptc_window": ("gloas",),
     "builder_pending_payments": ("gloas",),
     "proposer_lookahead": ("fulu", "gloas"),
@@ -63,8 +116,11 @@ def run_case(preset: str, fork: str, handler: str, case) -> None:
     """Run one case: the state after the step, or a rejection when the case has no post."""
     pre = snappy.decompress((case / "pre.ssz_snappy").read_bytes())
     config_file = case / "config.yaml"
-    config = (replacements(YAML(typ="safe").load(config_file.read_text()), preset)
-              if config_file.exists() else None)
+    config = (
+        replacements(YAML(typ="safe").load(config_file.read_text()), preset)
+        if config_file.exists()
+        else None
+    )
     post = case / "post.ssz_snappy"
     if post.exists():
         got = consensus.process_epoch(preset, FORKS[fork], handler, pre, config)
@@ -80,8 +136,9 @@ def _cases() -> list:
     for pre in sorted(FILES.rglob("pre.ssz_snappy")):
         case = pre.parent
         preset, fork, _, handler = case.relative_to(FILES).parts[:4]
-        cases.append(pytest.param(preset, fork, handler, case,
-                                  id=case.relative_to(FILES).as_posix()))
+        cases.append(
+            pytest.param(preset, fork, handler, case, id=case.relative_to(FILES).as_posix())
+        )
     return cases
 
 
@@ -91,17 +148,27 @@ def _archive_cases() -> list:
         return []
     cases = []
     for preset, name in ARCHIVES.items():
-        paths = [f"tests/{preset}/{fork}/epoch_processing/{handler}"
-                 for handler, forks in HANDLERS.items() for fork in forks
-                 if preset == "minimal" or handler not in MINIMAL_ONLY]
+        paths = [
+            f"tests/{preset}/{fork}/epoch_processing/{handler}"
+            for handler, forks in HANDLERS.items()
+            for fork in forks
+            if preset == "minimal" or handler not in MINIMAL_ONLY
+        ]
         base = archives.unpack(name, *paths) / "tests" / preset
         for path in paths:
             for pre in sorted((base / path.split("/", 2)[2]).rglob("pre.ssz_snappy")):
                 case = pre.parent
                 fork, _, handler = case.relative_to(base).parts[:3]
-                cases.append(pytest.param(preset, fork, handler, case,
-                                          id=f"{preset}/{case.relative_to(base).as_posix()}",
-                                          marks=pytest.mark.archive(name)))
+                cases.append(
+                    pytest.param(
+                        preset,
+                        fork,
+                        handler,
+                        case,
+                        id=f"{preset}/{case.relative_to(base).as_posix()}",
+                        marks=pytest.mark.archive(name),
+                    )
+                )
     # An empty list would skip the test in silence, so a wrong path in an archive fails here.
     if not cases:
         raise LookupError("the archives hold no epoch_processing case that EthLib runs")
@@ -111,8 +178,9 @@ def _archive_cases() -> list:
 def test_digests():
     lines = (FILES / "SHA256SUMS").read_text().splitlines()
     entries = [line.split() for line in lines if not line.startswith("#")]
-    assert len(entries) == sum(1 for path in FILES.rglob("*") if path.is_file()
-                               and path.name != "SHA256SUMS")
+    assert len(entries) == sum(
+        1 for path in FILES.rglob("*") if path.is_file() and path.name != "SHA256SUMS"
+    )
     for digest, name in entries:
         assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name
 

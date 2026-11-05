@@ -23,10 +23,15 @@ def _emit(case: str, root: bytes, index: int, opening: bytes, expected: bytes | 
     # A rejection is written as a null output.
     result = vrf.verify(root, index, opening)
     assert result == expected
-    write_case("vrf", HANDLER, case, {
-        "input": {"root": hex_str(root), "index": index, "opening": hex_str(opening)},
-        "output": None if result is None else hex_str(result),
-    })
+    write_case(
+        "vrf",
+        HANDLER,
+        case,
+        {
+            "input": {"root": hex_str(root), "index": index, "opening": hex_str(opening)},
+            "output": None if result is None else hex_str(result),
+        },
+    )
 
 
 @pytest.mark.parametrize("name", CASES)

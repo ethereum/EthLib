@@ -78,8 +78,14 @@ def test_pong() -> None:
 def test_oversized_message_rejected() -> None:
     # The preamble declares 2^24 + 1 bytes, more than 16 MiB, so no decompression starts.
     size = 2**24 + 1
-    preamble = bytes([(size & 0x7F) | 0x80, ((size >> 7) & 0x7F) | 0x80, ((size >> 14) & 0x7F) | 0x80,
-                      size >> 21])
+    preamble = bytes(
+        [
+            (size & 0x7F) | 0x80,
+            ((size >> 7) & 0x7F) | 0x80,
+            ((size >> 14) & 0x7F) | 0x80,
+            size >> 21,
+        ]
+    )
     with pytest.raises(devp2p.Devp2pError) as info:
         devp2p.decode_message(True, b"\x02" + preamble + b"\x00\xc0")
     assert info.value.code == 3

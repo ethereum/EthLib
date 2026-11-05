@@ -61,8 +61,22 @@ def _p(n: int) -> bytes:
 
 def test_blob_network_form_hash() -> None:
     # EIP-4844 "Networking": the network form hashes as the transaction without its blobs.
-    body = [_p(1), b"", _p(1), _p(10), _p(21000), b"\x11" * 20, b"", b"", [], _p(1),
-            [b"\x01" + bytes(31)], b"", _p(1), _p(1)]
+    body = [
+        _p(1),
+        b"",
+        _p(1),
+        _p(10),
+        _p(21000),
+        b"\x11" * 20,
+        b"",
+        b"",
+        [],
+        _p(1),
+        [b"\x01" + bytes(31)],
+        b"",
+        _p(1),
+        _p(1),
+    ]
     canonical = b"\x03" + rlp.encode(body)
     # The network form of Fusaka, with blobs elided as eth/72 sends them.
     network = b"\x03" + rlp.encode([body, _p(1), [], [bytes(48)], [bytes(48)] * 128])
@@ -104,8 +118,11 @@ def test_announcement_eth68(version: int) -> None:
     assert decode_message(version, NEW_POOLED_TRANSACTION_HASHES, data) == data
     # The form of eth/72 has four fields.
     with pytest.raises(EthWireError) as info:
-        decode_message(version, NEW_POOLED_TRANSACTION_HASHES,
-                       _announcement(b"\x00\x02\x03", [100, 120, 300], HASHES, b""))
+        decode_message(
+            version,
+            NEW_POOLED_TRANSACTION_HASHES,
+            _announcement(b"\x00\x02\x03", [100, 120, 300], HASHES, b""),
+        )
     assert info.value.code == 2
 
 

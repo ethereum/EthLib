@@ -56,9 +56,14 @@ VAR = _progressive_container(
 
 # The unions, longest name first, so that a name matches its own entry and not a prefix.
 UNIONS = {
-    "CompatibleUnionABCA": {"compatible_union": [
-        [1, SINGLE_FIELD], [2, SINGLE_LIST], [3, VAR], [4, SINGLE_FIELD],
-    ]},
+    "CompatibleUnionABCA": {
+        "compatible_union": [
+            [1, SINGLE_FIELD],
+            [2, SINGLE_LIST],
+            [3, VAR],
+            [4, SINGLE_FIELD],
+        ]
+    },
     "CompatibleUnionBC": {"compatible_union": [[2, SINGLE_LIST], [3, VAR]]},
     "CompatibleUnionA": {"compatible_union": [[1, SINGLE_FIELD]]},
 }
@@ -84,34 +89,57 @@ STRUCTURES = {
     "SmallTestStruct": SMALL,
     "FixedTestStruct": FIXED,
     "VarTestStruct": VAR_STRUCT,
-    "ComplexTestStruct": _container([
-        ("A", UINT16), ("B", {"list": [UINT16, 128]}), ("C", UINT8), ("D", {"byte_list": 256}),
-        ("E", VAR_STRUCT), ("F", {"vector": [FIXED, 4]}), ("G", {"vector": [VAR_STRUCT, 2]}),
-    ]),
-    "ProgressiveTestStruct": _container([
-        ("A", {"progressive_list": [BYTE, None]}),
-        ("B", {"progressive_list": [UINT64, None]}),
-        ("C", {"progressive_list": [SMALL, None]}),
-        ("D", {"progressive_list": [{"progressive_list": [VAR_STRUCT, None]}, None]}),
-    ]),
-    "BitsStruct": _container([
-        ("A", {"bitlist": 5}), ("B", {"bitvector": 2}), ("C", {"bitvector": 1}),
-        ("D", {"bitlist": 6}), ("E", {"bitvector": 8}),
-    ]),
-    "ProgressiveBitsStruct": _container([
-        (name, kind)
-        for names, length in ((("A", "B", "C"), 256), (("D", "E", "F"), 257),
-                              (("G", "H", "I"), 1280), (("J", "K", "L"), 1281))
-        for name, kind in zip(names, ({"bitvector": length}, {"bitlist": length},
-                                      PROGRESSIVE_BITLIST_FIELD))
-    ]),
+    "ComplexTestStruct": _container(
+        [
+            ("A", UINT16),
+            ("B", {"list": [UINT16, 128]}),
+            ("C", UINT8),
+            ("D", {"byte_list": 256}),
+            ("E", VAR_STRUCT),
+            ("F", {"vector": [FIXED, 4]}),
+            ("G", {"vector": [VAR_STRUCT, 2]}),
+        ]
+    ),
+    "ProgressiveTestStruct": _container(
+        [
+            ("A", {"progressive_list": [BYTE, None]}),
+            ("B", {"progressive_list": [UINT64, None]}),
+            ("C", {"progressive_list": [SMALL, None]}),
+            ("D", {"progressive_list": [{"progressive_list": [VAR_STRUCT, None]}, None]}),
+        ]
+    ),
+    "BitsStruct": _container(
+        [
+            ("A", {"bitlist": 5}),
+            ("B", {"bitvector": 2}),
+            ("C", {"bitvector": 1}),
+            ("D", {"bitlist": 6}),
+            ("E", {"bitvector": 8}),
+        ]
+    ),
+    "ProgressiveBitsStruct": _container(
+        [
+            (name, kind)
+            for names, length in (
+                (("A", "B", "C"), 256),
+                (("D", "E", "F"), 257),
+                (("G", "H", "I"), 1280),
+                (("J", "K", "L"), 1281),
+            )
+            for name, kind in zip(
+                names, ({"bitvector": length}, {"bitlist": length}, PROGRESSIVE_BITLIST_FIELD)
+            )
+        ]
+    ),
     "ProgressiveSingleFieldContainerTestStruct": SINGLE_FIELD,
     "ProgressiveSingleListContainerTestStruct": SINGLE_LIST,
     "ProgressiveVarTestStruct": VAR,
     "ProgressiveComplexTestStruct": _progressive_container(
         [1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1],
         [
-            ("A", BYTE), ("B", {"list": [UINT16, 123]}), ("C", PROGRESSIVE_BITLIST_FIELD),
+            ("A", BYTE),
+            ("B", {"list": [UINT16, 123]}),
+            ("C", PROGRESSIVE_BITLIST_FIELD),
             ("D", {"progressive_list": [UINT64, None]}),
             ("E", {"progressive_list": [SMALL, None]}),
             ("F", {"progressive_list": [{"progressive_list": [VAR_STRUCT, None]}, None]}),
@@ -161,7 +189,7 @@ def tagged(ssz_type, value):
     """The tagged form that the binding takes of a value that a case writes."""
     if ssz_type == BOOL:
         return {"bool": value}
-    (kind, body), = ssz_type.items()
+    ((kind, body),) = ssz_type.items()
     if kind == "uint":
         return {"uint": int(value)}
     if kind == "bitvector":

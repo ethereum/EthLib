@@ -22,10 +22,19 @@ def _state(pre: dict) -> bytes:
     """The RLP input of the state export: each account as address, nonce, balance, code, storage."""
     accounts = []
     for address, account in pre.items():
-        storage = [[int(key, 16).to_bytes(32, "big"), _scalar(value)]
-                   for key, value in account["storage"].items()]
-        accounts.append([bytes.fromhex(address[2:]), _scalar(account["nonce"]),
-                         _scalar(account["balance"]), bytes.fromhex(account["code"][2:]), storage])
+        storage = [
+            [int(key, 16).to_bytes(32, "big"), _scalar(value)]
+            for key, value in account["storage"].items()
+        ]
+        accounts.append(
+            [
+                bytes.fromhex(address[2:]),
+                _scalar(account["nonce"]),
+                _scalar(account["balance"]),
+                bytes.fromhex(account["code"][2:]),
+                storage,
+            ]
+        )
     return rlp.encode(accounts)
 
 

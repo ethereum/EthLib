@@ -15,14 +15,30 @@ from .test_transactions import CHAIN_ID, FORK_OF_NETWORK, names
 ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
 
 _ROOT = "fixtures/blockchain_tests"
-_FORKS = ["frontier", "homestead", "tangerinewhistle", "spuriousdragon", "byzantium",
-          "constantinoplefix", "istanbul", "berlin", "london", "paris", "shanghai", "cancun",
-          "prague", "osaka"]
+_FORKS = [
+    "frontier",
+    "homestead",
+    "tangerinewhistle",
+    "spuriousdragon",
+    "byzantium",
+    "constantinoplefix",
+    "istanbul",
+    "berlin",
+    "london",
+    "paris",
+    "shanghai",
+    "cancun",
+    "prague",
+    "osaka",
+]
 SOURCES = [
     *(f"{_ROOT}/for_{fork}/frontier/validation" for fork in _FORKS),
     f"{_ROOT}/for_london/london/eip1559_fee_market_change",
-    *(f"{_ROOT}/for_{fork}/ported_static/{test}" for fork in ("cancun", "prague", "osaka")
-      for test in ("stEIP3607", "stTransactionTest")),
+    *(
+        f"{_ROOT}/for_{fork}/ported_static/{test}"
+        for fork in ("cancun", "prague", "osaka")
+        for test in ("stEIP3607", "stTransactionTest")
+    ),
     *(f"{_ROOT}/for_{fork}/cancun/eip4844_blobs/blob_txs" for fork in ("cancun", "osaka")),
     f"{_ROOT}/for_prague/prague/eip7623_increase_calldata_cost/transaction_validity",
     f"{_ROOT}/for_prague/prague/eip7702_set_code_tx",
@@ -81,16 +97,30 @@ def _scalar(value: int) -> bytes:
 
 def _state(accounts: dict) -> bytes:
     """The state in the form of the state root export: address, nonce, balance, code, storage."""
-    return rlp.encode([
-        [address, _scalar(a["nonce"]), _scalar(a["balance"]), a["code"],
-         [[_int(k).to_bytes(32, "big"), _scalar(_int(v))] for k, v in a["storage"].items()]]
-        for address, a in accounts.items()])
+    return rlp.encode(
+        [
+            [
+                address,
+                _scalar(a["nonce"]),
+                _scalar(a["balance"]),
+                a["code"],
+                [[_int(k).to_bytes(32, "big"), _scalar(_int(v))] for k, v in a["storage"].items()],
+            ]
+            for address, a in accounts.items()
+        ]
+    )
 
 
 def _accounts(fixture: dict) -> dict:
-    return {_address(address): {"nonce": _int(a["nonce"]), "balance": _int(a["balance"]),
-                                "code": _address(a["code"]), "storage": a["storage"]}
-            for address, a in fixture["pre"].items()}
+    return {
+        _address(address): {
+            "nonce": _int(a["nonce"]),
+            "balance": _int(a["balance"]),
+            "code": _address(a["code"]),
+            "storage": a["storage"],
+        }
+        for address, a in fixture["pre"].items()
+    }
 
 
 def _account(accounts: dict, address: bytes) -> dict:
@@ -116,9 +146,16 @@ def _run_block(fixture: dict) -> tuple[int, str | None]:
     for index, (tx, data) in enumerate(zip(decoded["transactions"], raw, strict=True)):
         try:
             included = transactions.check_in_block(
-                fork, CHAIN_ID, data, _state(accounts), gas_limit=_int(header["gasLimit"]),
-                gas_used=gas_used, blob_gas_used=blob_gas_used, base_fee=base_fee,
-                excess_blob_gas=excess)
+                fork,
+                CHAIN_ID,
+                data,
+                _state(accounts),
+                gas_limit=_int(header["gasLimit"]),
+                gas_used=gas_used,
+                blob_gas_used=blob_gas_used,
+                base_fee=base_fee,
+                excess_blob_gas=excess,
+            )
         except ValueError as error:
             return index, str(error)
         assert included.sender == _address(tx["sender"])
@@ -128,8 +165,9 @@ def _run_block(fixture: dict) -> tuple[int, str | None]:
             return index + 1, None
         # A transaction that runs no code leaves gas, nonces and balances that we can follow.
         gas = _int(tx["gasLimit"])
-        settled = transactions.settle(fork, data, base_fee,
-                                      gas - transactions.intrinsic_gas(fork, data), 0)
+        settled = transactions.settle(
+            fork, data, base_fee, gas - transactions.intrinsic_gas(fork, data), 0
+        )
         gas_used += settled.gas_used
         blob_gas_used += included.blob_gas_used
         sender = _account(accounts, included.sender)
@@ -163,12 +201,18 @@ def test_inclusion(archive, source) -> None:
             if error is not None:
                 # The first rejection is the exception of the fixture.
                 assert expected, (name, error)
-                assert any(names_in_block(e, error) for e in expected.split("|")), (name, expected, error)
+                assert any(names_in_block(e, error) for e in expected.split("|")), (
+                    name,
+                    expected,
+                    error,
+                )
                 rejected += 1
             elif checked == len(block.get("rlp_decoded", block)["transactions"]) and expected:
                 # Every transaction passes, so the block fails for a reason of its own.
-                assert any(e.startswith("BlockException.") for e in expected.split("|")), \
-                    (name, expected)
+                assert any(e.startswith("BlockException.") for e in expected.split("|")), (
+                    name,
+                    expected,
+                )
                 accepted += 1
             else:
                 accepted += 1

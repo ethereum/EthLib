@@ -5,6 +5,7 @@ Check `check_lean_layout.py` itself, on planted Lean text and on a small git rep
 
 Only the standard library is used, like the script.
 """
+
 import contextlib
 import importlib.util
 import io
@@ -28,8 +29,9 @@ def lines_of(text: str, changed: set[int] | None = None) -> list[int]:
 
 
 def pairs(text: str, changed: set[int] | None = None) -> list[int]:
-    return [f.line for f in layout.check_text("T.lean", text, changed)
-            if "sentence lines" in f.message]
+    return [
+        f.line for f in layout.check_text("T.lean", text, changed) if "sentence lines" in f.message
+    ]
 
 
 class LineLength(unittest.TestCase):
@@ -47,14 +49,21 @@ class LineLength(unittest.TestCase):
         self.assertEqual(lines_of(text, set()), [])
 
     def test_url_alone(self):
-        for line in (URL, "  " + URL, "-- " + URL, "/-- " + URL + " -/", "/-! " + URL,
-                     "<" + URL + ">", "[draft]: " + URL):
+        for line in (
+            URL,
+            "  " + URL,
+            "-- " + URL,
+            "/-- " + URL + " -/",
+            "/-! " + URL,
+            "<" + URL + ">",
+            "[draft]: " + URL,
+        ):
             with self.subTest(line=line):
                 self.assertEqual(lines_of(line), [])
 
     def test_url_in_a_sentence(self):
         self.assertEqual(lines_of(f"-- See [the draft]({URL}).", {1}), [1])
-        self.assertEqual(lines_of(f"def x := \"{URL}\"", {1}), [1])
+        self.assertEqual(lines_of(f'def x := "{URL}"', {1}), [1])
 
 
 class CommentLayout(unittest.TestCase):
@@ -67,8 +76,10 @@ class CommentLayout(unittest.TestCase):
         self.assertEqual(pairs("/-!\n# Title\nOne.\n\nTwo.\n-/"), [])
 
     def test_lists_tables_and_links(self):
-        text = ("/-!\nThe rules:\n- one\n- two,\n  continued\n1. three\n\n| a | b |\n| c | d |\n\n"
-                f"See the draft.\n[draft]: {URL}\n{URL}\n-/")
+        text = (
+            "/-!\nThe rules:\n- one\n- two,\n  continued\n1. three\n\n| a | b |\n| c | d |\n\n"
+            f"See the draft.\n[draft]: {URL}\n{URL}\n-/"
+        )
         self.assertEqual(pairs(text), [])
 
     def test_code_blocks(self):
@@ -95,7 +106,7 @@ class CommentLayout(unittest.TestCase):
 
     def test_strings_and_characters(self):
         self.assertEqual(pairs('def s := "-- One.\n-- Two."'), [])
-        self.assertEqual(pairs("def s := r#\"/- One.\nTwo. -/\"#"), [])
+        self.assertEqual(pairs('def s := r#"/- One.\nTwo. -/"#'), [])
         self.assertEqual(pairs("def c := '\"'\n-- One.\n-- Two."), [3])
         self.assertEqual(pairs("def x' := 1\n-- One.\n-- Two."), [3])
 
@@ -130,8 +141,9 @@ class ChangedLines(unittest.TestCase):
             saved = layout.ROOT
             layout.ROOT = root
             try:
-                self.assertEqual(layout.changed_lines("base"),
-                                 {"New.lean": {1, 2}, "Old.lean": {5}})
+                self.assertEqual(
+                    layout.changed_lines("base"), {"New.lean": {1, 2}, "Old.lean": {5}}
+                )
                 out = io.StringIO()
                 with contextlib.redirect_stdout(out):
                     status = layout.main(["check_lean_layout.py", "--base", "base"])

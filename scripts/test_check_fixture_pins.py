@@ -5,6 +5,7 @@ Check `check_fixture_pins.py` itself, on small repositories built in a temporary
 
 Only the standard library is used, like the script.
 """
+
 import importlib.util
 import tempfile
 import unittest
@@ -85,8 +86,10 @@ class Pins(unittest.TestCase):
 
     def test_source_line_of_another_commit(self):
         tree = Tree()
-        tree.write("tests/suite/b/SHA256SUMS",
-                   f"# Source: RFC 1\n# Source: org/vectors at {OTHER}\n" + SUMS)
+        tree.write(
+            "tests/suite/b/SHA256SUMS",
+            f"# Source: RFC 1\n# Source: org/vectors at {OTHER}\n" + SUMS,
+        )
         problems = tree.problems()
         self.assertTrue(any("is not a source" in p for p in problems), problems)
 
@@ -101,17 +104,23 @@ class Pins(unittest.TestCase):
         self.assertFails(tree, "tests/suite/a/README.md: does not name")
 
     def test_cited_commit_that_is_not_a_pin(self):
-        for text in (f"at commit `{OTHER}`", f"at commit\n# {OTHER[:9]}",
-                     f"# Commit: {OTHER}",
-                     f"https://github.com/org/vectors/blob/{OTHER}/case.json"):
+        for text in (
+            f"at commit `{OTHER}`",
+            f"at commit\n# {OTHER[:9]}",
+            f"# Commit: {OTHER}",
+            f"https://github.com/org/vectors/blob/{OTHER}/case.json",
+        ):
             with self.subTest(text=text):
                 tree = Tree()
                 tree.write("tests/suite/a/format.md", text + "\n")
                 self.assertFails(tree, f"cites commit {OTHER[:9]}")
 
     def test_hex_word_that_is_not_a_pin(self):
-        for text in ("execution-specs at `abc1234`", "execution-specs at abc1234, in gas.py",
-                     "the commit `abc1234cafe`"):
+        for text in (
+            "execution-specs at `abc1234`",
+            "execution-specs at abc1234, in gas.py",
+            "the commit `abc1234cafe`",
+        ):
             with self.subTest(text=text):
                 tree = Tree()
                 tree.write("bindings/python/tests/test_c.py", f'"""{text}."""\n')
@@ -120,8 +129,13 @@ class Pins(unittest.TestCase):
     def test_hex_word_that_reads_as_no_commit(self):
         # A digest is longer than a commit, even when it is cut short.
         # A word needs a letter and a digit.
-        for text in (f"`{'ab12' * 16}`", "`deadbeef`", "`1234567`", "look at abc1234x",
-                     "sha256 `e2fa7ea2…`"):
+        for text in (
+            f"`{'ab12' * 16}`",
+            "`deadbeef`",
+            "`1234567`",
+            "look at abc1234x",
+            "sha256 `e2fa7ea2…`",
+        ):
             with self.subTest(text=text):
                 tree = Tree()
                 tree.write("bindings/python/tests/test_c.py", f'"""{text}."""\n')
@@ -134,8 +148,9 @@ class Pins(unittest.TestCase):
 
     def test_stale_pin(self):
         tree = Tree()
-        tree.write("tests/sources.toml",
-                   SOURCES + f'\n[repositories."org/unused"]\ncommit = "{OTHER}"\n')
+        tree.write(
+            "tests/sources.toml", SOURCES + f'\n[repositories."org/unused"]\ncommit = "{OTHER}"\n'
+        )
         self.assertFails(tree, "no test cites the pin of org/unused")
 
     def test_short_pin(self):
@@ -168,8 +183,9 @@ class Archives(unittest.TestCase):
     def test_archive_that_no_test_names(self):
         tree = self.tree()
         (tree.root / "bindings/python/tests/test_b.py").unlink()
-        self.assertEqual(tree.problems(),
-                         ["tests/sources.toml: no test names the archive vectors/v1/all"])
+        self.assertEqual(
+            tree.problems(), ["tests/sources.toml: no test names the archive vectors/v1/all"]
+        )
 
     def test_archive_from_no_repository(self):
         archive = ARCHIVE.replace('repository = "org/vectors"', 'source = "NIST CAVP"')
@@ -180,11 +196,13 @@ class Archives(unittest.TestCase):
         self.assertIn("needs a recorded repository", problems[0])
 
     def test_malformed_archive(self):
-        for old, new, text in (('"org/vectors"', '"org/other"', "a recorded repository"),
-                               ("https://", "http://", "an https URL"),
-                               ("size = 10", "size = 0", "a positive size"),
-                               ("size = 10", 'size = "10"', "a positive size"),
-                               ("3" * 64, "3" * 63, "a 64-digit sha256")):
+        for old, new, text in (
+            ('"org/vectors"', '"org/other"', "a recorded repository"),
+            ("https://", "http://", "an https URL"),
+            ("size = 10", "size = 0", "a positive size"),
+            ("size = 10", 'size = "10"', "a positive size"),
+            ("3" * 64, "3" * 63, "a 64-digit sha256"),
+        ):
             with self.subTest(text=text, new=new):
                 problems = self.tree(ARCHIVE.replace(old, new)).problems()
                 self.assertEqual(len(problems), 1, problems)

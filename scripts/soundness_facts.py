@@ -21,6 +21,7 @@ The facts that change with the code, such as the theorems that still use
 Only the standard library is used, and Python 3.10 is enough, so the check
 needs no Lean, no build and no install step.
 """
+
 import argparse
 import json
 import re
@@ -32,7 +33,8 @@ ROOT = Path(__file__).resolve().parent.parent
 BLOCK = re.compile(r"(<!-- generated: (\S+) -->\n)(.*?)(<!-- end generated -->)", re.S)
 VERSION_LINE = re.compile(
     r"^This document describes the development tree that declares package version `([^`]+)` in `pyproject.toml`\.$",
-    re.M)
+    re.M,
+)
 
 
 def baseline(root: Path) -> list[tuple[str, str]]:
@@ -61,13 +63,17 @@ def native(root: Path) -> str:
     names = sorted((d for k, d in baseline(root) if k == "native"), key=readable)
     if not names:
         return "No theorem uses them.\n"
-    return (f"{len(names)} theorems still use them, and "
-            "`scripts/check_decls_baseline.txt` lists each one:\n\n"
-            + "".join(f"- {readable(n)}\n" for n in names))
+    return (
+        f"{len(names)} theorems still use them, and "
+        "`scripts/check_decls_baseline.txt` lists each one:\n\n"
+        + "".join(f"- {readable(n)}\n" for n in names)
+    )
 
 
 def unfoldable(root: Path) -> str:
-    found = sorted((d, k) for k, d in baseline(root) if k in ("partial", "opaque", "reaches-opaque"))
+    found = sorted(
+        (d, k) for k, d in baseline(root) if k in ("partial", "opaque", "reaches-opaque")
+    )
     return "".join(f"- {readable(d)}, `{k}`\n" for d, k in found)
 
 
@@ -111,7 +117,9 @@ def strip_lean(text: str) -> str:
             while j < n and text[j] != '"':
                 j += 2 if text[j] == "\\" else 1
             j = min(j + 1, n)
-        elif (m := re.compile(r"'(\\.[^']*|[^\\'])'").match(text, i)) and (i == 0 or not is_ident(text[i - 1])):
+        elif (m := re.compile(r"'(\\.[^']*|[^\\'])'").match(text, i)) and (
+            i == 0 or not is_ident(text[i - 1])
+        ):
             j = m.end()
         else:
             out.append(text[i])
@@ -185,9 +193,11 @@ def exports(root: Path) -> str:
     consts = {s for s in lean if "_const_" in s}
     ops = lean - consts
 
-    text = (f"Lean exports {len(ops)} operations and {len(consts)} size constants.\n"
-            f"The Python extension calls {len(ops & called)} of the operations "
-            f"and {len(consts & called)} of the constants.\n")
+    text = (
+        f"Lean exports {len(ops)} operations and {len(consts)} size constants.\n"
+        f"The Python extension calls {len(ops & called)} of the operations "
+        f"and {len(consts & called)} of the constants.\n"
+    )
     for kind, uncalled in (("operations", ops - called), ("constants", consts - called)):
         if uncalled:
             text += f"Exported {kind} it does not call: {', '.join(f'`{s}`' for s in sorted(uncalled))}.\n"
@@ -197,8 +207,11 @@ def exports(root: Path) -> str:
 def c_lines(root: Path) -> str:
     bindings = root / "bindings" / "python"
     # `docstrings.h` is written by `lake exe gen-bindings`, so it is not hand-written C.
-    files = sorted(p for p in list(bindings.glob("*.c")) + list(bindings.glob("*.h"))
-                   if p.name != "docstrings.h")
+    files = sorted(
+        p
+        for p in list(bindings.glob("*.c")) + list(bindings.glob("*.h"))
+        if p.name != "docstrings.h"
+    )
     counts = [(p.name, len(p.read_text().splitlines())) for p in files]
     total = sum(n for _, n in counts)
     each = ", ".join(f"`{name}` ({n})" for name, n in counts)
@@ -217,15 +230,24 @@ def pins(root: Path) -> str:
 
     def pin(p: dict) -> str:
         rev, requested = p["rev"][:7], p.get("inputRev")
-        return f"`{requested}`, commit `{rev}`" if requested and not p["rev"].startswith(requested) else f"`{rev}`"
+        return (
+            f"`{requested}`, commit `{rev}`"
+            if requested and not p["rev"].startswith(requested)
+            else f"`{rev}`"
+        )
 
     # One line per package, sorted by name, so the text does not follow the manifest's order.
-    required = sorted((PACKAGE_NAMES.get(p["name"], p["name"]), pin(p))
-                      for p in packages if not p.get("inherited", False))
-    return ("The specification requires no package.\n"
-            + "".join(f"The package requires {name}, at {at}.\n" for name, at in required)
-            + "Only the proofs import them.\n"
-            + f"The Lean toolchain is `{toolchain}`.\n")
+    required = sorted(
+        (PACKAGE_NAMES.get(p["name"], p["name"]), pin(p))
+        for p in packages
+        if not p.get("inherited", False)
+    )
+    return (
+        "The specification requires no package.\n"
+        + "".join(f"The package requires {name}, at {at}.\n" for name, at in required)
+        + "Only the proofs import them.\n"
+        + f"The Lean toolchain is `{toolchain}`.\n"
+    )
 
 
 GENERATORS = {
@@ -270,8 +292,10 @@ def check_version(root: Path, doc: str) -> list[str]:
     if not m:
         return ["no line naming the package version the document describes"]
     if m.group(1) != version:
-        return [f"it describes package version {m.group(1)}, but pyproject.toml declares {version}: "
-                "review the document for this version, then update that line"]
+        return [
+            f"it describes package version {m.group(1)}, but pyproject.toml declares {version}: "
+            "review the document for this version, then update that line"
+        ]
     return []
 
 
@@ -282,7 +306,9 @@ def run(root: Path, check: bool) -> list[str]:
     problems += check_version(root, doc)
     if check:
         if new != doc:
-            problems.append("generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py")
+            problems.append(
+                "generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py"
+            )
     elif new != doc:
         path.write_text(new)
         print("SOUNDNESS.md: generated blocks updated")
@@ -291,8 +317,11 @@ def run(root: Path, check: bool) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0].strip())
-    parser.add_argument("--check", action="store_true",
-                        help="fail if a generated block is out of date, or the version differs")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="fail if a generated block is out of date, or the version differs",
+    )
     args = parser.parse_args()
     problems = run(ROOT, args.check)
     for p in problems:

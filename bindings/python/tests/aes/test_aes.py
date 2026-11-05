@@ -9,12 +9,21 @@ from ethlib.errors import AesError
 # https://doi.org/10.6028/NIST.FIPS.197-upd1
 # https://csrc.nist.gov/files/pubs/fips/197/final/docs/fips-197.pdf
 BLOCKS = [
-    ("2b7e151628aed2a6abf7158809cf4f3c", "3243f6a8885a308d313198a2e0370734",
-     "3925841d02dc09fbdc118597196a0b32"),
-    ("000102030405060708090a0b0c0d0e0f", "00112233445566778899aabbccddeeff",
-     "69c4e0d86a7b0430d8cdb78070b4c55a"),
-    ("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
-     "00112233445566778899aabbccddeeff", "8ea2b7ca516745bfeafc49904b496089"),
+    (
+        "2b7e151628aed2a6abf7158809cf4f3c",
+        "3243f6a8885a308d313198a2e0370734",
+        "3925841d02dc09fbdc118597196a0b32",
+    ),
+    (
+        "000102030405060708090a0b0c0d0e0f",
+        "00112233445566778899aabbccddeeff",
+        "69c4e0d86a7b0430d8cdb78070b4c55a",
+    ),
+    (
+        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+        "00112233445566778899aabbccddeeff",
+        "8ea2b7ca516745bfeafc49904b496089",
+    ),
 ]
 
 
@@ -36,12 +45,16 @@ F5_PLAINTEXT = (
 # F.5.1 (CTR-AES128) and F.5.5 (CTR-AES256): key and ciphertext.
 # F.5.2 and F.5.6 decrypt them back, with the same function.
 CTR = [
-    ("2b7e151628aed2a6abf7158809cf4f3c",
-     "874d6191b620e3261bef6864990db6ce9806f66b7970fdff8617187bb9fffdff"
-     "5ae4df3edbd5d35e5b4f09020db03eab1e031dda2fbe03d1792170a0f3009cee"),
-    ("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4",
-     "601ec313775789a5b7a7f504bbf3d228f443e3ca4d62b59aca84e990cacaf5c5"
-     "2b0930daa23de94ce87017ba2d84988ddfc9c58db67aada613c2dd08457941a6"),
+    (
+        "2b7e151628aed2a6abf7158809cf4f3c",
+        "874d6191b620e3261bef6864990db6ce9806f66b7970fdff8617187bb9fffdff"
+        "5ae4df3edbd5d35e5b4f09020db03eab1e031dda2fbe03d1792170a0f3009cee",
+    ),
+    (
+        "603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4",
+        "601ec313775789a5b7a7f504bbf3d228f443e3ca4d62b59aca84e990cacaf5c5"
+        "2b0930daa23de94ce87017ba2d84988ddfc9c58db67aada613c2dd08457941a6",
+    ),
 ]
 
 
@@ -116,15 +129,14 @@ GCM = [
     # gcmEncryptExtIV256.rsp, Count = 0, in the section
     # `Keylen = 256, IVlen = 96, PTlen = 128, AADlen = 128, Taglen = 128`.
     dict(
-        key=(
-            "92e11dcdaa866f5ce790fd24501f92509aacf4cb8b1339d50c9c1240935dd08b"
-        ),
+        key=("92e11dcdaa866f5ce790fd24501f92509aacf4cb8b1339d50c9c1240935dd08b"),
         iv="ac93a1a6145299bde902f21a",
         pt="2d71bcfa914e4ac045b2aa60955fad24",
         aad="1e0889016f67601c8ebea4943bc23ad6",
         ct="8995ae2e6df3dbf96fac7b7137bae67f",
         tag="eca5aa77d51d4a0a14d9c51e1da474ab",
-    ),]
+    ),
+]
 
 
 @pytest.mark.parametrize("case", GCM, ids=range(len(GCM)))
@@ -176,11 +188,14 @@ def test_gcm_rejects_short_tags(tag_length: int) -> None:
     assert info.value.code == 2
 
 
-@pytest.mark.parametrize("call, error", [
-    (lambda: aes.encrypt_block(bytes(24), bytes(16)), "key size"),
-    (lambda: aes.encrypt_block(bytes(16), bytes(15)), "block size"),
-    (lambda: aes.ctr(bytes(16), bytes(15), b""), "counter size"),
-])
+@pytest.mark.parametrize(
+    "call, error",
+    [
+        (lambda: aes.encrypt_block(bytes(24), bytes(16)), "key size"),
+        (lambda: aes.encrypt_block(bytes(16), bytes(15)), "block size"),
+        (lambda: aes.ctr(bytes(16), bytes(15), b""), "counter size"),
+    ],
+)
 def test_rejects_bad_sizes(call, error: str) -> None:
     # The export reads these sizes itself, so the error has code 0.
     with pytest.raises(AesError, match=error) as info:

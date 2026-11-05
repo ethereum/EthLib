@@ -45,18 +45,30 @@ REJECTED = [
 
 # Test vectors 4 to 7: the rounds field, the flag and the output.
 ACCEPTED = [
-    ("00000000", "01",
-     "08c9bcf367e6096a3ba7ca8485ae67bb2bf894fe72f36e3cf1361d5f3af54fa5"
-     "d282e6ad7f520e511f6c3e2b8c68059b9442be0454267ce079217e1319cde05b"),
-    ("0000000c", "01",
-     "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"
-     "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923"),
-    ("0000000c", "00",
-     "75ab69d3190a562c51aef8d88f1c2775876944407270c42c9844252c26d28752"
-     "98743e7f6d5ea2f2d3e8d226039cd31b4e426ac4f2d3d666a610c2116fde4735"),
-    ("00000001", "01",
-     "b63a380cb2897d521994a85234ee2c181b5f844d2c624c002677e9703449d2fb"
-     "a551b3a8333bcdf5f2f7e08993d53923de3d64fcc68c034e717b9293fed7a421"),
+    (
+        "00000000",
+        "01",
+        "08c9bcf367e6096a3ba7ca8485ae67bb2bf894fe72f36e3cf1361d5f3af54fa5"
+        "d282e6ad7f520e511f6c3e2b8c68059b9442be0454267ce079217e1319cde05b",
+    ),
+    (
+        "0000000c",
+        "01",
+        "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d1"
+        "7d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923",
+    ),
+    (
+        "0000000c",
+        "00",
+        "75ab69d3190a562c51aef8d88f1c2775876944407270c42c9844252c26d28752"
+        "98743e7f6d5ea2f2d3e8d226039cd31b4e426ac4f2d3d666a610c2116fde4735",
+    ),
+    (
+        "00000001",
+        "01",
+        "b63a380cb2897d521994a85234ee2c181b5f844d2c624c002677e9703449d2fb"
+        "a551b3a8333bcdf5f2f7e08993d53923de3d64fcc68c034e717b9293fed7a421",
+    ),
 ]
 
 
@@ -85,8 +97,14 @@ def test_eip152_vector8_rounds(fork: str) -> None:
 # The rest leave the EIP-152 layout: they build h, m, t0 and t1 themselves.
 
 IV = [
-    0x6A09E667F3BCC908, 0xBB67AE8584CAA73B, 0x3C6EF372FE94F82B, 0xA54FF53A5F1D36F1,
-    0x510E527FADE682D1, 0x9B05688C2B3E6C1F, 0x1F83D9ABFB41BD6B, 0x5BE0CD19137E2179,
+    0x6A09E667F3BCC908,
+    0xBB67AE8584CAA73B,
+    0x3C6EF372FE94F82B,
+    0xA54FF53A5F1D36F1,
+    0x510E527FADE682D1,
+    0x9B05688C2B3E6C1F,
+    0x1F83D9ABFB41BD6B,
+    0x5BE0CD19137E2179,
 ]
 
 SIGMA = [
@@ -147,8 +165,13 @@ H = [IV[0] ^ 0x01010040] + IV[1:]
 
 def encode(rounds: int, block: bytes, t0: int, t1: int, final: int) -> bytes:
     """The 213-byte input: rounds big-endian, then h, m, t0 and t1 little-endian, then the flag."""
-    return (struct.pack(">I", rounds) + struct.pack("<8Q", *H) + block
-            + struct.pack("<2Q", t0, t1) + bytes([final]))
+    return (
+        struct.pack(">I", rounds)
+        + struct.pack("<8Q", *H)
+        + block
+        + struct.pack("<2Q", t0, t1)
+        + bytes([final])
+    )
 
 
 def test_oracle_agrees_with_eip152() -> None:
@@ -170,7 +193,8 @@ def test_full_block(fork: str) -> None:
     block = bytes(range(128))
     digest = bytes.fromhex(
         "2319e3789c47e2daa5fe807f61bec2a1a6537fa03f19ff32e87eecbfd64b7e0e"
-        "8ccff439ac333b040f19b0c4ddd11a61e24ac1fe0f10a039806c5dcc0da3d115")
+        "8ccff439ac333b040f19b0c4ddd11a61e24ac1fe0f10a039806c5dcc0da3d115"
+    )
     assert hashlib.blake2b(block).digest() == digest
     assert run(fork, ADDRESS, encode(12, block, 128, 0, 1), 12) == digest
 
@@ -182,7 +206,8 @@ def test_high_offset(fork: str) -> None:
     block = b"abc".ljust(128, b"\0")
     expected = bytes.fromhex(
         "5811650d30e41b4e9641ddb368e6b697ac38f34598f74e9f253db772f522fa80"
-        "55e373dcd96b59e0e30efa21ed0c4110eeb8dc7a33d626ec6a2930a1808a5560")
+        "55e373dcd96b59e0e30efa21ed0c4110eeb8dc7a33d626ec6a2930a1808a5560"
+    )
     m = list(struct.unpack("<16Q", block))
     assert struct.pack("<8Q", *compress(12, H, m, 3, 1, True)) == expected
     assert run(fork, ADDRESS, encode(12, block, 3, 1, 1), 12) == expected

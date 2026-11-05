@@ -34,36 +34,48 @@ MAINNET_FORKS = [
     ("petersburg", BLOCK, 7_280_000),
 ]
 MAINNET = forkid.schedule(MAINNET_GENESIS, 0, MAINNET_FORKS)
-ROPSTEN = forkid.schedule(ROPSTEN_GENESIS, 0, [
-    ("frontier", BLOCK, 0),
-    ("homestead", BLOCK, 0),
-    ("tangerineWhistle", BLOCK, 0),
-    ("spuriousDragon", BLOCK, 10),
-    ("byzantium", BLOCK, 1_700_000),
-    ("constantinople", BLOCK, 4_230_000),
-    ("petersburg", BLOCK, 4_939_394),
-    ("istanbul", BLOCK, 6_485_846),
-])
-RINKEBY = forkid.schedule(RINKEBY_GENESIS, 0, [
-    ("frontier", BLOCK, 0),
-    ("homestead", BLOCK, 1),
-    ("tangerineWhistle", BLOCK, 2),
-    ("spuriousDragon", BLOCK, 3),
-    ("byzantium", BLOCK, 1_035_301),
-    ("constantinople", BLOCK, 3_660_663),
-    ("petersburg", BLOCK, 4_321_234),
-    ("istanbul", BLOCK, 5_435_345),
-])
-GOERLI = forkid.schedule(GOERLI_GENESIS, 0, [
-    ("frontier", BLOCK, 0),
-    ("homestead", BLOCK, 0),
-    ("tangerineWhistle", BLOCK, 0),
-    ("spuriousDragon", BLOCK, 0),
-    ("byzantium", BLOCK, 0),
-    ("constantinople", BLOCK, 0),
-    ("petersburg", BLOCK, 0),
-    ("istanbul", BLOCK, 1_561_651),
-])
+ROPSTEN = forkid.schedule(
+    ROPSTEN_GENESIS,
+    0,
+    [
+        ("frontier", BLOCK, 0),
+        ("homestead", BLOCK, 0),
+        ("tangerineWhistle", BLOCK, 0),
+        ("spuriousDragon", BLOCK, 10),
+        ("byzantium", BLOCK, 1_700_000),
+        ("constantinople", BLOCK, 4_230_000),
+        ("petersburg", BLOCK, 4_939_394),
+        ("istanbul", BLOCK, 6_485_846),
+    ],
+)
+RINKEBY = forkid.schedule(
+    RINKEBY_GENESIS,
+    0,
+    [
+        ("frontier", BLOCK, 0),
+        ("homestead", BLOCK, 1),
+        ("tangerineWhistle", BLOCK, 2),
+        ("spuriousDragon", BLOCK, 3),
+        ("byzantium", BLOCK, 1_035_301),
+        ("constantinople", BLOCK, 3_660_663),
+        ("petersburg", BLOCK, 4_321_234),
+        ("istanbul", BLOCK, 5_435_345),
+    ],
+)
+GOERLI = forkid.schedule(
+    GOERLI_GENESIS,
+    0,
+    [
+        ("frontier", BLOCK, 0),
+        ("homestead", BLOCK, 0),
+        ("tangerineWhistle", BLOCK, 0),
+        ("spuriousDragon", BLOCK, 0),
+        ("byzantium", BLOCK, 0),
+        ("constantinople", BLOCK, 0),
+        ("petersburg", BLOCK, 0),
+        ("istanbul", BLOCK, 1_561_651),
+    ],
+)
 
 # The chain of EIP-6122 "Test Cases": mainnet to Gray Glacier, a merge netsplit block at
 # 18000000 and withdrawals at time 1668000000.
@@ -72,7 +84,8 @@ GOERLI = forkid.schedule(GOERLI_GENESIS, 0, [
 WITHDRAWALS = forkid.schedule(
     MAINNET_GENESIS,
     0,
-    MAINNET_FORKS + [
+    MAINNET_FORKS
+    + [
         ("istanbul", BLOCK, 9_069_000),
         ("muirGlacier", BLOCK, 9_200_000),
         ("berlin", BLOCK, 12_244_000),
@@ -280,10 +293,23 @@ HOODI_GENESIS = bytes.fromhex("bbe312868b376a3001692a646dd2d7d1e4406380dfd86b98a
 HOODI = forkid.schedule(
     HOODI_GENESIS,
     0,
-    [(name, BLOCK, 0) for name in [
-        "frontier", "homestead", "tangerineWhistle", "spuriousDragon", "byzantium",
-        "constantinople", "petersburg", "istanbul", "berlin", "london", "paris",
-    ]] + [
+    [
+        (name, BLOCK, 0)
+        for name in [
+            "frontier",
+            "homestead",
+            "tangerineWhistle",
+            "spuriousDragon",
+            "byzantium",
+            "constantinople",
+            "petersburg",
+            "istanbul",
+            "berlin",
+            "london",
+            "paris",
+        ]
+    ]
+    + [
         ("shapella", TIME, 0),
         ("dencun", TIME, 0),
         ("pectra", TIME, 1_742_999_832),
@@ -293,11 +319,15 @@ HOODI = forkid.schedule(
 
 def test_eip6122_example() -> None:
     # EIP-6122 "Specification": a fork at time 1668000000 right after Homestead.
-    chain = forkid.schedule(MAINNET_GENESIS, 0, [
-        ("frontier", BLOCK, 0),
-        ("homestead", BLOCK, 1_150_000),
-        ("shapella", TIME, 1_668_000_000),
-    ])
+    chain = forkid.schedule(
+        MAINNET_GENESIS,
+        0,
+        [
+            ("frontier", BLOCK, 0),
+            ("homestead", BLOCK, 1_150_000),
+            ("shapella", TIME, 1_668_000_000),
+        ],
+    )
     assert forkid.fork_id(chain, 1_150_000, 1_668_000_000) == (bytes.fromhex("cb37b2ee"), 0)
 
 
@@ -308,8 +338,14 @@ def test_hoodi() -> None:
 
 # The boundaries of mainnet, from ChainConfig.mainnet, against the hashes above.
 # EIP-6122 gives no mainnet hash after Gray Glacier, so these check only the fork order.
-MAINNET_TIMES = [1_681_338_455, 1_710_338_135, 1_746_612_311, 1_764_798_551,
-                 1_765_290_071, 1_767_747_671]
+MAINNET_TIMES = [
+    1_681_338_455,
+    1_710_338_135,
+    1_746_612_311,
+    1_764_798_551,
+    1_765_290_071,
+    1_767_747_671,
+]
 
 
 def test_mainnet_blocks() -> None:
@@ -317,7 +353,9 @@ def test_mainnet_blocks() -> None:
     for chain, number, timestamp, fork_hash, fork_next in IDS:
         if chain is WITHDRAWALS and number < 15_050_000:
             assert forkid.mainnet_fork_id(number, timestamp) == (
-                fork_hash.to_bytes(4, "big"), fork_next)
+                fork_hash.to_bytes(4, "big"),
+                fork_next,
+            )
     # Mainnet sets no merge netsplit block, so Shapella follows Gray Glacier.
     assert forkid.mainnet_fork_id(15_050_000, 0) == (bytes.fromhex("f0afd0e3"), MAINNET_TIMES[0])
     assert forkid.mainnet_fork_id(20_000_000, MAINNET_TIMES[0] - 1)[1] == MAINNET_TIMES[0]

@@ -73,7 +73,9 @@ def test_phase0_long_preamble() -> None:
     assert gossip.message_id("phase0", TOPIC, data) == expected
 
 
-@pytest.mark.parametrize("fork", ["bellatrix", "shapella", "dencun", "pectra", "fusaka", "glamsterdam"])
+@pytest.mark.parametrize(
+    "fork", ["bellatrix", "shapella", "dencun", "pectra", "fusaka", "glamsterdam"]
+)
 def test_later_forks_keep_altair(fork: str) -> None:
     assert gossip.message_id(fork, TOPIC, COMPRESSED) == _id(VALID, _length(TOPIC), TOPIC, PAYLOAD)
 

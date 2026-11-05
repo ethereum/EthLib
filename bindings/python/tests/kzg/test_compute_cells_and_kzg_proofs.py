@@ -15,10 +15,15 @@ HANDLER = "compute_cells_and_kzg_proofs"
 def test_valid(i: int) -> None:
     blob = F.VALID_BLOBS[i]
     cells, proofs = F.cached_cells_and_proofs(blob)
-    write_case("kzg", HANDLER, f"{HANDLER}_case_valid_{i}", {
-        "input":  {"blob": hex_str(blob)},
-        "output": [hex_list(cells), hex_list(proofs)],
-    })
+    write_case(
+        "kzg",
+        HANDLER,
+        f"{HANDLER}_case_valid_{i}",
+        {
+            "input": {"blob": hex_str(blob)},
+            "output": [hex_list(cells), hex_list(proofs)],
+        },
+    )
 
 
 @pytest.mark.parametrize("i", range(len(F.INVALID_BLOBS)))
@@ -26,5 +31,9 @@ def test_invalid_blob(i: int) -> None:
     blob = F.INVALID_BLOBS[i]
     with pytest.raises(F.invalid_blob_error(blob)):
         kzg.compute_cells_and_kzg_proofs(blob)
-    write_case("kzg", HANDLER, f"{HANDLER}_case_invalid_blob_{i}",
-               {"input": {"blob": hex_str(blob)}, "output": None})
+    write_case(
+        "kzg",
+        HANDLER,
+        f"{HANDLER}_case_invalid_blob_{i}",
+        {"input": {"blob": hex_str(blob)}, "output": None},
+    )

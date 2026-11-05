@@ -49,29 +49,61 @@ EXCLUDED_FILES = {"EthLib.lean"}
 PROCEDURAL_LIMIT = 20
 DESCRIPTIVE_LIMIT = 25
 
-ABBREVIATIONS = {"e.g.", "i.e.", "etc.", "cf.", "vs.", "al.", "fig.", "no.", "resp.", "viz.",
-                 "thm.", "lem.", "sec.", "eq.", "approx.", "def.", "prop.", "cor."}
+ABBREVIATIONS = {
+    "e.g.",
+    "i.e.",
+    "etc.",
+    "cf.",
+    "vs.",
+    "al.",
+    "fig.",
+    "no.",
+    "resp.",
+    "viz.",
+    "thm.",
+    "lem.",
+    "sec.",
+    "eq.",
+    "approx.",
+    "def.",
+    "prop.",
+    "cor.",
+}
 PHRASAL_PAIRS = {
-    "set up": "set|sets", "carry out": "carry|carries|carried",
-    "figure out": "figure|figures|figured", "point out": "point|points|pointed",
-    "rule out": "rule|rules|ruled", "fill in": "fill|fills|filled",
-    "fill out": "fill|fills|filled", "look up": "look|looks|looked", "end up": "end|ends|ended",
-    "find out": "find|finds|found", "pick up": "pick|picks|picked",
-    "check out": "check|checks|checked", "come up with": "come|comes|came",
+    "set up": "set|sets",
+    "carry out": "carry|carries|carried",
+    "figure out": "figure|figures|figured",
+    "point out": "point|points|pointed",
+    "rule out": "rule|rules|ruled",
+    "fill in": "fill|fills|filled",
+    "fill out": "fill|fills|filled",
+    "look up": "look|looks|looked",
+    "end up": "end|ends|ended",
+    "find out": "find|finds|found",
+    "pick up": "pick|picks|picked",
+    "check out": "check|checks|checked",
+    "come up with": "come|comes|came",
 }
 PHRASAL = re.compile(
-    "|".join(rf"\b(?:{forms})\s+" + r"\s+".join(
-        re.escape(word) for word in pair.split()[1:]) + r"\b"
-        for pair, forms in PHRASAL_PAIRS.items()), re.IGNORECASE)
+    "|".join(
+        rf"\b(?:{forms})\s+" + r"\s+".join(re.escape(word) for word in pair.split()[1:]) + r"\b"
+        for pair, forms in PHRASAL_PAIRS.items()
+    ),
+    re.IGNORECASE,
+)
 LATIN = re.compile(r"(?<![\w.])(?:e\.g\.|i\.e\.|etc\.|cf\.|resp\.|viz\.)", re.IGNORECASE)
 CONTRACTION = re.compile(
     r"\b\w+n['’]t\b|\b\w+['’](?:re|ll|ve|d)\b"
-    r"|\b(?:it|that|there|here|what|let|who|where)['’]s\b", re.IGNORECASE)
+    r"|\b(?:it|that|there|here|what|let|who|where)['’]s\b",
+    re.IGNORECASE,
+)
 HISTORY_SCOPE = re.compile(
-    r"^(?:EthLib/|(?:README|ARCHITECTURE|BUILDING|SOUNDNESS|WRITING)\.md$)|\.lean$")
+    r"^(?:EthLib/|(?:README|ARCHITECTURE|BUILDING|SOUNDNESS|WRITING)\.md$)|\.lean$"
+)
 CITATION = re.compile(
     r"\b(?:RFC|EIP|ERC|FIPS|SEC|SP)[ -]\d+(?:\s+v\d+(?:\.\d+)*)?"
-    r"(?:\s*§\s?\d+(?:\.\d+)*[a-z]?)?")
+    r"(?:\s*§\s?\d+(?:\.\d+)*[a-z]?)?"
+)
 GENERATED_START = re.compile(r"<!--\s*generated:")
 GENERATED_END = re.compile(r"<!--\s*end generated\s*-->")
 
@@ -127,15 +159,22 @@ def vocabulary_section(text: str, title: str) -> str:
         name = re.sub(r"^\d+(?:\.\d+)*[.)]?\s+", "", heading.group(2))
         if name.casefold() != title.casefold():
             continue
-        end = next((other.start() for other in headings[index + 1:]
-                    if len(other.group(1)) <= len(heading.group(1))), len(text))
-        return text[heading.end():end]
+        end = next(
+            (
+                other.start()
+                for other in headings[index + 1 :]
+                if len(other.group(1)) <= len(heading.group(1))
+            ),
+            len(text),
+        )
+        return text[heading.end() : end]
     raise ValueError(f"missing vocabulary section: {title}")
 
 
 def word_pattern(words: list[str]) -> re.Pattern[str] | None:
     if not words:
         return None
+
     def alternative(word: str) -> str:
         # A single word also matches its inflected forms: "utilize" matches "utilizes".
         suffix = r"(?:s|es|d|ed|ing)?" if re.fullmatch(r"[a-z]+", word) else ""
@@ -192,7 +231,7 @@ def markdown_blocks(path: str, text: str, first_line: int = 1) -> list[Block]:
     comment = False
     generated = False
     list_context = False
-    procedural_context = (Path(path).name == "AGENTS.md" or "/docs/skills/" in "/" + path)
+    procedural_context = Path(path).name == "AGENTS.md" or "/docs/skills/" in "/" + path
     lines = text.split("\n")
     visible_lines = CODE_SPAN.sub(lambda m: blank(m.group(), True), text).split("\n")
 
@@ -236,8 +275,13 @@ def markdown_blocks(path: str, text: str, first_line: int = 1) -> list[Block]:
                 flush()
                 generated = True
                 continue
-        if (not path.endswith(".lean") and raw.startswith(("    ", "\t"))
-                and not current and not comment and not list_context):
+        if (
+            not path.endswith(".lean")
+            and raw.startswith(("    ", "\t"))
+            and not current
+            and not comment
+            and not list_context
+        ):
             continue
         raw, comment = strip_html_comments(raw, comment, visible_lines[offset])
         stripped = raw.strip()
@@ -249,10 +293,13 @@ def markdown_blocks(path: str, text: str, first_line: int = 1) -> list[Block]:
             if legal_section is not None and level <= legal_section:
                 legal_section = None
             title = heading.group(2).casefold()
-            if legal_section is None and (title in {"license", "licence", "licensing"}
-                    or title.startswith("copyright")
-                    or (Path(path).name == "CONTRIBUTING.md"
-                        and title == "material from other projects")):
+            if legal_section is None and (
+                title in {"license", "licence", "licensing"}
+                or title.startswith("copyright")
+                or (
+                    Path(path).name == "CONTRIBUTING.md" and title == "material from other projects"
+                )
+            ):
                 legal_section = level
             header_row = True
             continue
@@ -358,7 +405,7 @@ def lean_blocks(path: str, text: str) -> list[Block]:
                     cursor += 2
                 else:
                     cursor += 1
-            body = text[body_start:cursor - 2 if depth == 0 else cursor]
+            body = text[body_start : cursor - 2 if depth == 0 else cursor]
             blocks.extend(markdown_blocks(path, body, line))
             line += text.count("\n", index, cursor)
             index = cursor
@@ -366,8 +413,8 @@ def lean_blocks(path: str, text: str) -> list[Block]:
         if text.startswith("--", index):
             end = text.find("\n", index)
             end = length if end == -1 else end
-            before = text[text.rfind("\n", 0, index) + 1:index]
-            content = text[index + 2:end].strip()
+            before = text[text.rfind("\n", 0, index) + 1 : index]
+            content = text[index + 2 : end].strip()
             if before.strip():
                 flush_line_comments()
                 blocks.extend(markdown_blocks(path, content, line))
@@ -385,8 +432,14 @@ def lean_blocks(path: str, text: str) -> list[Block]:
 
 
 def file_blocks(path: str, text: str) -> list[Block]:
-    if Path(path).name.casefold() in {"license", "licence", "copying",
-                                      "license.md", "licence.md", "copying.md"}:
+    if Path(path).name.casefold() in {
+        "license",
+        "licence",
+        "copying",
+        "license.md",
+        "licence.md",
+        "copying.md",
+    }:
         return []
     return lean_blocks(path, text) if path.endswith(".lean") else markdown_blocks(path, text)
 
@@ -402,42 +455,51 @@ def blank(text: str, token: bool = False) -> str:
         positions = [i for i, char in enumerate(result) if char == " "]
         if positions:
             index = positions[min(1, len(positions) - 1)]
-            result = result[:index] + "X" + result[index + 1:]
+            result = result[:index] + "X" + result[index + 1 :]
     return result
 
 
-def mask(text: str, collapse_parentheses: bool,
-         parentheticals: list[str] | None = None,
-         parenthetical_offsets: list[int] | None = None) -> str:
+def mask(
+    text: str,
+    collapse_parentheses: bool,
+    parentheticals: list[str] | None = None,
+    parenthetical_offsets: list[int] | None = None,
+) -> str:
     """Mask exempt elements with one word, preserving source offsets and newlines."""
     text = CODE_SPAN.sub(lambda m: blank(m.group(), True), text)
-    for pattern, token in (
-            (r"\$\$.*?\$\$|\$[^$]+\$", True),
-            (r"&[A-Za-z]+;|&#\d+;", False)):
+    for pattern, token in ((r"\$\$.*?\$\$|\$[^$]+\$", True), (r"&[A-Za-z]+;|&#\d+;", False)):
         text = re.sub(pattern, lambda m: blank(m.group(), token), text, flags=re.DOTALL)
+
     def link(match: re.Match[str]) -> str:
         start, end = match.span(1)
-        return (blank(match.group()[:start - match.start()]) + match.group(1)
-                + blank(match.group()[end - match.start():]))
+        return (
+            blank(match.group()[: start - match.start()])
+            + match.group(1)
+            + blank(match.group()[end - match.start() :])
+        )
+
     text = re.sub(r"!?\[([^\]]*)\]\((?:[^()]|\([^()]*\))*\)", link, text)
     text = re.sub(r"\[([^\]]+)\]\[[^\]]*\]", link, text)
     # EthLib keeps a document reference and its section together in the estimate.
     text = CITATION.sub(lambda match: blank(match.group(), True), text)
     for pattern, token in (
-            (r"\[[A-Z][A-Za-z+-]*\d{2}[a-z]?(?:,[^\]]*)?\]", True),
-            (r"<https?://[^>]+>|https?://\S+", True),
-            (r"</?[A-Za-z][^>]*>", False),
-            (r'"[^"]*"|“[^”]*”', True),
-            (r"\*\*|__|(?<!\w)[*_]|[*_](?!\w)", False)):
+        (r"\[[A-Z][A-Za-z+-]*\d{2}[a-z]?(?:,[^\]]*)?\]", True),
+        (r"<https?://[^>]+>|https?://\S+", True),
+        (r"</?[A-Za-z][^>]*>", False),
+        (r'"[^"]*"|“[^”]*”', True),
+        (r"\*\*|__|(?<!\w)[*_]|[*_](?!\w)", False),
+    ):
         text = re.sub(pattern, lambda m: blank(m.group(), token), text)
     if collapse_parentheses:
         while re.search(r"\([^()]*\)", text):
+
             def parenthesis(match: re.Match[str]) -> str:
                 if parentheticals is not None:
                     parentheticals.append(match.group()[1:-1])
                 if parenthetical_offsets is not None:
                     parenthetical_offsets.append(match.start() + 1)
                 return blank(match.group(), True)
+
             text = re.sub(r"\([^()]*\)", parenthesis, text)
     return text
 
@@ -446,18 +508,21 @@ def sentence_spans(text: str) -> list[tuple[int, int]]:
     """Return sentence spans in the supplied text without losing source offsets."""
     spans: list[tuple[int, int]] = []
     start = 0
-    boundaries = list(re.finditer(
-        r"(?<=[.!?])\s+(?=[A-Z0-9(\[]|[a-z][\w-]*\.[\w-]+(?:\s|$))", text))
+    boundaries = list(
+        re.finditer(r"(?<=[.!?])\s+(?=[A-Z0-9(\[]|[a-z][\w-]*\.[\w-]+(?:\s|$))", text)
+    )
     for boundary in boundaries:
-        part = text[start:boundary.start()]
+        part = text[start : boundary.start()]
         if part.split() and part.split()[-1].lower() in ABBREVIATIONS:
             continue
         spans.append((start, boundary.start()))
         start = boundary.end()
     spans.append((start, len(text)))
-    return [(a + len(text[a:b]) - len(text[a:b].lstrip()),
-             b - len(text[a:b]) + len(text[a:b].rstrip()))
-            for a, b in spans if text[a:b].strip()]
+    return [
+        (a + len(text[a:b]) - len(text[a:b].lstrip()), b - len(text[a:b]) + len(text[a:b].rstrip()))
+        for a, b in spans
+        if text[a:b].strip()
+    ]
 
 
 def sentences(text: str) -> list[str]:
@@ -472,8 +537,9 @@ def word_count(sentence: str) -> int:
 # Rules
 
 
-def check_block(block: Block, general: re.Pattern[str] | None,
-                history: re.Pattern[str] | None) -> list[Finding]:
+def check_block(
+    block: Block, general: re.Pattern[str] | None, history: re.Pattern[str] | None
+) -> list[Finding]:
     found: list[Finding] = []
 
     def add(rule: str, message: str, offset: int, end: int) -> None:
@@ -491,13 +557,19 @@ def check_block(block: Block, general: re.Pattern[str] | None,
         for start, end in sentence_spans(text):
             words = word_count(text[start:end])
             if words > suggested_length:
-                add("S1", f"This sentence has about {words} words. Consider a split if it "
-                    "improves clarity.", offset + start, offset + end)
+                add(
+                    "S1",
+                    f"This sentence has about {words} words. Consider a split if it "
+                    "improves clarity.",
+                    offset + start,
+                    offset + end,
+                )
     for pattern, rule, message in (
-            (LATIN, "W7", "Consider spelling out this Latin abbreviation."),
-            (PHRASAL, "W6", "Consider a direct verb if it preserves this meaning."),
-            (CONTRACTION, "S5", "Consider the full form of this contraction."),
-            (general, "W1", "Review this wording using WRITING.md. Preserve its meaning.")):
+        (LATIN, "W7", "Consider spelling out this Latin abbreviation."),
+        (PHRASAL, "W6", "Consider a direct verb if it preserves this meaning."),
+        (CONTRACTION, "S5", "Consider the full form of this contraction."),
+        (general, "W1", "Review this wording using WRITING.md. Preserve its meaning."),
+    ):
         if pattern is None:
             continue
         for match in pattern.finditer(plain):
@@ -506,8 +578,12 @@ def check_block(block: Block, general: re.Pattern[str] | None,
             add(rule, message, match.start(), match.end())
     if history is not None and HISTORY_SCOPE.search(block.path):
         for match in history.finditer(plain):
-            add("C3", "Review whether this history belongs in reference documentation.",
-                match.start(), match.end())
+            add(
+                "C3",
+                "Review whether this history belongs in reference documentation.",
+                match.start(),
+                match.end(),
+            )
     return found
 
 
@@ -523,13 +599,23 @@ def check_blocks(blocks: list[Block], vocabulary: Path = VOCABULARY) -> list[Fin
 
 
 def git(*args: str) -> str:
-    return subprocess.run(["git", *args], check=True, capture_output=True, text=True,
-                          cwd=ROOT, encoding="utf-8", errors="surrogateescape").stdout
+    return subprocess.run(
+        ["git", *args],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+        encoding="utf-8",
+        errors="surrogateescape",
+    ).stdout
 
 
 def checked_path(path: str) -> bool:
-    return (path.endswith((".md", ".lean")) and path not in EXCLUDED_FILES
-            and not path.startswith(EXCLUDED_PREFIXES))
+    return (
+        path.endswith((".md", ".lean"))
+        and path not in EXCLUDED_FILES
+        and not path.startswith(EXCLUDED_PREFIXES)
+    )
 
 
 def added_lines(base: str) -> dict[str, set[int]]:
@@ -538,8 +624,11 @@ def added_lines(base: str) -> dict[str, set[int]]:
     # NUL-delimited names do not depend on quoting or patch-header prefixes.
     # Keep both sides of a rename so unchanged prose is not treated as an addition.
     options = ("--no-ext-diff", "--no-textconv", "--find-renames")
-    names = iter(git("diff", *options, "--name-status", "-z", "--diff-filter=ACMRT",
-                     merge_base, "--").split("\0"))
+    names = iter(
+        git("diff", *options, "--name-status", "-z", "--diff-filter=ACMRT", merge_base, "--").split(
+            "\0"
+        )
+    )
     result: dict[str, set[int]] = {}
     for status in names:
         if not status:
@@ -549,9 +638,18 @@ def added_lines(base: str) -> dict[str, set[int]]:
         if not checked_path(path):
             continue
         paths = (source, path) if status[0] in "RC" else (path,)
-        diff = git("--literal-pathspecs", "diff", *options, "--text", "--unified=0",
-                   "--inter-hunk-context=0", "--no-color",
-                   merge_base, "--", *paths)
+        diff = git(
+            "--literal-pathspecs",
+            "diff",
+            *options,
+            "--text",
+            "--unified=0",
+            "--inter-hunk-context=0",
+            "--no-color",
+            merge_base,
+            "--",
+            *paths,
+        )
         lines = result.setdefault(path, set())
         for hunk in re.finditer(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", diff, re.MULTILINE):
             first = int(hunk.group(1))
@@ -563,14 +661,23 @@ def added_lines(base: str) -> dict[str, set[int]]:
 def read_source(path: Path, label: str, diagnostics: list[Finding]) -> str | None:
     """Report unsupported source input as advisory data, retaining other file checks."""
     if path.is_symlink():
-        diagnostics.append(Finding(label, 1, "Input",
-                                   "This is a symlink. Check its target separately as a source file.", ""))
+        diagnostics.append(
+            Finding(
+                label,
+                1,
+                "Input",
+                "This is a symlink. Check its target separately as a source file.",
+                "",
+            )
+        )
         return None
     try:
         return path.read_text(encoding="utf-8")
     except UnicodeDecodeError as error:
         line = error.object.count(b"\n", 0, error.start) + 1
-        diagnostics.append(Finding(label, line, "Input", "This file is not UTF-8. Prose was not checked.", ""))
+        diagnostics.append(
+            Finding(label, line, "Input", "This file is not UTF-8. Prose was not checked.", "")
+        )
     return None
 
 
@@ -598,23 +705,40 @@ def escape(message: str) -> str:
 def report(found: list[Finding], github: bool, label_is_file: bool) -> None:
     for item in found:
         if github:
-            location = (f"file={escape(item.path).replace(':', '%3A').replace(',', '%2C')},"
-                        f"line={item.line}," if label_is_file else "")
-            print(f"::warning {location}title=Writing {item.rule}::"
-                  f"{escape(item.message + ' ' + repr(item.excerpt))}")
+            location = (
+                f"file={escape(item.path).replace(':', '%3A').replace(',', '%2C')},"
+                f"line={item.line},"
+                if label_is_file
+                else ""
+            )
+            print(
+                f"::warning {location}title=Writing {item.rule}::"
+                f"{escape(item.message + ' ' + repr(item.excerpt))}"
+            )
         else:
             print(f"{item.path}:{item.line}: [{item.rule}] {item.message} {item.excerpt!r}")
     rules = sorted({item.rule for item in found})
-    summary = (f"{len(found)} writing suggestion(s) for {', '.join(rules)}. Review in context; "
-               "leave clear, correct text alone." if found else "No writing suggestions.")
+    summary = (
+        f"{len(found)} writing suggestion(s) for {', '.join(rules)}. Review in context; "
+        "leave clear, correct text alone."
+        if found
+        else "No writing suggestions."
+    )
     print(summary)
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY") if github else None
     if summary_path:
-        lines = [f"{item.path}:{item.line}: [{item.rule}] {item.message} {item.excerpt!r}"
-                 for item in found]
+        lines = [
+            f"{item.path}:{item.line}: [{item.rule}] {item.message} {item.excerpt!r}"
+            for item in found
+        ]
         with open(summary_path, "a", encoding="utf-8", errors="backslashreplace") as output:
-            output.write("\n### Writing check\n\n" + html.escape(summary) + "\n\n<pre>" +
-                         html.escape("\n".join(lines)) + "</pre>\n")
+            output.write(
+                "\n### Writing check\n\n"
+                + html.escape(summary)
+                + "\n\n<pre>"
+                + html.escape("\n".join(lines))
+                + "</pre>\n"
+            )
 
 
 def main(argv: list[str]) -> int:
@@ -625,8 +749,14 @@ def main(argv: list[str]) -> int:
     mode.add_argument("files", nargs="*", default=[], help="check all prose in these files")
     parser.add_argument("--github", action="store_true", help="print GitHub annotations")
     parser.add_argument("--strict", action="store_true", help="exit with 1 on suggestions")
-    parser.add_argument("--guide", "--vocabulary", dest="vocabulary", type=Path,
-                        default=VOCABULARY, help="the guide with its vocabulary (default: WRITING.md)")
+    parser.add_argument(
+        "--guide",
+        "--vocabulary",
+        dest="vocabulary",
+        type=Path,
+        default=VOCABULARY,
+        help="the guide with its vocabulary (default: WRITING.md)",
+    )
     args = parser.parse_args(argv[1:])
     label_is_file = True
     diagnostics: list[Finding] = []
@@ -637,10 +767,18 @@ def main(argv: list[str]) -> int:
             try:
                 text = sys.stdin.read()
             except UnicodeDecodeError:
-                diagnostics.append(Finding(args.stdin, 1, "Input", "Input is not UTF-8. Prose was not checked.", ""))
+                diagnostics.append(
+                    Finding(
+                        args.stdin, 1, "Input", "Input is not UTF-8. Prose was not checked.", ""
+                    )
+                )
                 text = ""
             if any(0xDC80 <= ord(char) <= 0xDCFF for char in text):
-                diagnostics.append(Finding(args.stdin, 1, "Input", "Input is not UTF-8. Prose was not checked.", ""))
+                diagnostics.append(
+                    Finding(
+                        args.stdin, 1, "Input", "Input is not UTF-8. Prose was not checked.", ""
+                    )
+                )
                 text = ""
             blocks = markdown_blocks(args.stdin, text)
             label_is_file = False

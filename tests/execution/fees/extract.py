@@ -37,15 +37,17 @@ for path in sorted(paths):
                 continue
             child = fee_fields(header)
             if exception is None or exception == NEGATIVE:
-                cases.append({
-                    "file": relative,
-                    "test": name.split("::")[-1],
-                    "block": index + 1,
-                    "network": test["network"],
-                    "valid": exception is None,
-                    "parent": parent,
-                    "child": child,
-                })
+                cases.append(
+                    {
+                        "file": relative,
+                        "test": name.split("::")[-1],
+                        "block": index + 1,
+                        "network": test["network"],
+                        "valid": exception is None,
+                        "parent": parent,
+                        "child": child,
+                    }
+                )
             if exception is None:
                 parent = child
 # One pair per line, so that a change to one pair shows as one line of the diff.

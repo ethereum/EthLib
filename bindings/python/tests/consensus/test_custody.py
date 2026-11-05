@@ -20,8 +20,10 @@ def _cases(handler: str) -> list:
     params = []
     for preset in PRESETS:
         suite = FILES / preset / "fulu" / "networking" / handler / "pyspec_tests"
-        params += [pytest.param(preset, case, id=f"{preset}-{case.name}")
-                   for case in sorted(suite.iterdir())]
+        params += [
+            pytest.param(preset, case, id=f"{preset}-{case.name}")
+            for case in sorted(suite.iterdir())
+        ]
     return params
 
 

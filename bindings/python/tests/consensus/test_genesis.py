@@ -39,27 +39,43 @@ def run_case(preset: str, fork: str, handler: str, case: Path) -> None:
     if handler == "validity":
         state = snappy.decompress((case / "genesis.ssz_snappy").read_bytes())
         assert consensus.is_valid_genesis_state(preset, FORKS[fork], state) == _load(
-            case / "is_valid.yaml")
+            case / "is_valid.yaml"
+        )
         return
     eth1 = _load(case / "eth1.yaml")
     count = _load(case / "meta.yaml")["deposits_count"]
-    deposits = [snappy.decompress((case / f"deposits_{index}.ssz_snappy").read_bytes())
-                for index in range(count)]
-    state = consensus.initialize_genesis(preset, FORKS[fork],
-                                         bytes.fromhex(eth1["eth1_block_hash"][2:]),
-                                         eth1["eth1_timestamp"], deposits)
+    deposits = [
+        snappy.decompress((case / f"deposits_{index}.ssz_snappy").read_bytes())
+        for index in range(count)
+    ]
+    state = consensus.initialize_genesis(
+        preset,
+        FORKS[fork],
+        bytes.fromhex(eth1["eth1_block_hash"][2:]),
+        eth1["eth1_timestamp"],
+        deposits,
+    )
     assert state == snappy.decompress((case / "state.ssz_snappy").read_bytes())
 
 
 def _cases(base: Path, marks=()) -> list:
     """Every case under a directory of presets, as its preset, fork, handler and directory."""
     cases = []
-    for manifest in sorted(path for path in base.rglob("*")
-                           if path.is_dir() and path.parent.name == "pyspec_tests"):
+    for manifest in sorted(
+        path for path in base.rglob("*") if path.is_dir() and path.parent.name == "pyspec_tests"
+    ):
         preset, fork, runner, handler = manifest.relative_to(base).parts[:4]
         if runner == "genesis" and runs(fork, handler):
-            cases.append(pytest.param(preset, fork, handler, manifest, marks=marks,
-                                      id=manifest.relative_to(base).as_posix()))
+            cases.append(
+                pytest.param(
+                    preset,
+                    fork,
+                    handler,
+                    manifest,
+                    marks=marks,
+                    id=manifest.relative_to(base).as_posix(),
+                )
+            )
     return cases
 
 
@@ -67,8 +83,11 @@ def _archive_cases() -> list:
     """Every genesis case of the archive at a fork that EthLib runs, when the cache is set."""
     if archives.CACHE is None:
         return []
-    paths = [f"tests/minimal/{fork}/genesis/{handler}" for handler, forks in HANDLERS.items()
-             for fork in forks]
+    paths = [
+        f"tests/minimal/{fork}/genesis/{handler}"
+        for handler, forks in HANDLERS.items()
+        for fork in forks
+    ]
     base = archives.unpack(ARCHIVE, *paths) / "tests"
     cases = _cases(base, marks=pytest.mark.archive(ARCHIVE))
     # An empty list would skip the test in silence, so a wrong path in an archive fails here.
@@ -90,7 +109,8 @@ def test_archive_case(preset: str, fork: str, handler: str, case: Path) -> None:
 def test_digests():
     lines = (FILES / "SHA256SUMS").read_text().splitlines()
     entries = [line.split() for line in lines if not line.startswith("#")]
-    assert len(entries) == sum(1 for path in FILES.rglob("*") if path.is_file()
-                               and path.name != "SHA256SUMS")
+    assert len(entries) == sum(
+        1 for path in FILES.rglob("*") if path.is_file() and path.name != "SHA256SUMS"
+    )
     for digest, name in entries:
         assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name

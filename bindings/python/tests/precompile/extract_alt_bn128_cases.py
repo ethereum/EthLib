@@ -73,10 +73,17 @@ def int_to_bytes(n: int, length: int, byteorder: str) -> bytes:
 
 
 BINOPS = {
-    ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
-    ast.LShift: operator.lshift, ast.RShift: operator.rshift, ast.BitOr: operator.or_,
-    ast.BitAnd: operator.and_, ast.BitXor: operator.xor, ast.Pow: operator.pow,
-    ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod,
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.LShift: operator.lshift,
+    ast.RShift: operator.rshift,
+    ast.BitOr: operator.or_,
+    ast.BitAnd: operator.and_,
+    ast.BitXor: operator.xor,
+    ast.Pow: operator.pow,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
 }
 CALLS = {PointG1, PointG2, FP, int, bytes, int_to_bytes}
 PYTEST = Namespace()
@@ -130,15 +137,26 @@ class Evaluate:
         function = self(node.func)
         if function not in CALLS:
             raise ValueError(f"unsupported call: {function}")
-        return function(*[self(a) for a in node.args],
-                        **{k.arg: self(k.value) for k in node.keywords})
+        return function(
+            *[self(a) for a in node.args], **{k.arg: self(k.value) for k in node.keywords}
+        )
 
 
 def load_spec(path: Path, names: dict) -> Namespace:
     """The class `Spec` of a `spec.py`, its constants evaluated in order."""
     spec = Namespace()
-    evaluate = Evaluate({"PointG1": PointG1, "PointG2": PointG2, "FP": FP, "Scalar": FP,
-                         "Address": int, "int": int, "bytes": bytes, **names})
+    evaluate = Evaluate(
+        {
+            "PointG1": PointG1,
+            "PointG2": PointG2,
+            "FP": FP,
+            "Scalar": FP,
+            "Address": int,
+            "int": int,
+            "bytes": bytes,
+            **names,
+        }
+    )
     for node in ast.parse(path.read_text()).body:
         if isinstance(node, ast.ClassDef) and node.name == "Spec":
             for statement in node.body:
@@ -151,8 +169,11 @@ def load_spec(path: Path, names: dict) -> Namespace:
 
 
 def is_parametrize(node) -> bool:
-    return (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "parametrize")
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "parametrize"
+    )
 
 
 def rows(node: ast.Call, evaluate: Evaluate) -> tuple[list, list]:
@@ -172,11 +193,26 @@ def rows(node: ast.Call, evaluate: Evaluate) -> tuple[list, list]:
 
 def cases(path: Path, spec: Namespace):
     """Each case of the test functions of one file that take `input_data`."""
-    evaluate = Evaluate({"Spec": spec, "PointG1": PointG1, "PointG2": PointG2, "FP": FP,
-                         "Scalar": FP, "pytest": PYTEST, "int": int, "bytes": bytes})
+    evaluate = Evaluate(
+        {
+            "Spec": spec,
+            "PointG1": PointG1,
+            "PointG2": PointG2,
+            "FP": FP,
+            "Scalar": FP,
+            "pytest": PYTEST,
+            "int": int,
+            "bytes": bytes,
+        }
+    )
     tree = ast.parse(path.read_text())
-    module = [d for node in tree.body if isinstance(node, ast.Assign)
-              and node.targets[0].id == "pytestmark" for d in node.value.elts if is_parametrize(d)]
+    module = [
+        d
+        for node in tree.body
+        if isinstance(node, ast.Assign) and node.targets[0].id == "pytestmark"
+        for d in node.value.elts
+        if is_parametrize(d)
+    ]
     count = defaultdict(int)
     for node in tree.body:
         if not isinstance(node, ast.FunctionDef):
@@ -206,8 +242,18 @@ def cases(path: Path, spec: Namespace):
 
 def gas_cases(path: Path, spec: Namespace, address: int):
     """Each case of a `test_gas.py`, which gives a gas modifier but no output."""
-    evaluate = Evaluate({"Spec": spec, "PointG1": PointG1, "PointG2": PointG2, "FP": FP,
-                         "Scalar": FP, "pytest": PYTEST, "int": int, "bytes": bytes})
+    evaluate = Evaluate(
+        {
+            "Spec": spec,
+            "PointG1": PointG1,
+            "PointG2": PointG2,
+            "FP": FP,
+            "Scalar": FP,
+            "pytest": PYTEST,
+            "int": int,
+            "bytes": bytes,
+        }
+    )
     for node in ast.parse(path.read_text()).body:
         if not isinstance(node, ast.FunctionDef) or not node.name.startswith("test_"):
             continue
@@ -241,10 +287,14 @@ def main() -> None:
     add_mul, pairing = byzantium / "eip196_ec_add_mul", byzantium / "eip197_ec_pairing"
     spec196 = load_spec(add_mul / "spec.py", {})
     spec197 = load_spec(pairing / "spec.py", {"Spec196": spec196})
-    result = [c for name in ("test_ecadd.py", "test_ecmul.py")
-              for c in cases(add_mul / name, spec196)]
-    result += [c for name in ("test_ecpairing.py", "test_ecpairing_fuzzed.py")
-               for c in cases(pairing / name, spec197)]
+    result = [
+        c for name in ("test_ecadd.py", "test_ecmul.py") for c in cases(add_mul / name, spec196)
+    ]
+    result += [
+        c
+        for name in ("test_ecpairing.py", "test_ecpairing_fuzzed.py")
+        for c in cases(pairing / name, spec197)
+    ]
     result += list(gas_cases(add_mul / "test_gas.py", spec196, 0x06))
     result += list(gas_cases(pairing / "test_gas.py", spec197, 0x08))
     assert len({c["id"] for c in result}) == len(result), "duplicate id"

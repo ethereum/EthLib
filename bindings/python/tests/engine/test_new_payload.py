@@ -20,15 +20,17 @@ def _id(case: dict) -> str:
 
 @pytest.mark.parametrize("case", CASES, ids=_id)
 def test_case(case: dict) -> None:
-    check(case["network"], case["method"], case["params"], case["validationError"],
-          case["errorCode"])
+    check(
+        case["network"], case["method"], case["params"], case["validationError"], case["errorCode"]
+    )
 
 
 def test_counts() -> None:
     """The file holds 78 valid payloads, 46 JSON-RPC errors and 43 invalid payloads."""
     kinds = Counter(
         check(c["network"], c["method"], c["params"], c["validationError"], c["errorCode"])
-        for c in CASES)
+        for c in CASES
+    )
     assert kinds == {"valid": 78, "error": 46, "invalid": 43}
 
 

@@ -29,8 +29,9 @@ def _cases() -> list:
 def test_digests():
     lines = (FILES / "SHA256SUMS").read_text().splitlines()
     entries = [line.split() for line in lines if not line.startswith("#")]
-    assert len(entries) == sum(1 for path in FILES.rglob("*") if path.name != "SHA256SUMS"
-                               and path.is_file())
+    assert len(entries) == sum(
+        1 for path in FILES.rglob("*") if path.name != "SHA256SUMS" and path.is_file()
+    )
     for digest, name in entries:
         assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name
 
@@ -40,7 +41,8 @@ def test_every_case_is_a_known_container():
 
 
 @pytest.mark.parametrize(
-    "preset, fork, container, case", _cases(),
+    "preset, fork, container, case",
+    _cases(),
     ids=lambda value: value.relative_to(FILES).as_posix() if isinstance(value, Path) else None,
 )
 def test_case(preset, fork, container, case):
@@ -61,7 +63,7 @@ def test_no_container_outside_its_forks(container):
     first, dropped = CONTAINERS[container]
     forks = list(FORKS)
     end = forks.index(dropped) if dropped else len(forks)
-    for fork in forks[:forks.index(first)] + forks[end:]:
+    for fork in forks[: forks.index(first)] + forks[end:]:
         with pytest.raises(SszError):
             consensus.ssz_static("minimal", FORKS[fork], container, b"")
 
@@ -71,7 +73,7 @@ def test_every_fork_of_a_container_has_cases():
     forks = list(FORKS)
     for container, (first, dropped) in CONTAINERS.items():
         end = forks.index(dropped) if dropped else len(forks)
-        for fork in forks[forks.index(first):end]:
+        for fork in forks[forks.index(first) : end]:
             assert (fork, container) in found, (fork, container)
 
 
@@ -87,11 +89,31 @@ def test_mainnet_state_reads_on_the_main_thread():
     # The Phase 0 mainnet state with every list empty, built field by field: the size of each
     # fixed field, or None for a list, which is a 4-byte offset to the end of the fixed part.
     # Its 65,536 RANDAO mixes must read without a stack that grows with them.
-    sizes = [8, 32, 8, 16, 112, 8192 * 32, 8192 * 32, None, 72, None, 8, None, None,
-             65536 * 32, 8192 * 8, None, None, 1, 40, 40, 40]
+    sizes = [
+        8,
+        32,
+        8,
+        16,
+        112,
+        8192 * 32,
+        8192 * 32,
+        None,
+        72,
+        None,
+        8,
+        None,
+        None,
+        65536 * 32,
+        8192 * 8,
+        None,
+        None,
+        1,
+        40,
+        40,
+        40,
+    ]
     end = sum(4 if size is None else size for size in sizes)
-    data = b"".join(end.to_bytes(4, "little") if size is None else bytes(size)
-                    for size in sizes)
+    data = b"".join(end.to_bytes(4, "little") if size is None else bytes(size) for size in sizes)
     _, encoded = consensus.ssz_static("mainnet", "phase0", "BeaconState", data)
     assert encoded == data
 
@@ -131,9 +153,16 @@ def _archive_cases() -> list:
                 case = roots.parent
                 container = case.relative_to(base / fork / "ssz_static").parts[0]
                 if _within(container, fork):
-                    cases.append(pytest.param(preset, fork, container, case,
-                                              id=f"{preset}/{case.relative_to(base).as_posix()}",
-                                              marks=pytest.mark.archive(name)))
+                    cases.append(
+                        pytest.param(
+                            preset,
+                            fork,
+                            container,
+                            case,
+                            id=f"{preset}/{case.relative_to(base).as_posix()}",
+                            marks=pytest.mark.archive(name),
+                        )
+                    )
     # An empty list would skip the test in silence, so a wrong path in an archive fails here.
     if not cases:
         raise LookupError("the archives hold no ssz_static case of a known container")
@@ -146,8 +175,9 @@ def test_archive_case(preset, fork, container, case):
 
 
 @pytest.mark.parametrize(
-    "preset", [pytest.param(preset, marks=pytest.mark.archive(name))
-               for preset, name in ARCHIVES.items()])
+    "preset",
+    [pytest.param(preset, marks=pytest.mark.archive(name)) for preset, name in ARCHIVES.items()],
+)
 def test_vendored_cases_are_copies(preset):
     # Each vendored file is the file of the release, byte for byte.
     name = ARCHIVES[preset]

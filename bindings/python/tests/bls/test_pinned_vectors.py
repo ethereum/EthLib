@@ -99,11 +99,14 @@ DESERIALIZATION_ERRORS = {
 DECODE = {"G1": (bls.decode_g1, "pubkey"), "G2": (bls.decode_g2, "signature")}
 
 
-@pytest.mark.parametrize("group, name, case", [
-    pytest.param(group, param.id, param.values[0], id=f"{group}-{param.id}")
-    for group in DECODE
-    for param in cases("bls", f"deserialization_{group}")
-])
+@pytest.mark.parametrize(
+    "group, name, case",
+    [
+        pytest.param(group, param.id, param.values[0], id=f"{group}-{param.id}")
+        for group in DECODE
+        for param in cases("bls", f"deserialization_{group}")
+    ],
+)
 def test_deserialization(group: str, name: str, case: dict) -> None:
     decode, field = DECODE[group]
     data = b(case["input"][field])
@@ -112,7 +115,8 @@ def test_deserialization(group: str, name: str, case: dict) -> None:
         assert decode(data) == data
         return
     message, code = DESERIALIZATION_ERRORS.get(
-        (group, name), (f"invalid {group} point", 4 if group == "G1" else 5))
+        (group, name), (f"invalid {group} point", 4 if group == "G1" else 5)
+    )
     with pytest.raises(bls.BlsError, match=message) as error:
         decode(data)
     assert error.value.code == code

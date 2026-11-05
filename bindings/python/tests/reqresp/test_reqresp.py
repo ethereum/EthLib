@@ -79,7 +79,7 @@ def test_max_compressed_len_overflow():
 def test_framed_payload_bytes():
     # deadbeef in one uncompressed chunk, written out in full.
     # The checksum 0x91a0ce90 is CRC-32C 0xf1dc778e, rotated right by 15 bits, plus 0xa282ead8.
-    message = bytes.fromhex("04" "ff060000734e61507059" "01080000" "90cea091" "deadbeef")
+    message = bytes.fromhex("04ff060000734e615070590108000090cea091deadbeef")
     assert message == _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
     assert reqresp.decode_payload(4, message) == PAYLOAD
 

@@ -9,8 +9,11 @@ from ethlib.cryptography import aes
 CAVP = Path(__file__).resolve().parent / "cavp"
 
 # The four known-answer tests of AESAVS §6.2, at the two key sizes EthLib implements.
-FILES = [f"ECB{test}{bits}.rsp" for test in ("GFSbox", "KeySbox", "VarKey", "VarTxt")
-         for bits in (128, 256)]
+FILES = [
+    f"ECB{test}{bits}.rsp"
+    for test in ("GFSbox", "KeySbox", "VarKey", "VarTxt")
+    for bits in (128, 256)
+]
 
 
 def _cases(name: str) -> list[tuple[str, bytes, bytes, bytes]]:
@@ -27,8 +30,14 @@ def _cases(name: str) -> list[tuple[str, bytes, bytes, bytes]]:
         case[key] = value
         # The last field of a case is CIPHERTEXT in an encrypt section, PLAINTEXT in a decrypt one.
         if key == ("CIPHERTEXT" if direction == "ENCRYPT" else "PLAINTEXT"):
-            cases.append((direction, bytes.fromhex(case["KEY"]),
-                          bytes.fromhex(case["PLAINTEXT"]), bytes.fromhex(case["CIPHERTEXT"])))
+            cases.append(
+                (
+                    direction,
+                    bytes.fromhex(case["KEY"]),
+                    bytes.fromhex(case["PLAINTEXT"]),
+                    bytes.fromhex(case["CIPHERTEXT"]),
+                )
+            )
             case = {}
     return cases
 

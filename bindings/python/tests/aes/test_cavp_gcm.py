@@ -32,7 +32,7 @@ def _sections(text: str) -> tuple[str, list[tuple[dict, str]]]:
     """The header of a file, and each section with its parameters and its text."""
     lines = text.splitlines(keepends=True)
     starts = [i for i, line in enumerate(lines) if line.startswith("[Keylen")]
-    header = "".join(lines[:starts[0]])
+    header = "".join(lines[: starts[0]])
     sections = []
     for start, end in zip(starts, starts[1:] + [len(lines)]):
         body = "".join(lines[start:end])
@@ -49,8 +49,11 @@ def _sections(text: str) -> tuple[str, list[tuple[dict, str]]]:
 def excerpt(text: str) -> str:
     """The header of a file, and its sections that `EXCERPT` selects, unchanged."""
     header, sections = _sections(text)
-    kept = [body for params, body in sections
-            if all(params[key] in values for key, values in EXCERPT.items())]
+    kept = [
+        body
+        for params, body in sections
+        if all(params[key] in values for key, values in EXCERPT.items())
+    ]
     return header + "".join(kept)
 
 

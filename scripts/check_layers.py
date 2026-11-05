@@ -26,6 +26,7 @@ An entry that no longer matches an import fails the check too.
 
 Only the standard library is used, so the check needs no Lean and no build.
 """
+
 import importlib.util
 import re
 import sys
@@ -35,7 +36,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # Load the comment stripper of `soundness_facts.py` by path: `scripts` is not a package.
 _spec = importlib.util.spec_from_file_location(
-    "soundness_facts", Path(__file__).resolve().parent / "soundness_facts.py")
+    "soundness_facts", Path(__file__).resolve().parent / "soundness_facts.py"
+)
 _facts = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_facts)
 strip_lean = _facts.strip_lean
@@ -52,8 +54,7 @@ LAYERS = {
 }
 AGGREGATORS = {"EthLib", "EthLib.Proofs", "EthLib.Exports"}
 TOOLCHAIN = {"Init", "Std", "Lean"}
-KIND_NAMES = {"specification": "a specification", "property": "a property",
-              "export": "a C export"}
+KIND_NAMES = {"specification": "a specification", "property": "a property", "export": "a C export"}
 
 HEADER_WORD = re.compile(r"\s*(module|prelude)\b")
 IMPORT = re.compile(r"\s*(?:public\s+)?(?:meta\s+)?import\s+(?:all\s+)?([^\s]+)")
@@ -157,14 +158,20 @@ def check(root: Path) -> list[str]:
                 used.add((name, imported))
             elif found:
                 for problem in found:
-                    problems.append(f"{modules[name].relative_to(root)}: "
-                                    f"imports {imported}, but {problem}")
+                    problems.append(
+                        f"{modules[name].relative_to(root)}: imports {imported}, but {problem}"
+                    )
     for name, imported in sorted(baseline - used):
-        problems.append(f"scripts/check_layers_baseline.txt: {name} {imported} "
-                        "breaks no rule any more; remove the entry")
+        problems.append(
+            f"scripts/check_layers_baseline.txt: {name} {imported} "
+            "breaks no rule any more; remove the entry"
+        )
 
-    roots = [r for r in library_roots((root / "lakefile.lean").read_text(encoding="utf-8"))
-             if r in modules]
+    roots = [
+        r
+        for r in library_roots((root / "lakefile.lean").read_text(encoding="utf-8"))
+        if r in modules
+    ]
     if not roots:
         problems.append("lakefile.lean: no library root under EthLib/ found")
     reached, stack = set(roots), list(roots)
@@ -180,8 +187,10 @@ def check(root: Path) -> list[str]:
     if architecture.exists():
         listed = {directory for _, directory in LAYER_ROW.findall(architecture.read_text())}
         if listed != set(LAYERS):
-            problems.append(f"ARCHITECTURE.md lists the layers {sorted(listed)}, "
-                            f"but this check knows {sorted(LAYERS)}")
+            problems.append(
+                f"ARCHITECTURE.md lists the layers {sorted(listed)}, "
+                f"but this check knows {sorted(LAYERS)}"
+            )
     return problems
 
 

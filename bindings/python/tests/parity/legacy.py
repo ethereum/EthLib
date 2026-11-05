@@ -72,11 +72,23 @@ UNKNOWN_PARENT = {"UnknownParent", "UnknownParent2", "BlockException.UNKNOWN_PAR
 # They concern the body, the execution, the ommer rules, or the DAO Fork rule of a chain
 # configuration, so a block with one of them has a valid header.
 NOT_IN_HEADER = {
-    "InvalidStateRoot", "InvalidReceiptsStateRoot", "InvalidLogBloom", "InvalidTransactionsRoot",
-    "InvalidGasUsed", "BlockGasLimitReached", "BlockException.INVALID_GAS_USED",
-    "InvalidUnclesHash", "InvalidUncleParentHash", "TooManyUncles", "UncleInChain",
-    "UncleIsAncestor", "UncleIsBrother", "UncleParentIsNotAncestor", "UncleTooOld",
-    "BlockException.UNCLE_PARENT_INCORRECT", DAO_EXTRA_DATA,
+    "InvalidStateRoot",
+    "InvalidReceiptsStateRoot",
+    "InvalidLogBloom",
+    "InvalidTransactionsRoot",
+    "InvalidGasUsed",
+    "BlockGasLimitReached",
+    "BlockException.INVALID_GAS_USED",
+    "InvalidUnclesHash",
+    "InvalidUncleParentHash",
+    "TooManyUncles",
+    "UncleInChain",
+    "UncleIsAncestor",
+    "UncleIsBrother",
+    "UncleParentIsNotAncestor",
+    "UncleTooOld",
+    "BlockException.UNCLE_PARENT_INCORRECT",
+    DAO_EXTRA_DATA,
     # An ommer in the header form of the other side of the London transition.
     "BlockException.IMPORT_IMPOSSIBLE_LONDON_WRONG_PARENT",
     "BlockException.IMPORT_IMPOSSIBLE_LEGACY_WRONG_PARENT",
@@ -152,8 +164,9 @@ def recent(chain: dict[str, Block], parent: Block) -> list[bytes]:
     return [b.block for b in reversed(blocks_)]
 
 
-def _header_error(network: str, test: dict, chain: dict, parent: Block, block: Block,
-                  expected: str) -> None:
+def _header_error(
+    network: str, test: dict, chain: dict, parent: Block, block: Block, expected: str
+) -> None:
     """Check that the header of the block or of one of its ommers fails as the exception says."""
     codes = HEADER_CODES[expected]
     check = blocks.validate_header if sealed(test) else blocks.check_header
@@ -178,9 +191,11 @@ def _header_error(network: str, test: dict, chain: dict, parent: Block, block: B
     # first check that this block breaks.
     assert codes & {207}, message
     headers = {_number(b[0]): b[0] for b in map(rlp.decode, recent(chain, parent))}
-    assert any(_number(ommer) - 1 in headers
-               and ommer[0] != blocks.header_hash(block.fork, rlp.encode(headers[_number(ommer) - 1]))
-               for ommer in rlp.decode(block.block)[2]), message
+    assert any(
+        _number(ommer) - 1 in headers
+        and ommer[0] != blocks.header_hash(block.fork, rlp.encode(headers[_number(ommer) - 1]))
+        for ommer in rlp.decode(block.block)[2]
+    ), message
 
 
 def _number(header: list) -> int:
@@ -250,8 +265,19 @@ OMMER_CODES = {
 # The block reward before Byzantium, from Byzantium, and from Constantinople, in wei.
 ETHER = 10**18
 BLOCK_REWARDS = (("constantinople", 2 * ETHER), ("byzantium", 3 * ETHER), ("frontier", 5 * ETHER))
-FORK_ORDER = ("frontier", "homestead", "daoFork", "tangerineWhistle", "spuriousDragon",
-              "byzantium", "constantinople", "petersburg", "istanbul", "berlin", "london")
+FORK_ORDER = (
+    "frontier",
+    "homestead",
+    "daoFork",
+    "tangerineWhistle",
+    "spuriousDragon",
+    "byzantium",
+    "constantinople",
+    "petersburg",
+    "istanbul",
+    "berlin",
+    "london",
+)
 
 
 def _block_reward(fork: str) -> int:
@@ -295,8 +321,9 @@ def run_ommers(root: Path, case: Case) -> None:
         if expected is None:
             chain[block.hash] = block
             if decoded[2]:
-                assert validate_ommers(chain_forks(network), recent(chain, parent), data,
-                                       sealed(test))
+                assert validate_ommers(
+                    chain_forks(network), recent(chain, parent), data, sealed(test)
+                )
                 _check_rewards(network, decoded, data)
                 checked += 1
         elif expected in OMMER_CODES:
@@ -310,8 +337,9 @@ def run_ommers(root: Path, case: Case) -> None:
 
 def _state(balances: Counter) -> bytes:
     """A state whose accounts hold only the given balances."""
-    return rlp.encode([[address, b"", _quantity(value), b"", []]
-                       for address, value in balances.items()])
+    return rlp.encode(
+        [[address, b"", _quantity(value), b"", []] for address, value in balances.items()]
+    )
 
 
 def _check_rewards(network: str, decoded: list, data: bytes) -> None:
@@ -384,11 +412,19 @@ def _dao_accounts(test: dict, accounts: str) -> bytes:
     def scalar(value: str) -> bytes:
         return _quantity(int(value, 16))
 
-    return rlp.encode([
-        [address, scalar(a["nonce"]), scalar(a["balance"]), bytes.fromhex(a["code"][2:]),
-         [[int(k, 16).to_bytes(32, "big"), scalar(v)] for k, v in a["storage"].items()]]
-        for address, a in ((bytes.fromhex(k[2:]), a) for k, a in test[accounts].items())
-        if address in wanted])
+    return rlp.encode(
+        [
+            [
+                address,
+                scalar(a["nonce"]),
+                scalar(a["balance"]),
+                bytes.fromhex(a["code"][2:]),
+                [[int(k, 16).to_bytes(32, "big"), scalar(v)] for k, v in a["storage"].items()],
+            ]
+            for address, a in ((bytes.fromhex(k[2:]), a) for k, a in test[accounts].items())
+            if address in wanted
+        ]
+    )
 
 
 def run_dao(root: Path, case: Case) -> None:
@@ -423,15 +459,22 @@ def run_dao(root: Path, case: Case) -> None:
     assert checked > 0
     # No transaction pays a DAO account or the recovery contract, so only the fork moves their
     # ether.
-    paid = {tx[3] for entry in test["blocks"] if "blockHeader" in entry
-            for tx in rlp.decode(bytes.fromhex(entry["rlp"].removeprefix("0x")))[1]
-            if isinstance(tx, list)}
+    paid = {
+        tx[3]
+        for entry in test["blocks"]
+        if "blockHeader" in entry
+        for tx in rlp.decode(bytes.fromhex(entry["rlp"].removeprefix("0x")))[1]
+        if isinstance(tx, list)
+    }
     assert not paid & (set(DAO_ACCOUNTS) | {DAO_RECOVERY})
     pre, post = _dao_accounts(test, "pre"), _dao_accounts(test, "postState")
     # The DAO accounts hold ether, so the move changes the state.
     assert dao_fork_root(pre) != state_root(pre)
-    last = next(entry["blockHeader"] for entry in test["blocks"]
-                if entry.get("blockHeader", {}).get("hash") == test["lastblockhash"])
+    last = next(
+        entry["blockHeader"]
+        for entry in test["blocks"]
+        if entry.get("blockHeader", {}).get("hash") == test["lastblockhash"]
+    )
     if int(last["number"], 16) >= TRANSITION_BLOCK:
         assert dao_fork_root(pre) == state_root(post)
     else:

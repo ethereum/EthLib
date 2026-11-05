@@ -18,7 +18,9 @@ def test_hash512(i: int) -> None:
     assert keccak.keccak512(message) == digest
     # Write the checked vector as one case of the committed suite.
     write_case(
-        "keccak", HANDLER, F.CASE_NAMES_512[i],
+        "keccak",
+        HANDLER,
+        F.CASE_NAMES_512[i],
         {"input": {"message": hex_str(message)}, "output": hex_str(digest)},
     )
 

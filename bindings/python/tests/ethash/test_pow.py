@@ -49,8 +49,10 @@ def test_hashimoto_light(name: str, cache_epoch_0: bytes) -> None:
     # The function gives the case's mix digest and result.
     case = _POW[name]
     mix, result = ethash.hashimoto_light(
-        case["full_size"], cache_epoch_0,
-        bytes.fromhex(case["header_hash"]), bytes.fromhex(case["nonce"]),
+        case["full_size"],
+        cache_epoch_0,
+        bytes.fromhex(case["header_hash"]),
+        bytes.fromhex(case["nonce"]),
     )
     assert mix == bytes.fromhex(case["mixHash"])
     assert result == bytes.fromhex(case["result"])
@@ -78,7 +80,8 @@ def test_sealed_header_passes(cache_epoch_0: bytes) -> None:
     fields[7] = b"\x01"
     unsealed = rlp.encode(fields)
     mix, _ = ethash.hashimoto_light(
-        _POW["first"]["full_size"], cache_epoch_0, seal_hash(FORK, unsealed), fields[14])
+        _POW["first"]["full_size"], cache_epoch_0, seal_hash(FORK, unsealed), fields[14]
+    )
     fields[13] = mix
     assert check_proof_of_work(FORK, rlp.encode(fields))
 
@@ -121,7 +124,7 @@ def test_hashimoto_light_against_the_specification(items: int, pairs: int) -> No
     # A small random cache and dataset, fixed by their sizes, and a fixed header hash and nonce.
     rng = random.Random(items * 100 + pairs)
     raw = bytes(rng.getrandbits(8) for _ in range(64 * items))
-    cache = [_words(raw[64 * k:64 * k + 64]) for k in range(items)]
+    cache = [_words(raw[64 * k : 64 * k + 64]) for k in range(items)]
     header_hash, nonce = bytes(range(32)), bytes.fromhex("0102030405060708")
     expected = _reference_hashimoto(128 * pairs, cache, header_hash, nonce)
     assert ethash.hashimoto_light(128 * pairs, raw, header_hash, nonce) == expected

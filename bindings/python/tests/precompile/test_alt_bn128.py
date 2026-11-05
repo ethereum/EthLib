@@ -70,9 +70,18 @@ def mul1(k: int):
     return bn128.multiply(bn128.G1, k)
 
 
-@pytest.mark.parametrize("a, b", [
-    (1, 1), (1, 2), (1, bn128.curve_order - 1), (5, 7), (3, bn128.curve_order - 3), (0, 9), (0, 0),
-])
+@pytest.mark.parametrize(
+    "a, b",
+    [
+        (1, 1),
+        (1, 2),
+        (1, bn128.curve_order - 1),
+        (5, 7),
+        (3, bn128.curve_order - 3),
+        (0, 9),
+        (0, 0),
+    ],
+)
 @pytest.mark.parametrize("fork", FORKS)
 def test_ecadd(fork: str, a: int, b: int) -> None:
     expected = g1(bn128.add(mul1(a), mul1(b)))
@@ -98,7 +107,14 @@ def test_ecadd_errors(fork: str) -> None:
 
 
 SCALARS = [
-    0, 1, 2, 3, 2**128 + 1, bn128.curve_order - 1, bn128.curve_order, bn128.curve_order + 1,
+    0,
+    1,
+    2,
+    3,
+    2**128 + 1,
+    bn128.curve_order - 1,
+    bn128.curve_order,
+    bn128.curve_order + 1,
     2**256 - 1,
 ]
 
@@ -109,7 +125,9 @@ SCALARS = [
 def test_ecmul(fork: str, base: int, k: int) -> None:
     # The scalar is not reduced, but the result wraps around the group of order q.
     point = mul1(base)
-    assert run(fork, 0x07, g1(point) + word(k), mul_price(fork)) == g1(bn128.multiply(point, k % bn128.curve_order))
+    assert run(fork, 0x07, g1(point) + word(k), mul_price(fork)) == g1(
+        bn128.multiply(point, k % bn128.curve_order)
+    )
 
 
 @pytest.mark.parametrize("fork", FORKS)
@@ -134,20 +152,23 @@ def pairing_input(pairs) -> bytes:
     return b"".join(g1(p) + g2(q) for p, q in pairs)
 
 
-@pytest.mark.parametrize("pairs, holds", [
-    # The empty product is 1.
-    ([], True),
-    # e(G1, G2) is not 1.
-    ([(bn128.G1, bn128.G2)], False),
-    # e(G1, G2) * e(-G1, G2) = 1.
-    ([(bn128.G1, bn128.G2), (bn128.neg(bn128.G1), bn128.G2)], True),
-    # e(6 G1, 5 G2) * e(-30 G1, G2) = 1, by bilinearity.
-    ([(mul1(6), bn128.multiply(bn128.G2, 5)), (bn128.neg(mul1(30)), bn128.G2)], True),
-    # e(6 G1, 5 G2) * e(-29 G1, G2) = e(G1, G2), which is not 1.
-    ([(mul1(6), bn128.multiply(bn128.G2, 5)), (bn128.neg(mul1(29)), bn128.G2)], False),
-    # A pair with a point at infinity contributes 1.
-    ([(None, bn128.G2), (bn128.G1, bn128.G2), (bn128.neg(bn128.G1), bn128.G2)], True),
-])
+@pytest.mark.parametrize(
+    "pairs, holds",
+    [
+        # The empty product is 1.
+        ([], True),
+        # e(G1, G2) is not 1.
+        ([(bn128.G1, bn128.G2)], False),
+        # e(G1, G2) * e(-G1, G2) = 1.
+        ([(bn128.G1, bn128.G2), (bn128.neg(bn128.G1), bn128.G2)], True),
+        # e(6 G1, 5 G2) * e(-30 G1, G2) = 1, by bilinearity.
+        ([(mul1(6), bn128.multiply(bn128.G2, 5)), (bn128.neg(mul1(30)), bn128.G2)], True),
+        # e(6 G1, 5 G2) * e(-29 G1, G2) = e(G1, G2), which is not 1.
+        ([(mul1(6), bn128.multiply(bn128.G2, 5)), (bn128.neg(mul1(29)), bn128.G2)], False),
+        # A pair with a point at infinity contributes 1.
+        ([(None, bn128.G2), (bn128.G1, bn128.G2), (bn128.neg(bn128.G1), bn128.G2)], True),
+    ],
+)
 @pytest.mark.parametrize("fork", FORKS)
 def test_ecpairing(fork: str, pairs, holds: bool) -> None:
     data = pairing_input(pairs)

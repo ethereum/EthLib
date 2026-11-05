@@ -21,8 +21,10 @@ LEGACY_ROOT = "legacytests-1f581b8ccdc4c63acf5f2c5c1b155c690c32a8eb"
 # The directory Constantinople holds the networks up to Constantinople Fix, and Cancun the later ones.
 # The state tests in blockchain form need the state transition, so they are left out.
 LEGACY_DIRECTORIES = (
-    "Constantinople/BlockchainTests/ValidBlocks", "Constantinople/BlockchainTests/InvalidBlocks",
-    "Cancun/BlockchainTests/ValidBlocks", "Cancun/BlockchainTests/InvalidBlocks",
+    "Constantinople/BlockchainTests/ValidBlocks",
+    "Constantinople/BlockchainTests/InvalidBlocks",
+    "Cancun/BlockchainTests/ValidBlocks",
+    "Cancun/BlockchainTests/InvalidBlocks",
     "Cancun/BlockchainTests/TransitionTests",
 )
 
@@ -55,30 +57,69 @@ LEGACY_FORKS = {
 # From Paris on, execution-spec-tests covers each fork.
 # The transition to Paris at a total difficulty needs a rule that EthLib leaves out (decision 39).
 LEGACY_OUT_OF_SCOPE = {
-    "Paris", "Shanghai", "Cancun", "ParisToShanghaiAtTime15k", "ArrowGlacierToParisAtDiffC0000",
+    "Paris",
+    "Shanghai",
+    "Cancun",
+    "ParisToShanghaiAtTime15k",
+    "ArrowGlacierToParisAtDiffC0000",
 }
 
 # The formats of execution-spec-tests that the parity covers.
 # The format blockchain_test_sync checks a client's sync, which no specification defines.
-FORMATS = ("state_test", "blockchain_test", "blockchain_test_engine",
-           "blockchain_test_engine_x", "transaction_test")
+FORMATS = (
+    "state_test",
+    "blockchain_test",
+    "blockchain_test_engine",
+    "blockchain_test_engine_x",
+    "transaction_test",
+)
 
 # The networks of execution-spec-tests from Frontier to Amsterdam.
 # Each transition comes after the fork that it leaves.
 # The BPO scenario networks after Amsterdam change only the blob schedule of the chain.
 EXECUTION_FORKS = (
-    "Frontier", "Homestead", "TangerineWhistle", "SpuriousDragon", "Byzantium",
-    "ConstantinopleFix", "Istanbul", "Berlin", "London", "Paris", "ParisToShanghaiAtTime15k",
-    "Shanghai", "ShanghaiToCancunAtTime15k", "Cancun", "CancunToPragueAtTime15k", "Prague",
-    "PragueToOsakaAtTime15k", "Osaka", "OsakaToBPO1AtTime15k", "BPO1", "BPO1ToBPO2AtTime15k",
-    "BPO2", "BPO2ToAmsterdamAtTime15k", "Amsterdam",
-    "AmsterdamToBPOIncreaseAtTime15k", "AmsterdamBPOIncrease",
-    "AmsterdamToBPODecreaseAtTime15k", "AmsterdamBPODecrease",
+    "Frontier",
+    "Homestead",
+    "TangerineWhistle",
+    "SpuriousDragon",
+    "Byzantium",
+    "ConstantinopleFix",
+    "Istanbul",
+    "Berlin",
+    "London",
+    "Paris",
+    "ParisToShanghaiAtTime15k",
+    "Shanghai",
+    "ShanghaiToCancunAtTime15k",
+    "Cancun",
+    "CancunToPragueAtTime15k",
+    "Prague",
+    "PragueToOsakaAtTime15k",
+    "Osaka",
+    "OsakaToBPO1AtTime15k",
+    "BPO1",
+    "BPO1ToBPO2AtTime15k",
+    "BPO2",
+    "BPO2ToAmsterdamAtTime15k",
+    "Amsterdam",
+    "AmsterdamToBPOIncreaseAtTime15k",
+    "AmsterdamBPOIncrease",
+    "AmsterdamToBPODecreaseAtTime15k",
+    "AmsterdamBPODecrease",
 )
 
 # The forks of consensus-specs from Phase 0 to Heze.
-CONSENSUS_FORKS = ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu",
-                   "gloas", "heze")
+CONSENSUS_FORKS = (
+    "phase0",
+    "altair",
+    "bellatrix",
+    "capella",
+    "deneb",
+    "electra",
+    "fulu",
+    "gloas",
+    "heze",
+)
 
 
 @dataclass(frozen=True)
@@ -112,10 +153,18 @@ def execution_index() -> list[dict]:
 
 def execution_cases() -> list[Case]:
     """Every fixture of the formats in scope, from the index of the release."""
-    return [Case("execution-spec-tests", "", entry["fork"], entry["format"], entry["id"],
-                 "fixtures/" + entry["json_path"])
-            for entry in execution_index()
-            if entry["format"] in FORMATS and entry["fork"] in EXECUTION_FORKS]
+    return [
+        Case(
+            "execution-spec-tests",
+            "",
+            entry["fork"],
+            entry["format"],
+            entry["id"],
+            "fixtures/" + entry["json_path"],
+        )
+        for entry in execution_index()
+        if entry["format"] in FORMATS and entry["fork"] in EXECUTION_FORKS
+    ]
 
 
 def consensus_cases() -> list[Case]:
@@ -128,8 +177,16 @@ def consensus_cases() -> list[Case]:
             parts = member.split("/")
             if len(parts) == 8 and parts[1] == preset and parts[2] in CONSENSUS_FORKS:
                 path = "/".join(parts[:7])
-                cases.add(Case("consensus-spec-tests", preset, parts[2],
-                               f"{parts[3]}/{parts[4]}", path, path))
+                cases.add(
+                    Case(
+                        "consensus-spec-tests",
+                        preset,
+                        parts[2],
+                        f"{parts[3]}/{parts[4]}",
+                        path,
+                        path,
+                    )
+                )
     return sorted(cases, key=lambda case: case.path)
 
 
@@ -140,18 +197,22 @@ def legacy_networks(root: Path) -> set[str]:
 
 def legacy_cases(root: Path) -> list[Case]:
     """Every legacy blockchain test from Frontier to London under `root`, once per group."""
-    return [Case("legacytests", "", network, group, f"{path}::{name}", path)
-            for path, name, network, groups in _legacy_index(root)
-            if network in LEGACY_FORKS and LEGACY_FORGED not in path.split("/")
-            for group in groups]
+    return [
+        Case("legacytests", "", network, group, f"{path}::{name}", path)
+        for path, name, network, groups in _legacy_index(root)
+        if network in LEGACY_FORKS and LEGACY_FORGED not in path.split("/")
+        for group in groups
+    ]
 
 
 def _legacy_groups(fixture: dict) -> tuple[str, ...]:
     """The groups of runners of a test: headers, ommers and the DAO Fork."""
+
     # An error in the header of an ommer belongs to the header checks.
     def ommers(entry: dict) -> bool:
-        named = any("Uncle" in value for key, value in entry.items()
-                    if key.startswith("expectException"))
+        named = any(
+            "Uncle" in value for key, value in entry.items() if key.startswith("expectException")
+        )
         return named or ("blockHeader" in entry and bool(entry.get("uncleHeaders")))
 
     groups = ("legacy_header",)
@@ -169,6 +230,12 @@ def _legacy_index(root: Path) -> tuple[tuple[str, str, str, tuple[str, ...]], ..
     for directory in LEGACY_DIRECTORIES:
         for path in sorted((root / directory).rglob("*.json")):
             for name, fixture in json.loads(path.read_text()).items():
-                index.append((path.relative_to(root).as_posix(), name, fixture["network"],
-                              _legacy_groups(fixture)))
+                index.append(
+                    (
+                        path.relative_to(root).as_posix(),
+                        name,
+                        fixture["network"],
+                        _legacy_groups(fixture),
+                    )
+                )
     return tuple(index)

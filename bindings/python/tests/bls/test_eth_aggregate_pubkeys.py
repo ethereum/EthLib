@@ -13,19 +13,29 @@ HANDLER = "eth_aggregate_pubkeys"
 
 def _emit_valid(case: str, pubkeys: list[bytes]) -> None:
     out = bls.eth_aggregate_pubkeys(pubkeys)
-    write_case("bls", HANDLER, case, {
-        "input":  hex_list(pubkeys),
-        "output": hex_str(out),
-    })
+    write_case(
+        "bls",
+        HANDLER,
+        case,
+        {
+            "input": hex_list(pubkeys),
+            "output": hex_str(out),
+        },
+    )
 
 
 def _emit_invalid(case: str, pubkeys: list[bytes]) -> None:
     with pytest.raises(bls.BlsError):
         bls.eth_aggregate_pubkeys(pubkeys)
-    write_case("bls", HANDLER, case, {
-        "input":  hex_list(pubkeys),
-        "output": None,
-    })
+    write_case(
+        "bls",
+        HANDLER,
+        case,
+        {
+            "input": hex_list(pubkeys),
+            "output": None,
+        },
+    )
 
 
 @pytest.mark.parametrize("i", range(len(F.PRIVKEYS)))

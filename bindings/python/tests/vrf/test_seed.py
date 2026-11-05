@@ -19,20 +19,30 @@ CASES = {
 def test_secret(name: str) -> None:
     index, secret, _ = CASES[name]
     assert vrf.secret(F.SEED, index) == secret
-    write_case("vrf", "secret", f"secret_{name}", {
-        "input": {"seed": hex_str(F.SEED), "index": index},
-        "output": hex_str(secret),
-    })
+    write_case(
+        "vrf",
+        "secret",
+        f"secret_{name}",
+        {
+            "input": {"seed": hex_str(F.SEED), "index": index},
+            "output": hex_str(secret),
+        },
+    )
 
 
 @pytest.mark.parametrize("name", CASES)
 def test_evaluate(name: str) -> None:
     index, _, output = CASES[name]
     assert vrf.evaluate(F.SEED, index) == output
-    write_case("vrf", "evaluate", f"evaluate_{name}", {
-        "input": {"seed": hex_str(F.SEED), "index": index},
-        "output": hex_str(output),
-    })
+    write_case(
+        "vrf",
+        "evaluate",
+        f"evaluate_{name}",
+        {
+            "input": {"seed": hex_str(F.SEED), "index": index},
+            "output": hex_str(output),
+        },
+    )
 
 
 @pytest.mark.parametrize("index", [0, 1, 0x0102_0304, 0xFFFF_FFFF])

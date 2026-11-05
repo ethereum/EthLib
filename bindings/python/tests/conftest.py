@@ -14,7 +14,8 @@ def pytest_collection_modifyitems(items) -> None:
         return
     skip = pytest.mark.skip(
         reason=f"set {archives.fetch_archives.ENVIRONMENT} to a cache directory to read the "
-               "release archives")
+        "release archives"
+    )
     for item in items:
         if item.get_closest_marker("archive") is not None:
             item.add_marker(skip)

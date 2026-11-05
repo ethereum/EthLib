@@ -21,6 +21,7 @@ def test_copy(archive, path) -> None:
 
 
 def test_every_fork_in_scope(archive) -> None:
-    released = sorted(p.relative_to(archive / MEMBERS).as_posix()
-                      for p in (archive / MEMBERS).rglob("*.json"))
+    released = sorted(
+        p.relative_to(archive / MEMBERS).as_posix() for p in (archive / MEMBERS).rglob("*.json")
+    )
     assert VENDORED == released

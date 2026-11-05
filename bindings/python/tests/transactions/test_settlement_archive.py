@@ -18,11 +18,25 @@ ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
 # These directories hold such blocks: plain transfers, the call data floor of EIP-7623, and the
 # blob fees of EIP-4844.
 _ROOT = "fixtures/blockchain_tests"
-_EARLY = ["frontier", "homestead", "tangerinewhistle", "spuriousdragon", "byzantium",
-          "constantinoplefix", "istanbul", "berlin", "london", "paris", "shanghai"]
+_EARLY = [
+    "frontier",
+    "homestead",
+    "tangerinewhistle",
+    "spuriousdragon",
+    "byzantium",
+    "constantinoplefix",
+    "istanbul",
+    "berlin",
+    "london",
+    "paris",
+    "shanghai",
+]
 SOURCES = [
-    *(f"{_ROOT}/for_{fork}/frontier/{test}" for fork in _EARLY
-      for test in ("validation", "eip2681_limit_account_nonce")),
+    *(
+        f"{_ROOT}/for_{fork}/frontier/{test}"
+        for fork in _EARLY
+        for test in ("validation", "eip2681_limit_account_nonce")
+    ),
     *(f"{_ROOT}/for_{fork}/frontier/validation" for fork in ("cancun", "prague", "osaka")),
     *(f"{_ROOT}/for_{fork}/ported_static/stTransactionTest" for fork in ("cancun", "prague")),
     *(f"{_ROOT}/for_{fork}/cancun/eip4844_blobs" for fork in ("cancun", "prague", "osaka")),
@@ -40,8 +54,15 @@ _PRECOMPILES = {i.to_bytes(20, "big") for i in [*range(1, 0x12), 0x100]}
 # EIP-1234.
 # EIP-3675 ends it at Paris.
 _REWARD = {
-    "Frontier": 5, "Homestead": 5, "TangerineWhistle": 5, "SpuriousDragon": 5, "Byzantium": 3,
-    "ConstantinopleFix": 2, "Istanbul": 2, "Berlin": 2, "London": 2,
+    "Frontier": 5,
+    "Homestead": 5,
+    "TangerineWhistle": 5,
+    "SpuriousDragon": 5,
+    "Byzantium": 3,
+    "ConstantinopleFix": 2,
+    "Istanbul": 2,
+    "Berlin": 2,
+    "London": 2,
 }
 
 
@@ -114,13 +135,16 @@ def _check_block(fixture: dict) -> int:
     assert cumulative == _int(header["gasUsed"])
     # No block here has an ommer, whose reward would change the beneficiary's balance.
     assert not block["uncleHeaders"]
-    balances[coinbase] = balances.get(coinbase, 0) + _REWARD.get(network, 0) * 10 ** 18
+    balances[coinbase] = balances.get(coinbase, 0) + _REWARD.get(network, 0) * 10**18
     for withdrawal in block.get("withdrawals", []):
         address = _address(withdrawal["address"])
-        balances[address] = balances.get(address, 0) + _int(withdrawal["amount"]) * 10 ** 9
+        balances[address] = balances.get(address, 0) + _int(withdrawal["amount"]) * 10**9
     post = {_address(a): _int(account["balance"]) for a, account in fixture["postState"].items()}
-    for address in {coinbase, *(_address(tx["sender"]) for tx in block["transactions"]),
-                    *(_address(tx["to"]) for tx in block["transactions"])}:
+    for address in {
+        coinbase,
+        *(_address(tx["sender"]) for tx in block["transactions"]),
+        *(_address(tx["to"]) for tx in block["transactions"]),
+    }:
         # An account that leaves the state holds nothing.
         assert post.get(address, 0) == balances.get(address, 0), address.hex()
     return len(block["transactions"])
@@ -145,15 +169,19 @@ def test_settlement(archive, source) -> None:
 
 def test_settle_rejects(archive) -> None:
     source = f"{_ROOT}/for_prague/prague/eip7623_increase_calldata_cost"
-    fixture = next(iter(json.loads((archive / source / "eip_mainnet/eip_7623.json").read_text())
-                        .values()))
+    fixture = next(
+        iter(json.loads((archive / source / "eip_mainnet/eip_7623.json").read_text()).values())
+    )
     block = fixture["blocks"][0]
     tx = _raw_transactions(bytes.fromhex(block["rlp"].removeprefix("0x")))[0]
     gas, max_fee = _int(block["transactions"][0]["gasLimit"]), _price(block["transactions"][0], 0)
     # A maximum fee below the base fee, more gas left than the gas limit, and a base fee before
     # London are inputs that no block accepts.
-    for fork, base_fee, gas_left in [("pectra", max_fee + 1, 0), ("pectra", 0, gas + 1),
-                                     ("berlin", 1, 0)]:
+    for fork, base_fee, gas_left in [
+        ("pectra", max_fee + 1, 0),
+        ("pectra", 0, gas + 1),
+        ("berlin", 1, 0),
+    ]:
         with pytest.raises(transactions.TransactionError) as error:
             transactions.settle(fork, tx, base_fee, gas_left, 0)
         assert error.value.code == 0

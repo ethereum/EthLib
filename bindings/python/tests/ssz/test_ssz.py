@@ -29,14 +29,20 @@ CASES = [
     (FIXED_PAIR, {"seq": [{"uint": 0x4567}, {"uint": 0x0123}]}, "67452301"),
     # A variable field leaves a four-byte offset among the fixed fields, and its body follows.
     # The fixed part holds two bytes for a and four for the offset, so the body starts at byte 6.
-    (MIXED_PAIR, {"seq": [{"uint": 1}, {"seq": [{"uint": 2}, {"uint": 3}]}]},
-     "0100060000000200" "0300"),
+    (
+        MIXED_PAIR,
+        {"seq": [{"uint": 1}, {"seq": [{"uint": 2}, {"uint": 3}]}]},
+        "01000600000002000300",
+    ),
     # Opaque bytes of a fixed length are written as they are.
     ({"byte_vector": 2}, {"bytes": "0x0102"}, "0102"),
     # A variable field of opaque bytes takes an offset, like any variable field: the body
     # starts at byte 5, after the one byte of a and the four of the offset.
-    ({"container": [["a", {"uint": 1}], ["b", {"byte_list": 4}]]},
-     {"seq": [{"uint": 7}, {"bytes": "0xaabb"}]}, "0705000000aabb"),
+    (
+        {"container": [["a", {"uint": 1}], ["b", {"byte_list": 4}]]},
+        {"seq": [{"uint": 7}, {"bytes": "0xaabb"}]},
+        "0705000000aabb",
+    ),
 ]
 
 
@@ -101,21 +107,33 @@ ROOTS = [
     (UINT16, {"uint": 0x0102}, _chunk("0201")),
     ("bool", {"bool": True}, _chunk("01")),
     # A container of two fields roots the two field roots as leaves.
-    (FIXED_PAIR, {"seq": [{"uint": 0x4567}, {"uint": 0x0123}]},
-     _node(_chunk("6745"), _chunk("2301"))),
+    (
+        FIXED_PAIR,
+        {"seq": [{"uint": 0x4567}, {"uint": 0x0123}]},
+        _node(_chunk("6745"), _chunk("2301")),
+    ),
     # A List[uint16, 4] packs into one chunk, and mixes in its length 2.
-    ({"list": [UINT16, 4]}, {"seq": [{"uint": 2}, {"uint": 3}]},
-     _node(_chunk("02000300"), _chunk("02"))),
+    (
+        {"list": [UINT16, 4]},
+        {"seq": [{"uint": 2}, {"uint": 3}]},
+        _node(_chunk("02000300"), _chunk("02")),
+    ),
     # A Bitlist[8] packs its bits without the closing bit, and mixes in the bit count 3.
     ({"bitlist": 8}, {"bits": [True, False, True]}, _node(_chunk("05"), _chunk("03"))),
     # A ByteList[33] has room for two chunks, so even an empty one roots a tree of depth 1.
     ({"byte_list": 33}, {"bytes": "0x"}, _node(_node(ZERO, ZERO), ZERO)),
     # A Vector[uint16, 17] fills two chunks: sixteen elements, then one.
-    ({"vector": [UINT16, 17]}, {"seq": [{"uint": 1}] * 17},
-     _node(_chunk("0100" * 16), _chunk("0100"))),
+    (
+        {"vector": [UINT16, 17]},
+        {"seq": [{"uint": 1}] * 17},
+        _node(_chunk("0100" * 16), _chunk("0100")),
+    ),
     # The variable field of a container is rooted by its own rule, length included.
-    (MIXED_PAIR, {"seq": [{"uint": 1}, {"seq": [{"uint": 2}, {"uint": 3}]}]},
-     _node(_chunk("0100"), _node(_chunk("02000300"), _chunk("02")))),
+    (
+        MIXED_PAIR,
+        {"seq": [{"uint": 1}, {"seq": [{"uint": 2}, {"uint": 3}]}]},
+        _node(_chunk("0100"), _node(_chunk("02000300"), _chunk("02"))),
+    ),
 ]
 
 

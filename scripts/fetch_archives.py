@@ -10,6 +10,7 @@ An archive is a tar file, compressed or not, or a zip file when its URL ends in 
 The cache is the directory that `ETHLIB_ARCHIVES` names.
 Without it, the cache is `ethlib/archives` in the user's cache directory, such as `~/.cache`.
 """
+
 import argparse
 import contextlib
 import hashlib
@@ -49,8 +50,10 @@ class Archive:
 def load(root: Path = ROOT) -> dict[str, Archive]:
     """The archives that `tests/sources.toml` pins, by name."""
     config = tomllib.loads((root / SOURCES).read_text(encoding="utf-8"))
-    return {name: Archive(name, entry["url"], entry["size"], entry["sha256"])
-            for name, entry in config.get("archives", {}).items()}
+    return {
+        name: Archive(name, entry["url"], entry["size"], entry["sha256"])
+        for name, entry in config.get("archives", {}).items()
+    }
 
 
 @contextlib.contextmanager
@@ -100,8 +103,10 @@ def _download(archive: Archive, cache: Path) -> Path:
             out.write(chunk)
     if size != archive.size or h.hexdigest() != archive.sha256:
         part.unlink()
-        raise ArchiveError(f"{archive.url}: not the pinned archive {archive.name} "
-                           f"({archive.size} bytes, sha256 {archive.sha256})")
+        raise ArchiveError(
+            f"{archive.url}: not the pinned archive {archive.name} "
+            f"({archive.size} bytes, sha256 {archive.sha256})"
+        )
     part.replace(path)
     return path
 
@@ -224,11 +229,20 @@ def default_cache() -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument("names", nargs="*", metavar="NAME", help="an archive of the table")
-    parser.add_argument("--cache", type=Path, default=default_cache(),
-                        help=f"the cache directory; the default is ${ENVIRONMENT}, or else "
-                             "~/.cache/ethlib/archives")
-    parser.add_argument("--path", action="append", default=[], dest="paths",
-                        help="a file or directory to unpack, repeatable")
+    parser.add_argument(
+        "--cache",
+        type=Path,
+        default=default_cache(),
+        help=f"the cache directory; the default is ${ENVIRONMENT}, or else "
+        "~/.cache/ethlib/archives",
+    )
+    parser.add_argument(
+        "--path",
+        action="append",
+        default=[],
+        dest="paths",
+        help="a file or directory to unpack, repeatable",
+    )
     parser.add_argument("--list", action="store_true", help="list the pinned archives")
     args = parser.parse_args()
 

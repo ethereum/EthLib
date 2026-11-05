@@ -16,7 +16,8 @@ from .test_blocks import CASES
 # The genesis block and the three blocks of one Frontier chain, in order.
 _CHAIN = sorted(
     (c for c in CASES if c["network"] == "Frontier"),
-    key=lambda c: -1 if c["block"] == "genesis" else c["block"])
+    key=lambda c: -1 if c["block"] == "genesis" else c["block"],
+)
 BLOCKS = [rlp.decode(bytes.fromhex(c["rlp"])) for c in _CHAIN]
 
 FORK = "frontier"
@@ -63,8 +64,9 @@ def test_one_ommer_passes() -> None:
 
 
 def test_two_ommers_pass() -> None:
-    assert validate_ommers(FORK, RECENT, _block([OMMER, _with_coinbase(BLOCKS[2][0], 0x22)]),
-                           check_seal=False)
+    assert validate_ommers(
+        FORK, RECENT, _block([OMMER, _with_coinbase(BLOCKS[2][0], 0x22)]), check_seal=False
+    )
 
 
 def test_wrong_ommers_hash() -> None:
@@ -119,11 +121,14 @@ def _code_with(forks: list[tuple[str, int]]) -> int:
     return error.value.code
 
 
-@pytest.mark.parametrize("forks", [
-    [(FORK, 1)],
-    [("homestead", 0), (FORK, 5)],
-    [(FORK, 0), ("hegota", 5)],
-])
+@pytest.mark.parametrize(
+    "forks",
+    [
+        [(FORK, 1)],
+        [("homestead", 0), (FORK, 5)],
+        [(FORK, 0), ("hegota", 5)],
+    ],
+)
 def test_forks_that_no_chain_runs(forks: list[tuple[str, int]]) -> None:
     # The first fork starts after block 0, the forks are out of order, or a fork is not specified.
     assert _code_with(forks) == 0

@@ -10,7 +10,7 @@ from .test_root import rlp_encode
 _EIP = (Path(__file__).resolve().parent / "dao" / "eip-779.md.txt").read_text()
 
 # The list `L` of EIP-779, in its order, between its summary and the end of its details.
-_LIST = _EIP[_EIP.index("Reference list L"):_EIP.index("</details>")]
+_LIST = _EIP[_EIP.index("Reference list L") : _EIP.index("</details>")]
 DAO_ACCOUNTS = [bytes.fromhex(a[2:]) for a in re.findall(r"0x[0-9a-f]{40}", _LIST)]
 
 # The contract that receives the ether, as EIP-779 names it.

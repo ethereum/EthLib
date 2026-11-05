@@ -8,9 +8,7 @@ import pytest
 from ethlib.cryptography import crc32
 
 # The genesis hash of mainnet.
-MAINNET_GENESIS = bytes.fromhex(
-    "d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3"
-)
+MAINNET_GENESIS = bytes.fromhex("d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3")
 
 # The mainnet fork hashes of EIP-2124.
 #

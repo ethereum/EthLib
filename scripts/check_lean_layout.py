@@ -19,6 +19,7 @@ Lines that the branch does not change are never checked, so existing files do no
 With files instead of `--base`, every line of each file counts as changed.
 Only the standard library is used, so the check needs no Lean and no install step.
 """
+
 import argparse
 import re
 import subprocess
@@ -88,7 +89,7 @@ def comments(text: str) -> list[list[tuple[int, str]]]:
                     depth, cursor = depth - 1, cursor + 2
                 else:
                     cursor += 1
-            body = text[index + opener:cursor - 2 if depth == 0 else cursor]
+            body = text[index + opener : cursor - 2 if depth == 0 else cursor]
             found.append([(line + k, part) for k, part in enumerate(body.split("\n"))])
             line += text.count("\n", index, cursor)
             index = cursor
@@ -96,8 +97,8 @@ def comments(text: str) -> list[list[tuple[int, str]]]:
         if text.startswith("--", index):
             end = text.find("\n", index)
             end = length if end < 0 else end
-            content = text[index + 2:end]
-            if text[text.rfind("\n", 0, index) + 1:index].strip():
+            content = text[index + 2 : end]
+            if text[text.rfind("\n", 0, index) + 1 : index].strip():
                 flush()
                 found.append([(line, content)])
             else:
@@ -160,35 +161,48 @@ def sentence_lines(comment: list[tuple[int, str]]) -> list[tuple[int, bool]]:
         elif LIST_ITEM.match(stripped):
             in_list = True
         code = in_fence or (number != comment[0][0] and indentation(content) >= base + 4)
-        sentence = (bool(stripped) and not code and not in_list
-                    and not stripped.startswith(("#", "|")) and not URL_CONTENT.fullmatch(content)
-                    and any(c.isalnum() for c in stripped))
+        sentence = (
+            bool(stripped)
+            and not code
+            and not in_list
+            and not stripped.startswith(("#", "|"))
+            and not URL_CONTENT.fullmatch(content)
+            and any(c.isalnum() for c in stripped)
+        )
         out.append((number, sentence))
     return out
 
 
 def check_text(path: str, text: str, changed: set[int] | None) -> list[Finding]:
     """The findings on the changed lines of one Lean file; `None` means every line changed."""
+
     def is_changed(number: int) -> bool:
         return changed is None or number in changed
 
     found = []
     for number, content in enumerate(text.split("\n"), start=1):
         if is_changed(number) and len(content) > MAX_LENGTH and not URL_LINE.fullmatch(content):
-            found.append(Finding(path, number,
-                                 f"line has {len(content)} characters, more than {MAX_LENGTH}"))
+            found.append(
+                Finding(path, number, f"line has {len(content)} characters, more than {MAX_LENGTH}")
+            )
     for comment in comments(text):
         lines = sentence_lines(comment)
         for (first, first_sentence), (second, second_sentence) in zip(lines, lines[1:]):
             if first_sentence and second_sentence and (is_changed(first) or is_changed(second)):
-                found.append(Finding(path, second, "comment has two sentence lines in a row; "
-                                     "put a blank line between them"))
+                found.append(
+                    Finding(
+                        path,
+                        second,
+                        "comment has two sentence lines in a row; put a blank line between them",
+                    )
+                )
     return sorted(found, key=lambda f: f.line)
 
 
 def git(*args: str) -> str:
-    return subprocess.run(["git", *args], check=True, capture_output=True, text=True,
-                          cwd=ROOT).stdout
+    return subprocess.run(
+        ["git", *args], check=True, capture_output=True, text=True, cwd=ROOT
+    ).stdout
 
 
 def changed_lines(base: str) -> dict[str, set[int]]:

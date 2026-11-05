@@ -23,6 +23,7 @@ cases, so those come from the ethereum/bls12-381-tests release archive.
 Only the standard library is used, so the check needs no Lean and no
 install step.
 """
+
 import argparse
 import hashlib
 import importlib.util
@@ -38,7 +39,8 @@ REQUIRED = ("bls", "kzg", "secp256k1", "secp256r1")
 # The fetcher of the release archives that `tests/sources.toml` pins, loaded by path:
 # `scripts` is not a package.
 _spec = importlib.util.spec_from_file_location(
-    "fetch_archives", ROOT.parents[1] / "scripts" / "fetch_archives.py")
+    "fetch_archives", ROOT.parents[1] / "scripts" / "fetch_archives.py"
+)
 fetch_archives = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(fetch_archives)
 
@@ -53,8 +55,14 @@ BLS_TESTS = "bls12-381-tests/v0.1.2/bls_tests_yaml"
 
 # The handlers of that archive that are pinned here, under `bls/`.
 BLS_TESTS_HANDLERS = (
-    "aggregate", "aggregate_verify", "deserialization_G1", "deserialization_G2",
-    "fast_aggregate_verify", "hash_to_G2", "sign", "verify",
+    "aggregate",
+    "aggregate_verify",
+    "deserialization_G1",
+    "deserialization_G2",
+    "fast_aggregate_verify",
+    "hash_to_G2",
+    "sign",
+    "verify",
 )
 
 
@@ -150,7 +158,7 @@ def bls_tests_digests(archive: Path) -> dict[tuple[str, str], str]:
             if not leaf.endswith(".yaml"):
                 continue
             data = tar.extractfile(member).read()
-            digests[("bls", f"{handler}/{leaf[:-len('.yaml')]}/data.yaml")] = sha256(data)
+            digests[("bls", f"{handler}/{leaf[: -len('.yaml')]}/data.yaml")] = sha256(data)
     return digests
 
 
@@ -184,12 +192,19 @@ def check_upstream(archive: Path, bls_archive: Path, root: Path = ROOT) -> tuple
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0].strip())
-    parser.add_argument("--upstream", action="store_true",
-                        help="also compare the pinned digests with the upstream archive")
-    parser.add_argument("--archive", type=Path,
-                        help="a local copy of the consensus-specs archive, not downloaded")
-    parser.add_argument("--bls-archive", type=Path,
-                        help="a local copy of the bls12-381-tests archive, not downloaded")
+    parser.add_argument(
+        "--upstream",
+        action="store_true",
+        help="also compare the pinned digests with the upstream archive",
+    )
+    parser.add_argument(
+        "--archive", type=Path, help="a local copy of the consensus-specs archive, not downloaded"
+    )
+    parser.add_argument(
+        "--bls-archive",
+        type=Path,
+        help="a local copy of the bls12-381-tests archive, not downloaded",
+    )
     args = parser.parse_args()
 
     errors, own = check_local(), 0
@@ -203,8 +218,9 @@ def main() -> int:
 
     for error in errors:
         print(error, file=sys.stderr)
-    count = sum(len(read_sums(d / "SHA256SUMS")) for d in pinned_dirs(ROOT)
-                if (d / "SHA256SUMS").is_file())
+    count = sum(
+        len(read_sums(d / "SHA256SUMS")) for d in pinned_dirs(ROOT) if (d / "SHA256SUMS").is_file()
+    )
     if errors:
         print(f"{len(errors)} problem(s) in {count} pinned vectors", file=sys.stderr)
         return 1

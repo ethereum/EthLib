@@ -237,7 +237,7 @@ jobs:
       # or deleted case.
       - run: uv run --no-project --python 3.12 python -m unittest tests/cryptography/test_check_vectors.py
 
-  # Lint, type-check and spell-check the Python code, with the tools that uv.lock pins.
+  # Lint, format-check, type-check and spell-check the Python code, with the tools that uv.lock pins.
   python:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -263,6 +263,9 @@ jobs:
 
       - name: lint
         run: uv run --no-sync ruff check --no-fix --show-fixes
+
+      - name: format
+        run: uv run --no-sync ruff format --check
 
       - name: types
         run: uv run --no-sync ty check

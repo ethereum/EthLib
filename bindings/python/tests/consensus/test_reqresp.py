@@ -40,31 +40,42 @@ ALTAIR = [
     _id("metadata", 2),
 ] + LIGHT_CLIENT
 DENEB = ALTAIR + [_id("blob_sidecars_by_range", 1), _id("blob_sidecars_by_root", 1)]
-FULU = [
-    _id("status", 1),
-    _id("status", 2),
-    _id("goodbye", 1),
-    _id("beacon_blocks_by_range", 1),
-    _id("beacon_blocks_by_range", 2),
-    _id("beacon_blocks_by_root", 1),
-    _id("beacon_blocks_by_root", 2),
-    _id("ping", 1),
-    _id("metadata", 1),
-    _id("metadata", 2),
-    _id("metadata", 3),
-] + LIGHT_CLIENT + [
-    _id("blob_sidecars_by_range", 1),
-    _id("blob_sidecars_by_root", 1),
-    _id("data_column_sidecars_by_range", 1),
-    _id("data_column_sidecars_by_root", 1),
-    _id("beacon_blocks_by_head", 1),
-]
+FULU = (
+    [
+        _id("status", 1),
+        _id("status", 2),
+        _id("goodbye", 1),
+        _id("beacon_blocks_by_range", 1),
+        _id("beacon_blocks_by_range", 2),
+        _id("beacon_blocks_by_root", 1),
+        _id("beacon_blocks_by_root", 2),
+        _id("ping", 1),
+        _id("metadata", 1),
+        _id("metadata", 2),
+        _id("metadata", 3),
+    ]
+    + LIGHT_CLIENT
+    + [
+        _id("blob_sidecars_by_range", 1),
+        _id("blob_sidecars_by_root", 1),
+        _id("data_column_sidecars_by_range", 1),
+        _id("data_column_sidecars_by_root", 1),
+        _id("beacon_blocks_by_head", 1),
+    ]
+)
 
 
 @pytest.mark.parametrize(
     "fork, expected",
-    [("phase0", PHASE0), ("altair", ALTAIR), ("shapella", ALTAIR), ("dencun", DENEB),
-     ("pectra", DENEB), ("fusaka", FULU), ("bpo2", FULU)],
+    [
+        ("phase0", PHASE0),
+        ("altair", ALTAIR),
+        ("shapella", ALTAIR),
+        ("dencun", DENEB),
+        ("pectra", DENEB),
+        ("fusaka", FULU),
+        ("bpo2", FULU),
+    ],
 )
 def test_protocol_ids(fork: str, expected: list) -> None:
     assert consensus.reqresp_protocol_ids(fork) == expected
@@ -112,8 +123,13 @@ def _merkleize(chunks: list) -> bytes:
 
 
 def _status(fork_digest: bytes, finalized: bytes, epoch: int, head: bytes, slot: int) -> list:
-    return [_chunk(fork_digest), finalized, _chunk(epoch.to_bytes(8, "little")), head,
-            _chunk(slot.to_bytes(8, "little"))]
+    return [
+        _chunk(fork_digest),
+        finalized,
+        _chunk(epoch.to_bytes(8, "little")),
+        head,
+        _chunk(slot.to_bytes(8, "little")),
+    ]
 
 
 def test_status_v1() -> None:
@@ -248,11 +264,13 @@ def test_column_root_request() -> None:
     _, again = consensus.reqresp_message("minimal", "fusaka", name, data)
     assert again == data
     # The request names at most 128 blocks.
-    assert consensus.reqresp_message("minimal", "fusaka", "DataColumnSidecarsByRootRequest",
-                                     _identifiers(128))[1] == _identifiers(128)
+    assert consensus.reqresp_message(
+        "minimal", "fusaka", "DataColumnSidecarsByRootRequest", _identifiers(128)
+    )[1] == _identifiers(128)
     with pytest.raises(SszError):
-        consensus.reqresp_message("minimal", "fusaka", "DataColumnSidecarsByRootRequest",
-                                  _identifiers(129))
+        consensus.reqresp_message(
+            "minimal", "fusaka", "DataColumnSidecarsByRootRequest", _identifiers(129)
+        )
 
 
 def _identifiers(count: int) -> bytes:

@@ -13,10 +13,15 @@ HANDLER = "compute_challenge"
 
 def _emit(case: str, blob: bytes, commitment: bytes) -> None:
     challenge = kzg.compute_challenge(blob, commitment)
-    write_case("kzg", HANDLER, case, {
-        "input":  {"blob": hex_str(blob), "commitment": hex_str(commitment)},
-        "output": hex_str(challenge),
-    })
+    write_case(
+        "kzg",
+        HANDLER,
+        case,
+        {
+            "input": {"blob": hex_str(blob), "commitment": hex_str(commitment)},
+            "output": hex_str(challenge),
+        },
+    )
 
 
 @pytest.mark.parametrize("i", range(len(F.VALID_BLOBS)))
@@ -26,10 +31,12 @@ def test_valid(i: int) -> None:
 
 
 def test_mismatched_commitment() -> None:
-    _emit(f"{HANDLER}_case_mismatched_commitment",
-          F.VALID_BLOBS[3], F.cached_commitment(F.VALID_BLOBS[4]))
+    _emit(
+        f"{HANDLER}_case_mismatched_commitment",
+        F.VALID_BLOBS[3],
+        F.cached_commitment(F.VALID_BLOBS[4]),
+    )
 
 
 def test_commitment_at_infinity() -> None:
-    _emit(f"{HANDLER}_case_commitment_at_infinity",
-          F.VALID_BLOBS[4], F.G1_POINT_AT_INFINITY)
+    _emit(f"{HANDLER}_case_commitment_at_infinity", F.VALID_BLOBS[4], F.G1_POINT_AT_INFINITY)

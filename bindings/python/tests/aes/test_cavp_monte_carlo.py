@@ -33,8 +33,9 @@ def _sections(bits: int) -> dict[str, list[tuple[bytes, bytes, bytes]]]:
         # The last field of a checkpoint is the output of its direction.
         if key == ("CIPHERTEXT" if direction == "ENCRYPT" else "PLAINTEXT"):
             assert int(case["COUNT"]) == len(sections[direction])
-            sections[direction].append(tuple(bytes.fromhex(case[k])
-                                             for k in ("KEY", "PLAINTEXT", "CIPHERTEXT")))
+            sections[direction].append(
+                tuple(bytes.fromhex(case[k]) for k in ("KEY", "PLAINTEXT", "CIPHERTEXT"))
+            )
             case = {}
     return sections
 
@@ -53,8 +54,9 @@ def test_monte_carlo(bits: int, direction: str) -> None:
     text = plaintext if direction == "ENCRYPT" else ciphertext
     for i in range(count):
         expected_key, plaintext, ciphertext = checkpoints[i]
-        source, target = ((plaintext, ciphertext) if direction == "ENCRYPT"
-                          else (ciphertext, plaintext))
+        source, target = (
+            (plaintext, ciphertext) if direction == "ENCRYPT" else (ciphertext, plaintext)
+        )
         assert key == expected_key and text == source, f"checkpoint {i}"
         previous = text
         for _ in range(1000):

@@ -6,6 +6,7 @@ directory.
 
 Only the standard library is used, like the check.
 """
+
 import hashlib
 import importlib.util
 import io
@@ -34,7 +35,6 @@ def write_suite(root: Path, name: str, cases: dict[str, bytes]) -> None:
 
 
 class CheckLocal(unittest.TestCase):
-
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
@@ -58,11 +58,15 @@ class CheckLocal(unittest.TestCase):
 
     def test_missing_secp256k1_manifest_fails(self):
         (self.root / "secp256k1" / "SHA256SUMS").unlink()
-        self.assertEqual(self.errors(), ["secp256k1/SHA256SUMS: missing, so nothing in secp256k1 is checked"])
+        self.assertEqual(
+            self.errors(), ["secp256k1/SHA256SUMS: missing, so nothing in secp256k1 is checked"]
+        )
 
     def test_missing_secp256r1_manifest_fails(self):
         (self.root / "secp256r1" / "SHA256SUMS").unlink()
-        self.assertEqual(self.errors(), ["secp256r1/SHA256SUMS: missing, so nothing in secp256r1 is checked"])
+        self.assertEqual(
+            self.errors(), ["secp256r1/SHA256SUMS: missing, so nothing in secp256r1 is checked"]
+        )
 
     def test_missing_both_manifests_fails(self):
         (self.root / "bls" / "SHA256SUMS").unlink()
@@ -82,7 +86,9 @@ class CheckLocal(unittest.TestCase):
 
     def test_changed_case_fails(self):
         (self.root / "kzg" / "blob" / "case_0" / "data.yaml").write_bytes(b"changed")
-        self.assertEqual(self.errors(), ["kzg/blob/case_0/data.yaml: digest differs from SHA256SUMS"])
+        self.assertEqual(
+            self.errors(), ["kzg/blob/case_0/data.yaml: digest differs from SHA256SUMS"]
+        )
 
     def test_unlisted_case_fails(self):
         extra = self.root / "kzg" / "blob" / "case_2" / "data.yaml"
@@ -97,17 +103,20 @@ class CheckLocal(unittest.TestCase):
     def test_other_pinned_suite_is_checked(self):
         write_suite(self.root, "xmss", {"sign/case_0": b"xmss 0"})
         (self.root / "xmss" / "sign" / "case_0" / "data.yaml").write_bytes(b"changed")
-        self.assertEqual(self.errors(), ["xmss/sign/case_0/data.yaml: digest differs from SHA256SUMS"])
+        self.assertEqual(
+            self.errors(), ["xmss/sign/case_0/data.yaml: digest differs from SHA256SUMS"]
+        )
 
 
 class BlsTestsDigests(unittest.TestCase):
-
     def test_layout_maps_to_pinned_paths(self):
         with tempfile.TemporaryDirectory() as tmp:
             archive = Path(tmp) / "bls.tar.gz"
             with tarfile.open(archive, "w:gz") as tar:
-                for name, data in (("./sign/case_0.yaml", b"sign 0"),
-                                   ("./batch_verify/case_0.yaml", b"not pinned")):
+                for name, data in (
+                    ("./sign/case_0.yaml", b"sign 0"),
+                    ("./batch_verify/case_0.yaml", b"not pinned"),
+                ):
                     info = tarfile.TarInfo(name)
                     info.size = len(data)
                     tar.addfile(info, io.BytesIO(data))

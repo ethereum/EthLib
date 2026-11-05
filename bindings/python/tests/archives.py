@@ -7,7 +7,8 @@ REPO = Path(__file__).resolve().parents[3]
 
 # The fetcher, loaded by path: `scripts` is not a package.
 _spec = importlib.util.spec_from_file_location(
-    "fetch_archives", REPO / "scripts" / "fetch_archives.py")
+    "fetch_archives", REPO / "scripts" / "fetch_archives.py"
+)
 fetch_archives = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(fetch_archives)
 

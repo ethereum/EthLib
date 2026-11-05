@@ -15,8 +15,17 @@ FORK_OF_NETWORK = {
 
 # The forks up to Paris, which the fixtures activate at block 0.
 BLOCK_FORKS = [
-    "frontier", "homestead", "tangerineWhistle", "spuriousDragon", "byzantium",
-    "constantinople", "petersburg", "istanbul", "berlin", "london", "paris",
+    "frontier",
+    "homestead",
+    "tangerineWhistle",
+    "spuriousDragon",
+    "byzantium",
+    "constantinople",
+    "petersburg",
+    "istanbul",
+    "berlin",
+    "london",
+    "paris",
 ]
 
 # The forks from Shapella, which activate by timestamp.
@@ -48,7 +57,7 @@ def config(network: str) -> dict:
     first = FORK_OF_NETWORK[before]
     activations = [[fork, "block", 0] for fork in BLOCK_FORKS]
     if first in TIME_FORKS:
-        activations += [[fork, "time", 0] for fork in TIME_FORKS[:TIME_FORKS.index(first) + 1]]
+        activations += [[fork, "time", 0] for fork in TIME_FORKS[: TIME_FORKS.index(first) + 1]]
     if after:
         activations.append([FORK_OF_NETWORK[after], "time", TRANSITION_TIME])
     return {"chainId": 1, "activations": activations}

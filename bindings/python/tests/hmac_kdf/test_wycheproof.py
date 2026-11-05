@@ -20,8 +20,11 @@ DIR = Path(__file__).resolve().parent / "wycheproof"
 def _tests(name: str) -> list[dict]:
     """Each test of a set, with the tag size of its group when it has one."""
     data = json.loads((DIR / name).read_text())
-    tests = [dict(test, tagSize=group.get("tagSize")) for group in data["testGroups"]
-             for test in group["tests"]]
+    tests = [
+        dict(test, tagSize=group.get("tagSize"))
+        for group in data["testGroups"]
+        for test in group["tests"]
+    ]
     assert len(tests) == data["numberOfTests"]
     return tests
 
@@ -36,7 +39,7 @@ def test_hmac(test: dict) -> None:
     # as RFC 2104 §5 truncates. A modified tag must differ from the tag EthLib computes.
     tag = hmac_sha256(bytes.fromhex(test["key"]), bytes.fromhex(test["msg"]))
     assert len(tag) == 32
-    truncated = tag[:test["tagSize"] // 8]
+    truncated = tag[: test["tagSize"] // 8]
     expected = bytes.fromhex(test["tag"])
     assert test["result"] in ("valid", "invalid")
     assert (truncated == expected) == (test["result"] == "valid")

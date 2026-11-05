@@ -43,12 +43,40 @@ CHAIN_ID = 1
 
 # The index of each field in the payload of each type, by the names that the exceptions use.
 FIELDS = {
-    0: {"NONCE": 0, "GASPRICE": 1, "GASLIMIT": 2, "TO": 3, "VALUE": 4, "DATA": 5,
-        "V": 6, "R": 7, "S": 8},
-    1: {"NONCE": 1, "GASPRICE": 2, "GASLIMIT": 3, "TO": 4, "VALUE": 5, "DATA": 6,
-        "ACCESS_LIST": 7, "R": 9, "S": 10},
-    2: {"NONCE": 1, "PRIORITY": 2, "MAXFEE": 3, "GASLIMIT": 4, "TO": 5, "VALUE": 6,
-        "DATA": 7, "ACCESS_LIST": 8, "R": 10, "S": 11},
+    0: {
+        "NONCE": 0,
+        "GASPRICE": 1,
+        "GASLIMIT": 2,
+        "TO": 3,
+        "VALUE": 4,
+        "DATA": 5,
+        "V": 6,
+        "R": 7,
+        "S": 8,
+    },
+    1: {
+        "NONCE": 1,
+        "GASPRICE": 2,
+        "GASLIMIT": 3,
+        "TO": 4,
+        "VALUE": 5,
+        "DATA": 6,
+        "ACCESS_LIST": 7,
+        "R": 9,
+        "S": 10,
+    },
+    2: {
+        "NONCE": 1,
+        "PRIORITY": 2,
+        "MAXFEE": 3,
+        "GASLIMIT": 4,
+        "TO": 5,
+        "VALUE": 6,
+        "DATA": 7,
+        "ACCESS_LIST": 8,
+        "R": 10,
+        "S": 11,
+    },
 }
 
 # The results that ethereum/tests rejects and EthLib accepts, by file and exception.
@@ -78,11 +106,20 @@ _SHORT_OF_GAS = "insufficientGas"
 # Transactions with a second fault, which EthLib reports before the one the fixture names.
 SECOND_FAULT = {
     # The data of these transactions costs more than their gas limit of 21000 or 2000.
-    **{f"ttVValue/{name}.json": _SHORT_OF_GAS for name in (
-        "V_overflow32bit", "V_overflow32bitSigned", "V_wrongvalue_101", "V_wrongvalue_121",
-        "V_wrongvalue_122", "V_wrongvalue_123", "V_wrongvalue_124", "V_wrongvalue_ff",
-        "V_wrongvalue_ffff",
-    )},
+    **{
+        f"ttVValue/{name}.json": _SHORT_OF_GAS
+        for name in (
+            "V_overflow32bit",
+            "V_overflow32bitSigned",
+            "V_wrongvalue_101",
+            "V_wrongvalue_121",
+            "V_wrongvalue_122",
+            "V_wrongvalue_123",
+            "V_wrongvalue_124",
+            "V_wrongvalue_ff",
+            "V_wrongvalue_ffff",
+        )
+    },
     "ttWrongRLP/TRANSCT_rvalue_TooShort.json": _SHORT_OF_GAS,
     # The empty transaction has a gas limit of 0.
     "ttSignature/EmptyTransaction.json": _SHORT_OF_GAS,
@@ -93,17 +130,21 @@ SECOND_FAULT = {
 
 def _sized(pattern: str, compare):
     """Whether a message holds the pattern, and its last number passes `compare`."""
+
     def check(message: str, kind: int) -> bool:
         match = re.search(pattern.format(**FIELDS.get(kind, {})) + r" (\d+)$", message)
         return match is not None and compare(int(match.group(1)))
+
     return check
 
 
 def _field(name: str, fault: str):
     """Whether a message names a fault of one field of the payload."""
+
     def check(message: str, kind: int) -> bool:
         index = FIELDS[kind][name]
         return re.search(rf"decoding: field {index}: {fault}", message) is not None
+
     return check
 
 
@@ -113,6 +154,7 @@ def _any(*rules):
             rule(message, kind) if callable(rule) else re.search(rule, message) is not None
             for rule in rules
         )
+
     return check
 
 
@@ -147,13 +189,17 @@ NAMES = {
     "RLP_ERROR_SIZE": _any(_TOO_SHORT, r"^decoding: trailingBytes \d+$"),
     "RLP_ERROR_SIZE_LEADING_ZEROS": _any(r"^decoding: leadingZeroInLength$"),
     "RLP_INVALID_ACCESS_LIST_ADDRESS_TOO_LONG": _sized(
-        r"decoding: field {ACCESS_LIST}: field 0: wrongLength 20", lambda n: n > 20),
+        r"decoding: field {ACCESS_LIST}: field 0: wrongLength 20", lambda n: n > 20
+    ),
     "RLP_INVALID_ACCESS_LIST_ADDRESS_TOO_SHORT": _sized(
-        r"decoding: field {ACCESS_LIST}: field 0: wrongLength 20", lambda n: n < 20),
+        r"decoding: field {ACCESS_LIST}: field 0: wrongLength 20", lambda n: n < 20
+    ),
     "RLP_INVALID_ACCESS_LIST_STORAGE_TOO_LONG": _sized(
-        r"decoding: field {ACCESS_LIST}: field 1: wrongLength 32", lambda n: n > 32),
+        r"decoding: field {ACCESS_LIST}: field 1: wrongLength 32", lambda n: n > 32
+    ),
     "RLP_INVALID_ACCESS_LIST_STORAGE_TOO_SHORT": _sized(
-        r"decoding: field {ACCESS_LIST}: field 1: wrongLength 32", lambda n: n < 32),
+        r"decoding: field {ACCESS_LIST}: field 1: wrongLength 32", lambda n: n < 32
+    ),
     "RLP_INVALID_DATA": _field("DATA", r"listAsBytes$"),
     "RLP_LEADING_ZEROS_BASEFEE": _field("MAXFEE", r"leadingZeroInScalar$"),
     "RLP_LEADING_ZEROS_DATA_SIZE": _any(r"^decoding: leadingZeroInLength$"),

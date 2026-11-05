@@ -17,15 +17,19 @@ GENESIS = bytes.fromhex("d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0
 LATEST_HASH = bytes(range(32))
 
 # The chain of EIP-2124 "Test Cases": mainnet up to Petersburg.
-SCHEDULE = forkid.schedule(GENESIS, 0, [
-    ("frontier", BLOCK, 0),
-    ("homestead", BLOCK, 1_150_000),
-    ("daoFork", BLOCK, 1_920_000),
-    ("tangerineWhistle", BLOCK, 2_463_000),
-    ("spuriousDragon", BLOCK, 2_675_000),
-    ("byzantium", BLOCK, 4_370_000),
-    ("petersburg", BLOCK, 7_280_000),
-])
+SCHEDULE = forkid.schedule(
+    GENESIS,
+    0,
+    [
+        ("frontier", BLOCK, 0),
+        ("homestead", BLOCK, 1_150_000),
+        ("daoFork", BLOCK, 1_920_000),
+        ("tangerineWhistle", BLOCK, 2_463_000),
+        ("spuriousDragon", BLOCK, 2_675_000),
+        ("byzantium", BLOCK, 4_370_000),
+        ("petersburg", BLOCK, 7_280_000),
+    ],
+)
 HEAD = 7_987_396
 # The identifier of that chain at HEAD, from EIP-2124 "Test Cases".
 FORK_ID = [bytes.fromhex("668db0af"), b""]
@@ -40,11 +44,20 @@ def _status68(version: int = 68, fork_id: list = FORK_ID) -> bytes:
     return rlp.encode([_p(version), _p(1), _p(td), LATEST_HASH, GENESIS, fork_id])
 
 
-def _status69(version: int = 69, fork_id: list = FORK_ID, earliest: int = 0,
-              latest: int = HEAD) -> bytes:
-    return rlp.encode([
-        _p(version), _p(1), GENESIS, fork_id, _p(earliest), _p(latest), LATEST_HASH,
-    ])
+def _status69(
+    version: int = 69, fork_id: list = FORK_ID, earliest: int = 0, latest: int = HEAD
+) -> bytes:
+    return rlp.encode(
+        [
+            _p(version),
+            _p(1),
+            GENESIS,
+            fork_id,
+            _p(earliest),
+            _p(latest),
+            LATEST_HASH,
+        ]
+    )
 
 
 def test_status68_round_trip() -> None:
@@ -105,8 +118,9 @@ def test_unknown_version() -> None:
     assert info.value.code == 0
 
 
-@pytest.mark.parametrize("version, data", [(68, _status68()), (69, _status69()),
-                                           (72, _status69(72))])
+@pytest.mark.parametrize(
+    "version, data", [(68, _status68()), (69, _status69()), (72, _status69(72))]
+)
 def test_status_accepted(version: int, data: bytes) -> None:
     check_status(version, SCHEDULE, HEAD, 0, data)
 

@@ -19,17 +19,28 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # The fixture takes the settings of each default library from the real lakefile.
 # Its roots follow the real tree, so that each library holds modules of its own.
-LIBRARY = re.compile(r"^(@\[default_target\]\n)?lean_lib «(\w+)» where\n((?:[ \t]+.*\n)*)", re.MULTILINE)
-SETTING = re.compile(r"^[ \t]+(requiresModuleSystem|precompileModules|platformIndependent) := (true|false)$",
-                     re.MULTILINE)
-FIXTURE_ROOTS = {"EthLib": ["EthLib"], "Proofs": ["EthLib.Base.Proofs"], "Exports": ["EthLib.Exports"]}
+LIBRARY = re.compile(
+    r"^(@\[default_target\]\n)?lean_lib «(\w+)» where\n((?:[ \t]+.*\n)*)", re.MULTILINE
+)
+SETTING = re.compile(
+    r"^[ \t]+(requiresModuleSystem|precompileModules|platformIndependent) := (true|false)$",
+    re.MULTILINE,
+)
+FIXTURE_ROOTS = {
+    "EthLib": ["EthLib"],
+    "Proofs": ["EthLib.Base.Proofs"],
+    "Exports": ["EthLib.Exports"],
+}
 
 
 def default_libraries():
     """Map each default library of `lakefile.lean` to its boolean settings."""
     text = (ROOT / "lakefile.lean").read_text()
-    return {match.group(2): dict(SETTING.findall(match.group(3)))
-            for match in LIBRARY.finditer(text) if match.group(1)}
+    return {
+        match.group(2): dict(SETTING.findall(match.group(3)))
+        for match in LIBRARY.finditer(text)
+        if match.group(1)
+    }
 
 
 class BuildPipelineTests(unittest.TestCase):
@@ -52,7 +63,11 @@ class BuildPipelineTests(unittest.TestCase):
         self.assertEqual(set(libraries), set(FIXTURE_ROOTS))
         lines = ['name = "BuildPipelineTest"', f"defaultTargets = {json.dumps(list(libraries))}"]
         for name, settings in libraries.items():
-            lines += ["[[lean_lib]]", f'name = "{name}"', f"roots = {json.dumps(FIXTURE_ROOTS[name])}"]
+            lines += [
+                "[[lean_lib]]",
+                f'name = "{name}"',
+                f"roots = {json.dumps(FIXTURE_ROOTS[name])}",
+            ]
             lines += [f"{key} = {value}" for key, value in settings.items()]
         (self.project / "lakefile.toml").write_text("\n".join(lines) + "\n")
         (self.project / "EthLib.lean").write_text(
@@ -71,8 +86,9 @@ class BuildPipelineTests(unittest.TestCase):
         with (ROOT / ".github" / "workflows" / "ci.yml").open() as handle:
             self.steps = YAML(typ="safe").load(handle)["jobs"]["build"]["steps"]
         # Keep fixture measurements and summaries apart from the hosting workflow's files.
-        self.env = {key: value for key, value in os.environ.items()
-                    if not key.startswith("BUILD_TIMING_")}
+        self.env = {
+            key: value for key, value in os.environ.items() if not key.startswith("BUILD_TIMING_")
+        }
         self.env.update(
             BUILD_TIMING_LOG_DIR=str(self.logs),
             BUILD_TIMING_RESULTS=str(self.logs / "results.jsonl"),
@@ -98,8 +114,14 @@ class BuildPipelineTests(unittest.TestCase):
         )
 
     def run_command(self, args):
-        run = subprocess.run(args, cwd=self.project, env=self.env,
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        run = subprocess.run(
+            args,
+            cwd=self.project,
+            env=self.env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
         self.assertEqual(run.returncode, 0, run.stdout)
         return run.stdout
 
@@ -120,7 +142,9 @@ class BuildPipelineTests(unittest.TestCase):
         self.run_step("keep earlier module times")
 
         # Change executable export code while the specification and proofs stay untouched.
-        self.assertLess(self.steps.index(self.step("exports")), self.steps.index(self.step("bindings")))
+        self.assertLess(
+            self.steps.index(self.step("exports")), self.steps.index(self.step("bindings"))
+        )
         self.write_export(2)
         self.run_step("exports")
         self.run_step("proofs")

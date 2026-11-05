@@ -15,10 +15,15 @@ def _emit(case: str, seed: bytes) -> None:
         result = hex_str(sphincs.key_gen(seed))
     except (ValueError, RuntimeError):
         result = None
-    write_case("sphincs", HANDLER, case, {
-        "input": {"seed": hex_str(seed)},
-        "output": result,
-    })
+    write_case(
+        "sphincs",
+        HANDLER,
+        case,
+        {
+            "input": {"seed": hex_str(seed)},
+            "output": result,
+        },
+    )
 
 
 @F.slow

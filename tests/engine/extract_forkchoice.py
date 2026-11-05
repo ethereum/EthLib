@@ -17,19 +17,27 @@ def main(fixtures: Path, out: Path) -> None:
             network = test["network"]
             if "Amsterdam" in network:
                 continue
-            payloads = [{
-                "blockHash": p["params"][0]["blockHash"],
-                "parentHash": p["params"][0]["parentHash"],
-                "valid": not p.get("validationError") and "errorCode" not in p,
-                "forkchoiceUpdatedVersion": p["forkchoiceUpdatedVersion"],
-            } for p in test["engineNewPayloads"]]
+            payloads = [
+                {
+                    "blockHash": p["params"][0]["blockHash"],
+                    "parentHash": p["params"][0]["parentHash"],
+                    "valid": not p.get("validationError") and "errorCode" not in p,
+                    "forkchoiceUpdatedVersion": p["forkchoiceUpdatedVersion"],
+                }
+                for p in test["engineNewPayloads"]
+            ]
             if all(p["valid"] for p in payloads) and len(payloads) < 3:
                 continue
-            chains.setdefault(network, []).append({
-                "file": relative, "test": name, "network": network,
-                "genesisHash": test["genesisBlockHeader"]["hash"],
-                "payloads": payloads, "lastblockhash": test["lastblockhash"],
-            })
+            chains.setdefault(network, []).append(
+                {
+                    "file": relative,
+                    "test": name,
+                    "network": network,
+                    "genesisHash": test["genesisBlockHeader"]["hash"],
+                    "payloads": payloads,
+                    "lastblockhash": test["lastblockhash"],
+                }
+            )
     kept = []
     for network in sorted(chains):
         ranked = sorted(chains[network], key=lambda c: -len(c["payloads"]))

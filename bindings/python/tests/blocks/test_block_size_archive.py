@@ -9,12 +9,15 @@ from ethlib.execution import blocks
 ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
 
 _DIRECTORY = "fixtures/blockchain_tests/for_osaka/osaka/eip7934_block_rlp_limit/max_block_rlp_size"
-SOURCES = [f"{_DIRECTORY}/{name}.json" for name in [
-    "block_at_rlp_limit_with_logs",
-    "block_at_rlp_limit_with_withdrawals",
-    "block_at_rlp_size_limit_boundary",
-    "block_rlp_size_at_limit_with_all_typed_transactions",
-]]
+SOURCES = [
+    f"{_DIRECTORY}/{name}.json"
+    for name in [
+        "block_at_rlp_limit_with_logs",
+        "block_at_rlp_limit_with_withdrawals",
+        "block_at_rlp_size_limit_boundary",
+        "block_rlp_size_at_limit_with_all_typed_transactions",
+    ]
+]
 
 pytestmark = pytest.mark.archive(ARCHIVE, *SOURCES)
 

@@ -8,9 +8,18 @@ from ethlib.cryptography import crc32c
 
 # The SCSI Read (10) Command PDU of RFC 3720 Appendix B.4, four bytes per row as it prints them.
 SCSI_READ_10 = bytes.fromhex(
-    "01c00000" "00000000" "00000000" "00000000"
-    "14000000" "00000400" "00000014" "00000018"
-    "28000000" "00000000" "02000000" "00000000"
+    "01c00000"
+    "00000000"
+    "00000000"
+    "00000000"
+    "14000000"
+    "00000400"
+    "00000014"
+    "00000018"
+    "28000000"
+    "00000000"
+    "02000000"
+    "00000000"
 )
 
 # The five examples of RFC 3720 Appendix B.4, with the digest bytes it prints.

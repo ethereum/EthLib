@@ -17,6 +17,7 @@ The files are parsed at import time, so a parsing bug fails collection, not a si
 
 No independent Keccak-256 is in the Python standard library, so the digests are the files' own.
 """
+
 from pathlib import Path
 
 # The vendored files sit next to this module.

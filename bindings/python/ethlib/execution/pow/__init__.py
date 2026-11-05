@@ -45,12 +45,20 @@ def chain_forks(forks: str | Sequence[tuple[str, int]]) -> bytes:
     """The RLP form of the forks of a chain with their first blocks; a name alone starts at 0."""
     if isinstance(forks, str):
         forks = [(forks, 0)]
-    return rlp.encode([[name.encode(), first.to_bytes((first.bit_length() + 7) // 8, "big")]
-                       for name, first in forks])
+    return rlp.encode(
+        [
+            [name.encode(), first.to_bytes((first.bit_length() + 7) // 8, "big")]
+            for name, first in forks
+        ]
+    )
 
 
-def validate_ommers(forks: str | Sequence[tuple[str, int]], recent: list[bytes], block: bytes,
-                    check_seal: bool = True) -> bool:
+def validate_ommers(
+    forks: str | Sequence[tuple[str, int]],
+    recent: list[bytes],
+    block: bytes,
+    check_seal: bool = True,
+) -> bool:
     """Check the ommers of a block against the last seven blocks of its chain, each at its fork."""
     items = rlp.encode([rlp.decode(b) for b in recent])
     return _native.pow_validate_ommers(chain_forks(forks), items, block, check_seal)

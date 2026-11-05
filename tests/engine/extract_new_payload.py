@@ -46,13 +46,18 @@ def main(fixtures: Path, out: Path) -> None:
                 else:
                     keep = False
                 if keep:
-                    cases.append({
-                        "file": relative, "test": name, "payload": index, "network": network,
-                        "method": f"engine_newPayloadV{payload['newPayloadVersion']}",
-                        "params": payload["params"],
-                        "validationError": payload.get("validationError"),
-                        "errorCode": payload.get("errorCode"),
-                    })
+                    cases.append(
+                        {
+                            "file": relative,
+                            "test": name,
+                            "payload": index,
+                            "network": network,
+                            "method": f"engine_newPayloadV{payload['newPayloadVersion']}",
+                            "params": payload["params"],
+                            "validationError": payload.get("validationError"),
+                            "errorCode": payload.get("errorCode"),
+                        }
+                    )
     out.write_text(json.dumps(cases, indent=1) + "\n")
 
 

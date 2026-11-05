@@ -16,7 +16,9 @@ def test_valid_blob(i: int) -> None:
     blob = F.VALID_BLOBS[i]
     commitment = kzg.blob_to_kzg_commitment(blob)
     write_case(
-        "kzg", HANDLER, f"{HANDLER}_case_valid_blob_{i}",
+        "kzg",
+        HANDLER,
+        f"{HANDLER}_case_valid_blob_{i}",
         {"input": {"blob": hex_str(blob)}, "output": hex_str(commitment)},
     )
 
@@ -27,6 +29,8 @@ def test_invalid_blob(i: int) -> None:
     with pytest.raises(F.invalid_blob_error(blob)):
         kzg.blob_to_kzg_commitment(blob)
     write_case(
-        "kzg", HANDLER, f"{HANDLER}_case_invalid_blob_{i}",
+        "kzg",
+        HANDLER,
+        f"{HANDLER}_case_invalid_blob_{i}",
         {"input": {"blob": hex_str(blob)}, "output": None},
     )

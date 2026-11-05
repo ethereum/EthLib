@@ -38,8 +38,11 @@ def run_case(preset: str, fork: str, case) -> None:
     # Setting 2 marks placeholder signatures, which the case must not check.
     verify = meta.get("bls_setting", 0) != 2
     config_file = case / "config.yaml"
-    config = (replacements(YAML(typ="safe").load(config_file.read_text()), preset)
-              if config_file.exists() else None)
+    config = (
+        replacements(YAML(typ="safe").load(config_file.read_text()), preset)
+        if config_file.exists()
+        else None
+    )
     got = consensus.upgrade_state(preset, FORKS[fork], pre, verify, config)
     assert got == snappy.decompress((case / "post.ssz_snappy").read_bytes())
 
@@ -66,9 +69,15 @@ def _archive_cases() -> list:
             for pre in sorted((base / path.split("/", 2)[2]).rglob("pre.ssz_snappy")):
                 case = pre.parent
                 fork = case.relative_to(base).parts[0]
-                cases.append(pytest.param(preset, fork, case,
-                                          id=f"{preset}/{case.relative_to(base).as_posix()}",
-                                          marks=pytest.mark.archive(name)))
+                cases.append(
+                    pytest.param(
+                        preset,
+                        fork,
+                        case,
+                        id=f"{preset}/{case.relative_to(base).as_posix()}",
+                        marks=pytest.mark.archive(name),
+                    )
+                )
     # An empty list would skip the test in silence, so a wrong path in an archive fails here.
     if not cases:
         raise LookupError("the archives hold no fork case that EthLib runs")
@@ -78,8 +87,9 @@ def _archive_cases() -> list:
 def test_digests():
     lines = (FILES / "SHA256SUMS").read_text().splitlines()
     entries = [line.split() for line in lines if not line.startswith("#")]
-    assert len(entries) == sum(1 for path in FILES.rglob("*") if path.is_file()
-                               and path.name != "SHA256SUMS")
+    assert len(entries) == sum(
+        1 for path in FILES.rglob("*") if path.is_file() and path.name != "SHA256SUMS"
+    )
     for digest, name in entries:
         assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name
 
@@ -113,8 +123,8 @@ def test_heze_needs_every_contract_deposit():
     # The fixed fields and offsets of the Gloas state that come before eth1_deposit_index.
     roots = consensus.preset("minimal")["SLOTS_PER_HISTORICAL_ROOT"]
     at = 8 + 32 + 8 + 16 + 112 + 2 * 32 * roots + 4 + 72 + 4
-    processed = int.from_bytes(pre[at:at + 8], "little")
-    pre[at:at + 8] = (processed + 1).to_bytes(8, "little")
+    processed = int.from_bytes(pre[at : at + 8], "little")
+    pre[at : at + 8] = (processed + 1).to_bytes(8, "little")
     with pytest.raises(consensus.TransitionError) as info:
         consensus.upgrade_state("minimal", "hegota", bytes(pre))
     assert info.value.code == 33

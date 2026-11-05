@@ -31,8 +31,18 @@ INCLUSION = "invalid header inclusion proof"
 NO_HEADER = "valid corresponding header has not been seen"
 BITMAP = "bitmap length does not match commitments length"
 KZG = "invalid sidecar kzg proofs"
-ALONE = {EMPTY, CELL_COUNT, PROOF_COUNT, PRIOR_HEADER, ROOT, NO_COMMITMENTS, INCLUSION, NO_HEADER,
-         BITMAP, KZG}
+ALONE = {
+    EMPTY,
+    CELL_COUNT,
+    PROOF_COUNT,
+    PRIOR_HEADER,
+    ROOT,
+    NO_COMMITMENTS,
+    INCLUSION,
+    NO_HEADER,
+    BITMAP,
+    KZG,
+}
 
 # The reasons that read the store once the header has passed, before the checks of the cells.
 CELLS_STORE = {
@@ -54,13 +64,13 @@ def _bits(data: bytes) -> list:
 
 
 def _offsets(data: bytes, count: int) -> list:
-    return [int.from_bytes(data[4 * i:4 * i + 4], "little") for i in range(count)] + [len(data)]
+    return [int.from_bytes(data[4 * i : 4 * i + 4], "little") for i in range(count)] + [len(data)]
 
 
 def header_parts(data: bytes) -> dict:
     """The fields of a partial header that the checks read, at their SSZ offsets."""
     start = int.from_bytes(data[:4], "little")
-    return {"bytes": data, "message": data[4:4 + HEADER], "commitments": data[start:]}
+    return {"bytes": data, "message": data[4 : 4 + HEADER], "commitments": data[start:]}
 
 
 def sidecar_parts(data: bytes) -> dict:
@@ -68,18 +78,25 @@ def sidecar_parts(data: bytes) -> dict:
     bitmap, column, proofs, header, end = _offsets(data, 4)
     parts = {
         "bits": _bits(data[bitmap:column]),
-        "cells": [data[i:i + CELL] for i in range(column, proofs, CELL)],
-        "proofs": [data[i:i + PROOF] for i in range(proofs, header, PROOF)],
+        "cells": [data[i : i + CELL] for i in range(column, proofs, CELL)],
+        "proofs": [data[i : i + PROOF] for i in range(proofs, header, PROOF)],
         "header": None,
     }
     if header < end:
         # A list of one header of variable size: one offset, then the header.
-        parts["header"] = header_parts(data[header + 4:])
+        parts["header"] = header_parts(data[header + 4 :])
     return parts
 
 
-def check_alone(preset: str, fork: str, data: bytes, group_root: bytes, column: int,
-                seen: dict, stop: str | None) -> str | None:
+def check_alone(
+    preset: str,
+    fork: str,
+    data: bytes,
+    group_root: bytes,
+    column: int,
+    seen: dict,
+    stop: str | None,
+) -> str | None:
     """The reason of the first check that reads no store and fails, or none.
 
     The checks stop where gossip validation would stop for a reason that reads the store.
@@ -106,7 +123,8 @@ def check_alone(preset: str, fork: str, data: bytes, group_root: bytes, column: 
             # Gossip validation stops at a check of the header that reads the store.
             return None
         if not consensus.verify_partial_data_column_header_inclusion_proof(
-                preset, fork, header["bytes"]):
+            preset, fork, header["bytes"]
+        ):
             return INCLUSION
         seen[group_root] = header
     if count:
@@ -120,7 +138,8 @@ def check_alone(preset: str, fork: str, data: bytes, group_root: bytes, column: 
             return BITMAP
         try:
             valid = consensus.verify_partial_data_column_sidecar_kzg_proofs(
-                preset, fork, data, commitments, column)
+                preset, fork, data, commitments, column
+            )
         except KzgError:
             valid = False
         if not valid:
@@ -137,15 +156,17 @@ def run_partial_gossip_case(case: Path, preset: str) -> None:
     fork = FORKS[case.parts[-5]]
     meta = _yaml(case / "meta.yaml")
     # A case may start with headers that the node has already validated.
-    seen = {bytes.fromhex(entry["block_root"][2:]):
-            header_parts(snappy.decompress((case / f"{entry['header']}.ssz_snappy").read_bytes()))
-            for entry in meta.get("seen_partial_data_column_headers", [])}
+    seen = {
+        bytes.fromhex(entry["block_root"][2:]): header_parts(
+            snappy.decompress((case / f"{entry['header']}.ssz_snappy").read_bytes())
+        )
+        for entry in meta.get("seen_partial_data_column_headers", [])
+    }
     for message in meta["messages"]:
         data = snappy.decompress((case / f"{message['message']}.ssz_snappy").read_bytes())
         group = snappy.decompress((case / f"{message['group_id']}.ssz_snappy").read_bytes())
         reason = message.get("reason")
-        failing = check_alone(preset, fork, data, group, message["column_index"], seen,
-                                 reason)
+        failing = check_alone(preset, fork, data, group, message["column_index"], seen, reason)
         if reason in ALONE:
             assert failing == reason, (message, failing)
         else:
@@ -153,9 +174,10 @@ def run_partial_gossip_case(case: Path, preset: str) -> None:
 
 
 def _cases() -> list:
-    return [pytest.param(case.parts[-6], case, id=f"{case.parts[-6]}-{case.name}")
-            for case in sorted(FILES.glob(
-                "*/fulu/networking/gossip_partial_data_column_sidecar/*/*"))]
+    return [
+        pytest.param(case.parts[-6], case, id=f"{case.parts[-6]}-{case.name}")
+        for case in sorted(FILES.glob("*/fulu/networking/gossip_partial_data_column_sidecar/*/*"))
+    ]
 
 
 @pytest.mark.parametrize("preset, case", _cases())

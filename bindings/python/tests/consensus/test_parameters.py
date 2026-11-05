@@ -121,8 +121,9 @@ def test_preset(name: str) -> None:
 def test_suffixes_are_known(name: str) -> None:
     # A suffixed value is either a replacement listed above or a new value.
     suffixes = tuple("_" + fork.upper() for fork in FORKS)
-    suffixed = {key for values in _preset_files(name).values() for key in values
-                if key.endswith(suffixes)}
+    suffixed = {
+        key for values in _preset_files(name).values() for key in values if key.endswith(suffixes)
+    }
     replacements = {key for key in suffixed if key.rsplit("_", 1)[0] in REPLACED}
     assert suffixed - replacements == NEW_WITH_SUFFIX
 
@@ -137,7 +138,7 @@ def test_parameters(name: str, fork: str) -> None:
         # Before the fork that adds a value, the value of that fork stands in.
         first = next(name for name in FORKS if key in files[name])
         expected[key] = files[first][key]
-        for earlier in FORKS[FORKS.index(first) + 1:FORKS.index(TIMELINE[fork]) + 1]:
+        for earlier in FORKS[FORKS.index(first) + 1 : FORKS.index(TIMELINE[fork]) + 1]:
             replacement = f"{key}_{earlier.upper()}"
             if replacement in files[earlier]:
                 expected[key] = files[earlier][replacement]

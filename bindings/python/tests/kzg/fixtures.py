@@ -13,6 +13,7 @@ from ethlib.cryptography import kzg
 
 # ---- Memoized spec calls --------------------------------------------------
 
+
 @lru_cache(maxsize=None)
 def cached_cells_and_proofs(blob: bytes) -> tuple[tuple[bytes, ...], tuple[bytes, ...]]:
     cells, proofs = kzg.compute_cells_and_kzg_proofs(blob)
@@ -32,6 +33,7 @@ def cached_kzg_proof(blob: bytes, z: bytes) -> tuple[bytes, bytes]:
 @lru_cache(maxsize=None)
 def cached_blob_kzg_proof(blob: bytes, commitment: bytes) -> bytes:
     return kzg.compute_blob_kzg_proof(blob, commitment)
+
 
 # ---- Field arithmetic ------------------------------------------------------
 
@@ -87,9 +89,9 @@ BLS_MODULUS_BYTES = field_element_bytes_unchecked(BLS_MODULUS)
 
 FE_INVALID_EQUAL_TO_MODULUS = BLS_MODULUS_BYTES
 FE_INVALID_MODULUS_PLUS_ONE = field_element_bytes_unchecked(BLS_MODULUS + 1)
-FE_INVALID_UINT256_MAX      = field_element_bytes_unchecked(2**256 - 1)
-FE_INVALID_UINT256_MID      = field_element_bytes_unchecked(2**256 - 2**128)
-FE_INVALID_LENGTH_PLUS_ONE  = FE_VALID1 + b"\x00"
+FE_INVALID_UINT256_MAX = field_element_bytes_unchecked(2**256 - 1)
+FE_INVALID_UINT256_MID = field_element_bytes_unchecked(2**256 - 2**128)
+FE_INVALID_LENGTH_PLUS_ONE = FE_VALID1 + b"\x00"
 FE_INVALID_LENGTH_MINUS_ONE = FE_VALID1[:-1]
 
 INVALID_FIELD_ELEMENTS = [
@@ -120,16 +122,13 @@ BLOB_RANDOM_VALID3 = b"".join(
 BLOB_ALL_MODULUS_MINUS_ONE = b"".join(
     field_element_bytes(BLS_MODULUS - 1) for _ in range(_FE_PER_BLOB)
 )
-BLOB_ALMOST_ZERO = b"".join(
-    field_element_bytes(1 if n == 3211 else 0) for n in range(_FE_PER_BLOB)
-)
+BLOB_ALMOST_ZERO = b"".join(field_element_bytes(1 if n == 3211 else 0) for n in range(_FE_PER_BLOB))
 
 BLOB_INVALID = b"\xff" * kzg.BYTES_PER_BLOB
 BLOB_INVALID_CLOSE = b"".join(
-    BLS_MODULUS_BYTES if n == 2111 else field_element_bytes(0)
-    for n in range(_FE_PER_BLOB)
+    BLS_MODULUS_BYTES if n == 2111 else field_element_bytes(0) for n in range(_FE_PER_BLOB)
 )
-BLOB_INVALID_LENGTH_PLUS_ONE  = BLOB_RANDOM_VALID1 + b"\x00"
+BLOB_INVALID_LENGTH_PLUS_ONE = BLOB_RANDOM_VALID1 + b"\x00"
 BLOB_INVALID_LENGTH_MINUS_ONE = BLOB_RANDOM_VALID1[:-1]
 
 VALID_BLOBS = [
@@ -159,9 +158,9 @@ def invalid_blob_error(blob: bytes) -> type[Exception]:
 
 # ---- Compressed G1 inputs --------------------------------------------------
 
-G1_INVALID_TOO_FEW_BYTES   = G1[:-1]
-G1_INVALID_TOO_MANY_BYTES  = G1 + b"\x00"
-G1_INVALID_P1_NOT_IN_G1    = bytes.fromhex(
+G1_INVALID_TOO_FEW_BYTES = G1[:-1]
+G1_INVALID_TOO_MANY_BYTES = G1 + b"\x00"
+G1_INVALID_P1_NOT_IN_G1 = bytes.fromhex(
     "8123456789abcdef0123456789abcdef0123456789abcdef"
     "0123456789abcdef0123456789abcdef0123456789abcdef"
 )
@@ -196,7 +195,7 @@ CELL_ALL_MAX_VALUE = b"".join(
 CELL_ONE_INVALID_FIELD = b"".join(
     BLS_MODULUS_BYTES if n == 7 else field_element_bytes(0) for n in range(_FE_PER_CELL)
 )
-CELL_INVALID_TOO_FEW_BYTES  = CELL_RANDOM_VALID1[:-1]
+CELL_INVALID_TOO_FEW_BYTES = CELL_RANDOM_VALID1[:-1]
 CELL_INVALID_TOO_MANY_BYTES = CELL_RANDOM_VALID2 + b"\x00"
 
 VALID_INDIVIDUAL_RANDOM_CELL_BYTES = [CELL_RANDOM_VALID1, CELL_RANDOM_VALID2, CELL_RANDOM_VALID3]
@@ -210,10 +209,11 @@ INVALID_INDIVIDUAL_CELL_BYTES = [
 
 # ---- Cell helpers ---------------------------------------------------------
 
+
 def cell_to_coset_evals(cell: bytes) -> list[bytes]:
     """Split a cell into its 64 field-element-bytes — the form the
     `compute_verify_cell_kzg_proof_batch_challenge` generator passes as
     each entry of `cosets_evals`. The Lean impl of `compute_cells`
     stores cells in the same byte order the challenge function
     consumes, so this is just a 32-byte chunk-up."""
-    return [cell[i*32:(i+1)*32] for i in range(_FE_PER_CELL)]
+    return [cell[i * 32 : (i + 1) * 32] for i in range(_FE_PER_CELL)]

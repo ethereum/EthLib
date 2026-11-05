@@ -93,8 +93,12 @@ def test_error(fork: str, address: int, case: dict) -> None:
 LARGE_MSM = json.loads((Path(__file__).parent / "eip2537_msm_repeated.json").read_text())
 
 LARGE = [
-    pytest.param(ADDRESS[name], bytes.fromhex(group["Pair"]) * case["Count"], case,
-                 id=f"{name}:{case['Name']}")
+    pytest.param(
+        ADDRESS[name],
+        bytes.fromhex(group["Pair"]) * case["Count"],
+        case,
+        id=f"{name}:{case['Name']}",
+    )
     for name, group in LARGE_MSM.items()
     for case in group["Cases"]
 ]

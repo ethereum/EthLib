@@ -43,10 +43,13 @@ def markdown() -> str:
     for row in order:
         by_suite[row.split(" ")[0]].append(row)
     for suite, rows in by_suite.items():
-        lines += [f"## {suite}", "",
-                  "| Preset | Fork | Runner | Cases | Passed | Disagreed | Failed | "
-                  "Not yet runnable | Passed of all | Waits for |",
-                  "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |"]
+        lines += [
+            f"## {suite}",
+            "",
+            "| Preset | Fork | Runner | Cases | Passed | Disagreed | Failed | "
+            "Not yet runnable | Passed of all | Waits for |",
+            "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        ]
         for row in rows:
             _, preset, fork, runner = row.split(" ")
             entry, done = _catalogue[row], _outcomes[row]
@@ -54,14 +57,18 @@ def markdown() -> str:
             lines.append(
                 f"| {preset} | {fork} | {runner} | {entry['cases']} | {done['passed']} | "
                 f"{done['disagreed']} | {done['failed']} | {waiting} | "
-                f"{_percent(done['passed'], entry['cases'])} | {entry['plan'] or ''} |")
+                f"{_percent(done['passed'], entry['cases'])} | {entry['plan'] or ''} |"
+            )
         total = Counter()
         for row in rows:
             total.update({"cases": _catalogue[row]["cases"], **_outcomes[row]})
-        lines += ["", f"In all, {total['passed']} of {total['cases']} cases pass "
-                      f"({_percent(total['passed'], total['cases'])}).",
-                  f"{total['disagreed']} disagree for a listed reason, and {total['failed']} fail.",
-                  ""]
+        lines += [
+            "",
+            f"In all, {total['passed']} of {total['cases']} cases pass "
+            f"({_percent(total['passed'], total['cases'])}).",
+            f"{total['disagreed']} disagree for a listed reason, and {total['failed']} fail.",
+            "",
+        ]
     return "\n".join(lines)
 
 
