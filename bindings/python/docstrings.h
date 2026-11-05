@@ -287,6 +287,27 @@
 #define DOC_pq_keys_is_valid_possession_proof \
   "Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."
 
+#define DOC_consensus_verify_data_column_sidecar \
+  "Whether a sidecar, given as bytes, has a valid shape under the blob limit of its epoch."
+
+#define DOC_consensus_verify_data_column_sidecar_inclusion_proof \
+  "Whether the branch of a sidecar, given as bytes, climbs to the body root of its header."
+
+#define DOC_consensus_verify_data_column_sidecar_kzg_proofs \
+  "Whether the cells of a sidecar, given as bytes, match its commitments by their proofs."
+
+#define DOC_consensus_compute_matrix \
+  "The matrix of the blobs, given one after another, as its entries one after another."
+
+#define DOC_consensus_recover_matrix \
+  "The full matrix of `count` rows, from some entries given one after another."
+
+#define DOC_consensus_get_data_column_sidecars_from_block \
+  "The column sidecars of a signed block, from its bytes and the rows of its blobs."
+
+#define DOC_consensus_get_data_column_sidecars_from_column_sidecar \
+  "All the column sidecars of a block, from the bytes of one of them and the rows of its blobs."
+
 #define DOC_consensus_compute_shuffled_permutation \
   "The shuffled position of every index below the count."
 

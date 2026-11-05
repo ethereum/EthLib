@@ -60,6 +60,15 @@ The release also has cases for Gloas and Heze, and the directory leaves them out
 It also climbs the branch with the SHA-256 of `hashlib`, to check that it reaches the root of the value.
 Every week, the same test also runs every case of both archives and checks that the vendored files are copies.
 
+The directory `data_columns/` holds the Fulu cases of the gossip handler `gossip_data_column_sidecar`, in both archives.
+Each case keeps its files under its path in the archive, except the state, which the checks of a sidecar alone do not read.
+A case gives some sidecars, each with the verdict of gossip validation and the reason for a rejection.
+`bindings/python/tests/consensus/test_data_column.py` runs the three checks of a sidecar alone: its shape, its branch and its cell proofs.
+A sidecar rejected for one of them fails that check, and every other sidecar passes all three.
+The rest of gossip validation reads the store of the fork choice, which EthLib does not hold yet.
+The same file rebuilds every sidecar of a block from one sidecar, and from the bodies of `merkle_proof/` for Fulu.
+It also builds the matrix of two blobs of the KZG vectors under `tests/cryptography/kzg/`, and recovers it from half of its columns.
+
 The test release publishes its cases in three archives.
 Their SHA-256 digests are:
 

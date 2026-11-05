@@ -13,6 +13,7 @@ public import EthLib.Consensus.Containers.Signing
 public import EthLib.Consensus.Containers.State
 public import EthLib.Consensus.Containers.SyncCommittee
 public import EthLib.Consensus.DataAvailability.Blob
+public import EthLib.Consensus.DataAvailability.Column
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Serialization.Exports.Ssz
 
@@ -107,6 +108,11 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
   | "BeaconState" => some ⟨BeaconState preset fork⟩
   | "BlobSidecar" => if .dencun ≤ fork ∧ fork < .fusaka then some ⟨BlobSidecar preset⟩ else none
   | "BlobIdentifier" => if .dencun ≤ fork ∧ fork < .fusaka then some ⟨BlobIdentifier⟩ else none
+  | "DataColumnSidecar" =>
+    if .fusaka ≤ fork then some ⟨DataColumnSidecar preset fork⟩ else none
+  | "DataColumnsByRootIdentifier" =>
+    if .fusaka ≤ fork then some ⟨DataColumnsByRootIdentifier preset⟩ else none
+  | "MatrixEntry" => if .fusaka ≤ fork then some ⟨MatrixEntry⟩ else none
   | "Withdrawal" => if .shapella ≤ fork then some ⟨Withdrawal⟩ else none
   | "ExecutionPayload" =>
     if .bellatrix ≤ fork then some ⟨ExecutionPayload preset fork⟩ else none
@@ -157,7 +163,8 @@ def specifiedFromGlamsterdam : List String := [
   "Attestation", "IndexedAttestation", "AttesterSlashing", "AggregateAndProof",
   "SignedAggregateAndProof", "ExecutionPayload", "ExecutionRequests", "NewPayloadRequest",
   "ExecutionPayloadEnvelope", "SignedExecutionPayloadEnvelope", "PayloadAttestation",
-  "IndexedPayloadAttestation"]
+  "IndexedPayloadAttestation", "DataColumnSidecar", "DataColumnsByRootIdentifier",
+  "MatrixEntry"]
 
 /-- The containers whose form EthLib holds at Gloas but not yet at Heze, which changes them. -/
 def specifiedAtGloasOnly : List String :=

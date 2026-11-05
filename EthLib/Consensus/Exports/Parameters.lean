@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Exports
 public import Lean.Data.Json
 public import EthLib.Base.Hex
+public import EthLib.Serialization.Ssz.Codec.Json
 public import EthLib.Consensus.Config
 public import EthLib.Consensus.Preset
 public import EthLib.Networking.ReqResp.Encoding
@@ -45,6 +46,29 @@ deriving instance ToJson for Networking.Gossip.SubnetParameters
 deriving instance ToJson for Config
 deriving instance ToJson for Parameters
 
+/-- Bytes from hex after `0x`, of the length of the vector. -/
+instance {n : Nat} : FromJson (Vector UInt8 n) where
+  fromJson? json := do
+    let text ← json.getStr?
+    let bytes ← (Serialization.Ssz.ofHex text).mapError fun e => s!"{text}: {reprStr e}"
+    if h : bytes.size = n then return ⟨bytes, h⟩
+    else throw s!"{text} does not hold {n} bytes"
+
+/-- A 256-bit integer, from a number or from decimal digits. -/
+instance : FromJson U256 where
+  fromJson? json := do
+    let n ← match json with
+      | .str text => match text.toNat? with
+        | some n => pure n
+        | none => throw s!"{text} is not a number"
+      | _ => fromJson? (α := Nat) json
+    if n < 2 ^ 256 then return BitVec.ofNat 256 n else throw s!"{n} does not fit in 256 bits"
+
+deriving instance FromJson for BlobScheduleEntry
+deriving instance FromJson for GasLimitScheduleEntry
+deriving instance FromJson for Networking.Gossip.SubnetParameters
+deriving instance FromJson for Config
+
 /-- The preset of a name, with the values that it derives from its fields. -/
 def presetJson (preset : Preset) : Json :=
   (toJson preset).mergeObj <| Json.mkObj [
@@ -69,6 +93,18 @@ def configOf : String → Result Config
   | "mainnet" => return .mainnet
   | "minimal" => return .minimal
   | name => throw (0, s!"no configuration is named {name}")
+
+/-- The configuration of a name, with some of its values replaced.
+
+The replacements come as a JSON object with the names of the configuration file.
+
+An empty replacement keeps the configuration of the name. -/
+def configWith (name replacements : ByteArray) : Result Config := do
+  let config ← configOf (← nameOf name)
+  if replacements.isEmpty then return config
+  let some text := String.fromUTF8? replacements | throw (0, "configuration is not UTF-8")
+  let replaced ← (Json.parse text).mapError fun e => (0, s!"configuration: {e}")
+  (fromJson? ((toJson config).mergeObj replaced)).mapError fun e => (0, s!"configuration: {e}")
 
 /-- The fork of a name, for the forks from Phase 0 to Hegotá, whose beacon chain is Heze.
 

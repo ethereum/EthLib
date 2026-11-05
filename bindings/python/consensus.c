@@ -153,6 +153,19 @@ eth_consensus_verify_blob_sidecar_inclusion_proof(
   lean_object* data
 );
 
+extern lean_object* eth_consensus_verify_data_column_sidecar(
+  lean_object* name, lean_object* fork, lean_object* data, lean_object* config);
+extern lean_object* eth_consensus_verify_data_column_sidecar_inclusion_proof(
+  lean_object* name, lean_object* fork, lean_object* data);
+extern lean_object* eth_consensus_verify_data_column_sidecar_kzg_proofs(
+  lean_object* name, lean_object* fork, lean_object* data);
+extern lean_object* eth_consensus_compute_matrix(lean_object* blobs);
+extern lean_object* eth_consensus_recover_matrix(lean_object* entries, uint64_t blob_count);
+extern lean_object* eth_consensus_get_data_column_sidecars_from_block(
+  lean_object* name, lean_object* fork, lean_object* block, lean_object* rows);
+extern lean_object* eth_consensus_get_data_column_sidecars_from_column_sidecar(
+  lean_object* name, lean_object* fork, lean_object* sidecar, lean_object* rows);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* The UTF-8 bytes of a `str` argument, or NULL with a TypeError set. */
@@ -589,4 +602,137 @@ py_consensus_verify_blob_sidecar_inclusion_proof(
     (const uint8_t*) PyBytes_AS_STRING(data_obj), PyBytes_GET_SIZE(data_obj));
   return except_into_pybool(
     eth_consensus_verify_blob_sidecar_inclusion_proof(name, fork, data), SSZ_ERROR);
+}
+
+/* The bytes of a `bytes` argument that the caller has checked. */
+static lean_object*
+bytes_arg(
+  PyObject* obj
+) {
+  return mk_bytearray((const uint8_t*) PyBytes_AS_STRING(obj), PyBytes_GET_SIZE(obj));
+}
+
+/* Read a preset name, a fork name and `count` byte strings, or set an error and return 0. */
+static int
+name_fork_bytes_args(
+  PyObject* args,
+  int count,
+  lean_object** name,
+  lean_object** fork,
+  lean_object** first,
+  lean_object** second
+) {
+  PyObject *name_obj, *fork_obj, *first_obj, *second_obj = NULL;
+  if (count == 1) {
+    if (!PyArg_ParseTuple(args, "OOO", &name_obj, &fork_obj, &first_obj)) return 0;
+  } else if (!PyArg_ParseTuple(args, "OOOO", &name_obj, &fork_obj, &first_obj, &second_obj)) {
+    return 0;
+  }
+  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
+  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name and fork must be str");
+    return 0;
+  }
+  if (!PyBytes_Check(first_obj) || (second_obj && !PyBytes_Check(second_obj))) {
+    PyErr_SetString(PyExc_TypeError, "the data must be bytes");
+    return 0;
+  }
+  *name = str_arg(name_obj, "name");
+  if (!*name) return 0;
+  *fork = str_arg(fork_obj, "fork");
+  if (!*fork) {
+    lean_dec(*name);
+    return 0;
+  }
+  *first = bytes_arg(first_obj);
+  if (second_obj) *second = bytes_arg(second_obj);
+  return 1;
+}
+
+PyObject*
+py_consensus_verify_data_column_sidecar(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object *name, *fork, *data, *config;
+  if (!name_fork_bytes_args(args, 2, &name, &fork, &data, &config)) return NULL;
+  return except_into_pybool(
+    eth_consensus_verify_data_column_sidecar(name, fork, data, config), SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_verify_data_column_sidecar_inclusion_proof(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object *name, *fork, *data;
+  if (!name_fork_bytes_args(args, 1, &name, &fork, &data, NULL)) return NULL;
+  return except_into_pybool(
+    eth_consensus_verify_data_column_sidecar_inclusion_proof(name, fork, data), SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_verify_data_column_sidecar_kzg_proofs(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object *name, *fork, *data;
+  if (!name_fork_bytes_args(args, 1, &name, &fork, &data, NULL)) return NULL;
+  return except_into_pybool(
+    eth_consensus_verify_data_column_sidecar_kzg_proofs(name, fork, data), KZG_ERROR);
+}
+
+PyObject*
+py_consensus_compute_matrix(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject* blobs_obj;
+  if (!PyArg_ParseTuple(args, "O", &blobs_obj)) return NULL;
+  if (!PyBytes_Check(blobs_obj)) {
+    PyErr_SetString(PyExc_TypeError, "blobs must be bytes");
+    return NULL;
+  }
+  return except_into_pybytes(eth_consensus_compute_matrix(bytes_arg(blobs_obj)), KZG_ERROR);
+}
+
+PyObject*
+py_consensus_recover_matrix(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *entries_obj, *count_obj;
+  if (!PyArg_ParseTuple(args, "OO", &entries_obj, &count_obj)) return NULL;
+  if (!PyBytes_Check(entries_obj)) {
+    PyErr_SetString(PyExc_TypeError, "entries must be bytes");
+    return NULL;
+  }
+  /* A count outside [0, 2^64) raises OverflowError. */
+  unsigned long long count = PyLong_AsUnsignedLongLong(count_obj);
+  if (PyErr_Occurred()) return NULL;
+  return except_into_pybytes(
+    eth_consensus_recover_matrix(bytes_arg(entries_obj), (uint64_t) count), KZG_ERROR);
+}
+
+PyObject*
+py_consensus_get_data_column_sidecars_from_block(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object *name, *fork, *block, *rows;
+  if (!name_fork_bytes_args(args, 2, &name, &fork, &block, &rows)) return NULL;
+  return except_into_pybytes(
+    eth_consensus_get_data_column_sidecars_from_block(name, fork, block, rows), SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_get_data_column_sidecars_from_column_sidecar(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object *name, *fork, *sidecar, *rows;
+  if (!name_fork_bytes_args(args, 2, &name, &fork, &sidecar, &rows)) return NULL;
+  return except_into_pybytes(
+    eth_consensus_get_data_column_sidecars_from_column_sidecar(name, fork, sidecar, rows),
+    SSZ_ERROR);
 }

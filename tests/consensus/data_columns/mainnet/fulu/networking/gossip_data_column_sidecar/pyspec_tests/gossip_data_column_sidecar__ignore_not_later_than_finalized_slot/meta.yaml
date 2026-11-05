@@ -1,0 +1,11 @@
+topic: data_column_sidecar
+blocks:
+- {block: 
+    block_0xfee0eac898e0a4862fe76b7d3fcf14774f20f153a65c68ed217e7e33df4fbb29}
+finalized_checkpoint: {epoch: 1, block: 
+    block_0xfee0eac898e0a4862fe76b7d3fcf14774f20f153a65c68ed217e7e33df4fbb29}
+messages:
+- {subnet_id: 0, current_time_ms: 384500, message: 
+    data_column_sidecar_0xefe80307b9fe9b7e5a171aec75c8101533a8dc93d6fb08a96c9fe3b1bcd96cc0,
+  expected: ignore, reason: sidecar is not from a slot greater than the latest 
+    finalized slot}

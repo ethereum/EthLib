@@ -23,6 +23,7 @@ public import EthLib.Cryptography.Proofs.Kzg.RecoveryDomain
 public import EthLib.Cryptography.Proofs.Kzg.RecoveryFlatten
 public import EthLib.Cryptography.Proofs.Kzg.RecoveryMasked
 public import EthLib.Cryptography.Proofs.Kzg.RecoveryReconstruction
+public import EthLib.Cryptography.Proofs.Kzg.RecoveryRoundTrip
 public import EthLib.Cryptography.Proofs.Kzg.RecoveryCapacity
 public import EthLib.Cryptography.Proofs.Kzg.ExtendedCells
 public import EthLib.Cryptography.Proofs.Kzg.CosetInterpolation

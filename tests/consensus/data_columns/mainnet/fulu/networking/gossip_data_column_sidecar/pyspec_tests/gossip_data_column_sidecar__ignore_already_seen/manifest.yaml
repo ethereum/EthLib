@@ -1,0 +1,6 @@
+preset: mainnet
+fork: fulu
+runner: networking
+handler: gossip_data_column_sidecar
+suite: pyspec_tests
+case: gossip_data_column_sidecar__ignore_already_seen

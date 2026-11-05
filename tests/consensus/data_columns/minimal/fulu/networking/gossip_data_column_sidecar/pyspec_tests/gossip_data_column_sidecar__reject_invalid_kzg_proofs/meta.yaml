@@ -1,0 +1,8 @@
+topic: data_column_sidecar
+blocks:
+- {block: 
+    block_0x7f2b248e1a15c9c4da4508b784f4b8c38b5eeaa0095b6894f9b8144ef743cd21}
+messages:
+- {subnet_id: 0, current_time_ms: 6500, message: 
+    data_column_sidecar_0x66b5c91c0df885432a27c895996040422f478df616716e7d317e44cb4322a34c,
+  expected: reject, reason: invalid sidecar kzg proofs}

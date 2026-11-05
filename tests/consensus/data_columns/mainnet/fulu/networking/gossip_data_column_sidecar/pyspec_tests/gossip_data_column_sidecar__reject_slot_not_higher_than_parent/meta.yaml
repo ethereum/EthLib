@@ -1,0 +1,10 @@
+topic: data_column_sidecar
+blocks:
+- {block: 
+    block_0xfee0eac898e0a4862fe76b7d3fcf14774f20f153a65c68ed217e7e33df4fbb29}
+- {block: 
+    block_0x3b863080ffb7a823a2e76d89ee730d554d5cdbc9cb6db7e370cb87f393f9b135}
+messages:
+- {subnet_id: 0, current_time_ms: 12500, message: 
+    data_column_sidecar_0xb299b40d907bb0e99d31fc952d0adde060af061fcd1cc3f976b3b6b93a69daf2,
+  expected: reject, reason: sidecar is not from a higher slot than its parent}
