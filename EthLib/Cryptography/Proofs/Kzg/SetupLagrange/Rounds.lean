@@ -16,7 +16,7 @@ Four tables hold affine points as pairs of naturals.
 - Table `M` holds the decoded monomial points, and table `L` the decoded Lagrange points.
 - Tables `A` and `B` hold the results of the first two rounds.
 
-The checks compare each decoded string with its table entry.
+The checks test that each string of the setup encodes its table entry.
 
 They also compare each transform of size 16 with the entries of its inputs and outputs.
 
@@ -148,10 +148,10 @@ abbrev Table := Nat → Nat × Nat
 /-- Entry `n` of a table, as a point of `G1`. -/
 def Table.point (t : Table) (n : Nat) : G1 := affinePoint (t n).1 (t n).2
 
-/-- Each list of digit codes decodes to its entry of the table, from entry `a` on. -/
+/-- Each list of digit codes encodes its entry of the table, from entry `a` on. -/
 def decodeCheck (t : Table) : Nat → List (List Nat) → Bool
   | _, [] => true
-  | a, c :: cs => decodeCodes c == some (t a) && decodeCheck t (a + 1) cs
+  | a, c :: cs => encodes c (t a).1 (t a).2 && decodeCheck t (a + 1) cs
 
 /-- The roots `u^i` of the transforms of size 16. -/
 def roots16 : Vector Nat (2 ^ 4) := Vector.ofFn fun i => rootPowNat i.val
@@ -178,26 +178,26 @@ def checkC (tB tL : Table) (k1 k2 : Nat) : Bool :=
 
 theorem decodeCheck_spec {t : Table} :
     ∀ {a : Nat} {cs : List (List Nat)}, decodeCheck t a cs = true →
-      ∀ (i : Nat) (hi : i < cs.length), decodeCodes cs[i] = some (t (a + i))
+      ∀ (i : Nat) (hi : i < cs.length), encodes cs[i] (t (a + i)).1 (t (a + i)).2 = true
   | _, [], _, i, hi => absurd hi (Nat.not_lt_zero i)
   | a, c :: cs, h, i, hi => by
-    simp only [decodeCheck, Bool.and_eq_true, beq_iff_eq] at h
+    simp only [decodeCheck, Bool.and_eq_true] at h
     cases i with
     | zero => exact h.1
     | succ i =>
-      rw [List.getElem_cons_succ, decodeCheck_spec h.2 i (by simpa using hi)]
-      congr 2
-      omega
+      rw [List.getElem_cons_succ, show a + (i + 1) = a + 1 + i by omega]
+      exact decodeCheck_spec h.2 i (by simpa using hi)
 
 /-- The checks of the chunks of 16 strings give the check of each string. -/
-theorem decodeCodes_of_chunks {t : Table} {hex : Array String} (hsize : hex.size = 4096)
+theorem encodes_of_chunks {t : Table} {hex : Array String} (hsize : hex.size = 4096)
     (h : ∀ c < 256, decodeCheck t (16 * c) (((hex.toList.map codes).drop (16 * c)).take 16) = true)
-    {j : Nat} (hj : j < 4096) : decodeCodes (codes hex[j]!) = some (t j) := by
+    {j : Nat} (hj : j < 4096) : encodes (codes hex[j]!) (t j).1 (t j).2 = true := by
   have hc := decodeCheck_spec (h (j / 16) (by omega)) (j % 16)
     (by simp only [List.length_take, List.length_drop, List.length_map, Array.length_toList,
       hsize]; omega)
   rw [show 16 * (j / 16) + j % 16 = j by omega] at hc
-  rw [← hc, getElem!_pos hex j (by omega)]
+  refine Eq.trans ?_ hc
+  rw [getElem!_pos hex j (by omega)]
   simp only [List.getElem_take, List.getElem_drop, List.getElem_map, Array.getElem_toList]
   congr 3
   omega
@@ -279,13 +279,13 @@ theorem lagrangeOfMonomial_of_checks {s : TrustedSetup} (hs : TrustedSetup.ofHex
     have hlget := (hexListToBytes_getElem hl).2
     have hr : reverseBits i.val FIELD_ELEMENTS_PER_BLOB < 4096 := reverseBits_lt_two_pow i.val 12
     constructor
-    · have hd := decodeCodes_of_chunks hMsize hM i.isLt
+    · have hd := encodes_of_chunks hMsize hM i.isLt
       rw [getElem!_pos _ i.val (by rw [hMsize]; exact i.isLt)] at hd
       exact eq_affinePoint
-        (coords_of_decodeCodes hd (hmget i.val (by rw [hMsize]; exact i.isLt)) hum)
-    · have hd := decodeCodes_of_chunks hLsize hL hr
+        (coords_of_encodes hd (hmget i.val (by rw [hMsize]; exact i.isLt)) hum)
+    · have hd := encodes_of_chunks hLsize hL hr
       rw [getElem!_pos _ _ (by rw [hLsize]; exact hr)] at hd
-      exact eq_affinePoint (coords_of_decodeCodes hd (hlget _ (by rw [hLsize]; exact hr)) hul)
+      exact eq_affinePoint (coords_of_encodes hd (hlget _ (by rw [hLsize]; exact hr)) hul)
   -- The monomial points have order dividing `r`.
   have htorM (j : Nat) (hj : j < 4096) : Fr.modulus • G1.toPoint (tM.point j) = 0 := by
     have ht := TrustedSetup.ofHex_torsion hs hj

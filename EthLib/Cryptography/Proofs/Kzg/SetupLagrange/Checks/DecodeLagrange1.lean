@@ -5,9 +5,9 @@ public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Tables
 /-!
 # Proofs: the decoded Lagrange points 1024 to 2047 of the embedded setup
 
-Each theorem decodes 16 Lagrange strings in the kernel.
+Each theorem checks in the kernel that 16 Lagrange strings encode their table entries.
 
-It compares each decoded point with its table entry.
+Decompression of such a string gives its entry, so the kernel computes no square root.
 
 Separate theorems keep the memory of each kernel check small.
 -/
