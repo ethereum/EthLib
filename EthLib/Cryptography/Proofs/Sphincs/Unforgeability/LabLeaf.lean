@@ -100,26 +100,40 @@ theorem readCell_self_labTriple (P : PublicParam) (c : Cell) :
     rw [(graph P).eagerImpl_readCell_run] at hz
     exact RelabelState.le_and_cell_eq_of_mem_support_drawCell hz
 
-/-! ## The starts of the chains -/
-
-/-- The derivation that starts chains `2j` and `2j + 1` of a key. -/
-def pairInput (P : PublicParam) (key : GraphKey) (j : Fin (V / 2)) : DerivationInput :=
-  ⟨(P, addrPrf key.toOtsKey j, .empty), isDerivationAddress_addrPrf _ _⟩
-
-/-- A derivation of a pair of starts leaves each half in its cell. -/
-theorem pair_labTriple (P : PublicParam) (key : GraphKey) (j : Fin (V / 2)) :
-    LabTriple P (fun _ => True) (labPrf P (addrPrf key.toOtsKey j) .empty)
-      (labPrf P (addrPrf key.toOtsKey j) .empty)
-      fun out st => ∀ h : Fin 2, st.2 (.inl (pairInput P key j, h)) = some (halfOf h out) := by
-  rw [labPrf_eq P (isDerivationAddress_addrPrf _ _)]
+/-- A derivation from the seed leaves each half in its cell. -/
+theorem derivation_labTriple (P : PublicParam) {A : Address} (hA : IsDerivationAddress A) :
+    LabTriple P (fun _ => True) (labPrf P A .empty) (labPrf P A .empty)
+      fun out st => ∀ h : Fin 2, st.2 (.inl (⟨(P, A, .empty), hA⟩, h)) = some (halfOf h out) := by
+  rw [labPrf_eq P hA]
   refine (readCell_self_labTriple P _).bind fun u => ?_
   refine (((readCell_self_labTriple P _).frame
-    (F := fun st => st.2 (.inl (pairInput P key j, 0)) = some u)
+    (F := fun st => st.2 (.inl (⟨(P, A, .empty), hA⟩, 0)) = some u)
     fun _ _ hle h => hle.2 h).mono (fun _ h => ⟨trivial, h⟩) fun _ _ h => h).bind fun v => ?_
   refine QueryImpl.EqDistTriple.pure _ fun st ⟨hv, hu⟩ h => ?_
   fin_cases h
   · exact hu.trans (congrArg some (halfOf_zero_hashHalves_symm u v).symm)
   · exact hv.trans (congrArg some (halfOf_one_hashHalves_symm u v).symm)
+
+/-- The lab touch of a derivation: both of its halves, half 0 first. -/
+noncomputable def touchDerivation (x : DerivationInput) : OracleComp LabWorld Unit := do
+  touchCell (some (.inl (x, 0)))
+  touchCell (some (.inl (x, 1)))
+
+/-- In the eager game, touching a derivation leaves the state as deriving it does. -/
+theorem simulateQ_eagerImpl_touchDerivation (P : PublicParam) {A : Address}
+    (hA : IsDerivationAddress A) :
+    simulateQ (graph P).eagerImpl (touchDerivation ⟨(P, A, .empty), hA⟩) =
+      (fun _ => ()) <$> simulateQ (graph P).eagerImpl (labPrf P A .empty) := by
+  rw [labPrf_eq P hA]
+  simp only [touchDerivation, simulateQ_bind, simulateQ_pure,
+    (graph P).simulateQ_eagerImpl_touchCell, map_bind, map_pure, ← bind_pure_unit_eq_map]
+  simp only [bind_assoc, pure_bind]
+
+/-! ## The starts of the chains -/
+
+/-- The derivation that starts chains `2j` and `2j + 1` of a key. -/
+def pairInput (P : PublicParam) (key : GraphKey) (j : Fin (V / 2)) : DerivationInput :=
+  ⟨(P, addrPrf key.toOtsKey j, .empty), isDerivationAddress_addrPrf _ _⟩
 
 /-- **The starts of a key's chains.**
 
@@ -132,35 +146,28 @@ theorem chainStarts_labTriple (P : PublicParam) (key : GraphKey) :
   refine (ofFnInOrder_eqDistTriple (fun _ => True)
     (fun j out st => ∀ h : Fin 2, st.2 (.inl (pairInput P key j, h)) = some (halfOf h out))
     (fun _ _ _ _ hle h half => hle.2 (h half))
-    fun j => (pair_labTriple P key j).mono (fun _ h => h) fun _ _ h => ⟨trivial, h⟩).bind
+    fun _ => (derivation_labTriple P (isDerivationAddress_addrPrf _ _)).mono (fun _ h => h)
+      fun _ _ h => ⟨trivial, h⟩).bind
       fun pairs => QueryImpl.EqDistTriple.pure _ fun st ⟨_, h⟩ i => ⟨_, rfl, ?_⟩
   have hi := h ⟨i.val / 2, by have := i.isLt; simp only [V] at *; omega⟩
     ⟨i.val % 2, Nat.mod_lt _ (by decide)⟩
   simp only [Fin.getElem_fin, Vector.getElem_ofFn]
   exact hi
 
-/-- The lab touch of a pair of starts: both halves of its derivation, half 0 first. -/
-noncomputable def touchPair (P : PublicParam) (key : GraphKey) (j : Fin (V / 2)) :
-    OracleComp LabWorld Unit := do
-  touchCell (some (.inl (pairInput P key j, 0)))
-  touchCell (some (.inl (pairInput P key j, 1)))
-
 /-- The lab touch of the starts of a key's chains: each pair in the honest order. -/
 noncomputable def touchStarts (P : PublicParam) (key : GraphKey) : OracleComp LabWorld Unit := do
-  let _ ← Xmss.ofFnInOrder (V / 2) (touchPair P key)
+  let _ ← Xmss.ofFnInOrder (V / 2) fun j => touchDerivation (pairInput P key j)
   pure ()
 
 /-- In the eager game, touching the starts leaves the state as deriving them does. -/
 theorem simulateQ_eagerImpl_touchStarts (P : PublicParam) (key : GraphKey) :
     simulateQ (graph P).eagerImpl (touchStarts P key) =
       (fun _ => ()) <$> simulateQ (graph P).eagerImpl (chainStarts P labPrf key.toOtsKey) := by
-  have hc := simulateQ_ofFnInOrder_discard (so := (graph P).eagerImpl) (f := touchPair P key)
+  have hc := simulateQ_ofFnInOrder_discard (so := (graph P).eagerImpl)
+    (f := fun j => touchDerivation (pairInput P key j))
     (g := fun j => labPrf P (addrPrf key.toOtsKey j) .empty) fun j => by
-      rw [labPrf_eq P (isDerivationAddress_addrPrf _ _)]
-      simp only [touchPair, simulateQ_bind, simulateQ_pure, (graph P).simulateQ_eagerImpl_touchCell,
-        map_bind, map_pure, ← bind_pure_unit_eq_map]
-      simp only [bind_assoc, pure_bind]
-      rfl
+      rw [pairInput, simulateQ_eagerImpl_touchDerivation P (isDerivationAddress_addrPrf _ _),
+        Functor.map_map]
   simp only [touchStarts, chainStarts, simulateQ_bind, simulateQ_pure, map_bind, map_pure]
   rw [bind_pure_unit_eq_map, bind_pure_unit_eq_map, hc]
 
