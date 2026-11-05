@@ -29,9 +29,21 @@ Then [EIP-161][eip161] deletes it if the transaction touched it.
 
 Before Spurious Dragon, an empty account stays.
 
+A transaction also records the accounts and the storage keys it reads.
+
+From Glamsterdam, the block access list of [EIP-7928][eip7928] holds them.
+
+It holds them even when the call that read them reverts, so a rollback keeps them.
+
+From Glamsterdam, [EIP-8246][eip8246] clears an account that SELFDESTRUCT marked.
+
+That clear keeps the balance.
+
 [eip1153]: https://eips.ethereum.org/EIPS/eip-1153#specification
 [eip7523]: https://eips.ethereum.org/EIPS/eip-7523#specification
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
+[eip7928]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
+[eip8246]: https://eips.ethereum.org/EIPS/eip-8246#specification
 -/
 
 @[expose] public section
@@ -124,10 +136,18 @@ structure TransactionState where
   storageClears : Std.ExtTreeSet Address
   /-- The transient storage of each address. -/
   transientStorage : StorageMap
+  /-- The addresses whose account the transaction read.
+
+  A rollback keeps them. -/
+  accountReads : Std.ExtTreeSet Address
+  /-- The storage keys that the transaction read, at each address.
+
+  A rollback keeps them. -/
+  storageReads : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32)
 
 /-- A transaction with no write yet, in a block. -/
 def TransactionState.ofBlock (block : BlockState) : TransactionState :=
-  ⟨block, ∅, ∅, ∅, ∅, ∅, ∅⟩
+  ⟨block, ∅, ∅, ∅, ∅, ∅, ∅, ∅, ∅⟩
 
 namespace TransactionState
 
@@ -185,6 +205,18 @@ def getStorageOriginal (tx : TransactionState) (address : Address) (key : Bytes3
   | none =>
     if address ∈ tx.parent.storageClears then 0 else tx.parent.preState.getStorage address key
 
+/-- The account at an address before the transaction, or none if it had no account.
+
+The block's writes come first, then the state before the block. -/
+def getPreStateAccountOptional (tx : TransactionState) (address : Address) : Option Account :=
+  match tx.parent.accountWrites[address]? with
+  | some account => account
+  | none => tx.parent.preState.getAccountOptional address
+
+/-- The account at an address before the transaction, or the empty account. -/
+def getPreStateAccount (tx : TransactionState) (address : Address) : Account :=
+  (tx.getPreStateAccountOptional address).getD EMPTY_ACCOUNT
+
 /-- The word at a key of the transient storage of an address, or zero if none is set. -/
 def getTransientStorage (tx : TransactionState) (address : Address) (key : Bytes32) : U256 :=
   (tx.transientStorage.slot address key).getD 0
@@ -210,6 +242,18 @@ def isAccountAlive (tx : TransactionState) (address : Address) : Bool :=
   | some account => account != EMPTY_ACCOUNT
   | none => false
 
+/-! ## The record of reads -/
+
+/-- Record a read of the account at an address. -/
+def recordAccountRead (tx : TransactionState) (address : Address) : TransactionState :=
+  { tx with accountReads := tx.accountReads.insert address }
+
+/-- Record a read of a key of the storage of an address. -/
+def recordStorageRead (tx : TransactionState) (address : Address) (key : Bytes32) :
+    TransactionState :=
+  { tx with
+    storageReads := tx.storageReads.insert address ((tx.storageReads.getD address ∅).insert key) }
+
 /-! ## Writes -/
 
 /-- Set the account at an address, or delete it with none.
@@ -231,11 +275,16 @@ def setStorage (tx : TransactionState) (address : Address) (key : Bytes32) (valu
       storageWrites := tx.storageWrites.insert address
         ((tx.storageWrites.getD address ∅).insert key value) }
 
-/-- Wipe the storage of an address: drop its writes, and hide every earlier word. -/
+/-- Wipe the storage of an address: drop its writes, and hide every earlier word.
+
+The keys it wrote become reads, so a wiped slot still counts as accessed. -/
 def destroyStorage (tx : TransactionState) (address : Address) : TransactionState :=
+  let written := (tx.storageWrites.getD address ∅).keys
   { tx with
     storageWrites := tx.storageWrites.erase address
-    storageClears := tx.storageClears.insert address }
+    storageClears := tx.storageClears.insert address
+    storageReads := tx.storageReads.insert address
+      ((tx.storageReads.getD address ∅).insertMany written) }
 
 /-- Delete the account at an address, with its storage. -/
 def destroyAccount (tx : TransactionState) (address : Address) : TransactionState :=
@@ -311,6 +360,16 @@ def setCode (fork : Fork) (tx : TransactionState) (address : Address) (code : By
     { tx with codeWrites := tx.codeWrites.insert codeHash code }
   tx.modifyState fork address fun account => .ok { account with codeHash := codeHash }
 
+/-- Clear the nonce, the code and the storage of an address, and keep its balance.
+
+From Glamsterdam, the end of a transaction does this to each account that SELFDESTRUCT marked.
+
+From Paris, an account that this leaves empty is deleted. -/
+def clearAccountPreservingBalance (fork : Fork) (tx : TransactionState) (address : Address) :
+    Except StateError TransactionState :=
+  (tx.destroyStorage address).modifyState fork address fun account =>
+    .ok { account with nonce := 0, codeHash := EMPTY_CODE_HASH }
+
 /-- Give an address with no account the empty account.
 
 Before Paris, a transaction touches accounts in this way. -/
@@ -331,9 +390,13 @@ def destroyTouchedEmptyAccounts (fork : Fork) (tx : TransactionState) (touched :
 
 /-- Restore the writes of a snapshot after a failed call.
 
-The accounts that the transaction created stay recorded. -/
+The accounts that the transaction created stay recorded, and so do its reads. -/
 def restoreTxState (tx snapshot : TransactionState) : TransactionState :=
-  { snapshot with parent := tx.parent, createdAccounts := tx.createdAccounts }
+  { snapshot with
+    parent := tx.parent
+    createdAccounts := tx.createdAccounts
+    accountReads := tx.accountReads
+    storageReads := tx.storageReads }
 
 /-- The words of `slots` written over those of `base`. -/
 def writeSlots (base slots : Std.ExtTreeMap Bytes32 U256) : Std.ExtTreeMap Bytes32 U256 :=
@@ -343,7 +406,7 @@ def writeSlots (base slots : Std.ExtTreeMap Bytes32 U256) : Std.ExtTreeMap Bytes
 
 A wipe of the transaction drops the block's writes to that storage first.
 
-The next transaction has no write, so its transient storage is empty. -/
+The next transaction has no write and no read, so its transient storage is empty. -/
 def incorporateTxIntoBlock (tx : TransactionState) : TransactionState :=
   let block := tx.parent
   let storageWrites := tx.storageClears.foldl (fun acc address => acc.erase address)
