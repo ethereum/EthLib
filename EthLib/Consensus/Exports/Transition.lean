@@ -92,9 +92,14 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
         (← decodeInput (BeaconBlockBody preset fork) operation) bellatrix)
     else throw (0, s!"no operation execution_payload at {fork.name}")
   | "withdrawals" =>
-    if capella : .shapella ≤ fork then do
-      runTransition (processWithdrawals state capella
-        (← decodeInput (ExecutionPayload preset fork) operation))
+    if capella : .shapella ≤ fork then
+      -- From Gloas the step takes no payload, and the operation bytes are not read.
+      if gloas : .glamsterdam ≤ fork then
+        runTransition (processWithdrawals state capella fun before => absurd gloas
+          (Nat.not_le_of_lt before))
+      else do
+        let payload ← decodeInput (ExecutionPayload preset fork) operation
+        runTransition (processWithdrawals state capella fun _ => payload)
     else throw (0, s!"no operation withdrawals at {fork.name}")
   | "bls_to_execution_change" =>
     if .shapella ≤ fork then do
@@ -126,7 +131,7 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
 /-- The operations whose Gloas rule EthLib holds. -/
 def gloasOperations : List String :=
   ["payload_attestation", "execution_payload_bid", "builder_deposit_request",
-    "builder_exit_request"]
+    "builder_exit_request", "withdrawals"]
 
 /-- The preset and the fork that UTF-8 names name, at a fork up to Gloas. -/
 def transitionPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do

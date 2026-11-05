@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: operations
+handler: withdrawals
+suite: pyspec_tests
+case: early_return_empty_parent_block

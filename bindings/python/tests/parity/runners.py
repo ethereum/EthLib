@@ -63,7 +63,6 @@ _GLOAS = {
     "operations/deposit_request": "the parent execution payload (G48)",
     "operations/withdrawal_request": "the parent execution payload (G48)",
     "operations/consolidation_request": "the parent execution payload (G48)",
-    "operations/withdrawals": "the Gloas withdrawals (G49)",
     "fork_choice": "the Gloas block and payload handlers (G70)",
     "fast_confirmation": "the Gloas fast confirmation (G73)",
     "networking": "the Gloas data columns and unchanged topics (G77)",
