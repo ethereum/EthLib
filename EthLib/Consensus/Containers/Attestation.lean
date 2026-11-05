@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Fork
 public import EthLib.Consensus.Containers.Misc
+public import EthLib.Serialization.Ssz.Typed.ForkKind
 public import EthLib.Serialization.Ssz.Typed.Since
 
 /-!
@@ -15,7 +16,14 @@ From Electra one attestation covers several committees of a slot, as [EIP-7549] 
 
 Its bits then run over all those committees, and a bit vector says which committees take part.
 
+From Gloas the bits and the indices have no limit in their type.
+
+An attestation and its indexed form are then progressive containers, as [EIP-7688] specifies.
+
+The other containers here only hold those two, so their own kind does not change.
+
 [EIP-7549]: https://eips.ethereum.org/EIPS/eip-7549#consensus-layer
+[EIP-7688]: https://eips.ethereum.org/EIPS/eip-7688#converted-types
 -/
 
 @[expose] public section
@@ -34,12 +42,10 @@ def maxAttesters (preset : Preset) (fork : Fork) : Nat :=
     preset.MAX_VALIDATORS_PER_COMMITTEE.toNat * preset.MAX_COMMITTEES_PER_SLOT.toNat
   else preset.MAX_VALIDATORS_PER_COMMITTEE.toNat
 
-/-- An aggregate vote of validators, with one bit for each validator that signed.
-
-Gloas is not yet specified, so from Glamsterdam on this is still the shape of Electra. -/
+/-- An aggregate vote of validators, with one bit for each validator that signed. -/
 structure Attestation (preset : Preset) (fork : Fork) where
   /-- One bit for each member of the committees, in committee order, set when it signed. -/
-  aggregationBits : Bitlist (maxAttesters preset fork)
+  aggregationBits : ForkBitlist .glamsterdam fork (maxAttesters preset fork)
   /-- What the validators vote for. -/
   data : AttestationData
   /-- The aggregate signature of the validators whose bit is set. -/
@@ -53,8 +59,11 @@ namespace Attestation
 def names (fork : Fork) : List String :=
   ["aggregation_bits", "data", "signature"] ++ sinceNames .pectra fork ["committee_bits"]
 
+/-- From Gloas: the layout of an attestation, its four fields in their order. -/
+def activeFields : List Bool := [true, true, true, true]
+
 instance {preset : Preset} {fork : Fork} : SszType (Attestation preset fork) :=
-  .container (names fork)
+  .forkContainer .glamsterdam fork activeFields (names fork)
     (fun a => (a.aggregationBits, a.data, a.signature, a.committeeBits))
     (fun (aggregationBits, data, signature, committeeBits) =>
       ⟨aggregationBits, data, signature, committeeBits⟩)
@@ -64,14 +73,18 @@ end Attestation
 /-- An attestation with the indices of the validators that signed, in place of their bits. -/
 structure IndexedAttestation (preset : Preset) (fork : Fork) where
   /-- The indices of the validators that signed. -/
-  attestingIndices : SszList ValidatorIndex (maxAttesters preset fork)
+  attestingIndices : ForkList .glamsterdam fork ValidatorIndex (maxAttesters preset fork)
   /-- What the validators vote for. -/
   data : AttestationData
   /-- The aggregate signature of those validators. -/
   signature : BLSSignature
 
+/-- From Gloas: the layout of an indexed attestation, its three fields in their order. -/
+def IndexedAttestation.activeFields : List Bool := [true, true, true]
+
 instance {preset : Preset} {fork : Fork} : SszType (IndexedAttestation preset fork) :=
-  .container ["attesting_indices", "data", "signature"]
+  .forkContainer .glamsterdam fork IndexedAttestation.activeFields
+    ["attesting_indices", "data", "signature"]
     (fun a => (a.attestingIndices, a.data, a.signature))
     (fun (attestingIndices, data, signature) => ⟨attestingIndices, data, signature⟩)
 
@@ -111,6 +124,27 @@ structure SignedAggregateAndProof (preset : Preset) (fork : Fork) where
 instance {preset : Preset} {fork : Fork} : SszType (SignedAggregateAndProof preset fork) :=
   .container ["message", "signature"] (fun s => (s.message, s.signature))
     (fun (message, signature) => ⟨message, signature⟩)
+
+/-- From Gloas: an attestation of Fulu in its Gloas form, with the same bits and fields. -/
+def Attestation.upgradeToGloas {preset : Preset} (pre : Attestation preset .fusaka) :
+    Attestation preset .glamsterdam where
+  aggregationBits := ⟨pre.aggregationBits.bits, fun before => absurd before (by decide)⟩
+  data := pre.data
+  signature := pre.signature
+  committeeBits := fun _ => pre.committeeBits (by decide)
+
+/-- From Gloas: an indexed attestation of Fulu in its Gloas form, with the same indices. -/
+def IndexedAttestation.upgradeToGloas {preset : Preset} (pre : IndexedAttestation preset .fusaka) :
+    IndexedAttestation preset .glamsterdam where
+  attestingIndices := ⟨pre.attestingIndices.data, fun before => absurd before (by decide)⟩
+  data := pre.data
+  signature := pre.signature
+
+/-- From Gloas: an attester slashing of Fulu in its Gloas form. -/
+def AttesterSlashing.upgradeToGloas {preset : Preset} (pre : AttesterSlashing preset .fusaka) :
+    AttesterSlashing preset .glamsterdam where
+  attestation1 := pre.attestation1.upgradeToGloas
+  attestation2 := pre.attestation2.upgradeToGloas
 
 /-- From Electra: the vote of one validator, as it travels before aggregation. -/
 structure SingleAttestation where

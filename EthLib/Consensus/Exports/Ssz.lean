@@ -139,7 +139,9 @@ def specifiedFromGlamsterdam : List String := [
   "PendingPartialWithdrawal", "PendingConsolidation", "DepositRequest", "WithdrawalRequest",
   "ConsolidationRequest", "Withdrawal", "Builder", "BuilderPendingPayment",
   "BuilderPendingWithdrawal", "BuilderDepositRequest", "BuilderExitRequest",
-  "PayloadAttestationData", "PayloadAttestationMessage", "InclusionList", "SignedInclusionList"]
+  "PayloadAttestationData", "PayloadAttestationMessage", "InclusionList", "SignedInclusionList",
+  "Attestation", "IndexedAttestation", "AttesterSlashing", "AggregateAndProof",
+  "SignedAggregateAndProof"]
 
 /-- The preset and the fork that UTF-8 names name, at a fork up to Fulu. -/
 def presetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
