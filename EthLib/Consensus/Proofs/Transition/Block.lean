@@ -30,12 +30,82 @@ open Base Uint64 Cryptography.Bls Serialization.Ssz SszType
 
 variable {preset : Preset} {fork : Base.Fork}
 
+/-- The constructor index that a code names, so that codes are read back in one pass. -/
+private def ctorIdxOfCode : UInt32 → Nat
+  | 1 => 0
+  | 2 => 1
+  | 3 => 2
+  | 4 => 3
+  | 5 => 4
+  | 6 => 5
+  | 7 => 6
+  | 8 => 7
+  | 9 => 8
+  | 10 => 9
+  | 11 => 10
+  | 12 => 11
+  | 13 => 12
+  | 14 => 13
+  | 15 => 14
+  | 16 => 15
+  | 17 => 16
+  | 18 => 17
+  | 19 => 18
+  | 20 => 19
+  | 21 => 20
+  | 22 => 21
+  | 23 => 22
+  | 24 => 23
+  | 25 => 24
+  | 26 => 25
+  | 27 => 26
+  | 28 => 27
+  | 29 => 28
+  | 30 => 29
+  | 31 => 30
+  | 32 => 31
+  | 33 => 32
+  | 34 => 33
+  | 35 => 34
+  | 36 => 35
+  | 37 => 36
+  | 38 => 37
+  | 39 => 38
+  | 40 => 39
+  | 41 => 40
+  | 42 => 41
+  | 43 => 42
+  | 44 => 43
+  | 45 => 44
+  | 46 => 45
+  | 47 => 46
+  | 48 => 47
+  | 49 => 48
+  | 50 => 49
+  | 51 => 50
+  | 61 => 51
+  | 62 => 52
+  | 63 => 53
+  | 64 => 54
+  | 65 => 55
+  | 52 => 56
+  | 53 => 57
+  | 54 => 58
+  | 55 => 59
+  | 66 => 60
+  | 67 => 61
+  | 68 => 62
+  | 69 => 63
+  | _ => 0
+
 /-- Two errors with one code come from one constructor. -/
 theorem TransitionError.code_injective (e₁ e₂ : TransitionError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
-  cases e₁ <;> cases e₂ <;>
-    first | rfl | (simp only [TransitionError.code] at h; exact absurd h (by decide))
+  -- Each code names the index of its constructor, so the code determines the index.
+  have back : ∀ e : TransitionError, ctorIdxOfCode e.code = e.ctorIdx := by
+    intro e
+    cases e <;> rfl
+  rw [← back e₁, ← back e₂, h]
 
 theorem liftAccessor_ok {α : Type} {result : Except AccessorError α} {value : α} :
     liftAccessor result = .ok value ↔ result = .ok value :=

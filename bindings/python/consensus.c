@@ -154,7 +154,8 @@ eth_consensus_process_operation(
   lean_object* pre,
   lean_object* operation,
   lean_object* config,
-  uint8_t verify
+  uint8_t verify,
+  uint8_t execution_valid
 );
 
 extern lean_object*
@@ -853,9 +854,9 @@ py_consensus_process_operation(
   PyObject* args
 ) {
   PyObject *name_obj, *fork_obj, *handler_obj, *pre_obj, *operation_obj, *config_obj;
-  int verify;
-  if (!PyArg_ParseTuple(args, "OOOOOOp", &name_obj, &fork_obj, &handler_obj, &pre_obj,
-                        &operation_obj, &config_obj, &verify)) return NULL;
+  int verify, execution_valid;
+  if (!PyArg_ParseTuple(args, "OOOOOOpp", &name_obj, &fork_obj, &handler_obj, &pre_obj,
+                        &operation_obj, &config_obj, &verify, &execution_valid)) return NULL;
   /* Check every argument before any Lean object exists, so a failure leaks nothing. */
   if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj) || !PyUnicode_Check(handler_obj)) {
     PyErr_SetString(PyExc_TypeError, "name, fork and handler must be str");
@@ -883,7 +884,7 @@ py_consensus_process_operation(
     (const uint8_t*) PyBytes_AS_STRING(config_obj), PyBytes_GET_SIZE(config_obj));
   return except_into_pybytes(
     eth_consensus_process_operation(name, fork, handler, pre, operation, config,
-                                    (uint8_t) verify),
+                                    (uint8_t) verify, (uint8_t) execution_valid),
     TRANSITION_ERROR);
 }
 

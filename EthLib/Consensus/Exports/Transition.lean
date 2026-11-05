@@ -9,6 +9,7 @@ public import EthLib.Consensus.Transition.BuilderRequests
 public import EthLib.Consensus.Transition.EpochJustification
 public import EthLib.Consensus.Transition.EpochRewards
 public import EthLib.Consensus.Transition.EpochUpdates
+public import EthLib.Consensus.Transition.Execution
 public import EthLib.Consensus.Transition.Operations
 public import EthLib.Consensus.Transition.Payload
 public import EthLib.Consensus.Transition.StateTransition
@@ -34,6 +35,8 @@ The configuration of a name holds, with the replacements that a JSON object give
 
 It checks the BLS signatures, or accepts every signature for the vectors with placeholder ones.
 
+The vectors fix the answer of the execution layer to a payload, and so does the operation export.
+
 An input that does not decode, or an unknown name, has code 0.
 -/
 
@@ -52,10 +55,12 @@ def decodeInput (α : Type) [SszType α] (data : ByteArray) : Result α :=
 def runTransition {α : Type} (result : Except TransitionError α) : Result α :=
   result.mapError fun e => (e.code, reprStr e)
 
-/-- The state after a block operation of a handler of the vectors, the operation given as bytes. -/
+/-- The state after a block operation of a handler of the vectors, the operation given as bytes.
+
+The execution layer gives one fixed answer to a payload. -/
 def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : SignatureChecks)
-    (handler : String) (state : BeaconState preset fork) (operation : ByteArray) :
-    Result (BeaconState preset fork) :=
+    (executionValid : Bool) (handler : String) (state : BeaconState preset fork)
+    (operation : ByteArray) : Result (BeaconState preset fork) :=
   match handler with
   | "block_header" => do
     runTransition (processBlockHeader state (← decodeInput (BeaconBlock preset fork) operation))
@@ -75,6 +80,11 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
   | "voluntary_exit" => do
     runTransition (processVoluntaryExit config checks state
       (← decodeInput SignedVoluntaryExit operation))
+  | "execution_payload" =>
+    if bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam then do
+      runTransition (processExecutionPayload config (.constant executionValid) state
+        (← decodeInput (BeaconBlockBody preset fork) operation) bellatrix)
+    else throw (0, s!"no operation execution_payload at {fork.name}")
   | "withdrawals" =>
     if capella : .shapella ≤ fork then do
       runTransition (processWithdrawals state capella
@@ -153,10 +163,12 @@ def runEpochStep {preset : Preset} {fork : Fork} (config : Config) (handler : St
 
 The preset, the configuration and the fork are named in UTF-8, and the handler too.
 
-The signature checks run unless the last argument is false. -/
+The signature checks run unless the verify flag is false.
+
+The last argument is the answer of the execution layer to a payload. -/
 @[export eth_consensus_process_operation]
 def processOperationExport (name fork handler pre operation replacements : ByteArray)
-    (verify : Bool) : Result ByteArray := do
+    (verify executionValid : Bool) : Result ByteArray := do
   let (preset, fork) ← transitionPresetAndFork name fork
   let config ← configWith name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
@@ -165,7 +177,7 @@ def processOperationExport (name fork handler pre operation replacements : ByteA
   if .glamsterdam ≤ fork ∧ handler ∉ gloasOperations then
     throw (0, s!"operation {handler} not yet specified at {fork.name}")
   let state ← decodeInput (BeaconState preset fork) pre
-  let after ← runOperation config checks handler state operation
+  let after ← runOperation config checks executionValid handler state operation
   (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
 
 /-- The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes.

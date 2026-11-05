@@ -316,7 +316,7 @@ def bindings : List Binding := [
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_process_operation", `EthLib.Consensus.Exports.processOperationExport,
     "(name: str, fork: str, handler: str, pre: bytes, operation: bytes, config: bytes, " ++
-      "verify: bool) -> bytes",
+      "verify: bool, execution_valid: bool) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_process_epoch", `EthLib.Consensus.Exports.processEpochExport,
     "(name: str, fork: str, handler: str, pre: bytes, config: bytes) -> bytes",
