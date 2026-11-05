@@ -371,8 +371,12 @@ def consensus_verify_blob_sidecar_inclusion_proof(name: str, fork: str, data: by
     """Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header."""
     ...
 
-def consensus_process_operation(name: str, fork: str, handler: str, pre: bytes, operation: bytes, verify: bool) -> bytes:
+def consensus_process_operation(name: str, fork: str, handler: str, pre: bytes, operation: bytes, config: bytes, verify: bool) -> bytes:
     """The state after a block operation of a handler of the vectors, as SSZ bytes."""
+    ...
+
+def consensus_process_epoch(name: str, fork: str, handler: str, pre: bytes, config: bytes) -> bytes:
+    """The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes."""
     ...
 
 def consensus_light_client_sync(name: str, fork: str, config: bytes, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: bytes) -> bytes:

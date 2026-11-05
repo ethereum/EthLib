@@ -3,6 +3,7 @@
 import hashlib
 from pathlib import Path
 
+import archives
 import pytest
 from ruamel.yaml import YAML
 
@@ -10,6 +11,7 @@ from ethlib import consensus
 from ethlib.networking import snappy
 
 from .containers import FORKS
+from .test_data_column import replacements
 
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "operations"
 
@@ -23,7 +25,15 @@ HANDLERS = {
                           ("phase0", "altair", "bellatrix", "capella", "deneb")),
     "attester_slashing": ("attester_slashing",
                           ("phase0", "altair", "bellatrix", "capella", "deneb")),
+    "payload_attestation": ("payload_attestation", ("gloas",)),
 }
+
+# The release archives that hold the cases of the forks that the repository does not vendor.
+ARCHIVES = {
+    "minimal": "consensus-specs/v1.7.0-beta.4/minimal",
+    "mainnet": "consensus-specs/v1.7.0-beta.4/mainnet",
+}
+ARCHIVE_FORKS = ("gloas",)
 
 
 def runs(fork: str, handler: str) -> bool:
@@ -38,14 +48,18 @@ def run_case(preset: str, fork: str, handler: str, case: Path) -> None:
     meta = case / "meta.yaml"
     # Setting 2 marks placeholder signatures, which the case must not check.
     setting = YAML(typ="safe").load(meta.read_text()).get("bls_setting", 0) if meta.exists() else 0
+    config_file = case / "config.yaml"
+    config = (replacements(YAML(typ="safe").load(config_file.read_text()), preset)
+              if config_file.exists() else None)
     post = case / "post.ssz_snappy"
     if post.exists():
         got = consensus.process_operation(preset, FORKS[fork], handler, pre, operation,
-                                          setting != 2)
+                                          setting != 2, config)
         assert got == snappy.decompress(post.read_bytes())
     else:
         with pytest.raises(consensus.TransitionError):
-            consensus.process_operation(preset, FORKS[fork], handler, pre, operation, setting != 2)
+            consensus.process_operation(preset, FORKS[fork], handler, pre, operation, setting != 2,
+                                        config)
 
 
 def _cases() -> list:
@@ -56,6 +70,28 @@ def _cases() -> list:
         preset, fork, _, handler = case.relative_to(FILES).parts[:4]
         cases.append(pytest.param(preset, fork, handler, case,
                                   id=case.relative_to(FILES).as_posix()))
+    return cases
+
+
+def _archive_cases() -> list:
+    """Every case of the archives for a handler that EthLib runs there, when the cache is set."""
+    if archives.CACHE is None:
+        return []
+    cases = []
+    for preset, name in ARCHIVES.items():
+        paths = [f"tests/{preset}/{fork}/operations/{handler}"
+                 for fork in ARCHIVE_FORKS for handler in HANDLERS if runs(fork, handler)]
+        base = archives.unpack(name, *paths) / "tests" / preset
+        for path in paths:
+            for pre in sorted((base / path.split("/", 2)[2]).rglob("pre.ssz_snappy")):
+                case = pre.parent
+                fork, _, handler = case.relative_to(base).parts[:3]
+                cases.append(pytest.param(preset, fork, handler, case,
+                                          id=f"{preset}/{case.relative_to(base).as_posix()}",
+                                          marks=pytest.mark.archive(name)))
+    # An empty list would skip the test in silence, so a wrong path in an archive fails here.
+    if not cases:
+        raise LookupError("the archives hold no operations case of a handler that EthLib runs")
     return cases
 
 
@@ -72,6 +108,19 @@ def test_digests():
 def test_case(preset, fork, handler, case):
     assert runs(fork, handler)
     run_case(preset, fork, handler, case)
+
+
+@pytest.mark.parametrize("preset, fork, handler, case", _archive_cases())
+def test_archive_case(preset, fork, handler, case):
+    run_case(preset, fork, handler, case)
+
+
+def test_operation_not_yet_specified_at_gloas():
+    # At Gloas, an operation whose Gloas rule EthLib does not hold fails before it reads the state.
+    with pytest.raises(consensus.TransitionError) as info:
+        consensus.process_operation("minimal", "glamsterdam", "block_header", b"", b"")
+    assert info.value.code == 0
+    assert "not yet specified" in str(info.value)
 
 
 def test_undecodable_state():

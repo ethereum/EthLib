@@ -281,6 +281,9 @@
 #define DOC_consensus_process_operation \
   "The state after a block operation of a handler of the vectors, as SSZ bytes."
 
+#define DOC_consensus_process_epoch \
+  "The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes."
+
 #define DOC_consensus_light_client_sync \
   "The headers of a sync, step by step, from a bootstrap for a trusted block root."
 

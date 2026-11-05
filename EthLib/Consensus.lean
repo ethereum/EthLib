@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Accessors
 public import EthLib.Consensus.Builders
 public import EthLib.Consensus.Mutators
+public import EthLib.Consensus.PayloadTimeliness
 public import EthLib.Consensus.Config
 public import EthLib.Consensus.Constants
 public import EthLib.Consensus.Containers.Attestation

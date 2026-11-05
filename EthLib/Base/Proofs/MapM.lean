@@ -15,7 +15,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - The map succeeds when the function succeeds on every input.
 - A function that returns a known value on every input maps to the list of those values.
 - A part of each output that its input fixes comes out in the order of the inputs.
-- Output `i` is the image of input `i`.
+- Output `i` is the image of input `i`, for a list or a vector.
 - A failed map fails on some input, and succeeds on every input before it.
 
 A mapped error leaves a success unchanged.
@@ -114,6 +114,18 @@ theorem mapM_ok_getElem {xs : List α} {ys : List β} (h : xs.mapM f = .ok ys)
     cases i with
     | zero => exact head
     | succ i => exact ih tail i (Nat.lt_of_succ_lt_succ hi)
+
+/-- Output `i` of a successful map over a vector is the image of input `i`. -/
+theorem vector_mapM_ok_getElem {n : Nat} {xs : Vector α n} {ys : Vector β n}
+    (h : xs.mapM f = .ok ys) (i : Nat) (hi : i < n) : f xs[i] = .ok ys[i] := by
+  have onArray : xs.toArray.mapM f = .ok ys.toArray := by
+    rw [← Vector.toArray_mapM, h]
+    rfl
+  have onList : xs.toArray.toList.mapM f = .ok ys.toArray.toList := by
+    rw [← Array.toList_mapM, onArray]
+    rfl
+  have := mapM_ok_getElem onList i (by simpa using hi)
+  simpa using this
 
 /-- A failed map fails with its error on some input, and succeeds on every input before it. -/
 theorem mapM_error {xs : List α} {e : ε} (h : xs.mapM f = .error e) :
