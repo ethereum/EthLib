@@ -62,7 +62,7 @@ The last four are in Last Call, so their prices may still change.
 
 This file holds their prices for accounts, storage writes, calls and transactions only.
 
-The Glamsterdam prices of creations and SELFDESTRUCT are not here yet.
+The Glamsterdam price of SELFDESTRUCT is not here yet.
 
 The precompiles keep their prices, and the blob prices are with the blob fees.
 

@@ -23,6 +23,7 @@ public import EthLib.Execution.Proofs.Evm.CallGas
 public import EthLib.Execution.Proofs.Evm.EnvironmentData
 public import EthLib.Execution.Proofs.Evm.AccountData
 public import EthLib.Execution.Proofs.Evm.ContractAddress
+public import EthLib.Execution.Proofs.Evm.Create
 public import EthLib.Execution.Proofs.Evm.LogData
 public import EthLib.Execution.Proofs.Evm.TransientStorage
 public import EthLib.Execution.Proofs.Evm.Storage

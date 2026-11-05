@@ -12,13 +12,23 @@ A creation pops its value, the range of its init code and, for CREATE2, a salt.
 
 It pays 32000, the growth of memory, and from Shanghai 2 gas per word of init code.
 
+From Glamsterdam, it pays 12000 in place of the 32000, by EIP-8038.
+
 CREATE2 also pays 6 gas per word to hash the init code.
 
-From Tangerine Whistle, it passes on all but one 64th of the gas left, and before, all of it.
+A creation fails in a frame that must not change the state.
+
+From Glamsterdam, it checks the frame before it pops its operands.
 
 A frame that lacks the value, at the greatest depth, or with the greatest nonce runs no message.
 
-It gets back that gas, and pushes 0.
+It pushes 0, and keeps its gas.
+
+Otherwise the creation accesses the new address.
+
+From Glamsterdam, a dead address costs the state gas of a new account, by EIP-8037.
+
+From Tangerine Whistle, it then passes on all but one 64th of the gas left, and before, all of it.
 
 An address with code or a nonce takes that gas and pushes 0, and the frame's nonce still grows.
 
@@ -33,6 +43,8 @@ That commit precedes the commit that made the state tests that EthLib runs.
 Otherwise the frame's nonce grows and the init code runs at the new address.
 
 The caller pushes the new address on success, and 0 on failure with the output as return data.
+
+A creation that fails creates no account, so it gets back the state gas of the new account.
 
 A creation sends a message with less gas than it has, so it lowers the measure of the frame.
 
@@ -50,6 +62,8 @@ The EIPs that add or change an instruction define it:
 - [EIP-2681][eip2681], the greatest nonce
 - [EIP-2929][eip2929], the access to the new address
 - [EIP-3860][eip3860], the price and the limit of init code
+- [EIP-8037][eip8037], the state gas of a new account, in Last Call
+- [EIP-8038][eip8038], the price of a creation, in Last Call
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [eip150]: https://eips.ethereum.org/EIPS/eip-150#specification
@@ -61,6 +75,8 @@ The EIPs that add or change an instruction define it:
 [eip2929]: https://eips.ethereum.org/EIPS/eip-2929#specification
 [eip3860]: https://eips.ethereum.org/EIPS/eip-3860#specification
 [eip7610]: https://eips.ethereum.org/EIPS/eip-7610#specification
+[eip8037]: https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-new-accounts
+[eip8038]: https://eips.ethereum.org/EIPS/eip-8038#createcreate2
 [es-7610]: https://github.com/ethereum/execution-specs/commit/2ce2191562f76ec6e64a82f82165d821e1c781fc
 -/
 
@@ -81,6 +97,23 @@ def MAX_NONCE : Nat := 2 ^ 64 - 1
 From Tangerine Whistle, it is all but one 64th of that gas, and before, all of it. -/
 def createMessageGas (fork : Fork) (gasLeft : Nat) : Nat :=
   if fork ≥ .tangerineWhistle then maxMessageCallGas gasLeft else gasLeft
+
+/-- The price of a creation at fork `fork`, before memory, init code and the hash of CREATE2.
+
+It is 32000 up to BPO5.
+
+From Glamsterdam, it is the access and the write of the new account, 12000, by EIP-8038. -/
+def createBaseCost (fork : Fork) : Nat :=
+  if fork ≥ .glamsterdam then CREATE_ACCESS else OPCODE_CREATE_BASE
+
+/-- The state gas that a creation pays for the account at `address`, at fork `fork`.
+
+From Glamsterdam, it is the state gas of a new account when the address is dead, by EIP-8037.
+
+Before Glamsterdam, it is 0. -/
+def createNewAccountStateGas (fork : Fork) (state : State.TransactionState) (address : Address) :
+    Nat :=
+  if fork ≥ .glamsterdam ∧ ¬state.isAccountAlive address then NEW_ACCOUNT_STATE_GAS else 0
 
 /-- The salt that CREATE2 pops, or none for CREATE. -/
 def popSalt (create2 : Bool) (evm : Evm fork Meter) :
@@ -103,34 +136,44 @@ def creationAddress (sender : Address) (nonce : Nat) (salt : Option U256) (initC
 
 On success it pushes the address, and the return data is empty.
 
-On failure it pushes 0, and the output of the child becomes the return data. -/
-def resumeCreate (fork : Fork) (caller : Evm fork Meter) (address : Address)
+On failure it pushes 0, and the output of the child becomes the return data.
+
+It then gets back the `newAccount` state gas that it paid, since no account was created. -/
+def resumeCreate (fork : Fork) (caller : Evm fork Meter) (newAccount : Nat) (address : Address)
     (child : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let (word, returnData) :=
     if child.error.isNone then (address.toU256, ByteArray.empty) else (0, child.output)
-  let evm ← pushWord { incorporateChild fork caller child with returnData } word
+  let evm := incorporateChild fork caller child
+  let evm := if child.error.isNone then evm else refillStateGas evm newAccount
+  let evm ← pushWord { evm with returnData } word
   return advance evm
 
-/-- The step of a creation that has paid, and kept `gas` for its message.
+/-- The step of a creation that has paid its price.
 
 It runs no message when the frame lacks the value, is too deep, or has the greatest nonce.
 
-Otherwise it accesses the new address, and the nonce of the frame grows by one.
+Otherwise it accesses the new address, and pays the state gas of a new account if any.
+
+It then keeps the gas of the message, and the nonce of the frame grows by one.
 
 An address with code or a nonce gets no message.
 
 Otherwise the frame passes on its whole reservoir to the message. -/
-def launchCreate (evm : Evm fork Meter) (gas : Nat) (value : U256) (initCode : ByteArray)
+def launchCreate (evm : Evm fork Meter) (value : U256) (initCode : ByteArray)
     (salt : Option U256) : Except EvmError (StepResult fork Meter) :=
   let evm := { evm with returnData := .empty }
   let current := evm.message.currentTarget
   let sender := evm.state.getAccount current
   if sender.balance < value ∨ sender.nonce = MAX_NONCE ∨
       evm.message.depth + 1 > STACK_DEPTH_LIMIT then
-    .next <$> skipCall evm gas 0
+    .next <$> skipCall evm 0 0
   else do
     let address ← creationAddress current sender.nonce salt initCode
     let evm := (accessAddress evm address).2
+    let newAccount := createNewAccountStateGas fork evm.state address
+    let evm ← chargeStateGas evm newAccount
+    let gas := createMessageGas fork (GasMeter.gasLeft evm.gas)
+    let evm ← chargeGas evm gas
     let deployable := evm.state.accountDeployable address
     let state ← (evm.state.incrementNonce fork current).mapError .state
     let evm := { evm with state }
@@ -153,7 +196,7 @@ def launchCreate (evm : Evm fork Meter) (gas : Nat) (value : U256) (initCode : B
           shouldTransferValue := true
           isStatic := false
           disablePrecompiles := false }
-      .ok (.child evm message (resumeCreate fork evm address))
+      .ok (.child evm message (resumeCreate fork evm newAccount address))
     else do
       let evm ← pushWord evm 0
       return .next (advance evm)
@@ -162,30 +205,28 @@ def launchCreate (evm : Evm fork Meter) (gas : Nat) (value : U256) (initCode : B
 
 From Shanghai, init code longer than the limit fails.
 
-It keeps the gas of the message, and fails in a static frame. -/
+It fails in a static frame. -/
 def genericCreate (evm : Evm fork Meter) (value : U256) (initCode : ByteArray)
     (salt : Option U256) : Except EvmError (StepResult fork Meter) :=
   if fork ≥ .shapella ∧ maxInitCodeSize fork < initCode.size then .error .outOfGas
-  else
-    let gas := createMessageGas fork (GasMeter.gasLeft evm.gas)
-    match chargeGas evm gas with
-    | .error e => .error e
-    | .ok evm =>
-      if evm.message.isStatic then .error .writeInStaticContext
-      else launchCreate evm gas value initCode salt
+  else if evm.message.isStatic then .error .writeInStaticContext
+  else launchCreate evm value initCode salt
 
 /-- The step of CREATE, or of CREATE2 when `create2` holds.
 
-It pays its price and the growth of memory, then reads the init code from memory. -/
+It pays its price and the growth of memory, then reads the init code from memory.
+
+From Glamsterdam, it fails in a static frame before it pops its operands. -/
 def createStep (create2 : Bool) (evm : Evm fork Meter) :
     Except EvmError (StepResult fork Meter) := do
+  if fork ≥ .glamsterdam ∧ evm.message.isStatic then throw .writeInStaticContext
   let (value, evm) ← popWord evm
   let (start, evm) ← popWord evm
   let (size, evm) ← popWord evm
   let (salt, evm) ← popSalt create2 evm
   let hashCost := if create2 then OPCODE_KECCAK256_PER_WORD * wordCount size.toNat else 0
   let initCost := if fork ≥ .shapella then initCodeCost size.toNat else 0
-  let evm ← chargeGasAndMemory evm (OPCODE_CREATE_BASE + hashCost + initCost) [(start, size)]
+  let evm ← chargeGasAndMemory evm (createBaseCost fork + hashCost + initCost) [(start, size)]
   genericCreate evm value (memoryReadBytes evm.memory start.toNat size.toNat) salt
 
 /-- The instruction of a creation opcode at fork `fork`.
@@ -206,13 +247,13 @@ def messageInstruction (fork : Fork) (op : Op) :
 
 /-- A message with less gas than the frame paid, and a resume that adds the child's gas, decrease.
 
-The resume must give the gas that the caller and the child hold, and keep the caller running. -/
+The resume must keep the caller running, with at most the gas of the caller and the child. -/
 theorem child_decreases [LawfulGasMeter Meter] {before caller : Evm fork Meter}
     {message : Message fork} {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
     {cost : Nat} (paid : Pays cost before caller) (lt : message.gas < cost)
     (running : before.running = true)
     (resumes : ∀ {child after}, resume child = .ok after →
-      GasMeter.gasHeld after.gas = GasMeter.gasHeld caller.gas + GasMeter.gasHeld child.gas ∧
+      GasMeter.gasHeld after.gas ≤ GasMeter.gasHeld caller.gas + GasMeter.gasHeld child.gas ∧
         after.running = caller.running) :
     (StepResult.child caller message resume).Decreases before := by
   have := paid.gasHeld
@@ -220,43 +261,52 @@ theorem child_decreases [LawfulGasMeter Meter] {before caller : Evm fork Meter}
   obtain ⟨g, r⟩ := resumes resumed
   exact Pays.measure_lt ⟨by omega, r.trans paid.running⟩ running
 
-/-- The caller gets back exactly the gas that the child of a creation holds, and keeps running. -/
+/-- The caller gets back at most the gas that the child of a creation holds, and keeps running. -/
 theorem resumeCreate_gasHeld [LawfulGasMeter Meter] {caller child after : Evm fork Meter}
-    {address : Address} (h : resumeCreate fork caller address child = .ok after) :
-    GasMeter.gasHeld after.gas = GasMeter.gasHeld caller.gas + GasMeter.gasHeld child.gas ∧
+    {newAccount : Nat} {address : Address}
+    (h : resumeCreate fork caller newAccount address child = .ok after) :
+    GasMeter.gasHeld after.gas ≤ GasMeter.gasHeld caller.gas + GasMeter.gasHeld child.gas ∧
       after.running = caller.running := by
   obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
   cases h
   obtain ⟨_, -, h1⟩ := Base.bind_ok_iff.mp h1
   cases h1
-  exact ⟨gasHeld_incorporateChild caller child, running_incorporateChild caller child⟩
+  have g := gasHeld_incorporateChild caller child
+  have r := running_incorporateChild caller child
+  dsimp only
+  split
+  · exact ⟨Nat.le_of_eq g, r⟩
+  · exact ⟨Nat.le_trans (LawfulGasMeter.gasHeld_refill _ _) (Nat.le_of_eq g), r⟩
 
-/-- A creation that paid more than the gas of its message lowers the measure. -/
+/-- A creation that paid at least 1 gas lowers the measure. -/
 theorem launchCreate_decreases [LawfulGasMeter Meter] {before evm : Evm fork Meter}
-    {gas cost : Nat} {value : U256} {initCode : ByteArray} {salt : Option U256}
-    {result : StepResult fork Meter} (paid : Pays cost before evm) (lt : gas < cost)
+    {cost : Nat} {value : U256} {initCode : ByteArray} {salt : Option U256}
+    {result : StepResult fork Meter} (paid : Pays cost before evm) (pos : 0 < cost)
     (running : before.running = true)
-    (h : launchCreate evm gas value initCode salt = .ok result) : result.Decreases before := by
+    (h : launchCreate evm value initCode salt = .ok result) : result.Decreases before := by
   unfold launchCreate at h
   dsimp only at h
   split at h
-  · cases hs : skipCall { evm with returnData := .empty } gas 0 with
+  · cases hs : skipCall { evm with returnData := .empty } 0 0 with
     | error => simp [hs, Functor.map, Except.map] at h
     | ok after =>
       simp only [hs, Functor.map, Except.map, Except.ok.injEq] at h
       subst h
-      refine skipCall_measure_lt ?_ lt running hs
+      refine skipCall_measure_lt ?_ pos running hs
       exact paid.congr rfl rfl
   · obtain ⟨address, -, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e1, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e2, h2, h⟩ := Base.bind_ok_iff.mp h
     obtain ⟨state, -, h⟩ := Base.bind_ok_iff.mp h
     have access := accessAddress_pays { evm with returnData := .empty } address
-    have paid' : Pays cost before
-        { (accessAddress { evm with returnData := .empty } address).2 with state } :=
-      (((paid.congr rfl rfl : Pays cost before { evm with returnData := .empty }).trans
-        access).mono (by omega)).congr rfl rfl
+    have paid' : Pays (cost + createMessageGas fork (GasMeter.gasLeft e1.gas)) before
+        { e2 with state } :=
+      ((((paid.congr rfl rfl : Pays cost before { evm with returnData := .empty }).trans
+        access).trans (chargeStateGas_pays h1)).trans (chargeGas_pays h2)).mono (by omega)
+        |>.congr rfl rfl
     split at h
     · cases h
-      exact child_decreases paid'.drain lt running resumeCreate_gasHeld
+      exact child_decreases paid'.drain (by dsimp only; omega) running resumeCreate_gasHeld
     · obtain ⟨_, hp, h⟩ := Base.bind_ok_iff.mp h
       cases h
       show measure _ < measure before
@@ -272,13 +322,9 @@ theorem genericCreate_decreases [LawfulGasMeter Meter] {before evm : Evm fork Me
   unfold genericCreate at h
   split at h
   · cases h
-  · dsimp only at h
-    split at h
+  · split at h
     · cases h
-    · rename_i charged hc
-      split at h
-      · cases h
-      · exact launchCreate_decreases (paid.trans (chargeGas_pays hc)) (by omega) running h
+    · exact launchCreate_decreases paid pos running h
 
 /-- The pop of the salt pays nothing. -/
 theorem popSalt_pays {create2 : Bool} {evm after : Evm fork Meter} {salt : Option U256}
@@ -295,6 +341,11 @@ theorem popSalt_pays {create2 : Bool} {evm after : Evm fork Meter} {salt : Optio
 theorem createStep_decreases [LawfulGasMeter Meter] {create2 : Bool} {evm : Evm fork Meter}
     {result : StepResult fork Meter} (running : evm.running = true)
     (h : createStep create2 evm = .ok result) : result.Decreases evm := by
+  unfold createStep at h
+  by_cases hs : fork ≥ .glamsterdam ∧ evm.message.isStatic = true
+  · simp only [hs, and_self, ↓reduceIte] at h
+    cases h
+  simp only [hs, ↓reduceIte] at h
   obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨_, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
@@ -303,7 +354,9 @@ theorem createStep_decreases [LawfulGasMeter Meter] {create2 : Bool} {evm : Evm 
   have paid := ((((popWord_pays h1).trans (popWord_pays h2)).trans (popWord_pays h3)).trans
     (popSalt_pays h4)).trans (chargeGasAndMemory_pays h5)
   refine genericCreate_decreases paid ?_ running h
-  simp only [OPCODE_CREATE_BASE]
+  have : 0 < createBaseCost fork := by
+    unfold createBaseCost
+    split <;> decide
   omega
 
 /-- Each creation instruction lowers the measure of a running frame. -/

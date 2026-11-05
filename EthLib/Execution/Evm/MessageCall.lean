@@ -47,6 +47,10 @@ From Spurious Dragon, code longer than the limit fails, by EIP-170.
 
 From London, code that starts with `0xef` fails, by EIP-3541.
 
+From Glamsterdam, the code pays 6 gas a word to hash it, and 1530 state gas a byte, by EIP-8037.
+
+Code longer than the limit then fails before the code pays.
+
 The section Message Call of the Yellow Paper, Shanghai version, defines the execution of a message.
 
 Its section Contract Creation defines the creation.
@@ -55,12 +59,15 @@ Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
 [EIP-2][eip2], [EIP-161][eip161], [EIP-170][eip170] and [EIP-3541][eip3541] change the creation.
 
+[EIP-8037][eip8037-code], in Last Call, changes the price of the code.
+
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [eip2]: https://eips.ethereum.org/EIPS/eip-2#specification
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
 [eip170]: https://eips.ethereum.org/EIPS/eip-170#specification
 [eip3541]: https://eips.ethereum.org/EIPS/eip-3541#specification
 [eip8037]: https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-halts-and-reverts
+[eip8037-code]: https://eips.ethereum.org/EIPS/eip-8037#parameter-changes
 -/
 
 @[expose] public section
@@ -164,13 +171,37 @@ def prepareCreation (fork : Fork) (state : TransactionState) (address : Address)
   if fork ≥ .spuriousDragon then (state.incrementNonce fork address).mapError .state
   else .ok state
 
+/-- The meter after the code of `size` bytes pays its deposit at fork `fork`, or the error.
+
+Up to BPO5, it pays 200 gas a byte.
+
+From Glamsterdam, it pays 6 gas a word to hash the code, then 1530 state gas a byte. -/
+def chargeCodeDeposit (fork : Fork) (meter : Meter) (size : Nat) : Except EvmError Meter :=
+  if fork ≥ .glamsterdam then do
+    let meter ← GasMeter.charge meter (OPCODE_KECCAK256_PER_WORD * wordCount size)
+    GasMeter.chargeState meter (size * CPSB)
+  else GasMeter.charge meter (size * CODE_DEPOSIT_PER_BYTE)
+
+/-- The deposit of the code leaves no more gas than the meter held. -/
+theorem gasHeld_chargeCodeDeposit_le [LawfulGasMeter Meter] {meter after : Meter} {size : Nat}
+    (h : chargeCodeDeposit fork meter size = .ok after) :
+    GasMeter.gasHeld after ≤ GasMeter.gasHeld meter := by
+  unfold chargeCodeDeposit at h
+  split at h
+  · obtain ⟨_, h1, h2⟩ := Base.bind_ok_iff.mp h
+    exact Nat.le_trans (LawfulGasMeter.gasHeld_chargeState h2)
+      (Nat.le_trans (Nat.le_add_right _ _) (LawfulGasMeter.gasHeld_charge h1))
+  · exact Nat.le_trans (Nat.le_add_right _ _) (LawfulGasMeter.gasHeld_charge h)
+
 /-- The frame that ends a creation, from the frame `evm` that ends its init code.
 
 A creation that fails puts back the state `snapshot` from before it.
 
 A creation whose init code succeeds pays for the output and deploys it as code.
 
-When it cannot, it fails with no gas left, and from Byzantium with no output. -/
+When it cannot, it fails with no gas left, and from Byzantium with no output.
+
+From Glamsterdam, code longer than the limit fails before it pays. -/
 def depositCode (fork : Fork) (snapshot : TransactionState) (evm : Evm fork Meter) :
     Except EvmError (Evm fork Meter) :=
   if evm.error.isSome then .ok { evm with state := evm.state.restoreTxState snapshot }
@@ -183,8 +214,9 @@ def depositCode (fork : Fork) (snapshot : TransactionState) (evm : Evm fork Mete
         output := if fork ≥ .byzantium then .empty else evm.output
         error := some error }
     if fork ≥ .london ∧ code[0]? = some 0xef then .ok (fail .invalidContractPrefix)
+    else if fork ≥ .glamsterdam ∧ (maxCodeSize fork).any (· < code.size) then .ok (fail .outOfGas)
     else
-      match GasMeter.charge evm.gas (code.size * CODE_DEPOSIT_PER_BYTE) with
+      match chargeCodeDeposit fork evm.gas code.size with
       | .error e => .ok (if fork ≥ .homestead then fail e else { evm with output := .empty })
       | .ok gas =>
         if (maxCodeSize fork).any (· < code.size) then .ok (fail .outOfGas)
@@ -196,29 +228,34 @@ def depositCode (fork : Fork) (snapshot : TransactionState) (evm : Evm fork Mete
 theorem gasHeld_depositCode_le [LawfulGasMeter Meter] {snapshot : TransactionState}
     {evm after : Evm fork Meter} (h : depositCode fork snapshot evm = .ok after) :
     GasMeter.gasHeld after.gas ≤ GasMeter.gasHeld evm.gas := by
+  have exhausted := LawfulGasMeter.gasHeld_exhaust evm.gas
   unfold depositCode at h
   dsimp only at h
   split at h
   · cases h
     exact Nat.le_refl _
-  · split at h
-    · cases h
-      simp only [LawfulGasMeter.gasHeld_exhaust]
-      exact Nat.zero_le _
-    · split at h
-      · cases h
-        split
-        · simp only [LawfulGasMeter.gasHeld_exhaust]
-          exact Nat.zero_le _
-        · exact Nat.le_refl _
-      · rename_i hc
-        split at h
-        · cases h
-          simp only [LawfulGasMeter.gasHeld_exhaust]
-          exact Nat.zero_le _
-        · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-          cases h
-          exact Nat.le_trans (Nat.le_add_right _ _) (LawfulGasMeter.gasHeld_charge hc)
+  split at h
+  · cases h
+    dsimp only
+    omega
+  split at h
+  · cases h
+    dsimp only
+    omega
+  split at h
+  · cases h
+    split
+    · dsimp only
+      omega
+    · exact Nat.le_refl _
+  rename_i hc
+  split at h
+  · cases h
+    dsimp only
+    omega
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  exact gasHeld_chargeCodeDeposit_le hc
 
 mutual
 
