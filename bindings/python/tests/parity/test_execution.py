@@ -28,10 +28,9 @@ def test_every_group_has_a_runner_or_a_plan() -> None:
 
 
 def test_every_network_is_placed() -> None:
-    # A network that is neither in scope nor an Amsterdam network is new upstream.
+    # A network that is not in scope is new upstream.
     networks = {entry["fork"] for entry in catalogue.execution_index()}
-    new = networks - set(catalogue.EXECUTION_FORKS)
-    assert sorted(network for network in new if "Amsterdam" not in network) == []
+    assert sorted(networks - set(catalogue.EXECUTION_FORKS)) == []
 
 
 def test_disagreements() -> None:
