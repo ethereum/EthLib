@@ -39,8 +39,10 @@ private def g (x : Fp) : Fp := x * x * x + Aprime * x + Bprime
 
 /-- The first candidate `x1` of the SSWU map. -/
 private def x1 (u : Fp) : Fp :=
-  if (Z * (u * u) * (Z * (u * u)) + Z * (u * u)).isZero then Bprime / (Z * Aprime)
-  else (-Bprime / Aprime) * (Fp.one + (Z * (u * u) * (Z * (u * u)) + Z * (u * u)).inverse)
+  if BaseField.isZero (Z * (u * u) * (Z * (u * u)) + Z * (u * u)) then
+    Bprime * BaseField.inverse (Z * Aprime)
+  else (-Bprime * BaseField.inverse Aprime) *
+    (BaseField.one + BaseField.inverse (Z * (u * u) * (Z * (u * u)) + Z * (u * u)))
 
 /-- A square root of `-Z = -11`. -/
 private def sqrtNegZ : Fp :=
@@ -52,7 +54,8 @@ private theorem sqrtNegZ_sq : toF sqrtNegZ * toF sqrtNegZ = -toF Z := by decide
 private theorem aprime_ne_zero : toF Aprime ≠ 0 := by decide
 
 -- At the exceptional `u`, the map takes `x1 = B' / (Z * A')`, and `g(x1)` is a square.
-private theorem sqrt_exceptional_ok : (Fp.sqrt (g (Bprime / (Z * Aprime)))).isOk = true := by
+private theorem sqrt_exceptional_ok :
+    (Fp.sqrt (g (Bprime * BaseField.inverse (Z * Aprime)))).isOk = true := by
   decide +kernel
 
 /-- `g(t * x1) = t^3 * g(x1)` when `x1 = (-B' / A') * (1 + 1 / (t^2 + t))`. -/
@@ -81,7 +84,7 @@ private theorem sqrt_ok (u : Fp) :
     | ok c => exact ⟨c, rfl⟩
     | error e => rw [hs] at hok; cases hok
   rw [ite_eq_right hok]
-  have hden : (Z * (u * u) * (Z * (u * u)) + Z * (u * u)).isZero = false := by
+  have hden : BaseField.isZero (Z * (u * u) * (Z * (u * u)) + Z * (u * u)) = false := by
     apply Bool.eq_false_iff.mpr
     intro hz
     apply hok
@@ -91,14 +94,17 @@ private theorem sqrt_ok (u : Fp) :
   rcases HashToCurve.sq_or_neg_sq (g (x1 u)) with hs | hs
   · exact absurd (by rw [Fp.sqrt_complete hs]; rfl) hok
   have hne : toF (Z * (u * u)) * toF (Z * (u * u)) + toF (Z * (u * u)) ≠ 0 := fun h => by
-    rw [(G1.isZero_iff (a := Z * (u * u) * (Z * (u * u)) + Z * (u * u))).mpr h] at hden
-    cases hden
-  have hx1 : x1 u = (-Bprime / Aprime) *
+    have h' : BaseField.isZero (Z * (u * u) * (Z * (u * u)) + Z * (u * u)) = true :=
+      (G1.isZero_iff (a := Z * (u * u) * (Z * (u * u)) + Z * (u * u))).mpr h
+    rw [hden] at h'
+    cases h'
+  have hx1 : x1 u = (-Bprime * (Aprime : Fp).inverse) *
       (Fp.one + (Z * (u * u) * (Z * (u * u)) + Z * (u * u)).inverse) := by
     rw [x1, ite_eq_right (by rw [hden]; decide)]
+    rfl
   have hg : toF (g (Z * (u * u) * x1 u)) =
       toF (Z * (u * u)) * toF (Z * (u * u)) * toF (Z * (u * u)) * toF (g (x1 u)) := by
-    rw [hx1, Fp.div_eq_mul_inv', Fp.inverse_eq_inv]
+    rw [hx1, Fp.inverse_eq_inv, Fp.inverse_eq_inv]
     exact g_mul (toF (Z * (u * u))) hne
   refine ⟨_, Fp.sqrt_complete (b := sqrtNegZ * Z * (u * u * u) *
     Fp.powNat (g (x1 u)) ((Fp.modulus + 1) / 4)) ?_⟩
@@ -111,6 +117,7 @@ theorem simpleSwuG1_ok (u : Fp) : ∃ p, simpleSwuG1 u = .ok p := by
   have h := sqrt_ok u
   revert h
   unfold simpleSwuG1 g x1
+  rw [show (sqrtOrError : Fp → Except BlsError Fp) = Fp.sqrt from funext Fp.sqrtOrError_eq]
   generalize Fp.sqrt = sqrtFn
   rintro ⟨c, hc⟩
   dsimp only
@@ -131,10 +138,11 @@ private theorem curve_of_bind {s : Except BlsError Fp} {x : Fp} {f : Fp → Fp} 
 /-- Every output `(x, y)` of the SSWU map lies on `E' : y^2 = x^3 + A' * x + B'`. -/
 theorem simpleSwuG1_curve_eq {u : Fp} {p : Fp × Fp} (h : simpleSwuG1 u = .ok p) :
     p.2 * p.2 = p.1 * p.1 * p.1 + Aprime * p.1 + Bprime := by
-  have hsqrt : ∀ {a c : Fp}, Fp.sqrt a = .ok c → c * c = a := fun hs => Fp.sqrt_ok hs
+  have hsqrt : ∀ {a c : Fp}, sqrtOrError a = .ok c → c * c = a :=
+    fun hs => Fp.sqrt_ok ((Fp.sqrtOrError_eq _).symm.trans hs)
   revert h
   unfold simpleSwuG1
-  generalize Fp.sqrt = sqrtFn at hsqrt ⊢
+  generalize (sqrtOrError : Fp → Except BlsError Fp) = sqrtFn at hsqrt ⊢
   intro h
   refine curve_of_bind (fun y => ?_) (fun c hc => hsqrt hc) h
   split
@@ -251,6 +259,7 @@ theorem isoMapG1_valid {x y : Fp} (h : y * y = x * x * x + Aprime * x + Bprime) 
     G1.Valid (isoMapG1 x y) := by
   unfold isoMapG1
   dsimp only
+  simp only [Fp.baseField_isZero, Fp.baseField_powNat, Fp.baseField_inverse, Fp.baseField_one]
   by_cases hd : ((evaluate K2 x + Fp.powNat x 10).isZero ||
       (evaluate K4 x + Fp.powNat x 15).isZero) = true
   · rw [ite_eq_left hd]
@@ -265,7 +274,7 @@ theorem isoMapG1_valid {x y : Fp} (h : y * y = x * x * x + Aprime * x + Bprime) 
       exact Bool.noConfusion hd.2
     rw [Fp.powNat_eq_pow] at hxd hyd
     apply G1.valid_of_affine_eq
-    rw [Fp.div_eq_mul_inv', Fp.div_eq_mul_inv', Fp.powNat_eq_pow, Fp.powNat_eq_pow]
+    rw [Fp.inverse_eq_inv, Fp.inverse_eq_inv, Fp.powNat_eq_pow, Fp.powNat_eq_pow]
     exact image_equation h hxd hyd
 
 end EthLib.Cryptography.Bls.MapToCurve

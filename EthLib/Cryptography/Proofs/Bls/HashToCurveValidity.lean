@@ -96,14 +96,14 @@ theorem clearCofactor_valid {P : G2} (hP : G2.Valid P) : G2.Valid (clearCofactor
 
 /-- `psi` fixes the point at infinity. -/
 @[simp]
-theorem psi_zero : psi G2.zero = G2.zero := by
+theorem psi_zero : psi (G2.zero : G2) = G2.zero := by
   unfold psi
   have hz : (G2.zero : G2).z.isZero = true := by decide
   simp [hz]
 
 /-- `psi2` fixes the point at infinity. -/
 @[simp]
-theorem psi2_zero : psi2 G2.zero = G2.zero := by
+theorem psi2_zero : psi2 (G2.zero : G2) = G2.zero := by
   unfold psi2
   have hz : (G2.zero : G2).z.isZero = true := by decide
   simp [hz]
@@ -126,7 +126,7 @@ theorem psi2_neg (P : G2) : psi2 (G2.neg P) = G2.neg (psi2 P) := by
 theorem hashToG2_valid {msg dst : ByteArray} {P : G2}
     (h : hashToG2 msg dst = .ok P) : G2.Valid P := by
   unfold hashToG2 at h
-  cases hf : hashToFieldFp2 msg dst 2 with
+  cases hf : (hashToFieldFp2 msg dst 2 : Except BlsError (Array Fp2)) with
   | error e => simp [hf, bind, Except.bind] at h
   | ok us =>
     cases h0 : simpleSwu us[0]! with
@@ -149,7 +149,7 @@ private theorem expandMessageXmd_256_ok (msg dst : ByteArray) :
   exact ⟨_, rfl⟩
 
 private theorem hashToFieldFp2_two_ok (msg dst : ByteArray) :
-    ∃ us, hashToFieldFp2 msg dst 2 = .ok us := by
+    ∃ us : Array Fp2, hashToFieldFp2 msg dst 2 = .ok us := by
   obtain ⟨uniform, hunif⟩ := expandMessageXmd_256_ok msg dst
   unfold hashToFieldFp2
   dsimp only

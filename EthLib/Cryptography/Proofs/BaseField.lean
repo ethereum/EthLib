@@ -30,6 +30,9 @@ structure Hom (F G : Type) [BaseField F] [BaseField G] where
   map_beq : ∀ a b, beq (toFun a) (toFun b) = beq a b
   map_isZero : ∀ a, isZero (toFun a) = isZero a
   map_inverse : ∀ a, toFun (inverse a) = inverse (toFun a)
+  map_powNat : ∀ a n, toFun (powNat a n) = powNat (toFun a) n
+  map_sqrt : ∀ a, sqrt (toFun a) = (sqrt a).map toFun
+  map_sgn0 : ∀ a, sgn0 (toFun a) = sgn0 a
 
 instance {F G : Type} [BaseField F] [BaseField G] : CoeFun (Hom F G) (fun _ => F → G) :=
   ⟨Hom.toFun⟩

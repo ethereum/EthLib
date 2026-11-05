@@ -94,7 +94,7 @@ theorem clearCofactor_inSubgroup {P : G2} (hP : G2.Valid P) :
 theorem hashToG2_inSubgroup {msg dst : ByteArray} {P : G2}
     (h : hashToG2 msg dst = .ok P) : G2.inSubgroup P = true := by
   unfold hashToG2 at h
-  cases hf : hashToFieldFp2 msg dst 2 with
+  cases hf : (hashToFieldFp2 msg dst 2 : Except BlsError (Array Fp2)) with
   | error e => simp [hf, bind, Except.bind] at h
   | ok us =>
     cases h0 : simpleSwu us[0]! with

@@ -44,36 +44,42 @@ def Fp2.signBit (y : Fp2) : Bool :=
 
 /-! ## Square root in Fp2 -/
 
+section Sqrt
+
+variable {F : Type} [BaseField F]
+
 /-- Square root in `Fp2`. Returns `none` when `a` isn't a square. -/
-def Fp2.sqrt (a : Fp2) : Except BlsError Fp2 :=
+def Fp2.sqrt (a : Fp2 F) : Except BlsError (Fp2 F) :=
   -- Pure-imaginary input: handle the case `a1 = 0` directly.
-  if a.c1.isZero then
-    match Fp.sqrt a.c0 with
-    | .ok s => .ok ⟨s, Fp.zero⟩
+  if BaseField.isZero a.c1 then
+    match sqrtOrError a.c0 with
+    | .ok s => .ok ⟨s, BaseField.zero⟩
     | .error _ =>
       -- −a₀ might be a square; if so, `sqrt(a) = 0 + sqrt(−a₀)·i`
       -- because `(s·i)² = s²·(−1) = −s²`.
-      match Fp.sqrt (-a.c0) with
-      | .ok s    => .ok ⟨Fp.zero, s⟩
+      match sqrtOrError (-a.c0) with
+      | .ok s    => .ok ⟨BaseField.zero, s⟩
       | .error _ => .error .notASquare
   else
     -- Norm = a₀² + a₁² in Fp; we need its sqrt to exist.
     let n := a.c0 * a.c0 + a.c1 * a.c1
-    match Fp.sqrt n with
+    match sqrtOrError n with
     | .error _ => .error .notASquare
     | .ok s =>
-      let twoInv := (Fp.ofNat 2).inverse
+      let twoInv := BaseField.inverse (BaseField.ofNat 2 : F)
       -- Try c₀² = (a₀ + s)/2, then fall back to (a₀ − s)/2.
-      let try1 := Fp.sqrt ((a.c0 + s) * twoInv)
+      let try1 := sqrtOrError ((a.c0 + s) * twoInv)
       let c0Opt :=
         match try1 with
         | .ok _    => try1
-        | .error _ => Fp.sqrt ((a.c0 - s) * twoInv)
+        | .error _ => sqrtOrError ((a.c0 - s) * twoInv)
       match c0Opt with
       | .error _ => .error .notASquare
       | .ok c0Fp =>
-        let c1Fp := a.c1 * (Fp.ofNat 2 * c0Fp).inverse
+        let c1Fp := a.c1 * BaseField.inverse (BaseField.ofNat 2 * c0Fp)
         .ok ⟨c0Fp, c1Fp⟩
+
+end Sqrt
 
 /-- True iff `bytes[start..]` are all zero. -/
 -- The exposed decoders need this body for downstream reduction.

@@ -55,10 +55,12 @@ private theorem swuG_x2_aux (t A B invA invD : Fp2)
 
 private theorem swuX1_non_zero_denom (u : Fp2)
     (hdenom : ((Z * (u * u)) * (Z * (u * u)) + Z * (u * u)).isZero = false) :
-    swuX1 u = (-Bprime * Aprime.inverse) * (Fp2.one + ((Z * (u * u)) * (Z * (u * u)) + Z * (u * u)).inverse) := by
+    swuX1 u = (-(Bprime : Fp2) * (Aprime : Fp2).inverse) *
+      (Fp2.one + ((Z * (u * u)) * (Z * (u * u)) + Z * (u * u)).inverse) := by
   unfold swuX1
   dsimp only
   rw [hdenom]
+  simp only [Bool.false_eq_true, ↓reduceIte]
   rfl
 
 /-- Fundamental SSWU polynomial identity (`RFC 9380 §6.6.2`).
@@ -75,11 +77,16 @@ theorem swuG_x2_eq (u : Fp2)
   have hd_inv : ((Z * (u * u)) * (Z * (u * u)) + Z * (u * u)) *
       ((Z * (u * u)) * (Z * (u * u)) + Z * (u * u)).inverse = 1 :=
     Fp2.mul_inverse_cancel hd_ne
-  have ha_inv : Aprime * Aprime.inverse = 1 := Fp2.mul_inverse_cancel aprime_ne_zero
+  have ha_inv : (Aprime : Fp2) * Aprime.inverse = 1 := Fp2.mul_inverse_cancel aprime_ne_zero
   unfold swuG swuX2
-  rw [swuX1_non_zero_denom u hdenom, Fp2.one_eq_one]
-  exact swuG_x2_aux (Z * (u * u)) Aprime Bprime Aprime.inverse
-    ((Z * (u * u)) * (Z * (u * u)) + Z * (u * u)).inverse hd_inv ha_inv
+  rewrite [swuX1_non_zero_denom u hdenom, Fp2.one_eq_one]
+  -- The constants become variables, so unification never evaluates the inverse of `A'`.
+  generalize ((Z * (u * u)) * (Z * (u * u)) + Z * (u * u)).inverse = invD at hd_inv ⊢
+  generalize Z * (u * u) = t at hd_inv ⊢
+  generalize (Aprime : Fp2).inverse = invA at ha_inv ⊢
+  generalize (Aprime : Fp2) = A at ha_inv ⊢
+  generalize (Bprime : Fp2) = B
+  exact swuG_x2_aux t A B invA invD hd_inv ha_inv
 
 private theorem sq_ite_neg (P : Prop) [Decidable P] (y : Fp2) :
     (if P then y else -y) * (if P then y else -y) = y * y := by
@@ -143,71 +150,42 @@ private theorem r_ne_zero_of_neg_try1 {a0 a1 s twoInv r : ZMod Fp.modulus}
       + r * ((a0 - s) * twoInv) * hr0
   exact mul_ne_zero ha1 h2ne (mul_self_eq_zero.mp hprod)
 
--- Uses `Fp2.sqrt`'s generated matchers so `Fp2.sqrt` is definitionally `sqrtWith Fp.inverse (Fp.ofNat 2).inverse`.
-set_option linter.auxLemma false in
-private def sqrtWith (invFn : Fp → Fp) (twoInvVal : Fp) (a : Fp2) : Except BlsError Fp2 :=
-  if a.c1.isZero = true then
-    Fp2.sqrt.match_1 (fun _ => Except BlsError Fp2) a.c0.sqrt (fun s => Except.ok { c0 := s, c1 := Fp.zero }) fun _ =>
-      Fp2.sqrt.match_1 (fun _ => Except BlsError Fp2) (-a.c0).sqrt (fun s => Except.ok { c0 := Fp.zero, c1 := s }) fun _ =>
-        Except.error BlsError.notASquare
-  else
-    have n := a.c0 * a.c0 + a.c1 * a.c1
-    Fp2.sqrt.match_3 (fun _ => Except BlsError Fp2) n.sqrt (fun _ => Except.error BlsError.notASquare) fun s =>
-      have twoInv := twoInvVal
-      have try1 := ((a.c0 + s) * twoInv).sqrt
-      have c0Opt :=
-        Fp2.sqrt.match_1 (fun _ => Except BlsError Fp) try1 (fun _ => try1) fun _ => ((a.c0 - s) * twoInv).sqrt
-      Fp2.sqrt.match_3 (fun _ => Except BlsError Fp2) c0Opt (fun _ => Except.error BlsError.notASquare) fun c0Fp =>
-        have c1Fp := a.c1 * invFn (Fp.ofNat 2 * c0Fp)
-        Except.ok { c0 := c0Fp, c1 := c1Fp }
-
-set_option linter.auxLemma false in
-private theorem sqrtWith_of_norm_sq {invFn : Fp → Fp} {twoInv : Fp}
-    (h2inv : (Fp.ofNat 2 : ZMod Fp.modulus) * (twoInv : ZMod Fp.modulus) = 1)
-    {a : Fp2} {sn : Fp}
-    (hsn : (sn : ZMod Fp.modulus) * sn = a.c0 * a.c0 + a.c1 * a.c1) :
-    ∃ c, sqrtWith invFn twoInv a = .ok c := by
-  unfold sqrtWith
-  split
-  · rcases sq_or_neg_sq a.c0 with hs1 | hs2
-    · rw [Fp.sqrt_complete hs1]; exact ⟨_, rfl⟩
-    · cases h1 : a.c0.sqrt with
-      | ok s => exact ⟨_, rfl⟩
-      | error _ => rw [Fp.sqrt_complete hs2]; exact ⟨_, rfl⟩
-  · rename_i hc1nz
-    have ha1 : (a.c1 : ZMod Fp.modulus) ≠ 0 := fun h0 => hc1nz (G1.isZero_iff.mpr h0)
-    dsimp only
-    have hsqrt_n := Fp.sqrt_complete hsn
-    rw [hsqrt_n]
-    dsimp only
-    set s := Fp.powNat (a.c0 * a.c0 + a.c1 * a.c1) ((Fp.modulus + 1) / 4)
-    have hs : (s : ZMod Fp.modulus) * s = a.c0 * a.c0 + a.c1 * a.c1 := Fp.sqrt_ok hsqrt_n
-    rcases sq_or_neg_sq ((a.c0 + s) * twoInv) with htry1 | hneg1
-    · rw [Fp.sqrt_complete htry1]; exact ⟨_, rfl⟩
-    · cases h1 : ((a.c0 + s) * twoInv).sqrt with
-      | ok s1 => exact ⟨_, rfl⟩
-      | error _ =>
-        dsimp only [Fp2.sqrt.match_1]
-        set r := Fp.powNat ((a.c0 + s) * twoInv) ((Fp.modulus + 1) / 4)
-        have hr_ne : (r : ZMod Fp.modulus) ≠ 0 :=
-          r_ne_zero_of_neg_try1 ha1 h2inv hs hneg1
-        have hrInv : (r : ZMod Fp.modulus) * (r.inverse : ZMod Fp.modulus) = 1 := by
-          rw [Fp.inverse_eq_inv]
-          exact mul_inv_cancel₀ hr_ne
-        have htry2 : ((a.c1 * twoInv * r.inverse : Fp) : ZMod Fp.modulus) *
-            (a.c1 * twoInv * r.inverse : Fp) = (a.c0 - s) * twoInv :=
-          try_sub_sq_zmod hs hneg1 hrInv
-        rw [Fp.sqrt_complete htry2]
-        exact ⟨_, rfl⟩
-
 /-- Any `a : Fp2` whose `Fp` norm is a square in `Fp` has a square root returned by `Fp2.sqrt`. -/
 theorem sqrt_of_norm_sq {a : Fp2} {sn : Fp}
     (hsn : (sn : ZMod Fp.modulus) * sn = Fp2.norm a) :
     ∃ c, Fp2.sqrt a = .ok c := by
-  have h2inv : (Fp.ofNat 2 : ZMod Fp.modulus) * ((Fp.ofNat 2).inverse : ZMod Fp.modulus) = 1 := by
-    rw [Fp.inverse_eq_inv]
-    exact mul_inv_cancel₀ (by decide)
-  exact sqrtWith_of_norm_sq h2inv hsn
+  have hsqrt : ∀ {x b : Fp}, (b : ZMod Fp.modulus) * b = x →
+      sqrtOrError x = .ok (Fp.powNat x ((Fp.modulus + 1) / 4)) :=
+    fun hb => (Fp.sqrtOrError_eq _).trans (Fp.sqrt_complete hb)
+  cases hz : BaseField.isZero a.c1
+  · have ha1 : (a.c1 : ZMod Fp.modulus) ≠ 0 := fun h0 => by
+      have h' : BaseField.isZero a.c1 = true := G1.isZero_iff.mpr h0
+      rw [hz] at h'
+      cases h'
+    have hsqrt_n := hsqrt hsn
+    refine Fp2.sqrt_isOk_of_c1_ne hz hsqrt_n ?_
+    -- The inverse of 2 becomes a variable, so the kernel never evaluates it.
+    generalize htwo : BaseField.inverse (BaseField.ofNat 2 : Fp) = twoInv
+    have h2inv : (Fp.ofNat 2 : ZMod Fp.modulus) * (twoInv : ZMod Fp.modulus) = 1 := by
+      subst htwo
+      rw [Fp.baseField_inverse, Fp.baseField_ofNat, Fp.inverse_eq_inv]
+      exact mul_inv_cancel₀ (by decide)
+    set s := Fp.powNat (a.c0 * a.c0 + a.c1 * a.c1) ((Fp.modulus + 1) / 4)
+    have hs : (s : ZMod Fp.modulus) * s = a.c0 * a.c0 + a.c1 * a.c1 :=
+      Fp.sqrt_ok (Fp.sqrt_complete hsn)
+    rcases sq_or_neg_sq ((a.c0 + s) * twoInv) with htry1 | hneg1
+    · exact Or.inl ⟨_, hsqrt htry1⟩
+    · set r := Fp.powNat ((a.c0 + s) * twoInv) ((Fp.modulus + 1) / 4)
+      have hr_ne : (r : ZMod Fp.modulus) ≠ 0 :=
+        r_ne_zero_of_neg_try1 ha1 h2inv hs hneg1
+      have hrInv : (r : ZMod Fp.modulus) * (r.inverse : ZMod Fp.modulus) = 1 := by
+        rw [Fp.inverse_eq_inv]
+        exact mul_inv_cancel₀ hr_ne
+      exact Or.inr ⟨_, hsqrt (try_sub_sq_zmod hs hneg1 hrInv)⟩
+  · refine Fp2.sqrt_isOk_of_c1_zero hz ?_
+    rcases sq_or_neg_sq a.c0 with hs1 | hs2
+    · exact Or.inl ⟨_, hsqrt hs1⟩
+    · exact Or.inr ⟨_, hsqrt hs2⟩
 
 private def sqrtNegNormZ : Fp :=
   Fp.ofNat 0x186417302d5a65347a88b0f999ab2b504614aa5e2eebdeb1a014c40bceb7d2306c12a6d436befcf94d39c9db7b263cd4
@@ -223,14 +201,15 @@ private def zaInv : Fp2 :=
 private theorem za_mul_zaInv : (Z * Aprime) * zaInv = 1 := by
   decide
 
-private theorem za_ne_zero : Z * Aprime ≠ 0 := by
+private theorem za_ne_zero : (Z : Fp2) * Aprime ≠ 0 := by
   intro h
   have := congrArg Fp2.c0 h
   revert this; decide
 
-private theorem za_inverse_eq : (Z * Aprime).inverse = zaInv := by
-  have h1 : (Z * Aprime) * (Z * Aprime).inverse = 1 := Fp2.mul_inverse_cancel za_ne_zero
-  linear_combination zaInv * h1 - (Z * Aprime).inverse * za_mul_zaInv
+private theorem za_inverse_eq : ((Z : Fp2) * Aprime).inverse = zaInv := by
+  have h1 : ((Z : Fp2) * Aprime) * ((Z : Fp2) * Aprime).inverse = 1 :=
+    Fp2.mul_inverse_cancel za_ne_zero
+  linear_combination zaInv * h1 - ((Z : Fp2) * Aprime).inverse * za_mul_zaInv
 
 private def sqrtNormGx1Zero : Fp :=
   Fp.ofNat 0x14bc2d072749c399567308a4ea62f9640737884f167efe5f0485541babeb2042e44ddf51fdf7a7164c1d372558051161
@@ -258,7 +237,7 @@ theorem simpleSwu_sqrt_complete (u : Fp2) :
       unfold swuX1
       dsimp only
       rw [hdenom, ite_eq_left rfl]
-      change Bprime * (Z * Aprime).inverse = Bprime * zaInv
+      change Bprime * ((Z : Fp2) * Aprime).inverse = Bprime * zaInv
       rw [za_inverse_eq]
     rw [hx1]
     exact sqrt_of_norm_sq sqrtNormGx1Zero_sq
@@ -288,7 +267,7 @@ theorem simpleSwu_ok (u : Fp2) : ∃ p, simpleSwu u = .ok p := by
   have hor := simpleSwu_sqrt_complete u
   revert hor
   unfold simpleSwu swuG swuX2 swuX1
-  generalize Fp2.sqrt = sqrtFn
+  generalize (Fp2.sqrt : Fp2 → Except BlsError Fp2) = sqrtFn
   rintro (⟨y1, hy1⟩ | ⟨y2, hy2⟩)
   · dsimp only
     rw [hy1]
@@ -307,7 +286,7 @@ theorem simpleSwu_curve_eq {u : Fp2} {p : Fp2 × Fp2} (h : simpleSwu u = .ok p) 
   have hsqrt : ∀ {a c : Fp2}, Fp2.sqrt a = .ok c → c * c = a := fun hs => Fp2.sqrt_ok hs
   revert h
   unfold simpleSwu swuG
-  generalize Fp2.sqrt = sqrtFn at hsqrt ⊢
+  generalize (Fp2.sqrt : Fp2 → Except BlsError Fp2) = sqrtFn at hsqrt ⊢
   dsimp only
   cases h1 : sqrtFn _ with
   | ok y1 =>

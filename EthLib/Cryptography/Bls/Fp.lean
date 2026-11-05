@@ -77,6 +77,15 @@ Core already has a division on `Fin n`, which divides the integers.
 That division is wrong for a field element, so this instance has high priority. -/
 instance (priority := high) : Div Fp := ⟨fun a b => a * b.inverse⟩
 
+/-- Square root, valid since `p = 3 mod 4`.
+
+The root it returns is `a ^ ((p + 1) / 4)`.
+
+It fails when `a` is not a square. -/
+def sqrt (a : Fp) : Except BlsError Fp :=
+  let cand := powNat a ((modulus + 1) / 4)
+  if (cand * cand).beq a then .ok cand else .error .notASquare
+
 /-- The operations that the extensions and curves of BLS12-381 read from `Fp`. -/
 instance : BaseField Fp where
   zero := zero
@@ -85,13 +94,11 @@ instance : BaseField Fp where
   beq := beq
   isZero := isZero
   inverse := inverse
-
-/-- Square root, valid since `p = 3 mod 4`.
-
-It fails when `a` is not a square. -/
-def sqrt (a : Fp) : Except BlsError Fp :=
-  let cand := powNat a ((modulus + 1) / 4)
-  if (cand * cand).beq a then .ok cand else .error .notASquare
+  powNat := powNat
+  sqrt a := match Fp.sqrt a with
+    | .ok s => some s
+    | .error _ => none
+  sgn0 a := a.val % 2 == 1
 
 /-- Decode big-endian bytes as a `Nat`. -/
 def bytesBEToNat (b : ByteArray) : Nat := Id.run do
@@ -115,5 +122,11 @@ def toBytesBE (a : Fp) : ByteArray :=
     UInt8.ofNat ((a.val >>> ((47 - i.val) * 8)) &&& 0xff)
 
 end Fp
+
+/-- A square root in a base field, or the error of `Fp.sqrt` when the element is not a square. -/
+def sqrtOrError {F : Type} [BaseField F] (a : F) : Except BlsError F :=
+  match BaseField.sqrt a with
+  | some s => .ok s
+  | none => .error .notASquare
 
 end EthLib.Cryptography.Bls
