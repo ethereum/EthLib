@@ -58,17 +58,47 @@ theorem decodeChunks_chunk_error {type : UInt8} {body : List UInt8} {e : FrameEr
   simp [decodeChunks, hv, hc, show ¬ body.length + rest.length < body.length by omega]
 
 /-- The four bytes of a 32-bit value, such as a checksum, read back as that value. -/
-theorem foldr_uintToBytes_four (c : UInt32) :
+private theorem foldr_uintToBytes_uint32 (c : UInt32) :
     Vector.foldr (fun byte acc => byte.toNat + 256 * acc) 0 (uintToBytes 4 c.toNat) = c.toNat :=
-  (EthLib.Base.bytesToUint_uintToBytes 4 _).trans (Nat.mod_eq_of_lt (UInt32.toNat_lt _))
+  EthLib.Base.foldr_uintToBytes_of_lt (UInt32.toNat_lt _)
 
 /-- An uncompressed chunk of at most 65536 bytes with its own checksum decodes to its data. -/
 theorem decodeChunk_uncompressed {data : List UInt8} (h : data.length ≤ maxChunkLength) :
     decodeChunk uncompressedType
         ((uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ data) = .ok data := by
   simp [decodeChunk, verifyChecksum, compressedType, uncompressedType,
-    EthLib.Base.bytesToUint_toVector, foldr_uintToBytes_four,
+    EthLib.Base.bytesToUint_toVector, foldr_uintToBytes_uint32,
     show ¬ maxChunkLength < data.length by omega]
+
+/-- A compressed chunk decodes to its data (§4.2).
+
+Its block may be any block that decompresses to at most 65536 bytes.
+
+Its checksum is the one of the decompressed data.
+-/
+theorem decodeChunk_compressed {block data : List UInt8}
+    (hb : decompressList block = .ok data) (hd : data.length ≤ maxChunkLength) :
+    decodeChunk compressedType
+        ((uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ block) = .ok data := by
+  -- The preamble of a block that decompresses declares the length of its output.
+  obtain ⟨rest, hpre⟩ := Block.decompressList_length_eq_declared hb
+  simp [decodeChunk, hpre, hb, verifyChecksum, EthLib.Base.bytesToUint_toVector,
+    foldr_uintToBytes_uint32, show ¬ maxChunkLength < data.length by omega]
+
+/-- A compressed chunk whose block holds its data as one literal decodes to that data.
+
+For empty data, the block is the preamble alone.
+
+So some compressed chunk of each length up to 65536 bytes decodes.
+-/
+theorem decodeChunk_compressed_compressLiteralList {data : List UInt8}
+    (h : data.length ≤ maxChunkLength) :
+    decodeChunk compressedType
+        ((uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++
+          compressLiteralList data) = .ok data :=
+  decodeChunk_compressed
+    (Block.decompressList_compressLiteralList
+      (Nat.le_trans h (by simp [maxChunkLength, maxUncompressedLength]))) h
 
 /-! ## The round trip -/
 
@@ -249,34 +279,6 @@ theorem decodeChunk_compressed_checksumMismatch {checksum block data : List UInt
   simp only [EthLib.Base.bytesToUint_toVector] at hne
   simp [decodeChunk, hcs, hpre, hb, verifyChecksum, EthLib.Base.bytesToUint_toVector, hne,
     show ¬ maxChunkLength < data.length by omega]
-
-/-- A compressed chunk decodes to its data (§4.2).
-
-Its block may be any block that decompresses to at most 65536 bytes.
-
-Its checksum is the one of the decompressed data.
--/
-theorem decodeChunk_compressed {block data : List UInt8}
-    (hb : decompressList block = .ok data) (hd : data.length ≤ maxChunkLength) :
-    decodeChunk compressedType
-        ((uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ block) = .ok data := by
-  -- The preamble of a block that decompresses declares the length of its output.
-  obtain ⟨rest, hpre⟩ := Block.decompressList_length_eq_declared hb
-  simp [decodeChunk, hpre, hb, verifyChecksum, EthLib.Base.bytesToUint_toVector,
-    foldr_uintToBytes_four, show ¬ maxChunkLength < data.length by omega]
-
-/-- A compressed chunk whose block is one literal decodes to its data.
-
-So some compressed chunk of each length up to 65536 bytes decodes.
--/
-theorem decodeChunk_compressed_compressLiteralList {data : List UInt8}
-    (h : data.length ≤ maxChunkLength) :
-    decodeChunk compressedType
-        ((uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++
-          compressLiteralList data) = .ok data :=
-  decodeChunk_compressed
-    (Block.decompressList_compressLiteralList
-      (Nat.le_trans h (by simp [maxChunkLength, maxUncompressedLength]))) h
 
 /-! ## Error codes -/
 
