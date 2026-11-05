@@ -1,4 +1,5 @@
-"""secp256k1 ECDSA, as Ethereum uses it.
+"""
+secp256k1 ECDSA, as Ethereum uses it.
 
 - A public key is either SEC 1 encoding: 33 bytes compressed, or 65 bytes uncompressed.
 - A hash is 32 bytes.
@@ -22,7 +23,8 @@ from ethlib.errors import Secp256k1Error
 
 
 def verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool:
-    """Whether the signature on the hash is valid under the public key, by SEC 1 v2 §4.1.4.
+    """
+    Whether the signature on the hash is valid under the public key, by SEC 1 v2 §4.1.4.
 
     It accepts a high s, as ECDSA does.
     """
@@ -35,7 +37,8 @@ def is_low_s(signature: bytes) -> bool:
 
 
 def recover(msg_hash: bytes, signature: bytes, recovery_id: int) -> bytes:
-    """The public key that signed the hash, by SEC 1 v2 §4.1.6, as 65 uncompressed bytes.
+    """
+    The public key that signed the hash, by SEC 1 v2 §4.1.6, as 65 uncompressed bytes.
 
     The recovery id is 0 or 1: the parity of the y of the signer's point R.
     A signature with no key for that id raises Secp256k1Error.

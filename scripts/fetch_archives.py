@@ -227,6 +227,7 @@ def default_cache() -> Path:
 
 
 def main() -> int:
+    """List the archives, or download or unpack the named ones, and return the exit code."""
     parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument("names", nargs="*", metavar="NAME", help="an archive of the table")
     parser.add_argument(

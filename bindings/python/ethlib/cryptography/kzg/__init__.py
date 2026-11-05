@@ -1,3 +1,5 @@
+"""KZG commitments and proofs for blobs and their cells."""
+
 from ethlib.cryptography._native import (
     BYTES_PER_BLOB,
     BYTES_PER_CELL,

@@ -25,7 +25,8 @@ def _scalar(item: Item) -> int:
 
 
 def decode_as(kind: str, data: bytes):
-    """The value of one type that the bytes encode.
+    """
+    The value of one type that the bytes encode.
 
     The kinds, and the Python value of each:
 

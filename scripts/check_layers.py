@@ -78,10 +78,12 @@ def imports(text: str) -> list[str]:
 
 
 def module_name(path: Path, root: Path) -> str:
+    """The Lean module name of a file under `root`."""
     return ".".join(path.relative_to(root).with_suffix("").parts)
 
 
 def kind(module: str) -> str:
+    """The kind of a module: a property, an export or a specification."""
     parts = module.split(".")
     if "Proofs" in parts:
         return "property"
@@ -91,14 +93,17 @@ def kind(module: str) -> str:
 
 
 def layer(module: str) -> str | None:
+    """The layer of an `EthLib` module, or None outside the layers."""
     parts = module.split(".")
     return parts[1] if len(parts) > 1 and parts[0] == "EthLib" and parts[1] in LAYERS else None
 
 
 def library_roots(lakefile: str) -> list[str]:
-    """The root modules of each `lean_lib` of the lakefile.
+    """
+    The root modules of each `lean_lib` of the lakefile.
 
-    A library without `roots` has one root, named after the library."""
+    A library without `roots` has one root, named after the library.
+    """
     roots = []
     for name, body in LIBRARY.findall(lakefile):
         if listed := ROOTS.search(body):
@@ -129,6 +134,7 @@ def import_problems(module: str, imported: str) -> list[str]:
 
 
 def read_baseline(path: Path) -> set[tuple[str, str]]:
+    """The (module, import) pairs that the baseline file allows."""
     entries = set()
     if path.exists():
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -195,6 +201,7 @@ def check(root: Path) -> list[str]:
 
 
 def main() -> int:
+    """Print each problem that the check finds, and return the exit code."""
     problems = check(ROOT)
     for problem in problems:
         print(problem, file=sys.stderr)

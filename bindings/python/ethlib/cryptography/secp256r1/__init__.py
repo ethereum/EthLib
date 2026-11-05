@@ -1,4 +1,5 @@
-"""secp256r1 ECDSA verification, also called P-256.
+"""
+secp256r1 ECDSA verification, also called P-256.
 
 - A public key is 64 bytes: x then y, each a 32-byte big-endian integer below p.
 - A hash is 32 bytes.
@@ -18,7 +19,8 @@ from ethlib.errors import Secp256r1Error
 
 
 def verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool:
-    """Whether the signature on the hash is valid under the public key, by SEC 1 v2 §4.1.4.
+    """
+    Whether the signature on the hash is valid under the public key, by SEC 1 v2 §4.1.4.
 
     A key off the curve verifies nothing.
     """

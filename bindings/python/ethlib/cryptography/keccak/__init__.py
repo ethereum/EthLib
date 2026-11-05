@@ -9,7 +9,8 @@ from ethlib.errors import KeccakError
 
 
 def keccak256(data: bytes) -> bytes:
-    """The 32-byte Keccak-256 digest of the message.
+    """
+    The 32-byte Keccak-256 digest of the message.
 
     Every byte string has a digest.
 
@@ -26,7 +27,8 @@ def keccak512(data: bytes) -> bytes:
 
 
 def keccak_f1600(state: bytes) -> bytes:
-    """The Keccak-f[1600] permutation of a 200-byte state string.
+    """
+    The Keccak-f[1600] permutation of a 200-byte state string.
 
     Lane `i` is bytes `8i` to `8i + 7`, the first least significant, as in FIPS 202 §3.1.3.
 

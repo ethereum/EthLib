@@ -1,4 +1,5 @@
-"""The state of the execution layer, and the root that commits to it.
+"""
+The state of the execution layer, and the root that commits to it.
 
 A state is given as RLP bytes: a list of accounts.
 Each account is the list `[address, nonce, balance, code, storage]`.
@@ -16,7 +17,8 @@ from ethlib.execution.pow import chain_forks
 
 
 def state_root(state: bytes) -> bytes:
-    """The 32-byte state root, with Keccak-256, of the state that the RLP bytes encode.
+    """
+    The 32-byte state root, with Keccak-256, of the state that the RLP bytes encode.
 
     A storage key with the value zero is absent from the storage.
 

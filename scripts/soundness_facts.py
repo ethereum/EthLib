@@ -41,11 +41,13 @@ VERSION_LINE = re.compile(
 
 
 def baseline(root: Path) -> list[tuple[str, str]]:
-    """The declaration-check baseline, as (kind, declaration) pairs.
+    """
+    The declaration-check baseline, as (kind, declaration) pairs.
 
     `lake exe check-decls` fails on a stale entry as well as on a missing
     one, so in a tree that passes CI the baseline is the exact list of
-    findings."""
+    findings.
+    """
     out = []
     for line in (root / "scripts" / "check_decls_baseline.txt").read_text().splitlines():
         fields = line.split("#", 1)[0].split()
@@ -55,14 +57,17 @@ def baseline(root: Path) -> list[tuple[str, str]]:
 
 
 def readable(decl: str) -> str:
-    """A declaration name as a reader would write it.
-    A private name, `_private.<module>.0.<name>`, becomes `<name>` marked private."""
+    """
+    A declaration name as a reader would write it.
+    A private name, `_private.<module>.0.<name>`, becomes `<name>` marked private.
+    """
     if decl.startswith("_private."):
         return f"`{decl.split('.0.', 1)[1]}` (private)"
     return f"`{decl}`"
 
 
 def native(root: Path) -> str:
+    """The text that counts and lists the baseline entries of kind `native`."""
     names = sorted((d for k, d in baseline(root) if k == "native"), key=readable)
     if not names:
         return "No theorem uses them.\n"
@@ -74,6 +79,7 @@ def native(root: Path) -> str:
 
 
 def unfoldable(root: Path) -> str:
+    """The baseline entries of kind `partial`, `opaque` or `reaches-opaque`, as a Markdown list."""
     found = sorted(
         (d, k) for k, d in baseline(root) if k in ("partial", "opaque", "reaches-opaque")
     )
@@ -86,17 +92,20 @@ def blank(text: str) -> str:
 
 
 def is_ident(c: str) -> bool:
+    """Whether a character can continue a Lean identifier."""
     return c.isalnum() or c in "_'!?"
 
 
 def strip_lean(text: str) -> str:
-    """Lean source with its comments and string and character literals blanked out.
+    r"""
+    Lean source with its comments and string and character literals blanked out.
 
     Block comments `/- … -/` nest, so a depth is kept; a line comment runs from
     `--` to the end of the line. A string `"…"` honours backslash escapes, and a
     raw string `r#"…"#` ends at the quote followed by as many `#` as it opened
-    with. A character literal is `'c'` or an escape such as `'\\n'`, where the `'` does not end an
-    identifier such as `x'`."""
+    with. A character literal is `'c'` or an escape such as `'\n'`, where the `'` does not end an
+    identifier such as `x'`.
+    """
     out, i, n = [], 0, len(text)
     while i < n:
         if text.startswith("/-", i):
@@ -134,11 +143,13 @@ def strip_lean(text: str) -> str:
 
 
 def lean_exports(root: Path) -> set[str]:
-    """Every `@[export name]` symbol in an export module.
+    r"""
+    Every `@[export name]` symbol in an export module.
 
     An attribute list may span lines and hold other attributes, as in
-    `@[inline,\\n  export eth_foo]`, and `attribute [export eth_foo] decl` is
-    the other way to write one."""
+    `@[inline,\n  export eth_foo]`, and `attribute [export eth_foo] decl` is
+    the other way to write one.
+    """
     symbols = set()
     for path in (root / "EthLib").rglob("*.lean"):
         if "Exports" not in path.parts:
@@ -150,10 +161,12 @@ def lean_exports(root: Path) -> set[str]:
 
 
 def strip_c(text: str) -> str:
-    """C source with its comments and string and character literals blanked out.
+    """
+    C source with its comments and string and character literals blanked out.
 
     Block comments `/* … */` do not nest in C. A string `"…"` and a character
-    `'…'` honour backslash escapes."""
+    `'…'` honour backslash escapes.
+    """
     out, i, n = [], 0, len(text)
     while i < n:
         if text.startswith("/*", i):
@@ -177,11 +190,13 @@ def strip_c(text: str) -> str:
 
 
 def c_calls(root: Path, symbols: set[str]) -> set[str]:
-    """The members of `symbols` that the C sources call, not merely declare.
+    """
+    The members of `symbols` that the C sources call, not merely declare.
 
     A declaration is an `extern` statement, `extern <type> name(<params>);`.
     Once those are removed, any remaining `name(` is a call: the C sources
-    define none of these functions themselves."""
+    define none of these functions themselves.
+    """
     called = set()
     for path in sorted((root / "bindings" / "python").glob("*.c")):
         text = re.sub(r"\bextern\b[^;{]*;", " ", strip_c(path.read_text()))
@@ -209,6 +224,7 @@ def exports(root: Path) -> str:
 
 
 def c_lines(root: Path) -> str:
+    """The line count of each hand-written C file of the bindings, and their total."""
     bindings = root / "bindings" / "python"
     # `docstrings.h` is written by `lake exe gen-bindings`, so it is not hand-written C.
     files = sorted(
@@ -227,8 +243,10 @@ PACKAGE_NAMES = {"mathlib": "Mathlib"}
 
 
 def pins(root: Path) -> str:
-    """The pinned dependencies: the commit each resolved to, and the tag or branch requested.
-    Only the packages the lakefile requires itself are named, not the ones they require."""
+    """
+    The pinned dependencies: the commit each resolved to, and the tag or branch requested.
+    Only the packages the lakefile requires itself are named, not the ones they require.
+    """
     packages = json.loads((root / "lake-manifest.json").read_text())["packages"]
     toolchain = (root / "lean-toolchain").read_text().strip()
 
@@ -282,8 +300,10 @@ def regenerate(root: Path, doc: str) -> tuple[str, list[str]]:
 
 
 def package_version(root: Path) -> str | None:
-    """The `version` in the `[project]` table of `pyproject.toml`.
-    Read with a pattern rather than `tomllib`, which needs Python 3.11."""
+    """
+    The `version` in the `[project]` table of `pyproject.toml`.
+    Read with a pattern rather than `tomllib`, which needs Python 3.11.
+    """
     text = (root / "pyproject.toml").read_text()
     project = re.search(r"^\[project\]\n(.*?)(?=^\[|\Z)", text, re.M | re.S)
     m = project and re.search(r'^version\s*=\s*"([^"]+)"', project.group(1), re.M)
@@ -291,6 +311,7 @@ def package_version(root: Path) -> str | None:
 
 
 def check_version(root: Path, doc: str) -> list[str]:
+    """The problems with the line that names the package version."""
     version = package_version(root)
     m = VERSION_LINE.search(doc)
     if not m:
@@ -304,6 +325,7 @@ def check_version(root: Path, doc: str) -> list[str]:
 
 
 def run(root: Path, check: bool) -> list[str]:
+    """Regenerate or check the blocks of SOUNDNESS.md, and return the problems."""
     path = root / "SOUNDNESS.md"
     doc = path.read_text()
     new, problems = regenerate(root, doc)
@@ -321,6 +343,7 @@ def run(root: Path, check: bool) -> list[str]:
 
 
 def main() -> int:
+    """Regenerate or check SOUNDNESS.md, and return the exit code."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0].strip())
     parser.add_argument(
         "--check",

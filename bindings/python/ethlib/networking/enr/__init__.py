@@ -1,4 +1,5 @@
-"""Ethereum Node Records, from EIP-778, with the "v4" identity scheme.
+"""
+Ethereum Node Records, from EIP-778, with the "v4" identity scheme.
 
 - A record is its RLP bytes, at most MAX_RECORD_SIZE bytes long.
 - Its text form is "enr:", then the unpadded URL-safe base64 of those bytes.
@@ -32,7 +33,8 @@ def seq(record: bytes) -> int:
 
 
 def verify_v4(record: bytes) -> bool:
-    """Whether the record names the "v4" scheme and its signature verifies under its public key.
+    """
+    Whether the record names the "v4" scheme and its signature verifies under its public key.
 
     A high s is accepted, since EIP-778 adds no low-s rule.
     """
@@ -40,7 +42,8 @@ def verify_v4(record: bytes) -> bool:
 
 
 def node_id(record: bytes) -> bytes:
-    """The 32-byte node ID of a "v4" record: the Keccak-256 hash of the x and y of its key.
+    """
+    The 32-byte node ID of a "v4" record: the Keccak-256 hash of the x and y of its key.
 
     It does not check the signature.
     """
@@ -56,7 +59,8 @@ class EnrForkId(NamedTuple):
 
 
 class ConsensusEntries(NamedTuple):
-    """The consensus entries of a record, as a node at one fork reads them.
+    """
+    The consensus entries of a record, as a node at one fork reads them.
 
     attnets and syncnets are the SSZ bytes of their bitvectors, or None when absent.
     A node before Altair does not read syncnets, and a node before Fulu does not read cgc or nfd.

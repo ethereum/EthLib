@@ -43,6 +43,7 @@ class Runner:
     """Time named rows and save the results of one side to a JSON file."""
 
     def __init__(self, side: str, out_path: str):
+        """Record the side and the output path, with no results yet."""
         self.side = side
         self.out_path = out_path
         self.results = {}

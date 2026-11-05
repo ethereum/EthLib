@@ -4,7 +4,8 @@ from ethlib.cryptography._native import sha256 as native_sha256
 
 
 def sha256(data: bytes) -> bytes:
-    """The 32-byte SHA-256 digest of the message.
+    """
+    The 32-byte SHA-256 digest of the message.
 
     Every byte string has a digest.
 

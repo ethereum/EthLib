@@ -86,6 +86,7 @@ def manifest(root: Path) -> dict[str, object]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Check the release version, write the manifest, and return the exit code."""
     parser = argparse.ArgumentParser(
         description="Check the release version and write the manifest."
     )
