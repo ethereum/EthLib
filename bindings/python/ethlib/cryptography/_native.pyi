@@ -623,6 +623,10 @@ def eth_receipts_match(version: int, fork: str, receipts_root: bytes, receipts: 
     """Whether the receipts of a block, as a version sends them, match the receipts root of its header."""
     ...
 
+def eth_access_lists_answer(version: int, request: bytes, response: bytes, expected: list[bytes]) -> bool:
+    """Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request` of eth/71 on, given the access list hash of each requested block."""
+    ...
+
 def snap_message_decode(version: int, id: int, data: bytes) -> bytes:
     """The canonical data of the message with the ID `id` and the data `data`, on a version."""
     ...

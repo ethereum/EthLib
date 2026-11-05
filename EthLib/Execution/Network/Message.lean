@@ -1,7 +1,9 @@
 module
 
 public import EthLib.Execution.Network.Blocks
+public import EthLib.Execution.Network.Cells
 public import EthLib.Execution.Network.Receipts
+public import EthLib.Execution.Network.Snap
 public import EthLib.Execution.Network.Status
 public import EthLib.Execution.Network.Transactions
 
@@ -28,6 +30,12 @@ namespace EthLib.Execution.Network
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
+
+/-- The message ID of GetBlockAccessLists, from eth/71 on. -/
+def GET_BLOCK_ACCESS_LISTS_ID : Nat := 0x12
+
+/-- The message ID of BlockAccessLists, from eth/71 on. -/
+def BLOCK_ACCESS_LISTS_ID : Nat := 0x13
 
 /-- A message of the eth capability. -/
 inductive Message where
@@ -63,6 +71,17 @@ inductive Message where
   | receipts (requestId : UInt64) (lastIncomplete : Option Bool) (lists : List (List Item))
   /-- BlockRangeUpdate (0x11), from eth/69 on. -/
   | blockRangeUpdate (r : BlockRange)
+  /-- GetBlockAccessLists (0x12) of eth/71: `[request-id, [blockhash, ...]]`. -/
+  | getBlockAccessLists (requestId : UInt64) (hashes : List Hash32)
+  /-- BlockAccessLists (0x13) of eth/71: `[request-id, [bal, ...]]`.
+
+  Each access list is its RLP item, or the empty string when the peer does not have it. -/
+  | blockAccessLists (requestId : UInt64) (lists : List Item)
+  /-- GetCells (0x14) of eth/72: `[request-id, [txhash, ...], cells]`. -/
+  | getCells (requestId : UInt64) (hashes : List Hash32) (mask : CellMask)
+  /-- Cells (0x15) of eth/72: `[request-id, [txhash, ...], [[cell, ...], ...], cells]`. -/
+  | cells (requestId : UInt64) (hashes : List Hash32) (groups : List (List ByteArray))
+      (mask : CellMask)
   deriving DecidableEq
 
 /-- Every way a message can be rejected. -/
@@ -101,6 +120,10 @@ def id : Message → Nat
   | getReceipts .. => GET_RECEIPTS_ID
   | receipts .. => RECEIPTS_ID
   | blockRangeUpdate _ => BLOCK_RANGE_UPDATE_ID
+  | getBlockAccessLists .. => GET_BLOCK_ACCESS_LISTS_ID
+  | blockAccessLists .. => BLOCK_ACCESS_LISTS_ID
+  | getCells .. => GET_CELLS_ID
+  | cells .. => CELLS_ID
 
 /-- The envelope of a request or a response: `[request-id, payload]`, from EIP-2481. -/
 def envelope (requestId : UInt64) (payload : Item) : Item :=
@@ -130,6 +153,10 @@ def toItem : Message → Item
   | getReceipts i k hs => withPart i k (Codec.toItem hs)
   | receipts i b ls => withPart i b (.list (ls.map .list))
   | blockRangeUpdate r => Codec.toItem r
+  | getBlockAccessLists i hs => envelope i (Codec.toItem hs)
+  | blockAccessLists i ls => envelope i (.list ls)
+  | getCells i hs m => .list [Codec.toItem i, Codec.toItem hs, Codec.toItem m]
+  | cells i hs gs m => .list [Codec.toItem i, Codec.toItem hs, Codec.toItem gs, Codec.toItem m]
 
 /-- The request ID and the payload in the envelope `[request-id, payload]`. -/
 def readEnvelope {α : Type} [Codec α] (item : Item) : Except RlpError (UInt64 × α) := do
@@ -152,8 +179,8 @@ def readWithPart {α β : Type} [Codec α] [Codec β] (version : EthVersion) (it
 /-- The request ID of a request or a response, and none for the other messages. -/
 def requestId? : Message → Option UInt64
   | getBlockHeaders i _ | blockHeaders i _ | getBlockBodies i _ | blockBodies i _
-  | getPooledTransactions i _ | pooledTransactions i _ | getReceipts i _ _ | receipts i _ _ =>
-    some i
+  | getPooledTransactions i _ | pooledTransactions i _ | getReceipts i _ _ | receipts i _ _
+  | getBlockAccessLists i _ | blockAccessLists i _ | getCells i _ _ | cells i _ _ _ => some i
   | _ => none
 
 /-- Whether `response` answers `request`: it is the response type of the request type, and it
@@ -164,6 +191,8 @@ def answers (request response : Message) : Bool :=
   | getBlockBodies i _, blockBodies j _ => i == j
   | getPooledTransactions i _, pooledTransactions j _ => i == j
   | getReceipts i _ _, receipts j _ _ => i == j
+  | getBlockAccessLists i _, blockAccessLists j _ => i == j
+  | getCells i _ _, cells j _ _ _ => i == j
   | _, _ => false
 
 /-- The message with the ID `id` and the data `item`, on the version `version`.
@@ -198,6 +227,18 @@ def ofItem (version : EthVersion) (id : Nat) (item : Item) : Except EthError Mes
     ((fun (i, k, hs) => getReceipts i k hs) <$> readWithPart version item).mapError .rlp
   else if id = RECEIPTS_ID then
     ((fun (i, b, ls) => receipts i b ls) <$> readWithPart version item).mapError .rlp
+  else if id = GET_BLOCK_ACCESS_LISTS_ID ∧ EthVersion.eth71 ≤ version then
+    ((fun (i, hs) => getBlockAccessLists i hs) <$> readEnvelope item).mapError .rlp
+  else if id = BLOCK_ACCESS_LISTS_ID ∧ EthVersion.eth71 ≤ version then
+    ((fun (i, ls) => blockAccessLists i ls) <$> readEnvelope item).mapError .rlp
+  else if id = GET_CELLS_ID ∧ EthVersion.eth72 ≤ version then Except.mapError .rlp do
+    match ← item.fields 3 with
+    | [i, hs, m] => return getCells (← i.field 0) (← hs.field 1) (← m.field 2)
+    | items => throw (.wrongFieldCount 3 items.length)
+  else if id = CELLS_ID ∧ EthVersion.eth72 ≤ version then Except.mapError .rlp do
+    match ← item.fields 4 with
+    | [i, hs, gs, m] => return cells (← i.field 0) (← hs.field 1) (← gs.field 2) (← m.field 3)
+    | items => throw (.wrongFieldCount 4 items.length)
   else if id = BLOCK_RANGE_UPDATE_ID ∧ EthVersion.eth69 ≤ version then
     (blockRangeUpdate <$> Codec.ofItem item).mapError .rlp
   else .error (.unknownId id)
@@ -226,6 +267,29 @@ def checkPooledResponse (request response : Message) : Except PoolError Unit :=
   | getPooledTransactions i hs, pooledTransactions j txs =>
     if i = j then checkPooled hs txs else throw .notAnswer
   | _, _ => throw .notAnswer
+
+/-- Whether `response` is Cells that answers the GetCells `request`.
+
+It must repeat the request ID and pass the checks of the cells, with `blobs` the number of blobs
+of each transaction of the response. -/
+def checkCellsResponse (blobs : List Nat) (request response : Message) :
+    Except CellsError Unit :=
+  match request, response with
+  | getCells i requested requestMask, cells j hashes groups mask =>
+    if i = j then checkCells requested requestMask blobs hashes groups mask else throw .notAnswer
+  | _, _ => throw .notAnswer
+
+/-- Whether `response` is BlockAccessLists that answers the GetBlockAccessLists `request`.
+
+`expected` holds the access list hash of the header of each requested block.
+
+`eth.md` gives each element of the response one requested block, so the response has exactly
+one entry per request, unlike snap/2, which lets the peer cut the tail. -/
+def accessListsResponse (expected : List Hash32) (request response : Message) : Bool :=
+  match request, response with
+  | getBlockAccessLists i _, blockAccessLists j lists =>
+    i == j && lists.length == expected.length && accessListsAnswer expected lists
+  | _, _ => false
 
 end Message
 

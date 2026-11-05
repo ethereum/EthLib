@@ -135,4 +135,19 @@ def receiptsMatchExport (version : UInt64) (fork root receipts : ByteArray) : Re
   | .ok (.list items) => return receiptsMatch v fork root items
   | _ => throw (0, "receipts are not one RLP list")
 
+/-- Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request`
+of eth/71 on, given the access list hash of each requested block. -/
+@[export eth_access_lists_answer]
+def accessListsAnswerExport (version : UInt64) (request response : ByteArray)
+    (expected : Array ByteArray) : Result Bool := do
+  let v ← readVersion version
+  let run {α : Type} (act : Except EthError α) : Result α :=
+    act.mapError fun e => (e.code, ethMessage e)
+  let req ← run (Message.decode v GET_BLOCK_ACCESS_LISTS_ID request)
+  let resp ← run (Message.decode v BLOCK_ACCESS_LISTS_ID response)
+  let hashes ← expected.toList.mapM fun b =>
+    if h : b.size = 32 then pure (⟨b.data, h⟩ : Base.Hash32)
+    else throw (0, "an access list hash is not 32 bytes")
+  return Message.accessListsResponse hashes req resp
+
 end EthLib.Execution.Network.Exports
