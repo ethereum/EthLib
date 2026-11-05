@@ -205,6 +205,8 @@ In the random oracle model, `prEvent_guess_le` (`Proofs/Vrf/Unpredictability.lea
 The secret at the guessed index is uniform, and the adversary sees the root, the hash and the openings at other indices.
 It guesses right with probability at most `(1 + 2 Q) / 2^256`, where `Q = q_H + (q_O + 1) 2^33` counts its hash queries and requests.
 The theorem fixes the index in advance, and does not cover a secret derived from a seed.
+`prEvent_adaptiveGame_le` (`Proofs/Vrf/AdaptiveIndex.lean`) lets the adversary choose the index, with all secrets uniform.
+Its bound is `2^32 (1 + 2 Q) / 2^256`, because the proof splits a win by the index named.
 Verification accepts any tree, so a holder that chooses its secrets can bias every output.
 
 ### BLS12-381
