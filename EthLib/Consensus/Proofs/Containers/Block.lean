@@ -24,6 +24,8 @@ At Heze the body has eleven of the thirteen places of Gloas, and two gaps.
 Each field that Heze keeps sits at the place it has at Gloas.
 
 The vectors whose length comes from the preset need that length to be positive.
+
+The genesis block holds the state root, and the defaults of every other field.
 -/
 
 @[expose] public section
@@ -33,6 +35,21 @@ namespace EthLib.Consensus
 open Base Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork}
+
+/-- The genesis block holds the state root, and zero in its slot, proposer and parent root.
+
+Its body is the one that the default value of the body type stands for. -/
+theorem BeaconBlock.genesis_fields {stateRoot : Root} {block : BeaconBlock preset fork}
+    (built : BeaconBlock.genesis preset fork stateRoot = .ok block) :
+    block.slot = 0 ∧ block.proposerIndex = 0 ∧ block.parentRoot = Vector.replicate 32 0 ∧
+      block.stateRoot = stateRoot ∧
+      ∃ value, (SszType.desc (BeaconBlockBody preset fork)).default = .ok value ∧
+        SszType.ofValue value = .ok block.body := by
+  unfold BeaconBlock.genesis at built
+  simp only [bind_ok_iff] at built
+  obtain ⟨value, isDefault, body, decoded, built⟩ := built
+  cases built
+  exact ⟨rfl, rfl, rfl, rfl, value, isDefault, decoded⟩
 
 /-- The field names of a body are distinct at every fork. -/
 theorem BeaconBlockBody.names_nodup : (BeaconBlockBody.names fork).Nodup := by

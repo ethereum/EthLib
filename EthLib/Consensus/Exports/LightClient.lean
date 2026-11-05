@@ -183,6 +183,52 @@ def isBetterUpdateExport (name fork newUpdate oldUpdate : ByteArray) : Result Bo
   return isBetterUpdate (← decodeAs (LightClientUpdate preset fork) newUpdate)
     (← decodeAs (LightClientUpdate preset fork) oldUpdate)
 
+/-- The genesis block of a state, given as bytes, with a signature of zero bytes.
+
+No proposer signs the genesis block, so its signature stays empty. -/
+@[export eth_consensus_genesis_block]
+def genesisBlockExport (name fork state : ByteArray) : Result ByteArray := do
+  let (preset, fork) ← lightClientPresetAndFork name fork
+  let state ← decodeAs (BeaconState preset fork) state
+  let root ← runSsz "root rejected" (SszType.hashTreeRoot state)
+  let block ← runSsz "default rejected" (BeaconBlock.genesis preset fork root)
+  let signed : SignedBeaconBlock preset fork := ⟨block, Vector.replicate _ 0⟩
+  runSsz "value rejected" (SszType.serialize signed)
+
+/-- The bootstrap that a full node serves for a block, from the block and its post state. -/
+@[export eth_consensus_create_light_client_bootstrap]
+def createLightClientBootstrapExport (name fork replacements state block : ByteArray) :
+    Result ByteArray := do
+  let (preset, fork) ← lightClientPresetAndFork name fork
+  let config ← configWith name replacements
+  let bootstrap ← runLightClient (createLightClientBootstrap config
+    (← decodeAs (BeaconState preset fork) state) (← decodeAs (SignedBeaconBlock preset fork) block))
+  runSsz "value rejected" (SszType.serialize bootstrap)
+
+/-- The update that a full node serves for a block, from the blocks and their post states.
+
+The type names the update, the finality update or the optimistic update that it gives.
+
+Empty bytes for the finalized block stand for a finalized block that the node does not know. -/
+@[export eth_consensus_create_light_client_update]
+def createLightClientUpdateExport (name fork type replacements state block attestedState
+    attestedBlock finalizedBlock : ByteArray) : Result ByteArray := do
+  let (preset, fork) ← lightClientPresetAndFork name fork
+  let config ← configWith name replacements
+  let finalized ← if finalizedBlock.isEmpty then pure none
+    else some <$> decodeAs (SignedBeaconBlock preset fork) finalizedBlock
+  let update ← runLightClient (createLightClientUpdate config
+    (← decodeAs (BeaconState preset fork) state) (← decodeAs (SignedBeaconBlock preset fork) block)
+    (← decodeAs (BeaconState preset fork) attestedState)
+    (← decodeAs (SignedBeaconBlock preset fork) attestedBlock) finalized)
+  match ← nameOf type with
+  | "LightClientUpdate" => runSsz "value rejected" (SszType.serialize update)
+  | "LightClientFinalityUpdate" =>
+    runSsz "value rejected" (SszType.serialize (createLightClientFinalityUpdate update))
+  | "LightClientOptimisticUpdate" =>
+    runSsz "value rejected" (SszType.serialize (createLightClientOptimisticUpdate update))
+  | other => throw (0, s!"no update of type {other}")
+
 /-- The fork digest at an epoch, on the chain with the given root of the genesis validators.
 
 The configuration of the name holds, with the replacements that the JSON object gives. -/

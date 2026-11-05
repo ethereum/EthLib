@@ -8,6 +8,7 @@ public import EthLib.Consensus.Containers.PayloadAttestation
 public import EthLib.Consensus.Containers.Requests
 public import EthLib.Consensus.Containers.SyncCommittee
 public import EthLib.Cryptography.Kzg.Core
+public import EthLib.Serialization.Ssz.Type.Default
 
 /-!
 # `Consensus.Containers.Block`
@@ -179,6 +180,16 @@ instance {preset : Preset} {fork : Fork} : SszType (BeaconBlock preset fork) :=
     (fun b => (b.slot, b.proposerIndex, b.parentRoot, b.stateRoot, b.body))
     (fun (slot, proposerIndex, parentRoot, stateRoot, body) =>
       ⟨slot, proposerIndex, parentRoot, stateRoot, body⟩)
+
+/-- The genesis block: the root of the genesis state, and every other field at its default.
+
+The default of each field is its SSZ default: zero, or an empty list.
+
+A body with no default is an error. -/
+def BeaconBlock.genesis (preset : Preset) (fork : Fork) (stateRoot : Root) :
+    Except Err (BeaconBlock preset fork) := do
+  let body ← SszType.ofValue (← (SszType.desc (BeaconBlockBody preset fork)).default)
+  return { slot := 0, proposerIndex := 0, parentRoot := Vector.replicate 32 0, stateRoot, body }
 
 /-- A beacon block with the signature of its proposer. -/
 structure SignedBeaconBlock (preset : Preset) (fork : Fork) where

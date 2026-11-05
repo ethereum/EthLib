@@ -1,4 +1,4 @@
-"""The light client data collection vectors of consensus-specs, without the state transition."""
+"""The light client data collection vectors of consensus-specs."""
 
 from pathlib import Path
 
@@ -16,10 +16,20 @@ _YAML = YAML(typ="safe")
 # The size of a beacon block header, the first field of a light client header.
 BEACON = 112
 
+# The forks whose blocks the state transition of EthLib processes.
+# A case of one of them, with no fork transition, runs every block, and its served data is
+# checked against what the full node functions give from the post states.
+TRANSITION = ("altair", "bellatrix", "capella")
+
 
 def runs_data_collection(fork: str, name: str) -> bool:
     """Whether EthLib runs a data collection case: every case from Altair."""
     return fork in SPECIFIED
+
+
+def _transition_runs(fork: str, name: str) -> bool:
+    """Whether the blocks of a case go through the state transition."""
+    return fork in TRANSITION and name == "light_client_data_collection"
 
 
 def _read(case: Path, name: str) -> bytes:
@@ -81,13 +91,15 @@ class Chain:
         self.genesis_validators_root = root
         # The block of the initial state is not in the case, so its header comes from the state.
         epoch = _uint(state[40:48]) // consensus.preset(preset)["SLOTS_PER_EPOCH"]
-        state_fork = [fork for fork in SPECIFIED
-                      if self.values[f"{fork.upper()}_FORK_EPOCH"] <= epoch][-1]
+        self.state_fork = [fork for fork in SPECIFIED
+                           if self.values[f"{fork.upper()}_FORK_EPOCH"] <= epoch][-1]
         latest = state[64:64 + BEACON]
         if not any(latest[48:80]):
-            state_root = consensus.ssz_static(preset, FORKS[state_fork], "BeaconState", state)[0]
+            state_root = consensus.ssz_static(preset, FORKS[self.state_fork], "BeaconState",
+                                              state)[0]
             latest = latest[:48] + state_root + latest[80:]
-        self.headers = {self.beacon_root(latest): (None, latest)}
+        self.initial_state, self.initial_root = state, self.beacon_root(latest)
+        self.headers = {self.initial_root: (None, latest)}
         self.slots = {}
 
     def beacon_root(self, beacon: bytes) -> bytes:
@@ -116,6 +128,146 @@ class Chain:
     def check_signature_slot(self, attested: bytes, slot: int) -> None:
         """A block of the case at the signature slot has the attested block as its parent."""
         assert any(beacon[16:48] == attested for beacon in self.slots.get(slot, []))
+
+
+class Block:
+    """A block of a full node: its fork, its signed bytes, its slot, its parent and post state."""
+
+    def __init__(self, fork: str, signed: bytes, post: bytes):
+        self.fork, self.signed, self.post = fork, signed, post
+        message = signed[100:]
+        self.slot, self.parent = _uint(message[:8]), message[16:48]
+        self.body = message[_uint(message[80:84]):]
+        self.bootstrap = None
+
+
+class FullNode:
+    """The blocks of a case with their post states, and the data a full node serves from them."""
+
+    def __init__(self, chain: Chain):
+        self.chain = chain
+        preset = consensus.preset(chain.preset)
+        self.slots_per_epoch = preset["SLOTS_PER_EPOCH"]
+        self.period_slots = self.slots_per_epoch * preset["EPOCHS_PER_SYNC_COMMITTEE_PERIOD"]
+        self.committee_size = preset["SYNC_COMMITTEE_SIZE"]
+        self.min_participants = preset["MIN_SYNC_COMMITTEE_PARTICIPANTS"]
+        # The finalized checkpoint follows the fields that every fork keeps from Phase 0.
+        self.finalized_at = (8 + 32 + 8 + 16 + BEACON + 2 * 32 * preset["SLOTS_PER_HISTORICAL_ROOT"]
+                             + 4 + 72 + 4 + 8 + 4 + 4
+                             + 32 * preset["EPOCHS_PER_HISTORICAL_VECTOR"]
+                             + 8 * preset["EPOCHS_PER_SLASHINGS_VECTOR"] + 4 + 4 + 1 + 40 + 40)
+        fork, state = chain.state_fork, chain.initial_state
+        genesis = consensus.genesis_block(chain.preset, FORKS[fork], state)
+        root = consensus.ssz_static(chain.preset, FORKS[fork], "BeaconBlock", genesis[100:])[0]
+        # The initial state is that of the genesis block, so the two roots agree.
+        assert root == chain.initial_root
+        self.blocks = {root: Block(fork, genesis, state)}
+        # The data collection starts at the slot of the initial state.
+        self.tail = self.blocks[root].slot
+        epoch, finalized = self.finalized(state)
+        self.latest = (epoch, finalized, epoch * self.slots_per_epoch)
+        self.updates = {}
+
+    def finalized(self, state: bytes) -> tuple[int, bytes]:
+        """The epoch and the root of the finalized checkpoint of a state."""
+        checkpoint = state[self.finalized_at:self.finalized_at + 40]
+        return _uint(checkpoint[:8]), checkpoint[8:]
+
+    def participants(self, block: Block) -> int:
+        """The number of members of the sync committee that signed a block."""
+        bits = block.body[220:220 + self.committee_size // 8]
+        return sum(bin(byte).count("1") for byte in bits)
+
+    def period(self, slot: int) -> int:
+        return slot // self.period_slots
+
+    def add_block(self, fork: str, name: str) -> None:
+        """Run a block through the state transition from the post state of its parent."""
+        signed = _read(self.chain.case, name)
+        parent = self.blocks[signed[100:][16:48]]
+        assert parent.fork == fork
+        post = consensus.state_transition(self.chain.preset, FORKS[fork], parent.post, signed,
+                                          True, config=self.chain.config)
+        root = consensus.ssz_static(self.chain.preset, FORKS[fork], "BeaconBlock",
+                                    signed[100:])[0]
+        self.blocks[root] = Block(fork, signed, post)
+
+    def ancestry(self, root: bytes) -> list:
+        """The blocks from a block back to the genesis block, newest first."""
+        chain = []
+        while root in self.blocks:
+            chain.append(self.blocks[root])
+            root = self.blocks[root].parent
+        return chain
+
+    def update(self, kind: str, signature: Block) -> bytes:
+        """The update of a kind that a block gives, as the full node functions build it."""
+        key = (kind, signature.signed)
+        if key not in self.updates:
+            attested = self.blocks[signature.parent]
+            epoch, root = self.finalized(attested.post)
+            # A zero root is the genesis checkpoint, whose block is at the genesis slot.
+            finalized = (self.blocks[self.chain.initial_root] if not any(root)
+                         else self.blocks.get(root))
+            self.updates[key] = consensus.create_light_client_update(
+                self.chain.preset, FORKS[signature.fork], kind, signature.post,
+                signature.signed, attested.post, attested.signed,
+                finalized.signed if finalized else None, config=self.chain.config)
+        return self.updates[key]
+
+    def candidates(self, head: list, period: int) -> list:
+        """The blocks of the head's chain whose update can be the best of a period."""
+        return [block for block in head[:-1]
+                if block.parent in self.blocks
+                and self.blocks[block.parent].slot >= self.tail
+                and self.period(self.blocks[block.parent].slot) == period
+                and self.period(block.slot) == period
+                and self.participants(block) >= self.min_participants]
+
+    def check_head(self, head_root: bytes, checks: dict) -> None:
+        """Check the data served after a new head against what the post states give."""
+        preset, head = self.chain.preset, self.ancestry(bytes.fromhex(head_root[2:]))
+        old_slot = self.latest[2]
+        # The finalized checkpoint moves when the head's names a later block, on any branch.
+        epoch, root = self.finalized(head[0].post)
+        if epoch != 0 and self.blocks[root].slot > old_slot:
+            self.latest = (epoch, root, self.blocks[root].slot)
+        served = checks["latest_finalized_checkpoint"]
+        assert (served["epoch"], bytes.fromhex(served["root"][2:])) == self.latest[:2]
+        for entry in checks["bootstraps"]:
+            if "bootstrap" not in entry:
+                continue
+            block = self.blocks[bytes.fromhex(entry["block_root"][2:])]
+            fork = self.chain.digests[entry["bootstrap"]["fork_digest"]]
+            if block.bootstrap is None:
+                block.bootstrap = consensus.create_light_client_bootstrap(
+                    preset, FORKS[fork], block.post, block.signed, config=self.chain.config)
+            assert _read(self.chain.case, entry["bootstrap"]["data"]) == block.bootstrap
+        for entry in checks["best_updates"]:
+            candidates = self.candidates(head, entry["period"])
+            if "update" not in entry:
+                assert candidates == []
+                continue
+            fork = self.chain.digests[entry["update"]["fork_digest"]]
+            data = _read(self.chain.case, entry["update"]["data"])
+            # The served update is that of a block of the head's chain, and none ranks above it.
+            assert data in [self.update("LightClientUpdate", block) for block in candidates]
+            assert not any(consensus.is_better_update(
+                preset, FORKS[fork], self.update("LightClientUpdate", block), data)
+                for block in candidates)
+        # The latest updates come from the latest block of the head's chain with enough
+        # signatures, after the finalized block, and from its parent as the attested block.
+        low = max(self.tail, old_slot)
+        signed = [block for block in head[:-1]
+                  if self.participants(block) >= self.min_participants]
+        latest = signed[0] if signed and signed[0].slot > low else None
+        if latest is not None and self.blocks[latest.parent].slot < low:
+            latest = None
+        for key, kind in (("latest_finality_update", "LightClientFinalityUpdate"),
+                          ("latest_optimistic_update", "LightClientOptimisticUpdate")):
+            assert (key in checks) == (latest is not None)
+            if latest is not None:
+                assert _read(self.chain.case, checks[key]["data"]) == self.update(kind, latest)
 
 
 def _check_new_head(chain: Chain, checks: dict) -> None:
@@ -171,17 +323,23 @@ def _period(preset: str) -> int:
 
 
 def run_data_collection_case(case: Path, preset: str) -> None:
-    """Check the light client data that a case serves after each new head, against its blocks."""
+    """Check the light client data that a case serves after each new head."""
     # Each header must be the one that EthLib derives from its block, and each proof must verify.
-    # Choosing the best update and the finalized checkpoint needs the state transition.
+    # Where the state transition runs the blocks, the full node functions must also give the
+    # served data from the post states, and the chosen best update must rank above the others.
     chain = Chain(case, preset)
+    node = FullNode(chain) if _transition_runs(case.parts[-5], case.name) else None
     for step in _YAML.load((case / "steps.yaml").read_text()):
         (kind, body), = step.items()
         if kind == "new_block":
             chain.add_block(chain.digests[body["fork_digest"]], body["data"])
+            if node is not None:
+                node.add_block(chain.digests[body["fork_digest"]], body["data"])
         else:
             assert kind == "new_head"
             _check_new_head(chain, body["checks"])
+            if node is not None:
+                node.check_head(body["head_block_root"], body["checks"])
 
 
 def _cases() -> list:
