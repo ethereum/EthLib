@@ -60,7 +60,7 @@ CONTAINERS = {
     "BeaconBlockBody": ("phase0", "heze"),
     "BeaconBlock": ("phase0", "heze"),
     "SignedBeaconBlock": ("phase0", "heze"),
-    "BeaconState": ("phase0", "gloas"),
+    "BeaconState": ("phase0", "heze"),
     "BlobSidecar": ("deneb", "fulu"),
     "LightClientHeader": ("altair", "gloas"),
     "LightClientBootstrap": ("altair", "gloas"),
