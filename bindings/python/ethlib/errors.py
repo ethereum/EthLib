@@ -77,6 +77,10 @@ class TransitionError(EthLibError, ValueError):
     """A step of the beacon state transition rejected its state or its block."""
 
 
+class LightClientError(EthLibError, ValueError):
+    """A light client rejected a bootstrap or an update."""
+
+
 class HkdfError(EthLibError, ValueError):
     """HKDF rejected its input."""
 
@@ -203,6 +207,7 @@ __all__ = [
     "ReqRespError",
     "ConsensusError",
     "TransitionError",
+    "LightClientError",
     "HkdfError",
     "ConcatKdfError",
     "AesError",

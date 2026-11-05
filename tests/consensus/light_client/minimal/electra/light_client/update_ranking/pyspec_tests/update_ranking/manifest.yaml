@@ -1,0 +1,6 @@
+preset: minimal
+fork: electra
+runner: light_client
+handler: update_ranking
+suite: pyspec_tests
+case: update_ranking

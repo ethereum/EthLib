@@ -10,6 +10,8 @@ from ruamel.yaml import YAML
 from consensus.containers import CONTAINERS
 from consensus.containers import FORKS as CONSENSUS_FORK
 from consensus.test_operations import HANDLERS as OPERATIONS
+from consensus.test_light_client_sync import SPECIFIED as LIGHT_CLIENT_FORKS
+from consensus.test_light_client_sync import runs_sync
 from consensus.test_operations import runs as runs_operation
 from transactions.test_inclusion_archive import names_in_block
 from transactions.test_transactions import CHAIN_ID, FORK_OF_NETWORK, names
@@ -36,7 +38,7 @@ NOT_YET = {
     "fork_choice": "fork choice (consensus track C43 to C50)",
     "fast_confirmation": "fast confirmation rule (consensus track, decision 9)",
     "sync": "optimistic sync (consensus track C48)",
-    "light_client": "light client (consensus track C54 to C56)",
+    "light_client": "light client fork upgrades, data collection and Gloas (consensus track C56)",
     "networking": "gossip validation (consensus track C63 and C64)",
     "ssz_static": "the remaining beacon containers (consensus track C2, C6 to C12)",
 }
@@ -282,6 +284,18 @@ def _single_merkle_proof(root: Path, case: Case) -> None:
     _check(case.preset, case.fork, container, root / case.path)
 
 
+def _light_client_sync(root: Path, case: Case) -> None:
+    from consensus.test_light_client_sync import run_sync_case
+
+    run_sync_case(root / case.path, case.preset, case.fork)
+
+
+def _update_ranking(root: Path, case: Case) -> None:
+    from consensus.test_light_client_sync import run_ranking_case
+
+    run_ranking_case(root / case.path, case.preset, case.fork)
+
+
 def _merkle_proof(root: Path, case: Case) -> None:
     from consensus.test_merkle_proof import run_case
 
@@ -313,6 +327,8 @@ RUNNERS = {
     **{f"ssz_static/{container}": _ssz_static for container in CONTAINERS},
     "light_client/single_merkle_proof": _single_merkle_proof,
     "merkle_proof/single_merkle_proof": _merkle_proof,
+    "light_client/sync": _light_client_sync,
+    "light_client/update_ranking": _update_ranking,
     "legacy_header": legacy.run_headers,
     **{f"operations/{handler}": _operation for handler in OPERATIONS},
     "legacy_ommers": legacy.run_ommers,
@@ -346,6 +362,10 @@ def runner(case: Case):
     if run is _ssz_static and case.fork not in _container_forks(case.group.split("/")[1]):
         return None
     if run is _operation and not runs_operation(case.fork, case.group.split("/")[1]):
+        return None
+    if run is _light_client_sync and not runs_sync(case.fork, Path(case.path).name):
+        return None
+    if run is _update_ranking and case.fork not in LIGHT_CLIENT_FORKS:
         return None
     return run
 

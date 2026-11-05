@@ -1,0 +1,60 @@
+- process_update:
+    update_fork_digest: '0x790e5b44'
+    update: 
+      update_0x3322216d071f34510ffcdce82025f5628ef584facff301a59552c9788b1772a3_sf
+    current_slot: 41
+    checks:
+      finalized_header:
+        slot: 24
+        beacon_root: '0x5e3be7a389b550d8ecb112020508d278700f478098d600f6f074f41c000e4957'
+      optimistic_header:
+        slot: 40
+        beacon_root: '0x3322216d071f34510ffcdce82025f5628ef584facff301a59552c9788b1772a3'
+- process_update:
+    update_fork_digest: '0x790e5b44'
+    update: 
+      update_0xfe2f000a3f7486e9463c87bcb428fc2b994689fa140830a0790b93de9b7bf486_xf
+    current_slot: 89
+    checks:
+      finalized_header:
+        slot: 72
+        beacon_root: '0xeac0434191fea2cd0e098dc6de64292b9c86dfdc043e934eb261819ead50baab'
+      optimistic_header:
+        slot: 88
+        beacon_root: '0xfe2f000a3f7486e9463c87bcb428fc2b994689fa140830a0790b93de9b7bf486'
+- process_update:
+    update_fork_digest: '0x790e5b44'
+    update: 
+      update_0xc70faa40e16a48f09948e191efec11e57f9c4ecabcaea09c2dfe04f69b27704d_xx
+    current_slot: 97
+    checks:
+      finalized_header:
+        slot: 72
+        beacon_root: '0xeac0434191fea2cd0e098dc6de64292b9c86dfdc043e934eb261819ead50baab'
+      optimistic_header:
+        slot: 96
+        beacon_root: '0xc70faa40e16a48f09948e191efec11e57f9c4ecabcaea09c2dfe04f69b27704d'
+- process_update:
+    update_fork_digest: '0x790e5b44'
+    update: 
+      update_0xc70faa40e16a48f09948e191efec11e57f9c4ecabcaea09c2dfe04f69b27704d_xf
+    current_slot: 97
+    checks:
+      finalized_header:
+        slot: 80
+        beacon_root: '0x45ceeb45c8fa56a358dae9ec53cab9cd136b68b66a1131191bbb5241e505380a'
+      optimistic_header:
+        slot: 96
+        beacon_root: '0xc70faa40e16a48f09948e191efec11e57f9c4ecabcaea09c2dfe04f69b27704d'
+- process_update:
+    update_fork_digest: '0x790e5b44'
+    update: 
+      update_0xc70faa40e16a48f09948e191efec11e57f9c4ecabcaea09c2dfe04f69b27704d_sf
+    current_slot: 97
+    checks:
+      finalized_header:
+        slot: 80
+        beacon_root: '0x45ceeb45c8fa56a358dae9ec53cab9cd136b68b66a1131191bbb5241e505380a'
+      optimistic_header:
+        slot: 96
+        beacon_root: '0xc70faa40e16a48f09948e191efec11e57f9c4ecabcaea09c2dfe04f69b27704d'

@@ -3,7 +3,7 @@
 import json
 from typing import Any
 
-from ..errors import ConsensusError, TransitionError
+from ..errors import ConsensusError, LightClientError, TransitionError
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -186,6 +186,37 @@ def verify_data_column_sidecar_kzg_proofs(name: str, fork: str, data: bytes) -> 
     return _native.consensus_verify_data_column_sidecar_kzg_proofs(name, fork, data)
 
 
+def light_client_sync(name: str, fork: str, trusted_block_root: bytes,
+                      genesis_validators_root: bytes, bootstrap: bytes, steps: list,
+                      config: dict | None = None) -> list:
+    """The finalized and optimistic headers, as slot and two roots, after each step of a sync."""
+    # A step is a slot and an update, or a slot and None to force an update at that slot.
+    replacements = json.dumps(config).encode() if config else b""
+    records = b"".join(slot.to_bytes(8, "little") + len(update or b"").to_bytes(4, "little")
+                       + (update or b"") for slot, update in steps)
+    out = _native.consensus_light_client_sync(name, fork, replacements, trusted_block_root,
+                                              genesis_validators_root, bootstrap, records)
+
+    def header(record: bytes) -> tuple:
+        return int.from_bytes(record[:8], "little"), record[8:40], record[40:72]
+
+    return [(header(out[i:i + 72]), header(out[i + 72:i + 144]))
+            for i in range(0, len(out), 144)]
+
+
+def is_better_update(name: str, fork: str, new_update: bytes, old_update: bytes) -> bool:
+    """Whether a new light client update ranks above an old one for a forced update."""
+    return _native.consensus_is_better_update(name, fork, new_update, old_update)
+
+
+def compute_fork_digest(name: str, genesis_validators_root: bytes, epoch: int,
+                        config: dict | None = None) -> bytes:
+    """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_compute_fork_digest(name, replacements, genesis_validators_root,
+                                                 epoch)
+
+
 def compute_matrix(blobs: list) -> list:
     """The entries of the matrix of the blobs, each in its SSZ encoding."""
     out = _native.consensus_compute_matrix(b"".join(blobs))
@@ -252,4 +283,8 @@ __all__ = [
     "get_data_column_sidecars_from_column_sidecar",
     "TransitionError",
     "process_operation",
+    "LightClientError",
+    "light_client_sync",
+    "is_better_update",
+    "compute_fork_digest",
 ]
