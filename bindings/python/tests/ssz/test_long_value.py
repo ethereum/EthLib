@@ -16,3 +16,22 @@ def test_long_uint64_list() -> None:
     value = {"seq": [{"uint": i} for i in range(count)]}
     expected = b"".join(i.to_bytes(8, "little") for i in range(count))
     assert ssz.serialize(UINT64_LIST, value) == expected
+
+
+def test_many_variable_elements() -> None:
+    # A list of 200 000 empty byte lists: an offset table and no bodies, on the main thread.
+    count = 200_000
+    kind = {"list": [{"byte_list": 2**30}, 2**20]}
+    data = (4 * count).to_bytes(4, "little") * count
+    value = ssz.deserialize(kind, data)
+    assert value == {"seq": [{"bytes": "0x"}] * count}
+    assert ssz.serialize(kind, value) == data
+    assert len(ssz.hash_tree_root(kind, value)) == 32
+
+
+def test_many_fixed_elements() -> None:
+    count = 200_000
+    value = {"seq": [{"uint": i} for i in range(count)]}
+    data = b"".join(i.to_bytes(8, "little") for i in range(count))
+    assert ssz.serialize(UINT64_LIST, value) == data
+    assert ssz.deserialize(UINT64_LIST, data) == value

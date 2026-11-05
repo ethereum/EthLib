@@ -73,13 +73,13 @@ private theorem offsetSpans_cons (data : Bytes) (scope start : Nat) (rest spans 
   -- The next offset closes a body, while the total scope closes the final body.
   cases rest with
   | nil =>
-    simp only [offsetSpans] at read
+    simp only [offsetSpans_single] at read
     split at read
     · cases read
     · obtain rfl := by simpa using read
       refine ⟨scope - start, [], rfl, ?_, by simp, ?_, rfl⟩ <;> simp <;> omega
   | cons next rest =>
-    simp only [offsetSpans] at read
+    simp only [offsetSpans_cons_cons] at read
     split at read
     · cases read
     · cases tail : offsetSpans (next :: rest) scope <;>
@@ -197,7 +197,7 @@ theorem structSlices_assemble_inverse (fields : List Desc) (data : Bytes) (parts
         simp only [pure, Except.pure, Except.ok.injEq] at read
         subst parts
         apply assemble_readSlots fields data slots leading [] (slots.map Slot.held) slotsRead
-        · simp [absent, offsetSpans]
+        · simp [absent, offsetSpans_nil]
         · exact takeSlots_no_bodies data slots absent
         · simp only [absent, List.headD_nil]
           simpa using sized

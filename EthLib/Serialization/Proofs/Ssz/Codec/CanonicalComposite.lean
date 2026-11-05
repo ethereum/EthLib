@@ -13,9 +13,9 @@ namespace EthLib.Serialization.Ssz
 private theorem deserializeEach_length {element : Desc} :
     ∀ (slices : List Bytes) (values : List Value),
       deserializeEach element slices = .ok values → slices.length = values.length
-  | [], values, read => by simp_all [deserializeEach]
+  | [], values, read => by simp_all [deserializeEach_nil]
   | slice :: rest, values, read => by
-    rw [deserializeEach] at read
+    rw [deserializeEach_cons] at read
     obtain ⟨first, -, read⟩ := checksPassed read
     obtain ⟨others, tail, ⟨⟩⟩ := checksPassed read
     simp [deserializeEach_length rest others tail]
@@ -31,10 +31,10 @@ theorem serializeEach_of_deserializeEach {element : Desc}
   induction slices with
   | nil =>
     intro values read
-    simp_all [deserializeEach, serializeEach_nil]
+    simp_all [deserializeEach_nil, serializeEach_nil]
   | cons slice slices ih =>
     intro values read
-    rw [deserializeEach] at read
+    rw [deserializeEach_cons] at read
     -- A successful composite decode requires the remaining slices to decode successfully too.
     obtain ⟨value, head, read⟩ := checksPassed read
     obtain ⟨rest, tail, ⟨⟩⟩ := checksPassed read

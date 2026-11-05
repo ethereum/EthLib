@@ -110,7 +110,8 @@ For the fields `u64`, a list and `u8`:
 ```
 -/
 def assemble (inline : List Bool) (parts : List Bytes) : Except Err Bytes := do
-  let slots := inline.zip parts
+  -- Each part is paired with its flag; `zipWith` pairs them in a loop of constant stack.
+  let slots := List.zipWith Prod.mk inline parts
   -- The first body starts past the fixed part, so that width is also the first offset.
   let leading := headWidth slots
   -- An offset past what four bytes can name would wrap, so the encoding is refused.
