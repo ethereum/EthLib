@@ -45,6 +45,7 @@ public import EthLib.Cryptography.Proofs.Kzg.Arsdh
 public import EthLib.Cryptography.Proofs.Kzg.MultiproofBatching
 public import EthLib.Cryptography.Proofs.Kzg.CellBatching
 public import EthLib.Cryptography.Proofs.Kzg.CodeBinding
+public import EthLib.Cryptography.Proofs.Kzg.PeerDasGames
 
 /-!
 # `EthLib.Cryptography.Proofs.Kzg`

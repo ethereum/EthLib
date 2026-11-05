@@ -376,8 +376,8 @@ In these three theorems, the scalar of a commitment or a proof is a function of 
 Wagner and Zapico, ePrint 2025/1683, Definition 1, write the bilinear strong Diffie–Hellman problem with `1 / (τ - c)`.
 `isBsdhSolution_iff_sub` (`Proofs/Kzg/Arsdh.lean`) proves that this form and the one of the extended KZG paper differ only by the sign of `c`.
 `IsArsdhSolution` in the same file is the winning condition of adaptive rational strong Diffie–Hellman, Definition 2 there.
-These are winning conditions for a fixed secret, not the assumptions.
-They model neither the adversary's input nor its advantage, and the hardness of each problem stays an informal hypothesis.
+These are winning conditions for a fixed secret.
+The games below give the advantages.
 `multiproof_batching` (`Proofs/Kzg/MultiproofBatching.lean`) proves Lemma 2 of 2025/1683, the multiproof batching lemma, over any field.
 In place of the paper's cosets, it assumes that the vanishing polynomial of `S - S_j` is constant on each part `S_j`, and that the parts are nonempty.
 `eval_nodal_cellNodes` (`Proofs/Kzg/CellBatching.lean`) is Lemma 1: on cell `i`, the vanishing polynomial of cell `j` takes the value `h_i^64 - h_j^64`.
@@ -387,8 +387,33 @@ Let exactly 64 cells and one more cell satisfy the scalar equation of a valid ce
 Then all 65 cells take the values of one polynomial of degree below 4096.
 Otherwise a search returns a bilinear strong Diffie–Hellman solution, or a second search returns a `(4095, 64)`-ARSDH winning solution.
 Both searches read only the setup, the commitment, the cells and the proofs.
-The bound of Lemma 4 on the advantages, and the running times of the searches, are not formalized.
 No theorem states what the batch check of blobs returns on accepted input.
+
+`Proofs/Kzg/PeerDasGames.lean` states Lemmas 3 and 4 of 2025/1683 as games, and proves them.
+In each game, the secret `τ` is uniform in `Fr`.
+Every adversary receives only `[τ^i]_1` for `i ≤ 4095` and `[τ^i]_2` for `i ≤ 64`, the input of Definitions 1 and 2 there.
+`bsdhAdvantage` and `arsdhAdvantage` are the advantages of Definitions 1 and 2, with `(d, D) = (4095, 64)`.
+The verifier of the games builds the full setup from these points and checks each cell alone with `verifyCellKzgProofBatch`.
+The error polynomial of one cell is a constant, so `CellOpening.Verifies.valid` needs no random oracle.
+The code is the Reed–Solomon code of §3.1 there: a codeword holds the values of a polynomial of degree below 4096 on the 128 cosets.
+Each of its cells is the encoding of 64 values that the verifier decodes.
+`positionBindingAdvantage_le` is Lemma 3, position-binding, Definition 4 there.
+The advantage of every adversary is at most the BSDH advantage of one reduction.
+2025/1683 cites Lemma 3 from Lemma 2 of §3.1 of Wagner and Zapico, ePrint 2024/1362, where the adversary also receives `[τ^i]_2` for `i ≤ 4095`.
+`codeBindingAdvantage_le` is Lemma 4, code-binding, Definition 5 there.
+The advantage of every adversary is at most the BSDH advantage of one reduction plus the ARSDH advantage of a second.
+Each reduction runs the adversary once, then a deterministic search; their running times are not formalized.
+Both theorems assume the pairing law, `PairingLaws`, and the BSDH reductions work in any model of the target group, `TargetGroup`.
+That BSDH and ARSDH are hard stays an informal hypothesis: no theorem assumes it, and the bounds hold for every adversary.
+An adversary is any Lean function, so without a model of cost, hardness cannot be stated as a Lean hypothesis.
+The BSDH advantage is relative to a model of the target group; `TargetGroup.ofPairingLaws` is the model of the real pairing.
+The games check one cell per call; acceptance of a batch of many cells under one challenge is outside them.
+No theorem proves that an honest cell is accepted by the setup that the games build.
+EthLib does not prove Theorem 1 of 2025/1683, that PeerDAS is a secure data-availability sampling scheme, and does not claim it.
+That theorem is informal in the paper.
+Its §3.2 explains how it follows from the two lemmas.
+The steps are §3.2 of ePrint 2024/1362, for many blobs, and the framework of Hall-Andersen, Simkin and Wagner, ePrint 2023/1079.
+2025/1683 does not prove these steps again, and EthLib does not formalize them.
 
 `findSdh_valid_bytes` (`Proofs/Kzg/Binding.lean`) is the evaluation binding of single proofs.
 Let the check accept one commitment at one point with two different values.
