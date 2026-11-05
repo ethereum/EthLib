@@ -60,7 +60,7 @@ theorem vertical_eq (a : Fp) (b : Fp2) :
 theorem vertical_ne_zero {b : Fp2} (hb : b ≠ 0) (a : Fp) :
     fp2ToFp6 (Fp2.ofFp a) - fp2ToFp6 b * Fp6.v⁻¹ ≠ 0 := by
   intro h
-  have hv : Fp6.v ≠ 0 := fun h => by simpa using congrArg Fp6.c1 h
+  have hv : (Fp6.v : Fp6) ≠ 0 := fun h => by simpa using congrArg Fp6.c1 h
   have h' : fp2ToFp6 (Fp2.ofFp a) * Fp6.v = fp2ToFp6 b := by
     rw [sub_eq_zero] at h
     rw [h, mul_assoc, inv_mul_cancel₀ hv, mul_one]
