@@ -158,6 +158,8 @@ inductive TransitionError where
   | invalidSyncCommitteeKey
   /-- From Altair: no validator holds the key of a member of the sync committee. -/
   | unknownSyncCommitteeMember
+  /-- A block is of another fork than the state at its slot. -/
+  | blockForkMismatch (block state : Fork)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -234,6 +236,7 @@ def TransitionError.code : TransitionError → UInt32
   | .invalidSyncAggregate => 71
   | .invalidSyncCommitteeKey => 72
   | .unknownSyncCommitteeMember => 73
+  | .blockForkMismatch .. => 74
 
 /-- An error of a state accessor, as an error of the transition. -/
 def liftAccessor {α : Type} (result : Except AccessorError α) : Except TransitionError α :=

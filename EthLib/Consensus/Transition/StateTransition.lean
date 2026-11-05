@@ -233,24 +233,31 @@ def checkStateRoot (validateResult : Bool) (state : BeaconState preset fork)
     ensure (block.stateRoot = (← liftSsz (hashTreeRoot state))) .wrongStateRoot
   else pure ()
 
-/-- The state after a signed block.
-
-The state advances to the slot of the block, and the block runs.
+/-- The state after a signed block, on a state already at the slot of the block.
 
 When the result is validated, the block must carry the signature of its proposer.
 
 Its state root must then be the root of the state after it.
 
 From Bellatrix the execution layer checks the payload of the block. -/
-def stateTransition (config : Config) (checks : SignatureChecks)
+def applySignedBlock (config : Config) (checks : SignatureChecks)
     (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
-    (signed : SignedBeaconBlock preset fork) (validateResult : Bool := true) :
+    (signed : SignedBeaconBlock preset fork) (validateResult : Bool) :
     Except TransitionError (BeaconState preset fork) := do
   let block := signed.message
-  let state ← processSlots config state block.slot
   checkBlockSignature validateResult config checks state signed
   let state ← processBlock config checks engine state block
   checkStateRoot validateResult state block
   return state
+
+/-- The state after a signed block.
+
+The state advances to the slot of the block, and the block runs. -/
+def stateTransition (config : Config) (checks : SignatureChecks)
+    (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
+    (signed : SignedBeaconBlock preset fork) (validateResult : Bool := true) :
+    Except TransitionError (BeaconState preset fork) := do
+  let state ← processSlots config state signed.message.slot
+  applySignedBlock config checks engine state signed validateResult
 
 end EthLib.Consensus

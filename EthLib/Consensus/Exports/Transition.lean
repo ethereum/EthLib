@@ -10,6 +10,7 @@ public import EthLib.Consensus.Transition.EpochJustification
 public import EthLib.Consensus.Transition.EpochRewards
 public import EthLib.Consensus.Transition.EpochUpdates
 public import EthLib.Consensus.Transition.Execution
+public import EthLib.Consensus.Transition.ForkBoundary
 public import EthLib.Consensus.Transition.Operations
 public import EthLib.Consensus.Transition.Payload
 public import EthLib.Consensus.Transition.SyncAggregate
@@ -30,7 +31,9 @@ They take and return states as SSZ bytes, and accept forks up to Gloas.
 
 At Gloas, only the steps whose Gloas rule EthLib holds run.
 
-A third export upgrades a state to Gloas or to Heze.
+Another export upgrades a state to the next consensus fork, from Altair to Heze.
+
+The last runs a signed block from a state of an earlier fork, across the fork epochs between.
 
 The configuration of a name holds, with the replacements that a JSON object gives.
 
@@ -248,6 +251,18 @@ def stateTransitionExport (name fork pre block replacements : ByteArray) (verify
   let after ← runTransition (stateTransition config checks (.constant true) state signed)
   (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
 
+/-- The consensus fork before a fork, from Altair to Heze. -/
+def forkBefore : Fork → Result Fork
+  | .altair => pure .phase0
+  | .bellatrix => pure .altair
+  | .shapella => pure .bellatrix
+  | .dencun => pure .shapella
+  | .pectra => pure .dencun
+  | .fusaka => pure .pectra
+  | .glamsterdam => pure .fusaka
+  | .hegota => pure .glamsterdam
+  | fork => throw (0, s!"no upgrade to {fork.name}")
+
 /-- The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.
 
 The preset, the configuration and the target fork are named in UTF-8.
@@ -260,36 +275,37 @@ The signature checks of the deposits at the upgrade to Gloas run unless the last
 def upgradeStateExport (name fork pre replacements : ByteArray) (verify : Bool) :
     Result ByteArray := do
   let preset ← presetOf (← nameOf name)
-  let fork ← forkOf fork
+  let previous ← forkBefore (← forkOf fork)
   let config ← configWith name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
-  let serialize {fork : Fork} (post : BeaconState preset fork) : Result ByteArray :=
-    (SszType.serialize post).mapError fun e => (0, s!"state rejected: {reprStr e}")
-  match fork with
-  | .altair =>
-    serialize (← runTransition (upgradeToAltair config
-      (← decodeInput (BeaconState preset .phase0) pre)))
-  | .bellatrix =>
-    let state ← decodeInput (BeaconState preset .altair) pre
-    serialize (carryFields config .bellatrix state (by decide) (by decide))
-  | .shapella =>
-    let state ← decodeInput (BeaconState preset .bellatrix) pre
-    serialize (carryFields config .shapella state (by decide) (by decide))
-  | .dencun =>
-    let state ← decodeInput (BeaconState preset .shapella) pre
-    serialize (carryFields config .dencun state (by decide) (by decide))
-  | .pectra =>
-    serialize (← runTransition (upgradeToElectra config
-      (← decodeInput (BeaconState preset .dencun) pre)))
-  | .fusaka =>
-    serialize (← runTransition (upgradeToFulu config
-      (← decodeInput (BeaconState preset .pectra) pre)))
-  | .glamsterdam =>
-    serialize (← runTransition (upgradeToGloas config checks
-      (← decodeInput (BeaconState preset .fusaka) pre)))
-  | .hegota =>
-    serialize (← runTransition (upgradeToHeze config
-      (← decodeInput (BeaconState preset .glamsterdam) pre)))
-  | fork => throw (0, s!"no upgrade to {fork.name}")
+  let state ← decodeInput (BeaconState preset previous) pre
+  let post ← runTransition (upgradeNext config checks ⟨previous, state⟩)
+  (SszType.serialize post.val.state).mapError fun e => (0, s!"state rejected: {reprStr e}")
+
+/-- The state after a signed block of a fork, from a state of that fork or an earlier one.
+
+The state advances to the slot of the block and upgrades at each fork epoch on the way.
+
+The fork epochs are those of the configuration, with its replacements.
+
+The block must be of the fork that the state then has.
+
+The preset, the configuration and both forks are named in UTF-8, each fork up to Gloas.
+
+The signature checks run unless the last argument is false.
+
+The execution layer accepts every payload, as in the vectors, which fix no answer for blocks. -/
+@[export eth_consensus_state_transition_across]
+def stateTransitionAcrossExport (name fork pre blockFork block replacements : ByteArray)
+    (verify : Bool) : Result ByteArray := do
+  let (preset, fork) ← transitionPresetAndFork name fork
+  let (_, blockFork) ← transitionPresetAndFork name blockFork
+  let config ← configWith name replacements
+  let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
+  let state ← decodeInput (BeaconState preset fork) pre
+  let signed ← decodeInput (SignedBeaconBlock preset blockFork) block
+  let after ← runTransition
+    (stateTransitionAcross config checks (.constant true) ⟨fork, state⟩ signed)
+  (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
 
 end EthLib.Consensus.Exports
