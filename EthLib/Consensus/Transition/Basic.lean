@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Except
 public import EthLib.Consensus.Mutators
 public import EthLib.Cryptography.Bls.Signatures
 
@@ -233,11 +234,6 @@ def TransitionError.code : TransitionError → UInt32
   | .invalidSyncAggregate => 71
   | .invalidSyncCommitteeKey => 72
   | .unknownSyncCommitteeMember => 73
-
-/-- An assertion of the rule: success when the condition holds, and the error otherwise. -/
-def ensure (condition : Prop) [Decidable condition] (error : TransitionError) :
-    Except TransitionError Unit :=
-  if condition then .ok () else .error error
 
 /-- An error of a state accessor, as an error of the transition. -/
 def liftAccessor {α : Type} (result : Except AccessorError α) : Except TransitionError α :=
