@@ -57,6 +57,7 @@ CONTAINERS = {
     "BeaconBlockBody": ("phase0", None),
     "BeaconBlock": ("phase0", None),
     "SignedBeaconBlock": ("phase0", None),
+    "BeaconState": ("phase0", None),
     "Withdrawal": ("capella", None),
     "ExecutionPayload": ("bellatrix", None),
     "ExecutionPayloadHeader": ("bellatrix", None),

@@ -19,12 +19,32 @@ open SszType
 
 namespace SszType
 
+/-- Reading elements onto those read so far appends the elements that the list reads to. -/
+theorem ofElementsOnto_eq {α : Type} [SszType α] :
+    ∀ (elements : List Value) (read : Array α),
+      ofElementsOnto elements read = (read ++ ·.toArray) <$> elements.mapM ofValue
+  | [], read => by simp [ofElementsOnto, pure, Except.pure, Functor.map, Except.map]
+  | element :: rest, read => by
+    simp only [ofElementsOnto, List.mapM_cons]
+    cases head : ofValue (α := α) element with
+    | error fault => simp [bind, Except.bind, Functor.map, Except.map]
+    | ok item =>
+      simp only []
+      rw [ofElementsOnto_eq rest (read.push item)]
+      cases tail : rest.mapM (ofValue (α := α)) <;>
+        simp [bind, Except.bind, Functor.map, Except.map, pure, Except.pure]
+
+/-- Reading elements is reading the list in order, then making it an array. -/
+theorem ofElements_eq {α : Type} [SszType α] (elements : List Value) :
+    ofElements (α := α) elements = List.toArray <$> elements.mapM ofValue := by
+  simp [ofElements, ofElementsOnto_eq]
+
 variable {α : Type} [SszType α] [LawfulSszType α]
 
 /-- Converted elements read back as the elements they came from. -/
 theorem ofElements_map (items : List α) : ofElements (items.map toValue) = .ok items.toArray := by
   suffices read : (items.map toValue).mapM (ofValue (α := α)) = .ok items by
-    simp [ofElements, read, Functor.map, Except.map]
+    simp [ofElements_eq, read, Functor.map, Except.map]
   induction items with
   | nil => rfl
   | cons item rest ih =>
@@ -35,7 +55,7 @@ theorem map_toValue_of_ofElements {elements : List Value} {items : Array α}
     (read : ofElements elements = .ok items) : items.toList.map toValue = elements := by
   suffices back : ∀ {items : List α}, elements.mapM ofValue = .ok items →
       items.map toValue = elements by
-    unfold ofElements at read
+    rw [ofElements_eq] at read
     cases mapped : elements.mapM (ofValue (α := α)) with
     | error fault => simp [mapped, Functor.map, Except.map] at read
     | ok list =>

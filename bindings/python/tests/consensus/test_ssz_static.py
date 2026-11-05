@@ -91,6 +91,19 @@ def test_truncated_bytes_are_rejected():
         consensus.ssz_static(preset, FORKS[fork], container, data[:-1])
 
 
+def test_mainnet_state_reads_on_the_main_thread():
+    # The Phase 0 mainnet state with every list empty, built field by field: the size of each
+    # fixed field, or None for a list, which is a 4-byte offset to the end of the fixed part.
+    # Its 65,536 RANDAO mixes must read without a stack that grows with them.
+    sizes = [8, 32, 8, 16, 112, 8192 * 32, 8192 * 32, None, 72, None, 8, None, None,
+             65536 * 32, 8192 * 8, None, None, 1, 40, 40, 40]
+    end = sum(4 if size is None else size for size in sizes)
+    data = b"".join(end.to_bytes(4, "little") if size is None else bytes(size)
+                    for size in sizes)
+    _, encoded = consensus.ssz_static("mainnet", "phase0", "BeaconState", data)
+    assert encoded == data
+
+
 def test_unknown_container():
     with pytest.raises(SszError):
         consensus.ssz_static("minimal", "fusaka", "NoSuchContainer", b"")
@@ -127,7 +140,7 @@ def _archive_cases() -> list:
                 container = case.relative_to(base / fork / "ssz_static").parts[0]
                 if _within(container, fork):
                     cases.append(pytest.param(preset, fork, container, case,
-                                              id=case.relative_to(base).as_posix(),
+                                              id=f"{preset}/{case.relative_to(base).as_posix()}",
                                               marks=pytest.mark.archive(name)))
     # An empty list would skip the test in silence, so a wrong path in an archive fails here.
     if not cases:
