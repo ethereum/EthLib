@@ -216,17 +216,12 @@ theorem checkAddresses_eq_ok_iff (bal : BlockAccessList) :
       · rename_i hlt
         simp [hlt]
 
-/-- A test passes exactly when it holds. -/
-theorem ensure_eq_ok {test : Bool} {error : Error} : ensure test error = .ok () ↔ test = true := by
-  cases test <;> simp [ensure]
-
 /-- The checks of a list pass exactly when each of its three parts passes. -/
 theorem check_eq_ok_iff (bal : BlockAccessList) (gasLimit : Nat) :
     check bal gasLimit = .ok () ↔ (∀ a ∈ bal, checkAccount a = .ok ()) ∧
       ascending (bal.map (addressKey ·.address)) = true ∧
       itemCount bal ≤ gasLimit / ITEM_COST := by
-  simp only [check, bind_unit_ok_iff, forM_ok_iff, checkAddresses_eq_ok_iff, ensure_eq_ok,
-    decide_eq_true_eq]
+  simp only [check, bind_unit_ok_iff, forM_ok_iff, checkAddresses_eq_ok_iff, ensure_ok_iff]
 
 /-- A list that passes the checks names each account once. -/
 theorem nodup_addresses_of_check {bal : BlockAccessList} {gasLimit : Nat}
@@ -239,7 +234,7 @@ theorem nodup_addresses_of_check {bal : BlockAccessList} {gasLimit : Nat}
 /-- In an account that passes its checks, no key is written twice, read twice, or both. -/
 theorem nodup_keys_of_checkAccount {a : AccountChanges} (h : checkAccount a = .ok ()) :
     (a.storageChanges.map (·.slot.toNat) ++ a.storageReads.map (·.toNat)).Nodup := by
-  simp only [checkAccount, bind_unit_ok_iff, ensure_eq_ok, forM_ok_iff] at h
+  simp only [checkAccount, bind_unit_ok_iff, ensure_ok_iff, forM_ok_iff] at h
   obtain ⟨hSlots, -, hReads, hDisjoint, -⟩ := h
   refine List.nodup_append.mpr ⟨nodup_of_ascending hSlots, nodup_of_ascending hReads, ?_⟩
   intro x hx y hy hxy

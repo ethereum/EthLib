@@ -25,12 +25,6 @@ open EthLib.Base
 open EthLib.Serialization.Rlp
 open EthLib.Cryptography.Hash.Keccak (keccak256)
 
-/-- A check passes exactly when its condition holds. -/
-theorem ensure_eq_ok {condition : Bool} {error : OmmerError} :
-    ensure condition error = .ok () ↔ condition = true := by
-  unfold ensure
-  cases condition <;> simp
-
 /-- The facts that valid ommers give about a block. -/
 theorem validateOmmers_spec {fork : Fork} {config : ChainConfig} {checkSeal : Bool}
     {recent : List RecentBlock} {header : Header fork} {ommers : List ((f : Fork) × Header f)}
@@ -52,16 +46,16 @@ theorem validateOmmers_spec {fork : Fork} {config : ChainConfig} {checkSeal : Bo
   obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
   obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
   obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
-  have hhash := ensure_eq_ok.mp hhash
-  have hcount := ensure_eq_ok.mp hcount
+  have hhash := ensure_ok_iff.mp hhash
+  have hcount := ensure_ok_iff.mp hcount
   have hfirst := forM_ok_iff.mp hfirst
   have hlast := forM_ok_iff.mp h
   -- One hash per ommer, so each ommer meets its hash in the pairs.
   have hlen : ommerHashes.length = ommers.length := mapM_ok_length hhashes
   refine ⟨⟨encoded, mapError_ok_iff.mp henc, eq_of_beq hhash⟩, by simpa using hcount,
-    ⟨ommerHashes, hhashes, by simpa using ensure_eq_ok.mp hnodup⟩, fun ommer hm => ?_⟩
+    ⟨ommerHashes, hhashes, by simpa using ensure_ok_iff.mp hnodup⟩, fun ommer hm => ?_⟩
   obtain ⟨_, hrange, -⟩ := bind_ok_iff.mp (hfirst ommer hm)
-  have hrange := ensure_eq_ok.mp hrange
+  have hrange := ensure_ok_iff.mp hrange
   simp only [Bool.and_eq_true, decide_eq_true_eq] at hrange
   obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem hm
   have hpair : (ommers[i], ommerHashes[i]'(hlen ▸ hi)) ∈ ommers.zip ommerHashes := by
@@ -72,8 +66,8 @@ theorem validateOmmers_spec {fork : Fork} {config : ChainConfig} {checkSeal : Bo
   obtain ⟨_, -, hp⟩ := bind_ok_iff.mp hp
   obtain ⟨_, hage, hp⟩ := bind_ok_iff.mp hp
   obtain ⟨_, -, hp⟩ := bind_ok_iff.mp hp
-  have hage := ensure_eq_ok.mp hage
-  have hsib := ensure_eq_ok.mp hp
+  have hage := ensure_ok_iff.mp hage
+  have hsib := ensure_ok_iff.mp hp
   simp only [Bool.and_eq_true, decide_eq_true_eq] at hage
   simp only [bne_iff_ne, ne_eq] at hsib
   exact ⟨hrange.1, hrange.2, hage.1, hage.2, hsib⟩
@@ -97,7 +91,7 @@ theorem validateOmmers_daoExtraData {fork : Fork} {config : ChainConfig} {checkS
     simp only [hfind] at hcheck
     split at hcheck
     · obtain ⟨_, -, hdao⟩ := bind_ok_iff.mp hcheck
-      exact ensure_eq_ok.mp hdao
+      exact ensure_ok_iff.mp hdao
     · obtain ⟨_, h, -⟩ := bind_ok_iff.mp hcheck
       exact nomatch h
 

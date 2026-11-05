@@ -65,10 +65,6 @@ structure RecentBlock where
 def headerHash {fork : Fork} (h : Header fork) : Except OmmerError Hash32 :=
   h.hash.mapError .encoding
 
-/-- Fail with an error unless a condition holds. -/
-def ensure (condition : Bool) (error : OmmerError) : Except OmmerError Unit :=
-  if condition then .ok () else .error error
-
 /-- Check one ommer as a header at its own fork, against its parent, the recent block one below it.
 
 With the seal check off, the proof of work is left out, as for chains that run without one.

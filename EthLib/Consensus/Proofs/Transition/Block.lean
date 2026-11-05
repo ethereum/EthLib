@@ -119,12 +119,6 @@ theorem liftSsz_ok {α : Type} {result : Except Err α} {value : α} :
     liftSsz result = .ok value ↔ result = .ok value :=
   mapError_ok_iff
 
-/-- An assertion succeeds exactly when its condition holds. -/
-theorem ensure_ok_iff {condition : Prop} [Decidable condition] {error : TransitionError}
-    {u : Unit} : ensure condition error = .ok u ↔ condition := by
-  unfold ensure
-  split <;> simp_all
-
 /-! ## The block header -/
 
 /-- A valid block is at the slot of the state, after the latest block, and from its proposer.

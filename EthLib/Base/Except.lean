@@ -3,7 +3,7 @@ module
 /-!
 # `Base.Except`
 
-When a map or a sequence of two steps in `Except` succeeds.
+An assertion in `Except`, and when an assertion, a map or a sequence of two steps succeeds.
 
 It sits outside the property modules, so a specification module may import it.
 
@@ -13,6 +13,16 @@ Lean core states no such fact for `Except`.
 @[expose] public section
 
 namespace EthLib.Base
+
+/-- An assertion: success when the condition holds, and the error otherwise. -/
+def ensure {ε : Type} (condition : Prop) [Decidable condition] (error : ε) : Except ε Unit :=
+  if condition then .ok () else .error error
+
+/-- An assertion succeeds exactly when its condition holds. -/
+theorem ensure_ok_iff {ε : Type} {condition : Prop} [Decidable condition] {error : ε}
+    {u : Unit} : ensure condition error = .ok u ↔ condition := by
+  unfold ensure
+  split <;> simp_all
 
 /-- Two steps in sequence succeed exactly when the first succeeds with some value.
 

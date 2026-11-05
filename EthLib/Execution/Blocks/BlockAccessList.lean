@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Address
+public import EthLib.Base.Except
 public import EthLib.Base.Hash32
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Serialization.Rlp.Codec
@@ -277,10 +278,6 @@ def Error.code : Error → UInt32
   | .nonceChangesNotAscending _ => 408
   | .codeChangesNotAscending _ => 409
   | .tooManyItems .. => 410
-
-/-- Pass when a test holds, and fail with an error otherwise. -/
-def ensure (test : Bool) (error : Error) : Except Error Unit :=
-  if test then .ok () else .error error
 
 /-- Check the order of the changes of one account.
 
