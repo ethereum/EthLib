@@ -14,19 +14,21 @@ PAYLOAD = bytes(32)
 COMPRESSED = bytes.fromhex("2000007a0100")
 
 
+def _preamble(n: int) -> bytes:
+    """The Snappy preamble that declares `n` bytes, a little-endian varint."""
+    length = bytearray()
+    while True:
+        low = n & 0x7F
+        n >>= 7
+        length.append(low | (0x80 if n else 0))
+        if not n:
+            return bytes(length)
+
+
 def _literal_block(payload: bytes) -> bytes:
     """A Snappy block that holds the payload as one literal, for payloads of at least 61 bytes."""
-    n = len(payload)
-    length = bytearray()
-    m = n
-    while True:
-        low = m & 0x7F
-        m >>= 7
-        length.append(low | (0x80 if m else 0))
-        if not m:
-            break
-    size = (n - 1).to_bytes(4, "little")
-    return bytes(length) + bytes([63 << 2]) + size + payload
+    size = (len(payload) - 1).to_bytes(4, "little")
+    return _preamble(len(payload)) + bytes([63 << 2]) + size + payload
 
 
 def _code(error: GossipError) -> int:
@@ -65,3 +67,12 @@ def test_compressed_length() -> None:
     with pytest.raises(GossipError) as caught:
         gossip.decode_payload(2**64 - 1, bytes(MAX_COMPRESSED + 1))
     assert _code(caught.value) == 2
+
+
+def test_declared_length_rejected_unread() -> None:
+    # The preamble declares one byte over the cap, and a copy with nothing to copy from follows.
+    # The length alone rejects the data, so the invalid block is never decompressed.
+    data = _preamble(MAX_PAYLOAD_SIZE + 1) + bytes.fromhex("0101")
+    with pytest.raises(GossipError) as caught:
+        gossip.decode_payload(2**64 - 1, data)
+    assert _code(caught.value) == 4

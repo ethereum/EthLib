@@ -2,6 +2,7 @@ module
 
 public import EthLib.Networking.Gossip.Parameters
 public import EthLib.Networking.Gossip.Payload
+public import EthLib.Networking.Proofs.Snappy.Block
 
 /-!
 # `Networking.Proofs.Gossip.Payload`
@@ -12,6 +13,7 @@ Properties of the size limits on gossip, and of the gossipsub parameters.
 - The payload decoder accepts exactly the data within that length which decompresses to a
   payload within the cap and the bound of its type.
 - It rejects data above either bound.
+- It rejects a payload length above the bounds from the preamble alone, before it decompresses.
 - The mesh bounds and the message cache windows are ordered.
 -/
 
@@ -41,9 +43,14 @@ theorem decodePayload_eq_ok_iff {typeBound : UInt64} {data payload : ByteArray} 
   by_cases long : 32 + MAX_PAYLOAD_SIZE.toNat + MAX_PAYLOAD_SIZE.toNat / 6 < data.size
   · simp [long, throw, throwThe, MonadExceptOf.throw, Nat.not_le.mpr long]
   · simp only [long, ite_false, Nat.not_lt.mp long, true_and]
-    cases Snappy.decompress data with
-    | error e => simp
+    cases hd : Snappy.decompress data with
+    | error e =>
+      -- Every path fails: at the preamble check, or at the decompression.
+      simp only [reduceCtorEq, false_and, iff_false]
+      split <;> (try split) <;> simp [throw, throwThe, MonadExceptOf.throw]
     | ok decoded =>
+      -- The preamble declares the length of the decompressed payload.
+      rw [Proofs.Snappy.Block.declaredLength_of_decompress hd]
       by_cases over : (min typeBound MAX_PAYLOAD_SIZE).toNat < decoded.size
       · simp only [over, ite_true, throw, throwThe, MonadExceptOf.throw, reduceCtorEq,
           false_iff, not_and, Except.ok.injEq]
@@ -71,6 +78,21 @@ theorem decodePayload_payload_too_long {typeBound : UInt64} {data payload : Byte
   rw [decompressed] at same
   cases same
   omega
+
+/-- A payload whose preamble declares a length above the bounds is rejected unread.
+
+The result does not depend on the rest of the data, so nothing is decompressed. -/
+theorem decodePayload_declared_too_long {typeBound : UInt64} {data : ByteArray} {declared : Nat}
+    (short : data.size ≤ 32 + MAX_PAYLOAD_SIZE.toNat + MAX_PAYLOAD_SIZE.toNat / 6)
+    (hd : Snappy.declaredLength data = .ok declared)
+    (long : (min typeBound MAX_PAYLOAD_SIZE).toNat < declared) :
+    decodePayload typeBound data =
+      .error (.payloadTooLong declared (min typeBound MAX_PAYLOAD_SIZE).toNat) := by
+  have cap : (UInt64.ofNat (32 + MAX_PAYLOAD_SIZE.toNat + MAX_PAYLOAD_SIZE.toNat / 6)).toNat =
+      32 + MAX_PAYLOAD_SIZE.toNat + MAX_PAYLOAD_SIZE.toNat / 6 := by decide
+  unfold decodePayload
+  simp only [maxCompressedLen_maxPayloadSize, Except.mapError, bind, Except.bind, cap,
+    Nat.not_lt.mpr short, ite_false, hd, long, ite_true, throw, throwThe, MonadExceptOf.throw]
 
 /-- Two errors with one code come from one constructor. -/
 theorem _root_.EthLib.Networking.Gossip.PayloadError.code_injective
