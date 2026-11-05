@@ -439,11 +439,14 @@ Let exactly 64 cells and one more cell satisfy the scalar equation of a valid ce
 Then all 65 cells take the values of one polynomial of degree below 4096.
 Otherwise a search returns a bilinear strong Diffie–Hellman solution, or a second search returns a `(4095, 64)`-ARSDH winning solution.
 Both searches read only the setup, the commitment, the cells and the proofs.
-`Proofs/Kzg/BlobVerifier.lean` lifts the batch check of openings to `verifyBlobKzgProofBatch`, which checks blob transactions before Fusaka.
+`Proofs/Kzg/BlobVerifier.lean` lifts the batch check of openings to `verifyBlobKzgProofBatch`, which checks the blobs of a block and of a blob transaction before Fusaka.
 `verifyBlobKzgProofBatch_exists_ok` shows that it returns a verdict, with no error, when the sizes match, each blob decodes, and each commitment and proof passes KZG validation.
-`verifyBlobKzgProofBatch_ok_iff_root` states that this verdict is true exactly when the challenge is a root of the error polynomial of the blob batch.
-`verifyBlobKzgProofBatch_valid_or_root` splits an accepted batch into two cases.
-Every entry satisfies the opening equation and passes `verifyBlobKzgProof`, or the challenge is a root of a nonzero error polynomial.
+Assume `PairingLaws`, a well-formed setup, and decoded points that represent the scalars `c` and `w` of their bytes.
+Then `verifyBlobKzgProofBatch_ok_iff_root` states that this verdict is true exactly when the batch challenge is a root of the error polynomial of the blob batch.
+`verifyBlobKzgProofBatch_valid_or_root` assumes the same and splits an accepted batch into two cases.
+Every entry satisfies `c_i - y_i = w_i (τ - z_i)` and passes `verifyBlobKzgProof`, or the batch challenge is a root of a nonzero error polynomial.
+`prEvent_batchErrorPoly_root_le` (`Proofs/Kzg/BatchChallenge.lean`) bounds the root case by `(q + 1) (n - 1) / r` for the batch of openings that the check builds.
+No theorem states that bound for an adversary that outputs blobs, commitments and proofs.
 `verifyBlobKzgProofBatch_of_blobOpeningValid` proves that the check accepts every batch of valid blob openings.
 So it accepts the commitments and proofs that `blobToKzgCommitment` and `computeBlobKzgProof` return (`verifyBlobKzgProofBatch_computeBlobKzgProof`).
 

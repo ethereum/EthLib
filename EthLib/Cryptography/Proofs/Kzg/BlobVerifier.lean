@@ -8,13 +8,17 @@ public import EthLib.Cryptography.Proofs.Kzg.HonestCells
 
 The batch check of blobs takes triples of a blob, a commitment and a proof, as bytes.
 
-It validates each commitment and each proof, decodes each blob, and evaluates it at its challenge.
+It validates each commitment and each proof, and decodes each blob.
 
-It then runs the batch check of openings on these points, challenges and values.
+It evaluates each decoded blob at its evaluation challenge.
+
+It then runs the batch check of openings on these points, evaluation challenges and values.
+
+Each root below is a root of the error polynomial of the batch.
 
 - On well-formed inputs of one size, the batch check of blobs returns a verdict, with no error.
-- Under the pairing law, the verdict is true iff the challenge is a root of the error polynomial.
-- An accepted batch has valid blob openings, or its challenge is a root of a nonzero polynomial.
+- Under the pairing law, the verdict is true exactly when the batch challenge is a root.
+- Every entry of an accepted batch satisfies the opening equation, or the batch challenge is a root.
 - Every batch of valid blob openings is accepted, including honestly computed proofs.
 -/
 
@@ -57,11 +61,11 @@ noncomputable def BlobBatchInput.evals (y : BlobBatchInput) : Array Fr :=
   Array.ofFn (n := y.blobs.size) fun i =>
     (interpolant (decodeBlobPolys y.blobs)[i.val]!).eval y.challenges[i.val]!
 
-/-- The Fiat-Shamir challenge of the batch check on a blob batch. -/
+/-- The batch challenge: the Fiat-Shamir challenge of the batch check of openings on blobs. -/
 noncomputable def BlobBatchInput.challenge (y : BlobBatchInput) : Fr :=
   computeVerifyKzgProofBatchChallenge y.commitments y.challenges y.evals y.proofs
 
-/-- The error polynomial of a blob batch, where `c` and `w` give the scalars of the points. -/
+/-- The error polynomial of a blob batch, where `c` and `w` map the bytes of points to scalars. -/
 noncomputable def BlobBatchInput.errorPoly (y : BlobBatchInput) (τ : Fr)
     (c w : Bytes48 → Fr) : Fr[X] :=
   batchErrorPoly τ (fun i => c y.commitments[i]!) (y.evals[·]!) (fun i => w y.proofs[i]!)
@@ -69,11 +73,11 @@ noncomputable def BlobBatchInput.errorPoly (y : BlobBatchInput) (τ : Fr)
 
 /-! ## Decomposition and totality of the batch check -/
 
-/-- The accumulator type of the loop in `verifyBlobKzgProofBatch`. -/
+/-- The accumulator type of the loop of the batch check of blobs. -/
 private abbrev BlobBatchAcc :=
   Array KZGCommitment × Array G1 × Array Fr × Array Fr × Array KZGProof × Array G1
 
-/-- One pure step of the accumulator of `verifyBlobKzgProofBatch`. -/
+/-- One pure step of the accumulator of the batch check of blobs. -/
 private noncomputable def blobPureStep (acc : BlobBatchAcc)
     (entry : Blob × Bytes48 × Bytes48 × G1 × G1 × Polynomial) : BlobBatchAcc :=
   let (commitments, commitmentsG1, challenges, ys, proofs, proofsG1) := acc
@@ -106,7 +110,7 @@ private theorem list_foldlM_forall {ε σ α : Type} {f : σ → α → Except �
       · exact hf init q mid hx
       · exact list_foldlM_forall hf xs mid out h q hmem
 
-/-- A monadic fold whose steps compute a deterministic pure step returns the pure fold. -/
+/-- A monadic fold whose every step succeeds with a pure step returns the pure fold. -/
 private theorem list_foldlM_eq_foldl {ε σ α : Type} {f : σ → α → Except ε σ} {step : σ → α → σ}
     {L : List α} (hstep : ∀ acc x, x ∈ L → f acc x = .ok (step acc x)) :
     ∀ init, L.foldlM f init = .ok (L.foldl step init) := by
@@ -118,7 +122,7 @@ private theorem list_foldlM_eq_foldl {ε σ α : Type} {f : σ → α → Except
     simp only [bind, Except.bind]
     exact ih (fun acc q hq => hstep acc q (List.mem_cons_of_mem x hq)) _
 
-/-- One step of the loop in `verifyBlobKzgProofBatch`, on valid inputs. -/
+/-- One step of the loop of the batch check of blobs, on inputs that decode. -/
 private theorem blobLoopStep_of_ok (acc : BlobBatchAcc) (blob : Blob) (cb pb : Bytes48) (i : Nat)
     {c p : G1} {poly : Polynomial} (hcb : validateKzgG1Point cb = .ok c)
     (hpb : validateKzgG1Point pb = .ok p) (hbl : blobToPolynomial blob = .ok poly) :
@@ -143,7 +147,7 @@ private theorem blobLoopStep_of_ok (acc : BlobBatchAcc) (blob : Blob) (cb pb : B
   simp only [bind, Except.bind, pure, Except.pure,
     evaluatePolynomialInEvaluationForm_eq_interpolate poly _ hsz]
 
-/-- One step of the loop in `verifyBlobKzgProofBatch` implies that the three inputs decode. -/
+/-- A successful step of the loop of the batch check of blobs means that its three inputs decode. -/
 private theorem blobLoopStep_valid (acc r : BlobBatchAcc) (blob : Blob) (cb pb : Bytes48) (i : Nat)
     (hr : (let (commitments, commitmentsG1, challenges, ys, proofs, proofsG1) := acc
            do
@@ -290,9 +294,11 @@ private theorem blobLoop_eq_ok {blobs : Array Blob} {commitmentsBytes proofsByte
     simp [pureEntry, hgetL k (by simp [hlenL]; omega), getElem!_pos psG1 k hk₂]
   rw [h1, h2, h3, h4, h5, h6]
 
-/-- **A blob batch check that returns a verdict decodes its inputs and runs the core check.**
+/-- **A blob batch check that returns a verdict decodes its inputs and checks the openings.**
 
-The commitments and the proofs are as many as the blobs.
+Let the batch check of blobs return a verdict.
+
+Then the commitments and the proofs are as many as the blobs.
 
 Every blob decodes to a polynomial, and every commitment and proof passes KZG validation.
 
@@ -319,13 +325,7 @@ theorem verifyBlobKzgProofBatch_eq_ok {s : TrustedSetup} {blobs : Array Blob}
   rw [ite_eq_right hc, ite_eq_right hp] at h
   replace hc := Decidable.not_not.mp hc
   replace hp := Decidable.not_not.mp hp
-  have hbind : ∀ {α β : Type} {m : Except KzgError α} {k : α → Except KzgError β} {v : β},
-      (m >>= k) = .ok v → ∃ a, m = .ok a ∧ k a = .ok v := by
-    intro α β m k v hm
-    cases m with
-    | error e => cases hm
-    | ok a => exact ⟨a, rfl, hm⟩
-  obtain ⟨acc, hfold, hbatch⟩ := hbind h
+  obtain ⟨acc, hfold, hbatch⟩ := EthLib.Base.bind_ok_iff.mp h
   have hmemL : ∀ k (hk : k < blobs.size),
       ((blobs[k], commitmentsBytes[k]'(hc ▸ hk), proofsBytes[k]'(hp ▸ hk)), k) ∈
         (blobs.zip (commitmentsBytes.zip proofsBytes)).zipIdx.toList := by
@@ -378,16 +378,12 @@ theorem verifyBlobKzgProofBatch_exists_ok (s : TrustedSetup) {blobs : Array Blob
     (xs := proofsBytes) fun pb hpb => exists_validateKzgG1Point_of_validateKzgG1 (hps pb hpb)
   unfold verifyBlobKzgProofBatch
   rw [ite_eq_right (not_not.mpr hc), ite_eq_right (not_not.mpr hp)]
-  have hbind : ∀ {α β : Type} {m : Except KzgError α} {k : α → Except KzgError β} {a : α} {v : β},
-      m = .ok a → k a = .ok v → (m >>= k) = .ok v := by
-    rintro _ _ _ _ _ _ rfl hk
-    exact hk
   obtain ⟨b, hb⟩ := verifyKzgProofBatch_exists_ok s
     (zs := (⟨blobs, commitmentsBytes, proofsBytes⟩ : BlobBatchInput).challenges)
     (ys := (⟨blobs, commitmentsBytes, proofsBytes⟩ : BlobBatchInput).evals)
     (by simp [BlobBatchInput.challenges, hc]) (by simp [BlobBatchInput.evals, hc])
     (hp.trans hc.symm) (array_mapM_ok hcsG1).1 ((array_mapM_ok hpsG1).1.trans (hp.trans hc.symm))
-  exact ⟨b, hbind (blobLoop_eq_ok hc hp hpsM hcsG1 hpsG1) hb⟩
+  exact ⟨b, EthLib.Base.bind_ok_iff.mpr ⟨_, blobLoop_eq_ok hc hp hpsM hcsG1 hpsG1, hb⟩⟩
 
 /-! ## Root characterization and soundness dichotomy -/
 
@@ -395,13 +391,13 @@ theorem verifyBlobKzgProofBatch_exists_ok (s : TrustedSetup) {blobs : Array Blob
 
 Assume the pairing law and a well-formed setup of the secret `τ`.
 
-Let each commitment decode to a point that represents the scalar `c` of its bytes.
+Let each commitment that decodes give a point that represents the scalar `c` of its bytes.
 
-Let each proof decode to a point that represents the scalar `w` of its bytes.
+Let each proof that decodes give a point that represents the scalar `w` of its bytes.
 
 Let the batch check of blobs return the verdict `b`.
 
-Then `b` is true exactly when the challenge is a root of the error polynomial of the batch. -/
+Then `b` is true exactly when the batch challenge is a root of the error polynomial of the batch. -/
 theorem verifyBlobKzgProofBatch_ok_iff_root (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) (y : BlobBatchInput) {c w : Bytes48 → Fr}
     (hC : ∀ i < y.commitments.size, ∀ P, uncompressG1 y.commitments[i]! = .ok P →
@@ -419,15 +415,21 @@ theorem verifyBlobKzgProofBatch_ok_iff_root (laws : Bls.PairingLaws) {s : Truste
     fun i hi => hP i (hpgsz ▸ hi) _ (uncompressG1_of_validateKzgG1Point (hpgk i (hpgsz ▸ hi)))
   exact verifyKzgProofBatch_ok_iff_root laws hs hC' hP' hbatch
 
-/-- **An accepted batch of blobs is valid, or its challenge is a root.**
+/-- **An accepted batch of blobs is valid, or its batch challenge is a root.**
 
 Assume the pairing law and a well-formed setup of the secret `τ`.
 
-Let the scalars `c` and `w` be as in the previous theorem, and let the batch check accept.
+Let each commitment that decodes give a point that represents the scalar `c` of its bytes.
 
-Then every entry satisfies the opening equation and passes the check of one blob.
+Let each proof that decodes give a point that represents the scalar `w` of its bytes.
 
-Otherwise the error polynomial of the batch is not zero, and the challenge is one of its roots. -/
+Let the batch check of blobs accept.
+
+Then every entry satisfies `c - y = w (τ - z)` at its evaluation challenge `z` and value `y`.
+
+Each entry also passes the check of one blob.
+
+Otherwise the error polynomial of the batch is not zero, and the batch challenge is a root of it. -/
 theorem verifyBlobKzgProofBatch_valid_or_root (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
     (hs : s.WellFormed τ) (y : BlobBatchInput) {c w : Bytes48 → Fr}
     (hC : ∀ i < y.commitments.size, ∀ P, uncompressG1 y.commitments[i]! = .ok P →
@@ -452,7 +454,6 @@ theorem verifyBlobKzgProofBatch_valid_or_root (laws : Bls.PairingLaws) {s : Trus
       (fun k => w y.proofs[k]!) (y.challenges[·]!) y.commitments.size).mp hzero i hi_c
     refine ⟨heq, ?_⟩
     have hbl := hpsk i hi
-    have hsize := size_blobToPolynomial y.blobs[i]! ps[i]! hbl
     have hrC := hC i hi_c _ (uncompressG1_of_validateKzgG1Point (hcsk i hi_c))
     have hrP := hP i hi_p _ (uncompressG1_of_validateKzgG1Point (hpgk i hi_p))
     have hchal : y.challenges[i]! = computeChallenge y.blobs[i]! y.commitments[i]! := by
@@ -461,71 +462,13 @@ theorem verifyBlobKzgProofBatch_valid_or_root (laws : Bls.PairingLaws) {s : Trus
     have heval : y.evals[i]! = (interpolant ps[i]!).eval y.challenges[i]! := by
       rw [getElem!_pos y.evals i (by simp [BlobBatchInput.evals, hi])]
       simp [BlobBatchInput.evals, hdec]
-    unfold verifyBlobKzgProof
-    rw [hcsk i hi_c, hbl, hpgk i hi_p]
-    simp only [bind, Except.bind, pure, Except.pure]
-    rw [evaluatePolynomialInEvaluationForm_eq_interpolate ps[i]! _ hsize]
-    change Except.ok (verifyKzgProofImpl s csG1[i]! _ ((interpolant ps[i]!).eval _) psG1[i]!) = _
+    refine verifyBlobKzgProof_of_blobOpeningValid laws hs
+      ⟨ps[i]!, _, _, _, _, hbl, hcsk i hi_c, hrC, hpgk i hi_p, hrP, ?_⟩
     rw [← hchal, ← heval]
-    exact congrArg Except.ok ((verifyKzgProofImpl_iff laws hs hrC hrP _ _).mpr heq)
+    exact heq
   · exact Or.inr ⟨hzero, (verifyBlobKzgProofBatch_ok_iff_root laws hs y hC hP h).mp rfl⟩
 
 /-! ## Valid blob openings and completeness -/
-
-/-- **A valid opening of a blob at its Fiat-Shamir challenge, for the secret `τ`.**
-
-The blob decodes to values `poly`.
-
-The commitment and the proof pass KZG validation, as points that represent `c` and `w`.
-
-Let `z` be the evaluation challenge of the blob and the commitment.
-
-Then `c - p(z) = w (τ - z)` for the interpolant `p` of `poly`. -/
-def BlobOpeningValid (τ : Fr) (blob : Blob) (commitment proof : Bytes48) : Prop :=
-  ∃ poly C c P w, blobToPolynomial blob = .ok poly ∧
-    validateKzgG1Point commitment = .ok C ∧ G1.Represents C c ∧
-    validateKzgG1Point proof = .ok P ∧ G1.Represents P w ∧
-    c - (interpolant poly).eval (computeChallenge blob commitment) =
-      w * (τ - computeChallenge blob commitment)
-
-/-- **An honestly computed blob commitment and proof form a valid opening.**
-
-Let the setup be well-formed for the secret `τ`.
-
-Let `blobToKzgCommitment` return `C`, and let `computeBlobKzgProof` return `P`.
-
-Then `(blob, C, P)` is a valid blob opening at `τ`. -/
-theorem blobOpeningValid_computeBlobKzgProof {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
-    {blob : Blob} {C P : Bytes48} (hC : blobToKzgCommitment s blob = .ok C)
-    (hP : computeBlobKzgProof s blob C = .ok P) :
-    BlobOpeningValid τ blob C P := by
-  cases hblob : blobToPolynomial blob with
-  | error e =>
-    unfold blobToKzgCommitment at hC
-    rw [hblob] at hC
-    cases hC
-  | ok poly =>
-    have hsize := size_blobToPolynomial blob poly hblob
-    rw [blobToKzgCommitment_eq_ok s hblob] at hC
-    obtain rfl := Except.ok.inj hC
-    obtain ⟨C', hC', hrC'⟩ := validateKzgG1Point_compressG1
-      (represents_lagrange_msm hs (τ := τ) hsize)
-    have hbytes : bytesToKzgCommitment (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)) =
-        .ok (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)) :=
-      bytesToKzgCommitment_ok_iff.mpr ⟨validateKzgG1_of_validateKzgG1Point hC', rfl⟩
-    let z := computeChallenge blob (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly))
-    obtain ⟨Q, hQs, hQv, hImpl⟩ := computeKzgProofImpl_eq s hsize z
-    have hcomp : computeBlobKzgProof s blob (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)) =
-        .ok (compressG1 (G1.msm s.g1LagrangeBrp.toArray Q)) := by
-      unfold computeBlobKzgProof
-      rw [hbytes, hblob]
-      change (computeKzgProofImpl s poly z >>= fun v => pure v.1) = _
-      rw [hImpl]
-      rfl
-    rw [hcomp] at hP
-    obtain rfl := Except.ok.inj hP
-    obtain ⟨P', hP', hrP'⟩ := validateKzgG1Point_compressG1 (represents_quotient hs hQs hQv)
-    exact ⟨poly, C', _, P', _, hblob, hC', hrC', hP', hrP', eval_interpolant_sub poly z τ⟩
 
 /-- **The blob batch check accepts every batch of valid blob openings.**
 
@@ -615,32 +558,17 @@ private theorem blobToPolynomial_zeroBlob :
 
 /-- **A non-empty honest batch of blobs exists and is accepted.**
 
-Under the pairing law, every secret `τ` has a setup and a non-empty accepted honest blob batch. -/
+Under the pairing law, every secret `τ` has a well-formed setup and a non-empty batch.
+
+Its commitments and proofs are computed honestly, and the batch check of blobs accepts it. -/
 theorem exists_honest_blob_batch (laws : Bls.PairingLaws) (τ : Fr) :
     ∃ (s : TrustedSetup) (y : BlobBatchInput),
       s.WellFormed τ ∧ y.blobs.size > 0 ∧
       (∀ i < y.blobs.size, blobToKzgCommitment s y.blobs[i]! = .ok y.commitments[i]! ∧
         computeBlobKzgProof s y.blobs[i]! y.commitments[i]! = .ok y.proofs[i]!) ∧
       verifyBlobKzgProofBatch s y.blobs y.commitments y.proofs = .ok true := by
-  have hsingle : ∀ {s : TrustedSetup} {bl : Blob} {hbpoly : Array Fr},
-      s.WellFormed τ → blobToPolynomial bl = .ok hbpoly →
-      ∃ C P, blobToKzgCommitment s bl = .ok C ∧ computeBlobKzgProof s bl C = .ok P := by
-    intro s bl poly hs hblob
-    have hsize := size_blobToPolynomial bl poly hblob
-    obtain ⟨C', hC', -⟩ := validateKzgG1Point_compressG1
-      (represents_lagrange_msm hs (τ := τ) hsize)
-    have hbytes : bytesToKzgCommitment (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)) =
-        .ok (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)) :=
-      bytesToKzgCommitment_ok_iff.mpr ⟨validateKzgG1_of_validateKzgG1Point hC', rfl⟩
-    obtain ⟨Q, -, -, hImpl⟩ := computeKzgProofImpl_eq s hsize
-      (computeChallenge bl (compressG1 (G1.msm s.g1LagrangeBrp.toArray poly)))
-    refine ⟨_, compressG1 (G1.msm s.g1LagrangeBrp.toArray Q), blobToKzgCommitment_eq_ok s hblob, ?_⟩
-    unfold computeBlobKzgProof
-    rw [hbytes, hblob]
-    change (computeKzgProofImpl s poly _ >>= fun v => pure v.1) = _
-    rw [hImpl]
-    rfl
-  obtain ⟨C, P, hC, hP⟩ := hsingle (wellFormed_ofPowers τ) blobToPolynomial_zeroBlob
+  obtain ⟨C, P, hC, hP⟩ :=
+    exists_blobToKzgCommitment_computeBlobKzgProof (wellFormed_ofPowers τ) blobToPolynomial_zeroBlob
   have hhonest : ∀ i < (#[zeroBlob]).size,
       blobToKzgCommitment (TrustedSetup.ofPowers (setupPowers τ)) (#[zeroBlob])[i]! =
         .ok (#[C])[i]! ∧
