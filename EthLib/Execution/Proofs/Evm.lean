@@ -26,6 +26,7 @@ public import EthLib.Execution.Proofs.Evm.Storage
 public import EthLib.Execution.Proofs.Evm.JumpDest
 public import EthLib.Execution.Proofs.Evm.ControlFlow
 public import EthLib.Execution.Proofs.Evm.Interpreter
+public import EthLib.Execution.Proofs.Evm.MessageCall
 
 /-!
 # `EthLib.Execution.Proofs.Evm`
