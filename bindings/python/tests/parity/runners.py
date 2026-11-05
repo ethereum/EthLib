@@ -109,6 +109,14 @@ def _ssz_static(root: Path, case: Case) -> None:
     assert encoded == data
 
 
+def _single_merkle_proof(root: Path, case: Case) -> None:
+    from consensus.test_light_client_proofs import _check
+
+    # tests/<preset>/<fork>/light_client/single_merkle_proof/<container>/<case>
+    container = case.path.split("/")[5]
+    _check(case.preset, case.fork, container, root / case.path)
+
+
 def _container_forks(container: str) -> tuple[str, ...]:
     first, dropped = CONTAINERS[container]
     forks = list(CONSENSUS_FORK)
@@ -122,6 +130,7 @@ RUNNERS = {
     "networking/get_custody_groups": _custody_groups,
     "networking/compute_columns_for_custody_group": _custody_columns,
     **{f"ssz_static/{container}": _ssz_static for container in CONTAINERS},
+    "light_client/single_merkle_proof": _single_merkle_proof,
 }
 
 

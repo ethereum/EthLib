@@ -51,6 +51,15 @@ A case gives a body, a generalized index, the node at that index and its branch.
 Each case keeps its files `object.ssz_snappy` and `proof.yaml` under its path in the archive.
 `bindings/python/tests/consensus/test_merkle_proof.py` builds the node and the branch in Lean, and compares them with the case.
 
+The directory `light_client/` holds the `single_merkle_proof` cases of the light client, from Altair to Fulu, in both archives.
+A case gives a beacon state or a block body, and the node of a sync committee, the finalized root or the execution payload.
+It also gives the generalized index of that node and its branch.
+Each case keeps its files `object.ssz_snappy` and `proof.yaml` under its path in the archive.
+The release also has cases for Gloas and Heze, and the directory leaves them out until EthLib specifies those forks.
+`bindings/python/tests/consensus/test_light_client_proofs.py` builds the node and the branch in Lean, and compares them with the case.
+It also climbs the branch with the SHA-256 of `hashlib`, to check that it reaches the root of the value.
+Every week, the same test also runs every case of both archives and checks that the vendored files are copies.
+
 The test release publishes its cases in three archives.
 Their SHA-256 digests are:
 
