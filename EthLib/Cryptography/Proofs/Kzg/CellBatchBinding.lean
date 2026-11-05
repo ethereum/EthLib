@@ -27,11 +27,7 @@ Under the pairing law, the batch check accepts exactly when its challenge `r` is
 
 So an accepted batch has every cell valid, or `r` is a root of a nonzero `P`.
 
-This file does not reduce the binding of cells to a hard problem.
-
-Two different cells at one index would solve a bilinear variant of strong Diffie–Hellman.
-
-That solution lies in the target group of the pairing, which EthLib does not model.
+The binding of cells, with a bilinear variant of strong Diffie–Hellman, is in another file.
 -/
 
 @[expose] public section
