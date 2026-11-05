@@ -23,6 +23,7 @@ public import EthLib.Consensus.DataAvailability.Custody
 public import EthLib.Consensus.ForkSchedule
 public import EthLib.Consensus.Gossip.Topics
 public import EthLib.Consensus.InclusionList
+public import EthLib.Consensus.LightClient.Containers
 public import EthLib.Consensus.PqKeys.Containers
 public import EthLib.Consensus.PqKeys.Gossip
 public import EthLib.Consensus.PqKeys.Possession
