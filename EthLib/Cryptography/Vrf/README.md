@@ -96,8 +96,9 @@ An opening also travels as bytes (`Serialization.lean`).
 Decoding succeeds exactly on strings of 1056 bytes, and on those strings encoding and decoding are inverse bijections.
 Verification over bytes rejects a root that is not 32 bytes, an opening that is not 1056 bytes, and an index outside `[0, 2^32)`.
 
-*Unpredictability* says that no one without a secret can guess its output before it is opened (`Unpredictability.lean`).
-The theorem takes the challenge secret uniform, not derived from a seed.
+*Unpredictability* says that no one without a secret can guess its output before it is opened.
+Three theorems prove it, in three games.
+The first theorem (`Unpredictability.lean`) takes the challenge secret uniform, not derived from a seed.
 It is the residual unpredictability of Micali, Rabin and Vadhan, §3.2, in their definition of a verifiable unpredictable function.
 The hash is a random oracle, the secret at the challenge index is uniform, and the other secrets are any fixed values.
 The adversary gets the root, queries the hash `q_H` times, and asks for `q_O` openings at other indices.
@@ -112,7 +113,15 @@ It wins if it names an index whose opening it never asked for, and guesses the o
 The proof splits a win by the index named, so its bound is `2^32` times the first: `2^32 (1 + 2 Q) / 2^256`.
 With `q_H = 2^64` and `q_O = 2^32`, that is below `2^-157`.
 
-Neither theorem covers a holder who chooses its own secrets: such a holder can bias its outputs.
+A third theorem covers the secrets of key generation, derived from a uniform seed (`prEvent_seedGame_le`, `SeedSecrets.lean`).
+Its game is the second one, with each secret the hash of its secret input under the seed.
+The secrets act as independent uniform values until a hash query hits a secret input of the seed.
+Such an input fixes the seed, so each hash query hits with probability at most `2^-256`.
+The bound gains one term for it: `2^32 (1 + 2 Q) / 2^256 + Q / 2^256`.
+With `q_H = 2^64` and `q_O = 2^32`, that is still below `2^-157`.
+The game computes the root and the openings of the tree of a seed, with the hash as an oracle (`rootOf_secret`, `openingOf_secret`).
+
+None of these theorems covers a holder who chooses its own secrets: such a holder can bias its outputs.
 
 ## Test vectors
 
@@ -127,9 +136,6 @@ The secrets and outputs of one seed at the same two indices were computed outsid
 Pseudorandomness is not proved: that an output is indistinguishable from random until it is opened.
 It rests on Keccak-256 being a pseudorandom function keyed by the seed, and on its preimage resistance, and both need a model of the hash.
 It could hold only for a tree whose secrets the holder did not choose.
-
-Unpredictability is not proved for a tree built from a seed.
-It would need at least one more step in the random oracle model: no one queries the hash at the secret seed.
 
 No bound on the cost of a Keccak-256 collision is proved either.
 Uniqueness turns a second output into a collision, but how hard a collision is to find depends on the hash.
