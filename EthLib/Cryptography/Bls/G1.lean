@@ -214,7 +214,7 @@ The window sums are independent, so each runs as its own task.
 The fold then combines them in order, from the top window down. -/
 def msm (points : Array G1) (scalars : Array Fr) : G1 :=
   let n := if points.size ≤ scalars.size then points.size else scalars.size
-  -- `Fr.val` leaves the Montgomery form, so each scalar is read once, not once per window.
+  -- Leaving Montgomery form costs a product, so each scalar is converted once, before the windows.
   let vals := scalars.map Fr.val
   if n = 0 then zero
   else if msmMaxBits vals n = 0 then zero

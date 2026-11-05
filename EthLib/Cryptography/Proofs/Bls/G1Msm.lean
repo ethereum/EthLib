@@ -486,8 +486,8 @@ private theorem msmAcc_spec (points : Array G1) (vals : Array Nat)
       rw [windowVal, show (nW - (0 + 1)) * 8 = (nW - 1 - 0) * 8 from by omega]
       omega
 
-/-- Reading the values first gives the value of each scalar in range. -/
-private theorem map_val_getElem! (scalars : Array Fr) (j : Nat) (hj : j < scalars.size) :
+/-- In range, the mapped array holds the value of each scalar. -/
+private theorem getElem!_map_val (scalars : Array Fr) (j : Nat) (hj : j < scalars.size) :
     (scalars.map Fr.val)[j]! = (scalars[j]!).val := by
   rw [getElem!_pos (scalars.map Fr.val) j (by simpa using hj), getElem!_pos scalars j hj,
     Array.getElem_map]
@@ -509,7 +509,7 @@ theorem toPoint_msm (points : Array G1) (scalars : Array Fr)
       ≤ scalars.size := by split <;> omega
   -- Over the first `n` positions, the values are the values of the scalars.
   rw [Finset.sum_congr rfl fun j hj => by
-    rw [← map_val_getElem! scalars j (by have := Finset.mem_range.mp hj; omega)]]
+    rw [← getElem!_map_val scalars j (by have := Finset.mem_range.mp hj; omega)]]
   generalize (if points.size ≤ scalars.size then points.size else scalars.size) = n at hval ⊢
   generalize scalars.map Fr.val = vals
   by_cases h0 : n = 0
