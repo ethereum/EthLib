@@ -23,17 +23,10 @@ namespace EthLib.Cryptography.Xmss.Unforgeability
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
 
-variable {m : Type → Type} [Monad m] [HasQuery XmssSecurity.HashSpec m]
+export EthLib.Cryptography.HashSig (queryH)
 
 /-- A chain as the model numbers it. -/
 def chainOf (i : Fin V) : XmssSecurity.ChainIndex := ⟨i.val, i.isLt⟩
-
-/-- `H` as a query to the model's oracle.
-
-The input's bytes go in, and the answer's 32 bytes come out. -/
-def queryH (input : ByteArray) : m (Vector UInt8 32) :=
-  ofOutput <$> XmssSecurity.Concrete.oracleHash (m := m) input.data.toList
-
 
 /-- The 58 values of a function on chains, as EthLib's vector of digests. -/
 def ofChains (f : XmssSecurity.ChainIndex → XmssSecurity.Digest) : Vector Digest V :=

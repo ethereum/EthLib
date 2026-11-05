@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
+public import EthLib.Cryptography.Proofs.EvalDistEq
 public import VCVio.OracleComp.QueryTracking.RandomOracle.DeferredSampling
 public import VCVio.OracleComp.QueryTracking.Unpredictability
 
@@ -11,14 +11,7 @@ open OracleComp OracleSpec ENNReal
 
 namespace XmssSecurity
 
-theorem hashOutputBits_eq : hashOutputBits = digestBits + digestBits := by
-  decide
-
-/-- A 256-bit oracle output viewed as two digest halves.
-
-Truncation keeps the low half. -/
-def splitHashOutput (output : HashOutput) : BitVec (digestBits + digestBits) :=
-  output.cast hashOutputBits_eq
+export EthLib.Cryptography.HashSig (hashOutputBits_eq splitHashOutput)
 
 end XmssSecurity
 
@@ -30,11 +23,9 @@ noncomputable local instance : UniformAnswerMeasure HashSpec :=
 theorem card_hashOutput : Fintype.card HashOutput = 2 ^ hashOutputBits := by
   simp
 
-def joinDigest (high low : Digest) : HashOutput :=
-  (high ++ low).cast hashOutputBits_eq.symm
-
-def highDigest (output : HashOutput) : Digest :=
-  (splitHashOutput output).extractLsb' digestBits digestBits
+export EthLib.Cryptography.HashSig (joinDigest highDigest hashOutputEquivDigestPair
+  independentDigestHalves evalDist_split_uniformHashOutput_eq_independent
+  evalDist_truncate_uniformHashOutput)
 
 def digestFiberEquiv (target : Digest) :
     Digest ≃ {output : HashOutput // truncateHash output = target} where
@@ -55,57 +46,6 @@ def digestFiberEquiv (target : Digest) :
         exact congrArg (BitVec.cast hashOutputBits_eq.symm)
           (BitVec.extractLsb'_append_extractLsb' (x := splitHashOutput output.val))
       _ = output.val := by simp [splitHashOutput]
-
-/-- A 256-bit random-oracle answer is equivalently two independent parts.
-
-These are a high half and the 128-bit digest used by XMSS. -/
-def hashOutputEquivDigestPair : HashOutput ≃ Digest × Digest where
-  toFun output := (highDigest output, truncateHash output)
-  invFun halves := joinDigest halves.1 halves.2
-  left_inv output := by
-    calc
-      joinDigest (highDigest output) (truncateHash output) =
-          (splitHashOutput output).cast hashOutputBits_eq.symm := by
-        exact congrArg (BitVec.cast hashOutputBits_eq.symm)
-          (BitVec.extractLsb'_append_extractLsb' (x := splitHashOutput output))
-      _ = output := by simp [splitHashOutput]
-  right_inv halves := by
-    apply Prod.ext
-    · change BitVec.extractLsb' digestBits digestBits (halves.1 ++ halves.2) = halves.1
-      exact BitVec.extractLsb'_append_eq_left
-    · change BitVec.extractLsb' 0 digestBits (halves.1 ++ halves.2) = halves.2
-      exact BitVec.extractLsb'_append_eq_right
-
-noncomputable def independentDigestHalves : ProbComp (Digest × Digest) := do
-  let high ← $ᵗ Digest
-  let low ← $ᵗ Digest
-  return (high, low)
-
-/-- Splitting a uniform 256-bit answer gives two independent uniform 128-bit halves. -/
-theorem evalDist_split_uniformHashOutput_eq_independent :
-    (hashOutputEquivDigestPair <$> ($ᵗ HashOutput)) =ᵈ independentDigestHalves := by
-  calc
-    (hashOutputEquivDigestPair <$> ($ᵗ HashOutput)) =ᵈ ($ᵗ (Digest × Digest)) :=
-      SampleableType.map_uniformSample_evalDistEq_of_bijective
-        hashOutputEquivDigestPair.bijective
-    _ =ᵈ independentDigestHalves := by
-      unfold independentDigestHalves
-      rw [SampleableType.uniformSample_prod_eq_bind]
-
-/-- Truncating a uniform 256-bit answer gives a uniform XMSS digest. -/
-theorem evalDist_truncate_uniformHashOutput :
-    (truncateHash <$> ($ᵗ HashOutput)) =ᵈ ($ᵗ Digest) := by
-  calc
-    (truncateHash <$> ($ᵗ HashOutput)) =ᵈ
-        (Prod.snd <$> (hashOutputEquivDigestPair <$> ($ᵗ HashOutput))) := by
-      simp [Functor.map_map, hashOutputEquivDigestPair]
-    _ =ᵈ (Prod.snd <$> independentDigestHalves) :=
-      evalDist_split_uniformHashOutput_eq_independent.map _
-    _ =ᵈ ($ᵗ Digest) := by
-      unfold independentDigestHalves
-      simp only [map_eq_bind_pure_comp, bind_assoc, pure_bind,
-        Function.comp_apply, bind_pure]
-      exact OracleComp.EvalDistEq.bind_const _ _
 
 /-- Sample a 256-bit oracle answer whose low XMSS digest is fixed.
 

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Vrf.Unpredictability
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
+public import EthLib.Cryptography.Proofs.EvalDistEq
 public import VCVio.OracleComp.SimSemantics.StateT.UntilBad
 public import VCVio.EvalDist.ProbabilityBounds
 

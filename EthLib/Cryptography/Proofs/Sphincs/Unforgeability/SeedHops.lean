@@ -41,7 +41,7 @@ So the derivations may be anything at other addresses, and the algorithms do not
 namespace EthLib.Cryptography.Sphincs.Unforgeability
 
 open EthLib.Cryptography.Sphincs.Constants
-open EthLib.Cryptography.Xmss.Unforgeability (ofOutput queryH)
+open EthLib.Cryptography.HashSig (ofOutput queryH)
 open OracleSpec OracleComp
 
 /-! ## Only the derivation addresses matter
@@ -146,29 +146,29 @@ The schemes of this section run in such worlds, and map back to the game's schem
 
 /-- The game's oracle with derivation queries `X`, each answered with 32 bytes. -/
 abbrev World (X : Type) :=
-  XmssSecurity.HashSpec.withDerivations X XmssSecurity.HashOutput
+  HashSig.HashSpec.withDerivations X HashSig.HashOutput
 
 /-- `H` in a world with derivations: the game's query, passed on. -/
 def liftH (X : Type) (x : ByteArray) : OracleComp (World X) (Vector UInt8 32) :=
-  simulateQ (XmssSecurity.HashSpec.withDerivationsLift X XmssSecurity.HashOutput) (H x)
+  simulateQ (HashSig.HashSpec.withDerivationsLift X HashSig.HashOutput) (H x)
 
 /-- In the game, `H` is the oracle's answer to the input's bytes. -/
 theorem H_eq (x : ByteArray) :
-    H x = ofOutput <$> (liftM (XmssSecurity.OracleWorld.query (.inr x.data.toList)) :
-      OracleComp XmssSecurity.OracleWorld _) := by
-  unfold H queryH XmssSecurity.Concrete.oracleHash
+    H x = ofOutput <$> (liftM (HashSig.OracleWorld.query (.inr x.data.toList)) :
+      OracleComp HashSig.OracleWorld _) := by
+  unfold H queryH HashSig.oracleHash
   rfl
 
 /-- A handler that undoes the lift turns the lifted `H` back into `H`. -/
 theorem simulateQ_liftH {X : Type}
-    (G : QueryImpl (World X) (OracleComp XmssSecurity.OracleWorld))
-    (hG : G ∘ₛ XmssSecurity.HashSpec.withDerivationsLift X XmssSecurity.HashOutput =
+    (G : QueryImpl (World X) (OracleComp HashSig.OracleWorld))
+    (hG : G ∘ₛ HashSig.HashSpec.withDerivationsLift X HashSig.HashOutput =
       QueryImpl.id' _) (x : ByteArray) :
     simulateQ G (liftH X x) = H x := by
   rw [liftH, ← QueryImpl.simulateQ_compose, hG, simulateQ_id']
 
 /-- A 32-byte answer read as a seed. -/
-def seedOf (u : XmssSecurity.HashOutput) : Seed :=
+def seedOf (u : HashSig.HashOutput) : Seed :=
   ofOutput u
 
 /-- The verifier of the game over a hash: no signature never verifies. -/
@@ -179,7 +179,7 @@ def verifyOption {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt
 
 /-- leanSPHINCS with its derivations fixed: the scheme seed `s` is known. -/
 noncomputable def seededScheme (s : Seed) :
-    SignatureAlg (OracleComp XmssSecurity.OracleWorld) Message PublicKey Unit (Option Signature)
+    SignatureAlg (OracleComp HashSig.OracleWorld) Message PublicKey Unit (Option Signature)
     where
   keygen := do
     let pk ← publicKeyOf H (seedPrf H s)
@@ -206,7 +206,7 @@ noncomputable def seedScheme :
 
 /-- The scheme seed `S = H("leanSPHINCS" | S_0)`, as the one derivation from the key's seed. -/
 def seedEncoding :
-    SecretEncoding XmssSecurity.HashSpec Seed Unit XmssSecurity.HashOutput where
+    SecretEncoding HashSig.HashSpec Seed Unit HashSig.HashOutput where
   enc s _ := (seedInput s).data.toList
   range_eq _ _ := rfl
   injective _ _ _ _ := rfl
@@ -217,7 +217,7 @@ noncomputable def liftAdversary (X : Type)
     {A : SignatureAlg (OracleComp (World X)) Message PublicKey Unit (Option Signature)}
     (adversary : Adversary) : SignatureAlg.UnforgeableAdversary A :=
   adversary.toUnforgeableAdversary.mapOracles
-    (XmssSecurity.HashSpec.withDerivationsLift X XmssSecurity.HashOutput)
+    (HashSig.HashSpec.withDerivationsLift X HashSig.HashOutput)
 
 section SeedMap
 
@@ -335,7 +335,7 @@ theorem seedInput_injective : Function.Injective seedInput := fun _ _ h =>
 
 /-- A 32-byte answer read as a seed: the seed fixes the answer. -/
 theorem seedOf_injective : Function.Injective seedOf := fun _ _ h =>
-  Xmss.Unforgeability.ofBV_inj (by decide) h
+  HashSig.ofBV_inj (by decide) h
 
 /-- An input of a derivation: the parameter, a derivation address and the suffix. -/
 abbrev DerivationInput : Type :=
@@ -345,8 +345,8 @@ abbrev DerivationInput : Type :=
 
 The secret is the 32-byte answer that the scheme seed reads. -/
 def hiddenSeedEncoding :
-    SecretEncoding XmssSecurity.HashSpec XmssSecurity.HashOutput DerivationInput
-      XmssSecurity.HashOutput where
+    SecretEncoding HashSig.HashSpec HashSig.HashOutput DerivationInput
+      HashSig.HashOutput where
   enc u x := (thInput x.1.1 x.1.2.1 (packBytes (seedOf u) ++ x.1.2.2)).data.toList
   range_eq _ _ := rfl
   injective u x y h := by
@@ -354,7 +354,7 @@ def hiddenSeedEncoding :
     exact Subtype.ext (Prod.ext hpp (Prod.ext hA (HashSig.byteArray_append_inj hpay rfl).2))
 
 /-- An encoded point fixes the secret: its bytes 32 to 63 are the scheme seed. -/
-theorem hiddenSeedEncoding_fix (u u' : XmssSecurity.HashOutput) (x x' : DerivationInput)
+theorem hiddenSeedEncoding_fix (u u' : HashSig.HashOutput) (x x' : DerivationInput)
     (h : hiddenSeedEncoding.enc u x = hiddenSeedEncoding.enc u' x') : u = u' := by
   obtain ⟨-, -, hpay⟩ := thInput_inj (byteArray_eq_of_toList_eq h)
   have hsize : (packBytes (seedOf u)).size = (packBytes (seedOf u')).size := by
@@ -362,7 +362,7 @@ theorem hiddenSeedEncoding_fix (u u' : XmssSecurity.HashOutput) (x x' : Derivati
   exact seedOf_injective (Base.packBytes_injective (HashSig.byteArray_append_inj hpay hsize).1)
 
 /-- A 32-byte answer as the output of a derivation. -/
-def outputOf (u : XmssSecurity.HashOutput) : HashOutput :=
+def outputOf (u : HashSig.HashOutput) : HashOutput :=
   ofOutput u
 
 open Classical in
@@ -391,7 +391,7 @@ noncomputable def hiddenSeedScheme :
 
 section Seeded
 
-variable (u : XmssSecurity.HashOutput)
+variable (u : HashSig.HashOutput)
 
 /-- Fixing the scheme seed sends the lifted `H` back to `H`. -/
 theorem simulateQ_fixDerivation_liftH :
@@ -636,7 +636,7 @@ theorem isQueryBoundP_hiddenSeedScheme {adversary : Adversary} {qH qS : Nat}
 /-- The forging advantage is the chance that the transcript of the game wins. -/
 theorem forgeAdvantage_eq (adversary : Adversary) :
     forgeAdvantage adversary =
-      Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
+      Pr{let z ← (simulateQ HashSig.HashSpec.romImpl
         (SignatureAlg.unforgeableTranscriptExperiment adversary.toUnforgeableAdversary)).run ∅}[
         z.1.strongWins = true] := by
   rw [forgeAdvantage, SignatureAlg.strongUnforgeableAdvantage, ProbCompRuntime.rom_evalDist,
@@ -652,7 +652,7 @@ theorem natCard_seed : Nat.card Seed = 2 ^ 256 := by
     Fintype.card_fin, ← pow_mul]
 
 /-- There are `2^256` answers of the oracle. -/
-theorem natCard_hashOutput : Nat.card XmssSecurity.HashOutput = 2 ^ 256 := by
+theorem natCard_hashOutput : Nat.card HashSig.HashOutput = 2 ^ 256 := by
   rw [Nat.card_eq_fintype_card, ← FinEnum.card_eq_fintypeCard, FinEnum.card_bitVec]
   rfl
 
@@ -667,7 +667,7 @@ theorem prEvent_seedEncoding_le (t : List UInt8) :
 /-- A uniform answer is the scheme seed of a given derivation point with probability at most
 `2^-256`. -/
 theorem prEvent_hiddenSeedEncoding_le (t : List UInt8) :
-    Pr{let u ← $ᵗ XmssSecurity.HashOutput}[t ∈ Set.range (hiddenSeedEncoding.enc u)] ≤
+    Pr{let u ← $ᵗ HashSig.HashOutput}[t ∈ Set.range (hiddenSeedEncoding.enc u)] ≤
       ((2 : ENNReal) ^ 256)⁻¹ := by
   refine (prEvent_mem_range_enc_le hiddenSeedEncoding hiddenSeedEncoding_fix t).trans_eq ?_
   rw [natCard_hashOutput, Nat.cast_pow, Nat.cast_ofNat]
@@ -692,8 +692,8 @@ The budget counts only the adversary's hash queries, `qH`. -/
 theorem forgeAdvantage_le_hiddenSeed (adversary : Adversary) {qH qS : Nat}
     (hadversary : adversary.RomQueryBound qH qS) :
     forgeAdvantage adversary ≤
-      Pr{let z ← (simulateQ (SecretEncoding.idealImpl XmssSecurity.HashSpec DerivationInput
-          XmssSecurity.HashOutput) (SignatureAlg.unforgeableTranscriptExperiment
+      Pr{let z ← (simulateQ (SecretEncoding.idealImpl HashSig.HashSpec DerivationInput
+          HashSig.HashOutput) (SignatureAlg.unforgeableTranscriptExperiment
             (liftAdversary DerivationInput (A := hiddenSeedScheme) adversary))).run (∅, ∅)}[
           z.1.strongWins = true] +
         qH * ((2 : ENNReal) ^ 256)⁻¹ + qH * ((2 : ENNReal) ^ 256)⁻¹ := by
@@ -718,7 +718,7 @@ theorem forgeAdvantage_le_hiddenSeed (adversary : Adversary) {qH qS : Nat}
       rw [length_toList, size_seedInput])
     (isQueryBoundP_seedScheme hadversary) (fun _ z => z.strongWins = true)
   have h2 := prEvent_romImpl_deriveImpl_le hiddenSeedEncoding
-    (ms := $ᵗ XmssSecurity.HashOutput)
+    (ms := $ᵗ HashSig.HashOutput)
     (ε := ((2 : ENNReal) ^ 256)⁻¹) prEvent_hiddenSeedEncoding_le
     (p := IsPublicQuery IsDerivationPoint)
     (fun u y => ⟨u, y, rfl⟩)

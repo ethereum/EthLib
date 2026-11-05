@@ -3,17 +3,16 @@ module
 public import EthLib.Cryptography.Xmss
 public import EthLib.Cryptography.Proofs.Xmss.Types
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Types
+public import EthLib.Cryptography.Proofs.HashSig.Bytes
 
 /-!
 # Proofs: EthLib's bytes as the security proof's bit vectors
 
 The security proof writes leanXMSS over bit vectors, EthLib over byte vectors.
 
-A bit vector is the integer its little-endian bytes encode.
+Both schemes share the conversion of a bit vector to its little-endian bytes.
 
-A bit vector `x : BitVec (8 n)` becomes a byte vector of length `n`.
-
-Byte `i` holds bits `8 i` to `8 i + 7`.
+Here each leanXMSS object gets its own byte count, and a hash value its two halves.
 
 The proof's own little-endian encoding has exactly those bytes.
 
@@ -29,59 +28,8 @@ namespace EthLib.Cryptography.Xmss.Unforgeability
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
 
-/-! ## Bit vectors as bytes -/
-
-/-- The `n` low little-endian bytes of a bit vector.
-
-The byte count is an argument, not read off the width, so each EthLib type names its own. -/
-def ofBV (n : Nat) {w : Nat} (x : BitVec w) : Vector UInt8 n :=
-  Vector.ofFn fun i => UInt8.ofBitVec (x.extractLsb' (8 * i.val) 8)
-
-/-- Byte `i` of `ofBV n x` is bits `8 i` to `8 i + 7` of `x`. -/
-@[simp] theorem getElem_ofBV (n : Nat) {w : Nat} (x : BitVec w) (i : Nat) (hi : i < n) :
-    (ofBV n x)[i] = UInt8.ofBitVec (x.extractLsb' (8 * i) 8) := by
-  simp [ofBV]
-
-/-- `ofBV n` lists the bytes the proof's `bytesLE n` does. -/
-theorem toList_ofBV (n : Nat) (x : BitVec (8 * n)) :
-    (ofBV n x).toList = XmssSecurity.bytesLE n x := by
-  apply List.ext_getElem (by simp [XmssSecurity.bytesLE])
-  intro i _ _
-  simp [XmssSecurity.bytesLE]
-
-/-- Bits `a` to `a + c - 1` of `z mod 2^b` are those of `z`, when `a + c <= b`. -/
-private theorem mod_div_mod (z a b c : Nat) (h : a + c ≤ b) :
-    z % 2 ^ b / 2 ^ a % 2 ^ c = z / 2 ^ a % 2 ^ c := by
-  apply Nat.eq_of_testBit_eq
-  intro j
-  simp only [Nat.testBit_mod_two_pow, Nat.testBit_div_two_pow]
-  by_cases hj : j < c
-  · simp [hj, show j + a < b by omega]
-  · simp [hj]
-
-/-- The bytes of the `8 n`-bit vector of an integer are its `n` low little-endian bytes. -/
-theorem ofBV_ofNat (n z : Nat) : ofBV n (BitVec.ofNat (8 * n) z) = uintToBytes n z := by
-  apply Vector.ext
-  intro i hi
-  simp only [getElem_ofBV, uintToBytes, Vector.getElem_ofFn]
-  apply UInt8.toNat.inj
-  simp only [UInt8.toNat_ofBitVec, BitVec.extractLsb'_toNat, BitVec.toNat_ofNat,
-    Nat.shiftRight_eq_div_pow]
-  -- Byte `i` of `z mod 2^(8n)` is byte `i` of `z`, since `i < n`.
-  rw [mod_div_mod z (8 * i) (8 * n) 8 (by omega),
-    show (256 : Nat) ^ i = 2 ^ (8 * i) by rw [pow_mul]; norm_num]
-  simp
-
-/-- The bytes of a bit vector of any width are the little-endian bytes of its integer. -/
-theorem ofBV_eq_uintToBytes (n : Nat) {w : Nat} (y : BitVec w) :
-    ofBV n y = uintToBytes n y.toNat := by
-  apply Vector.ext
-  intro i hi
-  simp only [getElem_ofBV, uintToBytes, Vector.getElem_ofFn]
-  apply UInt8.toNat.inj
-  simp only [UInt8.toNat_ofBitVec, BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow]
-  rw [show (256 : Nat) ^ i = 2 ^ (8 * i) by rw [pow_mul]; norm_num]
-  simp
+export EthLib.Cryptography.HashSig (ofBV getElem_ofBV toList_ofBV ofBV_ofNat ofBV_eq_uintToBytes
+  ofBV_ofNat_bytesToUint ofBV_inj ofOutput)
 
 /-! ## The bytes of each object
 
@@ -103,9 +51,6 @@ abbrev ofSeed {w : Nat} (x : BitVec w) : Seed := ofBV SEED_LEN x
 
 /-- A message's 32 bytes. -/
 abbrev ofMessage {w : Nat} (x : BitVec w) : Message := ofBV MESSAGE_LEN x
-
-/-- A hash value's 32 bytes. -/
-abbrev ofOutput {w : Nat} (x : BitVec w) : Vector UInt8 32 := ofBV 32 x
 
 @[simp] theorem toList_ofDigest (x : XmssSecurity.Digest) :
     (ofDigest x).toList = XmssSecurity.bytesLE 16 x :=
@@ -132,49 +77,7 @@ abbrev ofOutput {w : Nat} (x : BitVec w) : Vector UInt8 32 := ofBV 32 x
     (packBytes v).data.toList = v.toList :=
   rfl
 
-/-! ## Back from bytes
-
-An object from outside enters the proof through its integer.
-
-A signature that an adversary sends is one such object.
-
-That works at any width.
-
-So it needs no cast between EthLib's length constants and the proof's widths. -/
-
-/-- Put the integer of `n` bytes in a bit vector at least `8 n` bits wide.
-
-Then its bytes are the bytes we started from. -/
-theorem ofBV_ofNat_bytesToUint {n w : Nat} (v : Vector UInt8 n) (hw : 8 * n ≤ w) :
-    ofBV n (BitVec.ofNat w (bytesToUint v)) = v := by
-  rw [ofBV_eq_uintToBytes, BitVec.toNat_ofNat, Nat.mod_eq_of_lt, Base.uintToBytes_bytesToUint]
-  calc bytesToUint v < 256 ^ n := Base.bytesToUint_lt v
-    _ = 2 ^ (8 * n) := by rw [pow_mul]; norm_num
-    _ ≤ 2 ^ w := Nat.pow_le_pow_right (by decide) hw
-
-/-- Two bit vectors of at most `8 n` bits with the same `n` bytes are equal. -/
-theorem ofBV_inj {n w : Nat} {x y : BitVec w} (hw : w ≤ 8 * n) (h : ofBV n x = ofBV n y) :
-    x = y := by
-  rw [ofBV_eq_uintToBytes, ofBV_eq_uintToBytes] at h
-  have := congrArg bytesToUint h
-  rw [Base.bytesToUint_uintToBytes, Base.bytesToUint_uintToBytes] at this
-  -- Both integers are below `2^w <= 256^n`, so the modulus does nothing.
-  have hpow : 2 ^ w ≤ 256 ^ n := by
-    calc 2 ^ w ≤ 2 ^ (8 * n) := Nat.pow_le_pow_right (by decide) hw
-      _ = 256 ^ n := by rw [pow_mul]; norm_num
-  apply BitVec.eq_of_toNat_eq
-  rwa [Nat.mod_eq_of_lt (lt_of_lt_of_le x.isLt hpow), Nat.mod_eq_of_lt (lt_of_lt_of_le y.isLt hpow)]
-    at this
-
 /-! ## The two halves of a hash value -/
-
-/-- Bits `8 i` to `8 i + 7` of the low part of a bit vector are the vector's own. -/
-private theorem extractLsb'_byte_low {w : Nat} (x : BitVec w) (lo m i : Nat) (h : 8 * i + 8 ≤ m) :
-    (x.extractLsb' lo m).extractLsb' (8 * i) 8 = x.extractLsb' (lo + 8 * i) 8 := by
-  apply BitVec.eq_of_toNat_eq
-  simp only [BitVec.extractLsb'_toNat, Nat.shiftRight_eq_div_pow]
-  -- Dividing by `2^(8i)` inside `mod 2^m` keeps the low byte.
-  rw [mod_div_mod _ (8 * i) m 8 h, Nat.div_div_eq_div_mul, ← pow_add]
 
 /-- The first 16 bytes of a hash value are the bytes of its low 128 bits. -/
 theorem halfOf_zero_ofOutput (x : XmssSecurity.HashOutput) :
@@ -182,11 +85,9 @@ theorem halfOf_zero_ofOutput (x : XmssSecurity.HashOutput) :
   apply Vector.ext
   intro i hi
   simp only [DIGEST_LEN] at hi
-  simp only [halfOf, Vector.getElem_ofFn, getElem_ofBV, XmssSecurity.truncateHash,
-    XmssSecurity.digestBits]
-  rw [extractLsb'_byte_low x 0 128 i (by omega)]
-  congr 2
-  omega
+  simp only [halfOf, Vector.getElem_ofFn]
+  simp only [Fin.isValue, Fin.val_zero, Nat.mul_zero, Nat.zero_add]
+  exact HashSig.getElem_ofOutput_of_lt x i hi
 
 /-- The last 16 bytes of a hash value are the bytes of its high 128 bits. -/
 theorem halfOf_one_ofOutput (x : XmssSecurity.HashOutput) :
@@ -196,7 +97,7 @@ theorem halfOf_one_ofOutput (x : XmssSecurity.HashOutput) :
   simp only [DIGEST_LEN] at hi
   simp only [halfOf, Vector.getElem_ofFn, getElem_ofBV, XmssSecurity.upperHash,
     XmssSecurity.digestBits]
-  rw [extractLsb'_byte_low x 128 128 i (by omega)]
+  rw [HashSig.extractLsb'_byte_low x 128 128 i (by omega)]
   congr 2
   omega
 

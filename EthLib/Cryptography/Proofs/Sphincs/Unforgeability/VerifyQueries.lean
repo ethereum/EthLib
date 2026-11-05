@@ -425,23 +425,23 @@ theorem verifyWith_H_isTotalQueryBound (pk : PublicKey) (msg : Message) (sig : S
   verifyCalls_eq ▸ verifyWith_isTotalQueryBound H H_isTotalQueryBound pk msg sig
 
 /-- The inputs verification hashes in the game, when `F` answers every query. -/
-def verifyQueries (F : QueryImpl XmssSecurity.OracleWorld Id) (pk : PublicKey) (msg : Message)
-    (sig : Signature) : List XmssSecurity.OracleWorld.Domain :=
+def verifyQueries (F : QueryImpl HashSig.OracleWorld Id) (pk : PublicKey) (msg : Message)
+    (sig : Signature) : List HashSig.OracleWorld.Domain :=
   queriesWith F (verifyWith H pk msg sig)
 
 /-- Verification hashes at most 466 inputs. -/
-theorem length_verifyQueries_le (F : QueryImpl XmssSecurity.OracleWorld Id) (pk : PublicKey)
+theorem length_verifyQueries_le (F : QueryImpl HashSig.OracleWorld Id) (pk : PublicKey)
     (msg : Message) (sig : Signature) : (verifyQueries F pk msg sig).length ≤ 466 :=
   length_queriesWith_le F (verifyWith_H_isTotalQueryBound pk msg sig)
 
 /-- When `F` answers every query, the game's verification is EthLib's verification.
 
 Its hash is the one that `F` gives. -/
-theorem evalWithAnswerFn_verifyWith (F : QueryImpl XmssSecurity.OracleWorld Id) (pk : PublicKey)
+theorem evalWithAnswerFn_verifyWith (F : QueryImpl HashSig.OracleWorld Id) (pk : PublicKey)
     (msg : Message) (sig : Signature) :
     evalWithAnswerFn F (verifyWith H pk msg sig)
       = (verifyWith (pureHash fun x => evalWithAnswerFn F (H x)) pk msg sig : Id Bool) := by
-  have hmap := verifyWith_map_monad (m := OracleComp XmssSecurity.OracleWorld) (n := Id)
+  have hmap := verifyWith_map_monad (m := OracleComp HashSig.OracleWorld) (n := Id)
     (fun x => evalWithAnswerFn F x) (fun _ => rfl)
     (fun x f => by rw [evalWithAnswerFn_bind]; rfl) H pk msg sig
   -- The mapped hash is the pure hash of the answers, as a function.
@@ -452,7 +452,7 @@ theorem evalWithAnswerFn_verifyWith (F : QueryImpl XmssSecurity.OracleWorld Id) 
 /-- Verification reads only the answers at the inputs it hashes.
 
 Two answer functions that agree there give the same verdict, after the same inputs. -/
-theorem verifyWith_congr (F G : QueryImpl XmssSecurity.OracleWorld Id) (pk : PublicKey)
+theorem verifyWith_congr (F G : QueryImpl HashSig.OracleWorld Id) (pk : PublicKey)
     (msg : Message) (sig : Signature) (h : ∀ t ∈ verifyQueries F pk msg sig, F t = G t) :
     evalWithAnswerFn F (verifyWith H pk msg sig)
         = evalWithAnswerFn G (verifyWith H pk msg sig) ∧

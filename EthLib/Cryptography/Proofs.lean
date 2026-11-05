@@ -4,7 +4,10 @@ public import EthLib.Cryptography.Proofs.Hash
 public import EthLib.Cryptography.Proofs.Bls
 public import EthLib.Cryptography.Proofs.Kzg
 public import EthLib.Cryptography.Proofs.Merkle
+public import EthLib.Cryptography.Proofs.EvalDistEq
 public import EthLib.Cryptography.Proofs.HashSig
+public import EthLib.Cryptography.Proofs.HashSig.Oracle
+public import EthLib.Cryptography.Proofs.HashSig.Bytes
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Wots.Binding
 public import EthLib.Cryptography.Proofs.Wots.TargetSum

@@ -92,3 +92,7 @@ The remaining changes adapt the proof to the versions of Lean, VCVio and EthLib 
   So `XmssSecurity/Proof/RevealProbeOracleSimulation.lean` gains `tableHits_eq_true_iff` and `tableHits_eq_false_iff`, proved at a generic index type, and `CappedGlobalChainHighLocalCoupling.lean`, `CappedGlobalChainHighCoverage.lean` and `CappedGlobalChainHighReplay.lean` rewrite with them instead of unfolding.
 - `lake exe check-decls` rejects `opaque` declarations, which the kernel cannot unfold.
   So the four sampling instances `randomizerOutputsSampleableType` (`Deterministic/TableSigner.lean`), `bottomSampleable`, `topOtsSampleable` and `topRndSampleable` (`Bridge/Program.lean`) are `@[irreducible] noncomputable def` instead.
+- leanSPHINCS uses the same random oracle, and neither scheme imports the other.
+  So the oracle, its inputs and answers, the truncation of an answer and the byte encoding `bytesLE` move to `Proofs/HashSig/Oracle.lean` and `Proofs/HashSig/Bytes.lean`.
+  `XmssSecurity/Types.lean` and `XmssSecurity/Proof/RandomOracle.lean` export them under their old names, so the proof keeps them.
+  `XmssSecurity/Proof/EvalDistEq.lean` moves to `Proofs/EvalDistEq.lean`, because other proofs use it as well.

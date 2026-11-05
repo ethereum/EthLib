@@ -26,7 +26,7 @@ A forgery in the game is then at most a forgery in the relabelled game, or a con
 namespace EthLib.Cryptography.Sphincs.Unforgeability
 
 open EthLib.Cryptography.Sphincs.Constants
-open EthLib.Cryptography.Xmss.Unforgeability (ofOutput)
+open EthLib.Cryptography.HashSig (ofOutput)
 open OracleSpec OracleComp
 
 /-! ## The experiment after the public parameter -/

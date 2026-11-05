@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EvalDistEq
+public import EthLib.Cryptography.Proofs.EvalDistEq
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Reduction
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.BudgetTransfer
 

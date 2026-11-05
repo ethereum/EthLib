@@ -44,7 +44,7 @@ def trialSize : Layer → Nat
 /-- A query of a trial input of a key on a layer that `S` selects.
 
 It is an input at the key's encoding address, with a payload of the layer's trial size. -/
-def IsTrialQuery (S : Layer → Prop) : XmssSecurity.OracleWorld.Domain → Prop
+def IsTrialQuery (S : Layer → Prop) : HashSig.OracleWorld.Domain → Prop
   | .inl _ => False
   | .inr x => ∃ pp key payload, S key.layer ∧ payload.size = trialSize key.layer ∧
       x = (thInput pp (addrEncoding key) payload).data.toList
@@ -54,7 +54,7 @@ noncomputable instance (S : Layer → Prop) : DecidablePred (IsTrialQuery S) :=
 
 /-- A trial input of a layer that `S` selects is one of a layer that a weaker `S'` selects. -/
 theorem IsTrialQuery.mono {S S' : Layer → Prop} (h : ∀ l, S l → S' l)
-    {x : XmssSecurity.OracleWorld.Domain} (hx : IsTrialQuery S x) : IsTrialQuery S' x := by
+    {x : HashSig.OracleWorld.Domain} (hx : IsTrialQuery S x) : IsTrialQuery S' x := by
   rcases x with _ | x
   · exact hx.elim
   · obtain ⟨pp, key, payload, hS, hsize, rfl⟩ := hx
@@ -62,7 +62,7 @@ theorem IsTrialQuery.mono {S S' : Layer → Prop} (h : ∀ l, S l → S' l)
 
 /-- A cache with no trial input of the layers `S'` selects has none of the layers `S` selects. -/
 theorem cacheAvoids_isTrialQuery_mono {S S' : Layer → Prop} (h : ∀ l, S l → S' l)
-    {cache : XmssSecurity.HashSpec.QueryCache} (hcache : CacheAvoids (IsTrialQuery S') cache) :
+    {cache : HashSig.HashSpec.QueryCache} (hcache : CacheAvoids (IsTrialQuery S') cache) :
     CacheAvoids (IsTrialQuery S) cache :=
   fun x hx => hcache x (hx.mono h)
 
@@ -128,7 +128,7 @@ theorem seedPrf_isQueryBoundP_trial (S : Layer → Prop) (s : Seed) (pp : Public
 
 /-- What a layer's key signs, with the counter, fills the layer's trial payload. -/
 theorem size_add_of_mem_support_layerMessage {pp : PublicParam} {prf : SeedPrf (OracleComp
-    XmssSecurity.OracleWorld)} {layer : Layer} {idx : Nat} {msg : ByteArray}
+    HashSig.OracleWorld)} {layer : Layer} {idx : Nat} {msg : ByteArray}
     (hmsg : msg ∈ support (layerMessage H pp prf layer idx)) :
     msg.size + 4 = trialSize layer := by
   cases layer <;> simp only [layerMessage, bind_pure_comp, support_map, Set.mem_image] at hmsg <;>
@@ -145,10 +145,10 @@ The message with its counter fills the trial payload of the key's layer.
 
 The cache holds no trial input of that layer. -/
 theorem prEvent_otsSign_none_le (pp : PublicParam) (prf : SeedPrf (OracleComp
-    XmssSecurity.OracleWorld)) (key : OtsKey) (msg : ByteArray)
-    (hsize : msg.size + 4 = trialSize key.layer) (cache : XmssSecurity.HashSpec.QueryCache)
+    HashSig.OracleWorld)) (key : OtsKey) (msg : ByteArray)
+    (hsize : msg.size + 4 = trialSize key.layer) (cache : HashSig.HashSpec.QueryCache)
     (hcache : CacheAvoids (IsTrialQuery (· = key.layer)) cache) :
-    Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
+    Pr{let z ← (simulateQ HashSig.HashSpec.romImpl
       (otsSign H pp prf key msg)).run' cache}[z = none]
       ≤ ENNReal.ofReal (Real.exp (-(2 ^ 18))) := by
   unfold otsSign
@@ -171,10 +171,10 @@ The message with its counter fills the layer's trial payload.
 
 The cache holds no trial input of the layer. -/
 theorem prEvent_signLayer_error_le (pp : PublicParam) (prf : SeedPrf (OracleComp
-    XmssSecurity.OracleWorld)) (layer : Layer) (idx : Nat) (msg : ByteArray)
-    (hsize : msg.size + 4 = trialSize layer) (cache : XmssSecurity.HashSpec.QueryCache)
+    HashSig.OracleWorld)) (layer : Layer) (idx : Nat) (msg : ByteArray)
+    (hsize : msg.size + 4 = trialSize layer) (cache : HashSig.HashSpec.QueryCache)
     (hcache : CacheAvoids (IsTrialQuery (· = layer)) cache) :
-    Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
+    Pr{let z ← (simulateQ HashSig.HashSpec.romImpl
       (signLayer H pp prf layer idx msg)).run' cache}[z.isOk = false]
       ≤ ENNReal.ofReal (Real.exp (-(2 ^ 18))) := by
   unfold signLayer
@@ -198,12 +198,12 @@ That holds from every cache with no trial input above the layer.
 Then the event has probability at most `exp(-2^18) + δ`. -/
 theorem prEvent_layerMessage_bind_signLayer_le {β : Type} (s : Seed) (pp : PublicParam)
     (layer : Layer) (idx : Nat)
-    (k : Except SphincsError (LayerSignature layer) → OracleComp XmssSecurity.OracleWorld β)
-    (E : β → Prop) {δ : ℝ≥0∞} (cache : XmssSecurity.HashSpec.QueryCache)
+    (k : Except SphincsError (LayerSignature layer) → OracleComp HashSig.OracleWorld β)
+    (E : β → Prop) {δ : ℝ≥0∞} (cache : HashSig.HashSpec.QueryCache)
     (hcache : CacheAvoids (IsTrialQuery (layer.toNat ≤ ·.toNat)) cache)
     (hk : ∀ sig c, CacheAvoids (IsTrialQuery (layer.toNat < ·.toNat)) c →
-      Pr{let y ← (simulateQ XmssSecurity.HashSpec.romImpl (k (.ok sig))).run' c}[E y] ≤ δ) :
-    Pr{let y ← (simulateQ XmssSecurity.HashSpec.romImpl
+      Pr{let y ← (simulateQ HashSig.HashSpec.romImpl (k (.ok sig))).run' c}[E y] ≤ δ) :
+    Pr{let y ← (simulateQ HashSig.HashSpec.romImpl
       (layerMessage H pp (seedPrf H s) layer idx >>= fun msg =>
         signLayer H pp (seedPrf H s) layer idx msg >>= k)).run' cache}[E y]
       ≤ ENNReal.ofReal (Real.exp (-(2 ^ 18))) + δ := by
@@ -214,7 +214,7 @@ theorem prEvent_layerMessage_bind_signLayer_le {β : Type} (s : Seed) (pp : Publ
     cache_eq_none_of_mem_support_run_romImpl (layerMessage_isQueryBoundP_zero H _
       (H_thInput_isQueryBoundP_trial _) (seedPrf_isQueryBoundP_trial _ s) pp layer idx) hcache hz
   have hmsg : z.1 ∈ support (layerMessage H pp (seedPrf H s) layer idx) :=
-    support_simulateQ_run'_subset XmssSecurity.HashSpec.romImpl _ cache (by
+    support_simulateQ_run'_subset HashSig.HashSpec.romImpl _ cache (by
       rw [StateT.run'_eq, support_map]
       exact ⟨z, hz, rfl⟩)
   rw [run'_simulateQ_romImpl_bind]
@@ -244,17 +244,17 @@ theorem prEvent_layerMessage_bind_signLayer_le {β : Type} (s : Seed) (pp : Publ
 
 The cache holds no trial input of any key. -/
 theorem prEvent_signDerived_error_le (s : Seed) (pp : PublicParam) (msg : Message)
-    (cache : XmssSecurity.HashSpec.QueryCache)
+    (cache : HashSig.HashSpec.QueryCache)
     (hcache : CacheAvoids (IsTrialQuery fun _ => True) cache) :
-    Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
+    Pr{let z ← (simulateQ HashSig.HashSpec.romImpl
       (signDerived H (seedPrf H s) pp msg)).run' cache}[z.isOk = false]
       ≤ 3 * ENNReal.ofReal (Real.exp (-(2 ^ 18))) := by
   have hH := H_thInput_isQueryBoundP_trial (fun _ => True)
   have hprf := seedPrf_isQueryBoundP_trial (fun _ => True) s
-  have hinv : ∀ {α : Type} {oa : OracleComp XmssSecurity.OracleWorld α},
+  have hinv : ∀ {α : Type} {oa : OracleComp HashSig.OracleWorld α},
       IsQueryBoundP oa (IsTrialQuery fun _ => True) 0 → ∀ c,
       CacheAvoids (IsTrialQuery fun _ => True) c →
-      ∀ z ∈ support ((simulateQ XmssSecurity.HashSpec.romImpl oa).run c),
+      ∀ z ∈ support ((simulateQ HashSig.HashSpec.romImpl oa).run c),
         CacheAvoids (IsTrialQuery fun _ => True) z.2 :=
     fun h c hc z hz => cache_eq_none_of_mem_support_run_romImpl h hc hz
   unfold signDerived
@@ -292,9 +292,9 @@ That size is 772 bytes on the bottom layer and 20 above it.
 
 Each layer's search then fails with probability at most `exp(-2^18)`. -/
 theorem prEvent_signWith_error_le (sk : SecretKey) (msg : Message)
-    (cache : XmssSecurity.HashSpec.QueryCache)
+    (cache : HashSig.HashSpec.QueryCache)
     (hcache : CacheAvoids (IsTrialQuery fun _ => True) cache) :
-    Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
+    Pr{let z ← (simulateQ HashSig.HashSpec.romImpl
       (signWith H sk msg)).run' cache}[z.isOk = false]
       ≤ 3 * ENNReal.ofReal (Real.exp (-(2 ^ 18))) := by
   unfold signWith
@@ -309,7 +309,7 @@ theorem prEvent_signWith_error_le (sk : SecretKey) (msg : Message)
 
 /-- From an empty cache, a leanSPHINCS signature fails with probability at most `3 exp(-2^18)`. -/
 theorem prEvent_signWith_error_le_empty (sk : SecretKey) (msg : Message) :
-    Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
+    Pr{let z ← (simulateQ HashSig.HashSpec.romImpl
       (signWith H sk msg)).run' ∅}[z.isOk = false]
       ≤ 3 * ENNReal.ofReal (Real.exp (-(2 ^ 18))) :=
   prEvent_signWith_error_le sk msg ∅ fun _ _ => rfl
