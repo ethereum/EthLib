@@ -128,13 +128,16 @@ theorem sameSizes_processRandao {config : Config} {checks : SignatureChecks}
 It adopts the vote once more than half the slots of the period cast it.
 
 It changes nothing else. -/
-theorem processEth1Data_eq {state after : BeaconState preset fork}
-    {body : BeaconBlockBody preset fork} (computed : processEth1Data state body = .ok after) :
-    after.eth1DataVotes.data = state.eth1DataVotes.data.push body.eth1Data ∧
-      after.eth1Data =
+theorem processEth1Data_eq {before : fork < .hegota} {state after : BeaconState preset fork}
+    {body : BeaconBlockBody preset fork}
+    (computed : processEth1Data before state body = .ok after) :
+    (after.eth1DataVotes before).data =
+        (state.eth1DataVotes before).data.push (body.eth1Data before) ∧
+      after.eth1Data before =
         (if preset.EPOCHS_PER_ETH1_VOTING_PERIOD.toNat * preset.SLOTS_PER_EPOCH.toNat <
-            (state.eth1DataVotes.data.push body.eth1Data).count body.eth1Data * 2
-          then body.eth1Data else state.eth1Data) ∧
+            ((state.eth1DataVotes before).data.push (body.eth1Data before)).count
+              (body.eth1Data before) * 2
+          then body.eth1Data before else state.eth1Data before) ∧
       { after with eth1DataVotes := state.eth1DataVotes, eth1Data := state.eth1Data } = state := by
   simp only [processEth1Data] at computed
   split at computed
@@ -149,8 +152,9 @@ theorem processEth1Data_eq {state after : BeaconState preset fork}
         try (intro; omega)
   · simp [throw, throwThe, MonadExcept.throw, MonadExceptOf.throw] at computed
 
-theorem sameSizes_processEth1Data {state after : BeaconState preset fork}
-    {body : BeaconBlockBody preset fork} (computed : processEth1Data state body = .ok after) :
+theorem sameSizes_processEth1Data {before : fork < .hegota}
+    {state after : BeaconState preset fork} {body : BeaconBlockBody preset fork}
+    (computed : processEth1Data before state body = .ok after) :
     SameSizes state after := by
   obtain ⟨_, _, rest⟩ := processEth1Data_eq computed
   rw [← rest]

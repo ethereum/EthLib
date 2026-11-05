@@ -24,6 +24,10 @@ From Gloas the body is a progressive container, and its lists have no limit in t
 
 [EIP-7688] makes that change.
 
+A progressive container keeps a gap where a later fork removes a field.
+
+So the fields that remain keep their places in the tree, and their proofs stay valid.
+
 [EIP-7688]: https://eips.ethereum.org/EIPS/eip-7688#converted-types
 -/
 
@@ -74,15 +78,20 @@ In their place it adds the bid of the builder, the payload votes and the parent'
 
 [EIP-7732] specifies these changes.
 
+Heze removes the vote on the deposit contract and the deposits, as [EIP-8015] asks.
+
+On 2026-11-03 EIP-8015 was a Draft that EIP-8081 only considers for Hegotá.
+
 [EIP-4844]: https://eips.ethereum.org/EIPS/eip-4844#consensus-layer-validation
 [EIP-7685]: https://eips.ethereum.org/EIPS/eip-7685#consensus-layer
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#modified-containers
+[EIP-8015]: https://eips.ethereum.org/EIPS/eip-8015#beaconblockbody-modifications
 -/
 structure BeaconBlockBody (preset : Preset) (fork : Fork) where
   /-- The proposer's signature of the epoch, which feeds the RANDAO mix. -/
   randaoReveal : BLSSignature
-  /-- The proposer's vote on the deposit contract of the execution layer. -/
-  eth1Data : Eth1Data
+  /-- Before Heze: the proposer's vote on the deposit contract of the execution layer. -/
+  eth1Data : Until .hegota fork Eth1Data
   /-- Free bytes that the proposer chooses. -/
   graffiti : Bytes32
   /-- The proposer slashings. -/
@@ -91,8 +100,8 @@ structure BeaconBlockBody (preset : Preset) (fork : Fork) where
   attesterSlashings : AttesterSlashings preset fork
   /-- The attestations. -/
   attestations : Attestations preset fork
-  /-- The deposits. -/
-  deposits : Deposits preset fork
+  /-- Before Heze: the deposits. -/
+  deposits : Until .hegota fork (Deposits preset fork)
   /-- The voluntary exits. -/
   voluntaryExits : VoluntaryExits preset fork
   /-- From Altair: the signature of the sync committee on the parent block. -/
@@ -116,8 +125,9 @@ namespace BeaconBlockBody
 
 /-- The names of the fields of a body at a fork, in their order. -/
 def names (fork : Fork) : List String :=
-  ["randao_reveal", "eth1_data", "graffiti", "proposer_slashings", "attester_slashings",
-    "attestations", "deposits", "voluntary_exits"] ++
+  ["randao_reveal"] ++ untilNames .hegota fork ["eth1_data"] ++
+  ["graffiti", "proposer_slashings", "attester_slashings", "attestations"] ++
+  untilNames .hegota fork ["deposits"] ++ ["voluntary_exits"] ++
   sinceNames .altair fork ["sync_aggregate"] ++
   duringNames .bellatrix .glamsterdam fork ["execution_payload"] ++
   sinceNames .shapella fork ["bls_to_execution_changes"] ++
@@ -126,11 +136,16 @@ def names (fork : Fork) : List String :=
   sinceNames .glamsterdam fork
     ["signed_execution_payload_bid", "payload_attestations", "parent_execution_requests"]
 
-/-- From Gloas: the layout of a body, its thirteen fields in their order. -/
-def activeFields : List Bool := List.replicate 13 true
+/-- From Gloas: the layout of a body, thirteen places in their order.
+
+From Heze the places of the vote on the deposit contract and of the deposits stay empty. -/
+def activeFields (fork : Fork) : List Bool :=
+  if .hegota ≤ fork then
+    [true, false, true, true, true, true, false, true, true, true, true, true, true]
+  else List.replicate 13 true
 
 instance {preset : Preset} {fork : Fork} : SszType (BeaconBlockBody preset fork) :=
-  .forkContainer .glamsterdam fork activeFields (names fork)
+  .forkContainer .glamsterdam fork (activeFields fork) (names fork)
     (fun b => (b.randaoReveal, b.eth1Data, b.graffiti, b.proposerSlashings, b.attesterSlashings,
       b.attestations, b.deposits, b.voluntaryExits, b.syncAggregate, b.executionPayload,
       b.blsToExecutionChanges, b.blobKzgCommitments, b.executionRequests,

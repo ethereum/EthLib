@@ -180,17 +180,12 @@ def specifiedFromGlamsterdam : List String := [
   "SignedAggregateAndProof", "ExecutionPayload", "ExecutionRequests", "NewPayloadRequest",
   "ExecutionPayloadEnvelope", "SignedExecutionPayloadEnvelope", "PayloadAttestation",
   "IndexedPayloadAttestation", "DataColumnSidecar", "DataColumnsByRootIdentifier",
-  "MatrixEntry"]
-
-/-- The containers whose form EthLib holds at Gloas but not yet at Heze, which changes them. -/
-def specifiedAtGloasOnly : List String :=
-  ["ExecutionPayloadBid", "SignedExecutionPayloadBid", "BeaconBlockBody", "BeaconBlock",
-    "SignedBeaconBlock", "BeaconState"]
+  "MatrixEntry", "ExecutionPayloadBid", "SignedExecutionPayloadBid", "BeaconBlockBody",
+  "BeaconBlock", "SignedBeaconBlock", "BeaconState"]
 
 /-- Whether EthLib holds the form of a container at a fork. -/
 def specifiedAt (fork : Fork) (type : String) : Bool :=
-  fork < .glamsterdam || type ∈ specifiedFromGlamsterdam ||
-    (fork == .glamsterdam && type ∈ specifiedAtGloasOnly)
+  fork < .glamsterdam || type ∈ specifiedFromGlamsterdam
 
 /-- The preset and the fork that UTF-8 names name, at a fork up to Fulu. -/
 def presetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do

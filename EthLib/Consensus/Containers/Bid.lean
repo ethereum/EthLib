@@ -1,7 +1,9 @@
 module
 
+public import EthLib.Consensus.Containers.InclusionList
 public import EthLib.Consensus.Containers.Requests
 public import EthLib.Cryptography.Kzg.Core
+public import EthLib.Serialization.Ssz.Typed.Since
 
 /-!
 # `Consensus.Containers.Bid`
@@ -16,7 +18,10 @@ The builder later reveals the payload and its requests in a signed envelope.
 
 [EIP-7732] adds these containers; on 2026-11-03 the EIP was in Last Call.
 
+From Heze the bid also says which inclusion lists the builder saw, as [EIP-7805] asks.
+
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#new-containers
+[EIP-7805]: https://eips.ethereum.org/EIPS/eip-7805#consensus-layer
 -/
 
 @[expose] public section
@@ -31,7 +36,9 @@ From Gloas the list has no limit in its type, as EIP-7688 specifies. -/
 abbrev BlobKZGCommitments (preset : Preset) (fork : Fork) :=
   ForkList .glamsterdam fork KZGCommitment preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
 
-/-- The offer of a builder to give the payload of a slot for a value. -/
+/-- The offer of a builder to give the payload of a slot for a value.
+
+Heze adds the inclusion lists that the builder saw, as its last field. -/
 structure ExecutionPayloadBid (preset : Preset) (fork : Fork) where
   /-- The hash of the parent execution block. -/
   parentBlockHash : Hash32
@@ -57,28 +64,33 @@ structure ExecutionPayloadBid (preset : Preset) (fork : Fork) where
   blobKzgCommitments : BlobKZGCommitments preset fork
   /-- The root of the requests of the payload. -/
   executionRequestsRoot : Root
+  /-- From Heze: whether the builder saw the list of each member of the inclusion list committee. -/
+  inclusionListBits : Since .hegota fork (InclusionListBits preset)
 
 namespace ExecutionPayloadBid
 
-/-- The names of the fields of a bid, in their order. -/
-def names : List String :=
+/-- The names of the fields of a bid at a fork, in their order. -/
+def names (fork : Fork) : List String :=
   ["parent_block_hash", "parent_block_root", "block_hash", "prev_randao", "fee_recipient",
     "gas_limit", "builder_index", "slot", "value", "execution_payment", "blob_kzg_commitments",
-    "execution_requests_root"]
+    "execution_requests_root"] ++
+  sinceNames .hegota fork ["inclusion_list_bits"]
 
-/-- The layout of a bid, its twelve fields in their order. -/
-def activeFields : List Bool := List.replicate 12 true
+/-- The layout of a bid at a fork: twelve fields, and thirteen from Heze. -/
+def activeFields (fork : Fork) : List Bool :=
+  List.replicate (if .hegota ≤ fork then 13 else 12) true
 
 instance {preset : Preset} {fork : Fork} : SszType (ExecutionPayloadBid preset fork) :=
-  .progressiveContainer activeFields names
+  .progressiveContainer (activeFields fork) (names fork)
     (fun b => (b.parentBlockHash, b.parentBlockRoot, b.blockHash, b.prevRandao, b.feeRecipient,
       b.gasLimit, b.builderIndex, b.slot, b.value, b.executionPayment, b.blobKzgCommitments,
-      b.executionRequestsRoot))
+      b.executionRequestsRoot, b.inclusionListBits))
     (fun (parentBlockHash, parentBlockRoot, blockHash, prevRandao, feeRecipient, gasLimit,
         builderIndex, slot, value, executionPayment, blobKzgCommitments,
-        executionRequestsRoot) =>
+        executionRequestsRoot, inclusionListBits) =>
       ⟨parentBlockHash, parentBlockRoot, blockHash, prevRandao, feeRecipient, gasLimit,
-        builderIndex, slot, value, executionPayment, blobKzgCommitments, executionRequestsRoot⟩)
+        builderIndex, slot, value, executionPayment, blobKzgCommitments, executionRequestsRoot,
+        inclusionListBits⟩)
 
 end ExecutionPayloadBid
 

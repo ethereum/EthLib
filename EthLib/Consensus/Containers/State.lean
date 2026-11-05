@@ -7,7 +7,7 @@ public import EthLib.Serialization.Ssz.Typed.Since
 /-!
 # `Consensus.Containers.State`
 
-The beacon state, one type for every fork from Phase 0 to Gloas.
+The beacon state, one type for every fork from Phase 0 to Heze.
 
 Each fork adds its fields after those of the forks before.
 
@@ -20,6 +20,8 @@ A field that a fork adds or removes holds nothing where it is absent, and its co
 From Gloas the state is a progressive container, as [EIP-7688] specifies.
 
 Its registry, its balances, its flags and its queues then have no limit in their type.
+
+From Heze the places of the removed fields stay empty, so the other fields keep theirs.
 
 [EIP-7688]: https://eips.ethereum.org/EIPS/eip-7688#converted-types
 -/
@@ -75,10 +77,15 @@ Gloas adds the builders, their payments and withdrawals, and the latest bid of [
 
 It also adds the availability of recent payloads and the window of payload committees.
 
+Heze removes the deposit contract data, its votes and the two deposit indices of [EIP-8015].
+
+On 2026-11-03 EIP-8015 was a Draft that EIP-8081 only considers for Hegotá.
+
 [EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer
 [EIP-6110]: https://eips.ethereum.org/EIPS/eip-6110#consensus-layer
 [EIP-7917]: https://eips.ethereum.org/EIPS/eip-7917#specification
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#modified-containers
+[EIP-8015]: https://eips.ethereum.org/EIPS/eip-8015#beaconstate-modifications
 -/
 structure BeaconState (preset : Preset) (fork : Fork) where
   /-- The time of the genesis, in seconds since the Unix epoch. -/
@@ -97,13 +104,15 @@ structure BeaconState (preset : Preset) (fork : Fork) where
   stateRoots : Vector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat
   /-- The roots of the historical batches, frozen from Capella. -/
   historicalRoots : SszList Root preset.HISTORICAL_ROOTS_LIMIT.toNat
-  /-- The deposit contract data that the chain has agreed on. -/
-  eth1Data : Eth1Data
-  /-- The votes of the current voting period on the deposit contract data. -/
+  /-- Before Heze: the deposit contract data that the chain has agreed on. -/
+  eth1Data : Until .hegota fork Eth1Data
+  /-- Before Heze: the votes of the current voting period on the deposit contract data. -/
   eth1DataVotes :
-    SszList Eth1Data (preset.EPOCHS_PER_ETH1_VOTING_PERIOD.toNat * preset.SLOTS_PER_EPOCH.toNat)
-  /-- The number of deposits that the state has processed. -/
-  eth1DepositIndex : UInt64
+    Until .hegota fork
+      (SszList Eth1Data
+        (preset.EPOCHS_PER_ETH1_VOTING_PERIOD.toNat * preset.SLOTS_PER_EPOCH.toNat))
+  /-- Before Heze: the number of deposits that the state has processed. -/
+  eth1DepositIndex : Until .hegota fork UInt64
   /-- The registry of validators. -/
   validators : Validators preset fork
   /-- The balance of each validator, in the order of the registry. -/
@@ -152,8 +161,8 @@ structure BeaconState (preset : Preset) (fork : Fork) where
   /-- From Capella: the summaries of the historical batches. -/
   historicalSummaries :
     Since .shapella fork (SszList HistoricalSummary preset.HISTORICAL_ROOTS_LIMIT.toNat)
-  /-- From Electra: the index of the first deposit that came as a request. -/
-  depositRequestsStartIndex : Since .pectra fork UInt64
+  /-- From Electra to Gloas: the index of the first deposit that came as a request. -/
+  depositRequestsStartIndex : During .pectra .hegota fork UInt64
   /-- From Electra: the balance that deposits may still use from the churn. -/
   depositBalanceToConsume : Since .pectra fork Gwei
   /-- From Electra: the balance that exits may still use from the churn. -/
@@ -196,8 +205,9 @@ namespace BeaconState
 /-- The names of the fields of a state at a fork, in their order. -/
 def names (fork : Fork) : List String :=
   ["genesis_time", "genesis_validators_root", "slot", "fork", "latest_block_header",
-    "block_roots", "state_roots", "historical_roots", "eth1_data", "eth1_data_votes",
-    "eth1_deposit_index", "validators", "balances", "randao_mixes", "slashings"] ++
+    "block_roots", "state_roots", "historical_roots"] ++
+  untilNames .hegota fork ["eth1_data", "eth1_data_votes", "eth1_deposit_index"] ++
+  ["validators", "balances", "randao_mixes", "slashings"] ++
   untilNames .altair fork ["previous_epoch_attestations", "current_epoch_attestations"] ++
   sinceNames .altair fork ["previous_epoch_participation", "current_epoch_participation"] ++
   ["justification_bits", "previous_justified_checkpoint", "current_justified_checkpoint",
@@ -207,21 +217,28 @@ def names (fork : Fork) : List String :=
   sinceNames .glamsterdam fork ["latest_block_hash"] ++
   sinceNames .shapella fork
     ["next_withdrawal_index", "next_withdrawal_validator_index", "historical_summaries"] ++
+  duringNames .pectra .hegota fork ["deposit_requests_start_index"] ++
   sinceNames .pectra fork
-    ["deposit_requests_start_index", "deposit_balance_to_consume", "exit_balance_to_consume",
-      "earliest_exit_epoch", "consolidation_balance_to_consume", "earliest_consolidation_epoch",
-      "pending_deposits", "pending_partial_withdrawals", "pending_consolidations"] ++
+    ["deposit_balance_to_consume", "exit_balance_to_consume", "earliest_exit_epoch",
+      "consolidation_balance_to_consume", "earliest_consolidation_epoch", "pending_deposits",
+      "pending_partial_withdrawals", "pending_consolidations"] ++
   sinceNames .fusaka fork ["proposer_lookahead"] ++
   sinceNames .glamsterdam fork
     ["builders", "next_withdrawal_builder_index", "execution_payload_availability",
       "builder_pending_payments", "builder_pending_withdrawals", "latest_execution_payload_bid",
       "payload_expected_withdrawals", "ptc_window"]
 
-/-- From Gloas: the layout of a state, its forty-six fields in their order. -/
-def activeFields : List Bool := List.replicate 46 true
+/-- From Gloas: the layout of a state, forty-six places in their order.
+
+From Heze the places of the four removed fields stay empty. -/
+def activeFields (fork : Fork) : List Bool :=
+  if .hegota ≤ fork then
+    List.replicate 8 true ++ List.replicate 3 false ++ List.replicate 17 true ++ [false] ++
+      List.replicate 17 true
+  else List.replicate 46 true
 
 instance {preset : Preset} {fork : Fork} : SszType (BeaconState preset fork) :=
-  .forkContainer .glamsterdam fork activeFields (names fork)
+  .forkContainer .glamsterdam fork (activeFields fork) (names fork)
     (fun s => (s.genesisTime, s.genesisValidatorsRoot, s.slot, s.forkVersions, s.latestBlockHeader,
       s.blockRoots, s.stateRoots, s.historicalRoots, s.eth1Data, s.eth1DataVotes,
       s.eth1DepositIndex, s.validators, s.balances, s.randaoMixes, s.slashings,
