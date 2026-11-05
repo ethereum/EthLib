@@ -27,9 +27,9 @@ def verify_proof(
 
 def hex_prefix(nibbles: list[int], is_leaf: bool) -> bytes:
     """The hex-prefix encoding of a path of nibbles, HP of Appendix C of the Yellow Paper."""
-    # A value outside a byte raises ValueError here, and a byte of 16 or more TrieError with code 0.
+    # A value outside a byte raises OverflowError, and a byte of 16 or more TrieError with code 0.
     if any(not 0 <= n < 256 for n in nibbles):
-        raise ValueError("a nibble must be in [0, 16)")
+        raise OverflowError("a nibble must be in [0, 256)")
     return _native.trie_hex_prefix(bytes(nibbles), is_leaf)
 
 

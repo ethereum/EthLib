@@ -419,7 +419,7 @@ except_into_pybool(
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
-/* A Python `int` in [0, 2^64), or -1 with an exception set. */
+/* A Python `int` in [0, 2^64), or -1 with an exception set: OverflowError outside it. */
 int
 parse_uint64(
   PyObject* obj,
@@ -432,7 +432,7 @@ parse_uint64(
   }
   unsigned long long value = PyLong_AsUnsignedLongLong(obj);
   if (value == (unsigned long long) -1 && PyErr_Occurred()) {
-    PyErr_Format(PyExc_ValueError, "%s must be in [0, 2^64)", name);
+    PyErr_Format(PyExc_OverflowError, "%s must be in [0, 2^64)", name);
     return -1;
   }
   *out = (uint64_t) value;

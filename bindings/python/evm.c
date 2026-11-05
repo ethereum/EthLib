@@ -88,7 +88,7 @@ py_evm_word_op(
   unsigned long opcode = PyLong_AsUnsignedLong(PyTuple_GET_ITEM(args, 0));
   if (PyErr_Occurred()) return NULL;
   if (opcode > 0xff) {
-    PyErr_SetString(PyExc_ValueError, "the opcode must be below 256");
+    PyErr_SetString(PyExc_OverflowError, "the opcode must be below 256");
     return NULL;
   }
   /* Each operand is one word. */
@@ -109,7 +109,7 @@ py_evm_immediate_depths(
   if (!PyArg_ParseTuple(args, "kk", &opcode, &immediate)) return NULL;
   /* The opcode and its immediate are one byte each. */
   if (opcode > 0xff || immediate > 0xff) {
-    PyErr_SetString(PyExc_ValueError, "the opcode and the immediate must be below 256");
+    PyErr_SetString(PyExc_OverflowError, "the opcode and the immediate must be below 256");
     return NULL;
   }
   return except_into_pybytes(eth_evm_immediate_depths((uint8_t) opcode, (uint8_t) immediate),

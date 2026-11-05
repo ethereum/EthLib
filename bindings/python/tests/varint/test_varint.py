@@ -56,5 +56,5 @@ def test_decode_rejected(data: bytes, fault: str) -> None:
 
 
 def test_encode_out_of_range() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(OverflowError):
         varint.encode(2**64)

@@ -101,7 +101,7 @@ def test_fork_without_blobs(fork: str) -> None:
 
 
 def test_negative_quantity() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(OverflowError):
         calculate_base_fee_per_gas(30_000_000, -1, 7)
 
 

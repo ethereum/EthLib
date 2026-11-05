@@ -12,8 +12,10 @@ Code 0 means a failure that the export reports without a Lean error code.
 Examples are an unknown name, and an input that the export reads before the specification runs.
 No Lean error type uses code 0.
 
-The bindings check the type and the length of some arguments before Lean runs.
-Such a check raises `TypeError` or `ValueError`, with no code.
+The bindings check the type, the length and the range of some arguments before Lean runs.
+A wrong type raises `TypeError`, and a wrong length `ValueError`.
+An integer out of its range raises `OverflowError`.
+None of them carries a code.
 """
 
 
