@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Delegation
+public import EthLib.Execution.Evm.Frame
 public import EthLib.Execution.Evm.Gas
 public import EthLib.Execution.State.Tracker
 public import EthLib.Execution.Transactions.Signature
@@ -32,13 +33,37 @@ An authorization to the zero address clears that code instead.
 
 Either way, the nonce of the authority grows by one.
 
-The transaction paid 25000 for each authorization, as the price of a new account.
+Up to BPO5, the transaction paid 25000 for each authorization, as the price of a new account.
 
 So an authority that already has an account gives back 12500 of it, through the refund counter.
 
+From Glamsterdam, the transaction paid only a base price for each authorization.
+
+An accepted authorization then pays what it writes, from the gas of the first frame:
+
+- 183600 state gas when the authority has no account;
+- 9000 execution gas for the first write to the authority, unless the transaction paid it already;
+- 35190 state gas for a new delegation indicator.
+
+The last charge applies when the authority had no indicator at the start of the transaction.
+
+It also needs that no earlier authorization set one for that authority.
+
+There is no refund, and a lack of gas stops the authorizations.
+
+The sender's first write is paid already.
+
+So is the recipient's, when the transaction moves ether.
+
 [EIP-7702][eip7702] defines the list and its processing.
 
+[EIP-2780][eip2780], in Last Call, prices it from Glamsterdam.
+
+Its state gas is that of [EIP-8037][eip8037], in Last Call.
+
 [eip7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior
+[eip2780]: https://eips.ethereum.org/EIPS/eip-2780#eip-7702-authorization-processing
+[eip8037]: https://eips.ethereum.org/EIPS/eip-8037#specification
 -/
 
 @[expose] public section
@@ -47,7 +72,7 @@ namespace EthLib.Execution.Transactions
 
 open EthLib.Base
 open EthLib.Cryptography.Secp256k1
-open EthLib.Execution.Evm (delegationIndicator isValidDelegation)
+open EthLib.Execution.Evm (EvmError GasMeter delegationIndicator isValidDelegation)
 open EthLib.Execution.Evm.GasCosts
 open EthLib.Execution.State (StateError TransactionState)
 open EthLib.Serialization.Rlp
@@ -102,7 +127,7 @@ def delegationCode (auth : Authorization) : ByteArray :=
 
 /-- The state after the authority takes a valid authorization at `fork`, and the refund.
 
-The refund is 12500 for an authority that has an account, and 0 otherwise.
+Up to BPO5, the refund is 12500 for an authority that has an account, and 0 otherwise.
 
 The steps of EIP-7702 refund an authority that is not empty.
 
@@ -110,36 +135,84 @@ The steps of EIP-7702 refund an authority that is not empty.
 
 They differ only for an empty account, which [EIP-7523][eip7523] forbids after the merge.
 
+From Glamsterdam, the refund is 0, since the intrinsic gas pays for no new account.
+
 [eip7702-refund]: https://eips.ethereum.org/EIPS/eip-7702#charge-maximum-cost-upfront
 [eip7523]: https://eips.ethereum.org/EIPS/eip-7523#specification -/
 def delegate (fork : Fork) (state : TransactionState) (authority : Address)
     (auth : Authorization) : Except StateError (TransactionState × Nat) := do
-  let refund := if state.accountExists authority then
+  let refund := if fork < .glamsterdam ∧ state.accountExists authority then
     AUTH_PER_EMPTY_ACCOUNT - REFUND_AUTH_PER_EXISTING_ACCOUNT else 0
   let state ← state.setCode fork authority (delegationCode auth)
   let state ← state.incrementNonce fork authority
   return (state, refund)
 
-/-- What the authorizations so far leave: the state, the accessed addresses and the refund. -/
-structure Delegations where
+/-- What the authorizations so far leave, with a gas meter of type `Meter`. -/
+structure Delegations (Meter : Type) where
   /-- The state after the valid authorizations so far. -/
   state : TransactionState
   /-- The accessed addresses, with each authority whose signature was recovered. -/
   accessed : Std.ExtTreeSet Address
   /-- The gas that the authorities with an account give back. -/
   refund : Nat
+  /-- The gas meter of the first frame, which pays the authorizations from Glamsterdam. -/
+  meter : Meter
+  /-- The accounts whose first write the transaction has paid. -/
+  paidWrites : Std.ExtTreeSet Address
+  /-- The authorities that an authorization so far gave a delegation indicator. -/
+  delegated : Std.ExtTreeSet Address
+
+variable {Meter : Type} [GasMeter Meter]
+
+/-- The meter once an accepted authorization from `authority` pays, from Glamsterdam, or the error.
+
+It pays state gas for a new account, then the first write, then state gas for a new indicator.
+
+It runs before the authorization changes the state. -/
+def chargeAuthorization (done : Delegations Meter) (authority : Address) (auth : Authorization) :
+    Except EvmError Meter := do
+  let meter ← if done.state.accountExists authority then pure done.meter
+    else GasMeter.chargeState done.meter NEW_ACCOUNT_STATE_GAS
+  let meter ← if authority ∈ done.paidWrites then pure meter
+    else GasMeter.charge meter ACCOUNT_WRITE
+  let before ← (done.state.getCode (done.state.getPreStateAccount authority).codeHash).mapError
+    .state
+  if auth.address ≠ NULL_ADDRESS ∧ !isValidDelegation before ∧ authority ∉ done.delegated then
+    GasMeter.chargeState meter AUTH_BASE_STATE_GAS
+  else pure meter
+
+/-- The delegations once an accepted authorization from `authority` pays at `fork`, or the error.
+
+Up to BPO5 it pays nothing here, since the intrinsic gas paid it.
+
+From Glamsterdam it pays from the meter, and records the write as paid.
+
+It also records the authority as delegated when the authorization sets a delegation indicator. -/
+def payAuthorization (fork : Fork) (done : Delegations Meter) (authority : Address)
+    (auth : Authorization) : Except EvmError (Delegations Meter) :=
+  if fork ≥ .glamsterdam then do
+    let meter ← chargeAuthorization done authority auth
+    return { done with
+      meter
+      paidWrites := done.paidWrites.insert authority
+      delegated := if auth.address ≠ NULL_ADDRESS then done.delegated.insert authority
+        else done.delegated }
+  else .ok done
 
 /-- The delegations after one more authorization, on the chain `chainId` at `fork`.
 
-An authorization that fails a check leaves them as they were, except for the access. -/
-def applyAuthorization (fork : Fork) (chainId : Nat) (done : Delegations)
-    (auth : Authorization) : Except StateError Delegations :=
+An authorization that fails a check leaves them as they were, except for the access.
+
+From Glamsterdam, an authorization that lacks gas stops them with an error. -/
+def applyAuthorization (fork : Fork) (chainId : Nat) (done : Delegations Meter)
+    (auth : Authorization) : Except EvmError (Delegations Meter) :=
   if authorizationInScope chainId auth then
     match recoverAuthority auth with
     | some authority => do
       let done := { done with accessed := done.accessed.insert authority }
-      if ← authorityAccepts done.state authority auth then
-        let (state, refund) ← delegate fork done.state authority auth
+      if ← (authorityAccepts done.state authority auth).mapError .state then
+        let done ← payAuthorization fork done authority auth
+        let (state, refund) ← (delegate fork done.state authority auth).mapError .state
         return { done with state, refund := done.refund + refund }
       else return done
     | none => .ok done
@@ -147,12 +220,14 @@ def applyAuthorization (fork : Fork) (chainId : Nat) (done : Delegations)
 
 /-- Apply the authorizations of a transaction in order, on the chain `chainId` at `fork`.
 
-It starts from the state and the accessed addresses of the transaction, with no refund.
+It starts from the state, the accesses, the meter and the paid writes of the transaction.
 
-It fails only when the state lacks the code of an authority. -/
+It starts with no refund.
+
+It fails when the state lacks the code of an authority, and from Glamsterdam when gas lacks. -/
 def applyAuthorizations (fork : Fork) (chainId : Nat) (state : TransactionState)
-    (accessed : Std.ExtTreeSet Address) (auths : List Authorization) :
-    Except StateError Delegations :=
-  auths.foldlM (applyAuthorization fork chainId) ⟨state, accessed, 0⟩
+    (accessed : Std.ExtTreeSet Address) (meter : Meter) (paidWrites : Std.ExtTreeSet Address)
+    (auths : List Authorization) : Except EvmError (Delegations Meter) :=
+  auths.foldlM (applyAuthorization fork chainId) ⟨state, accessed, 0, meter, paidWrites, ∅⟩
 
 end EthLib.Execution.Transactions

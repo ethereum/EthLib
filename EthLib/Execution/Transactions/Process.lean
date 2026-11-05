@@ -14,6 +14,8 @@ The sender first buys the gas, and its nonce grows by one.
 
 The message gets the gas limit minus the intrinsic gas.
 
+From Glamsterdam, that gas splits into execution gas and a reservoir of state gas, by EIP-8037.
+
 A call runs the code of its recipient, and a creation runs the data as init code.
 
 A creation goes to the address that the sender and its nonce before the transaction give.
@@ -32,9 +34,24 @@ From Pectra, a recipient whose code is a delegation indicator runs the code of i
 
 The delegate is then accessed, and the message runs no precompile.
 
+From Glamsterdam, the first frame pays some gas before its code runs, in this order:
+
+- each accepted authorization pays what it writes, and that state gas is committed;
+- a transfer of ether to an account that is not alive pays the state gas of a new account;
+- the access to a delegate pays the price of an account access, cold or warm;
+- a creation pays the state gas of a new account when its address had none.
+
+A lack of gas there halts the message before its frame runs.
+
+The authorizations are then undone, all the execution gas is used, and the reservoir comes back.
+
+The nonce and the fee of the sender stay.
+
 A message that fails keeps no log, no refund and no account to delete.
 
 Once the message ends, the sender gets back its gas left and its refund.
+
+From Glamsterdam, the gas left includes the reservoir left.
 
 Then the beneficiary gets its fee.
 
@@ -57,15 +74,13 @@ The EIPs that change it:
 - [EIP-2930][eip2930], the access list
 - [EIP-3651][eip3651], the beneficiary accessed at the start
 - [EIP-7702][eip7702], the authorizations and the delegated recipient
+- [EIP-2780][eip2780], the gas that the first frame pays before its code, in Last Call
+- [EIP-8037][eip8037], the reservoir of state gas, in Last Call
 - [EIP-8246][eip8246], the accounts that SELFDESTRUCT marked keep their balance, in Last Call
 
-These rules hold up to BPO5, which keeps the rules of BPO2.
+Glamsterdam also records the reads of the run, by EIP-7928.
 
-Glamsterdam changes the gas used of a transaction, by EIP-7778 and EIP-8037.
-
-It also records the reads of the run, by EIP-7928.
-
-Those rules are not here yet, so a run from Glamsterdam fails as not yet specified.
+That rule is not here yet, so a run from Glamsterdam fails as not yet specified.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
@@ -73,6 +88,8 @@ Those rules are not here yet, so a run from Glamsterdam fails as not yet specifi
 [eip2930]: https://eips.ethereum.org/EIPS/eip-2930#specification
 [eip3651]: https://eips.ethereum.org/EIPS/eip-3651#specification
 [eip7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior
+[eip2780]: https://eips.ethereum.org/EIPS/eip-2780#runtime-gas-costs
+[eip8037]: https://eips.ethereum.org/EIPS/eip-8037#transaction-level-gas-accounting-reservoir-model
 [eip8246]: https://eips.ethereum.org/EIPS/eip-8246#specification
 -/
 
@@ -83,7 +100,8 @@ namespace EthLib.Execution.Transactions
 open EthLib.Base
 open EthLib.Execution.Blocks (Log)
 open EthLib.Execution.Evm
-open EthLib.Execution.State (BlockState TransactionState)
+open EthLib.Execution.Evm.GasCosts (NEW_ACCOUNT_STATE_GAS)
+open EthLib.Execution.State (BlockState EMPTY_ACCOUNT TransactionState)
 
 /-! ## The start of the message -/
 
@@ -164,8 +182,10 @@ def transactionMessage {fork : Fork} (env : BlockEnvironment fork)
 structure CallOutput where
   /-- The state after the message. -/
   state : TransactionState
-  /-- The gas left. -/
+  /-- The execution gas left. -/
   gasLeft : Nat
+  /-- The state gas left in the reservoir, 0 before Glamsterdam. -/
+  reservoir : Nat
   /-- The gas to give back, before its cap. -/
   refund : Nat
   /-- The logs, oldest first. -/
@@ -178,68 +198,135 @@ structure CallOutput where
   error : Option EvmError
   /-- The data that the message returned, or the data of its revert. -/
   output : ByteArray
+  /-- The net state gas that the message used, which can be negative, and is 0 before Glamsterdam.
+  -/
+  stateGasUsed : Int
+
+variable {Meter : Type} [GasMeter Meter]
 
 /-- The output of a message that ends with the frame `evm`, with `refund` gas from before it.
 
 A message that fails keeps its gas left and the earlier refund, and nothing else. -/
-def CallOutput.ofFrame {fork : Fork} (evm : Evm fork Nat) (refund : Nat)
+def CallOutput.ofFrame {fork : Fork} (evm : Evm fork Meter) (refund : Nat)
     (touched : Std.ExtTreeSet Address) : CallOutput :=
+  let gasLeft := GasMeter.gasLeft evm.gas
+  let reservoir := GasMeter.reservoir evm.gas
+  let used := GasMeter.stateGasUsed evm.gas
   if evm.error.isSome then
-    ⟨evm.state, GasMeter.gasLeft evm.gas, refund, #[], ∅, ∅, evm.error, evm.output⟩
+    ⟨evm.state, gasLeft, reservoir, refund, #[], ∅, ∅, evm.error, evm.output, used⟩
   else
-    ⟨evm.state, GasMeter.gasLeft evm.gas, refund + evm.substate.refundCounter.toNat,
-      evm.substate.logs, evm.substate.accountsToDelete, touched, none, evm.output⟩
+    ⟨evm.state, gasLeft, reservoir, refund + evm.substate.refundCounter.toNat, evm.substate.logs,
+      evm.substate.accountsToDelete, touched, none, evm.output, used⟩
 
-/-- The message of a creation, at `fork`.
+/-- The output of a message whose first frame never runs, because of `error`.
 
-At an address with code or a nonce, it fails with no gas left. -/
-def processCreation {fork : Fork} (message : Message fork) (state : TransactionState)
-    (substate : Substate) : Except EvmError CallOutput :=
-  if state.accountDeployable message.currentTarget then do
-    let ⟨evm, _⟩ ← processCreateMessage (Meter := Nat) fork message state substate
-    return .ofFrame evm 0 evm.substate.touchedAccounts
-  else .ok ⟨state, 0, 0, #[], ∅, ∅, some .addressCollision, .empty⟩
+The state stays `state`, from before the message.
 
-/-- The message of a call to `target` at `fork`, once the authorizations have applied.
+No execution gas is left, the reservoir `reservoir` comes back whole, and no state gas is used. -/
+def CallOutput.ofHalt (state : TransactionState) (reservoir : Nat) (error : EvmError) :
+    CallOutput :=
+  ⟨state, 0, reservoir, 0, #[], ∅, ∅, some error, .empty, 0⟩
+
+/-- The first frame of a transaction, ready to run, with a gas meter of type `Meter`. -/
+structure FirstFrame (fork : Fork) (Meter : Type) [GasMeter Meter] where
+  /-- The message of the frame. -/
+  message : Message fork
+  /-- The state that the frame starts from. -/
+  state : TransactionState
+  /-- The substate that the frame starts from. -/
+  substate : Substate
+  /-- The gas that the authorizations give back. -/
+  refund : Nat
+  /-- The meter that the frame starts with. -/
+  meter : Meter
+  /-- The meter holds the gas of the message. -/
+  held : GasMeter.gasHeld meter ≤ message.gas
+
+/-- The first frame of `message`, whose meter has paid what comes before it.
+
+The message holds the gas that the meter holds. -/
+def FirstFrame.ofMeter {fork : Fork} (message : Message fork) (state : TransactionState)
+    (substate : Substate) (refund : Nat) (meter : Meter) : FirstFrame fork Meter :=
+  ⟨{ message with gas := GasMeter.gasHeld meter }, state, substate, refund, meter, Nat.le_refl _⟩
+
+/-- The first frame of a transaction at `fork`, on the chain `chainId`, or the error that stops it.
+
+The meter starts with the gas and the reservoir of the message.
+
+A creation fails at an address with code or a nonce.
+
+From Glamsterdam, it pays the state gas of a new account when the address had none before.
+
+A call first applies the authorizations `auths`, then commits the state gas they paid.
+
+From Glamsterdam, a call that moves ether to an account not alive pays for a new account.
 
 From Pectra, a recipient whose code is a delegation indicator runs the code of its delegate.
 
-From Spurious Dragon to Paris, a recipient left empty is touched. -/
-def processCall {fork : Fork} (message : Message fork) (target : Address)
-    (state : TransactionState) (substate : Substate) (refund : Nat) :
-    Except EvmError CallOutput := do
-  let code ← (state.getCode (state.getAccount target).codeHash).mapError .state
-  let delegate := if fork ≥ .pectra then delegatedAddress code else none
-  let (message, substate) ← match delegate with
-    | some delegate => do
-      let code ← (state.getCode (state.getAccount delegate).codeHash).mapError .state
-      pure ({ message with code, codeAddress := some delegate, disablePrecompiles := true },
-        { substate with accessedAddresses := substate.accessedAddresses.insert delegate })
-    | none => pure ({ message with code }, substate)
-  let ⟨evm, _⟩ ← processMessage (Meter := Nat) fork message state substate
-  let touched := evm.substate.touchedAccounts
-  let touched := if fork ≥ .spuriousDragon ∧ fork < .paris ∧
-    evm.state.accountExistsAndIsEmpty target then touched.insert target else touched
-  return .ofFrame evm refund touched
+The delegate is then accessed, and the message runs no precompile.
+
+From Glamsterdam, that access pays the price of an account access, cold or warm.
+
+The accounts `paidWrites` have their first write paid already. -/
+def prepareFirstFrame {fork : Fork} (chainId : Nat) (message : Message fork)
+    (state : TransactionState) (substate : Substate) (auths : List Authorization)
+    (paidWrites : Std.ExtTreeSet Address) : Except EvmError (FirstFrame fork Meter) := do
+  let meter : Meter := GasMeter.start message.gas message.reservoir
+  match message.target with
+  | none =>
+    let address := message.currentTarget
+    unless state.accountDeployable address do throw .addressCollision
+    let meter ← if fork ≥ .glamsterdam ∧ state.getPreStateAccount address = EMPTY_ACCOUNT then
+        GasMeter.chargeState meter NEW_ACCOUNT_STATE_GAS
+      else pure meter
+    return .ofMeter message state substate 0 meter
+  | some target =>
+    let done ← applyAuthorizations fork chainId state substate.accessedAddresses meter paidWrites
+      auths
+    let meter := GasMeter.commit done.meter
+    let meter ←
+      if fork ≥ .glamsterdam ∧ message.value ≠ 0 ∧ !done.state.isAccountAlive target then
+        GasMeter.chargeState meter NEW_ACCOUNT_STATE_GAS
+      else pure meter
+    let substate := { substate with accessedAddresses := done.accessed }
+    let code ← (done.state.getCode (done.state.getAccount target).codeHash).mapError .state
+    match if fork ≥ .pectra then delegatedAddress code else none with
+    | some delegate =>
+      let meter ← if fork ≥ .glamsterdam then
+          GasMeter.charge meter (accountAccessCost fork (delegate ∉ done.accessed))
+        else pure meter
+      let code ← (done.state.getCode (done.state.getAccount delegate).codeHash).mapError .state
+      let message := { message with code, codeAddress := some delegate, disablePrecompiles := true }
+      let substate := { substate with accessedAddresses := done.accessed.insert delegate }
+      return .ofMeter message done.state substate done.refund meter
+    | none => return .ofMeter { message with code } done.state substate done.refund meter
 
 /-- The message of a transaction at `fork`, on the chain `chainId`.
 
-A call first applies the authorizations `auths`.
+It first prepares the first frame, which applies the authorizations `auths` of a call.
 
-They add to the accessed addresses and to the refund.
+A failure there halts the message before its frame runs, and undoes the authorizations.
 
-From Glamsterdam it fails, since the rules of that fork are not yet specified here. -/
-def processMessageCall {fork : Fork} (chainId : Nat) (message : Message fork)
-    (state : TransactionState) (substate : Substate) (auths : List Authorization) :
+From Spurious Dragon to Paris, a recipient left empty is touched. -/
+def processMessageCall {fork : Fork} [LawfulGasMeter Meter] (chainId : Nat)
+    (message : Message fork) (state : TransactionState) (substate : Substate)
+    (auths : List Authorization := []) (paidWrites : Std.ExtTreeSet Address := ∅) :
     Except EvmError CallOutput :=
-  if .glamsterdam ≤ fork then .error (.forkNotYetSpecified fork) else
-  match message.target with
-  | none => processCreation message state substate
-  | some target => do
-    let done ← (applyAuthorizations fork chainId state substate.accessedAddresses auths).mapError
-      .state
-    processCall message target done.state { substate with accessedAddresses := done.accessed }
-      done.refund
+  match prepareFirstFrame (Meter := Meter) chainId message state substate auths paidWrites with
+  | .error e => if e.aborts then .error e else .ok (.ofHalt state message.reservoir e)
+  | .ok first =>
+    match message.target with
+    | none => do
+      let ⟨evm, _⟩ ← processCreateMessage fork first.message first.state first.substate
+        first.meter first.held
+      return .ofFrame evm 0 evm.substate.touchedAccounts
+    | some target => do
+      let ⟨evm, _⟩ ← processMessage fork first.message first.state first.substate first.meter
+        first.held
+      let touched := evm.substate.touchedAccounts
+      let touched := if fork ≥ .spuriousDragon ∧ fork < .paris ∧
+        evm.state.accountExistsAndIsEmpty target then touched.insert target else touched
+      return .ofFrame evm first.refund touched
 
 /-! ## The transaction -/
 
@@ -249,6 +336,8 @@ structure TransactionOutput where
   block : BlockState
   /-- The gas that the transaction used, after the refund. -/
   gasUsed : Nat
+  /-- The gas that the transaction adds to the counts of its block. -/
+  blockGas : BlockGas
   /-- The logs of the transaction, oldest first. -/
   logs : Array Log
   /-- The error that stopped its message, or none when the message succeeded. -/
@@ -266,20 +355,29 @@ def deleteAccounts (fork : Fork) (state : TransactionState) (output : CallOutput
     else pure (state.destroyAccount address)
   return state.destroyTouchedEmptyAccounts fork output.touchedAccounts.toList
 
-/-- Run a transaction that may enter its block, on the block state `block` at `fork`.
+/-- The accounts whose first write a transaction from `sender` to `target` has paid.
+
+The intrinsic gas pays the write of the sender.
+
+It also pays that of the target, for a creation or a transfer of ether.
+
+[EIP-2780][eip2780] defines them.
+
+[eip2780]: https://eips.ethereum.org/EIPS/eip-2780#eip-7702-authorization-processing -/
+def paidWrites (sender target : Address) (tx : Transaction) : Std.ExtTreeSet Address :=
+  let paid := (∅ : Std.ExtTreeSet Address).insert sender
+  if tx.to.isNone ∨ tx.value ≠ 0 then paid.insert target else paid
+
+/-- Run a transaction with a gas meter of type `Meter`, on the block state `block` at `fork`.
 
 The checks of the transaction gave `included`.
 
-It returns the block state with the writes of the transaction.
+The gas past the intrinsic gas splits into the execution gas and the reservoir of the message.
 
-It also returns the gas used, the logs, and the error of the message.
-
-It fails only with an error that aborts the whole execution, such as missing code.
-
-From Glamsterdam it fails, since the rules of that fork are not yet specified here. -/
-def processTransaction {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
-    (included : Included) (tx : Transaction) : Except EvmError TransactionOutput := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
+The sender gets back the gas left and the reservoir left, with its refund. -/
+def runTransaction {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]
+    (env : BlockEnvironment fork) (block : BlockState) (included : Included) (tx : Transaction) :
+    Except EvmError TransactionOutput := do
   let state := TransactionState.ofBlock block
   let sender := included.sender
   let target ← messageTarget sender (state.getAccount sender).nonce tx
@@ -287,13 +385,38 @@ def processTransaction {fork : Fork} (env : BlockEnvironment fork) (block : Bloc
   let txEnv : TransactionEnvironment fork :=
     { origin := sender, gasPrice := included.gasPrice,
       blobVersionedHashes := fun _ => tx.blobHashes }
-  let message ← transactionMessage env txEnv state sender target
-    (tx.gas.toNat - included.intrinsicGas) tx
-  let output ← processMessageCall env.chainId message state
+  let gas := allocateGas fork tx included.intrinsicGas
+  let message ← transactionMessage env txEnv state sender target gas.execution tx
+  let output ← processMessageCall (Meter := Meter) env.chainId
+    { message with reservoir := gas.reservoir } state
     (startSubstate fork env.coinbase sender target tx) tx.authorizations
-  let settled := settleGas env output.state sender tx output.gasLeft output.refund
-  let (state, gasUsed) ← settled.mapError .state
+    (paidWrites sender target tx)
+  let gasLeft := output.gasLeft + output.reservoir
+  let blockGas := transactionBlockGas fork sender tx gasLeft output.refund output.stateGasUsed
+  let (state, gasUsed) ← (settleGas env output.state sender tx gasLeft output.refund).mapError
+    .state
   let state ← (deleteAccounts fork state output).mapError .state
-  return ⟨state.incorporateTxIntoBlock.parent, gasUsed, output.logs, output.error⟩
+  return ⟨state.incorporateTxIntoBlock.parent, gasUsed, blockGas, output.logs, output.error⟩
+
+/-- Run a transaction that may enter its block, on the block state `block` at `fork`.
+
+The checks of the transaction gave `included`.
+
+It returns the block state with the writes of the transaction.
+
+It also returns the gas used, the gas it adds to its block, the logs, and the error of the message.
+
+It fails only with an error that aborts the whole execution, such as missing code.
+
+Up to BPO5, the gas meter is one counter of the gas left.
+
+From Glamsterdam, the meter of EIP-8037 also meters state gas.
+
+From Glamsterdam it fails, since the rules of that fork are not all specified here yet. -/
+def processTransaction {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
+    (included : Included) (tx : Transaction) : Except EvmError TransactionOutput := do
+  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
+  if fork ≥ .glamsterdam then runTransaction StateGasMeter env block included tx
+  else runTransaction Nat env block included tx
 
 end EthLib.Execution.Transactions

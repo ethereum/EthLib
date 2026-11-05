@@ -62,7 +62,7 @@ namespace EthLib.Execution.Blocks
 open EthLib.Base
 open EthLib.Execution.Evm
 open EthLib.Execution.State (BlockState TransactionState)
-open EthLib.Execution.Transactions (processCall)
+open EthLib.Execution.Transactions (processMessageCall)
 
 /-! ## Addresses and gas -/
 
@@ -128,8 +128,8 @@ From Glamsterdam it fails, since the rules of that fork are not yet specified he
 def systemCall {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
     (target : Address) (data : ByteArray) : Except EvmError SystemCallOutput := do
   if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
-  let out ← processCall (systemMessage env target data) target (TransactionState.ofBlock block)
-    Substate.empty 0
+  let out ← processMessageCall (Meter := Nat) env.chainId (systemMessage env target data)
+    (TransactionState.ofBlock block) Substate.empty
   return ⟨out.state.incorporateTxIntoBlock.parent, out.output, out.error⟩
 
 /-- The code of the account at `target`, in the block state `block`. -/
