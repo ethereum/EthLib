@@ -23,7 +23,7 @@ public section
 
 namespace EthLib.Execution.Network.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result forkUpTo)
 
 /-- A message for a rejected message, phrased for someone reading a Python traceback. -/
 def ethMessage : EthError → String
@@ -119,5 +119,20 @@ def wireHashExport (tx : ByteArray) : Result ByteArray := do
     match wireHash item with
     | .error _ => throw (0, "transaction has no RLP encoding")
     | .ok h => return ⟨h.toArray⟩
+
+/-- Whether the receipts of a block, as a version sends them, match a receipts root.
+
+The receipts are one RLP list, and the fork names the fork of the block.
+
+The forks after Glamsterdam fail with code 0, since EthLib does not specify their blocks yet. -/
+@[export eth_receipts_match]
+def receiptsMatchExport (version : UInt64) (fork root receipts : ByteArray) : Result Bool := do
+  let v ← readVersion version
+  let fork ← forkUpTo .glamsterdam fork
+  let some (root : Base.Hash32) := (if h : root.size = 32 then some ⟨root.data, h⟩ else none)
+    | throw (0, "receipts root is not 32 bytes")
+  match Serialization.Rlp.decode receipts with
+  | .ok (.list items) => return receiptsMatch v fork root items
+  | _ => throw (0, "receipts are not one RLP list")
 
 end EthLib.Execution.Network.Exports

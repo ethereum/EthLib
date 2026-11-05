@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Network.Blocks
+public import EthLib.Execution.Network.Receipts
 public import EthLib.Execution.Network.Status
 public import EthLib.Execution.Network.Transactions
 
@@ -52,6 +53,14 @@ inductive Message where
   | getPooledTransactions (requestId : UInt64) (hashes : List Hash32)
   /-- PooledTransactions (0x0a): `[request-id, [tx, ...]]`. -/
   | pooledTransactions (requestId : UInt64) (txs : List Item)
+  /-- GetReceipts (0x0f): `[request-id, [blockhash, ...]]`.
+
+  From eth/70 on, `firstBlockReceiptIndex` comes after the request ID. -/
+  | getReceipts (requestId : UInt64) (firstIndex : Option Nat) (hashes : List Hash32)
+  /-- Receipts (0x10): `[request-id, [[receipt, ...], ...]]`, one list for each block.
+
+  From eth/70 on, `lastBlockIncomplete` comes after the request ID. -/
+  | receipts (requestId : UInt64) (lastIncomplete : Option Bool) (lists : List (List Item))
   /-- BlockRangeUpdate (0x11), from eth/69 on. -/
   | blockRangeUpdate (r : BlockRange)
   deriving DecidableEq
@@ -89,11 +98,21 @@ def id : Message → Nat
   | newPooledTransactionHashes _ => NEW_POOLED_TRANSACTION_HASHES_ID
   | getPooledTransactions .. => GET_POOLED_TRANSACTIONS_ID
   | pooledTransactions .. => POOLED_TRANSACTIONS_ID
+  | getReceipts .. => GET_RECEIPTS_ID
+  | receipts .. => RECEIPTS_ID
   | blockRangeUpdate _ => BLOCK_RANGE_UPDATE_ID
 
 /-- The envelope of a request or a response: `[request-id, payload]`, from EIP-2481. -/
 def envelope (requestId : UInt64) (payload : Item) : Item :=
   .list [Codec.toItem requestId, payload]
+
+/-- The envelope of eth/70, `[request-id, part, payload]`, or `[request-id, payload]` without a
+part. -/
+def withPart {α : Type} [Codec α] (requestId : UInt64) (part : Option α) (payload : Item) :
+    Item :=
+  match part with
+  | none => envelope requestId payload
+  | some p => .list [Codec.toItem requestId, Codec.toItem p, payload]
 
 /-- The data of the message, as one RLP item. -/
 def toItem : Message → Item
@@ -108,6 +127,8 @@ def toItem : Message → Item
   | newPooledTransactionHashes a => a.toItem
   | getPooledTransactions i hs => envelope i (Codec.toItem hs)
   | pooledTransactions i txs => envelope i (.list txs)
+  | getReceipts i k hs => withPart i k (Codec.toItem hs)
+  | receipts i b ls => withPart i b (.list (ls.map .list))
   | blockRangeUpdate r => Codec.toItem r
 
 /-- The request ID and the payload in the envelope `[request-id, payload]`. -/
@@ -116,10 +137,23 @@ def readEnvelope {α : Type} [Codec α] (item : Item) : Except RlpError (UInt64 
   | [i, p] => return (← i.field 0, ← p.field 1)
   | items => throw (.wrongFieldCount 2 items.length)
 
+/-- The request ID, the part and the payload of `[request-id, part, payload]` from eth/70 on, or
+of `[request-id, payload]` before. -/
+def readWithPart {α β : Type} [Codec α] [Codec β] (version : EthVersion) (item : Item) :
+    Except RlpError (UInt64 × Option α × β) := do
+  if version < .eth70 then
+    let (i, p) ← readEnvelope (α := β) item
+    return (i, none, p)
+  else
+    match ← item.fields 3 with
+    | [i, k, p] => return (← i.field 0, some (← k.field 1), ← p.field 2)
+    | items => throw (.wrongFieldCount 3 items.length)
+
 /-- The request ID of a request or a response, and none for the other messages. -/
 def requestId? : Message → Option UInt64
   | getBlockHeaders i _ | blockHeaders i _ | getBlockBodies i _ | blockBodies i _
-  | getPooledTransactions i _ | pooledTransactions i _ => some i
+  | getPooledTransactions i _ | pooledTransactions i _ | getReceipts i _ _ | receipts i _ _ =>
+    some i
   | _ => none
 
 /-- Whether `response` answers `request`: it is the response type of the request type, and it
@@ -129,6 +163,7 @@ def answers (request response : Message) : Bool :=
   | getBlockHeaders i _, blockHeaders j _ => i == j
   | getBlockBodies i _, blockBodies j _ => i == j
   | getPooledTransactions i _, pooledTransactions j _ => i == j
+  | getReceipts i _ _, receipts j _ _ => i == j
   | _, _ => false
 
 /-- The message with the ID `id` and the data `item`, on the version `version`.
@@ -159,6 +194,10 @@ def ofItem (version : EthVersion) (id : Nat) (item : Item) : Except EthError Mes
     ((fun (i, hs) => getPooledTransactions i hs) <$> readEnvelope item).mapError .rlp
   else if id = POOLED_TRANSACTIONS_ID then
     ((fun (i, txs) => pooledTransactions i txs) <$> readEnvelope item).mapError .rlp
+  else if id = GET_RECEIPTS_ID then
+    ((fun (i, k, hs) => getReceipts i k hs) <$> readWithPart version item).mapError .rlp
+  else if id = RECEIPTS_ID then
+    ((fun (i, b, ls) => receipts i b ls) <$> readWithPart version item).mapError .rlp
   else if id = BLOCK_RANGE_UPDATE_ID ∧ EthVersion.eth69 ≤ version then
     (blockRangeUpdate <$> Codec.ofItem item).mapError .rlp
   else .error (.unknownId id)

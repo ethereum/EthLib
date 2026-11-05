@@ -18,6 +18,8 @@ TRANSACTIONS = 0x02
 NEW_POOLED_TRANSACTION_HASHES = 0x08
 GET_POOLED_TRANSACTIONS = 0x09
 POOLED_TRANSACTIONS = 0x0A
+GET_RECEIPTS = 0x0F
+RECEIPTS = 0x10
 BLOCK_RANGE_UPDATE = 0x11
 
 
@@ -46,6 +48,11 @@ def wire_hash(tx: bytes) -> bytes:
     return _native.eth_wire_hash(tx)
 
 
+def receipts_match(version: int, fork: str, receipts_root: bytes, receipts: bytes) -> bool:
+    """Whether the RLP list `receipts` of a block, as eth/`version` sends them, has this root."""
+    return _native.eth_receipts_match(version, fork, receipts_root, receipts)
+
+
 __all__ = [
     "BLOCK_BODIES",
     "BLOCK_HEADERS",
@@ -53,10 +60,12 @@ __all__ = [
     "GET_BLOCK_BODIES",
     "GET_BLOCK_HEADERS",
     "GET_POOLED_TRANSACTIONS",
+    "GET_RECEIPTS",
     "NEW_BLOCK",
     "NEW_BLOCK_HASHES",
     "NEW_POOLED_TRANSACTION_HASHES",
     "POOLED_TRANSACTIONS",
+    "RECEIPTS",
     "STATUS",
     "TRANSACTIONS",
     "EthWireError",
@@ -64,5 +73,6 @@ __all__ = [
     "check_pooled",
     "check_status",
     "decode_message",
+    "receipts_match",
     "wire_hash",
 ]

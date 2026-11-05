@@ -458,6 +458,9 @@
 #define DOC_eth_wire_hash \
   "The hash of a transaction as it crosses the wire."
 
+#define DOC_eth_receipts_match \
+  "Whether the receipts of a block, as a version sends them, match the receipts root of its header."
+
 #define DOC_snappy_decompress \
   "The bytes a Snappy block decompresses to, or why it is not a valid block."
 

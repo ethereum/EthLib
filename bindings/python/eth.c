@@ -40,6 +40,14 @@ eth_wire_hash(
   lean_object* tx
 );
 
+extern lean_object*
+eth_receipts_match(
+  uint64_t version,
+  lean_object* fork,
+  lean_object* root,
+  lean_object* receipts
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* Copy the Python `bytes` object `obj` into a Lean `ByteArray`, or set a TypeError naming it. */
@@ -132,4 +140,29 @@ py_eth_wire_hash(
   lean_object* tx;
   if (parse_bytes(tx_obj, "tx", &tx)) return NULL;
   return except_into_pybytes(eth_wire_hash(tx), ETH_WIRE_ERROR);
+}
+
+PyObject*
+py_eth_receipts_match(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *version_obj, *fork_obj, *root_obj, *receipts_obj;
+  if (!PyArg_ParseTuple(args, "OOOO", &version_obj, &fork_obj, &root_obj, &receipts_obj))
+    return NULL;
+  uint64_t version;
+  if (parse_uint64(version_obj, "version", &version)) return NULL;
+  if (!PyUnicode_Check(fork_obj)) {
+    PyErr_SetString(PyExc_TypeError, "fork must be str");
+    return NULL;
+  }
+  Py_ssize_t len;
+  const char* utf8 = PyUnicode_AsUTF8AndSize(fork_obj, &len);
+  if (!utf8) return NULL;
+  lean_object *root, *receipts;
+  if (parse_bytes(root_obj, "receipts_root", &root)) return NULL;
+  if (parse_bytes(receipts_obj, "receipts", &receipts)) { lean_dec(root); return NULL; }
+  lean_object* fork = mk_bytearray((const uint8_t*) utf8, (size_t) len);
+  return except_into_pybool(
+    eth_receipts_match(version, fork, root, receipts), ETH_WIRE_ERROR);
 }

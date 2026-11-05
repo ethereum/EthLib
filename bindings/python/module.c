@@ -657,6 +657,7 @@ static PyMethodDef methods[] = {
   {"eth_check_headers", py_eth_check_headers, METH_VARARGS, DOC_eth_check_headers},
   {"eth_check_pooled", py_eth_check_pooled, METH_VARARGS, DOC_eth_check_pooled},
   {"eth_wire_hash", py_eth_wire_hash, METH_VARARGS, DOC_eth_wire_hash},
+  {"eth_receipts_match", py_eth_receipts_match, METH_VARARGS, DOC_eth_receipts_match},
   {"snappy_decompress", py_snappy_decompress, METH_VARARGS, DOC_snappy_decompress},
   {"snappy_compress_literal", py_snappy_compress_literal, METH_VARARGS, DOC_snappy_compress_literal},
   {"snappy_decode_frames", py_snappy_decode_frames, METH_VARARGS, DOC_snappy_decode_frames},
