@@ -32,10 +32,10 @@ open scoped EthLib.Cryptography.Bls.Fr
 
 /-- Bilinearity on the multiples of the generators: `e(a g1, b g2) = e(g1, g2)^(a b)`. -/
 def PairingBilinear : Prop :=
-  ∀ a b : Fr, pairing (G1.mul G1.generator a) (G2.mul G2.generator b) =
-    pairing G1.generator G2.generator ^ (a.val * b.val)
+  ∀ a b : Fr, pairing (G1.mul (G1.generator : G1) a) (G2.mul G2.generator b) =
+    pairing (G1.generator : G1) G2.generator ^ (a.val * b.val)
 
-private theorem finalExponentiation_one : finalExponentiation 1 = 1 := by
+private theorem finalExponentiation_one : finalExponentiation (1 : Fp12) = 1 := by
   rw [finalExponentiation_eq_pow, one_pow]
 
 /-- The pairing is the final exponentiation of the pair's factor, or 1 without a factor. -/

@@ -35,9 +35,9 @@ private theorem lineValue_eq (c0 c2 c3 : Fp2) :
   rw [Fp12.eq_sum (lineValue c0 c2 c3)]
   simp only [lineValue, Fp2.zero_eq_zero, map_zero, zero_mul, add_zero]
 
-private theorem two_eq : Fp2.ofFp (Fp.ofNat 2) = 2 := by decide
+private theorem two_eq : Fp2.ofFp (BaseField.ofNat 2 : Fp) = 2 := by decide
 
-private theorem three_eq : Fp2.ofFp (Fp.ofNat 3) = 3 := by decide
+private theorem three_eq : Fp2.ofFp (BaseField.ofNat 3 : Fp) = 3 := by decide
 
 private theorem two_ne_zero' : (2 : Fp12) ≠ 0 := by decide
 

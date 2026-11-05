@@ -19,11 +19,11 @@ The kernel evaluates the pairing of the generators; each check takes a few secon
 namespace EthLib.Cryptography.Bls
 
 /-- The pairing of the generators is not 1. -/
-theorem pairing_generators_ne_one : pairing G1.generator G2.generator ≠ 1 := by
+theorem pairing_generators_ne_one : pairing (G1.generator : G1) G2.generator ≠ 1 := by
   decide +kernel
 
 /-- The pairing of the generators is not 0. -/
-theorem pairing_generators_ne_zero : pairing G1.generator G2.generator ≠ 0 := by
+theorem pairing_generators_ne_zero : pairing (G1.generator : G1) G2.generator ≠ 0 := by
   decide +kernel
 
 /-- Every nonzero output of the final exponentiation is an `r`-th root of unity. -/
@@ -38,7 +38,8 @@ theorem finalExponentiation_pow_modulus {f : Fp12} (h : finalExponentiation f �
   exact FiniteField.pow_card_sub_one_eq_one f hf
 
 /-- The pairing of the generators has order `r`. -/
-theorem orderOf_pairing_generators : orderOf (pairing G1.generator G2.generator) = Fr.modulus := by
+theorem orderOf_pairing_generators :
+    orderOf (pairing (G1.generator : G1) G2.generator) = Fr.modulus := by
   apply orderOf_eq_prime
   · have h := pairing_generators_ne_zero
     unfold pairing at h ⊢
@@ -49,7 +50,7 @@ theorem orderOf_pairing_generators : orderOf (pairing G1.generator G2.generator)
   · exact pairing_generators_ne_one
 
 /-- The pairing check of the generators fails. -/
-theorem pairingCheck_generators : pairingCheck #[(G1.generator, G2.generator)] = false := by
+theorem pairingCheck_generators : pairingCheck #[((G1.generator : G1), G2.generator)] = false := by
   have h := pairing_generators_ne_one
   rw [pairingCheck_eq_finalExp_prod, Bool.eq_false_iff]
   intro h1
