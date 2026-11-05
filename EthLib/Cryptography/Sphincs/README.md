@@ -202,6 +202,12 @@ Definitions that derive a secret take the derivation function as an argument too
   Key generation first draws the two halves of `P`, and the rest of the experiment runs with `P` the first (`skipExperiment_eq`, `prEvent_skip_eq`).
   From the state holding them, VCVio's canonical relabelling applies to the graph of `P`.
   The forging advantage is at most the chance of a forgery or a conflict in the relabelled game, plus `qH / 2^256` for each seed (`forgeAdvantage_le_relabel`).
+- Honest and lab steps in the eager game (`Unforgeability/LabSteps.lean`).
+  The eager game adds touches and reads of cells to the relabelled game.
+  At a node whose children are held in their cells, the honest tweakable hash and the read of the node's label are one draw (`th_labTriple`).
+  The honest walk of a chain from its start and the lab chain have one law of output and state (`labChain_labTriple`).
+  The lab chain touches every value below the position it reads, so those values can stay hidden.
+  The same holds for a key's leaf, from the ends of its chains (`otsLeafHash_labTriple`).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
 
