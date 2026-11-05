@@ -12,7 +12,7 @@ def _dump(document) -> bytes:
 
 
 def serialize(ssz_type, value) -> bytes:
-    """The SSZ bytes of a value of a type, such as serialize({"uint": 2}, {"uint": 258})."""
+    """The SSZ bytes of a value of a type, for example {"uint": 258} of type {"uint": 2}."""
     return _native.ssz_serialize(_dump(ssz_type), _dump(value))
 
 

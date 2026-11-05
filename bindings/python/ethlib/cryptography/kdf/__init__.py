@@ -1,4 +1,5 @@
-"""Key derivation with SHA-256: HKDF of RFC 5869 and the Concatenation KDF of SP 800-56C.
+"""
+Key derivation with SHA-256: HKDF of RFC 5869 and the Concatenation KDF of SP 800-56C.
 
 The input keying material and the shared secret are secret.
 
@@ -14,7 +15,8 @@ from ethlib.errors import ConcatKdfError, HkdfError
 
 
 def hkdf_extract(salt: bytes, ikm: bytes) -> bytes:
-    """HKDF-Extract of RFC 5869 §2.2: the 32-byte pseudorandom key `HMAC-SHA-256(salt, IKM)`.
+    """
+    HKDF-Extract of RFC 5869 §2.2: the 32-byte pseudorandom key `HMAC-SHA-256(salt, IKM)`.
 
     An empty salt gives the same key as 32 zero bytes, the RFC's default.
 

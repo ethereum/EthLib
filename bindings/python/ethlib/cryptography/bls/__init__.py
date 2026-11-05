@@ -1,3 +1,5 @@
+"""BLS signatures on the BLS12-381 curve, with their aggregation and their proofs of possession."""
+
 from ethlib.cryptography._native import (
     BYTES_PER_PUBKEY,
     BYTES_PER_SIGNATURE,
@@ -21,7 +23,8 @@ from ethlib.errors import BlsError
 
 
 def key_gen(ikm: bytes, key_info: bytes = b"") -> bytes:
-    """A secret key, as 32 big-endian bytes, from at least 32 bytes of keying material.
+    """
+    A secret key, as 32 big-endian bytes, from at least 32 bytes of keying material.
 
     The keying material and the key are secret, and EthLib makes no constant-time claim.
     """

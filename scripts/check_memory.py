@@ -1,4 +1,5 @@
-"""Report the time and the peak memory that Lean needs to elaborate each given file.
+"""
+Report the time and the peak memory that Lean needs to elaborate each given file.
 
 CI runs this check after the build, on the Lean files that a pull request changes.
 The imports of each file must be built, so that Lean reads them from their `.olean` files.
@@ -44,7 +45,8 @@ def classify(peak: int, exit_code: int, warn: int, fail: int) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    """Measure each file, print the table and the annotations, and return the exit code."""
+    parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument("files", nargs="*", help="Lean files to elaborate")
     parser.add_argument("--warn-gib", type=float, default=DEFAULT_WARN_GIB)
     parser.add_argument("--fail-gib", type=float, default=DEFAULT_FAIL_GIB)

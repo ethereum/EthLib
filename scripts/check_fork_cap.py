@@ -1,4 +1,5 @@
-"""Check that every C export which reads a fork name rejects the forks whose rules it lacks.
+"""
+Check that every C export which reads a fork name rejects the forks whose rules it lacks.
 
 uv run --no-project --python 3.12 python scripts/check_fork_cap.py
 """
@@ -38,6 +39,8 @@ FORK_BINDER = re.compile(r"[({]([^(){}:]*):")
 
 @dataclass
 class Decl:
+    """A top-level Lean definition, with its header, its body and its export attribute."""
+
     path: str
     name: str
     header: str
@@ -89,6 +92,7 @@ def read_allowlist(path: Path) -> tuple[dict[tuple[str, str], str], list[str]]:
 
 
 def check(root: Path) -> list[str]:
+    """Every problem with the fork caps of the exports and with the allowlist."""
     allowed, problems = read_allowlist(root / ALLOWLIST)
     decls = []
     for file in sorted((root / "EthLib").rglob("*.lean")):
@@ -135,6 +139,7 @@ def check(root: Path) -> list[str]:
 
 
 def main() -> int:
+    """Print each problem that the check finds, and return the exit code."""
     problems = check(ROOT)
     for problem in problems:
         print(problem, file=sys.stderr)

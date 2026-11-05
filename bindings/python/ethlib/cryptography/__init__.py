@@ -1,3 +1,5 @@
+"""The cryptographic primitives of Ethereum."""
+
 __all__ = [
     "aes",
     "bls",

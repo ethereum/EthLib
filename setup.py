@@ -26,11 +26,13 @@ LAKE_IR = REPO_ROOT / ".lake" / "build" / "ir"
 
 
 def _lean_sysroot() -> Path | None:
-    """Active Lean toolchain prefix (`lean --print-prefix`), or `None`
+    """
+    Active Lean toolchain prefix (`lean --print-prefix`), or `None`
     if no `lean` is on PATH. The sdist build doesn't need Lean — it just
     tars up source files — so we tolerate its absence at metadata time
     and only require it when `LakeThenBuild.run` actually compiles the
-    extension."""
+    extension.
+    """
     try:
         out = subprocess.check_output(["lean", "--print-prefix"], text=True).strip()
     except (FileNotFoundError, subprocess.CalledProcessError):
@@ -39,12 +41,14 @@ def _lean_sysroot() -> Path | None:
 
 
 def _current_objects(ir: Path, src: Path, sub: str = "") -> list[str]:
-    """The `.c.o.export` objects under `ir / sub` whose module still exists.
+    """
+    The `.c.o.export` objects under `ir / sub` whose module still exists.
 
     Lake never deletes the object of a module that was moved or removed.
     Linking it beside its successor would define every export twice, so an
     object counts only while `src` holds the module's `.lean` file, at the
-    same relative path."""
+    same relative path.
+    """
     objects = []
     for obj in glob(str(ir / sub / "**" / "*.c.o.export"), recursive=True):
         module = Path(obj).relative_to(ir).as_posix().removesuffix(".c.o.export")
@@ -54,16 +58,19 @@ def _current_objects(ir: Path, src: Path, sub: str = "") -> list[str]:
 
 
 def _collect_lean_objects() -> list[str]:
-    """Every current `.c.o.export` Lake produced for the package.
+    """
+    Every current `.c.o.export` Lake produced for the package.
 
     Only objects under `EthLib/` are the package's modules. The top level
     of `LAKE_IR` also holds tools such as `lake exe check-decls`, whose
-    object defines `main` and must not be linked into the extension."""
+    object defines `main` and must not be linked into the extension.
+    """
     return sorted(_current_objects(LAKE_IR, REPO_ROOT, "EthLib"))
 
 
 def _lean_runtime_link(sysroot: Path) -> tuple[list[str], list[str], list[str]]:
-    """How to bring the Lean runtime into our shared extension. Returns
+    """
+    How to bring the Lean runtime into our shared extension. Returns
     `(extra_objects, library_dirs, libraries)` to merge into the `Extension`.
 
     We dynamically link against `libleanshared` on every platform: the
@@ -74,7 +81,8 @@ def _lean_runtime_link(sysroot: Path) -> tuple[list[str], list[str], list[str]]:
     bundle the runtime `.so` / `.dylib` into the wheel and patch RPATH,
     so installed wheels are self-contained — the user does NOT need
     elan or any Lean toolchain on their machine. `libgmp.a` /
-    `libuv.a` stay as static inputs."""
+    `libuv.a` stay as static inputs.
+    """
     gmp_uv = [
         str(p) for p in (sysroot / "lib" / "libgmp.a", sysroot / "lib" / "libuv.a") if p.exists()
     ]
@@ -82,12 +90,15 @@ def _lean_runtime_link(sysroot: Path) -> tuple[list[str], list[str], list[str]]:
 
 
 class LakeThenBuild(build_ext):
-    """Run `lake build Exports` to (re-)generate the Lean object files before
+    """
+    Run `lake build Exports` to (re-)generate the Lean object files before
     handing things to setuptools. Only the exports and the specification
     they import are built: the extension links no proof code, and the proofs
-    pull in Mathlib."""
+    pull in Mathlib.
+    """
 
     def run(self):
+        """Build the Lean exports, then link their objects into each extension."""
         # The exports import the specification, so this builds both, and
         # skips the proofs, which link nothing.
         subprocess.check_call(["lake", "build", "Exports"], cwd=str(REPO_ROOT))

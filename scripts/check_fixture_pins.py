@@ -173,6 +173,7 @@ def check(root: Path) -> list[str]:
 
 
 def main() -> int:
+    """Print each problem that the check finds, and return the exit code."""
     problems = check(ROOT)
     for problem in problems:
         print(problem, file=sys.stderr)

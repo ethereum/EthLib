@@ -1,5 +1,6 @@
 #!/usr/bin/env -S uv run --no-project --python 3.12 python
-"""Report optional editing suggestions for EthLib prose.
+"""
+Report optional editing suggestions for EthLib prose.
 
 The guide is `WRITING.md`. This script reports patterns that a search can find:
 
@@ -110,6 +111,8 @@ GENERATED_END = re.compile(r"<!--\s*end generated\s*-->")
 
 @dataclass
 class Block:
+    """A block of prose, with its first line, its last line and its text type."""
+
     path: str
     line: int
     text: str
@@ -119,6 +122,8 @@ class Block:
 
 @dataclass
 class Finding:
+    """A writing suggestion at a line, with its rule and an excerpt of the text."""
+
     path: str
     line: int
     rule: str
@@ -131,7 +136,8 @@ class Finding:
 
 
 def avoid_words(vocabulary: Path = VOCABULARY) -> tuple[list[str], list[str]]:
-    """Return the general words to avoid and the history words (rule C3) from the vocabulary.
+    """
+    Return the general words to avoid and the history words (rule C3) from the vocabulary.
 
     The words are the quoted terms in the first column of the "Words to avoid" table. A row whose
     second column names rule C3 gives history words, which apply only to library text.
@@ -172,6 +178,7 @@ def vocabulary_section(text: str, title: str) -> str:
 
 
 def word_pattern(words: list[str]) -> re.Pattern[str] | None:
+    """Return a pattern that matches the words and their inflected forms, or None."""
     if not words:
         return None
 
@@ -432,6 +439,7 @@ def lean_blocks(path: str, text: str) -> list[Block]:
 
 
 def file_blocks(path: str, text: str) -> list[Block]:
+    """Return the prose blocks of a Lean or Markdown file, and none for a licence file."""
     if Path(path).name.casefold() in {
         "license",
         "licence",
@@ -528,10 +536,12 @@ def sentence_spans(text: str) -> list[tuple[int, int]]:
 
 
 def sentences(text: str) -> list[str]:
+    """Split a text into its sentences."""
     return [text[a:b] for a, b in sentence_spans(text)]
 
 
 def word_count(sentence: str) -> int:
+    """Count the tokens of a sentence that hold a letter or a digit."""
     return sum(1 for token in sentence.split() if re.search(r"[^\W_]", token))
 
 
@@ -542,6 +552,7 @@ def word_count(sentence: str) -> int:
 def check_block(
     block: Block, general: re.Pattern[str] | None, history: re.Pattern[str] | None
 ) -> list[Finding]:
+    """Return the suggestions for one prose block."""
     found: list[Finding] = []
 
     def add(rule: str, message: str, offset: int, end: int) -> None:
@@ -590,6 +601,7 @@ def check_block(
 
 
 def check_blocks(blocks: list[Block], vocabulary: Path = VOCABULARY) -> list[Finding]:
+    """Return the suggestions for each block, with the words of the vocabulary."""
     general_words, history_words = avoid_words(vocabulary)
     general = word_pattern(general_words)
     history = word_pattern(history_words)
@@ -601,6 +613,7 @@ def check_blocks(blocks: list[Block], vocabulary: Path = VOCABULARY) -> list[Fin
 
 
 def git(*args: str) -> str:
+    """Return the standard output of a git command run at the root of the repository."""
     return subprocess.run(
         ["git", *args],
         check=True,
@@ -613,6 +626,7 @@ def git(*args: str) -> str:
 
 
 def checked_path(path: str) -> bool:
+    """Return whether the checker reads the prose of a path."""
     return (
         path.endswith((".md", ".lean"))
         and path not in EXCLUDED_FILES
@@ -684,6 +698,7 @@ def read_source(path: Path, label: str, diagnostics: list[Finding]) -> str | Non
 
 
 def changed_blocks(base: str, diagnostics: list[Finding] | None = None) -> list[Block]:
+    """Return the prose blocks that contain a line added since the merge base."""
     blocks: list[Block] = []
     diagnostics = [] if diagnostics is None else diagnostics
     for path, lines in sorted(added_lines(base).items()):
@@ -701,10 +716,12 @@ def changed_blocks(base: str, diagnostics: list[Finding] | None = None) -> list[
 
 
 def escape(message: str) -> str:
+    """Escape a message for a GitHub workflow command."""
     return message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
 def report(found: list[Finding], github: bool, label_is_file: bool) -> None:
+    """Print the suggestions and their summary, as text or GitHub annotations."""
     for item in found:
         if github:
             location = (
@@ -744,6 +761,7 @@ def report(found: list[Finding], github: bool, label_is_file: bool) -> None:
 
 
 def main(argv: list[str]) -> int:
+    """Check the prose that the arguments name, and return the exit code."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--base", help="check the prose that changed since the merge base")

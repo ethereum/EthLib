@@ -46,17 +46,21 @@ FENCE = re.compile(r"(```|~~~)")
 
 @dataclass(frozen=True)
 class Finding:
+    """A layout finding at a line of a file."""
+
     path: str
     line: int
     message: str
 
 
 def is_ident(char: str) -> bool:
+    """Whether a character can continue a Lean identifier."""
     return char.isalnum() or char in "_'!?"
 
 
 def comments(text: str) -> list[list[tuple[int, str]]]:
-    """The comments of a Lean file, each as a list of (line number, content) pairs.
+    """
+    The comments of a Lean file, each as a list of (line number, content) pairs.
 
     A block comment `/- … -/`, `/-- … -/` or `/-! … -/` is one comment, without its markers.
     Block comments nest.
@@ -136,17 +140,20 @@ def comments(text: str) -> list[list[tuple[int, str]]]:
 
 
 def indentation(content: str) -> int:
+    """The number of spaces at the start of a line."""
     return len(content) - len(content.lstrip(" "))
 
 
 def sentence_lines(comment: list[tuple[int, str]]) -> list[tuple[int, bool]]:
-    """Each line of a comment, with whether it is a sentence line.
+    """
+    Each line of a comment, with whether it is a sentence line.
 
     A sentence line holds a letter or a digit.
     It is not a heading, a table row, a URL alone or a link reference definition.
     It is not a list item or its continuation, and not a line of a fenced or an indented code block.
     A line is indented code when it is indented by four spaces more than the least indented line,
-    leaving out the first line, which follows the comment opener."""
+    leaving out the first line, which follows the comment opener.
+    """
     rest = [content for _, content in comment[1:] if content.strip()]
     base = min(map(indentation, rest), default=0)
     out = []
@@ -201,6 +208,7 @@ def check_text(path: str, text: str, changed: set[int] | None) -> list[Finding]:
 
 
 def git(*args: str) -> str:
+    """The standard output of a git command run at the root of the repository."""
     return subprocess.run(
         ["git", *args], check=True, capture_output=True, text=True, cwd=ROOT
     ).stdout
@@ -226,6 +234,7 @@ def changed_lines(base: str) -> dict[str, set[int]]:
 
 
 def main(argv: list[str]) -> int:
+    """Print the layout findings of the files, and return the exit code."""
     parser = argparse.ArgumentParser(description=__doc__.strip().split("\n")[0])
     parser.add_argument("--base", help="check the lines changed since the merge base with BASE")
     parser.add_argument("files", nargs="*", help="check every line of these files")

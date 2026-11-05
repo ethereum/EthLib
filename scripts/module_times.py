@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Adapted for EthLib from Verified-zkEVM/ArkLib and Verified-zkEVM/VCVio.
 # Sources and license: scripts/BUILD_TIMING_SOURCES.md.
-"""Track the last recorded elaboration time of each EthLib module.
+"""
+Track the last recorded elaboration time of each EthLib module.
 
 The table travels with the cached build.
 An incremental build replaces samples only for modules Lake actually rebuilt.
@@ -35,6 +36,7 @@ def parse_duration(value: str, unit: str) -> tuple[float, int]:
 
 
 def is_module(target: str) -> bool:
+    """Return whether a build target is an EthLib module, not native work."""
     # Facet-qualified captions (`Mod:c.o`, `Mod:dynlib`) are native work, not elaboration.
     if ":" in target:
         return False
@@ -42,6 +44,7 @@ def is_module(target: str) -> bool:
 
 
 def source_path(module: str) -> str:
+    """Return the Lean source path of a module."""
     return module.replace(".", "/") + ".lean"
 
 
@@ -64,6 +67,7 @@ def parse_logs(paths: list[pathlib.Path]) -> dict[str, dict[str, Any]]:
 
 
 def empty_table() -> dict[str, Any]:
+    """Return a table with no modules and no commit."""
     return {"schema_version": SCHEMA_VERSION, "commit": None, "modules": {}}
 
 
@@ -92,12 +96,14 @@ def load_table(path: pathlib.Path) -> dict[str, Any] | None:
 
 
 def total_seconds(table: dict[str, Any]) -> float:
+    """Return the sum of the recorded times of the table."""
     return sum(entry["seconds"] for entry in table["modules"].values())
 
 
 def update_table(
     table: dict[str, Any], built: dict[str, dict[str, Any]], commit: str | None, root: pathlib.Path
 ) -> dict[str, Any]:
+    """Overlay the built modules onto the table, and drop modules with no source."""
     modules = dict(table["modules"])
     modules.update(built)
     modules = {
@@ -109,6 +115,7 @@ def update_table(
 
 
 def main() -> None:
+    """Overlay the samples of the build logs onto the table file."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     subparsers = parser.add_subparsers(dest="command", required=True)
     update = subparsers.add_parser("update", help="overlay build-log samples onto a table")

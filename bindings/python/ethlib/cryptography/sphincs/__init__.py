@@ -1,4 +1,5 @@
-"""leanSPHINCS signatures: key generation, signing and verification.
+"""
+leanSPHINCS signatures: key generation, signing and verification.
 
 - Malformed arguments raise TypeError or ValueError.
 - Inputs the spec rejects raise SphincsError, with the code and the message of the Lean error.
@@ -17,7 +18,8 @@ from ethlib.errors import SphincsError
 
 
 def key_gen(seed: bytes) -> bytes:
-    """The public key grown from a 32-byte seed.
+    """
+    The public key grown from a 32-byte seed.
 
     It builds the whole top tree, 2^10 one-time keys.
     """
@@ -25,7 +27,8 @@ def key_gen(seed: bytes) -> bytes:
 
 
 def sign(seed: bytes, message: bytes) -> bytes:
-    """Sign a 32-byte message with the key grown from a seed.
+    """
+    Sign a 32-byte message with the key grown from a seed.
 
     The message digest picks the FORS instance, so signing needs no index and keeps no state.
 

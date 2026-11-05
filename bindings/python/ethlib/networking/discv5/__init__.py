@@ -1,4 +1,5 @@
-"""Node distances, handshake cryptography and packets of discv5.
+"""
+Node distances, handshake cryptography and packets of discv5.
 
 An invalid input raises Discv5Error, a ValueError.
 """

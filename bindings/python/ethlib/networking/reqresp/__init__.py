@@ -1,4 +1,5 @@
-"""The ssz_snappy encoding of consensus-layer requests and responses.
+"""
+The ssz_snappy encoding of consensus-layer requests and responses.
 
 - A payload is a varint of the SSZ length, then a Snappy framed stream of the SSZ bytes.
 - A response chunk is a response code, then context bytes, then a payload.
@@ -37,7 +38,8 @@ def decode_payload(type_bound: int, data: bytes) -> bytes:
 
 
 def decode_response_chunk(context_bytes: int, type_bound: int, data: bytes) -> ResponseChunk:
-    """One response chunk, for a method that sends context_bytes context bytes on success.
+    """
+    One response chunk, for a method that sends context_bytes context bytes on success.
 
     An error chunk carries no context bytes, and its payload is the error message.
     """

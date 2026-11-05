@@ -1,4 +1,5 @@
-"""The exceptions that the specification raises through the bindings.
+"""
+The exceptions that the specification raises through the bindings.
 
 Each primitive has one exception class.
 An instance carries the code and the message of the Lean error.
@@ -26,6 +27,7 @@ class EthLibError(Exception):
     message: str
 
     def __init__(self, code: int, message: str) -> None:
+        """Keep the code and the message of the Lean error."""
         super().__init__(message)
         self.code = code
         self.message = message
@@ -112,7 +114,8 @@ class SszError(EthLibError, ValueError):
 
 
 class SnappyError(EthLibError, ValueError):
-    """A Snappy block or framed stream was rejected.
+    """
+    A Snappy block or framed stream was rejected.
 
     Block errors have codes from 1, and frame errors codes from 101.
     """
@@ -147,7 +150,8 @@ class ForkIdError(EthLibError, ValueError):
 
 
 class EthWireError(EthLibError, ValueError):
-    """An eth message, a Status or an answer of headers was rejected.
+    """
+    An eth message, a Status or an answer of headers was rejected.
 
     Message errors have codes from 1, Status errors from 101, header errors from 201, and
     transaction errors from 301.
@@ -176,7 +180,8 @@ class FeesError(EthLibError, ValueError):
 
 
 class TrieError(EthLibError, ValueError):
-    """A trie has no root, a proof does not verify, or an RLP input is malformed.
+    """
+    A trie has no root, a proof does not verify, or an RLP input is malformed.
 
     Trie errors have codes from 1, proof errors codes from 101, and a malformed input code 0.
     """
@@ -187,7 +192,8 @@ class StateError(EthLibError, ValueError):
 
 
 class PrecompileError(EthLibError, ValueError):
-    """A precompile call failed, or no precompile has the address.
+    """
+    A precompile call failed, or no precompile has the address.
 
     The code names the precompile that failed, and code 0 means no precompile has the address.
     """
