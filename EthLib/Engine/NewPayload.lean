@@ -110,7 +110,7 @@ def checkNewPayload (config : ChainConfig) (version : Nat) (params : Json) :
   let params ← match params with
     | .arr items => pure items.toList
     | _ => invalid "params: not an array"
-  unless params.length == paramCount version ∧ params.all (· != .null) do
+  unless params.length == paramCount version ∧ params.all (!·.isNull) do
     invalid s!"params: not {paramCount version} values"
   let any ← anyPayload params[0]!
   unless acceptsStructure version any.version do

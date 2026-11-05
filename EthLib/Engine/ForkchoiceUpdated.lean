@@ -138,6 +138,6 @@ def forkchoiceUpdatedParams (params : Json) : Decode (Option ForkchoiceState) :=
   let .arr items := params | invalid "params: not an array"
   let [state, attributes] := items.toList | invalid "params: not 2 values"
   let state ← forkchoiceStateOfJson state
-  return if attributes == .null then some state else none
+  return if attributes.isNull then some state else none
 
 end EthLib.Engine

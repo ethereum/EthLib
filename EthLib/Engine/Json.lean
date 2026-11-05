@@ -113,7 +113,7 @@ def array {α : Type} (what : String) (f : Json → Decode α) : Json → Decode
 
 /-- The fields of an object with a value other than `null`, by name. -/
 def fields (what : String) : Json → Decode (List (String × Json))
-  | .obj kvs => pure (kvs.toList.filter fun (_, v) => v != .null)
+  | .obj kvs => pure (kvs.toList.filter fun (_, v) => !v.isNull)
   | _ => invalid s!"{what}: not an object"
 
 /-- Whether an object has exactly the named fields, ignoring those whose value is `null`. -/
