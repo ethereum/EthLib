@@ -2,6 +2,8 @@ module
 
 public import EthLib.Base.Fork
 public import EthLib.Consensus.Config
+public import EthLib.Consensus.DataAvailability.Blob
+public import EthLib.Consensus.DataAvailability.Column
 public import EthLib.Consensus.Types
 public import EthLib.Networking.Enr.Consensus
 public import EthLib.Networking.Gossip.Topic
@@ -20,9 +22,15 @@ Phase 0 has the status, goodbye, block range, block root, ping and metadata prot
 
 Altair adds a second version of the block and metadata protocols.
 
-Fulu adds a second version of the status protocol and a third of the metadata protocol.
+Altair also adds four protocols that serve light clients.
 
-The protocols of blobs, data columns and light clients are not part of this module.
+Deneb adds the protocols of blob sidecars, by range and by root.
+
+Fulu adds the protocols of data column sidecars, by range and by root.
+
+Fulu also adds blocks by head, a second version of status and a third of metadata.
+
+Fulu deprecates the blob protocols at an epoch after its start, so they stay in its list.
 -/
 
 @[expose] public section
@@ -45,6 +53,24 @@ inductive ReqRespProtocol where
   | ping
   /-- The metadata of a node. -/
   | metadata
+  /-- From Altair: the bootstrap of a light client at a block root. -/
+  | lightClientBootstrap
+  /-- From Altair: the light client updates of a range of sync committee periods. -/
+  | lightClientUpdatesByRange
+  /-- From Altair: the latest light client finality update. -/
+  | lightClientFinalityUpdate
+  /-- From Altair: the latest light client optimistic update. -/
+  | lightClientOptimisticUpdate
+  /-- From Deneb: blob sidecars in a range of slots. -/
+  | blobSidecarsByRange
+  /-- From Deneb: blob sidecars by block root and index. -/
+  | blobSidecarsByRoot
+  /-- From Fulu: data column sidecars of some columns in a range of slots. -/
+  | dataColumnSidecarsByRange
+  /-- From Fulu: data column sidecars by block root and column indices. -/
+  | dataColumnSidecarsByRoot
+  /-- From Fulu: blocks along the ancestry of a block root, newest first. -/
+  | beaconBlocksByHead
   deriving DecidableEq, Repr
 
 /-- The name of a protocol in its ID. -/
@@ -55,10 +81,22 @@ def ReqRespProtocol.name : ReqRespProtocol → String
   | .beaconBlocksByRoot => "beacon_blocks_by_root"
   | .ping => "ping"
   | .metadata => "metadata"
+  | .lightClientBootstrap => "light_client_bootstrap"
+  | .lightClientUpdatesByRange => "light_client_updates_by_range"
+  | .lightClientFinalityUpdate => "light_client_finality_update"
+  | .lightClientOptimisticUpdate => "light_client_optimistic_update"
+  | .blobSidecarsByRange => "blob_sidecars_by_range"
+  | .blobSidecarsByRoot => "blob_sidecars_by_root"
+  | .dataColumnSidecarsByRange => "data_column_sidecars_by_range"
+  | .dataColumnSidecarsByRoot => "data_column_sidecars_by_root"
+  | .beaconBlocksByHead => "beacon_blocks_by_head"
 
-/-- Every protocol, in the order of the Phase 0 text. -/
+/-- Every protocol: those of Phase 0 in the order of its text, then the later ones by fork. -/
 def ReqRespProtocol.all : List ReqRespProtocol :=
-  [.status, .goodbye, .beaconBlocksByRange, .beaconBlocksByRoot, .ping, .metadata]
+  [.status, .goodbye, .beaconBlocksByRange, .beaconBlocksByRoot, .ping, .metadata,
+    .lightClientBootstrap, .lightClientUpdatesByRange, .lightClientFinalityUpdate,
+    .lightClientOptimisticUpdate, .blobSidecarsByRange, .blobSidecarsByRoot,
+    .dataColumnSidecarsByRange, .dataColumnSidecarsByRoot, .beaconBlocksByHead]
 
 /-- A protocol and its version. -/
 structure ProtocolId where
@@ -72,13 +110,18 @@ structure ProtocolId where
 def ProtocolId.toString (id : ProtocolId) : String :=
   "/eth2/beacon_chain/req/" ++ id.protocol.name ++ "/" ++ Nat.repr id.version ++ "/ssz_snappy"
 
-/-- The versions of a protocol that a fork defines, oldest first. -/
+/-- The versions of a protocol that a fork defines, oldest first; none before its fork. -/
 def ReqRespProtocol.versions (fork : Fork) : ReqRespProtocol → List Nat
   | .status => if .fusaka ≤ fork then [1, 2] else [1]
   | .goodbye | .ping => [1]
   | .beaconBlocksByRange | .beaconBlocksByRoot => if .altair ≤ fork then [1, 2] else [1]
   | .metadata =>
     if .fusaka ≤ fork then [1, 2, 3] else if .altair ≤ fork then [1, 2] else [1]
+  | .lightClientBootstrap | .lightClientUpdatesByRange | .lightClientFinalityUpdate
+  | .lightClientOptimisticUpdate => if .altair ≤ fork then [1] else []
+  | .blobSidecarsByRange | .blobSidecarsByRoot => if .dencun ≤ fork then [1] else []
+  | .dataColumnSidecarsByRange | .dataColumnSidecarsByRoot | .beaconBlocksByHead =>
+    if .fusaka ≤ fork then [1] else []
 
 /-- The protocol IDs of a fork. -/
 def protocolIds (fork : Fork) : List ProtocolId :=
@@ -204,6 +247,64 @@ def Config.maxRequestBlocks (config : Config) (fork : Fork) : UInt64 :=
 /-- A request for blocks by the roots of their messages. -/
 abbrev BeaconBlocksByRootRequest (config : Config) (fork : Fork) :=
   SszList Root (config.maxRequestBlocks fork).toNat
+
+/-- A request for the light client updates of a range of sync committee periods. -/
+structure LightClientUpdatesByRangeRequest where
+  /-- The first period. -/
+  startPeriod : UInt64
+  /-- The number of periods. -/
+  count : UInt64
+  deriving DecidableEq, Repr
+
+instance : SszType LightClientUpdatesByRangeRequest :=
+  .container ["start_period", "count"] (fun r => (r.startPeriod, r.count))
+    (fun (s, c) => ⟨s, c⟩)
+
+/-- A request for the blob sidecars of a range of slots. -/
+structure BlobSidecarsByRangeRequest where
+  /-- The first slot. -/
+  startSlot : Slot
+  /-- The number of slots. -/
+  count : UInt64
+  deriving DecidableEq, Repr
+
+instance : SszType BlobSidecarsByRangeRequest :=
+  .container ["start_slot", "count"] (fun r => (r.startSlot, r.count)) (fun (s, c) => ⟨s, c⟩)
+
+/-- A request for blob sidecars by the root of their block and their index.
+
+From Electra the limit grows with the blobs of a block. -/
+abbrev BlobSidecarsByRootRequest (config : Config) (fork : Fork) :=
+  SszList BlobIdentifier (computeMaxRequestBlobSidecars config fork).toNat
+
+/-- A request for the sidecars of some columns in a range of slots. -/
+structure DataColumnSidecarsByRangeRequest (preset : Preset) where
+  /-- The first slot. -/
+  startSlot : Slot
+  /-- The number of slots. -/
+  count : UInt64
+  /-- The indices of the columns. -/
+  columns : SszList DataAvailability.ColumnIndex preset.NUMBER_OF_COLUMNS.toNat
+  deriving DecidableEq
+
+instance {preset : Preset} : SszType (DataColumnSidecarsByRangeRequest preset) :=
+  .container ["start_slot", "count", "columns"] (fun r => (r.startSlot, r.count, r.columns))
+    (fun (s, c, l) => ⟨s, c, l⟩)
+
+/-- A request for the sidecars of some columns of some blocks, each block named by its root. -/
+abbrev DataColumnSidecarsByRootRequest (preset : Preset) (config : Config) :=
+  SszList (DataColumnsByRootIdentifier preset) config.MAX_REQUEST_BLOCKS_DENEB.toNat
+
+/-- A request for blocks along the ancestry of a block root, that block first. -/
+structure BeaconBlocksByHeadRequest where
+  /-- The root of the newest block. -/
+  beaconRoot : Root
+  /-- The number of blocks. -/
+  count : UInt64
+  deriving DecidableEq, Repr
+
+instance : SszType BeaconBlocksByHeadRequest :=
+  .container ["beacon_root", "count"] (fun r => (r.beaconRoot, r.count)) (fun (b, c) => ⟨b, c⟩)
 
 /-- The message of an error response, at most 256 bytes. -/
 abbrev ErrorMessage := SszList UInt8 256

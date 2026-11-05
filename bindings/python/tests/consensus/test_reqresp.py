@@ -22,6 +22,12 @@ PHASE0 = [
     _id("ping", 1),
     _id("metadata", 1),
 ]
+LIGHT_CLIENT = [
+    _id("light_client_bootstrap", 1),
+    _id("light_client_updates_by_range", 1),
+    _id("light_client_finality_update", 1),
+    _id("light_client_optimistic_update", 1),
+]
 ALTAIR = [
     _id("status", 1),
     _id("goodbye", 1),
@@ -32,7 +38,8 @@ ALTAIR = [
     _id("ping", 1),
     _id("metadata", 1),
     _id("metadata", 2),
-]
+] + LIGHT_CLIENT
+DENEB = ALTAIR + [_id("blob_sidecars_by_range", 1), _id("blob_sidecars_by_root", 1)]
 FULU = [
     _id("status", 1),
     _id("status", 2),
@@ -45,12 +52,19 @@ FULU = [
     _id("metadata", 1),
     _id("metadata", 2),
     _id("metadata", 3),
+] + LIGHT_CLIENT + [
+    _id("blob_sidecars_by_range", 1),
+    _id("blob_sidecars_by_root", 1),
+    _id("data_column_sidecars_by_range", 1),
+    _id("data_column_sidecars_by_root", 1),
+    _id("beacon_blocks_by_head", 1),
 ]
 
 
 @pytest.mark.parametrize(
     "fork, expected",
-    [("phase0", PHASE0), ("altair", ALTAIR), ("pectra", ALTAIR), ("fusaka", FULU), ("bpo2", FULU)],
+    [("phase0", PHASE0), ("altair", ALTAIR), ("shapella", ALTAIR), ("dencun", DENEB),
+     ("pectra", DENEB), ("fusaka", FULU), ("bpo2", FULU)],
 )
 def test_protocol_ids(fork: str, expected: list) -> None:
     assert consensus.reqresp_protocol_ids(fork) == expected
@@ -165,6 +179,86 @@ def test_root_request_limit(fork: str, limit: int) -> None:
     assert again == data
     with pytest.raises(SszError):
         consensus.reqresp_message("mainnet", fork, "BeaconBlocksByRootRequest", data + bytes(32))
+
+
+def _range(*values: int) -> bytes:
+    return b"".join(value.to_bytes(8, "little") for value in values)
+
+
+@pytest.mark.parametrize(
+    "fork, name, data",
+    [
+        ("altair", "LightClientUpdatesByRangeRequest", _range(400, 8)),
+        ("dencun", "BlobSidecarsByRangeRequest", _range(10, 64)),
+        ("fusaka", "BeaconBlocksByHeadRequest", bytes(range(32)) + _range(64)),
+    ],
+)
+def test_two_field_requests(fork: str, name: str, data: bytes) -> None:
+    # Two fields of fixed size: the root of their two chunks.
+    root, again = consensus.reqresp_message("mainnet", fork, name, data)
+    assert again == data
+    first, second = data[:-8], data[-8:]
+    assert root == hashlib.sha256(_chunk(first) + _chunk(second)).digest()
+
+
+@pytest.mark.parametrize(
+    "name, fork",
+    [
+        ("LightClientUpdatesByRangeRequest", "phase0"),
+        ("BlobSidecarsByRangeRequest", "shapella"),
+        ("BlobSidecarsByRootRequest", "shapella"),
+        ("DataColumnSidecarsByRangeRequest", "pectra"),
+        ("DataColumnSidecarsByRootRequest", "pectra"),
+        ("BeaconBlocksByHeadRequest", "pectra"),
+    ],
+)
+def test_request_before_its_fork(name: str, fork: str) -> None:
+    with pytest.raises(SszError, match="no message"):
+        consensus.reqresp_message("mainnet", fork, name, bytes(16))
+
+
+# A blob identifier is a root and an index: 40 bytes.
+@pytest.mark.parametrize("fork, limit", [("dencun", 128 * 6), ("pectra", 128 * 9)])
+def test_blob_root_request_limit(fork: str, limit: int) -> None:
+    data = bytes(40 * limit)
+    _, again = consensus.reqresp_message("mainnet", fork, "BlobSidecarsByRootRequest", data)
+    assert again == data
+    with pytest.raises(SszError):
+        consensus.reqresp_message("mainnet", fork, "BlobSidecarsByRootRequest", data + bytes(40))
+
+
+def test_column_range_request() -> None:
+    # Two fixed fields, then the offset of the list of columns.
+    columns = _range(0, 5, 127)
+    data = _range(10, 4) + (20).to_bytes(4, "little") + columns
+    name = "DataColumnSidecarsByRangeRequest"
+    _, again = consensus.reqresp_message("mainnet", "fusaka", name, data)
+    assert again == data
+    # The list holds at most the 128 columns.
+    many = _range(10, 4) + (20).to_bytes(4, "little") + bytes(8 * 129)
+    with pytest.raises(SszError):
+        consensus.reqresp_message("mainnet", "fusaka", name, many)
+
+
+def test_column_root_request() -> None:
+    # One identifier: the offset of the identifier, its root, the offset of its columns.
+    identifier = bytes([7]) * 32 + (36).to_bytes(4, "little") + _range(3, 64)
+    data = (4).to_bytes(4, "little") + identifier
+    name = "DataColumnSidecarsByRootRequest"
+    _, again = consensus.reqresp_message("minimal", "fusaka", name, data)
+    assert again == data
+    # The request names at most 128 blocks.
+    assert consensus.reqresp_message("minimal", "fusaka", "DataColumnSidecarsByRootRequest",
+                                     _identifiers(128))[1] == _identifiers(128)
+    with pytest.raises(SszError):
+        consensus.reqresp_message("minimal", "fusaka", "DataColumnSidecarsByRootRequest",
+                                  _identifiers(129))
+
+
+def _identifiers(count: int) -> bytes:
+    # Identifiers with no column: their offsets, then each a root and the offset of its columns.
+    offsets = b"".join((4 * count + 36 * i).to_bytes(4, "little") for i in range(count))
+    return offsets + (bytes(32) + (36).to_bytes(4, "little")) * count
 
 
 def test_error_message_limit() -> None:

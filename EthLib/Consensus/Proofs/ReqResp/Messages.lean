@@ -14,7 +14,8 @@ Properties of the request and response messages of the consensus layer.
 
 - Each protocol ID parses back to its protocol and its version.
 - So no two protocol IDs of a fork are one string.
-- The status, the metadata and the block range request are lawful SSZ containers at every fork.
+- A protocol ID of a fork is a protocol ID of every later fork.
+- The status, the metadata and the container requests are lawful SSZ containers at every fork.
 - A goodbye code is recovered from the reason it names.
 -/
 
@@ -91,8 +92,22 @@ theorem parse?_protocolIds {fork : Fork} {id : ProtocolId} (listed : id ∈ prot
     show 0 < version ∧ version ≤ 3
     cases protocol <;> simp only [ReqRespProtocol.versions] at member <;>
       repeat' (split at member)
-    all_goals simp at member; omega
+    all_goals simp at member
+    all_goals omega
   exact parse?_toString id.protocol bounds.1 (by omega)
+
+/-- A protocol ID of a fork is a protocol ID of every later fork. -/
+theorem mem_protocolIds_of_le {fork later : Fork} (le : fork ≤ later) {id : ProtocolId}
+    (listed : id ∈ protocolIds fork) : id ∈ protocolIds later := by
+  simp only [protocolIds, List.mem_flatMap, List.mem_map] at listed ⊢
+  obtain ⟨protocol, all, version, member, rfl⟩ := listed
+  refine ⟨protocol, all, version, ?_, rfl⟩
+  have up : ∀ {first : Fork}, first ≤ fork → first ≤ later := fun h => Nat.le_trans h le
+  -- A version is listed under the forks from some fork on, which then holds later too.
+  cases protocol <;> simp only [ReqRespProtocol.versions] at member ⊢ <;>
+    (repeat' split at member) <;> (repeat' split)
+  all_goals simp_all
+  all_goals omega
 
 /-- Two protocol IDs of a fork with one string are one ID. -/
 theorem toString_injective {fork : Fork} {a b : ProtocolId} (left : a ∈ protocolIds fork)
@@ -147,6 +162,18 @@ instance {config : Config} {fork : Fork} [NeZero config.ATTESTATION_SUBNET_COUNT
     (fun _ => rfl) (fun _ => rfl)
 
 instance : LawfulSszType BeaconBlocksByRangeRequest :=
+  .container (by decide) (fun _ => rfl) (fun _ => rfl)
+
+instance : LawfulSszType LightClientUpdatesByRangeRequest :=
+  .container (by decide) (fun _ => rfl) (fun _ => rfl)
+
+instance : LawfulSszType BlobSidecarsByRangeRequest :=
+  .container (by decide) (fun _ => rfl) (fun _ => rfl)
+
+instance {preset : Preset} : LawfulSszType (DataColumnSidecarsByRangeRequest preset) :=
+  .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
+
+instance : LawfulSszType BeaconBlocksByHeadRequest :=
   .container (by decide) (fun _ => rfl) (fun _ => rfl)
 
 end EthLib.Consensus.Proofs.ReqResp.Messages
