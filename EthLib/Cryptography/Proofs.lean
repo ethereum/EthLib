@@ -19,6 +19,7 @@ public import EthLib.Cryptography.Proofs.Montgomery
 public import EthLib.Cryptography.Proofs.MillerFunction
 public import EthLib.Cryptography.Proofs.MillerDivisor
 public import EthLib.Cryptography.Proofs.MillerLines
+public import EthLib.Cryptography.Proofs.MillerUnique
 public import EthLib.Cryptography.Proofs.ScaledCurve
 
 /-!
