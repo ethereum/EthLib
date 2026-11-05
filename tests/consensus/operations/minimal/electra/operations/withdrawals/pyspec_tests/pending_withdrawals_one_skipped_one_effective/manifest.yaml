@@ -1,0 +1,6 @@
+preset: minimal
+fork: electra
+runner: operations
+handler: withdrawals
+suite: pyspec_tests
+case: pending_withdrawals_one_skipped_one_effective

@@ -19,6 +19,7 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "operation
 # Gloas also cancels the builder payments of a slashed proposer, which EthLib does not hold yet,
 # so the slashings stop at Fulu.
 # Altair changes attestations and new validators, and Deneb the signature of exits.
+# Gloas changes the withdrawals.
 HANDLERS = {
     "block_header": ("block", ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
                                "fulu")),
@@ -31,6 +32,8 @@ HANDLERS = {
     "attestation": ("attestation", ("phase0",)),
     "deposit": ("deposit", ("phase0",)),
     "voluntary_exit": ("voluntary_exit", ("phase0", "altair", "bellatrix", "capella")),
+    "withdrawals": ("execution_payload", ("capella", "deneb", "electra", "fulu")),
+    "bls_to_execution_change": ("address_change", ("capella", "deneb", "electra", "fulu")),
     "payload_attestation": ("payload_attestation", ("gloas",)),
     "execution_payload_bid": ("execution_payload_bid", ("gloas",)),
     "builder_deposit_request": ("builder_deposit_request", ("gloas",)),

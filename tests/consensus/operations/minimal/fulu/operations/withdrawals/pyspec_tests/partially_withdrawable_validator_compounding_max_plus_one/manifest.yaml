@@ -1,0 +1,6 @@
+preset: minimal
+fork: fulu
+runner: operations
+handler: withdrawals
+suite: pyspec_tests
+case: partially_withdrawable_validator_compounding_max_plus_one

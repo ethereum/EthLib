@@ -2,12 +2,15 @@ module
 
 public import EthLib.Consensus.Transition.Block
 public import EthLib.Consensus.Transition.BuilderRequests
+public import EthLib.Consensus.Transition.Withdrawals
 public import EthLib.Serialization.Ssz.Merkle.Branch
 
 /-!
 # `Consensus.Transition.Operations`
 
 The operations of a block: slashings, attestations, deposits and voluntary exits.
+
+From Capella a block also changes BLS credentials to addresses.
 
 A block runs them in that order, each kind in the order of the block.
 
@@ -243,15 +246,17 @@ The block must hold every deposit that the state has not processed, up to the mo
 
 The proposer slashings run first, then the attester slashings, attestations, deposits and exits.
 
+From Capella the changes of BLS credentials run last.
+
 A 64-bit underflow is an error.
 
-Capella adds changes of withdrawal credentials, which EthLib does not yet have. -/
+Electra changes the deposits and adds the requests, which EthLib does not yet have. -/
 def processOperations (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (body : BeaconBlockBody preset fork) :
     Except TransitionError (BeaconState preset fork) :=
-  if capella : .shapella ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if electra : .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
   else do
-    have before : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le capella) (by decide)
+    have before : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le electra) (by decide)
     let outstanding ← liftAccessor (liftArith
       (subChecked (state.eth1Data before).depositCount (state.eth1DepositIndex before)))
     let expected := (min preset.MAX_DEPOSITS outstanding).toNat
@@ -261,6 +266,10 @@ def processOperations (config : Config) (checks : SignatureChecks)
     let state ← body.attesterSlashings.data.foldlM (processAttesterSlashing config checks) state
     let state ← body.attestations.data.foldlM (processAttestation config checks) state
     let state ← deposits.foldlM (processDeposit config checks before) state
-    body.voluntaryExits.data.foldlM (processVoluntaryExit config checks) state
+    let state ← body.voluntaryExits.data.foldlM (processVoluntaryExit config checks) state
+    if capella : .shapella ≤ fork then
+      (body.blsToExecutionChanges capella).data.foldlM (processBlsToExecutionChange config checks)
+        state
+    else return state
 
 end EthLib.Consensus
