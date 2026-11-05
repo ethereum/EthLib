@@ -484,6 +484,54 @@ theorem moveEther_balance {fork : Fork} {tx tx' : TransactionState} {sender reci
         omega
       · cases hcredit
 
+/-- A change of an account keeps the record of the accounts that the transaction created. -/
+theorem createdAccounts_modifyState {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
+    tx'.createdAccounts = tx.createdAccounts := by
+  unfold modifyState at h
+  cases hf : f (tx.getAccount address) with
+  | error e => simp [hf, bind, Except.bind] at h
+  | ok account =>
+    simp only [hf, bind, Except.bind, pure, Except.pure] at h
+    split at h <;> cases h <;> rfl
+
+/-- Moving ether keeps the record of the accounts that the transaction created. -/
+theorem createdAccounts_moveEther {fork : Fork} {tx tx' : TransactionState}
+    {sender recipient : Address} {amount : U256}
+    (h : tx.moveEther fork sender recipient amount = .ok tx') :
+    tx'.createdAccounts = tx.createdAccounts := by
+  unfold moveEther at h
+  cases hmid : tx.modifyState fork sender (fun account =>
+      if account.balance < amount then .error (.insufficientBalance sender)
+      else .ok { account with balance := account.balance - amount }) with
+  | error e => simp [hmid, bind, Except.bind] at h
+  | ok mid =>
+    simp only [hmid, bind, Except.bind] at h
+    rw [createdAccounts_modifyState h, createdAccounts_modifyState hmid]
+
+/-- Moving ether from an address to itself keeps its balance. -/
+theorem moveEther_self {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {amount : U256} (h : tx.moveEther fork address address amount = .ok tx') :
+    (tx'.getAccount address).balance = (tx.getAccount address).balance := by
+  unfold moveEther at h
+  cases hmid : tx.modifyState fork address (fun account =>
+      if account.balance < amount then .error (.insufficientBalance address)
+      else .ok { account with balance := account.balance - amount }) with
+  | error e => simp [hmid, bind, Except.bind] at h
+  | ok mid =>
+    simp only [hmid, bind, Except.bind] at h
+    obtain ⟨debited, hdebit, hread, -⟩ := modifyState_eq_ok hmid
+    obtain ⟨credited, hcredit, hread', -⟩ := modifyState_eq_ok h
+    split at hdebit
+    · cases hdebit
+    · cases hdebit
+      rw [hread] at hcredit
+      split at hcredit
+      · cases hcredit
+        rw [hread']
+        exact BitVec.sub_add_cancel _ _
+      · cases hcredit
+
 end EthLib.Execution.State.TransactionState
 
 /-! ## Folds of writes -/

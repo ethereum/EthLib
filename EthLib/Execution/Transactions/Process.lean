@@ -40,6 +40,10 @@ Then the beneficiary gets its fee.
 
 Then each account that SELFDESTRUCT marked is deleted.
 
+From Glamsterdam, such an account loses its nonce, code and storage, and keeps its balance.
+
+It is deleted only when that leaves it empty, by EIP-8246.
+
 From Spurious Dragon to Paris, each touched account that is empty is deleted too.
 
 Section 6.2 of the Yellow Paper, Shanghai version, defines the run of a transaction.
@@ -53,6 +57,7 @@ The EIPs that change it:
 - [EIP-2930][eip2930], the access list
 - [EIP-3651][eip3651], the beneficiary accessed at the start
 - [EIP-7702][eip7702], the authorizations and the delegated recipient
+- [EIP-8246][eip8246], the accounts that SELFDESTRUCT marked keep their balance, in Last Call
 
 These rules hold up to BPO5, which keeps the rules of BPO2.
 
@@ -68,6 +73,7 @@ Those rules are not here yet, so a run from Glamsterdam fails as not yet specifi
 [eip2930]: https://eips.ethereum.org/EIPS/eip-2930#specification
 [eip3651]: https://eips.ethereum.org/EIPS/eip-3651#specification
 [eip7702]: https://eips.ethereum.org/EIPS/eip-7702#behavior
+[eip8246]: https://eips.ethereum.org/EIPS/eip-8246#specification
 -/
 
 @[expose] public section
@@ -250,12 +256,15 @@ structure TransactionOutput where
 
 /-- The state after the end of a transaction at `fork`: the deletions of its accounts.
 
-Each account to delete goes, then each touched account that is empty. -/
+Each account to delete goes, then each touched account that is empty.
+
+From Glamsterdam, an account to delete keeps its balance, and goes only when that is 0. -/
 def deleteAccounts (fork : Fork) (state : TransactionState) (output : CallOutput) :
-    TransactionState :=
-  let state := output.accountsToDelete.foldl (fun state address => state.destroyAccount address)
-    state
-  state.destroyTouchedEmptyAccounts fork output.touchedAccounts.toList
+    Except State.StateError TransactionState := do
+  let state ← output.accountsToDelete.foldlM (init := state) fun state address =>
+    if fork ≥ .glamsterdam then state.clearAccountPreservingBalance fork address
+    else pure (state.destroyAccount address)
+  return state.destroyTouchedEmptyAccounts fork output.touchedAccounts.toList
 
 /-- Run a transaction that may enter its block, on the block state `block` at `fork`.
 
@@ -284,7 +293,7 @@ def processTransaction {fork : Fork} (env : BlockEnvironment fork) (block : Bloc
     (startSubstate fork env.coinbase sender target tx) tx.authorizations
   let settled := settleGas env output.state sender tx output.gasLeft output.refund
   let (state, gasUsed) ← settled.mapError .state
-  let state := deleteAccounts fork state output
+  let state ← (deleteAccounts fork state output).mapError .state
   return ⟨state.incorporateTxIntoBlock.parent, gasUsed, output.logs, output.error⟩
 
 end EthLib.Execution.Transactions
