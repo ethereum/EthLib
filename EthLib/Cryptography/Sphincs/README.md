@@ -213,6 +213,10 @@ Definitions that derive a secret take the derivation function as an argument too
   The lab leaf touches the starts of the key's chains, runs each lab chain to its end and reads the leaf.
   It leaves the state as the honest leaf does, so the honest leaf and the lab leaf have one law of output and state (`otsPublicLeaf_labTriple`).
   The lab leaf reads no start and no value inside a chain, so a later game can defer those draws.
+- Trees of the hypertree in the eager game (`Unforgeability/LabTree.lean`).
+  Two Merkle computations whose leaves and parent steps are related have related nodes and paths (`node_eqDistTriple`, `siblings_eqDistTriple`).
+  The lab tree runs each key's lab leaf and reads each parent's cell.
+  Its nodes, roots and paths have the law of the honest ones (`node_labTriple`, `treeRoot_labTriple`, `path_labTriple`).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
 
