@@ -11,7 +11,11 @@ The calls that a block makes to system contracts, outside any transaction.
 
 A system call comes from the system address, with 30,000,000 gas and no value.
 
+From Glamsterdam, it also gets a reservoir of state gas for 16 new storage slots, by EIP-8037.
+
 Its gas does not count against the gas limit of the block, and nobody pays for it.
+
+So it adds to neither gas count of the block.
 
 It runs the code of its contract as the message of a transaction does.
 
@@ -43,16 +47,17 @@ Each EIP states its call in its section on block processing or on the system cal
 - [EIP-2935][eip-2935], the history storage contract
 - [EIP-7002][eip-7002], the withdrawal request contract
 - [EIP-7251][eip-7251], the consolidation request contract
+- [EIP-8037][eip-8037], the reservoir of state gas, in Last Call
 
 A list of requests with no data is left out, as [EIP-7685][eip-7685] leaves it out of its hash.
 
-From Glamsterdam the calls fail as not yet specified, as the run of a transaction does.
 
 [eip-4788]: https://eips.ethereum.org/EIPS/eip-4788#block-processing
 [eip-2935]: https://eips.ethereum.org/EIPS/eip-2935#block-processing
 [eip-7002]: https://eips.ethereum.org/EIPS/eip-7002#system-call
 [eip-7251]: https://eips.ethereum.org/EIPS/eip-7251#system-call
 [eip-7685]: https://eips.ethereum.org/EIPS/eip-7685#block-header
+[eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#system-contracts-and-system-transactions
 -/
 
 @[expose] public section
@@ -68,6 +73,16 @@ open EthLib.Execution.Transactions (processMessageCall)
 
 /-- The gas of a system call. -/
 def SYSTEM_TRANSACTION_GAS : Nat := 30000000
+
+/-- The reservoir of state gas of a system call at `fork`.
+
+From Glamsterdam, it is the state gas of 16 new storage slots, 1,566,720.
+
+Before Glamsterdam, it is 0. -/
+def systemReservoir (fork : Fork) : Nat :=
+  if fork ≥ .glamsterdam then
+    GasCosts.STORAGE_SET_STATE_GAS * GasCosts.SYSTEM_MAX_SSTORES_PER_CALL
+  else 0
 
 /-- The beacon roots contract of EIP-4788. -/
 def BEACON_ROOTS_ADDRESS : Address :=
@@ -89,12 +104,16 @@ def CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS : Address :=
 
 /-- What a system call leaves. -/
 structure SystemCallOutput where
-  /-- The block state, with the writes of the call. -/
-  block : BlockState
+  /-- The state of the call once it has run, before its writes join the block. -/
+  state : TransactionState
   /-- The data that the call returned. -/
   output : ByteArray
   /-- The error that stopped the call, or none when it succeeded. -/
   error : Option EvmError
+
+/-- The block state, with the writes of the call. -/
+def SystemCallOutput.block (output : SystemCallOutput) : BlockState :=
+  output.state.incorporateTxIntoBlock.parent
 
 /-- The message of a system call to `target` with the data `data`, at `fork`.
 
@@ -109,6 +128,7 @@ def systemMessage {fork : Fork} (env : BlockEnvironment fork) (target : Address)
   target := some target
   currentTarget := target
   gas := SYSTEM_TRANSACTION_GAS
+  reservoir := systemReservoir fork
   value := 0
   data := data
   codeAddress := some target
@@ -124,13 +144,17 @@ A call that fails leaves the block state as it was.
 
 It fails only with an error that aborts the whole execution, such as missing code.
 
-From Glamsterdam it fails, since the rules of that fork are not yet specified here. -/
+Up to BPO5, the gas meter is one counter of the gas left.
+
+From Glamsterdam, the meter of EIP-8037 also meters state gas. -/
 def systemCall {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
     (target : Address) (data : ByteArray) : Except EvmError SystemCallOutput := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
-  let out ← processMessageCall (Meter := Nat) env.chainId (systemMessage env target data)
-    (TransactionState.ofBlock block) Substate.empty
-  return ⟨out.state.incorporateTxIntoBlock.parent, out.output, out.error⟩
+  let message := systemMessage env target data
+  let state := TransactionState.ofBlock block
+  let out ← if fork ≥ .glamsterdam then
+      processMessageCall (Meter := StateGasMeter) env.chainId message state Substate.empty
+    else processMessageCall (Meter := Nat) env.chainId message state Substate.empty
+  return ⟨out.state, out.output, out.error⟩
 
 /-- The code of the account at `target`, in the block state `block`. -/
 def codeAt (block : BlockState) (target : Address) : Except EvmError ByteArray :=
