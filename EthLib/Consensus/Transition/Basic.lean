@@ -121,6 +121,8 @@ inductive TransitionError where
   | exitTooSoon (index : ValidatorIndex)
   /-- A voluntary exit is not signed by its validator. -/
   | invalidExitSignature
+  /-- A pending attestation was included with no delay, which no reward can divide by. -/
+  | zeroInclusionDelay
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -179,6 +181,7 @@ def TransitionError.code : TransitionError → UInt32
   | .exitNotYetValid .. => 48
   | .exitTooSoon _ => 49
   | .invalidExitSignature => 50
+  | .zeroInclusionDelay => 51
 
 /-- An assertion of the rule: success when the condition holds, and the error otherwise. -/
 def ensure (condition : Prop) [Decidable condition] (error : TransitionError) :

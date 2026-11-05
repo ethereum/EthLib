@@ -2021,7 +2021,8 @@
       {"constructor": "exitAlreadyInitiated", "code": 47},
       {"constructor": "exitNotYetValid", "code": 48},
       {"constructor": "exitTooSoon", "code": 49},
-      {"constructor": "invalidExitSignature", "code": 50}]}],
+      {"constructor": "invalidExitSignature", "code": 50},
+      {"constructor": "zeroInclusionDelay", "code": 51}]}],
    "error_class": "TransitionError",
    "docstring":
    "The state after a block operation of a handler of the vectors, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8, and the handler too.\n\nThe signature checks run unless the last argument is false."},
@@ -2083,7 +2084,8 @@
       {"constructor": "exitAlreadyInitiated", "code": 47},
       {"constructor": "exitNotYetValid", "code": 48},
       {"constructor": "exitTooSoon", "code": 49},
-      {"constructor": "invalidExitSignature", "code": 50}]}],
+      {"constructor": "invalidExitSignature", "code": 50},
+      {"constructor": "zeroInclusionDelay", "code": 51}]}],
    "error_class": "TransitionError",
    "docstring":
    "The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8, and the handler too."},
@@ -2145,7 +2147,8 @@
       {"constructor": "exitAlreadyInitiated", "code": 47},
       {"constructor": "exitNotYetValid", "code": 48},
       {"constructor": "exitTooSoon", "code": 49},
-      {"constructor": "invalidExitSignature", "code": 50}]}],
+      {"constructor": "invalidExitSignature", "code": 50},
+      {"constructor": "zeroInclusionDelay", "code": 51}]}],
    "error_class": "TransitionError",
    "docstring":
    "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.\n\nThe preset, the configuration and the target fork are named in UTF-8.\n\nThe upgrades are the ones to Gloas and to Heze.\n\nThe signature checks of the deposits at the upgrade to Gloas run unless the last argument is false."},

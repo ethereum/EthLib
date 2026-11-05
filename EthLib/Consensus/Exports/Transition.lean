@@ -7,6 +7,7 @@ public import EthLib.Consensus.Transition.Block
 public import EthLib.Consensus.Transition.BuilderPayments
 public import EthLib.Consensus.Transition.BuilderRequests
 public import EthLib.Consensus.Transition.EpochJustification
+public import EthLib.Consensus.Transition.EpochRewards
 public import EthLib.Consensus.Transition.Operations
 public import EthLib.Consensus.Transition.Payload
 public import EthLib.Consensus.Transition.Upgrade
@@ -109,6 +110,7 @@ def runEpochStep {preset : Preset} {fork : Fork} (handler : String)
   match handler with
   | "justification_and_finalization" =>
     runTransition (processJustificationAndFinalization state)
+  | "rewards_and_penalties" => runTransition (processRewardsAndPenalties state)
   | "ptc_window" =>
     if gloas : .glamsterdam ≤ fork then runTransition (liftAccessor (processPtcWindow state gloas))
     else throw (0, s!"no epoch step ptc_window at {fork.name}")
