@@ -15,8 +15,10 @@ The facts that change with the code, such as the theorems that still use
     ...
     <!-- end generated -->
 
-    uv run --no-project --python 3.12 python scripts/soundness_facts.py           # rewrite the generated blocks
-    uv run --no-project --python 3.12 python scripts/soundness_facts.py --check   # fail if any is out of date, or the version differs
+    # Rewrite the generated blocks.
+    uv run --no-project --python 3.12 python scripts/soundness_facts.py
+    # Fail if any is out of date, or the version differs.
+    uv run --no-project --python 3.12 python scripts/soundness_facts.py --check
 
 Only the standard library is used, and Python 3.10 is enough, so the check
 needs no Lean, no build and no install step.
@@ -32,7 +34,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 BLOCK = re.compile(r"(<!-- generated: (\S+) -->\n)(.*?)(<!-- end generated -->)", re.S)
 VERSION_LINE = re.compile(
-    r"^This document describes the development tree that declares package version `([^`]+)` in `pyproject.toml`\.$",
+    r"^This document describes the development tree that declares package version "
+    r"`([^`]+)` in `pyproject.toml`\.$",
     re.M,
 )
 
@@ -78,7 +81,7 @@ def unfoldable(root: Path) -> str:
 
 
 def blank(text: str) -> str:
-    """`text` with every character but newlines replaced by a space, so lines stay where they were."""
+    """`text` with each character but newlines replaced by a space, so each line keeps its place."""
     return re.sub(r"[^\n]", " ", text)
 
 
@@ -200,7 +203,8 @@ def exports(root: Path) -> str:
     )
     for kind, uncalled in (("operations", ops - called), ("constants", consts - called)):
         if uncalled:
-            text += f"Exported {kind} it does not call: {', '.join(f'`{s}`' for s in sorted(uncalled))}.\n"
+            names = ", ".join(f"`{s}`" for s in sorted(uncalled))
+            text += f"Exported {kind} it does not call: {names}.\n"
     return text
 
 
@@ -307,7 +311,8 @@ def run(root: Path, check: bool) -> list[str]:
     if check:
         if new != doc:
             problems.append(
-                "generated blocks are out of date: run uv run --no-project --python 3.12 python scripts/soundness_facts.py"
+                "generated blocks are out of date: run "
+                "uv run --no-project --python 3.12 python scripts/soundness_facts.py"
             )
     elif new != doc:
         path.write_text(new)

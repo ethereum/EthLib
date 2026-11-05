@@ -5,7 +5,7 @@ import pytest
 from dumper import hex_list, write_case
 from ethlib.cryptography import kzg
 
-from . import fixtures as F
+from . import fixtures
 
 HANDLER = "verify_cell_kzg_proof_batch"
 
@@ -51,11 +51,11 @@ def _emit(
     )
 
 
-@pytest.mark.parametrize("bi", range(len(F.VALID_BLOBS)))
+@pytest.mark.parametrize("bi", range(len(fixtures.VALID_BLOBS)))
 def test_valid(bi: int) -> None:
-    blob = F.VALID_BLOBS[bi]
-    cells, proofs = F.cached_cells_and_proofs(blob)
-    com = F.cached_commitment(blob)
+    blob = fixtures.VALID_BLOBS[bi]
+    cells, proofs = fixtures.cached_cells_and_proofs(blob)
+    com = fixtures.cached_commitment(blob)
     _emit(
         f"{HANDLER}_case_valid_{bi}",
         commitments=[com] * len(cells),
@@ -80,10 +80,10 @@ def test_valid_zero_cells() -> None:
 
 
 def test_valid_multiple_blobs() -> None:
-    c0, p0 = F.cached_cells_and_proofs(F.VALID_BLOBS[0])
-    c1, p1 = F.cached_cells_and_proofs(F.VALID_BLOBS[1])
-    com0 = F.cached_commitment(F.VALID_BLOBS[0])
-    com1 = F.cached_commitment(F.VALID_BLOBS[1])
+    c0, p0 = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[0])
+    c1, p1 = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[1])
+    com0 = fixtures.cached_commitment(fixtures.VALID_BLOBS[0])
+    com1 = fixtures.cached_commitment(fixtures.VALID_BLOBS[1])
     _emit(
         f"{HANDLER}_case_valid_multiple_blobs",
         commitments=[com0, com1],
@@ -96,8 +96,8 @@ def test_valid_multiple_blobs() -> None:
 
 
 def test_valid_same_cell_multiple_times() -> None:
-    cells, proofs = F.cached_cells_and_proofs(F.VALID_BLOBS[3])
-    com = F.cached_commitment(F.VALID_BLOBS[3])
+    cells, proofs = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[3])
+    com = fixtures.cached_commitment(fixtures.VALID_BLOBS[3])
     dup = 3
     _emit(
         f"{HANDLER}_case_valid_same_cell_multiple_times",
@@ -111,12 +111,12 @@ def test_valid_same_cell_multiple_times() -> None:
 
 
 def test_valid_not_sorted() -> None:
-    c3, p3 = F.cached_cells_and_proofs(F.VALID_BLOBS[3])
-    c4, p4 = F.cached_cells_and_proofs(F.VALID_BLOBS[4])
-    c5, p5 = F.cached_cells_and_proofs(F.VALID_BLOBS[5])
-    com3 = F.cached_commitment(F.VALID_BLOBS[3])
-    com4 = F.cached_commitment(F.VALID_BLOBS[4])
-    com5 = F.cached_commitment(F.VALID_BLOBS[5])
+    c3, p3 = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[3])
+    c4, p4 = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[4])
+    c5, p5 = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[5])
+    com3 = fixtures.cached_commitment(fixtures.VALID_BLOBS[3])
+    com4 = fixtures.cached_commitment(fixtures.VALID_BLOBS[4])
+    com5 = fixtures.cached_commitment(fixtures.VALID_BLOBS[5])
     _emit(
         f"{HANDLER}_case_valid_not_sorted",
         commitments=[com3, com4, com3, com5],
@@ -199,11 +199,11 @@ def test_valid_regression1() -> None:
 
 
 def test_incorrect_commitment() -> None:
-    cells, proofs = F.cached_cells_and_proofs(F.VALID_BLOBS[5])
-    com = F.cached_commitment(F.VALID_BLOBS[5])
+    cells, proofs = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[5])
+    com = fixtures.cached_commitment(fixtures.VALID_BLOBS[5])
     _emit(
         f"{HANDLER}_case_incorrect_commitment",
-        commitments=[F.bls_add_one(com)],
+        commitments=[fixtures.bls_add_one(com)],
         cell_indices=[0],
         cells=[cells[0]],
         proofs=[proofs[0]],
@@ -213,13 +213,13 @@ def test_incorrect_commitment() -> None:
 
 
 def test_incorrect_cell() -> None:
-    cells, proofs = F.cached_cells_and_proofs(F.VALID_BLOBS[6])
-    com = F.cached_commitment(F.VALID_BLOBS[6])
+    cells, proofs = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[6])
+    com = fixtures.cached_commitment(fixtures.VALID_BLOBS[6])
     _emit(
         f"{HANDLER}_case_incorrect_cell",
         commitments=[com],
         cell_indices=[0],
-        cells=[F.CELL_RANDOM_VALID2],
+        cells=[fixtures.CELL_RANDOM_VALID2],
         proofs=[proofs[0]],
         expected=False,
         valid=True,
@@ -227,26 +227,26 @@ def test_incorrect_cell() -> None:
 
 
 def test_incorrect_proof() -> None:
-    cells, proofs = F.cached_cells_and_proofs(F.VALID_BLOBS[0])
-    com = F.cached_commitment(F.VALID_BLOBS[0])
+    cells, proofs = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[0])
+    com = fixtures.cached_commitment(fixtures.VALID_BLOBS[0])
     _emit(
         f"{HANDLER}_case_incorrect_proof",
         commitments=[com],
         cell_indices=[0],
         cells=[cells[0]],
-        proofs=[F.bls_add_one(proofs[0])],
+        proofs=[fixtures.bls_add_one(proofs[0])],
         expected=False,
         valid=True,
     )
 
 
-@pytest.mark.parametrize("i", range(len(F.INVALID_G1_POINTS)))
+@pytest.mark.parametrize("i", range(len(fixtures.INVALID_G1_POINTS)))
 def test_invalid_commitment(i: int) -> None:
-    bidx = i % len(F.INVALID_G1_POINTS)
-    cells, proofs = F.cached_cells_and_proofs(F.VALID_BLOBS[bidx])
+    bidx = i % len(fixtures.INVALID_G1_POINTS)
+    cells, proofs = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[bidx])
     _emit(
         f"{HANDLER}_case_invalid_commitment_{i}",
-        commitments=[F.INVALID_G1_POINTS[i]],
+        commitments=[fixtures.INVALID_G1_POINTS[i]],
         cell_indices=[0],
         cells=[cells[0]],
         proofs=[proofs[0]],
@@ -256,8 +256,8 @@ def test_invalid_commitment(i: int) -> None:
 
 
 def test_invalid_cell_index() -> None:
-    cells, proofs = F.cached_cells_and_proofs(F.VALID_BLOBS[1])
-    com = F.cached_commitment(F.VALID_BLOBS[1])
+    cells, proofs = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[1])
+    com = fixtures.cached_commitment(fixtures.VALID_BLOBS[1])
     _emit(
         f"{HANDLER}_case_invalid_cell_index",
         commitments=[com],
@@ -269,41 +269,41 @@ def test_invalid_cell_index() -> None:
     )
 
 
-@pytest.mark.parametrize("i", range(len(F.INVALID_INDIVIDUAL_CELL_BYTES)))
+@pytest.mark.parametrize("i", range(len(fixtures.INVALID_INDIVIDUAL_CELL_BYTES)))
 def test_invalid_cell(i: int) -> None:
-    bidx = i % len(F.INVALID_INDIVIDUAL_CELL_BYTES)
-    _, proofs = F.cached_cells_and_proofs(F.VALID_BLOBS[bidx])
-    com = F.cached_commitment(F.VALID_BLOBS[bidx])
+    bidx = i % len(fixtures.INVALID_INDIVIDUAL_CELL_BYTES)
+    _, proofs = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[bidx])
+    com = fixtures.cached_commitment(fixtures.VALID_BLOBS[bidx])
     _emit(
         f"{HANDLER}_case_invalid_cell_{i}",
         commitments=[com],
         cell_indices=[0],
-        cells=[F.INVALID_INDIVIDUAL_CELL_BYTES[i]],
+        cells=[fixtures.INVALID_INDIVIDUAL_CELL_BYTES[i]],
         proofs=[proofs[0]],
         expected=None,
         valid=False,
     )
 
 
-@pytest.mark.parametrize("i", range(len(F.INVALID_G1_POINTS)))
+@pytest.mark.parametrize("i", range(len(fixtures.INVALID_G1_POINTS)))
 def test_invalid_proof(i: int) -> None:
-    bidx = i % len(F.INVALID_G1_POINTS)
-    cells, _ = F.cached_cells_and_proofs(F.VALID_BLOBS[bidx])
-    com = F.cached_commitment(F.VALID_BLOBS[bidx])
+    bidx = i % len(fixtures.INVALID_G1_POINTS)
+    cells, _ = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[bidx])
+    com = fixtures.cached_commitment(fixtures.VALID_BLOBS[bidx])
     _emit(
         f"{HANDLER}_case_invalid_proof_{i}",
         commitments=[com],
         cell_indices=[0],
         cells=[cells[0]],
-        proofs=[F.INVALID_G1_POINTS[i]],
+        proofs=[fixtures.INVALID_G1_POINTS[i]],
         expected=None,
         valid=False,
     )
 
 
 def test_invalid_missing_commitment() -> None:
-    cells, proofs = F.cached_cells_and_proofs(F.VALID_BLOBS[0])
-    com = F.cached_commitment(F.VALID_BLOBS[0])
+    cells, proofs = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[0])
+    com = fixtures.cached_commitment(fixtures.VALID_BLOBS[0])
     _emit(
         f"{HANDLER}_case_invalid_missing_commitment",
         commitments=[com],
@@ -316,8 +316,8 @@ def test_invalid_missing_commitment() -> None:
 
 
 def test_invalid_missing_cell_index() -> None:
-    cells, proofs = F.cached_cells_and_proofs(F.VALID_BLOBS[2])
-    com = F.cached_commitment(F.VALID_BLOBS[2])
+    cells, proofs = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[2])
+    com = fixtures.cached_commitment(fixtures.VALID_BLOBS[2])
     _emit(
         f"{HANDLER}_case_invalid_missing_cell_index",
         commitments=[com, com],
@@ -330,8 +330,8 @@ def test_invalid_missing_cell_index() -> None:
 
 
 def test_invalid_missing_cell() -> None:
-    cells, proofs = F.cached_cells_and_proofs(F.VALID_BLOBS[3])
-    com = F.cached_commitment(F.VALID_BLOBS[3])
+    cells, proofs = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[3])
+    com = fixtures.cached_commitment(fixtures.VALID_BLOBS[3])
     _emit(
         f"{HANDLER}_case_invalid_missing_cell",
         commitments=[com, com],
@@ -344,8 +344,8 @@ def test_invalid_missing_cell() -> None:
 
 
 def test_invalid_missing_proof() -> None:
-    cells, proofs = F.cached_cells_and_proofs(F.VALID_BLOBS[4])
-    com = F.cached_commitment(F.VALID_BLOBS[4])
+    cells, proofs = fixtures.cached_cells_and_proofs(fixtures.VALID_BLOBS[4])
+    com = fixtures.cached_commitment(fixtures.VALID_BLOBS[4])
     _emit(
         f"{HANDLER}_case_invalid_missing_proof",
         commitments=[com, com],

@@ -138,7 +138,7 @@ R.run("bls_eth_aggregate_pubkeys_512", lambda: bls.eth_aggregate_pubkeys(pks))
 blobs = [x(b) for b in inp["blobs"]]
 z = x(inp["kzg_z"])
 commits = [kzg.blob_to_kzg_commitment(b) for b in blobs]
-proofs = [kzg.compute_blob_kzg_proof(b, c) for b, c in zip(blobs, commits)]
+proofs = [kzg.compute_blob_kzg_proof(b, c) for b, c in zip(blobs, commits, strict=True)]
 R.run("kzg_blob_to_commitment", lambda: kzg.blob_to_kzg_commitment(blobs[0]))
 R.run("kzg_compute_kzg_proof", lambda: kzg.compute_kzg_proof(blobs[0], z))
 pz, yz = kzg.compute_kzg_proof(blobs[0], z)

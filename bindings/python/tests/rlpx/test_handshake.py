@@ -134,8 +134,11 @@ def test_handshake_codes() -> None:
     recipient = b"\x04" + public_key(STATIC_KEY_B)
     # A nonce of the wrong size is a bad argument, with code 0.
     assert _code(lambda: rlpx.finish(STATIC_KEY_A, EPHEMERAL_KEY_A, b"", AUTH_2, ACK_2, b"")) == 0
+
     # 101: the encrypted message does not fit in a 16-bit size.
-    too_long = lambda: rlpx.make_auth(*KEYS_A, recipient, EPHEMERAL_KEY_B, bytes(16), bytes(65536))
+    def too_long():
+        return rlpx.make_auth(*KEYS_A, recipient, EPHEMERAL_KEY_B, bytes(16), bytes(65536))
+
     assert _code(too_long) == 101
     # 103: the body is not an RLP list.
     assert _code(lambda: rlpx.recipient_secrets(*KEYS_B, _packet_to_b(b"\x00"), ACK_2, b"")) == 103

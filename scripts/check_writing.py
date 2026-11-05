@@ -468,7 +468,9 @@ def mask(
     """Mask exempt elements with one word, preserving source offsets and newlines."""
     text = CODE_SPAN.sub(lambda m: blank(m.group(), True), text)
     for pattern, token in ((r"\$\$.*?\$\$|\$[^$]+\$", True), (r"&[A-Za-z]+;|&#\d+;", False)):
-        text = re.sub(pattern, lambda m: blank(m.group(), token), text, flags=re.DOTALL)
+        text = re.sub(
+            pattern, lambda m, token=token: blank(m.group(), token), text, flags=re.DOTALL
+        )
 
     def link(match: re.Match[str]) -> str:
         start, end = match.span(1)
@@ -489,7 +491,7 @@ def mask(
         (r'"[^"]*"|“[^”]*”', True),
         (r"\*\*|__|(?<!\w)[*_]|[*_](?!\w)", False),
     ):
-        text = re.sub(pattern, lambda m: blank(m.group(), token), text)
+        text = re.sub(pattern, lambda m, token=token: blank(m.group(), token), text)
     if collapse_parentheses:
         while re.search(r"\([^()]*\)", text):
 
@@ -552,7 +554,7 @@ def check_block(
     counted = mask(block.text, True, parentheticals, parenthetical_offsets)
     plain = mask(block.text, False)
     suggested_length = PROCEDURAL_LIMIT if block.procedural else DESCRIPTIVE_LIMIT
-    sentence_parts = [(counted, 0)] + list(zip(parentheticals, parenthetical_offsets))
+    sentence_parts = [(counted, 0)] + list(zip(parentheticals, parenthetical_offsets, strict=True))
     for text, offset in sentence_parts:
         for start, end in sentence_spans(text):
             words = word_count(text[start:end])

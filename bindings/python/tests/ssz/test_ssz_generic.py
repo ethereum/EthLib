@@ -127,7 +127,9 @@ STRUCTURES = {
                 (("J", "K", "L"), 1281),
             )
             for name, kind in zip(
-                names, ({"bitvector": length}, {"bitlist": length}, PROGRESSIVE_BITLIST_FIELD)
+                names,
+                ({"bitvector": length}, {"bitlist": length}, PROGRESSIVE_BITLIST_FIELD),
+                strict=True,
             )
         ]
     ),

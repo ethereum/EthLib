@@ -5,7 +5,7 @@ import pytest
 from dumper import hex_str, write_case
 from ethlib.cryptography import kzg
 
-from . import fixtures as F
+from . import fixtures
 
 HANDLER = "compute_kzg_proof"
 
@@ -29,29 +29,32 @@ def _emit(case: str, blob: bytes, z: bytes, valid: bool) -> None:
     )
 
 
-@pytest.mark.parametrize("bi", range(len(F.VALID_BLOBS)))
-@pytest.mark.parametrize("zi", range(len(F.VALID_FIELD_ELEMENTS)))
+@pytest.mark.parametrize("bi", range(len(fixtures.VALID_BLOBS)))
+@pytest.mark.parametrize("zi", range(len(fixtures.VALID_FIELD_ELEMENTS)))
 def test_valid(bi: int, zi: int) -> None:
     _emit(
         f"{HANDLER}_case_valid_blob_{bi}_{zi}",
-        F.VALID_BLOBS[bi],
-        F.VALID_FIELD_ELEMENTS[zi],
+        fixtures.VALID_BLOBS[bi],
+        fixtures.VALID_FIELD_ELEMENTS[zi],
         valid=True,
     )
 
 
-@pytest.mark.parametrize("i", range(len(F.INVALID_BLOBS)))
+@pytest.mark.parametrize("i", range(len(fixtures.INVALID_BLOBS)))
 def test_invalid_blob(i: int) -> None:
     _emit(
         f"{HANDLER}_case_invalid_blob_{i}",
-        F.INVALID_BLOBS[i],
-        F.VALID_FIELD_ELEMENTS[0],
+        fixtures.INVALID_BLOBS[i],
+        fixtures.VALID_FIELD_ELEMENTS[0],
         valid=False,
     )
 
 
-@pytest.mark.parametrize("i", range(len(F.INVALID_FIELD_ELEMENTS)))
+@pytest.mark.parametrize("i", range(len(fixtures.INVALID_FIELD_ELEMENTS)))
 def test_invalid_z(i: int) -> None:
     _emit(
-        f"{HANDLER}_case_invalid_z_{i}", F.VALID_BLOBS[4], F.INVALID_FIELD_ELEMENTS[i], valid=False
+        f"{HANDLER}_case_invalid_z_{i}",
+        fixtures.VALID_BLOBS[4],
+        fixtures.INVALID_FIELD_ELEMENTS[i],
+        valid=False,
     )

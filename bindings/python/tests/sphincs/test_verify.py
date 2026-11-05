@@ -10,7 +10,7 @@ import pytest
 from dumper import hex_str, write_case
 from ethlib.cryptography import sphincs
 
-from . import fixtures as F
+from . import fixtures
 
 HANDLER = "verify"
 
@@ -54,11 +54,11 @@ def _emit(
 
 
 def _key(case: str = "key_gen_known_answer") -> bytes:
-    return F.read_output("key_gen", case)
+    return fixtures.read_output("key_gen", case)
 
 
 def _signature(case: str = "sign_known_answer") -> bytes:
-    return F.read_output("sign", case)
+    return fixtures.read_output("sign", case)
 
 
 # ---- Accepted ----------------------------------------------------------------
@@ -67,9 +67,9 @@ def _signature(case: str = "sign_known_answer") -> bytes:
 @pytest.mark.parametrize(
     "case, key, message",
     [
-        ("sign_known_answer", "key_gen_known_answer", F.MESSAGE_KNOWN_ANSWER),
-        ("sign_zero_message", "key_gen_known_answer", F.MESSAGE_ZERO),
-        ("sign_zero_seed", "key_gen_zero_seed", F.MESSAGE_KNOWN_ANSWER),
+        ("sign_known_answer", "key_gen_known_answer", fixtures.MESSAGE_KNOWN_ANSWER),
+        ("sign_zero_message", "key_gen_known_answer", fixtures.MESSAGE_ZERO),
+        ("sign_zero_seed", "key_gen_zero_seed", fixtures.MESSAGE_KNOWN_ANSWER),
     ],
 )
 def test_valid(case: str, key: str, message: bytes) -> None:
@@ -86,20 +86,20 @@ def test_valid_scheme_seed() -> None:
     # The independent key and signature: every hash of the verifier is fixed by them.
     _emit(
         f"{HANDLER}_valid_scheme_seed",
-        F.PUBLIC_KEY_SCHEME_SEED,
-        F.MESSAGE_KNOWN_ANSWER,
-        F.SIGNATURE_SCHEME_SEED,
+        fixtures.PUBLIC_KEY_SCHEME_SEED,
+        fixtures.MESSAGE_KNOWN_ANSWER,
+        fixtures.SIGNATURE_SCHEME_SEED,
         expected=True,
     )
 
 
 def test_zeroed_scheme_seed_top_last_sibling() -> None:
     # The sibling just below the key's root, the last 16 bytes, becomes all zero.
-    signature = F.SIGNATURE_SCHEME_SEED[:-16] + bytes(16)
+    signature = fixtures.SIGNATURE_SCHEME_SEED[:-16] + bytes(16)
     _emit(
         f"{HANDLER}_zeroed_scheme_seed_top_last_sibling",
-        F.PUBLIC_KEY_SCHEME_SEED,
-        F.MESSAGE_KNOWN_ANSWER,
+        fixtures.PUBLIC_KEY_SCHEME_SEED,
+        fixtures.MESSAGE_KNOWN_ANSWER,
         signature,
         expected=False,
     )
@@ -107,12 +107,12 @@ def test_zeroed_scheme_seed_top_last_sibling() -> None:
 
 def test_zeroed_scheme_seed_fors_secret() -> None:
     # The secret of FORS tree 0 becomes all zero, so the bottom layer signed another FORS key.
-    signature = F.SIGNATURE_SCHEME_SEED
+    signature = fixtures.SIGNATURE_SCHEME_SEED
     signature = signature[:FORS] + bytes(16) + signature[FORS + 16 :]
     _emit(
         f"{HANDLER}_zeroed_scheme_seed_fors_secret",
-        F.PUBLIC_KEY_SCHEME_SEED,
-        F.MESSAGE_KNOWN_ANSWER,
+        fixtures.PUBLIC_KEY_SCHEME_SEED,
+        fixtures.MESSAGE_KNOWN_ANSWER,
         signature,
         expected=False,
     )
@@ -126,7 +126,7 @@ def test_wrong_message() -> None:
     _emit(
         f"{HANDLER}_wrong_message",
         _key(),
-        F.flip(F.MESSAGE_KNOWN_ANSWER, 0),
+        fixtures.flip(fixtures.MESSAGE_KNOWN_ANSWER, 0),
         _signature(),
         expected=False,
     )
@@ -137,8 +137,8 @@ def test_tampered_randomizer() -> None:
     _emit(
         f"{HANDLER}_tampered_randomizer",
         _key(),
-        F.MESSAGE_KNOWN_ANSWER,
-        F.flip(_signature(), 0),
+        fixtures.MESSAGE_KNOWN_ANSWER,
+        fixtures.flip(_signature(), 0),
         expected=False,
     )
 
@@ -149,8 +149,8 @@ def test_tampered_fors(field: str, offset: int) -> None:
     _emit(
         f"{HANDLER}_tampered_fors_{field}",
         _key(),
-        F.MESSAGE_KNOWN_ANSWER,
-        F.flip(_signature(), offset),
+        fixtures.MESSAGE_KNOWN_ANSWER,
+        fixtures.flip(_signature(), offset),
         expected=False,
     )
 
@@ -169,8 +169,8 @@ def test_tampered(layer: str, start: int, field: str, offset: int) -> None:
     _emit(
         f"{HANDLER}_tampered_{layer}_{field}",
         _key(),
-        F.MESSAGE_KNOWN_ANSWER,
-        F.flip(_signature(), start + offset),
+        fixtures.MESSAGE_KNOWN_ANSWER,
+        fixtures.flip(_signature(), start + offset),
         expected=False,
     )
 
@@ -181,8 +181,8 @@ def test_tampered_top_last_sibling() -> None:
     _emit(
         f"{HANDLER}_tampered_top_last_sibling",
         _key(),
-        F.MESSAGE_KNOWN_ANSWER,
-        F.flip(signature, len(signature) - 1),
+        fixtures.MESSAGE_KNOWN_ANSWER,
+        fixtures.flip(signature, len(signature) - 1),
         expected=False,
     )
 
@@ -191,8 +191,8 @@ def test_wrong_root() -> None:
     # The public key is the root, then the public parameter.
     _emit(
         f"{HANDLER}_wrong_root",
-        F.flip(_key(), 0),
-        F.MESSAGE_KNOWN_ANSWER,
+        fixtures.flip(_key(), 0),
+        fixtures.MESSAGE_KNOWN_ANSWER,
         _signature(),
         expected=False,
     )
@@ -201,8 +201,8 @@ def test_wrong_root() -> None:
 def test_wrong_public_param() -> None:
     _emit(
         f"{HANDLER}_wrong_public_param",
-        F.flip(_key(), 16),
-        F.MESSAGE_KNOWN_ANSWER,
+        fixtures.flip(_key(), 16),
+        fixtures.MESSAGE_KNOWN_ANSWER,
         _signature(),
         expected=False,
     )
@@ -213,7 +213,7 @@ def test_other_key() -> None:
     _emit(
         f"{HANDLER}_other_key",
         _key("key_gen_zero_seed"),
-        F.MESSAGE_KNOWN_ANSWER,
+        fixtures.MESSAGE_KNOWN_ANSWER,
         _signature(),
         expected=False,
     )
@@ -226,7 +226,7 @@ def test_short_public_key() -> None:
     _emit(
         f"{HANDLER}_short_public_key",
         _key()[:31],
-        F.MESSAGE_KNOWN_ANSWER,
+        fixtures.MESSAGE_KNOWN_ANSWER,
         _signature(),
         expected=None,
     )
@@ -234,7 +234,11 @@ def test_short_public_key() -> None:
 
 def test_short_message() -> None:
     _emit(
-        f"{HANDLER}_short_message", _key(), F.MESSAGE_KNOWN_ANSWER[:31], _signature(), expected=None
+        f"{HANDLER}_short_message",
+        _key(),
+        fixtures.MESSAGE_KNOWN_ANSWER[:31],
+        _signature(),
+        expected=None,
     )
 
 
@@ -242,7 +246,7 @@ def test_short_signature() -> None:
     _emit(
         f"{HANDLER}_short_signature",
         _key(),
-        F.MESSAGE_KNOWN_ANSWER,
+        fixtures.MESSAGE_KNOWN_ANSWER,
         _signature()[:-1],
         expected=None,
     )
@@ -252,7 +256,7 @@ def test_long_signature() -> None:
     _emit(
         f"{HANDLER}_long_signature",
         _key(),
-        F.MESSAGE_KNOWN_ANSWER,
+        fixtures.MESSAGE_KNOWN_ANSWER,
         _signature() + b"\x00",
         expected=None,
     )

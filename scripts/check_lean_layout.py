@@ -25,6 +25,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -187,7 +188,7 @@ def check_text(path: str, text: str, changed: set[int] | None) -> list[Finding]:
             )
     for comment in comments(text):
         lines = sentence_lines(comment)
-        for (first, first_sentence), (second, second_sentence) in zip(lines, lines[1:]):
+        for (first, first_sentence), (second, second_sentence) in pairwise(lines):
             if first_sentence and second_sentence and (is_changed(first) or is_changed(second)):
                 found.append(
                     Finding(

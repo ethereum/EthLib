@@ -20,7 +20,7 @@ ZERO = "0x" + "00" * 32
 
 
 def _fixtures(archive):
-    """Every fixture from Paris to BPO2; Amsterdam is the next fork, with version 5 of the method."""
+    """Every fixture from Paris to BPO2; Amsterdam, the next fork, has version 5 of the method."""
     for path in sorted((archive / DIRECTORY).rglob("*.json")):
         for fixture in json.loads(path.read_text()).values():
             if "Amsterdam" not in fixture["network"]:

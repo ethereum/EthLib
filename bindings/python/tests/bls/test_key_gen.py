@@ -9,7 +9,7 @@ Commit: be307c948f28897adb8f25afcc253c2c909de35d
 """
 
 import pytest
-from py_ecc.bls import G2ProofOfPossession as ref_bls
+from py_ecc.bls import G2ProofOfPossession as RefBls
 
 from ethlib.cryptography import bls
 
@@ -42,7 +42,7 @@ def test_eip_2333_master_key(seed: str, master_sk: int) -> None:
 @pytest.mark.parametrize("ikm", [b"\x00" * 32, bytes(range(32)), b"\xff" * 64])
 @pytest.mark.parametrize("key_info", [b"", b"key info"])
 def test_matches_reference(ikm: bytes, key_info: bytes) -> None:
-    expected = ref_bls.KeyGen(ikm, key_info)
+    expected = RefBls.KeyGen(ikm, key_info)
     assert bls.key_gen(ikm, key_info) == expected.to_bytes(32, "big")
 
 

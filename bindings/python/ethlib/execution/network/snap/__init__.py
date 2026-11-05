@@ -19,7 +19,7 @@ BLOCK_ACCESS_LISTS = 0x09
 
 
 def decode_message(version: int, message_id: int, data: bytes) -> bytes:
-    """The canonical RLP data of the message `message_id` with the data `data`, on snap/`version`."""
+    """The canonical RLP data of message `message_id` with the data `data`, on snap/`version`."""
     return _native.snap_message_decode(version, message_id, data)
 
 

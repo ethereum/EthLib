@@ -1,4 +1,4 @@
-"""Write the genesis block of the test `block_intermediate_state` at each network, with its state."""
+"""Write the genesis block of the test `block_intermediate_state` at each network, and its state."""
 
 import json
 import sys

@@ -223,8 +223,8 @@ def cases(path: Path, spec: Namespace):
             continue
         for combination in itertools.product(*[r for _, r in sets]):
             row, ids = {}, []
-            for (names, _), (values, case_id) in zip(sets, combination):
-                row.update(zip(names, values))
+            for (names, _), (values, case_id) in zip(sets, combination, strict=True):
+                row.update(zip(names, values, strict=True))
                 if case_id is not None:
                     ids.append(case_id)
             # A case with no id gets the one pytest gives it, by its place in the test.
@@ -261,8 +261,8 @@ def gas_cases(path: Path, spec: Namespace, address: int):
         for combination in itertools.product(*[r for _, r in sets]):
             # The input defaults to the empty call data of the test's STATICCALL.
             row, ids = {"input_data": b"", "precompile_address": address}, []
-            for (names, _), (values, case_id) in zip(sets, combination):
-                row.update(zip(names, values))
+            for (names, _), (values, case_id) in zip(sets, combination, strict=True):
+                row.update(zip(names, values, strict=True))
                 ids.append(str(case_id if case_id is not None else values[0]))
             # The EIP-196 file names its invalid input `invalid_input`.
             row["input_data"] = row.get("invalid_input", row["input_data"])

@@ -1,4 +1,4 @@
-"""Write the invalid blocks from Paris to Osaka whose exception is a header check, with each parent."""
+"""Write the invalid blocks from Paris to Osaka that fail a header check, with each parent."""
 
 import collections
 import json

@@ -105,7 +105,7 @@ def test_body_roots_cover_both_cases() -> None:
     # The fixtures hold empty and nonempty lists of transactions and of withdrawals.
     bodies = [rlp.decode(bytes.fromhex(c["rlp"])) for c in CASES]
     assert any(b[1] == [] for b in bodies) and any(b[1] != [] for b in bodies)
-    later = [b for b, c in zip(bodies, CASES) if c["network"] not in BEFORE_SHANGHAI]
+    later = [b for b, c in zip(bodies, CASES, strict=True) if c["network"] not in BEFORE_SHANGHAI]
     assert any(b[3] == [] for b in later) and any(b[3] != [] for b in later)
     assert any(b[0][4] == EMPTY_TRIE_ROOT for b in bodies)
     # Each type of typed transaction appears, as its type then its payload.

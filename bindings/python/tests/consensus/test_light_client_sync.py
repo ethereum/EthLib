@@ -32,7 +32,7 @@ _YAML = YAML(typ="safe")
 
 
 def store_fork(version_fork: str, fork: str) -> str:
-    """The fork of a store: a version names the fork of its containers, which a later fork shares."""
+    """The fork of a store: a version names the fork of its containers, shared by later forks."""
     if SHAPE[version_fork] == SHAPE[fork] and SPECIFIED.index(fork) > SPECIFIED.index(version_fork):
         return fork
     return version_fork
@@ -122,7 +122,7 @@ def run_sync_case(case: Path, preset: str, fork: str) -> None:
         config,
     )
     assert len(headers) == len(checks)
-    for (finalized, optimistic), expected in zip(headers, checks):
+    for (finalized, optimistic), expected in zip(headers, checks, strict=True):
         for (slot, beacon, execution), want in (
             (finalized, expected["finalized_header"]),
             (optimistic, expected["optimistic_header"]),

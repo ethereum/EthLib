@@ -4,7 +4,8 @@ Each vector of `tests/cryptography/kzg/verify_kzg_proof` becomes a 192-byte call
 
     versioned_hash: 32 | z: 32 | y: 32 | commitment: 48 | proof: 48
 
-The versioned hash is `0x01` followed by the last 31 bytes of SHA-256 of the commitment, as in EIP-4844.
+The versioned hash is `0x01` followed by the last 31 bytes of SHA-256 of the commitment,
+as in EIP-4844.
 
 A proof that verifies gives the two words `FIELD_ELEMENTS_PER_BLOB` and `BLS_MODULUS`.
 A proof that fails, or an input that does not decode, makes the call fail.

@@ -1,4 +1,4 @@
-"""Keccak-256 and Keccak-512 against the long-message and Monte Carlo known answers of the Keccak team."""
+"""Keccak-256 and -512 against the Keccak team's long-message and Monte Carlo known answers."""
 
 import os
 from pathlib import Path

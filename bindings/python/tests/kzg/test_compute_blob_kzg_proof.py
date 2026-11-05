@@ -5,7 +5,7 @@ import pytest
 from dumper import hex_str, write_case
 from ethlib.cryptography import kzg
 
-from . import fixtures as F
+from . import fixtures
 
 HANDLER = "compute_blob_kzg_proof"
 
@@ -28,22 +28,22 @@ def _emit(case: str, blob: bytes, commitment: bytes, valid: bool) -> None:
     )
 
 
-@pytest.mark.parametrize("i", range(len(F.VALID_BLOBS)))
+@pytest.mark.parametrize("i", range(len(fixtures.VALID_BLOBS)))
 def test_valid_blob(i: int) -> None:
-    blob = F.VALID_BLOBS[i]
-    _emit(f"{HANDLER}_case_valid_blob_{i}", blob, F.cached_commitment(blob), valid=True)
+    blob = fixtures.VALID_BLOBS[i]
+    _emit(f"{HANDLER}_case_valid_blob_{i}", blob, fixtures.cached_commitment(blob), valid=True)
 
 
-@pytest.mark.parametrize("i", range(len(F.INVALID_BLOBS)))
+@pytest.mark.parametrize("i", range(len(fixtures.INVALID_BLOBS)))
 def test_invalid_blob(i: int) -> None:
-    _emit(f"{HANDLER}_case_invalid_blob_{i}", F.INVALID_BLOBS[i], F.G1, valid=False)
+    _emit(f"{HANDLER}_case_invalid_blob_{i}", fixtures.INVALID_BLOBS[i], fixtures.G1, valid=False)
 
 
-@pytest.mark.parametrize("i", range(len(F.INVALID_G1_POINTS)))
+@pytest.mark.parametrize("i", range(len(fixtures.INVALID_G1_POINTS)))
 def test_invalid_commitment(i: int) -> None:
     _emit(
         f"{HANDLER}_case_invalid_commitment_{i}",
-        F.VALID_BLOBS[1],
-        F.INVALID_G1_POINTS[i],
+        fixtures.VALID_BLOBS[1],
+        fixtures.INVALID_G1_POINTS[i],
         valid=False,
     )

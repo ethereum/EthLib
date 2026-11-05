@@ -3,7 +3,7 @@
 import pytest
 
 from ethlib.precompiles import price, run
-from sha256 import fixtures as F
+from sha256 import fixtures
 
 from .forks import FORKS, ends
 
@@ -33,24 +33,24 @@ def test_gas_boundaries(fork: str, size: int, expected: int) -> None:
     assert price(fork, ADDRESS, bytes(size)) == expected
 
 
-@pytest.mark.parametrize("i", range(len(F.VECTORS)))
+@pytest.mark.parametrize("i", range(len(fixtures.VECTORS)))
 @pytest.mark.parametrize("fork", ends("frontier"))
 def test_exact_price(fork: str, i: int) -> None:
     # Exactly the price succeeds, and returns the published digest.
-    message, digest = F.VECTORS[i]
+    message, digest = fixtures.VECTORS[i]
     assert price(fork, ADDRESS, message) == cost(len(message))
     assert run(fork, ADDRESS, message, cost(len(message))) == digest
 
 
-@pytest.mark.parametrize("i", range(len(F.VECTORS)))
+@pytest.mark.parametrize("i", range(len(fixtures.VECTORS)))
 @pytest.mark.parametrize("fork", ends("frontier"))
 def test_one_gas_short(fork: str, i: int) -> None:
     # One gas below the price runs out of gas.
-    message, _ = F.VECTORS[i]
+    message, _ = fixtures.VECTORS[i]
     with pytest.raises(ValueError, match="outOfGas"):
         run(fork, ADDRESS, message, cost(len(message)) - 1)
 
 
 def test_surplus_gas() -> None:
-    message, digest = F.VECTORS[0]
+    message, digest = fixtures.VECTORS[0]
     assert run("bpo2", ADDRESS, message, 2**64 - 1) == digest

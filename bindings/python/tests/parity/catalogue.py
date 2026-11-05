@@ -18,7 +18,8 @@ LEGACY = "legacytests@1f581b8c/source"
 LEGACY_ROOT = "legacytests-1f581b8ccdc4c63acf5f2c5c1b155c690c32a8eb"
 
 # The blockchain tests of ethereum/legacytests.
-# The directory Constantinople holds the networks up to Constantinople Fix, and Cancun the later ones.
+# The directory Constantinople holds the networks up to Constantinople Fix,
+# and Cancun the later ones.
 # The state tests in blockchain form need the state transition, so they are left out.
 LEGACY_DIRECTORIES = (
     "Constantinople/BlockchainTests/ValidBlocks",
