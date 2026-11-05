@@ -14,6 +14,8 @@ So a state whose registry and balances have one length keeps that property.
 A validator that starts to exit may withdraw a fixed delay after its exit epoch, with no overflow.
 
 Before Electra, an exit epoch other than the far future held fewer exits than the churn limit.
+
+Slashing a validator sets its slashed flag and changes no flag of another validator.
 -/
 
 @[expose] public section
@@ -182,5 +184,102 @@ theorem exitQueueEpoch_churn {config : Config} {state : BeaconState preset fork}
   · rename_i _ notFull
     cases computed
     omega
+
+/-- A state with the same registry reads the same validators. -/
+theorem getValidator_of_validators_eq {state after : BeaconState preset fork}
+    (same : after.validators = state.validators) (index : ValidatorIndex) :
+    getValidator after index = getValidator state index := by
+  simp [getValidator, same]
+
+/-- The slashed flag of a validator, or the error of an index outside the registry. -/
+def slashedFlag (state : BeaconState preset fork) (index : ValidatorIndex) :
+    Except AccessorError Bool :=
+  (getValidator state index).map (·.slashed)
+
+/-- A replaced validator is read back at its index. -/
+theorem getValidator_setValidator_self {state : BeaconState preset fork}
+    {index : ValidatorIndex} {old : Validator} (found : getValidator state index = .ok old)
+    (validator : Validator) :
+    getValidator (state.setValidator index.toNat validator) index = .ok validator := by
+  unfold getValidator at found ⊢
+  split at found
+  · rename_i read
+    have inRange := (Array.getElem?_eq_some_iff.mp read).1
+    simp [BeaconState.setValidator, inRange]
+  · cases found
+
+/-- Replacing a validator leaves the validators at other indices. -/
+theorem getValidator_setValidator_of_ne {state : BeaconState preset fork}
+    {index other : ValidatorIndex} (distinct : other ≠ index) (validator : Validator) :
+    getValidator (state.setValidator index.toNat validator) other = getValidator state other := by
+  have : index.toNat ≠ other.toNat := fun same => distinct (UInt64.toNat_inj.mp same).symm
+  simp [getValidator, BeaconState.setValidator, this]
+
+/-- Raising a balance leaves the registry. -/
+theorem increaseBalance_validators {state after : BeaconState preset fork}
+    {index : ValidatorIndex} {delta : Gwei}
+    (computed : increaseBalance state index delta = .ok after) :
+    after.validators = state.validators := by
+  simp only [increaseBalance, bind, Except.bind, pure, Except.pure] at computed
+  repeat' (split at computed; · cases computed)
+  cases computed
+  rfl
+
+/-- Lowering a balance leaves the registry. -/
+theorem decreaseBalance_validators {state after : BeaconState preset fork}
+    {index : ValidatorIndex} {delta : Gwei}
+    (computed : decreaseBalance state index delta = .ok after) :
+    after.validators = state.validators := by
+  simp only [decreaseBalance, bind, Except.bind, pure, Except.pure] at computed
+  repeat' (split at computed; · cases computed)
+  cases computed
+  rfl
+
+/-- Starting an exit changes no slashed flag. -/
+theorem slashedFlag_initiateValidatorExit {config : Config}
+    {state after : BeaconState preset fork} {index : ValidatorIndex}
+    (computed : initiateValidatorExit config state index = .ok after) (other : ValidatorIndex) :
+    slashedFlag after other = slashedFlag state other := by
+  simp only [initiateValidatorExit, bind, Except.bind, pure, Except.pure] at computed
+  split at computed
+  · cases computed
+  rename_i validator found
+  split at computed
+  · cases computed
+    rfl
+  split at computed
+  · simp [throw, throwThe, MonadExcept.throw, MonadExceptOf.throw] at computed
+  repeat' (split at computed; · cases computed)
+  cases computed
+  by_cases same : other = index
+  · subst same
+    simp [slashedFlag, getValidator_setValidator_self found, found, Except.map]
+  · simp [slashedFlag, getValidator_setValidator_of_ne same]
+
+/-- Slashing a validator sets its slashed flag, and changes no other flag. -/
+theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState preset fork}
+    {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
+    (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
+    slashedFlag after slashedIndex = .ok true ∧
+      ∀ other, other ≠ slashedIndex → slashedFlag after other = slashedFlag state other := by
+  unfold slashValidator at computed
+  split at computed
+  · simp [throw, throwThe, MonadExcept.throw, MonadExceptOf.throw, bind, Except.bind] at computed
+  simp only [bind_ok_iff, liftArith, mapError_ok_iff] at computed
+  obtain ⟨exited, exitedOk, validator, found, withdrawable, _, _, _, _, _, _, lowered, _, _, _, _,
+    _, raised, final⟩ := computed
+  -- The balance steps keep the registry in which the validator is marked slashed.
+  let marked : Validator :=
+    { validator with
+      slashed := true, withdrawableEpoch := max validator.withdrawableEpoch withdrawable }
+  have same := (increaseBalance_validators final).trans ((increaseBalance_validators raised).trans
+    (decreaseBalance_validators lowered))
+  replace same : after.validators = (exited.setValidator slashedIndex.toNat marked).validators :=
+    same
+  refine ⟨?_, fun other distinct => ?_⟩
+  · simp [slashedFlag, getValidator_of_validators_eq same, getValidator_setValidator_self found,
+      Except.map, marked]
+  · rw [slashedFlag, getValidator_of_validators_eq same, getValidator_setValidator_of_ne distinct]
+    exact slashedFlag_initiateValidatorExit exitedOk other
 
 end EthLib.Consensus

@@ -79,6 +79,7 @@ PyObject* VRF_ERROR;
 PyObject* TRIE_ERROR;
 PyObject* EVM_ERROR;
 PyObject* FEES_ERROR;
+PyObject* TRANSITION_ERROR;
 
 /* ---- Lean externs: size accessors ------------------------------------ */
 
@@ -585,6 +586,8 @@ static PyMethodDef methods[] = {
   {"consensus_merkle_proof", py_consensus_merkle_proof, METH_VARARGS, DOC_consensus_merkle_proof},
   {"consensus_verify_blob_sidecar_inclusion_proof", py_consensus_verify_blob_sidecar_inclusion_proof,
    METH_VARARGS, DOC_consensus_verify_blob_sidecar_inclusion_proof},
+  {"consensus_process_operation", py_consensus_process_operation, METH_VARARGS,
+   DOC_consensus_process_operation},
   {"pq_keys_ssz", py_pq_keys_ssz, METH_VARARGS, DOC_pq_keys_ssz},
   {"pq_keys_possession_signing_root", py_pq_keys_possession_signing_root, METH_VARARGS,
    DOC_pq_keys_possession_signing_root},
@@ -784,6 +787,7 @@ PyInit__native(void) {
     EVM_ERROR = PyObject_GetAttrString(errors, "EvmError");
     FEES_ERROR = PyObject_GetAttrString(errors, "FeesError");
     ENGINE_ERROR = PyObject_GetAttrString(errors, "EngineError");
+    TRANSITION_ERROR = PyObject_GetAttrString(errors, "TransitionError");
     Py_DECREF(errors);
     if (PyErr_Occurred()) return NULL;
 

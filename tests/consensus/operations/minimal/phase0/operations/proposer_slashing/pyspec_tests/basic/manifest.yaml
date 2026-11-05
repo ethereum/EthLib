@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: operations
+handler: proposer_slashing
+suite: pyspec_tests
+case: basic

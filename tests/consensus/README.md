@@ -69,6 +69,15 @@ The rest of gossip validation reads the store of the fork choice, which EthLib d
 The same file rebuilds every sidecar of a block from one sidecar, and from the bodies of `merkle_proof/` for Fulu.
 It also builds the matrix of two blobs of the KZG vectors under `tests/cryptography/kzg/`, and recovers it from half of its columns.
 
+The directory `operations/` holds block operation cases of `minimal.tar.gz`, copied byte for byte under their path in the archive.
+A case gives a state before the operation, the operation, and the state after it when the operation is valid.
+A case without a state after it must be rejected.
+The directory keeps one valid and one invalid case of each handler that EthLib runs, at each fork where it runs.
+These are the block header from Phase 0 to Fulu, and the proposer and attester slashings from Phase 0 to Deneb.
+From Electra a slashing starts an exit counted in balance, which EthLib does not hold yet.
+A mainnet state is a few hundred kilobytes, so only the weekly parity job reads the mainnet cases.
+`bindings/python/tests/consensus/test_operations.py` runs each case through the Lean transition and compares the state after it.
+
 The test release publishes its cases in three archives.
 Their SHA-256 digests are:
 

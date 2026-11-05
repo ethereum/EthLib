@@ -34,6 +34,7 @@ public import EthLib.Consensus.Proofs.Shuffle
 public import EthLib.Consensus.Proofs.ShufflePermutation
 public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.Time
+public import EthLib.Consensus.Proofs.Transition.Block
 
 /-!
 # `EthLib.Consensus.Proofs`

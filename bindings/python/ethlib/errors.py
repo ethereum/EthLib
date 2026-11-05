@@ -73,6 +73,10 @@ class ConsensusError(EthLibError, ValueError):
     """A custody selection failed (codes 1-3), or a name is unknown (code 0)."""
 
 
+class TransitionError(EthLibError, ValueError):
+    """A step of the beacon state transition rejected its state or its block."""
+
+
 class HkdfError(EthLibError, ValueError):
     """HKDF rejected its input."""
 
@@ -198,6 +202,7 @@ __all__ = [
     "EthashError",
     "ReqRespError",
     "ConsensusError",
+    "TransitionError",
     "HkdfError",
     "ConcatKdfError",
     "AesError",

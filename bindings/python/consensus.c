@@ -147,6 +147,16 @@ eth_consensus_merkle_proof(
 );
 
 extern lean_object*
+eth_consensus_process_operation(
+  lean_object* name,
+  lean_object* fork,
+  lean_object* handler,
+  lean_object* pre,
+  lean_object* operation,
+  uint8_t verify
+);
+
+extern lean_object*
 eth_consensus_verify_blob_sidecar_inclusion_proof(
   lean_object* name,
   lean_object* fork,
@@ -735,4 +745,41 @@ py_consensus_get_data_column_sidecars_from_column_sidecar(
   return except_into_pybytes(
     eth_consensus_get_data_column_sidecars_from_column_sidecar(name, fork, sidecar, rows),
     SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_process_operation(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *handler_obj, *pre_obj, *operation_obj;
+  int verify;
+  if (!PyArg_ParseTuple(args, "OOOOOp", &name_obj, &fork_obj, &handler_obj, &pre_obj,
+                        &operation_obj, &verify)) return NULL;
+  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
+  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj) || !PyUnicode_Check(handler_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name, fork and handler must be str");
+    return NULL;
+  }
+  if (!PyBytes_Check(pre_obj) || !PyBytes_Check(operation_obj)) {
+    PyErr_SetString(PyExc_TypeError, "pre and operation must be bytes");
+    return NULL;
+  }
+  Py_ssize_t name_len, fork_len, handler_len;
+  const char* name_utf8 = PyUnicode_AsUTF8AndSize(name_obj, &name_len);
+  if (!name_utf8) return NULL;
+  const char* fork_utf8 = PyUnicode_AsUTF8AndSize(fork_obj, &fork_len);
+  if (!fork_utf8) return NULL;
+  const char* handler_utf8 = PyUnicode_AsUTF8AndSize(handler_obj, &handler_len);
+  if (!handler_utf8) return NULL;
+  lean_object* name = mk_bytearray((const uint8_t*) name_utf8, name_len);
+  lean_object* fork = mk_bytearray((const uint8_t*) fork_utf8, fork_len);
+  lean_object* handler = mk_bytearray((const uint8_t*) handler_utf8, handler_len);
+  lean_object* pre = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(pre_obj), PyBytes_GET_SIZE(pre_obj));
+  lean_object* operation = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(operation_obj), PyBytes_GET_SIZE(operation_obj));
+  return except_into_pybytes(
+    eth_consensus_process_operation(name, fork, handler, pre, operation, (uint8_t) verify),
+    TRANSITION_ERROR);
 }

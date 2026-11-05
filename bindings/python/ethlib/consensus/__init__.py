@@ -3,7 +3,7 @@
 import json
 from typing import Any
 
-from ..errors import ConsensusError
+from ..errors import ConsensusError, TransitionError
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -213,6 +213,12 @@ def get_data_column_sidecars_from_column_sidecar(name: str, fork: str, sidecar: 
         name, fork, sidecar, joined))
 
 
+def process_operation(name: str, fork: str, handler: str, pre: bytes, operation: bytes,
+                      verify: bool = True) -> bytes:
+    """The SSZ bytes of a beacon state after one block operation, or TransitionError."""
+    return _native.consensus_process_operation(name, fork, handler, pre, operation, verify)
+
+
 __all__ = [
     "preset",
     "config",
@@ -244,4 +250,6 @@ __all__ = [
     "recover_matrix",
     "get_data_column_sidecars_from_block",
     "get_data_column_sidecars_from_column_sidecar",
+    "TransitionError",
+    "process_operation",
 ]

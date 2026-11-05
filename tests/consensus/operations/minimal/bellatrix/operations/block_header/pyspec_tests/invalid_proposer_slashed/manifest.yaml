@@ -1,0 +1,6 @@
+preset: minimal
+fork: bellatrix
+runner: operations
+handler: block_header
+suite: pyspec_tests
+case: invalid_proposer_slashed

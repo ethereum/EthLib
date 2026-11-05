@@ -371,6 +371,10 @@ def consensus_verify_blob_sidecar_inclusion_proof(name: str, fork: str, data: by
     """Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header."""
     ...
 
+def consensus_process_operation(name: str, fork: str, handler: str, pre: bytes, operation: bytes, verify: bool) -> bytes:
+    """The state after a block operation of a handler of the vectors, as SSZ bytes."""
+    ...
+
 def pq_keys_ssz(type: str, data: bytes) -> bytes:
     """The root of the value that the bytes encode, then the bytes of that value."""
     ...

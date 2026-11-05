@@ -1,0 +1,6 @@
+preset: minimal
+fork: deneb
+runner: operations
+handler: proposer_slashing
+suite: pyspec_tests
+case: basic
