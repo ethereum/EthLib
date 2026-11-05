@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Memory
+public import EthLib.Execution.Evm.Step
 public import EthLib.Execution.Proofs.Evm.Gas
 
 /-!
@@ -11,6 +12,9 @@ public import EthLib.Execution.Proofs.Evm.Gas
 - So padding the buffer with zeros changes no byte.
 - A read of memory after a write of the same range gives the written bytes, and the size stays.
 - Memory grows in whole words, so its size stays a multiple of 32.
+- A write within memory sets each byte of its range and keeps every other byte.
+- Growth keeps every byte, and a read gives the bytes of its range.
+- After a charge for gas and memory, memory holds every range that is not empty.
 -/
 
 @[expose] public section
@@ -122,5 +126,159 @@ theorem size_memoryExtend_mod {memory : ByteArray} (h : memory.size % 32 = 0)
   have := ceil32_add_expandBy_mod memory.size extensions
   rw [ceil32_of_mod h] at this
   rwa [size_memoryExtend]
+
+/-! ## The bytes of memory -/
+
+/-- A write within memory sets each byte of its range to the byte of the value.
+
+It keeps every other byte. -/
+theorem byteAt_memoryWrite {memory value : ByteArray} {start : Nat}
+    (h : start + value.size ≤ memory.size) (i : Nat) :
+    byteAt (memoryWrite memory start value) i =
+      if start ≤ i ∧ i < start + value.size then byteAt value (i - start)
+      else byteAt memory i := by
+  unfold memoryWrite
+  split
+  · rw [ite_eq_right_iff.mpr (fun hc => absurd hc (by omega))]
+  · have hp : (memory.extract 0 start).data.size = start := by
+      rw [ByteArray.size_data, ByteArray.size_extract]; omega
+    have hv : value.data.size = value.size := ByteArray.size_data
+    have hm : memory.data.size = memory.size := ByteArray.size_data
+    simp only [byteAt_eq_getD, ByteArray.data_append, Array.getD_eq_getD_getElem?]
+    by_cases h1 : i < start
+    · rw [ite_eq_right_iff.mpr (fun hc => absurd hc.1 (by omega)),
+        Array.getElem?_append_left (by rw [Array.size_append]; omega),
+        Array.getElem?_append_left (by omega), ByteArray.data_extract, Array.getElem?_extract]
+      simp [show i < min start memory.size from Nat.lt_min.mpr ⟨h1, by omega⟩]
+    · by_cases h2 : i < start + value.size
+      · rw [ite_eq_left_iff.mpr (fun hc => absurd ⟨by omega, h2⟩ hc),
+          Array.getElem?_append_left (by rw [Array.size_append]; omega),
+          Array.getElem?_append_right (by omega), hp]
+      · rw [ite_eq_right_iff.mpr (fun hc => absurd hc.2 h2),
+          Array.getElem?_append_right (by rw [Array.size_append]; omega), Array.size_append, hp,
+          hv, ByteArray.data_extract, Array.getElem?_extract]
+        by_cases h3 : i < memory.size
+        · simp [show i - (start + value.size) < memory.size - (start + value.size) by omega,
+            show start + value.size + (i - (start + value.size)) = i by omega, hm]
+        · simp [show ¬ i - (start + value.size) < memory.size - (start + value.size) by omega, hm,
+            Array.getElem?_eq_none (show memory.data.size ≤ i by omega)]
+
+/-- Growth keeps every byte of memory, and each new byte reads as zero. -/
+theorem byteAt_memoryExtend (memory : ByteArray) (n i : Nat) :
+    byteAt (memoryExtend memory n) i = byteAt memory i :=
+  byteAt_append_zeros memory n i
+
+/-- A read within memory gives the bytes of memory from its start, and zero past its size. -/
+theorem byteAt_memoryReadBytes {memory : ByteArray} {start size : Nat}
+    (h : start + size ≤ memory.size) (i : Nat) :
+    byteAt (memoryReadBytes memory start size) i =
+      if i < size then byteAt memory (start + i) else 0 := by
+  unfold memoryReadBytes
+  split
+  · rename_i hz
+    rw [ite_eq_right_iff.mpr (fun hi => absurd hi (by omega))]
+    exact byteAt_of_size_le (by simp)
+  · have hm : memory.data.size = memory.size := ByteArray.size_data
+    simp only [byteAt_eq_getD, ByteArray.data_extract, Array.getD_eq_getD_getElem?,
+      Array.getElem?_extract]
+    by_cases hi : i < size
+    · simp [hi, show i < min (start + size) memory.size - start by omega, hm,
+        Array.getElem?_eq_getElem (show start + i < memory.data.size by omega)]
+    · simp [hi, show ¬ i < min (start + size) memory.size - start by omega]
+
+/-- A buffer of a read holds the bytes of the read, and zero past its size. -/
+theorem byteAt_bufferRead (data : ByteArray) (offset size j : Nat) :
+    byteAt ⟨(bufferRead data offset size).toArray⟩ j =
+      if j < size then byteAt data (offset + j) else 0 := by
+  unfold byteAt
+  by_cases hj : j < size
+  · have hlen : j < (bufferRead data offset size).toArray.size := by simp [bufferRead_length, hj]
+    rw [dite_eq_left_of_eq_true (eq_true (by simpa [ByteArray.size] using hlen)),
+      ite_eq_left_of_eq_true _ _ (eq_true hj), ByteArray.getElem_eq_getElem_data]
+    simp [bufferRead, byteAt]
+  · rw [dite_eq_right_of_eq_false
+      (eq_false (by simpa [ByteArray.size, bufferRead_length] using hj)),
+      ite_eq_right_of_eq_false _ _ (eq_false hj)]
+
+/-- The rounded size and the growth for a list of ranges cover every range that is not empty. -/
+theorem le_ceil32_add_expandBy (currentSize : Nat) (ranges : List (U256 × U256)) :
+    ∀ r ∈ ranges, r.2 ≠ 0 →
+      r.1.toNat + r.2.toNat ≤ ceil32 currentSize + (extendMemory currentSize ranges).expandBy := by
+  induction ranges generalizing currentSize with
+  | nil => simp
+  | cons p ranges ih =>
+    obtain ⟨start, size⟩ := p
+    intro r hr hnz
+    unfold extendMemory
+    split
+    · rename_i hz
+      rcases List.mem_cons.mp hr with heq | hr
+      · subst heq
+        exact absurd hz hnz
+      · exact ih currentSize r hr hnz
+    · simp only
+      split
+      · rename_i fits
+        rcases List.mem_cons.mp hr with heq | hr
+        · subst heq
+          have := le_ceil32 (start.toNat + size.toNat)
+          simp only
+          omega
+        · exact ih currentSize r hr hnz
+      · rename_i grows
+        simp only
+        have hafter := ceil32_of_mod (ceil32_mod (start.toNat + size.toNat))
+        rcases List.mem_cons.mp hr with heq | hr
+        · subst heq
+          have := le_ceil32 (start.toNat + size.toNat)
+          simp only
+          omega
+        · have := ih (ceil32 (start.toNat + size.toNat)) r hr hnz
+          rw [hafter] at this
+          omega
+
+/-! ## A charge for gas and memory -/
+
+section Charge
+
+variable {fork : EthLib.Base.Fork} {Meter : Type} [GasMeter Meter]
+
+/-- A charge for gas and memory grows memory by the growth for its ranges. -/
+theorem memory_chargeGasAndMemory {evm after : Evm fork Meter} {cost : Nat}
+    {ranges : List (U256 × U256)} (h : chargeGasAndMemory evm cost ranges = .ok after) :
+    after.memory = memoryExtend evm.memory (extendMemory evm.memory.size ranges).expandBy := by
+  unfold chargeGasAndMemory chargeGas at h
+  cases hc : GasMeter.charge evm.gas (cost + (extendMemory evm.memory.size ranges).cost) with
+  | error e => simp [hc, bind, Except.bind] at h
+  | ok gas =>
+    simp only [hc, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
+    rw [← h]
+
+/-- After a charge for gas and memory, memory holds every range that is not empty.
+
+Memory must start at a size that is a multiple of 32, as every frame keeps it. -/
+theorem le_size_chargeGasAndMemory {evm after : Evm fork Meter} {cost : Nat}
+    {ranges : List (U256 × U256)} (hmod : evm.memory.size % 32 = 0)
+    (h : chargeGasAndMemory evm cost ranges = .ok after) :
+    ∀ r ∈ ranges, r.2 ≠ 0 → r.1.toNat + r.2.toNat ≤ after.memory.size := by
+  intro r hr hnz
+  rw [memory_chargeGasAndMemory h, size_memoryExtend]
+  have := le_ceil32_add_expandBy evm.memory.size ranges r hr hnz
+  rwa [ceil32_of_mod hmod] at this
+
+/-- A charge for gas and memory keeps every byte of memory. -/
+theorem byteAt_chargeGasAndMemory {evm after : Evm fork Meter} {cost : Nat}
+    {ranges : List (U256 × U256)} (h : chargeGasAndMemory evm cost ranges = .ok after) (i : Nat) :
+    byteAt after.memory i = byteAt evm.memory i := by
+  rw [memory_chargeGasAndMemory h, byteAt_memoryExtend]
+
+/-- A charge for gas and memory keeps the size of memory a multiple of 32. -/
+theorem size_chargeGasAndMemory_mod {evm after : Evm fork Meter} {cost : Nat}
+    {ranges : List (U256 × U256)} (hmod : evm.memory.size % 32 = 0)
+    (h : chargeGasAndMemory evm cost ranges = .ok after) : after.memory.size % 32 = 0 := by
+  rw [memory_chargeGasAndMemory h]
+  exact size_memoryExtend_mod hmod ranges
+
+end Charge
 
 end EthLib.Execution.Evm
