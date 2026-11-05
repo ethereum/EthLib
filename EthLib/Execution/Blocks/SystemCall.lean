@@ -39,7 +39,9 @@ From Pectra, a block ends with calls to the withdrawal and consolidation request
 
 Each has no data, and returns the requests of its type, in the order of its queue.
 
-These two calls are checked: the block is invalid when the contract has no code or the call fails.
+From Glamsterdam, calls to the builder deposit and builder exit contracts follow.
+
+These calls are checked: the block is invalid when the contract has no code or the call fails.
 
 Each EIP states its call in its section on block processing or on the system call:
 
@@ -47,10 +49,10 @@ Each EIP states its call in its section on block processing or on the system cal
 - [EIP-2935][eip-2935], the history storage contract
 - [EIP-7002][eip-7002], the withdrawal request contract
 - [EIP-7251][eip-7251], the consolidation request contract
+- [EIP-8282][eip-8282], the builder deposit and exit contracts, in Last Call
 - [EIP-8037][eip-8037], the reservoir of state gas, in Last Call
 
 A list of requests with no data is left out, as [EIP-7685][eip-7685] leaves it out of its hash.
-
 
 [eip-4788]: https://eips.ethereum.org/EIPS/eip-4788#block-processing
 [eip-2935]: https://eips.ethereum.org/EIPS/eip-2935#block-processing
@@ -58,6 +60,7 @@ A list of requests with no data is left out, as [EIP-7685][eip-7685] leaves it o
 [eip-7251]: https://eips.ethereum.org/EIPS/eip-7251#system-call
 [eip-7685]: https://eips.ethereum.org/EIPS/eip-7685#block-header
 [eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#system-contracts-and-system-transactions
+[eip-8282]: https://eips.ethereum.org/EIPS/eip-8282#request-queue-and-system-call
 -/
 
 @[expose] public section
@@ -99,6 +102,14 @@ def WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS : Address :=
 /-- The consolidation request contract of EIP-7251. -/
 def CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS : Address :=
   toAddressMasked (BitVec.ofNat 256 0x0000BBdDc7CE488642fb579F8B00f3a590007251)
+
+/-- The builder deposit contract of EIP-8282. -/
+def BUILDER_DEPOSIT_CONTRACT_ADDRESS : Address :=
+  toAddressMasked (BitVec.ofNat 256 0x0000bFF46984e3725691FA540a8C7589300D8282)
+
+/-- The builder exit contract of EIP-8282. -/
+def BUILDER_EXIT_CONTRACT_ADDRESS : Address :=
+  toAddressMasked (BitVec.ofNat 256 0x000064D678505ad48F8cCb093BC65613800E8282)
 
 /-! ## The call -/
 
@@ -190,16 +201,31 @@ def startSystemCalls {fork : Fork} (env : BlockEnvironment fork) (parentHash : H
     (·.block) <$> systemCall env block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
   else pure block
 
-/-- The contracts that a block reads requests from, each with the type of its requests. -/
+/-- The contracts that a block reads requests from from Pectra, each with the type of its requests.
+-/
 def REQUEST_CONTRACTS : List (UInt8 × Address) :=
   [(WITHDRAWAL_REQUEST_TYPE, WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS),
     (CONSOLIDATION_REQUEST_TYPE, CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS)]
+
+/-- The contracts of the builder requests, which a block reads from Glamsterdam. -/
+def BUILDER_REQUEST_CONTRACTS : List (UInt8 × Address) :=
+  [(BUILDER_DEPOSIT_REQUEST_TYPE, BUILDER_DEPOSIT_CONTRACT_ADDRESS),
+    (BUILDER_EXIT_REQUEST_TYPE, BUILDER_EXIT_CONTRACT_ADDRESS)]
+
+/-- The contracts that a block at `fork` reads requests from, in the order of their types.
+
+From Glamsterdam, the builder contracts come after the consolidation contract. -/
+def requestContracts (fork : Fork) : List (UInt8 × Address) :=
+  if fork ≥ .glamsterdam then REQUEST_CONTRACTS ++ BUILDER_REQUEST_CONTRACTS
+  else REQUEST_CONTRACTS
 
 /-- The request list of type `type` with the data `data`, or none when the data is empty. -/
 def requestList (type : UInt8) (data : ByteArray) : List ByteArray :=
   if data.size = 0 then [] else [⟨#[type]⟩ ++ data]
 
 /-- The withdrawal and consolidation requests of a block at `fork`, after its withdrawals.
+
+From Glamsterdam, the builder deposit and exit requests follow them.
 
 From Pectra, each contract returns the data of its requests, which follow its type byte.
 
@@ -209,7 +235,7 @@ Before Pectra, there is no request. -/
 def readRequests {fork : Fork} (env : BlockEnvironment fork) (block : BlockState) :
     Except BlockError (BlockState × List ByteArray) :=
   if .pectra ≤ fork then
-    REQUEST_CONTRACTS.foldlM
+    (requestContracts fork).foldlM
       (fun (block, requests) (type, target) => do
         let out ← checkedSystemCall env block target .empty
         return (out.block, requests ++ requestList type out.output))
