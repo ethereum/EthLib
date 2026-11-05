@@ -823,6 +823,10 @@ def block_dao_extra_data_valid(dao_block: int, fork: str, header: bytes) -> bool
     """Whether a header has the extra data that the DAO Fork asks of its first ten blocks."""
     ...
 
+def state_transition(config: bytes, state: bytes, recent: bytes, fork: str, block: bytes, check_seal: bool) -> bytes:
+    """Run the state transition of a block on a chain, and give the state after it."""
+    ...
+
 def precompile_run(fork: str, address: int, data: bytes, gas: int) -> bytes:
     """Run the precompile at the address on the call data, with the gas given, at the fork named."""
     ...

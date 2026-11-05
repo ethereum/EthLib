@@ -71,9 +71,11 @@ end Transaction
 
 /-- The most blob gas of a block at `fork`: the most blobs times the blob gas of one blob.
 
+The most blobs come from the blob schedule of the block.
+
 A block before Dencun has no blobs. -/
-def maxBlobGasPerBlock (fork : Fork) : Nat :=
-  if h : .dencun ≤ fork then GAS_PER_BLOB * (blobSchedule fork h).max else 0
+def maxBlobGasPerBlock {fork : Fork} (env : BlockEnvironment fork) : Nat :=
+  if h : .dencun ≤ fork then GAS_PER_BLOB * (env.blobSchedule h).max else 0
 
 /-- The gas of a transaction that must fit in the execution gas that its block has left, at `fork`.
 
@@ -164,7 +166,7 @@ def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork
   failIf (fork ≥ .glamsterdam ∧ stateAvailable < tx.gas.toNat)
     (.gasAllowanceExceeded tx.gas.toNat stateAvailable)
   let blobGas := calculateTotalBlobGas tx
-  let blobAvailable := maxBlobGasPerBlock fork - used.blob
+  let blobAvailable := maxBlobGasPerBlock env - used.blob
   failIf (blobAvailable < blobGas) (.blobGasLimitExceeded blobGas blobAvailable)
   let baseFee := baseFeeOf env
   failIf (tx.maxFeePerGas < baseFee) (.insufficientMaxFeePerGas tx.maxFeePerGas baseFee)

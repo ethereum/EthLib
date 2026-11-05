@@ -95,7 +95,7 @@ theorem checkInclusion_ok {fork : Fork} {chainId : UInt64} {env : BlockEnvironme
       validateTransaction fork inc.sender tx = .ok inc.intrinsicGas ∧
       executionCapacity fork tx ≤ env.gasLimit - used.execution ∧
       inc.blobGasUsed = calculateTotalBlobGas tx ∧
-      inc.blobGasUsed ≤ maxBlobGasPerBlock fork - used.blob ∧
+      inc.blobGasUsed ≤ maxBlobGasPerBlock env - used.blob ∧
       baseFeeOf env ≤ tx.maxFeePerGas ∧
       (0 < inc.blobGasUsed → blobGasPriceOf env ≤ tx.maxFeePerBlobGas) ∧
       inc.gasPrice = effectiveGasPrice (baseFeeOf env) tx ∧

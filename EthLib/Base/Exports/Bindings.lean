@@ -685,6 +685,10 @@ def bindings : List Binding := [
   ⟨"block_dao_extra_data_valid", `EthLib.Execution.Blocks.Exports.daoExtraDataValidExport,
     "(dao_block: int, fork: str, header: bytes) -> bool",
     [`EthLib.Serialization.Rlp.RlpError], some "BlockError"⟩,
+  ⟨"state_transition", `EthLib.Execution.Blocks.Exports.stateTransitionExport,
+    "(config: bytes, state: bytes, recent: bytes, fork: str, block: bytes, check_seal: bool) " ++
+      "-> bytes",
+    [`EthLib.Execution.Blocks.BlockError], some "BlockError"⟩,
   ⟨"precompile_run", `EthLib.Execution.Evm.Precompiles.Exports.runExport,
     "(fork: str, address: int, data: bytes, gas: int) -> bytes",
     [`EthLib.Execution.Evm.Precompiles.PrecompileError], some "PrecompileError"⟩,

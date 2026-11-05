@@ -27,6 +27,7 @@ namespace EthLib.Engine.Exports
 
 open Lean (Json)
 open EthLib.Exports (Result)
+open EthLib.Base.ChainConfig.Exports (parseJson)
 open EthLib.Base
 
 /-- One payload of the tree: its block hash, its parent hash and whether it is valid. -/

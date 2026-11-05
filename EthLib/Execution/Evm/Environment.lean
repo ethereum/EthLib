@@ -4,6 +4,7 @@ public import EthLib.Base.Address
 public import EthLib.Base.Fork
 public import EthLib.Base.Hash32
 public import EthLib.Base.U256
+public import EthLib.Execution.Fees.BlobBaseFee
 
 /-!
 # `Evm.Environment`
@@ -25,6 +26,7 @@ The EIPs that add a field:
 - [EIP-4788][eip4788], the root of the parent beacon block
 - [EIP-4844][eip4844], the excess blob gas and the blob hashes
 - [EIP-7843][eip7843], the slot number
+- [EIP-7892][eip7892], the blob schedule of the chain
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [eip1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
@@ -32,13 +34,14 @@ The EIPs that add a field:
 [eip4788]: https://eips.ethereum.org/EIPS/eip-4788#specification
 [eip4844]: https://eips.ethereum.org/EIPS/eip-4844#parameters
 [eip7843]: https://eips.ethereum.org/EIPS/eip-7843#specification
+[eip7892]: https://eips.ethereum.org/EIPS/eip-7892#execution-layer-configuration
 -/
 
 @[expose] public section
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Address Bytes32 Fork Hash32 Since U256)
+open EthLib.Base (Address BlobSchedule Bytes32 Fork Hash32 Since U256)
 
 /-- The block that runs the code, at fork `fork`. -/
 structure BlockEnvironment (fork : Fork) where
@@ -68,6 +71,10 @@ structure BlockEnvironment (fork : Fork) where
   parentBeaconBlockRoot : Since .dencun fork Hash32
   /-- The slot of the block on the beacon chain, from Glamsterdam. -/
   slotNumber : Since .glamsterdam fork UInt64
+  /-- The blob schedule of the block, from Dencun.
+
+  A chain can set its own, and by default it is the schedule of the fork. -/
+  blobSchedule : Since .dencun fork BlobSchedule := Fees.BlobBaseFee.blobSchedule fork
 
 /-- The transaction that runs the code, at fork `fork`. -/
 structure TransactionEnvironment (fork : Fork) where

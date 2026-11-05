@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports
+public import EthLib.Base.Exports.ChainConfig
 public import EthLib.Base.Hex
 public import EthLib.Engine.NewPayload
 
@@ -31,32 +32,9 @@ public section
 namespace EthLib.Engine.Exports
 
 open Lean (Json)
-open EthLib.Exports (Result forkOfName)
+open EthLib.Exports (Result)
 open EthLib.Base
-
-/-- The JSON value of some UTF-8 text. -/
-def parseJson (what : String) (text : ByteArray) : Result Json := do
-  let some text := String.fromUTF8? text | throw (0, s!"{what} is not UTF-8")
-  match Json.parse text with
-  | .ok j => pure j
-  | .error e => throw (0, s!"{what} is not JSON: {e}")
-
-/-- One activation of a configuration: a fork name, `block` or `time`, and a number. -/
-def activationOfJson (j : Json) : Result (Fork × Activation) := do
-  let .arr #[.str name, .str kind, n] := j | throw (0, "an activation is not [fork, kind, n]")
-  let fork ← forkOfName name.toUTF8
-  let some n := n.getNat?.toOption | throw (0, "an activation has no number")
-  match kind with
-  | "block" => pure (fork, .block n)
-  | "time" => pure (fork, .time n)
-  | _ => throw (0, s!"no activation kind {kind}")
-
-/-- A chain configuration given as JSON. -/
-def configOfJson (j : Json) : Result ChainConfig := do
-  let some chainId := (j.getObjValAs? Nat "chainId").toOption | throw (0, "config: no chainId")
-  let .arr activations := j.getObjValD "activations" | throw (0, "config: no activations")
-  let activations ← activations.toList.mapM activationOfJson
-  return { chainId := BitVec.ofNat 256 chainId, activations }
+open EthLib.Base.ChainConfig.Exports (configOfJson parseJson)
 
 /-- Bytes as lowercase hex behind `0x`. -/
 def hex (bytes : List UInt8) : String :=

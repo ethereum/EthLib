@@ -9,6 +9,7 @@ public import EthLib.Execution.Exports.Pow
 public import EthLib.Execution.Exports.Precompiles
 public import EthLib.Execution.Exports.State
 public import EthLib.Execution.Exports.Transactions
+public import EthLib.Execution.Exports.Transition
 public import EthLib.Execution.Exports.Trie
 
 /-!
