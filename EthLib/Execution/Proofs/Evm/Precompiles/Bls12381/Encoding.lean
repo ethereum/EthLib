@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Evm.Precompiles.Bls12381.Encoding
 public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Cryptography.Proofs.Inverse
 
 /-!
@@ -274,14 +275,5 @@ theorem bytesToG2_affine {x y : Fp2} (hon : onCurveG2 x y = true) {subgroupCheck
   cases subgroupCheck with
   | false => rfl
   | true => simp [hsub rfl]
-
-/-! ## Results -/
-
-/-- A chain of steps that succeeds succeeded at its first step. -/
-theorem bind_eq_ok {α β : Type} {x : Except Bls12381Error α} {f : α → Except Bls12381Error β} {y : β}
-    (h : x >>= f = .ok y) : ∃ a, x = .ok a ∧ f a = .ok y := by
-  cases x with
-  | error => cases h
-  | ok a => exact ⟨a, rfl, h⟩
 
 end EthLib.Execution.Evm.Precompiles.Bls12381
