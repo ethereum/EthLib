@@ -23,7 +23,9 @@ Deneb adds the blob sidecar subnets, and Electra raises their number.
 
 Fulu replaces the blob sidecar subnets by the data column sidecar subnets.
 
-The topics of Gloas and Heze are not yet specified here, so those forks have no topic set.
+Gloas adds the topics of builder bids, payloads, payload attestations and proposer preferences.
+
+The topics of Heze are not yet specified here, so Heze has no topic set.
 -/
 
 @[expose] public section
@@ -61,6 +63,14 @@ inductive GossipTopic where
   | blobSidecar (subnet : SubnetID)
   /-- Data column sidecars of one column subnet. -/
   | dataColumnSidecar (subnet : SubnetID)
+  /-- From Gloas: signed bids of builders for the payload of a slot. -/
+  | executionPayloadBid
+  /-- From Gloas: signed envelopes that reveal the payload of a block. -/
+  | executionPayload
+  /-- From Gloas: votes of the payload timeliness committee on a payload. -/
+  | payloadAttestationMessage
+  /-- From Gloas: signed preferences of proposers for their coming slots. -/
+  | proposerPreferences
   deriving DecidableEq, Repr
 
 /-- The name of a topic, as it appears between the fork digest and the encoding. -/
@@ -78,12 +88,21 @@ def GossipTopic.name : GossipTopic → String
   | .blsToExecutionChange => "bls_to_execution_change"
   | .blobSidecar subnet => subnetTopicName "blob_sidecar" subnet
   | .dataColumnSidecar subnet => subnetTopicName "data_column_sidecar" subnet
+  | .executionPayloadBid => "execution_payload_bid"
+  | .executionPayload => "execution_payload"
+  | .payloadAttestationMessage => "payload_attestation_message"
+  | .proposerPreferences => "proposer_preferences"
 
 /-- The topics with no subnet, each with its name. -/
 def GossipTopic.global : List GossipTopic :=
   [.beaconBlock, .beaconAggregateAndProof, .voluntaryExit, .proposerSlashing, .attesterSlashing,
     .syncCommitteeContributionAndProof, .lightClientFinalityUpdate,
-    .lightClientOptimisticUpdate, .blsToExecutionChange]
+    .lightClientOptimisticUpdate, .blsToExecutionChange, .executionPayloadBid, .executionPayload,
+    .payloadAttestationMessage, .proposerPreferences]
+
+/-- The topics that Gloas adds, as EIP-7732 lists them in its section "P2P changes". -/
+def GossipTopic.gloas : List GossipTopic :=
+  [.executionPayloadBid, .executionPayload, .payloadAttestationMessage, .proposerPreferences]
 
 /-- The topics with a subnet, each with its base name. -/
 def GossipTopic.subnetBases : List (String × (SubnetID → GossipTopic)) :=
@@ -119,10 +138,10 @@ The gossip topics of a fork, in the order of the fork that adds each one.
 
 A fork before Altair has the topics of Phase 0.
 
-Gloas and Heze have none yet, since their topics are not yet specified here.
+Heze has none yet, since its topics are not yet specified here.
 -/
 def Config.gossipTopics (config : Config) (fork : Fork) : Option (List GossipTopic) :=
-  if .glamsterdam ≤ fork then none
+  if .hegota ≤ fork then none
   else some <|
     [.beaconBlock, .beaconAggregateAndProof] ++
     subnetTopics config.ATTESTATION_SUBNET_COUNT .beaconAttestation ++
@@ -136,7 +155,8 @@ def Config.gossipTopics (config : Config) (fork : Fork) : Option (List GossipTop
     subnetTopics (config.blobSidecarSubnetCount fork) .blobSidecar ++
     (if .fusaka ≤ fork then
       subnetTopics config.DATA_COLUMN_SIDECAR_SUBNET_COUNT .dataColumnSidecar
-    else [])
+    else []) ++
+    (if .glamsterdam ≤ fork then GossipTopic.gloas else [])
 
 /--
 The subnet of an attestation, from the committees per slot, its slot and its committee index.

@@ -14,6 +14,7 @@ Properties of the gossip topics and of the subnets of messages.
 - Every subnet of a topic of a fork is below the number of subnets of its kind.
 - Each subnet that a message is sent on is below that number.
 - A node subscribes to as many attestation subnets as the configuration says.
+- The topics of Gloas are those of Fulu, then the four topics that Gloas adds.
 -/
 
 @[expose] public section
@@ -110,13 +111,27 @@ theorem gossipTopics_beaconAttestation {config : Config} {fork : Fork}
     -- Only the attestation subnets hold an attestation topic.
     simp only [subnetTopics, List.mem_append, List.mem_cons, List.mem_map, List.mem_range,
       List.mem_nil_iff, reduceCtorEq, or_false, false_or] at member
-    rcases member with (((⟨a, lt, same⟩ | other) | other) | other) | other
+    rcases member with ((((⟨a, lt, same⟩ | other) | other) | other) | other) | other
     · cases same
       exact ofNat_lt lt
     all_goals
       first
-      | simp at other
+      | simp [GossipTopic.gloas] at other
       | (split at other <;> simp [List.mem_append, List.mem_cons, List.mem_map] at other)
+
+/-- The topics of Gloas are those of Fulu, then the four topics that Gloas adds. -/
+theorem gossipTopics_gloas {config : Config} {fork : Fork} (gloas : .glamsterdam ≤ fork)
+    (beforeHeze : fork < .hegota) :
+    config.gossipTopics fork = (config.gossipTopics .fusaka).map (· ++ GossipTopic.gloas) := by
+  have notHeze : ¬ (.hegota ≤ fork) := Nat.not_le_of_lt beforeHeze
+  have altair : Fork.altair ≤ fork := Nat.le_trans (by decide) gloas
+  have shapella : Fork.shapella ≤ fork := Nat.le_trans (by decide) gloas
+  have fusaka : Fork.fusaka ≤ fork := Nat.le_trans (by decide) gloas
+  have blobs : config.blobSidecarSubnetCount fork = config.blobSidecarSubnetCount .fusaka := by
+    simp (config := { decide := true }) [Config.blobSidecarSubnetCount, fusaka]
+  simp only [Config.gossipTopics, notHeze, altair, shapella, fusaka, gloas, blobs,
+    ↓reduceIte, List.append_assoc]
+  simp (config := { decide := true }) [List.append_assoc]
 
 /-- An attestation is sent on a subnet below the number of attestation subnets. -/
 theorem computeSubnetForAttestation_lt {preset : Preset} {config : Config}

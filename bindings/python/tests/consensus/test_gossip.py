@@ -23,6 +23,7 @@ ALTAIR = [
     "light_client_optimistic_update",
 ]
 CAPELLA = ["bls_to_execution_change"]
+GLOAS = ["execution_payload_bid", "execution_payload", "payload_attestation_message", "proposer_preferences"]
 
 
 def _blobs(count: int) -> list:
@@ -38,6 +39,7 @@ EXPECTED = {
     "pectra": PHASE0 + ALTAIR + CAPELLA + _blobs(9),
     "fusaka": PHASE0 + ALTAIR + CAPELLA + [f"data_column_sidecar_{i}" for i in range(128)],
 }
+EXPECTED["glamsterdam"] = EXPECTED["fusaka"] + GLOAS
 
 
 @pytest.mark.parametrize("name", ["mainnet", "minimal"])
@@ -46,15 +48,17 @@ def test_topics(fork: str, name: str) -> None:
     assert consensus.gossip_topics(fork, name) == EXPECTED[fork]
 
 
-@pytest.mark.parametrize("fork, like", [("london", "phase0"), ("bpo1", "fusaka"), ("bpo2", "fusaka")])
+@pytest.mark.parametrize(
+    "fork, like",
+    [("london", "phase0"), *[(f"bpo{i}", "fusaka") for i in range(1, 6)]],
+)
 def test_topics_of_forks_without_a_consensus_change(fork: str, like: str) -> None:
     assert consensus.gossip_topics(fork) == EXPECTED[like]
 
 
-@pytest.mark.parametrize("fork", ["glamsterdam", "hegota"])
-def test_topics_not_yet_specified(fork: str) -> None:
+def test_topics_not_yet_specified() -> None:
     with pytest.raises(ConsensusError):
-        consensus.gossip_topics(fork)
+        consensus.gossip_topics("hegota")
 
 
 def _attestation_subnet(committees_per_slot: int, slot: int, committee_index: int) -> int:
