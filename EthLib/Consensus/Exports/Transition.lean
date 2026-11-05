@@ -8,6 +8,7 @@ public import EthLib.Consensus.Transition.BuilderPayments
 public import EthLib.Consensus.Transition.BuilderRequests
 public import EthLib.Consensus.Transition.EpochJustification
 public import EthLib.Consensus.Transition.EpochRewards
+public import EthLib.Consensus.Transition.EpochUpdates
 public import EthLib.Consensus.Transition.Operations
 public import EthLib.Consensus.Transition.Payload
 public import EthLib.Consensus.Transition.Upgrade
@@ -116,12 +117,22 @@ def transitionPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) :=
   return (preset, fork)
 
 /-- The state after one step of the epoch transition of a handler of the vectors. -/
-def runEpochStep {preset : Preset} {fork : Fork} (handler : String)
+def runEpochStep {preset : Preset} {fork : Fork} (config : Config) (handler : String)
     (state : BeaconState preset fork) : Result (BeaconState preset fork) :=
   match handler with
   | "justification_and_finalization" =>
     runTransition (processJustificationAndFinalization state)
   | "rewards_and_penalties" => runTransition (processRewardsAndPenalties state)
+  | "registry_updates" => runTransition (processRegistryUpdates config state)
+  | "slashings" => runTransition (processSlashings state)
+  | "eth1_data_reset" =>
+    if before : fork < .hegota then runTransition (processEth1DataReset before state)
+    else throw (0, s!"no epoch step eth1_data_reset at {fork.name}")
+  | "effective_balance_updates" => runTransition (processEffectiveBalanceUpdates state)
+  | "slashings_reset" => runTransition (processSlashingsReset state)
+  | "randao_mixes_reset" => runTransition (processRandaoMixesReset state)
+  | "historical_roots_update" => runTransition (processHistoricalRootsUpdate state)
+  | "participation_record_updates" => runTransition (processParticipationRecordUpdates state)
   | "ptc_window" =>
     if gloas : .glamsterdam ≤ fork then runTransition (liftAccessor (processPtcWindow state gloas))
     else throw (0, s!"no epoch step ptc_window at {fork.name}")
@@ -160,9 +171,9 @@ The preset, the configuration and the fork are named in UTF-8, and the handler t
 @[export eth_consensus_process_epoch]
 def processEpochExport (name fork handler pre replacements : ByteArray) : Result ByteArray := do
   let (preset, fork) ← transitionPresetAndFork name fork
-  let _config ← configWith name replacements
+  let config ← configWith name replacements
   let state ← decodeInput (BeaconState preset fork) pre
-  let after ← runEpochStep (← nameOf handler) state
+  let after ← runEpochStep config (← nameOf handler) state
   (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
 
 /-- The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.

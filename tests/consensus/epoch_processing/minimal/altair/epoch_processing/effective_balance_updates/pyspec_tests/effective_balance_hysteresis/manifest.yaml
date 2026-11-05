@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: epoch_processing
+handler: effective_balance_updates
+suite: pyspec_tests
+case: effective_balance_hysteresis

@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: epoch_processing
+handler: slashings_reset
+suite: pyspec_tests
+case: flush_slashings

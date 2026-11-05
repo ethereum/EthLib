@@ -1,0 +1,6 @@
+preset: minimal
+fork: bellatrix
+runner: epoch_processing
+handler: registry_updates
+suite: pyspec_tests
+case: ejection
