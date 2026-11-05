@@ -26,6 +26,7 @@ structure Hom (F G : Type) [BaseField F] [BaseField G] where
   map_neg : ∀ a, toFun (-a) = -toFun a
   map_zero : toFun zero = zero
   map_one : toFun one = one
+  map_ofNat : ∀ n, toFun (ofNat n) = ofNat n
   map_beq : ∀ a b, beq (toFun a) (toFun b) = beq a b
   map_isZero : ∀ a, isZero (toFun a) = isZero a
   map_inverse : ∀ a, toFun (inverse a) = inverse (toFun a)

@@ -78,7 +78,8 @@ theorem toAffine_congr {P Q : G1} (hP : Valid P) (hQ : Valid Q) (h : toPoint P =
   · have hQz : ¬Q.z.isZero = true := fun h => hPz (hz.mpr h)
     obtain ⟨hx, hy⟩ := affine_eq_of_toAffine_eq hP hQ h
       (fun h => hPz (isZero_iff.mpr h)) (fun h => hQz (isZero_iff.mpr h))
-    simp only [G1.toAffine, ite_eq_right hPz, ite_eq_right hQz]
+    simp only [G1.toAffine, Fp.baseField_isZero, Fp.baseField_inverse, ite_eq_right hPz,
+      ite_eq_right hQz]
     exact Prod.ext
       ((mul_inverse_sq _ _ _ (z_mul_inverse hPz)).trans
         (hx.trans (mul_inverse_sq _ _ _ (z_mul_inverse hQz)).symm))

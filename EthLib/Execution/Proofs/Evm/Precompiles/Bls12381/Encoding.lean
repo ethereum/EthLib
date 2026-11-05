@@ -164,8 +164,8 @@ theorem natToBytes_bytesToFq2 {raw : List UInt8} (hlength : raw.length = 96) {a 
 
 /-- The affine form of a point with `z = 1` is its `x` and `y`. -/
 theorem g1_toAffine_one (x y : Fp) : G1.toAffine ⟨x, y, Fp.one⟩ = (x, y) := by
-  have hinv : Fp.one.inverse = Fp.one := Cryptography.Fin.inverse_one
-  have hz : Fp.one.isZero = false := by decide
+  have hinv : Cryptography.BaseField.inverse Fp.one = Fp.one := Cryptography.Fin.inverse_one
+  have hz : Cryptography.BaseField.isZero Fp.one = false := by decide
   simp only [G1.toAffine, hz, hinv, Bool.false_eq_true, ↓reduceIte]
   have hone : Fp.one * Fp.one = Fp.one := by decide
   rw [hone, hone]
@@ -174,7 +174,8 @@ theorem g1_toAffine_one (x y : Fp) : G1.toAffine ⟨x, y, Fp.one⟩ = (x, y) := 
 /-- The point at infinity encodes as 96 zero bytes. -/
 theorem g1ToBytes_of_isZero {p : G1} (h : p.z.isZero = true) :
     g1ToBytes p = List.replicate 96 0 := by
-  simp only [g1ToBytes, G1.toAffine, h, ↓reduceIte]
+  have h' : Cryptography.BaseField.isZero p.z = true := h
+  simp only [g1ToBytes, G1.toAffine, h', ↓reduceIte]
   rfl
 
 -- The kernel reads 96 bytes one by one, deeper than the default recursion limit.

@@ -98,14 +98,14 @@ theorem clearCofactor_valid {P : G2} (hP : G2.Valid P) : G2.Valid (clearCofactor
 @[simp]
 theorem psi_zero : psi G2.zero = G2.zero := by
   unfold psi
-  have hz : G2.zero.z.isZero = true := by decide
+  have hz : (G2.zero : G2).z.isZero = true := by decide
   simp [hz]
 
 /-- `psi2` fixes the point at infinity. -/
 @[simp]
 theorem psi2_zero : psi2 G2.zero = G2.zero := by
   unfold psi2
-  have hz : G2.zero.z.isZero = true := by decide
+  have hz : (G2.zero : G2).z.isZero = true := by decide
   simp [hz]
 
 /-- On finite points, `psi2` negates the affine `y` coordinate. -/

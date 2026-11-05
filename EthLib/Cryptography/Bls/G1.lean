@@ -18,40 +18,52 @@ Jacobian doubling and addition need none, and one inversion at the end gives the
 
 The formulas are those of the explicit-formulas database, for short Weierstrass curves with `a = 0`:
 <https://hyperelliptic.org/EFD/>
+
+The code is generic in the base field, as for `Fp2`.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Bls
 
-/-- A G1 point in Jacobian projective coordinates. `z = 0` is the
-point at infinity. -/
-structure G1 where
-  x : Fp
-  y : Fp
-  z : Fp
+/-- A G1 point in Jacobian projective coordinates.
+
+`z = 0` is the point at infinity.
+
+The base field is `Fp` unless stated. -/
+structure G1 (F : Type := Fp) where
+  x : F
+  y : F
+  z : F
 deriving Inhabited, BEq, Repr
 
 namespace G1
 
+variable {F : Type} [BaseField F]
+
+/-- The x-coordinate of the generator of G1, as an integer. -/
+def generatorX : Nat :=
+  0x17f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb
+
+/-- The y-coordinate of the generator of G1, as an integer. -/
+def generatorY : Nat :=
+  0x08b3f481e3aaa0f1a09e30ed741d8ae4fcf5e095d5d00af600db18cb2c04b3edd03cc744a2888ae40caa232946c5e7e1
+
 /-- Affine generator of G1, embedded with `z = 1`. -/
-def generator : G1 :=
-  { x := Fp.ofNat 0x17f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb
-  , y := Fp.ofNat 0x08b3f481e3aaa0f1a09e30ed741d8ae4fcf5e095d5d00af600db18cb2c04b3edd03cc744a2888ae40caa232946c5e7e1
-  , z := Fp.one }
+def generator : G1 F := ⟨BaseField.ofNat generatorX, BaseField.ofNat generatorY, BaseField.one⟩
 
 /-- The point at infinity. -/
-def zero : G1 := ⟨Fp.one, Fp.one, Fp.zero⟩
+def zero : G1 F := ⟨BaseField.one, BaseField.one, BaseField.zero⟩
 
-@[inline] def isInfinity (p : G1) : Bool := p.z.isZero
+@[inline] def isInfinity (p : G1 F) : Bool := BaseField.isZero p.z
 
 /-- Jacobian point doubling for `a = 0` curves.
 
 These are the `dbl-2009-l` formulas of the explicit-formulas database.
 
 Each product by 2, 3 or 8 is written as additions, which are cheaper than a multiplication. -/
-def double (p : G1) : G1 :=
-  if p.z.isZero then p else
+def double (p : G1 F) : G1 F :=
+  if BaseField.isZero p.z then p else
     let A := p.x * p.x
     let B := p.y * p.y
     let C := B * B
@@ -68,22 +80,22 @@ def double (p : G1) : G1 :=
     ⟨x', y', z'⟩
 
 /-- Negation: `(x, y, z) ↦ (x, −y, z)`. -/
-@[inline] def neg (p : G1) : G1 := ⟨p.x, -p.y, p.z⟩
+@[inline] def neg (p : G1 F) : G1 F := ⟨p.x, -p.y, p.z⟩
 
 /-- `p + q` for two finite points, by the `add-2007-bl` formulas of the explicit-formulas database.
 
 Each product by 2 is written as an addition.
 
 Equal points double, and opposite points sum to the point at infinity. -/
-def addGeneral (p q : G1) : G1 :=
+def addGeneral (p q : G1 F) : G1 F :=
   let z1z1 := p.z * p.z
   let z2z2 := q.z * q.z
   let u1 := p.x * z2z2
   let u2 := q.x * z1z1
   let s1 := p.y * q.z * z2z2
   let s2 := q.y * p.z * z1z1
-  if u1.beq u2 then
-    if s1.beq s2 then double p else zero
+  if BaseField.beq u1 u2 then
+    if BaseField.beq s1 s2 then double p else zero
   else
     let h := u2 - u1
     let h2 := h + h
@@ -103,12 +115,12 @@ These are the general formulas with `z2 = 1`, so `u1 = x1` and `s1 = y1`.
 The last coordinate `((z1 + 1)^2 - z1^2 - 1) * h` simplifies to `2 * z1 * h`.
 
 They take 11 multiplications instead of 20, and give the same coordinates. -/
-def addMixed (p q : G1) : G1 :=
+def addMixed (p q : G1 F) : G1 F :=
   let z1z1 := p.z * p.z
   let u2 := q.x * z1z1
   let s2 := q.y * p.z * z1z1
-  if p.x.beq u2 then
-    if p.y.beq s2 then double p else zero
+  if BaseField.beq p.x u2 then
+    if BaseField.beq p.y s2 then double p else zero
   else
     let h := u2 - p.x
     let h2 := h + h
@@ -126,25 +138,25 @@ def addMixed (p q : G1) : G1 :=
 Every point decompressed from bytes has `z = 1`, and then the mixed formulas apply.
 
 So most additions in a multi-scalar multiplication take that shorter path. -/
-def add (p q : G1) : G1 :=
-  if p.z.isZero then q else
-  if q.z.isZero then p else
-  if q.z.beq Fp.one then addMixed p q else addGeneral p q
+def add (p q : G1 F) : G1 F :=
+  if BaseField.isZero p.z then q else
+  if BaseField.isZero q.z then p else
+  if BaseField.beq q.z BaseField.one then addMixed p q else addGeneral p q
 
-instance : Add G1 := ⟨add⟩
-instance : Neg G1 := ⟨neg⟩
+instance : Add (G1 F) := ⟨add⟩
+instance : Neg (G1 F) := ⟨neg⟩
 
 /-- Project a Jacobian point to affine `(x, y)`. Undefined at infinity. -/
-def toAffine (p : G1) : Fp × Fp :=
-  if p.z.isZero then (Fp.zero, Fp.zero)
+def toAffine (p : G1 F) : F × F :=
+  if BaseField.isZero p.z then (BaseField.zero, BaseField.zero)
   else
-    let zinv  := p.z.inverse
+    let zinv  := BaseField.inverse p.z
     let zinv2 := zinv * zinv
     let zinv3 := zinv2 * zinv
     (p.x * zinv2, p.y * zinv3)
 
 /-- Scalar multiplication via double-and-add. -/
-def mulNat (p : G1) (k : Nat) : G1 :=
+def mulNat (p : G1 F) (k : Nat) : G1 F :=
   if k = 0 then zero
   else
     let half := mulNat (double p) (k / 2)
@@ -152,7 +164,7 @@ def mulNat (p : G1) (k : Nat) : G1 :=
 termination_by k
 decreasing_by omega
 
-@[inline] def mul (p : G1) (s : Fr) : G1 := mulNat p s.val
+@[inline] def mul (p : G1 F) (s : Fr) : G1 F := mulNat p s.val
 
 /-! ## Multi-scalar multiplication
 
@@ -176,10 +188,15 @@ def msmMaxBits (vals : Array Nat) (n : Nat) : Nat :=
       if vals[j]!.log2 + 1 > m then vals[j]!.log2 + 1 else m
     else m) 0
 
+section Buckets
+
+-- The buckets are arrays, and reading one needs a default point.
+variable [Inhabited F]
+
 /-- The buckets of window `k`: bucket `v` sums the points whose digit `k` is `v`.
 
 Bucket 0 stays empty, since those points contribute nothing. -/
-def msmBuckets (points : Array G1) (vals : Array Nat) (n k : Nat) : Array G1 :=
+def msmBuckets (points : Array (G1 F)) (vals : Array Nat) (n k : Nat) : Array (G1 F) :=
   (List.range' 0 n).foldl (fun bs j =>
     if windowVal vals[j]! k ≠ 0 then
       bs.set! (windowVal vals[j]! k)
@@ -193,7 +210,7 @@ The state is `(partialSum, running)`.
 The running sum holds `sum_{u >= v} B_u`.
 
 Adding it at each step counts bucket `u` exactly `u` times. -/
-def msmRunning (bs : Array G1) : MProd G1 G1 :=
+def msmRunning (bs : Array (G1 F)) : MProd (G1 F) (G1 F) :=
   (List.range' 0 (1 <<< 8 - 1)).foldl (fun rp vv =>
     ⟨add rp.1 (add rp.2 bs[1 <<< 8 - 1 - vv]!),
      add rp.2 bs[1 <<< 8 - 1 - vv]!⟩) ⟨zero, zero⟩
@@ -201,7 +218,7 @@ def msmRunning (bs : Array G1) : MProd G1 G1 :=
 /-- One step of the window fold: shift `acc` up by 8 bits, then add the window sum `S`.
 
 The first step starts from zero and skips the doublings. -/
-def msmCombine (nW : Nat) (acc : G1) (kk : Nat) (S : G1) : G1 :=
+def msmCombine (nW : Nat) (acc : G1 F) (kk : Nat) (S : G1 F) : G1 F :=
   if nW - 1 - kk + 1 < nW then
     add ((List.range' 0 8).foldl (fun a _ => double a) acc) S
   else
@@ -212,7 +229,7 @@ def msmCombine (nW : Nat) (acc : G1) (kk : Nat) (S : G1) : G1 :=
 The window sums are independent, so each runs as its own task.
 
 The fold then combines them in order, from the top window down. -/
-def msm (points : Array G1) (scalars : Array Fr) : G1 :=
+def msm (points : Array (G1 F)) (scalars : Array Fr) : G1 F :=
   let n := if points.size ≤ scalars.size then points.size else scalars.size
   -- Leaving Montgomery form costs a product, so each scalar is converted once, before the windows.
   let vals := scalars.map Fr.val
@@ -230,6 +247,8 @@ def msm (points : Array G1) (scalars : Array Fr) : G1 :=
       let sums := windows.map fun kk => Task.spawn fun _ =>
         (msmRunning (msmBuckets points vals n (nW - 1 - kk))).1
       (windows.zip sums).foldl (fun acc w => msmCombine nW acc w.1 w.2.get) zero).get
+
+end Buckets
 
 end G1
 

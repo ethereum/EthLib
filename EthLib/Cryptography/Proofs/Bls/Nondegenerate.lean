@@ -42,8 +42,9 @@ theorem orderOf_pairing_generators : orderOf (pairing G1.generator G2.generator)
   apply orderOf_eq_prime
   · have h := pairing_generators_ne_zero
     unfold pairing at h ⊢
-    simp only [show (G1.generator.isInfinity || G2.generator.isInfinity) = false by decide,
-      Bool.false_eq_true, ↓reduceIte] at h ⊢
+    have hinf : ((G1.generator : G1).isInfinity || (G2.generator : G2).isInfinity) = false := by
+      decide
+    simp only [hinf, Bool.false_eq_true, ↓reduceIte] at h ⊢
     exact finalExponentiation_pow_modulus h
   · exact pairing_generators_ne_one
 
@@ -55,7 +56,8 @@ theorem pairingCheck_generators : pairingCheck #[(G1.generator, G2.generator)] =
   apply h
   rw [Fp12.isOne_iff] at h1
   unfold pairing
-  simpa [pairFactor, show (G1.generator.isInfinity || G2.generator.isInfinity) = false by decide]
-    using h1
+  have hinf : ((G1.generator : G1).isInfinity || (G2.generator : G2).isInfinity) = false := by
+    decide
+  simpa [pairFactor, hinf] using h1
 
 end EthLib.Cryptography.Bls

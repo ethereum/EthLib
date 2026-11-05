@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Bls.Fp2
 public import EthLib.Cryptography.Proofs.Bls.BaseFieldMap
+public import EthLib.Cryptography.Proofs.Bls.CurveMap
 public import EthLib.Cryptography.Proofs.Bls.Fp6
 public import EthLib.Cryptography.Proofs.Bls.Fp12
 public import EthLib.Cryptography.Proofs.Bls.FpZMod

@@ -102,9 +102,10 @@ private theorem fp_three : Fp.ofNat 3 = 1 + 1 + 1 := by decide
 private theorem fp_eight : Fp.ofNat 8 = 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 := by decide
 
 /-- The library's doubling gives the printed coordinates. -/
-theorem double_eq_doubleSpec : @double = @doubleSpec := by
+theorem double_eq_doubleSpec : (double : G1 → G1) = doubleSpec := by
   funext p
   unfold double doubleSpec
+  simp only [Fp.baseField_isZero]
   split
   · rfl
   · simp only [fp_two, fp_three, fp_eight, G1.mk.injEq]
@@ -115,6 +116,7 @@ private theorem addSpec_eq_addMixed (p : G1) (qx qy : Fp)
     (hp : ¬p.z.isZero = true) (hq : ¬(1 : Fp).isZero = true) :
     addSpec p ⟨qx, qy, 1⟩ = addMixed p ⟨qx, qy, 1⟩ := by
   unfold addSpec addMixed
+  simp only [Fp.baseField_beq]
   rw [ite_eq_right hp, ite_eq_right hq]
   -- With z2 = 1, u1 and s1 reduce to x1 and y1.
   have hu : p.x * (1 * 1) = p.x := by grind
@@ -129,17 +131,18 @@ private theorem addSpec_eq_addMixed (p : G1) (qx qy : Fp)
 private theorem addSpec_eq_addGeneral (p q : G1) (hp : ¬p.z.isZero = true) (hq : ¬q.z.isZero = true) :
     addSpec p q = addGeneral p q := by
   unfold addSpec addGeneral
+  simp only [Fp.baseField_beq]
   rw [ite_eq_right hp, ite_eq_right hq]
-  dsimp only
   split
   · rfl
   · simp only [fp_two, G1.mk.injEq]
     refine ⟨?_, ?_, ?_⟩ <;> grind
 
 /-- The library's addition gives the printed coordinates. -/
-theorem add_eq_addSpec : @add = @addSpec := by
+theorem add_eq_addSpec : (add : G1 → G1 → G1) = addSpec := by
   funext p q
   unfold add
+  simp only [Fp.baseField_isZero, Fp.baseField_beq, show (BaseField.one : Fp) = Fp.one from rfl]
   by_cases hp : p.z.isZero = true
   · rw [ite_eq_left hp, addSpec, ite_eq_left hp]
   by_cases hq : q.z.isZero = true
@@ -286,7 +289,7 @@ theorem rep_double {P : G1} (hz : ¬P.z.isZero = true) :
 
 theorem valid_double {P : G1} (h : Valid P) : Valid (double P) := by
   by_cases hz : P.z.isZero = true
-  · rw [Valid, double, ite_eq_left hz]
+  · rw [Valid, double_eq_doubleSpec, doubleSpec, ite_eq_left hz]
     exact h
   · rw [Valid, rep_double hz, ← add_of_equiv (Setoid.refl (rep P))]
     exact nonsingular_add h h

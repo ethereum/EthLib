@@ -27,6 +27,8 @@ class BaseField (F : Type) extends Add F, Sub F, Mul F, Neg F where
   zero : F
   /-- The multiplicative identity. -/
   one : F
+  /-- The image of a natural number `n`, the sum of `n` ones. -/
+  ofNat : Nat → F
   /-- Equality as a boolean. -/
   beq : F → F → Bool
   /-- Whether the element is zero. -/

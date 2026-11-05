@@ -135,7 +135,7 @@ theorem pairing_eq_pow_of_laws (laws : PairingLaws) {P : G1} {Q : G2} {a b : Fr}
     pairing P Q = pairing G1.generator G2.generator ^ (a * b).val := by
   -- Both sides times `e(-(a b) g1, g2)` give 1, by the check on two lists of pairs.
   set c := a * b
-  set N := G1.mul G1.generator (-c)
+  set N := G1.mul (G1.generator : G1) (-c)
   have hN : G1.Represents N (-c) := G1.represents_mul_generator (-c)
   have h₁ := pairing_mul_eq_one laws [(P, Q), (N, G2.generator)] [a, -c] [b, 1] rfl rfl
     (fun i hi => by

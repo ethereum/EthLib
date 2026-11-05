@@ -473,6 +473,9 @@ def toZMod : Fp ≃+* ZMod modulus := RingEquiv.refl _
 /-- The one that the extensions read is the one of `Fp`. -/
 @[simp] theorem baseField_one : (BaseField.one : Fp) = 1 := rfl
 
+/-- The curves read the natural numbers in `Fp` through its own map. -/
+@[simp] theorem baseField_ofNat (n : Nat) : (BaseField.ofNat n : Fp) = Fp.ofNat n := rfl
+
 /-! ## Bridge: spec operations = Mathlib operations -/
 
 /-- `Fp.powNat` is monoid power, phrased over `ZMod Fp.modulus`

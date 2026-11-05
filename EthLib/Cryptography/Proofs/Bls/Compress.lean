@@ -225,7 +225,7 @@ theorem affine_sqrt_witness {p : G1} (h : Valid p) (hz : ¬ p.z.isZero = true) :
   have heq := valid_equation h
   rw [rep_x, rep_y, rep_z] at heq
   have hw := z_mul_inverse hz
-  simp only [G1.toAffine, ite_eq_right hz]
+  simp only [G1.toAffine, Fp.baseField_isZero, Fp.baseField_inverse, ite_eq_right hz]
   exact curve_eq_aux p.x p.y p.z p.z.inverse hw heq
 
 /-! ## Sign-bit recovery -/
@@ -328,9 +328,9 @@ theorem toPoint_affine_normalize {p : G1} (hz : ¬ p.z.isZero = true) :
   have hw := z_mul_inverse hz
   refine Point.toAffine_of_equiv (equiv_of_X_eq_of_Y_eq one_ne_zero hzne ?_ ?_)
   · -- rep q 0 * rep p 2 ^ 2 = rep p 0 * rep q 2 ^ 2
-    simp only [rep, G1.toAffine, ite_eq_right hz]
+    simp only [rep, G1.toAffine, Fp.baseField_isZero, Fp.baseField_inverse, ite_eq_right hz]
     exact xeq_aux p.x p.z p.z.inverse Fp.one hw rfl
-  · simp only [rep, G1.toAffine, ite_eq_right hz]
+  · simp only [rep, G1.toAffine, Fp.baseField_isZero, Fp.baseField_inverse, ite_eq_right hz]
     exact yeq_aux p.y p.z p.z.inverse Fp.one hw rfl
 
 /-! ## Compress → uncompress round-trip -/
@@ -764,6 +764,7 @@ private theorem ba_set!_get!_self (b : ByteArray) {j : Nat} (hj : j < b.size) :
 private theorem toAffine_of_z_one (x y : Fp) :
     (⟨x, y, Fp.one⟩ : G1).toAffine = (x, y) := by
   unfold toAffine
+  simp only [Fp.baseField_isZero, Fp.baseField_inverse]
   -- z = 1 is not zero, so the point is not at infinity.
   rw [ite_eq_right (by decide : ¬ Fp.one.isZero = true)]
   -- The inverse of 1 is 1, read off from the identity z * z^(-1) = 1.
@@ -772,7 +773,6 @@ private theorem toAffine_of_z_one (x y : Fp) :
     change (1 : Fp) * Fp.one.inverse = (1 : Fp) at h
     rwa [Fin.one_mul] at h
   -- Dividing by 1^2 and 1^3 leaves x and y unchanged.
-  dsimp only
   rw [hinv, Fin.mul_one, Fin.mul_one, Fin.mul_one, Fin.mul_one]
 
 /-! ### The infinity encoding -/
