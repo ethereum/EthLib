@@ -2762,7 +2762,7 @@
   {"summary":
    "Whether a new update, given as bytes, ranks above an old one for a forced update.",
    "signature":
-   "(name: str, fork: str, new_update: bytes, old_update: bytes) -> bool",
+   "(name: str, fork: str, old_fork: str, config: bytes, new_update: bytes, old_update: bytes) -> bool",
    "operation": "EthLib.Consensus.Exports.isBetterUpdateExport",
    "method": "consensus_is_better_update",
    "errors":
@@ -2791,7 +2791,7 @@
       {"constructor": "finalizedNotOfState", "code": 21}]}],
    "error_class": "LightClientError",
    "docstring":
-   "Whether a new update, given as bytes, ranks above an old one for a forced update."},
+   "Whether a new update, given as bytes, ranks above an old one for a forced update.\n\nThe first fork is that of the new update, and the second that of the old one.\n\nThe update of the earlier fork is first upgraded to the later fork."},
   {"summary":
    "The genesis block of a state, given as bytes, with a signature of zero bytes.",
    "signature": "(name: str, fork: str, state: bytes) -> bytes",
@@ -2860,7 +2860,7 @@
   {"summary":
    "The update that a full node serves for a block, from the blocks and their post states.",
    "signature":
-   "(name: str, fork: str, type: str, config: bytes, state: bytes, block: bytes, attested_state: bytes, attested_block: bytes, finalized_block: bytes) -> bytes",
+   "(name: str, fork: str, attested_fork: str, finalized_fork: str, type: str, config: bytes, state: bytes, block: bytes, attested_state: bytes, attested_block: bytes, finalized_block: bytes) -> bytes",
    "operation": "EthLib.Consensus.Exports.createLightClientUpdateExport",
    "method": "consensus_create_light_client_update",
    "errors":
@@ -2889,7 +2889,7 @@
       {"constructor": "finalizedNotOfState", "code": 21}]}],
    "error_class": "LightClientError",
    "docstring":
-   "The update that a full node serves for a block, from the blocks and their post states.\n\nThe type names the update, the finality update or the optimistic update that it gives.\n\nEmpty bytes for the finalized block stand for a finalized block that the node does not know."},
+   "The update that a full node serves for a block, from the blocks and their post states.\n\nThe type names the update, the finality update or the optimistic update that it gives.\n\nThe first fork is that of the block, the second that of its parent, which the update takes.\n\nThe third is the fork of the finalized block, at or before the second.\n\nEmpty bytes for the finalized block stand for a finalized block that the node does not know."},
   {"summary":
    "The fork digest at an epoch, on the chain with the given root of the genesis validators.",
    "signature":

@@ -272,16 +272,17 @@ extern lean_object* eth_consensus_light_client_update_proofs(
   lean_object* name, lean_object* fork, lean_object* type, lean_object* config,
   lean_object* data);
 extern lean_object* eth_consensus_is_better_update(
-  lean_object* name, lean_object* fork, lean_object* new_update, lean_object* old_update);
+  lean_object* name, lean_object* fork, lean_object* old_fork, lean_object* config,
+  lean_object* new_update, lean_object* old_update);
 extern lean_object* eth_consensus_genesis_block(
   lean_object* name, lean_object* fork, lean_object* state);
 extern lean_object* eth_consensus_create_light_client_bootstrap(
   lean_object* name, lean_object* fork, lean_object* config, lean_object* state,
   lean_object* block);
 extern lean_object* eth_consensus_create_light_client_update(
-  lean_object* name, lean_object* fork, lean_object* type, lean_object* config,
-  lean_object* state, lean_object* block, lean_object* attested_state,
-  lean_object* attested_block, lean_object* finalized_block);
+  lean_object* name, lean_object* fork, lean_object* attested_fork, lean_object* finalized_fork,
+  lean_object* type, lean_object* config, lean_object* state, lean_object* block,
+  lean_object* attested_state, lean_object* attested_block, lean_object* finalized_block);
 extern lean_object* eth_consensus_compute_fork_digest(
   lean_object* name, lean_object* config, lean_object* genesis_validators_root, uint64_t epoch);
 
@@ -1025,10 +1026,10 @@ py_consensus_is_better_update(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object *name, *fork, *updates[2];
-  if (!name_fork_bytes_args(args, 2, &name, &fork, updates)) return NULL;
+  lean_object* a[6];
+  if (!strs_bytes_args(args, 3, 3, a)) return NULL;
   return except_into_pybool(
-    eth_consensus_is_better_update(name, fork, updates[0], updates[1]), LIGHT_CLIENT_ERROR);
+    eth_consensus_is_better_update(a[0], a[1], a[2], a[3], a[4], a[5]), LIGHT_CLIENT_ERROR);
 }
 
 PyObject*
@@ -1058,11 +1059,11 @@ py_consensus_create_light_client_update(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object* a[9];
-  if (!strs_bytes_args(args, 3, 6, a)) return NULL;
+  lean_object* a[11];
+  if (!strs_bytes_args(args, 5, 6, a)) return NULL;
   return except_into_pybytes(
     eth_consensus_create_light_client_update(
-      a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8]),
+      a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10]),
     LIGHT_CLIENT_ERROR);
 }
 

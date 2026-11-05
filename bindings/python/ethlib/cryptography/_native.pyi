@@ -423,7 +423,7 @@ def consensus_light_client_update_proofs(name: str, fork: str, type: str, config
     """Whether the proofs of an update or a finality update, given as bytes, verify."""
     ...
 
-def consensus_is_better_update(name: str, fork: str, new_update: bytes, old_update: bytes) -> bool:
+def consensus_is_better_update(name: str, fork: str, old_fork: str, config: bytes, new_update: bytes, old_update: bytes) -> bool:
     """Whether a new update, given as bytes, ranks above an old one for a forced update."""
     ...
 
@@ -435,7 +435,7 @@ def consensus_create_light_client_bootstrap(name: str, fork: str, config: bytes,
     """The bootstrap that a full node serves for a block, from the block and its post state."""
     ...
 
-def consensus_create_light_client_update(name: str, fork: str, type: str, config: bytes, state: bytes, block: bytes, attested_state: bytes, attested_block: bytes, finalized_block: bytes) -> bytes:
+def consensus_create_light_client_update(name: str, fork: str, attested_fork: str, finalized_fork: str, type: str, config: bytes, state: bytes, block: bytes, attested_state: bytes, attested_block: bytes, finalized_block: bytes) -> bytes:
     """The update that a full node serves for a block, from the blocks and their post states."""
     ...
 

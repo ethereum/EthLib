@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.LightClient.FullNode
+public import EthLib.Consensus.LightClient.Branch
 
 /-!
 # `Consensus.LightClient.Upgrade`

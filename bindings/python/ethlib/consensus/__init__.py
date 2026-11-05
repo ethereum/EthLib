@@ -248,9 +248,12 @@ def light_client_update_proofs(name: str, fork: str, type_name: str, data: bytes
     return _native.consensus_light_client_update_proofs(name, fork, type_name, replacements, data)
 
 
-def is_better_update(name: str, fork: str, new_update: bytes, old_update: bytes) -> bool:
-    """Whether a new light client update ranks above an old one for a forced update."""
-    return _native.consensus_is_better_update(name, fork, new_update, old_update)
+def is_better_update(name: str, fork: str, new_update: bytes, old_update: bytes,
+                     old_fork: str | None = None, config: dict | None = None) -> bool:
+    """Whether a new light client update ranks above an old one, both at the later fork."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_is_better_update(name, fork, old_fork or fork, replacements,
+                                              new_update, old_update)
 
 
 def genesis_block(name: str, fork: str, state: bytes) -> bytes:
@@ -268,12 +271,14 @@ def create_light_client_bootstrap(name: str, fork: str, state: bytes, block: byt
 def create_light_client_update(name: str, fork: str, type_name: str, state: bytes, block: bytes,
                                attested_state: bytes, attested_block: bytes,
                                finalized_block: bytes | None,
-                               config: dict | None = None) -> bytes:
+                               config: dict | None = None, attested_fork: str | None = None,
+                               finalized_fork: str | None = None) -> bytes:
     """The SSZ bytes of the update of a type that a full node serves for a block."""
     replacements = json.dumps(config).encode() if config else b""
+    attested_fork = attested_fork or fork
     return _native.consensus_create_light_client_update(
-        name, fork, type_name, replacements, state, block, attested_state, attested_block,
-        finalized_block or b"")
+        name, fork, attested_fork, finalized_fork or attested_fork, type_name, replacements,
+        state, block, attested_state, attested_block, finalized_block or b"")
 
 
 def compute_fork_digest(name: str, genesis_validators_root: bytes, epoch: int,
