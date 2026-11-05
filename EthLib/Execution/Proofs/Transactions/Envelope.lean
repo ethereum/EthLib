@@ -14,6 +14,8 @@ A legacy transaction starts with a byte of at least `0xc0`, and a typed one star
 A fork decodes exactly the bytes of the transactions of the kinds that it has.
 
 So two transactions with the same bytes are equal.
+
+A block holds a typed transaction as a byte string, and from Glamsterdam also a legacy one.
 -/
 
 @[expose] public section
@@ -242,5 +244,31 @@ theorem encodeTransaction_injective {t u : Transaction} {bytes : ByteArray}
     (decodeTransaction_encodeTransaction hu (Fork.le_hegota u.fork))
   cases this
   rfl
+
+/-! ## The transactions of a block -/
+
+/-- A byte string that starts with a type holds the transaction of its bytes, at every fork. -/
+theorem decodeBodyTransaction_typed (fork : Fork) {bytes : ByteArray} (h0 : 0 < bytes.size)
+    (hType : bytes[0] < (0xc0 : UInt8)) :
+    decodeBodyTransaction fork (.bytes bytes) = decodeTransaction fork bytes := by
+  simp [decodeBodyTransaction, h0, hType]
+
+/-- Before Glamsterdam, a byte string that starts like an RLP list holds no transaction. -/
+theorem decodeBodyTransaction_legacy_of_lt {fork : Fork} (hFork : fork < .glamsterdam)
+    {bytes : ByteArray} (h0 : 0 < bytes.size) (hList : (0xc0 : UInt8) ≤ bytes[0]) :
+    decodeBodyTransaction fork (.bytes bytes) = .error (.unsupportedType bytes[0]) := by
+  have hType : ¬bytes[0] < 0xc0 := UInt8.not_lt.mpr hList
+  have hGlam : ¬Fork.glamsterdam ≤ fork := fun h => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le hFork h)
+  simp [decodeBodyTransaction, h0, hType, hGlam]
+
+/-- From Glamsterdam, a byte string holds the transaction of its bytes, unless it starts with 0xff.
+-/
+theorem decodeBodyTransaction_bytes {fork : Fork} (hFork : .glamsterdam ≤ fork)
+    {bytes : ByteArray} (hFF : ∀ h : 0 < bytes.size, bytes[0] ≠ (0xff : UInt8)) :
+    decodeBodyTransaction fork (.bytes bytes) = decodeTransaction fork bytes := by
+  unfold decodeBodyTransaction
+  by_cases h0 : 0 < bytes.size
+  · simp [h0, hFork, hFF h0]
+  · simp [h0, decodeTransaction]
 
 end EthLib.Execution.Transactions

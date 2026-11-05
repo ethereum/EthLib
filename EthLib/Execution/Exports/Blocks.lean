@@ -121,16 +121,9 @@ def checkHeaderExport (parentFork fork parent header : ByteArray) : Result UInt8
       fun e => (e.code, s!"header invalid: {reprStr e}")
   else throw (0, "the parent's fork is after the fork")
 
-/-- The transaction that an item of a block holds at the fork.
-
-A list is a legacy transaction, and a byte string is the bytes of a typed one. -/
-def transactionOfItem (fork : Fork) (item : Item) : Result Transactions.Transaction := do
-  let bytes ← match item with
-    | .list _ => runRlp "transaction has no encoding" (encode item)
-    | .bytes bytes =>
-      if bytes.size > 0 ∧ bytes[0]! < 0xc0 then pure bytes
-      else throw (0, "a typed transaction does not start with its type")
-  (Transactions.decodeTransaction fork bytes).mapError
+/-- The transaction that an item of a block holds at the fork. -/
+def transactionOfItem (fork : Fork) (item : Item) : Result Transactions.Transaction :=
+  (Transactions.decodeBodyTransaction fork item).mapError
     fun e => (0, s!"transaction rejected: {reprStr e}")
 
 /-- A root, or the code and the message of its trie error. -/
