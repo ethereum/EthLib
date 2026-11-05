@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: epoch_processing
+handler: justification_and_finalization
+suite: pyspec_tests
+case: 123_ok_support

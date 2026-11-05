@@ -95,7 +95,8 @@ A mainnet state is a few hundred kilobytes, so only the weekly parity job reads 
 The directory `epoch_processing/` holds epoch step cases of `minimal.tar.gz` in the same way.
 A case gives a state before the step and the state after it.
 The directory keeps two cases of each step that EthLib runs, at each fork where it runs.
-These are the proposer lookahead at Fulu and Gloas, and the builder pending payments and the window of payload committees at Gloas.
+These are justification and finalization at Phase 0, and the proposer lookahead at Fulu and Gloas.
+They are also the builder pending payments and the window of payload committees at Gloas.
 The release has a single case of the window, so the directory keeps that one.
 `bindings/python/tests/consensus/test_epoch_processing.py` runs each case through the Lean step and compares the state after it.
 
