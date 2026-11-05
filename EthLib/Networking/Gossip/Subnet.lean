@@ -40,7 +40,7 @@ def NODE_ID_BITS : Nat := 256
 
 `ε` is the error type of the shuffle. -/
 inductive SubnetError (ε : Type) where
-  /-- There are no attestation subnets. -/
+  /-- There are no subnets of the kind asked for. -/
   | zeroSubnetCount
   /-- A subscription lasts zero epochs. -/
   | zeroEpochsPerSubscription
@@ -53,6 +53,23 @@ inductive SubnetError (ε : Type) where
   /-- The shuffle failed. -/
   | shuffle (error : ε)
   deriving Repr, DecidableEq
+
+/--
+The stable code of an error, one per constructor, for the C exports.
+
+The code ignores the arguments of the constructor, which the message carries.
+
+A new constructor takes a new code, so that each code keeps its meaning.
+
+The codes start at 101, since the consensus errors of the bindings share one class.
+-/
+def SubnetError.code {ε : Type} : SubnetError ε → UInt32
+  | .zeroSubnetCount => 101
+  | .zeroEpochsPerSubscription => 102
+  | .epochOverflow => 103
+  | .prefixBitsTooLarge _ => 104
+  | .subnetOverflow => 105
+  | .shuffle _ => 106
 
 variable {ε : Type}
 

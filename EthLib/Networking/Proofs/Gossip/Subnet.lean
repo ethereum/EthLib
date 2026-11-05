@@ -23,6 +23,14 @@ open EthLib.Networking.Gossip
 variable {ε : Type} {config : SubnetParameters}
   {shuffle : UInt64 → UInt64 → ByteArray → Except ε UInt64} {nodeId : NodeID} {epoch : UInt64}
 
+/-- Two errors with one code come from one constructor. -/
+theorem _root_.EthLib.Networking.Gossip.SubnetError.code_injective
+    (e₁ e₂ : SubnetError ε) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [SubnetError.code] at h; exact absurd h (by decide))
+
 /-- Every subnet is below the number of subnets. -/
 theorem computeSubscribedSubnet_lt {index : UInt64} {subnet : SubnetID}
     (h : computeSubscribedSubnet config shuffle nodeId epoch index = .ok subnet) :

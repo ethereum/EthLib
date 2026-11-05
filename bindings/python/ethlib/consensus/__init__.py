@@ -1,4 +1,4 @@
-"""The consensus layer: presets, configurations, containers, the shuffle and custody."""
+"""The consensus layer: presets, configurations, containers, the shuffle, custody and gossip."""
 
 import json
 from typing import Any
@@ -70,6 +70,38 @@ def compute_shuffled_index(index: int, count: int, seed: bytes, name: str = "mai
     return _native.consensus_compute_shuffled_index(name, index, count, seed)
 
 
+def gossip_topics(fork: str, name: str = "mainnet") -> list:
+    """The names of the gossip topics of a fork."""
+    return json.loads(_native.consensus_gossip_topics(name, fork))
+
+
+def compute_subnet_for_attestation(
+    committees_per_slot: int, slot: int, committee_index: int, name: str = "mainnet"
+) -> int:
+    """The subnet of an attestation."""
+    return _native.consensus_compute_subnet_for_attestation(
+        name, committees_per_slot, slot, committee_index
+    )
+
+
+def compute_subnet_for_blob_sidecar(fork: str, blob_index: int, name: str = "mainnet") -> int:
+    """The subnet of a blob sidecar at a fork."""
+    return _native.consensus_compute_subnet_for_blob_sidecar(name, fork, blob_index)
+
+
+def compute_subnet_for_data_column_sidecar(column_index: int, name: str = "mainnet") -> int:
+    """The subnet of a data column sidecar."""
+    return _native.consensus_compute_subnet_for_data_column_sidecar(name, column_index)
+
+
+def compute_subscribed_subnets(node_id: int, epoch: int, name: str = "mainnet") -> list:
+    """The attestation subnets of a node in an epoch."""
+    if not 0 <= node_id < 2**256:
+        raise ValueError("node_id is out of range")
+    subnets = _native.consensus_compute_subscribed_subnets(name, node_id.to_bytes(32, "big"), epoch)
+    return _value(json.loads(subnets))
+
+
 __all__ = [
     "preset",
     "config",
@@ -80,4 +112,9 @@ __all__ = [
     "ssz_static",
     "compute_shuffled_permutation",
     "compute_shuffled_index",
+    "gossip_topics",
+    "compute_subnet_for_attestation",
+    "compute_subnet_for_blob_sidecar",
+    "compute_subnet_for_data_column_sidecar",
+    "compute_subscribed_subnets",
 ]

@@ -48,7 +48,8 @@ def ctorCodes (ty : Name) : MetaM (List (Name × Option Nat)) := do
   info.ctors.mapM fun ctor => do
     let cinfo ← getConstInfoCtor ctor
     forallTelescope cinfo.type fun xs _ => do
-      let e := mkApp (mkConst ``UInt32.toNat) (mkApp (mkConst code) (mkAppN (mkConst ctor) xs))
+      -- Elaboration infers the parameters of the type, such as the error of a shuffle.
+      let e := mkApp (mkConst ``UInt32.toNat) (← mkAppM code #[mkAppN (mkConst ctor) xs])
       let r ← instantiateMVars (← withTransparency .all <| whnf e)
       return (ctor, ← evalNat r)
 

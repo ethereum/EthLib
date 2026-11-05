@@ -278,6 +278,21 @@
 #define DOC_consensus_compute_shuffled_index \
   "The shuffled position of one index, which must be below the count."
 
+#define DOC_consensus_gossip_topics \
+  "The gossip topics of a fork, in the order of the fork that adds each one."
+
+#define DOC_consensus_compute_subnet_for_attestation \
+  "The subnet of an attestation, from the committees per slot, its slot and its committee index."
+
+#define DOC_consensus_compute_subnet_for_blob_sidecar \
+  "From Deneb to Electra: the subnet of a blob sidecar, its blob index modulo the number of subnets."
+
+#define DOC_consensus_compute_subnet_for_data_column_sidecar \
+  "From Fulu: the subnet of a data column sidecar, its column modulo the number of subnets."
+
+#define DOC_consensus_compute_subscribed_subnets \
+  "The attestation subnets that a node subscribes to in an epoch."
+
 #define DOC_reqresp_max_compressed_len \
   "The most compressed bytes a reader accepts after a declared length `n`: `32 + n + n / 6`."
 
