@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: epoch_processing
+handler: registry_updates
+suite: pyspec_tests
+case: ejection

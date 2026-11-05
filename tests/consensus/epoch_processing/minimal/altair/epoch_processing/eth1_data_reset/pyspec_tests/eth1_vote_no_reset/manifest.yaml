@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: epoch_processing
+handler: eth1_data_reset
+suite: pyspec_tests
+case: eth1_vote_no_reset

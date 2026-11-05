@@ -133,6 +133,8 @@ inductive TransitionError where
   | wrongBlsKey (index : ValidatorIndex)
   /-- From Capella: a change of BLS credentials is not signed by its key. -/
   | invalidBlsChangeSignature
+  /-- The historical roots are at their list limit. -/
+  | historicalRootsFull
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -197,6 +199,7 @@ def TransitionError.code : TransitionError → UInt32
   | .notBlsCredentials _ => 63
   | .wrongBlsKey _ => 64
   | .invalidBlsChangeSignature => 65
+  | .historicalRootsFull => 52
 
 /-- An assertion of the rule: success when the condition holds, and the error otherwise. -/
 def ensure (condition : Prop) [Decidable condition] (error : TransitionError) :

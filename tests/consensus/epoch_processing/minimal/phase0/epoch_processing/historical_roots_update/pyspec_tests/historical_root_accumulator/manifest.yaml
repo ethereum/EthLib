@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: epoch_processing
+handler: historical_roots_update
+suite: pyspec_tests
+case: historical_root_accumulator

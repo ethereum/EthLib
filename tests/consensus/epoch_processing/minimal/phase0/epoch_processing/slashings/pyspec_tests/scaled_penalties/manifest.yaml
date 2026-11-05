@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: epoch_processing
+handler: slashings
+suite: pyspec_tests
+case: scaled_penalties

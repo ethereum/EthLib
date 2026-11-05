@@ -1,0 +1,6 @@
+preset: minimal
+fork: bellatrix
+runner: epoch_processing
+handler: slashings
+suite: pyspec_tests
+case: scaled_penalties

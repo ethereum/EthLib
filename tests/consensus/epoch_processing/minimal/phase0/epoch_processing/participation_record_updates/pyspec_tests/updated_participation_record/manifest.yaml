@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: epoch_processing
+handler: participation_record_updates
+suite: pyspec_tests
+case: updated_participation_record
