@@ -56,7 +56,7 @@ def isValidDepositSignature (config : Config) (checks : SignatureChecks) (pubkey
 
 /-- Whether a builder deposit carries the signature of its key, under the builder deposit domain.
 
-That domain differs from the deposit domain, so no signature serves both deposits. -/
+Its domain type differs from the deposit domain type of validators. -/
 def isValidBuilderDepositSignature (config : Config) (checks : SignatureChecks)
     (request : BuilderDepositRequest) : Except TransitionError Bool :=
   isValidDepositMessageSignature config checks DOMAIN_BUILDER_DEPOSIT request.pubkey
