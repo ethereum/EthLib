@@ -56,13 +56,13 @@ A price that an EIP adds or changes names that EIP:
 - [EIP-2780](https://eips.ethereum.org/EIPS/eip-2780#parameters), the parts of a transaction
 - [EIP-7976](https://eips.ethereum.org/EIPS/eip-7976#specification), the call data floor
 - [EIP-8037](https://eips.ethereum.org/EIPS/eip-8037#specification), authorizations, gas limit
-- [EIP-8038](https://eips.ethereum.org/EIPS/eip-8038#parameters), accounts and access lists
+- [EIP-8038](https://eips.ethereum.org/EIPS/eip-8038#parameters), accounts, calls and access lists
 
 The last four are in Last Call, so their prices may still change.
 
-This file holds their prices for accounts and transactions only.
+This file holds their prices for accounts, storage writes, calls and transactions only.
 
-The Glamsterdam prices of storage writes, calls, creations and SELFDESTRUCT are not here yet.
+The Glamsterdam prices of creations and SELFDESTRUCT are not here yet.
 
 The precompiles keep their prices, and the blob prices are with the blob fees.
 
@@ -110,8 +110,12 @@ def STORAGE_WRITE : Nat := 10000
 
 /-- The gas that a call with value gives the callee on top of the gas it passes. -/
 def CALL_STIPEND : Nat := 2300
-/-- The price to send value with a call. -/
+/-- The price to send value with a call, up to BPO5. -/
 def CALL_VALUE : Nat := 9000
+/-- The price to write the leaf values of an account, from EIP-8038.
+
+From Glamsterdam, the price to send value with a call is this plus the stipend. -/
+def ACCOUNT_WRITE : Nat := 9000
 /-- The extra price of a call that creates an account. -/
 def NEW_ACCOUNT : Nat := 25000
 
