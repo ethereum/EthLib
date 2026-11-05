@@ -50,17 +50,16 @@ theorem keyGenLoop_ne_hkdf (ikm keyInfo salt : ByteArray) (attempts : Nat) :
     rw [keyGenLoop] at h
     -- Name the expansion, so that no tactic evaluates the hashes.
     generalize hx : Hkdf.expand _ _ KEYGEN_L = r at h
-    cases r with
-    | error e' =>
-      have := Hkdf.hkdf_error hx
-      simp [KEYGEN_L, Hkdf.HASH_LEN] at this
-    | ok okm =>
-      rw [mapError_ok_bind] at h
-      generalize Fr.ofNat (Fr.bytesBEToNat okm) = sk at h
-      dsimp only at h
-      split at h
-      · exact ih _ h
-      · cases h
+    -- The key has 32 bytes and the output 48, so the expansion succeeds.
+    obtain ⟨okm, rfl⟩ : ∃ okm, r = .ok okm :=
+      ⟨_, hx.symm.trans (Hkdf.expand_eq (by simp [Hkdf.extract, Hkdf.HASH_LEN])
+        (by simp [KEYGEN_L, Hkdf.HASH_LEN]))⟩
+    rw [mapError_ok_bind] at h
+    generalize Fr.ofNat (Fr.bytesBEToNat okm) = sk at h
+    dsimp only at h
+    split at h
+    · exact ih _ h
+    · cases h
 
 /-- Key generation never fails inside HKDF. -/
 theorem keyGen_ne_hkdf (ikm keyInfo : ByteArray) :
