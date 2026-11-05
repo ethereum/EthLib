@@ -39,7 +39,7 @@ A client that samples a column checks it in its own batch, with many commitments
 
 So the cells of one commitment reach it through several batches, each with its own challenge.
 
-The game does not model that shape.
+The game does not model that shape; another file states the games with such columns.
 -/
 
 @[expose] public section

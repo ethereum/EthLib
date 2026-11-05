@@ -457,7 +457,19 @@ At the challenge of the hash, and under `PairingLaws`, this is the batch check o
 The bound is the bound of Lemma 4 plus `(q + 1) 127 / r`, the root term of the random-oracle game, for at most 128 distinct cells.
 The verifier accepts valid openings with every challenge (`CellBatchInput.acceptsAt_of_cellOpeningValid`).
 A client that samples a column checks it in its own batch, with many commitments at one cell index.
-The game does not model several such batches, each with its own challenge.
+That game does not model several such batches, each with its own challenge.
+`Proofs/Kzg/PeerDasColumnGames.lean` models them.
+There the adversary outputs a commitment, openings and `m` columns, and the verifier makes one oracle query per column.
+A column holds an opening when one of its entries has the commitment, the cell and the proof of the opening, at the cell index of the column.
+`verifyDataColumnSidecarKzgProofs_eq_verify` (`Consensus/Proofs/DataAvailability/Column.lean`) shows that the client's check of a sidecar is the batch check of such a column.
+Let each column have at most `n` cells, and let the adversary make at most `q` queries.
+`columnPositionBindingAdvantage_le` bounds position-binding by the advantage of a BSDH reduction plus `(q + m)(n - 1)/r`.
+`columnCodeBindingAdvantage_le` bounds code-binding by the advantages of a BSDH reduction and an ARSDH reduction plus the same term.
+Before Gloas, the type of the commitments of a sidecar allows at most `MAX_BLOB_COMMITMENTS_PER_BLOCK` of them.
+So `n` equal to that limit covers every sidecar whose column the check accepts.
+The term bounds the event that the challenge of some column is a root of a nonzero error polynomial (`prEvent_batchesRomRoot_le`).
+Otherwise every opening that a column holds verifies alone, and the games of single cells apply.
+The verifier accepts a column of cells and proofs of blobs with every challenge (`ColumnBatch.acceptsAt_computeCellsAndKzgProofs`).
 `cellOpeningValid_computeCellsAndKzgProofs` (`Proofs/Kzg/HonestCells.lean`) is about the cells and proofs that the code computes for a blob.
 Under every well-formed setup, they are valid openings for the commitment of the blob, so also under the setup that the games build.
 A valid opening satisfies the scalar equation of a valid cell, with points that pass KZG validation.
