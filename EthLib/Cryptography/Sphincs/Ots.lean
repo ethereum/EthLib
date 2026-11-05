@@ -48,13 +48,13 @@ variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
 /-! ## Chains -/
 
-/-- The 32 hashes of the seed that start the 64 chains of one key.
+/-- The 32 derivations from the seed that start the 64 chains of one key.
 
-Chains `2j` and `2j + 1` start at the two halves of hash `j`. -/
-def chainStarts (pp : PublicParam) (seed : Seed) (key : OtsKey) : m (Vector Digest V) := do
-  -- One hash per pair of chains, so 32 hashes for 64 chains.
-  let pairs ← ofFnInOrder (V / 2) fun j => thFull H pp (addrPrf key j) (packBytes seed)
-  -- Chain `i` takes half `i mod 2` of hash `floor(i / 2)`.
+Chains `2j` and `2j + 1` start at the two halves of derivation `j`. -/
+def chainStarts (pp : PublicParam) (prf : SeedPrf m) (key : OtsKey) : m (Vector Digest V) := do
+  -- One derivation per pair of chains, so 32 derivations for 64 chains.
+  let pairs ← ofFnInOrder (V / 2) fun j => prf pp (addrPrf key j) .empty
+  -- Chain `i` takes half `i mod 2` of derivation `floor(i / 2)`.
   return Vector.ofFn fun i =>
     halfOf ⟨i.val % 2, Nat.mod_lt _ (by decide)⟩
       (pairs[i.val / 2]'(by have := i.isLt; simp only [V] at *; omega))
@@ -79,9 +79,9 @@ def chain (pp : PublicParam) (key : OtsKey) (i : Fin V) (start steps : Nat)
 def otsLeafHash (pp : PublicParam) (key : OtsKey) (ends : Vector Digest V) : m Digest :=
   th H pp (addrLeaf key) (packDigests ends)
 
-/-- The leaf of a key, computed from the seed. -/
-def otsPublicLeaf (pp : PublicParam) (seed : Seed) (key : OtsKey) : m Digest := do
-  let starts ← chainStarts H pp seed key
+/-- The leaf of a key, computed from the seed's derivations. -/
+def otsPublicLeaf (pp : PublicParam) (prf : SeedPrf m) (key : OtsKey) : m Digest := do
+  let starts ← chainStarts pp prf key
   -- Every chain walked from position 0 to position 3, chain 0 first.
   let ends ← ofFnInOrder V fun i => chain H pp key i 0 (CHAIN_LENGTH - 1) (by decide) starts[i]
   otsLeafHash H pp key ends
@@ -118,13 +118,13 @@ Reveals chain `i` at position `x_i`.
 Returns nothing when no counter gives a codeword.
 
 Deterministic, so signing one message again gives the same signature. -/
-def otsSign (pp : PublicParam) (seed : Seed) (key : OtsKey) (msg : ByteArray) :
+def otsSign (pp : PublicParam) (prf : SeedPrf m) (key : OtsKey) (msg : ByteArray) :
     m (Option (UInt32 × Vector Digest V)) := do
   -- Step 1: search the counter until the encoding is a codeword.
   let some (counter, x) ← Internal.findCounter H pp key msg 0 MAX_COUNTER_TRIALS
     | return none
   -- Step 2: reveal each chain at the position its digit names, chain 0 first.
-  let starts ← chainStarts H pp seed key
+  let starts ← chainStarts pp prf key
   let y ← ofFnInOrder V fun i => chain H pp key i 0 x[i] (by simp) starts[i]
   return some (counter, y)
 

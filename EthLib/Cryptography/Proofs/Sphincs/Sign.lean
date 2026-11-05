@@ -23,7 +23,7 @@ namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
 
-variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {seed : Seed} {layer : Layer}
+variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {prf : SeedPrf Id} {layer : Layer}
   {idx : Nat} {msg : ByteArray}
 
 /-! ## The signer as a value
@@ -32,66 +32,66 @@ variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {seed : Seed} {l
 
 /-- What a layer's signature computes: the one-time signature with the key's path, or the error. -/
 theorem signLayer_run :
-    (signLayer (pureHash f) pp seed layer idx msg).run
-      = match (otsSign (pureHash f) pp seed (OtsKey.ofIndex layer idx) msg).run with
+    (signLayer (pureHash f) pp prf layer idx msg).run
+      = match (otsSign (pureHash f) pp prf (OtsKey.ofIndex layer idx) msg).run with
         | none => .error (.noAdmissibleEncoding layer)
         | some (counter, chainValues) =>
-          .ok { counter, chainValues, path := (path (pureHash f) pp seed layer
+          .ok { counter, chainValues, path := (path (pureHash f) pp prf layer
             (OtsKey.ofIndex layer idx).tree (OtsKey.ofIndex layer idx).leaf).run } := by
   rw [signLayer, Id.run_bind]
-  cases (otsSign (pureHash f) pp seed (OtsKey.ofIndex layer idx) msg).run with
+  cases (otsSign (pureHash f) pp prf (OtsKey.ofIndex layer idx) msg).run with
   | none => rfl
   | some found => rfl
 
 /-- What each layer's key signs: the FORS key, or the root of the tree below. -/
 theorem layerMessage_run :
-    (layerMessage (pureHash f) pp seed layer idx).run = match layer with
-      | .bottom => forsKeyBytes (forsKey (pureHash f) pp seed idx).run
-      | .middle => packBytes (treeRoot (pureHash f) pp seed .bottom
+    (layerMessage (pureHash f) pp prf layer idx).run = match layer with
+      | .bottom => forsKeyBytes (forsKey (pureHash f) pp prf idx).run
+      | .middle => packBytes (treeRoot (pureHash f) pp prf .bottom
           (OtsKey.ofIndex .bottom idx).tree).run
-      | .top => packBytes (treeRoot (pureHash f) pp seed .middle
+      | .top => packBytes (treeRoot (pureHash f) pp prf .middle
           (OtsKey.ofIndex .middle idx).tree).run := by
   cases layer <;> rfl
 
-/-- What signing from the scheme seed computes, one layer after the other, in `Except`.
+/-- What signing from the derivations of a seed computes, one layer after the other, in `Except`.
 
 Each layer signs what the layer below gives, at the index the digest names. -/
 theorem signDerived_run {m : Message} :
-    (signDerived (pureHash f) seed pp m).run
-      = let rho := (randomizer (pureHash f) pp seed m).run
+    (signDerived (pureHash f) prf pp m).run
+      = let rho := (randomizer pp prf m).run
         let d := (messageDigest (pureHash f) pp m rho).run
-        (signLayer (pureHash f) pp seed .bottom (digestIndex d)
-            (layerMessage (pureHash f) pp seed .bottom (digestIndex d)).run).run.bind
-          fun bottom => (signLayer (pureHash f) pp seed .middle (digestIndex d)
-            (layerMessage (pureHash f) pp seed .middle (digestIndex d)).run).run.bind
-          fun middle => (signLayer (pureHash f) pp seed .top (digestIndex d)
-            (layerMessage (pureHash f) pp seed .top (digestIndex d)).run).run.bind
+        (signLayer (pureHash f) pp prf .bottom (digestIndex d)
+            (layerMessage (pureHash f) pp prf .bottom (digestIndex d)).run).run.bind
+          fun bottom => (signLayer (pureHash f) pp prf .middle (digestIndex d)
+            (layerMessage (pureHash f) pp prf .middle (digestIndex d)).run).run.bind
+          fun middle => (signLayer (pureHash f) pp prf .top (digestIndex d)
+            (layerMessage (pureHash f) pp prf .top (digestIndex d)).run).run.bind
           fun top => .ok ⟨rho,
-            (forsSign (pureHash f) pp seed (digestIndex d) (digestLeaves d)).run,
+            (forsSign (pureHash f) pp prf (digestIndex d) (digestLeaves d)).run,
             bottom, middle, top⟩ := by
   rw [signDerived]
   simp only [Id.run_bind]
   -- Each layer is either an error, which ends signing, or a value the next layer uses.
-  cases (signLayer (pureHash f) pp seed .bottom
-      (digestIndex (messageDigest (pureHash f) pp m (randomizer (pureHash f) pp seed m).run).run)
-      (layerMessage (pureHash f) pp seed .bottom (digestIndex (messageDigest (pureHash f) pp m
-        (randomizer (pureHash f) pp seed m).run).run)).run).run with
+  cases (signLayer (pureHash f) pp prf .bottom
+      (digestIndex (messageDigest (pureHash f) pp m (randomizer pp prf m).run).run)
+      (layerMessage (pureHash f) pp prf .bottom (digestIndex (messageDigest (pureHash f) pp m
+        (randomizer pp prf m).run).run)).run).run with
   | error err => rfl
   | ok bottom =>
     -- No signer is unfolded here, so `simp` may reduce the matches on `.ok`.
     simp only [Id.run_bind, Id.run_pure, Except.bind]
-    cases (signLayer (pureHash f) pp seed .middle
-        (digestIndex (messageDigest (pureHash f) pp m (randomizer (pureHash f) pp seed m).run).run)
-        (layerMessage (pureHash f) pp seed .middle (digestIndex (messageDigest (pureHash f) pp m
-          (randomizer (pureHash f) pp seed m).run).run)).run).run with
+    cases (signLayer (pureHash f) pp prf .middle
+        (digestIndex (messageDigest (pureHash f) pp m (randomizer pp prf m).run).run)
+        (layerMessage (pureHash f) pp prf .middle (digestIndex (messageDigest (pureHash f) pp m
+          (randomizer pp prf m).run).run)).run).run with
     | error err => rfl
     | ok middle =>
       simp only [Id.run_bind, Id.run_pure]
-      cases (signLayer (pureHash f) pp seed .top
+      cases (signLayer (pureHash f) pp prf .top
           (digestIndex (messageDigest (pureHash f) pp m
-            (randomizer (pureHash f) pp seed m).run).run)
-          (layerMessage (pureHash f) pp seed .top (digestIndex (messageDigest (pureHash f) pp m
-            (randomizer (pureHash f) pp seed m).run).run)).run).run with
+            (randomizer pp prf m).run).run)
+          (layerMessage (pureHash f) pp prf .top (digestIndex (messageDigest (pureHash f) pp m
+            (randomizer pp prf m).run).run)).run).run with
       | error err => rfl
       | ok top => rfl
 
@@ -99,14 +99,14 @@ theorem signDerived_run {m : Message} :
 
 /-- A layer signature is the one-time signature of the layer's key, with that key's path. -/
 theorem signLayer_eq_ok {sig : LayerSignature layer}
-    (h : (signLayer (pureHash f) pp seed layer idx msg).run = .ok sig) :
-    (otsSign (pureHash f) pp seed (OtsKey.ofIndex layer idx) msg).run
+    (h : (signLayer (pureHash f) pp prf layer idx msg).run = .ok sig) :
+    (otsSign (pureHash f) pp prf (OtsKey.ofIndex layer idx) msg).run
         = some (sig.counter, sig.chainValues) ∧
-      sig.path = (path (pureHash f) pp seed layer (OtsKey.ofIndex layer idx).tree
+      sig.path = (path (pureHash f) pp prf layer (OtsKey.ofIndex layer idx).tree
         (OtsKey.ofIndex layer idx).leaf).run := by
   rw [signLayer_run] at h
   -- Name the one-time signature, so the match reduces without evaluating it.
-  cases hots : (otsSign (pureHash f) pp seed (OtsKey.ofIndex layer idx) msg).run with
+  cases hots : (otsSign (pureHash f) pp prf (OtsKey.ofIndex layer idx) msg).run with
   -- No codeword: the result is an error, not a signature.
   | none =>
     rw [hots] at h
@@ -120,11 +120,11 @@ theorem signLayer_eq_ok {sig : LayerSignature layer}
 
 /-- A layer fails only when its key finds no codeword, and then says which layer it was. -/
 theorem signLayer_error {e : SphincsError}
-    (h : (signLayer (pureHash f) pp seed layer idx msg).run = .error e) :
+    (h : (signLayer (pureHash f) pp prf layer idx msg).run = .error e) :
     e = .noAdmissibleEncoding layer ∧
-      (otsSign (pureHash f) pp seed (OtsKey.ofIndex layer idx) msg).run = none := by
+      (otsSign (pureHash f) pp prf (OtsKey.ofIndex layer idx) msg).run = none := by
   rw [signLayer_run] at h
-  cases hots : (otsSign (pureHash f) pp seed (OtsKey.ofIndex layer idx) msg).run with
+  cases hots : (otsSign (pureHash f) pp prf (OtsKey.ofIndex layer idx) msg).run with
   -- No codeword: the error names the layer.
   | none =>
     rw [hots] at h
@@ -141,20 +141,22 @@ theorem signLayer_error {e : SphincsError}
 /-- A signature holds the randomizer, the FORS openings its digest picks, and three layers.
 
 - `s` and `pp` are the scheme seed and the public parameter, from the secret key's seed.
+- Every secret is a derivation from `s`.
 - Each layer's key signs what the layer below gives. -/
 theorem sign_eq_ok {s : Seed} {sk : SecretKey} {m : Message} {σ : Signature}
     (hs : (schemeSeed (pureHash f) sk.seed).run = s)
-    (hpp : (publicParamOf (pureHash f) s).run = pp)
+    (hpp : (publicParamOf (seedPrf (pureHash f) s)).run = pp)
     (h : (signWith (pureHash f) sk m).run = .ok σ) :
+    let prf := seedPrf (pureHash f) s
     let d := (messageDigest (pureHash f) pp m σ.randomizer).run
-    σ.randomizer = (randomizer (pureHash f) pp s m).run ∧
-      σ.fors = (forsSign (pureHash f) pp s (digestIndex d) (digestLeaves d)).run ∧
-      (signLayer (pureHash f) pp s .bottom (digestIndex d)
-          (layerMessage (pureHash f) pp s .bottom (digestIndex d)).run).run = .ok σ.bottom ∧
-      (signLayer (pureHash f) pp s .middle (digestIndex d)
-          (layerMessage (pureHash f) pp s .middle (digestIndex d)).run).run = .ok σ.middle ∧
-      (signLayer (pureHash f) pp s .top (digestIndex d)
-          (layerMessage (pureHash f) pp s .top (digestIndex d)).run).run = .ok σ.top := by
+    σ.randomizer = (randomizer pp prf m).run ∧
+      σ.fors = (forsSign (pureHash f) pp prf (digestIndex d) (digestLeaves d)).run ∧
+      (signLayer (pureHash f) pp prf .bottom (digestIndex d)
+          (layerMessage (pureHash f) pp prf .bottom (digestIndex d)).run).run = .ok σ.bottom ∧
+      (signLayer (pureHash f) pp prf .middle (digestIndex d)
+          (layerMessage (pureHash f) pp prf .middle (digestIndex d)).run).run = .ok σ.middle ∧
+      (signLayer (pureHash f) pp prf .top (digestIndex d)
+          (layerMessage (pureHash f) pp prf .top (digestIndex d)).run).run = .ok σ.top := by
   subst hs hpp
   rw [signWith, Id.run_bind, Id.run_bind, signDerived_run] at h
   -- Peel the three layers off the signer, one bind at a time.

@@ -73,11 +73,11 @@ theorem OtsKey.ofIndex_child (idx : Nat) :
 variable {f : ByteArray → Vector UInt8 32}
 
 /-- An honest layer signature leads to the root of its key's tree. -/
-theorem layerRoot_signLayer {pp : PublicParam} {seed : Seed} {layer : Layer} {idx : Nat}
+theorem layerRoot_signLayer {pp : PublicParam} {prf : SeedPrf Id} {layer : Layer} {idx : Nat}
     {msg : ByteArray} {sig : LayerSignature layer}
-    (h : (signLayer (pureHash f) pp seed layer idx msg).run = .ok sig) :
+    (h : (signLayer (pureHash f) pp prf layer idx msg).run = .ok sig) :
     (layerRoot (pureHash f) pp layer idx msg sig).run
-      = some (treeRoot (pureHash f) pp seed layer (OtsKey.ofIndex layer idx).tree).run := by
+      = some (treeRoot (pureHash f) pp prf layer (OtsKey.ofIndex layer idx).tree).run := by
   obtain ⟨hots, hpath⟩ := signLayer_eq_ok h
   -- The one-time signature recovers the key's leaf, and the honest path climbs to the root.
   rw [layerRoot_run, otsLeaf_otsSign hots, Option.map_some, hpath]
@@ -91,13 +91,15 @@ The public key is the one its scheme seed `S = H("leanSPHINCS" | S_0)` gives. -/
 theorem verify_sign {sk : SecretKey} {m : Message} {σ : Signature}
     (h : (signWith (pureHash f) sk m).run = .ok σ) :
     (verifyWith (pureHash f)
-      (publicKeyOf (pureHash f) (schemeSeed (pureHash f) sk.seed).run).run m σ).run = true := by
+      (publicKeyOf (pureHash f) (seedPrf (pureHash f) (schemeSeed (pureHash f) sk.seed).run)).run
+      m σ).run = true := by
   obtain ⟨-, hfors, hbottom, hmiddle, htop⟩ := sign_eq_ok rfl rfl h
   simp only [layerMessage_run] at hbottom hmiddle htop
   rw [verify_iff, signatureRoot]
   -- The public key's parameter is the one the signer derives.
-  rw [show (publicKeyOf (pureHash f) (schemeSeed (pureHash f) sk.seed).run).run.publicParam
-      = (publicParamOf (pureHash f) (schemeSeed (pureHash f) sk.seed).run).run from rfl]
+  rw [show (publicKeyOf (pureHash f)
+        (seedPrf (pureHash f) (schemeSeed (pureHash f) sk.seed).run)).run.publicParam
+      = (publicParamOf (seedPrf (pureHash f) (schemeSeed (pureHash f) sk.seed).run)).run from rfl]
   -- Step 1: the FORS openings recover the FORS key the bottom key signed.
   rw [hfors, forsRecover_forsSign]
   -- Step 2: each layer leads to the root of its key's tree, which the layer above signed.

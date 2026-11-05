@@ -19,6 +19,10 @@ The hash every other definition is built from.
 
 One seed derivation keeps both halves: they are two secrets for the price of one hash.
 
+Every secret is a derivation `H(P' | A | S | suffix)` from the scheme seed `S`.
+
+All of them go through one function, so a proof can replace the seed's role in one place.
+
 Every definition that hashes takes the hash `H` as an argument, in a monad `m`.
 
 - The hash that EthLib computes is Keccak-256, in the identity monad.
@@ -79,5 +83,18 @@ def thFull (pp : PublicParam) (address : Address) (payload : ByteArray) : m Hash
 /-- `Th(P, A, M)`: hash a payload under one address of one key, cut to 16 bytes. -/
 def th (pp : PublicParam) (address : Address) (payload : ByteArray) : m Digest := do
   return halfOf 0 (← thFull H pp address payload)
+
+/-! ## Derivations from the seed -/
+
+/-- A source of secret values: the derivation at a parameter, an address and a suffix.
+
+The signer derives every secret through one such source, so a proof can replace it whole. -/
+abbrev SeedPrf (m : Type → Type) := PublicParam → Address → ByteArray → m HashOutput
+
+/-- `H(P' | A | S | suffix)`: the derivations from the scheme seed `S`.
+
+The seed comes right after the address, so the suffix follows it. -/
+def seedPrf (s : Seed) : SeedPrf m := fun pp address suffix =>
+  thFull H pp address (packBytes s ++ suffix)
 
 end EthLib.Cryptography.Sphincs
