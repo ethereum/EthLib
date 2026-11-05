@@ -315,7 +315,11 @@ def bindings : List Binding := [
     "(name: str, fork: str, data: bytes) -> bool",
     [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
   ⟨"consensus_process_operation", `EthLib.Consensus.Exports.processOperationExport,
-    "(name: str, fork: str, handler: str, pre: bytes, operation: bytes, verify: bool) -> bytes",
+    "(name: str, fork: str, handler: str, pre: bytes, operation: bytes, config: bytes, " ++
+      "verify: bool) -> bytes",
+    [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
+  ⟨"consensus_process_epoch", `EthLib.Consensus.Exports.processEpochExport,
+    "(name: str, fork: str, handler: str, pre: bytes, config: bytes) -> bytes",
     [`EthLib.Consensus.TransitionError], some "TransitionError"⟩,
   ⟨"consensus_light_client_sync", `EthLib.Consensus.Exports.lightClientSyncExport,
     "(name: str, fork: str, config: bytes, trusted: bytes, genesis_validators_root: bytes, " ++

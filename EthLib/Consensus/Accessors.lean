@@ -62,6 +62,8 @@ inductive AccessorError where
   | builderIndexOutOfRange (index : BuilderIndex)
   /-- From Gloas: a position is past the end of the pending builder payments. -/
   | paymentIndexOutOfRange (index : UInt64)
+  /-- From Gloas: the window of payload committees holds no committee for the slot. -/
+  | ptcSlotOutOfRange (slot stateSlot : Slot)
   deriving DecidableEq, Repr
 
 /-- Whether a validator is active in an epoch: from its activation epoch, before its exit epoch. -/

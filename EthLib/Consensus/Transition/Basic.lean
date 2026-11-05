@@ -55,6 +55,12 @@ inductive TransitionError where
   | invalidIndexedAttestation
   /-- No validator in both attestations of an attester slashing may be slashed. -/
   | noneSlashed
+  /-- From Gloas: a payload attestation is not for the parent of the block. -/
+  | payloadAttestationNotForParent
+  /-- From Gloas: a payload attestation is not for the slot before that of the state. -/
+  | payloadAttestationWrongSlot (slot stateSlot : Slot)
+  /-- From Gloas: a payload attestation is not a valid indexed payload attestation. -/
+  | invalidPayloadAttestation
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -80,6 +86,9 @@ def TransitionError.code : TransitionError → UInt32
   | .notSlashableData => 15
   | .invalidIndexedAttestation => 16
   | .noneSlashed => 17
+  | .payloadAttestationNotForParent => 18
+  | .payloadAttestationWrongSlot .. => 19
+  | .invalidPayloadAttestation => 20
 
 /-- An assertion of the rule: success when the condition holds, and the error otherwise. -/
 def ensure (condition : Prop) [Decidable condition] (error : TransitionError) :

@@ -9,6 +9,8 @@ from ruamel.yaml import YAML
 
 from consensus.containers import CONTAINERS
 from consensus.containers import FORKS as CONSENSUS_FORK
+from consensus.test_epoch_processing import HANDLERS as EPOCH_STEPS
+from consensus.test_epoch_processing import runs as runs_epoch_step
 from consensus.test_operations import HANDLERS as OPERATIONS
 from consensus.test_light_client_sync import SPECIFIED as LIGHT_CLIENT_FORKS
 from consensus.test_light_client_sync import runs_sync
@@ -309,6 +311,13 @@ def _operation(root: Path, case: Case) -> None:
     run_case(case.preset, case.fork, case.group.split("/")[1], root / case.path)
 
 
+def _epoch_step(root: Path, case: Case) -> None:
+    from consensus.test_epoch_processing import run_case
+
+    # tests/<preset>/<fork>/epoch_processing/<handler>/<suite>/<case>
+    run_case(case.preset, case.fork, case.group.split("/")[1], root / case.path)
+
+
 def _container_forks(container: str) -> tuple[str, ...]:
     first, dropped = CONTAINERS[container]
     forks = list(CONSENSUS_FORK)
@@ -331,6 +340,7 @@ RUNNERS = {
     "light_client/update_ranking": _update_ranking,
     "legacy_header": legacy.run_headers,
     **{f"operations/{handler}": _operation for handler in OPERATIONS},
+    **{f"epoch_processing/{handler}": _epoch_step for handler in EPOCH_STEPS},
     "legacy_ommers": legacy.run_ommers,
     "legacy_dao": legacy.run_dao,
 }
@@ -366,6 +376,8 @@ def runner(case: Case):
     if run is _light_client_sync and not runs_sync(case.fork, Path(case.path).name):
         return None
     if run is _update_ranking and case.fork not in LIGHT_CLIENT_FORKS:
+        return None
+    if run is _epoch_step and not runs_epoch_step(case.fork, case.group.split("/")[1]):
         return None
     return run
 

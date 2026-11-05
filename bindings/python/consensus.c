@@ -153,7 +153,17 @@ eth_consensus_process_operation(
   lean_object* handler,
   lean_object* pre,
   lean_object* operation,
+  lean_object* config,
   uint8_t verify
+);
+
+extern lean_object*
+eth_consensus_process_epoch(
+  lean_object* name,
+  lean_object* fork,
+  lean_object* handler,
+  lean_object* pre,
+  lean_object* config
 );
 
 extern lean_object*
@@ -759,17 +769,17 @@ py_consensus_process_operation(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *name_obj, *fork_obj, *handler_obj, *pre_obj, *operation_obj;
+  PyObject *name_obj, *fork_obj, *handler_obj, *pre_obj, *operation_obj, *config_obj;
   int verify;
-  if (!PyArg_ParseTuple(args, "OOOOOp", &name_obj, &fork_obj, &handler_obj, &pre_obj,
-                        &operation_obj, &verify)) return NULL;
+  if (!PyArg_ParseTuple(args, "OOOOOOp", &name_obj, &fork_obj, &handler_obj, &pre_obj,
+                        &operation_obj, &config_obj, &verify)) return NULL;
   /* Check every argument before any Lean object exists, so a failure leaks nothing. */
   if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj) || !PyUnicode_Check(handler_obj)) {
     PyErr_SetString(PyExc_TypeError, "name, fork and handler must be str");
     return NULL;
   }
-  if (!PyBytes_Check(pre_obj) || !PyBytes_Check(operation_obj)) {
-    PyErr_SetString(PyExc_TypeError, "pre and operation must be bytes");
+  if (!PyBytes_Check(pre_obj) || !PyBytes_Check(operation_obj) || !PyBytes_Check(config_obj)) {
+    PyErr_SetString(PyExc_TypeError, "pre, operation and config must be bytes");
     return NULL;
   }
   Py_ssize_t name_len, fork_len, handler_len;
@@ -786,8 +796,11 @@ py_consensus_process_operation(
     (const uint8_t*) PyBytes_AS_STRING(pre_obj), PyBytes_GET_SIZE(pre_obj));
   lean_object* operation = mk_bytearray(
     (const uint8_t*) PyBytes_AS_STRING(operation_obj), PyBytes_GET_SIZE(operation_obj));
+  lean_object* config = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(config_obj), PyBytes_GET_SIZE(config_obj));
   return except_into_pybytes(
-    eth_consensus_process_operation(name, fork, handler, pre, operation, (uint8_t) verify),
+    eth_consensus_process_operation(name, fork, handler, pre, operation, config,
+                                    (uint8_t) verify),
     TRANSITION_ERROR);
 }
 
@@ -859,4 +872,39 @@ py_consensus_compute_fork_digest(
     eth_consensus_compute_fork_digest(name, bytes_arg(config_obj), bytes_arg(root_obj),
                                       (uint64_t) epoch),
     SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_process_epoch(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *handler_obj, *pre_obj, *config_obj;
+  if (!PyArg_ParseTuple(args, "OOOOO", &name_obj, &fork_obj, &handler_obj, &pre_obj,
+                        &config_obj)) return NULL;
+  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
+  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj) || !PyUnicode_Check(handler_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name, fork and handler must be str");
+    return NULL;
+  }
+  if (!PyBytes_Check(pre_obj) || !PyBytes_Check(config_obj)) {
+    PyErr_SetString(PyExc_TypeError, "pre and config must be bytes");
+    return NULL;
+  }
+  Py_ssize_t name_len, fork_len, handler_len;
+  const char* name_utf8 = PyUnicode_AsUTF8AndSize(name_obj, &name_len);
+  if (!name_utf8) return NULL;
+  const char* fork_utf8 = PyUnicode_AsUTF8AndSize(fork_obj, &fork_len);
+  if (!fork_utf8) return NULL;
+  const char* handler_utf8 = PyUnicode_AsUTF8AndSize(handler_obj, &handler_len);
+  if (!handler_utf8) return NULL;
+  lean_object* name = mk_bytearray((const uint8_t*) name_utf8, name_len);
+  lean_object* fork = mk_bytearray((const uint8_t*) fork_utf8, fork_len);
+  lean_object* handler = mk_bytearray((const uint8_t*) handler_utf8, handler_len);
+  lean_object* pre = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(pre_obj), PyBytes_GET_SIZE(pre_obj));
+  lean_object* config = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(config_obj), PyBytes_GET_SIZE(config_obj));
+  return except_into_pybytes(
+    eth_consensus_process_epoch(name, fork, handler, pre, config), TRANSITION_ERROR);
 }
