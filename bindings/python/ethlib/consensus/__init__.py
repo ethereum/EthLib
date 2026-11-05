@@ -124,6 +124,17 @@ def compute_subscribed_subnets(node_id: int, epoch: int, name: str = "mainnet") 
     return _value(json.loads(subnets))
 
 
+def merkle_proof(name: str, fork: str, type_name: str, data: bytes, gindex: int) -> tuple:
+    """The node at a generalized index of a beacon container, and its branch up to the root."""
+    out = _native.consensus_merkle_proof(name, fork, type_name, data, gindex)
+    return out[:32], [out[i:i + 32] for i in range(32, len(out), 32)]
+
+
+def verify_blob_sidecar_inclusion_proof(name: str, fork: str, data: bytes) -> bool:
+    """Whether the branch of a blob sidecar climbs from its commitment to its body root."""
+    return _native.consensus_verify_blob_sidecar_inclusion_proof(name, fork, data)
+
+
 __all__ = [
     "preset",
     "config",
@@ -143,4 +154,6 @@ __all__ = [
     "compute_subnet_for_blob_sidecar",
     "compute_subnet_for_data_column_sidecar",
     "compute_subscribed_subnets",
+    "merkle_proof",
+    "verify_blob_sidecar_inclusion_proof",
 ]

@@ -12,6 +12,7 @@ public import EthLib.Consensus.Proofs.Containers.Requests
 public import EthLib.Consensus.Proofs.Containers.Signing
 public import EthLib.Consensus.Proofs.Containers.State
 public import EthLib.Consensus.Proofs.Containers.SyncCommittee
+public import EthLib.Consensus.Proofs.DataAvailability.Blob
 public import EthLib.Consensus.Proofs.DataAvailability.Custody
 public import EthLib.Consensus.Proofs.ForkSchedule
 public import EthLib.Consensus.Proofs.Gossip.Topics

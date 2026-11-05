@@ -363,6 +363,14 @@ def consensus_ssz_static(name: str, fork: str, type: str, data: bytes) -> bytes:
     """The root of the value that the bytes encode, then the bytes of that value."""
     ...
 
+def consensus_merkle_proof(name: str, fork: str, type: str, data: bytes, gindex: int) -> bytes:
+    """The node at a generalized index of the value that the bytes encode, then its branch."""
+    ...
+
+def consensus_verify_blob_sidecar_inclusion_proof(name: str, fork: str, data: bytes) -> bool:
+    """Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header."""
+    ...
+
 def consensus_compute_shuffled_permutation(name: str, count: int, seed: bytes) -> bytes:
     """The shuffled position of every index below the count."""
     ...

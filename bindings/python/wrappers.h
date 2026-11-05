@@ -291,6 +291,8 @@ PyObject* py_consensus_parameters                         (PyObject* self, PyObj
 PyObject* py_consensus_get_custody_groups                 (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_columns_for_custody_group  (PyObject* self, PyObject* args);
 PyObject* py_consensus_ssz_static                         (PyObject* self, PyObject* args);
+PyObject* py_consensus_merkle_proof                       (PyObject* self, PyObject* args);
+PyObject* py_consensus_verify_blob_sidecar_inclusion_proof (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_shuffled_permutation      (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_shuffled_index            (PyObject* self, PyObject* args);
 PyObject* py_consensus_reqresp_protocol_ids               (PyObject* self, PyObject* args);
