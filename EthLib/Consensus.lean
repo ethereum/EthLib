@@ -26,6 +26,7 @@ public import EthLib.Consensus.ForkChoice.Store
 public import EthLib.Consensus.ForkSchedule
 public import EthLib.Consensus.Gossip.Topics
 public import EthLib.Consensus.InclusionList
+public import EthLib.Consensus.HonestBuilder
 public import EthLib.Consensus.InclusionListCommittee
 public import EthLib.Consensus.LightClient.Containers
 public import EthLib.Consensus.LightClient.Sync
@@ -39,6 +40,7 @@ public import EthLib.Consensus.Signing
 public import EthLib.Consensus.Time
 public import EthLib.Consensus.Transition.Basic
 public import EthLib.Consensus.Transition.Block
+public import EthLib.Consensus.Transition.Payload
 public import EthLib.Consensus.Types
 
 /-!
