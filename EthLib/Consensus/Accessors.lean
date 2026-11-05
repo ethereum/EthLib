@@ -54,6 +54,8 @@ inductive AccessorError where
   | bitOutOfRange (position : Nat)
   /-- An attestation has more attesters than its indexed form can list. -/
   | tooManyAttesters (count limit : Nat)
+  /-- The rule at this fork is not yet in EthLib, so no older rule stands in for it. -/
+  | forkNotYetSpecified (fork : Base.Fork)
   deriving DecidableEq, Repr
 
 /-- Whether a validator is active in an epoch: from its activation epoch, before its exit epoch. -/
