@@ -356,8 +356,8 @@ theorem queueExcessActiveBalance_balance {state after : BeaconState preset fork}
       rw [UInt64.min_def, ite_eq_right_iff.mpr (fun le => absurd above (UInt64.not_lt.mpr le))]
     rw [minimum]
     refine ⟨getBalance_setBalance_self found _, [⟨validator.pubkey,
-      validator.withdrawalCredentials, balance - preset.MIN_ACTIVATION_BALANCE, infinitySignature,
-      GENESIS_SLOT⟩], ?_, ?_⟩
+      validator.withdrawalCredentials, balance - preset.MIN_ACTIVATION_BALANCE,
+      Cryptography.Bls.Signatures.infinitySignature, GENESIS_SLOT⟩], ?_, ?_⟩
     · show pending.data.toList = _
       rw [appendWithinLimit_data appended, Array.toList_push]
     · simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil, Nat.add_zero]

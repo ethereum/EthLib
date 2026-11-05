@@ -427,6 +427,10 @@ theorem ethFastAggregateVerify_empty (msg sig : ByteArray) :
     ethFastAggregateVerify #[] msg sig = true ↔ sig = G2_POINT_AT_INFINITY := by
   simp [ethFastAggregateVerify]
 
+/-- The signature of the point at infinity is the constant of the Ethereum wrapper. -/
+theorem pointToSignature_zero : pointToSignature G2.zero = infinitySignature := by
+  simp [pointToSignature, infinitySignature, G2_POINT_AT_INFINITY]
+
 /-- Honest signatures on one message pass the Ethereum fast aggregate verification.
 
 The secret keys must not sum to zero. -/
