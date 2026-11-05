@@ -51,13 +51,24 @@ Each opcode takes at least one byte, so the size of the code bounds the number o
 def opcodePositions (code : ByteArray) : List Nat :=
   opcodePositionsFrom code code.size 0
 
+/-- The flags with each JUMPDEST set that starts an opcode of the code from `pc`.
+
+It scans at most `fuel` opcodes, the same positions as the list of opcode positions.
+
+It calls itself only last, so a scan of millions of opcodes needs no deep stack. -/
+def markJumpDestsFrom (code : ByteArray) : (fuel pc : Nat) → Array Bool → Array Bool
+  | 0, _, flags => flags
+  | fuel + 1, pc, flags =>
+    if pc < code.size then
+      markJumpDestsFrom code fuel (nextOpcode code pc)
+        (if byteAt code pc = JUMPDEST then flags.set! pc true else flags)
+    else flags
+
 /-- The valid jump destinations of the code, as one flag for each position.
 
 A flag is true when an opcode starts at the position and the byte there is JUMPDEST. -/
 def validJumpDestinations (code : ByteArray) : Array Bool :=
-  (opcodePositions code).foldl
-    (fun flags pc => if byteAt code pc = JUMPDEST then flags.set! pc true else flags)
-    (Array.replicate code.size false)
+  markJumpDestsFrom code code.size 0 (Array.replicate code.size false)
 
 /-- Whether a position is a valid jump destination, given the flags of the code. -/
 def isValidJumpDest (flags : Array Bool) (pc : Nat) : Bool :=
