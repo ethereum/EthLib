@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Length
 public import EthLib.Serialization.Rlp.Encode
 
 /-!
@@ -31,38 +32,8 @@ The decoder rejects all three, and any input that ends early or has bytes left a
 
 namespace EthLib.Serialization.Rlp
 
-namespace Internal
-
-/-- Whether a list has at least `n` elements, read in at most `n` steps. -/
-def hasAtLeast {α : Type} : Nat → List α → Bool
-  | 0, _ => true
-  | _ + 1, [] => false
-  | n + 1, _ :: rest => hasAtLeast n rest
-
-/-- The check reads the length of the list against the bound. -/
-theorem hasAtLeast_iff {α : Type} (n : Nat) (l : List α) :
-    hasAtLeast n l = true ↔ n ≤ l.length := by
-  induction n generalizing l with
-  | zero => simp [hasAtLeast]
-  | succ n ih => cases l <;> simp [hasAtLeast, ih]
-
-/-- A bound on the length of a list, decided in as many steps as the bound.
-
-Each length a decoder reads is checked against the rest of the input.
-
-So each check costs that length, not the whole input. -/
-@[instance_reducible] def decideLeLength {α : Type} (n : Nat) (l : List α) :
-    Decidable (n ≤ l.length) :=
-  decidable_of_iff _ (hasAtLeast_iff n l)
-
-/-- A list shorter than a bound, decided in as many steps as the bound. -/
-@[instance_reducible] def decideLengthLt {α : Type} (l : List α) (n : Nat) :
-    Decidable (l.length < n) :=
-  decidable_of_iff (¬ hasAtLeast n l = true) (by rw [hasAtLeast_iff]; omega)
-
-end Internal
-
-attribute [local instance high] Internal.decideLeLength Internal.decideLengthLt
+-- Each length the decoder reads is checked in as many steps as that length.
+attribute [local instance high] Base.Length.decideLeLength Base.Length.decideLengthLt
 
 /-- What the first bytes of an encoding announce, from its first byte `first` and the rest.
 

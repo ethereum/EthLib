@@ -108,13 +108,75 @@ theorem readPreamble_le {bs rest : List UInt8} {len : Nat}
 The output is held most recent byte first, so a forward list `o` is stored as its reverse.
 -/
 
+/-- No bytes to copy leave the output as it is. -/
+theorem copyBytes_zero (out : List UInt8) (offset : Nat) : copyBytes out offset 0 = .ok out := by
+  rw [copyBytes, ite_eq_left rfl]
+
+/-- Copying `n + 1` bytes writes the byte `offset` back, then copies `n` more after it.
+
+This is the rule of §2.2, one byte at a time. -/
+theorem copyBytes_succ (out : List UInt8) (offset n : Nat) :
+    copyBytes out offset (n + 1) =
+      match out[offset - 1]? with
+      | none => .error (.copyOffsetTooLarge offset)
+      | some b => copyBytes (b :: out) offset n := by
+  induction n using Nat.strongRecOn generalizing out with
+  | ind n ih =>
+  -- The byte read is the oldest of the window of `max offset 1 = k + 1` bytes.
+  obtain ⟨k, hk⟩ : ∃ k, max offset 1 = k + 1 := ⟨max offset 1 - 1, by omega⟩
+  have hidx : offset - 1 = k := by omega
+  -- The same copy, unfolded once, for any output and length.
+  have unfold : ∀ (o : List UInt8) (m : Nat), m ≠ 0 → copyBytes o offset m =
+      if (o.take (k + 1)).length < k + 1 then .error (.copyOffsetTooLarge offset)
+      else if m ≤ k + 1 then .ok ((o.take (k + 1)).drop (k + 1 - m) ++ o)
+      else copyBytes (o.take (k + 1) ++ o) offset (m - (k + 1)) := by
+    intro o m hm
+    rw [copyBytes, ite_eq_right hm, hk]
+  rw [unfold out (n + 1) (by omega), hidx]
+  by_cases short : out.length < k + 1
+  · rw [ite_eq_left (by simp; omega), List.getElem?_eq_none (by omega)]
+  · have hlt : k < out.length := by omega
+    rw [ite_eq_right (by simp; omega), List.getElem?_eq_getElem hlt]
+    dsimp only
+    -- The window is the bytes before the one read, then that byte.
+    have hwin : out.take (k + 1) = out.take k ++ [out[k]] := by
+      rw [List.take_add_one, List.getElem?_eq_getElem hlt]
+      rfl
+    have hwin' : (out[k] :: out).take (k + 1) = out[k] :: out.take k := List.take_succ_cons
+    have hlen' : ¬((out[k] :: out).take (k + 1)).length < k + 1 := by
+      rw [hwin']; simp; omega
+    by_cases fits : n + 1 ≤ k + 1
+    · rw [ite_eq_left fits]
+      rcases Nat.eq_zero_or_pos n with rfl | hn
+      · rw [copyBytes_zero, hwin, List.drop_append_of_le_length (by simp; omega)]
+        simp
+      · rw [unfold _ n (by omega), ite_eq_right hlen', ite_eq_left (by omega), hwin', hwin,
+          show k + 1 - n = (k - n) + 1 by omega, List.drop_succ_cons,
+          List.drop_append_of_le_length (by simp; omega)]
+        simp
+    · rw [ite_eq_right fits]
+      have hget : (out.take (k + 1) ++ out)[k]? = some out[k] := by
+        rw [List.getElem?_append_left (by simp; omega), List.getElem?_take_of_lt (by omega),
+          List.getElem?_eq_getElem hlt]
+      by_cases exact : n = k + 1
+      · subst exact
+        rw [unfold _ (k + 1) (by omega), ite_eq_right hlen', ite_eq_left (Nat.le_refl _),
+          Nat.sub_self, List.drop_zero, show k + 1 + 1 - (k + 1) = 0 + 1 by omega, ih 0 (by omega),
+          hidx, hget]
+        simp only [copyBytes_zero, hwin', hwin, List.append_assoc, List.nil_append,
+          List.cons_append]
+      · rw [unfold _ n (by omega), ite_eq_right hlen', ite_eq_right (by omega), hwin',
+          show n + 1 - (k + 1) = (n - (k + 1)) + 1 by omega, ih (n - (k + 1)) (by omega), hidx,
+          hget]
+        simp only [hwin, List.append_assoc, List.cons_append, List.nil_append]
+
 /-- A successful copy of `n` bytes lengthens the output by `n`. -/
 theorem copyBytes_length {out out' : List UInt8} {offset n : Nat}
     (h : copyBytes out offset n = .ok out') : out'.length = out.length + n := by
   induction n generalizing out with
-  | zero => rw [copyBytes] at h; cases h; simp
+  | zero => rw [copyBytes_zero] at h; cases h; simp
   | succ n ih =>
-      rw [copyBytes] at h
+      rw [copyBytes_succ] at h
       split at h
       · cases h
       · have := ih h
@@ -137,7 +199,7 @@ theorem copyBytes_spec {o : List UInt8} {offset : Nat} (n : Nat)
       ∀ (j : Nat) (hj : o.length ≤ j) (hjr : j < r.length),
         r[j] = r[j - offset]'(by omega) := by
   induction n generalizing o with
-  | zero => exact ⟨o, rfl, rfl, List.prefix_refl o, fun j hj hjr => by omega⟩
+  | zero => exact ⟨o, copyBytes_zero _ _, rfl, List.prefix_refl o, fun j hj hjr => by omega⟩
   | succ n ih =>
       -- The byte `offset` back in forward order.
       have hidx : o.length - offset < o.length := by omega
@@ -148,7 +210,7 @@ theorem copyBytes_spec {o : List UInt8} {offset : Nat} (n : Nat)
       obtain ⟨r, hr, hlen, hpre, hrep⟩ :=
         ih (o := o ++ [o[o.length - offset]]) (by simp; omega)
       refine ⟨r, ?_, ?_, ?_, ?_⟩
-      · rw [copyBytes, hread]
+      · rw [copyBytes_succ, hread]
         simpa using hr
       · simp at hlen; omega
       · exact (List.prefix_append o _).trans hpre
@@ -171,13 +233,14 @@ theorem copyBytes_spec {o : List UInt8} {offset : Nat} (n : Nat)
 theorem copyBytes_nil {offset len : Nat} (hlen : 0 < len) :
     copyBytes [] offset len = .error (.copyOffsetTooLarge offset) := by
   obtain ⟨k, rfl⟩ : ∃ k, len = k + 1 := ⟨len - 1, by omega⟩
+  rw [copyBytes_succ]
   rfl
 
 /-- A copy reaching past the start of the output fails. -/
 theorem copyBytes_tooLarge {out : List UInt8} {offset n : Nat}
     (hout : out.length < offset) :
     copyBytes out offset (n + 1) = .error (.copyOffsetTooLarge offset) := by
-  rw [copyBytes, List.getElem?_eq_none (by omega)]
+  rw [copyBytes_succ, List.getElem?_eq_none (by omega)]
 
 /-! ## The element loop -/
 
@@ -198,6 +261,7 @@ theorem decompressElements_succ_fuel (input out : List UInt8) {fuel : Nat}
           have hr : rest.length ≤ fuel := by omega
           -- Every recursive call reads a suffix of the rest.
           simp (disch := simp only [List.length_drop]; omega) only [decompressElements, ih]
+          congr
 
 /-- The element loop gives the same result for every fuel that covers the input. -/
 theorem decompressElements_fuel (input out : List UInt8) {fuel : Nat}
