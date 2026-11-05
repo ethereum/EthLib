@@ -635,6 +635,10 @@ def receipt_reencode(fork: str, receipt: bytes) -> bytes:
     """The bytes of a receipt, decoded at the fork and encoded again with its transaction type."""
     ...
 
+def block_make_receipts(fork: str, results: bytes) -> bytes:
+    """The receipts of the transactions of a block, and their receipts root."""
+    ...
+
 def receipt_logs_bloom(fork: str, receipt: bytes) -> bytes:
     """The logs Bloom filter of the logs of a receipt, decoded at the fork."""
     ...

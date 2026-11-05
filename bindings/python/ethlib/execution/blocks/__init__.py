@@ -1,6 +1,7 @@
 """Block headers, blocks and receipts of the execution layer, at each fork."""
 
 from ...errors import BlockError
+from ...serialization import rlp
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -52,6 +53,12 @@ def receipt_reencode(fork: str, receipt: bytes) -> bytes:
     return _native.receipt_reencode(fork, receipt)
 
 
+def make_receipts(fork: str, results: bytes) -> tuple[bytes, list[bytes]]:
+    """The receipts root and the receipts of a block, from the RLP list of its results."""
+    root, receipts = rlp.decode(_native.block_make_receipts(fork, results))
+    return root, receipts
+
+
 def receipt_logs_bloom(fork: str, receipt: bytes) -> bytes:
     """The 256-byte logs Bloom filter of the logs of a receipt, decoded at the fork."""
     return _native.receipt_logs_bloom(fork, receipt)
@@ -74,5 +81,5 @@ def check_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -> N
 
 __all__ = ["header_hash", "reencode", "transactions_root", "withdrawals_root",
            "deposit_requests", "requests_hash", "block_access_list_hash",
-           "check_block_access_list", "receipt_reencode", "receipt_logs_bloom", "validate_size",
-           "validate_header", "check_header", "BlockError"]
+           "check_block_access_list", "make_receipts", "receipt_reencode", "receipt_logs_bloom",
+           "validate_size", "validate_header", "check_header", "BlockError"]

@@ -3358,6 +3358,31 @@
    "docstring":
    "The bytes of a receipt, decoded at the fork and encoded again with its transaction type."},
   {"summary":
+   "The receipts of the transactions of a block, and their receipts root.",
+   "signature": "(fork: str, results: bytes) -> bytes",
+   "operation": "EthLib.Execution.Blocks.Exports.makeReceiptsExport",
+   "method": "block_make_receipts",
+   "errors":
+   [{"type": "EthLib.Serialization.Rlp.RlpError",
+     "codes":
+     [{"constructor": "payloadTooLong", "code": 1},
+      {"constructor": "inputTooShort", "code": 2},
+      {"constructor": "singleByteWithPrefix", "code": 3},
+      {"constructor": "longFormForShortLength", "code": 4},
+      {"constructor": "leadingZeroInLength", "code": 5},
+      {"constructor": "trailingBytes", "code": 6},
+      {"constructor": "leadingZeroInScalar", "code": 7},
+      {"constructor": "listAsScalar", "code": 8},
+      {"constructor": "listAsBytes", "code": 9},
+      {"constructor": "bytesAsList", "code": 10},
+      {"constructor": "wrongLength", "code": 11},
+      {"constructor": "scalarTooLarge", "code": 12},
+      {"constructor": "wrongFieldCount", "code": 13},
+      {"constructor": "inField", "code": 14}]}],
+   "error_class": "BlockError",
+   "docstring":
+   "The receipts of the transactions of a block, and their receipts root.\n\nThe input is the RLP list of the results of the transactions, in order.\n\nIt returns the RLP list of the root and of the list of the bytes of each receipt."},
+  {"summary":
    "The logs Bloom filter of the logs of a receipt, decoded at the fork.",
    "signature": "(fork: str, receipt: bytes) -> bytes",
    "operation": "EthLib.Execution.Blocks.Exports.receiptLogsBloomExport",

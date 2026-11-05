@@ -362,6 +362,7 @@ PyObject* py_eth_message_decode                           (PyObject* self, PyObj
 PyObject* py_eth_check_status                             (PyObject* self, PyObject* args);
 PyObject* py_receipt_reencode                             (PyObject* self, PyObject* args);
 PyObject* py_receipt_logs_bloom                           (PyObject* self, PyObject* args);
+PyObject* py_block_make_receipts                          (PyObject* self, PyObject* args);
 PyObject* py_tx_type                                      (PyObject* self, PyObject* args);
 PyObject* py_tx_hash                                      (PyObject* self, PyObject* args);
 PyObject* py_tx_recover_sender                            (PyObject* self, PyObject* args);
