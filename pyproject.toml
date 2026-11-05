@@ -14,7 +14,7 @@ urls = { homepage = "https://github.com/ethereum/ethlib" }
 
 [project.optional-dependencies]
 test = [
-  "pytest==9.0.3",
+  "pytest==9.2.0",
   "pytest-xdist==3.8.0",
   "ruamel.yaml==0.19.1",
   "py_ecc==8.0.0",
