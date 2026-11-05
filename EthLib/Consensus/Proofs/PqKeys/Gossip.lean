@@ -49,7 +49,7 @@ theorem validatePqKeyRegistration_eq_accept {view : RegistrationView} {pubkey : 
       activationEpoch ≤ clockEpoch ∧
       view.notExiting signed.message.index = true ∧
       view.depositFinalized signed.message.index = true ∧
-      (namesBuilder signed.message.index = true →
+      (isBuilderIndex signed.message.index = true →
         signed.message.keyMaterial.vrfRoot = Vector.replicate 32 0) ∧
       seen = false ∧
       signed.message.previousChangeEpoch = changeEpoch ∧
@@ -74,7 +74,7 @@ theorem validatePqKeyRegistration_eq_accept {view : RegistrationView} {pubkey : 
   · rintro ⟨early, exiting, deposit, vrf, fresh, stale, delay, zero, used, bls, possession⟩
     subst stale
     refine ⟨early, exiting, deposit, ?_, fresh, rfl, ?_, zero, used, bls, possession⟩
-    · cases builder : namesBuilder signed.message.index
+    · cases builder : isBuilderIndex signed.message.index
       · exact .inl rfl
       · exact .inr (vrf builder)
     · by_cases nonzero : stored.xmssPublicKey = Vector.replicate 32 0
