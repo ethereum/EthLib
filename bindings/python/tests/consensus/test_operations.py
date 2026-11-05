@@ -26,6 +26,7 @@ HANDLERS = {
     "attester_slashing": ("attester_slashing",
                           ("phase0", "altair", "bellatrix", "capella", "deneb")),
     "payload_attestation": ("payload_attestation", ("gloas",)),
+    "execution_payload_bid": ("execution_payload_bid", ("gloas",)),
 }
 
 # The release archives that hold the cases of the forks that the repository does not vendor.

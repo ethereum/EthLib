@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Exports.Ssz
 public import EthLib.Consensus.PayloadTimeliness
 public import EthLib.Consensus.Transition.Block
+public import EthLib.Consensus.Transition.Payload
 
 /-!
 # `Exports.Transition`
@@ -55,10 +56,15 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
       runTransition (processPayloadAttestation config checks state gloas
         (← decodeInput (PayloadAttestation preset) operation))
     else throw (0, s!"no operation payload_attestation at {fork.name}")
+  | "execution_payload_bid" =>
+    if gloas : .glamsterdam ≤ fork then do
+      runTransition (processExecutionPayloadBid config checks state gloas
+        (← decodeInput (SignedExecutionPayloadBid preset fork) operation))
+    else throw (0, s!"no operation execution_payload_bid at {fork.name}")
   | handler => throw (0, s!"no operation {handler}")
 
 /-- The operations whose Gloas rule EthLib holds. -/
-def gloasOperations : List String := ["payload_attestation"]
+def gloasOperations : List String := ["payload_attestation", "execution_payload_bid"]
 
 /-- The preset and the fork that UTF-8 names name, at a fork up to Gloas. -/
 def transitionPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
