@@ -11,6 +11,7 @@ public import EthLib.Execution.Proofs.Evm.Words
 public import EthLib.Execution.Proofs.Evm.Gas
 public import EthLib.Execution.Proofs.Evm.Op
 public import EthLib.Execution.Proofs.Evm.Stack
+public import EthLib.Execution.Proofs.Evm.Delegation
 public import EthLib.Execution.Proofs.Evm.Frame
 public import EthLib.Execution.Proofs.Evm.Step
 public import EthLib.Execution.Proofs.Evm.StackOnly
