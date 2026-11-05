@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: sanity
+handler: blocks
+suite: pyspec_tests
+case: attestation

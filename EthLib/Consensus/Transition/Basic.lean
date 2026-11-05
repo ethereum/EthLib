@@ -135,6 +135,12 @@ inductive TransitionError where
   | invalidBlsChangeSignature
   /-- The historical roots are at their list limit. -/
   | historicalRootsFull
+  /-- The target slot is not after the slot of the state. -/
+  | slotNotAfter (slot stateSlot : Slot)
+  /-- A block does not carry the signature of its proposer. -/
+  | invalidBlockSignature
+  /-- The state root of a block is not the root of the state after it. -/
+  | wrongStateRoot
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -200,6 +206,9 @@ def TransitionError.code : TransitionError → UInt32
   | .wrongBlsKey _ => 64
   | .invalidBlsChangeSignature => 65
   | .historicalRootsFull => 52
+  | .slotNotAfter .. => 53
+  | .invalidBlockSignature => 54
+  | .wrongStateRoot => 55
 
 /-- An assertion of the rule: success when the condition holds, and the error otherwise. -/
 def ensure (condition : Prop) [Decidable condition] (error : TransitionError) :

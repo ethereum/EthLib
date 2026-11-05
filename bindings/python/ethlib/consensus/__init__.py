@@ -310,6 +310,20 @@ def rewards_deltas(name: str, fork: str, component: str, pre: bytes,
     return _native.consensus_rewards_deltas(name, fork, component, pre, replacements)
 
 
+def process_slots(name: str, fork: str, pre: bytes, slots: int,
+                  config: dict | None = None) -> bytes:
+    """The SSZ bytes of a beacon state some slots later, or TransitionError."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_process_slots(name, fork, pre, replacements, slots)
+
+
+def state_transition(name: str, fork: str, pre: bytes, block: bytes, verify: bool = True,
+                     config: dict | None = None) -> bytes:
+    """The SSZ bytes of a beacon state after a signed block, or TransitionError."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_state_transition(name, fork, pre, block, replacements, verify)
+
+
 def upgrade_state(name: str, fork: str, pre: bytes, verify: bool = True,
                   config: dict | None = None) -> bytes:
     """The SSZ bytes of a state upgraded to a fork from the fork before, or TransitionError."""
@@ -361,4 +375,6 @@ __all__ = [
     "process_epoch",
     "rewards_deltas",
     "upgrade_state",
+    "process_slots",
+    "state_transition",
 ]

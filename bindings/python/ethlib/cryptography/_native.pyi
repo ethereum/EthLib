@@ -383,6 +383,14 @@ def consensus_rewards_deltas(name: str, fork: str, component: str, pre: bytes, c
     """The rewards and the penalties of each validator for one kind of vote, as SSZ bytes."""
     ...
 
+def consensus_process_slots(name: str, fork: str, pre: bytes, config: bytes, slots: int) -> bytes:
+    """The state some slots later, as SSZ bytes."""
+    ...
+
+def consensus_state_transition(name: str, fork: str, pre: bytes, block: bytes, config: bytes, verify: bool) -> bytes:
+    """The state after a signed block, as SSZ bytes, with the signature and the state root checked."""
+    ...
+
 def consensus_upgrade_state(name: str, fork: str, pre: bytes, config: bytes, verify: bool) -> bytes:
     """The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."""
     ...

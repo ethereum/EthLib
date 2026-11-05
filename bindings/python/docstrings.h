@@ -287,6 +287,12 @@
 #define DOC_consensus_rewards_deltas \
   "The rewards and the penalties of each validator for one kind of vote, as SSZ bytes."
 
+#define DOC_consensus_process_slots \
+  "The state some slots later, as SSZ bytes."
+
+#define DOC_consensus_state_transition \
+  "The state after a signed block, as SSZ bytes, with the signature and the state root checked."
+
 #define DOC_consensus_upgrade_state \
   "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."
 

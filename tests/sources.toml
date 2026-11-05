@@ -30,6 +30,7 @@ directories = [
   "tests/consensus/parameters",
   "tests/consensus/rewards",
   "tests/consensus/shuffling",
+  "tests/consensus/transition",
   "tests/consensus/snappy",
   "tests/consensus/ssz_static",
   "tests/cryptography/bls",
