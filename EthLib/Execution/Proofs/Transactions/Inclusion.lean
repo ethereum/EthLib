@@ -51,12 +51,6 @@ theorem InclusionError.code_injective (e₁ e₂ : InclusionError) (h : e₁.cod
 
 /-! ## Steps of a passing check -/
 
-private theorem bind_ok {ε α β : Type} {x : Except ε α} {f : α → Except ε β} {y : β}
-    (h : (x >>= f) = .ok y) : ∃ a, x = .ok a ∧ f a = .ok y := by
-  cases x with
-  | error e => cases h
-  | ok a => exact ⟨a, rfl, h⟩
-
 private theorem failIf_ok {c : Bool} {e : InclusionError} {u : Unit} (h : failIf c e = .ok u) :
     c = false := by
   cases c
@@ -88,19 +82,19 @@ theorem checkInclusion_ok {fork : Fork} {chainId : UInt64} {env : BlockEnvironme
       tx.nonce.toNat = (state.getAccount inc.sender).nonce ∧
       tx.maxGasFee + tx.value.toNat ≤ (state.getAccount inc.sender).balance.toNat := by
   unfold checkInclusion at h
-  obtain ⟨_, -, h⟩ := bind_ok h
-  obtain ⟨s, hs, h⟩ := bind_ok h
-  obtain ⟨g, hv, h⟩ := bind_ok h
-  obtain ⟨_, hGas, h⟩ := bind_ok h
-  obtain ⟨_, hBlob, h⟩ := bind_ok h
-  obtain ⟨_, hFee, h⟩ := bind_ok h
-  obtain ⟨_, -, h⟩ := bind_ok h
-  obtain ⟨_, hBlobFee, h⟩ := bind_ok h
-  obtain ⟨_, hLow, h⟩ := bind_ok h
-  obtain ⟨_, hHigh, h⟩ := bind_ok h
-  obtain ⟨_, hBal, h⟩ := bind_ok h
-  obtain ⟨_, -, h⟩ := bind_ok h
-  obtain ⟨_, -, h⟩ := bind_ok h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨s, hs, h⟩ := bind_ok_iff.mp h
+  obtain ⟨g, hv, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, hGas, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, hBlob, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, hFee, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, hBlobFee, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, hLow, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, hHigh, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, hBal, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
   cases h
   have hGas := failIf_ok hGas
   have hBlob := failIf_ok hBlob

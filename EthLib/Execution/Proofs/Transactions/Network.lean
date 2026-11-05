@@ -37,10 +37,6 @@ theorem NetworkBlobTransaction.ofItem_toItem (fork : Fork) (w : NetworkBlobTrans
       pure, Except.pure]
   · simp [h, LawfulCodec.ofItem_toItem, Except.mapError, bind, Except.bind, pure, Except.pure]
 
-private theorem bind_ok {ε α β : Type} {x : Except ε α} {f : α → Except ε β} {y : β} :
-    x >>= f = .ok y ↔ ∃ a, x = .ok a ∧ f a = .ok y := by
-  cases x <;> simp [bind, Except.bind]
-
 /-- A list that holds a network form is the list of that form. -/
 theorem NetworkBlobTransaction.toItem_of_ofItem {fork : Fork} {item : Item}
     {w : NetworkBlobTransaction} (h : NetworkBlobTransaction.ofItem fork item = .ok w) :
@@ -51,7 +47,7 @@ theorem NetworkBlobTransaction.toItem_of_ofItem {fork : Fork} {item : Item}
   · rename_i hf
     split at h
     · rename_i tx v b c p
-      obtain ⟨version, hv, h⟩ := bind_ok.mp h
+      obtain ⟨version, hv, h⟩ := bind_ok_iff.mp h
       have hv := LawfulCodec.toItem_of_ofItem (mapError_ok_iff.mp hv)
       split at h
       · exact nomatch h
@@ -115,7 +111,7 @@ theorem tx_of_decodeNetwork {fork : Fork} {bytes : ByteArray} {w : NetworkBlobTr
   · exact nomatch h
   rename_i type payload hbytes
   split at h
-  · obtain ⟨item, hitem, h⟩ := bind_ok.mp h
+  · obtain ⟨item, hitem, h⟩ := bind_ok_iff.mp h
     have hitem := mapError_ok_iff.mp hitem
     have hw := NetworkBlobTransaction.toItem_of_ofItem h
     rw [hbytes, List.drop_one, List.tail_cons, hitem, ← hw]
