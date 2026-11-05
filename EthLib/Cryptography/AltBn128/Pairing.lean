@@ -164,18 +164,59 @@ def add (a b : Fp12) : Fp12 := Vector.ofFn fun k => a[k] + b[k]
 /-- The difference, coefficient by coefficient. -/
 def sub (a b : Fp12) : Fp12 := Vector.ofFn fun k => a[k] - b[k]
 
-/-- The product: the product of the polynomials, reduced with `w^12 = 18 w^6 - 82`. -/
+/-- The product: the product of the polynomials, reduced with `w^12 = 18 w^6 - 82`.
+
+The coefficient of `w^m` in the product of the polynomials is `c_m`, for `m ≤ 22`.
+
+Each `w^m` with `m ≥ 12` is `18 w^(m - 6) - 82 w^(m - 12)`.
+
+So the terms of `w^18` to `w^22` first fold into those of `w^12` to `w^16`. -/
 def mul (a b : Fp12) : Fp12 :=
-  -- The 23 coefficients of the product of the polynomials.
-  let product : Array Fp := Array.ofFn (n := 23) fun m =>
-    (List.range 12).foldl (fun acc i =>
-      if i ≤ m.val ∧ m.val - i < 12 then acc + a[i]! * b[m.val - i]! else acc) 0
-  -- From the top degree down, `w^m = 18 w^(m - 6) - 82 w^(m - 12)` folds each high term.
-  let reduced := (List.range 11).foldl (fun (coefficients : Array Fp) step =>
-    let m := 22 - step
-    let top := coefficients[m]!
-    (coefficients.modify (m - 6) (· + 18 * top)).modify (m - 12) (· - 82 * top)) product
-  Vector.ofFn fun k => reduced[k.val]!
+  let x0 := a[0]; let x1 := a[1]; let x2 := a[2]; let x3 := a[3]
+  let x4 := a[4]; let x5 := a[5]; let x6 := a[6]; let x7 := a[7]
+  let x8 := a[8]; let x9 := a[9]; let x10 := a[10]; let x11 := a[11]
+  let y0 := b[0]; let y1 := b[1]; let y2 := b[2]; let y3 := b[3]
+  let y4 := b[4]; let y5 := b[5]; let y6 := b[6]; let y7 := b[7]
+  let y8 := b[8]; let y9 := b[9]; let y10 := b[10]; let y11 := b[11]
+  let c0 := x0 * y0
+  let c1 := x0 * y1 + x1 * y0
+  let c2 := x0 * y2 + x1 * y1 + x2 * y0
+  let c3 := x0 * y3 + x1 * y2 + x2 * y1 + x3 * y0
+  let c4 := x0 * y4 + x1 * y3 + x2 * y2 + x3 * y1 + x4 * y0
+  let c5 := x0 * y5 + x1 * y4 + x2 * y3 + x3 * y2 + x4 * y1 + x5 * y0
+  let c6 := x0 * y6 + x1 * y5 + x2 * y4 + x3 * y3 + x4 * y2 + x5 * y1 + x6 * y0
+  let c7 := x0 * y7 + x1 * y6 + x2 * y5 + x3 * y4 + x4 * y3 + x5 * y2 + x6 * y1 + x7 * y0
+  let c8 := x0 * y8 + x1 * y7 + x2 * y6 + x3 * y5 + x4 * y4 + x5 * y3 + x6 * y2 + x7 * y1 + x8 * y0
+  let c9 := x0 * y9 + x1 * y8 + x2 * y7 + x3 * y6 + x4 * y5 + x5 * y4 + x6 * y3 + x7 * y2 +
+    x8 * y1 + x9 * y0
+  let c10 := x0 * y10 + x1 * y9 + x2 * y8 + x3 * y7 + x4 * y6 + x5 * y5 + x6 * y4 + x7 * y3 +
+    x8 * y2 + x9 * y1 + x10 * y0
+  let c11 := x0 * y11 + x1 * y10 + x2 * y9 + x3 * y8 + x4 * y7 + x5 * y6 + x6 * y5 + x7 * y4 +
+    x8 * y3 + x9 * y2 + x10 * y1 + x11 * y0
+  let c12 := x1 * y11 + x2 * y10 + x3 * y9 + x4 * y8 + x5 * y7 + x6 * y6 + x7 * y5 + x8 * y4 +
+    x9 * y3 + x10 * y2 + x11 * y1
+  let c13 := x2 * y11 + x3 * y10 + x4 * y9 + x5 * y8 + x6 * y7 + x7 * y6 + x8 * y5 + x9 * y4 +
+    x10 * y3 + x11 * y2
+  let c14 := x3 * y11 + x4 * y10 + x5 * y9 + x6 * y8 + x7 * y7 + x8 * y6 + x9 * y5 + x10 * y4 +
+    x11 * y3
+  let c15 := x4 * y11 + x5 * y10 + x6 * y9 + x7 * y8 + x8 * y7 + x9 * y6 + x10 * y5 + x11 * y4
+  let c16 := x5 * y11 + x6 * y10 + x7 * y9 + x8 * y8 + x9 * y7 + x10 * y6 + x11 * y5
+  let c17 := x6 * y11 + x7 * y10 + x8 * y9 + x9 * y8 + x10 * y7 + x11 * y6
+  let c18 := x7 * y11 + x8 * y10 + x9 * y9 + x10 * y8 + x11 * y7
+  let c19 := x8 * y11 + x9 * y10 + x10 * y9 + x11 * y8
+  let c20 := x9 * y11 + x10 * y10 + x11 * y9
+  let c21 := x10 * y11 + x11 * y10
+  let c22 := x11 * y11
+  -- The terms of `w^12` to `w^16`, once those of `w^18` to `w^22` folded into them.
+  let d12 := c12 + 18 * c18
+  let d13 := c13 + 18 * c19
+  let d14 := c14 + 18 * c20
+  let d15 := c15 + 18 * c21
+  let d16 := c16 + 18 * c22
+  #v[c0 - 82 * d12, c1 - 82 * d13, c2 - 82 * d14, c3 - 82 * d15, c4 - 82 * d16,
+    c5 - 82 * c17, c6 + 18 * d12 - 82 * c18, c7 + 18 * d13 - 82 * c19,
+    c8 + 18 * d14 - 82 * c20, c9 + 18 * d15 - 82 * c21, c10 + 18 * d16 - 82 * c22,
+    c11 + 18 * c17]
 
 instance : Add Fp12 := ⟨add⟩
 instance : Sub Fp12 := ⟨sub⟩
