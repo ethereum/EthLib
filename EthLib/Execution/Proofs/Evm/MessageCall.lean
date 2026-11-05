@@ -37,13 +37,6 @@ structure SameWrites (tx snapshot : TransactionState) : Prop where
   storageClears : tx.storageClears = snapshot.storageClears
   transientStorage : tx.transientStorage = snapshot.transientStorage
 
-/-- A map that succeeds succeeded on a value that it maps to its result. -/
-theorem except_map_eq_ok {ε α β : Type} {f : α → β} {x : Except ε α} {y : β}
-    (h : Except.map f x = .ok y) : ∃ a, x = .ok a ∧ f a = y := by
-  cases x with
-  | error => cases h
-  | ok a => exact ⟨a, rfl, by simpa [Except.map] using h⟩
-
 /-- A restored snapshot has the writes of the snapshot. -/
 theorem sameWrites_restoreTxState (tx snapshot : TransactionState) :
     SameWrites (tx.restoreTxState snapshot) snapshot :=
@@ -56,7 +49,7 @@ theorem processMessage_sameWrites_of_error [LawfulGasMeter Meter] {message : Mes
     (h : processMessage fork message state substate = .ok ⟨evm, used⟩)
     (failed : evm.error.isSome) : SameWrites evm.state state := by
   rw [processMessage] at h
-  obtain ⟨ended, -, rolled⟩ := except_map_eq_ok h
+  obtain ⟨ended, -, rolled⟩ := Base.map_ok_iff.mp h
   have hval := congrArg Subtype.val rolled
   simp only at hval
   subst hval
