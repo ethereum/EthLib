@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Blocks.Transition
+public import EthLib.Execution.Proofs.Blocks.AccessListBuilder
 public import EthLib.Execution.Proofs.Blocks.Validate
 
 /-!
@@ -17,6 +18,12 @@ It also used the gas that its header states, and its Bloom filter is the filter 
 Its fork is the active fork of its chain at its number and its time.
 
 A transaction that cannot enter the block makes the block invalid, with its own error.
+
+Before Glamsterdam a body gives no block access list.
+
+From Glamsterdam, the list that a body builds is well formed and fits the gas limit.
+
+A block that passes the checks then commits to that list by the hash in its header.
 
 From Glamsterdam the transition fails as not yet specified.
 -/
@@ -65,13 +72,51 @@ theorem of_outputChecks {header : Header fork} {output : BlockOutput fork} {root
       (decide (roots.state = header.stateRoot), .wrongStateRoot),
       (decide (roots.receipts = header.receiptRoot), .wrongReceiptRoot),
       (decide (logsBloom output.logs = header.bloom), .wrongBloom)], c.1 = true :=
-    fun c hc => get c (List.mem_append_left _ (List.mem_append_left _
-      (List.mem_append_left _ hc)))
+    fun c hc => get c (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _
+      (List.mem_append_left _ hc))))
   refine ⟨?_, ?_, ?_⟩
   · exact of_decide_eq_true (first _ (.head _))
   · exact of_decide_eq_true (first _ (.tail _ (.tail _ (.head _))))
   · have := first _ (.tail _ (.tail _ (.tail _ (.tail _ (.head _)))))
     simpa using this
+
+/-- From Glamsterdam, a block that passes the checks commits to the list of its body.
+
+The hash of its header is the hash of the block access list that the body built. -/
+theorem accessListHash_of_outputChecks {header : Header fork} {output : BlockOutput fork}
+    {roots : OutputRoots} (hFork : .glamsterdam ≤ fork)
+    (h : firstFailure (outputChecks header output roots) = .ok ()) :
+    output.accessListHash = some (header.blockAccessListHash hFork) := by
+  have all := (firstFailure_eq_ok_iff _).mp h
+  have last : (decide (output.accessListHash = some (header.blockAccessListHash hFork)),
+      BlockError.wrongBlockAccessListHash) ∈ outputChecks header output roots := by
+    unfold outputChecks
+    simp only [hFork, ↓reduceDIte]
+    exact List.mem_append_right _ (List.mem_singleton_self _)
+  exact of_decide_eq_true (all _ last)
+
+/-! ## The block access list -/
+
+/-- Before Glamsterdam, a body gives no block access list. -/
+theorem accessListHashOf_of_lt_glamsterdam {body : BodyState} {gasLimit : Nat}
+    (h : fork < .glamsterdam) : accessListHashOf fork body gasLimit = .ok none := by
+  have hpre : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
+  simp [accessListHashOf, hpre, pure, Except.pure]
+
+/-- From Glamsterdam, the hash that a body gives is the hash of the list it built.
+
+That list passes every check of a list alone: its order, its uniqueness and its size. -/
+theorem accessListHashOf_eq_ok {body : BodyState} {gasLimit : Nat} {hash : Option Hash32}
+    (h : accessListHashOf fork body gasLimit = .ok hash) (hFork : .glamsterdam ≤ fork) :
+    BlockAccessList.check body.builder.build gasLimit = .ok () ∧
+      ∃ value, hash = some value ∧ BlockAccessList.hash body.builder.build = .ok value := by
+  unfold accessListHashOf at h
+  simp only [hFork, ↓reduceIte] at h
+  obtain ⟨_, hCheck, h⟩ := bind_ok_iff.mp h
+  obtain ⟨value, hHash, h⟩ := bind_ok_iff.mp (show _ >>= _ = _ from h)
+  refine ⟨mapError_ok_iff.mp hCheck, value, ?_, mapError_ok_iff.mp hHash⟩
+  cases h
+  rfl
 
 /-! ## The transactions -/
 

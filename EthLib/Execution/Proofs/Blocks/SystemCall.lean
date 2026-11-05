@@ -116,12 +116,13 @@ theorem mem_requestList {type : UInt8} {r : ByteArray} (h : r ∈ requestList ty
     · rfl
 
 /-- The requests that a fold over request contracts adds come in the order of the contracts. -/
-theorem foldlM_requests {contracts : List (UInt8 × Address)} {start : BlockState × List ByteArray}
-    {result : BlockState × List ByteArray}
+theorem foldlM_requests {contracts : List (UInt8 × Address)} {start : BodyState × List ByteArray}
+    {result : BodyState × List ByteArray}
     (h : contracts.foldlM
-      (fun (acc : BlockState × List ByteArray) (contract : UInt8 × Address) => do
-        let out ← checkedSystemCall env acc.1 contract.2 .empty
-        return (out.block, acc.2 ++ requestList contract.1 out.output))
+      (fun (acc : BodyState × List ByteArray) (contract : UInt8 × Address) => do
+        let out ← checkedSystemCall env acc.1.block contract.2 .empty
+        let body ← (acc.1.join out.state).mapError .state
+        return (body, acc.2 ++ requestList contract.1 out.output))
       start = .ok result) :
     ∃ added, result.2 = start.2 ++ added ∧ (∀ r ∈ added, 1 < r.size) ∧
       (added.map (·[0]!)).Sublist (contracts.map Prod.fst) := by
@@ -133,7 +134,8 @@ theorem foldlM_requests {contracts : List (UInt8 × Address)} {start : BlockStat
   | cons contract rest ih =>
     simp only [List.foldlM_cons] at h
     obtain ⟨next, hNext, hRest⟩ := bind_ok_iff.mp h
-    obtain ⟨out, hOut, hEq⟩ := bind_ok_iff.mp hNext
+    obtain ⟨out, hOut, hNext⟩ := bind_ok_iff.mp hNext
+    obtain ⟨body, hBody, hEq⟩ := bind_ok_iff.mp hNext
     cases hEq
     obtain ⟨added, hAdded, hSize, hSub⟩ := ih hRest
     refine ⟨requestList contract.1 out.output ++ added, by simp [hAdded], ?_, ?_⟩
@@ -150,9 +152,9 @@ theorem foldlM_requests {contracts : List (UInt8 × Address)} {start : BlockStat
         rw [this]
         exact hSub.cons_cons _
 
-/-- Before Pectra, a block reads no request and its state is unchanged. -/
-theorem readRequests_of_lt_pectra (h : fork < .pectra) :
-    readRequests env block = .ok (block, []) := by
+/-- Before Pectra, a block reads no request and its body is unchanged. -/
+theorem readRequests_of_lt_pectra {body : BodyState} (h : fork < .pectra) :
+    readRequests env body = .ok (body, []) := by
   unfold readRequests
   split
   · exact absurd ‹_› (Nat.not_le_of_lt h)
@@ -166,8 +168,8 @@ From Glamsterdam, builder deposits, of type 3, then builder exits, of type 4, fo
 
 Each type comes at most once, and before Glamsterdam no builder type comes.
 -/
-theorem readRequests_requests {result : BlockState × List ByteArray}
-    (h : readRequests env block = .ok result) :
+theorem readRequests_requests {body : BodyState} {result : BodyState × List ByteArray}
+    (h : readRequests env body = .ok result) :
     (∀ r ∈ result.2, 1 < r.size) ∧
       (result.2.map (·[0]!)).Sublist ((requestContracts fork).map Prod.fst) := by
   unfold readRequests at h

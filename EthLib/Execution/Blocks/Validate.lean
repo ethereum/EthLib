@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Blocks.Block
+public import EthLib.Execution.Blocks.BlockAccessList
 public import EthLib.Execution.Blocks.Difficulty
 public import EthLib.Execution.Blocks.ProofOfWork
 public import EthLib.Execution.Blocks.Requests
@@ -146,6 +147,12 @@ inductive BlockError where
   | state (error : State.StateError)
   /-- The transaction `index`, counted from 0, of the body does not decode at the fork. -/
   | undecodableTransaction (index : Nat) (error : Transactions.TransactionError)
+  /-- From Glamsterdam, the block access list of the body breaks a rule of its form, by `error`.
+
+  The list that a body builds has the right form, so only its size can break a rule. -/
+  | blockAccessList (error : BlockAccessList.Error)
+  /-- From Glamsterdam, the hash of the block access list is not the hash of the header. -/
+  | wrongBlockAccessListHash
 
 /-- Why the ommers of a block are not valid. -/
 inductive OmmerError where
@@ -263,6 +270,10 @@ def BlockError.reprPrec' : BlockError → Nat → Std.Format
   | .undecodableTransaction index error, prec =>
     constructorFormat "EthLib.Execution.Blocks.BlockError.undecodableTransaction"
       [reprArg index, reprArg error] prec
+  | .blockAccessList error, prec =>
+    constructorFormat "EthLib.Execution.Blocks.BlockError.blockAccessList"
+      [reprArg error] prec
+  | .wrongBlockAccessListHash, _ => "EthLib.Execution.Blocks.BlockError.wrongBlockAccessListHash"
 
 /-- The form of an ommer error in Lean syntax, with its arguments. -/
 def OmmerError.reprPrec' : OmmerError → Nat → Std.Format
@@ -338,6 +349,8 @@ def BlockError.code : BlockError → UInt32
   | .ommers _ => 252
   | .state _ => 253
   | .undecodableTransaction .. => 254
+  | .blockAccessList _ => 255
+  | .wrongBlockAccessListHash => 256
 
 /-- The stable code of an error, one per constructor, for the C exports.
 
