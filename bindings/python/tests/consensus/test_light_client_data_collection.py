@@ -270,7 +270,7 @@ class FullNode:
             and self.participants(block) >= self.min_participants
         ]
 
-    def check_head(self, head_root: bytes, checks: dict) -> None:
+    def check_head(self, head_root: str, checks: dict) -> None:
         """Check the data served after a new head against what the post states give."""
         preset, head = self.chain.preset, self.ancestry(bytes.fromhex(head_root[2:]))
         old_slot = self.latest[2]

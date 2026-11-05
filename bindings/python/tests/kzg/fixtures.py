@@ -5,6 +5,7 @@ KZG test-vector generator.
 
 from functools import cache
 
+from eth_typing import BLSPubkey
 from py_ecc import optimized_bls12_381 as bls
 from py_ecc.bls.g2_primitives import G1_to_pubkey, pubkey_to_G1
 
@@ -69,7 +70,7 @@ def bls_add_one(x: bytes) -> bytes:
     intentionally-incorrect proofs in the verify-* generators. Implemented
     via `py_ecc` so the spec module doesn't need to expose a curve-add
     primitive purely for negative-test fixtures."""
-    return G1_to_pubkey(bls.add(pubkey_to_G1(x), bls.G1))
+    return G1_to_pubkey(bls.add(pubkey_to_G1(BLSPubkey(x)), bls.G1))
 
 
 # ---- Field elements -------------------------------------------------------

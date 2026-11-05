@@ -203,11 +203,11 @@ def test_concat_kdf_blocks() -> None:
 
 def test_rejects_non_bytes() -> None:
     with pytest.raises(TypeError):
-        hmac_sha256("key", b"message")  # type: ignore[arg-type]
+        hmac_sha256("key", b"message")  # ty: ignore[invalid-argument-type]
     with pytest.raises(TypeError):
-        hkdf(b"salt", "ikm", b"info", 32)  # type: ignore[arg-type]
+        hkdf(b"salt", "ikm", b"info", 32)  # ty: ignore[invalid-argument-type]
     with pytest.raises(TypeError):
-        concat_kdf(b"z", "info", 32)  # type: ignore[arg-type]
+        concat_kdf(b"z", "info", 32)  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.parametrize("length", [-1, 2**64, 2**64 + 32])

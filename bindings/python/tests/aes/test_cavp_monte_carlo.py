@@ -19,7 +19,7 @@ SLOW = os.environ.get("ETHLIB_SLOW_VECTORS") == "1"
 def _sections(bits: int) -> dict[str, list[tuple[bytes, bytes, bytes]]]:
     """The (key, plaintext, ciphertext) checkpoints of the encrypt and the decrypt section."""
     sections: dict[str, list] = {}
-    direction, case = None, {}
+    direction, case = "", {}
     for line in (CAVP / f"ECBMCT{bits}.rsp").read_text().splitlines():
         line = line.strip()
         if line in ("[ENCRYPT]", "[DECRYPT]"):

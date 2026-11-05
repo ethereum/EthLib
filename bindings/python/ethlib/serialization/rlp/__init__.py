@@ -1,5 +1,7 @@
 """Recursive Length Prefix, the strict encoding of byte strings and nested lists."""
 
+from typing import Any
+
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
 from ethlib.cryptography import _native
@@ -8,13 +10,15 @@ from ethlib.errors import RlpError as RlpError
 Item = bytes | list["Item"]
 
 
-def encode(item: Item) -> bytes:
+def encode(item: bytes | list[Any]) -> bytes:
     """The RLP encoding of an item."""
+    # The elements are Any, not Item: a list is invariant, so a list[bytes] is not a list[Item].
     return _native.rlp_encode(item)
 
 
-def decode(data: bytes) -> Item:
+def decode(data: bytes) -> Any:
     """The item that the bytes encode, if they encode exactly one item."""
+    # The result is Any, not Item: the caller reads it in the shape that its schema gives.
     return _native.rlp_decode(data)
 
 

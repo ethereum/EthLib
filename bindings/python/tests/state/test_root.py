@@ -154,4 +154,4 @@ def test_rejects_malformed_state(state: bytes, error: str) -> None:
 
 def test_rejects_non_bytes() -> None:
     with pytest.raises(TypeError):
-        state_root("abc")  # type: ignore[arg-type]
+        state_root("abc")  # ty: ignore[invalid-argument-type]

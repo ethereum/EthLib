@@ -66,4 +66,4 @@ def test_reference() -> None:
 
 def test_rejects_non_bytes() -> None:
     with pytest.raises(TypeError):
-        crc32c.digest("abc")  # type: ignore[arg-type]
+        crc32c.digest("abc")  # ty: ignore[invalid-argument-type]

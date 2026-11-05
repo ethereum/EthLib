@@ -57,4 +57,4 @@ def test_zlib() -> None:
 
 def test_rejects_non_bytes() -> None:
     with pytest.raises(TypeError):
-        crc32.digest("abc")  # type: ignore[arg-type]
+        crc32.digest("abc")  # ty: ignore[invalid-argument-type]

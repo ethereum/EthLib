@@ -165,4 +165,4 @@ def test_rejects_bad_inputs() -> None:
         rlpx.write_frames(aes_secret, mac_secret, mac_init, _rlp_list([bytes(2**24)]))
     assert err.value.code == 201
     with pytest.raises(TypeError):
-        rlpx.read_frames(aes_secret, mac_secret, mac_init, "frame")  # type: ignore[arg-type]
+        rlpx.read_frames(aes_secret, mac_secret, mac_init, "frame")  # ty: ignore[invalid-argument-type]

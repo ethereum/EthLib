@@ -5,6 +5,7 @@ from collections import Counter
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -317,18 +318,21 @@ def run_ommers(root: Path, case: Case) -> None:
             chain[block.hash] = block
             continue
         expected = exception(network, entry)
+        # A block whose ommers the test checks has its parent in the chain.
         parent = chain.get(block.parent_hash)
         if expected is None:
             chain[block.hash] = block
             if decoded[2]:
                 assert validate_ommers(
-                    chain_forks(network), recent(chain, parent), data, sealed(test)
+                    chain_forks(network), recent(chain, cast(Block, parent)), data, sealed(test)
                 )
                 _check_rewards(network, decoded, data)
                 checked += 1
         elif expected in OMMER_CODES:
             with pytest.raises(BlockError) as error:
-                validate_ommers(chain_forks(network), recent(chain, parent), data, sealed(test))
+                validate_ommers(
+                    chain_forks(network), recent(chain, cast(Block, parent)), data, sealed(test)
+                )
             assert error.value.code in OMMER_CODES[expected], (expected, str(error.value))
             checked += 1
     _check_post_state(test, chain)

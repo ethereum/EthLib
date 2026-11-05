@@ -10,7 +10,7 @@ from ethlib.errors import ConsensusError, SszError
 PREFIX = "/eth2/beacon_chain/req/"
 
 
-def _id(name: str, version: int) -> str:
+def _id(name: str, version: int | str) -> str:
     return f"{PREFIX}{name}/{version}/ssz_snappy"
 
 

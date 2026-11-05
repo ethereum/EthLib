@@ -5,6 +5,7 @@ import re
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
+from typing import cast
 
 import pytest
 from ruamel.yaml import YAML
@@ -521,6 +522,8 @@ def _engine_payload(fixture: dict, payload: dict, state: bytes, recent: list) ->
     if not expected:
         assert status["status"] == "VALID", status
         assert status["latestValidHash"] == payload["params"][0]["blockHash"]
+        # A valid payload gives its header and the accounts after it.
+        header, accounts = cast(bytes, header), cast(list, accounts)
         fork = active_fork(chain_of(fixture)[1], rlp.decode(header))
         return "valid", rlp.encode(accounts), (recent + [(fork, header, [])])[-256:]
     names = expected.split("|")

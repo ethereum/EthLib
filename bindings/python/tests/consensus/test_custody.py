@@ -93,9 +93,9 @@ def test_native_rejects_out_of_range(value):
 
 def test_native_rejects_non_integer():
     with pytest.raises(TypeError):
-        _native.consensus_get_custody_groups("mainnet", bytes(32), "4")
+        _native.consensus_get_custody_groups("mainnet", bytes(32), "4")  # ty: ignore[invalid-argument-type]
     with pytest.raises(TypeError):
-        _native.consensus_compute_columns_for_custody_group("mainnet", "0")
+        _native.consensus_compute_columns_for_custody_group("mainnet", "0")  # ty: ignore[invalid-argument-type]
 
 
 @pytest.mark.parametrize("value", OUT_OF_RANGE)
