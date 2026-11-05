@@ -24,6 +24,9 @@ public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.HalvedGame
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Graph
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.ForsForgery
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.HypertreeForgery
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Ghost
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.SkipGame
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.FixedParam
 public import EthLib.Cryptography.Proofs.Sphincs.SignatureFailure
 
 /-!
