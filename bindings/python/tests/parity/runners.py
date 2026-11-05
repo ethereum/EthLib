@@ -59,8 +59,6 @@ _GLOAS = {
     "operations": "the Gloas attestations, slashings and operations (G50)",
     "operations/builder_deposit_request": "the builder deposit and exit requests (G46)",
     "operations/builder_exit_request": "the builder deposit and exit requests (G46)",
-    "operations/execution_payload_bid": "the execution payload bid and payload attestations (G47)",
-    "operations/payload_attestation": "the execution payload bid and payload attestations (G47)",
     "operations/parent_execution_payload": "the parent execution payload (G48)",
     "operations/deposit_request": "the parent execution payload (G48)",
     "operations/withdrawal_request": "the parent execution payload (G48)",

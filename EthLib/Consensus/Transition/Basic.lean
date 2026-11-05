@@ -61,6 +61,30 @@ inductive TransitionError where
   | payloadAttestationWrongSlot (slot stateSlot : Slot)
   /-- From Gloas: a payload attestation is not a valid indexed payload attestation. -/
   | invalidPayloadAttestation
+  /-- From Gloas: a self-built bid has a nonzero value or a signature. -/
+  | selfBuildBidPaid
+  /-- From Gloas: the builder of a bid is not active. -/
+  | builderNotActive (builder : BuilderIndex)
+  /-- From Gloas: the builder of a bid does not build payloads. -/
+  | notPayloadBuilder (builder : BuilderIndex)
+  /-- From Gloas: the builder of a bid cannot pay its value. -/
+  | bidNotCovered (builder : BuilderIndex)
+  /-- From Gloas: a bid is not signed by its builder. -/
+  | invalidBidSignature
+  /-- From Gloas: a bid commits to more blobs than a block may hold. -/
+  | tooManyBlobCommitments
+  /-- From Gloas: a bid is not for the slot of the state. -/
+  | bidWrongSlot (bidSlot stateSlot : Slot)
+  /-- From Gloas: a bid is for the genesis slot. -/
+  | bidAtGenesis
+  /-- From Gloas: the parent hash of a bid is not the hash of the latest payload. -/
+  | bidWrongParentHash
+  /-- From Gloas: the payload hash of a bid is its parent hash. -/
+  | bidRepeatsParentHash
+  /-- From Gloas: the parent block root of a bid is not that of the previous slot. -/
+  | bidWrongParentRoot
+  /-- From Gloas: the RANDAO mix of a bid is not that of the current epoch. -/
+  | bidWrongRandao
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -89,6 +113,18 @@ def TransitionError.code : TransitionError → UInt32
   | .payloadAttestationNotForParent => 18
   | .payloadAttestationWrongSlot .. => 19
   | .invalidPayloadAttestation => 20
+  | .selfBuildBidPaid => 21
+  | .builderNotActive _ => 22
+  | .notPayloadBuilder _ => 23
+  | .bidNotCovered _ => 24
+  | .invalidBidSignature => 25
+  | .tooManyBlobCommitments => 26
+  | .bidWrongSlot .. => 27
+  | .bidAtGenesis => 28
+  | .bidWrongParentHash => 29
+  | .bidRepeatsParentHash => 30
+  | .bidWrongParentRoot => 31
+  | .bidWrongRandao => 32
 
 /-- An assertion of the rule: success when the condition holds, and the error otherwise. -/
 def ensure (condition : Prop) [Decidable condition] (error : TransitionError) :
