@@ -122,6 +122,8 @@ inductive ForkChoiceError where
   | invalidIndexedAttestation
   /-- The two attestations of an attester slashing are not slashable together. -/
   | notSlashable
+  /-- The proposer asks for its head while that head still holds the boost. -/
+  | boostNotWornOff (root : Root)
   /-- A tick does not move the clock to a later slot. -/
   | tickNotAdvancing (slot : Slot)
   /-- The rule of this fork is not yet specified here. -/

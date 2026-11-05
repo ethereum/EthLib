@@ -27,7 +27,7 @@ An attester slashing marks the validators in both of its attestations as equivoc
 
 So far a block runs at Phase 0 only.
 
-From Altair the pull-up of the justification is not yet specified here, so a new block fails.
+From Altair the state transition and the pull-up are not yet specified here, so a new block fails.
 
 From Bellatrix a block also checks its payload, which is not yet specified here either.
 -/
@@ -320,7 +320,7 @@ def addBlock (checks : SignatureChecks) (signed : SignedBeaconBlock preset fork)
 
 /-- The store after a signed block: a known block changes nothing, and a new one is added.
 
-From Altair the pull-up of the justification is not yet specified here, so a new block fails.
+From Altair the state transition and the pull-up are not yet specified here, so a new block fails.
 
 From Bellatrix the rule also checks the payload, and it fails there as not yet specified. -/
 def onBlock (checks : SignatureChecks) (signed : SignedBeaconBlock preset fork) :
