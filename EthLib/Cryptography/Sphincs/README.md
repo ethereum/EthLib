@@ -149,6 +149,7 @@ Keccak-256 is one such function, so the theorems cover the specification as it r
 ## What is not proved
 
 - Any security property, such as unforgeability.
+  The game of strong unforgeability for one key is stated in `Unforgeability/Game.lean`, with no bound on it yet.
   The 127-bit bound, up to 1,182,000,000 signatures, is the theorem `h26_layered` of the model's [`FORS/Main.lean`](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Main.lean), about the model, not about this module.
 - That this module and the model compute the same bytes.
   The definitions follow the model line by line, but no theorem links the two.
