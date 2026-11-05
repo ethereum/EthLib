@@ -57,16 +57,17 @@ theorem decodeChunks_chunk_error {type : UInt8} {body : List UInt8} {e : FrameEr
   rw [habc]
   simp [decodeChunks, hv, hc, show ¬ body.length + rest.length < body.length by omega]
 
+/-- The four bytes of a 32-bit value, such as a checksum, read back as that value. -/
+theorem foldr_uintToBytes_four (c : UInt32) :
+    Vector.foldr (fun byte acc => byte.toNat + 256 * acc) 0 (uintToBytes 4 c.toNat) = c.toNat :=
+  (EthLib.Base.bytesToUint_uintToBytes 4 _).trans (Nat.mod_eq_of_lt (UInt32.toNat_lt _))
+
 /-- An uncompressed chunk of at most 65536 bytes with its own checksum decodes to its data. -/
 theorem decodeChunk_uncompressed {data : List UInt8} (h : data.length ≤ maxChunkLength) :
     decodeChunk uncompressedType
         ((uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ data) = .ok data := by
-  -- The four checksum bytes read back as the checksum, which is below 2^32.
-  have hv : Vector.foldr (fun byte acc => byte.toNat + 256 * acc) 0
-      (uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat) = (maskedCrc ⟨data.toArray⟩).toNat :=
-    (EthLib.Base.bytesToUint_uintToBytes 4 _).trans (Nat.mod_eq_of_lt (UInt32.toNat_lt _))
   simp [decodeChunk, verifyChecksum, compressedType, uncompressedType,
-    EthLib.Base.bytesToUint_toVector, hv,
+    EthLib.Base.bytesToUint_toVector, foldr_uintToBytes_four,
     show ¬ maxChunkLength < data.length by omega]
 
 /-! ## The round trip -/
@@ -249,9 +250,11 @@ theorem decodeChunk_compressed_checksumMismatch {checksum block data : List UInt
   simp [decodeChunk, hcs, hpre, hb, verifyChecksum, EthLib.Base.bytesToUint_toVector, hne,
     show ¬ maxChunkLength < data.length by omega]
 
-/-- A compressed chunk of at most 65536 bytes with its own checksum decodes to its data (§4.2).
+/-- A compressed chunk decodes to its data (§4.2).
 
-The counterpart of `decodeChunk_uncompressed` for the chunk type that carries a Snappy block.
+Its block may be any block that decompresses to at most 65536 bytes.
+
+Its checksum is the one of the decompressed data.
 -/
 theorem decodeChunk_compressed {block data : List UInt8}
     (hb : decompressList block = .ok data) (hd : data.length ≤ maxChunkLength) :
@@ -259,16 +262,12 @@ theorem decodeChunk_compressed {block data : List UInt8}
         ((uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ block) = .ok data := by
   -- The preamble of a block that decompresses declares the length of its output.
   obtain ⟨rest, hpre⟩ := Block.decompressList_length_eq_declared hb
-  -- The four checksum bytes read back as the checksum, which is below 2^32.
-  have hv : Vector.foldr (fun byte acc => byte.toNat + 256 * acc) 0
-      (uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat) = (maskedCrc ⟨data.toArray⟩).toNat :=
-    (EthLib.Base.bytesToUint_uintToBytes 4 _).trans (Nat.mod_eq_of_lt (UInt32.toNat_lt _))
-  simp [decodeChunk, hpre, hb, verifyChecksum, EthLib.Base.bytesToUint_toVector, hv,
-    show ¬ maxChunkLength < data.length by omega]
+  simp [decodeChunk, hpre, hb, verifyChecksum, EthLib.Base.bytesToUint_toVector,
+    foldr_uintToBytes_four, show ¬ maxChunkLength < data.length by omega]
 
-/-- The compressed chunk of a one-literal block decodes back to its data.
+/-- A compressed chunk whose block is one literal decodes to its data.
 
-An instance of `decodeChunk_compressed`, so the acceptance it states is not empty.
+So some compressed chunk of each length up to 65536 bytes decodes.
 -/
 theorem decodeChunk_compressed_compressLiteralList {data : List UInt8}
     (h : data.length ≤ maxChunkLength) :
