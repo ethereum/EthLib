@@ -379,6 +379,10 @@ def consensus_process_epoch(name: str, fork: str, handler: str, pre: bytes, conf
     """The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes."""
     ...
 
+def consensus_upgrade_state(name: str, fork: str, pre: bytes, config: bytes, verify: bool) -> bytes:
+    """The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."""
+    ...
+
 def consensus_light_client_sync(name: str, fork: str, config: bytes, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: bytes) -> bytes:
     """The headers of a sync, step by step, from a bootstrap for a trusted block root."""
     ...

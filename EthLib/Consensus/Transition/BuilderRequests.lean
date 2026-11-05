@@ -36,17 +36,31 @@ open Base Uint64 Cryptography.Bls
 
 variable {preset : Preset} {fork : Base.Fork}
 
-/-- Whether a builder deposit carries the signature of its key, over its deposit message.
+/-- Whether a deposit message carries the signature of its key, under a domain type.
 
-The domain is the builder deposit domain at the genesis version, with no validators root. -/
-def isValidBuilderDepositSignature (config : Config) (checks : SignatureChecks)
-    (request : BuilderDepositRequest) : Except TransitionError Bool := do
-  let message : DepositMessage :=
-    ⟨request.pubkey, request.withdrawalCredentials, request.amount⟩
-  let domain ← liftSsz (computeDomain config DOMAIN_BUILDER_DEPOSIT)
+The domain is at the genesis version, with no validators root, so it holds at every fork. -/
+def isValidDepositMessageSignature (config : Config) (checks : SignatureChecks)
+    (domainType : DomainType) (pubkey : BLSPubkey) (withdrawalCredentials : Bytes32)
+    (amount : Gwei) (signature : BLSSignature) : Except TransitionError Bool := do
+  let message : DepositMessage := ⟨pubkey, withdrawalCredentials, amount⟩
+  let domain ← liftSsz (computeDomain config domainType)
   let signingRoot ← liftSsz (computeSigningRoot message domain)
-  return checks.verify (packBytes request.pubkey) (packBytes signingRoot)
-    (packBytes request.signature)
+  return checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signature)
+
+/-- Whether a validator deposit carries the signature of its key, under the deposit domain. -/
+def isValidDepositSignature (config : Config) (checks : SignatureChecks) (pubkey : BLSPubkey)
+    (withdrawalCredentials : Bytes32) (amount : Gwei) (signature : BLSSignature) :
+    Except TransitionError Bool :=
+  isValidDepositMessageSignature config checks DOMAIN_DEPOSIT pubkey withdrawalCredentials amount
+    signature
+
+/-- Whether a builder deposit carries the signature of its key, under the builder deposit domain.
+
+That domain differs from the deposit domain, so no signature serves both deposits. -/
+def isValidBuilderDepositSignature (config : Config) (checks : SignatureChecks)
+    (request : BuilderDepositRequest) : Except TransitionError Bool :=
+  isValidDepositMessageSignature config checks DOMAIN_BUILDER_DEPOSIT request.pubkey
+    request.withdrawalCredentials request.amount request.signature
 
 /-- Whether the index of a builder may be given to a new builder.
 
