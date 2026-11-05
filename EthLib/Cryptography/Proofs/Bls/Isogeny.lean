@@ -23,7 +23,7 @@ open EthLib.Cryptography.Bls
 
 set_option maxRecDepth 8000
 
-local notation "I" => Fp2.i
+local notation "I" => (Fp2.i : Fp2)
 
 private def xn (x : Fp2) := x ^ 3 + (12 - 12 * I) * x ^ 2 - 24 * I * x + 304 + 304 * I
 private def yn (x : Fp2) := -x ^ 3 + (-18 + 18 * I) * x ^ 2 + 264 * I * x + 752 + 752 * I
