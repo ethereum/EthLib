@@ -1,11 +1,10 @@
 """The fork identifier of EIP-2124 and EIP-6122."""
 
-from ...errors import ForkIdError
-from ...serialization import rlp
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ...cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import ForkIdError
+from ethlib.serialization import rlp
 
 # A fork activates at a block number or at a timestamp.
 BLOCK = 0

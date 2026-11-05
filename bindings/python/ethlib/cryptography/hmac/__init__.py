@@ -3,7 +3,7 @@
 The key is secret, and EthLib makes no constant-time claim.
 """
 
-from .._native import hmac_sha256 as native_hmac_sha256
+from ethlib.cryptography._native import hmac_sha256 as native_hmac_sha256
 
 
 def hmac_sha256(key: bytes, message: bytes) -> bytes:

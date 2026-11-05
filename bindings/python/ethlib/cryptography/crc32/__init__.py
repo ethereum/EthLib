@@ -1,6 +1,6 @@
 """CRC-32, the CRC of ISO 3309 and ITU-T V.42 that gzip (RFC 1952) and EIP-2124 use."""
 
-from .._native import crc32 as native_crc32
+from ethlib.cryptography._native import crc32 as native_crc32
 
 
 def digest(data: bytes) -> bytes:

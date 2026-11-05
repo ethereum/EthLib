@@ -3,14 +3,13 @@
 import pytest
 
 import archives
-
-from consensus.test_epoch_processing import HANDLERS as EPOCH_STEPS
-from consensus.test_epoch_processing import MINIMAL_ONLY as EPOCH_MINIMAL_ONLY
-from consensus.test_fork_choice import HANDLERS as FORK_CHOICE
-from consensus.test_fork_choice import SPECIFIED as FORK_CHOICE_FORKS
+from consensus.test_epoch_processing import (
+    HANDLERS as EPOCH_STEPS,
+    MINIMAL_ONLY as EPOCH_MINIMAL_ONLY,
+)
+from consensus.test_fork_choice import HANDLERS as FORK_CHOICE, SPECIFIED as FORK_CHOICE_FORKS
 from consensus.test_operations import HANDLERS as OPERATIONS
-from consensus.test_rewards import HANDLERS as REWARDS
-from consensus.test_rewards import SPECIFIED as REWARDS_FORKS
+from consensus.test_rewards import HANDLERS as REWARDS, SPECIFIED as REWARDS_FORKS
 from consensus.test_transition import GROUPS as TRANSITION_GROUPS
 
 from . import catalogue, harness

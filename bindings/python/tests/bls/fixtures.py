@@ -4,7 +4,6 @@ Reference operations come from `py_ecc.bls.G2ProofOfPossession`.
 
 from py_ecc.bls import G2ProofOfPossession as ref_bls
 
-
 # ---- Messages -------------------------------------------------------------
 
 MESSAGES = [

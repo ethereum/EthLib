@@ -1,10 +1,9 @@
 """The RLPx transport of devp2p: ECIES encryption, the handshake and frames."""
 
-from ...errors import RlpxError
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ...cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import RlpxError
 
 # The secrets of a session: aes-secret, mac-secret, and the egress and ingress MAC digests.
 SECRETS_SIZE = 128

@@ -11,10 +11,10 @@ Its test still runs, and Wycheproof must call it invalid, but it writes no case.
 
 import pytest
 
+from dumper import hex_str, write_case
 from ethlib.cryptography import secp256k1
 
 from . import wycheproof as W
-from dumper import hex_str, write_case
 
 
 def _verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool | None:

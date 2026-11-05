@@ -2,11 +2,10 @@
 
 import pytest
 
+from dumper import hex_list, write_case
 from ethlib.cryptography import kzg
 
 from . import fixtures as F
-from dumper import hex_list, write_case
-
 
 HANDLER = "verify_cell_kzg_proof_batch"
 

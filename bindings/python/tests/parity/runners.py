@@ -9,25 +9,17 @@ from pathlib import Path
 import pytest
 from ruamel.yaml import YAML
 
-from consensus.containers import CONTAINERS
-from consensus.containers import FORKS as CONSENSUS_FORK
-from consensus.test_epoch_processing import HANDLERS as EPOCH_STEPS
-from consensus.test_epoch_processing import runs as runs_epoch_step
+from consensus.containers import CONTAINERS, FORKS as CONSENSUS_FORK
+from consensus.test_epoch_processing import HANDLERS as EPOCH_STEPS, runs as runs_epoch_step
 from consensus.test_fork import runs as runs_upgrade
-from consensus.test_fork_choice import HANDLERS as FORK_CHOICE
-from consensus.test_fork_choice import runs as runs_fork_choice
-from consensus.test_operations import HANDLERS as OPERATIONS
+from consensus.test_fork_choice import HANDLERS as FORK_CHOICE, runs as runs_fork_choice
+from consensus.test_genesis import HANDLERS as GENESIS, runs as runs_genesis
 from consensus.test_light_client_data_collection import runs_data_collection
-from consensus.test_light_client_sync import SPECIFIED as LIGHT_CLIENT_FORKS
-from consensus.test_light_client_sync import runs_sync
-from consensus.test_operations import runs as runs_operation
-from consensus.test_genesis import HANDLERS as GENESIS
-from consensus.test_genesis import runs as runs_genesis
-from consensus.test_rewards import HANDLERS as REWARDS
-from consensus.test_rewards import runs as runs_rewards
+from consensus.test_light_client_sync import SPECIFIED as LIGHT_CLIENT_FORKS, runs_sync
+from consensus.test_operations import HANDLERS as OPERATIONS, runs as runs_operation
+from consensus.test_rewards import HANDLERS as REWARDS, runs as runs_rewards
+from consensus.test_transition import GROUPS as TRANSITION_GROUPS, runs as runs_transition
 from engine.cases import EXCEPTIONS as ENGINE_EXCEPTIONS
-from consensus.test_transition import GROUPS as TRANSITION_GROUPS
-from consensus.test_transition import runs as runs_transition
 from transactions.test_inclusion_archive import names_in_block
 from transactions.test_transactions import CHAIN_ID, FORK_OF_NETWORK, names
 
@@ -512,9 +504,8 @@ def _header_of_json(fields: dict) -> bytes:
 
 def _engine_payload(fixture: dict, payload: dict, state: bytes, recent: list) -> tuple:
     """Run one payload on the chain; return its kind, and the next state and recent blocks."""
-    from ethlib.serialization import rlp
-
     from ethlib import engine
+    from ethlib.serialization import rlp
 
     config, _ = chain_of(fixture)
     method = f"engine_newPayloadV{payload['newPayloadVersion']}"

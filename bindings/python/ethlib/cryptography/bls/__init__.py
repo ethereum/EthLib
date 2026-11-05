@@ -1,23 +1,23 @@
-from ...errors import BlsError
-from .._native import (
-    eth_aggregate_pubkeys,
-    eth_fast_aggregate_verify,
-    bls_key_gen as _key_gen,
-    bls_sign as sign,
-    bls_verify as verify,
+from ethlib.cryptography._native import (
+    BYTES_PER_PUBKEY,
+    BYTES_PER_SIGNATURE,
     bls_aggregate as aggregate,
     bls_aggregate_verify as aggregate_verify,
-    bls_fast_aggregate_verify as fast_aggregate_verify,
-    bls_pop_prove as pop_prove,
-    bls_pop_verify as pop_verify,
     bls_decode_g1 as decode_g1,
     bls_decode_g2 as decode_g2,
     bls_expand_message_xmd as expand_message_xmd,
+    bls_fast_aggregate_verify as fast_aggregate_verify,
     bls_hash_to_g2 as hash_to_g2,
+    bls_key_gen as _key_gen,
     bls_pairing as pairing,
-    BYTES_PER_PUBKEY,
-    BYTES_PER_SIGNATURE,
+    bls_pop_prove as pop_prove,
+    bls_pop_verify as pop_verify,
+    bls_sign as sign,
+    bls_verify as verify,
+    eth_aggregate_pubkeys,
+    eth_fast_aggregate_verify,
 )
+from ethlib.errors import BlsError
 
 
 def key_gen(ikm: bytes, key_info: bytes = b"") -> bytes:

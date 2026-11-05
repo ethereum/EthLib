@@ -6,11 +6,10 @@ An invalid input raises Discv5Error, a ValueError.
 import json
 from typing import NamedTuple
 
-from ...errors import Discv5Error
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ...cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import Discv5Error
 
 
 class SessionKeys(NamedTuple):

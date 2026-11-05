@@ -10,7 +10,6 @@ from py_ecc.bls.g2_primitives import G1_to_pubkey, pubkey_to_G1
 
 from ethlib.cryptography import kzg
 
-
 # ---- Memoized spec calls --------------------------------------------------
 
 

@@ -2,7 +2,7 @@
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ..cryptography import _native
+from ethlib.cryptography import _native
 
 
 def mainnet_active_fork(number: int, timestamp: int) -> str | None:

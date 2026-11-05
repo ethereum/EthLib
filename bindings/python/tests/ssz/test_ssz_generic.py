@@ -4,10 +4,10 @@ import hashlib
 import re
 from pathlib import Path
 
-import archives
 import pytest
 from ruamel.yaml import YAML
 
+import archives
 from ethlib.errors import SszError
 from ethlib.networking import snappy
 from ethlib.serialization import ssz

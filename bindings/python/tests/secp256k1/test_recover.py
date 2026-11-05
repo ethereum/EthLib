@@ -11,11 +11,10 @@ Each id writes a case: the key it returns, or null when it returns none.
 
 import pytest
 
+from dumper import hex_str, write_case
 from ethlib.cryptography import secp256k1
 
 from . import wycheproof as W
-from dumper import hex_str, write_case
-
 
 VALID = [c for c in W.cases(W.P1363) if c[4]]
 

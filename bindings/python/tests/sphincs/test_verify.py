@@ -7,11 +7,10 @@ Each rejection changes one input, so it fails at one known step.
 
 import pytest
 
+from dumper import hex_str, write_case
 from ethlib.cryptography import sphincs
 
 from . import fixtures as F
-from dumper import hex_str, write_case
-
 
 HANDLER = "verify"
 

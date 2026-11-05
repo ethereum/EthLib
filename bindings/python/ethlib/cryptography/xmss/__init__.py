@@ -3,17 +3,17 @@
 # Malformed arguments raise TypeError, ValueError or OverflowError.
 # Inputs that the specification rejects raise XmssError, with the code of the Lean error.
 
-from ...errors import XmssError
-from .._native import (
-    xmss_key_gen,
-    xmss_sign,
-    xmss_verify,
-    xmss_signature_index,
+from ethlib.cryptography._native import (
     XMSS_MESSAGE_LEN as MESSAGE_LEN,
     XMSS_PUB_KEY_SIZE as PUB_KEY_SIZE,
     XMSS_SEED_LEN as SEED_LEN,
     XMSS_SIG_SIZE as SIG_SIZE,
+    xmss_key_gen,
+    xmss_sign,
+    xmss_signature_index,
+    xmss_verify,
 )
+from ethlib.errors import XmssError
 
 
 def key_gen(seed: bytes) -> bytes:

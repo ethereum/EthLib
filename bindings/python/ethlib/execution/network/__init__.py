@@ -1,10 +1,9 @@
 """The messages of the eth capability of devp2p."""
 
-from ...errors import EthWireError
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ...cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import EthWireError
 
 # The message IDs within the capability.
 STATUS = 0x00

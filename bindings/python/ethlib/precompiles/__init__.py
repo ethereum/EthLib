@@ -1,10 +1,9 @@
 """The EVM precompiled contracts of every fork, by address."""
 
-from ..errors import PrecompileError
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ..cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import PrecompileError
 
 ADDRESSES = (
     0x01,

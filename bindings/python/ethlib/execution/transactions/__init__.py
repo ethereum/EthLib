@@ -2,12 +2,11 @@
 
 from typing import NamedTuple
 
-from ...errors import TransactionError
-from ...serialization import rlp
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ...cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import TransactionError
+from ethlib.serialization import rlp
 
 
 def tx_type(fork: str, tx: bytes) -> int:

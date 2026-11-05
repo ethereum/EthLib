@@ -3,7 +3,7 @@
 It detects errors and authenticates nothing: anyone can recompute it.
 """
 
-from .._native import crc32c as native_crc32c
+from ethlib.cryptography._native import crc32c as native_crc32c
 
 
 def digest(data: bytes) -> bytes:

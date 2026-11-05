@@ -1,10 +1,9 @@
 """The messages of the snap capability of devp2p, snap/1 and snap/2."""
 
-from ....errors import SnapError
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ....cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import SnapError
 
 # The message IDs within the capability.
 GET_ACCOUNT_RANGE = 0x00

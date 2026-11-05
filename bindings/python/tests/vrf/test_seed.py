@@ -2,11 +2,10 @@
 
 import pytest
 
+from dumper import hex_str, write_case
 from ethlib.cryptography import keccak, vrf
 
 from . import fixtures as F
-from dumper import hex_str, write_case
-
 
 # The secret and the output at each index, by the name of the index.
 CASES = {

@@ -4,16 +4,16 @@
 - Inputs the spec rejects raise SphincsError, with the code and the message of the Lean error.
 """
 
-from ...errors import SphincsError
-from .._native import (
-    sphincs_key_gen,
-    sphincs_sign,
-    sphincs_verify,
+from ethlib.cryptography._native import (
     SPHINCS_MESSAGE_LEN as MESSAGE_LEN,
     SPHINCS_PUB_KEY_SIZE as PUB_KEY_SIZE,
     SPHINCS_SEED_LEN as SEED_LEN,
     SPHINCS_SIG_SIZE as SIG_SIZE,
+    sphincs_key_gen,
+    sphincs_sign,
+    sphincs_verify,
 )
+from ethlib.errors import SphincsError
 
 
 def key_gen(seed: bytes) -> bytes:

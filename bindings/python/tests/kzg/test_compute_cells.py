@@ -2,11 +2,10 @@
 
 import pytest
 
+from dumper import hex_list, hex_str, write_case
 from ethlib.cryptography import kzg
 
 from . import fixtures as F
-from dumper import hex_list, hex_str, write_case
-
 
 HANDLER = "compute_cells"
 

@@ -7,8 +7,13 @@ No official vectors exist, so each message is built here as RLP.
 
 import pytest
 
-from ethlib.execution.network import BLOCK_RANGE_UPDATE, STATUS, EthWireError
-from ethlib.execution.network import check_status, decode_message
+from ethlib.execution.network import (
+    BLOCK_RANGE_UPDATE,
+    STATUS,
+    EthWireError,
+    check_status,
+    decode_message,
+)
 from ethlib.networking import forkid
 from ethlib.networking.forkid import BLOCK
 from ethlib.serialization import rlp

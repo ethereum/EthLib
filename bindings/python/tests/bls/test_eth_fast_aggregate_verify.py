@@ -2,11 +2,10 @@
 
 import pytest
 
+from dumper import hex_list, hex_str, write_case
 from ethlib.cryptography import bls
 
 from . import fixtures as F
-from dumper import hex_str, hex_list, write_case
-
 
 HANDLER = "eth_fast_aggregate_verify"
 

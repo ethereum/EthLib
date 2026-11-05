@@ -7,11 +7,10 @@ The expected index of each signed case is the index it was signed at, not a valu
 
 import pytest
 
+from dumper import hex_str, write_case
 from ethlib.cryptography import xmss
 
 from . import fixtures as F
-from dumper import hex_str, write_case
-
 
 HANDLER = "signature_index"
 

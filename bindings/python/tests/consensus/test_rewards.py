@@ -3,9 +3,9 @@
 import hashlib
 from pathlib import Path
 
-import archives
 import pytest
 
+import archives
 from ethlib import consensus
 from ethlib.networking import snappy
 

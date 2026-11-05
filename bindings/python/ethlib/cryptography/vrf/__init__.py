@@ -3,8 +3,8 @@
 # Malformed arguments raise TypeError, ValueError or OverflowError.
 # Verification never raises on bytes: it returns None for every input it rejects.
 
-from ...errors import VrfError
-from .._native import vrf_evaluate, vrf_secret, vrf_verify
+from ethlib.cryptography._native import vrf_evaluate, vrf_secret, vrf_verify
+from ethlib.errors import VrfError
 
 
 def verify(root: bytes, index: int, opening: bytes) -> bytes | None:

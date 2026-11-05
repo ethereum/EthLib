@@ -6,6 +6,7 @@ import hashlib
 import sys
 from types import SimpleNamespace
 
+from benchlib import Runner, load
 from ethereum import state_mpt as S
 from ethereum.crypto.elliptic_curve import secp256k1_recover
 from ethereum.crypto.hash import keccak256, keccak512
@@ -16,15 +17,12 @@ from ethereum.forks.osaka.fork_types import Address
 from ethereum.forks.osaka.vm.gas import calculate_blob_gas_price, calculate_memory_gas_cost
 from ethereum.forks.osaka.vm.instructions import Ops, op_implementation
 from ethereum.forks.osaka.vm.precompiled_contracts.mapping import PRE_COMPILED_CONTRACTS
-from ethereum.merkle_patricia_trie import Trie, trie_set
-from ethereum.merkle_patricia_trie import root as trie_root
+from ethereum.merkle_patricia_trie import Trie, root as trie_root, trie_set
 from ethereum.state import Account
 from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes, Bytes32
 from ethereum_types.numeric import U64, U256, Uint
 from py_ecc.bls import G2ProofOfPossession as P
-
-from benchlib import Runner, load
 
 inp = load(sys.argv[1], "inputs.json")
 R = Runner("eels", sys.argv[2])
