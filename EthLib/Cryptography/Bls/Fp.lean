@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls.Errors
 public import EthLib.Cryptography.Inverse
+public import EthLib.Cryptography.BaseField
 
 /-!
 # `Fp`
@@ -75,6 +76,14 @@ Core already has a division on `Fin n`, which divides the integers.
 
 That division is wrong for a field element, so this instance has high priority. -/
 instance (priority := high) : Div Fp := ⟨fun a b => a * b.inverse⟩
+
+/-- The operations that the extensions and curves of BLS12-381 read from `Fp`. -/
+instance : BaseField Fp where
+  zero := zero
+  one := one
+  beq := beq
+  isZero := isZero
+  inverse := inverse
 
 /-- Square root, valid since `p = 3 mod 4`.
 

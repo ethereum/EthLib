@@ -89,7 +89,7 @@ theorem card_fp12 : Fintype.card Fp12 = Fp.modulus ^ 12 := by
 
 /-- Constant inclusion from `ZMod Fp.modulus` into `Fp2`. -/
 def fpToFp2 : ZMod Fp.modulus →+* Fp2 where
-  toFun := Fp2.ofFp
+  toFun := (Fp2.ofFp : Fp → Fp2)
   map_zero' := rfl
   map_one' := rfl
   map_add' a b := by
@@ -202,9 +202,9 @@ theorem primeFrobenius2_apply (a : Fp2) : primeFrobenius2 a = a ^ Fp.modulus := 
 
 /-- Because `p = 3 mod 4`, `i^p = -i` and the `p`-power map on `Fp2` is conjugation. -/
 theorem fp2_pow_p_eq_conjugate (a : Fp2) : a ^ Fp.modulus = a.conjugate := by
-  have hi4 : Fp2.i ^ 4 = 1 := by
-    rw [show 4 = 2 * 2 by decide, pow_mul, pow_two Fp2.i, Fp2.i_sq, neg_one_sq]
-  have hi3 : Fp2.i ^ 3 = -Fp2.i := by
+  have hi4 : (Fp2.i : Fp2) ^ 4 = 1 := by
+    rw [show 4 = 2 * 2 by decide, pow_mul, pow_two (Fp2.i : Fp2), Fp2.i_sq, neg_one_sq]
+  have hi3 : (Fp2.i : Fp2) ^ 3 = -Fp2.i := by
     rw [pow_succ, pow_two, Fp2.i_sq, neg_one_mul]
   have hip : primeFrobenius2 Fp2.i = -Fp2.i := by
     rw [primeFrobenius2_apply,

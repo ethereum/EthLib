@@ -316,10 +316,10 @@ private theorem isOnTwist_of_z_one {x y : Fp2} (h : y * y = x * x * x + bTwist) 
     G2.isOnTwist ⟨x, y, Fp2.one⟩ = true := by
   unfold isOnTwist
   have hinf : (⟨x, y, Fp2.one⟩ : G2).isInfinity = false :=
-    show Fp2.one.isZero = false by decide
+    show (Fp2.one : Fp2).isZero = false by decide
   rw [ite_eq_right (by rw [hinf]; decide)]
   dsimp only
-  have h1 : Fp2.one * Fp2.one = Fp2.one := by decide
+  have h1 : (Fp2.one : Fp2) * Fp2.one = Fp2.one := by decide
   have hb : bTwist * Fp2.one = bTwist := mul_one bTwist
   rw [h1, h1, h1, hb, h]
   exact beq_self_eq_true _
@@ -507,9 +507,9 @@ theorem compress_eq_infinityBytes_iff (p : G2) :
 @[simp] theorem toAffine_of_z_one (x y : Fp2) :
     (⟨x, y, Fp2.one⟩ : G2).toAffine = (x, y) := by
   unfold toAffine
-  have h1z : Fp2.one.isZero = false := by decide
+  have h1z : (Fp2.one : Fp2).isZero = false := by decide
   rw [ite_eq_right (by rw [h1z]; decide)]
-  have hinv : Fp2.one.inverse = 1 := by
+  have hinv : (Fp2.one : Fp2).inverse = 1 := by
     have h := Fp2.mul_inverse_cancel (a := 1) (by decide)
     rwa [one_mul] at h
   dsimp only
@@ -551,7 +551,7 @@ theorem projectiveEq_toAffine {p : G2} (hinf : ¬ p.isInfinity = true) :
   have hzne : p.z ≠ 0 := fun hz0 => hinf (Fp2.isZero_iff.mpr hz0)
   have hw : p.z * p.z.inverse = 1 := Fp2.mul_inverse_cancel hzne
   unfold projectiveEq
-  rw [ite_eq_right (by decide : ¬ Fp2.one.isZero = true), ite_eq_right hpz]
+  rw [ite_eq_right (by decide : ¬ (Fp2.one : Fp2).isZero = true), ite_eq_right hpz]
   dsimp only [G2.toAffine]
   rw [ite_eq_right hpz]
   dsimp only
@@ -680,7 +680,7 @@ theorem uncompress_compress_of_z_one {p : G2} (hz : p.z = Fp2.one)
   dsimp only at hz
   subst hz
   have hinf : ¬ (⟨x, y, Fp2.one⟩ : G2).isInfinity = true := by
-    change ¬ Fp2.one.isZero = true; decide
+    change ¬ (Fp2.one : Fp2).isZero = true; decide
   have hrt := uncompress_compress_noninf h hinf
   rwa [toAffine_of_z_one] at hrt
 
@@ -814,7 +814,7 @@ theorem compress_uncompress {b : ByteArray} {q : G2}
               set y : Fp2 :=
                 if (Fp2.signBit yPos = true) = ((b.get! 0 &&& 0x20) ≠ 0) then yPos else -yPos
               have hqinf : ¬ (⟨x, y, Fp2.one⟩ : G2).isInfinity = true := by
-                change ¬ Fp2.one.isZero = true
+                change ¬ (Fp2.one : Fp2).isZero = true
                 decide
               have hpa : (⟨x, y, Fp2.one⟩ : G2).toAffine = (x, y) := toAffine_of_z_one x y
               rw [compress_noninf hqinf hpa]

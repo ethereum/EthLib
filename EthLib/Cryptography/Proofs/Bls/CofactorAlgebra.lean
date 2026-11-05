@@ -31,8 +31,8 @@ private theorem c12_cube : c12 ^ 3 = 1 := by decide +kernel
 private theorem toAffine_one (x y : Fp2) :
     G2.toAffine ⟨x, y, Fp2.one⟩ = (x, y) := by
   unfold G2.toAffine
-  have hz : Fp2.one.isZero = false := by decide
-  have hi : Fp2.one.inverse = (1 : Fp2) := inv_one
+  have hz : (Fp2.one : Fp2).isZero = false := by decide
+  have hi : (Fp2.one : Fp2).inverse = (1 : Fp2) := inv_one
   simp only [hz, Bool.false_eq_true, ↓reduceIte, hi, mul_one]
 
 private theorem psi_noninf (P : G2) (hz : P.z.isZero = false) :
@@ -184,7 +184,7 @@ theorem psi2_cube_projectiveEq_neg (P : G2) :
     have hPz : P.z ≠ 0 := fun h0 => by
       rw [Fp2.isZero_iff.mpr h0] at hz
       cases hz
-    have hone_nz : ¬Fp2.one.isZero = true := by decide
+    have hone_nz : ¬(Fp2.one : Fp2).isZero = true := by decide
     unfold G2.projectiveEq
     dsimp only
     rw [ite_eq_right hone_nz, ite_eq_right (by simp [hnz])]

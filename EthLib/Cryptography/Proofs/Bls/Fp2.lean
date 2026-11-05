@@ -43,8 +43,8 @@ instance : One Fp2 := ⟨one⟩
 @[simp] theorem zero_c1 : (0 : Fp2).c1 = 0 := rfl
 @[simp] theorem one_c0 : (1 : Fp2).c0 = 1 := rfl
 @[simp] theorem one_c1 : (1 : Fp2).c1 = 0 := rfl
-@[simp] theorem i_c0 : i.c0 = 0 := rfl
-@[simp] theorem i_c1 : i.c1 = 1 := rfl
+@[simp] theorem i_c0 : (i : Fp2).c0 = 0 := rfl
+@[simp] theorem i_c1 : (i : Fp2).c1 = 1 := rfl
 @[simp] theorem ofFp_c0 (x : Fp) : (ofFp x).c0 = x := rfl
 @[simp] theorem ofFp_c1 (x : Fp) : (ofFp x).c1 = 0 := rfl
 
@@ -62,11 +62,12 @@ instance : One Fp2 := ⟨one⟩
 /-! ## Boolean equality and zero check -/
 
 theorem beq_iff_eq {a b : Fp2} : a.beq b = true ↔ a = b := by
-  rw [beq, Bool.and_eq_true, G1.beq_iff, G1.beq_iff]
+  rw [beq, Bool.and_eq_true, Fp.baseField_beq, Fp.baseField_beq, G1.beq_iff, G1.beq_iff]
   exact ⟨fun ⟨h0, h1⟩ => ext h0 h1, fun h => ⟨congrArg c0 h, congrArg c1 h⟩⟩
 
 theorem isZero_iff {a : Fp2} : a.isZero = true ↔ a = 0 := by
-  rw [isZero, Bool.and_eq_true, G1.isZero_iff, G1.isZero_iff]
+  rw [isZero, Bool.and_eq_true, Fp.baseField_isZero, Fp.baseField_isZero, G1.isZero_iff,
+    G1.isZero_iff]
   exact ⟨fun ⟨h0, h1⟩ => ext h0 h1, fun h => ⟨congrArg c0 h, congrArg c1 h⟩⟩
 
 instance : LawfulBEq Fp2 where
@@ -153,7 +154,7 @@ instance : CommRing Fp2 where
 
 /-! ## Basis, non-residue, conjugation, and norm -/
 
-theorem i_sq : i * i = -1 := by
+theorem i_sq : (i : Fp2) * i = -1 := by
   apply ext <;> simp
 
 /-- The element `xi = 1 + i`.

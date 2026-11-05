@@ -456,6 +456,23 @@ instance : Fact (Nat.Prime modulus) := ⟨modulus_prime⟩
 /-- `Fp` is (definitionally) Mathlib's `ZMod Fp.modulus`, as rings. -/
 def toZMod : Fp ≃+* ZMod modulus := RingEquiv.refl _
 
+/-! ## The base-field operations of `Fp` -/
+
+/-- The extensions read the equality of `Fp` as its boolean equality. -/
+@[simp] theorem baseField_beq (a b : Fp) : BaseField.beq a b = a.beq b := rfl
+
+/-- The extensions read the zero test of `Fp` as its own. -/
+@[simp] theorem baseField_isZero (a : Fp) : BaseField.isZero a = a.isZero := rfl
+
+/-- The extensions read the inverse of `Fp` as its own. -/
+@[simp] theorem baseField_inverse (a : Fp) : BaseField.inverse a = a.inverse := rfl
+
+/-- The zero that the extensions read is the zero of `Fp`. -/
+@[simp] theorem baseField_zero : (BaseField.zero : Fp) = 0 := rfl
+
+/-- The one that the extensions read is the one of `Fp`. -/
+@[simp] theorem baseField_one : (BaseField.one : Fp) = 1 := rfl
+
 /-! ## Bridge: spec operations = Mathlib operations -/
 
 /-- `Fp.powNat` is monoid power, phrased over `ZMod Fp.modulus`
