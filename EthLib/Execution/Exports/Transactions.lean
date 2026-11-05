@@ -184,7 +184,7 @@ def checkInBlockExport (fork : ByteArray) (chainId : UInt64)
     chainId := chainId.toNat, coinbase := 0, number := 0, gasLimit := numberOf gasLimit,
     timestamp := 0, difficulty := 0, blockHashes := [], baseFeePerGas := fun _ => baseFee,
     prevRandao := fun _ => 0, excessBlobGas := fun _ => UInt64.ofNat excess,
-    parentBeaconBlockRoot := fun _ => 0 }
+    parentBeaconBlockRoot := fun _ => 0, slotNumber := fun _ => 0 }
   let inc ← (checkInclusion chainId env (numberOf gasUsed) (numberOf blobGasUsed)
     (.ofBlock ⟨pre, ∅, ∅, ∅, ∅⟩) tx).mapError fun e => (e.code, inclusionMessage e)
   let blobGas ← gasToUInt64 inc.blobGasUsed

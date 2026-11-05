@@ -15,6 +15,8 @@ A list of hashes too short to reach a block gives 0 for it, never another hash.
 
 BLOBHASH gives the hash at its index, and 0 past the end of the list.
 
+SLOTNUM pays the base price and pushes the slot of the block, from Glamsterdam on.
+
 Each instruction exists exactly from the fork that adds its opcode.
 
 None of these instructions changes the message, the state or the substate of the frame.
@@ -79,10 +81,33 @@ No other opcode has one. -/
 theorem isSome_environmentStep {op : Op} :
     (environmentStep (Meter := Meter) fork op).isSome ↔
       op ∈ [.address, .origin, .caller, .callvalue, .gasprice, .blockhash, .coinbase, .timestamp,
-        .number, .prevrandao, .gaslimit, .chainid, .basefee, .blobhash, .blobbasefee] ∧
+        .number, .prevrandao, .gaslimit, .chainid, .basefee, .blobhash, .blobbasefee,
+        .slotnum] ∧
       op.since ≤ fork := by
   cases op <;> simp [environmentStep, Op.since, Fork.frontier_le] <;> split <;>
     simp_all
+
+/-- SLOTNUM, from Glamsterdam, on a stack with room: pay the base price, push the slot.
+
+Its price is the base price, 2 gas, as EIP-7843 gives. -/
+theorem environmentStep_slotnum (h : .glamsterdam ≤ fork) {evm : Evm fork Meter}
+    (room : evm.stack.val.length < STACK_LIMIT) :
+    ∃ step, environmentStep fork .slotnum = some step ∧
+      step evm = (GasMeter.charge evm.gas GasCosts.BASE).map fun gas =>
+        { evm with
+          gas
+          stack := ⟨BitVec.ofNat 256 (evm.message.blockEnv.slotNumber h).toNat :: evm.stack.val,
+            room⟩
+          pc := evm.pc + 1 } :=
+  ⟨readFrame GasCosts.OPCODE_SLOTNUM fun evm =>
+      BitVec.ofNat 256 (evm.message.blockEnv.slotNumber h).toNat,
+    by simp [environmentStep, h], readFrame_of_length_lt room⟩
+
+/-- Before Glamsterdam, SLOTNUM has no instruction. -/
+theorem environmentStep_slotnum_of_lt (h : fork < .glamsterdam) :
+    environmentStep (Meter := Meter) fork .slotnum = none := by
+  have hNot : ¬ .glamsterdam ≤ fork := fun hle => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le h hle)
+  simp [environmentStep, hNot]
 
 /-- Each instruction of the environment keeps the message, the state and the substate. -/
 theorem environmentStep_sameContext {op : Op}
@@ -96,7 +121,7 @@ theorem environmentStep_sameContext {op : Op}
   case prevrandao =>
     split at hstep <;> (simp only [Option.some.injEq] at hstep; subst hstep) <;>
       exact readFrame_sameContext h
-  case chainid | basefee | blobbasefee =>
+  case chainid | basefee | blobbasefee | slotnum =>
     split at hstep
     · simp only [Option.some.injEq] at hstep
       subst hstep

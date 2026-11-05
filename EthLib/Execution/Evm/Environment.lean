@@ -24,12 +24,14 @@ The EIPs that add a field:
 - [EIP-4399][eip4399], the randomness of the beacon chain
 - [EIP-4788][eip4788], the root of the parent beacon block
 - [EIP-4844][eip4844], the excess blob gas and the blob hashes
+- [EIP-7843][eip7843], the slot number
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [eip1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
 [eip4399]: https://eips.ethereum.org/EIPS/eip-4399#specification
 [eip4788]: https://eips.ethereum.org/EIPS/eip-4788#specification
 [eip4844]: https://eips.ethereum.org/EIPS/eip-4844#parameters
+[eip7843]: https://eips.ethereum.org/EIPS/eip-7843#specification
 -/
 
 @[expose] public section
@@ -64,6 +66,8 @@ structure BlockEnvironment (fork : Fork) where
   excessBlobGas : Since .dencun fork UInt64
   /-- The root of the parent beacon block, from Dencun. -/
   parentBeaconBlockRoot : Since .dencun fork Hash32
+  /-- The slot of the block on the beacon chain, from Glamsterdam. -/
+  slotNumber : Since .glamsterdam fork UInt64
 
 /-- The transaction that runs the code, at fork `fork`. -/
 structure TransactionEnvironment (fork : Fork) where

@@ -254,6 +254,8 @@ def OPCODE_SELFBALANCE : Nat := FAST_STEP
 def OPCODE_BASEFEE : Nat := BASE
 /-- The price of BLOBBASEFEE, from EIP-7516. -/
 def OPCODE_BLOBBASEFEE : Nat := BASE
+/-- The price of SLOTNUM, from EIP-7843. -/
+def OPCODE_SLOTNUM : Nat := BASE
 /-- The price of BLOBHASH, from EIP-4844. -/
 def OPCODE_BLOBHASH : Nat := 3
 /-- The price of PUSH1 to PUSH32. -/
