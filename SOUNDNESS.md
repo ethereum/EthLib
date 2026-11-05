@@ -915,16 +915,26 @@ The setup raises three separate assumptions, and each use of KZG relies on a dif
 - Provenance: the embedded bytes are the ceremony's output.
   They match consensus-specs `presets/mainnet/trusted_setups/trusted_setup_4096.json` byte for byte, and `Kzg/TrustedSetupData.lean` records that source, the commit it comes from and its sha256.
 - Algebraic consistency: the bytes decode to valid points, the monomial points are powers of one secret, and the Lagrange points are the matching basis.
-  For the embedded bytes, only the first part is proved, and only in part.
+  For the embedded bytes, the first and the third parts are proved if the bytes decode, and the second is not.
   `TrustedSetup.ofHex_valid` (`Proofs/Kzg/TrustedSetup.lean`) proves that, if they decode, each point is on its curve.
   No theorem says that they decode.
   If they decode, `TrustedSetup.ofHex_torsion` proves that each monomial point of `G1` has an order that divides `r`.
   No theorem says this of the Lagrange points or of the points of `G2`.
+  If they decode, `TrustedSetup.ofHex_lagrangeOfMonomial` (`Proofs/Kzg/SetupLagrange/Embedded.lean`) proves that each Lagrange point of `G1` is the sum of the monomial points times the coefficients of its basis polynomial.
+  So the Lagrange points are the matching basis of whatever secret the monomial points hold.
+  The kernel checks this on the embedded data: it decodes all 8192 points of `G1` and runs 768 transforms of size 16, in three rounds.
+  Compiled code computes two tables of intermediate points when the files are built, and the repository holds no copy of them.
+  A wrong table only makes a kernel check fail.
+  This is a second recorded exception to the rule of a few seconds for concrete facts in [CONTRIBUTING.md](CONTRIBUTING.md#known-answers).
+  It costs about 21 CPU-minutes per replay, measured one module at a time, in 56 modules, and about as much per build.
+  Each module takes 13 to 43 seconds and at most 3.3 GB to replay.
   The Python suite checks for every point that it decodes and lies in the subgroup (`bindings/python/tests/kzg/test_trusted_setup.py`).
   `checksSufficient` covers the ceremony's monomial points, under its hypotheses.
   `TrustedSetup.WellFormed s τ` (`Proofs/Kzg/Commitment.lean`) states the consistency of a setup `s` with a secret `τ`.
   The theorems on commitments and on honest proofs take it as a hypothesis.
-  For the embedded setup, that some `τ` makes it well formed is an assumption, and no theorem proves it.
+  For the embedded setup, `TrustedSetup.ofHex_wellFormed` reduces it to the monomial points.
+  If the setup decodes and its monomial points of `G1` and `G2` represent the powers of `τ`, it is well formed at `τ`.
+  That some `τ` makes the monomial points represent its powers is an assumption, and no theorem proves it.
 - Secrecy: no one knows the secret, which holds if at least one ceremony participant was honest.
   Only binding, a security property, needs it; a theorem about parsing, or that an honest proof verifies, does not.
 
