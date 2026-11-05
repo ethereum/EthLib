@@ -32,6 +32,16 @@ def test_copy_longer_than_its_offset() -> None:
     assert snappy.decompress(block) == expected
 
 
+def test_many_copies_far_back() -> None:
+    # 60 000 bytes, then 15 000 copies of 4 bytes that each reach 60 000 bytes back.
+    head = bytes((i * 7 + i // 251) % 256 for i in range(60_000))
+    copies = 15_000
+    expected = head + head[: 4 * copies]
+    literals = b"".join(_literal(head[i : i + 60]) for i in range(0, len(head), 60))
+    block = _varint(len(expected)) + literals + _copy(4, len(head)) * copies
+    assert snappy.decompress(block) == expected
+
+
 def test_copy_far_back() -> None:
     # 60 distinct bytes, then 50 000 bytes of filler, then a copy of the first 60 bytes.
     head = bytes(range(60))

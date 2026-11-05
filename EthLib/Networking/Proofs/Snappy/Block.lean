@@ -103,89 +103,24 @@ theorem readPreamble_le {bs rest : List UInt8} {len : Nat}
     · cases h
     · cases h; omega
 
-/-! ## Copies (§2.2)
-
-The output is held most recent byte first, so a forward list `o` is stored as its reverse.
--/
-
-/-- No bytes to copy leave the output as it is. -/
-theorem copyBytes_zero (out : List UInt8) (offset : Nat) : copyBytes out offset 0 = .ok out := by
-  rw [copyBytes, ite_eq_left rfl]
-
-/-- Copying `n + 1` bytes writes the byte `offset` back, then copies `n` more after it.
-
-This is the rule of §2.2, one byte at a time. -/
-theorem copyBytes_succ (out : List UInt8) (offset n : Nat) :
-    copyBytes out offset (n + 1) =
-      match out[offset - 1]? with
-      | none => .error (.copyOffsetTooLarge offset)
-      | some b => copyBytes (b :: out) offset n := by
-  induction n using Nat.strongRecOn generalizing out with
-  | ind n ih =>
-  -- The byte read is the oldest of the window of `max offset 1 = k + 1` bytes.
-  obtain ⟨k, hk⟩ : ∃ k, max offset 1 = k + 1 := ⟨max offset 1 - 1, by omega⟩
-  have hidx : offset - 1 = k := by omega
-  -- The same copy, unfolded once, for any output and length.
-  have unfold : ∀ (o : List UInt8) (m : Nat), m ≠ 0 → copyBytes o offset m =
-      if (o.take (k + 1)).length < k + 1 then .error (.copyOffsetTooLarge offset)
-      else if m ≤ k + 1 then .ok ((o.take (k + 1)).drop (k + 1 - m) ++ o)
-      else copyBytes (o.take (k + 1) ++ o) offset (m - (k + 1)) := by
-    intro o m hm
-    rw [copyBytes, ite_eq_right hm, hk]
-  rw [unfold out (n + 1) (by omega), hidx]
-  by_cases short : out.length < k + 1
-  · rw [ite_eq_left (by simp; omega), List.getElem?_eq_none (by omega)]
-  · have hlt : k < out.length := by omega
-    rw [ite_eq_right (by simp; omega), List.getElem?_eq_getElem hlt]
-    dsimp only
-    -- The window is the bytes before the one read, then that byte.
-    have hwin : out.take (k + 1) = out.take k ++ [out[k]] := by
-      rw [List.take_add_one, List.getElem?_eq_getElem hlt]
-      rfl
-    have hwin' : (out[k] :: out).take (k + 1) = out[k] :: out.take k := List.take_succ_cons
-    have hlen' : ¬((out[k] :: out).take (k + 1)).length < k + 1 := by
-      rw [hwin']; simp; omega
-    by_cases fits : n + 1 ≤ k + 1
-    · rw [ite_eq_left fits]
-      rcases Nat.eq_zero_or_pos n with rfl | hn
-      · rw [copyBytes_zero, hwin, List.drop_append_of_le_length (by simp; omega)]
-        simp
-      · rw [unfold _ n (by omega), ite_eq_right hlen', ite_eq_left (by omega), hwin', hwin,
-          show k + 1 - n = (k - n) + 1 by omega, List.drop_succ_cons,
-          List.drop_append_of_le_length (by simp; omega)]
-        simp
-    · rw [ite_eq_right fits]
-      have hget : (out.take (k + 1) ++ out)[k]? = some out[k] := by
-        rw [List.getElem?_append_left (by simp; omega), List.getElem?_take_of_lt (by omega),
-          List.getElem?_eq_getElem hlt]
-      by_cases exact : n = k + 1
-      · subst exact
-        rw [unfold _ (k + 1) (by omega), ite_eq_right hlen', ite_eq_left (Nat.le_refl _),
-          Nat.sub_self, List.drop_zero, show k + 1 + 1 - (k + 1) = 0 + 1 by omega, ih 0 (by omega),
-          hidx, hget]
-        simp only [copyBytes_zero, hwin', hwin, List.append_assoc, List.nil_append,
-          List.cons_append]
-      · rw [unfold _ n (by omega), ite_eq_right hlen', ite_eq_right (by omega), hwin',
-          show n + 1 - (k + 1) = (n - (k + 1)) + 1 by omega, ih (n - (k + 1)) (by omega), hidx,
-          hget]
-        simp only [hwin, List.append_assoc, List.cons_append, List.nil_append]
+/-! ## Copies (§2.2) -/
 
 /-- A successful copy of `n` bytes lengthens the output by `n`. -/
-theorem copyBytes_length {out out' : List UInt8} {offset n : Nat}
-    (h : copyBytes out offset n = .ok out') : out'.length = out.length + n := by
+theorem copyBytes_size {out out' : ByteArray} {offset n : Nat}
+    (h : copyBytes out offset n = .ok out') : out'.size = out.size + n := by
   induction n generalizing out with
-  | zero => rw [copyBytes_zero] at h; cases h; simp
+  | zero => cases h; simp
   | succ n ih =>
-      rw [copyBytes_succ] at h
+      rw [copyBytes] at h
       split at h
-      · cases h
       · have := ih h
-        simp only [List.length_cons] at this
+        simp only [ByteArray.size_push] at this
         omega
+      · cases h
 
 /-- A copy that reaches back no further than the output succeeds, and writes what §2.2 describes.
 
-In forward order, the result `r`:
+The result `r`:
 
 - starts with the output `o` it was given,
 - is `n` bytes longer,
@@ -195,23 +130,21 @@ The last rule is read on the bytes already written, so a copy longer than its of
 -/
 theorem copyBytes_spec {o : List UInt8} {offset : Nat} (n : Nat)
     (hpos : 0 < offset) (hle : offset ≤ o.length) :
-    ∃ r, copyBytes o.reverse offset n = .ok r.reverse ∧ r.length = o.length + n ∧ o <+: r ∧
+    ∃ r, copyBytes o.toByteArray offset n = .ok r.toByteArray ∧ r.length = o.length + n ∧ o <+: r ∧
       ∀ (j : Nat) (hj : o.length ≤ j) (hjr : j < r.length),
         r[j] = r[j - offset]'(by omega) := by
   induction n generalizing o with
-  | zero => exact ⟨o, copyBytes_zero _ _, rfl, List.prefix_refl o, fun j hj hjr => by omega⟩
+  | zero => exact ⟨o, rfl, rfl, List.prefix_refl o, fun j hj hjr => by omega⟩
   | succ n ih =>
-      -- The byte `offset` back in forward order.
       have hidx : o.length - offset < o.length := by omega
-      have hread : o.reverse[offset - 1]? = some o[o.length - offset] := by
-        have hi : o.length - 1 - (offset - 1) = o.length - offset := by omega
-        rw [List.getElem?_reverse (by omega), hi, List.getElem?_eq_getElem hidx]
-      -- Writing it is appending it in forward order.
+      have hmax : max offset 1 = offset := by omega
+      -- Writing the byte `offset` back is appending it.
       obtain ⟨r, hr, hlen, hpre, hrep⟩ :=
         ih (o := o ++ [o[o.length - offset]]) (by simp; omega)
       refine ⟨r, ?_, ?_, ?_, ?_⟩
-      · rw [copyBytes_succ, hread]
-        simpa using hr
+      · rw [copyBytes, dite_eq_left (by simpa [hmax] using hle)]
+        simpa only [List.size_toByteArray, hmax, List.getElem_toByteArray, List.toByteArray_append,
+          ByteArray.append_toByteArray_singleton] using hr
       · simp at hlen; omega
       · exact (List.prefix_append o _).trans hpre
       · intro j hj hjr
@@ -231,21 +164,20 @@ theorem copyBytes_spec {o : List UInt8} {offset : Nat} (n : Nat)
 
 /-- A copy into an empty output fails, whatever its offset. -/
 theorem copyBytes_nil {offset len : Nat} (hlen : 0 < len) :
-    copyBytes [] offset len = .error (.copyOffsetTooLarge offset) := by
+    copyBytes ByteArray.empty offset len = .error (.copyOffsetTooLarge offset) := by
   obtain ⟨k, rfl⟩ : ∃ k, len = k + 1 := ⟨len - 1, by omega⟩
-  rw [copyBytes_succ]
-  rfl
+  rw [copyBytes, dite_eq_right (by simp)]
 
 /-- A copy reaching past the start of the output fails. -/
-theorem copyBytes_tooLarge {out : List UInt8} {offset n : Nat}
-    (hout : out.length < offset) :
+theorem copyBytes_tooLarge {out : ByteArray} {offset n : Nat}
+    (hout : out.size < offset) :
     copyBytes out offset (n + 1) = .error (.copyOffsetTooLarge offset) := by
-  rw [copyBytes_succ, List.getElem?_eq_none (by omega)]
+  rw [copyBytes, dite_eq_right (by omega)]
 
 /-! ## The element loop -/
 
 /-- One more unit of fuel changes nothing once the fuel covers the input. -/
-theorem decompressElements_succ_fuel (input out : List UInt8) {fuel : Nat}
+theorem decompressElements_succ_fuel (input : List UInt8) (out : ByteArray) {fuel : Nat}
     (h : input.length ≤ fuel) :
     decompressElements input out (fuel + 1) = decompressElements input out fuel := by
   induction fuel generalizing input out with
@@ -264,7 +196,7 @@ theorem decompressElements_succ_fuel (input out : List UInt8) {fuel : Nat}
           congr
 
 /-- The element loop gives the same result for every fuel that covers the input. -/
-theorem decompressElements_fuel (input out : List UInt8) {fuel : Nat}
+theorem decompressElements_fuel (input : List UInt8) (out : ByteArray) {fuel : Nat}
     (h : input.length ≤ fuel) :
     decompressElements input out fuel = decompressElements input out input.length := by
   obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le h
@@ -276,7 +208,7 @@ theorem decompressElements_fuel (input out : List UInt8) {fuel : Nat}
 /-- A first element that is a copy has nothing to copy from, so it is rejected (§2). -/
 theorem decompressElements_copy_first {tag : UInt8} {rest : List UInt8} {fuel : Nat}
     (hcopy : tag.toNat % 4 ≠ 0) :
-    ∃ e, decompressElements (tag :: rest) [] (fuel + 1) = .error e := by
+    ∃ e, decompressElements (tag :: rest) ByteArray.empty (fuel + 1) = .error e := by
   simp only [decompressElements, beq_iff_eq, hcopy, ↓reduceIte, EthLib.Base.bytesToUint_toVector]
   repeat' split
   -- Every branch is an error, since a copy of at least 1 byte cannot read an empty output.
@@ -286,11 +218,11 @@ theorem decompressElements_copy_first {tag : UInt8} {rest : List UInt8} {fuel : 
 
 /-! ## The whole block -/
 
-/-- A block that decompresses yields exactly as many bytes as its preamble declared. -/
-theorem decompressList_length_eq_declared {bs out : List UInt8}
-    (h : decompressList bs = .ok out) :
-    ∃ rest, readPreamble bs = .ok (out.length, rest) := by
-  rw [decompressList] at h
+/-- Decoded to a byte array, a block yields exactly as many bytes as its preamble declared. -/
+theorem decompressToArray_size_eq_declared {bs : List UInt8} {out : ByteArray}
+    (h : decompressToArray bs = .ok out) :
+    ∃ rest, readPreamble bs = .ok (out.size, rest) := by
+  rw [decompressToArray] at h
   split at h
   · cases h
   · rename_i declared rest hpre
@@ -299,8 +231,19 @@ theorem decompressList_length_eq_declared {bs out : List UInt8}
     · split at h
       · rename_i hlen
         cases h
-        exact ⟨rest, by rw [hpre, List.length_reverse, beq_iff_eq.mp hlen]⟩
+        exact ⟨rest, by rw [hpre, beq_iff_eq.mp hlen]⟩
       · cases h
+
+/-- A block that decompresses yields exactly as many bytes as its preamble declared. -/
+theorem decompressList_length_eq_declared {bs out : List UInt8}
+    (h : decompressList bs = .ok out) :
+    ∃ rest, readPreamble bs = .ok (out.length, rest) := by
+  cases hd : decompressToArray bs with
+  | error e => simp only [decompressList, hd, Except.map] at h; cases h
+  | ok o =>
+      simp only [decompressList, hd, Except.map] at h
+      cases h
+      simpa using decompressToArray_size_eq_declared hd
 
 /-- A block that decompresses yields at most 2^32 - 1 bytes. -/
 theorem decompressList_length_le {bs out : List UInt8}
@@ -313,19 +256,13 @@ theorem decompressList_copy_first {bs rest : List UInt8} {declared : Nat} {tag :
     (hpre : readPreamble bs = .ok (declared, tag :: rest)) (hcopy : tag.toNat % 4 ≠ 0) :
     ∃ e, decompressList bs = .error e := by
   obtain ⟨e, he⟩ := decompressElements_copy_first (rest := rest) (fuel := rest.length) hcopy
-  exact ⟨e, by simp [decompressList, hpre, he]⟩
+  exact ⟨e, by simp [decompressList, decompressToArray, hpre, he, Except.map]⟩
 
 /-- On bytes, a block that decompresses yields exactly as many bytes as its preamble declared. -/
 theorem decompress_size_eq_declared {bs out : ByteArray}
     (h : decompress bs = .ok out) :
-    ∃ rest, readPreamble bs.toList = .ok (out.size, rest) := by
-  rw [decompress] at h
-  cases hd : decompressList bs.toList with
-  | error e => simp [hd] at h; cases h
-  | ok o =>
-      simp [hd] at h
-      cases h
-      exact decompressList_length_eq_declared hd
+    ∃ rest, readPreamble bs.toList = .ok (out.size, rest) :=
+  decompressToArray_size_eq_declared h
 
 /-! ## The literal encoder -/
 
@@ -352,7 +289,7 @@ theorem toList_eq_data_toList (bs : ByteArray) : bs.toList = bs.data.toList := b
 /-- The tag of a literal reads back as a literal, and its length as the data length (§2.1). -/
 theorem decompressElements_literal {data : List UInt8} (hne : data ≠ [])
     (h : data.length ≤ 2 ^ 32) (fuel : Nat) :
-    decompressElements (literal data) [] (fuel + 1) = .ok data.reverse := by
+    decompressElements (literal data) ByteArray.empty (fuel + 1) = .ok data.toByteArray := by
   have hpos : 0 < data.length := List.length_pos_iff.mpr hne
   dsimp only [literal]
   split
@@ -380,11 +317,11 @@ theorem decompressElements_literal {data : List UInt8} (hne : data ≠ [])
     simp [show ¬ 59 + k < 60 by omega, show 59 + k - 59 = k by omega, hv,
       show data.length - 1 + 1 = data.length by omega, decompressElements]
 
-/-- A block of one literal decompresses to its data, for data of at most 2^32 - 1 bytes. -/
-theorem decompressList_compressLiteralList {data : List UInt8}
+/-- A block of one literal decompresses to its data as a byte array, for up to 2^32 - 1 bytes. -/
+theorem decompressToArray_compressLiteralList {data : List UInt8}
     (h : data.length ≤ maxUncompressedLength) :
-    decompressList (compressLiteralList data) = .ok data := by
-  rw [decompressList, compressLiteralList, readPreamble_encode _ h]
+    decompressToArray (compressLiteralList data) = .ok data.toByteArray := by
+  rw [decompressToArray, compressLiteralList, readPreamble_encode _ h]
   cases data with
   | nil => rfl
   | cons b bs =>
@@ -395,13 +332,19 @@ theorem decompressList_compressLiteralList {data : List UInt8}
         (by simp [maxUncompressedLength] at h ⊢; omega)]
       simp
 
+/-- A block of one literal decompresses to its data, for data of at most 2^32 - 1 bytes. -/
+theorem decompressList_compressLiteralList {data : List UInt8}
+    (h : data.length ≤ maxUncompressedLength) :
+    decompressList (compressLiteralList data) = .ok data := by
+  simp [decompressList, decompressToArray_compressLiteralList h, Except.map]
+
 /-- The literal block of a byte array decompresses back to it, for at most 2^32 - 1 bytes. -/
 theorem decompress_compressLiteral {d : ByteArray} (h : d.size ≤ maxUncompressedLength) :
     decompress (compressLiteral d) = .ok d := by
   have hl : d.data.toList.length ≤ maxUncompressedLength := by simpa using h
   rw [decompress, compressLiteral, toList_eq_data_toList]
-  rw [decompressList_compressLiteralList hl]
-  rfl
+  simp only [decompressToArray_compressLiteralList hl]
+  exact congrArg Except.ok (ByteArray.ext (by simp))
 
 /-! ## Error codes -/
 

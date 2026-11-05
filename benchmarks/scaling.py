@@ -50,6 +50,20 @@ def want(n):
     return WHICH is None or n in WHICH
 
 
+def far_copies(data):
+    """A Snappy block: `data` as one literal, then 4-byte copies from `len(data)` bytes back."""
+    n = len(data)
+
+    def varint(v):
+        return bytes([v & 0x7F | 0x80]) + varint(v >> 7) if v >= 0x80 else bytes([v])
+
+    # format_description.txt §2.2.3: a copy of 4 bytes with a 4-byte offset has the tag 0b00001111.
+    copy = bytes([0x0F]) + n.to_bytes(4, "little")
+    copies = n // 4
+    literal = snappy.compress_literal(data)[len(varint(n)) :]
+    return varint(n + 4 * copies) + literal + copy * copies
+
+
 if want("hash"):
     for name, f in [("keccak", keccak.keccak256), ("sha256", sha256.sha256)]:
         sizes = [1_000, 10_000, 100_000, 1_000_000]
@@ -102,6 +116,11 @@ if want("snappy"):
         "snappy.decompress (literal)",
         sizes,
         [t(lambda c=snappy.compress_literal(raw[:n]): snappy.decompress(c)) for n in sizes],
+    )
+    show(
+        "snappy.decompress (far copies)",
+        sizes,
+        [t(lambda c=far_copies(raw[:n]): snappy.decompress(c)) for n in sizes],
     )
     show(
         "snappy.compress_literal",
