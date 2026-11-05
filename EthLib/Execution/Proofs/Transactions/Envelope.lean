@@ -146,11 +146,6 @@ theorem getElem_zero_of_toList {bytes : ByteArray} {first : UInt8} {rest : List 
   subst h
   exact ⟨by simp [ByteArray.size], by simp [ByteArray.getElem_eq_getElem_data]⟩
 
-/-- A map in `Except` succeeds exactly when the mapped computation succeeds. -/
-private theorem map_eq_ok {ε α β : Type} {f : α → β} {x : Except ε α} {y : β} :
-    f <$> x = .ok y ↔ ∃ a, x = .ok a ∧ f a = y := by
-  cases x <;> simp [Functor.map, Except.map]
-
 /-- A map, then a change of error, succeeds exactly when the computation succeeds. -/
 private theorem map_mapError_eq_ok {ε ε' α β : Type} {f : α → β} {g : ε → ε'}
     {x : Except ε α} {y : β} : (f <$> x).mapError g = .ok y ↔ ∃ a, x = .ok a ∧ f a = y := by
@@ -175,7 +170,7 @@ theorem encodeTransaction_head {t : Transaction} {bytes : ByteArray}
     obtain ⟨h0, hEq⟩ := getElem_zero_of_toList hList
     exact ⟨h0, by simp [Transaction.type, hEq, hFirst], by simp [Transaction.type]⟩
   | accessList tx | feeMarket tx | blob tx | setCode tx =>
-    simp only [encodeTransaction, map_eq_ok] at h
+    simp only [encodeTransaction, map_ok_iff] at h
     obtain ⟨payload, -, rfl⟩ := h
     exact ⟨by simp [size_typedBytes], by simp [Transaction.type, typedBytes_getElem_zero],
       by simp [Transaction.type, typedBytes_getElem_zero]⟩
@@ -193,7 +188,7 @@ theorem decodeTransaction_encodeTransaction {fork : Fork} {t : Transaction} {byt
     simp [decodeTransaction, h0, hFirst, Codec.decode_encode h, Functor.map, Except.map,
       Except.mapError]
   | accessList tx | feeMarket tx | blob tx | setCode tx =>
-    simp only [encodeTransaction, map_eq_ok] at h
+    simp only [encodeTransaction, map_ok_iff] at h
     obtain ⟨payload, hPayload, rfl⟩ := h
     simp [Transaction.fork, Transaction.type, typeFork] at hFork
     simp [decodeTransaction, h0, typedBytes_getElem_zero, typeFork, hFork, decodePayload,

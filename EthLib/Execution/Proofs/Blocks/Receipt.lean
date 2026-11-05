@@ -47,11 +47,6 @@ instance : LawfulCodec Log where
 
 variable {fork : Fork}
 
-/-- A map in `Except` succeeds exactly when the mapped computation succeeds. -/
-private theorem map_eq_ok {α β : Type} {f : α → β} {x : Except RlpError α} {y : β} :
-    f <$> x = .ok y ↔ ∃ a, x = .ok a ∧ f a = y := by
-  cases x <;> simp [Functor.map, Except.map]
-
 instance : LawfulCodec (Outcome fork) where
   ofItem_toItem
     | .postState before root => by
@@ -66,9 +61,9 @@ instance : LawfulCodec (Outcome fork) where
     change Outcome.ofItem item = .ok o at h
     unfold Outcome.ofItem at h
     split at h
-    · obtain ⟨b, hb, rfl⟩ := map_eq_ok.mp h
+    · obtain ⟨b, hb, rfl⟩ := map_ok_iff.mp h
       exact LawfulCodec.toItem_of_ofItem (α := Bool) hb
-    · obtain ⟨root, hRoot, rfl⟩ := map_eq_ok.mp h
+    · obtain ⟨root, hRoot, rfl⟩ := map_ok_iff.mp h
       exact LawfulCodec.toItem_of_ofItem (α := Hash32) hRoot
 
 instance : LawfulCodec (Receipt fork) where
