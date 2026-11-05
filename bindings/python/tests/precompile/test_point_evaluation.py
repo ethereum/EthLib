@@ -8,6 +8,7 @@ The versioned hash is `0x01` followed by the last 31 bytes of SHA-256 of the com
 
 A proof that verifies gives the two words `FIELD_ELEMENTS_PER_BLOB` and `BLS_MODULUS`.
 A proof that fails, or an input that does not decode, makes the call fail.
+The test checks that the call fails with the error that names the reason.
 """
 
 import hashlib
@@ -49,6 +50,24 @@ def test_found_vectors() -> None:
     assert len(CASES) == 122
 
 
+# The error of the Lean specification for each kind of failing vector of the right length.
+ERROR = {
+    "invalid_commitment": "invalidCommitment",
+    "invalid_z": "invalidFieldElement",
+    "invalid_y": "invalidFieldElement",
+    "invalid_proof": "invalidProof",
+    "incorrect_proof": "proofRejected",
+}
+
+
+def expected_error(name: str, data: bytes) -> str:
+    """The error of the Lean specification for a vector whose call fails."""
+    if len(data) != 192:
+        return "invalidInputLength"
+    (error,) = [error for kind, error in ERROR.items() if f"_case_{kind}_" in name]
+    return error
+
+
 @pytest.mark.parametrize("name", CASES)
 @pytest.mark.parametrize("fork", FORKS)
 def test_vector(fork: str, name: str) -> None:
@@ -56,7 +75,7 @@ def test_vector(fork: str, name: str) -> None:
     if verifies:
         assert run(fork, 0x0A, data, 50000) == SUCCESS
     else:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=rf"\.{expected_error(name, data)}\b"):
             run(fork, 0x0A, data, 50000)
 
 
