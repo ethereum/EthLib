@@ -143,6 +143,10 @@ Keccak-256 is one such function, so the theorems cover the specification as it r
   The eleven address types have eleven codes (`AddressType.code_injective`).
   Each address of a key or a FORS instance determines its own arguments (`keyAddress_inj`, `addrNode_inj`, `addrForsNode_inj` and the others).
   A hash input determines its public parameter, address and payload (`thInput_inj`).
+- Verification's hash calls (`Unforgeability/VerifyQueries.lean`).
+  Verification makes at most 466 calls, with any hash that makes at most one oracle call (`verifyWith_isTotalQueryBound`, `verifyCalls_eq`).
+  When a fixed function answers the oracle, verification computes EthLib's verification with that function as its hash (`evalWithAnswerFn_verifyWith`).
+  Two answer functions that agree on the inputs verification hashes give the same verdict (`verifyWith_congr`).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
 
