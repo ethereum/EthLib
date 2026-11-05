@@ -392,6 +392,15 @@
 #define DOC_discv4_record_signed_by \
   "Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`."
 
+#define DOC_fork_id \
+  "The fork identifier, as RLP, of a node with the schedule `schedule` at a head."
+
+#define DOC_mainnet_fork_id \
+  "The fork identifier, as RLP, of a mainnet node at a head."
+
+#define DOC_fork_id_validate \
+  "Whether a node at a head accepts the fork identifier of a peer, by the validation rules of [EIP-2124](https://eips.ethereum.org/EIPS/eip-2124#validation-rules)."
+
 #define DOC_snappy_decompress \
   "The bytes a Snappy block decompresses to, or why it is not a valid block."
 

@@ -523,6 +523,18 @@ def discv4_record_signed_by(sender: bytes, record: bytes) -> bool:
     """Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`."""
     ...
 
+def fork_id(schedule: bytes, number: int, timestamp: int) -> bytes:
+    """The fork identifier, as RLP, of a node with the schedule `schedule` at a head."""
+    ...
+
+def mainnet_fork_id(number: int, timestamp: int) -> bytes:
+    """The fork identifier, as RLP, of a mainnet node at a head."""
+    ...
+
+def fork_id_validate(schedule: bytes, number: int, timestamp: int, remote: bytes) -> bool:
+    """Whether a node at a head accepts the fork identifier of a peer, by the validation rules of [EIP-2124](https://eips.ethereum.org/EIPS/eip-2124#validation-rules)."""
+    ...
+
 def snappy_decompress(block: bytes) -> bytes:
     """The bytes a Snappy block decompresses to, or why it is not a valid block."""
     ...

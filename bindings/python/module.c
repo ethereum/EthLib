@@ -70,6 +70,7 @@ PyObject* DISCV5_ERROR;
 PyObject* RLPX_ERROR;
 PyObject* DEVP2P_ERROR;
 PyObject* DISCV4_ERROR;
+PyObject* FORK_ID_ERROR;
 PyObject* TRANSACTION_ERROR;
 PyObject* VRF_ERROR;
 PyObject* TRIE_ERROR;
@@ -615,6 +616,9 @@ static PyMethodDef methods[] = {
   {"discv4_decode", py_discv4_decode, METH_VARARGS, DOC_discv4_decode},
   {"discv4_encode", py_discv4_encode, METH_VARARGS, DOC_discv4_encode},
   {"discv4_record_signed_by", py_discv4_record_signed_by, METH_VARARGS, DOC_discv4_record_signed_by},
+  {"fork_id", py_fork_id, METH_VARARGS, DOC_fork_id},
+  {"mainnet_fork_id", py_mainnet_fork_id, METH_VARARGS, DOC_mainnet_fork_id},
+  {"fork_id_validate", py_fork_id_validate, METH_VARARGS, DOC_fork_id_validate},
   {"snappy_decompress", py_snappy_decompress, METH_VARARGS, DOC_snappy_decompress},
   {"snappy_compress_literal", py_snappy_compress_literal, METH_VARARGS, DOC_snappy_compress_literal},
   {"snappy_decode_frames", py_snappy_decode_frames, METH_VARARGS, DOC_snappy_decode_frames},
@@ -692,6 +696,7 @@ PyInit__native(void) {
     RLPX_ERROR = PyObject_GetAttrString(errors, "RlpxError");
     DEVP2P_ERROR = PyObject_GetAttrString(errors, "Devp2pError");
     DISCV4_ERROR = PyObject_GetAttrString(errors, "Discv4Error");
+    FORK_ID_ERROR = PyObject_GetAttrString(errors, "ForkIdError");
     TRANSACTION_ERROR = PyObject_GetAttrString(errors, "TransactionError");
     VRF_ERROR = PyObject_GetAttrString(errors, "VrfError");
     TRIE_ERROR = PyObject_GetAttrString(errors, "TrieError");

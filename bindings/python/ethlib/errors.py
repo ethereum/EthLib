@@ -131,6 +131,10 @@ class Discv4Error(EthLibError, ValueError):
     """A discv4 packet was rejected, with the code of its error, or 0 for a bad argument."""
 
 
+class ForkIdError(EthLibError, ValueError):
+    """A node refused the fork identifier of a peer, or an input was malformed, with code 0."""
+
+
 class TransactionError(EthLibError, ValueError):
     """A transaction or its network form was rejected, or a fork name is unknown."""
 
@@ -193,6 +197,7 @@ __all__ = [
     "RlpxError",
     "Devp2pError",
     "Discv4Error",
+    "ForkIdError",
     "TransactionError",
     "VrfError",
     "TrieError",
