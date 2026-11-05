@@ -18,6 +18,7 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "epoch_pro
 # The forks at which EthLib runs each handler.
 HANDLERS = {
     "justification_and_finalization": ("phase0",),
+    "rewards_and_penalties": ("phase0",),
     "ptc_window": ("gloas",),
     "builder_pending_payments": ("gloas",),
     "proposer_lookahead": ("fulu", "gloas"),

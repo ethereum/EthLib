@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: epoch_processing
+handler: rewards_and_penalties
+suite: pyspec_tests
+case: duplicate_participants_different_attestation_1
