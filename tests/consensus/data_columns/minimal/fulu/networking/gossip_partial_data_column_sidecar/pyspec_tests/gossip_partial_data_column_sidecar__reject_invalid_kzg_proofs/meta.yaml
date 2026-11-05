@@ -1,0 +1,10 @@
+topic: partial_data_column_sidecar
+blocks:
+- {block: 
+    block_0x7f2b248e1a15c9c4da4508b784f4b8c38b5eeaa0095b6894f9b8144ef743cd21}
+messages:
+- {group_id: 
+    partial_data_column_group_id_0xc5a6f232a3975a519c0bce05b8485ace3b78895351fb1beb02bbf3a02e2361a9,
+  column_index: 0, message: 
+    partial_data_column_sidecar_0xa6e65a9e80137839689432f20736ba9ea122e1720751a9f898f3c3fb8dd0a054,
+  expected: reject, reason: invalid sidecar kzg proofs, current_time_ms: 6500}

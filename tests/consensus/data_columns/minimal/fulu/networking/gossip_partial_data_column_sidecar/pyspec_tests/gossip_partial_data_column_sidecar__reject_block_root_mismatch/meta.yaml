@@ -1,0 +1,11 @@
+topic: partial_data_column_sidecar
+blocks:
+- {block: 
+    block_0x7f2b248e1a15c9c4da4508b784f4b8c38b5eeaa0095b6894f9b8144ef743cd21}
+messages:
+- {group_id: 
+    partial_data_column_group_id_0xabababababababababababababababababababababababababababababababab,
+  column_index: 0, current_time_ms: 6500, message: 
+    partial_data_column_sidecar_0x5191c9ff7dd73be832f152f81b88c2c9d25f2fefe303b26a66240d37143aec4c,
+  expected: reject, reason: header's block root does not match group id's block 
+    root}

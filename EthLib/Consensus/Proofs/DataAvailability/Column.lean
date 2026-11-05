@@ -61,6 +61,40 @@ instance : LawfulSszType MatrixEntry := .container (by decide) (fun _ => rfl) (f
 instance {preset : Preset} : LawfulSszType (DataColumnsByRootIdentifier preset) :=
   .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
 
+/-- Two lists of commitments whose branches verify for one body root have one root.
+
+Otherwise the two climbs hash two different messages to one SHA-256 output. -/
+theorem verifyKzgCommitmentsInclusionProof_binding {preset : Preset} {fork : Fork}
+    {first second : BlobKZGCommitments preset fork}
+    {firstBranch secondBranch : Vector Bytes32 preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat}
+    {bodyRoot : Root}
+    (firstValid : verifyKzgCommitmentsInclusionProof preset first firstBranch bodyRoot = true)
+    (secondValid : verifyKzgCommitmentsInclusionProof preset second secondBranch bodyRoot = true) :
+    ∃ leaf other index, SszType.hashTreeRoot first = .ok leaf ∧
+      SszType.hashTreeRoot second = .ok other ∧
+      (leaf = other ∨ ∃ a ∈ branchMessages index 0 leaf.toArray
+          (firstBranch.toList.map Vector.toArray),
+        ∃ b ∈ branchMessages index 0 other.toArray (secondBranch.toList.map Vector.toArray),
+          a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
+          Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
+            Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+  unfold verifyKzgCommitmentsInclusionProof at firstValid secondValid
+  cases gindex : blobKzgCommitmentsGindex preset fork with
+  | error fault => simp [gindex] at firstValid
+  | ok g =>
+    cases leafRoot : SszType.hashTreeRoot first with
+    | error fault => simp [gindex, leafRoot] at firstValid
+    | ok leaf =>
+      cases otherRoot : SszType.hashTreeRoot second with
+      | error fault => simp [gindex, otherRoot] at secondValid
+      | ok other =>
+        cases subtree : getSubtreeIndex g with
+        | error fault => simp [gindex, leafRoot, subtree] at firstValid
+        | ok index =>
+          simp only [gindex, leafRoot, subtree] at firstValid
+          simp only [gindex, otherRoot, subtree] at secondValid
+          exact ⟨leaf, other, index, rfl, rfl, isValidMerkleBranch_binding firstValid secondValid⟩
+
 /-- Two sidecars that verify for one body root carry one root of commitments.
 
 Otherwise the two climbs hash two different messages to one SHA-256 output. -/
@@ -80,21 +114,92 @@ theorem verifyDataColumnSidecarInclusionProof_binding {preset : Preset} {fork : 
           Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
             Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
   unfold verifyDataColumnSidecarInclusionProof at firstValid secondValid
-  cases gindex : blobKzgCommitmentsGindex preset fork with
-  | error fault => simp [gindex] at firstValid
-  | ok g =>
-    cases leafRoot : SszType.hashTreeRoot (first.kzgCommitments beforeGloas) with
-    | error fault => simp [gindex, leafRoot] at firstValid
-    | ok leaf =>
-      cases otherRoot : SszType.hashTreeRoot (second.kzgCommitments beforeGloas) with
-      | error fault => simp [gindex, otherRoot] at secondValid
-      | ok other =>
-        cases subtree : getSubtreeIndex g with
-        | error fault => simp [gindex, leafRoot, subtree] at firstValid
-        | ok index =>
-          simp only [gindex, leafRoot, subtree] at firstValid
-          simp only [gindex, otherRoot, subtree, ← sameRoot] at secondValid
-          exact ⟨leaf, other, index, rfl, rfl, isValidMerkleBranch_binding firstValid secondValid⟩
+  rw [sameRoot] at firstValid
+  exact verifyKzgCommitmentsInclusionProof_binding firstValid secondValid
+
+/-- Two partial headers that verify for one body root carry one root of commitments.
+
+Otherwise the two climbs hash two different messages to one SHA-256 output. -/
+theorem verifyPartialDataColumnHeaderInclusionProof_binding {preset : Preset} {fork : Fork}
+    {first second : PartialDataColumnHeader preset fork}
+    (sameRoot : first.signedBlockHeader.message.bodyRoot =
+      second.signedBlockHeader.message.bodyRoot)
+    (firstValid : verifyPartialDataColumnHeaderInclusionProof preset first = true)
+    (secondValid : verifyPartialDataColumnHeaderInclusionProof preset second = true) :
+    ∃ leaf other index, SszType.hashTreeRoot first.kzgCommitments = .ok leaf ∧
+      SszType.hashTreeRoot second.kzgCommitments = .ok other ∧
+      (leaf = other ∨ ∃ a ∈ branchMessages index 0 leaf.toArray
+          (first.kzgCommitmentsInclusionProof.toList.map Vector.toArray),
+        ∃ b ∈ branchMessages index 0 other.toArray
+          (second.kzgCommitmentsInclusionProof.toList.map Vector.toArray),
+          a.size = 64 ∧ b.size = 64 ∧ a ≠ b ∧
+          Cryptography.Hash.Sha256.hash (ByteArray.mk a) =
+            Cryptography.Hash.Sha256.hash (ByteArray.mk b)) := by
+  unfold verifyPartialDataColumnHeaderInclusionProof at firstValid secondValid
+  rw [sameRoot] at firstValid
+  exact verifyKzgCommitmentsInclusionProof_binding firstValid secondValid
+
+instance {preset : Preset} {fork : Fork}
+    [NeZero preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat] :
+    LawfulSszType (PartialDataColumnHeader preset fork) :=
+  .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
+
+instance {preset : Preset} {fork : Fork}
+    [NeZero preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat] :
+    LawfulSszType (PartialDataColumnSidecar preset fork) :=
+  .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
+
+instance {preset : Preset} : LawfulSszType (PartialDataColumnPartsMetadata preset) :=
+  .container ⟨rfl, by simp, by decide⟩ (fun _ => rfl) (fun _ => rfl)
+
+instance : LawfulSszType PartialDataColumnGroupID :=
+  .container (by decide) (fun _ => rfl) (fun _ => rfl)
+
+/-- A bitmap with every bit set names every blob, in order. -/
+theorem PartialDataColumnSidecar.blobIndices_of_all {preset : Preset} {fork : Fork}
+    {sidecar : PartialDataColumnSidecar preset fork}
+    (all : ∀ bit ∈ sidecar.cellsPresentBitmap.bits, bit = true) :
+    sidecar.blobIndices = Array.range sidecar.cellsPresentBitmap.bits.size := by
+  unfold PartialDataColumnSidecar.blobIndices
+  rw [Array.filter_eq_self.mpr fun x member => all x.1 (Array.fst_mem_of_mem_zipIdx member)]
+  exact Array.ext (by simp) fun i _ _ => by simp
+
+/-- With every bit set and one bit per blob, the partial check is the check of a whole column.
+
+So a partial sidecar that carries every cell passes exactly when the full column would. -/
+theorem verifyPartialDataColumnSidecarKzgProofs_of_all {preset : Preset} {fork : Fork}
+    {setup : Cryptography.Kzg.TrustedSetup} {sidecar : PartialDataColumnSidecar preset fork}
+    {commitments : BlobKZGCommitments preset fork} {columnIndex : DataAvailability.ColumnIndex}
+    (all : ∀ bit ∈ sidecar.cellsPresentBitmap.bits, bit = true)
+    (oneEach : sidecar.cellsPresentBitmap.bits.size = commitments.data.size) :
+    verifyPartialDataColumnSidecarKzgProofs setup sidecar commitments columnIndex =
+      Cryptography.Kzg.verifyCellKzgProofBatch setup commitments.data
+        (Array.replicate commitments.data.size columnIndex.toNat) sidecar.partialColumn.data
+        sidecar.kzgProofs.data := by
+  unfold verifyPartialDataColumnSidecarKzgProofs
+  rw [PartialDataColumnSidecar.blobIndices_of_all all, oneEach]
+  -- Every index below the count has its commitment, so the lookup gives the list back.
+  have fetched : ∀ indices : List Nat, (∀ i ∈ indices, i < commitments.data.size) →
+      indices.mapM (fun index =>
+        if inside : index < commitments.data.size then
+          (pure commitments.data[index] : Except Cryptography.Kzg.KzgError _)
+        else throw .commitmentIndexOutOfBounds) =
+        pure (indices.map fun i => commitments.data[i]!) := by
+    intro indices inside
+    induction indices with
+    | nil => rfl
+    | cons i rest ih =>
+      have here : i < commitments.data.size := inside i (by simp)
+      rw [List.mapM_cons, ih fun j member => inside j (by simp [member])]
+      simp [here, getElem!_pos]
+  have whole : (List.range commitments.data.size).map (fun i => commitments.data[i]!) =
+      commitments.data.toList :=
+    List.ext_getElem (by simp) fun i inside _ => by
+      simp only [List.length_map, List.length_range] at inside
+      simp [getElem!_pos commitments.data i inside]
+  simp only [Array.mapM_eq_mapM_toList, Array.toList_range, Array.size_range]
+  rw [fetched _ fun i member => List.mem_range.mp member, whole]
+  rfl
 
 /-- At Fulu and the BPO forks, the depth of the inclusion proof is that of the commitment list.
 

@@ -1,0 +1,11 @@
+topic: partial_data_column_sidecar
+blocks:
+- {block: 
+    block_0x7f2b248e1a15c9c4da4508b784f4b8c38b5eeaa0095b6894f9b8144ef743cd21}
+messages:
+- {group_id: 
+    partial_data_column_group_id_0xc3aec1aa1afe7f1336ef55c898c75d217c92ec19bd961076c7b78423802ec790,
+  column_index: 0, current_time_ms: 6500, message: 
+    partial_data_column_sidecar_0x96ab823d5130cd2b81989bca9121611098f13336dd5723aaa92e7a09193cb5a7,
+  expected: reject, reason: header proposer_index does not match expected 
+    proposer}

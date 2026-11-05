@@ -356,6 +356,12 @@ def _gossip_data_column_sidecar(root: Path, case: Case) -> None:
     run_gossip_case(root / case.path, case.preset)
 
 
+def _gossip_partial_data_column_sidecar(root: Path, case: Case) -> None:
+    from consensus.test_partial_data_column import run_partial_gossip_case
+
+    run_partial_gossip_case(root / case.path, case.preset)
+
+
 def _ssz_static(root: Path, case: Case) -> None:
     from ethlib import consensus
     from ethlib.networking import snappy
@@ -438,6 +444,8 @@ RUNNERS = {
     "networking/compute_columns_for_custody_group": _custody_columns,
     # The checks of the sidecar alone; the checks that read the store come with C63.
     "networking/gossip_data_column_sidecar": _gossip_data_column_sidecar,
+    # The checks of a partial message that read no store; the others wait for C63.
+    "networking/gossip_partial_data_column_sidecar": _gossip_partial_data_column_sidecar,
     **{f"ssz_static/{container}": _ssz_static for container in CONTAINERS},
     "light_client/single_merkle_proof": _single_merkle_proof,
     "merkle_proof/single_merkle_proof": _merkle_proof,
@@ -456,11 +464,12 @@ RUNNERS = {
 
 # The runners that stop before a fork, with the first fork that they do not run.
 # Processing a transaction is not yet specified from Amsterdam on.
-# The light client proofs read the forms of Fulu.
+# The light client proofs and the partial column checks read the forms of Fulu.
 _STOPS = {
     "state_test": "BPO2ToAmsterdamAtTime15k",
     "blockchain_test": "BPO2ToAmsterdamAtTime15k",
     "light_client/single_merkle_proof": "gloas",
+    "networking/gossip_partial_data_column_sidecar": "gloas",
 }
 
 

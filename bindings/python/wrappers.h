@@ -305,6 +305,8 @@ PyObject* py_pq_keys_is_valid_possession_proof            (PyObject* self, PyObj
 PyObject* py_consensus_verify_data_column_sidecar         (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_data_column_sidecar_inclusion_proof(PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_data_column_sidecar_kzg_proofs(PyObject* self, PyObject* args);
+PyObject* py_consensus_verify_partial_data_column_header_inclusion_proof(PyObject* self, PyObject* args);
+PyObject* py_consensus_verify_partial_data_column_sidecar_kzg_proofs(PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_matrix                     (PyObject* self, PyObject* args);
 PyObject* py_consensus_recover_matrix                     (PyObject* self, PyObject* args);
 PyObject* py_consensus_light_client_sync                 (PyObject* self, PyObject* args);

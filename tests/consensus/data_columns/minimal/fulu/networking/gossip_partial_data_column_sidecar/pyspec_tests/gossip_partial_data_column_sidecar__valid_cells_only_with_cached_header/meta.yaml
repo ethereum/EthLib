@@ -1,0 +1,15 @@
+topic: partial_data_column_sidecar
+blocks:
+- {block: 
+    block_0x7f2b248e1a15c9c4da4508b784f4b8c38b5eeaa0095b6894f9b8144ef743cd21}
+messages:
+- {group_id: 
+    partial_data_column_group_id_0xc5a6f232a3975a519c0bce05b8485ace3b78895351fb1beb02bbf3a02e2361a9,
+  column_index: 0, current_time_ms: 6500, message: 
+    partial_data_column_sidecar_0xb29ccc798cd0ae46c0b006650c08c0e88ad0e62fcd47a7101339b66a0d3d5d10,
+  expected: valid}
+- {group_id: 
+    partial_data_column_group_id_0xc5a6f232a3975a519c0bce05b8485ace3b78895351fb1beb02bbf3a02e2361a9,
+  column_index: 0, current_time_ms: 6600, message: 
+    partial_data_column_sidecar_0x2c14f002c1032bfe221549d80dde202ffb899400b95c6996760b310f33a3f83a,
+  expected: valid}

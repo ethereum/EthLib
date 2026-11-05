@@ -1,0 +1,10 @@
+topic: partial_data_column_sidecar
+blocks:
+- {block: 
+    block_0xfee0eac898e0a4862fe76b7d3fcf14774f20f153a65c68ed217e7e33df4fbb29}
+messages:
+- {group_id: 
+    partial_data_column_group_id_0xe8b8f97043a33769b4cf45f730ec1bb83e65f6a01938bcf23fba39fc295f4ede,
+  column_index: 0, current_time_ms: 12500, message: 
+    partial_data_column_sidecar_0x3aed8e3284c231b942d1db2acf13bcc0eec08865ec378ef4fc199326ee7a3321,
+  expected: ignore, reason: header's parent has not been seen}

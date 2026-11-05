@@ -129,6 +129,17 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
   | "DataColumnsByRootIdentifier" =>
     if .fusaka ≤ fork then some ⟨DataColumnsByRootIdentifier preset⟩ else none
   | "MatrixEntry" => if .fusaka ≤ fork then some ⟨MatrixEntry⟩ else none
+  | "PartialDataColumnSidecar" =>
+    if .fusaka ≤ fork ∧ fork < .glamsterdam then some ⟨PartialDataColumnSidecar preset fork⟩
+    else none
+  | "PartialDataColumnPartsMetadata" =>
+    if .fusaka ≤ fork ∧ fork < .glamsterdam then some ⟨PartialDataColumnPartsMetadata preset⟩
+    else none
+  | "PartialDataColumnHeader" =>
+    if .fusaka ≤ fork ∧ fork < .glamsterdam then some ⟨PartialDataColumnHeader preset fork⟩
+    else none
+  | "PartialDataColumnGroupID" =>
+    if .fusaka ≤ fork ∧ fork < .glamsterdam then some ⟨PartialDataColumnGroupID⟩ else none
   | "Withdrawal" => if .shapella ≤ fork then some ⟨Withdrawal⟩ else none
   | "ExecutionPayload" =>
     if .bellatrix ≤ fork then some ⟨ExecutionPayload preset fork⟩ else none
