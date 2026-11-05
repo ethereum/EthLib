@@ -640,8 +640,10 @@ def run_blockchain(root: Path, case: Case) -> None:
             assert expected is not None, entry
             with raises(
                 BlockError,
-                "header rejected: EthLib.Serialization.Rlp.RlpError.wrongFieldCount "
-                f"{header_fields(fork)} {len(header)}",
+                # The block decodes as a whole, so the header's error is that of its field 0.
+                "block rejected: EthLib.Serialization.Rlp.RlpError.inField 0 "
+                "(EthLib.Serialization.Rlp.RlpError.wrongFieldCount "
+                f"{header_fields(fork)} {len(header)})",
             ):
                 blocks.state_transition(config, state, recent_blocks, fork, raw, sealed(test))
             continue
