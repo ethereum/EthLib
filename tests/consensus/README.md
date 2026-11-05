@@ -114,13 +114,17 @@ A mainnet state is a few hundred kilobytes, so only the weekly parity job reads 
 The directory `epoch_processing/` holds epoch step cases of `minimal.tar.gz` in the same way.
 A case gives a state before the step and the state after it.
 The directory keeps two cases of each step that EthLib runs, at each fork where it runs.
-These are justification and finalization at Phase 0, and the rewards and penalties from Phase 0 to Gloas.
+These are justification and finalization, and the rewards and penalties, from Phase 0 to Gloas.
+The inactivity scores, the rotation of the flags and the sync committee update run from Altair to Gloas.
+The historical summaries run from Capella to Gloas.
 The registry updates run from Phase 0 to Capella, and the slashings and effective balances to Deneb.
 The resets of the deposit votes, the slashings and the RANDAO mixes run from Phase 0 to Gloas.
 The historical roots run from Phase 0 to Bellatrix, and the rotation of pending attestations at Phase 0.
 They are also the proposer lookahead at Fulu and Gloas.
 Then come the builder pending payments and the window of payload committees at Gloas.
 The release has a single case of the window, so the directory keeps that one.
+Where a step has no case without a state after it, both kept cases are valid.
+The release has no mainnet case of the sync committee update, since its period is 256 epochs.
 `bindings/python/tests/consensus/test_epoch_processing.py` runs each case through the Lean step and compares the state after it.
 
 The directory `rewards/` holds rewards cases of `minimal.tar.gz` in the same way.
@@ -135,6 +139,7 @@ The directory `transition/` holds cases of the whole state transition from `mini
 A `sanity/slots` case advances a state by some slots.
 A `sanity/blocks`, `finality` or `random` case runs a list of signed blocks, and must be rejected when it has no state after it.
 The directory keeps two cases of each group at Phase 0, the only fork whose whole transition EthLib holds.
+It also keeps two `sanity/slots` cases at each of Altair, Bellatrix and Capella, whose epoch transition EthLib holds.
 `bindings/python/tests/consensus/test_transition.py` runs each case through the Lean transition and compares the state after it.
 
 The test release publishes its cases in three archives.

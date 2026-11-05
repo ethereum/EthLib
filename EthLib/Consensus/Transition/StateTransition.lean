@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Transition.EpochParticipation
 public import EthLib.Consensus.Transition.EpochUpdates
 public import EthLib.Consensus.Transition.Operations
 
@@ -52,9 +53,43 @@ def processSlot (state : BeaconState preset fork) :
     let blockRoot ← liftSsz (hashTreeRoot header)
     return { state with blockRoots := state.blockRoots.set! index blockRoot }
 
-/-- The state after the epoch transition, before Altair.
+/-- From Altair: the state after the epoch transition.
 
-Justification and finalization come first, then rewards and penalties.
+Justification and finalization come first, then the inactivity scores, rewards and penalties.
+
+The registry updates, the slashings and the reset of the deposit votes follow.
+
+Then come the effective balances, the slashings and RANDAO resets, and the history.
+
+Before Capella the history takes a root of each span, and from Capella a summary.
+
+The rotation of the participation flags and the sync committee update come last.
+
+Deneb changes the registry updates, and Electra adds steps.
+
+EthLib does not yet have those rules here, so both fail as not yet specified. -/
+def processEpochAltair (config : Config) (state : BeaconState preset fork)
+    (altair : .altair ≤ fork) : Except TransitionError (BeaconState preset fork) :=
+  if electra : .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  else do
+    have before : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le electra) (by decide)
+    let state ← processJustificationAndFinalization state
+    let state ← processInactivityUpdates config state altair
+    let state ← processRewardsAndPenalties config state
+    let state ← processRegistryUpdates config state
+    let state ← processSlashings state
+    let state ← processEth1DataReset before state
+    let state ← processEffectiveBalanceUpdates state
+    let state ← processSlashingsReset state
+    let state ← processRandaoMixesReset state
+    let state ← if capella : .shapella ≤ fork then processHistoricalSummariesUpdate state capella
+      else processHistoricalRootsUpdate state
+    let state := processParticipationFlagUpdates state altair
+    processSyncCommitteeUpdates state altair
+
+/-- The state after the epoch transition.
+
+Before Altair, justification and finalization come first, then rewards and penalties.
 
 The registry updates, the slashings and the reset of the deposit votes follow.
 
@@ -62,10 +97,10 @@ Then come the effective balances, the slashings and RANDAO resets and the histor
 
 The rotation of the pending attestations comes last.
 
-Altair changes the steps, which EthLib does not yet have here. -/
+From Altair the participation flags and the sync committees add their steps. -/
 def processEpoch (config : Config) (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) :=
-  if altair : .altair ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if altair : .altair ≤ fork then processEpochAltair config state altair
   else do
     have before : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le altair) (by decide)
     let state ← processJustificationAndFinalization state

@@ -149,6 +149,8 @@ inductive TransitionError where
   | wrongPayloadTimestamp (timestamp expected : UInt64)
   /-- From Bellatrix: the execution layer rejects a payload. -/
   | invalidExecutionPayload
+  /-- From Capella: the historical summaries are at their list limit. -/
+  | historicalSummariesFull
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -221,6 +223,7 @@ def TransitionError.code : TransitionError → UInt32
   | .wrongPayloadRandao => 67
   | .wrongPayloadTimestamp .. => 68
   | .invalidExecutionPayload => 69
+  | .historicalSummariesFull => 70
 
 /-- An assertion of the rule: success when the condition holds, and the error otherwise. -/
 def ensure (condition : Prop) [Decidable condition] (error : TransitionError) :

@@ -533,7 +533,7 @@ theorem processJustificationAndFinalization_invariant (ordered : CheckpointsOrde
       after.balances = state.balances := by
   obtain ⟨ordered', finalized⟩ := processJustificationAndFinalization_ordered ordered settled computed
   have previous := getPreviousEpoch_le state
-  obtain ⟨_, same | ⟨_, _, _, weighed⟩⟩ := processJustificationAndFinalization_ok computed
+  obtain same | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok computed
   · subst same
     exact ⟨ordered', finalized, UInt64.le_trans settled previous, rfl, rfl, rfl⟩
   · obtain ⟨_, current, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed

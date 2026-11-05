@@ -123,25 +123,35 @@ theorem processJustificationAndFinalization_early (before : fork < .altair)
   have notAltair : ¬Fork.altair ≤ fork := fun le => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le before le)
   simp [processJustificationAndFinalization, notAltair, early, pure, Except.pure]
 
-/-- Justification and finalization succeed only before Altair.
+/-- What a successful justification and finalization did.
 
-They change nothing in the first two epochs, and else weigh the target balances of the votes. -/
+It changed nothing in the first two epochs, and else weighed some target balances. -/
 theorem processJustificationAndFinalization_ok
     (computed : processJustificationAndFinalization state = .ok after) :
-    fork < .altair ∧
-      (after = state ∨ ∃ total previous current,
-        weighJustificationAndFinalization state total previous current = .ok after) := by
+    after = state ∨ ∃ total previous current,
+      weighJustificationAndFinalization state total previous current = .ok after := by
   unfold processJustificationAndFinalization at computed
   split at computed
-  · cases computed
-  rename_i altair
-  refine ⟨Nat.lt_of_not_le altair, ?_⟩
+  · unfold processJustificationAndFinalizationAltair at computed
+    split at computed
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      exact .inl computed.symm
+    · simp only [bind_ok_iff, liftAccessor_ok] at computed
+      obtain ⟨_, _, _, _, total, _, previous, _, current, _, weighed⟩ := computed
+      exact .inr ⟨total, previous, current, weighed⟩
   split at computed
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact .inl computed.symm
   · simp only [bind_ok_iff] at computed
     obtain ⟨_, _, _, _, total, _, previous, _, current, _, weighed⟩ := computed
     exact .inr ⟨total, previous, current, weighed⟩
+
+/-- From Altair, in the first two epochs, justification and finalization change nothing. -/
+theorem processJustificationAndFinalization_early_altair (altair : .altair ≤ fork)
+    (early : getCurrentEpoch state ≤ GENESIS_EPOCH + 1) :
+    processJustificationAndFinalization state = .ok state := by
+  simp [processJustificationAndFinalization, processJustificationAndFinalizationAltair, altair,
+    early, pure, Except.pure]
 
 /-- Justification and finalization keep the checkpoints in order.
 
@@ -153,7 +163,7 @@ theorem processJustificationAndFinalization_ordered (ordered : CheckpointsOrdere
     (computed : processJustificationAndFinalization state = .ok after) :
     CheckpointsOrdered after ∧
       state.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch := by
-  obtain ⟨_, same | ⟨_, _, _, weighed⟩⟩ := processJustificationAndFinalization_ok computed
+  obtain same | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok computed
   · subst same
     exact ⟨ordered, UInt64.le_refl _⟩
   · exact weighJustificationAndFinalization_ordered ordered settled weighed
@@ -161,7 +171,7 @@ theorem processJustificationAndFinalization_ordered (ordered : CheckpointsOrdere
 theorem sameSizes_processJustificationAndFinalization
     (computed : processJustificationAndFinalization state = .ok after) :
     SameSizes state after := by
-  obtain ⟨_, same | ⟨_, _, _, weighed⟩⟩ := processJustificationAndFinalization_ok computed
+  obtain same | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok computed
   · subst same
     exact SameSizes.refl _
   · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed

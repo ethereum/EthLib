@@ -1,0 +1,6 @@
+preset: minimal
+fork: capella
+runner: epoch_processing
+handler: justification_and_finalization
+suite: pyspec_tests
+case: 123_poor_support

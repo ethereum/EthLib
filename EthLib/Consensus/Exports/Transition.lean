@@ -135,6 +135,9 @@ def runEpochStep {preset : Preset} {fork : Fork} (config : Config) (handler : St
   match handler with
   | "justification_and_finalization" =>
     runTransition (processJustificationAndFinalization state)
+  | "inactivity_updates" =>
+    if altair : .altair ≤ fork then runTransition (processInactivityUpdates config state altair)
+    else throw (0, s!"no epoch step inactivity_updates at {fork.name}")
   | "rewards_and_penalties" => runTransition (processRewardsAndPenalties config state)
   | "registry_updates" => runTransition (processRegistryUpdates config state)
   | "slashings" => runTransition (processSlashings state)
@@ -146,6 +149,16 @@ def runEpochStep {preset : Preset} {fork : Fork} (config : Config) (handler : St
   | "randao_mixes_reset" => runTransition (processRandaoMixesReset state)
   | "historical_roots_update" => runTransition (processHistoricalRootsUpdate state)
   | "participation_record_updates" => runTransition (processParticipationRecordUpdates state)
+  | "historical_summaries_update" =>
+    if capella : .shapella ≤ fork then
+      runTransition (processHistoricalSummariesUpdate state capella)
+    else throw (0, s!"no epoch step historical_summaries_update at {fork.name}")
+  | "participation_flag_updates" =>
+    if altair : .altair ≤ fork then pure (processParticipationFlagUpdates state altair)
+    else throw (0, s!"no epoch step participation_flag_updates at {fork.name}")
+  | "sync_committee_updates" =>
+    if altair : .altair ≤ fork then runTransition (processSyncCommitteeUpdates state altair)
+    else throw (0, s!"no epoch step sync_committee_updates at {fork.name}")
   | "ptc_window" =>
     if gloas : .glamsterdam ≤ fork then runTransition (liftAccessor (processPtcWindow state gloas))
     else throw (0, s!"no epoch step ptc_window at {fork.name}")

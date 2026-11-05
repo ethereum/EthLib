@@ -232,7 +232,7 @@ When the next epoch starts a span of slots, the span joins the history.
 
 The root of its block roots and state roots joins the historical roots.
 
-Capella keeps summaries of the spans instead, which EthLib does not yet have. -/
+From Capella the summaries of the spans take its place. -/
 def processHistoricalRootsUpdate (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) :=
   if .shapella ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
@@ -243,6 +243,25 @@ def processHistoricalRootsUpdate (state : BeaconState preset fork) :
       let root ← liftSsz (hashTreeRoot batch)
       return { state with historicalRoots := ← appendHistoricalRoot state.historicalRoots root }
     else return state
+
+/-- From Capella: the state after the historical summaries update.
+
+When the next epoch starts a span of slots, the span joins the history.
+
+The root of its block roots and the root of its state roots join the summaries, as one entry. -/
+def processHistoricalSummariesUpdate (state : BeaconState preset fork)
+    (capella : .shapella ≤ fork) : Except TransitionError (BeaconState preset fork) := do
+  let nextEpoch ← liftAccessor (liftArith (addChecked (getCurrentEpoch state) 1))
+  if nextEpoch % (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH) = 0 then
+    let summary : HistoricalSummary :=
+      ⟨← liftSsz (hashTreeRoot state.blockRoots), ← liftSsz (hashTreeRoot state.stateRoots)⟩
+    let summaries := state.historicalSummaries capella
+    if fits : summaries.data.size < preset.HISTORICAL_ROOTS_LIMIT.toNat then
+      let summaries : SszList HistoricalSummary preset.HISTORICAL_ROOTS_LIMIT.toNat :=
+        ⟨summaries.data.push summary, by simp only [Array.size_push]; omega⟩
+      return { state with historicalSummaries := fun _ => summaries }
+    else throw .historicalSummariesFull
+  else return state
 
 /-- The state after the rotation of the pending attestations.
 
