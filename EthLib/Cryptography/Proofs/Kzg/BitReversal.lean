@@ -83,6 +83,8 @@ theorem size_bitReversalPermutation {α : Type _} [Inhabited α]
 theorem getElem_bitReversalPermutation {α : Type _} [Inhabited α]
     (seq : Array α) (i : Nat) (h : i < (bitReversalPermutation seq).size) :
     (bitReversalPermutation seq)[i] = seq[reverseBits i seq.size]! := by
+  have hi : i < seq.size := by simpa [bitReversalPermutation] using h
+  rw [getElem!_pos seq _ (reverseBits_lt i (by omega))]
   simp [bitReversalPermutation]
 
 /-- `bitReversalPermutation` is an involution on arrays whose size is a

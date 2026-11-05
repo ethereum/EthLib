@@ -21,6 +21,12 @@ namespace EthLib.Cryptography.Kzg
 
 open EthLib.Cryptography.Bls (Fr)
 
+/-- Every other element of `xs`, starting at index `start`.
+
+The recursive model below halves its arrays with it. -/
+def fftHalve (xs : Array Fr) (start : Nat) : Array Fr :=
+  Array.ofFn (n := xs.size / 2) fun i => xs[start + 2 * i.val]!
+
 @[simp] theorem size_fftHalve (xs : Array Fr) (start : Nat) :
     (fftHalve xs start).size = xs.size / 2 := by
   simp [fftHalve]
@@ -67,19 +73,15 @@ decreasing_by all_goals (simp [fftHalve]; omega)
   · rfl
   · simp
 
-@[simp] theorem size_fftStage (roots x : Array Fr) (h : Nat) :
-    (fftStage roots x h).size = x.size := by
-  simp [fftStage]
-
-@[simp] theorem size_fftStages (roots : Array Fr) (s : Nat) (x : Array Fr) (h : Nat) :
-    (fftStages roots s x h).size = x.size := by
-  induction s generalizing x h with
-  | zero => rfl
-  | succ s ih => rw [fftStages, ih, size_fftStage]
-
 @[simp] theorem size_fftField (vals rootsOfUnity : Array Fr) (inv : Bool) :
     (fftField vals rootsOfUnity inv).size = vals.size := by
-  cases inv <;> simp [fftField, fftFieldIter, BitReversal.size_bitReversalPermutation]
+  have hiter : ∀ roots, (fftFieldIter vals roots).size = vals.size := by
+    intro roots
+    unfold fftFieldIter
+    split
+    · exact Vector.size_toArray _
+    · rfl
+  cases inv <;> simp [fftField, hiter]
 
 /-! ## One step of the Cooley–Tukey recursion
 

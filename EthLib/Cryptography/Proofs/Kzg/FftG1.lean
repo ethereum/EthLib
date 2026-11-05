@@ -68,6 +68,12 @@ theorem nsmul_val_neg_of_torsion {P : G1.curve.toAffine.Point}
 
 /-! ## Shape and butterfly step of `fftHalveG1` and `fftG1` -/
 
+/-- Every other point of `xs`, starting at index `start`.
+
+The proofs below halve their arrays with it. -/
+def fftHalveG1 (xs : Array G1) (start : Nat) : Array G1 :=
+  Array.ofFn (n := xs.size / 2) fun i => xs[start + 2 * i.val]!
+
 @[simp] theorem size_fftHalveG1 (xs : Array G1) (start : Nat) :
     (fftHalveG1 xs start).size = xs.size / 2 := by
   simp [fftHalveG1]
@@ -83,62 +89,96 @@ theorem getElem!_fftHalveG1 (xs : Array G1) (start i : Nat)
     (fftG1 vals rootsOfUnity).size = vals.size := by
   rw [fftG1]
   split
+  · rename_i h
+    exact (Vector.size_toArray _).trans h.1.symm
   · rfl
-  · simp
 
-/-- Single-element unfolding of `fftG1` in the recursive case (`vals.size = 2 * m`). -/
-theorem getElem!_fftG1_step {m : Nat} (vals : Array G1) (roots : Array Fr)
-    (hm : 0 < m) (hsz : vals.size = 2 * m) (p : Nat) (hp : p < 2 * m) :
+/-- On `2^k` points and `2^k` roots, the FFT is the one of the vectors. -/
+theorem fftG1_eq_fftG1Vector {k : Nat} (vals : Array G1) (roots : Array Fr)
+    (hn : vals.size = 2 ^ k) (hr : roots.size = 2 ^ k) :
+    fftG1 vals roots = (fftG1Vector k ⟨vals, hn⟩ ⟨roots, hr⟩).toArray := by
+  have hk : vals.size.log2 = k := by rw [hn, Nat.log2_two_pow]
+  have hshape : vals.size = 2 ^ vals.size.log2 ∧ roots.size = vals.size := by
+    rw [hk]; exact ⟨hn, hr.trans hn.symm⟩
+  rw [fftG1, dite_eq_left hshape]
+  subst hk
+  rfl
+
+/-- The halves of a vector of `2^(k + 1)` points are the halves of its array. -/
+theorem toArray_everyOther_G1 {k : Nat} (xs : Vector G1 (2 ^ (k + 1))) (start : Fin 2) :
+    (everyOther xs start).toArray = fftHalveG1 xs.toArray start.val := by
+  have h2 : 2 ^ (k + 1) = 2 * 2 ^ k := by rw [pow_succ]; ring
+  apply Array.ext (by simp [h2])
+  intro i h1 h2'
+  have hi : i < 2 ^ k := by simpa using h1
+  rw [← getElem!_pos (fftHalveG1 xs.toArray start.val) i h2',
+    getElem!_fftHalveG1 _ _ _ (by simp; omega)]
+  simp only [everyOther, Vector.toArray_ofFn, Array.getElem_ofFn]
+  exact Vector.getElem_eq_getElem!_toArray _ _
+
+/-- The halves of a vector of `2^(k + 1)` roots are the halves of its array. -/
+theorem toArray_everyOther_Fr {k : Nat} (xs : Vector Fr (2 ^ (k + 1))) (start : Fin 2) :
+    (everyOther xs start).toArray = fftHalve xs.toArray start.val := by
+  have h2 : 2 ^ (k + 1) = 2 * 2 ^ k := by rw [pow_succ]; ring
+  apply Array.ext (by simp [h2])
+  intro i h1 h2'
+  have hi : i < 2 ^ k := by simpa using h1
+  rw [getElem_fftHalve, getElem!_pos _ _ (by have := start.isLt; simp; omega)]
+  simp [everyOther]
+
+/-- Single-element unfolding of `fftG1` on `2 * 2^k` points and as many roots. -/
+theorem getElem!_fftG1_step {k : Nat} (vals : Array G1) (roots : Array Fr)
+    (hsz : vals.size = 2 * 2 ^ k) (hrs : roots.size = 2 * 2 ^ k) (p : Nat) (hp : p < 2 * 2 ^ k) :
     (fftG1 vals roots)[p]! =
-      (if p < m then
+      (if p < 2 ^ k then
         G1.add (fftG1 (fftHalveG1 vals 0) (fftHalve roots 0))[p]!
           (G1.mul (fftG1 (fftHalveG1 vals 1) (fftHalve roots 0))[p]! roots[p]!)
       else
-        G1.add (fftG1 (fftHalveG1 vals 0) (fftHalve roots 0))[p - m]!
-          (G1.neg (G1.mul (fftG1 (fftHalveG1 vals 1) (fftHalve roots 0))[p - m]!
-            roots[p - m]!))) := by
-  set l := fftG1 (fftHalveG1 vals 0) (fftHalve roots 0) with hl
-  set r := fftG1 (fftHalveG1 vals 1) (fftHalve roots 0) with hr
-  rw [fftG1, ite_eq_right (by omega : ¬ vals.size ≤ 1)]
-  rw [getElem!_pos _ p (by simp [hsz, hp])]
-  simp only [Array.getElem_ofFn, ← hl, ← hr]
-  have hlsize : l.size = m := by
-    rw [hl, size_fftG1, size_fftHalveG1, hsz]
-    omega
-  -- Evaluate the spawned task entry at index q < l.size.
-  have htask (q : Nat) (hq : q < l.size) :
-      (Array.map Task.get
-        (Array.ofFn (n := l.size) fun i =>
-          Task.spawn fun _ => G1.mul r[i.val]! roots[i.val]!))[q]! =
-        G1.mul r[q]! roots[q]! := by
-    rw [getElem!_pos _ q (by simp [hq]), Array.getElem_map, Array.getElem_ofFn]
+        G1.add (fftG1 (fftHalveG1 vals 0) (fftHalve roots 0))[p - 2 ^ k]!
+          (G1.neg (G1.mul (fftG1 (fftHalveG1 vals 1) (fftHalve roots 0))[p - 2 ^ k]!
+            roots[p - 2 ^ k]!))) := by
+  have h2 : 2 ^ (k + 1) = 2 * 2 ^ k := by rw [pow_succ]; ring
+  set v : Vector G1 (2 ^ (k + 1)) := ⟨vals, hsz.trans h2.symm⟩
+  set w : Vector Fr (2 ^ (k + 1)) := ⟨roots, hrs.trans h2.symm⟩
+  have hv0 : fftHalveG1 vals 0 = (everyOther v 0).toArray := (toArray_everyOther_G1 v 0).symm
+  have hv1 : fftHalveG1 vals 1 = (everyOther v 1).toArray := (toArray_everyOther_G1 v 1).symm
+  have hw0 : fftHalve roots 0 = (everyOther w 0).toArray := (toArray_everyOther_Fr w 0).symm
+  rw [fftG1_eq_fftG1Vector vals roots (hsz.trans h2.symm) (hrs.trans h2.symm), hv0, hv1, hw0,
+    fftG1_eq_fftG1Vector (k := k) _ _ (by simp) (by simp),
+    fftG1_eq_fftG1Vector (k := k) _ _ (by simp) (by simp),
+    getElem!_pos _ p (by simp; omega)]
+  simp only [Vector.mk_toArray, Vector.getElem_toArray]
+  rw [fftG1Vector]
+  simp only [Vector.getElem_ofFn, Vector.getElem_map]
+  split
+  · rename_i hpk
+    rw [getElem!_pos _ p (by simp; omega), getElem!_pos _ p (by simp; omega),
+      getElem!_pos roots p (by omega)]
     rfl
-  by_cases hph : p < m
-  · have hpl : p < l.size := hlsize ▸ hph
-    rw [ite_eq_left hpl, ite_eq_left hph, htask p hpl]
-  · have hpl : ¬ p < l.size := hlsize ▸ hph
-    have hsub : p - l.size < l.size := by omega
-    rw [ite_eq_right hpl, ite_eq_right hph, htask (p - l.size) hsub, hlsize]
+  · rename_i hpk
+    rw [getElem!_pos _ (p - 2 ^ k) (by simp; omega), getElem!_pos _ (p - 2 ^ k) (by simp; omega),
+      getElem!_pos roots (p - 2 ^ k) (by omega)]
+    rfl
 
 /-! ## Curve validity and DFT characterization of `fftG1` -/
 
-/-- `fftG1` preserves curve validity on power-of-two arrays. -/
-theorem valid_getElem!_fftG1 {k : Nat} (vals : Array G1) (roots : Array Fr)
-    (hn : vals.size = 2 ^ k)
+/-- `fftG1` preserves curve validity on power-of-two arrays, for roots of the same length. -/
+theorem valid_getElem!_fftG1_of_size {k : Nat} (vals : Array G1) (roots : Array Fr)
+    (hn : vals.size = 2 ^ k) (hrs : roots.size = 2 ^ k)
     (hvalid : ∀ i < 2 ^ k, G1.Valid vals[i]!)
     (j : Nat) (hj : j < 2 ^ k) :
     G1.Valid (fftG1 vals roots)[j]! := by
   induction k generalizing vals roots j with
   | zero =>
     simp only [pow_zero] at hn hj hvalid
-    rw [fftG1, ite_eq_left (by omega : vals.size ≤ 1)]
+    rw [fftG1_eq_fftG1Vector (k := 0) vals roots hn hrs]
     exact hvalid j hj
   | succ k ih =>
     have h2 : 2 ^ (k + 1) = 2 * 2 ^ k := by rw [pow_succ]; ring
     have hhalf : vals.size / 2 = 2 ^ k := by rw [hn, h2]; omega
-    have hsz : 1 < vals.size := by rw [hn, h2]; omega
     have hsize0 : (fftHalveG1 vals 0).size = 2 ^ k := by rw [size_fftHalveG1, hhalf]
     have hsize1 : (fftHalveG1 vals 1).size = 2 ^ k := by rw [size_fftHalveG1, hhalf]
+    have hsizeR : (fftHalve roots 0).size = 2 ^ k := by rw [size_fftHalve, hrs, h2]; omega
     have hv0 : ∀ i < 2 ^ k, G1.Valid (fftHalveG1 vals 0)[i]! := by
       intro i hi
       rw [getElem!_fftHalveG1 vals 0 i (hhalf ▸ hi), Nat.zero_add]
@@ -147,18 +187,30 @@ theorem valid_getElem!_fftG1 {k : Nat} (vals : Array G1) (roots : Array Fr)
       intro i hi
       rw [getElem!_fftHalveG1 vals 1 i (hhalf ▸ hi)]
       exact hvalid (1 + 2 * i) (by rw [h2]; omega)
-    rw [getElem!_fftG1_step vals roots (Nat.two_pow_pos k) (h2 ▸ hn) j (h2 ▸ hj)]
+    rw [getElem!_fftG1_step vals roots (h2 ▸ hn) (h2 ▸ hrs) j (h2 ▸ hj)]
     by_cases hjk : j < 2 ^ k
     · rw [ite_eq_left hjk]
       exact G1.valid_add
-        (ih (fftHalveG1 vals 0) (fftHalve roots 0) hsize0 hv0 j hjk)
-        (G1.valid_mul (ih (fftHalveG1 vals 1) (fftHalve roots 0) hsize1 hv1 j hjk) _)
+        (ih (fftHalveG1 vals 0) (fftHalve roots 0) hsize0 hsizeR hv0 j hjk)
+        (G1.valid_mul (ih (fftHalveG1 vals 1) (fftHalve roots 0) hsize1 hsizeR hv1 j hjk) _)
     · rw [ite_eq_right hjk]
       have hq : j - 2 ^ k < 2 ^ k := by omega
       exact G1.valid_add
-        (ih (fftHalveG1 vals 0) (fftHalve roots 0) hsize0 hv0 (j - 2 ^ k) hq)
+        (ih (fftHalveG1 vals 0) (fftHalve roots 0) hsize0 hsizeR hv0 (j - 2 ^ k) hq)
         (G1.valid_neg (G1.valid_mul
-          (ih (fftHalveG1 vals 1) (fftHalve roots 0) hsize1 hv1 (j - 2 ^ k) hq) _))
+          (ih (fftHalveG1 vals 1) (fftHalve roots 0) hsize1 hsizeR hv1 (j - 2 ^ k) hq) _))
+
+/-- `fftG1` preserves curve validity on power-of-two arrays. -/
+theorem valid_getElem!_fftG1 {k : Nat} (vals : Array G1) (roots : Array Fr)
+    (hn : vals.size = 2 ^ k)
+    (hvalid : ∀ i < 2 ^ k, G1.Valid vals[i]!)
+    (j : Nat) (hj : j < 2 ^ k) :
+    G1.Valid (fftG1 vals roots)[j]! := by
+  by_cases hrs : roots.size = 2 ^ k
+  · exact valid_getElem!_fftG1_of_size vals roots hn hrs hvalid j hj
+  · -- Roots of another length leave the points unchanged.
+    rw [fftG1, dite_eq_right (fun h => hrs (h.2.trans hn))]
+    exact hvalid j hj
 
 /-- Sum splitting into even and odd indices in any additive commutative monoid. -/
 private theorem sum_range_even_odd_add {M : Type*} [AddCommMonoid M]
@@ -191,7 +243,8 @@ theorem toPoint_getElem!_fftG1 {k : Nat} {ω : Fr}
   induction k generalizing ω vals roots j with
   | zero =>
     simp only [pow_zero] at hn hj hroots ⊢
-    rw [fftG1, ite_eq_left (by omega : vals.size ≤ 1)]
+    rw [fftG1_eq_fftG1Vector (k := 0) vals roots hn hrs]
+    change G1.toPoint vals[j]! = _
     have hj0 : j = 0 := by omega
     subst hj0
     rw [Finset.sum_range_one, Nat.zero_mul, fr_pow_zero, Bls.Fr.val_one, one_nsmul]
@@ -246,7 +299,7 @@ theorem toPoint_getElem!_fftG1 {k : Nat} {ω : Fr}
       rw [getElem!_fftHalveG1 vals 1 i (hhalf ▸ hi),
         show (1 : Nat) + 2 * i = 2 * i + 1 by omega, ← pow_mul, Nat.mul_assoc]
     -- Unfold one G1 butterfly step and split the target sum into even and odd indices.
-    rw [getElem!_fftG1_step vals roots hpk (h2 ▸ hn) j (h2 ▸ hj),
+    rw [getElem!_fftG1_step vals roots (h2 ▸ hn) (h2 ▸ hrs) j (h2 ▸ hj),
       show (2 : Nat) ^ (k + 1) = 2 * 2 ^ k from h2,
       sum_range_even_odd_add (2 ^ k) (fun i => (ω ^ (i * j)).val • G1.toPoint vals[i]!)]
     by_cases hjk : j < 2 ^ k
