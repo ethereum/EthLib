@@ -38,7 +38,7 @@ private theorem finalExponentiation_one : finalExponentiation 1 = 1 := by
   rw [finalExponentiation_eq_pow, one_pow]
 
 /-- The pairing is the final exponentiation of the pair's factor, or 1 without a factor. -/
-private theorem pairing_eq_factor (P : G1) (Q : G2) :
+theorem pairing_eq_factor (P : G1) (Q : G2) :
     pairing P Q = finalExponentiation ((pairFactor (P, Q)).getD 1) := by
   unfold pairing pairFactor
   split
@@ -46,7 +46,7 @@ private theorem pairing_eq_factor (P : G1) (Q : G2) :
   · rfl
 
 /-- The final exponentiation of the folded factors is the product of the pairings. -/
-private theorem finalExp_foldl (l : List (G1 × G2)) (acc : Fp12) :
+theorem finalExp_foldl (l : List (G1 × G2)) (acc : Fp12) :
     finalExponentiation ((l.filterMap pairFactor).foldl (· * ·) acc) =
       finalExponentiation acc * (l.map fun pq => pairing pq.1 pq.2).prod := by
   induction l generalizing acc with
@@ -62,12 +62,18 @@ private theorem finalExp_foldl (l : List (G1 × G2)) (acc : Fp12) :
       rw [ih, finalExponentiation_mul, mul_assoc]
 
 /-- Representatives have the pairing of their group elements. -/
-private theorem pairing_congr {P : G1} {Q : G2} {a b : Fr} (hP : G1.Represents P a)
+theorem pairing_congr {P : G1} {Q : G2} {a b : Fr} (hP : G1.Represents P a)
     (hQ : G2.Represents Q b) :
     pairing P Q = pairing (G1.mul G1.generator a) (G2.mul G2.generator b) := by
   rw [pairing_eq_factor, pairing_eq_factor,
     pairFactor_congr hP.1 (G1.valid_mul G1.valid_generator a) hP.2 hQ.1
       (G2.valid_mul G2.valid_generator b) hQ.2]
+
+/-- The check of a list of pairs accepts exactly when the product of their pairings is 1. -/
+theorem pairingCheck_toArray_iff (l : List (G1 × G2)) :
+    pairingCheck l.toArray = true ↔ (l.map fun pq => pairing pq.1 pq.2).prod = 1 := by
+  rw [pairingCheck_eq_finalExp_prod, Fp12.isOne_iff, List.toList_toArray, finalExp_foldl,
+    Fp12.one_eq_one, finalExponentiation_one, one_mul]
 
 /-- Under bilinearity, the product of the pairings is a power of `e(g1, g2)`. -/
 private theorem prod_pairing (h : PairingBilinear) :
@@ -116,9 +122,7 @@ private theorem dvd_iff_sum_eq_zero (a b : List Fr) :
 /-- Bilinearity gives the pairing law of the check. -/
 theorem PairingLaws.of_bilinear (h : PairingBilinear) : PairingLaws where
   pairingCheck_iff pairs a b ha hb hr := by
-    rw [pairingCheck_eq_finalExp_prod, Fp12.isOne_iff, List.toList_toArray, finalExp_foldl,
-      Fp12.one_eq_one, finalExponentiation_one, one_mul,
-      prod_pairing h pairs a b ha hb hr, ← dvd_iff_sum_eq_zero]
+    rw [pairingCheck_toArray_iff, prod_pairing h pairs a b ha hb hr, ← dvd_iff_sum_eq_zero]
     have hord := orderOf_pairing_generators
     exact (hord ▸ orderOf_dvd_iff_pow_eq_one).symm
 
