@@ -45,25 +45,10 @@ theorem moveEther_whole {fork : Fork} {tx tx' : TransactionState} {sender recipi
         (tx.getAccount recipient).balance.toNat + (tx.getAccount sender).balance.toNat ∧
       ∀ other, other ≠ sender → other ≠ recipient →
         tx'.getAccount other = tx.getAccount other := by
-  obtain ⟨hsum, hrest⟩ := moveEther_balance hne h
-  unfold moveEther at h
-  cases hmid : tx.modifyState fork sender (fun account =>
-      if account.balance < (tx.getAccount sender).balance then .error (.insufficientBalance sender)
-      else .ok { account with balance := account.balance - (tx.getAccount sender).balance }) with
-  | error e => simp [hmid, bind, Except.bind] at h
-  | ok mid =>
-    simp only [hmid, bind, Except.bind] at h
-    obtain ⟨debited, hdebit, hsender, -⟩ := modifyState_eq_ok hmid
-    obtain ⟨-, -, -, hrest'⟩ := modifyState_eq_ok h
-    -- The sender's balance minus itself is zero.
-    simp only [BitVec.lt_irrefl, ↓reduceIte, Except.ok.injEq] at hdebit
-    have hzero : (tx'.getAccount sender).balance = 0 := by
-      rw [hrest' sender hne, hsender, ← hdebit]
-      exact BitVec.sub_self _
-    refine ⟨hzero, ?_, hrest⟩
-    rw [hzero] at hsum
-    have h0 : (0 : U256).toNat = 0 := rfl
-    omega
+  obtain ⟨-, hfit, hsender, hrecipient, hrest⟩ := moveEther_eq_ok hne h
+  -- The sender's balance minus itself is zero, and the credit stays below 2^256.
+  refine ⟨by rw [hsender]; exact BitVec.sub_self _, ?_, hrest⟩
+  rw [hrecipient, BitVec.toNat_add, Nat.mod_eq_of_lt hfit]
 
 /-- Moving each listed balance to an outside recipient empties the list and credits the recipient.
 
