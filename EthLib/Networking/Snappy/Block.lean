@@ -79,7 +79,7 @@ inductive SnappyError where
   | copyOffsetZero
   /-- A copy reaching before the first byte of the output (§2.2). -/
   | copyOffsetTooLarge (offset : Nat)
-  /-- The output length differs from the length the preamble declared. -/
+  /-- The output stops short of the declared length, or an element would take it past. -/
   | lengthMismatch (declared actual : Nat)
   deriving Repr, DecidableEq
 
@@ -152,13 +152,18 @@ def copyBytes (out : ByteArray) (offset : Nat) : Nat → Except SnappyError Byte
 -- Each length an element declares is checked in as many steps as that length.
 attribute [local instance high] Base.Length.decideLeLength Base.Length.decideLengthLt
 
-/-- Decode the elements of a block onto the end of the output.
+/-- Decode the elements of a block onto the end of the output, up to the declared length.
+
+An element that would take the output past the declared length is rejected before it is written.
+
+So the output never holds more than the declared length.
 
 The fuel bounds the number of elements.
 
 Each element takes at least its tag byte, so the input length is enough fuel.
 -/
-def decompressElements : List UInt8 → ByteArray → Nat → Except SnappyError ByteArray
+def decompressElements (declared : Nat) :
+    List UInt8 → ByteArray → Nat → Except SnappyError ByteArray
   | [], out, _ => .ok out
   -- Out of fuel: unreachable when the fuel is at least the input length.
   | _ :: _, _, 0 => .error .literalPastEnd
@@ -172,8 +177,10 @@ def decompressElements : List UInt8 → ByteArray → Nat → Except SnappyError
           let len := upper + 1
           if rest.length < len then
             .error .literalPastEnd
+          else if declared < out.size + len then
+            .error (.lengthMismatch declared (out.size + len))
           else
-            decompressElements (rest.drop len) (out ++ (rest.take len).toByteArray) fuel
+            decompressElements declared (rest.drop len) (out ++ (rest.take len).toByteArray) fuel
         -- Tags 60 to 63 say that 1 to 4 little-endian bytes hold the length minus one (§2.1).
         else
           let extra := upper - 59
@@ -184,8 +191,10 @@ def decompressElements : List UInt8 → ByteArray → Nat → Except SnappyError
             let rest := rest.drop extra
             if rest.length < len then
               .error .literalPastEnd
+            else if declared < out.size + len then
+              .error (.lengthMismatch declared (out.size + len))
             else
-              decompressElements (rest.drop len) (out ++ (rest.take len).toByteArray) fuel
+              decompressElements declared (rest.drop len) (out ++ (rest.take len).toByteArray) fuel
       else
         -- A copy: the tag fixes the width of the offset (§2.2.1 to §2.2.3).
         let width := if t == 1 then 1 else if t == 2 then 2 else 4
@@ -200,17 +209,19 @@ def decompressElements : List UInt8 → ByteArray → Nat → Except SnappyError
             else bytesToUint (rest.take width).toArray.toVector
           if offset == 0 then
             .error .copyOffsetZero
+          else if declared < out.size + len then
+            .error (.lengthMismatch declared (out.size + len))
           else
             match copyBytes out offset len with
             | .error e => .error e
-            | .ok out => decompressElements (rest.drop width) out fuel
+            | .ok out => decompressElements declared (rest.drop width) out fuel
 
 /-- The byte array that a Snappy block, read as a list, decompresses to, or why it is not valid. -/
 def decompressToArray (bs : List UInt8) : Except SnappyError ByteArray :=
   match readPreamble bs with
   | .error e => .error e
   | .ok (declared, rest) =>
-      match decompressElements rest ByteArray.empty rest.length with
+      match decompressElements declared rest ByteArray.empty rest.length with
       | .error e => .error e
       | .ok out =>
           -- The output must have exactly the declared length: no truncation, no padding.

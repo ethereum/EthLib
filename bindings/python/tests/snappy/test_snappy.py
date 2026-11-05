@@ -94,6 +94,10 @@ BAD_BLOCKS = [
     ("020041", "lengthMismatch 2 1"),
     # An output of two bytes where the preamble declared one.
     ("01044142", "lengthMismatch 1 2"),
+    # The same literal, then a copy with offset zero: the literal already passes the length.
+    ("010441420100", "lengthMismatch 1 2"),
+    # A copy of four bytes that would take one byte of output past the four declared.
+    ("0400410101", "lengthMismatch 4 5"),
 ]
 
 

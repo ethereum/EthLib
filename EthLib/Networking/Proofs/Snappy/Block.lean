@@ -177,9 +177,10 @@ theorem copyBytes_tooLarge {out : ByteArray} {offset n : Nat}
 /-! ## The element loop -/
 
 /-- One more unit of fuel changes nothing once the fuel covers the input. -/
-theorem decompressElements_succ_fuel (input : List UInt8) (out : ByteArray) {fuel : Nat}
-    (h : input.length ≤ fuel) :
-    decompressElements input out (fuel + 1) = decompressElements input out fuel := by
+theorem decompressElements_succ_fuel (declared : Nat) (input : List UInt8) (out : ByteArray)
+    {fuel : Nat} (h : input.length ≤ fuel) :
+    decompressElements declared input out (fuel + 1) =
+      decompressElements declared input out fuel := by
   induction fuel generalizing input out with
   | zero =>
       cases input with
@@ -196,25 +197,50 @@ theorem decompressElements_succ_fuel (input : List UInt8) (out : ByteArray) {fue
           congr
 
 /-- The element loop gives the same result for every fuel that covers the input. -/
-theorem decompressElements_fuel (input : List UInt8) (out : ByteArray) {fuel : Nat}
-    (h : input.length ≤ fuel) :
-    decompressElements input out fuel = decompressElements input out input.length := by
+theorem decompressElements_fuel (declared : Nat) (input : List UInt8) (out : ByteArray)
+    {fuel : Nat} (h : input.length ≤ fuel) :
+    decompressElements declared input out fuel =
+      decompressElements declared input out input.length := by
   obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le h
   induction k with
   | zero => rfl
   | succ k ih =>
-      rw [← Nat.add_assoc, decompressElements_succ_fuel input out (by omega), ih (by omega)]
+      rw [← Nat.add_assoc, decompressElements_succ_fuel declared input out (by omega),
+        ih (by omega)]
 
 /-- A first element that is a copy has nothing to copy from, so it is rejected (§2). -/
-theorem decompressElements_copy_first {tag : UInt8} {rest : List UInt8} {fuel : Nat}
-    (hcopy : tag.toNat % 4 ≠ 0) :
-    ∃ e, decompressElements (tag :: rest) ByteArray.empty (fuel + 1) = .error e := by
+theorem decompressElements_copy_first {declared : Nat} {tag : UInt8} {rest : List UInt8}
+    {fuel : Nat} (hcopy : tag.toNat % 4 ≠ 0) :
+    ∃ e, decompressElements declared (tag :: rest) ByteArray.empty (fuel + 1) = .error e := by
   simp only [decompressElements, beq_iff_eq, hcopy, ↓reduceIte, EthLib.Base.bytesToUint_toVector]
   repeat' split
   -- Every branch is an error, since a copy of at least 1 byte cannot read an empty output.
   all_goals first
     | exact ⟨_, rfl⟩
     | (rename_i h; rw [copyBytes_nil (by omega)] at h; cases h)
+
+/-- The element loop never takes the output past the declared length.
+
+Each element checks its length before it writes, so this holds at every step, not only at the end.
+-/
+theorem decompressElements_size_le {declared : Nat} {input : List UInt8} {out out' : ByteArray}
+    {fuel : Nat} (hout : out.size ≤ declared)
+    (h : decompressElements declared input out fuel = .ok out') : out'.size ≤ declared := by
+  revert hout h
+  fun_induction decompressElements declared input out fuel <;> intro hout h
+  all_goals first
+    | (cases h; exact hout)
+    | cases h
+    -- A literal: its guard bounds the output it appends to.
+    | (rename_i hlen hfit ih
+       refine ih ?_ h
+       simp only [ByteArray.size_append, List.size_toByteArray, List.length_take]
+       omega)
+    -- A copy: its guard bounds the output, which grows by exactly the copy length.
+    | (rename_i hfit hc ih
+       refine ih ?_ h
+       rw [copyBytes_size hc]
+       omega)
 
 /-! ## The whole block -/
 
@@ -255,7 +281,8 @@ theorem decompressList_length_le {bs out : List UInt8}
 theorem decompressList_copy_first {bs rest : List UInt8} {declared : Nat} {tag : UInt8}
     (hpre : readPreamble bs = .ok (declared, tag :: rest)) (hcopy : tag.toNat % 4 ≠ 0) :
     ∃ e, decompressList bs = .error e := by
-  obtain ⟨e, he⟩ := decompressElements_copy_first (rest := rest) (fuel := rest.length) hcopy
+  obtain ⟨e, he⟩ :=
+    decompressElements_copy_first (declared := declared) (rest := rest) (fuel := rest.length) hcopy
   exact ⟨e, by simp [decompressList, decompressToArray, hpre, he, Except.map]⟩
 
 /-- On bytes, a block that decompresses yields exactly as many bytes as its preamble declared. -/
@@ -287,9 +314,10 @@ theorem toList_eq_data_toList (bs : ByteArray) : bs.toList = bs.data.toList := b
   simpa using loop 0 [] (Nat.zero_le _)
 
 /-- The tag of a literal reads back as a literal, and its length as the data length (§2.1). -/
-theorem decompressElements_literal {data : List UInt8} (hne : data ≠ [])
-    (h : data.length ≤ 2 ^ 32) (fuel : Nat) :
-    decompressElements (literal data) ByteArray.empty (fuel + 1) = .ok data.toByteArray := by
+theorem decompressElements_literal {declared : Nat} {data : List UInt8} (hne : data ≠ [])
+    (h : data.length ≤ 2 ^ 32) (hd : data.length ≤ declared) (fuel : Nat) :
+    decompressElements declared (literal data) ByteArray.empty (fuel + 1) =
+      .ok data.toByteArray := by
   have hpos : 0 < data.length := List.length_pos_iff.mpr hne
   dsimp only [literal]
   split
@@ -298,7 +326,8 @@ theorem decompressElements_literal {data : List UInt8} (hne : data ≠ [])
     have ht : (UInt8.ofNat ((data.length - 1) * 4)).toNat = (data.length - 1) * 4 := by
       rw [UInt8.toNat_ofNat']; omega
     simp only [decompressElements, ht]
-    simp [hn, show data.length - 1 + 1 = data.length by omega, decompressElements]
+    simp [hn, show data.length - 1 + 1 = data.length by omega, decompressElements,
+      show ¬ declared < data.length by omega]
   -- The length takes 1 to 4 bytes after the tag.
   · rename_i hn
     have hk : 1 ≤ literalLengthBytes (data.length - 1) ∧ literalLengthBytes (data.length - 1) ≤ 4 ∧
@@ -315,7 +344,8 @@ theorem decompressElements_literal {data : List UInt8} (hne : data ≠ [])
     rw [List.cons_append]
     simp only [decompressElements, ht, EthLib.Base.bytesToUint_toVector]
     simp [show ¬ 59 + k < 60 by omega, show 59 + k - 59 = k by omega, hv,
-      show data.length - 1 + 1 = data.length by omega, decompressElements]
+      show data.length - 1 + 1 = data.length by omega, decompressElements,
+      show ¬ declared < data.length by omega]
 
 /-- A block of one literal decompresses to its data as a byte array, for up to 2^32 - 1 bytes. -/
 theorem decompressToArray_compressLiteralList {data : List UInt8}
@@ -329,7 +359,7 @@ theorem decompressToArray_compressLiteralList {data : List UInt8}
       obtain ⟨f, hf⟩ : ∃ f, (literal (b :: bs)).length = f + 1 := by
         dsimp only [literal]; split <;> exact ⟨_, rfl⟩
       rw [hf, decompressElements_literal (List.cons_ne_nil b bs)
-        (by simp [maxUncompressedLength] at h ⊢; omega)]
+        (by simp [maxUncompressedLength] at h ⊢; omega) (Nat.le_refl _)]
       simp
 
 /-- A block of one literal decompresses to its data, for data of at most 2^32 - 1 bytes. -/
