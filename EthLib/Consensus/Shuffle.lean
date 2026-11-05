@@ -104,6 +104,10 @@ def computeShuffledIndex (preset : Preset) (index count : UInt64) (seed : Bytes3
 
 It holds the shuffled indices from `len * index / count` up to `len * (index + 1) / count`.
 
+A position past the last index is out of range, which happens only when `index ≥ count`.
+
+An empty range has no position to read, so it gives an empty committee, even past the end.
+
 The default value is never read, since each shuffled position is below the length. -/
 def computeCommittee (preset : Preset) (indices : Array ValidatorIndex) (seed : Bytes32)
     (index count : UInt64) : Except ShuffleError (Array ValidatorIndex) := do
@@ -112,6 +116,9 @@ def computeCommittee (preset : Preset) (indices : Array ValidatorIndex) (seed : 
     throw .overflow
   let start := indices.size * index.toNat / count.toNat
   let stop := indices.size * (index.toNat + 1) / count.toNat
+  -- The first position to shuffle at or past the length is the larger of the two.
+  if start < stop ∧ indices.size < stop then
+    throw (.indexOutOfRange (UInt64.ofNat (max start indices.size)) (UInt64.ofNat indices.size))
   let shuffled := computeShuffledPermutation preset (UInt64.ofNat indices.size) seed
   return ((List.range (stop - start)).map fun i =>
     indices.getD (shuffled.getD (start + i) 0).toNat 0).toArray
