@@ -31,7 +31,7 @@ theorem tstoreStep_getTransientStorage {evm after : Evm fork Meter} {key value :
     after.state.getTransientStorage evm.message.currentTarget (U256.toBeBytes key) = value := by
   have hstack : evm.stack = ⟨key :: value :: rest, hs ▸ evm.stack.property⟩ := Subtype.ext hs
   simp only [tstoreStep, popWord, hstack, Stack.pop, bind, Except.bind, pure, Except.pure] at h
-  obtain ⟨e, hc, h⟩ := except_bind_eq_ok h
+  obtain ⟨e, hc, h⟩ := Base.bind_ok_iff.mp h
   have := chargeGas_sameContext hc
   split at h
   · cases h
@@ -43,9 +43,9 @@ theorem tstoreStep_getTransientStorage {evm after : Evm fork Meter} {key value :
 theorem tstoreStep_ne_ok_of_isStatic {evm after : Evm fork Meter}
     (static : evm.message.isStatic = true) : tstoreStep evm ≠ .ok after := by
   intro h
-  obtain ⟨⟨_, e1⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, e2⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨e3, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
   have m : e3.message = evm.message := (chargeGas_sameContext h3).message.trans
     ((popWord_sameContext h2).message.trans (popWord_sameContext h1).message)
   simp [m, static, throw, throwThe, MonadExceptOf.throw] at h
@@ -53,9 +53,9 @@ theorem tstoreStep_ne_ok_of_isStatic {evm after : Evm fork Meter}
 /-- TLOAD keeps the message, the state and the substate. -/
 theorem tloadStep_sameContext {evm after : Evm fork Meter} (h : tloadStep evm = .ok after) :
     SameContext evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((popWord_sameContext h1).trans (chargeGas_sameContext h2)).trans
     (pushWord_sameContext h3)).advance

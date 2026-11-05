@@ -126,10 +126,10 @@ theorem stackOnlyStep_sameContext {op : Op}
     | skip
   case exp | keccak256 =>
     simp only [expStep, keccak256Step] at h
-    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-    obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-    obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
-    obtain ⟨_, h4, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
     cases h
     first
       | exact ((((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
@@ -137,24 +137,24 @@ theorem stackOnlyStep_sameContext {op : Op}
       | exact ((((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
           (chargeGasAndMemory_sameContext h3)).trans (pushWord_sameContext h4)).advance
   case pop =>
-    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-    obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
     cases h
     exact ((popWord_sameContext h1).trans (chargeGas_sameContext h2)).advance
   case push =>
-    obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
-    obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+    obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
     cases h
     exact ((chargeGas_sameContext h1).trans (pushWord_sameContext h2)).advance _
   case dup =>
-    obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+    obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
     split at h
     · cases h
-    · obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+    · obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
       cases h
       exact ((chargeGas_sameContext h1).trans (pushWord_sameContext h2)).advance
   case swap =>
-    obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+    obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
     split at h
     · split at h
       · cases h

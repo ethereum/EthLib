@@ -30,7 +30,7 @@ theorem finishSelfdestruct_keeps_account {beneficiary : Address} {refund : Nat}
   unfold finishSelfdestruct at h
   split at h
   · cases h
-  · obtain ⟨state, -, h⟩ := except_bind_eq_ok h
+  · obtain ⟨state, -, h⟩ := Base.bind_ok_iff.mp h
     cases h
     have : ¬ (fork < .dencun) := Nat.not_lt.mpr cancun
     simp_all
@@ -44,7 +44,7 @@ theorem finishSelfdestruct_deletes {beneficiary : Address} {refund : Nat}
   unfold finishSelfdestruct at h
   split at h
   · cases h
-  · obtain ⟨state, -, h⟩ := except_bind_eq_ok h
+  · obtain ⟨state, -, h⟩ := Base.bind_ok_iff.mp h
     cases h
     simp [early]
 

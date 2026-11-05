@@ -99,24 +99,24 @@ theorem memoryDataStep_sameContext {op : Op}
     subst hstep
   case msize | calldatasize | codesize | returndatasize => exact readFrame_sameContext h
   case mload =>
-    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-    obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
-    obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
     cases h
     exact (((popWord_sameContext h1).trans (chargeGasAndMemory_sameContext h2)).trans
       (pushWord_sameContext h3)).advance
   case mstore | mstore8 =>
-    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-    obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-    obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
     cases h
     have := ((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
       (chargeGasAndMemory_sameContext h3)
     exact ⟨this.message, this.state, this.substate⟩
   case calldataload =>
-    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-    obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
-    obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
     cases h
     exact (((popWord_sameContext h1).trans (chargeGas_sameContext h2)).trans
       (pushWord_sameContext h3)).advance
@@ -124,19 +124,19 @@ theorem memoryDataStep_sameContext {op : Op}
     first
       | simp only [mcopyStep] at h
       | simp only [copyToMemory] at h
-    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-    obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-    obtain ⟨⟨_, _⟩, h3, h⟩ := except_bind_eq_ok h
-    obtain ⟨_, h4, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, _⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
     cases h
     have := (((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
       (popWord_sameContext h3)).trans (chargeGasAndMemory_sameContext h4)
     exact ⟨this.message, this.state, this.substate⟩
   case returndatacopy =>
-    obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-    obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-    obtain ⟨⟨_, _⟩, h3, h⟩ := except_bind_eq_ok h
-    obtain ⟨_, h4, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, _⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
     simp only [throw, throwThe, MonadExceptOf.throw] at h
     split at h
     · cases h

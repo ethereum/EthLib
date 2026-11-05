@@ -109,21 +109,21 @@ theorem measure_lt_of_stop {a b : Evm fork Meter}
 /-- A pop pays nothing. -/
 theorem popWord_pays {evm after : Evm fork Meter} {x : U256}
     (h : popWord evm = .ok (x, after)) : Pays 0 evm after := by
-  obtain ⟨⟨_, _⟩, -, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, -, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact .of_eq rfl rfl
 
 /-- A push pays nothing. -/
 theorem pushWord_pays {evm after : Evm fork Meter} {x : U256}
     (h : pushWord evm x = .ok after) : Pays 0 evm after := by
-  obtain ⟨_, -, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact .of_eq rfl rfl
 
 /-- A charge of `amount` pays `amount`. -/
 theorem chargeGas_pays [LawfulGasMeter Meter] {evm after : Evm fork Meter} {amount : Nat}
     (h : chargeGas evm amount = .ok after) : Pays amount evm after := by
-  obtain ⟨_, hc, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, hc, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact ⟨LawfulGasMeter.gasHeld_charge hc, rfl⟩
 
@@ -131,7 +131,7 @@ theorem chargeGas_pays [LawfulGasMeter Meter] {evm after : Evm fork Meter} {amou
 theorem chargeGasAndMemory_pays [LawfulGasMeter Meter] {evm after : Evm fork Meter}
     {cost : Nat} {ranges : List (U256 × U256)}
     (h : chargeGasAndMemory evm cost ranges = .ok after) : Pays cost evm after := by
-  obtain ⟨_, hc, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, hc, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact ((chargeGas_pays hc).mono (Nat.le_add_right _ _)).congr rfl rfl
 
@@ -155,8 +155,8 @@ theorem popTopics_pays {evm after : Evm fork Meter} {n : Nat} {topics : List Byt
     cases h
     exact .of_eq rfl rfl
   | succ k ih =>
-    obtain ⟨⟨_, e1⟩, h1, h⟩ := except_bind_eq_ok h
-    obtain ⟨⟨_, e2⟩, h2, h⟩ := except_bind_eq_ok h
+    obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
     cases h
     exact ((popWord_pays h1).trans (ih h2)).mono (by omega)
 
@@ -201,9 +201,9 @@ variable [LawfulGasMeter Meter]
 /-- An instruction with one operand pays its price. -/
 theorem unaryOp_pays {cost : Nat} {f : U256 → U256} {evm after : Evm fork Meter}
     (h : unaryOp cost f evm = .ok after) : Pays cost evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact ((((popWord_pays h1).trans (chargeGas_pays h2)).trans (pushWord_pays h3)).mono
     (m := cost) (by omega)).congr rfl rfl
@@ -211,10 +211,10 @@ theorem unaryOp_pays {cost : Nat} {f : U256 → U256} {evm after : Evm fork Mete
 /-- An instruction with two operands pays its price. -/
 theorem binaryOp_pays {cost : Nat} {f : U256 → U256 → U256} {evm after : Evm fork Meter}
     (h : binaryOp cost f evm = .ok after) : Pays cost evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h4, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((((popWord_pays h1).trans (popWord_pays h2)).trans (chargeGas_pays h3)).trans
     (pushWord_pays h4)).mono (m := cost) (by omega)).congr rfl rfl
@@ -222,11 +222,11 @@ theorem binaryOp_pays {cost : Nat} {f : U256 → U256 → U256} {evm after : Evm
 /-- An instruction with three operands pays its price. -/
 theorem ternaryOp_pays {cost : Nat} {f : U256 → U256 → U256 → U256} {evm after : Evm fork Meter}
     (h : ternaryOp cost f evm = .ok after) : Pays cost evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h3, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h4, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h5, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h5, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact ((((((popWord_pays h1).trans (popWord_pays h2)).trans (popWord_pays h3)).trans
     (chargeGas_pays h4)).trans (pushWord_pays h5)).mono (m := cost) (by omega)).congr rfl rfl
@@ -234,8 +234,8 @@ theorem ternaryOp_pays {cost : Nat} {f : U256 → U256 → U256 → U256} {evm a
 /-- POP pays its price. -/
 theorem popStep_pays {evm after : Evm fork Meter} (h : popStep evm = .ok after) :
     Pays OPCODE_POP evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((popWord_pays h1).trans (chargeGas_pays h2)).mono (m := OPCODE_POP) (by omega)).congr
     rfl rfl
@@ -243,8 +243,8 @@ theorem popStep_pays {evm after : Evm fork Meter} (h : popStep evm = .ok after) 
 /-- PUSHn pays at least 1 gas. -/
 theorem pushN_pays {n : Fin 33} {evm after : Evm fork Meter} (h : pushN n evm = .ok after) :
     Pays 1 evm after := by
-  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
   cases h
   have price : 1 ≤ if n.val = 0 then OPCODE_PUSH0 else OPCODE_PUSH := by split <;> decide
   exact (((chargeGas_pays h1).trans (pushWord_pays h2)).mono (m := 1) (by omega)).congr rfl rfl
@@ -252,10 +252,10 @@ theorem pushN_pays {n : Fin 33} {evm after : Evm fork Meter} (h : pushN n evm = 
 /-- DUPn pays its price. -/
 theorem dupN_pays {n : Fin 16} {evm after : Evm fork Meter} (h : dupN n evm = .ok after) :
     Pays OPCODE_DUP evm after := by
-  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
   split at h
   · cases h
-  · obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+  · obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
     cases h
     exact (((chargeGas_pays h1).trans (pushWord_pays h2)).mono (m := OPCODE_DUP) (by omega)).congr
       rfl rfl
@@ -263,7 +263,7 @@ theorem dupN_pays {n : Fin 16} {evm after : Evm fork Meter} (h : dupN n evm = .o
 /-- SWAPn pays its price. -/
 theorem swapN_pays {n : Fin 16} {evm after : Evm fork Meter} (h : swapN n evm = .ok after) :
     Pays OPCODE_SWAP evm after := by
-  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
   split at h
   · split at h
     · cases h
@@ -274,11 +274,11 @@ theorem swapN_pays {n : Fin 16} {evm after : Evm fork Meter} (h : swapN n evm = 
 /-- DUPN pays its price. -/
 theorem dupnStep_pays {evm after : Evm fork Meter} (h : dupnStep evm = .ok after) :
     Pays OPCODE_DUPN evm after := by
-  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
   split at h
   · split at h
     · cases h
-    · obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+    · obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
       cases h
       exact (((chargeGas_pays h1).trans (pushWord_pays h2)).mono (m := OPCODE_DUPN)
         (by omega)).congr rfl rfl
@@ -287,7 +287,7 @@ theorem dupnStep_pays {evm after : Evm fork Meter} (h : dupnStep evm = .ok after
 /-- SWAPN pays its price. -/
 theorem swapnStep_pays {evm after : Evm fork Meter} (h : swapnStep evm = .ok after) :
     Pays OPCODE_SWAPN evm after := by
-  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
   split at h
   · split at h
     · cases h
@@ -298,7 +298,7 @@ theorem swapnStep_pays {evm after : Evm fork Meter} (h : swapnStep evm = .ok aft
 /-- EXCHANGE pays its price. -/
 theorem exchangeStep_pays {evm after : Evm fork Meter} (h : exchangeStep evm = .ok after) :
     Pays OPCODE_EXCHANGE evm after := by
-  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
   split at h
   · split at h
     · cases h
@@ -309,10 +309,10 @@ theorem exchangeStep_pays {evm after : Evm fork Meter} (h : exchangeStep evm = .
 /-- EXP pays at least its base price. -/
 theorem expStep_pays {evm after : Evm fork Meter} (h : expStep fork evm = .ok after) :
     Pays OPCODE_EXP_BASE evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h4, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((((popWord_pays h1).trans (popWord_pays h2)).trans (chargeGas_pays h3)).trans
     (pushWord_pays h4)).mono (m := OPCODE_EXP_BASE) (by omega)).congr rfl rfl
@@ -320,10 +320,10 @@ theorem expStep_pays {evm after : Evm fork Meter} (h : expStep fork evm = .ok af
 /-- KECCAK256 pays at least its base price. -/
 theorem keccak256Step_pays {evm after : Evm fork Meter} (h : keccak256Step evm = .ok after) :
     Pays OPCODE_KECCAK256_BASE evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h4, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((((popWord_pays h1).trans (popWord_pays h2)).trans (chargeGasAndMemory_pays h3)).trans
     (pushWord_pays h4)).mono (m := OPCODE_KECCAK256_BASE) (by omega)).congr rfl rfl
@@ -356,16 +356,16 @@ theorem stackOnlyStep_measure_lt {op : Op}
 /-- An instruction that reads the frame pays its price. -/
 theorem readFrame_pays {cost : Nat} {value : Evm fork Meter → U256} {evm after : Evm fork Meter}
     (h : readFrame cost value evm = .ok after) : Pays cost evm after := by
-  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((chargeGas_pays h1).trans (pushWord_pays h2)).mono (m := cost) (by omega)).congr rfl rfl
 
 /-- JUMP pays its price. -/
 theorem jumpStep_pays {evm after : Evm fork Meter} (h : jumpStep evm = .ok after) :
     Pays OPCODE_JUMP evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
   have paid := ((popWord_pays h1).trans (chargeGas_pays h2)).mono (m := OPCODE_JUMP) (by omega)
   split at h
   · cases h
@@ -375,9 +375,9 @@ theorem jumpStep_pays {evm after : Evm fork Meter} (h : jumpStep evm = .ok after
 /-- JUMPI pays its price. -/
 theorem jumpiStep_pays {evm after : Evm fork Meter} (h : jumpiStep evm = .ok after) :
     Pays OPCODE_JUMPI evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   have paid := (((popWord_pays h1).trans (popWord_pays h2)).trans (chargeGas_pays h3)).mono
     (m := OPCODE_JUMPI) (by omega)
   split at h
@@ -391,7 +391,7 @@ theorem jumpiStep_pays {evm after : Evm fork Meter} (h : jumpiStep evm = .ok aft
 /-- JUMPDEST pays its price. -/
 theorem jumpdestStep_pays {evm after : Evm fork Meter} (h : jumpdestStep evm = .ok after) :
     Pays OPCODE_JUMPDEST evm after := by
-  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (chargeGas_pays h1).congr rfl rfl
 
@@ -415,9 +415,9 @@ theorem controlFlowStep_measure_lt {op : Op}
 /-- MLOAD pays its price. -/
 theorem mloadStep_pays {evm after : Evm fork Meter} (h : mloadStep evm = .ok after) :
     Pays OPCODE_MLOAD_BASE evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact ((((popWord_pays h1).trans (chargeGasAndMemory_pays h2)).trans (pushWord_pays h3)).mono
     (m := OPCODE_MLOAD_BASE) (by omega)).congr rfl rfl
@@ -425,9 +425,9 @@ theorem mloadStep_pays {evm after : Evm fork Meter} (h : mloadStep evm = .ok aft
 /-- MSTORE pays its price. -/
 theorem mstoreStep_pays {evm after : Evm fork Meter} (h : mstoreStep evm = .ok after) :
     Pays OPCODE_MSTORE_BASE evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact ((((popWord_pays h1).trans (popWord_pays h2)).trans (chargeGasAndMemory_pays h3)).mono
     (m := OPCODE_MSTORE_BASE) (by omega)).congr rfl rfl
@@ -435,9 +435,9 @@ theorem mstoreStep_pays {evm after : Evm fork Meter} (h : mstoreStep evm = .ok a
 /-- MSTORE8 pays its price. -/
 theorem mstore8Step_pays {evm after : Evm fork Meter} (h : mstore8Step evm = .ok after) :
     Pays OPCODE_MSTORE8_BASE evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact ((((popWord_pays h1).trans (popWord_pays h2)).trans (chargeGasAndMemory_pays h3)).mono
     (m := OPCODE_MSTORE8_BASE) (by omega)).congr rfl rfl
@@ -445,10 +445,10 @@ theorem mstore8Step_pays {evm after : Evm fork Meter} (h : mstore8Step evm = .ok
 /-- MCOPY pays at least its base price. -/
 theorem mcopyStep_pays {evm after : Evm fork Meter} (h : mcopyStep evm = .ok after) :
     Pays OPCODE_MCOPY_BASE evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h3, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h4, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((((popWord_pays h1).trans (popWord_pays h2)).trans (popWord_pays h3)).trans
     (chargeGasAndMemory_pays h4)).mono (m := OPCODE_MCOPY_BASE) (by omega)).congr rfl rfl
@@ -456,9 +456,9 @@ theorem mcopyStep_pays {evm after : Evm fork Meter} (h : mcopyStep evm = .ok aft
 /-- CALLDATALOAD pays its price. -/
 theorem calldataloadStep_pays {evm after : Evm fork Meter}
     (h : calldataloadStep evm = .ok after) : Pays OPCODE_CALLDATALOAD evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact ((((popWord_pays h1).trans (chargeGas_pays h2)).trans (pushWord_pays h3)).mono
     (m := OPCODE_CALLDATALOAD) (by omega)).congr rfl rfl
@@ -466,10 +466,10 @@ theorem calldataloadStep_pays {evm after : Evm fork Meter}
 /-- A copy to memory pays at least its base price. -/
 theorem copyToMemory_pays {base : Nat} {source : ByteArray} {evm after : Evm fork Meter}
     (h : copyToMemory base source evm = .ok after) : Pays base evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h3, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h4, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((((popWord_pays h1).trans (popWord_pays h2)).trans (popWord_pays h3)).trans
     (chargeGasAndMemory_pays h4)).mono (m := base) (by omega)).congr rfl rfl
@@ -477,10 +477,10 @@ theorem copyToMemory_pays {base : Nat} {source : ByteArray} {evm after : Evm for
 /-- RETURNDATACOPY pays at least its base price. -/
 theorem returndatacopyStep_pays {evm after : Evm fork Meter}
     (h : returndatacopyStep evm = .ok after) : Pays OPCODE_RETURNDATACOPY_BASE evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h3, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h4, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
   have paid := ((((popWord_pays h1).trans (popWord_pays h2)).trans (popWord_pays h3)).trans
     (chargeGas_pays h4)).mono (m := OPCODE_RETURNDATACOPY_BASE) (by omega)
   split at h
@@ -508,9 +508,9 @@ theorem memoryDataStep_measure_lt {op : Op}
 /-- A halt with output stops the frame, with no more gas. -/
 theorem haltWithOutput_stops {evm after : Evm fork Meter} (h : haltWithOutput evm = .ok after) :
     GasMeter.gasHeld after.gas ≤ GasMeter.gasHeld evm.gas ∧ after.running = false := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   have := (((popWord_pays h1).trans (popWord_pays h2)).trans (chargeGasAndMemory_pays h3)).gasHeld
   exact ⟨by simp only at this ⊢; omega, rfl⟩
@@ -527,7 +527,7 @@ theorem returnOpStep_measure_lt {op : Op}
   · split at hf
     · simp only [Option.some.injEq] at hf
       subst hf
-      obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+      obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
       cases h
       obtain ⟨gas, stops⟩ := haltWithOutput_stops h1
       exact measure_lt_of_stop gas stops running
@@ -538,9 +538,9 @@ theorem returnOpStep_measure_lt {op : Op}
 /-- BLOCKHASH pays its price. -/
 theorem blockhashStep_pays {evm after : Evm fork Meter} (h : blockhashStep evm = .ok after) :
     Pays OPCODE_BLOCKHASH evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact ((((popWord_pays h1).trans (chargeGas_pays h2)).trans (pushWord_pays h3)).mono
     (m := OPCODE_BLOCKHASH) (by omega)).congr rfl rfl
@@ -548,9 +548,9 @@ theorem blockhashStep_pays {evm after : Evm fork Meter} (h : blockhashStep evm =
 /-- BLOBHASH pays its price. -/
 theorem blobhashStep_pays {hf : .dencun ≤ fork} {evm after : Evm fork Meter}
     (h : blobhashStep hf evm = .ok after) : Pays OPCODE_BLOBHASH evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact ((((popWord_pays h1).trans (chargeGas_pays h2)).trans (pushWord_pays h3)).mono
     (m := OPCODE_BLOBHASH) (by omega)).congr rfl rfl
@@ -580,9 +580,9 @@ theorem environmentStep_measure_lt {op : Op}
 /-- BALANCE pays at least 1 gas. -/
 theorem balanceStep_pays {evm after : Evm fork Meter} (h : balanceStep evm = .ok after) :
     Pays 1 evm after := by
-  obtain ⟨⟨word, e1⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨word, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((((popWord_pays h1).trans (accessAddress_pays _ _)).trans (chargeGas_pays h2)).trans
     (pushWord_pays h3)).mono (m := 1)
@@ -591,10 +591,10 @@ theorem balanceStep_pays {evm after : Evm fork Meter} (h : balanceStep evm = .ok
 /-- EXTCODESIZE pays at least 1 gas. -/
 theorem extcodesizeStep_pays {evm after : Evm fork Meter} (h : extcodesizeStep evm = .ok after) :
     Pays 1 evm after := by
-  obtain ⟨⟨word, e1⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, -, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨word, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((((popWord_pays h1).trans (accessAddress_pays _ _)).trans (chargeGas_pays h2)).trans
     (pushWord_pays h3)).mono (m := 1)
@@ -603,12 +603,12 @@ theorem extcodesizeStep_pays {evm after : Evm fork Meter} (h : extcodesizeStep e
 /-- EXTCODECOPY pays at least 1 gas. -/
 theorem extcodecopyStep_pays {evm after : Evm fork Meter} (h : extcodecopyStep evm = .ok after) :
     Pays 1 evm after := by
-  obtain ⟨⟨word, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h3, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, e4⟩, h4, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h5, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, -, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨word, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h5, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact ((((((popWord_pays h1).trans (popWord_pays h2)).trans (popWord_pays h3)).trans
     (popWord_pays h4)).trans ((accessAddress_pays _ _).trans (chargeGasAndMemory_pays h5))).mono
@@ -619,9 +619,9 @@ theorem extcodecopyStep_pays {evm after : Evm fork Meter} (h : extcodecopyStep e
 /-- EXTCODEHASH pays at least 1 gas. -/
 theorem extcodehashStep_pays {evm after : Evm fork Meter} (h : extcodehashStep evm = .ok after) :
     Pays 1 evm after := by
-  obtain ⟨⟨word, e1⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨word, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((((popWord_pays h1).trans (accessAddress_pays _ _)).trans (chargeGas_pays h2)).trans
     (pushWord_pays h3)).mono (m := 1)
@@ -660,9 +660,9 @@ theorem accountStep_measure_lt {op : Op}
 /-- SLOAD pays at least 1 gas. -/
 theorem sloadStep_pays {evm after : Evm fork Meter} (h : sloadStep evm = .ok after) :
     Pays 1 evm after := by
-  obtain ⟨⟨word, e1⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨word, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((((popWord_pays h1).trans (accessStorageKey_pays _ _ _)).trans
     (chargeGas_pays h2)).trans (pushWord_pays h3)).mono (m := 1)
@@ -671,13 +671,13 @@ theorem sloadStep_pays {evm after : Evm fork Meter} (h : sloadStep evm = .ok aft
 /-- SSTORE pays at least 1 gas. -/
 theorem sstoreStep_pays {evm after : Evm fork Meter} (h : sstoreStep evm = .ok after) :
     Pays 1 evm after := by
-  obtain ⟨⟨word, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨new, e2⟩, h2, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨word, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨new, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
   dsimp only at h
   split at h <;> try (cases h; done)
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   split at h <;> try (cases h; done)
-  obtain ⟨_, -, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((((popWord_pays h1).trans (popWord_pays h2)).trans
     (accessStorageKey_pays _ _ _)).trans (chargeGas_pays h3)).mono (m := 1)
@@ -697,9 +697,9 @@ theorem storageStep_measure_lt {op : Op}
 /-- TLOAD pays its price. -/
 theorem tloadStep_pays {evm after : Evm fork Meter} (h : tloadStep evm = .ok after) :
     Pays OPCODE_TLOAD evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact ((((popWord_pays h1).trans (chargeGas_pays h2)).trans (pushWord_pays h3)).mono
     (m := OPCODE_TLOAD) (by omega)).congr rfl rfl
@@ -707,9 +707,9 @@ theorem tloadStep_pays {evm after : Evm fork Meter} (h : tloadStep evm = .ok aft
 /-- TSTORE pays its price. -/
 theorem tstoreStep_pays {evm after : Evm fork Meter} (h : tstoreStep evm = .ok after) :
     Pays OPCODE_TSTORE evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   split at h
   · cases h
   · cases h
@@ -740,10 +740,10 @@ theorem transientStorageStep_measure_lt {op : Op}
 /-- LOGn pays at least its base price. -/
 theorem logStep_pays {n : Nat} {evm after : Evm fork Meter} (h : logStep n evm = .ok after) :
     Pays OPCODE_LOG_BASE evm after := by
-  obtain ⟨⟨_, _⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, _⟩, h3, h⟩ := except_bind_eq_ok h
-  obtain ⟨_, h4, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, _⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
   split at h
   · cases h
   · cases h

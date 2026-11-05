@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.BigEndian
+public import EthLib.Base.Except
 public import EthLib.Execution.Evm.Frame
 public import EthLib.Execution.Evm.Gas
 public import EthLib.Execution.Evm.Memory
@@ -91,12 +92,5 @@ inductive StepResult (fork : Fork) (Meter : Type) where
   The frame goes on with `resume` applied to the frame that ends the message. -/
   | child (caller : Evm fork Meter) (message : Message fork)
       (resume : Evm fork Meter → Except EvmError (Evm fork Meter))
-
-/-- A chain of steps that succeeds succeeded at its first step. -/
-theorem except_bind_eq_ok {α β : Type} {x : Except EvmError α} {f : α → Except EvmError β}
-    {y : β} (h : x >>= f = .ok y) : ∃ a, x = .ok a ∧ f a = .ok y := by
-  cases x with
-  | error => cases h
-  | ok a => exact ⟨a, rfl, h⟩
 
 end EthLib.Execution.Evm

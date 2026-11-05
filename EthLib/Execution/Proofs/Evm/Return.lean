@@ -50,9 +50,9 @@ theorem revertStep_eq (evm : Evm fork Meter) :
 /-- RETURN keeps the message, the state and the substate. -/
 theorem returnStep_sameContext {evm after : Evm fork Meter} (h : returnStep evm = .ok after) :
     SameContext evm after := by
-  obtain ⟨⟨_, e1⟩, h1, h⟩ := except_bind_eq_ok h
-  obtain ⟨⟨_, e2⟩, h2, h⟩ := except_bind_eq_ok h
-  obtain ⟨e3, h3, h⟩ := except_bind_eq_ok h
+  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   have := ((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
     (chargeGasAndMemory_sameContext h3)
@@ -61,7 +61,7 @@ theorem returnStep_sameContext {evm after : Evm fork Meter} (h : returnStep evm 
 /-- REVERT keeps the message, the state and the substate. -/
 theorem revertStep_sameContext {evm after : Evm fork Meter} (h : revertStep evm = .ok after) :
     SameContext evm after := by
-  obtain ⟨e, he, h⟩ := except_bind_eq_ok h
+  obtain ⟨e, he, h⟩ := Base.bind_ok_iff.mp h
   cases h
   have := returnStep_sameContext he
   exact ⟨this.message, this.state, this.substate⟩

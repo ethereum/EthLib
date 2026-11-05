@@ -135,7 +135,7 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 /-- SWAPN keeps the items of the stack, in another order. -/
 theorem swapnStep_perm {evm after : Evm fork Meter} (h : swapnStep evm = .ok after) :
     after.stack.val.Perm evm.stack.val := by
-  obtain ⟨paid, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨paid, h1, h⟩ := Base.bind_ok_iff.mp h
   have hstack : paid.stack = evm.stack := by
     simp only [chargeGas, bind, Except.bind] at h1
     split at h1 <;> cases h1
@@ -151,7 +151,7 @@ theorem swapnStep_perm {evm after : Evm fork Meter} (h : swapnStep evm = .ok aft
 /-- EXCHANGE keeps the items of the stack, in another order. -/
 theorem exchangeStep_perm {evm after : Evm fork Meter} (h : exchangeStep evm = .ok after) :
     after.stack.val.Perm evm.stack.val := by
-  obtain ⟨paid, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨paid, h1, h⟩ := Base.bind_ok_iff.mp h
   have hstack : paid.stack = evm.stack := by
     simp only [chargeGas, bind, Except.bind] at h1
     split at h1 <;> cases h1
@@ -179,7 +179,7 @@ theorem dupnStep_stack {evm after : Evm fork Meter} {n : Nat}
     (hn : decodeSingle (immediateByte evm.code evm.pc) = some n)
     (h : dupnStep evm = .ok after) :
     ∃ x, evm.stack.val[n - 1]? = some x ∧ after.stack.val = x :: evm.stack.val := by
-  obtain ⟨paid, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨paid, h1, h⟩ := Base.bind_ok_iff.mp h
   have hpaid : paid = { evm with gas := paid.gas } := by
     simp only [chargeGas, bind, Except.bind] at h1
     split at h1 <;> cases h1
@@ -189,7 +189,7 @@ theorem dupnStep_stack {evm after : Evm fork Meter} {n : Nat}
   split at h
   · cases h
   · rename_i x hx
-    obtain ⟨pushed, h2, h⟩ := except_bind_eq_ok h
+    obtain ⟨pushed, h2, h⟩ := Base.bind_ok_iff.mp h
     cases h
     refine ⟨x, hx, ?_⟩
     simp only [pushWord, Stack.push, bind, Except.bind] at h2
@@ -205,11 +205,11 @@ theorem dupnStep_stack {evm after : Evm fork Meter} {n : Nat}
 /-- DUPN keeps the message, the state and the substate. -/
 theorem dupnStep_sameContext {evm after : Evm fork Meter} (h : dupnStep evm = .ok after) :
     SameContext evm after := by
-  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
   split at h
   · split at h
     · cases h
-    · obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+    · obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
       cases h
       exact ((chargeGas_sameContext h1).trans (pushWord_sameContext h2)).advance _
   · cases h
@@ -217,7 +217,7 @@ theorem dupnStep_sameContext {evm after : Evm fork Meter} (h : dupnStep evm = .o
 /-- SWAPN keeps the message, the state and the substate. -/
 theorem swapnStep_sameContext {evm after : Evm fork Meter} (h : swapnStep evm = .ok after) :
     SameContext evm after := by
-  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
   split at h
   · split at h
     · cases h
@@ -229,7 +229,7 @@ theorem swapnStep_sameContext {evm after : Evm fork Meter} (h : swapnStep evm = 
 /-- EXCHANGE keeps the message, the state and the substate. -/
 theorem exchangeStep_sameContext {evm after : Evm fork Meter} (h : exchangeStep evm = .ok after) :
     SameContext evm after := by
-  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+  obtain ⟨_, h1, h⟩ := Base.bind_ok_iff.mp h
   split at h
   · split at h
     · cases h
