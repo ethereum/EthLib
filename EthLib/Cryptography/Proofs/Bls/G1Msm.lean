@@ -27,22 +27,23 @@ set_option maxRecDepth 4000
 /-- One window step of `msm`, with the window sum computed in place.
 
 It is `msmCombine` with that sum filled in, so the mechanical equality below is definitional at this node. -/
-def msmWindowStep (points : Array G1) (scalars : Array Fr) (n nW : Nat)
+def msmWindowStep (points : Array G1) (vals : Array Nat) (n nW : Nat)
     (acc : G1) (kk : Nat) : G1 :=
   if nW - 1 - kk + 1 < nW then
     add ((List.range' 0 8).foldl (fun a _ => double a) acc)
-      (msmRunning (msmBuckets points scalars n (nW - 1 - kk))).1
+      (msmRunning (msmBuckets points vals n (nW - 1 - kk))).1
   else
-    add acc (msmRunning (msmBuckets points scalars n (nW - 1 - kk))).1
+    add acc (msmRunning (msmBuckets points vals n (nW - 1 - kk))).1
 
 /-- The pure model of `G1.msm`. -/
 def msmModel (points : Array G1) (scalars : Array Fr) : G1 :=
   let n := if points.size ≤ scalars.size then points.size else scalars.size
+  let vals := scalars.map Fr.val
   if n = 0 then zero
-  else if msmMaxBits scalars n = 0 then zero
+  else if msmMaxBits vals n = 0 then zero
   else
-    (List.range' 0 ((msmMaxBits scalars n + 8 - 1) / 8)).foldl
-      (msmWindowStep points scalars n ((msmMaxBits scalars n + 8 - 1) / 8))
+    (List.range' 0 ((msmMaxBits vals n + 8 - 1) / 8)).foldl
+      (msmWindowStep points vals n ((msmMaxBits vals n + 8 - 1) / 8))
       zero
 
 /-! ## `msm` equals its model (mechanical layer) -/
@@ -61,10 +62,11 @@ theorem msm_eq_msmModel (points : Array G1) (scalars : Array Fr) :
   unfold msm msmModel
   dsimp only
   generalize (if points.size ≤ scalars.size then points.size else scalars.size) = n
+  generalize scalars.map Fr.val = vals
   by_cases h0 : n = 0
   · rw [ite_eq_left h0, ite_eq_left h0]
   rw [ite_eq_right h0, ite_eq_right h0]
-  by_cases h1 : msmMaxBits scalars n = 0
+  by_cases h1 : msmMaxBits vals n = 0
   · rw [ite_eq_left h1, ite_eq_left h1]
   rw [ite_eq_right h1, ite_eq_right h1]
   exact foldl_zip_spawn _ _ _ _
@@ -74,21 +76,21 @@ theorem msm_eq_msmModel (points : Array G1) (scalars : Array Fr) :
 open Finset
 
 /-- The `maxBits` fold function, named for the induction proofs. -/
-private def maxBitsF (scalars : Array Fr) (m j : Nat) : Nat :=
-  if scalars[j]!.val ≠ 0 then
-    if scalars[j]!.val.log2 + 1 > m then scalars[j]!.val.log2 + 1 else m
+private def maxBitsF (vals : Array Nat) (m j : Nat) : Nat :=
+  if vals[j]! ≠ 0 then
+    if vals[j]!.log2 + 1 > m then vals[j]!.log2 + 1 else m
   else m
 
-private theorem msmMaxBits_eq_foldl (scalars : Array Fr) (n : Nat) :
-    msmMaxBits scalars n = (List.range' 0 n).foldl (maxBitsF scalars) 0 := rfl
+private theorem msmMaxBits_eq_foldl (vals : Array Nat) (n : Nat) :
+    msmMaxBits vals n = (List.range' 0 n).foldl (maxBitsF vals) 0 := rfl
 
-private theorem maxBitsF_le (scalars : Array Fr) (l : List Nat) :
-    ∀ init, init ≤ l.foldl (maxBitsF scalars) init := by
+private theorem maxBitsF_le (vals : Array Nat) (l : List Nat) :
+    ∀ init, init ≤ l.foldl (maxBitsF vals) init := by
   induction l with
   | nil => exact fun _ => Nat.le_refl _
   | cons a l ih =>
     intro init
-    refine Nat.le_trans ?_ (ih (maxBitsF scalars init a))
+    refine Nat.le_trans ?_ (ih (maxBitsF vals init a))
     rw [maxBitsF]
     split
     · split
@@ -96,36 +98,36 @@ private theorem maxBitsF_le (scalars : Array Fr) (l : List Nat) :
       · exact Nat.le_refl _
     · exact Nat.le_refl _
 
-private theorem maxBitsF_bound (scalars : Array Fr) (l : List Nat) :
+private theorem maxBitsF_bound (vals : Array Nat) (l : List Nat) :
     ∀ init j, j ∈ l →
-      scalars[j]!.val < 2 ^ (l.foldl (maxBitsF scalars) init) := by
+      vals[j]! < 2 ^ (l.foldl (maxBitsF vals) init) := by
   induction l with
   | nil => exact fun _ j hj => absurd hj (List.not_mem_nil)
   | cons a l ih =>
     intro init j hj
     rcases List.mem_cons.mp hj with rfl | hj
     · -- the head: the fold is at least `log2 + 1` (or the value is 0)
-      by_cases h0 : scalars[j]!.val = 0
+      by_cases h0 : vals[j]! = 0
       · rw [h0]
         exact Nat.two_pow_pos _
-      · have hstep : scalars[j]!.val.log2 + 1 ≤ maxBitsF scalars init j := by
+      · have hstep : vals[j]!.log2 + 1 ≤ maxBitsF vals init j := by
           rw [maxBitsF, ite_eq_left h0]
           split
           · exact Nat.le_refl _
           · omega
-        have hle := Nat.le_trans hstep (maxBitsF_le scalars l _)
-        calc scalars[j]!.val < 2 ^ (scalars[j]!.val.log2 + 1) :=
+        have hle := Nat.le_trans hstep (maxBitsF_le vals l _)
+        calc vals[j]! < 2 ^ (vals[j]!.log2 + 1) :=
               Nat.lt_log2_self
-          _ ≤ 2 ^ (List.foldl (maxBitsF scalars) (maxBitsF scalars init j) l) :=
+          _ ≤ 2 ^ (List.foldl (maxBitsF vals) (maxBitsF vals init j) l) :=
               Nat.pow_le_pow_right (by omega) hle
-    · exact ih (maxBitsF scalars init a) j hj
+    · exact ih (maxBitsF vals init a) j hj
 
 /-- Every scalar among the first `n` is below `2 ^ msmMaxBits`. -/
-private theorem msmMaxBits_bound (scalars : Array Fr) (n : Nat) :
-    ∀ j, j < n → scalars[j]!.val < 2 ^ msmMaxBits scalars n := by
+private theorem msmMaxBits_bound (vals : Array Nat) (n : Nat) :
+    ∀ j, j < n → vals[j]! < 2 ^ msmMaxBits vals n := by
   intro j hj
   rw [msmMaxBits_eq_foldl]
-  exact maxBitsF_bound scalars (List.range' 0 n) 0 j
+  exact maxBitsF_bound vals (List.range' 0 n) 0 j
     (List.mem_range'_1.mpr ⟨Nat.zero_le j, by omega⟩)
 
 /-- The base-`2⁸` digit decomposition that drives the window
@@ -153,14 +155,14 @@ private theorem doubleFold_spec {a : G1} (h : Valid a) (m : Nat) :
 /-- The bucket fold: sizes, validity, and the partition sums.
 Bucket `0` is never written and stays `zero`; bucket `v > 0` collects
 exactly the points whose window value is `v`. -/
-private theorem msmBuckets_spec (points : Array G1) (scalars : Array Fr)
+private theorem msmBuckets_spec (points : Array G1) (vals : Array Nat)
     (n k : Nat) (hval : ∀ j, j < n → Valid points[j]!) :
-    (msmBuckets points scalars n k).size = 1 <<< 8
-    ∧ (∀ v, v < 1 <<< 8 → Valid (msmBuckets points scalars n k)[v]!)
+    (msmBuckets points vals n k).size = 1 <<< 8
+    ∧ (∀ v, v < 1 <<< 8 → Valid (msmBuckets points vals n k)[v]!)
     ∧ ∀ v, v < 1 <<< 8 →
-        toPoint (msmBuckets points scalars n k)[v]!
+        toPoint (msmBuckets points vals n k)[v]!
           = if v = 0 then 0
-            else ∑ j ∈ (range n).filter (fun j => windowVal scalars[j]! k = v),
+            else ∑ j ∈ (range n).filter (fun j => windowVal vals[j]! k = v),
               toPoint points[j]! := by
   induction n with
   | zero =>
@@ -169,9 +171,9 @@ private theorem msmBuckets_spec (points : Array G1) (scalars : Array Fr)
       intro v hv
       simpa using hv
     have hget : ∀ v, (hv : v < 1 <<< 8) →
-        (msmBuckets points scalars 0 k)[v]! = zero := by
+        (msmBuckets points vals 0 k)[v]! = zero := by
       intro v hv
-      rw [show msmBuckets points scalars 0 k
+      rw [show msmBuckets points vals 0 k
           = Array.replicate (1 <<< 8) zero from rfl,
         getElem!_pos (Array.replicate (1 <<< 8) (zero : G1)) v (hsz v hv),
         Array.getElem_replicate]
@@ -186,26 +188,26 @@ private theorem msmBuckets_spec (points : Array G1) (scalars : Array Fr)
         exact toPoint_zero
   | succ n ih =>
     have ihn := ih (fun j hj => hval j (by omega))
-    have hstep : msmBuckets points scalars (n + 1) k
-        = if windowVal scalars[n]! k ≠ 0 then
-            (msmBuckets points scalars n k).setIfInBounds
-              (windowVal scalars[n]! k)
-              (add (msmBuckets points scalars n k)[windowVal scalars[n]! k]!
+    have hstep : msmBuckets points vals (n + 1) k
+        = if windowVal vals[n]! k ≠ 0 then
+            (msmBuckets points vals n k).setIfInBounds
+              (windowVal vals[n]! k)
+              (add (msmBuckets points vals n k)[windowVal vals[n]! k]!
                 points[n]!)
-          else msmBuckets points scalars n k := by
+          else msmBuckets points vals n k := by
       rw [msmBuckets, msmBuckets, List.range'_1_concat, List.foldl_append,
         List.foldl_cons, List.foldl_nil]
       simp only [Nat.zero_add]
       rfl
-    have hwlt : windowVal scalars[n]! k < 1 <<< 8 := by
-      have := Nat.and_le_right (n := scalars[n]!.val >>> (k * 8))
+    have hwlt : windowVal vals[n]! k < 1 <<< 8 := by
+      have := Nat.and_le_right (n := vals[n]! >>> (k * 8))
         (m := 1 <<< 8 - 1)
       rw [windowVal]
       omega
-    by_cases hw : windowVal scalars[n]! k ≠ 0
+    by_cases hw : windowVal vals[n]! k ≠ 0
     · rw [hstep, ite_eq_left hw]
-      set bs := msmBuckets points scalars n k with hbs
-      set w := windowVal scalars[n]! k with hwdef
+      set bs := msmBuckets points vals n k with hbs
+      set w := windowVal vals[n]! k with hwdef
       have hsz : (bs.setIfInBounds w (add bs[w]! points[n]!)).size
           = 1 <<< 8 := by
         rw [Array.size_setIfInBounds]
@@ -250,7 +252,7 @@ private theorem msmBuckets_spec (points : Array G1) (scalars : Array Fr)
             rw [ite_eq_right hv0] at this
             exact this
     · rw [hstep, ite_eq_right hw]
-      replace hw : windowVal scalars[n]! k = 0 := not_ne_iff.mp hw
+      replace hw : windowVal vals[n]! k = 0 := not_ne_iff.mp hw
       refine ⟨ihn.1, ihn.2.1, fun v hv => ?_⟩
       by_cases hv0 : v = 0
       · subst hv0
@@ -370,25 +372,25 @@ private theorem msmRunning_spec (bs : Array G1)
     zero_nsmul, zero_add]
   exact Finset.sum_congr rfl fun v hv => by rw [Nat.sub_zero]
 
-private theorem windowVal_lt (s : Fr) (k : Nat) : windowVal s k < 1 <<< 8 := by
-  have := Nat.and_le_right (n := s.val >>> (k * 8)) (m := 1 <<< 8 - 1)
+private theorem windowVal_lt (s : Nat) (k : Nat) : windowVal s k < 1 <<< 8 := by
+  have := Nat.and_le_right (n := s >>> (k * 8)) (m := 1 <<< 8 - 1)
   rw [windowVal]
   omega
 
 /-- Buckets + running sums compute the window-weighted point sum. -/
-private theorem window_sum (points : Array G1) (scalars : Array Fr)
+private theorem window_sum (points : Array G1) (vals : Array Nat)
     (n k : Nat) (hval : ∀ j, j < n → Valid points[j]!) :
-    Valid (msmRunning (msmBuckets points scalars n k)).1
-    ∧ toPoint (msmRunning (msmBuckets points scalars n k)).1
-        = ∑ j ∈ range n, windowVal scalars[j]! k • toPoint points[j]! := by
-  obtain ⟨hbsz, hbval, hbsum⟩ := msmBuckets_spec points scalars n k hval
+    Valid (msmRunning (msmBuckets points vals n k)).1
+    ∧ toPoint (msmRunning (msmBuckets points vals n k)).1
+        = ∑ j ∈ range n, windowVal vals[j]! k • toPoint points[j]! := by
+  obtain ⟨hbsz, hbval, hbsum⟩ := msmBuckets_spec points vals n k hval
   obtain ⟨hrv, hrsum⟩ := msmRunning_spec _ hbval
   refine ⟨hrv, ?_⟩
   rw [hrsum]
   have h1 : ∀ v ∈ range (1 <<< 8),
-      v • toPoint (msmBuckets points scalars n k)[v]!
-        = ∑ j ∈ (range n).filter (fun j => windowVal scalars[j]! k = v),
-            windowVal scalars[j]! k • toPoint points[j]! := by
+      v • toPoint (msmBuckets points vals n k)[v]!
+        = ∑ j ∈ (range n).filter (fun j => windowVal vals[j]! k = v),
+            windowVal vals[j]! k • toPoint points[j]! := by
     intro v hv
     rw [hbsum v (Finset.mem_range.mp hv)]
     by_cases hv0 : v = 0
@@ -402,29 +404,29 @@ private theorem window_sum (points : Array G1) (scalars : Array Fr)
   have h2 := Finset.sum_congr rfl h1
   rw [h2]
   exact Finset.sum_fiberwise_of_maps_to
-    (fun j _ => Finset.mem_range.mpr (windowVal_lt scalars[j]! k)) _
+    (fun j _ => Finset.mem_range.mpr (windowVal_lt vals[j]! k)) _
 
 /-- Prefix of the outer window fold. -/
-private def msmAcc (points : Array G1) (scalars : Array Fr)
+private def msmAcc (points : Array G1) (vals : Array Nat)
     (n nW t : Nat) : G1 :=
-  (List.range' 0 t).foldl (msmWindowStep points scalars n nW) zero
+  (List.range' 0 t).foldl (msmWindowStep points vals n nW) zero
 
 /-- The window-recomposition invariant: after `t` windows, the
 accumulator holds `Σ_j (sⱼ >>> ((nW − t)·8)) · Pⱼ`. -/
-private theorem msmAcc_spec (points : Array G1) (scalars : Array Fr)
+private theorem msmAcc_spec (points : Array G1) (vals : Array Nat)
     (n nW : Nat) (hval : ∀ j, j < n → Valid points[j]!)
-    (hbound : ∀ j, j < n → scalars[j]!.val < 2 ^ (nW * 8)) :
+    (hbound : ∀ j, j < n → vals[j]! < 2 ^ (nW * 8)) :
     ∀ t, t ≤ nW →
-      Valid (msmAcc points scalars n nW t)
-      ∧ toPoint (msmAcc points scalars n nW t)
+      Valid (msmAcc points vals n nW t)
+      ∧ toPoint (msmAcc points vals n nW t)
           = ∑ j ∈ range n,
-              (scalars[j]!.val >>> ((nW - t) * 8)) • toPoint points[j]! := by
+              (vals[j]! >>> ((nW - t) * 8)) • toPoint points[j]! := by
   intro t
   induction t with
   | zero =>
     intro _
     refine ⟨valid_zero, ?_⟩
-    rw [show toPoint (msmAcc points scalars n nW 0) = 0 from toPoint_zero,
+    rw [show toPoint (msmAcc points vals n nW 0) = 0 from toPoint_zero,
       Nat.sub_zero]
     exact (Finset.sum_eq_zero fun j hj => by
       rw [Nat.shiftRight_eq_zero _ _ (hbound j (Finset.mem_range.mp hj)),
@@ -432,27 +434,27 @@ private theorem msmAcc_spec (points : Array G1) (scalars : Array Fr)
   | succ t ih =>
     intro ht
     obtain ⟨ihv, ihsum⟩ := ih (by omega)
-    have hstep : msmAcc points scalars n nW (t + 1)
-        = msmWindowStep points scalars n nW (msmAcc points scalars n nW t)
+    have hstep : msmAcc points vals n nW (t + 1)
+        = msmWindowStep points vals n nW (msmAcc points vals n nW t)
             t := by
       rw [msmAcc, msmAcc, List.range'_1_concat, List.foldl_append,
         List.foldl_cons, List.foldl_nil]
       simp only [Nat.zero_add]
-    obtain ⟨hwv, hwsum⟩ := window_sum points scalars n (nW - 1 - t) hval
+    obtain ⟨hwv, hwsum⟩ := window_sum points vals n (nW - 1 - t) hval
     -- merging one window into the accumulated shifts
     have hmerge : (2 ^ 8)
           • (∑ j ∈ range n,
-              (scalars[j]!.val >>> ((nW - t) * 8)) • toPoint points[j]!)
+              (vals[j]! >>> ((nW - t) * 8)) • toPoint points[j]!)
         + ∑ j ∈ range n,
-            windowVal scalars[j]! (nW - 1 - t) • toPoint points[j]!
+            windowVal vals[j]! (nW - 1 - t) • toPoint points[j]!
         = ∑ j ∈ range n,
-            (scalars[j]!.val >>> ((nW - (t + 1)) * 8)) • toPoint points[j]!
+            (vals[j]! >>> ((nW - (t + 1)) * 8)) • toPoint points[j]!
         := by
       rw [Finset.smul_sum, ← Finset.sum_add_distrib]
       refine Finset.sum_congr rfl fun j hj => ?_
       rw [← mul_nsmul', ← add_nsmul]
       congr 1
-      have hsw := shift_window scalars[j]!.val ((nW - 1 - t) * 8)
+      have hsw := shift_window vals[j]! ((nW - 1 - t) * 8)
       rw [show ((nW - 1 - t) * 8 + 8) = (nW - t) * 8 from by omega] at hsw
       rw [windowVal, show (nW - (t + 1)) * 8 = (nW - 1 - t) * 8 from by omega]
       omega
@@ -469,7 +471,7 @@ private theorem msmAcc_spec (points : Array G1) (scalars : Array Fr)
       refine ⟨valid_add ihv hwv, ?_⟩
       rw [toPoint_add ihv hwv, ihsum, hwsum]
       have hzero : ∑ j ∈ range n,
-          (scalars[j]!.val >>> ((nW - 0) * 8)) • toPoint points[j]! = 0 :=
+          (vals[j]! >>> ((nW - 0) * 8)) • toPoint points[j]! = 0 :=
         Finset.sum_eq_zero fun j hj => by
           rw [Nat.shiftRight_eq_zero _ _ (by
             rw [Nat.sub_zero]
@@ -477,12 +479,18 @@ private theorem msmAcc_spec (points : Array G1) (scalars : Array Fr)
       rw [hzero, zero_add]
       refine Finset.sum_congr rfl fun j hj => ?_
       congr 1
-      have hsw := shift_window scalars[j]!.val ((nW - 1 - 0) * 8)
-      have h0 : scalars[j]!.val >>> ((nW - 1 - 0) * 8 + 8) = 0 := by
+      have hsw := shift_window vals[j]! ((nW - 1 - 0) * 8)
+      have h0 : vals[j]! >>> ((nW - 1 - 0) * 8 + 8) = 0 := by
         rw [show (nW - 1 - 0) * 8 + 8 = nW * 8 from by omega]
         exact Nat.shiftRight_eq_zero _ _ (hbound j (Finset.mem_range.mp hj))
       rw [windowVal, show (nW - (0 + 1)) * 8 = (nW - 1 - 0) * 8 from by omega]
       omega
+
+/-- Reading the values first gives the value of each scalar in range. -/
+private theorem map_val_getElem! (scalars : Array Fr) (j : Nat) (hj : j < scalars.size) :
+    (scalars.map Fr.val)[j]! = (scalars[j]!).val := by
+  rw [getElem!_pos (scalars.map Fr.val) j (by simpa using hj), getElem!_pos scalars j hj,
+    Array.getElem_map]
 
 /-- **Correctness of the spec's Pippenger MSM**: for valid points,
 `msm` computes `Σ_j [scalars[j]] points[j]` in the curve group. -/
@@ -496,39 +504,39 @@ theorem toPoint_msm (points : Array G1) (scalars : Array Fr)
             (scalars[j]!).val • toPoint points[j]! := by
   rw [msm_eq_msmModel]
   unfold msmModel
-  by_cases h0 : (if points.size ≤ scalars.size then points.size
-      else scalars.size) = 0
+  dsimp only
+  have hsize : (if points.size ≤ scalars.size then points.size else scalars.size)
+      ≤ scalars.size := by split <;> omega
+  -- Over the first `n` positions, the values are the values of the scalars.
+  rw [Finset.sum_congr rfl fun j hj => by
+    rw [← map_val_getElem! scalars j (by have := Finset.mem_range.mp hj; omega)]]
+  generalize (if points.size ≤ scalars.size then points.size else scalars.size) = n at hval ⊢
+  generalize scalars.map Fr.val = vals
+  by_cases h0 : n = 0
   · rw [ite_eq_left h0, h0]
     exact ⟨valid_zero, by rw [toPoint_zero, Finset.range_zero,
       Finset.sum_empty]⟩
   · rw [ite_eq_right h0]
-    by_cases h1 : msmMaxBits scalars (if points.size ≤ scalars.size
-        then points.size else scalars.size) = 0
+    by_cases h1 : msmMaxBits vals n = 0
     · rw [ite_eq_left h1]
       refine ⟨valid_zero, ?_⟩
       rw [toPoint_zero]
       refine (Finset.sum_eq_zero fun j hj => ?_).symm
-      have hb := msmMaxBits_bound scalars _ j (Finset.mem_range.mp hj)
+      have hb := msmMaxBits_bound vals _ j (Finset.mem_range.mp hj)
       rw [h1, pow_zero] at hb
-      rw [show (scalars[j]!).val = 0 from by omega, zero_nsmul]
+      rw [show vals[j]! = 0 from by omega, zero_nsmul]
     · rw [ite_eq_right h1]
-      have hbound : ∀ j, j < (if points.size ≤ scalars.size
-          then points.size else scalars.size) →
-          scalars[j]!.val < 2 ^ (((msmMaxBits scalars
-            (if points.size ≤ scalars.size then points.size
-              else scalars.size) + 8 - 1) / 8) * 8) := by
+      have hbound : ∀ j, j < n →
+          vals[j]! < 2 ^ (((msmMaxBits vals n + 8 - 1) / 8) * 8) := by
         intro j hj
-        refine Nat.lt_of_lt_of_le (msmMaxBits_bound scalars _ j hj) ?_
+        refine Nat.lt_of_lt_of_le (msmMaxBits_bound vals _ j hj) ?_
         exact Nat.pow_le_pow_right (by omega) (by omega)
-      obtain ⟨hv, hsum⟩ := msmAcc_spec points scalars _ _ hval hbound _
+      obtain ⟨hv, hsum⟩ := msmAcc_spec points vals _ _ hval hbound _
         (Nat.le_refl _)
       refine ⟨hv, ?_⟩
-      rw [show toPoint ((List.range' 0 ((msmMaxBits scalars
-          (if points.size ≤ scalars.size then points.size
-            else scalars.size) + 8 - 1) / 8)).foldl
-          (msmWindowStep points scalars _ _) zero) = toPoint (msmAcc points
-            scalars _ ((msmMaxBits scalars (if points.size ≤ scalars.size
-              then points.size else scalars.size) + 8 - 1) / 8) _)
+      rw [show toPoint ((List.range' 0 ((msmMaxBits vals n + 8 - 1) / 8)).foldl
+          (msmWindowStep points vals _ _) zero) = toPoint (msmAcc points
+            vals _ ((msmMaxBits vals n + 8 - 1) / 8) _)
         from rfl, hsum]
       refine Finset.sum_congr rfl fun j hj => ?_
       rw [Nat.sub_self, Nat.zero_mul, Nat.shiftRight_zero]

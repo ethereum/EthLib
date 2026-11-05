@@ -164,26 +164,26 @@ Pippenger's algorithm splits each scalar into 8-bit windows.
 Each window's sum needs only the points and the scalars, so each one runs as its own task.
 -/
 
-/-- Window `k` of a scalar: bits `[8k, 8k + 8)` of its value. -/
-def windowVal (s : Fr) (k : Nat) : Nat := (s.val >>> (k * 8)) &&& (1 <<< 8 - 1)
+/-- Window `k` of the value of a scalar: its bits `[8k, 8k + 8)`. -/
+def windowVal (s : Nat) (k : Nat) : Nat := (s >>> (k * 8)) &&& (1 <<< 8 - 1)
 
-/-- The largest bit length among the first `n` scalars.
+/-- The largest bit length among the values of the first `n` scalars.
 
 Windows above it are all zero, so they are skipped. -/
-def msmMaxBits (scalars : Array Fr) (n : Nat) : Nat :=
+def msmMaxBits (vals : Array Nat) (n : Nat) : Nat :=
   (List.range' 0 n).foldl (fun m j =>
-    if scalars[j]!.val ≠ 0 then
-      if scalars[j]!.val.log2 + 1 > m then scalars[j]!.val.log2 + 1 else m
+    if vals[j]! ≠ 0 then
+      if vals[j]!.log2 + 1 > m then vals[j]!.log2 + 1 else m
     else m) 0
 
 /-- The buckets of window `k`: bucket `v` sums the points whose digit `k` is `v`.
 
 Bucket 0 stays empty, since those points contribute nothing. -/
-def msmBuckets (points : Array G1) (scalars : Array Fr) (n k : Nat) : Array G1 :=
+def msmBuckets (points : Array G1) (vals : Array Nat) (n k : Nat) : Array G1 :=
   (List.range' 0 n).foldl (fun bs j =>
-    if windowVal scalars[j]! k ≠ 0 then
-      bs.set! (windowVal scalars[j]! k)
-        (add bs[windowVal scalars[j]! k]! points[j]!)
+    if windowVal vals[j]! k ≠ 0 then
+      bs.set! (windowVal vals[j]! k)
+        (add bs[windowVal vals[j]! k]! points[j]!)
     else bs) (Array.replicate (1 <<< 8) zero)
 
 /-- `sum_v v * B_v`, by the running-sum trick, walking `v` from 255 down to 1.
@@ -214,10 +214,12 @@ The window sums are independent, so each runs as its own task.
 The fold then combines them in order, from the top window down. -/
 def msm (points : Array G1) (scalars : Array Fr) : G1 :=
   let n := if points.size ≤ scalars.size then points.size else scalars.size
+  -- `Fr.val` leaves the Montgomery form, so each scalar is read once, not once per window.
+  let vals := scalars.map Fr.val
   if n = 0 then zero
-  else if msmMaxBits scalars n = 0 then zero
+  else if msmMaxBits vals n = 0 then zero
   else
-    let nW := (msmMaxBits scalars n + 8 - 1) / 8
+    let nW := (msmMaxBits vals n + 8 - 1) / 8
     let windows := List.range' 0 nW
     -- The windows are spawned from a task of their own.
     -- Lean's pool starts a new worker only when no worker is idle.
@@ -226,7 +228,7 @@ def msm (points : Array G1) (scalars : Array Fr) : G1 :=
     (Task.spawn fun _ =>
       -- Spawn every window first, then wait for them in fold order.
       let sums := windows.map fun kk => Task.spawn fun _ =>
-        (msmRunning (msmBuckets points scalars n (nW - 1 - kk))).1
+        (msmRunning (msmBuckets points vals n (nW - 1 - kk))).1
       (windows.zip sums).foldl (fun acc w => msmCombine nW acc w.1 w.2.get) zero).get
 
 end G1
