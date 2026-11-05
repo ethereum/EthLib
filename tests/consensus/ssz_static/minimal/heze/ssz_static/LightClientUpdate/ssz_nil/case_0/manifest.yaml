@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: ssz_static
+handler: LightClientUpdate
+suite: ssz_nil
+case: case_0

@@ -1,0 +1,6 @@
+preset: mainnet
+fork: heze
+runner: ssz_static
+handler: LightClientFinalityUpdate
+suite: ssz_random
+case: case_0

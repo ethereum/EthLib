@@ -13,12 +13,12 @@ from .test_data_column import replacements
 
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "light_client"
 
-# The forks whose light client containers EthLib defines; those of Gloas are not yet.
-SPECIFIED = ["altair", "bellatrix", "capella", "deneb", "electra", "fulu"]
+# The forks that have a light client.
+SPECIFIED = ["altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas", "heze"]
 
 # The fork whose light client containers each fork uses.
 SHAPE = {"altair": "altair", "bellatrix": "altair", "capella": "capella", "deneb": "deneb",
-         "electra": "electra", "fulu": "electra"}
+         "electra": "electra", "fulu": "electra", "gloas": "gloas", "heze": "gloas"}
 
 _YAML = YAML(typ="safe")
 
@@ -31,8 +31,8 @@ def store_fork(version_fork: str, fork: str) -> str:
 
 
 def runs_sync(fork: str, name: str) -> bool:
-    """Whether EthLib runs a sync case: every case from Altair to Fulu that reaches no Gloas data."""
-    return fork in SPECIFIED and "gloas" not in name
+    """Whether EthLib runs a sync case: every case from Altair."""
+    return fork in SPECIFIED
 
 
 def _read(case: Path, name: str) -> bytes:
@@ -44,9 +44,9 @@ def _hex(text: str) -> bytes:
 
 
 def fork_digests(case_config: dict, preset: str, root: bytes, config: dict | None) -> dict:
-    """The fork of each digest that a fork takes over its epochs, from Altair to Fulu."""
+    """The fork of each digest that a fork takes over its epochs, from Altair."""
     # From Fulu the digest also changes at each blob schedule entry.
-    starts = {fork: case_config[f"{fork.upper()}_FORK_EPOCH"] for fork in SPECIFIED + ["gloas"]}
+    starts = {fork: case_config[f"{fork.upper()}_FORK_EPOCH"] for fork in SPECIFIED}
     digests = {}
     for fork in SPECIFIED:
         first = starts[fork]
@@ -145,8 +145,11 @@ def test_ranking_case(preset, fork, case):
 
 
 def test_every_fork_has_cases():
-    # Each fork has its four single-fork sync cases, and the earlier ones add upgrade cases.
-    counts = {"altair": 7, "bellatrix": 10, "capella": 8, "deneb": 6, "electra": 4, "fulu": 4}
-    for handler, per_fork in (("sync", counts), ("update_ranking", dict.fromkeys(SPECIFIED, 1))):
+    # Each fork to Gloas has its four single-fork sync cases, and the earlier ones add upgrades.
+    # Heze has no case of its own.
+    counts = {"altair": 8, "bellatrix": 11, "capella": 10, "deneb": 8, "electra": 5, "fulu": 6,
+              "gloas": 4, "heze": 0}
+    rankings = {**dict.fromkeys(SPECIFIED, 1), "heze": 0}
+    for handler, per_fork in (("sync", counts), ("update_ranking", rankings)):
         forks = [param.values[1] for param in _cases(handler)]
         assert {fork: forks.count(fork) for fork in SPECIFIED} == per_fork

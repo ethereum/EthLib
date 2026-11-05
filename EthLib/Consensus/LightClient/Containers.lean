@@ -26,9 +26,15 @@ Electra adds fields to the state, so its tree is one level deeper.
 
 So from Electra to Fulu the branches into the state are one node longer.
 
-The containers and the indices here hold from Altair to Fulu.
+From Gloas, a block body holds a bid instead of the execution payload.
 
-Gloas deepens the state again, and its light client is not yet specified.
+A header then keeps only the hash of the parent execution block, which the bid names.
+
+Its branch proves that hash against the body root.
+
+Gloas makes the state a progressive container, so the branches into the state change length.
+
+Heze keeps the light client of Gloas, and its state and body keep these indices.
 -/
 
 @[expose] public section
@@ -43,38 +49,77 @@ def stateGindex (preset : Preset) (fork : Fork) (field : String) (below : List P
   SszType.getGeneralizedIndex (BeaconState preset fork)
     (.position ((BeaconState.names fork).idxOf field) :: below)
 
-/-- The generalized index of the finalized checkpoint root, in a state from Altair to Fulu. -/
-def finalizedRootGindex (fork : Fork) : Nat := if .pectra ≤ fork then 169 else 105
+/-- The generalized index of the finalized checkpoint root, in a state from Altair.
 
-/-- The generalized index of the current sync committee, in a state from Altair to Fulu. -/
-def currentSyncCommitteeGindex (fork : Fork) : Nat := if .pectra ≤ fork then 86 else 54
+The index is that of Altair, of Electra from Electra, and of Gloas from Gloas. -/
+def finalizedRootGindex (fork : Fork) : Nat :=
+  if .glamsterdam ≤ fork then 735 else if .pectra ≤ fork then 169 else 105
 
-/-- The generalized index of the next sync committee, in a state from Altair to Fulu. -/
-def nextSyncCommitteeGindex (fork : Fork) : Nat := if .pectra ≤ fork then 87 else 55
+/-- The generalized index of the current sync committee, in a state from Altair.
 
-/-- From Capella: the generalized index of the execution payload, in the tree of a block body. -/
+The index is that of Altair, of Electra from Electra, and of Gloas from Gloas. -/
+def currentSyncCommitteeGindex (fork : Fork) : Nat :=
+  if .glamsterdam ≤ fork then 2945 else if .pectra ≤ fork then 86 else 54
+
+/-- The generalized index of the next sync committee, in a state from Altair.
+
+The index is that of Altair, of Electra from Electra, and of Gloas from Gloas. -/
+def nextSyncCommitteeGindex (fork : Fork) : Nat :=
+  if .glamsterdam ≤ fork then 2946 else if .pectra ≤ fork then 87 else 55
+
+/-- From Capella to Fulu: the generalized index of the execution payload, in a block body. -/
 def EXECUTION_PAYLOAD_GINDEX : Nat := 25
+
+/-- The generalized index of the block hash, in the execution payload of a Capella body. -/
+def EXECUTION_BLOCK_HASH_GINDEX : Nat := 412
+
+/-- The generalized index of the block hash, in the execution payload of a Deneb body. -/
+def EXECUTION_BLOCK_HASH_GINDEX_DENEB : Nat := 812
+
+/-- The generalized index of the parent block hash, in the bid of a Gloas body. -/
+def EXECUTION_BLOCK_HASH_GINDEX_GLOAS : Nat := 2856
+
+/-- The generalized index that the execution branch of a header proves, in a block body.
+
+From Capella to Fulu it is the execution payload, and from Gloas the parent block hash. -/
+def executionBranchGindex (fork : Fork) : Nat :=
+  if .glamsterdam ≤ fork then EXECUTION_BLOCK_HASH_GINDEX_GLOAS else EXECUTION_PAYLOAD_GINDEX
+
+/-- The generalized index of the block hash, in an execution payload header from Capella.
+
+Deneb adds two fields to the header, so its tree is one level deeper. -/
+def payloadHeaderBlockHashGindex (fork : Fork) : Nat := if .dencun ≤ fork then 44 else 28
 
 /-- A block header, as a light client sees it.
 
-From Capella it also holds the execution payload header and its branch to the body root. -/
+From Capella to Fulu it also holds the execution payload header.
+
+From Gloas it holds the parent execution block hash instead.
+
+From Capella its branch proves that execution data against the body root. -/
 structure LightClientHeader (preset : Preset) (fork : Fork) where
   /-- The header of the beacon block. -/
   beacon : BeaconBlockHeader
-  /-- From Capella: the header of the execution payload of the block. -/
-  execution : Since .shapella fork (ExecutionPayloadHeader preset fork)
-  /-- From Capella: the branch from the execution payload up to the body root. -/
-  executionBranch : Since .shapella fork (Vector Bytes32 (Nat.log2 EXECUTION_PAYLOAD_GINDEX))
+  /-- From Capella to Fulu: the header of the execution payload of the block. -/
+  execution : During .shapella .glamsterdam fork (ExecutionPayloadHeader preset fork)
+  /-- From Gloas: the hash of the parent execution block, which the bid of the block names. -/
+  executionBlockHash : Since .glamsterdam fork Hash32
+  /-- From Capella: the branch from the execution data up to the body root. -/
+  executionBranch : Since .shapella fork (Vector Bytes32 (Nat.log2 (executionBranchGindex fork)))
 
 namespace LightClientHeader
 
 /-- The names of the fields of a header at a fork, in their order. -/
 def names (fork : Fork) : List String :=
-  ["beacon"] ++ sinceNames .shapella fork ["execution", "execution_branch"]
+  ["beacon"] ++ duringNames .shapella .glamsterdam fork ["execution"] ++
+    sinceNames .glamsterdam fork ["execution_block_hash"] ++
+    sinceNames .shapella fork ["execution_branch"]
 
 instance {preset : Preset} {fork : Fork} : SszType (LightClientHeader preset fork) :=
-  .container (names fork) (fun h => (h.beacon, h.execution, h.executionBranch))
-    (fun (beacon, execution, executionBranch) => ⟨beacon, execution, executionBranch⟩)
+  .container (names fork)
+    (fun h => (h.beacon, h.execution, h.executionBlockHash, h.executionBranch))
+    (fun (beacon, execution, executionBlockHash, executionBranch) =>
+      ⟨beacon, execution, executionBlockHash, executionBranch⟩)
 
 end LightClientHeader
 

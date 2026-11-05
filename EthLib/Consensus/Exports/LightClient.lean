@@ -7,7 +7,7 @@ public import EthLib.Consensus.LightClient.Upgrade
 /-!
 # `Exports.LightClient`
 
-C-ABI exports of the light client sync protocol, from Altair to Fulu.
+C-ABI exports of the light client sync protocol, from Altair.
 
 A bootstrap, the updates and the blocks arrive in their SSZ encoding.
 
@@ -44,7 +44,7 @@ open Serialization.Ssz.Exports (runSsz)
 def runLightClient {α : Type} (act : Except LightClientError α) : Result α :=
   act.mapError fun e => (e.code, s!"light client: {reprStr e}")
 
-/-- The preset and a fork of the light client, from Altair to Fulu. -/
+/-- The preset and a fork of the light client, from Altair. -/
 def lightClientPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
   let preset ← presetOf (← nameOf name)
   let fork ← forkOf fork
@@ -115,7 +115,7 @@ def lightClientSyncExport (name fork bootstrapFork replacements trusted genesisV
   let bootstrap ← decodeAs (LightClientBootstrap preset bootstrapFork) bootstrap
   let mut store : (fork : Fork) × LightClientStore preset fork :=
     ⟨fork, ← runLightClient
-      (initializeLightClientStore config trusted (bootstrap.upgrade fork earlier))⟩
+      (do initializeLightClientStore config trusted (← bootstrap.upgrade config fork earlier))⟩
   let mut out := ByteArray.empty
   for (kind, slot, forkName, data) in ← readSteps (steps.size + 1) steps 0 do
     let ⟨storeFork, current⟩ := store
@@ -123,13 +123,15 @@ def lightClientSyncExport (name fork bootstrapFork replacements trusted genesisV
     | 0 =>
       let ⟨updateFork, earlier⟩ ← dataFork forkName storeFork
       let update ← decodeAs (LightClientUpdate preset updateFork) data
-      store := ⟨storeFork, ← runLightClient (processLightClientUpdate config SignatureChecks.bls
-        current (update.upgrade storeFork earlier) slot genesisValidatorsRoot)⟩
+      store := ⟨storeFork, ← runLightClient do
+        processLightClientUpdate config SignatureChecks.bls current
+          (← update.upgrade config storeFork earlier) slot genesisValidatorsRoot⟩
     | 1 => store := ⟨storeFork, ← runLightClient (processLightClientStoreForceUpdate current slot)⟩
     | 2 =>
       let next ← forkOf forkName
       runLightClient (LightClientError.requireFork next)
-      if later : storeFork ≤ next then store := ⟨next, current.upgrade next later⟩
+      if later : storeFork ≤ next then
+        store := ⟨next, ← runLightClient (current.upgrade config next later)⟩
       else throw (0, s!"a store of {storeFork.name} cannot go back to {next.name}")
     | _ => throw (0, s!"no step of kind {kind}")
     out := out ++ (← headerRecord config store.2.finalizedHeader) ++

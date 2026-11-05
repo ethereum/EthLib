@@ -1,0 +1,6 @@
+preset: mainnet
+fork: gloas
+runner: light_client
+handler: single_merkle_proof
+suite: BeaconState
+case: finality_root_merkle_proof

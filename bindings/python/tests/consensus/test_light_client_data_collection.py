@@ -18,8 +18,8 @@ BEACON = 112
 
 
 def runs_data_collection(fork: str, name: str) -> bool:
-    """Whether EthLib runs a data collection case: from Altair to Fulu, with no Gloas block."""
-    return fork in SPECIFIED and "gloas" not in name
+    """Whether EthLib runs a data collection case: every case from Altair."""
+    return fork in SPECIFIED
 
 
 def _read(case: Path, name: str) -> bytes:
@@ -37,18 +37,22 @@ class Shapes:
         size = consensus.preset(preset)["SYNC_COMMITTEE_SIZE"]
         self.committee = size * 48 + 48
         self.aggregate = size // 8 + 96
-        # From Capella a header has variable size; from Electra the state is one level deeper.
-        self.variable = SPECIFIED.index(fork) >= SPECIFIED.index("capella")
-        electra = SPECIFIED.index(fork) >= SPECIFIED.index("electra")
-        self.committee_branch = 32 * (6 if electra else 5)
-        self.finality_branch = 32 * (7 if electra else 6)
+        # From Capella to Fulu a header has variable size; from Electra the state is deeper.
+        # From Gloas a header is fixed again: the beacon header, a hash and a branch of 11 nodes.
+        at = SPECIFIED.index(fork)
+        gloas = at >= SPECIFIED.index("gloas")
+        electra = at >= SPECIFIED.index("electra")
+        self.variable = SPECIFIED.index("capella") <= at and not gloas
+        self.header = BEACON + 32 + 11 * 32 if gloas else BEACON
+        self.committee_branch = 32 * (11 if gloas else 6 if electra else 5)
+        self.finality_branch = 32 * (9 if gloas else 7 if electra else 6)
         self.slot = 8
 
     def split(self, data: bytes, fields: list) -> list:
         """The bytes of each field of a container; a field named `header` is a header."""
         sizes = [None if field == "header" else getattr(self, field) for field in fields]
         if not self.variable:
-            sizes = [BEACON if size is None else size for size in sizes]
+            sizes = [self.header if size is None else size for size in sizes]
         parts, offsets, at = [], [], 0
         for size in sizes:
             if size is None:

@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: ssz_static
+handler: LightClientFinalityUpdate
+suite: ssz_random_chaos
+case: case_0

@@ -43,7 +43,6 @@ NOT_YET = {
     "fork_choice": "fork choice (consensus track C43 to C50)",
     "fast_confirmation": "fast confirmation rule (consensus track, decision 9)",
     "sync": "optimistic sync (consensus track C48)",
-    "light_client": "the light client cases that reach Gloas data (G54, G55)",
     "networking": "gossip validation (consensus track C63 and C64)",
     "ssz_static": "the remaining beacon containers (consensus track C2, C6 to C12)",
 }
@@ -65,7 +64,6 @@ _GLOAS = {
     "operations/withdrawals": "the Gloas withdrawals (G49)",
     "fork_choice": "the Gloas block and payload handlers (G70)",
     "fast_confirmation": "the Gloas fast confirmation (G73)",
-    "light_client": "the Gloas light client (G54, G55)",
     "networking": "the Gloas data columns and unchanged topics (G77)",
     "networking/gossip_execution_payload_bid": "bids and proposer preferences (G74)",
     "networking/gossip_proposer_preferences": "bids and proposer preferences (G74)",
@@ -75,7 +73,7 @@ _GLOAS = {
     "networking/gossip_beacon_attestation": "Gloas blocks and attestations (G76)",
     "networking/gossip_beacon_aggregate_and_proof": "Gloas blocks and attestations (G76)",
     "networking/gossip_partial_data_column_sidecar": "Gloas partial data columns (G78)",
-    "ssz_static": "the remaining Gloas containers (G36 to G41, G54, G65)",
+    "ssz_static": "the remaining Gloas containers (G36 to G41, G65)",
 }
 _HEZE = {
     "epoch_processing": "Heze blocks and epochs (G84)",
@@ -87,7 +85,6 @@ _HEZE = {
     "transition": "the Gloas state transition (G52) and Heze blocks and epochs (G84)",
     "fork_choice": "inclusion lists in the Heze fork choice (G86)",
     "fast_confirmation": "the Gloas fast confirmation (G73) on the Heze fork choice (G86)",
-    "light_client": "the Gloas light client (G54) on the Heze state (G81)",
     "networking": "the Heze gossip and req/resp rules (G87)",
     "ssz_static": "the Heze containers (G80, G81)",
 }
@@ -559,13 +556,12 @@ RUNNERS = {
 
 # The runners that stop before a fork, with the first fork that they do not run.
 # Processing a transaction is not yet specified from Amsterdam on.
-# The light client proofs and the partial column checks read the forms of Fulu.
+# The partial column checks read the forms of Fulu.
 _STOPS = {
     "state_test": "BPO2ToAmsterdamAtTime15k",
     "blockchain_test": "BPO2ToAmsterdamAtTime15k",
     "blockchain_test_engine": "BPO2ToAmsterdamAtTime15k",
     "blockchain_test_engine_x": "BPO2ToAmsterdamAtTime15k",
-    "light_client/single_merkle_proof": "gloas",
     "networking/gossip_partial_data_column_sidecar": "gloas",
 }
 

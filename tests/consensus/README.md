@@ -51,21 +51,21 @@ A case gives a body, a generalized index, the node at that index and its branch.
 Each case keeps its files `object.ssz_snappy` and `proof.yaml` under its path in the archive.
 `bindings/python/tests/consensus/test_merkle_proof.py` builds the node and the branch in Lean, and compares them with the case.
 
-The directory `light_client/` holds the `single_merkle_proof` cases of the light client, from Altair to Fulu, in both archives.
-A case gives a beacon state or a block body, and the node of a sync committee, the finalized root or the execution payload.
+The directory `light_client/` holds the `single_merkle_proof` cases of the light client, from Altair to Heze, in both archives.
+A case gives a beacon state or a block body, and the node of a sync committee, the finalized root or the execution data.
+From Capella to Fulu that data is the execution payload, and from Gloas the parent block hash of the bid.
 It also gives the generalized index of that node and its branch.
 Each case keeps its files `object.ssz_snappy` and `proof.yaml` under its path in the archive.
-The release also has cases for Gloas and Heze, and the directory leaves them out until EthLib specifies those forks.
 `bindings/python/tests/consensus/test_light_client_proofs.py` builds the node and the branch in Lean, and compares them with the case.
 It also climbs the branch with the SHA-256 of `hashlib`, to check that it reaches the root of the value.
 Every week, the same test also runs every case of both archives and checks that the vendored files are copies.
 
-The same directory holds the minimal `sync` and `update_ranking` cases of the light client, from Altair to Fulu.
+The same directory holds the minimal `sync` and `update_ranking` cases of the light client, from Altair to Gloas.
 A `sync` case gives a trusted block root, a bootstrap and a list of steps.
 A step processes an update or forces one, then gives the slot and the roots of the finalized and the optimistic header.
 A `sync` case also gives its configuration, which replaces values of the minimal configuration.
-The directory keeps the four `sync` cases of each fork that stay at one fork.
-The other cases upgrade the bootstrap or the store to a later fork, which EthLib does not specify yet.
+The directory keeps every `sync` case: the four of each fork that stay at one fork, and those that upgrade to a later fork.
+An upgrade case brings the bootstrap, the updates or the store to the form of a later fork first.
 An `update_ranking` case lists updates from the best to the worst.
 `bindings/python/tests/consensus/test_light_client_sync.py` runs both kinds of cases in Lean.
 
