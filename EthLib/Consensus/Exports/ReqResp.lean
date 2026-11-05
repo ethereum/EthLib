@@ -22,19 +22,13 @@ public section
 namespace EthLib.Consensus.Exports
 
 open Lean Base Serialization.Ssz
-open EthLib.Exports (Result forkOfName)
+open EthLib.Exports (Result forkUpTo)
 open Serialization.Ssz.Exports (runSsz)
-
-/-- A fork whose request and response protocols are specified here. -/
-def reqRespForkOf (name : ByteArray) : Result Fork := do
-  let fork ← forkOfName name
-  if .glamsterdam ≤ fork then throw (0, s!"fork {fork.name} not yet specified")
-  return fork
 
 /-- The protocol IDs of a fork, as a JSON list of strings. -/
 @[export eth_consensus_reqresp_protocol_ids]
 def reqRespProtocolIdsExport (fork : ByteArray) : Result ByteArray := do
-  let fork ← reqRespForkOf fork
+  let fork ← forkUpTo .bpo5 fork
   return jsonBytes (toJson ((protocolIds fork).map ProtocolId.toString))
 
 /-- The protocol name and the version that an ID names, as a JSON pair. -/
@@ -58,7 +52,7 @@ def reqRespMessageOf (config : Config) (fork : Fork) : String → Option Contain
 @[export eth_consensus_reqresp_message]
 def reqRespMessageExport (name fork type data : ByteArray) : Result ByteArray := do
   let config ← configOf (← nameOf name)
-  let fork ← reqRespForkOf fork
+  let fork ← forkUpTo .bpo5 fork
   let type ← nameOf type
   let some message := reqRespMessageOf config fork type
     | throw (0, s!"no message {type} at {fork.name}")
