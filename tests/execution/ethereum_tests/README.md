@@ -1,10 +1,10 @@
-# Transaction tests of ethereum/tests
+# Transaction tests and the mainnet genesis of ethereum/tests
 
-The files here are the transaction tests of the legacy test repository.
+The files here are the transaction tests of the legacy test repository, and its test of the mainnet genesis block.
 
 - Repository: [`ethereum/tests`](https://github.com/ethereum/tests)
 - Commit: `c67e485ff8b5be9abc8ad15345ec21aa22e290d9`
-- Files: every file of `TransactionTests/` but two, copied without change to the same path
+- Files: every file of `TransactionTests/` but two, and `BasicTests/genesishashestest.json`, copied without change to the same path
 - Results: 2,938, over 14 networks from Frontier to Prague
 - Authors: the Ethereum Foundation
 - Licence: MIT, under the notice below
@@ -17,6 +17,9 @@ The outcome is the hash, the sender and the intrinsic gas of the transaction, or
 
 The test `bindings/python/tests/transactions/test_ethereum_tests.py` reads these files and never rewrites them.
 `SHA256SUMS` pins each file.
+
+`BasicTests/genesishashestest.json` gives the RLP form, the state root and the hash of the mainnet genesis block.
+The test `bindings/python/tests/blocks/test_genesis.py` builds that block from the allocation in `tests/execution/genesis` and compares all three.
 
 ## Where EthLib disagrees
 

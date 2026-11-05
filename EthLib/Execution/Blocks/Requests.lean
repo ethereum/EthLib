@@ -148,4 +148,8 @@ def requestsHash (requests : List ByteArray) : ByteArray :=
   Cryptography.Hash.sha256
     ((requests.filter (·.size > 1)).foldl (fun acc r => acc ++ Cryptography.Hash.sha256 r) .empty)
 
+/-- The requests hash of request lists, as the 32 bytes of a header field. -/
+def requestsCommitment (requests : List ByteArray) : Hash32 :=
+  Vector.ofFn fun i => (requestsHash requests)[i.val]!
+
 end EthLib.Execution.Blocks

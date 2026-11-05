@@ -85,6 +85,13 @@ eth_state_transition(
 );
 
 extern lean_object*
+eth_genesis_block(
+  lean_object* fork,
+  lean_object* params,
+  lean_object* state
+);
+
+extern lean_object*
 eth_block_validate_header(
   lean_object* parent_fork,
   lean_object* fork,
@@ -401,5 +408,25 @@ py_state_transition(
       mk_bytearray((const uint8_t*) state, (size_t) state_len),
       mk_bytearray((const uint8_t*) recent, (size_t) recent_len), fork,
       mk_bytearray((const uint8_t*) block, (size_t) block_len), (uint8_t) check_seal),
+    BLOCK_ERROR);
+}
+
+PyObject*
+py_genesis_block(
+  PyObject* self,
+  PyObject* args
+) {
+  const char *params, *state;
+  Py_ssize_t params_len, state_len;
+  PyObject* fork_obj;
+  if (!PyArg_ParseTuple(args, "Oy#y#", &fork_obj, &params, &params_len, &state, &state_len)) {
+    return NULL;
+  }
+  lean_object* fork = parse_fork(fork_obj);
+  if (!fork) return NULL;
+  return except_into_pybytes(
+    eth_genesis_block(
+      fork, mk_bytearray((const uint8_t*) params, (size_t) params_len),
+      mk_bytearray((const uint8_t*) state, (size_t) state_len)),
     BLOCK_ERROR);
 }

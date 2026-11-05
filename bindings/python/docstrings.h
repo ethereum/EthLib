@@ -641,6 +641,9 @@
 #define DOC_state_transition \
   "Run the state transition of a block on a chain, and give the state after it."
 
+#define DOC_genesis_block \
+  "The genesis block at a fork, in RLP form."
+
 #define DOC_precompile_run \
   "Run the precompile at the address on the call data, with the gas given, at the fork named."
 
