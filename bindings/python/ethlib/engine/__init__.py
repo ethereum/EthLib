@@ -2,12 +2,11 @@
 
 import json
 
-from ..errors import EngineError
-from ..serialization import rlp
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ..cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import EngineError
+from ethlib.serialization import rlp
 
 
 def new_payload(config: dict, method: str, params: list) -> dict:

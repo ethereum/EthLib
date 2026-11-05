@@ -8,6 +8,8 @@ The messages are built here as RLP, from caps/eth.md, EIP-7642 and EIP-7975.
 
 import pytest
 
+from blocks.test_blocks import FORK_OF_NETWORK
+from blocks.test_receipts import CASES, _case_id
 from ethlib.execution import trie
 from ethlib.execution.network import (
     GET_RECEIPTS,
@@ -18,9 +20,6 @@ from ethlib.execution.network import (
     receipts_match,
 )
 from ethlib.serialization import rlp
-
-from blocks.test_blocks import FORK_OF_NETWORK
-from blocks.test_receipts import CASES, _case_id
 
 
 def _p(n: int) -> bytes:

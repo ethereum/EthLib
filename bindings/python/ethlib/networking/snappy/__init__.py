@@ -1,10 +1,9 @@
 """Snappy blocks and framed streams, as the consensus layer uses them."""
 
-from ...errors import SnappyError
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ...cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import SnappyError as SnappyError
 
 
 def decompress(block: bytes) -> bytes:

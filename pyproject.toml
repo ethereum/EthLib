@@ -56,6 +56,11 @@ markers = [
 
 [tool.ruff]
 line-length = 100
+# The modules of these directories are first-party, as for the type checker.
+src = ["bindings/python", "bindings/python/tests", "scripts"]
+# The scripts and the suites run on Python 3.12, and the package supports Python 3.10.
+target-version = "py312"
+per-file-target-version = { "bindings/python/ethlib/**" = "py310", "setup.py" = "py310" }
 # `lake exe gen-bindings` writes the stub, and its check compares it byte for byte.
 # tests/consensus/pq_keys/SHA256SUMS pins the key generator by its digest.
 extend-exclude = [
@@ -73,8 +78,8 @@ ignore = [
   "D205", "D203", "D212", "D415", "C901", "A005", "C420",
   # Findings in the code today, each removed from this list by the change that fixes it.
   "A004", "B007", "B008", "B023", "B905", "C408", "D101", "D102", "D103", "D104", "D107",
-  "D208", "D209", "D213", "D301", "D402", "E501", "E702", "E731", "E741", "F401", "I001",
-  "N802", "N803", "N812", "N813", "N814", "TID252", "UP007", "UP031", "UP033",
+  "D208", "D209", "D213", "D301", "D402", "E501", "E702", "E731", "E741",
+  "N802", "N803", "N812", "N813", "N814", "UP007", "UP031", "UP033",
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -86,6 +91,8 @@ ban-relative-imports = "all"
 [tool.ruff.lint.isort]
 combine-as-imports = true
 known-first-party = ["ethlib"]
+# The benchmarks import python-snappy and ssz-specs, whose names two suites share.
+known-third-party = ["snappy", "ssz"]
 
 [tool.ruff.lint.per-file-ignores]
 # Each suite imports its own `fixtures` module, which shares its name with the other suites',

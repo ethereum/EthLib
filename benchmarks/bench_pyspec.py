@@ -10,10 +10,8 @@ from pathlib import Path
 
 import ckzg
 import snappy
-from eth_consensus_specs.fulu import mainnet as spec
-from eth_consensus_specs.fulu import minimal as spec_min
-
 from benchlib import Runner, load
+from eth_consensus_specs.fulu import mainnet as spec, minimal as spec_min
 
 inp = load(sys.argv[1], "inputs.json")
 R = Runner("pyspec", sys.argv[2])

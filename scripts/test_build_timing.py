@@ -2,13 +2,12 @@
 
 import json
 import os
-from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from pathlib import Path
 
 from module_times import empty_table, load_table, parse_logs, update_table
-
 
 ROOT = Path(__file__).resolve().parent.parent
 REPORT = ROOT / "scripts" / "build_timing_report.sh"

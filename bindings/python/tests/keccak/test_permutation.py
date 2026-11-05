@@ -2,11 +2,10 @@
 
 import pytest
 
+from dumper import hex_str, write_case
 from ethlib.cryptography import keccak
 
 from . import fixtures as F
-from dumper import hex_str, write_case
-
 
 HANDLER = "permutation"
 

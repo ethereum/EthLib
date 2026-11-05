@@ -15,7 +15,6 @@ from ruamel.yaml import YAML
 
 from dumper import ROOT
 
-
 # ---- Slow cases ------------------------------------------------------------
 
 # Key generation and signing run only on request.

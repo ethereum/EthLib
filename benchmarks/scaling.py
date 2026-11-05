@@ -10,8 +10,7 @@ import math
 import sys
 import time
 
-from ethlib.cryptography import _native as N
-from ethlib.cryptography import keccak, sha256
+from ethlib.cryptography import _native as N, keccak, sha256
 from ethlib.execution import trie
 from ethlib.networking import snappy
 from ethlib.serialization import rlp, ssz

@@ -10,13 +10,13 @@ EnrError is a ValueError, with the code of the Lean error.
 
 from typing import NamedTuple
 
-from ... import consensus
-from ...errors import EnrError
-from ...serialization import rlp
+from ethlib import consensus
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ...cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import EnrError
+from ethlib.serialization import rlp
 
 MAX_RECORD_SIZE = _native.ENR_MAX_RECORD_SIZE
 

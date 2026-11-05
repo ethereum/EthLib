@@ -1,6 +1,6 @@
 """The SHA-256 hash function, FIPS 180-4 §6.2."""
 
-from .._native import sha256 as native_sha256
+from ethlib.cryptography._native import sha256 as native_sha256
 
 
 def sha256(data: bytes) -> bytes:

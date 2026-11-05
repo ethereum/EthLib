@@ -9,11 +9,10 @@ A message that the decoder rejects raises ReqRespError, a ValueError with a code
 
 from typing import NamedTuple
 
-from ...errors import ReqRespError
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ...cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import ReqRespError
 
 MAX_PAYLOAD_SIZE = _native.REQRESP_MAX_PAYLOAD_SIZE
 MAX_ERROR_MESSAGE_SIZE = _native.REQRESP_MAX_ERROR_MESSAGE_SIZE

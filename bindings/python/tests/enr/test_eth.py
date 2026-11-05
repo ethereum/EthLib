@@ -8,8 +8,8 @@ The reader does not check the signature.
 import pytest
 
 from ethlib.errors import EnrError
-from ethlib.serialization import rlp
 from ethlib.networking import enr, forkid
+from ethlib.serialization import rlp
 
 SIGNATURE = bytes(64)
 

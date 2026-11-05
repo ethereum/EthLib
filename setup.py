@@ -17,9 +17,8 @@ import subprocess
 from glob import glob
 from pathlib import Path
 
-from setuptools import setup, Extension
+from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
-
 
 REPO_ROOT = Path(__file__).parent.resolve()
 BINDINGS = REPO_ROOT / "bindings" / "python"

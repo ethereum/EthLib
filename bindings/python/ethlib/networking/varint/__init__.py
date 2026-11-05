@@ -1,10 +1,9 @@
 """The unsigned protobuf varint of a 64-bit value."""
 
-from ...errors import VarintError
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ...cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import VarintError as VarintError
 
 
 def encode(value: int) -> bytes:

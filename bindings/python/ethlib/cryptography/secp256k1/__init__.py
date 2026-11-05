@@ -8,17 +8,17 @@ Arguments that are not bytes raise TypeError.
 Inputs the spec rejects raise Secp256k1Error, a ValueError with the code of the Lean error.
 """
 
-from ...errors import Secp256k1Error
-from .._native import (
-    secp256k1_verify,
+from ethlib.cryptography._native import (
+    SECP256K1_HASH_LEN as HASH_LEN,
+    SECP256K1_SIGNATURE_LEN as SIGNATURE_LEN,
+    secp256k1_address,
+    secp256k1_ecdh,
     secp256k1_is_low_s,
     secp256k1_recover,
     secp256k1_sign,
-    secp256k1_ecdh,
-    secp256k1_address,
-    SECP256K1_HASH_LEN as HASH_LEN,
-    SECP256K1_SIGNATURE_LEN as SIGNATURE_LEN,
+    secp256k1_verify,
 )
+from ethlib.errors import Secp256k1Error
 
 
 def verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool:

@@ -2,7 +2,7 @@
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ...cryptography import _native
+from ethlib.cryptography import _native
 
 _WORD = 2**256
 

@@ -4,11 +4,11 @@ These tests write no vectors.
 """
 
 import pytest
+from py_ecc.bls import G2ProofOfPossession as ref_bls
 
 from ethlib.cryptography import bls
 
 from . import fixtures as F
-from py_ecc.bls import G2ProofOfPossession as ref_bls
 
 
 def sk_bytes(sk: int) -> bytes:

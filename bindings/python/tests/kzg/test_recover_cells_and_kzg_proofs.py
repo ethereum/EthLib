@@ -4,11 +4,10 @@ import random
 
 import pytest
 
+from dumper import hex_list, write_case
 from ethlib.cryptography import kzg
 
 from . import fixtures as F
-from dumper import hex_list, write_case
-
 
 HANDLER = "recover_cells_and_kzg_proofs"
 

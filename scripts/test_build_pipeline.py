@@ -2,18 +2,17 @@
 
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
 import tarfile
 import tempfile
 import unittest
+from pathlib import Path
 
 from ruamel.yaml import YAML
 
 from module_times import parse_logs
-
 
 ROOT = Path(__file__).resolve().parent.parent
 

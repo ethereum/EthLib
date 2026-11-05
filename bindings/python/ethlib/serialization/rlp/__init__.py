@@ -2,11 +2,10 @@
 
 from typing import Union
 
-from ...errors import RlpError
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ...cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import RlpError as RlpError
 
 Item = Union[bytes, list["Item"]]
 

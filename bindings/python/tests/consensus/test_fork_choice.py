@@ -3,10 +3,10 @@
 import hashlib
 from pathlib import Path
 
-import archives
 import pytest
 from ruamel.yaml import YAML
 
+import archives
 from ethlib import consensus
 from ethlib.cryptography.kzg import BYTES_PER_BLOB
 from ethlib.networking import snappy

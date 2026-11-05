@@ -5,16 +5,15 @@
 import json
 import sys
 
+from benchlib import Runner, load
+
 from ethlib.consensus import compute_columns_for_custody_group, get_custody_groups
-from ethlib.cryptography import _native as N
-from ethlib.cryptography import bls, keccak, kzg, secp256k1, sha256
+from ethlib.cryptography import _native as N, bls, keccak, kzg, secp256k1, sha256
 from ethlib.execution import evm, fees, transactions, trie
 from ethlib.networking import snappy
 from ethlib.precompiles import run as precompile
 from ethlib.serialization import rlp, ssz
 from ethlib.state import state_root
-
-from benchlib import Runner, load
 
 inp = load(sys.argv[1], "inputs.json")
 R = Runner("ethlib", sys.argv[2])

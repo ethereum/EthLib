@@ -8,12 +8,11 @@ The code hash of an account is the Keccak-256 hash of its code.
 
 from collections.abc import Sequence
 
-from ..errors import StateError
-from ..execution.pow import chain_forks
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ..cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import StateError
+from ethlib.execution.pow import chain_forks
 
 
 def state_root(state: bytes) -> bytes:

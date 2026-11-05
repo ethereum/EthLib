@@ -11,8 +11,7 @@ import sys
 from pathlib import Path
 
 import snappy
-from eth_consensus_specs.fulu import mainnet as spec
-from eth_consensus_specs.fulu import minimal as spec_min
+from eth_consensus_specs.fulu import mainnet as spec, minimal as spec_min
 from ssz.bitfields import BitList, BitVector
 from ssz.boolean import Boolean
 from ssz.byte_arrays import ByteList, ByteVector

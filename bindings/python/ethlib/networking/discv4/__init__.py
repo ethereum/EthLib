@@ -1,10 +1,9 @@
 """The packets of the Node Discovery Protocol v4."""
 
-from ...errors import Discv4Error
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ...cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import Discv4Error
 
 
 def decode(packet: bytes) -> bytes:

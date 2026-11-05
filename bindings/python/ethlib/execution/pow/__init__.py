@@ -2,12 +2,11 @@
 
 from collections.abc import Sequence
 
-from ...errors import BlockError
-from ...serialization import rlp
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ...cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import BlockError
+from ethlib.serialization import rlp
 
 
 def _number(n: int) -> bytes:

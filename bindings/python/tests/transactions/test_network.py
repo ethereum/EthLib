@@ -8,7 +8,7 @@ from functools import cache
 
 import pytest
 
-from ethlib.cryptography import kzg, keccak
+from ethlib.cryptography import keccak, kzg
 from ethlib.execution import transactions
 from ethlib.serialization import rlp
 

@@ -2,12 +2,11 @@
 
 # Both hash with Keccak-256, and a secured trie hashes each key before it becomes a path.
 
-from ...errors import TrieError
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ...cryptography import _native
-from ...serialization import rlp
+from ethlib.cryptography import _native
+from ethlib.errors import TrieError
+from ethlib.serialization import rlp
 
 
 def root(pairs: list[tuple[bytes, bytes]], secured: bool = False) -> bytes:

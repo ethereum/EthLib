@@ -1,10 +1,9 @@
 """The messages of the devp2p "p2p" capability: Hello, Disconnect, Ping and Pong."""
 
-from ...errors import Devp2pError
-
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
-from ...cryptography import _native
+from ethlib.cryptography import _native
+from ethlib.errors import Devp2pError
 
 
 def decode_message(snappy: bool, frame_data: bytes) -> bytes:

@@ -17,11 +17,13 @@ from ethereum_rlp import rlp
 from ethereum_types.bytes import Bytes, Bytes8, Bytes32
 from ethereum_types.numeric import U64, U256, Uint
 from py_ecc.bls import G2ProofOfPossession as BLS
-from py_ecc.optimized_bn128 import G1 as BN_G1
-from py_ecc.optimized_bn128 import G2 as BN_G2
-from py_ecc.optimized_bn128 import multiply as bn_mul
-from py_ecc.optimized_bn128 import neg as bn_neg
-from py_ecc.optimized_bn128 import normalize as bn_norm
+from py_ecc.optimized_bn128 import (
+    G1 as BN_G1,
+    G2 as BN_G2,
+    multiply as bn_mul,
+    neg as bn_neg,
+    normalize as bn_norm,
+)
 
 ETHLIB = Path(sys.argv[1])  # the EthLib checkout, for its vector files
 OUT = Path(sys.argv[2]) / "inputs.json"

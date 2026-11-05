@@ -16,10 +16,9 @@ from pathlib import Path
 
 import pytest
 
+from dumper import hex_str, write_case
 from ethlib.cryptography import secp256r1
 from ethlib.cryptography.sha256 import sha256
-
-from dumper import hex_str, write_case
 
 SET = Path(__file__).resolve().parent / "wycheproof" / "ecdsa_secp256r1_sha256_p1363_test.json"
 

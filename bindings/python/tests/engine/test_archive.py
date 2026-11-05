@@ -6,7 +6,6 @@ from collections import Counter
 import pytest
 
 from ethlib import engine
-
 from parity.runners import run_engine_chain
 
 from .cases import check

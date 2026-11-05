@@ -1,7 +1,7 @@
 """Ethash, the proof of work of Ethereum before Paris."""
 
-from ...errors import EthashError
-from .. import _native
+from ethlib.cryptography import _native
+from ethlib.errors import EthashError
 
 
 def _number(n: int) -> bytes:

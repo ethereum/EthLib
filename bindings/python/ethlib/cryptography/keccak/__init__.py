@@ -1,9 +1,11 @@
 """The Keccak-256 and Keccak-512 hash functions and the Keccak-f[1600] permutation."""
 
-from ...errors import KeccakError
-from .._native import keccak256 as native_keccak256
-from .._native import keccak512 as native_keccak512
-from .._native import keccak_f1600 as native_keccak_f1600
+from ethlib.cryptography._native import (
+    keccak256 as native_keccak256,
+    keccak512 as native_keccak512,
+    keccak_f1600 as native_keccak_f1600,
+)
+from ethlib.errors import KeccakError
 
 
 def keccak256(data: bytes) -> bytes:

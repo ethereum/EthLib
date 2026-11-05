@@ -1,10 +1,9 @@
 """Test-vector generator: `sign`."""
 
+from dumper import hex_str, write_case
 from ethlib.cryptography import xmss
 
 from . import fixtures as F
-from dumper import hex_str, write_case
-
 
 HANDLER = "sign"
 

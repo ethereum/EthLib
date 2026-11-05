@@ -8,13 +8,13 @@ Arguments that are not bytes raise TypeError.
 Bytes of the wrong length or range raise Secp256r1Error, a ValueError with a code.
 """
 
-from ...errors import Secp256r1Error
-from .._native import (
-    secp256r1_verify,
-    SECP256R1_PUBLIC_KEY_LEN as PUBLIC_KEY_LEN,
+from ethlib.cryptography._native import (
     SECP256R1_HASH_LEN as HASH_LEN,
+    SECP256R1_PUBLIC_KEY_LEN as PUBLIC_KEY_LEN,
     SECP256R1_SIGNATURE_LEN as SIGNATURE_LEN,
+    secp256r1_verify,
 )
+from ethlib.errors import Secp256r1Error
 
 
 def verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool:

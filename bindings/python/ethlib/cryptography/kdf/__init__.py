@@ -5,10 +5,12 @@ The input keying material and the shared secret are secret.
 EthLib makes no constant-time claim.
 """
 
-from ...errors import ConcatKdfError, HkdfError
-from .._native import concat_kdf_sha256 as native_concat_kdf_sha256
-from .._native import hkdf_sha256 as native_hkdf_sha256
-from .._native import hmac_sha256 as native_hmac_sha256
+from ethlib.cryptography._native import (
+    concat_kdf_sha256 as native_concat_kdf_sha256,
+    hkdf_sha256 as native_hkdf_sha256,
+    hmac_sha256 as native_hmac_sha256,
+)
+from ethlib.errors import ConcatKdfError, HkdfError
 
 
 def hkdf_extract(salt: bytes, ikm: bytes) -> bytes:
