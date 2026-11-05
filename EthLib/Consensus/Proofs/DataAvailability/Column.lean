@@ -6,6 +6,7 @@ public import EthLib.Consensus.Proofs.DataAvailability.Blob
 public import EthLib.Serialization.Proofs.Ssz.Typed.ForkKind
 public import EthLib.Serialization.Proofs.Ssz.Typed.Since
 public import EthLib.Cryptography.Proofs.Kzg.RecoveryRoundTrip
+public import EthLib.Cryptography.Proofs.Kzg.PeerDasColumnGames
 
 /-!
 # Proofs: the data column sidecars
@@ -17,6 +18,10 @@ So its bytes decode back to it.
 Two sidecars whose branches verify for one body root carry one root of commitments.
 
 Otherwise the two climbs to the body root hash two different messages to one SHA-256 output.
+
+The check of the proofs of a sidecar is the batch check of one column.
+
+The games of columns of PeerDAS state position-binding and code-binding for that check.
 -/
 
 @[expose] public section
@@ -289,6 +294,22 @@ theorem recoverMatrix_computeMatrix {setup : TrustedSetup} {blobs : List Blob}
     simpa using hkeptlt _ (List.getElem_mem (by simpa using hi))
   rw [hidx, hcells, recoverCellsAndKzgProofs_fk20 setup hp (by simpa using enough) hbound
     (ascending_check_false hsorted)]
+  rfl
+
+/-- **The check of the proofs of a sidecar is the batch check of its column.**
+
+The column holds the commitments of the sidecar, its index, its cells and its proofs.
+
+Before Gloas, the type of the commitments allows at most `MAX_BLOB_COMMITMENTS_PER_BLOCK` of them.
+
+A check that returns a verdict has as many cells as commitments, so the column has at most as many.
+-/
+theorem verifyDataColumnSidecarKzgProofs_eq_verify {preset : Preset} {fork : Fork}
+    (setup : TrustedSetup) (sidecar : DataColumnSidecar preset fork)
+    (bidCommitments : Since .glamsterdam fork (BlobKZGCommitments preset fork)) :
+    verifyDataColumnSidecarKzgProofs setup sidecar bidCommitments =
+      ColumnBatch.verify setup ⟨(sidecar.commitments bidCommitments).data, sidecar.index.toNat,
+        sidecar.column.data, sidecar.kzgProofs.data⟩ :=
   rfl
 
 end Matrix
