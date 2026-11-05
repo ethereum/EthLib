@@ -80,6 +80,7 @@ PyObject* TRIE_ERROR;
 PyObject* EVM_ERROR;
 PyObject* FEES_ERROR;
 PyObject* TRANSITION_ERROR;
+PyObject* LIGHT_CLIENT_ERROR;
 
 /* ---- Lean externs: size accessors ------------------------------------ */
 
@@ -588,6 +589,12 @@ static PyMethodDef methods[] = {
    METH_VARARGS, DOC_consensus_verify_blob_sidecar_inclusion_proof},
   {"consensus_process_operation", py_consensus_process_operation, METH_VARARGS,
    DOC_consensus_process_operation},
+  {"consensus_light_client_sync", py_consensus_light_client_sync, METH_VARARGS,
+   DOC_consensus_light_client_sync},
+  {"consensus_is_better_update", py_consensus_is_better_update, METH_VARARGS,
+   DOC_consensus_is_better_update},
+  {"consensus_compute_fork_digest", py_consensus_compute_fork_digest, METH_VARARGS,
+   DOC_consensus_compute_fork_digest},
   {"pq_keys_ssz", py_pq_keys_ssz, METH_VARARGS, DOC_pq_keys_ssz},
   {"pq_keys_possession_signing_root", py_pq_keys_possession_signing_root, METH_VARARGS,
    DOC_pq_keys_possession_signing_root},
@@ -791,6 +798,7 @@ PyInit__native(void) {
     FEES_ERROR = PyObject_GetAttrString(errors, "FeesError");
     ENGINE_ERROR = PyObject_GetAttrString(errors, "EngineError");
     TRANSITION_ERROR = PyObject_GetAttrString(errors, "TransitionError");
+    LIGHT_CLIENT_ERROR = PyObject_GetAttrString(errors, "LightClientError");
     Py_DECREF(errors);
     if (PyErr_Occurred()) return NULL;
 

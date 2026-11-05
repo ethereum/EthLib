@@ -175,6 +175,13 @@ extern lean_object* eth_consensus_get_data_column_sidecars_from_block(
   lean_object* name, lean_object* fork, lean_object* block, lean_object* rows);
 extern lean_object* eth_consensus_get_data_column_sidecars_from_column_sidecar(
   lean_object* name, lean_object* fork, lean_object* sidecar, lean_object* rows);
+extern lean_object* eth_consensus_light_client_sync(
+  lean_object* name, lean_object* fork, lean_object* config, lean_object* trusted,
+  lean_object* genesis_validators_root, lean_object* bootstrap, lean_object* steps);
+extern lean_object* eth_consensus_is_better_update(
+  lean_object* name, lean_object* fork, lean_object* new_update, lean_object* old_update);
+extern lean_object* eth_consensus_compute_fork_digest(
+  lean_object* name, lean_object* config, lean_object* genesis_validators_root, uint64_t epoch);
 
 /* ---- Wrappers --------------------------------------------------------- */
 
@@ -782,4 +789,74 @@ py_consensus_process_operation(
   return except_into_pybytes(
     eth_consensus_process_operation(name, fork, handler, pre, operation, (uint8_t) verify),
     TRANSITION_ERROR);
+}
+
+PyObject*
+py_consensus_light_client_sync(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *data_obj[5];
+  if (!PyArg_ParseTuple(args, "OOOOOOO", &name_obj, &fork_obj, &data_obj[0], &data_obj[1],
+                        &data_obj[2], &data_obj[3], &data_obj[4])) {
+    return NULL;
+  }
+  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
+  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name and fork must be str");
+    return NULL;
+  }
+  for (int i = 0; i < 5; i++) {
+    if (!PyBytes_Check(data_obj[i])) {
+      PyErr_SetString(PyExc_TypeError, "the data must be bytes");
+      return NULL;
+    }
+  }
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  lean_object* fork = str_arg(fork_obj, "fork");
+  if (!fork) {
+    lean_dec(name);
+    return NULL;
+  }
+  lean_object* data[5];
+  for (int i = 0; i < 5; i++) data[i] = bytes_arg(data_obj[i]);
+  return except_into_pybytes(
+    eth_consensus_light_client_sync(name, fork, data[0], data[1], data[2], data[3], data[4]),
+    LIGHT_CLIENT_ERROR);
+}
+
+PyObject*
+py_consensus_is_better_update(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object *name, *fork, *new_update, *old_update;
+  if (!name_fork_bytes_args(args, 2, &name, &fork, &new_update, &old_update)) return NULL;
+  return except_into_pybool(
+    eth_consensus_is_better_update(name, fork, new_update, old_update), LIGHT_CLIENT_ERROR);
+}
+
+PyObject*
+py_consensus_compute_fork_digest(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *config_obj, *root_obj;
+  unsigned long long epoch;
+  if (!PyArg_ParseTuple(args, "OOOK", &name_obj, &config_obj, &root_obj, &epoch)) return NULL;
+  if (!PyUnicode_Check(name_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name must be str");
+    return NULL;
+  }
+  if (!PyBytes_Check(config_obj) || !PyBytes_Check(root_obj)) {
+    PyErr_SetString(PyExc_TypeError, "the data must be bytes");
+    return NULL;
+  }
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  return except_into_pybytes(
+    eth_consensus_compute_fork_digest(name, bytes_arg(config_obj), bytes_arg(root_obj),
+                                      (uint64_t) epoch),
+    SSZ_ERROR);
 }

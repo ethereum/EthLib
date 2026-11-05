@@ -24,7 +24,11 @@ From Capella, a header also carries the execution payload header, with a branch 
 
 Electra adds fields to the state, so its tree is one level deeper.
 
-So from Electra the branches into the state are one node longer.
+So from Electra to Fulu the branches into the state are one node longer.
+
+The containers and the indices here hold from Altair to Fulu.
+
+Gloas deepens the state again, and its light client is not yet specified.
 -/
 
 @[expose] public section
@@ -39,13 +43,13 @@ def stateGindex (preset : Preset) (fork : Fork) (field : String) (below : List P
   SszType.getGeneralizedIndex (BeaconState preset fork)
     (.position ((BeaconState.names fork).idxOf field) :: below)
 
-/-- The generalized index of the root of the finalized checkpoint, in the tree of a state. -/
+/-- The generalized index of the finalized checkpoint root, in a state from Altair to Fulu. -/
 def finalizedRootGindex (fork : Fork) : Nat := if .pectra ≤ fork then 169 else 105
 
-/-- The generalized index of the current sync committee, in the tree of a state. -/
+/-- The generalized index of the current sync committee, in a state from Altair to Fulu. -/
 def currentSyncCommitteeGindex (fork : Fork) : Nat := if .pectra ≤ fork then 86 else 54
 
-/-- The generalized index of the next sync committee, in the tree of a state. -/
+/-- The generalized index of the next sync committee, in a state from Altair to Fulu. -/
 def nextSyncCommitteeGindex (fork : Fork) : Nat := if .pectra ≤ fork then 87 else 55
 
 /-- From Capella: the generalized index of the execution payload, in the tree of a block body. -/

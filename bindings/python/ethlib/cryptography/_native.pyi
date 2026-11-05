@@ -375,6 +375,18 @@ def consensus_process_operation(name: str, fork: str, handler: str, pre: bytes, 
     """The state after a block operation of a handler of the vectors, as SSZ bytes."""
     ...
 
+def consensus_light_client_sync(name: str, fork: str, config: bytes, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: bytes) -> bytes:
+    """The headers of a sync, step by step, from a bootstrap for a trusted block root."""
+    ...
+
+def consensus_is_better_update(name: str, fork: str, new_update: bytes, old_update: bytes) -> bool:
+    """Whether a new update, given as bytes, ranks above an old one for a forced update."""
+    ...
+
+def consensus_compute_fork_digest(name: str, config: bytes, genesis_validators_root: bytes, epoch: int) -> bytes:
+    """The fork digest at an epoch, on the chain with the given root of the genesis validators."""
+    ...
+
 def pq_keys_ssz(type: str, data: bytes) -> bytes:
     """The root of the value that the bytes encode, then the bytes of that value."""
     ...

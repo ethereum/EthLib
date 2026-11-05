@@ -61,6 +61,16 @@ def computeSlotAtTime (config : Config) (genesisTime time : UInt64) : Except Ari
 def computeEpochAtSlot (preset : Preset) (slot : Slot) : Epoch :=
   slot / preset.SLOTS_PER_EPOCH
 
+/-- From Altair: the period of the sync committees that contains an epoch.
+
+A period is a fixed number of epochs, and one sync committee serves through each. -/
+def computeSyncCommitteePeriod (preset : Preset) (epoch : Epoch) : UInt64 :=
+  epoch / preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD
+
+/-- From Altair: the period of the sync committees that contains a slot. -/
+def computeSyncCommitteePeriodAtSlot (preset : Preset) (slot : Slot) : UInt64 :=
+  computeSyncCommitteePeriod preset (computeEpochAtSlot preset slot)
+
 /-- The first slot of an epoch. -/
 def computeStartSlotAtEpoch (preset : Preset) (epoch : Epoch) : Except ArithError Slot :=
   mulChecked epoch preset.SLOTS_PER_EPOCH

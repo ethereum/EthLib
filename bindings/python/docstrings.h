@@ -281,6 +281,15 @@
 #define DOC_consensus_process_operation \
   "The state after a block operation of a handler of the vectors, as SSZ bytes."
 
+#define DOC_consensus_light_client_sync \
+  "The headers of a sync, step by step, from a bootstrap for a trusted block root."
+
+#define DOC_consensus_is_better_update \
+  "Whether a new update, given as bytes, ranks above an old one for a forced update."
+
+#define DOC_consensus_compute_fork_digest \
+  "The fork digest at an epoch, on the chain with the given root of the genesis validators."
+
 #define DOC_pq_keys_ssz \
   "The root of the value that the bytes encode, then the bytes of that value."
 

@@ -60,6 +60,15 @@ The release also has cases for Gloas and Heze, and the directory leaves them out
 It also climbs the branch with the SHA-256 of `hashlib`, to check that it reaches the root of the value.
 Every week, the same test also runs every case of both archives and checks that the vendored files are copies.
 
+The same directory holds the minimal `sync` and `update_ranking` cases of the light client, from Altair to Fulu.
+A `sync` case gives a trusted block root, a bootstrap and a list of steps.
+A step processes an update or forces one, then gives the slot and the roots of the finalized and the optimistic header.
+A `sync` case also gives its configuration, which replaces values of the minimal configuration.
+The directory keeps the four `sync` cases of each fork that stay at one fork.
+The other cases upgrade the bootstrap or the store to a later fork, which EthLib does not specify yet.
+An `update_ranking` case lists updates from the best to the worst.
+`bindings/python/tests/consensus/test_light_client_sync.py` runs both kinds of cases in Lean.
+
 The directory `data_columns/` holds the Fulu cases of the gossip handler `gossip_data_column_sidecar`, in both archives.
 Each case keeps its files under its path in the archive, except the state, which the checks of a sidecar alone do not read.
 A case gives some sidecars, each with the verdict of gossip validation and the reason for a rejection.
