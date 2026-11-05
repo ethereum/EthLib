@@ -102,7 +102,16 @@ def delegationCode (auth : Authorization) : ByteArray :=
 
 /-- The state after the authority takes a valid authorization at `fork`, and the refund.
 
-The refund is 12500 for an authority that has an account, and 0 otherwise. -/
+The refund is 12500 for an authority that has an account, and 0 otherwise.
+
+The steps of EIP-7702 refund an authority that is not empty.
+
+[Its rationale][eip7702-refund] refunds one that already exists, as here.
+
+They differ only for an empty account, which [EIP-7523][eip7523] forbids after the merge.
+
+[eip7702-refund]: https://eips.ethereum.org/EIPS/eip-7702#charge-maximum-cost-upfront
+[eip7523]: https://eips.ethereum.org/EIPS/eip-7523#specification -/
 def delegate (fork : Fork) (state : TransactionState) (authority : Address)
     (auth : Authorization) : Except StateError (TransactionState × Nat) := do
   let refund := if state.accountExists authority then
