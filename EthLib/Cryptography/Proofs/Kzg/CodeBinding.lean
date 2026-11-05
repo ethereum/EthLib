@@ -37,7 +37,9 @@ Both searches read only the setup, the commitment, the cells and the proofs, not
 
 The paper calls them the reductions `B1` and `B2`.
 
-Its bound on the advantages and the running times of the reductions are not formalized here.
+The bound of Lemma 4 on the advantages is proved for games in another file.
+
+The running times of the reductions are not formalized.
 
 The first search uses the sign of the extended KZG paper; `isBsdhSolution_iff_sub` relates it to
 the sign of ePrint 2025/1683.
@@ -61,21 +63,30 @@ attribute [-instance] Fin.instNatPow
 def commitPoly (s : TrustedSetup) (p : Fr[X]) : G1 :=
   G1.msm s.g1Monomial.toArray (Array.ofFn fun k : Fin FIELD_ELEMENTS_PER_BLOB => p.coeff k)
 
-/-- The commitment to a polynomial of degree below 4096 represents its value at the secret. -/
-theorem represents_commitPoly {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ) {p : Fr[X]}
-    (hp : p.natDegree < FIELD_ELEMENTS_PER_BLOB) : G1.Represents (commitPoly s p) (p.eval τ) := by
+/-- The commitment to a polynomial of degree below 4096 represents its value at the secret.
+
+Only the monomial points of `G1` must represent the powers of the secret. -/
+theorem represents_commitPoly_of_monomial {s : TrustedSetup} {τ : Fr}
+    (hm : ∀ i : Fin FIELD_ELEMENTS_PER_BLOB, G1.Represents s.g1Monomial[i] (τ ^ i.val))
+    {p : Fr[X]} (hp : p.natDegree < FIELD_ELEMENTS_PER_BLOB) :
+    G1.Represents (commitPoly s p) (p.eval τ) := by
   have h := G1.represents_msm (points := s.g1Monomial.toArray)
     (scalars := Array.ofFn fun k : Fin FIELD_ELEMENTS_PER_BLOB => p.coeff k)
     (a := fun j => τ ^ j) (by simp) fun j hj => by
       have hj' : j < FIELD_ELEMENTS_PER_BLOB := by simpa using hj
       rw [getElem!_pos _ j hj, Vector.getElem_toArray]
-      exact hs.monomial_g1 ⟨j, hj'⟩
+      exact hm ⟨j, hj'⟩
   rw [commitPoly]
   convert h using 1
   rw [eval_eq_sum_range' hp, Vector.size_toArray]
   refine Finset.sum_congr rfl fun j hj => ?_
   rw [getElem!_pos _ j (by simpa using hj), Array.getElem_ofFn]
   rfl
+
+/-- The commitment to a polynomial of degree below 4096 represents its value at the secret. -/
+theorem represents_commitPoly {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ) {p : Fr[X]}
+    (hp : p.natDegree < FIELD_ELEMENTS_PER_BLOB) : G1.Represents (commitPoly s p) (p.eval τ) :=
+  represents_commitPoly_of_monomial hs.monomial_g1 hp
 
 /-- The sum of the points `P j` times the weights `a j`, over a finite set `J` of indices. -/
 def weightedSum (J : Finset Nat) (P : Nat → G1) (a : Nat → Fr) : G1 :=
@@ -128,18 +139,20 @@ theorem card_biUnion_cellNodes (J : Finset Nat) :
   rw [Finset.card_biUnion (cellNodes_pairwiseDisjoint J)]
   simp [card_cellNodes, mul_comm]
 
-/-- The interpolation of 64 cells has degree below 4096. -/
+/-- The interpolation of at most 64 cells has degree below 4096. -/
 theorem natDegree_cellsInterpolant_lt {J : Finset Nat} (hJ : ∀ j ∈ J, j < CELLS_PER_EXT_BLOB)
-    (hJcard : J.card = FIELD_ELEMENTS_PER_CELL) (ev : Nat → CosetEvals) :
+    (hJcard : J.card ≤ FIELD_ELEMENTS_PER_CELL) (ev : Nat → CosetEvals) :
     (cellsInterpolant J ev).natDegree < FIELD_ELEMENTS_PER_BLOB := by
   have h := degree_interpolate_lt (r := cellValue ev) (domainPoint_injOn_cells hJ)
-  rw [card_biUnion_cellNodes, hJcard] at h
+  rw [card_biUnion_cellNodes] at h
+  have hle : FIELD_ELEMENTS_PER_CELL * J.card ≤ FIELD_ELEMENTS_PER_BLOB :=
+    (Nat.mul_le_mul_left _ hJcard).trans (by decide)
   rcases eq_or_ne (cellsInterpolant J ev) 0 with h0 | h0
   · rw [h0, natDegree_zero]
     decide
   · rw [cellsInterpolant] at h0
     rw [cellsInterpolant, ← Nat.cast_lt (α := WithBot Nat), ← degree_eq_natDegree h0]
-    exact h
+    exact h.trans_le (by exact_mod_cast hle)
 
 /-- The vanishing polynomial of the points of a set of cells, at `τ`, is the product over the
 cells of `τ^64 - h^64`. -/
@@ -254,7 +267,7 @@ theorem code_binding {GT : Type} [CommMonoid GT] (M : TargetGroup GT) {s : Trust
       (∃ sol, findBsdh M s jx (ev jx) (honestEvals J ev jx) (P jx) (honestProof s J ev jx) =
         some sol ∧ IsBsdhSolution M τ sol) ∨
       IsArsdhSolution (FIELD_ELEMENTS_PER_BLOB - 1) τ (arsdhCandidate s J ev C P) := by
-  have hdeg := natDegree_cellsInterpolant_lt hJ hJcard ev
+  have hdeg := natDegree_cellsInterpolant_lt hJ hJcard.le ev
   by_cases hcons : ∀ m < FIELD_ELEMENTS_PER_CELL,
       (cellsInterpolant J ev).eval (cellPoint jx m) = (ev jx)[m]!
   · refine Or.inl ⟨hdeg, fun j hj m hm => ?_⟩
