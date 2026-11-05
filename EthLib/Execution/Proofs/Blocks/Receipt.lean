@@ -15,6 +15,10 @@ They do so at each fork that has the type, and only the encoding decodes to them
 
 The receipts of a block count the gas cumulatively, so the counts never decrease.
 
+Each receipt counts the gas of the transactions up to it.
+
+So two receipts in a row differ by the gas of the second transaction.
+
 The last count is the gas of all the transactions.
 
 The Bloom filter of each receipt is the filter of its logs.
@@ -229,6 +233,26 @@ theorem cumulativeGasUsed_pairwise (gasUsed : Nat)
   | cons head rest ih =>
     obtain ⟨outcome, gas, logs⟩ := head
     exact .cons (fun _ h => le_cumulativeGasUsed h) (ih _)
+
+/-- Receipt `i` counts the gas of the block before, plus the gas of transactions `0` to `i`.
+
+So two receipts in a row differ by the gas of the second transaction. -/
+theorem getElem_makeReceiptsFrom_cumulativeGasUsed (gasUsed : Nat)
+    (results : List (Outcome fork × Nat × List Log)) (i : Nat)
+    (h : i < (makeReceiptsFrom gasUsed results).length) :
+    (makeReceiptsFrom gasUsed results)[i].cumulativeGasUsed =
+      gasUsed + ((results.take (i + 1)).map (·.2.1)).sum := by
+  induction results generalizing gasUsed i with
+  | nil => simp [makeReceiptsFrom] at h
+  | cons head rest ih =>
+    obtain ⟨outcome, gas, logs⟩ := head
+    cases i with
+    | zero => simp [makeReceiptsFrom, makeReceipt]
+    | succ i =>
+      simp only [makeReceiptsFrom, List.getElem_cons_succ, List.take_succ_cons, List.map_cons,
+        List.sum_cons]
+      rw [ih]
+      omega
 
 /-- The last receipt counts the gas of the block before, plus the gas of every transaction. -/
 theorem getLast?_makeReceiptsFrom (gasUsed : Nat) (results : List (Outcome fork × Nat × List Log)) :

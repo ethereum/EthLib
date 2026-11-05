@@ -30,9 +30,9 @@ The type, the hash and the sender hold up to Glamsterdam, which keeps the transa
 
 The intrinsic gas and the checks hold up to Glamsterdam.
 
-The settlement of the gas and the network form of a blob transaction hold up to BPO5.
+The settlement of the gas, the checks against the block and the network form hold up to BPO5.
 
-Glamsterdam settles the gas by EIP-7778 and EIP-8037, which are not here yet.
+The settlement of Glamsterdam, by EIP-7778 and EIP-8037, has no export yet.
 
 Hegotá is not yet specified.
 -/
@@ -185,8 +185,10 @@ def checkInBlockExport (fork : ByteArray) (chainId : UInt64)
     timestamp := 0, difficulty := 0, blockHashes := [], baseFeePerGas := fun _ => baseFee,
     prevRandao := fun _ => 0, excessBlobGas := fun _ => UInt64.ofNat excess,
     parentBeaconBlockRoot := fun _ => 0, slotNumber := fun _ => 0 }
-  let inc ← (checkInclusion chainId env (numberOf gasUsed) (numberOf blobGasUsed)
-    (.ofBlock ⟨pre, ∅, ∅, ∅, ∅⟩) tx).mapError fun e => (e.code, inclusionMessage e)
+  -- Before Glamsterdam a block counts no state gas.
+  let used : BlockGas := ⟨numberOf gasUsed, 0, numberOf blobGasUsed⟩
+  let inc ← (checkInclusion chainId env used (.ofBlock ⟨pre, ∅, ∅, ∅, ∅⟩) tx).mapError
+    fun e => (e.code, inclusionMessage e)
   let blobGas ← gasToUInt64 inc.blobGasUsed
   return ⟨inc.sender.toArray ++ (natToBytes 32 inc.gasPrice).toArray ++
     (List.range 8).reverse.toArray.map fun i => (blobGas >>> UInt64.ofNat (8 * i)).toUInt8⟩

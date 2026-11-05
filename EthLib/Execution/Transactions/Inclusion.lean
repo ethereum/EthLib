@@ -11,6 +11,8 @@ The rules that a transaction must pass to enter a block, against the block and t
 The rules alone need no state, and these rules add what the block and the state decide.
 
 - The gas limit fits in the gas that the block has left.
+- From Glamsterdam, the execution gas fits in the execution gas that the block has left.
+- From Glamsterdam, the gas limit also fits in the state gas that the block has left.
 - From Dencun, the blob gas fits in the blob gas that the block has left.
 - From London, the maximum fee per gas covers the base fee of the block.
 - From Dencun, the maximum fee per blob gas covers the base fee per blob gas.
@@ -30,14 +32,16 @@ The EIPs that add a rule:
 - [EIP-3607][eip3607], the sender without code, at every fork
 - [EIP-4844][eip4844], the blob gas and its fee
 - [EIP-7702][eip7702], the sender with a delegation indicator
+- [EIP-8037][eip8037], the execution gas and the state gas that the block has left
 
-These rules hold up to BPO5, which keeps the rules of BPO2.
+These rules hold up to Glamsterdam, which changes only the rule on the gas of the block.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [eip1559]: https://eips.ethereum.org/EIPS/eip-1559#specification
 [eip3607]: https://eips.ethereum.org/EIPS/eip-3607#specification
 [eip4844]: https://eips.ethereum.org/EIPS/eip-4844#execution-layer-validation
 [eip7702]: https://eips.ethereum.org/EIPS/eip-7702#transaction-origination
+[eip8037]: https://eips.ethereum.org/EIPS/eip-8037#transaction-validation
 -/
 
 @[expose] public section
@@ -46,6 +50,7 @@ namespace EthLib.Execution.Transactions
 
 open EthLib.Base
 open EthLib.Execution.Evm (BlockEnvironment isValidDelegation)
+open EthLib.Execution.Evm.GasCosts (TX_MAX_GAS_LIMIT)
 open EthLib.Execution.State (EMPTY_CODE_HASH TransactionState)
 open EthLib.Execution.Fees.BlobBaseFee
 
@@ -70,13 +75,21 @@ A block before Dencun has no blobs. -/
 def maxBlobGasPerBlock (fork : Fork) : Nat :=
   if h : .dencun ≤ fork then GAS_PER_BLOB * (blobSchedule fork h).max else 0
 
+/-- The gas of a transaction that must fit in the execution gas that its block has left, at `fork`.
+
+It is the gas limit, capped from Glamsterdam at `2^24`, the most execution gas of a transaction. -/
+def executionCapacity (fork : Fork) (tx : Transaction) : Nat :=
+  if fork ≥ .glamsterdam then min TX_MAX_GAS_LIMIT tx.gas.toNat else tx.gas.toNat
+
 /-! ## The rules -/
 
 /-- Why a transaction cannot enter its block. -/
 inductive InclusionError where
   /-- The transaction fails a rule that needs no state. -/
   | transaction (error : TransactionError)
-  /-- The gas limit `gas` is above the gas `available` that the block has left. -/
+  /-- The gas `gas` of the transaction is above the gas `available` that the block has left.
+
+  From Glamsterdam it is either the execution gas or the state gas. -/
   | gasAllowanceExceeded (gas available : Nat)
   /-- The blob gas `blobGas` is above the blob gas `available` that the block has left. -/
   | blobGasLimitExceeded (blobGas available : Nat)
@@ -133,21 +146,25 @@ def failIf (condition : Bool) (error : InclusionError) : Except InclusionError U
 
 /-- Check that a transaction may enter its block at `fork`, on the chain `chainId`.
 
-The block has used `gasUsed` gas and `blobGasUsed` blob gas before it, and `state` is the state.
+The block has used the gas `used` before it, and `state` is the state.
 
 The chain and the sender come first, then the rules that need no state.
 
 Then come the rules of the block, and last those of the sender. -/
 def checkInclusion {fork : Fork} (chainId : UInt64) (env : BlockEnvironment fork)
-    (gasUsed blobGasUsed : Nat) (state : TransactionState) (tx : Transaction) :
+    (used : BlockGas) (state : TransactionState) (tx : Transaction) :
     Except InclusionError Included := do
   (checkChainId fork chainId tx).mapError .transaction
   let sender ← (recoverSender fork tx).mapError .transaction
   let intrinsic ← (validateTransaction fork sender tx).mapError .transaction
-  let available := env.gasLimit - gasUsed
-  failIf (available < tx.gas.toNat) (.gasAllowanceExceeded tx.gas.toNat available)
+  let available := env.gasLimit - used.execution
+  let gas := executionCapacity fork tx
+  failIf (available < gas) (.gasAllowanceExceeded gas available)
+  let stateAvailable := env.gasLimit - used.state
+  failIf (fork ≥ .glamsterdam ∧ stateAvailable < tx.gas.toNat)
+    (.gasAllowanceExceeded tx.gas.toNat stateAvailable)
   let blobGas := calculateTotalBlobGas tx
-  let blobAvailable := maxBlobGasPerBlock fork - blobGasUsed
+  let blobAvailable := maxBlobGasPerBlock fork - used.blob
   failIf (blobAvailable < blobGas) (.blobGasLimitExceeded blobGas blobAvailable)
   let baseFee := baseFeeOf env
   failIf (tx.maxFeePerGas < baseFee) (.insufficientMaxFeePerGas tx.maxFeePerGas baseFee)

@@ -12,6 +12,8 @@ A transaction that may enter its block passes the rules that need no state.
 
 Its gas limit fits in the gas that the block has left, and its nonce is the nonce of the sender.
 
+From Glamsterdam, its gas limit fits in the state gas that the block has left too.
+
 Its price per gas covers the base fee of the block, and is at most its maximum fee per gas.
 
 The sender holds what the purchase of the gas, the blobs and the value take, so it cannot overdraw.
@@ -49,6 +51,20 @@ theorem InclusionError.code_injective (e₁ e₂ : InclusionError) (h : e₁.cod
     | transaction b => exact absurd h.symm (apart b _ (by simp))
     | _ => first | rfl | (simp only [InclusionError.code] at h; exact absurd h (by decide))
 
+/-! ## The gas of the block -/
+
+/-- Before Glamsterdam, the whole gas limit must fit in the gas that the block has left. -/
+theorem executionCapacity_of_lt {fork : Fork} (hFork : fork < .glamsterdam) (tx : Transaction) :
+    executionCapacity fork tx = tx.gas.toNat := by
+  have : ¬fork ≥ .glamsterdam := Nat.not_le.mpr hFork
+  simp only [executionCapacity, this, ↓reduceIte]
+
+/-- From Glamsterdam, the gas that must fit in the execution gas left is at most `2^24`. -/
+theorem executionCapacity_le {fork : Fork} (hFork : fork ≥ .glamsterdam) (tx : Transaction) :
+    executionCapacity fork tx ≤ Evm.GasCosts.TX_MAX_GAS_LIMIT := by
+  simp only [executionCapacity, hFork, ↓reduceIte]
+  exact Nat.min_le_left _ _
+
 /-! ## Steps of a passing check -/
 
 private theorem failIf_ok {c : Bool} {e : InclusionError} {u : Unit} (h : failIf c e = .ok u) :
@@ -63,29 +79,35 @@ It passes the rules that need no state, and its signature names the sender.
 
 Its gas fits in the gas left of the block, and its blob gas in the blob gas left.
 
+From Glamsterdam, the gas left of the block is execution gas.
+
+From Glamsterdam, the gas limit also fits in the state gas left.
+
 Its maximum fee per gas covers the base fee.
 
 From Dencun, its maximum fee per blob gas covers the base fee per blob gas.
 
 Its nonce is the nonce of the sender, and the sender holds its most cost and its value. -/
 theorem checkInclusion_ok {fork : Fork} {chainId : UInt64} {env : BlockEnvironment fork}
-    {gasUsed blobGasUsed : Nat} {state : TransactionState} {tx : Transaction} {inc : Included}
-    (h : checkInclusion chainId env gasUsed blobGasUsed state tx = .ok inc) :
+    {used : BlockGas} {state : TransactionState} {tx : Transaction} {inc : Included}
+    (h : checkInclusion chainId env used state tx = .ok inc) :
     recoverSender fork tx = .ok inc.sender ∧
       validateTransaction fork inc.sender tx = .ok inc.intrinsicGas ∧
-      tx.gas.toNat ≤ env.gasLimit - gasUsed ∧
+      executionCapacity fork tx ≤ env.gasLimit - used.execution ∧
       inc.blobGasUsed = calculateTotalBlobGas tx ∧
-      inc.blobGasUsed ≤ maxBlobGasPerBlock fork - blobGasUsed ∧
+      inc.blobGasUsed ≤ maxBlobGasPerBlock fork - used.blob ∧
       baseFeeOf env ≤ tx.maxFeePerGas ∧
       (0 < inc.blobGasUsed → blobGasPriceOf env ≤ tx.maxFeePerBlobGas) ∧
       inc.gasPrice = effectiveGasPrice (baseFeeOf env) tx ∧
       tx.nonce.toNat = (state.getAccount inc.sender).nonce ∧
-      tx.maxGasFee + tx.value.toNat ≤ (state.getAccount inc.sender).balance.toNat := by
+      tx.maxGasFee + tx.value.toNat ≤ (state.getAccount inc.sender).balance.toNat ∧
+      (fork ≥ .glamsterdam → tx.gas.toNat ≤ env.gasLimit - used.state) := by
   unfold checkInclusion at h
   obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
   obtain ⟨s, hs, h⟩ := bind_ok_iff.mp h
   obtain ⟨g, hv, h⟩ := bind_ok_iff.mp h
   obtain ⟨_, hGas, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, hState, h⟩ := bind_ok_iff.mp h
   obtain ⟨_, hBlob, h⟩ := bind_ok_iff.mp h
   obtain ⟨_, hFee, h⟩ := bind_ok_iff.mp h
   obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
@@ -97,6 +119,7 @@ theorem checkInclusion_ok {fork : Fork} {chainId : UInt64} {env : BlockEnvironme
   obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
   cases h
   have hGas := failIf_ok hGas
+  have hState := failIf_ok hState
   have hBlob := failIf_ok hBlob
   have hFee := failIf_ok hFee
   have hBlobFee := failIf_ok hBlobFee
@@ -105,24 +128,26 @@ theorem checkInclusion_ok {fork : Fork} {chainId : UInt64} {env : BlockEnvironme
   have hBal := failIf_ok hBal
   simp only [decide_eq_false_iff_not, Nat.not_lt] at hGas hBlob hFee hBlobFee hLow hHigh hBal
   refine ⟨mapError_ok_iff.mp hs, mapError_ok_iff.mp hv, hGas, rfl, hBlob, hFee, ?_, rfl,
-    by dsimp only; omega, hBal⟩
-  intro hPos
-  simpa [hPos] using hBlobFee
+    by dsimp only; omega, hBal, ?_⟩
+  · intro hPos
+    simpa [hPos] using hBlobFee
+  · intro hFork
+    simpa [hFork] using hState
 
 /-! ## What a passing transaction pays -/
 
 /-- A transaction that may enter its block pays at least the base fee per gas. -/
 theorem checkInclusion_baseFee_le {fork : Fork} {chainId : UInt64} {env : BlockEnvironment fork}
-    {gasUsed blobGasUsed : Nat} {state : TransactionState} {tx : Transaction} {inc : Included}
-    (h : checkInclusion chainId env gasUsed blobGasUsed state tx = .ok inc) :
+    {used : BlockGas} {state : TransactionState} {tx : Transaction} {inc : Included}
+    (h : checkInclusion chainId env used state tx = .ok inc) :
     baseFeeOf env ≤ inc.gasPrice := by
   obtain ⟨-, -, -, -, -, hFee, -, hPrice, -⟩ := checkInclusion_ok h
   exact hPrice ▸ le_effectiveGasPrice hFee
 
 /-- A transaction that may enter its block pays at most its maximum fee per gas. -/
 theorem checkInclusion_gasPrice_le {fork : Fork} {chainId : UInt64} {env : BlockEnvironment fork}
-    {gasUsed blobGasUsed : Nat} {state : TransactionState} {tx : Transaction} {inc : Included}
-    (h : checkInclusion chainId env gasUsed blobGasUsed state tx = .ok inc) :
+    {used : BlockGas} {state : TransactionState} {tx : Transaction} {inc : Included}
+    (h : checkInclusion chainId env used state tx = .ok inc) :
     inc.gasPrice ≤ tx.maxFeePerGas := by
   obtain ⟨-, -, -, -, -, hFee, -, hPrice, -⟩ := checkInclusion_ok h
   exact hPrice ▸ effectiveGasPrice_le_maxFeePerGas hFee
@@ -131,12 +156,12 @@ theorem checkInclusion_gasPrice_le {fork : Fork} {chainId : UInt64} {env : Block
 
 The sender holds the gas limit times the price per gas, the fee of the blobs and the value. -/
 theorem checkInclusion_no_overdraw {fork : Fork} {chainId : UInt64}
-    {env : BlockEnvironment fork} {gasUsed blobGasUsed : Nat} {state : TransactionState}
+    {env : BlockEnvironment fork} {used : BlockGas} {state : TransactionState}
     {tx : Transaction} {inc : Included}
-    (h : checkInclusion chainId env gasUsed blobGasUsed state tx = .ok inc) :
+    (h : checkInclusion chainId env used state tx = .ok inc) :
     tx.gas.toNat * inc.gasPrice + inc.blobGasUsed * blobGasPriceOf env + tx.value.toNat ≤
       (state.getAccount inc.sender).balance.toNat := by
-  obtain ⟨-, -, -, hBlobGas, -, -, hBlobFee, -, -, hBal⟩ := checkInclusion_ok h
+  obtain ⟨-, -, -, hBlobGas, -, -, hBlobFee, -, -, hBal, -⟩ := checkInclusion_ok h
   have hPrice := checkInclusion_gasPrice_le h
   have hGas : tx.gas.toNat * inc.gasPrice ≤ tx.gas.toNat * tx.maxFeePerGas :=
     Nat.mul_le_mul_left _ hPrice
