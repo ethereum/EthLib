@@ -17,7 +17,10 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "epoch_pro
 
 # The forks at which EthLib runs each handler.
 HANDLERS = {
-    "justification_and_finalization": ("phase0",),
+    "justification_and_finalization": ("phase0", "altair", "bellatrix", "capella", "deneb",
+                                       "electra", "fulu", "gloas"),
+    "inactivity_updates": ("altair", "bellatrix", "capella", "deneb", "electra", "fulu",
+                           "gloas"),
     "rewards_and_penalties": ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
                               "fulu", "gloas"),
     "registry_updates": ("phase0", "altair", "bellatrix", "capella"),
@@ -30,11 +33,19 @@ HANDLERS = {
     "randao_mixes_reset": ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
                            "fulu", "gloas"),
     "historical_roots_update": ("phase0", "altair", "bellatrix"),
+    "historical_summaries_update": ("capella", "deneb", "electra", "fulu", "gloas"),
     "participation_record_updates": ("phase0",),
+    "participation_flag_updates": ("altair", "bellatrix", "capella", "deneb", "electra", "fulu",
+                                   "gloas"),
+    "sync_committee_updates": ("altair", "bellatrix", "capella", "deneb", "electra", "fulu",
+                               "gloas"),
     "ptc_window": ("gloas",),
     "builder_pending_payments": ("gloas",),
     "proposer_lookahead": ("fulu", "gloas"),
 }
+
+# A mainnet sync committee period is 256 epochs, so the release has no mainnet case of its update.
+MINIMAL_ONLY = {"sync_committee_updates"}
 
 # The release archives that hold the cases.
 ARCHIVES = {
@@ -81,7 +92,8 @@ def _archive_cases() -> list:
     cases = []
     for preset, name in ARCHIVES.items():
         paths = [f"tests/{preset}/{fork}/epoch_processing/{handler}"
-                 for handler, forks in HANDLERS.items() for fork in forks]
+                 for handler, forks in HANDLERS.items() for fork in forks
+                 if preset == "minimal" or handler not in MINIMAL_ONLY]
         base = archives.unpack(name, *paths) / "tests" / preset
         for path in paths:
             for pre in sorted((base / path.split("/", 2)[2]).rglob("pre.ssz_snappy")):

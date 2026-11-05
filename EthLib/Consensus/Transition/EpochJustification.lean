@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Participation
 public import EthLib.Consensus.Transition.Basic
 
 /-!
@@ -165,16 +166,34 @@ def weighJustificationAndFinalization (state : BeaconState preset fork)
     previousJustifiedCheckpoint := oldCurrent, currentJustifiedCheckpoint := justified,
     justificationBits := ⟨bits⟩, finalizedCheckpoint := finalized }
 
+/-- From Altair: the state after justification and finalization.
+
+The first two epochs change nothing.
+
+The target balances are those of the unslashed validators with the timely target flag. -/
+def processJustificationAndFinalizationAltair (state : BeaconState preset fork)
+    (altair : .altair ≤ fork) : Except TransitionError (BeaconState preset fork) :=
+  if getCurrentEpoch state ≤ GENESIS_EPOCH + 1 then pure state
+  else do
+    let previous ← liftAccessor (getUnslashedParticipatingIndices state altair
+      TIMELY_TARGET_FLAG_INDEX (getPreviousEpoch state))
+    let current ← liftAccessor (getUnslashedParticipatingIndices state altair
+      TIMELY_TARGET_FLAG_INDEX (getCurrentEpoch state))
+    let total ← liftAccessor (getTotalActiveBalance state)
+    let previousBalance ← liftAccessor (getTotalBalance state previous)
+    let currentBalance ← liftAccessor (getTotalBalance state current)
+    weighJustificationAndFinalization state total previousBalance currentBalance
+
 /-- The state after justification and finalization.
 
 The first two epochs change nothing.
 
 Before Altair, the target balances are those of the matching pending attestations.
 
-Altair counts participation flags instead, which EthLib does not yet have. -/
+From Altair they are those of the unslashed validators with the timely target flag. -/
 def processJustificationAndFinalization (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) :=
-  if altair : .altair ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if altair : .altair ≤ fork then processJustificationAndFinalizationAltair state altair
   else if getCurrentEpoch state ≤ GENESIS_EPOCH + 1 then pure state
   else do
     have before : fork < .altair := Nat.lt_of_not_le altair

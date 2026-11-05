@@ -1,0 +1,6 @@
+preset: minimal
+fork: bellatrix
+runner: sanity
+handler: slots
+suite: pyspec_tests
+case: double_empty_epoch

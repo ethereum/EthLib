@@ -17,7 +17,7 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "transitio
 
 # The forks at which EthLib runs each group, as runner and handler.
 GROUPS = {
-    "sanity/slots": ("phase0",),
+    "sanity/slots": ("phase0", "altair", "bellatrix", "capella"),
     "sanity/blocks": ("phase0",),
     "finality/finality": ("phase0",),
     "random/random": ("phase0",),
@@ -121,7 +121,8 @@ def test_archive_case(preset, fork, group, case):
 
 def test_slots_not_after():
     # The target slot must be after the slot of the state, so zero slots is a rejection.
-    pre = snappy.decompress(next(FILES.rglob("pre.ssz_snappy")).read_bytes())
+    case = next((FILES / "minimal" / "phase0").rglob("pre.ssz_snappy"))
+    pre = snappy.decompress(case.read_bytes())
     with pytest.raises(consensus.TransitionError) as info:
         consensus.process_slots("minimal", "phase0", pre, 0)
     assert info.value.code == 53

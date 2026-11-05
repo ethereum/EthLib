@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: epoch_processing
+handler: participation_flag_updates
+suite: pyspec_tests
+case: all_zeroed

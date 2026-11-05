@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: sanity
+handler: slots
+suite: pyspec_tests
+case: balance_change_affects_proposer
