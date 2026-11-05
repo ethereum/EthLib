@@ -115,9 +115,8 @@ private theorem dvd_sum_zipWith_val_iff_fr (a b : List Fr) :
   have e2 : List.zipWith (· * ·) (a.map Fr.toZMod) (b.map Fr.toZMod) =
       (List.zipWith (· * ·) a b).map Fr.toZMod := by
     rw [List.zipWith_map, List.map_zipWith]
-    congr
-    funext x y
-    exact (map_mul Fr.toZMod x y).symm
+    exact congrArg (fun f => List.zipWith f a b)
+      (funext fun x => funext fun y => (map_mul Fr.toZMod x y).symm)
   rw [e1, e2, ← map_list_sum, map_eq_zero_iff _ Fr.toZMod.injective] at h
   exact h
 
