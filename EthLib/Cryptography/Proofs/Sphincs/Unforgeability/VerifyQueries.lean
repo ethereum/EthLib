@@ -119,10 +119,10 @@ omit [LawfulMonad m] [LawfulMonad n] in
 /-- Computing a vector in order commutes with the map. -/
 theorem ofFnInOrder_map_monad {α : Type} :
     ∀ (k : Nat) (f : Fin k → m α),
-      φ (Xmss.ofFnInOrder k f) = Xmss.ofFnInOrder k fun i => φ (f i)
+      φ (HashSig.ofFnInOrder k f) = HashSig.ofFnInOrder k fun i => φ (f i)
   | 0, _ => map_pure _
   | k + 1, f => by
-    simp only [Xmss.ofFnInOrder, map_bind, map_pure, ofFnInOrder_map_monad k]
+    simp only [HashSig.ofFnInOrder, map_bind, map_pure, ofFnInOrder_map_monad k]
 
 omit [LawfulMonad m] [LawfulMonad n] in
 /-- A hash chain commutes with the map. -/
@@ -257,10 +257,10 @@ variable {ι : Type} {spec : OracleSpec ι}
 theorem ofFnInOrder_isTotalQueryBound {α : Type} :
     ∀ (k : Nat) (f : Fin k → OracleComp spec α) (b : Fin k → Nat),
       (∀ i, IsTotalQueryBound (f i) (b i)) →
-        IsTotalQueryBound (Xmss.ofFnInOrder k f) (∑ i, b i)
+        IsTotalQueryBound (HashSig.ofFnInOrder k f) (∑ i, b i)
   | 0, _, _, _ => isQueryBound_pure _ _ _ _
   | k + 1, f, b, h => by
-    rw [Xmss.ofFnInOrder, Fin.sum_univ_succ]
+    rw [HashSig.ofFnInOrder, Fin.sum_univ_succ]
     refine isTotalQueryBound_bind (h 0) fun _ => ?_
     rw [← Nat.add_zero (∑ i : Fin k, b i.succ)]
     exact isTotalQueryBound_bind (ofFnInOrder_isTotalQueryBound k _ _ fun i => h i.succ)

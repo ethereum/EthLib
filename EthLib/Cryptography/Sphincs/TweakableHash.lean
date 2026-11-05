@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Cryptography.Sphincs.Address
-public import EthLib.Cryptography.Xmss.TweakableHash
+public import EthLib.Cryptography.HashSig
 
 /-!
 # The leanSPHINCS tweakable hash
@@ -44,7 +44,7 @@ open EthLib.Cryptography.Sphincs.Constants
 
 /-! ## The hash -/
 
-export EthLib.Cryptography.Xmss (pureHash)
+export EthLib.Cryptography.HashSig (pureHash)
 
 /-- `H`: the scheme's 32-byte hash. -/
 def hash (input : ByteArray) : HashOutput :=

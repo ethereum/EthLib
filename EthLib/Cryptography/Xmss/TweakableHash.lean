@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Hash.Keccak
+public import EthLib.Cryptography.HashSig
 public import EthLib.Cryptography.Xmss.Address
 
 /-!
@@ -36,9 +37,7 @@ open EthLib.Cryptography.Xmss.Constants
 def hash (input : ByteArray) : Vector UInt8 32 :=
   Hash.Keccak.keccak256 input
 
-/-- A hash function, as a computation in the identity monad. -/
-def pureHash (f : ByteArray → Vector UInt8 32) (input : ByteArray) : Id (Vector UInt8 32) :=
-  pure (f input)
+export EthLib.Cryptography.HashSig (pureHash)
 
 /-- `H` as EthLib computes it: Keccak-256, in the identity monad.
 
