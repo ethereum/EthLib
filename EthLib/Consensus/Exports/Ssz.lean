@@ -11,6 +11,7 @@ public import EthLib.Consensus.Containers.Requests
 public import EthLib.Consensus.Containers.Signing
 public import EthLib.Consensus.Containers.State
 public import EthLib.Consensus.Containers.SyncCommittee
+public import EthLib.Consensus.DataAvailability.Blob
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Serialization.Exports.Ssz
 
@@ -49,7 +50,9 @@ attribute [instance] Container.codec
 
 Altair replaces the pending attestations of a state by participation flags.
 
-Capella stops adding historical batches, and adds historical summaries instead. -/
+Capella stops adding historical batches, and adds historical summaries instead.
+
+Fulu carries blobs in data column sidecars instead of blob sidecars. -/
 def containerOf (preset : Preset) (fork : Fork) : String → Option Container
   | "Fork" => some ⟨ForkVersions⟩
   | "ForkData" => some ⟨ForkData⟩
@@ -101,6 +104,8 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
   | "BeaconBlock" => some ⟨BeaconBlock preset fork⟩
   | "SignedBeaconBlock" => some ⟨SignedBeaconBlock preset fork⟩
   | "BeaconState" => some ⟨BeaconState preset fork⟩
+  | "BlobSidecar" => if .dencun ≤ fork ∧ fork < .fusaka then some ⟨BlobSidecar preset⟩ else none
+  | "BlobIdentifier" => if .dencun ≤ fork ∧ fork < .fusaka then some ⟨BlobIdentifier⟩ else none
   | "Withdrawal" => if .shapella ≤ fork then some ⟨Withdrawal⟩ else none
   | "ExecutionPayload" =>
     if .bellatrix ≤ fork then some ⟨ExecutionPayload preset fork⟩ else none
@@ -136,6 +141,13 @@ def specifiedFromGlamsterdam : List String := [
   "BuilderPendingWithdrawal", "BuilderDepositRequest", "BuilderExitRequest",
   "PayloadAttestationData", "PayloadAttestationMessage", "InclusionList", "SignedInclusionList"]
 
+/-- The preset and the fork that UTF-8 names name, at a fork up to Fulu. -/
+def presetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
+  let preset ← presetOf (← nameOf name)
+  let fork ← forkOf fork
+  if .glamsterdam ≤ fork then throw (0, s!"fork {fork.name} not yet specified")
+  return (preset, fork)
+
 /-- The root of the value that the bytes encode, then the bytes of that value.
 
 The preset, the fork and the container are named in UTF-8. -/
@@ -152,5 +164,28 @@ def sszStaticExport (name fork type data : ByteArray) : Result ByteArray := do
   let root ← runSsz "root rejected" (SszType.hashTreeRoot value)
   let bytes ← runSsz "value rejected" (SszType.serialize value)
   return ⟨root.toArray⟩ ++ bytes
+
+/-- The node at a generalized index of the value that the bytes encode, then its branch.
+
+The branch lists the sibling of each node on the path, from the node up to the root. -/
+@[export eth_consensus_merkle_proof]
+def merkleProofExport (name fork type data : ByteArray) (gindex : UInt64) : Result ByteArray := do
+  let (preset, fork) ← presetAndFork name fork
+  let type ← nameOf type
+  let some container := containerOf preset fork type
+    | throw (0, s!"no container {type} at {fork.name}")
+  let value ← runSsz "input rejected" (SszType.deserialize container.type data)
+  let shape := SszType.desc container.type
+  let node ← runSsz "node rejected" (nodeRoot shape (SszType.toValue value) gindex.toNat)
+  let branch ← runSsz "branch rejected" (buildProof shape (SszType.toValue value) gindex.toNat)
+  return branch.foldl (fun bytes sibling => bytes ++ ⟨sibling⟩) ⟨node⟩
+
+/-- Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header. -/
+@[export eth_consensus_verify_blob_sidecar_inclusion_proof]
+def verifyBlobSidecarInclusionProofExport (name fork data : ByteArray) : Result Bool := do
+  let (preset, fork) ← presetAndFork name fork
+  if ¬(.dencun ≤ fork ∧ fork < .fusaka) then throw (0, s!"no container BlobSidecar at {fork.name}")
+  let sidecar ← runSsz "input rejected" (SszType.deserialize (BlobSidecar preset) data)
+  return verifyBlobSidecarInclusionProof preset fork sidecar
 
 end EthLib.Consensus.Exports

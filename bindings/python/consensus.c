@@ -114,6 +114,22 @@ eth_consensus_compute_subscribed_subnets(
   uint64_t epoch
 );
 
+extern lean_object*
+eth_consensus_merkle_proof(
+  lean_object* name,
+  lean_object* fork,
+  lean_object* type,
+  lean_object* data,
+  uint64_t gindex
+);
+
+extern lean_object*
+eth_consensus_verify_blob_sidecar_inclusion_proof(
+  lean_object* name,
+  lean_object* fork,
+  lean_object* data
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* The UTF-8 bytes of a `str` argument, or NULL with a TypeError set. */
@@ -434,4 +450,69 @@ py_consensus_compute_min_epochs_for_block_requests(
   if (!name) return NULL;
   return except_into_pyint(
     eth_consensus_compute_min_epochs_for_block_requests(name), CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_merkle_proof(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *type_obj, *data_obj, *gindex_obj;
+  if (!PyArg_ParseTuple(args, "OOOOO", &name_obj, &fork_obj, &type_obj, &data_obj, &gindex_obj))
+    return NULL;
+  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
+  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj) || !PyUnicode_Check(type_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name, fork and type must be str");
+    return NULL;
+  }
+  if (!PyBytes_Check(data_obj)) {
+    PyErr_SetString(PyExc_TypeError, "data must be bytes");
+    return NULL;
+  }
+  /* A generalized index outside [0, 2^64) raises OverflowError. */
+  unsigned long long gindex = PyLong_AsUnsignedLongLong(gindex_obj);
+  if (PyErr_Occurred()) return NULL;
+  Py_ssize_t name_len, fork_len, type_len;
+  const char* name_utf8 = PyUnicode_AsUTF8AndSize(name_obj, &name_len);
+  if (!name_utf8) return NULL;
+  const char* fork_utf8 = PyUnicode_AsUTF8AndSize(fork_obj, &fork_len);
+  if (!fork_utf8) return NULL;
+  const char* type_utf8 = PyUnicode_AsUTF8AndSize(type_obj, &type_len);
+  if (!type_utf8) return NULL;
+  lean_object* name = mk_bytearray((const uint8_t*) name_utf8, name_len);
+  lean_object* fork = mk_bytearray((const uint8_t*) fork_utf8, fork_len);
+  lean_object* type = mk_bytearray((const uint8_t*) type_utf8, type_len);
+  lean_object* data = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(data_obj), PyBytes_GET_SIZE(data_obj));
+  return except_into_pybytes(
+    eth_consensus_merkle_proof(name, fork, type, data, (uint64_t) gindex), SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_verify_blob_sidecar_inclusion_proof(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *data_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &name_obj, &fork_obj, &data_obj)) return NULL;
+  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
+  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name and fork must be str");
+    return NULL;
+  }
+  if (!PyBytes_Check(data_obj)) {
+    PyErr_SetString(PyExc_TypeError, "data must be bytes");
+    return NULL;
+  }
+  Py_ssize_t name_len, fork_len;
+  const char* name_utf8 = PyUnicode_AsUTF8AndSize(name_obj, &name_len);
+  if (!name_utf8) return NULL;
+  const char* fork_utf8 = PyUnicode_AsUTF8AndSize(fork_obj, &fork_len);
+  if (!fork_utf8) return NULL;
+  lean_object* name = mk_bytearray((const uint8_t*) name_utf8, name_len);
+  lean_object* fork = mk_bytearray((const uint8_t*) fork_utf8, fork_len);
+  lean_object* data = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(data_obj), PyBytes_GET_SIZE(data_obj));
+  return except_into_pybool(
+    eth_consensus_verify_blob_sidecar_inclusion_proof(name, fork, data), SSZ_ERROR);
 }

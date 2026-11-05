@@ -61,6 +61,8 @@ CONTAINERS = {
     "BeaconBlock": ("phase0", "gloas"),
     "SignedBeaconBlock": ("phase0", "gloas"),
     "BeaconState": ("phase0", "gloas"),
+    "BlobSidecar": ("deneb", "fulu"),
+    "BlobIdentifier": ("deneb", "fulu"),
     "Withdrawal": ("capella", None),
     "ExecutionPayload": ("bellatrix", "gloas"),
     "ExecutionPayloadHeader": ("bellatrix", "gloas"),

@@ -272,6 +272,12 @@
 #define DOC_consensus_ssz_static \
   "The root of the value that the bytes encode, then the bytes of that value."
 
+#define DOC_consensus_merkle_proof \
+  "The node at a generalized index of the value that the bytes encode, then its branch."
+
+#define DOC_consensus_verify_blob_sidecar_inclusion_proof \
+  "Whether the branch of a blob sidecar, given as bytes, climbs to the body root of its header."
+
 #define DOC_consensus_compute_shuffled_permutation \
   "The shuffled position of every index below the count."
 
