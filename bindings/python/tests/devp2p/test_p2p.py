@@ -9,7 +9,7 @@ from ethlib.networking import devp2p
 #
 # File: EIPS/eip-8.md
 # Repository: ethereum/EIPs
-# Commit: 0ce679f4654ba4d120c97113626f320475e22fa9
+# Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
 # Licence: CC0-1.0
 HELLO = bytes.fromhex(
     "f87137916b6e6574682f76302e39312f706c616e39cdc5836574683dc6846d6f726b1682270fb840"

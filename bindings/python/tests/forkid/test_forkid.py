@@ -10,7 +10,7 @@ from ethlib.networking.forkid import BLOCK, TIME, ForkIdError
 # Section: Test Cases
 # Files: EIPS/eip-2124.md, EIPS/eip-6122.md
 # Repository: ethereum/EIPs
-# Commit: 0ce679f4654ba4d120c97113626f320475e22fa9
+# Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
 # Licence: CC0-1.0
 #
 # Each genesis hash is checked by the first fork hash of its chain, the CRC-32 of the hash alone.
@@ -271,7 +271,7 @@ def test_malformed_identifier(remote: str) -> None:
 #
 # File: EIPS/eip-7910.md
 # Repository: ethereum/EIPs
-# Commit: 0ce679f4654ba4d120c97113626f320475e22fa9
+# Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
 # Licence: CC0-1.0
 #
 # Hoodi starts with every fork up to Cancun at genesis, so none of them is a fork.

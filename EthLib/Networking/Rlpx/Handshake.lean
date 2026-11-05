@@ -17,7 +17,7 @@ The initiator sends `auth`, and the recipient answers with `ack`.
 
 Each message is an RLP list encrypted with ECIES, as "Specification" of [EIP-8][eip8] fixes it.
 
-[eip8]: https://github.com/ethereum/EIPs/blob/0ce679f4654ba4d120c97113626f320475e22fa9/EIPS/eip-8.md
+[eip8]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8.md
 
 EthLib reads only this form, and rejects the older fixed-size form of `auth` and `ack`.
 
