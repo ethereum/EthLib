@@ -109,15 +109,13 @@ def test_example_3_length_too_large(fork: str, gas: int) -> None:
         run(fork, 0x05, EXAMPLE_3, gas)
 
 
-# The prices of example 3 that EthLib reports under EIP-198 and under EIP-2565.
-EXAMPLE_3_EIP_198_PRICE = int(
-    "106843469441730070637230511704452836328351196382845634728734630254657807121733"
-    "20789629146724657549280936306536701227228889744512638312451529980055895215896"
-)
-EXAMPLE_3_EIP_2565_PRICE = int(
-    "178072449069550117728717519507421393880585327304742724547891050424429678524414"
-    "29578564989302252918614900823561653926786290141875609616538210107190086205440"
-)
+# The prices of example 3: a modulus of x = 2^256 - 1 bytes, and an exponent of 2^256 - 2, whose
+# highest bit has the index 255.
+# EIP-198: mult_complexity(x) = x^2 // 16 + 480 * x - 199680 above 1024 bytes, times 255, over 20.
+# EIP-2565: ceil(x / 8)^2, times 255, over 3, and at least 200.
+EXAMPLE_3_LENGTH = 2**256 - 1
+EXAMPLE_3_EIP_198_PRICE = (EXAMPLE_3_LENGTH**2 // 16 + 480 * EXAMPLE_3_LENGTH - 199680) * 255 // 20
+EXAMPLE_3_EIP_2565_PRICE = max(200, ((EXAMPLE_3_LENGTH + 7) // 8) ** 2 * 255 // 3)
 
 
 @pytest.mark.parametrize("fork", since("byzantium", "fusaka"))

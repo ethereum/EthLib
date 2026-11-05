@@ -63,121 +63,109 @@ SUCCEEDS = _group(lambda c: c["output"] is None)
 INVALID = _group(lambda c: c["output"] == "" and c["gas_modifier"] >= 0)
 SHORT = _group(lambda c: c["gas_modifier"] < 0)
 
-# The error of each invalid case, as EthLib reports it; every G2 subgroup case is notInSubgroup.
-INVALID_ERROR = {
-    "eip196_ec_add_mul/test_gas::test_invalid_gas_consumption[ecadd-exact]": "notOnCurve",
-    "eip196_ec_add_mul/test_gas::test_invalid_gas_consumption[ecadd-extra_100k]": "notOnCurve",
-    "eip196_ec_add_mul/test_gas::test_invalid_gas_consumption[ecmul-exact]": "notOnCurve",
-    "eip196_ec_add_mul/test_gas::test_invalid_gas_consumption[ecmul-extra_100k]": "notOnCurve",
-    "eip197_ec_pairing/test_gas::"
-    "test_invalid_gas_consumption[invalid_g1_point-exact]": "notOnCurve",
-    "eip197_ec_pairing/test_gas::"
-    "test_invalid_gas_consumption[invalid_g1_point-extra_100k]": "notOnCurve",
-    "test_ecadd::test_invalid[0_P_plus_inf]": "invalidFieldElement",
-    "test_ecadd::test_invalid[1_Pplus2_plus_inf]": "invalidFieldElement",
-    "test_ecadd::test_invalid[P_0_plus_inf]": "invalidFieldElement",
-    "test_ecadd::test_invalid[Pplus1_2_plus_inf]": "invalidFieldElement",
-    "test_ecadd::test_invalid[inf_plus_0_P]": "invalidFieldElement",
-    "test_ecadd::test_invalid[inf_plus_1_Pplus2]": "invalidFieldElement",
-    "test_ecadd::test_invalid[inf_plus_P_0]": "invalidFieldElement",
-    "test_ecadd::test_invalid[inf_plus_Pplus1_2]": "invalidFieldElement",
-    "test_ecadd::test_invalid[inf_plus_pt_1_3]": "notOnCurve",
-    "test_ecadd::test_invalid[not_on_curve_plus_not_on_curve]": "notOnCurve",
-    "test_ecadd::test_invalid[not_on_curve_plus_valid]": "notOnCurve",
-    "test_ecadd::test_invalid[pt_0_3_plus_inf]": "notOnCurve",
-    "test_ecadd::test_invalid[pt_1_1_plus_inf]": "notOnCurve",
-    "test_ecadd::test_invalid[pt_1_3_plus_16_zero_bytes]": "notOnCurve",
-    "test_ecadd::test_invalid[pt_1_3_plus_1_zero_byte]": "notOnCurve",
-    "test_ecadd::test_invalid[pt_1_3_plus_32_zero_bytes]": "notOnCurve",
-    "test_ecadd::test_invalid[pt_6_9_plus_pt_0x126198c_0x1e4dc]": "notOnCurve",
-    "test_ecadd::test_invalid[valid_plus_not_on_curve]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_0_3-32_extra_byte_0x00]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_0_3-length_80]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_0_3_no_scalar]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_0_3_times_2_pow_128-length_80]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_0_3_times_2_pow_128]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_0_3_times_2_pow_256_minus_1]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_0_3_times_group_order]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_0_3_times_group_order_minus_one]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_0_3_times_nine]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_0_3_times_one]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_0_3_times_two]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_0_3_times_zero]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_1_3-32_extra_byte_0x00]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_1_3-length_80]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_1_3_no_scalar]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_1_3_times_2_pow_128-length_80]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_1_3_times_2_pow_128]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_1_3_times_2_pow_256_minus_1]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_1_3_times_group_order]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_1_3_times_group_order_minus_one]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_1_3_times_nine]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_1_3_times_one]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_1_3_times_two]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_1_3_times_zero]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_7827_6598_times_one]": "notOnCurve",
-    "test_ecmul::test_invalid[not_on_curve_7827_6598_times_zero]": "notOnCurve",
-    "test_ecmul::test_invalid[x_eq_P]": "invalidFieldElement",
-    "test_ecmul::test_invalid[x_plus_P]": "invalidFieldElement",
-    "test_ecmul::test_invalid[y_eq_P]": "invalidFieldElement",
-    "test_ecmul::test_invalid[y_plus_P]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[bad_length_191]": "invalidInputLength 191",
-    "test_ecpairing::test_invalid[bad_length_193]": "invalidInputLength 193",
-    "test_ecpairing::test_invalid[g1_not_on_curve]": "notOnCurve",
-    "test_ecpairing::test_invalid[g1_x_eq_P]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g1_x_plus_P]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g1_y_eq_P]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g1_y_plus_P]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g2_x0_eq_P]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g2_x0_plus_N]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g2_x0_plus_P]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g2_x0_plus_one]": "notOnCurve",
-    "test_ecpairing::test_invalid[g2_x1_eq_P]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g2_x1_plus_N]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g2_x1_plus_P]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g2_x1_plus_one]": "notOnCurve",
-    "test_ecpairing::test_invalid[g2_y0_eq_P]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g2_y0_plus_N]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g2_y0_plus_P]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g2_y0_plus_one]": "notOnCurve",
-    "test_ecpairing::test_invalid[g2_y1_eq_P]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g2_y1_plus_N]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g2_y1_plus_P]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[g2_y1_plus_one]": "notOnCurve",
-    "test_ecpairing::test_invalid[one_point_not_in_subgroup]": "notOnCurve",
-    "test_ecpairing::test_invalid[one_point_with_g2_zero_and_g1_invalid]": "notOnCurve",
-    "test_ecpairing::test_invalid[perturb_x0_by_curve_order]": "notOnCurve",
-    "test_ecpairing::test_invalid[perturb_x1_by_curve_order]": "notOnCurve",
-    "test_ecpairing::test_invalid[perturb_zeropoint_by_field_modulus]": "invalidFieldElement",
-    "test_ecpairing::test_invalid[perturb_zeropoint_by_one]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data0]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data10]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data11]": "invalidFieldElement",
-    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data12]": "invalidFieldElement",
-    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data1]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data2]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data3]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data4]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data5]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data6]": "invalidFieldElement",
-    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data7]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data8]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data9]": "invalidFieldElement",
-    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data0]": "invalidFieldElement",
-    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data10]": "invalidFieldElement",
-    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data11]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data12]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data13]": "invalidFieldElement",
-    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data1]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data2]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data3]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data4]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data5]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data6]": "invalidFieldElement",
-    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data7]": "notOnCurve",
-    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data8]": "invalidFieldElement",
-    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data9]": "invalidFieldElement",
-}
+# The field modulus p and the group order r of EIP-196 and EIP-197.
+P = 0x30644E72E131A029B85045B68181585D97816A916871CA8D3C208C16D87CFD47
+R = 0x30644E72E131A029B85045B68181585D2833E84879B9709143E1F593F0000001
+
+# An element a + b * i of F_p^2 = F_p[i] / (i^2 + 1) is the pair (a, b).
+Fq2 = tuple[int, int]
+
+
+def fq2_add(a: Fq2, b: Fq2) -> Fq2:
+    """The sum in F_p^2."""
+    return ((a[0] + b[0]) % P, (a[1] + b[1]) % P)
+
+
+def fq2_sub(a: Fq2, b: Fq2) -> Fq2:
+    """The difference in F_p^2."""
+    return ((a[0] - b[0]) % P, (a[1] - b[1]) % P)
+
+
+def fq2_mul(a: Fq2, b: Fq2) -> Fq2:
+    """The product in F_p^2."""
+    return ((a[0] * b[0] - a[1] * b[1]) % P, (a[0] * b[1] + a[1] * b[0]) % P)
+
+
+def fq2_inv(a: Fq2) -> Fq2:
+    """The inverse in F_p^2 of a nonzero element: (a - b * i) / (a^2 + b^2)."""
+    norm = pow(a[0] * a[0] + a[1] * a[1], -1, P)
+    return (a[0] * norm % P, -a[1] * norm % P)
+
+
+# The twist of EIP-197 is y^2 = x^3 + 3 / (9 + i).
+TWIST_B = fq2_mul((3, 0), fq2_inv((9, 1)))
+
+
+def g2_add(a: tuple[Fq2, Fq2] | None, b: tuple[Fq2, Fq2] | None) -> tuple[Fq2, Fq2] | None:
+    """The sum of two points of the twist in affine form, with None for the point at infinity."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    if a[0] == b[0] and a[1] != b[1]:
+        return None
+    if a == b:
+        x_squared = fq2_mul(a[0], a[0])
+        slope = fq2_mul(
+            fq2_add(fq2_add(x_squared, x_squared), x_squared), fq2_inv(fq2_add(a[1], a[1]))
+        )
+    else:
+        slope = fq2_mul(fq2_sub(b[1], a[1]), fq2_inv(fq2_sub(b[0], a[0])))
+    x = fq2_sub(fq2_sub(fq2_mul(slope, slope), a[0]), b[0])
+    return (x, fq2_sub(fq2_mul(slope, fq2_sub(a[0], x)), a[1]))
+
+
+def g2_times_r(point: tuple[Fq2, Fq2]) -> tuple[Fq2, Fq2] | None:
+    """The point times the group order r, by double and add."""
+    result = None
+    for bit in bin(R)[2:]:
+        result = g2_add(result, result)
+        if bit == "1":
+            result = g2_add(result, point)
+    return result
+
+
+def g1_variant(x: int, y: int) -> str | None:
+    """The error of a G1 point of EIP-196, or None for a point of the curve y^2 = x^3 + 3."""
+    if x >= P or y >= P:
+        return "invalidFieldElement"
+    if (x, y) != (0, 0) and (y * y - x**3 - 3) % P != 0:
+        return "notOnCurve"
+    return None
+
+
+def invalid_variant(address: int, data: bytes) -> str:
+    """The error of an input that EIP-196 or EIP-197 rejects, read from its bytes in order."""
+    # ECADD reads two G1 points and ECMUL one, from the input padded with zeros.
+    if address in (0x06, 0x07):
+        padded = data.ljust(128, b"\0")
+        for offset in (0, 64) if address == 0x06 else (0,):
+            x = int.from_bytes(padded[offset : offset + 32])
+            y = int.from_bytes(padded[offset + 32 : offset + 64])
+            if variant := g1_variant(x, y):
+                return variant
+        raise AssertionError("an invalid case with a valid ECADD or ECMUL input")
+    # A pairing input is a list of 192-byte pairs of a G1 point and a G2 point.
+    # EIP-197 fixes no order among the errors, so a case with several faults expects the first
+    # one that a reader meets, checking each pair in full before the next.
+    if len(data) % 192 != 0:
+        return f"invalidInputLength {len(data)}"
+    for offset in range(0, len(data), 192):
+        words = [int.from_bytes(data[offset + i : offset + i + 32]) for i in range(0, 192, 32)]
+        if variant := g1_variant(words[0], words[1]):
+            return variant
+        if any(word >= P for word in words[2:]):
+            return "invalidFieldElement"
+        # EIP-197 writes each coordinate of G2 as its imaginary part, then its real part.
+        g2 = ((words[3], words[2]), (words[5], words[4]))
+        if g2 == ((0, 0), (0, 0)):
+            continue
+        x_cubed = fq2_mul(fq2_mul(g2[0], g2[0]), g2[0])
+        if fq2_mul(g2[1], g2[1]) != fq2_add(x_cubed, TWIST_B):
+            return "notOnCurve"
+        if g2_times_r(g2) is not None:
+            return "notInSubgroup"
+    raise AssertionError("an invalid case with a valid pairing input")
 
 
 def error(variant: str) -> str:
@@ -218,11 +206,7 @@ def test_valid_one_gas_short(fork: str, case: dict) -> None:
 def test_invalid(fork: str, case: dict) -> None:
     # The call fails at its price or above, so it fails for its input and not for lack of gas.
     data = bytes.fromhex(case["input"])
-    if case["id"].startswith("test_ecpairing_fuzzed::test_invalid_g2_subgroup["):
-        expected = "notInSubgroup"
-    else:
-        expected = INVALID_ERROR[case["id"]]
-    with raises(ValueError, error(expected)):
+    with raises(ValueError, error(invalid_variant(case["address"], data))):
         run(fork, case["address"], data, price(fork, case["address"], data) + case["gas_modifier"])
 
 
