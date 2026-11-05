@@ -1,12 +1,13 @@
 # leanSPHINCS security proof
 
-This directory will hold a proof that leanSPHINCS is strongly unforgeable in the random oracle model, with 127 bits of classical security.
+This directory will hold a proof that leanSPHINCS is strongly unforgeable in the random oracle model.
+The bound will give 127 bits of classical security for up to `2^30` signatures with one key.
 Strong unforgeability means that an adversary who sees signatures of messages of its choice cannot produce a new valid pair of message and signature.
 This includes a second signature of a message already signed.
 The random oracle model treats the hash as an ideal random function that everyone, the adversary included, can only query.
 
 The proof is a port, and it lands in parts.
-This part holds the model of the scheme and its lemmas.
+So far it holds the model of the scheme and its lemmas, generic probability bounds, and the first step of the game hops.
 The theorem itself is not stated here yet.
 Nothing in this directory is a security claim about EthLib's leanSPHINCS until the last part connects the model to EthLib's algorithms.
 
@@ -25,6 +26,14 @@ Its oracle world is a uniform sampler together with a hash oracle from byte list
 The files in `SphincsSecurity/Scheme/` prove facts about the model.
 These facts cover the byte layout of its hash inputs, the encoding of digests and the recovery of public values from a signature.
 They also cover correctness, the search for a valid encoding and the cost of a verification.
+
+The files in `SphincsSecurity/Base/` prove probability bounds that do not mention the scheme.
+They bound potentials of independent disclosures, and they bound tails with Chernoff and Poisson estimates.
+`Base/Prelude.lean` holds generic lemmas about counted queries and uniform tables.
+
+The files in `SphincsSecurity/Seed/` prepare the step that removes the hidden key seed from the game.
+`Seed/Model.lean` describes the hash outputs that key generation derives from the seed, and the cache that programs them.
+`Seed/Coupling.lean` proves that sampling these outputs and programming them into the cache before a computation leaves its distribution unchanged.
 
 A later part will bridge the model to EthLib's leanSPHINCS, in `EthLib/Cryptography/Sphincs/`.
 Some hash calls are made by EthLib and not by the model, or the other way round.
@@ -57,6 +66,11 @@ This means that every event has the same probability under both.
   `Scheme/Bytes.lean` gains lemmas for the lengths of the byte widths that the model uses.
   Two files set the option that lets definitional unfolding cross reducibility boundaries.
 - `Scheme/Uniform.lean` gains a lemma: the first coordinate of a uniform pair is uniform.
+- The Mathlib that EthLib uses has no uniform probability mass function of a finite type.
+  So `Base/Prelude.lean` states its lemmas about uniform products and uniform tables for uniform samples, as equalities in distribution.
+- `Base/Domination.lean` and `Base/Virtual.lean` import the parts of Mathlib that they use instead of all of Mathlib.
+  A file that imports all of Mathlib needs more memory than EthLib's limit per file.
+- `lake exe check-decls` rejects `opaque` declarations, so the sampling instance of `Seed/Model.lean` is an irreducible definition instead.
 - No file raises the heartbeat limit.
 - Arguments that the simplifier does not use, deprecated lemma names and unused section variables are removed, so the files build without warnings.
 
