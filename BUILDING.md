@@ -62,7 +62,7 @@ Public metadata still changes when source positions move, so a proof edit does n
 A full build of EthLib is slow, so CI caches it.
 CI restores EthLib's `.lake/build` only from successful pushes to `master`, while Mathlib uses its own published cache.
 The EthLib cache key includes the operating system, the architecture, the toolchain and the dependency manifest.
-Pull requests read the cache but never publish one, and the manual workflow's `clean_build` input skips the restore.
+Pull requests read the cache but never publish one.
 
 A new push to a pull request cancels the run still in progress on that pull request.
 On `master`, the run in progress finishes, and the latest push waits until it ends.
@@ -73,6 +73,8 @@ So CI caches their `.lake/build` directories separately, under a key of the oper
 Each successful push to `master` saves this cache under a new key, and a run restores the newest entry for its toolchain and manifest.
 So a module of these packages that EthLib starts to import is cached after the next push to `master`.
 Lake compares content hashes, so it rebuilds a restored module whose inputs differ.
+
+The manual workflow's `clean_build` input skips both restores, so the run builds EthLib and these packages from scratch.
 
 The cache saves the most time when a change rebuilds only the proofs that it affects.
 Because `EthLib` sets `precompileModules`, Lake loads the native shared library of all of `EthLib` into each proof that imports the specification.
