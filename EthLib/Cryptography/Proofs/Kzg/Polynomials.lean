@@ -26,6 +26,30 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 
+/-! ## Folds over the indices of an array -/
+
+/-- The indices of `Array.finRange n`, as numbers, are `List.range n`. -/
+theorem map_val_toList_finRange (n : Nat) :
+    (Array.finRange n).toList.map Fin.val = List.range n := by
+  apply List.ext_getElem (by simp [Array.finRange])
+  intro i h1 h2
+  simp [Array.finRange]
+
+/-- A fold over `Array.finRange n` that reads only index values is a fold over `List.range n`. -/
+theorem foldl_finRange_eq_foldl_range {β : Type _} {n : Nat} (g : β → Fin n → β)
+    (f : β → Nat → β) (hgf : ∀ r (i : Fin n), g r i = f r i.val) (init : β) :
+    (Array.finRange n).foldl g init = (List.range n).foldl f init := by
+  rw [← Array.foldl_toList, ← map_val_toList_finRange, List.foldl_map]
+  exact congrArg (fun g => List.foldl g init _) (funext fun r => funext fun i => hgf r i)
+
+/-- The monadic form of `foldl_finRange_eq_foldl_range`. -/
+theorem foldlM_finRange_eq_foldlM_range {m : Type _ → Type _} [Monad m] [LawfulMonad m]
+    {β : Type _} {n : Nat} (g : β → Fin n → m β) (f : β → Nat → m β)
+    (hgf : ∀ r (i : Fin n), g r i = f r i.val) (init : β) :
+    (Array.finRange n).foldlM g init = (List.range n).foldlM f init := by
+  rw [← Array.foldlM_toList, ← map_val_toList_finRange, List.foldlM_map]
+  exact congrArg (fun g => List.foldlM g init _) (funext fun r => funext fun i => hgf r i)
+
 /-- A thrown error skips the rest of an `Except` computation.
 
 The rejection theorems of the KZG operations rewrite with it. -/
@@ -439,11 +463,11 @@ private theorem getElem!_of_ge_size (p : PolynomialCoeff) {i : Nat}
   rw [getElem!_neg p i h]
   rfl
 
-private theorem ite_lt_size_getElem! (p : PolynomialCoeff) (i : Nat) :
-    (if i < p.size then p[i]! else Fr.zero) = p[i]! := by
+private theorem dite_lt_size_getElem! (p : PolynomialCoeff) (i : Nat) :
+    (if h : i < p.size then p[i] else Fr.zero) = p[i]! := by
   by_cases h : i < p.size
-  · rw [ite_eq_left h]
-  · rw [ite_eq_right h, getElem!_of_ge_size p h]
+  · rw [dite_eq_left h, getElem!_pos p i h]
+  · rw [dite_eq_right h, getElem!_of_ge_size p h]
 
 /-- Coefficient `i` of `addPolynomialcoeff a b` is `a[i]! + b[i]!` for all `i`
 (since out-of-bounds accesses default to `Fr.zero`). -/
@@ -454,8 +478,9 @@ private theorem ite_lt_size_getElem! (p : PolynomialCoeff) (i : Nat) :
   · rw [ite_eq_left hab]
     dsimp only []
     by_cases hi : i < a.size
-    · rw [getElem!_pos _ i (by simp [hi]), Array.getElem_ofFn,
-          ite_lt_size_getElem!]
+    · rw [getElem!_pos _ i (by simp [hi]), Array.getElem_ofFn]
+      simp only [Fin.getElem_fin]
+      rw [getElem!_pos a i hi, dite_lt_size_getElem!]
     · have hib : ¬ i < b.size := by omega
       rw [getElem!_of_ge_size _ (by simp [hi]),
           getElem!_of_ge_size a hi, getElem!_of_ge_size b hib]
@@ -463,8 +488,9 @@ private theorem ite_lt_size_getElem! (p : PolynomialCoeff) (i : Nat) :
   · rw [ite_eq_right hab]
     dsimp only []
     by_cases hi : i < b.size
-    · rw [getElem!_pos _ i (by simp [hi]), Array.getElem_ofFn,
-          ite_lt_size_getElem!, Fr.add_comm]
+    · rw [getElem!_pos _ i (by simp [hi]), Array.getElem_ofFn]
+      simp only [Fin.getElem_fin]
+      rw [getElem!_pos b i hi, Fr.add_comm, dite_lt_size_getElem!]
     · have hia : ¬ i < a.size := by omega
       rw [getElem!_of_ge_size _ (by simp [hi]),
           getElem!_of_ge_size a hia, getElem!_of_ge_size b hi]
@@ -531,6 +557,28 @@ theorem evalPolyAt_addPoly (a b : PolynomialCoeff) (x : Fr) :
     evalPolyAt (addPolynomialcoeff a b) x = evalPolyAt a x + evalPolyAt b x :=
   evalCoeffPoly_addPolynomialcoeff a b x
 
+private def mulFoldStep (a b : PolynomialCoeff) (r : PolynomialCoeff)
+    (power : Nat) : PolynomialCoeff :=
+  let coef := a[power]!
+  let summand : PolynomialCoeff :=
+    Array.replicate power Fr.zero ++ b.map (· * coef)
+  addPolynomialcoeff r summand
+
+/-- The product's fold, with the coefficient read under its bound, is the fold of `mulFoldStep`. -/
+private theorem multiplyFold_eq (a b : PolynomialCoeff) :
+    (Array.finRange a.size).foldl (init := #[Fr.zero]) (fun r power =>
+      addPolynomialcoeff r (Array.replicate power.val Fr.zero ++ b.map (· * a[power]))) =
+    (List.range a.size).foldl (mulFoldStep a b) #[Fr.zero] :=
+  foldl_finRange_eq_foldl_range _ _ (fun r i => by
+    simp only [mulFoldStep, Fin.getElem_fin, getElem!_pos a i.val i.isLt]) _
+
+/-- A product within the size bound is the fold of `mulFoldStep`. -/
+private theorem multiplyPolynomialcoeff_eq_fold {a b : PolynomialCoeff}
+    (h : ¬ a.size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB) :
+    multiplyPolynomialcoeff a b = .ok ((List.range a.size).foldl (mulFoldStep a b) #[Fr.zero]) := by
+  rw [multiplyPolynomialcoeff, ite_eq_right h, ← multiplyFold_eq]
+  rfl
+
 /-- Multiplying an empty left polynomial by a bounded right polynomial returns `#[Fr.zero]`. -/
 @[simp] theorem multiplyPolynomialcoeff_empty_left {b : PolynomialCoeff}
     (hb : b.size ≤ FIELD_ELEMENTS_PER_EXT_BLOB) :
@@ -538,9 +586,7 @@ theorem evalPolyAt_addPoly (a b : PolynomialCoeff) (x : Fr) :
   have hnot : ¬ ((#[] : PolynomialCoeff).size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB) := by
     simp
     omega
-  rw [multiplyPolynomialcoeff, ite_eq_right hnot]
-  -- Use the range equations instead of reducing its unexposed implementation.
-  simp only [Array.size_empty, Array.range_eq_range', Array.range'_zero]
+  rw [multiplyPolynomialcoeff_eq_fold hnot]
   rfl
 
 private theorem addPolynomialcoeff_replicate_zero (m n : Nat) :
@@ -573,13 +619,6 @@ theorem multiplyPolynomialcoeff_too_large {a b : PolynomialCoeff}
   rw [ite_eq_left h]
   rfl
 
-private def mulFoldStep (a b : PolynomialCoeff) (r : PolynomialCoeff)
-    (power : Nat) : PolynomialCoeff :=
-  let coef := a[power]!
-  let summand : PolynomialCoeff :=
-    Array.replicate power Fr.zero ++ b.map (· * coef)
-  addPolynomialcoeff r summand
-
 private theorem foldl_mulFoldStep_empty_right (a : PolynomialCoeff) (k : Nat) :
     (List.range k).foldl (mulFoldStep a #[]) #[Fr.zero] =
       Array.replicate (max (k - 1) 1) Fr.zero := by
@@ -602,9 +641,7 @@ private theorem foldl_mulFoldStep_empty_right (a : PolynomialCoeff) (k : Nat) :
   have hnot : ¬ (a.size + (#[] : PolynomialCoeff).size > FIELD_ELEMENTS_PER_EXT_BLOB) := by
     simp
     omega
-  rw [multiplyPolynomialcoeff, ite_eq_right hnot]
-  change Except.ok ((Array.range a.size).foldl (mulFoldStep a #[]) #[Fr.zero]) = _
-  rw [← Array.foldl_toList, Array.toList_range, foldl_mulFoldStep_empty_right]
+  rw [multiplyPolynomialcoeff_eq_fold hnot, foldl_mulFoldStep_empty_right]
 
 private theorem size_mulFoldStep (a b r : PolynomialCoeff) (power : Nat) :
     (mulFoldStep a b r power).size = max r.size (power + b.size) := by
@@ -630,19 +667,13 @@ private theorem size_foldl_mulFoldStep (a b : PolynomialCoeff) (k : Nat) :
 theorem size_multiplyPolynomialcoeff {a b p : PolynomialCoeff}
     (h : multiplyPolynomialcoeff a b = .ok p) :
     p.size = if a.isEmpty then 1 else max (a.size + b.size - 1) 1 := by
-  rw [multiplyPolynomialcoeff] at h
   by_cases hgt : a.size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB
-  · rw [ite_eq_left hgt] at h
+  · rw [multiplyPolynomialcoeff, ite_eq_left hgt] at h
     cases h
-  · rw [ite_eq_right hgt] at h
-    change Except.ok _ = Except.ok p at h
+  · rw [multiplyPolynomialcoeff_eq_fold hgt] at h
     injection h with hp
     subst hp
-    have hfold : (Array.range a.size).foldl (mulFoldStep a b) #[Fr.zero] =
-        (List.range a.size).foldl (mulFoldStep a b) #[Fr.zero] := by
-      rw [← Array.foldl_toList, Array.toList_range]
-    change ((Array.range a.size).foldl (mulFoldStep a b) #[Fr.zero]).size = _
-    rw [hfold, size_foldl_mulFoldStep a b a.size]
+    rw [size_foldl_mulFoldStep a b a.size]
     by_cases ha : a.isEmpty = true
     · have ha0 : a.size = 0 := Array.isEmpty_iff_size_eq_zero.mp ha
       simp [ha, ha0]
@@ -679,19 +710,12 @@ theorem leadingCoeff_multiplyPolynomialcoeff {a b p : PolynomialCoeff}
     simpa [Array.isEmpty_iff_size_eq_zero, Nat.pos_iff_ne_zero] using ha
   have hb0 : 0 < b.size := by
     simpa [Array.isEmpty_iff_size_eq_zero, Nat.pos_iff_ne_zero] using hb
-  rw [multiplyPolynomialcoeff] at h
   by_cases hgt : a.size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB
-  · rw [ite_eq_left hgt] at h
+  · rw [multiplyPolynomialcoeff, ite_eq_left hgt] at h
     cases h
-  · rw [ite_eq_right hgt] at h
-    change Except.ok _ = Except.ok p at h
+  · rw [multiplyPolynomialcoeff_eq_fold hgt] at h
     injection h with hp
     subst hp
-    have hfold : (Array.range a.size).foldl (mulFoldStep a b) #[Fr.zero] =
-        (List.range a.size).foldl (mulFoldStep a b) #[Fr.zero] := by
-      rw [← Array.foldl_toList, Array.toList_range]
-    change ((Array.range a.size).foldl (mulFoldStep a b) #[Fr.zero])[a.size + b.size - 2]! = _
-    rw [hfold]
     obtain ⟨k, hk⟩ : ∃ k, a.size = k + 1 := ⟨a.size - 1, by omega⟩
     rw [hk, List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil]
     have hidx : k + 1 + b.size - 2 = k + b.size - 1 := by omega
@@ -957,19 +981,14 @@ product of their evaluations at `x`. -/
 theorem evalPolyAt_mulPoly {a b p : PolynomialCoeff} (x : Fr)
     (h : multiplyPolynomialcoeff a b = .ok p) :
     evalPolyAt p x = evalPolyAt a x * evalPolyAt b x := by
-  rw [multiplyPolynomialcoeff] at h
   by_cases hgt : a.size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB
-  · rw [ite_eq_left hgt] at h
+  · rw [multiplyPolynomialcoeff, ite_eq_left hgt] at h
     cases h
-  · rw [ite_eq_right hgt] at h
-    change Except.ok _ = Except.ok p at h
+  · rw [multiplyPolynomialcoeff_eq_fold hgt] at h
     injection h with hp
     subst hp
-    have hfold : (Array.range a.size).foldl (mulFoldStep a b) #[Fr.zero] =
-        (List.range a.size).foldl (mulFoldStep a b) #[Fr.zero] := by
-      rw [← Array.foldl_toList, Array.toList_range]
-    change evalCoeffPoly ((Array.range a.size).foldl (mulFoldStep a b) #[Fr.zero]) x = _
-    rw [hfold, evalCoeffPoly_foldl_mulFoldStep]
+    change evalCoeffPoly _ x = _
+    rw [evalCoeffPoly_foldl_mulFoldStep]
     rfl
 
 private theorem evalPolyAt_linear_factor_self (z : Fr) :
@@ -1030,13 +1049,14 @@ theorem dividePolynomialcoeff_zero_divisor (a b : PolynomialCoeff)
     (h : b.size = 0 ∨ (b.size ≤ a.size ∧ b[b.size - 1]!.isZero = true)) :
     dividePolynomialcoeff a b = .error .zeroDivisorPolynomial := by
   rcases h with h | ⟨hle, hzero⟩
-  · simp [dividePolynomialcoeff, h, Bind.bind, Except.bind,
-      throw, throwThe, MonadExceptOf.throw]
+  · simp [dividePolynomialcoeff, h, throw, throwThe, MonadExceptOf.throw]
   · have hnotlt : ¬ a.size < b.size := by omega
     by_cases hb0 : b.size = 0
-    · simp [dividePolynomialcoeff, hb0, Bind.bind, Except.bind,
-        throw, throwThe, MonadExceptOf.throw]
-    · simp [dividePolynomialcoeff, hb0, hnotlt, hzero, Bind.bind, Except.bind,
+    · simp [dividePolynomialcoeff, hb0, throw, throwThe, MonadExceptOf.throw]
+    · have hz : (b[b.size - 1]'(by omega)).isZero = true := by
+        rw [← getElem!_pos b _ (by omega)]
+        exact hzero
+      simp [dividePolynomialcoeff, hb0, hnotlt, hz, Bind.bind, Except.bind,
         throw, throwThe, MonadExceptOf.throw]
 
 /-- When the dividend has strictly fewer coefficients than the divisor,
@@ -1053,7 +1073,7 @@ theorem interpolatePolynomialcoeff_size_mismatch {xs ys : Array Fr}
     interpolatePolynomialcoeff xs ys =
       .error (.inputLengthMismatch "ys" xs.size ys.size) := by
   unfold interpolatePolynomialcoeff
-  rw [ite_eq_left h]
+  rw [dite_eq_left h]
   rfl
 
 @[simp] theorem length_computePowersAux (x current : Fr) (n : Nat) :
@@ -1104,17 +1124,13 @@ theorem getElem_computePowers (x : Fr) (n i : Nat)
     rw [ite_eq_right (Nat.succ_ne_zero i), Fr.powNat_succ, Fr.one_mul_mul,
       ← Fr.powNat_succ]
 
-/-- The divisibility guard in `computeRootsOfUnity` is logically the
-identity: the function always computes the powers of the domain root. -/
+/-- `computeRootsOfUnity` computes the powers of the domain root. -/
 theorem computeRootsOfUnity_def (order : Nat) :
     computeRootsOfUnity order =
       computePowers
         ((Fr.ofNat PRIMITIVE_ROOT_OF_UNITY) ^
           (Fr.ofNat ((BLS_MODULUS - 1) / order))) order := by
-  rw [computeRootsOfUnity]
-  split
-  · rfl
-  · exact panicWith_eq _ _
+  rfl
 
 @[simp] theorem size_computeRootsOfUnity (order : Nat) :
     (computeRootsOfUnity order).size = order := by
@@ -1149,15 +1165,88 @@ theorem blobToPolynomial_error (blob : Blob) {e : KzgError}
     (rootsOfUnityBrp size).size = size := by
   simp [rootsOfUnityBrp, size_bitReversalPermutation]
 
+/-! ## Evaluation in evaluation form -/
+
+/-- The barycentric sum `Σ_j p[i+j] * D[i+j] / (z - D[i+j])` of `count` terms.
+
+It adds the terms from left to right onto `acc`.
+
+A zero denominator would add `0`, since division in `Fr` by `0` gives `0`. -/
+def barycentricSumAux (polynomial domain : Array Fr) (z : Fr) :
+    Fr → Nat → Nat → Fr
+  | acc, _, 0 => acc
+  | acc, i, count + 1 =>
+    let a := polynomial[i]! * domain[i]!
+    let b := z - domain[i]!
+    barycentricSumAux polynomial domain z (acc + a / b) (i + 1) count
+
+/-- The barycentric sum, with the inverses of `z - D[i]` given. -/
+def barycentricSumInvAux (polynomial domain inverses : Array Fr) :
+    Fr → Nat → Nat → Fr
+  | acc, _, 0 => acc
+  | acc, i, count + 1 =>
+    barycentricSumInvAux polynomial domain inverses
+      (acc + polynomial[i]! * domain[i]! * inverses[i]!) (i + 1) count
+
+/-- A fold over an array is a fold over its indices, reading each entry with a default. -/
+theorem foldl_eq_foldl_range_getElem! {α β : Type _} [Inhabited α] (f : β → α → β)
+    (arr : Array α) (init : β) :
+    arr.foldl f init = (List.range arr.size).foldl (fun acc k => f acc arr[k]!) init := by
+  have hl : arr.toList = (List.range arr.size).map (arr[·]!) := by
+    apply List.ext_getElem (by simp)
+    intro i h1 h2
+    simp only [List.getElem_map, List.getElem_range, Array.getElem_toList]
+    rw [getElem!_pos arr i (by simpa using h1)]
+  rw [← Array.foldl_toList, hl, List.foldl_map]
+
+/-- The sum with inverses, from index `i`, is a fold over the indices `i` to `i + count - 1`. -/
+theorem barycentricSumInvAux_eq_foldl (polynomial domain inverses : Array Fr) (count : Nat) :
+    ∀ acc i, barycentricSumInvAux polynomial domain inverses acc i count =
+      (List.range' i count).foldl
+        (fun acc k => acc + polynomial[k]! * domain[k]! * inverses[k]!) acc := by
+  induction count with
+  | zero => intro acc i; rfl
+  | succ n ih =>
+    intro acc i
+    rw [List.range'_succ, List.foldl_cons, ← ih]
+    rfl
+
+/-- The fold of the evaluation over its triples is the sum with inverses. -/
+theorem foldl_zip_zip_eq_barycentricSumInvAux (polynomial domain inverses : Array Fr)
+    (hpd : polynomial.size = domain.size) (hinv : inverses.size = polynomial.size) (acc : Fr) :
+    ((polynomial.zip domain).zip inverses).foldl (init := acc) (fun acc ((y, d), inv) =>
+      acc + y * d * inv) =
+      barycentricSumInvAux polynomial domain inverses acc 0 polynomial.size := by
+  rw [foldl_eq_foldl_range_getElem!, barycentricSumInvAux_eq_foldl, ← List.range_eq_range']
+  simp only [Array.size_zip, hpd, hinv, Nat.min_self]
+  apply List.foldl_ext
+  intro r k hk
+  have hk' : k < domain.size := List.mem_range.mp hk
+  rw [getElem!_pos _ k (by simp [hpd, hinv]; omega)]
+  simp only [Array.getElem_zip]
+  rw [getElem!_pos polynomial k (by omega), getElem!_pos domain k hk',
+    getElem!_pos inverses k (by omega)]
+
 /-- When `z` is the `i`-th element of `domain`, evaluation is a table
 lookup. -/
 theorem evaluatePolynomialInEvaluationFormAux_fastPath
     (polynomial domain : Array Fr) (z : Fr) (i : Nat)
+    (hsize : polynomial.size = domain.size)
     (h : domain.idxOf? z = some i) :
     evaluatePolynomialInEvaluationFormAux polynomial domain z
       = polynomial[i]! := by
+  rw [Array.idxOf?_eq_map_finIdxOf?_val, Option.map_eq_some_iff] at h
+  obtain ⟨fi, hfi, rfl⟩ := h
+  obtain ⟨hdi, hbefore⟩ := Array.finIdxOf?_eq_some_iff.mp hfi
+  have hi : fi.val < polynomial.size := by have := fi.isLt; omega
+  have hfind : (polynomial.zip domain).find? (·.2 == z) =
+      some (polynomial[fi.val], domain[fi]) := by
+    rw [Array.find?_eq_some_iff_getElem]
+    refine ⟨by simp [hdi], fi.val, by simp [hi], by simp [Array.getElem_zip], fun j hj => ?_⟩
+    simpa [Array.getElem_zip] using hbefore ⟨j, Nat.lt_trans hj fi.isLt⟩ hj
   rw [evaluatePolynomialInEvaluationFormAux]
-  simp only [h]
+  simp only [hfind]
+  rw [getElem!_pos polynomial _ hi]
 
 /-- When `z` is the `i`-th element of the evaluation domain, evaluating
 the polynomial at `z` is a table lookup. -/
@@ -1168,8 +1257,8 @@ theorem evaluatePolynomialInEvaluationForm_fastPath
     evaluatePolynomialInEvaluationForm polynomial z = .ok polynomial[i]! := by
   rw [evaluatePolynomialInEvaluationForm, ite_eq_right (by simp [hsize])]
   exact congrArg Except.ok
-    (evaluatePolynomialInEvaluationFormAux_fastPath polynomial _ z i h)
-
+    (evaluatePolynomialInEvaluationFormAux_fastPath polynomial _ z i
+      (by rw [hsize, size_rootsOfUnityBrp]) h)
 
 -- Proofs about barycentricSumAux and evaluation outside of the fast path--
 

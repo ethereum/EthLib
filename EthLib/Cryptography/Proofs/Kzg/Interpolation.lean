@@ -104,6 +104,23 @@ private def outerStep (xs ys : Array Fr) (r : PolynomialCoeff) (i : Nat) :
   let summand ← (Array.range ys.size).foldlM (interpolationStep xs i) #[ys[i]!]
   return addPolynomialcoeff r summand
 
+/-- With nodes and values of one length, the interpolation folds `outerStep` over the indices. -/
+private theorem interpolatePolynomialcoeff_eq_fold {xs ys : Array Fr} (hsz : xs.size = ys.size) :
+    interpolatePolynomialcoeff xs ys =
+      (List.range xs.size).foldlM (outerStep xs ys) #[Fr.zero] := by
+  unfold interpolatePolynomialcoeff
+  rw [dite_eq_right (by omega)]
+  refine foldlM_finRange_eq_foldlM_range _ _ (fun r i => ?_) _
+  have hi := i.isLt
+  unfold outerStep
+  rw [← Array.foldlM_toList (xs := Array.range ys.size), Array.toList_range,
+    getElem!_pos ys i.val (by omega),
+    ← foldlM_finRange_eq_foldlM_range _ (interpolationStep xs i.val) (fun s j => ?_)]
+  have hj := j.isLt
+  unfold interpolationStep
+  rw [getElem!_pos xs i.val hi, getElem!_pos xs j.val (by omega)]
+  simp only [Fin.getElem_fin, ne_eq]
+
 private theorem outer_step_eval (xs ys : Array Fr) (r out : PolynomialCoeff)
     (i k : Nat) (hi : i < xs.size) (hk : k < xs.size) (hsz : xs.size = ys.size)
     (hdistinct : ∀ i j, i < xs.size → j < xs.size → i ≠ j → xs[i]! ≠ xs[j]!)
@@ -165,10 +182,7 @@ theorem interpolatePolynomialcoeff_eval_at_of_distinct
     {k : Nat} (hk : k < xs.size) :
     evalPolyAt out xs[k]! = ys[k]! := by
   have hfold : (List.range xs.size).foldlM (outerStep xs ys) #[Fr.zero] = .ok out := by
-    unfold interpolatePolynomialcoeff at h
-    rw [ite_eq_right (by omega)] at h
-    change (Array.range xs.size).foldlM (outerStep xs ys) #[Fr.zero] = .ok out at h
-    simpa only [← Array.foldlM_toList, Array.toList_range] using h
+    rwa [interpolatePolynomialcoeff_eq_fold hsz] at h
   rw [outer_eval xs ys k hk hsz hdistinct (List.range xs.size) #[Fr.zero] out
     (fun i hi => List.mem_range.mp hi) hfold, eval_singleton]
   rw [sum_delta _ k _ List.nodup_range, ite_eq_left (List.mem_range.mpr hk)]
@@ -348,14 +362,11 @@ theorem size_interpolatePolynomialcoeff {xs ys out : Array Fr}
     (h : interpolatePolynomialcoeff xs ys = .ok out) :
     xs.size = ys.size ∧ xs.size < Constants.FIELD_ELEMENTS_PER_EXT_BLOB ∧
       out.size = max xs.size 1 := by
-  unfold interpolatePolynomialcoeff at h
   by_cases hne : xs.size ≠ ys.size
-  · rw [ite_eq_left hne] at h
+  · rw [interpolatePolynomialcoeff_size_mismatch hne] at h
     cases h
   · have hsz : xs.size = ys.size := Decidable.of_not_not hne
-    rw [ite_eq_right hne] at h
-    change (Array.range xs.size).foldlM (outerStep xs ys) #[Fr.zero] = .ok out at h
-    rw [← Array.foldlM_toList, Array.toList_range] at h
+    rw [interpolatePolynomialcoeff_eq_fold hsz] at h
     obtain ⟨hout_sz, hbd⟩ := outer_range_size_and_bound xs ys hsz xs.size (Nat.le_refl _) out h
     refine ⟨hsz, ?_, ?_⟩
     · by_cases hx0 : xs.size = 0
@@ -374,10 +385,7 @@ theorem interpolatePolynomialcoeff_ok_of_lt {xs ys : Array Fr}
       out.size = max xs.size 1 := by
   obtain ⟨out, hout, hout_sz⟩ := outer_range_ok xs ys hsz hbound xs.size (Nat.le_refl _)
   refine ⟨out, ?_, ?_⟩
-  · unfold interpolatePolynomialcoeff
-    rw [ite_eq_right (by omega)]
-    change (Array.range xs.size).foldlM (outerStep xs ys) #[Fr.zero] = .ok out
-    rw [← Array.foldlM_toList, Array.toList_range]
+  · rw [interpolatePolynomialcoeff_eq_fold hsz]
     exact hout
   · rw [hout_sz]
     split <;> omega

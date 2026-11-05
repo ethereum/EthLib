@@ -201,6 +201,13 @@ private theorem divisionLoopState_size (a b : PolynomialCoeff) (n : Nat) :
   | zero => rfl
   | succ n ih => simp [divisionLoopState_succ, size_divisionSubtract, ih]
 
+/-- Each step of the loop prepends one quotient coefficient. -/
+theorem size_divisionLoopState_snd (a b : PolynomialCoeff) (n : Nat) :
+    (divisionLoopState a b n).2.size = n := by
+  induction n with
+  | zero => rfl
+  | succ n ih => simp [divisionLoopState_succ, ih, Nat.add_comm]
+
 private theorem outer_step_identity {R : Type*} [CommRing R]
     (r b q o x p : R) :
     (r - b*q*p) + (q+x*o)*b*p = r + o*b*(x*p) := by ring
@@ -242,7 +249,25 @@ theorem dividePolynomialcoeff_loop_invariant (a b : PolynomialCoeff) (x : Fr)
       x (Fr.powNat x (a.size + 1 - b.size - (n+1)))).trans hi
 
 
-private theorem dividePolynomialcoeff_eq_loop (a b : PolynomialCoeff)
+/-- The subtraction step on a vector is `divisionSubtract` on its array. -/
+private theorem toArray_foldl_subtract {n : Nat} (r : Vector Fr n) (b : PolynomialCoeff)
+    (shift : Nat) (quot : Fr) (h : shift + b.size ≤ n) :
+    ((Array.finRange b.size).foldl (fun r i =>
+      r.set (shift + i.val) (r[shift + i.val]'(by have := i.isLt; omega) - b[i] * quot)
+        (by have := i.isLt; omega)) r).toArray =
+      divisionSubtract r.toArray b shift quot b.size := by
+  rw [← Array.foldl_hom Vector.toArray
+    (g₂ := fun x (i : Fin b.size) => x.set! (shift + i.val) (x[shift + i.val]! - b[i.val]! * quot))]
+  · unfold divisionSubtract
+    rw [← Array.foldl_toList, ← map_val_toList_finRange, List.foldl_map]
+  · intro x i
+    have hi := i.isLt
+    rw [Array.set!_eq_setIfInBounds, Array.setIfInBounds_def, dite_eq_left (by simp; omega),
+      Vector.toArray_set, getElem!_pos x.toArray _ (by simp; omega), getElem!_pos b _ hi]
+    simp
+
+/-- Long division with a usable divisor is the second half of the loop state after every step. -/
+theorem dividePolynomialcoeff_eq_loop (a b : PolynomialCoeff)
     (hb : 0 < b.size) (hab : b.size ≤ a.size)
     (hlead : b[b.size-1]!.isZero = false) :
     dividePolynomialcoeff a b =
@@ -250,10 +275,32 @@ private theorem dividePolynomialcoeff_eq_loop (a b : PolynomialCoeff)
   have hb0 : ¬ b.size = 0 := by omega
   have hnotlt : ¬ a.size < b.size := by omega
   have hmax : max b.size 1 = b.size := by omega
-  simp only [dividePolynomialcoeff, hb0, hnotlt, hlead, ↓reduceIte,
-    Bool.false_eq_true, pure, Except.pure,
-    hmax, divisionLoopState, divisionSubtract,
-    ← Array.foldl_toList, Array.toList_range]
+  have hlead' : (b[b.size - 1]'(by omega)).isZero = false := by
+    rw [← getElem!_pos b _ (by omega)]
+    exact hlead
+  simp only [dividePolynomialcoeff, hb0, hnotlt, hlead', dite_false, Bool.false_eq_true,
+    ↓reduceIte]
+  rw [show a.size + 1 - b.size = a.size + 1 - max b.size 1 by omega]
+  -- The loop on the vector, read as arrays, is the loop of `divisionLoopState`.
+  let F : Vector Fr a.size × PolynomialCoeff → PolynomialCoeff × PolynomialCoeff :=
+    fun x => (x.1.toArray, x.2)
+  let G : PolynomialCoeff × PolynomialCoeff → Fin (a.size + 1 - max b.size 1) →
+      PolynomialCoeff × PolynomialCoeff := fun x t =>
+    let apos := x.1.size - 1 - t.val
+    let shift := apos - (b.size - 1)
+    let quot := x.1[apos]! * b[b.size - 1]!.inverse
+    (divisionSubtract x.1 b shift quot b.size, #[quot] ++ x.2)
+  have hstate : (Array.finRange (a.size + 1 - max b.size 1)).foldl G (F (a.toVector, #[])) =
+      divisionLoopState a b (a.size + 1 - max b.size 1) := by
+    unfold divisionLoopState
+    rw [← Array.foldl_toList, ← map_val_toList_finRange, List.foldl_map]
+  refine congrArg Except.ok (Eq.trans (congrArg Prod.snd
+    (Array.foldl_hom F (g₂ := G) ?_)).symm (congrArg Prod.snd hstate))
+  intro x t
+  have ht := t.isLt
+  simp only [F, G, Vector.size_toArray]
+  rw [getElem!_pos x.1.toArray _ (by simp; omega), getElem!_pos b _ (by omega),
+    ← toArray_foldl_subtract _ _ _ _ (by omega)]
   rfl
 
 private theorem final_identity {R : Type*} [CommRing R] (r q b a : R)

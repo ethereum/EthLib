@@ -510,34 +510,10 @@ private theorem size_dividePolynomialcoeff {a b q : PolynomialCoeff}
       | true =>
         rw [dividePolynomialcoeff_zero_divisor a b (Or.inr ⟨hab, hz⟩)] at h
         cases h
-    have hb0 : ¬ b.size = 0 := by omega
-    have hmax : max b.size 1 = b.size := by omega
-    unfold dividePolynomialcoeff at h
-    rw [ite_eq_right hb0, ite_eq_right hlt, ite_eq_right (by simp [hlead])] at h
-    change Except.ok _ = Except.ok q at h
+    rw [dividePolynomialcoeff_eq_loop a b hb hab hlead] at h
     injection h with hq
     subst hq
-    let stepFn := fun (st : PolynomialCoeff × PolynomialCoeff) (t : Nat) =>
-      let apos := st.1.size - 1 - t
-      let diff := apos - (b.size - 1)
-      let quot := st.1[apos]! * b[b.size - 1]!.inverse
-      let a' := (Array.range b.size).foldl
-        (fun a i => a.set! (diff + i) (a[diff + i]! - b[i]! * quot)) st.1
-      (a', #[quot] ++ st.2)
-    change ((Array.range (a.size + 1 - max b.size 1)).foldl stepFn (a, #[])).2.size = _
-    rw [hmax, ← Array.foldl_toList, Array.toList_range]
-    -- Each step of `List.range steps` prepends one element to `o`.
-    suffices ∀ steps (init_a : PolynomialCoeff),
-        (((List.range steps).foldl stepFn (init_a, #[])).2).size = steps by
-      exact this (a.size + 1 - b.size) a
-    intro steps init_a
-    induction steps with
-    | zero => rfl
-    | succ s ih =>
-      simp only [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
-        stepFn, Array.size_append]
-      rw [ih]
-      simp [Nat.add_comm]
+    exact size_divisionLoopState_snd a b _
 
 /-- Dividing `f` by `binomialVanishing n c` produces `toeplitzQuotient f n c`.
 
@@ -565,10 +541,7 @@ theorem dividePolynomialcoeff_binomialVanishing {f : PolynomialCoeff} {n : Nat}
     exact (Array.size_eq_zero_iff.mp h0).symm
   · have hnf : n < f.size := by omega
     have hdiv_ok : ∃ q, dividePolynomialcoeff f b = .ok q := by
-      have hb0 : ¬ b.size = 0 := by omega
-      unfold dividePolynomialcoeff
-      rw [ite_eq_right hb0, ite_eq_right hlt, ite_eq_right (by simp [hb_lead_isZero])]
-      exact ⟨_, rfl⟩
+      exact ⟨_, dividePolynomialcoeff_eq_loop f b hb_pos (by omega) hb_lead_isZero⟩
     obtain ⟨q, hq⟩ := hdiv_ok
     rw [hq]
     apply congrArg Except.ok
