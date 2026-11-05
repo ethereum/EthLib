@@ -314,4 +314,15 @@ def chargeGas {fork : Fork} {Meter : Type} [GasMeter Meter] (evm : Evm fork Mete
   let gas ← GasMeter.charge evm.gas amount
   return { evm with gas }
 
+/-- The frame after a charge of `amount` state gas, or out of gas. -/
+def chargeStateGas {fork : Fork} {Meter : Type} [GasMeter Meter] (evm : Evm fork Meter)
+    (amount : Nat) : Except EvmError (Evm fork Meter) := do
+  let gas ← GasMeter.chargeState evm.gas amount
+  return { evm with gas }
+
+/-- The frame after a refill of `amount` state gas, for a state creation that is undone. -/
+def refillStateGas {fork : Fork} {Meter : Type} [GasMeter Meter] (evm : Evm fork Meter)
+    (amount : Nat) : Evm fork Meter :=
+  { evm with gas := GasMeter.refill evm.gas amount }
+
 end EthLib.Execution.Evm
