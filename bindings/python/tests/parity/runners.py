@@ -40,7 +40,7 @@ NOT_YET = {
     "transition": "the Electra and Fulu blocks (consensus track C35 to C40)",
     "fork_choice": "the Electra and Fulu blocks in the state transition (C35 to C40)",
     "fast_confirmation": "fast confirmation rule (consensus track, decision 9)",
-    "sync": "optimistic sync (consensus track C48)",
+    "sync": "the Electra and Fulu blocks in the state transition (C35 to C40)",
     "networking": "gossip validation (consensus track C63 and C64)",
     "ssz_static": "the remaining beacon containers (consensus track C2, C6 to C12)",
 }
@@ -684,7 +684,7 @@ def _transition(root: Path, case: Case) -> None:
 def _fork_choice(root: Path, case: Case) -> None:
     from consensus.test_fork_choice import run_case
 
-    # tests/<preset>/<fork>/fork_choice/<handler>/<suite>/<case>
+    # tests/<preset>/<fork>/<fork_choice or sync>/<handler>/<suite>/<case>
     run_case(case.preset, case.fork, root / case.path)
 
 
@@ -735,6 +735,8 @@ RUNNERS = {
     **{f"rewards/{handler}": _rewards for handler in REWARDS},
     "fork/fork": _upgrade,
     **{f"fork_choice/{handler}": _fork_choice for handler in FORK_CHOICE},
+    # Optimistic sync runs as a fork choice case, with the verdicts of the execution layer.
+    "sync/optimistic": _fork_choice,
     **{group: _transition for group in TRANSITION_GROUPS},
     **{f"genesis/{handler}": _genesis for handler in GENESIS},
     "legacy_ommers": legacy.run_ommers,

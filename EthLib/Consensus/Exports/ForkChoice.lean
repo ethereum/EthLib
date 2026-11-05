@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Exports.Transition
 public import EthLib.Consensus.ForkChoice.Handlers
+public import EthLib.Consensus.ForkChoice.Optimistic
 public import EthLib.Consensus.ForkChoice.ProposerHead
 public import EthLib.Cryptography.Exports.Kzg
 
@@ -38,11 +39,21 @@ A count of zero means that the node cannot get the columns.
 
 Without it the node samples no column for a block.
 
-The execution layer accepts every payload, as in the vectors.
+Kind 8 gives the verdict of the execution layer on the payload of the next block.
+
+A byte of 0 accepts the payload, and a byte of 1 finds it invalid.
+
+An invalid verdict may add the 32 bytes of the latest valid hash of the chain.
+
+The block then fails, and the blocks that the verdict finds invalid leave the store.
+
+Without a verdict the execution layer accepts the payload.
 
 After each step comes one byte: 0 when the store takes the step, 1 when it rejects it.
 
-A rejection leaves the store as it was, and carries its error code, a length and a message.
+A rejection carries its error code, a length and a message.
+
+It leaves the store as it was, except for the blocks that an invalid verdict removes.
 
 A read gives the head as a slot and a root, then the time and the genesis time in milliseconds.
 
@@ -168,6 +179,16 @@ def readColumnData {preset : Preset} {fork : Fork} (data : ByteArray) :
   if offset ≠ data.size then throw (0, "bytes follow the last column")
   return if count = 0 then none else some columns
 
+/-- The verdict of a step on a payload: none when the execution layer accepts it.
+
+Otherwise it is the latest valid hash, when the execution layer knows one. -/
+def readPayloadVerdict (data : ByteArray) : Result (Option (Option Hash32)) :=
+  match data.toList with
+  | [0] => return none
+  | [1] => return some none
+  | 1 :: _ => return some (some (← decodeInput Hash32 (data.extract 1 data.size)))
+  | _ => throw (0, "a verdict is 0, or 1 with an optional hash of 32 bytes")
+
 /-- The outcome of each step of a fork choice case, from an anchor state and an anchor block.
 
 The preset, the configuration and the fork are named in UTF-8.
@@ -191,6 +212,7 @@ def forkChoiceExport (name fork anchorState anchorBlock steps replacements : Byt
   let mut powBlocks : List PowBlock := []
   let mut blobData : Array Cryptography.Kzg.Blob × Array Cryptography.Kzg.KZGProof := (#[], #[])
   let mut columnData : Option (Array (DataColumnSidecar preset fork)) := some #[]
+  let mut verdict : Option (Option Hash32) := none
   let setup ← Cryptography.Kzg.Exports.embeddedSetup.mapError fun e => (0, e.message)
   for step in ← readForkChoiceSteps (steps.size + 1) steps 0 do
     if step.1 = 5 then
@@ -205,20 +227,38 @@ def forkChoiceExport (name fork anchorState anchorBlock steps replacements : Byt
       columnData ← readColumnData step.2
       out := out.push 0
       continue
+    if step.1 = 8 then
+      verdict ← readPayloadVerdict step.2
+      out := out.push 0
+      continue
     let known := powBlocks
     let held := blobData
     let sampled := columnData
+    let invalid := if step.1 = 1 then verdict else none
     let sources : BlockSources preset fork := {
-      engine := .constant true
+      engine := .constant invalid.isNone
       powBlock := fun hash => known.find? (·.blockHash = hash)
       blobsAndProofs := fun _ => some held
       columns := fun _ => sampled
       setup }
-    -- The blobs and the columns of a step serve only the block that follows it.
+    -- The blobs, the columns and the verdict of a step serve only the block that follows it.
     if step.1 = 1 then
       blobData := (#[], #[])
       columnData := some #[]
-    match ← runForkChoiceStep config checks sources store step with
+      verdict := none
+    let mut outcome ← runForkChoiceStep config checks sources store step
+    -- An invalid verdict removes blocks, whether the block itself fails or not.
+    if let some latestValidHash := invalid then
+      let signed ← decodeInput (SignedBeaconBlock preset fork) step.2
+      let after := match outcome with
+        | .ok (next, _) => next
+        | .error _ => store
+      match after.onInvalidPayload signed.message latestValidHash with
+      | .ok removed =>
+        store := removed
+        outcome := outcome.map fun (_, record) => (removed, record)
+      | .error e => outcome := .error e
+    match outcome with
     | .ok (next, record) =>
       store := next
       out := out.push 0 ++ record

@@ -450,7 +450,11 @@ _FORK_CHOICE_STEPS = {
     "attester_slashing": 3,
     "checks": 4,
     "pow_block": 5,
+    "payload": 8,
 }
+
+# The verdicts of the execution layer that find a payload invalid.
+_INVALID_PAYLOAD = ("INVALID", "INVALID_BLOCK_HASH")
 
 
 def fork_choice(
@@ -468,12 +472,18 @@ def fork_choice(
     # From Deneb a block may come as (block, blobs, proofs): the node holds those for it.
     # From Fulu a block may come as (block, columns): the node samples those SSZ columns for it,
     # and an empty list means that it cannot get them.
+    # A "payload" step is (status, latest valid hash or None): the verdict of the execution
+    # layer on the payload of the next block, by its Engine API name.
     records = b""
     for kind, data in steps:
         if kind == "tick":
             data = data.to_bytes(8, "little")
         elif kind == "checks":
             data = bytes([bool(data)])
+        elif kind == "payload":
+            status, latest_valid_hash = data
+            invalid = status in _INVALID_PAYLOAD
+            data = bytes([invalid]) + (latest_valid_hash or b"" if invalid else b"")
         elif kind == "block" and isinstance(data, tuple) and len(data) == 3:
             data, blobs, proofs = data
             held = len(blobs).to_bytes(4, "little") + b"".join(blobs) + b"".join(proofs)

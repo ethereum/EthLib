@@ -23,6 +23,7 @@ HANDLERS = (
     "get_proposer_head",
     "on_block",
     "on_merge_block",
+    "optimistic",
     "reorg",
     "withholding",
 )
@@ -81,6 +82,10 @@ def _input(case: Path, step: dict) -> tuple:
         return "tick", step["tick"]
     if "checks" in step:
         return "checks", "get_proposer_head" in step["checks"]
+    if "payload_status" in step:
+        status = step["payload_status"]
+        latest_valid_hash = status["latest_valid_hash"]
+        return "payload", (status["status"], latest_valid_hash and _hex(latest_valid_hash))
     if "columns" in step:
         return "block", (
             _read(case, step["block"]),
@@ -170,8 +175,15 @@ def _archive_cases() -> list:
     cases = []
     for preset, name in ARCHIVES.items():
         paths = [f"tests/{preset}/{fork}/fork_choice" for fork in (*SPECIFIED, "fulu")]
+        # The optimistic sync cases are mainnet only, from Bellatrix.
+        if preset == "mainnet":
+            paths += [f"tests/{preset}/{fork}/sync" for fork in SPECIFIED if fork != "altair"]
         base = archives.unpack(name, *paths) / "tests" / preset
-        for steps in sorted(base.glob("*/fork_choice/*/*/*/steps.yaml")):
+        found = [
+            *base.glob("*/fork_choice/*/*/*/steps.yaml"),
+            *base.glob("*/sync/*/*/*/steps.yaml"),
+        ]
+        for steps in sorted(found):
             case = steps.parent
             fork, _, handler = case.relative_to(base).parts[:3]
             if runs(fork, handler) or checks_columns(fork, case):

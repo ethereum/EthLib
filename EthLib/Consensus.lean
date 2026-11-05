@@ -27,6 +27,7 @@ public import EthLib.Consensus.DataAvailability.Column
 public import EthLib.Consensus.DataAvailability.Custody
 public import EthLib.Consensus.ForkChoice.Handlers
 public import EthLib.Consensus.ForkChoice.Head
+public import EthLib.Consensus.ForkChoice.Optimistic
 public import EthLib.Consensus.ForkChoice.ProposerHead
 public import EthLib.Consensus.ForkChoice.Store
 public import EthLib.Consensus.ForkSchedule
