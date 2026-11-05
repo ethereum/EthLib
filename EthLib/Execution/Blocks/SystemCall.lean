@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Blocks.AccessListBuilder
 public import EthLib.Execution.Blocks.Requests
 public import EthLib.Execution.Blocks.Validate
 public import EthLib.Execution.Transactions.Process
@@ -184,25 +185,52 @@ def checkedSystemCall {fork : Fork} (env : BlockEnvironment fork) (block : Block
   | some error => throw (.systemCallFailed target error)
   | none => return out
 
+/-! ## The body of a block -/
+
+/-- The block state, and the builder of the block access list, as the body of a block runs. -/
+structure BodyState where
+  /-- The block state, with the writes so far. -/
+  block : BlockState
+  /-- The builder of the block access list. -/
+  builder : AccessListBuilder
+
+/-- The body before it runs, on the block state `block`, at position 0. -/
+def BodyState.init (block : BlockState) : BodyState := ⟨block, .init block⟩
+
+/-- Begin the position `index` of the body, from the block state so far. -/
+def BodyState.beginIndex (body : BodyState) (index : Nat) : BodyState :=
+  { body with builder := body.builder.beginIndex (UInt32.ofNat index) body.block }
+
+/-- The body once a call that ends with the state `tx` joins it.
+
+The builder records the call, then its writes join the block. -/
+def BodyState.join (body : BodyState) (tx : TransactionState) :
+    Except State.StateError BodyState := do
+  let builder ← body.builder.recordTransaction tx
+  return ⟨tx.incorporateTxIntoBlock.parent, builder⟩
+
 /-! ## The calls of a block -/
 
 /-- The system calls at the start of a block at `fork`, before its transactions.
 
 From Dencun, the beacon roots contract stores the root of the parent beacon block.
 
-From Pectra, the history storage contract then stores `parentHash`, the hash of the parent. -/
-def startSystemCalls {fork : Fork} (env : BlockEnvironment fork) (parentHash : Hash32)
-    (block : BlockState) : Except EvmError BlockState := do
-  let block ← if h : .dencun ≤ fork then
-      (·.block) <$> systemCall env block BEACON_ROOTS_ADDRESS
-        ⟨(env.parentBeaconBlockRoot h).toArray⟩
-    else pure block
-  if .pectra ≤ fork then
-    (·.block) <$> systemCall env block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
-  else pure block
+From Pectra, the history storage contract then stores `parentHash`, the hash of the parent.
 
-/-- The contracts that a block reads requests from from Pectra, each with the type of its requests.
--/
+Each call joins the body at the current position. -/
+def startSystemCalls {fork : Fork} (env : BlockEnvironment fork) (parentHash : Hash32)
+    (body : BodyState) : Except EvmError BodyState := do
+  let body ← if h : .dencun ≤ fork then do
+      let out ← systemCall env body.block BEACON_ROOTS_ADDRESS
+        ⟨(env.parentBeaconBlockRoot h).toArray⟩
+      (body.join out.state).mapError .state
+    else pure body
+  if .pectra ≤ fork then do
+    let out ← systemCall env body.block HISTORY_STORAGE_ADDRESS ⟨parentHash.toArray⟩
+    (body.join out.state).mapError .state
+  else pure body
+
+/-- The request contracts of Pectra, each with the type of its requests. -/
 def REQUEST_CONTRACTS : List (UInt8 × Address) :=
   [(WITHDRAWAL_REQUEST_TYPE, WITHDRAWAL_REQUEST_PREDEPLOY_ADDRESS),
     (CONSOLIDATION_REQUEST_TYPE, CONSOLIDATION_REQUEST_PREDEPLOY_ADDRESS)]
@@ -231,15 +259,18 @@ From Pectra, each contract returns the data of its requests, which follow its ty
 
 A list with no data is left out.
 
-Before Pectra, there is no request. -/
-def readRequests {fork : Fork} (env : BlockEnvironment fork) (block : BlockState) :
-    Except BlockError (BlockState × List ByteArray) :=
+Before Pectra, there is no request.
+
+Each call joins the body at the current position. -/
+def readRequests {fork : Fork} (env : BlockEnvironment fork) (body : BodyState) :
+    Except BlockError (BodyState × List ByteArray) :=
   if .pectra ≤ fork then
     (requestContracts fork).foldlM
-      (fun (block, requests) (type, target) => do
-        let out ← checkedSystemCall env block target .empty
-        return (out.block, requests ++ requestList type out.output))
-      (block, [])
-  else .ok (block, [])
+      (fun (body, requests) (type, target) => do
+        let out ← checkedSystemCall env body.block target .empty
+        let body ← (body.join out.state).mapError .state
+        return (body, requests ++ requestList type out.output))
+      (body, [])
+  else .ok (body, [])
 
 end EthLib.Execution.Blocks

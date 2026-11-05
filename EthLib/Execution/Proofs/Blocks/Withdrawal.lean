@@ -126,7 +126,7 @@ theorem getAccount_processWithdrawals {fork : Fork} {block block' : BlockState}
         ((TransactionState.ofBlock block).getAccount address).nonce ∧
       ((TransactionState.ofBlock block').getAccount address).codeHash =
         ((TransactionState.ofBlock block).getAccount address).codeHash := by
-  simp only [processWithdrawals, bind, Except.bind, pure, Except.pure] at h
+  simp only [processWithdrawals, withdrawalState, bind, Except.bind, pure, Except.pure] at h
   split at h
   · cases h
   · rename_i tx htx

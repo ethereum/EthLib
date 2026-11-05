@@ -25,12 +25,26 @@ Then its body runs on the state after the parent.
 - Then each transaction must be able to enter the block, and runs.
 - From Shapella, the withdrawals follow.
 - From Pectra, the requests follow: the deposits, then the withdrawal and consolidation requests.
+- From Glamsterdam, the builder deposit and exit requests follow them.
 - Before Paris, the beneficiary and the ommers get their rewards last.
+
+From Glamsterdam, the body also builds its block access list, which must fit the gas limit.
+
+The body records its calls for that list at every fork, and only from Glamsterdam builds it.
+
+The system calls at the start run at position 0 of that list, transaction `i` at `i + 1`.
+
+The withdrawals and the requests run at position `n + 1`, after the last of `n` transactions.
+
+From Glamsterdam, the gas used of the block is the larger of its execution and state gas.
+
+The receipts still add up the gas that each transaction used after its refund.
 
 Last, the block must agree with what the body gave, in this order:
 
 - the gas used, then the transactions root, the state root, the receipts root and the Bloom filter;
-- from Shapella the withdrawals root, from Dencun the blob gas used, from Pectra the requests hash.
+- from Shapella the withdrawals root, from Dencun the blob gas used, from Pectra the requests hash;
+- from Glamsterdam the hash of the block access list.
 
 Each failure has its own error.
 
@@ -51,6 +65,9 @@ The EIPs that change it:
 - [EIP-4844][eip-4844], the blob gas used
 - [EIP-7685][eip-7685], the requests hash
 - [EIP-7934][eip-7934], the most bytes of a block
+- [EIP-7778][eip-7778], the gas of a block without the refunds, in Last Call
+- [EIP-7928][eip-7928], the block access list, in Last Call
+- [EIP-8037][eip-8037], the two counts of gas of a block and the gas of a receipt, in Last Call
 
 From Glamsterdam the transition fails as not yet specified, as the run of a transaction does.
 
@@ -61,6 +78,9 @@ From Glamsterdam the transition fails as not yet specified, as the run of a tran
 [eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#header-extension
 [eip-7685]: https://eips.ethereum.org/EIPS/eip-7685#block-header
 [eip-7934]: https://eips.ethereum.org/EIPS/eip-7934#specification
+[eip-7778]: https://eips.ethereum.org/EIPS/eip-7778#specification
+[eip-7928]: https://eips.ethereum.org/EIPS/eip-7928#state-transition-function
+[eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#block-level-gas-accounting
 -/
 
 @[expose] public section
@@ -119,18 +139,30 @@ def blockEnvironment {fork : Fork} (config : ChainConfig) (hashes : List Hash32)
 
 /-- What the body of a block gives, at `fork`. -/
 structure BodyOutput (fork : Fork) where
-  /-- The block state, with the writes of the body. -/
-  block : BlockState
+  /-- The block state and the builder of the block access list, after the body so far. -/
+  body : BodyState
   /-- The gas counts of the transactions. -/
   gas : BlockGas
+  /-- The gas that the transactions used, after their refunds, which the receipts add up. -/
+  cumulativeGasUsed : Nat
   /-- The receipt of each transaction, with the type of the transaction. -/
   receipts : List (UInt8 × Receipt fork)
   /-- The logs of the transactions, oldest first. -/
   logs : List Log
 
+/-- The block state, with the writes of the body so far. -/
+def BodyOutput.block {fork : Fork} (output : BodyOutput fork) : BlockState :=
+  output.body.block
+
 /-- Run the transaction `tx`, the `index`-th of its block, after the transactions before it.
 
 It fails when the transaction cannot enter the block.
+
+It runs at position `index + 1` of the block access list.
+
+The block counts the gas of the transaction by its counts of gas.
+
+Its receipt adds up the gas used after the refunds, as EIP-8037 keeps it.
 
 Before Byzantium, its receipt holds the state root after it. -/
 def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
@@ -138,20 +170,22 @@ def applyTransaction {fork : Fork} (env : BlockEnvironment fork) (index : Nat)
   let included ← (checkInclusion (UInt64.ofNat env.chainId) env before.gas
     (.ofBlock before.block) tx).mapError (.invalidTransaction index)
   let out ← (processTransaction env before.block included tx).mapError .aborted
-  let gas := before.gas.add ⟨out.gasUsed, 0, included.blobGasUsed⟩
+  let body ← ((before.body.beginIndex (index + 1)).join out.state).mapError .state
+  let gas := before.gas.add out.blockGas
+  let cumulativeGasUsed := before.cumulativeGasUsed + out.gasUsed
   let outcome : Outcome fork ← if h : .byzantium ≤ fork then pure (.status h out.error.isNone)
     else .postState (Nat.lt_of_not_le h) <$>
-      (stateRoot keccak256 out.block.applyChanges).mapError .trie
-  return { block := out.block, gas
+      (stateRoot keccak256 body.block.applyChanges).mapError .trie
+  return { body, gas, cumulativeGasUsed
            receipts :=
-             before.receipts ++ [(tx.type, makeReceipt outcome gas.execution out.logs.toList)]
+             before.receipts ++ [(tx.type, makeReceipt outcome cumulativeGasUsed out.logs.toList)]
            logs := before.logs ++ out.logs.toList }
 
-/-- Run the transactions of a block in order, from the block state `block`. -/
-def applyTransactions {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
+/-- Run the transactions of a block in order, from the body so far. -/
+def applyTransactions {fork : Fork} (env : BlockEnvironment fork) (body : BodyState)
     (transactions : List Transaction) : Except BlockError (BodyOutput fork) :=
   transactions.zipIdx.foldlM (fun before (tx, index) => applyTransaction env index before tx)
-    ⟨block, .zero, [], []⟩
+    ⟨body, .zero, 0, [], []⟩
 
 /-- Run a writing step on a block state, as a transaction of its own. -/
 def onBlock (block : BlockState)
@@ -163,37 +197,59 @@ def onBlock (block : BlockState)
 /-- The requests of a block at `fork`, after its transactions and withdrawals.
 
 The deposits come from the logs of the block, the other requests from their contracts. -/
-def blockRequests {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
-    (logs : List Log) : Except BlockError (BlockState × List ByteArray) := do
+def blockRequests {fork : Fork} (env : BlockEnvironment fork) (body : BodyState)
+    (logs : List Log) : Except BlockError (BodyState × List ByteArray) := do
   if .pectra ≤ fork then
     let deposits ← (depositRequests logs).mapError .deposit
-    let (block, requests) ← readRequests env block
-    return (block, requestList DEPOSIT_REQUEST_TYPE deposits ++ requests)
-  else return (block, [])
+    let (body, requests) ← readRequests env body
+    return (body, requestList DEPOSIT_REQUEST_TYPE deposits ++ requests)
+  else return (body, [])
 
 /-- What the whole body of a block gives: the output of its transactions, and its requests. -/
 structure BlockOutput (fork : Fork) extends BodyOutput fork where
   /-- The requests of the block, each list with its type byte first. -/
   requests : List ByteArray
+  /-- The hash of the block access list, from Glamsterdam, and none before. -/
+  accessListHash : Option Hash32
+
+/-- The hash of the block access list of a body at `fork`, or none before Glamsterdam.
+
+The list must fit the gas limit `gasLimit` of the block, as EIP-7928 asks. -/
+def accessListHashOf (fork : Fork) (body : BodyState) (gasLimit : Nat) :
+    Except BlockError (Option Hash32) := do
+  if fork ≥ .glamsterdam then
+    let bal := body.builder.build
+    (BlockAccessList.check bal gasLimit).mapError .blockAccessList
+    some <$> (BlockAccessList.hash bal).mapError .encoding
+  else return none
 
 /-- Run the body of the block `block` on the block state `start`, at `fork`.
 
-At the first block of the DAO Fork on the chain `config`, the DAO ether moves first. -/
+At the first block of the DAO Fork on the chain `config`, the DAO ether moves first.
+
+The system calls at the start run at position 0 of the block access list.
+
+The withdrawals and the requests run at position `n + 1`, after the last of `n` transactions.
+
+From Glamsterdam, the body then builds its block access list, which must fit the gas limit. -/
 def applyBody {fork : Fork} (config : ChainConfig) (env : BlockEnvironment fork)
     (block : Block fork Transaction) (start : BlockState) :
     Except BlockError (BlockOutput fork) := do
   let state ← if daoForkBlock config = some block.header.number then
       onBlock start (applyDaoFork fork) else pure start
-  let state ← (startSystemCalls env block.header.parentHash state).mapError .aborted
-  let body ← applyTransactions env state block.transactions
-  let state ← if h : .shapella ≤ fork then
-      (processWithdrawals fork body.block (block.withdrawals h)).mapError .state
-    else pure body.block
-  let (state, requests) ← blockRequests env state body.logs
+  let body ← (startSystemCalls env block.header.parentHash (.init state)).mapError .aborted
+  let output ← applyTransactions env body block.transactions
+  let body := output.body.beginIndex (block.transactions.length + 1)
+  let body ← if h : .shapella ≤ fork then do
+      let tx ← (withdrawalState fork body.block (block.withdrawals h)).mapError .state
+      (body.join tx).mapError .state
+    else pure body
+  let (body, requests) ← blockRequests env body output.logs
   let ommers := block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number)
-  let state ← onBlock state fun tx =>
+  let state ← onBlock body.block fun tx =>
     payRewards fork tx block.header.coinbase block.header.number ommers
-  return { body with block := state, requests }
+  let accessListHash ← accessListHashOf fork body block.header.gasLimit
+  return { output with body := { body with block := state }, requests, accessListHash }
 
 /-! ## The checks -/
 
@@ -279,6 +335,10 @@ def outputChecks {fork : Fork} (header : Header fork) (output : BlockOutput fork
   (if h : .pectra ≤ fork then
     [(decide ((requestsHash output.requests).data.toList = (header.requestsHash h).toList),
       .wrongRequestsHash)]
+  else []) ++
+  (if h : .glamsterdam ≤ fork then
+    [(decide (output.accessListHash = some (header.blockAccessListHash h)),
+      .wrongBlockAccessListHash)]
   else [])
 
 /-! ## The transition -/

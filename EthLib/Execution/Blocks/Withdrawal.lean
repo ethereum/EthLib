@@ -66,14 +66,23 @@ def GWEI_TO_WEI : Nat := 10 ^ 9
 
 /-- Add the amount of each withdrawal, in wei, to the balance of its account, in order.
 
+The withdrawals run together as one transaction on the block state `block`.
+
+It fails only when a balance would reach `2^256`, which EIP-4895 leaves out. -/
+def withdrawalState (fork : Fork) (block : BlockState) (withdrawals : List Withdrawal) :
+    Except StateError TransactionState :=
+  withdrawals.foldlM
+    (fun tx w => tx.createEther fork w.address (BitVec.ofNat 256 (w.amount.toNat * GWEI_TO_WEI)))
+    (TransactionState.ofBlock block)
+
+/-- Add the amount of each withdrawal, in wei, to the balance of its account, in order.
+
 The writes join the block, as the writes of a transaction do.
 
 It fails only when a balance would reach `2^256`, which EIP-4895 leaves out. -/
 def processWithdrawals (fork : Fork) (block : BlockState) (withdrawals : List Withdrawal) :
     Except StateError BlockState := do
-  let tx ← withdrawals.foldlM
-    (fun tx w => tx.createEther fork w.address (BitVec.ofNat 256 (w.amount.toNat * GWEI_TO_WEI)))
-    (TransactionState.ofBlock block)
+  let tx ← withdrawalState fork block withdrawals
   return tx.incorporateTxIntoBlock.parent
 
 end EthLib.Execution.Blocks
