@@ -281,6 +281,12 @@
 #define DOC_pq_keys_ssz \
   "The root of the value that the bytes encode, then the bytes of that value."
 
+#define DOC_pq_keys_possession_signing_root \
+  "The root that a proof of possession signs, on the chain with the given genesis validators."
+
+#define DOC_pq_keys_is_valid_possession_proof \
+  "Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."
+
 #define DOC_consensus_compute_shuffled_permutation \
   "The shuffled position of every index below the count."
 

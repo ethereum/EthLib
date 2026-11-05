@@ -2049,6 +2049,26 @@
    "error_class": "SszError",
    "docstring":
    "The root of the value that the bytes encode, then the bytes of that value.\n\nThe container is named in UTF-8."},
+  {"summary":
+   "The root that a proof of possession signs, on the chain with the given genesis validators.",
+   "signature":
+   "(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes) -> bytes",
+   "operation": "EthLib.Consensus.PqKeys.possessionSigningRoot",
+   "method": "pq_keys_possession_signing_root",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The root that a proof of possession signs, on the chain with the given genesis validators.\n\nIt is the signing root of the message that names both keys.\n\nIts domain is that of a proof of possession at the genesis fork version."},
+  {"summary":
+   "Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256.",
+   "signature":
+   "(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes, proof: bytes) -> bool",
+   "operation": "EthLib.Consensus.PqKeys.isValidPqPossessionProof",
+   "method": "pq_keys_is_valid_possession_proof",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."},
   {"summary": "The shuffled position of every index below the count.",
    "signature": "(name: str, count: int, seed: bytes) -> bytes",
    "operation": "EthLib.Consensus.Exports.computeShuffledPermutationExport",

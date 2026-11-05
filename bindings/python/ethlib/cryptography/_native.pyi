@@ -375,6 +375,14 @@ def pq_keys_ssz(type: str, data: bytes) -> bytes:
     """The root of the value that the bytes encode, then the bytes of that value."""
     ...
 
+def pq_keys_possession_signing_root(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes) -> bytes:
+    """The root that a proof of possession signs, on the chain with the given genesis validators."""
+    ...
+
+def pq_keys_is_valid_possession_proof(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes, proof: bytes) -> bool:
+    """Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."""
+    ...
+
 def consensus_compute_shuffled_permutation(name: str, count: int, seed: bytes) -> bytes:
     """The shuffled position of every index below the count."""
     ...

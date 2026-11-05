@@ -23,6 +23,8 @@ public import EthLib.Consensus.Proofs.Models.Ffg.PlausibleLiveness
 public import EthLib.Consensus.Proofs.Models.ForkChoice.LmdGhost
 public import EthLib.Consensus.Proofs.Models.ForkChoice.PayloadTree
 public import EthLib.Consensus.Proofs.PqKeys.Containers
+public import EthLib.Consensus.Proofs.PqKeys.Possession
+public import EthLib.Consensus.Proofs.PqKeys.PossessionBinding
 public import EthLib.Consensus.Proofs.ReqResp.Messages
 public import EthLib.Consensus.Proofs.Shuffle
 public import EthLib.Consensus.Proofs.ShufflePermutation

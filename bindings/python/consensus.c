@@ -49,6 +49,23 @@ eth_pq_keys_ssz(
 );
 
 extern lean_object*
+eth_pq_keys_possession_signing_root(
+  lean_object* name,
+  lean_object* genesis_validators_root,
+  lean_object* pubkey,
+  lean_object* xmss_public_key
+);
+
+extern lean_object*
+eth_pq_keys_is_valid_possession_proof(
+  lean_object* name,
+  lean_object* genesis_validators_root,
+  lean_object* pubkey,
+  lean_object* xmss_public_key,
+  lean_object* proof
+);
+
+extern lean_object*
 eth_consensus_compute_shuffled_permutation(
   lean_object* name,
   uint64_t count,
@@ -274,6 +291,43 @@ py_pq_keys_ssz(
   lean_object* type = str_arg(type_obj, "type");
   if (!type) return NULL;
   return except_into_pybytes(eth_pq_keys_ssz(type, mk_bytearray(data, data_len)), SSZ_ERROR);
+}
+
+PyObject*
+py_pq_keys_possession_signing_root(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj;
+  const uint8_t *root, *pubkey, *key;
+  Py_ssize_t root_len, pubkey_len, key_len;
+  if (!PyArg_ParseTuple(args, "Oy#y#y#", &name_obj, &root, &root_len, &pubkey, &pubkey_len,
+                        &key, &key_len)) return NULL;
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  return except_into_pybytes(
+    eth_pq_keys_possession_signing_root(name, mk_bytearray(root, root_len),
+      mk_bytearray(pubkey, pubkey_len), mk_bytearray(key, key_len)),
+    CONSENSUS_ERROR);
+}
+
+PyObject*
+py_pq_keys_is_valid_possession_proof(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj;
+  const uint8_t *root, *pubkey, *key, *proof;
+  Py_ssize_t root_len, pubkey_len, key_len, proof_len;
+  if (!PyArg_ParseTuple(args, "Oy#y#y#y#", &name_obj, &root, &root_len, &pubkey, &pubkey_len,
+                        &key, &key_len, &proof, &proof_len)) return NULL;
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  return except_into_pybool(
+    eth_pq_keys_is_valid_possession_proof(name, mk_bytearray(root, root_len),
+      mk_bytearray(pubkey, pubkey_len), mk_bytearray(key, key_len),
+      mk_bytearray(proof, proof_len)),
+    CONSENSUS_ERROR);
 }
 
 PyObject*

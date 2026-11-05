@@ -62,8 +62,9 @@ The list covers the main theorems and is not yet complete.
 
 Most of these theorems are about correctness: an honest run gives the expected answer, or malformed input is rejected.
 
-Six of them state a security property.
+Seven of them state a security property.
 The unforgeability of leanXMSS holds for EthLib's own definitions.
+The binding of an EIP-8450 proof of possession follows from it.
 The unforgeability of BLS signatures holds for a scheme that EthLib's signing and verification compute.
 The accountable safety and the plausible liveness of Casper FFG hold for an abstract model of votes.
 The evaluation binding of single KZG proofs reduces to the strong Diffie–Hellman problem.
@@ -104,6 +105,23 @@ It bounds every run, including the unlucky ones, so the bound is weaker than `2^
 
 The bound is classical: the adversary queries the oracle as a classical algorithm.
 The statement is written with VCVio's oracle computations and probabilities, so their definitions are part of what it says.
+
+### EIP-8450 proof of possession
+
+A proof of possession is a leanXMSS signature, at leaf index 0, of a root that names a BLS key and the leanXMSS key.
+Completeness is `isValidPqPossessionProof_sign` (`Consensus/Proofs/PqKeys/Possession.lean`): a key generated from a seed that signs its possession root at leaf 0 gives a proof that the check accepts.
+`isValidPqPossessionProofWith_of_index_ne` shows that a proof at any other leaf index fails.
+
+Binding is `possession_binding` (`Consensus/Proofs/PqKeys/PossessionBinding.lean`).
+Its game is the leanXMSS game, except that the adversary returns a BLS key and a proof.
+It wins when the check accepts the proof for that BLS key and the honest leanXMSS key.
+And no signing request for their possession root returned that proof.
+Such an adversary turns into a leanXMSS adversary with the same hash calls that wins whenever it wins, so the bound is again `q / 2^127`.
+The game checks a proof as the specification does, and `possessionVerdict_eq` shows that the two verdicts agree for every hash.
+
+The theorem says nothing about two BLS keys whose possession roots collide under SHA-256.
+A proof that the key holder made for one of them is then valid for the other.
+The game does not count that as a win.
 
 ### Merkle trees
 
@@ -538,11 +556,12 @@ The Python bindings expose the block cipher, CTR and GCM, as `encrypt_block`, `d
 ### A4. Idealisations
 
 A security theorem rests on a model, such as a random oracle for a hash.
-EthLib has five such theorems, and each rests on one idealisation.
-The two theorems of Casper FFG share one bullet:
+EthLib has six such theorems, and each rests on one idealisation.
+The two theorems of Casper FFG share one bullet, and the binding of a proof of possession shares that of leanXMSS:
 
 - leanXMSS: the hash `H`, Keccak-256, is a random oracle on byte strings.
   The theorem says nothing about an attack that uses the structure of Keccak.
+  The binding of an EIP-8450 proof of possession rests on the same oracle.
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
   Nothing in EthLib proves that the hash behaves as such an oracle.
@@ -609,13 +628,13 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 191 operations and 35 size constants.
-The Python extension calls 191 of the operations and 26 of the constants.
+Lean exports 193 operations and 35 size constants.
+The Python extension calls 193 of the operations and 26 of the constants.
 Exported constants it does not call: `eth_sphincs_const_chains`, `eth_sphincs_const_n`, `eth_sphincs_const_public_param_len`, `eth_sphincs_const_randomizer_len`, `eth_xmss_const_chains`, `eth_xmss_const_digest_len`, `eth_xmss_const_layer_height`, `eth_xmss_const_public_param_len`, `eth_xmss_const_randomizer_len`.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-6595 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (337), `bls.c` (378), `chain.c` (50), `consensus.c` (538), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (223), `engine.c` (56), `enr.c` (146), `eth.c` (168), `ethash.c` (112), `evm.c` (163), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (864), `pow.c` (105), `precompile.c` (95), `reqresp.c` (80), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snappy.c` (131), `sphincs.c` (85), `ssz.c` (88), `state.c` (114), `transactions.c` (219), `trie.c` (96), `vrf.c` (119), `wrappers.h` (402), `xmss.c` (134).
+6655 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (337), `bls.c` (378), `chain.c` (50), `consensus.c` (592), `crc32.c` (38), `crc32c.c` (38), `devp2p.c` (59), `discv4.c` (78), `discv5.c` (223), `engine.c` (56), `enr.c` (146), `eth.c` (168), `ethash.c` (112), `evm.c` (163), `fees.c` (101), `forkid.c` (90), `gossip.c` (66), `hmac.c` (102), `keccak.c` (85), `kzg.c` (511), `module.c` (868), `pow.c` (105), `precompile.c` (95), `reqresp.c` (80), `rlp.c` (162), `rlpx.c` (194), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snappy.c` (131), `sphincs.c` (85), `ssz.c` (88), `state.c` (114), `transactions.c` (219), `trie.c` (96), `vrf.c` (119), `wrappers.h` (404), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
