@@ -17,6 +17,8 @@ public import EthLib.Cryptography.Proofs.Sphincs.Errors
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Game
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.VerifyQueries
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.HonestQueries
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.HiddenSeed
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.SeedHops
 
 /-!
 # Proofs: leanSPHINCS
