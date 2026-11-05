@@ -22,8 +22,9 @@ The second kind is a surround whose inner vote does not go forward in epochs.
 
 The model counts a surround only when the inner link goes forward.
 
-Casper FFG §2, [arXiv 1710.09437v4](https://arxiv.org/abs/1710.09437v4), states its second
-slashing condition with that order of the four epochs.
+Casper FFG §2 states its second slashing condition with that order of the four epochs.
+
+The paper is [arXiv 1710.09437v4](https://arxiv.org/abs/1710.09437v4).
 
 With these two kinds added, and an injective map, the two rules agree exactly.
 
@@ -107,8 +108,9 @@ theorem isSlashableAttestationData_of_ffg {block : Root → β} {validator : ν}
 
 They are the double votes and surround votes of the model, and the two kinds that it does not see.
 
-The map from roots to blocks must be injective, so that two checkpoints of one epoch with two
-roots stay apart. -/
+The map from roots to blocks must be injective.
+
+Then two checkpoints of one epoch with two roots stay apart. -/
 theorem isSlashableAttestationData_iff_ffg {block : Root → β}
     (injective : Function.Injective block) (validator : ν) (data1 data2 : AttestationData) :
     isSlashableAttestationData data1 data2 = true ↔
@@ -197,11 +199,13 @@ theorem exists_isSlashableAttestationData_of_slashable {block : Root → β}
 open scoped Classical in
 /-- Accountable safety for signed attestations.
 
-Take two finalized checkpoints of the model whose blocks conflict, with the votes of the signed
-attestation data.
+Take the votes of the model that the signed attestation data cast.
 
-Then validators of `V` with at least one third of its stake each signed two attestation data that
-the beacon chain slashes.
+Take two finalized checkpoints of the model whose blocks conflict.
+
+Then some validators of `V` each signed two attestation data that the beacon chain slashes.
+
+Together they hold at least one third of the stake of `V`.
 
 The validator set and the stakes are the same for every vote, as in the model. -/
 theorem accountable_safety_isSlashableAttestationData [Preorder β] {V : Finset ν} {w : ν → ℕ}

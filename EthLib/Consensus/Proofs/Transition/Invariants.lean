@@ -17,8 +17,9 @@ Each validator may withdraw no earlier than it exits.
 
 The finalized, previous justified and current justified epochs stay in increasing order.
 
-The current justified epoch is at most the previous epoch, so the next epoch transition cannot
-lower the finalized epoch.
+The current justified epoch is at most the previous epoch.
+
+So the next epoch transition cannot lower the finalized epoch.
 
 The finalized epoch then never decreases.
 
@@ -43,8 +44,9 @@ def ExitsOrdered (state : BeaconState preset fork) : Prop :=
 
 /-- A step that keeps the slot and the three checkpoints.
 
-When they hold before it, it also keeps one balance for each validator and each exit no later
-than its withdrawal. -/
+When they hold before it, it also keeps one balance for each validator.
+
+It then also keeps each exit no later than its withdrawal. -/
 structure Frame (state after : BeaconState preset fork) : Prop where
   slot : after.slot = state.slot
   finalized : after.finalizedCheckpoint = state.finalizedCheckpoint
@@ -507,7 +509,8 @@ theorem getPreviousEpoch_toNat (state : BeaconState preset fork) :
     simp only [UInt64.toNat_zero]
     omega
 
-theorem Frame.invariant (frame : Frame state after) (holds : Invariant state) : Invariant after where
+theorem Frame.invariant (frame : Frame state after) (holds : Invariant state) :
+    Invariant after where
   balancesMatch := frame.balancesMatch holds.balancesMatch
   exitsOrdered := frame.exitsOrdered holds.exitsOrdered
   ordered := by
@@ -534,7 +537,8 @@ theorem processJustificationAndFinalization_invariant (ordered : CheckpointsOrde
       after.currentJustifiedCheckpoint.epoch ≤ getCurrentEpoch state ∧
       after.slot = state.slot ∧ after.validators = state.validators ∧
       after.balances = state.balances := by
-  obtain ⟨ordered', finalized⟩ := processJustificationAndFinalization_ordered ordered settled computed
+  obtain ⟨ordered', finalized⟩ :=
+    processJustificationAndFinalization_ordered ordered settled computed
   have previous := getPreviousEpoch_le state
   obtain same | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok computed
   · subst same
@@ -551,8 +555,9 @@ theorem processJustificationAndFinalization_invariant (ordered : CheckpointsOrde
 
 /-- Before Altair, the epoch transition keeps the order of the checkpoints and the slot.
 
-The finalized epoch does not decrease, and the current justified epoch ends at most at the current
-epoch.
+The finalized epoch does not decrease.
+
+The current justified epoch ends at most at the current epoch.
 
 The registry keeps one balance for each validator, and each exit no later than its withdrawal. -/
 theorem processEpoch_invariant (altair : fork < .altair) (holds : Invariant state)

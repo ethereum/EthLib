@@ -304,6 +304,8 @@ PyObject* py_consensus_rewards_deltas (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_slots (PyObject* self, PyObject* args);
 PyObject* py_consensus_state_transition (PyObject* self, PyObject* args);
 PyObject* py_consensus_fork_choice (PyObject* self, PyObject* args);
+PyObject* py_consensus_initialize_genesis (PyObject* self, PyObject* args);
+PyObject* py_consensus_is_valid_genesis_state (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_ssz                                  (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_possession_signing_root              (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_is_valid_possession_proof            (PyObject* self, PyObject* args);

@@ -149,6 +149,12 @@ A step moves the clock, adds a block, an attestation or an attester slashing, or
 The directory keeps one case of each handler of Altair, and two of `on_block`, one of which a store must reject.
 `bindings/python/tests/consensus/test_fork_choice.py` runs each case on one store in Lean and compares each step with the case.
 
+The directory `genesis/` holds every genesis case of `minimal.tar.gz` in the same way.
+An `initialization` case builds the genesis state from a block hash, a time and some deposits.
+A `validity` case tells whether a candidate state launches the chain.
+The release has genesis cases only at Phase 0 and only for the minimal preset.
+`bindings/python/tests/consensus/test_genesis.py` runs each case through the Lean genesis and compares the result.
+
 The test release publishes its cases in three archives.
 Their SHA-256 digests are:
 

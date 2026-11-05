@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: genesis
+handler: initialization
+suite: pyspec_tests
+case: initialize_beacon_state_from_eth1

@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: genesis
+handler: validity
+suite: pyspec_tests
+case: one_more_validator

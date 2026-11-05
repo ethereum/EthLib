@@ -196,6 +196,25 @@ eth_consensus_state_transition(
 );
 
 extern lean_object*
+eth_consensus_initialize_genesis(
+  lean_object* name,
+  lean_object* fork,
+  lean_object* eth1_block_hash,
+  lean_object* deposits,
+  lean_object* config,
+  uint64_t eth1_timestamp,
+  uint8_t verify
+);
+
+extern lean_object*
+eth_consensus_is_valid_genesis_state(
+  lean_object* name,
+  lean_object* fork,
+  lean_object* state,
+  lean_object* config
+);
+
+extern lean_object*
 eth_consensus_upgrade_state(
   lean_object* name,
   lean_object* fork,
@@ -1195,6 +1214,67 @@ py_consensus_process_slots(
     (const uint8_t*) PyBytes_AS_STRING(config_obj), PyBytes_GET_SIZE(config_obj));
   return except_into_pybytes(
     eth_consensus_process_slots(name, fork, pre, config, (uint64_t) slots), TRANSITION_ERROR);
+}
+
+PyObject*
+py_consensus_initialize_genesis(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj;
+  const uint8_t *hash, *deposits, *config;
+  Py_ssize_t hash_len, deposits_len, config_len;
+  unsigned long long timestamp;
+  int verify;
+  if (!PyArg_ParseTuple(args, "OOy#y#y#Kp", &name_obj, &fork_obj, &hash, &hash_len, &deposits,
+                        &deposits_len, &config, &config_len, &timestamp, &verify))
+    return NULL;
+  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
+  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name and fork must be str");
+    return NULL;
+  }
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  lean_object* fork = str_arg(fork_obj, "fork");
+  if (!fork) {
+    lean_dec(name);
+    return NULL;
+  }
+  return except_into_pybytes(
+    eth_consensus_initialize_genesis(name, fork, mk_bytearray(hash, hash_len),
+      mk_bytearray(deposits, deposits_len), mk_bytearray(config, config_len),
+      (uint64_t) timestamp, (uint8_t) verify),
+    TRANSITION_ERROR);
+}
+
+PyObject*
+py_consensus_is_valid_genesis_state(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj;
+  const uint8_t *state, *config;
+  Py_ssize_t state_len, config_len;
+  if (!PyArg_ParseTuple(args, "OOy#y#", &name_obj, &fork_obj, &state, &state_len, &config,
+                        &config_len))
+    return NULL;
+  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
+  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name and fork must be str");
+    return NULL;
+  }
+  lean_object* name = str_arg(name_obj, "name");
+  if (!name) return NULL;
+  lean_object* fork = str_arg(fork_obj, "fork");
+  if (!fork) {
+    lean_dec(name);
+    return NULL;
+  }
+  return except_into_pybool(
+    eth_consensus_is_valid_genesis_state(name, fork, mk_bytearray(state, state_len),
+      mk_bytearray(config, config_len)),
+    TRANSITION_ERROR);
 }
 
 PyObject*
