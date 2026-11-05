@@ -597,6 +597,34 @@ theorem onBlock_new {checks : SignatureChecks} {sources : BlockSources preset fo
     Bool.false_eq_true] at added
   exact addBlock_ok added
 
+/-- A new block enters the store at its root, with the state that the transition computes for it.
+
+No other block and no other state changes. -/
+theorem onBlock_insert {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork}
+    {blockRoot : Root} {after : Store preset fork}
+    (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
+    (new : ¬ store.blocks.contains blockRoot)
+    (added : store.onBlock config checks sources signed = .ok after) :
+    after.blocks = store.blocks.insert blockRoot signed.message ∧
+      ∃ pre state, store.blockStates[signed.message.parentRoot]? = some pre ∧
+        stateTransition config checks sources.engine pre signed true = .ok state ∧
+        after.blockStates = store.blockStates.insert blockRoot state := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · rw [onBlock_of_gloas gloas] at added
+    cases added
+  simp only [onBlock, gloas, root, new, bind, Except.bind, Except.mapError, ↓reduceIte,
+    Bool.false_eq_true] at added
+  unfold addBlock at added
+  simp only [bind_ok_iff] at added
+  obtain ⟨state, valid, head, -, recorded, record, boosted, boost, added⟩ := added
+  obtain ⟨-, b1, bs1⟩ := recordBlockTimeliness_frame record
+  obtain ⟨-, b2, bs2⟩ := updateProposerBoostRoot_frame boost
+  obtain ⟨-, b3, bs3⟩ := computePulledUpTip_frame added
+  obtain ⟨pre, found, -, transition⟩ := validateOnBlock_ok valid
+  refine ⟨by rw [b3, updateCheckpoints_blocks, b2, b1], pre, state, found, transition, ?_⟩
+  rw [bs3, updateCheckpoints_blockStates, bs2, bs1]
+
 /-- No block lowers the epoch of the justified or the finalized checkpoint. -/
 theorem onBlock_epochsLe {checks : SignatureChecks} {sources : BlockSources preset fork}
     {signed : SignedBeaconBlock preset fork}
