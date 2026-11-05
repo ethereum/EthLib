@@ -16,15 +16,17 @@ from .test_data_column import replacements
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "operations"
 
 # The file of the operation of each handler, and the forks whose rule EthLib holds.
-# Electra counts the exit queue in balance, which EthLib does not hold yet, so the slashings
-# stop at Deneb.
+# Gloas also cancels the builder payments of a slashed proposer, which EthLib does not hold yet,
+# so the slashings stop at Fulu.
 HANDLERS = {
     "block_header": ("block", ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
                                "fulu")),
     "proposer_slashing": ("proposer_slashing",
-                          ("phase0", "altair", "bellatrix", "capella", "deneb")),
+                          ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
+                           "fulu")),
     "attester_slashing": ("attester_slashing",
-                          ("phase0", "altair", "bellatrix", "capella", "deneb")),
+                          ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
+                           "fulu")),
     "payload_attestation": ("payload_attestation", ("gloas",)),
     "execution_payload_bid": ("execution_payload_bid", ("gloas",)),
     "builder_deposit_request": ("builder_deposit_request", ("gloas",)),

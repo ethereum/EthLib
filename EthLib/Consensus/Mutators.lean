@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.Accessors
+public import EthLib.Consensus.Churn
 
 /-!
 # `Consensus.Mutators`
@@ -11,14 +11,19 @@ A balance grows by a reward, and shrinks by a penalty down to zero at most.
 
 A validator that exits joins the exit queue, which lets a limited number leave each epoch.
 
+Before Electra the exit queue counts validators, and from Electra it counts balance.
+
+From Electra, a validator that switches to compounding credentials keeps the activation balance.
+
+The rest of its balance joins the queue of pending deposits.
+
 A slashed validator exits, loses part of its balance, and pays a reward to whoever reported it.
 
-A read past the end of a list, or a 64-bit overflow, is an error.
+A read past the end of a list, a full list, or a 64-bit overflow is an error.
 
-Electra counts the exit queue in balance, and Gloas also cancels the builder payments of a slashed
-proposer.
+Gloas also cancels the builder payments of a slashed proposer.
 
-Those rules are not yet in EthLib, so these functions fail there instead of applying older rules.
+That rule is not yet in EthLib, so slashing fails from Gloas instead of applying older rules.
 -/
 
 @[expose] public section
@@ -82,23 +87,79 @@ def exitQueueEpoch (config : Config) (state : BeaconState preset fork) :
   if (getValidatorChurnLimit config state).toNat ≤ churn then liftArith (addChecked latest 1)
   else return latest
 
+/-- The epoch at which an exit of a balance leaves, and the state with the exit queue updated.
+
+Before Electra the queue counts validators, and the state stays the same.
+
+From Electra the queue counts balance, as [EIP-7251] specifies, so the exit spends churn.
+
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer
+-/
+def exitQueue (config : Config) (state : BeaconState preset fork) (exitBalance : Gwei) :
+    Except AccessorError (BeaconState preset fork × Epoch) :=
+  if electra : .pectra ≤ fork then computeExitEpochAndUpdateChurn config state electra exitBalance
+  else return (state, ← exitQueueEpoch config state)
+
 /-- The state in which a validator starts to exit, unless it has already started.
 
-It leaves at the epoch of the exit queue, and may withdraw a fixed delay after that.
+It leaves at the epoch of the exit queue for its effective balance.
 
-Electra counts the exit queue in balance, as [EIP-7251] specifies, which EthLib does not yet have.
-
-[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#specification
--/
+It may withdraw a fixed delay after that. -/
 def initiateValidatorExit (config : Config) (state : BeaconState preset fork)
     (index : ValidatorIndex) : Except AccessorError (BeaconState preset fork) := do
   let validator ← getValidator state index
   if validator.exitEpoch != FAR_FUTURE_EPOCH then return state
-  if .pectra ≤ fork then throw (.forkNotYetSpecified fork)
-  let exitEpoch ← exitQueueEpoch config state
-  let withdrawableEpoch ←
-    liftArith (addChecked exitEpoch config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY)
-  return state.setValidator index.toNat { validator with exitEpoch, withdrawableEpoch }
+  else
+    let (state, exitEpoch) ← exitQueue config state validator.effectiveBalance
+    let withdrawableEpoch ←
+      liftArith (addChecked exitEpoch config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY)
+    return state.setValidator index.toNat { validator with exitEpoch, withdrawableEpoch }
+
+/-- A list of the state with one more element at its end.
+
+Before the fork at which the list loses its limit, an append to a full list is an error. -/
+def appendWithinLimit {switch : Base.Fork} {α : Type} {limit : Nat}
+    (list : ForkList switch fork α limit) (item : α) :
+    Except AccessorError (ForkList switch fork α limit) :=
+  if fits : fork < switch → list.data.size + 1 ≤ limit then
+    .ok ⟨list.data.push item, fun before => by simpa using fits before⟩
+  else .error (.listFull limit)
+
+/-- The signature that encodes the point at infinity, which no key produces. -/
+def infinitySignature : Cryptography.Bls.BLSSignature :=
+  Cryptography.Bls.Signatures.pointToSignature Cryptography.Bls.G2.zero
+
+/-- From Electra: the state in which the excess balance of a validator waits as a pending deposit.
+
+The excess is the balance above the activation balance.
+
+The deposit carries the signature of the point at infinity and the genesis slot.
+
+That tells it apart from a deposit that comes as a request. -/
+def queueExcessActiveBalance (state : BeaconState preset fork) (electra : .pectra ≤ fork)
+    (index : ValidatorIndex) : Except AccessorError (BeaconState preset fork) := do
+  let balance ← getBalance state index
+  if preset.MIN_ACTIVATION_BALANCE < balance then
+    let validator ← getValidator state index
+    let deposit : PendingDeposit := ⟨validator.pubkey, validator.withdrawalCredentials,
+      balance - preset.MIN_ACTIVATION_BALANCE, infinitySignature, GENESIS_SLOT⟩
+    let pending ← appendWithinLimit (state.pendingDeposits electra) deposit
+    return { state.setBalance index.toNat preset.MIN_ACTIVATION_BALANCE with
+      pendingDeposits := fun _ => pending }
+  else return state
+
+/-- From Electra: the state in which a validator has compounding credentials.
+
+The first byte of its credentials becomes the compounding prefix, and the rest stays.
+
+Its balance above the activation balance then waits as a pending deposit. -/
+def switchToCompoundingValidator (state : BeaconState preset fork) (electra : .pectra ≤ fork)
+    (index : ValidatorIndex) : Except AccessorError (BeaconState preset fork) := do
+  let validator ← getValidator state index
+  let withdrawalCredentials :=
+    validator.withdrawalCredentials.set 0 COMPOUNDING_WITHDRAWAL_PREFIX[0]
+  queueExcessActiveBalance (state.setValidator index.toNat { validator with withdrawalCredentials })
+    electra index
 
 /-- The share of the whistleblower reward that goes to the proposer.
 
@@ -116,8 +177,6 @@ The validator exits, cannot withdraw before a fixed number of epochs, and pays a
 Its effective balance joins the slashed balance of the epoch, which sets a later penalty.
 
 The proposer and the whistleblower share a reward, and the proposer is the whistleblower by default.
-
-From Electra, the slashing of a validator that has not started to exit fails through its exit.
 
 Gloas also cancels the builder payments of the validator, which EthLib does not yet have. -/
 def slashValidator (config : Config) (state : BeaconState preset fork)

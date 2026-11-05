@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Accessors
 public import EthLib.Consensus.Builders
+public import EthLib.Consensus.Churn
 public import EthLib.Consensus.Mutators
 public import EthLib.Consensus.PayloadTimeliness
 public import EthLib.Consensus.Config
@@ -19,6 +20,7 @@ public import EthLib.Consensus.Containers.Requests
 public import EthLib.Consensus.Containers.Signing
 public import EthLib.Consensus.Containers.State
 public import EthLib.Consensus.Containers.SyncCommittee
+public import EthLib.Consensus.Credentials
 public import EthLib.Consensus.DataAvailability.Blob
 public import EthLib.Consensus.DataAvailability.Column
 public import EthLib.Consensus.DataAvailability.Custody
