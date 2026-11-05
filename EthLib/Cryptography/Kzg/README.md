@@ -202,6 +202,7 @@ It assumes the pairing law, the subgroup checks, and that two points are not at 
 - Binding of the batch check of blobs is not proved.
   For cells, `Proofs/Kzg/CellBinding.lean` proves binding.
   Two accepted cells at one index with different values give a solution of the bilinear variant of the problem, or the challenge is a root.
+  `Proofs/Kzg/CellVerifier.lean` states both results for the outer check, which removes repeated commitments.
   Binding also needs the ceremony secret to stay unknown, which no proof can show.
 - The trusted setup itself is not proved correct.
   Its bytes match the pinned file that `TrustedSetupData.lean` names.
