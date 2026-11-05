@@ -13,6 +13,8 @@ So running the rounds again in reverse order gives each index back.
 Hence the shuffled list holds each index below the count exactly once.
 
 The committees cut from a list of indices then hold each of its entries exactly once.
+
+Each member of any committee that has a value is one of the indices.
 -/
 
 @[expose] public section
@@ -321,5 +323,47 @@ theorem computeCommittee_partition {preset : Preset} {indices : Array ValidatorI
     simp [Shuffle.shuffledIndices]
   rw [whole, ← length, List.take_length]
   exact Shuffle.shuffledIndices_perm preset seed sizeFits
+
+/-- The shuffled position read at a place below the count is below the count. -/
+theorem computeShuffledPermutation_getD_lt {preset : Preset} {count : UInt64} {seed : Bytes32}
+    {place : Nat} (lt : place < count.toNat) :
+    ((computeShuffledPermutation preset count seed).getD place 0).toNat < count.toNat := by
+  have below := Shuffle.shuffledIndex_lt (rounds := preset.SHUFFLE_ROUND_COUNT.toNat)
+    (seed := seed) lt
+  rw [Array.getD_eq_getD_getElem?, computeShuffledPermutation_getElem lt, Option.getD_some,
+    UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_trans below count.toNat_lt)]
+  exact below
+
+/-- Each member of a committee is one of the indices it is cut from. -/
+theorem mem_of_computeCommittee {preset : Preset} {indices : Array ValidatorIndex}
+    {seed : Bytes32} {index count : UInt64} {committee : Array ValidatorIndex}
+    (computed : computeCommittee preset indices seed index count = .ok committee)
+    {member : ValidatorIndex} (mem : member ∈ committee) : member ∈ indices := by
+  unfold computeCommittee at computed
+  by_cases zero : count = 0
+  · simp [zero, bind, Except.bind, throw, throwThe, MonadExcept.throw,
+      MonadExceptOf.throw] at computed
+  by_cases fits : index.toNat + 1 < 2 ^ 64 ∧ indices.size * (index.toNat + 1) < 2 ^ 64
+  · by_cases past : indices.size * index.toNat / count.toNat <
+        indices.size * (index.toNat + 1) / count.toNat ∧
+        indices.size < indices.size * (index.toNat + 1) / count.toNat
+    · simp [zero, fits, past, bind, Except.bind, throw, throwThe, MonadExcept.throw,
+      MonadExceptOf.throw] at computed
+    · simp [zero, fits, past, pure, Except.pure] at computed
+      subst computed
+      simp only [List.mem_toArray, List.mem_map, List.mem_range] at mem
+      obtain ⟨i, lt, rfl⟩ := mem
+      have sizeFits : indices.size < 2 ^ 64 :=
+        Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_right _ (Nat.succ_pos _)) fits.2
+      have sizeEq : (UInt64.ofNat indices.size).toNat = indices.size := by
+        rw [UInt64.toNat_ofNat', Nat.mod_eq_of_lt sizeFits]
+      have entry := computeShuffledPermutation_getD_lt (preset := preset) (seed := seed)
+        (count := UInt64.ofNat indices.size)
+        (place := indices.size * index.toNat / count.toNat + i) (by rw [sizeEq]; omega)
+      rw [sizeEq, Array.getD_eq_getD_getElem?] at entry
+      rw [Array.getElem?_eq_getElem entry, Option.getD_some]
+      exact Array.getElem_mem entry
+  · simp [zero, fits, bind, Except.bind, throw, throwThe, MonadExcept.throw,
+      MonadExceptOf.throw] at computed
 
 end EthLib.Consensus

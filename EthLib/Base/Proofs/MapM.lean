@@ -15,6 +15,8 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - A part of each output that its input fixes comes out in the order of the inputs.
 - Output `i` is the image of input `i`.
 - A failed map fails on some input, and succeeds on every input before it.
+
+A mapped error leaves a success unchanged.
 -/
 
 @[expose] public section
@@ -137,5 +139,10 @@ theorem mapM_error {xs : List α} {e : ε} (h : xs.mapM f = .error e) :
         cases k with
         | zero => exact ⟨y, hx⟩
         | succ k => exact hbefore k (Nat.lt_of_succ_lt_succ hk)
+
+/-- A computation with its error mapped succeeds with a value exactly when the computation does. -/
+theorem mapError_ok_iff {ε' : Type} {g : ε → ε'} {result : Except ε α} {value : α} :
+    result.mapError g = .ok value ↔ result = .ok value := by
+  cases result <;> simp [Except.mapError]
 
 end EthLib.Base
