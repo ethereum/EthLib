@@ -1,0 +1,6 @@
+preset: minimal
+fork: deneb
+runner: operations
+handler: withdrawals
+suite: pyspec_tests
+case: invalid_one_expected_full_withdrawal_and_none_in_withdrawals

@@ -4,6 +4,7 @@ public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.BuilderRequests
+public import EthLib.Consensus.Proofs.Transition.Withdrawals
 public import EthLib.Consensus.Transition.Operations
 
 /-!
@@ -388,12 +389,12 @@ theorem sameSizes_processVoluntaryExit {signed : SignedVoluntaryExit}
 
 /-! ## All the operations of a block -/
 
-/-- The operations of a valid block run before Capella.
+/-- The operations of a valid block run before Electra.
 
 The block holds every outstanding deposit, up to the most per block. -/
 theorem processOperations_deposits {body : BeaconBlockBody preset fork}
     (computed : processOperations config checks state body = .ok after) :
-    fork < .shapella ∧ ∀ before : fork < .hegota,
+    fork < .pectra ∧ ∀ before : fork < .hegota,
       (state.eth1DepositIndex before).toNat ≤ (state.eth1Data before).depositCount.toNat ∧
       (body.deposits before).data.size =
         min preset.MAX_DEPOSITS.toNat
@@ -424,7 +425,7 @@ theorem balancesMatch_processOperations {body : BeaconBlockBody preset fork}
   · cases computed
   simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨_, _, _, _, proposers, proposersOk, attesters, attestersOk, attested, attestedOk,
-    deposited, depositedOk, exitsOk⟩ := computed
+    deposited, depositedOk, exited, exitsOk, changesOk⟩ := computed
   have keep {α : Type} (step : BeaconState preset fork → α → Except TransitionError _)
       (sizes : ∀ s x s', step s x = .ok s' → SameSizes s s') :=
     fun s x s' (h : BalancesMatch s) ok => balancesMatch_of_sameSizes (sizes s x s' ok) h
@@ -436,7 +437,12 @@ theorem balancesMatch_processOperations {body : BeaconBlockBody preset fork}
     (keep _ fun _ _ _ ok => sameSizes_processAttestation ok) two attestedOk
   have four := foldlM_ok_invariant BalancesMatch
     (fun _ _ _ h ok => balancesMatch_processDeposit ok h) three depositedOk
-  exact foldlM_ok_invariant BalancesMatch
+  have five := foldlM_ok_invariant BalancesMatch
     (keep _ fun _ _ _ ok => sameSizes_processVoluntaryExit ok) four exitsOk
+  split at changesOk
+  · exact foldlM_ok_invariant BalancesMatch
+      (keep _ fun _ _ _ ok => sameSizes_processBlsToExecutionChange ok) five changesOk
+  · cases changesOk
+    exact five
 
 end EthLib.Consensus

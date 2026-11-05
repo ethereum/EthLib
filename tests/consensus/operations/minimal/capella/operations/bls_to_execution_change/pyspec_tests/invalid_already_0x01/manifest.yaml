@@ -1,0 +1,6 @@
+preset: minimal
+fork: capella
+runner: operations
+handler: bls_to_execution_change
+suite: pyspec_tests
+case: invalid_already_0x01

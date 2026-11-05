@@ -11,6 +11,7 @@ public import EthLib.Consensus.Transition.EpochRewards
 public import EthLib.Consensus.Transition.Operations
 public import EthLib.Consensus.Transition.Payload
 public import EthLib.Consensus.Transition.Upgrade
+public import EthLib.Consensus.Transition.Withdrawals
 
 /-!
 # `Exports.Transition`
@@ -70,6 +71,16 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
   | "voluntary_exit" => do
     runTransition (processVoluntaryExit config checks state
       (← decodeInput SignedVoluntaryExit operation))
+  | "withdrawals" =>
+    if capella : .shapella ≤ fork then do
+      runTransition (processWithdrawals state capella
+        (← decodeInput (ExecutionPayload preset fork) operation))
+    else throw (0, s!"no operation withdrawals at {fork.name}")
+  | "bls_to_execution_change" =>
+    if .shapella ≤ fork then do
+      runTransition (processBlsToExecutionChange config checks state
+        (← decodeInput SignedBLSToExecutionChange operation))
+    else throw (0, s!"no operation bls_to_execution_change at {fork.name}")
   | "payload_attestation" =>
     if gloas : .glamsterdam ≤ fork then do
       runTransition (processPayloadAttestation config checks state gloas

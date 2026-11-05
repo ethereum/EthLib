@@ -123,6 +123,16 @@ inductive TransitionError where
   | invalidExitSignature
   /-- A pending attestation was included with no delay, which no reward can divide by. -/
   | zeroInclusionDelay
+  /-- From Capella: the withdrawals before those of a reading leave it no place. -/
+  | priorWithdrawalsAtLimit (count limit : Nat)
+  /-- From Capella: a payload does not carry the withdrawals that the state expects. -/
+  | wrongWithdrawals
+  /-- From Capella: a change of BLS credentials is for a validator without BLS credentials. -/
+  | notBlsCredentials (index : ValidatorIndex)
+  /-- From Capella: the credentials of a validator do not commit to the key of a change. -/
+  | wrongBlsKey (index : ValidatorIndex)
+  /-- From Capella: a change of BLS credentials is not signed by its key. -/
+  | invalidBlsChangeSignature
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -182,6 +192,11 @@ def TransitionError.code : TransitionError → UInt32
   | .exitTooSoon _ => 49
   | .invalidExitSignature => 50
   | .zeroInclusionDelay => 51
+  | .priorWithdrawalsAtLimit .. => 61
+  | .wrongWithdrawals => 62
+  | .notBlsCredentials _ => 63
+  | .wrongBlsKey _ => 64
+  | .invalidBlsChangeSignature => 65
 
 /-- An assertion of the rule: success when the condition holds, and the error otherwise. -/
 def ensure (condition : Prop) [Decidable condition] (error : TransitionError) :
