@@ -267,7 +267,7 @@ def processHistoricalSummariesUpdate (state : BeaconState preset fork)
 
 Those of the current epoch become those of the previous epoch, and the current ones start empty.
 
-Altair rotates participation flags instead, which EthLib does not yet have. -/
+From Altair the participation flags rotate instead, in their own step. -/
 def processParticipationRecordUpdates (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) :=
   if .altair ≤ fork then throw (.accessor (.forkNotYetSpecified fork))

@@ -26,6 +26,7 @@ namespace EthLib.Consensus
 open Base Uint64 Serialization.Ssz SszType
 
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
+  {engine : ExecutionEngine preset fork}
   {state after : BeaconState preset fork}
 
 /-- The caching of a slot succeeds only before Gloas, and keeps the slot. -/
@@ -85,11 +86,11 @@ When the result is validated, the block carries its proposer's signature on that
 
 Its state root is then the root of the state after it. -/
 theorem stateTransition_ok {signed : SignedBeaconBlock preset fork} {validateResult : Bool}
-    (computed : stateTransition config checks state signed validateResult = .ok after) :
+    (computed : stateTransition config checks engine state signed validateResult = .ok after) :
     ∃ advanced, processSlots config state signed.message.slot = .ok advanced ∧
       advanced.slot = signed.message.slot ∧
       (validateResult = true → verifyBlockSignature config checks advanced signed = .ok true) ∧
-      processBlock config checks advanced signed.message = .ok after ∧
+      processBlock config checks engine advanced signed.message = .ok after ∧
       (validateResult = true → hashTreeRoot after = .ok signed.message.stateRoot) := by
   simp only [stateTransition, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨advanced, slotsOk, _, signatureOk, processed, blockOk, _, rootOk, rfl⟩ := computed

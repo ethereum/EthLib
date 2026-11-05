@@ -12,6 +12,7 @@ public import EthLib.Consensus.Transition.EpochUpdates
 public import EthLib.Consensus.Transition.Execution
 public import EthLib.Consensus.Transition.Operations
 public import EthLib.Consensus.Transition.Payload
+public import EthLib.Consensus.Transition.SyncAggregate
 public import EthLib.Consensus.Transition.StateTransition
 public import EthLib.Consensus.Transition.Upgrade
 public import EthLib.Consensus.Transition.Withdrawals
@@ -77,6 +78,11 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
     if before : fork < .hegota then do
       runTransition (processDeposit config checks before state (← decodeInput Deposit operation))
     else throw (0, s!"no operation deposit at {fork.name}")
+  | "sync_aggregate" =>
+    if altair : .altair ≤ fork then do
+      runTransition (processSyncAggregate config checks state altair
+        (← decodeInput (SyncAggregate preset) operation))
+    else throw (0, s!"no operation sync_aggregate at {fork.name}")
   | "voluntary_exit" => do
     runTransition (processVoluntaryExit config checks state
       (← decodeInput SignedVoluntaryExit operation))
@@ -223,7 +229,9 @@ def processSlotsExport (name fork pre replacements : ByteArray) (slots : UInt64)
 
 The preset, the configuration and the fork are named in UTF-8.
 
-The signature checks run unless the last argument is false. -/
+The signature checks run unless the last argument is false.
+
+The execution layer accepts every payload, as in the vectors, which fix no answer for blocks. -/
 @[export eth_consensus_state_transition]
 def stateTransitionExport (name fork pre block replacements : ByteArray) (verify : Bool) :
     Result ByteArray := do
@@ -232,7 +240,7 @@ def stateTransitionExport (name fork pre block replacements : ByteArray) (verify
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   let state ← decodeInput (BeaconState preset fork) pre
   let signed ← decodeInput (SignedBeaconBlock preset fork) block
-  let after ← runTransition (stateTransition config checks state signed)
+  let after ← runTransition (stateTransition config checks (.constant true) state signed)
   (SszType.serialize after).mapError fun e => (0, s!"state rejected: {reprStr e}")
 
 /-- The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.

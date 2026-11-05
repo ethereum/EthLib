@@ -98,7 +98,8 @@ A case gives a state before the operation, the operation, and the state after it
 A case without a state after it must be rejected.
 The directory keeps two cases of each handler that EthLib runs, at each fork where it runs.
 These are the block header and the proposer and attester slashings from Phase 0 to Fulu.
-They are also the attestation and the deposit at Phase 0, and the voluntary exit from Phase 0 to Capella.
+They are also the attestation and the deposit from Phase 0 to Deneb, and the voluntary exit from Phase 0 to Capella.
+The sync aggregate runs from Altair to Fulu.
 The execution payload runs from Bellatrix to Fulu.
 Its cases also fix the answer of the execution layer, in `execution.yaml`.
 Bellatrix keeps two more of them: a payload with a transaction of no bytes, and a wrong parent hash.
@@ -138,8 +139,8 @@ The groups are `basic`, `leak` and `random`, and from Altair also `inactivity_sc
 The directory `transition/` holds cases of the whole state transition from `minimal.tar.gz` in the same way.
 A `sanity/slots` case advances a state by some slots.
 A `sanity/blocks`, `finality` or `random` case runs a list of signed blocks, and must be rejected when it has no state after it.
-The directory keeps two cases of each group at Phase 0, the only fork whose whole transition EthLib holds.
-It also keeps two `sanity/slots` cases at each of Altair, Bellatrix and Capella, whose epoch transition EthLib holds.
+The directory keeps two cases of each group at each fork whose whole transition EthLib holds.
+These forks are Phase 0, Altair, Bellatrix and Capella.
 `bindings/python/tests/consensus/test_transition.py` runs each case through the Lean transition and compares the state after it.
 
 The test release publishes its cases in three archives.

@@ -323,7 +323,7 @@ theorem validateOnBlock_ok {checks : SignatureChecks} {signed : SignedBeaconBloc
     {blockRoot : Root} {state : BeaconState preset fork}
     (valid : store.validateOnBlock config checks signed blockRoot = .ok state) :
     ∃ pre, store.blockStates[signed.message.parentRoot]? = some pre ∧
-      stateTransition config checks pre signed true = .ok state := by
+      stateTransition config checks (.constant true) pre signed true = .ok state := by
   unfold validateOnBlock at valid
   dsimp only at valid
   cases found : store.blockStates[signed.message.parentRoot]? with
@@ -345,7 +345,8 @@ theorem validateOnBlock_ok {checks : SignatureChecks} {signed : SignedBeaconBloc
     obtain ⟨_, _, valid⟩ := valid
     split at valid
     · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at valid
-    cases t : stateTransition config checks pre signed <;> simp_all [Except.mapError]
+    cases t : stateTransition config checks (.constant true) pre signed <;>
+      simp_all [Except.mapError]
 
 /-- A new block enters the store with the state after it, and no epoch falls.
 
@@ -355,7 +356,7 @@ theorem addBlock_ok {checks : SignatureChecks} {signed : SignedBeaconBlock prese
     (added : store.addBlock config checks signed blockRoot = .ok after) :
     store.EpochsLe after ∧ after.blocks[blockRoot]? = some signed.message ∧
       ∃ pre state, store.blockStates[signed.message.parentRoot]? = some pre ∧
-        stateTransition config checks pre signed true = .ok state ∧
+        stateTransition config checks (.constant true) pre signed true = .ok state ∧
         after.blockStates[blockRoot]? = some state := by
   unfold addBlock at added
   simp only [bind_ok_iff] at added
@@ -396,7 +397,7 @@ theorem onBlock_new {checks : SignatureChecks} {signed : SignedBeaconBlock prese
     (added : store.onBlock config checks signed = .ok after) :
     store.EpochsLe after ∧ after.blocks[blockRoot]? = some signed.message ∧
       ∃ pre state, store.blockStates[signed.message.parentRoot]? = some pre ∧
-        stateTransition config checks pre signed true = .ok state ∧
+        stateTransition config checks (.constant true) pre signed true = .ok state ∧
         after.blockStates[blockRoot]? = some state := by
   by_cases bellatrix : .bellatrix ≤ fork
   · rw [onBlock_of_bellatrix bellatrix] at added

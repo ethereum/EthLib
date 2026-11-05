@@ -2,7 +2,9 @@ module
 
 public import EthLib.Consensus.Transition.EpochParticipation
 public import EthLib.Consensus.Transition.EpochUpdates
+public import EthLib.Consensus.Transition.Execution
 public import EthLib.Consensus.Transition.Operations
+public import EthLib.Consensus.Transition.SyncAggregate
 
 /-!
 # `Consensus.Transition.StateTransition`
@@ -145,14 +147,60 @@ def processSlots (config : Config) (state : BeaconState preset fork) (slot : Slo
   ensure (state.slot < slot) (.slotNotAfter slot state.slot)
   advanceSlots config (slot.toNat - state.slot.toNat) state
 
-/-- The state after a block, before Altair.
+/-- From Bellatrix: the state after the execution part of a block.
 
-The header runs first, then the RANDAO reveal, the vote on the deposit contract and the operations.
+Before Capella the payload runs only once execution is enabled, at the merge or after it.
 
-Altair adds the sync aggregate, which EthLib does not yet have here. -/
-def processBlock (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork)
+From Capella the withdrawals of the payload run first, and the payload always runs. -/
+def processBlockExecution (config : Config) (engine : ExecutionEngine preset fork)
+    (state : BeaconState preset fork) (body : BeaconBlockBody preset fork)
+    (bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam) :
+    Except TransitionError (BeaconState preset fork) :=
+  if capella : .shapella ≤ fork then do
+    let state ← processWithdrawals state capella (body.executionPayload bellatrix)
+    processExecutionPayload config engine state body bellatrix
+  else if isExecutionEnabled state body bellatrix then
+    processExecutionPayload config engine state body bellatrix
+  else pure state
+
+/-- From Altair: the state after a block.
+
+The header runs first, then from Bellatrix the execution part of the block.
+
+The RANDAO reveal, the vote on the deposit contract and the operations follow.
+
+The sync aggregate comes last.
+
+Deneb changes the voluntary exits, and Electra the operations.
+
+EthLib does not yet have those rules here, so both fail as not yet specified. -/
+def processBlockAltair (config : Config) (checks : SignatureChecks)
+    (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
+    (block : BeaconBlock preset fork) (altair : .altair ≤ fork) :
+    Except TransitionError (BeaconState preset fork) :=
+  if electra : .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  else do
+    have before : fork < .glamsterdam := Nat.lt_trans (Nat.lt_of_not_le electra) (by decide)
+    let state ← processBlockHeader state block
+    let state ← if bellatrix : .bellatrix ≤ fork then
+        processBlockExecution config engine state block.body ⟨bellatrix, before⟩
+      else pure state
+    let state ← processRandao config checks state block.body
+    let state ← processEth1Data (Nat.lt_trans before (by decide)) state block.body
+    let state ← processOperations config checks state block.body
+    processSyncAggregate config checks state altair (block.body.syncAggregate altair)
+
+/-- The state after a block.
+
+Before Altair, the header runs first, then the RANDAO reveal, the deposit vote and the operations.
+
+From Altair the sync aggregate follows, and from Bellatrix the execution part of the block.
+
+The execution layer checks the payloads, as an argument like the signature checks. -/
+def processBlock (config : Config) (checks : SignatureChecks)
+    (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
     (block : BeaconBlock preset fork) : Except TransitionError (BeaconState preset fork) :=
-  if altair : .altair ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if altair : .altair ≤ fork then processBlockAltair config checks engine state block altair
   else do
     have before : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le altair) (by decide)
     let state ← processBlockHeader state block
@@ -181,14 +229,17 @@ The state advances to the slot of the block, and the block runs.
 
 When the result is validated, the block must carry the signature of its proposer.
 
-Its state root must then be the root of the state after it. -/
-def stateTransition (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork)
+Its state root must then be the root of the state after it.
+
+From Bellatrix the execution layer checks the payload of the block. -/
+def stateTransition (config : Config) (checks : SignatureChecks)
+    (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
     (signed : SignedBeaconBlock preset fork) (validateResult : Bool := true) :
     Except TransitionError (BeaconState preset fork) := do
   let block := signed.message
   let state ← processSlots config state block.slot
   checkBlockSignature validateResult config checks state signed
-  let state ← processBlock config checks state block
+  let state ← processBlock config checks engine state block
   checkStateRoot validateResult state block
   return state
 

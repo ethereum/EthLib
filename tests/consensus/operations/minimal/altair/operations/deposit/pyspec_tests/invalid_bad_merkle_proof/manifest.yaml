@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: operations
+handler: deposit
+suite: pyspec_tests
+case: invalid_bad_merkle_proof

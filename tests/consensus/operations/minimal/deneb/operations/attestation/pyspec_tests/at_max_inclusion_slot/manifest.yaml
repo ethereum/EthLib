@@ -1,0 +1,6 @@
+preset: minimal
+fork: deneb
+runner: operations
+handler: attestation
+suite: pyspec_tests
+case: at_max_inclusion_slot

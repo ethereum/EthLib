@@ -301,7 +301,8 @@ def validateOnBlock (checks : SignatureChecks) (signed : SignedBeaconBlock prese
     store.getCheckpointBlock block.parentRoot store.finalizedCheckpoint.epoch
   if store.finalizedCheckpoint.root ≠ finalizedCheckpointBlock then
     throw (.notDescendantOfFinalized blockRoot)
-  (stateTransition config checks preState signed true).mapError .transition
+  -- The block handler stops before Bellatrix, so no block here carries a payload to check.
+  (stateTransition config checks (.constant true) preState signed true).mapError .transition
 
 /-- The store with a new block, the state after it, and the updates that the block brings.
 

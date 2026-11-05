@@ -1,0 +1,6 @@
+preset: minimal
+fork: capella
+runner: operations
+handler: sync_aggregate
+suite: pyspec_tests
+case: proposer_in_committee_with_participation

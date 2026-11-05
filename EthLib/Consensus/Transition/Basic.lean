@@ -151,6 +151,12 @@ inductive TransitionError where
   | invalidExecutionPayload
   /-- From Capella: the historical summaries are at their list limit. -/
   | historicalSummariesFull
+  /-- From Altair: the sync aggregate is not the signature of its members on the parent block. -/
+  | invalidSyncAggregate
+  /-- From Altair: a key of the sync committee does not decode, as the check of its sum needs. -/
+  | invalidSyncCommitteeKey
+  /-- From Altair: no validator holds the key of a member of the sync committee. -/
+  | unknownSyncCommitteeMember
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -224,6 +230,9 @@ def TransitionError.code : TransitionError → UInt32
   | .wrongPayloadTimestamp .. => 68
   | .invalidExecutionPayload => 69
   | .historicalSummariesFull => 70
+  | .invalidSyncAggregate => 71
+  | .invalidSyncCommitteeKey => 72
+  | .unknownSyncCommitteeMember => 73
 
 /-- An assertion of the rule: success when the condition holds, and the error otherwise. -/
 def ensure (condition : Prop) [Decidable condition] (error : TransitionError) :
