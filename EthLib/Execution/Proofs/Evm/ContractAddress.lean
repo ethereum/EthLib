@@ -4,7 +4,10 @@ public import EthLib.Base.Proofs.U256
 public import EthLib.Execution.Evm.ContractAddress
 public import EthLib.Serialization.Proofs.Rlp.Codec
 public import EthLib.Serialization.Proofs.Rlp.Item
+public import EthLib.Serialization.Proofs.Rlp.Bound
+public import EthLib.Serialization.Proofs.Rlp.Loops
 public import EthLib.Serialization.Proofs.Rlp.RoundTrip
+public import EthLib.Serialization.Proofs.Rlp.Scalar
 
 /-!
 # Proofs: `Evm.ContractAddress`
@@ -16,6 +19,8 @@ Two triples of a sender, a salt and a code hash with one CREATE2 preimage are th
 The CREATE2 preimage has 85 bytes, and a CREATE preimage of a nonce below `2^256` at most 55.
 
 So no CREATE preimage is a CREATE2 preimage.
+
+Every nonce below `2^256` has a CREATE preimage, so CREATE never lacks an address.
 
 The addresses still collide whenever Keccak-256 collides on their last 20 bytes.
 -/
@@ -73,6 +78,33 @@ theorem createPreimage_size_le {sender : Address} {nonce : Nat} {preimage : Byte
   simp only [ByteArray.size_append, ByteArray.size_empty] at hsize ⊢
   change 1 + (e1.size + (e2.size + 0)) ≤ 55
   omega
+
+/-- Every nonce below `2^256` has a CREATE preimage. -/
+theorem createPreimage_ok (sender : Address) {nonce : Nat} (small : nonce < 2 ^ 256) :
+    ∃ preimage, createPreimage sender nonce = .ok preimage := by
+  have hs : (⟨sender.toArray⟩ : ByteArray).size = 20 := by simp [ByteArray.size]
+  obtain ⟨e1, h1⟩ := (encode_bytes_succeeds_iff ⟨sender.toArray⟩).2 (by omega)
+  have s1 := encode_bytes_size_le (by omega) h1
+  have pow : (256 : Nat) ^ 32 = 2 ^ 256 := by
+    rw [show (256 : Nat) = 2 ^ 8 from rfl, ← Nat.pow_mul]
+  have hb : (bigEndian nonce).size ≤ 32 := bigEndian_size_le nonce 32 (pow ▸ small)
+  obtain ⟨e2, h2⟩ := encode_scalar_succeeds nonce small
+  have s2 := encode_bytes_size_le (data := bigEndian nonce) (by omega) h2
+  have hJoin : joinEncodings [Codec.toItem sender, Codec.toItem nonce] =
+      .ok (e1 ++ (e2 ++ .empty)) := by
+    rw [joinEncodings_cons, joinEncodings_cons]
+    simp only [Codec.toItem, Item.scalar] at h2 ⊢
+    simp [h1, h2, joinEncodings, bind, Except.bind, pure, Except.pure]
+  exact (encode_list_succeeds_iff _ _ hJoin).2 (by
+    simp only [ByteArray.size_append, ByteArray.size_empty]
+    omega)
+
+/-- Every nonce below `2^256` has a CREATE address. -/
+theorem createAddress_ok (sender : Address) {nonce : Nat} (small : nonce < 2 ^ 256) :
+    ∃ address, createAddress sender nonce = .ok address := by
+  obtain ⟨preimage, h⟩ := createPreimage_ok sender small
+  exact ⟨addressOfHash (Cryptography.Hash.Keccak.keccak256 preimage),
+    by simp [createAddress, h, bind, Except.bind, pure, Except.pure]⟩
 
 /-- The CREATE2 preimage has 85 bytes: one, then 20, then 32, then 32. -/
 theorem size_create2Preimage (sender : Address) (salt : U256) (hash : Vector UInt8 32) :

@@ -29,11 +29,33 @@ A precompile charges its price, and its failure is an exceptional halt.
 
 The caller checks the depth of the message and the balance it sends before the message runs.
 
+A creation first wipes the storage of the new account and records it as created.
+
+From Spurious Dragon, the new account starts with nonce 1, by EIP-161.
+
+Once the init code succeeds, its output is the code of the new account, at 200 gas a byte.
+
+From Homestead, a creation that cannot pay for its code fails, by EIP-2.
+
+Before, it succeeds and deploys no code.
+
+From Spurious Dragon, code longer than the limit fails, by EIP-170.
+
+From London, code that starts with `0xef` fails, by EIP-3541.
+
 The section Message Call of the Yellow Paper, Shanghai version, defines the execution of a message.
+
+Its section Contract Creation defines the creation.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
+[EIP-2][eip2], [EIP-161][eip161], [EIP-170][eip170] and [EIP-3541][eip3541] change the creation.
+
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
+[eip2]: https://eips.ethereum.org/EIPS/eip-2#specification
+[eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
+[eip170]: https://eips.ethereum.org/EIPS/eip-170#specification
+[eip3541]: https://eips.ethereum.org/EIPS/eip-3541#specification
 -/
 
 @[expose] public section
@@ -42,6 +64,7 @@ namespace EthLib.Execution.Evm
 
 open EthLib.Base (Address Fork)
 open EthLib.Execution.State (TransactionState)
+open GasCosts
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
@@ -112,6 +135,75 @@ def precompileAddress (fork : Fork) (message : Message fork) : Option Nat :=
 def rollbackOnError (snapshot : TransactionState) (evm : Evm fork Meter) : Evm fork Meter :=
   if evm.error.isSome then { evm with state := evm.state.restoreTxState snapshot } else evm
 
+/-- The state at the start of the creation of the account at `address`, at fork `fork`.
+
+Its storage is wiped, and it is recorded as created.
+
+From Spurious Dragon, its nonce grows from 0 to 1. -/
+def prepareCreation (fork : Fork) (state : TransactionState) (address : Address) :
+    Except EvmError TransactionState :=
+  let state := (state.destroyStorage address).markAccountCreated address
+  if fork ≥ .spuriousDragon then (state.incrementNonce fork address).mapError .state
+  else .ok state
+
+/-- The frame that ends a creation, from the frame `evm` that ends its init code.
+
+A creation that fails puts back the state `snapshot` from before it.
+
+A creation whose init code succeeds pays for the output and deploys it as code.
+
+When it cannot, it fails with no gas left, and from Byzantium with no output. -/
+def depositCode (fork : Fork) (snapshot : TransactionState) (evm : Evm fork Meter) :
+    Except EvmError (Evm fork Meter) :=
+  if evm.error.isSome then .ok { evm with state := evm.state.restoreTxState snapshot }
+  else
+    let code := evm.output
+    let fail (error : EvmError) : Evm fork Meter :=
+      { evm with
+        state := evm.state.restoreTxState snapshot
+        gas := GasMeter.exhaust evm.gas
+        output := if fork ≥ .byzantium then .empty else evm.output
+        error := some error }
+    if fork ≥ .london ∧ code[0]? = some 0xef then .ok (fail .invalidContractPrefix)
+    else
+      match GasMeter.charge evm.gas (code.size * CODE_DEPOSIT_PER_BYTE) with
+      | .error e => .ok (if fork ≥ .homestead then fail e else { evm with output := .empty })
+      | .ok gas =>
+        if (maxCodeSize fork).any (· < code.size) then .ok (fail .outOfGas)
+        else do
+          let state ← (evm.state.setCode fork evm.message.currentTarget code).mapError .state
+          return { evm with gas, state }
+
+/-- The deposit of the code leaves no more gas than the init code left. -/
+theorem gasLeft_depositCode_le [LawfulGasMeter Meter] {snapshot : TransactionState}
+    {evm after : Evm fork Meter} (h : depositCode fork snapshot evm = .ok after) :
+    GasMeter.gasLeft after.gas ≤ GasMeter.gasLeft evm.gas := by
+  unfold depositCode at h
+  dsimp only at h
+  split at h
+  · cases h
+    exact Nat.le_refl _
+  · split at h
+    · cases h
+      simp only [LawfulGasMeter.gasLeft_exhaust]
+      exact Nat.zero_le _
+    · split at h
+      · cases h
+        split
+        · simp only [LawfulGasMeter.gasLeft_exhaust]
+          exact Nat.zero_le _
+        · exact Nat.le_refl _
+      · rename_i hc
+        split at h
+        · cases h
+          simp only [LawfulGasMeter.gasLeft_exhaust]
+          exact Nat.zero_le _
+        · obtain ⟨_, -, h⟩ := except_bind_eq_ok h
+          cases h
+          exact Nat.le_trans (Nat.le_add_right _ _) (LawfulGasMeter.gasLeft_charge hc)
+
+mutual
+
 /-- Run a message at fork `fork`, from the state and the substate it starts from.
 
 The frame that ends the message has at most the gas of the message.
@@ -145,10 +237,28 @@ def processMessage [LawfulGasMeter Meter] (fork : Fork) (message : Message fork)
         | none => pure ⟨{ evm with running := false }, Nat.le_of_eq start⟩
     | none =>
       match h : runFrame (step fork) (step_decreases fork) message.gas
-          (fun caller child _ => processMessage fork child caller.state caller.substate.child)
+          (fun caller child _ =>
+            match child.target with
+            | some _ => processMessage fork child caller.state caller.substate.child
+            | none => processCreateMessage fork child caller.state caller.substate.child)
           evm (Nat.le_of_eq start) with
       | .error e => throw e
       | .ok after => pure ⟨after, start ▸ gasLeft_runFrame_le h⟩
-termination_by message.gas
+termination_by (message.gas, 0)
+
+/-- Run the creation `message` at fork `fork`, from the state and the substate it starts from.
+
+The frame that ends the creation has at most the gas of the message. -/
+def processCreateMessage [LawfulGasMeter Meter] (fork : Fork) (message : Message fork)
+    (state : TransactionState) (substate : Substate) :
+    Except EvmError { evm : Evm fork Meter // GasMeter.gasLeft evm.gas ≤ message.gas } := do
+  let prepared ← prepareCreation fork state message.currentTarget
+  let ⟨evm, used⟩ ← processMessage fork message prepared substate
+  match h : depositCode fork state evm with
+  | .error e => throw e
+  | .ok after => pure ⟨after, Nat.le_trans (gasLeft_depositCode_le h) used⟩
+termination_by (message.gas, 1)
+
+end
 
 end EthLib.Execution.Evm
