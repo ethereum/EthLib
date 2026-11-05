@@ -103,6 +103,32 @@ def mulBits (a : Fin m) : Nat → Nat → Jacobian m → Jacobian m
     let rest := mulBits a fuel (k / 2) (double a p)
     if k % 2 = 1 then add a p rest else rest
 
+/-- `k P + l Q`, for `k, l < 2^fuel`, with one chain of doublings for both, high bits first.
+
+`pq` is `P + Q`, which each pair of bits that are both `1` adds at once.
+
+It recurses on `fuel`, so the kernel can run it. -/
+def mulAddAux (a : Fin m) (p q pq : Jacobian m) : Nat → Nat → Nat → Jacobian m
+  | 0, _, _ => infinity
+  | fuel + 1, k, l =>
+    -- `k P + l Q = 2 ((k / 2) P + (l / 2) Q) + (k mod 2) P + (l mod 2) Q`.
+    let acc := double a (mulAddAux a p q pq fuel (k / 2) (l / 2))
+    if k % 2 = 1 then
+      if l % 2 = 1 then add a acc pq else add a acc p
+    else if l % 2 = 1 then add a acc q else acc
+
+/-- `k P + l Q`, for `k, l < 2^fuel`, by simultaneous multiple point multiplication.
+
+The two products share their doublings: `fuel` doublings in total, instead of `2 fuel`.
+
+The method is Algorithm 3.48, in §3.3.3 of "Guide to Elliptic Curve Cryptography".
+
+Its windows here have one bit.
+
+That book is by Hankerson, Menezes and Vanstone (Springer, 2004). -/
+def mulAdd (a : Fin m) (fuel k : Nat) (p : Jacobian m) (l : Nat) (q : Jacobian m) : Jacobian m :=
+  mulAddAux a p q (add a p q) fuel k l
+
 end Jacobian
 
 end EthLib.Cryptography

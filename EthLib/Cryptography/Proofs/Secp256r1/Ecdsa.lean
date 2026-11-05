@@ -113,6 +113,7 @@ theorem verify_sign (d k : Fn) (e : Nat) (hd : d ≠ 0) {x y : Fp}
     · exact toPoint_generator_ne_zero h0
   rw [verify, dite_eq_left hrr, dite_eq_left hss, ite_eq_left hQ]
   dsimp only
+  rw [mulAdd_eq _ _ isOnCurve_generator hQ.2]
   -- The verifier rebuilds `R`: `u1 G + u2 (d G) = s^(-1) (e + r d) G = k G`.
   have hrebuilt : toPoint (mul (Fin.ofNat _ e * Fn.inv ⟨sig.val, hss.2⟩) generator
       + mul ((⟨x.val % Fn.modulus, hrr.2⟩ : Fn) * Fn.inv ⟨sig.val, hss.2⟩) (mul d generator))
@@ -154,6 +155,7 @@ theorem verify_neg_s (q : Point) (e r : Nat) {s : Nat} (hs : 0 < s ∧ s < Fn.mo
     · rw [verify, verify, dite_eq_left hr, dite_eq_left hr, dite_eq_left hs, dite_eq_left hs',
         ite_eq_left hq, ite_eq_left hq]
       dsimp only
+      rw [mulAdd_eq _ _ isOnCurve_generator hq.2, mulAdd_eq _ _ isOnCurve_generator hq.2]
       -- `n - s` is `-s` mod `n`, so `u1`, `u2` and the rebuilt point change sign.
       have hneg : (⟨Fn.modulus - s, hs'.2⟩ : Fn) = -⟨s, hs.2⟩ :=
         Fin.ext (by simp only [Fin.neg_def]; exact (Nat.mod_eq_of_lt hs'.2).symm)

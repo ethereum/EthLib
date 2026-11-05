@@ -54,7 +54,13 @@ private theorem recover_eq (hash : Vector UInt8 32) (r s : Nat) (id : Fin 2) (hr
       else .ok (mul (Fn.inv ⟨r, hr.2⟩ * ⟨s, hs.2⟩) R
         + mul (-(Fn.inv ⟨r, hr.2⟩ * Fin.ofNat _ (hashToInt hash))) generator) := by
   rw [recover, dite_eq_left hr, dite_eq_left hs]
-  rfl
+  -- `R` comes from the decoder, so it is on the curve.
+  cases hd : decompress (Fin.ofNat _ r) (id == 1) with
+  | error e => rfl
+  | ok R =>
+    obtain ⟨y, rfl, hc, -⟩ := decompress_eq_ok_iff.mp hd
+    simp only [bind, Except.bind]
+    rw [mulAdd_eq _ _ hc isOnCurve_generator]
 
 /-- A recovery fails outside the ranges `[1, n - 1]`. -/
 theorem recover_range {hash : Vector UInt8 32} {r s : Nat} {id : Fin 2} {q : Point}
@@ -98,6 +104,7 @@ theorem verify_recover {hash : Vector UInt8 32} {r s : Nat} {id : Fin 2} {q : Po
     · rw [verify, dite_eq_left hr, dite_eq_left hs, ite_eq_left ⟨hqi, hqc⟩]
       dsimp only
       have hG := isOnCurve_generator
+      rw [mulAdd_eq _ _ hG hqc]
       -- The verifier rebuilds `R`: `e s^(-1) G + r s^(-1) (r^(-1) s R - r^(-1) e G) = R`.
       have hrebuilt : toPoint (mul (Fin.ofNat _ (hashToInt hash) * Fn.inv ⟨s, hs.2⟩) generator
           + mul ((⟨r, hr.2⟩ : Fn) * Fn.inv ⟨s, hs.2⟩) (mul (Fn.inv ⟨r, hr.2⟩ * ⟨s, hs.2⟩) (.affine (Fin.ofNat _ r) y)
@@ -213,6 +220,7 @@ theorem verify_rebuilt {q : Point} {hash : Vector UInt8 32} {r s : Nat} (hv : ve
   refine ⟨hr, hs, hq.1, hq.2, ?_⟩
   rw [verify, dite_eq_left hr, dite_eq_left hs, ite_eq_left hq] at hv
   dsimp only at hv
+  rw [mulAdd_eq _ _ isOnCurve_generator hq.2] at hv
   split at hv
   · cases hv
   · rename_i x y hR
