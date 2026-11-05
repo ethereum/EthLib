@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.State.Tracker
+public import EthLib.Serialization.Rlp.Item
 
 /-!
 # `Evm.Errors`
@@ -10,6 +11,8 @@ The ways in which the execution of EVM code can stop before its end.
 A revert keeps the gas left and returns data.
 
 A state that lacks data it must hold stops the whole execution, and is no halt.
+
+So does a nonce too large for the address of a creation.
 
 So does an opcode whose instruction is not yet specified.
 
@@ -58,13 +61,17 @@ inductive EvmError where
   | state (e : State.StateError)
   /-- The byte is an opcode at the fork, but its instruction is not yet specified here. -/
   | unspecifiedOpcode (code : UInt8)
+  /-- The address of a creation has no RLP preimage, which no nonce below 2^256 gives. -/
+  | encoding (e : Serialization.Rlp.RlpError)
   deriving DecidableEq, Repr
 
 /-- Whether an error aborts the whole execution, instead of halting one frame.
 
-A state that lacks data aborts, and so does an opcode whose instruction is not yet specified. -/
+A state that lacks data aborts, and so does an opcode whose instruction is not yet specified.
+
+So does a creation whose address has no preimage, which no nonce below 2^256 gives. -/
 def EvmError.aborts : EvmError → Bool
-  | .state _ | .unspecifiedOpcode _ => true
+  | .state _ | .unspecifiedOpcode _ | .encoding _ => true
   | _ => false
 
 end EthLib.Execution.Evm

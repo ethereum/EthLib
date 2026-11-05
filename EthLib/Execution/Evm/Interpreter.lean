@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Evm.Call
+public import EthLib.Execution.Evm.Create
 
 /-!
 # `Evm.Interpreter`
@@ -13,7 +13,7 @@ A position past the end of the code holds STOP.
 
 A byte that is no opcode at the fork halts the frame.
 
-CREATE, CREATE2 and SELFDESTRUCT have no instruction yet.
+SELFDESTRUCT has no instruction yet.
 
 A step on one of them aborts the whole run, since nothing here gives its result.
 
@@ -54,9 +54,9 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- The instruction of an opcode at fork `fork` that gives the next frame, or none.
 
-The calls give a message to run first, so they are not here.
+The calls and the creations may give a message to run first, so they are not here.
 
-The creations and SELFDESTRUCT have no instruction yet, so they give none. -/
+SELFDESTRUCT has no instruction yet, so it gives none. -/
 def instruction (fork : Fork) (op : Op) :
     Option (Evm fork Meter → Except EvmError (Evm fork Meter)) :=
   stackOnlyStep fork op <|> controlFlowStep op <|> memoryDataStep op <|> returnOpStep fork op <|>
@@ -77,7 +77,7 @@ def step (fork : Fork) (evm : Evm fork Meter) : Except EvmError (StepResult fork
       match instruction fork op with
       | some run => .next <$> run evm
       | none =>
-        match callInstruction fork op with
+        match messageInstruction fork op with
         | some run => run evm
         | none => throw (.unspecifiedOpcode byte)
   else .next <$> stopStep evm
@@ -130,7 +130,7 @@ theorem step_decreases [LawfulGasMeter Meter] (fork : Fork) {evm : Evm fork Mete
           exact instruction_measure_lt hop hr running
       · split at h
         · rename_i hcall
-          exact callInstruction_decreases hcall h running
+          exact messageInstruction_decreases hcall h running
         · cases h
   · simp only [stopStep, Functor.map, Except.map, Except.ok.injEq] at h
     subst h

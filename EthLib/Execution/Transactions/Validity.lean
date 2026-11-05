@@ -238,16 +238,6 @@ def minimumGas (fork : Fork) (sender : Address) (tx : Transaction) : Nat :=
 
 /-! ## The rules -/
 
-/-- The most bytes of init code at `fork`, twice the most bytes of code.
-
-[EIP-3860](https://eips.ethereum.org/EIPS/eip-3860#parameters) sets it at 49152 at Shapella.
-
-[EIP-7954][eip-7954] raises it to 131072 at Glamsterdam.
-
-[eip-7954]: https://eips.ethereum.org/EIPS/eip-7954#specification -/
-def maxInitCodeSize (fork : Fork) : Nat :=
-  if fork ≥ .glamsterdam then 131072 else 49152
-
 /-- The most blobs of one transaction.
 
 [EIP-7594](https://eips.ethereum.org/EIPS/eip-7594#specification) sets it at Fusaka. -/
