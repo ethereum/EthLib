@@ -39,6 +39,8 @@ A separate theorem covers an adaptive index, with uniform secrets, at the cost o
 
 A challenge secret derived from a seed is not covered.
 
+A separate theorem covers secrets derived from a seed, but only at an adaptive index.
+
 The theorem does not cover a holder who chooses its secrets.
 
 Such a holder can bias its own outputs, because verification accepts any tree.

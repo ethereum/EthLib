@@ -207,6 +207,8 @@ It guesses right with probability at most `(1 + 2 Q) / 2^256`, where `Q = q_H + 
 The theorem fixes the index in advance, and does not cover a secret derived from a seed.
 `prEvent_adaptiveGame_le` (`Proofs/Vrf/AdaptiveIndex.lean`) lets the adversary choose the index, with all secrets uniform.
 Its bound is `2^32 (1 + 2 Q) / 2^256`, because the proof splits a win by the index named.
+`prEvent_seedGame_le` (`Proofs/Vrf/SeedSecrets.lean`) does the same for secrets derived from a uniform seed, as key generation derives them.
+One hidden-seed step adds `Q / 2^256` to its bound.
 Verification accepts any tree, so a holder that chooses its secrets can bias every output.
 
 ### BLS12-381

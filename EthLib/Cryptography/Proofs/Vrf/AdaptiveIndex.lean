@@ -24,7 +24,7 @@ The proof splits a win by the index the adversary names, which costs the factor 
 
 For each index, the game agrees with the game of that fixed index until the adversary opens it.
 
-Secrets derived from a seed are not covered here.
+Secrets derived from a seed are not covered here; a separate theorem covers them.
 
 The property is the residual unpredictability of Micali, Rabin and Vadhan, §3.2.
 
