@@ -2,7 +2,7 @@ module
 
 public import EthLib.Execution.Evm.Precompiles.Ecrecover
 public import EthLib.Cryptography.Proofs.Secp256k1.Recovery
-public import EthLib.Execution.Proofs.Evm.Memory
+public import EthLib.Execution.Proofs.Evm.Machine.Memory
 
 /-!
 # Proofs: `Evm.Precompiles.Ecrecover`

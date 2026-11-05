@@ -5,7 +5,7 @@ public import EthLib.Execution.Blocks.BlockAccessList
 public import EthLib.Execution.Blocks.Difficulty
 public import EthLib.Execution.Blocks.ProofOfWork
 public import EthLib.Execution.Blocks.Requests
-public import EthLib.Execution.Evm.Errors
+public import EthLib.Execution.Evm.Machine.Errors
 public import EthLib.Execution.Transactions.Inclusion
 public import EthLib.Execution.Trie.Root
 public import EthLib.Execution.Fees.BaseFee

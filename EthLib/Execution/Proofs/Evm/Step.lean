@@ -1,9 +1,9 @@
 module
 
 public import EthLib.Execution.Evm.Step
-public import EthLib.Execution.Proofs.Evm.Frame
-public import EthLib.Execution.Proofs.Evm.Memory
-public import EthLib.Execution.Proofs.Evm.Stack
+public import EthLib.Execution.Proofs.Evm.Machine.Frame
+public import EthLib.Execution.Proofs.Evm.Machine.Memory
+public import EthLib.Execution.Proofs.Evm.Machine.Stack
 
 /-!
 # Proofs: `Evm.Step`

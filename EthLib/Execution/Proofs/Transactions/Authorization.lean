@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Except
-public import EthLib.Execution.Proofs.Evm.Delegation
+public import EthLib.Execution.Proofs.Evm.Call.Delegation
 public import EthLib.Execution.Proofs.State.Tracker
 public import EthLib.Execution.Transactions.Authorization
 

@@ -2,9 +2,9 @@ module
 
 public import EthLib.Base.BigEndian
 public import EthLib.Base.Except
-public import EthLib.Execution.Evm.Frame
+public import EthLib.Execution.Evm.Machine.Frame
 public import EthLib.Execution.Evm.Gas
-public import EthLib.Execution.Evm.Memory
+public import EthLib.Execution.Evm.Machine.Memory
 
 /-!
 # `Evm.Step`

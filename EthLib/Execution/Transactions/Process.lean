@@ -1,7 +1,7 @@
 module
 
-public import EthLib.Execution.Evm.ContractAddress
-public import EthLib.Execution.Evm.MessageCall
+public import EthLib.Execution.Evm.Call.ContractAddress
+public import EthLib.Execution.Evm.Call.MessageCall
 public import EthLib.Execution.Transactions.Authorization
 public import EthLib.Execution.Transactions.Inclusion
 

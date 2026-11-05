@@ -1,14 +1,14 @@
 module
 
-public import EthLib.Execution.Evm.AccountData
-public import EthLib.Execution.Evm.ControlFlow
-public import EthLib.Execution.Evm.EnvironmentData
-public import EthLib.Execution.Evm.LogData
-public import EthLib.Execution.Evm.MemoryData
-public import EthLib.Execution.Evm.Return
-public import EthLib.Execution.Evm.StackOnly
-public import EthLib.Execution.Evm.Storage
-public import EthLib.Execution.Evm.TransientStorage
+public import EthLib.Execution.Evm.Instructions.AccountData
+public import EthLib.Execution.Evm.Instructions.ControlFlow
+public import EthLib.Execution.Evm.Instructions.EnvironmentData
+public import EthLib.Execution.Evm.Instructions.LogData
+public import EthLib.Execution.Evm.Instructions.MemoryData
+public import EthLib.Execution.Evm.Instructions.Return
+public import EthLib.Execution.Evm.Instructions.StackOnly
+public import EthLib.Execution.Evm.Instructions.Storage
+public import EthLib.Execution.Evm.Instructions.TransientStorage
 
 /-!
 # `Evm.Measure`

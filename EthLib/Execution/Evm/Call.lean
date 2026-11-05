@@ -1,7 +1,7 @@
 module
 
-public import EthLib.Execution.Evm.CallGas
-public import EthLib.Execution.Evm.Delegation
+public import EthLib.Execution.Evm.Gas.CallGas
+public import EthLib.Execution.Evm.Call.Delegation
 public import EthLib.Execution.Evm.Measure
 
 /-!

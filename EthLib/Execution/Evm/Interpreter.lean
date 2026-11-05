@@ -1,7 +1,7 @@
 module
 
-public import EthLib.Execution.Evm.Create
-public import EthLib.Execution.Evm.SelfDestruct
+public import EthLib.Execution.Evm.Call.Create
+public import EthLib.Execution.Evm.Instructions.SelfDestruct
 
 /-!
 # `Evm.Interpreter`
