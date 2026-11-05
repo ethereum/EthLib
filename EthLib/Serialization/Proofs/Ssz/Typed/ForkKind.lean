@@ -54,6 +54,18 @@ theorem serialize_forkList_ofSszList (before : fork < switch) (l : SszList α li
     simp only [SszType.serialize, SszType.hashTreeRoot, desc_forkList before,
       toValue_forkList_ofSszList]
 
+/-- A list with the same elements has the same bytes after the switch as before it.
+
+The list before the switch stays within its limit, which the progressive list does not check. -/
+theorem serialize_forkList_across {earlier later : Fork} (after : switch ≤ later)
+    (before : earlier < switch) {a : ForkList switch later α limit}
+    {b : ForkList switch earlier α limit} (same : a.data = b.data) :
+    SszType.serialize a = SszType.serialize b := by
+  simp only [SszType.serialize, desc, toValue, after, not_switch_of_lt before, ite_true,
+    ite_false, same]
+  simp [Serialization.Ssz.serialize, boundCheck, b.bound before]
+  rfl
+
 variable [LawfulSszType α]
 
 instance : LawfulSszType (ForkList switch fork α limit) where

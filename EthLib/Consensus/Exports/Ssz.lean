@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Containers.Attestation
+public import EthLib.Consensus.Containers.Bid
 public import EthLib.Consensus.Containers.Block
 public import EthLib.Consensus.Containers.Builder
 public import EthLib.Consensus.Containers.Execution
@@ -99,7 +100,7 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
   | "DepositRequest" => if .pectra ≤ fork then some ⟨DepositRequest⟩ else none
   | "WithdrawalRequest" => if .pectra ≤ fork then some ⟨WithdrawalRequest⟩ else none
   | "ConsolidationRequest" => if .pectra ≤ fork then some ⟨ConsolidationRequest⟩ else none
-  | "ExecutionRequests" => if .pectra ≤ fork then some ⟨ExecutionRequests preset⟩ else none
+  | "ExecutionRequests" => if .pectra ≤ fork then some ⟨ExecutionRequests preset fork⟩ else none
   | "BeaconBlockBody" => some ⟨BeaconBlockBody preset fork⟩
   | "BeaconBlock" => some ⟨BeaconBlock preset fork⟩
   | "SignedBeaconBlock" => some ⟨SignedBeaconBlock preset fork⟩
@@ -122,6 +123,19 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
     if .glamsterdam ≤ fork then some ⟨PayloadAttestationData⟩ else none
   | "PayloadAttestationMessage" =>
     if .glamsterdam ≤ fork then some ⟨PayloadAttestationMessage⟩ else none
+  | "PayloadAttestation" => if .glamsterdam ≤ fork then some ⟨PayloadAttestation preset⟩ else none
+  | "IndexedPayloadAttestation" =>
+    if .glamsterdam ≤ fork then some ⟨IndexedPayloadAttestation preset⟩ else none
+  | "NewPayloadRequest" =>
+    if .bellatrix ≤ fork then some ⟨NewPayloadRequest preset fork⟩ else none
+  | "ExecutionPayloadBid" =>
+    if .glamsterdam ≤ fork then some ⟨ExecutionPayloadBid preset fork⟩ else none
+  | "SignedExecutionPayloadBid" =>
+    if .glamsterdam ≤ fork then some ⟨SignedExecutionPayloadBid preset fork⟩ else none
+  | "ExecutionPayloadEnvelope" =>
+    if .glamsterdam ≤ fork then some ⟨ExecutionPayloadEnvelope preset fork⟩ else none
+  | "SignedExecutionPayloadEnvelope" =>
+    if .glamsterdam ≤ fork then some ⟨SignedExecutionPayloadEnvelope preset fork⟩ else none
   | "InclusionList" => if .hegota ≤ fork then some ⟨InclusionList⟩ else none
   | "SignedInclusionList" => if .hegota ≤ fork then some ⟨SignedInclusionList⟩ else none
   | _ => none
@@ -141,7 +155,17 @@ def specifiedFromGlamsterdam : List String := [
   "BuilderPendingWithdrawal", "BuilderDepositRequest", "BuilderExitRequest",
   "PayloadAttestationData", "PayloadAttestationMessage", "InclusionList", "SignedInclusionList",
   "Attestation", "IndexedAttestation", "AttesterSlashing", "AggregateAndProof",
-  "SignedAggregateAndProof"]
+  "SignedAggregateAndProof", "ExecutionPayload", "ExecutionRequests", "NewPayloadRequest",
+  "ExecutionPayloadEnvelope", "SignedExecutionPayloadEnvelope", "PayloadAttestation",
+  "IndexedPayloadAttestation"]
+
+/-- The containers whose form EthLib holds at Gloas but not yet at Heze, which changes them. -/
+def specifiedAtGloasOnly : List String := ["ExecutionPayloadBid", "SignedExecutionPayloadBid"]
+
+/-- Whether EthLib holds the form of a container at a fork. -/
+def specifiedAt (fork : Fork) (type : String) : Bool :=
+  fork < .glamsterdam || type ∈ specifiedFromGlamsterdam ||
+    (fork == .glamsterdam && type ∈ specifiedAtGloasOnly)
 
 /-- The preset and the fork that UTF-8 names name, at a fork up to Fulu. -/
 def presetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
@@ -160,7 +184,7 @@ def sszStaticExport (name fork type data : ByteArray) : Result ByteArray := do
   let type ← nameOf type
   let some container := containerOf preset fork type
     | throw (0, s!"no container {type} at {fork.name}")
-  if .glamsterdam ≤ fork ∧ type ∉ specifiedFromGlamsterdam then
+  if !specifiedAt fork type then
     throw (0, s!"{type} not yet specified at {fork.name}")
   let value ← runSsz "input rejected" (SszType.deserialize container.type data)
   let root ← runSsz "root rejected" (SszType.hashTreeRoot value)
