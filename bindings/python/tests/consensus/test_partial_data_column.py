@@ -8,6 +8,7 @@ from ruamel.yaml import YAML
 from ethlib import consensus
 from ethlib.errors import KzgError, SszError
 from ethlib.networking import snappy
+from raising import raises
 
 from .containers import FORKS
 
@@ -186,5 +187,5 @@ def test_partial_gossip_checks(preset, case):
 
 
 def test_no_partial_sidecar_after_fulu():
-    with pytest.raises(SszError):
+    with raises(SszError, "no form of this check at glamsterdam"):
         consensus.verify_partial_data_column_header_inclusion_proof("minimal", "glamsterdam", b"")

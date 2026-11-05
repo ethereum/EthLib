@@ -7,6 +7,9 @@ from pathlib import Path
 import pytest
 
 from ethlib.execution import transactions
+from raising import raises, raises_shape
+
+from .expected_errors import expected_template
 
 _REPO = Path(__file__).resolve().parents[4]
 _FIXTURES = _REPO / "tests" / "execution" / "transactions"
@@ -126,10 +129,10 @@ def test_vector(network: str, tx: bytes, outcome: dict):
     """The checks reach the outcome of the fixture at its fork."""
     fork = FORK_OF_NETWORK[network]
     if "exception" in outcome:
-        with pytest.raises(ValueError) as error:
+        intrinsic = int(outcome.get("intrinsicGas", "0x0"), 16) or None
+        template = expected_template(outcome["exception"], fork, tx, CHAIN_ID, intrinsic)
+        with raises_shape(ValueError, template):
             transactions.check(fork, CHAIN_ID, tx)
-        expected = outcome["exception"].split("|")
-        assert any(names(e, str(error.value)) for e in expected), (expected, str(error.value))
     else:
         checked = transactions.check(fork, CHAIN_ID, tx)
         assert checked.sender == bytes.fromhex(outcome["sender"].removeprefix("0x"))
@@ -141,7 +144,7 @@ def test_vector(network: str, tx: bytes, outcome: dict):
 
 def test_unknown_fork():
     """A fork name that is not a case of the fork type raises ValueError."""
-    with pytest.raises(ValueError, match="no fork named notAFork"):
+    with raises(ValueError, "no fork named notAFork"):
         transactions.tx_type("notAFork", b"\xc0")
 
 
@@ -152,5 +155,5 @@ def test_type_of_typed_transaction():
     tx = bytes.fromhex(next(iter(fixture.values()))["txbytes"].removeprefix("0x"))
     assert transactions.tx_type("fusaka", tx) == 4
     # Before Pectra, no fork has the type 4.
-    with pytest.raises(ValueError, match="unsupportedType 4"):
+    with raises(ValueError, "unsupportedType 4"):
         transactions.tx_type("dencun", tx)

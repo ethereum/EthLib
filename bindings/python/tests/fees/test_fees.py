@@ -9,6 +9,7 @@ from ethlib.execution.fees import (
     fake_exponential,
     get_base_fee_per_blob_gas,
 )
+from raising import raises
 
 
 @pytest.mark.parametrize(
@@ -108,16 +109,23 @@ def test_excess_blob_gas_fusaka(excess: int, used: int, base_fee: int, expected:
     assert calc_excess_blob_gas("fusaka", excess, used, base_fee) == expected
 
 
-@pytest.mark.parametrize("fork", ["shapella", "frontier", "noSuchFork"])
-def test_fork_without_blobs(fork: str) -> None:
+@pytest.mark.parametrize(
+    "fork, message",
+    [
+        ("shapella", "a fork before dencun has no blob schedule"),
+        ("frontier", "a fork before dencun has no blob schedule"),
+        ("noSuchFork", "no fork named noSuchFork"),
+    ],
+)
+def test_fork_without_blobs(fork: str, message: str) -> None:
     # An unknown fork, or one before Dencun, has no blob schedule.
-    with pytest.raises(FeesError) as info:
+    with raises(FeesError, message) as info:
         get_base_fee_per_blob_gas(fork, 0)
     assert info.value.code == 0
 
 
 def test_negative_quantity() -> None:
-    with pytest.raises(OverflowError):
+    with raises(OverflowError, "a fee quantity cannot be negative"):
         calculate_base_fee_per_gas(30_000_000, -1, 7)
 
 

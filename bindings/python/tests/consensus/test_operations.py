@@ -9,6 +9,7 @@ from ruamel.yaml import YAML
 import archives
 from ethlib import consensus
 from ethlib.networking import snappy
+from raising import raises
 
 from .containers import FORKS
 from .test_data_column import replacements
@@ -167,14 +168,19 @@ def test_archive_case(preset, fork, handler, case):
 
 def test_operation_not_yet_specified_at_gloas():
     # At Gloas, an operation whose Gloas rule EthLib does not hold fails before it reads the state.
-    with pytest.raises(consensus.TransitionError) as info:
+    with raises(
+        consensus.TransitionError, "operation block_header not yet specified at glamsterdam"
+    ) as info:
         consensus.process_operation("minimal", "glamsterdam", "block_header", b"", b"")
     assert info.value.code == 0
     assert "not yet specified" in str(info.value)
 
 
 def test_undecodable_state():
-    with pytest.raises(consensus.TransitionError) as info:
+    with raises(
+        consensus.TransitionError,
+        "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 7057 0",
+    ) as info:
         consensus.process_operation("minimal", "phase0", "block_header", b"", b"")
     assert info.value.code == 0
 
@@ -192,7 +198,9 @@ def test_payload_rejected_by_the_execution_layer():
     )
     pre = snappy.decompress((case / "pre.ssz_snappy").read_bytes())
     body = snappy.decompress((case / "body.ssz_snappy").read_bytes())
-    with pytest.raises(consensus.TransitionError) as info:
+    with raises(
+        consensus.TransitionError, "EthLib.Consensus.TransitionError.invalidExecutionPayload"
+    ) as info:
         consensus.process_operation(
             "minimal", "bellatrix", "execution_payload", pre, body, execution_valid=False
         )
@@ -200,6 +208,9 @@ def test_payload_rejected_by_the_execution_layer():
 
 
 def test_no_payload_before_bellatrix():
-    with pytest.raises(consensus.TransitionError) as info:
+    with raises(
+        consensus.TransitionError,
+        "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 10229 0",
+    ) as info:
         consensus.process_operation("minimal", "altair", "execution_payload", b"", b"")
     assert info.value.code == 0

@@ -19,6 +19,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from ethlib.precompiles import run
+from raising import raises
 
 from .forks import ends
 
@@ -63,12 +64,20 @@ ERROR = {
 }
 
 
+def error(variant: str) -> str:
+    """The message of a failed call, from the variant of its error."""
+    return (
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.pointEvaluation\n  "
+        f"(EthLib.Execution.Evm.Precompiles.PointEvaluation.PointEvaluationError.{variant})"
+    )
+
+
 def expected_error(name: str, data: bytes) -> str:
     """The error of the Lean specification for a vector whose call fails."""
     if len(data) != 192:
-        return "invalidInputLength"
-    (error,) = [error for kind, error in ERROR.items() if f"_case_{kind}_" in name]
-    return error
+        return f"invalidInputLength {len(data)}"
+    (variant,) = [variant for kind, variant in ERROR.items() if f"_case_{kind}_" in name]
+    return variant
 
 
 @pytest.mark.parametrize("name", CASES)
@@ -78,7 +87,7 @@ def test_vector(fork: str, name: str) -> None:
     if verifies:
         assert run(fork, 0x0A, data, 50000) == SUCCESS
     else:
-        with pytest.raises(ValueError, match=rf"\.{expected_error(name, data)}\b"):
+        with raises(ValueError, error(expected_error(name, data))):
             run(fork, 0x0A, data, 50000)
 
 
@@ -86,22 +95,42 @@ def test_vector(fork: str, name: str) -> None:
 def test_versioned_hash_mismatch(fork: str) -> None:
     # Flip the version byte of a call whose proof verifies.
     data, _ = call_data("verify_kzg_proof_case_correct_proof_0_0")
-    with pytest.raises(ValueError, match="versionedHashMismatch"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.pointEvaluation\n  "
+            "(EthLib.Execution.Evm.Precompiles.PointEvaluation.PointEvaluationError.versionedHashMismatch)"
+        ),
+    ):
         run(fork, 0x0A, b"\x02" + data[1:], 50000)
 
 
 @pytest.mark.parametrize("fork", FORKS)
 def test_out_of_gas(fork: str) -> None:
     data, _ = call_data("verify_kzg_proof_case_correct_proof_0_0")
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.pointEvaluation\n  "
+            "(EthLib.Execution.Evm.Precompiles.PointEvaluation.PointEvaluationError.outOfGas "
+            "50000 49999)"
+        ),
+    ):
         run(fork, 0x0A, data, 49999)
     # The gas is checked before the call data is decoded.
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.pointEvaluation\n  "
+            "(EthLib.Execution.Evm.Precompiles.PointEvaluation.PointEvaluationError.outOfGas "
+            "50000 49999)"
+        ),
+    ):
         run(fork, 0x0A, bytes(192), 49999)
 
 
 @pytest.mark.parametrize("size", [0, 191, 193])
 @pytest.mark.parametrize("fork", FORKS)
 def test_invalid_length(fork: str, size: int) -> None:
-    with pytest.raises(ValueError, match="invalidInputLength"):
+    with raises(ValueError, error(f"invalidInputLength {size}")):
         run(fork, 0x0A, bytes(size), 50000)

@@ -7,6 +7,7 @@ import pytest
 
 from ethlib.execution import blocks
 from ethlib.serialization import rlp
+from raising import raises
 
 _REPO = Path(__file__).resolve().parents[4]
 _CASES_FILE = _REPO / "tests" / "execution" / "blocks" / "blockchain_tests.json"
@@ -43,6 +44,25 @@ BEFORE_LONDON = {
     "Berlin",
 }
 
+# The number of fields of a header of each network.
+HEADER_FIELDS = {
+    "Frontier": 15,
+    "Homestead": 15,
+    "TangerineWhistle": 15,
+    "SpuriousDragon": 15,
+    "Byzantium": 15,
+    "ConstantinopleFix": 15,
+    "Istanbul": 15,
+    "Berlin": 15,
+    "London": 16,
+    "Paris": 16,
+    "Shanghai": 17,
+    "Cancun": 20,
+    "Prague": 21,
+    "Osaka": 21,
+    "Amsterdam": 23,
+}
+
 
 def _first_item(data: bytes) -> bytes:
     """The encoding of the first item in the payload of the RLP list `data`."""
@@ -73,10 +93,12 @@ def test_fixture_block(case) -> None:
 @pytest.mark.parametrize("case", CASES, ids=[_case_id(c) for c in CASES])
 def test_header_rejected_at_other_fork(case) -> None:
     # A London header has one more field than a Frontier header, so each fork rejects the other.
-    other = "london" if case["network"] in BEFORE_LONDON else "frontier"
+    other = "London" if case["network"] in BEFORE_LONDON else "Frontier"
     header = _first_item(bytes.fromhex(case["rlp"]))
-    with pytest.raises(ValueError, match=r"\.wrongFieldCount\b"):
-        blocks.header_hash(other, header)
+    counts = f"{HEADER_FIELDS[other]} {HEADER_FIELDS[case['network']]}"
+    message = f"header rejected: EthLib.Serialization.Rlp.RlpError.wrongFieldCount {counts}"
+    with raises(ValueError, message):
+        blocks.header_hash(FORK_OF_NETWORK[other], header)
 
 
 # The networks before Shanghai, whose blocks have no withdrawals.
@@ -94,7 +116,7 @@ def test_body_roots(case) -> None:
     # The roots of the body are the roots that the header of the fixture holds.
     assert blocks.transactions_root(fork, block) == header[4]
     if case["network"] in BEFORE_SHANGHAI:
-        with pytest.raises(blocks.BlockError, match="before Shapella") as error:
+        with raises(blocks.BlockError, "the fork is before Shapella") as error:
             blocks.withdrawals_root(fork, block)
         assert error.value.code == 0
     else:
@@ -118,7 +140,10 @@ def test_legacy_transaction_in_bytes_before_glamsterdam() -> None:
     block = rlp.decode(bytes.fromhex(case["rlp"]))
     # Before Glamsterdam, a byte string that holds a legacy transaction is no transaction.
     block[1] = [rlp.encode([b"", b"", b"", b"", b"", b"", b"", b"", b""])]
-    with pytest.raises(blocks.BlockError, match="unsupportedType 201") as error:
+    with raises(
+        blocks.BlockError,
+        "transaction rejected: EthLib.Execution.Transactions.TransactionError.unsupportedType 201",
+    ) as error:
         blocks.transactions_root("pectra", rlp.encode(block))
     assert error.value.code == 0
 
@@ -139,22 +164,25 @@ def test_legacy_transaction_in_bytes_from_glamsterdam() -> None:
     assert blocks.transactions_root("glamsterdam", rlp.encode(block)) == root
     # The first byte 0xff is a type that no fork has.
     block[1] = [b"\xff" + rlp.encode(tx)[1:] for tx in block[1][:1]]
-    with pytest.raises(blocks.BlockError, match="unsupportedType 255"):
+    with raises(
+        blocks.BlockError,
+        "transaction rejected: EthLib.Execution.Transactions.TransactionError.unsupportedType 255",
+    ):
         blocks.transactions_root("glamsterdam", rlp.encode(block))
 
 
 def test_trailing_byte_rejected() -> None:
     case = CASES[0]
     block = bytes.fromhex(case["rlp"])
-    with pytest.raises(ValueError, match=r"\.trailingBytes\b"):
+    with raises(ValueError, "block rejected: EthLib.Serialization.Rlp.RlpError.trailingBytes 1"):
         blocks.reencode(FORK_OF_NETWORK[case["network"]], block + b"\x00")
 
 
 def test_unknown_fork_rejected() -> None:
-    with pytest.raises(ValueError, match="no fork named prague"):
+    with raises(ValueError, "no fork named prague"):
         blocks.reencode("prague", bytes.fromhex(CASES[0]["rlp"]))
 
 
 def test_rejects_non_bytes() -> None:
-    with pytest.raises(TypeError):
+    with raises(TypeError, "block must be bytes"):
         blocks.reencode("frontier", "c0")  # ty: ignore[invalid-argument-type]

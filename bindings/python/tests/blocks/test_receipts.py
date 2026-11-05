@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from ethlib.execution import blocks
+from raising import raises
 
 from .test_blocks import FORK_OF_NETWORK
 
@@ -35,22 +36,40 @@ def _first(network: str, type_: str) -> bytes:
 
 def test_typed_receipt_rejected_before_its_fork() -> None:
     # Type 4 transactions start at Pectra, so Dencun has no such receipt.
-    with pytest.raises(ValueError, match=r"\.unsupportedType 4"):
+    with raises(
+        ValueError, "receipt rejected: EthLib.Execution.Blocks.ReceiptError.unsupportedType 4"
+    ):
         blocks.receipt_reencode("dencun", _first("Amsterdam", "0x04"))
 
 
 def test_state_root_receipt_rejected_from_byzantium() -> None:
     # From Byzantium the outcome is a status, and a 32-byte state root is no status.
-    with pytest.raises(ValueError, match=r"\.decoding\b[\s\S]*\.scalarTooLarge\b"):
+    with raises(
+        ValueError,
+        (
+            "receipt rejected: EthLib.Execution.Blocks.ReceiptError.decoding\n  "
+            "(EthLib.Serialization.Rlp.RlpError.inField\n    0\n    "
+            "(EthLib.Serialization.Rlp.RlpError.scalarTooLarge\n      "
+            "36275914291122208996321553314393517492983287139762320008492702682652323682353\n      "
+            "1))"
+        ),
+    ):
         blocks.receipt_reencode("byzantium", _first("Frontier", "0x00"))
 
 
 def test_status_receipt_rejected_before_byzantium() -> None:
     # Before Byzantium the outcome is a 32-byte state root, and a status is no root.
-    with pytest.raises(ValueError, match=r"\.wrongLength\b"):
+    with raises(
+        ValueError,
+        (
+            "receipt rejected: EthLib.Execution.Blocks.ReceiptError.decoding\n  "
+            "(EthLib.Serialization.Rlp.RlpError.inField 0 "
+            "(EthLib.Serialization.Rlp.RlpError.wrongLength 32 1))"
+        ),
+    ):
         blocks.receipt_reencode("frontier", _first("Byzantium", "0x00"))
 
 
 def test_empty_receipt_rejected() -> None:
-    with pytest.raises(ValueError, match=r"\.emptyReceipt\b"):
+    with raises(ValueError, "receipt rejected: EthLib.Execution.Blocks.ReceiptError.emptyReceipt"):
         blocks.receipt_reencode("fusaka", b"")

@@ -4,6 +4,7 @@ import pytest
 
 from ethlib.errors import EvmError
 from ethlib.execution.evm import extend_memory, immediate_depths, memory_gas_cost, word_op
+from raising import raises
 
 OPCODES = {
     "MOD": 0x06,
@@ -314,20 +315,20 @@ def test_edge_cases(op: str, operands: tuple, result: int) -> None:
 
 def test_opcode_outside_the_table() -> None:
     # JUMP depends on more than its operands.
-    with pytest.raises(EvmError) as info:
+    with raises(EvmError, "opcode 86 does not push a word of its operands alone") as info:
         word_op(0x56, 0)
     assert info.value.code == 0
 
 
 def test_integers_out_of_range() -> None:
     # An opcode is one byte and an operand one word, so a larger integer is out of range.
-    with pytest.raises(OverflowError):
+    with raises(OverflowError, "the opcode must be below 256"):
         word_op(0x100, 0, 0)
-    with pytest.raises(OverflowError):
+    with raises(OverflowError, "a word must be in [0, 2^256)"):
         word_op(0x01, 2**256, 0)
-    with pytest.raises(OverflowError):
+    with raises(OverflowError, "the opcode and the immediate must be below 256"):
         immediate_depths(0xE6, 0x100)
-    with pytest.raises(OverflowError):
+    with raises(OverflowError, "a size cannot be negative"):
         memory_gas_cost(-1)
 
 
@@ -360,7 +361,7 @@ def test_raw_lengths() -> None:
     # The extension takes whole words and whole ranges, so a shorter input is rejected.
     from ethlib.cryptography import _native
 
-    with pytest.raises(ValueError, match="each operand must be 32 bytes"):
+    with raises(ValueError, "each operand must be 32 bytes"):
         _native.evm_word_op(0x01, b"\x01", bytes(32), bytes(32))
-    with pytest.raises(ValueError, match="the ranges must be a whole number of 64-byte pairs"):
+    with raises(ValueError, "the ranges must be a whole number of 64-byte pairs"):
         _native.evm_extend_memory_cost(b"\x00", bytes(63))

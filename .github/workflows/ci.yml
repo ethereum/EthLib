@@ -273,6 +273,13 @@ jobs:
       - name: spelling
         run: git ls-files -z '*.py' | xargs -0 uv run --no-sync codespell
 
+      # Each test expects the whole message of an exception, through the helper of raising.py.
+      - name: exception messages
+        run: uv run --no-sync python scripts/check_raises.py
+
+      - name: exception messages, unit tests
+        run: uv run --no-sync python -m unittest scripts/test_check_raises.py
+
   soundness:
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -4,6 +4,7 @@ import pytest
 
 from dumper import hex_str, write_case
 from ethlib.cryptography import keccak
+from raising import raises
 
 from . import fixtures
 
@@ -27,11 +28,11 @@ def test_permutation(i: int) -> None:
 @pytest.mark.parametrize("size", [0, 199, 201])
 def test_rejects_wrong_size(size: int) -> None:
     # The state is exactly 25 lanes of 8 bytes.
-    with pytest.raises(ValueError, match="state: expected 200 bytes"):
+    with raises(ValueError, f"state: expected 200 bytes, got {size}"):
         keccak.keccak_f1600(bytes(size))
 
 
 def test_rejects_non_bytes() -> None:
     # The binding takes only `bytes`.
-    with pytest.raises(TypeError):
+    with raises(TypeError, "state: expected bytes"):
         keccak.keccak_f1600(bytearray(200))  # ty: ignore[invalid-argument-type]

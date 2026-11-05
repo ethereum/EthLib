@@ -4,6 +4,7 @@ import pytest
 
 from dumper import hex_list, hex_str, write_case
 from ethlib.cryptography import bls
+from raising import raises
 
 from . import fixtures
 
@@ -23,8 +24,8 @@ def _emit_valid(case: str, pubkeys: list[bytes]) -> None:
     )
 
 
-def _emit_invalid(case: str, pubkeys: list[bytes]) -> None:
-    with pytest.raises(bls.BlsError):
+def _emit_invalid(case: str, pubkeys: list[bytes], message: str) -> None:
+    with raises(bls.BlsError, message):
         bls.eth_aggregate_pubkeys(pubkeys)
     write_case(
         "bls",
@@ -49,16 +50,18 @@ def test_valid_pubkeys() -> None:
 
 
 def test_empty_list() -> None:
-    _emit_invalid(f"{HANDLER}_empty_list", [])
+    _emit_invalid(f"{HANDLER}_empty_list", [], "empty pubkey list")
 
 
 def test_zero_pubkey() -> None:
-    _emit_invalid(f"{HANDLER}_zero_pubkey", [fixtures.ZERO_PUBKEY])
+    _emit_invalid(f"{HANDLER}_zero_pubkey", [fixtures.ZERO_PUBKEY], "invalid pubkey at index 0")
 
 
 def test_infinity_pubkey() -> None:
-    _emit_invalid(f"{HANDLER}_infinity_pubkey", [fixtures.G1_POINT_AT_INFINITY])
+    _emit_invalid(
+        f"{HANDLER}_infinity_pubkey", [fixtures.G1_POINT_AT_INFINITY], "invalid pubkey at index 0"
+    )
 
 
 def test_x40_pubkey() -> None:
-    _emit_invalid(f"{HANDLER}_x40_pubkey", [b"\x40" + b"\x00" * 47])
+    _emit_invalid(f"{HANDLER}_x40_pubkey", [b"\x40" + b"\x00" * 47], "invalid pubkey at index 0")

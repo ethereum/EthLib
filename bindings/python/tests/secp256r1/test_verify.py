@@ -19,6 +19,7 @@ import pytest
 from dumper import hex_str, write_case
 from ethlib.cryptography import secp256r1
 from ethlib.cryptography.sha256 import sha256
+from raising import raises
 
 SET = Path(__file__).resolve().parent / "wycheproof" / "ecdsa_secp256r1_sha256_p1363_test.json"
 
@@ -91,9 +92,16 @@ def test_sizes() -> None:
     assert (secp256r1.PUBLIC_KEY_LEN, secp256r1.HASH_LEN, secp256r1.SIGNATURE_LEN) == (64, 32, 64)
 
 
-@pytest.mark.parametrize("public_key", [bytes(63), bytes(65), b"\xff" * 64])
-def test_bad_public_key_raises(public_key: bytes) -> None:
+@pytest.mark.parametrize(
+    "public_key, message",
+    [
+        (bytes(63), "bad public key size: 63, expected 64"),
+        (bytes(65), "bad public key size: 65, expected 64"),
+        (b"\xff" * 64, "bad public key: a coordinate is not below p"),
+    ],
+)
+def test_bad_public_key_raises(public_key: bytes, message: str) -> None:
     # A wrong length, or a coordinate not below p, is malformed input.
     _, _, msg_hash, signature, _ = CASES[0]
-    with pytest.raises(ValueError, match="bad public key"):
+    with raises(ValueError, message):
         secp256r1.verify(public_key, msg_hash, signature)

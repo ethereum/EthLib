@@ -5,6 +5,7 @@ import pytest
 from ethlib.cryptography import keccak
 from ethlib.cryptography.secp256k1 import recover, sign
 from ethlib.networking import discv4, enr
+from raising import raises
 
 # Section: "Test Vectors", "RLPx Discovery Protocol", of EIP-8.
 # Repository: ethereum/EIPs.
@@ -135,7 +136,7 @@ def test_eip8_packets_older_than_eip868(packet: bytes) -> None:
     # The item after the fixed fields is a list, where EIP-868 puts the sequence number.
     _, *rest = _raw_items(packet[98:])
     assert any(item[0] >= 0xC0 for item in rest)
-    with pytest.raises(discv4.Discv4Error) as info:
+    with raises(discv4.Discv4Error, "packet data is not RLP of the expected shape") as info:
         discv4.decode(packet)
     assert info.value.code == 7
 
@@ -159,16 +160,18 @@ def test_changed_byte_fails(position: int) -> None:
     # The hash covers every byte after it, so any change breaks it.
     changed = bytearray(PING)
     changed[position] ^= 0x01
-    with pytest.raises(discv4.Discv4Error) as info:
+    with raises(discv4.Discv4Error, "packet hash does not match") as info:
         discv4.decode(bytes(changed))
     assert info.value.code == 3
 
 
 def test_size_bounds() -> None:
-    with pytest.raises(discv4.Discv4Error) as info:
+    with raises(discv4.Discv4Error, "packet has 1281 bytes, more than 1280") as info:
         discv4.decode(PING + bytes(1281 - len(PING)))
     assert info.value.code == 1
-    with pytest.raises(discv4.Discv4Error) as info:
+    with raises(
+        discv4.Discv4Error, "packet has 97 bytes, too few for a header and a packet type"
+    ) as info:
         discv4.decode(PING[:97])
     assert info.value.code == 2
 
@@ -176,10 +179,10 @@ def test_size_bounds() -> None:
 def test_unknown_type() -> None:
     signed = b"\x07\xc0"
     body = sign(KEY, keccak.keccak256(signed)) + signed
-    with pytest.raises(discv4.Discv4Error) as info:
+    with raises(discv4.Discv4Error, "packet type 7 is unknown") as info:
         discv4.decode(keccak.keccak256(body) + body)
     assert info.value.code == 6
-    with pytest.raises(discv4.Discv4Error) as info:
+    with raises(discv4.Discv4Error, "packet type 7 is unknown") as info:
         discv4.encode(KEY, signed)
     assert info.value.code == 6
 

@@ -4,6 +4,7 @@ import pytest
 
 from dumper import hex_str, write_case
 from ethlib.cryptography import keccak, vrf
+from raising import raises
 
 from . import fixtures
 
@@ -53,7 +54,7 @@ def test_secret_reads_index_little_endian(index: int) -> None:
 
 def test_rejects_bad_arguments() -> None:
     # The seed is exactly 32 bytes, and the index is below 2^32.
-    with pytest.raises(ValueError, match="seed: expected 32 bytes, got 31"):
+    with raises(ValueError, "seed: expected 32 bytes, got 31"):
         vrf.secret(fixtures.SEED[:31], 0)
-    with pytest.raises(OverflowError):
+    with raises(OverflowError, "index: must be at most 4294967295, got 4294967296"):
         vrf.evaluate(fixtures.SEED, 1 << 32)

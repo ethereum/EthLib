@@ -3,6 +3,7 @@
 import pytest
 
 from ethlib.networking import discv5
+from raising import raises
 
 # The test vectors of the discv5 wire protocol.
 #
@@ -75,19 +76,21 @@ def test_nodes_with_one_record():
 
 
 def test_empty():
-    with pytest.raises(discv5.Discv5Error, match="empty") as error:
+    with raises(discv5.Discv5Error, "invalid message: empty") as error:
         discv5.decode_message(b"")
     assert error.value.code == 101
 
 
 def test_error_code_of_a_range_check():
-    with pytest.raises(discv5.Discv5Error) as error:
+    with raises(
+        discv5.Discv5Error, "invalid message: a size or a distance is out of range"
+    ) as error:
         discv5.decode_message(_message(1, _rlp_bytes(bytes(9)), _scalar(1)))
     assert error.value.code == 105
 
 
 def test_unknown_type():
-    with pytest.raises(discv5.Discv5Error, match="unknown type") as error:
+    with raises(discv5.Discv5Error, "invalid message: unknown type 11") as error:
         discv5.decode_message(_message(11, _rlp_bytes(H("01"))))
     assert error.value.code == 102
 
@@ -96,35 +99,37 @@ def test_field_of_the_wrong_form():
     # A port of 65536 is not below 2^16.
     ip = _rlp_bytes(H("7f000001"))
     plaintext = _message(2, _rlp_bytes(H("01")), _scalar(5), ip, _scalar(65536))
-    with pytest.raises(discv5.Discv5Error, match="wrong form") as error:
+    with raises(
+        discv5.Discv5Error, "invalid message: not one RLP list, or a field of the wrong form"
+    ) as error:
         discv5.decode_message(plaintext)
     assert error.value.code == 103
 
 
 def test_wrong_field_count():
-    with pytest.raises(discv5.Discv5Error, match="field count") as error:
+    with raises(discv5.Discv5Error, "invalid message: wrong field count for type 1") as error:
         discv5.decode_message(_message(1, _rlp_bytes(H("01"))))
     assert error.value.code == 104
 
 
 def test_request_id_of_nine_bytes():
-    with pytest.raises(ValueError, match="out of range"):
+    with raises(ValueError, "invalid message: a size or a distance is out of range"):
         discv5.decode_message(_message(1, _rlp_bytes(bytes(9)), _scalar(1)))
 
 
 def test_distance_257():
-    with pytest.raises(ValueError, match="out of range"):
+    with raises(ValueError, "invalid message: a size or a distance is out of range"):
         discv5.decode_message(_message(3, _rlp_bytes(H("01")), _rlp_list(_scalar(257))))
 
 
 def test_pong_address_of_five_bytes():
     plaintext = _message(2, _rlp_bytes(H("01")), _scalar(5), _rlp_bytes(bytes(5)), _scalar(1))
-    with pytest.raises(ValueError, match="out of range"):
+    with raises(ValueError, "invalid message: a size or a distance is out of range"):
         discv5.decode_message(plaintext)
 
 
 def test_topic_distance_zero():
     # A distance from a topic is a positive integer.
     plaintext = _message(9, _rlp_bytes(H("01")), _rlp_bytes(bytes(32)), _rlp_list(_scalar(0)))
-    with pytest.raises(ValueError, match="out of range"):
+    with raises(ValueError, "invalid message: a size or a distance is out of range"):
         discv5.decode_message(plaintext)

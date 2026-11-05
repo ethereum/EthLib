@@ -8,9 +8,8 @@ Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
 Licence: CC0-1.0
 """
 
-import pytest
-
 from ethlib.networking import enr
+from raising import raises
 
 TEXT = (
     "enr:-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRc"
@@ -68,39 +67,39 @@ def test_changed_signature_fails() -> None:
 
 
 def test_unsorted_keys_rejected() -> None:
-    with pytest.raises(ValueError, match="the keys are not sorted"):
+    with raises(ValueError, "the keys are not sorted"):
         enr.seq(_record([PAIRS[1], PAIRS[0], PAIRS[2], PAIRS[3]]))
 
 
 def test_repeated_key_rejected() -> None:
-    with pytest.raises(ValueError, match="a key is repeated"):
+    with raises(ValueError, "a key is repeated"):
         enr.seq(_record([PAIRS[0], PAIRS[1], PAIRS[1], PAIRS[2], PAIRS[3]]))
 
 
 def test_missing_id_rejected() -> None:
     # The key `id` is the one key that every record must have.
-    with pytest.raises(ValueError, match="record has no id"):
+    with raises(ValueError, "record has no id"):
         enr.seq(_record(PAIRS[1:]))
 
 
 def test_too_large_rejected() -> None:
     record = _record(PAIRS)
-    with pytest.raises(ValueError, match="record has 301 bytes, more than 300"):
+    with raises(ValueError, "record has 301 bytes, more than 300"):
         enr.seq(record + b"\x00" * (enr.MAX_RECORD_SIZE + 1 - len(record)))
 
 
 def test_text_without_prefix_rejected() -> None:
-    with pytest.raises(ValueError, match="text does not start with enr:"):
+    with raises(ValueError, "text does not start with enr:"):
         enr.from_text(TEXT[len("enr:") :])
 
 
 def test_nonzero_pad_bits_rejected() -> None:
     # The last character goes from 8 to 9, which sets a bit past the end of the bytes.
     assert TEXT.endswith("8")
-    with pytest.raises(ValueError, match="base64"):
+    with raises(ValueError, "text is not unpadded URL-safe base64"):
         enr.from_text(TEXT[:-1] + "9")
 
 
 def test_padded_text_rejected() -> None:
-    with pytest.raises(ValueError, match="text is not unpadded URL-safe base64"):
+    with raises(ValueError, "text is not unpadded URL-safe base64"):
         enr.from_text(TEXT + "=")

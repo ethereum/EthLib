@@ -6,6 +6,7 @@ import pytest
 
 from ethlib import consensus
 from ethlib.errors import ConsensusError, SszError
+from raising import raises
 
 PREFIX = "/eth2/beacon_chain/req/"
 
@@ -82,7 +83,7 @@ def test_protocol_ids(fork: str, expected: list) -> None:
 
 
 def test_protocol_ids_not_yet_specified() -> None:
-    with pytest.raises(ConsensusError):
+    with raises(ConsensusError, "fork glamsterdam not yet specified"):
         consensus.reqresp_protocol_ids("glamsterdam")
 
 
@@ -104,7 +105,7 @@ def test_parse_protocol_ids() -> None:
     ],
 )
 def test_parse_rejects(text: str) -> None:
-    with pytest.raises(ConsensusError):
+    with raises(ConsensusError, f"{text} names no protocol"):
         consensus.reqresp_parse_protocol_id(text)
 
 
@@ -148,7 +149,7 @@ def test_status_v2() -> None:
     assert again == data
     chunks = _status(digest, finalized, 1, head, 64) + [_chunk((32).to_bytes(8, "little"))]
     assert root == _merkleize(chunks)
-    with pytest.raises(SszError):
+    with raises(SszError, "input rejected: EthLib.Serialization.Ssz.Err.scope 92 84"):
         consensus.reqresp_message("mainnet", "fusaka", "Status", fields)
 
 
@@ -170,7 +171,7 @@ def test_metadata(fork: str, data: bytes) -> None:
 
 def test_metadata_syncnets_padding() -> None:
     # Four sync committee subnets leave the top four bits of their byte at zero.
-    with pytest.raises(SszError):
+    with raises(SszError, "input rejected: EthLib.Serialization.Ssz.Err.paddingBits"):
         consensus.reqresp_message("mainnet", "altair", "MetaData", SEQ_AND_ATTNETS + bytes([0x10]))
 
 
@@ -193,7 +194,9 @@ def test_root_request_limit(fork: str, limit: int) -> None:
     data = bytes(32 * limit)
     _, again = consensus.reqresp_message("mainnet", fork, "BeaconBlocksByRootRequest", data)
     assert again == data
-    with pytest.raises(SszError):
+    with raises(
+        SszError, f"input rejected: EthLib.Serialization.Ssz.Err.overLimit {limit} {limit + 1}"
+    ):
         consensus.reqresp_message("mainnet", fork, "BeaconBlocksByRootRequest", data + bytes(32))
 
 
@@ -229,7 +232,7 @@ def test_two_field_requests(fork: str, name: str, data: bytes) -> None:
     ],
 )
 def test_request_before_its_fork(name: str, fork: str) -> None:
-    with pytest.raises(SszError, match="no message"):
+    with raises(SszError, f"no message {name} at {fork}"):
         consensus.reqresp_message("mainnet", fork, name, bytes(16))
 
 
@@ -239,7 +242,9 @@ def test_blob_root_request_limit(fork: str, limit: int) -> None:
     data = bytes(40 * limit)
     _, again = consensus.reqresp_message("mainnet", fork, "BlobSidecarsByRootRequest", data)
     assert again == data
-    with pytest.raises(SszError):
+    with raises(
+        SszError, f"input rejected: EthLib.Serialization.Ssz.Err.overLimit {limit} {limit + 1}"
+    ):
         consensus.reqresp_message("mainnet", fork, "BlobSidecarsByRootRequest", data + bytes(40))
 
 
@@ -252,7 +257,7 @@ def test_column_range_request() -> None:
     assert again == data
     # The list holds at most the 128 columns.
     many = _range(10, 4) + (20).to_bytes(4, "little") + bytes(8 * 129)
-    with pytest.raises(SszError):
+    with raises(SszError, "input rejected: EthLib.Serialization.Ssz.Err.overLimit 128 129"):
         consensus.reqresp_message("mainnet", "fusaka", name, many)
 
 
@@ -267,7 +272,7 @@ def test_column_root_request() -> None:
     assert consensus.reqresp_message(
         "minimal", "fusaka", "DataColumnSidecarsByRootRequest", _identifiers(128)
     )[1] == _identifiers(128)
-    with pytest.raises(SszError):
+    with raises(SszError, "input rejected: EthLib.Serialization.Ssz.Err.overLimit 128 129"):
         consensus.reqresp_message(
             "minimal", "fusaka", "DataColumnSidecarsByRootRequest", _identifiers(129)
         )
@@ -281,7 +286,7 @@ def _identifiers(count: int) -> bytes:
 
 def test_error_message_limit() -> None:
     consensus.reqresp_message("mainnet", "phase0", "ErrorMessage", bytes(256))
-    with pytest.raises(SszError):
+    with raises(SszError, "input rejected: EthLib.Serialization.Ssz.Err.overLimit 256 257"):
         consensus.reqresp_message("mainnet", "phase0", "ErrorMessage", bytes(257))
 
 

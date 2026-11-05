@@ -7,6 +7,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from ethlib.cryptography import bls
+from raising import raises
 
 ROOT = Path(__file__).resolve().parents[4]
 DATA = ROOT / "EthLib" / "Cryptography" / "Kzg" / "TrustedSetupData.lean"
@@ -47,6 +48,6 @@ def test_in_subgroup(name: str) -> None:
 def test_not_in_subgroup_rejected() -> None:
     # A point on the curve outside the subgroup fails, so the check above is not empty.
     pubkey = YAML(typ="safe", pure=True).load(NOT_IN_G1.read_text())["input"]["pubkey"]
-    with pytest.raises(bls.BlsError, match="point not in subgroup") as error:
+    with raises(bls.BlsError, "point not in subgroup") as error:
         bls.decode_g1(bytes.fromhex(pubkey))
     assert error.value.code == 7

@@ -7,6 +7,7 @@ import pytest
 
 from ethlib import precompiles
 from ethlib.precompiles import run
+from raising import raises
 
 from .forks import since
 
@@ -62,6 +63,130 @@ SUCCEEDS = _group(lambda c: c["output"] is None)
 INVALID = _group(lambda c: c["output"] == "" and c["gas_modifier"] >= 0)
 SHORT = _group(lambda c: c["gas_modifier"] < 0)
 
+# The error of each invalid case, as EthLib reports it; every G2 subgroup case is notInSubgroup.
+INVALID_ERROR = {
+    "eip196_ec_add_mul/test_gas::test_invalid_gas_consumption[ecadd-exact]": "notOnCurve",
+    "eip196_ec_add_mul/test_gas::test_invalid_gas_consumption[ecadd-extra_100k]": "notOnCurve",
+    "eip196_ec_add_mul/test_gas::test_invalid_gas_consumption[ecmul-exact]": "notOnCurve",
+    "eip196_ec_add_mul/test_gas::test_invalid_gas_consumption[ecmul-extra_100k]": "notOnCurve",
+    "eip197_ec_pairing/test_gas::"
+    "test_invalid_gas_consumption[invalid_g1_point-exact]": "notOnCurve",
+    "eip197_ec_pairing/test_gas::"
+    "test_invalid_gas_consumption[invalid_g1_point-extra_100k]": "notOnCurve",
+    "test_ecadd::test_invalid[0_P_plus_inf]": "invalidFieldElement",
+    "test_ecadd::test_invalid[1_Pplus2_plus_inf]": "invalidFieldElement",
+    "test_ecadd::test_invalid[P_0_plus_inf]": "invalidFieldElement",
+    "test_ecadd::test_invalid[Pplus1_2_plus_inf]": "invalidFieldElement",
+    "test_ecadd::test_invalid[inf_plus_0_P]": "invalidFieldElement",
+    "test_ecadd::test_invalid[inf_plus_1_Pplus2]": "invalidFieldElement",
+    "test_ecadd::test_invalid[inf_plus_P_0]": "invalidFieldElement",
+    "test_ecadd::test_invalid[inf_plus_Pplus1_2]": "invalidFieldElement",
+    "test_ecadd::test_invalid[inf_plus_pt_1_3]": "notOnCurve",
+    "test_ecadd::test_invalid[not_on_curve_plus_not_on_curve]": "notOnCurve",
+    "test_ecadd::test_invalid[not_on_curve_plus_valid]": "notOnCurve",
+    "test_ecadd::test_invalid[pt_0_3_plus_inf]": "notOnCurve",
+    "test_ecadd::test_invalid[pt_1_1_plus_inf]": "notOnCurve",
+    "test_ecadd::test_invalid[pt_1_3_plus_16_zero_bytes]": "notOnCurve",
+    "test_ecadd::test_invalid[pt_1_3_plus_1_zero_byte]": "notOnCurve",
+    "test_ecadd::test_invalid[pt_1_3_plus_32_zero_bytes]": "notOnCurve",
+    "test_ecadd::test_invalid[pt_6_9_plus_pt_0x126198c_0x1e4dc]": "notOnCurve",
+    "test_ecadd::test_invalid[valid_plus_not_on_curve]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_0_3-32_extra_byte_0x00]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_0_3-length_80]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_0_3_no_scalar]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_0_3_times_2_pow_128-length_80]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_0_3_times_2_pow_128]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_0_3_times_2_pow_256_minus_1]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_0_3_times_group_order]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_0_3_times_group_order_minus_one]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_0_3_times_nine]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_0_3_times_one]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_0_3_times_two]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_0_3_times_zero]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_1_3-32_extra_byte_0x00]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_1_3-length_80]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_1_3_no_scalar]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_1_3_times_2_pow_128-length_80]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_1_3_times_2_pow_128]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_1_3_times_2_pow_256_minus_1]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_1_3_times_group_order]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_1_3_times_group_order_minus_one]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_1_3_times_nine]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_1_3_times_one]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_1_3_times_two]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_1_3_times_zero]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_7827_6598_times_one]": "notOnCurve",
+    "test_ecmul::test_invalid[not_on_curve_7827_6598_times_zero]": "notOnCurve",
+    "test_ecmul::test_invalid[x_eq_P]": "invalidFieldElement",
+    "test_ecmul::test_invalid[x_plus_P]": "invalidFieldElement",
+    "test_ecmul::test_invalid[y_eq_P]": "invalidFieldElement",
+    "test_ecmul::test_invalid[y_plus_P]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[bad_length_191]": "invalidInputLength 191",
+    "test_ecpairing::test_invalid[bad_length_193]": "invalidInputLength 193",
+    "test_ecpairing::test_invalid[g1_not_on_curve]": "notOnCurve",
+    "test_ecpairing::test_invalid[g1_x_eq_P]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g1_x_plus_P]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g1_y_eq_P]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g1_y_plus_P]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g2_x0_eq_P]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g2_x0_plus_N]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g2_x0_plus_P]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g2_x0_plus_one]": "notOnCurve",
+    "test_ecpairing::test_invalid[g2_x1_eq_P]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g2_x1_plus_N]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g2_x1_plus_P]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g2_x1_plus_one]": "notOnCurve",
+    "test_ecpairing::test_invalid[g2_y0_eq_P]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g2_y0_plus_N]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g2_y0_plus_P]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g2_y0_plus_one]": "notOnCurve",
+    "test_ecpairing::test_invalid[g2_y1_eq_P]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g2_y1_plus_N]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g2_y1_plus_P]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[g2_y1_plus_one]": "notOnCurve",
+    "test_ecpairing::test_invalid[one_point_not_in_subgroup]": "notOnCurve",
+    "test_ecpairing::test_invalid[one_point_with_g2_zero_and_g1_invalid]": "notOnCurve",
+    "test_ecpairing::test_invalid[perturb_x0_by_curve_order]": "notOnCurve",
+    "test_ecpairing::test_invalid[perturb_x1_by_curve_order]": "notOnCurve",
+    "test_ecpairing::test_invalid[perturb_zeropoint_by_field_modulus]": "invalidFieldElement",
+    "test_ecpairing::test_invalid[perturb_zeropoint_by_one]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data0]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data10]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data11]": "invalidFieldElement",
+    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data12]": "invalidFieldElement",
+    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data1]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data2]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data3]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data4]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data5]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data6]": "invalidFieldElement",
+    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data7]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data8]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g1_point[input_data9]": "invalidFieldElement",
+    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data0]": "invalidFieldElement",
+    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data10]": "invalidFieldElement",
+    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data11]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data12]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data13]": "invalidFieldElement",
+    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data1]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data2]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data3]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data4]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data5]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data6]": "invalidFieldElement",
+    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data7]": "notOnCurve",
+    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data8]": "invalidFieldElement",
+    "test_ecpairing_fuzzed::test_invalid_g2_point[input_data9]": "invalidFieldElement",
+}
+
+
+def error(variant: str) -> str:
+    """The message of a failed call, from the variant of its error."""
+    return (
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
+        f"(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.{variant})"
+    )
+
 
 def test_case_count() -> None:
     # Every case is in exactly one group.
@@ -83,8 +208,9 @@ def test_valid(fork: str, case: dict) -> None:
 @pytest.mark.parametrize("fork", FORKS)
 def test_valid_one_gas_short(fork: str, case: dict) -> None:
     data = bytes.fromhex(case["input"])
-    with pytest.raises(ValueError, match="outOfGas"):
-        run(fork, case["address"], data, price(fork, case["address"], data) - 1)
+    cost = price(fork, case["address"], data)
+    with raises(ValueError, error(f"outOfGas {cost} {cost - 1}")):
+        run(fork, case["address"], data, cost - 1)
 
 
 @pytest.mark.parametrize("case", INVALID)
@@ -92,9 +218,12 @@ def test_valid_one_gas_short(fork: str, case: dict) -> None:
 def test_invalid(fork: str, case: dict) -> None:
     # The call fails at its price or above, so it fails for its input and not for lack of gas.
     data = bytes.fromhex(case["input"])
-    with pytest.raises(ValueError, match=r"PrecompileError\.altBn128") as error:
+    if case["id"].startswith("test_ecpairing_fuzzed::test_invalid_g2_subgroup["):
+        expected = "notInSubgroup"
+    else:
+        expected = INVALID_ERROR[case["id"]]
+    with raises(ValueError, error(expected)):
         run(fork, case["address"], data, price(fork, case["address"], data) + case["gas_modifier"])
-    assert "outOfGas" not in str(error.value)
 
 
 @pytest.mark.parametrize("case", SUCCEEDS)
@@ -110,8 +239,9 @@ def test_succeeds_at_price(fork: str, case: dict) -> None:
 @pytest.mark.parametrize("fork", FORKS)
 def test_short_of_gas(fork: str, case: dict) -> None:
     data = bytes.fromhex(case["input"])
-    with pytest.raises(ValueError, match="outOfGas"):
-        run(fork, case["address"], data, price(fork, case["address"], data) + case["gas_modifier"])
+    cost = price(fork, case["address"], data)
+    with raises(ValueError, error(f"outOfGas {cost} {cost + case['gas_modifier']}")):
+        run(fork, case["address"], data, cost + case["gas_modifier"])
 
 
 @pytest.mark.parametrize("fork", FORKS)

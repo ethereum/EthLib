@@ -6,10 +6,9 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from ethlib.execution import trie
 from ethlib.serialization import rlp
+from raising import raises
 
 _FILE = Path(__file__).resolve().parent / "getproof" / "get-account-proof-with-storage.io"
 
@@ -62,11 +61,11 @@ def test_rejects_tampered_node() -> None:
     # A changed byte in the root node no longer hashes to the state root.
     proof = [_hex(node) for node in _RESPONSE["accountProof"]]
     proof[0] = proof[0][:-1] + bytes([proof[0][-1] ^ 1])
-    with pytest.raises(ValueError, match=r"\.hashMismatch\b"):
+    with raises(ValueError, "proof does not verify: EthLib.Execution.Trie.ProofError.hashMismatch"):
         trie.verify_proof(STATE_ROOT, _hex(_RESPONSE["address"]), proof, secured=True)
 
 
 def test_rejects_short_root() -> None:
     proof = [_hex(node) for node in _RESPONSE["accountProof"]]
-    with pytest.raises(ValueError, match="bad root size: 31, expected 32"):
+    with raises(ValueError, "bad root size: 31, expected 32"):
         trie.verify_proof(STATE_ROOT[:31], _hex(_RESPONSE["address"]), proof, secured=True)

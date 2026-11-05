@@ -9,6 +9,7 @@ from ruamel.yaml import YAML
 import archives
 from ethlib import consensus
 from ethlib.networking import snappy
+from raising import raises
 
 from .containers import FORKS
 from .test_data_column import replacements
@@ -106,13 +107,16 @@ def test_archive_case(preset, fork, case):
 
 
 def test_no_upgrade_to_phase0():
-    with pytest.raises(consensus.TransitionError) as info:
+    with raises(consensus.TransitionError, "no upgrade to phase0") as info:
         consensus.upgrade_state("minimal", "phase0", b"")
     assert info.value.code == 0
 
 
 def test_undecodable_state():
-    with pytest.raises(consensus.TransitionError) as info:
+    with raises(
+        consensus.TransitionError,
+        "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 10441 0",
+    ) as info:
         consensus.upgrade_state("minimal", "glamsterdam", b"")
     assert info.value.code == 0
 
@@ -125,6 +129,8 @@ def test_heze_needs_every_contract_deposit():
     at = 8 + 32 + 8 + 16 + 112 + 2 * 32 * roots + 4 + 72 + 4
     processed = int.from_bytes(pre[at : at + 8], "little")
     pre[at : at + 8] = (processed + 1).to_bytes(8, "little")
-    with pytest.raises(consensus.TransitionError) as info:
+    with raises(
+        consensus.TransitionError, "EthLib.Consensus.TransitionError.depositIndicesDiffer 65 64"
+    ) as info:
         consensus.upgrade_state("minimal", "hegota", bytes(pre))
     assert info.value.code == 33

@@ -11,6 +11,7 @@ from ethlib import consensus
 from ethlib.cryptography import _native
 from ethlib.errors import KzgError, SszError
 from ethlib.networking import snappy
+from raising import raises
 
 from .containers import FORKS
 
@@ -243,16 +244,16 @@ def _first_message(case: Path) -> bytes:
 def test_sidecar_and_block_must_match():
     gloas = _first_message(_gossip_cases("gloas")[0].values[1])
     # From Gloas the check decodes the signed block, so bytes that are not one, or no block, fail.
-    with pytest.raises(SszError):
+    with raises(SszError, "block rejected: EthLib.Serialization.Ssz.Err.firstOffset 100 0"):
         consensus.verify_data_column_sidecar("minimal", "glamsterdam", gloas, bytes(200))
-    with pytest.raises(KzgError):
+    with raises(KzgError, "block rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 100 0"):
         consensus.verify_data_column_sidecar_kzg_proofs("minimal", "glamsterdam", gloas)
     # No sidecar from Gloas has an inclusion proof.
-    with pytest.raises(SszError):
+    with raises(SszError, "no form of this check at glamsterdam"):
         consensus.verify_data_column_sidecar_inclusion_proof("minimal", "glamsterdam", gloas)
     # Before Gloas the sidecar carries its commitments, so a block is refused.
     fulu = _first_message(_gossip_cases("fulu")[0].values[1])
-    with pytest.raises(KzgError):
+    with raises(KzgError, "no block for a sidecar at fusaka"):
         consensus.verify_data_column_sidecar_kzg_proofs("minimal", "fusaka", fulu, b"\x00")
 
 
@@ -279,11 +280,11 @@ def test_block_of_another_root():
     # and the parent root before the state root.
     other = bytearray(block)
     other[int.from_bytes(block[:4], "little") + 48] ^= 1
-    expected = "^the block is not the block of the sidecar$"
-    with pytest.raises(SszError, match=expected) as info:
+    expected = "the block is not the block of the sidecar"
+    with raises(SszError, expected) as info:
         consensus.verify_data_column_sidecar(preset, "glamsterdam", data, bytes(other))
     assert info.value.code == 0
-    with pytest.raises(KzgError, match=expected) as info:
+    with raises(KzgError, expected) as info:
         consensus.verify_data_column_sidecar_kzg_proofs(preset, "glamsterdam", data, bytes(other))
     assert info.value.code == 0
 
@@ -334,7 +335,7 @@ def test_sidecars_need_one_row_per_commitment():
     message = bytes(80) + (84).to_bytes(4, "little") + body
     block = (100).to_bytes(4, "little") + bytes(96) + message
     rows = [([bytes(CELL)] * 128, [bytes(PROOF)] * 128)] * 200
-    with pytest.raises(SszError):
+    with raises(SszError, "sidecars rejected: EthLib.Serialization.Ssz.Err.count 1 200"):
         consensus.get_data_column_sidecars_from_block("minimal", "fusaka", block, rows)
 
 
@@ -367,10 +368,10 @@ def test_compute_and_recover_matrix():
     kept = [entry for entry in matrix if _entry(entry)[2] % 2 == 1]
     assert consensus.recover_matrix(kept, 2) == matrix
     # One column fewer than half is not enough.
-    with pytest.raises(KzgError):
+    with raises(KzgError, "not enough cells provided"):
         consensus.recover_matrix([e for e in kept if _entry(e)[2] != 1], 2)
 
 
 def test_no_data_column_sidecar_before_fulu():
-    with pytest.raises(SszError):
+    with raises(SszError, "no data column sidecar at pectra"):
         consensus.verify_data_column_sidecar_inclusion_proof("minimal", "pectra", b"")

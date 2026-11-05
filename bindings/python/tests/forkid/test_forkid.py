@@ -4,6 +4,7 @@ import pytest
 
 from ethlib.networking import forkid
 from ethlib.networking.forkid import BLOCK, TIME, ForkIdError
+from raising import raises
 
 # The test cases of EIP-2124 and EIP-6122.
 #
@@ -192,6 +193,11 @@ def _id(fork_hash: int, fork_next: int) -> bytes:
 # The codes of the refusals: 1 is ErrRemoteStale, 2 is ErrLocalIncompatibleOrStale.
 REMOTE_STALE = 1
 LOCAL_INCOMPATIBLE_OR_STALE = 2
+# The message of each refusal.
+REFUSALS = {
+    REMOTE_STALE: "remote is on an earlier fork and announces another next fork",
+    LOCAL_INCOMPATIBLE_OR_STALE: "chains are incompatible, or the local node is stale",
+}
 
 # (chain, head number, head timestamp, remote hash, remote next, refusal code or None).
 VALIDATIONS = [
@@ -238,7 +244,7 @@ def test_validate(
     if code is None:
         forkid.validate(chain, number, timestamp, remote)
     else:
-        with pytest.raises(ForkIdError) as info:
+        with raises(ForkIdError, REFUSALS[code]) as info:
             forkid.validate(chain, number, timestamp, remote)
         assert info.value.code == code
 
@@ -255,7 +261,7 @@ ENCODINGS = [
 def test_encoding(fork_hash: int, fork_next: int, encoding: str) -> None:
     assert _id(fork_hash, fork_next).hex() == encoding
     # The node reads the identifier, and refuses it as a hash of another chain.
-    with pytest.raises(ForkIdError) as info:
+    with raises(ForkIdError, "chains are incompatible, or the local node is stale") as info:
         forkid.validate(MAINNET, 0, 0, bytes.fromhex(encoding))
     assert info.value.code == LOCAL_INCOMPATIBLE_OR_STALE
 
@@ -275,7 +281,7 @@ def test_mainnet_identifier_bytes() -> None:
     ],
 )
 def test_malformed_identifier(remote: str) -> None:
-    with pytest.raises(ForkIdError) as info:
+    with raises(ForkIdError, "remote is not an RLP fork identifier") as info:
         forkid.validate(MAINNET, 0, 0, bytes.fromhex(remote))
     assert info.value.code == 0
 

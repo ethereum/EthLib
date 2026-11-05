@@ -9,6 +9,7 @@ from ruamel.yaml import YAML
 import archives
 from ethlib import consensus
 from ethlib.networking import snappy
+from raising import raises
 
 from .containers import FORKS
 from .test_data_column import replacements
@@ -126,7 +127,13 @@ def run_case(preset: str, fork: str, handler: str, case) -> None:
         got = consensus.process_epoch(preset, FORKS[fork], handler, pre, config)
         assert got == snappy.decompress(post.read_bytes())
     else:
-        with pytest.raises(consensus.TransitionError):
+        with raises(
+            consensus.TransitionError,
+            (
+                "EthLib.Consensus.TransitionError.accessor "
+                "(EthLib.Consensus.AccessorError.arith (EthLib.Base.ArithError.overflow))"
+            ),
+        ):
             consensus.process_epoch(preset, FORKS[fork], handler, pre, config)
 
 
@@ -198,12 +205,18 @@ def test_archive_case(preset, fork, handler, case):
 
 def test_step_before_gloas():
     # Before Gloas, the state has no window of payload committees.
-    with pytest.raises(consensus.TransitionError) as info:
+    with raises(
+        consensus.TransitionError,
+        "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 10441 0",
+    ) as info:
         consensus.process_epoch("minimal", "fusaka", "ptc_window", b"")
     assert info.value.code == 0
 
 
 def test_unknown_step():
-    with pytest.raises(consensus.TransitionError) as info:
+    with raises(
+        consensus.TransitionError,
+        "input rejected: EthLib.Serialization.Ssz.Err.scopeTooSmall 14405 0",
+    ) as info:
         consensus.process_epoch("minimal", "glamsterdam", "no_such_step", b"")
     assert info.value.code == 0

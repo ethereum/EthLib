@@ -11,6 +11,7 @@ import pytest
 
 from ethlib.cryptography.hmac import hmac_sha256
 from ethlib.cryptography.kdf import concat_kdf, hkdf, hkdf_extract
+from raising import raises
 
 # RFC 4231 §4.2 to §4.8, test cases 1 to 7: key, message and tag, in hex.
 # Test case 5 truncates its tag to 128 bits.
@@ -106,7 +107,7 @@ def test_hkdf_rfc5869(salt: str, ikm: str, info: str, length: int, prk: str, okm
 def test_hkdf_lengths() -> None:
     # 255 blocks of 32 bytes is the longest output; one byte more is rejected.
     assert len(hkdf(b"salt", b"ikm", b"info", 255 * 32)) == 255 * 32
-    with pytest.raises(ValueError, match="outputTooLong"):
+    with raises(ValueError, "EthLib.Cryptography.Hash.Hkdf.HkdfError.outputTooLong 8161"):
         hkdf(b"salt", b"ikm", b"info", 255 * 32 + 1)
     assert hkdf(b"salt", b"ikm", b"info", 0) == b""
 
@@ -197,23 +198,30 @@ def test_concat_kdf_blocks() -> None:
     )
     for length in (1, 31, 32, 33, 64, 65, 96):
         assert concat_kdf(z, fixed_info, length) == blocks[:length]
-    with pytest.raises(ValueError, match="emptyOutput"):
+    with raises(ValueError, "EthLib.Cryptography.Hash.ConcatKdf.ConcatKdfError.emptyOutput"):
         concat_kdf(z, fixed_info, 0)
 
 
 def test_rejects_non_bytes() -> None:
-    with pytest.raises(TypeError):
+    with raises(TypeError, "key must be bytes"):
         hmac_sha256("key", b"message")  # ty: ignore[invalid-argument-type]
-    with pytest.raises(TypeError):
+    with raises(TypeError, "ikm must be bytes"):
         hkdf(b"salt", "ikm", b"info", 32)  # ty: ignore[invalid-argument-type]
-    with pytest.raises(TypeError):
+    with raises(TypeError, "fixed_info must be bytes"):
         concat_kdf(b"z", "info", 32)  # ty: ignore[invalid-argument-type]
 
 
-@pytest.mark.parametrize("length", [-1, 2**64, 2**64 + 32])
-def test_length_out_of_range(length: int) -> None:
+@pytest.mark.parametrize(
+    "length, message",
+    [
+        (-1, "can't convert negative int to unsigned"),
+        (2**64, "int too big to convert"),
+        (2**64 + 32, "int too big to convert"),
+    ],
+)
+def test_length_out_of_range(length: int, message: str) -> None:
     # A length that does not fit in 64 bits is an error, not a length modulo 2^64.
-    with pytest.raises(OverflowError):
+    with raises(OverflowError, message):
         hkdf(b"salt", b"ikm", b"info", length)
-    with pytest.raises(OverflowError):
+    with raises(OverflowError, message):
         concat_kdf(b"z", b"info", length)

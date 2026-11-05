@@ -6,7 +6,10 @@ from pathlib import Path
 import pytest
 
 from ethlib.execution import blocks
+from ethlib.serialization import rlp
+from raising import raises
 
+from .expected_errors import expected_message, fork_schedule
 from .test_blocks import _first_item
 
 ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
@@ -76,9 +79,18 @@ def test_fixture_header(case) -> None:
     if case["exception"] is None:
         blocks.validate_header(FORK, FORK, parent, header, own)
         return
-    with pytest.raises(blocks.BlockError) as error:
+    message = _expected(case["exception"], parent, header, own)
+    with raises(blocks.BlockError, message) as error:
         blocks.validate_header(FORK, FORK, parent, header, own)
     assert error.value.code == WRONG_EXCESS_BLOB_GAS
+
+
+def _expected(exception: str, parent: bytes, header: bytes, own: list) -> str:
+    """The message of the header error, under the last schedule of the network that applies."""
+    timestamp = int.from_bytes(rlp.decode(header)[11], "big")
+    reached = [schedule[1:] for schedule in own if schedule[0] <= timestamp]
+    schedule = reached[-1] if reached else fork_schedule(FORK)
+    return expected_message(exception, parent, header, schedule, True)
 
 
 def test_schedule_decides_some_header() -> None:
@@ -104,7 +116,9 @@ def test_cases_cover_each_network() -> None:
 @pytest.mark.parametrize("schedule", [(0, 7, 6, 3338477), (0, 0, 0, 3338477), (0, 1, 2, 0)])
 def test_schedule_out_of_bounds_rejected(schedule) -> None:
     case = _CASES[0]
-    with pytest.raises(blocks.BlockError) as error:
+    with raises(
+        blocks.BlockError, "a blob schedule needs target ≤ max, 0 < max and 0 < update fraction"
+    ) as error:
         blocks.validate_header(
             FORK, FORK, bytes.fromhex(case["parent"]), bytes.fromhex(case["header"]), [schedule]
         )
@@ -119,7 +133,10 @@ def test_later_schedule_wins() -> None:
     parent, header = bytes.fromhex(case["parent"]), bytes.fromhex(case["header"])
     own = schedules(case["network"], case["blobSchedule"])
     blocks.validate_header(FORK, FORK, parent, header, [(0, 1, 2, 3338477)] + own)
-    with pytest.raises(blocks.BlockError) as error:
+    with raises(
+        blocks.BlockError,
+        "header invalid: EthLib.Execution.Blocks.BlockError.wrongExcessBlobGas 184942592 182321152",
+    ) as error:
         blocks.validate_header(FORK, FORK, parent, header, own + [(0, 1, 2, 3338477)])
     assert error.value.code == WRONG_EXCESS_BLOB_GAS
 
@@ -147,7 +164,8 @@ def test_headers_of_every_fixture(archive: Path, directory: str) -> None:
                 if exception != "BlockException.INCORRECT_EXCESS_BLOB_GAS":
                     # A transaction check of the block, which a header check does not see.
                     continue
-                with pytest.raises(blocks.BlockError) as error:
-                    blocks.check_header(FORK, FORK, headers["0x" + header[4:36].hex()], header, own)
+                parent = headers["0x" + header[4:36].hex()]
+                with raises(blocks.BlockError, _expected(exception, parent, header, own)) as error:
+                    blocks.check_header(FORK, FORK, parent, header, own)
                 assert error.value.code == WRONG_EXCESS_BLOB_GAS, f"{path.name}::{name}"
     assert checked > 0

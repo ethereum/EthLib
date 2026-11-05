@@ -17,6 +17,7 @@ from ethlib.execution.network import (
 from ethlib.networking import forkid
 from ethlib.networking.forkid import BLOCK
 from ethlib.serialization import rlp
+from raising import raises
 
 GENESIS = bytes.fromhex("d4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3")
 LATEST_HASH = bytes(range(32))
@@ -76,14 +77,14 @@ def test_status69_round_trip(version: int) -> None:
 
 
 def test_eth68_rejects_status69() -> None:
-    with pytest.raises(EthWireError) as info:
+    with raises(EthWireError, "message data is not RLP of the expected shape") as info:
         decode_message(68, STATUS, _status69(68))
     assert info.value.code == 2
 
 
 @pytest.mark.parametrize("version", [69, 70, 71, 72])
 def test_later_versions_reject_status68(version: int) -> None:
-    with pytest.raises(EthWireError) as info:
+    with raises(EthWireError, "message data is not RLP of the expected shape") as info:
         decode_message(version, STATUS, _status68(version))
     assert info.value.code == 2
 
@@ -92,7 +93,9 @@ def test_block_range_update() -> None:
     data = rlp.encode([b"", _p(HEAD), LATEST_HASH])
     assert decode_message(69, BLOCK_RANGE_UPDATE, data) == data
     # eth/68 does not use the ID 0x11.
-    with pytest.raises(EthWireError) as info:
+    with raises(
+        EthWireError, "message ID 17 is not used by this eth version, or not read by EthLib yet"
+    ) as info:
         decode_message(68, BLOCK_RANGE_UPDATE, data)
     assert info.value.code == 1
 
@@ -106,19 +109,21 @@ def test_block_range_update() -> None:
     ],
 )
 def test_malformed_block_range_update(data: bytes) -> None:
-    with pytest.raises(EthWireError) as info:
+    with raises(EthWireError, "message data is not RLP of the expected shape") as info:
         decode_message(69, BLOCK_RANGE_UPDATE, data)
     assert info.value.code == 2
 
 
 def test_unknown_message_id() -> None:
-    with pytest.raises(EthWireError) as info:
+    with raises(
+        EthWireError, "message ID 22 is not used by this eth version, or not read by EthLib yet"
+    ) as info:
         decode_message(69, 0x16, rlp.encode([]))
     assert info.value.code == 1
 
 
 def test_unknown_version() -> None:
-    with pytest.raises(EthWireError) as info:
+    with raises(EthWireError, "eth/67 is not a version that EthLib specifies") as info:
         decode_message(67, STATUS, _status68(67))
     assert info.value.code == 0
 
@@ -131,20 +136,30 @@ def test_status_accepted(version: int, data: bytes) -> None:
 
 
 @pytest.mark.parametrize(
-    "version, data, code",
+    "version, data, code, message",
     [
         # The Status announces another version than the negotiated one.
-        (69, _status69(70), 101),
-        (68, _status68(67), 101),
+        (69, _status69(70), 101, "Status announces version 70, not the negotiated one"),
+        (68, _status68(67), 101, "Status announces version 67, not the negotiated one"),
         # A remote of Rinkeby at Petersburg: incompatible, EIP-2124 "Test Cases".
-        (69, _status69(fork_id=[bytes.fromhex("afec6b27"), b""]), 102),
+        (
+            69,
+            _status69(fork_id=[bytes.fromhex("afec6b27"), b""]),
+            102,
+            "fork identifier refused: chains are incompatible, or the local node is stale",
+        ),
         # The range starts after its end.
-        (69, _status69(earliest=HEAD + 1), 103),
+        (
+            69,
+            _status69(earliest=HEAD + 1),
+            103,
+            "block range starts at 7987397, after its end 7987396",
+        ),
         # The Status of eth/69 on eth/68.
-        (68, _status69(68), 2),
+        (68, _status69(68), 2, "message data is not RLP of the expected shape"),
     ],
 )
-def test_status_refused(version: int, data: bytes, code: int) -> None:
-    with pytest.raises(EthWireError) as info:
+def test_status_refused(version: int, data: bytes, code: int, message: str) -> None:
+    with raises(EthWireError, message) as info:
         check_status(version, SCHEDULE, HEAD, 0, data)
     assert info.value.code == code

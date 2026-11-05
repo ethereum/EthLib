@@ -3,6 +3,7 @@
 import pytest
 
 from ethlib.execution.evm import create2_address, create_address
+from raising import raises
 
 # The examples of EIP-1014, "Examples".
 # Each case is the sender, the salt, the init code and the address.
@@ -75,13 +76,13 @@ def test_create_address_is_20_bytes() -> None:
 @pytest.mark.parametrize("sender", [b"", bytes(19), bytes(21)])
 def test_sender_must_be_20_bytes(sender: bytes) -> None:
     """A sender that is not 20 bytes is rejected before Lean runs."""
-    with pytest.raises(ValueError, match="the sender must be 20 bytes"):
+    with raises(ValueError, "the sender must be 20 bytes"):
         create_address(sender, 0)
-    with pytest.raises(ValueError, match="the sender must be 20 bytes"):
+    with raises(ValueError, "the sender must be 20 bytes"):
         create2_address(sender, bytes(32), b"")
 
 
 def test_salt_must_be_32_bytes() -> None:
     """A salt that is not one word is rejected."""
-    with pytest.raises(ValueError, match="the salt must be 32 bytes"):
+    with raises(ValueError, "the salt must be 32 bytes"):
         create2_address(bytes(20), bytes(31), b"")

@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 
 from ethlib.execution import blocks
+from raising import raises
 
+from .expected_errors import expected_message
 from .test_blocks import FORK_OF_NETWORK, _first_item
 
 ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
@@ -59,13 +61,15 @@ def test_headers_of_every_fixture(archive: Path, directory: str) -> None:
                     headers[block["blockHeader"]["hash"]] = header
                     checked += 1
                     continue
-                codes = {CODES[e] for e in exception.split("|") if e in CODES}
+                named = [e for e in exception.split("|") if e in CODES]
                 parent = headers.get("0x" + header[4:36].hex())
-                if not codes or parent is None:
+                if not named or parent is None:
                     continue
-                # The first failed check is the one that the fixture names.
-                with pytest.raises(blocks.BlockError) as error:
+                # Each such block names one exception, and the header check fails on it.
+                assert len(named) == 1, f"{path.name}::{name}"
+                message = expected_message(named[0], parent, header, None, False)
+                with raises(blocks.BlockError, message) as error:
                     blocks.check_header(fork, fork, parent, header)
-                assert error.value.code in codes, f"{path.name}::{name}"
+                assert error.value.code == CODES[named[0]], f"{path.name}::{name}"
     # Every directory has valid blocks to check.
     assert checked > 0

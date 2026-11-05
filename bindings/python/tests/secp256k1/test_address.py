@@ -9,6 +9,7 @@ from py_ecc.secp256k1 import secp256k1 as reference
 
 from ethlib.cryptography import secp256k1
 from ethlib.cryptography.keccak import keccak256
+from raising import raises
 
 N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
 
@@ -43,12 +44,12 @@ def test_address_of_key_one() -> None:
 
 
 def test_address_rejects_zero() -> None:
-    with pytest.raises(ValueError, match="private key is zero"):
+    with raises(ValueError, "private key is zero"):
         secp256k1.address(bytes(32))
 
 
 def test_address_rejects_n() -> None:
-    with pytest.raises(ValueError, match="not below the group order"):
+    with raises(ValueError, "bad private key: not below the group order n"):
         secp256k1.address(N.to_bytes(32, "big"))
 
 

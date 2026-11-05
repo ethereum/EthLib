@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from ethlib.precompiles import run
+from raising import raises
 
 from .forks import ends
 
@@ -43,6 +44,15 @@ ERROR = {
     "g2 point is not in the correct subgroup": "notInSubgroup",
 }
 
+
+def error(variant: str) -> str:
+    """The message of a failed call, from the variant of its error."""
+    return (
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.bls12381\n  "
+        f"(EthLib.Execution.Evm.Precompiles.Bls12381.Bls12381Error.{variant})"
+    )
+
+
 # A failing case lists no gas, so it runs with more than any of these calls costs.
 AMPLE_GAS = 10**9
 
@@ -70,15 +80,20 @@ def test_exact_price(fork: str, address: int, case: dict) -> None:
 @pytest.mark.parametrize("address, case", SUCCESS)
 @pytest.mark.parametrize("fork", FORKS)
 def test_one_gas_short(fork: str, address: int, case: dict) -> None:
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(ValueError, error(f"outOfGas {case['Gas']} {case['Gas'] - 1}")):
         run(fork, address, bytes.fromhex(case["Input"]), case["Gas"] - 1)
 
 
 @pytest.mark.parametrize("address, case", FAILURE)
 @pytest.mark.parametrize("fork", FORKS)
 def test_error(fork: str, address: int, case: dict) -> None:
-    with pytest.raises(ValueError, match=rf"\.{ERROR[case['ExpectedError']]}\b"):
-        run(fork, address, bytes.fromhex(case["Input"]), AMPLE_GAS)
+    data = bytes.fromhex(case["Input"])
+    variant = ERROR[case["ExpectedError"]]
+    # The length error names the length of the input.
+    if variant == "invalidInputLength":
+        variant = f"{variant} {len(data)}"
+    with raises(ValueError, error(variant)):
+        run(fork, address, data, AMPLE_GAS)
 
 
 # The MSM cases of EIP-2537 with more than 8 pairs, from the same directory.
@@ -121,5 +136,5 @@ def test_large_msm_exact_price(fork: str, address: int, data: bytes, case: dict)
 @pytest.mark.parametrize("address, data, case", LARGE)
 @pytest.mark.parametrize("fork", FORKS)
 def test_large_msm_one_gas_short(fork: str, address: int, data: bytes, case: dict) -> None:
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(ValueError, error(f"outOfGas {case['Gas']} {case['Gas'] - 1}")):
         run(fork, address, data, case["Gas"] - 1)

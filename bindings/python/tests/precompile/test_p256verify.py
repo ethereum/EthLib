@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 
 from ethlib.precompiles import run
+from raising import raises
 
 from .forks import ends
 
@@ -40,5 +41,11 @@ def test_vector(fork: str, case: dict) -> None:
 
 @pytest.mark.parametrize("fork", FORKS)
 def test_out_of_gas(fork: str) -> None:
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.p256Verify\n  "
+            "(EthLib.Execution.Evm.Precompiles.P256Verify.P256VerifyError.outOfGas 6900 6899)"
+        ),
+    ):
         run(fork, 0x100, bytes.fromhex(CASES[0]["Input"]), 6899)

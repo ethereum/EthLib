@@ -12,6 +12,7 @@ from ethlib.networking import enr
 from ethlib.precompiles import price, run
 from ethlib.serialization import rlp
 from ethlib.state import rewards_root, withdrawals_root
+from raising import raises
 
 _REPO = Path(__file__).resolve().parents[4]
 _FILE = _REPO / "tests" / "execution" / "blocks" / "blockchain_tests.json"
@@ -110,7 +111,7 @@ AT_HEGOTA = {"consensus_parameters", "ssz_static"}
 
 
 def _rejects(export: str, fork: str) -> None:
-    with pytest.raises(EthLibError, match=f"^fork {fork} not yet specified$") as error:
+    with raises(EthLibError, f"fork {fork} not yet specified") as error:
         EXPORTS[export](fork)
     assert error.value.code == 0
 

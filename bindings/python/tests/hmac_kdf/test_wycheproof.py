@@ -7,6 +7,7 @@ import pytest
 
 from ethlib.cryptography.hmac import hmac_sha256
 from ethlib.cryptography.kdf import HkdfError, hkdf
+from raising import raises
 
 # The HMAC-SHA-256 and HKDF-SHA-256 vectors of Wycheproof.
 #
@@ -58,6 +59,8 @@ def test_hkdf(test: dict) -> None:
     else:
         # RFC 5869 §2.3 caps the output at 255 hash lengths, 8160 bytes for SHA-256.
         assert test["flags"] == ["SizeTooLarge"] and test["size"] == 255 * 32 + 1
-        with pytest.raises(HkdfError, match="outputTooLong") as error:
+        with raises(
+            HkdfError, "EthLib.Cryptography.Hash.Hkdf.HkdfError.outputTooLong 8161"
+        ) as error:
             hkdf(salt, ikm, info, test["size"])
         assert error.value.code == 2

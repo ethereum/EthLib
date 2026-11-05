@@ -4,9 +4,8 @@ Each record is built here as RLP, with a placeholder signature, since the reader
 Each value is written out by hand from its SSZ type, and each test names the rule that it pins.
 """
 
-import pytest
-
 from ethlib.networking import enr
+from raising import raises
 
 from .test_enr import _rlp_list
 
@@ -77,17 +76,17 @@ def test_attnets_may_be_absent():
 
 
 def test_missing_eth2():
-    with pytest.raises(ValueError, match="eth2"):
+    with raises(ValueError, "record has no eth2 entry"):
         enr.consensus_entries("phase0", _record(_without(b"eth2")))
 
 
 def test_fulu_requires_cgc():
-    with pytest.raises(ValueError, match="cgc"):
+    with raises(ValueError, "record has no cgc entry"):
         enr.consensus_entries("fusaka", _record(_without(b"cgc")))
 
 
 def test_fulu_requires_nfd():
-    with pytest.raises(ValueError, match="nfd"):
+    with raises(ValueError, "record has no nfd entry"):
         enr.consensus_entries("fusaka", _record(_without(b"nfd")))
 
 
@@ -98,14 +97,14 @@ def test_cgc_not_required_before_fulu():
 
 def test_eth2_of_15_bytes():
     record = _record({**FULL, b"eth2": ETH2[:15]})
-    with pytest.raises(ValueError, match="eth2"):
+    with raises(ValueError, "the eth2 entry is not valid SSZ"):
         enr.consensus_entries("phase0", record)
 
 
 def test_syncnets_bit_past_the_length():
     # Bit 4 of a Bitvector[4] must be zero.
     record = _record({**FULL, b"syncnets": bytes([0x10])})
-    with pytest.raises(ValueError, match="syncnets"):
+    with raises(ValueError, "the syncnets entry is not valid SSZ"):
         enr.consensus_entries("altair", record)
 
 
@@ -116,7 +115,9 @@ def test_cgc_zero_is_empty():
 
 def test_cgc_leading_zero():
     record = _record({**FULL, b"cgc": bytes([0x00, 0x80])})
-    with pytest.raises(ValueError, match="cgc"):
+    with raises(
+        ValueError, "the cgc entry is not a big-endian integer below 2^64 without leading zeros"
+    ):
         enr.consensus_entries("fusaka", record)
 
 
@@ -129,5 +130,5 @@ def test_minimal_configuration():
 def test_attnets_of_7_bytes():
     # 64 subnets need 8 bytes, so 7 bytes are rejected.
     record = _record({**FULL, b"attnets": ATTNETS[:7]})
-    with pytest.raises(ValueError, match="attnets"):
+    with raises(ValueError, "the attnets entry is not valid SSZ"):
         enr.consensus_entries("fusaka", record)

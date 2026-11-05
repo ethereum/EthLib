@@ -13,6 +13,7 @@ import struct
 import pytest
 
 from ethlib.precompiles import run
+from raising import raises
 
 from .forks import ends
 
@@ -37,10 +38,10 @@ def vector(rounds: str, flag: str) -> bytes:
 
 # Test vectors 0 to 3: the inputs the precompile rejects, with the error it names.
 REJECTED = [
-    (b"", "invalidInputLength"),
-    (vector("00000c", "01"), "invalidInputLength"),
-    (vector("000000000c", "01"), "invalidInputLength"),
-    (vector("0000000c", "02"), "invalidFlag"),
+    (b"", "invalidInputLength 0"),
+    (vector("00000c", "01"), "invalidInputLength 212"),
+    (vector("000000000c", "01"), "invalidInputLength 214"),
+    (vector("0000000c", "02"), "invalidFlag 2"),
 ]
 
 # Test vectors 4 to 7: the rounds field, the flag and the output.
@@ -75,7 +76,11 @@ ACCEPTED = [
 @pytest.mark.parametrize("data, error", REJECTED)
 @pytest.mark.parametrize("fork", FORKS)
 def test_eip152_rejected(fork: str, data: bytes, error: str) -> None:
-    with pytest.raises(ValueError, match=error):
+    with raises(
+        ValueError,
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f\n  "
+        f"(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.{error})",
+    ):
         run(fork, ADDRESS, data, 12)
 
 
@@ -90,7 +95,14 @@ def test_eip152_vector8_rounds(fork: str) -> None:
     # Test vector 8 asks for 2^32 - 1 rounds, too many to run in a test.
     # One unit of gas short of that count, the call fails before any round.
     # So the rounds field reads as 2^32 - 1, big-endian.
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f\n  "
+            "(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.outOfGas 4294967295 "
+            "4294967294)"
+        ),
+    ):
         run(fork, ADDRESS, vector("ffffffff", "01"), 2**32 - 2)
 
 

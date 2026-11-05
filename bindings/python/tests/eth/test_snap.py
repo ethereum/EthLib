@@ -30,6 +30,7 @@ from ethlib.execution.network.snap import (
     full_account,
 )
 from ethlib.serialization import rlp
+from raising import raises
 
 _BALS = Path(__file__).resolve().parents[4] / "tests/execution/blocks/block_access_lists.json"
 
@@ -91,7 +92,7 @@ def test_snap2_round_trip(message_id: int, data: bytes) -> None:
     [(2, m, d) for m, d in SNAP1] + [(1, m, d) for m, d in SNAP2] + [(2, 0x0A, rlp.encode([]))],
 )
 def test_ids_of_the_other_version(version: int, message_id: int, data: bytes) -> None:
-    with pytest.raises(SnapError) as info:
+    with raises(SnapError, f"message ID {message_id} is not used by this snap version") as info:
         decode_message(version, message_id, data)
     assert info.value.code == 1
 

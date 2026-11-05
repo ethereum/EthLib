@@ -20,6 +20,7 @@ from ethlib.execution.network import (
     decode_message,
 )
 from ethlib.serialization import rlp
+from raising import raises
 
 
 def _p(n: int) -> bytes:
@@ -104,7 +105,7 @@ def test_round_trip(version: int, message_id: int, data: bytes) -> None:
     ],
 )
 def test_malformed(message_id: int, data: bytes) -> None:
-    with pytest.raises(EthWireError) as info:
+    with raises(EthWireError, "message data is not RLP of the expected shape") as info:
         decode_message(69, message_id, data)
     assert info.value.code == 2
 
@@ -129,24 +130,59 @@ def test_headers_answer(request_: bytes, response: bytes) -> None:
 
 
 @pytest.mark.parametrize(
-    "request_, response, code",
+    "request_, response, code, message",
     [
         # More headers than the limit.
-        (_get_headers(100, 2, 0, 0), _headers(CHAIN[:3]), 201),
+        (
+            _get_headers(100, 2, 0, 0),
+            _headers(CHAIN[:3]),
+            201,
+            "answer holds 3 headers, more than the limit 2",
+        ),
         # The first header is not the start block.
-        (_get_headers(101, 3, 0, 0), _headers(CHAIN[:3]), 203),
-        (_get_headers(_hash(CHAIN[1]), 3, 0, 0), _headers(CHAIN[:3]), 203),
+        (
+            _get_headers(101, 3, 0, 0),
+            _headers(CHAIN[:3]),
+            203,
+            "first header is not the start block",
+        ),
+        (
+            _get_headers(_hash(CHAIN[1]), 3, 0, 0),
+            _headers(CHAIN[:3]),
+            203,
+            "first header is not the start block",
+        ),
         # A gap of one block where none was asked.
-        (_get_headers(100, 3, 0, 0), _headers([CHAIN[0], CHAIN[2]]), 204),
+        (
+            _get_headers(100, 3, 0, 0),
+            _headers([CHAIN[0], CHAIN[2]]),
+            204,
+            "header has number 102, not 101",
+        ),
         # Rising where falling was asked.
-        (_get_headers(100, 3, 0, 1), _headers(CHAIN[:2]), 204),
+        (
+            _get_headers(100, 3, 0, 1),
+            _headers(CHAIN[:2]),
+            204,
+            "header has number 101, not 99",
+        ),
         # The right numbers, but block 101 does not have block 100 as its parent.
-        (_get_headers(100, 2, 0, 0), _headers([CHAIN[0], _header(bytes(32), 101)]), 205),
+        (
+            _get_headers(100, 2, 0, 0),
+            _headers([CHAIN[0], _header(bytes(32), 101)]),
+            205,
+            "header 101 does not chain to the header before it",
+        ),
         # Another request ID.
-        (_get_headers(100, 3, 0, 0), _headers(CHAIN[:3], request_id=8), 206),
+        (
+            _get_headers(100, 3, 0, 0),
+            _headers(CHAIN[:3], request_id=8),
+            206,
+            "response is not BlockHeaders with the request ID of the request",
+        ),
     ],
 )
-def test_headers_refused(request_: bytes, response: bytes, code: int) -> None:
-    with pytest.raises(EthWireError) as info:
+def test_headers_refused(request_: bytes, response: bytes, code: int, message: str) -> None:
+    with raises(EthWireError, message) as info:
         check_headers(69, request_, response)
     assert info.value.code == code

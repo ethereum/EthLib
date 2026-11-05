@@ -11,6 +11,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from ethlib.precompiles import price, run
+from raising import raises
 
 from .forks import ends, since
 
@@ -140,7 +141,11 @@ def test_bls(fork: str, address: int, case: dict) -> None:
 @pytest.mark.parametrize("fork", ends("pectra"))
 @pytest.mark.parametrize("address, case", _new(BLS_FAILURE, BLS_FAIL_EIP))
 def test_bls_error(fork: str, address: int, case: dict) -> None:
-    with pytest.raises(ValueError, match=rf"\.{BLS_ERROR[case['ExpectedError']]}\b"):
+    with raises(
+        ValueError,
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.bls12381\n  "
+        f"(EthLib.Execution.Evm.Precompiles.Bls12381.Bls12381Error.{BLS_ERROR[case['ExpectedError']]})",
+    ):
         run(fork, address, _hex(case["Input"]), AMPLE_GAS)
 
 

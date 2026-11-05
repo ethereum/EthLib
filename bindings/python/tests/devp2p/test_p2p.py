@@ -1,8 +1,7 @@
 """The messages of the "p2p" capability against EIP-8 and hand-built Snappy frames."""
 
-import pytest
-
 from ethlib.networking import devp2p
+from raising import raises
 
 # The Hello of "Test Vectors", "devp2p Base Protocol", in EIP-8.
 # It holds version 55, two capabilities and three list elements after the five fields of Hello.
@@ -86,27 +85,29 @@ def test_oversized_message_rejected() -> None:
             size >> 21,
         ]
     )
-    with pytest.raises(devp2p.Devp2pError) as info:
+    with raises(
+        devp2p.Devp2pError, "message decompresses to 16777217 bytes, more than 16777216"
+    ) as info:
         devp2p.decode_message(True, b"\x02" + preamble + b"\x00\xc0")
     assert info.value.code == 3
 
 
 def test_unknown_id_rejected() -> None:
     # Code 4 names a message ID outside the "p2p" capability.
-    with pytest.raises(devp2p.Devp2pError) as info:
+    with raises(devp2p.Devp2pError, "message ID 4 is not a p2p message") as info:
         devp2p.decode_message(False, b"\x04\xc0")
     assert info.value.code == 4
 
 
 def test_ping_with_items_rejected() -> None:
     # Code 1 names RLP of the wrong shape.
-    with pytest.raises(devp2p.Devp2pError) as info:
+    with raises(devp2p.Devp2pError, "message is not RLP of the expected shape") as info:
         devp2p.decode_message(False, b"\x02\xc1\x80")
     assert info.value.code == 1
 
 
 def test_bad_snappy_block_rejected() -> None:
     # Code 2 names a Snappy block that is not valid: the literal claims 2 bytes, and 1 follows.
-    with pytest.raises(devp2p.Devp2pError) as info:
+    with raises(devp2p.Devp2pError, "message is not a valid Snappy block") as info:
         devp2p.decode_message(True, b"\x02\x05\x04\xc0")
     assert info.value.code == 2

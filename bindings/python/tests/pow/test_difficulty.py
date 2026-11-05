@@ -7,6 +7,7 @@ import pytest
 
 from ethlib.errors import BlockError
 from ethlib.execution.pow import block_difficulty
+from raising import raises
 
 # The vendored files sit next to this module.
 _DIR = Path(__file__).resolve().parent / "difficulty"
@@ -69,10 +70,10 @@ def test_paris_is_zero() -> None:
 
 def test_unknown_fork() -> None:
     # A name that is not a fork of the timeline fails before any arithmetic.
-    with pytest.raises(BlockError):
+    with raises(BlockError, "no fork named ropsten"):
         block_difficulty("ropsten", 1, 2, 1, 131072, 0)
 
 
 def test_negative_quantity() -> None:
-    with pytest.raises(OverflowError):
+    with raises(OverflowError, "a block quantity cannot be negative"):
         block_difficulty("homestead", -1, 2, 1, 131072, 0)

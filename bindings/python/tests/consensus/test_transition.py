@@ -9,6 +9,7 @@ from ruamel.yaml import YAML
 import archives
 from ethlib import consensus
 from ethlib.networking import snappy
+from raising import raises
 
 from .containers import FORKS
 from .test_data_column import replacements
@@ -187,6 +188,8 @@ def test_slots_not_after():
     # The target slot must be after the slot of the state, so zero slots is a rejection.
     case = next((FILES / "minimal" / "phase0").rglob("pre.ssz_snappy"))
     pre = snappy.decompress(case.read_bytes())
-    with pytest.raises(consensus.TransitionError) as info:
+    with raises(
+        consensus.TransitionError, "EthLib.Consensus.TransitionError.slotNotAfter 529 529"
+    ) as info:
         consensus.process_slots("minimal", "phase0", pre, 0)
     assert info.value.code == 53

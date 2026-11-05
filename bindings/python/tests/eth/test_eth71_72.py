@@ -17,6 +17,7 @@ from ethlib.execution.network import (
     decode_message,
 )
 from ethlib.serialization import rlp
+from raising import raises
 
 from .test_snap import BALS
 
@@ -56,13 +57,14 @@ def test_cell_messages(message_id: int, data: bytes) -> None:
     + [(v, m, d) for v in (68, 69, 70, 71) for m, d in CELL_MESSAGES],
 )
 def test_ids_of_later_versions(version: int, message_id: int, data: bytes) -> None:
-    with pytest.raises(EthWireError) as info:
+    message = f"message ID {message_id} is not used by this eth version, or not read by EthLib yet"
+    with raises(EthWireError, message) as info:
         decode_message(version, message_id, data)
     assert info.value.code == 1
 
 
 def test_cell_mask_of_15_bytes() -> None:
-    with pytest.raises(EthWireError) as info:
+    with raises(EthWireError, "message data is not RLP of the expected shape") as info:
         decode_message(72, GET_CELLS, rlp.encode([_p(3), H, MASK[:15]]))
     assert info.value.code == 2
 

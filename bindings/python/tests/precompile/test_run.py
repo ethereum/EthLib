@@ -10,6 +10,7 @@ import struct
 import pytest
 
 from ethlib.precompiles import ADDRESSES, price, run
+from raising import raises
 
 from .forks import FORKS, since
 
@@ -41,34 +42,34 @@ def test_fork_adds_precompile(fork: str, address: int) -> None:
     if fork in since(ADDED[address]):
         assert price(fork, address, b"") >= 0
     else:
-        with pytest.raises(ValueError, match="no precompile at address"):
+        with raises(ValueError, f"no precompile at address {address} at fork {fork}"):
             run(fork, address, b"", 10**6)
-        with pytest.raises(ValueError, match="no precompile at address"):
+        with raises(ValueError, f"no precompile at address {address} at fork {fork}"):
             price(fork, address, b"")
 
 
 def test_unknown_fork() -> None:
-    with pytest.raises(ValueError, match="no fork named"):
+    with raises(ValueError, "no fork named osaka"):
         run("osaka", 0x04, b"", 100)
-    with pytest.raises(ValueError, match="no fork named"):
+    with raises(ValueError, "no fork named osaka"):
         price("osaka", 0x04, b"")
 
 
 @pytest.mark.parametrize("address", [0x00, 0x12, 0xFF, 0x101, 2**64 - 1])
 @pytest.mark.parametrize("fork", FORKS)
 def test_unknown_address(fork: str, address: int) -> None:
-    with pytest.raises(ValueError, match="no precompile at address"):
+    with raises(ValueError, f"no precompile at address {address} at fork {fork}"):
         run(fork, address, b"", 10**6)
 
 
 def test_rejects_bad_arguments() -> None:
-    with pytest.raises(TypeError):
+    with raises(TypeError, "data must be bytes"):
         run("fusaka", 0x04, "abc", 100)  # ty: ignore[invalid-argument-type]
-    with pytest.raises(TypeError):
+    with raises(TypeError, "fork must be str"):
         run(b"fusaka", 0x04, b"", 100)  # ty: ignore[invalid-argument-type]
-    with pytest.raises(OverflowError):
+    with raises(OverflowError, "int too big to convert"):
         run("fusaka", 0x04, b"", 2**64)
-    with pytest.raises(OverflowError):
+    with raises(OverflowError, "int too big to convert"):
         price("fusaka", 2**64, b"")
 
 
@@ -77,14 +78,26 @@ def test_ecrecover(fork: str) -> None:
     # The word `v` is bytes 32 to 63, which is neither 27 nor 28, so the output is empty.
     data = bytes(range(128))
     assert run(fork, 0x01, data, 3000) == b""
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.ecrecover\n  "
+            "(EthLib.Execution.Evm.Precompiles.Ecrecover.EcrecoverError.outOfGas 3000 2999)"
+        ),
+    ):
         run(fork, 0x01, data, 2999)
 
 
 @pytest.mark.parametrize("fork", FORKS)
 def test_sha256(fork: str) -> None:
     assert run(fork, 0x02, b"abc", 72) == hashlib.sha256(b"abc").digest()
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.sha256\n  "
+            "(EthLib.Execution.Evm.Precompiles.Sha256.Sha256Error.outOfGas 72 71)"
+        ),
+    ):
         run(fork, 0x02, b"abc", 71)
 
 
@@ -104,7 +117,11 @@ def test_ripemd160(fork: str, data: bytes, digest: str | None, cost: int) -> Non
     assert out[:12] == bytes(12)
     if digest is not None:
         assert out[12:].hex() == digest
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(
+        ValueError,
+        f"EthLib.Execution.Evm.Precompiles.PrecompileError.ripemd160\n  "
+        f"(EthLib.Execution.Evm.Precompiles.Ripemd160.Ripemd160Error.outOfGas {cost} {cost - 1})",
+    ):
         run(fork, 0x03, data, cost - 1)
 
 
@@ -114,7 +131,11 @@ def test_identity(fork: str, size: int, cost: int) -> None:
     # The price is 15, plus 3 per started 32-byte word.
     data = bytes(range(size))
     assert run(fork, 0x04, data, cost) == data
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(
+        ValueError,
+        f"EthLib.Execution.Evm.Precompiles.PrecompileError.identity\n  "
+        f"(EthLib.Execution.Evm.Precompiles.Identity.IdentityError.outOfGas {cost} {cost - 1})",
+    ):
         run(fork, 0x04, data, cost - 1)
 
 
@@ -125,7 +146,11 @@ def test_modexp(fork: str) -> None:
     data = word(1) + word(32) + word(32) + bytes([3]) + word(p - 2) + word(p)
     cost = price(fork, 0x05, data)
     assert run(fork, 0x05, data, cost) == word(pow(3, p - 2, p))
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(
+        ValueError,
+        f"EthLib.Execution.Evm.Precompiles.PrecompileError.modexp\n  "
+        f"(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.outOfGas {cost} {cost - 1})",
+    ):
         run(fork, 0x05, data, cost - 1)
 
 
@@ -158,18 +183,42 @@ def test_blake2f(fork: str) -> None:
     # With 12 rounds and the final flag, F on the one block of "abc" is the whole BLAKE2b-512 hash.
     data = blake2f_input(12, b"abc", 1)
     assert run(fork, 0x09, data, 12) == hashlib.blake2b(b"abc").digest()
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f\n  "
+            "(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.outOfGas 12 11)"
+        ),
+    ):
         run(fork, 0x09, data, 11)
 
 
 @pytest.mark.parametrize("fork", since("istanbul"))
 def test_blake2f_order_of_checks(fork: str) -> None:
     # The length is checked before the gas, and the gas before the flag.
-    with pytest.raises(ValueError, match="invalidInputLength"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f\n  "
+            "(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.invalidInputLength 212)"
+        ),
+    ):
         run(fork, 0x09, blake2f_input(12, b"abc", 1)[:-1], 0)
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f\n  "
+            "(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.outOfGas 12 11)"
+        ),
+    ):
         run(fork, 0x09, blake2f_input(12, b"abc", 2), 11)
-    with pytest.raises(ValueError, match="invalidFlag"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.blake2f\n  "
+            "(EthLib.Execution.Evm.Precompiles.Blake2f.Blake2fError.invalidFlag 2)"
+        ),
+    ):
         run(fork, 0x09, blake2f_input(12, b"abc", 2), 12)
 
 
@@ -184,7 +233,11 @@ def test_blake2f_order_of_checks(fork: str) -> None:
 @pytest.mark.parametrize("fork", since("pectra"))
 def test_bls12_add_infinity(fork: str, address: int, size: int, cost: int, out_size: int) -> None:
     assert run(fork, address, bytes(size), cost) == bytes(out_size)
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(
+        ValueError,
+        f"EthLib.Execution.Evm.Precompiles.PrecompileError.bls12381\n  "
+        f"(EthLib.Execution.Evm.Precompiles.Bls12381.Bls12381Error.outOfGas {cost} {cost - 1})",
+    ):
         run(fork, address, bytes(size), cost - 1)
 
 
@@ -199,5 +252,9 @@ def test_bls12_add_infinity(fork: str, address: int, size: int, cost: int, out_s
 def test_bls12_map_zero(fork: str, address: int, size: int, cost: int, out_size: int) -> None:
     # The zero field element maps to a point, which the EIP-2537 vectors fix.
     assert len(run(fork, address, bytes(size), cost)) == out_size
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(
+        ValueError,
+        f"EthLib.Execution.Evm.Precompiles.PrecompileError.bls12381\n  "
+        f"(EthLib.Execution.Evm.Precompiles.Bls12381.Bls12381Error.outOfGas {cost} {cost - 1})",
+    ):
         run(fork, address, bytes(size), cost - 1)

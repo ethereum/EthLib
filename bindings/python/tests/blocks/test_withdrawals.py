@@ -7,6 +7,7 @@ import pytest
 
 from ethlib.serialization import rlp
 from ethlib.state import StateError, state_root, withdrawals_root
+from raising import raises
 
 _REPO = Path(__file__).resolve().parents[4]
 _CASES_FILE = _REPO / "tests" / "execution" / "blocks" / "withdrawals.json"
@@ -69,7 +70,9 @@ def test_withdrawals_change_the_root() -> None:
 def test_shapella_block_rejected_at_paris() -> None:
     # A Paris block has no withdrawals field, so a Shapella block does not decode at Paris.
     case = CASES[0]
-    with pytest.raises(StateError, match="block rejected") as error:
+    with raises(
+        StateError, "block rejected: EthLib.Serialization.Rlp.RlpError.wrongFieldCount 3 4"
+    ) as error:
         withdrawals_root("paris", _state(case["pre"]), bytes.fromhex(case["rlp"]))
     assert error.value.code == 0
 
@@ -78,6 +81,6 @@ def test_fork_before_shapella_rejected() -> None:
     # A Paris block decodes at Paris, but Paris has no withdrawals.
     blocks = json.loads((_CASES_FILE.parent / "blockchain_tests.json").read_text())
     paris = next(c for c in blocks if c["network"] == "Paris")
-    with pytest.raises(StateError, match="before Shapella") as error:
+    with raises(StateError, "the fork is before Shapella") as error:
         withdrawals_root("paris", _state(CASES[0]["pre"]), bytes.fromhex(paris["rlp"]))
     assert error.value.code == 0

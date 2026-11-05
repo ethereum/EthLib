@@ -9,7 +9,9 @@ import pytest
 
 from ethlib.execution import blocks
 from ethlib.serialization import rlp
+from raising import raises
 
+from .expected_errors import BLOB_FORKS, expected_message, fork_schedule, has_reserve_price
 from .test_blocks import CASES, FORK_OF_NETWORK, _first_item
 
 # The networks from Paris on, where the header checks apply.
@@ -49,6 +51,9 @@ def test_fixture_header_is_valid(pair) -> None:
     blocks.validate_header(fork, fork, parent, header)
 
 
+_INVALID_HEADER = "header invalid: EthLib.Execution.Blocks.BlockError."
+
+
 def _mutated(header: bytes, index: int, value: bytes) -> bytes:
     fields = rlp.decode(header)
     fields[index] = value
@@ -57,17 +62,22 @@ def _mutated(header: bytes, index: int, value: bytes) -> bytes:
 
 # Field positions in the header list: gas limit 9, gas used 10, timestamp 11, extra data 12.
 @pytest.mark.parametrize(
-    "index,value,code",
+    "index,value,code,fault",
     [
-        (11, b"", 206),  # timestamp 0, not after the parent
-        (12, b"\x00" * 33, 208),  # 33 bytes of extra data
-        (10, (2**63).to_bytes(8, "big"), 203),  # gas used above the gas limit
-        (9, (2**40).to_bytes(6, "big"), 204),  # a gas limit far above the parent's
+        (11, b"", 206, "timestampNotAfterParent"),  # timestamp 0, not after the parent
+        (12, b"\x00" * 33, 208, "extraDataTooLong"),  # 33 bytes of extra data
+        (10, (2**63).to_bytes(8, "big"), 203, "gasUsedAboveLimit"),  # gas used above the gas limit
+        (
+            9,
+            (2**40).to_bytes(6, "big"),
+            204,
+            "invalidGasLimit",
+        ),  # a gas limit far above the parent's
     ],
 )
-def test_mutated_header_is_invalid(index: int, value: bytes, code: int) -> None:
+def test_mutated_header_is_invalid(index: int, value: bytes, code: int, fault: str) -> None:
     parent, header, fork = _headers(PAIRS[0])
-    with pytest.raises(blocks.BlockError) as error:
+    with raises(blocks.BlockError, _INVALID_HEADER + fault) as error:
         blocks.validate_header(fork, fork, parent, _mutated(header, index, value))
     assert error.value.code == code
 
@@ -90,7 +100,15 @@ _INVALID = json.loads(
 )
 def test_fixture_invalid_header(case) -> None:
     fork = FORK_OF_NETWORK[case["network"]]
-    with pytest.raises(blocks.BlockError) as error:
+    blobs = fork in BLOB_FORKS
+    message = expected_message(
+        case["exception"],
+        bytes.fromhex(case["parent"]),
+        bytes.fromhex(case["header"]),
+        fork_schedule(fork) if blobs else None,
+        blobs and has_reserve_price(fork),
+    )
+    with raises(blocks.BlockError, message) as error:
         blocks.validate_header(
             fork, fork, bytes.fromhex(case["parent"]), bytes.fromhex(case["header"])
         )
@@ -124,7 +142,9 @@ def test_block_at_size_limit_is_valid() -> None:
 
 
 def test_block_above_size_limit_is_invalid() -> None:
-    with pytest.raises(blocks.BlockError) as error:
+    with raises(
+        blocks.BlockError, "block invalid: EthLib.Execution.Blocks.BlockError.blockTooLarge 8388609"
+    ) as error:
         blocks.validate_size("fusaka", _block_of_size(MAX_RLP_BLOCK_SIZE + 1))
     assert error.value.code == 214
 
@@ -143,7 +163,10 @@ def test_paris_header_fails_the_difficulty_before_paris() -> None:
     # Its difficulty is 0, below the minimum of 131,072 that London asks.
     paris = next(p for p in PAIRS if p[0]["network"] == "Paris")
     parent, header, _ = _headers(paris)
-    with pytest.raises(blocks.BlockError) as error:
+    with raises(
+        blocks.BlockError,
+        "header invalid: EthLib.Execution.Blocks.BlockError.wrongDifficulty 131072 0",
+    ) as error:
         blocks.validate_header("london", "london", parent, header)
     assert error.value.code == 215
 
@@ -184,7 +207,10 @@ def test_wrong_difficulty_before_paris_is_rejected() -> None:
     pair = next(p for p in CHAIN_PAIRS if p[0]["network"] == "Frontier")
     parent, header, fork = _headers(pair)
     difficulty = int.from_bytes(rlp.decode(header)[7], "big") + 1
-    with pytest.raises(blocks.BlockError) as error:
+    with raises(
+        blocks.BlockError,
+        "header invalid: EthLib.Execution.Blocks.BlockError.wrongDifficulty 131136 131137",
+    ) as error:
         blocks.check_header(
             fork, fork, parent, _mutated(header, 7, difficulty.to_bytes(8, "big").lstrip(b"\x00"))
         )
@@ -198,6 +224,10 @@ def test_unsealed_header_fails_the_proof_of_work() -> None:
     # The fixtures carry no proof of work, so the full check rejects them before Paris.
     pair = next(p for p in CHAIN_PAIRS if p[0]["network"] == "Frontier")
     parent, header, fork = _headers(pair)
-    with pytest.raises(blocks.BlockError) as error:
+    with raises(
+        blocks.BlockError,
+        "header invalid: EthLib.Execution.Blocks.BlockError.proofOfWork "
+        "(EthLib.Execution.Blocks.PowError.wrongMixDigest)",
+    ) as error:
         blocks.validate_header(fork, fork, parent, header)
     assert error.value.code == 216

@@ -5,6 +5,7 @@ import json
 import pytest
 
 from ethlib.execution import blocks
+from raising import raises
 
 ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
 
@@ -38,7 +39,10 @@ def test_block_size(archive, source) -> None:
                 blocks.validate_size("fusaka", data)
                 checked["valid"] += 1
             elif exception.split("|") == [TOO_LARGE]:
-                with pytest.raises(blocks.BlockError) as error:
+                with raises(
+                    blocks.BlockError,
+                    "block invalid: EthLib.Execution.Blocks.BlockError.blockTooLarge 8388609",
+                ) as error:
                     blocks.validate_size("fusaka", data)
                 assert error.value.code == 214
                 checked["too large"] += 1

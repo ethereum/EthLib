@@ -4,11 +4,10 @@
 # cramjam 2.14.0. Every other case is built by hand from format_description.txt and
 # framing_format.txt of google/snappy.
 
-import re
-
 import pytest
 
 from ethlib.networking import snappy
+from raising import raises
 
 A = b"\x41"
 
@@ -103,7 +102,7 @@ BAD_BLOCKS = [
 
 @pytest.mark.parametrize(("block", "fault"), BAD_BLOCKS)
 def test_decompress_rejected(block: str, fault: str) -> None:
-    with pytest.raises(ValueError, match=re.escape("SnappyError." + fault) + "$"):
+    with raises(ValueError, "block rejected: EthLib.Networking.Snappy.SnappyError." + fault):
         snappy.decompress(bytes.fromhex(block))
 
 
@@ -179,5 +178,5 @@ BAD_STREAMS = [
 
 @pytest.mark.parametrize(("stream", "fault"), BAD_STREAMS)
 def test_decode_frames_rejected(stream: bytes, fault: str) -> None:
-    with pytest.raises(ValueError, match=re.escape("FrameError." + fault) + "$"):
+    with raises(ValueError, "stream rejected: EthLib.Networking.Snappy.FrameError." + fault):
         snappy.decode_frames(stream)

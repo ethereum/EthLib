@@ -6,11 +6,10 @@
 import hashlib
 from functools import cache
 
-import pytest
-
 from ethlib.cryptography import keccak, kzg
 from ethlib.execution import transactions
 from ethlib.serialization import rlp
+from raising import raises
 
 
 def _blob(seed: int) -> bytes:
@@ -74,8 +73,8 @@ def _fusaka(
     return b"\x03" + rlp.encode([body, _int(version), blobs, commitments, proofs])
 
 
-def _check_raises(fork: str, network: bytes, code: int) -> None:
-    with pytest.raises(transactions.TransactionError) as info:
+def _check_raises(fork: str, network: bytes, code: int, message: str) -> None:
+    with raises(transactions.TransactionError, message) as info:
         transactions.network_check(fork, network)
     assert info.value.code == code
 
@@ -101,44 +100,84 @@ def test_form_of_the_other_fork() -> None:
     blobs, commitments = _blobs()
     body = _body([_versioned_hash(c) for c in commitments])
     # Each fork reads only its own list: four items before Fusaka, five from it.
-    _check_raises("fusaka", _dencun(body, blobs, commitments, _blob_proofs()), 3)
-    _check_raises("dencun", _fusaka(body, blobs, commitments, _cell_proofs()), 3)
+    _check_raises(
+        "fusaka",
+        _dencun(body, blobs, commitments, _blob_proofs()),
+        3,
+        "decoding: wrongFieldCount 5 4",
+    )
+    _check_raises(
+        "dencun",
+        _fusaka(body, blobs, commitments, _cell_proofs()),
+        3,
+        "decoding: wrongFieldCount 4 5",
+    )
 
 
 def test_before_dencun() -> None:
     blobs, commitments = _blobs()
     body = _body([_versioned_hash(c) for c in commitments])
-    _check_raises("shapella", _dencun(body, blobs, commitments, _blob_proofs()), 2)
+    _check_raises(
+        "shapella", _dencun(body, blobs, commitments, _blob_proofs()), 2, "unsupportedType 3"
+    )
 
 
 def test_wrong_version() -> None:
     blobs, commitments = _blobs()
     body = _body([_versioned_hash(c) for c in commitments])
-    _check_raises("fusaka", _fusaka(body, blobs, commitments, _cell_proofs(), version=2), 101)
+    _check_raises(
+        "fusaka",
+        _fusaka(body, blobs, commitments, _cell_proofs(), version=2),
+        101,
+        "wrapper version 2 is not 1",
+    )
 
 
 def test_count_mismatch() -> None:
     blobs, commitments = _blobs()
     body = _body([_versioned_hash(c) for c in commitments])
-    _check_raises("dencun", _dencun(body, blobs, commitments, _blob_proofs()[:1]), 102)
-    _check_raises("fusaka", _fusaka(body, blobs, commitments, _cell_proofs()[:-1]), 102)
+    _check_raises(
+        "dencun",
+        _dencun(body, blobs, commitments, _blob_proofs()[:1]),
+        102,
+        "2 versioned hashes, 2 blobs, 2 commitments and 1 proofs do not match",
+    )
+    _check_raises(
+        "fusaka",
+        _fusaka(body, blobs, commitments, _cell_proofs()[:-1]),
+        102,
+        "2 versioned hashes, 2 blobs, 2 commitments and 255 proofs do not match",
+    )
     _check_raises(
         "dencun",
         _dencun(_body([_versioned_hash(commitments[0])]), blobs, commitments, _blob_proofs()),
         102,
+        "1 versioned hashes, 2 blobs, 2 commitments and 2 proofs do not match",
     )
 
 
 def test_versioned_hash_mismatch() -> None:
     blobs, commitments = _blobs()
     body = _body([_versioned_hash(c) for c in reversed(commitments)])
-    _check_raises("dencun", _dencun(body, blobs, commitments, _blob_proofs()), 103)
+    _check_raises(
+        "dencun",
+        _dencun(body, blobs, commitments, _blob_proofs()),
+        103,
+        "a commitment does not hash to its versioned hash",
+    )
 
 
 def test_proof_rejected() -> None:
     blobs, commitments = _blobs()
     body = _body([_versioned_hash(c) for c in commitments])
-    _check_raises("dencun", _dencun(body, blobs, commitments, _blob_proofs()[::-1]), 105)
+    _check_raises(
+        "dencun",
+        _dencun(body, blobs, commitments, _blob_proofs()[::-1]),
+        105,
+        "the proofs do not verify",
+    )
     proofs = _cell_proofs()
     swapped = proofs[1:2] + proofs[:1] + proofs[2:]
-    _check_raises("fusaka", _fusaka(body, blobs, commitments, swapped), 105)
+    _check_raises(
+        "fusaka", _fusaka(body, blobs, commitments, swapped), 105, "the proofs do not verify"
+    )

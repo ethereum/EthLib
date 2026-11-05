@@ -8,6 +8,7 @@ from ruamel.yaml import YAML
 
 from ethlib import consensus
 from ethlib.errors import SszError
+from raising import raises
 
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "pq_keys"
 
@@ -49,6 +50,28 @@ def test_every_container_has_cases():
     assert {container for container, _ in _cases()} == CONTAINERS
 
 
+# The error of each invalid case, after the prefix of a rejected input.
+INVALID = {
+    ("BuilderPQKeyChangeEpochs", "invalid_partial_element"): "scopeUndivided 17 8",
+    ("BuilderPQKeyMaterial", "invalid_partial_element"): "scopeUndivided 129 64",
+    ("PQKeyMaterial", "invalid_empty"): "scope 64 0",
+    ("PQKeyMaterial", "invalid_one_byte_long"): "scope 64 65",
+    ("PQKeyMaterial", "invalid_one_byte_short"): "scope 64 63",
+    ("PQKeyPossession", "invalid_empty"): "scope 80 0",
+    ("PQKeyPossession", "invalid_one_byte_long"): "scope 80 81",
+    ("PQKeyPossession", "invalid_one_byte_short"): "scope 80 79",
+    ("PQKeyRegistration", "invalid_empty"): "scope 80 0",
+    ("PQKeyRegistration", "invalid_one_byte_long"): "scope 80 81",
+    ("PQKeyRegistration", "invalid_one_byte_short"): "scope 80 79",
+    ("PQKeyRegistrations", "invalid_partial_element"): "scopeUndivided 5161 2580",
+    ("SignedPQKeyRegistration", "invalid_empty"): "scope 2580 0",
+    ("SignedPQKeyRegistration", "invalid_one_byte_long"): "scope 2580 2581",
+    ("SignedPQKeyRegistration", "invalid_one_byte_short"): "scope 2580 2579",
+    ("ValidatorPQKeyChangeEpochs", "invalid_partial_element"): "scopeUndivided 17 8",
+    ("ValidatorPQKeyMaterial", "invalid_partial_element"): "scopeUndivided 129 64",
+}
+
+
 @pytest.mark.parametrize(
     "container, case",
     _cases(),
@@ -58,7 +81,8 @@ def test_case(container, case):
     data = YAML(typ="safe").load((case / "data.yaml").read_text())
     serialized = bytes.fromhex(data["serialized"].removeprefix("0x"))
     if data["root"] is None:
-        with pytest.raises(SszError):
+        error = INVALID[container, case.name]
+        with raises(SszError, f"input rejected: EthLib.Serialization.Ssz.Err.{error}"):
             consensus.pq_keys_ssz(container, serialized)
         return
     root, encoded = consensus.pq_keys_ssz(container, serialized)
@@ -67,5 +91,5 @@ def test_case(container, case):
 
 
 def test_unknown_container_is_rejected():
-    with pytest.raises(SszError):
+    with raises(SszError, "no container BeaconState in the post-quantum key registry"):
         consensus.pq_keys_ssz("BeaconState", b"")

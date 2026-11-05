@@ -8,6 +8,7 @@ import pytest
 from ethlib.errors import FeesError
 from ethlib.execution import fees
 from ethlib.serialization import rlp
+from raising import raises
 
 _BLOCKS = json.loads(
     (
@@ -72,6 +73,6 @@ def test_transactions_without_blobs_pay_nothing(network: str, fork: str) -> None
 
 
 def test_fork_before_dencun_rejected() -> None:
-    with pytest.raises(FeesError, match="before dencun") as error:
+    with raises(FeesError, "a fork before dencun has no blob schedule") as error:
         fees.calculate_data_fee("shapella", 0, BLOB_TX)
     assert error.value.code == 0

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from ethlib.cryptography import secp256k1
+from raising import raises
 
 # The secp256k1 ECDH vectors of Wycheproof.
 #
@@ -58,7 +59,30 @@ def test_case_count() -> None:
     assert len(CASES) > 400
 
 
-INVALID_POINT = "point coordinate is not below p|point is not on the curve"
+_NOT_BELOW_P = "point coordinate is not below p"
+_OFF_CURVE = "point is not on the curve"
+
+# The error of each invalid public key of the set, by tcId.
+INVALID_POINT = {
+    475: _OFF_CURVE,
+    476: _OFF_CURVE,
+    477: _OFF_CURVE,
+    478: _NOT_BELOW_P,
+    479: _OFF_CURVE,
+    480: _OFF_CURVE,
+    481: _OFF_CURVE,
+    482: _NOT_BELOW_P,
+    483: _OFF_CURVE,
+    484: _OFF_CURVE,
+    485: _OFF_CURVE,
+    486: _NOT_BELOW_P,
+    487: _NOT_BELOW_P,
+    488: _NOT_BELOW_P,
+    489: _NOT_BELOW_P,
+    490: _NOT_BELOW_P,
+    494: _OFF_CURVE,
+    495: _OFF_CURVE,
+}
 
 
 @pytest.mark.parametrize(
@@ -66,8 +90,7 @@ INVALID_POINT = "point coordinate is not below p|point is not on the curve"
 )
 def test_ecdh(tc_id: int, private_key: bytes, public_key: bytes, shared: bytes | None) -> None:
     if shared is None:
-        # Each invalid public key of the set has a coordinate not below p, or is off the curve.
-        with pytest.raises(ValueError, match=INVALID_POINT):
+        with raises(ValueError, INVALID_POINT[tc_id]):
             secp256k1.ecdh(private_key, public_key)
     else:
         assert secp256k1.ecdh(private_key, public_key) == shared
@@ -76,5 +99,5 @@ def test_ecdh(tc_id: int, private_key: bytes, public_key: bytes, shared: bytes |
 def test_ecdh_rejects_zero_key() -> None:
     # Test 1 of the set, with the private key 0: d Q is the point at infinity.
     public_key = CASES[0][2]
-    with pytest.raises(ValueError, match="the point at infinity is not a public key"):
+    with raises(ValueError, "the point at infinity is not a public key"):
         secp256k1.ecdh(bytes(32), public_key)

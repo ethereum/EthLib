@@ -6,6 +6,7 @@ import pytest
 
 from ethlib.errors import GossipError
 from ethlib.networking import gossip
+from raising import raises
 
 # The payload is 32 zero bytes.
 # python-snappy 0.7.3 (on cramjam 2.14.0) compresses it to 20 00 00 7a 01 00: the length 32,
@@ -85,5 +86,5 @@ def test_phase0_ignores_topic() -> None:
 
 
 def test_unknown_fork() -> None:
-    with pytest.raises(GossipError):
+    with raises(GossipError, "no fork named nofork"):
         gossip.message_id("nofork", TOPIC, RAW)

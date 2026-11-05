@@ -10,6 +10,7 @@ from ethlib.errors import BlockError
 from ethlib.execution import blocks
 from ethlib.serialization import rlp
 from parity.runners import genesis_of
+from raising import raises
 from transactions.test_transactions import FORK_OF_NETWORK
 
 CASES = json.loads((archives.REPO / "tests" / "execution" / "blocks" / "genesis.json").read_text())
@@ -68,7 +69,13 @@ def test_mainnet() -> None:
 
 def test_fields_that_do_not_decode() -> None:
     # A nonce of 9 bytes is not a header nonce, so the export rejects the fields with code 0.
-    with pytest.raises(BlockError) as error:
+    with raises(
+        BlockError,
+        (
+            "genesis fields rejected: EthLib.Serialization.Rlp.RlpError.inField 6 "
+            "(EthLib.Serialization.Rlp.RlpError.wrongLength 8 9)"
+        ),
+    ) as error:
         blocks.genesis_block(
             "frontier",
             rlp.encode([]),
