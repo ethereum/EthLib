@@ -35,6 +35,8 @@ Glamsterdam adds two header fields, by EIP-7928 and EIP-7843.
 The encodings of the body and the receipt stay those of BPO2.
 
 So do the checks of a header against its parent.
+
+The receipts of a block hold up to BPO5, since Glamsterdam changes the gas that a block counts.
 -/
 
 public section
@@ -179,5 +181,34 @@ def blockAccessListCheckExport (bal : ByteArray) (gasLimit : UInt64) : Result UI
   let bal : BlockAccessList ← runRlp "block access list rejected" (Codec.decode bal)
   (BlockAccessList.check bal gasLimit.toNat).map (fun () => 1) |>.mapError
     fun e => (e.code, s!"block access list invalid: {reprStr e}")
+
+/-- One transaction of a block: its type, its outcome, the gas it used and its logs.
+
+The input is the RLP list of the four, where the outcome has the form it has in a receipt. -/
+def resultOfItem (fork : Fork) (item : Item) : Result (UInt8 × Outcome fork × Nat × List Log) := do
+  match ← runRlp "result rejected" (item.fields 4) with
+  | [type, outcome, gas, logs] =>
+    let type : Nat ← runRlp "type rejected" (Codec.ofItem type)
+    -- No error type covers this bound of the binding, so its code is 0.
+    if 256 ≤ type then throw (0, "type is 256 or more")
+    return (type.toUInt8, ← runRlp "outcome rejected" (Codec.ofItem outcome),
+      ← runRlp "gas rejected" (Codec.ofItem gas), ← runRlp "logs rejected" (Codec.ofItem logs))
+  | _ => throw (0, "a result is not a list of four items")
+
+/-- The receipts of the transactions of a block, and their receipts root.
+
+The input is the RLP list of the results of the transactions, in order.
+
+It returns the RLP list of the root and of the list of the bytes of each receipt. -/
+@[export eth_block_make_receipts]
+def makeReceiptsExport (fork results : ByteArray) : Result ByteArray := do
+  let fork ← forkUpTo .bpo5 fork
+  let items ← runRlp "results rejected" ((← runRlp "results rejected" (decode results)).toItems)
+  let results ← items.mapM (resultOfItem fork)
+  let receipts := makeReceipts (results.map fun (_, rest) => rest)
+  let typed := (results.map (·.1)).zip receipts
+  let root ← runTrie (receiptsRoot typed)
+  let bytes ← typed.mapM fun (type, r) => runRlp "receipt has no encoding" (encodeReceipt type r)
+  runRlp "output has no encoding" (encode (.list [.bytes root, .list (bytes.map .bytes)]))
 
 end EthLib.Execution.Blocks.Exports

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Blocks.Receipt
+public import EthLib.Execution.Proofs.Blocks.Bloom
 public import EthLib.Execution.Proofs.Transactions.Envelope
 
 /-!
@@ -11,6 +12,14 @@ The RLP codecs of a log, of an outcome and of a receipt are lawful at every fork
 The bytes of a receipt decode back to its transaction type and the receipt.
 
 They do so at each fork that has the type, and only the encoding decodes to them.
+
+The receipts of a block count the gas cumulatively, so the counts never decrease.
+
+The last count is the gas of all the transactions.
+
+The Bloom filter of each receipt is the filter of its logs.
+
+The filters of the receipts combine into the filter of all the logs of the block.
 -/
 
 @[expose] public section
@@ -173,5 +182,98 @@ theorem _root_.EthLib.Execution.Blocks.ReceiptError.code_ne_rlp
   cases e <;> cases r <;> simp only [ReceiptError.code, RlpError.code] <;> decide
 
 end
+
+/-! ## The receipts of a block -/
+
+section Receipts
+
+variable {fork : Fork}
+
+/-- The Bloom filter of a receipt is the filter of its logs. -/
+theorem bloom_makeReceipt (outcome : Outcome fork) (cumulativeGasUsed : Nat) (logs : List Log) :
+    (makeReceipt outcome cumulativeGasUsed logs).bloom = logsBloom logs := rfl
+
+/-- From Byzantium, the outcome of a transaction is whether it succeeded. -/
+theorem Outcome.make_of_le {fork : Fork} (h : Fork.byzantium ≤ fork) (succeeded : Bool)
+    (postStateRoot : Unit → Hash32) :
+    Outcome.make fork succeeded postStateRoot = .status h succeeded := by
+  simp [Outcome.make, h]
+
+/-- Each transaction gives one receipt. -/
+theorem length_makeReceiptsFrom (gasUsed : Nat) (results : List (Outcome fork × Nat × List Log)) :
+    (makeReceiptsFrom gasUsed results).length = results.length := by
+  induction results generalizing gasUsed with
+  | nil => rfl
+  | cons r rest ih => simp [makeReceiptsFrom, ih]
+
+/-- Each receipt counts at least the gas of the block before the transactions. -/
+theorem le_cumulativeGasUsed {gasUsed : Nat} {results : List (Outcome fork × Nat × List Log)}
+    {r : Receipt fork} (h : r ∈ makeReceiptsFrom gasUsed results) :
+    gasUsed ≤ r.cumulativeGasUsed := by
+  induction results generalizing gasUsed with
+  | nil => cases h
+  | cons head rest ih =>
+    obtain ⟨outcome, gas, logs⟩ := head
+    simp only [makeReceiptsFrom, List.mem_cons] at h
+    rcases h with rfl | h
+    · exact Nat.le_add_right _ _
+    · exact Nat.le_trans (Nat.le_add_right _ _) (ih h)
+
+/-- The cumulative gas of the receipts never decreases. -/
+theorem cumulativeGasUsed_pairwise (gasUsed : Nat)
+    (results : List (Outcome fork × Nat × List Log)) :
+    (makeReceiptsFrom gasUsed results).Pairwise
+      (fun a b => a.cumulativeGasUsed ≤ b.cumulativeGasUsed) := by
+  induction results generalizing gasUsed with
+  | nil => exact .nil
+  | cons head rest ih =>
+    obtain ⟨outcome, gas, logs⟩ := head
+    exact .cons (fun _ h => le_cumulativeGasUsed h) (ih _)
+
+/-- The last receipt counts the gas of the block before, plus the gas of every transaction. -/
+theorem getLast?_makeReceiptsFrom (gasUsed : Nat) (results : List (Outcome fork × Nat × List Log)) :
+    (makeReceiptsFrom gasUsed results).getLast?.map (·.cumulativeGasUsed) =
+      if results = [] then none else some (gasUsed + (results.map (·.2.1)).sum) := by
+  induction results generalizing gasUsed with
+  | nil => rfl
+  | cons head rest ih =>
+    obtain ⟨outcome, gas, logs⟩ := head
+    cases rest with
+    | nil => simp [makeReceiptsFrom, makeReceipt]
+    | cons next more =>
+      have := ih (gasUsed + gas)
+      simp only [makeReceiptsFrom, reduceCtorEq, ↓reduceIte, List.map_cons,
+        List.sum_cons] at this ⊢
+      rw [List.getLast?_cons_cons, this]
+      simp only [Option.some.injEq]
+      omega
+
+/-- The receipts hold the logs of the transactions, in order. -/
+theorem flatMap_logs_makeReceiptsFrom (gasUsed : Nat)
+    (results : List (Outcome fork × Nat × List Log)) :
+    (makeReceiptsFrom gasUsed results).flatMap (·.logs) = results.flatMap (·.2.2) := by
+  induction results generalizing gasUsed with
+  | nil => rfl
+  | cons head rest ih =>
+    obtain ⟨outcome, gas, logs⟩ := head
+    simp [makeReceiptsFrom, makeReceipt, ih]
+
+/-- The filters of some receipts combine into the filter of all their logs. -/
+theorem foldr_ofLogs (receipts : List (Receipt fork)) :
+    (receipts.map fun r => Bloom.ofLogs r.logs).foldr (· ||| ·) 0 =
+      Bloom.ofLogs (receipts.flatMap (·.logs)) := by
+  induction receipts with
+  | nil => rfl
+  | cons r rest ih =>
+    simp only [List.map_cons, List.foldr_cons, List.flatMap_cons, Bloom.ofLogs_append]
+    rw [ih]
+
+/-- The filters of the receipts combine into the filter of all the logs of the block. -/
+theorem ofLogs_makeReceipts (results : List (Outcome fork × Nat × List Log)) :
+    ((makeReceipts results).map fun r => Bloom.ofLogs r.logs).foldr (· ||| ·) 0 =
+      Bloom.ofLogs (results.flatMap (·.2.2)) := by
+  rw [foldr_ofLogs, makeReceipts, flatMap_logs_makeReceiptsFrom]
+
+end Receipts
 
 end EthLib.Execution.Blocks

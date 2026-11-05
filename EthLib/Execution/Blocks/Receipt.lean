@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Bytes
 public import EthLib.Base.Fork
+public import EthLib.Execution.Blocks.Bloom
 public import EthLib.Execution.Blocks.Log
 public import EthLib.Execution.Transactions.Envelope
 
@@ -21,6 +22,8 @@ From Byzantium, [EIP-658][eip-658] makes it a status: 1 for success, 0 for failu
 From Berlin, [EIP-2718][eip-2718] puts the type of a typed transaction before its receipt.
 
 The receipt of a legacy transaction stays the RLP form, whose first byte is at least `0xc0`.
+
+The receipts of a block count the gas cumulatively, so each holds the gas of the block so far.
 
 Section 4.4.1 of the Yellow Paper, Shanghai version, defines the receipt: [`Paper.tex`][yp].
 
@@ -88,6 +91,39 @@ instance {fork : Fork} : Codec (Receipt fork) where
         bloom := ← Item.field 2 bloom
         logs := ← Item.field 3 logs }
     | items => .error (.wrongFieldCount 4 items.length)
+
+/-! ## Making the receipts of a block -/
+
+/-- The outcome of a transaction at `fork`: the status, or the state root before Byzantium.
+
+The state root after the transaction is computed only before Byzantium. -/
+def Outcome.make (fork : Fork) (succeeded : Bool) (postStateRoot : Unit → Hash32) :
+    Outcome fork :=
+  if h : Fork.byzantium ≤ fork then .status h succeeded
+  else .postState (Nat.lt_of_not_le h) (postStateRoot ())
+
+/-- The receipt of a transaction, from its outcome, the gas of the block so far and its logs.
+
+Its Bloom filter is the filter of its logs. -/
+def makeReceipt {fork : Fork} (outcome : Outcome fork) (cumulativeGasUsed : Nat)
+    (logs : List Log) : Receipt fork :=
+  ⟨outcome, cumulativeGasUsed, logsBloom logs, logs⟩
+
+/-- The receipts of some transactions, after `gasUsed` gas of their block.
+
+Each transaction gives its outcome, the gas it used and its logs. -/
+def makeReceiptsFrom {fork : Fork} (gasUsed : Nat) :
+    List (Outcome fork × Nat × List Log) → List (Receipt fork)
+  | [] => []
+  | (outcome, gas, logs) :: rest =>
+    makeReceipt outcome (gasUsed + gas) logs :: makeReceiptsFrom (gasUsed + gas) rest
+
+/-- The receipts of the transactions of a block, in order.
+
+Each transaction gives its outcome, the gas it used and its logs. -/
+def makeReceipts {fork : Fork} (results : List (Outcome fork × Nat × List Log)) :
+    List (Receipt fork) :=
+  makeReceiptsFrom 0 results
 
 /-- Why some bytes hold no receipt. -/
 inductive ReceiptError where

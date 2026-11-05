@@ -664,6 +664,7 @@ static PyMethodDef methods[] = {
   {"gossip_decode_payload", py_gossip_decode_payload, METH_VARARGS, DOC_gossip_decode_payload},
   {"receipt_reencode", py_receipt_reencode, METH_VARARGS, DOC_receipt_reencode},
   {"receipt_logs_bloom", py_receipt_logs_bloom, METH_VARARGS, DOC_receipt_logs_bloom},
+  {"block_make_receipts", py_block_make_receipts, METH_VARARGS, DOC_block_make_receipts},
   {"tx_type", py_tx_type, METH_VARARGS, DOC_tx_type},
   {"tx_hash", py_tx_hash, METH_VARARGS, DOC_tx_hash},
   {"tx_recover_sender", py_tx_recover_sender, METH_VARARGS, DOC_tx_recover_sender},

@@ -476,6 +476,9 @@
 #define DOC_receipt_reencode \
   "The bytes of a receipt, decoded at the fork and encoded again with its transaction type."
 
+#define DOC_block_make_receipts \
+  "The receipts of the transactions of a block, and their receipts root."
+
 #define DOC_receipt_logs_bloom \
   "The logs Bloom filter of the logs of a receipt, decoded at the fork."
 
