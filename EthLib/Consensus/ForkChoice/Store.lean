@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Accessors
 public import EthLib.Consensus.Containers.State
 public import EthLib.Consensus.Time
+public import EthLib.Consensus.Transition.Basic
 public import Std.Data.TreeMap
 
 /-!
@@ -97,6 +98,32 @@ inductive ForkChoiceError where
   | ssz (error : Err)
   /-- A state accessor fails. -/
   | accessor (error : AccessorError)
+  /-- The state transition rejects a block, or a state or an attestation cannot be checked. -/
+  | transition (error : TransitionError)
+  /-- The store holds no timeliness for the block with the root. -/
+  | unknownBlockTimeliness (root : Root)
+  /-- A block is from a slot after the current one. -/
+  | futureBlock (slot : Slot)
+  /-- A block is not after the first slot of the finalized epoch. -/
+  | blockNotAfterFinalized (slot : Slot)
+  /-- The chain of a block does not hold the finalized block. -/
+  | notDescendantOfFinalized (root : Root)
+  /-- The target of an attestation is neither in the current epoch nor in the previous one. -/
+  | targetEpochNotRecent (epoch : Epoch)
+  /-- The target epoch of an attestation is not the epoch of its slot. -/
+  | targetEpochMismatch (epoch : Epoch)
+  /-- An attestation votes for a block from a slot after its own. -/
+  | futureVote (root : Root)
+  /-- The target of an attestation is not the checkpoint block of the chain of its vote. -/
+  | targetNotCheckpointBlock (root : Root)
+  /-- An attestation is from the current slot or a later one. -/
+  | attestationNotYetDue (slot : Slot)
+  /-- An indexed attestation is not valid in the state of its target. -/
+  | invalidIndexedAttestation
+  /-- The two attestations of an attester slashing are not slashable together. -/
+  | notSlashable
+  /-- A tick does not move the clock to a later slot. -/
+  | tickNotAdvancing (slot : Slot)
   /-- The rule of this fork is not yet specified here. -/
   | forkNotYetSpecified (fork : Fork)
   deriving Repr

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.ForkChoice.Head
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Consensus.Proofs.ForkChoice.Store
 
 /-!
@@ -105,47 +106,6 @@ theorem chooseHeaviest_eq_none {weighted : List (ForkChoiceNode × Gwei)} :
     chooseHeaviest weighted = none ↔ weighted = [] := by
   cases weighted <;> simp [chooseHeaviest]
 
-/-- A map in the error monad that returns the empty list maps the empty list. -/
-theorem eq_nil_of_mapM_eq_ok_nil {ε α β : Type} {f : α → Except ε β} {l : List α}
-    (mapped : l.mapM f = .ok []) : l = [] := by
-  cases l with
-  | nil => rfl
-  | cons a l =>
-    rw [List.mapM_cons] at mapped
-    cases fa : f a with
-    | error e => simp [fa, bind, Except.bind] at mapped
-    | ok b =>
-      cases fl : l.mapM f with
-      | error e => simp [fa, fl, bind, Except.bind] at mapped
-      | ok bs => simp [fa, fl, bind, Except.bind, pure, Except.pure] at mapped
-
-/-- Each pair of a list weighted in the error monad starts with an element of the list. -/
-theorem mem_of_mapM_pair {ε α β : Type} {f : α → Except ε β} {l : List α} {w : List (α × β)}
-    {a : α} {b : β} (mapped : l.mapM (fun x => (x, ·) <$> f x) = .ok w) (mem : (a, b) ∈ w) :
-    a ∈ l := by
-  induction l generalizing w with
-  | nil =>
-    simp [pure, Except.pure] at mapped
-    subst mapped
-    cases mem
-  | cons x l ih =>
-    rw [List.mapM_cons] at mapped
-    cases fx : f x with
-    | error e => simp [fx, bind, Except.bind, Functor.map, Except.map] at mapped
-    | ok y =>
-      cases fl : l.mapM (fun x => (x, ·) <$> f x) with
-      | error e =>
-        rw [fx, fl] at mapped
-        simp [bind, Except.bind, Functor.map, Except.map] at mapped
-      | ok ys =>
-        rw [fx, fl] at mapped
-        simp [bind, Except.bind, Functor.map, Except.map, pure, Except.pure] at mapped
-        subst mapped
-        simp only [List.mem_cons, Prod.mk.injEq] at mem
-        rcases mem with ⟨rfl, -⟩ | mem
-        · exact List.mem_cons_self
-        · exact List.mem_cons_of_mem _ (ih fl mem)
-
 namespace Store
 
 variable {config : Config} {store : Store preset fork}
@@ -231,7 +191,7 @@ theorem getHeadFrom_leaf {nodes : List ForkChoiceNode} {start head : ForkChoiceN
         subst walk
         rw [chooseHeaviest_eq_none] at choice
         subst choice
-        have empty := eq_nil_of_mapM_eq_ok_nil hw
+        have empty := List.length_eq_zero_iff.mp (mapM_ok_length hw).symm
         refine ⟨children, hc, fun child mem inNodes => ?_⟩
         have : child ∈ children.filter (· ∈ nodes) := List.mem_filter.mpr ⟨mem, by simpa⟩
         rw [empty] at this
@@ -262,7 +222,11 @@ theorem getHeadFrom_mem {nodes : List ForkChoiceNode} {start head : ForkChoiceNo
           · obtain ⟨children, weighted, -, hw, choice⟩ := heaviestChild_eq found
             obtain ⟨weight, mem, -⟩ := chooseHeaviest_some choice
             rw [same]
-            exact Or.inr (of_decide_eq_true (List.mem_filter.mp (mem_of_mapM_pair hw mem)).2)
+            obtain ⟨source, member, pair⟩ := mapM_ok_mem hw _ mem
+            cases weighed : store.getWeight config source <;>
+              simp [weighed, Functor.map, Except.map] at pair
+            obtain ⟨rfl, -⟩ := pair
+            exact Or.inr (of_decide_eq_true (List.mem_filter.mp member).2)
           · exact .inr mem
         · cases walk
 
