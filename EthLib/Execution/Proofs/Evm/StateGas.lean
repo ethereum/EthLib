@@ -245,6 +245,13 @@ theorem restoreToEntry_spec (meter : StateGasMeter) :
   simp only [restoreToEntry, stateGasUsed]
   refine ⟨?_, ?_⟩ <;> first | trivial | omega
 
+/-- A rollback to the start, then a halt, leave no execution gas, the start reservoir, no state gas.
+-/
+theorem restoreToEntry_halt (meter : StateGasMeter) :
+    meter.restoreToEntry.halt.gasLeft = 0 ∧ meter.restoreToEntry.halt.reservoir = meter.grant ∧
+      meter.restoreToEntry.halt.stateGasUsed = 0 := by
+  simp [restoreToEntry, halt, restore, stateGasUsed]
+
 /-- A repayment keeps the net state gas. -/
 theorem stateGasUsed_repay (meter : StateGasMeter) :
     meter.repay.stateGasUsed = meter.stateGasUsed := by

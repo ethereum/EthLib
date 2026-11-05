@@ -82,6 +82,10 @@ class GasMeter (Meter : Type) where
 
   The flag says whether the message succeeded. -/
   absorb : Meter → (child : Meter) → (succeeded : Bool) → Meter
+  /-- The meter after a commit: a later rollback keeps the state gas paid so far. -/
+  commit : Meter → Meter
+  /-- The net state gas that the frame has used since it started, which can be negative. -/
+  stateGasUsed : Meter → Int
 
 /-- The laws of a gas meter.
 
@@ -121,7 +125,7 @@ class LawfulGasMeter (Meter : Type) [GasMeter Meter] : Prop where
 
 These forks have no state gas, so a charge of state gas is a charge of execution gas.
 
-There is no reservoir, and nothing to refill or to roll back. -/
+There is no reservoir, and nothing to refill, to roll back or to commit. -/
 instance : GasMeter Nat where
   charge gas amount := if gas < amount then .error .outOfGas else .ok (gas - amount)
   chargeState gas amount := if gas < amount then .error .outOfGas else .ok (gas - amount)
@@ -135,6 +139,8 @@ instance : GasMeter Nat where
   drain gas := gas
   credit gas amount _ := gas + amount
   absorb gas child _ := gas + child
+  commit gas := gas
+  stateGasUsed _ := 0
 
 /-- One counter of gas obeys the laws of a meter. -/
 instance : LawfulGasMeter Nat where
@@ -183,6 +189,8 @@ instance : GasMeter StateGasMeter where
   drain := StateGasMeter.drain
   credit meter gas reservoir := StateGasMeter.cancel meter (StateGasMeter.start gas reservoir)
   absorb := StateGasMeter.absorb
+  commit := StateGasMeter.commit
+  stateGasUsed := StateGasMeter.stateGasUsed
 
 /-- The meter of EIP-8037 obeys the laws of a meter. -/
 instance : LawfulGasMeter StateGasMeter where

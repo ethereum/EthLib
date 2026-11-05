@@ -3,7 +3,7 @@ module
 public import EthLib.Execution.Transactions.Process
 
 /-!
-# Proofs: the accesses at the start of a transaction
+# Proofs: the start of a transaction
 
 From Berlin, a transaction starts with these addresses accessed:
 
@@ -13,6 +13,12 @@ From Berlin, a transaction starts with these addresses accessed:
 - from Shapella, the beneficiary of its block.
 
 Before Berlin, it starts with no access.
+
+A first frame that fails to start halts the message with the state from before it.
+
+The sender then keeps its higher nonce and its fee, and gets back the whole reservoir.
+
+Up to BPO5, a transaction runs with one counter of the gas left.
 
 From Glamsterdam, a run fails as not yet specified, so no caller gets the rules of BPO5 there.
 -/
@@ -99,5 +105,38 @@ theorem processTransaction_of_glamsterdam_le {env : BlockEnvironment fork}
     processTransaction env block included tx = .error (.forkNotYetSpecified fork) := by
   simp only [processTransaction, h, ↓reduceIte]
   rfl
+
+/-! ## The first frame -/
+
+variable {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter] {chainId : Nat}
+  {message : Message fork} {state : State.TransactionState} {substate : Substate}
+  {auths : List Authorization} {paid : Std.ExtTreeSet Address}
+
+/-- A message whose first frame fails to start halts with the state from before it.
+
+So a transaction keeps the nonce and the fee of its sender, which come before its message.
+
+No execution gas is left, the reservoir comes back whole, and no state gas is used. -/
+theorem processMessageCall_of_halt {e : EvmError}
+    (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid = .error e)
+    (halts : e.aborts = false) :
+    processMessageCall (Meter := Meter) chainId message state substate auths paid =
+      .ok (.ofHalt state message.reservoir e) := by
+  simp only [processMessageCall, h, halts, Bool.false_eq_true, ↓reduceIte]
+
+/-- A halt before the first frame leaves no execution gas, the whole reservoir and no state gas. -/
+theorem ofHalt_gas (state : State.TransactionState) (reservoir : Nat) (e : EvmError) :
+    (CallOutput.ofHalt state reservoir e).gasLeft = 0 ∧
+      (CallOutput.ofHalt state reservoir e).reservoir = reservoir ∧
+      (CallOutput.ofHalt state reservoir e).stateGasUsed = 0 ∧
+      (CallOutput.ofHalt state reservoir e).state = state :=
+  ⟨rfl, rfl, rfl, rfl⟩
+
+/-- Up to BPO5, a transaction runs with one counter of the gas left. -/
+theorem processTransaction_of_lt_glamsterdam {env : BlockEnvironment fork}
+    {block : State.BlockState} {included : Included} (h : fork < .glamsterdam) :
+    processTransaction env block included tx = runTransaction Nat env block included tx := by
+  have hpre : ¬Fork.glamsterdam ≤ fork := Nat.not_le_of_lt h
+  simp only [processTransaction, hpre, ↓reduceIte, GE.ge]
 
 end EthLib.Execution.Transactions

@@ -97,15 +97,17 @@ def Substate.child (substate : Substate) : Substate :=
     accessedAddresses := substate.accessedAddresses
     accessedStorageKeys := substate.accessedStorageKeys }
 
-/-- The frame of a message at its start, with the state and the substate it starts from. -/
-def startFrame (message : Message fork) (state : TransactionState) (substate : Substate) :
-    Evm fork Meter where
+/-- The frame of a message at its start, with the state, the substate and the meter it starts from.
+
+A message starts with a new meter, but the first frame of a transaction may have paid already. -/
+def startFrame (message : Message fork) (state : TransactionState) (substate : Substate)
+    (meter : Meter) : Evm fork Meter where
   pc := 0
   stack := .empty
   memory := .empty
   code := message.code
   validJumpDestinations := validJumpDestinations message.code
-  gas := GasMeter.start message.gas message.reservoir
+  gas := meter
   running := true
   message := message
   output := .empty
@@ -120,7 +122,7 @@ A precompile that succeeds charges its price and gives its output.
 
 A precompile that fails halts the frame exceptionally. -/
 def runPrecompile (fork : Fork) (address : Nat) (evm : Evm fork Meter) : Option (Evm fork Meter) :=
-  match Precompiles.run fork address evm.message.data evm.message.gas with
+  match Precompiles.run fork address evm.message.data (GasMeter.gasLeft evm.gas) with
   | none => none
   | some (.error _) => some (exceptionalHalt evm .precompile)
   | some (.ok output) =>
@@ -267,11 +269,16 @@ mutual
 
 /-- Run a message at fork `fork`, from the state and the substate it starts from.
 
+Its frame starts with a new meter, or with `meter`, which holds at most the gas of the message.
+
 The frame that ends the message has at most the gas of the message.
 
 The run fails only with an error that aborts the whole execution. -/
 def processMessage [LawfulGasMeter Meter] (fork : Fork) (message : Message fork)
-    (state : TransactionState) (substate : Substate) :
+    (state : TransactionState) (substate : Substate)
+    (meter : Meter := GasMeter.start message.gas message.reservoir)
+    (held : GasMeter.gasHeld meter ≤ message.gas := by
+      exact Nat.le_of_eq (LawfulGasMeter.gasHeld_start _ _)) :
     Except EvmError { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas } :=
   let rollback (ended : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas }) :
       { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas } :=
@@ -296,35 +303,39 @@ def processMessage [LawfulGasMeter Meter] (fork : Fork) (message : Message fork)
           logs := pushTransferLog fork substate.logs message.caller message.currentTarget
             message.value }
       else substate
-    let evm : Evm fork Meter := startFrame message state substate
-    have start : GasMeter.gasHeld evm.gas = message.gas := LawfulGasMeter.gasHeld_start _ _
+    let evm : Evm fork Meter := startFrame message state substate meter
     match precompileAddress fork message with
     | some address =>
       if message.disablePrecompiles then
-        pure ⟨{ evm with running := false }, Nat.le_of_eq start⟩
+        pure ⟨{ evm with running := false }, held⟩
       else
         match h : runPrecompile fork address evm with
-        | some after => pure ⟨after, start ▸ gasHeld_runPrecompile_le h⟩
-        | none => pure ⟨{ evm with running := false }, Nat.le_of_eq start⟩
+        | some after => pure ⟨after, Nat.le_trans (gasHeld_runPrecompile_le h) held⟩
+        | none => pure ⟨{ evm with running := false }, held⟩
     | none =>
       match h : runFrame (step fork) (step_decreases fork) message.gas
           (fun caller child _ =>
             match child.target with
             | some _ => processMessage fork child caller.state caller.substate.child
             | none => processCreateMessage fork child caller.state caller.substate.child)
-          evm (Nat.le_of_eq start) with
+          evm held with
       | .error e => throw e
-      | .ok after => pure ⟨after, start ▸ gasHeld_runFrame_le h⟩
+      | .ok after => pure ⟨after, Nat.le_trans (gasHeld_runFrame_le h) held⟩
 termination_by (message.gas, 0)
 
 /-- Run the creation `message` at fork `fork`, from the state and the substate it starts from.
 
+Its frame starts with a new meter, or with `meter`, which holds at most the gas of the message.
+
 The frame that ends the creation has at most the gas of the message. -/
 def processCreateMessage [LawfulGasMeter Meter] (fork : Fork) (message : Message fork)
-    (state : TransactionState) (substate : Substate) :
+    (state : TransactionState) (substate : Substate)
+    (meter : Meter := GasMeter.start message.gas message.reservoir)
+    (held : GasMeter.gasHeld meter ≤ message.gas := by
+      exact Nat.le_of_eq (LawfulGasMeter.gasHeld_start _ _)) :
     Except EvmError { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas } := do
   let prepared ← prepareCreation fork state message.currentTarget
-  let ⟨evm, used⟩ ← processMessage fork message prepared substate
+  let ⟨evm, used⟩ ← processMessage fork message prepared substate meter held
   match h : depositCode fork state evm with
   | .error e => throw e
   | .ok after => pure ⟨after, Nat.le_trans (gasHeld_depositCode_le h) used⟩
