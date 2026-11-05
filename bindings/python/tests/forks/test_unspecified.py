@@ -77,8 +77,9 @@ AT_GLAMSTERDAM = {
     "intrinsic_gas", "check", "ssz_static",
 }
 
-# The exports whose rules hold at Hegotá: the preset parameters of Heze.
-AT_HEGOTA = {"consensus_parameters"}
+# The exports whose rules hold at Hegotá: the preset parameters of Heze, and the containers that
+# Heze keeps, such as a checkpoint.
+AT_HEGOTA = {"consensus_parameters", "ssz_static"}
 
 
 def _rejects(export: str, fork: str) -> None:

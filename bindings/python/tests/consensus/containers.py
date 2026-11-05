@@ -1,6 +1,6 @@
 """The beacon containers that EthLib defines, and the forks that have each."""
 
-# Each fork of the beacon chain up to Gloas, as consensus-specs names it, with its name in Lean.
+# Each fork of the beacon chain up to Heze, as consensus-specs names it, with its name in Lean.
 FORKS = {
     "phase0": "phase0",
     "altair": "altair",
@@ -10,6 +10,7 @@ FORKS = {
     "electra": "pectra",
     "fulu": "fusaka",
     "gloas": "glamsterdam",
+    "heze": "hegota",
 }
 
 # Each container that EthLib defines, with the first fork at which EthLib holds it, and the first
@@ -70,5 +71,7 @@ CONTAINERS = {
     "BuilderExitRequest": ("gloas", None),
     "PayloadAttestationData": ("gloas", None),
     "PayloadAttestationMessage": ("gloas", None),
+    "InclusionList": ("heze", None),
+    "SignedInclusionList": ("heze", None),
 }
 

@@ -4,6 +4,7 @@ public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Block
 public import EthLib.Consensus.Containers.Builder
 public import EthLib.Consensus.Containers.Execution
+public import EthLib.Consensus.Containers.InclusionList
 public import EthLib.Consensus.Containers.Operations
 public import EthLib.Consensus.Containers.PayloadAttestation
 public import EthLib.Consensus.Containers.Requests
@@ -24,9 +25,7 @@ The export decodes the bytes, then returns the root of the value and its bytes e
 
 A name with no container at the fork comes back as code 0, since no error type covers it.
 
-From Glamsterdam on, a container whose Gloas form EthLib does not hold yet fails with code 0 too.
-
-The containers of Heze are not yet specified, so Hegotá fails too.
+From Glamsterdam on, a container whose form EthLib does not hold yet fails with code 0 too.
 -/
 
 public section
@@ -118,11 +117,13 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
     if .glamsterdam ≤ fork then some ⟨PayloadAttestationData⟩ else none
   | "PayloadAttestationMessage" =>
     if .glamsterdam ≤ fork then some ⟨PayloadAttestationMessage⟩ else none
+  | "InclusionList" => if .hegota ≤ fork then some ⟨InclusionList⟩ else none
+  | "SignedInclusionList" => if .hegota ≤ fork then some ⟨SignedInclusionList⟩ else none
   | _ => none
 
 /-- The containers whose form EthLib holds from Glamsterdam on.
 
-Gloas changes some containers, and EthLib holds those forms only as they are specified. -/
+Gloas and Heze change some containers, and EthLib holds those forms only as specified. -/
 def specifiedFromGlamsterdam : List String := [
   "Fork", "ForkData", "SigningData", "Checkpoint", "Validator", "AttestationData", "Eth1Data",
   "DepositMessage", "DepositData", "BeaconBlockHeader", "SignedBeaconBlockHeader", "Eth1Block",
@@ -133,7 +134,7 @@ def specifiedFromGlamsterdam : List String := [
   "PendingPartialWithdrawal", "PendingConsolidation", "DepositRequest", "WithdrawalRequest",
   "ConsolidationRequest", "Withdrawal", "Builder", "BuilderPendingPayment",
   "BuilderPendingWithdrawal", "BuilderDepositRequest", "BuilderExitRequest",
-  "PayloadAttestationData", "PayloadAttestationMessage"]
+  "PayloadAttestationData", "PayloadAttestationMessage", "InclusionList", "SignedInclusionList"]
 
 /-- The root of the value that the bytes encode, then the bytes of that value.
 
@@ -142,7 +143,6 @@ The preset, the fork and the container are named in UTF-8. -/
 def sszStaticExport (name fork type data : ByteArray) : Result ByteArray := do
   let preset ← presetOf (← nameOf name)
   let fork ← forkOf fork
-  if .hegota ≤ fork then throw (0, s!"fork {fork.name} not yet specified")
   let type ← nameOf type
   let some container := containerOf preset fork type
     | throw (0, s!"no container {type} at {fork.name}")

@@ -7,6 +7,7 @@ public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Block
 public import EthLib.Consensus.Containers.Builder
 public import EthLib.Consensus.Containers.Execution
+public import EthLib.Consensus.Containers.InclusionList
 public import EthLib.Consensus.Containers.Misc
 public import EthLib.Consensus.Containers.Operations
 public import EthLib.Consensus.Containers.PayloadAttestation
