@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.Fork
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Serialization.Rlp.Codec
 public import EthLib.Serialization.Proofs.Rlp.Canonical
 public import EthLib.Serialization.Proofs.Rlp.Scalar
@@ -346,11 +347,6 @@ A decoder of a structure reads its fields one after another.
 
 Each read takes the item of one field, so the items are the items of the fields, in order. -/
 
-/-- A step of a decoder succeeds exactly when it and the rest succeed. -/
-theorem bind_eq_ok {α β : Type} {x : Except RlpError α} {f : α → Except RlpError β} {y : β} :
-    x >>= f = .ok y ↔ ∃ a, x = .ok a ∧ f a = .ok y := by
-  cases x <;> simp [bind, Except.bind]
-
 section Fields
 
 variable {α : Type} [Codec α] [LawfulCodec α]
@@ -397,7 +393,7 @@ theorem Item.eq_of_readSince {f fork : Fork} {count : Nat} {items rest : List It
   unfold Item.ofSince
   by_cases hf : f ≤ fork
   · simp only [hf, ↓reduceDIte] at h ⊢
-    obtain ⟨⟨y, tail⟩, hy, h⟩ := bind_eq_ok.mp h
+    obtain ⟨⟨y, tail⟩, hy, h⟩ := bind_ok_iff.mp h
     simp only [pure, Except.pure, Except.ok.injEq] at h
     obtain ⟨rfl, rfl⟩ := h
     exact Item.eq_of_readField hy
