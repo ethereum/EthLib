@@ -13,6 +13,8 @@ On a stack that holds its operands, it pays its price, then puts its result in p
 So it equals the pure function of the instruction, applied to the top words of the stack.
 
 Each part of an instruction keeps the message, the state and the substate of the frame.
+
+A pop takes the top word of the stack and keeps memory and the return data.
 -/
 
 @[expose] public section
@@ -205,5 +207,20 @@ theorem ternaryOp_sameContext {cost : Nat} {f : U256 → U256 → U256 → U256}
   exact (((((popWord_sameContext h1).trans (popWord_sameContext h2)).trans
     (popWord_sameContext h3)).trans (chargeGas_sameContext h4)).trans
     (pushWord_sameContext h5)).advance
+
+omit [GasMeter Meter] in
+/-- A pop takes the word on top of the stack, leaves the rest, and keeps memory. -/
+theorem popWord_eq_ok {evm after : Evm fork Meter} {x : U256}
+    (h : popWord evm = .ok (x, after)) :
+    evm.stack.val = x :: after.stack.val ∧ after.memory = evm.memory ∧
+      after.returnData = evm.returnData := by
+  obtain ⟨⟨y, st⟩, hp, h⟩ := Base.bind_ok_iff.mp h
+  simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
+  obtain ⟨rfl, rfl⟩ := h
+  refine ⟨?_, rfl, rfl⟩
+  rcases hst : evm.stack with ⟨_ | ⟨a, l⟩, hl⟩ <;> rw [hst] at hp <;>
+    simp only [Stack.pop, reduceCtorEq, Except.ok.injEq, Prod.mk.injEq] at hp
+  obtain ⟨rfl, rfl⟩ := hp
+  rfl
 
 end EthLib.Execution.Evm

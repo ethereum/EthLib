@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Return
+public import EthLib.Execution.Proofs.Evm.Memory
 public import EthLib.Execution.Proofs.Evm.Step
 
 /-!
@@ -11,6 +12,8 @@ RETURN and REVERT pay the growth of memory, then stop with the memory range as t
 REVERT succeeds as a step, with the revert error in the frame, so it keeps the gas it has left.
 
 Neither changes the message, the state or the substate.
+
+Their output holds the bytes of memory in the range, with zero past its size.
 -/
 
 @[expose] public section
@@ -65,5 +68,66 @@ theorem revertStep_sameContext {evm after : Evm fork Meter} (h : revertStep evm 
   cases h
   have := returnStep_sameContext he
   exact ⟨this.message, this.state, this.substate⟩
+
+/-- RETURN and REVERT output the bytes of memory from their start, with zero past the size.
+
+Memory must start at a size that is a multiple of 32. -/
+theorem byteAt_haltWithOutput {evm after : Evm fork Meter} {start size : U256} {rest : List U256}
+    (hstack : evm.stack.val = start :: size :: rest) (hmod : evm.memory.size % 32 = 0)
+    (h : haltWithOutput evm = .ok after) (i : Nat) :
+    after.output.size = size.toNat ∧
+      byteAt after.output i =
+        if i < size.toNat then byteAt evm.memory (start.toNat + i) else 0 := by
+  unfold haltWithOutput at h
+  obtain ⟨⟨x, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨y, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
+  simp only [pure, Except.pure, Except.ok.injEq] at h
+  subst h
+  obtain ⟨s1, m1, -⟩ := popWord_eq_ok h1
+  obtain ⟨s2, m2, -⟩ := popWord_eq_ok h2
+  rw [hstack] at s1
+  obtain ⟨rfl, r1⟩ := List.cons.inj s1
+  rw [← r1] at s2
+  obtain ⟨rfl, -⟩ := List.cons.inj s2
+  by_cases hz : size = 0
+  · subst hz
+    refine ⟨by simp [memoryReadBytes], ?_⟩
+    simp only [memoryReadBytes]
+    exact byteAt_of_size_le (by simp)
+  · have hmod2 : e2.memory.size % 32 = 0 := by rw [m2, m1]; exact hmod
+    have fit := le_size_chargeGasAndMemory hmod2 h3 (start, size) (by simp) hz
+    simp only at fit
+    refine ⟨size_memoryReadBytes fit, ?_⟩
+    rw [byteAt_memoryReadBytes fit]
+    split
+    · rw [byteAt_chargeGasAndMemory h3, m2, m1]
+    · rfl
+
+/-- RETURN outputs the bytes of memory from its start, with zero past the size.
+
+Memory must start at a size that is a multiple of 32. -/
+theorem byteAt_returnStep {evm after : Evm fork Meter} {start size : U256} {rest : List U256}
+    (hstack : evm.stack.val = start :: size :: rest) (hmod : evm.memory.size % 32 = 0)
+    (h : returnStep evm = .ok after) (i : Nat) :
+    after.output.size = size.toNat ∧
+      byteAt after.output i =
+        if i < size.toNat then byteAt evm.memory (start.toNat + i) else 0 :=
+  byteAt_haltWithOutput hstack hmod h i
+
+/-- REVERT outputs the bytes of memory from its start, with zero past the size.
+
+Memory must start at a size that is a multiple of 32. -/
+theorem byteAt_revertStep {evm after : Evm fork Meter} {start size : U256} {rest : List U256}
+    (hstack : evm.stack.val = start :: size :: rest) (hmod : evm.memory.size % 32 = 0)
+    (h : revertStep evm = .ok after) (i : Nat) :
+    after.output.size = size.toNat ∧
+      byteAt after.output i =
+        if i < size.toNat then byteAt evm.memory (start.toNat + i) else 0 := by
+  unfold revertStep at h
+  obtain ⟨mid, hmid, h⟩ := Base.bind_ok_iff.mp h
+  simp only [pure, Except.pure, Except.ok.injEq] at h
+  subst h
+  exact byteAt_haltWithOutput hstack hmod hmid i
 
 end EthLib.Execution.Evm
