@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Fees.BlobBaseFee
+public import EthLib.Base.Proofs.ChainConfig
 public import EthLib.Base.Proofs.Fork
 
 /-!
@@ -9,6 +10,8 @@ public import EthLib.Base.Proofs.Fork
 - The loop of `fake_exponential` stops before its bound.
 - The base fee per blob gas is monotone in the excess, and at least 1.
 - At every fork, the excess rises by at most `GAS_PER_BLOB * (max - target)` per block.
+- Under every blob schedule, the excess grows with the blob gas of the parent.
+- A chain that sets no blob schedule of its own, as mainnet and Hoodi, has the forks' schedules.
 -/
 
 @[expose] public section
@@ -332,5 +335,48 @@ theorem calcExcessBlobGas_le (parentExcessBlobGas parentBaseFeePerGas : Nat)
   · -- `GAS_PER_BLOB * (max - target)` is `GAS_PER_BLOB * max - GAS_PER_BLOB * target`.
     rw [calcExcessBlobGas_eq_sub hReserve, Nat.mul_sub]
     omega
+
+/-- Under every blob schedule, more blob gas in the parent never lowers the excess.
+
+The reserve condition reads the parent's excess and base fee, not its blob gas. -/
+theorem calcExcessBlobGas_mono_used (parentExcessBlobGas parentBaseFeePerGas : Nat)
+    {parentBlobGasUsed parentBlobGasUsed' : Nat} (h : parentBlobGasUsed ≤ parentBlobGasUsed') :
+    calcExcessBlobGas fork schedule parentExcessBlobGas parentBlobGasUsed parentBaseFeePerGas
+      ≤ calcExcessBlobGas fork schedule parentExcessBlobGas parentBlobGasUsed'
+        parentBaseFeePerGas := by
+  by_cases hReserve :
+      fork ≥ .fusaka ∧ BelowReserve schedule parentExcessBlobGas parentBaseFeePerGas
+  · rcases Nat.lt_or_ge (parentExcessBlobGas + parentBlobGasUsed)
+        (GAS_PER_BLOB * schedule.target) with hlt | hge
+    · rw [calcExcessBlobGas_of_lt _ hlt]
+      exact Nat.zero_le _
+    · rw [calcExcessBlobGas_of_below hReserve.1 hge hReserve.2,
+        calcExcessBlobGas_of_below hReserve.1 (by omega) hReserve.2]
+      exact Nat.add_le_add_left (Nat.div_le_div_right (Nat.mul_le_mul_right _ h)) _
+  · rw [calcExcessBlobGas_eq_sub hReserve, calcExcessBlobGas_eq_sub hReserve]
+    omega
+
+/-- A chain that sets no blob schedule at a block gives the block the schedule of its fork. -/
+theorem chainBlobSchedule_of_none {config : ChainConfig} {number timestamp : Nat}
+    (h : config.blobScheduleAt number timestamp = none) :
+    chainBlobSchedule config fork number timestamp = blobSchedule fork := by
+  funext hDencun
+  simp [chainBlobSchedule, h]
+
+/-- A schedule that a chain sets at a block replaces the schedule of the fork. -/
+theorem chainBlobSchedule_of_some {config : ChainConfig} {number timestamp : Nat}
+    (h : config.blobScheduleAt number timestamp = some schedule) (hDencun : .dencun ≤ fork) :
+    chainBlobSchedule config fork number timestamp hDencun = schedule := by
+  simp [chainBlobSchedule, h]
+
+/-- Every block of mainnet has the blob schedule of its fork. -/
+theorem chainBlobSchedule_mainnet (number timestamp : Nat) :
+    chainBlobSchedule ChainConfig.mainnet fork number timestamp = blobSchedule fork :=
+  chainBlobSchedule_of_none (ChainConfig.mainnet_blobScheduleAt number timestamp)
+
+/-- Every block of Hoodi has the blob schedule of its fork. -/
+theorem chainBlobSchedule_hoodi (number timestamp : Nat) :
+    chainBlobSchedule ChainConfig.hoodi fork number timestamp = blobSchedule fork :=
+  chainBlobSchedule_of_none (ChainConfig.hoodi_blobScheduleAt number timestamp)
 
 end EthLib.Execution.Fees.BlobBaseFee

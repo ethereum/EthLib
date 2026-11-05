@@ -137,10 +137,13 @@ def parentExcessBlobGas {parentFork : Fork} (parent : Header parentFork) : Nat :
 def parentBlobGasUsed {parentFork : Fork} (parent : Header parentFork) : Nat :=
   if h : .dencun ≤ parentFork then (parent.blobGasUsed h).toNat else 0
 
-/-- The excess blob gas that a parent gives to a header at `fork`, from Dencun on. -/
+/-- The excess blob gas that a parent gives to a header at `fork`, from Dencun on.
+
+The blob schedule is the header's, by default the schedule of the fork. -/
 def expectedExcessBlobGas {parentFork fork : Fork} (hLondon : .london ≤ parentFork)
-    (h : .dencun ≤ fork) (parent : Header parentFork) : Nat :=
-  BlobBaseFee.calcExcessBlobGas fork (BlobBaseFee.blobSchedule fork h)
+    (h : .dencun ≤ fork) (parent : Header parentFork)
+    (schedule : Since .dencun fork BlobSchedule := BlobBaseFee.blobSchedule fork) : Nat :=
+  BlobBaseFee.calcExcessBlobGas fork (schedule h)
     (parentExcessBlobGas parent) (parentBlobGasUsed parent) (parent.baseFeePerGas hLondon)
 
 /-- The base fee that a parent gives to its child. -/
@@ -168,15 +171,18 @@ def expectedDifficulty {parentFork fork : Fork} (parent : Header parentFork)
 From Paris on, the parent must be from London on, as the base fee and the blob gas need.
 
 Before Paris, the difficulty follows its rule; from Paris on, the proof-of-work fields are fixed.
--/
+
+The blob schedule is the header's, by default the schedule of the fork. -/
 def headerChecks {parentFork fork : Fork} (_hFork : parentFork ≤ fork)
-    (parent : Header parentFork) (header : Header fork) : List (Bool × BlockError) :=
+    (parent : Header parentFork) (header : Header fork)
+    (schedule : Since .dencun fork BlobSchedule := BlobBaseFee.blobSchedule fork) :
+    List (Bool × BlockError) :=
   let parentCheck :=
     if .paris ≤ fork then [(decide (.london ≤ parentFork), BlockError.parentBeforeLondon)] else []
   let excessCheck :=
     if h : .dencun ≤ fork then
       if hLondon : .london ≤ parentFork then
-        let expected := expectedExcessBlobGas hLondon h parent
+        let expected := expectedExcessBlobGas hLondon h parent schedule
         let actual := (header.excessBlobGas h).toNat
         [(decide (actual = expected), BlockError.wrongExcessBlobGas expected actual)]
       else []
@@ -210,17 +216,25 @@ def headerChecks {parentFork fork : Fork} (_hFork : parentFork ≤ fork)
 
 /-- Check a header against its parent, every check but the proof of work.
 
-The parent can be at an earlier fork, when the header is the first of a fork. -/
+The parent can be at an earlier fork, when the header is the first of a fork.
+
+The blob schedule is the header's, by default the schedule of the fork. -/
 def checkHeader {parentFork fork : Fork} (hFork : parentFork ≤ fork)
-    (parent : Header parentFork) (header : Header fork) : Except BlockError Unit :=
-  firstFailure (headerChecks hFork parent header)
+    (parent : Header parentFork) (header : Header fork)
+    (schedule : Since .dencun fork BlobSchedule := BlobBaseFee.blobSchedule fork) :
+    Except BlockError Unit :=
+  firstFailure (headerChecks hFork parent header schedule)
 
 /-- Check a header at `fork` against its parent at `parentFork`, at every fork.
 
-Before Paris, the proof of work is checked last, after every other check passes. -/
+Before Paris, the proof of work is checked last, after every other check passes.
+
+The blob schedule is the header's, by default the schedule of the fork. -/
 def validateHeader {parentFork fork : Fork} (hFork : parentFork ≤ fork)
-    (parent : Header parentFork) (header : Header fork) : Except BlockError Unit := do
-  checkHeader hFork parent header
+    (parent : Header parentFork) (header : Header fork)
+    (schedule : Since .dencun fork BlobSchedule := BlobBaseFee.blobSchedule fork) :
+    Except BlockError Unit := do
+  checkHeader hFork parent header schedule
   if fork < .paris then (checkProofOfWork header).mapError .proofOfWork
 
 /-- Check the RLP size of a block: from Fusaka, at most the most bytes. -/

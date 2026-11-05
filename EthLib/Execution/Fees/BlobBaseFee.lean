@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Fork
+public import EthLib.Base.ChainConfig
 
 /-!
 # `Fees.BlobBaseFee`
@@ -47,27 +47,8 @@ def MIN_BASE_FEE_PER_BLOB_GAS : Nat := 1
 Source: [EIP-7918](https://eips.ethereum.org/EIPS/eip-7918#parameters). -/
 def BLOB_BASE_COST : Nat := 2 ^ 13
 
-/-- The blob parameters of one fork.
-
-Source: [EIP-7892](https://eips.ethereum.org/EIPS/eip-7892#blob-base-fee-computations).
-
-The bounds exclude the schedules that would divide by 0 or subtract below 0.
-
-For a schedule written in numbers, `decide` proves them. -/
-structure BlobSchedule where
-  /-- The blobs per block that the fee aims for. -/
-  target : Nat
-  /-- The most blobs a block may carry. -/
-  max : Nat
-  /-- The excess that multiplies the fee by about e. -/
-  baseFeeUpdateFraction : Nat
-  /-- The target is at most the maximum, so the subtraction `max - target` never truncates. -/
-  target_le_max : target ≤ max := by decide
-  /-- The maximum is positive, so the reserve price rule never divides by 0. -/
-  max_pos : 0 < max := by decide
-  /-- The update fraction is positive, so the exponential never divides by 0. -/
-  baseFeeUpdateFraction_pos : 0 < baseFeeUpdateFraction := by decide
-  deriving Repr, DecidableEq
+-- The blob parameters are chain configuration, so their type lives in `Base`.
+export EthLib.Base (BlobSchedule)
 
 /-- The loop of the exponential of EIP-4844, from step `i`, run at most `fuel` times.
 
@@ -130,7 +111,7 @@ Fusaka keeps the values of Pectra, and the forks after BPO2 keep those of BPO2.
 
 No EIP gives BPO3, BPO4 or BPO5 other values yet.
 
-[EIP-7892][eip-7892] makes the schedule chain configuration, so a testnet can set others.
+[EIP-7892][eip-7892] makes the schedule chain configuration, so a chain can set others.
 
 [eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#parameters
 [eip-7691]: https://eips.ethereum.org/EIPS/eip-7691#parameters
@@ -142,6 +123,23 @@ def blobSchedule (fork : Fork) : Since .dencun fork BlobSchedule := fun _ =>
   else if fork ≥ .bpo1 then { target := 10, max := 15, baseFeeUpdateFraction := 8346193 }
   else if fork ≥ .pectra then { target := 6, max := 9, baseFeeUpdateFraction := 5007716 }
   else { target := 3, max := 6, baseFeeUpdateFraction := 3338477 }
+
+/-- The blob schedule of a block at `fork` on a chain, from Dencun on.
+
+It is the last blob schedule that the chain sets itself and that the block has reached.
+
+Without one, it is the schedule of the fork.
+
+The header check reads it for the excess blob gas.
+
+The blob gas limit of a block and the price of its blob gas still read the fork's schedule.
+
+[EIP-7892][eip-7892] links each schedule of the configuration to an activation.
+
+[eip-7892]: https://eips.ethereum.org/EIPS/eip-7892#execution-layer-configuration -/
+def chainBlobSchedule (config : ChainConfig) (fork : Fork) (number timestamp : Nat) :
+    Since .dencun fork BlobSchedule := fun h =>
+  (config.blobScheduleAt number timestamp).getD (blobSchedule fork h)
 
 /-- The excess blob gas of a block at `fork`, from its parent's excess, blob gas and base fee.
 

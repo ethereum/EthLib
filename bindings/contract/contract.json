@@ -3987,7 +3987,7 @@
   {"summary":
    "Check a header at a fork against its parent at the parent's fork, at every fork.",
    "signature":
-   "(parent_fork: str, fork: str, parent: bytes, header: bytes) -> bool",
+   "(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) -> bool",
    "operation": "EthLib.Execution.Blocks.Exports.validateHeaderExport",
    "method": "block_validate_header",
    "errors":
@@ -4028,11 +4028,11 @@
       {"constructor": "parentBeforeLondon", "code": 217}]}],
    "error_class": "BlockError",
    "docstring":
-   "Check a header at a fork against its parent at the parent's fork, at every fork."},
+   "Check a header at a fork against its parent at the parent's fork, at every fork.\n\nThe header's blob schedule is the last given one that it has reached, else that of its fork."},
   {"summary":
    "Check a header against its parent at two named forks, every check but the proof of work.",
    "signature":
-   "(parent_fork: str, fork: str, parent: bytes, header: bytes) -> bool",
+   "(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) -> bool",
    "operation": "EthLib.Execution.Blocks.Exports.checkHeaderExport",
    "method": "block_check_header",
    "errors":
@@ -4073,7 +4073,7 @@
       {"constructor": "parentBeforeLondon", "code": 217}]}],
    "error_class": "BlockError",
    "docstring":
-   "Check a header against its parent at two named forks, every check but the proof of work.\n\nTest chains that run without proof of work check their headers this way."},
+   "Check a header against its parent at two named forks, every check but the proof of work.\n\nTest chains that run without proof of work check their headers this way.\n\nThe header's blob schedule is the last given one that it has reached, else that of its fork."},
   {"summary":
    "Run the precompile at the address on the call data, with the gas given, at the fork named.",
    "signature": "(fork: str, address: int, data: bytes, gas: int) -> bytes",
