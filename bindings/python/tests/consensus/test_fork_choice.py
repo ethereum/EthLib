@@ -16,8 +16,9 @@ from .test_data_column import replacements
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "fork_choice"
 
 # The handlers that EthLib runs, and the forks at which it runs them.
-HANDLERS = ("ex_ante", "get_head", "get_proposer_head", "on_block", "reorg", "withholding")
-SPECIFIED = ("altair",)
+HANDLERS = ("ex_ante", "get_head", "get_proposer_head", "on_block", "on_merge_block", "reorg",
+            "withholding")
+SPECIFIED = ("altair", "bellatrix", "capella")
 
 # The release archives that hold the cases.
 ARCHIVES = {
@@ -26,7 +27,7 @@ ARCHIVES = {
 }
 
 # The step of each file kind of a case, as the export names it.
-_FILE_STEPS = ("block", "attestation", "attester_slashing")
+_FILE_STEPS = ("block", "attestation", "attester_slashing", "pow_block")
 
 _YAML = YAML(typ="safe")
 
@@ -156,7 +157,7 @@ def test_archive_case(preset, fork, case):
 
 def test_anchor_state_mismatch():
     # The anchor block must commit to the anchor state; its state root sits at bytes 48 to 80.
-    case = next(FILES.rglob("steps.yaml")).parent
+    case = next((FILES / "minimal" / "altair").rglob("steps.yaml")).parent
     block = bytearray(_read(case, "anchor_block"))
     block[48] ^= 1
     with pytest.raises(consensus.ForkChoiceError) as info:

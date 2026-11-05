@@ -2562,10 +2562,14 @@
       {"constructor": "notSlashable", "code": 21},
       {"constructor": "boostNotWornOff", "code": 22},
       {"constructor": "tickNotAdvancing", "code": 23},
-      {"constructor": "forkNotYetSpecified", "code": 24}]}],
+      {"constructor": "forkNotYetSpecified", "code": 24},
+      {"constructor": "unknownPowBlock", "code": 25},
+      {"constructor": "notTerminalPowBlock", "code": 26},
+      {"constructor": "terminalBlockHashNotActive", "code": 27},
+      {"constructor": "notTerminalBlockHash", "code": 28}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe signature checks run unless the last argument is false.\n\nFrom Bellatrix a block is not yet specified here, and from Gloas neither is the store."},
+   "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe signature checks run unless the last argument is false.\n\nFrom Deneb a block is not yet specified here, and from Gloas neither is the store."},
   {"summary":
    "The headers of a sync, step by step, from a bootstrap for a trusted block root.",
    "signature":
@@ -2728,7 +2732,7 @@
       {"constructor": "finalizedNotOfState", "code": 21}]}],
    "error_class": "LightClientError",
    "docstring":
-   "The genesis block of a state, given as bytes, with a signature of zero bytes.\n\nNo proposer signs the genesis block, so its signature stays empty."},
+   "The genesis block of a state, given as bytes, with a signature of zero bytes.\n\nNo proposer signs the genesis block, so its signature is 96 zero bytes."},
   {"summary":
    "The bootstrap that a full node serves for a block, from the block and its post state.",
    "signature":

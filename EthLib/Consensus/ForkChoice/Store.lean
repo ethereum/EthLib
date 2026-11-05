@@ -128,6 +128,14 @@ inductive ForkChoiceError where
   | tickNotAdvancing (slot : Slot)
   /-- The rule of this fork is not yet specified here. -/
   | forkNotYetSpecified (fork : Fork)
+  /-- The node does not know the proof-of-work block of the hash. -/
+  | unknownPowBlock (hash : Hash32)
+  /-- The proof-of-work block of the hash is not terminal. -/
+  | notTerminalPowBlock (hash : Hash32)
+  /-- A block uses the configured terminal block hash before the epoch that activates it. -/
+  | terminalBlockHashNotActive (epoch : Epoch)
+  /-- The payload of a block does not follow the configured terminal block hash. -/
+  | notTerminalBlockHash (hash : Hash32)
   deriving Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -160,6 +168,10 @@ def ForkChoiceError.code : ForkChoiceError → UInt32
   | .boostNotWornOff _ => 22
   | .tickNotAdvancing _ => 23
   | .forkNotYetSpecified _ => 24
+  | .unknownPowBlock _ => 25
+  | .notTerminalPowBlock _ => 26
+  | .terminalBlockHashNotActive _ => 27
+  | .notTerminalBlockHash _ => 28
 
 variable (preset : Preset) (fork : Fork)
 

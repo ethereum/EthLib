@@ -1,0 +1,6 @@
+preset: minimal
+fork: bellatrix
+runner: fork_choice
+handler: reorg
+suite: pyspec_tests
+case: include_votes_another_empty_chain_without_enough_ffg_votes_current_epoch

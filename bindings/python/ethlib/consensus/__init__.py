@@ -349,14 +349,14 @@ def state_transition(name: str, fork: str, pre: bytes, block: bytes, verify: boo
 
 
 _FORK_CHOICE_STEPS = {"tick": 0, "block": 1, "attestation": 2, "attester_slashing": 3,
-                      "checks": 4}
+                      "checks": 4, "pow_block": 5}
 
 
 def fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list,
                 verify: bool = True, config: dict | None = None) -> list:
     """The outcome of each step of a fork choice case, from an anchor state and block."""
-    # A step is (kind, data): the tick in seconds, the SSZ bytes of a block, an attestation or
-    # an attester slashing, or for "checks" whether to read the head of the next proposer.
+    # A step is (kind, data): the tick in seconds, the SSZ bytes of a block, an attestation, an
+    # attester slashing or a PoW block, or for "checks" whether to read the proposer head.
     records = b""
     for kind, data in steps:
         if kind == "tick":

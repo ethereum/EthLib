@@ -16,6 +16,8 @@ A tick sets the clock to its time, and the catch-up loop never stalls.
 
 A new block enters the store with the state that the transition computes for it.
 
+At Bellatrix the first payload passes exactly when it follows a terminal block of proof of work.
+
 A known block leaves the store as it was.
 
 An attestation leaves each voter not marked as an equivocator a vote at its target epoch or later.
@@ -321,11 +323,12 @@ theorem updateProposerBoostRoot_frame {head root : Root} {after : Store preset f
 /-- A new block that passes the checks has a known parent.
 
 Its state is the one that the state transition computes from the parent's. -/
-theorem validateOnBlock_ok {checks : SignatureChecks} {signed : SignedBeaconBlock preset fork}
+theorem validateOnBlock_ok {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork}
     {blockRoot : Root} {state : BeaconState preset fork}
-    (valid : store.validateOnBlock config checks signed blockRoot = .ok state) :
+    (valid : store.validateOnBlock config checks sources signed blockRoot = .ok state) :
     ∃ pre, store.blockStates[signed.message.parentRoot]? = some pre ∧
-      stateTransition config checks (.constant true) pre signed true = .ok state := by
+      stateTransition config checks sources.engine pre signed true = .ok state := by
   unfold validateOnBlock at valid
   dsimp only at valid
   cases found : store.blockStates[signed.message.parentRoot]? with
@@ -347,18 +350,101 @@ theorem validateOnBlock_ok {checks : SignatureChecks} {signed : SignedBeaconBloc
     obtain ⟨_, _, valid⟩ := valid
     split at valid
     · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at valid
-    cases t : stateTransition config checks (.constant true) pre signed <;>
-      simp_all [Except.mapError]
+    simp only [bind_ok_iff] at valid
+    obtain ⟨after, transition, valid⟩ := valid
+    -- The merge check returns the state of the transition, or fails.
+    have same : after = state := by
+      split at valid
+      · split at valid
+        · simp only [bind_ok_iff] at valid
+          obtain ⟨_, _, valid⟩ := valid
+          simpa [pure, Except.pure] using valid
+        · simpa [pure, Except.pure] using valid
+      · simpa [pure, Except.pure] using valid
+    subst same
+    exact mapError_ok_iff.mp transition
+
+/-- The first payload passes exactly when it follows a terminal block of proof of work.
+
+With a configured terminal block hash, the epoch must reach its activation.
+
+The payload must then follow that hash.
+
+Otherwise the node must know the parent of the payload and its own parent.
+
+The first of the two must then be terminal. -/
+theorem validateMergeBlock_ok {powBlock : Hash32 → Option PowBlock}
+    {block : BeaconBlock preset fork} {bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam} :
+    validateMergeBlock config powBlock block bellatrix = .ok () ↔
+      if config.TERMINAL_BLOCK_HASH ≠ Vector.replicate 32 0 then
+        config.TERMINAL_BLOCK_HASH_ACTIVATION_EPOCH ≤ computeEpochAtSlot preset block.slot ∧
+          (block.body.executionPayload bellatrix).parentHash = config.TERMINAL_BLOCK_HASH
+      else ∃ terminal parent,
+        powBlock (block.body.executionPayload bellatrix).parentHash = some terminal ∧
+          powBlock terminal.parentHash = some parent ∧
+          isValidTerminalPowBlock config terminal parent = true := by
+  unfold validateMergeBlock
+  dsimp only
+  by_cases hash : config.TERMINAL_BLOCK_HASH ≠ Vector.replicate 32 0
+  · simp only [ne_eq, hash, not_false_eq_true, ↓reduceIte]
+    by_cases early :
+        computeEpochAtSlot preset block.slot < config.TERMINAL_BLOCK_HASH_ACTIVATION_EPOCH
+    · simp [early, UInt64.not_le.mpr early, throw, throwThe, MonadExceptOf.throw, bind,
+        Except.bind]
+    · by_cases same :
+          (block.body.executionPayload bellatrix).parentHash = config.TERMINAL_BLOCK_HASH
+      · simp [early, same, pure, Except.pure, UInt64.not_lt.mp early]
+      · simp [early, same, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  · simp only [hash, ↓reduceIte]
+    cases found : powBlock (block.body.executionPayload bellatrix).parentHash with
+    | none => simp [throw, throwThe, MonadExceptOf.throw]
+    | some terminal =>
+      cases foundParent : powBlock terminal.parentHash with
+      | none => simp [foundParent, throw, throwThe, MonadExceptOf.throw]
+      | some parent =>
+        cases valid : isValidTerminalPowBlock config terminal parent <;>
+          simp [foundParent, valid, throw, throwThe, MonadExceptOf.throw, pure, Except.pure]
+
+/-- At Bellatrix, a new block with the first payload of its chain passed the merge check. -/
+theorem validateOnBlock_merge {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork} {blockRoot : Root}
+    {state pre : BeaconState preset fork} (bellatrix : fork = .bellatrix)
+    (range : .bellatrix ≤ fork ∧ fork < .glamsterdam)
+    (found : store.blockStates[signed.message.parentRoot]? = some pre)
+    (merge : isMergeTransitionBlock pre signed.message.body range = true)
+    (valid : store.validateOnBlock config checks sources signed blockRoot = .ok state) :
+    validateMergeBlock config sources.powBlock signed.message range = .ok () := by
+  unfold validateOnBlock at valid
+  dsimp only at valid
+  simp only [blockState, found, bind_ok_iff] at valid
+  obtain ⟨a, ha, _, _, valid⟩ := valid
+  simp only [pure, Except.pure, Except.ok.injEq] at ha
+  subst ha
+  split at valid
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at valid
+  simp only [bind_ok_iff] at valid
+  obtain ⟨_, _, valid⟩ := valid
+  split at valid
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at valid
+  simp only [bind_ok_iff] at valid
+  obtain ⟨_, _, valid⟩ := valid
+  split at valid
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at valid
+  simp only [bind_ok_iff] at valid
+  -- The merge test holds, so the step after the transition is the merge check.
+  obtain ⟨_, _, _, checked, _⟩ := valid
+  exact checked
 
 /-- A new block enters the store with the state after it, and no epoch falls.
 
 That state is the one the state transition computes from the state after the parent. -/
-theorem addBlock_ok {checks : SignatureChecks} {signed : SignedBeaconBlock preset fork}
+theorem addBlock_ok {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork}
     {blockRoot : Root} {after : Store preset fork}
-    (added : store.addBlock config checks signed blockRoot = .ok after) :
+    (added : store.addBlock config checks sources signed blockRoot = .ok after) :
     store.EpochsLe after ∧ after.blocks[blockRoot]? = some signed.message ∧
       ∃ pre state, store.blockStates[signed.message.parentRoot]? = some pre ∧
-        stateTransition config checks (.constant true) pre signed true = .ok state ∧
+        stateTransition config checks sources.engine pre signed true = .ok state ∧
         after.blockStates[blockRoot]? = some state := by
   unfold addBlock at added
   simp only [bind_ok_iff] at added
@@ -374,43 +460,47 @@ theorem addBlock_ok {checks : SignatureChecks} {signed : SignedBeaconBlock prese
     rw [bs3, updateCheckpoints_blockStates, bs2, bs1]
     simp
 
-/-- From Bellatrix a block also checks its payload, which is not yet specified here. -/
-theorem onBlock_of_bellatrix {checks : SignatureChecks} {signed : SignedBeaconBlock preset fork}
-    (bellatrix : .bellatrix ≤ fork) :
-    store.onBlock config checks signed = .error (.forkNotYetSpecified fork) := by
-  simp [onBlock, bellatrix, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+/-- From Deneb a block also needs its blob data, which is not yet specified here. -/
+theorem onBlock_of_deneb {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork}
+    (deneb : .dencun ≤ fork) :
+    store.onBlock config checks sources signed = .error (.forkNotYetSpecified fork) := by
+  simp [onBlock, deneb, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
 /-- A block that the store holds already leaves the store as it was. -/
-theorem onBlock_known {checks : SignatureChecks} {signed : SignedBeaconBlock preset fork}
-    {blockRoot : Root} (before : fork < .bellatrix)
+theorem onBlock_known {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork}
+    {blockRoot : Root} (before : fork < .dencun)
     (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
     (known : store.blocks.contains blockRoot) :
-    store.onBlock config checks signed = .ok store := by
-  have later : ¬ .bellatrix ≤ fork := Nat.not_le_of_lt before
+    store.onBlock config checks sources signed = .ok store := by
+  have later : ¬ .dencun ≤ fork := Nat.not_le_of_lt before
   simp [onBlock, later, root, known, bind, Except.bind, Except.mapError, pure, Except.pure]
 
 /-- A new block enters the store with the state after it, and no epoch falls.
 
 That state is the one the state transition computes from the state after the parent. -/
-theorem onBlock_new {checks : SignatureChecks} {signed : SignedBeaconBlock preset fork}
+theorem onBlock_new {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork}
     {blockRoot : Root} {after : Store preset fork}
     (root : SszType.hashTreeRoot signed.message = .ok blockRoot)
     (new : ¬ store.blocks.contains blockRoot)
-    (added : store.onBlock config checks signed = .ok after) :
+    (added : store.onBlock config checks sources signed = .ok after) :
     store.EpochsLe after ∧ after.blocks[blockRoot]? = some signed.message ∧
       ∃ pre state, store.blockStates[signed.message.parentRoot]? = some pre ∧
-        stateTransition config checks (.constant true) pre signed true = .ok state ∧
+        stateTransition config checks sources.engine pre signed true = .ok state ∧
         after.blockStates[blockRoot]? = some state := by
-  by_cases bellatrix : .bellatrix ≤ fork
-  · rw [onBlock_of_bellatrix bellatrix] at added
+  by_cases deneb : .dencun ≤ fork
+  · rw [onBlock_of_deneb deneb] at added
     cases added
-  simp only [onBlock, bellatrix, root, new, bind, Except.bind, Except.mapError, ↓reduceIte,
+  simp only [onBlock, deneb, root, new, bind, Except.bind, Except.mapError, ↓reduceIte,
     Bool.false_eq_true] at added
   exact addBlock_ok added
 
 /-- No block lowers the epoch of the justified or the finalized checkpoint. -/
-theorem onBlock_epochsLe {checks : SignatureChecks} {signed : SignedBeaconBlock preset fork}
-    {after : Store preset fork} (added : store.onBlock config checks signed = .ok after) :
+theorem onBlock_epochsLe {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork}
+    {after : Store preset fork} (added : store.onBlock config checks sources signed = .ok after) :
     store.EpochsLe after := by
   cases root : SszType.hashTreeRoot signed.message with
   | error e =>
@@ -420,10 +510,10 @@ theorem onBlock_epochsLe {checks : SignatureChecks} {signed : SignedBeaconBlock 
     · simp [root, bind, Except.bind, Except.mapError] at added
   | ok blockRoot =>
     by_cases known : store.blocks.contains blockRoot
-    · by_cases bellatrix : .bellatrix ≤ fork
-      · rw [onBlock_of_bellatrix bellatrix] at added
+    · by_cases deneb : .dencun ≤ fork
+      · rw [onBlock_of_deneb deneb] at added
         cases added
-      rw [onBlock_known (Nat.lt_of_not_le bellatrix) root known] at added
+      rw [onBlock_known (Nat.lt_of_not_le deneb) root known] at added
       cases added
       exact EpochsLe.refl _
     · exact (onBlock_new root known added).1
@@ -431,7 +521,8 @@ theorem onBlock_epochsLe {checks : SignatureChecks} {signed : SignedBeaconBlock 
 /-- A block and the votes that it carries lower no epoch. -/
 theorem onBlockWithVotes_epochsLe {checks : SignatureChecks}
     {signed : SignedBeaconBlock preset fork} {after : Store preset fork}
-    (added : store.onBlockWithVotes config checks signed = .ok after) : store.EpochsLe after := by
+    (added : store.onBlockWithVotes config checks sources signed = .ok after) :
+    store.EpochsLe after := by
   unfold onBlockWithVotes at added
   simp only [bind_ok_iff, ← Array.foldlM_toList] at added
   obtain ⟨blocked, block, voted, attested, slashed⟩ := added
