@@ -516,7 +516,7 @@ theorem getStorage_clearAccountPreservingBalance {fork : Fork} {tx tx' : Transac
 theorem moveEther_insufficient (fork : Fork) (tx : TransactionState) (sender recipient : Address)
     (amount : U256) (h : (tx.getAccount sender).balance < amount) :
     tx.moveEther fork sender recipient amount = .error (.insufficientBalance sender) := by
-  simp [moveEther, modifyState, h, bind, Except.bind]
+  simp [moveEther, modifyState, Account.debit, h, bind, Except.bind]
 
 /-- The debit of the sender, the first step of a move of ether, has two outcomes.
 
@@ -526,19 +526,15 @@ Otherwise it takes the amount from the sender, and every other account is unchan
 theorem modifyState_debit (fork : Fork) (tx : TransactionState) (sender : Address)
     (amount : U256) :
     ((tx.getAccount sender).balance < amount ∧
-        tx.modifyState fork sender (fun account =>
-          if account.balance < amount then .error (.insufficientBalance sender)
-          else .ok { account with balance := account.balance - amount }) =
+        tx.modifyState fork sender (Account.debit sender amount) =
           .error (.insufficientBalance sender)) ∨
       (¬ (tx.getAccount sender).balance < amount ∧ ∃ mid,
-        tx.modifyState fork sender (fun account =>
-          if account.balance < amount then .error (.insufficientBalance sender)
-          else .ok { account with balance := account.balance - amount }) = .ok mid ∧
+        tx.modifyState fork sender (Account.debit sender amount) = .ok mid ∧
         mid.getAccount sender =
           { tx.getAccount sender with balance := (tx.getAccount sender).balance - amount } ∧
         ∀ other, other ≠ sender → mid.getAccount other = tx.getAccount other) := by
   by_cases hlt : (tx.getAccount sender).balance < amount
-  · exact .inl ⟨hlt, by simp [modifyState, hlt, bind, Except.bind]⟩
+  · exact .inl ⟨hlt, by simp [modifyState, Account.debit, hlt, bind, Except.bind]⟩
   · -- A change by a step that succeeds gives the account that the step computes.
     have hok : ∀ {f : Account → Except StateError Account} {account : Account},
         f (tx.getAccount sender) = .ok account → ∃ mid, tx.modifyState fork sender f = .ok mid ∧
@@ -549,7 +545,7 @@ theorem modifyState_debit (fork : Fork) (tx : TransactionState) (sender : Addres
       obtain ⟨account', hf', hsender, hrest⟩ := modifyState_eq_ok hmid
       rw [hf, Except.ok.injEq] at hf'
       exact ⟨mid, hmid, hf' ▸ hsender, hrest⟩
-    exact .inr ⟨hlt, hok (ite_eq_right hlt)⟩
+    exact .inr ⟨hlt, hok (by simp only [Account.debit, hlt, ↓reduceIte])⟩
 
 /-- A change of an account keeps the record of the accounts that the transaction created. -/
 theorem createdAccounts_modifyState {fork : Fork} {tx tx' : TransactionState} {address : Address}
@@ -584,6 +580,7 @@ theorem moveEther_self {fork : Fork} {tx tx' : TransactionState} {address : Addr
   · simp only [hmid, bind, Except.bind] at h
     obtain ⟨credited, hcredit, hread', -⟩ := modifyState_eq_ok h
     rw [hread] at hcredit
+    unfold Account.credit at hcredit
     split at hcredit
     · cases hcredit
       rw [hread']
@@ -748,6 +745,7 @@ theorem moveEther_eq_ok {fork : Fork} {tx tx' : TransactionState} {sender recipi
   · simp only [hmid, bind, Except.bind] at h
     obtain ⟨credited, hcredit, hrecipient, hrest'⟩ := modifyState_eq_ok h
     rw [hrest recipient (Ne.symm hne)] at hcredit
+    unfold Account.credit at hcredit
     split at hcredit
     · rename_i hfit
       cases hcredit
@@ -797,7 +795,7 @@ theorem moveEther_eq_error {fork : Fork} {tx : TransactionState} {sender recipie
       · rfl
       · exact absurd hlt hge
   · simp only [hmid, bind, Except.bind]
-    rw [modifyState_eq_error, hrest recipient (Ne.symm hne)]
+    rw [modifyState_eq_error, hrest recipient (Ne.symm hne), Account.credit]
     by_cases hfit : (tx.getAccount recipient).balance.toNat + amount.toNat < 2 ^ 256
     · simp only [hfit, ↓reduceIte, reduceCtorEq, false_iff, not_or, not_and]
       exact ⟨fun h _ => hfunds h, fun _ h _ => Nat.not_le_of_gt hfit h⟩
@@ -839,7 +837,7 @@ theorem moveEther_self_eq_error {fork : Fork} {tx : TransactionState} {address :
   · simp only [hmid, bind, Except.bind, Except.error.injEq]
     exact ⟨fun h => ⟨hlt, h.symm⟩, fun h => h.2.symm⟩
   · simp only [hmid, bind, Except.bind]
-    rw [modifyState_eq_error, hread]
+    rw [modifyState_eq_error, hread, Account.credit]
     have hle : amount.toNat ≤ (tx.getAccount address).balance.toNat := by
       simpa [BitVec.lt_def] using hfunds
     have hfit : ((tx.getAccount address).balance - amount).toNat + amount.toNat < 2 ^ 256 := by

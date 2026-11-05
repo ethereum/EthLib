@@ -71,6 +71,7 @@ private theorem getAccount_createEther {fork : Fork} {tx tx' : TransactionState}
   by_cases hsame : target = address
   · subst hsame
     rw [hread]
+    unfold Account.credit at hf
     split at hf
     · rename_i hfit
       cases hf

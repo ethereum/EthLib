@@ -36,6 +36,7 @@ theorem createEther_eq_ok {fork : Fork} {tx tx' : TransactionState} {address : A
   obtain ⟨account, hf, hread, hrest⟩ := modifyState_eq_ok h
   refine ⟨?_, hrest⟩
   rw [hread]
+  unfold Account.credit at hf
   split at hf
   · rename_i hfit
     cases hf
