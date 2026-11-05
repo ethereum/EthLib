@@ -50,11 +50,26 @@ noncomputable def toQuot (a : Fp12) : AdjoinRoot poly :=
   ∑ i ∈ Finset.range 12, ι a[i]! * r ^ i
 
 /-- The value at the root, term by term. -/
-private theorem toQuot_eq_terms (a : Fp12) :
+theorem toQuot_eq_terms (a : Fp12) :
     toQuot a = ι a[0] + ι a[1] * r + ι a[2] * r ^ 2 + ι a[3] * r ^ 3 + ι a[4] * r ^ 4 +
     ι a[5] * r ^ 5 + ι a[6] * r ^ 6 + ι a[7] * r ^ 7 + ι a[8] * r ^ 8 + ι a[9] * r ^ 9 +
     ι a[10] * r ^ 10 + ι a[11] * r ^ 11 := by
   simp [toQuot, Finset.sum_range_succ, getElem!_pos]
+
+/-- A value reduced modulo `p` has the value of the number at the root. -/
+private theorem ι_ofNat (n : ℕ) : ι (Fin.ofNat Fp.modulus n) = n := by
+  have h : Fp.toZMod (Fin.ofNat Fp.modulus n) = n := by
+    apply ZMod.val_injective
+    rw [ZMod.val_natCast]
+    rfl
+  rw [ι, RingHom.comp_apply, RingEquiv.toRingHom_eq_coe, RingEquiv.coe_toRingHom, h,
+    map_natCast]
+
+/-- The value of an element of `Fp`, as a number, is its value at the root. -/
+private theorem natCast_val (x : Fp) : ((x.val : ℕ) : AdjoinRoot poly) = ι x := by
+  rw [ι, RingHom.comp_apply, ← map_natCast (AdjoinRoot.of poly), RingEquiv.toRingHom_eq_coe,
+    RingEquiv.coe_toRingHom, ← ZMod.natCast_zmod_val (Fp.toZMod x)]
+  rfl
 
 /-- The product of the specification is the product in the quotient.
 
@@ -63,7 +78,9 @@ theorem toQuot_mul (a b : Fp12) : toQuot (a * b) = toQuot a * toQuot b := by
   change toQuot (mul a b) = _
   rw [toQuot_eq_terms, toQuot_eq_terms a, toQuot_eq_terms b]
   simp only [mul, Vector.getElem_mk, List.getElem_toArray, List.getElem_cons_succ,
-    List.getElem_cons_zero, map_add, map_sub, map_mul, map_ofNat]
+    List.getElem_cons_zero, map_sub, ι_ofNat]
+  push_cast
+  simp only [natCast_val]
   -- The quotient of the product of the polynomials by `X^12 - 18 X^6 + 82`.
   linear_combination (-(
       (ι a[1] * ι b[11] + ι a[2] * ι b[10] + ι a[3] * ι b[9] + ι a[4] * ι b[8] + ι a[5] * ι b[7] +
