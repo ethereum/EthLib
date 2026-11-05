@@ -82,6 +82,24 @@ def StateError.code : StateError → UInt32
   | .insufficientBalance _ => 103
   | .balanceOverflow _ => 104
 
+/-! ## The balance steps of a move of ether -/
+
+/-- Take `amount` wei from the account at an address, which must hold it. -/
+def Account.debit (address : Address) (amount : U256) (account : Account) :
+    Except StateError Account :=
+  if account.balance < amount then
+    .error (.insufficientBalance address)
+  else
+    .ok { account with balance := account.balance - amount }
+
+/-- Add `amount` wei to the account at an address, whose balance must stay below 2^256. -/
+def Account.credit (address : Address) (amount : U256) (account : Account) :
+    Except StateError Account :=
+  if account.balance.toNat + amount.toNat < 2 ^ 256 then
+    .ok { account with balance := account.balance + amount }
+  else
+    .error (.balanceOverflow address)
+
 /-! ## The state before a block -/
 
 /-- The account at an address, or none if the address has no account. -/
@@ -332,25 +350,13 @@ def modifyState (fork : Fork) (tx : TransactionState) (address : Address)
 The sender must hold the amount, and the recipient's balance must stay below 2^256. -/
 def moveEther (fork : Fork) (tx : TransactionState) (sender recipient : Address) (amount : U256) :
     Except StateError TransactionState := do
-  let tx ← tx.modifyState fork sender fun account =>
-    if account.balance < amount then
-      .error (.insufficientBalance sender)
-    else
-      .ok { account with balance := account.balance - amount }
-  tx.modifyState fork recipient fun account =>
-    if account.balance.toNat + amount.toNat < 2 ^ 256 then
-      .ok { account with balance := account.balance + amount }
-    else
-      .error (.balanceOverflow recipient)
+  let tx ← tx.modifyState fork sender (Account.debit sender amount)
+  tx.modifyState fork recipient (Account.credit recipient amount)
 
 /-- Add newly created ether to the balance of an address, which must stay below 2^256. -/
 def createEther (fork : Fork) (tx : TransactionState) (address : Address) (amount : U256) :
     Except StateError TransactionState :=
-  tx.modifyState fork address fun account =>
-    if account.balance.toNat + amount.toNat < 2 ^ 256 then
-      .ok { account with balance := account.balance + amount }
-    else
-      .error (.balanceOverflow address)
+  tx.modifyState fork address (Account.credit address amount)
 
 /-- Set the balance of an address. -/
 def setAccountBalance (fork : Fork) (tx : TransactionState) (address : Address) (amount : U256) :
