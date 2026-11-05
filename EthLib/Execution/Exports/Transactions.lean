@@ -2,7 +2,9 @@ module
 
 public import EthLib.Base.Exports
 public import EthLib.Execution.Exports.Blocks
+public import EthLib.Execution.Exports.State
 public import EthLib.Cryptography.Exports.Kzg
+public import EthLib.Execution.Transactions.Inclusion
 public import EthLib.Execution.Transactions.Network
 public import EthLib.Execution.Transactions.Settlement
 public import EthLib.Execution.Transactions.Validity
@@ -147,6 +149,47 @@ def settleExport (fork tx baseFee gasLeft refundCounter : ByteArray) : Result By
     throw (0, "the gas left is above the gas limit")
   let s := settlement fork baseFee sender tx (numberOf gasLeft) (numberOf refundCounter)
   return ⟨([s.gasUsed, s.senderRefund, s.priorityFee, s.burned].flatMap (natToBytes 64)).toArray⟩
+
+/-- A message for a rejection by the block, phrased for a Python traceback. -/
+def inclusionMessage : InclusionError → String
+  | .transaction e => message e
+  | error => (oneLine error).replace "EthLib.Execution.Transactions.InclusionError." ""
+
+/-- Check that a transaction may enter its block, against the state that `state` encodes.
+
+The state takes the form of the state root export.
+
+The block has a gas limit, a base fee and an excess blob gas, given as big-endian numbers.
+
+Before the transaction, the block has used `gasUsed` gas and `blobGasUsed` blob gas.
+
+The base fee must be 0 before London, and the excess blob gas below 2^64.
+
+It returns 60 bytes: the sender, the price per gas as 32 bytes, and the blob gas as 8 bytes. -/
+@[export eth_tx_check_in_block]
+def checkInBlockExport (fork : ByteArray) (chainId : UInt64)
+    (tx state gasLimit gasUsed blobGasUsed baseFee excessBlobGas : ByteArray) :
+    Result ByteArray := do
+  let (fork, tx) ← decodeAt .bpo5 fork tx
+  let pre ← (State.Exports.ofInput state).mapError fun e => (e.code, e.message)
+  let baseFee := numberOf baseFee
+  let excess := numberOf excessBlobGas
+  -- No error type covers these inputs of the binding, so their code is 0.
+  if fork < .london ∧ baseFee ≠ 0 then
+    throw (0, "a fork before london has no base fee")
+  if 2 ^ 64 ≤ excess then
+    throw (0, "excess blob gas is 2^64 or more")
+  -- The checks read no other field of the block, so the others hold 0.
+  let env : Evm.BlockEnvironment fork := {
+    chainId := chainId.toNat, coinbase := 0, number := 0, gasLimit := numberOf gasLimit,
+    timestamp := 0, difficulty := 0, blockHashes := [], baseFeePerGas := fun _ => baseFee,
+    prevRandao := fun _ => 0, excessBlobGas := fun _ => UInt64.ofNat excess,
+    parentBeaconBlockRoot := fun _ => 0 }
+  let inc ← (checkInclusion chainId env (numberOf gasUsed) (numberOf blobGasUsed)
+    (.ofBlock ⟨pre, ∅, ∅, ∅, ∅⟩) tx).mapError fun e => (e.code, inclusionMessage e)
+  let blobGas ← gasToUInt64 inc.blobGasUsed
+  return ⟨inc.sender.toArray ++ (natToBytes 32 inc.gasPrice).toArray ++
+    (List.range 8).reverse.toArray.map fun i => (blobGas >>> UInt64.ofNat (8 * i)).toUInt8⟩
 
 /-! ## The network form of blob transactions -/
 

@@ -43,6 +43,19 @@ eth_tx_check(
 );
 
 extern lean_object*
+eth_tx_check_in_block(
+  lean_object* fork,
+  uint64_t chain_id,
+  lean_object* tx,
+  lean_object* state,
+  lean_object* gas_limit,
+  lean_object* gas_used,
+  lean_object* blob_gas_used,
+  lean_object* base_fee,
+  lean_object* excess_blob_gas
+);
+
+extern lean_object*
 eth_tx_settle(
   lean_object* fork,
   lean_object* tx,
@@ -144,6 +157,33 @@ py_tx_check(
   lean_object *fork, *tx;
   if (!parse_fork_and_tx(fork_obj, tx_obj, &fork, &tx)) return NULL;
   return except_into_pybytes(eth_tx_check(fork, chain_id, tx), TRANSACTION_ERROR);
+}
+
+PyObject*
+py_tx_check_in_block(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *fork_obj, *chain_obj, *tx_obj;
+  const char* data[6];
+  Py_ssize_t len[6];
+  if (!PyArg_ParseTuple(args, "OOOy#y#y#y#y#y#", &fork_obj, &chain_obj, &tx_obj,
+                        &data[0], &len[0], &data[1], &len[1], &data[2], &len[2],
+                        &data[3], &len[3], &data[4], &len[4], &data[5], &len[5])) {
+    return NULL;
+  }
+  /* The chain is a non-negative integer below 2^64. */
+  uint64_t chain_id = (uint64_t) PyLong_AsUnsignedLongLong(chain_obj);
+  if (PyErr_Occurred()) return NULL;
+  lean_object *fork, *tx;
+  if (!parse_fork_and_tx(fork_obj, tx_obj, &fork, &tx)) return NULL;
+  lean_object* arg[6];
+  for (int i = 0; i < 6; i++) {
+    arg[i] = mk_bytearray((const uint8_t*) data[i], (size_t) len[i]);
+  }
+  return except_into_pybytes(
+    eth_tx_check_in_block(fork, chain_id, tx, arg[0], arg[1], arg[2], arg[3], arg[4], arg[5]),
+    TRANSACTION_ERROR);
 }
 
 PyObject*

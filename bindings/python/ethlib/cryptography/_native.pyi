@@ -667,6 +667,10 @@ def tx_check(fork: str, chain_id: int, tx: bytes) -> bytes:
     """Check a transaction alone on the chain `chainId`."""
     ...
 
+def tx_check_in_block(fork: str, chain_id: int, tx: bytes, state: bytes, gas_limit: bytes, gas_used: bytes, blob_gas_used: bytes, base_fee: bytes, excess_blob_gas: bytes) -> bytes:
+    """Check that a transaction may enter its block at `fork`, on the chain `chainId`."""
+    ...
+
 def tx_settle(fork: str, tx: bytes, base_fee: bytes, gas_left: bytes, refund_counter: bytes) -> bytes:
     """Settle the gas of a transaction that passes the gas, nonce and fee rules."""
     ...

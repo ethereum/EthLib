@@ -500,6 +500,9 @@
 #define DOC_tx_check \
   "Check a transaction alone on the chain `chainId`."
 
+#define DOC_tx_check_in_block \
+  "Check that a transaction may enter its block at `fork`, on the chain `chainId`."
+
 #define DOC_tx_settle \
   "Settle the gas of a transaction that passes the gas, nonce and fee rules."
 
