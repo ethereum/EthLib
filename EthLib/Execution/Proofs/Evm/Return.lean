@@ -22,7 +22,7 @@ It holds the bytes of memory in the range, and reads as zero past its end.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork U256)
+open EthLib.Base (Fork U256 byteAt byteAt_of_size_le)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 

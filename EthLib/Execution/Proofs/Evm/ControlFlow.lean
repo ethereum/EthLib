@@ -24,7 +24,7 @@ None of these instructions changes the message, the state or the substate of the
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork U256)
+open EthLib.Base (Fork U256 byteAt)
 open GasCosts
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]

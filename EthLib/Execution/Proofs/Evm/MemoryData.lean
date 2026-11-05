@@ -28,7 +28,7 @@ They keep every other byte of memory.
 
 namespace EthLib.Execution.Evm
 
-open EthLib.Base (Fork U256 bytesToNat natToBytes)
+open EthLib.Base (Fork U256 bytesToNat natToBytes byteAt byteAt_append_zeros byteAt_eq_getD)
 open GasCosts
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]

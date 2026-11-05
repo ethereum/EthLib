@@ -27,6 +27,8 @@ Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
 namespace EthLib.Execution.Evm
 
+open EthLib.Base (byteAt)
+
 /-- The byte of JUMPDEST. -/
 def JUMPDEST : UInt8 := 0x5b
 

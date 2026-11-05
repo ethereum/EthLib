@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Base.Bytes
+
 /-!
 # `Hash.Keccak`
 
@@ -357,9 +359,7 @@ def blockCount (rate len : Nat) : Nat :=
 
 namespace Internal
 
-/-- Byte `i` of a string, or zero past its end. -/
-@[inline] def byteAt (bytes : ByteArray) (i : Nat) : UInt8 :=
-  if h : i < bytes.size then bytes[i] else 0
+open EthLib.Base (byteAt)
 
 /-- The lane that the 8 bytes from index `i` spell, the first byte least significant.
 

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Bytes
 public import EthLib.Cryptography.Proofs.Hash.Keccak
 
 /-!
@@ -14,46 +15,8 @@ The pieces can be cut anywhere, since a block that two pieces share is absorbed 
 
 namespace EthLib.Cryptography.Hash.Keccak
 
+open EthLib.Base (byteAt byteAt_append byteAt_extract eq_of_byteAt)
 open Internal
-
-/-! ## Bytes -/
-
-/-- A byte of two strings joined is a byte of the first, or of the second past its end. -/
-theorem byteAt_append (a b : ByteArray) (i : Nat) :
-    byteAt (a ++ b) i = if i < a.size then byteAt a i else byteAt b (i - a.size) := by
-  have hs := @ByteArray.size_append a b
-  unfold byteAt
-  by_cases ha : i < a.size
-  · rw [ite_eq_left ha, dite_eq_left ha, dite_eq_left (show i < (a ++ b).size by omega),
-      ByteArray.getElem_append_left ha]
-  · rw [ite_eq_right ha]
-    by_cases hb : i - a.size < b.size
-    · rw [dite_eq_left hb, dite_eq_left (show i < (a ++ b).size by omega),
-        ByteArray.getElem_append_right (Nat.le_of_not_lt ha)]
-    · rw [dite_eq_right hb, dite_eq_right (show ¬i < (a ++ b).size by omega)]
-
-/-- A byte of a slice is the byte at the same offset from its start, or zero past its end. -/
-theorem byteAt_extract (b : ByteArray) (start stop j : Nat) :
-    byteAt (b.extract start stop) j
-      = if start + j < min stop b.size then byteAt b (start + j) else 0 := by
-  have hs := @ByteArray.size_extract b start stop
-  have hm := Nat.min_le_right stop b.size
-  unfold byteAt
-  by_cases hj : start + j < min stop b.size
-  · rw [ite_eq_left hj, dite_eq_left (show j < (b.extract start stop).size by omega),
-      dite_eq_left (show start + j < b.size by omega), ByteArray.getElem_extract]
-  · rw [ite_eq_right hj, dite_eq_right (show ¬j < (b.extract start stop).size by omega)]
-
-/-- Two strings of one length are equal when they agree on every byte. -/
-theorem eq_of_byteAt {a b : ByteArray} (size : a.size = b.size)
-    (bytes : ∀ i, byteAt a i = byteAt b i) : a = b := by
-  apply ByteArray.ext
-  apply Array.ext size
-  intro i ha hb
-  have h := bytes i
-  unfold byteAt at h
-  rw [dite_eq_left (show i < a.size from ha), dite_eq_left (show i < b.size from hb)] at h
-  exact h
 
 /-! ## Blocks -/
 

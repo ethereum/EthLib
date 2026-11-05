@@ -19,7 +19,7 @@ A rejected signature gives empty output, and the call still succeeds.
 namespace EthLib.Execution.Evm.Precompiles.Ecrecover
 
 open EthLib.Cryptography.Secp256k1
-open EthLib.Execution.Evm (byteAt)
+open EthLib.Base (byteAt)
 
 /-- Why an ECRECOVER call fails: only a lack of gas, which consumes all the gas given. -/
 inductive EcrecoverError where
