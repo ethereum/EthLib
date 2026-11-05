@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
 public import EthLib.Cryptography.Proofs.Wots
-public import EthLib.Cryptography.Xmss.Types
+public import EthLib.Cryptography.HashSig
 public import VCVio.OracleComp.QueryTracking.QueryBound.Simulation
 
 /-!
@@ -30,10 +30,10 @@ variable {ι : Type} {spec : OracleSpec ι} {p : spec.Domain → Prop} [Decidabl
 /-- Computing a vector in order queries `p` nowhere when no entry does. -/
 theorem ofFnInOrder_isQueryBoundP_zero {α : Type} :
     ∀ (k : Nat) (f : Fin k → OracleComp spec α), (∀ i, IsQueryBoundP (f i) p 0) →
-      IsQueryBoundP (Xmss.ofFnInOrder k f) p 0
+      IsQueryBoundP (HashSig.ofFnInOrder k f) p 0
   | 0, _, _ => isQueryBoundP_pure _ _ _
   | k + 1, f, h => by
-    rw [Xmss.ofFnInOrder]
+    rw [HashSig.ofFnInOrder]
     exact isQueryBoundP_bind_zero _ _ (h 0) fun _ =>
       isQueryBoundP_bind_zero _ _ (ofFnInOrder_isQueryBoundP_zero k _ fun i => h i.succ)
         fun _ => isQueryBoundP_pure _ _ _

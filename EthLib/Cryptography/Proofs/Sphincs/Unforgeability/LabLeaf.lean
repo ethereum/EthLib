@@ -38,11 +38,11 @@ theorem ofFnInOrder_eqDistTriple {α : Type} {r : σ → σ → Prop} [IsPreorde
     (Inv : σ → Prop) : ∀ {k : Nat} (R : Fin k → α → σ → Prop),
       (∀ i a s s', r s s' → R i a s → R i a s') → ∀ {f g : Fin k → OracleComp spec α},
       (∀ i, so.EqDistTriple r Inv (f i) (g i) fun a s => Inv s ∧ R i a s) →
-      so.EqDistTriple r Inv (Xmss.ofFnInOrder k f) (Xmss.ofFnInOrder k g)
+      so.EqDistTriple r Inv (HashSig.ofFnInOrder k f) (HashSig.ofFnInOrder k g)
         fun v s => Inv s ∧ ∀ i, R i v[i] s
   | 0, _, _, _, _, _ => QueryImpl.EqDistTriple.pure _ fun _ h => ⟨h, fun i => i.elim0⟩
   | k + 1, R, hR, f, g, h => by
-    simp only [Xmss.ofFnInOrder]
+    simp only [HashSig.ofFnInOrder]
     refine (h 0).bind fun a => ?_
     refine ((ofFnInOrder_eqDistTriple Inv (fun i => R i.succ) (fun i => hR i.succ)
       fun i => h i.succ).frame (hR 0 a)).bind fun v => ?_
@@ -61,15 +61,15 @@ theorem bind_pure_unit_eq_map {γ : Type} (x : StateT σ ProbComp γ) :
 theorem simulateQ_ofFnInOrder_discard {α β : Type} :
     ∀ {k : Nat} {f : Fin k → OracleComp spec α} {g : Fin k → OracleComp spec β},
       (∀ i, (fun _ => ()) <$> simulateQ so (f i) = (fun _ => ()) <$> simulateQ so (g i)) →
-      (fun _ => ()) <$> simulateQ so (Xmss.ofFnInOrder k f) =
-        (fun _ => ()) <$> simulateQ so (Xmss.ofFnInOrder k g)
-  | 0, _, _, _ => by simp only [Xmss.ofFnInOrder, simulateQ_pure, map_pure]
+      (fun _ => ()) <$> simulateQ so (HashSig.ofFnInOrder k f) =
+        (fun _ => ()) <$> simulateQ so (HashSig.ofFnInOrder k g)
+  | 0, _, _, _ => by simp only [HashSig.ofFnInOrder, simulateQ_pure, map_pure]
   | k + 1, f, g, h => by
     have ih := simulateQ_ofFnInOrder_discard fun i => h i.succ
     have e : ∀ {γ δ : Type} (x : StateT σ ProbComp γ) (y : StateT σ ProbComp δ),
         (x >>= fun _ => y) = ((fun _ => ()) <$> x) >>= fun _ => y := fun x y => by
       rw [bind_map_left]
-    simp only [Xmss.ofFnInOrder, simulateQ_bind, simulateQ_pure, map_bind, map_pure]
+    simp only [HashSig.ofFnInOrder, simulateQ_bind, simulateQ_pure, map_bind, map_pure]
     rw [e (simulateQ so (f 0)), h 0, ← e, bind_pure_unit_eq_map, bind_pure_unit_eq_map, ih]
 
 end Loops
@@ -156,7 +156,7 @@ theorem chainStarts_labTriple (P : PublicParam) (key : GraphKey) :
 
 /-- The lab touch of the starts of a key's chains: each pair in the honest order. -/
 noncomputable def touchStarts (P : PublicParam) (key : GraphKey) : OracleComp LabWorld Unit := do
-  let _ ← Xmss.ofFnInOrder (V / 2) fun j => touchDerivation (pairInput P key j)
+  let _ ← HashSig.ofFnInOrder (V / 2) fun j => touchDerivation (pairInput P key j)
   pure ()
 
 /-- In the eager game, touching the starts leaves the state as deriving them does. -/
@@ -176,7 +176,7 @@ theorem simulateQ_eagerImpl_touchStarts (P : PublicParam) (key : GraphKey) :
 /-- The lab leaf of a key: touch the starts, run each lab chain to its end, read the leaf. -/
 noncomputable def labOtsLeaf (P : PublicParam) (key : GraphKey) : OracleComp LabWorld Digest := do
   touchStarts P key
-  let _ ← Xmss.ofFnInOrder V fun i => labChain P key i (CHAIN_LENGTH - 1)
+  let _ ← HashSig.ofFnInOrder V fun i => labChain P key i (CHAIN_LENGTH - 1)
   readNode (.otsLeaf key)
 
 /-- **A key's leaf.**
@@ -190,7 +190,7 @@ theorem otsPublicLeaf_labTriple (P : PublicParam) (key : GraphKey) :
   have hlab : simulateQ (graph P).eagerImpl (labOtsLeaf P key) =
       simulateQ (graph P).eagerImpl (do
         let _ ← chainStarts P labPrf key.toOtsKey
-        let _ ← Xmss.ofFnInOrder V fun i => labChain P key i (CHAIN_LENGTH - 1)
+        let _ ← HashSig.ofFnInOrder V fun i => labChain P key i (CHAIN_LENGTH - 1)
         readNode (.otsLeaf key)) := by
     simp only [labOtsLeaf, simulateQ_bind, simulateQ_eagerImpl_touchStarts, bind_map_left]
   refine QueryImpl.EqDistTriple.of_simulateQ_eq_right ?_ hlab.symm

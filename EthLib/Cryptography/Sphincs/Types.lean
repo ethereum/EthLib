@@ -1,7 +1,8 @@
 module
 
 public import EthLib.Cryptography.Sphincs.Constants
-public import EthLib.Cryptography.Xmss.Types
+public import EthLib.Base.LittleEndian
+public import EthLib.Cryptography.HashSig
 
 /-!
 # leanSPHINCS types
@@ -12,7 +13,7 @@ Fixed-size byte objects, with the length carried in the type, and the layers of 
 - Sizes stop being side conditions dragged through proofs.
 - The types are abbreviations, so equal-length objects stay interchangeable.
 
-The byte conversions are leanXMSS's: both schemes read and write integers little-endian.
+Integers are read and written little-endian, with the shared conversions of Base.
 -/
 
 @[expose] public section
@@ -21,10 +22,10 @@ namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
 
-/-! ## Byte conversions and ordered vectors shared with leanXMSS -/
+/-! ## Byte conversions and ordered vectors -/
 
-export EthLib.Cryptography.Xmss
-  (uintToBytes bytesToUint packBytes readBytes unpackBytes? ofFnInOrder)
+export EthLib.Base (uintToBytes bytesToUint packBytes readBytes)
+export EthLib.Cryptography.HashSig (unpackBytes? ofFnInOrder)
 
 /-! ## Objects -/
 

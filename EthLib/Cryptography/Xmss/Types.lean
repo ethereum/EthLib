@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Bytes
 public import EthLib.Base.LittleEndian
+public import EthLib.Cryptography.HashSig
 public import EthLib.Cryptography.Xmss.Constants
 
 /-!
@@ -83,27 +84,12 @@ export EthLib.Base (uintToBytes bytesToUint)
 /-! ## Crossing to and from untyped bytes -/
 
 export EthLib.Base (packBytes readBytes)
+export EthLib.Cryptography.HashSig (unpackBytes?)
 
 /-- The bytes of a list of digests, in order. -/
 def packDigests {n : Nat} (ds : Vector Digest n) : ByteArray :=
   -- Digest `i` lands at bytes `16i` to `16i + 15`.
   packBytes ds.flatten
-
-/-- Read a fixed-size object out of a buffer at an offset.
-
-Returns nothing when the buffer has no room for the object.
-
-Never pads and never truncates.
-
-Examples, with `b = ByteArray.mk #[10, 20, 30, 40]`:
-* `unpackBytes? 4 b = some #v[10, 20, 30, 40]`
-* `unpackBytes? 2 b 1 = some #v[20, 30]`
-* `unpackBytes? 2 b 3 = none`
--/
-def unpackBytes? (n : Nat) (b : ByteArray) (offset : Nat := 0) :
-    Option (Vector UInt8 n) :=
-  -- The guard is the whole validation: a buffer without room is rejected.
-  if h : offset + n ≤ b.size then some (readBytes b offset n h) else none
 
 /-- Cut a byte field into consecutive 16-byte digests. -/
 def splitDigests {n : Nat} (bytes : Vector UInt8 (n * DIGEST_LEN)) : Vector Digest n :=
@@ -117,18 +103,6 @@ def splitDigests {n : Nat} (bytes : Vector UInt8 (n * DIGEST_LEN)) : Vector Dige
 
 /-! ## Computing a vector in order -/
 
-/-- Run one computation per index, index 0 first, and collect the results.
-
-The order matters when each computation calls the hash.
-
-It fixes the sequence of hash calls, which a proof in the random oracle model counts. -/
-def ofFnInOrder {m : Type → Type} [Monad m] {α : Type} :
-    (n : Nat) → (Fin n → m α) → m (Vector α n)
-  | 0, _ => pure #v[]
-  -- Structural recursion, so the kernel can evaluate it.
-  | n + 1, f => do
-    let head ← f 0
-    let tail ← ofFnInOrder n fun i => f i.succ
-    return (#v[head] ++ tail).cast (Nat.add_comm 1 n)
+export EthLib.Cryptography.HashSig (ofFnInOrder)
 
 end EthLib.Cryptography.Xmss

@@ -153,7 +153,7 @@ theorem forsNode_labTriple (P : PublicParam) (idx : Fin (2 ^ HEIGHT)) (kappa : F
 /-- The lab FORS key of an instance: the lab level-9 nodes of every tree, tree 0 first. -/
 noncomputable def labForsKey (P : PublicParam) (idx : Fin (2 ^ HEIGHT)) :
     OracleComp LabWorld ForsKey :=
-  Xmss.ofFnInOrder FORS_TREES fun kappa => do
+  HashSig.ofFnInOrder FORS_TREES fun kappa => do
     let left ← labForsNode P idx kappa (FORS_HEIGHT - 1) 0
     let right ← labForsNode P idx kappa (FORS_HEIGHT - 1) 1
     return (left, right)
@@ -279,7 +279,7 @@ The honest openings of every tree and the lab openings have one law of output an
 theorem forsSign_labTriple (P : PublicParam) (idx : Fin (2 ^ HEIGHT))
     (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES) :
     LabTriple P (fun _ => True) (forsSign labH P labPrf idx.val leaves)
-      (Xmss.ofFnInOrder FORS_TREES fun kappa => labTreeOpen P idx kappa leaves[kappa])
+      (HashSig.ofFnInOrder FORS_TREES fun kappa => labTreeOpen P idx kappa leaves[kappa])
       fun _ _ => True :=
   (ofFnInOrder_eqDistTriple (fun _ => True) (fun _ _ _ => True) (fun _ _ _ _ _ h => h)
     fun kappa => (treeOpen_labTriple P idx kappa leaves[kappa]).mono (fun _ h => h)
