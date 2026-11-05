@@ -159,6 +159,7 @@ extern PyObject* RLPX_ERROR;
 extern PyObject* DEVP2P_ERROR;
 extern PyObject* DISCV4_ERROR;
 extern PyObject* FORK_ID_ERROR;
+extern PyObject* ETH_WIRE_ERROR;
 extern PyObject* TRANSACTION_ERROR;
 extern PyObject* VRF_ERROR;
 extern PyObject* TRIE_ERROR;
@@ -351,6 +352,8 @@ PyObject* py_discv4_record_signed_by                      (PyObject* self, PyObj
 PyObject* py_fork_id                                      (PyObject* self, PyObject* args);
 PyObject* py_mainnet_fork_id                              (PyObject* self, PyObject* args);
 PyObject* py_fork_id_validate                             (PyObject* self, PyObject* args);
+PyObject* py_eth_message_decode                           (PyObject* self, PyObject* args);
+PyObject* py_eth_check_status                             (PyObject* self, PyObject* args);
 PyObject* py_receipt_reencode                             (PyObject* self, PyObject* args);
 PyObject* py_receipt_logs_bloom                           (PyObject* self, PyObject* args);
 PyObject* py_tx_type                                      (PyObject* self, PyObject* args);

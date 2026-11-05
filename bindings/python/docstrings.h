@@ -422,6 +422,12 @@
 #define DOC_fork_id_validate \
   "Whether a node at a head accepts the fork identifier of a peer, by the validation rules of [EIP-2124](https://eips.ethereum.org/EIPS/eip-2124#validation-rules)."
 
+#define DOC_eth_message_decode \
+  "The canonical data of the message with the ID `id` and the data `data`, on a version."
+
+#define DOC_eth_check_status \
+  "Whether a node accepts the Status of a peer, on the negotiated version `version`."
+
 #define DOC_snappy_decompress \
   "The bytes a Snappy block decompresses to, or why it is not a valid block."
 

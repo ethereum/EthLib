@@ -1,0 +1,131 @@
+module
+
+public import EthLib.Execution.Network.Message
+public import EthLib.Networking.Proofs.Devp2p.ForkId
+
+/-!
+# Proofs: Status and BlockRangeUpdate
+
+Each message reads back from its RLP item on the versions that use its form.
+
+The decoder of eth/68 rejects the Status of eth/69, and the decoder of each later version rejects
+the Status of eth/68.
+
+eth/68 rejects BlockRangeUpdate.
+
+A node accepts a Status that carries its own version, its own fork identifier and a valid range.
+-/
+
+@[expose] public section
+
+namespace EthLib.Execution.Network
+
+open EthLib.Base
+open EthLib.Networking.Devp2p
+open EthLib.Serialization.Rlp
+
+instance : LawfulCodec BlockRange where
+  ofItem_toItem r := by
+    show (Codec.ofItem (.list r.items) : Except RlpError BlockRange) = _
+    simp [Codec.ofItem, BlockRange.items, Item.fields, Item.toItems, Item.field_toItem, bind,
+      Except.bind, pure, Except.pure]
+  toItem_of_ofItem {item r} h := by
+    obtain ⟨items, rfl, hlen, hrest⟩ := Item.fields_bind_eq_ok.mp h
+    rcases items with _ | ⟨a, _ | ⟨b, _ | ⟨c, _ | ⟨_, _⟩⟩⟩⟩ <;> simp at hlen
+    obtain ⟨x, rfl, h1⟩ := Item.field_bind_eq_ok.mp hrest
+    obtain ⟨y, rfl, h2⟩ := Item.field_bind_eq_ok.mp h1
+    obtain ⟨z, rfl, h3⟩ := Item.field_bind_eq_ok.mp h2
+    cases h3
+    rfl
+
+namespace Status
+
+/-- The Status of eth/68 reads back on eth/68. -/
+theorem ofItem_eth68 (v n td : Nat) (h g : Hash32) (id : ForkId) :
+    ofItem .eth68 (eth68 v n td h g id).toItem = .ok (eth68 v n td h g id) := by
+  simp [ofItem, toItem, Item.fields, Item.toItems, Item.field_toItem, bind, Except.bind, pure,
+    Except.pure]
+
+/-- The Status of eth/69 reads back on every version from eth/69 on. -/
+theorem ofItem_eth69 {version : EthVersion} (hv : version ≠ .eth68) (v n : Nat) (g : Hash32)
+    (id : ForkId) (r : BlockRange) :
+    ofItem version (eth69 v n g id r).toItem = .ok (eth69 v n g id r) := by
+  simp [ofItem, toItem, hv, BlockRange.items, Item.fields, Item.toItems, Item.field_toItem, bind,
+    Except.bind, pure, Except.pure]
+
+/-- eth/68 rejects the Status of eth/69, which has seven fields. -/
+theorem ofItem_eth68_of_eth69 (v n : Nat) (g : Hash32) (id : ForkId) (r : BlockRange) :
+    ofItem .eth68 (eth69 v n g id r).toItem = .error (.wrongFieldCount 6 7) := by
+  simp [ofItem, toItem, BlockRange.items, Item.fields, Item.toItems, bind, Except.bind]
+
+/-- Every version from eth/69 on rejects the Status of eth/68, which has six fields. -/
+theorem ofItem_of_eth68 {version : EthVersion} (hv : version ≠ .eth68) (v n td : Nat)
+    (h g : Hash32) (id : ForkId) :
+    ofItem version (eth68 v n td h g id).toItem = .error (.wrongFieldCount 7 6) := by
+  simp [ofItem, toItem, hv, Item.fields, Item.toItems, bind, Except.bind]
+
+end Status
+
+/-- A message has the form of a version: Status in the form of that version, and
+BlockRangeUpdate from eth/69 on. -/
+def Message.FitsVersion (version : EthVersion) : Message → Prop
+  | .status (.eth68 ..) => version = .eth68
+  | .status (.eth69 ..) => version ≠ .eth68
+  | .blockRangeUpdate _ => EthVersion.eth69 ≤ version
+
+/-- A message of the form of a version reads back from its ID and its item on that version. -/
+theorem Message.ofItem_toItem {version : EthVersion} {m : Message}
+    (hm : m.FitsVersion version) : Message.ofItem version m.id m.toItem = .ok m := by
+  cases m with
+  | status s =>
+    cases s with
+    | eth68 v n td h g id =>
+      subst hm
+      simp [ofItem, Message.id, toItem, Status.ofItem_eth68, Functor.map, Except.map,
+        Except.mapError]
+    | eth69 v n g id r =>
+      simp [ofItem, Message.id, toItem, Status.ofItem_eth69 hm, Functor.map, Except.map,
+        Except.mapError]
+  | blockRangeUpdate r =>
+    have hm : EthVersion.eth69 ≤ version := hm
+    simp [ofItem, Message.id, toItem, hm, STATUS_ID, BLOCK_RANGE_UPDATE_ID,
+      LawfulCodec.ofItem_toItem, Functor.map, Except.map, Except.mapError]
+
+/-- eth/68 rejects BlockRangeUpdate, which eth/69 adds. -/
+theorem Message.ofItem_blockRangeUpdate_eth68 (item : Item) :
+    Message.ofItem .eth68 BLOCK_RANGE_UPDATE_ID item
+      = .error (.unknownId BLOCK_RANGE_UPDATE_ID) := by
+  have : ¬ EthVersion.eth69 ≤ .eth68 := by decide
+  simp [ofItem, STATUS_ID, BLOCK_RANGE_UPDATE_ID, this]
+
+/-- The multiplexing of RLPx gives an eth capability the message count of its version. -/
+theorem ethLength_capability (v : EthVersion) : ethLength v.capability = v.messageCount := by
+  cases v <;> rfl
+
+/-- Two errors with one code come from one constructor. -/
+theorem StatusError.code_injective (e₁ e₂ : StatusError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [StatusError.code] at h; exact absurd h (by decide))
+
+/-- Two errors with one code come from one constructor. -/
+theorem EthError.code_injective (e₁ e₂ : EthError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [EthError.code] at h; exact absurd h (by decide))
+
+/--
+A node accepts a Status from eth/69 on that carries the negotiated version, the node's own fork
+identifier and a valid range.
+
+The forks of the node must fit rule 1a, and its head must be a real block.
+-/
+theorem checkStatus_own {version : EthVersion} {s : Schedule} {number timestamp : Nat}
+    (hs : s.Separated) (hn : number ≤ TIMESTAMP_THRESHOLD) (networkId : Nat) (genesis : Hash32)
+    {r : BlockRange} (hr : r.Valid) :
+    checkStatus version s number timestamp
+      (.eth69 version.number networkId genesis (s.forkId number timestamp) r) = .ok () := by
+  simp [checkStatus, Status.version, Status.forkId, s.validate_forkId_self number timestamp hs hn,
+    hr, Except.mapError, bind, Except.bind, pure, Except.pure]
+
+end EthLib.Execution.Network
