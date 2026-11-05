@@ -4,6 +4,7 @@ public import EthLib.Consensus.Exports.Ssz
 public import EthLib.Consensus.PayloadTimeliness
 public import EthLib.Consensus.Proposers
 public import EthLib.Consensus.Transition.Block
+public import EthLib.Consensus.Transition.BuilderPayments
 public import EthLib.Consensus.Transition.BuilderRequests
 public import EthLib.Consensus.Transition.Payload
 public import EthLib.Consensus.Transition.Upgrade
@@ -95,6 +96,10 @@ def runEpochStep {preset : Preset} {fork : Fork} (handler : String)
   | "ptc_window" =>
     if gloas : .glamsterdam ≤ fork then runTransition (liftAccessor (processPtcWindow state gloas))
     else throw (0, s!"no epoch step ptc_window at {fork.name}")
+  | "builder_pending_payments" =>
+    if gloas : .glamsterdam ≤ fork then
+      runTransition (liftAccessor (processBuilderPendingPayments state gloas))
+    else throw (0, s!"no epoch step builder_pending_payments at {fork.name}")
   | "proposer_lookahead" =>
     if fulu : .fusaka ≤ fork then
       runTransition (liftAccessor (processProposerLookahead state fulu))

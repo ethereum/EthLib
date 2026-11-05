@@ -41,6 +41,7 @@ public import EthLib.Consensus.Signing
 public import EthLib.Consensus.Time
 public import EthLib.Consensus.Transition.Basic
 public import EthLib.Consensus.Transition.Block
+public import EthLib.Consensus.Transition.BuilderPayments
 public import EthLib.Consensus.Transition.BuilderRequests
 public import EthLib.Consensus.Transition.Payload
 public import EthLib.Consensus.Transition.Upgrade
