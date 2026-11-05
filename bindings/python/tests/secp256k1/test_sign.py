@@ -48,7 +48,7 @@ def test_sign_verifies() -> None:
 @pytest.mark.parametrize("case", DATA["invalid"]["sign"], ids=lambda c: c["description"])
 def test_sign_rejects_key(case: dict) -> None:
     # A zero key, and every key not below n.
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="private key is zero|not below the group order n"):
         secp256k1.sign(bytes.fromhex(case["d"]), bytes.fromhex(case["m"]))
 
 

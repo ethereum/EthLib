@@ -226,7 +226,7 @@ def test_raw_lengths() -> None:
     # The extension takes whole words and whole ranges, so a shorter input is rejected.
     from ethlib.cryptography import _native
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="each operand must be 32 bytes"):
         _native.evm_word_op(0x01, b"\x01", bytes(32), bytes(32))
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="the ranges must be a whole number of 64-byte pairs"):
         _native.evm_extend_memory_cost(b"\x00", bytes(63))

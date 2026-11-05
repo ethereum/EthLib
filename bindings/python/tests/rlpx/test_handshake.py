@@ -80,7 +80,7 @@ def test_round_trip(padding: bytes) -> None:
 def test_changed_auth_rejected() -> None:
     auth = bytearray(AUTH_2)
     auth[100] ^= 1
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="tag does not match"):
         rlpx.recipient_secrets(*KEYS_B, bytes(auth), ACK_2, b"")
 
 

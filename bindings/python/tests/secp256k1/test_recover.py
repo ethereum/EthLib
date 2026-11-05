@@ -57,5 +57,5 @@ def test_recover(tc_id, public_key, msg_hash, signature, valid) -> None:
 
 def test_recovery_id_out_of_range() -> None:
     _, _, msg_hash, signature, _ = VALID[0]
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="bad recovery id: 2, expected 0 or 1"):
         secp256k1.recover(msg_hash, signature, 2)

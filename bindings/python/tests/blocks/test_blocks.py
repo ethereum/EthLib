@@ -67,7 +67,7 @@ def test_header_rejected_at_other_fork(case) -> None:
     # A London header has one more field than a Frontier header, so each fork rejects the other.
     other = "london" if case["network"] in BEFORE_LONDON else "frontier"
     header = _first_item(bytes.fromhex(case["rlp"]))
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"\.wrongFieldCount\b"):
         blocks.header_hash(other, header)
 
 
@@ -135,12 +135,12 @@ def test_legacy_transaction_in_bytes_from_glamsterdam() -> None:
 def test_trailing_byte_rejected() -> None:
     case = CASES[0]
     block = bytes.fromhex(case["rlp"])
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"\.trailingBytes\b"):
         blocks.reencode(FORK_OF_NETWORK[case["network"]], block + b"\x00")
 
 
 def test_unknown_fork_rejected() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="no fork named prague"):
         blocks.reencode("prague", bytes.fromhex(CASES[0]["rlp"]))
 
 

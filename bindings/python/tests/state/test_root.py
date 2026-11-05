@@ -128,16 +128,19 @@ def test_rejects_repeated_address() -> None:
         state_root(rlp_encode([account, account]))
 
 
-@pytest.mark.parametrize("state", [
-    b"",
-    rlp_encode(b"\x01\x02"),
-    rlp_encode([[ADDRESS_A, 0, 0, b""]]),
-    rlp_encode([[ADDRESS_A[:19], 0, 0, b"", []]]),
-    rlp_encode([[ADDRESS_A, 0, 2**256, b"", []]]),
-    rlp_encode([[ADDRESS_A, 0, 0, b"", [[b"\x03", 7]]]]),
+ACCOUNT_ERROR = "an account is not a list of address, nonce, balance, code and storage"
+
+
+@pytest.mark.parametrize("state, error", [
+    (b"", "state is not one RLP item"),
+    (rlp_encode(b"\x01\x02"), "state is not an RLP list"),
+    (rlp_encode([[ADDRESS_A, 0, 0, b""]]), ACCOUNT_ERROR),
+    (rlp_encode([[ADDRESS_A[:19], 0, 0, b"", []]]), ACCOUNT_ERROR),
+    (rlp_encode([[ADDRESS_A, 0, 2**256, b"", []]]), ACCOUNT_ERROR),
+    (rlp_encode([[ADDRESS_A, 0, 0, b"", [[b"\x03", 7]]]]), ACCOUNT_ERROR),
 ])
-def test_rejects_malformed_state(state: bytes) -> None:
-    with pytest.raises(ValueError):
+def test_rejects_malformed_state(state: bytes, error: str) -> None:
+    with pytest.raises(ValueError, match=error):
         state_root(state)
 
 

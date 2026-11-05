@@ -141,7 +141,7 @@ def test_vector(network: str, tx: bytes, outcome: dict):
 
 def test_unknown_fork():
     """A fork name that is not a case of the fork type raises ValueError."""
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="no fork named notAFork"):
         transactions.tx_type("notAFork", b"\xc0")
 
 

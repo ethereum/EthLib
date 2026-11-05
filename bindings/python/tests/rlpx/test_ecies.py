@@ -72,12 +72,12 @@ def test_ack_eip8(packet: bytes, version: int, count: int) -> None:
 
 
 def test_wrong_key_fails() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="tag does not match"):
         rlpx.ecies_decrypt(STATIC_KEY_A, b"", AUTH_1)
 
 
 def test_wrong_shared_data_fails() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="tag does not match"):
         rlpx.ecies_decrypt(STATIC_KEY_B, b"\x01\xb4", AUTH_2[2:])
 
 
@@ -98,15 +98,15 @@ def test_round_trip(message: bytes) -> None:
 def test_changed_byte_fails(position: int) -> None:
     ciphertext = bytearray(rlpx.ecies_encrypt(RECIPIENT, EPHEMERAL_KEY_A, IV, b"", b"a message"))
     ciphertext[position] ^= 1
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="bad ephemeral public key|tag does not match"):
         rlpx.ecies_decrypt(STATIC_KEY_B, b"", bytes(ciphertext))
 
 
 def test_zero_ephemeral_key_rejected() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="the point at infinity is not a public key"):
         rlpx.ecies_encrypt(RECIPIENT, bytes(32), IV, b"", b"m")
 
 
 def test_short_ciphertext_rejected() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="ciphertext has 112 bytes, fewer than 113"):
         rlpx.ecies_decrypt(STATIC_KEY_B, b"", AUTH_1[:112])

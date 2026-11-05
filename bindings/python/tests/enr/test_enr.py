@@ -85,12 +85,12 @@ def test_missing_id_rejected() -> None:
 
 def test_too_large_rejected() -> None:
     record = _record(PAIRS)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="record has 301 bytes, more than 300"):
         enr.seq(record + b"\x00" * (enr.MAX_RECORD_SIZE + 1 - len(record)))
 
 
 def test_text_without_prefix_rejected() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="text does not start with enr:"):
         enr.from_text(TEXT[len("enr:"):])
 
 
@@ -102,5 +102,5 @@ def test_nonzero_pad_bits_rejected() -> None:
 
 
 def test_padded_text_rejected() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="text is not unpadded URL-safe base64"):
         enr.from_text(TEXT + "=")
