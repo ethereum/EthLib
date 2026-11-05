@@ -106,6 +106,8 @@ def validatorIndexOfPubkey (state : BeaconState preset fork) (pubkey : BLSPubkey
 
 The members whose bit is set must sign the root of the block at the slot before the state's.
 
+At slot 0 there is no earlier block root to read, so the step fails.
+
 The signature is under the sync committee domain, at the epoch of that slot.
 
 Each member that signed earns its reward, and the proposer its share, in committee order.
