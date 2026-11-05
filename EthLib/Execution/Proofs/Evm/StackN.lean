@@ -137,8 +137,7 @@ theorem swapnStep_perm {evm after : Evm fork Meter} (h : swapnStep evm = .ok aft
     after.stack.val.Perm evm.stack.val := by
   obtain ⟨paid, h1, h⟩ := Base.bind_ok_iff.mp h
   have hstack : paid.stack = evm.stack := by
-    simp only [chargeGas, bind, Except.bind] at h1
-    split at h1 <;> cases h1
+    obtain ⟨_, -, rfl⟩ := chargeGas_eq_ok_iff_charge.mp h1
     rfl
   split at h
   · split at h
@@ -153,8 +152,7 @@ theorem exchangeStep_perm {evm after : Evm fork Meter} (h : exchangeStep evm = .
     after.stack.val.Perm evm.stack.val := by
   obtain ⟨paid, h1, h⟩ := Base.bind_ok_iff.mp h
   have hstack : paid.stack = evm.stack := by
-    simp only [chargeGas, bind, Except.bind] at h1
-    split at h1 <;> cases h1
+    obtain ⟨_, -, rfl⟩ := chargeGas_eq_ok_iff_charge.mp h1
     rfl
   split at h
   · split at h
@@ -181,8 +179,7 @@ theorem dupnStep_stack {evm after : Evm fork Meter} {n : Nat}
     ∃ x, evm.stack.val[n - 1]? = some x ∧ after.stack.val = x :: evm.stack.val := by
   obtain ⟨paid, h1, h⟩ := Base.bind_ok_iff.mp h
   have hpaid : paid = { evm with gas := paid.gas } := by
-    simp only [chargeGas, bind, Except.bind] at h1
-    split at h1 <;> cases h1
+    obtain ⟨_, -, rfl⟩ := chargeGas_eq_ok_iff_charge.mp h1
     rfl
   rw [hpaid] at h
   simp only [hn] at h

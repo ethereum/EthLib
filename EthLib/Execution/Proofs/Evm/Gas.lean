@@ -12,6 +12,8 @@ The growth of memory pays the price of the new size minus the price of the old s
 
 A range of size 0 never grows memory, and nothing is paid when no range grows it.
 
+The rounded size and the growth cover every range that is not empty.
+
 A gas budget `g` bounds the words of memory by `w * w ≤ 512 * g`.
 
 A call passes on at most the gas it has, and at least 63 64ths of it.
@@ -95,6 +97,28 @@ theorem extendMemory_cost (currentSize : Nat) (extensions : List (U256 × U256))
         have further := memoryGasCost_mono (Nat.le_add_right after rest)
         rw [show ceil32 currentSize + (after - ceil32 currentSize + rest) = after + rest by omega]
         omega
+
+/-- The rounded size and the growth for a list of ranges cover every range that is not empty. -/
+theorem le_ceil32_add_expandBy (currentSize : Nat) (ranges : List (U256 × U256)) :
+    ∀ r ∈ ranges, r.2 ≠ 0 →
+      r.1.toNat + r.2.toNat ≤ ceil32 currentSize + (extendMemory currentSize ranges).expandBy := by
+  induction ranges generalizing currentSize with
+  | nil => simp
+  | cons p ranges ih =>
+    obtain ⟨start, size⟩ := p
+    intro r hr hnz
+    have hle := le_ceil32 (start.toNat + size.toNat)
+    have hfix := ceil32_of_mod (ceil32_mod (start.toNat + size.toNat))
+    unfold extendMemory
+    rcases List.mem_cons.mp hr with rfl | hr
+    · simp only [hnz, ↓reduceIte]
+      split <;> (try dsimp only) <;> omega
+    · have h1 := ih currentSize r hr hnz
+      have h2 := ih (ceil32 (start.toNat + size.toNat)) r hr hnz
+      split
+      · exact h1
+      · dsimp only
+        split <;> (try dsimp only) <;> omega
 
 /-- A call passes on at most the gas it has. -/
 theorem maxMessageCallGas_le (gas : Nat) : maxMessageCallGas gas ≤ gas := by

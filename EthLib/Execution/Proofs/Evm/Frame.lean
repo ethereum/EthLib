@@ -1,9 +1,12 @@
 module
 
+public import EthLib.Base.Except
 public import EthLib.Execution.Evm.Frame
 
 /-!
 # Proofs: `Evm.Frame`
+
+A charge that succeeds changes only the gas.
 
 With one counter of gas, a charge succeeds exactly when the frame has the gas.
 
@@ -28,21 +31,29 @@ theorem chargeGas_eq_error_iff {evm : Evm fork Nat} {amount : Nat} {e : EvmError
     intro
     omega
 
+/-- A charge succeeds exactly when the meter pays it, and then it changes only the gas. -/
+theorem chargeGas_eq_ok_iff_charge {Meter : Type} [GasMeter Meter] {evm after : Evm fork Meter}
+    {amount : Nat} :
+    chargeGas evm amount = .ok after ↔
+      ∃ gas, GasMeter.charge evm.gas amount = .ok gas ∧ after = { evm with gas } := by
+  simp only [chargeGas, Base.bind_ok_iff, pure, Except.pure, Except.ok.injEq]
+  simp only [eq_comm]
+
 /-- With one counter of gas, a charge within the gas left takes it from the gas left. -/
 theorem chargeGas_eq_ok_iff {evm after : Evm fork Nat} {amount : Nat} :
     chargeGas evm amount = .ok after ↔
       amount ≤ evm.gas ∧ after = { evm with gas := evm.gas - amount } := by
-  simp only [chargeGas, GasMeter.charge]
+  rw [chargeGas_eq_ok_iff_charge]
+  simp only [GasMeter.charge]
   split
-  · simp only [bind, Except.bind, reduceCtorEq, false_iff, not_and]
+  · simp only [reduceCtorEq, false_and, exists_false, false_iff, not_and]
     intro
     omega
-  · simp only [bind, Except.bind, pure, Except.pure, Except.ok.injEq]
+  · simp only [Except.ok.injEq, exists_eq_left']
     constructor
-    · rintro rfl
-      exact ⟨by omega, rfl⟩
-    · rintro ⟨-, rfl⟩
-      rfl
+    · intro h
+      exact ⟨by omega, h⟩
+    · exact And.right
 
 /-- From Glamsterdam, a call whose message never runs leaves the meter of the caller as before.
 

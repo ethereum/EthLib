@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.JumpDest
+public import EthLib.Execution.Proofs.Evm.Op
 
 /-!
 # Proofs: `Evm.JumpDest`
@@ -51,7 +52,7 @@ theorem not_mem_of_lt_nextOpcode {code : ByteArray} {fuel pc p q : Nat}
   | succ fuel ih =>
     unfold opcodePositionsFrom at hp ⊢
     split at hp
-    · rename_i hpc
+    next hpc =>
       simp only [hpc, ite_true, List.mem_cons, not_or]
       rcases List.mem_cons.mp hp with rfl | hp
       · refine ⟨by omega, fun hq => ?_⟩
@@ -77,13 +78,13 @@ theorem getD_foldl_mark {code : ByteArray} (positions : List Nat) (flags : Array
     have hpc := hlt pc List.mem_cons_self
     have hrest : ∀ x ∈ rest, x < code.size := fun x hx => hlt x (List.mem_cons_of_mem _ hx)
     split
-    · rename_i hj
+    next hj =>
       rw [ih _ (by simp [hsize]) hrest]
       by_cases hi : i = pc
       · subst hi
         simp [Array.getD_eq_getD_getElem?, hj, hsize, hpc]
       · simp [Array.getD_eq_getD_getElem?, Ne.symm hi, hi]
-    · rename_i hj
+    next hj =>
       rw [ih _ hsize hrest]
       by_cases hi : i = pc
       · subst hi
@@ -137,22 +138,23 @@ theorem BoundaryFrom.bounds {code : ByteArray} {start pc : Nat} (h : BoundaryFro
     exact ⟨by omega, ih.2⟩
 
 /-- Each position that the scan lists is a boundary. -/
-theorem boundaryFrom_of_mem {code : ByteArray} {fuel start pc : Nat}
+theorem boundaryFrom_of_mem_opcodePositionsFrom {code : ByteArray} {fuel start pc : Nat}
     (h : pc ∈ opcodePositionsFrom code fuel start) : BoundaryFrom code start pc := by
   induction fuel generalizing start with
   | zero => simp [opcodePositionsFrom] at h
   | succ fuel ih =>
     unfold opcodePositionsFrom at h
     split at h
-    · rename_i hs
+    next hs =>
       rcases List.mem_cons.mp h with rfl | h
       · exact .here hs
       · exact .step hs (ih h)
     · simp at h
 
 /-- The scan lists each boundary that lies fewer than `fuel` bytes past the start. -/
-theorem mem_of_boundaryFrom {code : ByteArray} {start pc : Nat} (h : BoundaryFrom code start pc)
-    {fuel : Nat} (hfuel : pc - start < fuel) : pc ∈ opcodePositionsFrom code fuel start := by
+theorem mem_opcodePositionsFrom_of_boundaryFrom {code : ByteArray} {start pc : Nat}
+    (h : BoundaryFrom code start pc) {fuel : Nat} (hfuel : pc - start < fuel) :
+    pc ∈ opcodePositionsFrom code fuel start := by
   induction h generalizing fuel with
   | here hs =>
     obtain ⟨fuel, rfl⟩ : ∃ f, fuel = f + 1 := ⟨fuel - 1, by omega⟩
@@ -169,14 +171,14 @@ theorem mem_of_boundaryFrom {code : ByteArray} {start pc : Nat} (h : BoundaryFro
 theorem mem_opcodePositions_iff {code : ByteArray} {pc : Nat} :
     pc ∈ opcodePositions code ↔ BoundaryFrom code 0 pc := by
   constructor
-  · exact boundaryFrom_of_mem
+  · exact boundaryFrom_of_mem_opcodePositionsFrom
   · intro h
-    exact mem_of_boundaryFrom h (by have := h.bounds; omega)
+    exact mem_opcodePositionsFrom_of_boundaryFrom h (by have := h.bounds; omega)
 
 /-- A position is a valid jump destination exactly when it is a boundary that holds JUMPDEST.
 
 The boundaries start at position 0. -/
-theorem isValidJumpDest_iff_boundary {code : ByteArray} {i : Nat} :
+theorem isValidJumpDest_iff_boundaryFrom {code : ByteArray} {i : Nat} :
     isValidJumpDest (validJumpDestinations code) i = true ↔
       BoundaryFrom code 0 i ∧ byteAt code i = JUMPDEST := by
   rw [isValidJumpDest_iff, mem_opcodePositions_iff]
@@ -192,21 +194,17 @@ theorem nextOpcode_eq (code : ByteArray) (pc : Nat) :
         (byteAt code pc).toNat - 0x5f else 0 := by
   unfold nextOpcode
   generalize byteAt code pc = b
-  have key : ∀ k, k < 256 → (match Op.decode (UInt8.ofNat k) with
-      | some (.push n) => n.val + 1
-      | _ => 1) = 1 + if 0x60 ≤ k ∧ k ≤ 0x7f then k - 0x5f else 0 := by
-    decide +kernel
-  have := key b.toNat b.toNat_lt
-  rw [UInt8.ofNat_toNat] at this
-  have hm : (match Op.decode b with
-      | some (.push n) => pc + n.val + 1
-      | _ => pc + 1) =
-      pc + (match Op.decode b with
-      | some (.push n) => n.val + 1
-      | _ => 1) := by
-    split <;> rfl
-  refine hm.trans ?_
-  rw [this]
-  omega
+  split
+  next n hd =>
+    -- A PUSH decodes only from its own byte.
+    have := congrArg UInt8.toNat (Op.toByte_of_decode hd)
+    simp only [Op.toByte, Nat.toUInt8, UInt8.ofNat_add, UInt8.reduceOfNat, UInt8.toNat_add,
+      UInt8.reduceToNat, UInt8.toNat_ofNat', Nat.reducePow, Nat.add_mod_mod] at this
+    have := n.isLt
+    split <;> omega
+  next hnp =>
+    -- A byte of PUSH1 to PUSH32 decodes to a PUSH.
+    rw [ite_eq_right_of_eq_false _ _ (eq_false fun ⟨h1, h2⟩ =>
+      hnp ⟨b.toNat - 0x5f, by omega⟩ (by simp [Op.decode, show 0x5f ≤ b.toNat by omega, h2]))]
 
 end EthLib.Execution.Evm

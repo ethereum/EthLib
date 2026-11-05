@@ -166,12 +166,8 @@ theorem byteAt_mstoreStep {evm after : Evm fork Meter} {start value : U256} {res
   obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
   simp only [pure, Except.pure, Except.ok.injEq] at h
   subst h
-  obtain ⟨s1, m1, -⟩ := popWord_eq_ok h1
-  obtain ⟨s2, m2, -⟩ := popWord_eq_ok h2
-  rw [hstack] at s1
-  obtain ⟨rfl, hrest⟩ := List.cons.inj s1
-  rw [← hrest] at s2
-  obtain ⟨rfl, -⟩ := List.cons.inj s2
+  obtain ⟨rfl, s1, m1, -⟩ := popWord_of_stack hstack h1
+  obtain ⟨rfl, -, m2, -⟩ := popWord_of_stack s1 h2
   have hmod2 : e2.memory.size % 32 = 0 := by rw [m2, m1]; exact hmod
   have fit := le_size_chargeGasAndMemory hmod2 h3 (start, 32) (List.mem_singleton_self _) (by simp)
   simp only [advance]
@@ -194,12 +190,8 @@ theorem byteAt_mstore8Step {evm after : Evm fork Meter} {start value : U256} {re
   obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
   simp only [pure, Except.pure, Except.ok.injEq] at h
   subst h
-  obtain ⟨s1, m1, -⟩ := popWord_eq_ok h1
-  obtain ⟨s2, m2, -⟩ := popWord_eq_ok h2
-  rw [hstack] at s1
-  obtain ⟨rfl, hrest⟩ := List.cons.inj s1
-  rw [← hrest] at s2
-  obtain ⟨rfl, -⟩ := List.cons.inj s2
+  obtain ⟨rfl, s1, m1, -⟩ := popWord_of_stack hstack h1
+  obtain ⟨rfl, -, m2, -⟩ := popWord_of_stack s1 h2
   have hmod2 : e2.memory.size % 32 = 0 := by rw [m2, m1]; exact hmod
   have fit := le_size_chargeGasAndMemory hmod2 h3 (start, 1) (List.mem_singleton_self _) (by simp)
   have hone : ({ data := #[UInt8.ofNat value.toNat] } : ByteArray).size = 1 := rfl
@@ -207,8 +199,7 @@ theorem byteAt_mstore8Step {evm after : Evm fork Meter} {start value : U256} {re
   rw [byteAt_memoryWrite (by rw [hone]; exact fit), hone]
   by_cases hi : i = start.toNat
   · subst hi
-    simp [byteAt, hone]
-    rfl
+    simp [byteAt, hone, ByteArray.getElem_eq_getElem_data]
   · rw [ite_eq_right_iff.mpr (fun hc => absurd (by omega) hi),
       ite_eq_right_iff.mpr (fun hc => absurd hc hi), byteAt_chargeGasAndMemory h3, m2, m1]
 
@@ -233,15 +224,9 @@ theorem byteAt_mcopyStep {evm after : Evm fork Meter} {destination source length
   obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
   simp only [pure, Except.pure, Except.ok.injEq] at h
   subst h
-  obtain ⟨s1, m1, -⟩ := popWord_eq_ok h1
-  obtain ⟨s2, m2, -⟩ := popWord_eq_ok h2
-  obtain ⟨s3, m3, -⟩ := popWord_eq_ok h3
-  rw [hstack] at s1
-  obtain ⟨rfl, r1⟩ := List.cons.inj s1
-  rw [← r1] at s2
-  obtain ⟨rfl, r2⟩ := List.cons.inj s2
-  rw [← r2] at s3
-  obtain ⟨rfl, -⟩ := List.cons.inj s3
+  obtain ⟨rfl, s1, m1, -⟩ := popWord_of_stack hstack h1
+  obtain ⟨rfl, s2, m2, -⟩ := popWord_of_stack s1 h2
+  obtain ⟨rfl, -, m3, -⟩ := popWord_of_stack s2 h3
   have hmem : ∀ j, byteAt e4.memory j = byteAt evm.memory j := fun j => by
     rw [byteAt_chargeGasAndMemory h4, m3, m2, m1]
   simp only [advance]
@@ -257,8 +242,7 @@ theorem byteAt_mcopyStep {evm after : Evm fork Meter} {destination source length
     have hsize := size_memoryReadBytes fitSource
     rw [byteAt_memoryWrite (by rw [hsize]; exact fitDest), hsize]
     split
-    · rename_i hin
-      rw [byteAt_memoryReadBytes fitSource, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc),
+    · rw [byteAt_memoryReadBytes fitSource, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc),
         hmem]
     · exact hmem i
 
@@ -286,15 +270,9 @@ theorem byteAt_copyToMemory {base : Nat} {data : ByteArray} {evm after : Evm for
   obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
   simp only [pure, Except.pure, Except.ok.injEq] at h
   subst h
-  obtain ⟨s1, m1, -⟩ := popWord_eq_ok h1
-  obtain ⟨s2, m2, -⟩ := popWord_eq_ok h2
-  obtain ⟨s3, m3, -⟩ := popWord_eq_ok h3
-  rw [hstack] at s1
-  obtain ⟨rfl, r1⟩ := List.cons.inj s1
-  rw [← r1] at s2
-  obtain ⟨rfl, r2⟩ := List.cons.inj s2
-  rw [← r2] at s3
-  obtain ⟨rfl, -⟩ := List.cons.inj s3
+  obtain ⟨rfl, s1, m1, -⟩ := popWord_of_stack hstack h1
+  obtain ⟨rfl, s2, m2, -⟩ := popWord_of_stack s1 h2
+  obtain ⟨rfl, -, m3, -⟩ := popWord_of_stack s2 h3
   have hmem : ∀ j, byteAt e4.memory j = byteAt evm.memory j := fun j => by
     rw [byteAt_chargeGasAndMemory h4, m3, m2, m1]
   have hlen : ({ data := (bufferRead data offset.toNat size.toNat).toArray } : ByteArray).size =
@@ -312,8 +290,7 @@ theorem byteAt_copyToMemory {base : Nat} {data : ByteArray} {evm after : Evm for
     simp only at fit
     rw [byteAt_memoryWrite (by rw [hlen]; exact fit), hlen]
     split
-    · rename_i hin
-      rw [byteAt_bufferRead, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc)]
+    · rw [byteAt_bufferRead, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc)]
     · exact hmem i
 
 /-- RETURNDATACOPY sets each byte of its range to the byte of the return data from the offset.
@@ -334,49 +311,37 @@ theorem byteAt_returndatacopyStep {evm after : Evm fork Meter} {start offset siz
   obtain ⟨⟨x, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨y, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨z, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨s1, m1, d1⟩ := popWord_eq_ok h1
-  obtain ⟨s2, m2, d2⟩ := popWord_eq_ok h2
-  obtain ⟨s3, m3, d3⟩ := popWord_eq_ok h3
-  rw [hstack] at s1
-  obtain ⟨rfl, r1⟩ := List.cons.inj s1
-  rw [← r1] at s2
-  obtain ⟨rfl, r2⟩ := List.cons.inj s2
-  rw [← r2] at s3
-  obtain ⟨rfl, -⟩ := List.cons.inj s3
+  obtain ⟨rfl, s1, m1, d1⟩ := popWord_of_stack hstack h1
+  obtain ⟨rfl, s2, m2, d2⟩ := popWord_of_stack s1 h2
+  obtain ⟨rfl, -, m3, d3⟩ := popWord_of_stack s2 h3
   obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-  have hc : e4.memory = e3.memory ∧ e4.returnData = e3.returnData := by
-    unfold chargeGas at h4
-    obtain ⟨gas, -, h4⟩ := Base.bind_ok_iff.mp h4
-    simp only [pure, Except.pure, Except.ok.injEq] at h4
-    subst h4
-    exact ⟨rfl, rfl⟩
+  obtain ⟨_, -, rfl⟩ := chargeGas_eq_ok_iff_charge.mp h4
   split at h
   · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
   · rename_i inside
     simp only [pure, Except.pure, Except.ok.injEq] at h
     subst h
     simp only [advance]
-    have hdata : e4.returnData = evm.returnData := by rw [hc.2, d3, d2, d1]
+    have hdata : e3.returnData = evm.returnData := by rw [d3, d2, d1]
     have hmem : e3.memory = evm.memory := by rw [m3, m2, m1]
     by_cases hz : size = 0
     · subst hz
       have hz0 : (0 : U256).toNat = 0 := rfl
-      rw [show memoryReadBytes e4.returnData offset.toNat (0 : U256).toNat = .empty by
+      rw [show memoryReadBytes e3.returnData offset.toNat (0 : U256).toNat = .empty by
           simp [memoryReadBytes],
         show ∀ m : ByteArray, memoryWrite m start.toNat .empty = m from
           fun m => by simp [memoryWrite]]
-      rw [byteAt_memoryExtend, hc.1, hmem,
+      rw [byteAt_memoryExtend, hmem,
         ite_eq_right_iff.mpr (fun hc => absurd hc.2 (by have := hc.1; omega))]
-    · have hcover := le_ceil32_add_expandBy e4.memory.size [(start, size)] (start, size)
+    · have hcover := le_ceil32_add_expandBy e3.memory.size [(start, size)] (start, size)
         (List.mem_singleton_self _) hz
-      rw [hc.1, hmem, ceil32_of_mod hmod] at hcover
-      have fitData : offset.toNat + size.toNat ≤ e4.returnData.size := Nat.le_of_not_gt inside
+      rw [hmem, ceil32_of_mod hmod] at hcover
+      have fitData : offset.toNat + size.toNat ≤ e3.returnData.size := Nat.le_of_not_gt inside
       have hsize := size_memoryReadBytes fitData
-      rw [byteAt_memoryWrite (by rw [hsize, size_memoryExtend, hc.1, hmem]; exact hcover), hsize]
+      rw [byteAt_memoryWrite (by rw [hsize, size_memoryExtend, hmem]; exact hcover), hsize]
       split
-      · rename_i hin
-        rw [byteAt_memoryReadBytes fitData, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc),
+      · rw [byteAt_memoryReadBytes fitData, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc),
           hdata]
-      · rw [byteAt_memoryExtend, hc.1, hmem]
+      · rw [byteAt_memoryExtend, hmem]
 
 end EthLib.Execution.Evm
