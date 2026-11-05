@@ -166,6 +166,10 @@ class PrecompileError(EthLibError, ValueError):
     """
 
 
+class EngineError(EthLibError, ValueError):
+    """An Engine API method returned a JSON-RPC error, whose code is the negative of this code."""
+
+
 __all__ = [
     "EthLibError",
     "KzgError",
@@ -200,4 +204,5 @@ __all__ = [
     "TrieError",
     "EvmError",
     "FeesError",
+    "EngineError",
 ]

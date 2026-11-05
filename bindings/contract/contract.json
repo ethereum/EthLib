@@ -3580,4 +3580,18 @@
    "errors": [],
    "error_class": null,
    "docstring":
-   "The name of the active fork of mainnet at a block, or no bytes when no fork is active."}]}
+   "The name of the active fork of mainnet at a block, or no bytes when no fork is active."},
+  {"summary":
+   "The payload status of an `engine_newPayload` request, without the parent's state.",
+   "signature": "(config: bytes, request: bytes) -> bytes",
+   "operation": "EthLib.Engine.Exports.newPayloadExport",
+   "method": "engine_new_payload",
+   "errors":
+   [{"type": "EthLib.Engine.EngineError",
+     "codes":
+     [{"constructor": "invalidParams", "code": 32602},
+      {"constructor": "unsupportedFork", "code": 38005},
+      {"constructor": "invalidForkchoiceState", "code": 38002}]}],
+   "error_class": "EngineError",
+   "docstring":
+   "The payload status of an `engine_newPayload` request, without the parent's state."}]}

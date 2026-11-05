@@ -139,6 +139,7 @@ def _make_extension() -> Extension:
         name="ethlib.cryptography._native",
         sources=[
             "bindings/python/module.c",
+            "bindings/python/engine.c",
             "bindings/python/kzg.c",
             "bindings/python/bls.c",
             "bindings/python/xmss.c",
@@ -206,6 +207,7 @@ setup(
         "ethlib.networking.enr",
         "ethlib.state",
         "ethlib.chain",
+        "ethlib.engine",
         "ethlib.consensus",
         "ethlib.networking.reqresp",
         "ethlib.networking.rlpx",

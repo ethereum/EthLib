@@ -521,4 +521,7 @@
 #define DOC_mainnet_active_fork \
   "The name of the active fork of mainnet at a block, or no bytes when no fork is active."
 
+#define DOC_engine_new_payload \
+  "The payload status of an `engine_newPayload` request, without the parent's state."
+
 #endif /* ETHLIB_DOCSTRINGS_H */

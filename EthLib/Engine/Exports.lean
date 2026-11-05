@@ -1,0 +1,15 @@
+module
+
+public import EthLib.Engine.Exports.NewPayload
+
+/-!
+# `EthLib.Engine.Exports`
+
+The C exports of the Engine API, for the Python bindings.
+
+They are compiled by the `Exports` Lake library.
+
+The specification does not import them.
+
+So a Lean project that imports `EthLib` gets no `@[export]` symbol.
+-/

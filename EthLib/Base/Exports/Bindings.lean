@@ -574,7 +574,10 @@ def bindings : List Binding := [
     some "StateError"⟩,
   ⟨"mainnet_active_fork", `EthLib.Base.ChainConfig.Exports.mainnetActiveForkExport,
     "(number: int, timestamp: int) -> bytes",
-    [], none⟩
+    [], none⟩,
+  ⟨"engine_new_payload", `EthLib.Engine.Exports.newPayloadExport,
+    "(config: bytes, request: bytes) -> bytes",
+    [`EthLib.Engine.EngineError], some "EngineError"⟩
 ]
 
 /-- The table as plain data, which the generator reads without the structure.
