@@ -467,6 +467,12 @@
 #define DOC_rlpx_finish \
   "The initiator's secrets for its `auth` and the `ack` it received."
 
+#define DOC_rlpx_write_frames \
+  "The frames of the frame data in the RLP list `frames`, from the start of a direction."
+
+#define DOC_rlpx_read_frames \
+  "The frame data of the frames in `input`, as an RLP list, from the start of a direction."
+
 #define DOC_block_validate_header \
   "Check a header at a fork against its parent at the parent's fork, at every fork."
 

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Exports
-public import EthLib.Networking.Rlpx.Handshake
+public import EthLib.Networking.Rlpx.Frame
 
 /-!
 # `Exports.Rlpx`
@@ -14,7 +14,7 @@ A public key is either SEC 1 encoding.
 
 A key, an iv or a nonce that the export rejects has code 0.
 
-The other errors keep the codes of ECIES, from 1 to 5, or of the handshake, from 101.
+The other errors keep their codes: ECIES from 1 to 5, the handshake from 101, frames from 201.
 
 The secrets of a session come back as 128 bytes: aes-secret, mac-secret, then two digests.
 
@@ -142,5 +142,67 @@ def finishExport (staticKey ephemeralKey nonce auth ack probe : ByteArray) :
     Result ByteArray := do
   let keys ← readKeys staticKey ephemeralKey nonce
   return secretsBytes (← runHandshake (finish keys auth ack)) probe
+
+/-! ## Frames -/
+
+/-- A message for a rejected frame. -/
+def frameMessage : FrameError → String
+  | .tooLarge size => s!"frame data has {size} bytes, more than 2^24 - 1"
+  | .tooShort needed available => s!"input has {available} bytes, fewer than {needed}"
+  | .headerMacMismatch => "header MAC does not match"
+  | .frameMacMismatch => "frame MAC does not match"
+
+/-- Run a fallible frame step, with its error as a code and a message. -/
+def runFrame {α : Type} (act : Except FrameError α) : Result α :=
+  act.mapError fun e => (e.code, frameMessage e)
+
+/-- A 32-byte secret as an AES-256 key, or an error for any other length. -/
+def readSecret (bytes : ByteArray) : Result (Cryptography.Aes.Key .aes256) :=
+  if h : bytes.size = 32 then pure ⟨bytes.data, by simp [h, Cryptography.Aes.KeySize.Nk]⟩
+  else throw (0, s!"bad secret size: {bytes.size}, expected 32")
+
+/-- The state of one direction at its start: the zero counter, and the MAC after `macInit`. -/
+def readFrameState (aesSecret macSecret macInit : ByteArray) : Result FrameState := do
+  return ⟨← readSecret aesSecret, Vector.replicate 16 0, ← readSecret macSecret,
+    Cryptography.Hash.Keccak.Hasher.empty.absorb macInit⟩
+
+/-- The frames of a list of frame data, one after another in one direction. -/
+def writeFrames (st : FrameState) : List ByteArray → Except FrameError ByteArray
+  | [] => .ok .empty
+  | data :: rest => do
+    let (frame, st) ← writeFrame st data
+    return frame ++ (← writeFrames st rest)
+
+/-- The frame data of the frames that fill `input`, one after another in one direction.
+
+Each frame takes at least 32 bytes, so `fuel` frames cover an input of `fuel` bytes. -/
+def readFrames : Nat → FrameState → ByteArray → Except FrameError (List ByteArray)
+  | fuel + 1, st, input =>
+    if input.size = 0 then .ok [] else do
+      let (data, st, rest) ← readFrame st input
+      return data :: (← readFrames fuel st rest)
+  | 0, _, input => if input.size = 0 then .ok [] else .error (.tooShort 32 input.size)
+
+/-- The frames of the frame data in the RLP list `frames`, from the start of a direction.
+
+The direction starts at the zero counter, with its MAC state after the bytes `macInit`. -/
+@[export eth_rlpx_write_frames]
+def writeFramesExport (aesSecret macSecret macInit frames : ByteArray) : Result ByteArray := do
+  let st ← readFrameState aesSecret macSecret macInit
+  let datas ← match Serialization.Rlp.Codec.decode (α := List ByteArray) frames with
+    | .ok datas => pure datas
+    | .error _ => throw (0, "frames is not an RLP list of byte strings")
+  runFrame (writeFrames st datas)
+
+/-- The frame data of the frames in `input`, as an RLP list, from the start of a direction.
+
+The input must hold whole frames only. -/
+@[export eth_rlpx_read_frames]
+def readFramesExport (aesSecret macSecret macInit input : ByteArray) : Result ByteArray := do
+  let st ← readFrameState aesSecret macSecret macInit
+  let datas ← runFrame (readFrames input.size st input)
+  match Serialization.Rlp.Codec.encode datas with
+  | .ok bytes => pure bytes
+  | .error _ => throw (0, "frame data does not fit in RLP")
 
 end EthLib.Networking.Rlpx.Exports

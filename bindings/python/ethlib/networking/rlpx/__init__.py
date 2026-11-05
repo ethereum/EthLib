@@ -1,4 +1,4 @@
-"""The RLPx transport of devp2p: ECIES encryption and the handshake."""
+"""The RLPx transport of devp2p: ECIES encryption, the handshake and frames."""
 
 from ...errors import RlpxError
 
@@ -64,6 +64,16 @@ def finish(
     return _native.rlpx_finish(static_key, ephemeral_key, nonce, auth, ack, probe)
 
 
+def write_frames(aes_secret: bytes, mac_secret: bytes, mac_init: bytes, frames: bytes) -> bytes:
+    """The frames of the RLP list of frame data `frames`, from the start of a direction."""
+    return _native.rlpx_write_frames(aes_secret, mac_secret, mac_init, frames)
+
+
+def read_frames(aes_secret: bytes, mac_secret: bytes, mac_init: bytes, data: bytes) -> bytes:
+    """The frame data of the frames in `data`, as an RLP list, from the start of a direction."""
+    return _native.rlpx_read_frames(aes_secret, mac_secret, mac_init, data)
+
+
 __all__ = [
     "SECRETS_SIZE",
     "RlpxError",
@@ -73,4 +83,6 @@ __all__ = [
     "respond",
     "recipient_secrets",
     "finish",
+    "write_frames",
+    "read_frames",
 ]
