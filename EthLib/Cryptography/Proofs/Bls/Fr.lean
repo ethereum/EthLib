@@ -192,7 +192,7 @@ theorem powNat_succ (a : Fr) (e : Nat) : powNat a (e + 1) = a * powNat a e := by
 /-- Decoding the 32 bytes of an element gives it back. -/
 theorem fromBytesBE_toBytesBE (a : Fr) : fromBytesBE a.toBytesBE = .ok a := by
   unfold fromBytesBE
-  have hs : a.toBytesBE.size = 32 := rfl
+  have hs : a.toBytesBE.size = 32 := Montgomery.toBytesBE_size a
   rw [hs]
   simp only [ne_eq, not_true_eq_false, ↓reduceIte]
   rw [show a.toBytesBE = Montgomery.toBytesBE a from rfl, Montgomery.ofBytesBE_toBytesBE]

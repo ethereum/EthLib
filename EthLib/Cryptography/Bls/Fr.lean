@@ -32,8 +32,10 @@ protected theorem Fr.modulus_pos : 0 < Fr.modulus := by decide
 
 instance : NeZero Fr.modulus := ⟨by decide⟩
 
-/-- The modulus `r` with the constants of its Montgomery arithmetic. -/
-def Fr.params : Montgomery.Modulus where
+/-- The modulus `r` with the constants of its Montgomery arithmetic, on eight limbs.
+
+It is inline, so that the compiler sees its fields as constants at each use. -/
+@[inline] def Fr.params : Montgomery.Modulus 8 where
   p := modulus
   pLimbs := ⟨1, 4294967295, 4294859774, 1404937218, 161601541, 859428872, 698187080, 1944954707⟩
   pinv := 4294967295
