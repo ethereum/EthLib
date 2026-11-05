@@ -68,24 +68,33 @@ theorem legacyRecovery_27 (fork : Fork) : legacyRecovery fork 27 = .ok (none, 0)
 theorem legacyRecovery_28 (fork : Fork) : legacyRecovery fork 28 = .ok (none, 1) := by
   simp [legacyRecovery]
 
-/-- From Spurious Dragon, `v = 35 + 2 c + y` signs the chain `c` with the recovery id `y`. -/
+/-- From Spurious Dragon, `v = 35 + 2 c + y` signs the chain `c` with the recovery id `y`.
+
+The chain is below 2^64. -/
 theorem legacyRecovery_eip155 {fork : Fork} (hFork : fork ≥ .spuriousDragon) (c : Nat)
-    (y : Fin 2) (h : 35 + 2 * c + y.val < 2 ^ 256) :
+    (y : Fin 2) (hc : c < 2 ^ 64) :
     legacyRecovery fork (BitVec.ofNat 256 (35 + 2 * c + y.val)) =
       .ok (some (BitVec.ofNat 256 c), y) := by
-  have hv : (BitVec.ofNat 256 (35 + 2 * c + y.val)).toNat = 35 + 2 * c + y.val := by
-    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h]
   have hy := y.isLt
+  have hv : (BitVec.ofNat 256 (35 + 2 * c + y.val)).toNat = 35 + 2 * c + y.val := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
   have h27 : 35 + 2 * c + y.val ≠ 27 := by omega
   have h28 : 35 + 2 * c + y.val ≠ 28 := by omega
-  have h35 : 35 ≤ 35 + 2 * c + y.val := by omega
-  simp only [legacyRecovery, hv, h27, h28, hFork, h35, ↓reduceIte]
   have hc : (35 + 2 * c + y.val - 35) / 2 = c := by omega
+  have h35 : 35 ≤ 35 + 2 * c + y.val ∧ (35 + 2 * c + y.val - 35) / 2 < 2 ^ 64 := by omega
+  simp only [legacyRecovery, hv, h27, h28, hFork, h35, and_self, ↓reduceIte]
   have hParity : Fin.ofNat 2 ((35 + 2 * c + y.val - 35) % 2) = y := by
     apply Fin.ext
     simp only [Fin.val_ofNat]
     omega
   rw [hc, hParity]
+
+/-- A `v` whose chain is 2^64 or more names no sender. -/
+theorem legacyRecovery_chain_ge {fork : Fork} {v : U256} (h27 : v.toNat ≠ 27)
+    (h28 : v.toNat ≠ 28) (hc : 2 ^ 64 ≤ (v.toNat - 35) / 2) :
+    legacyRecovery fork v = .error .invalidSignature := by
+  have : ¬(35 ≤ v.toNat ∧ (v.toNat - 35) / 2 < 2 ^ 64) := fun h => absurd h.2 (by omega)
+  simp only [legacyRecovery, h27, h28, this, ↓reduceIte, ite_self]
 
 /-- Before Spurious Dragon, a `v` other than 27 and 28 names no sender. -/
 theorem legacyRecovery_pre155 {fork : Fork} (hFork : fork < .spuriousDragon) {v : U256}
