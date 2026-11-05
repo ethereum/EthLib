@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Sphincs.Ots
-public import EthLib.Cryptography.Proofs.Xmss.Types
+public import EthLib.Cryptography.Proofs.HashSig
 
 /-!
 # Proofs: WOTS+C one-time signatures
@@ -55,7 +55,7 @@ theorem otsSign_run {prf : SeedPrf Id} {msg : ByteArray} :
   | some found =>
     obtain ⟨counter, x⟩ := found
     -- The signer reveals the chains in order, which is the vector of the walked chains.
-    rw [Option.map_some, ← Xmss.ofFnInOrder_run]
+    rw [Option.map_some, ← HashSig.ofFnInOrder_run]
     rfl
 
 /-! ## The counter search -/
@@ -100,7 +100,7 @@ theorem otsLeaf_otsSign {prf : SeedPrf Id} {msg : ByteArray} {counter : UInt32}
   rw [Internal.findCounter] at hfind
   obtain ⟨-, -, -, -, hcw, -⟩ := Wots.findFirst_spec hfind
   -- The verifier recomputes the same codeword.
-  simp only [otsLeaf, otsPublicLeaf, Id.run_bind, Id.run_pure, hcw, Xmss.ofFnInOrder_run]
+  simp only [otsLeaf, otsPublicLeaf, Id.run_bind, Id.run_pure, hcw, HashSig.ofFnInOrder_run]
   refine congrArg (fun ends => some (otsLeafHash (pureHash f) pp key ends).run)
     (Vector.ext fun j hj => ?_)
   simp only [Fin.getElem_fin, Vector.getElem_ofFn]

@@ -42,7 +42,7 @@ open OracleSpec OracleComp ENNReal
 
 /-- Exactly `|C|` digests are codewords: a digest is its 64 digits. -/
 theorem card_codeword : Nat.card {d : Digest // (codeword? d).isSome} = CODE_SIZE := by
-  have hdig : Function.Bijective (Internal.digits) := Xmss.digits_bijective
+  have hdig : Function.Bijective (Internal.digits) := Wots.digits4_bijective
   rw [← card_onTarget]
   exact Nat.card_congr ((Equiv.ofBijective _ hdig).subtypeEquiv fun d => codeword?_isSome_iff)
 
@@ -50,7 +50,7 @@ theorem card_codeword : Nat.card {d : Digest // (codeword? d).isSome} = CODE_SIZ
 theorem card_not_codeword : Nat.card {d : Digest // codeword? d = none} = 2 ^ 128 - CODE_SIZE := by
   have h := Nat.card_congr (Equiv.sumCompl fun d : Digest => (codeword? d).isSome)
   rw [Nat.card_sum, card_codeword, Nat.card_eq_fintype_card (α := Digest),
-    show Fintype.card Digest = 2 ^ 128 from Xmss.card_digest] at h
+    show Fintype.card Digest = 2 ^ 128 from Wots.card_bytes16] at h
   rw [← h, Nat.add_sub_cancel_left]
   exact Nat.card_congr (Equiv.subtypeEquivRight fun d => by simp)
 
@@ -95,7 +95,7 @@ theorem prEvent_findCounter_none (pp : PublicParam) (key : OtsKey) (msg : ByteAr
     rfl
   · have hin := (thInput_inj (ByteArray.ext (Array.toList_inj.mp h))).2.2
     have hc := Base.uintToBytes_inj (by simp [COUNTER_LEN]; omega) (by simp [COUNTER_LEN]; omega)
-      (Xmss.packBytes_injective (Xmss.byteArray_append_inj hin rfl).2)
+      (Base.packBytes_injective (HashSig.byteArray_append_inj hin rfl).2)
     rw [toNat_ofNat_trial (by omega), toNat_ofNat_trial (by omega)] at hc
     exact hc
   · rw [toNat_ofNat_trial (by omega)]

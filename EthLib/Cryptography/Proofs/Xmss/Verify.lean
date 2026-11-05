@@ -39,7 +39,7 @@ theorem otsLeaf_run {pp : PublicParam} {layer : Layer} {e : UInt32} {msg : ByteA
   | none => rfl
   | some x =>
     -- The chains are walked in order, which is the vector of the walked chains.
-    rw [Option.map_some, ← ofFnInOrder_run]
+    rw [Option.map_some, ← HashSig.ofFnInOrder_run]
     rfl
 
 /-- What a layer's root computes: the recovered leaf, folded up the path. -/

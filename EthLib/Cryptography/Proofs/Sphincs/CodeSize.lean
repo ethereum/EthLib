@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Encoding
-public import EthLib.Cryptography.Proofs.Xmss.CodeSize
+public import EthLib.Cryptography.Proofs.Wots.TargetSum
 
 /-!
 # Proofs: the size of the target-sum code
@@ -36,10 +36,10 @@ open EthLib.Cryptography.Sphincs.Constants
 /-- The number of codewords. -/
 def CODE_SIZE : ℕ := 23195210617839120199658819909693679
 
-/-- The number of codewords, counted by the leanXMSS dynamic program over digit strings. -/
+/-- The number of codewords, counted by the dynamic program over digit strings. -/
 theorem card_digitStrings_code :
-    Fintype.card (Xmss.DigitStrings V CHAIN_LENGTH TARGET_SUM) = CODE_SIZE := by
-  rw [← Xmss.countRow_eq_card CHAIN_LENGTH TARGET_SUM V TARGET_SUM (le_refl _)]
+    Fintype.card (Wots.DigitStrings V CHAIN_LENGTH TARGET_SUM) = CODE_SIZE := by
+  rw [← Wots.countRow_eq_card CHAIN_LENGTH TARGET_SUM V TARGET_SUM (le_refl _)]
   -- About 33,000 additions of large numbers, which the kernel evaluates.
   decide +kernel
 
@@ -60,7 +60,7 @@ theorem card_onTarget :
     Nat.card {x : Codeword // Internal.digitSum x = TARGET_SUM} = CODE_SIZE := by
   -- A vector is a function from positions to digits.
   let e : {x : Codeword // Internal.digitSum x = TARGET_SUM}
-      ≃ Xmss.DigitStrings V CHAIN_LENGTH TARGET_SUM :=
+      ≃ Wots.DigitStrings V CHAIN_LENGTH TARGET_SUM :=
     { toFun := fun x => ⟨fun i => x.1[i], by
         have := x.2
         rw [digitSum_eq_sum] at this

@@ -73,20 +73,6 @@ open Constants
     size_encodeLayerSignature, SIG_SIZE]
   omega
 
-/-! ## Reading a field out of a concatenation -/
-
-/-- A read that covers exactly the middle part of a concatenation returns that part. -/
-theorem readBytes_middle {b a c : ByteArray} {n : Nat} {v : Vector UInt8 n} {offset : Nat}
-    (hb : b = a ++ packBytes v ++ c) (ho : offset = a.size) (h : offset + n ≤ b.size) :
-    readBytes b offset n h = v := by
-  subst hb ho
-  -- Strip the last part, then the first, leaving the object itself.
-  rw [readBytes_append_left _ (by simp)]
-  have past := readBytes_append_right (a := a) (b := packBytes v) (offset := 0) (n := n)
-    (by simp)
-  simp only [Nat.add_zero] at past
-  rw [past, readBytes_packBytes]
-
 /-- A layer's signature reads back from its place in a concatenation. -/
 theorem decodeLayerSignature_middle {b a c : ByteArray} {sig : LayerSignature} {offset : Nat}
     (hb : b = a ++ encodeLayerSignature sig ++ c) (ho : offset = a.size)
@@ -106,10 +92,10 @@ theorem decodeLayerSignature_middle {b a c : ByteArray} {sig : LayerSignature} {
     rw [hb, encodeLayerSignature]
     simp only [ByteArray.append_assoc, packDigests]
   -- Each field starts where the previous one ends.
-  have r := readBytes_middle hr ho (by simp only [LAYER_SIG_SIZE] at h; omega)
-  have c' := readBytes_middle hc (offset := offset + RANDOMIZER_LEN)
+  have r := HashSig.readBytes_middle hr ho (by simp only [LAYER_SIG_SIZE] at h; omega)
+  have c' := HashSig.readBytes_middle hc (offset := offset + RANDOMIZER_LEN)
     (by simp [ho]) (by simp only [LAYER_SIG_SIZE] at h; omega)
-  have p := readBytes_middle hp (offset := offset + RANDOMIZER_LEN + V * DIGEST_LEN)
+  have p := HashSig.readBytes_middle hp (offset := offset + RANDOMIZER_LEN + V * DIGEST_LEN)
     (by simp [ho]) (by simp only [LAYER_SIG_SIZE] at h; omega)
   simp only [decodeLayerSignature, r, c', p, splitDigests_flatten]
 
@@ -120,11 +106,11 @@ theorem decodeLayerSignature_middle {b a c : ByteArray} {sig : LayerSignature} {
     decodePublicKey (encodePublicKey pk) = .ok pk := by
   rw [decodePublicKey, dite_eq_left (size_encodePublicKey pk)]
   -- The root is the first field, the public parameter the one after it.
-  have root := readBytes_middle (b := encodePublicKey pk) (a := ByteArray.empty)
+  have root := HashSig.readBytes_middle (b := encodePublicKey pk) (a := ByteArray.empty)
     (c := packBytes pk.publicParam) (v := pk.root) (offset := 0)
     (by simp [encodePublicKey, ByteArray.empty_append]) (by simp)
     (by simp [PUB_KEY_SIZE])
-  have param := readBytes_middle (b := encodePublicKey pk) (a := packBytes pk.root)
+  have param := HashSig.readBytes_middle (b := encodePublicKey pk) (a := packBytes pk.root)
     (c := ByteArray.empty) (v := pk.publicParam) (offset := DIGEST_LEN)
     (by simp [encodePublicKey, ByteArray.append_empty]) (by simp) (by simp [PUB_KEY_SIZE])
   simp only [root, param]
@@ -134,7 +120,7 @@ theorem decodeLayerSignature_middle {b a c : ByteArray} {sig : LayerSignature} {
     decodeSignature (encodeSignature sig) = .ok sig := by
   rw [decodeSignature, dite_eq_left (size_encodeSignature sig)]
   -- The leaf index is the first four bytes, as a little-endian word.
-  have idx := readBytes_middle (b := encodeSignature sig) (a := ByteArray.empty)
+  have idx := HashSig.readBytes_middle (b := encodeSignature sig) (a := ByteArray.empty)
     (v := uintToBytes LEAF_INDEX_SIZE sig.leafIndex.toNat)
     (c := encodeLayerSignature sig.bottom ++ encodeLayerSignature sig.top) (offset := 0)
     (by simp [encodeSignature, ByteArray.append_assoc, ByteArray.empty_append]) (by simp)
@@ -159,17 +145,6 @@ theorem decodeLayerSignature_middle {b a c : ByteArray} {sig : LayerSignature} {
 
 /-! ## Every string of the right length is an encoding -/
 
-/-- The bytes of a read are the slice of the buffer it covers. -/
-theorem packBytes_readBytes (b : ByteArray) (offset n : Nat) (h) :
-    packBytes (readBytes b offset n h) = ⟨b.data.extract offset (offset + n)⟩ := by
-  apply ByteArray.ext
-  apply Array.ext
-  · simp only [ByteArray.size] at h
-    simp only [packBytes, readBytes, Vector.toArray_ofFn, Array.size_ofFn, Array.size_extract]
-    omega
-  · intro i h₁ h₂
-    simp [packBytes, readBytes]
-
 /-- Two adjacent slices of a buffer join into one. -/
 private theorem slice_append (b : ByteArray) {i j k : Nat} (hij : i ≤ j) (hjk : j ≤ k) :
     (⟨b.data.extract i j⟩ : ByteArray) ++ ⟨b.data.extract j k⟩ = ⟨b.data.extract i k⟩ := by
@@ -182,7 +157,7 @@ theorem encodeLayerSignature_decodeLayerSignature (b : ByteArray) (offset : Nat)
     encodeLayerSignature (decodeLayerSignature b offset h)
       = ⟨b.data.extract offset (offset + LAYER_SIG_SIZE)⟩ := by
   simp only [encodeLayerSignature, decodeLayerSignature, packDigests, flatten_splitDigests,
-    packBytes_readBytes]
+    HashSig.packBytes_readBytes]
   rw [slice_append _ (by omega) (by omega), slice_append _ (by omega) (by omega)]
   simp only [LAYER_SIG_SIZE, Nat.add_assoc]
 
@@ -190,7 +165,7 @@ theorem encodeLayerSignature_decodeLayerSignature (b : ByteArray) (offset : Nat)
 theorem encodePublicKey_decodePublicKey {bytes : ByteArray} (sized : bytes.size = PUB_KEY_SIZE) :
     (decodePublicKey bytes).map encodePublicKey = .ok bytes := by
   rw [decodePublicKey, dite_eq_left sized]
-  simp only [Except.map, encodePublicKey, packBytes_readBytes, Nat.zero_add]
+  simp only [Except.map, encodePublicKey, HashSig.packBytes_readBytes, Nat.zero_add]
   rw [slice_append _ (by omega) (by omega)]
   -- The slice from 0 to the end is the whole buffer.
   congr 1
@@ -210,7 +185,7 @@ theorem encodeSignature_decodeSignature {bytes : ByteArray} (sized : bytes.size 
       (by simp only [sized, SIG_SIZE]; omega))
     simpa [LEAF_INDEX_SIZE] using this
   rw [decodeLeafIndex, UInt32.toNat_ofNat_of_lt' hword, Base.uintToBytes_bytesToUint,
-    packBytes_readBytes, Nat.zero_add, slice_append _ (by omega) (by omega),
+    HashSig.packBytes_readBytes, Nat.zero_add, slice_append _ (by omega) (by omega),
     slice_append _ (by omega) (by omega)]
   -- The slice from 0 to the end is the whole buffer.
   congr 1

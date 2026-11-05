@@ -75,7 +75,7 @@ private theorem tail_zero_iff (z : Nat) (hz : z < 2 ^ 128) :
       rw [Nat.div_lt_iff_lt_mul (by positivity)]
       calc z < 2 ^ 128 := hz
         _ = 4 ^ 6 * 4 ^ 58 := by norm_num
-    rw [← Nat.mod_eq_of_lt hlt, ← sum_base_digits_eq_mod 4 (z / 4 ^ 58) 6]
+    rw [← Nat.mod_eq_of_lt hlt, ← Wots.sum_base_digits_eq_mod 4 (z / 4 ^ 58) 6]
     apply Finset.sum_eq_zero
     intro j hj
     rw [Finset.mem_range] at hj

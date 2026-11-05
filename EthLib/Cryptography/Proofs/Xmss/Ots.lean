@@ -55,7 +55,7 @@ theorem otsSign_run {seed : Seed} {msg : ByteArray} :
   | some found =>
     obtain ⟨rho, x⟩ := found
     -- The signer reveals the chains in order, which is the vector of the walked chains.
-    rw [Option.map_some, ← ofFnInOrder_run]
+    rw [Option.map_some, ← HashSig.ofFnInOrder_run]
     rfl
 
 /-- A one-time signature from the seed recovers the leaf the seed gives the key.
@@ -76,7 +76,7 @@ theorem otsLeaf_otsSign {seed : Seed} {msg : ByteArray} {rho : Randomizer} {y : 
   unfold Id.run at hcw
   replace hcw : codeword? (messageDigest (pureHash f) pp layer e msg rho').run = some x := hcw
   -- The verifier recomputes the same codeword.
-  simp only [otsLeaf, otsPublicLeaf, Id.run_bind, Id.run_pure, hcw, ofFnInOrder_run]
+  simp only [otsLeaf, otsPublicLeaf, Id.run_bind, Id.run_pure, hcw, HashSig.ofFnInOrder_run]
   refine congrArg (fun ends => some (otsLeafHash (pureHash f) pp layer e ends).run)
     (Vector.ext fun j hj => ?_)
   simp only [Fin.getElem_fin, Vector.getElem_ofFn]
@@ -104,6 +104,6 @@ theorem otsPublicLeaf_eq {seed : Seed} {starts ends : Vector Digest V} {leaf : D
   have hv : (Vector.ofFn fun i =>
       (chain (pureHash f) pp layer e i 0 (CHAIN_LENGTH - 1) (by decide) starts[i]).run) = ends :=
     Vector.ext fun i hi => by simpa using hends ⟨i, hi⟩
-  simp only [otsPublicLeaf, Id.run_bind, hstarts, ofFnInOrder_run, hv, hleaf]
+  simp only [otsPublicLeaf, Id.run_bind, hstarts, HashSig.ofFnInOrder_run, hv, hleaf]
 
 end EthLib.Cryptography.Xmss

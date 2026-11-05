@@ -307,7 +307,7 @@ theorem findForsPreimage_honest (idx : Fin (2 ^ HEIGHT))
       none := by
   rw [findForsPreimage, List.findSome?_eq_none_iff]
   intro kappa _
-  rw [forsSign, Xmss.ofFnInOrder_run]
+  rw [forsSign, HashSig.ofFnInOrder_run]
   simp only [Fin.getElem_fin, Vector.getElem_ofFn]
   exact findTreePreimage_honest idx kappa _
 
@@ -333,9 +333,9 @@ theorem forsRecover_binding {idx : Fin (2 ^ HEIGHT)}
   rw [findForsPreimage, List.findSome?_eq_none_iff] at hw
   -- Tree `i` recovers its honest pair, and its search found nothing.
   have htree := congrArg (fun key : ForsKey => key[i]) h
-  simp only [forsRecover, forsKey, Xmss.ofFnInOrder_run, Vector.getElem_ofFn, Id.run_bind,
+  simp only [forsRecover, forsKey, HashSig.ofFnInOrder_run, Vector.getElem_ofFn, Id.run_bind,
     Id.run_pure] at htree
-  simp only [forsSign, Xmss.ofFnInOrder_run, Vector.getElem_ofFn]
+  simp only [forsSign, HashSig.ofFnInOrder_run, Vector.getElem_ofFn]
   rcases treeRecover_binding (prf := prf) (idx := idx) (kappa := ⟨i, hi⟩) htree with
     ho | ⟨w, hsome, -⟩
   · exact ho

@@ -1,7 +1,8 @@
 module
 
 public import EthLib.Cryptography.Sphincs.Serialization
-public import EthLib.Cryptography.Proofs.Xmss.Serialization
+public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Cryptography.Proofs.HashSig
 
 /-!
 # Proofs: leanSPHINCS byte encodings
@@ -112,7 +113,7 @@ open Constants
 /-- A signature encodes to 7740 bytes. -/
 @[simp] theorem size_encodeSignature (sig : Signature) :
     (encodeSignature sig).size = SIG_SIZE := by
-  simp only [encodeSignature, ByteArray.size_append, Xmss.size_packBytes, size_encodeFors,
+  simp only [encodeSignature, ByteArray.size_append, Base.size_packBytes, size_encodeFors,
     size_encodeLayerSignature, Layer.height, SIG_SIZE]
   omega
 
@@ -123,7 +124,7 @@ theorem decodeFors_middle {b a c : ByteArray} {openings : Vector TreeOpening FOR
     {offset : Nat} (hb : b = a ++ encodeFors openings ++ c) (ho : offset = a.size)
     (h : offset + FORS_TREES * TREE_OPENING_SIZE ≤ b.size) :
     decodeFors b offset h = openings := by
-  have hread := Xmss.readBytes_middle (v := (openings.map treeOpeningBytes).flatten) hb ho h
+  have hread := HashSig.readBytes_middle (v := (openings.map treeOpeningBytes).flatten) hb ho h
   simp only [decodeFors, hread, splitChunks_flatten, Vector.map_map]
   -- Writing then reading an opening is the identity.
   have : treeOpeningOfBytes ∘ treeOpeningBytes = id := funext treeOpeningOfBytes_treeOpeningBytes
@@ -149,10 +150,10 @@ theorem decodeLayerSignature_middle {layer : Layer} {b a c : ByteArray}
     rw [hb, encodeLayerSignature]
     simp only [ByteArray.append_assoc, packDigests]
   -- Each field starts where the previous one ends.
-  have r := Xmss.readBytes_middle hr ho (by simp only [layerSigSize] at h; omega)
-  have c' := Xmss.readBytes_middle hc (offset := offset + COUNTER_LEN)
+  have r := HashSig.readBytes_middle hr ho (by simp only [layerSigSize] at h; omega)
+  have c' := HashSig.readBytes_middle hc (offset := offset + COUNTER_LEN)
     (by simp [ho]) (by simp only [layerSigSize] at h; omega)
-  have p := Xmss.readBytes_middle hp (offset := offset + COUNTER_LEN + V * N)
+  have p := HashSig.readBytes_middle hp (offset := offset + COUNTER_LEN + V * N)
     (by simp [ho]) (by simp only [layerSigSize] at h; omega)
   -- A 32-bit word survives its four bytes.
   have word : UInt32.ofNat (bytesToUint (uintToBytes COUNTER_LEN sig.counter.toNat))
@@ -170,11 +171,11 @@ theorem decodeLayerSignature_middle {layer : Layer} {b a c : ByteArray}
     decodePublicKey (encodePublicKey pk) = .ok pk := by
   rw [decodePublicKey, dite_eq_left (size_encodePublicKey pk)]
   -- The root is the first field, the public parameter the one after it.
-  have root := Xmss.readBytes_middle (b := encodePublicKey pk) (a := ByteArray.empty)
+  have root := HashSig.readBytes_middle (b := encodePublicKey pk) (a := ByteArray.empty)
     (c := packBytes pk.publicParam) (v := pk.root) (offset := 0)
     (by simp [encodePublicKey, ByteArray.empty_append]) (by simp)
     (by simp [PUB_KEY_SIZE])
-  have param := Xmss.readBytes_middle (b := encodePublicKey pk) (a := packBytes pk.root)
+  have param := HashSig.readBytes_middle (b := encodePublicKey pk) (a := packBytes pk.root)
     (c := ByteArray.empty) (v := pk.publicParam) (offset := N)
     (by simp [encodePublicKey, ByteArray.append_empty]) (by simp) (by simp [PUB_KEY_SIZE])
   simp only [root, param]
@@ -184,7 +185,7 @@ theorem decodeLayerSignature_middle {layer : Layer} {b a c : ByteArray}
     decodeSignature (encodeSignature sig) = .ok sig := by
   rw [decodeSignature, dite_eq_left (size_encodeSignature sig)]
   -- The randomizer is the first 16 bytes.
-  have rho := Xmss.readBytes_middle (b := encodeSignature sig) (a := ByteArray.empty)
+  have rho := HashSig.readBytes_middle (b := encodeSignature sig) (a := ByteArray.empty)
     (v := sig.randomizer)
     (c := encodeFors sig.fors ++ encodeLayerSignature sig.bottom ++ encodeLayerSignature sig.middle
       ++ encodeLayerSignature sig.top) (offset := 0)
@@ -234,7 +235,7 @@ theorem encodeFors_decodeFors (b : ByteArray) (offset : Nat) (h) :
   simp only [encodeFors, decodeFors, Vector.map_map]
   -- Reading then writing 176 bytes is the identity.
   have : treeOpeningBytes ∘ treeOpeningOfBytes = id := funext treeOpeningBytes_treeOpeningOfBytes
-  rw [this, Vector.map_id, flatten_splitChunks, Xmss.packBytes_readBytes]
+  rw [this, Vector.map_id, flatten_splitChunks, HashSig.packBytes_readBytes]
 
 /-- A layer's signature re-encodes to the bytes it was read from. -/
 theorem encodeLayerSignature_decodeLayerSignature (layer : Layer) (b : ByteArray) (offset : Nat) (h) :
@@ -247,7 +248,7 @@ theorem encodeLayerSignature_decodeLayerSignature (layer : Layer) (b : ByteArray
       (by simp only [layerSigSize] at h; omega))
     simpa [COUNTER_LEN] using this
   simp only [encodeLayerSignature, decodeLayerSignature, packDigests, splitDigests,
-    flatten_splitChunks, Xmss.packBytes_readBytes, UInt32.toNat_ofNat_of_lt' hword,
+    flatten_splitChunks, HashSig.packBytes_readBytes, UInt32.toNat_ofNat_of_lt' hword,
     Base.uintToBytes_bytesToUint]
   rw [slice_append _ (by omega) (by omega), slice_append _ (by omega) (by omega)]
   simp only [layerSigSize, Nat.add_assoc]
@@ -256,7 +257,7 @@ theorem encodeLayerSignature_decodeLayerSignature (layer : Layer) (b : ByteArray
 theorem encodePublicKey_decodePublicKey {bytes : ByteArray} (sized : bytes.size = PUB_KEY_SIZE) :
     (decodePublicKey bytes).map encodePublicKey = .ok bytes := by
   rw [decodePublicKey, dite_eq_left sized]
-  simp only [Except.map, encodePublicKey, Xmss.packBytes_readBytes, Nat.zero_add]
+  simp only [Except.map, encodePublicKey, HashSig.packBytes_readBytes, Nat.zero_add]
   rw [slice_append _ (by omega) (by omega)]
   -- The slice from 0 to the end is the whole buffer.
   congr 1
@@ -269,7 +270,7 @@ theorem encodeSignature_decodeSignature {bytes : ByteArray} (sized : bytes.size 
     (decodeSignature bytes).map encodeSignature = .ok bytes := by
   rw [decodeSignature, dite_eq_left sized]
   simp only [Except.map, encodeSignature, encodeLayerSignature_decodeLayerSignature,
-    encodeFors_decodeFors, Xmss.packBytes_readBytes, Nat.zero_add]
+    encodeFors_decodeFors, HashSig.packBytes_readBytes, Nat.zero_add]
   simp only [forsOffset, bottomOffset, middleOffset, topOffset, Layer.height]
   rw [slice_append _ (by omega) (by omega), slice_append _ (by omega) (by omega),
     slice_append _ (by omega) (by omega), slice_append _ (by omega) (by omega)]

@@ -331,7 +331,7 @@ theorem byteArray_eq_of_toList_eq {a b : ByteArray} (h : a.data.toList = b.data.
 
 /-- The key's seed is fixed by the input that grows the scheme seed. -/
 theorem seedInput_injective : Function.Injective seedInput := fun _ _ h =>
-  Base.packBytes_injective (Xmss.byteArray_append_inj h rfl).2
+  Base.packBytes_injective (HashSig.byteArray_append_inj h rfl).2
 
 /-- A 32-byte answer read as a seed: the seed fixes the answer. -/
 theorem seedOf_injective : Function.Injective seedOf := fun _ _ h =>
@@ -351,7 +351,7 @@ def hiddenSeedEncoding :
   range_eq _ _ := rfl
   injective u x y h := by
     obtain ⟨hpp, hA, hpay⟩ := thInput_inj (byteArray_eq_of_toList_eq h)
-    exact Subtype.ext (Prod.ext hpp (Prod.ext hA (Xmss.byteArray_append_inj hpay rfl).2))
+    exact Subtype.ext (Prod.ext hpp (Prod.ext hA (HashSig.byteArray_append_inj hpay rfl).2))
 
 /-- An encoded point fixes the secret: its bytes 32 to 63 are the scheme seed. -/
 theorem hiddenSeedEncoding_fix (u u' : XmssSecurity.HashOutput) (x x' : DerivationInput)
@@ -359,7 +359,7 @@ theorem hiddenSeedEncoding_fix (u u' : XmssSecurity.HashOutput) (x x' : Derivati
   obtain ⟨-, -, hpay⟩ := thInput_inj (byteArray_eq_of_toList_eq h)
   have hsize : (packBytes (seedOf u)).size = (packBytes (seedOf u')).size := by
     rw [Base.size_packBytes, Base.size_packBytes]
-  exact seedOf_injective (Base.packBytes_injective (Xmss.byteArray_append_inj hpay hsize).1)
+  exact seedOf_injective (Base.packBytes_injective (HashSig.byteArray_append_inj hpay hsize).1)
 
 /-- A 32-byte answer as the output of a derivation. -/
 def outputOf (u : XmssSecurity.HashOutput) : HashOutput :=
