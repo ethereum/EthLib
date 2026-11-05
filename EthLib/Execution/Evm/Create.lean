@@ -24,7 +24,7 @@ An address with code or a nonce takes that gas and pushes 0, and the frame's non
 
 EIP-7610, in Last Call, would also count an address with storage.
 
-The execution specification does not include it, so it is not applied here.
+It is not final, so it is not applied here.
 
 Otherwise the frame's nonce grows and the init code runs at the new address.
 

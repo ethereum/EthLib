@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Create
+public import EthLib.Execution.Evm.SelfDestruct
 
 /-!
 # `Evm.Interpreter`
@@ -13,9 +14,7 @@ A position past the end of the code holds STOP.
 
 A byte that is no opcode at the fork halts the frame.
 
-SELFDESTRUCT has no instruction yet.
-
-A step on one of them aborts the whole run, since nothing here gives its result.
+An opcode with no instruction aborts the whole run, since nothing here gives its result.
 
 A step gives the next frame, or a message to run first, for a call or a creation.
 
@@ -54,14 +53,12 @@ variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
 /-- The instruction of an opcode at fork `fork` that gives the next frame, or none.
 
-The calls and the creations may give a message to run first, so they are not here.
-
-SELFDESTRUCT has no instruction yet, so it gives none. -/
+The calls and the creations may give a message to run first, so they are not here. -/
 def instruction (fork : Fork) (op : Op) :
     Option (Evm fork Meter → Except EvmError (Evm fork Meter)) :=
   stackOnlyStep fork op <|> controlFlowStep op <|> memoryDataStep op <|> returnOpStep fork op <|>
     environmentStep fork op <|> accountStep fork op <|> storageStep op <|>
-    transientStorageStep fork op <|> logOpStep op
+    transientStorageStep fork op <|> logOpStep op <|> selfdestructOpStep fork op
 
 /-- The step of a frame at fork `fork`: run the opcode at the program counter.
 
@@ -107,9 +104,11 @@ theorem instruction_measure_lt [LawfulGasMeter Meter] {op : Op}
   · exact accountStep_measure_lt hf h running
   rcases orElse_eq_some hrun with hf | hrun
   · exact storageStep_measure_lt hf h running
-  rcases orElse_eq_some hrun with hf | hf
+  rcases orElse_eq_some hrun with hf | hrun
   · exact transientStorageStep_measure_lt hf h running
+  rcases orElse_eq_some hrun with hf | hf
   · exact logOpStep_measure_lt hf h running
+  · exact selfdestructOpStep_measure_lt hf h running
 
 /-- Each step of a running frame lowers its measure. -/
 theorem step_decreases [LawfulGasMeter Meter] (fork : Fork) {evm : Evm fork Meter}
