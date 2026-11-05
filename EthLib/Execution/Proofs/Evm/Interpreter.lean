@@ -15,6 +15,10 @@ A step on a call or a creation runs it.
 
 A step on an opcode with no instruction yet fails with an error that aborts the run.
 
+No opcode lacks an instruction: each opcode has one at every fork from the fork that adds it.
+
+So a step never fails at its dispatch with that error.
+
 A step that fails halts the frame with no gas and no output, unless its error aborts the run.
 
 Then the whole run fails with that error.
@@ -22,6 +26,8 @@ Then the whole run fails with that error.
 A step that succeeds lets the loop go on from the next frame.
 
 Every run that succeeds ends with a stopped frame.
+
+A run keeps the size of memory a multiple of 32 when each of its steps keeps it.
 -/
 
 @[expose] public section
@@ -68,6 +74,43 @@ theorem step_of_messageInstruction {evm : Evm fork Meter} {op : Op}
     (hrun : messageInstruction fork op = some run) :
     step fork evm = run evm := by
   simp [step, h, decoded, noInstruction, hrun]
+
+/-- Every opcode has an instruction at each fork from the fork that adds it.
+
+The instruction gives the next frame, or it may send a message, as a call or a creation does. -/
+theorem instruction_or_messageInstruction_isSome {op : Op} (h : op.since ≤ fork) :
+    (instruction (Meter := Meter) fork op).isSome ∨
+      (messageInstruction (Meter := Meter) fork op).isSome := by
+  cases op <;> simp only [Op.since] at h <;>
+    simp [instruction, messageInstruction, stackOnlyStep, controlFlowStep, memoryDataStep,
+      returnOpStep, environmentStep, accountStep, storageStep, transientStorageStep, logOpStep,
+      selfdestructOpStep, callInstruction, createInstruction, h, HOrElse.hOrElse,
+      OrElse.orElse, Option.orElse] <;>
+    by_cases hp : Fork.paris ≤ fork <;> simp [hp]
+
+/-- A byte decodes at a fork only to an opcode that the fork has. -/
+theorem since_le_of_ofByte_eq_some {b : UInt8} {op : Op} (h : Op.ofByte fork b = some op) :
+    op.since ≤ fork := by
+  simp only [Op.ofByte, Option.filter_eq_some_iff] at h
+  simpa using h.2
+
+/-- A step on an opcode of the fork runs an instruction of that opcode.
+
+So the step never takes the branch that fails with `unspecifiedOpcode`. -/
+theorem step_of_ofByte_eq_some {evm : Evm fork Meter} {op : Op} (h : evm.pc < evm.code.size)
+    (decoded : Op.ofByte fork evm.code[evm.pc] = some op) :
+    (∃ run, instruction fork op = some run ∧ step fork evm = .next <$> run evm) ∨
+      ∃ run, instruction (Meter := Meter) fork op = none ∧ messageInstruction fork op = some run ∧
+        step fork evm = run evm := by
+  rcases instruction_or_messageInstruction_isSome (Meter := Meter)
+    (since_le_of_ofByte_eq_some decoded) with hi | hm
+  · obtain ⟨run, hrun⟩ := Option.isSome_iff_exists.mp hi
+    exact .inl ⟨run, hrun, step_of_instruction h decoded hrun⟩
+  · cases hi : instruction (Meter := Meter) fork op with
+    | some run => exact .inl ⟨run, rfl, step_of_instruction h decoded hi⟩
+    | none =>
+      obtain ⟨run, hrun⟩ := Option.isSome_iff_exists.mp hm
+      exact .inr ⟨run, rfl, hrun, step_of_messageInstruction h decoded hi hrun⟩
 
 section Loop
 
@@ -126,6 +169,27 @@ theorem running_runFrame {evm after : Evm fork Meter} {within : GasMeter.gasHeld
     | (cases h; assumption)
     | (rename_i ih; exact ih h)
     | (cases h; simp_all)
+
+/-- A run keeps the size of memory a multiple of 32 when each of its steps keeps it.
+
+A step that gives a message must give a resume that keeps it too. -/
+theorem size_runFrame_mod
+    (next : ∀ {evm after : Evm fork Meter}, evm.memory.size % 32 = 0 →
+      step evm = .ok (.next after) → after.memory.size % 32 = 0)
+    (resumes : ∀ {evm caller child after : Evm fork Meter} {message : Message fork}
+      {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}, evm.memory.size % 32 = 0 →
+      step evm = .ok (.child caller message resume) → resume child = .ok after →
+      after.memory.size % 32 = 0)
+    {evm after : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound}
+    (hmod : evm.memory.size % 32 = 0)
+    (h : runFrame step decreases bound runChild evm within = .ok after) :
+    after.memory.size % 32 = 0 := by
+  fun_induction runFrame step decreases bound runChild evm within
+  all_goals first
+    | (cases h; done)
+    | (cases h; exact hmod)
+    | (rename_i result _ ih; exact ih (next hmod result) h)
+    | (rename_i resumed _ ih; exact ih (resumes hmod (by assumption) resumed) h)
 
 end Loop
 

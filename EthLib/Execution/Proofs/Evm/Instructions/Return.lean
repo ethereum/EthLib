@@ -16,6 +16,8 @@ Neither changes the message, the state or the substate.
 Their output has the size of the range.
 
 It holds the bytes of memory in the range, and reads as zero past its end.
+
+Both keep the size of memory a multiple of 32.
 -/
 
 @[expose] public section
@@ -167,5 +169,33 @@ theorem byteAt_output_revertStep {evm after : Evm fork Meter} {start size : U256
   simp only [pure, Except.pure, Except.ok.injEq] at h
   subst h
   exact byteAt_output_haltWithOutput (after := mid) hstack hmod hmid i
+
+/-- A halt with output keeps the size of memory a multiple of 32. -/
+theorem size_haltWithOutput_mod {evm after : Evm fork Meter} (hmod : evm.memory.size % 32 = 0)
+    (h : haltWithOutput evm = .ok after) : after.memory.size % 32 = 0 := by
+  obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  exact (size_chargeGasAndMemory_mod
+    (by rw [(popWord_eq_ok h2).2.1, (popWord_eq_ok h1).2.1]; exact hmod) h3 :
+    e3.memory.size % 32 = 0)
+
+/-- RETURN and REVERT keep the size of memory a multiple of 32. -/
+theorem size_returnOpStep_mod {op : Op}
+    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (hstep : returnOpStep fork op = some step) {evm after : Evm fork Meter}
+    (hmod : evm.memory.size % 32 = 0) (h : step evm = .ok after) :
+    after.memory.size % 32 = 0 := by
+  cases op <;> simp only [returnOpStep, Option.some.injEq, reduceCtorEq] at hstep
+  · subst hstep
+    exact size_haltWithOutput_mod hmod h
+  · split at hstep
+    · simp only [Option.some.injEq] at hstep
+      subst hstep
+      obtain ⟨e, h1, h⟩ := Base.bind_ok_iff.mp h
+      cases h
+      exact (size_haltWithOutput_mod hmod h1 : e.memory.size % 32 = 0)
+    · cases hstep
 
 end EthLib.Execution.Evm

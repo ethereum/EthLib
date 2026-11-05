@@ -22,6 +22,8 @@ None of these instructions changes the message, the state or the substate of the
 MSTORE, MSTORE8, MCOPY, CALLDATACOPY, CODECOPY and RETURNDATACOPY set each byte of their range.
 
 They keep every other byte of memory.
+
+Each instruction keeps the size of memory a multiple of 32.
 -/
 
 @[expose] public section
@@ -343,5 +345,111 @@ theorem byteAt_returndatacopyStep {evm after : Evm fork Meter} {start offset siz
       · rw [byteAt_memoryReadBytes fitData, ite_eq_left_iff.mpr (fun hc => absurd (by omega) hc),
           hdata]
       · rw [byteAt_memoryExtend, hmem]
+
+/-! ## The size of memory -/
+
+/-- Each instruction that moves bytes keeps the size of memory a multiple of 32. -/
+theorem size_memoryDataStep_mod {op : Op}
+    {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
+    (hstep : memoryDataStep op = some step) {evm after : Evm fork Meter}
+    (hmod : evm.memory.size % 32 = 0) (h : step evm = .ok after) :
+    after.memory.size % 32 = 0 := by
+  cases op <;> simp only [memoryDataStep, Option.some.injEq, reduceCtorEq] at hstep <;>
+    subst hstep
+  case msize | calldatasize | codesize | returndatasize => rwa [memory_readFrame h]
+  case mload =>
+    obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    simp only [advance, memory_pushWord h3]
+    exact size_chargeGasAndMemory_mod (by rw [(popWord_eq_ok h1).2.1]; exact hmod) h2
+  case calldataload =>
+    obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    simp only [advance, memory_pushWord h3, memory_chargeGas h2, (popWord_eq_ok h1).2.1]
+    exact hmod
+  case mstore =>
+    obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    have m2 : e2.memory.size % 32 = 0 := by
+      rw [(popWord_eq_ok h2).2.1, (popWord_eq_ok h1).2.1]; exact hmod
+    simp only [advance]
+    refine size_memoryWrite_chargeGasAndMemory_mod m2 h3 ?_
+    exact size_wordBytes _
+  case mstore8 =>
+    obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    have m2 : e2.memory.size % 32 = 0 := by
+      rw [(popWord_eq_ok h2).2.1, (popWord_eq_ok h1).2.1]; exact hmod
+    simp only [advance]
+    refine size_memoryWrite_chargeGasAndMemory_mod m2 h3 ?_
+    rfl
+  case calldatacopy | codecopy =>
+    simp only [copyToMemory] at h
+    obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨_, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    have m3 : e3.memory.size % 32 = 0 := by
+      rw [(popWord_eq_ok h3).2.1, (popWord_eq_ok h2).2.1, (popWord_eq_ok h1).2.1]; exact hmod
+    simp only [advance]
+    refine size_memoryWrite_chargeGasAndMemory_mod m3 h4 ?_
+    simp [ByteArray.size, bufferRead_length]
+  case mcopy =>
+    obtain ⟨⟨dst, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨src, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨length, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    have m3 : e3.memory.size % 32 = 0 := by
+      rw [(popWord_eq_ok h3).2.1, (popWord_eq_ok h2).2.1, (popWord_eq_ok h1).2.1]; exact hmod
+    simp only [advance]
+    have fit : (memoryReadBytes e4.memory src.toNat length.toNat).size ≠ 0 →
+        dst.toNat + (memoryReadBytes e4.memory src.toNat length.toNat).size ≤
+          e4.memory.size := fun hz => by
+      have hnz : length ≠ 0 := by
+        rintro rfl
+        exact hz (by simp [memoryReadBytes])
+      have fs := le_size_chargeGasAndMemory m3 h4 (src, length) (by simp) hnz
+      have fd := le_size_chargeGasAndMemory m3 h4 (dst, length)
+        (List.mem_cons_of_mem _ (by simp)) hnz
+      simp only at fs fd
+      rw [size_memoryReadBytes fs]
+      exact fd
+    rw [size_memoryWrite_of_fit fit]
+    exact size_chargeGasAndMemory_mod m3 h4
+  case returndatacopy =>
+    obtain ⟨⟨start, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨offset, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨⟨size, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
+    have m3 : e3.memory.size % 32 = 0 := by
+      rw [(popWord_eq_ok h3).2.1, (popWord_eq_ok h2).2.1, (popWord_eq_ok h1).2.1]; exact hmod
+    have m4 := memory_chargeGas h4
+    split at h
+    · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+    · rename_i inside
+      simp only [pure, Except.pure, Except.ok.injEq] at h
+      subst h
+      simp only [advance]
+      rw [size_memoryWrite_of_fit fun hz => ?_]
+      · rw [m4]
+        exact size_memoryExtend_mod m3 _
+      · have hnz : size ≠ 0 := by
+          rintro rfl
+          exact hz (by simp [memoryReadBytes])
+        have hcover := le_ceil32_add_expandBy e3.memory.size [(start, size)] (start, size)
+          (List.mem_singleton_self _) hnz
+        rw [ceil32_of_mod m3] at hcover
+        rw [size_memoryReadBytes (Nat.le_of_not_gt inside), size_memoryExtend, m4]
+        exact hcover
 
 end EthLib.Execution.Evm
