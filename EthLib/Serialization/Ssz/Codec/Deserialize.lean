@@ -58,6 +58,19 @@ def highestBit (byte : UInt8) : Nat :=
   else if (byte >>> UInt8.ofNat 1) &&& 1 == 1 then 1
   else 0
 
+/-- The spans so far, in reverse order, then the spans of `offsets`.
+
+The loop runs in constant stack for any number of offsets. -/
+def offsetSpansFrom : List Nat → Nat → List Nat → Except Err (List Nat)
+  | [], _, done => .ok done.reverse
+  -- The final body is closed by the budget rather than by another offset.
+  | [start], scope, done =>
+      if scope < start then .error .offsetPastScope else .ok ((scope - start) :: done).reverse
+  -- Every other body ends where the next one begins.
+  | start :: next :: rest, scope, done =>
+      if next < start then .error .offsetUnordered
+      else offsetSpansFrom (next :: rest) scope ((next - start) :: done)
+
 /--
 Width of each body, from the table and the budget it closes over.
 
@@ -67,15 +80,8 @@ The whole table is settled before any body is read.
 
 A corrupt one is then refused as a table, not as whatever a bad span made of it.
 -/
-def offsetSpans : List Nat → Nat → Except Err (List Nat)
-  | [], _ => .ok []
-  -- The final body is closed by the budget rather than by another offset.
-  | [start], scope =>
-      if scope < start then .error .offsetPastScope else .ok [scope - start]
-  -- Every other body ends where the next one begins.
-  | start :: next :: rest, scope =>
-      if next < start then .error .offsetUnordered
-      else do return (next - start) :: (← offsetSpans (next :: rest) scope)
+def offsetSpans (offsets : List Nat) (scope : Nat) : Except Err (List Nat) :=
+  offsetSpansFrom offsets scope []
 
 /-- Where each field's bytes sit inside a struct's encoding. -/
 def readSlots : List Desc → Bytes → Nat → Except Err (List Slot × Nat)
@@ -173,7 +179,8 @@ def vectorSlices (element : Desc) (length : Nat) (data : Bytes) :
     let offsets := readOffsets data length
     if offsets[0]! != expectedFirst then throw (.firstOffset expectedFirst offsets[0]!)
     let spans ← offsetSpans offsets data.size
-    return (offsets.zip spans).map fun (start, span) => data.extract start (start + span)
+    -- `zipWith` pairs each offset with its span in a loop of constant stack.
+    return List.zipWith (fun start span => data.extract start (start + span)) offsets spans
 
 /-- Where each element's bytes sit, for a sequence whose count the encoding carries. -/
 def listSlices (element : Desc) (limit : Option Nat) (data : Bytes) :
@@ -202,7 +209,8 @@ def listSlices (element : Desc) (limit : Option Nat) (data : Bytes) :
       if count > cap then throw (.overLimit cap count)
     let offsets := readOffsets data count
     let spans ← offsetSpans offsets scope
-    return (offsets.zip spans).map fun (start, span) => data.extract start (start + span)
+    -- `zipWith` pairs each offset with its span in a loop of constant stack.
+    return List.zipWith (fun start span => data.extract start (start + span)) offsets spans
 
 /--
 Bits recovered from a delimited encoding.
@@ -272,13 +280,19 @@ def deserialize : Desc → Bytes → Except Err Value
 termination_by d => (sizeOf d, 0)
 
 /-- Each element of a sequence decoded on its own. -/
-def deserializeEach (element : Desc) : List Bytes → Except Err (List Value)
-  | [] => .ok []
-  | slice :: rest => do
+def deserializeEach (element : Desc) (slices : List Bytes) : Except Err (List Value) :=
+  deserializeEachFrom element slices []
+termination_by (sizeOf element, slices.length + 1)
+
+/-- The values decoded so far, in reverse order, then each element of `slices` decoded.
+
+The loop runs in constant stack for any number of elements. -/
+def deserializeEachFrom (element : Desc) : List Bytes → List Value → Except Err (List Value)
+  | [], done => .ok done.reverse
+  | slice :: rest, done => do
     let head ← deserialize element slice
-    let tail ← deserializeEach element rest
-    return head :: tail
-termination_by slices => (sizeOf element, slices.length + 1)
+    deserializeEachFrom element rest (head :: done)
+termination_by slices => (sizeOf element, slices.length)
 
 /--
 Each field of a struct, decoded in the order the specification reads them:

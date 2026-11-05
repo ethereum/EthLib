@@ -281,4 +281,141 @@ theorem byteRun_uint (n : Nat) (rest : List Value) :
     rw [byteRunFrom_eq]
     cases byteRunFrom rest #[] <;> rfl
 
+/-! ## Layout and slices, by `zip` -/
+
+/-- The layout pairs each part with its flag, as `zip` does. -/
+theorem assemble_eq (inline : List Bool) (parts : List Bytes) :
+    assemble inline parts = (do
+      let slots := inline.zip parts
+      let leading := headWidth slots
+      let total := leading + bodyWidth slots
+      if total ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow total)
+      return headOf leading slots ++ bodiesOf slots) := by
+  rw [assemble, List.zip_eq_zipWith]
+
+/-- The slices of a fixed-count sequence, with offsets paired to spans by `zip`. -/
+theorem vectorSlices_eq (element : Desc) (length : Nat) (data : Bytes) :
+    vectorSlices element length data = (do
+      if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
+      match element.fixedSize with
+      | some width =>
+        let expected := width * length
+        if data.size != expected then throw (.scope expected data.size)
+        return (List.range length).map fun i => data.extract (i * width) ((i + 1) * width)
+      | none =>
+        let expectedFirst := length * bytesPerOffset
+        if data.size < expectedFirst then throw (.scopeTooSmall expectedFirst data.size)
+        if length == 0 then return []
+        let offsets := readOffsets data length
+        if offsets[0]! != expectedFirst then throw (.firstOffset expectedFirst offsets[0]!)
+        let spans ← offsetSpans offsets data.size
+        return (offsets.zip spans).map fun (start, span) => data.extract start (start + span)) := by
+  simp only [vectorSlices, List.map_zip_eq_zipWith]
+  rfl
+
+/-- The slices of a counted sequence, with offsets paired to spans by `zip`. -/
+theorem listSlices_eq (element : Desc) (limit : Option Nat) (data : Bytes) :
+    listSlices element limit data = (do
+      if data.size ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow data.size)
+      let scope := data.size
+      if scope == 0 then return []
+      match element.fixedSize with
+      | some width =>
+        if width == 0 then throw .scopeWidthless
+        if scope % width != 0 then throw (.scopeUndivided scope width)
+        let count := scope / width
+        if let some cap := limit then
+          if count > cap then throw (.overLimit cap count)
+        return (List.range count).map fun i => data.extract (i * width) ((i + 1) * width)
+      | none =>
+        if scope < bytesPerOffset then throw (.scopeTooSmall bytesPerOffset scope)
+        let first := readUint data 0 bytesPerOffset
+        if first < bytesPerOffset then throw .offsetBelowTable
+        if first % bytesPerOffset != 0 then throw .offsetUnaligned
+        if first > scope then throw .offsetPastScope
+        let count := first / bytesPerOffset
+        if let some cap := limit then
+          if count > cap then throw (.overLimit cap count)
+        let offsets := readOffsets data count
+        let spans ← offsetSpans offsets scope
+        return (offsets.zip spans).map fun (start, span) => data.extract start (start + span)) := by
+  simp only [listSlices, List.map_zip_eq_zipWith]
+  rfl
+
+/-! ## Offsets -/
+
+/-- The span loop from some spans is the loop from none, after them. -/
+theorem offsetSpansFrom_eq : ∀ (offsets : List Nat) (scope : Nat) (done : List Nat),
+    offsetSpansFrom offsets scope done =
+      (offsetSpansFrom offsets scope []).map (done.reverse ++ ·)
+  | [], _, done => by simp [offsetSpansFrom, Except.map]
+  | [start], scope, done => by
+    simp only [offsetSpansFrom]
+    split <;> simp [Except.map]
+  | start :: next :: rest, scope, done => by
+    simp only [offsetSpansFrom]
+    split
+    · rfl
+    · rw [offsetSpansFrom_eq (next :: rest) scope ((next - start) :: done),
+        offsetSpansFrom_eq (next :: rest) scope [next - start]]
+      cases offsetSpansFrom (next :: rest) scope [] <;> simp [Except.map]
+
+/-- No offsets give no spans. -/
+theorem offsetSpans_nil (scope : Nat) : offsetSpans [] scope = .ok [] := rfl
+
+/-- The last body is closed by the budget. -/
+theorem offsetSpans_single (start scope : Nat) :
+    offsetSpans [start] scope =
+      if scope < start then .error .offsetPastScope else .ok [scope - start] := by
+  simp only [offsetSpans, offsetSpansFrom]
+  split <;> rfl
+
+/-- Every other body ends where the next one begins. -/
+theorem offsetSpans_cons_cons (start next : Nat) (rest : List Nat) (scope : Nat) :
+    offsetSpans (start :: next :: rest) scope =
+      if next < start then .error .offsetUnordered
+      else do return (next - start) :: (← offsetSpans (next :: rest) scope) := by
+  simp only [offsetSpans, offsetSpansFrom]
+  split
+  · rfl
+  · rw [offsetSpansFrom_eq]
+    cases offsetSpansFrom (next :: rest) scope [] <;> rfl
+
+/-! ## Decoding each element -/
+
+/-- The element loop from some values is the loop from none, after them. -/
+theorem deserializeEachFrom_eq (element : Desc) (slices : List Bytes) (done : List Value) :
+    deserializeEachFrom element slices done =
+      (deserializeEachFrom element slices []).map (done.reverse ++ ·) := by
+  induction slices generalizing done with
+  | nil => simp [deserializeEachFrom, Except.map]
+  | cons slice rest ih =>
+    rw [deserializeEachFrom, deserializeEachFrom]
+    cases deserialize element slice with
+    | error e => rfl
+    | ok head =>
+      show deserializeEachFrom element rest (head :: done) =
+        (deserializeEachFrom element rest [head]).map _
+      rw [ih, ih [head]]
+      cases deserializeEachFrom element rest [] <;> simp [Except.map]
+
+/-- No slices decode to no values. -/
+theorem deserializeEach_nil (element : Desc) : deserializeEach element [] = .ok [] := by
+  rw [deserializeEach, deserializeEachFrom]
+  rfl
+
+/-- The elements of a sequence: the first decoded, then the rest. -/
+theorem deserializeEach_cons (element : Desc) (slice : Bytes) (rest : List Bytes) :
+    deserializeEach element (slice :: rest) = do
+      let head ← deserialize element slice
+      let tail ← deserializeEach element rest
+      return head :: tail := by
+  rw [deserializeEach, deserializeEachFrom]
+  cases deserialize element slice with
+  | error e => rfl
+  | ok head =>
+    show deserializeEachFrom element rest [head] = _
+    rw [deserializeEachFrom_eq, deserializeEach]
+    cases deserializeEachFrom element rest [] <;> rfl
+
 end EthLib.Serialization.Ssz

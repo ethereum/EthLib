@@ -205,11 +205,11 @@ theorem offsetSpans_bodyOffsets :
         = .ok (bodySizes fields parts) := by
   intro fields
   induction fields with
-  | nil => intro parts _; simp [bodyOffsets, bodySizes, offsetSpans]
+  | nil => intro parts _; simp [bodyOffsets, bodySizes, offsetSpans_nil]
   | cons field fields ih =>
     intro parts bodyStart
     cases parts with
-    | nil => simp [bodyOffsets, bodySizes, offsetSpans]
+    | nil => simp [bodyOffsets, bodySizes, offsetSpans_nil]
     | cons part parts =>
       rw [slotsOf_cons]
       by_cases fixed : field.isFixed
@@ -223,10 +223,11 @@ theorem offsetSpans_bodyOffsets :
           -- Nothing follows, so the budget closes this body.
           obtain ⟨noSizes, noWidth⟩ := bodySizes_of_no_offsets fields parts _ later
           simp [bodyOffsets, bodySizes, fixed, bodyWidth_cons_variable, later, noSizes, noWidth,
-              offsetSpans]
+              offsetSpans_single]
         | cons next others =>
           cases bodyOffsets_head fields parts _ next others later
-          simp_all [bodyOffsets, bodySizes, bodyWidth_cons_variable, offsetSpans, Nat.add_assoc,
+          simp_all [bodyOffsets, bodySizes, bodyWidth_cons_variable, offsetSpans_cons_cons,
+              Nat.add_assoc,
             Bind.bind, Except.bind, pure, Except.pure]
 
 /--
@@ -372,7 +373,7 @@ theorem structSlices_assemble :
   intro fields parts paired widths nameable
   have shape : (fields.map Desc.isFixed).zip parts = slotsOf fields parts := rfl
   -- The encoder writes the fixed part and then the bodies, and refuses neither.
-  simp only [assemble, shape]
+  simp only [assemble_eq, shape]
   rw [ite_eq_right (by omega)]
   show structSlices fields (headOf (headWidth (slotsOf fields parts)) (slotsOf fields parts)
     ++ bodiesOf (slotsOf fields parts)) = .ok parts
@@ -408,7 +409,7 @@ theorem assemble_nameable (inline : List Bool) (parts : List Bytes) (bytes : Byt
     headWidth (inline.zip parts) + bodyWidth (inline.zip parts)
       < 2 ^ (8 * bytesPerOffset) := by
   -- The encoder refuses anything wider, so what it wrote is inside the bound.
-  simp only [assemble] at wrote
+  simp only [assemble_eq] at wrote
   split at wrote
   · simp [Functor.map, Except.map, throw, throwThe, MonadExceptOf.throw] at wrote
   · omega
@@ -419,7 +420,7 @@ theorem assemble_size (inline : List Bool) (parts : List Bytes) (bytes : Bytes)
     bytes.size = headWidth (inline.zip parts) + bodyWidth (inline.zip parts) := by
   -- Successful assembly has already established that its total width is representable.
   have nameable := assemble_nameable inline parts bytes wrote
-  simp only [assemble, ite_eq_right (show ¬ headWidth (inline.zip parts)
+  simp only [assemble_eq, ite_eq_right (show ¬ headWidth (inline.zip parts)
     + bodyWidth (inline.zip parts) ≥ 2 ^ (8 * bytesPerOffset) by omega),
     Pure.pure, Except.pure] at wrote
   -- Identify the returned bytes as the header followed by the bodies, then add their widths.
@@ -483,7 +484,7 @@ theorem assemble_inline (parts : List Bytes) (bytes : Bytes)
     bytes = concatParts parts := by
   -- Successful assembly passes the composite size bound even when no offsets are stored.
   have nameable := assemble_nameable (parts.map fun _ => true) parts bytes wrote
-  simp only [assemble, ite_eq_right (show ¬ headWidth ((parts.map fun _ => true).zip parts)
+  simp only [assemble_eq, ite_eq_right (show ¬ headWidth ((parts.map fun _ => true).zip parts)
     + bodyWidth ((parts.map fun _ => true).zip parts) ≥ 2 ^ (8 * bytesPerOffset) by omega),
     Pure.pure, Except.pure] at wrote
   rw [← Except.ok.inj wrote]
@@ -601,12 +602,13 @@ theorem offsetSpans_runningOffsets : ∀ (parts : List Bytes) (start : Nat),
       = .ok (parts.map Array.size) := by
   intro parts
   induction parts with
-  | nil => intro _; simp [runningOffsets, offsetSpans]
+  | nil => intro _; simp [runningOffsets, offsetSpans_nil]
   | cons part rest ih =>
     intro start
     -- Either this is the last element, closed by the budget, or the next one closes it.
     have onward := ih (start + part.size)
-    cases rest <;> simp_all [runningOffsets, offsetSpans, offsetSlots_cons, bodyWidth_nil,
+    cases rest <;> simp_all [runningOffsets, offsetSpans_nil, offsetSpans_single,
+        offsetSpans_cons_cons, offsetSlots_cons, bodyWidth_nil,
         bodyWidth_cons_variable,
       Nat.add_assoc, Bind.bind, Except.bind, pure, Except.pure]
 
@@ -630,7 +632,7 @@ theorem assemble_offset (parts : List Bytes) (bytes : Bytes)
     bytes = headOf (parts.length * bytesPerOffset) (offsetSlots parts) ++ concatParts parts := by
   -- Successful assembly guarantees that the entire table and payload fit the offset range.
   have nameable := assemble_nameable (parts.map fun _ => false) parts bytes wrote
-  simp only [assemble, ite_eq_right (show ¬ headWidth ((parts.map fun _ => false).zip parts)
+  simp only [assemble_eq, ite_eq_right (show ¬ headWidth ((parts.map fun _ => false).zip parts)
     + bodyWidth ((parts.map fun _ => false).zip parts) ≥ 2 ^ (8 * bytesPerOffset) by omega),
     Pure.pure, Except.pure] at wrote
   rw [← Except.ok.inj wrote]

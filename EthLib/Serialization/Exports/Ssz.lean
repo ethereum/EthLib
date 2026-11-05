@@ -114,13 +114,15 @@ def jsonOfValue : Value → Json
   | .uint n => Json.mkObj [("uint", n)]
   | .bytes data => Json.mkObj [("bytes", toHex data)]
   | .bits data => Json.mkObj [("bits", Json.arr (data.map Json.bool))]
-  | .seq elements => Json.mkObj [("seq", Json.arr (jsonOfValues elements).toArray)]
+  | .seq elements => Json.mkObj [("seq", Json.arr (jsonOfValues elements #[]))]
   | .union selector data => Json.mkObj [("union", Json.arr #[selector, jsonOfValue data])]
 
-/-- The JSON documents of values, in order. -/
-def jsonOfValues : List Value → List Json
-  | [] => []
-  | value :: rest => jsonOfValue value :: jsonOfValues rest
+/-- The JSON documents so far, then those of the values, in order.
+
+The loop runs in constant stack for any number of values. -/
+def jsonOfValues : List Value → Array Json → Array Json
+  | [], out => out
+  | value :: rest, out => jsonOfValues rest (out.push (jsonOfValue value))
 
 end
 

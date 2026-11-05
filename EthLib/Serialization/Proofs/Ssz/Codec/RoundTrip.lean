@@ -83,7 +83,7 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
           rw [concatParts_size width parts widths, counted, Nat.mul_comm]
         have nameable := serializeSequence_size_lt wrote
         rw [sizeIs, ← counted] at nameable
-        simp only [deserialize, vectorSlices, fixed, sizeIs,
+        simp only [deserialize, vectorSlices_eq, fixed, sizeIs,
           ite_eq_right (Nat.not_le.mpr nameable), bne_self_eq_false, ite_eq_right,
           Bool.false_eq_true, not_false_eq_true, ← counted]
         rw [map_extract_concatParts width parts widths]
@@ -156,10 +156,10 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
         -- No elements, so the table is empty and so is the encoding.
         have none : elements = [] := List.eq_nil_of_length_eq_zero lengths.symm
         subst none
-        simp [deserialize, vectorSlices, varying, headOf_nil, concatParts, deserializeEach]
+        simp [deserialize, vectorSlices_eq, varying, headOf_nil, concatParts, deserializeEach_nil]
         rfl
       | part :: rest, lengths, nameable, decoded, sizeIs, frontIs =>
-        simp only [deserialize, vectorSlices, varying, sizeIs,
+        simp only [deserialize, vectorSlices_eq, varying, sizeIs,
           ite_eq_right (Nat.not_le.mpr nameable),
           ite_eq_right (show ¬ ((part :: rest).length * bytesPerOffset
             + bodyWidth (offsetSlots (part :: rest))

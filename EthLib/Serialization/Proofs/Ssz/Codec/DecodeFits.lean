@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.Uint
 public import EthLib.Serialization.Proofs.Ssz.Codec.Admits
 public import EthLib.Serialization.Proofs.Ssz.Codec.StructOrder
@@ -34,20 +35,22 @@ theorem readUint_lt (data : Bytes) (start width : Nat) :
 theorem offsetSpans_length {offsets spans : List Nat} {scope : Nat}
     (read : offsetSpans offsets scope = .ok spans) : spans.length = offsets.length := by
   -- Each accepted start offset contributes one span, including a zero-length span.
-  induction offsets, scope using offsetSpans.induct generalizing spans with
-  | case1 => cases read; rfl
-  | case2 start scope bad => simp [offsetSpans, bad] at read
-  | case3 start scope good =>
-    simp only [offsetSpans, good, ite_false] at read
-    cases read
-    rfl
-  | case4 start next rest scope bad => simp [offsetSpans, bad] at read
-  | case5 start next rest scope good ih =>
-    -- A rejected suffix cannot occur inside a successfully decoded table.
-    simp only [offsetSpans, good, ite_false] at read
-    obtain ⟨more, tail, ⟨⟩⟩ := checksPassed read
-    -- Prepending the current span increases both counts by one.
-    simp [ih tail]
+  induction offsets generalizing spans with
+  | nil => rw [offsetSpans_nil] at read; cases read; rfl
+  | cons start rest ih =>
+    cases rest with
+    | nil =>
+      rw [offsetSpans_single] at read
+      split at read <;> cases read
+      rfl
+    | cons next rest =>
+      rw [offsetSpans_cons_cons] at read
+      split at read
+      · cases read
+      · -- A rejected suffix cannot occur inside a successfully decoded table.
+        obtain ⟨more, tail, ⟨⟩⟩ := checksPassed read
+        -- Prepending the current span increases both counts by one.
+        simp [ih tail]
 
 /-- Cutting a vector produces one slice per declared element. -/
 theorem vectorSlices_length {element : Desc} {count : Nat} {data : Bytes}
@@ -56,8 +59,8 @@ theorem vectorSlices_length {element : Desc} {count : Nat} {data : Bytes}
   -- The composite size restriction applies before either slicing strategy can succeed.
   by_cases huge : data.size ≥ 2 ^ (8 * bytesPerOffset)
   · cases fixed : element.fixedSize <;>
-      simp [vectorSlices, huge, throw_error, Bind.bind, Except.bind] at read
-  · simp only [vectorSlices, ite_eq_right huge] at read
+      simp [vectorSlices_eq, huge, throw_error, Bind.bind, Except.bind] at read
+  · simp only [vectorSlices_eq, ite_eq_right huge] at read
     cases fixed : element.fixedSize with
     -- Fixed-size slicing creates one equal-width interval for each declared element.
     | some width =>
@@ -99,7 +102,7 @@ theorem listSlices_bound {element : Desc} {limit : Nat} {data : Bytes}
     {slices : List Bytes} (read : listSlices element (some limit) data = .ok slices) :
     slices.length ≤ limit := by
   -- For fixed elements the count comes from byte length, and for variable elements it comes from the first offset.
-  simp [listSlices, throw_error, Bind.bind, Except.bind, pure, Except.pure] at read
+  simp [listSlices_eq, throw_error, Bind.bind, Except.bind, pure, Except.pure] at read
   repeat' split at read
   all_goals simp_all
   -- Every surviving decoder path has checked that its recovered count fits the capacity.
@@ -131,10 +134,10 @@ private theorem deserializeEach_fits {element : Desc}
   induction slices with
   | nil =>
     intro values read
-    simp_all [deserializeEach]
+    simp_all [deserializeEach_nil]
   | cons slice slices ih =>
     intro values read
-    rw [deserializeEach] at read
+    rw [deserializeEach_cons] at read
     -- The remaining slices must decode successfully because errors propagate.
     obtain ⟨value, head, read⟩ := checksPassed read
     obtain ⟨rest, tail, ⟨⟩⟩ := checksPassed read
@@ -320,14 +323,14 @@ theorem vectorSlices_overflow (element : Desc) (count : Nat) (data : Bytes)
     vectorSlices element count data = .error (.offsetOverflow data.size) := by
   -- Both fixed and variable element layouts enforce the same four-byte offset ceiling.
   cases element.fixedSize <;>
-    simp [vectorSlices, large, throw_error, Bind.bind, Except.bind]
+    simp [vectorSlices_eq, large, throw_error, Bind.bind, Except.bind]
 
 /-- A list budget outside the offset range is rejected independently of its capacity. -/
 theorem listSlices_overflow (element : Desc) (limit : Option Nat) (data : Bytes)
     (large : data.size ≥ 2 ^ (8 * bytesPerOffset)) :
     listSlices element limit data = .error (.offsetOverflow data.size) := by
   -- No declared element capacity enlarges the composite byte-offset range.
-  simp [listSlices, large, throw_error, Bind.bind, Except.bind]
+  simp [listSlices_eq, large, throw_error, Bind.bind, Except.bind]
 
 /-- Decoding a delimited bit list finds a nonzero last byte, and the bits below its highest set bit. -/
 theorem unpackDelimited_ok {limit : Option Nat} {data : Bytes} {bits : Array Bool}
@@ -367,7 +370,8 @@ theorem vectorSlices_offsets {element : Desc} {length : Nat} {data : Bytes} {sli
     (varies : element.fixedSize = none) (read : vectorSlices element length data = .ok slices) :
     length * bytesPerOffset ≤ data.size := by
   -- Cutting refuses an encoding too short to hold the offset table.
-  simp only [vectorSlices, varies, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, pure,
+  simp only [vectorSlices_eq, varies, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind,
+    pure,
     Except.pure] at read
   split at read
   · cases read
@@ -389,7 +393,7 @@ theorem listSlices_facts {element : Desc} {limit : Option Nat} {data : Bytes} {s
       (width = 0 → slices.length = 0)) ∧
     (element.fixedSize = none → (data.size = 0 ∧ slices.length = 0) ∨
       (4 ≤ data.size ∧ slices.length = readUint data 0 bytesPerOffset / 4 ∧ 4 * slices.length ≤ data.size)) := by
-  simp only [listSlices, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, pure,
+  simp only [listSlices_eq, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, pure,
     Except.pure] at read
   split at read
   · cases read

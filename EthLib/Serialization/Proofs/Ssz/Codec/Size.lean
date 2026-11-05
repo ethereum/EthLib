@@ -90,7 +90,8 @@ private theorem assemble_complete (inline : List Bool) (parts : List Bytes) (siz
     ∃ bytes, assemble inline parts = .ok bytes ∧ bytes.size = size := by
   -- The header and bodies together have exactly the measured size, so the overflow guard passes.
   refine ⟨headOf (headWidth (inline.zip parts)) (inline.zip parts) ++ bodiesOf (inline.zip parts), ?_, ?_⟩
-  · simp [assemble, measured, show ¬size ≥ 2 ^ (8 * bytesPerOffset) by simpa [bytesPerOffset] using Nat.not_le.mpr bounded,
+  · simp [assemble_eq, measured,
+      show ¬size ≥ 2 ^ (8 * bytesPerOffset) by simpa [bytesPerOffset] using Nat.not_le.mpr bounded,
       pure, Except.pure]
   · simpa only [Array.size_append, headOf_size, bodiesOf_size] using measured
 

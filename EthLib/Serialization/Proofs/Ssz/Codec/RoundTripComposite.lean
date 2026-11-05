@@ -259,14 +259,14 @@ theorem deserializeEach_reads_back :
   intro element elements
   -- Use the per-element round trip in the same order that the encoder collected the parts.
   induction elements with
-  | nil => intro parts wrote _; simp_all [serializeEach_nil, deserializeEach]
+  | nil => intro parts wrote _; simp_all [serializeEach_nil, deserializeEach_nil]
   | cons value values ih =>
     intro parts wrote reads
     cases head : serialize element value <;> cases tail : serializeEach element values <;>
       simp [serializeEach_cons, head, tail, Bind.bind, Except.bind, Pure.pure, Except.pure] at wrote
     subst wrote
     -- Combine the first recovered value with the recursively recovered sequence.
-    simp only [deserializeEach, reads value (by simp) _ head,
+    simp only [deserializeEach_cons, reads value (by simp) _ head,
       ih _ tail (fun v m => reads v (List.mem_cons_of_mem _ m)), Bind.bind, Except.bind]
     rfl
 

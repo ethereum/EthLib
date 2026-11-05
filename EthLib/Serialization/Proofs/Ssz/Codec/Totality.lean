@@ -26,7 +26,7 @@ private theorem overflow_assemble (inline : List Bool) (parts : List Bytes) :
     OnlyOverflow (assemble inline parts) := by
   -- The only assembly failure is a total byte count outside the four-byte offset range.
   intro fault failed
-  simp only [assemble] at failed
+  simp only [assemble_eq] at failed
   split at failed
   · -- A failing assembly records exactly the offending header-plus-body size.
     exact ⟨_, (Except.error.inj failed).symm, ‹_›⟩

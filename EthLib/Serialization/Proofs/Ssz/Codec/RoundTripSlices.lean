@@ -18,7 +18,7 @@ theorem listSlices_concat_fixed {element : Desc} {width : Nat}
     listSlices element limit (concatParts parts) = .ok parts := by
   -- Equal element widths recover the count by division, including the empty sequence.
   cases parts with
-  | nil => simp [listSlices, concatParts, Pure.pure, Except.pure]
+  | nil => simp [listSlices_eq, concatParts, Pure.pure, Except.pure]
   | cons part rest =>
     have sizeIs := concatParts_size width (part :: rest) widths
     -- A positive width makes division recover the element count exactly.
@@ -33,7 +33,7 @@ theorem listSlices_concat_fixed {element : Desc} {width : Nat}
     have extracted := map_extract_concatParts width (part :: rest) widths
     -- Adding a capacity check changes only whether the recovered count is permitted.
     cases limit <;>
-      simp only [listSlices, sizeIs, fixed, beq_iff_eq, bne_iff_ne,
+      simp only [listSlices_eq, sizeIs, fixed, beq_iff_eq, bne_iff_ne,
         ite_eq_right notEmpty, ite_eq_right (Nat.ne_of_gt positive), ite_eq_right (Nat.not_le.mpr nameable),
         Nat.mul_mod_left, ne_self_iff_false, counted, ite_false, Bind.bind, Except.bind, Pure.pure,
         Except.pure]
@@ -51,7 +51,7 @@ theorem listSlices_offset_parts {element : Desc} (varying : element.fixedSize = 
       (headOf (parts.length * bytesPerOffset) (offsetSlots parts) ++ concatParts parts) = .ok parts := by
   -- With no elements, both the table and body are empty.
   cases parts with
-  | nil => simp [listSlices, headOf_nil, concatParts, Pure.pure, Except.pure]
+  | nil => simp [listSlices_eq, headOf_nil, concatParts, Pure.pure, Except.pure]
   | cons part rest =>
     let parts := part :: rest
     have nameable : parts.length * bytesPerOffset + bodyWidth (offsetSlots parts) <
@@ -88,7 +88,8 @@ theorem listSlices_offset_parts {element : Desc} (varying : element.fixedSize = 
       ++ concatParts parts) = .ok parts
     -- Both capacity choices use the same recovered offsets and body spans.
     cases limit <;>
-      simp only [listSlices, varying, sizeIs, firstIs, counted, ite_eq_right (Nat.not_le.mpr nameable),
+      simp only [listSlices_eq, varying, sizeIs, firstIs, counted,
+        ite_eq_right (Nat.not_le.mpr nameable),
         beq_iff_eq, bne_iff_ne, ite_eq_right notEmpty, ite_eq_right scopeEnough, ite_eq_right firstEnough,
         Nat.mul_mod_left, ne_self_iff_false, ite_false, ite_eq_right inScope]
     all_goals try rw [ite_eq_right (Nat.not_lt.mpr (within _ rfl))]

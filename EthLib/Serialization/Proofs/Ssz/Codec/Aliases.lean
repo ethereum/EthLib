@@ -53,7 +53,7 @@ theorem serializeSequence_bytes (data : Bytes) :
   have slots : ((data.toList.map fun byte => #[byte]).map fun _ => true).zip
       (data.toList.map fun byte => #[byte]) = data.toList.map fun byte => (true, #[byte]) := by
     induction data.toList <;> simp_all
-  simp only [assemble, slots]
+  simp only [assemble_eq, slots]
   rw [(byteSlots_width _).1, (byteSlots_width _).2]
   simp only [Array.length_toList, Nat.add_zero]
   -- The bound counts every byte, though no offset is ever written.
@@ -86,12 +86,12 @@ theorem serialize_byteList_alias (data : Bytes) (limit : Nat) :
 private theorem deserializeEach_bytes :
     ∀ (slices : List Bytes), (∀ slice ∈ slices, slice.size = 1) →
       deserializeEach (.uint 1) slices = .ok (slices.map fun slice => .uint (slice[0]!).toNat)
-  | [], _ => by simp [deserializeEach]
+  | [], _ => by simp [deserializeEach_nil]
   | slice :: rest, single => by
     -- Each slice passes the width check and reads back as its only byte.
     have tail := deserializeEach_bytes rest fun other member =>
       single other (List.mem_cons_of_mem _ member)
-    simp [deserializeEach, deserialize, single slice List.mem_cons_self, readUint_zero,
+    simp [deserializeEach_cons, deserialize, single slice List.mem_cons_self, readUint_zero,
       readUint_succ, tail, Bind.bind, Except.bind, pure, Except.pure]
 
 /-- Cutting bytes into one-byte slices and decoding each gives the integer spelling. -/
@@ -113,7 +113,7 @@ private theorem deserializeEach_byteSlices (data : Bytes) :
 theorem deserialize_byteVector_alias (data : Bytes) (length : Nat) :
     deserialize (.vector (.uint 1) length) data =
       (deserialize (.byteVector length) data).map fun _ => .seq (byteValues data) := by
-  simp only [deserialize, vectorSlices, Desc.fixedSize]
+  simp only [deserialize, vectorSlices_eq, Desc.fixedSize]
   -- The size bound is checked first on both paths, then the same byte count.
   by_cases large : data.size ≥ 2 ^ (8 * bytesPerOffset)
   · simp [large, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, Except.map]
@@ -128,14 +128,14 @@ theorem deserialize_byteVector_alias (data : Bytes) (length : Nat) :
 theorem deserialize_byteList_alias (data : Bytes) (limit : Nat) :
     deserialize (.list (.uint 1) limit) data =
       (deserialize (.byteList limit) data).map fun _ => .seq (byteValues data) := by
-  simp only [deserialize, listSlices, Desc.fixedSize]
+  simp only [deserialize, listSlices_eq, Desc.fixedSize]
   -- The size bound is checked first on both paths, then the same limit.
   by_cases large : data.size ≥ 2 ^ (8 * bytesPerOffset)
   · simp [large, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, Except.map]
   -- An empty input is an empty list on one path and empty bytes on the other.
   by_cases empty : data = #[]
   · subst empty
-    simp [deserializeEach, byteValues, Bind.bind, Except.bind, Except.map, pure, Except.pure]
+    simp [deserializeEach_nil, byteValues, Bind.bind, Except.bind, Except.map, pure, Except.pure]
   -- Otherwise each byte is one element, so the element count is the byte count.
   have filled : data.size ≠ 0 := fun zero => empty (Array.eq_empty_of_size_eq_zero zero)
   by_cases within : data.size ≤ limit
