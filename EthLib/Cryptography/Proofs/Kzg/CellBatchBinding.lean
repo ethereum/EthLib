@@ -291,9 +291,9 @@ private theorem cell_term_identity (c i w t h x : Fr) :
   ring
 
 /-- The identity of the check, with the factor `-1` of the generator of `G2`. -/
-private theorem cell_identity {ll rlc rli rlp t : Fr}
-    (h : ll * t + (rlc + -rli + rlp) * -1 = 0) : rlc - rli + rlp - ll * t = 0 := by
-  linear_combination -h
+private theorem cell_identity {ll rlc rli rlp t : Fr} :
+    ll * t + (rlc + -rli + rlp) * -1 = 0 ↔ rlc - rli + rlp - ll * t = 0 :=
+  ⟨fun h => by linear_combination -h, fun h => by linear_combination -h⟩
 
 /-- **The batch check of cells as a scalar identity.**
 
@@ -303,19 +303,21 @@ Let the commitments decode to points that represent `c i`.
 
 Let the proofs decode to points that represent `w k`.
 
-If the batch check accepts, its challenge is a root of the error polynomial of the cells. -/
-theorem verifyCellKzgProofBatchImpl_root (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
-    (hs : s.WellFormed τ) {commitments : Array KZGCommitment}
+Let the batch check return the verdict `b`.
+
+Then `b` is true exactly when the challenge is a root of the error polynomial of the cells. -/
+theorem verifyCellKzgProofBatchImpl_ok_iff_root (laws : Bls.PairingLaws) {s : TrustedSetup}
+    {τ : Fr} (hs : s.WellFormed τ) {commitments : Array KZGCommitment}
     {commitmentIndices : Array CommitmentIndex} {cellIndices : Array CellIndex}
     {cosetsEvals : Array CosetEvals} {proofs : Array KZGProof} {commitmentsG1 proofsG1 : Array G1}
-    {c w : Nat → Fr}
+    {c w : Nat → Fr} {b : Bool}
     (hCd : commitments.mapM uncompressG1 = .ok commitmentsG1)
     (hPd : proofs.mapM uncompressG1 = .ok proofsG1)
     (hC : ∀ i < commitmentsG1.size, G1.Represents commitmentsG1[i]! (c i))
     (hP : ∀ k < proofsG1.size, G1.Represents proofsG1[k]! (w k))
     (h : verifyCellKzgProofBatchImpl s commitments commitmentIndices cellIndices cosetsEvals
-      proofs = .ok true) :
-    (cellErrorPoly τ c w commitmentIndices cellIndices cosetsEvals).eval
+      proofs = .ok b) :
+    b = true ↔ (cellErrorPoly τ c w commitmentIndices cellIndices cosetsEvals).eval
       (computeVerifyCellKzgProofBatchChallenge commitments commitmentIndices cellIndices
         cosetsEvals proofs) = 0 := by
   unfold verifyCellKzgProofBatchImpl at h
@@ -417,7 +419,7 @@ theorem verifyCellKzgProofBatchImpl_root (laws : Bls.PairingLaws) {s : TrustedSe
   have hs0 : G2.Represents (s.g2Monomial[0]'(by decide)) (τ ^ 0) := by
     have hm := hs.monomial_g2 ⟨0, by decide⟩
     simpa only [Fin.getElem_fin] using hm
-  have hid := (laws.two_pairs hA hs64 ((hCm.add hD.neg).add hE) hs0.neg).mp hpair
+  have hid := laws.two_pairs hA hs64 ((hCm.add hD.neg).add hE) hs0.neg
   -- Each sum of the identity, as a sum over the cells.
   have hpow : ∀ k < n, rp[k]! = r ^ k := fun k hk => by
     rw [getElem!_pos rp k (by rw [hrp]; exact hk), getElem_computePowers, Bls.Fr.powNat_eq_pow]
@@ -466,6 +468,8 @@ theorem verifyCellKzgProofBatchImpl_root (laws : Bls.PairingLaws) {s : TrustedSe
     exact Finset.sum_congr rfl fun k hk => by rw [hpow k (Finset.mem_range.mp hk)]
   rw [hcsum, hdsum, hesum, hasum] at hid
   -- The value of the error polynomial at `r` is the left side of the identity of the check.
+  subst hpair
+  refine hid.trans ?_
   rw [cellErrorPoly, eval_errorPoly, h₁]
   have key : ∑ k ∈ Finset.range n, cellError τ (c commitmentIndices[k]!) (w k)
         (cellShift cellIndices[k]!) (cellInterpolant cellIndices[k]! cosetsEvals[k]!) * r ^ k =
@@ -476,8 +480,29 @@ theorem verifyCellKzgProofBatchImpl_root (laws : Bls.PairingLaws) {s : TrustedSe
     Finset.sum_congr rfl fun k _ => cell_term_identity _ _ _ _ _ _
   rw [key, Finset.sum_sub_distrib, Finset.sum_add_distrib, Finset.sum_sub_distrib,
     ← Finset.sum_mul]
-  rw [pow_zero] at hid
-  exact cell_identity hid
+  rw [pow_zero]
+  exact cell_identity
+
+/-- **An accepted batch check of cells has its challenge as a root.**
+
+Under the hypotheses of the scalar identity, let the batch check accept.
+
+Then its challenge is a root of the error polynomial of the cells. -/
+theorem verifyCellKzgProofBatchImpl_root (laws : Bls.PairingLaws) {s : TrustedSetup} {τ : Fr}
+    (hs : s.WellFormed τ) {commitments : Array KZGCommitment}
+    {commitmentIndices : Array CommitmentIndex} {cellIndices : Array CellIndex}
+    {cosetsEvals : Array CosetEvals} {proofs : Array KZGProof} {commitmentsG1 proofsG1 : Array G1}
+    {c w : Nat → Fr}
+    (hCd : commitments.mapM uncompressG1 = .ok commitmentsG1)
+    (hPd : proofs.mapM uncompressG1 = .ok proofsG1)
+    (hC : ∀ i < commitmentsG1.size, G1.Represents commitmentsG1[i]! (c i))
+    (hP : ∀ k < proofsG1.size, G1.Represents proofsG1[k]! (w k))
+    (h : verifyCellKzgProofBatchImpl s commitments commitmentIndices cellIndices cosetsEvals
+      proofs = .ok true) :
+    (cellErrorPoly τ c w commitmentIndices cellIndices cosetsEvals).eval
+      (computeVerifyCellKzgProofBatchChallenge commitments commitmentIndices cellIndices
+        cosetsEvals proofs) = 0 :=
+  (verifyCellKzgProofBatchImpl_ok_iff_root laws hs hCd hPd hC hP h).mp rfl
 
 /-- **An accepted batch of cells is valid, or its challenge is a root.**
 

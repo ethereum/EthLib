@@ -61,7 +61,9 @@ The BSDH advantage is relative to a model of the target group.
 
 The real pairing gives such a model under the pairing law.
 
-No theorem here proves that an honest cell is accepted by the setup built from the powers.
+Under the pairing law, this verifier accepts the cells and proofs of a blob.
+
+Another file proves it.
 
 Theorem 1 of ePrint 2025/1683 is not proved here.
 
@@ -209,20 +211,8 @@ def CellOpening.Verifies (s : TrustedSetup) (commitment : Bytes48) (o : CellOpen
 /-- Bytes that pass KZG validation decode to a point that represents some scalar. -/
 theorem represents_of_validateKzgG1 {b : Bytes48} (h : validateKzgG1 b = true) {P : G1}
     (hP : uncompressG1 b = .ok P) : ∃ a, G1.Represents P a := by
-  have hQ : ∃ Q, validateKzgG1Point b = .ok Q := by
-    unfold validateKzgG1 at h
-    unfold validateKzgG1Point
-    by_cases hb : (b == G1_POINT_AT_INFINITY) = true
-    · exact ⟨_, ite_eq_left hb⟩
-    · rw [ite_eq_right hb] at h ⊢
-      cases hk : G1.keyValidatePoint ⟨b.toArray⟩ with
-      | error e =>
-        simp [G1.keyValidate, hk, bind, Except.bind, Except.isOk, Except.toBool] at h
-      | ok q => exact ⟨q, rfl⟩
-  obtain ⟨Q, hQ⟩ := hQ
-  have hu := (validateKzgG1Point_eq_ok_iff.mp hQ).1
-  unfold uncompressG1 at hP
-  rw [hu] at hP
+  obtain ⟨Q, hQ⟩ := exists_validateKzgG1Point_of_validateKzgG1 h
+  rw [uncompressG1_of_validateKzgG1Point hQ] at hP
   cases hP
   exact represents_of_validateKzgG1Point hQ
 
@@ -318,13 +308,6 @@ theorem validateKzgG1_of_verifyCellKzgProofBatch {s : TrustedSetup} {commitment 
     validateKzgG1 commitment = true ∧ validateKzgG1 proof = true := by
   obtain ⟨hc, hp⟩ := validates_of_verifyCellKzgProofBatch h
   exact ⟨hc _ (by simp), hp _ (by simp)⟩
-
-/-- Cells that decode have their values as their decoding.
-
-It is stated on variable cells, so the kernel never evaluates the decoding. -/
-private theorem decodeCells_of_ok {cells : Array Cell} {evals : Array CosetEvals}
-    (h : cells.mapM cellToCosetEvals = .ok evals) : decodeCells cells = evals := by
-  simp only [decodeCells, h]
 
 /-- A polynomial of degree zero that is not zero has no root. -/
 theorem eval_ne_zero_of_natDegree_le_zero {P : Fr[X]} (h0 : P ≠ 0) (hd : P.natDegree ≤ 0)

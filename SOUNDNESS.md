@@ -387,7 +387,8 @@ Under the pairing law and for a well-formed setup, honest KZG proofs and blob pr
 Let opening `i` have commitment `c_i`, value `y_i`, point `z_i` and proof `w_i`.
 Then its challenge `r` is a root of `P(X) = sum_i X^i (c_i - y_i - w_i (τ - z_i))`.
 `P` is zero exactly when every opening satisfies the identity of the single check.
-`verifyCellKzgProofBatchImpl_root` (`Proofs/Kzg/CellBatchBinding.lean`) states the same for the batch check of cells.
+`verifyCellKzgProofBatchImpl_ok_iff_root` (`Proofs/Kzg/CellBatchBinding.lean`) states the same for the batch check of cells, as an equivalence.
+Its verdict is true exactly when the challenge is a root.
 Let cell `k` have commitment `c_{i_k}` at commitment index `i_k`, proof `w_k`, coset shift `h_k`, and values that interpolate to `I_k` of degree below 64.
 Then the challenge is a root of `sum_k X^k (c_{i_k} - I_k(τ) - w_k (τ^64 - h_k^64))`.
 That polynomial is zero exactly when every cell is valid.
@@ -403,6 +404,9 @@ The theorem holds in any model of that group, `TargetGroup`, such as the pairing
 `Proofs/Kzg/CellVerifier.lean` lifts these three results to the outer check, `verifyCellKzgProofBatch`, which the bindings call.
 That check takes one commitment per cell, keeps the first copy of each, and runs the core check.
 `verifyCellKzgProofBatch_valid_or_root` checks each cell against its own commitment.
+`verifyCellKzgProofBatch_exists_ok` shows that the outer check returns a verdict, with no error, on well-formed input.
+The input is well formed when the sizes agree, each cell index is below 128, each cell decodes, and each commitment and proof passes KZG validation.
+`verifyCellKzgProofBatch_ok_iff_root` states that this verdict is true exactly when the challenge is a root.
 `verifyCellKzgProofBatch_binding` concludes that the two cells are equal as bytes, or one of the two other cases holds.
 `prEvent_cellInput_root_le` keeps the bound `(q + 1) (n - 1) / r`, where the adversary outputs the inputs of the outer check.
 In these three theorems, the scalar of a commitment or a proof is a function of its bytes.
@@ -448,7 +452,11 @@ The games check one cell per call; acceptance of a batch of many cells under one
 `cellOpeningValid_computeCellsAndKzgProofs` (`Proofs/Kzg/HonestCells.lean`) is about the cells and proofs that the code computes for a blob.
 Under every well-formed setup, they are valid openings for the commitment of the blob, so also under the setup that the games build.
 A valid opening satisfies the scalar equation of a valid cell, with points that pass KZG validation.
-No theorem yet proves that the batch check accepts such openings.
+`verifyCellKzgProofBatch_of_cellOpeningValid` proves that the batch check of cells accepts every batch of valid openings.
+It assumes `PairingLaws` and a well-formed setup, and the commitments of the batch may repeat.
+So the batch check accepts the cells and proofs of blobs (`verifyCellKzgProofBatch_computeCellsAndKzgProofs`).
+For one cell, `CellOpening.verifies_iff` shows that the verifier of the games accepts an opening exactly when it is valid.
+`CellOpening.verifies_computeCellsAndKzgProofs` applies this to the setup that the games build: the openings of a blob verify there.
 EthLib does not prove Theorem 1 of 2025/1683, that PeerDAS is a secure data-availability sampling scheme, and does not claim it.
 That theorem is informal in the paper.
 Its §3.2 explains how it follows from the two lemmas.
