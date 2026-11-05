@@ -412,7 +412,10 @@ That BSDH and ARSDH are hard stays an informal hypothesis: no theorem assumes it
 An adversary is any Lean function, so without a model of cost, hardness cannot be stated as a Lean hypothesis.
 The BSDH advantage is relative to a model of the target group; `TargetGroup.ofPairingLaws` is the model of the real pairing.
 The games check one cell per call; acceptance of a batch of many cells under one challenge is outside them.
-No theorem proves that an honest cell is accepted by the setup that the games build.
+`cellOpeningValid_computeCellsAndKzgProofs` (`Proofs/Kzg/HonestCells.lean`) is about the cells and proofs that the code computes for a blob.
+Under every well-formed setup, they are valid openings for the commitment of the blob, so also under the setup that the games build.
+A valid opening satisfies the scalar equation of a valid cell, with points that pass KZG validation.
+No theorem yet proves that the batch check accepts such openings.
 EthLib does not prove Theorem 1 of 2025/1683, that PeerDAS is a secure data-availability sampling scheme, and does not claim it.
 That theorem is informal in the paper.
 Its §3.2 explains how it follows from the two lemmas.
