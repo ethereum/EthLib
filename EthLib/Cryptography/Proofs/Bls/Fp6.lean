@@ -41,9 +41,9 @@ instance : One Fp6 := ⟨one⟩
 @[simp] theorem one_c0 : (1 : Fp6).c0 = 1 := rfl
 @[simp] theorem one_c1 : (1 : Fp6).c1 = 0 := rfl
 @[simp] theorem one_c2 : (1 : Fp6).c2 = 0 := rfl
-@[simp] theorem v_c0 : v.c0 = 0 := rfl
-@[simp] theorem v_c1 : v.c1 = 1 := rfl
-@[simp] theorem v_c2 : v.c2 = 0 := rfl
+@[simp] theorem v_c0 : (v : Fp6).c0 = 0 := rfl
+@[simp] theorem v_c1 : (v : Fp6).c1 = 1 := rfl
+@[simp] theorem v_c2 : (v : Fp6).c2 = 0 := rfl
 @[simp] theorem ofFp2_c0 (x : Fp2) : (ofFp2 x).c0 = x := rfl
 @[simp] theorem ofFp2_c1 (x : Fp2) : (ofFp2 x).c1 = 0 := rfl
 @[simp] theorem ofFp2_c2 (x : Fp2) : (ofFp2 x).c2 = 0 := rfl
