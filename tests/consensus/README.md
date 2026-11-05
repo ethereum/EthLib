@@ -82,12 +82,12 @@ The directory `operations/` holds block operation cases of `minimal.tar.gz`, cop
 A case gives a state before the operation, the operation, and the state after it when the operation is valid.
 A case without a state after it must be rejected.
 The directory keeps two cases of each handler that EthLib runs, at each fork where it runs.
-Where the handler has both, one is valid and one invalid.
+These are the block header and the proposer and attester slashings from Phase 0 to Fulu.
+At Gloas they are the payload attestation, the execution payload bid, and the builder deposit and exit requests.
+From Gloas a slashing also removes the pending builder payments of the slashed proposer, which EthLib does not hold yet.
+Where the handler has both, one case is valid and one invalid.
 Every builder deposit or exit request case of the release has a state after it.
 So the second case of these two handlers is a request that leaves the state as it was.
-These are the block header from Phase 0 to Fulu, and the proposer and attester slashings from Phase 0 to Deneb.
-At Gloas they are the payload attestation, the execution payload bid, and the builder deposit and exit requests.
-From Electra a slashing starts an exit counted in balance, which EthLib does not hold yet.
 A mainnet state is a few hundred kilobytes, so only the weekly parity job reads the mainnet cases.
 `bindings/python/tests/consensus/test_operations.py` runs each case through the Lean transition and compares the state after it.
 
