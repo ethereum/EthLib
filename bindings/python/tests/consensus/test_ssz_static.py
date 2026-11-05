@@ -66,6 +66,13 @@ def test_no_container_outside_its_forks(container):
             consensus.ssz_static("minimal", FORKS[fork], container, b"")
 
 
+def test_no_container_at_gloas_yet():
+    # The containers of Gloas are not specified yet, so no Fulu form stands in for them.
+    for container in CONTAINERS:
+        with pytest.raises(SszError):
+            consensus.ssz_static("minimal", "glamsterdam", container, b"")
+
+
 def test_every_fork_of_a_container_has_cases():
     found = {(fork, container) for _, fork, container, _ in _cases()}
     forks = list(FORKS)

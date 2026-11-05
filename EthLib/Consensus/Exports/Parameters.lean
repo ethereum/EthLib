@@ -40,6 +40,7 @@ instance : ToJson U256 where
 
 deriving instance ToJson for Preset
 deriving instance ToJson for BlobScheduleEntry
+deriving instance ToJson for GasLimitScheduleEntry
 deriving instance ToJson for Networking.Gossip.SubnetParameters
 deriving instance ToJson for Config
 deriving instance ToJson for Parameters
@@ -69,13 +70,14 @@ def configOf : String → Result Config
   | "minimal" => return .minimal
   | name => throw (0, s!"no configuration is named {name}")
 
-/-- The fork of a name, for the forks from Phase 0 to BPO2, the last fork up to Fulu.
+/-- The fork of a name, for the forks from Phase 0 to Glamsterdam, whose beacon chain is Gloas.
 
-The configuration has no epoch for BPO3 to BPO5, and Gloas is not yet specified.
+The configuration has no epoch for BPO3 to BPO5, and Heze is not yet specified.
 
-So the forks after BPO2 fail. -/
+So BPO3 to BPO5 and Hegotá fail. -/
 def forkOf (name : ByteArray) : Result Fork := do
-  let fork ← forkUpTo .bpo2 name
+  let fork ← forkUpTo .glamsterdam name
+  if .bpo3 ≤ fork ∧ fork ≤ .bpo5 then throw (0, s!"fork {fork.name} not yet specified")
   if .phase0 ≤ fork then return fork
   else throw (0, s!"{fork.name} is not a fork of the beacon chain")
 

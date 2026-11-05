@@ -20,6 +20,8 @@ The container is named as the source names it, at a preset and a fork.
 The export decodes the bytes, then returns the root of the value and its bytes encoded again.
 
 A name with no container at the fork comes back as code 0, since no error type covers it.
+
+The containers of Gloas are not yet specified, so Glamsterdam fails with code 0 too.
 -/
 
 public section
@@ -108,6 +110,7 @@ The preset, the fork and the container are named in UTF-8. -/
 def sszStaticExport (name fork type data : ByteArray) : Result ByteArray := do
   let preset ← presetOf (← nameOf name)
   let fork ← forkOf fork
+  if .glamsterdam ≤ fork then throw (0, s!"fork {fork.name} not yet specified")
   let type ← nameOf type
   let some container := containerOf preset fork type
     | throw (0, s!"no container {type} at {fork.name}")

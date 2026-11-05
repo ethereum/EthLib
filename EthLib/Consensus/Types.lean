@@ -79,4 +79,9 @@ abbrev CellIndex := UInt64
 /-- From Fulu: the index of a row, one blob, in the matrix of cells of a block. -/
 abbrev RowIndex := UInt64
 
+/-- From Gloas: the index of a builder in the registry of builders.
+
+[EIP-7732](https://eips.ethereum.org/EIPS/eip-7732#types) defines it. -/
+abbrev BuilderIndex := UInt64
+
 end EthLib.Consensus

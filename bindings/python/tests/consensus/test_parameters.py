@@ -1,6 +1,6 @@
 """The presets, configurations and parameters of EthLib against the files of consensus-specs.
 
-The files are the mainnet and minimal presets from Phase 0 to Fulu, and the two configurations.
+The files are the mainnet and minimal presets from Phase 0 to Gloas, and the two configurations.
 They are copied byte for byte from ethereum/consensus-specs, at the pin that `tests/sources.toml`
 records, into `tests/consensus/parameters/`, and `SHA256SUMS` there fixes their digests.
 """
@@ -17,8 +17,8 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "parameter
 
 PRESETS = ("mainnet", "minimal")
 
-# The forks of the beacon chain up to Fulu, in order, as consensus-specs names them.
-FORKS = ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu")
+# The forks of the beacon chain up to Gloas, in order, as consensus-specs names them.
+FORKS = ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas")
 
 # Each fork of the shared timeline from Phase 0 on, with the fork of the beacon chain in force.
 TIMELINE = {
@@ -36,6 +36,7 @@ TIMELINE = {
     "fusaka": "fulu",
     "bpo1": "fulu",
     "bpo2": "fulu",
+    "glamsterdam": "gloas",
 }
 
 # The preset values that a fork replaces. A replacement carries the name of its fork as a suffix,
@@ -56,30 +57,16 @@ NEW_WITH_SUFFIX = {"MAX_EFFECTIVE_BALANCE_ELECTRA"}
 
 # Configuration values that EthLib does not hold in the configuration.
 # The gossip message ID defines the two message domains as constants.
-# The rest belong to forks after Fulu: Gloas, Heze, and the feature forks of EIP-8198 and EIP-8321.
+# The rest belong to forks after Gloas: Heze, and the feature forks of EIP-8198 and EIP-8321.
 NOT_IN_CONFIG = {
     "MESSAGE_DOMAIN_INVALID_SNAPPY",
     "MESSAGE_DOMAIN_VALID_SNAPPY",
-    "GLOAS_FORK_VERSION",
-    "GLOAS_FORK_EPOCH",
     "HEZE_FORK_VERSION",
     "HEZE_FORK_EPOCH",
-    "MIN_BUILDER_WITHDRAWABILITY_DELAY",
-    "ATTESTATION_DUE_BPS_GLOAS",
-    "AGGREGATE_DUE_BPS_GLOAS",
-    "SYNC_MESSAGE_DUE_BPS_GLOAS",
-    "CONTRIBUTION_DUE_BPS_GLOAS",
-    "PAYLOAD_DUE_BPS",
-    "PAYLOAD_ATTESTATION_DUE_BPS",
     "INCLUSION_LIST_DUE_BPS",
-    "CHURN_LIMIT_QUOTIENT_GLOAS",
-    "CONSOLIDATION_CHURN_LIMIT_QUOTIENT",
-    "MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS",
-    "MAX_REQUEST_PAYLOADS",
     "MAX_REQUEST_INCLUSION_LIST",
     "MIN_SLOTS_FOR_INCLUSION_LISTS_REQUESTS",
     "MAX_TRANSACTIONS_BYTES_PER_INCLUSION_LIST",
-    "GAS_LIMIT_SCHEDULE",
     "EIP8198_FORK_VERSION",
     "EIP8198_FORK_EPOCH",
     "SLOT_DURATION_MS_EIP8198",
@@ -174,3 +161,5 @@ def test_unknown_names_are_rejected() -> None:
         consensus.config("holesky")
     with pytest.raises(ValueError):
         consensus.parameters("mainnet", "frontier")
+    with pytest.raises(ValueError):
+        consensus.parameters("mainnet", "hegota")

@@ -11,6 +11,10 @@ A preset fixes the values that differ between modes of operation, such as mainne
 It holds each value under the name of its source, so a value that a fork replaces has two fields.
 
 The parameters at a fork take, for each such value, the field in force at that fork.
+
+The values of Gloas come from EIP-7732 and EIP-8282, in Last Call on 2026-11-03, and EIP-7688.
+
+EIP-7688 was in Review then, and it asks for the three message size bounds without fixing them.
 -/
 
 @[expose] public section
@@ -19,7 +23,7 @@ namespace EthLib.Consensus
 
 open Base
 
-/-- The values of a preset, from Phase 0 to Fulu. -/
+/-- The values of a preset, from Phase 0 to Gloas. -/
 structure Preset where
   /-- The most committees in one slot. -/
   MAX_COMMITTEES_PER_SLOT : UInt64
@@ -167,6 +171,28 @@ structure Preset where
   KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH : UInt64
   /-- From Fulu: the number of field elements in a cell. -/
   FIELD_ELEMENTS_PER_CELL : UInt64
+  /-- From Gloas: the number of members of the payload timeliness committee of a slot.
+
+  [EIP-7732](https://eips.ethereum.org/EIPS/eip-7732#misc-1) defines it. -/
+  PTC_SIZE : UInt64
+  /-- From Gloas: the most payload attestations in one block. -/
+  MAX_PAYLOAD_ATTESTATIONS : UInt64
+  /-- From Gloas: the most builder deposit requests in one execution payload. -/
+  MAX_BUILDER_DEPOSIT_REQUESTS_PER_PAYLOAD : UInt64
+  /-- From Gloas: the most builder exit requests in one execution payload. -/
+  MAX_BUILDER_EXIT_REQUESTS_PER_PAYLOAD : UInt64
+  /-- From Gloas: the most builders that one sweep for withdrawals reads. -/
+  MAX_BUILDERS_PER_WITHDRAWALS_SWEEP : UInt64
+  /-- From Gloas: the most bytes of a signed aggregate with its proof, before compression.
+
+  A list without a limit does not bound the size of the message, so a constant does.
+
+  [EIP-7688](https://eips.ethereum.org/EIPS/eip-7688#network-message-size-bounds) asks for it. -/
+  MAX_SIGNED_AGGREGATE_AND_PROOF_SIZE : UInt64
+  /-- From Gloas: the most bytes of an attester slashing, before compression. -/
+  MAX_ATTESTER_SLASHING_SIZE : UInt64
+  /-- From Gloas: the most bytes of a signed execution payload bid, before compression. -/
+  MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE : UInt64
   deriving DecidableEq, Repr
 
 namespace Preset
@@ -257,6 +283,14 @@ def mainnet : Preset where
   MAX_PENDING_DEPOSITS_PER_EPOCH := 2 ^ 4
   KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH := 4
   FIELD_ELEMENTS_PER_CELL := 64
+  PTC_SIZE := 2 ^ 9
+  MAX_PAYLOAD_ATTESTATIONS := 2 ^ 2
+  MAX_BUILDER_DEPOSIT_REQUESTS_PER_PAYLOAD := 2 ^ 6
+  MAX_BUILDER_EXIT_REQUESTS_PER_PAYLOAD := 2 ^ 4
+  MAX_BUILDERS_PER_WITHDRAWALS_SWEEP := 2 ^ 14
+  MAX_SIGNED_AGGREGATE_AND_PROOF_SIZE := 16829
+  MAX_ATTESTER_SLASHING_SIZE := 2097616
+  MAX_SIGNED_EXECUTION_PAYLOAD_BID_SIZE := 196932
 
 /-- The minimal preset, which shrinks the mainnet preset for tests. -/
 def minimal : Preset :=
@@ -278,7 +312,11 @@ def minimal : Preset :=
     MAX_VALIDATORS_PER_WITHDRAWALS_SWEEP := 2 ^ 4
     PENDING_PARTIAL_WITHDRAWALS_LIMIT := 2 ^ 6
     PENDING_CONSOLIDATIONS_LIMIT := 2 ^ 6
-    MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP := 2 ^ 1 }
+    MAX_PENDING_PARTIALS_PER_WITHDRAWALS_SWEEP := 2 ^ 1
+    PTC_SIZE := 2 ^ 4
+    MAX_BUILDERS_PER_WITHDRAWALS_SWEEP := 2 ^ 4
+    MAX_SIGNED_AGGREGATE_AND_PROOF_SIZE := 1462
+    MAX_ATTESTER_SLASHING_SIZE := 131536 }
 
 end Preset
 

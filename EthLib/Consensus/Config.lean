@@ -10,7 +10,11 @@ public import EthLib.Networking.Gossip.Parameters
 
 A configuration fixes the values of one network, such as its genesis and the epochs of its forks.
 
-It holds each value under the name of its source, from Phase 0 to Fulu.
+It holds each value under the name of its source, from Phase 0 to Gloas.
+
+The values of Gloas come from EIP-7732, EIP-8061 and EIP-8261, in Last Call on 2026-11-03.
+
+They can change until the EIPs are final.
 
 The parameters of the attestation subnets come from the networking layer, which reads them too.
 
@@ -31,7 +35,15 @@ structure BlobScheduleEntry where
   MAX_BLOBS_PER_BLOCK : UInt64
   deriving DecidableEq, Repr
 
-/-- The values of a configuration, from Phase 0 to Fulu. -/
+/-- From Gloas: one entry of the gas limit schedule. -/
+structure GasLimitScheduleEntry where
+  /-- The first epoch of the entry. -/
+  EPOCH : Epoch
+  /-- The gas limit that the schedule recommends from that epoch on. -/
+  GAS_LIMIT : UInt64
+  deriving DecidableEq, Repr
+
+/-- The values of a configuration, from Phase 0 to Gloas. -/
 structure Config extends Networking.Gossip.SubnetParameters where
   /-- The name of the preset that the configuration uses. -/
   PRESET_BASE : String
@@ -75,12 +87,20 @@ structure Config extends Networking.Gossip.SubnetParameters where
   FULU_FORK_VERSION : Version
   /-- The first epoch of Fulu. -/
   FULU_FORK_EPOCH : Epoch
+  /-- The version of Gloas. -/
+  GLOAS_FORK_VERSION : Version
+  /-- The first epoch of Gloas. -/
+  GLOAS_FORK_EPOCH : Epoch
   /-- The length of a slot, in milliseconds. -/
   SLOT_DURATION_MS : UInt64
   /-- The expected time between two blocks of the deposit chain, in seconds. -/
   SECONDS_PER_ETH1_BLOCK : UInt64
   /-- The fewest epochs from the exit of a validator to its withdrawal. -/
   MIN_VALIDATOR_WITHDRAWABILITY_DELAY : Epoch
+  /-- From Gloas: the fewest epochs from the exit of a builder to its withdrawal.
+
+  [EIP-7732](https://eips.ethereum.org/EIPS/eip-7732#time-parameters) defines it. -/
+  MIN_BUILDER_WITHDRAWABILITY_DELAY : Epoch
   /-- The fewest epochs from the activation of a validator to its voluntary exit. -/
   SHARD_COMMITTEE_PERIOD : Epoch
   /-- The number of blocks of the deposit chain that a vote on its state stays behind. -/
@@ -95,6 +115,20 @@ structure Config extends Networking.Gossip.SubnetParameters where
   SYNC_MESSAGE_DUE_BPS : UInt64
   /-- From Altair: the part of a slot, in basis points, at which a contribution is due. -/
   CONTRIBUTION_DUE_BPS : UInt64
+  /-- From Gloas: the part of a slot, in basis points, at which an attestation is due.
+
+  [EIP-7732](https://eips.ethereum.org/EIPS/eip-7732#fork-choice-changes) gives it. -/
+  ATTESTATION_DUE_BPS_GLOAS : UInt64
+  /-- From Gloas: the part of a slot, in basis points, at which an aggregate is due. -/
+  AGGREGATE_DUE_BPS_GLOAS : UInt64
+  /-- From Gloas: the part of a slot, in basis points, at which a sync committee message is due. -/
+  SYNC_MESSAGE_DUE_BPS_GLOAS : UInt64
+  /-- From Gloas: the part of a slot, in basis points, at which a contribution is due. -/
+  CONTRIBUTION_DUE_BPS_GLOAS : UInt64
+  /-- From Gloas: the part of a slot, in basis points, by which the payload must be seen. -/
+  PAYLOAD_DUE_BPS : UInt64
+  /-- From Gloas: the part of a slot, in basis points, at which a payload attestation is due. -/
+  PAYLOAD_ATTESTATION_DUE_BPS : UInt64
   /-- From Altair: the inactivity score that a validator gains in each epoch that it misses. -/
   INACTIVITY_SCORE_BIAS : UInt64
   /-- From Altair: the most inactivity score that a validator loses in an epoch without a leak. -/
@@ -111,6 +145,16 @@ structure Config extends Networking.Gossip.SubnetParameters where
   MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA : Gwei
   /-- From Electra: the largest churn limit for activations and exits, as a balance. -/
   MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT : Gwei
+  /-- From Gloas: the active balance divided by this gives the churn of activations and exits.
+
+  [EIP-8061](https://eips.ethereum.org/EIPS/eip-8061#configuration) defines it. -/
+  CHURN_LIMIT_QUOTIENT_GLOAS : UInt64
+  /-- From Gloas: the active balance divided by this gives the churn of consolidations. -/
+  CONSOLIDATION_CHURN_LIMIT_QUOTIENT : UInt64
+  /-- From Gloas: the largest churn for activations, as a balance.
+
+  The EIP drops the suffix and gives the value as 256 ether, here in Gwei. -/
+  MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS : Gwei
   /-- The boost of the weight of a timely proposal, in percent of a committee's weight. -/
   PROPOSER_SCORE_BOOST : UInt64
   /-- A late head is reorganized only below this weight, in percent of a committee's weight. -/
@@ -157,8 +201,16 @@ structure Config extends Networking.Gossip.SubnetParameters where
   BALANCE_PER_ADDITIONAL_CUSTODY_GROUP : Gwei
   /-- From Fulu: the fewest recent epochs whose data column sidecars a node serves. -/
   MIN_EPOCHS_FOR_DATA_COLUMN_SIDECARS_REQUESTS : Epoch
+  /-- From Gloas: the most execution payload envelopes in one request. -/
+  MAX_REQUEST_PAYLOADS : UInt64
   /-- From Fulu: the limits of blobs from given epochs, as EIP-7892 allows. -/
   BLOB_SCHEDULE : List BlobScheduleEntry
+  /-- From Gloas: the gas limits that the schedule recommends from given epochs.
+
+  It adds no validity rule.
+
+  [EIP-8261](https://eips.ethereum.org/EIPS/eip-8261#gas-limit-schedule) defines it. -/
+  GAS_LIMIT_SCHEDULE : List GasLimitScheduleEntry
   /-- The largest share of Byzantine validators, in percent, that fast confirmation assumes. -/
   CONFIRMATION_BYZANTINE_THRESHOLD : UInt64
   deriving DecidableEq, Repr
@@ -188,9 +240,12 @@ def mainnet : Config where
   ELECTRA_FORK_EPOCH := 364032
   FULU_FORK_VERSION := #v[0x06, 0x00, 0x00, 0x00]
   FULU_FORK_EPOCH := 411392
+  GLOAS_FORK_VERSION := #v[0x07, 0x00, 0x00, 0x00]
+  GLOAS_FORK_EPOCH := FAR_FUTURE_EPOCH
   SLOT_DURATION_MS := 12000
   SECONDS_PER_ETH1_BLOCK := 14
   MIN_VALIDATOR_WITHDRAWABILITY_DELAY := 2 ^ 8
+  MIN_BUILDER_WITHDRAWABILITY_DELAY := 2 ^ 6
   SHARD_COMMITTEE_PERIOD := 2 ^ 8
   ETH1_FOLLOW_DISTANCE := 2 ^ 11
   PROPOSER_REORG_CUTOFF_BPS := 1667
@@ -198,6 +253,12 @@ def mainnet : Config where
   AGGREGATE_DUE_BPS := 6667
   SYNC_MESSAGE_DUE_BPS := 3333
   CONTRIBUTION_DUE_BPS := 6667
+  ATTESTATION_DUE_BPS_GLOAS := 2500
+  AGGREGATE_DUE_BPS_GLOAS := 5000
+  SYNC_MESSAGE_DUE_BPS_GLOAS := 2500
+  CONTRIBUTION_DUE_BPS_GLOAS := 5000
+  PAYLOAD_DUE_BPS := 5000
+  PAYLOAD_ATTESTATION_DUE_BPS := 7500
   INACTIVITY_SCORE_BIAS := 2 ^ 2
   INACTIVITY_SCORE_RECOVERY_RATE := 2 ^ 4
   EJECTION_BALANCE := 2 ^ 4 * 10 ^ 9
@@ -206,6 +267,9 @@ def mainnet : Config where
   MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT := 2 ^ 3
   MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA := 2 ^ 7 * 10 ^ 9
   MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT := 2 ^ 8 * 10 ^ 9
+  CHURN_LIMIT_QUOTIENT_GLOAS := 2 ^ 15
+  CONSOLIDATION_CHURN_LIMIT_QUOTIENT := 2 ^ 16
+  MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS := 2 ^ 8 * 10 ^ 9
   PROPOSER_SCORE_BOOST := 40
   REORG_HEAD_WEIGHT_THRESHOLD := 20
   REORG_PARENT_WEIGHT_THRESHOLD := 160
@@ -234,7 +298,9 @@ def mainnet : Config where
   VALIDATOR_CUSTODY_REQUIREMENT := 8
   BALANCE_PER_ADDITIONAL_CUSTODY_GROUP := 32 * 10 ^ 9
   MIN_EPOCHS_FOR_DATA_COLUMN_SIDECARS_REQUESTS := 2 ^ 12
+  MAX_REQUEST_PAYLOADS := 2 ^ 7
   BLOB_SCHEDULE := [⟨412672, 15⟩, ⟨419072, 21⟩]
+  GAS_LIMIT_SCHEDULE := []
   CONFIRMATION_BYZANTINE_THRESHOLD := 25
 
 /-- The minimal configuration, which the minimal preset uses for tests. -/
@@ -260,7 +326,9 @@ def minimal : Config :=
     ELECTRA_FORK_EPOCH := FAR_FUTURE_EPOCH
     FULU_FORK_VERSION := #v[0x06, 0x00, 0x00, 0x01]
     FULU_FORK_EPOCH := FAR_FUTURE_EPOCH
+    GLOAS_FORK_VERSION := #v[0x07, 0x00, 0x00, 0x01]
     SLOT_DURATION_MS := 6000
+    MIN_BUILDER_WITHDRAWABILITY_DELAY := 2
     SHARD_COMMITTEE_PERIOD := 64
     ETH1_FOLLOW_DISTANCE := 16
     MIN_PER_EPOCH_CHURN_LIMIT := 2
@@ -268,6 +336,9 @@ def minimal : Config :=
     MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT := 4
     MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA := 64000000000
     MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT := 128000000000
+    CHURN_LIMIT_QUOTIENT_GLOAS := 16
+    CONSOLIDATION_CHURN_LIMIT_QUOTIENT := 32
+    MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT_GLOAS := 128000000000
     DEPOSIT_CHAIN_ID := 5
     DEPOSIT_NETWORK_ID := 5
     DEPOSIT_CONTRACT_ADDRESS := #v[0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56, 0x78, 0x90,
