@@ -43,14 +43,31 @@ def constructVanishingPolynomial
 
   -- The vanishing polynomial over the small domain, with roots in bit-reversed order.
   let xs : Array Fr := missingCellIndices.map fun mci =>
-    rouReduced[reverseBits mci CELLS_PER_EXT_BLOB]!
+    rouReduced[reverseBits mci CELLS_PER_EXT_BLOB]'(by
+      rw [size_computeRootsOfUnity]
+      exact reverseBits_lt _ (by decide))
   let shortZeroPoly ← vanishingPolynomialcoeff xs
 
   -- Extend it to the full domain, by the closed form of the vanishing polynomial of a coset.
-  return (Array.range shortZeroPoly.size).foldl
-    (init := Array.replicate FIELD_ELEMENTS_PER_EXT_BLOB Fr.zero)
-    fun zeroPoly i =>
-      zeroPoly.set! (i * FIELD_ELEMENTS_PER_CELL) shortZeroPoly[i]!
+  --
+  -- Coefficient `64 i` is coefficient `i` of the short polynomial, and the others are zero.
+  return Array.ofFn (n := FIELD_ELEMENTS_PER_EXT_BLOB) fun j =>
+    if h : j.val % FIELD_ELEMENTS_PER_CELL = 0 ∧
+        j.val / FIELD_ELEMENTS_PER_CELL < shortZeroPoly.size then
+      shortZeroPoly[j.val / FIELD_ELEMENTS_PER_CELL]
+    else Fr.zero
+
+/-- Value `j` of cell `ci` lies inside the extended blob. -/
+theorem cell_slot_lt {ci j : Nat} (hci : ci < CELLS_PER_EXT_BLOB)
+    (hj : j < FIELD_ELEMENTS_PER_CELL) :
+    ci * FIELD_ELEMENTS_PER_CELL + j < FIELD_ELEMENTS_PER_EXT_BLOB := by
+  have h1 : CELLS_PER_EXT_BLOB = 128 := rfl
+  have h2 : FIELD_ELEMENTS_PER_EXT_BLOB = 8192 := rfl
+  have h3 : FIELD_ELEMENTS_PER_CELL = 64 := rfl
+  rw [h1] at hci
+  rw [h3] at hj ⊢
+  rw [h2]
+  omega
 
 /-- Recover the polynomial in coefficient form whose values on the domain are the extended blob. -/
 def recoverPolynomialcoeff
@@ -65,15 +82,19 @@ def recoverPolynomialcoeff
   -- Flatten the values of the cosets, with zeros for the missing cells.
   --
   -- Let E(x) be the polynomial of degree below 8192 through these values.
-  let extendedRbo : Array Fr := (Array.range cellIndices.size).foldl
-    (init := Array.replicate FIELD_ELEMENTS_PER_EXT_BLOB Fr.zero)
-    fun acc k =>
-      let cell := cosetsEvals[k]!
-      let start := cellIndices[k]! * FIELD_ELEMENTS_PER_CELL
-      (Array.range FIELD_ELEMENTS_PER_CELL).foldl
-        (fun acc j => acc.set! (start + j) cell[j]!) acc
+  --
+  -- A cell index of 128 or more names no cell, and a cell shorter than 64 values reads as zeros.
+  let extendedRbo : Vector Fr FIELD_ELEMENTS_PER_EXT_BLOB :=
+    (cellIndices.zip cosetsEvals).foldl
+      (init := Vector.replicate FIELD_ELEMENTS_PER_EXT_BLOB Fr.zero)
+      fun acc (ci, cell) =>
+        if hci : ci < CELLS_PER_EXT_BLOB then
+          (Array.finRange FIELD_ELEMENTS_PER_CELL).foldl (init := acc) fun acc j =>
+            let v := if hj : j.val < cell.size then cell[j.val] else Fr.zero
+            acc.set (ci * FIELD_ELEMENTS_PER_CELL + j.val) v (cell_slot_lt hci j.isLt)
+        else acc
 
-  let extended := bitReversalPermutation extendedRbo
+  let extended := bitReversalPermutation extendedRbo.toArray
 
   -- The vanishing polynomial Z(x) of the missing points, in coefficient form.
   --
@@ -88,9 +109,7 @@ def recoverPolynomialcoeff
   -- Compute (E*Z)(x) = E(x) * Z(x) in evaluation form over the FFT domain.
   --
   -- For the polynomial P(x) to recover, (E*Z)(x) and (P*Z)(x) agree over the FFT domain.
-  let extTimesZero : Array Fr :=
-    Array.ofFn (n := FIELD_ELEMENTS_PER_EXT_BLOB) fun i =>
-      zeroPolyEval[i.val]! * extended[i.val]!
+  let extTimesZero : Array Fr := Array.zipWith (· * ·) zeroPolyEval extended
 
   -- (P*Z)(x) has degree below 8192, so the inverse FFT of (E*Z)(x) gives its coefficients.
   let extTimesZeroCoeffs := fftField extTimesZero rouExt (inv := true)
@@ -108,9 +127,7 @@ def recoverPolynomialcoeff
   -- Compute P(x) = (P*Z)(x) / Z(x) in evaluation form over a coset of the FFT domain.
   -- One batch inversion gives every `1 / Z(x)`.
   let zInverses := Fr.batchInverse zOverCoset
-  let pOverCoset : Array Fr :=
-    Array.ofFn (n := FIELD_ELEMENTS_PER_EXT_BLOB) fun i =>
-      pzOverCoset[i.val]! * zInverses[i.val]!
+  let pOverCoset : Array Fr := Array.zipWith (· * ·) pzOverCoset zInverses
   -- Convert P(x) to coefficient form.
   let pCoeff := cosetFftField pOverCoset rouExt (inv := true)
 
@@ -144,8 +161,7 @@ def recoverCellsAndKzgProofs (setup : TrustedSetup)
 
   -- Cell indices must be strictly ascending. This enforces two requirements
   -- at once: no duplicates, and ascending order.
-  if (Array.range (cellIndices.size - 1)).any
-      (fun i => cellIndices[i + 1]! ≤ cellIndices[i]!) then
+  if (cellIndices.zip (cellIndices.extract 1)).any (fun (prev, next) => next ≤ prev) then
     throw .indicesNotAscending
 
   -- Convert cells to coset evaluations.
