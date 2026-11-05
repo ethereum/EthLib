@@ -1,0 +1,8 @@
+topic: data_column_sidecar
+blocks:
+- {block: 
+    block_0xfee0eac898e0a4862fe76b7d3fcf14774f20f153a65c68ed217e7e33df4fbb29}
+messages:
+- {subnet_id: 1, current_time_ms: 12500, message: 
+    data_column_sidecar_0x6b61f917b310be52fb403f573ec0932641561f30a86d1c686aa66ab756051b6c,
+  expected: reject, reason: sidecar is for wrong subnet}

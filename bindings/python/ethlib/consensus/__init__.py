@@ -156,6 +156,63 @@ def verify_blob_sidecar_inclusion_proof(name: str, fork: str, data: bytes) -> bo
     return _native.consensus_verify_blob_sidecar_inclusion_proof(name, fork, data)
 
 
+# The bytes of one matrix entry: a cell, a proof, a column index and a row index.
+MATRIX_ENTRY_BYTES = 2048 + 48 + 8 + 8
+
+
+def _list_items(data: bytes) -> list:
+    # Split the SSZ encoding of a list of variable-size items at its offsets.
+    if not data:
+        return []
+    first = int.from_bytes(data[:4], "little")
+    offsets = [int.from_bytes(data[i:i + 4], "little") for i in range(0, first, 4)]
+    return [data[a:b] for a, b in zip(offsets, offsets[1:] + [len(data)])]
+
+
+def verify_data_column_sidecar(name: str, fork: str, data: bytes,
+                               config: dict | None = None) -> bool:
+    """Whether a data column sidecar has a valid shape under the blob limit of its epoch."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_verify_data_column_sidecar(name, fork, data, replacements)
+
+
+def verify_data_column_sidecar_inclusion_proof(name: str, fork: str, data: bytes) -> bool:
+    """Whether the branch of a data column sidecar climbs from its commitments to its body root."""
+    return _native.consensus_verify_data_column_sidecar_inclusion_proof(name, fork, data)
+
+
+def verify_data_column_sidecar_kzg_proofs(name: str, fork: str, data: bytes) -> bool:
+    """Whether the cells of a data column sidecar match its commitments by their proofs."""
+    return _native.consensus_verify_data_column_sidecar_kzg_proofs(name, fork, data)
+
+
+def compute_matrix(blobs: list) -> list:
+    """The entries of the matrix of the blobs, each in its SSZ encoding."""
+    out = _native.consensus_compute_matrix(b"".join(blobs))
+    return [out[i:i + MATRIX_ENTRY_BYTES] for i in range(0, len(out), MATRIX_ENTRY_BYTES)]
+
+
+def recover_matrix(entries: list, blob_count: int) -> list:
+    """The entries of the full matrix of `blob_count` rows, recovered from some of its entries."""
+    out = _native.consensus_recover_matrix(b"".join(entries), blob_count)
+    return [out[i:i + MATRIX_ENTRY_BYTES] for i in range(0, len(out), MATRIX_ENTRY_BYTES)]
+
+
+def get_data_column_sidecars_from_block(name: str, fork: str, block: bytes, rows: list) -> list:
+    """The data column sidecars of a signed block, from the cells and proofs of each blob."""
+    joined = b"".join(b"".join(cells) + b"".join(proofs) for cells, proofs in rows)
+    return _list_items(
+        _native.consensus_get_data_column_sidecars_from_block(name, fork, block, joined))
+
+
+def get_data_column_sidecars_from_column_sidecar(name: str, fork: str, sidecar: bytes,
+                                                 rows: list) -> list:
+    """All the data column sidecars of a block, from one of them and the cells of each blob."""
+    joined = b"".join(b"".join(cells) + b"".join(proofs) for cells, proofs in rows)
+    return _list_items(_native.consensus_get_data_column_sidecars_from_column_sidecar(
+        name, fork, sidecar, joined))
+
+
 __all__ = [
     "preset",
     "config",
@@ -180,4 +237,11 @@ __all__ = [
     "compute_subscribed_subnets",
     "merkle_proof",
     "verify_blob_sidecar_inclusion_proof",
+    "verify_data_column_sidecar",
+    "verify_data_column_sidecar_inclusion_proof",
+    "verify_data_column_sidecar_kzg_proofs",
+    "compute_matrix",
+    "recover_matrix",
+    "get_data_column_sidecars_from_block",
+    "get_data_column_sidecars_from_column_sidecar",
 ]

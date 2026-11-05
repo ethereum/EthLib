@@ -97,6 +97,12 @@ def _custody_columns(root: Path, case: Case) -> None:
         meta["result"]
 
 
+def _gossip_data_column_sidecar(root: Path, case: Case) -> None:
+    from consensus.test_data_column import run_gossip_case
+
+    run_gossip_case(root / case.path, case.preset)
+
+
 def _ssz_static(root: Path, case: Case) -> None:
     from ethlib import consensus
     from ethlib.networking import snappy
@@ -130,6 +136,8 @@ RUNNERS = {
     "shuffling/core": _shuffle,
     "networking/get_custody_groups": _custody_groups,
     "networking/compute_columns_for_custody_group": _custody_columns,
+    # The checks of the sidecar alone; the checks that read the store come with C63.
+    "networking/gossip_data_column_sidecar": _gossip_data_column_sidecar,
     **{f"ssz_static/{container}": _ssz_static for container in CONTAINERS},
     "light_client/single_merkle_proof": _single_merkle_proof,
     "legacy_header": legacy.run_headers,

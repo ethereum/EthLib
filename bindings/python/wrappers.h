@@ -297,6 +297,13 @@ PyObject* py_consensus_verify_blob_sidecar_inclusion_proof (PyObject* self, PyOb
 PyObject* py_pq_keys_ssz                                  (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_possession_signing_root              (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_is_valid_possession_proof            (PyObject* self, PyObject* args);
+PyObject* py_consensus_verify_data_column_sidecar         (PyObject* self, PyObject* args);
+PyObject* py_consensus_verify_data_column_sidecar_inclusion_proof(PyObject* self, PyObject* args);
+PyObject* py_consensus_verify_data_column_sidecar_kzg_proofs(PyObject* self, PyObject* args);
+PyObject* py_consensus_compute_matrix                     (PyObject* self, PyObject* args);
+PyObject* py_consensus_recover_matrix                     (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_data_column_sidecars_from_block(PyObject* self, PyObject* args);
+PyObject* py_consensus_get_data_column_sidecars_from_column_sidecar(PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_shuffled_permutation      (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_shuffled_index            (PyObject* self, PyObject* args);
 PyObject* py_consensus_reqresp_protocol_ids               (PyObject* self, PyObject* args);

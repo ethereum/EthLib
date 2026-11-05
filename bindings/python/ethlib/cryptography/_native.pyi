@@ -383,6 +383,34 @@ def pq_keys_is_valid_possession_proof(name: str, genesis_validators_root: bytes,
     """Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."""
     ...
 
+def consensus_verify_data_column_sidecar(name: str, fork: str, data: bytes, config: bytes) -> bool:
+    """Whether a sidecar, given as bytes, has a valid shape under the blob limit of its epoch."""
+    ...
+
+def consensus_verify_data_column_sidecar_inclusion_proof(name: str, fork: str, data: bytes) -> bool:
+    """Whether the branch of a sidecar, given as bytes, climbs to the body root of its header."""
+    ...
+
+def consensus_verify_data_column_sidecar_kzg_proofs(name: str, fork: str, data: bytes) -> bool:
+    """Whether the cells of a sidecar, given as bytes, match its commitments by their proofs."""
+    ...
+
+def consensus_compute_matrix(blobs: bytes) -> bytes:
+    """The matrix of the blobs, given one after another, as its entries one after another."""
+    ...
+
+def consensus_recover_matrix(entries: bytes, blob_count: int) -> bytes:
+    """The full matrix of `count` rows, from some entries given one after another."""
+    ...
+
+def consensus_get_data_column_sidecars_from_block(name: str, fork: str, block: bytes, rows: bytes) -> bytes:
+    """The column sidecars of a signed block, from its bytes and the rows of its blobs."""
+    ...
+
+def consensus_get_data_column_sidecars_from_column_sidecar(name: str, fork: str, sidecar: bytes, rows: bytes) -> bytes:
+    """All the column sidecars of a block, from the bytes of one of them and the rows of its blobs."""
+    ...
+
 def consensus_compute_shuffled_permutation(name: str, count: int, seed: bytes) -> bytes:
     """The shuffled position of every index below the count."""
     ...
