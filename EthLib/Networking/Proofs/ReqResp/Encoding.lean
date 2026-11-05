@@ -11,9 +11,9 @@ Properties of the `ssz_snappy` encoding of requests and responses.
 
 A payload that decodes has its declared length, within both bounds.
 
-The decoder accepts exactly the encoding of that length, followed by compressed bytes.
+The decoder accepts exactly the encoding of that length, then compressed bytes.
 
-Those bytes are within their bound, and they decompress to the payload.
+Those bytes are within the bound for that length, and they decompress to the payload.
 
 More compressed bytes than the bound for the declared length reject the payload.
 
@@ -98,59 +98,6 @@ theorem maxCompressedLen_eq {n : UInt64} (h : n.toNat < 2 ^ 63) :
   dsimp only
   rw [ite_eq_left (by rw [hadd, UInt64.toNat_div]; simp; omega)]
 
-/-! ## The literal encoder -/
-
-/-- Uncompressed chunks add eight bytes to each block of up to 65536 bytes. -/
-theorem length_encodeChunksLiteral_le (data : List UInt8) (fuel : Nat) :
-    (Snappy.encodeChunksLiteral data fuel).length ≤
-      data.length + 8 * ((data.length + 65535) / 65536) := by
-  induction fuel generalizing data with
-  | zero => cases data <;> simp [Snappy.encodeChunksLiteral]
-  | succ fuel ih =>
-    cases data with
-    | nil => simp [Snappy.encodeChunksLiteral]
-    | cons b bs =>
-      have := ih ((b :: bs).drop Snappy.maxChunkLength)
-      simp only [Snappy.encodeChunksLiteral, Snappy.uncompressedChunk, List.length_append,
-        List.length_cons, Vector.length_toList, List.length_take, List.length_drop,
-        Snappy.maxChunkLength] at this ⊢
-      omega
-
-/-- The literal frames of `n` bytes fit in the bound `32 + n + n / 6`. -/
-theorem size_encodeFramesLiteral_le (d : ByteArray) :
-    (Snappy.encodeFramesLiteral d).size ≤ 32 + d.size + d.size / 6 := by
-  have := length_encodeChunksLiteral_le d.data.toList d.data.size
-  simp only [Array.length_toList] at this
-  simp only [Snappy.encodeFramesLiteral, ByteArray.size, List.size_toArray, List.length_append,
-    Snappy.streamIdentifier, List.length_cons, List.length_nil]
-  omega
-
-/-- A payload of the literal encoder decodes back, when it fits both bounds. -/
-theorem decodePayload_encodePayloadLiteral {typeBound : UInt64} {d : ByteArray}
-    (hp : d.size ≤ MAX_PAYLOAD_SIZE.toNat) (ht : d.size ≤ typeBound.toNat) :
-    decodePayload typeBound (encodePayloadLiteral d) = .ok d := by
-  have h : d.size < 2 ^ 63 := by have : MAX_PAYLOAD_SIZE.toNat = 10485760 := rfl; omega
-  have hs : (UInt64.ofNat d.size).toNat = d.size :=
-    UInt64.toNat_ofNat_of_lt' (by unfold UInt64.size; omega)
-  obtain ⟨b, hb, hbv⟩ := maxCompressedLen_eq (n := UInt64.ofNat d.size) (by omega)
-  rw [hs] at hbv
-  have hframes := size_encodeFramesLiteral_le d
-  have hbound : ¬ min typeBound MAX_PAYLOAD_SIZE < UInt64.ofNat d.size := by
-    rw [UInt64.min_def]; split <;> rw [UInt64.lt_iff_toNat_lt, hs] <;> omega
-  have hlen : ¬ b.toNat < (Snappy.encodeFramesLiteral d).data.toList.length := by
-    have : (Snappy.encodeFramesLiteral d).data.toList.length =
-        (Snappy.encodeFramesLiteral d).size :=
-      Array.length_toList
-    omega
-  have hsize : ¬ d.size ≠ (UInt64.ofNat d.size).toNat := by omega
-  simp only [decodePayload, encodePayloadLiteral, ByteArray.data_append, Array.toList_append,
-    splitVarint_encode, decode_encode, hb, bind, Except.bind, Except.mapError, hbound, hlen,
-    ite_false, Array.toArray_toList]
-  rw [show ({ data := (Snappy.encodeFramesLiteral d).data } : ByteArray) =
-    Snappy.encodeFramesLiteral d from rfl, Snappy.Frame.decodeFrames_encodeFramesLiteral]
-  simp [pure, Except.pure]
-  omega
-
 /-! ## What a decoded payload satisfies -/
 
 /-- A payload that decodes has its declared length, and that length is within both bounds.
@@ -202,7 +149,7 @@ theorem decodePayload_ok {typeBound : UInt64} {bs d : ByteArray}
 
 /-- The decoder accepts exactly the encoding of a length within both bounds, then compressed bytes.
 
-Those bytes are within the bound for that length, and they decompress to a payload of that length.
+Those bytes are within the bound for that length, and they decompress to the payload itself.
 -/
 theorem decodePayload_eq_ok_iff {typeBound : UInt64} {bs d : ByteArray} :
     decodePayload typeBound bs = .ok d ↔
@@ -273,6 +220,46 @@ theorem decodePayload_lengthOutOfBounds {typeBound declared : UInt64}
   generalize splitVarint bs.data.toList = sp at hv ⊢
   obtain ⟨header, rest⟩ := sp
   simp [hv, bind, Except.bind, Except.mapError, hgt, throw, throwThe, MonadExceptOf.throw]
+
+/-! ## The literal encoder -/
+
+/-- Uncompressed chunks add eight bytes to each block of up to 65536 bytes. -/
+theorem length_encodeChunksLiteral_le (data : List UInt8) (fuel : Nat) :
+    (Snappy.encodeChunksLiteral data fuel).length ≤
+      data.length + 8 * ((data.length + 65535) / 65536) := by
+  induction fuel generalizing data with
+  | zero => cases data <;> simp [Snappy.encodeChunksLiteral]
+  | succ fuel ih =>
+    cases data with
+    | nil => simp [Snappy.encodeChunksLiteral]
+    | cons b bs =>
+      have := ih ((b :: bs).drop Snappy.maxChunkLength)
+      simp only [Snappy.encodeChunksLiteral, Snappy.uncompressedChunk, List.length_append,
+        List.length_cons, Vector.length_toList, List.length_take, List.length_drop,
+        Snappy.maxChunkLength] at this ⊢
+      omega
+
+/-- The literal frames of `n` bytes fit in the bound `32 + n + n / 6`. -/
+theorem size_encodeFramesLiteral_le (d : ByteArray) :
+    (Snappy.encodeFramesLiteral d).size ≤ 32 + d.size + d.size / 6 := by
+  have := length_encodeChunksLiteral_le d.data.toList d.data.size
+  simp only [Array.length_toList] at this
+  simp only [Snappy.encodeFramesLiteral, ByteArray.size, List.size_toArray, List.length_append,
+    Snappy.streamIdentifier, List.length_cons, List.length_nil]
+  omega
+
+/-- A payload of the literal encoder decodes back, when it fits both bounds. -/
+theorem decodePayload_encodePayloadLiteral {typeBound : UInt64} {d : ByteArray}
+    (hp : d.size ≤ MAX_PAYLOAD_SIZE.toNat) (ht : d.size ≤ typeBound.toNat) :
+    decodePayload typeBound (encodePayloadLiteral d) = .ok d := by
+  refine decodePayload_eq_ok_iff.mpr
+    ⟨?_, (Snappy.encodeFramesLiteral d).data.toList, ?_, ?_, ?_⟩
+  · rw [UInt64.min_def]
+    split <;> omega
+  · simp [encodePayloadLiteral]
+  · rw [Array.length_toList]
+    exact size_encodeFramesLiteral_le d
+  · simpa using Snappy.Frame.decodeFrames_encodeFramesLiteral d
 
 /-! ## Response codes and chunks -/
 

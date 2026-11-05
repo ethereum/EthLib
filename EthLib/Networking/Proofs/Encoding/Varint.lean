@@ -10,8 +10,8 @@ Properties of the unsigned protobuf varint codec, proved for every 64-bit value 
 - Decoding undoes encoding.
 - An encoding never exceeds the ten bytes the specification allows.
 - An encoding is always minimal.
-- The decoder accepts only these encodings, so each value has one canonical encoding.
-- A varint is too long exactly when it has over ten bytes and the first ten are continued.
+- The decoder accepts only these encodings, so exactly one byte string decodes to each value.
+- An input is too long exactly when it has over ten bytes and the first ten are continued.
 
 The kernel checks everything here, so no `native_decide` or `bv_decide` axiom appears.
 -/
@@ -233,7 +233,9 @@ theorem decode_encode (v : UInt64) : decode (encode v) = .ok v := by
 
 /-! ## The canonical encoding -/
 
-/-- The shape check passes a byte in two ways: the byte ends the input, or the rest passes. -/
+/-- The shape check passes a last byte only at the end of the input.
+
+It passes a continued byte only when the rest passes. -/
 private theorem of_groups_cons_eq_ok {fuel : Nat} {b : UInt8} {bs gs : List UInt8}
     (h : groups (fuel + 1) (b :: bs) = .ok gs) :
     (b.toNat < continuation ∧ bs = [] ∧ gs = [b]) ∨
@@ -311,7 +313,7 @@ private theorem encodeAux_valueOf_of_groups_eq_ok {fuel : Nat} {bs gs : List UIn
                   omega
                 rw [encodeAux, ite_eq_right hge, hq, hbyte, hrec]
 
-/-- The decoder accepts only canonical input: what it decodes from `bs` is encoded as `bs`. -/
+/-- Every input that decodes is the encoding of the value it decodes to. -/
 theorem encode_decode {bs : List UInt8} {v : UInt64} (h : decode bs = .ok v) : encode v = bs := by
   -- An input that decodes passed the shape check and both later checks.
   cases hg : groups maxLength bs with
@@ -333,7 +335,7 @@ theorem encode_decode {bs : List UInt8} {v : UInt64} (h : decode bs = .ok v) : e
           rw [encode, hv]
           exact encodeAux_valueOf_of_groups_eq_ok hg (by simpa using hm)
 
-/-- `encode` is a bijection between 64-bit values and the byte strings that `decode` accepts.
+/-- Encoding is a bijection from 64-bit values onto the byte strings that the decoder accepts.
 
 - Every value decodes back from its encoding.
 - Every input that decodes is the encoding of what it decodes to.
@@ -341,7 +343,7 @@ theorem encode_decode {bs : List UInt8} {v : UInt64} (h : decode bs = .ok v) : e
 theorem decode_eq_ok_iff {bs : List UInt8} {v : UInt64} : decode bs = .ok v ↔ encode v = bs :=
   ⟨encode_decode, fun h => h ▸ decode_encode v⟩
 
-/-! ## Rejected varints -/
+/-! ## Inputs that are too long -/
 
 /-- The shape check runs out of budget exactly when bytes remain after continued bytes fill it. -/
 private theorem groups_eq_tooLong_iff {fuel : Nat} {bs : List UInt8} :
@@ -363,7 +365,7 @@ private theorem groups_eq_tooLong_iff {fuel : Nat} {bs : List UInt8} :
               cases groups fuel bs <;> simp [Except.map]
             simp [groups, hb, hmap, ih, Nat.le_of_not_lt hb]
 
-/-- A varint is too long exactly when it has over ten bytes and the first ten are continued. -/
+/-- An input is too long exactly when it has over ten bytes and the first ten are continued. -/
 theorem decode_eq_tooLong_iff {bs : List UInt8} :
     decode bs = .error .tooLong ↔
       10 < bs.length ∧ ∀ c ∈ bs.take 10, continuation ≤ c.toNat := by
