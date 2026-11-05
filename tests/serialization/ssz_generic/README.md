@@ -16,8 +16,10 @@ The release `v1.7.0-alpha.12` holds the same files, byte for byte.
 
 The eight handlers are `basic_progressive_list`, `basic_vector`, `bitlist`, `bitvector`, `boolean`, `compatible_unions`, `progressive_bitlist` and `uints`.
 
-The handlers `containers` and `progressive_containers` are left out.
+The handlers `containers` and `progressive_containers` are not vendored.
 They hold 260 MB, too much to vendor.
+The same test reads them from the pinned archive `consensus-specs/v1.7.0-alpha.12/general` of `tests/sources.toml`, in the weekly run of the archive tests.
+They hold 1,226 cases, of which 724 valid and 502 invalid.
 
 A valid case gives a value, its SSZ bytes compressed as a Snappy block, and its hash tree root.
 An invalid case gives only bytes that no value of the type has.

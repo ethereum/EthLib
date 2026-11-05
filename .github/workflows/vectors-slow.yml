@@ -48,6 +48,10 @@ jobs:
           - suite: consensus-spec-tests
             bindings: true
             run: uv run --no-sync pytest -m archive bindings/python/tests/consensus/test_ssz_static.py
+          # The two ssz_generic handlers too large to vendor: containers and progressive containers.
+          - suite: ssz-generic
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/ssz/test_ssz_generic.py
           # Every case of execution-spec-tests and of consensus-spec-tests in scope, with a
           # report of the cases that pass, disagree, fail or wait for a runner.
           - suite: parity-execution
