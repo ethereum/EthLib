@@ -13,6 +13,7 @@ from .test_data_column import replacements
 # The forks at which EthLib runs each handler.
 HANDLERS = {
     "ptc_window": ("gloas",),
+    "proposer_lookahead": ("fulu", "gloas"),
 }
 
 # The release archives that hold the cases.
