@@ -3,9 +3,10 @@
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 root, out = Path(sys.argv[1]), Path(sys.argv[2])
-cases = []
+cases: list[dict[str, Any]] = []
 for path in sorted(root.glob("state_tests/*/byzantium/eip198_modexp_precompile/modexp/*.json")):
     if "amsterdam" in path.as_posix():
         continue

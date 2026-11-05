@@ -128,8 +128,10 @@ def comments(text: str) -> list[list[tuple[int, str]]]:
             while end < length and text[end] != '"':
                 end += 2 if text[end] == "\\" else 1
             end = min(end + 1, length)
-        elif char == "'" and not is_ident(previous) and CHAR_LITERAL.match(text, index):
-            end = CHAR_LITERAL.match(text, index).end()
+        elif (
+            char == "'" and not is_ident(previous) and (literal := CHAR_LITERAL.match(text, index))
+        ):
+            end = literal.end()
         else:
             index += 1
             continue

@@ -9,12 +9,14 @@ Only the standard library is used, like the script.
 import importlib.util
 import tempfile
 import unittest
+from collections.abc import Mapping
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
 # Load the script by path: `scripts` is not a package.
 spec = importlib.util.spec_from_file_location("check_layers", HERE / "check_layers.py")
+assert spec and spec.loader
 layers = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(layers)
 
@@ -80,7 +82,7 @@ class Tree:
 
     def __init__(
         self,
-        modules: dict[str, list[str] | str],
+        modules: Mapping[str, list[str] | str],
         lakefile: str = LAKEFILE,
         baseline: str = "",
         architecture: str = ARCHITECTURE,
@@ -103,8 +105,8 @@ class Tree:
             self.tmp.cleanup()
 
 
-def with_imports(module: str, *imported: str) -> dict[str, list[str] | str]:
-    tree: dict[str, list[str] | str] = {k: list(v) for k, v in GOOD.items()}
+def with_imports(module: str, *imported: str) -> dict[str, list[str]]:
+    tree = {k: list(v) for k, v in GOOD.items()}
     tree[module] = tree[module] + list(imported)
     return tree
 

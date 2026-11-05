@@ -38,6 +38,7 @@ ROOT = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location(
     "soundness_facts", Path(__file__).resolve().parent / "soundness_facts.py"
 )
+assert _spec and _spec.loader
 _facts = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_facts)
 strip_lean = _facts.strip_lean

@@ -19,6 +19,7 @@ HERE = Path(__file__).resolve().parent
 
 # Load the script by path: `scripts` is not a package.
 spec = importlib.util.spec_from_file_location("fetch_archives", HERE / "fetch_archives.py")
+assert spec and spec.loader
 fetch = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fetch)
 

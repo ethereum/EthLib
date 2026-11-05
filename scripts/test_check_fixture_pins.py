@@ -15,6 +15,7 @@ HERE = Path(__file__).resolve().parent
 
 # Load the script by path: `scripts` is not a package.
 spec = importlib.util.spec_from_file_location("check_fixture_pins", HERE / "check_fixture_pins.py")
+assert spec and spec.loader
 pins = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pins)
 

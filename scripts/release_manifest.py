@@ -15,6 +15,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from typing import Any
+
 from soundness_facts import lean_exports  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -74,7 +76,7 @@ def exports(root: Path) -> list[str]:
     return sorted(lean_exports(root))
 
 
-def manifest(root: Path) -> dict[str, object]:
+def manifest(root: Path) -> dict[str, Any]:
     """The release manifest of the checkout at `root`."""
     return {
         "version": python_version(root),

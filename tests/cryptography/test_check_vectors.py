@@ -19,6 +19,7 @@ HERE = Path(__file__).resolve().parent
 
 # Load the check by path: `tests/cryptography` is not a package.
 spec = importlib.util.spec_from_file_location("check_vectors", HERE / "check_vectors.py")
+assert spec and spec.loader
 check_vectors = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(check_vectors)
 
