@@ -1,4 +1,4 @@
-/* eth capability wrappers around the `eth_message_decode` and `eth_check_status` Lean exports. */
+/* eth capability wrappers around the `eth_*` Lean exports of the eth messages. */
 #include "wrappers.h"
 
 /* ---- Lean externs ----------------------------------------------------- */
@@ -19,6 +19,13 @@ eth_check_status(
   uint64_t number,
   uint64_t timestamp,
   lean_object* data
+);
+
+extern lean_object*
+eth_check_headers(
+  uint64_t version,
+  lean_object* request,
+  lean_object* response
 );
 
 /* ---- Wrappers --------------------------------------------------------- */
@@ -71,4 +78,19 @@ py_eth_check_status(
   if (parse_bytes(data_obj, "data", &data)) { lean_dec(schedule); return NULL; }
   return except_into_pybool(
     eth_check_status(version, schedule, number, timestamp, data), ETH_WIRE_ERROR);
+}
+
+PyObject*
+py_eth_check_headers(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *version_obj, *request_obj, *response_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &version_obj, &request_obj, &response_obj)) return NULL;
+  uint64_t version;
+  if (parse_uint64(version_obj, "version", &version)) return NULL;
+  lean_object *request, *response;
+  if (parse_bytes(request_obj, "request", &request)) return NULL;
+  if (parse_bytes(response_obj, "response", &response)) { lean_dec(request); return NULL; }
+  return except_into_pybool(eth_check_headers(version, request, response), ETH_WIRE_ERROR);
 }

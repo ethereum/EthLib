@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Network.Blocks
 public import EthLib.Execution.Network.Message
 public import EthLib.Execution.Network.Protocol
 public import EthLib.Execution.Network.Status

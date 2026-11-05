@@ -3292,6 +3292,27 @@
    "docstring":
    "Whether a node accepts the Status of a peer, on the negotiated version `version`.\n\nThe node has the schedule `s`, and its head has a block number and a timestamp.\n\n- The announced version must be the negotiated one.\n- The fork identifier must pass the rules of EIP-2124.\n- From eth/69 on, the announced range must be valid.\n\nThe network ID and the genesis hash are left to the node, since no rule of the specification\nreads them."},
   {"summary":
+   "Whether `response` is BlockHeaders that answers the GetBlockHeaders `request`.",
+   "signature": "(version: int, request: bytes, response: bytes) -> bool",
+   "operation": "EthLib.Execution.Network.Message.checkHeaderResponse",
+   "method": "eth_check_headers",
+   "errors":
+   [{"type": "EthLib.Execution.Network.EthError",
+     "codes":
+     [{"constructor": "unknownId", "code": 1},
+      {"constructor": "rlp", "code": 2}]},
+    {"type": "EthLib.Execution.Network.HeadersError",
+     "codes":
+     [{"constructor": "tooMany", "code": 201},
+      {"constructor": "rlp", "code": 202},
+      {"constructor": "wrongStart", "code": 203},
+      {"constructor": "wrongNumber", "code": 204},
+      {"constructor": "notChained", "code": 205},
+      {"constructor": "notAnswer", "code": 206}]}],
+   "error_class": "EthWireError",
+   "docstring":
+   "Whether `response` is BlockHeaders that answers the GetBlockHeaders `request`.\n\nIt must repeat the request ID, and its headers must pass the check of the request."},
+  {"summary":
    "The bytes a Snappy block decompresses to, or why it is not a valid block.",
    "signature": "(block: bytes) -> bytes",
    "operation": "EthLib.Networking.Snappy.decompress",

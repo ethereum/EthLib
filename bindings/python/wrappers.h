@@ -361,6 +361,7 @@ PyObject* py_mainnet_fork_id                              (PyObject* self, PyObj
 PyObject* py_fork_id_validate                             (PyObject* self, PyObject* args);
 PyObject* py_eth_message_decode                           (PyObject* self, PyObject* args);
 PyObject* py_eth_check_status                             (PyObject* self, PyObject* args);
+PyObject* py_eth_check_headers                            (PyObject* self, PyObject* args);
 PyObject* py_receipt_reencode                             (PyObject* self, PyObject* args);
 PyObject* py_receipt_logs_bloom                           (PyObject* self, PyObject* args);
 PyObject* py_block_make_receipts                          (PyObject* self, PyObject* args);

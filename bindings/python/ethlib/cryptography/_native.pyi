@@ -599,6 +599,10 @@ def eth_check_status(version: int, schedule: bytes, number: int, timestamp: int,
     """Whether a node accepts the Status of a peer, on the negotiated version `version`."""
     ...
 
+def eth_check_headers(version: int, request: bytes, response: bytes) -> bool:
+    """Whether `response` is BlockHeaders that answers the GetBlockHeaders `request`."""
+    ...
+
 def snappy_decompress(block: bytes) -> bytes:
     """The bytes a Snappy block decompresses to, or why it is not a valid block."""
     ...
