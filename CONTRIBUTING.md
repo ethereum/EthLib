@@ -303,6 +303,18 @@ It fails on an import that breaks a rule of [`ARCHITECTURE.md`](ARCHITECTURE.md#
 An import that must break a rule goes in `scripts/check_layers_baseline.txt`, with the reason in a comment and in the pull request.
 An entry that no longer breaks a rule fails the check, so remove it with the import.
 
+When you add or change a C export that reads a fork name, check that it rejects the forks whose rules EthLib lacks:
+
+```bash
+uv run --no-project --python 3.12 python scripts/check_fork_cap.py
+```
+
+An export caps its fork with `forkUpTo` in `EthLib/Base/Exports.lean`, which names the last fork whose rules the export holds.
+Without the cap, a later fork would get the rules of the fork before it.
+An export may read the fork without a cap only if its rule does not change at the next fork, or if it already rejects that fork.
+Such an export goes in `scripts/check_fork_cap_allowlist.txt`, with the reason on the same line.
+An entry that no longer reads a fork name fails the check, so remove it with the code.
+
 When you touch test vectors or fixtures, also check their sources:
 
 ```bash

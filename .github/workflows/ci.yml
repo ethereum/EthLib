@@ -238,6 +238,11 @@ jobs:
 
       - run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_layers.py
 
+      # Every C export that reads a fork name caps it at the last fork whose rules it holds.
+      - run: uv run --no-project --python 3.12 python scripts/check_fork_cap.py
+
+      - run: uv run --no-project --python 3.12 python -m unittest scripts/test_check_fork_cap.py
+
       # Every test cites only the pinned commits of tests/sources.toml, and every pinned
       # vector directory names its sources.
       # pyproject.toml and lakefile.lean declare one release version.
