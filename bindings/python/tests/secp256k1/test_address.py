@@ -42,7 +42,7 @@ def test_address_of_key_one() -> None:
 
 
 def test_address_rejects_zero() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="private key is zero"):
         secp256k1.address(bytes(32))
 
 

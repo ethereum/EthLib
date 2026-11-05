@@ -58,11 +58,15 @@ def test_case_count() -> None:
     assert len(CASES) > 400
 
 
+INVALID_POINT = "point coordinate is not below p|point is not on the curve"
+
+
 @pytest.mark.parametrize("tc_id, private_key, public_key, shared", CASES,
                          ids=[f"tc{c[0]}" for c in CASES])
 def test_ecdh(tc_id: int, private_key: bytes, public_key: bytes, shared: bytes | None) -> None:
     if shared is None:
-        with pytest.raises(ValueError):
+        # Each invalid public key of the set has a coordinate not below p, or is off the curve.
+        with pytest.raises(ValueError, match=INVALID_POINT):
             secp256k1.ecdh(private_key, public_key)
     else:
         assert secp256k1.ecdh(private_key, public_key) == shared
@@ -71,5 +75,5 @@ def test_ecdh(tc_id: int, private_key: bytes, public_key: bytes, shared: bytes |
 def test_ecdh_rejects_zero_key() -> None:
     # Test 1 of the set, with the private key 0: d Q is the point at infinity.
     public_key = CASES[0][2]
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="the point at infinity is not a public key"):
         secp256k1.ecdh(bytes(32), public_key)

@@ -63,5 +63,5 @@ def test_empty_root(secured: bool) -> None:
 
 def test_rejects_malformed_pairs() -> None:
     # A pair must be a list of exactly two byte strings.
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="not enough values to unpack"):
         trie.root([(b"key",)], False)  # type: ignore[list-item]

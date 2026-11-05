@@ -123,7 +123,7 @@ def test_aes_gcm_vector():
 def test_changed_tag_fails():
     p = discv5.decode_packet(DEST_ID, PING_PACKET)
     message = p["message"][:-1] + bytes([p["message"][-1] ^ 1])
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="message does not authenticate"):
         discv5.decrypt_message(bytes(16), NONCE, message, p["message_ad"])
 
 

@@ -72,7 +72,7 @@ def test_max_compressed_len():
 
 
 def test_max_compressed_len_overflow():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"2\^64 or more"):
         reqresp.max_compressed_len(2**64 - 1)
 
 

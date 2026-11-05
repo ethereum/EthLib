@@ -35,22 +35,22 @@ def _first(network: str, type_: str) -> bytes:
 
 def test_typed_receipt_rejected_before_its_fork() -> None:
     # Type 4 transactions start at Pectra, so Dencun has no such receipt.
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"\.unsupportedType 4"):
         blocks.receipt_reencode("dencun", _first("Amsterdam", "0x04"))
 
 
 def test_state_root_receipt_rejected_from_byzantium() -> None:
     # From Byzantium the outcome is a status, and a 32-byte state root is no status.
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"\.decoding\b"):
         blocks.receipt_reencode("byzantium", _first("Frontier", "0x00"))
 
 
 def test_status_receipt_rejected_before_byzantium() -> None:
     # Before Byzantium the outcome is a 32-byte state root, and a status is no root.
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"\.wrongLength\b"):
         blocks.receipt_reencode("frontier", _first("Byzantium", "0x00"))
 
 
 def test_empty_receipt_rejected() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"\.emptyReceipt\b"):
         blocks.receipt_reencode("fusaka", b"")

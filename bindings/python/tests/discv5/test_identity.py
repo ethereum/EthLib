@@ -90,5 +90,5 @@ def test_log_distance_first_bit():
 
 
 def test_log_distance_rejects_short_id():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="node ID has 31 bytes, not 32"):
         discv5.log_distance(NODE_ID_A[:31], NODE_ID_B)

@@ -33,7 +33,7 @@ def b(hex_str: str) -> bytes:
 def test_sign(case: dict) -> None:
     sk, msg = b(case["input"]["privkey"]), b(case["input"]["message"])
     if case["output"] is None:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="invalid secret key"):
             bls.sign(sk, msg)
     else:
         assert bls.sign(sk, msg) == b(case["output"])
@@ -49,7 +49,7 @@ def test_verify(case: dict) -> None:
 def test_aggregate(case: dict) -> None:
     sigs = [b(s) for s in case["input"]]
     if case["output"] is None:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="empty signature list"):
             bls.aggregate(sigs)
     else:
         assert bls.aggregate(sigs) == b(case["output"])

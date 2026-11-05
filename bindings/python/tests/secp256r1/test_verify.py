@@ -85,5 +85,5 @@ def test_sizes() -> None:
 def test_bad_public_key_raises(public_key: bytes) -> None:
     # A wrong length, or a coordinate not below p, is malformed input.
     _, _, msg_hash, signature, _ = CASES[0]
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="bad public key"):
         secp256r1.verify(public_key, msg_hash, signature)

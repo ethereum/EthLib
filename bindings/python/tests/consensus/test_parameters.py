@@ -153,9 +153,9 @@ def test_config(name: str) -> None:
 
 
 def test_unknown_names_are_rejected() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="no preset is named holesky"):
         consensus.preset("holesky")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="no configuration is named holesky"):
         consensus.config("holesky")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="frontier is not a fork of the beacon chain"):
         consensus.parameters("mainnet", "frontier")

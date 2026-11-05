@@ -196,5 +196,5 @@ def test_list_nat() -> None:
 
 
 def test_unknown_kind_rejected() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="unknown RLP type"):
         rlp.decode_as("float", bytes.fromhex("80"))

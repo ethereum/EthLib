@@ -26,7 +26,7 @@ def test_permutation(i: int) -> None:
 @pytest.mark.parametrize("size", [0, 199, 201])
 def test_rejects_wrong_size(size: int) -> None:
     # The state is exactly 25 lanes of 8 bytes.
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="state: expected 200 bytes"):
         keccak.keccak_f1600(bytes(size))
 
 

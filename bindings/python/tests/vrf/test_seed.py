@@ -44,7 +44,7 @@ def test_secret_reads_index_little_endian(index: int) -> None:
 
 def test_rejects_bad_arguments() -> None:
     # The seed is exactly 32 bytes, and the index is below 2^32.
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="seed: expected 32 bytes, got 31"):
         vrf.secret(F.SEED[:31], 0)
     with pytest.raises(OverflowError):
         vrf.evaluate(F.SEED, 1 << 32)
