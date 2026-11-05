@@ -17,6 +17,12 @@ Each new transaction starts with an empty transient storage.
 
 The end of a transaction keeps every read of the transaction.
 
+A record of a read changes no read, and a rollback keeps the record.
+
+A wipe of the storage records the keys it drops as reads.
+
+Clearing an account keeps its balance, and zeroes its nonce, its code and its storage.
+
 The state after a block reads as the block does at the start of its next transaction.
 -/
 
@@ -276,6 +282,102 @@ theorem getAccountOptional_modifyState {fork : Fork} {tx tx' : TransactionState}
     Bool.false_and, Bool.false_eq_true, ↓reduceIte, Except.ok.injEq] at h
   subst h
   exact getAccountOptional_setAccount_self _ _ _
+
+/-! ## The record of reads -/
+
+/-- A record of an account read changes no read of the state. -/
+theorem recordAccountRead_reads (tx : TransactionState) (address other : Address)
+    (key : Bytes32) (codeHash : Hash32) :
+    (tx.recordAccountRead address).getAccountOptional other = tx.getAccountOptional other ∧
+      (tx.recordAccountRead address).getStorage other key = tx.getStorage other key ∧
+      (tx.recordAccountRead address).getStorageOriginal other key =
+        tx.getStorageOriginal other key ∧
+      (tx.recordAccountRead address).getCode codeHash = tx.getCode codeHash ∧
+      (tx.recordAccountRead address).getTransientStorage other key =
+        tx.getTransientStorage other key :=
+  ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+/-- A record of a storage read changes no read of the state. -/
+theorem recordStorageRead_reads (tx : TransactionState) (address other : Address)
+    (slot key : Bytes32) (codeHash : Hash32) :
+    (tx.recordStorageRead address slot).getAccountOptional other = tx.getAccountOptional other ∧
+      (tx.recordStorageRead address slot).getStorage other key = tx.getStorage other key ∧
+      (tx.recordStorageRead address slot).getStorageOriginal other key =
+        tx.getStorageOriginal other key ∧
+      (tx.recordStorageRead address slot).getCode codeHash = tx.getCode codeHash ∧
+      (tx.recordStorageRead address slot).getTransientStorage other key =
+        tx.getTransientStorage other key :=
+  ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+/-- A recorded account read is in the reads, with every earlier one. -/
+theorem mem_accountReads_recordAccountRead (tx : TransactionState) (address other : Address) :
+    other ∈ (tx.recordAccountRead address).accountReads ↔
+      other = address ∨ other ∈ tx.accountReads := by
+  simp only [recordAccountRead, Std.ExtTreeSet.mem_insert, Std.compare_eq_iff_eq]
+  exact or_congr_left eq_comm
+
+/-- A recorded storage read is in the reads, with every earlier one. -/
+theorem mem_storageReads_recordStorageRead (tx : TransactionState) (address other : Address)
+    (key slot : Bytes32) :
+    slot ∈ (tx.recordStorageRead address key).storageReads.getD other ∅ ↔
+      (other = address ∧ slot = key) ∨ slot ∈ tx.storageReads.getD other ∅ := by
+  by_cases h : other = address
+  · subst h
+    simp only [recordStorageRead, Std.ExtTreeMap.getD_insert_self, Std.ExtTreeSet.mem_insert,
+      Std.compare_eq_iff_eq, true_and]
+    exact or_congr_left eq_comm
+  · simp [recordStorageRead, Std.ExtTreeMap.getD_insert, Ne.symm h, h]
+
+/-- A rollback keeps the reads of the transaction, not those of the snapshot. -/
+theorem reads_restoreTxState (tx snapshot : TransactionState) :
+    (tx.restoreTxState snapshot).accountReads = tx.accountReads ∧
+      (tx.restoreTxState snapshot).storageReads = tx.storageReads :=
+  ⟨rfl, rfl⟩
+
+/-- A wipe of the storage turns each key it drops into a read. -/
+theorem mem_storageReads_destroyStorage {tx : TransactionState} {address : Address}
+    {key : Bytes32} (h : key ∈ tx.storageWrites.getD address ∅) :
+    key ∈ (tx.destroyStorage address).storageReads.getD address ∅ := by
+  simp [destroyStorage, Std.ExtTreeMap.getD_insert_self, Std.ExtTreeSet.mem_insertMany_list, h]
+
+/-- A wipe of the storage keeps every earlier read. -/
+theorem mem_storageReads_destroyStorage_of_mem {tx : TransactionState} {address other : Address}
+    {key : Bytes32} (h : key ∈ tx.storageReads.getD other ∅) :
+    key ∈ (tx.destroyStorage address).storageReads.getD other ∅ := by
+  by_cases hother : other = address
+  · subst hother
+    simp [destroyStorage, Std.ExtTreeMap.getD_insert_self, Std.ExtTreeSet.mem_insertMany_list, h]
+  · simpa [destroyStorage, Std.ExtTreeMap.getD_insert, Ne.symm hother] using h
+
+/-! ## Clearing an account and keeping its balance -/
+
+/-- Clearing an account keeps its balance and zeroes its nonce and its code. -/
+theorem getAccount_clearAccountPreservingBalance {fork : Fork} {tx tx' : TransactionState}
+    {address : Address} (h : tx.clearAccountPreservingBalance fork address = .ok tx') :
+    tx'.getAccount address =
+      { tx.getAccount address with nonce := 0, codeHash := EMPTY_CODE_HASH } := by
+  obtain ⟨account, hf, hread, -⟩ := modifyState_eq_ok h
+  cases hf
+  exact hread
+
+/-- Clearing an account leaves every other account unchanged. -/
+theorem getAccount_clearAccountPreservingBalance_of_ne {fork : Fork} {tx tx' : TransactionState}
+    {address other : Address} (h : tx.clearAccountPreservingBalance fork address = .ok tx')
+    (hne : other ≠ address) : tx'.getAccount other = tx.getAccount other := by
+  obtain ⟨-, -, -, hother⟩ := modifyState_eq_ok h
+  exact hother other hne
+
+/-- Clearing an account wipes its storage. -/
+theorem getStorage_clearAccountPreservingBalance {fork : Fork} {tx tx' : TransactionState}
+    {address : Address} (h : tx.clearAccountPreservingBalance fork address = .ok tx')
+    (key : Bytes32) : tx'.getStorage address key = 0 := by
+  simp only [clearAccountPreservingBalance, modifyState, bind, Except.bind, pure,
+    Except.pure] at h
+  split at h
+  · cases h
+    exact getStorage_destroyStorage _ _ _
+  · cases h
+    exact getStorage_destroyStorage _ _ _
 
 /-! ## Moving ether -/
 
