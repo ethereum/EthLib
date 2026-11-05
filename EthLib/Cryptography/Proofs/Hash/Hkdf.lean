@@ -8,6 +8,8 @@ public import EthLib.Cryptography.Hash.Hkdf
 
 A successful expansion has exactly the requested length.
 
+HKDF expands the key `HMAC-Hash(salt, IKM)` of RFC 5869 §2.2.
+
 The expansion computes the blocks `T(1), T(2), ...` of [RFC 5869 §2.3][rfc5869].
 
 [rfc5869]: https://www.rfc-editor.org/rfc/rfc5869#section-2.3
@@ -167,6 +169,31 @@ theorem extract_empty (ikm : ByteArray) :
   unfold extract
   rw [← hmac_append_zeros (key := ByteArray.empty) (n := HASH_LEN) (by decide),
     ByteArray.empty_append]
+
+/-! ## HKDF -/
+
+/-- HKDF, RFC 5869 §2: the first `L` bytes of `T(1) | ... | T(N)` under the key `PRK`.
+
+Here `PRK = HMAC-Hash(salt, IKM)`, as RFC 5869 §2.2 sets it, and `N = ceil(L / HashLen)`.
+
+The key is `HashLen` bytes, so only the output length can be rejected.
+-/
+theorem hkdf_eq {salt ikm info : ByteArray} {length : Nat} (h : length ≤ 255 * HASH_LEN) :
+    hkdf salt ikm info length =
+      .ok ((blocks (hmac salt ikm) info
+        ((length + HASH_LEN - 1) / HASH_LEN)).extract 0 length) :=
+  -- The key `HMAC-Hash(salt, IKM)` is `HashLen` bytes, so it is never too short.
+  expand_eq (by simp [extract, HASH_LEN]) h
+
+/-- A successful HKDF returns exactly the requested length. -/
+theorem hkdf_size {salt ikm info okm : ByteArray} {length : Nat}
+    (h : hkdf salt ikm info length = .ok okm) : okm.size = length :=
+  expand_size h
+
+/-- HKDF accepts every output length up to `255 * HashLen`, and returns that many bytes. -/
+theorem hkdf_ok {salt ikm info : ByteArray} {length : Nat} (h : length ≤ 255 * HASH_LEN) :
+    ∃ okm, hkdf salt ikm info length = .ok okm ∧ okm.size = length :=
+  ⟨_, hkdf_eq h, hkdf_size (hkdf_eq h)⟩
 
 /-! ## Error codes -/
 
