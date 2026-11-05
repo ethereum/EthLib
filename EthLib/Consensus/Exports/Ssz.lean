@@ -15,6 +15,7 @@ public import EthLib.Consensus.Containers.SyncCommittee
 public import EthLib.Consensus.DataAvailability.Blob
 public import EthLib.Consensus.DataAvailability.Column
 public import EthLib.Consensus.Exports.Parameters
+public import EthLib.Consensus.LightClient.Containers
 public import EthLib.Serialization.Exports.Ssz
 
 /-!
@@ -48,13 +49,18 @@ structure Container where
 
 attribute [instance] Container.codec
 
+/-- Whether EthLib holds the light client containers at a fork: from Altair until Gloas. -/
+def lightClientAt (fork : Fork) : Bool := .altair ≤ fork ∧ fork < .glamsterdam
+
 /-- The container of a name at a preset and a fork, if the fork has one.
 
 Altair replaces the pending attestations of a state by participation flags.
 
 Capella stops adding historical batches, and adds historical summaries instead.
 
-Fulu carries blobs in data column sidecars instead of blob sidecars. -/
+Fulu carries blobs in data column sidecars instead of blob sidecars.
+
+The light client containers start at Altair; EthLib does not yet hold their Gloas form. -/
 def containerOf (preset : Preset) (fork : Fork) : String → Option Container
   | "Fork" => some ⟨ForkVersions⟩
   | "ForkData" => some ⟨ForkData⟩
@@ -106,6 +112,16 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
   | "BeaconBlock" => some ⟨BeaconBlock preset fork⟩
   | "SignedBeaconBlock" => some ⟨SignedBeaconBlock preset fork⟩
   | "BeaconState" => some ⟨BeaconState preset fork⟩
+  | "LightClientHeader" =>
+    if lightClientAt fork then some ⟨LightClientHeader preset fork⟩ else none
+  | "LightClientBootstrap" =>
+    if lightClientAt fork then some ⟨LightClientBootstrap preset fork⟩ else none
+  | "LightClientUpdate" =>
+    if lightClientAt fork then some ⟨LightClientUpdate preset fork⟩ else none
+  | "LightClientFinalityUpdate" =>
+    if lightClientAt fork then some ⟨LightClientFinalityUpdate preset fork⟩ else none
+  | "LightClientOptimisticUpdate" =>
+    if lightClientAt fork then some ⟨LightClientOptimisticUpdate preset fork⟩ else none
   | "BlobSidecar" => if .dencun ≤ fork ∧ fork < .fusaka then some ⟨BlobSidecar preset⟩ else none
   | "BlobIdentifier" => if .dencun ≤ fork ∧ fork < .fusaka then some ⟨BlobIdentifier⟩ else none
   | "DataColumnSidecar" =>
