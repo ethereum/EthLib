@@ -1,7 +1,8 @@
 """The snap capability, against hand-built messages and the block access lists of the fixtures.
 
-The forms come from caps/snap.md of ethereum/devp2p at the pin for snap/2, and at a1d196b for the
-trie node messages of snap/1.
+The snap/2 forms come from caps/snap.md of ethereum/devp2p at its pin.
+The trie node messages are those of snap/1, whose text EthLib/Execution/Network/Snap.lean cites.
+The pinned file records only their removal by snap/2.
 The access lists and their hashes come from tests/execution/blocks/block_access_lists.json.
 """
 
