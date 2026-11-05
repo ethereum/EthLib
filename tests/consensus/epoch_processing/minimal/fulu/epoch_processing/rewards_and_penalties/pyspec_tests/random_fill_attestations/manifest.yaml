@@ -1,0 +1,6 @@
+preset: minimal
+fork: fulu
+runner: epoch_processing
+handler: rewards_and_penalties
+suite: pyspec_tests
+case: random_fill_attestations

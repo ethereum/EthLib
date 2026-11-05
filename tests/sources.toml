@@ -28,6 +28,7 @@ directories = [
   "tests/consensus/light_client",
   "tests/consensus/merkle_proof", "tests/consensus/networking", "tests/consensus/operations",
   "tests/consensus/parameters",
+  "tests/consensus/rewards",
   "tests/consensus/shuffling",
   "tests/consensus/snappy",
   "tests/consensus/ssz_static",

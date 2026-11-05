@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: rewards
+handler: leak
+suite: pyspec_tests
+case: half_full_leak

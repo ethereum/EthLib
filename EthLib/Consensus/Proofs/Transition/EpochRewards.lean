@@ -15,6 +15,14 @@ It pays the base reward instead.
 
 So a validator absent from the unslashed signers earns no reward for that kind of vote.
 
+From Altair, a validator that did not set a flag earns no reward for it.
+
+A validator that set it pays no penalty for it, and nobody pays one for the head flag.
+
+The inactivity deltas hold no reward.
+
+From Altair, a validator with a timely target pays no inactivity penalty.
+
 The first epoch has no rewards, and the step keeps one balance for each validator.
 -/
 
@@ -101,12 +109,217 @@ theorem getAttestationComponentDeltas_absent {attestations : Array (PendingAttes
       exact before j unmarkedJ) start folded
   exact holds index unmarked
 
-/-- In the first epoch, rewards and penalties change nothing before Altair. -/
-theorem processRewardsAndPenalties_genesis (before : fork < .altair)
+/-- A fold of steps that keep one entry of the deltas, from zeros, leaves that entry zero. -/
+private theorem foldlM_getD_zero {step : Array Gwei × Array Gwei → ValidatorIndex →
+      Except TransitionError (Array Gwei × Array Gwei)}
+    (pick : Array Gwei × Array Gwei → Array Gwei) {j : Nat}
+    (keeps : ∀ deltas index next, step deltas index = .ok next →
+      (pick next).getD j 0 = (pick deltas).getD j 0)
+    {indices : List ValidatorIndex} {start result : Array Gwei × Array Gwei}
+    (zero : (pick start).getD j 0 = 0) (computed : indices.foldlM step start = .ok result) :
+    (pick result).getD j 0 = 0 :=
+  foldlM_ok_invariant (fun deltas => (pick deltas).getD j 0 = 0)
+    (fun deltas index next before done => (keeps deltas index next done).trans before) zero computed
+
+/-- An array of zeros is zero at every index. -/
+private theorem replicate_getD_zero (size j : Nat) :
+    (Array.replicate size (0 : Gwei)).getD j 0 = 0 := by
+  simp only [Array.getD_eq_getD_getElem?, Array.getElem?_replicate]
+  split <;> rfl
+
+/-- One step of the flag deltas keeps the reward of a validator that did not set the flag. -/
+theorem addFlagDelta_reward {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length}
+    {participated : Array Bool} {total participatingIncrements activeIncrements : Gwei}
+    {deltas next : Array Gwei × Array Gwei} {index : ValidatorIndex}
+    (computed : addFlagDelta state flagIndex participated total participatingIncrements
+      activeIncrements deltas index = .ok next)
+    {j : Nat} (unset : participated.getD j false = false) :
+    next.1.getD j 0 = deltas.1.getD j 0 := by
+  obtain ⟨rewards, penalties⟩ := deltas
+  simp only [addFlagDelta, bind_ok_iff] at computed
+  obtain ⟨_, _, computed⟩ := computed
+  split at computed
+  · rename_i set
+    have other : j ≠ index.toNat := fun same => by rw [same, set] at unset; cases unset
+    simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      rfl
+    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+      obtain ⟨_, _, _, _, _, _, _, ok, rfl⟩ := computed
+      exact addDelta_getD_of_ne ok other
+  · split at computed
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      rfl
+    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+      obtain ⟨_, _, _, _, rfl⟩ := computed
+      rfl
+
+/-- One step of the flag deltas keeps the penalty of a validator that set the flag.
+
+It keeps every penalty for the head flag. -/
+theorem addFlagDelta_penalty {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length}
+    {participated : Array Bool} {total participatingIncrements activeIncrements : Gwei}
+    {deltas next : Array Gwei × Array Gwei} {index : ValidatorIndex}
+    (computed : addFlagDelta state flagIndex participated total participatingIncrements
+      activeIncrements deltas index = .ok next)
+    {j : Nat} (exempt : participated.getD j false = true ∨
+      flagIndex.val.toUInt64 = TIMELY_HEAD_FLAG_INDEX) :
+    next.2.getD j 0 = deltas.2.getD j 0 := by
+  obtain ⟨rewards, penalties⟩ := deltas
+  simp only [addFlagDelta, bind_ok_iff] at computed
+  obtain ⟨_, _, computed⟩ := computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      rfl
+    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+      obtain ⟨_, _, _, _, _, _, _, _, rfl⟩ := computed
+      rfl
+  · rename_i unset
+    split at computed
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      rfl
+    · rename_i notHead
+      simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+      obtain ⟨_, _, _, ok, rfl⟩ := computed
+      refine addDelta_getD_of_ne ok fun same => ?_
+      rcases exempt with set | head
+      · rw [same] at set
+        exact unset set
+      · exact notHead head
+
+/-- From Altair, a validator that did not set a flag in the previous epoch earns no reward for it.
+
+This holds in a leak and outside one. -/
+theorem getFlagIndexDeltas_absent {altair : .altair ≤ fork}
+    {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length} {rewards penalties : Array Gwei}
+    (computed : getFlagIndexDeltas state altair flagIndex = .ok (rewards, penalties))
+    {participating : List ValidatorIndex}
+    (flagged : getUnslashedParticipatingIndices state altair flagIndex.val.toUInt64
+      (getPreviousEpoch state) = .ok participating)
+    {index : Nat} (absent : ∀ participant ∈ participating, participant.toNat ≠ index) :
+    rewards.getD index 0 = 0 := by
+  simp only [getFlagIndexDeltas, bind_ok_iff, liftAccessor_ok, flagged] at computed
+  obtain ⟨_, found, _, _, _, _, _, _, folded⟩ := computed
+  cases found
+  have unset : (markIndices state.validators.data.size participating).getD index false = false := by
+    rw [Array.getD_eq_getD_getElem?, getElem?_markIndices]
+    split
+    · simp only [Option.getD_some, List.any_eq_false, beq_iff_eq]
+      exact fun participant member => absent participant member
+    · rfl
+  exact foldlM_getD_zero Prod.fst (fun _ _ _ step => addFlagDelta_reward step unset)
+    (replicate_getD_zero _ _) folded
+
+/-- From Altair, a validator that set a flag in the previous epoch pays no penalty for it. -/
+theorem getFlagIndexDeltas_present {altair : .altair ≤ fork}
+    {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length} {rewards penalties : Array Gwei}
+    (computed : getFlagIndexDeltas state altair flagIndex = .ok (rewards, penalties))
+    {participating : List ValidatorIndex}
+    (flagged : getUnslashedParticipatingIndices state altair flagIndex.val.toUInt64
+      (getPreviousEpoch state) = .ok participating)
+    {index : ValidatorIndex} (present : index ∈ participating)
+    (inside : index.toNat < state.validators.data.size) :
+    penalties.getD index.toNat 0 = 0 := by
+  simp only [getFlagIndexDeltas, bind_ok_iff, liftAccessor_ok, flagged] at computed
+  obtain ⟨_, found, _, _, _, _, _, _, folded⟩ := computed
+  cases found
+  have set : (markIndices state.validators.data.size participating).getD index.toNat false =
+      true := by
+    rw [Array.getD_eq_getD_getElem?, getElem?_markIndices]
+    simpa [inside] using ⟨index, present, rfl⟩
+  exact foldlM_getD_zero Prod.snd (fun _ _ _ step => addFlagDelta_penalty step (.inl set))
+    (replicate_getD_zero _ _) folded
+
+/-- From Altair, the head flag has no penalties. -/
+theorem getFlagIndexDeltas_head {altair : .altair ≤ fork}
+    {flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length} {rewards penalties : Array Gwei}
+    (computed : getFlagIndexDeltas state altair flagIndex = .ok (rewards, penalties))
+    (head : flagIndex.val.toUInt64 = TIMELY_HEAD_FLAG_INDEX) (j : Nat) :
+    penalties.getD j 0 = 0 := by
+  simp only [getFlagIndexDeltas, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, folded⟩ := computed
+  exact foldlM_getD_zero Prod.snd (fun _ _ _ step => addFlagDelta_penalty step (.inr head))
+    (replicate_getD_zero _ _) folded
+
+/-- The inactivity deltas hold no reward, at every fork. -/
+theorem getInactivityPenaltyDeltas_rewards {config : Config} {rewards penalties : Array Gwei}
+    (computed : getInactivityPenaltyDeltas config state = .ok (rewards, penalties)) (j : Nat) :
+    rewards.getD j 0 = 0 := by
+  unfold getInactivityPenaltyDeltas at computed
+  dsimp only at computed
+  split at computed
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
+    obtain ⟨_, _, _, _, _, _, rfl, _⟩ := computed
+    exact replicate_getD_zero _ _
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
+      obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl, _⟩ := computed
+      exact replicate_getD_zero _ _
+    · simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
+      obtain ⟨rfl, _⟩ := computed
+      exact replicate_getD_zero _ _
+
+/-- One step of the inactivity penalties keeps the penalty of a validator with a timely target. -/
+theorem addInactivityScorePenalty_matched {config : Config} {altair : .altair ≤ fork}
+    {targetMatched : Array Bool} {penalties next : Array Gwei} {index : ValidatorIndex}
+    (computed : addInactivityScorePenalty config state altair targetMatched penalties index =
+      .ok next)
+    {j : Nat} (matched : targetMatched.getD j false = true) :
+    next.getD j 0 = penalties.getD j 0 := by
+  unfold addInactivityScorePenalty at computed
+  split at computed
+  · cases computed
+    rfl
+  · rename_i unmatched
+    simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · simp only [bind_ok_iff] at computed
+      obtain ⟨_, _, _, _, _, _, ok⟩ := computed
+      exact addDelta_getD_of_ne ok fun same => unmatched (same ▸ matched)
+    · cases computed
+
+/-- From Altair, a validator with a timely target in the previous epoch pays no inactivity penalty.
+
+This holds in a leak and outside one. -/
+theorem getInactivityPenaltyDeltas_target {config : Config} (altair : .altair ≤ fork)
+    {rewards penalties : Array Gwei}
+    (computed : getInactivityPenaltyDeltas config state = .ok (rewards, penalties))
+    {matching : List ValidatorIndex}
+    (timely : getUnslashedParticipatingIndices state altair TIMELY_TARGET_FLAG_INDEX
+      (getPreviousEpoch state) = .ok matching)
+    {index : ValidatorIndex} (present : index ∈ matching)
+    (inside : index.toNat < state.validators.data.size) :
+    penalties.getD index.toNat 0 = 0 := by
+  unfold getInactivityPenaltyDeltas at computed
+  dsimp only at computed
+  simp only [altair, ↓reduceDIte, bind_ok_iff, liftAccessor_ok, timely, pure, Except.pure,
+    Except.ok.injEq, Prod.mk.injEq] at computed
+  obtain ⟨_, found, _, _, _, folded, _, rfl⟩ := computed
+  cases found
+  have set : (markIndices state.validators.data.size matching).getD index.toNat false = true := by
+    rw [Array.getD_eq_getD_getElem?, getElem?_markIndices]
+    simpa [inside] using ⟨index, present, rfl⟩
+  exact foldlM_ok_invariant (fun deltas : Array Gwei => deltas.getD index.toNat 0 = 0)
+    (fun _ _ _ before step => (addInactivityScorePenalty_matched step set).trans before)
+    (replicate_getD_zero _ _) folded
+
+/-- In the first epoch, rewards and penalties change nothing. -/
+theorem processRewardsAndPenalties_genesis (config : Config)
     (genesis : getCurrentEpoch state = GENESIS_EPOCH) :
-    processRewardsAndPenalties state = .ok state := by
-  have notAltair : ¬Fork.altair ≤ fork := fun le => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le before le)
-  simp [processRewardsAndPenalties, notAltair, genesis, pure, Except.pure]
+    processRewardsAndPenalties config state = .ok state := by
+  simp [processRewardsAndPenalties, genesis, pure, Except.pure]
 
 /-- Applying the deltas of one validator keeps the sizes. -/
 theorem sameSizes_applyDeltas {rewards penalties : Array Gwei} {index : Nat}
@@ -115,21 +328,26 @@ theorem sameSizes_applyDeltas {rewards penalties : Array Gwei} {index : Nat}
   obtain ⟨raised, raisedOk, lowered⟩ := computed
   exact (sameSizes_increaseBalance raisedOk).trans (sameSizes_decreaseBalance lowered)
 
-/-- Rewards and penalties succeed only before Altair, and keep the sizes. -/
-theorem processRewardsAndPenalties_ok
-    (computed : processRewardsAndPenalties state = .ok after) :
-    fork < .altair ∧ SameSizes state after := by
+/-- Applying some deltas to every validator keeps the sizes. -/
+theorem sameSizes_applyAllDeltas {deltas : Array Gwei × Array Gwei}
+    (computed : applyAllDeltas state deltas = .ok after) : SameSizes state after :=
+  foldlM_ok_invariant (SameSizes state) (fun _ _ _ sizes step =>
+    sizes.trans (sameSizes_applyDeltas step)) (SameSizes.refl state) computed
+
+/-- Rewards and penalties keep the sizes, at every fork. -/
+theorem processRewardsAndPenalties_sameSizes {config : Config}
+    (computed : processRewardsAndPenalties config state = .ok after) : SameSizes state after := by
   unfold processRewardsAndPenalties at computed
-  split at computed
-  · cases computed
-  rename_i altair
-  refine ⟨Nat.lt_of_not_le altair, ?_⟩
   split at computed
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ SameSizes.refl _
+  split at computed
   · simp only [bind_ok_iff] at computed
-    obtain ⟨⟨rewards, penalties⟩, _, applied⟩ := computed
-    exact foldlM_ok_invariant (SameSizes state) (fun _ _ _ sizes step =>
-      sizes.trans (sameSizes_applyDeltas step)) (SameSizes.refl state) applied
+    obtain ⟨_, _, _, _, applied⟩ := computed
+    exact foldlM_ok_invariant (SameSizes state) (fun before _ _ sizes step =>
+      sizes.trans (sameSizes_applyAllDeltas step)) (SameSizes.refl state) applied
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, applied⟩ := computed
+    exact sameSizes_applyAllDeltas applied
 
 end EthLib.Consensus

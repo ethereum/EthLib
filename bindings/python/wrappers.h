@@ -299,6 +299,7 @@ PyObject* py_consensus_verify_blob_sidecar_inclusion_proof (PyObject* self, PyOb
 PyObject* py_consensus_process_operation (PyObject* self, PyObject* args);
 PyObject* py_consensus_upgrade_state (PyObject* self, PyObject* args);
 PyObject* py_consensus_process_epoch (PyObject* self, PyObject* args);
+PyObject* py_consensus_rewards_deltas (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_ssz                                  (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_possession_signing_root              (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_is_valid_possession_proof            (PyObject* self, PyObject* args);
