@@ -32,15 +32,17 @@ namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
 
+variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+
 /-- What the one-time key of a layer on the way from `idx` up signs.
 
 - The bottom key signs the FORS key of instance `idx`.
 - A higher key signs the root of the tree below it, the tree its own index names. -/
-def layerMessage (pp : PublicParam) (seed : Seed) (layer : Layer) (idx : Nat) : ByteArray :=
+def layerMessage (pp : PublicParam) (seed : Seed) (layer : Layer) (idx : Nat) : m ByteArray :=
   match layer with
-  | .bottom => forsKeyBytes (forsKey pp seed idx)
-  | .middle => packBytes (treeRoot pp seed .bottom (OtsKey.ofIndex .bottom idx).tree)
-  | .top => packBytes (treeRoot pp seed .middle (OtsKey.ofIndex .middle idx).tree)
+  | .bottom => return forsKeyBytes (← forsKey H pp seed idx)
+  | .middle => return packBytes (← treeRoot H pp seed .bottom (OtsKey.ofIndex .bottom idx).tree)
+  | .top => return packBytes (← treeRoot H pp seed .middle (OtsKey.ofIndex .middle idx).tree)
 
 /-- One layer's signature of a message: the one-time signature and the path of the key.
 
@@ -50,11 +52,61 @@ The key is the layer's key on the way from `idx` up.
 
 - No counter gives a codeword, which happens with probability below `exp(-2^18)`. -/
 def signLayer (pp : PublicParam) (seed : Seed) (layer : Layer) (idx : Nat) (msg : ByteArray) :
-    Except SphincsError (LayerSignature layer) :=
+    m (Except SphincsError (LayerSignature layer)) := do
   let key := OtsKey.ofIndex layer idx
-  -- No codeword is an error, and a one-time signature is packed with the key's path.
-  (otsSign pp seed key msg).elim (.error (.noAdmissibleEncoding layer)) fun ots =>
-    .ok { counter := ots.1, chainValues := ots.2, path := path pp seed layer key.tree key.leaf }
+  -- No codeword is an error.
+  let some (counter, chainValues) ← otsSign H pp seed key msg
+    | return .error (.noAdmissibleEncoding layer)
+  -- A one-time signature is packed with the key's path.
+  return .ok { counter, chainValues, path := ← path H pp seed layer key.tree key.leaf }
+
+/-- Sign a message from the scheme seed `S` and the parameter `P`.
+
+1. The randomizer and the message give the digest: the index and one leaf per FORS tree.
+2. FORS instance `idx` opens those leaves.
+3. Each layer's key signs what the layer below gives, with its path.
+
+# Errors
+
+- A one-time signature finds no codeword. -/
+def signDerived (s : Seed) (pp : PublicParam) (msg : Message) :
+    m (Except SphincsError Signature) := do
+  -- Step 1: the randomizer, then the digest it gives the message.
+  let rho ← randomizer H pp s msg
+  let d ← messageDigest H pp msg rho
+  let idx := digestIndex d
+  -- Step 2: open the FORS instance at the digest's leaves.
+  let fors ← forsSign H pp s idx (digestLeaves d)
+  -- Step 3: sign up the hypertree, each layer what the layer below gives.
+  -- A layer's error ends signing, before any later hash call.
+  let bottom ← match ← signLayer H pp s .bottom idx (← layerMessage H pp s .bottom idx) with
+    | .ok sig => pure sig
+    | .error err => return .error err
+  let middle ← match ← signLayer H pp s .middle idx (← layerMessage H pp s .middle idx) with
+    | .ok sig => pure sig
+    | .error err => return .error err
+  let top ← match ← signLayer H pp s .top idx (← layerMessage H pp s .top idx) with
+    | .ok sig => pure sig
+    | .error err => return .error err
+  return .ok { randomizer := rho, fors, bottom, middle, top }
+
+/-- `Sign(sk, m)` over a hash `H`: sign a message.
+
+1. The scheme seed `S` and the public parameter `P`, from the secret key's seed.
+2. The signature from `S` and `P`.
+
+# Warning
+
+Never sign more than `2^30` messages with one secret key.
+
+# Errors
+
+- A one-time signature finds no codeword. -/
+def signWith (sk : SecretKey) (msg : Message) : m (Except SphincsError Signature) := do
+  -- Every secret derives from the scheme seed, not from the key's seed itself.
+  let s ← schemeSeed H sk.seed
+  let pp ← publicParamOf H s
+  signDerived H s pp msg
 
 /-- `Sign(sk, m)`: sign a message.
 
@@ -69,20 +121,7 @@ Never sign more than `2^30` messages with one secret key.
 # Errors
 
 - A one-time signature finds no codeword. -/
-def sign (sk : SecretKey) (m : Message) : Except SphincsError Signature := do
-  -- Every secret derives from the scheme seed, not from the key's seed itself.
-  let seed := sk.master
-  let pp := sk.publicParam
-  -- Step 1: the randomizer, then the digest it gives the message.
-  let rho := randomizer pp seed m
-  let d := messageDigest pp m rho
-  let idx := digestIndex d
-  -- Step 2: open the FORS instance at the digest's leaves.
-  let fors := forsSign pp seed idx (digestLeaves d)
-  -- Step 3: sign up the hypertree, each layer what the layer below gives.
-  let bottom ← signLayer pp seed .bottom idx (layerMessage pp seed .bottom idx)
-  let middle ← signLayer pp seed .middle idx (layerMessage pp seed .middle idx)
-  let top ← signLayer pp seed .top idx (layerMessage pp seed .top idx)
-  return { randomizer := rho, fors, bottom, middle, top }
+def sign (sk : SecretKey) (m : Message) : Except SphincsError Signature :=
+  (signWith hashId sk m).run
 
 end EthLib.Cryptography.Sphincs

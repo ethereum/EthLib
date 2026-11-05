@@ -21,9 +21,10 @@ namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
 
-/-! ## Byte conversions shared with leanXMSS -/
+/-! ## Byte conversions and ordered vectors shared with leanXMSS -/
 
-export EthLib.Cryptography.Xmss (uintToBytes bytesToUint packBytes readBytes unpackBytes?)
+export EthLib.Cryptography.Xmss
+  (uintToBytes bytesToUint packBytes readBytes unpackBytes? ofFnInOrder)
 
 /-! ## Objects -/
 

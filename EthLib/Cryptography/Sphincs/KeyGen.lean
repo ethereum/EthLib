@@ -29,43 +29,53 @@ namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
 
+variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+
+/-! ## Derivations from the seed -/
+
 /-- `S = H("leanSPHINCS" | S_0)`: the seed every secret derives from.
 
 The scheme's name comes first, so no other scheme derives from the same bytes. -/
-def schemeSeed (seed : Seed) : Seed :=
-  hash (ByteArray.mk SEED_TAG.toArray ++ packBytes seed)
+def schemeSeed (seed : Seed) : m Seed :=
+  H (ByteArray.mk SEED_TAG.toArray ++ packBytes seed)
 
 /-- `P = Th(0^128, A_param, S)`: the public parameter.
 
 The all-zero parameter stands in for the one being derived. -/
-def publicParamOf (seed : Seed) : PublicParam :=
-  th (Vector.replicate PUBLIC_PARAM_LEN 0) addrParam (packBytes seed)
+def publicParamOf (s : Seed) : m PublicParam :=
+  th H (Vector.replicate PUBLIC_PARAM_LEN 0) addrParam (packBytes s)
+
+/-! ## Keys -/
 
 /-- A secret key: the seed `S_0`. -/
 structure SecretKey where
   /-- The 32 uniform bytes the scheme's seed derives from. -/
   seed : Seed
 
-/-- The secret key's scheme seed `S`, which every secret derives from. -/
-def SecretKey.master (sk : SecretKey) : Seed :=
-  schemeSeed sk.seed
+/-! ## Key generation -/
 
-/-- The secret key's public parameter `P`. -/
-def SecretKey.publicParam (sk : SecretKey) : PublicParam :=
-  publicParamOf sk.master
+/-- The public key of the scheme seed `S`: the parameter `P`, then the root of the top tree.
 
-/-- The public key: the root of the top tree, with the public parameter.
+Computing the root builds the whole top tree: `2^10` one-time keys. -/
+def publicKeyOf (s : Seed) : m PublicKey := do
+  let pp ← publicParamOf H s
+  let root ← treeRoot H pp s .top 0
+  return { root, publicParam := pp }
 
-Computing it builds the whole top tree: `2^10` one-time keys. -/
-def SecretKey.publicKey (sk : SecretKey) : PublicKey where
-  root := treeRoot sk.publicParam sk.master .top 0
-  publicParam := sk.publicParam
+/-- `Gen` over a hash `H`: the key pair grown from a seed.
+
+1. The scheme seed `S`, from the seed.
+2. The public key of `S`.
+
+The seed must be 32 uniform bytes, kept secret. -/
+def keyGenWith (seed : Seed) : m (SecretKey × PublicKey) := do
+  let s ← schemeSeed H seed
+  return (⟨seed⟩, ← publicKeyOf H s)
 
 /-- `Gen`: the key pair grown from a seed.
 
 The seed must be 32 uniform bytes, kept secret. -/
 def keyGen (seed : Seed) : SecretKey × PublicKey :=
-  let sk : SecretKey := ⟨seed⟩
-  (sk, sk.publicKey)
+  (keyGenWith hashId seed).run
 
 end EthLib.Cryptography.Sphincs

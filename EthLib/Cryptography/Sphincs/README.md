@@ -107,6 +107,11 @@ They come from the code under test.
 
 The proofs are in `EthLib/Cryptography/Proofs/Sphincs/`.
 
+Every definition that hashes takes the hash as an argument, as leanXMSS's definitions do.
+`keyGen`, `sign` and `verify` pass Keccak-256.
+Each theorem about such a definition holds for every hash function, run in the identity monad.
+Keccak-256 is one such function, so the theorems cover the specification as it runs.
+
 - Correctness.
   A key from `keyGen` verifies every signature that `sign` makes with it (`verify_keyGen_sign`, `Correctness.lean`).
 - What verification checks.

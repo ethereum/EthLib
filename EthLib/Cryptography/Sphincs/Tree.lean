@@ -28,7 +28,9 @@ The trees of a layer are the shared Merkle trees of EthLib.
 
 Their node hash reads the position of the node into its address.
 
-They are pure, so they run in the identity monad.
+Every definition takes the hash `H`.
+
+A node computes its left subtree, then its right subtree, then its own hash.
 
 Source: `Seeded.treeNode`, `Seeded.treePath` and `treeFold` in FORS/Scheme.lean.
 <https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Scheme.lean>
@@ -39,6 +41,8 @@ Source: `Seeded.treeNode`, `Seeded.treePath` and `treeFold` in FORS/Scheme.lean.
 namespace EthLib.Cryptography.Sphincs
 
 open EthLib.Cryptography.Sphincs.Constants
+
+variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
 /-- No layer is taller than the top one, so every level of a tree fits a node address. -/
 theorem Layer.height_le (layer : Layer) : layer.height ≤ TOP_HEIGHT := by
@@ -51,23 +55,24 @@ theorem Layer.height_le (layer : Layer) : layer.height ≤ TOP_HEIGHT := by
 The address holds the level modulo 11.
 
 The tree hashes only at levels 1 to its height, at most 10, so the address names the true level. -/
-def nodeHash (pp : PublicParam) (layer : Layer) (tree level j : Nat) (left right : Digest) : Id Digest :=
+def nodeHash (pp : PublicParam) (layer : Layer) (tree level j : Nat) (left right : Digest) :
+    m Digest :=
   -- The payload is the left child, then the right child.
-  th pp (addrNode layer tree (Fin.ofNat _ level) j) (packBytes left ++ packBytes right)
+  th H pp (addrNode layer tree (Fin.ofNat _ level) j) (packBytes left ++ packBytes right)
 
 /-- `X_{0,j}`: the leaf of one-time key `j` of tree `tree` of a layer. -/
-def leaves (pp : PublicParam) (seed : Seed) (layer : Layer) (tree j : Nat) : Id Digest :=
-  otsPublicLeaf pp seed ⟨layer, tree, j⟩
+def leaves (pp : PublicParam) (seed : Seed) (layer : Layer) (tree j : Nat) : m Digest :=
+  otsPublicLeaf H pp seed ⟨layer, tree, j⟩
 
 /-- `X_{level,j}`: node `j` on `level` of tree `tree` of a layer.
 
 Computing it evaluates the `2^level` one-time keys below it. -/
-def node (pp : PublicParam) (seed : Seed) (layer : Layer) (tree level j : Nat) : Digest :=
-  (Merkle.node (nodeHash pp layer tree) (leaves pp seed layer tree) level j).run
+def node (pp : PublicParam) (seed : Seed) (layer : Layer) (tree level j : Nat) : m Digest :=
+  Merkle.node (nodeHash H pp layer tree) (leaves H pp seed layer tree) level j
 
 /-- The root of tree `tree` of a layer: its one node on the top level. -/
-def treeRoot (pp : PublicParam) (seed : Seed) (layer : Layer) (tree : Nat) : Digest :=
-  (Merkle.root (nodeHash pp layer tree) (leaves pp seed layer tree) layer.height).run
+def treeRoot (pp : PublicParam) (seed : Seed) (layer : Layer) (tree : Nat) : m Digest :=
+  Merkle.root (nodeHash H pp layer tree) (leaves H pp seed layer tree) layer.height
 
 /-! ## The path -/
 
@@ -77,12 +82,13 @@ def treeRoot (pp : PublicParam) (seed : Seed) (layer : Layer) (tree : Nat) : Dig
     pi_lambda = X_{lambda, floor(e / 2^lambda) xor 1}
 ```
 -/
-def path (pp : PublicParam) (seed : Seed) (layer : Layer) (tree e : Nat) : Vector Digest layer.height :=
-  (Merkle.path (nodeHash pp layer tree) (leaves pp seed layer tree) layer.height e).run
+def path (pp : PublicParam) (seed : Seed) (layer : Layer) (tree e : Nat) :
+    m (Vector Digest layer.height) :=
+  Merkle.path (nodeHash H pp layer tree) (leaves H pp seed layer tree) layer.height e
 
 /-- `Tree.fold`: the root a path leads to from the leaf of key `e` of tree `tree`. -/
 def fold (pp : PublicParam) (layer : Layer) (tree e : Nat) (leaf : Digest)
-    (pi : Vector Digest layer.height) : Digest :=
-  (Merkle.climb (nodeHash pp layer tree) 0 e leaf pi.toList).run
+    (pi : Vector Digest layer.height) : m Digest :=
+  Merkle.climb (nodeHash H pp layer tree) 0 e leaf pi.toList
 
 end EthLib.Cryptography.Sphincs

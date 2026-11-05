@@ -79,18 +79,44 @@ structure Signature where
 
 /-! ## Verification -/
 
+variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+
 /-- The root one layer's signature leads to, from the message it signs.
 
 The signing key is the layer's key on the way from `idx` up.
 
 Returns nothing when the counter does not encode the message as a codeword. -/
 def layerRoot (pp : PublicParam) (layer : Layer) (idx : Nat) (msg : ByteArray)
-    (sig : LayerSignature layer) : Option Digest := do
+    (sig : LayerSignature layer) : m (Option Digest) := do
   let key := OtsKey.ofIndex layer idx
   -- Recover the key's leaf from the one-time signature.
-  let leaf ← otsLeaf pp key msg sig.counter sig.chainValues
+  let some leaf ← otsLeaf H pp key msg sig.counter sig.chainValues | return none
   -- Climb the key's path to its tree's root.
-  return fold pp layer key.tree key.leaf leaf sig.path
+  return some (← fold H pp layer key.tree key.leaf leaf sig.path)
+
+/-- `Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key.
+
+1. The digest names the index and the leaf of each FORS tree.
+2. The openings lead to a FORS key.
+3. Each layer, from the bottom up, signs what the layer below leads to.
+
+A layer that fails ends verification, before any later hash call. -/
+def verifyWith (pk : PublicKey) (msg : Message) (sig : Signature) : m Bool := do
+  let pp := pk.publicParam
+  -- Step 1: the digest names the index and the leaf of each FORS tree.
+  let d ← messageDigest H pp msg sig.randomizer
+  let idx := digestIndex d
+  -- Step 2: the openings lead to a FORS key.
+  let key ← forsRecover H pp idx (digestLeaves d) sig.fors
+  -- Step 3: the bottom key signs the FORS key, and its path leads to a bottom root.
+  let some bottomRoot ← layerRoot H pp .bottom idx (forsKeyBytes key) sig.bottom | return false
+  -- Step 4: the middle key signs that root, and its path leads to a middle root.
+  let some middleRoot ← layerRoot H pp .middle idx (packBytes bottomRoot) sig.middle
+    | return false
+  -- Step 5: the top key signs that root, and its path leads to the top root.
+  let some root ← layerRoot H pp .top idx (packBytes middleRoot) sig.top | return false
+  -- Step 6: no layer failed, and the top root is the key's.
+  return decide (root = pk.root)
 
 /-- `Ver(pk, m, sigma)`: whether a signature signs a message under a public key.
 
@@ -98,20 +124,6 @@ A yes or a no, never a reason.
 
 Which step rejected a well-formed signature carries no meaning for the caller. -/
 def verify (pk : PublicKey) (m : Message) (sig : Signature) : Bool :=
-  let pp := pk.publicParam
-  -- Step 1: the digest names the index and the leaf of each FORS tree.
-  let d := messageDigest pp m sig.randomizer
-  let idx := digestIndex d
-  -- Step 2: the openings lead to a FORS key.
-  let key := forsRecover pp idx (digestLeaves d) sig.fors
-  let root? : Option Digest := do
-    -- Step 3: the bottom key signs the FORS key, and its path leads to a bottom root.
-    let bottomRoot ← layerRoot pp .bottom idx (forsKeyBytes key) sig.bottom
-    -- Step 4: the middle key signs that root, and its path leads to a middle root.
-    let middleRoot ← layerRoot pp .middle idx (packBytes bottomRoot) sig.middle
-    -- Step 5: the top key signs that root, and its path leads to the top root.
-    layerRoot pp .top idx (packBytes middleRoot) sig.top
-  -- Step 6: no layer failed, and the top root is the key's.
-  decide (root? = some pk.root)
+  (verifyWith hashId pk m sig).run
 
 end EthLib.Cryptography.Sphincs
