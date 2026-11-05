@@ -388,7 +388,7 @@ Let opening `i` have commitment `c_i`, value `y_i`, point `z_i` and proof `w_i`.
 Then its challenge `r` is a root of `P(X) = sum_i X^i (c_i - y_i - w_i (τ - z_i))`.
 `P` is zero exactly when every opening satisfies the identity of the single check.
 `verifyCellKzgProofBatchImpl_ok_iff_root` (`Proofs/Kzg/CellBatchBinding.lean`) states the same for the batch check of cells, as an equivalence.
-Its verdict is true exactly when the challenge is a root.
+Under `PairingLaws`, a well-formed setup, and decoded points that represent `c` and `w`, its verdict is true exactly when the challenge is a root.
 Let cell `k` have commitment `c_{i_k}` at commitment index `i_k`, proof `w_k`, coset shift `h_k`, and values that interpolate to `I_k` of degree below 64.
 Then the challenge is a root of `sum_k X^k (c_{i_k} - I_k(τ) - w_k (τ^64 - h_k^64))`.
 That polynomial is zero exactly when every cell is valid.
@@ -409,7 +409,7 @@ The input is well formed when the sizes agree, each cell index is below 128, eac
 `verifyCellKzgProofBatch_ok_iff_root` states that this verdict is true exactly when the challenge is a root.
 `verifyCellKzgProofBatch_binding` concludes that the two cells are equal as bytes, or one of the two other cases holds.
 `prEvent_cellInput_root_le` keeps the bound `(q + 1) (n - 1) / r`, where the adversary outputs the inputs of the outer check.
-In these three theorems, the scalar of a commitment or a proof is a function of its bytes.
+In `verifyCellKzgProofBatch_valid_or_root`, `verifyCellKzgProofBatch_ok_iff_root`, `verifyCellKzgProofBatch_binding` and `prEvent_cellInput_root_le`, the scalar of a commitment or a proof is a function of its bytes.
 Wagner and Zapico, ePrint 2025/1683, Definition 1, write the bilinear strong Diffie–Hellman problem with `1 / (τ - c)`.
 `isBsdhSolution_iff_sub` (`Proofs/Kzg/Arsdh.lean`) proves that this form and the one of the extended KZG paper differ only by the sign of `c`.
 `IsArsdhSolution` in the same file is the winning condition of adaptive rational strong Diffie–Hellman, Definition 2 there.
@@ -448,7 +448,16 @@ Both theorems assume the pairing law, `PairingLaws`, and the BSDH reductions wor
 That BSDH and ARSDH are hard stays an informal hypothesis: no theorem assumes it, and the bounds hold for every adversary.
 An adversary is any Lean function, so without a model of cost, hardness cannot be stated as a Lean hypothesis.
 The BSDH advantage is relative to a model of the target group; `TargetGroup.ofPairingLaws` is the model of the real pairing.
-The games check one cell per call; acceptance of a batch of many cells under one challenge is outside them.
+These games check one cell per call.
+`batchCodeBindingAdvantage_le` (`Proofs/Kzg/PeerDasBatchGames.lean`) states code-binding with one batch check of all opened cells of the commitment.
+The hash of the challenge is a random oracle into `Fr` on the inputs of the core check, and the adversary makes at most `q` queries.
+That idealises SHA-256 reduced modulo `r`, whose values are not exactly uniform.
+The verifier accepts when the batch check returns a verdict and its challenge is a root of the error polynomial of the batch.
+At the challenge of the hash, and under `PairingLaws`, this is the batch check of cells (`CellBatchInput.acceptsAt_challenge_iff`); no theorem relates the two at another challenge.
+The bound is the bound of Lemma 4 plus `(q + 1) 127 / r`, the root term of the random-oracle game, for at most 128 distinct cells.
+The verifier accepts valid openings with every challenge (`CellBatchInput.acceptsAt_of_cellOpeningValid`).
+A client that samples a column checks it in its own batch, with many commitments at one cell index.
+The game does not model several such batches, each with its own challenge.
 `cellOpeningValid_computeCellsAndKzgProofs` (`Proofs/Kzg/HonestCells.lean`) is about the cells and proofs that the code computes for a blob.
 Under every well-formed setup, they are valid openings for the commitment of the blob, so also under the setup that the games build.
 A valid opening satisfies the scalar equation of a valid cell, with points that pass KZG validation.

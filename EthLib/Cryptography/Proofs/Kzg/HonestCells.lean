@@ -24,9 +24,15 @@ The setup is any well-formed setup of `τ`, so the setup of the PeerDAS games is
 - The remainder of that division takes the values of the cell on its coset.
   It has degree below 64, so it is the polynomial that interpolates the cell.
 
-Under the pairing law, the batch check of cells accepts every batch of valid openings.
+Give each point the scalar that it represents, as a function of its bytes.
 
-Their error polynomial is zero, so the challenge is a root of it.
+Then a batch of valid openings has a zero error polynomial.
+
+Conversely, let the batch check return a verdict, with a zero error polynomial.
+
+Then every entry is valid.
+
+Under the pairing law, the batch check of cells accepts every batch of valid openings.
 
 So the batch check accepts the cells and proofs of blobs, and so does the verifier of the games.
 -/
@@ -210,7 +216,130 @@ theorem cellOpeningValid_computeCellsAndKzgProofs {s : TrustedSetup} {τ : Fr}
     · rw [hproof]
       exact hPv
 
+/-! ## The scalar of a point -/
+
+/-- An entry of an array, read in range, is a member of the array. -/
+theorem getElem!_mem_of_lt {α : Type} [Inhabited α] {xs : Array α} {k : Nat} (hk : k < xs.size) :
+    xs[k]! ∈ xs := by
+  rw [getElem!_pos xs k hk]
+  exact Array.getElem_mem hk
+
+/-- The scalar of 48 bytes: the scalar that their point represents, if there is one. -/
+noncomputable def scalarOf (b : Bytes48) : Fr :=
+  Classical.epsilon fun a => ∀ P, uncompressG1 b = .ok P → G1.Represents P a
+
+/-- Bytes that pass KZG validation decode to a point that represents their scalar. -/
+theorem represents_scalarOf {b : Bytes48} (h : validateKzgG1 b = true) {P : G1}
+    (hP : uncompressG1 b = .ok P) : G1.Represents P (scalarOf b) := by
+  obtain ⟨a, ha⟩ := represents_of_validateKzgG1 h hP
+  refine Classical.epsilon_spec (p := fun a => ∀ P, uncompressG1 b = .ok P → G1.Represents P a)
+    ⟨a, fun P' hP' => ?_⟩ P hP
+  rw [hP] at hP'
+  cases hP'
+  exact ha
+
+/-- Bytes that decode to a point of the subgroup have the scalar of that point. -/
+theorem scalarOf_eq {b : Bytes48} {P : G1} {a : Fr} (hb : validateKzgG1Point b = .ok P)
+    (ha : G1.Represents P a) : scalarOf b = a :=
+  (represents_scalarOf (validateKzgG1_of_validateKzgG1Point hb)
+    (uncompressG1_of_validateKzgG1Point hb)).unique ha
+
+/-! ## Valid openings and the error polynomial -/
+
+/-- **A batch of valid openings has a zero error polynomial.**
+
+Take a batch with one commitment, one cell index, one cell and one proof per entry.
+
+Let each entry be a valid opening at `τ`.
+
+Then the error polynomial of the batch is zero, where each point has the scalar of its bytes. -/
+theorem errorPoly_eq_zero_of_cellOpeningValid {τ : Fr} {y : CellBatchInput}
+    (h₁ : y.cells.size = y.commitments.size) (h₃ : y.cellIndices.size = y.commitments.size)
+    (hv : ∀ k < y.commitments.size,
+      CellOpeningValid τ y.commitments[k]! y.cellIndices[k]! y.cells[k]! y.proofs[k]!) :
+    y.toCellBatch.errorPoly τ scalarOf scalarOf = 0 := by
+  obtain ⟨evals, hev⟩ := array_mapM_exists_ok (f := cellToCosetEvals) (xs := y.cells)
+    fun x hx => by
+      obtain ⟨k, hk, rfl⟩ := Array.getElem_of_mem hx
+      obtain ⟨-, e, -, -, -, -, he, -⟩ := hv k (h₁ ▸ hk)
+      exact ⟨e, by rw [← getElem!_pos _ k hk]; exact he⟩
+  obtain ⟨-, hevk⟩ := array_mapM_ok hev
+  obtain ⟨-, hdidx, -⟩ := dedupCommitments_spec y.commitments
+  refine (cellErrorPoly_eq_zero_iff τ _ _ _ _ _).mpr fun k hk => ?_
+  have hk' : k < y.commitments.size := h₃ ▸ hk
+  obtain ⟨-, e, C, a, W, w, he, hCv, hCr, hWv, hWr, hval⟩ := hv k hk'
+  have hek : evals[k]! = e := Except.ok.inj ((hevk k (h₁ ▸ hk')).symm.trans he)
+  simp only [CellBatchInput.toCellBatch, decodeCells_of_ok hev, hek, (hdidx k hk').2,
+    scalarOf_eq hCv hCr, scalarOf_eq hWv hWr]
+  exact hval
+
+/-- **A batch with a zero error polynomial holds only valid openings.**
+
+Let the batch check of cells return a verdict.
+
+Let the error polynomial of the batch be zero, where each point has the scalar of its bytes.
+
+Then every entry of the batch is a valid opening at `τ`. -/
+theorem cellOpeningValid_of_errorPoly_eq_zero {s : TrustedSetup} {τ : Fr} {y : CellBatchInput}
+    {b : Bool}
+    (h : verifyCellKzgProofBatch s y.commitments y.cellIndices y.cells y.proofs = .ok b)
+    (hz : y.toCellBatch.errorPoly τ scalarOf scalarOf = 0) {k : Nat}
+    (hk : k < y.commitments.size) :
+    CellOpeningValid τ y.commitments[k]! y.cellIndices[k]! y.cells[k]! y.proofs[k]! := by
+  obtain ⟨h₁, h₂, h₃, hci, evals, hev, -⟩ := verifyCellKzgProofBatch_eq_ok h
+  obtain ⟨hvc, hvp⟩ := validates_of_verifyCellKzgProofBatch h
+  obtain ⟨-, hdidx, -⟩ := dedupCommitments_spec y.commitments
+  obtain ⟨-, hevk⟩ := array_mapM_ok hev
+  have hvck := hvc _ (getElem!_mem_of_lt hk)
+  have hvpk := hvp _ (getElem!_mem_of_lt (h₂ ▸ hk))
+  obtain ⟨C, hC⟩ := exists_validateKzgG1Point_of_validateKzgG1 hvck
+  obtain ⟨P, hP⟩ := exists_validateKzgG1Point_of_validateKzgG1 hvpk
+  have hv := (cellErrorPoly_eq_zero_iff τ _ _ _ _ _).mp hz k (by
+    simp only [CellBatchInput.toCellBatch]
+    omega)
+  simp only [CellBatchInput.toCellBatch, decodeCells_of_ok hev, (hdidx k hk).2] at hv
+  exact ⟨hci k (by omega), evals[k]!, C, _, P, _, hevk k (by omega), hC,
+    represents_scalarOf hvck (uncompressG1_of_validateKzgG1Point hC), hP,
+    represents_scalarOf hvpk (uncompressG1_of_validateKzgG1Point hP), hv⟩
+
 /-! ## The batch check accepts valid openings -/
+
+/-- **On valid openings, the batch check of cells returns a verdict.**
+
+Take a batch with one commitment, one cell index, one cell and one proof per entry.
+
+Let each entry be a valid opening at `τ`.
+
+Then the batch check of cells returns a verdict, with no error.
+
+Its commitments and proofs pass KZG validation. -/
+theorem exists_ok_of_cellOpeningValid {s : TrustedSetup} {τ : Fr} {y : CellBatchInput}
+    (h₁ : y.cells.size = y.commitments.size) (h₂ : y.proofs.size = y.commitments.size)
+    (h₃ : y.cellIndices.size = y.commitments.size)
+    (hv : ∀ k < y.commitments.size,
+      CellOpeningValid τ y.commitments[k]! y.cellIndices[k]! y.cells[k]! y.proofs[k]!) :
+    (∃ b, verifyCellKzgProofBatch s y.commitments y.cellIndices y.cells y.proofs = .ok b) ∧
+      (∀ x ∈ y.commitments, validateKzgG1 x = true) ∧ ∀ x ∈ y.proofs, validateKzgG1 x = true := by
+  -- Each entry of an array of the batch is the entry of some index.
+  have hmem : ∀ {α : Type} [Inhabited α] {xs : Array α}, xs.size = y.commitments.size →
+      ∀ x ∈ xs, ∃ k < y.commitments.size, xs[k]! = x := fun hsz x hx => by
+    obtain ⟨k, hk, rfl⟩ := Array.getElem_of_mem hx
+    exact ⟨k, hsz ▸ hk, getElem!_pos _ k hk⟩
+  have hbs : ∀ x ∈ y.commitments, validateKzgG1 x = true := fun x hx => by
+    obtain ⟨k, hk, rfl⟩ := hmem rfl x hx
+    obtain ⟨-, _, _, _, _, _, -, hC, -⟩ := hv k hk
+    exact validateKzgG1_of_validateKzgG1Point hC
+  have hps : ∀ x ∈ y.proofs, validateKzgG1 x = true := fun x hx => by
+    obtain ⟨k, hk, rfl⟩ := hmem h₂ x hx
+    obtain ⟨-, _, _, _, _, _, -, -, -, hP, -⟩ := hv k hk
+    exact validateKzgG1_of_validateKzgG1Point hP
+  refine ⟨verifyCellKzgProofBatch_exists_ok h₁ h₂ h₃ (fun i hi => ?_) hbs hps fun x hx => ?_,
+    hbs, hps⟩
+  · obtain ⟨k, hk, rfl⟩ := hmem h₃ i hi
+    exact (hv k hk).1
+  · obtain ⟨k, hk, rfl⟩ := hmem h₁ x hx
+    obtain ⟨-, e, -, -, -, -, he, -⟩ := hv k hk
+    exact ⟨e, he⟩
 
 /-- **The batch check of cells accepts valid openings.**
 
@@ -229,75 +358,15 @@ theorem verifyCellKzgProofBatch_of_cellOpeningValid (laws : Bls.PairingLaws) {s 
     (h₂ : ps.size = bs.size) (h₃ : cellIndices.size = bs.size)
     (hv : ∀ k < bs.size, CellOpeningValid τ bs[k]! cellIndices[k]! cells[k]! ps[k]!) :
     verifyCellKzgProofBatch s bs cellIndices cells ps = .ok true := by
-  -- Each entry of an array of the batch is the entry of some index.
-  have hmem : ∀ {α : Type} [Inhabited α] {xs : Array α}, xs.size = bs.size →
-      ∀ x ∈ xs, ∃ k < bs.size, xs[k]! = x := fun hsz x hx => by
-    obtain ⟨k, hk, rfl⟩ := Array.getElem_of_mem hx
-    exact ⟨k, hsz ▸ hk, getElem!_pos _ k hk⟩
-  obtain ⟨b, hb⟩ := verifyCellKzgProofBatch_exists_ok (s := s) h₁ h₂ h₃
-    (fun i hi => by
-      obtain ⟨k, hk, rfl⟩ := hmem h₃ i hi
-      exact (hv k hk).1)
-    (fun x hx => by
-      obtain ⟨k, hk, rfl⟩ := hmem rfl x hx
-      obtain ⟨-, _, _, _, _, _, -, hC, -⟩ := hv k hk
-      exact validateKzgG1_of_validateKzgG1Point hC)
-    (fun x hx => by
-      obtain ⟨k, hk, rfl⟩ := hmem h₂ x hx
-      obtain ⟨-, _, _, _, _, _, -, -, -, hP, -⟩ := hv k hk
-      exact validateKzgG1_of_validateKzgG1Point hP)
-    (fun x hx => by
-      obtain ⟨k, hk, rfl⟩ := hmem h₁ x hx
-      obtain ⟨-, e, -, -, -, -, he, -⟩ := hv k hk
-      exact ⟨e, he⟩)
-  -- One scalar for each byte string that decodes to a point with a scalar.
-  obtain ⟨c, hc⟩ : ∃ c : Bytes48 → Fr, ∀ x,
-      (∃ a, ∀ P, uncompressG1 x = .ok P → G1.Represents P a) →
-        ∀ P, uncompressG1 x = .ok P → G1.Represents P (c x) :=
-    ⟨fun x => Classical.epsilon fun a => ∀ P, uncompressG1 x = .ok P → G1.Represents P a,
-      fun _ hx => Classical.epsilon_spec hx⟩
-  -- Bytes that decode to a point with a scalar get that scalar.
-  have hscalar : ∀ {x : Bytes48} {P : G1} {a : Fr}, validateKzgG1Point x = .ok P →
-      G1.Represents P a → c x = a := fun {x P a} hx ha => by
-    have hu := uncompressG1_of_validateKzgG1Point hx
-    refine (hc _ ⟨a, fun P' hP' => ?_⟩ _ hu).unique ha
-    rw [hu] at hP'
-    cases hP'
-    exact ha
-  have hrep : ∀ {x : Bytes48} {P P' : G1} {a : Fr}, validateKzgG1Point x = .ok P →
-      G1.Represents P a → uncompressG1 x = .ok P' → G1.Represents P' (c x) :=
-    fun hx ha hu => by
-      rw [uncompressG1_of_validateKzgG1Point hx] at hu
-      cases hu
-      rw [hscalar hx ha]
-      exact ha
   let y : CellBatchInput := ⟨bs, cellIndices, cells, ps⟩
-  have hC : ∀ k < y.commitments.size, ∀ P, uncompressG1 y.commitments[k]! = .ok P →
-      G1.Represents P (c y.commitments[k]!) := fun k hk _ hu => by
-    obtain ⟨-, _, _, _, _, _, -, hCv, hCr, -⟩ := hv k hk
-    exact hrep hCv hCr hu
-  have hP : ∀ k < y.proofs.size, ∀ P, uncompressG1 y.proofs[k]! = .ok P →
-      G1.Represents P (c y.proofs[k]!) := fun k hk _ hu => by
-    obtain ⟨-, _, _, _, _, _, -, -, -, hWv, hWr, -⟩ := hv k (h₂ ▸ hk)
-    exact hrep hWv hWr hu
-  rw [hb, (verifyCellKzgProofBatch_ok_iff_root laws hs y hC hP hb).mpr ?_]
-  -- Every cell is valid, so the error polynomial is zero.
-  obtain ⟨evals, hev⟩ := array_mapM_exists_ok (f := cellToCosetEvals) (xs := cells)
-    fun x hx => by
-      obtain ⟨k, hk, rfl⟩ := hmem h₁ x hx
-      obtain ⟨-, e, -, -, -, -, he, -⟩ := hv k hk
-      exact ⟨e, he⟩
-  obtain ⟨-, hevk⟩ := array_mapM_ok hev
-  obtain ⟨-, hdidx, -⟩ := dedupCommitments_spec bs
-  have hzero : y.toCellBatch.errorPoly τ c c = 0 := by
-    refine (cellErrorPoly_eq_zero_iff τ _ _ _ _ _).mpr fun k hk => ?_
-    have hk' : k < bs.size := h₃ ▸ hk
-    obtain ⟨-, e, C, a, W, w, he, hCv, hCr, hWv, hWr, hval⟩ := hv k hk'
-    have hek : evals[k]! = e := Except.ok.inj ((hevk k (h₁ ▸ hk')).symm.trans he)
-    simp only [y, CellBatchInput.toCellBatch, decodeCells_of_ok hev, hek,
-      (hdidx k hk').2, hscalar hCv hCr, hscalar hWv hWr]
-    exact hval
-  rw [hzero, Polynomial.eval_zero]
+  obtain ⟨⟨b, hb⟩, hbs, hps⟩ := exists_ok_of_cellOpeningValid (s := s) (y := y) h₁ h₂ h₃ hv
+  have hz : y.toCellBatch.errorPoly τ scalarOf scalarOf = 0 :=
+    errorPoly_eq_zero_of_cellOpeningValid h₁ h₃ hv
+  have hroot := (verifyCellKzgProofBatch_ok_iff_root laws hs y
+    (fun k hk _ hu => represents_scalarOf (hbs _ (getElem!_mem_of_lt hk)) hu)
+    (fun k hk _ hu => represents_scalarOf (hps _ (getElem!_mem_of_lt hk)) hu) hb).mpr
+    (by rw [hz, Polynomial.eval_zero])
+  rw [hb, hroot]
 
 /-- **The batch check of cells accepts the cells and proofs of blobs.**
 
