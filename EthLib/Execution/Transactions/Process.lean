@@ -80,8 +80,6 @@ The EIPs that change it:
 
 The run records what it reads, for the block access list of EIP-7928.
 
-The block does not check that list yet, so a run from Glamsterdam fails as not yet specified.
-
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
 [eip2929]: https://eips.ethereum.org/EIPS/eip-2929#specification
@@ -433,11 +431,11 @@ Up to BPO5, the gas meter is one counter of the gas left.
 
 From Glamsterdam, the meter of EIP-8037 also meters state gas.
 
-From Glamsterdam it fails, since the rules of that fork are not all specified here yet. -/
+From Hegotá it fails, since the rules of that fork are not yet specified here. -/
 def processTransaction {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
-    (included : Included) (tx : Transaction) : Except EvmError TransactionOutput := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
-  if fork ≥ .glamsterdam then runTransaction StateGasMeter env block included tx
+    (included : Included) (tx : Transaction) : Except EvmError TransactionOutput :=
+  if .hegota ≤ fork then .error (.forkNotYetSpecified fork)
+  else if fork ≥ .glamsterdam then runTransaction StateGasMeter env block included tx
   else runTransaction Nat env block included tx
 
 end EthLib.Execution.Transactions

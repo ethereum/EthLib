@@ -5166,7 +5166,7 @@
       {"constructor": "balanceOverflow", "code": 104}]}],
    "error_class": "TransactionError",
    "docstring":
-   "Run one transaction on the state that `state` encodes, in a block with no transaction before.\n\nThe state takes the form of the state root export, and the block is a list of nine items.\n\nA transaction that may not enter the block fails with the code of its inclusion error.\n\nAn error that aborts the run has the code of its state error, or 0.\n\nIt returns a list of five items, about the transaction and the state after it.\n\nThey are the state root, the hash of the encoding of the logs, and the gas used.\n\nThen come whether the message succeeded, and the accounts of the state.\n\nThe state after it has no beneficiary reward, since a block pays that."},
+   "Run one transaction on the state that `state` encodes, in a block with no transaction before.\n\nThe state takes the form of the state root export, and the block is a list of ten items.\n\nA transaction that may not enter the block fails with the code of its inclusion error.\n\nAn error that aborts the run has the code of its state error, or 0.\n\nIt returns a list of five items, about the transaction and the state after it.\n\nThey are the state root, the hash of the encoding of the logs, and the gas used.\n\nThen come whether the message succeeded, and the accounts of the state.\n\nThe state after it has no beneficiary reward, since a block pays that."},
   {"summary": "Check the network form of a blob transaction at the named fork.",
    "signature": "(fork: str, network: bytes) -> bytes",
    "operation": "EthLib.Execution.Transactions.Exports.networkCheckExport",

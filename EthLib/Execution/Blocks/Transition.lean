@@ -69,8 +69,6 @@ The EIPs that change it:
 - [EIP-7928][eip-7928], the block access list, in Last Call
 - [EIP-8037][eip-8037], the two counts of gas of a block and the gas of a receipt, in Last Call
 
-From Glamsterdam the transition fails as not yet specified, as the run of a transaction does.
-
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [yp-berlin]: https://github.com/ethereum/yellowpaper/blob/beacfbd29ccc04dfd790f2282d4c4b1c0afc9b5a/Paper.tex
 [eip-3675]: https://eips.ethereum.org/EIPS/eip-3675#block-structure
@@ -349,10 +347,10 @@ The fork of the block must be the active fork of the chain at its number and its
 
 With `checkSeal` off, the proof of work is left out, as for chains that run without one.
 
-From Glamsterdam it fails, since the rules of that fork are not yet specified here. -/
+From Hegotá it fails, since the rules of that fork are not yet specified here. -/
 def stateTransition (chain : BlockChain) {fork : Fork} (block : Block fork Transaction)
     (checkSeal : Bool := true) : Except BlockError State := do
-  if .glamsterdam ≤ fork then throw (.aborted (.forkNotYetSpecified fork))
+  if .hegota ≤ fork then throw (.aborted (.forkNotYetSpecified fork))
   unless chain.config.activeFork block.header.number block.header.timestamp.toNat = some fork do
     throw .wrongFork
   checkBlock chain.config checkSeal chain.recent block

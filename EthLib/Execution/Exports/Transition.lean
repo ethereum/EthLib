@@ -23,7 +23,7 @@ So does a block or a transaction of its body that does not decode.
 
 An input of the chain that does not decode has code 0, since the export reads it itself.
 
-The transition holds up to BPO5, and fails from Glamsterdam as not yet specified.
+The transition holds up to Glamsterdam, and fails from Hegotá as not yet specified.
 
 The genesis export takes the name of a fork, the fields that the chain chooses and the state.
 

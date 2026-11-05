@@ -25,7 +25,7 @@ From Glamsterdam, the list that a body builds is well formed and fits the gas li
 
 A block that passes the checks then commits to that list by the hash in its header.
 
-From Glamsterdam the transition fails as not yet specified.
+From Hegotá the transition fails as not yet specified.
 -/
 
 @[expose] public section
@@ -130,9 +130,9 @@ theorem applyTransaction_of_checkInclusion {env : BlockEnvironment fork} {index 
 
 /-! ## The transition -/
 
-/-- From Glamsterdam, the transition fails, since the rules of that fork are not here yet. -/
-theorem stateTransition_of_glamsterdam_le {chain : BlockChain} {block : Block fork Transaction}
-    {checkSeal : Bool} (h : .glamsterdam ≤ fork) :
+/-- From Hegotá, the transition fails, since the rules of that fork are not here yet. -/
+theorem stateTransition_of_hegota_le {chain : BlockChain} {block : Block fork Transaction}
+    {checkSeal : Bool} (h : .hegota ≤ fork) :
     stateTransition chain block checkSeal = .error (.aborted (.forkNotYetSpecified fork)) := by
   simp only [stateTransition, h, ↓reduceIte]
   rfl
@@ -145,7 +145,7 @@ theorem of_stateTransition {chain : BlockChain} {block : Block fork Transaction}
     chain.config.activeFork block.header.number block.header.timestamp.toNat = some fork ∧
       stateRoot keccak256 post = .ok block.header.stateRoot := by
   unfold stateTransition at h
-  by_cases hFork : .glamsterdam ≤ fork
+  by_cases hFork : .hegota ≤ fork
   · simp [hFork, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
   · simp only [hFork, ↓reduceIte] at h
     split at h

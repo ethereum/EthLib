@@ -91,8 +91,6 @@ _HEZE = {
     "ssz_static": "the Heze containers (G80, G81)",
 }
 _AMSTERDAM = {
-    "state_test": "the pre-execution phase and block transition of Amsterdam (G20, G23), then G24",
-    "blockchain_test": "the Amsterdam block transition (G23), then G24",
     "blockchain_test_engine": "the Amsterdam payload on the Engine layer (G39), after G23",
     "blockchain_test_engine_x": "the Amsterdam payload on the Engine layer (G39), after G23",
 }
@@ -165,7 +163,7 @@ def _block_hashes(number: int) -> list[bytes]:
 
 
 def _environment(env: dict) -> bytes:
-    """The nine fields of the block that a run reads, with 0 for a field the fork lacks."""
+    """The ten fields of the block that a run reads, with 0 for a field the fork lacks."""
     from ethlib.serialization import rlp
 
     random = int(env.get("currentRandom", "0x0"), 16).to_bytes(32, "big")
@@ -174,7 +172,7 @@ def _environment(env: dict) -> bytes:
         _scalar(env["currentNumber"]), _scalar(env["currentTimestamp"]),
         _scalar(env["currentDifficulty"]), _scalar(env.get("currentBaseFee", "0x0")), random,
         _scalar(env.get("currentExcessBlobGas", "0x0")),
-        _block_hashes(int(env["currentNumber"], 16))])
+        _block_hashes(int(env["currentNumber"], 16)), _scalar(env.get("slotNumber", "0x0"))])
 
 
 def _accounts(accounts: list) -> dict:
@@ -231,7 +229,8 @@ def _state_test(root: Path, case: Case) -> None:
 # The forks of a network of the blockchain tests, in order, and how each activates.
 _BLOCK_FORKS = ["frontier", "homestead", "tangerineWhistle", "spuriousDragon", "byzantium",
                 "constantinople", "petersburg", "istanbul", "berlin", "london", "paris"]
-_TIME_FORKS = ["shapella", "dencun", "pectra", "fusaka", "bpo1", "bpo2"]
+_TIME_FORKS = ["shapella", "dencun", "pectra", "fusaka", "bpo1", "bpo2", "bpo3", "bpo4", "bpo5",
+               "glamsterdam"]
 _NETWORK_FORK = {**FORK_OF_NETWORK, "BPO1": "bpo1", "BPO2": "bpo2"}
 
 # The block exceptions of the blockchain tests, by the error of the state transition.
@@ -247,7 +246,15 @@ _BLOCK_EXCEPTIONS = {
     "SYSTEM_CONTRACT_CALL_FAILED": r"system call to .* failed",
     "RLP_STRUCTURES_ENCODING": r"does not decode|block rejected",
     "RLP_BLOCK_LIMIT_EXCEEDED": r"blockTooLarge",
-    "INCORRECT_BLOCK_FORMAT": r"block rejected",
+    # From Amsterdam, a block carries only the hash of its access list.
+    # So a list that breaks a rule of its form shows as a wrong hash.
+    "INCORRECT_BLOCK_FORMAT": r"block rejected|wrongBlockAccessListHash",
+    "INVALID_GAS_USED": r"wrongGasUsed",
+    "INVALID_BLOCK_ACCESS_LIST": r"wrongBlockAccessListHash|blockAccessList",
+    "BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED": r"blockAccessList .*tooManyItems",
+    # A header without the field of the hash, or with one too many, does not decode.
+    "INVALID_BAL_HASH": r"wrongBlockAccessListHash|block rejected",
+    "INVALID_BLOCK_HASH": r"block rejected",
 }
 
 
@@ -259,9 +266,20 @@ def names_block_error(exception: str, message: str) -> bool:
     return names_in_block(exception, message)
 
 
+# The networks after Amsterdam that only set a blob schedule of their own, with its name and time.
+_SCENARIOS = {
+    "AmsterdamBPOIncrease": ("AmsterdamBPOIncrease", 0),
+    "AmsterdamBPODecrease": ("AmsterdamBPODecrease", 0),
+    "AmsterdamToBPOIncreaseAtTime15k": ("AmsterdamBPOIncrease", 15_000),
+    "AmsterdamToBPODecreaseAtTime15k": ("AmsterdamBPODecrease", 15_000),
+}
+
+
 def chain_of(fixture: dict) -> tuple[dict, list]:
     """The chain configuration of a blockchain test, and its activations as tuples."""
-    before, _, after = fixture["network"].removesuffix("AtTime15k").partition("To")
+    scenario = _SCENARIOS.get(fixture["network"])
+    network = "Amsterdam" if scenario else fixture["network"]
+    before, _, after = network.removesuffix("AtTime15k").partition("To")
     first = _NETWORK_FORK[before]
     forks = _BLOCK_FORKS + _TIME_FORKS
     activations = [(fork, "block" if fork in _BLOCK_FORKS else "time", 0)
@@ -276,6 +294,11 @@ def chain_of(fixture: dict) -> tuple[dict, list]:
                 schedules.append([kind, number, int(schedule["target"], 16),
                                   int(schedule["max"], 16),
                                   int(schedule["baseFeeUpdateFraction"], 16)])
+    if scenario:
+        name, time = scenario
+        own = fixture["config"]["blobSchedule"][name]
+        schedules.append(["time", time, int(own["target"], 16), int(own["max"], 16),
+                          int(own["baseFeeUpdateFraction"], 16)])
     config = {"chainId": int(fixture["config"]["chainid"], 16),
               "activations": [list(a) for a in activations],
               "blobSchedules": sorted(schedules, key=lambda s: s[1])}
@@ -585,11 +608,9 @@ RUNNERS = {
 
 
 # The runners that stop before a fork, with the first fork that they do not run.
-# Processing a transaction is not yet specified from Amsterdam on.
+# The Engine runners do not yet run Amsterdam payloads (G39).
 # The partial column checks read the forms of Fulu.
 _STOPS = {
-    "state_test": "BPO2ToAmsterdamAtTime15k",
-    "blockchain_test": "BPO2ToAmsterdamAtTime15k",
     "blockchain_test_engine": "BPO2ToAmsterdamAtTime15k",
     "blockchain_test_engine_x": "BPO2ToAmsterdamAtTime15k",
     "networking/gossip_partial_data_column_sidecar": "gloas",

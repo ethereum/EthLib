@@ -32,7 +32,7 @@ Each step lowers the measure of the frame, so the loop ends with no bound on its
 
 A message gets less gas than its caller had, so the recursion of messages can end too.
 
-The instructions are those of the forks up to BPO5, and Glamsterdam and Hegotá are not specified.
+The instructions are those of the forks up to Glamsterdam, and Hegotá is not specified.
 
 The Yellow Paper, Shanghai version, defines the loop in its section Execution Model.
 
