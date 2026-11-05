@@ -16,11 +16,13 @@ Four tables hold affine points as pairs of naturals.
 - Table `M` holds the decoded monomial points, and table `L` the decoded Lagrange points.
 - Tables `A` and `B` hold the results of the first two rounds.
 
-The checks compare each decoded string with its table entry, and each transform of size 16 with
-the entries of its inputs and outputs.
+The checks compare each decoded string with its table entry.
 
-If all checks pass, each Lagrange point is the combination of the monomial points by the
-coefficients of its basis polynomial.
+They also compare each transform of size 16 with the entries of its inputs and outputs.
+
+If all checks pass, each Lagrange point is a combination of the monomial points.
+
+The factors are the coefficients of its basis polynomial.
 
 The tables are arbitrary here, so a wrong table only makes a check fail.
 -/
@@ -154,21 +156,18 @@ def decodeCheck (t : Table) : Nat → List (List Nat) → Bool
 /-- The roots `u^i` of the transforms of size 16. -/
 def roots16 : Vector Nat (2 ^ 4) := Vector.ofFn fun i => rootPowNat i.val
 
-/-- The first round at `(j2, j3)`: inputs `M(256 j1 + 16 j2 + j3)`, outputs
-`A(256 k1 + 16 j2 + j3)`. -/
+/-- The first round at `(j2, j3)`, from `M(256 j1 + 16 j2 + j3)` to `A(256 k1 + 16 j2 + j3)`. -/
 def checkA (tM tA : Table) (j2 j3 : Nat) : Bool :=
   dftCheck (k := 4) (Vector.ofFn fun i => tM (256 * i.val + 16 * j2 + j3))
     (Vector.ofFn fun _ => 1) roots16 (Vector.ofFn fun k1 => tA (256 * k1.val + 16 * j2 + j3))
 
-/-- The second round at `(k1, j3)`: inputs `A(256 k1 + 16 j2 + j3)`, outputs
-`B(256 k1 + 16 k2 + j3)`. -/
+/-- The second round at `(k1, j3)`, from `A(256 k1 + 16 j2 + j3)` to `B(256 k1 + 16 k2 + j3)`. -/
 def checkB (tA tB : Table) (k1 j3 : Nat) : Bool :=
   dftCheck (k := 4) (Vector.ofFn fun i => tA (256 * k1 + 16 * i.val + j3))
     (Vector.ofFn fun i => scalarB k1 i.val) roots16
     (Vector.ofFn fun k2 => tB (256 * k1 + 16 * k2.val + j3))
 
-/-- The third round at `(k1, k2)`: inputs `B(256 k1 + 16 k2 + j3)`, outputs
-`L(k1 + 16 k2 + 256 k3)`. -/
+/-- The third round at `(k1, k2)`, from `B(256 k1 + 16 k2 + j3)` to `L(k1 + 16 k2 + 256 k3)`. -/
 def checkC (tB tL : Table) (k1 k2 : Nat) : Bool :=
   dftCheck (k := 4) (Vector.ofFn fun i => tB (256 * k1 + 16 * k2 + i.val))
     (Vector.ofFn fun i => scalarC k1 k2 i.val) roots16
@@ -243,8 +242,9 @@ private theorem scalarC_val {k1 k2 j3 : Nat} (hk1 : k1 < 16) (hk2 : k2 < 16) (hj
 
 /-! ## The Lagrange points of the embedded setup -/
 
-/-- If the embedded setup decodes and every check passes, its Lagrange points come from its
-monomial points. -/
+/-- If the embedded setup decodes and every check passes, each Lagrange point is a sum.
+
+Its terms are the monomial points times the coefficients of its basis polynomial. -/
 theorem lagrangeOfMonomial_of_checks {s : TrustedSetup} (hs : TrustedSetup.ofHex = .ok s)
     {tM tA tB tL : Table}
     (hM : ∀ c < 256, decodeCheck tM (16 * c)
