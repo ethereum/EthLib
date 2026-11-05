@@ -19,7 +19,6 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Fin.instNatPow
 
 /-- Cell-level bit reversal selects the low seven bits of the natural FFT index. -/
 theorem reverseBits_cellOfRoot (j : Nat) :
@@ -45,9 +44,11 @@ theorem domainRoot_extended_pow_cell :
   unfold domainRoot
   rw [Bls.Fr.hpow_eq_pow, Bls.Fr.hpow_eq_pow]
   have h1 : (Fr.ofNat ((BLS_MODULUS - 1) / FIELD_ELEMENTS_PER_EXT_BLOB)).val =
-      (BLS_MODULUS - 1) / FIELD_ELEMENTS_PER_EXT_BLOB := by decide
+      (BLS_MODULUS - 1) / FIELD_ELEMENTS_PER_EXT_BLOB :=
+    Bls.Fr.val_ofNat_of_lt (by decide)
   have h2 : (Fr.ofNat ((BLS_MODULUS - 1) / CELLS_PER_EXT_BLOB)).val =
-      (BLS_MODULUS - 1) / CELLS_PER_EXT_BLOB := by decide
+      (BLS_MODULUS - 1) / CELLS_PER_EXT_BLOB :=
+    Bls.Fr.val_ofNat_of_lt (by decide)
   rw [h1, h2]
   have hpow (x : Fr) (a b : Nat) : (x ^ a) ^ b = x ^ (a * b) := (pow_mul x a b).symm
   rw [hpow]

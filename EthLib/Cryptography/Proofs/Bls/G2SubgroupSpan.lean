@@ -110,6 +110,6 @@ theorem exists_mul_generator_of_inSubgroup {P : G2} (hP : Valid P)
     (hsub : inSubgroup P = true) :
     ∃ a : Fr, toPoint P = toPoint (mul generator a) := by
   obtain ⟨n, hn, he⟩ := exists_mulNat_generator_of_inSubgroup hP hsub
-  exact ⟨⟨n, hn⟩, he⟩
+  exact ⟨Fr.ofNat n, by rw [he, mul, Fr.val_ofNat_of_lt hn]⟩
 
 end EthLib.Cryptography.Bls.G2

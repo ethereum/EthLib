@@ -43,9 +43,6 @@ open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial Lagrange
 
--- Core's power instance on `Fin` hides Mathlib's power on `Fr`, as in `Proofs.Bls.FrZMod`.
-attribute [-instance] Fin.instNatPow
-
 /-- Point `i` of the bit-reversed domain of 8192 points. -/
 def domainPoint (i : Nat) : Fr := (rootsOfUnityBrp FIELD_ELEMENTS_PER_EXT_BLOB)[i]!
 
@@ -142,7 +139,6 @@ theorem eval_nodal_cellNodes {j j' i : Nat} (hj : j < CELLS_PER_EXT_BLOB)
   obtain ⟨m, hm, rfl⟩ := mem_cellNodes.mp hi
   rw [nodal_cellNodes hj', eval_sub, eval_pow, eval_X, eval_C, domainPoint_cellNode,
     cellPoint_pow hj hm]
-  rfl
 
 /-- The weight of cell `j` in a set `J` of cells: the product of `h_j^64 - h_{j'}^64` over the
 other cells `j'`.
@@ -254,6 +250,5 @@ theorem cell_multiproof_batching {J : Finset Nat} (hJ : ∀ j ∈ J, j < CELLS_P
   rw [nodal_biUnion (cellNodes_pairwiseDisjoint J), eval_prod] at hb
   refine hb.trans (congrArg _ (Finset.prod_congr rfl fun j hj => ?_))
   rw [nodal_cellNodes (hJ j hj), eval_sub, eval_pow, eval_X, eval_C]
-  rfl
 
 end EthLib.Cryptography.Kzg

@@ -21,7 +21,6 @@ So facts about degree and roots from Mathlib apply to the arrays the code comput
 namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Fin.instNatPow
 
 /-- Mathematical polynomial denoted by an executable coefficient array. -/
 noncomputable def coefficientPolynomial (p : PolynomialCoeff) : _root_.Polynomial Fr :=
@@ -47,7 +46,6 @@ theorem eval_coefficientPolynomial (p : PolynomialCoeff) (x : Fr) :
   apply Finset.sum_congr rfl
   intro i _
   rw [getElem!_pos p i.val i.isLt]
-  rfl
 
 /-- Array length is a strict bound on the represented degree. -/
 theorem natDegree_coefficientPolynomial_lt {p : PolynomialCoeff} (hp : 0 < p.size) :
@@ -82,6 +80,5 @@ theorem eval_polynomialCoefficients_mul (n : Nat) (a b : PolynomialCoeff)
       evalPolyAt a x * evalPolyAt b x := by
   rw [← eval_coefficientPolynomial, coefficientPolynomial_polynomialCoefficients n _ hdegree,
     Polynomial.eval_mul, eval_coefficientPolynomial, eval_coefficientPolynomial]
-  rfl
 
 end EthLib.Cryptography.Kzg

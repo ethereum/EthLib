@@ -30,7 +30,6 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Fin.instNatPow
 
 private theorem array_ext_bang {a b : Array Fr} (hs : a.size = b.size)
     (h : ∀ i, i < a.size → a[i]! = b[i]!) : a = b := by

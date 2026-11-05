@@ -26,9 +26,6 @@ open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial
 
--- Core's power instance on `Fin` hides Mathlib's power on `Fr`, as in `Proofs.Bls.FrZMod`.
-attribute [-instance] Fin.instNatPow
-
 /-- The setup of the secret `τ`.
 
 The monomial points represent the powers of `τ`, in `G1` and in `G2`.
@@ -75,7 +72,6 @@ theorem eval_interpolant (poly : Polynomial) (τ : Fr) :
   rw [interpolant, Lagrange.interpolate_apply, eval_finsetSum]
   refine Finset.sum_congr rfl fun i _ => ?_
   rw [eval_mul, eval_C]
-  rfl
 
 /-- On a decoded blob, the commitment compresses the sum of the values times the points. -/
 theorem blobToKzgCommitment_eq_ok (s : TrustedSetup) {blob : Blob} {poly : Polynomial}

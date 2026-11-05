@@ -1,9 +1,9 @@
 module
 
 public import EthLib.Cryptography.Montgomery
-public import EthLib.Cryptography.Proofs.Inverse
 public import EthLib.Base.Proofs.BigEndian
 public import Mathlib.Data.ZMod.Basic
+public import Mathlib.FieldTheory.Finite.Basic
 public import Mathlib.Tactic.LinearCombination
 public import Mathlib.Tactic.Ring
 
@@ -221,22 +221,105 @@ theorem toNat_eq (a : Montgomery M) : a.toNat = (toZMod a).val := by
 /-- The integer of an element is below `p`. -/
 theorem toNat_lt (a : Montgomery M) : a.toNat < M.p := (mulLimbs M a.limbs a.lt _).lt
 
+/-- The element of the integer of `a` is `a`. -/
+theorem ofNat_toNat (a : Montgomery M) : ofNat a.toNat = a := by
+  have : NeZero M.p := ⟨Nat.pos_iff_ne_zero.mp M.pos⟩
+  apply toZMod_injective
+  rw [toZMod_ofNat, toNat_eq, ZMod.natCast_zmod_val]
+
+/-- The table holds the powers of `a`, from the first powers. -/
+theorem powTableAux_spec (a : Montgomery M) (k : ℕ) (t : Array (Montgomery M)) (ht : 0 < t.size)
+    (h : ∀ i < t.size, toZMod t[i]! = toZMod a ^ i) :
+    (powTableAux a k t).size = t.size + k ∧
+      ∀ i < t.size + k, toZMod (powTableAux a k t)[i]! = toZMod a ^ i := by
+  induction k generalizing t with
+  | zero => exact ⟨rfl, h⟩
+  | succ k ih =>
+    have hb : toZMod t.back! = toZMod a ^ (t.size - 1) := h _ (by omega)
+    obtain ⟨hs, hv⟩ := ih (t.push (mul t.back! a)) (by simp) (by
+      intro i hi
+      rw [Array.size_push] at hi
+      rcases Nat.lt_or_ge i t.size with hlt | hge
+      · rw [getElem!_pos (t.push _) i (by simp; omega), Array.getElem_push_lt hlt,
+          ← getElem!_pos t i hlt]
+        exact h i hlt
+      · obtain rfl : i = t.size := by omega
+        rw [getElem!_pos (t.push _) t.size (by simp), Array.getElem_push_eq]
+        change toZMod (t.back! * a) = _
+        rw [toZMod_mul, hb, ← pow_succ]
+        congr 1
+        omega)
+    rw [powTableAux]
+    refine ⟨by rw [hs, Array.size_push]; omega, fun i hi => hv i (by simp; omega)⟩
+
+/-- The table holds `a ^ 0` to `a ^ 15`. -/
+theorem powTable_spec (a : Montgomery M) {i : ℕ} (hi : i < 16) :
+    toZMod (powTable a)[i]! = toZMod a ^ i :=
+  (powTableAux_spec a 15 #[one] (by simp) (by
+    intro i hi
+    obtain rfl : i = 0 := by simpa using hi
+    exact toZMod_one.trans (pow_zero _).symm)).2 i (by simpa using hi)
+
+/-- A window raises the accumulator to the 16th power and multiplies by `a ^ d`. -/
+theorem toZMod_window (a acc : Montgomery M) {d : UInt32} (hd : d.toNat < 16) :
+    toZMod (window (powTable a) acc d) = toZMod acc ^ 16 * toZMod a ^ d.toNat := by
+  change toZMod (acc * acc * (acc * acc) * (acc * acc * (acc * acc)) *
+    (acc * acc * (acc * acc) * (acc * acc * (acc * acc))) * (powTable a)[d.toNat]!) = _
+  simp only [toZMod_mul, powTable_spec a hd]
+  ring
+
+/-- The windows of a word `w` raise the accumulator to the power `2 ^ 32`, times `a ^ w`. -/
+theorem toZMod_powWord (a acc : Montgomery M) (w : UInt32) :
+    toZMod (powWord (powTable a) acc w) = toZMod acc ^ 2 ^ 32 * toZMod a ^ w.toNat := by
+  have hw := w.toNat_lt
+  have e7 : (w >>> 28).toNat = w.toNat / 2 ^ 28 := by
+    simp [UInt32.toNat_shiftRight, Nat.shiftRight_eq_div_pow]
+  have e (k : UInt32) (hk : k.toNat < 32) :
+      (w >>> k &&& 15).toNat = w.toNat / 2 ^ k.toNat % 16 := by
+    rw [UInt32.toNat_and, UInt32.toNat_shiftRight, Nat.mod_eq_of_lt hk,
+      Nat.shiftRight_eq_div_pow]
+    exact Nat.and_two_pow_sub_one_eq_mod _ 4
+  have e0 : (w &&& 15).toNat = w.toNat % 16 := by
+    rw [UInt32.toNat_and]
+    exact Nat.and_two_pow_sub_one_eq_mod _ 4
+  unfold powWord
+  simp only
+  rw [toZMod_window _ _ (by rw [e0]; omega), toZMod_window _ _ (by rw [e 4 (by decide)]; omega),
+    toZMod_window _ _ (by rw [e 8 (by decide)]; omega),
+    toZMod_window _ _ (by rw [e 12 (by decide)]; omega),
+    toZMod_window _ _ (by rw [e 16 (by decide)]; omega),
+    toZMod_window _ _ (by rw [e 20 (by decide)]; omega),
+    toZMod_window _ _ (by rw [e 24 (by decide)]; omega),
+    toZMod_window _ _ (by rw [e7]; omega), e0, e 4 (by decide), e 8 (by decide),
+    e 12 (by decide), e 16 (by decide), e 20 (by decide), e 24 (by decide), e7]
+  simp only [UInt32.reduceToNat]
+  have hsum : w.toNat = w.toNat % 16 + 16 * (w.toNat / 2 ^ 4 % 16 + 16 * (w.toNat / 2 ^ 8 % 16 +
+      16 * (w.toNat / 2 ^ 12 % 16 + 16 * (w.toNat / 2 ^ 16 % 16 + 16 * (w.toNat / 2 ^ 20 % 16 +
+      16 * (w.toNat / 2 ^ 24 % 16 + 16 * (w.toNat / 2 ^ 28))))))) := by omega
+  conv_rhs => rw [hsum]
+  ring
+
+/-- The power by limbs is the power by their integer. -/
+theorem toZMod_powLimbs (a : Montgomery M) (e : Limbs) :
+    toZMod (powLimbs a e) = toZMod a ^ e.val := by
+  unfold powLimbs
+  simp only [List.foldl, toZMod_powWord, show toZMod (one : Montgomery M) = 1 from toZMod_one,
+    one_pow, one_mul, Limbs.val]
+  ring
+
 /-- For a prime modulus, the inverse is the inverse of `ZMod p`. -/
 theorem toZMod_inv [Fact M.p.Prime] (a : Montgomery M) : toZMod a⁻¹ = (toZMod a)⁻¹ := by
-  have : NeZero M.p := ⟨Nat.pos_iff_ne_zero.mp M.pos⟩
-  apply radix_cancel
-  rw [← limbs_cast]
-  change ((mulLimbs M M.r3 M.r3_lt (Limbs.ofNat
-    (Fin.inverse (⟨a.limbs.val, a.lt⟩ : Fin M.p)).val)).limbs.val : ZMod M.p) = _
-  apply radix_cancel
-  rw [mulLimbs_cast, M.r3_spec, Limbs.val_ofNat,
-    Nat.mod_eq_of_lt (Nat.lt_trans (Fin.isLt _) M.lt_radix), ZMod.natCast_mod,
-    Fin.inverse_val ⟨a.limbs.val, a.lt⟩]
-  change _ * ((a.limbs.val : ℕ) : ZMod M.p)⁻¹ = _
-  rw [limbs_cast, mul_inv, Nat.cast_mul, Nat.cast_mul]
-  change radix M * radix M * radix M * ((toZMod a)⁻¹ * (radix M)⁻¹) = _
-  have h1 := radix_mul_inv M
-  linear_combination (radix M * radix M * (toZMod a)⁻¹) * h1
+  change toZMod (powLimbs a M.pm2) = _
+  rw [toZMod_powLimbs, M.pm2_spec]
+  have h3 : 2 < M.p := by
+    have := M.odd
+    have := (Fact.out : M.p.Prime).two_le
+    omega
+  by_cases ha : toZMod a = 0
+  · rw [ha, inv_zero, zero_pow (by omega)]
+  · refine eq_inv_of_mul_eq_one_left ?_
+    rw [← pow_succ, show M.p - 2 + 1 = M.p - 1 by omega]
+    exact ZMod.pow_card_sub_one_eq_one ha
 
 /-! ## Bytes -/
 
@@ -325,5 +408,21 @@ theorem toBytesBE_eq (a : Montgomery M) : (toBytesBE a).data.toList = natToBytes
   unfold toBytesBE
   rw [Limbs.toBytesBE_eq]
   rfl
+
+/-- Reading the 32 bytes of an element gives it back. -/
+theorem ofBytesBE_toBytesBE (a : Montgomery M) : ofBytesBE (toBytesBE a) 0 = some a := by
+  have hl : (List.ofFn (n := 32) fun k => (toBytesBE a)[0 + k.val]!) =
+      (toBytesBE a).data.toList := by
+    have hs : (toBytesBE a).size = 32 := rfl
+    apply List.ext_getElem (by rw [List.length_ofFn, Array.length_toList]; exact hs.symm)
+    intro i h1 _
+    simp only [List.getElem_ofFn, Nat.zero_add, Array.getElem_toList]
+    rw [getElem!_pos (toBytesBE a) i (by simp at h1; omega)]
+    rfl
+  have hv : bytesToNat (toBytesBE a).data.toList = a.toNat := by
+    rw [toBytesBE_eq, bytesToNat_natToBytes, Nat.mod_eq_of_lt (Nat.lt_of_lt_of_le
+      (Nat.lt_trans (toNat_lt a) M.lt_radix) (by norm_num))]
+  rw [ofBytesBE_eq, hl, hv]
+  simp only [toNat_lt a, ↓reduceIte, ofNat_toNat]
 
 end EthLib.Cryptography.Montgomery

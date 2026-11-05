@@ -19,7 +19,6 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Fin.instNatPow
 
 /-- The vanishing polynomial degree is bounded by the number of erased field elements. -/
 theorem natDegree_constructVanishingPolynomial_le

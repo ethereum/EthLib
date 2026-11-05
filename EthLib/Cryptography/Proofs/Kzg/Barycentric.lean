@@ -29,11 +29,6 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 
--- See the note in `Proofs.Bls.FrZMod`: core's `NatPow` instance on `Fin`
--- shadows Mathlib's monoid power on `Fr` and breaks
--- `rw` with Mathlib `pow` lemmas. File-local, so repeated here.
-attribute [-instance] Fin.instNatPow
-
 /-- The batch inverses of the barycentric denominators are their inverses. -/
 theorem getElem!_batchInverse_denominators (domain : Array Fr) (z : Fr) (width k : Nat)
     (hk : k < width) :
@@ -96,8 +91,7 @@ theorem barycentricRefSum_eq_sum (p D : Array Fr) (z : Fr) (n : Nat) :
 dividing by it in the barycentric formula is meaningful. -/
 theorem natCast_field_elements_per_blob_ne_zero :
     ((FIELD_ELEMENTS_PER_BLOB : Nat) : Fr) ≠ 0 := by
-  rw [← Bls.Fr.ofNat_eq_natCast]
-  decide
+  exact Bls.Fr.natCast_ne_zero (by decide) (by decide)
 
 /-- Slow path of `evaluatePolynomialInEvaluationFormAux` in Mathlib
 operations. Needs the width to be canonical (`p.size < r`) so the

@@ -22,7 +22,6 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Fin.instNatPow
 
 /-- Cancelling the coefficient shifts used by coset FFTs. -/
 theorem shiftVals_shiftVals_inverse (vals : Array Fr) (factor : Fr)
@@ -53,7 +52,7 @@ theorem cosetFftField_cosetFftField_inv {k : Nat} {ω : Fr}
     cosetFftField (cosetFftField vals roots false) roots true = vals := by
   simp only [cosetFftField, Bool.false_eq_true, ↓reduceIte]
   rw [fftField_fftField_inv hω _ roots (by simpa using hn) hrs hroots]
-  exact shiftVals_shiftVals_inverse vals _ (by decide)
+  exact shiftVals_shiftVals_inverse vals _ (Bls.Fr.natCast_ne_zero (by decide) (by decide))
 
 /-- The reverse executable coset round-trip. -/
 theorem cosetFftField_inv_cosetFftField {k : Nat} {ω : Fr}
@@ -68,7 +67,7 @@ theorem cosetFftField_inv_cosetFftField {k : Nat} {ω : Fr}
   have hc := shiftVals_shiftVals_inverse (fftField vals roots true)
     (Fr.ofNat PRIMITIVE_ROOT_OF_UNITY).inverse (by
       rw [Bls.Fr.inverse_eq_inv]
-      exact inv_ne_zero (by decide))
+      exact inv_ne_zero (Bls.Fr.natCast_ne_zero (by decide) (by decide)))
   rw [hs] at hc
   rw [hc]
   exact fftField_inv_fftField hω vals roots hn hrs hroots

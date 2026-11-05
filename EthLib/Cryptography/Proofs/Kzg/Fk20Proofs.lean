@@ -49,7 +49,6 @@ open EthLib.Cryptography.Bls (Fr G1)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Fin.instNatPow
 
 private theorem fr_pow_zero (a : Fr) : a ^ 0 = 1 := pow_zero a
 private theorem fr_pow_succ (a : Fr) (n : Nat) : a ^ (n + 1) = a ^ n * a := pow_succ a n
@@ -595,7 +594,7 @@ theorem dividePolynomialcoeff_binomialVanishing {f : PolynomialCoeff} {n : Nat}
           rw [coeff_coefficientPolynomial]
           exact hr₁_deg_coeff _ hge'
         exact Polynomial.leadingCoeff_ne_zero.mpr hr0 hcoeff0
-    have hcard_fr : Fintype.card Fr = Fr.modulus := ZMod.card Fr.modulus
+    have hcard_fr : Fintype.card Fr = Fr.modulus := Bls.Fr.card_eq
     have hf_deg : (coefficientPolynomial f).degree < ((Finset.univ : Finset Fr).card : WithBot Nat) := by
       rw [Finset.card_univ, hcard_fr]
       rcases eq_or_ne (coefficientPolynomial f) 0 with hf0 | hf0
@@ -870,8 +869,7 @@ private theorem sum_padded_msm_eq_msm_toeplitz
     rw [Finset.mem_range] at ht
     by_cases hlt : t + n * (e + 1) < f.size
     · rw [ite_eq_left hlt, ite_eq_left hlt, ← nsmul_val_mul_of_torsion (htor t ht)]
-    · rw [ite_eq_right hlt, ite_eq_right hlt, zero_nsmul, nsmul_zero]
-      exact (zero_nsmul _).symm
+    · rw [ite_eq_right hlt, ite_eq_right hlt, Bls.Fr.val_zero, zero_nsmul, nsmul_zero]
   rw [hexpand, Finset.sum_comm]
   -- Collapse the inner `e` sum into `(toeplitzQuotient f n c)[t]!` via `r`-torsion linearity.
   have hcollapse :
@@ -890,8 +888,7 @@ private theorem sum_padded_msm_eq_msm_toeplitz
       intro m g
       induction m with
       | zero =>
-        rw [Finset.range_zero, Finset.sum_empty, Finset.sum_empty]
-        exact (zero_nsmul _).symm
+        rw [Finset.range_zero, Finset.sum_empty, Finset.sum_empty, Bls.Fr.val_zero, zero_nsmul]
       | succ m ih =>
         rw [Finset.sum_range_succ, Finset.sum_range_succ, ih,
           ← nsmul_val_add_of_torsion (htor t ht)]

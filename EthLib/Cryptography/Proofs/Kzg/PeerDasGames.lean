@@ -77,9 +77,6 @@ open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial OracleComp ENNReal MeasureTheory
 
--- Core's power instance on `Fin` hides Mathlib's power on `Fr`, as in `Proofs.Bls.FrZMod`.
-attribute [-instance] Fin.instNatPow
-
 /-! ## Reductions in general -/
 
 /-- **A reduction that wins whenever the adversary wins wins at least as often.**
@@ -229,25 +226,105 @@ theorem represents_of_validateKzgG1 {b : Bytes48} (h : validateKzgG1 b = true) {
   cases hP
   exact represents_of_validateKzgG1Point hQ
 
+/-- A fold whose steps fail on an invalid commitment validates every commitment it reads. -/
+private theorem foldlM_validates {ε : Type}
+    {f : Array KZGCommitment × Array CommitmentIndex → Bytes48 × Nat →
+      Except ε (Array KZGCommitment × Array CommitmentIndex)}
+    (hf : ∀ acc p r, f acc p = .ok r → validateKzgG1 p.1 = true) :
+    ∀ (L : List (Bytes48 × Nat)) init r, L.foldlM f init = .ok r →
+      ∀ p ∈ L, validateKzgG1 p.1 = true
+  | [], _, _, _ => fun _ hp => absurd hp List.not_mem_nil
+  | q :: L, init, r, h => by
+    simp only [List.foldlM_cons, bind, Except.bind] at h
+    cases hq : f init q with
+    | error e => rw [hq] at h; cases h
+    | ok r' =>
+      rw [hq] at h
+      intro p hp
+      rcases List.mem_cons.mp hp with rfl | hp
+      · exact hf _ _ _ hq
+      · exact foldlM_validates hf L r' r h p hp
+
+/-- A map that fails on an invalid proof validates every proof it reads. -/
+private theorem zipIdx_mapM_validates {ε : Type} {g : Bytes48 × Nat → Except ε Bytes48}
+    (hg : ∀ p r, g p = .ok r → validateKzgG1 p.1 = true) {ps qs : Array Bytes48}
+    (h : ps.zipIdx.mapM g = .ok qs) : ∀ p ∈ ps, validateKzgG1 p = true := by
+  obtain ⟨-, hk⟩ := array_mapM_ok h
+  intro p hp
+  obtain ⟨i, hi, rfl⟩ := Array.getElem_of_mem hp
+  have hi' : i < ps.zipIdx.size := by rw [Array.size_zipIdx]; exact hi
+  have := hg _ _ (hk i hi')
+  rwa [getElem!_pos _ i hi', Array.getElem_zipIdx] at this
+
+/-- A batch of cells that returns validates every commitment and every proof.
+
+It is stated on variables, so the kernel never evaluates a cell. -/
+private theorem validates_of_verifyCellKzgProofBatch {s : TrustedSetup} {bs : Array Bytes48}
+    {cellIndices : Array CellIndex} {cells : Array Cell} {ps : Array Bytes48} {b : Bool}
+    (h : verifyCellKzgProofBatch s bs cellIndices cells ps = .ok b) :
+    (∀ c ∈ bs, validateKzgG1 c = true) ∧ (∀ p ∈ ps, validateKzgG1 p = true) := by
+  unfold verifyCellKzgProofBatch at h
+  by_cases h₁ : cells.size ≠ bs.size
+  · simp [h₁, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  by_cases h₂ : ps.size ≠ bs.size
+  · simp [h₁, h₂, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  by_cases h₃ : cellIndices.size ≠ bs.size
+  · simp [h₁, h₂, h₃, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  by_cases h₄ : cellIndices.any (· ≥ CELLS_PER_EXT_BLOB) = true
+  · simp [h₁, h₂, h₃, h₄, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  simp only [ne_eq, Decidable.not_not, Bool.not_eq_true] at h₁ h₂ h₃ h₄
+  simp only [h₄, Bool.false_eq_true, ↓reduceIte] at h
+  simp only [h₁, h₂, h₃, ne_eq, not_true_eq_false, ↓reduceIte, bind, Except.bind] at h
+  split at h
+  · cases h
+  rename_i dd hdd
+  split at h
+  · cases h
+  split at h
+  · cases h
+  rename_i qs hqs
+  constructor
+  · intro c hc
+    rw [← Array.foldlM_toList] at hdd
+    have hall := foldlM_validates (fun acc p r hr => by
+      cases hb : bytesToKzgCommitment p.1 with
+      | error e =>
+        simp [hb, throw, throwThe, MonadExceptOf.throw] at hr
+      | ok c =>
+        unfold bytesToKzgCommitment at hb
+        split at hb
+        · assumption
+        · cases hb) _ _ _ hdd
+    obtain ⟨i, hi, rfl⟩ := Array.getElem_of_mem hc
+    have hm : (bs[i], i) ∈ bs.zipIdx.toList := by
+      rw [Array.toList_zipIdx]
+      exact List.mem_iff_getElem.mpr ⟨i, by simpa using hi, by simp⟩
+    exact hall (bs[i], i) hm
+  · refine zipIdx_mapM_validates ?_ hqs
+    intro p r hr
+    cases hb : bytesToKzgProof p.1 with
+    | error e =>
+      simp [hb, throw, throwThe, MonadExceptOf.throw] at hr
+    | ok q =>
+      unfold bytesToKzgProof at hb
+      split at hb
+      · assumption
+      · cases hb
+
 /-- A batch of one cell that returns validates its commitment and its proof. -/
 theorem validateKzgG1_of_verifyCellKzgProofBatch {s : TrustedSetup} {commitment proof : Bytes48}
     {cellIndex : CellIndex} {cell : Cell} {b : Bool}
     (h : verifyCellKzgProofBatch s #[commitment] #[cellIndex] #[cell] #[proof] = .ok b) :
     validateKzgG1 commitment = true ∧ validateKzgG1 proof = true := by
-  constructor
-  · by_contra hc
-    simp only [Bool.not_eq_true] at hc
-    simp [verifyCellKzgProofBatch, bytesToKzgCommitment, hc, bind, Except.bind, throw,
-      throwThe, MonadExceptOf.throw, Array.zipIdx, pure, Except.pure] at h
-    repeat' split at h
-    all_goals cases h
-  · by_contra hc
-    simp only [Bool.not_eq_true] at hc
-    simp [verifyCellKzgProofBatch, bytesToKzgProof, hc, bind, Except.bind, throw,
-      throwThe, MonadExceptOf.throw, Array.zipIdx, pure, Except.pure, Functor.map,
-      Except.map] at h
-    repeat' split at h
-    all_goals cases h
+  obtain ⟨hc, hp⟩ := validates_of_verifyCellKzgProofBatch h
+  exact ⟨hc _ (by simp), hp _ (by simp)⟩
+
+/-- Cells that decode have their values as their decoding.
+
+It is stated on variable cells, so the kernel never evaluates the decoding. -/
+private theorem decodeCells_of_ok {cells : Array Cell} {evals : Array CosetEvals}
+    (h : cells.mapM cellToCosetEvals = .ok evals) : decodeCells cells = evals := by
+  simp only [decodeCells, h]
 
 /-- A polynomial of degree zero that is not zero has no root. -/
 theorem eval_ne_zero_of_natDegree_le_zero {P : Fr[X]} (h0 : P ≠ 0) (hd : P.natDegree ≤ 0)
@@ -308,8 +385,7 @@ theorem CellOpening.Verifies.valid (laws : Bls.PairingLaws) {s : TrustedSetup} {
     simp only [y, List.getElem!_toArray, List.getElem!_cons_zero, hP] at hP'
     cases hP'
     exact hw
-  have hx : y.toCellBatch.cosetsEvals = evals := by
-    simp only [y, CellBatchInput.toCellBatch, decodeCells, hev]
+  have hx : y.toCellBatch.cosetsEvals = evals := decodeCells_of_ok hev
   rcases verifyCellKzgProofBatch_valid_or_root laws hs y (c := fun _ => c) (w := fun _ => w) hyC
     hyP h with hall | ⟨h0, hroot⟩
   · have hv := hall 0 (by simp [y])
@@ -323,9 +399,16 @@ theorem CellOpening.Verifies.valid (laws : Bls.PairingLaws) {s : TrustedSetup} {
 
 /-- The values of a cell, or no values if it does not decode. -/
 def decodeCell (cell : Cell) : CosetEvals :=
-  match cellToCosetEvals cell with
-  | .ok e => e
-  | .error _ => #[]
+  (cellToCosetEvals cell).toOption.getD #[]
+
+/-- A cell that decodes has its values as its decoding.
+
+It is stated on a variable cell, so the kernel never evaluates the decoding. -/
+theorem decodeCell_of_ok {cell : Cell} {e : CosetEvals} (he : cellToCosetEvals cell = .ok e) :
+    decodeCell cell = e := by
+  unfold decodeCell
+  rw [he]
+  rfl
 
 /-- The point of 48 bytes, or zero if they do not decode. -/
 def decodePoint (b : Bytes48) : G1 :=
@@ -348,7 +431,7 @@ theorem CellOpening.Verifies.valid₂ (laws : Bls.PairingLaws) {s : TrustedSetup
   rw [hC] at hC'
   cases hC'
   rw [hc.unique hc'] at ⊢
-  refine ⟨hci, e, w, he, by simp only [decodeCell, he], ?_, hv⟩
+  refine ⟨hci, e, w, he, decodeCell_of_ok he, ?_, hv⟩
   simpa only [decodePoint, hP] using hw
 
 /-! ## Position-binding, Lemma 3 -/
@@ -539,6 +622,8 @@ theorem eq_codewordCell {cell : Cell} {e : CosetEvals} (he : cellToCosetEvals ce
     {f : Fr[X]} {j : Nat} (hf : ∀ m < FIELD_ELEMENTS_PER_CELL, f.eval (cellPoint j m) = e[m]!) :
     cell = codewordCell f j := by
   have hsz := size_bytesToBlsFields he
+  -- Open the codeword by its equation, so the kernel never compares two encodings.
+  rw [codewordCell]
   refine (cosetEvalsToCell_of_cellToCosetEvals he).symm.trans (congrArg cosetEvalsToCell ?_)
   refine Array.ext (by simp [hsz]) fun m hm _ => ?_
   rw [Array.getElem_ofFn, ← getElem!_pos e m hm]
@@ -573,7 +658,7 @@ theorem codeBinding_searches {GT : Type} [CommMonoid GT] (M : TargetGroup GT)
       obtain ⟨-, e, -, -, -, -, he, -⟩ := (hver o ho).valid laws hs
       refine ⟨e, he, ?_⟩
       simp only [openedValues, openingAt_cellIndex hnd ho, Option.map_some, Option.getD_some,
-        decodeCell, he]
+        decodeCell_of_ok he]
   cases hout : outlier os with
   | none =>
     -- The interpolation of the first 64 openings agrees with every opening.

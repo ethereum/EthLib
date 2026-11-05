@@ -34,9 +34,6 @@ open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr Polynomial
 
--- Core's power instance on `Fin` hides Mathlib's power on `Fr`, as in `Proofs.Bls.FrZMod`.
-attribute [-instance] Fin.instNatPow
-
 /-- The polynomial of the values of a blob: its coefficients are their inverse FFT. -/
 noncomputable def blobPolynomial (poly : Kzg.Polynomial) : Fr[X] :=
   coefficientPolynomial (polynomialEvalToCoeff poly)

@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Bls.Fr
 public import EthLib.Cryptography.Proofs.Bls.Fr
 public import EthLib.Cryptography.Proofs.PowMod
-public import EthLib.Cryptography.Proofs.Inverse
+public import EthLib.Cryptography.Proofs.Montgomery
 public import Mathlib.Data.ZMod.Basic
 public import Mathlib.Algebra.Field.ZMod
 public import Mathlib.NumberTheory.LucasPrimality
@@ -14,13 +14,11 @@ public import Mathlib.RingTheory.RootsOfUnity.PrimitiveRoots
 /-!
 # Proofs: `Fr` as a Mathlib finite field
 
-This file maps `Fr`, which is `Fin r`, to Mathlib's `ZMod r`.
+This file maps `Fr` to Mathlib's `ZMod r`.
 
-Since `r` is a positive numeral, `ZMod r` reduces by definition to `Fin r`.
+An element of `Fr` holds its Montgomery form, and the map sends it to the integer it stands for.
 
-Mathlib builds the ring structure of `ZMod` to agree by definition with that of `Fin`.
-
-So the ring isomorphism below is the identity.
+The map is a ring isomorphism, so `Fr` is a field as `ZMod r` is.
 
 ## Primality of the modulus
 
@@ -45,19 +43,13 @@ Those roots are the domains of the FFT and of barycentric evaluation.
 
 ## The bridge to Mathlib
 
-The last section maps each operation of `Fr` to its Mathlib counterpart.
+The last section carries the field structure of `ZMod r` to `Fr` through the isomorphism.
 
-The cast of a natural number, the power, the inverse and the division all agree.
+Its operations are those of `Fr`: the sum, the product, the power, the inverse and the division.
 
-The inverse is the Euclidean inverse, which equals the field inverse because `r` is prime.
+So each operation of the specification is the operation of the field, by definition.
 
-The field instance is the one of `ZMod r`, except for its division.
-
-Its division is the division of `Fr`, a product by the Euclidean inverse.
-
-So `a / b` in the specification is the field's division, by definition.
-
-Two division instances that agree only up to proof would make the kernel reject the structure.
+The inverse is `a ^ (r - 2)`, which equals the field inverse because `r` is prime.
 
 Later proofs open the field structure with `open scoped EthLib.Cryptography.Bls.Fr`.
 
@@ -71,17 +63,6 @@ namespace EthLib.Cryptography.Bls.Fr
 -- Kernel evaluation of `powModAux` (256 recursion steps) exceeds the
 -- default `maxRecDepth` of the `decide` calls below.
 set_option maxRecDepth 4000
-
--- Core registers a global `NatPow (Fin n)` instance, `Fin.instNatPow`.
--- Because `Fr` is an abbrev of `Fin modulus`,
--- `a ^ n` with a `Nat` exponent elaborates through that instance
--- instead of Mathlib's `Monoid.toPow` — the two are definitionally but
--- not syntactically equal, so `rw` with Mathlib's `pow` lemmas fails
--- against statements phrased with the core instance. Remove it for
--- this file so every `Fr ^ Nat` below is Mathlib's monoid power.
--- NOTE: `attribute [-instance]` is file-local; proof files that state
--- `Fr ^ Nat` lemmas must repeat this line.
-attribute [-instance] Fin.instNatPow
 
 private theorem seven_pow_div_ne_one (q : Nat)
     (hne : PowMod.powModAux 256 modulus 7 ((modulus - 1) / q) ≠ 1 % modulus) :
@@ -150,11 +131,38 @@ theorem modulus_prime : Nat.Prime modulus :=
 
 instance : Fact (Nat.Prime modulus) := ⟨modulus_prime⟩
 
-/-- `Fr` is (definitionally) Mathlib's `ZMod Fr.modulus`, as rings. -/
-def toZMod : Fr ≃+* ZMod modulus := RingEquiv.refl _
+instance : Fact (Nat.Prime params.p) := ⟨modulus_prime⟩
 
-/-- With primality, `ZMod Fr.modulus` — and hence `Fr`, via `toZMod` —
-is a finite field. (See `Fr.instField` below for the scoped instance.) -/
+/-- The element of `Fr` that an element of `ZMod r` stands for. -/
+def ofZMod (z : ZMod modulus) : Fr := Fr.ofNat z.val
+
+/-- An element of `ZMod r` maps back to itself. -/
+theorem toZMod_ofZMod (z : ZMod modulus) : Montgomery.toZMod (ofZMod z) = z :=
+  (Montgomery.toZMod_ofNat z.val).trans (ZMod.natCast_zmod_val z)
+
+/-- An element of `Fr` maps back to itself. -/
+theorem ofZMod_toZMod (a : Fr) : ofZMod (Montgomery.toZMod a) = a :=
+  Montgomery.toZMod_injective (toZMod_ofZMod _)
+
+/-- `Fr` and Mathlib's `ZMod r` are isomorphic rings.
+
+The map sends an element to the integer mod `r` that it stands for. -/
+def toZMod : Fr ≃+* ZMod modulus where
+  toFun := Montgomery.toZMod
+  invFun := ofZMod
+  left_inv := ofZMod_toZMod
+  right_inv := toZMod_ofZMod
+  map_mul' := Montgomery.toZMod_mul
+  map_add' := Montgomery.toZMod_add
+
+/-- `Fr` is finite, through the isomorphism. -/
+instance : Fintype Fr := Fintype.ofEquiv _ toZMod.symm.toEquiv
+
+/-- `Fr` has `r` elements. -/
+theorem card_eq : Fintype.card Fr = modulus :=
+  (Fintype.card_congr toZMod.toEquiv).trans (ZMod.card modulus)
+
+/-- With primality, `ZMod r` is a finite field, and `Fr` is one through the isomorphism. -/
 example : Field (ZMod modulus) := inferInstance
 
 /-! ## Roots of unity -/
@@ -180,78 +188,48 @@ theorem isPrimitiveRoot_seven_pow {n : Nat} (hn : n ∣ modulus - 1) :
 
 /-! ## Bridge: spec operations = Mathlib operations -/
 
-/-- `Fr.powNat` is monoid power, phrased over `ZMod Fr.modulus`
-(definitionally `Fr`) so it is usable while constructing `Fr`'s own
-`Field` instance below. Public `Fr`-facing version: `powNat_eq_pow`. -/
-private theorem powNat_eq_zmod_pow (a : ZMod modulus) (n : Nat) :
-    Fr.powNat a n = a ^ n := by
-  -- `a` is a `ZMod` element passed where `powNat` takes an `Fr`.
-  -- `rw` checks the rewritten goal at `implicit` transparency, where that
-  -- is ill-typed, so the `powNat` equations go in by `trans`.
-  induction n with
-  | zero => exact (powNat_zero a).trans (pow_zero a).symm
-  | succ n ih => exact (powNat_succ a n).trans (by rw [ih, pow_succ']; rfl)
+/-- The field structure of `ZMod r`, carried to `Fr` by the isomorphism.
 
-/-- The Euclidean inverse is the field inverse of `ZMod r`, and both send `0` to `0`.
-
-It is stated over `ZMod r`, which the field instance below needs. -/
-private theorem inverse_eq_zmod_inv (a : ZMod modulus) :
-    Fr.inverse a = a⁻¹ :=
-  Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
-
-/-- The Mathlib field structure on `ZMod Fr.modulus`, named so it can be
-used as the source of the structure update in `instField` below. -/
--- The exposed field instance reduces through this structure.
-@[reducible] def zmodField : Field (ZMod modulus) := inferInstance
-
-/-- The field structure of `ZMod r` on `Fr`, with the division of the specification.
+The operations are those of the specification: the sum, the product, the power and the inverse.
 
 So `a / b` in the specification is the division of the field, by definition.
 
-The division of `ZMod` would not do: the axioms that mention `/` would then use two instances.
+The scalar actions and the casts from the integers and the rationals go through `ZMod r`.
 
-Those three axioms are proved again from the inverse lemma above; all else is from `ZMod`.
+Proofs alone use them.
 
-Scoped rather than global for the same reason Mathlib keeps
-`Fin.instCommRing` scoped (see `Mathlib.Data.ZMod.Defs`): the `NatCast`
-coercion it introduces can change how mixed `Fin`/`Nat` expressions
-elaborate. Activate with `open scoped EthLib.Cryptography.Bls.Fr`. -/
+It is scoped, as Mathlib scopes the ring instance of `Fin`, to avoid coercion loops.
+
+Activate with `open scoped EthLib.Cryptography.Bls.Fr`. -/
 scoped instance instField : Field Fr :=
-  { zmodField with
-    div := (· / ·)
-    -- A `by` field keeps its private proof dependencies out of the public data.
-    div_eq_mul_inv := by
-      intro a b
-      -- Explicit `@HMul.hMul` because `a * ·` would make the binop
-      -- elaborator look for `HMul (ZMod modulus) Fr` on the mixed-type
-      -- operands; the defeq handover to the goal is checked by `exact`.
-      exact congrArg (fun x : ZMod modulus =>
-          @HMul.hMul (ZMod modulus) (ZMod modulus) (ZMod modulus) _ a x)
-        (inverse_eq_zmod_inv b)
-    nnratCast_def := fun q => by
-      have h : (q : ZMod modulus)
-          = (q.num : ZMod modulus) / (q.den : ZMod modulus) := NNRat.cast_def q
-      rw [div_eq_mul_inv, ← inverse_eq_zmod_inv] at h
-      exact h
-    ratCast_def := fun q => by
-      have h : (q : ZMod modulus)
-          = (q.num : ZMod modulus) / (q.den : ZMod modulus) := Rat.cast_def q
-      rw [div_eq_mul_inv, ← inverse_eq_zmod_inv] at h
-      exact h }
+  letI : SMul ℕ Fr := ⟨fun n a => ofZMod (n • Montgomery.toZMod a)⟩
+  letI : SMul ℤ Fr := ⟨fun n a => ofZMod (n • Montgomery.toZMod a)⟩
+  letI : SMul ℚ≥0 Fr := ⟨fun q a => ofZMod (q • Montgomery.toZMod a)⟩
+  letI : SMul ℚ Fr := ⟨fun q a => ofZMod (q • Montgomery.toZMod a)⟩
+  letI : Pow Fr ℤ := ⟨fun a n => ofZMod (Montgomery.toZMod a ^ n)⟩
+  letI : IntCast Fr := ⟨fun n => ofZMod n⟩
+  letI : NNRatCast Fr := ⟨fun q => ofZMod q⟩
+  letI : RatCast Fr := ⟨fun q => ofZMod q⟩
+  Function.Injective.field (Montgomery.toZMod : Fr → ZMod modulus) Montgomery.toZMod_injective
+    Montgomery.toZMod_zero Montgomery.toZMod_one Montgomery.toZMod_add Montgomery.toZMod_mul
+    Montgomery.toZMod_neg Montgomery.toZMod_sub Montgomery.toZMod_inv
+    (fun a b => by
+      change Montgomery.toZMod (a * b⁻¹) = _
+      rw [Montgomery.toZMod_mul, Montgomery.toZMod_inv, div_eq_mul_inv])
+    (fun _ _ => toZMod_ofZMod _) (fun _ _ => toZMod_ofZMod _) (fun _ _ => toZMod_ofZMod _)
+    (fun _ _ => toZMod_ofZMod _) Montgomery.toZMod_pow (fun _ _ => toZMod_ofZMod _)
+    Montgomery.toZMod_natCast (fun _ => toZMod_ofZMod _) (fun _ => toZMod_ofZMod _)
+    (fun _ => toZMod_ofZMod _)
 
 @[simp] theorem zero_def : Fr.zero = (0 : Fr) := rfl
 
 @[simp] theorem one_def : Fr.one = (1 : Fr) := rfl
 
 /-- The spec's `Fr.ofNat` is Mathlib's `Nat.cast`. -/
-theorem ofNat_eq_natCast (n : Nat) : Fr.ofNat n = (n : Fr) := by
-  apply Fin.ext
-  rw [ofNat, Fin.val_ofNat]
-  exact (ZMod.val_natCast modulus n).symm
+theorem ofNat_eq_natCast (n : Nat) : Fr.ofNat n = (n : Fr) := rfl
 
 /-- The spec's `Fr.powNat` is Mathlib's monoid power. -/
-theorem powNat_eq_pow (a : Fr) (n : Nat) : a.powNat n = a ^ n :=
-  powNat_eq_zmod_pow a n
+theorem powNat_eq_pow (a : Fr) (n : Nat) : a.powNat n = a ^ n := rfl
 
 /-- The spec's `HPow Fr Fr Fr` (used as `a ^ b`) is Mathlib's monoid
 power at the exponent's value. -/
@@ -262,20 +240,38 @@ theorem hpow_eq_pow (a b : Fr) : a ^ b = a ^ b.val :=
 when `w` is canonical the round-trip through `Fr` is invisible. -/
 theorem hpow_ofNat_eq_pow (a : Fr) {w : Nat} (hw : w < modulus) :
     a ^ Fr.ofNat w = a ^ w := by
-  rw [hpow_eq_pow]
-  congr 1
-  show w % modulus = w
-  exact Nat.mod_eq_of_lt hw
+  rw [hpow_eq_pow, val_ofNat_of_lt hw]
 
-/-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
-theorem inverse_eq_inv (a : Fr) : a.inverse = a⁻¹ :=
-  inverse_eq_zmod_inv a
+/-- The inverse of the specification is the field inverse, and both send `0` to `0`. -/
+theorem inverse_eq_inv (a : Fr) : a.inverse = a⁻¹ := rfl
 
-/-- The spec's division (`a * b.inverse`, registered at high priority
-over core's `Fin` Nat-division) is field division. -/
-theorem div_eq_mul_inv' (a b : Fr) : a / b = a * b⁻¹ := by
-  show a * b.inverse = a * b⁻¹
-  rw [inverse_eq_inv]
+/-- The spec's division, a product by the inverse, is field division. -/
+theorem div_eq_mul_inv' (a b : Fr) : a / b = a * b⁻¹ := rfl
+
+/-- The cast of the integer of an element is the element. -/
+theorem natCast_val (x : Fr) : ((x.val : Nat) : Fr) = x := by
+  apply Montgomery.toZMod_injective
+  rw [Montgomery.toZMod_natCast, val_eq, ZMod.natCast_zmod_val]
+
+/-- The cast of a natural number is zero exactly when `r` divides it. -/
+theorem natCast_eq_zero_iff (n : Nat) : (n : Fr) = 0 ↔ modulus ∣ n := by
+  have h := ZMod.natCast_eq_zero_iff n modulus
+  constructor
+  · intro hn
+    have hz := congrArg Montgomery.toZMod hn
+    rw [Montgomery.toZMod_natCast, Montgomery.toZMod_zero] at hz
+    exact h.mp hz
+  · intro hn
+    apply Montgomery.toZMod_injective
+    rw [Montgomery.toZMod_natCast, Montgomery.toZMod_zero]
+    exact h.mpr hn
+
+/-- The cast of a natural number strictly between `0` and `r` is not zero. -/
+theorem natCast_ne_zero {n : Nat} (h0 : 0 < n) (hn : n < modulus) : (n : Fr) ≠ 0 := by
+  intro h
+  have hv := congrArg Fr.val h
+  rw [← ofNat_eq_natCast, val_ofNat_of_lt hn, val_zero] at hv
+  omega
 
 /-- `Fr`-facing form of `isPrimitiveRoot_seven_pow`, phrased with the
 spec's own operations (`Fr.ofNat` and the `Fr`-exponent power): the root
@@ -285,14 +281,11 @@ theorem isPrimitiveRoot_ofNat_seven_pow {n : Nat} (hn : n ∣ modulus - 1) :
     IsPrimitiveRoot (Fr.ofNat 7 ^ Fr.ofNat ((modulus - 1) / n)) n := by
   have hlt : (modulus - 1) / n < modulus :=
     Nat.lt_of_le_of_lt (Nat.div_le_self _ _) (Nat.sub_lt Fr.modulus_pos Nat.one_pos)
-  have hval : (Fr.ofNat ((modulus - 1) / n)).val = (modulus - 1) / n := by
-    rw [ofNat, Fin.val_ofNat]
-    exact Nat.mod_eq_of_lt hlt
-  rw [hpow_eq_pow, hval, ofNat_eq_natCast]
-  exact isPrimitiveRoot_seven_pow hn
+  rw [hpow_eq_pow, val_ofNat_of_lt hlt, ofNat_eq_natCast]
+  have h := (isPrimitiveRoot_seven_pow hn).map_of_injective (f := toZMod.symm) toZMod.symm.injective
+  rwa [map_pow, map_natCast] at h
 
--- Smoke tests: the scoped field structure interoperates with the
--- globally available `Fin` instances the executable spec uses.
+-- Smoke tests: the scoped field structure uses the operations of the executable spec.
 example (a b : Fr) : a * b = b * a := mul_comm a b
 example (a b : Fr) : a - b = a + -b := sub_eq_add_neg a b
 example (a : Fr) (h : a ≠ 0) : a * a⁻¹ = 1 := mul_inv_cancel₀ h

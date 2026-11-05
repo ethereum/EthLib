@@ -24,7 +24,6 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Fin.instNatPow
 
 /-- The exact zero-filled, bit-reversed-order evaluation array used in recovery. -/
 def recoveryFlatten (indices : Array CellIndex) (cells : Array CosetEvals) : Array Fr :=
@@ -117,6 +116,6 @@ theorem recovery_masked_product
   · rw [recoveryFlatten_known hmatch i hi hknown]
     exact mul_comm _ _
   · rw [constructVanishingPolynomial_missing_root hz i (recoveryMissing_of_not_known indices i hknown)]
-    exact (Fin.zero_mul _).trans (Fin.mul_zero _).symm
+    exact (zero_mul _).trans (mul_zero _).symm
 
 end EthLib.Cryptography.Kzg

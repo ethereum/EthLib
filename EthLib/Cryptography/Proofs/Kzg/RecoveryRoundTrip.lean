@@ -20,7 +20,6 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Fin.instNatPow
 
 /-- The values of a polynomial on the coset of a cell, read from its extended evaluations. -/
 def computedCosetEvals (p : PolynomialCoeff) (cellIndex : CellIndex) : CosetEvals :=
@@ -98,8 +97,10 @@ theorem recoverCellsAndKzgProofs_fk20 (setup : TrustedSetup) {p : PolynomialCoef
     (cosetsEvals := cellIndices.map (computedCosetEvals p)) ?_ ?_
   · rw [Array.mapM_eq_mapM_toList, Array.toList_map, List.mapM_map]
     rw [Base.mapM_eq_ok_map (f := cellToCosetEvals ∘ fun i => (fk20CellsAndProofs setup p).1[i]!)
-      (g := computedCosetEvals p) fun i hi =>
-        cellToCosetEvals_fk20Cell setup hle (hlt i (Array.mem_def.mpr hi))]
+      (g := computedCosetEvals p) fun i hi => by
+        -- Open the composition by a rewrite, so the kernel never evaluates the decoding.
+        rw [Function.comp_apply]
+        exact cellToCosetEvals_fk20Cell setup hle (hlt i (Array.mem_def.mpr hi))]
     simp only [Functor.map, Except.map]
     rw [← Array.toList_map, Array.toArray_toList]
   · intro k hk j hj

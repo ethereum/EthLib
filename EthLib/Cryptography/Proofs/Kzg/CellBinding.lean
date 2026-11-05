@@ -40,9 +40,6 @@ open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial
 
--- Core's power instance on `Fin` hides Mathlib's power on `Fr`, as in `Proofs.Bls.FrZMod`.
-attribute [-instance] Fin.instNatPow
-
 /-! ## The points of a cell -/
 
 /-- The points of the coset of a cell are distinct. -/
@@ -59,7 +56,7 @@ theorem cellPoint_injOn {cellIndex : Nat} (hci : cellIndex < CELLS_PER_EXT_BLOB)
   exact hab
 
 /-- A shift times a power of an `n`th root of unity has the `n`th power of the shift. -/
-private theorem shift_mul_root_pow (h ω : ZMod Fr.modulus) (k n : Nat) (hω : ω ^ n = 1) :
+private theorem shift_mul_root_pow (h ω : Fr) (k n : Nat) (hω : ω ^ n = 1) :
     (h * ω ^ k) ^ n = h ^ n := by
   rw [mul_pow, ← pow_mul, mul_comm k, pow_mul, hω, one_pow, mul_one]
 
@@ -189,7 +186,7 @@ theorem natDegree_quotientAt_lt {p : Fr[X]} {n : Nat} (hp : p.natDegree ≤ n) (
   omega
 
 /-- The scalar step: two valid cells with values that differ by `δ` at `x` give `1 / (τ - x)`. -/
-private theorem bsdh_scalar {t x δ w w' c i i' zt qt h : ZMod Fr.modulus} (hδ : δ ≠ 0)
+private theorem bsdh_scalar {t x δ w w' c i i' zt qt h : Fr} (hδ : δ ≠ 0)
     (hq : i' - i = (t - x) * qt + δ) (hz : t ^ FIELD_ELEMENTS_PER_CELL - h = (t - x) * zt)
     (hv : c - i = w * (t ^ FIELD_ELEMENTS_PER_CELL - h))
     (hv' : c - i' = w' * (t ^ FIELD_ELEMENTS_PER_CELL - h)) :
@@ -208,18 +205,18 @@ private theorem bsdh_scalar {t x δ w w' c i i' zt qt h : ZMod Fr.modulus} (hδ 
   field_simp
   ring
 
-/-- One term of an evaluation, over `ZMod r` where `ring` applies. -/
-private theorem mul_right_comm_pow (c a t : ZMod Fr.modulus) (n : Nat) :
+/-- One term of an evaluation. -/
+private theorem mul_right_comm_pow (c a t : Fr) (n : Nat) :
     c * a * t ^ n = a * (c * t ^ n) := by
   ring
 
-/-- One term of the first product of pairings, over `ZMod r`. -/
-private theorem term_one (c d w t : ZMod Fr.modulus) (n : Nat) :
+/-- One term of the first product of pairings. -/
+private theorem term_one (c d w t : Fr) (n : Nat) :
     c * (w * d) * t ^ n = c * d * w * t ^ n := by
   ring
 
-/-- One term of the second product of pairings, over `ZMod r`. -/
-private theorem term_two (c d t : ZMod Fr.modulus) (n : Nat) :
+/-- One term of the second product of pairings. -/
+private theorem term_two (c d t : Fr) (n : Nat) :
     c * -d * t ^ n = -c * d * t ^ n * 1 := by
   ring
 

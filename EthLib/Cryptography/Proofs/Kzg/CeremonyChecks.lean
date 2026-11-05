@@ -74,15 +74,13 @@ theorem g2Validate_isInfinity_eq_false {p : G2} (h : g2Validate p = true) :
 
 /-- Scalar multiplication of any `G1` point by `0` gives `G1.zero`. -/
 @[simp] theorem G1.mul_zero (p : G1) : G1.mul p (0 : Fr) = G1.zero := by
-  change G1.mulNat p 0 = G1.zero
-  rw [G1.mulNat_def]
+  rw [G1.mul, Fr.val_zero, G1.mulNat_def]
   rfl
 
 /-- Scalar multiplication of a non-infinity `G1` point by `1` returns the point unchanged. -/
 @[simp] theorem G1.mul_one {p : G1} (hp : p.isInfinity = false) :
     G1.mul p (1 : Fr) = p := by
-  change G1.mulNat p 1 = p
-  rw [G1.mulNat_def]
+  rw [G1.mul, Fr.val_one, G1.mulNat_def]
   norm_num
   rw [G1.mulNat_def]
   norm_num
@@ -111,15 +109,13 @@ private theorem g2MulNat_def (p : G2) (k : Nat) :
 
 /-- Scalar multiplication of any `G2` point by `0` gives `G2.zero`. -/
 @[simp] theorem G2.mul_zero (p : G2) : G2.mul p (0 : Fr) = G2.zero := by
-  change G2.mulNat p 0 = G2.zero
-  rw [g2MulNat_def]
+  rw [G2.mul, Fr.val_zero, g2MulNat_def]
   rfl
 
 /-- Scalar multiplication of a non-infinity `G2` point by `1` returns the point unchanged. -/
 @[simp] theorem G2.mul_one {p : G2} (hp : p.isInfinity = false) :
     G2.mul p (1 : Fr) = p := by
-  change G2.mulNat p 1 = p
-  rw [g2MulNat_def]
+  rw [G2.mul, Fr.val_one, g2MulNat_def]
   norm_num
   rw [g2MulNat_def]
   norm_num
@@ -149,8 +145,9 @@ theorem g1Mul_nonzero_iff (s : Fr) :
   rw [← addOrderOf_dvd_iff_nsmul_eq_zero, G1.addOrderOf_toPoint_generator]
   constructor
   · intro hdvd
-    exact Fin.ext (Nat.eq_zero_of_dvd_of_lt hdvd s.isLt)
+    exact Fr.ext (by rw [Fr.val_zero]; exact Nat.eq_zero_of_dvd_of_lt hdvd (Fr.val_lt s))
   · rintro rfl
+    rw [Fr.val_zero]
     exact Nat.dvd_zero _
 
 /-- Non-infinity of a `G1` scalar multiple implies the scalar is nonzero. -/
@@ -238,8 +235,8 @@ structure SubgroupExponents
   g2_rep : ∀ i (hi : i < contribution.g2Powers.size),
     G2.Represents (contribution.g2Powers[i]'hi) (b i)
 
-/-- The scalar identity of a pairing equality, stated over `ZMod` so that ring tactics apply. -/
-private theorem add_neg_mul_eq_zero_iff (a b c d : ZMod Fr.modulus) :
+/-- The scalar identity of a pairing equality. -/
+private theorem add_neg_mul_eq_zero_iff (a b c d : Fr) :
     a * b + -c * d = 0 ↔ a * b = c * d := by
   constructor <;> intro h <;> linear_combination h
 
@@ -294,7 +291,7 @@ theorem exponentChecksSufficient
   have updateScalar : exponents.s * exponents.x = exponents.a 1 := by
     have hmul := (pairingEq_iff laws exponents.previousTau_rep exponents.potPubkey_rep
       (exponents.g1_rep 1 checks.one_lt_g1) G2.represents_generator).mp checks.tauUpdate
-    exact hmul.trans (Fin.mul_one (exponents.a 1))
+    exact hmul.trans (mul_one (exponents.a 1))
 
   -- The G1 recurrence: `e([a_(i+1)], [1]) = e([a_i], [b_1])`.
   have g1Recurrence : ∀ i (hi : i + 1 < contribution.g1Powers.size),
@@ -306,7 +303,7 @@ theorem exponentChecksSufficient
     exact
       calc
         exponents.a (i + 1) = exponents.a (i + 1) * (1 : Fr) :=
-          (Fin.mul_one (exponents.a (i + 1))).symm
+          (mul_one (exponents.a (i + 1))).symm
         _ = exponents.a i * exponents.b 1 := hmul
 
   -- The cross-group check: `e([1], [b_i]) = e([a_i], [1])`.
@@ -319,9 +316,9 @@ theorem exponentChecksSufficient
     exact
       calc
         exponents.b i = (1 : Fr) * exponents.b i :=
-          (Fin.one_mul (exponents.b i)).symm
+          (one_mul (exponents.b i)).symm
         _ = exponents.a i * (1 : Fr) := hmul
-        _ = exponents.a i := Fin.mul_one (exponents.a i)
+        _ = exponents.a i := mul_one (exponents.a i)
 
   let tau : Fr := exponents.s * exponents.x
 
@@ -335,7 +332,7 @@ theorem exponentChecksSufficient
       mul_inv_cancel₀ x_ne_zero
     apply s_ne_zero
     calc
-      exponents.s = exponents.s * 1 := (Fin.mul_one exponents.s).symm
+      exponents.s = exponents.s * 1 := (mul_one exponents.s).symm
       _ = exponents.s * (exponents.x * exponents.x⁻¹) :=
         congrArg (fun z : Fr => exponents.s * z) hxInv.symm
       _ = (exponents.s * exponents.x) * exponents.x⁻¹ :=
@@ -368,13 +365,13 @@ theorem exponentChecksSufficient
       calc
         (1 : Fr) = exponents.a 1 * (exponents.a 1)⁻¹ := haInv.symm
         _ = ((1 : Fr) * exponents.a 1) * (exponents.a 1)⁻¹ := by
-          rw [Fin.one_mul]
+          rw [one_mul]
         _ = (exponents.a 0 * exponents.a 1) * (exponents.a 1)⁻¹ := hcancelInv
         _ = exponents.a 0 * (exponents.a 1 * (exponents.a 1)⁻¹) :=
           mul_assoc _ _ _
         _ = exponents.a 0 * 1 :=
           congrArg (fun z : Fr => exponents.a 0 * z) haInv
-        _ = exponents.a 0 := Fin.mul_one _
+        _ = exponents.a 0 := mul_one _
     exact one_eq_a_zero.symm
 
   have g1_is_powers : ∀ i, i < contribution.g1Powers.size →

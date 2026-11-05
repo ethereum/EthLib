@@ -19,7 +19,6 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Fin.instNatPow
 
 private theorem field_mul_ne_zero {F : Type*} [Field F] {a b : F}
     (ha : a ≠ 0) (hb : b ≠ 0) : a * b ≠ 0 := mul_ne_zero ha hb
@@ -29,8 +28,7 @@ private theorem eval_linear_factor (z x : Fr) :
   change (Fr.zero + (-z) * Fr.powNat x 0) + Fr.one * Fr.powNat x 1 = x - z
   rw [Bls.Fr.powNat_zero, Bls.Fr.powNat_succ, Bls.Fr.powNat_zero]
   change (0 + (-z) * 1) + 1 * (x * 1) = x - z
-  rw [Fin.zero_add, Fin.mul_one, Fin.mul_one, Fin.one_mul]
-  exact (add_comm (-z) x).trans (sub_eq_add_neg x z).symm
+  ring
 
 private theorem foldlM_vanishing_eval_ne_zero (xs : List Fr)
     (init v : PolynomialCoeff) (z : Fr)
@@ -59,6 +57,6 @@ theorem vanishingPolynomialcoeff_eval_ne_zero {zs : Array Fr} {v : PolynomialCoe
   change Fr.zero + Fr.one * Fr.powNat z 0 ≠ 0
   rw [Bls.Fr.powNat_zero]
   change (0 : Fr) + 1 * 1 ≠ 0
-  decide
+  simp
 
 end EthLib.Cryptography.Kzg

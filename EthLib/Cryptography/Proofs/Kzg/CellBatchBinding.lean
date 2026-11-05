@@ -40,9 +40,6 @@ open EthLib.Cryptography.Kzg.BitReversal
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial
 
--- Core's power instance on `Fin` hides Mathlib's power on `Fr`, as in `Proofs.Bls.FrZMod`.
-attribute [-instance] Fin.instNatPow
-
 /-! ## Valid cells -/
 
 /-- Point `m` of the coset of cell index `j`: entry `64 j + m` of the bit-reversed domain. -/
@@ -169,11 +166,7 @@ theorem size_of_interpolateCosetEvals {h : Fr} {evals : CosetEvals} {p : Polynom
 theorem evalPolyAt_singleton (a x : Fr) : evalPolyAt #[a] x = a := by
   show Fr.zero + a * Fr.powNat x 0 = a
   rw [Bls.Fr.powNat_zero]
-  exact (Fin.zero_add _).trans (Fin.mul_one _)
-
-/-- Addition in `Fr` is associative, stated over `ZMod r` where the lemma of rings applies. -/
-private theorem add_assoc_zmod (a b c : ZMod Fr.modulus) : a + b + c = a + (b + c) :=
-  add_assoc a b c
+  exact (zero_add _).trans (mul_one _)
 
 /-- The value of an interpolation of the check at `x`, or zero if it fails. -/
 def interpolationValue (x shift : Fr) (evals : CosetEvals) : Fr :=
@@ -197,7 +190,7 @@ theorem sumInterp_spec (x : Fr) :
           evalPolyAt init x + (L.map fun e => e.2.2 * interpolationValue x e.1 e.2.1).sum
   | [], init, acc, hinit, h => by
     cases h
-    exact ⟨hinit, by simp, (Fin.add_zero _).symm⟩
+    exact ⟨hinit, by simp, (add_zero _).symm⟩
   | e :: L, init, acc, hinit, h => by
     simp only [List.foldlM_cons, bind, Except.bind] at h
     cases hi : interpolateCosetEvals e.1 e.2.1 with
@@ -220,13 +213,7 @@ theorem sumInterp_spec (x : Fr) :
     · rw [heval, evalPolyAt_addPoly, evalPolyAt_mulPoly x hs, evalPolyAt_singleton,
         List.map_cons, List.sum_cons]
       simp only [interpolationValue, hi]
-      exact add_assoc_zmod _ _ _
-
-/-- Zero times an element of `Fr`, over `ZMod r` where the lemma of rings applies. -/
-private theorem zero_mul_zmod (a : ZMod Fr.modulus) : 0 * a = 0 := zero_mul a
-
-/-- Zero plus an element of `Fr`, over `ZMod r` where the lemma of rings applies. -/
-private theorem zero_add_zmod (a : ZMod Fr.modulus) : 0 + a = a := zero_add a
+      exact add_assoc _ _ _
 
 /-- Entry `k` of two zipped arrays is the pair of their entries `k`. -/
 theorem getElem!_zip' {α β : Type} [Inhabited α] [Inhabited β] {a : Array α} {b : Array β}
@@ -239,7 +226,7 @@ theorem sum_replicate_zero_mul (m : Nat) (a : Nat → Fr) :
     ∑ i ∈ Finset.range m, (Array.replicate m Fr.zero)[i]! * a i = 0 :=
   Finset.sum_eq_zero fun j hj => by
     rw [getElem!_pos _ j (by simpa using hj), Array.getElem_replicate]
-    exact zero_mul_zmod _
+    exact zero_mul _
 
 /-- The value of an array of coefficients, as a sum. -/
 theorem evalPolyAt_eq_sum (p : PolynomialCoeff) (x : Fr) :
@@ -298,13 +285,13 @@ theorem sum_weights {R : Type} [CommRing R] [Inhabited R] {numCommitments : Nat}
 
 /-! ## The batch check of cells -/
 
-/-- One term of the identity of the check, over `ZMod r` where `ring` applies. -/
-private theorem cell_term_identity (c i w t h x : ZMod Fr.modulus) :
+/-- One term of the identity of the check. -/
+private theorem cell_term_identity (c i w t h x : Fr) :
     (c - i - w * (t - h)) * x = x * c - x * i + x * h * w - x * w * t := by
   ring
 
 /-- The identity of the check, with the factor `-1` of the generator of `G2`. -/
-private theorem cell_identity {ll rlc rli rlp t : ZMod Fr.modulus}
+private theorem cell_identity {ll rlc rli rlp t : Fr}
     (h : ll * t + (rlc + -rli + rlp) * -1 = 0) : rlc - rli + rlp - ll * t = 0 := by
   linear_combination -h
 
@@ -447,14 +434,14 @@ theorem verifyCellKzgProofBatchImpl_root (laws : Bls.PairingLaws) {s : TrustedSe
       ∑ k ∈ Finset.range n, r ^ k * c commitmentIndices[k]! := by
     rw [hCsz, hW, ← Array.foldl_toList]
     refine hWsum.trans ((congrArg (· + _) (sum_replicate_zero_mul _ c)).trans
-      ((zero_add_zmod _).trans ?_))
+      ((zero_add _).trans ?_))
     refine (sum_zip_toList (M := Fr) commitmentIndices rp hrp.symm (fun e => e.2 * c e.1)).trans ?_
     exact Finset.sum_congr rfl fun k hk => by rw [hpow k (Finset.mem_range.mp hk)]
   have hdsum : ∑ j ∈ Finset.range (s.g1Monomial.toArray.extract 0 FIELD_ELEMENTS_PER_CELL).size,
       sumInterp[j]! * τ ^ j =
       ∑ k ∈ Finset.range n, r ^ k * (cellInterpolant cellIndices[k]! cosetsEvals[k]!).eval τ := by
     rw [hmono, ← evalPolyAt_eq_sum, hsieval]
-    refine (congrArg (· + _) (evalPolyAt_replicate_zero _ τ)).trans ((zero_add_zmod _).trans ?_)
+    refine (congrArg (· + _) (evalPolyAt_replicate_zero _ τ)).trans ((zero_add _).trans ?_)
     refine (sum_zip_toList (M := Fr) shifts (cosetsEvals.zip rp) (hsh.1.trans hzsz.symm)
       (fun e => e.2.2 * interpolationValue τ e.1 e.2.1)).trans ?_
     rw [hsh.1]
@@ -489,6 +476,7 @@ theorem verifyCellKzgProofBatchImpl_root (laws : Bls.PairingLaws) {s : TrustedSe
     Finset.sum_congr rfl fun k _ => cell_term_identity _ _ _ _ _ _
   rw [key, Finset.sum_sub_distrib, Finset.sum_add_distrib, Finset.sum_sub_distrib,
     ← Finset.sum_mul]
+  rw [pow_zero] at hid
   exact cell_identity hid
 
 /-- **An accepted batch of cells is valid, or its challenge is a root.**

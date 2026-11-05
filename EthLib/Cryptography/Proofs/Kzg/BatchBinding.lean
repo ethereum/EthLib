@@ -39,9 +39,6 @@ open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 open Polynomial
 
--- Core's power instance on `Fin` hides Mathlib's power on `Fr`, as in `Proofs.Bls.FrZMod`.
-attribute [-instance] Fin.instNatPow
-
 /-- The polynomial `sum_{i < n} e_i X^i` of the errors `e_i` of `n` checks. -/
 noncomputable def errorPoly (e : Nat → Fr) (n : Nat) : Fr[X] :=
   ∑ i ∈ Finset.range n, C (e i) * X ^ i
@@ -52,7 +49,6 @@ theorem coeff_errorPoly (e : Nat → Fr) (n i : Nat) :
   simp only [errorPoly, finsetSum_coeff, coeff_C_mul_X_pow]
   rw [Finset.sum_ite_eq (Finset.range n) i]
   simp only [Finset.mem_range]
-  rfl
 
 /-- The error polynomial is zero exactly when every error is zero. -/
 theorem errorPoly_eq_zero_iff (e : Nat → Fr) (n : Nat) :
@@ -68,20 +64,17 @@ theorem errorPoly_eq_zero_iff (e : Nat → Fr) (n : Nat) :
     split
     · rename_i hi
       rw [h i hi]
-      rfl
     · rfl
 
 /-- The error polynomial has degree at most `n - 1`. -/
 theorem natDegree_errorPoly_le (e : Nat → Fr) (n : Nat) : (errorPoly e n).natDegree ≤ n - 1 := by
   refine natDegree_le_iff_coeff_eq_zero.mpr fun i hi => ?_
   rw [coeff_errorPoly, ite_eq_right (by omega)]
-  rfl
 
 /-- The value of the error polynomial at `r`, as a sum. -/
 theorem eval_errorPoly (e : Nat → Fr) (n : Nat) (r : Fr) :
     (errorPoly e n).eval r = ∑ i ∈ Finset.range n, e i * r ^ i := by
   simp [errorPoly, eval_finsetSum]
-  rfl
 
 /-- The error of an opening: zero exactly when `c - y = w (τ - z)`. -/
 def openingError (τ c y w z : Fr) : Fr := c - y - w * (τ - z)
@@ -115,13 +108,13 @@ theorem eval_batchErrorPoly (τ : Fr) (c y w z : Nat → Fr) (n : Nat) (r : Fr) 
 
 /-! ## The batch check -/
 
-/-- One term of the identity of the check, over `ZMod r` where `ring` applies. -/
-private theorem term_identity (c y w z t x : ZMod Fr.modulus) :
+/-- One term of the identity of the check. -/
+private theorem term_identity (c y w z t x : Fr) :
     (c - y - w * (t - z)) * x = x * w * -t + (x * (c + -y) + z * x * w) := by
   ring
 
 /-- The factor `1` of the generator of `G2` drops out of the identity of the check. -/
-private theorem add_mul_one_eq_zero {a b : ZMod Fr.modulus} (h : a + b * 1 = 0) : a + b = 0 := by
+private theorem add_mul_one_eq_zero {a b : Fr} (h : a + b * 1 = 0) : a + b = 0 := by
   rwa [mul_one] at h
 
 /-- **The batch check as a scalar identity.**

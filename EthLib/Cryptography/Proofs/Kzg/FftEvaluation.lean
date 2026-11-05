@@ -20,7 +20,6 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
-attribute [-instance] Fin.instNatPow
 
 private theorem fr_mul_pow (a b : Fr) (n : Nat) : (a * b) ^ n = a ^ n * b ^ n := mul_pow a b n
 private theorem fr_pow_mul (a : Fr) (m n : Nat) : a ^ (m * n) = (a ^ m) ^ n := pow_mul a m n

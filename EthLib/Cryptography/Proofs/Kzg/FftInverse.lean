@@ -30,11 +30,6 @@ open EthLib.Cryptography.Bls (Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
 
--- See the note in `Proofs.Bls.FrZMod`: core's `NatPow` instance on `Fin`
--- shadows Mathlib's monoid power on `Fr` and breaks
--- `rw` with Mathlib `pow` lemmas. File-local, so repeated here.
-attribute [-instance] Fin.instNatPow
-
 /-! ## Even/odd splitting of a range sum -/
 
 /-- A sum over `range (2 * m)` splits into its even- and odd-indexed
@@ -55,11 +50,9 @@ theorem sum_range_split_even_odd {M : Type*} [AddCommMonoid M]
 
 /-! ## Orthogonality of roots of unity
 
-These are stated generically over an arbitrary `Field F`. Proving them
-abstractly (rather than directly on `Fr`) avoids the instance-diamond
-friction that arises when Mathlib's group/field `rw` lemmas meet `Fr`'s
-`Fin`-derived structure; we instantiate at `F := Fr` where the round-trip
-needs them. -/
+These are stated generically over an arbitrary `Field F`.
+
+The round trip instantiates them at `F := Fr`. -/
 
 section Orthogonality
 
@@ -132,14 +125,9 @@ theorem getElem!_fftHalve (xs : Array Fr) (start i : Nat)
 
 /-! ## `Fr` algebra bridges
 
-`Fr` carries two definitionally-equal but syntactically-distinct sets of
-algebraic operations: the executable spec's (inherited from `Fin`) and
-Mathlib's scoped `Field` structure. `rw` needs syntactic agreement, and
-the terms produced by `fftFieldAux`/`getElem_fftFieldAux_step` use the
-spec's `*`, `1`, `-`. These bridges restate the Mathlib rewrite lemmas
-with the spec's operations (the proof term supplies the Mathlib lemma,
-type-checked across the definitional gap), so the DFT proof can rewrite
-without ever mixing the two instance families. -/
+These bridges restate the Mathlib rewrite lemmas on `Fr`.
+
+The DFT proof rewrites with them. -/
 
 private theorem fr_pow_zero (a : Fr) : a ^ 0 = 1 := pow_zero a
 private theorem fr_pow_add (a : Fr) (m n : Nat) :
@@ -310,7 +298,7 @@ theorem fftField_fftField_inv {k : Nat} {ω : Fr}
   -- `n = 2 ^ k` is invertible in `Fr`
   have hnz : Fr.ofNat (2 ^ k) ≠ 0 := by
     rw [Bls.Fr.ofNat_eq_natCast, Nat.cast_pow, Nat.cast_two]
-    exact pow_ne_zero k (by decide)
+    exact pow_ne_zero k (Bls.Fr.natCast_ne_zero (by decide) (by decide))
   set y := fftField vals roots false with hy
   have hysize : y.size = 2 ^ k := by rw [hy, size_fftField, hn]
   -- forward transform: y[j] = ∑ i, vals[i] * ω ^ (i * j)
@@ -356,8 +344,7 @@ theorem fftField_fftField_inv {k : Nat} {ω : Fr}
       simp_rw [Bls.Fr.mul_assoc, ← Finset.mul_sum]
       rw [Finset.sum_congr rfl (fun i hi => by
         rw [hinner i (Finset.mem_range.mp hi)])]
-      -- This `0` is `Fin`'s, which core's `Fin.mul_zero` matches and Mathlib's `mul_zero` does not.
-      simp_rw [mul_ite, Fin.mul_zero]
+      simp_rw [mul_ite, mul_zero]
       rw [Finset.sum_ite_eq' (Finset.range (2 ^ k)) m
             (fun i => vals[i]! * ((2 ^ k : Nat) : Fr)),
           ite_eq_left (Finset.mem_range.mpr hm)]
@@ -386,7 +373,7 @@ theorem fftField_inv_fftField {k : Nat} {ω : Fr}
   have hωinv : IsPrimitiveRoot ω⁻¹ (2 ^ k) := hω.inv
   have hnz : Fr.ofNat (2 ^ k) ≠ 0 := by
     rw [Bls.Fr.ofNat_eq_natCast, Nat.cast_pow, Nat.cast_two]
-    exact pow_ne_zero k (by decide)
+    exact pow_ne_zero k (Bls.Fr.natCast_ne_zero (by decide) (by decide))
   have hn0 : ((2 ^ k : Nat) : Fr) ≠ 0 := by
     rw [← Bls.Fr.ofNat_eq_natCast]; exact hnz
   -- inverse transform: y[j] = (∑ i, vals[i] * (ω⁻¹) ^ (i * j)) / n
@@ -434,8 +421,7 @@ theorem fftField_inv_fftField {k : Nat} {ω : Fr}
       simp_rw [Bls.Fr.mul_assoc, ← Finset.mul_sum]
       rw [Finset.sum_congr rfl (fun i hi => by
         rw [hinner i (Finset.mem_range.mp hi)])]
-      -- This `0` is `Fin`'s, which core's `Fin.mul_zero` matches and Mathlib's `mul_zero` does not.
-      simp_rw [mul_ite, Fin.mul_zero]
+      simp_rw [mul_ite, mul_zero]
       rw [Finset.sum_ite_eq (Finset.range (2 ^ k)) m
             (fun i => vals[i]! * ((2 ^ k : Nat) : Fr)),
           ite_eq_left (Finset.mem_range.mpr hm)]
