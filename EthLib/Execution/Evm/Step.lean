@@ -80,4 +80,11 @@ def ternaryOp (cost : Nat) (f : U256 → U256 → U256 → U256) (evm : Evm fork
   let evm ← pushWord evm (f x y z)
   return advance evm
 
+/-- A chain of steps that succeeds succeeded at its first step. -/
+theorem except_bind_eq_ok {α β : Type} {x : Except EvmError α} {f : α → Except EvmError β}
+    {y : β} (h : x >>= f = .ok y) : ∃ a, x = .ok a ∧ f a = .ok y := by
+  cases x with
+  | error => cases h
+  | ok a => exact ⟨a, rfl, h⟩
+
 end EthLib.Execution.Evm

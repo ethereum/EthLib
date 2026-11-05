@@ -11,6 +11,8 @@ A revert keeps the gas left and returns data.
 
 A state that lacks data it must hold stops the whole execution, and is no halt.
 
+So does an opcode whose instruction is not yet specified.
+
 Every other error is an exceptional halt, which consumes all the gas of the frame.
 
 The subsection Exceptional Halting of the Yellow Paper, Shanghai version, lists most of them.
@@ -54,6 +56,15 @@ inductive EvmError where
   | revert
   /-- The state lacks data that it must hold, such as the code of a code hash. -/
   | state (e : State.StateError)
+  /-- The byte is an opcode at the fork, but its instruction is not yet specified here. -/
+  | unspecifiedOpcode (code : UInt8)
   deriving DecidableEq, Repr
+
+/-- Whether an error aborts the whole execution, instead of halting one frame.
+
+A state that lacks data aborts, and so does an opcode whose instruction is not yet specified. -/
+def EvmError.aborts : EvmError → Bool
+  | .state _ | .unspecifiedOpcode _ => true
+  | _ => false
 
 end EthLib.Execution.Evm
