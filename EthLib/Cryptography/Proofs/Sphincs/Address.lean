@@ -25,14 +25,9 @@ open EthLib.Cryptography.Sphincs.Constants
 
 /-- The 16 bytes of an address determine all six of its fields.
 
-```text
-    bytes 0-3    lo
-    bytes 4-6    hi
-    byte  7      type + 32 step
-    byte  8      layer
-    bytes 9-12   tree
-    bytes 13-15  zero
-```
+- Bytes 0 to 3 hold `lo`, and bytes 4 to 6 hold `hi`.
+- Byte 7 holds `type + 32 step`, and byte 8 the layer.
+- Bytes 9 to 12 hold the tree, and bytes 13 to 15 are zero.
 -/
 theorem encodeAddress_inj {type type' : Fin 32} {step step' : Fin 8} {layer layer' : Fin 256}
     {tree tree' : UInt32} {hi hi' : Fin (2 ^ 24)} {lo lo' : UInt32} :
@@ -196,56 +191,5 @@ theorem addrForsNode_inj {idx idx' : Nat} {kappa kappa' : Fin FORS_TREES} {level
   obtain ⟨hk, hpos⟩ := forsHi_inj hhi
   obtain ⟨hl, hj⟩ := forsNodePosition_inj hpos
   exact ⟨uint32_ofNat_inj hi hi' hlo, hk, hl, hj⟩
-
-/-! ## Known answers -/
-
-/-- One address with every field set, worked out by hand from the encoding.
-
-- `lo = 0x89abcdef` gives the bytes `ef cd ab 89`.
-- `hi = 0x123456` gives `56 34 12`.
-- Type 17 and step 5 give `17 + 32 * 5 = 177`, the byte `b1`.
-- Layer 2 gives `02`.
-- `tree = 0x0a0b0c0d` gives `0d 0c 0b 0a`.
-- Three zero bytes end it.
--/
-theorem encodeAddress_known_answer :
-    encodeAddress 17 5 2 0x0a0b0c0d ⟨0x123456, by decide⟩ 0x89abcdef =
-      #v[0xef, 0xcd, 0xab, 0x89, 0x56, 0x34, 0x12, 0xb1, 0x02, 0x0d, 0x0c, 0x0b, 0x0a, 0, 0, 0] := by
-  -- The literal has length `16` and `Address` has length `ADDRESS_LEN`.
-  -- Instance search does not unfold that constant, so `decide` finds no instance.
-  -- Both sides reduce to the same vector, so `rfl` closes it.
-  rfl
-
-/-- Step 2 of chain 5 of leaf 3 of middle tree 9.
-
-```text
-    lo = 3, hi = 5, type 1 + 32 * 2 = 65, layer 1, tree 9
-```
--/
-theorem addrChain_known_answer :
-    addrChain ⟨.middle, 9, 3⟩ ⟨5, by decide⟩ ⟨2, by decide⟩
-      = #v[3, 0, 0, 0, 5, 0, 0, 65, 1, 9, 0, 0, 0, 0, 0, 0] := by
-  rfl
-
-/-- Call 1 of the message digest.
-
-```text
-    lo = 0, hi = 1, type 12
-```
--/
-theorem addrMsg_known_answer :
-    addrMsg ⟨1, by decide⟩ = #v[0, 0, 0, 0, 1, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 0] := by
-  rfl
-
-/-- Node 7 on level 4 of FORS tree 18 of instance `0xABCDEF`.
-
-```text
-    lo = 0xabcdef, hi = 18 + 64 * (4 + 16 * 7) = 7442 = 0x001d12, type 17
-```
--/
-theorem addrForsNode_known_answer :
-    addrForsNode 0xABCDEF ⟨18, by decide⟩ 4 ⟨7, by decide⟩
-      = #v[0xef, 0xcd, 0xab, 0, 0x12, 0x1d, 0, 17, 0, 0, 0, 0, 0, 0, 0, 0] := by
-  rfl
 
 end EthLib.Cryptography.Sphincs

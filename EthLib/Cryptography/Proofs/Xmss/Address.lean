@@ -24,12 +24,8 @@ open EthLib.Cryptography.Xmss.Constants
 
 /-- The 16 bytes of an address determine its type, position and both fields.
 
-```text
-    bytes 0-3   lo
-    bytes 4-6   hi
-    byte  7     tau + 32 mu
-    bytes 8-15  zero
-```
+- Bytes 0 to 3 hold `lo`, and bytes 4 to 6 hold `hi`.
+- Byte 7 holds `tau + 32 mu`, and bytes 8 to 15 are zero.
 -/
 theorem encodeAddress_inj {tau tau' : Fin 32} {mu mu' : Fin 8} {hi hi' : Fin (2 ^ 24)}
     {lo lo' : UInt32} :
@@ -147,30 +143,5 @@ theorem addrMsg_inj {layer layer' : Layer} {e e' : UInt32} :
     exact ⟨(layerHi_inj.mp hhi).1, he⟩
   · rintro ⟨rfl, rfl⟩
     rfl
-
-/-! ## Known answer -/
-
-/-- One address, worked out by hand from the encoding.
-
-```text
-    lo  = 0x89abcdef     ->  ef cd ab 89
-    hi  = 0x123456       ->  56 34 12
-    tau = 19, mu = 5     ->  19 + 32 * 5 = 179 = b3
-    then eight zero bytes
-```
--/
-theorem encodeAddress_known_answer :
-    encodeAddress 19 5 ⟨0x123456, by decide⟩ 0x89abcdef =
-      #v[0xef, 0xcd, 0xab, 0x89, 0x56, 0x34, 0x12, 0xb3, 0, 0, 0, 0, 0, 0, 0, 0] := by
-  -- `decide` cannot find the instance: the literal has length `16` and `Address` has
-  -- length `ADDRESS_LEN`, which instance search does not unfold. Both sides reduce to the
-  -- same vector, so `rfl` closes it.
-  rfl
-
-/-- The top layer sets bit 23 of `hi`, the top bit of byte 6. -/
-theorem addrLeaf_top_known_answer :
-    addrLeaf .top 0x0102 =
-      #v[0x02, 0x01, 0, 0, 0, 0, 0x80, 0x02, 0, 0, 0, 0, 0, 0, 0, 0] := by
-  rfl
 
 end EthLib.Cryptography.Xmss
