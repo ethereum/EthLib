@@ -33,12 +33,14 @@ def test_every_group_has_a_runner_or_a_plan() -> None:
 # Runnable groups that keep no vendored case, each with the reason.
 # A mainnet state case is a few megabytes, so the weekly archive run alone reads them; the
 # minimal state cases are vendored, and test_ssz_static decodes an empty mainnet state.
-# A mainnet operation case holds two states of a few hundred kilobytes, for the same reason.
+# A mainnet operation or fork case holds two states of a few hundred kilobytes, for the same
+# reason.
 # The custody cases of Gloas and Heze repeat those of Fulu, and only the fork name in their
 # manifest differs, so only the Fulu cases are vendored.
 NOT_VENDORED = {f"mainnet/{fork}/ssz_static/BeaconState" for fork in
                 ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu",
                  "gloas")} | {
+    f"mainnet/{fork}/fork/fork" for fork in ("gloas", "heze")} | {
     f"mainnet/{fork}/operations/{handler}" for handler, (_, forks) in OPERATIONS.items()
     for fork in forks} | {
     f"{preset}/{fork}/networking/{handler}" for preset in ("mainnet", "minimal")

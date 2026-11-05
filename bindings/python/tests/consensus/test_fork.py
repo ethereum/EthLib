@@ -1,5 +1,8 @@
 """The fork upgrades of EthLib against the fork vectors of consensus-specs."""
 
+import hashlib
+from pathlib import Path
+
 import archives
 import pytest
 from ruamel.yaml import YAML
@@ -10,8 +13,10 @@ from ethlib.networking import snappy
 from .containers import FORKS
 from .test_data_column import replacements
 
+FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "fork"
+
 # The forks whose upgrade EthLib holds, each from the fork before it.
-UPGRADES = ("gloas",)
+UPGRADES = ("gloas", "heze")
 
 # The release archives that hold the cases.
 ARCHIVES = {
@@ -39,6 +44,16 @@ def run_case(preset: str, fork: str, case) -> None:
     assert got == snappy.decompress((case / "post.ssz_snappy").read_bytes())
 
 
+def _cases() -> list:
+    """Every vendored case, as its preset, fork and directory."""
+    cases = []
+    for pre in sorted(FILES.rglob("pre.ssz_snappy")):
+        case = pre.parent
+        preset, fork = case.relative_to(FILES).parts[:2]
+        cases.append(pytest.param(preset, fork, case, id=case.relative_to(FILES).as_posix()))
+    return cases
+
+
 def _archive_cases() -> list:
     """Every upgrade case of the archives that EthLib runs, when the cache is set."""
     if archives.CACHE is None:
@@ -60,6 +75,21 @@ def _archive_cases() -> list:
     return cases
 
 
+def test_digests():
+    lines = (FILES / "SHA256SUMS").read_text().splitlines()
+    entries = [line.split() for line in lines if not line.startswith("#")]
+    assert len(entries) == sum(1 for path in FILES.rglob("*") if path.is_file()
+                               and path.name != "SHA256SUMS")
+    for digest, name in entries:
+        assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name
+
+
+@pytest.mark.parametrize("preset, fork, case", _cases())
+def test_case(preset, fork, case):
+    assert runs(fork)
+    run_case(preset, fork, case)
+
+
 @pytest.mark.parametrize("preset, fork, case", _archive_cases())
 def test_archive_case(preset, fork, case):
     run_case(preset, fork, case)
@@ -75,3 +105,16 @@ def test_undecodable_state():
     with pytest.raises(consensus.TransitionError) as info:
         consensus.upgrade_state("minimal", "glamsterdam", b"")
     assert info.value.code == 0
+
+
+def test_heze_needs_every_contract_deposit():
+    case = FILES / "minimal/heze/fork/fork/pyspec_tests/fork_base_state"
+    pre = bytearray(snappy.decompress((case / "pre.ssz_snappy").read_bytes()))
+    # The fixed fields and offsets of the Gloas state that come before eth1_deposit_index.
+    roots = consensus.preset("minimal")["SLOTS_PER_HISTORICAL_ROOT"]
+    at = 8 + 32 + 8 + 16 + 112 + 2 * 32 * roots + 4 + 72 + 4
+    processed = int.from_bytes(pre[at:at + 8], "little")
+    pre[at:at + 8] = (processed + 1).to_bytes(8, "little")
+    with pytest.raises(consensus.TransitionError) as info:
+        consensus.upgrade_state("minimal", "hegota", bytes(pre))
+    assert info.value.code == 33

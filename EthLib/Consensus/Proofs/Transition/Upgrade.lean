@@ -17,6 +17,12 @@ Each pending deposit stays in the queue, funds a builder with its amount, or is 
 A deposit is dropped only when it has builder credentials and an invalid signature.
 
 So the builder balances and the queue together hold at most the value of the queue before.
+
+The upgrade of a Gloas state to Heze succeeds exactly when every contract deposit is processed.
+
+It then keeps every Gloas field that Heze keeps, each list as the same sequence.
+
+The latest bid differs from the Gloas bid only by its inclusion list bits, which are all unset.
 -/
 
 @[expose] public section
@@ -194,5 +200,131 @@ theorem upgradeToGloas_spec {pre : BeaconState preset .fusaka}
   obtain ⟨window, -, onboarded⟩ := bind_ok_iff.mp rest
   obtain ⟨⟨builders, pending, rfl⟩, -⟩ := onboardBuildersFromPendingDeposits_spec onboarded
   exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+/-- The upgraded bid keeps every field of the Gloas bid, and sets no inclusion list bit. -/
+theorem upgradeBidToHeze_spec (bid : ExecutionPayloadBid preset .glamsterdam) :
+    (upgradeBidToHeze bid).parentBlockHash = bid.parentBlockHash ∧
+      (upgradeBidToHeze bid).parentBlockRoot = bid.parentBlockRoot ∧
+      (upgradeBidToHeze bid).blockHash = bid.blockHash ∧
+      (upgradeBidToHeze bid).prevRandao = bid.prevRandao ∧
+      (upgradeBidToHeze bid).feeRecipient = bid.feeRecipient ∧
+      (upgradeBidToHeze bid).gasLimit = bid.gasLimit ∧
+      (upgradeBidToHeze bid).builderIndex = bid.builderIndex ∧
+      (upgradeBidToHeze bid).slot = bid.slot ∧
+      (upgradeBidToHeze bid).value = bid.value ∧
+      (upgradeBidToHeze bid).executionPayment = bid.executionPayment ∧
+      (upgradeBidToHeze bid).blobKzgCommitments.data = bid.blobKzgCommitments.data ∧
+      (upgradeBidToHeze bid).executionRequestsRoot = bid.executionRequestsRoot ∧
+      ∀ i : Fin preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat,
+        ((upgradeBidToHeze bid).inclusionListBits (by decide)).bits[i] = false := by
+  refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun i => ?_⟩
+  simp [upgradeBidToHeze]
+
+/-- Two Gloas bids with the same upgraded bid are equal. -/
+theorem upgradeBidToHeze_injective :
+    Function.Injective (upgradeBidToHeze (preset := preset)) := by
+  rintro ⟨_, _, _, _, _, _, _, _, _, _, ⟨data, bound⟩, _, bits⟩
+    ⟨_, _, _, _, _, _, _, _, _, _, ⟨data', bound'⟩, _, bits'⟩ same
+  simp only [upgradeBidToHeze, toHezeList] at same
+  obtain ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, -⟩ := same
+  -- Before Heze the bits field holds nothing, so the two functions are equal.
+  have : bits = bits' := funext fun later => absurd later (by decide)
+  subst this
+  rfl
+
+/-- The upgrade to Heze carries the registry, the balances, the scores and the queues.
+
+Each list keeps its elements, in order. -/
+theorem upgradeHezeFields_lists (pre : BeaconState preset .glamsterdam) :
+    (upgradeHezeFields config pre).validators.data = pre.validators.data ∧
+      (upgradeHezeFields config pre).balances.data = pre.balances.data ∧
+      ((upgradeHezeFields config pre).previousEpochParticipation (by decide)).data =
+        (pre.previousEpochParticipation (by decide)).data ∧
+      ((upgradeHezeFields config pre).currentEpochParticipation (by decide)).data =
+        (pre.currentEpochParticipation (by decide)).data ∧
+      ((upgradeHezeFields config pre).inactivityScores (by decide)).data =
+        (pre.inactivityScores (by decide)).data ∧
+      ((upgradeHezeFields config pre).pendingDeposits (by decide)).data =
+        (pre.pendingDeposits (by decide)).data ∧
+      ((upgradeHezeFields config pre).pendingPartialWithdrawals (by decide)).data =
+        (pre.pendingPartialWithdrawals (by decide)).data ∧
+      ((upgradeHezeFields config pre).pendingConsolidations (by decide)).data =
+        (pre.pendingConsolidations (by decide)).data ∧
+      ((upgradeHezeFields config pre).payloadExpectedWithdrawals (by decide)).data =
+        (pre.payloadExpectedWithdrawals (by decide)).data :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+/-- The upgrade to Heze keeps every field of a Gloas state whose type does not change.
+
+The fork version moves to Heze at the current epoch.
+
+The Gloas version becomes the previous one. -/
+theorem upgradeHezeFields_kept (pre : BeaconState preset .glamsterdam) :
+    let post := upgradeHezeFields config pre
+    post.genesisTime = pre.genesisTime ∧
+      post.genesisValidatorsRoot = pre.genesisValidatorsRoot ∧ post.slot = pre.slot ∧
+      post.forkVersions =
+        ⟨pre.forkVersions.currentVersion, config.HEZE_FORK_VERSION, getCurrentEpoch pre⟩ ∧
+      post.latestBlockHeader = pre.latestBlockHeader ∧ post.blockRoots = pre.blockRoots ∧
+      post.stateRoots = pre.stateRoots ∧ post.historicalRoots = pre.historicalRoots ∧
+      post.randaoMixes = pre.randaoMixes ∧ post.slashings = pre.slashings ∧
+      post.justificationBits = pre.justificationBits ∧
+      post.previousJustifiedCheckpoint = pre.previousJustifiedCheckpoint ∧
+      post.currentJustifiedCheckpoint = pre.currentJustifiedCheckpoint ∧
+      post.finalizedCheckpoint = pre.finalizedCheckpoint ∧
+      post.currentSyncCommittee (by decide) = pre.currentSyncCommittee (by decide) ∧
+      post.nextSyncCommittee (by decide) = pre.nextSyncCommittee (by decide) ∧
+      post.latestBlockHash (by decide) = pre.latestBlockHash (by decide) ∧
+      post.nextWithdrawalIndex (by decide) = pre.nextWithdrawalIndex (by decide) ∧
+      post.nextWithdrawalValidatorIndex (by decide) =
+        pre.nextWithdrawalValidatorIndex (by decide) ∧
+      post.historicalSummaries (by decide) = pre.historicalSummaries (by decide) ∧
+      post.depositBalanceToConsume (by decide) = pre.depositBalanceToConsume (by decide) ∧
+      post.exitBalanceToConsume (by decide) = pre.exitBalanceToConsume (by decide) ∧
+      post.earliestExitEpoch (by decide) = pre.earliestExitEpoch (by decide) ∧
+      post.consolidationBalanceToConsume (by decide) =
+        pre.consolidationBalanceToConsume (by decide) ∧
+      post.earliestConsolidationEpoch (by decide) = pre.earliestConsolidationEpoch (by decide) ∧
+      post.proposerLookahead (by decide) = pre.proposerLookahead (by decide) ∧
+      post.builders (by decide) = pre.builders (by decide) ∧
+      post.nextWithdrawalBuilderIndex (by decide) = pre.nextWithdrawalBuilderIndex (by decide) ∧
+      post.executionPayloadAvailability (by decide) =
+        pre.executionPayloadAvailability (by decide) ∧
+      post.builderPendingPayments (by decide) = pre.builderPendingPayments (by decide) ∧
+      post.builderPendingWithdrawals (by decide) = pre.builderPendingWithdrawals (by decide) ∧
+      post.latestExecutionPayloadBid (by decide) =
+        upgradeBidToHeze (pre.latestExecutionPayloadBid (by decide)) ∧
+      post.ptcWindow (by decide) = pre.ptcWindow (by decide) :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl,
+    rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+/-- The upgrade to Heze succeeds exactly when the two deposit indices are equal.
+
+The first counts the processed deposits, and the second is the index of the first deposit request.
+
+The result is then the state with the carried fields. -/
+theorem upgradeToHeze_ok_iff {pre : BeaconState preset .glamsterdam}
+    {post : BeaconState preset .hegota} :
+    upgradeToHeze config pre = .ok post ↔
+      pre.eth1DepositIndex (by decide) = pre.depositRequestsStartIndex (by decide) ∧
+        post = upgradeHezeFields config pre := by
+  simp only [upgradeToHeze, bind_ok_iff, ensure_ok_iff, pure, Except.pure, Except.ok.injEq]
+  constructor
+  · rintro ⟨_, equal, rfl⟩
+    exact ⟨equal, rfl⟩
+  · rintro ⟨equal, rfl⟩
+    exact ⟨(), equal, rfl⟩
+
+/-- The upgrade to Heze fails exactly when the two deposit indices differ, with both indices. -/
+theorem upgradeToHeze_error_iff {pre : BeaconState preset .glamsterdam}
+    {error : TransitionError} :
+    upgradeToHeze config pre = .error error ↔
+      pre.eth1DepositIndex (by decide) ≠ pre.depositRequestsStartIndex (by decide) ∧
+        error = .depositIndicesDiffer (pre.eth1DepositIndex (by decide))
+          (pre.depositRequestsStartIndex (by decide)) := by
+  dsimp only [upgradeToHeze, ensure]
+  by_cases equal : pre.eth1DepositIndex (by decide) = pre.depositRequestsStartIndex (by decide)
+  · simp [equal, bind, Except.bind, pure, Except.pure]
+  · simp [equal, bind, Except.bind, eq_comm]
 
 end EthLib.Consensus

@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: fork
+handler: fork
+suite: pyspec_tests
+case: fork_invalid_builder_deposit_followed_by_valid_builder_deposit
