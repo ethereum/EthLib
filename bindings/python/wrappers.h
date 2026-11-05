@@ -387,5 +387,6 @@ PyObject* py_state_rewards_root                           (PyObject* self, PyObj
 PyObject* py_mainnet_active_fork                          (PyObject* self, PyObject* args);
 
 PyObject* py_engine_new_payload                          (PyObject* self, PyObject* args);
+PyObject* py_engine_forkchoice_updated                   (PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */

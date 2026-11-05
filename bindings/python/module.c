@@ -684,6 +684,8 @@ static PyMethodDef methods[] = {
   {"state_rewards_root", py_state_rewards_root, METH_VARARGS, DOC_state_rewards_root},
   {"mainnet_active_fork", py_mainnet_active_fork, METH_VARARGS, DOC_mainnet_active_fork},
   {"engine_new_payload", py_engine_new_payload, METH_VARARGS, DOC_engine_new_payload},
+  {"engine_forkchoice_updated", py_engine_forkchoice_updated, METH_VARARGS,
+   DOC_engine_forkchoice_updated},
   {NULL, NULL, 0, NULL},
 };
 

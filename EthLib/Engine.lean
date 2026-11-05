@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Engine.Block
+public import EthLib.Engine.ForkchoiceUpdated
 public import EthLib.Engine.Json
 public import EthLib.Engine.NewPayload
 public import EthLib.Engine.Payload

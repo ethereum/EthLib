@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Engine.Exports.ForkchoiceUpdated
 public import EthLib.Engine.Exports.NewPayload
 
 /-!

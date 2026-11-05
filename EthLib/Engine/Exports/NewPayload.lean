@@ -71,8 +71,8 @@ def reasonMessage : PayloadError → String
     s!"block hash {hex expected.toList}, header hash {hex computed.toList}"
   | .wrongVersionedHashes => "the expected versioned hashes are not those of the block"
 
-/-- The JSON text of a payload status, with the code of its reason first in the error. -/
-def statusJson (status : PayloadStatus) (reason : Option PayloadError) : String :=
+/-- The JSON of a payload status, with the code of its reason first in the error. -/
+def statusJson (status : PayloadStatus) (reason : Option PayloadError) : Json :=
   let latest := match status.latestValidHash with
     | some h => Json.str (hex h.toList)
     | none => .null
@@ -80,7 +80,7 @@ def statusJson (status : PayloadStatus) (reason : Option PayloadError) : String 
     | some e => Json.str s!"{e.code}: {reasonMessage e}"
     | none => .null
   (Json.mkObj [("status", status.status.name), ("latestValidHash", latest),
-    ("validationError", error)]).compress
+    ("validationError", error)])
 
 /-- The version of a method name `engine_newPayloadV1` to `engine_newPayloadV4`. -/
 def newPayloadVersion (method : String) : Option Nat :=
@@ -97,7 +97,7 @@ def newPayloadExport (config request : ByteArray) : Result ByteArray := do
   let some version := newPayloadVersion method | throw (0, s!"no method {method}")
   let params := request.getObjValD "params"
   match newPayloadWithoutState config version params with
-  | .ok (status, reason) => return (statusJson status reason).toUTF8
+  | .ok (status, reason) => return (statusJson status reason).compress.toUTF8
   | .error e => throw (e.code, s!"engine error: {reprStr e}")
 
 end EthLib.Engine.Exports
