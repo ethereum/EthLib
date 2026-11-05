@@ -3388,6 +3388,21 @@
    "docstring":
    "Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request`\nof eth/71 on, given the access list hash of each requested block."},
   {"summary":
+   "The checks that [EIP-7975](https://eips.ethereum.org/EIPS/eip-7975#specification) asks of the receipts of a block that arrive in parts.",
+   "signature":
+   "(gas_limits: bytes, block_gas_limit: int, receipts: bytes) -> bool",
+   "operation": "EthLib.Execution.Network.checkPartialReceipts",
+   "method": "eth_check_partial_receipts",
+   "errors":
+   [{"type": "EthLib.Execution.Network.PartialReceiptsError",
+     "codes":
+     [{"constructor": "tooMany", "code": 501},
+      {"constructor": "receiptTooLarge", "code": 502},
+      {"constructor": "totalTooLarge", "code": 503}]}],
+   "error_class": "EthWireError",
+   "docstring":
+   "The checks that [EIP-7975](https://eips.ethereum.org/EIPS/eip-7975#specification) asks of the\nreceipts of a block that arrive in parts.\n\n`gasLimits` holds the gas limit of each transaction of the block, in order.\n\n`sizes` holds the size in bytes of each receipt delivered so far, from the first one.\n\n- No more receipts than transactions; the list is complete when there are as many.\n\nThe EIP asks that the count of receipts \"matches\" the count of transactions.\n\nA list still in parts has fewer, so EthLib reads the rule as \"at most\" until the list is complete.\n\n- Each receipt is at most the gas limit of its transaction divided by 8.\n- All the receipts together are at most the gas limit of the block divided by 8.\n\nThe EIP says only \"allowed by the block gas limit\" for the total, so EthLib applies the bound of\none transaction to the whole block, as its Rationale derives that bound from the gas."},
+  {"summary":
    "The canonical data of the message with the ID `id` and the data `data`, on a version.",
    "signature": "(version: int, id: int, data: bytes) -> bytes",
    "operation": "EthLib.Execution.Network.Snap.Exports.decodeExport",

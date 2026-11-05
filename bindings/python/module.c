@@ -664,6 +664,7 @@ static PyMethodDef methods[] = {
   {"eth_wire_hash", py_eth_wire_hash, METH_VARARGS, DOC_eth_wire_hash},
   {"eth_receipts_match", py_eth_receipts_match, METH_VARARGS, DOC_eth_receipts_match},
   {"eth_access_lists_answer", py_eth_access_lists_answer, METH_VARARGS, DOC_eth_access_lists_answer},
+  {"eth_check_partial_receipts", py_eth_check_partial_receipts, METH_VARARGS, DOC_eth_check_partial_receipts},
   {"snap_message_decode", py_snap_message_decode, METH_VARARGS, DOC_snap_message_decode},
   {"snap_codes_answer", py_snap_codes_answer, METH_VARARGS, DOC_snap_codes_answer},
   {"snap_access_lists_answer", py_snap_access_lists_answer, METH_VARARGS, DOC_snap_access_lists_answer},

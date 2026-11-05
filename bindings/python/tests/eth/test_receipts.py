@@ -13,6 +13,7 @@ from ethlib.execution.network import (
     GET_RECEIPTS,
     RECEIPTS,
     EthWireError,
+    check_partial_receipts,
     decode_message,
     receipts_match,
 )
@@ -119,3 +120,31 @@ def test_wrong_form(version: int, message_id: int, data: bytes) -> None:
     with pytest.raises(EthWireError) as info:
         decode_message(version, message_id, data)
     assert info.value.code == 2
+
+
+# The checks of a partial list from EIP-7975 "Specification".
+GAS_LIMITS = rlp.encode([_p(21000), _p(40), _p(21000)])
+# Each receipt below has 7 bytes: c7 02 01 82 52 08 c0.
+
+
+@pytest.mark.parametrize(
+    "receipts, block_gas_limit, code",
+    [
+        # Two of three receipts, each within 21000 / 8 = 2625 bytes.
+        ([[_p(2), _p(1), _p(21000), []]] * 1, 30_000_000, None),
+        # The second transaction has gas limit 40, so its receipt may have 5 bytes at most.
+        ([[_p(2), _p(1), _p(21000), []]] * 2, 30_000_000, 502),
+        # Four receipts for three transactions.
+        ([[_p(2), _p(1), _p(21000), []]] * 4, 30_000_000, 501),
+        # A block gas limit of 40 allows 5 bytes in total.
+        ([[_p(2), _p(1), _p(21000), []]] * 1, 40, 503),
+    ],
+)
+def test_partial_receipts(receipts: list, block_gas_limit: int, code) -> None:
+    data = rlp.encode(receipts)
+    if code is None:
+        check_partial_receipts(GAS_LIMITS, block_gas_limit, data)
+    else:
+        with pytest.raises(EthWireError) as info:
+            check_partial_receipts(GAS_LIMITS, block_gas_limit, data)
+        assert info.value.code == code
