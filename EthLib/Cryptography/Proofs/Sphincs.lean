@@ -32,6 +32,7 @@ public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.LabLeaf
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.LabTree
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.LabFors
 public import EthLib.Cryptography.Proofs.Sphincs.SignatureFailure
+public import EthLib.Cryptography.Proofs.Sphincs.Security
 
 /-!
 # Proofs: leanSPHINCS
