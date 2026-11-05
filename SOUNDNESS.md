@@ -371,11 +371,16 @@ Wagner and Zapico, ePrint 2025/1683, Definition 1, write the bilinear strong Dif
 `IsArsdhSolution` in the same file is the winning condition of adaptive rational strong Diffie–Hellman, Definition 2 there.
 These are winning conditions for a fixed secret, not the assumptions.
 They model neither the adversary's input nor its advantage, and the hardness of each problem stays an informal hypothesis.
-No theorem in this version reduces a property to ARSDH.
 `multiproof_batching` (`Proofs/Kzg/MultiproofBatching.lean`) proves Lemma 2 of 2025/1683, the multiproof batching lemma, over any field.
 In place of the paper's cosets, it assumes that the vanishing polynomial of `S - S_j` is constant on each part `S_j`, and that the parts are nonempty.
 `eval_nodal_cellNodes` (`Proofs/Kzg/CellBatching.lean`) is Lemma 1: on cell `i`, the vanishing polynomial of cell `j` takes the value `h_i^64 - h_j^64`.
 `cell_multiproof_batching` in the same file applies Lemma 2 to a set of cells.
+`code_binding` (`Proofs/Kzg/CodeBinding.lean`) is the deterministic core of Lemma 4, code-binding.
+Let exactly 64 cells and one more cell satisfy the scalar equation of a valid cell for one commitment.
+Then all 65 cells take the values of one polynomial of degree below 4096.
+Otherwise a search returns a bilinear strong Diffie–Hellman solution, or a second search returns a `(4095, 64)`-ARSDH winning solution.
+Both searches read only the setup, the commitment, the cells and the proofs.
+The bound of Lemma 4 on the advantages, and the running times of the searches, are not formalized.
 No theorem states what the batch check of blobs returns on accepted input.
 
 `findSdh_valid_bytes` (`Proofs/Kzg/Binding.lean`) is the evaluation binding of single proofs.
