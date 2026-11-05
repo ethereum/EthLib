@@ -60,6 +60,11 @@ jobs:
           - suite: parity-consensus
             bindings: true
             run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_consensus.py
+          # Every legacy blockchain test from Frontier to London, with the proof of work of each
+          # sealed block.
+          - suite: parity-legacy
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_legacy.py
           # Every AES-GCM case of the NIST CAVP files, of which ci.yml runs an excerpt.
           - suite: nist-cavp
             bindings: true
