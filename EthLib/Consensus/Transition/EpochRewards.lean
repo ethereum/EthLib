@@ -1,11 +1,12 @@
 module
 
+public import EthLib.Consensus.Participation
 public import EthLib.Consensus.Transition.EpochJustification
 
 /-!
 # `Consensus.Transition.EpochRewards`
 
-The rewards and penalties of the attesters of the previous epoch, before Altair.
+The rewards and penalties of the attesters of the previous epoch.
 
 Each eligible validator gets a base reward, which shrinks as the active balance grows.
 
@@ -27,7 +28,15 @@ A validator that missed the target also pays a penalty that grows with the delay
 
 The first epoch has no rewards.
 
-A 64-bit overflow or underflow is an error.
+From Altair the state keeps participation flags instead of attestations.
+
+Outside a leak, a flag earns its weight of the base reward, scaled by the balance that set it.
+
+A validator that missed the source or the target pays its weight of the base reward.
+
+A validator that missed the target also pays for its inactivity score.
+
+A 64-bit overflow or underflow is an error, and so is a division by zero.
 -/
 
 @[expose] public section
@@ -37,22 +46,6 @@ namespace EthLib.Consensus
 open Base Uint64 Serialization.Ssz
 
 variable {preset : Preset} {fork : Base.Fork}
-
-/-- The base reward of an effective balance, under a total active balance.
-
-The square root of the total divides it, so the issuance grows with the square root of the stake.
--/
-def baseReward (preset : Preset) (totalActiveBalance effectiveBalance : Gwei) :
-    Except TransitionError Gwei := do
-  let scaled ← liftAccessor (liftArith (mulChecked effectiveBalance preset.BASE_REWARD_FACTOR))
-  return scaled / integerSquareroot totalActiveBalance / BASE_REWARDS_PER_EPOCH
-
-/-- Before Altair: the base reward of a validator.
-
-The caller reads the total active balance of the state once, and passes it for every validator. -/
-def baseRewardOf (state : BeaconState preset fork) (totalActiveBalance : Gwei)
-    (index : ValidatorIndex) : Except TransitionError Gwei := do
-  baseReward preset totalActiveBalance (← liftAccessor (getValidator state index)).effectiveBalance
 
 /-- The share of a base reward that goes to the proposer that includes the vote. -/
 def proposerReward (preset : Preset) (baseReward : Gwei) : Gwei :=
@@ -129,7 +122,7 @@ def getAttestationComponentDeltas (state : BeaconState preset fork)
   let zeros : Array Gwei := Array.replicate size 0
   (← getEligibleValidatorIndices state).foldlM (init := (zeros, zeros))
     fun (rewards, penalties) index => do
-      let base ← baseRewardOf state total index
+      let base ← liftAccessor (getBaseReward state total index)
       let (reward, penalty) ←
         componentDelta state (matched.getD index.toNat false) base attestingBalance total
       return (← addDelta rewards index reward, ← addDelta penalties index penalty)
@@ -177,7 +170,7 @@ def addInclusionReward (state : BeaconState preset fork) (totalActiveBalance : G
     (index : ValidatorIndex) : Except TransitionError (Array Gwei) := do
   let some attestation := earliest.getD index.toNat none
     | throw (.accessor (.indexOutOfRange index))
-  let base ← baseRewardOf state totalActiveBalance index
+  let base ← liftAccessor (getBaseReward state totalActiveBalance index)
   let rewards ← addDelta rewards attestation.proposerIndex (proposerReward preset base)
   let maxAttesterReward ← liftAccessor (liftArith (subChecked base (proposerReward preset base)))
   ensure (attestation.inclusionDelay ≠ 0) .zeroInclusionDelay
@@ -207,7 +200,7 @@ That product is divided by a fixed quotient. -/
 def addInactivityPenalty (state : BeaconState preset fork) (totalActiveBalance : Gwei)
     (finalityDelay : Epoch) (targetMatched : Array Bool) (penalties : Array Gwei)
     (index : ValidatorIndex) : Except TransitionError (Array Gwei) := do
-  let base ← baseRewardOf state totalActiveBalance index
+  let base ← liftAccessor (getBaseReward state totalActiveBalance index)
   let full ← liftAccessor (liftArith (mulChecked BASE_REWARDS_PER_EPOCH base))
   let paidBack ← liftAccessor (liftArith (subChecked full (proposerReward preset base)))
   let penalties ← addDelta penalties index paidBack
@@ -217,23 +210,105 @@ def addInactivityPenalty (state : BeaconState preset fork) (totalActiveBalance :
     let scaled ← liftAccessor (liftArith (mulChecked validator.effectiveBalance finalityDelay))
     addDelta penalties index (scaled / (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT)
 
-/-- Before Altair: the penalties of each validator for inactivity.
+/-- From Altair: the inactivity penalty of one eligible validator that missed the target.
 
-Only a leak has them, and they fall on the eligible validators. -/
-def getInactivityPenaltyDeltas (state : BeaconState preset fork) (before : fork < .altair) :
+It pays its effective balance times its inactivity score.
+
+That product is divided by the score bias times a fixed quotient. -/
+def addInactivityScorePenalty (config : Config) (state : BeaconState preset fork)
+    (altair : .altair ≤ fork) (targetMatched : Array Bool) (penalties : Array Gwei)
+    (index : ValidatorIndex) : Except TransitionError (Array Gwei) :=
+  if targetMatched.getD index.toNat false then pure penalties
+  else do
+    let validator ← liftAccessor (getValidator state index)
+    let some score := (state.inactivityScores altair).data[index.toNat]?
+      | throw (.accessor (.indexOutOfRange index))
+    let numerator ← liftAccessor (liftArith (mulChecked validator.effectiveBalance score))
+    let denominator ← liftAccessor (liftArith (mulChecked config.INACTIVITY_SCORE_BIAS
+      (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT))
+    addDelta penalties index (← liftAccessor (liftArith (divChecked numerator denominator)))
+
+/-- The penalties of each validator for inactivity.
+
+Before Altair only a leak has them, and they fall on the eligible validators.
+
+From Altair they fall on the eligible validators that missed the target, in a leak or not.
+
+There are no rewards. -/
+def getInactivityPenaltyDeltas (config : Config) (state : BeaconState preset fork) :
     Except TransitionError (Array Gwei × Array Gwei) := do
   let size := state.validators.data.size
-  let leak ← isInInactivityLeak state
-  if leak then
-    let attestations ← getMatchingTargetAttestations state before (getPreviousEpoch state)
-    let attesters ← liftAccessor (getUnslashedAttestingIndices state attestations)
-    let targetMatched := markIndices size attesters
-    let total ← liftAccessor (getTotalActiveBalance state)
-    let delay ← getFinalityDelay state
+  if altair : .altair ≤ fork then
+    let matching ← liftAccessor (getUnslashedParticipatingIndices state altair
+      TIMELY_TARGET_FLAG_INDEX (getPreviousEpoch state))
     let penalties ← (← getEligibleValidatorIndices state).foldlM
-      (addInactivityPenalty state total delay targetMatched) (Array.replicate size 0)
+      (addInactivityScorePenalty config state altair (markIndices size matching))
+      (Array.replicate size 0)
     return (Array.replicate size 0, penalties)
-  else return (Array.replicate size 0, Array.replicate size 0)
+  else
+    let leak ← isInInactivityLeak state
+    if leak then
+      let attestations ← getMatchingTargetAttestations state (Nat.lt_of_not_le altair)
+        (getPreviousEpoch state)
+      let attesters ← liftAccessor (getUnslashedAttestingIndices state attestations)
+      let targetMatched := markIndices size attesters
+      let total ← liftAccessor (getTotalActiveBalance state)
+      let delay ← getFinalityDelay state
+      let penalties ← (← getEligibleValidatorIndices state).foldlM
+        (addInactivityPenalty state total delay targetMatched) (Array.replicate size 0)
+      return (Array.replicate size 0, penalties)
+    else return (Array.replicate size 0, Array.replicate size 0)
+
+/-- From Altair: the reward and the penalty of one eligible validator for one flag.
+
+A validator that set the flag earns nothing in a leak.
+
+Otherwise it earns the weight of the flag in its base reward, scaled by the share that set it.
+
+That share is the balance that set the flag over the active balance, both in whole increments.
+
+A validator that did not set the flag pays the weight of the flag in its base reward.
+
+The head flag has no penalty.
+
+The leak is read only for a validator that set the flag. -/
+def addFlagDelta (state : BeaconState preset fork)
+    (flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length) (participated : Array Bool)
+    (totalActiveBalance participatingIncrements activeIncrements : Gwei)
+    (deltas : Array Gwei × Array Gwei) (index : ValidatorIndex) :
+    Except TransitionError (Array Gwei × Array Gwei) := do
+  let (rewards, penalties) := deltas
+  let weight := PARTICIPATION_FLAG_WEIGHTS[flagIndex]
+  let base ← liftAccessor (getBaseReward state totalActiveBalance index)
+  if participated.getD index.toNat false then
+    if ← isInInactivityLeak state then return (rewards, penalties)
+    else
+      let numerator ← liftAccessor (liftArith do
+        mulChecked (← mulChecked base weight) participatingIncrements)
+      let denominator ← liftAccessor (liftArith (mulChecked activeIncrements WEIGHT_DENOMINATOR))
+      let reward ← liftAccessor (liftArith (divChecked numerator denominator))
+      return (← addDelta rewards index reward, penalties)
+  else if flagIndex.val.toUInt64 = TIMELY_HEAD_FLAG_INDEX then return (rewards, penalties)
+  else
+    let scaled ← liftAccessor (liftArith (mulChecked base weight))
+    return (rewards, ← addDelta penalties index (scaled / WEIGHT_DENOMINATOR))
+
+/-- From Altair: the rewards and penalties of each validator for one participation flag.
+
+The flag is the one that the votes of the previous epoch set. -/
+def getFlagIndexDeltas (state : BeaconState preset fork) (altair : .altair ≤ fork)
+    (flagIndex : Fin PARTICIPATION_FLAG_WEIGHTS.length) :
+    Except TransitionError (Array Gwei × Array Gwei) := do
+  let size := state.validators.data.size
+  let participating ← liftAccessor (getUnslashedParticipatingIndices state altair
+    flagIndex.val.toUInt64 (getPreviousEpoch state))
+  let participatingBalance ← liftAccessor (getTotalBalance state participating)
+  let total ← liftAccessor (getTotalActiveBalance state)
+  let increment := preset.EFFECTIVE_BALANCE_INCREMENT
+  let zeros : Array Gwei := Array.replicate size 0
+  (← getEligibleValidatorIndices state).foldlM
+    (addFlagDelta state flagIndex (markIndices size participating) total
+      (participatingBalance / increment) (total / increment)) (zeros, zeros)
 
 /-- The sums of four lists of deltas, index by index, from left to right. -/
 def sumDeltas (first second third fourth : Array Gwei) : Except TransitionError (Array Gwei) :=
@@ -242,13 +317,14 @@ def sumDeltas (first second third fourth : Array Gwei) : Except TransitionError 
       (fourth.getD i 0))
 
 /-- Before Altair: the rewards and the penalties of each validator for the previous epoch. -/
-def getAttestationDeltas (state : BeaconState preset fork) (before : fork < .altair) :
+def getAttestationDeltas (config : Config) (state : BeaconState preset fork)
+    (before : fork < .altair) :
     Except TransitionError (Array Gwei × Array Gwei) := do
   let (sourceRewards, sourcePenalties) ← getSourceDeltas state before
   let (targetRewards, targetPenalties) ← getTargetDeltas state before
   let (headRewards, headPenalties) ← getHeadDeltas state before
   let (inclusionRewards, _) ← getInclusionDelayDeltas state before
-  let (_, inactivityPenalties) ← getInactivityPenaltyDeltas state before
+  let (_, inactivityPenalties) ← getInactivityPenaltyDeltas config state
   let rewards ← sumDeltas sourceRewards targetRewards headRewards inclusionRewards
   let penalties ← sumDeltas sourcePenalties targetPenalties headPenalties inactivityPenalties
   return (rewards, penalties)
@@ -259,17 +335,26 @@ def applyDeltas (rewards penalties : Array Gwei) (state : BeaconState preset for
   let state ← liftAccessor (increaseBalance state index.toUInt64 (rewards.getD index 0))
   liftAccessor (decreaseBalance state index.toUInt64 (penalties.getD index 0))
 
+/-- The state with the rewards and then the penalties of some deltas applied, index by index. -/
+def applyAllDeltas (state : BeaconState preset fork) (deltas : Array Gwei × Array Gwei) :
+    Except TransitionError (BeaconState preset fork) :=
+  (List.range state.validators.data.size).foldlM (applyDeltas deltas.1 deltas.2) state
+
 /-- The state after the rewards and penalties of the previous epoch.
 
 The first epoch changes nothing.
 
-Altair counts participation flags instead, which EthLib does not yet have. -/
-def processRewardsAndPenalties (state : BeaconState preset fork) :
+Before Altair the deltas of each kind of vote are summed, then applied once.
+
+From Altair the deltas of each flag, then those of inactivity, are applied in turn. -/
+def processRewardsAndPenalties (config : Config) (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) :=
-  if altair : .altair ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
-  else if getCurrentEpoch state = GENESIS_EPOCH then pure state
-  else do
-    let (rewards, penalties) ← getAttestationDeltas state (Nat.lt_of_not_le altair)
-    (List.range state.validators.data.size).foldlM (applyDeltas rewards penalties) state
+  if getCurrentEpoch state = GENESIS_EPOCH then pure state
+  else if altair : .altair ≤ fork then do
+    let flagDeltas ← (List.finRange PARTICIPATION_FLAG_WEIGHTS.length).mapM
+      (getFlagIndexDeltas state altair)
+    let inactivityDeltas ← getInactivityPenaltyDeltas config state
+    (flagDeltas ++ [inactivityDeltas]).foldlM applyAllDeltas state
+  else do applyAllDeltas state (← getAttestationDeltas config state (Nat.lt_of_not_le altair))
 
 end EthLib.Consensus

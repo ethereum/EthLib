@@ -19,6 +19,8 @@ from consensus.test_light_client_data_collection import runs_data_collection
 from consensus.test_light_client_sync import SPECIFIED as LIGHT_CLIENT_FORKS
 from consensus.test_light_client_sync import runs_sync
 from consensus.test_operations import runs as runs_operation
+from consensus.test_rewards import HANDLERS as REWARDS
+from consensus.test_rewards import runs as runs_rewards
 from engine.cases import EXCEPTIONS as ENGINE_EXCEPTIONS
 from transactions.test_inclusion_archive import names_in_block
 from transactions.test_transactions import CHAIN_ID, FORK_OF_NETWORK, names
@@ -36,7 +38,6 @@ NOT_YET = {
     "genesis": "beacon state transition (consensus track C13 to C40)",
     "operations": "beacon state transition (consensus track C13 to C40)",
     "random": "beacon state transition (consensus track C13 to C40)",
-    "rewards": "beacon state transition (consensus track C13 to C40)",
     "sanity": "beacon state transition (consensus track C13 to C40)",
     "transition": "beacon state transition (consensus track C13 to C40)",
     "fork_choice": "fork choice (consensus track C43 to C50)",
@@ -52,7 +53,6 @@ NOT_YET = {
 # At these forks an entry here comes before the entry of NOT_YET.
 _GLOAS = {
     "epoch_processing": "the Gloas slot and epoch processing (G51)",
-    "rewards": "the Gloas slot and epoch processing (G51)",
     "finality": "the Gloas block processing and state transition (G52)",
     "random": "the Gloas block processing and state transition (G52)",
     "sanity": "the Gloas block processing and state transition (G52)",
@@ -506,6 +506,13 @@ def _epoch_step(root: Path, case: Case) -> None:
     run_case(case.preset, case.fork, case.group.split("/")[1], root / case.path)
 
 
+def _rewards(root: Path, case: Case) -> None:
+    from consensus.test_rewards import run_case
+
+    # tests/<preset>/<fork>/rewards/<handler>/<suite>/<case>
+    run_case(case.preset, case.fork, root / case.path)
+
+
 def _upgrade(root: Path, case: Case) -> None:
     from consensus.test_fork import run_case
 
@@ -543,6 +550,7 @@ RUNNERS = {
     "legacy_header": legacy.run_headers,
     **{f"operations/{handler}": _operation for handler in OPERATIONS},
     **{f"epoch_processing/{handler}": _epoch_step for handler in EPOCH_STEPS},
+    **{f"rewards/{handler}": _rewards for handler in REWARDS},
     "fork/fork": _upgrade,
     "legacy_ommers": legacy.run_ommers,
     "legacy_dao": legacy.run_dao,
@@ -586,6 +594,8 @@ def runner(case: Case):
     if run is _update_ranking and case.fork not in LIGHT_CLIENT_FORKS:
         return None
     if run is _epoch_step and not runs_epoch_step(case.fork, case.group.split("/")[1]):
+        return None
+    if run is _rewards and not runs_rewards(case.fork):
         return None
     if run is _upgrade and not runs_upgrade(case.fork):
         return None

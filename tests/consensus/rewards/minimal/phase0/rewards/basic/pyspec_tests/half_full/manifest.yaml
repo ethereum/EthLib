@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: rewards
+handler: basic
+suite: pyspec_tests
+case: half_full

@@ -122,7 +122,7 @@ def runEpochStep {preset : Preset} {fork : Fork} (config : Config) (handler : St
   match handler with
   | "justification_and_finalization" =>
     runTransition (processJustificationAndFinalization state)
-  | "rewards_and_penalties" => runTransition (processRewardsAndPenalties state)
+  | "rewards_and_penalties" => runTransition (processRewardsAndPenalties config state)
   | "registry_updates" => runTransition (processRegistryUpdates config state)
   | "slashings" => runTransition (processSlashings state)
   | "eth1_data_reset" =>

@@ -284,6 +284,9 @@
 #define DOC_consensus_process_epoch \
   "The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes."
 
+#define DOC_consensus_rewards_deltas \
+  "The rewards and the penalties of each validator for one kind of vote, as SSZ bytes."
+
 #define DOC_consensus_upgrade_state \
   "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."
 

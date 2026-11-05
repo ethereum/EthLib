@@ -71,31 +71,35 @@ def setOrAppendList {switch : Base.Fork} {α : Type} {limit : Nat}
 
 /-- From Altair: the base reward of one increment of effective balance.
 
-It is a fixed factor of the increment over the square root of the total active balance. -/
-def getBaseRewardPerIncrement (state : BeaconState preset fork) : Except AccessorError Gwei := do
-  let total ← getTotalActiveBalance state
+It is a fixed factor of the increment over the square root of the total active balance.
+
+The caller reads that total from the state once, and passes it. -/
+def getBaseRewardPerIncrement (preset : Preset) (totalActiveBalance : Gwei) :
+    Except AccessorError Gwei :=
   liftArith do
     divChecked (← mulChecked preset.EFFECTIVE_BALANCE_INCREMENT preset.BASE_REWARD_FACTOR)
-      (integerSquareroot total)
+      (integerSquareroot totalActiveBalance)
 
-/-- The base reward of a validator.
+/-- The base reward of a validator, under the total active balance of the state.
 
 Before Altair it is a fixed factor of its effective balance over the square root of the total.
 
-The total is the total active balance, and the result is shared among the parts of an epoch reward.
+The result is shared among the parts of an epoch reward.
 
 From Altair it is the base reward of one increment, for each whole increment of effective balance.
+
+The caller reads the total from the state once, and passes it for every validator.
 -/
-def getBaseReward (state : BeaconState preset fork) (index : ValidatorIndex) :
-    Except AccessorError Gwei := do
+def getBaseReward (state : BeaconState preset fork) (totalActiveBalance : Gwei)
+    (index : ValidatorIndex) : Except AccessorError Gwei := do
   let effectiveBalance := (← getValidator state index).effectiveBalance
   if .altair ≤ fork then
     let increments := effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT
-    liftArith (mulChecked increments (← getBaseRewardPerIncrement state))
+    liftArith (mulChecked increments (← getBaseRewardPerIncrement preset totalActiveBalance))
   else
-    let total ← getTotalActiveBalance state
     let reward ← liftArith do
-      divChecked (← mulChecked effectiveBalance preset.BASE_REWARD_FACTOR) (integerSquareroot total)
+      divChecked (← mulChecked effectiveBalance preset.BASE_REWARD_FACTOR)
+        (integerSquareroot totalActiveBalance)
     return reward / BASE_REWARDS_PER_EPOCH
 
 /-- From Altair: the validators active in a recent epoch, not slashed, with a flag set for it.

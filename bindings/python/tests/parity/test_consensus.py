@@ -6,6 +6,8 @@ import archives
 
 from consensus.test_epoch_processing import HANDLERS as EPOCH_STEPS
 from consensus.test_operations import HANDLERS as OPERATIONS
+from consensus.test_rewards import HANDLERS as REWARDS
+from consensus.test_rewards import SPECIFIED as REWARDS_FORKS
 
 from . import catalogue, harness
 
@@ -35,7 +37,7 @@ def test_every_group_has_a_runner_or_a_plan() -> None:
 # A mainnet state case is a few megabytes, so the weekly archive run alone reads them; the
 # minimal state cases are vendored, and test_ssz_static decodes an empty mainnet state.
 # A mainnet operation, epoch step or fork case holds two states of a few hundred kilobytes,
-# for the same reason.
+# for the same reason, and a mainnet rewards case holds one.
 # The custody cases of Gloas and Heze repeat those of Fulu, and only the fork name in their
 # manifest differs, so only the Fulu cases are vendored.
 NOT_VENDORED = {f"mainnet/{fork}/ssz_static/BeaconState" for fork in
@@ -46,6 +48,8 @@ NOT_VENDORED = {f"mainnet/{fork}/ssz_static/BeaconState" for fork in
     for fork in forks} | {
     f"mainnet/{fork}/epoch_processing/{handler}" for handler, forks in EPOCH_STEPS.items()
     for fork in forks} | {
+    f"mainnet/{fork}/rewards/{handler}" for handler in REWARDS for fork in REWARDS_FORKS
+    if fork != "phase0" or handler != "inactivity_scores"} | {
     f"{preset}/{fork}/networking/{handler}" for preset in ("mainnet", "minimal")
     for fork in ("gloas", "heze")
     for handler in ("get_custody_groups", "compute_columns_for_custody_group")}

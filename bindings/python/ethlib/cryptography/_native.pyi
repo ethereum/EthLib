@@ -379,6 +379,10 @@ def consensus_process_epoch(name: str, fork: str, handler: str, pre: bytes, conf
     """The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes."""
     ...
 
+def consensus_rewards_deltas(name: str, fork: str, component: str, pre: bytes, config: bytes) -> bytes:
+    """The rewards and the penalties of each validator for one kind of vote, as SSZ bytes."""
+    ...
+
 def consensus_upgrade_state(name: str, fork: str, pre: bytes, config: bytes, verify: bool) -> bytes:
     """The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."""
     ...

@@ -303,6 +303,13 @@ def process_epoch(name: str, fork: str, handler: str, pre: bytes,
     return _native.consensus_process_epoch(name, fork, handler, pre, replacements)
 
 
+def rewards_deltas(name: str, fork: str, component: str, pre: bytes,
+                   config: dict | None = None) -> bytes:
+    """The SSZ bytes of the reward and penalty deltas of one kind of vote, or TransitionError."""
+    replacements = json.dumps(config).encode() if config else b""
+    return _native.consensus_rewards_deltas(name, fork, component, pre, replacements)
+
+
 def upgrade_state(name: str, fork: str, pre: bytes, verify: bool = True,
                   config: dict | None = None) -> bytes:
     """The SSZ bytes of a state upgraded to a fork from the fork before, or TransitionError."""
@@ -352,5 +359,6 @@ __all__ = [
     "is_better_update",
     "compute_fork_digest",
     "process_epoch",
+    "rewards_deltas",
     "upgrade_state",
 ]

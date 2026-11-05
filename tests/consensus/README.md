@@ -111,7 +111,7 @@ A mainnet state is a few hundred kilobytes, so only the weekly parity job reads 
 The directory `epoch_processing/` holds epoch step cases of `minimal.tar.gz` in the same way.
 A case gives a state before the step and the state after it.
 The directory keeps two cases of each step that EthLib runs, at each fork where it runs.
-These are justification and finalization, and the rewards and penalties, at Phase 0.
+These are justification and finalization at Phase 0, and the rewards and penalties from Phase 0 to Gloas.
 The registry updates run from Phase 0 to Capella, and the slashings and effective balances to Deneb.
 The resets of the deposit votes, the slashings and the RANDAO mixes run from Phase 0 to Gloas.
 The historical roots run from Phase 0 to Bellatrix, and the rotation of pending attestations at Phase 0.
@@ -119,6 +119,14 @@ They are also the proposer lookahead at Fulu and Gloas.
 Then come the builder pending payments and the window of payload committees at Gloas.
 The release has a single case of the window, so the directory keeps that one.
 `bindings/python/tests/consensus/test_epoch_processing.py` runs each case through the Lean step and compares the state after it.
+
+The directory `rewards/` holds rewards cases of `minimal.tar.gz` in the same way.
+A case gives a state, and the rewards and penalties of each validator for each kind of vote.
+Before Altair the kinds are the source, the target, the head, the inclusion delay and inactivity.
+From Altair the source, the target and the head are participation flags, and the inclusion delay is gone.
+The directory keeps one case of each group at each fork from Phase 0 to Gloas.
+The groups are `basic`, `leak` and `random`, and from Altair also `inactivity_scores`.
+`bindings/python/tests/consensus/test_rewards.py` computes each kind of deltas in Lean and compares them with the case.
 
 The test release publishes its cases in three archives.
 Their SHA-256 digests are:

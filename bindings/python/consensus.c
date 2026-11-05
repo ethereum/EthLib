@@ -167,6 +167,15 @@ eth_consensus_process_epoch(
 );
 
 extern lean_object*
+eth_consensus_rewards_deltas(
+  lean_object* name,
+  lean_object* fork,
+  lean_object* component,
+  lean_object* pre,
+  lean_object* config
+);
+
+extern lean_object*
 eth_consensus_upgrade_state(
   lean_object* name,
   lean_object* fork,
@@ -995,6 +1004,42 @@ py_consensus_process_epoch(
     (const uint8_t*) PyBytes_AS_STRING(config_obj), PyBytes_GET_SIZE(config_obj));
   return except_into_pybytes(
     eth_consensus_process_epoch(name, fork, handler, pre, config), TRANSITION_ERROR);
+}
+
+PyObject*
+py_consensus_rewards_deltas(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *name_obj, *fork_obj, *component_obj, *pre_obj, *config_obj;
+  if (!PyArg_ParseTuple(args, "OOOOO", &name_obj, &fork_obj, &component_obj, &pre_obj,
+                        &config_obj)) return NULL;
+  /* Check every argument before any Lean object exists, so a failure leaks nothing. */
+  if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj) ||
+      !PyUnicode_Check(component_obj)) {
+    PyErr_SetString(PyExc_TypeError, "name, fork and component must be str");
+    return NULL;
+  }
+  if (!PyBytes_Check(pre_obj) || !PyBytes_Check(config_obj)) {
+    PyErr_SetString(PyExc_TypeError, "pre and config must be bytes");
+    return NULL;
+  }
+  Py_ssize_t name_len, fork_len, component_len;
+  const char* name_utf8 = PyUnicode_AsUTF8AndSize(name_obj, &name_len);
+  if (!name_utf8) return NULL;
+  const char* fork_utf8 = PyUnicode_AsUTF8AndSize(fork_obj, &fork_len);
+  if (!fork_utf8) return NULL;
+  const char* component_utf8 = PyUnicode_AsUTF8AndSize(component_obj, &component_len);
+  if (!component_utf8) return NULL;
+  lean_object* name = mk_bytearray((const uint8_t*) name_utf8, name_len);
+  lean_object* fork = mk_bytearray((const uint8_t*) fork_utf8, fork_len);
+  lean_object* component = mk_bytearray((const uint8_t*) component_utf8, component_len);
+  lean_object* pre = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(pre_obj), PyBytes_GET_SIZE(pre_obj));
+  lean_object* config = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(config_obj), PyBytes_GET_SIZE(config_obj));
+  return except_into_pybytes(
+    eth_consensus_rewards_deltas(name, fork, component, pre, config), TRANSITION_ERROR);
 }
 
 PyObject*
