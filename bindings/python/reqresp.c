@@ -12,6 +12,7 @@ eth_reqresp_max_compressed_len(
 
 extern lean_object*
 eth_reqresp_decode_payload(
+  uint64_t type_min,
   uint64_t type_bound,
   lean_object* data
 );
@@ -19,6 +20,7 @@ eth_reqresp_decode_payload(
 extern lean_object*
 eth_reqresp_decode_response_chunk(
   uint64_t context_bytes,
+  uint64_t type_min,
   uint64_t type_bound,
   lean_object* data
 );
@@ -54,13 +56,15 @@ py_reqresp_decode_payload(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *bound_obj, *data_obj;
-  if (!PyArg_ParseTuple(args, "OO", &bound_obj, &data_obj)) return NULL;
-  uint64_t type_bound;
+  PyObject *min_obj, *bound_obj, *data_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &min_obj, &bound_obj, &data_obj)) return NULL;
+  uint64_t type_min, type_bound;
+  if (parse_uint64(min_obj, "type_min", &type_min)) return NULL;
   if (parse_uint64(bound_obj, "type_bound", &type_bound)) return NULL;
   lean_object* data = parse_data(data_obj);
   if (!data) return NULL;
-  return except_into_pybytes(eth_reqresp_decode_payload(type_bound, data), REQRESP_ERROR);
+  return except_into_pybytes(
+    eth_reqresp_decode_payload(type_min, type_bound, data), REQRESP_ERROR);
 }
 
 PyObject*
@@ -68,13 +72,14 @@ py_reqresp_decode_response_chunk(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *context_obj, *bound_obj, *data_obj;
-  if (!PyArg_ParseTuple(args, "OOO", &context_obj, &bound_obj, &data_obj)) return NULL;
-  uint64_t context_bytes, type_bound;
+  PyObject *context_obj, *min_obj, *bound_obj, *data_obj;
+  if (!PyArg_ParseTuple(args, "OOOO", &context_obj, &min_obj, &bound_obj, &data_obj)) return NULL;
+  uint64_t context_bytes, type_min, type_bound;
   if (parse_uint64(context_obj, "context_bytes", &context_bytes)) return NULL;
+  if (parse_uint64(min_obj, "type_min", &type_min)) return NULL;
   if (parse_uint64(bound_obj, "type_bound", &type_bound)) return NULL;
   lean_object* data = parse_data(data_obj);
   if (!data) return NULL;
   return except_into_pybytes(
-    eth_reqresp_decode_response_chunk(context_bytes, type_bound, data), REQRESP_ERROR);
+    eth_reqresp_decode_response_chunk(context_bytes, type_min, type_bound, data), REQRESP_ERROR);
 }

@@ -102,14 +102,17 @@ theorem maxCompressedLen_eq {n : UInt64} (h : n.toNat < 2 ^ 63) :
 
 /-- A payload that decodes has its declared length, and that length is within both bounds.
 
+It is also at least the smallest encoding of the type.
+
 The compressed bytes after the prefix are within the bound for that length.
 
 They decompress to the payload. -/
-theorem decodePayload_ok {typeBound : UInt64} {bs d : ByteArray}
-    (h : decodePayload typeBound bs = .ok d) :
+theorem decodePayload_ok {typeMin typeBound : UInt64} {bs d : ByteArray}
+    (h : decodePayload typeMin typeBound bs = .ok d) :
     ∃ declared b, decode (splitVarint bs.data.toList).1 = .ok declared ∧
       d.size = declared.toNat ∧ declared ≤ typeBound ∧ declared ≤ MAX_PAYLOAD_SIZE ∧
-      maxCompressedLen declared = .ok b ∧ (splitVarint bs.data.toList).2.length ≤ b.toNat ∧
+      typeMin ≤ declared ∧ maxCompressedLen declared = .ok b ∧
+      (splitVarint bs.data.toList).2.length ≤ b.toNat ∧
       Snappy.decodeFrames ⟨(splitVarint bs.data.toList).2.toArray⟩ = .ok d := by
   simp only [decodePayload] at h
   generalize splitVarint bs.data.toList = sp at h ⊢
@@ -120,7 +123,7 @@ theorem decodePayload_ok {typeBound : UInt64} {bs d : ByteArray}
     cases hm : maxCompressedLen declared with
     | error e =>
       simp [hv, hm, bind, Except.bind, Except.mapError] at h
-      split at h <;> simp_all
+      split at h <;> (try split at h) <;> simp_all
     | ok b =>
       simp only [hv, hm, bind, Except.bind, Except.mapError] at h
       split at h
@@ -128,55 +131,62 @@ theorem decodePayload_ok {typeBound : UInt64} {bs d : ByteArray}
       · rename_i hlt
         split at h
         · simp_all
-        · rename_i hc
-          cases hf : Snappy.decodeFrames ⟨rest.toArray⟩ with
-          | error e => simp [hf] at h
-          | ok data =>
-            simp only [hf] at h
-            split at h
-            · simp_all
-            · rename_i hsz
-              simp only [pure, Except.pure, Except.ok.injEq] at h
-              subst h
-              have hle : declared.toNat ≤ typeBound.toNat ∧
-                  declared.toNat ≤ MAX_PAYLOAD_SIZE.toNat := by
-                rw [UInt64.min_def] at hlt
-                split at hlt <;> rename_i hcond <;>
-                  simp only [UInt64.not_lt, UInt64.le_iff_toNat_le] at hlt hcond <;> omega
-              exact ⟨declared, b, by simp, by simpa using hsz,
-                UInt64.le_iff_toNat_le.mpr hle.1, UInt64.le_iff_toNat_le.mpr hle.2, by simp [hm],
-                by simpa using hc, by simp⟩
+        · rename_i hmin
+          split at h
+          · simp_all
+          · rename_i hc
+            cases hf : Snappy.decodeFrames ⟨rest.toArray⟩ with
+            | error e => simp [hf] at h
+            | ok data =>
+              simp only [hf] at h
+              split at h
+              · simp_all
+              · rename_i hsz
+                simp only [pure, Except.pure, Except.ok.injEq] at h
+                subst h
+                have hle : declared.toNat ≤ typeBound.toNat ∧
+                    declared.toNat ≤ MAX_PAYLOAD_SIZE.toNat := by
+                  rw [UInt64.min_def] at hlt
+                  split at hlt <;> rename_i hcond <;>
+                    simp only [UInt64.not_lt, UInt64.le_iff_toNat_le] at hlt hcond <;> omega
+                exact ⟨declared, b, by simp, by simpa using hsz,
+                  UInt64.le_iff_toNat_le.mpr hle.1, UInt64.le_iff_toNat_le.mpr hle.2,
+                  UInt64.not_lt.mp hmin, by simp [hm], by simpa using hc, by simp⟩
 
-/-- The decoder accepts exactly the encoding of a length within both bounds, then compressed bytes.
+/-- The decoder accepts exactly the encoding of a length within the bounds, then compressed bytes.
 
-Those bytes are within the bound for that length, and they decompress to the payload itself.
+The length is at most the smaller of the largest encoding and the cap, and at least the smallest.
+
+The compressed bytes are within the bound for that length, and they decompress to the payload.
 -/
-theorem decodePayload_eq_ok_iff {typeBound : UInt64} {bs d : ByteArray} :
-    decodePayload typeBound bs = .ok d ↔
-      d.size ≤ (min typeBound MAX_PAYLOAD_SIZE).toNat ∧
+theorem decodePayload_eq_ok_iff {typeMin typeBound : UInt64} {bs d : ByteArray} :
+    decodePayload typeMin typeBound bs = .ok d ↔
+      d.size ≤ (min typeBound MAX_PAYLOAD_SIZE).toNat ∧ typeMin.toNat ≤ d.size ∧
       ∃ rest, bs.data.toList = encode (UInt64.ofNat d.size) ++ rest ∧
         rest.length ≤ 32 + d.size + d.size / 6 ∧
         Snappy.decodeFrames ⟨rest.toArray⟩ = .ok d := by
   have hmax : MAX_PAYLOAD_SIZE.toNat = 10485760 := rfl
   constructor
   · intro h
-    obtain ⟨declared, b, hv, hs, hty, hcap, hb, hlen, hf⟩ := decodePayload_ok h
+    obtain ⟨declared, b, hv, hs, hty, hcap, hmin, hb, hlen, hf⟩ := decodePayload_ok h
     have hdeclared : UInt64.ofNat d.size = declared := by rw [hs, UInt64.ofNat_toNat]
     -- The declared length is within the cap, so the compressed bound does not overflow.
     have hcap' := UInt64.le_iff_toNat_le.mp hcap
     obtain ⟨b', hb', hbv⟩ := maxCompressedLen_eq (n := declared) (by omega)
     obtain rfl : b = b' := Except.ok.inj (hb.symm.trans hb')
-    refine ⟨?_, (splitVarint bs.data.toList).2, ?_, ?_, hf⟩
+    refine ⟨?_, ?_, (splitVarint bs.data.toList).2, ?_, ?_, hf⟩
     · rw [hs, UInt64.min_def]
       split
       · exact UInt64.le_iff_toNat_le.mp hty
       · exact hcap'
+    · rw [hs]
+      exact UInt64.le_iff_toNat_le.mp hmin
     · -- The prefix decodes to the declared length, so it is the encoding of that length.
       rw [hdeclared, encode_decode hv]
       exact (List.take_append_drop _ _).symm
     · rw [hs]
       omega
-  · rintro ⟨hbound, rest, hbs, hlen, hf⟩
+  · rintro ⟨hbound, hmin, rest, hbs, hlen, hf⟩
     -- The length is within the cap, so 64 bits hold it and its bound on the compressed bytes.
     have hle : (min typeBound MAX_PAYLOAD_SIZE).toNat ≤ MAX_PAYLOAD_SIZE.toNat := by
       rw [UInt64.min_def]
@@ -191,35 +201,51 @@ theorem decodePayload_eq_ok_iff {typeBound : UInt64} {bs d : ByteArray} :
     have hgt : ¬ min typeBound MAX_PAYLOAD_SIZE < UInt64.ofNat d.size := by
       rw [UInt64.lt_iff_toNat_lt, hs]
       omega
+    have hlt : ¬ UInt64.ofNat d.size < typeMin := by
+      rw [UInt64.lt_iff_toNat_lt, hs]
+      omega
     have hc : ¬ b.toNat < rest.length := by omega
     have hsize : ¬ d.size ≠ (UInt64.ofNat d.size).toNat := by omega
     simp only [decodePayload, hbs, splitVarint_encode, decode_encode, hb, hf, bind, Except.bind,
-      Except.mapError, hgt, hc, hsize, ite_false, pure, Except.pure]
+      Except.mapError, hgt, hlt, hc, hsize, ite_false, pure, Except.pure]
 
 /-- A payload with more compressed bytes than the bound for its declared length is rejected. -/
-theorem decodePayload_compressedTooLong {typeBound declared b : UInt64}
+theorem decodePayload_compressedTooLong {typeMin typeBound declared b : UInt64}
     {bs : ByteArray} (hv : decode (splitVarint bs.data.toList).1 = .ok declared)
-    (hle : declared ≤ min typeBound MAX_PAYLOAD_SIZE)
+    (hle : declared ≤ min typeBound MAX_PAYLOAD_SIZE) (hmin : typeMin ≤ declared)
     (hb : maxCompressedLen declared = .ok b)
     (hlong : b.toNat < (splitVarint bs.data.toList).2.length) :
-    decodePayload typeBound bs =
+    decodePayload typeMin typeBound bs =
       .error (.compressedTooLong (splitVarint bs.data.toList).2.length b.toNat) := by
   simp only [decodePayload]
   generalize splitVarint bs.data.toList = sp at hv hlong ⊢
   obtain ⟨header, rest⟩ := sp
-  simp [hv, hb, bind, Except.bind, Except.mapError, UInt64.not_lt.mpr hle, hlong, throw,
-    throwThe, MonadExceptOf.throw]
+  simp [hv, hb, bind, Except.bind, Except.mapError, UInt64.not_lt.mpr hle,
+    UInt64.not_lt.mpr hmin, hlong, throw, throwThe, MonadExceptOf.throw]
 
 /-- A payload whose declared length is above either bound is rejected. -/
-theorem decodePayload_lengthOutOfBounds {typeBound declared : UInt64}
+theorem decodePayload_lengthOutOfBounds {typeMin typeBound declared : UInt64}
     {bs : ByteArray} (hv : decode (splitVarint bs.data.toList).1 = .ok declared)
     (hgt : min typeBound MAX_PAYLOAD_SIZE < declared) :
-    decodePayload typeBound bs =
+    decodePayload typeMin typeBound bs =
       .error (.lengthOutOfBounds declared (min typeBound MAX_PAYLOAD_SIZE)) := by
   simp only [decodePayload]
   generalize splitVarint bs.data.toList = sp at hv ⊢
   obtain ⟨header, rest⟩ := sp
   simp [hv, bind, Except.bind, Except.mapError, hgt, throw, throwThe, MonadExceptOf.throw]
+
+/-- A payload whose declared length is below the smallest encoding of its type is rejected.
+
+The decoder checks the upper bounds first, so the length must pass them. -/
+theorem decodePayload_lengthBelowMinimum {typeMin typeBound declared : UInt64}
+    {bs : ByteArray} (hv : decode (splitVarint bs.data.toList).1 = .ok declared)
+    (hle : declared ≤ min typeBound MAX_PAYLOAD_SIZE) (hlt : declared < typeMin) :
+    decodePayload typeMin typeBound bs = .error (.lengthBelowMinimum declared typeMin) := by
+  simp only [decodePayload]
+  generalize splitVarint bs.data.toList = sp at hv ⊢
+  obtain ⟨header, rest⟩ := sp
+  simp [hv, bind, Except.bind, Except.mapError, UInt64.not_lt.mpr hle, hlt, throw, throwThe,
+    MonadExceptOf.throw]
 
 /-! ## The literal encoder -/
 
@@ -248,12 +274,13 @@ theorem size_encodeFramesLiteral_le (d : ByteArray) :
     Snappy.streamIdentifier, List.length_cons, List.length_nil]
   omega
 
-/-- A payload of the literal encoder decodes back, when it fits both bounds. -/
-theorem decodePayload_encodePayloadLiteral {typeBound : UInt64} {d : ByteArray}
-    (hp : d.size ≤ MAX_PAYLOAD_SIZE.toNat) (ht : d.size ≤ typeBound.toNat) :
-    decodePayload typeBound (encodePayloadLiteral d) = .ok d := by
+/-- A payload of the literal encoder decodes back, when it fits the bounds. -/
+theorem decodePayload_encodePayloadLiteral {typeMin typeBound : UInt64} {d : ByteArray}
+    (hp : d.size ≤ MAX_PAYLOAD_SIZE.toNat) (ht : d.size ≤ typeBound.toNat)
+    (hm : typeMin.toNat ≤ d.size) :
+    decodePayload typeMin typeBound (encodePayloadLiteral d) = .ok d := by
   refine decodePayload_eq_ok_iff.mpr
-    ⟨?_, (Snappy.encodeFramesLiteral d).data.toList, ?_, ?_, ?_⟩
+    ⟨?_, hm, (Snappy.encodeFramesLiteral d).data.toList, ?_, ?_, ?_⟩
   · rw [UInt64.min_def]
     split <;> omega
   · simp [encodePayloadLiteral]
@@ -279,18 +306,19 @@ Its code must be the code of its own byte, which excludes a reserved code outsid
 
 A success carries the context bytes of the method, and an error carries none.
 
-The payload fits the bound of its code. -/
+The payload fits the bounds of its code. -/
 theorem decodeResponseChunk_encodeResponseChunkLiteral {contextBytes : Nat}
-    {typeBound : UInt64} {c : ResponseChunk}
+    {typeMin typeBound : UInt64} {c : ResponseChunk}
     (hc : ResponseCode.ofByte c.code.toByte = c.code)
     (hctx : c.context.size = if c.code = .success then contextBytes else 0)
     (hp : c.payload.size ≤ MAX_PAYLOAD_SIZE.toNat)
     (ht : c.payload.size ≤
-      (if c.code = .success then typeBound else MAX_ERROR_MESSAGE_SIZE).toNat) :
-    decodeResponseChunk contextBytes typeBound (encodeResponseChunkLiteral c) =
+      (if c.code = .success then typeBound else MAX_ERROR_MESSAGE_SIZE).toNat)
+    (hm : c.code = .success → typeMin.toNat ≤ c.payload.size) :
+    decodeResponseChunk contextBytes typeMin typeBound (encodeResponseChunkLiteral c) =
       .ok c := by
   obtain ⟨code, context, payload⟩ := c
-  simp only at hc hctx hp ht
+  simp only at hc hctx hp ht hm
   have hbytes : (encodeResponseChunkLiteral ⟨code, context, payload⟩).data.toList =
       code.toByte :: (context.data.toList ++ (encodePayloadLiteral payload).data.toList) := by
     simp [encodeResponseChunkLiteral, ByteArray.data_append]
@@ -301,7 +329,7 @@ theorem decodeResponseChunk_encodeResponseChunkLiteral {contextBytes : Nat}
     subst hctx
     have hlen : context.data.toList.length = context.size := Array.length_toList
     rw [List.drop_left' hlen, List.take_left' hlen, mk_toList]
-    simp [hlen, decodePayload_encodePayloadLiteral hp ht, bind, Except.bind, pure,
+    simp [hlen, decodePayload_encodePayloadLiteral hp ht (hm rfl), bind, Except.bind, pure,
       Except.pure, throw, throwThe, MonadExceptOf.throw]
   · simp only [hs, ite_false] at hctx ht
     have hctx' : context = ByteArray.empty := by
@@ -314,7 +342,8 @@ theorem decodeResponseChunk_encodeResponseChunkLiteral {contextBytes : Nat}
     cases code with
     | success => contradiction
     | _ =>
-      simp [decodePayload_encodePayloadLiteral hp ht, bind, Except.bind, pure, Except.pure]
+      simp [decodePayload_encodePayloadLiteral (typeMin := 0) hp ht (Nat.zero_le _), bind,
+        Except.bind, pure, Except.pure]
 
 /-! ## Error codes -/
 

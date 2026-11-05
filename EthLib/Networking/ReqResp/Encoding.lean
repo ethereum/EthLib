@@ -100,6 +100,8 @@ inductive ReqRespError where
   | varint (error : Varint.VarintError)
   /-- The declared length is above the bound of the message type or the payload cap. -/
   | lengthOutOfBounds (declared bound : UInt64)
+  /-- The declared length is below the smallest SSZ encoding of the message type. -/
+  | lengthBelowMinimum (declared minimum : UInt64)
   /-- The bound on the compressed size is 2^64 or more. -/
   | arith (error : ArithError)
   /-- More compressed bytes follow the prefix than the declared length allows. -/
@@ -128,6 +130,7 @@ def ReqRespError.code : ReqRespError → UInt32
   | .lengthMismatch .. => 6
   | .missingCode => 7
   | .contextTruncated => 8
+  | .lengthBelowMinimum .. => 9
 
 /-- The bytes of a varint at the start of the input, and the bytes after them.
 
@@ -138,21 +141,28 @@ def splitVarint (bs : List UInt8) : List UInt8 × List UInt8 :=
   let k := (bs.take Varint.maxLength).findIdx (·.toNat < Varint.continuation) + 1
   (bs.take k, bs.drop k)
 
-/-- The SSZ bytes of a payload, given the bound of its SSZ type.
+/-- The SSZ bytes of a payload, given the smallest and the largest encoding of its SSZ type.
 
-The declared length must be at most the smaller bound.
+The declared length must be at most the smaller of the largest encoding and the payload cap.
+
+It must also be at least the smallest encoding, since a shorter payload cannot be of that type.
+
+The length prefix must be the shortest varint of its value.
+
+The specification only recommends this; requiring it gives each length exactly one prefix.
 
 At most `32 + n + n / 6` bytes may follow a declared length `n`.
 
 The stream must decode to exactly `n` bytes, so a stream that ends early or runs on is rejected.
 
 The caller deserializes the bytes, since it knows their SSZ type. -/
-def decodePayload (typeBound : UInt64) (bs : ByteArray) :
+def decodePayload (typeMin typeBound : UInt64) (bs : ByteArray) :
     Except ReqRespError ByteArray := do
   let (header, rest) := splitVarint bs.data.toList
   let declared ← (Varint.decode header).mapError .varint
   let bound := min typeBound MAX_PAYLOAD_SIZE
   if bound < declared then throw (.lengthOutOfBounds declared bound)
+  if declared < typeMin then throw (.lengthBelowMinimum declared typeMin)
   let compressedBound ← (maxCompressedLen declared).mapError .arith
   if compressedBound.toNat < rest.length then
     throw (.compressedTooLong rest.length compressedBound.toNat)
@@ -180,10 +190,10 @@ structure ResponseChunk where
 
 /-- One response chunk, given the number of context bytes that the method sends.
 
-A success carries that many context bytes, and its payload has the bound of the message type.
+A success carries that many context bytes, and its payload has the bounds of the message type.
 
 An error carries no context bytes, and its payload is an error message of at most 256 bytes. -/
-def decodeResponseChunk (contextBytes : Nat) (typeBound : UInt64)
+def decodeResponseChunk (contextBytes : Nat) (typeMin typeBound : UInt64)
     (bs : ByteArray) : Except ReqRespError ResponseChunk :=
   match bs.data.toList with
   | [] => throw .missingCode
@@ -191,10 +201,10 @@ def decodeResponseChunk (contextBytes : Nat) (typeBound : UInt64)
     match ResponseCode.ofByte b with
     | .success => do
       if rest.length < contextBytes then throw .contextTruncated
-      let payload ← decodePayload typeBound ⟨(rest.drop contextBytes).toArray⟩
+      let payload ← decodePayload typeMin typeBound ⟨(rest.drop contextBytes).toArray⟩
       return ⟨.success, ⟨(rest.take contextBytes).toArray⟩, payload⟩
     | code => do
-      let payload ← decodePayload MAX_ERROR_MESSAGE_SIZE ⟨rest.toArray⟩
+      let payload ← decodePayload 0 MAX_ERROR_MESSAGE_SIZE ⟨rest.toArray⟩
       return ⟨code, ByteArray.empty, payload⟩
 
 /-- A response chunk that decodes to `chunk`, with its payload in uncompressed Snappy frames.
