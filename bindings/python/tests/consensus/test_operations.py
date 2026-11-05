@@ -34,7 +34,7 @@ HANDLERS = {
     "deposit": ("deposit", ("phase0", "altair", "bellatrix", "capella", "deneb")),
     "sync_aggregate": ("sync_aggregate", ("altair", "bellatrix", "capella", "deneb", "electra",
                                           "fulu")),
-    "voluntary_exit": ("voluntary_exit", ("phase0", "altair", "bellatrix", "capella")),
+    "voluntary_exit": ("voluntary_exit", ("phase0", "altair", "bellatrix", "capella", "deneb")),
     "execution_payload": ("body", ("bellatrix", "capella", "deneb", "electra", "fulu")),
     "withdrawals": ("execution_payload", ("capella", "deneb", "electra", "fulu", "gloas")),
     "bls_to_execution_change": ("address_change", ("capella", "deneb", "electra", "fulu")),

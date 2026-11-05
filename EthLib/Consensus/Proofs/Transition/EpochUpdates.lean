@@ -155,15 +155,21 @@ theorem sameSizes_activateValidator {index : ValidatorIndex}
   obtain ⟨_, _, _, _, rfl⟩ := computed
   exact sameSizes_setValidator _ _ _
 
-/-- The registry updates succeed only before Deneb, and keep the sizes. -/
+/-- From Deneb, an epoch activates at most the maximum, and at most the churn limit. -/
+theorem getValidatorActivationChurnLimit_le {config : Config} :
+    getValidatorActivationChurnLimit config state ≤ config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT ∧
+      getValidatorActivationChurnLimit config state ≤ getValidatorChurnLimit config state :=
+  ⟨Std.min_le_left, Std.min_le_right⟩
+
+/-- The registry updates succeed only before Electra, and keep the sizes. -/
 theorem processRegistryUpdates_ok {config : Config}
     (computed : processRegistryUpdates config state = .ok after) :
-    fork < .dencun ∧ SameSizes state after := by
+    fork < .pectra ∧ SameSizes state after := by
   unfold processRegistryUpdates at computed
   split at computed
   · cases computed
-  rename_i deneb
-  refine ⟨Nat.lt_of_not_le deneb, ?_⟩
+  rename_i electra
+  refine ⟨Nat.lt_of_not_le electra, ?_⟩
   simp only [bind_ok_iff] at computed
   obtain ⟨updated, updatedOk, activated⟩ := computed
   have first := foldlM_ok_invariant (SameSizes state)

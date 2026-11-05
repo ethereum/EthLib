@@ -23,7 +23,7 @@ HANDLERS = {
                            "gloas"),
     "rewards_and_penalties": ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
                               "fulu", "gloas"),
-    "registry_updates": ("phase0", "altair", "bellatrix", "capella"),
+    "registry_updates": ("phase0", "altair", "bellatrix", "capella", "deneb"),
     "slashings": ("phase0", "altair", "bellatrix", "capella", "deneb"),
     "eth1_data_reset": ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu",
                         "gloas"),

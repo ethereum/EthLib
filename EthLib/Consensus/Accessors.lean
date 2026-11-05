@@ -219,6 +219,16 @@ def getValidatorChurnLimit (config : Config) (state : BeaconState preset fork) :
     ((getActiveValidatorIndices state (getCurrentEpoch state)).length.toUInt64 /
       config.CHURN_LIMIT_QUOTIENT)
 
+/-- From Deneb: the most validators that an epoch activates.
+
+It is the churn limit, up to a maximum, as [EIP-7514] specifies.
+
+[EIP-7514]: https://eips.ethereum.org/EIPS/eip-7514#specification
+-/
+def getValidatorActivationChurnLimit (config : Config) (state : BeaconState preset fork) :
+    UInt64 :=
+  min config.MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT (getValidatorChurnLimit config state)
+
 /-- From Electra: the sum of the amounts of the pending partial withdrawals of a validator.
 
 A sum of 2^64 or more is an error. -/

@@ -79,9 +79,7 @@ Before Capella the history takes a root of each span, and from Capella a summary
 
 The rotation of the participation flags and the sync committee update come last.
 
-Deneb changes the registry updates, and Electra adds steps.
-
-EthLib does not yet have those rules here, so both fail as not yet specified. -/
+Electra adds steps, which EthLib does not yet have here, so it fails as not yet specified. -/
 def processEpochAltair (config : Config) (state : BeaconState preset fork)
     (altair : .altair ≤ fork) : Except TransitionError (BeaconState preset fork) :=
   if electra : .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
@@ -183,9 +181,9 @@ The RANDAO reveal, the vote on the deposit contract and the operations follow.
 
 The sync aggregate comes last.
 
-Deneb changes the voluntary exits, and Electra the operations.
+Electra changes the operations, which EthLib does not yet have here.
 
-EthLib does not yet have those rules here, so both fail as not yet specified. -/
+So it fails as not yet specified. -/
 def processBlockAltair (config : Config) (checks : SignatureChecks)
     (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
     (block : BeaconBlock preset fork) (altair : .altair ≤ fork) :

@@ -336,6 +336,23 @@ def processDeposit (config : Config) (checks : SignatureChecks) (before : fork <
 
 /-! ## Voluntary exits -/
 
+/-- The domain under which a validator signs a voluntary exit for an epoch.
+
+Before Deneb it is the domain of the fork at that epoch.
+
+From Deneb it is fixed on the fork version of Capella, as [EIP-7044] specifies.
+
+So an exit signed once stays valid at every later fork.
+
+[EIP-7044]: https://eips.ethereum.org/EIPS/eip-7044#specification
+-/
+def voluntaryExitDomain (config : Config) (state : BeaconState preset fork) (epoch : Epoch) :
+    Except TransitionError Domain :=
+  if .dencun ≤ fork then
+    liftSsz (computeDomain config DOMAIN_VOLUNTARY_EXIT config.CAPELLA_FORK_VERSION
+      state.genesisValidatorsRoot)
+  else liftAccessor (getDomain config state DOMAIN_VOLUNTARY_EXIT (some epoch))
+
 /-- The state after a voluntary exit.
 
 Its validator must be active, and must not have started to exit.
@@ -344,18 +361,15 @@ It must have been active for long enough.
 
 The exit must not be for a later epoch than the current one.
 
-The validator must sign the exit, under the fork version of the epoch of the exit.
+The validator must sign the exit, under the domain of a voluntary exit.
 
 The validator then starts to exit.
 
-Deneb fixes the version of the signature, as [EIP-7044] specifies, which EthLib does not yet have.
-
-[EIP-7044]: https://eips.ethereum.org/EIPS/eip-7044#specification
--/
+Electra changes the rule, which EthLib does not yet have here. -/
 def processVoluntaryExit (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (signed : SignedVoluntaryExit) :
     Except TransitionError (BeaconState preset fork) :=
-  if .dencun ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
   else do
     let exit := signed.message
     let validator ← liftAccessor (getValidator state exit.validatorIndex)
@@ -367,7 +381,7 @@ def processVoluntaryExit (config : Config) (checks : SignatureChecks)
     let eligible ←
       liftAccessor (liftArith (addChecked validator.activationEpoch config.SHARD_COMMITTEE_PERIOD))
     ensure (eligible ≤ epoch) (.exitTooSoon exit.validatorIndex)
-    let domain ← liftAccessor (getDomain config state DOMAIN_VOLUNTARY_EXIT (some exit.epoch))
+    let domain ← voluntaryExitDomain config state exit.epoch
     let signingRoot ← liftSsz (computeSigningRoot exit domain)
     ensure (checks.verify (packBytes validator.pubkey) (packBytes signingRoot)
       (packBytes signed.signature) = true) .invalidExitSignature

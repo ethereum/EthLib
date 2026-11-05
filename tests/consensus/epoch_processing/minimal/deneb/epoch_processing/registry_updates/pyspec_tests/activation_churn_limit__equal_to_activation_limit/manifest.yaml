@@ -1,0 +1,6 @@
+preset: minimal
+fork: deneb
+runner: epoch_processing
+handler: registry_updates
+suite: pyspec_tests
+case: activation_churn_limit__equal_to_activation_limit
