@@ -36,7 +36,11 @@ The ommers hash is that of an empty list, and the body is empty.
 
 Its other values, such as the gas limit and the nonce, are those of that chain only.
 
-The roots of the transactions and the receipts follow from its section 4.3.2 for an empty body.
+The appendix sets the roots of the transactions and the receipts to 0.
+
+Here they are the roots of empty tries, as its section 4.3.2 gives for an empty body.
+
+The mainnet genesis block holds these roots too.
 
 The EIPs add the fields of later forks:
 
