@@ -20,6 +20,22 @@ The wei of the gas limit split exactly into the refund, the priority fee and the
 Before London the base fee is 0, so nothing is burned.
 
 From Spurious Dragon to Paris, a fee of 0 creates no beneficiary and deletes an empty one.
+
+From Glamsterdam, the execution gas and the reservoir split the gas past the intrinsic gas.
+
+The execution gas is at most `2^24` minus the intrinsic gas.
+
+The reservoir is the gas limit past `2^24`.
+
+The execution gas that a block counts for a transaction is at least the call data floor.
+
+It is also at least the gas used before the refund, minus the state gas.
+
+So it is at least the gas that the sender pays, minus the state gas.
+
+Before Glamsterdam, a block counts the gas that the sender pays.
+
+So the gas used in the header is the sum of the gas of the transactions.
 -/
 
 @[expose] public section
@@ -27,6 +43,7 @@ From Spurious Dragon to Paris, a fee of 0 creates no beneficiary and deletes an 
 namespace EthLib.Execution.Transactions
 
 open EthLib.Base
+open EthLib.Execution.Fees.BlobBaseFee (calculateTotalBlobGas)
 
 /-! ## The refund -/
 
@@ -166,5 +183,111 @@ theorem payBeneficiary_zero_empty {fork : Fork} (h₁ : fork ≥ .spuriousDragon
     rfl
   refine ⟨?_, TransactionState.getAccountOptional_setAccount_self _ _ _⟩
   simp only [payBeneficiary, h₁, h₂, hBal, and_self, ↓reduceIte, hEmpty]
+
+/-! ## The gas of the run -/
+
+/-- The execution gas and the reservoir split the gas past the intrinsic gas. -/
+theorem allocateGas_add (fork : Fork) (tx : Transaction) (intrinsic : Nat) :
+    (allocateGas fork tx intrinsic).execution + (allocateGas fork tx intrinsic).reservoir =
+      tx.gas.toNat - intrinsic := by
+  unfold allocateGas
+  split <;> simp only <;> omega
+
+/-- Before Glamsterdam, all the gas past the intrinsic gas is execution gas. -/
+theorem allocateGas_of_lt {fork : Fork} (hFork : fork < .glamsterdam) (tx : Transaction)
+    (intrinsic : Nat) : allocateGas fork tx intrinsic = ⟨tx.gas.toNat - intrinsic, 0⟩ := by
+  have : ¬fork ≥ .glamsterdam := Nat.not_le.mpr hFork
+  simp only [allocateGas, this, ↓reduceIte]
+
+/-- From Glamsterdam, the execution gas is at most `2^24` minus the intrinsic gas. -/
+theorem allocateGas_execution_le {fork : Fork} (hFork : fork ≥ .glamsterdam) (tx : Transaction)
+    (intrinsic : Nat) :
+    (allocateGas fork tx intrinsic).execution ≤ Evm.GasCosts.TX_MAX_GAS_LIMIT - intrinsic := by
+  simp only [allocateGas, hFork, ↓reduceIte]
+  exact Nat.min_le_left _ _
+
+/-- From Glamsterdam, the reservoir is the gas limit past `2^24`.
+
+The intrinsic gas must be at most `2^24` and at most the gas limit, as the checks ask. -/
+theorem allocateGas_reservoir {fork : Fork} (hFork : fork ≥ .glamsterdam) {tx : Transaction}
+    {intrinsic : Nat} (hMax : intrinsic ≤ Evm.GasCosts.TX_MAX_GAS_LIMIT)
+    (hGas : intrinsic ≤ tx.gas.toNat) :
+    (allocateGas fork tx intrinsic).reservoir = tx.gas.toNat - Evm.GasCosts.TX_MAX_GAS_LIMIT := by
+  simp only [allocateGas, hFork, ↓reduceIte]
+  omega
+
+/-! ## The gas of the block -/
+
+/-- Before Glamsterdam, a block counts the gas that the transaction uses, and no state gas. -/
+theorem transactionBlockGas_of_lt {fork : Fork} (hFork : fork < .glamsterdam) (sender : Address)
+    (tx : Transaction) (gasLeft refundCounter : Nat) (stateGasUsed : Int) :
+    transactionBlockGas fork sender tx gasLeft refundCounter stateGasUsed =
+      ⟨gasUsed fork sender tx gasLeft refundCounter, 0, calculateTotalBlobGas tx⟩ := by
+  have : ¬fork ≥ .glamsterdam := Nat.not_le.mpr hFork
+  simp only [transactionBlockGas, this, ↓reduceIte]
+
+/-- From Glamsterdam, a block counts the state gas used, or 0 when it is negative. -/
+theorem transactionBlockGas_state {fork : Fork} (hFork : fork ≥ .glamsterdam) (sender : Address)
+    (tx : Transaction) (gasLeft refundCounter : Nat) (stateGasUsed : Int) :
+    (transactionBlockGas fork sender tx gasLeft refundCounter stateGasUsed).state =
+      stateGasUsed.toNat := by
+  simp only [transactionBlockGas, hFork, ↓reduceIte]
+
+/-- From Glamsterdam, the execution gas of a transaction in its block is at least its floor. -/
+theorem calldataFloor_le_transactionBlockGas {fork : Fork} (hFork : fork ≥ .glamsterdam)
+    (sender : Address) (tx : Transaction) (gasLeft refundCounter : Nat) (stateGasUsed : Int) :
+    calldataFloor fork sender tx ≤
+      (transactionBlockGas fork sender tx gasLeft refundCounter stateGasUsed).execution := by
+  simp only [transactionBlockGas, hFork, ↓reduceIte]
+  exact Nat.le_max_right _ _
+
+/-- From Glamsterdam, a block counts the gas used before the refund, minus the state gas.
+
+The refund counter does not lower it. -/
+theorem sub_le_transactionBlockGas {fork : Fork} (hFork : fork ≥ .glamsterdam)
+    (sender : Address) (tx : Transaction) (gasLeft refundCounter : Nat) (stateGasUsed : Int) :
+    tx.gas.toNat - gasLeft - stateGasUsed.toNat ≤
+      (transactionBlockGas fork sender tx gasLeft refundCounter stateGasUsed).execution := by
+  simp only [transactionBlockGas, hFork, ↓reduceIte]
+  exact Nat.le_max_left _ _
+
+/-- From Glamsterdam, a block counts at least the gas that the sender pays, minus the state gas. -/
+theorem gasUsed_sub_le_transactionBlockGas {fork : Fork} (hFork : fork ≥ .glamsterdam)
+    (sender : Address) (tx : Transaction) (gasLeft refundCounter : Nat) (stateGasUsed : Int) :
+    gasUsed fork sender tx gasLeft refundCounter - stateGasUsed.toNat ≤
+      (transactionBlockGas fork sender tx gasLeft refundCounter stateGasUsed).execution := by
+  have hPectra : fork ≥ .pectra := Nat.le_trans (by decide) hFork
+  simp only [transactionBlockGas, gasUsed, hFork, hPectra, ↓reduceIte]
+  omega
+
+/-- With no state gas, as before Glamsterdam, the gas used in the header is the execution gas. -/
+theorem BlockGas.gasUsed_of_state_eq_zero {counts : BlockGas} (h : counts.state = 0) :
+    counts.gasUsed = counts.execution := by
+  simp [BlockGas.gasUsed, h]
+
+/-- The execution gas of some parts of a block together is the sum of theirs. -/
+theorem BlockGas.sum_execution (parts : List BlockGas) :
+    (BlockGas.sum parts).execution = (parts.map (·.execution)).sum := by
+  induction parts with
+  | nil => rfl
+  | cons p rest ih => simp [BlockGas.sum, BlockGas.add, ← ih]
+
+/-- The state gas of some parts of a block together is the sum of theirs. -/
+theorem BlockGas.sum_state (parts : List BlockGas) :
+    (BlockGas.sum parts).state = (parts.map (·.state)).sum := by
+  induction parts with
+  | nil => rfl
+  | cons p rest ih => simp [BlockGas.sum, BlockGas.add, ← ih]
+
+/-- With no state gas in any part, the gas used in the header is the sum of the gas of the parts. -/
+theorem BlockGas.gasUsed_sum {parts : List BlockGas} (h : ∀ p ∈ parts, p.state = 0) :
+    (BlockGas.sum parts).gasUsed = (parts.map (·.execution)).sum := by
+  rw [BlockGas.gasUsed_of_state_eq_zero, BlockGas.sum_execution]
+  rw [BlockGas.sum_state]
+  induction parts with
+  | nil => rfl
+  | cons p rest ih =>
+    simp only [List.mem_cons, forall_eq_or_imp] at h
+    simp [h.1, ih h.2]
 
 end EthLib.Execution.Transactions

@@ -25,11 +25,19 @@ The receipt of a legacy transaction stays the RLP form, whose first byte is at l
 
 The receipts of a block count the gas cumulatively, so each holds the gas of the block so far.
 
+From Glamsterdam, that gas is the gas that the senders pay, after the refunds and the floor.
+
+The block counts its own gas apart, before the refunds.
+
+[EIP-7778][eip-7778] and [EIP-8037][eip-8037] make this change.
+
 Section 4.4.1 of the Yellow Paper, Shanghai version, defines the receipt: [`Paper.tex`][yp].
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [eip-658]: https://eips.ethereum.org/EIPS/eip-658#specification
 [eip-2718]: https://eips.ethereum.org/EIPS/eip-2718#receipts
+[eip-7778]: https://eips.ethereum.org/EIPS/eip-7778#specification
+[eip-8037]: https://eips.ethereum.org/EIPS/eip-8037#receipt-semantics
 -/
 
 @[expose] public section
@@ -71,7 +79,9 @@ instance {fork : Fork} : Codec (Outcome fork) := ⟨Outcome.toItem, Outcome.ofIt
 structure Receipt (fork : Fork) : Type where
   /-- The outcome of the transaction. -/
   outcome : Outcome fork
-  /-- The gas that the block used up to and with the transaction. -/
+  /-- The gas that the block used up to and with the transaction.
+
+  From Glamsterdam, it is the gas that the senders paid up to and with the transaction. -/
   cumulativeGasUsed : Nat
   /-- The Bloom filter of the logs. -/
   bloom : Bytes256
@@ -111,7 +121,9 @@ def makeReceipt {fork : Fork} (outcome : Outcome fork) (cumulativeGasUsed : Nat)
 
 /-- The receipts of some transactions, after `gasUsed` gas of their block.
 
-Each transaction gives its outcome, the gas it used and its logs. -/
+Each transaction gives its outcome, the gas it used and its logs.
+
+From Glamsterdam, the gas it used is the gas that its sender paid. -/
 def makeReceiptsFrom {fork : Fork} (gasUsed : Nat) :
     List (Outcome fork × Nat × List Log) → List (Receipt fork)
   | [] => []
@@ -120,7 +132,9 @@ def makeReceiptsFrom {fork : Fork} (gasUsed : Nat) :
 
 /-- The receipts of the transactions of a block, in order.
 
-Each transaction gives its outcome, the gas it used and its logs. -/
+Each transaction gives its outcome, the gas it used and its logs.
+
+From Glamsterdam, the gas it used is the gas that its sender paid. -/
 def makeReceipts {fork : Fork} (results : List (Outcome fork × Nat × List Log)) :
     List (Receipt fork) :=
   makeReceiptsFrom 0 results
