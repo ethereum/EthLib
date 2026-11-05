@@ -66,6 +66,8 @@ inductive AccessorError where
   | ptcSlotOutOfRange (slot stateSlot : Slot)
   /-- From Electra: a list of the state that has a limit is full. -/
   | listFull (limit : Nat)
+  /-- The epoch is neither the previous nor the current epoch. -/
+  | epochNotRecent (epoch previous current : Epoch)
   deriving DecidableEq, Repr
 
 /-- Whether a validator is active in an epoch: from its activation epoch, before its exit epoch. -/

@@ -6,6 +6,7 @@ public import EthLib.Consensus.Proposers
 public import EthLib.Consensus.Transition.Block
 public import EthLib.Consensus.Transition.BuilderPayments
 public import EthLib.Consensus.Transition.BuilderRequests
+public import EthLib.Consensus.Transition.EpochJustification
 public import EthLib.Consensus.Transition.Operations
 public import EthLib.Consensus.Transition.Payload
 public import EthLib.Consensus.Transition.Upgrade
@@ -106,6 +107,8 @@ def transitionPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) :=
 def runEpochStep {preset : Preset} {fork : Fork} (handler : String)
     (state : BeaconState preset fork) : Result (BeaconState preset fork) :=
   match handler with
+  | "justification_and_finalization" =>
+    runTransition (processJustificationAndFinalization state)
   | "ptc_window" =>
     if gloas : .glamsterdam ≤ fork then runTransition (liftAccessor (processPtcWindow state gloas))
     else throw (0, s!"no epoch step ptc_window at {fork.name}")
