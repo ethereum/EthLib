@@ -19,7 +19,9 @@ The sender lacks the amount, or the recipient's balance would reach 2^256.
 
 Otherwise it moves the amount exactly.
 
-A change of an account keeps the code and the storage, unless it deletes the account.
+A change of an account keeps every code.
+
+It keeps the storage too, unless it deletes the account.
 
 An account that the transaction created has zero words before the transaction.
 
@@ -606,7 +608,7 @@ theorem modifyState_eq_error {fork : Fork} {tx : TransactionState} {address : Ad
 @[simp] theorem getStorage_recordAccountRead (tx : TransactionState) (address : Address) :
     (tx.recordAccountRead address).getStorage = tx.getStorage := rfl
 
-/-- Setting an account changes no word of the storage. Deleting an account keeps its storage. -/
+/-- Setting an account changes no word of the storage, even when it removes the account. -/
 @[simp] theorem getStorage_setAccount (tx : TransactionState) (address : Address)
     (account : Option Account) : (tx.setAccount address account).getStorage = tx.getStorage := rfl
 
@@ -733,15 +735,15 @@ theorem getStorageOriginal_destroyStorage (tx : TransactionState) (address : Add
 
 /-! ## The outcomes of moving ether -/
 
-/-- The debit step of `moveEther`, named for the proofs below. -/
+/-- The debit of the sender in a move of ether, named for the proofs below. -/
 private abbrev debit (sender : Address) (amount : U256) (account : Account) :
     Except StateError Account :=
   if account.balance < amount then .error (.insufficientBalance sender)
   else .ok { account with balance := account.balance - amount }
 
-/-- Moving ether between two addresses succeeds exactly when two conditions hold.
+/-- A move of ether between two addresses that succeeds meets two conditions.
 
-The sender holds the amount, and the recipient's balance stays below 2^256.
+The sender held the amount, and the recipient's balance stays below 2^256.
 
 The two accounts then hold the moved balances and keep every other field.
 
