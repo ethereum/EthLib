@@ -359,6 +359,12 @@ Otherwise a search on the two cells returns a solution of the bilinear strong Di
 The problem is Definition 2.4 of the extended KZG paper.
 The solution is `(c, x)` with `x` the element `e(g_1, g_2)^(1 / (τ + c))` of the target group.
 The theorem holds in any model of that group, `TargetGroup`, such as the pairing itself under `PairingLaws`.
+`Proofs/Kzg/CellVerifier.lean` lifts these three results to the outer check, `verifyCellKzgProofBatch`, which the bindings call.
+That check takes one commitment per cell, keeps the first copy of each, and runs the core check.
+`verifyCellKzgProofBatch_valid_or_root` checks each cell against its own commitment.
+`verifyCellKzgProofBatch_binding` concludes that the two cells are equal as bytes, or one of the two other cases holds.
+`prEvent_cellInput_root_le` keeps the bound `(q + 1) (n - 1) / r`, where the adversary outputs the inputs of the outer check.
+In these three theorems, the scalar of a commitment or a proof is a function of its bytes.
 No theorem states what the batch check of blobs returns on accepted input.
 
 `findSdh_valid_bytes` (`Proofs/Kzg/Binding.lean`) is the evaluation binding of single proofs.
