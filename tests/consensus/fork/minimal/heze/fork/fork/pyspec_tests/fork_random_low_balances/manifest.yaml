@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: fork
+handler: fork
+suite: pyspec_tests
+case: fork_random_low_balances

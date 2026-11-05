@@ -8,6 +8,8 @@ public import EthLib.Consensus.Transition.BuilderRequests
 
 From Gloas: the upgrade of a Fulu state to a Gloas state, at the first slot of the fork epoch.
 
+From Heze: the upgrade of a Gloas state to a Heze state, at the first slot of its fork epoch.
+
 The Gloas state keeps every Fulu field but the latest payload header.
 
 The hash of that header becomes the latest block hash, and its fields seed the latest bid.
@@ -32,8 +34,20 @@ A 64-bit overflow of a builder balance is an error.
 
 [EIP-7732] adds the fields, and [EIP-8282] the onboarding of builders.
 
+The upgrade to Heze first asserts that the state has processed every deposit of the contract.
+
+That holds when the count of processed deposits equals the index of the first deposit request.
+
+The Heze state then keeps every Gloas field but those that [EIP-8015] removes.
+
+These are the deposit contract data, its votes and the two deposit indices.
+
+The latest bid stays, with the inclusion list bits of [EIP-7805] all unset.
+
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#specification
 [EIP-8282]: https://eips.ethereum.org/EIPS/eip-8282#fork-transition-onboarding
+[EIP-8015]: https://eips.ethereum.org/EIPS/eip-8015#activation-conditions
+[EIP-7805]: https://eips.ethereum.org/EIPS/eip-7805#consensus-layer
 -/
 
 @[expose] public section
@@ -193,5 +207,97 @@ def upgradeToGloas (config : Config) (checks : SignatureChecks) (pre : BeaconSta
   let post := upgradeFields config pre requestsRoot
   let window ← liftAccessor (initializePtcWindow post)
   onboardBuildersFromPendingDeposits config checks { post with ptcWindow := fun _ => window }
+
+/-- A list of a Gloas state as the same list of a Heze state. -/
+def toHezeList {α : Type} {limit : Nat} (list : ForkList .glamsterdam .glamsterdam α limit) :
+    ForkList .glamsterdam .hegota α limit :=
+  ⟨list.data, fun before => absurd before (by decide)⟩
+
+/-- The latest bid of a fresh Heze state: the Gloas bid, with no inclusion list seen. -/
+def upgradeBidToHeze (bid : ExecutionPayloadBid preset .glamsterdam) :
+    ExecutionPayloadBid preset .hegota :=
+  { parentBlockHash := bid.parentBlockHash
+    parentBlockRoot := bid.parentBlockRoot
+    blockHash := bid.blockHash
+    prevRandao := bid.prevRandao
+    feeRecipient := bid.feeRecipient
+    gasLimit := bid.gasLimit
+    builderIndex := bid.builderIndex
+    slot := bid.slot
+    value := bid.value
+    executionPayment := bid.executionPayment
+    blobKzgCommitments := toHezeList bid.blobKzgCommitments
+    executionRequestsRoot := bid.executionRequestsRoot
+    inclusionListBits := fun _ => ⟨Vector.replicate _ false⟩ }
+
+/-- The Heze state of a Gloas state, with the fields of the deposit contract removed.
+
+Every other field carries over, and the latest bid has no inclusion list bit set. -/
+def upgradeHezeFields (config : Config) (pre : BeaconState preset .glamsterdam) :
+    BeaconState preset .hegota :=
+  { genesisTime := pre.genesisTime
+    genesisValidatorsRoot := pre.genesisValidatorsRoot
+    slot := pre.slot
+    forkVersions :=
+      { previousVersion := pre.forkVersions.currentVersion
+        currentVersion := config.HEZE_FORK_VERSION
+        epoch := getCurrentEpoch pre }
+    latestBlockHeader := pre.latestBlockHeader
+    blockRoots := pre.blockRoots
+    stateRoots := pre.stateRoots
+    historicalRoots := pre.historicalRoots
+    eth1Data := fun before => absurd before (by decide)
+    eth1DataVotes := fun before => absurd before (by decide)
+    eth1DepositIndex := fun before => absurd before (by decide)
+    validators := toHezeList pre.validators
+    balances := toHezeList pre.balances
+    randaoMixes := pre.randaoMixes
+    slashings := pre.slashings
+    previousEpochAttestations := fun before => absurd before (by decide)
+    currentEpochAttestations := fun before => absurd before (by decide)
+    previousEpochParticipation := fun _ => toHezeList (pre.previousEpochParticipation (by decide))
+    currentEpochParticipation := fun _ => toHezeList (pre.currentEpochParticipation (by decide))
+    justificationBits := pre.justificationBits
+    previousJustifiedCheckpoint := pre.previousJustifiedCheckpoint
+    currentJustifiedCheckpoint := pre.currentJustifiedCheckpoint
+    finalizedCheckpoint := pre.finalizedCheckpoint
+    inactivityScores := fun _ => toHezeList (pre.inactivityScores (by decide))
+    currentSyncCommittee := fun _ => pre.currentSyncCommittee (by decide)
+    nextSyncCommittee := fun _ => pre.nextSyncCommittee (by decide)
+    latestExecutionPayloadHeader := fun during => absurd during.2 (by decide)
+    latestBlockHash := fun _ => pre.latestBlockHash (by decide)
+    nextWithdrawalIndex := fun _ => pre.nextWithdrawalIndex (by decide)
+    nextWithdrawalValidatorIndex := fun _ => pre.nextWithdrawalValidatorIndex (by decide)
+    historicalSummaries := fun _ => pre.historicalSummaries (by decide)
+    depositRequestsStartIndex := fun during => absurd during.2 (by decide)
+    depositBalanceToConsume := fun _ => pre.depositBalanceToConsume (by decide)
+    exitBalanceToConsume := fun _ => pre.exitBalanceToConsume (by decide)
+    earliestExitEpoch := fun _ => pre.earliestExitEpoch (by decide)
+    consolidationBalanceToConsume := fun _ => pre.consolidationBalanceToConsume (by decide)
+    earliestConsolidationEpoch := fun _ => pre.earliestConsolidationEpoch (by decide)
+    pendingDeposits := fun _ => toHezeList (pre.pendingDeposits (by decide))
+    pendingPartialWithdrawals := fun _ => toHezeList (pre.pendingPartialWithdrawals (by decide))
+    pendingConsolidations := fun _ => toHezeList (pre.pendingConsolidations (by decide))
+    proposerLookahead := fun _ => pre.proposerLookahead (by decide)
+    builders := fun _ => pre.builders (by decide)
+    nextWithdrawalBuilderIndex := fun _ => pre.nextWithdrawalBuilderIndex (by decide)
+    executionPayloadAvailability := fun _ => pre.executionPayloadAvailability (by decide)
+    builderPendingPayments := fun _ => pre.builderPendingPayments (by decide)
+    builderPendingWithdrawals := fun _ => pre.builderPendingWithdrawals (by decide)
+    latestExecutionPayloadBid := fun _ =>
+      upgradeBidToHeze (pre.latestExecutionPayloadBid (by decide))
+    payloadExpectedWithdrawals := fun _ => toHezeList (pre.payloadExpectedWithdrawals (by decide))
+    ptcWindow := fun _ => pre.ptcWindow (by decide) }
+
+/-- The Heze state of a Gloas state, at the first slot of the fork epoch.
+
+It fails when the count of processed deposits differs from the first deposit request's index.
+-/
+def upgradeToHeze (config : Config) (pre : BeaconState preset .glamsterdam) :
+    Except TransitionError (BeaconState preset .hegota) := do
+  let processed := pre.eth1DepositIndex (by decide)
+  let startIndex := pre.depositRequestsStartIndex (by decide)
+  ensure (processed = startIndex) (.depositIndicesDiffer processed startIndex)
+  return upgradeHezeFields config pre
 
 end EthLib.Consensus

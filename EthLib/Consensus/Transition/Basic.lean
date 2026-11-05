@@ -85,6 +85,8 @@ inductive TransitionError where
   | bidWrongParentRoot
   /-- From Gloas: the RANDAO mix of a bid is not that of the current epoch. -/
   | bidWrongRandao
+  /-- From Heze: at the upgrade, the state has not processed every deposit of the contract. -/
+  | depositIndicesDiffer (eth1DepositIndex depositRequestsStartIndex : UInt64)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -125,6 +127,7 @@ def TransitionError.code : TransitionError → UInt32
   | .bidRepeatsParentHash => 30
   | .bidWrongParentRoot => 31
   | .bidWrongRandao => 32
+  | .depositIndicesDiffer .. => 33
 
 /-- An assertion of the rule: success when the condition holds, and the error otherwise. -/
 def ensure (condition : Prop) [Decidable condition] (error : TransitionError) :

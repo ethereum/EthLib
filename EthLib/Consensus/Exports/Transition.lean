@@ -20,6 +20,8 @@ Both take and return states as SSZ bytes, and accept forks up to Gloas.
 
 At Gloas, only the steps whose Gloas rule EthLib holds run.
 
+A third export upgrades a state to Gloas or to Heze.
+
 The configuration of a name holds, with the replacements that a JSON object gives.
 
 It checks the BLS signatures, or accepts every signature for the vectors with placeholder ones.
@@ -140,19 +142,25 @@ def processEpochExport (name fork handler pre replacements : ByteArray) : Result
 
 The preset, the configuration and the target fork are named in UTF-8.
 
-So far the only upgrade is the one to Gloas.
+The upgrades are the ones to Gloas and to Heze.
 
-The signature checks of the deposits run unless the last argument is false. -/
+The signature checks of the deposits at the upgrade to Gloas run unless the last argument is false.
+-/
 @[export eth_consensus_upgrade_state]
 def upgradeStateExport (name fork pre replacements : ByteArray) (verify : Bool) :
     Result ByteArray := do
-  let (preset, fork) ← transitionPresetAndFork name fork
+  let preset ← presetOf (← nameOf name)
+  let fork ← forkOf fork
   let config ← configWith name replacements
   let checks := if verify then SignatureChecks.bls else SignatureChecks.acceptAll
   match fork with
   | .glamsterdam =>
     let state ← decodeInput (BeaconState preset .fusaka) pre
     let post ← runTransition (upgradeToGloas config checks state)
+    (SszType.serialize post).mapError fun e => (0, s!"state rejected: {reprStr e}")
+  | .hegota =>
+    let state ← decodeInput (BeaconState preset .glamsterdam) pre
+    let post ← runTransition (upgradeToHeze config state)
     (SszType.serialize post).mapError fun e => (0, s!"state rejected: {reprStr e}")
   | fork => throw (0, s!"no upgrade to {fork.name}")
 
