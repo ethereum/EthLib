@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Proofs.Transactions.Network
 public import EthLib.Execution.Proofs.Transactions.Settlement
 public import EthLib.Execution.Transactions.Inclusion
@@ -56,12 +57,6 @@ private theorem bind_ok {ε α β : Type} {x : Except ε α} {f : α → Except 
   | error e => cases h
   | ok a => exact ⟨a, rfl, h⟩
 
-private theorem mapError_ok {ε ε' α : Type} {x : Except ε α} {g : ε → ε'} {a : α}
-    (h : x.mapError g = .ok a) : x = .ok a := by
-  cases x with
-  | error e => cases h
-  | ok b => cases h; rfl
-
 private theorem failIf_ok {c : Bool} {e : InclusionError} {u : Unit} (h : failIf c e = .ok u) :
     c = false := by
   cases c
@@ -115,7 +110,7 @@ theorem checkInclusion_ok {fork : Fork} {chainId : UInt64} {env : BlockEnvironme
   have hHigh := failIf_ok hHigh
   have hBal := failIf_ok hBal
   simp only [decide_eq_false_iff_not, Nat.not_lt] at hGas hBlob hFee hBlobFee hLow hHigh hBal
-  refine ⟨mapError_ok hs, mapError_ok hv, hGas, rfl, hBlob, hFee, ?_, rfl,
+  refine ⟨mapError_ok_iff.mp hs, mapError_ok_iff.mp hv, hGas, rfl, hBlob, hFee, ?_, rfl,
     by dsimp only; omega, hBal⟩
   intro hPos
   simpa [hPos] using hBlobFee

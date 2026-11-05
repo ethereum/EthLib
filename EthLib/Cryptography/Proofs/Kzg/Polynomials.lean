@@ -237,11 +237,6 @@ theorem bytesToBlsField_ok {b : Bytes32} {f : Fr}
   simp only [fieldElementBytes, Vector.getElem_ofFn]
   exact (Vector.getElem_flatten _).trans (by simp only [hdiv, hmod, Fin.getElem_fin])
 
-/-- Relabelling the error keeps a success unchanged. -/
-private theorem mapError_eq_ok {ε ε' α : Type} {g : ε → ε'} {x : Except ε α} {y : α} :
-    x.mapError g = .ok y ↔ x = .ok y := by
-  cases x <;> simp [Except.mapError]
-
 /-- Relabelling the error fails exactly when the original fails. -/
 private theorem mapError_eq_error {ε ε' α : Type} {g : ε → ε'} {x : Except ε α} {e' : ε'} :
     x.mapError g = .error e' ↔ ∃ e, x = .error e ∧ g e = e' := by
@@ -283,7 +278,7 @@ theorem getElem_bytesToBlsFields {k : Nat} {bytes : Vector UInt8 (k * BYTES_PER_
     cases h
     have hil : i.val < (Array.finRange k).toList.length := by simp
     have hstep := Base.mapM_ok_getElem hl i.val hil
-    simp only [Array.getElem_toList, Array.getElem_finRange, mapError_eq_ok] at hstep
+    simp only [Array.getElem_toList, Array.getElem_finRange, Base.mapError_ok_iff] at hstep
     simpa using hstep
 
 /-- A failed decoding names its first invalid chunk.
@@ -312,7 +307,7 @@ theorem bytesToBlsFields_error {k : Nat} {bytes : Vector UInt8 (k * BYTES_PER_FI
       rw [this] at hf
       cases hf
     · obtain ⟨y, hy⟩ := hbefore i.val hij
-      simp only [Array.getElem_toList, Array.getElem_finRange, mapError_eq_ok] at hy
+      simp only [Array.getElem_toList, Array.getElem_finRange, Base.mapError_ok_iff] at hy
       exact ⟨y, by simpa using hy⟩
 
 /-- The decoding succeeds when every chunk decodes.
@@ -321,7 +316,7 @@ It then returns the decoded values. -/
 theorem bytesToBlsFields_eq_ok {k : Nat} {bytes : Vector UInt8 (k * BYTES_PER_FIELD_ELEMENT)}
     (g : Fin k → Fr) (h : ∀ i, bytesToBlsField (fieldElementBytes bytes i) = .ok (g i)) :
     bytesToBlsFields bytes = .ok (Array.ofFn g) := by
-  rw [bytesToBlsFields_eq, Base.mapM_eq_ok_map (g := g) fun i _ => mapError_eq_ok.mpr (h i)]
+  rw [bytesToBlsFields_eq, Base.mapM_eq_ok_map (g := g) fun i _ => Base.mapError_ok_iff.mpr (h i)]
   show Except.ok _ = _
   congr 1
   apply Array.ext

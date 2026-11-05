@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Blocks.Ommers
 
 /-!
@@ -47,13 +48,6 @@ theorem forM_eq_ok {α : Type} (f : α → Except OmmerError Unit) :
     | error e => exact ⟨(fun h => nomatch h), fun ⟨h, _⟩ => nomatch h⟩
     | ok u => exact ⟨fun h => ⟨rfl, ih.mp h⟩, fun ⟨_, h⟩ => ih.mpr h⟩
 
-/-- A computation whose error is renamed succeeds as the original does. -/
-private theorem mapError_eq_ok {ε ε' α : Type} {g : ε → ε'} {x : Except ε α} {a : α}
-    (h : x.mapError g = .ok a) : x = .ok a := by
-  cases x with
-  | error e => exact nomatch h
-  | ok b => simpa [Except.mapError] using h
-
 /-- A map in `Except` that succeeds keeps the length of the list. -/
 private theorem length_of_mapM_eq_ok {ε α β : Type} (f : α → Except ε β) :
     ∀ (l : List α) (r : List β), l.mapM f = .ok r → r.length = l.length := by
@@ -100,7 +94,7 @@ theorem validateOmmers_spec {fork : Fork} {checkSeal : Bool} {recent : List Rece
   have hlast := (forM_eq_ok _ (ommers.zip ommerHashes)).mp h
   -- One hash per ommer, so each ommer meets its hash in the pairs.
   have hlen : ommerHashes.length = ommers.length := length_of_mapM_eq_ok _ _ _ hhashes
-  refine ⟨⟨encoded, mapError_eq_ok henc, eq_of_beq hhash⟩, by simpa using hcount,
+  refine ⟨⟨encoded, mapError_ok_iff.mp henc, eq_of_beq hhash⟩, by simpa using hcount,
     ⟨ommerHashes, hhashes, by simpa using ensure_eq_ok.mp hnodup⟩, fun ommer hm => ?_⟩
   obtain ⟨_, hrange, -⟩ := bind_eq_ok (hfirst ommer hm)
   have hrange := ensure_eq_ok.mp hrange

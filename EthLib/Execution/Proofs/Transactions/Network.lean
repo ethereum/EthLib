@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Proofs.Transactions.Envelope
 public import EthLib.Execution.Transactions.Network
 
@@ -40,10 +41,6 @@ private theorem bind_ok {ε α β : Type} {x : Except ε α} {f : α → Except 
     x >>= f = .ok y ↔ ∃ a, x = .ok a ∧ f a = .ok y := by
   cases x <;> simp [bind, Except.bind]
 
-private theorem mapError_ok {ε ε' α : Type} {x : Except ε α} {f : ε → ε'} {y : α} :
-    x.mapError f = .ok y ↔ x = .ok y := by
-  cases x <;> simp [Except.mapError]
-
 /-- A list that holds a network form is the list of that form. -/
 theorem NetworkBlobTransaction.toItem_of_ofItem {fork : Fork} {item : Item}
     {w : NetworkBlobTransaction} (h : NetworkBlobTransaction.ofItem fork item = .ok w) :
@@ -55,13 +52,13 @@ theorem NetworkBlobTransaction.toItem_of_ofItem {fork : Fork} {item : Item}
     split at h
     · rename_i tx v b c p
       obtain ⟨version, hv, h⟩ := bind_ok.mp h
-      have hv := LawfulCodec.toItem_of_ofItem (mapError_ok.mp hv)
+      have hv := LawfulCodec.toItem_of_ofItem (mapError_ok_iff.mp hv)
       split at h
       · exact nomatch h
       rename_i hver
       simp only [ne_eq, Decidable.not_not] at hver
       subst hver
-      have h := mapError_ok.mp h
+      have h := mapError_ok_iff.mp h
       obtain ⟨x1, h1, h⟩ := bind_eq_ok.mp h
       obtain ⟨x2, h2, h⟩ := bind_eq_ok.mp h
       obtain ⟨x3, h3, h⟩ := bind_eq_ok.mp h
@@ -74,7 +71,7 @@ theorem NetworkBlobTransaction.toItem_of_ofItem {fork : Fork} {item : Item}
     · exact nomatch h
   · rename_i hf
     split at h
-    · have h := mapError_ok.mp h
+    · have h := mapError_ok_iff.mp h
       obtain ⟨x1, h1, h⟩ := bind_eq_ok.mp h
       obtain ⟨x2, h2, h⟩ := bind_eq_ok.mp h
       obtain ⟨x3, h3, h⟩ := bind_eq_ok.mp h
@@ -119,7 +116,7 @@ theorem tx_of_decodeNetwork {fork : Fork} {bytes : ByteArray} {w : NetworkBlobTr
   rename_i type payload hbytes
   split at h
   · obtain ⟨item, hitem, h⟩ := bind_ok.mp h
-    have hitem := mapError_ok.mp hitem
+    have hitem := mapError_ok_iff.mp hitem
     have hw := NetworkBlobTransaction.toItem_of_ofItem h
     rw [hbytes, List.drop_one, List.tail_cons, hitem, ← hw]
     unfold NetworkBlobTransaction.toItem
