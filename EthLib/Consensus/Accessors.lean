@@ -56,6 +56,8 @@ inductive AccessorError where
   | tooManyAttesters (count limit : Nat)
   /-- The rule at this fork is not yet in EthLib, so no older rule stands in for it. -/
   | forkNotYetSpecified (fork : Base.Fork)
+  /-- The epoch is past the next epoch, whose duties the state does not fix yet. -/
+  | epochTooFar (epoch nextEpoch : Epoch)
   deriving DecidableEq, Repr
 
 /-- Whether a validator is active in an epoch: from its activation epoch, before its exit epoch. -/

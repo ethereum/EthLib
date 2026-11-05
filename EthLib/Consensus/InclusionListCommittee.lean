@@ -14,6 +14,8 @@ When the slot has fewer validators than seats, the seats wrap around to the firs
 
 A member signs its list under the domain of the committee, at the fork version of the list's epoch.
 
+A validator finds its seat in an epoch up to the next one, since later committees are not fixed.
+
 [EIP-7805](https://eips.ethereum.org/EIPS/eip-7805#consensus-layer) adds the committee.
 
 The EIP names its domain `DOMAIN_IL_COMMITTEE` with the value `0x0C000000`.
@@ -27,7 +29,7 @@ EIP-7805 is a Draft on 2026-11-03, so these rules can still change.
 
 namespace EthLib.Consensus
 
-open Base Cryptography.Bls Serialization.Ssz
+open Base Uint64 Cryptography.Bls Serialization.Ssz
 
 variable {preset : Preset} {fork : Fork}
 
@@ -49,6 +51,31 @@ def getInclusionListCommittee (state : BeaconState preset fork) (slot : Slot) :
   if nonempty : 0 < members.size then
     return Vector.ofFn fun i => members[i.val % members.size]'(Nat.mod_lt _ nonempty)
   else throw .noCandidates
+
+/-- The first of a list of slots whose inclusion list committee holds a validator, if any.
+
+The search stops at that slot, so the committees of later slots are not computed. -/
+def firstInclusionListSlot (state : BeaconState preset fork) (validator : ValidatorIndex) :
+    List Slot → Except AccessorError (Option Slot)
+  | [] => return none
+  | slot :: rest => do
+    let committee ← getInclusionListCommittee state slot
+    if validator ∈ committee.toList then return some slot
+    else firstInclusionListSlot state validator rest
+
+/-- The slot of an epoch in which a validator sits on the inclusion list committee, if any.
+
+The epoch can be at most the next epoch of the state, since later committees are not fixed yet.
+
+A validator with seats in several slots gets the first of them. -/
+def getInclusionListCommitteeAssignment (state : BeaconState preset fork) (epoch : Epoch)
+    (validator : ValidatorIndex) : Except AccessorError (Option Slot) := do
+  let nextEpoch ← liftArith (addChecked (getCurrentEpoch state) 1)
+  if nextEpoch < epoch then throw (.epochTooFar epoch nextEpoch)
+  let start ← liftArith (computeStartSlotAtEpoch preset epoch)
+  let _ ← liftArith (addChecked start preset.SLOTS_PER_EPOCH)
+  firstInclusionListSlot state validator
+    ((List.range preset.SLOTS_PER_EPOCH.toNat).map fun k => start + k.toUInt64)
 
 /-- The root that a member signs for an inclusion list, on the chain of a state.
 
