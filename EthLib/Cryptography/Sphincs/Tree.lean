@@ -61,18 +61,18 @@ def nodeHash (pp : PublicParam) (layer : Layer) (tree level j : Nat) (left right
   th H pp (addrNode layer tree (Fin.ofNat _ level) j) (packBytes left ++ packBytes right)
 
 /-- `X_{0,j}`: the leaf of one-time key `j` of tree `tree` of a layer. -/
-def leaves (pp : PublicParam) (seed : Seed) (layer : Layer) (tree j : Nat) : m Digest :=
-  otsPublicLeaf H pp seed ⟨layer, tree, j⟩
+def leaves (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (tree j : Nat) : m Digest :=
+  otsPublicLeaf H pp prf ⟨layer, tree, j⟩
 
 /-- `X_{level,j}`: node `j` on `level` of tree `tree` of a layer.
 
 Computing it evaluates the `2^level` one-time keys below it. -/
-def node (pp : PublicParam) (seed : Seed) (layer : Layer) (tree level j : Nat) : m Digest :=
-  Merkle.node (nodeHash H pp layer tree) (leaves H pp seed layer tree) level j
+def node (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (tree level j : Nat) : m Digest :=
+  Merkle.node (nodeHash H pp layer tree) (leaves H pp prf layer tree) level j
 
 /-- The root of tree `tree` of a layer: its one node on the top level. -/
-def treeRoot (pp : PublicParam) (seed : Seed) (layer : Layer) (tree : Nat) : m Digest :=
-  Merkle.root (nodeHash H pp layer tree) (leaves H pp seed layer tree) layer.height
+def treeRoot (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (tree : Nat) : m Digest :=
+  Merkle.root (nodeHash H pp layer tree) (leaves H pp prf layer tree) layer.height
 
 /-! ## The path -/
 
@@ -82,9 +82,9 @@ def treeRoot (pp : PublicParam) (seed : Seed) (layer : Layer) (tree : Nat) : m D
     pi_lambda = X_{lambda, floor(e / 2^lambda) xor 1}
 ```
 -/
-def path (pp : PublicParam) (seed : Seed) (layer : Layer) (tree e : Nat) :
+def path (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (tree e : Nat) :
     m (Vector Digest layer.height) :=
-  Merkle.path (nodeHash H pp layer tree) (leaves H pp seed layer tree) layer.height e
+  Merkle.path (nodeHash H pp layer tree) (leaves H pp prf layer tree) layer.height e
 
 /-- `Tree.fold`: the root a path leads to from the leaf of key `e` of tree `tree`. -/
 def fold (pp : PublicParam) (layer : Layer) (tree e : Nat) (leaf : Digest)

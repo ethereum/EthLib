@@ -60,6 +60,8 @@ Every secret derives from the scheme seed `S = H("leanSPHINCS" | S_0)`, the hash
 The model's `keygenFromSeed` derives from the seed directly.
 The name separates these derivations from those of every other scheme, and leanXMSS hashes its own name the same way.
 Key generation costs one permutation more than in the model, and everything below the scheme seed is the model's.
+Every derivation from the scheme seed has the form `H(P' | A | S | suffix)`, and all of them go through one function, `seedPrf`.
+A security proof can then replace the derivations as a whole, without reading the seed.
 
 Every index lands in the key, so the signer keeps the first randomizer `R_0`.
 
@@ -111,6 +113,7 @@ Every definition that hashes takes the hash as an argument, as leanXMSS's defini
 `keyGen`, `sign` and `verify` pass Keccak-256.
 Each theorem about such a definition holds for every hash function, run in the identity monad.
 Keccak-256 is one such function, so the theorems cover the specification as it runs.
+Definitions that derive a secret take the derivation function as an argument too, and their theorems hold for every such function.
 
 - Correctness.
   A key from `keyGen` verifies every signature that `sign` makes with it (`verify_keyGen_sign`, `Correctness.lean`).

@@ -46,7 +46,9 @@ variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
 /-! ## The randomizer -/
 
-/-- `R`: the randomizer of a message, the first half of one hash of the seed and the message.
+/-- `R`: the randomizer of a message, the first half of one derivation from the seed.
+
+The derivation's suffix is the message.
 
 The seed is in the input, so the randomizer is unpredictable to anyone without the secret key.
 
@@ -55,8 +57,8 @@ Every index is a leaf of this key, so the first randomizer is always kept.
 The note's signer would try `R + i delta` for `i = 1, 2, ...`.
 
 It does so only if an index could miss the key. -/
-def randomizer (pp : PublicParam) (seed : Seed) (msg : Message) : m Randomizer :=
-  th H pp addrRnd (packBytes seed ++ packBytes msg)
+def randomizer (pp : PublicParam) (prf : SeedPrf m) (msg : Message) : m Randomizer := do
+  return halfOf 0 (← prf pp addrRnd (packBytes msg))
 
 /-! ## The digest -/
 

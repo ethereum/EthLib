@@ -78,14 +78,14 @@ variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
 /-- The secret of leaf `l` of tree `kappa` of instance `idx`.
 
-Leaves `2p` and `2p + 1` take the two halves of one hash of the seed. -/
-def forsSecret (pp : PublicParam) (seed : Seed) (idx : Nat) (kappa : Fin FORS_TREES)
+Leaves `2p` and `2p + 1` take the two halves of one derivation from the seed. -/
+def forsSecret (pp : PublicParam) (prf : SeedPrf m) (idx : Nat) (kappa : Fin FORS_TREES)
     (l : Fin (2 ^ FORS_HEIGHT)) : m Digest := do
-  -- The pair `p = floor(l / 2)` names the hash, and the low bit of `l` names the half.
+  -- The pair `p = floor(l / 2)` names the derivation, and the low bit of `l` names the half.
   let pair : Fin (2 ^ FORS_HEIGHT / 2) :=
     ⟨l.val / 2, by have := l.isLt; simp only [FORS_HEIGHT] at *; omega⟩
   return halfOf ⟨l.val % 2, Nat.mod_lt _ (by decide)⟩
-    (← thFull H pp (addrForsPrf idx kappa pair) (packBytes seed))
+    (← prf pp (addrForsPrf idx kappa pair) .empty)
 
 /-- Leaf `l` of tree `kappa` of instance `idx`: the hash of its secret. -/
 def forsLeafHash (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREES) (l : Fin (2 ^ FORS_HEIGHT))
@@ -104,24 +104,24 @@ def forsNodeHash (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREES) (level 
     (packBytes left ++ packBytes right)
 
 /-- `Y_{0,j}`: leaf `j` of tree `kappa` of instance `idx`, the hash of its secret. -/
-def forsLeaves (pp : PublicParam) (seed : Seed) (idx : Nat) (kappa : Fin FORS_TREES) (j : Nat) :
-    m Digest := do
-  forsLeafHash H pp idx kappa (forsIndex j) (← forsSecret H pp seed idx kappa (forsIndex j))
+def forsLeaves (pp : PublicParam) (prf : SeedPrf m) (idx : Nat) (kappa : Fin FORS_TREES)
+    (j : Nat) : m Digest := do
+  forsLeafHash H pp idx kappa (forsIndex j) (← forsSecret pp prf idx kappa (forsIndex j))
 
 /-! ## Nodes -/
 
 /-- `Y_{level,j}`: node `j` on `level` of tree `kappa` of instance `idx`.
 
 Levels stop at 9: the tree is never hashed into a root. -/
-def forsNode (pp : PublicParam) (seed : Seed) (idx : Nat) (kappa : Fin FORS_TREES) (level j : Nat) :
-    m Digest :=
-  Merkle.node (forsNodeHash H pp idx kappa) (forsLeaves H pp seed idx kappa) level j
+def forsNode (pp : PublicParam) (prf : SeedPrf m) (idx : Nat) (kappa : Fin FORS_TREES)
+    (level j : Nat) : m Digest :=
+  Merkle.node (forsNodeHash H pp idx kappa) (forsLeaves H pp prf idx kappa) level j
 
 /-- The FORS key of instance `idx`: the two level-9 nodes of every tree, tree 0 first. -/
-def forsKey (pp : PublicParam) (seed : Seed) (idx : Nat) : m ForsKey :=
+def forsKey (pp : PublicParam) (prf : SeedPrf m) (idx : Nat) : m ForsKey :=
   ofFnInOrder FORS_TREES fun kappa => do
-    let left ← forsNode H pp seed idx kappa (FORS_HEIGHT - 1) 0
-    let right ← forsNode H pp seed idx kappa (FORS_HEIGHT - 1) 1
+    let left ← forsNode H pp prf idx kappa (FORS_HEIGHT - 1) 0
+    let right ← forsNode H pp prf idx kappa (FORS_HEIGHT - 1) 1
     return (left, right)
 
 /-- The bytes of a FORS key, the message the bottom one-time key signs.
@@ -146,19 +146,19 @@ The path is the one of a tree of height 10, so its last node is the other level-
     pi_lambda = Y_{lambda, floor(l / 2^lambda) xor 1},   lambda < 10
 ```
 -/
-def treeOpen (pp : PublicParam) (seed : Seed) (idx : Nat) (kappa : Fin FORS_TREES)
+def treeOpen (pp : PublicParam) (prf : SeedPrf m) (idx : Nat) (kappa : Fin FORS_TREES)
     (l : Fin (2 ^ FORS_HEIGHT)) : m TreeOpening := do
-  let secret ← forsSecret H pp seed idx kappa l
+  let secret ← forsSecret pp prf idx kappa l
   let path ←
-    Merkle.path (forsNodeHash H pp idx kappa) (forsLeaves H pp seed idx kappa) FORS_HEIGHT l
+    Merkle.path (forsNodeHash H pp idx kappa) (forsLeaves H pp prf idx kappa) FORS_HEIGHT l
   return { secret, path }
 
 /-- `Fts.sign`: the opening of every tree, each at the leaf the digest picked for it.
 
 The trees are opened in order, tree 0 first. -/
-def forsSign (pp : PublicParam) (seed : Seed) (idx : Nat)
+def forsSign (pp : PublicParam) (prf : SeedPrf m) (idx : Nat)
     (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES) : m (Vector TreeOpening FORS_TREES) :=
-  ofFnInOrder FORS_TREES fun kappa => treeOpen H pp seed idx kappa leaves[kappa]
+  ofFnInOrder FORS_TREES fun kappa => treeOpen H pp prf idx kappa leaves[kappa]
 
 /-! ## Recovering the key -/
 

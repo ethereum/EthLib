@@ -32,18 +32,18 @@ open EthLib.Cryptography.Sphincs.Constants
 section Monad
 
 variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
-  {pp : PublicParam} {seed : Seed} {layer : Layer} {tree : Nat}
+  {pp : PublicParam} {prf : SeedPrf m} {layer : Layer} {tree : Nat}
 
 /-- A node on level 0 is the leaf of one-time key `j`. -/
 theorem node_zero (j : Nat) :
-    node H pp seed layer tree 0 j = otsPublicLeaf H pp seed ⟨layer, tree, j⟩ :=
+    node H pp prf layer tree 0 j = otsPublicLeaf H pp prf ⟨layer, tree, j⟩ :=
   rfl
 
 /-- A node above level 0 hashes its two children, the left subtree first. -/
 theorem node_succ (l j : Nat) :
-    node H pp seed layer tree (l + 1) j = (do
-      let left ← node H pp seed layer tree l (2 * j)
-      let right ← node H pp seed layer tree l (2 * j + 1)
+    node H pp prf layer tree (l + 1) j = (do
+      let left ← node H pp prf layer tree l (2 * j)
+      let right ← node H pp prf layer tree l (2 * j + 1)
       nodeHash H pp layer tree (l + 1) j left right) :=
   rfl
 
@@ -58,7 +58,7 @@ theorem nodeHash_of_le {level : Nat} (hlevel : level ≤ TOP_HEIGHT) (j : Nat) (
 /-- A path is the same with any node hash that agrees on the levels of the tree. -/
 theorem path_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest)
     (agree : ∀ k, 1 ≤ k → k ≤ layer.height → nodeHash H pp layer tree k = hash' k) (e : Nat) :
-    path H pp seed layer tree e = Merkle.path hash' (leaves H pp seed layer tree) layer.height e :=
+    path H pp prf layer tree e = Merkle.path hash' (leaves H pp prf layer tree) layer.height e :=
   Merkle.path_congr _ hash' _ _ e fun k h1 h2 => agree k h1 (by omega)
 
 /-- A fold is the same with any node hash that agrees on the levels of the tree. -/
@@ -71,29 +71,29 @@ theorem fold_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest
 /-- The root is the same with any node hash that agrees on the levels of the tree. -/
 theorem treeRoot_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest)
     (agree : ∀ k, 1 ≤ k → k ≤ layer.height → nodeHash H pp layer tree k = hash' k) :
-    treeRoot H pp seed layer tree = Merkle.root hash' (leaves H pp seed layer tree) layer.height :=
+    treeRoot H pp prf layer tree = Merkle.root hash' (leaves H pp prf layer tree) layer.height :=
   Merkle.node_congr _ hash' _ _ 0 agree
 
 end Monad
 
 /-! ## The path reaches the root -/
 
-variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {seed : Seed} {layer : Layer}
+variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {prf : SeedPrf Id} {layer : Layer}
   {tree : Nat}
 
 /-- An honest path leads from key `e`'s leaf to node `floor(e / 2^h)` on the top level. -/
 theorem fold_path (e : Nat) :
-    (fold (pureHash f) pp layer tree e (node (pureHash f) pp seed layer tree 0 e).run
-        (path (pureHash f) pp seed layer tree e).run).run
-      = (node (pureHash f) pp seed layer tree layer.height (e / 2 ^ layer.height)).run :=
+    (fold (pureHash f) pp layer tree e (node (pureHash f) pp prf layer tree 0 e).run
+        (path (pureHash f) pp prf layer tree e).run).run
+      = (node (pureHash f) pp prf layer tree layer.height (e / 2 ^ layer.height)).run :=
   Merkle.climb_path _ _ _ _
 
 /-- A key of the tree, below `2^h`, reaches the tree's root. -/
 theorem fold_path_root {e : Nat} (he : e < 2 ^ layer.height) :
-    (fold (pureHash f) pp layer tree e (otsPublicLeaf (pureHash f) pp seed ⟨layer, tree, e⟩).run
-        (path (pureHash f) pp seed layer tree e).run).run
-      = (treeRoot (pureHash f) pp seed layer tree).run :=
+    (fold (pureHash f) pp layer tree e (otsPublicLeaf (pureHash f) pp prf ⟨layer, tree, e⟩).run
+        (path (pureHash f) pp prf layer tree e).run).run
+      = (treeRoot (pureHash f) pp prf layer tree).run :=
   Merkle.climb_path_root (nodeHash (pureHash f) pp layer tree)
-    (leaves (pureHash f) pp seed layer tree) he
+    (leaves (pureHash f) pp prf layer tree) he
 
 end EthLib.Cryptography.Sphincs

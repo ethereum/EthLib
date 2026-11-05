@@ -43,12 +43,12 @@ variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {key : OtsKey} {
 `simp` rewrites with `rfl` lemmas, and checking those makes Lean unfold the counter search.
 
 That search runs up to `2^32` trials. -/
-theorem otsSign_run {seed : Seed} {msg : ByteArray} :
-    (otsSign (pureHash f) pp seed key msg).run =
+theorem otsSign_run {prf : SeedPrf Id} {msg : ByteArray} :
+    (otsSign (pureHash f) pp prf key msg).run =
       ((Internal.findCounter (pureHash f) pp key msg 0 MAX_COUNTER_TRIALS).run).map
         fun found => (found.1, Vector.ofFn fun i => (chain (pureHash f) pp key i 0
           (found.2[i]).val (by have := (found.2[i]).isLt; omega)
-          (chainStarts (pureHash f) pp seed key).run[i]).run) := by
+          (chainStarts pp prf key).run[i]).run) := by
   rw [otsSign, Id.run_bind]
   cases (Internal.findCounter (pureHash f) pp key msg 0 MAX_COUNTER_TRIALS).run with
   | none => rfl
@@ -63,8 +63,9 @@ theorem otsSign_run {seed : Seed} {msg : ByteArray} :
 /-- A one-time signature carries the least admissible counter below `2^32`.
 
 Its encoding is a codeword, and the encoding of every smaller counter is not. -/
-theorem otsSign_counter {seed : Seed} {msg : ByteArray} {counter : UInt32} {y : Vector Digest V}
-    (h : (otsSign (pureHash f) pp seed key msg).run = some (counter, y)) :
+theorem otsSign_counter {prf : SeedPrf Id} {msg : ByteArray} {counter : UInt32}
+    {y : Vector Digest V}
+    (h : (otsSign (pureHash f) pp prf key msg).run = some (counter, y)) :
     (∃ x, (encode (pureHash f) pp key msg counter).run = some x) ∧
       ∀ k < counter.toNat, (encode (pureHash f) pp key msg (UInt32.ofNat k)).run = none := by
   rw [otsSign_run, Option.map_eq_some_iff] at h
@@ -81,15 +82,16 @@ theorem otsSign_counter {seed : Seed} {msg : ByteArray} {counter : UInt32} {y : 
 
 /-! ## An honest signature leads to the key's leaf -/
 
-/-- A one-time signature from the seed recovers the leaf the seed gives the key.
+/-- A one-time signature from the derivations recovers the leaf they give the key.
 
 The verifier walks each revealed value from position `x_i` to 3.
 
 The signer walked it from 0 to `x_i`, so together they walk the whole chain. -/
-theorem otsLeaf_otsSign {seed : Seed} {msg : ByteArray} {counter : UInt32} {y : Vector Digest V}
-    (h : (otsSign (pureHash f) pp seed key msg).run = some (counter, y)) :
+theorem otsLeaf_otsSign {prf : SeedPrf Id} {msg : ByteArray} {counter : UInt32}
+    {y : Vector Digest V}
+    (h : (otsSign (pureHash f) pp prf key msg).run = some (counter, y)) :
     (otsLeaf (pureHash f) pp key msg counter y).run
-      = some (otsPublicLeaf (pureHash f) pp seed key).run := by
+      = some (otsPublicLeaf (pureHash f) pp prf key).run := by
   -- Name the search result: a counter and its codeword.
   rw [otsSign_run, Option.map_eq_some_iff] at h
   obtain ⟨⟨counter', x⟩, hfind, hxy⟩ := h
@@ -106,7 +108,7 @@ theorem otsLeaf_otsSign {seed : Seed} {msg : ByteArray} {counter : UInt32} {y : 
   have hx := (x[j]'hj).isLt
   have hsplit := Wots.chain_add (m := Id) (step := chainStep (pureHash f) pp key ⟨j, hj⟩)
     (start := 0) (s₁ := (x[j]'hj : Nat)) (s₂ := CHAIN_LENGTH - 1 - (x[j]'hj : Nat))
-    (value := (chainStarts (pureHash f) pp seed key).run[j]'hj) (Nat.zero_add _).symm
+    (value := (chainStarts pp prf key).run[j]'hj) (Nat.zero_add _).symm
     (by simp only [CHAIN_LENGTH] at *; omega) (by simp only [CHAIN_LENGTH] at *; omega)
   -- Steps revealed plus steps walked is the whole chain.
   exact hsplit.trans (Wots.chain_steps_congr (by simp only [CHAIN_LENGTH] at *; omega) _ _)
