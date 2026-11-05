@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Base.Except
+
 /-!
 # `Base.Proofs.MapM`
 
@@ -17,8 +19,6 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - A failed map fails on some input, and succeeds on every input before it.
 
 A mapped error leaves a success unchanged.
-
-A sequence of two computations succeeds when both steps succeed.
 -/
 
 @[expose] public section
@@ -146,12 +146,5 @@ theorem mapM_error {xs : List α} {e : ε} (h : xs.mapM f = .error e) :
 theorem mapError_ok_iff {ε' : Type} {g : ε → ε'} {result : Except ε α} {value : α} :
     result.mapError g = .ok value ↔ result = .ok value := by
   cases result <;> simp [Except.mapError]
-
-/-- Two steps in sequence succeed exactly when the first succeeds with some value.
-
-The second step must then succeed on that value. -/
-theorem bind_ok_iff {x : Except ε α} {g : α → Except ε β} {y : β} :
-    x >>= g = .ok y ↔ ∃ a, x = .ok a ∧ g a = .ok y := by
-  cases x <;> simp [bind, Except.bind]
 
 end EthLib.Base
