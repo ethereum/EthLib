@@ -1,8 +1,8 @@
 module
 
 public import EthLib.Consensus.Containers.Block
-public import EthLib.Consensus.LightClient.Sync
-public import EthLib.Serialization.Ssz.Codec.Proof
+public import EthLib.Consensus.LightClient.Branch
+public import EthLib.Consensus.LightClient.Upgrade
 
 /-!
 # `Consensus.LightClient.FullNode`
@@ -37,17 +37,6 @@ open Base Serialization.Ssz
 open LightClientError (require liftRoot specifiedFork)
 
 variable {preset : Preset} {fork : Fork}
-
-/-- The branch that proves the node at a generalized index of a value, from the node up. -/
-def computeMerkleProof {α : Type} [SszType α] (value : α) (gindex : Nat) :
-    Except Err (List Bytes32) := do
-  (← buildProof (SszType.desc α) (SszType.toValue value) gindex).mapM toChunk
-
-/-- A branch as a vector of its length, or the error of a branch of another length. -/
-def branchVector (depth : Nat) (branch : List Bytes32) : Except LightClientError
-    (Vector Bytes32 depth) :=
-  if h : branch.length = depth then .ok ⟨branch.toArray, by simpa using h⟩
-  else .error (.ssz (.count depth branch.length))
 
 /-- The light client header of a block.
 
@@ -121,17 +110,23 @@ The block must carry the signature of at least the minimum of the sync committee
 
 Its parent is the attested block, and its post state proves what the update carries.
 
+The update is of the fork of the attested block, which the block may follow across a fork epoch.
+
 The next committee comes only when the committee of the attested period signs.
 
-The finalized header comes when the finalized block is known, and is zero for the genesis. -/
-def createLightClientUpdate (config : Config) (state : BeaconState preset fork)
-    (block : SignedBeaconBlock preset fork) (attestedState : BeaconState preset fork)
-    (attestedBlock : SignedBeaconBlock preset fork)
-    (finalizedBlock : Option (SignedBeaconBlock preset fork)) :
+The finalized header comes when the finalized block is known, and is zero for the genesis.
+
+A finalized block of an earlier fork gives its header upgraded to the fork of the update. -/
+def createLightClientUpdate (config : Config) {signatureFork finalizedFork : Fork}
+    (state : BeaconState preset signatureFork) (block : SignedBeaconBlock preset signatureFork)
+    (attestedState : BeaconState preset fork) (attestedBlock : SignedBeaconBlock preset fork)
+    (finalizedBlock : Option (SignedBeaconBlock preset finalizedFork))
+    (finalizedEarlier : finalizedFork ≤ fork) :
     Except LightClientError (LightClientUpdate preset fork) := do
   let ⟨altair⟩ ← specifiedFork fork
+  let ⟨signatureAltair⟩ ← specifiedFork signatureFork
   require (computeEpochAtSlot preset attestedState.slot ≥ config.ALTAIR_FORK_EPOCH) .beforeAltair
-  let aggregate := block.message.body.syncAggregate altair
+  let aggregate := block.message.body.syncAggregate signatureAltair
   require (aggregate.participants ≥ preset.MIN_SYNC_COMMITTEE_PARTICIPANTS.toNat)
     .tooFewParticipants
   require (state.slot = state.latestBlockHeader.slot) .stateNotAtBlock
@@ -158,7 +153,7 @@ def createLightClientUpdate (config : Config) (state : BeaconState preset fork)
           let header ← blockToLightClientHeader config finalized
           require ((← liftRoot (SszType.hashTreeRoot header.beacon)) = finalizedRoot)
             .finalizedNotOfState
-          pure header
+          header.upgrade config fork finalizedEarlier
         else do
           require (finalizedRoot = zeroBytes32) .finalizedNotOfState
           pure empty

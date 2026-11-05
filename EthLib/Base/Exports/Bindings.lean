@@ -361,7 +361,8 @@ def bindings : List Binding := [
     "(name: str, fork: str, type: str, config: bytes, data: bytes) -> bool",
     [`EthLib.Consensus.LightClientError], some "LightClientError"⟩,
   ⟨"consensus_is_better_update", `EthLib.Consensus.Exports.isBetterUpdateExport,
-    "(name: str, fork: str, new_update: bytes, old_update: bytes) -> bool",
+    "(name: str, fork: str, old_fork: str, config: bytes, new_update: bytes, " ++
+      "old_update: bytes) -> bool",
     [`EthLib.Consensus.LightClientError], some "LightClientError"⟩,
   ⟨"consensus_genesis_block", `EthLib.Consensus.Exports.genesisBlockExport,
     "(name: str, fork: str, state: bytes) -> bytes",
@@ -371,8 +372,9 @@ def bindings : List Binding := [
     "(name: str, fork: str, config: bytes, state: bytes, block: bytes) -> bytes",
     [`EthLib.Consensus.LightClientError], some "LightClientError"⟩,
   ⟨"consensus_create_light_client_update", `EthLib.Consensus.Exports.createLightClientUpdateExport,
-    "(name: str, fork: str, type: str, config: bytes, state: bytes, block: bytes, " ++
-      "attested_state: bytes, attested_block: bytes, finalized_block: bytes) -> bytes",
+    "(name: str, fork: str, attested_fork: str, finalized_fork: str, type: str, " ++
+      "config: bytes, state: bytes, block: bytes, attested_state: bytes, " ++
+      "attested_block: bytes, finalized_block: bytes) -> bytes",
     [`EthLib.Consensus.LightClientError], some "LightClientError"⟩,
   ⟨"consensus_compute_fork_digest", `EthLib.Consensus.Exports.computeForkDigestExport,
     "(name: str, config: bytes, genesis_validators_root: bytes, epoch: int) -> bytes",

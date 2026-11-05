@@ -17,8 +17,8 @@ _YAML = YAML(typ="safe")
 BEACON = 112
 
 # The forks whose blocks the state transition of EthLib processes.
-# A case of one of them, with no fork transition, runs every block, and its served data is
-# checked against what the full node functions give from the post states.
+# A case whose forks are all among them runs every block, across the fork boundaries, and its
+# served data is checked against what the full node functions give from the post states.
 TRANSITION = ("altair", "bellatrix", "capella", "deneb")
 
 
@@ -27,9 +27,14 @@ def runs_data_collection(fork: str, name: str) -> bool:
     return fork in SPECIFIED
 
 
+def _case_forks(fork: str, name: str) -> list:
+    """The forks of a case: its own, and those that a reorg case names, such as `capella_deneb`."""
+    return [fork] + (name.split("_reorg_")[0].split("_") if "_reorg_" in name else [])
+
+
 def _transition_runs(fork: str, name: str) -> bool:
     """Whether the blocks of a case go through the state transition."""
-    return fork in TRANSITION and name == "light_client_data_collection"
+    return all(each in TRANSITION for each in _case_forks(fork, name))
 
 
 def _read(case: Path, name: str) -> bytes:
@@ -185,9 +190,10 @@ class FullNode:
         """Run a block through the state transition from the post state of its parent."""
         signed = _read(self.chain.case, name)
         parent = self.blocks[signed[100:][16:48]]
-        assert parent.fork == fork
-        post = consensus.state_transition(self.chain.preset, FORKS[fork], parent.post, signed,
-                                          True, config=self.chain.config)
+        # The parent's state upgrades at each fork epoch between the two blocks.
+        post = consensus.state_transition_across(self.chain.preset, FORKS[parent.fork],
+                                                 parent.post, FORKS[fork], signed, True,
+                                                 config=self.chain.config)
         root = consensus.ssz_static(self.chain.preset, FORKS[fork], "BeaconBlock",
                                     signed[100:])[0]
         self.blocks[root] = Block(fork, signed, post)
@@ -209,10 +215,13 @@ class FullNode:
             # A zero root is the genesis checkpoint, whose block is at the genesis slot.
             finalized = (self.blocks[self.chain.initial_root] if not any(root)
                          else self.blocks.get(root))
+            # The update is of the attested block's fork, which may precede the signature's.
             self.updates[key] = consensus.create_light_client_update(
                 self.chain.preset, FORKS[signature.fork], kind, signature.post,
                 signature.signed, attested.post, attested.signed,
-                finalized.signed if finalized else None, config=self.chain.config)
+                finalized.signed if finalized else None, config=self.chain.config,
+                attested_fork=FORKS[attested.fork],
+                finalized_fork=FORKS[finalized.fork] if finalized else None)
         return self.updates[key]
 
     def candidates(self, head: list, period: int) -> list:
@@ -251,9 +260,12 @@ class FullNode:
             fork = self.chain.digests[entry["update"]["fork_digest"]]
             data = _read(self.chain.case, entry["update"]["data"])
             # The served update is that of a block of the head's chain, and none ranks above it.
+            # Each update is of its attested block's fork, and ranks at the later of two forks.
             assert data in [self.update("LightClientUpdate", block) for block in candidates]
             assert not any(consensus.is_better_update(
-                preset, FORKS[fork], self.update("LightClientUpdate", block), data)
+                preset, FORKS[self.blocks[block.parent].fork],
+                self.update("LightClientUpdate", block), data, old_fork=FORKS[fork],
+                config=self.chain.config)
                 for block in candidates)
         # The latest updates come from the latest block of the head's chain with enough
         # signatures, after the finalized block, and from its parent as the attested block.
