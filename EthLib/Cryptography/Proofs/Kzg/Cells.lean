@@ -27,8 +27,7 @@ open EthLib.Cryptography.Kzg.Constants
 theorem size_cosetForCell {cellIndex : CellIndex} {c : Coset}
     (h : cosetForCell cellIndex = .ok c) :
     c.size = FIELD_ELEMENTS_PER_CELL := by
-  simp only [cosetForCell, bind, Except.bind, pure, Except.pure,
-    throw, throwThe, MonadExceptOf.throw] at h
+  simp only [cosetForCell, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at h
   repeat' split at h
   · cases h
   · injection h with h
@@ -39,7 +38,7 @@ theorem size_cosetForCell {cellIndex : CellIndex} {c : Coset}
 theorem cosetForCell_cellIndexOutOfBounds {cellIndex : CellIndex}
     (h : cellIndex ≥ CELLS_PER_EXT_BLOB) :
     cosetForCell cellIndex = .error .cellIndexOutOfBounds := by
-  simp [cosetForCell, h, Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+  simp [cosetForCell, h, throw, throwThe, MonadExceptOf.throw]
 
 /-- `cosetForCell` succeeds for every `cellIndex < CELLS_PER_EXT_BLOB`,
 returning a coset of size `FIELD_ELEMENTS_PER_CELL`. -/
@@ -54,8 +53,8 @@ theorem cosetForCell_ok_of_lt {cellIndex : CellIndex}
   let c : Coset := Array.ofFn (n := FIELD_ELEMENTS_PER_CELL) fun i => domain[start + i.val]!
   have hc : cosetForCell cellIndex = .ok c := by
     unfold cosetForCell
-    rw [ite_eq_right (Nat.not_le.mpr h)]
-    rfl
+    rw [dite_eq_right (Nat.not_le.mpr h)]
+    exact congrArg Except.ok (congrArg Array.ofFn (funext fun i => (getElem!_pos _ _ _).symm))
   refine ⟨c, hc, size_cosetForCell hc, fun i hi => ?_⟩
   rw [getElem!_pos c i (by simp [c, hi])]
   simp [c, domain, start]
@@ -81,6 +80,7 @@ theorem cellToCosetEvals_cosetEvalsToCell
     fun i => ?_).trans ?_
   · rw [fieldElementBytes_flatten]
     simp only [Fin.getElem_fin, Vector.getElem_ofFn, bytesToBlsField_blsFieldToBytes]
+    rfl
   refine congrArg Except.ok ?_
   apply Array.ext
   · simp [hsize]

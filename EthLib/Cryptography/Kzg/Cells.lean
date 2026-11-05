@@ -44,11 +44,27 @@ abbrev CosetEvals       := Array Fr
 def cellToCosetEvals (cell : Cell) : Except KzgError CosetEvals :=
   bytesToBlsFields (k := FIELD_ELEMENTS_PER_CELL) cell
 
-/-- Convert a trusted `CosetEvals` back into an untrusted `Cell`. -/
+/-- Convert a trusted `CosetEvals` back into an untrusted `Cell`.
+
+Every caller passes 64 values; a value past the end of a shorter array encodes as zero. -/
 def cosetEvalsToCell (cosetEvals : CosetEvals) : Cell :=
-  (Vector.ofFn (n := FIELD_ELEMENTS_PER_CELL) fun i => blsFieldToBytes cosetEvals[i.val]!).flatten
+  (Vector.ofFn (n := FIELD_ELEMENTS_PER_CELL) fun i =>
+    blsFieldToBytes (if h : i.val < cosetEvals.size then cosetEvals[i.val] else Fr.zero)).flatten
 
 /-! ## Cell cosets -/
+
+/-- Value `j` of cell `ci` lies inside the extended blob. -/
+theorem cell_slot_lt {ci j : Nat} (hci : ci < CELLS_PER_EXT_BLOB)
+    (hj : j < FIELD_ELEMENTS_PER_CELL) :
+    ci * FIELD_ELEMENTS_PER_CELL + j < FIELD_ELEMENTS_PER_EXT_BLOB := by
+  have h1 : CELLS_PER_EXT_BLOB = 128 := rfl
+  have h2 : FIELD_ELEMENTS_PER_EXT_BLOB = 8192 := rfl
+  have h3 : FIELD_ELEMENTS_PER_CELL = 64 := rfl
+  rw [h1] at hci
+  rw [h3] at hj ⊢
+  rw [h2]
+  omega
+
 
 /-- The coset of a cell.
 
@@ -58,11 +74,14 @@ The coset is `h * G = {h, hg, hg^2, ...}` for a shift `h`.
 
 It is block `i` of 64 points of the bit-reversed domain, for the cell index `i`. -/
 def cosetForCell (cellIndex : CellIndex) : Except KzgError Coset := do
-  if cellIndex ≥ CELLS_PER_EXT_BLOB then
+  if hci : cellIndex ≥ CELLS_PER_EXT_BLOB then
     throw .cellIndexOutOfBounds
-  let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_EXT_BLOB
-  let start := FIELD_ELEMENTS_PER_CELL * cellIndex
-  return Array.ofFn (n := FIELD_ELEMENTS_PER_CELL) fun i => domain[start + i.val]!
+  else
+    let domain := rootsOfUnityBrp FIELD_ELEMENTS_PER_EXT_BLOB
+    return Array.ofFn (n := FIELD_ELEMENTS_PER_CELL) fun i =>
+      domain[FIELD_ELEMENTS_PER_CELL * cellIndex + i.val]'(by
+        rw [size_rootsOfUnityBrp, Nat.mul_comm]
+        exact cell_slot_lt (Nat.lt_of_not_le hci) i.isLt)
 
 /-- Interpolate one cell: the polynomial `I` of degree below 64 with the values on the coset.
 

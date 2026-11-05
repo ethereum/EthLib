@@ -444,7 +444,7 @@ theorem cosetEvalsToCell_of_cellToCosetEvals {a : Cell} {e : CosetEvals}
   intro i
   rw [cosetEvalsToCell, fieldElementBytes_flatten]
   simp only [Fin.getElem_fin, Vector.getElem_ofFn]
-  rw [getElem!_pos e i.val (by rw [hsz]; exact i.isLt)]
+  rw [dite_eq_left (by rw [hsz]; exact i.isLt)]
   exact blsFieldToBytes_of_bytesToBlsField (getElem_bytesToBlsFields h i)
 
 /-- Two cells that decode to the same values are equal. -/

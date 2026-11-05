@@ -201,8 +201,8 @@ def computeVerifyCellKzgProofBatchChallengeExport
     if proofs.size ≠ commitmentIndices.size then
       throw (.inputLengthMismatch "proofs" commitmentIndices.size proofs.size)
     let commitments ← commitments.mapM parseCommitment
-    for i in [:commitments.size] do
-      match bytesToKzgCommitment commitments[i]! with
+    for (commitment, i) in commitments.zipIdx do
+      match bytesToKzgCommitment commitment with
       | .ok _    => pure ()
       | .error _ => throw (.invalidCommitment (some i))
     if commitmentIndices.any (· ≥ commitments.size) then
@@ -210,8 +210,8 @@ def computeVerifyCellKzgProofBatchChallengeExport
     if cellIndices.any (· ≥ Constants.CELLS_PER_EXT_BLOB) then
       throw .cellIndexOutOfBounds
     let proofs ← proofs.mapM parseProof
-    for i in [:proofs.size] do
-      match bytesToKzgProof proofs[i]! with
+    for (proof, i) in proofs.zipIdx do
+      match bytesToKzgProof proof with
       | .ok _    => pure ()
       | .error _ => throw (.invalidProof (some i))
     let evals : Array CosetEvals ← cosetsEvals.mapM fun ce => do

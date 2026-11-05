@@ -57,18 +57,6 @@ def constructVanishingPolynomial
       shortZeroPoly[j.val / FIELD_ELEMENTS_PER_CELL]
     else Fr.zero
 
-/-- Value `j` of cell `ci` lies inside the extended blob. -/
-theorem cell_slot_lt {ci j : Nat} (hci : ci < CELLS_PER_EXT_BLOB)
-    (hj : j < FIELD_ELEMENTS_PER_CELL) :
-    ci * FIELD_ELEMENTS_PER_CELL + j < FIELD_ELEMENTS_PER_EXT_BLOB := by
-  have h1 : CELLS_PER_EXT_BLOB = 128 := rfl
-  have h2 : FIELD_ELEMENTS_PER_EXT_BLOB = 8192 := rfl
-  have h3 : FIELD_ELEMENTS_PER_CELL = 64 := rfl
-  rw [h1] at hci
-  rw [h3] at hj ⊢
-  rw [h2]
-  omega
-
 /-- Recover the polynomial in coefficient form whose values on the domain are the extended blob. -/
 def recoverPolynomialcoeff
     (cellIndices : Array CellIndex) (cosetsEvals : Array CosetEvals)
