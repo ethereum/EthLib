@@ -13,8 +13,9 @@ Restoring a snapshot restores every read of the snapshot.
 
 A move of ether keeps the sum of the two balances, and fails when the sender lacks the amount.
 
-A move of ether between two addresses fails exactly when the sender lacks the amount or the
-recipient's balance would reach 2^256.
+A move of ether between two addresses fails exactly in two cases.
+
+The sender lacks the amount, or the recipient's balance would reach 2^256.
 
 Otherwise it moves the amount exactly.
 
@@ -646,8 +647,9 @@ theorem getStorage_modifyState {fork : Fork} {tx tx' : TransactionState} {addres
     simp only [hf, bind, Except.bind, pure, Except.pure] at h
     split at h
     · cases h
-      have hnone : (((tx.recordAccountRead address).setAccount address (some account)).destroyAccount
-          address).getAccountOptional address = none := by
+      have hnone :
+          (((tx.recordAccountRead address).setAccount address (some account)).destroyAccount
+            address).getAccountOptional address = none := by
         simp [destroyAccount, getAccountOptional_setAccount_self]
       rw [getStorage_destroyAccount]
       by_cases ho : other = address <;> simp [ho, hnone]
@@ -737,11 +739,13 @@ private abbrev debit (sender : Address) (amount : U256) (account : Account) :
   if account.balance < amount then .error (.insufficientBalance sender)
   else .ok { account with balance := account.balance - amount }
 
-/-- Moving ether between two addresses succeeds exactly when the sender holds the amount and the
-recipient's balance stays below 2^256.
+/-- Moving ether between two addresses succeeds exactly when two conditions hold.
 
-The two accounts then hold the moved balances, with every other field kept, and every other
-account is unchanged. -/
+The sender holds the amount, and the recipient's balance stays below 2^256.
+
+The two accounts then hold the moved balances and keep every other field.
+
+Every other account is unchanged. -/
 theorem moveEther_eq_ok {fork : Fork} {tx tx' : TransactionState} {sender recipient : Address}
     {amount : U256} (hne : sender ≠ recipient)
     (h : tx.moveEther fork sender recipient amount = .ok tx') :
@@ -775,8 +779,9 @@ theorem moveEther_eq_ok {fork : Fork} {tx tx' : TransactionState} {sender recipi
 
 /-- Moving ether between two addresses fails exactly in two cases, each with its error.
 
-The sender holds less than the amount, or the sender holds it and the recipient's balance would
-reach 2^256. -/
+The sender holds less than the amount.
+
+Or the sender holds the amount, and the recipient's balance would reach 2^256. -/
 theorem moveEther_eq_error {fork : Fork} {tx : TransactionState} {sender recipient : Address}
     {amount : U256} {e : StateError} (hne : sender ≠ recipient) :
     tx.moveEther fork sender recipient amount = .error e ↔
@@ -819,8 +824,9 @@ theorem moveEther_eq_error {fork : Fork} {tx : TransactionState} {sender recipie
           · exact absurd hlt hfunds
           · rfl
 
-/-- Moving ether between two addresses succeeds exactly when the sender holds the amount and the
-recipient's balance stays below 2^256. -/
+/-- Moving ether between two addresses succeeds exactly when two conditions hold.
+
+The sender holds the amount, and the recipient's balance stays below 2^256. -/
 theorem moveEther_isOk_iff {fork : Fork} {tx : TransactionState} {sender recipient : Address}
     {amount : U256} (hne : sender ≠ recipient) :
     (∃ tx', tx.moveEther fork sender recipient amount = .ok tx') ↔
@@ -837,8 +843,7 @@ theorem moveEther_isOk_iff {fork : Fork} {tx : TransactionState} {sender recipie
     · exact hfunds hlt
     · exact Nat.not_le_of_gt hfit hover
 
-/-- Moving ether from an address to itself fails exactly when the address holds less than the
-amount. -/
+/-- Moving ether from an address to itself fails exactly when its balance is below the amount. -/
 theorem moveEther_self_eq_error {fork : Fork} {tx : TransactionState} {address : Address}
     {amount : U256} {e : StateError} :
     tx.moveEther fork address address amount = .error e ↔
@@ -888,8 +893,9 @@ theorem moveEther_self_isOk_iff {fork : Fork} {tx : TransactionState} {address :
     simp only [reduceCtorEq, exists_false, false_iff, Classical.not_not]
     exact (moveEther_self_eq_error.mp hm).1
 
-/-- Moving ether keeps every code, every word before the transaction, and the storage of every
-address other than the two parties. -/
+/-- Moving ether keeps every code and every word before the transaction.
+
+It also keeps the storage of every address other than the two parties. -/
 theorem moveEther_preserves {fork : Fork} {tx tx' : TransactionState}
     {sender recipient : Address} {amount : U256}
     (h : tx.moveEther fork sender recipient amount = .ok tx') :
