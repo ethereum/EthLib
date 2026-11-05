@@ -1818,7 +1818,7 @@
    "errors": [],
    "error_class": "ConsensusError",
    "docstring":
-   "The gossip topics of a fork, in the order of the fork that adds each one.\n\nA fork before Altair has the topics of Phase 0.\n\nGloas and Heze have none yet, since their topics are not yet specified here."},
+   "The gossip topics of a fork, in the order of the fork that adds each one.\n\nA fork before Altair has the topics of Phase 0.\n\nHeze has none yet, since its topics are not yet specified here."},
   {"summary":
    "The subnet of an attestation, from the committees per slot, its slot and its committee index.",
    "signature":
