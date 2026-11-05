@@ -51,7 +51,7 @@ def want(n):
 
 
 def far_copies(data):
-    """A Snappy block of `data` as a literal, then copies of 4 bytes, each `len(data)` bytes back."""
+    """A Snappy block: `data` as one literal, then 4-byte copies from `len(data)` bytes back."""
     n = len(data)
 
     def varint(v):

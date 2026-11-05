@@ -143,7 +143,8 @@ theorem copyBytes_spec {o : List UInt8} {offset : Nat} (n : Nat)
         ih (o := o ++ [o[o.length - offset]]) (by simp; omega)
       refine ⟨r, ?_, ?_, ?_, ?_⟩
       · rw [copyBytes, dite_eq_left (by simpa [hmax] using hle)]
-        simpa [hmax] using hr
+        simpa only [List.size_toByteArray, hmax, List.getElem_toByteArray, List.toByteArray_append,
+          ByteArray.append_toByteArray_singleton] using hr
       · simp at hlen; omega
       · exact (List.prefix_append o _).trans hpre
       · intro j hj hjr
@@ -217,11 +218,11 @@ theorem decompressElements_copy_first {tag : UInt8} {rest : List UInt8} {fuel : 
 
 /-! ## The whole block -/
 
-/-- A block that decompresses yields exactly as many bytes as its preamble declared. -/
-theorem decompressBytes_size_eq_declared {bs : List UInt8} {out : ByteArray}
-    (h : decompressBytes bs = .ok out) :
+/-- Decoded to a byte array, a block yields exactly as many bytes as its preamble declared. -/
+theorem decompressToArray_size_eq_declared {bs : List UInt8} {out : ByteArray}
+    (h : decompressToArray bs = .ok out) :
     ∃ rest, readPreamble bs = .ok (out.size, rest) := by
-  rw [decompressBytes] at h
+  rw [decompressToArray] at h
   split at h
   · cases h
   · rename_i declared rest hpre
@@ -237,12 +238,12 @@ theorem decompressBytes_size_eq_declared {bs : List UInt8} {out : ByteArray}
 theorem decompressList_length_eq_declared {bs out : List UInt8}
     (h : decompressList bs = .ok out) :
     ∃ rest, readPreamble bs = .ok (out.length, rest) := by
-  cases hd : decompressBytes bs with
-  | error e => simp [decompressList, hd] at h; cases h
+  cases hd : decompressToArray bs with
+  | error e => simp only [decompressList, hd, Except.map] at h; cases h
   | ok o =>
-      simp [decompressList, hd] at h
+      simp only [decompressList, hd, Except.map] at h
       cases h
-      simpa using decompressBytes_size_eq_declared hd
+      simpa using decompressToArray_size_eq_declared hd
 
 /-- A block that decompresses yields at most 2^32 - 1 bytes. -/
 theorem decompressList_length_le {bs out : List UInt8}
@@ -255,13 +256,13 @@ theorem decompressList_copy_first {bs rest : List UInt8} {declared : Nat} {tag :
     (hpre : readPreamble bs = .ok (declared, tag :: rest)) (hcopy : tag.toNat % 4 ≠ 0) :
     ∃ e, decompressList bs = .error e := by
   obtain ⟨e, he⟩ := decompressElements_copy_first (rest := rest) (fuel := rest.length) hcopy
-  exact ⟨e, by simp [decompressList, decompressBytes, hpre, he]; rfl⟩
+  exact ⟨e, by simp [decompressList, decompressToArray, hpre, he, Except.map]⟩
 
 /-- On bytes, a block that decompresses yields exactly as many bytes as its preamble declared. -/
 theorem decompress_size_eq_declared {bs out : ByteArray}
     (h : decompress bs = .ok out) :
     ∃ rest, readPreamble bs.toList = .ok (out.size, rest) :=
-  decompressBytes_size_eq_declared h
+  decompressToArray_size_eq_declared h
 
 /-! ## The literal encoder -/
 
@@ -285,16 +286,6 @@ theorem toList_eq_data_toList (bs : ByteArray) : bs.toList = bs.data.toList := b
   unfold ByteArray.toList
   simpa using loop 0 [] (Nat.zero_le _)
 
-/-- Pushing each byte of a list onto an empty array builds the array of that list. -/
-private theorem foldl_push_empty (data : List UInt8) :
-    data.foldl ByteArray.push ByteArray.empty = data.toByteArray := by
-  have h : ∀ out : ByteArray,
-      (data.foldl ByteArray.push out).data = out.data ++ data.toArray := by
-    induction data with
-    | nil => simp
-    | cons b bs ih => intro out; simp [ih]
-  exact ByteArray.ext (by simpa using h ByteArray.empty)
-
 /-- The tag of a literal reads back as a literal, and its length as the data length (§2.1). -/
 theorem decompressElements_literal {data : List UInt8} (hne : data ≠ [])
     (h : data.length ≤ 2 ^ 32) (fuel : Nat) :
@@ -307,7 +298,7 @@ theorem decompressElements_literal {data : List UInt8} (hne : data ≠ [])
     have ht : (UInt8.ofNat ((data.length - 1) * 4)).toNat = (data.length - 1) * 4 := by
       rw [UInt8.toNat_ofNat']; omega
     simp only [decompressElements, ht]
-    simp [hn, show data.length - 1 + 1 = data.length by omega, decompressElements, foldl_push_empty]
+    simp [hn, show data.length - 1 + 1 = data.length by omega, decompressElements]
   -- The length takes 1 to 4 bytes after the tag.
   · rename_i hn
     have hk : 1 ≤ literalLengthBytes (data.length - 1) ∧ literalLengthBytes (data.length - 1) ≤ 4 ∧
@@ -324,13 +315,13 @@ theorem decompressElements_literal {data : List UInt8} (hne : data ≠ [])
     rw [List.cons_append]
     simp only [decompressElements, ht, EthLib.Base.bytesToUint_toVector]
     simp [show ¬ 59 + k < 60 by omega, show 59 + k - 59 = k by omega, hv,
-      show data.length - 1 + 1 = data.length by omega, decompressElements, foldl_push_empty]
+      show data.length - 1 + 1 = data.length by omega, decompressElements]
 
-/-- A block of one literal decompresses to its data, for data of at most 2^32 - 1 bytes. -/
-theorem decompressBytes_compressLiteralList {data : List UInt8}
+/-- A block of one literal decompresses to its data as a byte array, for up to 2^32 - 1 bytes. -/
+theorem decompressToArray_compressLiteralList {data : List UInt8}
     (h : data.length ≤ maxUncompressedLength) :
-    decompressBytes (compressLiteralList data) = .ok data.toByteArray := by
-  rw [decompressBytes, compressLiteralList, readPreamble_encode _ h]
+    decompressToArray (compressLiteralList data) = .ok data.toByteArray := by
+  rw [decompressToArray, compressLiteralList, readPreamble_encode _ h]
   cases data with
   | nil => rfl
   | cons b bs =>
@@ -345,14 +336,14 @@ theorem decompressBytes_compressLiteralList {data : List UInt8}
 theorem decompressList_compressLiteralList {data : List UInt8}
     (h : data.length ≤ maxUncompressedLength) :
     decompressList (compressLiteralList data) = .ok data := by
-  simp [decompressList, decompressBytes_compressLiteralList h, Except.map]
+  simp [decompressList, decompressToArray_compressLiteralList h, Except.map]
 
 /-- The literal block of a byte array decompresses back to it, for at most 2^32 - 1 bytes. -/
 theorem decompress_compressLiteral {d : ByteArray} (h : d.size ≤ maxUncompressedLength) :
     decompress (compressLiteral d) = .ok d := by
   have hl : d.data.toList.length ≤ maxUncompressedLength := by simpa using h
   rw [decompress, compressLiteral, toList_eq_data_toList]
-  simp only [decompressBytes_compressLiteralList hl]
+  simp only [decompressToArray_compressLiteralList hl]
   exact congrArg Except.ok (ByteArray.ext (by simp))
 
 /-! ## Error codes -/
