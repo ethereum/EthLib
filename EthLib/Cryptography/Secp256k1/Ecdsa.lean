@@ -62,7 +62,7 @@ def verify (q : Point) (hash : Vector UInt8 32) (r s : Nat) : Bool :=
         let u1 := e * sInv
         let u2 := (⟨r, hr.2⟩ : Fn) * sInv
         -- Steps 5 to 8: `R = u1 G + u2 Q` must not be `O`, and `x_R mod n` must be `r`.
-        match Point.mul u1 .generator + Point.mul u2 q with
+        match Point.mulAdd u1 .generator u2 q with
         | .infinity => false
         | .affine x _ => x.val % Fn.modulus == r
       else false

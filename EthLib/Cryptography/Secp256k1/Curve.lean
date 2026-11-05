@@ -109,6 +109,12 @@ def mulBits (fuel k : Nat) (p : Point) : Point :=
 `n` has 256 bits, so 256 steps cover every scalar. -/
 def mul (k : Fn) (p : Point) : Point := mulBits 256 k.val p
 
+/-- `k P + l Q`, for scalars mod `n`, with one chain of doublings for both.
+
+On points of the curve it is the sum of the two products. -/
+def mulAdd (k : Fn) (p : Point) (l : Fn) (q : Point) : Point :=
+  ofJacobian (Jacobian.mulAdd 0 256 k.val (toJacobian p) l.val (toJacobian q))
+
 end Point
 
 end EthLib.Cryptography.Secp256k1

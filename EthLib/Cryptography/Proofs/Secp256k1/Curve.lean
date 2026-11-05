@@ -15,7 +15,7 @@ Mathlib defines that curve over the field `ZMod p`, and proves its points form a
 Each point of the specification maps to an element of that group.
 
 - Addition and negation are the group's.
-- Double and add computes `k P`.
+- Double and add computes `k P`, and one shared chain of doublings computes `k P + l Q`.
 - Each operation stays on the curve.
 - Points on the curve and group elements correspond one to one.
 
@@ -274,6 +274,32 @@ theorem toPoint_surjective (P : curve.Point) : ∃ p : Point, p.isOnCurve = true
   | some x y h =>
     have hc : (affine x y).isOnCurve = true := (isOnCurve_affine x y).mpr ((equation_iff x y).mp h.1)
     exact ⟨affine x y, hc, toPoint_affine hc⟩
+
+/-! ## Two products with shared doublings -/
+
+theorem isOnCurve_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
+    (hq : q.isOnCurve = true) : (mulAdd k p l q).isOnCurve = true :=
+  (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
+    (toJacobian_spec hp).1 (toJacobian_spec hq).1)).1
+
+/-- The shared chain computes `k P + l Q`, with the values of `k` and `l` below `n`. -/
+theorem toPoint_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
+    (hq : q.isOnCurve = true) :
+    toPoint (mulAdd k p l q) = k.val • toPoint p + l.val • toPoint q := by
+  have hJp := toJacobian_spec hp
+  have hJq := toJacobian_spec hq
+  rw [mulAdd, (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
+      hJp.1 hJq.1)).2,
+    Jacobian.toPoint_mulAdd toZ_a two_ne_zero' 256 k.val l.val hJp.1 hJq.1
+      (Nat.lt_trans k.isLt (by decide)) (Nat.lt_trans l.isLt (by decide))]
+  exact congrArg₂ (k.val • · + l.val • ·) hJp.2 hJq.2
+
+/-- On points of the curve, the shared chain gives the sum of the two products. -/
+theorem mulAdd_eq (k l : Fn) {p q : Point} (hp : p.isOnCurve = true) (hq : q.isOnCurve = true) :
+    mulAdd k p l q = mul k p + mul l q := by
+  rw [← toPoint_inj (isOnCurve_mulAdd k l hp hq) (isOnCurve_add (isOnCurve_mul k hp)
+    (isOnCurve_mul l hq)), toPoint_mulAdd k l hp hq, toPoint_add (isOnCurve_mul k hp)
+    (isOnCurve_mul l hq), toPoint_mul k hp, toPoint_mul l hq]
 
 end Point
 

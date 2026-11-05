@@ -52,7 +52,7 @@ def recover (hash : Vector UInt8 32) (r s : Nat) (recoveryId : Fin 2) : Except S
       -- Steps 1.5 and 1.6.1: `Q = r^(-1) (s R - e G) = (r^(-1) s) R + (-(r^(-1) e)) G`.
       let e : Fn := Fin.ofNat _ (hashToInt hash)
       let rInv := Fn.inv ⟨r, hr.2⟩
-      let q := Point.mul (rInv * ⟨s, hs.2⟩) R + Point.mul (-(rInv * e)) .generator
+      let q := Point.mulAdd (rInv * ⟨s, hs.2⟩) R (-(rInv * e)) .generator
       -- A public key is never `O`.
       if q = .infinity then .error .pointAtInfinity else .ok q
     else .error .scalarOutOfRange

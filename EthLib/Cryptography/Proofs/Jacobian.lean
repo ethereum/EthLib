@@ -11,7 +11,7 @@ Each Jacobian form `(X, Y, Z)` with `Z != 0` gives the affine point `(X / Z^2, Y
 
 Doubling and addition of forms give the forms of the group's sums.
 
-So double and add on forms computes `k P`.
+So double and add on forms computes `k P`, and one shared chain of doublings computes `k P + l Q`.
 
 The proofs map each coordinate to the field `ZMod m`, for a prime `m != 2`.
 -/
@@ -313,5 +313,66 @@ theorem toPoint_mulBits (fuel k : Nat) {p : Jacobian m} (hp : OnCurve A B p) (hk
       rw [hrest]
       conv_rhs => rw [show k = 2 * (k / 2) by omega]
       module
+
+/-! ## Two scalar multiplications with shared doublings -/
+
+/-- The joint chain stays on the curve. -/
+theorem onCurve_mulAddAux {p q pq : Jacobian m} (hp : OnCurve A B p) (hq : OnCurve A B q)
+    (hpq : OnCurve A B pq) (fuel k l : Nat) : OnCurve A B (mulAddAux a p q pq fuel k l) := by
+  induction fuel generalizing k l with
+  | zero => exact onCurve_infinity
+  | succ fuel ih =>
+    have hacc := (double_spec ha h2 (ih (k / 2) (l / 2))).1
+    simp only [mulAddAux]
+    split_ifs
+    · exact (add_spec ha h2 hacc hpq).1
+    · exact (add_spec ha h2 hacc hp).1
+    · exact (add_spec ha h2 hacc hq).1
+    · exact hacc
+
+/-- The joint chain computes `k P + l Q`, when `pq` is `P + Q` and `k, l < 2^fuel`. -/
+theorem toPoint_mulAddAux {p q pq : Jacobian m} (hp : OnCurve A B p) (hq : OnCurve A B q)
+    (hpq : OnCurve A B pq) (hsum : toPoint A B pq = toPoint A B p + toPoint A B q)
+    (fuel k l : Nat) (hk : k < 2 ^ fuel) (hl : l < 2 ^ fuel) :
+    toPoint A B (mulAddAux a p q pq fuel k l) = k • toPoint A B p + l • toPoint A B q := by
+  induction fuel generalizing k l with
+  | zero =>
+    obtain rfl : k = 0 := by simpa using hk
+    obtain rfl : l = 0 := by simpa using hl
+    simp [mulAddAux, toPoint_of_z_eq_zero (rfl : (infinity : Jacobian m).z = 0)]
+  | succ fuel ih =>
+    have hk2 : k / 2 < 2 ^ fuel := by rw [Nat.pow_succ] at hk; omega
+    have hl2 : l / 2 < 2 ^ fuel := by rw [Nat.pow_succ] at hl; omega
+    have hrest := onCurve_mulAddAux ha h2 hp hq hpq fuel (k / 2) (l / 2)
+    obtain ⟨hacc, hdbl⟩ := double_spec ha h2 hrest
+    rw [ih (k / 2) (l / 2) hk2 hl2] at hdbl
+    -- `k = 2 (k / 2) + k mod 2`, and likewise for `l`.
+    have ek := Nat.div_add_mod k 2
+    have el := Nat.div_add_mod l 2
+    simp only [mulAddAux]
+    split_ifs with hk1 hl1 hl1
+    · rw [(add_spec ha h2 hacc hpq).2, hdbl, hsum]
+      conv_rhs => rw [← ek, ← el, hk1, hl1]
+      module
+    · rw [(add_spec ha h2 hacc hp).2, hdbl]
+      conv_rhs => rw [← ek, ← el, hk1, show l % 2 = 0 by omega]
+      module
+    · rw [(add_spec ha h2 hacc hq).2, hdbl]
+      conv_rhs => rw [← ek, ← el, show k % 2 = 0 by omega, hl1]
+      module
+    · rw [hdbl]
+      conv_rhs => rw [← ek, ← el, show k % 2 = 0 by omega, show l % 2 = 0 by omega]
+      module
+
+/-- Simultaneous multiplication stays on the curve. -/
+theorem onCurve_mulAdd (fuel k l : Nat) {p q : Jacobian m} (hp : OnCurve A B p)
+    (hq : OnCurve A B q) : OnCurve A B (mulAdd a fuel k p l q) :=
+  onCurve_mulAddAux ha h2 hp hq (add_spec ha h2 hp hq).1 fuel k l
+
+/-- Simultaneous multiplication computes `k P + l Q`, when `k, l < 2^fuel`. -/
+theorem toPoint_mulAdd (fuel k l : Nat) {p q : Jacobian m} (hp : OnCurve A B p)
+    (hq : OnCurve A B q) (hk : k < 2 ^ fuel) (hl : l < 2 ^ fuel) :
+    toPoint A B (mulAdd a fuel k p l q) = k • toPoint A B p + l • toPoint A B q :=
+  toPoint_mulAddAux ha h2 hp hq (add_spec ha h2 hp hq).1 (add_spec ha h2 hp hq).2 fuel k l hk hl
 
 end EthLib.Cryptography.Jacobian
