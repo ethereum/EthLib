@@ -397,6 +397,10 @@ The verifier of the games builds the full setup from these points and checks eac
 The error polynomial of one cell is a constant, so `CellOpening.Verifies.valid` needs no random oracle.
 The code is the Reed–Solomon code of §3.1 there: a codeword holds the values of a polynomial of degree below 4096 on the 128 cosets.
 Each of its cells is the encoding of 64 values that the verifier decodes.
+`computeCells_eq_codewordCell` (`Proofs/Kzg/PeerDasCodeword.lean`) shows that the cells that `computeCells` returns for a blob are this codeword.
+The polynomial is that of the blob: it has degree below 4096 and takes the values of the blob on the blob domain (`eval_blobPolynomial`).
+So openings of cells that `computeCells` returns for one blob never win code-binding (`not_codeBindingWins_of_computeCells`).
+That theorem leaves the commitment and the proofs arbitrary, so it says nothing about whether the openings verify.
 `positionBindingAdvantage_le` is Lemma 3, position-binding, Definition 4 there.
 The advantage of every adversary is at most the BSDH advantage of one reduction.
 2025/1683 cites Lemma 3 from Lemma 2 of §3.1 of Wagner and Zapico, ePrint 2024/1362, where the adversary also receives `[τ^i]_2` for `i ≤ 4095`.
