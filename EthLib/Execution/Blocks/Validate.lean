@@ -197,7 +197,7 @@ def constructorFormat (name : String) (args : List Std.Format) (prec : Nat) : St
 mutual
 
 /-- The form of a block error in Lean syntax, with its arguments. -/
-def BlockError.reprPrec' : BlockError → Nat → Std.Format
+def instReprBlockError.reprPrec : BlockError → Nat → Std.Format
   | .genesisNumber, _ => "EthLib.Execution.Blocks.BlockError.genesisNumber"
   | .wrongExcessBlobGas expected actual, prec =>
     constructorFormat "EthLib.Execution.Blocks.BlockError.wrongExcessBlobGas"
@@ -263,7 +263,7 @@ def BlockError.reprPrec' : BlockError → Nat → Std.Format
   | .wrongRequestsHash, _ => "EthLib.Execution.Blocks.BlockError.wrongRequestsHash"
   | .ommers error, prec =>
     constructorFormat "EthLib.Execution.Blocks.BlockError.ommers"
-      [OmmerError.reprPrec' error max_prec] prec
+      [instReprOmmerError.reprPrec error max_prec] prec
   | .state error, prec =>
     constructorFormat "EthLib.Execution.Blocks.BlockError.state"
       [reprArg error] prec
@@ -276,13 +276,13 @@ def BlockError.reprPrec' : BlockError → Nat → Std.Format
   | .wrongBlockAccessListHash, _ => "EthLib.Execution.Blocks.BlockError.wrongBlockAccessListHash"
 
 /-- The form of an ommer error in Lean syntax, with its arguments. -/
-def OmmerError.reprPrec' : OmmerError → Nat → Std.Format
+def instReprOmmerError.reprPrec : OmmerError → Nat → Std.Format
   | .wrongOmmersHash, _ => "EthLib.Execution.Blocks.OmmerError.wrongOmmersHash"
   | .numberOutOfRange, _ => "EthLib.Execution.Blocks.OmmerError.numberOutOfRange"
   | .parentMissing, _ => "EthLib.Execution.Blocks.OmmerError.parentMissing"
   | .invalidHeader error, prec =>
     constructorFormat "EthLib.Execution.Blocks.OmmerError.invalidHeader"
-      [BlockError.reprPrec' error max_prec] prec
+      [instReprBlockError.reprPrec error max_prec] prec
   | .tooManyOmmers, _ => "EthLib.Execution.Blocks.OmmerError.tooManyOmmers"
   | .duplicateOmmer, _ => "EthLib.Execution.Blocks.OmmerError.duplicateOmmer"
   | .ommerInChain, _ => "EthLib.Execution.Blocks.OmmerError.ommerInChain"
@@ -297,9 +297,9 @@ def OmmerError.reprPrec' : OmmerError → Nat → Std.Format
 
 end
 
-instance : Repr BlockError := ⟨BlockError.reprPrec'⟩
+instance instReprBlockError : Repr BlockError := ⟨instReprBlockError.reprPrec⟩
 
-instance : Repr OmmerError := ⟨OmmerError.reprPrec'⟩
+instance instReprOmmerError : Repr OmmerError := ⟨instReprOmmerError.reprPrec⟩
 
 /-- The stable code of an error, one per constructor, for the C exports.
 
