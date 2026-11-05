@@ -1,0 +1,11 @@
+topic: partial_data_column_sidecar
+blocks:
+- {block: 
+    block_0x7f2b248e1a15c9c4da4508b784f4b8c38b5eeaa0095b6894f9b8144ef743cd21}
+messages:
+- {group_id: 
+    partial_data_column_group_id_0xd827688eb71a3bce0c1417a30d4dfdfcedb425546b5cf162f3baaec84cbe800b,
+  column_index: 0, message: 
+    partial_data_column_sidecar_0xaf1e6e80b1cc62353b31f67ac72936208e16b8da5cb0626fd0dcd69e2d9bc8d0,
+  expected: reject, reason: number of cells does not match number of set bits, 
+    current_time_ms: 6500}

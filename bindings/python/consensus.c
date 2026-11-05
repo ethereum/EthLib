@@ -189,6 +189,11 @@ extern lean_object* eth_consensus_verify_data_column_sidecar_inclusion_proof(
   lean_object* name, lean_object* fork, lean_object* data);
 extern lean_object* eth_consensus_verify_data_column_sidecar_kzg_proofs(
   lean_object* name, lean_object* fork, lean_object* data, lean_object* block);
+extern lean_object* eth_consensus_verify_partial_data_column_header_inclusion_proof(
+  lean_object* name, lean_object* fork, lean_object* data);
+extern lean_object* eth_consensus_verify_partial_data_column_sidecar_kzg_proofs(
+  lean_object* name, lean_object* fork, lean_object* data, lean_object* commitments,
+  uint64_t column_index);
 extern lean_object* eth_consensus_compute_matrix(lean_object* blobs);
 extern lean_object* eth_consensus_recover_matrix(lean_object* entries, uint64_t blob_count);
 extern lean_object* eth_consensus_get_data_column_sidecars_from_block(
@@ -721,6 +726,42 @@ py_consensus_verify_data_column_sidecar_kzg_proofs(
   if (!name_fork_bytes_args(args, 2, &name, &fork, data)) return NULL;
   return except_into_pybool(
     eth_consensus_verify_data_column_sidecar_kzg_proofs(name, fork, data[0], data[1]), KZG_ERROR);
+}
+
+PyObject*
+py_consensus_verify_partial_data_column_header_inclusion_proof(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object *name, *fork, *data;
+  if (!name_fork_bytes_args(args, 1, &name, &fork, &data)) return NULL;
+  return except_into_pybool(
+    eth_consensus_verify_partial_data_column_header_inclusion_proof(name, fork, data),
+    SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_verify_partial_data_column_sidecar_kzg_proofs(
+  PyObject* self,
+  PyObject* args
+) {
+  if (!PyTuple_Check(args) || PyTuple_GET_SIZE(args) != 5) {
+    PyErr_SetString(PyExc_TypeError, "function takes exactly 5 arguments");
+    return NULL;
+  }
+  /* Read the column index before any Lean object exists. */
+  uint64_t column_index;
+  if (parse_uint64(PyTuple_GET_ITEM(args, 4), "column_index", &column_index) < 0) return NULL;
+  PyObject* leading = PyTuple_GetSlice(args, 0, 4);
+  if (!leading) return NULL;
+  lean_object *name, *fork, *data[2];
+  int read = name_fork_bytes_args(leading, 2, &name, &fork, data);
+  Py_DECREF(leading);
+  if (!read) return NULL;
+  return except_into_pybool(
+    eth_consensus_verify_partial_data_column_sidecar_kzg_proofs(
+      name, fork, data[0], data[1], column_index),
+    KZG_ERROR);
 }
 
 PyObject*

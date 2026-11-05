@@ -187,6 +187,18 @@ def verify_data_column_sidecar_kzg_proofs(name: str, fork: str, data: bytes,
     return _native.consensus_verify_data_column_sidecar_kzg_proofs(name, fork, data, block)
 
 
+def verify_partial_data_column_header_inclusion_proof(name: str, fork: str, data: bytes) -> bool:
+    """Whether the branch of a partial data column header climbs to its body root."""
+    return _native.consensus_verify_partial_data_column_header_inclusion_proof(name, fork, data)
+
+
+def verify_partial_data_column_sidecar_kzg_proofs(name: str, fork: str, data: bytes,
+                                                  commitments: bytes, column_index: int) -> bool:
+    """Whether the cells of a partial data column sidecar match their commitments."""
+    return _native.consensus_verify_partial_data_column_sidecar_kzg_proofs(
+        name, fork, data, commitments, column_index)
+
+
 def light_client_sync(name: str, fork: str, bootstrap_fork: str, trusted_block_root: bytes,
                       genesis_validators_root: bytes, bootstrap: bytes, steps: list,
                       config: dict | None = None) -> list:
@@ -325,6 +337,8 @@ __all__ = [
     "verify_data_column_sidecar",
     "verify_data_column_sidecar_inclusion_proof",
     "verify_data_column_sidecar_kzg_proofs",
+    "verify_partial_data_column_header_inclusion_proof",
+    "verify_partial_data_column_sidecar_kzg_proofs",
     "compute_matrix",
     "recover_matrix",
     "get_data_column_sidecars_from_block",

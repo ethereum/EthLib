@@ -52,7 +52,7 @@ def fuluPresetAndFork (name fork : ByteArray) :
     Result (Preset × (fork : Fork) ×' fork < .glamsterdam) := do
   let (preset, fork) ← columnPresetAndFork name fork
   if beforeGloas : fork < .glamsterdam then return (preset, ⟨fork, beforeGloas⟩)
-  else throw (0, s!"no inclusion proof in a sidecar at {fork.name}")
+  else throw (0, s!"no form of this check at {fork.name}")
 
 /-- Read a sidecar, with the code of a decoding error. -/
 def readSidecar (preset : Preset) (fork : Fork) (data : ByteArray) :
@@ -109,6 +109,31 @@ def verifyDataColumnSidecarKzgProofsExport (name fork data block : ByteArray) : 
     fun e => (0, s!"input rejected: {reprStr e}")
   let commitments ← (bidCommitmentsOf sidecar block).mapError fun (_, message) => (0, message)
   runKzgWithSetup fun setup => verifyDataColumnSidecarKzgProofs setup sidecar commitments
+
+/-- At Fulu: whether the branch of a partial header, given as bytes, climbs to its body root. -/
+@[export eth_consensus_verify_partial_data_column_header_inclusion_proof]
+def verifyPartialDataColumnHeaderInclusionProofExport (name fork data : ByteArray) :
+    Result Bool := do
+  let (preset, ⟨fork, _⟩) ← fuluPresetAndFork name fork
+  let header ← runSsz "input rejected"
+    (SszType.deserialize (PartialDataColumnHeader preset fork) data)
+  return verifyPartialDataColumnHeaderInclusionProof preset header
+
+/-- At Fulu: whether the cells of a partial sidecar match their commitments by their proofs.
+
+The commitments of all the blobs of the block arrive in their SSZ encoding.
+
+A sidecar or a list of commitments that does not decode has code 0. -/
+@[export eth_consensus_verify_partial_data_column_sidecar_kzg_proofs]
+def verifyPartialDataColumnSidecarKzgProofsExport (name fork data commitments : ByteArray)
+    (columnIndex : UInt64) : Result Bool := do
+  let (preset, ⟨fork, _⟩) ← fuluPresetAndFork name fork
+  let sidecar ← (SszType.deserialize (PartialDataColumnSidecar preset fork) data).mapError
+    fun e => (0, s!"input rejected: {reprStr e}")
+  let commitments ← (SszType.deserialize (BlobKZGCommitments preset fork) commitments).mapError
+    fun e => (0, s!"commitments rejected: {reprStr e}")
+  runKzgWithSetup fun setup =>
+    verifyPartialDataColumnSidecarKzgProofs setup sidecar commitments columnIndex
 
 /-- The bytes of the entries of a matrix, one after another. -/
 def matrixBytes (entries : List MatrixEntry) : Result ByteArray :=

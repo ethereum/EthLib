@@ -24,6 +24,12 @@ A Merkle branch shows that the list of commitments is in the body that the heade
 
 Gloas moves the commitments into the bid of the builder, so a sidecar names its block by root.
 
+At Fulu, a node may also send part of a column: the cells that a bitmap marks, with their proofs.
+
+A partial sidecar carries the header of its block only on the first push, as a list of at most one.
+
+The header holds the commitments of the block, its signed header and the branch between them.
+
 [EIP-7594] specifies the matrix, the sidecars and their checks.
 
 [EIP-7594]: https://eips.ethereum.org/EIPS/eip-7594#specification
@@ -170,21 +176,30 @@ def verifyDataColumnSidecarKzgProofs {preset : Preset} {fork : Fork} (setup : Tr
     (Array.replicate sidecar.column.data.size sidecar.index.toNat) sidecar.column.data
     sidecar.kzgProofs.data
 
+/-- Whether a branch climbs from a list of blob commitments to the root of a block body.
+
+The branch has the depth of the inclusion proof, and the list sits at its place in the body. -/
+def verifyKzgCommitmentsInclusionProof (preset : Preset) {fork : Fork}
+    (commitments : BlobKZGCommitments preset fork)
+    (branch : Vector Bytes32 preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat)
+    (bodyRoot : Root) : Bool :=
+  match blobKzgCommitmentsGindex preset fork, SszType.hashTreeRoot commitments with
+  | .ok gindex, .ok leaf =>
+    match getSubtreeIndex gindex with
+    | .ok index =>
+      isValidMerkleBranch leaf branch.toList preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat
+        index bodyRoot
+    | .error _ => false
+  | _, _ => false
+
 /-- Before Gloas: whether the branch of a sidecar climbs from its commitments to its body root.
 
 The branch has the depth of the inclusion proof. -/
 def verifyDataColumnSidecarInclusionProof (preset : Preset) {fork : Fork}
     (beforeGloas : fork < .glamsterdam) (sidecar : DataColumnSidecar preset fork) : Bool :=
-  match blobKzgCommitmentsGindex preset fork,
-      SszType.hashTreeRoot (sidecar.kzgCommitments beforeGloas) with
-  | .ok gindex, .ok leaf =>
-    match getSubtreeIndex gindex with
-    | .ok index =>
-      isValidMerkleBranch leaf (sidecar.kzgCommitmentsInclusionProof beforeGloas).toList
-        preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat index
-        (sidecar.signedBlockHeader beforeGloas).message.bodyRoot
-    | .error _ => false
-  | _, _ => false
+  verifyKzgCommitmentsInclusionProof preset (sidecar.kzgCommitments beforeGloas)
+    (sidecar.kzgCommitmentsInclusionProof beforeGloas)
+    (sidecar.signedBlockHeader beforeGloas).message.bodyRoot
 
 /-- The largest number of column sidecars in one request: every column of the most blocks. -/
 def computeMaxRequestDataColumnSidecars (preset : Preset) (config : Config) : UInt64 :=
@@ -299,5 +314,98 @@ def getDataColumnSidecarsFromColumnSidecar {preset : Preset} {fork : Fork}
     Except Err (List (DataColumnSidecar preset fork)) :=
   getDataColumnSidecars preset sidecar.signedBlockHeader sidecar.kzgCommitments
     sidecar.kzgCommitmentsInclusionProof sidecar.beaconBlockRoot sidecar.slot cellsAndKzgProofs
+
+/-- One bit per blob of a block, for the cells of one column. -/
+abbrev CellsBitList (preset : Preset) := Bitlist preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
+
+/-- At Fulu: what all the columns of a block share, to check their cells. -/
+structure PartialDataColumnHeader (preset : Preset) (fork : Fork) where
+  /-- The commitments to all the blobs of the block. -/
+  kzgCommitments : BlobKZGCommitments preset fork
+  /-- The header of the block, signed by its proposer. -/
+  signedBlockHeader : SignedBeaconBlockHeader
+  /-- The branch from the commitments up to the body root, nearest node first. -/
+  kzgCommitmentsInclusionProof : Vector Bytes32 preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat
+  deriving DecidableEq
+
+instance {preset : Preset} {fork : Fork} : SszType (PartialDataColumnHeader preset fork) :=
+  .container ["kzg_commitments", "signed_block_header", "kzg_commitments_inclusion_proof"]
+    (fun h => (h.kzgCommitments, h.signedBlockHeader, h.kzgCommitmentsInclusionProof))
+    (fun (kzgCommitments, signedBlockHeader, branch) => ⟨kzgCommitments, signedBlockHeader, branch⟩)
+
+/-- At Fulu: some cells of one column, those that the bitmap marks, with their proofs.
+
+The topic of the message names the column.
+
+A header comes along only on an eager push, as a list of at most one. -/
+structure PartialDataColumnSidecar (preset : Preset) (fork : Fork) where
+  /-- Bit `i` is set when the cell of blob `i` is present. -/
+  cellsPresentBitmap : CellsBitList preset
+  /-- The cells that are present, in the order of their blobs. -/
+  partialColumn : SszList Cell preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
+  /-- The proof of each cell that is present. -/
+  kzgProofs : SszList KZGProof preset.MAX_BLOB_COMMITMENTS_PER_BLOCK.toNat
+  /-- The header of the block, or nothing. -/
+  header : SszList (PartialDataColumnHeader preset fork) 1
+
+instance {preset : Preset} {fork : Fork} : SszType (PartialDataColumnSidecar preset fork) :=
+  .container ["cells_present_bitmap", "partial_column", "kzg_proofs", "header"]
+    (fun s => (s.cellsPresentBitmap, s.partialColumn, s.kzgProofs, s.header))
+    (fun (bitmap, cells, proofs, header) => ⟨bitmap, cells, proofs, header⟩)
+
+/-- At Fulu: the cells that a peer has, and those that it asks for.
+
+A peer that has a cell has its proof too. -/
+structure PartialDataColumnPartsMetadata (preset : Preset) where
+  /-- Bit `i` is set when the peer has the cell of blob `i` and will provide it. -/
+  available : CellsBitList preset
+  /-- Bit `i` is set when the peer wants the cell of blob `i`. -/
+  requests : CellsBitList preset
+  deriving DecidableEq
+
+instance {preset : Preset} : SszType (PartialDataColumnPartsMetadata preset) :=
+  .container ["available", "requests"] (fun m => (m.available, m.requests))
+    (fun (available, requests) => ⟨available, requests⟩)
+
+/-- At Fulu: the group of the partial messages of one block, named by the root of the block. -/
+structure PartialDataColumnGroupID where
+  /-- The root of the block. -/
+  beaconBlockRoot : Root
+  deriving DecidableEq
+
+instance : SszType PartialDataColumnGroupID :=
+  .container ["beacon_block_root"] (fun g => g.beaconBlockRoot) (fun root => ⟨root⟩)
+
+/-- The gossip group ID of a group: the version byte 0, then the SSZ bytes of the group. -/
+def PartialDataColumnGroupID.toGroupId (group : PartialDataColumnGroupID) :
+    Except Err ByteArray := do
+  return ByteArray.mk #[0] ++ (← SszType.serialize group)
+
+/-- Whether the branch of a header climbs from its commitments to its body root. -/
+def verifyPartialDataColumnHeaderInclusionProof (preset : Preset) {fork : Fork}
+    (header : PartialDataColumnHeader preset fork) : Bool :=
+  verifyKzgCommitmentsInclusionProof preset header.kzgCommitments
+    header.kzgCommitmentsInclusionProof header.signedBlockHeader.message.bodyRoot
+
+/-- The indices of the blobs whose cells a partial sidecar carries, in order. -/
+def PartialDataColumnSidecar.blobIndices {preset : Preset} {fork : Fork}
+    (sidecar : PartialDataColumnSidecar preset fork) : Array Nat :=
+  (sidecar.cellsPresentBitmap.bits.zipIdx.filter (·.1)).map (·.2)
+
+/-- Whether the cells of a partial sidecar match the commitments of their blobs, by their proofs.
+
+Each cell sits at the index of the column in the extended blob of its row.
+
+A set bit with no commitment fails with an error, and so do unequal counts. -/
+def verifyPartialDataColumnSidecarKzgProofs {preset : Preset} {fork : Fork}
+    (setup : TrustedSetup) (sidecar : PartialDataColumnSidecar preset fork)
+    (allCommitments : BlobKZGCommitments preset fork) (columnIndex : ColumnIndex) :
+    Except KzgError Bool := do
+  let indices := sidecar.blobIndices
+  let commitments ← indices.mapM fun index =>
+    if inside : index < allCommitments.data.size then pure allCommitments.data[index]
+    else throw .commitmentIndexOutOfBounds
+  verifyCellKzgProofBatch setup commitments (Array.replicate indices.size columnIndex.toNat)
+    sidecar.partialColumn.data sidecar.kzgProofs.data
 
 end EthLib.Consensus

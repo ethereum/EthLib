@@ -1,0 +1,6 @@
+preset: mainnet
+fork: fulu
+runner: networking
+handler: gossip_partial_data_column_sidecar
+suite: pyspec_tests
+case: gossip_partial_data_column_sidecar__ignore_parent_not_seen

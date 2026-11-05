@@ -320,6 +320,12 @@
 #define DOC_consensus_verify_data_column_sidecar_kzg_proofs \
   "Whether the cells of a sidecar, given as bytes, match its commitments by their proofs."
 
+#define DOC_consensus_verify_partial_data_column_header_inclusion_proof \
+  "At Fulu: whether the branch of a partial header, given as bytes, climbs to its body root."
+
+#define DOC_consensus_verify_partial_data_column_sidecar_kzg_proofs \
+  "At Fulu: whether the cells of a partial sidecar match their commitments by their proofs."
+
 #define DOC_consensus_compute_matrix \
   "The matrix of the blobs, given one after another, as its entries one after another."
 

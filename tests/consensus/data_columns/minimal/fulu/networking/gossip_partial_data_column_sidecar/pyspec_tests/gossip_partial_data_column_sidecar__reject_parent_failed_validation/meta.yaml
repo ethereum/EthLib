@@ -1,0 +1,13 @@
+topic: partial_data_column_sidecar
+blocks:
+- {block: 
+    block_0x7f2b248e1a15c9c4da4508b784f4b8c38b5eeaa0095b6894f9b8144ef743cd21}
+- {block: 
+    block_0x1e155f972a4148105b29a7e46f7456505c596e7dbdb7fe24e84770fa323b0d5b, 
+    failed: true}
+messages:
+- {group_id: 
+    partial_data_column_group_id_0x144ff0fa89d8a2f2c1040c15be9247b5bd44dc85df3d486689eeb8272d8e4c08,
+  column_index: 0, current_time_ms: 12500, message: 
+    partial_data_column_sidecar_0x64942a7f47ac95efb60dbff58a72209c10f85fc2c195a3ad9289b89803af083a,
+  expected: reject, reason: header's parent failed validation}

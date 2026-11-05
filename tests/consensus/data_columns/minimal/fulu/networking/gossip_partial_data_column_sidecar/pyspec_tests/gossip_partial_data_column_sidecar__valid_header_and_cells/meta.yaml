@@ -1,0 +1,10 @@
+topic: partial_data_column_sidecar
+blocks:
+- {block: 
+    block_0x7f2b248e1a15c9c4da4508b784f4b8c38b5eeaa0095b6894f9b8144ef743cd21}
+messages:
+- {group_id: 
+    partial_data_column_group_id_0xda6d57664b7dc577e7d7cc4ea2b5902b9702b5a0334a763dded548dc3cb378e2,
+  column_index: 0, current_time_ms: 6500, message: 
+    partial_data_column_sidecar_0xae105de9958b8c53c247bfbc50e120fad0f9c56364e4c64fcf796f4e2dfc0c29,
+  expected: valid}

@@ -1,0 +1,15 @@
+topic: partial_data_column_sidecar
+blocks:
+- {block: 
+    block_0x7f2b248e1a15c9c4da4508b784f4b8c38b5eeaa0095b6894f9b8144ef743cd21}
+messages:
+- {group_id: 
+    partial_data_column_group_id_0xd827688eb71a3bce0c1417a30d4dfdfcedb425546b5cf162f3baaec84cbe800b,
+  column_index: 0, current_time_ms: 6500, message: 
+    partial_data_column_sidecar_0x5191c9ff7dd73be832f152f81b88c2c9d25f2fefe303b26a66240d37143aec4c,
+  expected: valid}
+- {group_id: 
+    partial_data_column_group_id_0xd827688eb71a3bce0c1417a30d4dfdfcedb425546b5cf162f3baaec84cbe800b,
+  column_index: 0, current_time_ms: 6600, message: 
+    partial_data_column_sidecar_0x5e6c0bdc522b1d4571d5aeadfa4badf39f59c3fe2f40e8cd0aa480084ade6d01,
+  expected: reject, reason: header differs from previously validated header}
