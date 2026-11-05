@@ -30,9 +30,11 @@ namespace EthLib.Consensus.Models.ForkChoice
 
 /-- A block tree.
 
-Each block other than the genesis block has a parent one level below it.
+Each block other than the genesis block has a parent below it.
 
-The genesis block is its own parent. -/
+The genesis block is its own parent.
+
+A height only has to grow from a parent to its child, so the slot of a block can serve as one. -/
 structure BlockTree (β : Type*) where
   /-- The root of the tree. -/
   genesis : β
@@ -42,8 +44,8 @@ structure BlockTree (β : Type*) where
   height : β → ℕ
   /-- The genesis block is its own parent. -/
   parent_genesis : parent genesis = genesis
-  /-- Each block other than the genesis block sits one level above its parent. -/
-  height_parent : ∀ b, b ≠ genesis → height (parent b) + 1 = height b
+  /-- Each block other than the genesis block sits above its parent. -/
+  height_parent : ∀ b, b ≠ genesis → height (parent b) < height b
 
 namespace BlockTree
 
@@ -71,8 +73,13 @@ theorem Ancestor.trans {a b c : β} (hab : T.Ancestor a b) (hbc : T.Ancestor b c
 theorem IsChild.ancestor {b c : β} (h : T.IsChild c b) : T.Ancestor b c :=
   ⟨1, h.2⟩
 
-theorem IsChild.height {b c : β} (h : T.IsChild c b) : T.height c = T.height b + 1 := by
-  rw [← h.2, T.height_parent c h.1]
+theorem IsChild.height_lt {b c : β} (h : T.IsChild c b) : T.height b < T.height c := by
+  rw [← h.2]
+  exact T.height_parent c h.1
+
+/-- The genesis block is its only ancestor. -/
+theorem iterate_genesis (n : ℕ) : T.parent^[n] T.genesis = T.genesis :=
+  Function.iterate_fixed T.parent_genesis n
 
 /-- No ancestor is higher than its descendant. -/
 theorem height_iterate_le (n : ℕ) (b : β) : T.height (T.parent^[n] b) ≤ T.height b := by
@@ -83,14 +90,57 @@ theorem height_iterate_le (n : ℕ) (b : β) : T.height (T.parent^[n] b) ≤ T.h
     refine (ih _).trans ?_
     by_cases hb : b = T.genesis
     · rw [hb, T.parent_genesis]
-    · exact (T.height_parent b hb).le.trans' (Nat.le_succ _)
+    · exact (T.height_parent b hb).le
+
+/-- An ancestor of a block sits at most as high as the block. -/
+theorem Ancestor.height_le {a b : β} (h : T.Ancestor a b) : T.height a ≤ T.height b := by
+  obtain ⟨n, rfl⟩ := h
+  exact height_iterate_le n b
+
+/-- An ancestor other than the block itself sits below it. -/
+theorem Ancestor.height_lt {a b : β} (h : T.Ancestor a b) (hne : a ≠ b) :
+    T.height a < T.height b := by
+  obtain ⟨n, rfl⟩ := h
+  cases n with
+  | zero => exact absurd rfl hne
+  | succ n =>
+    -- The genesis block is its own only ancestor, so `b` is not the genesis block.
+    have hb : b ≠ T.genesis := by
+      rintro rfl
+      exact hne (iterate_genesis _)
+    rw [Function.iterate_succ_apply]
+    exact (height_iterate_le n _).trans_lt (T.height_parent b hb)
+
+/-- Two blocks in the chain of each other are equal. -/
+theorem Ancestor.antisymm {a b : β} (hab : T.Ancestor a b) (hba : T.Ancestor b a) : a = b := by
+  by_contra hne
+  exact absurd (hab.height_lt hne) (Nat.not_lt.mpr hba.height_le)
+
+/-- An ancestor of a block is the block itself or an ancestor of its parent. -/
+theorem Ancestor.eq_or_parent {a b : β} (h : T.Ancestor a b) :
+    a = b ∨ T.Ancestor a (T.parent b) := by
+  obtain ⟨n, rfl⟩ := h
+  cases n with
+  | zero => exact .inl rfl
+  | succ n => exact .inr ⟨n, (Function.iterate_succ_apply _ _ _).symm⟩
+
+/-- Two blocks in the chain of one block are in the chain of each other. -/
+theorem Ancestor.total {a b c : β} (ha : T.Ancestor a c) (hb : T.Ancestor b c) :
+    T.Ancestor a b ∨ T.Ancestor b a := by
+  obtain ⟨i, rfl⟩ := ha
+  obtain ⟨j, rfl⟩ := hb
+  rcases le_total i j with hij | hij
+  · obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le hij
+    exact .inr ⟨k, by rw [← Function.iterate_add_apply, Nat.add_comm]⟩
+  · obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le hij
+    exact .inl ⟨k, by rw [← Function.iterate_add_apply, Nat.add_comm]⟩
 
 /-- Two distinct children of one block have no common descendant. -/
 theorem IsChild.disjoint {b c c' m : β} (hc : T.IsChild c b) (hc' : T.IsChild c' b)
     (hne : c ≠ c') (hm : T.Ancestor c m) (hm' : T.Ancestor c' m) : False := by
   obtain ⟨i, hi⟩ := hm
   obtain ⟨j, hj⟩ := hm'
-  -- If one child is in the chain of the other, they are equal: both sit one level above `b`.
+  -- A strict ancestor of a child of `b` sits at or below `b`, so it is no child of `b`.
   have key : ∀ {x y : β}, T.IsChild x b → T.IsChild y b → ∀ k, T.parent^[k] x = y → x = y := by
     intro x y hx hy k hk
     cases k with
@@ -98,8 +148,8 @@ theorem IsChild.disjoint {b c c' m : β} (hc : T.IsChild c b) (hc' : T.IsChild c
     | succ k =>
       rw [Function.iterate_succ_apply, hx.2] at hk
       have := height_iterate_le (T := T) k b
-      rw [hk, hy.height] at this
-      omega
+      rw [hk] at this
+      exact absurd hy.height_lt (Nat.not_lt.mpr this)
   rcases le_total i j with hij | hij
   · obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le hij
     rw [Nat.add_comm, Function.iterate_add_apply, hi] at hj
@@ -121,6 +171,45 @@ theorem Ancestor.exists_child {a b : β} (h : T.Ancestor a b) (hne : a ≠ b) :
     rw [hn', Function.iterate_succ_apply'] at hn
     refine ⟨T.parent^[k] b, ⟨fun hg => hk ?_, hn⟩, k, rfl⟩
     rw [← hn, hg, T.parent_genesis]
+
+/-- Every climb of a block either reaches the genesis block or loses at least one level per step. -/
+theorem iterate_eq_genesis_or (n : ℕ) (b : β) :
+    T.parent^[n] b = T.genesis ∨ T.height (T.parent^[n] b) + n ≤ T.height b := by
+  induction n with
+  | zero => exact .inr le_rfl
+  | succ n ih =>
+    rw [Function.iterate_succ_apply']
+    rcases ih with hg | hle
+    · exact .inl (by rw [hg, T.parent_genesis])
+    · by_cases hg : T.parent^[n] b = T.genesis
+      · exact .inl (by rw [hg, T.parent_genesis])
+      · have := T.height_parent _ hg
+        exact .inr (by omega)
+
+/-- A climb as long as the height of the block, plus one, reaches the genesis block. -/
+theorem iterate_height_succ (b : β) : T.parent^[T.height b + 1] b = T.genesis :=
+  (iterate_eq_genesis_or (T.height b + 1) b).resolve_right (by omega)
+
+variable (T) in
+open scoped Classical in
+/-- The chain of a block: the block and all its ancestors. -/
+noncomputable def chain (b : β) : Finset β :=
+  (Finset.range (T.height b + 2)).image (T.parent^[·] b)
+
+theorem mem_chain {a b : β} : a ∈ T.chain b ↔ T.Ancestor a b := by
+  classical
+  simp only [chain, Finset.mem_image, Finset.mem_range]
+  constructor
+  · rintro ⟨n, -, hn⟩
+    exact ⟨n, hn⟩
+  · rintro ⟨n, rfl⟩
+    by_cases hn : n < T.height b + 2
+    · exact ⟨n, hn, rfl⟩
+    -- A longer climb stays at the genesis block, which the climb of the height already reaches.
+    refine ⟨T.height b + 1, by omega, ?_⟩
+    obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le (Nat.le_of_not_lt hn)
+    rw [iterate_height_succ, show T.height b + 2 + k = k + 1 + (T.height b + 1) by omega,
+      Function.iterate_add_apply, iterate_height_succ, iterate_genesis]
 
 end BlockTree
 
@@ -147,6 +236,21 @@ theorem View.mem_of_ancestor (G : View ν β T) {a b : β} (hb : b ∈ G.blocks)
   induction n with
   | zero => exact hb
   | succ n ih => rw [Function.iterate_succ_apply']; exact G.parent_mem _ ih
+
+open scoped Classical in
+/-- The view of the given blocks and their ancestors, with the given latest messages. -/
+noncomputable def View.ofBlocks (S : Finset β) (latest : ν → Option β) : View ν β T where
+  blocks := S.biUnion T.chain
+  parent_mem b hb := by
+    simp only [Finset.mem_biUnion, BlockTree.mem_chain] at hb ⊢
+    obtain ⟨s, hs, hbs⟩ := hb
+    exact ⟨s, hs, (show T.Ancestor (T.parent b) b from ⟨1, rfl⟩).trans hbs⟩
+  latest := latest
+
+theorem View.mem_ofBlocks {S : Finset β} {latest : ν → Option β} {a : β} :
+    a ∈ (View.ofBlocks (T := T) S latest).blocks ↔ ∃ b ∈ S, T.Ancestor a b := by
+  classical
+  simp [View.ofBlocks, BlockTree.mem_chain]
 
 variable (V : Finset ν) (w : ν → ℕ) (G : View ν β T)
 
@@ -197,7 +301,7 @@ theorem weight_add_le {b c c' : β} (hc : T.IsChild c b) (hc' : T.IsChild c' b) 
 theorem height_lt_of_mem_children {b c : β} (hc : c ∈ children G b) :
     G.blocks.sup T.height - T.height c < G.blocks.sup T.height - T.height b := by
   rw [mem_children] at hc
-  have h1 := hc.2.height
+  have h1 := hc.2.height_lt
   have h2 : T.height c ≤ G.blocks.sup T.height := Finset.le_sup hc.1
   omega
 
@@ -216,6 +320,18 @@ theorem heaviestChild_spec (b : β) (h : (children G b).Nonempty) :
           root (heaviestChild V w G root b h)) :=
   Classical.choose_spec
     ((children G b).exists_max_image (fun c => toLex (weight V w G c, root c)) h)
+
+variable {V w G root} in
+/-- A child above every other child by weight, then by root, is the child that the rule picks.
+
+The roots of the children must differ. -/
+theorem heaviestChild_eq {b c : β} (hc : c ∈ children G b)
+    (hmax : ∀ c' ∈ children G b, toLex (weight V w G c', root c') ≤ toLex (weight V w G c, root c))
+    (hroot : Set.InjOn root (children G b)) :
+    heaviestChild V w G root b ⟨c, hc⟩ = c := by
+  obtain ⟨hmem, hle⟩ := heaviestChild_spec V w G root b ⟨c, hc⟩
+  have key := le_antisymm (hmax _ hmem) (hle c hc)
+  exact hroot hmem hc (Prod.ext_iff.mp (toLex.injective key)).2
 
 /-- LMD-GHOST from the block `b`: move to the heaviest child until the block has no child. -/
 noncomputable def ghost (b : β) : β :=
