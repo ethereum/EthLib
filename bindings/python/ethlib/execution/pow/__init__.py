@@ -13,7 +13,7 @@ from ...cryptography import _native
 def _number(n: int) -> bytes:
     """The shortest big-endian bytes of a non-negative integer."""
     if n < 0:
-        raise ValueError("a block quantity cannot be negative")
+        raise OverflowError("a block quantity cannot be negative")
     return n.to_bytes(max(1, (n.bit_length() + 7) // 8), "big")
 
 

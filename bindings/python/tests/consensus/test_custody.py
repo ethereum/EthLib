@@ -98,7 +98,7 @@ def test_native_rejects_non_integer():
 
 @pytest.mark.parametrize("value", OUT_OF_RANGE)
 def test_wrapper_rejects_out_of_range(value):
-    with pytest.raises(ValueError):
+    with pytest.raises(OverflowError):
         consensus.get_custody_groups(0, value)
-    with pytest.raises(ValueError):
+    with pytest.raises(OverflowError):
         consensus.compute_columns_for_custody_group(value)

@@ -3,7 +3,7 @@
 import pytest
 
 from ethlib.errors import EvmError
-from ethlib.execution.evm import extend_memory, memory_gas_cost, word_op
+from ethlib.execution.evm import extend_memory, immediate_depths, memory_gas_cost, word_op
 
 OPCODES = {
     "MOD": 0x06, "SDIV": 0x05, "SMOD": 0x07, "ADDMOD": 0x08, "EXP": 0x0A, "SIGNEXTEND": 0x0B,
@@ -189,6 +189,18 @@ def test_opcode_outside_the_table() -> None:
     with pytest.raises(EvmError) as info:
         word_op(0x56, 0)
     assert info.value.code == 0
+
+
+def test_integers_out_of_range() -> None:
+    # An opcode is one byte and an operand one word, so a larger integer is out of range.
+    with pytest.raises(OverflowError):
+        word_op(0x100, 0, 0)
+    with pytest.raises(OverflowError):
+        word_op(0x01, 2**256, 0)
+    with pytest.raises(OverflowError):
+        immediate_depths(0xE6, 0x100)
+    with pytest.raises(OverflowError):
+        memory_gas_cost(-1)
 
 
 @pytest.mark.parametrize("size, cost", [

@@ -39,7 +39,7 @@ def parameters(name: str, fork: str) -> dict:
 def get_custody_groups(node_id: int, custody_group_count: int, name: str = "mainnet") -> list:
     """The sorted custody groups of a node, or ConsensusError when they cannot be selected."""
     if not 0 <= node_id < 2**256 or not 0 <= custody_group_count < 2**64:
-        raise ValueError("node_id or custody_group_count is out of range")
+        raise OverflowError("node_id or custody_group_count is out of range")
     groups = _native.consensus_get_custody_groups(
         name, node_id.to_bytes(32, "big"), custody_group_count
     )
@@ -49,7 +49,7 @@ def get_custody_groups(node_id: int, custody_group_count: int, name: str = "main
 def compute_columns_for_custody_group(custody_group: int, name: str = "mainnet") -> list:
     """The columns of a custody group, or ConsensusError for a group out of range."""
     if not 0 <= custody_group < 2**64:
-        raise ValueError("custody_group is out of range")
+        raise OverflowError("custody_group is out of range")
     columns = _native.consensus_compute_columns_for_custody_group(name, custody_group)
     return _value(json.loads(columns))
 
@@ -140,7 +140,7 @@ def compute_subnet_for_data_column_sidecar(column_index: int, name: str = "mainn
 def compute_subscribed_subnets(node_id: int, epoch: int, name: str = "mainnet") -> list:
     """The attestation subnets of a node in an epoch."""
     if not 0 <= node_id < 2**256:
-        raise ValueError("node_id is out of range")
+        raise OverflowError("node_id is out of range")
     subnets = _native.consensus_compute_subscribed_subnets(name, node_id.to_bytes(32, "big"), epoch)
     return _value(json.loads(subnets))
 

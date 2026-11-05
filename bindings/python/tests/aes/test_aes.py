@@ -163,9 +163,9 @@ def test_gcm_rejects_truncated_tag() -> None:
 @pytest.mark.parametrize("tag_length", [-1, 2**64 + 16])
 def test_gcm_rejects_tag_length_out_of_range(tag_length: int) -> None:
     # A length outside [0, 2^64) is an error, not a value modulo 2^64.
-    with pytest.raises(ValueError, match="tag_length"):
+    with pytest.raises(OverflowError, match="tag_length"):
         aes.gcm_encrypt(bytes(16), bytes(12), b"", b"", tag_length)
-    with pytest.raises(ValueError, match="tag_length"):
+    with pytest.raises(OverflowError, match="tag_length"):
         aes.gcm_decrypt(bytes(16), bytes(12), b"", b"", bytes(16), tag_length)
 
 

@@ -35,3 +35,9 @@ def test_not_a_nibble() -> None:
     with pytest.raises(TrieError) as info:
         trie.hex_prefix([16], False)
     assert info.value.code == 0
+
+
+def test_not_a_byte() -> None:
+    # A value outside a byte never reaches the encoder.
+    with pytest.raises(OverflowError):
+        trie.hex_prefix([256], False)

@@ -109,3 +109,8 @@ def test_dataset_item_rejects_a_bad_cache(cache: bytes) -> None:
     # A cache is a positive whole number of 64-byte items.
     with pytest.raises(EthashError):
         ethash.dataset_item(cache, 0)
+
+
+def test_negative_block_number() -> None:
+    with pytest.raises(OverflowError):
+        ethash.cache_size(-1)

@@ -71,3 +71,8 @@ def test_unknown_fork() -> None:
     # A name that is not a fork of the timeline fails before any arithmetic.
     with pytest.raises(BlockError):
         block_difficulty("ropsten", 1, 2, 1, 131072, 0)
+
+
+def test_negative_quantity() -> None:
+    with pytest.raises(OverflowError):
+        block_difficulty("homestead", -1, 2, 1, 131072, 0)

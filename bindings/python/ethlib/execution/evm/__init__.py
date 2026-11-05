@@ -10,14 +10,14 @@ _WORD = 2**256
 def _word(value: int) -> bytes:
     """The 32 big-endian bytes of a word, which must be below 2^256."""
     if not 0 <= value < _WORD:
-        raise ValueError("a word must be in [0, 2^256)")
+        raise OverflowError("a word must be in [0, 2^256)")
     return value.to_bytes(32, "big")
 
 
 def _number(n: int) -> bytes:
     """The shortest big-endian bytes of a non-negative integer."""
     if n < 0:
-        raise ValueError("a size cannot be negative")
+        raise OverflowError("a size cannot be negative")
     return n.to_bytes(max(1, (n.bit_length() + 7) // 8), "big")
 
 

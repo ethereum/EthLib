@@ -7,7 +7,7 @@ from .. import _native
 def _number(n: int) -> bytes:
     """The shortest big-endian bytes of a non-negative integer."""
     if n < 0:
-        raise ValueError("an Ethash number cannot be negative")
+        raise OverflowError("an Ethash number cannot be negative")
     return n.to_bytes(max(1, (n.bit_length() + 7) // 8), "big")
 
 
