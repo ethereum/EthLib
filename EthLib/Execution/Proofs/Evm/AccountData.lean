@@ -61,7 +61,7 @@ theorem accessAddress_snd (evm : Evm fork Meter) (a : Address) :
   · exact ⟨_, rfl⟩
   · exact ⟨evm.substate.accessedAddresses, rfl⟩
 
-/-- BALANCE on an address word with room on the stack: access, pay, push the balance. -/
+/-- BALANCE on an address word with room on the stack: access, pay, read, push the balance. -/
 theorem balanceStep_cons [GasMeter Meter] {evm : Evm fork Meter} {word : U256} {rest : List U256}
     (h : evm.stack.val = word :: rest) :
     balanceStep evm =
@@ -70,6 +70,7 @@ theorem balanceStep_cons [GasMeter Meter] {evm : Evm fork Meter} {word : U256} {
       (GasMeter.charge accessed.2.gas (balanceCost fork accessed.1)).map fun gas =>
         { accessed.2 with
           gas
+          state := accessed.2.state.recordAccountRead (toAddressMasked word)
           stack := ⟨(evm.state.getAccount (toAddressMasked word)).balance :: rest,
             by have := evm.stack.property; rw [h] at this; simpa using this⟩
           pc := evm.pc + 1 } := by
@@ -82,9 +83,10 @@ theorem balanceStep_cons [GasMeter Meter] {evm : Evm fork Meter} {word : U256} {
   obtain ⟨accessed, hacc⟩ := accessAddress_snd
     { evm with stack := ⟨rest, by have := evm.stack.property; rw [h] at this; simp at this; omega⟩ }
     (toAddressMasked word)
-  simp only [balanceStep, popWord, chargeGas, pushWord, advance, hstack, Stack.pop]
+  simp only [balanceStep, popWord, chargeGas, recordAccountRead, pushWord, advance, hstack,
+    Stack.pop]
   simp only [bind, Except.bind, pure, Except.pure, hacc]
-  rcases hc : GasMeter.charge _ _ with _ | _ <;> simp [Except.map, Stack.push, room]
+  rcases hc : GasMeter.charge _ _ with _ | _ <;> simp [Except.map, Stack.push, room] <;> rfl
 
 /-- EXTCODEHASH reads 0 for an address with no account. -/
 theorem codeHashWord_of_none {state : State.TransactionState} {a : Address}

@@ -159,6 +159,21 @@ theorem accessStorageKey_pays (evm : Evm fork Meter) (address : Address) (key : 
   unfold accessStorageKey
   split <;> exact .of_eq rfl rfl
 
+/-- A record of a read pays nothing. -/
+theorem recordAccountRead_pays (evm : Evm fork Meter) (address : Address) :
+    Pays 0 evm (recordAccountRead evm address) :=
+  .of_eq rfl rfl
+
+/-- A record of a read of a slot pays nothing. -/
+theorem recordStorageRead_pays (evm : Evm fork Meter) (address : Address) (key : Bytes32) :
+    Pays 0 evm (recordStorageRead evm address key) :=
+  .of_eq rfl rfl
+
+/-- An exceptional halt leaves the measure 0. -/
+theorem measure_exceptionalHalt [LawfulGasMeter Meter] (evm : Evm fork Meter) (e : EvmError) :
+    measure (exceptionalHalt evm e) = 0 := by
+  simp [measure, exceptionalHalt, LawfulGasMeter.gasHeld_exhaust]
+
 /-- The pops of the topics of a log pay nothing. -/
 theorem popTopics_pays {evm after : Evm fork Meter} {n : Nat} {topics : List Bytes32}
     (h : popTopics evm n = .ok (topics, after)) : Pays 0 evm after := by
@@ -598,7 +613,7 @@ theorem balanceStep_pays {evm after : Evm fork Meter} (h : balanceStep evm = .ok
   obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((((popWord_pays h1).trans (accessAddress_pays _ _)).trans (chargeGas_pays h2)).trans
-    (pushWord_pays h3)).mono (m := 1)
+    ((recordAccountRead_pays _ _).trans (pushWord_pays h3))).mono (m := 1)
     (by simp only [Nat.zero_add, Nat.add_zero]; exact one_le_balanceCost _ _)).congr rfl rfl
 
 /-- EXTCODESIZE pays at least 1 gas. -/
@@ -610,7 +625,7 @@ theorem extcodesizeStep_pays {evm after : Evm fork Meter} (h : extcodesizeStep e
   obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((((popWord_pays h1).trans (accessAddress_pays _ _)).trans (chargeGas_pays h2)).trans
-    (pushWord_pays h3)).mono (m := 1)
+    ((recordAccountRead_pays _ _).trans (pushWord_pays h3))).mono (m := 1)
     (by simp only [Nat.zero_add, Nat.add_zero]; exact one_le_externalBaseCost _ _)).congr rfl rfl
 
 /-- EXTCODECOPY pays at least 1 gas. -/
@@ -624,7 +639,9 @@ theorem extcodecopyStep_pays {evm after : Evm fork Meter} (h : extcodecopyStep e
   obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact ((((((popWord_pays h1).trans (popWord_pays h2)).trans (popWord_pays h3)).trans
-    (popWord_pays h4)).trans ((accessAddress_pays _ _).trans (chargeGasAndMemory_pays h5))).mono
+    (popWord_pays h4)).trans ((accessAddress_pays _ _).trans
+    ((chargeGasAndMemory_pays h5).trans
+      (recordAccountRead_pays _ (Base.toAddressMasked word))))).mono
     (m := 1) (by
       simp only [Nat.zero_add, Nat.add_zero]
       exact Nat.le_trans (one_le_externalBaseCost _ _) (Nat.le_add_right _ _))).congr rfl rfl
@@ -637,7 +654,7 @@ theorem extcodehashStep_pays {evm after : Evm fork Meter} (h : extcodehashStep e
   obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((((popWord_pays h1).trans (accessAddress_pays _ _)).trans (chargeGas_pays h2)).trans
-    (pushWord_pays h3)).mono (m := 1)
+    ((recordAccountRead_pays _ _).trans (pushWord_pays h3))).mono (m := 1)
     (by simp only [Nat.zero_add, Nat.add_zero]; exact one_le_extcodehashCost _ _)).congr rfl rfl
 
 /-- Each instruction that reads another account lowers the measure. -/
@@ -665,7 +682,7 @@ theorem accountStep_measure_lt {op : Op}
     split at hf
     · simp only [Option.some.injEq] at hf
       subst hf
-      exact ((readFrame_pays h).mono).measure_lt running
+      exact (((recordAccountRead_pays _ _).trans (readFrame_pays h)).mono).measure_lt running
     · cases hf
 
 /-! ## The instructions that use storage -/
@@ -678,28 +695,36 @@ theorem sloadStep_pays {evm after : Evm fork Meter} (h : sloadStep evm = .ok aft
   obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
   cases h
   exact (((((popWord_pays h1).trans (accessStorageKey_pays _ _ _)).trans
-    (chargeGas_pays h2)).trans (pushWord_pays h3)).mono (m := 1)
+    (chargeGas_pays h2)).trans ((recordStorageRead_pays _ _ _).trans (pushWord_pays h3))).mono
+    (m := 1)
     (by simp only [Nat.zero_add, Nat.add_zero]; exact one_le_sloadCost _ _)).congr rfl rfl
 
-/-- SSTORE pays at least 1 gas. -/
-theorem sstoreStep_pays {evm after : Evm fork Meter} (h : sstoreStep evm = .ok after) :
-    Pays 1 evm after := by
+/-- SSTORE lowers the measure: it pays at least 1 gas, or it halts once it has read the slot. -/
+theorem sstoreStep_measure_lt {evm after : Evm fork Meter} (h : sstoreStep evm = .ok after)
+    (running : evm.running = true) : measure after < measure evm := by
   unfold sstoreStep at h
   split at h
   · cases h
   obtain ⟨⟨word, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨new, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
   dsimp only at h
-  split at h <;> try (cases h; done)
-  obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
-  split at h <;> try (cases h; done)
-  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-  cases h
-  exact (((((((popWord_pays h1).trans (popWord_pays h2)).trans
-    (accessStorageKey_pays _ _ _)).trans (refillStateGas_pays _ _)).trans
-    (chargeGas_pays h3)).trans (chargeStateGas_pays h4)).mono (m := 1)
-    (by simp only [Nat.zero_add, Nat.add_zero]; exact one_le_sstoreCost _ _ _ _ _)).congr rfl rfl
+  split at h
+  · cases h
+  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
+  · obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
+    split at h
+    · cases h
+    obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    refine ((((((((popWord_pays h1).trans (popWord_pays h2)).trans
+      (accessStorageKey_pays _ _ _)).trans (recordStorageRead_pays _ _ _)).trans
+      (refillStateGas_pays _ _)).trans (chargeGas_pays h3)).trans
+      (chargeStateGas_pays h4)).mono (m := 1) ?_).congr rfl rfl |>.measure_lt running
+    simp only [Nat.zero_add, Nat.add_zero]
+    exact one_le_sstoreCost _ _ _ _ _
+  · simp only [id, measure_exceptionalHalt]
+    simp [measure, running]
 
 /-- SLOAD and SSTORE lower the measure. -/
 theorem storageStep_measure_lt {op : Op}
@@ -708,7 +733,7 @@ theorem storageStep_measure_lt {op : Op}
     measure after < measure evm := by
   cases op <;> simp only [storageStep, Option.some.injEq, reduceCtorEq] at hf <;> subst hf
   case sload => exact (sloadStep_pays h).measure_lt running
-  case sstore => exact (sstoreStep_pays h).measure_lt running
+  case sstore => exact sstoreStep_measure_lt h running
 
 /-! ## The instructions of transient storage -/
 

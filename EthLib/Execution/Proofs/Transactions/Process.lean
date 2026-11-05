@@ -116,12 +116,15 @@ variable {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter] {chainId : Nat}
 
 So a transaction keeps the nonce and the fee of its sender, which come before its message.
 
+The halt keeps only the reads of the preparation, from the state `read`.
+
 No execution gas is left, the reservoir comes back whole, and no state gas is used. -/
-theorem processMessageCall_of_halt {e : EvmError}
-    (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid = .error e)
+theorem processMessageCall_of_halt {e : EvmError} {read : State.TransactionState}
+    (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
+      .error (e, read))
     (halts : e.aborts = false) :
     processMessageCall (Meter := Meter) chainId message state substate auths paid =
-      .ok (.ofHalt state message.reservoir e) := by
+      .ok (.ofHalt (state.withReadsOf read) message.reservoir e) := by
   simp only [processMessageCall, h, halts, Bool.false_eq_true, ↓reduceIte]
 
 /-- A halt before the first frame leaves no execution gas, the whole reservoir and no state gas. -/

@@ -151,14 +151,6 @@ abbrev MessageRunner (fork : Fork) (Meter : Type) [GasMeter Meter] (bound : Nat)
   (caller : Evm fork Meter) → (message : Message fork) → message.gas < bound →
     Except EvmError { child : Evm fork Meter // GasMeter.gasHeld child.gas ≤ message.gas }
 
-/-- The frame after an exceptional halt: it stops with no gas, no output and the error. -/
-def exceptionalHalt (evm : Evm fork Meter) (error : EvmError) : Evm fork Meter :=
-  { evm with
-    gas := GasMeter.exhaust evm.gas
-    running := false
-    output := .empty
-    error := some error }
-
 /-- Run the frame `evm` until it stops, with the steps of `step`, which lower its measure.
 
 A message gets the gas below `bound`, which is at least the gas of the frame.

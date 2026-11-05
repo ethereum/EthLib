@@ -254,6 +254,12 @@ def recordStorageRead (tx : TransactionState) (address : Address) (key : Bytes32
   { tx with
     storageReads := tx.storageReads.insert address ((tx.storageReads.getD address ∅).insert key) }
 
+/-- The state `tx` with the reads of `other` in place of its own.
+
+A call that stops keeps the reads that it made before it stopped. -/
+def withReadsOf (tx other : TransactionState) : TransactionState :=
+  { tx with accountReads := other.accountReads, storageReads := other.storageReads }
+
 /-! ## Writes -/
 
 /-- Set the account at an address, or delete it with none.
@@ -265,12 +271,13 @@ def setAccount (tx : TransactionState) (address : Address) (account : Option Acc
 
 /-- Set the word at a key of the storage of an address.
 
-The address must have an account. -/
+The address must have an account, which the write reads. -/
 def setStorage (tx : TransactionState) (address : Address) (key : Bytes32) (value : U256) :
     Except StateError TransactionState :=
   if (tx.getAccountOptional address).isNone then
     .error (.noAccount address)
   else
+    let tx := tx.recordAccountRead address
     .ok { tx with
       storageWrites := tx.storageWrites.insert address
         ((tx.storageWrites.getD address ∅).insert key value) }
@@ -306,11 +313,14 @@ def setTransientStorage (tx : TransactionState) (address : Address) (key : Bytes
 
 /-- Change the account at an address by `f`, which may fail.
 
+The change reads the account first.
+
 An address with no account starts from the empty account.
 
 From Paris, a change that leaves the account empty deletes it. -/
 def modifyState (fork : Fork) (tx : TransactionState) (address : Address)
     (f : Account → Except StateError Account) : Except StateError TransactionState := do
+  let tx := tx.recordAccountRead address
   let tx := tx.setAccount address (some (← f (tx.getAccount address)))
   if fork ≥ .paris && tx.accountExistsAndIsEmpty address then
     return tx.destroyAccount address

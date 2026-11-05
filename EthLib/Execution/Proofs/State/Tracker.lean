@@ -43,6 +43,19 @@ theorem _root_.EthLib.Execution.State.StateError.code_injective (e₁ e₂ : Sta
 
 /-! ## Accounts -/
 
+/-- A record of an account read changes no account. -/
+@[simp] theorem getAccountOptional_recordAccountRead (tx : TransactionState)
+    (address other : Address) :
+    (tx.recordAccountRead address).getAccountOptional other = tx.getAccountOptional other := rfl
+
+/-- A record of an account read changes no account. -/
+@[simp] theorem getAccount_recordAccountRead (tx : TransactionState) (address other : Address) :
+    (tx.recordAccountRead address).getAccount other = tx.getAccount other := rfl
+
+/-- A record of an account read changes no record of created accounts. -/
+@[simp] theorem createdAccounts_recordAccountRead (tx : TransactionState) (address : Address) :
+    (tx.recordAccountRead address).createdAccounts = tx.createdAccounts := rfl
+
 /-- Reading the account just set gives it. -/
 theorem getAccountOptional_setAccount_self (tx : TransactionState) (address : Address)
     (account : Option Account) :
@@ -96,13 +109,15 @@ theorem getStorage_setStorage_of_ne {tx tx' : TransactionState} {address other :
   · cases h
   · cases h
     rcases hne with hne | hne
-    · simp [getStorage, StorageMap.slot, Std.ExtTreeMap.getElem?_insert, Ne.symm hne]
+    · simp [getStorage, StorageMap.slot, recordAccountRead, Std.ExtTreeMap.getElem?_insert,
+        Ne.symm hne] <;> rfl
     · by_cases haddress : other = address
       · subst haddress
-        simp [getStorage, StorageMap.slot, Std.ExtTreeMap.getElem?_insert, Ne.symm hne,
-          Std.ExtTreeMap.getD_eq_getD_getElem?]
-        cases tx.storageWrites[other]? <;> simp
-      · simp [getStorage, StorageMap.slot, Std.ExtTreeMap.getElem?_insert, Ne.symm haddress]
+        simp [getStorage, StorageMap.slot, recordAccountRead, Std.ExtTreeMap.getElem?_insert,
+          Ne.symm hne, Std.ExtTreeMap.getD_eq_getD_getElem?] <;> try rfl
+        cases tx.storageWrites[other]? <;> simp <;> rfl
+      · simp [getStorage, StorageMap.slot, recordAccountRead, Std.ExtTreeMap.getElem?_insert,
+          Ne.symm haddress] <;> rfl
 
 /-- A storage write leaves the words before the transaction. -/
 theorem getStorageOriginal_setStorage {tx tx' : TransactionState} {address : Address}
@@ -227,11 +242,13 @@ theorem modifyState_eq_ok {fork : Fork} {tx tx' : TransactionState} {address : A
     ∃ account, f (tx.getAccount address) = .ok account ∧ tx'.getAccount address = account ∧
       ∀ other, other ≠ address → tx'.getAccount other = tx.getAccount other := by
   unfold modifyState at h
+  simp only [getAccount_recordAccountRead] at h
   cases hf : f (tx.getAccount address) with
   | error e => simp [hf, bind, Except.bind] at h
   | ok account =>
     refine ⟨account, rfl, ?_⟩
-    have hset : ∀ other, (tx.setAccount address (some account)).getAccount other =
+    have hset : ∀ other,
+        ((tx.recordAccountRead address).setAccount address (some account)).getAccount other =
         if other = address then account else tx.getAccount other := by
       intro other
       unfold getAccount
@@ -241,6 +258,7 @@ theorem modifyState_eq_ok {fork : Fork} {tx tx' : TransactionState} {address : A
         rfl
       · rename_i hne
         rw [getAccountOptional_setAccount_of_ne _ _ hne]
+        rfl
     simp only [hf, bind, Except.bind, pure, Except.pure] at h
     split at h
     · -- From Paris, the empty result is deleted, and reads as the empty account it was.
@@ -261,6 +279,7 @@ theorem accountExistsAndIsEmpty_modifyState {fork : Fork} {tx tx' : TransactionS
     (h : tx.modifyState fork address f = .ok tx') :
     tx'.accountExistsAndIsEmpty address = false := by
   unfold modifyState at h
+  simp only [getAccount_recordAccountRead] at h
   cases hf : f (tx.getAccount address) with
   | error e => simp [hf, bind, Except.bind] at h
   | ok account =>
@@ -280,7 +299,8 @@ theorem getAccountOptional_modifyState {fork : Fork} {tx tx' : TransactionState}
     (h : tx.modifyState fork address f = .ok tx') :
     tx'.getAccountOptional address = some account := by
   have hlt : ¬ fork ≥ .paris := fun hge => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le hfork hge)
-  simp only [modifyState, hf, bind, Except.bind, pure, Except.pure, decide_eq_false hlt,
+  simp only [modifyState, getAccount_recordAccountRead, hf, bind, Except.bind, pure, Except.pure,
+    decide_eq_false hlt,
     Bool.false_and, Bool.false_eq_true, ↓reduceIte, Except.ok.injEq] at h
   subst h
   exact getAccountOptional_setAccount_self _ _ _
@@ -290,7 +310,7 @@ theorem modifyState_isOk {fork : Fork} {tx : TransactionState} {address : Addres
     {f : Account → Except StateError Account} {account : Account}
     (hf : f (tx.getAccount address) = .ok account) :
     ∃ tx', tx.modifyState fork address f = .ok tx' := by
-  simp only [modifyState, hf, bind, Except.bind, pure, Except.pure]
+  simp only [modifyState, getAccount_recordAccountRead, hf, bind, Except.bind, pure, Except.pure]
   split <;> exact ⟨_, rfl⟩
 
 /-- A change leaves the account at every other address, or its absence. -/
@@ -299,13 +319,14 @@ theorem getAccountOptional_modifyState_of_ne {fork : Fork} {tx tx' : Transaction
     (h : tx.modifyState fork address f = .ok tx') (hne : other ≠ address) :
     tx'.getAccountOptional other = tx.getAccountOptional other := by
   unfold modifyState at h
+  simp only [getAccount_recordAccountRead] at h
   cases hf : f (tx.getAccount address) with
   | error e => simp [hf, bind, Except.bind] at h
   | ok account =>
     simp only [hf, bind, Except.bind, pure, Except.pure] at h
     split at h <;> cases h <;>
       simp only [destroyAccount, getAccountOptional_setAccount_of_ne _ _ hne,
-        getAccountOptional_destroyStorage]
+        getAccountOptional_destroyStorage, getAccountOptional_recordAccountRead]
 
 /-- Setting the code of an address gives it the hash of that code.
 
@@ -387,6 +408,30 @@ theorem mem_storageReads_recordStorageRead (tx : TransactionState) (address othe
       Std.compare_eq_iff_eq, true_and]
     exact or_congr_left eq_comm
   · simp [recordStorageRead, Std.ExtTreeMap.getD_insert, Ne.symm h, h]
+
+/-- Taking the reads of another state changes no account, word, code or write. -/
+theorem withReadsOf_reads (tx other : TransactionState) (address : Address) (key : Bytes32)
+    (codeHash : Hash32) :
+    (tx.withReadsOf other).getAccountOptional address = tx.getAccountOptional address ∧
+      (tx.withReadsOf other).getStorage address key = tx.getStorage address key ∧
+      (tx.withReadsOf other).getCode codeHash = tx.getCode codeHash ∧
+      (tx.withReadsOf other).accountWrites = tx.accountWrites ∧
+      (tx.withReadsOf other).storageWrites = tx.storageWrites :=
+  ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+/-- A change to an account reads it, so the account joins the reads. -/
+theorem mem_accountReads_modifyState {fork : Fork} {tx tx' : TransactionState}
+    {address : Address} {f : Account → Except StateError Account}
+    (h : tx.modifyState fork address f = .ok tx') : address ∈ tx'.accountReads := by
+  unfold modifyState at h
+  simp only [getAccount_recordAccountRead] at h
+  have hmem : address ∈ (tx.recordAccountRead address).accountReads :=
+    (mem_accountReads_recordAccountRead _ _ _).mpr (.inl rfl)
+  cases hf : f (tx.getAccount address) with
+  | error e => simp [hf, bind, Except.bind] at h
+  | ok account =>
+    simp only [hf, bind, Except.bind, pure, Except.pure] at h
+    split at h <;> cases h <;> exact hmem
 
 /-- A rollback keeps the reads of the transaction, not those of the snapshot. -/
 theorem reads_restoreTxState (tx snapshot : TransactionState) :
@@ -489,6 +534,7 @@ theorem createdAccounts_modifyState {fork : Fork} {tx tx' : TransactionState} {a
     {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
     tx'.createdAccounts = tx.createdAccounts := by
   unfold modifyState at h
+  simp only [getAccount_recordAccountRead] at h
   cases hf : f (tx.getAccount address) with
   | error e => simp [hf, bind, Except.bind] at h
   | ok account =>

@@ -160,20 +160,29 @@ def finishSelfdestruct (fork : Fork) (beneficiary : Address) (refund : Nat)
 
 The refund before London is for an account that this frame and its callers do not yet delete.
 
-From Glamsterdam, it fails in a static frame before the pop, and pays state gas last. -/
+From Glamsterdam, it fails in a static frame before the pop, and pays state gas last.
+
+From Glamsterdam, the frame must hold the price of a beneficiary with an account first.
+
+Only then does it read the beneficiary, and that read stays even when it then halts.
+
+EIP-7928 asks for both. -/
 def selfdestructStep (fork : Fork) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   if fork ≥ .glamsterdam ∧ evm.message.isStatic then throw .writeInStaticContext
   let (word, evm) ← popWord evm
   let beneficiary := toAddressMasked word
   let (cold, evm) := accessAddress evm beneficiary
-  let originator := evm.message.currentTarget
-  let createsAccount := selfdestructCreatesAccount fork evm.state originator beneficiary
-  let refund :=
-    if originator ∈ evm.substate.accountsToDelete then 0
-    else (gasSchedule fork).REFUND_SELF_DESTRUCT
-  let evm ← chargeGas evm (selfdestructCost fork cold createsAccount)
-  let evm ← chargeStateGas evm (selfdestructStateGas fork createsAccount)
-  finishSelfdestruct fork beneficiary refund evm
+  checkGas evm (selfdestructCost fork cold false)
+  let evm := recordAccountRead evm beneficiary
+  keepReads evm id do
+    let originator := evm.message.currentTarget
+    let createsAccount := selfdestructCreatesAccount fork evm.state originator beneficiary
+    let refund :=
+      if originator ∈ evm.substate.accountsToDelete then 0
+      else (gasSchedule fork).REFUND_SELF_DESTRUCT
+    let evm ← chargeGas evm (selfdestructCost fork cold createsAccount)
+    let evm ← chargeStateGas evm (selfdestructStateGas fork createsAccount)
+    finishSelfdestruct fork beneficiary refund evm
 
 /-- The instruction of SELFDESTRUCT at fork `fork`, and none for any other opcode. -/
 def selfdestructOpStep (fork : Fork) :
@@ -195,16 +204,20 @@ theorem selfdestructOpStep_measure_lt [LawfulGasMeter Meter] {op : Op}
   simp only [hs, ↓reduceIte] at h
   obtain ⟨⟨_, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   dsimp only at h
-  obtain ⟨e2, h2, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
-  have paid := (((popWord_pays h1).trans (accessAddress_pays _ _)).trans (chargeGas_pays h2)).trans
-    (chargeStateGas_pays h3)
-  have := paid.gasHeld
-  unfold finishSelfdestruct at h
-  split at h
-  · cases h
-  · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
-    cases h
-    exact measure_lt_of_stop (show GasMeter.gasHeld e3.gas ≤ _ by omega) rfl running
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
+  · obtain ⟨e2, h2, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨e3, h3, h⟩ := Base.bind_ok_iff.mp h
+    have paid := ((((popWord_pays h1).trans (accessAddress_pays _ _)).trans
+      (recordAccountRead_pays _ _)).trans (chargeGas_pays h2)).trans (chargeStateGas_pays h3)
+    have := paid.gasHeld
+    unfold finishSelfdestruct at h
+    split at h
+    · cases h
+    · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+      cases h
+      exact measure_lt_of_stop (show GasMeter.gasHeld e3.gas ≤ _ by omega) rfl running
+  · simp only [id, measure_exceptionalHalt]
+    simp [measure, running]
 
 end EthLib.Execution.Evm

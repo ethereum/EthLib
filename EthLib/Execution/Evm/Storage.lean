@@ -155,6 +155,7 @@ def sloadStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let address := evm.message.currentTarget
   let (cold, evm) := accessStorageKey evm address key
   let evm ← chargeGas evm (sloadCost fork cold)
+  let evm := recordStorageRead evm address key
   let evm ← pushWord evm (evm.state.getStorage address key)
   return advance evm
 
@@ -162,7 +163,11 @@ def sloadStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
 
 It pays and changes the refund counter by the original, current and new values of the slot.
 
-From Glamsterdam, it first refills state gas, then pays execution gas, then state gas. -/
+From Glamsterdam, it first refills state gas, then pays execution gas, then state gas.
+
+Once the check of the 2300 gas passes, it reads the slot.
+
+That read stays even when the write then lacks gas, by EIP-7928. -/
 def sstoreStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   if fork ≥ .glamsterdam ∧ evm.message.isStatic then throw .writeInStaticContext
   let (word, evm) ← popWord evm
@@ -175,15 +180,17 @@ def sstoreStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
     let original := evm.state.getStorageOriginal address key
     let current := evm.state.getStorage address key
     let (cold, evm) := accessStorageKey evm address key
-    let evm := refillStateGas evm (sstoreStateRefill fork original current new)
-    let evm ← chargeGas evm (sstoreCost fork original current new cold)
-    let evm ← chargeStateGas evm (sstoreStateGas fork original current new)
-    if evm.message.isStatic then
-      throw .writeInStaticContext
-    else
-      let state ← (evm.state.setStorage address key new).mapError .state
-      let refundCounter := evm.substate.refundCounter + sstoreRefund fork original current new
-      return advance { evm with state, substate := { evm.substate with refundCounter } }
+    let evm := recordStorageRead evm address key
+    keepReads evm id do
+      let evm := refillStateGas evm (sstoreStateRefill fork original current new)
+      let evm ← chargeGas evm (sstoreCost fork original current new cold)
+      let evm ← chargeStateGas evm (sstoreStateGas fork original current new)
+      if evm.message.isStatic then
+        throw .writeInStaticContext
+      else
+        let state ← (evm.state.setStorage address key new).mapError .state
+        let refundCounter := evm.substate.refundCounter + sstoreRefund fork original current new
+        return advance { evm with state, substate := { evm.substate with refundCounter } }
 
 /-- The instruction of an opcode that uses storage, or none for another opcode. -/
 def storageStep : Op → Option (Evm fork Meter → Except EvmError (Evm fork Meter))

@@ -104,10 +104,10 @@ theorem finishCall_of_balance_lt [GasMeter Meter] {kind : CallKind} {call : Call
   split at h
   · cases h
   · dsimp only at h
-    simp only [low, ↓reduceIte] at h
-    cases hs : skipCall (refillStateGas
+    rw [ite_eq_left_of_eq_true _ _ (eq_true (by exact low))] at h
+    cases hs : skipCall (refillStateGas (recordAccountRead
         { evm with memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-        newAccount) subCall (GasMeter.reservoir evm.gas) with
+        evm.message.currentTarget) newAccount) subCall (GasMeter.reservoir evm.gas) with
     | error => simp [hs, Functor.map, Except.map] at h
     | ok after =>
       simp only [hs, Functor.map, Except.map, Except.ok.injEq] at h

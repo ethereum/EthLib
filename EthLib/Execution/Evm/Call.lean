@@ -187,16 +187,25 @@ The call then runs the code of the delegate, and pays a cold or a warm access to
 
 It follows one delegation only, even when the delegate has an indicator too.
 
+From Glamsterdam, the frame must hold `known` gas and the access to the delegate first.
+
+`known` is the price that the call knows before it reads the state.
+
+Only then does it read the delegate, which EIP-7928 records.
+
 Before Pectra, the call runs the code of the account at `address`. -/
-def accessDelegation (evm : Evm fork Meter) (address : Address) :
+def accessDelegation (evm : Evm fork Meter) (address : Address) (known : Nat) :
     Except EvmError (Callee × Evm fork Meter) := do
   let code ← accountCode evm address
   let delegate := if fork ≥ .pectra then delegatedAddress code else none
   match delegate with
   | some delegate =>
     let (cold, evm) := accessAddress evm delegate
+    let cost := accountAccessCost fork cold
+    checkGas evm (known + cost)
+    let evm := recordAccountRead evm delegate
     let code ← accountCode evm delegate
-    return (⟨delegate, code, true, accountAccessCost fork cold⟩, evm)
+    return (⟨delegate, code, true, cost⟩, evm)
   | none => return (⟨address, code, false, 0⟩, evm)
 
 /-- The frame after a call that runs no message: it gets back `gas` and `reservoir`, and pushes 0.
@@ -317,6 +326,7 @@ def finishCall (kind : CallKind) (call : CallOperands) (callee : Callee)
     let evm :=
       { evm with memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
     let current := evm.message.currentTarget
+    let evm := recordAccountRead evm current
     if (evm.state.getAccount current).balance < call.value then
       .next <$> skipCall (refillStateGas evm newAccount) subCall reservoir
     else
@@ -366,7 +376,13 @@ It pops its operands, accesses the address and a delegate, and pays.
 
 It pays its extra price, the gas it passes on, and the growth of memory for both ranges.
 
-From Glamsterdam, CALL with value in a frame that must not change the state fails first. -/
+From Glamsterdam, CALL with value in a frame that must not change the state fails first.
+
+From Glamsterdam, the frame must then hold the price it knows before it reads the address.
+
+That price is the access, the price of the value and the growth of memory, by EIP-7928.
+
+The reads of the address and of a delegate stay even when the call then halts. -/
 def callStep (kind : CallKind) (evm : Evm fork Meter) :
     Except EvmError (StepResult fork Meter) := do
   let (call, evm) ← popCallOperands kind evm
@@ -375,11 +391,16 @@ def callStep (kind : CallKind) (evm : Evm fork Meter) :
   let ranges := [(call.inputStart, call.inputSize), (call.outputStart, call.outputSize)]
   let growth := extendMemory evm.memory.size ranges
   let (cold, evm) := accessAddress evm call.address
-  let (callee, evm) ← accessDelegation evm call.address
-  let extraGas := callExtraGas fork kind evm.state call cold callee
-  let newAccount := callNewAccountStateGas fork kind evm.state call
-  let (subCall, evm) ← payCall kind call growth.cost extraGas newAccount evm
-  finishCall kind call callee subCall newAccount growth.expandBy evm
+  let known := callBaseCost fork cold + callValueCost fork call.value + growth.cost
+  checkGas evm known
+  let evm := recordAccountRead evm call.address
+  keepReads evm .next do
+    let (callee, evm) ← accessDelegation evm call.address known
+    keepReads evm .next do
+      let extraGas := callExtraGas fork kind evm.state call cold callee
+      let newAccount := callNewAccountStateGas fork kind evm.state call
+      let (subCall, evm) ← payCall kind call growth.cost extraGas newAccount evm
+      finishCall kind call callee subCall newAccount growth.expandBy evm
 
 /-- The instruction of a call opcode at fork `fork`.
 
@@ -416,14 +437,16 @@ theorem popCallOperands_pays {kind : CallKind} {evm after : Evm fork Meter}
     (popWord_pays h5)).trans (popWord_pays h6)).trans (popWord_pays h7)).mono
 
 /-- The access to a delegate pays nothing. -/
-theorem accessDelegation_pays {evm after : Evm fork Meter} {address : Address} {callee : Callee}
-    (h : accessDelegation evm address = .ok (callee, after)) : Pays 0 evm after := by
+theorem accessDelegation_pays {evm after : Evm fork Meter} {address : Address} {known : Nat}
+    {callee : Callee} (h : accessDelegation evm address known = .ok (callee, after)) :
+    Pays 0 evm after := by
   obtain ⟨code, -, h⟩ := Base.bind_ok_iff.mp h
   dsimp only at h
   split at h
   · obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+    obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
     cases h
-    exact accessAddress_pays _ _
+    exact (accessAddress_pays _ _).trans (recordAccountRead_pays _ _)
   · cases h
     exact .of_eq rfl rfl
 
@@ -499,19 +522,19 @@ theorem finishCall_decreases [LawfulGasMeter Meter] {kind : CallKind} {call : Ca
   split at h
   · cases h
   · dsimp only at h
-    have drained := (paid.congr (c := { evm with memory := memoryExtend evm.memory expandBy })
-      rfl rfl).drain
+    have drained := ((paid.congr (c := { evm with memory := memoryExtend evm.memory expandBy })
+      rfl rfl).drain).trans (recordAccountRead_pays _ evm.message.currentTarget)
     split at h
-    · cases hs : skipCall (refillStateGas
+    · cases hs : skipCall (refillStateGas (recordAccountRead
           { evm with memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
-          newAccount) subCall (GasMeter.reservoir evm.gas) with
+          evm.message.currentTarget) newAccount) subCall (GasMeter.reservoir evm.gas) with
       | error => simp [hs, Functor.map, Except.map] at h
       | ok after =>
         simp only [hs, Functor.map, Except.map, Except.ok.injEq] at h
         subst h
         exact skipCall_measure_lt ((drained.trans (refillStateGas_pays _ _)).mono
           (Nat.le_add_right _ _)) lt running hs
-    · exact genericCall_decreases drained lt running h
+    · exact genericCall_decreases (drained.mono (Nat.le_add_right _ _)) lt running h
 
 /-- The price of the access of a call is at least 1 at every fork. -/
 theorem one_le_callBaseCost (fork : Fork) (cold : Bool) : 1 ≤ callBaseCost fork cold := by
@@ -573,13 +596,24 @@ theorem callStep_decreases [LawfulGasMeter Meter] {kind : CallKind} {evm : Evm f
     rwa [hacc] at this
   rw [hacc] at h
   dsimp only at h
-  obtain ⟨⟨callee, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨⟨subCall, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
-  obtain ⟨pos, above⟩ := callExtraGas_bounds (fork := fork) (kind := kind) (state := e3.state)
-    (call := call) (cold := cold) (callee := callee)
-  obtain ⟨cost, lt, p4⟩ := payCall_pays pos above h4
-  have paid := (((popCallOperands_pays h1).trans p2).trans (accessDelegation_pays h3)).trans p4
-  exact finishCall_decreases (paid.mono (by omega)) lt running h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  have halted : ∀ (x : Evm fork Meter) e, (StepResult.next (exceptionalHalt x e)).Decreases evm :=
+    fun x e => by
+      show measure _ < measure evm
+      rw [measure_exceptionalHalt]
+      simp [measure, running]
+  rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
+  · obtain ⟨⟨callee, e3⟩, h3, h⟩ := Base.bind_ok_iff.mp h
+    rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
+    · obtain ⟨⟨subCall, e4⟩, h4, h⟩ := Base.bind_ok_iff.mp h
+      obtain ⟨pos, above⟩ := callExtraGas_bounds (fork := fork) (kind := kind) (state := e3.state)
+        (call := call) (cold := cold) (callee := callee)
+      obtain ⟨cost, lt, p4⟩ := payCall_pays pos above h4
+      have paid := ((((popCallOperands_pays h1).trans p2).trans
+        (recordAccountRead_pays _ call.address)).trans (accessDelegation_pays h3)).trans p4
+      exact finishCall_decreases (paid.mono (by omega)) lt running h
+    · exact halted _ _
+  · exact halted _ _
 
 /-- Each call instruction lowers the measure of a running frame. -/
 theorem callInstruction_decreases [LawfulGasMeter Meter] {op : Op}
