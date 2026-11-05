@@ -17,11 +17,10 @@ on:
         type: boolean
         default: false
 
-# A new push to a branch or a pull request cancels the run still in flight.
-# On master, only the latest commit of a burst of merges runs to the end.
+# On master the running run finishes and a newer pending run replaces the older; PRs still cancel.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 permissions:
   contents: read
