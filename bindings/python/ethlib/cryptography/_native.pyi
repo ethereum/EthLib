@@ -623,6 +623,14 @@ def rlpx_finish(static_key: bytes, ephemeral_key: bytes, nonce: bytes, auth: byt
     """The initiator's secrets for its `auth` and the `ack` it received."""
     ...
 
+def rlpx_write_frames(aes_secret: bytes, mac_secret: bytes, mac_init: bytes, frames: bytes) -> bytes:
+    """The frames of the frame data in the RLP list `frames`, from the start of a direction."""
+    ...
+
+def rlpx_read_frames(aes_secret: bytes, mac_secret: bytes, mac_init: bytes, input: bytes) -> bytes:
+    """The frame data of the frames in `input`, as an RLP list, from the start of a direction."""
+    ...
+
 def block_validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -> bool:
     """Check a header at a fork against its parent at the parent's fork, at every fork."""
     ...

@@ -407,6 +407,13 @@ theorem readFrame_changed {st st' : FrameState} {frameData f : ByteArray}
     hgm2, ← p4, List.take_of_length_le (l := List.drop (2 * BLOCK_SIZE + n) l)
       (by simp [hlen]; omega)]
 
+/-- Two errors with one code come from one constructor. -/
+theorem FrameError.code_injective (e₁ e₂ : FrameError) (h : e₁.code = e₂.code) :
+    e₁.ctorIdx = e₂.ctorIdx := by
+  -- Two distinct constructors have two distinct literal codes, which `decide` separates.
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [FrameError.code] at h; exact absurd h (by decide))
+
 /-! ## The two sides of a session -/
 
 /--

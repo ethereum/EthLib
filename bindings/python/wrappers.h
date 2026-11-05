@@ -356,6 +356,8 @@ PyObject* py_rlpx_make_auth                               (PyObject* self, PyObj
 PyObject* py_rlpx_respond                                 (PyObject* self, PyObject* args);
 PyObject* py_rlpx_recipient_secrets                       (PyObject* self, PyObject* args);
 PyObject* py_rlpx_finish                                  (PyObject* self, PyObject* args);
+PyObject* py_rlpx_write_frames                            (PyObject* self, PyObject* args);
+PyObject* py_rlpx_read_frames                             (PyObject* self, PyObject* args);
 PyObject* py_block_validate_header                        (PyObject* self, PyObject* args);
 PyObject* py_block_check_header                           (PyObject* self, PyObject* args);
 

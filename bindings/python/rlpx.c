@@ -64,6 +64,22 @@ eth_rlpx_finish(
   lean_object* probe
 );
 
+extern lean_object*
+eth_rlpx_write_frames(
+  lean_object* aes_secret,
+  lean_object* mac_secret,
+  lean_object* mac_init,
+  lean_object* frames
+);
+
+extern lean_object*
+eth_rlpx_read_frames(
+  lean_object* aes_secret,
+  lean_object* mac_secret,
+  lean_object* mac_init,
+  lean_object* input
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* Parse `n` arguments that must all be `bytes` into Lean byte arrays.
@@ -155,4 +171,24 @@ py_rlpx_finish(
   lean_object* a[6];
   if (!parse_bytes_args(args, 6, a)) return NULL;
   return except_into_pybytes(eth_rlpx_finish(a[0], a[1], a[2], a[3], a[4], a[5]), RLPX_ERROR);
+}
+
+PyObject*
+py_rlpx_write_frames(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[4];
+  if (!parse_bytes_args(args, 4, a)) return NULL;
+  return except_into_pybytes(eth_rlpx_write_frames(a[0], a[1], a[2], a[3]), RLPX_ERROR);
+}
+
+PyObject*
+py_rlpx_read_frames(
+  PyObject* self,
+  PyObject* args
+) {
+  lean_object* a[4];
+  if (!parse_bytes_args(args, 4, a)) return NULL;
+  return except_into_pybytes(eth_rlpx_read_frames(a[0], a[1], a[2], a[3]), RLPX_ERROR);
 }

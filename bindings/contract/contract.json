@@ -3209,6 +3209,38 @@
    "docstring":
    "The initiator's secrets for its `auth` and the `ack` it received."},
   {"summary":
+   "The frames of the frame data in the RLP list `frames`, from the start of a direction.",
+   "signature":
+   "(aes_secret: bytes, mac_secret: bytes, mac_init: bytes, frames: bytes) -> bytes",
+   "operation": "EthLib.Networking.Rlpx.Exports.writeFramesExport",
+   "method": "rlpx_write_frames",
+   "errors":
+   [{"type": "EthLib.Networking.Rlpx.FrameError",
+     "codes":
+     [{"constructor": "tooLarge", "code": 201},
+      {"constructor": "tooShort", "code": 202},
+      {"constructor": "headerMacMismatch", "code": 203},
+      {"constructor": "frameMacMismatch", "code": 204}]}],
+   "error_class": "RlpxError",
+   "docstring":
+   "The frames of the frame data in the RLP list `frames`, from the start of a direction.\n\nThe direction starts at the zero counter, with its MAC state after the bytes `macInit`."},
+  {"summary":
+   "The frame data of the frames in `input`, as an RLP list, from the start of a direction.",
+   "signature":
+   "(aes_secret: bytes, mac_secret: bytes, mac_init: bytes, input: bytes) -> bytes",
+   "operation": "EthLib.Networking.Rlpx.Exports.readFramesExport",
+   "method": "rlpx_read_frames",
+   "errors":
+   [{"type": "EthLib.Networking.Rlpx.FrameError",
+     "codes":
+     [{"constructor": "tooLarge", "code": 201},
+      {"constructor": "tooShort", "code": 202},
+      {"constructor": "headerMacMismatch", "code": 203},
+      {"constructor": "frameMacMismatch", "code": 204}]}],
+   "error_class": "RlpxError",
+   "docstring":
+   "The frame data of the frames in `input`, as an RLP list, from the start of a direction.\n\nThe input must hold whole frames only."},
+  {"summary":
    "Check a header at a fork against its parent at the parent's fork, at every fork.",
    "signature":
    "(parent_fork: str, fork: str, parent: bytes, header: bytes) -> bool",

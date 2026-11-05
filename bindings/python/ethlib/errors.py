@@ -117,10 +117,7 @@ class Discv5Error(EthLibError, ValueError):
 
 
 class RlpxError(EthLibError, ValueError):
-    """ECIES or the RLPx handshake rejected its input.
-
-    ECIES errors have codes from 1, handshake errors codes from 101, and a bad argument code 0.
-    """
+    """ECIES, the RLPx handshake or RLPx frames rejected its input."""
 
 
 class Devp2pError(EthLibError, ValueError):

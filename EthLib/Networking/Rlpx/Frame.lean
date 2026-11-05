@@ -37,6 +37,15 @@ inductive FrameError where
   | frameMacMismatch
 deriving DecidableEq, Repr
 
+/-- The stable code of an error, for the C exports.
+
+ECIES and the handshake share the codes up to 200, so frames take the codes from 201. -/
+def FrameError.code : FrameError → UInt32
+  | .tooLarge _ => 201
+  | .tooShort _ _ => 202
+  | .headerMacMismatch => 203
+  | .frameMacMismatch => 204
+
 /-- The size of a header, of a MAC and of a cipher block. -/
 def BLOCK_SIZE : Nat := 16
 
