@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Exports
 public import EthLib.Networking.Enr.Consensus
+public import EthLib.Networking.Enr.Eth
 public import EthLib.Networking.Enr.V4
 
 /-!
@@ -118,5 +119,17 @@ def consensusEntriesExport (fork : ByteArray) (count : UInt64) (record : ByteArr
   let e ← (readEntries count fork r).mapError fun err => (err.code, entryMessage err)
   return (← sszBytes e.eth2) ++ (← optionBytes e.attnets) ++ (← optionBytes e.syncnets) ++
     (← optionBytes e.cgc) ++ (← optionBytes e.nfd)
+
+/-- The fork identifier of the "eth" entry of a record, as RLP, or no bytes without the entry.
+
+An entry that is not a list starting with a fork identifier has code 0. -/
+@[export eth_enr_eth_fork_id]
+def ethForkIdExport (record : ByteArray) : Result ByteArray := do
+  let r ← runEnr (decode record)
+  match readEth r with
+  | .error _ => throw (0, "eth entry is not a list that starts with [forkHash, forkNext]")
+  | .ok none => pure .empty
+  | .ok (some id) =>
+    (Serialization.Rlp.Codec.encode id).mapError fun _ => (0, "too large")
 
 end EthLib.Networking.Enr.Exports

@@ -25,6 +25,16 @@ The data is an RLP list, one form for each packet type.
 EIP-8 asks the reader to ignore the Ping version, extra list items and the bytes after the list.
 
 EIP-868 adds the record packets, and the record sequence number of Ping and Pong.
+
+EIP-8 says that its Ping of version 555 and its Pong should be accepted.
+
+In both, the first item after the fixed fields is a list, where EIP-868 later put the sequence
+number.
+
+EthLib reads that item as the sequence number, so it rejects both packets.
+
+go-ethereum does the same:
+[`v4wire.go` at `0d06140`](https://github.com/ethereum/go-ethereum/blob/0d061403cf53263b95f9beec48f07046e78e1bed/p2p/discover/v4wire/v4wire.go#L54).
 -/
 
 @[expose] public section

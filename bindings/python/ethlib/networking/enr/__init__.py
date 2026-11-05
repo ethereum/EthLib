@@ -12,6 +12,7 @@ from typing import NamedTuple
 
 from ... import consensus
 from ...errors import EnrError
+from ...serialization import rlp
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -88,6 +89,15 @@ def consensus_entries(fork: str, record: bytes, config: str = "mainnet") -> Cons
     return ConsensusEntries(eth2, attnets, syncnets, cgc_value, nfd)
 
 
+def eth_fork_id(record: bytes) -> tuple[bytes, int] | None:
+    """The fork hash and next fork of the "eth" entry of a record, or None without the entry."""
+    raw = _native.enr_eth_fork_id(record)
+    if not raw:
+        return None
+    fork_hash, fork_next = rlp.decode(raw)
+    return fork_hash, int.from_bytes(fork_next, "big")
+
+
 __all__ = [
     "MAX_RECORD_SIZE",
     "from_text",
@@ -97,5 +107,6 @@ __all__ = [
     "EnrForkId",
     "ConsensusEntries",
     "consensus_entries",
+    "eth_fork_id",
     "EnrError",
 ]

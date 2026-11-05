@@ -32,6 +32,11 @@ eth_enr_consensus_entries(
   lean_object* record
 );
 
+extern lean_object*
+eth_enr_eth_fork_id(
+  lean_object* record
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* The bytes of a `bytes` argument, or NULL with a TypeError set. */
@@ -122,4 +127,20 @@ py_enr_consensus_entries(
   lean_object* record = mk_bytearray(
     (const uint8_t*) PyBytes_AS_STRING(record_obj), PyBytes_GET_SIZE(record_obj));
   return except_into_pybytes(eth_enr_consensus_entries(fork, count, record), ENR_ERROR);
+}
+
+PyObject*
+py_enr_eth_fork_id(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject* record_obj;
+  if (!PyArg_ParseTuple(args, "O", &record_obj)) return NULL;
+  if (!PyBytes_Check(record_obj)) {
+    PyErr_SetString(PyExc_TypeError, "record must be bytes");
+    return NULL;
+  }
+  lean_object* record = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(record_obj), PyBytes_GET_SIZE(record_obj));
+  return except_into_pybytes(eth_enr_eth_fork_id(record), ENR_ERROR);
 }
