@@ -1,0 +1,6 @@
+preset: minimal
+fork: fulu
+runner: operations
+handler: attester_slashing
+suite: pyspec_tests
+case: invalid_att1_high_index

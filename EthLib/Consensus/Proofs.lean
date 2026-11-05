@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Builders
+public import EthLib.Consensus.Proofs.Churn
 public import EthLib.Consensus.Proofs.Mutators
 public import EthLib.Consensus.Proofs.PayloadTimeliness
 public import EthLib.Consensus.Proofs.Proposers

@@ -3,6 +3,8 @@ module
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.Mutators
+public import EthLib.Consensus.Proofs.Churn
+public import EthLib.Consensus.Credentials
 
 /-!
 # Proofs: state mutators
@@ -16,6 +18,12 @@ A validator that starts to exit may withdraw a fixed delay after its exit epoch,
 Before Electra, an exit epoch other than the far future held fewer exits than the churn limit.
 
 Slashing a validator sets its slashed flag and changes no flag of another validator.
+
+From Electra, the balance of a validator above the activation balance moves to the pending deposits.
+
+The balance and the amounts added to the queue keep their sum.
+
+A validator that switches to compounding credentials then has compounding credentials.
 -/
 
 @[expose] public section
@@ -64,21 +72,56 @@ theorem sameSizes_decreaseBalance {state after : BeaconState preset fork}
   cases computed
   exact sameSizes_setBalance _ _ _
 
+/-- The exit queue changes neither the registry nor the balances. -/
+theorem exitQueue_validators {config : Config} {state after : BeaconState preset fork}
+    {exitBalance : Gwei} {exitEpoch : Epoch}
+    (computed : exitQueue config state exitBalance = .ok (after, exitEpoch)) :
+    after.validators = state.validators ∧ after.balances = state.balances := by
+  unfold exitQueue at computed
+  split at computed
+  · exact (computeExitEpochAndUpdateChurn_earliest computed).2
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
+    obtain ⟨_, _, rfl, _⟩ := computed
+    exact ⟨rfl, rfl⟩
+
+/-- The steps of an exit.
+
+A validator that has started to exit stays the same.
+
+Otherwise the exit queue gives its exit epoch, and its withdrawable epoch follows a delay later. -/
+theorem initiateValidatorExit_ok {config : Config} {state after : BeaconState preset fork}
+    {index : ValidatorIndex} (computed : initiateValidatorExit config state index = .ok after) :
+    ∃ validator, getValidator state index = .ok validator ∧
+      ((validator.exitEpoch ≠ FAR_FUTURE_EPOCH ∧ after = state) ∨
+        (validator.exitEpoch = FAR_FUTURE_EPOCH ∧ ∃ queued exitEpoch withdrawableEpoch,
+          exitQueue config state validator.effectiveBalance = .ok (queued, exitEpoch) ∧
+          addChecked exitEpoch config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY = .ok withdrawableEpoch ∧
+          after =
+            queued.setValidator index.toNat { validator with exitEpoch, withdrawableEpoch })) := by
+  simp only [initiateValidatorExit, bind_ok_iff] at computed
+  obtain ⟨validator, found, rest⟩ := computed
+  refine ⟨validator, found, ?_⟩
+  split at rest
+  · rename_i started
+    simp only [pure, Except.pure, Except.ok.injEq] at rest
+    exact .inl ⟨by simpa using started, rest.symm⟩
+  · rename_i notStarted
+    simp only [bind_ok_iff, liftArith, mapError_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at rest
+    obtain ⟨⟨queued, exitEpoch⟩, queue, withdrawableEpoch, summed, final⟩ := rest
+    exact .inr ⟨by simpa using notStarted, queued, exitEpoch, withdrawableEpoch, queue, summed,
+      final.symm⟩
+
 /-- Starting an exit keeps the sizes. -/
 theorem sameSizes_initiateValidatorExit {config : Config} {state after : BeaconState preset fork}
     {index : ValidatorIndex} (computed : initiateValidatorExit config state index = .ok after) :
     SameSizes state after := by
-  simp only [initiateValidatorExit, bind, Except.bind, pure, Except.pure] at computed
-  split at computed
-  · cases computed
-  split at computed
-  · cases computed
-    exact SameSizes.refl _
-  split at computed
-  · simp [throw, throwThe, MonadExcept.throw, MonadExceptOf.throw] at computed
-  repeat' (split at computed; · cases computed)
-  cases computed
-  exact sameSizes_setValidator _ _ _
+  obtain ⟨validator, _, ⟨_, rfl⟩ | ⟨_, queued, _, _, queue, _, rfl⟩⟩ :=
+    initiateValidatorExit_ok computed
+  · exact SameSizes.refl _
+  · obtain ⟨validators, balances⟩ := exitQueue_validators queue
+    refine (?_ : SameSizes state queued).trans (sameSizes_setValidator _ _ _)
+    exact ⟨by rw [validators], by rw [balances]⟩
 
 /-- Slashing a validator keeps the sizes. -/
 theorem sameSizes_slashValidator {config : Config} {state after : BeaconState preset fork}
@@ -97,38 +140,6 @@ theorem sameSizes_slashValidator {config : Config} {state after : BeaconState pr
   refine one.trans (SameSizes.trans ?_ ((sameSizes_decreaseBalance lowered).trans
     ((sameSizes_increaseBalance raisedOk).trans (sameSizes_increaseBalance computed))))
   simp [SameSizes, BeaconState.setValidator]
-
-/-- A validator that starts to exit may withdraw a fixed delay after its exit epoch.
-
-The sum does not wrap, since an exit whose sum reaches `2^64` fails. -/
-theorem initiateValidatorExit_withdrawableEpoch {config : Config}
-    {state after : BeaconState preset fork} {index : ValidatorIndex} {validator : Validator}
-    (found : getValidator state index = .ok validator)
-    (notExiting : validator.exitEpoch = FAR_FUTURE_EPOCH)
-    (computed : initiateValidatorExit config state index = .ok after) :
-    ∃ exited, getValidator after index = .ok exited ∧
-      exited.withdrawableEpoch.toNat =
-        exited.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
-  have inRange : index.toNat < state.validators.data.size := by
-    unfold getValidator at found
-    split at found
-    · rename_i read
-      exact (Array.getElem?_eq_some_iff.mp read).1
-    · cases found
-  simp only [initiateValidatorExit, found, notExiting, bne_self_eq_false, Bool.false_eq_true,
-    ↓reduceIte, bind, Except.bind, pure, Except.pure] at computed
-  split at computed
-  · simp [throw, throwThe, MonadExcept.throw, MonadExceptOf.throw] at computed
-  split at computed
-  · cases computed
-  rename_i exitEpoch _
-  split at computed
-  · cases computed
-  rename_i withdrawableEpoch summed
-  cases computed
-  have sum := (addChecked_ok_iff.mp (mapError_ok_iff.mp summed)).2
-  refine ⟨{ validator with exitEpoch, withdrawableEpoch }, ?_, sum⟩
-  simp [getValidator, BeaconState.setValidator, inRange]
 
 /-- The running maximum of the exit epochs is at least its start and each exit epoch it reads. -/
 theorem le_foldl_maxExitEpoch (validators : List Validator) (start : Epoch) :
@@ -215,6 +226,29 @@ theorem getValidator_setValidator_of_ne {state : BeaconState preset fork}
   have : index.toNat ≠ other.toNat := fun same => distinct (UInt64.toNat_inj.mp same).symm
   simp [getValidator, BeaconState.setValidator, this]
 
+/-- A validator that starts to exit may withdraw a fixed delay after its exit epoch.
+
+The sum does not wrap, since an exit whose sum reaches `2^64` fails. -/
+theorem initiateValidatorExit_withdrawableEpoch {config : Config}
+    {state after : BeaconState preset fork} {index : ValidatorIndex} {validator : Validator}
+    (found : getValidator state index = .ok validator)
+    (notExiting : validator.exitEpoch = FAR_FUTURE_EPOCH)
+    (computed : initiateValidatorExit config state index = .ok after) :
+    ∃ exited, getValidator after index = .ok exited ∧
+      exited.withdrawableEpoch.toNat =
+        exited.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
+  obtain ⟨read, readOk, ⟨started, _⟩ | ⟨_, queued, exitEpoch, withdrawableEpoch, queue, summed,
+    rfl⟩⟩ := initiateValidatorExit_ok computed
+  · rw [found] at readOk
+    cases readOk
+    exact absurd notExiting started
+  · rw [found] at readOk
+    cases readOk
+    have sum := (addChecked_ok_iff.mp summed).2
+    refine ⟨{ validator with exitEpoch, withdrawableEpoch }, ?_, sum⟩
+    rw [← getValidator_of_validators_eq (exitQueue_validators queue).1] at found
+    exact getValidator_setValidator_self found _
+
 /-- Raising a balance leaves the registry. -/
 theorem increaseBalance_validators {state after : BeaconState preset fork}
     {index : ValidatorIndex} {delta : Gwei}
@@ -240,21 +274,15 @@ theorem slashedFlag_initiateValidatorExit {config : Config}
     {state after : BeaconState preset fork} {index : ValidatorIndex}
     (computed : initiateValidatorExit config state index = .ok after) (other : ValidatorIndex) :
     slashedFlag after other = slashedFlag state other := by
-  simp only [initiateValidatorExit, bind, Except.bind, pure, Except.pure] at computed
-  split at computed
-  · cases computed
-  rename_i validator found
-  split at computed
-  · cases computed
-    rfl
-  split at computed
-  · simp [throw, throwThe, MonadExcept.throw, MonadExceptOf.throw] at computed
-  repeat' (split at computed; · cases computed)
-  cases computed
-  by_cases same : other = index
-  · subst same
-    simp [slashedFlag, getValidator_setValidator_self found, found, Except.map]
-  · simp [slashedFlag, getValidator_setValidator_of_ne same]
+  obtain ⟨validator, found, ⟨_, rfl⟩ | ⟨_, queued, _, _, queue, _, rfl⟩⟩ :=
+    initiateValidatorExit_ok computed
+  · rfl
+  have same := getValidator_of_validators_eq (exitQueue_validators queue).1
+  by_cases equal : other = index
+  · subst equal
+    have foundQueued : getValidator queued other = .ok validator := (same other).trans found
+    simp [slashedFlag, getValidator_setValidator_self foundQueued, found, Except.map]
+  · simp [slashedFlag, getValidator_setValidator_of_ne equal, same]
 
 /-- Slashing a validator sets its slashed flag, and changes no other flag. -/
 theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState preset fork}
@@ -281,5 +309,111 @@ theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState 
       Except.map, marked]
   · rw [slashedFlag, getValidator_of_validators_eq same, getValidator_setValidator_of_ne distinct]
     exact slashedFlag_initiateValidatorExit exitedOk other
+
+/-- A read of a replaced balance returns the new balance. -/
+theorem getBalance_setBalance_self {state : BeaconState preset fork} {index : ValidatorIndex}
+    {old : Gwei} (found : getBalance state index = .ok old) (balance : Gwei) :
+    getBalance (state.setBalance index.toNat balance) index = .ok balance := by
+  unfold getBalance at found ⊢
+  split at found
+  · rename_i read
+    have inRange := (Array.getElem?_eq_some_iff.mp read).1
+    simp [BeaconState.setBalance, inRange]
+  · cases found
+
+/-- An append within the limit adds the element at the end. -/
+theorem appendWithinLimit_data {switch : Base.Fork} {α : Type} {limit : Nat}
+    {list after : ForkList switch fork α limit} {item : α}
+    (computed : appendWithinLimit list item = .ok after) : after.data = list.data.push item := by
+  unfold appendWithinLimit at computed
+  split at computed
+  · cases computed
+    rfl
+  · cases computed
+
+/-- The balance above the activation balance moves to the end of the pending deposits.
+
+The balance keeps at most the activation balance.
+
+The new balance and the amounts added to the queue add up to the old balance. -/
+theorem queueExcessActiveBalance_balance {state after : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : ValidatorIndex} {balance : Gwei}
+    (found : getBalance state index = .ok balance)
+    (computed : queueExcessActiveBalance state electra index = .ok after) :
+    getBalance after index = .ok (min balance preset.MIN_ACTIVATION_BALANCE) ∧
+      ∃ added : List PendingDeposit,
+        (after.pendingDeposits electra).data.toList =
+          (state.pendingDeposits electra).data.toList ++ added ∧
+        (added.map (·.amount.toNat)).sum + (min balance preset.MIN_ACTIVATION_BALANCE).toNat =
+          balance.toNat := by
+  simp only [queueExcessActiveBalance, bind_ok_iff, found, Except.ok.injEq,
+    exists_eq_left'] at computed
+  split at computed
+  · rename_i above
+    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨validator, _, pending, appended, rfl⟩ := computed
+    have minimum : min balance preset.MIN_ACTIVATION_BALANCE = preset.MIN_ACTIVATION_BALANCE := by
+      rw [UInt64.min_def, ite_eq_right_iff.mpr (fun le => absurd above (UInt64.not_lt.mpr le))]
+    rw [minimum]
+    refine ⟨getBalance_setBalance_self found _, [⟨validator.pubkey,
+      validator.withdrawalCredentials, balance - preset.MIN_ACTIVATION_BALANCE, infinitySignature,
+      GENESIS_SLOT⟩], ?_, ?_⟩
+    · show pending.data.toList = _
+      rw [appendWithinLimit_data appended, Array.toList_push]
+    · simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil, Nat.add_zero]
+      have := UInt64.lt_iff_toNat_lt.mp above
+      rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_of_lt above)]
+      omega
+  · rename_i notAbove
+    simp only [pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    have minimum : min balance preset.MIN_ACTIVATION_BALANCE = balance := by
+      rw [UInt64.min_def, ite_eq_left_iff.mpr (fun no => absurd (UInt64.not_lt.mp notAbove) no)]
+    rw [minimum]
+    exact ⟨found, [], by simp, by simp⟩
+
+/-- Moving the balance above the activation balance to the queue keeps the sizes. -/
+theorem sameSizes_queueExcessActiveBalance {state after : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : ValidatorIndex}
+    (computed : queueExcessActiveBalance state electra index = .ok after) :
+    SameSizes state after := by
+  simp only [queueExcessActiveBalance, bind_ok_iff] at computed
+  obtain ⟨_, _, computed⟩ := computed
+  split at computed
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, rfl⟩ := computed
+    exact sameSizes_setBalance state index.toNat preset.MIN_ACTIVATION_BALANCE
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact SameSizes.refl _
+
+/-- A validator that switches to compounding credentials has compounding credentials.
+
+The sizes stay the same. -/
+theorem switchToCompoundingValidator_compounding {state after : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : ValidatorIndex}
+    (computed : switchToCompoundingValidator state electra index = .ok after) :
+    SameSizes state after ∧ ∃ validator, getValidator after index = .ok validator ∧
+      hasCompoundingWithdrawalCredential validator = true := by
+  simp only [switchToCompoundingValidator, bind_ok_iff] at computed
+  obtain ⟨validator, found, queued⟩ := computed
+  refine ⟨(sameSizes_setValidator _ _ _).trans (sameSizes_queueExcessActiveBalance queued),
+    { validator with withdrawalCredentials :=
+      validator.withdrawalCredentials.set 0 COMPOUNDING_WITHDRAWAL_PREFIX[0] }, ?_, ?_⟩
+  · -- Moving the balance leaves the registry.
+    have same : after.validators = (state.setValidator index.toNat { validator with
+        withdrawalCredentials :=
+          validator.withdrawalCredentials.set 0 COMPOUNDING_WITHDRAWAL_PREFIX[0] }).validators := by
+      simp only [queueExcessActiveBalance, bind_ok_iff] at queued
+      obtain ⟨_, _, queued⟩ := queued
+      split at queued
+      · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at queued
+        obtain ⟨_, _, _, _, rfl⟩ := queued
+        rfl
+      · simp only [pure, Except.pure, Except.ok.injEq] at queued
+        rw [queued]
+    rw [getValidator_of_validators_eq same]
+    exact getValidator_setValidator_self found _
+  · simp [hasCompoundingWithdrawalCredential, isCompoundingWithdrawalCredential]
 
 end EthLib.Consensus

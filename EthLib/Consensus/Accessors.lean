@@ -64,6 +64,8 @@ inductive AccessorError where
   | paymentIndexOutOfRange (index : UInt64)
   /-- From Gloas: the window of payload committees holds no committee for the slot. -/
   | ptcSlotOutOfRange (slot stateSlot : Slot)
+  /-- From Electra: a list of the state that has a limit is full. -/
+  | listFull (limit : Nat)
   deriving DecidableEq, Repr
 
 /-- Whether a validator is active in an epoch: from its activation epoch, before its exit epoch. -/
@@ -209,6 +211,15 @@ def getValidatorChurnLimit (config : Config) (state : BeaconState preset fork) :
   max config.MIN_PER_EPOCH_CHURN_LIMIT
     ((getActiveValidatorIndices state (getCurrentEpoch state)).length.toUInt64 /
       config.CHURN_LIMIT_QUOTIENT)
+
+/-- From Electra: the sum of the amounts of the pending partial withdrawals of a validator.
+
+A sum of 2^64 or more is an error. -/
+def getPendingBalanceToWithdraw (state : BeaconState preset fork) (electra : .pectra ≤ fork)
+    (index : ValidatorIndex) : Except AccessorError Gwei :=
+  let total := ((state.pendingPartialWithdrawals electra).data.toList.map fun withdrawal =>
+    if withdrawal.validatorIndex = index then withdrawal.amount.toNat else 0).sum
+  if total < 2 ^ 64 then .ok total.toUInt64 else .error .balanceOverflow
 
 /-- The seed of an epoch for one kind of duty.
 
