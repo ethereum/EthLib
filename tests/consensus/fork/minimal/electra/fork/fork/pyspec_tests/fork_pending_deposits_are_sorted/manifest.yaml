@@ -1,0 +1,6 @@
+preset: minimal
+fork: electra
+runner: fork
+handler: fork
+suite: pyspec_tests
+case: fork_pending_deposits_are_sorted

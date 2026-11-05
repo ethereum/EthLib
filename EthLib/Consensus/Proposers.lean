@@ -74,6 +74,19 @@ def getBeaconProposerIndices (state : BeaconState preset fork) (epoch : Epoch) :
   let seed ← getSeed state epoch DOMAIN_BEACON_PROPOSER
   computeProposerIndices state epoch seed (proposerCandidates state epoch)
 
+/-- From Fulu: the proposers of the current epoch and of each epoch of the seed lookahead.
+
+They are those of the current epoch first, then of each later epoch in turn.
+
+An epoch past 2^64 - 1 is an error. -/
+def initializeProposerLookahead (state : BeaconState preset fork) : Except AccessorError
+    (Vector ValidatorIndex
+      ((preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat)) := do
+  let epochs ← (Vector.range (preset.MIN_SEED_LOOKAHEAD.toNat + 1)).mapM fun offset => do
+    let epoch ← liftArith (addChecked (getCurrentEpoch state) offset.toUInt64)
+    getBeaconProposerIndices state epoch
+  return epochs.flatten
+
 /-- The state with its lookahead of proposers moved by one epoch.
 
 The last epoch of the lookahead becomes the epoch after the seed lookahead. -/

@@ -16,7 +16,7 @@ from .test_data_column import replacements
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "fork"
 
 # The forks whose upgrade EthLib holds, each from the fork before it.
-UPGRADES = ("gloas", "heze")
+UPGRADES = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas", "heze")
 
 # The release archives that hold the cases.
 ARCHIVES = {
@@ -95,9 +95,9 @@ def test_archive_case(preset, fork, case):
     run_case(preset, fork, case)
 
 
-def test_no_upgrade_to_fulu():
+def test_no_upgrade_to_phase0():
     with pytest.raises(consensus.TransitionError) as info:
-        consensus.upgrade_state("minimal", "fusaka", b"")
+        consensus.upgrade_state("minimal", "phase0", b"")
     assert info.value.code == 0
 
 

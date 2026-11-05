@@ -49,7 +49,8 @@ def test_every_group_has_a_runner_or_a_plan() -> None:
 NOT_VENDORED = {f"mainnet/{fork}/ssz_static/BeaconState" for fork in
                 ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu",
                  "gloas")} | {
-    f"mainnet/{fork}/fork/fork" for fork in ("gloas", "heze")} | {
+    f"mainnet/{fork}/fork/fork" for fork in
+    ("altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas", "heze")} | {
     f"mainnet/{fork}/operations/{handler}" for handler, (_, forks) in OPERATIONS.items()
     for fork in forks} | {
     f"mainnet/{fork}/epoch_processing/{handler}" for handler, forks in EPOCH_STEPS.items()
