@@ -1,8 +1,7 @@
 # Replay every declaration of EthLib into Lean's kernel with leanchecker, after the build.
 #
 # The replay repeats the kernel work of the proofs, so it does not run on pull requests.
-# It runs on each push to master and every Monday, because a push cancels the replay
-# of an earlier master commit that is still in progress.
+# It runs on each push to master and every Monday.
 
 name: replay
 
@@ -14,9 +13,10 @@ on:
   workflow_dispatch:
 
 # A push does not cancel a scheduled run, which has its own group.
+# On master the running replay finishes, and a newer pending run replaces the older one.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 permissions:
   contents: read
