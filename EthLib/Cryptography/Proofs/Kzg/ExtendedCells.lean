@@ -74,9 +74,19 @@ private theorem horner_foldl_eq_sum (p : PolynomialCoeff) (z : Fr) (k : Nat) (hk
 /-- `evaluatePolynomialcoeff` computes the monomial sum `evalPolyAt`. -/
 theorem evaluatePolynomialcoeff_eq_evalPolyAt (p : PolynomialCoeff) (z : Fr) :
     evaluatePolynomialcoeff p z = evalPolyAt p z := by
-  unfold evaluatePolynomialcoeff
-  dsimp only
-  rw [← Array.foldl_toList, Array.toList_range, horner_foldl_eq_sum p z p.size (Nat.le_refl _)]
+  -- Horner's rule from the last coefficient is a fold over the indices `n - 1, ..., 0`.
+  have hrev : p.toList.reverse = (List.range p.size).map (fun i => p[p.size - 1 - i]!) := by
+    apply List.ext_getElem (by simp)
+    intro i h1 h2
+    simp only [List.getElem_reverse, Array.getElem_toList, List.getElem_map, List.getElem_range,
+      Array.length_toList]
+    simp only [List.length_reverse, Array.length_toList] at h1
+    rw [getElem!_pos p _ (by omega)]
+  have hfold : evaluatePolynomialcoeff p z =
+      (List.range p.size).foldl (fun y i => y * z + p[p.size - 1 - i]!) Fr.zero := by
+    rw [evaluatePolynomialcoeff, ← Array.foldr_toList, List.foldr_eq_foldl_reverse, hrev,
+      List.foldl_map]
+  rw [hfold, horner_foldl_eq_sum p z p.size (Nat.le_refl _)]
   rw [evalPolyAt, evalCoeffPoly, evalCoeffPolyAux_eq_sum]
   refine Finset.sum_congr rfl fun j _ => ?_
   rw [Nat.sub_self, Nat.zero_add]

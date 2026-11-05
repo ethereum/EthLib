@@ -37,20 +37,48 @@ theorem getElem!_batchInverse_denominators (domain : Array Fr) (z : Fr) (width k
   rw [Fr.batchInverse_eq_map, getElem!_pos _ k (by simpa using hk)]
   simp
 
+/-- When `z` is not in `domain`, evaluation is the barycentric sum with the batch inverses. -/
+theorem evaluatePolynomialInEvaluationFormAux_of_idxOf?_none
+    (polynomial domain : Array Fr) (z : Fr)
+    (hsize : polynomial.size = domain.size)
+    (h : domain.idxOf? z = none) :
+    evaluatePolynomialInEvaluationFormAux polynomial domain z =
+      barycentricSumInvAux polynomial domain
+        (Fr.batchInverse ((polynomial.zip domain).map fun x => z - x.2)) Fr.zero 0
+          polynomial.size *
+        (z ^ (Fr.ofNat polynomial.size) - Fr.one) * (Fr.ofNat polynomial.size).inverse := by
+  have hz : z ∉ domain := Array.idxOf?_eq_none_iff.mp h
+  have hfind : (polynomial.zip domain).find? (·.2 == z) = none := by
+    rw [Array.find?_eq_none]
+    intro x hx hxz
+    exact hz (beq_iff_eq.mp hxz ▸ (Array.of_mem_zip hx).2)
+  rw [evaluatePolynomialInEvaluationFormAux]
+  simp only [hfind]
+  rw [foldl_zip_zip_eq_barycentricSumInvAux _ _ _ hsize (by simp [Fr.batchInverse_eq_map, hsize])]
+
+/-- The batch inverses of the denominators, read from the pairs of values and points. -/
+theorem getElem!_batchInverse_zip_denominators (polynomial domain : Array Fr) (z : Fr) (k : Nat)
+    (hsize : polynomial.size = domain.size) (hk : k < polynomial.size) :
+    (Fr.batchInverse ((polynomial.zip domain).map fun x => z - x.2))[k]! =
+      (z - domain[k]!).inverse := by
+  rw [Fr.batchInverse_eq_map, getElem!_pos _ k (by simp; omega),
+    getElem!_pos domain k (by omega)]
+  simp [Array.getElem_zip]
+
 /-- When `z` is not in the domain, evaluation follows the barycentric
 formula the docstring describes. Mirror of
 `evaluatePolynomialInEvaluationFormAux_fastPath`. -/
 theorem evaluatePolynomialInEvaluationFormAux_slowPath
     (polynomial domain : Array Fr) (z : Fr)
+    (hsize : polynomial.size = domain.size)
     (h : domain.idxOf? z = none) :
     evaluatePolynomialInEvaluationFormAux polynomial domain z =
       barycentricRefSum polynomial domain z polynomial.size *
       (z ^ (Fr.ofNat polynomial.size) - Fr.one) *
       (Fr.ofNat polynomial.size).inverse := by
-  rw [evaluatePolynomialInEvaluationFormAux]
-  simp only [h]
-  rw [barycentricSumInvAux_eq _ _ _ z _ 0 _
-      (fun k _ hk => getElem!_batchInverse_denominators domain z _ k (by omega)),
+  rw [evaluatePolynomialInEvaluationFormAux_of_idxOf?_none _ _ _ hsize h,
+    barycentricSumInvAux_eq _ _ _ z _ 0 _
+      (fun k _ hk => getElem!_batchInverse_zip_denominators _ domain z k hsize (by omega)),
     barycentricSumAux_zero_eq_refSum]
 
 /-- When `z` is not in the evaluation domain, evaluating the polynomial
@@ -66,7 +94,8 @@ theorem evaluatePolynomialInEvaluationForm_slowPath
       (Fr.ofNat polynomial.size).inverse) := by
   rw [evaluatePolynomialInEvaluationForm, ite_eq_right (by simp [hsize])]
   exact congrArg Except.ok
-    (evaluatePolynomialInEvaluationFormAux_slowPath polynomial _ z h)
+    (evaluatePolynomialInEvaluationFormAux_slowPath polynomial _ z
+      (by rw [hsize, size_rootsOfUnityBrp]) h)
 
 /-- The barycentric sum as a `Finset.sum`, with the spec's division. -/
 theorem barycentricRefSum_eq_sum_div (p D : Array Fr) (z : Fr) (n : Nat) :
@@ -97,12 +126,12 @@ theorem natCast_field_elements_per_blob_ne_zero :
 operations. Needs the width to be canonical (`p.size < r`) so the
 spec's detour of the exponent through `Fr` is invisible. -/
 theorem evaluatePolynomialInEvaluationFormAux_slowPath_sum
-    (p D : Array Fr) (z : Fr) (hw : p.size < Fr.modulus)
+    (p D : Array Fr) (z : Fr) (hw : p.size < Fr.modulus) (hsize : p.size = D.size)
     (h : D.idxOf? z = none) :
     evaluatePolynomialInEvaluationFormAux p D z =
       (∑ i ∈ Finset.range p.size, p[i]! * D[i]! * (z - D[i]!)⁻¹)
         * (z ^ p.size - 1) * ((p.size : Nat) : Fr)⁻¹ := by
-  rw [evaluatePolynomialInEvaluationFormAux_slowPath p D z h,
+  rw [evaluatePolynomialInEvaluationFormAux_slowPath p D z hsize h,
       barycentricRefSum_eq_sum, Bls.Fr.hpow_ofNat_eq_pow z hw,
       Bls.Fr.inverse_eq_inv, Bls.Fr.ofNat_eq_natCast, Bls.Fr.one_def]
 
@@ -124,7 +153,7 @@ theorem evaluatePolynomialInEvaluationForm_slowPath_sum
   rw [evaluatePolynomialInEvaluationForm, ite_eq_right (by simp [hsize])]
   have hw : p.size < Fr.modulus := by rw [hsize]; decide
   have := evaluatePolynomialInEvaluationFormAux_slowPath_sum p
-    (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB) z hw h
+    (rootsOfUnityBrp FIELD_ELEMENTS_PER_BLOB) z hw (by rw [hsize, size_rootsOfUnityBrp]) h
   rw [hsize] at this
   exact congrArg Except.ok this
 

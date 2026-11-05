@@ -101,17 +101,18 @@ def computePowersAux (x current : Fr) : Nat → List Fr
 def computePowers (x : Fr) (n : Nat) : Array Fr :=
   (computePowersAux x Fr.one n).toArray
 
-/-- The `order`-th roots of unity in `Fr`.
+/-- The `order`-th roots of unity in `Fr`: the powers of a primitive `order`-th root.
 
-`order` must divide `r - 1`, for the modulus `r` of `Fr`. -/
+`order` must divide `r - 1`, for the modulus `r` of `Fr`.
+
+Every caller passes 64, 128, 4096 or 8192, which divide `r - 1`.
+
+For another order, the powers are those of an element that is not a primitive `order`-th root. -/
 def computeRootsOfUnity (order : Nat) : Array Fr :=
   let exponent := (BLS_MODULUS - 1) / order
   let root :=
     (Fr.ofNat PRIMITIVE_ROOT_OF_UNITY) ^ (Fr.ofNat exponent)
-  let roots := computePowers root order
-  -- Another order would give a wrong domain, and `x % 0 = x ≠ 0` also rejects `order = 0`.
-  if (BLS_MODULUS - 1) % order == 0 then roots
-  else panicWith roots s!"computeRootsOfUnity: {order} does not divide BLS_MODULUS - 1"
+  computePowers root order
 
 /-! ## Polynomials in coefficient form -/
 
@@ -119,8 +120,8 @@ def computeRootsOfUnity (order : Nat) : Array Fr :=
 def addPolynomialcoeff (a b : PolynomialCoeff) : PolynomialCoeff :=
   let (a, b) := if a.size ≥ b.size then (a, b) else (b, a)
   Array.ofFn (n := a.size) fun i =>
-    let bi := if i.val < b.size then b[i.val]! else Fr.zero
-    a[i.val]! + bi
+    let bi := if h : i.val < b.size then b[i.val] else Fr.zero
+    a[i] + bi
 
 /-- Multiply the coefficient-form polynomials `a` and `b`.
 
@@ -131,10 +132,10 @@ def multiplyPolynomialcoeff (a b : PolynomialCoeff) :
     Except KzgError PolynomialCoeff := do
   if a.size + b.size > FIELD_ELEMENTS_PER_EXT_BLOB then
     throw (.polynomialProductTooLong a.size b.size)
-  return (Array.range a.size).foldl (init := #[Fr.zero]) fun r power =>
-    let coef := a[power]!
+  return (Array.finRange a.size).foldl (init := #[Fr.zero]) fun r power =>
+    let coef := a[power]
     let summand : PolynomialCoeff :=
-      Array.replicate power Fr.zero ++ b.map (· * coef)
+      Array.replicate power.val Fr.zero ++ b.map (· * coef)
     addPolynomialcoeff r summand
 
 /-- Long division of two coefficient-form polynomials.
@@ -147,31 +148,39 @@ It also rejects a divisor with a zero leading coefficient, when the loop would r
 def dividePolynomialcoeff (a b : PolynomialCoeff) :
     Except KzgError PolynomialCoeff := do
   -- An empty divisor is invalid.
-  if b.size = 0 then
+  if hb : b.size = 0 then
     throw .zeroDivisorPolynomial
   -- A dividend shorter than the divisor has quotient zero.
   -- The specification's loop runs zero times and returns the empty list.
-  if a.size < b.size then
+  else if hab : a.size < b.size then
     return #[]
-  -- A zero leading coefficient would make every quotient step a division by zero.
-  -- Field division by zero returns 0 here, so it would fail silently.
-  if b[b.size - 1]!.isZero then
-    throw .zeroDivisorPolynomial
-  let bpos := b.size - 1
-  -- The divisor's leading coefficient does not change, so its costly inverse is computed once.
-  let bLeadInv := b[bpos]!.inverse
-  -- One quotient coefficient per step, while `apos - t ≥ bpos`.
-  let steps := a.size + 1 - max b.size 1
-  let (_, o) := (Array.range steps).foldl
-    (init := (a, (Array.empty : PolynomialCoeff)))
-    fun (a, o) t =>
-      let apos := a.size - 1 - t
-      let diff := apos - bpos
-      let quot := a[apos]! * bLeadInv
-      let a := (Array.range b.size).foldl
-        (fun a i => a.set! (diff + i) (a[diff + i]! - b[i]! * quot)) a
-      (a, #[quot] ++ o)
-  return o
+  else
+    let bpos := b.size - 1
+    let lead := b[bpos]'(by omega)
+    -- A zero leading coefficient would make every quotient step a division by zero.
+    --
+    -- Field division by zero returns 0 here, so it would fail silently.
+    if lead.isZero then
+      throw .zeroDivisorPolynomial
+    -- The divisor's leading coefficient does not change, so its costly inverse is computed once.
+    let bLeadInv := lead.inverse
+    -- One quotient coefficient per step, while `apos - t ≥ bpos`.
+    --
+    -- The remainder keeps the length of `a`, so each step reads and writes inside it.
+    let steps := a.size + 1 - max b.size 1
+    let (_, o) := (Array.finRange steps).foldl
+      (init := (a.toVector, (Array.empty : PolynomialCoeff)))
+      fun (r, o) t =>
+        have ht : t.val < a.size + 1 - b.size := by have := t.isLt; omega
+        let apos := a.size - 1 - t.val
+        let diff := apos - bpos
+        let quot := r[apos]'(by omega) * bLeadInv
+        let r := (Array.finRange b.size).foldl
+          (fun r i =>
+            have hi := i.isLt
+            r.set (diff + i.val) (r[diff + i.val]'(by omega) - b[i] * quot) (by omega)) r
+        (r, #[quot] ++ o)
+    return o
 
 /-- Lagrange interpolation: the polynomial of lowest degree with value `ys[i]` at `xs[i]`.
 
@@ -181,31 +190,31 @@ The points `xs` must be pairwise distinct.
 
 The weights invert `xs[i] - xs[j]`, and inversion in `Fr` sends 0 to 0. -/
 def interpolatePolynomialcoeff
-    (xs ys : Array Fr) : Except KzgError PolynomialCoeff := do
+    (xs ys : Array Fr) : Except KzgError PolynomialCoeff :=
   -- The interpolation nodes and values must come in equal numbers
-  if xs.size ≠ ys.size then
+  if h : xs.size ≠ ys.size then
     throw (.inputLengthMismatch "ys" xs.size ys.size)
-  (Array.range xs.size).foldlM (init := #[Fr.zero]) fun r i => do
-    let summand ← (Array.range ys.size).foldlM (init := #[ys[i]!])
-      fun summand j =>
-        if j ≠ i then
-          let weightAdj := (xs[i]! - xs[j]!).inverse
-          multiplyPolynomialcoeff summand #[(-weightAdj) * xs[j]!, weightAdj]
-        else
-          pure summand
-    return addPolynomialcoeff r summand
+  else
+    (Array.finRange xs.size).foldlM (init := #[Fr.zero]) fun r i => do
+      let summand ← (Array.finRange ys.size).foldlM (init := #[ys[i.val]'(by omega)])
+        fun summand j =>
+          if j.val ≠ i.val then
+            let xj := xs[j.val]'(by omega)
+            let weightAdj := (xs[i] - xj).inverse
+            multiplyPolynomialcoeff summand #[(-weightAdj) * xj, weightAdj]
+          else
+            pure summand
+      return addPolynomialcoeff r summand
 
 /-- Compute the vanishing polynomial on `xs` (coefficient form). -/
 def vanishingPolynomialcoeff (xs : Array Fr) : Except KzgError PolynomialCoeff :=
   xs.foldlM (init := #[Fr.one]) fun p x =>
     multiplyPolynomialcoeff p #[-x, Fr.one]
 
-/-- Evaluate a coefficient-form polynomial at `z` using Horner's schema. -/
+/-- Evaluate a coefficient-form polynomial at `z` by Horner's rule, from the last coefficient. -/
 def evaluatePolynomialcoeff
     (polynomialCoeff : PolynomialCoeff) (z : Fr) : Fr :=
-  let n := polynomialCoeff.size
-  (Array.range n).foldl (init := Fr.zero) fun y i =>
-    y * z + polynomialCoeff[n - 1 - i]!
+  polynomialCoeff.foldr (init := Fr.zero) fun c y => y * z + c
 
 /-- Convert evaluation form to coefficient form via inverse FFT. -/
 def polynomialEvalToCoeff (polynomial : Polynomial) : PolynomialCoeff :=
@@ -227,47 +236,26 @@ def blobToPolynomial (blob : Blob) : Except KzgError Polynomial :=
 def rootsOfUnityBrp (size : Nat) : Array Fr :=
   bitReversalPermutation (computeRootsOfUnity size)
 
-/-- The barycentric sum `Σ_j p[i+j] * D[i+j] / (z - D[i+j])` of `count` terms.
+/-- Evaluation of an evaluation-form polynomial, over an explicit domain.
 
-It adds the terms from left to right onto `acc`.
+Value `i` of the polynomial is its value at point `i` of the domain.
 
-`z` must differ from every visited point of the domain.
-
-A zero denominator would add `0`, since division in `Fr` by `0` gives `0`. -/
-def barycentricSumAux (polynomial domain : Array Fr) (z : Fr) :
-    Fr → Nat → Nat → Fr
-  | acc, _, 0 => acc
-  | acc, i, count + 1 =>
-    let a := polynomial[i]! * domain[i]!
-    let b := z - domain[i]!
-    barycentricSumAux polynomial domain z (acc + a / b) (i + 1) count
-
-/-- The barycentric sum, with the inverses of `z - D[i]` given.
-
-`inverses[i]` must be the inverse of `z - domain[i]` for every visited `i`.
-
-Then each term `a / b` is `a * inverses[i]`, and the two sums agree. -/
-def barycentricSumInvAux (polynomial domain inverses : Array Fr) :
-    Fr → Nat → Nat → Fr
-  | acc, _, 0 => acc
-  | acc, i, count + 1 =>
-    barycentricSumInvAux polynomial domain inverses
-      (acc + polynomial[i]! * domain[i]! * inverses[i]!) (i + 1) count
-
-/-- Evaluation of an evaluation-form polynomial, over an explicit domain. -/
+The two arrays must have the same length, and the evaluation reads them as pairs. -/
 def evaluatePolynomialInEvaluationFormAux
     (polynomial domain : Array Fr) (z : Fr) : Fr :=
   let width := polynomial.size
   let inverseWidth := (Fr.ofNat width).inverse
-  match domain.idxOf? z with
+  let points := polynomial.zip domain
+  match points.find? (·.2 == z) with
   -- Fast path: z is in the domain.
-  | some i => polynomial[i]!
+  | some (y, _) => y
   | none =>
     -- The barycentric formula, where `z` is not in the domain, so no `z - domain[i]` is zero.
     --
     -- One batch inversion gives every `1 / (z - D[i])`.
-    let inverses := Fr.batchInverse (Array.ofFn (n := width) fun i => z - domain[i.val]!)
-    let acc := barycentricSumInvAux polynomial domain inverses Fr.zero 0 width
+    let inverses := Fr.batchInverse (points.map fun (_, d) => z - d)
+    let acc := (points.zip inverses).foldl (init := Fr.zero) fun acc ((y, d), inv) =>
+      acc + y * d * inv
     let r := z ^ (Fr.ofNat width) - Fr.one
     acc * r * inverseWidth
 
