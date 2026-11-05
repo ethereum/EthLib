@@ -45,149 +45,50 @@ theorem root_pow_twelve : r ^ 12 = 18 * r ^ 6 - 82 := by
     AdjoinRoot.mk_C, map_ofNat, map_ofNat] at h
   linear_combination h
 
-/-- The value of the first `n` coefficients of an array at the root. -/
-private noncomputable def prefixEval (c : Array Fp) (n : ℕ) : AdjoinRoot poly :=
-  ∑ i ∈ Finset.range n, ι c[i]! * r ^ i
-
-private theorem prefixEval_modify (c : Array Fp) (j : ℕ) (g : Fp → Fp) {n : ℕ} (hj : j < n)
-    (hn : n ≤ c.size) :
-    prefixEval (c.modify j g) n = prefixEval c n + (ι (g c[j]!) - ι c[j]!) * r ^ j := by
-  unfold prefixEval
-  have hsingle := Finset.sum_ite_eq' (Finset.range n) j
-    (fun i => (ι (g c[j]!) - ι c[j]!) * r ^ i)
-  rw [ite_eq_left (Finset.mem_range.mpr hj)] at hsingle
-  rw [← hsingle, ← Finset.sum_add_distrib]
-  refine Finset.sum_congr rfl fun i hi => ?_
-  have hi : i < c.size := by rw [Finset.mem_range] at hi; omega
-  rw [getElem!_pos (c.modify j g) i (by simpa using hi), getElem!_pos c i hi,
-    Array.getElem_modify]
-  by_cases h : j = i
-  · subst h
-    simp only [↓reduceIte, getElem!_pos c j hi]
-    ring
-  · simp [h, Ne.symm h]
-
-/-- One step of the reduction of the product, as the specification writes it. -/
-private def reduceStep (coefficients : Array Fp) (step : Nat) : Array Fp :=
-  let m := 22 - step
-  let top := coefficients[m]!
-  (coefficients.modify (m - 6) (· + 18 * top)).modify (m - 12) (· - 82 * top)
-
-/-- The 23 coefficients of the product of the polynomials, as the specification writes them. -/
-private def convolution (a b : Fp12) : Array Fp :=
-  Array.ofFn (n := 23) fun m =>
-    (List.range 12).foldl (fun acc i =>
-      if i ≤ m.val ∧ m.val - i < 12 then acc + a[i]! * b[m.val - i]! else acc) 0
-
-private theorem mul_eq (a b : Fp12) :
-    mul a b = Vector.ofFn fun k => ((List.range 11).foldl reduceStep (convolution a b))[k.val]! :=
-  rfl
-
-private theorem size_foldl_reduceStep (c : Array Fp) (s : Nat) :
-    ((List.range s).foldl reduceStep c).size = c.size := by
-  induction s with
-  | zero => rfl
-  | succ s ih => simp [List.range_succ, List.foldl_append, reduceStep, ih]
-
-/-- A reduction step keeps the value: `r^m = 18 r^(m - 6) - 82 r^(m - 12)`. -/
-private theorem prefixEval_reduceStep (c : Array Fp) {s : Nat} (hs : s < 11) (hc : c.size = 23) :
-    prefixEval (reduceStep c s) (22 - s) = prefixEval c (23 - s) := by
-  have hm : 12 ≤ 22 - s := by omega
-  generalize hmdef : 22 - s = m at hm
-  have h23 : 23 - s = m + 1 := by omega
-  rw [h23, reduceStep, hmdef]
-  rw [prefixEval_modify _ _ _ (by omega) (by simp; omega),
-    prefixEval_modify _ _ _ (by omega) (by omega)]
-  have hlow : (c.modify (m - 6) (· + 18 * c[m]!))[m - 12]! = c[m - 12]! := by
-    rw [getElem!_pos _ _ (by simp; omega), Array.getElem_modify_of_ne (by omega)]
-    exact (getElem!_pos c _ (by omega)).symm
-  rw [hlow, show prefixEval c (m + 1) = prefixEval c m + ι c[m]! * r ^ m from
-    Finset.sum_range_succ _ _]
-  have hr : r ^ m = 18 * r ^ (m - 6) - 82 * r ^ (m - 12) := by
-    obtain ⟨k, rfl⟩ : ∃ k, m = k + 12 := ⟨m - 12, by omega⟩
-    rw [show k + 12 - 6 = k + 6 by omega, Nat.add_sub_cancel, pow_add, pow_add,
-      root_pow_twelve]
-    ring
-  simp only [map_add, map_sub, map_mul, map_ofNat]
-  rw [hr]
-  ring
-
-private theorem prefixEval_foldl_reduceStep (c : Array Fp) (hc : c.size = 23) {s : Nat}
-    (hs : s ≤ 11) :
-    prefixEval ((List.range s).foldl reduceStep c) (23 - s) = prefixEval c 23 := by
-  induction s with
-  | zero => rfl
-  | succ s ih =>
-    rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil,
-      show 23 - (s + 1) = 22 - s by omega,
-      prefixEval_reduceStep _ (by omega) (by rw [size_foldl_reduceStep, hc]), ih (by omega)]
-
-private theorem foldl_ite_add (P : ℕ → Prop) [DecidablePred P] (t : ℕ → Fp) (x : Fp) (n : ℕ) :
-    (List.range n).foldl (fun acc i => if P i then acc + t i else acc) x =
-      x + ∑ i ∈ Finset.range n, if P i then t i else 0 := by
-  induction n generalizing x with
-  | zero => simp
-  | succ n ih =>
-    rw [List.range_succ, List.foldl_append, ih, List.foldl_cons, List.foldl_nil,
-      Finset.sum_range_succ]
-    split_ifs <;> ring
-
-private theorem convolution_getElem (a b : Fp12) {m : ℕ} (hm : m < 23) :
-    (convolution a b)[m]! =
-      ∑ i ∈ Finset.range 12, if i ≤ m ∧ m - i < 12 then a[i]! * b[m - i]! else 0 := by
-  rw [getElem!_pos _ _ (by simpa [convolution] using hm)]
-  simp only [convolution, Array.getElem_ofFn]
-  rw [foldl_ite_add (fun i => i ≤ m ∧ m - i < 12), zero_add]
-
 /-- The value of an element at the root, `sum_k a_k r^k`. -/
 noncomputable def toQuot (a : Fp12) : AdjoinRoot poly :=
   ∑ i ∈ Finset.range 12, ι a[i]! * r ^ i
 
-/-- The coefficients of the product of the polynomials have the product as their value. -/
-private theorem prefixEval_convolution (a b : Fp12) :
-    prefixEval (convolution a b) 23 = toQuot a * toQuot b := by
-  calc prefixEval (convolution a b) 23
-      = ∑ m ∈ Finset.range 23, ∑ i ∈ Finset.range 12,
-          if i ≤ m ∧ m - i < 12 then ι a[i]! * ι b[m - i]! * r ^ m else 0 := by
-        refine Finset.sum_congr rfl fun m hm => ?_
-        rw [convolution_getElem a b (Finset.mem_range.mp hm), map_sum, Finset.sum_mul]
-        refine Finset.sum_congr rfl fun i _ => ?_
-        split_ifs <;> simp
-    _ = ∑ i ∈ Finset.range 12, ∑ m ∈ Finset.range 23,
-          if i ≤ m ∧ m - i < 12 then ι a[i]! * ι b[m - i]! * r ^ m else 0 :=
-        Finset.sum_comm
-    _ = ∑ i ∈ Finset.range 12, ∑ j ∈ Finset.range 12, ι a[i]! * r ^ i * (ι b[j]! * r ^ j) := by
-        refine Finset.sum_congr rfl fun i hi => ?_
-        rw [Finset.mem_range] at hi
-        rw [← Finset.sum_filter]
-        refine Finset.sum_nbij' (fun m => m - i) (fun j => i + j) ?_ ?_ ?_ ?_ ?_
-        · intro m hm
-          simp only [Finset.mem_filter, Finset.mem_range] at hm ⊢
-          omega
-        · intro j hj
-          simp only [Finset.mem_filter, Finset.mem_range] at hj ⊢
-          omega
-        · intro m hm
-          simp only [Finset.mem_filter, Finset.mem_range] at hm
-          omega
-        · intro j _
-          simp
-        · intro m hm
-          simp only [Finset.mem_filter, Finset.mem_range] at hm
-          obtain ⟨j, rfl⟩ : ∃ j, m = i + j := ⟨m - i, by omega⟩
-          rw [Nat.add_sub_cancel_left, pow_add]
-          ring
-    _ = toQuot a * toQuot b := by
-        rw [toQuot, toQuot, Finset.sum_mul_sum]
-/-- The product of the specification is the product in the quotient. -/
+/-- The value at the root, term by term. -/
+private theorem toQuot_eq_terms (a : Fp12) :
+    toQuot a = ι a[0] + ι a[1] * r + ι a[2] * r ^ 2 + ι a[3] * r ^ 3 + ι a[4] * r ^ 4 +
+    ι a[5] * r ^ 5 + ι a[6] * r ^ 6 + ι a[7] * r ^ 7 + ι a[8] * r ^ 8 + ι a[9] * r ^ 9 +
+    ι a[10] * r ^ 10 + ι a[11] * r ^ 11 := by
+  simp [toQuot, Finset.sum_range_succ, getElem!_pos]
+
+/-- The product of the specification is the product in the quotient.
+
+The two sides differ by a multiple of `r^12 - 18 r^6 + 82`, which is 0. -/
 theorem toQuot_mul (a b : Fp12) : toQuot (a * b) = toQuot a * toQuot b := by
-  rw [← prefixEval_convolution, ← prefixEval_foldl_reduceStep _ (by simp [convolution])
-    (le_refl 11)]
   change toQuot (mul a b) = _
-  rw [toQuot, prefixEval, mul_eq]
-  refine Finset.sum_congr rfl fun k hk => ?_
-  rw [Finset.mem_range] at hk
-  rw [getElem!_pos _ k hk, Vector.getElem_ofFn]
+  rw [toQuot_eq_terms, toQuot_eq_terms a, toQuot_eq_terms b]
+  simp only [mul, Vector.getElem_mk, List.getElem_toArray, List.getElem_cons_succ,
+    List.getElem_cons_zero, map_add, map_sub, map_mul, map_ofNat]
+  -- The quotient of the product of the polynomials by `X^12 - 18 X^6 + 82`.
+  linear_combination (-(
+      (ι a[1] * ι b[11] + ι a[2] * ι b[10] + ι a[3] * ι b[9] + ι a[4] * ι b[8] + ι a[5] * ι b[7] +
+        ι a[6] * ι b[6] + ι a[7] * ι b[5] + ι a[8] * ι b[4] + ι a[9] * ι b[3] + ι a[10] * ι b[2] +
+        ι a[11] * ι b[1] + 18 * (ι a[7] * ι b[11] + ι a[8] * ι b[10] + ι a[9] * ι b[9] +
+        ι a[10] * ι b[8] + ι a[11] * ι b[7])) * r ^ 0 +
+      (ι a[2] * ι b[11] + ι a[3] * ι b[10] + ι a[4] * ι b[9] + ι a[5] * ι b[8] + ι a[6] * ι b[7] +
+        ι a[7] * ι b[6] + ι a[8] * ι b[5] + ι a[9] * ι b[4] + ι a[10] * ι b[3] + ι a[11] * ι b[2] +
+        18 * (ι a[8] * ι b[11] + ι a[9] * ι b[10] + ι a[10] * ι b[9] + ι a[11] * ι b[8])) * r ^ 1 +
+      (ι a[3] * ι b[11] + ι a[4] * ι b[10] + ι a[5] * ι b[9] + ι a[6] * ι b[8] + ι a[7] * ι b[7] +
+        ι a[8] * ι b[6] + ι a[9] * ι b[5] + ι a[10] * ι b[4] + ι a[11] * ι b[3] +
+        18 * (ι a[9] * ι b[11] + ι a[10] * ι b[10] + ι a[11] * ι b[9])) * r ^ 2 +
+      (ι a[4] * ι b[11] + ι a[5] * ι b[10] + ι a[6] * ι b[9] + ι a[7] * ι b[8] + ι a[8] * ι b[7] +
+        ι a[9] * ι b[6] + ι a[10] * ι b[5] + ι a[11] * ι b[4] + 18 * (ι a[10] * ι b[11] +
+        ι a[11] * ι b[10])) * r ^ 3 +
+      (ι a[5] * ι b[11] + ι a[6] * ι b[10] + ι a[7] * ι b[9] + ι a[8] * ι b[8] + ι a[9] * ι b[7] +
+        ι a[10] * ι b[6] + ι a[11] * ι b[5] + 18 * (ι a[11] * ι b[11])) * r ^ 4 +
+      (ι a[6] * ι b[11] + ι a[7] * ι b[10] + ι a[8] * ι b[9] + ι a[9] * ι b[8] + ι a[10] * ι b[7] +
+        ι a[11] * ι b[6]) * r ^ 5 +
+      (ι a[7] * ι b[11] + ι a[8] * ι b[10] + ι a[9] * ι b[9] + ι a[10] * ι b[8] +
+        ι a[11] * ι b[7]) * r ^ 6 +
+      (ι a[8] * ι b[11] + ι a[9] * ι b[10] + ι a[10] * ι b[9] + ι a[11] * ι b[8]) * r ^ 7 +
+      (ι a[9] * ι b[11] + ι a[10] * ι b[10] + ι a[11] * ι b[9]) * r ^ 8 +
+      (ι a[10] * ι b[11] + ι a[11] * ι b[10]) * r ^ 9 +
+      (ι a[11] * ι b[11]) * r ^ 10)) * root_pow_twelve
 
 /-! ## The ring -/
 
