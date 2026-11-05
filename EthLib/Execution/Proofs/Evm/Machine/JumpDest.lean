@@ -93,11 +93,35 @@ theorem getD_foldl_mark {code : ByteArray} (positions : List Nat) (flags : Array
         simp [hj]
       · simp [hi]
 
+/-- The scan that marks the flags visits the listed opcode positions, in order. -/
+theorem markJumpDestsFrom_eq_foldl (code : ByteArray) (fuel pc : Nat) (flags : Array Bool) :
+    markJumpDestsFrom code fuel pc flags =
+      (opcodePositionsFrom code fuel pc).foldl
+        (fun flags pc => if byteAt code pc = JUMPDEST then flags.set! pc true else flags)
+        flags := by
+  induction fuel generalizing pc flags with
+  | zero => simp [markJumpDestsFrom, opcodePositionsFrom]
+  | succ fuel ih =>
+    unfold markJumpDestsFrom opcodePositionsFrom
+    split
+    · rw [ih]
+      rfl
+    · rfl
+
+/-- The valid jump destinations mark each listed opcode position that holds JUMPDEST. -/
+theorem validJumpDestinations_eq_foldl (code : ByteArray) :
+    validJumpDestinations code =
+      (opcodePositions code).foldl
+        (fun flags pc => if byteAt code pc = JUMPDEST then flags.set! pc true else flags)
+        (Array.replicate code.size false) :=
+  markJumpDestsFrom_eq_foldl code code.size 0 _
+
 /-- A position is a valid destination exactly when an opcode starts there with the byte JUMPDEST. -/
 theorem isValidJumpDest_iff {code : ByteArray} {i : Nat} :
     isValidJumpDest (validJumpDestinations code) i = true ↔
       i ∈ opcodePositions code ∧ byteAt code i = JUMPDEST := by
-  unfold isValidJumpDest validJumpDestinations
+  rw [validJumpDestinations_eq_foldl]
+  unfold isValidJumpDest
   rw [getD_foldl_mark (opcodePositions code) _ (by simp)
     fun x hx => (le_of_mem_opcodePositionsFrom hx).2]
   -- No flag is set before the scan.
