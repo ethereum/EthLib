@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Bls.Signatures
+public import EthLib.Cryptography.Proofs.Bls.Represents
 public import EthLib.Cryptography.Proofs.Bls.KeyValidate
 public import EthLib.Cryptography.Proofs.Bls.CofactorSubgroupLanding
 public import EthLib.Base.Proofs.MapM
@@ -26,29 +27,9 @@ open scoped EthLib.Cryptography.Bls.Fr
 theorem G1.represents_zero : G1.Represents G1.zero 0 :=
   ⟨G1.valid_zero, by rw [G1.toPoint_zero, G1.toPoint_mul_generator, G1.ofFr_zero]⟩
 
-/-- The sum of representatives of `a • g1` and `c • g1` represents `(a + c) • g1`. -/
-theorem G1.Represents.add {P P' : G1} {a c : Fr} (h : G1.Represents P a)
-    (h' : G1.Represents P' c) : G1.Represents (G1.add P P') (a + c) := by
-  refine ⟨G1.valid_add h.1 h'.1, ?_⟩
-  rw [G1.toPoint_add h.1 h'.1, h.2, h'.2, G1.toPoint_mul_generator, G1.toPoint_mul_generator,
-    G1.toPoint_mul_generator, G1.ofFr_add]
-
 /-- The point at infinity represents `0 • g2`. -/
 theorem G2.represents_zero : G2.Represents G2.zero 0 :=
   ⟨G2.valid_zero, by rw [G2.toPoint_zero, G2.toPoint_mul_generator, G2.ofFr_zero]⟩
-
-/-- The sum of representatives of `b • g2` and `d • g2` represents `(b + d) • g2`. -/
-theorem G2.Represents.add {Q Q' : G2} {b d : Fr} (h : G2.Represents Q b)
-    (h' : G2.Represents Q' d) : G2.Represents (G2.add Q Q') (b + d) := by
-  refine ⟨G2.valid_add h.1 h'.1, ?_⟩
-  rw [G2.toPoint_add h.1 h'.1, h.2, h'.2, G2.toPoint_mul_generator, G2.toPoint_mul_generator,
-    G2.toPoint_mul_generator, G2.ofFr_add]
-
-/-- A multiple by `s` of a representative of `b • g2` represents `(s * b) • g2`. -/
-theorem G2.Represents.mul {Q : G2} {b : Fr} (h : G2.Represents Q b) (s : Fr) :
-    G2.Represents (G2.mul Q s) (s * b) := by
-  refine ⟨G2.valid_mul h.1 s, ?_⟩
-  rw [G2.toPoint_mul h.1, h.2, G2.toPoint_mul_generator, G2.toPoint_mul_generator, G2.ofFr_mul]
 
 namespace Signatures
 
