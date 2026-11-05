@@ -8,9 +8,85 @@
 # The case is the identifier that the parity report uses.
 # For execution-spec-tests, it is the test identifier of a fixture.
 # For consensus-spec-tests, it is the directory of a case in the archive.
+# For legacytests, it is the path of a file in the archive, two colons, and the name of a test.
+# An entry can name the group of runners that disagrees, and then holds for that group only.
 #
 #     [[disagreement]]
 #     suite = "execution-spec-tests"
 #     case = "tests/...::test_...[fork_Osaka-transaction_test-...]"
 #     reason = "..."
 #     source = "EIP-... section ..."
+
+# A block whose gas limit is 2^63, one above the gas limit of its parent.
+# Clients cap the gas limit at 2^63 - 1, and the tests reject the block.
+# The Yellow Paper bounds the gas limit only against the parent's, and from below by 5000.
+
+[[disagreement]]
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Frontier"
+group = "legacy_header"
+reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Homestead"
+group = "legacy_header"
+reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_EIP150"
+group = "legacy_header"
+reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_EIP158"
+group = "legacy_header"
+reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Byzantium"
+group = "legacy_header"
+reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Constantinople"
+group = "legacy_header"
+reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Constantinople/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_ConstantinopleFix"
+group = "legacy_header"
+reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Istanbul"
+group = "legacy_header"
+reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_Berlin"
+group = "legacy_header"
+reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"
+
+[[disagreement]]
+suite = "legacytests"
+case = "Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::LegacyTests/Cancun/BlockchainTests/InvalidBlocks/bcInvalidHeaderTest/GasLimitHigherThan2p63m1.json::GasLimitHigherThan2p63m1_London"
+group = "legacy_header"
+reason = "EthLib accepts a gas limit of 2^63, which no rule of the Yellow Paper bounds"
+source = "Yellow Paper, Shanghai version, sections 4.4.3 and 4.4.4: the gas limit is a natural number"

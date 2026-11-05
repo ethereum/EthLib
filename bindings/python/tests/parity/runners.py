@@ -11,6 +11,7 @@ from consensus.containers import CONTAINERS
 from consensus.containers import FORKS as CONSENSUS_FORK
 from transactions.test_transactions import CHAIN_ID, FORK_OF_NETWORK, names
 
+from . import legacy
 from .catalogue import Case
 
 # The groups that no runner covers yet, with the pull requests of the plan that bring them.
@@ -131,6 +132,7 @@ RUNNERS = {
     "networking/compute_columns_for_custody_group": _custody_columns,
     **{f"ssz_static/{container}": _ssz_static for container in CONTAINERS},
     "light_client/single_merkle_proof": _single_merkle_proof,
+    "legacy_header": legacy.run_headers,
 }
 
 

@@ -15,10 +15,14 @@ from .runners import RUNNERS, plan, runner
 DISAGREEMENTS_FILE = archives.REPO / "tests" / "parity" / "disagreements.toml"
 
 
-def disagreements(suite: str) -> dict[str, dict]:
-    """The listed disagreements of a suite, by case."""
+def disagreements(suite: str) -> dict[tuple[str, str | None], dict]:
+    """The listed disagreements of a suite, by case and group.
+
+    An entry without a group holds for every group of its case.
+    """
     entries = tomllib.loads(DISAGREEMENTS_FILE.read_text()).get("disagreement", [])
-    return {entry["case"]: entry for entry in entries if entry["suite"] == suite}
+    return {(entry["case"], entry.get("group")): entry
+            for entry in entries if entry["suite"] == suite}
 
 
 def runnable(cases: list[Case]) -> list[Case]:
@@ -37,8 +41,9 @@ def unpack(name: str, cases: list[Case], depth: int) -> Path:
 def run(root: Path, case: Case, suite_disagreements: dict, request, record_property) -> None:
     """Run one case, which must fail with the listed reason if it is a disagreement."""
     record_property("parity row", case.row)
-    if case.id in suite_disagreements:
-        entry = suite_disagreements[case.id]
+    entry = (suite_disagreements.get((case.id, case.group))
+             or suite_disagreements.get((case.id, None)))
+    if entry is not None:
         request.applymarker(pytest.mark.xfail(strict=True, reason=entry["reason"]))
     runner(case)(root, case)
 
@@ -69,7 +74,7 @@ def check_groups(cases: list[Case]) -> None:
 
 def check_disagreements(cases: list[Case], suite_disagreements: dict) -> None:
     """Every disagreement names a runnable case, with a reason and a source."""
-    ids = {case.id for case in runnable(cases)}
-    for case, entry in suite_disagreements.items():
-        assert case in ids, case
-        assert entry.get("reason") and entry.get("source"), case
+    keys = {key for case in runnable(cases) for key in ((case.id, case.group), (case.id, None))}
+    for key, entry in suite_disagreements.items():
+        assert key in keys, key
+        assert entry.get("reason") and entry.get("source"), key

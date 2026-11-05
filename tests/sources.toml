@@ -12,6 +12,7 @@
 # A release archive that is too large to vendor is pinned in the table `archives`.
 # Its entry gives the URL, the size in bytes and the sha256 of the file.
 # An archive can come from an older release than the pin of its repository.
+# A repository without releases gives the source archive of its pinned commit.
 # A test names the archive by its key, and reads it through scripts/fetch_archives.py.
 # The fetcher checks the size and the digest.
 #
@@ -76,6 +77,10 @@ directories = [
   "bindings/python/tests/trie/trietests",
 ]
 
+[repositories."ethereum/legacytests"]
+commit = "1f581b8ccdc4c63acf5f2c5c1b155c690c32a8eb"
+directories = ["tests/execution/legacytests"]
+
 [repositories."ethereum/ethereum-org-website"]
 commit = "0899bcb4dcb12040ccf46bea0053a422812bf913"
 directories = ["bindings/python/tests/ethash/spec"]
@@ -139,6 +144,12 @@ source = "NIST CAVP"
 url = "https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/mac/gcmtestvectors.zip"
 size = 9154174
 sha256 = "f9fc479e134cde2980b3bb7cddbcb567b2cd96fd753835243ed067699f26a023"
+
+[archives."legacytests@1f581b8c/source"]
+repository = "ethereum/legacytests"
+url = "https://github.com/ethereum/legacytests/archive/1f581b8ccdc4c63acf5f2c5c1b155c690c32a8eb.tar.gz"
+size = 126768895
+sha256 = "ed16742e585db5ac4196bdf552ee126a68b777128e3e811bab179b36206dee35"
 
 # The pinned vector directories whose cases come from no repository, with their source.
 [other]
