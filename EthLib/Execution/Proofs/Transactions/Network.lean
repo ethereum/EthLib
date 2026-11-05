@@ -55,10 +55,10 @@ theorem NetworkBlobTransaction.toItem_of_ofItem {fork : Fork} {item : Item}
       simp only [ne_eq, Decidable.not_not] at hver
       subst hver
       have h := mapError_ok_iff.mp h
-      obtain ⟨x1, h1, h⟩ := bind_eq_ok.mp h
-      obtain ⟨x2, h2, h⟩ := bind_eq_ok.mp h
-      obtain ⟨x3, h3, h⟩ := bind_eq_ok.mp h
-      obtain ⟨x4, h4, h⟩ := bind_eq_ok.mp h
+      obtain ⟨x1, h1, h⟩ := bind_ok_iff.mp h
+      obtain ⟨x2, h2, h⟩ := bind_ok_iff.mp h
+      obtain ⟨x3, h3, h⟩ := bind_ok_iff.mp h
+      obtain ⟨x4, h4, h⟩ := bind_ok_iff.mp h
       cases h
       simp only [hf, ↓reduceIte, hv, LawfulCodec.toItem_of_ofItem h1,
         LawfulCodec.toItem_of_ofItem h2, LawfulCodec.toItem_of_ofItem h3,
@@ -68,10 +68,10 @@ theorem NetworkBlobTransaction.toItem_of_ofItem {fork : Fork} {item : Item}
   · rename_i hf
     split at h
     · have h := mapError_ok_iff.mp h
-      obtain ⟨x1, h1, h⟩ := bind_eq_ok.mp h
-      obtain ⟨x2, h2, h⟩ := bind_eq_ok.mp h
-      obtain ⟨x3, h3, h⟩ := bind_eq_ok.mp h
-      obtain ⟨x4, h4, h⟩ := bind_eq_ok.mp h
+      obtain ⟨x1, h1, h⟩ := bind_ok_iff.mp h
+      obtain ⟨x2, h2, h⟩ := bind_ok_iff.mp h
+      obtain ⟨x3, h3, h⟩ := bind_ok_iff.mp h
+      obtain ⟨x4, h4, h⟩ := bind_ok_iff.mp h
       cases h
       simp only [hf, ↓reduceIte, LawfulCodec.toItem_of_ofItem h1,
         LawfulCodec.toItem_of_ofItem h2, LawfulCodec.toItem_of_ofItem h3,

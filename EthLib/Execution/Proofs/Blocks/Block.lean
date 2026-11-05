@@ -43,13 +43,13 @@ instance : LawfulCodec (Block fork Tx) where
     change Block.ofItem item = .ok b at hDecode
     unfold Block.ofItem at hDecode
     dsimp only at hDecode
-    obtain ⟨items, hFields, hDecode⟩ := bind_eq_ok.mp hDecode
+    obtain ⟨items, hFields, hDecode⟩ := bind_ok_iff.mp hDecode
     have hItem := Item.fields_eq_ok.mp hFields
     -- Each read takes the items of one part from the front of the rest.
     iterate 3
-      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_eq_ok.mp hDecode
+      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_ok_iff.mp hDecode
       have := Item.eq_of_readField hRead
-    obtain ⟨⟨_, rest⟩, hRead, hDecode⟩ := bind_eq_ok.mp hDecode
+    obtain ⟨⟨_, rest⟩, hRead, hDecode⟩ := bind_ok_iff.mp hDecode
     have := Item.eq_of_readSince hRead
     obtain rfl := Except.ok.inj hDecode
     obtain ⟨rfl, hLen⟩ := hItem

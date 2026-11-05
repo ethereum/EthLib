@@ -23,6 +23,7 @@ namespace EthLib.Networking.Discv4
 open EthLib.Cryptography
 open EthLib.Cryptography.Secp256k1
 open EthLib.Cryptography.Secp256k1.Point
+open EthLib.Base (bind_ok_iff)
 open EthLib.Serialization.Rlp
 
 /-! ## Packet data -/
@@ -36,13 +37,13 @@ instance : LawfulCodec Endpoint where
   toItem_of_ofItem {item e} h := by
     change Endpoint.ofItem item = .ok e at h
     unfold Endpoint.ofItem at h
-    obtain ⟨items, hf, hrest⟩ := bind_eq_ok.mp h
+    obtain ⟨items, hf, hrest⟩ := bind_ok_iff.mp h
     obtain ⟨rfl, hlen⟩ := Item.fields_eq_ok.mp hf
     rcases items with _ | ⟨ip, _ | ⟨u, _ | ⟨t, _ | ⟨_, _⟩⟩⟩⟩ <;> simp at hlen
     · dsimp only at hrest
-      obtain ⟨a, ha, h⟩ := bind_eq_ok.mp hrest
-      obtain ⟨b, hb, h⟩ := bind_eq_ok.mp h
-      obtain ⟨c, hc, h⟩ := bind_eq_ok.mp h
+      obtain ⟨a, ha, h⟩ := bind_ok_iff.mp hrest
+      obtain ⟨b, hb, h⟩ := bind_ok_iff.mp h
+      obtain ⟨c, hc, h⟩ := bind_ok_iff.mp h
       cases h
       show Endpoint.toItem _ = _
       simp only [Endpoint.toItem, LawfulCodec.toItem_of_ofItem ha,
@@ -57,14 +58,14 @@ instance : LawfulCodec Node where
   toItem_of_ofItem {item n} h := by
     change Node.ofItem item = .ok n at h
     unfold Node.ofItem at h
-    obtain ⟨items, hf, hrest⟩ := bind_eq_ok.mp h
+    obtain ⟨items, hf, hrest⟩ := bind_ok_iff.mp h
     obtain ⟨rfl, hlen⟩ := Item.fields_eq_ok.mp hf
     rcases items with _ | ⟨ip, _ | ⟨u, _ | ⟨t, _ | ⟨id, _ | ⟨_, _⟩⟩⟩⟩⟩ <;> simp at hlen
     · dsimp only at hrest
-      obtain ⟨a, ha, h⟩ := bind_eq_ok.mp hrest
-      obtain ⟨b, hb, h⟩ := bind_eq_ok.mp h
-      obtain ⟨c, hc, h⟩ := bind_eq_ok.mp h
-      obtain ⟨d, hd, h⟩ := bind_eq_ok.mp h
+      obtain ⟨a, ha, h⟩ := bind_ok_iff.mp hrest
+      obtain ⟨b, hb, h⟩ := bind_ok_iff.mp h
+      obtain ⟨c, hc, h⟩ := bind_ok_iff.mp h
+      obtain ⟨d, hd, h⟩ := bind_ok_iff.mp h
       cases h
       show Node.toItem _ = _
       simp only [Node.toItem, LawfulCodec.toItem_of_ofItem ha,

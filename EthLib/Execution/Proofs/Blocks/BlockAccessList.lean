@@ -36,10 +36,10 @@ instance : LawfulCodec StorageChange where
   toItem_of_ofItem {item c} hDecode := by
     change StorageChange.ofItem item = .ok c at hDecode
     unfold StorageChange.ofItem at hDecode
-    obtain ⟨items, hFields, hDecode⟩ := bind_eq_ok.mp hDecode
+    obtain ⟨items, hFields, hDecode⟩ := bind_ok_iff.mp hDecode
     have hItem := Item.fields_eq_ok.mp hFields
     iterate 2
-      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_eq_ok.mp hDecode
+      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_ok_iff.mp hDecode
       have := Item.eq_of_readField hRead
     obtain rfl := Except.ok.inj hDecode
     obtain ⟨rfl, hLen⟩ := hItem
@@ -57,10 +57,10 @@ instance : LawfulCodec BalanceChange where
   toItem_of_ofItem {item c} hDecode := by
     change BalanceChange.ofItem item = .ok c at hDecode
     unfold BalanceChange.ofItem at hDecode
-    obtain ⟨items, hFields, hDecode⟩ := bind_eq_ok.mp hDecode
+    obtain ⟨items, hFields, hDecode⟩ := bind_ok_iff.mp hDecode
     have hItem := Item.fields_eq_ok.mp hFields
     iterate 2
-      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_eq_ok.mp hDecode
+      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_ok_iff.mp hDecode
       have := Item.eq_of_readField hRead
     obtain rfl := Except.ok.inj hDecode
     obtain ⟨rfl, hLen⟩ := hItem
@@ -78,10 +78,10 @@ instance : LawfulCodec NonceChange where
   toItem_of_ofItem {item c} hDecode := by
     change NonceChange.ofItem item = .ok c at hDecode
     unfold NonceChange.ofItem at hDecode
-    obtain ⟨items, hFields, hDecode⟩ := bind_eq_ok.mp hDecode
+    obtain ⟨items, hFields, hDecode⟩ := bind_ok_iff.mp hDecode
     have hItem := Item.fields_eq_ok.mp hFields
     iterate 2
-      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_eq_ok.mp hDecode
+      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_ok_iff.mp hDecode
       have := Item.eq_of_readField hRead
     obtain rfl := Except.ok.inj hDecode
     obtain ⟨rfl, hLen⟩ := hItem
@@ -99,10 +99,10 @@ instance : LawfulCodec CodeChange where
   toItem_of_ofItem {item c} hDecode := by
     change CodeChange.ofItem item = .ok c at hDecode
     unfold CodeChange.ofItem at hDecode
-    obtain ⟨items, hFields, hDecode⟩ := bind_eq_ok.mp hDecode
+    obtain ⟨items, hFields, hDecode⟩ := bind_ok_iff.mp hDecode
     have hItem := Item.fields_eq_ok.mp hFields
     iterate 2
-      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_eq_ok.mp hDecode
+      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_ok_iff.mp hDecode
       have := Item.eq_of_readField hRead
     obtain rfl := Except.ok.inj hDecode
     obtain ⟨rfl, hLen⟩ := hItem
@@ -120,10 +120,10 @@ instance : LawfulCodec SlotChanges where
   toItem_of_ofItem {item c} hDecode := by
     change SlotChanges.ofItem item = .ok c at hDecode
     unfold SlotChanges.ofItem at hDecode
-    obtain ⟨items, hFields, hDecode⟩ := bind_eq_ok.mp hDecode
+    obtain ⟨items, hFields, hDecode⟩ := bind_ok_iff.mp hDecode
     have hItem := Item.fields_eq_ok.mp hFields
     iterate 2
-      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_eq_ok.mp hDecode
+      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_ok_iff.mp hDecode
       have := Item.eq_of_readField hRead
     obtain rfl := Except.ok.inj hDecode
     obtain ⟨rfl, hLen⟩ := hItem
@@ -141,10 +141,10 @@ instance : LawfulCodec AccountChanges where
   toItem_of_ofItem {item c} hDecode := by
     change AccountChanges.ofItem item = .ok c at hDecode
     unfold AccountChanges.ofItem at hDecode
-    obtain ⟨items, hFields, hDecode⟩ := bind_eq_ok.mp hDecode
+    obtain ⟨items, hFields, hDecode⟩ := bind_ok_iff.mp hDecode
     have hItem := Item.fields_eq_ok.mp hFields
     iterate 6
-      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_eq_ok.mp hDecode
+      obtain ⟨⟨_, _⟩, hRead, hDecode⟩ := bind_ok_iff.mp hDecode
       have := Item.eq_of_readField hRead
     obtain rfl := Except.ok.inj hDecode
     obtain ⟨rfl, hLen⟩ := hItem
