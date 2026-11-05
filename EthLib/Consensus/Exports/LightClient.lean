@@ -185,7 +185,7 @@ def isBetterUpdateExport (name fork newUpdate oldUpdate : ByteArray) : Result Bo
 
 /-- The genesis block of a state, given as bytes, with a signature of zero bytes.
 
-No proposer signs the genesis block, so its signature stays empty. -/
+No proposer signs the genesis block, so its signature is 96 zero bytes. -/
 @[export eth_consensus_genesis_block]
 def genesisBlockExport (name fork state : ByteArray) : Result ByteArray := do
   let (preset, fork) ← lightClientPresetAndFork name fork
