@@ -40,36 +40,6 @@ namespace EthLib.Cryptography.Sphincs.Unforgeability
 open EthLib.Cryptography.Sphincs.Constants
 open OracleSpec OracleComp
 
-/-! ## The map of a tree path -/
-
-section Merkle
-
-variable {m n : Type → Type} [Monad m] [Monad n] {α : Type} (hash : Nat → Nat → α → α → m α)
-  (φ : ∀ {β : Type}, m β → n β)
-  (map_pure : ∀ {β : Type} (b : β), φ (pure b) = pure b)
-  (map_bind : ∀ {β γ : Type} (x : m β) (f : β → m γ), φ (x >>= f) = φ x >>= fun b => φ (f b))
-
-include map_pure map_bind
-
-/-- The siblings of a node commute with the map. -/
-theorem siblings_map_monad (leaves : Nat → m α) :
-    ∀ (level j k : Nat), φ (Merkle.siblings hash leaves level j k)
-      = Merkle.siblings (fun level j left right => φ (hash level j left right))
-          (fun j => φ (leaves j)) level j k
-  | _, _, 0 => map_pure _
-  | level, j, k + 1 => by
-    simp only [Merkle.siblings, map_bind, map_pure, Merkle.node_map hash φ map_bind,
-      siblings_map_monad leaves (level + 1) (j / 2) k]
-
-/-- A tree path commutes with the map. -/
-theorem path_map_monad (leaves : Nat → m α) (h j : Nat) :
-    φ (Merkle.path hash leaves h j)
-      = Merkle.path (fun level j left right => φ (hash level j left right))
-          (fun j => φ (leaves j)) h j :=
-  siblings_map_monad hash φ map_pure map_bind leaves 0 j h
-
-end Merkle
-
 /-! ## Key generation and signing under a map of monads -/
 
 section Map
@@ -149,9 +119,9 @@ theorem treeRoot_map_monad (pp : PublicParam) (layer : Layer) (tree : Nat) :
   node_map_monad φ map_pure map_bind H prf pp layer tree _ 0
 
 /-- A key's path commutes with the map. -/
-theorem path_map_monad' (pp : PublicParam) (layer : Layer) (tree e : Nat) :
+theorem path_map_monad (pp : PublicParam) (layer : Layer) (tree e : Nat) :
     φ (path H pp prf layer tree e) = path (fun x => φ (H x)) pp (mapPrf φ prf) layer tree e := by
-  rw [path, path, path_map_monad _ φ map_pure map_bind]
+  rw [path, path, Merkle.path_map _ φ map_pure map_bind]
   simp only [nodeHash_map_monad φ map_pure map_bind, leaves,
     otsPublicLeaf_map_monad φ map_pure map_bind]
   rfl
@@ -191,7 +161,7 @@ theorem treeOpen_map_monad (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREE
     φ (treeOpen H pp prf idx kappa l)
       = treeOpen (fun x => φ (H x)) pp (mapPrf φ prf) idx kappa l := by
   rw [treeOpen, treeOpen, map_bind, forsSecret_map_monad φ map_pure map_bind]
-  simp only [map_bind, map_pure, path_map_monad _ φ map_pure map_bind,
+  simp only [map_bind, map_pure, Merkle.path_map _ φ map_pure map_bind,
     forsNodeHash_map_monad φ map_pure map_bind, forsLeaves_map_monad φ map_pure map_bind]
 
 /-- The FORS openings commute with the map. -/
@@ -227,7 +197,7 @@ theorem signLayer_map_monad [LawfulMonad m] [LawfulMonad n] (pp : PublicParam) (
   cases found with
   | none => exact map_pure _
   | some found =>
-    simp only [map_bind, map_pure, path_map_monad' φ map_pure map_bind]
+    simp only [map_bind, map_pure, path_map_monad φ map_pure map_bind]
 
 /-- The public parameter commutes with the map. -/
 theorem publicParamOf_map_monad :

@@ -188,8 +188,10 @@ The theorem holds for every root, including one built to cheat.
 `verify_opening` says that the opening of an honest tree verifies, with the output of its secret.
 
 Uniqueness is reduced to a collision, and no theorem bounds the cost of finding one.
-No theorem says that an output is unpredictable before it is opened.
-That could hold only for a tree built from a secret seed.
+In the random oracle model, `prEvent_guess_le` (`Proofs/Vrf/Unpredictability.lean`) bounds the chance of guessing an unopened output.
+The secret at the guessed index is uniform, and the adversary sees the root, the hash and the openings at other indices.
+It guesses right with probability at most `(1 + 2 Q) / 2^256`, where `Q = q_H + (q_O + 1) 2^33` counts its hash queries and requests.
+The theorem fixes the index in advance, and does not cover a secret derived from a seed.
 Verification accepts any tree, so a holder that chooses its secrets can bias every output.
 
 ### BLS12-381
@@ -595,6 +597,9 @@ The two theorems of Casper FFG share one bullet, and the binding of a proof of p
   The theorem says nothing about an attack that uses the structure of Keccak.
   The binding of an EIP-8450 proof of possession rests on the same oracle.
   So do the failure bounds of the codeword searches of leanXMSS and leanSPHINCS.
+- VRF unpredictability: Keccak-256 is a random oracle on byte strings, as for leanXMSS.
+  The bound says nothing about an attack that uses the structure of Keccak.
+  It counts classical queries only, so it says nothing about a quantum adversary.
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
   Nothing in EthLib proves that the hash behaves as such an oracle.

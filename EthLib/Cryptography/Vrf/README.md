@@ -64,6 +64,7 @@ It must first mix each output with randomness that becomes known only after the 
 The proofs are in `EthLib/Cryptography/Proofs/Vrf/`.
 Two of the three properties of Micali, Rabin and Vadhan are proved: provability and uniqueness.
 The third, pseudorandomness, is not proved (see [What is not proved](#what-is-not-proved)).
+A weaker property, unpredictability, is proved in the random oracle model.
 
 *Provability* says that an honest holder can always convince a verifier.
 The opening of an honest tree at index `i` verifies, and gives the output of secret `i` (`verify_opening`, `Verify.lean`).
@@ -95,6 +96,19 @@ An opening also travels as bytes (`Serialization.lean`).
 Decoding succeeds exactly on strings of 1056 bytes, and on those strings encoding and decoding are inverse bijections.
 Verification over bytes rejects a root that is not 32 bytes, an opening that is not 1056 bytes, and an index outside `[0, 2^32)`.
 
+*Unpredictability* says that no one without a secret can guess its output before it is opened (`Unpredictability.lean`).
+The theorem takes the challenge secret uniform, not derived from a seed.
+It is the residual unpredictability of Micali, Rabin and Vadhan, §3.2, in their definition of a verifiable unpredictable function.
+The hash is a random oracle, the secret at the challenge index is uniform, and the other secrets are any fixed values.
+The adversary gets the root, queries the hash `q_H` times, and asks for `q_O` openings at other indices.
+Its guess of the output at the challenge index is right with probability at most `(1 + 2 Q) / 2^256`, where `Q = q_H + (q_O + 1) 2^33` (`prEvent_guess_le`).
+With `q_H = 2^64` and `q_O = 2^32`, that is below `2^-189`.
+The game computes the root and the openings with the tree of this module, with the hash as an oracle (`rootWith_hash`, `openingWith_hash`).
+
+The theorem does not cover a holder who chooses its own secrets: such a holder can bias its outputs.
+It fixes the challenge index before the game, where Micali, Rabin and Vadhan let the adversary choose it.
+Guessing the index would cover the adaptive choice with a loss of up to `2^32`, but that step is not proved.
+
 ## Test vectors
 
 `tests/cryptography/vrf/` has cases for `verify`, `secret` and `evaluate`, which the Python suite checks through the bindings.
@@ -105,9 +119,12 @@ The secrets and outputs of one seed at the same two indices were computed outsid
 
 ## What is not proved
 
-Pseudorandomness is not proved: that an output stays unpredictable until it is opened.
+Pseudorandomness is not proved: that an output is indistinguishable from random until it is opened.
 It rests on Keccak-256 being a pseudorandom function keyed by the seed, and on its preimage resistance, and both need a model of the hash.
-It could hold only for a tree built from a secret seed, because the holder of any other tree chose its outputs.
+It could hold only for a tree whose secrets the holder did not choose.
+
+Unpredictability is not proved for a tree built from a seed.
+It would need at least one more step in the random oracle model: no one queries the hash at the secret seed.
 
 No bound on the cost of a Keccak-256 collision is proved either.
 Uniqueness turns a second output into a collision, but how hard a collision is to find depends on the hash.
