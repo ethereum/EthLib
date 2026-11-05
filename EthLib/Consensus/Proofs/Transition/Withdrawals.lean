@@ -345,7 +345,9 @@ theorem part_run {limit : Nat} {prior withdrawals : Array Withdrawal}
     ConsecutiveFrom start.toNat withdrawals ∧ next.toNat = start.toNat + withdrawals.size :=
   run.2
 
-/-- The parts of the expected withdrawals, in order, with the sizes of the last part. -/
+/-- The expected withdrawals number at most the most per payload.
+
+Their indices count up by one from the next withdrawal index of the state. -/
 theorem getExpectedWithdrawals_run {state : BeaconState preset fork}
     {capella : .shapella ≤ fork} {expected : ExpectedWithdrawals}
     (computed : getExpectedWithdrawals state capella = .ok expected) :

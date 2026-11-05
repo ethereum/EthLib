@@ -32,6 +32,18 @@ open Base Uint64 Serialization.Ssz Serialization.Ssz.SszType
 
 variable {preset : Preset} {fork : Base.Fork}
 
+/-- From Gloas: the state in which the payload of the slot after the state's slot is unavailable.
+
+Its bit in the circular buffer of payload availability is cleared.
+
+A slot of 2^64 - 1 has no next slot, and is an error. -/
+def unsetNextPayloadAvailability (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork) :
+    Except AccessorError (BeaconState preset fork) := do
+  let next ← liftArith (addChecked state.slot 1)
+  let index := (next % preset.SLOTS_PER_HISTORICAL_ROOT).toNat
+  let bits := (state.executionPayloadAvailability gloas).bits
+  return { state with executionPayloadAvailability := fun _ => ⟨bits.set! index false⟩ }
+
 /-- The state after the caching of one slot.
 
 The root of the state goes into the circular buffer of state roots.
@@ -40,20 +52,20 @@ The latest block header, if its state root is still empty, takes that root.
 
 The root of the latest block header then goes into the circular buffer of block roots.
 
-Gloas also records the availability of the payload, which EthLib does not yet have here. -/
+From Gloas the payload of the next slot is then marked as not yet available. -/
 def processSlot (state : BeaconState preset fork) :
-    Except TransitionError (BeaconState preset fork) :=
-  if .glamsterdam ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
-  else do
-    let index := (state.slot % preset.SLOTS_PER_HISTORICAL_ROOT).toNat
-    let stateRoot ← liftSsz (hashTreeRoot state)
-    let state := { state with stateRoots := state.stateRoots.set! index stateRoot }
-    let header := state.latestBlockHeader
-    let header :=
-      if header.stateRoot = Vector.replicate 32 0 then { header with stateRoot } else header
-    let state := { state with latestBlockHeader := header }
-    let blockRoot ← liftSsz (hashTreeRoot header)
-    return { state with blockRoots := state.blockRoots.set! index blockRoot }
+    Except TransitionError (BeaconState preset fork) := do
+  let index := (state.slot % preset.SLOTS_PER_HISTORICAL_ROOT).toNat
+  let stateRoot ← liftSsz (hashTreeRoot state)
+  let state := { state with stateRoots := state.stateRoots.set! index stateRoot }
+  let header := state.latestBlockHeader
+  let header :=
+    if header.stateRoot = Vector.replicate 32 0 then { header with stateRoot } else header
+  let state := { state with latestBlockHeader := header }
+  let blockRoot ← liftSsz (hashTreeRoot header)
+  let state := { state with blockRoots := state.blockRoots.set! index blockRoot }
+  if gloas : .glamsterdam ≤ fork then liftAccessor (unsetNextPayloadAvailability state gloas)
+  else return state
 
 /-- From Altair: the state after the epoch transition.
 

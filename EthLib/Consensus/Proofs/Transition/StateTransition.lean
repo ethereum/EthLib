@@ -8,6 +8,8 @@ public import EthLib.Consensus.Transition.StateTransition
 
 The caching of a slot keeps the slot, and each slot step moves it on by exactly one.
 
+From Gloas the caching also marks the payload of the next slot as not yet available.
+
 Advancing to a slot fails when the slot is not after that of the state.
 
 When it succeeds, the state ends exactly at that slot.
@@ -29,16 +31,62 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
   {engine : ExecutionEngine preset fork}
   {state after : BeaconState preset fork}
 
-/-- The caching of a slot succeeds only before Gloas, and keeps the slot. -/
-theorem processSlot_slot (computed : processSlot state = .ok after) :
-    fork < .glamsterdam ∧ after.slot = state.slot := by
+/-- Clearing the availability of the next payload changes only the availability bits.
+
+Their bit at the slot after the state's slot, in the circular buffer, is then false. -/
+theorem unsetNextPayloadAvailability_ok {gloas : .glamsterdam ≤ fork}
+    (computed : unsetNextPayloadAvailability state gloas = .ok after) :
+    ∃ next : Slot, next.toNat = state.slot.toNat + 1 ∧
+      after = { state with executionPayloadAvailability := fun _ =>
+        ⟨(state.executionPayloadAvailability gloas).bits.set!
+          (next % preset.SLOTS_PER_HISTORICAL_ROOT).toNat false⟩ } := by
+  simp only [unsetNextPayloadAvailability, bind_ok_iff, liftArith, mapError_ok_iff,
+    addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨next, ⟨_, sum⟩, rfl⟩ := computed
+  exact ⟨next, by simpa using sum, rfl⟩
+
+/-- The caching of a slot keeps every field but the roots and, from Gloas, the availability bits.
+
+The result is the state with those fields replaced. -/
+theorem processSlot_ok (computed : processSlot state = .ok after) :
+    ∃ (stateRoots blockRoots : Vector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+      (header : BeaconBlockHeader)
+      (availability : Since .glamsterdam fork (ExecutionPayloadAvailability preset)),
+      after = { state with
+        stateRoots := stateRoots
+        blockRoots := blockRoots
+        latestBlockHeader := header
+        executionPayloadAvailability := availability } := by
   unfold processSlot at computed
+  simp only [bind_ok_iff, liftSsz_ok] at computed
+  obtain ⟨_, _, _, _, computed⟩ := computed
   split at computed
-  · cases computed
-  rename_i gloas
-  simp only [bind_ok_iff, liftSsz_ok, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, rfl⟩ := computed
-  exact ⟨Nat.lt_of_not_le gloas, rfl⟩
+  · obtain ⟨_, _, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
+    exact ⟨_, _, _, _, rfl⟩
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨_, _, _, _, rfl⟩
+
+/-- The caching of a slot keeps the slot. -/
+theorem processSlot_slot (computed : processSlot state = .ok after) : after.slot = state.slot := by
+  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
+  rfl
+
+/-- From Gloas, after the caching of a slot, the payload of the next slot is not available.
+
+Its bit is the one at the next slot modulo the length of the circular buffer. -/
+theorem processSlot_nextPayloadUnavailable (gloas : .glamsterdam ≤ fork)
+    (positive : 0 < preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    (computed : processSlot state = .ok after) :
+    (after.executionPayloadAvailability gloas).bits[(state.slot.toNat + 1) %
+      preset.SLOTS_PER_HISTORICAL_ROOT.toNat]'(Nat.mod_lt _ positive) = false := by
+  unfold processSlot at computed
+  simp only [bind_ok_iff, liftSsz_ok] at computed
+  obtain ⟨_, _, _, _, computed⟩ := computed
+  split at computed
+  · obtain ⟨next, sum, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
+    simp [UInt64.toNat_mod, sum]
+  · contradiction
 
 /-- One slot step moves the slot on by exactly one. -/
 theorem advanceSlot_slot (computed : advanceSlot config state = .ok after) :

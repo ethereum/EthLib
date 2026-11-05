@@ -23,6 +23,11 @@ GROUPS = {
     "random/random": ("phase0", "altair", "bellatrix", "capella"),
 }
 
+# The Gloas slot cases that stay inside one epoch.
+# EthLib runs only these at Gloas until the epoch transition runs there.
+GLOAS_SLOTS = ("slots_1", "slots_2", "execution_payload_availability_reset_from_set",
+               "execution_payload_availability_reset_from_unset")
+
 # The release archives that hold the cases.
 ARCHIVES = {
     "minimal": "consensus-specs/v1.7.0-beta.4/minimal",
@@ -93,6 +98,12 @@ def _archive_cases() -> list:
                 cases.append(pytest.param(preset, fork, f"{runner}/{handler}", case,
                                           id=f"{preset}/{case.relative_to(base).as_posix()}",
                                           marks=pytest.mark.archive(name)))
+        base = archives.unpack(name, f"tests/{preset}/gloas/sanity/slots") / "tests" / preset
+        for slot_case in GLOAS_SLOTS:
+            case = base / "gloas" / "sanity" / "slots" / "pyspec_tests" / slot_case
+            cases.append(pytest.param(preset, "gloas", "sanity/slots", case,
+                                      id=f"{preset}/{case.relative_to(base).as_posix()}",
+                                      marks=pytest.mark.archive(name)))
     # An empty list would skip the test in silence, so a wrong path in an archive fails here.
     if not cases:
         raise LookupError("the archives hold no sanity, finality or random case")
@@ -110,7 +121,8 @@ def test_digests():
 
 @pytest.mark.parametrize("preset, fork, group, case", _cases())
 def test_case(preset, fork, group, case):
-    assert runs(fork, group)
+    assert runs(fork, group) or (fork == "gloas" and group == "sanity/slots"
+                                 and case.name in GLOAS_SLOTS)
     run_case(preset, fork, group, case)
 
 

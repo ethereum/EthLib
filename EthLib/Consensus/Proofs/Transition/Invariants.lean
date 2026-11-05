@@ -605,11 +605,7 @@ theorem getCurrentEpoch_toNat (state : BeaconState preset fork) :
   simp [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div]
 
 theorem frame_processSlot (computed : processSlot state = .ok after) : Frame state after := by
-  unfold processSlot at computed
-  split at computed
-  · cases computed
-  simp only [bind_ok_iff, liftSsz_ok, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, rfl⟩ := computed
+  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok computed
   exact Frame.of_validators ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl
 
 /-- Before Altair, one slot keeps the invariant, and the finalized epoch does not decrease.
