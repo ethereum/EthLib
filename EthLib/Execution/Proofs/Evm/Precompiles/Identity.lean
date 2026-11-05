@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.Identity
-public import EthLib.Execution.Proofs.Evm.Words
+public import EthLib.Execution.Proofs.Evm.Machine.Words
 
 /-!
 # Proofs: `Evm.Precompiles.Identity`

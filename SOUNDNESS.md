@@ -539,7 +539,7 @@ The 38 test cases of EIP-145 pin SHL, SHR and SAR.
 No theorem relates the definitions to the Yellow Paper.
 The stack, the frame with its program counter and gas meter, and memory are modelled.
 So are the instructions that read only the stack, memory, call data, code and return data.
-They are in `Execution/Evm/StackOnly.lean` and `Execution/Evm/MemoryData.lean`.
+They are in `Execution/Evm/Instructions/StackOnly.lean` and `Execution/Evm/Instructions/MemoryData.lean`.
 Storage, calls and the world state are not modelled yet.
 
 ### SHA-256 precompile
@@ -557,7 +557,7 @@ No theorem relates the module to the execution-specs code it follows, which call
 
 These theorems state agreement with EIP-198 and EIP-7823.
 `compute_eq_pow_mod` (`Execution/Proofs/Evm/Precompiles/Modexp/Core.lean`) proves that the output is `BASE ^ EXPONENT mod MODULUS`, or 0 for a zero modulus.
-It rests on `powMod_eq` (`Execution/Proofs/Evm/PowMod.lean`), which proves that the square-and-multiply loop equals `b ^ e % m`.
+It rests on `powMod_eq` (`Execution/Proofs/Evm/Instructions/PowMod.lean`), which proves that the square-and-multiply loop equals `b ^ e % m`.
 `modexp_outOfGas` and `modexp_ok` (`Execution/Proofs/Evm/Precompiles/Modexp/Core.lean`) prove that, with every length within the EIP-7823 bound, a call fails exactly when the gas is below the price.
 
 No theorem relates the module to the execution-specs code it follows.

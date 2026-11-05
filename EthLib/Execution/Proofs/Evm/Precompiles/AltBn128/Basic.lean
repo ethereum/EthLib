@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.AltBn128
-public import EthLib.Execution.Proofs.Evm.Memory
+public import EthLib.Execution.Proofs.Evm.Machine.Memory
 public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Base.Proofs.MapM
 

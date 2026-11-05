@@ -366,7 +366,8 @@ less.
 ### Proofs
 
 The proofs are in `EthLib/Execution/Proofs/Evm/Precompiles/Modexp/`.
-The loop of square-and-multiply equals `b ^ e % m` (`powMod_eq`, in `Proofs/Evm/PowMod.lean`).
+The loop of square-and-multiply equals `b ^ e % m`
+(`powMod_eq`, in `Proofs/Evm/Instructions/PowMod.lean`).
 So the output is `BASE ^ EXPONENT mod MODULUS`, or 0 for a zero modulus (`compute_eq_pow_mod`), on
 exactly `len_mod` bytes (`modexp_ok_size`).
 Zero bytes appended to the input change nothing (`modexp_append_zeros`), and neither does data past

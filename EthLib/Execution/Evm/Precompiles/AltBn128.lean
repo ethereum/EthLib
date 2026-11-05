@@ -3,7 +3,7 @@ module
 public import EthLib.Base.BigEndian
 public import EthLib.Base.Fork
 public import EthLib.Cryptography.AltBn128.Pairing
-public import EthLib.Execution.Evm.Memory
+public import EthLib.Execution.Evm.Machine.Memory
 
 /-!
 # `Evm.Precompiles.AltBn128`

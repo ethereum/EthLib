@@ -2,7 +2,7 @@ module
 
 public import EthLib.Execution.Evm.Precompiles.Ripemd160
 public import EthLib.Cryptography.Proofs.Hash.Ripemd160
-public import EthLib.Execution.Proofs.Evm.Words
+public import EthLib.Execution.Proofs.Evm.Machine.Words
 
 /-!
 # Proofs: `Ripemd160`

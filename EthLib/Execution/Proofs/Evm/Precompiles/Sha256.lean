@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.Sha256
-public import EthLib.Execution.Proofs.Evm.Words
+public import EthLib.Execution.Proofs.Evm.Machine.Words
 public import EthLib.Cryptography.Proofs.Hash.Sha256
 
 /-!

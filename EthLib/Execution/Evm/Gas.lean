@@ -2,7 +2,7 @@ module
 
 public import EthLib.Base.Fork
 public import EthLib.Base.U256
-public import EthLib.Execution.Evm.Words
+public import EthLib.Execution.Evm.Machine.Words
 
 /-!
 # `Evm.Gas`

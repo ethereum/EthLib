@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Evm.Delegation
+public import EthLib.Execution.Evm.Call.Delegation
 public import EthLib.Execution.Transactions.Settlement
 
 /-!

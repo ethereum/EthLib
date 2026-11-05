@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Proofs.Evm.Precompiles.Modexp.Encoding
-public import EthLib.Execution.Proofs.Evm.PowMod
+public import EthLib.Execution.Proofs.Evm.Instructions.PowMod
 public import EthLib.Execution.Proofs.Evm.Precompiles.Modexp.Gas
 public import EthLib.Execution.Evm.Precompiles.Modexp.Core
 

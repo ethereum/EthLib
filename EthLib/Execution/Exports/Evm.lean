@@ -1,10 +1,10 @@
 module
 
 public import EthLib.Base.Exports
-public import EthLib.Execution.Evm.ContractAddress
+public import EthLib.Execution.Evm.Call.ContractAddress
 public import EthLib.Execution.Evm.Gas
 public import EthLib.Execution.Evm.Op
-public import EthLib.Execution.Evm.StackN
+public import EthLib.Execution.Evm.Instructions.StackN
 public import EthLib.Execution.Evm.Instructions.Arithmetic
 public import EthLib.Execution.Evm.Instructions.Bitwise
 public import EthLib.Execution.Evm.Instructions.Comparison

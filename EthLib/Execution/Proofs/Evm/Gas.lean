@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Gas
-public import EthLib.Execution.Proofs.Evm.Words
+public import EthLib.Execution.Proofs.Evm.Machine.Words
 
 /-!
 # Proofs: `Evm.Gas`

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Interpreter
-public import EthLib.Execution.Proofs.Evm.AccountData
+public import EthLib.Execution.Proofs.Evm.Instructions.AccountData
 public import EthLib.Execution.Proofs.Evm.Step
 public import EthLib.Execution.Proofs.State.Tracker
 
