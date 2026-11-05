@@ -289,11 +289,12 @@ def get_data_column_sidecars_from_column_sidecar(name: str, fork: str, sidecar: 
 
 
 def process_operation(name: str, fork: str, handler: str, pre: bytes, operation: bytes,
-                      verify: bool = True, config: dict | None = None) -> bytes:
+                      verify: bool = True, config: dict | None = None,
+                      execution_valid: bool = True) -> bytes:
     """The SSZ bytes of a beacon state after one block operation, or TransitionError."""
     replacements = json.dumps(config).encode() if config else b""
     return _native.consensus_process_operation(name, fork, handler, pre, operation, replacements,
-                                               verify)
+                                               verify, execution_valid)
 
 
 def process_epoch(name: str, fork: str, handler: str, pre: bytes,

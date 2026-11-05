@@ -216,6 +216,29 @@ instance {preset : Preset} {fork : Fork} : SszType (ExecutionPayloadHeader prese
 
 end ExecutionPayloadHeader
 
+/-- The execution payload header whose fields are all zero or empty.
+
+The beacon state holds it until the first payload. -/
+def ExecutionPayloadHeader.empty (preset : Preset) (fork : Fork) :
+    ExecutionPayloadHeader preset fork where
+  parentHash := Vector.replicate 32 0
+  feeRecipient := Vector.replicate 20 0
+  stateRoot := Vector.replicate 32 0
+  receiptsRoot := Vector.replicate 32 0
+  logsBloom := Vector.replicate _ 0
+  prevRandao := Vector.replicate 32 0
+  blockNumber := 0
+  gasLimit := 0
+  gasUsed := 0
+  timestamp := 0
+  extraData := ⟨#[], Nat.zero_le _⟩
+  baseFeePerGas := 0
+  blockHash := Vector.replicate 32 0
+  transactionsRoot := Vector.replicate 32 0
+  withdrawalsRoot := fun _ => Vector.replicate 32 0
+  blobGasUsed := fun _ => 0
+  excessBlobGas := fun _ => 0
+
 /-- The header of a payload: its fields, with the transactions and withdrawals as their roots. -/
 def ExecutionPayload.header {preset : Preset} {fork : Fork}
     (payload : ExecutionPayload preset fork) : Except Err (ExecutionPayloadHeader preset fork) := do

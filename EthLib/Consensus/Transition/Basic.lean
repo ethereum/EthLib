@@ -71,7 +71,7 @@ inductive TransitionError where
   | bidNotCovered (builder : BuilderIndex)
   /-- From Gloas: a bid is not signed by its builder. -/
   | invalidBidSignature
-  /-- From Gloas: a bid commits to more blobs than a block may hold. -/
+  /-- From Deneb: a block, or from Gloas its bid, commits to more blobs than a block may hold. -/
   | tooManyBlobCommitments
   /-- From Gloas: a bid is not for the slot of the state. -/
   | bidWrongSlot (bidSlot stateSlot : Slot)
@@ -141,6 +141,14 @@ inductive TransitionError where
   | invalidBlockSignature
   /-- The state root of a block is not the root of the state after it. -/
   | wrongStateRoot
+  /-- From Bellatrix: the parent hash of a payload is not the block hash of the latest payload. -/
+  | wrongPayloadParentHash
+  /-- From Bellatrix: a payload does not read the RANDAO mix of the current epoch. -/
+  | wrongPayloadRandao
+  /-- From Bellatrix: the time of a payload is not the time of the slot of the state. -/
+  | wrongPayloadTimestamp (timestamp expected : UInt64)
+  /-- From Bellatrix: the execution layer rejects a payload. -/
+  | invalidExecutionPayload
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -209,6 +217,10 @@ def TransitionError.code : TransitionError → UInt32
   | .slotNotAfter .. => 53
   | .invalidBlockSignature => 54
   | .wrongStateRoot => 55
+  | .wrongPayloadParentHash => 66
+  | .wrongPayloadRandao => 67
+  | .wrongPayloadTimestamp .. => 68
+  | .invalidExecutionPayload => 69
 
 /-- An assertion of the rule: success when the condition holds, and the error otherwise. -/
 def ensure (condition : Prop) [Decidable condition] (error : TransitionError) :

@@ -148,27 +148,6 @@ def zeroBytes32 : Bytes32 := Vector.replicate 32 0
 def SyncCommittee.empty (preset : Preset) : SyncCommittee preset :=
   ⟨Vector.replicate _ (Vector.replicate 48 0), Vector.replicate 48 0⟩
 
-/-- The execution payload header whose fields are all zero or empty. -/
-def ExecutionPayloadHeader.empty (preset : Preset) (fork : Fork) :
-    ExecutionPayloadHeader preset fork where
-  parentHash := zeroBytes32
-  feeRecipient := Vector.replicate 20 0
-  stateRoot := zeroBytes32
-  receiptsRoot := zeroBytes32
-  logsBloom := Vector.replicate _ 0
-  prevRandao := zeroBytes32
-  blockNumber := 0
-  gasLimit := 0
-  gasUsed := 0
-  timestamp := 0
-  extraData := ⟨#[], Nat.zero_le _⟩
-  baseFeePerGas := 0
-  blockHash := zeroBytes32
-  transactionsRoot := zeroBytes32
-  withdrawalsRoot := fun _ => zeroBytes32
-  blobGasUsed := fun _ => 0
-  excessBlobGas := fun _ => 0
-
 /-- The execution payload header of Capella with the fields that a later header shares. -/
 def ExecutionPayloadHeader.toCapella {preset : Preset} {fork : Fork} (capella : .shapella ≤ fork)
     (header : ExecutionPayloadHeader preset fork) : ExecutionPayloadHeader preset .shapella where

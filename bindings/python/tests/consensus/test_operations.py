@@ -19,7 +19,7 @@ FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "operation
 # Gloas also cancels the builder payments of a slashed proposer, which EthLib does not hold yet,
 # so the slashings stop at Fulu.
 # Altair changes attestations and new validators, and Deneb the signature of exits.
-# Gloas changes the withdrawals.
+# Gloas changes the withdrawals, and moves the execution payload out of the block.
 HANDLERS = {
     "block_header": ("block", ("phase0", "altair", "bellatrix", "capella", "deneb", "electra",
                                "fulu")),
@@ -32,6 +32,7 @@ HANDLERS = {
     "attestation": ("attestation", ("phase0",)),
     "deposit": ("deposit", ("phase0",)),
     "voluntary_exit": ("voluntary_exit", ("phase0", "altair", "bellatrix", "capella")),
+    "execution_payload": ("body", ("bellatrix", "capella", "deneb", "electra", "fulu")),
     "withdrawals": ("execution_payload", ("capella", "deneb", "electra", "fulu")),
     "bls_to_execution_change": ("address_change", ("capella", "deneb", "electra", "fulu")),
     "payload_attestation": ("payload_attestation", ("gloas",)),
@@ -63,15 +64,19 @@ def run_case(preset: str, fork: str, handler: str, case: Path) -> None:
     config_file = case / "config.yaml"
     config = (replacements(YAML(typ="safe").load(config_file.read_text()), preset)
               if config_file.exists() else None)
+    # The answer of the execution layer to a payload, which the case fixes.
+    execution = case / "execution.yaml"
+    valid = (YAML(typ="safe").load(execution.read_text())["execution_valid"]
+             if execution.exists() else True)
     post = case / "post.ssz_snappy"
     if post.exists():
         got = consensus.process_operation(preset, FORKS[fork], handler, pre, operation,
-                                          setting != 2, config)
+                                          setting != 2, config, valid)
         assert got == snappy.decompress(post.read_bytes())
     else:
         with pytest.raises(consensus.TransitionError):
             consensus.process_operation(preset, FORKS[fork], handler, pre, operation, setting != 2,
-                                        config)
+                                        config, valid)
 
 
 def _cases() -> list:
@@ -138,4 +143,22 @@ def test_operation_not_yet_specified_at_gloas():
 def test_undecodable_state():
     with pytest.raises(consensus.TransitionError) as info:
         consensus.process_operation("minimal", "phase0", "block_header", b"", b"")
+    assert info.value.code == 0
+
+
+def test_payload_rejected_by_the_execution_layer():
+    # A payload that every check of the beacon chain accepts fails when the execution layer says no.
+    case = (FILES / "minimal" / "bellatrix" / "operations" / "execution_payload" / "pyspec_tests"
+            / "success_regular_payload")
+    pre = snappy.decompress((case / "pre.ssz_snappy").read_bytes())
+    body = snappy.decompress((case / "body.ssz_snappy").read_bytes())
+    with pytest.raises(consensus.TransitionError) as info:
+        consensus.process_operation("minimal", "bellatrix", "execution_payload", pre, body,
+                                    execution_valid=False)
+    assert info.value.code == 69
+
+
+def test_no_payload_before_bellatrix():
+    with pytest.raises(consensus.TransitionError) as info:
+        consensus.process_operation("minimal", "altair", "execution_payload", b"", b"")
     assert info.value.code == 0

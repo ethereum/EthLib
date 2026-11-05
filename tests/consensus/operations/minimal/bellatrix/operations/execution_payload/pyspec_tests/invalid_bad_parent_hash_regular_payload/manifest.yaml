@@ -1,0 +1,6 @@
+preset: minimal
+fork: bellatrix
+runner: operations
+handler: execution_payload
+suite: pyspec_tests
+case: invalid_bad_parent_hash_regular_payload
