@@ -79,14 +79,14 @@ variable {step : Evm fork Meter → Except EvmError (StepResult fork Meter)}
 
 /-- The loop leaves a stopped frame as it is. -/
 theorem runFrame_of_running_eq_false {evm : Evm fork Meter}
-    {within : GasMeter.gasLeft evm.gas ≤ bound} (stopped : evm.running = false) :
+    {within : GasMeter.gasHeld evm.gas ≤ bound} (stopped : evm.running = false) :
     runFrame step decreases bound runChild evm within = .ok evm := by
   rw [runFrame]
   simp [stopped]
 
 /-- A step that fails with an error that aborts makes the whole run fail with that error. -/
 theorem runFrame_of_step_eq_abort {evm : Evm fork Meter}
-    {within : GasMeter.gasLeft evm.gas ≤ bound} {e : EvmError}
+    {within : GasMeter.gasHeld evm.gas ≤ bound} {e : EvmError}
     (running : evm.running = true) (failed : step evm = .error e) (aborts : e.aborts = true) :
     runFrame step decreases bound runChild evm within = .error e := by
   rw [runFrame]
@@ -95,7 +95,7 @@ theorem runFrame_of_step_eq_abort {evm : Evm fork Meter}
 
 /-- A step that fails with any other error halts the frame exceptionally. -/
 theorem runFrame_of_step_eq_error {evm : Evm fork Meter}
-    {within : GasMeter.gasLeft evm.gas ≤ bound} {e : EvmError} (running : evm.running = true)
+    {within : GasMeter.gasHeld evm.gas ≤ bound} {e : EvmError} (running : evm.running = true)
     (failed : step evm = .error e) (halts : e.aborts = false) :
     runFrame step decreases bound runChild evm within = .ok (exceptionalHalt evm e) := by
   rw [runFrame]
@@ -104,11 +104,11 @@ theorem runFrame_of_step_eq_error {evm : Evm fork Meter}
 
 /-- A step that gives the next frame lets the loop go on from it. -/
 theorem runFrame_of_step_eq_next {evm after : Evm fork Meter}
-    {within : GasMeter.gasLeft evm.gas ≤ bound} (running : evm.running = true)
+    {within : GasMeter.gasHeld evm.gas ≤ bound} (running : evm.running = true)
     (next : step evm = .ok (.next after)) :
     runFrame step decreases bound runChild evm within =
       runFrame step decreases bound runChild after
-        (Nat.le_trans (gasLeft_le_of_measure_lt
+        (Nat.le_trans (gasHeld_le_of_measure_lt
           (show measure after < measure evm from decreases running next)) within) := by
   rw [runFrame]
   simp only [running, dite_true]
@@ -116,7 +116,7 @@ theorem runFrame_of_step_eq_next {evm after : Evm fork Meter}
   rfl
 
 /-- Every run that succeeds ends with a stopped frame. -/
-theorem running_runFrame {evm after : Evm fork Meter} {within : GasMeter.gasLeft evm.gas ≤ bound}
+theorem running_runFrame {evm after : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound}
     (h : runFrame step decreases bound runChild evm within = .ok after) :
     after.running = false := by
   fun_induction runFrame step decreases bound runChild evm within
@@ -130,9 +130,9 @@ theorem running_runFrame {evm after : Evm fork Meter} {within : GasMeter.gasLeft
 end Loop
 
 /-- An exceptional halt leaves no gas. -/
-theorem gasLeft_exceptionalHalt [LawfulGasMeter Meter] (evm : Evm fork Meter) (e : EvmError) :
-    GasMeter.gasLeft (exceptionalHalt evm e).gas = 0 :=
-  LawfulGasMeter.gasLeft_exhaust _
+theorem gasHeld_exceptionalHalt [LawfulGasMeter Meter] (evm : Evm fork Meter) (e : EvmError) :
+    GasMeter.gasHeld (exceptionalHalt evm e).gas = 0 :=
+  LawfulGasMeter.gasHeld_exhaust _
 
 /-- An exceptional halt drops the output and records the error. -/
 theorem exceptionalHalt_output (evm : Evm fork Meter) (e : EvmError) :

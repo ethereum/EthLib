@@ -117,7 +117,9 @@ It runs no message when the frame lacks the value, is too deep, or has the great
 
 Otherwise it accesses the new address, and the nonce of the frame grows by one.
 
-An address with code or a nonce gets no message. -/
+An address with code or a nonce gets no message.
+
+Otherwise the frame passes on its whole reservoir to the message. -/
 def launchCreate (evm : Evm fork Meter) (gas : Nat) (value : U256) (initCode : ByteArray)
     (salt : Option U256) : Except EvmError (StepResult fork Meter) :=
   let evm := { evm with returnData := .empty }
@@ -125,7 +127,7 @@ def launchCreate (evm : Evm fork Meter) (gas : Nat) (value : U256) (initCode : B
   let sender := evm.state.getAccount current
   if sender.balance < value ∨ sender.nonce = MAX_NONCE ∨
       evm.message.depth + 1 > STACK_DEPTH_LIMIT then
-    .next <$> skipCall evm gas
+    .next <$> skipCall evm gas 0
   else do
     let address ← creationAddress current sender.nonce salt initCode
     let evm := (accessAddress evm address).2
@@ -133,6 +135,8 @@ def launchCreate (evm : Evm fork Meter) (gas : Nat) (value : U256) (initCode : B
     let state ← (evm.state.incrementNonce fork current).mapError .state
     let evm := { evm with state }
     if deployable then
+      let reservoir := GasMeter.reservoir evm.gas
+      let evm := { evm with gas := GasMeter.drain evm.gas }
       let message : Message fork :=
         { blockEnv := evm.message.blockEnv
           txEnv := evm.message.txEnv
@@ -140,6 +144,7 @@ def launchCreate (evm : Evm fork Meter) (gas : Nat) (value : U256) (initCode : B
           target := none
           currentTarget := address
           gas
+          reservoir
           value
           data := .empty
           codeAddress := none
@@ -201,30 +206,30 @@ def messageInstruction (fork : Fork) (op : Op) :
 
 /-- A message with less gas than the frame paid, and a resume that adds the child's gas, decrease.
 
-The resume must give the caller's gas plus the child's gas left, and keep the caller running. -/
+The resume must give the gas that the caller and the child hold, and keep the caller running. -/
 theorem child_decreases [LawfulGasMeter Meter] {before caller : Evm fork Meter}
     {message : Message fork} {resume : Evm fork Meter → Except EvmError (Evm fork Meter)}
     {cost : Nat} (paid : Pays cost before caller) (lt : message.gas < cost)
     (running : before.running = true)
     (resumes : ∀ {child after}, resume child = .ok after →
-      GasMeter.gasLeft after.gas = GasMeter.gasLeft caller.gas + GasMeter.gasLeft child.gas ∧
+      GasMeter.gasHeld after.gas = GasMeter.gasHeld caller.gas + GasMeter.gasHeld child.gas ∧
         after.running = caller.running) :
     (StepResult.child caller message resume).Decreases before := by
-  have := paid.gasLeft
+  have := paid.gasHeld
   refine ⟨by omega, fun child after used resumed => ?_⟩
   obtain ⟨g, r⟩ := resumes resumed
   exact Pays.measure_lt ⟨by omega, r.trans paid.running⟩ running
 
-/-- The caller gets back exactly the gas left of the child of a creation, and keeps running. -/
-theorem resumeCreate_gasLeft [LawfulGasMeter Meter] {caller child after : Evm fork Meter}
+/-- The caller gets back exactly the gas that the child of a creation holds, and keeps running. -/
+theorem resumeCreate_gasHeld [LawfulGasMeter Meter] {caller child after : Evm fork Meter}
     {address : Address} (h : resumeCreate fork caller address child = .ok after) :
-    GasMeter.gasLeft after.gas = GasMeter.gasLeft caller.gas + GasMeter.gasLeft child.gas ∧
+    GasMeter.gasHeld after.gas = GasMeter.gasHeld caller.gas + GasMeter.gasHeld child.gas ∧
       after.running = caller.running := by
   obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
   cases h
   obtain ⟨_, -, h1⟩ := except_bind_eq_ok h1
   cases h1
-  exact ⟨gasLeft_incorporateChild caller child, running_incorporateChild caller child⟩
+  exact ⟨gasHeld_incorporateChild caller child, running_incorporateChild caller child⟩
 
 /-- A creation that paid more than the gas of its message lowers the measure. -/
 theorem launchCreate_decreases [LawfulGasMeter Meter] {before evm : Evm fork Meter}
@@ -235,7 +240,7 @@ theorem launchCreate_decreases [LawfulGasMeter Meter] {before evm : Evm fork Met
   unfold launchCreate at h
   dsimp only at h
   split at h
-  · cases hs : skipCall { evm with returnData := .empty } gas with
+  · cases hs : skipCall { evm with returnData := .empty } gas 0 with
     | error => simp [hs, Functor.map, Except.map] at h
     | ok after =>
       simp only [hs, Functor.map, Except.map, Except.ok.injEq] at h
@@ -251,7 +256,7 @@ theorem launchCreate_decreases [LawfulGasMeter Meter] {before evm : Evm fork Met
         access).mono (by omega)).congr rfl rfl
     split at h
     · cases h
-      exact child_decreases paid' lt running resumeCreate_gasLeft
+      exact child_decreases paid'.drain lt running resumeCreate_gasHeld
     · obtain ⟨_, hp, h⟩ := except_bind_eq_ok h
       cases h
       show measure _ < measure before

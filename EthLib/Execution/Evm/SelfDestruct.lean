@@ -152,12 +152,12 @@ theorem selfdestructOpStep_measure_lt [LawfulGasMeter Meter] {op : Op}
   dsimp only at h
   obtain ⟨e2, h2, h⟩ := except_bind_eq_ok h
   have paid := ((popWord_pays h1).trans (accessAddress_pays _ _)).trans (chargeGas_pays h2)
-  have := paid.gasLeft
+  have := paid.gasHeld
   unfold finishSelfdestruct at h
   split at h
   · cases h
   · obtain ⟨_, -, h⟩ := except_bind_eq_ok h
     cases h
-    exact measure_lt_of_stop (show GasMeter.gasLeft e2.gas ≤ _ by omega) rfl running
+    exact measure_lt_of_stop (show GasMeter.gasHeld e2.gas ≤ _ by omega) rfl running
 
 end EthLib.Execution.Evm

@@ -99,13 +99,13 @@ def touchedOnSuccess (fork : Fork) (caller child : Evm fork Meter) : Std.ExtTree
 
 /-- The calling frame after the message it ran ends with the frame `child`.
 
-The caller gets back the gas left of the child, and the state that the child leaves.
+The caller gets back the gas that the child holds, its reservoir, and the state it leaves.
 
 A child that succeeds also passes on its logs, its refund, its accounts to delete and its accesses.
 
 A child that fails passes on none of them. -/
 def incorporateChild (fork : Fork) (caller child : Evm fork Meter) : Evm fork Meter :=
-  let gas := GasMeter.credit caller.gas (GasMeter.gasLeft child.gas)
+  let gas := GasMeter.absorb caller.gas child.gas child.error.isNone
   if child.error.isNone then
     { caller with
       gas
@@ -124,12 +124,12 @@ def incorporateChild (fork : Fork) (caller child : Evm fork Meter) : Evm fork Me
       state := child.state
       substate := { caller.substate with touchedAccounts := touchedOnError fork caller child } }
 
-/-- The caller gets back exactly the gas left of the child. -/
-theorem gasLeft_incorporateChild [LawfulGasMeter Meter] (caller child : Evm fork Meter) :
-    GasMeter.gasLeft (incorporateChild fork caller child).gas =
-      GasMeter.gasLeft caller.gas + GasMeter.gasLeft child.gas := by
+/-- The caller gets back exactly the gas that the child holds. -/
+theorem gasHeld_incorporateChild [LawfulGasMeter Meter] (caller child : Evm fork Meter) :
+    GasMeter.gasHeld (incorporateChild fork caller child).gas =
+      GasMeter.gasHeld caller.gas + GasMeter.gasHeld child.gas := by
   unfold incorporateChild
-  split <;> exact LawfulGasMeter.gasLeft_credit _ _
+  split <;> exact LawfulGasMeter.gasHeld_absorb _ _ _
 
 /-- The caller runs after its callee exactly when it ran before. -/
 theorem running_incorporateChild (caller child : Evm fork Meter) :
@@ -187,11 +187,12 @@ def accessDelegation (evm : Evm fork Meter) (address : Address) :
     return (⟨delegate, code, true, accountAccessCost fork cold⟩, evm)
   | none => return (⟨address, code, false, 0⟩, evm)
 
-/-- The frame after a call that runs no message: it gets back `gas`, and pushes 0.
+/-- The frame after a call that runs no message: it gets back `gas` and `reservoir`, and pushes 0.
 
 The return data is empty. -/
-def skipCall (evm : Evm fork Meter) (gas : Nat) : Except EvmError (Evm fork Meter) := do
-  let evm ← pushWord { evm with gas := GasMeter.credit evm.gas gas, returnData := .empty } 0
+def skipCall (evm : Evm fork Meter) (gas reservoir : Nat) : Except EvmError (Evm fork Meter) := do
+  let evm ←
+    pushWord { evm with gas := GasMeter.credit evm.gas gas reservoir, returnData := .empty } 0
   return advance evm
 
 /-- The calling frame `caller` once its callee ends with the frame `child`.
@@ -212,11 +213,14 @@ def resumeCall (fork : Fork) (caller : Evm fork Meter) (outputStart outputSize :
 
 The call empties the return data.
 
-A frame at the greatest depth runs no message: it gets back the gas of the message. -/
+A frame at the greatest depth runs no message.
+
+It gets back the gas and the reservoir of the message. -/
 def genericCall (evm : Evm fork Meter) (message : Message fork) (outputStart outputSize : U256) :
     Except EvmError (StepResult fork Meter) :=
   let evm := { evm with returnData := .empty }
-  if evm.message.depth + 1 > STACK_DEPTH_LIMIT then .next <$> skipCall evm message.gas
+  if evm.message.depth + 1 > STACK_DEPTH_LIMIT then
+    .next <$> skipCall evm message.gas message.reservoir
   else .ok (.child evm message (resumeCall fork evm outputStart outputSize))
 
 /-- The operands of a call. -/
@@ -271,17 +275,19 @@ def callExtraGas (fork : Fork) (kind : CallKind) (state : State.TransactionState
 
 CALL with a value fails in a frame that must not change the state.
 
-Then memory grows by `expandBy` bytes.
+Then memory grows by `expandBy` bytes, and the frame passes on its whole reservoir.
 
-A frame that lacks the value runs no message. -/
+A frame that lacks the value runs no message, and gets back the gas and the reservoir. -/
 def finishCall (kind : CallKind) (call : CallOperands) (callee : Callee) (subCall expandBy : Nat)
     (evm : Evm fork Meter) : Except EvmError (StepResult fork Meter) :=
   if kind = .call ∧ evm.message.isStatic ∧ call.value ≠ 0 then .error .writeInStaticContext
   else
-    let evm := { evm with memory := memoryExtend evm.memory expandBy }
+    let reservoir := GasMeter.reservoir evm.gas
+    let evm :=
+      { evm with memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
     let current := evm.message.currentTarget
     if (evm.state.getAccount current).balance < call.value then
-      .next <$> skipCall evm subCall
+      .next <$> skipCall evm subCall reservoir
     else
       let to := if kind = .call ∨ kind = .staticcall then call.address else current
       let message : Message fork :=
@@ -291,6 +297,7 @@ def finishCall (kind : CallKind) (call : CallOperands) (callee : Callee) (subCal
           target := some to
           currentTarget := to
           gas := subCall
+          reservoir
           value := if kind = .delegatecall then evm.message.value else call.value
           data := memoryReadBytes evm.memory call.inputStart.toNat call.inputSize.toNat
           codeAddress := some callee.codeAddress
@@ -366,34 +373,34 @@ theorem accessDelegation_pays {evm after : Evm fork Meter} {address : Address} {
     exact .of_eq rfl rfl
 
 /-- A call that runs no message gets back exactly its gas, and keeps running. -/
-theorem skipCall_gasLeft [LawfulGasMeter Meter] {evm after : Evm fork Meter} {gas : Nat}
-    (h : skipCall evm gas = .ok after) :
-    GasMeter.gasLeft after.gas = GasMeter.gasLeft evm.gas + gas ∧ after.running = evm.running := by
+theorem skipCall_gasHeld [LawfulGasMeter Meter] {evm after : Evm fork Meter}
+    {gas reservoir : Nat} (h : skipCall evm gas reservoir = .ok after) :
+    GasMeter.gasHeld after.gas = GasMeter.gasHeld evm.gas + gas ∧ after.running = evm.running := by
   obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
   cases h
   obtain ⟨_, -, h1⟩ := except_bind_eq_ok h1
   cases h1
-  exact ⟨LawfulGasMeter.gasLeft_credit _ _, rfl⟩
+  exact ⟨LawfulGasMeter.gasHeld_credit _ _ _, rfl⟩
 
-/-- The caller gets back exactly the gas left of its callee, and keeps running. -/
-theorem resumeCall_gasLeft [LawfulGasMeter Meter] {caller child after : Evm fork Meter}
+/-- The caller gets back exactly the gas that its callee holds, and keeps running. -/
+theorem resumeCall_gasHeld [LawfulGasMeter Meter] {caller child after : Evm fork Meter}
     {outputStart outputSize : U256}
     (h : resumeCall fork caller outputStart outputSize child = .ok after) :
-    GasMeter.gasLeft after.gas = GasMeter.gasLeft caller.gas + GasMeter.gasLeft child.gas ∧
+    GasMeter.gasHeld after.gas = GasMeter.gasHeld caller.gas + GasMeter.gasHeld child.gas ∧
       after.running = caller.running := by
   obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
   cases h
   obtain ⟨_, -, h1⟩ := except_bind_eq_ok h1
   cases h1
-  exact ⟨gasLeft_incorporateChild caller child, running_incorporateChild caller child⟩
+  exact ⟨gasHeld_incorporateChild caller child, running_incorporateChild caller child⟩
 
 /-- A call that runs no message after it paid more than its gas lowers the measure. -/
 theorem skipCall_measure_lt [LawfulGasMeter Meter] {before evm after : Evm fork Meter}
-    {gas cost : Nat} (paid : Pays cost before evm) (lt : gas < cost)
-    (running : before.running = true) (h : skipCall evm gas = .ok after) :
+    {gas reservoir cost : Nat} (paid : Pays cost before evm) (lt : gas < cost)
+    (running : before.running = true) (h : skipCall evm gas reservoir = .ok after) :
     measure after < measure before := by
-  have := paid.gasLeft
-  obtain ⟨g, r⟩ := skipCall_gasLeft h
+  have := paid.gasHeld
+  obtain ⟨g, r⟩ := skipCall_gasHeld h
   exact Pays.measure_lt ⟨by omega, r.trans paid.running⟩ running
 
 /-- A call that paid more than the gas of its message lowers the measure of the frame. -/
@@ -403,11 +410,11 @@ theorem genericCall_decreases [LawfulGasMeter Meter] {before evm : Evm fork Mete
     (running : before.running = true)
     (h : genericCall evm message outputStart outputSize = .ok result) :
     result.Decreases before := by
-  have := paid.gasLeft
+  have := paid.gasHeld
   unfold genericCall at h
   dsimp only at h
   split at h
-  · cases hs : skipCall { evm with returnData := .empty } message.gas with
+  · cases hs : skipCall { evm with returnData := .empty } message.gas message.reservoir with
     | error => simp [hs, Functor.map, Except.map] at h
     | ok after =>
       simp only [hs, Functor.map, Except.map, Except.ok.injEq] at h
@@ -416,7 +423,7 @@ theorem genericCall_decreases [LawfulGasMeter Meter] {before evm : Evm fork Mete
       exact paid.congr rfl rfl
   · cases h
     refine ⟨by omega, fun child after used resumed => ?_⟩
-    obtain ⟨g, r⟩ := resumeCall_gasLeft resumed
+    obtain ⟨g, r⟩ := resumeCall_gasHeld resumed
     exact Pays.measure_lt ⟨by simp only at g; omega, r.trans paid.running⟩ running
 
 /-- A call that paid more than the gas it passes on lowers the measure of the frame. -/
@@ -431,15 +438,19 @@ theorem finishCall_decreases [LawfulGasMeter Meter] {kind : CallKind} {call : Ca
   · cases h
   · dsimp only at h
     split at h
-    · cases hs : skipCall { evm with memory := memoryExtend evm.memory expandBy } subCall with
+    · cases hs : skipCall
+          { evm with memory := memoryExtend evm.memory expandBy, gas := GasMeter.drain evm.gas }
+          subCall (GasMeter.reservoir evm.gas) with
       | error => simp [hs, Functor.map, Except.map] at h
       | ok after =>
         simp only [hs, Functor.map, Except.map, Except.ok.injEq] at h
         subst h
         refine skipCall_measure_lt ?_ lt running hs
-        exact paid.congr rfl rfl
+        exact (paid.congr (c := { evm with memory := memoryExtend evm.memory expandBy })
+          rfl rfl).drain
     · refine genericCall_decreases ?_ lt running h
-      exact paid.congr rfl rfl
+      exact (paid.congr (c := { evm with memory := memoryExtend evm.memory expandBy })
+        rfl rfl).drain
 
 /-- The price of the access of a call is at least 1 at every fork. -/
 theorem one_le_callBaseCost (fork : Fork) (cold : Bool) : 1 ≤ callBaseCost fork cold := by

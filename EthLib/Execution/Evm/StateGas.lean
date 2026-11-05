@@ -143,13 +143,17 @@ def repay (meter : StateGasMeter) : StateGasMeter :=
     reservoir := meter.reservoir - back
     spill := meter.spill - back }
 
+/-- The meter of a frame that passes on its whole reservoir to a message. -/
+def drain (meter : StateGasMeter) : StateGasMeter :=
+  { meter with reservoir := 0 }
+
 /-- The caller and the child at the start of a call that passes on `gas` execution gas.
 
 The caller has already paid `gas`.
 
 The child gets the whole reservoir of the caller, which keeps none of it. -/
 def enter (meter : StateGasMeter) (gas : Nat) : StateGasMeter × StateGasMeter :=
-  ({ meter with reservoir := 0 }, start gas meter.reservoir)
+  (meter.drain, start gas meter.reservoir)
 
 /-- The caller after a child that never ran: it gets back the gas and the reservoir of the child. -/
 def cancel (caller child : StateGasMeter) : StateGasMeter :=
@@ -171,6 +175,12 @@ def absorb (caller child : StateGasMeter) (succeeded : Bool) : StateGasMeter :=
       reservoir := caller.reservoir + child.reservoir
       spill := caller.spill + child.spill }
   if succeeded then merged.repay else merged
+
+/-- The execution gas that the meter holds: the gas left, and the spill a rollback credits back.
+
+Charges of state gas, refills and rollbacks keep it, and a charge of execution gas lowers it. -/
+def gasHeld (meter : StateGasMeter) : Nat :=
+  meter.gasLeft + meter.spill
 
 /-- The net state gas that the frame has used since it started, which can be negative.
 
