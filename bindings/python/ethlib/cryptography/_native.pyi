@@ -371,6 +371,22 @@ def consensus_compute_shuffled_index(name: str, index: int, count: int, seed: by
     """The shuffled position of one index, which must be below the count."""
     ...
 
+def consensus_reqresp_protocol_ids(fork: str) -> bytes:
+    """The protocol IDs of a fork."""
+    ...
+
+def consensus_reqresp_parse_protocol_id(text: str) -> bytes:
+    """The protocol and the version that an ID names, if it names one."""
+    ...
+
+def consensus_reqresp_message(name: str, fork: str, type: str, data: bytes) -> bytes:
+    """The root of the message that the bytes encode, then the bytes of that message."""
+    ...
+
+def consensus_compute_min_epochs_for_block_requests(name: str) -> int:
+    """The fewest epochs back from the current one over which a node must serve blocks."""
+    ...
+
 def consensus_gossip_topics(name: str, fork: str) -> bytes:
     """The gossip topics of a fork, in the order of the fork that adds each one."""
     ...

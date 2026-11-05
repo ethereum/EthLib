@@ -1,4 +1,4 @@
-"""The consensus layer: presets, configurations, containers, the shuffle, custody and gossip."""
+"""The consensus layer: presets, configurations, containers, the shuffle, custody and networking."""
 
 import json
 from typing import Any
@@ -70,6 +70,28 @@ def compute_shuffled_index(index: int, count: int, seed: bytes, name: str = "mai
     return _native.consensus_compute_shuffled_index(name, index, count, seed)
 
 
+def reqresp_protocol_ids(fork: str) -> list:
+    """The request and response protocol IDs of a fork."""
+    return json.loads(_native.consensus_reqresp_protocol_ids(fork))
+
+
+def reqresp_parse_protocol_id(text: str) -> tuple[str, int]:
+    """The protocol name and the version that a protocol ID names."""
+    name, version = json.loads(_native.consensus_reqresp_parse_protocol_id(text))
+    return name, version
+
+
+def reqresp_message(name: str, fork: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
+    """The root of a request or response message that SSZ bytes encode, and its bytes again."""
+    out = _native.consensus_reqresp_message(name, fork, type_name, data)
+    return out[:32], out[32:]
+
+
+def compute_min_epochs_for_block_requests(name: str = "mainnet") -> int:
+    """The fewest epochs back from the current one over which a node must serve blocks."""
+    return _native.consensus_compute_min_epochs_for_block_requests(name)
+
+
 def gossip_topics(fork: str, name: str = "mainnet") -> list:
     """The names of the gossip topics of a fork."""
     return json.loads(_native.consensus_gossip_topics(name, fork))
@@ -112,6 +134,10 @@ __all__ = [
     "ssz_static",
     "compute_shuffled_permutation",
     "compute_shuffled_index",
+    "reqresp_protocol_ids",
+    "reqresp_parse_protocol_id",
+    "reqresp_message",
+    "compute_min_epochs_for_block_requests",
     "gossip_topics",
     "compute_subnet_for_attestation",
     "compute_subnet_for_blob_sidecar",
