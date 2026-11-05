@@ -383,8 +383,8 @@ They take two hypotheses on the setup.
   For the embedded setup, `TrustedSetup.ofHex_torsion` (`Proofs/Kzg/SetupTorsion/Embedded.lean`) proves it for all 4096 monomial points of `G1`, if the setup decodes.
   The kernel checks each point from its `x` coordinate.
   This is a recorded exception to the rule of a few seconds for concrete facts in [CONTRIBUTING.md](CONTRIBUTING.md#known-answers).
-  It costs 15 to 20 CPU-minutes per build and about as much per replay, in 16 modules.
-  Each module takes about one minute, 2.4 GB to build and 2.9 GB to replay.
+  It costs about 8 CPU-minutes per build and about as much per replay, in 16 modules.
+  Each module takes 20 to 50 seconds and 1.9 GB to elaborate, and 2.4 GB to replay.
   No theorem proves that the embedded setup decodes, so that stays an assumption.
   The Python suite gives two checks of it, both on compiled code.
   Each KZG vector runs an operation that first decodes the embedded setup.
