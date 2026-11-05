@@ -56,3 +56,4 @@ A caller of `modexp.modexp(data, gas)` now calls `run(fork, 0x05, data, gas)`, a
 - An integer argument out of its range raises `OverflowError`, as Python's own conversions to a C integer do ([#718](https://github.com/ethereum/EthLib/pull/718)).
   Before, an integer outside [0, 2^64), an EVM opcode above 255 and the range checks of the Python wrappers raised `ValueError`.
   A caller that caught `ValueError` for such an argument now catches `OverflowError`.
+- `consensus.verify_data_column_sidecar` takes the signed block before the configuration, in the order of its native export ([#729](https://github.com/ethereum/EthLib/pull/729)).

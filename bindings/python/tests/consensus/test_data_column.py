@@ -9,7 +9,7 @@ from ruamel.yaml import YAML
 
 from ethlib import consensus
 from ethlib.cryptography import _native
-from ethlib.errors import KzgError
+from ethlib.errors import KzgError, SszError
 from ethlib.networking import snappy
 
 from .containers import FORKS
@@ -134,7 +134,7 @@ def run_gossip_case(case: Path, preset: str) -> None:
             # The batch check raises on inputs it cannot read, which rejects the sidecar.
             kzg = False
         results = {
-            "shape": consensus.verify_data_column_sidecar(preset, fork, data, config, block),
+            "shape": consensus.verify_data_column_sidecar(preset, fork, data, block, config),
             "kzg": kzg,
         }
         if fork not in GLOAS:
@@ -233,17 +233,17 @@ def _first_message(case: Path) -> bytes:
 
 def test_sidecar_and_block_must_match():
     gloas = _first_message(_gossip_cases("gloas")[0].values[1])
-    # From Gloas a block of another root, or no block, is not the block of the sidecar.
-    with pytest.raises(Exception):
-        consensus.verify_data_column_sidecar("minimal", "glamsterdam", gloas, None, bytes(200))
-    with pytest.raises(Exception):
+    # From Gloas the check decodes the signed block, so bytes that are not one, or no block, fail.
+    with pytest.raises(SszError):
+        consensus.verify_data_column_sidecar("minimal", "glamsterdam", gloas, bytes(200))
+    with pytest.raises(KzgError):
         consensus.verify_data_column_sidecar_kzg_proofs("minimal", "glamsterdam", gloas)
     # No sidecar from Gloas has an inclusion proof.
-    with pytest.raises(Exception):
+    with pytest.raises(SszError):
         consensus.verify_data_column_sidecar_inclusion_proof("minimal", "glamsterdam", gloas)
     # Before Gloas the sidecar carries its commitments, so a block is refused.
     fulu = _first_message(_gossip_cases("fulu")[0].values[1])
-    with pytest.raises(Exception):
+    with pytest.raises(KzgError):
         consensus.verify_data_column_sidecar_kzg_proofs("minimal", "fusaka", fulu, b"\x00")
 
 
@@ -284,7 +284,7 @@ def test_sidecars_need_one_row_per_commitment():
     message = bytes(80) + (84).to_bytes(4, "little") + body
     block = (100).to_bytes(4, "little") + bytes(96) + message
     rows = [([bytes(CELL)] * 128, [bytes(PROOF)] * 128)] * 200
-    with pytest.raises(Exception):
+    with pytest.raises(SszError):
         consensus.get_data_column_sidecars_from_block("minimal", "fusaka", block, rows)
 
 
@@ -319,5 +319,5 @@ def test_compute_and_recover_matrix():
 
 
 def test_no_data_column_sidecar_before_fulu():
-    with pytest.raises(Exception):
+    with pytest.raises(SszError):
         consensus.verify_data_column_sidecar_inclusion_proof("minimal", "pectra", b"")
