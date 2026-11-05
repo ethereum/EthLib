@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.MapM
 public import EthLib.Engine.Block
 public import EthLib.Execution.Proofs.Transactions.Envelope
 public import EthLib.Cryptography.Proofs.Hash.Sha256
@@ -112,10 +113,6 @@ private theorem bind_eq_ok {ε α β : Type} {x : Except ε α} {f : α → Exce
     x >>= f = .ok y ↔ ∃ a, x = .ok a ∧ f a = .ok y := by
   cases x <;> simp [bind, Except.bind]
 
-private theorem mapError_eq_ok {ε ε' α : Type} {g : ε → ε'} {x : Except ε α} {y : α} :
-    x.mapError g = .ok y ↔ x = .ok y := by
-  cases x <;> simp [Except.mapError]
-
 private theorem toNat_toUInt64 {n : Nat} (h : n < 2 ^ 64) : n.toUInt64.toNat = n :=
   UInt64.toNat_ofNat_of_lt' h
 
@@ -134,7 +131,7 @@ theorem toBlock_shape {hFork : fork < .glamsterdam} {p : ExecutionPayload fork}
       b.header.difficulty = 0 ∧ b.header.nonce = Vector.replicate 8 0 ∧
       b.header.prevRandao = p.prevRandao := by
   simp only [toBlock, toBlockUnchecked, toHeader, checkBlockHash, bind_eq_ok, pure_eq_ok,
-    mapError_eq_ok] at h
+    mapError_ok_iff] at h
   obtain ⟨_, ⟨txs, -, root, -, _, ⟨wr, -, rfl⟩, rfl⟩, _, ⟨computed, hHash, hCheck⟩, rfl⟩ := h
   have hComputed : computed = p.blockHash := by
     split at hCheck
@@ -149,7 +146,7 @@ theorem ofBlock_toBlock (hParis : .paris ≤ fork) {hFork : fork < .glamsterdam}
     {requests : Since .pectra fork (List ByteArray)} {b : Block fork Transaction}
     (h : p.toBlock beacon requests hFork = .ok b) : ofBlock hParis b = some p := by
   simp only [toBlock, toBlockUnchecked, toHeader, checkBlockHash, bind_eq_ok, pure_eq_ok,
-    mapError_eq_ok] at h
+    mapError_ok_iff] at h
   obtain ⟨_, ⟨txs, hTxs, root, -, _, ⟨wr, -, rfl⟩, rfl⟩, _, ⟨computed, hHash, hCheck⟩, rfl⟩ := h
   have hComputed : computed = p.blockHash := by
     split at hCheck
