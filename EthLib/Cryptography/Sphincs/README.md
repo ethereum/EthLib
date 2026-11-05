@@ -192,6 +192,16 @@ Definitions that derive a secret take the derivation function as an argument too
   Otherwise the layer is one of three things (`layerRoot_binding`).
   It holds a chain value below the one that the key's honest signature reveals, or it encodes another input to that signature's codeword, or it is that signature.
   Only below an honest bottom layer signature does the proof reach the FORS openings.
+- The game where the scheme skips the halves it throws away (`Unforgeability/Ghost.lean`, `Unforgeability/SkipGame.lean`).
+  A query whose answer is thrown away can be dropped (`run_askGhost_evalDistEq_skipGhost`).
+  A later query at that point then gets a fresh uniform answer instead of an unseen one, which has the same law.
+  The scheme reads a tweakable hash only through half 0 (`signDerived_congrH`, `verifyWith_congrH`), so it can skip half 1 of each one.
+  The ideal game of halves and the game where the scheme skips those halves give a forgery the same chance (`prEvent_halved_eq_skip`).
+  Without this step, a later game would have to ask a point made of values that it keeps hidden.
+- The game with the public parameter fixed (`Unforgeability/FixedParam.lean`).
+  Key generation first draws the two halves of `P`, and the rest of the experiment runs with `P` the first (`skipExperiment_eq`, `prEvent_skip_eq`).
+  From the state holding them, VCVio's canonical relabelling applies to the graph of `P`.
+  The forging advantage is at most the chance of a forgery or a conflict in the relabelled game, plus `qH / 2^256` for each seed (`forgeAdvantage_le_relabel`).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
 
