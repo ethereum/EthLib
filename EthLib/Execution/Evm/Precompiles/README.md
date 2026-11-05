@@ -310,6 +310,64 @@ A call succeeds exactly when the gas covers the price, and then returns its call
 `bindings/python/tests/precompile/test_identity_absence.py` runs the IDENTITY calls of the
 execution-specs tests, and the calls of addresses that have no precompile.
 
+## alt_bn128
+
+The three alt_bn128 precompiles let zkSNARK verifiers work on the curve alt_bn128, also called
+BN254:
+
+- ECADD at `0x06` adds two points of `G_1`.
+- ECMUL at `0x07` multiplies a point of `G_1` by a 32-byte scalar.
+- ECPAIRING at `0x08` checks that the product of the pairings of pairs of points is 1.
+
+### Source
+
+[EIP-196](https://eips.ethereum.org/EIPS/eip-196) defines the addition and the multiplication, and
+[EIP-197](https://eips.ethereum.org/EIPS/eip-197) the pairing check, from Byzantium.
+[EIP-1108](https://eips.ethereum.org/EIPS/eip-1108) lowers the three prices from Istanbul.
+Every fork computes the same results, so only the prices depend on the fork.
+
+### Input and output
+
+```text
+ECADD input:  [ x1: 32 | y1: 32 | x2: 32 | y2: 32 ]
+ECMUL input:  [ x: 32 | y: 32 | scalar: 32 ]
+output:       [ x: 32 | y: 32 ]
+ECPAIRING:    k pairs of [ G_1 point: 64 | G_2 point: 128 ], and the word 1 or 0
+G_2 point:    [ x.c1: 32 | x.c0: 32 | y.c1: 32 | y.c0: 32 ]
+```
+
+Each coordinate is a 32-byte big-endian integer, and `(0, 0)` is the point at infinity.
+ECADD and ECMUL read their call data as if followed by zero bytes.
+The scalar of ECMUL is the full 32-byte integer, not reduced.
+
+### Errors and price
+
+The errors are `outOfGas`, `invalidFieldElement`, `notOnCurve`, `invalidInputLength` and
+`notInSubgroup`.
+ECPAIRING charges the gas before it checks that the call data is a whole number of 192-byte pairs.
+
+| Fork | ECADD | ECMUL | ECPAIRING on `k` pairs |
+| --- | --- | --- | --- |
+| Byzantium to Petersburg | 500 | 40000 | `100000 + 80000 * k` |
+| From Istanbul | 150 | 6000 | `45000 + 34000 * k` |
+
+### Proofs
+
+The proofs are in `EthLib/Execution/Proofs/Evm/Precompiles/AltBn128/`.
+ECADD and ECMUL fail exactly when the gas is below the price or a point does not decode
+(`ecadd_eq_ok_iff`, `ecmul_eq_ok_iff`), and they return 64 bytes (`ecadd_size`, `ecmul_size`).
+ECPAIRING succeeds exactly when the gas covers the price and every pair decodes
+(`ecpairing_eq_ok_iff`), and it returns the word 0 or 1 (`ecpairing_ok`).
+Every decoded point is on the curve (`bytesToG1_isOnCurve`).
+`Group.lean` shows that ECADD returns the sum of its points in the group of the curve, and ECMUL
+the product of its point by its scalar (`ecadd_toPoint`, `ecmul_toPoint`).
+
+### Test vectors
+
+`bindings/python/tests/precompile/test_alt_bn128.py` checks the three precompiles against py_ecc.
+`test_alt_bn128_eest.py` runs the cases of the EIP-196 and EIP-197 tests of execution-specs.
+Both run on each side of EIP-1108, at the prices of each fork.
+
 ## BLAKE2F
 
 BLAKE2F at `0x09` runs F, the compression function of BLAKE2b, for the number of rounds that the
@@ -361,3 +419,84 @@ The code transcribes §3.2 line by line instead.
 It runs only the rounds field of vector 8, because `2^32 - 1` rounds take too long.
 It also checks BLAKE2b-512 of the bytes `0x00` to `0x7f`, and vector 5 with `t1 = 1`.
 `test_blake2b_kat.py` hashes the BLAKE2b known answers with the precompile as F.
+
+## Point evaluation
+
+The point evaluation at `0x0a` checks a KZG proof that the polynomial of a blob takes the value `y`
+at the point `z`.
+A blob transaction names each blob by the versioned hash of its commitment.
+
+### Source
+
+The section "Point evaluation precompile" of
+[EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#point-evaluation-precompile), from Dencun.
+Every later fork computes the same result at the same price.
+
+### Input and output
+
+```text
+input:   [ versioned hash: 32 | z: 32 | y: 32 | commitment: 48 | proof: 48 ]
+output:  [ FIELD_ELEMENTS_PER_BLOB: 32 | BLS_MODULUS: 32 ]
+```
+
+The versioned hash must be `0x01` followed by bytes 1 to 31 of the SHA-256 of the commitment.
+The proof must pass the pairing check of EIP-4844:
+
+```text
+e(commitment - [y]_1, -[1]_2) * e(proof, [tau]_2 - [z]_2) = 1
+```
+
+### Errors and price
+
+The price is 50000.
+The call checks the length, then charges the gas, then checks the hash and the proof.
+The errors are `invalidInputLength`, `outOfGas`, `versionedHashMismatch`, `invalidCommitment`,
+`invalidFieldElement`, `invalidProof`, `invalidTrustedSetup` and `proofRejected`.
+
+### Proofs
+
+The proofs are in `EthLib/Execution/Proofs/Evm/Precompiles/PointEvaluation.lean`.
+A call succeeds exactly when the call data has 192 bytes, the gas covers 50000, the versioned hash
+names the commitment and the proof verifies (`pointEvaluation_eq_ok_iff`).
+Every successful call returns the same 64 bytes (`output_eq`).
+
+### Test vectors
+
+`bindings/python/tests/precompile/test_point_evaluation.py` turns each of the 122
+`verify_kzg_proof` vectors of `tests/cryptography/kzg` into a call.
+
+## P256VERIFY
+
+P256VERIFY at `0x100` checks an ECDSA signature over secp256r1, the curve of passkeys and secure
+enclaves.
+
+### Source
+
+[EIP-7951](https://eips.ethereum.org/EIPS/eip-7951), from Fusaka.
+Its verification algorithm is that of SEC 1 v2 §4.1.4.
+
+### Input and output
+
+```text
+input:   [ hash: 32 | r: 32 | s: 32 | qx: 32 | qy: 32 ]
+output:  the word 1 for a valid signature, and no bytes otherwise
+```
+
+A wrong length, a value out of range, an invalid key or an invalid signature gives empty output.
+
+### Errors and price
+
+The price is 6900.
+The call charges the gas first, and fails only with `outOfGas`.
+
+### Proofs
+
+The proofs are in `EthLib/Execution/Proofs/Evm/Precompiles/P256Verify.lean`.
+A call fails exactly when the gas is below 6900 (`p256Verify_eq_error_iff`).
+With enough gas, a wrong length gives empty output (`p256Verify_invalidInputLength`), and every
+output is the word 1 or empty (`p256Verify_ok`).
+A signature with `r` or `s` outside `(0, n)` never verifies (`verify_of_r_out`, `verify_of_s_out`).
+
+### Test vectors
+
+`bindings/python/tests/precompile/test_p256verify.py` runs every test vector of EIP-7951.

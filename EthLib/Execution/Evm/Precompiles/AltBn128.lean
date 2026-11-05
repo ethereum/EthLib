@@ -1,40 +1,18 @@
 module
 
 public import EthLib.Base.BigEndian
+public import EthLib.Base.Fork
 public import EthLib.Cryptography.AltBn128.Pairing
-public import EthLib.Execution.Evm.Gas
 public import EthLib.Execution.Evm.Memory
 
 /-!
 # `Evm.Precompiles.AltBn128`
 
-The alt_bn128 precompiles of EIP-196 and EIP-197, which zkSNARK verifiers call.
+The alt_bn128 precompiles at `0x06` to `0x08`, from EIP-196 and EIP-197.
 
-- ECADD at `0x06` adds two points of `G_1`.
-- ECMUL at `0x07` multiplies a point of `G_1` by a 32-byte scalar.
-- ECPAIRING at `0x08` checks that the product of the pairings of pairs of points is 1.
+They add two points of `G_1`, multiply a point by a scalar, and check a product of pairings.
 
-A point is its coordinates as two 32-byte big-endian integers, and `(0, 0)` is the point at infinity:
-
-```text
-ECADD input:  [ x1: 32 | y1: 32 | x2: 32 | y2: 32 ]
-ECMUL input:  [ x: 32 | y: 32 | scalar: 32 ]
-output:       [ x: 32 | y: 32 ]
-ECPAIRING:    k pairs of [ G_1 point: 64 | G_2 point: 128 ], and 1 or 0 as a 32-byte word
-G_2 point:    [ x.c1: 32 | x.c0: 32 | y.c1: 32 | y.c0: 32 ]
-```
-
-The call data reads as if padded with zeros, so a short input is padded and bytes past the input are ignored.
-
-Sources: EIP-196 for addition and multiplication, and EIP-197 for the pairing check.
-
-Byzantium introduced the precompiles, and Istanbul lowered their prices with EIP-1108.
-
-So each call takes the fork, and reads its price from the gas schedule of that fork.
-
-Every fork computes the same results.
-
-An invalid point makes the call fail, and the call consumes all its gas.
+EIP-1108 lowers their prices from Istanbul, so each call takes the fork.
 -/
 
 @[expose] public section
@@ -42,7 +20,7 @@ An invalid point makes the call fail, and the call consumes all its gas.
 namespace EthLib.Execution.Evm.Precompiles.AltBn128
 
 open EthLib.Base (Fork bytesToNat natToBytes)
-open EthLib.Execution.Evm (bufferRead gasSchedule)
+open EthLib.Execution.Evm (bufferRead)
 open EthLib.Cryptography.AltBn128
 
 /-- Why an alt_bn128 call fails.
@@ -73,7 +51,21 @@ def AltBn128Error.code : AltBn128Error → UInt32
   | .invalidInputLength .. => 4
   | .notInSubgroup => 5
 
-/-- `bytes_to_g1`: a point of `G_1` from 64 bytes, with `(0, 0)` for the point at infinity. -/
+/-- The price of an addition: 500 from EIP-196, and 150 from Istanbul by EIP-1108. -/
+def ecaddGas (fork : Fork) : Nat := if fork ≥ .istanbul then 150 else 500
+
+/-- The price of a multiplication: 40000 from EIP-196, and 6000 from Istanbul by EIP-1108. -/
+def ecmulGas (fork : Fork) : Nat := if fork ≥ .istanbul then 6000 else 40000
+
+/-- The price of a pairing check on `size` bytes, with one pair per whole 192 bytes.
+
+EIP-197 charges 100000, plus 80000 per pair.
+
+From Istanbul, EIP-1108 charges 45000, plus 34000 per pair. -/
+def ecpairingGas (fork : Fork) (size : Nat) : Nat :=
+  if fork ≥ .istanbul then 34000 * (size / 192) + 45000 else 80000 * (size / 192) + 100000
+
+/-- A point of `G_1` from 64 bytes, with `(0, 0)` for the point at infinity. -/
 def bytesToG1 (raw : List UInt8) : Except AltBn128Error Point := do
   let x := bytesToNat (raw.take 32)
   let y := bytesToNat (raw.drop 32)
@@ -86,25 +78,25 @@ def bytesToG1 (raw : List UInt8) : Except AltBn128Error Point := do
     else throw .invalidFieldElement
   else throw .invalidFieldElement
 
-/-- The 64 bytes of a point: its coordinates as 32-byte words, and all zeros for the point at infinity. -/
+/-- The 64 bytes of a point: its two coordinates, and all zeros for the point at infinity. -/
 def g1ToBytes : Point → List UInt8
   | .infinity => List.replicate 64 0
   | .affine x y => natToBytes 32 x.val ++ natToBytes 32 y.val
 
-/-- `alt_bn128_add`: the sum of the two points in the call data. -/
+/-- ECADD: the sum of the two points in the call data, once the gas is charged. -/
 def ecadd (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error ByteArray := do
-  let cost := (gasSchedule fork).PRECOMPILE_ECADD
+  let cost := ecaddGas fork
   if gas < cost then
     throw (.outOfGas cost gas)
   let p0 ← bytesToG1 (bufferRead data 0 64)
   let p1 ← bytesToG1 (bufferRead data 64 64)
   return ⟨(g1ToBytes (p0 + p1)).toArray⟩
 
-/-- `alt_bn128_mul`: the point in the call data times the scalar after it.
+/-- ECMUL: the point in the call data times the scalar after it, once the gas is charged.
 
 The scalar is the full 32-byte integer, not reduced. -/
 def ecmul (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error ByteArray := do
-  let cost := (gasSchedule fork).PRECOMPILE_ECMUL
+  let cost := ecmulGas fork
   if gas < cost then
     throw (.outOfGas cost gas)
   let p0 ← bytesToG1 (bufferRead data 0 64)
@@ -112,17 +104,14 @@ def ecmul (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error By
   -- A 32-byte scalar is below `2^256`, so 256 bits cover it.
   return ⟨(g1ToBytes (Point.mulBits 256 n p0)).toArray⟩
 
-/-- The price of a pairing check on `size` bytes: one pair per whole 192 bytes. -/
-def ecpairingGas (fork : Fork) (size : Nat) : Nat :=
-  (gasSchedule fork).PRECOMPILE_ECPAIRING_PER_POINT * (size / 192) +
-    (gasSchedule fork).PRECOMPILE_ECPAIRING_BASE
-
 /-- An element of `Fp` from 32 bytes. -/
 def bytesToFp (raw : List UInt8) : Except AltBn128Error Fp :=
   let value := bytesToNat raw
   if h : value < Fp.modulus then .ok ⟨value, h⟩ else .error .invalidFieldElement
 
-/-- `bytes_to_g2`: a point of the twist from 128 bytes, the `i` part of each coordinate first, with zeros for the point at infinity. -/
+/-- A point of the twist from 128 bytes, with zeros for the point at infinity.
+
+Each coordinate gives its `i` part first. -/
 def bytesToG2 (raw : List UInt8) : Except AltBn128Error Point2 := do
   let x1 ← bytesToFp (raw.take 32)
   let x0 ← bytesToFp ((raw.drop 32).take 32)
@@ -146,9 +135,11 @@ def decodePair (data : ByteArray) (index : Nat) : Except AltBn128Error (Point ×
     throw .notInSubgroup
   return (p, q)
 
-/-- `alt_bn128_pairing_check`: 1 as a 32-byte word when the product of the pairings of the pairs is 1, and 0 otherwise.
+/-- ECPAIRING: the word 1 when the product of the pairings of the pairs is 1, and 0 otherwise.
 
-The gas is charged before the length is checked. -/
+The gas is charged before the length is checked.
+
+EIP-197 does not order the two, so this module orders them. -/
 def ecpairing (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error ByteArray := do
   if gas < ecpairingGas fork data.size then
     throw (.outOfGas (ecpairingGas fork data.size) gas)
