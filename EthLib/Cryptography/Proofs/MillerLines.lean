@@ -267,7 +267,7 @@ private theorem lineDivisor_sub_double (T : W.Point) :
   split_ifs <;> omega
 
 /-- The addition step adds the divisor `(T) + (Q) - (T + Q) - (O)` of `g_{T,Q}`. -/
-private theorem lineDivisor_sub_add (T Q : W.Point) :
+theorem lineDivisor_sub_add (T Q : W.Point) :
     lineDivisor W T Q - lineDivisor W (T + Q) (-(T + Q)) =
       Finsupp.single T 1 + Finsupp.single Q 1 - Finsupp.single (T + Q) 1 -
         Finsupp.single 0 1 := by
