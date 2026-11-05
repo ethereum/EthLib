@@ -203,16 +203,23 @@ def payAuthorization (fork : Fork) (done : Delegations Meter) (authority : Addre
 
 An authorization that fails a check leaves them as they were, except for the access.
 
-From Glamsterdam, an authorization that lacks gas stops them with an error. -/
+Once its signature gives an authority, the authority is read, for the list of EIP-7928.
+
+From Glamsterdam, an authorization that lacks gas stops them with an error.
+
+An error comes with the state so far, whose reads stay. -/
 def applyAuthorization (fork : Fork) (chainId : Nat) (done : Delegations Meter)
-    (auth : Authorization) : Except EvmError (Delegations Meter) :=
+    (auth : Authorization) : Except (EvmError × TransactionState) (Delegations Meter) :=
   if authorizationInScope chainId auth then
     match recoverAuthority auth with
     | some authority => do
-      let done := { done with accessed := done.accessed.insert authority }
-      if ← (authorityAccepts done.state authority auth).mapError .state then
-        let done ← payAuthorization fork done authority auth
-        let (state, refund) ← (delegate fork done.state authority auth).mapError .state
+      let done := { done with
+        state := done.state.recordAccountRead authority
+        accessed := done.accessed.insert authority }
+      let halt (e : EvmError) := (e, done.state)
+      if ← (authorityAccepts done.state authority auth).mapError (halt ∘ .state) then
+        let done ← (payAuthorization fork done authority auth).mapError halt
+        let (state, refund) ← (delegate fork done.state authority auth).mapError (halt ∘ .state)
         return { done with state, refund := done.refund + refund }
       else return done
     | none => .ok done
@@ -224,10 +231,12 @@ It starts from the state, the accesses, the meter and the paid writes of the tra
 
 It starts with no refund.
 
-It fails when the state lacks the code of an authority, and from Glamsterdam when gas lacks. -/
+It fails when the state lacks the code of an authority, and from Glamsterdam when gas lacks.
+
+An error comes with the state so far, whose reads stay. -/
 def applyAuthorizations (fork : Fork) (chainId : Nat) (state : TransactionState)
     (accessed : Std.ExtTreeSet Address) (meter : Meter) (paidWrites : Std.ExtTreeSet Address)
-    (auths : List Authorization) : Except EvmError (Delegations Meter) :=
+    (auths : List Authorization) : Except (EvmError × TransactionState) (Delegations Meter) :=
   auths.foldlM (applyAuthorization fork chainId) ⟨state, accessed, 0, meter, paidWrites, ∅⟩
 
 end EthLib.Execution.Transactions

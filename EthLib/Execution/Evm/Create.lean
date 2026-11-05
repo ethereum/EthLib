@@ -158,48 +158,54 @@ It then keeps the gas of the message, and the nonce of the frame grows by one.
 
 An address with code or a nonce gets no message.
 
-Otherwise the frame passes on its whole reservoir to the message. -/
+Otherwise the frame passes on its whole reservoir to the message.
+
+It reads the sender first, then the new address once the checks pass, by EIP-7928.
+
+The read of the new address stays even when the creation then lacks gas. -/
 def launchCreate (evm : Evm fork Meter) (value : U256) (initCode : ByteArray)
     (salt : Option U256) : Except EvmError (StepResult fork Meter) :=
   let evm := { evm with returnData := .empty }
   let current := evm.message.currentTarget
+  let evm := recordAccountRead evm current
   let sender := evm.state.getAccount current
   if sender.balance < value ∨ sender.nonce = MAX_NONCE ∨
       evm.message.depth + 1 > STACK_DEPTH_LIMIT then
     .next <$> skipCall evm 0 0
   else do
     let address ← creationAddress current sender.nonce salt initCode
-    let evm := (accessAddress evm address).2
-    let newAccount := createNewAccountStateGas fork evm.state address
-    let evm ← chargeStateGas evm newAccount
-    let gas := createMessageGas fork (GasMeter.gasLeft evm.gas)
-    let evm ← chargeGas evm gas
-    let deployable := evm.state.accountDeployable address
-    let state ← (evm.state.incrementNonce fork current).mapError .state
-    let evm := { evm with state }
-    if deployable then
-      let reservoir := GasMeter.reservoir evm.gas
-      let evm := { evm with gas := GasMeter.drain evm.gas }
-      let message : Message fork :=
-        { blockEnv := evm.message.blockEnv
-          txEnv := evm.message.txEnv
-          caller := current
-          target := none
-          currentTarget := address
-          gas
-          reservoir
-          value
-          data := .empty
-          codeAddress := none
-          code := initCode
-          depth := evm.message.depth + 1
-          shouldTransferValue := true
-          isStatic := false
-          disablePrecompiles := false }
-      .ok (.child evm message (resumeCreate fork evm newAccount address))
-    else do
-      let evm ← pushWord evm 0
-      return .next (advance evm)
+    let evm := recordAccountRead (accessAddress evm address).2 address
+    keepReads evm .next do
+      let newAccount := createNewAccountStateGas fork evm.state address
+      let evm ← chargeStateGas evm newAccount
+      let gas := createMessageGas fork (GasMeter.gasLeft evm.gas)
+      let evm ← chargeGas evm gas
+      let deployable := evm.state.accountDeployable address
+      let state ← (evm.state.incrementNonce fork current).mapError .state
+      let evm := { evm with state }
+      if deployable then
+        let reservoir := GasMeter.reservoir evm.gas
+        let evm := { evm with gas := GasMeter.drain evm.gas }
+        let message : Message fork :=
+          { blockEnv := evm.message.blockEnv
+            txEnv := evm.message.txEnv
+            caller := current
+            target := none
+            currentTarget := address
+            gas
+            reservoir
+            value
+            data := .empty
+            codeAddress := none
+            code := initCode
+            depth := evm.message.depth + 1
+            shouldTransferValue := true
+            isStatic := false
+            disablePrecompiles := false }
+        .ok (.child evm message (resumeCreate fork evm newAccount address))
+      else do
+        let evm ← pushWord evm 0
+        return .next (advance evm)
 
 /-- The step of a creation once it has paid its price and grown memory.
 
@@ -286,32 +292,40 @@ theorem launchCreate_decreases [LawfulGasMeter Meter] {before evm : Evm fork Met
     (h : launchCreate evm value initCode salt = .ok result) : result.Decreases before := by
   unfold launchCreate at h
   dsimp only at h
+  have start : Pays cost before
+      (recordAccountRead { evm with returnData := .empty } evm.message.currentTarget) :=
+    paid.congr rfl rfl
   split at h
-  · cases hs : skipCall { evm with returnData := .empty } 0 0 with
+  · cases hs : skipCall
+        (recordAccountRead { evm with returnData := .empty } evm.message.currentTarget) 0 0 with
     | error => simp [hs, Functor.map, Except.map] at h
     | ok after =>
       simp only [hs, Functor.map, Except.map, Except.ok.injEq] at h
       subst h
-      refine skipCall_measure_lt ?_ pos running hs
-      exact paid.congr rfl rfl
+      exact skipCall_measure_lt start pos running hs
   · obtain ⟨address, -, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e1, h1, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e2, h2, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨state, -, h⟩ := Base.bind_ok_iff.mp h
-    have access := accessAddress_pays { evm with returnData := .empty } address
-    have paid' : Pays (cost + createMessageGas fork (GasMeter.gasLeft e1.gas)) before
-        { e2 with state } :=
-      ((((paid.congr rfl rfl : Pays cost before { evm with returnData := .empty }).trans
-        access).trans (chargeStateGas_pays h1)).trans (chargeGas_pays h2)).mono (by omega)
-        |>.congr rfl rfl
-    split at h
-    · cases h
-      exact child_decreases paid'.drain (by dsimp only; omega) running resumeCreate_gasHeld
-    · obtain ⟨_, hp, h⟩ := Base.bind_ok_iff.mp h
-      cases h
-      show measure _ < measure before
-      exact Pays.measure_lt
-        (((paid'.trans (pushWord_pays hp)).mono (by omega)).congr rfl rfl) running
+    rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
+    · obtain ⟨e1, h1, h⟩ := Base.bind_ok_iff.mp h
+      obtain ⟨e2, h2, h⟩ := Base.bind_ok_iff.mp h
+      obtain ⟨state, -, h⟩ := Base.bind_ok_iff.mp h
+      have access := (accessAddress_pays
+        (recordAccountRead { evm with returnData := .empty } evm.message.currentTarget)
+        address).trans (recordAccountRead_pays _ address)
+      have paid' : Pays (cost + createMessageGas fork (GasMeter.gasLeft e1.gas)) before
+          { e2 with state } :=
+        (((start.trans access).trans (chargeStateGas_pays h1)).trans
+          (chargeGas_pays h2)).mono (by omega) |>.congr rfl rfl
+      split at h
+      · cases h
+        exact child_decreases paid'.drain (by dsimp only; omega) running resumeCreate_gasHeld
+      · obtain ⟨_, hp, h⟩ := Base.bind_ok_iff.mp h
+        cases h
+        show measure _ < measure before
+        exact Pays.measure_lt
+          (((paid'.trans (pushWord_pays hp)).mono (by omega)).congr rfl rfl) running
+    · show measure _ < measure before
+      rw [measure_exceptionalHalt]
+      simp [measure, running]
 
 /-- A creation that paid at least 1 gas lowers the measure. -/
 theorem genericCreate_decreases [LawfulGasMeter Meter] {before evm : Evm fork Meter}

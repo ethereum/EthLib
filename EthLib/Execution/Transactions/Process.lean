@@ -78,9 +78,9 @@ The EIPs that change it:
 - [EIP-8037][eip8037], the reservoir of state gas, in Last Call
 - [EIP-8246][eip8246], the accounts that SELFDESTRUCT marked keep their balance, in Last Call
 
-Glamsterdam also records the reads of the run, by EIP-7928.
+The run records what it reads, for the block access list of EIP-7928.
 
-That rule is not here yet, so a run from Glamsterdam fails as not yet specified.
+The block does not check that list yet, so a run from Glamsterdam fails as not yet specified.
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
@@ -267,39 +267,51 @@ The delegate is then accessed, and the message runs no precompile.
 
 From Glamsterdam, that access pays the price of an account access, cold or warm.
 
-The accounts `paidWrites` have their first write paid already. -/
+The accounts `paidWrites` have their first write paid already.
+
+It reads the created address, or the authorities, the recipient and the delegate, in this order.
+
+A call reads the recipient before its state gas only when it moves ether.
+
+An error comes with the state so far, whose reads stay, by EIP-7928. -/
 def prepareFirstFrame {fork : Fork} (chainId : Nat) (message : Message fork)
     (state : TransactionState) (substate : Substate) (auths : List Authorization)
-    (paidWrites : Std.ExtTreeSet Address) : Except EvmError (FirstFrame fork Meter) := do
+    (paidWrites : Std.ExtTreeSet Address) :
+    Except (EvmError × TransactionState) (FirstFrame fork Meter) := do
   let meter : Meter := GasMeter.start message.gas message.reservoir
   match message.target with
   | none =>
     let address := message.currentTarget
-    unless state.accountDeployable address do throw .addressCollision
+    let state := state.recordAccountRead address
+    unless state.accountDeployable address do throw (.addressCollision, state)
     let meter ← if fork ≥ .glamsterdam ∧ state.getPreStateAccount address = EMPTY_ACCOUNT then
-        GasMeter.chargeState meter NEW_ACCOUNT_STATE_GAS
+        (GasMeter.chargeState meter NEW_ACCOUNT_STATE_GAS).mapError (·, state)
       else pure meter
     return .ofMeter message state substate 0 meter
   | some target =>
     let done ← applyAuthorizations fork chainId state substate.accessedAddresses meter paidWrites
       auths
     let meter := GasMeter.commit done.meter
+    let state := if message.value ≠ 0 then done.state.recordAccountRead target else done.state
     let meter ←
-      if fork ≥ .glamsterdam ∧ message.value ≠ 0 ∧ !done.state.isAccountAlive target then
-        GasMeter.chargeState meter NEW_ACCOUNT_STATE_GAS
+      if fork ≥ .glamsterdam ∧ message.value ≠ 0 ∧ !state.isAccountAlive target then
+        (GasMeter.chargeState meter NEW_ACCOUNT_STATE_GAS).mapError (·, state)
       else pure meter
     let substate := { substate with accessedAddresses := done.accessed }
-    let code ← (done.state.getCode (done.state.getAccount target).codeHash).mapError .state
+    let state := state.recordAccountRead target
+    let code ← (state.getCode (state.getAccount target).codeHash).mapError (.state ·, state)
     match if fork ≥ .pectra then delegatedAddress code else none with
     | some delegate =>
       let meter ← if fork ≥ .glamsterdam then
-          GasMeter.charge meter (accountAccessCost fork (delegate ∉ done.accessed))
+          (GasMeter.charge meter (accountAccessCost fork (delegate ∉ done.accessed))).mapError
+            (·, state)
         else pure meter
-      let code ← (done.state.getCode (done.state.getAccount delegate).codeHash).mapError .state
+      let state := state.recordAccountRead delegate
+      let code ← (state.getCode (state.getAccount delegate).codeHash).mapError (.state ·, state)
       let message := { message with code, codeAddress := some delegate, disablePrecompiles := true }
       let substate := { substate with accessedAddresses := done.accessed.insert delegate }
-      return .ofMeter message done.state substate done.refund meter
-    | none => return .ofMeter { message with code } done.state substate done.refund meter
+      return .ofMeter message state substate done.refund meter
+    | none => return .ofMeter { message with code } state substate done.refund meter
 
 /-- The message of a transaction at `fork`, on the chain `chainId`.
 
@@ -307,13 +319,16 @@ It first prepares the first frame, which applies the authorizations `auths` of a
 
 A failure there halts the message before its frame runs, and undoes the authorizations.
 
+That halt keeps what the preparation read.
+
 From Spurious Dragon to Paris, a recipient left empty is touched. -/
 def processMessageCall {fork : Fork} [LawfulGasMeter Meter] (chainId : Nat)
     (message : Message fork) (state : TransactionState) (substate : Substate)
     (auths : List Authorization := []) (paidWrites : Std.ExtTreeSet Address := ∅) :
     Except EvmError CallOutput :=
   match prepareFirstFrame (Meter := Meter) chainId message state substate auths paidWrites with
-  | .error e => if e.aborts then .error e else .ok (.ofHalt state message.reservoir e)
+  | .error (e, read) =>
+    if e.aborts then .error e else .ok (.ofHalt (state.withReadsOf read) message.reservoir e)
   | .ok first =>
     match message.target with
     | none => do
@@ -332,8 +347,10 @@ def processMessageCall {fork : Fork} [LawfulGasMeter Meter] (chainId : Nat)
 
 /-- What a transaction leaves once it has run. -/
 structure TransactionOutput where
-  /-- The block state, with the writes of the transaction. -/
-  block : BlockState
+  /-- The state of the transaction once it has run, before its writes join the block.
+
+  It holds the reads of the transaction, for the block access list of EIP-7928. -/
+  state : TransactionState
   /-- The gas that the transaction used, after the refund. -/
   gasUsed : Nat
   /-- The gas that the transaction adds to the counts of its block. -/
@@ -342,6 +359,10 @@ structure TransactionOutput where
   logs : Array Log
   /-- The error that stopped its message, or none when the message succeeded. -/
   error : Option EvmError
+
+/-- The block state, with the writes of the transaction. -/
+def TransactionOutput.block (output : TransactionOutput) : BlockState :=
+  output.state.incorporateTxIntoBlock.parent
 
 /-- The state after the end of a transaction at `fork`: the deletions of its accounts.
 
@@ -396,13 +417,13 @@ def runTransaction {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasMeter
   let (state, gasUsed) ← (settleGas env output.state sender tx gasLeft output.refund).mapError
     .state
   let state ← (deleteAccounts fork state output).mapError .state
-  return ⟨state.incorporateTxIntoBlock.parent, gasUsed, blockGas, output.logs, output.error⟩
+  return ⟨state, gasUsed, blockGas, output.logs, output.error⟩
 
 /-- Run a transaction that may enter its block, on the block state `block` at `fork`.
 
 The checks of the transaction gave `included`.
 
-It returns the block state with the writes of the transaction.
+It returns the state of the transaction, whose writes then join the block.
 
 It also returns the gas used, the gas it adds to its block, the logs, and the error of the message.
 

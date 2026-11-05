@@ -60,19 +60,23 @@ theorem createNewAccountStateGas_of_glamsterdam (h : fork ≥ .glamsterdam)
 
 /-- A creation that fails its first checks runs no message.
 
-It pushes 0 and keeps its gas, its state and its substate, so it accesses no new address. -/
+It pushes 0 and keeps its gas and its substate, so it accesses no new address.
+
+Its state only records the read of the sender. -/
 theorem launchCreate_of_preflight {evm : Evm fork Meter} {value : U256} {initCode : ByteArray}
     {salt : Option U256} {result : StepResult fork Meter}
     (fails : (evm.state.getAccount evm.message.currentTarget).balance < value ∨
       (evm.state.getAccount evm.message.currentTarget).nonce = MAX_NONCE ∨
       evm.message.depth + 1 > STACK_DEPTH_LIMIT)
     (h : launchCreate evm value initCode salt = .ok result) :
-    ∃ after, result = .next after ∧ after.state = evm.state ∧ after.substate = evm.substate ∧
-      after.gas = GasMeter.credit evm.gas 0 0 := by
+    ∃ after, result = .next after ∧
+      after.state = evm.state.recordAccountRead evm.message.currentTarget ∧
+      after.substate = evm.substate ∧ after.gas = GasMeter.credit evm.gas 0 0 := by
   unfold launchCreate at h
   dsimp only at h
-  simp only [fails, ↓reduceIte] at h
-  cases hs : skipCall { evm with returnData := .empty } 0 0 with
+  rw [ite_eq_left_of_eq_true _ _ (eq_true (by exact fails))] at h
+  cases hs : skipCall (recordAccountRead { evm with returnData := .empty }
+      evm.message.currentTarget) 0 0 with
   | error => simp [hs, Functor.map, Except.map] at h
   | ok after =>
     simp only [hs, Functor.map, Except.map, Except.ok.injEq] at h

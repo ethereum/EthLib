@@ -83,6 +83,63 @@ def ternaryOp (cost : Nat) (f : U256 → U256 → U256 → U256) (evm : Evm fork
   let evm ← pushWord evm (f x y z)
   return advance evm
 
+/-- The frame after an exceptional halt: it stops with no gas, no output and the error. -/
+def exceptionalHalt (evm : Evm fork Meter) (error : EvmError) : Evm fork Meter :=
+  { evm with
+    gas := GasMeter.exhaust evm.gas
+    running := false
+    output := .empty
+    error := some error }
+
+/-! ## Reads of the state
+
+From Glamsterdam, the block access list of EIP-7928 names what each instruction reads.
+
+An instruction records a read once it has passed the gas check that comes before it.
+
+The read stays even when the instruction then halts. -/
+
+/-- The frame once it records a read of the account at an address. -/
+def recordAccountRead (evm : Evm fork Meter) (address : Base.Address) : Evm fork Meter :=
+  { evm with state := evm.state.recordAccountRead address }
+
+/-- The frame once it records a read of a key of the storage of an address. -/
+def recordStorageRead (evm : Evm fork Meter) (address : Base.Address) (key : Base.Bytes32) :
+    Evm fork Meter :=
+  { evm with state := evm.state.recordStorageRead address key }
+
+/-- From Glamsterdam, fail with out of gas when the frame has less than `amount` gas left.
+
+It charges nothing, and it passes before Glamsterdam.
+
+From Glamsterdam, an instruction checks the price it knows before it reads the state. -/
+def checkGas (evm : Evm fork Meter) (amount : Nat) : Except EvmError Unit :=
+  if fork ≥ .glamsterdam ∧ GasMeter.gasLeft evm.gas < amount then throw .outOfGas else pure ()
+
+/-- The result of the rest of an instruction, from the frame `evm` that has read the state.
+
+When the rest halts the frame, the frame halts with its reads, and `halted` makes the result.
+
+An error that aborts the whole execution stays an error. -/
+def keepReads {α : Type} (evm : Evm fork Meter) (halted : Evm fork Meter → α)
+    (rest : Except EvmError α) : Except EvmError α :=
+  match rest with
+  | .error e => if e.aborts then .error e else .ok (halted (exceptionalHalt evm e))
+  | .ok result => .ok result
+
+/-- The rest of an instruction that keeps its reads gives its own result, or a halted frame. -/
+theorem keepReads_eq_ok {α : Type} {evm : Evm fork Meter} {halted : Evm fork Meter → α}
+    {rest : Except EvmError α} {result : α} (h : keepReads evm halted rest = .ok result) :
+    rest = .ok result ∨ ∃ e, result = halted (exceptionalHalt evm e) := by
+  unfold keepReads at h
+  split at h
+  · split at h
+    · cases h
+    · cases h
+      exact .inr ⟨_, rfl⟩
+  · cases h
+    exact .inl rfl
+
 /-- What one step of a frame gives. -/
 inductive StepResult (fork : Fork) (Meter : Type) where
   /-- The frame after the step. -/

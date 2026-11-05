@@ -93,22 +93,30 @@ theorem delegate_isOk (state : TransactionState) :
   simp only [delegate, hcode, hnonce, bind, Except.bind, pure, Except.pure, Except.ok.injEq,
     exists_eq']
 
+/-- A record of a read changes no answer of an authority. -/
+theorem authorityAccepts_recordAccountRead (state : TransactionState) (address : Address) :
+    authorityAccepts (state.recordAccountRead address) authority auth =
+      authorityAccepts state authority auth := rfl
+
 /-- Up to BPO5, an accepted authorization delegates and accesses the authority, and adds the refund.
--/
+
+The authority is read first, and an error comes with that state. -/
 theorem applyAuthorization_of_accepts (hfork : fork < .glamsterdam)
     (hscope : authorizationInScope chainId auth = true)
     (hrecover : recoverAuthority auth = some authority)
     (haccept : authorityAccepts done.state authority auth = .ok true) :
     applyAuthorization fork chainId done auth =
-      ((delegate fork done.state authority auth).mapError .state).map fun (state, refund) =>
-        { done with
-          state := state
-          accessed := done.accessed.insert authority
-          refund := done.refund + refund } := by
+      ((delegate fork (done.state.recordAccountRead authority) authority auth).mapError
+          fun e => (.state e, done.state.recordAccountRead authority)).map
+        fun (state, refund) =>
+          { done with
+            state := state
+            accessed := done.accessed.insert authority
+            refund := done.refund + refund } := by
   have hpre : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hfork
-  simp only [applyAuthorization, payAuthorization, hpre, hscope, hrecover, ↓reduceIte, haccept,
-    Except.mapError, bind, Except.bind]
-  cases delegate fork done.state authority auth <;> rfl
+  simp only [applyAuthorization, payAuthorization, hpre, hscope, hrecover, ↓reduceIte,
+    authorityAccepts_recordAccountRead, haccept, Except.mapError, bind, Except.bind]
+  cases delegate fork (done.state.recordAccountRead authority) authority auth <;> rfl
 
 /-- Up to BPO5, after an accepted authorization to the zero address, the authority has no code. -/
 theorem codeHash_applyAuthorization_of_eq_null (hfork : fork < .glamsterdam)
@@ -119,7 +127,7 @@ theorem codeHash_applyAuthorization_of_eq_null (hfork : fork < .glamsterdam)
     (h : applyAuthorization fork chainId done auth = .ok done') :
     (done'.state.getAccount authority).codeHash = EMPTY_CODE_HASH := by
   rw [applyAuthorization_of_accepts hfork hscope hrecover haccept] at h
-  cases hdelegate : delegate fork done.state authority auth with
+  cases hdelegate : delegate fork (done.state.recordAccountRead authority) authority auth with
   | error e => simp [hdelegate, Except.map, Except.mapError] at h
   | ok result =>
     simp only [hdelegate, Except.map, Except.mapError, Except.ok.injEq] at h
@@ -135,13 +143,14 @@ theorem refund_applyAuthorization_of_accepts (hfork : fork < .glamsterdam)
     (h : applyAuthorization fork chainId done auth = .ok done') :
     done'.refund = done.refund + if done.state.accountExists authority then 12500 else 0 := by
   rw [applyAuthorization_of_accepts hfork hscope hrecover haccept] at h
-  cases hdelegate : delegate fork done.state authority auth with
+  cases hdelegate : delegate fork (done.state.recordAccountRead authority) authority auth with
   | error e => simp [hdelegate, Except.map, Except.mapError] at h
   | ok result =>
     simp only [hdelegate, Except.map, Except.mapError, Except.ok.injEq] at h
     subst h
     rw [(delegate_eq_ok hdelegate).1]
     simp only [hfork, true_and]
+    rfl
 
 /-! ## A skipped authorization -/
 
@@ -162,14 +171,16 @@ theorem applyAuthorization_of_recoverAuthority_none (h : recoverAuthority auth =
   unfold applyAuthorization
   split <;> simp only [h]
 
-/-- An authorization that its authority refuses only marks the authority as accessed. -/
+/-- An authorization that its authority refuses only marks the authority as accessed and read. -/
 theorem applyAuthorization_of_refused (hscope : authorizationInScope chainId auth = true)
     (hrecover : recoverAuthority auth = some authority)
     (hrefuse : authorityAccepts done.state authority auth = .ok false) :
     applyAuthorization fork chainId done auth =
-      .ok { done with accessed := done.accessed.insert authority } := by
-  simp only [applyAuthorization, hscope, hrecover, ↓reduceIte, hrefuse, Except.mapError, bind,
-    Except.bind, Bool.false_eq_true, pure, Except.pure]
+      .ok { done with
+        state := done.state.recordAccountRead authority
+        accessed := done.accessed.insert authority } := by
+  simp only [applyAuthorization, hscope, hrecover, ↓reduceIte, authorityAccepts_recordAccountRead,
+    hrefuse, Except.mapError, bind, Except.bind, Bool.false_eq_true, pure, Except.pure]
 
 /-- An authority whose code can be read refuses an authorization with another nonce. -/
 theorem authorityAccepts_of_nonce_ne {state : TransactionState} {code : ByteArray}
@@ -178,7 +189,7 @@ theorem authorityAccepts_of_nonce_ne {state : TransactionState} {code : ByteArra
     authorityAccepts state authority auth = .ok false := by
   simp [authorityAccepts, hcode, hnonce, bind, Except.bind, pure, Except.pure]
 
-/-- An authorization with a wrong nonce only marks its authority as accessed.
+/-- An authorization with a wrong nonce only marks its authority as accessed and read.
 
 The code of the authority must be readable.
 
@@ -189,7 +200,9 @@ theorem applyAuthorization_of_nonce_ne {code : ByteArray}
     (hcode : done.state.getCode (done.state.getAccount authority).codeHash = .ok code)
     (hnonce : (done.state.getAccount authority).nonce ≠ auth.nonce.toNat) :
     applyAuthorization fork chainId done auth =
-      .ok { done with accessed := done.accessed.insert authority } :=
+      .ok { done with
+        state := done.state.recordAccountRead authority
+        accessed := done.accessed.insert authority } :=
   applyAuthorization_of_refused hscope hrecover (authorityAccepts_of_nonce_ne hcode hnonce)
 
 /-! ## What an authorization pays -/

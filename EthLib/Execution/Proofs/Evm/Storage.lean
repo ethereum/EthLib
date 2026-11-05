@@ -22,7 +22,7 @@ Only a write that sets a zero slot charges state gas, and only a reset to zero r
 
 From Berlin, an access to a slot is cold exactly when the transaction has not accessed it.
 
-SSTORE never succeeds in a static frame, and from Istanbul fails with 2300 gas or less.
+SSTORE never completes in a static frame, and from Istanbul fails with 2300 gas or less.
 
 From Glamsterdam, SSTORE in a static frame fails before it reads the stack.
 -/
@@ -158,10 +158,10 @@ theorem accessStorageKey_snd (evm : Evm fork Meter) (a : Address) (key : Bytes32
 
 variable [GasMeter Meter]
 
-/-- SSTORE never succeeds in a static frame. -/
-theorem sstoreStep_ne_ok_of_isStatic {evm after : Evm fork Meter}
-    (static : evm.message.isStatic = true) : sstoreStep evm ≠ .ok after := by
-  intro h
+/-- SSTORE never completes in a static frame: it fails, or it halts with an error. -/
+theorem sstoreStep_halts_of_isStatic {evm after : Evm fork Meter}
+    (static : evm.message.isStatic = true) (h : sstoreStep evm = .ok after) :
+    after.running = false ∧ after.error.isSome := by
   unfold sstoreStep at h
   split at h
   · simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
@@ -172,20 +172,22 @@ theorem sstoreStep_ne_ok_of_isStatic {evm after : Evm fork Meter}
   simp only [] at h
   split at h
   · simp [throw, throwThe, MonadExceptOf.throw] at h
-  · obtain ⟨keys, hacc⟩ := accessStorageKey_snd e2 e2.message.currentTarget (U256.toBeBytes k)
-    rcases hpair : accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes k) with
-      ⟨cold, e3⟩
-    rw [hpair] at hacc
-    simp only [hpair] at h
-    obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-    obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
-    have m5 : e5.message = evm.message := by
-      obtain ⟨_, -, h5⟩ := Base.bind_ok_iff.mp h5
-      cases h5
-      rw [(chargeGas_sameContext h4).message]
-      cases hacc
-      exact m2
-    simp [m5, static, throw, throwThe, MonadExceptOf.throw] at h
+  · rcases keepReads_eq_ok h with h | ⟨e, rfl⟩
+    · obtain ⟨keys, hacc⟩ := accessStorageKey_snd e2 e2.message.currentTarget (U256.toBeBytes k)
+      rcases hpair : accessStorageKey e2 e2.message.currentTarget (U256.toBeBytes k) with
+        ⟨cold, e3⟩
+      rw [hpair] at hacc
+      simp only [hpair] at h
+      obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
+      obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
+      have m5 : e5.message = evm.message := by
+        obtain ⟨_, -, h5⟩ := Base.bind_ok_iff.mp h5
+        cases h5
+        rw [(chargeGas_sameContext h4).message]
+        cases hacc
+        exact m2
+      simp [m5, static, throw, throwThe, MonadExceptOf.throw] at h
+    · exact ⟨rfl, rfl⟩
 
 /-- From Glamsterdam, SSTORE in a static frame fails before it reads the stack. -/
 theorem sstoreStep_of_isStatic (h : fork ≥ .glamsterdam) {evm : Evm fork Meter}

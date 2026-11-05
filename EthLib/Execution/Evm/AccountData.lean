@@ -18,6 +18,8 @@ Before Berlin, the price does not depend on earlier accesses.
 
 From Pectra, the code of a delegated account is its delegation indicator, and these read it.
 
+Each records its read of the account once it has paid, for the block access list of EIP-7928.
+
 Appendix H.2 of the Yellow Paper, Shanghai version, defines these instructions.
 
 Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
@@ -70,6 +72,7 @@ def balanceStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
   let address := toAddressMasked word
   let (cold, evm) := accessAddress evm address
   let evm ← chargeGas evm (balanceCost fork cold)
+  let evm := recordAccountRead evm address
   let evm ← pushWord evm (evm.state.getAccount address).balance
   return advance evm
 
@@ -79,6 +82,7 @@ def extcodesizeStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) :=
   let address := toAddressMasked word
   let (cold, evm) := accessAddress evm address
   let evm ← chargeGas evm (externalBaseCost fork cold)
+  let evm := recordAccountRead evm address
   let code ← accountCode evm address
   let evm ← pushWord evm (BitVec.ofNat 256 code.size)
   return advance evm
@@ -95,6 +99,7 @@ def extcodecopyStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) :=
   let (cold, evm) := accessAddress evm address
   let cost := externalBaseCost fork cold + OPCODE_COPY_PER_WORD * wordCount size.toNat
   let evm ← chargeGasAndMemory evm cost [(start, size)]
+  let evm := recordAccountRead evm address
   let code ← accountCode evm address
   let value : ByteArray := ⟨(bufferRead code offset.toNat size.toNat).toArray⟩
   return advance { evm with memory := memoryWrite evm.memory start.toNat value }
@@ -111,6 +116,7 @@ def extcodehashStep (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) :=
   let address := toAddressMasked word
   let (cold, evm) := accessAddress evm address
   let evm ← chargeGas evm (extcodehashCost fork cold)
+  let evm := recordAccountRead evm address
   let evm ← pushWord evm (codeHashWord (evm.state.getAccount address))
   return advance evm
 
@@ -121,8 +127,9 @@ def accountStep (fork : Fork) : Op → Option (Evm fork Meter → Except EvmErro
   | .balance => some balanceStep
   | .selfbalance =>
     if .istanbul ≤ fork then
-      some (readFrame OPCODE_SELFBALANCE fun evm =>
-        (evm.state.getAccount evm.message.currentTarget).balance)
+      some fun evm => readFrame OPCODE_SELFBALANCE
+        (fun evm => (evm.state.getAccount evm.message.currentTarget).balance)
+        (recordAccountRead evm evm.message.currentTarget)
     else none
   | .extcodesize => some extcodesizeStep
   | .extcodecopy => some extcodecopyStep

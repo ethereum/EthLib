@@ -7,6 +7,7 @@ public import EthLib.Execution.Proofs.Evm.Instructions.Keccak
 public import EthLib.Execution.Proofs.Evm.Precompiles
 public import EthLib.Execution.Proofs.Evm.Memory
 public import EthLib.Execution.Proofs.Evm.PowMod
+public import EthLib.Execution.Proofs.Evm.Reads
 public import EthLib.Execution.Proofs.Evm.Words
 public import EthLib.Execution.Proofs.Evm.Gas
 public import EthLib.Execution.Proofs.Evm.Op
