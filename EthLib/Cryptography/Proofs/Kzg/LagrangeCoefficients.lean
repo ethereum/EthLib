@@ -16,10 +16,11 @@ At `d` the sum is `n`, so the polynomial is `1` there.
 
 Its degree is below `n`, so it is the basis polynomial, and its coefficient `j` is `n⁻¹ * d⁻¹ ^ j`.
 
-A setup holds the Lagrange points of its monomial points when each Lagrange point is the sum of the
-monomial points times the coefficients of its basis polynomial.
+A setup holds the Lagrange points of its monomial points when each Lagrange point `i` is a sum.
 
-Then any `τ` whose powers the monomial points represent makes the setup well formed.
+Its term `j` is monomial point `j` times coefficient `j` of the basis polynomial of point `i`.
+
+Then a valid setup is well formed at any `τ` whose powers its monomial points represent.
 -/
 
 @[expose] public section
@@ -101,8 +102,9 @@ theorem eval_basis_eq_sum (i : Fin FIELD_ELEMENTS_PER_BLOB) (τ : Fr) :
     Fintype.card_fin]
   exact Nat.sub_lt (by decide) Nat.one_pos
 
-/-- Each Lagrange point is the sum of the monomial points of `G1` times the coefficients of its
-basis polynomial.
+/-- Each Lagrange point is a sum of the monomial points of `G1`.
+
+The monomial point `j` has the factor of coefficient `j` of the basis polynomial.
 
 Lagrange point `i` belongs to domain point `i`, as in the decoded setup. -/
 def TrustedSetup.LagrangeOfMonomial (s : TrustedSetup) : Prop :=
@@ -110,8 +112,9 @@ def TrustedSetup.LagrangeOfMonomial (s : TrustedSetup) : Prop :=
     ∑ j : Fin FIELD_ELEMENTS_PER_BLOB,
       ((Lagrange.basis Finset.univ evalDomain i).coeff j).val • G1.toPoint s.g1Monomial[j]
 
-/-- A valid setup whose Lagrange points come from its monomial points is well formed at every `τ`
-whose powers its monomial points represent. -/
+/-- A valid setup whose Lagrange points come from its monomial points is well formed at a `τ`.
+
+The condition on `τ` is that the monomial points represent its powers. -/
 theorem TrustedSetup.WellFormed.of_lagrangeOfMonomial {s : TrustedSetup} {τ : Fr}
     (hv : s.Valid) (hl : s.LagrangeOfMonomial)
     (hg1 : ∀ i : Fin FIELD_ELEMENTS_PER_BLOB, G1.Represents s.g1Monomial[i] (τ ^ i.val))
