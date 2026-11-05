@@ -5,6 +5,7 @@ public import EthLib.Execution.Evm.Instructions.Bitwise
 public import EthLib.Execution.Evm.Instructions.Comparison
 public import EthLib.Execution.Evm.Instructions.Keccak
 public import EthLib.Execution.Evm.Op
+public import EthLib.Execution.Evm.StackN
 public import EthLib.Execution.Evm.Step
 
 /-!
@@ -17,6 +18,8 @@ Each one pops its operands, pays a price, pushes one word and moves to the next 
 The word it pushes is the pure function of the instruction.
 
 KECCAK256 also reads memory, and it pays for each word it hashes and for the growth of memory.
+
+DUPN, SWAPN and EXCHANGE, from Glamsterdam, read an immediate byte, so they move two bytes on.
 
 Appendix H.2 of the Yellow Paper, Shanghai version, defines these instructions up to Shanghai.
 
@@ -103,7 +106,7 @@ def keccak256Step (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := d
 
 Other opcodes give none.
 
-The fork sets the price of EXP. -/
+The fork sets the price of EXP, and DUPN, SWAPN and EXCHANGE exist from Glamsterdam. -/
 def stackOnlyStep (fork : Fork) : Op → Option (Evm fork Meter → Except EvmError (Evm fork Meter))
   | .add => some (binaryOp OPCODE_ADD Instructions.add)
   | .mul => some (binaryOp OPCODE_MUL Instructions.mul)
@@ -136,6 +139,9 @@ def stackOnlyStep (fork : Fork) : Op → Option (Evm fork Meter → Except EvmEr
   | .push n => some (pushN n)
   | .dup n => some (dupN n)
   | .swap n => some (swapN n)
+  | .dupn => if .glamsterdam ≤ fork then some dupnStep else none
+  | .swapn => if .glamsterdam ≤ fork then some swapnStep else none
+  | .exchange => if .glamsterdam ≤ fork then some exchangeStep else none
   | _ => none
 
 end EthLib.Execution.Evm

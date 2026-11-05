@@ -16,6 +16,7 @@ public import EthLib.Execution.Evm.Delegation
 public import EthLib.Execution.Evm.Environment
 public import EthLib.Execution.Evm.Frame
 public import EthLib.Execution.Evm.Step
+public import EthLib.Execution.Evm.StackN
 public import EthLib.Execution.Evm.StackOnly
 public import EthLib.Execution.Evm.MemoryData
 public import EthLib.Execution.Evm.Return

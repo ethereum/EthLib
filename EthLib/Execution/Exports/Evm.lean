@@ -4,6 +4,7 @@ public import EthLib.Base.Exports
 public import EthLib.Execution.Evm.ContractAddress
 public import EthLib.Execution.Evm.Gas
 public import EthLib.Execution.Evm.Op
+public import EthLib.Execution.Evm.StackN
 public import EthLib.Execution.Evm.Instructions.Arithmetic
 public import EthLib.Execution.Evm.Instructions.Bitwise
 public import EthLib.Execution.Evm.Instructions.Comparison
@@ -18,6 +19,8 @@ A word crosses the boundary as 32 big-endian bytes.
 A size or a price crosses it as its shortest big-endian bytes, so no value is truncated.
 
 An opcode outside the table of words fails with code 0.
+
+So does an immediate byte that encodes no depth of DUPN, SWAPN or EXCHANGE.
 -/
 
 public section
@@ -85,6 +88,23 @@ def wordOpExport (opcode : UInt8) (a b c : ByteArray) : Result ByteArray :=
   match (Op.decode opcode).bind fun op => wordOp op (wordOf a) (wordOf b) (wordOf c) with
   | some w => .ok (bytesOfWord w)
   | none => .error (0, s!"opcode {opcode} does not push a word of its operands alone")
+
+/-- The depths, counted from 1 at the top, that the immediate byte of an opcode encodes.
+
+DUPN and SWAPN give one depth, and EXCHANGE gives two, as EIP-8024 decodes them.
+
+Another opcode, or a byte that encodes no depth, fails with code 0.
+
+No Lean error type covers these failures. -/
+@[export eth_evm_immediate_depths]
+def immediateDepthsExport (opcode immediate : UInt8) : Result ByteArray :=
+  let depths := match Op.decode opcode with
+    | some .dupn | some .swapn => (decodeSingle immediate).map fun n => [n]
+    | some .exchange => (decodePair immediate).map fun (n, m) => [n, m]
+    | _ => none
+  match depths with
+  | some ds => .ok ⟨(ds.map Nat.toUInt8).toArray⟩
+  | none => .error (0, s!"byte {immediate} encodes no depth of opcode {opcode}")
 
 /-- The price of a memory of a given size in bytes. -/
 @[export eth_evm_memory_gas_cost]

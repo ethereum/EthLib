@@ -8,6 +8,7 @@
 /* Each export consumes its object arguments, so the caller never releases them. */
 
 extern lean_object* eth_evm_word_op(uint8_t, lean_object*, lean_object*, lean_object*);
+extern lean_object* eth_evm_immediate_depths(uint8_t, uint8_t);
 extern lean_object* eth_evm_memory_gas_cost(lean_object*);
 extern lean_object* eth_evm_extend_memory_cost(lean_object*, lean_object*);
 extern lean_object* eth_evm_extend_memory_expand_by(lean_object*, lean_object*);
@@ -97,6 +98,22 @@ py_evm_word_op(
   lean_object* a[EVM_MAX_ARGS];
   if (!parse_bytes_args(args, 1, 3, a)) return NULL;
   return except_into_pybytes(eth_evm_word_op((uint8_t) opcode, a[0], a[1], a[2]), EVM_ERROR);
+}
+
+PyObject*
+py_evm_immediate_depths(
+  PyObject* self,
+  PyObject* args
+) {
+  unsigned long opcode, immediate;
+  if (!PyArg_ParseTuple(args, "kk", &opcode, &immediate)) return NULL;
+  /* The opcode and its immediate are one byte each. */
+  if (opcode > 0xff || immediate > 0xff) {
+    PyErr_SetString(PyExc_ValueError, "the opcode and the immediate must be below 256");
+    return NULL;
+  }
+  return except_into_pybytes(eth_evm_immediate_depths((uint8_t) opcode, (uint8_t) immediate),
+                             EVM_ERROR);
 }
 
 PyObject*

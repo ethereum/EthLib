@@ -264,6 +264,41 @@ theorem swapN_pays {n : Fin 16} {evm after : Evm fork Meter} (h : swapN n evm = 
       exact (chargeGas_pays h1).congr rfl rfl
   · cases h
 
+/-- DUPN pays its price. -/
+theorem dupnStep_pays {evm after : Evm fork Meter} (h : dupnStep evm = .ok after) :
+    Pays OPCODE_DUPN evm after := by
+  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+  split at h
+  · split at h
+    · cases h
+    · obtain ⟨_, h2, h⟩ := except_bind_eq_ok h
+      cases h
+      exact (((chargeGas_pays h1).trans (pushWord_pays h2)).mono (m := OPCODE_DUPN)
+        (by omega)).congr rfl rfl
+  · cases h
+
+/-- SWAPN pays its price. -/
+theorem swapnStep_pays {evm after : Evm fork Meter} (h : swapnStep evm = .ok after) :
+    Pays OPCODE_SWAPN evm after := by
+  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+  split at h
+  · split at h
+    · cases h
+      exact (chargeGas_pays h1).congr rfl rfl
+    · cases h
+  · cases h
+
+/-- EXCHANGE pays its price. -/
+theorem exchangeStep_pays {evm after : Evm fork Meter} (h : exchangeStep evm = .ok after) :
+    Pays OPCODE_EXCHANGE evm after := by
+  obtain ⟨_, h1, h⟩ := except_bind_eq_ok h
+  split at h
+  · split at h
+    · cases h
+      exact (chargeGas_pays h1).congr rfl rfl
+    · cases h
+  · cases h
+
 /-- EXP pays at least its base price. -/
 theorem expStep_pays {evm after : Evm fork Meter} (h : expStep fork evm = .ok after) :
     Pays OPCODE_EXP_BASE evm after := by
@@ -291,8 +326,11 @@ theorem stackOnlyStep_measure_lt {op : Op}
     {f : Evm fork Meter → Except EvmError (Evm fork Meter)} {evm after : Evm fork Meter}
     (hf : stackOnlyStep fork op = some f) (h : f evm = .ok after) (running : evm.running = true) :
     measure after < measure evm := by
-  cases op <;> simp only [stackOnlyStep, Option.some.injEq, reduceCtorEq] at hf <;> subst hf
+  cases op <;> simp only [stackOnlyStep, Option.some.injEq, reduceCtorEq] at hf
+  all_goals (try split at hf) <;> (try simp only [Option.some.injEq, reduceCtorEq] at hf) <;>
+    (try subst hf)
   all_goals first
+    | cases hf
     | exact ((binaryOp_pays h).mono).measure_lt running
     | exact ((unaryOp_pays h).mono).measure_lt running
     | exact ((ternaryOp_pays h).mono).measure_lt running
@@ -302,6 +340,9 @@ theorem stackOnlyStep_measure_lt {op : Op}
     | exact (pushN_pays h).measure_lt running
     | exact ((dupN_pays h).mono).measure_lt running
     | exact ((swapN_pays h).mono).measure_lt running
+    | exact ((dupnStep_pays h).mono).measure_lt running
+    | exact ((swapnStep_pays h).mono).measure_lt running
+    | exact ((exchangeStep_pays h).mono).measure_lt running
 
 /-! ## The instructions that move or read the program counter, and STOP -/
 

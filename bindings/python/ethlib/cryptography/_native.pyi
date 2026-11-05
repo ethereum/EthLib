@@ -515,6 +515,10 @@ def evm_word_op(opcode: int, a: bytes, b: bytes, c: bytes) -> bytes:
     """The word that the instruction of an opcode pushes."""
     ...
 
+def evm_immediate_depths(opcode: int, immediate: int) -> bytes:
+    """The depths, counted from 1 at the top, that the immediate byte of an opcode encodes."""
+    ...
+
 def evm_memory_gas_cost(size: bytes) -> bytes:
     """The price of a memory of a given size in bytes."""
     ...

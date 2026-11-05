@@ -83,7 +83,9 @@ def addedOpcodes : List (UInt8 × Fork) :=
     -- CLZ, EIP-7939
     (0x1e, .fusaka),
     -- SLOTNUM, EIP-7843
-    (0x4b, .glamsterdam)]
+    (0x4b, .glamsterdam),
+    -- DUPN, SWAPN and EXCHANGE, EIP-8024
+    (0xe6, .glamsterdam), (0xe7, .glamsterdam), (0xe8, .glamsterdam)]
 
 /-- Each opcode is from the fork that its EIP gives, or from Frontier when it has no such EIP. -/
 theorem since_eq_addedOpcodes (op : Op) :

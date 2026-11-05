@@ -386,6 +386,9 @@
 #define DOC_evm_word_op \
   "The word that the instruction of an opcode pushes."
 
+#define DOC_evm_immediate_depths \
+  "The depths, counted from 1 at the top, that the immediate byte of an opcode encodes."
+
 #define DOC_evm_memory_gas_cost \
   "The price of a memory of a given size in bytes."
 

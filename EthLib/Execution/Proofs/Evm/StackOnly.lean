@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Evm.StackOnly
 public import EthLib.Execution.Proofs.Evm.Memory
+public import EthLib.Execution.Proofs.Evm.StackN
 public import EthLib.Execution.Proofs.Evm.Step
 
 /-!
@@ -111,9 +112,14 @@ theorem stackOnlyStep_sameContext {op : Op}
     {step : Evm fork Meter → Except EvmError (Evm fork Meter)}
     (hstep : stackOnlyStep fork op = some step) {evm after : Evm fork Meter}
     (h : step evm = .ok after) : SameContext evm after := by
-  cases op <;> simp only [stackOnlyStep, Option.some.injEq, reduceCtorEq] at hstep <;>
-    subst hstep
+  cases op <;> simp only [stackOnlyStep, Option.some.injEq, reduceCtorEq] at hstep
+  all_goals (try split at hstep) <;> (try simp only [Option.some.injEq, reduceCtorEq] at hstep) <;>
+    (try subst hstep)
   all_goals first
+    | cases hstep
+    | exact dupnStep_sameContext h
+    | exact swapnStep_sameContext h
+    | exact exchangeStep_sameContext h
     | exact unaryOp_sameContext h
     | exact binaryOp_sameContext h
     | exact ternaryOp_sameContext h
