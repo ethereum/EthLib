@@ -21,6 +21,11 @@ def _number(n: int) -> bytes:
     return n.to_bytes(max(1, (n.bit_length() + 7) // 8), "big")
 
 
+def immediate_depths(opcode: int, immediate: int) -> tuple[int, ...]:
+    """The depths that the immediate byte of DUPN, SWAPN or EXCHANGE encodes, by EIP-8024."""
+    return tuple(_native.evm_immediate_depths(opcode, immediate))
+
+
 def word_op(opcode: int, *operands: int) -> int:
     """The word that an opcode pushes, at a fork that has it, for operands missing ones as 0."""
     if len(operands) > 3:
@@ -53,4 +58,4 @@ def create2_address(sender: bytes, salt: bytes, init_code: bytes) -> bytes:
     return _native.evm_create2_address(sender, salt, init_code)
 
 
-__all__ = ["word_op", "memory_gas_cost", "extend_memory", "create_address", "create2_address"]
+__all__ = ["immediate_depths", "word_op", "memory_gas_cost", "extend_memory", "create_address", "create2_address"]

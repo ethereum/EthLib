@@ -2755,6 +2755,15 @@
    "error_class": "EvmError",
    "docstring":
    "The word that the instruction of an opcode pushes.\n\nEach opcode is read at a fork that has it.\n\nAn opcode outside the table fails with code 0, since no Lean error type covers it."},
+  {"summary":
+   "The depths, counted from 1 at the top, that the immediate byte of an opcode encodes.",
+   "signature": "(opcode: int, immediate: int) -> bytes",
+   "operation": "EthLib.Execution.Evm.Exports.immediateDepthsExport",
+   "method": "evm_immediate_depths",
+   "errors": [],
+   "error_class": "EvmError",
+   "docstring":
+   "The depths, counted from 1 at the top, that the immediate byte of an opcode encodes.\n\nDUPN and SWAPN give one depth, and EXCHANGE gives two, as EIP-8024 decodes them.\n\nAnother opcode, or a byte that encodes no depth, fails with code 0.\n\nNo Lean error type covers these failures."},
   {"summary": "The price of a memory of a given size in bytes.",
    "signature": "(size: bytes) -> bytes",
    "operation": "EthLib.Execution.Evm.Exports.memoryGasCostExport",

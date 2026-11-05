@@ -266,6 +266,12 @@ def OPCODE_PUSH0 : Nat := BASE
 def OPCODE_DUP : Nat := VERY_LOW
 /-- The price of SWAP1 to SWAP16. -/
 def OPCODE_SWAP : Nat := VERY_LOW
+/-- The price of DUPN, from EIP-8024. -/
+def OPCODE_DUPN : Nat := VERY_LOW
+/-- The price of SWAPN, from EIP-8024. -/
+def OPCODE_SWAPN : Nat := VERY_LOW
+/-- The price of EXCHANGE, from EIP-8024. -/
+def OPCODE_EXCHANGE : Nat := VERY_LOW
 /-- The price of TLOAD, from EIP-1153. -/
 def OPCODE_TLOAD : Nat := WARM_ACCESS
 /-- The price of TSTORE, from EIP-1153. -/

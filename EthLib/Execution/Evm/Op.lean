@@ -111,6 +111,12 @@ inductive Op where
   | swap (n : Fin 16)
   /-- LOGn, which emits a log with `n` topics, for `n` from 0 to 4. -/
   | log (n : Fin 5)
+  /-- DUPN, which copies an item deeper than DUP16 reaches, by EIP-8024. -/
+  | dupn
+  /-- SWAPN, which exchanges the top with an item deeper than SWAP16 reaches, by EIP-8024. -/
+  | swapn
+  /-- EXCHANGE, which exchanges two items below the top, by EIP-8024. -/
+  | exchange
   | create
   | call
   | callcode
@@ -201,6 +207,9 @@ def toByte : Op → UInt8
   | .dup n => (0x80 + n.val).toUInt8
   | .swap n => (0x90 + n.val).toUInt8
   | .log n => (0xa0 + n.val).toUInt8
+  | .dupn => 0xe6
+  | .swapn => 0xe7
+  | .exchange => 0xe8
   | .create => 0xf0
   | .call => 0xf1
   | .callcode => 0xf2
@@ -229,8 +238,8 @@ def since : Op → Fork
   | .blobhash | .blobbasefee | .tload | .tstore | .mcopy => .dencun
   -- EIP-7939
   | .clz => .fusaka
-  -- EIP-7843
-  | .slotnum => .glamsterdam
+  -- EIP-7843 and EIP-8024
+  | .slotnum | .dupn | .swapn | .exchange => .glamsterdam
   | _ => .frontier
 
 /-- The opcode of a byte, at the fork that adds that opcode or later, or none. -/
@@ -312,6 +321,9 @@ def decode (byte : UInt8) : Option Op :=
     | 0x5c => some .tload
     | 0x5d => some .tstore
     | 0x5e => some .mcopy
+    | 0xe6 => some .dupn
+    | 0xe7 => some .swapn
+    | 0xe8 => some .exchange
     | 0xf0 => some .create
     | 0xf1 => some .call
     | 0xf2 => some .callcode
