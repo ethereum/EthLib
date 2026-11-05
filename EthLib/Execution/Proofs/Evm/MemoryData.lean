@@ -264,9 +264,13 @@ theorem byteAt_mcopyStep {evm after : Evm fork Meter} {destination source length
 
 /-- A copy to memory sets each byte of its range to the byte of the source from the offset.
 
-Past the end of the source, the byte is zero. The copy keeps every other byte.
+Past the end of the source, the byte is zero.
 
-CALLDATACOPY and CODECOPY run this copy. Memory must start at a size that is a multiple of 32. -/
+The copy keeps every other byte.
+
+CALLDATACOPY and CODECOPY run this copy.
+
+Memory must start at a size that is a multiple of 32. -/
 theorem byteAt_copyToMemory {base : Nat} {data : ByteArray} {evm after : Evm fork Meter}
     {start offset size : U256} {rest : List U256}
     (hstack : evm.stack.val = start :: offset :: size :: rest) (hmod : evm.memory.size % 32 = 0)
