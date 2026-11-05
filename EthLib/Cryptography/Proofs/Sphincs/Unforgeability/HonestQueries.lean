@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.Bytes
+public import EthLib.Cryptography.Proofs.QueryAvoidance
 public import EthLib.Cryptography.Proofs.Sphincs.Address
 public import EthLib.Cryptography.Proofs.Sphincs.Serialization
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.VerifyQueries
@@ -369,74 +370,6 @@ least 16 bytes. -/
 section Avoid
 
 variable {ι : Type} {spec : OracleSpec ι} {p : spec.Domain → Prop} [DecidablePred p]
-
-/-- Computing a vector in order queries `p` nowhere when no entry does. -/
-theorem ofFnInOrder_isQueryBoundP_zero {α : Type} :
-    ∀ (k : Nat) (f : Fin k → OracleComp spec α), (∀ i, IsQueryBoundP (f i) p 0) →
-      IsQueryBoundP (Xmss.ofFnInOrder k f) p 0
-  | 0, _, _ => isQueryBoundP_pure _ _ _
-  | k + 1, f, h => by
-    rw [Xmss.ofFnInOrder]
-    exact isQueryBoundP_bind_zero _ _ (h 0) fun _ =>
-      isQueryBoundP_bind_zero _ _ (ofFnInOrder_isQueryBoundP_zero k _ fun i => h i.succ)
-        fun _ => isQueryBoundP_pure _ _ _
-
-/-- A hash chain queries `p` nowhere when no step does. -/
-theorem chain_isQueryBoundP_zero {α : Type} {k : Nat} (step : Fin k → α → OracleComp spec α)
-    (hstep : ∀ i v, IsQueryBoundP (step i v) p 0) (start : Nat) :
-    ∀ (steps : Nat) (h : start + steps ≤ k) (value : α),
-      IsQueryBoundP (Wots.chain step start steps h value) p 0
-  | 0, _, _ => isQueryBoundP_pure _ _ _
-  | s + 1, h, value => by
-    rw [Wots.chain_succ]
-    exact isQueryBoundP_bind_zero _ _ (chain_isQueryBoundP_zero step hstep start s _ value)
-      fun _ => hstep _ _
-
-/-- A search over trials queries `p` nowhere when no test does. -/
-theorem findFirst_isQueryBoundP_zero {κ β : Type} (trial : Nat → κ)
-    (test : κ → OracleComp spec (Option β)) (htest : ∀ k, IsQueryBoundP (test k) p 0) :
-    ∀ (c fuel : Nat), IsQueryBoundP (Wots.findFirst trial test c fuel) p 0
-  | _, 0 => isQueryBoundP_pure _ _ _
-  | c, fuel + 1 => by
-    rw [Wots.findFirst]
-    refine isQueryBoundP_bind_zero _ _ (htest _) fun r => ?_
-    cases r with
-    | none => exact findFirst_isQueryBoundP_zero trial test htest (c + 1) fuel
-    | some x => exact isQueryBoundP_pure _ _ _
-
-/-- A Merkle node queries `p` nowhere when no leaf and no node hash does. -/
-theorem merkleNode_isQueryBoundP_zero {α : Type} (hash : Nat → Nat → α → α → OracleComp spec α)
-    (leaves : Nat → OracleComp spec α) (hleaves : ∀ j, IsQueryBoundP (leaves j) p 0)
-    (hhash : ∀ level j left right, IsQueryBoundP (hash level j left right) p 0)
-    (level j : Nat) : IsQueryBoundP (Merkle.node hash leaves level j) p 0 :=
-  Merkle.node_rec hash (fun x => IsQueryBoundP x p 0)
-    (fun hx hf => isQueryBoundP_bind_zero _ _ hx hf) leaves hleaves hhash level j
-
-/-- The siblings of a node query `p` nowhere when no leaf and no node hash does. -/
-theorem merkleSiblings_isQueryBoundP_zero {α : Type}
-    (hash : Nat → Nat → α → α → OracleComp spec α) (leaves : Nat → OracleComp spec α)
-    (hleaves : ∀ j, IsQueryBoundP (leaves j) p 0)
-    (hhash : ∀ level j left right, IsQueryBoundP (hash level j left right) p 0) :
-    ∀ (level j k : Nat), IsQueryBoundP (Merkle.siblings hash leaves level j k) p 0
-  | _, _, 0 => isQueryBoundP_pure _ _ _
-  | level, j, k + 1 => by
-    rw [Merkle.siblings]
-    exact isQueryBoundP_bind_zero _ _
-      (merkleNode_isQueryBoundP_zero hash leaves hleaves hhash _ _) fun _ =>
-        isQueryBoundP_bind_zero _ _
-          (merkleSiblings_isQueryBoundP_zero hash leaves hleaves hhash _ _ k)
-          fun _ => isQueryBoundP_pure _ _ _
-
-/-- A climb queries `p` nowhere when no node hash does. -/
-theorem climb_isQueryBoundP_zero {α : Type} (hash : Nat → Nat → α → α → OracleComp spec α)
-    (hhash : ∀ level j left right, IsQueryBoundP (hash level j left right) p 0) :
-    ∀ (siblings : List α) (level j : Nat) (current : α),
-      IsQueryBoundP (Merkle.climb hash level j current siblings) p 0
-  | [], _, _, _ => isQueryBoundP_pure _ _ _
-  | _ :: rest, level, j, current => by
-    rw [Merkle.climb]
-    exact isQueryBoundP_bind_zero _ _ (hhash _ _ _ _) fun _ =>
-      climb_isQueryBoundP_zero hash hhash rest _ _ _
 
 variable (H : ByteArray → OracleComp spec (Vector UInt8 32)) (prf : SeedPrf (OracleComp spec))
   (hH : ∀ pp A payload, ¬IsDerivationAddress A → 16 ≤ payload.size →
