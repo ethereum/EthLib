@@ -181,13 +181,6 @@ theorem interpolatePolynomialcoeff_eval_at_of_distinct
   rw [ite_eq_left (List.mem_range.mpr hk)]
   exact Fin.zero_add _
 
-private theorem except_bind_eq_ok_interp {ε α β : Type _} {x : Except ε α}
-    {f : α → Except ε β} {b : β}
-    (h : x >>= f = .ok b) : ∃ a, x = .ok a ∧ f a = .ok b := by
-  cases x with
-  | error e => exact absurd h (by simp [Bind.bind, Except.bind])
-  | ok a => exact ⟨a, rfl, by simpa [Bind.bind, Except.bind] using h⟩
-
 private theorem inner_range_size_and_bound (xs : Array Fr) (i : Nat)
     (init : PolynomialCoeff) (hinit : init.size = 1) :
     ∀ (k : Nat) (out : PolynomialCoeff),
@@ -205,7 +198,7 @@ private theorem inner_range_size_and_bound (xs : Array Fr) (i : Nat)
     intro out h
     rw [List.range_succ, List.foldlM_append] at h
     simp only [List.foldlM_cons, List.foldlM_nil, bind_pure] at h
-    obtain ⟨q, hq, hstep⟩ := except_bind_eq_ok_interp h
+    obtain ⟨q, hq, hstep⟩ := Base.bind_ok_iff.mp h
     obtain ⟨hq_sz, hq_bd⟩ := ih q hq
     by_cases hki : k ≠ i
     · unfold interpolationStep at hstep
@@ -296,10 +289,10 @@ private theorem outer_range_size_and_bound (xs ys : Array Fr)
     intro hk out h
     rw [List.range_succ, List.foldlM_append] at h
     simp only [List.foldlM_cons, List.foldlM_nil, bind_pure] at h
-    obtain ⟨q, hq, hstep⟩ := except_bind_eq_ok_interp h
+    obtain ⟨q, hq, hstep⟩ := Base.bind_ok_iff.mp h
     obtain ⟨hq_sz, _⟩ := ih (by omega) q hq
     unfold outerStep at hstep
-    obtain ⟨summand, hs, hadd⟩ := except_bind_eq_ok_interp hstep
+    obtain ⟨summand, hs, hadd⟩ := Base.bind_ok_iff.mp hstep
     simp only [pure, Except.pure, Except.ok.injEq] at hadd
     subst hadd
     rw [← Array.foldlM_toList, Array.toList_range, ← hsz] at hs

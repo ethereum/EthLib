@@ -27,16 +27,6 @@ private theorem size_foldl_of_size_step {α β : Type _} (xs : Array β)
   Array.foldl_induction (motive := fun _ acc => acc.size = init.size) rfl
     (fun i acc h => (hf acc xs[i]).trans h)
 
-/-- Split a successful `Except` bind into its two successful stages.
-Cases on the opaque first stage, so nothing forces evaluation of the
-(expensive) underlying computation. -/
-private theorem except_bind_eq_ok {ε α β : Type _} {x : Except ε α}
-    {f : α → Except ε β} {b : β}
-    (h : x >>= f = .ok b) : ∃ a, x = .ok a ∧ f a = .ok b := by
-  cases x with
-  | error e => exact absurd h (by simp [Bind.bind, Except.bind])
-  | ok a => exact ⟨a, rfl, by simpa [Bind.bind, Except.bind] using h⟩
-
 /-- `constructVanishingPolynomial` rejects inputs where all cells are missing. -/
 theorem constructVanishingPolynomial_tooManyMissingCells
     {missingCellIndices : Array CellIndex}
@@ -448,7 +438,7 @@ theorem size_recoverPolynomialcoeff
   rw [recoverPolynomialcoeff] at h
   split at h
   · exact absurd h (by simp [Bind.bind, Except.bind])
-  · obtain ⟨u, hu, h⟩ := except_bind_eq_ok h
+  · obtain ⟨u, hu, h⟩ := Base.bind_ok_iff.mp h
     simp only [pure, Except.pure, Except.ok.injEq] at h
     subst h
     simp [FIELD_ELEMENTS_PER_EXT_BLOB]
@@ -518,7 +508,7 @@ theorem recoverPolynomialcoeff_ok_iff
       exact absurd h (by simp [Bind.bind, Except.bind])
     · have hlen : cosetsEvals.size = cellIndices.size := Decidable.of_not_not hne
       rw [ite_eq_right hne] at h
-      obtain ⟨z, hz, _⟩ := except_bind_eq_ok h
+      obtain ⟨z, hz, _⟩ := Base.bind_ok_iff.mp h
       have hlt := (leadingCoeff_constructVanishingPolynomial hz).1
       exact ⟨hlen, (missing_size_lt_iff cellIndices).mp hlt⟩
   · rintro ⟨hlen, hci⟩
