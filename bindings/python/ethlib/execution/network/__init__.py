@@ -64,6 +64,11 @@ def access_lists_answer(
     return _native.eth_access_lists_answer(version, request, response, expected)
 
 
+def check_partial_receipts(gas_limits: bytes, block_gas_limit: int, receipts: bytes) -> None:
+    """Accept the receipts delivered so far of a block, by the checks of EIP-7975."""
+    _native.eth_check_partial_receipts(gas_limits, block_gas_limit, receipts)
+
+
 __all__ = [
     "BLOCK_ACCESS_LISTS",
     "CELLS",
@@ -86,6 +91,7 @@ __all__ = [
     "TRANSACTIONS",
     "EthWireError",
     "check_headers",
+    "check_partial_receipts",
     "check_pooled",
     "check_status",
     "decode_message",

@@ -470,6 +470,9 @@
 #define DOC_eth_access_lists_answer \
   "Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request` of eth/71 on, given the access list hash of each requested block."
 
+#define DOC_eth_check_partial_receipts \
+  "The checks that [EIP-7975](https://eips.ethereum.org/EIPS/eip-7975#specification) asks of the receipts of a block that arrive in parts."
+
 #define DOC_snap_message_decode \
   "The canonical data of the message with the ID `id` and the data `data`, on a version."
 

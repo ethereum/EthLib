@@ -123,4 +123,54 @@ def receiptsMatch (version : EthVersion) (fork : Fork) (receiptsRoot : Hash32)
     | .error _ => false
   | .error _ => false
 
+/-! ## Partial receipt lists of eth/70 -/
+
+/-- Why a partial list of receipts fails the checks of EIP-7975. -/
+inductive PartialReceiptsError where
+  /-- More receipts were delivered than the block has transactions. -/
+  | tooMany (delivered transactions : Nat)
+  /-- A receipt is larger than the gas limit of its transaction divided by 8. -/
+  | receiptTooLarge (index size bound : Nat)
+  /-- The receipts are larger in total than the gas limit of the block divided by 8. -/
+  | totalTooLarge (size bound : Nat)
+  deriving DecidableEq, Repr
+
+/-- The stable code of an error, one per constructor, for the C exports.
+
+The codes start at 501, above every code of the other eth errors.
+
+A new constructor takes a new code, so that each code keeps its meaning. -/
+def PartialReceiptsError.code : PartialReceiptsError → UInt32
+  | .tooMany .. => 501
+  | .receiptTooLarge .. => 502
+  | .totalTooLarge .. => 503
+
+/--
+The checks that [EIP-7975](https://eips.ethereum.org/EIPS/eip-7975#specification) asks of the
+receipts of a block that arrive in parts.
+
+`gasLimits` holds the gas limit of each transaction of the block, in order.
+
+`sizes` holds the size in bytes of each receipt delivered so far, from the first one.
+
+- No more receipts than transactions; the list is complete when there are as many.
+
+The EIP asks that the count of receipts "matches" the count of transactions.
+
+A list still in parts has fewer, so EthLib reads the rule as "at most" until the list is complete.
+
+- Each receipt is at most the gas limit of its transaction divided by 8.
+- All the receipts together are at most the gas limit of the block divided by 8.
+
+The EIP says only "allowed by the block gas limit" for the total, so EthLib applies the bound of
+one transaction to the whole block, as its Rationale derives that bound from the gas.
+-/
+def checkPartialReceipts (gasLimits : List Nat) (blockGasLimit : Nat) (sizes : List Nat) :
+    Except PartialReceiptsError Unit := do
+  if gasLimits.length < sizes.length then throw (.tooMany sizes.length gasLimits.length)
+  let indexed := (List.range sizes.length).zip (sizes.zip gasLimits)
+  if let some (i, size, gas) := indexed.find? (fun (_, size, gas) => gas / 8 < size) then
+    throw (.receiptTooLarge i size (gas / 8))
+  if blockGasLimit / 8 < sizes.sum then throw (.totalTooLarge sizes.sum (blockGasLimit / 8))
+
 end EthLib.Execution.Network

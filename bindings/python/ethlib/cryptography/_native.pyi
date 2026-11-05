@@ -627,6 +627,10 @@ def eth_access_lists_answer(version: int, request: bytes, response: bytes, expec
     """Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request` of eth/71 on, given the access list hash of each requested block."""
     ...
 
+def eth_check_partial_receipts(gas_limits: bytes, block_gas_limit: int, receipts: bytes) -> bool:
+    """The checks that [EIP-7975](https://eips.ethereum.org/EIPS/eip-7975#specification) asks of the receipts of a block that arrive in parts."""
+    ...
+
 def snap_message_decode(version: int, id: int, data: bytes) -> bytes:
     """The canonical data of the message with the ID `id` and the data `data`, on a version."""
     ...

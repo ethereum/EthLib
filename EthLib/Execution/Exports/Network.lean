@@ -150,4 +150,29 @@ def accessListsAnswerExport (version : UInt64) (request response : ByteArray)
     else throw (0, "an access list hash is not 32 bytes")
   return Message.accessListsResponse hashes req resp
 
+/-- A message for a refused partial list, phrased for someone reading a Python traceback. -/
+def partialMessage : PartialReceiptsError → String
+  | .tooMany d t => s!"{d} receipts delivered for {t} transactions"
+  | .receiptTooLarge i s b => s!"receipt {i} has {s} bytes, more than {b}"
+  | .totalTooLarge s b => s!"receipts have {s} bytes, more than {b}"
+
+/-- Whether the receipts delivered so far of one block pass the checks of EIP-7975.
+
+The receipts are one RLP list, each receipt counting the bytes of its RLP encoding.
+
+The gas limits of the transactions are one RLP list of scalars. -/
+@[export eth_check_partial_receipts]
+def checkPartialReceiptsExport (gasLimits : ByteArray) (blockGasLimit : UInt64)
+    (receipts : ByteArray) : Result Bool := do
+  let .ok (limits : List Nat) := Serialization.Rlp.Codec.decode gasLimits
+    | throw (0, "gas limits are not an RLP list of scalars")
+  let .ok (.list items) := Serialization.Rlp.decode receipts
+    | throw (0, "receipts are not one RLP list")
+  let sizes ← items.mapM fun item =>
+    match Serialization.Rlp.encode item with
+    | .ok bytes => pure bytes.size
+    | .error _ => throw (0, "a receipt does not encode")
+  (checkPartialReceipts limits blockGasLimit.toNat sizes).map (fun _ => true)
+    |>.mapError fun e => (e.code, partialMessage e)
+
 end EthLib.Execution.Network.Exports

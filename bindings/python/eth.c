@@ -56,6 +56,13 @@ eth_access_lists_answer(
   lean_object* expected
 );
 
+extern lean_object*
+eth_check_partial_receipts(
+  lean_object* gas_limits,
+  uint64_t block_gas_limit,
+  lean_object* receipts
+);
+
 /* ---- Wrappers --------------------------------------------------------- */
 
 /* Copy the Python `bytes` object `obj` into a Lean `ByteArray`, or set a TypeError naming it. */
@@ -199,4 +206,20 @@ py_eth_access_lists_answer(
   PyMem_Free(hashes);
   return except_into_pybool(
     eth_access_lists_answer(version, request, response, expected), ETH_WIRE_ERROR);
+}
+
+PyObject*
+py_eth_check_partial_receipts(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *limits_obj, *block_obj, *receipts_obj;
+  if (!PyArg_ParseTuple(args, "OOO", &limits_obj, &block_obj, &receipts_obj)) return NULL;
+  uint64_t block_gas_limit;
+  if (parse_uint64(block_obj, "block_gas_limit", &block_gas_limit)) return NULL;
+  lean_object *limits, *receipts;
+  if (parse_bytes(limits_obj, "gas_limits", &limits)) return NULL;
+  if (parse_bytes(receipts_obj, "receipts", &receipts)) { lean_dec(limits); return NULL; }
+  return except_into_pybool(
+    eth_check_partial_receipts(limits, block_gas_limit, receipts), ETH_WIRE_ERROR);
 }

@@ -65,4 +65,40 @@ theorem consensusOfItem_toItem {version : EthVersion} (hv : version ≠ .eth68)
   simp [consensusOfItem, hv, LawfulCodec.ofItem_toItem, Functor.map, Except.map,
     Except.mapError]
 
+/-- A partial list that passes the checks of EIP-7975 has no more receipts than transactions, each
+receipt within its bound, and a total within the bound of the block. -/
+theorem of_checkPartialReceipts {gasLimits : List Nat} {blockGasLimit : Nat} {sizes : List Nat}
+    (h : checkPartialReceipts gasLimits blockGasLimit sizes = .ok ()) :
+    sizes.length ≤ gasLimits.length ∧
+      (∀ (i : Nat) (hs : i < sizes.length) (hg : i < gasLimits.length),
+        sizes[i] ≤ gasLimits[i] / 8) ∧
+      sizes.sum ≤ blockGasLimit / 8 := by
+  unfold checkPartialReceipts at h
+  by_cases hl : gasLimits.length < sizes.length
+  · simp [hl, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+  simp only [hl, ↓reduceIte, bind, Except.bind, pure, Except.pure] at h
+  cases hf : ((List.range sizes.length).zip (sizes.zip gasLimits)).find?
+      (fun (_, size, gas) => gas / 8 < size) with
+  | some x =>
+    obtain ⟨i, size, gas⟩ := x
+    simp [hf, throw, throwThe, MonadExceptOf.throw] at h
+  | none =>
+    simp only [hf] at h
+    refine ⟨by omega, fun i hs hg => ?_, ?_⟩
+    · have hmem : (i, sizes[i], gasLimits[i])
+          ∈ (List.range sizes.length).zip (sizes.zip gasLimits) :=
+        List.mem_iff_getElem.mpr ⟨i, by simp; omega, by simp⟩
+      have := List.find?_eq_none.mp hf _ hmem
+      simp at this
+      omega
+    · by_cases ht : blockGasLimit / 8 < sizes.sum
+      · simp [ht, throw, throwThe, MonadExceptOf.throw] at h
+      · omega
+
+/-- Two errors with one code come from one constructor. -/
+theorem PartialReceiptsError.code_injective (e₁ e₂ : PartialReceiptsError)
+    (h : e₁.code = e₂.code) : e₁.ctorIdx = e₂.ctorIdx := by
+  cases e₁ <;> cases e₂ <;>
+    first | rfl | (simp only [PartialReceiptsError.code] at h; exact absurd h (by decide))
+
 end EthLib.Execution.Network
