@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.Containers.Builder
+public import EthLib.Consensus.Builders
 public import EthLib.Consensus.PqKeys.Possession
 public import EthLib.Cryptography.Bls.Signatures
 public import EthLib.Networking.Gossip.Topic
@@ -58,21 +58,13 @@ structure RegistrationView where
   /-- The epoch of the last change of the keys of each builder. -/
   builderChangeEpochs : BuilderPQKeyChangeEpochs
 
-/-- Whether an index names a builder: the builder flag is set. -/
-def namesBuilder (index : ValidatorIndex) : Bool :=
-  index &&& BUILDER_INDEX_FLAG != 0
-
-/-- The builder index of an index with the builder flag set: the index without the flag. -/
-def builderIndexOf (index : ValidatorIndex) : BuilderIndex :=
-  index &&& ~~~BUILDER_INDEX_FLAG
-
 /-- The BLS key and the stored entry of the registrant of an index, if the index names one.
 
 The entry is the keys and the epoch of their last change. -/
 def RegistrationView.registrant (view : RegistrationView) (index : ValidatorIndex) :
     Option (BLSPubkey × PQKeyMaterial × Epoch) :=
-  if namesBuilder index then do
-    let builder := (builderIndexOf index).toNat
+  if isBuilderIndex index then do
+    let builder := (convertValidatorIndexToBuilderIndex index).toNat
     return ((← view.builders[builder]?).pubkey, ← view.builderKeys.data[builder]?,
       ← view.builderChangeEpochs.data[builder]?)
   else do
@@ -84,14 +76,16 @@ def RegistrationView.registrant (view : RegistrationView) (index : ValidatorInde
 
 A validator has no exit epoch yet, and a builder has no withdrawable epoch yet. -/
 def RegistrationView.notExiting (view : RegistrationView) (index : ValidatorIndex) : Bool :=
-  if namesBuilder index then
-    (view.builders[(builderIndexOf index).toNat]?).any (·.withdrawableEpoch == FAR_FUTURE_EPOCH)
+  if isBuilderIndex index then
+    (view.builders[(convertValidatorIndexToBuilderIndex index).toNat]?).any
+      (·.withdrawableEpoch == FAR_FUTURE_EPOCH)
   else (view.validators[index.toNat]?).any (·.exitEpoch == FAR_FUTURE_EPOCH)
 
 /-- Whether an index names a validator, or a builder whose deposit epoch is finalized. -/
 def RegistrationView.depositFinalized (view : RegistrationView) (index : ValidatorIndex) : Bool :=
-  !namesBuilder index ||
-    (view.builders[(builderIndexOf index).toNat]?).any (·.depositEpoch < view.finalizedEpoch)
+  !isBuilderIndex index ||
+    (view.builders[(convertValidatorIndexToBuilderIndex index).toNat]?).any
+      (·.depositEpoch < view.finalizedEpoch)
 
 /-- Whether any validator or builder holds a leanXMSS key. -/
 def RegistrationView.keyInUse (view : RegistrationView) (key : XMSSPublicKey) : Bool :=
@@ -142,7 +136,7 @@ def validatePqKeyRegistration (config : Config) (preset : PqKeyPreset) (activati
   | some (pubkey, stored, changeEpoch) =>
   (rejectUnless (view.notExiting index) "registrant exiting").andThen fun _ =>
   (ignoreUnless (view.depositFinalized index) "builder deposit not finalized").andThen fun _ =>
-  (rejectUnless (!namesBuilder index || keys.vrfRoot == Vector.replicate 32 0)
+  (rejectUnless (!isBuilderIndex index || keys.vrfRoot == Vector.replicate 32 0)
     "builder with a VRF root").andThen fun _ =>
   (ignoreUnless (!seen) "registration already seen").andThen fun _ =>
   (rejectUnless (registration.previousChangeEpoch == changeEpoch)

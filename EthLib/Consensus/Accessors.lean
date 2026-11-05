@@ -58,6 +58,10 @@ inductive AccessorError where
   | forkNotYetSpecified (fork : Base.Fork)
   /-- The epoch is past the next epoch, whose duties the state does not fix yet. -/
   | epochTooFar (epoch nextEpoch : Epoch)
+  /-- From Gloas: a builder index names no builder of the registry. -/
+  | builderIndexOutOfRange (index : BuilderIndex)
+  /-- From Gloas: a position is past the end of the pending builder payments. -/
+  | paymentIndexOutOfRange (index : UInt64)
   deriving DecidableEq, Repr
 
 /-- Whether a validator is active in an epoch: from its activation epoch, before its exit epoch. -/
