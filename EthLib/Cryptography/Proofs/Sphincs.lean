@@ -23,6 +23,7 @@ public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Halves
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.HalvedGame
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Graph
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.ForsForgery
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.HypertreeForgery
 public import EthLib.Cryptography.Proofs.Sphincs.SignatureFailure
 
 /-!

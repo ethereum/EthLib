@@ -186,6 +186,12 @@ Definitions that derive a secret take the derivation function as an argument too
   Under any hash, FORS openings that recover the honest FORS key of their instance are its honest openings at the leaves the digest picked (`forsRecover_binding`).
   Otherwise an explicit search finds a FORS leaf or a FORS node where verification hashed other children values to the honest value (`findForsPreimage_valid`).
   The search finds nothing in honest openings (`findForsPreimage_honest`).
+- What an accepted signature contains (`Unforgeability/HypertreeForgery.lean`).
+  Under any hash, a signature accepted under the honest public key is read from the top layer down (`verifyWith_binding`).
+  At each layer, an explicit search finds a tree node, a key's leaf or a chain step where verification left the honest values (`findLayerPreimage_valid`).
+  Otherwise the layer is one of three things (`layerRoot_binding`).
+  It holds a chain value below the one that the key's honest signature reveals, or it encodes another input to that signature's codeword, or it is that signature.
+  Only below an honest bottom layer signature does the proof reach the FORS openings.
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
 
