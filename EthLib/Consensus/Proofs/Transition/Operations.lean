@@ -174,6 +174,32 @@ theorem sameSizes_setEpochParticipation (current : Bool)
   unfold setEpochParticipation
   split <;> exact SameSizes.refl _
 
+/-- Before Deneb, the inclusion deadline passes exactly when two facts hold.
+
+The slot one epoch after the given slot fits in 64 bits.
+
+The slot of the state is at most that slot. -/
+theorem checkInclusionDeadline_ok_iff {slot : Slot} (before : fork < .dencun) :
+    checkInclusionDeadline state slot = .ok () ↔
+      slot.toNat + preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 ∧
+        state.slot.toNat ≤ slot.toNat + preset.SLOTS_PER_EPOCH.toNat := by
+  simp only [checkInclusionDeadline, before, ↓reduceIte, bind_ok_iff, ensure_ok_iff,
+    liftAccessor_ok, liftArith, mapError_ok_iff, addChecked_ok_iff]
+  constructor
+  · rintro ⟨latest, ⟨fits, sum⟩, le⟩
+    exact ⟨fits, sum ▸ UInt64.le_iff_toNat_le.mp le⟩
+  · rintro ⟨fits, le⟩
+    have sum : (slot + preset.SLOTS_PER_EPOCH).toNat = slot.toNat + preset.SLOTS_PER_EPOCH.toNat :=
+      by rw [UInt64.toNat_add, Nat.mod_eq_of_lt fits]
+    exact ⟨_, ⟨fits, sum⟩, UInt64.le_iff_toNat_le.mpr (sum ▸ le)⟩
+
+/-- From Deneb, the inclusion deadline always passes, whatever the slots. -/
+theorem checkInclusionDeadline_of_dencun {slot : Slot} (dencun : .dencun ≤ fork) :
+    checkInclusionDeadline state slot = .ok () := by
+  have notBefore : ¬fork < .dencun := Nat.not_lt.mpr dencun
+  simp only [checkInclusionDeadline, notBefore, ↓reduceIte]
+  rfl
+
 /-- From Altair, an attestation keeps the sizes of the registry and the balances. -/
 theorem sameSizes_processAttestationAltair {attestation : Attestation preset fork}
     {altair : .altair ≤ fork}
@@ -184,7 +210,7 @@ theorem sameSizes_processAttestationAltair {attestation : Attestation preset for
   · cases computed
   simp only [bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, _, _, _, _, _, _, raised⟩ := computed
+    _, _, _, _, _, _, raised⟩ := computed
   exact (sameSizes_setEpochParticipation _ _).trans (sameSizes_increaseBalance raised)
 
 theorem sameSizes_processAttestation {attestation : Attestation preset fork}

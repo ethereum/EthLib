@@ -39,18 +39,29 @@ theorem bls_fastAggregateVerify_empty (message signature : ByteArray) :
 
 /-- What a successful sync aggregate step checked.
 
-The keys of the members that signed decode, and the signature check passed on them. -/
+The keys of the members that signed decode.
+
+The signed root is the signing root of the block root at the slot before the state's.
+
+Its domain is the sync committee domain at the epoch of that slot.
+
+The signature check passed on those keys and that root. -/
 theorem processSyncAggregate_signed {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
     (computed : processSyncAggregate config checks state altair aggregate = .ok after) :
-    ∃ pubkeys signingRoot,
+    ∃ pubkeys domain root signingRoot,
       syncParticipantPubkeys (state.currentSyncCommittee altair) aggregate.syncCommitteeBits =
         .ok pubkeys ∧
-      syncAggregateVerify checks pubkeys signingRoot
+      getDomain config state DOMAIN_SYNC_COMMITTEE
+        (some (computeEpochAtSlot preset (saturatingSub state.slot 1))) = .ok domain ∧
+      getBlockRootAtSlot state (saturatingSub state.slot 1) = .ok root ∧
+      computeSigningRoot root domain = .ok signingRoot ∧
+      syncAggregateVerify checks pubkeys (packBytes signingRoot)
         (Base.packBytes aggregate.syncCommitteeSignature) = true := by
   unfold processSyncAggregate at computed
-  simp only [bind_ok_iff, ensure_ok_iff] at computed
-  obtain ⟨pubkeys, found, _, _, _, _, _, _, _, verified, _⟩ := computed
-  exact ⟨pubkeys, _, found, verified⟩
+  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at computed
+  obtain ⟨pubkeys, found, domain, inDomain, root, atSlot, signingRoot, signed, _, verified, _⟩ :=
+    computed
+  exact ⟨pubkeys, domain, root, signingRoot, found, inDomain, atSlot, signed, verified⟩
 
 /-- One step of the sync rewards keeps the sizes of the registry and the balances. -/
 theorem sameSizes_applySyncReward {reward proposerReward : Gwei}
