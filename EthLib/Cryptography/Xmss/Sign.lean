@@ -27,6 +27,23 @@ open EthLib.Cryptography.Xmss.Constants
 
 variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
+/-- Assemble a layer signature through delayed one-time signing and path callbacks.
+
+Source: leanXMSS draft at leanVM commit `4af2cdddd7cd41b9df2cc7e123e314a91b0b4462`.
+
+The order follows section "The scheme", paragraph "Signing".
+
+A failed one-time signature returns the original natural-number key in its error.
+
+The path callback runs only after a successful one-time signature.
+-/
+def signLayerWithCallbacks (layer : Layer) (e : Nat)
+    (getOts : Unit → m (Option (Randomizer × Vector Digest V)))
+    (getPath : Unit → m (Vector Digest LAYER_HEIGHT)) : m (Except XmssError LayerSignature) := do
+  let some (randomizer, chainValues) ← getOts ()
+    | return .error (.noAdmissibleEncoding layer e)
+  return .ok { randomizer, chainValues, path := ← getPath () }
+
 /-- One layer's signature by key `e` of a message: the one-time signature and the path.
 
 # Errors

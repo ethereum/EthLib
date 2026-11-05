@@ -13,6 +13,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Tree
 public import EthLib.Cryptography.Proofs.Xmss.Verify
 public import EthLib.Cryptography.Proofs.Xmss.Serialization
 public import EthLib.Cryptography.Proofs.Xmss.Sign
+public import EthLib.Cryptography.Proofs.Xmss.SignCallbacks
 public import EthLib.Cryptography.Proofs.Xmss.Correctness
 public import EthLib.Cryptography.Proofs.Xmss.Security
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability
