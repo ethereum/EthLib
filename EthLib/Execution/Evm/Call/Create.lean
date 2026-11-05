@@ -32,13 +32,11 @@ From Tangerine Whistle, it then passes on all but one 64th of the gas left, and 
 
 An address with code or a nonce takes that gas and pushes 0, and the frame's nonce still grows.
 
-An address with storage alone is not a collision: the creation wipes that storage first.
+An address with storage alone is not a collision: the creation clears that storage first.
 
 [EIP-7610][eip7610], in Last Call, would make such a creation fail, at every fork back to Frontier.
 
-It is not applied here: [execution-specs][es-7610] removed it at every fork in commit `2ce2191`.
-
-That commit precedes the commit that made the state tests that EthLib runs.
+EthLib does not apply EIP-7610 at any fork.
 
 Otherwise the frame's nonce grows and the init code runs at the new address.
 
@@ -74,10 +72,9 @@ The EIPs that add or change an instruction define it:
 [eip2681]: https://eips.ethereum.org/EIPS/eip-2681#specification
 [eip2929]: https://eips.ethereum.org/EIPS/eip-2929#specification
 [eip3860]: https://eips.ethereum.org/EIPS/eip-3860#specification
-[eip7610]: https://eips.ethereum.org/EIPS/eip-7610#specification
+[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
 [eip8037]: https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-new-accounts
 [eip8038]: https://eips.ethereum.org/EIPS/eip-8038#createcreate2
-[es-7610]: https://github.com/ethereum/execution-specs/commit/2ce2191562f76ec6e64a82f82165d821e1c781fc
 -/
 
 @[expose] public section

@@ -744,6 +744,7 @@ RUNNERS = {
     **{f"genesis/{handler}": _genesis for handler in GENESIS},
     "legacy_ommers": legacy.run_ommers,
     "legacy_dao": legacy.run_dao,
+    "legacy_blockchain": legacy.run_blockchain,
 }
 
 

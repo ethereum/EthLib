@@ -17,7 +17,9 @@ They hold a header error of each kind, and an error in the header of an ommer.
 They hold valid ommers, whose rewards are checked, and an ommer error of each kind that the tests fill.
 They also hold two transitions to London, and every test of the transition to the DAO Fork.
 Three tests seal their blocks with a proof of work.
+Each change also runs every block of these files through the state transition.
 The weekly parity job runs every test from Frontier to London, from the archive that `tests/sources.toml` pins.
+It also runs the state tests of `ethereum/tests` in blockchain form, from the directories `GeneralStateTests`.
 That job also checks that each file here is the file of the archive.
 
 The tests `bindings/python/tests/blocks/test_legacy.py` and `bindings/python/tests/parity/test_legacy.py` read these files and never rewrite them.
@@ -29,18 +31,20 @@ EthLib accepts the block of `GasLimitHigherThan2p63m1.json`, which the tests rej
 Its gas limit is 2^63, just above the gas limit of its parent, 2^63 - 1.
 Clients cap the gas limit at 2^63 - 1.
 The Yellow Paper (Shanghai version, sections 4.4.3 and 4.4.4) makes the gas limit a natural number, bounded only by the gas limit of the parent and by 5000 from below.
-`tests/parity/disagreements.toml` lists each of these cases, so a test fails if EthLib starts to reject them.
+`tests/parity/disagreements.toml` lists each of these cases, for the header check and for the state transition.
+So a test fails if EthLib starts to reject them.
 
-EthLib rejects valid blocks 5 to 10 of `londonUncles.json`, at the transition from Berlin to London at block 5.
-Each holds the ommer number 4, a Berlin header of 15 fields, while the block is a London header of 16 fields.
-EthLib reads the ommers of a block, and the recent blocks of the ommer check, in the form of the block's fork.
-EIP-1559 adds the base fee to the headers from the fork block on, so the header of block 4 has none.
+The weekly job also expects 71 state tests to fail in the state transition.
+Each creates a contract at an address that holds storage, but has no code and a nonce of zero.
+These tests apply EIP-7610, so the creation fails.
+EthLib does not apply EIP-7610, as the documentation of `EthLib/Execution/Evm/Call/Create.lean` says.
+The creation clears the storage and runs, so the gas that the block uses differs.
+`tests/parity/disagreements.toml` lists each case under the name of its test file.
 
-The tests of the DAO Fork start it at block 5, so blocks 5 to 14 must carry the extra data `dao-hard-fork`.
-`DaoTransactions_UncleExtradata.json` rejects blocks 7, 8 and 10, whose own headers carry it.
-Each holds an ommer numbered in that window whose extra data is another value.
-EthLib checks the extra data of a block's header, and its ommer check does not yet apply the rule.
-EIP-779 asks the extra data of the blocks of the window, and does not mention ommers.
+The state transition leaves out the network `Constantinople`.
+That network runs EIP-1283, which EIP-1716 removed before the fork reached mainnet.
+EthLib treats Constantinople as Petersburg, so it would compute other gas costs for these tests.
+The header, ommer and DAO Fork checks still run that network, since Petersburg keeps its headers, ommers and rewards.
 
 ## Licence
 

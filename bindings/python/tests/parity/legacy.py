@@ -1,14 +1,16 @@
 """The runners of the legacy blockchain tests of ethereum/legacytests, from Frontier to London."""
 
 import json
+import re
 from collections import Counter
 from dataclasses import dataclass
-from functools import cache
+from functools import lru_cache
 from pathlib import Path
 from typing import cast
 
 import pytest
 
+from ethlib.cryptography.keccak import keccak256
 from ethlib.errors import BlockError
 from ethlib.execution import blocks
 from ethlib.execution.pow import validate_ommers
@@ -111,7 +113,8 @@ class Block:
         return "0x" + rlp.decode(self.header)[0].hex()
 
 
-@cache
+# A file of state tests in blockchain form can hold hundreds of megabytes, so few stay in memory.
+@lru_cache(maxsize=4)
 def _fixtures(path: Path) -> dict:
     return json.loads(path.read_text())
 
@@ -409,9 +412,8 @@ def _check_post_state(test: dict, chain: dict[str, Block]) -> None:
     assert anchored > 0
 
 
-def _dao_accounts(test: dict, accounts: str) -> bytes:
-    """The DAO accounts and the recovery contract of a state of the test, as a state input."""
-    wanted = set(DAO_ACCOUNTS) | {DAO_RECOVERY}
+def _pre_state(accounts: dict) -> bytes:
+    """Accounts of a test in the form of a state input: address, nonce, balance, code, storage."""
 
     def scalar(value: str) -> bytes:
         return _quantity(int(value, 16))
@@ -419,15 +421,26 @@ def _dao_accounts(test: dict, accounts: str) -> bytes:
     return rlp.encode(
         [
             [
-                address,
+                bytes.fromhex(address[2:]),
                 scalar(a["nonce"]),
                 scalar(a["balance"]),
                 bytes.fromhex(a["code"][2:]),
                 [[int(k, 16).to_bytes(32, "big"), scalar(v)] for k, v in a["storage"].items()],
             ]
-            for address, a in ((bytes.fromhex(k[2:]), a) for k, a in test[accounts].items())
-            if address in wanted
+            for address, a in accounts.items()
         ]
+    )
+
+
+def _dao_accounts(test: dict, accounts: str) -> bytes:
+    """The DAO accounts and the recovery contract of a state of the test, as a state input."""
+    wanted = set(DAO_ACCOUNTS) | {DAO_RECOVERY}
+    return _pre_state(
+        {
+            address: a
+            for address, a in test[accounts].items()
+            if bytes.fromhex(address[2:]) in wanted
+        }
     )
 
 
@@ -483,3 +496,159 @@ def run_dao(root: Path, case: Case) -> None:
         assert dao_fork_root(pre) == state_root(post)
     else:
         assert state_root(pre) == state_root(post)
+
+
+# The legacy tests run on chain 1.
+CHAIN_ID = 1
+
+
+def chain_config(network: str) -> dict:
+    """The chain configuration of a network: each fork with the block from which it runs."""
+    first, *second = LEGACY_FORKS[network]
+    # The DAO Fork runs only as the second fork of its transition network.
+    forks = [fork for fork in FORK_ORDER if fork != "daoFork"]
+    activations = [[fork, "block", 0] for fork in forks[: forks.index(first) + 1]]
+    activations += [[fork, "block", TRANSITION_BLOCK] for fork in second]
+    return {"chainId": CHAIN_ID, "activations": activations, "blobSchedules": []}
+
+
+# The error of the state transition that each exception of the tests names, as a pattern.
+# The header and ommer names follow the code sets of the header and ommer runners above,
+# since the fillers name the first check of their client, and EthLib checks in another order.
+EXCEPTIONS: dict[str, str] = {
+    # The checks of a header against its parent.
+    "InvalidDifficulty": r"wrongDifficulty",
+    "InvalidGasLimit": r"invalidGasLimit",
+    "InvalidGasLimit2": r"invalidGasLimit|gasUsedAboveLimit",
+    "BlockException.INVALID_GASLIMIT": r"invalidGasLimit",
+    # The ommer check takes the parent of an ommer to be the recent block one number below it.
+    # An ommer with a wrong number then fails against a block that is not its parent.
+    # An ommer numbered 0, or not below the block, is out of range before its header is read.
+    "InvalidNumber": r"wrongNumber|genesisNumber|OmmerError\.(invalidHeader|numberOutOfRange)",
+    "InvalidTimestamp": r"timestampNotAfterParent",
+    "InvalidTimestampOlderParent": r"timestampNotAfterParent",
+    "ExtraDataTooBig": r"extraDataTooLong",
+    "TooMuchGasUsed": r"gasUsedAboveLimit",
+    "1559BlockImportImpossible_BaseFeeWrong": r"wrongBaseFee",
+    "3675PoSBlockRejected": r"wrongDifficulty",
+    "InvalidBlockNonce": r"proofOfWork",
+    "BlockException.EXTRA_DATA_INVALID_DAO": r"wrongDaoExtraData",
+    # The checks of the ommers.
+    "InvalidUnclesHash": r"wrongOmmersHash",
+    "TooManyUncles": r"tooManyOmmers",
+    "UncleInChain": r"duplicateOmmer|ommerInChain|ommerAlreadyIncluded",
+    "UncleIsAncestor": r"numberOutOfRange|ommerInChain",
+    "UncleIsBrother": r"numberOutOfRange|duplicateOmmer",
+    "UncleParentIsNotAncestor": r"numberOutOfRange|parentMissing|wrongAge",
+    "UncleTooOld": r"wrongAge|parentMissing",
+    # An ommer of age 7, whose parent is outside the seven recent blocks.
+    "BlockException.UNCLE_PARENT_INCORRECT": r"wrongAge|parentMissing",
+    "InvalidUncleParentHash": r"numberOutOfRange|parentMissing|invalidHeader",
+    # An ommer in the header form of the other side of the London transition does not decode.
+    "BlockException.IMPORT_IMPOSSIBLE_LONDON_WRONG_PARENT": r"wrongFieldCount",
+    "BlockException.IMPORT_IMPOSSIBLE_LEGACY_WRONG_PARENT": r"wrongFieldCount",
+    # The checks of the block against what its body gave.
+    "InvalidStateRoot": r"wrongStateRoot",
+    # Before Byzantium a receipt holds the state root after its transaction.
+    # A wrong state then also makes the receipts root wrong, and the state root is checked first.
+    "InvalidReceiptsStateRoot": r"wrongReceiptRoot|wrongStateRoot",
+    "InvalidTransactionsRoot": r"wrongTransactionsRoot",
+    "InvalidLogBloom": r"wrongBloom",
+    "InvalidGasUsed": r"wrongGasUsed",
+    "BlockException.INVALID_GAS_USED": r"wrongGasUsed",
+    "BlockGasLimitReached": r"gasAllowanceExceeded",
+    # The checks of a transaction, alone and against its block and the state.
+    "TR_GasLimitReached": r"gasAllowanceExceeded",
+    "TR_IntrinsicGas": r"insufficientGas",
+    "IntrinsicGas": r"insufficientGas",
+    "TransactionException.INTRINSIC_GAS_TOO_LOW": r"insufficientGas",
+    "TR_NoFunds": r"insufficientBalance",
+    "TR_NoFundsX": r"insufficientBalance",
+    "TransactionException.INSUFFICIENT_ACCOUNT_FUNDS": r"insufficientBalance",
+    "TR_NoFundsOrGas": r"insufficientBalance|insufficientGas|gasAllowanceExceeded",
+    "SenderNotEOA": r"senderNotEoa",
+    "SenderNotEOAorNoCASH": r"senderNotEoa|insufficientBalance",
+    "TR_TypeNotSupported": r"unsupportedType",
+    "TransactionException.TYPE_NOT_SUPPORTED": r"unsupportedType",
+    "TR_FeeCapLessThanBlocks": r"insufficientMaxFeePerGas",
+    "TransactionException.INSUFFICIENT_MAX_FEE_PER_GAS": r"insufficientMaxFeePerGas",
+    # A transaction below its intrinsic gas fails that check before the fee and balance checks.
+    "TR_FeeCapLessThanBlocksORNoFunds": (
+        r"insufficientMaxFeePerGas|insufficientBalance|insufficientGas"
+    ),
+    "TR_FeeCapLessThanBlocksORGasLimitReached": r"insufficientMaxFeePerGas|gasAllowanceExceeded",
+    "TR_TipGtFeeCap": r"priorityFeeGreaterThanMaxFee",
+    "TR_NonceHasMaxValue": r"nonceOverflow",
+    "TR_NonceTooLow": r"nonceTooLow",
+    "TR_NonceTooHigh": r"nonceTooHigh",
+    "TR_RLP_WRONGVALUE": r"does not decode",
+    "TR_InitCodeLimitExceeded": r"initCodeTooLarge",
+    "TransactionException.INITCODE_SIZE_EXCEEDED": r"initCodeTooLarge",
+    # A block that is not a list of its parts.
+    "RLP_ExpectedAsList": r"block rejected",
+    "BlockException.RLP_STRUCTURES_ENCODING": r"does not decode|block rejected",
+}
+
+
+def names(expected: str, message: str) -> bool:
+    """Whether an error of the state transition is one that an exception of a test names."""
+    return any(
+        re.search(EXCEPTIONS[name], message) for name in expected.split("|") if name in EXCEPTIONS
+    )
+
+
+def run_blockchain(root: Path, case: Case) -> None:
+    """Run each block through the state transition, and follow the chain of most difficulty."""
+    test = fixture(root, case)
+    network = test["network"]
+    config = chain_config(network)
+    genesis = rlp.decode(bytes.fromhex(test["genesisRLP"].removeprefix("0x")))[0]
+    # Each valid block by its hash: the state after it, the recent blocks that end with it,
+    # and the total difficulty of its chain.
+    chains = {
+        keccak256(rlp.encode(genesis)): (
+            _pre_state(test["pre"]),
+            [(fork_at(network, 0), rlp.encode(genesis), [])],
+            int.from_bytes(genesis[7], "big"),
+        )
+    }
+    head = next(iter(chains))
+    for entry in test["blocks"]:
+        expected = exception(network, entry)
+        raw = bytes.fromhex(entry["rlp"].removeprefix("0x"))
+        try:
+            item = rlp.decode(raw)
+            header, ommers = item[0], item[2]
+            number, parent = _number(header), chains.get(bytes(header[0]))
+        except Exception:
+            # A block that is not a list of a header, transactions and ommers is invalid.
+            assert expected is not None, entry
+            continue
+        if parent is None:
+            # The parent of the block is missing or invalid.
+            assert expected is not None, entry
+            continue
+        state, recent_blocks, difficulty = parent
+        fork = fork_at(network, number)
+        if len(header) != header_fields(fork):
+            # A header in the form of another fork decodes at no fork that its number runs.
+            assert expected is not None, entry
+            with pytest.raises(BlockError, match="wrongFieldCount"):
+                blocks.state_transition(config, state, recent_blocks, fork, raw, sealed(test))
+            continue
+        if expected is not None:
+            with pytest.raises(BlockError) as error:
+                blocks.state_transition(config, state, recent_blocks, fork, raw, sealed(test))
+            assert names(expected, str(error.value)), (expected, str(error.value))
+            continue
+        _, accounts = blocks.state_transition(config, state, recent_blocks, fork, raw, sealed(test))
+        block_hash = keccak256(rlp.encode(header))
+        recent_blocks = recent_blocks + [
+            (fork, rlp.encode(header), [rlp.encode(o) for o in ommers])
+        ]
+        difficulty += int.from_bytes(header[7], "big")
+        chains[block_hash] = (rlp.encode(accounts), recent_blocks[-256:], difficulty)
+        # The head moves only to a chain of strictly more total difficulty.
+        if difficulty > chains[head][2]:
+            head = block_hash
+    assert "0x" + head.hex() == test["lastblockhash"]
