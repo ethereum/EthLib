@@ -19,6 +19,10 @@ A list with no data, only its type byte, does not enter the hash.
 
 [EIP-6110][eip-6110] makes deposits the requests of type 0.
 
+From Glamsterdam, [EIP-8282][eip-8282] adds the builder deposits, of type 3, and exits, of type 4.
+
+That EIP is in Last Call, so its rules may still change.
+
 The block finds them in the logs of the deposit contract, in the order of the logs.
 
 Each deposit log carries its fields in the layout of the Solidity ABI.
@@ -29,6 +33,7 @@ A deposit log with any other layout makes the block invalid.
 
 [eip-7685]: https://eips.ethereum.org/EIPS/eip-7685#specification
 [eip-6110]: https://eips.ethereum.org/EIPS/eip-6110#block-validity
+[eip-8282]: https://eips.ethereum.org/EIPS/eip-8282#constants
 -/
 
 @[expose] public section
@@ -47,6 +52,12 @@ def WITHDRAWAL_REQUEST_TYPE : UInt8 := 1
 
 /-- The type of the consolidation requests, from EIP-7251. -/
 def CONSOLIDATION_REQUEST_TYPE : UInt8 := 2
+
+/-- The type of the builder deposit requests, from EIP-8282, from Glamsterdam. -/
+def BUILDER_DEPOSIT_REQUEST_TYPE : UInt8 := 3
+
+/-- The type of the builder exit requests, from EIP-8282, from Glamsterdam. -/
+def BUILDER_EXIT_REQUEST_TYPE : UInt8 := 4
 
 /-! ## Deposits -/
 

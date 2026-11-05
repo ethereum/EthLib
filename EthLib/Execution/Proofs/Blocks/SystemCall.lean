@@ -13,6 +13,8 @@ When it succeeds, its contract has code and the call stopped with no error.
 
 The requests of a block come in the order of their types, withdrawals before consolidations.
 
+From Glamsterdam, the builder deposits and exits follow, by EIP-8282.
+
 Each list holds its type byte and at least one byte of data.
 
 Before Pectra a block reads no request.
@@ -158,12 +160,16 @@ theorem readRequests_of_lt_pectra (h : fork < .pectra) :
 
 /-- The requests of a block have data, and come in the order of their types.
 
-Withdrawals, of type 1, come before consolidations, of type 2, and each type comes at most once.
+Withdrawals, of type 1, come before consolidations, of type 2.
+
+From Glamsterdam, builder deposits, of type 3, then builder exits, of type 4, follow.
+
+Each type comes at most once, and before Glamsterdam no builder type comes.
 -/
 theorem readRequests_requests {result : BlockState × List ByteArray}
     (h : readRequests env block = .ok result) :
     (∀ r ∈ result.2, 1 < r.size) ∧
-      (result.2.map (·[0]!)).Sublist [WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE] := by
+      (result.2.map (·[0]!)).Sublist ((requestContracts fork).map Prod.fst) := by
   unfold readRequests at h
   split at h
   · obtain ⟨added, hAdded, hSize, hSub⟩ := foldlM_requests h
@@ -172,5 +178,19 @@ theorem readRequests_requests {result : BlockState × List ByteArray}
     exact ⟨hSize, hSub⟩
   · cases h
     simp
+
+/-- Up to BPO5, a block reads the withdrawal and consolidation requests only. -/
+theorem requestContracts_types_of_lt_glamsterdam (h : fork < .glamsterdam) :
+    (requestContracts fork).map Prod.fst =
+      [WITHDRAWAL_REQUEST_TYPE, CONSOLIDATION_REQUEST_TYPE] := by
+  have hpre : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
+  simp only [requestContracts, hpre, ↓reduceIte]
+  rfl
+
+/-- From Glamsterdam, a block reads the request types 1 to 4, in ascending order. -/
+theorem requestContracts_types_of_glamsterdam (h : .glamsterdam ≤ fork) :
+    (requestContracts fork).map Prod.fst = [1, 2, 3, 4] := by
+  simp only [requestContracts, h, ↓reduceIte]
+  rfl
 
 end EthLib.Execution.Blocks
