@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Fork
 public import EthLib.Base.Uint64
 public import EthLib.Consensus.Config
 public import EthLib.Consensus.Preset
@@ -14,6 +15,10 @@ A slot lasts a fixed number of milliseconds, and an epoch is a fixed number of s
 A conversion whose result leaves the 64-bit range fails there instead of wrapping.
 
 Each division assumes a nonzero divisor, as every preset and configuration has.
+
+A duty is due a fixed part of a slot after its start, given in basis points.
+
+From Gloas, EIP-7732 moves the attestation and aggregation deadlines earlier, and adds two.
 -/
 
 @[expose] public section
@@ -65,5 +70,44 @@ def computeStartSlotAtEpoch (preset : Preset) (epoch : Epoch) : Except ArithErro
 The delay keeps the validators of an epoch fixed once the seed of its committees is known. -/
 def computeActivationExitEpoch (preset : Preset) (epoch : Epoch) : Except ArithError Epoch := do
   addChecked (← addChecked epoch 1) preset.MAX_SEED_LOOKAHEAD
+
+/-- A part of a slot, in milliseconds and rounded down, from that part in basis points. -/
+def getSlotComponentDurationMs (config : Config) (basisPoints : UInt64) :
+    Except ArithError UInt64 := do
+  return (← mulChecked basisPoints config.SLOT_DURATION_MS) / BASIS_POINTS
+
+/-- The time into a slot after which a proposer does not reorganize its head. -/
+def getProposerReorgCutoffMs (config : Config) : Except ArithError UInt64 :=
+  getSlotComponentDurationMs config config.PROPOSER_REORG_CUTOFF_BPS
+
+/-- The time into a slot at which an attestation is due. -/
+def getAttestationDueMs (config : Config) (fork : Fork) : Except ArithError UInt64 :=
+  getSlotComponentDurationMs config <|
+    if fork ≥ .glamsterdam then config.ATTESTATION_DUE_BPS_GLOAS else config.ATTESTATION_DUE_BPS
+
+/-- The time into a slot at which an aggregate is due. -/
+def getAggregateDueMs (config : Config) (fork : Fork) : Except ArithError UInt64 :=
+  getSlotComponentDurationMs config <|
+    if fork ≥ .glamsterdam then config.AGGREGATE_DUE_BPS_GLOAS else config.AGGREGATE_DUE_BPS
+
+/-- From Altair: the time into a slot at which a sync committee message is due. -/
+def getSyncMessageDueMs (config : Config) (fork : Fork) : Except ArithError UInt64 :=
+  getSlotComponentDurationMs config <|
+    if fork ≥ .glamsterdam then config.SYNC_MESSAGE_DUE_BPS_GLOAS
+    else config.SYNC_MESSAGE_DUE_BPS
+
+/-- From Altair: the time into a slot at which a sync committee contribution is due. -/
+def getContributionDueMs (config : Config) (fork : Fork) : Except ArithError UInt64 :=
+  getSlotComponentDurationMs config <|
+    if fork ≥ .glamsterdam then config.CONTRIBUTION_DUE_BPS_GLOAS
+    else config.CONTRIBUTION_DUE_BPS
+
+/-- From Gloas: the time into a slot at which the builder's payload is due. -/
+def getPayloadDueMs (config : Config) : Except ArithError UInt64 :=
+  getSlotComponentDurationMs config config.PAYLOAD_DUE_BPS
+
+/-- From Gloas: the time into a slot at which a payload attestation is due. -/
+def getPayloadAttestationDueMs (config : Config) : Except ArithError UInt64 :=
+  getSlotComponentDurationMs config config.PAYLOAD_ATTESTATION_DUE_BPS
 
 end EthLib.Consensus
