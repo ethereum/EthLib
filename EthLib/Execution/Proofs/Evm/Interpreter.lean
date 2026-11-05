@@ -96,7 +96,7 @@ theorem since_le_of_ofByte_eq_some {b : UInt8} {op : Op} (h : Op.ofByte fork b =
 
 /-- A step on an opcode of the fork runs an instruction of that opcode.
 
-So the step never takes the branch that fails with `unspecifiedOpcode`. -/
+So the step never fails with an unspecified opcode. -/
 theorem step_of_ofByte_eq_some {evm : Evm fork Meter} {op : Op} (h : evm.pc < evm.code.size)
     (decoded : Op.ofByte fork evm.code[evm.pc] = some op) :
     (∃ run, instruction fork op = some run ∧ step fork evm = .next <$> run evm) ∨

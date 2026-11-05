@@ -5,13 +5,13 @@ public import EthLib.Cryptography.Proofs.Hash.KeccakBitsPermutation
 /-!
 # Proofs: the Keccak-256 sponge on bytes and on bits
 
-`Hash.Keccak` pads, absorbs and squeezes byte strings.
+The Keccak implementation pads, absorbs and squeezes byte strings.
 
-The model `Models.KeccakBits` pads, absorbs and squeezes lists of bits.
+The bit model pads, absorbs and squeezes lists of bits.
 
 FIPS 202 Appendix B.1 orders the bits of each byte from least significant to most significant.
 
-This file proves that the two sponges agree in that order, so `Keccak.keccak256` is the model.
+This file proves that the two sponges agree in that order, so Keccak-256 equals the model.
 -/
 
 @[expose] public section
@@ -117,7 +117,9 @@ private theorem maskBits : ∀ (first last : Bool) (i : Fin 8),
       ((first && (decide (i.val = 0))) || (last && (decide (i.val = 7)))) := by
   decide +kernel
 
-/-- A padding byte sets bit 0 of its first byte and bit 7 of its last byte, and no other bit. -/
+/-- Byte `pos` of the padding sets bit 0 when it is the first byte, and bit 7 when it is the last.
+
+It sets no other bit. -/
 theorem paddingByte_testBit (rate len pos bit : Nat) (h : bit < 8) :
     (Keccak.paddingByte rate len pos).toNat.testBit bit =
       (decide (pos = 0 ∧ bit = 0) || decide (pos + 1 = rate - len % rate ∧ bit = 7)) := by
@@ -194,7 +196,7 @@ private theorem shiftedByte (b : UInt8) (m i : Nat) (hm : m < 8) (hi : i < 64) :
     · rw [byteExtend _ _ (by omega)]
       simp [h, low, show ¬ i - 8 * m < 8 by omega]
 
-/-- The eight bytes that `laneAt` reads, each shifted to its place. -/
+/-- A lane read from a byte string is its eight bytes from the start, each shifted to its place. -/
 private theorem laneAt_eq (bytes : ByteArray) (s : Nat) :
     Keccak.Internal.laneAt bytes s =
       (EthLib.Base.byteAt bytes s).toUInt64 |||
@@ -389,7 +391,7 @@ theorem keccak256_getElem (msg : ByteArray) (i : Nat) (h : i < 32) :
     (keccak256 msg)[i] = outputByte (absorbAll msg) i := by
   simp only [keccak256, Vector.getElem_ofFn]
 
-/-- `Keccak.keccak256` is the bit-level model of Keccak-256, for every message. -/
+/-- The lane implementation of Keccak-256 equals the bit model, for every message. -/
 theorem keccak256_eq (msg : ByteArray) : Keccak.keccak256 msg = keccak256 msg := by
   apply Vector.ext
   intro i hi

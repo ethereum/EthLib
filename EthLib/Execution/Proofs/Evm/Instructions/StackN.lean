@@ -18,7 +18,7 @@ DUPN pushes a copy of the item at its depth.
 
 Each of the three instructions fails first when it cannot pay its gas.
 
-It then fails with `invalidParameter` when its immediate byte encodes no depth or pair.
+It then fails with an invalid parameter when its immediate byte encodes no depth or pair.
 
 Last, it fails when the stack has no item at a depth, or when DUPN pushes onto a full stack.
 -/
@@ -266,7 +266,7 @@ theorem exchangeStep_of_charge_eq_error {evm : Evm fork Meter} {e : EvmError}
 
 /-- After DUPN pays its gas, it fails in exactly three cases, which it checks in this order.
 
-Its immediate byte encodes no depth, and the error is `invalidParameter`.
+Its immediate byte encodes no depth, and the error is an invalid parameter.
 
 Or the byte encodes a depth `n`, and the stack has fewer than `n` items, so it underflows.
 
@@ -301,7 +301,7 @@ theorem dupnStep_eq_error_iff {evm : Evm fork Meter} {g : Meter} {e : EvmError}
 
 /-- After SWAPN pays its gas, it fails in exactly two cases, which it checks in this order.
 
-Its immediate byte encodes no depth, and the error is `invalidParameter`.
+Its immediate byte encodes no depth, and the error is an invalid parameter.
 
 Or the byte encodes a depth `n`, and the stack has at most `n` items, so it underflows. -/
 theorem swapnStep_eq_error_iff {evm : Evm fork Meter} {g : Meter} {e : EvmError}
@@ -328,7 +328,7 @@ theorem swapnStep_eq_error_iff {evm : Evm fork Meter} {g : Meter} {e : EvmError}
 
 /-- After EXCHANGE pays its gas, it fails in exactly two cases, which it checks in this order.
 
-Its immediate byte encodes no pair, and the error is `invalidParameter`.
+Its immediate byte encodes no pair, and the error is an invalid parameter.
 
 Or the byte encodes a pair `n < m`, and the stack has at most `m` items, so it underflows. -/
 theorem exchangeStep_eq_error_iff {evm : Evm fork Meter} {g : Meter} {e : EvmError}

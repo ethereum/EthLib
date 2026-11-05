@@ -62,7 +62,7 @@ theorem processMessage_sameWrites_of_error [LawfulGasMeter Meter] {message : Mes
 
 /-- A message that fails ends with a state that rolls back to the state it started from.
 
-That rolled-back state keeps the reads of the frame that ended the message. -/
+It is a rollback, so it keeps the reads of the state that it rolls back. -/
 theorem processMessage_state_of_error [LawfulGasMeter Meter] {message : Message fork}
     {state : TransactionState} {substate : Substate} {evm : Evm fork Meter}
     {used : GasMeter.gasHeld evm.gas ≤ message.gas}

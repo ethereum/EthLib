@@ -13,7 +13,7 @@ The block access list of a block, from Glamsterdam on.
 
 It names every account that the block touches, and each change that the block makes to its state.
 
-[EIP-7928](https://eips.ethereum.org/EIPS/eip-7928#rlp-data-structures) defines it.
+[EIP-7928](https://eips.ethereum.org/EIPS/eip-7928#rlp-encoding) defines it.
 
 The EIP is in Last Call, so its rules may still change.
 

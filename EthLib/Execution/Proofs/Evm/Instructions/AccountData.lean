@@ -124,7 +124,7 @@ Past the end of the code, the byte is zero.
 
 It keeps every other byte.
 
-The code is the one that `accountCode` reads in the frame before the step.
+The code is the one that the step reads for the account, in the frame before the step.
 
 Memory must start at a size that is a multiple of 32. -/
 theorem byteAt_extcodecopyStep [GasMeter Meter] {evm after : Evm fork Meter}

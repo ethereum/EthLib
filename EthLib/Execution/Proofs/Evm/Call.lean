@@ -21,7 +21,7 @@ With the meter of EIP-8037, the caller then has the net state gas it had before 
 
 That holds when the failed callee has rolled back, as every failed message does.
 
-The caller's memory then holds the start of the output in its output range.
+After a call, the caller's memory holds the start of the output in its output range.
 
 A call fails with an error that does not abort the run in three cases only, in this order:
 
@@ -37,7 +37,7 @@ It gets back the gas it would pass on.
 
 A message that fails leaves the caller a rollback to its state from before the call.
 
-That rollback keeps the reads of the callee.
+That rollback keeps the reads of the state it rolls back.
 
 The caller then pushes 0, and the output of the callee becomes its return data.
 -/
@@ -443,7 +443,7 @@ theorem callStep_eq_error_iff {kind : CallKind} {evm : Evm fork Meter} {e : EvmE
 
 /-- A static CALL with value runs no message, at every fork.
 
-Its step gives a halted frame, or it fails with an error. -/
+When its step succeeds, it gives a halted frame. -/
 theorem callStep_of_static_value {evm after : Evm fork Meter} {call : CallOperands}
     {result : StepResult fork Meter} (hp : popCallOperands .call evm = .ok (call, after))
     (static : evm.message.isStatic = true) (hv : call.value ≠ 0)
@@ -478,9 +478,9 @@ theorem callStep_of_static_value {evm after : Evm fork Meter} {call : CallOperan
 
 /-- From Glamsterdam, a static CALL with value fails right after its pops.
 
-The error holds no frame, and `runFrame_of_step_eq_error` halts the frame from before the step.
+The error holds no frame, so the run halts the frame from before the step.
 
-So the halted frame has no read that the call made. -/
+That frame holds no read of the call. -/
 theorem callStep_of_static_value_of_glamsterdam {evm after : Evm fork Meter}
     {call : CallOperands} (glamsterdam : fork ≥ .glamsterdam)
     (hp : popCallOperands .call evm = .ok (call, after)) (static : evm.message.isStatic = true)
@@ -586,7 +586,7 @@ theorem resumeCall_of_error {caller child after : Evm fork Meter}
 
 /-- After a message that fails, the caller has the writes of its state before the call.
 
-That state is a rollback to the state of the caller, with the reads of the callee. -/
+That state is a rollback to the state of the caller, with the reads of the state it rolls back. -/
 theorem resumeCall_processMessage_of_error [LawfulGasMeter Meter] {message : Message fork}
     {substate : Substate} {caller child after : Evm fork Meter}
     {used : GasMeter.gasHeld child.gas ≤ message.gas}

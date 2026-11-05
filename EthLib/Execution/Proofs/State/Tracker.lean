@@ -33,7 +33,9 @@ A record of a read changes no read, and a rollback keeps the record.
 
 A wipe of the storage records the keys it drops as reads.
 
-Each change records exactly the reads that its definition names, and no other read.
+A storage write and a change to an account record a read of the account.
+
+A move of ether records a read of the sender and of the recipient.
 
 From Paris, a change that deletes an account also reads each key that the transaction wrote there.
 

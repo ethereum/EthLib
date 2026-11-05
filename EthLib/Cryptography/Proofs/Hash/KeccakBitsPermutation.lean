@@ -6,9 +6,9 @@ public import EthLib.Cryptography.Proofs.Hash.KeccakPermutation
 /-!
 # Proofs: Keccak-f[1600] on lanes and on bits
 
-`Hash.Keccak` computes Keccak-f[1600] on 25 lanes of 64 bits.
+The Keccak implementation computes Keccak-f[1600] on 25 lanes of 64 bits.
 
-The model `Models.KeccakBits` computes it on 1600 single bits, as FIPS 202 §3.2 writes it.
+The bit model computes it on 1600 single bits, as FIPS 202 §3.2 writes it.
 
 FIPS 202 §3.1.2 places bit `z` of lane `(x, y)` at position `64 * (x + 5 * y) + z` of the state.
 

@@ -19,9 +19,7 @@ The model imports nothing from the lane implementation, and it does not reuse it
 
 It is a model, so it lives in the proof library and no specification imports it.
 
-The theorem `keccak256_eq` proves that `Hash.Keccak.keccak256` equals it.
-
-It is in `EthLib.Cryptography.Proofs.Hash.KeccakBitsSponge`.
+The sponge proofs show that the lane implementation equals this model on every message.
 -/
 
 @[expose] public section
@@ -60,7 +58,7 @@ def rhoOffset (x y : Fin 5) : Nat :=
   (List.range 24).foldl (fun offset t =>
     if rhoPosition t = (x.val, y.val) then ((t + 1) * (t + 2) / 2) % 64 else offset) 0
 
-/-- Rho reads the bit displaced by the lane's source-defined offset. -/
+/-- Rho, FIPS 202 Algorithm 2: it rotates each lane by its offset. -/
 def rho (a : State) : State := fun x y z =>
   a x y (zcoord (z.val + 64 - rhoOffset x y))
 
@@ -118,7 +116,7 @@ def messageBits (msg : ByteArray) : List Bool := msg.data.toList.flatMap byteBit
 def padding (length : Nat) : List Bool :=
   true :: List.replicate ((1088 - ((length + 2) % 1088)) % 1088) false ++ [true]
 
-/-- The original Keccak message and its multi-rate padding. -/
+/-- The bits of a message followed by pad10*1 at the 1088-bit rate. -/
 def padded (msg : ByteArray) : List Bool :=
   let bits := messageBits msg
   bits ++ padding bits.length

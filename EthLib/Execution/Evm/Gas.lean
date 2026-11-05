@@ -108,9 +108,11 @@ def STORAGE_SET : Nat := 20000
 
 From Berlin, it includes the price of a cold access to the slot, by EIP-2929.
 
-It is `SSTORE_RESET_GAS` of EIP-2200, which EIP-8038 calls `GAS_STORAGE_UPDATE`.
+It is `SSTORE_RESET_GAS` as EIP-2200 sets it, which EIP-8038 calls `GAS_STORAGE_UPDATE`.
 
-The `COLD_STORAGE_WRITE` of the rationale of EIP-8038 is a measured run time, not this price. -/
+The `COLD_STORAGE_WRITE` of the rationale of EIP-8038 is a gas estimate from measured run times.
+
+It is not this price. -/
 def COLD_STORAGE_WRITE : Nat := 5000
 
 /-- The price of a write that moves a slot away from its original value, by EIP-8038. -/
@@ -171,7 +173,7 @@ EIP-8037 defines it as a sum of four parts:
 
 The price of ECRECOVER is in the precompiles, and this file does not import them.
 
-So the definition keeps the number, and `executionPerAuthBaseCost_eq` proves the sum. -/
+So the definition keeps the number, and a proof checks the sum. -/
 def EXECUTION_PER_AUTH_BASE_COST : Nat := 7816
 /-- The largest gas limit of a transaction, `2^32 - 1`, from EIP-8037. -/
 def TX_MAX_TOTAL_GAS_LIMIT : Nat := 4294967295
@@ -368,13 +370,15 @@ structure GasSchedule where
 
 Each price changes only at the forks that the comments name.
 
-From Glamsterdam, the prices of an access list and the refund to clear a slot follow other prices.
+From Glamsterdam, the prices of an access list and the refund to clear a slot derive from others.
 
 The section Conversion to gas costs of [EIP-8038][eip-8038] gives their formulas.
 
 It gives the refund as `(STORAGE_WRITE + COLD_STORAGE_ACCESS) * (4800/5000)`.
 
-The division in `Nat` is exact, since `12100 * 4800 = 11616 * 5000`.
+The code multiplies before it divides, so the division in `Nat` is exact.
+
+It is exact since `12100 * 4800 = 11616 * 5000`.
 
 [eip-8038]: https://eips.ethereum.org/EIPS/eip-8038#conversion-to-gas-costs
 -/
@@ -594,11 +598,11 @@ def maxCodeSize (fork : Fork) : Option Nat :=
 
 [EIP-7954][eip-7954] raises it to 131072 at Glamsterdam.
 
-EIP-3860 defines it as twice the code limit, and the numbers of EIP-7954 keep that ratio.
+From Shapella, EIP-3860 defines it as twice the code limit, and EIP-7954 keeps that ratio.
 
-`maxInitCodeSize_eq_two_mul` proves the ratio at every fork with a code limit.
+A proof checks that ratio at every fork that has a code limit.
 
-The definition keeps its own numbers, since `maxCodeSize` is none before Spurious Dragon.
+The definition keeps its own numbers, since no code limit exists before Spurious Dragon.
 
 [eip-7954]: https://eips.ethereum.org/EIPS/eip-7954#specification
 -/
