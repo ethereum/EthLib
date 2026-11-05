@@ -14,6 +14,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from ethlib.cryptography import bls
+from raising import raises
 
 ROOT = Path(__file__).resolve().parents[4] / "tests" / "cryptography"
 LOADER = YAML(typ="safe", pure=True)
@@ -33,7 +34,7 @@ def b(hex_str: str) -> bytes:
 def test_sign(case: dict) -> None:
     sk, msg = b(case["input"]["privkey"]), b(case["input"]["message"])
     if case["output"] is None:
-        with pytest.raises(ValueError, match="invalid secret key"):
+        with raises(ValueError, "invalid secret key"):
             bls.sign(sk, msg)
     else:
         assert bls.sign(sk, msg) == b(case["output"])
@@ -49,7 +50,7 @@ def test_verify(case: dict) -> None:
 def test_aggregate(case: dict) -> None:
     sigs = [b(s) for s in case["input"]]
     if case["output"] is None:
-        with pytest.raises(ValueError, match="empty signature list"):
+        with raises(ValueError, "empty signature list"):
             bls.aggregate(sigs)
     else:
         assert bls.aggregate(sigs) == b(case["output"])
@@ -117,7 +118,7 @@ def test_deserialization(group: str, name: str, case: dict) -> None:
     message, code = DESERIALIZATION_ERRORS.get(
         (group, name), (f"invalid {group} point", 4 if group == "G1" else 5)
     )
-    with pytest.raises(bls.BlsError, match=message) as error:
+    with raises(bls.BlsError, message) as error:
         decode(data)
     assert error.value.code == code
 

@@ -4,6 +4,7 @@ import pytest
 
 from ethlib.errors import EvmError
 from ethlib.execution.evm import immediate_depths
+from raising import raises
 
 DUPN, SWAPN, EXCHANGE = 0xE6, 0xE7, 0xE8
 
@@ -68,5 +69,5 @@ def test_every_byte_as_the_eip(opcode: int, decode) -> None:
 
 def test_other_opcode_rejected() -> None:
     # DUP1 carries no immediate byte.
-    with pytest.raises(EvmError):
+    with raises(EvmError, "byte 128 encodes no depth of opcode 128"):
         immediate_depths(0x80, 0x80)

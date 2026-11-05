@@ -10,6 +10,7 @@ from ruamel.yaml import YAML
 from ethlib import consensus
 from ethlib.cryptography import xmss
 from ethlib.errors import ConsensusError
+from raising import raises
 
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "pq_keys" / "possession"
 
@@ -114,15 +115,15 @@ def test_tampered_proof_is_rejected(position):
 def test_wrong_lengths_are_rejected():
     case = _case("mainnet_genesis_root")
     proof = case["proof"]
-    with pytest.raises(ConsensusError):
+    with raises(ConsensusError, "proof must be 2404 bytes, not 2403"):
         _valid(case, proof[:-1])
-    with pytest.raises(ConsensusError):
+    with raises(ConsensusError, "pubkey must be 48 bytes, not 47"):
         _valid(case, proof, pubkey=case["pubkey"][:-1])
-    with pytest.raises(ConsensusError):
+    with raises(ConsensusError, "pubkey must be 48 bytes, not 49"):
         consensus.pq_keys_possession_signing_root(
             case["genesis_validators_root"], case["pubkey"] + b"\x00", case["xmss_public_key"]
         )
-    with pytest.raises(ConsensusError):
+    with raises(ConsensusError, "no configuration is named holesky"):
         _valid(case, proof, name="holesky")
 
 

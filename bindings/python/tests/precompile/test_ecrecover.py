@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from ethlib.precompiles import price, run
+from raising import raises
 
 from .forks import FORKS, ends
 
@@ -38,7 +39,13 @@ def test_execution_specs(fork: str, case: dict) -> None:
 
 @pytest.mark.parametrize("fork", ends("frontier"))
 def test_out_of_gas(fork: str) -> None:
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.ecrecover\n  "
+            "(EthLib.Execution.Evm.Precompiles.Ecrecover.EcrecoverError.outOfGas 3000 2999)"
+        ),
+    ):
         run(fork, ADDRESS, bytes.fromhex(CASES[0]["input"]), GAS - 1)
 
 

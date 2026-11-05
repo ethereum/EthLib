@@ -14,6 +14,7 @@ import pytest
 from ethlib.cryptography import aes, keccak
 from ethlib.errors import RlpxError
 from ethlib.networking import rlpx
+from raising import raises
 
 from .vectors import ACK_2, AES_SECRET, AUTH_2, INGRESS_MAC_FOO, MAC_SECRET, NONCE_A, NONCE_B
 
@@ -120,7 +121,7 @@ def test_eip8_session() -> None:
     assert rlpx.read_frames(AES_SECRET, MAC_SECRET, a_to_b, frames) == _rlp_list(datas)
     # B sends to A from (mac-secret ^ initiator-nonce) || ack, so its MAC rejects A's frames.
     b_to_a = _xor(MAC_SECRET, NONCE_A) + ACK_2
-    with pytest.raises(RlpxError) as err:
+    with raises(RlpxError, "header MAC does not match") as err:
         rlpx.read_frames(AES_SECRET, MAC_SECRET, b_to_a, frames)
     assert err.value.code == 203
 
@@ -132,37 +133,52 @@ def _frames() -> tuple[bytes, bytes, bytes, bytes]:
 
 
 @pytest.mark.parametrize(
-    "position, code",
-    [(0, 203), (16, 203), (32, 204), (48, 204)],
+    "position, code, message",
+    [
+        (0, 203, "header MAC does not match"),
+        (16, 203, "header MAC does not match"),
+        (32, 204, "frame MAC does not match"),
+        (48, 204, "frame MAC does not match"),
+    ],
+    ids=["0-203", "16-203", "32-204", "48-204"],
 )
-def test_rejects_changed_byte(position: int, code: int) -> None:
+def test_rejects_changed_byte(position: int, code: int, message: str) -> None:
     # Bytes 0 to 31 are the header and its MAC, then the frame and its MAC.
     aes_secret, mac_secret, mac_init, frame = _frames()
     changed = bytearray(frame)
     changed[position] ^= 1
-    with pytest.raises(RlpxError) as err:
+    with raises(RlpxError, message) as err:
         rlpx.read_frames(aes_secret, mac_secret, mac_init, bytes(changed))
     assert err.value.code == code
 
 
-@pytest.mark.parametrize("cut", [1, 16, 31, 33])
-def test_rejects_truncated(cut: int) -> None:
+@pytest.mark.parametrize(
+    "cut, message",
+    [
+        (1, "input has 63 bytes, fewer than 64"),
+        (16, "input has 48 bytes, fewer than 64"),
+        (31, "input has 33 bytes, fewer than 64"),
+        (33, "input has 31 bytes, fewer than 32"),
+    ],
+    ids=["1", "16", "31", "33"],
+)
+def test_rejects_truncated(cut: int, message: str) -> None:
     aes_secret, mac_secret, mac_init, frame = _frames()
-    with pytest.raises(RlpxError) as err:
+    with raises(RlpxError, message) as err:
         rlpx.read_frames(aes_secret, mac_secret, mac_init, frame[:-cut])
     assert err.value.code == 202
 
 
 def test_rejects_bad_inputs() -> None:
     aes_secret, mac_secret, mac_init, frame = _frames()
-    with pytest.raises(RlpxError) as err:
+    with raises(RlpxError, "bad secret size: 31, expected 32") as err:
         rlpx.write_frames(aes_secret[:31], mac_secret, mac_init, _rlp_list([b""]))
     assert err.value.code == 0
-    with pytest.raises(RlpxError) as err:
+    with raises(RlpxError, "frames is not an RLP list of byte strings") as err:
         rlpx.write_frames(aes_secret, mac_secret, mac_init, b"\x01")
     assert err.value.code == 0
-    with pytest.raises(RlpxError) as err:
+    with raises(RlpxError, "frame data has 16777216 bytes, more than 2^24 - 1") as err:
         rlpx.write_frames(aes_secret, mac_secret, mac_init, _rlp_list([bytes(2**24)]))
     assert err.value.code == 201
-    with pytest.raises(TypeError):
+    with raises(TypeError, "argument 4 must be bytes"):
         rlpx.read_frames(aes_secret, mac_secret, mac_init, "frame")  # ty: ignore[invalid-argument-type]

@@ -21,8 +21,10 @@ from consensus.test_operations import HANDLERS as OPERATIONS, runs as runs_opera
 from consensus.test_rewards import HANDLERS as REWARDS, runs as runs_rewards
 from consensus.test_transition import GROUPS as TRANSITION_GROUPS, runs as runs_transition
 from engine.cases import EXCEPTIONS as ENGINE_EXCEPTIONS
+from raising import raises_shape
+from transactions.expected_errors import expected_template
 from transactions.test_inclusion_archive import names_in_block
-from transactions.test_transactions import CHAIN_ID, FORK_OF_NETWORK, names
+from transactions.test_transactions import CHAIN_ID, FORK_OF_NETWORK
 
 from . import legacy
 from .catalogue import CONSENSUS_FORKS, EXECUTION_FORKS, Case
@@ -127,10 +129,10 @@ def _transaction(root: Path, case: Case) -> None:
     outcome = fixture["result"][case.fork]
     fork = FORK_OF_NETWORK[case.fork]
     if "exception" in outcome:
-        with pytest.raises(ValueError) as error:
+        intrinsic = int(outcome.get("intrinsicGas", "0x0"), 16) or None
+        template = expected_template(outcome["exception"], fork, tx, CHAIN_ID, intrinsic)
+        with raises_shape(ValueError, template):
             transactions.check(fork, CHAIN_ID, tx)
-        expected = outcome["exception"].split("|")
-        assert any(names(e, str(error.value)) for e in expected), (expected, str(error.value))
     else:
         checked = transactions.check(fork, CHAIN_ID, tx)
         assert checked.sender == bytes.fromhex(outcome["sender"].removeprefix("0x"))

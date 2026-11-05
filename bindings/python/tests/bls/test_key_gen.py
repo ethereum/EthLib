@@ -12,6 +12,7 @@ import pytest
 from py_ecc.bls import G2ProofOfPossession as RefBls
 
 from ethlib.cryptography import bls
+from raising import raises
 
 EIP_2333 = [
     (
@@ -47,5 +48,5 @@ def test_matches_reference(ikm: bytes, key_info: bytes) -> None:
 
 
 def test_rejects_short_input() -> None:
-    with pytest.raises(ValueError, match="too short: 31 bytes"):
+    with raises(ValueError, "input keying material too short: 31 bytes"):
         bls.key_gen(b"\x01" * 31)

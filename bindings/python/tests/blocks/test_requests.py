@@ -8,6 +8,7 @@ import pytest
 
 from ethlib.execution import blocks
 from ethlib.serialization import rlp
+from raising import raises
 
 _REPO = Path(__file__).resolve().parents[4]
 _CASES_FILE = _REPO / "tests" / "execution" / "blocks" / "deposits.json"
@@ -83,24 +84,28 @@ def _word(value: int) -> bytes:
 
 
 @pytest.mark.parametrize(
-    "position, value, code",
+    "position, value, code, error",
     [
-        (0, 161, 302),  # the offset of the public key
-        (128, 544, 302),  # the offset of the index
-        (160, 47, 303),  # the size of the public key
-        (512, 9, 303),  # the size of the index
+        (0, 161, 302, "wrongOffset 0 161"),  # the offset of the public key
+        (128, 544, 302, "wrongOffset 4 544"),  # the offset of the index
+        (160, 47, 303, "wrongSize 0 47"),  # the size of the public key
+        (512, 9, 303, "wrongSize 4 9"),  # the size of the index
     ],
 )
-def test_wrong_layout_rejected(position: int, value: int, code: int) -> None:
+def test_wrong_layout_rejected(position: int, value: int, code: int, error: str) -> None:
     data = bytearray(_deposit_log_data())
     data[position : position + 32] = _word(value)
-    with pytest.raises(blocks.BlockError) as error:
+    message = f"deposit log rejected: EthLib.Execution.Blocks.DepositError.{error}"
+    with raises(blocks.BlockError, message) as caught:
         blocks.deposit_requests(_deposit_log(bytes(data)))
-    assert error.value.code == code
+    assert caught.value.code == code
 
 
 def test_wrong_length_rejected() -> None:
-    with pytest.raises(blocks.BlockError) as error:
+    with raises(
+        blocks.BlockError,
+        "deposit log rejected: EthLib.Execution.Blocks.DepositError.wrongLength 577",
+    ) as error:
         blocks.deposit_requests(_deposit_log(_deposit_log_data() + b"\x00"))
     assert error.value.code == 301
 

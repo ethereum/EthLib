@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from ethlib.cryptography import secp256k1
+from raising import raises
 
 # The ECDSA fixtures of tiny-secp256k1.
 #
@@ -45,15 +46,21 @@ def test_sign_verifies() -> None:
     assert secp256k1.is_low_s(out[:64])
 
 
+# The error of each invalid private key of the fixtures: a zero key, and every key not below n.
+SIGN_ERRORS = {
+    "Private key == 0": "private key is zero",
+    "Private key >= G": "bad private key: not below the group order n",
+}
+
+
 @pytest.mark.parametrize("case", DATA["invalid"]["sign"], ids=lambda c: c["description"])
 def test_sign_rejects_key(case: dict) -> None:
-    # A zero key, and every key not below n.
-    with pytest.raises(ValueError, match="private key is zero|not below the group order n"):
+    with raises(ValueError, SIGN_ERRORS[case["description"]]):
         secp256k1.sign(bytes.fromhex(case["d"]), bytes.fromhex(case["m"]))
 
 
 def test_sign_rejects_sizes() -> None:
-    with pytest.raises(ValueError, match="private key size"):
+    with raises(ValueError, "bad private key size: 31, expected 32"):
         secp256k1.sign(bytes(31), bytes(32))
-    with pytest.raises(ValueError, match="hash size"):
+    with raises(ValueError, "bad hash size: 31, expected 32"):
         secp256k1.sign(bytes(31) + b"\x01", bytes(31))

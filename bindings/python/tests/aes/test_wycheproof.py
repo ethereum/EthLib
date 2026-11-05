@@ -7,6 +7,7 @@ import pytest
 
 from ethlib.cryptography import aes
 from ethlib.errors import AesError
+from raising import raises
 
 # The AES-GCM vectors of Wycheproof.
 #
@@ -50,7 +51,7 @@ def test_valid(test: dict) -> None:
 def test_modified_tag(test: dict) -> None:
     key, iv, aad, _, ct, tag = _fields(test)
     assert test["result"] == "invalid"
-    with pytest.raises(AesError, match="authentication") as info:
+    with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.authentication") as info:
         aes.gcm_decrypt(key, iv, ct, aad, tag, len(tag))
     assert info.value.code == 6
 
@@ -62,10 +63,10 @@ def test_zero_length_iv(test: dict) -> None:
     # SP 800-38D §5.2.1.1 requires an IV of at least one bit, for encryption and decryption.
     key, iv, aad, msg, ct, tag = _fields(test)
     assert test["result"] == "invalid" and iv == b""
-    with pytest.raises(AesError, match="ivLength") as info:
+    with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.ivLength") as info:
         aes.gcm_encrypt(key, iv, msg, aad, len(tag))
     assert info.value.code == 3
-    with pytest.raises(AesError, match="ivLength") as info:
+    with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.ivLength") as info:
         aes.gcm_decrypt(key, iv, ct, aad, tag, len(tag))
     assert info.value.code == 3
 
@@ -83,9 +84,9 @@ def test_aes192_keys_are_rejected() -> None:
     for test in AES192:
         key, iv, aad, msg, ct, tag = _fields(test)
         assert len(key) == 24
-        with pytest.raises(AesError, match="key size: 24") as info:
+        with raises(AesError, "bad key size: 24, expected 16 or 32") as info:
             aes.gcm_encrypt(key, iv, msg, aad, len(tag))
         assert info.value.code == 0
-        with pytest.raises(AesError, match="key size: 24") as info:
+        with raises(AesError, "bad key size: 24, expected 16 or 32") as info:
             aes.gcm_decrypt(key, iv, ct, aad, tag, len(tag))
         assert info.value.code == 0

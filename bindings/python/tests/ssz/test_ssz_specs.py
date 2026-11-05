@@ -9,6 +9,7 @@ import pytest
 
 from ethlib.errors import SszError
 from ethlib.serialization import ssz
+from raising import raises
 
 FILES = Path(__file__).resolve().parents[4] / "tests" / "serialization" / "ssz"
 
@@ -221,8 +222,25 @@ def _accepted():
     return [case for case in CASES if "rejectionReason" not in case.values[1]]
 
 
+# The Lean error that each rejected case of the release meets, by its file name.
+FAULTS = {
+    "test_compatible_union_decode_failure_empty_input": "noSelector",
+    "test_compatible_union_decode_failure_reserved_zero_selector": "unknownSelector 0",
+    "test_compatible_union_decode_failure_trailing_byte": "scope 3 4",
+    "test_compatible_union_decode_failure_truncated_payload": "scope 3 1",
+    "test_compatible_union_decode_failure_undeclared_selector": "unknownSelector 3",
+    "test_progressive_container_decode_failure_first_offset": "firstOffset 12 13",
+    "test_progressive_container_decode_failure_trailing_byte": "scope 3 4",
+    "test_ssz_decode_failure_bitlist_exceeds_limit": "overLimit 8 12",
+}
+
+
 def _rejected():
-    return [case for case in CASES if "rejectionReason" in case.values[1]]
+    return [
+        pytest.param(*case.values, FAULTS[case.id], id=case.id)
+        for case in CASES
+        if "rejectionReason" in case.values[1]
+    ]
 
 
 def test_digests():
@@ -250,11 +268,10 @@ def test_accepted(directory: str, fixture: dict) -> None:
     assert ssz.hash_tree_root(ssz_type, value).hex() == fixture["root"].removeprefix("0x")
 
 
-@pytest.mark.parametrize(("directory", "fixture"), _rejected())
-def test_rejected(directory: str, fixture: dict) -> None:
+@pytest.mark.parametrize(("directory", "fixture", "fault"), _rejected())
+def test_rejected(directory: str, fixture: dict, fault: str) -> None:
     ssz_type = TYPES[directory][fixture["typeName"]]
     data = bytes.fromhex(fixture["rawBytes"].removeprefix("0x"))
-    with pytest.raises(SszError, match=r"^input rejected: EthLib\.Serialization\.Ssz\.Err\.") as e:
+    with raises(SszError, "input rejected: EthLib.Serialization.Ssz.Err." + fault):
         ssz.deserialize(ssz_type, data)
-    fault = str(e.value).rpartition("Err.")[2]
     assert REJECTION[fixture["rejectionReason"]](fault), fault

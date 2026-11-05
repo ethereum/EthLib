@@ -9,6 +9,7 @@ import pytest
 from py_ecc.bls import G2ProofOfPossession as RefBls
 
 from ethlib.cryptography import bls
+from raising import raises
 
 from . import fixtures
 
@@ -30,12 +31,12 @@ def test_sign_matches_reference(sk: int, msg: bytes) -> None:
 
 @pytest.mark.parametrize("sk", [0, R, R + 1])
 def test_sign_rejects_out_of_range_key(sk: int) -> None:
-    with pytest.raises(ValueError, match="invalid secret key"):
+    with raises(ValueError, "invalid secret key"):
         bls.sign(sk_bytes(sk), fixtures.SAMPLE_MESSAGE)
 
 
 def test_sign_rejects_short_key() -> None:
-    with pytest.raises(ValueError, match="invalid secret key"):
+    with raises(ValueError, "invalid secret key"):
         bls.sign(b"\x01" * 31, fixtures.SAMPLE_MESSAGE)
 
 
@@ -63,9 +64,9 @@ def test_aggregate_matches_reference() -> None:
 
 
 def test_aggregate_rejects() -> None:
-    with pytest.raises(ValueError, match="empty signature list"):
+    with raises(ValueError, "empty signature list"):
         bls.aggregate([])
-    with pytest.raises(ValueError, match="invalid G2 point"):
+    with raises(ValueError, "invalid G2 point"):
         bls.aggregate([fixtures.ZERO_SIGNATURE])
 
 
@@ -99,8 +100,15 @@ def test_proof_of_possession(sk: int) -> None:
     assert not bls.pop_verify(fixtures.sk_to_pk(sk + 1), proof)
 
 
-@pytest.mark.parametrize("length", [-1, 2**64, 2**64 + 32])
-def test_expand_message_xmd_length_out_of_range(length: int) -> None:
+@pytest.mark.parametrize(
+    "length, message",
+    [
+        (-1, "can't convert negative int to unsigned"),
+        (2**64, "int too big to convert"),
+        (2**64 + 32, "int too big to convert"),
+    ],
+)
+def test_expand_message_xmd_length_out_of_range(length: int, message: str) -> None:
     # A length that does not fit in 64 bits is an error, not a length modulo 2^64.
-    with pytest.raises(OverflowError):
+    with raises(OverflowError, message):
         bls.expand_message_xmd(b"msg", b"dst", length)

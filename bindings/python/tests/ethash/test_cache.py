@@ -11,6 +11,7 @@ import pytest
 from ethlib.cryptography import ethash
 from ethlib.cryptography.keccak import keccak256, keccak512
 from ethlib.errors import EthashError
+from raising import raises
 
 _DIR = Path(__file__).resolve().parent
 
@@ -107,10 +108,11 @@ def test_dataset_item_against_the_specification(items: int) -> None:
 @pytest.mark.parametrize("cache", [b"", bytes(63), bytes(65)])
 def test_dataset_item_rejects_a_bad_cache(cache: bytes) -> None:
     # A cache is a positive whole number of 64-byte items.
-    with pytest.raises(EthashError):
+    message = f"Ethash: a cache is a positive multiple of 64 bytes, got {len(cache)}"
+    with raises(EthashError, message):
         ethash.dataset_item(cache, 0)
 
 
 def test_negative_block_number() -> None:
-    with pytest.raises(OverflowError):
+    with raises(OverflowError, "an Ethash number cannot be negative"):
         ethash.cache_size(-1)

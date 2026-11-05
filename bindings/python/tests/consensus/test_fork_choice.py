@@ -10,6 +10,7 @@ import archives
 from ethlib import consensus
 from ethlib.cryptography.kzg import BYTES_PER_BLOB
 from ethlib.networking import snappy
+from raising import raises
 
 from .containers import FORKS
 from .test_data_column import replacements
@@ -228,6 +229,9 @@ def test_anchor_state_mismatch():
     case = next((FILES / "minimal" / "altair").rglob("steps.yaml")).parent
     block = bytearray(_read(case, "anchor_block"))
     block[48] ^= 1
-    with pytest.raises(consensus.ForkChoiceError) as info:
+    with raises(
+        consensus.ForkChoiceError,
+        "fork choice: EthLib.Consensus.ForkChoiceError.anchorStateMismatch",
+    ) as info:
         consensus.fork_choice("minimal", "altair", _read(case, "anchor_state"), bytes(block), [])
     assert info.value.code == 1

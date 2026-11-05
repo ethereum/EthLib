@@ -7,6 +7,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from ethlib import consensus
+from raising import raises
 
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "shuffling"
 PRESETS = ("minimal", "mainnet")
@@ -51,12 +52,12 @@ def test_shuffled_index(preset):
 
 
 def test_index_out_of_range():
-    with pytest.raises(consensus.ConsensusError, match="not below the index count") as info:
+    with raises(consensus.ConsensusError, "index 5 is not below the index count 5") as info:
         consensus.compute_shuffled_index(5, 5, bytes(32))
     assert info.value.code == 1
 
 
 def test_seed_length():
-    with pytest.raises(consensus.ConsensusError, match="a seed is 32 bytes") as info:
+    with raises(consensus.ConsensusError, "a seed is 32 bytes") as info:
         consensus.compute_shuffled_permutation(5, bytes(31))
     assert info.value.code == 0

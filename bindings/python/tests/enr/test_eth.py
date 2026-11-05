@@ -10,6 +10,7 @@ import pytest
 from ethlib.errors import EnrError
 from ethlib.networking import enr, forkid
 from ethlib.serialization import rlp
+from raising import raises
 
 SIGNATURE = bytes(64)
 
@@ -58,6 +59,6 @@ def test_entry_of_the_fork_id_export() -> None:
     ],
 )
 def test_malformed_entry(value: object) -> None:
-    with pytest.raises(EnrError) as info:
+    with raises(EnrError, "eth entry is not a list that starts with [forkHash, forkNext]") as info:
         enr.eth_fork_id(_record({b"eth": value, b"id": b"v4"}))
     assert info.value.code == 0

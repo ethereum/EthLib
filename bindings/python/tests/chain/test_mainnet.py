@@ -3,6 +3,7 @@
 import pytest
 
 from ethlib.chain import mainnet_active_fork
+from raising import raises
 
 # The first block of each fork by block number, with the fork before it.
 # EIP-6953 "Proof-of-Work Network Upgrades" lists Homestead to Gray Glacier.
@@ -64,7 +65,10 @@ def test_largest_inputs() -> None:
     assert mainnet_active_fork(2**64 - 1, 2**64 - 1) == "bpo2"
 
 
-@pytest.mark.parametrize("number, timestamp", [(-1, 0), (0, 2**64)])
-def test_out_of_range(number: int, timestamp: int) -> None:
-    with pytest.raises(OverflowError):
+@pytest.mark.parametrize(
+    "number, timestamp, message",
+    [(-1, 0, "can't convert negative int to unsigned"), (0, 2**64, "int too big to convert")],
+)
+def test_out_of_range(number: int, timestamp: int, message: str) -> None:
+    with raises(OverflowError, message):
         mainnet_active_fork(number, timestamp)

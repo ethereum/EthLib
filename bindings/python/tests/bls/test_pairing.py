@@ -6,6 +6,7 @@ from py_ecc.optimized_bls12_381 import G1, G2, Z1, Z2, multiply, neg
 
 from ethlib.cryptography import bls
 from ethlib.errors import BlsError
+from raising import raises
 
 # e(G1, G2), the coefficients e_0 to e_11 of draft-irtf-cfrg-pairing-friendly-curves-11,
 # Appendix B, BLS12_381: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-pairing-friendly-curves-11
@@ -67,5 +68,5 @@ def test_pairing_with_infinity(p, q) -> None:
 
 def test_pairing_rejects_bad_point() -> None:
     # 48 zero bytes lack the compression flag, so they encode no point.
-    with pytest.raises(BlsError):
+    with raises(BlsError, "invalid G1 point"):
         bls.pairing(bytes(48), g2(G2))

@@ -4,6 +4,7 @@ import pytest
 
 from ethlib.cryptography import aes
 from ethlib.errors import AesError
+from raising import raises
 
 # FIPS 197-upd1 Appendix B, then FIPS 197 (2001) Appendix C.1 and C.3: key, input, output.
 # https://doi.org/10.6028/NIST.FIPS.197-upd1
@@ -150,7 +151,7 @@ def test_gcm(case: dict) -> None:
 def test_gcm_forged_tag() -> None:
     # gcmDecrypt128.rsp, Count = 1, in the section
     # `Keylen = 128, IVlen = 96, PTlen = 128, AADlen = 128, Taglen = 128`: the file marks it FAIL.
-    with pytest.raises(AesError, match="authentication") as info:
+    with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.authentication") as info:
         aes.gcm_decrypt(
             bytes.fromhex("867fc5d5476d5008f0703d81e3622255"),
             bytes.fromhex("22945529dff947c3c9264df7"),
@@ -167,7 +168,7 @@ def test_gcm_rejects_truncated_tag() -> None:
     out = aes.gcm_encrypt(k, iv, p, aad, 16)
     c, tag = out[:-16], out[-16:]
     assert aes.gcm_decrypt(k, iv, c, aad, tag, 16) == p
-    with pytest.raises(AesError, match="tagLength") as info:
+    with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.tagLength") as info:
         aes.gcm_decrypt(k, iv, c, aad, tag[:12], 16)
     assert info.value.code == 1
 
@@ -175,29 +176,29 @@ def test_gcm_rejects_truncated_tag() -> None:
 @pytest.mark.parametrize("tag_length", [-1, 2**64 + 16])
 def test_gcm_rejects_tag_length_out_of_range(tag_length: int) -> None:
     # A length outside [0, 2^64) is an error, not a value modulo 2^64.
-    with pytest.raises(OverflowError, match="tag_length"):
+    with raises(OverflowError, "tag_length must be in [0, 2^64)"):
         aes.gcm_encrypt(bytes(16), bytes(12), b"", b"", tag_length)
-    with pytest.raises(OverflowError, match="tag_length"):
+    with raises(OverflowError, "tag_length must be in [0, 2^64)"):
         aes.gcm_decrypt(bytes(16), bytes(12), b"", b"", bytes(16), tag_length)
 
 
 @pytest.mark.parametrize("tag_length", [4, 8])
 def test_gcm_rejects_short_tags(tag_length: int) -> None:
-    with pytest.raises(AesError, match="shortTag") as info:
+    with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.shortTag") as info:
         aes.gcm_encrypt(bytes(16), bytes(12), b"", b"", tag_length)
     assert info.value.code == 2
 
 
 @pytest.mark.parametrize(
-    "call, error",
+    "call, message",
     [
-        (lambda: aes.encrypt_block(bytes(24), bytes(16)), "key size"),
-        (lambda: aes.encrypt_block(bytes(16), bytes(15)), "block size"),
-        (lambda: aes.ctr(bytes(16), bytes(15), b""), "counter size"),
+        (lambda: aes.encrypt_block(bytes(24), bytes(16)), "bad key size: 24, expected 16 or 32"),
+        (lambda: aes.encrypt_block(bytes(16), bytes(15)), "bad block size: 15, expected 16"),
+        (lambda: aes.ctr(bytes(16), bytes(15), b""), "bad counter size: 15, expected 16"),
     ],
 )
-def test_rejects_bad_sizes(call, error: str) -> None:
+def test_rejects_bad_sizes(call, message: str) -> None:
     # The export reads these sizes itself, so the error has code 0.
-    with pytest.raises(AesError, match=error) as info:
+    with raises(AesError, message) as info:
         call()
     assert info.value.code == 0

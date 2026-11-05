@@ -10,6 +10,7 @@ import pytest
 
 from ethlib.cryptography import keccak
 from ethlib.execution import trie
+from raising import raises
 
 _DIR = Path(__file__).resolve().parent / "trietests"
 
@@ -68,5 +69,5 @@ def test_empty_root(secured: bool) -> None:
 
 def test_rejects_malformed_pairs() -> None:
     # A pair must be a list of exactly two byte strings.
-    with pytest.raises(ValueError, match="not enough values to unpack"):
+    with raises(ValueError, "not enough values to unpack (expected 2, got 1)"):
         trie.root([(b"key",)], False)  # ty: ignore[invalid-argument-type]

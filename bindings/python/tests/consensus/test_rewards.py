@@ -8,6 +8,7 @@ import pytest
 import archives
 from ethlib import consensus
 from ethlib.networking import snappy
+from raising import raises
 
 from .containers import FORKS
 
@@ -119,7 +120,7 @@ def _pre(fork: str) -> bytes:
 
 def test_inclusion_delay_from_altair():
     # From Altair, the inclusion delay is no longer a kind of deltas.
-    with pytest.raises(consensus.TransitionError) as info:
+    with raises(consensus.TransitionError, "no deltas inclusion_delay_deltas at altair") as info:
         consensus.rewards_deltas(
             "minimal", FORKS["altair"], "inclusion_delay_deltas", _pre("altair")
         )
@@ -127,6 +128,6 @@ def test_inclusion_delay_from_altair():
 
 
 def test_unknown_component():
-    with pytest.raises(consensus.TransitionError) as info:
+    with raises(consensus.TransitionError, "no deltas no_such_deltas at phase0") as info:
         consensus.rewards_deltas("minimal", FORKS["phase0"], "no_such_deltas", _pre("phase0"))
     assert info.value.code == 0

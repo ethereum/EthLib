@@ -12,6 +12,7 @@ from ethlib.cryptography.keccak import keccak256, keccak512
 from ethlib.errors import BlockError
 from ethlib.execution.pow import check_proof_of_work, seal_hash
 from ethlib.serialization import rlp
+from raising import raises
 
 from .test_cache import _bytes, _fnv, _reference_item, _words
 
@@ -67,7 +68,9 @@ def test_header_result_is_above_its_target(name: str) -> None:
     #     second: result 0xab9b... > 2^256 / 0x020040
     case = _POW[name]
     assert int(case["result"], 16) > 2**256 // _difficulty(bytes.fromhex(case["header"]))
-    with pytest.raises(BlockError) as error:
+    with raises(
+        BlockError, "proof of work invalid: EthLib.Execution.Blocks.PowError.resultAboveTarget"
+    ) as error:
         check_proof_of_work(FORK, bytes.fromhex(case["header"]))
     assert error.value.code == 223
 
@@ -93,14 +96,18 @@ def test_wrong_mix_digest_is_rejected() -> None:
     header = bytearray(bytes.fromhex(case["header"]))
     at = header.rindex(bytes.fromhex(case["mixHash"])) + 31
     header[at] ^= 1
-    with pytest.raises(BlockError) as error:
+    with raises(
+        BlockError, "proof of work invalid: EthLib.Execution.Blocks.PowError.wrongMixDigest"
+    ) as error:
         check_proof_of_work(FORK, bytes(header))
     assert error.value.code == 222
 
 
 def test_paris_has_no_proof_of_work() -> None:
     # From Paris on, the check refuses the header before any Ethash work.
-    with pytest.raises(BlockError):
+    with raises(
+        BlockError, "header rejected: EthLib.Serialization.Rlp.RlpError.wrongFieldCount 16 15"
+    ):
         check_proof_of_work("paris", bytes.fromhex(_POW["first"]["header"]))
 
 

@@ -7,6 +7,7 @@ import pytest
 
 from ethlib import consensus
 from ethlib.errors import ConsensusError
+from raising import raises
 
 PHASE0 = [
     "beacon_block",
@@ -62,7 +63,7 @@ def test_topics_of_forks_without_a_consensus_change(fork: str, like: str) -> Non
 
 
 def test_topics_not_yet_specified() -> None:
-    with pytest.raises(ConsensusError):
+    with raises(ConsensusError, "the gossip topics of hegota are not yet specified"):
         consensus.gossip_topics("hegota")
 
 
@@ -80,7 +81,9 @@ def test_subnet_for_attestation() -> None:
 
 
 def test_subnet_for_attestation_overflow() -> None:
-    with pytest.raises(ConsensusError) as caught:
+    with raises(
+        ConsensusError, "subnet rejected: EthLib.Networking.Gossip.SubnetError.subnetOverflow"
+    ) as caught:
         consensus.compute_subnet_for_attestation(2**63, 2, 0)
     assert caught.value.code == 105
 
@@ -93,7 +96,9 @@ def test_subnet_for_blob_sidecar(fork: str, count: int) -> None:
 
 @pytest.mark.parametrize("fork", ["shapella", "fusaka"])
 def test_no_blob_sidecar_subnet(fork: str) -> None:
-    with pytest.raises(ConsensusError) as caught:
+    with raises(
+        ConsensusError, "subnet rejected: EthLib.Networking.Gossip.SubnetError.zeroSubnetCount"
+    ) as caught:
         consensus.compute_subnet_for_blob_sidecar(fork, 0)
     assert caught.value.code == 101
 
@@ -124,6 +129,8 @@ def test_subscribed_subnets(name: str) -> None:
 
 
 def test_subscribed_subnets_epoch_overflow() -> None:
-    with pytest.raises(ConsensusError) as caught:
+    with raises(
+        ConsensusError, "subnet rejected: EthLib.Networking.Gossip.SubnetError.epochOverflow"
+    ) as caught:
         consensus.compute_subscribed_subnets(255, 2**64 - 1)
     assert caught.value.code == 103

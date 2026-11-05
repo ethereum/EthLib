@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from ethlib.execution import blocks
+from raising import raises
 
 _FILE = Path(__file__).resolve().parents[4] / "tests" / "execution" / "blocks"
 CASES = json.loads((_FILE / "block_access_lists.json").read_text())
@@ -42,6 +43,272 @@ def _id(case) -> str:
     return f"{case['test'].split('[')[-1][:70]}-{case['payload']}"
 
 
+def _message(case) -> str:
+    variant = case["test"].split("[")[-1].removeprefix("fork_Amsterdam-blockchain_test_engine")
+    return _MESSAGES[_function(case), variant.strip("-]")]
+
+
+_INVALID = "block access list invalid: EthLib.Execution.Blocks.BlockAccessList.Error."
+_REJECTED = "block access list rejected: EthLib.Serialization.Rlp.RlpError."
+
+# The message of each invalid payload that the checks reject, by test and variant.
+_MESSAGES = {
+    ("test_bal_gas_limit_boundary", "below_boundary-no_tx-no_cl_withdrawal"): (
+        _INVALID + "tooManyItems 25 24"
+    ),
+    ("test_bal_gas_limit_boundary", "below_boundary-no_tx-with_cl_withdrawal"): (
+        _INVALID + "tooManyItems 26 25"
+    ),
+    ("test_bal_gas_limit_boundary", "below_boundary-with_tx-no_cl_withdrawal"): (
+        _INVALID + "tooManyItems 28 27"
+    ),
+    ("test_bal_gas_limit_boundary", "below_boundary-with_tx-with_cl_withdrawal"): (
+        _INVALID + "tooManyItems 29 28"
+    ),
+    ("test_bal_gas_limit_boundary_storage_keys", "below_boundary"): (
+        _INVALID + "tooManyItems 30 29"
+    ),
+    ("test_bal_invalid_account", ""): (
+        _INVALID + "accountsNotAscending\n  #v[149, 209, 190, 149, 141, 34, 173, 242, 148, "
+        "66, 140, 19, 204, 113, 216, 159, 243, 32, 191, 211]"
+    ),
+    ("test_bal_invalid_account_order", ""): (
+        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
+        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
+    ),
+    ("test_bal_invalid_complex_corruption", ""): (
+        _INVALID + "balanceChangesNotAscending\n  #v[42, 220, 37, 102, 80, 24, 170, 31, 224, "
+        "230, 188, 102, 109, 172, 143, 194, 105, 127, 249, 186]"
+    ),
+    ("test_bal_invalid_duplicate_account", ""): (
+        _INVALID + "accountsNotAscending\n  #v[214, 111, 34, 76, 189, 47, 171, 178, 27, 23, "
+        "187, 83, 197, 97, 24, 243, 47, 98, 235, 214]"
+    ),
+    ("test_bal_invalid_duplicate_entries", "duplicate_balance_change"): (
+        _INVALID + "balanceChangesNotAscending\n  #v[118, 2, 197, 112, 212, 149, 140, 9, 91, "
+        "37, 28, 169, 175, 40, 4, 117, 93, 199, 40, 35]"
+    ),
+    ("test_bal_invalid_duplicate_entries", "duplicate_code_change"): (
+        _INVALID + "codeChangesNotAscending\n  #v[37, 102, 185, 152, 156, 82, 99, 91, 21, "
+        "147, 152, 191, 110, 139, 213, 247, 160, 232, 150, 155]"
+    ),
+    ("test_bal_invalid_duplicate_entries", "duplicate_nonce_change"): (
+        _INVALID + "nonceChangesNotAscending\n  #v[246, 195, 169, 237, 193, 175, 160, 173, "
+        "91, 114, 14, 77, 66, 225, 67, 124, 67, 211, 179, 255]"
+    ),
+    ("test_bal_invalid_duplicate_entries", "duplicate_slot_change"): (
+        _INVALID + "storageChangesNotAscending\n  #v[118, 2, 197, 112, 212, 149, 140, 9, 91, "
+        "37, 28, 169, 175, 40, 4, 117, 93, 199, 40, 35]\n  "
+        "0x0000000000000000000000000000000000000000000000000000000000000001#256"
+    ),
+    ("test_bal_invalid_duplicate_entries", "duplicate_storage_read"): (
+        _INVALID + "readsNotAscending\n  #v[118, 2, 197, 112, 212, 149, 140, 9, 91, 37, 28, "
+        "169, 175, 40, 4, 117, 93, 199, 40, 35]"
+    ),
+    ("test_bal_invalid_duplicate_entries", "duplicate_storage_slot"): (
+        _INVALID + "slotsNotAscending\n  #v[118, 2, 197, 112, 212, 149, 140, 9, 91, 37, 28, "
+        "169, 175, 40, 4, 117, 93, 199, 40, 35]"
+    ),
+    ("test_bal_invalid_duplicate_entries", "storage_key_in_both_changes_and_reads"): (
+        _INVALID + "readAndWritten\n  #v[118, 2, 197, 112, 212, 149, 140, 9, 91, 37, 28, 169, "
+        "175, 40, 4, 117, 93, 199, 40, 35]\n  "
+        "0x0000000000000000000000000000000000000000000000000000000000000001#256"
+    ),
+    ("test_bal_invalid_empty_slot_changes", "demoted_noop"): (
+        _INVALID + "slotWithoutChange\n  #v[116, 62, 234, 74, 91, 214, 37, 228, 5, 122, 43, "
+        "11, 6, 228, 191, 86, 116, 59, 174, 36]\n  "
+        "0x0000000000000000000000000000000000000000000000000000000000000000#256"
+    ),
+    ("test_bal_invalid_empty_slot_changes", "unrelated_slot"): (
+        _INVALID + "slotWithoutChange\n  #v[23, 16, 152, 104, 233, 87, 55, 135, 79, 29, 90, "
+        "237, 116, 100, 39, 141, 41, 23, 72, 37]\n  "
+        "0x0000000000000000000000000000000000000000000000000000000000000001#256"
+    ),
+    (
+        "test_bal_invalid_engine_payload_encoding",
+        "header_commits_to_canonical_rlp-empty_byte_string",
+    ): (_REJECTED + "inputTooShort 1 0"),
+    ("test_bal_invalid_engine_payload_encoding", "header_commits_to_canonical_rlp-rlp_non_list"): (
+        _REJECTED + "bytesAsList"
+    ),
+    (
+        "test_bal_invalid_engine_payload_encoding",
+        "header_commits_to_canonical_rlp-rlp_truncated_list",
+    ): (_REJECTED + "inputTooShort 1 0"),
+    (
+        "test_bal_invalid_engine_payload_encoding",
+        "header_commits_to_payload_rlp-empty_byte_string",
+    ): (_REJECTED + "inputTooShort 1 0"),
+    ("test_bal_invalid_engine_payload_encoding", "header_commits_to_payload_rlp-rlp_non_list"): (
+        _REJECTED + "bytesAsList"
+    ),
+    (
+        "test_bal_invalid_engine_payload_encoding",
+        "header_commits_to_payload_rlp-rlp_truncated_list",
+    ): (_REJECTED + "inputTooShort 1 0"),
+    ("test_bal_invalid_extraneous_entries", "out_of_bounds-extra_account_access"): (
+        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
+        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
+    ),
+    ("test_bal_invalid_extraneous_entries", "out_of_bounds-extra_balance"): (
+        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
+        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
+    ),
+    ("test_bal_invalid_extraneous_entries", "out_of_bounds-extra_storage_write_touched"): (
+        _INVALID + "readAndWritten\n  #v[41, 83, 111, 247, 58, 50, 236, 131, 154, 252, 215, "
+        "21, 242, 17, 134, 127, 146, 199, 162, 191]\n  "
+        "0x0000000000000000000000000000000000000000000000000000000000000000#256"
+    ),
+    (
+        "test_bal_invalid_extraneous_entries",
+        "out_of_bounds-extra_storage_write_uninvolved_account",
+    ): (
+        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
+        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
+    ),
+    ("test_bal_invalid_extraneous_entries", "same_tx-extra_account_access"): (
+        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
+        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
+    ),
+    ("test_bal_invalid_extraneous_entries", "same_tx-extra_balance"): (
+        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
+        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
+    ),
+    ("test_bal_invalid_extraneous_entries", "same_tx-extra_storage_write_touched"): (
+        _INVALID + "readAndWritten\n  #v[41, 83, 111, 247, 58, 50, 236, 131, 154, 252, 215, "
+        "21, 242, 17, 134, 127, 146, 199, 162, 191]\n  "
+        "0x0000000000000000000000000000000000000000000000000000000000000000#256"
+    ),
+    ("test_bal_invalid_extraneous_entries", "same_tx-extra_storage_write_uninvolved_account"): (
+        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
+        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
+    ),
+    ("test_bal_invalid_extraneous_entries", "system_tx-extra_account_access"): (
+        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
+        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
+    ),
+    ("test_bal_invalid_extraneous_entries", "system_tx-extra_balance"): (
+        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
+        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
+    ),
+    ("test_bal_invalid_extraneous_entries", "system_tx-extra_storage_write_touched"): (
+        _INVALID + "readAndWritten\n  #v[41, 83, 111, 247, 58, 50, 236, 131, 154, 252, 215, "
+        "21, 242, 17, 134, 127, 146, 199, 162, 191]\n  "
+        "0x0000000000000000000000000000000000000000000000000000000000000000#256"
+    ),
+    ("test_bal_invalid_extraneous_entries", "system_tx-extra_storage_write_uninvolved_account"): (
+        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
+        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
+    ),
+    (
+        "test_bal_invalid_non_minimal_scalar_encoding",
+        "header_commits_to_canonical_rlp-field_balance",
+    ): (
+        _REJECTED + "inField\n  3\n  (EthLib.Serialization.Rlp.RlpError.inField 1 "
+        "(EthLib.Serialization.Rlp.RlpError.leadingZeroInScalar))"
+    ),
+    (
+        "test_bal_invalid_non_minimal_scalar_encoding",
+        "header_commits_to_canonical_rlp-field_block_access_index",
+    ): (
+        _REJECTED + "inField\n  3\n  (EthLib.Serialization.Rlp.RlpError.inField 0 "
+        "(EthLib.Serialization.Rlp.RlpError.leadingZeroInScalar))"
+    ),
+    (
+        "test_bal_invalid_non_minimal_scalar_encoding",
+        "header_commits_to_canonical_rlp-field_nonce",
+    ): (
+        _REJECTED + "inField\n  4\n  (EthLib.Serialization.Rlp.RlpError.inField 1 "
+        "(EthLib.Serialization.Rlp.RlpError.leadingZeroInScalar))"
+    ),
+    (
+        "test_bal_invalid_non_minimal_scalar_encoding",
+        "header_commits_to_canonical_rlp-field_storage_read",
+    ): (_REJECTED + "inField 2 (EthLib.Serialization.Rlp.RlpError.leadingZeroInScalar)"),
+    (
+        "test_bal_invalid_non_minimal_scalar_encoding",
+        "header_commits_to_canonical_rlp-field_storage_slot",
+    ): (
+        _REJECTED + "inField\n  1\n  (EthLib.Serialization.Rlp.RlpError.inField 0 "
+        "(EthLib.Serialization.Rlp.RlpError.leadingZeroInScalar))"
+    ),
+    (
+        "test_bal_invalid_non_minimal_scalar_encoding",
+        "header_commits_to_canonical_rlp-field_storage_value",
+    ): (
+        _REJECTED + "inField\n  1\n  (EthLib.Serialization.Rlp.RlpError.inField\n    1\n    "
+        "(EthLib.Serialization.Rlp.RlpError.inField 1 "
+        "(EthLib.Serialization.Rlp.RlpError.leadingZeroInScalar)))"
+    ),
+    (
+        "test_bal_invalid_non_minimal_scalar_encoding",
+        "header_commits_to_payload_rlp-field_balance",
+    ): (
+        _REJECTED + "inField\n  3\n  (EthLib.Serialization.Rlp.RlpError.inField 1 "
+        "(EthLib.Serialization.Rlp.RlpError.leadingZeroInScalar))"
+    ),
+    (
+        "test_bal_invalid_non_minimal_scalar_encoding",
+        "header_commits_to_payload_rlp-field_block_access_index",
+    ): (
+        _REJECTED + "inField\n  3\n  (EthLib.Serialization.Rlp.RlpError.inField 0 "
+        "(EthLib.Serialization.Rlp.RlpError.leadingZeroInScalar))"
+    ),
+    ("test_bal_invalid_non_minimal_scalar_encoding", "header_commits_to_payload_rlp-field_nonce"): (
+        _REJECTED + "inField\n  4\n  (EthLib.Serialization.Rlp.RlpError.inField 1 "
+        "(EthLib.Serialization.Rlp.RlpError.leadingZeroInScalar))"
+    ),
+    (
+        "test_bal_invalid_non_minimal_scalar_encoding",
+        "header_commits_to_payload_rlp-field_storage_read",
+    ): (_REJECTED + "inField 2 (EthLib.Serialization.Rlp.RlpError.leadingZeroInScalar)"),
+    (
+        "test_bal_invalid_non_minimal_scalar_encoding",
+        "header_commits_to_payload_rlp-field_storage_slot",
+    ): (
+        _REJECTED + "inField\n  1\n  (EthLib.Serialization.Rlp.RlpError.inField 0 "
+        "(EthLib.Serialization.Rlp.RlpError.leadingZeroInScalar))"
+    ),
+    (
+        "test_bal_invalid_non_minimal_scalar_encoding",
+        "header_commits_to_payload_rlp-field_storage_value",
+    ): (
+        _REJECTED + "inField\n  1\n  (EthLib.Serialization.Rlp.RlpError.inField\n    1\n    "
+        "(EthLib.Serialization.Rlp.RlpError.inField 1 "
+        "(EthLib.Serialization.Rlp.RlpError.leadingZeroInScalar)))"
+    ),
+    ("test_bal_invalid_ordering", "balance_changes_out_of_order"): (
+        _INVALID + "balanceChangesNotAscending\n  #v[246, 195, 169, 237, 193, 175, 160, 173, "
+        "91, 114, 14, 77, 66, 225, 67, 124, 67, 211, 179, 255]"
+    ),
+    ("test_bal_invalid_ordering", "code_changes_out_of_order"): (
+        _INVALID + "codeChangesNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, "
+        "219, 245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
+    ),
+    ("test_bal_invalid_ordering", "nonce_changes_out_of_order"): (
+        _INVALID + "nonceChangesNotAscending\n  #v[246, 195, 169, 237, 193, 175, 160, 173, "
+        "91, 114, 14, 77, 66, 225, 67, 124, 67, 211, 179, 255]"
+    ),
+    ("test_bal_invalid_ordering", "slot_changes_out_of_order"): (
+        _INVALID + "storageChangesNotAscending\n  #v[91, 70, 29, 63, 129, 119, 180, 238, 152, "
+        "26, 224, 164, 55, 194, 242, 36, 191, 123, 64, 199]\n  "
+        "0x0000000000000000000000000000000000000000000000000000000000000001#256"
+    ),
+    ("test_bal_invalid_ordering", "storage_reads_out_of_order"): (
+        _INVALID + "readsNotAscending\n  #v[91, 70, 29, 63, 129, 119, 180, 238, 152, 26, 224, "
+        "164, 55, 194, 242, 36, 191, 123, 64, 199]"
+    ),
+    ("test_bal_invalid_ordering", "storage_slots_out_of_order"): (
+        _INVALID + "slotsNotAscending\n  #v[91, 70, 29, 63, 129, 119, 180, 238, 152, 26, 224, "
+        "164, 55, 194, 242, 36, 191, 123, 64, 199]"
+    ),
+    ("test_bal_invalid_tx_order", ""): (
+        _INVALID + "balanceChangesNotAscending\n  #v[42, 220, 37, 102, 80, 24, 170, 31, 224, "
+        "230, 188, 102, 109, 172, 143, 194, 105, 127, 249, 186]"
+    ),
+}
+
+
 @pytest.mark.parametrize("case", VALID, ids=_id)
 def test_valid_list(case) -> None:
     bal = bytes.fromhex(case["bal"])
@@ -52,7 +319,7 @@ def test_valid_list(case) -> None:
 
 @pytest.mark.parametrize("case", [c for c in INVALID if _function(c) in FORM], ids=_id)
 def test_form_rejected(case) -> None:
-    with pytest.raises(blocks.BlockError) as error:
+    with raises(blocks.BlockError, _message(case)) as error:
         blocks.check_block_access_list(bytes.fromhex(case["bal"]), case["gasLimit"])
     assert error.value.code in FORM_CODES
 
@@ -60,7 +327,7 @@ def test_form_rejected(case) -> None:
 @pytest.mark.parametrize("case", [c for c in INVALID if _function(c) in ENCODING], ids=_id)
 def test_encoding_rejected(case) -> None:
     # The decoder rejects the bytes, so no hash exists.
-    with pytest.raises(blocks.BlockError, match="block access list rejected"):
+    with raises(blocks.BlockError, _message(case)):
         blocks.block_access_list_hash(bytes.fromhex(case["bal"]))
 
 
@@ -70,7 +337,7 @@ def test_encoding_rejected(case) -> None:
     ids=_id,
 )
 def test_too_many_items(case) -> None:
-    with pytest.raises(blocks.BlockError) as error:
+    with raises(blocks.BlockError, _message(case)) as error:
         blocks.check_block_access_list(bytes.fromhex(case["bal"]), case["gasLimit"])
     assert error.value.code == TOO_MANY_ITEMS
 
@@ -163,7 +430,7 @@ def test_needs_execution(case) -> None:
     # Here the form check alone rejects exactly the payloads that also break the form.
     bal = bytes.fromhex(case["bal"])
     if _form_also(case):
-        with pytest.raises(blocks.BlockError) as error:
+        with raises(blocks.BlockError, _message(case)) as error:
             blocks.check_block_access_list(bal, case["gasLimit"])
         assert error.value.code in FORM_CODES
     else:
@@ -180,6 +447,9 @@ def test_size_boundary() -> None:
     account = bytes([0xDA, 0x94]) + bytes(20) + bytes([0xC0] * 5)
     bal = bytes([0xDB]) + account
     blocks.check_block_access_list(bal, 2000)
-    with pytest.raises(blocks.BlockError) as error:
+    with raises(
+        blocks.BlockError,
+        "block access list invalid: EthLib.Execution.Blocks.BlockAccessList.Error.tooManyItems 1 0",
+    ) as error:
         blocks.check_block_access_list(bal, 1999)
     assert error.value.code == TOO_MANY_ITEMS

@@ -11,6 +11,7 @@ import pytest
 from py_ecc import bn128
 
 from ethlib.precompiles import price, run
+from raising import raises
 
 from .forks import since
 
@@ -45,8 +46,16 @@ def test_prices(fork: str) -> None:
 @pytest.mark.parametrize("address", [0x06, 0x07, 0x08])
 @pytest.mark.parametrize("fork", since("frontier", "byzantium"))
 def test_absent_before_byzantium(fork: str, address: int) -> None:
-    with pytest.raises(ValueError, match="no precompile"):
+    with raises(ValueError, f"no precompile at address {address} at fork {fork}"):
         run(fork, address, b"", 10**6)
+
+
+def out_of_gas(cost: int) -> str:
+    """The message of a call that has one gas less than its price."""
+    return (
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
+        f"(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.outOfGas {cost} {cost - 1})"
+    )
 
 
 def word(value: int) -> bytes:
@@ -98,11 +107,23 @@ def test_ecadd_short_input_is_zero_padded(fork: str) -> None:
 
 @pytest.mark.parametrize("fork", FORKS)
 def test_ecadd_errors(fork: str) -> None:
-    with pytest.raises(ValueError, match="notOnCurve"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
+            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.notOnCurve)"
+        ),
+    ):
         run(fork, 0x06, word(1) + word(3) + bytes(64), add_price(fork))
-    with pytest.raises(ValueError, match="invalidFieldElement"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
+            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.invalidFieldElement)"
+        ),
+    ):
         run(fork, 0x06, word(bn128.field_modulus) + word(2) + bytes(64), add_price(fork))
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(ValueError, out_of_gas(add_price(fork))):
         run(fork, 0x06, b"", add_price(fork) - 1)
 
 
@@ -138,13 +159,19 @@ def test_ecmul_short_scalar(fork: str) -> None:
 
 @pytest.mark.parametrize("fork", FORKS)
 def test_ecmul_not_on_curve(fork: str) -> None:
-    with pytest.raises(ValueError, match="notOnCurve"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
+            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.notOnCurve)"
+        ),
+    ):
         run(fork, 0x07, word(1) + word(3) + word(2), mul_price(fork))
 
 
 @pytest.mark.parametrize("fork", FORKS)
 def test_ecmul_out_of_gas(fork: str) -> None:
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(ValueError, out_of_gas(mul_price(fork))):
         run(fork, 0x07, g1(bn128.G1) + word(2), mul_price(fork) - 1)
 
 
@@ -173,13 +200,19 @@ def pairing_input(pairs) -> bytes:
 def test_ecpairing(fork: str, pairs, holds: bool) -> None:
     data = pairing_input(pairs)
     assert run(fork, 0x08, data, pairing_price(fork, len(pairs))) == word(int(holds))
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(ValueError, out_of_gas(pairing_price(fork, len(pairs)))):
         run(fork, 0x08, data, pairing_price(fork, len(pairs)) - 1)
 
 
 @pytest.mark.parametrize("fork", FORKS)
 def test_ecpairing_invalid_length(fork: str) -> None:
-    with pytest.raises(ValueError, match="invalidInputLength"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
+            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.invalidInputLength 191)"
+        ),
+    ):
         run(fork, 0x08, bytes(191), 10**6)
 
 
@@ -188,7 +221,13 @@ def test_ecpairing_g2_x_is_p(fork: str) -> None:
     # The imaginary part of the G2 x coordinate is p, which is not a field element.
     data = bytearray(pairing_input([(bn128.G1, bn128.G2)]))
     data[64:96] = word(bn128.field_modulus)
-    with pytest.raises(ValueError, match="invalidFieldElement"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
+            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.invalidFieldElement)"
+        ),
+    ):
         run(fork, 0x08, bytes(data), pairing_price(fork, 1))
 
 
@@ -196,5 +235,11 @@ def test_ecpairing_g2_x_is_p(fork: str) -> None:
 def test_ecpairing_g2_not_on_curve(fork: str) -> None:
     data = bytearray(pairing_input([(bn128.G1, bn128.G2)]))
     data[-1] ^= 1
-    with pytest.raises(ValueError, match="notOnCurve"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
+            "(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.notOnCurve)"
+        ),
+    ):
         run(fork, 0x08, bytes(data), pairing_price(fork, 1))

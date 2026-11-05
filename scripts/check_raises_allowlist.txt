@@ -1,0 +1,18 @@
+# Functions that may expect an exception with a bare pytest.raises, each for a reason.
+#
+# One function per line: its file, its name, a colon, then the reason.
+# Such a call names only the class, never a pattern.
+# An entry fits only a runner of external vectors whose cases do not give the message.
+# A line whose function holds no bare pytest.raises call fails the check.
+
+bindings/python/tests/ssz/test_ssz_generic.py test_invalid: the fixture names no error
+bindings/python/tests/consensus/test_operations.py run_case: the fixture names no error
+bindings/python/tests/consensus/test_transition.py run_case: the fixture names no error
+bindings/python/tests/precompile/test_modexp_state_tests.py test_call: the fixture names no error
+bindings/python/tests/precompile/test_modexp_state_tests.py test_call_between: the fixture names no error
+bindings/python/tests/parity/runners.py _engine_payload: the fixture names no error, only the error code that the runner compares
+bindings/python/tests/parity/legacy.py _header_error: the fixture name maps to several errors
+bindings/python/tests/parity/legacy.py run_ommers: the fixture name maps to several errors
+bindings/python/tests/parity/legacy.py run_blockchain: the fixture name maps to several errors
+bindings/python/tests/parity/runners.py _state_test: the message holds state values, such as balances and gas, that the fixture does not give
+bindings/python/tests/parity/runners.py _blockchain_test: the message holds state values, such as balances and gas, that the fixture does not give

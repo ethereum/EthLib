@@ -4,6 +4,7 @@ import pytest
 
 from dumper import hex_str, write_case
 from ethlib.cryptography import keccak
+from raising import raises
 
 from . import fixtures
 
@@ -26,5 +27,5 @@ def test_hash(i: int) -> None:
 
 def test_rejects_non_bytes() -> None:
     # The binding takes only `bytes`.
-    with pytest.raises(TypeError):
+    with raises(TypeError, "data must be bytes"):
         keccak.keccak256("abc")  # ty: ignore[invalid-argument-type]

@@ -20,6 +20,7 @@ from ethlib.execution.network import (
     receipts_match,
 )
 from ethlib.serialization import rlp
+from raising import raises
 
 
 def _p(n: int) -> bytes:
@@ -80,7 +81,7 @@ def test_logs_changed() -> None:
 
 
 def test_fork_not_specified() -> None:
-    with pytest.raises(EthWireError) as info:
+    with raises(EthWireError, "fork hegota not yet specified") as info:
         receipts_match(69, "hegota", bytes(32), rlp.encode([]))
     assert info.value.code == 0
 
@@ -116,7 +117,7 @@ def test_round_trip(version: int, message_id: int, data: bytes) -> None:
     ],
 )
 def test_wrong_form(version: int, message_id: int, data: bytes) -> None:
-    with pytest.raises(EthWireError) as info:
+    with raises(EthWireError, "message data is not RLP of the expected shape") as info:
         decode_message(version, message_id, data)
     assert info.value.code == 2
 
@@ -127,23 +128,38 @@ GAS_LIMITS = rlp.encode([_p(21000), _p(40), _p(21000)])
 
 
 @pytest.mark.parametrize(
-    "receipts, block_gas_limit, code",
+    "receipts, block_gas_limit, code, message",
     [
         # Two of three receipts, each within 21000 / 8 = 2625 bytes.
-        ([[_p(2), _p(1), _p(21000), []]] * 1, 30_000_000, None),
+        ([[_p(2), _p(1), _p(21000), []]] * 1, 30_000_000, None, None),
         # The second transaction has gas limit 40, so its receipt may have 5 bytes at most.
-        ([[_p(2), _p(1), _p(21000), []]] * 2, 30_000_000, 502),
+        (
+            [[_p(2), _p(1), _p(21000), []]] * 2,
+            30_000_000,
+            502,
+            "receipt 1 has 7 bytes, more than 5",
+        ),
         # Four receipts for three transactions.
-        ([[_p(2), _p(1), _p(21000), []]] * 4, 30_000_000, 501),
+        (
+            [[_p(2), _p(1), _p(21000), []]] * 4,
+            30_000_000,
+            501,
+            "4 receipts delivered for 3 transactions",
+        ),
         # A block gas limit of 40 allows 5 bytes in total.
-        ([[_p(2), _p(1), _p(21000), []]] * 1, 40, 503),
+        (
+            [[_p(2), _p(1), _p(21000), []]] * 1,
+            40,
+            503,
+            "receipts have 7 bytes, more than 5",
+        ),
     ],
 )
-def test_partial_receipts(receipts: list, block_gas_limit: int, code) -> None:
+def test_partial_receipts(receipts: list, block_gas_limit: int, code, message) -> None:
     data = rlp.encode(receipts)
     if code is None:
         check_partial_receipts(GAS_LIMITS, block_gas_limit, data)
     else:
-        with pytest.raises(EthWireError) as info:
+        with raises(EthWireError, message) as info:
             check_partial_receipts(GAS_LIMITS, block_gas_limit, data)
         assert info.value.code == code

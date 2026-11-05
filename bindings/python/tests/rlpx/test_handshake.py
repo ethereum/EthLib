@@ -3,6 +3,7 @@
 import pytest
 
 from ethlib.networking import rlpx
+from raising import raises
 
 from .vectors import (
     ACK_2,
@@ -80,13 +81,13 @@ def test_round_trip(padding: bytes) -> None:
 def test_changed_auth_rejected() -> None:
     auth = bytearray(AUTH_2)
     auth[100] ^= 1
-    with pytest.raises(ValueError, match="tag does not match"):
+    with raises(ValueError, "tag does not match"):
         rlpx.recipient_secrets(*KEYS_B, bytes(auth), ACK_2, b"")
 
 
 def test_wrong_size_prefix_rejected() -> None:
     # Code 102 names a packet whose size prefix does not count the bytes after it.
-    with pytest.raises(rlpx.RlpxError) as info:
+    with raises(rlpx.RlpxError, "packet of 438 bytes does not match its size prefix") as info:
         rlpx.recipient_secrets(*KEYS_B, AUTH_2 + b"\x00", ACK_2, b"")
     assert info.value.code == 102
 
@@ -94,7 +95,7 @@ def test_wrong_size_prefix_rejected() -> None:
 def test_changed_tag_keeps_ecies_code() -> None:
     # A wrong ECIES tag keeps the code of ECIES, 5, inside the handshake.
     auth = AUTH_2[:-1] + bytes([AUTH_2[-1] ^ 1])
-    with pytest.raises(rlpx.RlpxError) as info:
+    with raises(rlpx.RlpxError, "tag does not match") as info:
         rlpx.recipient_secrets(*KEYS_B, auth, ACK_2, b"")
     assert info.value.code == 5
 
@@ -122,8 +123,8 @@ def _packet_to_b(body: bytes) -> bytes:
     )
 
 
-def _code(call) -> int:
-    with pytest.raises(rlpx.RlpxError) as info:
+def _code(call, message: str) -> int:
+    with raises(rlpx.RlpxError, message) as info:
         call()
     return info.value.code
 
@@ -133,18 +134,42 @@ def test_handshake_codes() -> None:
     pub = public_key(STATIC_KEY_A)
     recipient = b"\x04" + public_key(STATIC_KEY_B)
     # A nonce of the wrong size is a bad argument, with code 0.
-    assert _code(lambda: rlpx.finish(STATIC_KEY_A, EPHEMERAL_KEY_A, b"", AUTH_2, ACK_2, b"")) == 0
+    assert (
+        _code(
+            lambda: rlpx.finish(STATIC_KEY_A, EPHEMERAL_KEY_A, b"", AUTH_2, ACK_2, b""),
+            "bad nonce size: 0, expected 32",
+        )
+        == 0
+    )
 
     # 101: the encrypted message does not fit in a 16-bit size.
     def too_long():
         return rlpx.make_auth(*KEYS_A, recipient, EPHEMERAL_KEY_B, bytes(16), bytes(65536))
 
-    assert _code(too_long) == 101
+    assert _code(too_long, "encrypted message has 65818 bytes, more than 65535") == 101
     # 103: the body is not an RLP list.
-    assert _code(lambda: rlpx.recipient_secrets(*KEYS_B, _packet_to_b(b"\x00"), ACK_2, b"")) == 103
+    assert (
+        _code(
+            lambda: rlpx.recipient_secrets(*KEYS_B, _packet_to_b(b"\x00"), ACK_2, b""),
+            "message body is not an RLP list of the expected fields",
+        )
+        == 103
+    )
     # 104: the initiator's public key is not on the curve.
     bad_key = _rlp_list([sig, bytes(64), NONCE_A, b"\x04"])
-    assert _code(lambda: rlpx.recipient_secrets(*KEYS_B, _packet_to_b(bad_key), ACK_2, b"")) == 104
+    assert (
+        _code(
+            lambda: rlpx.recipient_secrets(*KEYS_B, _packet_to_b(bad_key), ACK_2, b""),
+            "point is not on the curve",
+        )
+        == 104
+    )
     # 105: the recovery id of the signature is 2.
     bad_id = _rlp_list([bytes(64) + b"\x02", pub, NONCE_A, b"\x04"])
-    assert _code(lambda: rlpx.recipient_secrets(*KEYS_B, _packet_to_b(bad_id), ACK_2, b"")) == 105
+    assert (
+        _code(
+            lambda: rlpx.recipient_secrets(*KEYS_B, _packet_to_b(bad_id), ACK_2, b""),
+            "bad recovery id: 2, expected 0 or 1",
+        )
+        == 105
+    )

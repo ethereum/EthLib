@@ -16,6 +16,7 @@ from ethlib.execution import blocks
 from ethlib.execution.pow import validate_ommers
 from ethlib.serialization import rlp
 from ethlib.state import dao_fork_root, rewards_root, state_root
+from raising import raises
 from state.test_dao_fork import DAO_ACCOUNTS, DAO_RECOVERY
 
 from .catalogue import LEGACY_FORKS, Case
@@ -223,7 +224,11 @@ def run_headers(root: Path, case: Case) -> None:
         if len(fields) != header_fields(fork):
             # A header in the form of another fork decodes at no fork that its number runs.
             assert expected is not None
-            with pytest.raises(BlockError, match="wrongFieldCount"):
+            with raises(
+                BlockError,
+                "header rejected: EthLib.Serialization.Rlp.RlpError.wrongFieldCount "
+                f"{header_fields(fork)} {len(fields)}",
+            ):
                 blocks.header_hash(fork, header)
             checked += 1
             continue
@@ -633,7 +638,13 @@ def run_blockchain(root: Path, case: Case) -> None:
         if len(header) != header_fields(fork):
             # A header in the form of another fork decodes at no fork that its number runs.
             assert expected is not None, entry
-            with pytest.raises(BlockError, match="wrongFieldCount"):
+            with raises(
+                BlockError,
+                # The block decodes as a whole, so the header's error is that of its field 0.
+                "block rejected: EthLib.Serialization.Rlp.RlpError.inField 0 "
+                "(EthLib.Serialization.Rlp.RlpError.wrongFieldCount "
+                f"{header_fields(fork)} {len(header)})",
+            ):
                 blocks.state_transition(config, state, recent_blocks, fork, raw, sealed(test))
             continue
         if expected is not None:

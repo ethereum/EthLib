@@ -12,6 +12,7 @@ import pytest
 from ruamel.yaml import YAML
 
 from ethlib import consensus
+from raising import raises
 
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "parameters"
 
@@ -154,9 +155,9 @@ def test_config(name: str) -> None:
 
 
 def test_unknown_names_are_rejected() -> None:
-    with pytest.raises(ValueError, match="no preset is named holesky"):
+    with raises(ValueError, "no preset is named holesky"):
         consensus.preset("holesky")
-    with pytest.raises(ValueError, match="no configuration is named holesky"):
+    with raises(ValueError, "no configuration is named holesky"):
         consensus.config("holesky")
-    with pytest.raises(ValueError, match="frontier is not a fork of the beacon chain"):
+    with raises(ValueError, "frontier is not a fork of the beacon chain"):
         consensus.parameters("mainnet", "frontier")

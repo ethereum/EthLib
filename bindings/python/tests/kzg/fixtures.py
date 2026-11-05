@@ -146,6 +146,13 @@ INVALID_BLOBS = [
     BLOB_INVALID_LENGTH_PLUS_ONE,
     BLOB_INVALID_LENGTH_MINUS_ONE,
 ]
+# The message of the error of each invalid blob, in the same order.
+INVALID_BLOB_MESSAGES = [
+    "invalid field element at index 0",
+    "invalid field element at index 2111",
+    "blob: expected 131072 bytes, got 131073",
+    "blob: expected 131072 bytes, got 131071",
+]
 
 
 def invalid_blob_error(blob: bytes) -> type[Exception]:

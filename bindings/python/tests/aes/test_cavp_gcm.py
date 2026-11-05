@@ -7,6 +7,7 @@ import pytest
 
 from ethlib.cryptography import aes
 from ethlib.errors import AesError
+from raising import raises
 
 CAVP = Path(__file__).resolve().parent / "cavp"
 
@@ -151,7 +152,7 @@ def test_whole_file(archive: Path, name: str) -> None:
 def _encrypt(case: dict) -> None:
     tag_length = case["Taglen"] // 8
     if case["Taglen"] in SHORT_TAGS:
-        with pytest.raises(AesError, match="shortTag") as error:
+        with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.shortTag") as error:
             aes.gcm_encrypt(case["Key"], case["IV"], case["PT"], case["AAD"], tag_length)
         assert error.value.code == 2
         return
@@ -163,13 +164,13 @@ def _decrypt(case: dict) -> None:
     tag_length = case["Taglen"] // 8
     args = (case["Key"], case["IV"], case["CT"], case["AAD"], case["Tag"], tag_length)
     if case["Taglen"] in SHORT_TAGS:
-        with pytest.raises(AesError, match="shortTag") as error:
+        with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.shortTag") as error:
             aes.gcm_decrypt(*args)
         assert error.value.code == 2
     elif case.get("FAIL"):
         # The file marks a case FAIL when the tag does not authenticate the input.
         assert "PT" not in case
-        with pytest.raises(AesError, match="authentication") as error:
+        with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.authentication") as error:
             aes.gcm_decrypt(*args)
         assert error.value.code == 6
     else:

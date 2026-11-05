@@ -6,6 +6,7 @@ import pytest
 
 from dumper import hex_str, write_case
 from ethlib.cryptography import vrf
+from raising import raises
 
 from . import fixtures
 
@@ -80,5 +81,5 @@ def test_wrong_length(field: str, size: int) -> None:
 
 
 def test_rejects_non_bytes() -> None:
-    with pytest.raises(TypeError):
+    with raises(TypeError, "root and opening must be bytes"):
         vrf.verify(bytearray(fixtures.ROOT_ZERO), 0, fixtures.OPENING_ZERO)  # ty: ignore[invalid-argument-type]

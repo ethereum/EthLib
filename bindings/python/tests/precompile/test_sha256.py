@@ -3,6 +3,7 @@
 import pytest
 
 from ethlib.precompiles import price, run
+from raising import raises
 from sha256 import fixtures
 
 from .forks import FORKS, ends
@@ -47,8 +48,13 @@ def test_exact_price(fork: str, i: int) -> None:
 def test_one_gas_short(fork: str, i: int) -> None:
     # One gas below the price runs out of gas.
     message, _ = fixtures.VECTORS[i]
-    with pytest.raises(ValueError, match="outOfGas"):
-        run(fork, ADDRESS, message, cost(len(message)) - 1)
+    gas = cost(len(message))
+    with raises(
+        ValueError,
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.sha256\n  "
+        f"(EthLib.Execution.Evm.Precompiles.Sha256.Sha256Error.outOfGas {gas} {gas - 1})",
+    ):
+        run(fork, ADDRESS, message, gas - 1)
 
 
 def test_surplus_gas() -> None:

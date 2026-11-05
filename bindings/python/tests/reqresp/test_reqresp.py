@@ -5,9 +5,8 @@ protobuf varint, so no value comes from the code under test.
 Each test names the rule that its message pins.
 """
 
-import pytest
-
 from ethlib.networking import reqresp
+from raising import raises
 
 STREAM_IDENTIFIER = bytes([0xFF, 0x06, 0x00, 0x00]) + b"sNaPpY"
 
@@ -72,7 +71,7 @@ def test_max_compressed_len():
 
 
 def test_max_compressed_len_overflow():
-    with pytest.raises(ValueError, match=r"2\^64 or more"):
+    with raises(ValueError, "bound on the compressed size is 2^64 or more"):
         reqresp.max_compressed_len(2**64 - 1)
 
 
@@ -106,33 +105,33 @@ def test_empty_payload():
 
 def test_length_above_type_bound():
     message = _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
-    with pytest.raises(ValueError, match="above"):
+    with raises(ValueError, "declared length 4 is above 3"):
         reqresp.decode_payload(3, message)
 
 
 def test_length_above_payload_cap():
     # A declared length of 10 MiB + 1 exceeds the cap, before any frame is read.
     message = _varint(10 * 2**20 + 1) + STREAM_IDENTIFIER
-    with pytest.raises(ValueError, match="above 10485760"):
+    with raises(ValueError, "declared length 10485761 is above 10485760"):
         reqresp.decode_payload(2**30, message)
 
 
 def test_length_at_payload_cap():
     # A declared length of 10 MiB passes the cap, and fails later: the stream is empty.
     message = _varint(10 * 2**20) + STREAM_IDENTIFIER
-    with pytest.raises(ValueError, match="not the declared"):
+    with raises(ValueError, "payload has 0 bytes, not the declared 10485760"):
         reqresp.decode_payload(2**30, message)
 
 
 def test_stream_shorter_than_declared():
     message = _varint(5) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
-    with pytest.raises(ValueError, match="not the declared"):
+    with raises(ValueError, "payload has 4 bytes, not the declared 5"):
         reqresp.decode_payload(100, message)
 
 
 def test_stream_longer_than_declared():
     message = _varint(3) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
-    with pytest.raises(ValueError, match="not the declared"):
+    with raises(ValueError, "payload has 4 bytes, not the declared 3"):
         reqresp.decode_payload(100, message)
 
 
@@ -145,31 +144,31 @@ def test_compressed_bytes_at_the_bound():
 def test_compressed_bytes_above_the_bound():
     # One more padding byte makes 33 bytes after the prefix.
     message = _varint(0) + STREAM_IDENTIFIER + _chunk(0xFE, bytes(19))
-    with pytest.raises(ValueError, match="compressed bytes"):
+    with raises(ValueError, "33 compressed bytes, more than 32"):
         reqresp.decode_payload(0, message)
 
 
 def test_non_minimal_varint():
     message = bytes([0x84, 0x00]) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
-    with pytest.raises(ValueError, match="varint"):
+    with raises(ValueError, "length prefix is not a valid varint"):
         reqresp.decode_payload(100, message)
 
 
 def test_varint_over_ten_bytes():
     message = bytes([0x80] * 10 + [0x00]) + STREAM_IDENTIFIER
-    with pytest.raises(ValueError, match="varint"):
+    with raises(ValueError, "length prefix is not a valid varint"):
         reqresp.decode_payload(100, message)
 
 
 def test_bad_checksum():
     message = _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD, checksum=0)
-    with pytest.raises(ValueError, match="Snappy"):
+    with raises(ValueError, "payload is not a valid Snappy framed stream"):
         reqresp.decode_payload(100, message)
 
 
 def test_missing_stream_identifier():
     message = _varint(4) + _uncompressed(PAYLOAD)
-    with pytest.raises(ValueError, match="Snappy"):
+    with raises(ValueError, "payload is not a valid Snappy framed stream"):
         reqresp.decode_payload(100, message)
 
 
@@ -199,15 +198,15 @@ def test_request_specific_code():
 def test_error_message_too_long():
     message = bytes(reqresp.MAX_ERROR_MESSAGE_SIZE + 1)
     chunk = bytes([2]) + _varint(len(message)) + STREAM_IDENTIFIER + _uncompressed(message)
-    with pytest.raises(ValueError, match="above"):
+    with raises(ValueError, "declared length 257 is above 256"):
         reqresp.decode_response_chunk(0, 1000, chunk)
 
 
 def test_context_truncated():
-    with pytest.raises(ValueError, match="context"):
+    with raises(ValueError, "response chunk ends inside its context bytes"):
         reqresp.decode_response_chunk(4, 100, bytes([0, 0x6A, 0x95]))
 
 
 def test_missing_code():
-    with pytest.raises(ValueError, match="code"):
+    with raises(ValueError, "response chunk has no response code"):
         reqresp.decode_response_chunk(0, 100, b"")

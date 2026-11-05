@@ -10,6 +10,7 @@ import archives
 from ethlib import consensus
 from ethlib.errors import SszError
 from ethlib.networking import snappy
+from raising import raises
 
 from .containers import CONTAINERS, FORKS
 
@@ -64,7 +65,7 @@ def test_no_container_outside_its_forks(container):
     forks = list(FORKS)
     end = forks.index(dropped) if dropped else len(forks)
     for fork in forks[: forks.index(first)] + forks[end:]:
-        with pytest.raises(SszError):
+        with raises(SszError, f"no container {container} at {FORKS[fork]}"):
             consensus.ssz_static("minimal", FORKS[fork], container, b"")
 
 
@@ -81,7 +82,7 @@ def test_truncated_bytes_are_rejected():
     # A withdrawal has a fixed size, so one byte less encodes no withdrawal.
     preset, fork, container, case = next(c for c in _cases() if c[2] == "Withdrawal")
     data = snappy.decompress((case / "serialized.ssz_snappy").read_bytes())
-    with pytest.raises(SszError):
+    with raises(SszError, "input rejected: EthLib.Serialization.Ssz.Err.scope 44 43"):
         consensus.ssz_static(preset, FORKS[fork], container, data[:-1])
 
 
@@ -119,7 +120,7 @@ def test_mainnet_state_reads_on_the_main_thread():
 
 
 def test_unknown_container():
-    with pytest.raises(SszError):
+    with raises(SszError, "no container NoSuchContainer at fusaka"):
         consensus.ssz_static("minimal", "fusaka", "NoSuchContainer", b"")
 
 

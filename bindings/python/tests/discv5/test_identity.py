@@ -1,8 +1,7 @@
 """discv5 handshake cryptography against the test vectors of the discv5 wire protocol."""
 
-import pytest
-
 from ethlib.networking import discv5
+from raising import raises
 
 # The test vectors of the discv5 wire protocol.
 #
@@ -90,5 +89,5 @@ def test_log_distance_first_bit():
 
 
 def test_log_distance_rejects_short_id():
-    with pytest.raises(ValueError, match="node ID has 31 bytes, not 32"):
+    with raises(ValueError, "node ID has 31 bytes, not 32"):
         discv5.log_distance(NODE_ID_A[:31], NODE_ID_B)

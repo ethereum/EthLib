@@ -1,9 +1,8 @@
 """The size limits on the data of a gossip message."""
 
-import pytest
-
 from ethlib.errors import GossipError
 from ethlib.networking import gossip
+from raising import raises
 
 MAX_PAYLOAD_SIZE = 10 * 1024 * 1024
 MAX_COMPRESSED = 32 + MAX_PAYLOAD_SIZE + MAX_PAYLOAD_SIZE // 6
@@ -40,13 +39,22 @@ def test_accepts_within_bounds() -> None:
 
 
 def test_type_bound() -> None:
-    with pytest.raises(GossipError) as caught:
+    with raises(
+        GossipError,
+        "gossip payload rejected: EthLib.Networking.Gossip.PayloadError.payloadTooLong 32 31",
+    ) as caught:
         gossip.decode_payload(31, COMPRESSED)
     assert _code(caught.value) == 4
 
 
 def test_not_snappy() -> None:
-    with pytest.raises(GossipError) as caught:
+    with raises(
+        GossipError,
+        (
+            "gossip payload rejected: EthLib.Networking.Gossip.PayloadError.snappy "
+            "(EthLib.Networking.Snappy.SnappyError.lengthMismatch 0 1)"
+        ),
+    ) as caught:
         gossip.decode_payload(32, bytes(32))
     assert _code(caught.value) == 3
 
@@ -55,7 +63,13 @@ def test_payload_cap() -> None:
     # One byte over the cap is rejected even when the type allows it.
     data = _literal_block(bytes(MAX_PAYLOAD_SIZE + 1))
     assert len(data) <= MAX_COMPRESSED
-    with pytest.raises(GossipError) as caught:
+    with raises(
+        GossipError,
+        (
+            "gossip payload rejected: EthLib.Networking.Gossip.PayloadError.payloadTooLong "
+            "10485761 10485760"
+        ),
+    ) as caught:
         gossip.decode_payload(2**64 - 1, data)
     assert _code(caught.value) == 4
     assert gossip.decode_payload(2**64 - 1, _literal_block(bytes(MAX_PAYLOAD_SIZE))) == bytes(
@@ -64,7 +78,13 @@ def test_payload_cap() -> None:
 
 
 def test_compressed_length() -> None:
-    with pytest.raises(GossipError) as caught:
+    with raises(
+        GossipError,
+        (
+            "gossip payload rejected: EthLib.Networking.Gossip.PayloadError.compressedTooLong "
+            "12233419 12233418"
+        ),
+    ) as caught:
         gossip.decode_payload(2**64 - 1, bytes(MAX_COMPRESSED + 1))
     assert _code(caught.value) == 2
 
@@ -73,6 +93,12 @@ def test_declared_length_rejected_unread() -> None:
     # The preamble declares one byte over the cap, and a copy with nothing to copy from follows.
     # The length alone rejects the data, so the invalid block is never decompressed.
     data = _preamble(MAX_PAYLOAD_SIZE + 1) + bytes.fromhex("0101")
-    with pytest.raises(GossipError) as caught:
+    with raises(
+        GossipError,
+        (
+            "gossip payload rejected: EthLib.Networking.Gossip.PayloadError.payloadTooLong "
+            "10485761 10485760"
+        ),
+    ) as caught:
         gossip.decode_payload(2**64 - 1, data)
     assert _code(caught.value) == 4

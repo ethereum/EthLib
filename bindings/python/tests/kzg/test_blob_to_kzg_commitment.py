@@ -4,6 +4,7 @@ import pytest
 
 from dumper import hex_str, write_case
 from ethlib.cryptography import kzg
+from raising import raises
 
 from . import fixtures
 
@@ -25,7 +26,7 @@ def test_valid_blob(i: int) -> None:
 @pytest.mark.parametrize("i", range(len(fixtures.INVALID_BLOBS)))
 def test_invalid_blob(i: int) -> None:
     blob = fixtures.INVALID_BLOBS[i]
-    with pytest.raises(fixtures.invalid_blob_error(blob)):
+    with raises(fixtures.invalid_blob_error(blob), fixtures.INVALID_BLOB_MESSAGES[i]):
         kzg.blob_to_kzg_commitment(blob)
     write_case(
         "kzg",

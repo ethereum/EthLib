@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from ethlib.state import state_root
+from raising import raises
 
 _CASES = json.loads(
     (Path(__file__).resolve().parent / "genesis" / "basic_genesis_tests.json").read_text()
@@ -129,7 +130,7 @@ def test_zero_slot_is_absent() -> None:
 
 def test_rejects_repeated_address() -> None:
     account = [ADDRESS_A, 0, 0, b"", []]
-    with pytest.raises(ValueError, match="given twice"):
+    with raises(ValueError, "an address is given twice"):
         state_root(rlp_encode([account, account]))
 
 
@@ -148,10 +149,10 @@ ACCOUNT_ERROR = "an account is not a list of address, nonce, balance, code and s
     ],
 )
 def test_rejects_malformed_state(state: bytes, error: str) -> None:
-    with pytest.raises(ValueError, match=error):
+    with raises(ValueError, error):
         state_root(state)
 
 
 def test_rejects_non_bytes() -> None:
-    with pytest.raises(TypeError):
+    with raises(TypeError, "state must be bytes"):
         state_root("abc")  # ty: ignore[invalid-argument-type]

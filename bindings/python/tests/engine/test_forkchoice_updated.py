@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from ethlib import engine
+from raising import raises
 
 _FILE = Path(__file__).resolve().parents[4] / "tests" / "engine" / "forkchoice.json"
 CHAINS = json.loads(_FILE.read_text())
@@ -76,14 +77,18 @@ def test_invalid_head() -> None:
 
 def test_safe_off_chain() -> None:
     """A safe block that is not on the chain of the head is an invalid forkchoice state."""
-    with pytest.raises(engine.EngineError) as error:
+    with raises(
+        engine.EngineError, "engine error: EthLib.Engine.EngineError.invalidForkchoiceState"
+    ) as error:
         _update(TREE, _hash(2), safe=_hash(3))
     assert error.value.code == 38002
 
 
 def test_finalized_unknown() -> None:
     """A finalized block that the tree does not hold is not on the chain of the head."""
-    with pytest.raises(engine.EngineError) as error:
+    with raises(
+        engine.EngineError, "engine error: EthLib.Engine.EngineError.invalidForkchoiceState"
+    ) as error:
         _update(TREE, _hash(3), finalized=_hash(9))
     assert error.value.code == 38002
 
@@ -96,7 +101,10 @@ def test_ancestors() -> None:
 
 def test_wrong_fields() -> None:
     """A forkchoice state with a missing field is an invalid parameter."""
-    with pytest.raises(engine.EngineError) as error:
+    with raises(
+        engine.EngineError,
+        'engine error: EthLib.Engine.EngineError.invalidParams "forkchoiceState: wrong fields"',
+    ) as error:
         engine.forkchoice_updated(
             TREE,
             "engine_forkchoiceUpdatedV3",
@@ -108,6 +116,8 @@ def test_wrong_fields() -> None:
 def test_payload_attributes() -> None:
     """Payload attributes ask for a payload build, which is not specified, so code 0."""
     state = {"headBlockHash": _hash(3), "safeBlockHash": ZERO, "finalizedBlockHash": ZERO}
-    with pytest.raises(engine.EngineError) as error:
+    with raises(
+        engine.EngineError, "payload attributes: building a payload is not specified"
+    ) as error:
         engine.forkchoice_updated(TREE, "engine_forkchoiceUpdatedV1", [state, {"timestamp": "0x1"}])
     assert error.value.code == 0

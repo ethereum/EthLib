@@ -9,6 +9,7 @@ import pytest
 
 from ethlib.errors import TrieError
 from ethlib.execution import trie
+from raising import raises
 
 _FILE = Path(__file__).resolve().parent / "trietests" / "hexencodetest.json"
 _CASES = json.loads(_FILE.read_text())
@@ -35,12 +36,12 @@ def test_leaf_paths(nibbles: list[int], out: str) -> None:
 
 
 def test_not_a_nibble() -> None:
-    with pytest.raises(TrieError) as info:
+    with raises(TrieError, "16 is not a nibble") as info:
         trie.hex_prefix([16], False)
     assert info.value.code == 0
 
 
 def test_not_a_byte() -> None:
     # A value outside a byte never reaches the encoder.
-    with pytest.raises(OverflowError):
+    with raises(OverflowError, "a nibble must be in [0, 256)"):
         trie.hex_prefix([256], False)

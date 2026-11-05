@@ -21,6 +21,7 @@ from ethlib.execution.network import (
     wire_hash,
 )
 from ethlib.serialization import rlp
+from raising import raises
 
 FIXTURES = Path(__file__).resolve().parents[4] / "tests/execution/ethereum_tests/TransactionTests"
 
@@ -117,7 +118,7 @@ def test_announcement_eth68(version: int) -> None:
     data = _announcement(b"\x00\x02\x03", [100, 120, 300], HASHES)
     assert decode_message(version, NEW_POOLED_TRANSACTION_HASHES, data) == data
     # The form of eth/72 has four fields.
-    with pytest.raises(EthWireError) as info:
+    with raises(EthWireError, "message data is not RLP of the expected shape") as info:
         decode_message(
             version,
             NEW_POOLED_TRANSACTION_HASHES,
@@ -133,21 +134,46 @@ def test_announcement_eth72(cells: bytes) -> None:
 
 
 @pytest.mark.parametrize(
-    "version, data, code",
+    "version, data, code, message",
     [
         # Two types for three hashes.
-        (68, _announcement(b"\x00\x02", [100, 120, 300], HASHES), 3),
+        (
+            68,
+            _announcement(b"\x00\x02", [100, 120, 300], HASHES),
+            3,
+            "announcement has 2 types and 3 sizes for 3 hashes",
+        ),
         # Two sizes for three hashes.
-        (69, _announcement(b"\x00\x02\x03", [100, 120], HASHES), 3),
-        (72, _announcement(b"\x00\x02\x03", [100, 120], HASHES, b""), 3),
+        (
+            69,
+            _announcement(b"\x00\x02\x03", [100, 120], HASHES),
+            3,
+            "announcement has 3 types and 2 sizes for 3 hashes",
+        ),
+        (
+            72,
+            _announcement(b"\x00\x02\x03", [100, 120], HASHES, b""),
+            3,
+            "announcement has 3 types and 2 sizes for 3 hashes",
+        ),
         # Cells of 15 bytes.
-        (72, _announcement(b"\x00\x02\x03", [100, 120, 300], HASHES, b"\xff" * 15), 2),
+        (
+            72,
+            _announcement(b"\x00\x02\x03", [100, 120, 300], HASHES, b"\xff" * 15),
+            2,
+            "message data is not RLP of the expected shape",
+        ),
         # eth/72 reads four fields.
-        (72, _announcement(b"\x00\x02\x03", [100, 120, 300], HASHES), 2),
+        (
+            72,
+            _announcement(b"\x00\x02\x03", [100, 120, 300], HASHES),
+            2,
+            "message data is not RLP of the expected shape",
+        ),
     ],
 )
-def test_announcement_refused(version: int, data: bytes, code: int) -> None:
-    with pytest.raises(EthWireError) as info:
+def test_announcement_refused(version: int, data: bytes, code: int, message: str) -> None:
+    with raises(EthWireError, message) as info:
         decode_message(version, NEW_POOLED_TRANSACTION_HASHES, data)
     assert info.value.code == code
 
@@ -174,17 +200,29 @@ def test_pooled_answer(response: bytes) -> None:
 
 
 @pytest.mark.parametrize(
-    "response, code",
+    "response, code, message",
     [
         # Out of order.
-        (_pooled([TXS[1], TXS[0]]), 302),
+        (
+            _pooled([TXS[1], TXS[0]]),
+            302,
+            "transactions are not requested ones in the order of the request",
+        ),
         # A transaction that was not requested.
-        (_pooled([_item(HASHED[3][1])]), 302),
+        (
+            _pooled([_item(HASHED[3][1])]),
+            302,
+            "transactions are not requested ones in the order of the request",
+        ),
         # Another request ID.
-        (_pooled(TXS, request_id=10), 303),
+        (
+            _pooled(TXS, request_id=10),
+            303,
+            "response is not PooledTransactions with the request ID of the request",
+        ),
     ],
 )
-def test_pooled_refused(response: bytes, code: int) -> None:
-    with pytest.raises(EthWireError) as info:
+def test_pooled_refused(response: bytes, code: int, message: str) -> None:
+    with raises(EthWireError, message) as info:
         check_pooled(69, _get(HASHES), response)
     assert info.value.code == code

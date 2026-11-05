@@ -3,6 +3,7 @@
 import pytest
 
 from ethlib.cryptography import secp256k1
+from raising import raises
 
 # The coordinates of the generator `G`, as SEC 2 v2 §2.4.1 prints them.
 GX = "79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798"
@@ -30,19 +31,19 @@ def test_encode_generator() -> None:
 
 REJECTED = [
     # G with y + 1 is off the curve.
-    ("04" + GX + GY[:-1] + "9", "not on the curve"),
+    ("04" + GX + GY[:-1] + "9", "point is not on the curve"),
     # x = 2^256 - 1 is not below p.
-    ("02" + "FF" * 32, "not below p"),
+    ("02" + "FF" * 32, "point coordinate is not below p"),
     # x = 0 has no point: 7 is not a square mod p.
     ("02" + "00" * 32, "no point of the curve has this x"),
     # 05 is no prefix.
-    ("05" + GX, "prefix: 5"),
+    ("05" + GX, "bad point encoding prefix: 5"),
     # The 64 coordinate bytes alone, without a prefix, have no valid length.
-    (GX + GY, "size: 64"),
+    (GX + GY, "bad point encoding size: 64, expected 33 or 65"),
 ]
 
 
 @pytest.mark.parametrize("encoding, error", REJECTED)
 def test_decode_rejects(encoding: str, error: str) -> None:
-    with pytest.raises(ValueError, match=error):
+    with raises(ValueError, error):
         secp256k1.ecdh(ONE, bytes.fromhex(encoding))

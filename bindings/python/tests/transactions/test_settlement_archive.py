@@ -7,6 +7,7 @@ import pytest
 
 from ethlib.execution import fees, transactions
 from ethlib.serialization import rlp
+from raising import raises
 
 from .test_transactions import FORK_OF_NETWORK
 
@@ -177,11 +178,11 @@ def test_settle_rejects(archive) -> None:
     gas, max_fee = _int(block["transactions"][0]["gasLimit"]), _price(block["transactions"][0], 0)
     # A maximum fee below the base fee, more gas left than the gas limit, and a base fee before
     # London are inputs that no block accepts.
-    for fork, base_fee, gas_left in [
-        ("pectra", max_fee + 1, 0),
-        ("pectra", 0, gas + 1),
-        ("berlin", 1, 0),
+    for fork, base_fee, gas_left, message in [
+        ("pectra", max_fee + 1, 0, "the price per gas is below the base fee"),
+        ("pectra", 0, gas + 1, "the gas left is above the gas limit"),
+        ("berlin", 1, 0, "a fork before london has no base fee"),
     ]:
-        with pytest.raises(transactions.TransactionError) as error:
+        with raises(transactions.TransactionError, message) as error:
             transactions.settle(fork, tx, base_fee, gas_left, 0)
         assert error.value.code == 0

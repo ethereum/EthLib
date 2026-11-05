@@ -6,6 +6,7 @@ import pytest
 
 from ethlib.errors import SszError
 from ethlib.serialization import ssz
+from raising import raises
 
 UINT16 = {"uint": 2}
 
@@ -58,12 +59,12 @@ def test_deserialize(ssz_type, value, encoded: str) -> None:
 
 def test_bool_two_rejected() -> None:
     # A byte other than 00 and 01 is no boolean.
-    with pytest.raises(ValueError, match="notABit 2$"):
+    with raises(ValueError, "input rejected: EthLib.Serialization.Ssz.Err.notABit 2"):
         ssz.deserialize("bool", b"\x02")
 
 
 def test_bad_hex_rejected() -> None:
-    with pytest.raises(ValueError, match="hex"):
+    with raises(ValueError, "value: bytes must be 0x and hex digits"):
         ssz.serialize({"byte_vector": 2}, {"bytes": "0xzz"})
 
 
@@ -78,13 +79,13 @@ def test_bad_hex_rejected() -> None:
     ],
 )
 def test_illegal_type_rejected(ssz_type, fault: str) -> None:
-    with pytest.raises(ValueError, match="type rejected.*" + fault):
+    with raises(ValueError, "type rejected: EthLib.Serialization.Ssz.Err." + fault):
         ssz.deserialize(ssz_type, b"")
 
 
 def test_unknown_type_rejected() -> None:
     # A type that the JSON names no SSZ type for has code 0, which no SSZ error has.
-    with pytest.raises(SszError) as caught:
+    with raises(SszError, "type: unknown SSZ type float") as caught:
         ssz.serialize({"float": 4}, {"uint": 1})
     assert caught.value.code == 0
 
@@ -156,11 +157,11 @@ def test_hash_tree_root(ssz_type, value, root: bytes) -> None:
     ],
 )
 def test_hash_tree_root_rejects_value(ssz_type, value, fault: str) -> None:
-    with pytest.raises(SszError, match="value rejected.*" + fault + "$"):
+    with raises(SszError, "value rejected: EthLib.Serialization.Ssz.Err." + fault):
         ssz.hash_tree_root(ssz_type, value)
 
 
 def test_hash_tree_root_rejects_type() -> None:
     # The root checks the type before it reads the value.
-    with pytest.raises(SszError, match="type rejected.*uintWidth 3$"):
+    with raises(SszError, "type rejected: EthLib.Serialization.Ssz.Err.uintWidth 3"):
         ssz.hash_tree_root({"uint": 3}, {"uint": 0})

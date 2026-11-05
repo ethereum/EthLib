@@ -3,6 +3,7 @@
 import pytest
 
 from ethlib.networking import discv5
+from raising import raises
 
 # The test vectors of the discv5 wire protocol.
 #
@@ -123,27 +124,29 @@ def test_aes_gcm_vector():
 def test_changed_tag_fails():
     p = discv5.decode_packet(DEST_ID, PING_PACKET)
     message = p["message"][:-1] + bytes([p["message"][-1] ^ 1])
-    with pytest.raises(ValueError, match="message does not authenticate"):
+    with raises(ValueError, "message does not authenticate"):
         discv5.decrypt_message(bytes(16), NONCE, message, p["message_ad"])
 
 
 def test_wrong_destination():
     # Under another destination ID, the header unmasks to bytes without "discv5".
-    with pytest.raises(ValueError, match="protocolId"):
+    with raises(ValueError, "invalid packet: EthLib.Networking.Discv5.PacketError.protocolId"):
         discv5.decode_packet(SRC_ID, PING_PACKET)
 
 
 def test_packet_too_short():
-    with pytest.raises(ValueError, match="size"):
+    with raises(ValueError, "invalid packet: EthLib.Networking.Discv5.PacketError.size 62"):
         discv5.decode_packet(DEST_ID, PING_PACKET[:62])
 
 
 def test_packet_too_long():
-    with pytest.raises(ValueError, match="size"):
+    with raises(ValueError, "invalid packet: EthLib.Networking.Discv5.PacketError.size 1281"):
         discv5.decode_packet(DEST_ID, PING_PACKET + bytes(1281 - len(PING_PACKET)))
 
 
 def test_whoareyou_with_a_message():
     # A WHOAREYOU packet carries no message, so one more byte is rejected.
-    with pytest.raises(ValueError, match="whoareyouMessage"):
+    with raises(
+        ValueError, "invalid packet: EthLib.Networking.Discv5.PacketError.whoareyouMessage"
+    ):
         discv5.decode_packet(DEST_ID, WHOAREYOU_PACKET + b"\x00")

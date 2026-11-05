@@ -3,6 +3,7 @@
 import pytest
 
 from ethlib.precompiles import price, run
+from raising import raises
 
 from .forks import since
 
@@ -84,7 +85,11 @@ def test_examples(fork: str, data: bytes, output: bytes) -> None:
 def test_example_1_price(fork: str, cost: int) -> None:
     assert price(fork, 0x05, EXAMPLE_1) == cost
     assert run(fork, 0x05, EXAMPLE_1, cost) == word(1)
-    with pytest.raises(ValueError, match="outOfGas"):
+    with raises(
+        ValueError,
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp\n  "
+        f"(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.outOfGas {cost} {cost - 1})",
+    ):
         run(fork, 0x05, EXAMPLE_1, cost - 1)
 
 
@@ -92,8 +97,25 @@ def test_example_1_price(fork: str, cost: int) -> None:
 @pytest.mark.parametrize("fork", EIP_7883_FORKS)
 def test_example_3_length_too_large(fork: str, gas: int) -> None:
     # EIP-7823 bounds each length by 1024 bytes, before any gas is charged.
-    with pytest.raises(ValueError, match="lengthTooLarge"):
+    with raises(
+        ValueError,
+        (
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp\n  "
+            "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.lengthTooLarge\n    "
+            "(EthLib.Execution.Evm.Precompiles.Modexp.LengthField.modulus)\n    "
+            "115792089237316195423570985008687907853269984665640564039457584007913129639935)"
+        ),
+    ):
         run(fork, 0x05, EXAMPLE_3, gas)
+
+
+# The prices of example 3: a modulus of x = 2^256 - 1 bytes, and an exponent of 2^256 - 2, whose
+# highest bit has the index 255.
+# EIP-198: mult_complexity(x) = x^2 // 16 + 480 * x - 199680 above 1024 bytes, times 255, over 20.
+# EIP-2565: ceil(x / 8)^2, times 255, over 3, and at least 200.
+EXAMPLE_3_LENGTH = 2**256 - 1
+EXAMPLE_3_EIP_198_PRICE = (EXAMPLE_3_LENGTH**2 // 16 + 480 * EXAMPLE_3_LENGTH - 199680) * 255 // 20
+EXAMPLE_3_EIP_2565_PRICE = max(200, ((EXAMPLE_3_LENGTH + 7) // 8) ** 2 * 255 // 3)
 
 
 @pytest.mark.parametrize("fork", since("byzantium", "fusaka"))
@@ -101,13 +123,19 @@ def test_example_3_before_fusaka(fork: str) -> None:
     # Before EIP-7823, a modulus of 2^256 - 1 bytes is priced far above any gas, so the call
     # runs out of gas.
     assert price(fork, 0x05, EXAMPLE_3) > 2**64
-    with pytest.raises(ValueError, match="outOfGas"):
+    cost = EXAMPLE_3_EIP_198_PRICE if fork in EIP_198_FORKS else EXAMPLE_3_EIP_2565_PRICE
+    with raises(
+        ValueError,
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp\n  "
+        "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.outOfGas\n    "
+        f"{cost}\n    {2**64 - 1})",
+    ):
         run(fork, 0x05, EXAMPLE_3, 2**64 - 1)
 
 
 @pytest.mark.parametrize("fork", since("frontier", "byzantium"))
 def test_absent_before_byzantium(fork: str) -> None:
-    with pytest.raises(ValueError, match="no precompile at address 5"):
+    with raises(ValueError, f"no precompile at address 5 at fork {fork}"):
         run(fork, 0x05, EXAMPLE_1, AMPLE_GAS)
 
 

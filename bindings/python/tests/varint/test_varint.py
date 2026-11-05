@@ -1,10 +1,9 @@
 """The unsigned protobuf varint against hand-built cases and the protobuf encoding guide."""
 
-import re
-
 import pytest
 
 from ethlib.networking import varint
+from raising import raises
 
 # Each value and its varint.
 # 150 is the worked example of the protobuf encoding guide, and 300 is traced in the Lean module.
@@ -51,10 +50,12 @@ def test_decode(value: int, encoded: str) -> None:
     ],
 )
 def test_decode_rejected(data: bytes, fault: str) -> None:
-    with pytest.raises(ValueError, match=re.escape("VarintError." + fault) + "$"):
+    with raises(
+        ValueError, "varint rejected: EthLib.Networking.Encoding.Varint.VarintError." + fault
+    ):
         varint.decode(data)
 
 
 def test_encode_out_of_range() -> None:
-    with pytest.raises(OverflowError):
+    with raises(OverflowError, "value must be in [0, 2^64)"):
         varint.encode(2**64)

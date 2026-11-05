@@ -9,6 +9,7 @@ Only the standard library is used, like the script.
 import hashlib
 import importlib.util
 import io
+import re
 import tarfile
 import tempfile
 import unittest
@@ -68,6 +69,10 @@ class Fetch(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def raises_exactly(self, message: str):
+        """Expect an archive error whose message is exactly the text."""
+        return self.assertRaisesRegex(fetch.ArchiveError, rf"\A{re.escape(message)}\Z")
+
     def archive(
         self, data: bytes, sha256: str | None = None, name: str = "served.tar.gz"
     ) -> "fetch.Archive":
@@ -117,7 +122,7 @@ class Fetch(unittest.TestCase):
         self.assertEqual(fetch.members(archive, self.cache), expected)
 
     def test_path_without_member_fails(self):
-        with self.assertRaisesRegex(fetch.ArchiveError, "no member under fixtures/c"):
+        with self.raises_exactly("vectors: no member under fixtures/c"):
             fetch.unpack(self.archive(tar_gz(MEMBERS)), self.cache, ["fixtures/c"])
 
     def test_path_outside_the_archive_fails(self):
@@ -127,13 +132,13 @@ class Fetch(unittest.TestCase):
 
     def test_member_that_leaves_the_directory_fails(self):
         archive = self.archive(tar_gz({"fixtures/../../escape": b"x"}))
-        with self.assertRaisesRegex(fetch.ArchiveError, "unsafe member"):
+        with self.raises_exactly("vectors: unsafe member fixtures/../../escape"):
             fetch.unpack(archive, self.cache, ["fixtures"])
         self.assertFalse((self.root / "escape").exists())
 
     def test_link_fails(self):
         archive = self.archive(tar_gz(MEMBERS, {"fixtures/a/link": "/etc/passwd"}))
-        with self.assertRaisesRegex(fetch.ArchiveError, "not a file or a directory"):
+        with self.raises_exactly("vectors: fixtures/a/link is not a file or a directory"):
             fetch.unpack(archive, self.cache, ["fixtures/a"])
 
     def test_zip(self):
@@ -147,7 +152,7 @@ class Fetch(unittest.TestCase):
 
     def test_zip_member_that_leaves_the_directory_fails(self):
         archive = self.archive(zip_file({"fixtures/../../escape": b"x"}), name="served.zip")
-        with self.assertRaisesRegex(fetch.ArchiveError, "unsafe member"):
+        with self.raises_exactly("vectors: unsafe member fixtures/../../escape"):
             fetch.unpack(archive, self.cache, ["fixtures"])
         self.assertFalse((self.root / "escape").exists())
 
@@ -155,7 +160,7 @@ class Fetch(unittest.TestCase):
         archive = self.archive(
             zip_file(MEMBERS, {"fixtures/a/link": "/etc/passwd"}), name="served.zip"
         )
-        with self.assertRaisesRegex(fetch.ArchiveError, "not a file or a directory"):
+        with self.raises_exactly("vectors: fixtures/a/link is not a file or a directory"):
             fetch.unpack(archive, self.cache, ["fixtures/a"])
 
 

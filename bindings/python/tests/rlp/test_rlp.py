@@ -4,12 +4,12 @@
 """
 
 import json
-import re
 from pathlib import Path
 
 import pytest
 
 from ethlib.serialization import rlp
+from raising import raises
 
 _VECTORS = Path(__file__).resolve().parent / "vectors"
 _VALID = json.loads((_VECTORS / "rlptest.json").read_text())
@@ -80,6 +80,9 @@ def test_random_case(name: str) -> None:
 # - lessThan, int32Overflow and emptyEncoding: an input that ends before the bytes its prefix
 #   announces, given as the bytes announced, then the bytes available.
 # randomRLP is a list, inside which a byte string writes its length with a leading zero byte.
+# The decoder prefixes each fault with the stage and the error type.
+_REJECTED = "input rejected: EthLib.Serialization.Rlp.RlpError."
+
 _FAULTS = {
     "int32Overflow": "inputTooShort 1080863910568919042 2",
     "int32Overflow2": "inputTooShort 1080863910568919042 2",
@@ -118,7 +121,7 @@ def test_every_invalid_case_has_a_fault() -> None:
 def test_invalid_case(name: str) -> None:
     case = _INVALID[name]
     assert case["in"] == "INVALID"
-    with pytest.raises(ValueError, match=re.escape(_FAULTS[name]) + "$"):
+    with raises(ValueError, _REJECTED + _FAULTS[name]):
         rlp.decode(_bytes(case["out"]))
 
 
@@ -143,7 +146,7 @@ def test_scalar() -> None:
     ],
 )
 def test_scalar_rejected(data: str, fault: str) -> None:
-    with pytest.raises(ValueError, match=re.escape(fault) + "$"):
+    with raises(ValueError, _REJECTED + fault):
         rlp.decode_as("nat", bytes.fromhex(data))
 
 
@@ -153,7 +156,7 @@ def test_word() -> None:
 
 def test_word_list_rejected() -> None:
     # c2 01 02 is a list, so it holds no word.
-    with pytest.raises(ValueError, match="listAsScalar$"):
+    with raises(ValueError, "input rejected: EthLib.Serialization.Rlp.RlpError.listAsScalar"):
         rlp.decode_as("u256", bytes.fromhex("c20102"))
 
 
@@ -164,13 +167,13 @@ def test_bool() -> None:
 
 def test_bool_two_rejected() -> None:
     # 02 holds no boolean: 2 is not below 2^1.
-    with pytest.raises(ValueError, match=re.escape("scalarTooLarge 2 1") + "$"):
+    with raises(ValueError, _REJECTED + "scalarTooLarge 2 1"):
         rlp.decode_as("bool", bytes.fromhex("02"))
 
 
 def test_uint64_overflow_rejected() -> None:
     # 89 01 then 8 zero bytes holds 2^64, which is no 64-bit integer.
-    with pytest.raises(ValueError, match=re.escape(f"scalarTooLarge {2**64} 64") + "$"):
+    with raises(ValueError, _REJECTED + "scalarTooLarge 18446744073709551616 64"):
         rlp.decode_as("uint64", bytes.fromhex("89010000000000000000"))
 
 
@@ -186,7 +189,7 @@ def test_recipient_address() -> None:
 
 def test_recipient_short_rejected() -> None:
     # 81 ff is one byte, which is no address.
-    with pytest.raises(ValueError, match=re.escape("wrongLength 20 1") + "$"):
+    with raises(ValueError, _REJECTED + "wrongLength 20 1"):
         rlp.decode_as("recipient", bytes.fromhex("81ff"))
 
 
@@ -196,5 +199,5 @@ def test_list_nat() -> None:
 
 
 def test_unknown_kind_rejected() -> None:
-    with pytest.raises(ValueError, match="unknown RLP type"):
+    with raises(ValueError, "unknown RLP type"):
         rlp.decode_as("float", bytes.fromhex("80"))

@@ -9,6 +9,7 @@ from ruamel.yaml import YAML
 from ethlib import consensus
 from ethlib.errors import SszError
 from ethlib.networking import snappy
+from raising import raises
 
 from .containers import FORKS
 
@@ -88,5 +89,5 @@ def test_blob_sidecar_inclusion_proof(preset, fork, case):
 
 
 def test_no_blob_sidecar_at_fulu():
-    with pytest.raises(SszError):
+    with raises(SszError, "no container BlobSidecar at fusaka"):
         consensus.verify_blob_sidecar_inclusion_proof("minimal", "fusaka", b"")

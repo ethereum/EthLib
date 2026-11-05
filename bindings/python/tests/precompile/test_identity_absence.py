@@ -19,6 +19,7 @@ import pytest
 
 from ethlib.errors import PrecompileError
 from ethlib.precompiles import price, run
+from raising import raises
 
 from .forks import since
 
@@ -64,7 +65,12 @@ def test_identity_call(fork: str, data: bytes, gas: int, succeeds: bool) -> None
     if succeeds:
         assert run(fork, IDENTITY, data, gas) == data
     else:
-        with pytest.raises(PrecompileError) as error:
+        with raises(
+            PrecompileError,
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.identity\n  "
+            "(EthLib.Execution.Evm.Precompiles.Identity.IdentityError.outOfGas "
+            f"{PRICES[len(data)]} {gas})",
+        ) as error:
             run(fork, IDENTITY, data, gas)
         assert error.value.code != 0
 
