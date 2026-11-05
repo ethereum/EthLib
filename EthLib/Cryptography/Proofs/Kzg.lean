@@ -54,6 +54,7 @@ public import EthLib.Cryptography.Proofs.Kzg.PeerDasColumnGames
 public import EthLib.Cryptography.Proofs.Kzg.SetupTorsion.Embedded
 public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Points
 public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.FourStep
+public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Glv
 public import EthLib.Cryptography.Proofs.Kzg.SetupLagrange.Dft
 
 /-!
