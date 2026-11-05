@@ -4,6 +4,7 @@ public import EthLib.Base.Exports
 public import EthLib.Execution.Blocks.Block
 public import EthLib.Execution.Blocks.DaoFork
 public import EthLib.Execution.Blocks.Rewards
+public import EthLib.Execution.Exports.Blocks
 public import EthLib.Execution.State.Root
 public import EthLib.Execution.State.Errors
 
@@ -27,6 +28,8 @@ A failed change to the state has a code from 101.
 A fork name crosses the boundary as the name of its case in Lean, such as `shapella`.
 
 An unknown fork, a fork before Shapella, or a block that does not decode, has code 0.
+
+So do forks of a chain that do not decode, or that break the order of the timeline.
 
 So does Hegotá, which is not yet specified.
 -/
@@ -104,7 +107,7 @@ The block is decoded at the fork, which must be Shapella or later. -/
 def withdrawalsRootExport (fork input block : ByteArray) : Result ByteArray := do
   let fork ← forkUpTo .glamsterdam fork
   let pre ← (ofInput input).mapError fun e => (e.code, e.message)
-  let b : Blocks.Block fork Item ← (Codec.decode block).mapError
+  let b : Blocks.Block fork Item ← (Blocks.Block.decode (fun _ => fork) block).mapError
     fun e => (0, s!"block rejected: {reprStr e}")
   if h : .shapella ≤ fork then
     let post ← (Blocks.processWithdrawals fork ⟨pre, ∅, ∅, ∅, ∅⟩ (b.withdrawals h)).mapError
@@ -122,14 +125,18 @@ def daoForkRootExport (input : ByteArray) : Result ByteArray := do
 
 /-- The state root after the mining rewards of a block, from the state that `input` encodes.
 
-The block is decoded at the fork; from Paris on it pays no reward. -/
+The forks of the chain are an RLP list of `[name, first block]`, the first one from block 0.
+
+The block and each of its ommers decode at the fork of their own number.
+
+From Paris on, a block pays no reward. -/
 @[export eth_state_rewards_root]
-def rewardsRootExport (fork input block : ByteArray) : Result ByteArray := do
-  let fork ← forkUpTo .glamsterdam fork
+def rewardsRootExport (forks input block : ByteArray) : Result ByteArray := do
+  let config ← (Blocks.Exports.chainOfForks forks).mapError fun (_, m) => (0, m)
   let pre ← (ofInput input).mapError fun e => (e.code, e.message)
-  let b : Blocks.Block fork Item ← (Codec.decode block).mapError
-    fun e => (0, s!"block rejected: {reprStr e}")
-  let ommers := b.ommers.map fun o => (o.coinbase, o.number)
+  let item ← (Serialization.Rlp.decode block).mapError fun e => (0, s!"block rejected: {reprStr e}")
+  let ⟨fork, b⟩ ← (Blocks.Exports.blockOnChain config item).mapError fun (_, m) => (0, m)
+  let ommers := b.ommers.map fun o => (o.2.coinbase, o.2.number)
   let tx ← (Blocks.payRewards fork (.ofBlock ⟨pre, ∅, ∅, ∅, ∅⟩) b.header.coinbase b.header.number
     ommers).mapError fun e => (e.code, s!"rewards failed: {reprStr e}")
   rootOf tx.incorporateTxIntoBlock.parent.applyChanges

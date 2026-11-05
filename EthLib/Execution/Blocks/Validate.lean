@@ -255,7 +255,7 @@ def validateHeader {parentFork fork : Fork} (hFork : parentFork ≤ fork)
 def validateBlockSize {fork : Fork} {Tx : Type} [Codec Tx] (block : Block fork Tx) :
     Except BlockError Unit :=
   if fork ≥ .fusaka then do
-    let bytes ← (Codec.encode block).mapError .encoding
+    let bytes ← block.encode.mapError .encoding
     firstFailure [(decide (bytes.size ≤ MAX_RLP_BLOCK_SIZE), .blockTooLarge bytes.size)]
   else .ok ()
 

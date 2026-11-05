@@ -6,7 +6,10 @@ The storage is a list of pairs `[key, value]`, with a 32-byte key and a word.
 The code hash of an account is the Keccak-256 hash of its code.
 """
 
+from collections.abc import Sequence
+
 from ..errors import StateError
+from ..execution.pow import chain_forks
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -33,9 +36,9 @@ def dao_fork_root(state: bytes) -> bytes:
     return _native.state_dao_fork_root(state)
 
 
-def rewards_root(fork: str, state: bytes, block: bytes) -> bytes:
+def rewards_root(forks: str | Sequence[tuple[str, int]], state: bytes, block: bytes) -> bytes:
     """The state root after the mining rewards of a block, from the state that the RLP bytes encode."""
-    return _native.state_rewards_root(fork, state, block)
+    return _native.state_rewards_root(chain_forks(forks), state, block)
 
 
 __all__ = ["state_root", "withdrawals_root", "dao_fork_root", "rewards_root", "StateError"]

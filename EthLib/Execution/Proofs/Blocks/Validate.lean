@@ -159,13 +159,13 @@ The RLP form fits when it has at most 8 MiB, that is 8,388,608 bytes. -/
 theorem validateBlockSize_eq_ok_iff {fork : Fork} {Tx : Type} [Serialization.Rlp.Codec Tx]
     (block : Block fork Tx) :
     validateBlockSize block = .ok () ↔
-      fork < .fusaka ∨ ∃ bytes, Serialization.Rlp.Codec.encode block = .ok bytes ∧
+      fork < .fusaka ∨ ∃ bytes, block.encode = .ok bytes ∧
         bytes.size ≤ MAX_RLP_BLOCK_SIZE := by
   unfold validateBlockSize
   by_cases hfork : fork ≥ .fusaka
   · have hnot : ¬ fork < .fusaka := fun hlt => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le hlt hfork)
     simp only [hfork, ↓reduceIte, hnot, false_or]
-    cases Serialization.Rlp.Codec.encode block with
+    cases block.encode with
     | error e => simp [Except.mapError, bind, Except.bind]
     | ok bytes => simp [Except.mapError, bind, Except.bind, firstFailure_eq_ok_iff]
   · have hlt : fork < .fusaka := Nat.lt_of_not_le hfork

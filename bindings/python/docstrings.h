@@ -381,7 +381,7 @@
   "Check the proof of work of a header, as section 4.3.4 of the Yellow Paper asks."
 
 #define DOC_pow_validate_ommers \
-  "Check the ommers of a block in RLP form, against recent blocks, all at one named fork."
+  "Check the ommers of a block in RLP form, against recent blocks, each at the fork of its number."
 
 #define DOC_block_transactions_root \
   "The transactions root of the transactions of a block, decoded at the fork."

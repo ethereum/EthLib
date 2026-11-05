@@ -14,7 +14,7 @@ A fork crosses the boundary as the name of its case in Lean, such as `shapella`.
 
 A header, a block or a receipt crosses it as its bytes.
 
-Each operation decodes at the fork first.
+Each operation decodes at the fork first, the ommers of a block too.
 
 A rejected input comes back as the code and the message of its RLP error.
 
@@ -68,8 +68,40 @@ Each transaction stays the item that it is, so any transaction form passes. -/
 @[export eth_block_reencode]
 def reencodeExport (fork block : ByteArray) : Result ByteArray := do
   let fork ← forkUpTo .glamsterdam fork
-  let b : Block fork Item ← runRlp "block rejected" (Codec.decode block)
-  runRlp "block has no encoding" (Codec.encode b)
+  let b : Block fork Item ← runRlp "block rejected" (Block.decode (fun _ => fork) block)
+  runRlp "block has no encoding" b.encode
+
+/-- The forks of a chain by block number, from their RLP form: a list of `[name, first block]`.
+
+The first fork starts at block 0, so each block has a fork.
+
+The chain ID and the blob schedules play no part. -/
+def chainOfForks (forks : ByteArray) : Result ChainConfig := do
+  let entries : List (List Item) ← runRlp "forks rejected" (Codec.decode forks)
+  let activations ← entries.mapM fun
+    | [.bytes name, first] => do
+      let fork ← forkUpTo .glamsterdam name
+      let first : Nat ← runRlp "fork block rejected" (Codec.ofItem first)
+      pure (fork, Activation.block first)
+    | _ => throw (0, "a fork is not a list of a name and a block number")
+  let config : ChainConfig := { chainId := 0, activations }
+  if !decide config.Ordered then throw (0, "the forks are not in the order of the timeline")
+  match activations with
+  | (_, .block 0) :: _ => pure config
+  | _ => throw (0, "the first fork does not start at block 0")
+
+/-- The fork of a block number, on a chain whose first fork starts at block 0. -/
+def forkAtBlock (config : ChainConfig) (number : Nat) : Fork :=
+  (config.activeFork number 0).getD .frontier
+
+/-- A block in its RLP item, with each header at the fork of its own number on the chain. -/
+def blockOnChain (config : ChainConfig) (item : Item) :
+    Result ((fork : Fork) × Block fork Item) := do
+  let number ← runRlp "block rejected" do
+    let header :: _ ← item.toItems | .error (.wrongFieldCount 3 0)
+    Header.numberOfItem header
+  pure ⟨_, ← runRlp "block rejected"
+    (Block.ofItem (fork := forkAtBlock config number) (forkAtBlock config) item)⟩
 
 /-- The transaction type and the receipt that some bytes hold at the fork. -/
 def decodeReceiptAt (fork : Fork) (receipt : ByteArray) : Result (UInt8 × Receipt fork) :=
@@ -93,7 +125,7 @@ def receiptLogsBloomExport (fork receipt : ByteArray) : Result ByteArray := do
 @[export eth_block_validate_size]
 def validateSizeExport (fork block : ByteArray) : Result UInt8 := do
   let fork ← forkUpTo .glamsterdam fork
-  let b : Block fork Item ← runRlp "block rejected" (Codec.decode block)
+  let b : Block fork Item ← runRlp "block rejected" (Block.decode (fun _ => fork) block)
   (validateBlockSize b).map (fun () => 1) |>.mapError
     fun e => (e.code, s!"block invalid: {reprStr e}")
 
@@ -181,14 +213,14 @@ def runTrie (act : Except Trie.TrieError Hash32) : Result ByteArray :=
 @[export eth_block_transactions_root]
 def transactionsRootExport (fork block : ByteArray) : Result ByteArray := do
   let fork ← forkUpTo .glamsterdam fork
-  let b : Block fork Item ← runRlp "block rejected" (Codec.decode block)
+  let b : Block fork Item ← runRlp "block rejected" (Block.decode (fun _ => fork) block)
   runTrie (transactionsRoot (← b.transactions.mapM (transactionOfItem fork)))
 
 /-- The withdrawals root of the withdrawals of a block, decoded at a fork from Shapella. -/
 @[export eth_block_withdrawals_root]
 def withdrawalsRootExport (fork block : ByteArray) : Result ByteArray := do
   let fork ← forkUpTo .glamsterdam fork
-  let b : Block fork Item ← runRlp "block rejected" (Codec.decode block)
+  let b : Block fork Item ← runRlp "block rejected" (Block.decode (fun _ => fork) block)
   if h : .shapella ≤ fork then runTrie (withdrawalsRoot (b.withdrawals h))
   else throw (0, "the fork is before Shapella")
 
