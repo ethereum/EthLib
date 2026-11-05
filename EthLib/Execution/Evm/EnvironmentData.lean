@@ -28,6 +28,7 @@ The EIPs that add or change an instruction define it:
 - [EIP-4399][eip4399], PREVRANDAO in place of DIFFICULTY
 - [EIP-4844][eip4844], BLOBHASH
 - [EIP-7516][eip7516], BLOBBASEFEE
+- [EIP-7843][eip7843], SLOTNUM
 
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [eip1344]: https://eips.ethereum.org/EIPS/eip-1344#specification
@@ -35,6 +36,7 @@ The EIPs that add or change an instruction define it:
 [eip4399]: https://eips.ethereum.org/EIPS/eip-4399#specification
 [eip4844]: https://eips.ethereum.org/EIPS/eip-4844#opcode-to-get-versioned-hashes
 [eip7516]: https://eips.ethereum.org/EIPS/eip-7516#specification
+[eip7843]: https://eips.ethereum.org/EIPS/eip-7843#specification
 -/
 
 @[expose] public section
@@ -124,6 +126,11 @@ def environmentStep (fork : Fork) : Op → Option (Evm fork Meter → Except Evm
       some (readFrame OPCODE_BLOBBASEFEE fun evm =>
         BitVec.ofNat 256 (getBaseFeePerBlobGas (blobSchedule fork h)
           (evm.message.blockEnv.excessBlobGas h).toNat))
+    else none
+  | .slotnum =>
+    if h : .glamsterdam ≤ fork then
+      some (readFrame OPCODE_SLOTNUM fun evm =>
+        BitVec.ofNat 256 (evm.message.blockEnv.slotNumber h).toNat)
     else none
   | _ => none
 

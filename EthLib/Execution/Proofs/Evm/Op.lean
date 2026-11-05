@@ -81,11 +81,21 @@ def addedOpcodes : List (UInt8 × Fork) :=
     -- MCOPY, EIP-5656
     (0x5e, .dencun),
     -- CLZ, EIP-7939
-    (0x1e, .fusaka)]
+    (0x1e, .fusaka),
+    -- SLOTNUM, EIP-7843
+    (0x4b, .glamsterdam)]
 
 /-- Each opcode is from the fork that its EIP gives, or from Frontier when it has no such EIP. -/
 theorem since_eq_addedOpcodes (op : Op) :
     op.since = (addedOpcodes.lookup op.toByte).getD .frontier := by
   cases op <;> first | decide | (rename_i n; revert n; decide)
+
+/-- The byte `0x4b` is SLOTNUM from Glamsterdam, and no opcode before. -/
+theorem ofByte_slotnum (fork : Fork) :
+    ofByte fork 0x4b = if .glamsterdam ≤ fork then some .slotnum else none := by
+  have hd : decode 0x4b = some .slotnum := rfl
+  unfold ofByte
+  rw [hd]
+  split <;> simp_all [since, Option.filter]
 
 end EthLib.Execution.Evm.Op

@@ -5,13 +5,13 @@ public import EthLib.Base.Fork
 /-!
 # `Evm.Op`
 
-The opcodes of the EVM, from Frontier to Fusaka.
+The opcodes of the EVM, from Frontier to Glamsterdam.
 
 Each opcode is one byte of code, and a fork can add opcodes.
 
 So a byte decodes to an opcode only from the fork that adds that opcode.
 
-No fork up to Fusaka removes an opcode or gives a byte to another opcode.
+No fork up to Glamsterdam removes an opcode or gives a byte to another opcode.
 
 Appendix H.2 of the Yellow Paper, Shanghai version, lists the opcodes up to Shanghai.
 
@@ -86,6 +86,8 @@ inductive Op where
   | basefee
   | blobhash
   | blobbasefee
+  /-- SLOTNUM, which pushes the slot of the block, by EIP-7843. -/
+  | slotnum
   | pop
   | mload
   | mstore
@@ -179,6 +181,7 @@ def toByte : Op → UInt8
   | .basefee => 0x48
   | .blobhash => 0x49
   | .blobbasefee => 0x4a
+  | .slotnum => 0x4b
   | .pop => 0x50
   | .mload => 0x51
   | .mstore => 0x52
@@ -226,6 +229,8 @@ def since : Op → Fork
   | .blobhash | .blobbasefee | .tload | .tstore | .mcopy => .dencun
   -- EIP-7939
   | .clz => .fusaka
+  -- EIP-7843
+  | .slotnum => .glamsterdam
   | _ => .frontier
 
 /-- The opcode of a byte, at the fork that adds that opcode or later, or none. -/
@@ -291,6 +296,7 @@ def decode (byte : UInt8) : Option Op :=
     | 0x48 => some .basefee
     | 0x49 => some .blobhash
     | 0x4a => some .blobbasefee
+    | 0x4b => some .slotnum
     | 0x50 => some .pop
     | 0x51 => some .mload
     | 0x52 => some .mstore
