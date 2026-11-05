@@ -638,7 +638,11 @@ def run_blockchain(root: Path, case: Case) -> None:
         if len(header) != header_fields(fork):
             # A header in the form of another fork decodes at no fork that its number runs.
             assert expected is not None, entry
-            with pytest.raises(BlockError, match="wrongFieldCount"):
+            with raises(
+                BlockError,
+                "header rejected: EthLib.Serialization.Rlp.RlpError.wrongFieldCount "
+                f"{header_fields(fork)} {len(header)}",
+            ):
                 blocks.state_transition(config, state, recent_blocks, fork, raw, sealed(test))
             continue
         if expected is not None:

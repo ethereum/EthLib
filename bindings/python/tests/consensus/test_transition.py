@@ -188,8 +188,11 @@ def test_slots_not_after():
     # The target slot must be after the slot of the state, so zero slots is a rejection.
     case = next((FILES / "minimal" / "phase0").rglob("pre.ssz_snappy"))
     pre = snappy.decompress(case.read_bytes())
+    # A phase0 state starts with genesis_time (8 bytes) and genesis_validators_root (32 bytes),
+    # then its slot as a little-endian uint64.
+    slot = int.from_bytes(pre[40:48], "little")
     with raises(
-        consensus.TransitionError, "EthLib.Consensus.TransitionError.slotNotAfter 529 529"
+        consensus.TransitionError, f"EthLib.Consensus.TransitionError.slotNotAfter {slot} {slot}"
     ) as info:
         consensus.process_slots("minimal", "phase0", pre, 0)
     assert info.value.code == 53

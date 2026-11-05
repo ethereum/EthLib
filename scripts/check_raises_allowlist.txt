@@ -13,5 +13,6 @@ bindings/python/tests/precompile/test_modexp_state_tests.py test_call_between: t
 bindings/python/tests/parity/runners.py _engine_payload: the fixture names no error, only the error code that the runner compares
 bindings/python/tests/parity/legacy.py _header_error: the fixture name maps to several errors
 bindings/python/tests/parity/legacy.py run_ommers: the fixture name maps to several errors
+bindings/python/tests/parity/legacy.py run_blockchain: the fixture name maps to several errors
 bindings/python/tests/parity/runners.py _state_test: the message holds state values, such as balances and gas, that the fixture does not give
 bindings/python/tests/parity/runners.py _blockchain_test: the message holds state values, such as balances and gas, that the fixture does not give
