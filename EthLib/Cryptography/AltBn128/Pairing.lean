@@ -170,14 +170,16 @@ The coefficient of `w^m` in the product of the polynomials is `c_m`, for `m ≤ 
 
 Each `w^m` with `m ≥ 12` is `18 w^(m - 6) - 82 w^(m - 12)`.
 
-So the terms of `w^18` to `w^22` first fold into those of `w^12` to `w^16`. -/
+So the terms of `w^18` to `w^22` first fold into those of `w^12` to `w^16`.
+
+The sums are taken on the values in `Nat`, and each coefficient is reduced modulo `p` once. -/
 def mul (a b : Fp12) : Fp12 :=
-  let x0 := a[0]; let x1 := a[1]; let x2 := a[2]; let x3 := a[3]
-  let x4 := a[4]; let x5 := a[5]; let x6 := a[6]; let x7 := a[7]
-  let x8 := a[8]; let x9 := a[9]; let x10 := a[10]; let x11 := a[11]
-  let y0 := b[0]; let y1 := b[1]; let y2 := b[2]; let y3 := b[3]
-  let y4 := b[4]; let y5 := b[5]; let y6 := b[6]; let y7 := b[7]
-  let y8 := b[8]; let y9 := b[9]; let y10 := b[10]; let y11 := b[11]
+  let x0 := a[0].val; let x1 := a[1].val; let x2 := a[2].val; let x3 := a[3].val
+  let x4 := a[4].val; let x5 := a[5].val; let x6 := a[6].val; let x7 := a[7].val
+  let x8 := a[8].val; let x9 := a[9].val; let x10 := a[10].val; let x11 := a[11].val
+  let y0 := b[0].val; let y1 := b[1].val; let y2 := b[2].val; let y3 := b[3].val
+  let y4 := b[4].val; let y5 := b[5].val; let y6 := b[6].val; let y7 := b[7].val
+  let y8 := b[8].val; let y9 := b[9].val; let y10 := b[10].val; let y11 := b[11].val
   let c0 := x0 * y0
   let c1 := x0 * y1 + x1 * y0
   let c2 := x0 * y2 + x1 * y1 + x2 * y0
@@ -213,10 +215,11 @@ def mul (a b : Fp12) : Fp12 :=
   let d14 := c14 + 18 * c20
   let d15 := c15 + 18 * c21
   let d16 := c16 + 18 * c22
-  #v[c0 - 82 * d12, c1 - 82 * d13, c2 - 82 * d14, c3 - 82 * d15, c4 - 82 * d16,
-    c5 - 82 * c17, c6 + 18 * d12 - 82 * c18, c7 + 18 * d13 - 82 * c19,
-    c8 + 18 * d14 - 82 * c20, c9 + 18 * d15 - 82 * c21, c10 + 18 * d16 - 82 * c22,
-    c11 + 18 * c17]
+  let f (n : Nat) : Fp := Fin.ofNat Fp.modulus n
+  #v[f c0 - f (82 * d12), f c1 - f (82 * d13), f c2 - f (82 * d14), f c3 - f (82 * d15),
+    f c4 - f (82 * d16), f c5 - f (82 * c17), f (c6 + 18 * d12) - f (82 * c18),
+    f (c7 + 18 * d13) - f (82 * c19), f (c8 + 18 * d14) - f (82 * c20),
+    f (c9 + 18 * d15) - f (82 * c21), f (c10 + 18 * d16) - f (82 * c22), f (c11 + 18 * c17)]
 
 instance : Add Fp12 := ⟨add⟩
 instance : Sub Fp12 := ⟨sub⟩
@@ -232,9 +235,14 @@ def powBits : Nat → Fp12 → Nat → Fp12
 /-- `c a`, coefficient by coefficient. -/
 def scale (c : Fp) (a : Fp12) : Fp12 := Vector.ofFn fun k => c * a[k]
 
-/-- The powers `(w^p)^k` for `k < 12`, which are also `(w^k)^p`. -/
+/-- `w^(p - 1)` as an element of `Fp2`: `(9 + i)^((p - 1) / 6)`, since `w^6 = 9 + i`. -/
+def frobeniusGamma : Fp2 := Fp2.powBits 256 ⟨9, 1⟩ ((Fp.modulus - 1) / 6)
+
+/-- The powers `(w^p)^k` for `k < 12`, which are also `(w^k)^p`.
+
+`6` divides `p - 1`, so `w^p = w (w^6)^((p - 1) / 6)` is `w` times an element of `Fp2`. -/
 def frobeniusCoefficients : Array Fp12 :=
-  let wp := powBits 256 (wPow 1) Fp.modulus
+  let wp := wPow 1 * ofFp2 frobeniusGamma
   (List.range 11).foldl (fun powers _ => powers.push (powers.back! * wp)) #[one]
 
 /-- The `p`-th power.
@@ -273,29 +281,43 @@ def ATE_LOOP_COUNT : Nat := 29793968203157093288
 The count has 65 bits, and its top bit 64 is the starting point `q`. -/
 def LOG_ATE_LOOP_COUNT : Nat := 63
 
+/-- The line of slope `l w` through the twisted point `(x1 w^2, y1 w^3)`, at `(xt, yt)`.
+
+It is `l w (xt - x1 w^2) - (yt - y1 w^3)`.
+
+An element `a + b i` of `Fp2` is `(a - 9 b) + b w^6` in `Fp12`, so the line has a closed form.
+
+Write `l = l0 + l1 i` and `y1 - l x1 = d0 + d1 i`.
+
+Then the line is `-yt + xt (l0 - 9 l1) w + (d0 - 9 d1) w^3 + xt l1 w^7 + d1 w^9`. -/
+def slopeLine (l x1 y1 : Fp2) (xt yt : Fp) : Fp12 :=
+  let d := y1 - l * x1
+  #v[-yt, xt * (l.c0 - 9 * l.c1), 0, d.c0 - 9 * d.c1, 0, 0, 0, xt * l.c1, 0, d.c1, 0, 0]
+
+/-- The vertical line `xt - x1 w^2` through the twisted point with `x` coordinate `x1 w^2`.
+
+With `x1 = a + b i`, it is `xt - (a - 9 b) w^2 - b w^8`. -/
+def verticalLine (x1 : Fp2) (xt : Fp) : Fp12 :=
+  #v[xt, 0, -(x1.c0 - 9 * x1.c1), 0, 0, 0, 0, 0, -x1.c1, 0, 0, 0]
+
 /-- The line through the twisted points `r` and `q`, at the point `(xt, yt)` of `G_1`.
 
 A twisted point has `x` times `w^2` and `y` times `w^3`.
 
 So a slope `l` of the twist is the slope `l w` of the twisted points.
 
-- Two different `x`: the chord, `l w (xt - x1 w^2) - (yt - y1 w^3)`.
-- The same point: the tangent, of the same form.
-- Opposite points: the vertical line `xt - x1 w^2`. -/
+- Two different `x`: the chord.
+- The same point: the tangent.
+- Opposite points: the vertical line. -/
 def linefunc (r q : Point2) (xt yt : Fp) : Fp12 :=
   match r, q with
   | .affine x1 y1, .affine x2 y2 =>
-    let w := Fp12.wPow 1
-    let w2 := Fp12.wPow 2
-    let w3 := Fp12.wPow 3
-    let slopeLine (l : Fp2) : Fp12 :=
-      Fp12.ofFp2 l * w * (Fp12.ofFp xt - Fp12.ofFp2 x1 * w2) - (Fp12.ofFp yt - Fp12.ofFp2 y1 * w3)
     if x1 ≠ x2 then
-      slopeLine ((y2 - y1) * (x2 - x1).inv)
+      slopeLine ((y2 - y1) * (x2 - x1).inv) x1 y1 xt yt
     else if y1 = y2 then
-      slopeLine (Fp2.ofFp 3 * x1 * x1 * (Fp2.ofFp 2 * y1).inv)
+      slopeLine (Fp2.ofFp 3 * x1 * x1 * (Fp2.ofFp 2 * y1).inv) x1 y1 xt yt
     else
-      Fp12.ofFp xt - Fp12.ofFp2 x1 * w2
+      verticalLine x1 xt
   -- The loop never meets the point at infinity on points of order `q`.
   | _, _ => Fp12.one
 
