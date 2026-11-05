@@ -23,6 +23,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.Store
 public import EthLib.Consensus.Proofs.ForkSchedule
 public import EthLib.Consensus.Proofs.Gossip.Topics
 public import EthLib.Consensus.Proofs.InclusionList
+public import EthLib.Consensus.Proofs.HonestBuilder
 public import EthLib.Consensus.Proofs.InclusionListCommittee
 public import EthLib.Consensus.Proofs.LightClient.Containers
 public import EthLib.Consensus.Proofs.LightClient.Sync
