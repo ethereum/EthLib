@@ -262,61 +262,66 @@ theorem getAccount_destroyAccount (tx : TransactionState) (address other : Addre
 
 /-- A change by `f` succeeds exactly when `f` does on the account.
 
+The result then records the read and sets the account that `f` computes.
+
+From Paris, the result deletes that account instead when it is empty. -/
+theorem modifyState_eq_ok_iff {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {f : Account → Except StateError Account} :
+    tx.modifyState fork address f = .ok tx' ↔ ∃ account, f (tx.getAccount address) = .ok account ∧
+      tx' = if fork ≥ .paris && ((tx.recordAccountRead address).setAccount address
+          (some account)).accountExistsAndIsEmpty address then
+        ((tx.recordAccountRead address).setAccount address (some account)).destroyAccount address
+      else (tx.recordAccountRead address).setAccount address (some account) := by
+  unfold modifyState
+  simp only [getAccount_recordAccountRead]
+  cases f (tx.getAccount address) with
+  | error e => simp [bind, Except.bind]
+  | ok account =>
+    simp only [bind, Except.bind, pure, Except.pure, Except.ok.injEq, exists_eq_left']
+    split <;> rw [Except.ok.injEq, eq_comm]
+
+/-- A change by `f` succeeds exactly when `f` does on the account.
+
 The account then reads as the result of `f`, and every other account is unchanged. -/
 theorem modifyState_eq_ok {fork : Fork} {tx tx' : TransactionState} {address : Address}
     {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
     ∃ account, f (tx.getAccount address) = .ok account ∧ tx'.getAccount address = account ∧
       ∀ other, other ≠ address → tx'.getAccount other = tx.getAccount other := by
-  unfold modifyState at h
-  simp only [getAccount_recordAccountRead] at h
-  cases hf : f (tx.getAccount address) with
-  | error e => simp [hf, bind, Except.bind] at h
-  | ok account =>
-    refine ⟨account, rfl, ?_⟩
-    have hset : ∀ other,
-        ((tx.recordAccountRead address).setAccount address (some account)).getAccount other =
-        if other = address then account else tx.getAccount other := by
-      intro other
-      unfold getAccount
-      split
-      · subst other
-        rw [getAccountOptional_setAccount_self]
-        rfl
-      · rename_i hne
-        rw [getAccountOptional_setAccount_of_ne _ _ hne]
-        rfl
-    simp only [hf, bind, Except.bind, pure, Except.pure] at h
-    split at h
-    · -- From Paris, the empty result is deleted, and reads as the empty account it was.
-      rename_i hempty
-      cases h
-      have heq := eq_empty_of_accountExistsAndIsEmpty
-        (Bool.and_eq_true_iff.mp hempty).2
-      simp only [hset, ↓reduceIte] at heq
-      refine ⟨?_, fun other hne => ?_⟩
-      · simp only [getAccount_destroyAccount, ↓reduceIte, heq]
-      · simp only [getAccount_destroyAccount, hset, hne, ↓reduceIte]
-    · cases h
-      exact ⟨by simp only [hset, ↓reduceIte], fun other hne => by simp only [hset, hne, ↓reduceIte]⟩
+  obtain ⟨account, hf, rfl⟩ := modifyState_eq_ok_iff.mp h
+  refine ⟨account, hf, ?_⟩
+  have hset : ∀ other,
+      ((tx.recordAccountRead address).setAccount address (some account)).getAccount other =
+      if other = address then account else tx.getAccount other := by
+    intro other
+    unfold getAccount
+    split
+    · subst other
+      rw [getAccountOptional_setAccount_self]
+      rfl
+    · rename_i hne
+      rw [getAccountOptional_setAccount_of_ne _ _ hne]
+      rfl
+  split
+  · -- From Paris, the empty result is deleted, and reads as the empty account it was.
+    rename_i hempty
+    have heq := eq_empty_of_accountExistsAndIsEmpty (Bool.and_eq_true_iff.mp hempty).2
+    simp only [hset, ↓reduceIte] at heq
+    refine ⟨?_, fun other hne => ?_⟩
+    · simp only [getAccount_destroyAccount, ↓reduceIte, heq]
+    · simp only [getAccount_destroyAccount, hset, hne, ↓reduceIte]
+  · exact ⟨by simp only [hset, ↓reduceIte], fun other hne => by simp only [hset, hne, ↓reduceIte]⟩
 
 /-- From Paris, no change leaves an empty account behind. -/
 theorem accountExistsAndIsEmpty_modifyState {fork : Fork} {tx tx' : TransactionState}
     {address : Address} {f : Account → Except StateError Account} (hfork : fork ≥ .paris)
     (h : tx.modifyState fork address f = .ok tx') :
     tx'.accountExistsAndIsEmpty address = false := by
-  unfold modifyState at h
-  simp only [getAccount_recordAccountRead] at h
-  cases hf : f (tx.getAccount address) with
-  | error e => simp [hf, bind, Except.bind] at h
-  | ok account =>
-    simp only [hf, bind, Except.bind, pure, Except.pure] at h
-    split at h
-    · -- The empty account is deleted, so no account remains.
-      cases h
-      simp [accountExistsAndIsEmpty, destroyAccount, getAccountOptional_setAccount_self]
-    · rename_i hkeep
-      cases h
-      simpa [decide_eq_true hfork] using hkeep
+  obtain ⟨account, -, rfl⟩ := modifyState_eq_ok_iff.mp h
+  split
+  · -- The empty account is deleted, so no account remains.
+    simp [accountExistsAndIsEmpty, destroyAccount, getAccountOptional_setAccount_self]
+  · rename_i hkeep
+    simpa [decide_eq_true hfork] using hkeep
 
 /-- Before Paris, a change keeps the account it computes, even an empty one. -/
 theorem getAccountOptional_modifyState {fork : Fork} {tx tx' : TransactionState}
@@ -344,15 +349,10 @@ theorem getAccountOptional_modifyState_of_ne {fork : Fork} {tx tx' : Transaction
     {address other : Address} {f : Account → Except StateError Account}
     (h : tx.modifyState fork address f = .ok tx') (hne : other ≠ address) :
     tx'.getAccountOptional other = tx.getAccountOptional other := by
-  unfold modifyState at h
-  simp only [getAccount_recordAccountRead] at h
-  cases hf : f (tx.getAccount address) with
-  | error e => simp [hf, bind, Except.bind] at h
-  | ok account =>
-    simp only [hf, bind, Except.bind, pure, Except.pure] at h
-    split at h <;> cases h <;>
-      simp only [destroyAccount, getAccountOptional_setAccount_of_ne _ _ hne,
-        getAccountOptional_destroyStorage, getAccountOptional_recordAccountRead]
+  obtain ⟨account, -, rfl⟩ := modifyState_eq_ok_iff.mp h
+  split <;>
+    simp only [destroyAccount, getAccountOptional_setAccount_of_ne _ _ hne,
+      getAccountOptional_destroyStorage, getAccountOptional_recordAccountRead]
 
 /-- Setting the code of an address gives it the hash of that code.
 
@@ -449,15 +449,10 @@ theorem withReadsOf_reads (tx other : TransactionState) (address : Address) (key
 theorem mem_accountReads_modifyState {fork : Fork} {tx tx' : TransactionState}
     {address : Address} {f : Account → Except StateError Account}
     (h : tx.modifyState fork address f = .ok tx') : address ∈ tx'.accountReads := by
-  unfold modifyState at h
-  simp only [getAccount_recordAccountRead] at h
   have hmem : address ∈ (tx.recordAccountRead address).accountReads :=
     (mem_accountReads_recordAccountRead _ _ _).mpr (.inl rfl)
-  cases hf : f (tx.getAccount address) with
-  | error e => simp [hf, bind, Except.bind] at h
-  | ok account =>
-    simp only [hf, bind, Except.bind, pure, Except.pure] at h
-    split at h <;> cases h <;> exact hmem
+  obtain ⟨account, -, rfl⟩ := modifyState_eq_ok_iff.mp h
+  split <;> exact hmem
 
 /-- A rollback keeps the reads of the transaction, not those of the snapshot. -/
 theorem reads_restoreTxState (tx snapshot : TransactionState) :
@@ -551,13 +546,8 @@ theorem modifyState_debit (fork : Fork) (tx : TransactionState) (sender : Addres
 theorem createdAccounts_modifyState {fork : Fork} {tx tx' : TransactionState} {address : Address}
     {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
     tx'.createdAccounts = tx.createdAccounts := by
-  unfold modifyState at h
-  simp only [getAccount_recordAccountRead] at h
-  cases hf : f (tx.getAccount address) with
-  | error e => simp [hf, bind, Except.bind] at h
-  | ok account =>
-    simp only [hf, bind, Except.bind, pure, Except.pure] at h
-    split at h <;> cases h <;> rfl
+  obtain ⟨account, -, rfl⟩ := modifyState_eq_ok_iff.mp h
+  split <;> rfl
 
 /-- Moving ether keeps the record of the accounts that the transaction created. -/
 theorem createdAccounts_moveEther {fork : Fork} {tx tx' : TransactionState}
@@ -593,13 +583,9 @@ theorem moveEther_self {fork : Fork} {tx tx' : TransactionState} {address : Addr
 theorem modifyState_eq_error {fork : Fork} {tx : TransactionState} {address : Address}
     {f : Account → Except StateError Account} {e : StateError} :
     tx.modifyState fork address f = .error e ↔ f (tx.getAccount address) = .error e := by
-  unfold modifyState
-  simp only [getAccount_recordAccountRead]
   cases hf : f (tx.getAccount address) with
-  | error e' => simp [bind, Except.bind]
-  | ok account =>
-    simp only [bind, Except.bind, pure, Except.pure]
-    split <;> simp
+  | error e' => simp [modifyState, getAccount_recordAccountRead, hf, bind, Except.bind]
+  | ok account => simp [modifyState_eq_ok_iff.mpr ⟨account, hf, rfl⟩]
 
 /-- A record of an account read changes no word of the storage. -/
 @[simp] theorem getStorage_recordAccountRead (tx : TransactionState) (address : Address) :
@@ -629,34 +615,22 @@ theorem getStorage_modifyState {fork : Fork} {tx tx' : TransactionState} {addres
     tx'.getStorage other key =
       if other = address ∧ tx'.getAccountOptional address = none then 0
       else tx.getStorage other key := by
-  unfold modifyState at h
-  simp only [getAccount_recordAccountRead] at h
-  cases hf : f (tx.getAccount address) with
-  | error e => simp [hf, bind, Except.bind] at h
-  | ok account =>
-    simp only [hf, bind, Except.bind, pure, Except.pure] at h
-    split at h
-    · cases h
-      have hnone :
-          (((tx.recordAccountRead address).setAccount address (some account)).destroyAccount
-            address).getAccountOptional address = none := by
-        simp [destroyAccount, getAccountOptional_setAccount_self]
-      rw [getStorage_destroyAccount]
-      by_cases ho : other = address <;> simp [ho, hnone]
-    · cases h
-      simp [getAccountOptional_setAccount_self]
+  obtain ⟨account, -, rfl⟩ := modifyState_eq_ok_iff.mp h
+  split
+  · have hnone :
+        (((tx.recordAccountRead address).setAccount address (some account)).destroyAccount
+          address).getAccountOptional address = none := by
+      simp [destroyAccount, getAccountOptional_setAccount_self]
+    rw [getStorage_destroyAccount]
+    by_cases ho : other = address <;> simp [ho, hnone]
+  · simp [getAccountOptional_setAccount_self]
 
 /-- A change of an account changes no code. -/
 theorem getCode_modifyState {fork : Fork} {tx tx' : TransactionState} {address : Address}
     {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
     tx'.getCode = tx.getCode := by
-  unfold modifyState at h
-  simp only [getAccount_recordAccountRead] at h
-  cases hf : f (tx.getAccount address) with
-  | error e => simp [hf, bind, Except.bind] at h
-  | ok account =>
-    simp only [hf, bind, Except.bind, pure, Except.pure] at h
-    split at h <;> cases h <;> rfl
+  obtain ⟨account, -, rfl⟩ := modifyState_eq_ok_iff.mp h
+  split <;> rfl
 
 /-- Setting the code of an address keeps the code under its hash.
 
@@ -707,13 +681,8 @@ theorem getStorageOriginal_modifyState {fork : Fork} {tx tx' : TransactionState}
     {address : Address} {f : Account → Except StateError Account}
     (h : tx.modifyState fork address f = .ok tx') :
     tx'.getStorageOriginal = tx.getStorageOriginal := by
-  unfold modifyState at h
-  simp only [getAccount_recordAccountRead] at h
-  cases hf : f (tx.getAccount address) with
-  | error e => simp [hf, bind, Except.bind] at h
-  | ok account =>
-    simp only [hf, bind, Except.bind, pure, Except.pure] at h
-    split at h <;> cases h <;> rfl
+  obtain ⟨account, -, rfl⟩ := modifyState_eq_ok_iff.mp h
+  split <;> rfl
 
 /-- A wipe of the storage keeps every word before the transaction. -/
 theorem getStorageOriginal_destroyStorage (tx : TransactionState) (address : Address) :
