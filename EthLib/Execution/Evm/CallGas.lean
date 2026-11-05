@@ -16,6 +16,10 @@ Before Spurious Dragon, a call creates an account when the callee has none.
 
 From Spurious Dragon, only a call with value to a dead account creates one, by EIP-161.
 
+From Glamsterdam, sending value costs 11300: a write to the account, 9000, plus the stipend.
+
+A new account then costs state gas instead, by EIP-8037, so its price here is 0.
+
 A call with value gives the callee 2300 more gas, which the caller does not pay.
 
 From Tangerine Whistle, a call passes on at most all but one 64th of the gas it has left.
@@ -30,9 +34,15 @@ Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 
 [EIP-150][eip150] adds the cap, and [EIP-161][eip161] changes the price of a new account.
 
+[EIP-8038][eip8038] and [EIP-8037][eip8037] change both prices at Glamsterdam.
+
+They are in Last Call, so the prices may still change.
+
 [yp]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 [eip150]: https://eips.ethereum.org/EIPS/eip-150#specification
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
+[eip8037]: https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-new-accounts
+[eip8038]: https://eips.ethereum.org/EIPS/eip-8038#callcallcode
 -/
 
 @[expose] public section
@@ -51,18 +61,27 @@ structure MessageCallGas where
   subCall : Nat
   deriving DecidableEq, Repr
 
-/-- The price to send `value` with a call: 9000, or nothing for a call without value. -/
-def callValueCost (value : U256) : Nat :=
-  if value = 0 then 0 else CALL_VALUE
+/-- The price to send `value` with a call at fork `fork`, or nothing for a call without value.
 
-/-- The price of a call that creates the account of its callee, at fork `fork`.
+It is 9000 up to BPO5.
+
+From Glamsterdam, it is the price of a write to an account plus the stipend, 11300. -/
+def callValueCost (fork : Fork) (value : U256) : Nat :=
+  if value = 0 then 0
+  else if fork ≥ .glamsterdam then ACCOUNT_WRITE + CALL_STIPEND
+  else CALL_VALUE
+
+/-- The price in execution gas of a call that creates the account of its callee, at `fork`.
 
 Before Spurious Dragon, it is 25000 when the callee has no account.
 
-From Spurious Dragon, it is 25000 when the call sends value to a dead account. -/
+From Spurious Dragon, it is 25000 when the call sends value to a dead account.
+
+From Glamsterdam, it is 0, because the new account costs state gas. -/
 def callNewAccountCost (fork : Fork) (state : TransactionState) (to : Address) (value : U256) :
     Nat :=
-  if fork ≥ .spuriousDragon then
+  if fork ≥ .glamsterdam then 0
+  else if fork ≥ .spuriousDragon then
     if value = 0 ∨ state.isAccountAlive to then 0 else NEW_ACCOUNT
   else if state.accountExists to then 0 else NEW_ACCOUNT
 
@@ -91,11 +110,11 @@ def messageCallGas (fork : Fork) (value : U256) (gas gasLeft memoryCost extraGas
   ⟨gas + extraGas, gas + stipend⟩
 
 /-- The price to send value exceeds the stipend. -/
-theorem stipend_lt_callValueCost {value : U256} (h : value ≠ 0) :
-    CALL_STIPEND < callValueCost value := by
+theorem stipend_lt_callValueCost {fork : Fork} {value : U256} (h : value ≠ 0) :
+    CALL_STIPEND < callValueCost fork value := by
   unfold callValueCost
   simp only [h, ite_false]
-  decide
+  split <;> decide
 
 /-- The callee gets less gas than the call pays.
 
@@ -111,5 +130,14 @@ theorem subCall_lt_cost {fork : Fork} {value : U256} {gas gasLeft memoryCost ext
   · simp only [hv, ite_false]
     have := above hv
     omega
+
+/-- With no extra price and no memory, the callee gets the gas the call pays, and the stipend. -/
+theorem subCall_eq_cost_add_stipend {fork : Fork} {value : U256} {gas gasLeft stipend : Nat} :
+    (messageCallGas fork value gas gasLeft 0 0 stipend).subCall =
+      (messageCallGas fork value gas gasLeft 0 0 stipend).cost +
+        if value = 0 then 0 else stipend := by
+  unfold messageCallGas
+  dsimp only
+  omega
 
 end EthLib.Execution.Evm

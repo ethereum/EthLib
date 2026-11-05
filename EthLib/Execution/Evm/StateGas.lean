@@ -48,6 +48,8 @@ def STATE_BYTES_PER_NEW_ACCOUNT : Nat := 120
 def STATE_BYTES_PER_AUTH_BASE : Nat := 23
 /-- The state gas of a new storage slot: 64 bytes of state, the parameter `GAS_STORAGE_SET`. -/
 def STORAGE_SET_STATE_GAS : Nat := STATE_BYTES_PER_STORAGE_SET * CPSB
+/-- The state gas of a new account: 120 bytes of state, the parameter `GAS_NEW_ACCOUNT`. -/
+def NEW_ACCOUNT_STATE_GAS : Nat := STATE_BYTES_PER_NEW_ACCOUNT * CPSB
 /-- The new storage slots that a system call may write, a margin of EIP-8037. -/
 def SYSTEM_MAX_SSTORES_PER_CALL : Nat := 16
 
