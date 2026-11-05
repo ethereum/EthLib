@@ -53,10 +53,6 @@ variable {fork : Fork}
 def sinceM {ε α : Type} {f : Fork} (g : f ≤ fork → Except ε α) : Except ε (Since f fork α) :=
   if h : f ≤ fork then (fun a _ => a) <$> g h else pure fun h' => absurd h' h
 
-/-- The requests hash of request lists, as the 32 bytes of a header field. -/
-def requestsCommitment (requests : List ByteArray) : Hash32 :=
-  Vector.ofFn fun i => (requestsHash requests)[i.val]!
-
 /-- Transactions decoded at the fork, in order, the first one at an index from 0. -/
 def decodeTransactions (fork : Fork) (index : Nat) :
     List ByteArray → Except PayloadError (List Transaction)

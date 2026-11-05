@@ -290,6 +290,22 @@ def active_fork(activations: list, header: list) -> str:
     return reached[-1]
 
 
+def genesis_of(fork: str, header: dict, pre: dict) -> bytes:
+    """The genesis block of a chain, from its header in the JSON of a fixture and its state."""
+    from ethlib.execution import blocks
+
+    def number(name: str, default: int = 0) -> int:
+        return int(header[name], 16) if name in header else default
+
+    return blocks.genesis_block(
+        fork, _pre_state(pre), coinbase=_hex(header["coinbase"]),
+        difficulty=number("difficulty"), gas_limit=number("gasLimit"),
+        timestamp=number("timestamp"), extra_data=_hex(header["extraData"]),
+        mix_hash=_hex(header["mixHash"]), nonce=_hex(header["nonce"]),
+        base_fee=number("baseFeePerGas", blocks.INITIAL_BASE_FEE),
+        excess_blob_gas=number("excessBlobGas"), slot_number=number("slotNumber"))
+
+
 def _blockchain_test(root: Path, case: Case) -> None:
     from ethlib.cryptography.keccak import keccak256
     from ethlib.execution import blocks
@@ -300,6 +316,9 @@ def _blockchain_test(root: Path, case: Case) -> None:
     seal = fixture.get("sealEngine", "NoProof") != "NoProof"
     genesis = rlp.decode(_hex(fixture["genesisRLP"]))[0]
     recent = [(active_fork(activations, genesis), rlp.encode(genesis), [])]
+    # The genesis block follows from the fields of its header that the chain chooses, and the state.
+    assert genesis_of(recent[0][0], fixture["genesisBlockHeader"], fixture["pre"]) == \
+        _hex(fixture["genesisRLP"])
     state = _pre_state(fixture["pre"])
     for block in fixture["blocks"]:
         raw = _hex(block["rlp"])
@@ -387,6 +406,7 @@ def run_engine_chain(fixture: dict, pre: dict, genesis: dict) -> Counter:
     assert "0x" + keccak256(header).hex() == genesis["hash"]
     state = _pre_state(pre)
     recent = [(active_fork(chain_of(fixture)[1], rlp.decode(header)), header, [])]
+    assert rlp.encode(rlp.decode(genesis_of(recent[0][0], genesis, pre))[0]) == header
     kinds = Counter()
     for payload in fixture["engineNewPayloads"]:
         kind, state, recent = _engine_payload(fixture, payload, state, recent)

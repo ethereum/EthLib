@@ -116,8 +116,26 @@ def state_transition(config: dict, state: bytes, recent: Sequence[RecentBlock], 
     return root, accounts
 
 
+# The base fee of the first block of London, by EIP-1559.
+INITIAL_BASE_FEE = 1_000_000_000
+
+
+def genesis_block(fork: str, state: bytes, *, coinbase: bytes, difficulty: int, gas_limit: int,
+                  timestamp: int, extra_data: bytes, mix_hash: bytes, nonce: bytes,
+                  base_fee: int = INITIAL_BASE_FEE, excess_blob_gas: int = 0,
+                  slot_number: int = 0) -> bytes:
+    """The genesis block at a fork of a chain with the header fields it chooses and its state."""
+    def scalar(n: int) -> bytes:
+        return n.to_bytes((n.bit_length() + 7) // 8, "big")
+
+    params = [coinbase, scalar(difficulty), scalar(gas_limit), scalar(timestamp), extra_data,
+              mix_hash, nonce, scalar(base_fee), scalar(excess_blob_gas), scalar(slot_number)]
+    return _native.genesis_block(fork, rlp.encode(params), state)
+
+
 __all__ = ["header_hash", "reencode", "transactions_root", "withdrawals_root",
            "deposit_requests", "requests_hash", "block_access_list_hash",
            "check_block_access_list", "make_receipts", "receipt_reencode", "receipt_logs_bloom",
            "validate_size", "validate_header", "check_header", "dao_extra_data_valid",
-           "state_transition", "BlobSchedule", "RecentBlock", "BlockError"]
+           "state_transition", "genesis_block", "INITIAL_BASE_FEE", "BlobSchedule", "RecentBlock",
+           "BlockError"]

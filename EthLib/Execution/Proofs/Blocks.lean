@@ -6,6 +6,7 @@ public import EthLib.Execution.Proofs.Blocks.BlockAccessList
 public import EthLib.Execution.Proofs.Blocks.Bloom
 public import EthLib.Execution.Proofs.Blocks.DaoFork
 public import EthLib.Execution.Proofs.Blocks.Difficulty
+public import EthLib.Execution.Proofs.Blocks.Genesis
 public import EthLib.Execution.Proofs.Blocks.ProofOfWork
 public import EthLib.Execution.Proofs.Blocks.Header
 public import EthLib.Execution.Proofs.Blocks.Ommers

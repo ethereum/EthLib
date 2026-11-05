@@ -713,6 +713,9 @@ def bindings : List Binding := [
     "(config: bytes, state: bytes, recent: bytes, fork: str, block: bytes, check_seal: bool) " ++
       "-> bytes",
     [`EthLib.Execution.Blocks.BlockError], some "BlockError"⟩,
+  ⟨"genesis_block", `EthLib.Execution.Blocks.Exports.genesisExport,
+    "(fork: str, params: bytes, state: bytes) -> bytes",
+    [`EthLib.Execution.Blocks.BlockError], some "BlockError"⟩,
   ⟨"precompile_run", `EthLib.Execution.Evm.Precompiles.Exports.runExport,
     "(fork: str, address: int, data: bytes, gas: int) -> bytes",
     [`EthLib.Execution.Evm.Precompiles.PrecompileError], some "PrecompileError"⟩,

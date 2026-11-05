@@ -855,6 +855,10 @@ def state_transition(config: bytes, state: bytes, recent: bytes, fork: str, bloc
     """Run the state transition of a block on a chain, and give the state after it."""
     ...
 
+def genesis_block(fork: str, params: bytes, state: bytes) -> bytes:
+    """The genesis block at a fork, in RLP form."""
+    ...
+
 def precompile_run(fork: str, address: int, data: bytes, gas: int) -> bytes:
     """Run the precompile at the address on the call data, with the gas given, at the fork named."""
     ...

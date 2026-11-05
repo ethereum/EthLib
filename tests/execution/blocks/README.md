@@ -58,4 +58,13 @@ Each case keeps the header, its parent, the exception if any, and the blob sched
 python -I extract_blob_schedules.py <directory of fixtures> blob_schedules.json
 ```
 
+`genesis.json` holds the genesis block of the test `block_intermediate_state` at each network from Frontier to Amsterdam.
+Each case keeps the state before the first block and the genesis header in the JSON form of the fixture.
+It also keeps the RLP form of the genesis block.
+`extract_genesis.py` wrote the file from the archive, unpacked for these tests, and writes the same bytes again:
+
+```text
+python -I extract_genesis.py <directory of fixtures> genesis.json
+```
+
 The Python tests in `bindings/python/tests/blocks/` read these cases and never rewrite them.
