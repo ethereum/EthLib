@@ -685,13 +685,13 @@ theorem valueAt_plain (hash : ByteArray → Hash32) (data : List (ByteArray × B
   apply find?_congr
   intro entry _
   -- Two keys have the same nibbles exactly when they are the same bytes.
-  simp only [keyPath, Bool.false_eq_true, ↓reduceIte, sameBytes]
-  apply decide_eq_decide.mpr
+  simp only [keyPath, Bool.false_eq_true, ↓reduceIte]
+  rw [Bool.eq_iff_iff, decide_eq_true_iff, sameBytes_iff]
   constructor
   · intro h
-    rw [bytesToNibbleList_injective h]
+    exact bytesToNibbleList_injective h
   · intro h
-    rw [byteArray_eq_of_toList _ _ h]
+    rw [h]
 
 /-! ## Error codes -/
 
