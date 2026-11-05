@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Exports.Transition
 public import EthLib.Consensus.ForkChoice.Handlers
 public import EthLib.Consensus.ForkChoice.ProposerHead
+public import EthLib.Cryptography.Exports.Kzg
 
 /-!
 # `Exports.ForkChoice`
@@ -22,6 +23,12 @@ Kind 1 adds a signed block with its votes, kind 2 an attestation and kind 3 an a
 Kind 4 reads the store, and a byte of 1 also asks where the proposer of the slot builds.
 
 Kind 5 makes a block of proof of work known, in SSZ, for the merge check of later blocks.
+
+Kind 6 gives the blobs and the proofs that the node holds for the next block.
+
+It is a 4-byte count of blobs, then the blobs, then the proofs of 48 bytes each.
+
+Without it the node holds no blob and no proof for a block.
 
 The execution layer accepts every payload, as in the vectors.
 
@@ -115,13 +122,31 @@ def runForkChoiceStep {preset : Preset} {fork : Fork} (config : Config) (checks 
     return (store, ·) <$> storeRecord config store proposerHead
   | (kind, _) => throw (0, s!"no step of kind {kind}")
 
+/-- The blobs and the proofs of a step: a count of blobs, the blobs, then the proofs. -/
+def readBlobData (data : ByteArray) : Result (Array Cryptography.Kzg.Blob ×
+    Array Cryptography.Kzg.KZGProof) := do
+  if data.size < 4 then throw (0, "the count of blobs is cut short")
+  let count := (← decodeInput UInt32 (data.extract 0 4)).toNat
+  let blobBytes := count * Cryptography.Kzg.Constants.BYTES_PER_BLOB
+  if data.size < 4 + blobBytes then throw (0, "the blobs are cut short")
+  let proofBytes := data.size - (4 + blobBytes)
+  if proofBytes % 48 ≠ 0 then throw (0, "the proofs are not 48 bytes each")
+  let blobs ← (Array.range count).mapM fun i =>
+    decodeInput Cryptography.Kzg.Blob
+      (data.extract (4 + i * Cryptography.Kzg.Constants.BYTES_PER_BLOB)
+        (4 + (i + 1) * Cryptography.Kzg.Constants.BYTES_PER_BLOB))
+  let proofs ← (Array.range (proofBytes / 48)).mapM fun i =>
+    decodeInput Cryptography.Kzg.KZGProof
+      (data.extract (4 + blobBytes + i * 48) (4 + blobBytes + (i + 1) * 48))
+  return (blobs, proofs)
+
 /-- The outcome of each step of a fork choice case, from an anchor state and an anchor block.
 
 The preset, the configuration and the fork are named in UTF-8.
 
 The signature checks run unless the last argument is false.
 
-From Deneb a block is not yet specified here, and from Gloas neither is the store. -/
+From Fulu a block is not yet specified here, and from Gloas neither is the store. -/
 @[export eth_consensus_fork_choice]
 def forkChoiceExport (name fork anchorState anchorBlock steps replacements : ByteArray)
     (verify : Bool) : Result ByteArray := do
@@ -134,14 +159,23 @@ def forkChoiceExport (name fork anchorState anchorBlock steps replacements : Byt
   let mut store ← runForkChoice (getForkchoiceStore config anchorState anchorBlock)
   let mut out := ByteArray.empty
   let mut powBlocks : List PowBlock := []
+  let mut blobData : Array Cryptography.Kzg.Blob × Array Cryptography.Kzg.KZGProof := (#[], #[])
+  let setup ← Cryptography.Kzg.Exports.embeddedSetup.mapError fun e => (0, e.message)
   for step in ← readForkChoiceSteps (steps.size + 1) steps 0 do
     if step.1 = 5 then
       powBlocks := (← decodeInput PowBlock step.2) :: powBlocks
       out := out.push 0
       continue
+    if step.1 = 6 then
+      blobData ← readBlobData step.2
+      out := out.push 0
+      continue
     let known := powBlocks
+    let held := blobData
     let sources : BlockSources preset fork :=
-      ⟨.constant true, fun hash => known.find? (·.blockHash = hash)⟩
+      ⟨.constant true, fun hash => known.find? (·.blockHash = hash), fun _ => some held, setup⟩
+    -- The blobs of a step serve only the block that follows it.
+    if step.1 = 1 then blobData := (#[], #[])
     match ← runForkChoiceStep config checks sources store step with
     | .ok (next, record) =>
       store := next

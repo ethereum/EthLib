@@ -1,0 +1,16 @@
+- {tick: 0}
+- checks:
+    time: 0
+    head:
+      slot: 0
+      root: '0x7dbf5a9be22a1eb829ada180da364be672909f2598e294e8891a089048684b1b'
+    justified_checkpoint:
+      epoch: 0
+      root: '0x7dbf5a9be22a1eb829ada180da364be672909f2598e294e8891a089048684b1b'
+    finalized_checkpoint:
+      epoch: 0
+      root: '0x7dbf5a9be22a1eb829ada180da364be672909f2598e294e8891a089048684b1b'
+    proposer_boost_root: '0x0000000000000000000000000000000000000000000000000000000000000000'
+- {block: 
+    block_0x61b4328286805662f83b07f83ab37f29df1c85943bb7d7f917b372343642d540, 
+    valid: false}

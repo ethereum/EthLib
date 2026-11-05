@@ -136,6 +136,12 @@ inductive ForkChoiceError where
   | terminalBlockHashNotActive (epoch : Epoch)
   /-- The payload of a block does not follow the configured terminal block hash. -/
   | notTerminalBlockHash (hash : Hash32)
+  /-- The node does not hold the blobs of the block with the root. -/
+  | blobsUnavailable (root : Root)
+  /-- A blob, a commitment or a proof is not a valid input of KZG. -/
+  | kzg (error : Cryptography.Kzg.KzgError)
+  /-- The proofs do not show that the blobs of the block with the root match its commitments. -/
+  | blobsNotMatching (root : Root)
   deriving Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -172,6 +178,9 @@ def ForkChoiceError.code : ForkChoiceError → UInt32
   | .notTerminalPowBlock _ => 26
   | .terminalBlockHashNotActive _ => 27
   | .notTerminalBlockHash _ => 28
+  | .blobsUnavailable _ => 29
+  | .kzg _ => 30
+  | .blobsNotMatching _ => 31
 
 variable (preset : Preset) (fork : Fork)
 

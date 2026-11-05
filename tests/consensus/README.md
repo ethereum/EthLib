@@ -152,10 +152,14 @@ It keeps more where the upgrade has steps of its own: the attestations of Altair
 The directory `fork_choice/` holds cases of the fork choice from `minimal.tar.gz` in the same way.
 A case starts a store from an anchor state and an anchor block, then runs a list of steps.
 A step moves the clock, adds a block, an attestation, an attester slashing or a block of proof of work, or checks the store.
-The directory keeps one case of each handler at Altair, Bellatrix and Capella, and two of `on_block`, one of which a store must reject.
+From Deneb a block step can also give the blobs and the proofs that the node holds for the block.
+The directory keeps one case of each handler at Altair, Bellatrix, Capella and Deneb, and two of `on_block`, one of which a store must reject.
 At Bellatrix it also keeps two `on_merge_block` cases.
 In the first, the first payload follows a terminal block of proof of work.
 In the second, the store does not know the parent of the block that the payload follows.
+At Deneb it also keeps two `on_block` cases with blobs.
+In the first, the proofs show that the blobs match the commitments of each block.
+In the second, a proof does not match, so the store rejects the block.
 `bindings/python/tests/consensus/test_fork_choice.py` runs each case on one store in Lean and compares each step with the case.
 
 The directory `genesis/` holds every genesis case of `minimal.tar.gz` in the same way.
