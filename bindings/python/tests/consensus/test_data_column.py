@@ -247,6 +247,38 @@ def test_sidecar_and_block_must_match():
         consensus.verify_data_column_sidecar_kzg_proofs("minimal", "fusaka", fulu, b"\x00")
 
 
+def _gloas_sidecar_and_block() -> tuple:
+    """The preset, a sidecar and its signed block, from the first Gloas case that has both."""
+    for param in _gossip_cases("gloas"):
+        preset, case = param.values
+        blocks = case_blocks(case, preset, "glamsterdam")
+        for message in _yaml(case / "meta.yaml")["messages"]:
+            data = snappy.decompress((case / f"{message['message']}.ssz_snappy").read_bytes())
+            block = blocks.get(_gloas_sidecar_parts(data)["root"])
+            if block is not None:
+                return preset, data, block
+    raise LookupError("no Gloas case has a sidecar with its block")
+
+
+def test_block_of_another_root():
+    preset, data, block = _gloas_sidecar_and_block()
+    # The block of the sidecar decodes and matches, so the checks return a verdict.
+    consensus.verify_data_column_sidecar(preset, "glamsterdam", data, block)
+    consensus.verify_data_column_sidecar_kzg_proofs(preset, "glamsterdam", data, block)
+    # A new state root changes the root of the block, and nothing else that the checks read.
+    # The message starts at the offset in the first 4 bytes, with the slot, the proposer index
+    # and the parent root before the state root.
+    other = bytearray(block)
+    other[int.from_bytes(block[:4], "little") + 48] ^= 1
+    expected = "^the block is not the block of the sidecar$"
+    with pytest.raises(SszError, match=expected) as info:
+        consensus.verify_data_column_sidecar(preset, "glamsterdam", data, bytes(other))
+    assert info.value.code == 0
+    with pytest.raises(KzgError, match=expected) as info:
+        consensus.verify_data_column_sidecar_kzg_proofs(preset, "glamsterdam", data, bytes(other))
+    assert info.value.code == 0
+
+
 def _fulu_proof_cases() -> list:
     return [pytest.param(case.parts[-6], case, id=f"{case.parts[-6]}-{case.name}")
             for case in sorted(PROOFS.glob("*/fulu/merkle_proof/*/BeaconBlockBody/*"))]
