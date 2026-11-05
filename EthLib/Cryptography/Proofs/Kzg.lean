@@ -42,6 +42,8 @@ public import EthLib.Cryptography.Proofs.Kzg.CellBatchBinding
 public import EthLib.Cryptography.Proofs.Kzg.CellBinding
 public import EthLib.Cryptography.Proofs.Kzg.CellVerifier
 public import EthLib.Cryptography.Proofs.Kzg.Arsdh
+public import EthLib.Cryptography.Proofs.Kzg.MultiproofBatching
+public import EthLib.Cryptography.Proofs.Kzg.CellBatching
 
 /-!
 # `EthLib.Cryptography.Proofs.Kzg`
