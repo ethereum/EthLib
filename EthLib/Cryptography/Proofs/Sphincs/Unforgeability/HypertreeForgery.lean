@@ -89,7 +89,7 @@ theorem chain_chainStarts (key : OtsKey) (i : Fin V) (steps : Nat)
 theorem otsPublicLeaf_run (key : OtsKey) :
     (otsPublicLeaf (pureHash f) P prf key).run =
       (otsLeafHash (pureHash f) P key (honestEnds f P prf key)).run := by
-  rw [otsPublicLeaf, Id.run_bind, Id.run_bind, Xmss.ofFnInOrder_run]
+  rw [otsPublicLeaf, Id.run_bind, Id.run_bind, HashSig.ofFnInOrder_run]
   refine congrArg (fun ends => (otsLeafHash (pureHash f) P key ends).run)
     (Vector.ext fun i hi => ?_)
   simp only [Vector.getElem_ofFn, honestEnds]

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Xmss.Encoding
 public import EthLib.Cryptography.Proofs.Xmss.Types
+public import EthLib.Cryptography.Proofs.Wots.TargetSum
 public import Mathlib.Tactic
 
 /-!
@@ -81,17 +82,6 @@ theorem sum_of_codeword (h : codeword? d = some x) : ∑ i : Fin V, (x[i] : Nat)
 
 /-! ## Digits determine the digest -/
 
-/-- The low `k` base-`b` digits of a number reconstruct it modulo `b ^ k`. -/
-theorem sum_base_digits_eq_mod (b n : Nat) : ∀ k : Nat,
-    ∑ r ∈ Finset.range k, n / b ^ r % b * b ^ r = n % b ^ k := by
-  intro k
-  induction k with
-  | zero => simp [Nat.mod_one]
-  | succ k ih =>
-    -- One more digit is one more factor of the base in the modulus.
-    rw [Finset.sum_range_succ, ih, pow_succ, Nat.mod_mul]
-    ring
-
 /-- A codeword's digest is the base-4 number its 58 digits spell.
 
 ```text
@@ -105,7 +95,7 @@ theorem bytesToUint_of_codeword (h : codeword? d = some x) :
   have hlt : bytesToUint d < 4 ^ DIGITS := by
     have := Base.bytesToUint_lt d
     simpa [DIGEST_LEN, DIGITS] using this
-  have hall := sum_base_digits_eq_mod 4 (bytesToUint d) DIGITS
+  have hall := Wots.sum_base_digits_eq_mod 4 (bytesToUint d) DIGITS
   rw [Nat.mod_eq_of_lt hlt] at hall
   -- Digits 58 to 63 are zero, so only the first 58 contribute.
   have hsplit : ∑ r ∈ Finset.range DIGITS, bytesToUint d / 4 ^ r % 4 * 4 ^ r
@@ -132,31 +122,6 @@ So a signature for one codeword reaches another only if that one dominates it.
 
 A constant digit sum rules that out. -/
 
-/-- Pointwise domination with equal sums forces equality.
-
-It holds for any number of digits and any digit range, so leanSPHINCS uses it too. -/
-theorem eq_of_le_of_sum_eq {n k : Nat} {x y : Vector (Fin k) n}
-    (hle : ∀ i : Fin n, (x[i] : Nat) ≤ (y[i] : Nat))
-    (hsum : ∑ i : Fin n, (x[i] : Nat) = ∑ i : Fin n, (y[i] : Nat)) : x = y := by
-  -- Equal sums of dominated terms force every term to be equal.
-  have heq := (Finset.sum_eq_sum_iff_of_le fun i _ => hle i).mp hsum
-  exact Vector.ext fun i hi => Fin.val_inj.mp (heq ⟨i, hi⟩ (Finset.mem_univ _))
-
-/-- Two distinct digit vectors with equal sums are incomparable: each has a digit below the other's.
-
-It holds for any number of digits and any digit range, so leanSPHINCS uses it too. -/
-theorem incomparable_of_sum_eq {n k : Nat} {x y : Vector (Fin k) n}
-    (hsum : ∑ i : Fin n, (x[i] : Nat) = ∑ i : Fin n, (y[i] : Nat)) (hne : x ≠ y) :
-    (∃ i : Fin n, (x[i] : Nat) < (y[i] : Nat)) ∧ (∃ i : Fin n, (y[i] : Nat) < (x[i] : Nat)) := by
-  constructor
-  -- Were one never to exceed the other, equal sums would make them equal.
-  · by_contra hno
-    simp only [not_exists, Nat.not_lt] at hno
-    exact hne (eq_of_le_of_sum_eq hno hsum.symm).symm
-  · by_contra hno
-    simp only [not_exists, Nat.not_lt] at hno
-    exact hne (eq_of_le_of_sum_eq hno hsum)
-
 /-- Two distinct codewords are incomparable: each has a digit below the other's.
 
 Neither can be reached from the other by walking chains forward. -/
@@ -164,6 +129,6 @@ theorem codeword_incomparable (hx : codeword? d = some x) (hy : codeword? d' = s
     (hne : x ≠ y) :
     (∃ i : Fin V, (x[i] : Nat) < (y[i] : Nat)) ∧ (∃ i : Fin V, (y[i] : Nat) < (x[i] : Nat)) :=
   -- Both sums are the target, so they agree.
-  incomparable_of_sum_eq ((sum_of_codeword hx).trans (sum_of_codeword hy).symm) hne
+  Wots.incomparable_of_sum_eq ((sum_of_codeword hx).trans (sum_of_codeword hy).symm) hne
 
 end EthLib.Cryptography.Xmss

@@ -1,7 +1,8 @@
 module
 
 public import EthLib.Cryptography.Sphincs.Address
-public import EthLib.Cryptography.Proofs.Xmss.Types
+public import EthLib.Base.Proofs.LittleEndian
+public import EthLib.Cryptography.Proofs.HashSig
 
 /-!
 # Proofs: leanSPHINCS addresses

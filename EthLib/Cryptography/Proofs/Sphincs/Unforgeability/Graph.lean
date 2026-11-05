@@ -344,7 +344,7 @@ theorem pointBytes_inj (P : PublicParam) {k k' : Node} {vs vs' : List Digest}
   obtain ⟨-, hA, hpay⟩ := thInput_inj (byteArray_eq_of_toList_eq h)
   have hlen : vs.length = vs'.length := by
     rw [hl, hl', Node.length_children_eq_of_address_eq P hA]
-  obtain ⟨hvs, hs⟩ := Xmss.byteArray_append_inj hpay
+  obtain ⟨hvs, hs⟩ := HashSig.byteArray_append_inj hpay
     (by rw [size_digestsBytes, size_digestsBytes, hlen])
   exact ⟨Node.eq_of_address_eq hA hs, digestsBytes_injective hlen hvs⟩
 
@@ -381,7 +381,7 @@ theorem Node.eq_of_thInput_eq {P P' : PublicParam} {k k' : Node} {payload payloa
     have := congrArg ByteArray.size hpay
     rw [ByteArray.size_append, ByteArray.size_append, hs] at this
     omega
-  exact Node.eq_of_address_eq hA (Xmss.byteArray_append_inj hpay hp).2
+  exact Node.eq_of_address_eq hA (HashSig.byteArray_append_inj hpay hp).2
 
 open Classical in
 /-- The node at whose key a public point is, if any. -/

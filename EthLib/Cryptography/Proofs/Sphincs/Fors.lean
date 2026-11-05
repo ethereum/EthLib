@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Sphincs.Fors
 public import EthLib.Cryptography.Proofs.Sphincs.Tree
-public import EthLib.Cryptography.Proofs.Xmss.Types
+public import EthLib.Cryptography.Proofs.HashSig
 
 /-!
 # Proofs: FORS
@@ -122,8 +122,8 @@ theorem forsRecover_forsSign (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES
   -- Tree by tree, the opening recovers the tree's part of the key.
   have hsign : (forsSign (pureHash f) pp prf idx leaves).run
       = Vector.ofFn fun kappa => (treeOpen (pureHash f) pp prf idx kappa leaves[kappa]).run :=
-    Xmss.ofFnInOrder_run _ _
-  rw [hsign, forsRecover, Xmss.ofFnInOrder_run, forsKey, Xmss.ofFnInOrder_run]
+    HashSig.ofFnInOrder_run _ _
+  rw [hsign, forsRecover, HashSig.ofFnInOrder_run, forsKey, HashSig.ofFnInOrder_run]
   refine congrArg Vector.ofFn (funext fun kappa => ?_)
   simp only [Fin.getElem_fin, Vector.getElem_ofFn]
   exact treeRecover_treeOpen _

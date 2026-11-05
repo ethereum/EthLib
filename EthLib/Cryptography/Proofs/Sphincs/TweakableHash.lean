@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Sphincs.TweakableHash
-public import EthLib.Cryptography.Proofs.Xmss.TweakableHash
+public import EthLib.Cryptography.Proofs.HashSig
 
 /-!
 # Proofs: the leanSPHINCS tweakable hash
@@ -25,9 +25,9 @@ open EthLib.Cryptography.Sphincs.Constants
 theorem thInput_inj {pp pp' : PublicParam} {a a' : Address} {m m' : ByteArray}
     (h : thInput pp a m = thInput pp' a' m') : pp = pp' ∧ a = a' ∧ m = m' := by
   -- The first 32 bytes are the two fixed-size prefixes, the rest is the payload.
-  obtain ⟨hpre, hm⟩ := Xmss.byteArray_append_inj h (by simp)
-  obtain ⟨hpp, ha⟩ := Xmss.byteArray_append_inj hpre (by simp)
-  exact ⟨Xmss.packBytes_injective hpp, Xmss.packBytes_injective ha, hm⟩
+  obtain ⟨hpre, hm⟩ := HashSig.byteArray_append_inj h (by simp)
+  obtain ⟨hpp, ha⟩ := HashSig.byteArray_append_inj hpre (by simp)
+  exact ⟨Base.packBytes_injective hpp, Base.packBytes_injective ha, hm⟩
 
 /-- A derivation with an empty suffix hashes `P' | A | S`.
 

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Sphincs.Encoding
-public import EthLib.Cryptography.Proofs.Xmss.Encoding
+public import EthLib.Cryptography.Proofs.Wots.TargetSum
 
 /-!
 # Proofs: the WOTS+C target-sum code
@@ -51,7 +51,6 @@ theorem codeword?_isSome_iff :
 
 /-- The digit sum the specification folds is the sum over indices. -/
 theorem digitSum_eq_sum (x : Codeword) : Internal.digitSum x = ∑ i : Fin V, (x[i] : Nat) := by
-  -- The leanXMSS fold is the same fold, over a vector of the same digits.
   obtain ⟨arr, harr⟩ := x
   -- A vector fold is a fold over its list.
   have h1 : (⟨arr, harr⟩ : Codeword).foldl (fun sum d => sum + d.val) 0
@@ -89,7 +88,7 @@ theorem bytesToUint_of_codeword (h : codeword? d = some x) :
   have hlt : bytesToUint d < 4 ^ V := by
     have := Base.bytesToUint_lt d
     simpa [N, V] using this
-  have hall := Xmss.sum_base_digits_eq_mod 4 (bytesToUint d) V
+  have hall := Wots.sum_base_digits_eq_mod 4 (bytesToUint d) V
   rw [Nat.mod_eq_of_lt hlt] at hall
   rw [← hall, ← Fin.sum_univ_eq_sum_range (fun r => bytesToUint d / 4 ^ r % 4 * 4 ^ r)]
   exact Finset.sum_congr rfl fun i _ => by rw [hx i]
@@ -115,6 +114,6 @@ theorem codeword_incomparable (hx : codeword? d = some x) (hy : codeword? d' = s
     (hne : x ≠ y) :
     (∃ i : Fin V, (x[i] : Nat) < (y[i] : Nat)) ∧ (∃ i : Fin V, (y[i] : Nat) < (x[i] : Nat)) :=
   -- Both sums are the target, so they agree.
-  Xmss.incomparable_of_sum_eq ((sum_of_codeword hx).trans (sum_of_codeword hy).symm) hne
+  Wots.incomparable_of_sum_eq ((sum_of_codeword hx).trans (sum_of_codeword hy).symm) hne
 
 end EthLib.Cryptography.Sphincs

@@ -44,31 +44,12 @@ open OracleSpec OracleComp ENNReal
 /-! ## Digests and their digits -/
 
 /-- There are `2^128` digests of 16 bytes. -/
-theorem card_digest : Fintype.card Digest = 2 ^ 128 := by
-  rw [Fintype.card_congr (arrayVectorEquivFin _ _), Fintype.card_fun, Fintype.card_fin,
-    ← FinEnum.card_eq_fintypeCard, FinEnum.card_UInt8, DIGEST_LEN]
-  norm_num
-
-/-- A digest is the base-4 number its 64 digits spell. -/
-theorem bytesToUint_eq_sum_digits (d : Digest) :
-    bytesToUint d = ∑ i : Fin DIGITS, ((Internal.digits d)[i] : ℕ) * 4 ^ i.val := by
-  have hlt : bytesToUint d < 4 ^ DIGITS := by
-    have := Base.bytesToUint_lt d
-    simpa [DIGEST_LEN, DIGITS] using this
-  have hall := sum_base_digits_eq_mod 4 (bytesToUint d) DIGITS
-  rw [Nat.mod_eq_of_lt hlt] at hall
-  rw [← hall, ← Fin.sum_univ_eq_sum_range (fun r => bytesToUint d / 4 ^ r % 4 * 4 ^ r)]
-  exact Finset.sum_congr rfl fun i _ => by simp
+theorem card_digest : Fintype.card Digest = 2 ^ 128 :=
+  Wots.card_bytes16
 
 /-- Every string of 64 digits is the digits of exactly one digest. -/
-theorem digits_bijective : Function.Bijective (Internal.digits) := by
-  refine (Fintype.bijective_iff_injective_and_card _).mpr ⟨fun d d' h => ?_, ?_⟩
-  · have : bytesToUint d = bytesToUint d' := by
-      rw [bytesToUint_eq_sum_digits d, bytesToUint_eq_sum_digits d', h]
-    rw [← Base.uintToBytes_bytesToUint d, ← Base.uintToBytes_bytesToUint d', this]
-  · rw [card_digest, Fintype.card_congr (arrayVectorEquivFin _ _), Fintype.card_fun,
-      Fintype.card_fin, Fintype.card_fin, CHAIN_LENGTH, DIGITS]
-    norm_num
+theorem digits_bijective : Function.Bijective (Internal.digits) :=
+  Wots.digits4_bijective
 
 /-- Exactly `|C|` digests are codewords.
 
@@ -167,7 +148,7 @@ theorem prEvent_findCodeword_none (pp : PublicParam) (layer : Layer) (e : UInt32
       map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp_apply]
     rfl
   · have hin := (thInput_inj (ByteArray.ext (Array.toList_inj.mp h))).2.2
-    have hrho := packBytes_injective (byteArray_append_inj hin rfl).2
+    have hrho := packBytes_injective (HashSig.byteArray_append_inj hin rfl).2
     exact trialRandomizer_inj base (by simpa [MAX_RANDOMIZER_TRIALS] using hj)
       (by simpa [MAX_RANDOMIZER_TRIALS] using hj') hrho
 
