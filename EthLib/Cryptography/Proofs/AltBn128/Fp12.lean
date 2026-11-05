@@ -199,7 +199,8 @@ instance : NatCast Fp12 := ⟨fun n => ofFp n⟩
 /-- `n` as an element of `Fp12`: the element `n` of `Fp`. -/
 instance : IntCast Fp12 := ⟨fun n => ofFp n⟩
 
-private theorem toQuot_eq_sum (a : Fp12) (f : ℕ → AdjoinRoot poly)
+/-- The value of an element whose coefficients have the values `f i`. -/
+theorem toQuot_eq_sum (a : Fp12) (f : ℕ → AdjoinRoot poly)
     (h : ∀ i (hi : i < 12), ι a[i] = f i) : toQuot a = ∑ i ∈ Finset.range 12, f i * r ^ i := by
   refine Finset.sum_congr rfl fun i hi => ?_
   rw [Finset.mem_range] at hi
