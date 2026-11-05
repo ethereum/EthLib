@@ -84,7 +84,7 @@ def CHAIN_HASHES : Nat := 68
 
 A digest is a codeword with probability about `2^-20`.
 
-So all `2^32` trials fail with probability below `exp(-2^11)`. -/
+In the random oracle model, all `2^32` trials fail with probability below `exp(-4000)`. -/
 def MAX_RANDOMIZER_TRIALS : Nat := 2 ^ 32
 
 /-! ## Trees -/

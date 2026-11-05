@@ -141,6 +141,10 @@ Definitions that derive a secret take the derivation function as an argument too
   The code has `23195210617839120199658819909693679` words, counted two ways (`card_digitStrings_code`, `inclusion_exclusion_code`).
   So one counter succeeds with probability `2^-13.84`, if digests were uniform (`code_probability`).
   Then all `2^32` counters fail with probability below `exp(-2^18)` (`all_counters_fail_probability`).
+  Exactly `|C|` of the `2^128` digests are codewords (`card_codeword`, `CodewordSearch.lean`).
+- The counter search in the random oracle model (`CodewordSearch.lean`).
+  All `2^32` counters of one search miss the code with probability exactly `(1 - |C| / 2^128)^(2^32)`, below `exp(-2^18)` (`prEvent_findCounter_none`, `prEvent_findCounter_none_le`).
+  The theorem assumes that the oracle's cache holds none of the counters' inputs when the search starts, as an empty cache does.
 - Domain separation (`Address.lean`, `TweakableHash.lean`).
   An address determines all six of its fields (`encodeAddress_inj`).
   The eleven address types have eleven codes (`AddressType.code_injective`).
@@ -164,6 +168,5 @@ Definitions that derive a secret take the derivation function as an argument too
   The 127-bit bound, up to 1,182,000,000 signatures, is the theorem `h26_layered` of the model's [`FORS/Main.lean`](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Main.lean), about the model, not about this module.
 - That this module and the model compute the same bytes.
   The definitions follow the model line by line, but no theorem links the two.
-- That signing fails with small probability.
-  `all_counters_fail_probability` bounds the number, assuming uniform digests, which is the random-oracle assumption.
-- That every codeword is the codeword of some digest.
+- That a whole signature fails with small probability.
+  The search bound covers one search, and no theorem shows that the signer's cache holds none of its counters' inputs.
