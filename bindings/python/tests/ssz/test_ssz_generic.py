@@ -4,6 +4,7 @@ import hashlib
 import re
 from pathlib import Path
 
+import archives
 import pytest
 from ruamel.yaml import YAML
 
@@ -63,6 +64,64 @@ UNIONS = {
 }
 
 
+def _container(fields):
+    """A container: its fields in order, each a name and a type."""
+    return {"container": [list(field) for field in fields]}
+
+
+UINT8 = {"uint": 1}
+UINT32 = {"uint": 4}
+UINT64 = {"uint": 8}
+PROGRESSIVE_BITLIST_FIELD = {"progressive_bitlist": None}
+
+# The structures of the `containers` and `progressive_containers` handlers, as the format of the
+# suite defines them.
+SMALL = _container([("A", UINT16), ("B", UINT16)])
+FIXED = _container([("A", UINT8), ("B", UINT64), ("C", UINT32)])
+VAR_STRUCT = _container([("A", UINT16), ("B", {"list": [UINT16, 1024]}), ("C", UINT8)])
+STRUCTURES = {
+    "SingleFieldTestStruct": _container([("A", BYTE)]),
+    "SmallTestStruct": SMALL,
+    "FixedTestStruct": FIXED,
+    "VarTestStruct": VAR_STRUCT,
+    "ComplexTestStruct": _container([
+        ("A", UINT16), ("B", {"list": [UINT16, 128]}), ("C", UINT8), ("D", {"byte_list": 256}),
+        ("E", VAR_STRUCT), ("F", {"vector": [FIXED, 4]}), ("G", {"vector": [VAR_STRUCT, 2]}),
+    ]),
+    "ProgressiveTestStruct": _container([
+        ("A", {"progressive_list": [BYTE, None]}),
+        ("B", {"progressive_list": [UINT64, None]}),
+        ("C", {"progressive_list": [SMALL, None]}),
+        ("D", {"progressive_list": [{"progressive_list": [VAR_STRUCT, None]}, None]}),
+    ]),
+    "BitsStruct": _container([
+        ("A", {"bitlist": 5}), ("B", {"bitvector": 2}), ("C", {"bitvector": 1}),
+        ("D", {"bitlist": 6}), ("E", {"bitvector": 8}),
+    ]),
+    "ProgressiveBitsStruct": _container([
+        (name, kind)
+        for names, length in ((("A", "B", "C"), 256), (("D", "E", "F"), 257),
+                              (("G", "H", "I"), 1280), (("J", "K", "L"), 1281))
+        for name, kind in zip(names, ({"bitvector": length}, {"bitlist": length},
+                                      PROGRESSIVE_BITLIST_FIELD))
+    ]),
+    "ProgressiveSingleFieldContainerTestStruct": SINGLE_FIELD,
+    "ProgressiveSingleListContainerTestStruct": SINGLE_LIST,
+    "ProgressiveVarTestStruct": VAR,
+    "ProgressiveComplexTestStruct": _progressive_container(
+        [1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1],
+        [
+            ("A", BYTE), ("B", {"list": [UINT16, 123]}), ("C", PROGRESSIVE_BITLIST_FIELD),
+            ("D", {"progressive_list": [UINT64, None]}),
+            ("E", {"progressive_list": [SMALL, None]}),
+            ("F", {"progressive_list": [{"progressive_list": [VAR_STRUCT, None]}, None]}),
+            ("G", {"list": [SINGLE_FIELD, 10]}),
+            ("H", {"progressive_list": [VAR, None]}),
+        ],
+    ),
+}
+
+
 def type_of(handler: str, case: str):
     """The type that the name of a case declares, by the templates of the suite."""
     parts = case.split("_")
@@ -80,6 +139,8 @@ def type_of(handler: str, case: str):
         return {"bitlist": int(parts[1])}
     if handler == "progressive_bitlist":
         return PROGRESSIVE_BITLIST
+    if handler in ("containers", "progressive_containers"):
+        return STRUCTURES[parts[0]]
     if handler == "compatible_unions":
         return next(union for name, union in UNIONS.items() if case.startswith(name + "_"))
     raise AssertionError(f"no type for the handler {handler}")
@@ -107,8 +168,15 @@ def tagged(ssz_type, value):
         return {"bits": _bits(bytes.fromhex(value.removeprefix("0x")), body)}
     if kind in ("bitlist", "progressive_bitlist"):
         return {"bits": _delimited(value)}
+    if kind == "progressive_list" and isinstance(value, str):
+        # The suite writes a progressive list of bytes as hex.
+        return {"seq": [{"uint": byte} for byte in bytes.fromhex(value.removeprefix("0x"))]}
     if kind in ("vector", "list", "progressive_list"):
         return {"seq": [tagged(body[0], element) for element in value]}
+    if kind in ("byte_list", "byte_vector"):
+        return {"bytes": value}
+    if kind == "container":
+        return {"seq": [tagged(field, value[name]) for name, field in body]}
     if kind == "progressive_container":
         return {"seq": [tagged(field, value[name]) for name, field in body[1]]}
     if kind == "compatible_union":
@@ -170,3 +238,45 @@ def test_invalid(handler: str, case: Path) -> None:
     stage = "type" if ILLEGAL_TYPE.fullmatch(case.name) else "input"
     with pytest.raises(SszError, match=f"^{stage} rejected: "):
         ssz.deserialize(ssz_type, _serialized(case))
+
+
+# The two handlers that hold too many bytes to vendor run from the pinned release archive.
+ARCHIVE = "consensus-specs/v1.7.0-alpha.12/general"
+ARCHIVE_COUNTS = {"containers": (463, 238), "progressive_containers": (261, 264)}
+
+
+def _archive_root() -> Path:
+    paths = [f"tests/general/phase0/ssz_generic/{handler}" for handler in ARCHIVE_COUNTS]
+    return archives.unpack(ARCHIVE, *paths) / "tests" / "general" / "phase0" / "ssz_generic"
+
+
+def _archive_cases(suite: str) -> list:
+    """Every case of the two handlers in a suite, when the archive cache is set."""
+    if archives.CACHE is None:
+        return []
+    root = _archive_root()
+    return [
+        pytest.param(handler, case, id=f"{handler}/{case.name}", marks=pytest.mark.archive(ARCHIVE))
+        for handler in ARCHIVE_COUNTS
+        for case in sorted((root / handler / suite).iterdir())
+    ]
+
+
+@pytest.mark.archive(ARCHIVE)
+def test_archive_counts() -> None:
+    root = _archive_root()
+    found = {
+        handler: tuple(sum(1 for _ in (root / handler / suite).iterdir()) for suite in SUITES)
+        for handler in ARCHIVE_COUNTS
+    }
+    assert found == ARCHIVE_COUNTS
+
+
+@pytest.mark.parametrize(("handler", "case"), _archive_cases("valid"))
+def test_archive_valid(handler: str, case: Path) -> None:
+    test_valid(handler, case)
+
+
+@pytest.mark.parametrize(("handler", "case"), _archive_cases("invalid"))
+def test_archive_invalid(handler: str, case: Path) -> None:
+    test_invalid(handler, case)
