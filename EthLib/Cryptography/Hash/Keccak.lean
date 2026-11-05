@@ -75,9 +75,9 @@ Bit `z` moves to bit `(z + n) mod 64`, which is what `rho` and `theta` ask of th
 
 /-! ## The constants
 
-FIPS 202 does not list the round constants or the rotation offsets.
+FIPS 202 defines the round constants and the rotation offsets by two algorithms, transcribed here.
 
-It defines them by two algorithms, transcribed here.
+Its Table 2 lists the offsets before their reduction mod 64, and it lists no round constants.
 
 The tables used by the permutation are proved equal to them in `Proofs/Hash/Keccak.lean`. -/
 
