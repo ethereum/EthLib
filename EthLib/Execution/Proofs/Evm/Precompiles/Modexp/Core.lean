@@ -168,7 +168,7 @@ theorem modexp_append_excess (fork : Fork) (data extra : ByteArray) (gas : Nat)
   intro i hi
   -- Every covered byte lies inside the original data, before the excess.
   have hi' : i < data.size := Nat.lt_of_lt_of_le hi h
-  simp [byteAt, ByteArray.data_append, Array.getD_eq_getD_getElem?,
+  simp [byteAt_eq_getD, ByteArray.data_append, Array.getD_eq_getD_getElem?,
     Array.getElem?_append_left hi']
 
 /-! ## Bounds and gas -/

@@ -759,6 +759,10 @@ def tx_settle(fork: str, tx: bytes, base_fee: bytes, gas_left: bytes, refund_cou
     """Settle the gas of a transaction that passes the gas, nonce and fee rules."""
     ...
 
+def tx_run(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> bytes:
+    """Run one transaction on the state that `state` encodes, in a block with no transaction before."""
+    ...
+
 def tx_network_check(fork: str, network: bytes) -> bytes:
     """Check the network form of a blob transaction at the named fork."""
     ...

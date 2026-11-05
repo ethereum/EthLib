@@ -51,13 +51,20 @@ _RULES = {
     "INTRINSIC_GAS_BELOW_FLOOR_GAS_COST": r"insufficientGas",
     "GAS_LIMIT_EXCEEDS_MAXIMUM": r"gasLimitExceeded",
     "PRIORITY_GREATER_THAN_MAX_FEE_PER_GAS": r"priorityFeeGreaterThanMaxFee",
+    "INITCODE_SIZE_EXCEEDED": r"initCodeTooLarge",
+    # A typed transaction before the fork of its type does not decode.
+    "TYPE_1_TX_PRE_FORK": r"unsupportedType 1",
+    "TYPE_2_TX_PRE_FORK": r"unsupportedType 2",
+    "TYPE_3_TX_PRE_FORK": r"unsupportedType 3",
+    "TYPE_4_TX_PRE_FORK": r"unsupportedType 4",
     # A type 3 or type 4 transaction without a recipient does not decode.
     "TYPE_3_TX_CONTRACT_CREATION": r"decoding: ",
     "TYPE_4_TX_CONTRACT_CREATION": r"decoding: ",
 }
 
 
-def _names(exception: str, message: str) -> bool:
+def names_in_block(exception: str, message: str) -> bool:
+    """Whether an error message of the checks against the block names a fixture exception."""
     kind, _, name = exception.partition(".")
     if kind != "TransactionException":
         return False
@@ -154,7 +161,7 @@ def test_inclusion(archive, source) -> None:
             if error is not None:
                 # The first rejection is the exception of the fixture.
                 assert expected, (name, error)
-                assert any(_names(e, error) for e in expected.split("|")), (name, expected, error)
+                assert any(names_in_block(e, error) for e in expected.split("|")), (name, expected, error)
                 rejected += 1
             elif checked == len(block.get("rlp_decoded", block)["transactions"]) and expected:
                 # Every transaction passes, so the block fails for a reason of its own.

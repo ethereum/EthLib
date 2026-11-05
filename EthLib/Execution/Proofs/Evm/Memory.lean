@@ -24,21 +24,32 @@ theorem bufferRead_length (data : ByteArray) (start size : Nat) :
     (bufferRead data start size).length = size := by
   simp [bufferRead]
 
+/-- A byte of the buffer is the byte of its array, or zero past its end. -/
+theorem byteAt_eq_getD (data : ByteArray) (i : Nat) : byteAt data i = data.data.getD i 0 := by
+  unfold byteAt
+  split
+  · rename_i h
+    simp [Array.getD_eq_getD_getElem?, ByteArray.getElem_eq_getElem_data,
+      Array.getElem?_eq_getElem (by simpa [← ByteArray.size_data] using h)]
+  · rename_i h
+    simp [Array.getD_eq_getD_getElem?, Array.getElem?_eq_none
+      (by simpa [← ByteArray.size_data] using Nat.le_of_not_lt h)]
+
 /-- Past the end of the buffer every byte reads as zero. -/
 theorem byteAt_of_size_le {data : ByteArray} {i : Nat} (h : data.size ≤ i) :
     byteAt data i = 0 := by
-  simp [byteAt, Array.getD_eq_getD_getElem?, Array.getElem?_eq_none h]
+  simp [byteAt_eq_getD, Array.getD_eq_getD_getElem?, Array.getElem?_eq_none h]
 
 /-- Padding the buffer with zero bytes on the right changes no byte. -/
 theorem byteAt_append_zeros (data : ByteArray) (n i : Nat) :
     byteAt (data ++ ByteArray.mk (Array.replicate n 0)) i = byteAt data i := by
   by_cases h : i < data.size
-  · simp [byteAt, ByteArray.data_append, Array.getD_eq_getD_getElem?,
+  · simp [byteAt_eq_getD, ByteArray.data_append, Array.getD_eq_getD_getElem?,
       Array.getElem?_append_left h]
   · have h' : data.size ≤ i := Nat.le_of_not_lt h
     rw [byteAt_of_size_le h']
     -- Past the end of the data, the padding is zeros and beyond it nothing.
-    simp only [byteAt, ByteArray.data_append, Array.getD_eq_getD_getElem?]
+    simp only [byteAt_eq_getD, ByteArray.data_append, Array.getD_eq_getD_getElem?]
     rw [Array.getElem?_append_right (by simpa using h'), Array.getElem?_replicate]
     split <;> simp
 
@@ -46,17 +57,32 @@ theorem byteAt_append_zeros (data : ByteArray) (n i : Nat) :
 theorem size_memoryWrite {memory value : ByteArray} {start : Nat}
     (h : start + value.size ≤ memory.size) :
     (memoryWrite memory start value).size = memory.size := by
-  simp only [memoryWrite, ByteArray.size_append, ByteArray.size_extract]
-  omega
+  unfold memoryWrite
+  split
+  · rfl
+  · simp only [ByteArray.size_append, ByteArray.size_extract]
+    omega
+
+/-- A read within memory gives as many bytes as it asks for. -/
+theorem size_memoryReadBytes {memory : ByteArray} {start size : Nat}
+    (h : start + size ≤ memory.size) : (memoryReadBytes memory start size).size = size := by
+  unfold memoryReadBytes
+  split
+  · simp_all
+  · simp only [ByteArray.size_extract]
+    omega
 
 /-- A read of the range that a write covers gives the written bytes. -/
 theorem memoryReadBytes_memoryWrite {memory value : ByteArray} {start : Nat}
     (h : start + value.size ≤ memory.size) :
     memoryReadBytes (memoryWrite memory start value) start value.size = value := by
+  unfold memoryReadBytes memoryWrite
+  split
+  · rename_i empty
+    exact (ByteArray.size_eq_zero_iff.mp empty).symm
   have prefix_size : (memory.extract 0 start).size = start := by
     simp only [ByteArray.size_extract]
     omega
-  unfold memoryReadBytes memoryWrite
   -- Skip the prefix of `start` bytes, then take the value from the front of the rest.
   have skip := ByteArray.extract_append_size_add' (i := 0) (j := value.size)
     (b := value ++ memory.extract (start + value.size) memory.size) prefix_size.symm

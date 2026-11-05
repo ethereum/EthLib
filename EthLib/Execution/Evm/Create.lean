@@ -22,9 +22,13 @@ It gets back that gas, and pushes 0.
 
 An address with code or a nonce takes that gas and pushes 0, and the frame's nonce still grows.
 
-EIP-7610, in Last Call, would also count an address with storage.
+An address with storage alone is not a collision: the creation wipes that storage first.
 
-It is not final, so it is not applied here.
+[EIP-7610][eip7610], in Last Call, would make such a creation fail, at every fork back to Frontier.
+
+It is not applied here: [execution-specs][es-7610] removed it at every fork in commit `2ce2191`.
+
+That commit precedes the commit that made the state tests that EthLib runs.
 
 Otherwise the frame's nonce grows and the init code runs at the new address.
 
@@ -56,6 +60,8 @@ The EIPs that add or change an instruction define it:
 [eip2681]: https://eips.ethereum.org/EIPS/eip-2681#specification
 [eip2929]: https://eips.ethereum.org/EIPS/eip-2929#specification
 [eip3860]: https://eips.ethereum.org/EIPS/eip-3860#specification
+[eip7610]: https://eips.ethereum.org/EIPS/eip-7610#specification
+[es-7610]: https://github.com/ethereum/execution-specs/commit/2ce2191562f76ec6e64a82f82165d821e1c781fc
 -/
 
 @[expose] public section

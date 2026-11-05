@@ -3,6 +3,7 @@
 from typing import NamedTuple
 
 from ...errors import TransactionError
+from ...serialization import rlp
 
 # Every domain links into one extension module.
 # That module lives in the `cryptography` package.
@@ -79,6 +80,23 @@ def check_in_block(
     return Included(raw[:20], int.from_bytes(raw[20:52], "big"), int.from_bytes(raw[52:60], "big"))
 
 
+class Run(NamedTuple):
+    """What one transaction leaves, with the accounts of the state after it."""
+
+    state_root: bytes
+    logs_hash: bytes
+    gas_used: int
+    succeeded: bool
+    accounts: list
+
+
+def run(fork: str, chain_id: int, tx: bytes, state: bytes, env: bytes) -> Run:
+    """Run one transaction on a state in the form of `state_root`, in a block that `env` encodes."""
+    root, logs, gas_used, succeeded, accounts = rlp.decode(
+        _native.tx_run(fork, chain_id, tx, state, env))
+    return Run(root, logs, int.from_bytes(gas_used, "big"), succeeded == b"\x01", accounts)
+
+
 def settle(fork: str, tx: bytes, base_fee: int, gas_left: int, refund_counter: int) -> Settlement:
     """Settle the gas of a transaction, from its gas left and its refund counter."""
     raw = _native.tx_settle(fork, tx, _number(base_fee), _number(gas_left), _number(refund_counter))
@@ -88,12 +106,14 @@ def settle(fork: str, tx: bytes, base_fee: int, gas_left: int, refund_counter: i
 __all__ = [
     "Checked",
     "Included",
+    "Run",
     "Settlement",
     "check",
     "check_in_block",
     "intrinsic_gas",
     "network_check",
     "recover_sender",
+    "run",
     "settle",
     "tx_hash",
     "tx_type",

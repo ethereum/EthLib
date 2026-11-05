@@ -63,15 +63,19 @@ inductive EvmError where
   | unspecifiedOpcode (code : UInt8)
   /-- The address of a creation has no RLP preimage, which no nonce below 2^256 gives. -/
   | encoding (e : Serialization.Rlp.RlpError)
+  /-- The rules of a transaction at the fork are not yet specified here. -/
+  | forkNotYetSpecified (fork : Base.Fork)
   deriving DecidableEq, Repr
 
 /-- Whether an error aborts the whole execution, instead of halting one frame.
 
 A state that lacks data aborts, and so does an opcode whose instruction is not yet specified.
 
-So does a creation whose address has no preimage, which no nonce below 2^256 gives. -/
+So does a creation whose address has no preimage, which no nonce below 2^256 gives.
+
+So does a transaction at a fork whose rules are not yet specified. -/
 def EvmError.aborts : EvmError → Bool
-  | .state _ | .unspecifiedOpcode _ | .encoding _ => true
+  | .state _ | .unspecifiedOpcode _ | .encoding _ | .forkNotYetSpecified _ => true
   | _ => false
 
 end EthLib.Execution.Evm

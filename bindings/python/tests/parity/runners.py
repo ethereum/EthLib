@@ -1,7 +1,7 @@
 """The runner of each group of cases that EthLib can run, and the plan for every other group."""
 
 import json
-from functools import cache
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -11,6 +11,7 @@ from consensus.containers import CONTAINERS
 from consensus.containers import FORKS as CONSENSUS_FORK
 from consensus.test_operations import HANDLERS as OPERATIONS
 from consensus.test_operations import runs as runs_operation
+from transactions.test_inclusion_archive import names_in_block
 from transactions.test_transactions import CHAIN_ID, FORK_OF_NETWORK, names
 
 from . import legacy
@@ -20,7 +21,6 @@ from .catalogue import Case
 # A key is a runner, or a runner and a handler, of consensus-spec-tests, or a format of
 # execution-spec-tests.
 NOT_YET = {
-    "state_test": "EVM message call and gas settlement (E2 to E21), then T18",
     "blockchain_test": "block state transition (E36), then T19",
     "blockchain_test_engine": "the Engine API on the Engine layer (T26), after E36",
     "blockchain_test_engine_x": "the Engine API on the Engine layer (T26), after E36",
@@ -48,7 +48,8 @@ def _yaml(path: Path):
     return _YAML.load(path.read_text())
 
 
-@cache
+# A state test file can hold many megabytes, so only the last files read stay in memory.
+@lru_cache(maxsize=16)
 def _fixtures(path: Path) -> dict:
     return json.loads(path.read_text())
 
@@ -70,6 +71,98 @@ def _transaction(root: Path, case: Case) -> None:
         assert checked.sender == bytes.fromhex(outcome["sender"].removeprefix("0x"))
         assert checked.intrinsic_gas == int(outcome["intrinsicGas"], 16)
         assert transactions.tx_hash(fork, tx) == bytes.fromhex(outcome["hash"].removeprefix("0x"))
+
+
+def _scalar(value: str) -> bytes:
+    number = int(value, 16)
+    return number.to_bytes((number.bit_length() + 7) // 8, "big")
+
+
+def _hex(value: str) -> bytes:
+    return bytes.fromhex(value.removeprefix("0x"))
+
+
+def _pre_state(pre: dict) -> bytes:
+    """The state in the form of the state root export: address, nonce, balance, code, storage."""
+    from ethlib.serialization import rlp
+
+    return rlp.encode([
+        [_hex(address), _scalar(a["nonce"]), _scalar(a["balance"]), _hex(a["code"]),
+         [[int(k, 16).to_bytes(32, "big"), _scalar(v)] for k, v in a["storage"].items()]]
+        for address, a in pre.items()])
+
+
+def _block_hashes(number: int) -> list[bytes]:
+    """The hashes of the 256 blocks before a state test, oldest first."""
+    # A state test has no chain, so block `n` has the hash `keccak256(str(n))` by convention.
+    # The test `test_blockhash_zero_in_window_control` of execution-spec-tests states it.
+    from ethlib.cryptography.keccak import keccak256
+
+    return [keccak256(str(n).encode()) for n in range(max(0, number - 256), number)]
+
+
+def _environment(env: dict) -> bytes:
+    """The nine fields of the block that a run reads, with 0 for a field the fork lacks."""
+    from ethlib.serialization import rlp
+
+    random = int(env.get("currentRandom", "0x0"), 16).to_bytes(32, "big")
+    return rlp.encode([
+        _hex(env["currentCoinbase"]), _scalar(env["currentGasLimit"]),
+        _scalar(env["currentNumber"]), _scalar(env["currentTimestamp"]),
+        _scalar(env["currentDifficulty"]), _scalar(env.get("currentBaseFee", "0x0")), random,
+        _scalar(env.get("currentExcessBlobGas", "0x0")),
+        _block_hashes(int(env["currentNumber"], 16))])
+
+
+def _accounts(accounts: list) -> dict:
+    """The accounts of a run, by address, in the form of the post state of a fixture."""
+    return {"0x" + address.hex(): {
+        "nonce": int.from_bytes(nonce, "big"), "balance": int.from_bytes(balance, "big"),
+        "code": "0x" + code.hex(),
+        "storage": {int.from_bytes(k, "big"): int.from_bytes(v, "big") for k, v in storage}}
+        for address, nonce, balance, code, storage in accounts}
+
+
+def _expected_accounts(state: dict) -> dict:
+    return {address: {
+        "nonce": int(a["nonce"], 16), "balance": int(a["balance"], 16), "code": a["code"],
+        "storage": {int(k, 16): int(v, 16) for k, v in a["storage"].items() if int(v, 16)}}
+        for address, a in state.items()}
+
+
+def _state_diff(got: dict, expected: dict) -> list:
+    """The accounts where a run and a fixture differ, for the message of a failure."""
+    return [(address, got.get(address), expected.get(address))
+            for address in sorted(set(got) | set(expected))
+            if got.get(address) != expected.get(address)]
+
+
+def _state_test(root: Path, case: Case) -> None:
+    from ethlib.execution import transactions
+
+    fixture = _fixtures(root / case.path)[case.id]
+    (post,) = fixture["post"][case.fork]
+    fork = FORK_OF_NETWORK[case.fork]
+    args = (fork, int(fixture["config"]["chainid"], 16), _hex(post["txbytes"]),
+            _pre_state(fixture["pre"]), _environment(fixture["env"]))
+    if "expectException" in post:
+        with pytest.raises(ValueError) as error:
+            transactions.run(*args)
+        expected = post["expectException"].split("|")
+        assert any(names_in_block(e, str(error.value)) for e in expected), \
+            (expected, str(error.value))
+        return
+    run = transactions.run(*args)
+    if run.state_root != _hex(post["hash"]):
+        got, expected = _accounts(run.accounts), _expected_accounts(post["state"])
+        raise AssertionError(_state_diff(got, expected))
+    assert run.logs_hash == _hex(post["logs"])
+    receipt = post.get("receipt", {})
+    if "cumulativeGasUsed" in receipt:
+        assert run.gas_used == int(receipt["cumulativeGasUsed"], 16)
+    # A receipt before Byzantium holds a state root instead of a status.
+    if "status" in receipt:
+        assert run.succeeded == receipt["status"]
 
 
 def _shuffle(root: Path, case: Case) -> None:
@@ -147,6 +240,7 @@ def _container_forks(container: str) -> tuple[str, ...]:
 # The runner of each group, by format or by runner and handler.
 RUNNERS = {
     "transaction_test": _transaction,
+    "state_test": _state_test,
     "shuffling/core": _shuffle,
     "networking/get_custody_groups": _custody_groups,
     "networking/compute_columns_for_custody_group": _custody_columns,

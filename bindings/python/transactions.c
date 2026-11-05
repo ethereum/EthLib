@@ -56,6 +56,15 @@ eth_tx_check_in_block(
 );
 
 extern lean_object*
+eth_tx_run(
+  lean_object* fork,
+  uint64_t chain_id,
+  lean_object* tx,
+  lean_object* state,
+  lean_object* env
+);
+
+extern lean_object*
 eth_tx_settle(
   lean_object* fork,
   lean_object* tx,
@@ -184,6 +193,29 @@ py_tx_check_in_block(
   return except_into_pybytes(
     eth_tx_check_in_block(fork, chain_id, tx, arg[0], arg[1], arg[2], arg[3], arg[4], arg[5]),
     TRANSACTION_ERROR);
+}
+
+PyObject*
+py_tx_run(
+  PyObject* self,
+  PyObject* args
+) {
+  PyObject *fork_obj, *chain_obj, *tx_obj;
+  const char *state, *env;
+  Py_ssize_t state_len, env_len;
+  if (!PyArg_ParseTuple(args, "OOOy#y#", &fork_obj, &chain_obj, &tx_obj, &state, &state_len,
+                        &env, &env_len)) {
+    return NULL;
+  }
+  /* The chain is a non-negative integer below 2^64. */
+  uint64_t chain_id = (uint64_t) PyLong_AsUnsignedLongLong(chain_obj);
+  if (PyErr_Occurred()) return NULL;
+  lean_object *fork, *tx;
+  if (!parse_fork_and_tx(fork_obj, tx_obj, &fork, &tx)) return NULL;
+  lean_object* state_arg = mk_bytearray((const uint8_t*) state, (size_t) state_len);
+  lean_object* env_arg = mk_bytearray((const uint8_t*) env, (size_t) env_len);
+  return except_into_pybytes(eth_tx_run(fork, chain_id, tx, state_arg, env_arg),
+                             TRANSACTION_ERROR);
 }
 
 PyObject*
