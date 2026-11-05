@@ -8,7 +8,7 @@ from ethlib.networking import discv4, enr
 
 # Section: "Test Vectors", "RLPx Discovery Protocol", of EIP-8.
 # Repository: ethereum/EIPs.
-# Commit: 0ce679f4654ba4d120c97113626f320475e22fa9.
+# Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445.
 # Licence: CC0-1.0.
 # Each packet is signed with KEY, and each one has list items or bytes after its fields.
 KEY = bytes.fromhex("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
@@ -62,7 +62,7 @@ NEIGHBORS = bytes.fromhex(
 
 # Section: "Test Vectors" of EIP-778, a record signed with the same key.
 # Repository: ethereum/EIPs.
-# Commit: 0ce679f4654ba4d120c97113626f320475e22fa9.
+# Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445.
 # Licence: CC0-1.0.
 RECORD_TEXT = (
     "enr:-IS4QHCYrYZbAKWCBRlAy5zzaDZXJBGkcnh4MHcBFZntXNFrdvJjX04jRzjzCBOonrkTfj499SZuOh8R33Ls8RRc"

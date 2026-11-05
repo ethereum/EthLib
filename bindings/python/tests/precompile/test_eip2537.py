@@ -16,7 +16,7 @@ FORKS = ends("pectra")
 #
 # Directory: assets/eip-2537
 # Repository: ethereum/EIPs
-# Commit: 0ce679f4654ba4d120c97113626f320475e22fa9
+# Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
 # Licence: CC0-1.0
 CASES = json.loads((Path(__file__).parent / "eip2537_cases.json").read_text())
 

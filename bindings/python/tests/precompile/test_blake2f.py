@@ -4,7 +4,7 @@ The EIP-152 vectors are copied byte for byte.
 
 File: EIPS/eip-152.md
 Repository: ethereum/EIPs
-Commit: 0ce679f4654ba4d120c97113626f320475e22fa9
+Commit: 46976b2a9bf99f727fb87dc8c809e3a3cdc6b445
 """
 
 import hashlib

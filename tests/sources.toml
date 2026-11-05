@@ -61,7 +61,7 @@ commit = "e1fd7a77bb0ca87fb4726fb1fd4f424f30a04db9"
 directories = ["bindings/python/tests/secp256k1/tiny_secp256k1"]
 
 [repositories."ethereum/EIPs"]
-commit = "0ce679f4654ba4d120c97113626f320475e22fa9"
+commit = "46976b2a9bf99f727fb87dc8c809e3a3cdc6b445"
 directories = ["bindings/python/tests/state/dao"]
 
 [repositories."ethereum/ERCs"]
