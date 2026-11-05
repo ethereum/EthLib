@@ -3373,6 +3373,53 @@
    "docstring":
    "Whether the receipts of a block, as a version sends them, match the receipts root of its header.\n\nThe root is computed over the consensus forms, as \"Receipt Encoding and Validity\" says.\n\nReceipts that do not read, or that have no root, do not match."},
   {"summary":
+   "The canonical data of the message with the ID `id` and the data `data`, on a version.",
+   "signature": "(version: int, id: int, data: bytes) -> bytes",
+   "operation": "EthLib.Execution.Network.Snap.Exports.decodeExport",
+   "method": "snap_message_decode",
+   "errors":
+   [{"type": "EthLib.Execution.Network.SnapError",
+     "codes":
+     [{"constructor": "unknownId", "code": 1},
+      {"constructor": "rlp", "code": 2}]}],
+   "error_class": "SnapError",
+   "docstring":
+   "The canonical data of the message with the ID `id` and the data `data`, on a version.\n\nIt reads the message, then writes it back."},
+  {"summary":
+   "Whether the ByteCodes data `response` answers the GetByteCodes data `request`.",
+   "signature": "(version: int, request: bytes, response: bytes) -> bool",
+   "operation": "EthLib.Execution.Network.Snap.Exports.codesAnswerExport",
+   "method": "snap_codes_answer",
+   "errors":
+   [{"type": "EthLib.Execution.Network.SnapError",
+     "codes":
+     [{"constructor": "unknownId", "code": 1},
+      {"constructor": "rlp", "code": 2}]}],
+   "error_class": "SnapError",
+   "docstring":
+   "Whether the ByteCodes data `response` answers the GetByteCodes data `request`.\n\nIt must repeat the request ID, and the codes must hash to requested hashes, in order."},
+  {"summary":
+   "Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request`, given the access list hash of each requested block.",
+   "signature":
+   "(request: bytes, response: bytes, expected: list[bytes]) -> bool",
+   "operation": "EthLib.Execution.Network.Snap.Exports.accessListsAnswerExport",
+   "method": "snap_access_lists_answer",
+   "errors":
+   [{"type": "EthLib.Execution.Network.SnapError",
+     "codes":
+     [{"constructor": "unknownId", "code": 1},
+      {"constructor": "rlp", "code": 2}]}],
+   "error_class": "SnapError",
+   "docstring":
+   "Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data\n`request`, given the access list hash of each requested block."},
+  {"summary": "The full RLP form of an account in slim form.",
+   "signature": "(slim: bytes) -> bytes",
+   "operation": "EthLib.Execution.Network.Snap.Exports.fullAccountExport",
+   "method": "snap_full_account",
+   "errors": [],
+   "error_class": "SnapError",
+   "docstring": "The full RLP form of an account in slim form."},
+  {"summary":
    "The bytes a Snappy block decompresses to, or why it is not a valid block.",
    "signature": "(block: bytes) -> bytes",
    "operation": "EthLib.Networking.Snappy.decompress",

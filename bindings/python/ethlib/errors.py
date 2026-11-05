@@ -141,6 +141,10 @@ class EthWireError(EthLibError, ValueError):
     """
 
 
+class SnapError(EthLibError, ValueError):
+    """A snap message was rejected, with the code of its error, or 0 for a bad argument."""
+
+
 class TransactionError(EthLibError, ValueError):
     """A transaction or its network form was rejected, or a fork name is unknown."""
 
@@ -209,6 +213,7 @@ __all__ = [
     "Discv4Error",
     "ForkIdError",
     "EthWireError",
+    "SnapError",
     "TransactionError",
     "VrfError",
     "TrieError",
