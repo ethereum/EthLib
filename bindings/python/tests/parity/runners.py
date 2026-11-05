@@ -57,8 +57,6 @@ _GLOAS = {
     "fork": "the upgrade of a Fulu state to Gloas (G53)",
     "transition": "the upgrade to Gloas (G53) and the Gloas state transition (G52)",
     "operations": "the Gloas attestations, slashings and operations (G50)",
-    "operations/builder_deposit_request": "the builder deposit and exit requests (G46)",
-    "operations/builder_exit_request": "the builder deposit and exit requests (G46)",
     "operations/parent_execution_payload": "the parent execution payload (G48)",
     "operations/deposit_request": "the parent execution payload (G48)",
     "operations/withdrawal_request": "the parent execution payload (G48)",
