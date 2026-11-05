@@ -43,7 +43,7 @@ A nonzero constant has no root, and the zero constant means that the cell is val
 
 So an accepted cell is valid without a random oracle.
 
-The games do not cover a batch of many cells under one challenge, as clients run it.
+Another file states code-binding with one batch check of all opened cells of a commitment.
 
 Each reduction runs the adversary once.
 
@@ -249,7 +249,7 @@ private theorem zipIdx_mapM_validates {ε : Type} {g : Bytes48 × Nat → Except
 /-- A batch of cells that returns validates every commitment and every proof.
 
 It is stated on variables, so the kernel never evaluates a cell. -/
-private theorem validates_of_verifyCellKzgProofBatch {s : TrustedSetup} {bs : Array Bytes48}
+theorem validates_of_verifyCellKzgProofBatch {s : TrustedSetup} {bs : Array Bytes48}
     {cellIndices : Array CellIndex} {cells : Array Cell} {ps : Array Bytes48} {b : Bool}
     (h : verifyCellKzgProofBatch s bs cellIndices cells ps = .ok b) :
     (∀ c ∈ bs, validateKzgG1 c = true) ∧ (∀ p ∈ ps, validateKzgG1 p = true) := by
