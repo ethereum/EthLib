@@ -38,23 +38,40 @@ def reqRespParseProtocolIdExport (text : ByteArray) : Result ByteArray := do
   let some id := ProtocolId.parse? text | throw (0, s!"{text} names no protocol")
   return jsonBytes (toJson (id.protocol.name, id.version))
 
-/-- The request and response message of a name at a configuration and a fork. -/
-def reqRespMessageOf (config : Config) (fork : Fork) : String → Option Container
+/-- The request and response message of a name at a preset, a configuration and a fork.
+
+A request of a protocol that the fork does not define has no message. -/
+def reqRespMessageOf (preset : Preset) (config : Config) (fork : Fork) :
+    String → Option Container
   | "Status" => some ⟨Status fork⟩
   | "Goodbye" | "Ping" => some ⟨UInt64⟩
   | "MetaData" => some ⟨MetaData config fork⟩
   | "BeaconBlocksByRangeRequest" => some ⟨BeaconBlocksByRangeRequest⟩
   | "BeaconBlocksByRootRequest" => some ⟨BeaconBlocksByRootRequest config fork⟩
   | "ErrorMessage" => some ⟨ErrorMessage⟩
+  | "LightClientUpdatesByRangeRequest" =>
+    if .altair ≤ fork then some ⟨LightClientUpdatesByRangeRequest⟩ else none
+  | "BlobSidecarsByRangeRequest" =>
+    if .dencun ≤ fork then some ⟨BlobSidecarsByRangeRequest⟩ else none
+  | "BlobSidecarsByRootRequest" =>
+    if .dencun ≤ fork then some ⟨BlobSidecarsByRootRequest config fork⟩ else none
+  | "DataColumnSidecarsByRangeRequest" =>
+    if .fusaka ≤ fork then some ⟨DataColumnSidecarsByRangeRequest preset⟩ else none
+  | "DataColumnSidecarsByRootRequest" =>
+    if .fusaka ≤ fork then some ⟨DataColumnSidecarsByRootRequest preset config⟩ else none
+  | "BeaconBlocksByHeadRequest" =>
+    if .fusaka ≤ fork then some ⟨BeaconBlocksByHeadRequest⟩ else none
   | _ => none
 
 /-- The root of the message that the bytes encode, then the bytes of that message. -/
 @[export eth_consensus_reqresp_message]
 def reqRespMessageExport (name fork type data : ByteArray) : Result ByteArray := do
-  let config ← configOf (← nameOf name)
+  let name ← nameOf name
+  let preset ← presetOf name
+  let config ← configOf name
   let fork ← forkUpTo .bpo5 fork
   let type ← nameOf type
-  let some message := reqRespMessageOf config fork type
+  let some message := reqRespMessageOf preset config fork type
     | throw (0, s!"no message {type} at {fork.name}")
   let value ← runSsz "input rejected" (SszType.deserialize message.type data)
   let root ← runSsz "root rejected" (SszType.hashTreeRoot value)
