@@ -16,8 +16,6 @@ from .test_data_column import replacements
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "operations"
 
 # The file of the operation of each handler, and the forks whose rule EthLib holds.
-# Gloas also cancels the builder payments of a slashed proposer, which EthLib does not hold yet,
-# so the slashings stop at Fulu.
 # Electra changes attestations and new validators, and Deneb the signature of exits.
 # Gloas moves the execution payload out of the block.
 # From Gloas the withdrawals take no payload, so their cases have no operation file.
@@ -28,11 +26,11 @@ HANDLERS = {
     ),
     "proposer_slashing": (
         "proposer_slashing",
-        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
+        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas"),
     ),
     "attester_slashing": (
         "attester_slashing",
-        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
+        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas"),
     ),
     "attestation": ("attestation", ("phase0", "altair", "bellatrix", "capella", "deneb")),
     "deposit": ("deposit", ("phase0", "altair", "bellatrix", "capella", "deneb")),

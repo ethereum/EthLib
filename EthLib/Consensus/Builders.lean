@@ -49,10 +49,6 @@ def convertValidatorIndexToBuilderIndex (index : ValidatorIndex) : BuilderIndex 
 def isBuilderWithdrawalCredential (credentials : Bytes32) : Bool :=
   credentials[0] == BUILDER_WITHDRAWAL_PREFIX[0]
 
-/-- The payment of no bid: every field is zero. -/
-def BuilderPendingPayment.empty : BuilderPendingPayment :=
-  ⟨0, ⟨Vector.replicate 20 0, 0, 0⟩, 0⟩
-
 /-- The sum of the amounts that some withdrawals owe a builder, on natural numbers. -/
 def owedBy (index : BuilderIndex) (withdrawals : List BuilderPendingWithdrawal) : Nat :=
   (withdrawals.map fun withdrawal =>
