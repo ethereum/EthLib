@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: operations
+handler: execution_payload_bid
+suite: pyspec_tests
+case: process_execution_payload_bid_wrong_slot

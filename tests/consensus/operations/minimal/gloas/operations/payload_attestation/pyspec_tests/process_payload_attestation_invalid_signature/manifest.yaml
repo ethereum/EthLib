@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: operations
+handler: payload_attestation
+suite: pyspec_tests
+case: process_payload_attestation_invalid_signature
