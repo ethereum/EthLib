@@ -504,43 +504,6 @@ theorem moveEther_insufficient (fork : Fork) (tx : TransactionState) (sender rec
     tx.moveEther fork sender recipient amount = .error (.insufficientBalance sender) := by
   simp [moveEther, modifyState, h, bind, Except.bind]
 
-/-- Moving ether between two addresses keeps the sum of their balances.
-
-Every other balance is unchanged. -/
-theorem moveEther_balance {fork : Fork} {tx tx' : TransactionState} {sender recipient : Address}
-    {amount : U256} (hne : sender ≠ recipient)
-    (h : tx.moveEther fork sender recipient amount = .ok tx') :
-    (tx'.getAccount sender).balance.toNat + (tx'.getAccount recipient).balance.toNat =
-        (tx.getAccount sender).balance.toNat + (tx.getAccount recipient).balance.toNat ∧
-      ∀ other, other ≠ sender → other ≠ recipient →
-        tx'.getAccount other = tx.getAccount other := by
-  unfold moveEther at h
-  cases hmid : tx.modifyState fork sender (fun account =>
-      if account.balance < amount then .error (.insufficientBalance sender)
-      else .ok { account with balance := account.balance - amount }) with
-  | error e => simp [hmid, bind, Except.bind] at h
-  | ok mid =>
-    simp only [hmid, bind, Except.bind] at h
-    obtain ⟨debited, hdebit, hsender, hrest⟩ := modifyState_eq_ok hmid
-    obtain ⟨credited, hcredit, hrecipient, hrest'⟩ := modifyState_eq_ok h
-    -- The sender loses the amount without wrapping, and the recipient gains it.
-    split at hdebit
-    · cases hdebit
-    · rename_i hfunds
-      cases hdebit
-      rw [hrest recipient (Ne.symm hne)] at hcredit
-      split at hcredit
-      · rename_i hfit
-        cases hcredit
-        refine ⟨?_, fun other hs hr => by rw [hrest' other hr, hrest other hs]⟩
-        rw [hrest' sender hne, hsender, hrecipient]
-        have hle : amount.toNat ≤ (tx.getAccount sender).balance.toNat := by
-          simpa [BitVec.lt_def] using hfunds
-        simp only [BitVec.toNat_sub_of_le (BitVec.le_def.mpr hle), BitVec.toNat_add,
-          Nat.mod_eq_of_lt hfit]
-        omega
-      · cases hcredit
-
 /-- A change of an account keeps the record of the accounts that the transaction created. -/
 theorem createdAccounts_modifyState {fork : Fork} {tx tx' : TransactionState} {address : Address}
     {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
@@ -778,6 +741,25 @@ theorem moveEther_eq_ok {fork : Fork} {tx tx' : TransactionState} {sender recipi
         · rw [hrest' sender hne, hsender]
         · rw [hrest' other hr, hrest other hs]
       · cases hcredit
+
+/-- Moving ether between two addresses keeps the sum of their balances.
+
+Every other balance is unchanged. -/
+theorem moveEther_balance {fork : Fork} {tx tx' : TransactionState} {sender recipient : Address}
+    {amount : U256} (hne : sender ≠ recipient)
+    (h : tx.moveEther fork sender recipient amount = .ok tx') :
+    (tx'.getAccount sender).balance.toNat + (tx'.getAccount recipient).balance.toNat =
+        (tx.getAccount sender).balance.toNat + (tx.getAccount recipient).balance.toNat ∧
+      ∀ other, other ≠ sender → other ≠ recipient →
+        tx'.getAccount other = tx.getAccount other := by
+  obtain ⟨hfunds, hfit, hsender, hrecipient, hrest⟩ := moveEther_eq_ok hne h
+  refine ⟨?_, hrest⟩
+  rw [hsender, hrecipient]
+  have hle : amount.toNat ≤ (tx.getAccount sender).balance.toNat := by
+    simpa [BitVec.lt_def] using hfunds
+  simp only [BitVec.toNat_sub_of_le (BitVec.le_def.mpr hle), BitVec.toNat_add,
+    Nat.mod_eq_of_lt hfit]
+  omega
 
 /-- Moving ether between two addresses fails exactly in two cases, each with its error.
 
