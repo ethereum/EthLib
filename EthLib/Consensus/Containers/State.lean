@@ -1,18 +1,27 @@
 module
 
 public import EthLib.Consensus.Containers.Block
+public import EthLib.Consensus.Containers.Builder
 public import EthLib.Serialization.Ssz.Typed.Since
 
 /-!
 # `Consensus.Containers.State`
 
-The beacon state, one type for every fork from Phase 0 to Fulu.
+The beacon state, one type for every fork from Phase 0 to Gloas.
 
 Each fork adds its fields after those of the forks before.
 
 Altair replaces the pending attestations of Phase 0 by participation flags, at the same places.
 
+Gloas replaces the latest payload header by the latest block hash, at the same place.
+
 A field that a fork adds or removes holds nothing where it is absent, and its codec skips it.
+
+From Gloas the state is a progressive container, as [EIP-7688] specifies.
+
+Its registry, its balances, its flags and its queues then have no limit in their type.
+
+[EIP-7688]: https://eips.ethereum.org/EIPS/eip-7688#converted-types
 -/
 
 @[expose] public section
@@ -20,6 +29,35 @@ A field that a fork adds or removes holds nothing where it is absent, and its co
 namespace EthLib.Consensus
 
 open Base Cryptography.Bls Serialization.Ssz
+
+/-- The registry of validators. -/
+abbrev Validators (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork Validator preset.VALIDATOR_REGISTRY_LIMIT.toNat
+
+/-- The balance of each validator, in the order of the registry. -/
+abbrev Balances (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork Gwei preset.VALIDATOR_REGISTRY_LIMIT.toNat
+
+/-- From Altair: the participation flags of each validator for one epoch. -/
+abbrev EpochParticipation (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork ParticipationFlags preset.VALIDATOR_REGISTRY_LIMIT.toNat
+
+/-- From Altair: the inactivity score of each validator. -/
+abbrev InactivityScores (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork UInt64 preset.VALIDATOR_REGISTRY_LIMIT.toNat
+
+/-- From Electra: the deposits waiting for the churn. -/
+abbrev PendingDeposits (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork PendingDeposit preset.PENDING_DEPOSITS_LIMIT.toNat
+
+/-- From Electra: the partial withdrawals waiting to be paid. -/
+abbrev PendingPartialWithdrawals (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork PendingPartialWithdrawal
+    preset.PENDING_PARTIAL_WITHDRAWALS_LIMIT.toNat
+
+/-- From Electra: the consolidations waiting for their source to be withdrawable. -/
+abbrev PendingConsolidations (preset : Preset) (fork : Fork) :=
+  ForkList .glamsterdam fork PendingConsolidation preset.PENDING_CONSOLIDATIONS_LIMIT.toNat
 
 /-- The state of the beacon chain after a slot.
 
@@ -33,9 +71,14 @@ Electra also adds the index of the first deposit request of [EIP-6110].
 
 Fulu adds the proposer lookahead of [EIP-7917].
 
+Gloas adds the builders, their payments and withdrawals, and the latest bid of [EIP-7732].
+
+It also adds the availability of recent payloads and the window of payload committees.
+
 [EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer
 [EIP-6110]: https://eips.ethereum.org/EIPS/eip-6110#consensus-layer
 [EIP-7917]: https://eips.ethereum.org/EIPS/eip-7917#specification
+[EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#modified-containers
 -/
 structure BeaconState (preset : Preset) (fork : Fork) where
   /-- The time of the genesis, in seconds since the Unix epoch. -/
@@ -62,9 +105,9 @@ structure BeaconState (preset : Preset) (fork : Fork) where
   /-- The number of deposits that the state has processed. -/
   eth1DepositIndex : UInt64
   /-- The registry of validators. -/
-  validators : SszList Validator preset.VALIDATOR_REGISTRY_LIMIT.toNat
+  validators : Validators preset fork
   /-- The balance of each validator, in the order of the registry. -/
-  balances : SszList Gwei preset.VALIDATOR_REGISTRY_LIMIT.toNat
+  balances : Balances preset fork
   /-- The RANDAO mixes of the recent epochs, in a circular buffer. -/
   randaoMixes : Vector Bytes32 preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
   /-- The slashed balances of the recent epochs, in a circular buffer. -/
@@ -80,11 +123,9 @@ structure BeaconState (preset : Preset) (fork : Fork) where
       (SszList (PendingAttestation preset)
         (preset.MAX_ATTESTATIONS.toNat * preset.SLOTS_PER_EPOCH.toNat))
   /-- From Altair: the flags of each validator for the previous epoch. -/
-  previousEpochParticipation :
-    Since .altair fork (SszList ParticipationFlags preset.VALIDATOR_REGISTRY_LIMIT.toNat)
+  previousEpochParticipation : Since .altair fork (EpochParticipation preset fork)
   /-- From Altair: the flags of each validator for the current epoch. -/
-  currentEpochParticipation :
-    Since .altair fork (SszList ParticipationFlags preset.VALIDATOR_REGISTRY_LIMIT.toNat)
+  currentEpochParticipation : Since .altair fork (EpochParticipation preset fork)
   /-- Whether each of the recent epochs is justified, the latest first. -/
   justificationBits : Bitvector JUSTIFICATION_BITS_LENGTH.toNat
   /-- The justified checkpoint of the previous epoch. -/
@@ -94,13 +135,16 @@ structure BeaconState (preset : Preset) (fork : Fork) where
   /-- The finalized checkpoint. -/
   finalizedCheckpoint : Checkpoint
   /-- From Altair: the inactivity score of each validator. -/
-  inactivityScores : Since .altair fork (SszList UInt64 preset.VALIDATOR_REGISTRY_LIMIT.toNat)
+  inactivityScores : Since .altair fork (InactivityScores preset fork)
   /-- From Altair: the sync committee of the current period. -/
   currentSyncCommittee : Since .altair fork (SyncCommittee preset)
   /-- From Altair: the sync committee of the next period. -/
   nextSyncCommittee : Since .altair fork (SyncCommittee preset)
-  /-- From Bellatrix: the header of the latest execution payload. -/
-  latestExecutionPayloadHeader : Since .bellatrix fork (ExecutionPayloadHeader preset fork)
+  /-- From Bellatrix to Fulu: the header of the latest execution payload. -/
+  latestExecutionPayloadHeader :
+    During .bellatrix .glamsterdam fork (ExecutionPayloadHeader preset fork)
+  /-- From Gloas: the hash of the latest execution block that the chain holds. -/
+  latestBlockHash : Since .glamsterdam fork Hash32
   /-- From Capella: the index of the next withdrawal. -/
   nextWithdrawalIndex : Since .shapella fork WithdrawalIndex
   /-- From Capella: the validator at which the next withdrawal sweep starts. -/
@@ -121,18 +165,31 @@ structure BeaconState (preset : Preset) (fork : Fork) where
   /-- From Electra: the earliest epoch at which a new consolidation may take effect. -/
   earliestConsolidationEpoch : Since .pectra fork Epoch
   /-- From Electra: the deposits waiting for the churn. -/
-  pendingDeposits : Since .pectra fork (SszList PendingDeposit preset.PENDING_DEPOSITS_LIMIT.toNat)
+  pendingDeposits : Since .pectra fork (PendingDeposits preset fork)
   /-- From Electra: the partial withdrawals waiting to be paid. -/
-  pendingPartialWithdrawals :
-    Since .pectra fork
-      (SszList PendingPartialWithdrawal preset.PENDING_PARTIAL_WITHDRAWALS_LIMIT.toNat)
+  pendingPartialWithdrawals : Since .pectra fork (PendingPartialWithdrawals preset fork)
   /-- From Electra: the consolidations waiting for their source to be withdrawable. -/
-  pendingConsolidations :
-    Since .pectra fork (SszList PendingConsolidation preset.PENDING_CONSOLIDATIONS_LIMIT.toNat)
+  pendingConsolidations : Since .pectra fork (PendingConsolidations preset fork)
   /-- From Fulu: the proposer of each slot of the current epoch and the next ones. -/
   proposerLookahead :
     Since .fusaka fork
       (Vector ValidatorIndex ((preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat))
+  /-- From Gloas: the registry of builders. -/
+  builders : Since .glamsterdam fork Builders
+  /-- From Gloas: the builder at which the next withdrawal sweep of builders starts. -/
+  nextWithdrawalBuilderIndex : Since .glamsterdam fork BuilderIndex
+  /-- From Gloas: whether the block of each recent slot has a payload. -/
+  executionPayloadAvailability : Since .glamsterdam fork (ExecutionPayloadAvailability preset)
+  /-- From Gloas: the payments of the bids of the previous and current epochs. -/
+  builderPendingPayments : Since .glamsterdam fork (BuilderPendingPayments preset)
+  /-- From Gloas: the payments to builders and proposers waiting to be withdrawn. -/
+  builderPendingWithdrawals : Since .glamsterdam fork BuilderPendingWithdrawals
+  /-- From Gloas: the bid of the latest block. -/
+  latestExecutionPayloadBid : Since .glamsterdam fork (ExecutionPayloadBid preset fork)
+  /-- From Gloas: the withdrawals that the payload of the latest block must apply. -/
+  payloadExpectedWithdrawals : Since .glamsterdam fork (Withdrawals preset fork)
+  /-- From Gloas: the payload committees of the previous, current and lookahead epochs. -/
+  ptcWindow : Since .glamsterdam fork (PayloadTimelinessCommitteeWindow preset)
 
 namespace BeaconState
 
@@ -146,17 +203,25 @@ def names (fork : Fork) : List String :=
   ["justification_bits", "previous_justified_checkpoint", "current_justified_checkpoint",
     "finalized_checkpoint"] ++
   sinceNames .altair fork ["inactivity_scores", "current_sync_committee", "next_sync_committee"] ++
-  sinceNames .bellatrix fork ["latest_execution_payload_header"] ++
+  duringNames .bellatrix .glamsterdam fork ["latest_execution_payload_header"] ++
+  sinceNames .glamsterdam fork ["latest_block_hash"] ++
   sinceNames .shapella fork
     ["next_withdrawal_index", "next_withdrawal_validator_index", "historical_summaries"] ++
   sinceNames .pectra fork
     ["deposit_requests_start_index", "deposit_balance_to_consume", "exit_balance_to_consume",
       "earliest_exit_epoch", "consolidation_balance_to_consume", "earliest_consolidation_epoch",
       "pending_deposits", "pending_partial_withdrawals", "pending_consolidations"] ++
-  sinceNames .fusaka fork ["proposer_lookahead"]
+  sinceNames .fusaka fork ["proposer_lookahead"] ++
+  sinceNames .glamsterdam fork
+    ["builders", "next_withdrawal_builder_index", "execution_payload_availability",
+      "builder_pending_payments", "builder_pending_withdrawals", "latest_execution_payload_bid",
+      "payload_expected_withdrawals", "ptc_window"]
+
+/-- From Gloas: the layout of a state, its forty-six fields in their order. -/
+def activeFields : List Bool := List.replicate 46 true
 
 instance {preset : Preset} {fork : Fork} : SszType (BeaconState preset fork) :=
-  .container (names fork)
+  .forkContainer .glamsterdam fork activeFields (names fork)
     (fun s => (s.genesisTime, s.genesisValidatorsRoot, s.slot, s.forkVersions, s.latestBlockHeader,
       s.blockRoots, s.stateRoots, s.historicalRoots, s.eth1Data, s.eth1DataVotes,
       s.eth1DepositIndex, s.validators, s.balances, s.randaoMixes, s.slashings,
@@ -164,31 +229,48 @@ instance {preset : Preset} {fork : Fork} : SszType (BeaconState preset fork) :=
       s.currentEpochParticipation, s.justificationBits, s.previousJustifiedCheckpoint,
       s.currentJustifiedCheckpoint, s.finalizedCheckpoint, s.inactivityScores,
       s.currentSyncCommittee, s.nextSyncCommittee, s.latestExecutionPayloadHeader,
+      s.latestBlockHash,
       s.nextWithdrawalIndex, s.nextWithdrawalValidatorIndex, s.historicalSummaries,
       s.depositRequestsStartIndex, s.depositBalanceToConsume, s.exitBalanceToConsume,
       s.earliestExitEpoch, s.consolidationBalanceToConsume, s.earliestConsolidationEpoch,
       s.pendingDeposits, s.pendingPartialWithdrawals, s.pendingConsolidations,
-      s.proposerLookahead))
+      s.proposerLookahead, s.builders, s.nextWithdrawalBuilderIndex,
+      s.executionPayloadAvailability, s.builderPendingPayments, s.builderPendingWithdrawals,
+      s.latestExecutionPayloadBid, s.payloadExpectedWithdrawals, s.ptcWindow))
     (fun (genesisTime, genesisValidatorsRoot, slot, forkVersions, latestBlockHeader, blockRoots,
         stateRoots, historicalRoots, eth1Data, eth1DataVotes, eth1DepositIndex, validators,
         balances, randaoMixes, slashings, previousEpochAttestations, currentEpochAttestations,
         previousEpochParticipation, currentEpochParticipation, justificationBits,
         previousJustifiedCheckpoint, currentJustifiedCheckpoint, finalizedCheckpoint,
         inactivityScores, currentSyncCommittee, nextSyncCommittee, latestExecutionPayloadHeader,
-        nextWithdrawalIndex, nextWithdrawalValidatorIndex, historicalSummaries,
+        latestBlockHash, nextWithdrawalIndex, nextWithdrawalValidatorIndex, historicalSummaries,
         depositRequestsStartIndex, depositBalanceToConsume, exitBalanceToConsume,
         earliestExitEpoch, consolidationBalanceToConsume, earliestConsolidationEpoch,
-        pendingDeposits, pendingPartialWithdrawals, pendingConsolidations, proposerLookahead) =>
+        pendingDeposits, pendingPartialWithdrawals, pendingConsolidations, proposerLookahead,
+        builders, nextWithdrawalBuilderIndex, executionPayloadAvailability, builderPendingPayments,
+        builderPendingWithdrawals, latestExecutionPayloadBid, payloadExpectedWithdrawals,
+        ptcWindow) =>
       ⟨genesisTime, genesisValidatorsRoot, slot, forkVersions, latestBlockHeader, blockRoots,
         stateRoots, historicalRoots, eth1Data, eth1DataVotes, eth1DepositIndex, validators,
         balances, randaoMixes, slashings, previousEpochAttestations, currentEpochAttestations,
         previousEpochParticipation, currentEpochParticipation, justificationBits,
         previousJustifiedCheckpoint, currentJustifiedCheckpoint, finalizedCheckpoint,
         inactivityScores, currentSyncCommittee, nextSyncCommittee, latestExecutionPayloadHeader,
-        nextWithdrawalIndex, nextWithdrawalValidatorIndex, historicalSummaries,
+        latestBlockHash, nextWithdrawalIndex, nextWithdrawalValidatorIndex, historicalSummaries,
         depositRequestsStartIndex, depositBalanceToConsume, exitBalanceToConsume,
         earliestExitEpoch, consolidationBalanceToConsume, earliestConsolidationEpoch,
-        pendingDeposits, pendingPartialWithdrawals, pendingConsolidations, proposerLookahead⟩)
+        pendingDeposits, pendingPartialWithdrawals, pendingConsolidations, proposerLookahead,
+        builders, nextWithdrawalBuilderIndex, executionPayloadAvailability, builderPendingPayments,
+        builderPendingWithdrawals, latestExecutionPayloadBid, payloadExpectedWithdrawals,
+        ptcWindow⟩)
+
+/-- The registry holds at most the number of validators that the preset allows.
+
+Before Gloas the type of the registry says so.
+
+From Gloas the registry is a progressive list, so a theorem that needs the bound takes it. -/
+def RegistryWithinLimit {preset : Preset} {fork : Fork} (state : BeaconState preset fork) : Prop :=
+  state.validators.data.size ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat
 
 end BeaconState
 

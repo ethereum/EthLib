@@ -9,6 +9,10 @@ public import EthLib.Consensus.Proofs.Signing
 
 The active indices are exactly the indices of the active validators, in increasing order.
 
+That needs the registry to stay within the limit of the preset, which its type says before Gloas.
+
+From Gloas the registry is a progressive list, so these theorems take the bound as a hypothesis.
+
 A total balance reads its indices as a set: their order and their repeats do not matter.
 
 A total balance is at least one effective balance increment.
@@ -38,16 +42,19 @@ open Base Uint64 Serialization.Ssz
 
 variable {preset : Preset} {fork : Base.Fork}
 
-/-- A position of the validator registry, as a validator index, keeps its value. -/
-theorem toNat_toUInt64_of_lt {state : BeaconState preset fork} {i : Nat}
-    (lt : i < state.validators.data.size) : i.toUInt64.toNat = i := by
-  have bound := state.validators.bound
+/-- A position of the validator registry, as a validator index, keeps its value.
+
+The registry must stay within the limit of the preset, which its type says before Gloas. -/
+theorem toNat_toUInt64_of_lt {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) {i : Nat} (lt : i < state.validators.data.size) :
+    i.toUInt64.toNat = i := by
+  have bound : state.validators.data.size ≤ _ := within
   have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
 
 /-- An index is active exactly when it names a validator that is active in the epoch. -/
-theorem mem_getActiveValidatorIndices {state : BeaconState preset fork} {epoch : Epoch}
-    {index : ValidatorIndex} :
+theorem mem_getActiveValidatorIndices {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) {epoch : Epoch} {index : ValidatorIndex} :
     index ∈ getActiveValidatorIndices state epoch ↔
       ∃ validator, state.validators.data[index.toNat]? = some validator ∧
         isActiveValidator validator epoch = true := by
@@ -58,14 +65,15 @@ theorem mem_getActiveValidatorIndices {state : BeaconState preset fork} {epoch :
     have lt : i < state.validators.data.size := by
       have := (List.getElem?_eq_some_iff.mp found).1
       simpa using this
-    rw [toNat_toUInt64_of_lt lt]
+    rw [toNat_toUInt64_of_lt within lt]
     exact ⟨validator, by simpa using found, active⟩
   · rintro ⟨validator, found, active⟩
     refine ⟨validator, index.toNat, by simpa using found, active, ?_⟩
     simp
 
 /-- The active indices increase strictly. -/
-theorem getActiveValidatorIndices_sorted (state : BeaconState preset fork) (epoch : Epoch) :
+theorem getActiveValidatorIndices_sorted {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) (epoch : Epoch) :
     (getActiveValidatorIndices state epoch).Pairwise (· < ·) := by
   unfold getActiveValidatorIndices
   have base : state.validators.data.toList.zipIdx.Pairwise (fun a b => a.2 < b.2) := by
@@ -79,7 +87,7 @@ theorem getActiveValidatorIndices_sorted (state : BeaconState preset fork) (epoc
   obtain ⟨-, rfl⟩ := hb
   have hi : i < state.validators.data.size := by simpa using (List.mem_zipIdx' mi).1
   have hj : j < state.validators.data.size := by simpa using (List.mem_zipIdx' mj).1
-  rw [UInt64.lt_iff_toNat_lt, toNat_toUInt64_of_lt hi, toNat_toUInt64_of_lt hj]
+  rw [UInt64.lt_iff_toNat_lt, toNat_toUInt64_of_lt within hi, toNat_toUInt64_of_lt within hj]
   exact lt
 
 /-- Marking indices one after the other sets exactly the entries that some index names. -/
@@ -189,13 +197,13 @@ theorem getTotalBalance_congr {state : BeaconState preset fork}
     fun ⟨inside, rest⟩ => ⟨fun i m => inside i ((same i).mp m), rest⟩⟩
 
 /-- The total active balance never fails on an index: every active index names a validator. -/
-theorem getTotalActiveBalance_ne_indexOutOfRange (state : BeaconState preset fork)
-    (index : ValidatorIndex) :
+theorem getTotalActiveBalance_ne_indexOutOfRange {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) (index : ValidatorIndex) :
     getTotalActiveBalance state ≠ .error (.indexOutOfRange index) := by
   have inside : ∀ i ∈ getActiveValidatorIndices state (getCurrentEpoch state),
       i.toNat < state.validators.data.size := by
     intro i member
-    obtain ⟨_, found, -⟩ := mem_getActiveValidatorIndices.mp member
+    obtain ⟨_, found, -⟩ := (mem_getActiveValidatorIndices within).mp member
     exact (Array.getElem?_eq_some_iff.mp found).1
   have none : (getActiveValidatorIndices state (getCurrentEpoch state)).find?
       (state.validators.data.size ≤ ·.toNat) = none := by
@@ -241,23 +249,24 @@ theorem getPreviousEpoch_add_one {state : BeaconState preset fork}
     apply UInt64.toNat_inj.mp
     simp [one]
 
-/-- The number of active validators fits in 64 bits, since the registry does. -/
-theorem length_getActiveValidatorIndices_lt (state : BeaconState preset fork) (epoch : Epoch) :
+/-- The number of active validators fits in 64 bits, when the registry stays within its limit. -/
+theorem length_getActiveValidatorIndices_lt {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) (epoch : Epoch) :
     (getActiveValidatorIndices state epoch).length < 2 ^ 64 := by
   unfold getActiveValidatorIndices
   refine Nat.lt_of_le_of_lt (List.length_filterMap_le _ _) ?_
-  have bound := state.validators.bound
+  have bound : state.validators.data.size ≤ _ := within
   have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   simp only [List.length_zipIdx, Array.length_toList]
   omega
 
 /-- The number of active validators, as a 64-bit integer, keeps its value. -/
-theorem toNat_length_getActiveValidatorIndices (state : BeaconState preset fork)
-    (epoch : Epoch) :
+theorem toNat_length_getActiveValidatorIndices {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) (epoch : Epoch) :
     (getActiveValidatorIndices state epoch).length.toUInt64.toNat =
       (getActiveValidatorIndices state epoch).length := by
   rw [Nat.toUInt64_eq, UInt64.toNat_ofNat',
-    Nat.mod_eq_of_lt (length_getActiveValidatorIndices_lt state epoch)]
+    Nat.mod_eq_of_lt (length_getActiveValidatorIndices_lt within epoch)]
 
 /-- Each slot has at least one committee. -/
 theorem one_le_getCommitteeCountPerSlot (state : BeaconState preset fork) (epoch : Epoch) :
