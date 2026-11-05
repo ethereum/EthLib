@@ -82,7 +82,7 @@ theorem nodup_toList_filter (s : Std.ExtTreeSet Bytes32) (p : Bytes32 → Bool) 
 /-- The entry of every account record passes the checks of one account. -/
 theorem checkAccount_toChanges (address : Address) (r : AccountRecord) :
     checkAccount (r.toChanges address) = .ok () := by
-  simp only [checkAccount, AccountRecord.toChanges, bind_eq_ok_unit, ensure_eq_ok, forM_eq_ok]
+  simp only [checkAccount, AccountRecord.toChanges, bind_unit_ok_iff, ensure_eq_ok, forM_ok_iff]
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · refine ascending_of_pairwise (pairwise_lt_mergeSort (fun s : SlotChanges => s.slot.toNat) ?_)
     simpa [List.map_map, Function.comp_def] using

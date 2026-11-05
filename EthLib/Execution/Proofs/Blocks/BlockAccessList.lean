@@ -220,26 +220,12 @@ theorem checkAddresses_eq_ok_iff (bal : BlockAccessList) :
 theorem ensure_eq_ok {test : Bool} {error : Error} : ensure test error = .ok () ↔ test = true := by
   cases test <;> simp [ensure]
 
-/-- Two checks in a row pass exactly when each passes. -/
-theorem bind_eq_ok_unit {x : Except Error Unit} {f : Unit → Except Error Unit} :
-    (x >>= f) = .ok () ↔ x = .ok () ∧ f () = .ok () := by
-  cases x <;> simp [bind, Except.bind]
-
-/-- A check of each element of a list passes exactly when it passes on every element. -/
-theorem forM_eq_ok {α : Type} {l : List α} {f : α → Except Error Unit} :
-    l.forM f = .ok () ↔ ∀ a ∈ l, f a = .ok () := by
-  induction l with
-  | nil => simp [pure, Except.pure]
-  | cons a rest ih =>
-    simp only [List.forM, bind_eq_ok_unit, List.forall_mem_cons]
-    exact and_congr_right fun _ => ih
-
 /-- The checks of a list pass exactly when each of its three parts passes. -/
 theorem check_eq_ok_iff (bal : BlockAccessList) (gasLimit : Nat) :
     check bal gasLimit = .ok () ↔ (∀ a ∈ bal, checkAccount a = .ok ()) ∧
       ascending (bal.map (addressKey ·.address)) = true ∧
       itemCount bal ≤ gasLimit / ITEM_COST := by
-  simp only [check, bind_eq_ok_unit, forM_eq_ok, checkAddresses_eq_ok_iff, ensure_eq_ok,
+  simp only [check, bind_unit_ok_iff, forM_ok_iff, checkAddresses_eq_ok_iff, ensure_eq_ok,
     decide_eq_true_eq]
 
 /-- A list that passes the checks names each account once. -/
@@ -253,7 +239,7 @@ theorem nodup_addresses_of_check {bal : BlockAccessList} {gasLimit : Nat}
 /-- In an account that passes its checks, no key is written twice, read twice, or both. -/
 theorem nodup_keys_of_checkAccount {a : AccountChanges} (h : checkAccount a = .ok ()) :
     (a.storageChanges.map (·.slot.toNat) ++ a.storageReads.map (·.toNat)).Nodup := by
-  simp only [checkAccount, bind_eq_ok_unit, ensure_eq_ok, forM_eq_ok] at h
+  simp only [checkAccount, bind_unit_ok_iff, ensure_eq_ok, forM_ok_iff] at h
   obtain ⟨hSlots, -, hReads, hDisjoint, -⟩ := h
   refine List.nodup_append.mpr ⟨nodup_of_ascending hSlots, nodup_of_ascending hReads, ?_⟩
   intro x hx y hy hxy
