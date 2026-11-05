@@ -623,6 +623,22 @@ def eth_receipts_match(version: int, fork: str, receipts_root: bytes, receipts: 
     """Whether the receipts of a block, as a version sends them, match the receipts root of its header."""
     ...
 
+def snap_message_decode(version: int, id: int, data: bytes) -> bytes:
+    """The canonical data of the message with the ID `id` and the data `data`, on a version."""
+    ...
+
+def snap_codes_answer(version: int, request: bytes, response: bytes) -> bool:
+    """Whether the ByteCodes data `response` answers the GetByteCodes data `request`."""
+    ...
+
+def snap_access_lists_answer(request: bytes, response: bytes, expected: list[bytes]) -> bool:
+    """Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request`, given the access list hash of each requested block."""
+    ...
+
+def snap_full_account(slim: bytes) -> bytes:
+    """The full RLP form of an account in slim form."""
+    ...
+
 def snappy_decompress(block: bytes) -> bytes:
     """The bytes a Snappy block decompresses to, or why it is not a valid block."""
     ...

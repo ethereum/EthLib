@@ -73,6 +73,7 @@ PyObject* DEVP2P_ERROR;
 PyObject* DISCV4_ERROR;
 PyObject* FORK_ID_ERROR;
 PyObject* ETH_WIRE_ERROR;
+PyObject* SNAP_ERROR;
 PyObject* TRANSACTION_ERROR;
 PyObject* VRF_ERROR;
 PyObject* TRIE_ERROR;
@@ -662,6 +663,10 @@ static PyMethodDef methods[] = {
   {"eth_check_pooled", py_eth_check_pooled, METH_VARARGS, DOC_eth_check_pooled},
   {"eth_wire_hash", py_eth_wire_hash, METH_VARARGS, DOC_eth_wire_hash},
   {"eth_receipts_match", py_eth_receipts_match, METH_VARARGS, DOC_eth_receipts_match},
+  {"snap_message_decode", py_snap_message_decode, METH_VARARGS, DOC_snap_message_decode},
+  {"snap_codes_answer", py_snap_codes_answer, METH_VARARGS, DOC_snap_codes_answer},
+  {"snap_access_lists_answer", py_snap_access_lists_answer, METH_VARARGS, DOC_snap_access_lists_answer},
+  {"snap_full_account", py_snap_full_account, METH_VARARGS, DOC_snap_full_account},
   {"snappy_decompress", py_snappy_decompress, METH_VARARGS, DOC_snappy_decompress},
   {"snappy_compress_literal", py_snappy_compress_literal, METH_VARARGS, DOC_snappy_compress_literal},
   {"snappy_decode_frames", py_snappy_decode_frames, METH_VARARGS, DOC_snappy_decode_frames},
@@ -751,6 +756,7 @@ PyInit__native(void) {
     DISCV4_ERROR = PyObject_GetAttrString(errors, "Discv4Error");
     FORK_ID_ERROR = PyObject_GetAttrString(errors, "ForkIdError");
     ETH_WIRE_ERROR = PyObject_GetAttrString(errors, "EthWireError");
+    SNAP_ERROR = PyObject_GetAttrString(errors, "SnapError");
     TRANSACTION_ERROR = PyObject_GetAttrString(errors, "TransactionError");
     VRF_ERROR = PyObject_GetAttrString(errors, "VrfError");
     TRIE_ERROR = PyObject_GetAttrString(errors, "TrieError");

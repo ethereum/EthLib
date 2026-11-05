@@ -160,6 +160,7 @@ extern PyObject* DEVP2P_ERROR;
 extern PyObject* DISCV4_ERROR;
 extern PyObject* FORK_ID_ERROR;
 extern PyObject* ETH_WIRE_ERROR;
+extern PyObject* SNAP_ERROR;
 extern PyObject* TRANSACTION_ERROR;
 extern PyObject* VRF_ERROR;
 extern PyObject* TRIE_ERROR;
@@ -367,6 +368,10 @@ PyObject* py_eth_check_headers                            (PyObject* self, PyObj
 PyObject* py_eth_check_pooled                             (PyObject* self, PyObject* args);
 PyObject* py_eth_wire_hash                                (PyObject* self, PyObject* args);
 PyObject* py_eth_receipts_match                           (PyObject* self, PyObject* args);
+PyObject* py_snap_message_decode                          (PyObject* self, PyObject* args);
+PyObject* py_snap_codes_answer                            (PyObject* self, PyObject* args);
+PyObject* py_snap_access_lists_answer                     (PyObject* self, PyObject* args);
+PyObject* py_snap_full_account                            (PyObject* self, PyObject* args);
 PyObject* py_receipt_reencode                             (PyObject* self, PyObject* args);
 PyObject* py_receipt_logs_bloom                           (PyObject* self, PyObject* args);
 PyObject* py_block_make_receipts                          (PyObject* self, PyObject* args);

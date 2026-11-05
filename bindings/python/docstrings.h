@@ -467,6 +467,18 @@
 #define DOC_eth_receipts_match \
   "Whether the receipts of a block, as a version sends them, match the receipts root of its header."
 
+#define DOC_snap_message_decode \
+  "The canonical data of the message with the ID `id` and the data `data`, on a version."
+
+#define DOC_snap_codes_answer \
+  "Whether the ByteCodes data `response` answers the GetByteCodes data `request`."
+
+#define DOC_snap_access_lists_answer \
+  "Whether the BlockAccessLists data `response` answers the GetBlockAccessLists data `request`, given the access list hash of each requested block."
+
+#define DOC_snap_full_account \
+  "The full RLP form of an account in slim form."
+
 #define DOC_snappy_decompress \
   "The bytes a Snappy block decompresses to, or why it is not a valid block."
 
