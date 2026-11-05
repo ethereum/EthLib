@@ -225,6 +225,35 @@ def decodeTransaction (fork : Fork) (bytes : ByteArray) : Except TransactionErro
       | none => .error (.unsupportedType first)
   else .error .emptyTransaction
 
+/-- The transaction that one item of the transactions of a block holds at `fork`.
+
+A list is a legacy transaction, at every fork.
+
+A byte string is a typed transaction: its type, then its payload.
+
+[EIP-2718][eip-2718] tells the two forms of bytes apart by the first byte.
+
+A byte from `0` to `0x7f` is a type, and a byte from `0xc0` to `0xfe` starts a legacy transaction.
+
+From Glamsterdam, a byte string whose first byte is from `0xc0` to `0xfe` is a legacy transaction.
+
+No EIP says that a block may hold a legacy transaction in this form.
+
+EthLib follows execution-specs at commit [`a7dbafac`][es] here, whose Amsterdam fork accepts it.
+
+The first byte `0xff` is a type that no fork has, as before Glamsterdam.
+
+[eip-2718]: https://eips.ethereum.org/EIPS/eip-2718#backwards-compatibility
+[es]: https://github.com/ethereum/execution-specs/tree/a7dbafac0c0ec82e7b2e20959cc7c00ce958442a -/
+def decodeBodyTransaction (fork : Fork) : Item → Except TransactionError Transaction
+  | .list items => (.legacy <$> Codec.ofItem (.list items)).mapError .decoding
+  | .bytes bytes =>
+    if h : 0 < bytes.size then
+      if bytes[0] < 0xc0 ∨ (.glamsterdam ≤ fork ∧ bytes[0] ≠ 0xff) then
+        decodeTransaction fork bytes
+      else .error (.unsupportedType bytes[0])
+    else .error .emptyTransaction
+
 /-- The hash of a transaction: the Keccak-256 hash of its bytes. -/
 def transactionHash (tx : Transaction) : Except RlpError Hash32 := do
   return Cryptography.Hash.Keccak.keccak256 (← encodeTransaction tx)

@@ -106,14 +106,30 @@ def test_body_roots_cover_both_cases() -> None:
     assert types == {1, 2, 3, 4}
 
 
-def test_typed_transaction_must_start_with_its_type() -> None:
+def test_legacy_transaction_in_bytes_before_glamsterdam() -> None:
     case = next(c for c in CASES if c["network"] == "Prague")
     block = rlp.decode(bytes.fromhex(case["rlp"]))
-    # A byte string that holds a legacy transaction is no typed transaction.
+    # Before Glamsterdam, a byte string that holds a legacy transaction is no transaction.
     block[1] = [rlp.encode([b"", b"", b"", b"", b"", b"", b"", b"", b""])]
-    with pytest.raises(blocks.BlockError, match="does not start with its type") as error:
+    with pytest.raises(blocks.BlockError, match="unsupportedType 201") as error:
         blocks.transactions_root("pectra", rlp.encode(block))
     assert error.value.code == 0
+
+
+def test_legacy_transaction_in_bytes_from_glamsterdam() -> None:
+    cases = [c for c in CASES if c["network"] == "Amsterdam"
+             and any(isinstance(tx, list) for tx in rlp.decode(bytes.fromhex(c["rlp"]))[1])]
+    assert cases, "no vendored Amsterdam block holds a legacy transaction"
+    case = cases[0]
+    block = rlp.decode(bytes.fromhex(case["rlp"]))
+    root = block[0][4]
+    # From Glamsterdam, each legacy transaction may come as the byte string of its encoding.
+    block[1] = [rlp.encode(tx) if isinstance(tx, list) else tx for tx in block[1]]
+    assert blocks.transactions_root("glamsterdam", rlp.encode(block)) == root
+    # The first byte 0xff is a type that no fork has.
+    block[1] = [b"\xff" + rlp.encode(tx)[1:] for tx in block[1][:1]]
+    with pytest.raises(blocks.BlockError, match="unsupportedType 255"):
+        blocks.transactions_root("glamsterdam", rlp.encode(block))
 
 
 def test_trailing_byte_rejected() -> None:
