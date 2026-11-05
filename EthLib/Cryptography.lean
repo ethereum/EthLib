@@ -13,6 +13,7 @@ public import EthLib.Cryptography.Secp256r1
 public import EthLib.Cryptography.AltBn128
 public import EthLib.Cryptography.Aes
 public import EthLib.Cryptography.Ethash
+public import EthLib.Cryptography.Montgomery
 
 /-!
 # `EthLib.Cryptography`
