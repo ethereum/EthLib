@@ -12,7 +12,9 @@ The fork at an epoch is the latest of these forks whose first epoch is at or bef
 
 From Fulu on, the blob schedule raises the most blobs in a block at given epochs.
 
-Such a change is not a fork of the consensus layer, so the fork at an epoch is never BPO1 or BPO2.
+Such a change is not a fork of the consensus layer.
+
+So the fork at an epoch is never one of BPO1 to BPO5.
 
 From Gloas on, a gas limit schedule recommends a gas limit at given epochs, without a validity rule.
 -/
