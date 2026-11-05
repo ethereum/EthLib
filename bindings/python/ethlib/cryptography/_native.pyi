@@ -611,6 +611,10 @@ def eth_wire_hash(tx: bytes) -> bytes:
     """The hash of a transaction as it crosses the wire."""
     ...
 
+def eth_receipts_match(version: int, fork: str, receipts_root: bytes, receipts: bytes) -> bool:
+    """Whether the receipts of a block, as a version sends them, match the receipts root of its header."""
+    ...
+
 def snappy_decompress(block: bytes) -> bytes:
     """The bytes a Snappy block decompresses to, or why it is not a valid block."""
     ...

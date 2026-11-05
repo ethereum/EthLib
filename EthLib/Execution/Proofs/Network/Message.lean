@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Network.Message
 public import EthLib.Execution.Proofs.Network.Blocks
+public import EthLib.Execution.Proofs.Network.Receipts
 public import EthLib.Execution.Proofs.Network.Status
 public import EthLib.Execution.Proofs.Network.Transactions
 
@@ -31,7 +32,7 @@ namespace Message
 attribute [local simp] STATUS_ID NEW_BLOCK_HASHES_ID TRANSACTIONS_ID GET_BLOCK_HEADERS_ID
   BLOCK_HEADERS_ID GET_BLOCK_BODIES_ID BLOCK_BODIES_ID NEW_BLOCK_ID
   NEW_POOLED_TRANSACTION_HASHES_ID GET_POOLED_TRANSACTIONS_ID POOLED_TRANSACTIONS_ID
-  BLOCK_RANGE_UPDATE_ID
+  GET_RECEIPTS_ID RECEIPTS_ID BLOCK_RANGE_UPDATE_ID
 
 /-- The envelope `[request-id, payload]` reads back as its request ID and its payload. -/
 theorem readEnvelope_envelope {α : Type} [Codec α] [LawfulCodec α] (i : UInt64) (x : α) :
@@ -45,18 +46,50 @@ theorem list_eq_toItem (items : List Item) : Item.list items = Codec.toItem item
   congr 1
   exact (List.map_id' items).symm
 
+/-- Lists of lists of items are the item of themselves as nested lists. -/
+theorem lists_eq_toItem (lists : List (List Item)) :
+    Item.list (lists.map .list) = Codec.toItem lists := by
+  show Item.list (lists.map .list) = .list (lists.map Codec.toItem)
+  congr 1
+  apply List.map_congr_left
+  intro l _
+  exact list_eq_toItem l
+
+/-- The envelope of a version reads back as its request ID, its part and its payload, when the
+part is present exactly from eth/70 on. -/
+theorem readWithPart_withPart {α β : Type} [Codec α] [LawfulCodec α] [Codec β] [LawfulCodec β]
+    {version : EthVersion} (i : UInt64) (part : Option α) (x : β)
+    (h : part.isSome ↔ EthVersion.eth70 ≤ version) :
+    readWithPart version (withPart i part (Codec.toItem x)) = .ok (i, part, x) := by
+  cases part with
+  | none =>
+    have hv : version < .eth70 := by
+      simp at h
+      exact Nat.lt_of_not_le h
+    simp [readWithPart, withPart, hv, readEnvelope_envelope, bind, Except.bind, pure, Except.pure]
+  | some p =>
+    have hv : ¬ version < .eth70 := by
+      simp at h
+      exact Nat.not_lt_of_le h
+    simp [readWithPart, withPart, hv, Item.fields, Item.toItems, Item.field_toItem, bind,
+      Except.bind, pure, Except.pure]
+
 /-- A message has the form of a version.
 
 Status and announcements have the form of their version, and an announcement has as many
 types and sizes as hashes.
 
-BlockRangeUpdate exists from eth/69 on, and the other messages have one form at every version. -/
+BlockRangeUpdate exists from eth/69 on, and the receipt messages carry their part from eth/70 on.
+
+The other messages have one form at every version. -/
 def FitsVersion (version : EthVersion) : Message → Prop
   | .status (.eth68 ..) => version = .eth68
   | .status (.eth69 ..) => version ≠ .eth68
   | .blockRangeUpdate _ => EthVersion.eth69 ≤ version
   | .newPooledTransactionHashes a@(.eth68 ..) => version < .eth72 ∧ a.lengthsAgree
   | .newPooledTransactionHashes a@(.eth72 ..) => version = .eth72 ∧ a.lengthsAgree
+  | .getReceipts _ k _ => (k.isSome ↔ EthVersion.eth70 ≤ version)
+  | .receipts _ b _ => (b.isSome ↔ EthVersion.eth70 ≤ version)
   | _ => True
 
 /-- A message of the form of a version reads back from its ID and its item on that version. -/
@@ -113,6 +146,12 @@ theorem ofItem_toItem {version : EthVersion} {m : Message} (hm : m.FitsVersion v
   | pooledTransactions i txs =>
     simp [ofItem, Message.id, toItem, list_eq_toItem txs, readEnvelope_envelope, Functor.map,
       Except.map, Except.mapError]
+  | getReceipts i k hs =>
+    simp [ofItem, Message.id, toItem, readWithPart_withPart i k hs hm, Functor.map, Except.map,
+      Except.mapError]
+  | receipts i b ls =>
+    simp [ofItem, Message.id, toItem, lists_eq_toItem ls, readWithPart_withPart i b ls hm,
+      Functor.map, Except.map, Except.mapError]
 
 /-- eth/68 rejects BlockRangeUpdate, which eth/69 adds. -/
 theorem ofItem_blockRangeUpdate_eth68 (item : Item) :
@@ -134,10 +173,12 @@ theorem requestId_of_answers {request response : Message} (h : answers request r
 
 /-- Every response type answers its request type when it repeats the request ID. -/
 theorem answers_of_requestId (i : UInt64) (r : HeaderRequest) (hs : List Item)
-    (hashes : List Hash32) (bs txs : List Item) :
+    (hashes : List Hash32) (bs txs : List Item) (k : Option Nat) (b : Option Bool)
+    (ls : List (List Item)) :
     answers (getBlockHeaders i r) (blockHeaders i hs) ∧
       answers (getBlockBodies i hashes) (blockBodies i bs) ∧
-      answers (getPooledTransactions i hashes) (pooledTransactions i txs) := by
+      answers (getPooledTransactions i hashes) (pooledTransactions i txs) ∧
+      answers (getReceipts i k hashes) (receipts i b ls) := by
   simp [answers]
 
 /-- A response of headers that passes the check answers the request, with its request ID. -/

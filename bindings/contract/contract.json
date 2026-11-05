@@ -3343,6 +3343,16 @@
    "docstring":
    "The hash of a transaction as it crosses the wire.\n\nA legacy transaction hashes its RLP list, and a typed one its bytes `tx-type || tx-data`.\n\nA blob transaction in PooledTransactions can come in its network form, the type 3 followed by\n`rlp([tx_payload_body, ...])`, as\n[EIP-4844](https://eips.ethereum.org/EIPS/eip-4844#networking) says.\n\nIts hash is the hash of `0x03 || rlp(tx_payload_body)`, the transaction without its blobs.\n\nThe payload of a canonical blob transaction starts with the chain ID, a scalar, and the network\nform with the body, a list, so the first item tells the two apart."},
   {"summary":
+   "Whether the receipts of a block, as a version sends them, match the receipts root of its header.",
+   "signature":
+   "(version: int, fork: str, receipts_root: bytes, receipts: bytes) -> bool",
+   "operation": "EthLib.Execution.Network.receiptsMatch",
+   "method": "eth_receipts_match",
+   "errors": [],
+   "error_class": "EthWireError",
+   "docstring":
+   "Whether the receipts of a block, as a version sends them, match the receipts root of its header.\n\nThe root is computed over the consensus forms, as \"Receipt Encoding and Validity\" says.\n\nReceipts that do not read, or that have no root, do not match."},
+  {"summary":
    "The bytes a Snappy block decompresses to, or why it is not a valid block.",
    "signature": "(block: bytes) -> bytes",
    "operation": "EthLib.Networking.Snappy.decompress",

@@ -29,7 +29,8 @@ theorem ofItem_eth68 {version : EthVersion} (hv : version < .eth72) (t : ByteArr
 
 /-- The announcement of eth/72 reads back on eth/72. -/
 theorem ofItem_eth72 (t : ByteArray) (s : List Nat) (h : List Hash32)
-    (c : Option (Vector UInt8 16)) : ofItem .eth72 (eth72 t s h c).toItem = .ok (eth72 t s h c) := by
+    (c : Option (Vector UInt8 16)) :
+    ofItem .eth72 (eth72 t s h c).toItem = .ok (eth72 t s h c) := by
   have : ¬ EthVersion.eth72 < .eth72 := by decide
   simp [ofItem, toItem, this, Item.fields, Item.toItems, Item.field_toItem, bind, Except.bind,
     pure, Except.pure]
