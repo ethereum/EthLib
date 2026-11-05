@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: operations
+handler: attestation
+suite: pyspec_tests
+case: one_basic_attestation

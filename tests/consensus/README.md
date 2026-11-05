@@ -83,6 +83,7 @@ A case gives a state before the operation, the operation, and the state after it
 A case without a state after it must be rejected.
 The directory keeps two cases of each handler that EthLib runs, at each fork where it runs.
 These are the block header and the proposer and attester slashings from Phase 0 to Fulu.
+They are also the attestation and the deposit at Phase 0, and the voluntary exit from Phase 0 to Capella.
 At Gloas they are the payload attestation, the execution payload bid, and the builder deposit and exit requests.
 From Gloas a slashing also removes the pending builder payments of the slashed proposer, which EthLib does not hold yet.
 Where the handler has both, one case is valid and one invalid.

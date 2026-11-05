@@ -1,0 +1,6 @@
+preset: minimal
+fork: phase0
+runner: operations
+handler: attestation
+suite: pyspec_tests
+case: invalid_before_inclusion_delay
