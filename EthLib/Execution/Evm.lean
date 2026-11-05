@@ -15,6 +15,7 @@ public import EthLib.Execution.Evm.Stack
 public import EthLib.Execution.Evm.Delegation
 public import EthLib.Execution.Evm.Environment
 public import EthLib.Execution.Evm.Frame
+public import EthLib.Execution.Evm.StateGas
 public import EthLib.Execution.Evm.Step
 public import EthLib.Execution.Evm.StackN
 public import EthLib.Execution.Evm.StackOnly
@@ -50,6 +51,8 @@ The precompiled contracts are here too, because only the EVM calls them.
 The gas prices and the price of memory are here.
 
 The opcodes, the stack, the memory and the state of a frame are here, with the gas meter.
+
+From Glamsterdam, the meter of state gas beside execution gas is here too.
 
 The addresses of the contracts that CREATE and CREATE2 make are here.
 
