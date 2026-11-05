@@ -14,6 +14,7 @@ import operator
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import Literal, TypeGuard, cast
 
 
 def fp(x: int) -> bytes:
@@ -68,7 +69,7 @@ class Namespace:
     """An object with attributes, for `Spec` and `pytest`."""
 
 
-def int_to_bytes(n: int, length: int, byteorder: str) -> bytes:
+def int_to_bytes(n: int, length: int, byteorder: Literal["little", "big"]) -> bytes:
     return n.to_bytes(length, byteorder)
 
 
@@ -163,12 +164,14 @@ def load_spec(path: Path, names: dict) -> Namespace:
                 if isinstance(statement, ast.Assign):
                     value = evaluate(statement.value)
                     for target in statement.targets:
-                        setattr(spec, target.id, value)
-                        evaluate.names[target.id] = value
+                        # Each constant of `Spec` is assigned to a plain name.
+                        name = cast(ast.Name, target).id
+                        setattr(spec, name, value)
+                        evaluate.names[name] = value
     return spec
 
 
-def is_parametrize(node) -> bool:
+def is_parametrize(node) -> TypeGuard[ast.Call]:
     return (
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
@@ -178,9 +181,11 @@ def is_parametrize(node) -> bool:
 
 def rows(node: ast.Call, evaluate: Evaluate) -> tuple[list, list]:
     """The argument names of one `parametrize`, and its rows as (values, id)."""
-    names = [s.strip() for s in node.args[0].value.split(",")]
+    # The names come as one string, and the rows as a list or a tuple.
+    text = cast(str, cast(ast.Constant, node.args[0]).value)
+    names = [s.strip() for s in text.split(",")]
     result = []
-    for element in node.args[1].elts:
+    for element in cast(ast.List | ast.Tuple, node.args[1]).elts:
         if isinstance(element, ast.Call) and getattr(element.func, "attr", "") == "param":
             values = [evaluate(a) for a in element.args]
             case_id = next((evaluate(k.value) for k in element.keywords if k.arg == "id"), None)
@@ -206,11 +211,12 @@ def cases(path: Path, spec: Namespace):
         }
     )
     tree = ast.parse(path.read_text())
+    # Each module assignment is to a plain name, and `pytestmark` holds a list or a tuple.
     module = [
         d
         for node in tree.body
-        if isinstance(node, ast.Assign) and node.targets[0].id == "pytestmark"
-        for d in node.value.elts
+        if isinstance(node, ast.Assign) and cast(ast.Name, node.targets[0]).id == "pytestmark"
+        for d in cast(ast.List | ast.Tuple, node.value).elts
         if is_parametrize(d)
     ]
     count = defaultdict(int)

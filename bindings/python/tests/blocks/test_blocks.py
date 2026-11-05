@@ -157,4 +157,4 @@ def test_unknown_fork_rejected() -> None:
 
 def test_rejects_non_bytes() -> None:
     with pytest.raises(TypeError):
-        blocks.reencode("frontier", "c0")  # type: ignore[arg-type]
+        blocks.reencode("frontier", "c0")  # ty: ignore[invalid-argument-type]

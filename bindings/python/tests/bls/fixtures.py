@@ -2,6 +2,9 @@
 Reference operations come from `py_ecc.bls.G2ProofOfPossession`.
 """
 
+from typing import cast
+
+from eth_typing import BLSSignature
 from py_ecc.bls import G2ProofOfPossession as RefBls
 
 # ---- Messages -------------------------------------------------------------
@@ -43,4 +46,5 @@ def sign(sk: int, msg: bytes) -> bytes:
 
 
 def aggregate(sigs: list[bytes]) -> bytes:
-    return RefBls.Aggregate(sigs)
+    # The reference types its signatures as BLSSignature, and a list is invariant.
+    return RefBls.Aggregate(cast(list[BLSSignature], sigs))

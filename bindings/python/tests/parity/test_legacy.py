@@ -1,5 +1,8 @@
 """Every legacy blockchain test from Frontier to London, through the runners of EthLib."""
 
+from pathlib import Path
+from typing import cast
+
 import pytest
 
 import archives
@@ -7,6 +10,7 @@ import archives
 from . import catalogue, harness
 
 SUITE = "legacytests"
+# None without the archives, and then the mark `archive` skips every test of this file.
 ROOT = (
     (
         archives.unpack(
@@ -31,7 +35,7 @@ pytestmark = pytest.mark.archive(catalogue.LEGACY)
     "case", harness.runnable(CASES), ids=lambda case: f"{case.group}:{case.id}"
 )
 def test_case(case, request, record_property) -> None:
-    harness.run(ROOT, case, DISAGREEMENTS, request, record_property)
+    harness.run(cast(Path, ROOT), case, DISAGREEMENTS, request, record_property)
 
 
 def test_catalogue(record_property) -> None:
@@ -44,15 +48,16 @@ def test_every_group_has_a_runner_or_a_plan() -> None:
 
 def test_every_network_is_placed() -> None:
     # A network that is neither in scope nor listed as out of scope is new upstream.
-    new = catalogue.legacy_networks(ROOT) - set(catalogue.LEGACY_FORKS)
+    new = catalogue.legacy_networks(cast(Path, ROOT)) - set(catalogue.LEGACY_FORKS)
     assert sorted(new - catalogue.LEGACY_OUT_OF_SCOPE) == []
 
 
 def test_vendored_files_are_those_of_the_archive() -> None:
     vendored = sorted(p for p in VENDORED.rglob("*.json"))
     assert vendored
+    root = cast(Path, ROOT)
     for path in vendored:
-        assert path.read_bytes() == (ROOT / path.relative_to(VENDORED)).read_bytes(), path
+        assert path.read_bytes() == (root / path.relative_to(VENDORED)).read_bytes(), path
 
 
 def test_disagreements() -> None:

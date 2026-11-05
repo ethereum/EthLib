@@ -125,17 +125,3 @@ unused-ignore-comment = "error"
 
 [tool.ty.terminal]
 error-on-warning = true
-
-# Findings in the code today, each directory removed from this list by the change that fixes it.
-[[tool.ty.overrides]]
-include = ["bindings/python/ethlib/**", "bindings/python/tests/**"]
-
-[tool.ty.overrides.rules]
-invalid-argument-type = "ignore"
-invalid-assignment = "ignore"
-invalid-return-type = "ignore"
-no-matching-overload = "ignore"
-not-iterable = "ignore"
-not-subscriptable = "ignore"
-unresolved-attribute = "ignore"
-unsupported-operator = "ignore"

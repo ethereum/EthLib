@@ -4,6 +4,7 @@ import json
 import tomllib
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -52,7 +53,9 @@ def run(root: Path, case: Case, suite_disagreements: dict, request, record_prope
 
 def catalogue(cases: list[Case]) -> str:
     """The number of cases and of runnable cases of each row, and the plan for the others."""
-    rows = defaultdict(lambda: {"cases": 0, "runnable": 0, "plans": set()})
+    rows: defaultdict[str, dict[str, Any]] = defaultdict(
+        lambda: {"cases": 0, "runnable": 0, "plans": set()}
+    )
     for case in cases:
         entry = rows[case.row]
         entry["rank"] = case.rank

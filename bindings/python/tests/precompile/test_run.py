@@ -63,9 +63,9 @@ def test_unknown_address(fork: str, address: int) -> None:
 
 def test_rejects_bad_arguments() -> None:
     with pytest.raises(TypeError):
-        run("fusaka", 0x04, "abc", 100)  # type: ignore[arg-type]
+        run("fusaka", 0x04, "abc", 100)  # ty: ignore[invalid-argument-type]
     with pytest.raises(TypeError):
-        run(b"fusaka", 0x04, b"", 100)  # type: ignore[arg-type]
+        run(b"fusaka", 0x04, b"", 100)  # ty: ignore[invalid-argument-type]
     with pytest.raises(OverflowError):
         run("fusaka", 0x04, b"", 2**64)
     with pytest.raises(OverflowError):

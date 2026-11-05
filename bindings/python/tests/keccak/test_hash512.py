@@ -27,4 +27,4 @@ def test_hash512(i: int) -> None:
 def test_rejects_non_bytes() -> None:
     # The binding takes only `bytes`.
     with pytest.raises(TypeError):
-        keccak.keccak512("abc")  # type: ignore[arg-type]
+        keccak.keccak512("abc")  # ty: ignore[invalid-argument-type]

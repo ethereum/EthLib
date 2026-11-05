@@ -34,4 +34,4 @@ def test_rejects_wrong_size(size: int) -> None:
 def test_rejects_non_bytes() -> None:
     # The binding takes only `bytes`.
     with pytest.raises(TypeError):
-        keccak.keccak_f1600(bytearray(200))  # type: ignore[arg-type]
+        keccak.keccak_f1600(bytearray(200))  # ty: ignore[invalid-argument-type]

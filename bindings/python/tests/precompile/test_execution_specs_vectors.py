@@ -5,6 +5,7 @@
 import hashlib
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from ruamel.yaml import YAML
@@ -21,7 +22,7 @@ MODEXP = FILES / "osaka" / "eip7883_modexp_gas_increase" / "vector"
 KZG = FILES / "cancun" / "eip4844_blobs" / "point_evaluation_vectors"
 
 
-def _load(path: Path) -> list:
+def _load(path: Path) -> Any:
     return json.loads(path.read_text())
 
 

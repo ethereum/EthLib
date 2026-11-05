@@ -3,6 +3,8 @@
 These tests write no vectors.
 """
 
+from typing import cast
+
 import pytest
 from py_ecc.bls import G2ProofOfPossession as RefBls
 
@@ -55,7 +57,8 @@ def test_aggregate_matches_reference() -> None:
         RefBls.Sign(sk, msg) for sk, msg in zip(fixtures.PRIVKEYS, fixtures.MESSAGES, strict=True)
     ]
     for n in range(1, len(sigs) + 1):
-        assert bls.aggregate(sigs[:n]) == RefBls.Aggregate(sigs[:n])
+        # The reference types its signatures as BLSSignature, and a list is invariant.
+        assert bls.aggregate(cast(list[bytes], sigs[:n])) == RefBls.Aggregate(sigs[:n])
     assert bls.aggregate([fixtures.G2_POINT_AT_INFINITY]) == fixtures.G2_POINT_AT_INFINITY
 
 

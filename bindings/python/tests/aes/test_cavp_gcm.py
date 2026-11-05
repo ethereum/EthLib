@@ -1,6 +1,7 @@
 """AES-GCM against the test vectors of NIST CAVP, `gcmtestvectors.zip`."""
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -66,7 +67,8 @@ def _cases(params: dict, body: str) -> list[dict]:
             case = dict(params, Count=int(line.split(" = ")[1]))
             cases.append(case)
         elif line == "FAIL":
-            case["FAIL"] = True
+            # A FAIL line follows the Count line of its case.
+            cast(dict, case)["FAIL"] = True
         elif " = " in line and case is not None:
             key, value = line.split(" = ")
             case[key] = bytes.fromhex(value)

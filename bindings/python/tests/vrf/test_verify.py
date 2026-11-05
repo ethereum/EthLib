@@ -81,4 +81,4 @@ def test_wrong_length(field: str, size: int) -> None:
 
 def test_rejects_non_bytes() -> None:
     with pytest.raises(TypeError):
-        vrf.verify(bytearray(fixtures.ROOT_ZERO), 0, fixtures.OPENING_ZERO)  # type: ignore[arg-type]
+        vrf.verify(bytearray(fixtures.ROOT_ZERO), 0, fixtures.OPENING_ZERO)  # ty: ignore[invalid-argument-type]
