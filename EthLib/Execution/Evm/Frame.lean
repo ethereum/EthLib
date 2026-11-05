@@ -14,11 +14,15 @@ The gas meter is a parameter, because a fork can change how an instruction pays.
 
 Up to Fusaka, the meter is one counter of the gas left.
 
-A meter obeys two laws.
+A meter obeys four laws.
 
 A charge lowers the gas left by at least its amount.
 
 An exceptional halt leaves no gas.
+
+A frame starts with the gas it is given.
+
+A credit of gas raises the gas left by exactly that much.
 
 A frame also holds the writes of its transaction so far, and the accrued substate.
 
@@ -49,12 +53,12 @@ class GasMeter (Meter : Type) where
   gasLeft : Meter → Nat
   /-- The meter after an exceptional halt, which consumes all the gas left. -/
   exhaust : Meter → Meter
+  /-- The meter of a frame that starts with `gas`. -/
+  start : Nat → Meter
+  /-- The meter after a message that it ran gives back `amount` gas. -/
+  credit : Meter → Nat → Meter
 
-/-- The laws of a gas meter, which make the execution of a frame end.
-
-A charge lowers the gas left by at least the amount it charges.
-
-An exceptional halt leaves no gas. -/
+/-- The laws of a gas meter. -/
 class LawfulGasMeter (Meter : Type) [GasMeter Meter] : Prop where
   /-- A charge of `amount` lowers the gas left by at least `amount`. -/
   gasLeft_charge {meter after : Meter} {amount : Nat} :
@@ -62,12 +66,19 @@ class LawfulGasMeter (Meter : Type) [GasMeter Meter] : Prop where
       GasMeter.gasLeft after + amount ≤ GasMeter.gasLeft meter
   /-- An exceptional halt leaves no gas. -/
   gasLeft_exhaust (meter : Meter) : GasMeter.gasLeft (GasMeter.exhaust meter) = 0
+  /-- A frame starts with the gas it is given. -/
+  gasLeft_start (gas : Nat) : GasMeter.gasLeft (GasMeter.start (Meter := Meter) gas) = gas
+  /-- A credit of `amount` raises the gas left by exactly `amount`. -/
+  gasLeft_credit (meter : Meter) (amount : Nat) :
+    GasMeter.gasLeft (GasMeter.credit meter amount) = GasMeter.gasLeft meter + amount
 
 /-- The meter of every fork up to Fusaka: one counter of the gas left. -/
 instance : GasMeter Nat where
   charge gas amount := if gas < amount then .error .outOfGas else .ok (gas - amount)
   gasLeft gas := gas
   exhaust _ := 0
+  start gas := gas
+  credit gas amount := gas + amount
 
 /-- One counter of gas obeys the laws of a meter. -/
 instance : LawfulGasMeter Nat where
@@ -79,6 +90,8 @@ instance : LawfulGasMeter Nat where
       simp only [GasMeter.gasLeft]
       omega
   gasLeft_exhaust _ := rfl
+  gasLeft_start _ := rfl
+  gasLeft_credit _ _ := rfl
 
 /-- A message at fork `fork`: a call to an account, or the creation of a contract. -/
 structure Message (fork : Fork) where

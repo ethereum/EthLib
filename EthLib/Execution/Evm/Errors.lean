@@ -50,8 +50,8 @@ inductive EvmError where
   | invalidContractPrefix
   /-- A creation targets an address that already has code or a nonce. -/
   | addressCollision
-  /-- The point evaluation precompile rejects its proof. -/
-  | kzgProofError
+  /-- A precompiled contract rejects its input, or lacks gas. -/
+  | precompile
   /-- REVERT stops the frame, which keeps its gas left. -/
   | revert
   /-- The state lacks data that it must hold, such as the code of a code hash. -/
