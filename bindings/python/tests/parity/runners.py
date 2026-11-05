@@ -37,7 +37,6 @@ NOT_YET = {
     "fast_confirmation": "fast confirmation rule (consensus track, decision 9)",
     "sync": "optimistic sync (consensus track C48)",
     "light_client": "light client (consensus track C54 to C56)",
-    "merkle_proof": "Merkle proofs of the beacon state (consensus track C54 to C56)",
     "networking": "gossip validation (consensus track C63 and C64)",
     "ssz_static": "the remaining beacon containers (consensus track C2, C6 to C12)",
 }
@@ -126,6 +125,12 @@ def _single_merkle_proof(root: Path, case: Case) -> None:
     _check(case.preset, case.fork, container, root / case.path)
 
 
+def _merkle_proof(root: Path, case: Case) -> None:
+    from consensus.test_merkle_proof import run_case
+
+    run_case(case.preset, case.fork, root / case.path)
+
+
 def _operation(root: Path, case: Case) -> None:
     from consensus.test_operations import run_case
 
@@ -149,6 +154,7 @@ RUNNERS = {
     "networking/gossip_data_column_sidecar": _gossip_data_column_sidecar,
     **{f"ssz_static/{container}": _ssz_static for container in CONTAINERS},
     "light_client/single_merkle_proof": _single_merkle_proof,
+    "merkle_proof/single_merkle_proof": _merkle_proof,
     "legacy_header": legacy.run_headers,
     **{f"operations/{handler}": _operation for handler in OPERATIONS},
 }

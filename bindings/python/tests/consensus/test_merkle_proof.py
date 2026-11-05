@@ -45,12 +45,17 @@ def test_digests():
         assert hashlib.sha256((FILES / name).read_bytes()).hexdigest() == digest, name
 
 
-@pytest.mark.parametrize("preset, fork, case", _cases())
-def test_case(preset, fork, case):
+def run_case(preset: str, fork: str, case: Path) -> None:
+    """Check the leaf and branch of one case against those that EthLib builds."""
     body, gindex, leaf, branch = _read(case)
     node, siblings = consensus.merkle_proof(preset, FORKS[fork], "BeaconBlockBody", body, gindex)
     assert node == leaf
     assert siblings == branch
+
+
+@pytest.mark.parametrize("preset, fork, case", _cases())
+def test_case(preset, fork, case):
+    run_case(preset, fork, case)
 
 
 def _sidecar(preset: str, fork: str, case: Path) -> tuple:
