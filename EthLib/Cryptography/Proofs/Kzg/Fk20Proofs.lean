@@ -1163,7 +1163,7 @@ theorem recoverCellsAndKzgProofs_ok_eq (setup : TrustedSetup)
     ite_eq_right (Nat.not_lt.mpr hmin),
     ite_eq_right (Nat.not_lt.mpr hmax),
     ite_eq_right (by simp [hbound]),
-    ite_eq_right (by simpa [Array.size_range] using hasc)]
+    ite_eq_right (by rw [any_zip_extract_one_eq, hasc]; exact Bool.false_ne_true)]
   change (cells.mapM cellToCosetEvals >>= fun cosetsEvals =>
     recoverPolynomialcoeff cellIndices cosetsEvals >>=
       computeCellsAndKzgProofsPolynomialcoeff setup) = _

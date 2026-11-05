@@ -35,19 +35,6 @@ theorem constructVanishingPolynomial_tooManyMissingCells
       .error .tooManyMissingCells := by
   simp [constructVanishingPolynomial, h, Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
-/-- The extended vanishing polynomial spans the full extended domain. -/
-theorem size_constructVanishingPolynomial
-    {missingCellIndices : Array CellIndex} {p : PolynomialCoeff}
-    (h : constructVanishingPolynomial missingCellIndices = .ok p) :
-    p.size = FIELD_ELEMENTS_PER_EXT_BLOB := by
-  simp only [constructVanishingPolynomial,
-    bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at h
-  repeat' split at h
-  all_goals cases h
-  rw [size_foldl_of_size_step]
-  · simp
-  · exact fun acc b => Array.size_setIfInBounds
-
 private theorem getElem!_set!_self (arr : Array Fr) (i : Nat) (v : Fr)
     (hi : i < arr.size) : (arr.set! i v)[i]! = v := by
   show (arr.setIfInBounds i v)[i]! = v
@@ -66,6 +53,115 @@ private theorem getElem!_set!_ne (arr : Array Fr) {i j : Nat} (v : Fr)
 private theorem size_set! (arr : Array Fr) (i : Nat) (v : Fr) :
     (arr.set! i v).size = arr.size :=
   Array.size_setIfInBounds
+
+/-- The vanishing polynomial of the missing cells, written with array writes.
+
+The proofs below reason on this form, and a theorem below shows that it equals the definition. -/
+def constructVanishingPolynomialModel
+    (missingCellIndices : Array CellIndex) : Except KzgError PolynomialCoeff := do
+  if missingCellIndices.size ≥ CELLS_PER_EXT_BLOB then
+    throw .tooManyMissingCells
+  let rouReduced := computeRootsOfUnity CELLS_PER_EXT_BLOB
+  let xs : Array Fr := missingCellIndices.map fun mci =>
+    rouReduced[BitReversal.reverseBits mci CELLS_PER_EXT_BLOB]!
+  let shortZeroPoly ← vanishingPolynomialcoeff xs
+  return (Array.range shortZeroPoly.size).foldl
+    (init := Array.replicate FIELD_ELEMENTS_PER_EXT_BLOB Fr.zero)
+    fun zeroPoly i =>
+      zeroPoly.set! (i * FIELD_ELEMENTS_PER_CELL) shortZeroPoly[i]!
+
+/-- After the writes of the first `k` coefficients, entry `j` is coefficient `j / 64` or zero.
+
+It is the coefficient when `j` is a multiple of 64 below `64 k`. -/
+private theorem getElem!_foldl_vanishing_extend (shortZeroPoly : PolynomialCoeff) (k j : Nat)
+    (hj : j < FIELD_ELEMENTS_PER_EXT_BLOB) :
+    ((List.range k).foldl
+      (fun zeroPoly i => zeroPoly.set! (i * FIELD_ELEMENTS_PER_CELL) shortZeroPoly[i]!)
+      (Array.replicate FIELD_ELEMENTS_PER_EXT_BLOB Fr.zero))[j]! =
+      if j % FIELD_ELEMENTS_PER_CELL = 0 ∧ j / FIELD_ELEMENTS_PER_CELL < k then
+        shortZeroPoly[j / FIELD_ELEMENTS_PER_CELL]!
+      else Fr.zero := by
+  have hc : FIELD_ELEMENTS_PER_CELL = 64 := rfl
+  induction k with
+  | zero =>
+    rw [getElem!_pos _ j (by simpa using hj)]
+    simp
+  | succ k ih =>
+    have hsz : ((List.range k).foldl
+        (fun zeroPoly i => zeroPoly.set! (i * FIELD_ELEMENTS_PER_CELL) shortZeroPoly[i]!)
+        (Array.replicate FIELD_ELEMENTS_PER_EXT_BLOB Fr.zero)).size =
+          FIELD_ELEMENTS_PER_EXT_BLOB := by
+      clear ih
+      induction k with
+      | zero => simp
+      | succ k ihk =>
+        rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil, size_set!, ihk]
+    rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil]
+    by_cases hjk : j = k * FIELD_ELEMENTS_PER_CELL
+    · subst hjk
+      rw [getElem!_set!_self _ _ _ (by rw [hsz]; exact hj), ite_eq_left (by rw [hc]; omega)]
+      rw [hc, Nat.mul_div_cancel _ (by decide)]
+    · rw [getElem!_set!_ne _ _ (Ne.symm hjk) (by rw [hsz]; exact hj), ih]
+      rw [hc] at hjk ⊢
+      by_cases h1 : j % 64 = 0 ∧ j / 64 < k
+      · rw [ite_eq_left h1, ite_eq_left ⟨h1.1, by omega⟩]
+      · rw [ite_eq_right h1, ite_eq_right (fun h2 => by
+          apply h1
+          refine ⟨h2.1, ?_⟩
+          rcases Nat.lt_succ_iff_lt_or_eq.mp h2.2 with h3 | h3
+          · exact h3
+          · exact absurd (by omega : j = k * 64) hjk)]
+
+/-- The extended vanishing polynomial written at once equals the writes of the model. -/
+private theorem ofFn_vanishing_extend_eq (shortZeroPoly : PolynomialCoeff) :
+    (Array.ofFn (n := FIELD_ELEMENTS_PER_EXT_BLOB) fun j =>
+      if h : j.val % FIELD_ELEMENTS_PER_CELL = 0 ∧
+          j.val / FIELD_ELEMENTS_PER_CELL < shortZeroPoly.size then
+        shortZeroPoly[j.val / FIELD_ELEMENTS_PER_CELL]
+      else Fr.zero) =
+    (Array.range shortZeroPoly.size).foldl
+      (init := Array.replicate FIELD_ELEMENTS_PER_EXT_BLOB Fr.zero)
+      fun zeroPoly i => zeroPoly.set! (i * FIELD_ELEMENTS_PER_CELL) shortZeroPoly[i]! := by
+  apply Array.ext (by
+    rw [Array.size_ofFn, size_foldl_of_size_step _ _ _ (fun _ _ => size_set! _ _ _),
+      Array.size_replicate])
+  intro j h1 h2
+  have hj : j < FIELD_ELEMENTS_PER_EXT_BLOB := by simpa using h1
+  have key := getElem!_foldl_vanishing_extend shortZeroPoly shortZeroPoly.size j hj
+  rw [← Array.toList_range, Array.foldl_toList] at key
+  rw [Array.getElem_ofFn, ← getElem!_pos _ j h2, key]
+  split
+  · rw [getElem!_pos]
+  · rfl
+
+/-- Reading the roots under a proof of the bound is reading them with a default. -/
+private theorem map_getElem_eq_map_getElem! (m : Array CellIndex) (rou : Array Fr)
+    (f : CellIndex → Nat) (h : ∀ mci, f mci < rou.size) :
+    (m.map fun mci => rou[f mci]'(h mci)) = m.map fun mci => rou[f mci]! := by
+  apply Array.map_congr_left
+  intro mci _
+  rw [getElem!_pos]
+
+/-- The vanishing polynomial equals its model with array writes. -/
+theorem constructVanishingPolynomial_eq_model (missingCellIndices : Array CellIndex) :
+    constructVanishingPolynomial missingCellIndices =
+      constructVanishingPolynomialModel missingCellIndices := by
+  unfold constructVanishingPolynomial constructVanishingPolynomialModel
+  simp only [map_getElem_eq_map_getElem!, ofFn_vanishing_extend_eq]
+
+/-- The extended vanishing polynomial spans the full extended domain. -/
+theorem size_constructVanishingPolynomial
+    {missingCellIndices : Array CellIndex} {p : PolynomialCoeff}
+    (h : constructVanishingPolynomial missingCellIndices = .ok p) :
+    p.size = FIELD_ELEMENTS_PER_EXT_BLOB := by
+  rw [constructVanishingPolynomial_eq_model] at h
+  simp only [constructVanishingPolynomialModel,
+    bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at h
+  repeat' split at h
+  all_goals cases h
+  rw [size_foldl_of_size_step]
+  · simp
+  · exact fun acc b => Array.size_setIfInBounds
 
 private theorem foldl_vanishing_extend_size_and_getElem!
     (shortZeroPoly : PolynomialCoeff) (init : PolynomialCoeff)
@@ -108,7 +204,8 @@ theorem leadingCoeff_constructVanishingPolynomial
     missingCellIndices.size < CELLS_PER_EXT_BLOB ∧
       p[missingCellIndices.size * FIELD_ELEMENTS_PER_CELL]! = Fr.one ∧
       p[missingCellIndices.size * FIELD_ELEMENTS_PER_CELL]!.isZero = false := by
-  simp only [constructVanishingPolynomial,
+  rw [constructVanishingPolynomial_eq_model] at h
+  simp only [constructVanishingPolynomialModel,
     bind, Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at h
   split at h
   · cases h
@@ -163,7 +260,8 @@ theorem constructVanishingPolynomial_ok_of_lt
     fun zeroPoly i =>
       zeroPoly.set! (i * FIELD_ELEMENTS_PER_CELL) shortZeroPoly[i]!
   have hp : constructVanishingPolynomial missingCellIndices = .ok p := by
-    unfold constructVanishingPolynomial
+    rw [constructVanishingPolynomial_eq_model]
+    unfold constructVanishingPolynomialModel
     rw [ite_eq_right (by omega)]
     simp only [Bind.bind, Except.bind, xs, rouReduced, hshort, pure, Except.pure, p]
   exact ⟨p, hp, size_constructVanishingPolynomial hp,
@@ -358,7 +456,8 @@ theorem evalPolyAt_constructVanishingPolynomial
   have hcell : FIELD_ELEMENTS_PER_CELL = 64 := rfl
   have hext : FIELD_ELEMENTS_PER_EXT_BLOB = 8192 := rfl
   have hcells : CELLS_PER_EXT_BLOB = 128 := rfl
-  simp only [constructVanishingPolynomial, bind, Except.bind, pure, Except.pure] at h
+  rw [constructVanishingPolynomial_eq_model] at h
+  simp only [constructVanishingPolynomialModel, bind, Except.bind, pure, Except.pure] at h
   split at h
   · cases h
   · rename_i hlt
@@ -427,7 +526,17 @@ theorem recoverPolynomialcoeff_length_mismatch
       .error (.inputLengthMismatch "cosetsEvals" cellIndices.size cosetsEvals.size) := by
   simp [recoverPolynomialcoeff, h, Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
-set_option maxRecDepth 4096 in
+private theorem length_batchInverseAux (pre : Fr) (xs : List Fr) :
+    (Fr.batchInverseAux pre xs).1.length = xs.length := by
+  induction xs generalizing pre with
+  | nil => rfl
+  | cons x xs ih =>
+    unfold Fr.batchInverseAux
+    split <;> simp [ih]
+
+private theorem size_batchInverse (xs : Array Fr) : (Fr.batchInverse xs).size = xs.size := by
+  simp [Fr.batchInverse, length_batchInverseAux]
+
 /-- On success, the recovered polynomial has exactly
 `FIELD_ELEMENTS_PER_BLOB` coefficients, whatever the inputs. -/
 theorem size_recoverPolynomialcoeff
@@ -441,7 +550,8 @@ theorem size_recoverPolynomialcoeff
   · obtain ⟨u, hu, h⟩ := Base.bind_ok_iff.mp h
     simp only [pure, Except.pure, Except.ok.injEq] at h
     subst h
-    simp [FIELD_ELEMENTS_PER_EXT_BLOB]
+    simp [FIELD_ELEMENTS_PER_EXT_BLOB, size_constructVanishingPolynomial hu,
+      BitReversal.bitReversalPermutation, size_batchInverse]
     omega
 
 private theorem list_length_filter_lt_iff {α : Type _} (l : List α) (f : α → Bool) :
@@ -552,6 +662,24 @@ theorem recoverCellsAndKzgProofs_cellIndexOutOfBounds (setup : TrustedSetup)
       = throw .cellIndexOutOfBounds := by
   simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, h, throw_bind]
 
+/-- The ascending check on pairs of neighbours is the check on their indices. -/
+@[simp] theorem any_zip_extract_one_eq (a : Array CellIndex) :
+    (a.zip (a.extract 1)).any (fun p => decide (p.2 ≤ p.1)) =
+      (Array.range (a.size - 1)).any (fun i => decide (a[i + 1]! ≤ a[i]!)) := by
+  apply Bool.eq_iff_iff.mpr
+  rw [Array.any_eq_true, Array.any_eq_true]
+  simp only [Array.size_zip, Array.size_extract, Array.size_range,
+    Array.getElem_zip, Array.getElem_extract, Array.getElem_range, decide_eq_true_eq]
+  constructor
+  · rintro ⟨i, hi, h⟩
+    refine ⟨i, by omega, ?_⟩
+    rw [getElem!_pos a (i + 1) (by omega), getElem!_pos a i (by omega)]
+    simpa [Nat.add_comm] using h
+  · rintro ⟨i, hi, h⟩
+    refine ⟨i, by omega, ?_⟩
+    rw [getElem!_pos a (i + 1) (by omega), getElem!_pos a i (by omega)] at h
+    simpa [Nat.add_comm] using h
+
 /-- `recoverCellsAndKzgProofs` rejects cell indices that are not
 strictly ascending. -/
 theorem recoverCellsAndKzgProofs_indicesNotAscending (setup : TrustedSetup)
@@ -564,7 +692,9 @@ theorem recoverCellsAndKzgProofs_indicesNotAscending (setup : TrustedSetup)
       (fun i => cellIndices[i + 1]! ≤ cellIndices[i]!) = true) :
     recoverCellsAndKzgProofs setup cellIndices cells
       = throw .indicesNotAscending := by
-  simp only [Array.size_range] at h
+  rw [← any_zip_extract_one_eq] at h
+  simp only [Array.size_zip, Array.size_extract, Nat.min_self, Nat.min_eq_right (Nat.sub_le _ _)]
+    at h
   simp [recoverCellsAndKzgProofs, hlen, hmin, hmax, hbound, h, throw_bind]
 
 /-- The recovery vanishing polynomial has no coefficient above its mathematical degree bound. -/
@@ -572,7 +702,8 @@ theorem constructVanishingPolynomial_high_zero
     {missing : Array CellIndex} {p : PolynomialCoeff}
     (hp : constructVanishingPolynomial missing = .ok p)
     (i : Nat) (hi : missing.size * FIELD_ELEMENTS_PER_CELL < i) : p[i]! = Fr.zero := by
-  simp only [constructVanishingPolynomial, bind, Except.bind, pure, Except.pure] at hp
+  rw [constructVanishingPolynomial_eq_model] at hp
+  simp only [constructVanishingPolynomialModel, bind, Except.bind, pure, Except.pure] at hp
   split at hp
   · cases hp
   · rename_i hlt

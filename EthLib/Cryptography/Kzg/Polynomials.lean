@@ -114,6 +114,20 @@ def computeRootsOfUnity (order : Nat) : Array Fr :=
     (Fr.ofNat PRIMITIVE_ROOT_OF_UNITY) ^ (Fr.ofNat exponent)
   computePowers root order
 
+@[simp] theorem length_computePowersAux (x current : Fr) (n : Nat) :
+    (computePowersAux x current n).length = n := by
+  induction n generalizing current with
+  | zero => rfl
+  | succ n ih => simp [computePowersAux, ih]
+
+@[simp] theorem size_computePowers (x : Fr) (n : Nat) :
+    (computePowers x n).size = n := by
+  simp [computePowers]
+
+@[simp] theorem size_computeRootsOfUnity (order : Nat) :
+    (computeRootsOfUnity order).size = order := by
+  simp [computeRootsOfUnity]
+
 /-! ## Polynomials in coefficient form -/
 
 /-- Sum the coefficient-form polynomials `a` and `b`. -/
@@ -235,6 +249,10 @@ def blobToPolynomial (blob : Blob) : Except KzgError Polynomial :=
 /-- The bit-reversed `size`-th roots of unity. Recomputed on every call. -/
 def rootsOfUnityBrp (size : Nat) : Array Fr :=
   bitReversalPermutation (computeRootsOfUnity size)
+
+@[simp] theorem size_rootsOfUnityBrp (size : Nat) :
+    (rootsOfUnityBrp size).size = size := by
+  simp [rootsOfUnityBrp, bitReversalPermutation]
 
 /-- Evaluation of an evaluation-form polynomial, over an explicit domain.
 

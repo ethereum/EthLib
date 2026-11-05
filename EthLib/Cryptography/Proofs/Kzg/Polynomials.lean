@@ -1076,16 +1076,6 @@ theorem interpolatePolynomialcoeff_size_mismatch {xs ys : Array Fr}
   rw [dite_eq_left h]
   rfl
 
-@[simp] theorem length_computePowersAux (x current : Fr) (n : Nat) :
-    (computePowersAux x current n).length = n := by
-  induction n generalizing current with
-  | zero => rfl
-  | succ n ih => simp [computePowersAux, ih]
-
-@[simp] theorem size_computePowers (x : Fr) (n : Nat) :
-    (computePowers x n).size = n := by
-  simp [computePowers]
-
 /-- Element `i` of `computePowersAux x current n` is `current * x ^ i`
 (stated with an `if` so that it also holds for non-canonical `current`,
 which is returned unchanged at index `0`). -/
@@ -1132,10 +1122,6 @@ theorem computeRootsOfUnity_def (order : Nat) :
           (Fr.ofNat ((BLS_MODULUS - 1) / order))) order := by
   rfl
 
-@[simp] theorem size_computeRootsOfUnity (order : Nat) :
-    (computeRootsOfUnity order).size = order := by
-  simp [computeRootsOfUnity_def]
-
 /-- A successful `blobToPolynomial` returns exactly
 `FIELD_ELEMENTS_PER_BLOB` field elements. -/
 theorem size_blobToPolynomial (blob : Blob) (poly : Polynomial)
@@ -1160,10 +1146,6 @@ theorem blobToPolynomial_error (blob : Blob) {e : KzgError}
       ∀ i : Fin FIELD_ELEMENTS_PER_BLOB, i < j →
         ∃ f, bytesToBlsField (fieldElementBytes (k := FIELD_ELEMENTS_PER_BLOB) blob i) = .ok f :=
   bytesToBlsFields_error (k := FIELD_ELEMENTS_PER_BLOB) h
-
-@[simp] theorem size_rootsOfUnityBrp (size : Nat) :
-    (rootsOfUnityBrp size).size = size := by
-  simp [rootsOfUnityBrp, size_bitReversalPermutation]
 
 /-! ## Evaluation in evaluation form -/
 
