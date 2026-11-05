@@ -102,11 +102,13 @@ theorem forkAtEpoch_mono {earlier later : Epoch} (le : earlier ≤ later) :
   obtain ⟨first, scheduled, started⟩ := activationEpoch_forkAtEpoch (config := config) earlier
   exact le_forkAtEpoch scheduled (UInt64.le_trans started le)
 
-/-- The fork at an epoch is never BPO1 or BPO2, which change only the blob schedule. -/
+/-- The fork at an epoch is never one of BPO1 to BPO5, which change only the blob schedule. -/
 theorem forkAtEpoch_ne_bpo (epoch : Epoch) :
-    config.forkAtEpoch epoch ≠ .bpo1 ∧ config.forkAtEpoch epoch ≠ .bpo2 := by
+    config.forkAtEpoch epoch ∉ [Fork.bpo1, .bpo2, .bpo3, .bpo4, .bpo5] := by
   obtain ⟨first, scheduled, -⟩ := activationEpoch_forkAtEpoch (config := config) epoch
-  constructor <;> intro bpo <;> simp [bpo, activationEpoch] at scheduled
+  intro bpo
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at bpo
+  rcases bpo with bpo | bpo | bpo | bpo | bpo <;> simp [bpo, activationEpoch] at scheduled
 
 /-- The blob limit at an epoch.
 
