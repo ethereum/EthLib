@@ -154,6 +154,7 @@ The proof, adapted from leanerVM's, reasons over these same definitions (`Proofs
 - No security property is proved beyond the random oracle model, so the theorem says nothing about an attack that uses the structure of Keccak-256.
 - Security against a quantum adversary is not proved.
 - The failure bound of a whole signature assumes a starting cache with no trial input of its two keys.
-  In the unforgeability game the adversary's queries fill the cache first, and no theorem bounds the failure there.
+  An earlier signature under the same top key caches that key's trial inputs, and in the unforgeability game the adversary's queries can too.
+  So no theorem bounds the failure of a later signature, or of signing inside the game.
 - No theorem says that this module and any other implementation compute the same keys and signatures.
   The test vectors check one key and one signature against an independent implementation.

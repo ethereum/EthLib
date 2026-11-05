@@ -145,6 +145,15 @@ Definitions that derive a secret take the derivation function as an argument too
 - The counter search in the random oracle model (`CodewordSearch.lean`).
   All `2^32` counters of one search miss the code with probability exactly `(1 - |C| / 2^128)^(2^32)`, below `exp(-2^18)` (`prEvent_findCounter_none`, `prEvent_findCounter_none_le`).
   The theorem assumes that the oracle's cache holds none of the counters' inputs when the search starts, as an empty cache does.
+- A whole signature in the random oracle model (`SignatureFailure.lean`).
+  Signing fails with probability at most `3 exp(-2^18)`, one `exp(-2^18)` for each layer's search (`prEvent_signWith_error_le`).
+  A trial input of a key is an input at the key's encoding address whose payload has the layer's trial size.
+  On the bottom layer that size is 772 bytes: a 768-byte FORS key and a 4-byte counter.
+  Above it the size is 20 bytes: a 16-byte root and the counter.
+  Before a key's search, the signer hashes no trial input of that key's layer.
+  Its other calls are derivations, encodings on lower layers and hashes at addresses of other types.
+  The 43-byte input that grows the scheme seed is too short to be a trial input.
+  The theorem assumes that the cache holds no trial input of any key when signing starts, as an empty cache does (`prEvent_signWith_error_le_empty`).
 - Domain separation (`Address.lean`, `TweakableHash.lean`).
   An address determines all six of its fields (`encodeAddress_inj`).
   The eleven address types have eleven codes (`AddressType.code_injective`).
@@ -157,6 +166,7 @@ Definitions that derive a secret take the derivation function as an argument too
 - The hash calls of key generation and signing (`Unforgeability/HonestQueries.lean`).
   Key generation, signing and verification commute with every map of monads that keeps `pure` and `bind` (`keyGenWith_map_monad`, `signWith_map_monad`).
   Outside the derivations from the seed, every call hashes at an address of another type, with a payload of at least 16 bytes (`signDerived_isQueryBoundP_zero`, `publicKeyOf_isQueryBoundP_zero`, `verifyWith_isQueryBoundP_zero`).
+  The lemmas for one layer take each key's encodings as a separate hypothesis, since a key's search queries its own (`EncodingAvoids`).
   So in the game, the honest algorithms query a 43-byte input only to grow the scheme seed (`keyGenWith_H_isQueryBoundP_seedLength`, `signWith_H_isQueryBoundP_seedLength`, `size_seedInput`).
 - The two seeds are hidden (`Unforgeability/HiddenSeed.lean`, `Unforgeability/SeedHops.lean`).
   In the ideal game, the public parameter, every secret and every randomizer is an independent uniform answer.
@@ -172,5 +182,6 @@ Definitions that derive a secret take the derivation function as an argument too
   The 127-bit bound, up to 1,182,000,000 signatures, is the theorem `h26_layered` of the model's [`FORS/Main.lean`](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Main.lean), about the model, not about this module.
 - That this module and the model compute the same bytes.
   The definitions follow the model line by line, but no theorem links the two.
-- That a whole signature fails with small probability.
-  The search bound covers one search, and no theorem shows that the signer's cache holds none of its counters' inputs.
+- That a later signature, or a signature inside the unforgeability game, fails with small probability.
+  The failure bound assumes a starting cache with no trial input of any key.
+  An earlier signature under the same key caches the trial inputs of its keys, and in the game the adversary's queries can too.

@@ -17,13 +17,19 @@ The mapped algorithms take the mapped hash and the mapped derivations.
 
 The random-oracle proof uses this to move the algorithms between oracle worlds.
 
-Below the scheme seed, the honest algorithms make two kinds of call.
+Below the scheme seed, the honest algorithms make three kinds of call.
 
 - A derivation from the seed, at a derivation address: the chain starts, the FORS secrets, the
   public parameter and the randomizer.
+- An encoding of a one-time key, at the key's encoding address, with a payload of at least
+  16 bytes.
 - A hash at an address of another type, with a payload of at least 16 bytes.
 
-So a query that no call of the second kind makes is made only through the derivations.
+So a query that no call of the last two kinds makes is made only through the derivations.
+
+The encodings are a kind of their own because a key's counter search queries them.
+
+A hypothesis on each key's encodings then shows which calls avoid another key's search inputs.
 
 Two such sets of queries matter for the proof.
 
@@ -360,35 +366,61 @@ theorem size_packBytes_digest (d : Digest) : (packBytes d).size = 16 :=
 theorem size_forsKeyBytes (key : ForsKey) : (forsKeyBytes key).size = 768 := by
   simp [forsKeyBytes, FORS_TREES, N]
 
+/-- An address of another type than the encoding is not an encoding address. -/
+theorem ne_addrEncoding {type : AddressType} (htype : type ≠ .encoding) (step : Fin 8)
+    (layer : Fin 256) (tree : UInt32) (hi : Fin (2 ^ 24)) (lo : UInt32) (key : OtsKey) :
+    encodeAddress type.code step layer tree hi lo ≠ addrEncoding key := by
+  rw [addrEncoding, keyAddress]
+  exact encodeAddress_ne_of_type_ne _ _ _ _ _ _ _ _ _ _ fun h =>
+    htype (AddressType.code_injective h)
+
 /-! ## Inputs the honest algorithms never hash
 
 A predicate `p` on queries that no allowed call satisfies is never queried.
 
-An allowed call is a derivation, or a hash at an address of another type with a payload of at
-least 16 bytes. -/
+An allowed call is one of three kinds.
+
+- A derivation, at a derivation address.
+- An encoding of a key, with a payload of at least 16 bytes.
+- A hash at an address of another type, with a payload of at least 16 bytes.
+
+The encodings are asked of each key apart, since a key's counter search queries its own. -/
+
+/-- A key's encodings query `p` nowhere.
+
+This holds for every parameter and every payload of at least 16 bytes. -/
+def EncodingAvoids {ι : Type} {spec : OracleSpec ι} (p : spec.Domain → Prop) [DecidablePred p]
+    (H : ByteArray → OracleComp spec (Vector UInt8 32)) (key : OtsKey) : Prop :=
+  ∀ pp payload, 16 ≤ payload.size → IsQueryBoundP (H (thInput pp (addrEncoding key) payload)) p 0
 
 section Avoid
 
 variable {ι : Type} {spec : OracleSpec ι} {p : spec.Domain → Prop} [DecidablePred p]
 
 variable (H : ByteArray → OracleComp spec (Vector UInt8 32)) (prf : SeedPrf (OracleComp spec))
-  (hH : ∀ pp A payload, ¬IsDerivationAddress A → 16 ≤ payload.size →
-    IsQueryBoundP (H (thInput pp A payload)) p 0)
-  (hprf : ∀ pp A suffix, IsQueryBoundP (prf pp A suffix) p 0)
+  (hH : ∀ pp A payload, ¬IsDerivationAddress A → (∀ key, A ≠ addrEncoding key) →
+    16 ≤ payload.size → IsQueryBoundP (H (thInput pp A payload)) p 0)
+  (hprf : ∀ pp A suffix, IsDerivationAddress A → IsQueryBoundP (prf pp A suffix) p 0)
+
+/-- A tweakable hash call queries `p` nowhere when its hash does not. -/
+theorem th_isQueryBoundP_zero_of_hash {pp : PublicParam} {A : Address} {payload : ByteArray}
+    (h : IsQueryBoundP (H (thInput pp A payload)) p 0) : IsQueryBoundP (th H pp A payload) p 0 :=
+  isQueryBoundP_bind_zero _ _ h fun _ => isQueryBoundP_pure _ _ _
 
 include hH
 
-/-- A tweakable hash call outside the derivations queries `p` nowhere. -/
+/-- A tweakable hash call outside the derivations and the encodings queries `p` nowhere. -/
 theorem th_isQueryBoundP_zero {pp : PublicParam} {A : Address} {payload : ByteArray}
-    (hA : ¬IsDerivationAddress A) (hsize : 16 ≤ payload.size) :
-    IsQueryBoundP (th H pp A payload) p 0 :=
-  isQueryBoundP_bind_zero _ _ (hH pp A payload hA hsize) fun _ => isQueryBoundP_pure _ _ _
+    (hA : ¬IsDerivationAddress A) (hE : ∀ key, A ≠ addrEncoding key)
+    (hsize : 16 ≤ payload.size) : IsQueryBoundP (th H pp A payload) p 0 :=
+  th_isQueryBoundP_zero_of_hash H (hH pp A payload hA hE hsize)
 
 /-- A chain step queries `p` nowhere. -/
 theorem chainStep_isQueryBoundP_zero (pp : PublicParam) (key : OtsKey) (i : Fin V)
     (mu : Fin (CHAIN_LENGTH - 1)) (value : Digest) :
     IsQueryBoundP (chainStep H pp key i mu value) p 0 :=
-  th_isQueryBoundP_zero H hH (not_isDerivationAddress_addrChain key i mu) (by simp; decide)
+  th_isQueryBoundP_zero H hH (not_isDerivationAddress_addrChain key i mu)
+    (ne_addrEncoding (type := .chain) (by decide) _ _ _ _ _) (by simp; decide)
 
 /-- A walk along a chain queries `p` nowhere. -/
 theorem chainWalk_isQueryBoundP_zero (pp : PublicParam) (key : OtsKey) (i : Fin V)
@@ -400,21 +432,28 @@ theorem chainWalk_isQueryBoundP_zero (pp : PublicParam) (key : OtsKey) (i : Fin 
 theorem otsLeafHash_isQueryBoundP_zero (pp : PublicParam) (key : OtsKey) (ends : Vector Digest V) :
     IsQueryBoundP (otsLeafHash H pp key ends) p 0 :=
   th_isQueryBoundP_zero H hH (not_isDerivationAddress_addrLeaf key)
+    (ne_addrEncoding (type := .leaf) (by decide) _ _ _ _ _)
     (by rw [Sphincs.size_packDigests]; decide)
 
-/-- An encoding of a message of at least 12 bytes queries `p` nowhere. -/
-theorem encode_isQueryBoundP_zero (pp : PublicParam) (key : OtsKey) {msg : ByteArray}
-    (hmsg : 12 ≤ msg.size) (counter : UInt32) :
-    IsQueryBoundP (encode H pp key msg counter) p 0 :=
-  (isQueryBoundP_map_iff _ _ _).2 <| th_isQueryBoundP_zero H hH
-    (not_isDerivationAddress_addrEncoding key) (by simp [COUNTER_LEN]; omega)
+omit hH in
+/-- An encoding of a message of at least 12 bytes queries `p` nowhere.
 
-/-- A one-time leaf, from a signature of a message of at least 12 bytes, queries `p` nowhere. -/
-theorem otsLeaf_isQueryBoundP_zero (pp : PublicParam) (key : OtsKey) {msg : ByteArray}
-    (hmsg : 12 ≤ msg.size) (counter : UInt32) (y : Vector Digest V) :
+The key's encodings must query `p` nowhere. -/
+theorem encode_isQueryBoundP_zero (pp : PublicParam) {key : OtsKey} (hE : EncodingAvoids p H key)
+    {msg : ByteArray} (hmsg : 12 ≤ msg.size) (counter : UInt32) :
+    IsQueryBoundP (encode H pp key msg counter) p 0 :=
+  (isQueryBoundP_map_iff _ _ _).2 <| th_isQueryBoundP_zero_of_hash H
+    (hE pp (msg ++ packBytes (uintToBytes COUNTER_LEN counter.toNat))
+      (by simp [COUNTER_LEN]; omega))
+
+/-- A one-time leaf, from a signature of a message of at least 12 bytes, queries `p` nowhere.
+
+The key's encodings must query `p` nowhere. -/
+theorem otsLeaf_isQueryBoundP_zero (pp : PublicParam) {key : OtsKey} (hE : EncodingAvoids p H key)
+    {msg : ByteArray} (hmsg : 12 ≤ msg.size) (counter : UInt32) (y : Vector Digest V) :
     IsQueryBoundP (otsLeaf H pp key msg counter y) p 0 := by
   rw [otsLeaf]
-  refine isQueryBoundP_bind_zero _ _ (encode_isQueryBoundP_zero H hH pp key hmsg counter)
+  refine isQueryBoundP_bind_zero _ _ (encode_isQueryBoundP_zero H pp hE hmsg counter)
     fun x => ?_
   cases x with
   | none => exact isQueryBoundP_pure _ _ _
@@ -427,19 +466,22 @@ theorem otsLeaf_isQueryBoundP_zero (pp : PublicParam) (key : OtsKey) {msg : Byte
 /-- A hypertree node hash queries `p` nowhere. -/
 theorem nodeHash_isQueryBoundP_zero (pp : PublicParam) (layer : Layer) (tree level j : Nat)
     (left right : Digest) : IsQueryBoundP (nodeHash H pp layer tree level j left right) p 0 :=
-  th_isQueryBoundP_zero H hH (not_isDerivationAddress_addrNode _ _ _ _) (by simp; decide)
+  th_isQueryBoundP_zero H hH (not_isDerivationAddress_addrNode _ _ _ _)
+    (ne_addrEncoding (type := .node) (by decide) _ _ _ _ _) (by simp; decide)
 
 /-- A FORS leaf hash queries `p` nowhere. -/
 theorem forsLeafHash_isQueryBoundP_zero (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREES)
     (l : Fin (2 ^ FORS_HEIGHT)) (secret : Digest) :
     IsQueryBoundP (forsLeafHash H pp idx kappa l secret) p 0 :=
-  th_isQueryBoundP_zero H hH (not_isDerivationAddress_addrForsLeaf _ _ _) (by simp; decide)
+  th_isQueryBoundP_zero H hH (not_isDerivationAddress_addrForsLeaf _ _ _)
+    (ne_addrEncoding (type := .forsLeaf) (by decide) _ _ _ _ _) (by simp; decide)
 
 /-- A FORS node hash queries `p` nowhere. -/
 theorem forsNodeHash_isQueryBoundP_zero (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREES)
     (level j : Nat) (left right : Digest) :
     IsQueryBoundP (forsNodeHash H pp idx kappa level j left right) p 0 :=
-  th_isQueryBoundP_zero H hH (not_isDerivationAddress_addrForsNode _ _ _ _) (by simp; decide)
+  th_isQueryBoundP_zero H hH (not_isDerivationAddress_addrForsNode _ _ _ _)
+    (ne_addrEncoding (type := .forsNode) (by decide) _ _ _ _ _) (by simp; decide)
 
 /-- The message digest queries `p` nowhere. -/
 theorem messageDigest_isQueryBoundP_zero (pp : PublicParam) (msg : Message) (rho : Randomizer) :
@@ -447,6 +489,7 @@ theorem messageDigest_isQueryBoundP_zero (pp : PublicParam) (msg : Message) (rho
   rw [messageDigest]
   exact isQueryBoundP_bind_zero _ _ (ofFnInOrder_isQueryBoundP_zero _ _ fun call =>
     hH _ _ _ (not_isDerivationAddress_addrMsg call)
+      (ne_addrEncoding (type := .msg) (by decide) _ _ _ _ _)
       (by rw [ByteArray.size_append, Base.size_packBytes, Base.size_packBytes]; decide))
     fun _ => isQueryBoundP_pure _ _ _
 
@@ -467,12 +510,14 @@ theorem forsRecover_isQueryBoundP_zero (pp : PublicParam) (idx : Nat)
     IsQueryBoundP (forsRecover H pp idx leaves openings) p 0 :=
   ofFnInOrder_isQueryBoundP_zero _ _ fun _ => treeRecover_isQueryBoundP_zero H hH _ _ _ _ _
 
-/-- A layer's root, from a message of at least 12 bytes, queries `p` nowhere. -/
+/-- A layer's root, from a message of at least 12 bytes, queries `p` nowhere.
+
+The encodings of the layer's key must query `p` nowhere. -/
 theorem layerRoot_isQueryBoundP_zero (pp : PublicParam) (layer : Layer) (idx : Nat)
-    {msg : ByteArray} (hmsg : 12 ≤ msg.size) (sig : LayerSignature layer) :
-    IsQueryBoundP (layerRoot H pp layer idx msg sig) p 0 := by
+    (hE : EncodingAvoids p H (OtsKey.ofIndex layer idx)) {msg : ByteArray} (hmsg : 12 ≤ msg.size)
+    (sig : LayerSignature layer) : IsQueryBoundP (layerRoot H pp layer idx msg sig) p 0 := by
   rw [layerRoot]
-  refine isQueryBoundP_bind_zero _ _ (otsLeaf_isQueryBoundP_zero H hH _ _ hmsg _ _) fun leaf => ?_
+  refine isQueryBoundP_bind_zero _ _ (otsLeaf_isQueryBoundP_zero H hH _ hE hmsg _ _) fun leaf => ?_
   cases leaf with
   | none => exact isQueryBoundP_pure _ _ _
   | some leaf =>
@@ -480,36 +525,14 @@ theorem layerRoot_isQueryBoundP_zero (pp : PublicParam) (layer : Layer) (idx : N
       (fun _ _ _ _ => nodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _ _) _ _ _ _)
       fun _ => isQueryBoundP_pure _ _ _
 
-/-- Verification queries `p` nowhere. -/
-theorem verifyWith_isQueryBoundP_zero (pk : PublicKey) (msg : Message) (sig : Signature) :
-    IsQueryBoundP (verifyWith H pk msg sig) p 0 := by
-  have hroot : ∀ r : Digest, 12 ≤ (packBytes r).size := fun r => by simp; decide
-  rw [verifyWith]
-  refine isQueryBoundP_bind_zero _ _ (messageDigest_isQueryBoundP_zero H hH _ _ _) fun d =>
-    isQueryBoundP_bind_zero _ _ (forsRecover_isQueryBoundP_zero H hH _ _ _ _) fun key =>
-    isQueryBoundP_bind_zero _ _
-      (layerRoot_isQueryBoundP_zero H hH _ _ _ (by rw [size_forsKeyBytes]; omega) _) fun r₀ => ?_
-  cases r₀ with
-  | none => exact isQueryBoundP_pure _ _ _
-  | some r₀ =>
-    refine isQueryBoundP_bind_zero _ _ (layerRoot_isQueryBoundP_zero H hH _ _ _ (hroot r₀) _)
-      fun r₁ => ?_
-    cases r₁ with
-    | none => exact isQueryBoundP_pure _ _ _
-    | some r₁ =>
-      refine isQueryBoundP_bind_zero _ _ (layerRoot_isQueryBoundP_zero H hH _ _ _ (hroot r₁) _)
-        fun r₂ => ?_
-      cases r₂ with
-      | none => exact isQueryBoundP_pure _ _ _
-      | some r₂ => exact isQueryBoundP_pure _ _ _
-
 include hprf
 
 omit hH in
 /-- The chain starts query `p` nowhere, outside the derivations. -/
 theorem chainStarts_isQueryBoundP_zero (pp : PublicParam) (key : OtsKey) :
     IsQueryBoundP (chainStarts pp prf key) p 0 :=
-  isQueryBoundP_bind_zero _ _ (ofFnInOrder_isQueryBoundP_zero _ _ fun _ => hprf _ _ _)
+  isQueryBoundP_bind_zero _ _ (ofFnInOrder_isQueryBoundP_zero _ _ fun _ =>
+    hprf _ _ _ (isDerivationAddress_addrPrf _ _))
     fun _ => isQueryBoundP_pure _ _ _
 
 /-- A one-time key's leaf, from the seed, queries `p` nowhere. -/
@@ -520,12 +543,14 @@ theorem otsPublicLeaf_isQueryBoundP_zero (pp : PublicParam) (key : OtsKey) :
       chainWalk_isQueryBoundP_zero H hH _ _ _ _ _ _ _) fun _ =>
         otsLeafHash_isQueryBoundP_zero H hH _ _ _
 
-/-- A one-time signature of a message of at least 12 bytes queries `p` nowhere. -/
-theorem otsSign_isQueryBoundP_zero (pp : PublicParam) (key : OtsKey) {msg : ByteArray}
-    (hmsg : 12 ≤ msg.size) : IsQueryBoundP (otsSign H pp prf key msg) p 0 := by
+/-- A one-time signature of a message of at least 12 bytes queries `p` nowhere.
+
+The key's encodings must query `p` nowhere. -/
+theorem otsSign_isQueryBoundP_zero (pp : PublicParam) {key : OtsKey} (hE : EncodingAvoids p H key)
+    {msg : ByteArray} (hmsg : 12 ≤ msg.size) : IsQueryBoundP (otsSign H pp prf key msg) p 0 := by
   rw [otsSign]
   refine isQueryBoundP_bind_zero _ _ (findFirst_isQueryBoundP_zero _ _
-    (fun _ => encode_isQueryBoundP_zero H hH pp key hmsg _) _ _) fun found => ?_
+    (fun _ => encode_isQueryBoundP_zero H pp hE hmsg _) _ _) fun found => ?_
   cases found with
   | none => exact isQueryBoundP_pure _ _ _
   | some found =>
@@ -550,7 +575,8 @@ omit hH in
 /-- A FORS secret queries `p` nowhere, outside the derivations. -/
 theorem forsSecret_isQueryBoundP_zero (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREES)
     (l : Fin (2 ^ FORS_HEIGHT)) : IsQueryBoundP (forsSecret pp prf idx kappa l) p 0 :=
-  isQueryBoundP_bind_zero _ _ (hprf _ _ _) fun _ => isQueryBoundP_pure _ _ _
+  isQueryBoundP_bind_zero _ _ (hprf _ _ _ (isDerivationAddress_addrForsPrf _ _ _))
+    fun _ => isQueryBoundP_pure _ _ _
 
 /-- A FORS leaf, from the seed, queries `p` nowhere. -/
 theorem forsLeaves_isQueryBoundP_zero (pp : PublicParam) (idx : Nat) (kappa : Fin FORS_TREES)
@@ -591,7 +617,8 @@ omit hH in
 /-- The randomizer queries `p` nowhere, outside the derivations. -/
 theorem randomizer_isQueryBoundP_zero (pp : PublicParam) (msg : Message) :
     IsQueryBoundP (randomizer pp prf msg) p 0 :=
-  isQueryBoundP_bind_zero _ _ (hprf _ _ _) fun _ => isQueryBoundP_pure _ _ _
+  isQueryBoundP_bind_zero _ _ (hprf _ _ _ isDerivationAddress_addrRnd)
+    fun _ => isQueryBoundP_pure _ _ _
 
 end Avoid
 
@@ -614,9 +641,9 @@ theorem size_of_mem_support_layerMessage {pp : PublicParam} {layer : Layer} {idx
     rw [size_packBytes_digest]
     decide
 
-variable (hH : ∀ pp A payload, ¬IsDerivationAddress A → 16 ≤ payload.size →
-    IsQueryBoundP (H (thInput pp A payload)) p 0)
-  (hprf : ∀ pp A suffix, IsQueryBoundP (prf pp A suffix) p 0)
+variable (hH : ∀ pp A payload, ¬IsDerivationAddress A → (∀ key, A ≠ addrEncoding key) →
+    16 ≤ payload.size → IsQueryBoundP (H (thInput pp A payload)) p 0)
+  (hprf : ∀ pp A suffix, IsDerivationAddress A → IsQueryBoundP (prf pp A suffix) p 0)
 
 include hH hprf
 
@@ -632,12 +659,14 @@ theorem layerMessage_isQueryBoundP_zero (pp : PublicParam) (layer : Layer) (idx 
   · exact forsKey_isQueryBoundP_zero H prf hH hprf _ _
   all_goals exact treeRoot_isQueryBoundP_zero H prf hH hprf _ _ _
 
-/-- A layer's signature of a message of at least 12 bytes queries `p` nowhere. -/
+/-- A layer's signature of a message of at least 12 bytes queries `p` nowhere.
+
+The encodings of the layer's key must query `p` nowhere. -/
 theorem signLayer_isQueryBoundP_zero (pp : PublicParam) (layer : Layer) (idx : Nat)
-    {msg : ByteArray} (hmsg : 12 ≤ msg.size) :
-    IsQueryBoundP (signLayer H pp prf layer idx msg) p 0 := by
+    (hE : EncodingAvoids p H (OtsKey.ofIndex layer idx)) {msg : ByteArray}
+    (hmsg : 12 ≤ msg.size) : IsQueryBoundP (signLayer H pp prf layer idx msg) p 0 := by
   rw [signLayer]
-  refine isQueryBoundP_bind_zero _ _ (otsSign_isQueryBoundP_zero H prf hH hprf _ _ hmsg)
+  refine isQueryBoundP_bind_zero _ _ (otsSign_isQueryBoundP_zero H prf hH hprf _ hE hmsg)
     fun found => ?_
   cases found with
   | none => exact isQueryBoundP_pure _ _ _
@@ -645,34 +674,95 @@ theorem signLayer_isQueryBoundP_zero (pp : PublicParam) (layer : Layer) (idx : N
     exact isQueryBoundP_bind_zero _ _ (path_isQueryBoundP_zero H prf hH hprf _ _ _ _)
       fun _ => isQueryBoundP_pure _ _ _
 
-/-- A layer signs what its layer message gives, and that queries `p` nowhere. -/
+/-- A layer signs what its layer message gives, and that queries `p` nowhere.
+
+The encodings of the layer's key must query `p` nowhere. -/
 theorem layerMessage_bind_signLayer_isQueryBoundP_zero {β : Type} (pp : PublicParam)
-    (layer : Layer) (idx : Nat) (k : Except SphincsError (LayerSignature layer) →
-      OracleComp spec β) (hk : ∀ r, IsQueryBoundP (k r) p 0) :
+    (layer : Layer) (idx : Nat) (hE : EncodingAvoids p H (OtsKey.ofIndex layer idx))
+    (k : Except SphincsError (LayerSignature layer) → OracleComp spec β)
+    (hk : ∀ r, IsQueryBoundP (k r) p 0) :
     IsQueryBoundP (layerMessage H pp prf layer idx >>= fun msg =>
       signLayer H pp prf layer idx msg >>= k) p 0 :=
   isQueryBoundP_bind (layerMessage_isQueryBoundP_zero H prf hH hprf pp layer idx) fun _ hmsg =>
-    isQueryBoundP_bind_zero _ _ (signLayer_isQueryBoundP_zero H prf hH hprf pp layer idx
+    isQueryBoundP_bind_zero _ _ (signLayer_isQueryBoundP_zero H prf hH hprf pp layer idx hE
       (size_of_mem_support_layerMessage H prf hmsg)) hk
+
+end AvoidSign
+
+/-! ## One hypothesis for every call outside the derivations
+
+Here every hash outside the derivations avoids `p`, encodings included.
+
+Every derivation avoids `p` too, at any address. -/
+
+section AvoidAll
+
+variable {ι : Type} {spec : OracleSpec ι} {p : spec.Domain → Prop} [DecidablePred p]
+  (H : ByteArray → OracleComp spec (Vector UInt8 32)) (prf : SeedPrf (OracleComp spec))
+  (hH : ∀ pp A payload, ¬IsDerivationAddress A → 16 ≤ payload.size →
+    IsQueryBoundP (H (thInput pp A payload)) p 0)
+  (hprf : ∀ pp A suffix, IsQueryBoundP (prf pp A suffix) p 0)
+
+include hH in
+/-- Every key's encodings avoid `p`: an encoding address is not a derivation address. -/
+theorem encodingAvoids_of_forall (key : OtsKey) : EncodingAvoids p H key :=
+  fun pp payload hsize => hH pp _ payload (not_isDerivationAddress_addrEncoding key) hsize
+
+include hH in
+/-- Verification queries `p` nowhere. -/
+theorem verifyWith_isQueryBoundP_zero (pk : PublicKey) (msg : Message) (sig : Signature) :
+    IsQueryBoundP (verifyWith H pk msg sig) p 0 := by
+  have hH' : ∀ pp A payload, ¬IsDerivationAddress A → (∀ key, A ≠ addrEncoding key) →
+      16 ≤ payload.size → IsQueryBoundP (H (thInput pp A payload)) p 0 :=
+    fun pp A payload hA _ hsize => hH pp A payload hA hsize
+  have hE : ∀ key, EncodingAvoids p H key := encodingAvoids_of_forall H hH
+  have hroot : ∀ r : Digest, 12 ≤ (packBytes r).size := fun r => by simp; decide
+  rw [verifyWith]
+  refine isQueryBoundP_bind_zero _ _ (messageDigest_isQueryBoundP_zero H hH' _ _ _) fun d =>
+    isQueryBoundP_bind_zero _ _ (forsRecover_isQueryBoundP_zero H hH' _ _ _ _) fun key =>
+    isQueryBoundP_bind_zero _ _
+      (layerRoot_isQueryBoundP_zero H hH' _ _ _ (hE _) (by rw [size_forsKeyBytes]; omega) _)
+      fun r₀ => ?_
+  cases r₀ with
+  | none => exact isQueryBoundP_pure _ _ _
+  | some r₀ =>
+    refine isQueryBoundP_bind_zero _ _
+      (layerRoot_isQueryBoundP_zero H hH' _ _ _ (hE _) (hroot r₀) _) fun r₁ => ?_
+    cases r₁ with
+    | none => exact isQueryBoundP_pure _ _ _
+    | some r₁ =>
+      refine isQueryBoundP_bind_zero _ _
+        (layerRoot_isQueryBoundP_zero H hH' _ _ _ (hE _) (hroot r₁) _) fun r₂ => ?_
+      cases r₂ with
+      | none => exact isQueryBoundP_pure _ _ _
+      | some r₂ => exact isQueryBoundP_pure _ _ _
+
+include hH hprf
 
 /-- Signing from the derivations queries `p` nowhere. -/
 theorem signDerived_isQueryBoundP_zero (pp : PublicParam) (msg : Message) :
     IsQueryBoundP (signDerived H prf pp msg) p 0 := by
+  have hH' : ∀ pp A payload, ¬IsDerivationAddress A → (∀ key, A ≠ addrEncoding key) →
+      16 ≤ payload.size → IsQueryBoundP (H (thInput pp A payload)) p 0 :=
+    fun pp A payload hA _ hsize => hH pp A payload hA hsize
+  have hprf' : ∀ pp A suffix, IsDerivationAddress A → IsQueryBoundP (prf pp A suffix) p 0 :=
+    fun pp A suffix _ => hprf pp A suffix
+  have hE : ∀ key, EncodingAvoids p H key := encodingAvoids_of_forall H hH
   rw [signDerived]
-  refine isQueryBoundP_bind_zero _ _ (randomizer_isQueryBoundP_zero prf hprf _ _) fun rho =>
-    isQueryBoundP_bind_zero _ _ (messageDigest_isQueryBoundP_zero H hH _ _ _) fun d =>
-    isQueryBoundP_bind_zero _ _ (forsSign_isQueryBoundP_zero H prf hH hprf _ _ _) fun fors =>
-    layerMessage_bind_signLayer_isQueryBoundP_zero H prf hH hprf _ _ _ _ fun r₀ => ?_
+  refine isQueryBoundP_bind_zero _ _ (randomizer_isQueryBoundP_zero prf hprf' _ _) fun rho =>
+    isQueryBoundP_bind_zero _ _ (messageDigest_isQueryBoundP_zero H hH' _ _ _) fun d =>
+    isQueryBoundP_bind_zero _ _ (forsSign_isQueryBoundP_zero H prf hH' hprf' _ _ _) fun fors =>
+    layerMessage_bind_signLayer_isQueryBoundP_zero H prf hH' hprf' _ _ _ (hE _) _ fun r₀ => ?_
   cases r₀ with
   | error e => exact isQueryBoundP_pure _ _ _
   | ok bottom =>
     refine isQueryBoundP_bind_zero _ _ (isQueryBoundP_pure _ _ _) fun _ =>
-      layerMessage_bind_signLayer_isQueryBoundP_zero H prf hH hprf _ _ _ _ fun r₁ => ?_
+      layerMessage_bind_signLayer_isQueryBoundP_zero H prf hH' hprf' _ _ _ (hE _) _ fun r₁ => ?_
     cases r₁ with
     | error e => exact isQueryBoundP_pure _ _ _
     | ok middle =>
       refine isQueryBoundP_bind_zero _ _ (isQueryBoundP_pure _ _ _) fun _ =>
-        layerMessage_bind_signLayer_isQueryBoundP_zero H prf hH hprf _ _ _ _ fun r₂ => ?_
+        layerMessage_bind_signLayer_isQueryBoundP_zero H prf hH' hprf' _ _ _ (hE _) _ fun r₂ => ?_
       cases r₂ with
       | error e => exact isQueryBoundP_pure _ _ _
       | ok top =>
@@ -687,10 +777,12 @@ theorem publicParamOf_isQueryBoundP_zero : IsQueryBoundP (publicParamOf prf) p 0
 /-- The public key queries `p` nowhere. -/
 theorem publicKeyOf_isQueryBoundP_zero : IsQueryBoundP (publicKeyOf H prf) p 0 :=
   isQueryBoundP_bind_zero _ _ (publicParamOf_isQueryBoundP_zero prf hprf) fun _ =>
-    isQueryBoundP_bind_zero _ _ (treeRoot_isQueryBoundP_zero H prf hH hprf _ _ _)
-      fun _ => isQueryBoundP_pure _ _ _
+    isQueryBoundP_bind_zero _ _ (treeRoot_isQueryBoundP_zero H prf
+      (fun pp A payload hA _ hsize => hH pp A payload hA hsize)
+      (fun pp A suffix _ => hprf pp A suffix)
+      _ _ _) fun _ => isQueryBoundP_pure _ _ _
 
-end AvoidSign
+end AvoidAll
 
 /-! ## Input lengths -/
 
