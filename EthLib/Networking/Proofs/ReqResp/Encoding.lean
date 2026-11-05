@@ -11,6 +11,10 @@ Properties of the `ssz_snappy` encoding of requests and responses.
 
 A payload that decodes has its declared length, within both bounds.
 
+The decoder accepts exactly the encoding of that length, followed by compressed bytes.
+
+Those bytes are within their bound, and they decompress to the payload.
+
 More compressed bytes than the bound for the declared length reject the payload.
 
 The literal encoder writes payloads and response chunks that decode back.
@@ -151,12 +155,15 @@ theorem decodePayload_encodePayloadLiteral {typeBound : UInt64} {d : ByteArray}
 
 /-- A payload that decodes has its declared length, and that length is within both bounds.
 
-The compressed bytes after the prefix are within the bound for that length. -/
+The compressed bytes after the prefix are within the bound for that length.
+
+They decompress to the payload. -/
 theorem decodePayload_ok {typeBound : UInt64} {bs d : ByteArray}
     (h : decodePayload typeBound bs = .ok d) :
     ∃ declared b, decode (splitVarint bs.data.toList).1 = .ok declared ∧
       d.size = declared.toNat ∧ declared ≤ typeBound ∧ declared ≤ MAX_PAYLOAD_SIZE ∧
-      maxCompressedLen declared = .ok b ∧ (splitVarint bs.data.toList).2.length ≤ b.toNat := by
+      maxCompressedLen declared = .ok b ∧ (splitVarint bs.data.toList).2.length ≤ b.toNat ∧
+      Snappy.decodeFrames ⟨(splitVarint bs.data.toList).2.toArray⟩ = .ok d := by
   simp only [decodePayload] at h
   generalize splitVarint bs.data.toList = sp at h ⊢
   obtain ⟨header, rest⟩ := sp
@@ -191,7 +198,56 @@ theorem decodePayload_ok {typeBound : UInt64} {bs d : ByteArray}
                   simp only [UInt64.not_lt, UInt64.le_iff_toNat_le] at hlt hcond <;> omega
               exact ⟨declared, b, by simp, by simpa using hsz,
                 UInt64.le_iff_toNat_le.mpr hle.1, UInt64.le_iff_toNat_le.mpr hle.2, by simp [hm],
-                by simpa using hc⟩
+                by simpa using hc, by simp⟩
+
+/-- The decoder accepts exactly the encoding of a length within both bounds, then compressed bytes.
+
+Those bytes are within the bound for that length, and they decompress to a payload of that length.
+-/
+theorem decodePayload_eq_ok_iff {typeBound : UInt64} {bs d : ByteArray} :
+    decodePayload typeBound bs = .ok d ↔
+      d.size ≤ (min typeBound MAX_PAYLOAD_SIZE).toNat ∧
+      ∃ rest, bs.data.toList = encode (UInt64.ofNat d.size) ++ rest ∧
+        rest.length ≤ 32 + d.size + d.size / 6 ∧
+        Snappy.decodeFrames ⟨rest.toArray⟩ = .ok d := by
+  have hmax : MAX_PAYLOAD_SIZE.toNat = 10485760 := rfl
+  constructor
+  · intro h
+    obtain ⟨declared, b, hv, hs, hty, hcap, hb, hlen, hf⟩ := decodePayload_ok h
+    have hdeclared : UInt64.ofNat d.size = declared := by rw [hs, UInt64.ofNat_toNat]
+    -- The declared length is within the cap, so the compressed bound does not overflow.
+    have hcap' := UInt64.le_iff_toNat_le.mp hcap
+    obtain ⟨b', hb', hbv⟩ := maxCompressedLen_eq (n := declared) (by omega)
+    obtain rfl : b = b' := Except.ok.inj (hb.symm.trans hb')
+    refine ⟨?_, (splitVarint bs.data.toList).2, ?_, ?_, hf⟩
+    · rw [hs, UInt64.min_def]
+      split
+      · exact UInt64.le_iff_toNat_le.mp hty
+      · exact hcap'
+    · -- The prefix decodes to the declared length, so it is the encoding of that length.
+      rw [hdeclared, encode_decode hv]
+      exact (List.take_append_drop _ _).symm
+    · rw [hs]
+      omega
+  · rintro ⟨hbound, rest, hbs, hlen, hf⟩
+    -- The length is within the cap, so 64 bits hold it and its bound on the compressed bytes.
+    have hle : (min typeBound MAX_PAYLOAD_SIZE).toNat ≤ MAX_PAYLOAD_SIZE.toNat := by
+      rw [UInt64.min_def]
+      split
+      · rename_i hle
+        exact UInt64.le_iff_toNat_le.mp hle
+      · exact Nat.le_refl _
+    have hs : (UInt64.ofNat d.size).toNat = d.size :=
+      UInt64.toNat_ofNat_of_lt' (by unfold UInt64.size; omega)
+    obtain ⟨b, hb, hbv⟩ := maxCompressedLen_eq (n := UInt64.ofNat d.size) (by omega)
+    rw [hs] at hbv
+    have hgt : ¬ min typeBound MAX_PAYLOAD_SIZE < UInt64.ofNat d.size := by
+      rw [UInt64.lt_iff_toNat_lt, hs]
+      omega
+    have hc : ¬ b.toNat < rest.length := by omega
+    have hsize : ¬ d.size ≠ (UInt64.ofNat d.size).toNat := by omega
+    simp only [decodePayload, hbs, splitVarint_encode, decode_encode, hb, hf, bind, Except.bind,
+      Except.mapError, hgt, hc, hsize, ite_false, pure, Except.pure]
 
 /-- A payload with more compressed bytes than the bound for its declared length is rejected. -/
 theorem decodePayload_compressedTooLong {typeBound declared b : UInt64}

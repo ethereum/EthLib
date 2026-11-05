@@ -5,11 +5,13 @@ public import EthLib.Networking.Encoding.Varint
 /-!
 # `Networking.Proofs.Encoding.Varint`
 
-Properties of the unsigned protobuf varint codec, proved for every 64-bit value.
+Properties of the unsigned protobuf varint codec, proved for every 64-bit value and every input.
 
 - Decoding undoes encoding.
 - An encoding never exceeds the ten bytes the specification allows.
 - An encoding is always minimal.
+- The decoder accepts only these encodings, so each value has one canonical encoding.
+- A varint is too long exactly when it has over ten bytes and the first ten are continued.
 
 The kernel checks everything here, so no `native_decide` or `bv_decide` axiom appears.
 -/
@@ -228,6 +230,155 @@ theorem decode_encode (v : UInt64) : decode (encode v) = .ok v := by
   rw [ite_eq_right (by simp [nonMinimal_encode]),
     ite_eq_right (by rw [hv]; have := v.toNat_lt_size; simp only [UInt64.size] at *; omega), hv]
   rw [UInt64.ofNat_toNat]
+
+/-! ## The canonical encoding -/
+
+/-- The shape check passes a byte in two ways: the byte ends the input, or the rest passes. -/
+private theorem of_groups_cons_eq_ok {fuel : Nat} {b : UInt8} {bs gs : List UInt8}
+    (h : groups (fuel + 1) (b :: bs) = .ok gs) :
+    (b.toNat < continuation ∧ bs = [] ∧ gs = [b]) ∨
+      (continuation ≤ b.toNat ∧ ∃ rs, groups fuel bs = .ok rs ∧ gs = b :: rs) := by
+  simp only [groups] at h
+  split at h
+  · rename_i hb
+    cases bs with
+    | nil => exact Or.inl ⟨hb, rfl, (Except.ok.inj h).symm⟩
+    | cons _ _ => simp at h
+  · rename_i hb
+    cases hr : groups fuel bs with
+    | error e => simp [hr, Except.map] at h
+    | ok rs =>
+        simp only [hr, Except.map, Except.ok.injEq] at h
+        exact Or.inr ⟨Nat.le_of_not_lt hb, rs, rfl, h.symm⟩
+
+/-- The shape check returns its whole input when it passes. -/
+private theorem eq_of_groups_eq_ok {fuel : Nat} {bs gs : List UInt8}
+    (h : groups fuel bs = .ok gs) : gs = bs := by
+  induction fuel generalizing bs gs with
+  | zero => cases bs <;> simp [groups] at h
+  | succ fuel ih =>
+      cases bs with
+      | nil => simp [groups] at h
+      | cons b bs =>
+          rcases of_groups_cons_eq_ok h with ⟨-, rfl, rfl⟩ | ⟨-, rs, hr, rfl⟩
+          · rfl
+          · rw [ih hr]
+
+/-- An input that passes the shape check and is minimal encodes its value back to itself. -/
+private theorem encodeAux_valueOf_of_groups_eq_ok {fuel : Nat} {bs gs : List UInt8}
+    (h : groups fuel bs = .ok gs) (hm : nonMinimal bs = false) :
+    encodeAux (valueOf bs) fuel = bs := by
+  induction fuel generalizing bs gs with
+  | zero => cases bs <;> simp [groups] at h
+  | succ fuel ih =>
+      cases bs with
+      | nil => simp [groups] at h
+      | cons b bs =>
+          rcases of_groups_cons_eq_ok h with ⟨hb, rfl, -⟩ | ⟨hb, rs, hr, -⟩
+          · -- A byte below 128 is its own value, and it encodes as itself.
+            have hlt : b.toNat < groupSize := hb
+            have hv : valueOf [b] = b.toNat := by simp [valueOf, Nat.mod_eq_of_lt hlt]
+            rw [hv, encodeAux, ite_eq_left hlt, UInt8.ofNat_toNat]
+          · cases bs with
+            -- The shape check rejects an empty input.
+            | nil => simp [groups] at hr
+            | cons c cs =>
+                -- Minimality excludes a zero byte at the end, so the rest is minimal too.
+                have hl : (c :: cs).getLast? ≠ some 0 := by simpa [nonMinimal] using hm
+                have hrest : nonMinimal (c :: cs) = false := by simp [nonMinimal, hl]
+                have hrec := ih hr hrest
+                -- Zero encodes as one zero byte, so the rest denotes a positive number.
+                have hpos : 0 < valueOf (c :: cs) := by
+                  refine Nat.pos_of_ne_zero fun h0 => hl ?_
+                  cases fuel with
+                  | zero => simp [groups] at hr
+                  | succ fuel =>
+                      rw [h0, encodeAux, ite_eq_left (by decide : 0 < groupSize)] at hrec
+                      rw [← hrec]
+                      rfl
+                -- So the value is at least 128, and dividing it by 128 gives the rest back.
+                have hv : valueOf (b :: c :: cs) = b.toNat % 128 + 128 * valueOf (c :: cs) := rfl
+                have hge : ¬ valueOf (b :: c :: cs) < groupSize := by rw [groupSize_eq]; omega
+                have hq : valueOf (b :: c :: cs) / groupSize = valueOf (c :: cs) := by
+                  rw [groupSize_eq]; omega
+                -- The low group with the continuation bit is the byte itself.
+                have hbyte :
+                    UInt8.ofNat (valueOf (b :: c :: cs) % groupSize + continuation) = b := by
+                  apply UInt8.toNat_inj.mp
+                  have hsize := UInt8.toNat_lt b
+                  rw [toNat_continued_byte, groupSize_eq, continuation_eq]
+                  rw [continuation_eq] at hb
+                  omega
+                rw [encodeAux, ite_eq_right hge, hq, hbyte, hrec]
+
+/-- The decoder accepts only canonical input: what it decodes from `bs` is encoded as `bs`. -/
+theorem encode_decode {bs : List UInt8} {v : UInt64} (h : decode bs = .ok v) : encode v = bs := by
+  -- An input that decodes passed the shape check and both later checks.
+  cases hg : groups maxLength bs with
+  | error e => simp [decode, hg] at h
+  | ok gs =>
+      obtain rfl := eq_of_groups_eq_ok hg
+      rw [decode, hg] at h
+      dsimp only at h
+      split at h
+      · cases h
+      · rename_i hm
+        split at h
+        · cases h
+        · rename_i hlt
+          obtain rfl := Except.ok.inj h
+          -- The value is below 2^64, so the 64-bit integer keeps it.
+          have hv : (UInt64.ofNat (valueOf gs)).toNat = valueOf gs :=
+            UInt64.toNat_ofNat_of_lt' (by unfold UInt64.size; omega)
+          rw [encode, hv]
+          exact encodeAux_valueOf_of_groups_eq_ok hg (by simpa using hm)
+
+/-- `encode` is a bijection between 64-bit values and the byte strings that `decode` accepts.
+
+- Every value decodes back from its encoding.
+- Every input that decodes is the encoding of what it decodes to.
+-/
+theorem decode_eq_ok_iff {bs : List UInt8} {v : UInt64} : decode bs = .ok v ↔ encode v = bs :=
+  ⟨encode_decode, fun h => h ▸ decode_encode v⟩
+
+/-! ## Rejected varints -/
+
+/-- The shape check runs out of budget exactly when bytes remain after continued bytes fill it. -/
+private theorem groups_eq_tooLong_iff {fuel : Nat} {bs : List UInt8} :
+    groups fuel bs = .error .tooLong ↔
+      fuel < bs.length ∧ ∀ c ∈ bs.take fuel, continuation ≤ c.toNat := by
+  induction fuel generalizing bs with
+  | zero => cases bs <;> simp [groups]
+  | succ fuel ih =>
+      cases bs with
+      | nil => simp [groups]
+      | cons b bs =>
+          by_cases hb : b.toNat < continuation
+          · -- A last byte ends the check with success or with trailing bytes.
+            have hle : ¬ continuation ≤ b.toNat := Nat.not_le.mpr hb
+            cases bs <;> simp [groups, hb, hle]
+          · -- A continued byte keeps the result of the rest, whichever error it is.
+            have hmap : (groups fuel bs).map (b :: ·) = .error .tooLong ↔
+                groups fuel bs = .error .tooLong := by
+              cases groups fuel bs <;> simp [Except.map]
+            simp [groups, hb, hmap, ih, Nat.le_of_not_lt hb]
+
+/-- A varint is too long exactly when it has over ten bytes and the first ten are continued. -/
+theorem decode_eq_tooLong_iff {bs : List UInt8} :
+    decode bs = .error .tooLong ↔
+      10 < bs.length ∧ ∀ c ∈ bs.take 10, continuation ≤ c.toNat := by
+  have hg : groups maxLength bs = .error .tooLong ↔
+      10 < bs.length ∧ ∀ c ∈ bs.take 10, continuation ≤ c.toNat :=
+    groups_eq_tooLong_iff
+  rw [← hg]
+  -- The two checks after the shape check give other errors.
+  cases hr : groups maxLength bs with
+  | error e => simp [decode, hr]
+  | ok gs =>
+      simp only [decode, hr]
+      split
+      · simp
+      · split <;> simp
 
 /-! ## Error codes -/
 
