@@ -49,4 +49,13 @@ A valid payload also keeps the access list hash of its block, from the header of
 python -I extract_block_access_lists.py <directory that holds fixtures> block_access_lists.json
 ```
 
+`blob_schedules.json` holds header pairs of the four test networks that set a blob schedule of their own: `AmsterdamBPOIncrease`, `AmsterdamBPODecrease` and their transitions at time 15,000.
+From each file it keeps at most two valid headers and two headers whose exception is the excess blob gas.
+Each case keeps the header, its parent, the exception if any, and the blob schedule of the fixture's config.
+`extract_blob_schedules.py` wrote the file from the archive, unpacked for these networks, and writes the same bytes again:
+
+```text
+python -I extract_blob_schedules.py <directory of fixtures> blob_schedules.json
+```
+
 The Python tests in `bindings/python/tests/blocks/` read these cases and never rewrite them.

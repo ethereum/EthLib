@@ -1,5 +1,7 @@
 """Block headers, blocks and receipts of the execution layer, at each fork."""
 
+from collections.abc import Sequence
+
 from ...errors import BlockError
 from ...serialization import rlp
 
@@ -69,17 +71,31 @@ def validate_size(fork: str, block: bytes) -> None:
     _native.block_validate_size(fork, block)
 
 
-def validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -> None:
+# A blob schedule that a chain sets itself: activation time, target, maximum, update fraction.
+BlobSchedule = tuple[int, int, int, int]
+
+
+def _blob_schedules(schedules: Sequence[BlobSchedule]) -> bytes:
+    # Each integer crosses as its minimal big-endian bytes, in one RLP list per schedule.
+    return rlp.encode([[v.to_bytes((v.bit_length() + 7) // 8, "big") for v in schedule]
+                       for schedule in schedules])
+
+
+def validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes,
+                    blob_schedules: Sequence[BlobSchedule] = ()) -> None:
     """Check a header against its parent at any fork, and raise BlockError if it fails."""
-    _native.block_validate_header(parent_fork, fork, parent, header)
+    _native.block_validate_header(parent_fork, fork, parent, header,
+                                  _blob_schedules(blob_schedules))
 
 
-def check_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -> None:
+def check_header(parent_fork: str, fork: str, parent: bytes, header: bytes,
+                 blob_schedules: Sequence[BlobSchedule] = ()) -> None:
     """Check a header against its parent, every check but the proof of work."""
-    _native.block_check_header(parent_fork, fork, parent, header)
+    _native.block_check_header(parent_fork, fork, parent, header,
+                               _blob_schedules(blob_schedules))
 
 
 __all__ = ["header_hash", "reencode", "transactions_root", "withdrawals_root",
            "deposit_requests", "requests_hash", "block_access_list_hash",
            "check_block_access_list", "make_receipts", "receipt_reencode", "receipt_logs_bloom",
-           "validate_size", "validate_header", "check_header", "BlockError"]
+           "validate_size", "validate_header", "check_header", "BlobSchedule", "BlockError"]

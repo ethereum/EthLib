@@ -24,6 +24,8 @@ An unknown fork name, or forks out of order, has code 0, since no error type cov
 
 So does a transaction of a block that does not decode, and a trie with an empty value.
 
+So does a blob schedule that is not four integers, or whose bounds fail.
+
 A deposit log in another layout has a code from 301.
 
 A block access list that breaks a rule of its form has a code from 401.
@@ -95,29 +97,59 @@ def validateSizeExport (fork block : ByteArray) : Result UInt8 := do
   (validateBlockSize b).map (fun () => 1) |>.mapError
     fun e => (e.code, s!"block invalid: {reprStr e}")
 
-/-- Check a header at a fork against its parent at the parent's fork, at every fork. -/
-@[export eth_block_validate_header]
-def validateHeaderExport (parentFork fork parent header : ByteArray) : Result UInt8 := do
+/-- The blob schedules that a chain sets itself, from their RLP form.
+
+Each is a list of four integers: activation time, target, maximum and update fraction. -/
+def blobSchedulesOf (bytes : ByteArray) : Result (List (Activation × BlobSchedule)) := do
+  let entries : List (List Nat) ← runRlp "blob schedules rejected" (Codec.decode bytes)
+  entries.mapM fun
+    | [time, target, max, fraction] =>
+      if h : target ≤ max ∧ 0 < max ∧ 0 < fraction then
+        pure (.time time, ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩)
+      -- No error type covers a blob schedule of the binding, so its code is 0.
+      else throw (0, "a blob schedule needs target ≤ max, 0 < max and 0 < update fraction")
+    | _ => throw (0, "a blob schedule is not a list of four integers")
+
+/-- The parent and the header of a header check, decoded at their forks, and a blob schedule.
+
+The schedule is the header's, on a chain that sets the given blob schedules. -/
+def headerCheckInputs (parentFork fork parent header schedules : ByteArray) :
+    Result ((parentFork fork : Fork) × Header parentFork × Header fork ×
+      Since .dencun fork BlobSchedule) := do
   let parentFork ← forkUpTo .glamsterdam parentFork
   let fork ← forkUpTo .glamsterdam fork
   let parent : Header parentFork ← runRlp "parent rejected" (Codec.decode parent)
   let header : Header fork ← runRlp "header rejected" (Codec.decode header)
+  -- The chain's forks and chain ID play no part in the blob schedule of the header.
+  let config : ChainConfig :=
+    { chainId := 0, activations := [], blobSchedules := (← blobSchedulesOf schedules) }
+  return ⟨parentFork, fork, parent, header,
+    Fees.BlobBaseFee.chainBlobSchedule config fork header.number header.timestamp.toNat⟩
+
+/-- Check a header at a fork against its parent at the parent's fork, at every fork.
+
+The header's blob schedule is the last given one that it has reached, else that of its fork. -/
+@[export eth_block_validate_header]
+def validateHeaderExport (parentFork fork parent header schedules : ByteArray) :
+    Result UInt8 := do
+  let ⟨parentFork, fork, parent, header, schedule⟩ ←
+    headerCheckInputs parentFork fork parent header schedules
   if hFork : parentFork ≤ fork then
-    (validateHeader hFork parent header).map (fun () => 1) |>.mapError
+    (validateHeader hFork parent header schedule).map (fun () => 1) |>.mapError
       fun e => (e.code, s!"header invalid: {reprStr e}")
   else throw (0, "the parent's fork is after the fork")
 
 /-- Check a header against its parent at two named forks, every check but the proof of work.
 
-Test chains that run without proof of work check their headers this way. -/
+Test chains that run without proof of work check their headers this way.
+
+The header's blob schedule is the last given one that it has reached, else that of its fork. -/
 @[export eth_block_check_header]
-def checkHeaderExport (parentFork fork parent header : ByteArray) : Result UInt8 := do
-  let parentFork ← forkUpTo .glamsterdam parentFork
-  let fork ← forkUpTo .glamsterdam fork
-  let parent : Header parentFork ← runRlp "parent rejected" (Codec.decode parent)
-  let header : Header fork ← runRlp "header rejected" (Codec.decode header)
+def checkHeaderExport (parentFork fork parent header schedules : ByteArray) : Result UInt8 := do
+  let ⟨parentFork, fork, parent, header, schedule⟩ ←
+    headerCheckInputs parentFork fork parent header schedules
   if hFork : parentFork ≤ fork then
-    (checkHeader hFork parent header).map (fun () => 1) |>.mapError
+    (checkHeader hFork parent header schedule).map (fun () => 1) |>.mapError
       fun e => (e.code, s!"header invalid: {reprStr e}")
   else throw (0, "the parent's fork is after the fork")
 

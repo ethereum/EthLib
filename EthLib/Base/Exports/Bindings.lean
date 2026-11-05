@@ -622,10 +622,12 @@ def bindings : List Binding := [
     "(aes_secret: bytes, mac_secret: bytes, mac_init: bytes, input: bytes) -> bytes",
     [`EthLib.Networking.Rlpx.FrameError], some "RlpxError"⟩,
   ⟨"block_validate_header", `EthLib.Execution.Blocks.Exports.validateHeaderExport,
-    "(parent_fork: str, fork: str, parent: bytes, header: bytes) -> bool",
+    "(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) " ++
+      "-> bool",
     [`EthLib.Serialization.Rlp.RlpError, `EthLib.Execution.Blocks.BlockError], some "BlockError"⟩,
   ⟨"block_check_header", `EthLib.Execution.Blocks.Exports.checkHeaderExport,
-    "(parent_fork: str, fork: str, parent: bytes, header: bytes) -> bool",
+    "(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) " ++
+      "-> bool",
     [`EthLib.Serialization.Rlp.RlpError, `EthLib.Execution.Blocks.BlockError], some "BlockError"⟩,
   ⟨"precompile_run", `EthLib.Execution.Evm.Precompiles.Exports.runExport,
     "(fork: str, address: int, data: bytes, gas: int) -> bytes",

@@ -12,7 +12,7 @@ So a valid header uses at most its gas limit, and the gas limit rule accepts its
 
 From London, it also has the base fee that its parent gives, or the initial one at the first block.
 
-From Dencun, it also has the excess blob gas that its parent gives.
+From Dencun, it also has the excess blob gas that its parent gives under its blob schedule.
 
 Before Paris, it has the difficulty that its parent gives, and a valid proof of work.
 
@@ -36,37 +36,40 @@ theorem firstFailure_eq_ok_iff (checks : List (Bool × BlockError)) :
     cases condition <;> simp [firstFailure, ih]
 
 variable {parentFork fork : Fork} {hFork : parentFork ≤ fork} {parent : Header parentFork}
-  {header : Header fork}
+  {header : Header fork} {schedule : Since .dencun fork BlobSchedule}
 
 /-- A valid header passes every check but the proof of work. -/
-theorem checkHeader_of_validateHeader (hv : validateHeader hFork parent header = .ok ()) :
-    checkHeader hFork parent header = .ok () := by
+theorem checkHeader_of_validateHeader
+    (hv : validateHeader hFork parent header schedule = .ok ()) :
+    checkHeader hFork parent header schedule = .ok () := by
   unfold validateHeader at hv
-  cases hc : checkHeader hFork parent header with
+  cases hc : checkHeader hFork parent header schedule with
   | error e => simp [hc, bind, Except.bind] at hv
   | ok u => rfl
 
 /-- A valid header passes each of its checks. -/
-theorem check_of_validateHeader (hv : validateHeader hFork parent header = .ok ())
-    {c : Bool × BlockError} (hc : c ∈ headerChecks hFork parent header) : c.1 = true :=
+theorem check_of_validateHeader (hv : validateHeader hFork parent header schedule = .ok ())
+    {c : Bool × BlockError} (hc : c ∈ headerChecks hFork parent header schedule) : c.1 = true :=
   (firstFailure_eq_ok_iff _).mp (checkHeader_of_validateHeader hv) c hc
 
 /-- A valid header uses at most its gas limit. -/
-theorem gasUsed_le_of_validateHeader (hv : validateHeader hFork parent header = .ok ()) :
+theorem gasUsed_le_of_validateHeader
+    (hv : validateHeader hFork parent header schedule = .ok ()) :
     header.gasUsed ≤ header.gasLimit := by
   have := check_of_validateHeader hv (c := (decide (header.gasUsed ≤ header.gasLimit),
     .gasUsedAboveLimit)) (by simp [headerChecks])
   simpa using this
 
 /-- A valid header has a gas limit that the rule accepts, across a London transition too. -/
-theorem checkGasLimitAcross_of_validateHeader (hv : validateHeader hFork parent header = .ok ()) :
+theorem checkGasLimitAcross_of_validateHeader
+    (hv : validateHeader hFork parent header schedule = .ok ()) :
     GasLimit.checkGasLimitAcross parentFork fork header.gasLimit parent.gasLimit = true :=
   check_of_validateHeader hv (c := (GasLimit.checkGasLimitAcross parentFork fork header.gasLimit
     parent.gasLimit, .invalidGasLimit)) (by simp [headerChecks])
 
 /-- With a parent from London on, a valid header has a gas limit that the plain rule accepts. -/
 theorem checkGasLimit_of_validateHeader (hLondon : .london ≤ parentFork)
-    (hv : validateHeader hFork parent header = .ok ()) :
+    (hv : validateHeader hFork parent header schedule = .ok ()) :
     GasLimit.checkGasLimit header.gasLimit parent.gasLimit = true := by
   have h := checkGasLimitAcross_of_validateHeader hv
   have hnot : ¬ (parentFork < .london ∧ .london ≤ fork) := fun ⟨hlt, _⟩ =>
@@ -75,7 +78,7 @@ theorem checkGasLimit_of_validateHeader (hLondon : .london ≤ parentFork)
 
 /-- From London on, a valid header has the base fee that the rule across forks gives. -/
 theorem baseFeeAcross_of_validateHeader (h : .london ≤ fork)
-    (hv : validateHeader hFork parent header = .ok ()) :
+    (hv : validateHeader hFork parent header schedule = .ok ()) :
     header.baseFeePerGas h = expectedBaseFeeAcross parent := by
   have := check_of_validateHeader hv
     (c := (decide (header.baseFeePerGas h = expectedBaseFeeAcross parent),
@@ -85,7 +88,7 @@ theorem baseFeeAcross_of_validateHeader (h : .london ≤ fork)
 
 /-- With a parent from London on, a valid header has the base fee that its parent gives. -/
 theorem baseFee_of_validateHeader (hLondon : .london ≤ parentFork)
-    (hv : validateHeader hFork parent header = .ok ()) :
+    (hv : validateHeader hFork parent header schedule = .ok ()) :
     header.baseFeePerGas (Nat.le_trans hLondon hFork) =
       BaseFee.calculateBaseFeePerGas parent.gasLimit parent.gasUsed
         (parent.baseFeePerGas hLondon) := by
@@ -94,31 +97,33 @@ theorem baseFee_of_validateHeader (hLondon : .london ≤ parentFork)
 
 /-- The first London block, whose parent is before London, has the initial base fee. -/
 theorem baseFee_of_validateHeader_first (h : .london ≤ fork) (hParent : ¬ .london ≤ parentFork)
-    (hv : validateHeader hFork parent header = .ok ()) :
+    (hv : validateHeader hFork parent header schedule = .ok ()) :
     header.baseFeePerGas h = INITIAL_BASE_FEE := by
   rw [baseFeeAcross_of_validateHeader h hv]
   simp [expectedBaseFeeAcross, hParent]
 
 /-- From Dencun, with a parent from London on, a header has the excess blob gas its parent gives. -/
 theorem excessBlobGas_of_validateHeader (hLondon : .london ≤ parentFork) (h : .dencun ≤ fork)
-    (hv : validateHeader hFork parent header = .ok ()) :
-    (header.excessBlobGas h).toNat = expectedExcessBlobGas hLondon h parent := by
+    (hv : validateHeader hFork parent header schedule = .ok ()) :
+    (header.excessBlobGas h).toNat = expectedExcessBlobGas hLondon h parent schedule := by
   have := check_of_validateHeader hv
-    (c := (decide ((header.excessBlobGas h).toNat = expectedExcessBlobGas hLondon h parent),
-      .wrongExcessBlobGas (expectedExcessBlobGas hLondon h parent)
+    (c := (decide ((header.excessBlobGas h).toNat =
+        expectedExcessBlobGas hLondon h parent schedule),
+      .wrongExcessBlobGas (expectedExcessBlobGas hLondon h parent schedule)
         (header.excessBlobGas h).toNat))
     (by simp [headerChecks, h, hLondon])
   simpa using this
 
 /-- From Paris on, a valid header has a parent from London on. -/
 theorem london_le_of_validateHeader (h : .paris ≤ fork)
-    (hv : validateHeader hFork parent header = .ok ()) : .london ≤ parentFork := by
+    (hv : validateHeader hFork parent header schedule = .ok ()) : .london ≤ parentFork := by
   have := check_of_validateHeader hv
     (c := (decide (.london ≤ parentFork), .parentBeforeLondon)) (by simp [headerChecks, h])
   simpa using this
 
 /-- A valid header follows its parent: one number higher, and later in time. -/
-theorem number_timestamp_of_validateHeader (hv : validateHeader hFork parent header = .ok ()) :
+theorem number_timestamp_of_validateHeader
+    (hv : validateHeader hFork parent header schedule = .ok ()) :
     header.number = parent.number + 1 ∧ parent.timestamp.toNat < header.timestamp.toNat := by
   constructor
   · simpa using check_of_validateHeader hv
@@ -129,7 +134,7 @@ theorem number_timestamp_of_validateHeader (hv : validateHeader hFork parent hea
 
 /-- Before Paris, a valid header has the difficulty that its parent gives. -/
 theorem difficulty_of_validateHeader (h : fork < .paris)
-    (hv : validateHeader hFork parent header = .ok ()) :
+    (hv : validateHeader hFork parent header schedule = .ok ()) :
     header.difficulty = expectedDifficulty parent header := by
   have := check_of_validateHeader hv
     (c := (decide (header.difficulty = expectedDifficulty parent header),
@@ -139,7 +144,8 @@ theorem difficulty_of_validateHeader (h : fork < .paris)
 
 /-- Before Paris, a valid header carries a valid proof of work. -/
 theorem checkProofOfWork_of_validateHeader (h : fork < .paris)
-    (hv : validateHeader hFork parent header = .ok ()) : checkProofOfWork header = .ok () := by
+    (hv : validateHeader hFork parent header schedule = .ok ()) :
+    checkProofOfWork header = .ok () := by
   unfold validateHeader at hv
   rw [checkHeader_of_validateHeader hv] at hv
   simp only [h, ↓reduceIte, bind, Except.bind] at hv

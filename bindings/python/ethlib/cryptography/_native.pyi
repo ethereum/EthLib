@@ -751,11 +751,11 @@ def rlpx_read_frames(aes_secret: bytes, mac_secret: bytes, mac_init: bytes, inpu
     """The frame data of the frames in `input`, as an RLP list, from the start of a direction."""
     ...
 
-def block_validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -> bool:
+def block_validate_header(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) -> bool:
     """Check a header at a fork against its parent at the parent's fork, at every fork."""
     ...
 
-def block_check_header(parent_fork: str, fork: str, parent: bytes, header: bytes) -> bool:
+def block_check_header(parent_fork: str, fork: str, parent: bytes, header: bytes, blob_schedules: bytes) -> bool:
     """Check a header against its parent at two named forks, every check but the proof of work."""
     ...
 

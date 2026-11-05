@@ -56,7 +56,7 @@ def configOfJson (j : Json) : Result ChainConfig := do
   let some chainId := (j.getObjValAs? Nat "chainId").toOption | throw (0, "config: no chainId")
   let .arr activations := j.getObjValD "activations" | throw (0, "config: no activations")
   let activations ← activations.toList.mapM activationOfJson
-  return ⟨BitVec.ofNat 256 chainId, activations⟩
+  return { chainId := BitVec.ofNat 256 chainId, activations }
 
 /-- Bytes as lowercase hex behind `0x`. -/
 def hex (bytes : List UInt8) : String :=

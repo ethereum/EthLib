@@ -60,7 +60,7 @@ def readSchedule (bytes : ByteArray) : Result Schedule := do
     | _ => throw (0, "merge fork is not a list of at most one block")
   let .ok forks := forks.toItems | throw (0, "forks are not a list")
   let activations ← forks.mapM readActivation
-  return ⟨hash, time, ⟨0, activations⟩, mergeForkBlock⟩
+  return ⟨hash, time, { chainId := 0, activations }, mergeForkBlock⟩
 
 /-- The fork identifier, as RLP, of a node with the schedule `schedule` at a head. -/
 @[export eth_fork_id]
