@@ -29,6 +29,7 @@ public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.SkipGame
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.FixedParam
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.LabSteps
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.LabLeaf
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.LabTree
 public import EthLib.Cryptography.Proofs.Sphincs.SignatureFailure
 
 /-!
