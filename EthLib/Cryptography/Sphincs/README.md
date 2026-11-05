@@ -172,6 +172,16 @@ Definitions that derive a secret take the derivation function as an argument too
   In the ideal game, the public parameter, every secret and every randomizer is an independent uniform answer.
   The forging advantage is at most the chance of a forgery there, plus `qH / 2^256` for each of the two seeds, where `qH` counts the adversary's hash queries (`forgeAdvantage_le_hiddenSeed`).
   The first hop replaces the scheme seed, and the second replaces every derivation from it.
+- The game asked half by half (`Unforgeability/Halves.lean`, `Unforgeability/HalvedGame.lean`).
+  A uniform 32-byte answer is two independent uniform 16-byte halves, so every query can ask its two halves instead.
+  The ideal game then gives the same output in distribution (`run_simulateQ_halvesImpl_evalDistEq`), and the bound of the seed hops holds for the game of halves (`forgeAdvantage_le_halved`).
+  In that game, every value that feeds a tweakable hash is one answer of the oracle.
+- The canonical graph (`Unforgeability/Graph.lean`).
+  Every tweakable hash of a key with public parameter `P` is a node: a chain step, a key's leaf, a tree node, an encoding at a counter, a FORS leaf or a FORS node.
+  Its children are the derivation halves and nodes that its payload is made of.
+  Distinct nodes, or one node at distinct children values, have distinct points (`pointBytes_inj`), so the graph is an input of VCVio's canonical relabelling (`graph`).
+  A point at a node's address that ends with the node's suffix is at that node's key (`nodeKeys`, `nodeAt_thInput`).
+  Each honest call is at the point of its node, at the values its payload is made of (`pointBytes_chain` and its siblings).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
 
