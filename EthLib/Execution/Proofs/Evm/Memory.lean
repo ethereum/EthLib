@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Execution.Evm.Memory
-public import EthLib.Execution.Evm.Step
 public import EthLib.Execution.Proofs.Evm.Gas
 
 /-!
@@ -14,7 +13,6 @@ public import EthLib.Execution.Proofs.Evm.Gas
 - Memory grows in whole words, so its size stays a multiple of 32.
 - A write within memory sets each byte of its range and keeps every other byte.
 - Growth keeps every byte, and a read gives the bytes of its range.
-- After a charge for gas and memory, memory holds every range that is not empty.
 -/
 
 @[expose] public section
@@ -163,7 +161,7 @@ theorem byteAt_memoryWrite {memory value : ByteArray} {start : Nat}
         · simp [show ¬ i - (start + value.size) < memory.size - (start + value.size) by omega, hm,
             Array.getElem?_eq_none (show memory.data.size ≤ i by omega)]
 
-/-- Growth keeps every byte of memory, and each new byte reads as zero. -/
+/-- Growth keeps every byte of memory. -/
 theorem byteAt_memoryExtend (memory : ByteArray) (n i : Nat) :
     byteAt (memoryExtend memory n) i = byteAt memory i :=
   byteAt_append_zeros memory n i
@@ -199,86 +197,5 @@ theorem byteAt_bufferRead (data : ByteArray) (offset size j : Nat) :
   · rw [dite_eq_right_of_eq_false
       (eq_false (by simpa [ByteArray.size, bufferRead_length] using hj)),
       ite_eq_right_of_eq_false _ _ (eq_false hj)]
-
-/-- The rounded size and the growth for a list of ranges cover every range that is not empty. -/
-theorem le_ceil32_add_expandBy (currentSize : Nat) (ranges : List (U256 × U256)) :
-    ∀ r ∈ ranges, r.2 ≠ 0 →
-      r.1.toNat + r.2.toNat ≤ ceil32 currentSize + (extendMemory currentSize ranges).expandBy := by
-  induction ranges generalizing currentSize with
-  | nil => simp
-  | cons p ranges ih =>
-    obtain ⟨start, size⟩ := p
-    intro r hr hnz
-    unfold extendMemory
-    split
-    · rename_i hz
-      rcases List.mem_cons.mp hr with heq | hr
-      · subst heq
-        exact absurd hz hnz
-      · exact ih currentSize r hr hnz
-    · simp only
-      split
-      · rename_i fits
-        rcases List.mem_cons.mp hr with heq | hr
-        · subst heq
-          have := le_ceil32 (start.toNat + size.toNat)
-          simp only
-          omega
-        · exact ih currentSize r hr hnz
-      · rename_i grows
-        simp only
-        have hafter := ceil32_of_mod (ceil32_mod (start.toNat + size.toNat))
-        rcases List.mem_cons.mp hr with heq | hr
-        · subst heq
-          have := le_ceil32 (start.toNat + size.toNat)
-          simp only
-          omega
-        · have := ih (ceil32 (start.toNat + size.toNat)) r hr hnz
-          rw [hafter] at this
-          omega
-
-/-! ## A charge for gas and memory -/
-
-section Charge
-
-variable {fork : EthLib.Base.Fork} {Meter : Type} [GasMeter Meter]
-
-/-- A charge for gas and memory grows memory by the growth for its ranges. -/
-theorem memory_chargeGasAndMemory {evm after : Evm fork Meter} {cost : Nat}
-    {ranges : List (U256 × U256)} (h : chargeGasAndMemory evm cost ranges = .ok after) :
-    after.memory = memoryExtend evm.memory (extendMemory evm.memory.size ranges).expandBy := by
-  unfold chargeGasAndMemory chargeGas at h
-  cases hc : GasMeter.charge evm.gas (cost + (extendMemory evm.memory.size ranges).cost) with
-  | error e => simp [hc, bind, Except.bind] at h
-  | ok gas =>
-    simp only [hc, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
-    rw [← h]
-
-/-- After a charge for gas and memory, memory holds every range that is not empty.
-
-Memory must start at a size that is a multiple of 32, as every frame keeps it. -/
-theorem le_size_chargeGasAndMemory {evm after : Evm fork Meter} {cost : Nat}
-    {ranges : List (U256 × U256)} (hmod : evm.memory.size % 32 = 0)
-    (h : chargeGasAndMemory evm cost ranges = .ok after) :
-    ∀ r ∈ ranges, r.2 ≠ 0 → r.1.toNat + r.2.toNat ≤ after.memory.size := by
-  intro r hr hnz
-  rw [memory_chargeGasAndMemory h, size_memoryExtend]
-  have := le_ceil32_add_expandBy evm.memory.size ranges r hr hnz
-  rwa [ceil32_of_mod hmod] at this
-
-/-- A charge for gas and memory keeps every byte of memory. -/
-theorem byteAt_chargeGasAndMemory {evm after : Evm fork Meter} {cost : Nat}
-    {ranges : List (U256 × U256)} (h : chargeGasAndMemory evm cost ranges = .ok after) (i : Nat) :
-    byteAt after.memory i = byteAt evm.memory i := by
-  rw [memory_chargeGasAndMemory h, byteAt_memoryExtend]
-
-/-- A charge for gas and memory keeps the size of memory a multiple of 32. -/
-theorem size_chargeGasAndMemory_mod {evm after : Evm fork Meter} {cost : Nat}
-    {ranges : List (U256 × U256)} (hmod : evm.memory.size % 32 = 0)
-    (h : chargeGasAndMemory evm cost ranges = .ok after) : after.memory.size % 32 = 0 := by
-  rw [memory_chargeGasAndMemory h]
-  exact size_memoryExtend_mod hmod ranges
-
-end Charge
 
 end EthLib.Execution.Evm

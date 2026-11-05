@@ -1,6 +1,8 @@
 module
 
 public import EthLib.Execution.Evm.Step
+public import EthLib.Execution.Proofs.Evm.Frame
+public import EthLib.Execution.Proofs.Evm.Memory
 public import EthLib.Execution.Proofs.Evm.Stack
 
 /-!
@@ -15,6 +17,12 @@ So it equals the pure function of the instruction, applied to the top words of t
 Each part of an instruction keeps the message, the state and the substate of the frame.
 
 A pop takes the top word of the stack and keeps memory and the return data.
+
+A charge for gas and memory grows memory to hold each range that is not empty.
+
+That needs a size of memory that is a multiple of 32, and the charge keeps it so.
+
+The charge keeps every byte of memory.
 -/
 
 @[expose] public section
@@ -209,7 +217,9 @@ theorem ternaryOp_sameContext {cost : Nat} {f : U256 → U256 → U256 → U256}
     (pushWord_sameContext h5)).advance
 
 omit [GasMeter Meter] in
-/-- A pop takes the word on top of the stack, leaves the rest, and keeps memory. -/
+/-- A pop takes the word on top of the stack and leaves the rest.
+
+It keeps memory and the return data. -/
 theorem popWord_eq_ok {evm after : Evm fork Meter} {x : U256}
     (h : popWord evm = .ok (x, after)) :
     evm.stack.val = x :: after.stack.val ∧ after.memory = evm.memory ∧
@@ -217,10 +227,55 @@ theorem popWord_eq_ok {evm after : Evm fork Meter} {x : U256}
   obtain ⟨⟨y, st⟩, hp, h⟩ := Base.bind_ok_iff.mp h
   simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
   obtain ⟨rfl, rfl⟩ := h
-  refine ⟨?_, rfl, rfl⟩
-  rcases hst : evm.stack with ⟨_ | ⟨a, l⟩, hl⟩ <;> rw [hst] at hp <;>
-    simp only [Stack.pop, reduceCtorEq, Except.ok.injEq, Prod.mk.injEq] at hp
-  obtain ⟨rfl, rfl⟩ := hp
+  exact ⟨Stack.pop_eq_ok_iff.mp hp, rfl, rfl⟩
+
+omit [GasMeter Meter] in
+/-- A pop from a stack with `a` on top gives `a` and leaves the rest.
+
+It keeps memory and the return data. -/
+theorem popWord_of_stack {evm after : Evm fork Meter} {a x : U256} {rest : List U256}
+    (hstack : evm.stack.val = a :: rest) (h : popWord evm = .ok (x, after)) :
+    a = x ∧ after.stack.val = rest ∧ after.memory = evm.memory ∧
+      after.returnData = evm.returnData := by
+  obtain ⟨s, m, d⟩ := popWord_eq_ok h
+  rw [hstack] at s
+  obtain ⟨rfl, hr⟩ := List.cons.inj s
+  exact ⟨rfl, hr.symm, m, d⟩
+
+/-! ## A charge for gas and memory -/
+
+/-- A charge for gas and memory grows memory by the growth for its ranges. -/
+theorem memory_chargeGasAndMemory {evm after : Evm fork Meter} {cost : Nat}
+    {ranges : List (U256 × U256)} (h : chargeGasAndMemory evm cost ranges = .ok after) :
+    after.memory = memoryExtend evm.memory (extendMemory evm.memory.size ranges).expandBy := by
+  obtain ⟨charged, hc, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, -, rfl⟩ := chargeGas_eq_ok_iff_charge.mp hc
+  cases h
   rfl
+
+/-- After a charge for gas and memory, memory holds every range that is not empty.
+
+Memory must start at a size that is a multiple of 32, as every frame keeps it. -/
+theorem le_size_chargeGasAndMemory {evm after : Evm fork Meter} {cost : Nat}
+    {ranges : List (U256 × U256)} (hmod : evm.memory.size % 32 = 0)
+    (h : chargeGasAndMemory evm cost ranges = .ok after) :
+    ∀ r ∈ ranges, r.2 ≠ 0 → r.1.toNat + r.2.toNat ≤ after.memory.size := by
+  intro r hr hnz
+  rw [memory_chargeGasAndMemory h, size_memoryExtend]
+  have := le_ceil32_add_expandBy evm.memory.size ranges r hr hnz
+  rwa [ceil32_of_mod hmod] at this
+
+/-- A charge for gas and memory keeps every byte of memory. -/
+theorem byteAt_chargeGasAndMemory {evm after : Evm fork Meter} {cost : Nat}
+    {ranges : List (U256 × U256)} (h : chargeGasAndMemory evm cost ranges = .ok after) (i : Nat) :
+    byteAt after.memory i = byteAt evm.memory i := by
+  rw [memory_chargeGasAndMemory h, byteAt_memoryExtend]
+
+/-- A charge for gas and memory keeps the size of memory a multiple of 32. -/
+theorem size_chargeGasAndMemory_mod {evm after : Evm fork Meter} {cost : Nat}
+    {ranges : List (U256 × U256)} (hmod : evm.memory.size % 32 = 0)
+    (h : chargeGasAndMemory evm cost ranges = .ok after) : after.memory.size % 32 = 0 := by
+  rw [memory_chargeGasAndMemory h]
+  exact size_memoryExtend_mod hmod ranges
 
 end EthLib.Execution.Evm
