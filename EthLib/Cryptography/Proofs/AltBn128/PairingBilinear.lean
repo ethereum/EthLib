@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.AltBn128.Nondegenerate
 public import EthLib.Cryptography.Proofs.AltBn128.PairingLaws
+public import EthLib.Cryptography.Proofs.ZModSum
 
 /-!
 # Proofs: the pairing law of alt_bn128 from bilinearity
@@ -88,25 +89,6 @@ private theorem prod_pairing (h : PairingBilinear) :
     simp only [List.getElem_cons_zero, List.getElem!_cons_zero] at hP hQ
     rw [List.map_cons, List.prod_cons, ih, List.zipWith_cons_cons, List.sum_cons, pow_add, hP, hQ,
       h]
-
-/-- A sum of products of values is zero in `ZMod n` exactly when `n` divides it. -/
-theorem dvd_sum_zipWith_val_iff {n : ℕ} [NeZero n] (a b : List (ZMod n)) :
-    n ∣ (List.zipWith (fun x y => x.val * y.val) a b).sum ↔
-      (List.zipWith (· * ·) a b).sum = 0 := by
-  have hcast : ∀ a b : List (ZMod n),
-      (((List.zipWith (fun x y => x.val * y.val) a b).sum : ℕ) : ZMod n) =
-        (List.zipWith (· * ·) a b).sum := by
-    intro a b
-    induction a generalizing b with
-    | nil => simp
-    | cons x xs ih =>
-      cases b with
-      | nil => simp
-      | cons y ys =>
-        rw [List.zipWith_cons_cons, List.zipWith_cons_cons, List.sum_cons, List.sum_cons,
-          Nat.cast_add, Nat.cast_mul, ih, ZMod.natCast_zmod_val, ZMod.natCast_zmod_val]
-  rw [← hcast]
-  exact (ZMod.natCast_eq_zero_iff _ _).symm
 
 /-- Bilinearity gives the pairing law of the check. -/
 theorem PairingLaws.of_bilinear (h : PairingBilinear) : PairingLaws where
