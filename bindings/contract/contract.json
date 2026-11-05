@@ -3130,9 +3130,9 @@
    "docstring":
    "Check the proof of work of a header, as section 4.3.4 of the Yellow Paper asks."},
   {"summary":
-   "Check the ommers of a block in RLP form, against recent blocks, all at one named fork.",
+   "Check the ommers of a block in RLP form, against recent blocks, each at the fork of its number.",
    "signature":
-   "(fork: bytes, recent: bytes, block: bytes, check_seal: int) -> bool",
+   "(forks: bytes, recent: bytes, block: bytes, check_seal: int) -> bool",
    "operation": "EthLib.Execution.Blocks.Exports.validateOmmersExport",
    "method": "pow_validate_ommers",
    "errors":
@@ -3165,10 +3165,11 @@
       {"constructor": "wrongAge", "code": 239},
       {"constructor": "parentNotRecent", "code": 240},
       {"constructor": "siblingOfBlock", "code": 241},
-      {"constructor": "encoding", "code": 242}]}],
+      {"constructor": "encoding", "code": 242},
+      {"constructor": "wrongDaoExtraData", "code": 243}]}],
    "error_class": "BlockError",
    "docstring":
-   "Check the ommers of a block in RLP form, against recent blocks, all at one named fork.\n\nThe recent blocks are an RLP list of blocks, the last seven of the chain, ending with the parent.\n\nA check seal of 0 leaves out the proof of work of the ommers, as for test chains."},
+   "Check the ommers of a block in RLP form, against recent blocks, each at the fork of its number.\n\nThe forks of the chain are an RLP list of `[name, first block]`, the first one from block 0.\n\nThe recent blocks are an RLP list of blocks, the last seven of the chain, ending with the parent.\n\nA check seal of 0 leaves out the proof of work of the ommers, as for test chains."},
   {"summary":
    "The transactions root of the transactions of a block, decoded at the fork.",
    "signature": "(fork: str, block: bytes) -> bytes",
@@ -4919,7 +4920,7 @@
    "The state root after the DAO Fork moves the ether of its accounts, from the state of `input`."},
   {"summary":
    "The state root after the mining rewards of a block, from the state that `input` encodes.",
-   "signature": "(fork: str, state: bytes, block: bytes) -> bytes",
+   "signature": "(forks: bytes, state: bytes, block: bytes) -> bytes",
    "operation": "EthLib.Execution.State.Exports.rewardsRootExport",
    "method": "state_rewards_root",
    "errors":
@@ -4938,7 +4939,7 @@
       {"constructor": "balanceOverflow", "code": 104}]}],
    "error_class": "StateError",
    "docstring":
-   "The state root after the mining rewards of a block, from the state that `input` encodes.\n\nThe block is decoded at the fork; from Paris on it pays no reward."},
+   "The state root after the mining rewards of a block, from the state that `input` encodes.\n\nThe forks of the chain are an RLP list of `[name, first block]`, the first one from block 0.\n\nThe block and each of its ommers decode at the fork of their own number.\n\nFrom Paris on, a block pays no reward."},
   {"summary":
    "The name of the active fork of mainnet at a block, or no bytes when no fork is active.",
    "signature": "(number: int, timestamp: int) -> bytes",

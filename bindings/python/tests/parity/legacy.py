@@ -62,6 +62,9 @@ HEADER_CODES = {
 # The exception of a block in the first ten blocks of the DAO Fork without its extra data.
 DAO_EXTRA_DATA = "BlockException.EXTRA_DATA_INVALID_DAO"
 
+# The code of an ommer in those blocks without that extra data.
+OMMER_DAO_EXTRA_DATA = 243
+
 # The exceptions of a block whose parent is in no test chain.
 UNKNOWN_PARENT = {"UnknownParent", "UnknownParent2", "BlockException.UNKNOWN_PARENT"}
 
@@ -112,6 +115,12 @@ def fork_at(network: str, number: int) -> str:
     return forks[-1] if number >= TRANSITION_BLOCK else forks[0]
 
 
+def chain_forks(network: str) -> list[tuple[str, int]]:
+    """The forks of a network, each with its first block."""
+    forks = LEGACY_FORKS[network]
+    return [(forks[0], 0)] + [(fork, TRANSITION_BLOCK) for fork in forks[1:]]
+
+
 def header_fields(fork: str) -> int:
     """The number of fields of a header at a fork from Frontier to London."""
     return 16 if fork == "london" else 15
@@ -155,7 +164,7 @@ def _header_error(network: str, test: dict, chain: dict, parent: Block, block: B
         return
     # The header of the block is valid, so the exception names an ommer.
     with pytest.raises(BlockError) as error:
-        validate_ommers(block.fork, recent(chain, parent), block.block, sealed(test))
+        validate_ommers(chain_forks(network), recent(chain, parent), block.block, sealed(test))
     message = str(error.value)
     if error.value.code == OMMER_NUMBER_OUT_OF_RANGE:
         # An ommer numbered 0 or not below the block fails before its header is read.
@@ -286,12 +295,13 @@ def run_ommers(root: Path, case: Case) -> None:
         if expected is None:
             chain[block.hash] = block
             if decoded[2]:
-                assert validate_ommers(fork, recent(chain, parent), data, sealed(test))
-                _check_rewards(fork, decoded, data)
+                assert validate_ommers(chain_forks(network), recent(chain, parent), data,
+                                       sealed(test))
+                _check_rewards(network, decoded, data)
                 checked += 1
         elif expected in OMMER_CODES:
             with pytest.raises(BlockError) as error:
-                validate_ommers(fork, recent(chain, parent), data, sealed(test))
+                validate_ommers(chain_forks(network), recent(chain, parent), data, sealed(test))
             assert error.value.code in OMMER_CODES[expected], (expected, str(error.value))
             checked += 1
     _check_post_state(test, chain)
@@ -304,9 +314,11 @@ def _state(balances: Counter) -> bytes:
                        for address, value in balances.items()])
 
 
-def _check_rewards(fork: str, decoded: list, data: bytes) -> None:
+def _check_rewards(network: str, decoded: list, data: bytes) -> None:
     # From a state with no account, the rewards create one account for each address they pay.
-    assert rewards_root(fork, _state(Counter()), data) == state_root(_state(_rewards(fork, decoded)))
+    fork = fork_at(network, _number(decoded[0]))
+    paid = _rewards(fork, decoded)
+    assert rewards_root(chain_forks(network), _state(Counter()), data) == state_root(_state(paid))
 
 
 def _fee(fork: str, decoded: list) -> int | None:
@@ -383,16 +395,31 @@ def run_dao(root: Path, case: Case) -> None:
     """Check the extra data of the DAO Fork in each header, and the move of the DAO's ether."""
     test = fixture(root, case)
     network = test["network"]
+    chain: dict[str, Block] = {}
     checked = 0
-    for entry in test["blocks"]:
-        expected = exception(network, entry)
+    for data, entry in [(test["genesisRLP"], None)] + [(e["rlp"], e) for e in test["blocks"]]:
+        data = bytes.fromhex(data.removeprefix("0x"))
+        decoded = rlp.decode(data)
+        fork = fork_at(network, _number(decoded[0]))
+        header = rlp.encode(decoded[0])
+        block = Block(fork, "0x" + blocks.header_hash(fork, header).hex(), header, data)
+        expected = exception(network, entry) if entry else None
         if expected not in (None, DAO_EXTRA_DATA):
             continue
-        fields = rlp.decode(bytes.fromhex(entry["rlp"].removeprefix("0x")))[0]
-        fork = fork_at(network, _number(fields))
-        valid = blocks.dao_extra_data_valid(TRANSITION_BLOCK, fork, rlp.encode(fields))
-        assert valid == (expected is None), (_number(fields), expected)
-        checked += 1
+        if entry is not None:
+            valid = blocks.dao_extra_data_valid(TRANSITION_BLOCK, fork, header)
+            parent = chain.get(block.parent_hash)
+            if valid and decoded[2] and parent is not None:
+                # Each ommer in the first blocks of the fork carries the extra data too.
+                try:
+                    validate_ommers(chain_forks(network), recent(chain, parent), data, sealed(test))
+                except BlockError as error:
+                    assert error.code == OMMER_DAO_EXTRA_DATA, str(error)
+                    valid = False
+            assert valid == (expected is None), (_number(decoded[0]), expected)
+            checked += 1
+        if expected is None:
+            chain[block.hash] = block
     assert checked > 0
     # No transaction pays a DAO account or the recovery contract, so only the fork moves their
     # ether.

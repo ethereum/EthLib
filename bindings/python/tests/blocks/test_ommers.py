@@ -106,3 +106,24 @@ def test_ommer_already_included_by_a_recent_block() -> None:
     parent[2] = [OMMER]
     recent = RECENT[:2] + [rlp.encode(parent)]
     assert _code(recent, _block([OMMER])) == 238
+
+
+def test_forks_given_with_their_first_blocks() -> None:
+    # A chain of one fork from block 0 is the fork given by its name.
+    assert validate_ommers([(FORK, 0)], RECENT, _block([OMMER]), check_seal=False)
+
+
+def _code_with(forks: list[tuple[str, int]]) -> int:
+    with pytest.raises(BlockError) as error:
+        validate_ommers(forks, RECENT, _block([OMMER]), check_seal=False)
+    return error.value.code
+
+
+@pytest.mark.parametrize("forks", [
+    [(FORK, 1)],
+    [("homestead", 0), (FORK, 5)],
+    [(FORK, 0), ("hegota", 5)],
+])
+def test_forks_that_no_chain_runs(forks: list[tuple[str, int]]) -> None:
+    # The first fork starts after block 0, the forks are out of order, or a fork is not specified.
+    assert _code_with(forks) == 0

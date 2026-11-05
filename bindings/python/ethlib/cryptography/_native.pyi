@@ -507,8 +507,8 @@ def pow_check(fork: bytes, header: bytes) -> bool:
     """Check the proof of work of a header, as section 4.3.4 of the Yellow Paper asks."""
     ...
 
-def pow_validate_ommers(fork: bytes, recent: bytes, block: bytes, check_seal: int) -> bool:
-    """Check the ommers of a block in RLP form, against recent blocks, all at one named fork."""
+def pow_validate_ommers(forks: bytes, recent: bytes, block: bytes, check_seal: int) -> bool:
+    """Check the ommers of a block in RLP form, against recent blocks, each at the fork of its number."""
     ...
 
 def block_transactions_root(fork: str, block: bytes) -> bytes:
@@ -839,7 +839,7 @@ def state_dao_fork_root(state: bytes) -> bytes:
     """The state root after the DAO Fork moves the ether of its accounts, from the state of `input`."""
     ...
 
-def state_rewards_root(fork: str, state: bytes, block: bytes) -> bytes:
+def state_rewards_root(forks: bytes, state: bytes, block: bytes) -> bytes:
     """The state root after the mining rewards of a block, from the state that `input` encodes."""
     ...
 

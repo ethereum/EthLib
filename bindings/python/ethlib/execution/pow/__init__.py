@@ -1,5 +1,7 @@
 """Proof of work of the execution layer, before Paris."""
 
+from collections.abc import Sequence
+
 from ...errors import BlockError
 from ...serialization import rlp
 
@@ -39,15 +41,25 @@ def check_proof_of_work(fork: str, header: bytes) -> bool:
     return _native.pow_check(fork.encode(), header)
 
 
-def validate_ommers(fork: str, recent: list[bytes], block: bytes, check_seal: bool = True) -> bool:
-    """Check the ommers of a block against the last seven blocks of its chain, all at one fork."""
+def chain_forks(forks: str | Sequence[tuple[str, int]]) -> bytes:
+    """The RLP form of the forks of a chain with their first blocks; a name alone starts at 0."""
+    if isinstance(forks, str):
+        forks = [(forks, 0)]
+    return rlp.encode([[name.encode(), first.to_bytes((first.bit_length() + 7) // 8, "big")]
+                       for name, first in forks])
+
+
+def validate_ommers(forks: str | Sequence[tuple[str, int]], recent: list[bytes], block: bytes,
+                    check_seal: bool = True) -> bool:
+    """Check the ommers of a block against the last seven blocks of its chain, each at its fork."""
     items = rlp.encode([rlp.decode(b) for b in recent])
-    return _native.pow_validate_ommers(fork.encode(), items, block, check_seal)
+    return _native.pow_validate_ommers(chain_forks(forks), items, block, check_seal)
 
 
 __all__ = [
     "BlockError",
     "block_difficulty",
+    "chain_forks",
     "check_proof_of_work",
     "seal_hash",
     "validate_ommers",

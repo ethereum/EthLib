@@ -12,6 +12,8 @@ It holds at most two ommers, none twice.
 
 Each ommer is one to six blocks older than the block, and is not a sibling of the block.
 
+In the first ten blocks of the DAO Fork, each ommer carries the extra data of that fork.
+
 The Python suite shows that valid ommers pass.
 -/
 
@@ -61,16 +63,16 @@ private theorem length_of_mapM_eq_ok {ε α β : Type} (f : α → Except ε β)
     simp [ih bs hbs]
 
 /-- The facts that valid ommers give about a block. -/
-theorem validateOmmers_spec {fork : Fork} {checkSeal : Bool} {recent : List RecentBlock}
-    {header : Header fork} {ommers : List (Header fork)}
-    (h : validateOmmers checkSeal recent header ommers = .ok ()) :
-    (∃ encoded, encode (Codec.toItem ommers) = .ok encoded ∧
+theorem validateOmmers_spec {fork : Fork} {config : ChainConfig} {checkSeal : Bool}
+    {recent : List RecentBlock} {header : Header fork} {ommers : List ((f : Fork) × Header f)}
+    (h : validateOmmers config checkSeal recent header ommers = .ok ()) :
+    (∃ encoded, encode (ommersItem ommers) = .ok encoded ∧
       keccak256 encoded = header.ommersHash) ∧
     ommers.length ≤ MAX_OMMERS ∧
-    (∃ hashes, ommers.mapM headerHash = .ok hashes ∧ hashes.Nodup) ∧
-    ∀ ommer ∈ ommers, 1 ≤ ommer.number ∧ ommer.number < header.number ∧
-      1 ≤ header.number - ommer.number ∧ header.number - ommer.number ≤ MAX_OMMER_DEPTH ∧
-      ommer.parentHash ≠ header.parentHash := by
+    (∃ hashes, ommers.mapM (headerHash ·.2) = .ok hashes ∧ hashes.Nodup) ∧
+    ∀ ommer ∈ ommers, 1 ≤ ommer.2.number ∧ ommer.2.number < header.number ∧
+      1 ≤ header.number - ommer.2.number ∧ header.number - ommer.2.number ≤ MAX_OMMER_DEPTH ∧
+      ommer.2.parentHash ≠ header.parentHash := by
   unfold validateOmmers at h
   obtain ⟨encoded, henc, h⟩ := bind_ok_iff.mp h
   obtain ⟨_, hhash, h⟩ := bind_ok_iff.mp h
@@ -106,6 +108,29 @@ theorem validateOmmers_spec {fork : Fork} {checkSeal : Bool} {recent : List Rece
   simp only [Bool.and_eq_true, decide_eq_true_eq] at hage
   simp only [bne_iff_ne, ne_eq] at hsib
   exact ⟨hrange.1, hrange.2, hage.1, hage.2, hsib⟩
+
+/-- Valid ommers in the first ten blocks of the DAO Fork carry the extra data of that fork. -/
+theorem validateOmmers_daoExtraData {fork : Fork} {config : ChainConfig} {checkSeal : Bool}
+    {recent : List RecentBlock} {header : Header fork} {ommers : List ((f : Fork) × Header f)}
+    (h : validateOmmers config checkSeal recent header ommers = .ok ()) :
+    ∀ ommer ∈ ommers, daoExtraDataValid config ommer.2 = true := by
+  unfold validateOmmers at h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := bind_ok_iff.mp h
+  obtain ⟨_, hfirst, -⟩ := bind_ok_iff.mp h
+  intro ommer hm
+  obtain ⟨_, -, hcheck⟩ := bind_ok_iff.mp ((forM_eq_ok _ ommers).mp hfirst ommer hm)
+  unfold checkOmmerHeader at hcheck
+  -- The extra data check is the last step of the header check of the ommer.
+  cases hfind : recent.find? (·.header.number + 1 = ommer.2.number) with
+  | none => simp [hfind] at hcheck
+  | some parent =>
+    simp only [hfind] at hcheck
+    split at hcheck
+    · obtain ⟨_, -, hdao⟩ := bind_ok_iff.mp hcheck
+      exact ensure_eq_ok.mp hdao
+    · obtain ⟨_, h, -⟩ := bind_ok_iff.mp hcheck
+      exact nomatch h
 
 /-- Two errors with one code come from one constructor. -/
 theorem OmmerError.code_injective (e₁ e₂ : OmmerError) (h : e₁.code = e₂.code) :

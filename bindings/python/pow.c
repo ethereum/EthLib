@@ -85,21 +85,21 @@ py_pow_validate_ommers(
   PyObject* self,
   PyObject* args
 ) {
-  PyObject *fork_obj, *recent_obj, *block_obj;
+  PyObject *forks_obj, *recent_obj, *block_obj;
   int check_seal;
-  if (!PyArg_ParseTuple(args, "OOOp", &fork_obj, &recent_obj, &block_obj, &check_seal)) {
+  if (!PyArg_ParseTuple(args, "OOOp", &forks_obj, &recent_obj, &block_obj, &check_seal)) {
     return NULL;
   }
-  if (!PyBytes_Check(fork_obj) || !PyBytes_Check(recent_obj) || !PyBytes_Check(block_obj)) {
-    PyErr_SetString(PyExc_TypeError, "fork, recent and block must be bytes");
+  if (!PyBytes_Check(forks_obj) || !PyBytes_Check(recent_obj) || !PyBytes_Check(block_obj)) {
+    PyErr_SetString(PyExc_TypeError, "forks, recent and block must be bytes");
     return NULL;
   }
-  lean_object* fork = mk_bytearray(
-    (const uint8_t*) PyBytes_AS_STRING(fork_obj), (size_t) PyBytes_GET_SIZE(fork_obj));
+  lean_object* forks = mk_bytearray(
+    (const uint8_t*) PyBytes_AS_STRING(forks_obj), (size_t) PyBytes_GET_SIZE(forks_obj));
   lean_object* recent = mk_bytearray(
     (const uint8_t*) PyBytes_AS_STRING(recent_obj), (size_t) PyBytes_GET_SIZE(recent_obj));
   lean_object* block = mk_bytearray(
     (const uint8_t*) PyBytes_AS_STRING(block_obj), (size_t) PyBytes_GET_SIZE(block_obj));
   return except_into_pybool(
-    eth_pow_validate_ommers(fork, recent, block, (uint8_t) check_seal), BLOCK_ERROR);
+    eth_pow_validate_ommers(forks, recent, block, (uint8_t) check_seal), BLOCK_ERROR);
 }
