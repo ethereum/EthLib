@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Blocks.AccessListBuilder
 public import EthLib.Execution.Proofs.Blocks.Block
 public import EthLib.Execution.Proofs.Blocks.BlockAccessList
 public import EthLib.Execution.Proofs.Blocks.Bloom
