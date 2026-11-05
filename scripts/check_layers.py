@@ -10,6 +10,8 @@ The check fails on each of these, with the module and the import:
   an `Exports` component) from a specification;
 - an import of anything outside `EthLib` and the Lean toolchain (`Init`, `Std` and `Lean`) from
   a specification or a C export;
+- a module with an `Xmss` component that reaches a module with a `Sphincs` component through
+  its imports, or the reverse, with the first import on the path;
 - a module that no library root of `lakefile.lean` reaches through its imports;
 - a file under `EthLib/` outside a layer, other than the aggregators `EthLib.lean`,
   `EthLib/Proofs.lean` and `EthLib/Exports.lean`.
@@ -30,6 +32,7 @@ Only the standard library is used, so the check needs no Lean and no build.
 import importlib.util
 import re
 import sys
+from collections import deque
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -55,6 +58,7 @@ LAYERS = {
 }
 AGGREGATORS = {"EthLib", "EthLib.Proofs", "EthLib.Exports"}
 TOOLCHAIN = {"Init", "Std", "Lean"}
+SCHEMES = ("Xmss", "Sphincs")
 KIND_NAMES = {"specification": "a specification", "property": "a property", "export": "a C export"}
 
 HEADER_WORD = re.compile(r"\s*(module|prelude)\b")
@@ -97,6 +101,35 @@ def layer(module: str) -> str | None:
     """The layer of an `EthLib` module, or None outside the layers."""
     parts = module.split(".")
     return parts[1] if len(parts) > 1 and parts[0] == "EthLib" and parts[1] in LAYERS else None
+
+
+def scheme(module: str) -> str | None:
+    """The hash-based signature whose tree holds a module, if exactly one does."""
+    found = [name for name in SCHEMES if name in module.split(".")]
+    return found[0] if len(found) == 1 else None
+
+
+def scheme_problems(graph: dict[str, list[str]]) -> list[tuple[str, str, str]]:
+    """Each module of one scheme that reaches the other: the module, its import, the target."""
+    problems = []
+    for name in sorted(graph):
+        own = scheme(name)
+        if own is None:
+            continue
+        # Search breadth first, and remember the import of `name` that each module comes from.
+        first = {imported: imported for imported in graph[name] if imported in graph}
+        queue = deque(first)
+        while queue:
+            current = queue.popleft()
+            other = scheme(current)
+            if other is not None and other != own:
+                problems.append((name, first[current], current))
+                break
+            for imported in graph[current]:
+                if imported in graph and imported not in first:
+                    first[imported] = first[current]
+                    queue.append(imported)
+    return problems
 
 
 def library_roots(lakefile: str) -> list[str]:
@@ -172,6 +205,13 @@ def check(root: Path) -> list[str]:
         problems.append(
             f"scripts/check_layers_baseline.txt: {name} {imported} "
             "breaks no rule any more; remove the entry"
+        )
+
+    for name, imported, target in scheme_problems(graph):
+        via = "" if imported == target else f", which reaches {target}"
+        problems.append(
+            f"{modules[name].relative_to(root)}: imports {imported}{via}, "
+            f"but {scheme(name)} and {scheme(target)} never import each other"
         )
 
     roots = [

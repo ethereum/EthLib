@@ -111,6 +111,17 @@ def with_imports(module: str, *imported: str) -> dict[str, list[str]]:
     return tree
 
 
+def with_modules(*added: dict[str, list[str]]) -> dict[str, list[str] | str]:
+    """The good tree with more modules, each imported by the root `EthLib`."""
+    tree: dict[str, list[str] | str] = {k: list(v) for k, v in GOOD.items()}
+    root = list(GOOD["EthLib"])
+    for module in added:
+        tree |= module
+        root += list(module)
+    tree["EthLib"] = root
+    return tree
+
+
 class Rules(unittest.TestCase):
     def assert_fails(self, tree: dict, text: str) -> None:
         problems = Tree(tree).problems()
@@ -181,6 +192,42 @@ class Rules(unittest.TestCase):
     def test_outside_a_layer(self):
         tree = with_imports("EthLib", "EthLib.Chain.A") | {"EthLib.Chain.A": []}
         self.assert_fails(tree, "EthLib/Chain/A.lean: not in a layer")
+
+    def test_xmss_imports_sphincs(self):
+        tree = with_modules(
+            {"EthLib.Cryptography.Xmss.A": ["EthLib.Cryptography.Sphincs.A"]},
+            {"EthLib.Cryptography.Sphincs.A": []},
+        )
+        self.assert_fails(
+            tree,
+            "imports EthLib.Cryptography.Sphincs.A, but Xmss and Sphincs never import each other",
+        )
+
+    def test_sphincs_reaches_xmss_through_a_neutral_module(self):
+        tree = with_modules(
+            {"EthLib.Cryptography.Sphincs.A": ["EthLib.Cryptography.HashSig"]},
+            {"EthLib.Cryptography.HashSig": ["EthLib.Cryptography.Xmss.A"]},
+            {"EthLib.Cryptography.Xmss.A": []},
+        )
+        self.assert_fails(
+            tree,
+            "EthLib/Cryptography/Sphincs/A.lean: imports EthLib.Cryptography.HashSig, "
+            "which reaches EthLib.Cryptography.Xmss.A, "
+            "but Sphincs and Xmss never import each other",
+        )
+
+    def test_neutral_module_imports_both(self):
+        tree = with_modules(
+            {
+                "EthLib.Cryptography.HashSig": [
+                    "EthLib.Cryptography.Xmss.A",
+                    "EthLib.Cryptography.Sphincs.A",
+                ]
+            },
+            {"EthLib.Cryptography.Xmss.A": []},
+            {"EthLib.Cryptography.Sphincs.A": []},
+        )
+        self.assertEqual(Tree(tree).problems(), [])
 
     def test_aggregators_import_every_layer(self):
         tree = with_imports("EthLib.Proofs", "EthLib.Consensus.A", "EthLib.Base.A")
