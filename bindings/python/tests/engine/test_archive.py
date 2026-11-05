@@ -7,6 +7,8 @@ import pytest
 
 from ethlib import engine
 
+from parity.runners import run_engine_chain
+
 from .cases import check
 
 ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
@@ -60,3 +62,12 @@ def test_every_chain(archive) -> None:
         assert head == fixture["lastblockhash"]
         chains += 1
     assert chains == 56581
+
+
+def test_every_payload_on_chain(archive) -> None:
+    """With the parent's state, each payload is valid or invalid as its fixture expects."""
+    kinds = Counter()
+    for fixture in _fixtures(archive):
+        kinds += run_engine_chain(fixture, fixture["pre"], fixture["genesisBlockHeader"])
+    # The payloads that fail only in execution are now invalid, not syncing.
+    assert kinds == {"valid": 63256, "error": 46, "invalid": 51, "execution": 4991}

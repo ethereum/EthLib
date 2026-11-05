@@ -3,6 +3,7 @@ module
 public import EthLib.Base.ChainConfig
 public import EthLib.Engine.Block
 public import EthLib.Engine.Json
+public import EthLib.Execution.Blocks.Transition
 
 /-!
 # `Engine.NewPayload`
@@ -38,6 +39,8 @@ Then the block of the payload must decode, and its hash must be the block hash o
 A payload that fails these checks is invalid.
 
 A payload that passes them still needs its parent's state, so without it the status is syncing.
+
+With that state, the block of the payload runs, and its status is valid or invalid.
 
 The method specifications state these rules, at commit `3284ee8` of execution-apis:
 
@@ -157,5 +160,40 @@ def newPayloadWithoutState (config : ChainConfig) (version : Nat) (params : Json
   match ← checkNewPayload config version params with
   | .error (status, reason) => return (status, some reason)
   | .ok _ => return (⟨.syncing, none⟩, none)
+
+/-- The status of `engine_newPayload` from an execution layer that holds the parent's state.
+
+The chain holds the state after its last recent block.
+
+A payload whose parent is not that block stays syncing, since its parent's state is missing.
+
+Otherwise a payload that passes the checks before execution runs as the next block of the chain.
+
+It is valid when its block passes the state transition, and invalid otherwise.
+
+The latest valid hash of a valid payload is its own block hash.
+
+That of a payload invalid in execution is its parent's hash, or zero for a parent before Paris.
+
+An execution that aborts, such as on missing code, leaves the payload syncing.
+
+A valid payload also gives its block, as the new last recent block, and the state after it. -/
+def newPayloadOnChain (chain : BlockChain) (version : Nat) (params : Json) :
+    Except EngineError
+      (PayloadStatus × Option PayloadError × Option (RecentBlock × Execution.State.State)) := do
+  match ← checkNewPayload chain.config version params with
+  | .error (status, reason) => return (status, some reason, none)
+  | .ok checked =>
+    let header := checked.block.header
+    let some parent := chain.recent.getLast? | return (⟨.syncing, none⟩, none, none)
+    unless parent.header.hash.toOption = some header.parentHash do
+      return (⟨.syncing, none⟩, none, none)
+    match stateTransition chain checked.block (checkSeal := false) with
+    | .ok post =>
+      return (⟨.valid, header.hash.toOption⟩, none, some (⟨checked.fork, header, []⟩, post))
+    | .error (.aborted _) => return (⟨.syncing, none⟩, none, none)
+    | .error e =>
+      let ancestor : Hash32 := if parent.fork < .paris then 0 else header.parentHash
+      return (⟨.invalid, some ancestor⟩, some (.invalidBlock e), none)
 
 end EthLib.Engine

@@ -10,6 +10,14 @@ eth_engine_new_payload(
 );
 
 extern lean_object*
+eth_engine_new_payload_on_chain(
+  lean_object* config,
+  lean_object* state,
+  lean_object* recent,
+  lean_object* request
+);
+
+extern lean_object*
 eth_engine_forkchoice_updated(
   lean_object* tree,
   lean_object* request
@@ -53,4 +61,24 @@ py_engine_forkchoice_updated(
   lean_object* request_obj =
     mk_bytearray((const uint8_t*) PyBytes_AS_STRING(request), PyBytes_GET_SIZE(request));
   return except_into_pybytes(eth_engine_forkchoice_updated(tree_obj, request_obj), ENGINE_ERROR);
+}
+
+PyObject*
+py_engine_new_payload_on_chain(
+  PyObject* self,
+  PyObject* args
+) {
+  const char *config, *state, *recent, *request;
+  Py_ssize_t config_len, state_len, recent_len, request_len;
+  if (!PyArg_ParseTuple(args, "y#y#y#y#", &config, &config_len, &state, &state_len, &recent,
+                        &recent_len, &request, &request_len)) {
+    return NULL;
+  }
+  return except_into_pybytes(
+    eth_engine_new_payload_on_chain(
+      mk_bytearray((const uint8_t*) config, (size_t) config_len),
+      mk_bytearray((const uint8_t*) state, (size_t) state_len),
+      mk_bytearray((const uint8_t*) recent, (size_t) recent_len),
+      mk_bytearray((const uint8_t*) request, (size_t) request_len)),
+    ENGINE_ERROR);
 }

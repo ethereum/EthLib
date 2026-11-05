@@ -4,6 +4,7 @@ public import EthLib.Base.Exports
 public import EthLib.Base.Exports.ChainConfig
 public import EthLib.Base.Hex
 public import EthLib.Engine.NewPayload
+public import EthLib.Execution.Exports.Transition
 
 /-!
 # `Exports.NewPayload`
@@ -48,6 +49,7 @@ def reasonMessage : PayloadError → String
   | .wrongBlockHash expected computed =>
     s!"block hash {hex expected.toList}, header hash {hex computed.toList}"
   | .wrongVersionedHashes => "the expected versioned hashes are not those of the block"
+  | .invalidBlock e => s!"{e.code}: {Execution.Blocks.Exports.blockErrorMessage e}"
 
 /-- The JSON of a payload status, with the code of its reason first in the error. -/
 def statusJson (status : PayloadStatus) (reason : Option PayloadError) : Json :=
@@ -77,5 +79,40 @@ def newPayloadExport (config request : ByteArray) : Result ByteArray := do
   match newPayloadWithoutState config version params with
   | .ok (status, reason) => return (statusJson status reason).compress.toUTF8
   | .error e => throw (e.code, s!"engine error: {reprStr e}")
+
+/-- The payload status of an `engine_newPayload` request, on a chain that holds the parent.
+
+The chain has the inputs of the state transition export: configuration, state, recent blocks.
+
+It returns an RLP list of three items, the status as JSON first.
+
+For a valid payload, the RLP form of its header and the accounts of the state after it follow.
+
+For any other payload, two empty lists follow. -/
+@[export eth_engine_new_payload_on_chain]
+def newPayloadOnChainExport (config state recent request : ByteArray) : Result ByteArray := do
+  let config ← configOfJson (← parseJson "config" config)
+  -- The chain is an input that the export reads itself, so its errors have code 0.
+  let pre ← (Execution.State.Exports.ofInput state).mapError fun e => (0, e.message)
+  let recentItems : List Serialization.Rlp.Item ← (Serialization.Rlp.Codec.decode recent).mapError
+    fun e => (0, s!"recent blocks rejected: {reprStr e}")
+  let recent ← (recentItems.mapM (Execution.Blocks.Exports.recentOfItem config)).mapError
+    fun (_, m) => (0, m)
+  let request ← parseJson "request" request
+  let some method := (request.getObjValAs? String "method").toOption
+    | throw (0, "request: no method")
+  let some version := newPayloadVersion method | throw (0, s!"no method {method}")
+  match newPayloadOnChain ⟨config, pre, recent⟩ version (request.getObjValD "params") with
+  | .error e => throw (e.code, s!"engine error: {reprStr e}")
+  | .ok (status, reason, next) =>
+    let json := Serialization.Rlp.Item.bytes (statusJson status reason).compress.toUTF8
+    let (header, accounts) := match next with
+      | some (block, post) =>
+        (Serialization.Rlp.Codec.toItem block.header,
+          Serialization.Rlp.Item.list (post.accounts.toList.map fun (address, account) =>
+            Execution.Transactions.Exports.stateEntryItem post address account))
+      | none => (.list [], .list [])
+    (Serialization.Rlp.encode (.list [json, header, accounts])).mapError
+      fun e => (0, s!"result: {reprStr e}")
 
 end EthLib.Engine.Exports

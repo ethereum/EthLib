@@ -734,6 +734,9 @@ def bindings : List Binding := [
   ⟨"engine_new_payload", `EthLib.Engine.Exports.newPayloadExport,
     "(config: bytes, request: bytes) -> bytes",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
+  ⟨"engine_new_payload_on_chain", `EthLib.Engine.Exports.newPayloadOnChainExport,
+    "(config: bytes, state: bytes, recent: bytes, request: bytes) -> bytes",
+    [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_forkchoice_updated", `EthLib.Engine.Exports.forkchoiceUpdatedExport,
     "(tree: bytes, request: bytes) -> bytes",
     [`EthLib.Engine.EngineError], some "EngineError"⟩
