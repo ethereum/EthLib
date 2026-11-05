@@ -10,6 +10,12 @@ A point `P` of `G1` lies in the subgroup of order `r` when `[r] P` is the point 
 
 The kernel can check this for a concrete point by running double and add.
 
+The check writes `r` as `z^4 - z^2 + 1`, with the BLS parameter `z`.
+
+It computes `[r] P` as `[z^2] ([z^2] P - P) + P`.
+
+The products by `|z|` need about as many doublings as one product by `r`, but far fewer additions.
+
 Here the coordinates are naturals below `p`, and each field operation is one product or sum mod `p`.
 
 These operations take the same values as the field operations of `Fp`.
@@ -206,6 +212,30 @@ def powMod : Nat → Nat → Nat → Nat
       let half := powMod fuel (fmul b b) (e / 2)
       bif Nat.beq (e % 2) 1 then fmul b half else half
 
+/-- The absolute value of the BLS parameter `z = -0xd201000000010000`. -/
+def zAbs : Nat := 0xd201000000010000
+
+/-- The order `r` of `G1` is `z^4 - z^2 + 1`. -/
+theorem modulus_eq : Fr.modulus = zAbs ^ 4 - zAbs ^ 2 + 1 := by decide
+
+/-- Negation, as the negation of `G1` computes it. -/
+def neg (q : Coords) : Coords := (q.1, (Fp.modulus - q.2.1) % Fp.modulus, q.2.2)
+
+/-- `[r] q`, computed as `[z^2] ([z^2] q - q) + q`.
+
+Double and add takes one doubling for each bit of the scalar.
+
+It also takes one addition for each set bit.
+
+`|z|` has 64 bits, six of them set, so the four products by `|z|` take 256 doublings.
+
+They take 24 additions, and the chain adds two more.
+
+`r` has 255 bits, 134 of them set. -/
+def mulModulus (q : Coords) : Coords :=
+  let a := mulNatAux 64 (mulNatAux 64 q zAbs) zAbs
+  add (mulNatAux 64 (mulNatAux 64 (add a (neg q)) zAbs) zAbs) q
+
 /-- The candidate root of `x^3 + 4`, as `Fp.sqrt` computes it. -/
 def rootCandidate (x : Nat) : Nat :=
   powMod 384 (fadd (fmul (fmul x x) x) (4 % Fp.modulus)) ((Fp.modulus + 1) / 4) % Fp.modulus
@@ -217,7 +247,32 @@ def check (x : Nat) : Bool :=
   let y := rootCandidate x
   decide (x < Fp.modulus) &&
     fmul y y == fadd (fmul (fmul x x) x) (4 % Fp.modulus) &&
-    (mulNatAux 256 (x, y, 1) Fr.modulus).2.2 == 0
+    (mulModulus (x, y, 1)).2.2 == 0
+
+theorem coords_neg (q : G1) : coords (G1.neg q) = neg (coords q) := rfl
+
+/-- `[r] q` in `G1`, by the steps of `mulModulus`. -/
+def mulModulusG1 (q : G1) : G1 :=
+  let a := G1.mulNat (G1.mulNat q zAbs) zAbs
+  G1.add (G1.mulNat (G1.mulNat (G1.add a (G1.neg q)) zAbs) zAbs) q
+
+theorem coords_mulModulusG1 (q : G1) : coords (mulModulusG1 q) = mulModulus (coords q) := by
+  have hz (p : G1) : G1.mulNat p zAbs = G1.mulNatAux 64 p zAbs :=
+    (mulNatAux_eq 64 p zAbs (by decide)).symm
+  simp only [mulModulusG1, mulModulus, hz, coords_add, coords_mulNatAux, coords_neg]
+
+theorem toPoint_mulModulusG1 {q : G1} (h : Valid q) :
+    toPoint (mulModulusG1 q) = Fr.modulus • toPoint q := by
+  have h₁ := valid_mulNat (valid_mulNat h zAbs) zAbs
+  have h₂ := valid_add h₁ (valid_neg h)
+  have h₃ := valid_mulNat (valid_mulNat h₂ zAbs) zAbs
+  simp only [mulModulusG1, toPoint_add h₃ h, toPoint_mulNat (valid_mulNat h₂ zAbs),
+    toPoint_mulNat h₂, toPoint_add h₁ (valid_neg h), toPoint_mulNat (valid_mulNat h zAbs),
+    toPoint_mulNat h, toPoint_neg h]
+  have hle : zAbs ^ 2 ≤ zAbs ^ 4 := Nat.pow_le_pow_right (by decide) (by decide)
+  rw [modulus_eq, add_smul, one_smul, sub_nsmul _ hle]
+  simp only [smul_smul, ← pow_two]
+  rw [nsmul_add, neg_nsmul, smul_smul, ← pow_add]
 
 /-- A point `(x, y, 1)` of the curve whose `x` passes the check has order dividing `r`. -/
 theorem modulus_smul_eq_zero {x y : Fp} (hc : check x.val = true)
@@ -228,20 +283,20 @@ theorem modulus_smul_eq_zero {x y : Fp} (hc : check x.val = true)
   let y₀ : Fp := ⟨rootCandidate x.val, Nat.mod_lt _ Fp.modulus_pos⟩
   have hy₀ : (y₀ : ZMod Fp.modulus) * y₀ = x * x * x + Fp.ofNat 4 := Fin.ext hsq
   have hv : Valid ⟨x, y₀, Fp.one⟩ := valid_of_affine_eq hy₀
-  -- The ladder reaches the point at infinity, so `[r] (x, y₀, 1) = 0`.
+  -- The chain reaches the point at infinity, so `[r] (x, y₀, 1) = 0`.
   have hr : Fr.modulus • toPoint ⟨x, y₀, Fp.one⟩ = 0 := by
-    rw [← toPoint_mulNat hv]
+    rw [← toPoint_mulModulusG1 hv]
     refine Point.toAffine_of_Z_eq_zero (isZero_iff.mp ?_)
-    rw [rep_z, ← mulNatAux_eq 256 _ Fr.modulus (by decide)]
+    rw [rep_z]
     have hc : coords ⟨x, y₀, Fp.one⟩ = (x.val, rootCandidate x.val, 1) := rfl
-    have h := congrArg (fun c : Coords => c.2.2) (coords_mulNatAux 256 ⟨x, y₀, Fp.one⟩ Fr.modulus)
+    have h := congrArg (fun c : Coords => c.2.2) (coords_mulModulusG1 ⟨x, y₀, Fp.one⟩)
     rw [hc, hz] at h
-    generalize G1.mulNatAux 256 ⟨x, y₀, Fp.one⟩ Fr.modulus = X at h ⊢
+    generalize mulModulusG1 ⟨x, y₀, Fp.one⟩ = X at h ⊢
     exact beq_iff_eq.mpr h
   rcases sqrt_pm (hy.trans hy₀.symm) with h | h
   · rw [show y = y₀ from h]
     exact hr
-  · rw [show (⟨x, y, Fp.one⟩ : G1) = neg ⟨x, y₀, Fp.one⟩ by rw [show y = -y₀ from h]; rfl,
+  · rw [show (⟨x, y, Fp.one⟩ : G1) = G1.neg ⟨x, y₀, Fp.one⟩ by rw [show y = -y₀ from h]; rfl,
       toPoint_neg hv, neg_nsmul, hr, neg_zero]
 
 end EthLib.Cryptography.Bls.G1.TorsionCheck
