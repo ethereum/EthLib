@@ -13,6 +13,7 @@ public import EthLib.Execution.Blocks.Receipt
 public import EthLib.Execution.Blocks.Rewards
 public import EthLib.Execution.Blocks.Requests
 public import EthLib.Execution.Blocks.Roots
+public import EthLib.Execution.Blocks.SystemCall
 public import EthLib.Execution.Blocks.Validate
 public import EthLib.Execution.Blocks.Withdrawal
 

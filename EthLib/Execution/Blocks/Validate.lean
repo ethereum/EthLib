@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Blocks.Block
 public import EthLib.Execution.Blocks.Difficulty
 public import EthLib.Execution.Blocks.ProofOfWork
+public import EthLib.Execution.Evm.Errors
 public import EthLib.Execution.Fees.BaseFee
 public import EthLib.Execution.Fees.BlobBaseFee
 public import EthLib.Execution.Fees.GasLimit
@@ -96,6 +97,14 @@ inductive BlockError where
   | proofOfWork (error : PowError)
   /-- From Paris on, the parent is before London, so it has no base fee. -/
   | parentBeforeLondon
+  /-- A system call that must succeed finds no code at `address`. -/
+  | systemContractEmpty (address : Address)
+  /-- A system call that must succeed fails at `address` with `error`. -/
+  | systemCallFailed (address : Address) (error : Evm.EvmError)
+  /-- The execution aborts with `error`, so the block is neither valid nor invalid.
+
+  The state lacks data that it must hold, or the rules of the fork are not yet specified. -/
+  | aborted (error : Evm.EvmError)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -103,6 +112,8 @@ inductive BlockError where
 The code ignores the arguments of the constructor, which the message carries.
 
 The codes start at 201, above the codes of RLP and receipt errors, so that none of them meet.
+
+Proof-of-work errors hold the codes 221 to 223, so no constructor here takes them.
 
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def BlockError.code : BlockError → UInt32
@@ -123,6 +134,9 @@ def BlockError.code : BlockError → UInt32
   | .wrongDifficulty _ _ => 215
   | .proofOfWork _ => 216
   | .parentBeforeLondon => 217
+  | .systemContractEmpty _ => 218
+  | .systemCallFailed .. => 219
+  | .aborted _ => 220
 
 /-- The first error whose condition fails, in order, or success when every condition holds. -/
 def firstFailure : List (Bool × BlockError) → Except BlockError Unit

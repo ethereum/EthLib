@@ -170,6 +170,8 @@ structure CallOutput where
   touchedAccounts : Std.ExtTreeSet Address
   /-- The error that stopped the message, if any. -/
   error : Option EvmError
+  /-- The data that the message returned, or the data of its revert. -/
+  output : ByteArray
 
 /-- The output of a message that ends with the frame `evm`, with `refund` gas from before it.
 
@@ -177,10 +179,10 @@ A message that fails keeps its gas left and the earlier refund, and nothing else
 def CallOutput.ofFrame {fork : Fork} (evm : Evm fork Nat) (refund : Nat)
     (touched : Std.ExtTreeSet Address) : CallOutput :=
   if evm.error.isSome then
-    ⟨evm.state, GasMeter.gasLeft evm.gas, refund, #[], ∅, ∅, evm.error⟩
+    ⟨evm.state, GasMeter.gasLeft evm.gas, refund, #[], ∅, ∅, evm.error, evm.output⟩
   else
     ⟨evm.state, GasMeter.gasLeft evm.gas, refund + evm.substate.refundCounter.toNat,
-      evm.substate.logs, evm.substate.accountsToDelete, touched, none⟩
+      evm.substate.logs, evm.substate.accountsToDelete, touched, none, evm.output⟩
 
 /-- The message of a creation, at `fork`.
 
@@ -190,7 +192,7 @@ def processCreation {fork : Fork} (message : Message fork) (state : TransactionS
   if state.accountDeployable message.currentTarget then do
     let ⟨evm, _⟩ ← processCreateMessage (Meter := Nat) fork message state substate
     return .ofFrame evm 0 evm.substate.touchedAccounts
-  else .ok ⟨state, 0, 0, #[], ∅, ∅, some .addressCollision⟩
+  else .ok ⟨state, 0, 0, #[], ∅, ∅, some .addressCollision, .empty⟩
 
 /-- The message of a call to `target` at `fork`, once the authorizations have applied.
 
