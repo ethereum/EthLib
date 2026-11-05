@@ -24,7 +24,7 @@ If digests were uniform, all `2^32` counters would fail with probability below `
 
 That bound on the number is proved here.
 
-That digests behave as uniform values is the random-oracle assumption, and is not.
+In the random-oracle model, the search proofs derive that bound for the search itself.
 -/
 
 @[expose] public section

@@ -171,8 +171,9 @@ If `keyGen seed` returns a key pair, and `sign` returns a signature for a messag
 
 The Python suite checks one signature that an independent implementation computed, with its public key, through the bindings.
 
-`all_counters_fail_probability` (`Proofs/Sphincs/CodeSize.lean`) bounds a number: if digests were uniform, signing would fail with probability below `exp(-2^18)`.
-That digests are uniform is not proved.
+In the random oracle model, all `2^32` counters of one search miss the code with probability below `exp(-2^18)` (`prEvent_findCounter_none_le`, `Proofs/Sphincs/CodewordSearch.lean`).
+The theorem assumes that the oracle's cache holds none of the counters' inputs when the search starts.
+No theorem shows that the signer's cache satisfies this, so the failure of a whole signature is not bounded.
 
 The 127-bit unforgeability bound of the configuration is a theorem about the specification's own Lean model, outside EthLib.
 No theorem links that model to this module.
@@ -573,12 +574,13 @@ The Python bindings expose the block cipher, CTR and GCM, as `encrypt_block`, `d
 ### A4. Idealisations
 
 A security theorem rests on a model, such as a random oracle for a hash.
-EthLib has six such theorems, and each rests on one idealisation.
-The two theorems of Casper FFG share one bullet, and the binding of a proof of possession shares that of leanXMSS:
+Each such theorem of EthLib rests on one idealisation, listed below.
+The two theorems of Casper FFG share one bullet, and the binding of a proof of possession and the codeword searches share that of leanXMSS:
 
 - leanXMSS: the hash `H`, Keccak-256, is a random oracle on byte strings.
   The theorem says nothing about an attack that uses the structure of Keccak.
   The binding of an EIP-8450 proof of possession rests on the same oracle.
+  So do the failure bounds of the codeword searches of leanXMSS and leanSPHINCS.
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
   Nothing in EthLib proves that the hash behaves as such an oracle.

@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Proofs.Sphincs.Address
 public import EthLib.Cryptography.Proofs.Sphincs.TweakableHash
 public import EthLib.Cryptography.Proofs.Sphincs.Encoding
 public import EthLib.Cryptography.Proofs.Sphincs.CodeSize
+public import EthLib.Cryptography.Proofs.Sphincs.CodewordSearch
 public import EthLib.Cryptography.Proofs.Sphincs.Ots
 public import EthLib.Cryptography.Proofs.Sphincs.Tree
 public import EthLib.Cryptography.Proofs.Sphincs.Fors

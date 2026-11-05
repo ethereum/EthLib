@@ -31,7 +31,8 @@ variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
 # Errors
 
-- No randomizer trial gives a codeword, which happens with probability below `exp(-2^11)`. -/
+- No randomizer trial gives a codeword.
+  In the random oracle model, from an empty cache, that has probability below `exp(-4000)`. -/
 def signLayer (pp : PublicParam) (s : Seed) (layer : Layer) (e : Nat) (msg : ByteArray) :
     m (Except XmssError LayerSignature) := do
   -- No codeword is an error.

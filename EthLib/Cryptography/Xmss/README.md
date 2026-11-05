@@ -112,6 +112,11 @@ A codeword's digits sum to `T = 106` (`sum_of_codeword`), and no two digests sha
 Two distinct codewords are incomparable: each has a digit below the other's (`codeword_incomparable`).
 Incomparability is what stops a forger: to sign a different codeword from a signature, they would have to walk some chain backwards, which means inverting the hash.
 The code has `323504418562481994618807509487594` words, so one trial succeeds with probability `2^-20.0045` (`card_onTarget`, `code_probability`).
+Exactly that many 16-byte digests are codewords (`card_codeword`, `CodewordSearch.lean`).
+
+**The search rarely fails.**
+In the random oracle model, all `2^32` trials of one search miss the code with probability exactly `(1 - |C| / 2^128)^(2^32)`, which is below `exp(-4000)` (`prEvent_findCodeword_none`, `prEvent_findCodeword_none_le`).
+The theorem assumes that the oracle's cache holds none of the trial inputs when the search starts, as an empty cache does.
 
 **Domain separation.**
 Every hash call carries an address that says where in the key it happens, so that two calls never hash the same input by accident (`Address.lean`, `TweakableHash.lean`).
@@ -140,9 +145,7 @@ The proof, adapted from leanerVM's, reasons over these same definitions (`Proofs
 
 - No security property is proved beyond the random oracle model, so the theorem says nothing about an attack that uses the structure of Keccak-256.
 - Security against a quantum adversary is not proved.
-- No theorem says that signing fails with small probability.
-  `code_probability` gives one trial's chance, if digests were uniform, and the claim that all `2^32` trials fail with probability below `exp(-2^11)` is only argued in the docstring of `MAX_RANDOMIZER_TRIALS`.
-- No theorem says that every codeword is the codeword of some digest.
-  `eq_of_codeword` shows at most one digest per codeword, so at most `|C|` digests are codewords.
+- No theorem bounds the failure of a whole signature.
+  The search bound covers one search, and no theorem shows that the signer's cache holds none of its trial inputs.
 - No theorem says that this module and any other implementation compute the same keys and signatures.
   The test vectors check one key and one signature against an independent implementation.
