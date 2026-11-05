@@ -133,6 +133,12 @@ def readPreamble (bs : List UInt8) : Except SnappyError (Nat × List UInt8) :=
       else
         .ok (len, rest)
 
+/-- The uncompressed length a block declares, read from its first bytes alone (§1).
+
+The preamble takes at most five bytes, so this reads no more, and decompresses nothing. -/
+def declaredLength (bs : ByteArray) : Except SnappyError Nat :=
+  (readPreamble (bs.extract 0 preambleMaxLength).toList).map (·.1)
+
 /-- Copy the given number of bytes from `offset` back onto the end of the output (§2.2).
 
 Each byte is read `offset` back from the current end.

@@ -56,14 +56,19 @@ The data may be at most `32 + n + n / 6` bytes long, for the payload cap `n`.
 
 The payload must decompress, and be at most the smaller of the cap and the bound.
 
+A length above that is rejected from the preamble of the data, before anything is decompressed.
+
 The caller deserializes the bytes, since it knows their SSZ type.
 -/
 def decodePayload (typeBound : UInt64) (data : ByteArray) : Except PayloadError ByteArray := do
   let compressedBound ← (maxCompressedLen MAX_PAYLOAD_SIZE).mapError .arith
   if compressedBound.toNat < data.size then
     throw (.compressedTooLong data.size compressedBound.toNat)
-  let payload ← (Snappy.decompress data).mapError .snappy
   let bound := (min typeBound MAX_PAYLOAD_SIZE).toNat
+  -- The preamble declares the payload length, so a long payload is rejected unread.
+  if let .ok declared := Snappy.declaredLength data then
+    if bound < declared then throw (.payloadTooLong declared bound)
+  let payload ← (Snappy.decompress data).mapError .snappy
   if bound < payload.size then throw (.payloadTooLong payload.size bound)
   return payload
 

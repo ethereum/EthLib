@@ -14,6 +14,7 @@ Properties of Snappy block decompression, against `format_description.txt` of `g
 - A copy writes exactly the bytes §2.2 describes, overlapping copies included.
 - A block cannot start with a copy (§2).
 - A block that decompresses yields exactly the length it declared, at most 2^32 - 1.
+- Its first five bytes alone declare that length.
 - The fuel that bounds the element loop never changes the result.
 - A block of one literal decompresses back to its data, for at most 2^32 - 1 bytes.
 
@@ -102,6 +103,47 @@ theorem readPreamble_le {bs rest : List UInt8} {len : Nat}
   · split at h
     · cases h
     · cases h; omega
+
+/-- A preamble read within its fuel reads the same length from the first bytes alone. -/
+theorem readPreambleAux_take {l rest : List UInt8} {acc shift fuel len : Nat} (n : Nat)
+    (hn : fuel ≤ n) (h : readPreambleAux l acc shift fuel = .ok (len, rest)) :
+    ∃ rest', readPreambleAux (l.take n) acc shift fuel = .ok (len, rest') := by
+  induction fuel generalizing l acc shift n with
+  | zero => cases l <;> simp [readPreambleAux] at h
+  | succ fuel ih =>
+      obtain ⟨m, rfl⟩ : ∃ m, n = m + 1 := ⟨n - 1, by omega⟩
+      cases l with
+      | nil => simp [readPreambleAux] at h
+      | cons b bs =>
+          rw [List.take_succ_cons]
+          rw [readPreambleAux] at h ⊢
+          split at h
+          · rename_i hb
+            simp only [hb, ↓reduceIte]
+            cases h
+            exact ⟨_, rfl⟩
+          · rename_i hb
+            simp only [hb, ↓reduceIte]
+            exact ih m (by omega) h
+
+/-- An accepted preamble declares the same length when read from the first five bytes alone. -/
+theorem readPreamble_take {bs rest : List UInt8} {len : Nat}
+    (h : readPreamble bs = .ok (len, rest)) :
+    ∃ rest', readPreamble (bs.take preambleMaxLength) = .ok (len, rest') := by
+  rw [readPreamble] at h ⊢
+  cases haux : readPreambleAux bs 0 0 preambleMaxLength with
+  | error e => rw [haux] at h; cases h
+  | ok p =>
+      obtain ⟨len', rest''⟩ := p
+      rw [haux] at h
+      obtain ⟨rest', h'⟩ := readPreambleAux_take preambleMaxLength (Nat.le_refl _) haux
+      rw [h']
+      dsimp only at h ⊢
+      by_cases hl : maxUncompressedLength < len'
+      · simp only [hl, ↓reduceIte] at h; cases h
+      · simp only [hl, ↓reduceIte] at h ⊢
+        cases h
+        exact ⟨_, rfl⟩
 
 /-! ## Copies (§2.2) -/
 
@@ -375,6 +417,17 @@ theorem decompress_compressLiteral {d : ByteArray} (h : d.size ≤ maxUncompress
   rw [decompress, compressLiteral, toList_eq_data_toList]
   simp only [decompressToArray_compressLiteralList hl]
   exact congrArg Except.ok (ByteArray.ext (by simp))
+
+/-- The length that the first bytes of a block declare is the length it decompresses to. -/
+theorem declaredLength_of_decompress {bs out : ByteArray} (h : decompress bs = .ok out) :
+    declaredLength bs = .ok out.size := by
+  obtain ⟨rest, hpre⟩ := decompress_size_eq_declared h
+  obtain ⟨rest', h'⟩ := readPreamble_take hpre
+  have hl : (bs.extract 0 preambleMaxLength).toList = bs.toList.take preambleMaxLength := by
+    rw [toList_eq_data_toList, toList_eq_data_toList, ByteArray.data_extract,
+      Array.toList_extract]
+    simp [List.extract]
+  simp [declaredLength, hl, h', Except.map]
 
 /-! ## Error codes -/
 
