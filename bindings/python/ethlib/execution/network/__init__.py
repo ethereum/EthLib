@@ -14,6 +14,10 @@ BLOCK_HEADERS = 0x04
 GET_BLOCK_BODIES = 0x05
 BLOCK_BODIES = 0x06
 NEW_BLOCK = 0x07
+TRANSACTIONS = 0x02
+NEW_POOLED_TRANSACTION_HASHES = 0x08
+GET_POOLED_TRANSACTIONS = 0x09
+POOLED_TRANSACTIONS = 0x0A
 BLOCK_RANGE_UPDATE = 0x11
 
 
@@ -32,17 +36,33 @@ def check_headers(version: int, request: bytes, response: bytes) -> None:
     _native.eth_check_headers(version, request, response)
 
 
+def check_pooled(version: int, request: bytes, response: bytes) -> None:
+    """Accept the PooledTransactions data `response` as an answer to the GetPooledTransactions."""
+    _native.eth_check_pooled(version, request, response)
+
+
+def wire_hash(tx: bytes) -> bytes:
+    """The hash of the RLP item `tx` of a transaction, as it crosses the wire."""
+    return _native.eth_wire_hash(tx)
+
+
 __all__ = [
     "BLOCK_BODIES",
     "BLOCK_HEADERS",
     "BLOCK_RANGE_UPDATE",
     "GET_BLOCK_BODIES",
     "GET_BLOCK_HEADERS",
+    "GET_POOLED_TRANSACTIONS",
     "NEW_BLOCK",
     "NEW_BLOCK_HASHES",
+    "NEW_POOLED_TRANSACTION_HASHES",
+    "POOLED_TRANSACTIONS",
     "STATUS",
+    "TRANSACTIONS",
     "EthWireError",
     "check_headers",
+    "check_pooled",
     "check_status",
     "decode_message",
+    "wire_hash",
 ]

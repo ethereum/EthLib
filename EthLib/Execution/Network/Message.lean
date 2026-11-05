@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Network.Blocks
 public import EthLib.Execution.Network.Status
+public import EthLib.Execution.Network.Transactions
 
 /-!
 # `Execution.Network.Message`
@@ -33,6 +34,8 @@ inductive Message where
   | status (s : Status)
   /-- NewBlockHashes (0x01): `[[blockhash, number], ...]`. -/
   | newBlockHashes (blocks : List BlockAnnouncement)
+  /-- Transactions (0x02): `[tx, ...]`. -/
+  | transactions (txs : List Item)
   /-- GetBlockHeaders (0x03): `[request-id, [startblock, limit, skip, reverse]]`. -/
   | getBlockHeaders (requestId : UInt64) (request : HeaderRequest)
   /-- BlockHeaders (0x04): `[request-id, [header, ...]]`. -/
@@ -43,6 +46,12 @@ inductive Message where
   | blockBodies (requestId : UInt64) (bodies : List Item)
   /-- NewBlock (0x07): `[block, td]`, with the total difficulty of the block. -/
   | newBlock (block : Item) (totalDifficulty : Nat)
+  /-- NewPooledTransactionHashes (0x08): the types, sizes and hashes of new transactions. -/
+  | newPooledTransactionHashes (a : Announcement)
+  /-- GetPooledTransactions (0x09): `[request-id, [txhash, ...]]`. -/
+  | getPooledTransactions (requestId : UInt64) (hashes : List Hash32)
+  /-- PooledTransactions (0x0a): `[request-id, [tx, ...]]`. -/
+  | pooledTransactions (requestId : UInt64) (txs : List Item)
   /-- BlockRangeUpdate (0x11), from eth/69 on. -/
   | blockRangeUpdate (r : BlockRange)
   deriving DecidableEq
@@ -53,6 +62,8 @@ inductive EthError where
   | unknownId (id : Nat)
   /-- The data is not RLP of the shape that the message asks for. -/
   | rlp (error : RlpError)
+  /-- An announcement has not as many types and sizes as hashes. -/
+  | unequalLengths (types sizes hashes : Nat)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -61,6 +72,7 @@ A new constructor takes a new code, so that each code keeps its meaning. -/
 def EthError.code : EthError → UInt32
   | .unknownId _ => 1
   | .rlp _ => 2
+  | .unequalLengths .. => 3
 
 namespace Message
 
@@ -68,11 +80,15 @@ namespace Message
 def id : Message → Nat
   | status _ => STATUS_ID
   | newBlockHashes _ => NEW_BLOCK_HASHES_ID
+  | transactions _ => TRANSACTIONS_ID
   | getBlockHeaders .. => GET_BLOCK_HEADERS_ID
   | blockHeaders .. => BLOCK_HEADERS_ID
   | getBlockBodies .. => GET_BLOCK_BODIES_ID
   | blockBodies .. => BLOCK_BODIES_ID
   | newBlock .. => NEW_BLOCK_ID
+  | newPooledTransactionHashes _ => NEW_POOLED_TRANSACTION_HASHES_ID
+  | getPooledTransactions .. => GET_POOLED_TRANSACTIONS_ID
+  | pooledTransactions .. => POOLED_TRANSACTIONS_ID
   | blockRangeUpdate _ => BLOCK_RANGE_UPDATE_ID
 
 /-- The envelope of a request or a response: `[request-id, payload]`, from EIP-2481. -/
@@ -83,11 +99,15 @@ def envelope (requestId : UInt64) (payload : Item) : Item :=
 def toItem : Message → Item
   | status s => s.toItem
   | newBlockHashes bs => Codec.toItem bs
+  | transactions txs => .list txs
   | getBlockHeaders i r => envelope i (Codec.toItem r)
   | blockHeaders i hs => envelope i (.list hs)
   | getBlockBodies i hs => envelope i (Codec.toItem hs)
   | blockBodies i bs => envelope i (.list bs)
   | newBlock b td => .list [b, Codec.toItem td]
+  | newPooledTransactionHashes a => a.toItem
+  | getPooledTransactions i hs => envelope i (Codec.toItem hs)
+  | pooledTransactions i txs => envelope i (.list txs)
   | blockRangeUpdate r => Codec.toItem r
 
 /-- The request ID and the payload in the envelope `[request-id, payload]`. -/
@@ -98,7 +118,8 @@ def readEnvelope {α : Type} [Codec α] (item : Item) : Except RlpError (UInt64 
 
 /-- The request ID of a request or a response, and none for the other messages. -/
 def requestId? : Message → Option UInt64
-  | getBlockHeaders i _ | blockHeaders i _ | getBlockBodies i _ | blockBodies i _ => some i
+  | getBlockHeaders i _ | blockHeaders i _ | getBlockBodies i _ | blockBodies i _
+  | getPooledTransactions i _ | pooledTransactions i _ => some i
   | _ => none
 
 /-- Whether `response` answers `request`: it is the response type of the request type, and it
@@ -107,6 +128,7 @@ def answers (request response : Message) : Bool :=
   match request, response with
   | getBlockHeaders i _, blockHeaders j _ => i == j
   | getBlockBodies i _, blockBodies j _ => i == j
+  | getPooledTransactions i _, pooledTransactions j _ => i == j
   | _, _ => false
 
 /-- The message with the ID `id` and the data `item`, on the version `version`.
@@ -115,6 +137,7 @@ BlockRangeUpdate exists from eth/69 on. -/
 def ofItem (version : EthVersion) (id : Nat) (item : Item) : Except EthError Message :=
   if id = STATUS_ID then (status <$> Status.ofItem version item).mapError .rlp
   else if id = NEW_BLOCK_HASHES_ID then (newBlockHashes <$> Codec.ofItem item).mapError .rlp
+  else if id = TRANSACTIONS_ID then (transactions <$> Codec.ofItem item).mapError .rlp
   else if id = GET_BLOCK_HEADERS_ID then
     ((fun (i, r) => getBlockHeaders i r) <$> readEnvelope item).mapError .rlp
   else if id = BLOCK_HEADERS_ID then
@@ -127,6 +150,15 @@ def ofItem (version : EthVersion) (id : Nat) (item : Item) : Except EthError Mes
     match ← item.fields 2 with
     | [b, td] => return newBlock b (← td.field 1)
     | items => throw (.wrongFieldCount 2 items.length)
+  else if id = NEW_POOLED_TRANSACTION_HASHES_ID then do
+    let a ← (Announcement.ofItem version item).mapError .rlp
+    let (t, s, h) := a.lists
+    if a.lengthsAgree then return newPooledTransactionHashes a
+    else throw (.unequalLengths t.size s.length h.length)
+  else if id = GET_POOLED_TRANSACTIONS_ID then
+    ((fun (i, hs) => getPooledTransactions i hs) <$> readEnvelope item).mapError .rlp
+  else if id = POOLED_TRANSACTIONS_ID then
+    ((fun (i, txs) => pooledTransactions i txs) <$> readEnvelope item).mapError .rlp
   else if id = BLOCK_RANGE_UPDATE_ID ∧ EthVersion.eth69 ≤ version then
     (blockRangeUpdate <$> Codec.ofItem item).mapError .rlp
   else .error (.unknownId id)
@@ -145,6 +177,15 @@ It must repeat the request ID, and its headers must pass the check of the reques
 def checkHeaderResponse (request response : Message) : Except HeadersError Unit :=
   match request, response with
   | getBlockHeaders i r, blockHeaders j hs => if i = j then checkHeaders r hs else throw .notAnswer
+  | _, _ => throw .notAnswer
+
+/-- Whether `response` is PooledTransactions that answers the GetPooledTransactions `request`.
+
+It must repeat the request ID, and its transactions must be requested ones, in order. -/
+def checkPooledResponse (request response : Message) : Except PoolError Unit :=
+  match request, response with
+  | getPooledTransactions i hs, pooledTransactions j txs =>
+    if i = j then checkPooled hs txs else throw .notAnswer
   | _, _ => throw .notAnswer
 
 end Message

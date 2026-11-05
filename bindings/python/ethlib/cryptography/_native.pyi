@@ -603,6 +603,14 @@ def eth_check_headers(version: int, request: bytes, response: bytes) -> bool:
     """Whether `response` is BlockHeaders that answers the GetBlockHeaders `request`."""
     ...
 
+def eth_check_pooled(version: int, request: bytes, response: bytes) -> bool:
+    """Whether `response` is PooledTransactions that answers the GetPooledTransactions `request`."""
+    ...
+
+def eth_wire_hash(tx: bytes) -> bytes:
+    """The hash of a transaction as it crosses the wire."""
+    ...
+
 def snappy_decompress(block: bytes) -> bytes:
     """The bytes a Snappy block decompresses to, or why it is not a valid block."""
     ...

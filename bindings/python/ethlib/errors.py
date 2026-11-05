@@ -135,7 +135,8 @@ class ForkIdError(EthLibError, ValueError):
 class EthWireError(EthLibError, ValueError):
     """An eth message, a Status or an answer of headers was rejected.
 
-    Message errors have codes from 1, Status errors from 101, header errors from 201.
+    Message errors have codes from 1, Status errors from 101, header errors from 201, and
+    transaction errors from 301.
     A bad argument has code 0.
     """
 

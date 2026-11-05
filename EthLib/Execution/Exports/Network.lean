@@ -15,8 +15,8 @@ A message crosses it as its ID within the capability, and the RLP encoding of it
 
 A schedule crosses it as the fork identifier exports read it.
 
-Message errors have codes from 1, Status errors from 101, header errors from 201, and a bad
-argument code 0.
+Message errors have codes from 1, Status errors from 101, header errors from 201, transaction
+errors from 301, and a bad argument code 0.
 -/
 
 public section
@@ -29,6 +29,7 @@ open EthLib.Exports (Result)
 def ethMessage : EthError → String
   | .unknownId id => s!"message ID {id} is not used by this eth version, or not read by EthLib yet"
   | .rlp _ => "message data is not RLP of the expected shape"
+  | .unequalLengths t s h => s!"announcement has {t} types and {s} sizes for {h} hashes"
 
 /-- A message for a refused Status, phrased for someone reading a Python traceback. -/
 def statusMessage : StatusError → String
@@ -44,6 +45,12 @@ def headersMessage : HeadersError → String
   | .wrongNumber e g => s!"header has number {g}, not {e}"
   | .notChained n => s!"header {n} does not chain to the header before it"
   | .notAnswer => "response is not BlockHeaders with the request ID of the request"
+
+/-- A message for a refused answer of transactions, phrased for someone reading a traceback. -/
+def poolMessage : PoolError → String
+  | .rlp _ => "a transaction has no RLP encoding"
+  | .notRequested => "transactions are not requested ones in the order of the request"
+  | .notAnswer => "response is not PooledTransactions with the request ID of the request"
 
 /-- The version with a number, or code 0 when EthLib does not specify it. -/
 def readVersion (number : UInt64) : Result EthVersion :=
@@ -88,5 +95,29 @@ def checkHeadersExport (version : UInt64) (request response : ByteArray) : Resul
   let resp ← run (Message.decode v BLOCK_HEADERS_ID response)
   (Message.checkHeaderResponse req resp).map (fun _ => true)
     |>.mapError fun e => (e.code, headersMessage e)
+
+/-- Whether the PooledTransactions data `response` answers the GetPooledTransactions data
+`request`.
+
+It returns true on acceptance, and raises the code of the refusal otherwise. -/
+@[export eth_check_pooled]
+def checkPooledExport (version : UInt64) (request response : ByteArray) : Result Bool := do
+  let v ← readVersion version
+  let run {α : Type} (act : Except EthError α) : Result α :=
+    act.mapError fun e => (e.code, ethMessage e)
+  let req ← run (Message.decode v GET_POOLED_TRANSACTIONS_ID request)
+  let resp ← run (Message.decode v POOLED_TRANSACTIONS_ID response)
+  (Message.checkPooledResponse req resp).map (fun _ => true)
+    |>.mapError fun e => (e.code, poolMessage e)
+
+/-- The hash of a transaction as it crosses the wire, from its RLP item. -/
+@[export eth_wire_hash]
+def wireHashExport (tx : ByteArray) : Result ByteArray := do
+  match Serialization.Rlp.decode tx with
+  | .error _ => throw (0, "transaction is not one RLP item")
+  | .ok item =>
+    match wireHash item with
+    | .error _ => throw (0, "transaction has no RLP encoding")
+    | .ok h => return ⟨h.toArray⟩
 
 end EthLib.Execution.Network.Exports

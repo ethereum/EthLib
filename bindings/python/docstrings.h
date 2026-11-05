@@ -452,6 +452,12 @@
 #define DOC_eth_check_headers \
   "Whether `response` is BlockHeaders that answers the GetBlockHeaders `request`."
 
+#define DOC_eth_check_pooled \
+  "Whether `response` is PooledTransactions that answers the GetPooledTransactions `request`."
+
+#define DOC_eth_wire_hash \
+  "The hash of a transaction as it crosses the wire."
+
 #define DOC_snappy_decompress \
   "The bytes a Snappy block decompresses to, or why it is not a valid block."
 
