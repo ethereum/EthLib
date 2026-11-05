@@ -6,15 +6,25 @@ public import EthLib.Execution.Proofs.Evm.Step
 /-!
 # Proofs: `Evm.Storage`
 
-From Istanbul, a write that a second write undoes costs, net of refunds, two reads.
+From Istanbul to BPO5, a write that a second write undoes costs, net of refunds, two reads.
 
 A cold first access adds its price on top.
 
 A write that leaves the slot as it is costs one read and changes no refund.
 
+From Glamsterdam, a write that a second write undoes costs two accesses, net of refunds.
+
+The first may be cold, and the state gas of a new slot comes back.
+
+A write that leaves the slot as it is costs one access, and no state gas.
+
+Only a write that sets a zero slot charges state gas, and only a reset to zero refills it.
+
 From Berlin, an access to a slot is cold exactly when the transaction has not accessed it.
 
 SSTORE never succeeds in a static frame, and from Istanbul fails with 2300 gas or less.
+
+From Glamsterdam, SSTORE in a static frame fails before it reads the stack.
 -/
 
 @[expose] public section
@@ -26,25 +36,82 @@ open GasCosts
 
 variable {fork : Fork} {Meter : Type}
 
-/-- From Istanbul, a write and the write that restores the original value cost two reads.
+/-- From Istanbul to BPO5, a write and the write that restores the original value cost two reads.
 
 That is net of refunds, and a cold first access adds its price. -/
-theorem sstore_restore (h : fork ≥ .istanbul) {original new : U256} (hne : original ≠ new)
-    (cold : Bool) :
+theorem sstore_restore (h : fork ≥ .istanbul) (hlt : fork < .glamsterdam) {original new : U256}
+    (hne : original ≠ new) (cold : Bool) :
     ((sstoreCost fork original original new cold + sstoreCost fork original new original false :
       Nat) : Int) -
       (sstoreRefund fork original original new + sstoreRefund fork original new original) =
       (if cold then COLD_STORAGE_ACCESS else 0) + 2 * sstoreReadCost fork := by
   have hne' : new ≠ original := Ne.symm hne
+  have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
   unfold sstoreCost sstoreRefund sstoreResetCost sstoreReadCost
+  simp only [hg, ite_false]
   by_cases hb : fork ≥ .berlin <;> by_cases h0 : original = 0 <;> by_cases h1 : new = 0 <;>
     cases cold <;> simp [h, hb, h0, h1, hne, hne'] <;> simp_all <;> omega
 
-/-- From Istanbul, a write of the current value costs a read, and the cold surcharge. -/
-theorem sstoreCost_noop (h : fork ≥ .istanbul) (original current : U256) (cold : Bool) :
+/-- From Istanbul to BPO5, a write of the current value costs a read, and the cold surcharge. -/
+theorem sstoreCost_noop (h : fork ≥ .istanbul) (hlt : fork < .glamsterdam)
+    (original current : U256) (cold : Bool) :
     sstoreCost fork original current current cold =
       (if cold then COLD_STORAGE_ACCESS else 0) + sstoreReadCost fork := by
-  simp [sstoreCost, h]
+  have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
+  simp [sstoreCost, h, hg]
+
+/-- From Glamsterdam, a write and the write that restores the original value cost two accesses.
+
+That is net of refunds: the second write gives back the write price of the first.
+
+The first access may be cold, and the second is warm.
+
+The state gas that the first write charges, the second refills. -/
+theorem sstore_restore_of_glamsterdam (h : fork ≥ .glamsterdam) {original new : U256}
+    (hne : original ≠ new) (cold : Bool) :
+    ((sstoreCost fork original original new cold + sstoreCost fork original new original false :
+      Nat) : Int) -
+      (sstoreRefund fork original original new + sstoreRefund fork original new original) =
+      (if cold then COLD_STORAGE_ACCESS else WARM_ACCESS) + WARM_ACCESS ∧
+    sstoreStateGas fork original original new + sstoreStateGas fork original new original =
+      sstoreStateRefill fork original original new + sstoreStateRefill fork original new original
+  := by
+  have hne' : new ≠ original := Ne.symm hne
+  have hi : fork ≥ .istanbul := Nat.le_trans (by decide) h
+  unfold sstoreCost sstoreRefund sstoreStateGas sstoreStateRefill
+  by_cases h0 : original = 0 <;> by_cases h1 : new = 0 <;>
+    cases cold <;> simp [h, hi, h0, h1, hne, hne'] <;> simp_all <;> omega
+
+/-- From Glamsterdam, a write of the current value costs one access, and no state gas. -/
+theorem sstore_noop_of_glamsterdam (h : fork ≥ .glamsterdam) (original current : U256)
+    (cold : Bool) :
+    sstoreCost fork original current current cold =
+        (if cold then COLD_STORAGE_ACCESS else WARM_ACCESS) ∧
+      sstoreStateGas fork original current current = 0 ∧
+      sstoreStateRefill fork original current current = 0 := by
+  refine ⟨by simp [sstoreCost, h], ?_, ?_⟩ <;>
+    simp only [sstoreStateGas, sstoreStateRefill] <;> split <;> simp_all
+
+/-- SSTORE charges state gas only to set a slot that is zero now and was at the start. -/
+theorem sstoreStateGas_ne_zero {original current new : U256}
+    (hs : sstoreStateGas fork original current new ≠ 0) :
+    fork ≥ .glamsterdam ∧ original = 0 ∧ current = 0 ∧ new ≠ 0 := by
+  unfold sstoreStateGas at hs
+  split at hs
+  · assumption
+  · exact absurd rfl hs
+
+/-- SSTORE refills state gas only to clear a slot that was zero at the start. -/
+theorem sstoreStateRefill_ne_zero {original current new : U256}
+    (hs : sstoreStateRefill fork original current new ≠ 0) :
+    fork ≥ .glamsterdam ∧ original = 0 ∧ current ≠ 0 ∧ new = 0 := by
+  unfold sstoreStateRefill at hs
+  split at hs
+  · assumption
+  · exact absurd rfl hs
+
+/-- The state gas of a new slot: 64 bytes at 1530 gas a byte. -/
+theorem storageSetStateGas_eq : STORAGE_SET_STATE_GAS = 97920 := rfl
 
 /-- From Istanbul, a write of the current value changes no refund. -/
 theorem sstoreRefund_noop (h : fork ≥ .istanbul) (original current : U256) :
@@ -57,7 +124,8 @@ theorem sstoreCost_of_lt_istanbul (h : fork < .istanbul) (original current new :
     sstoreCost fork original current new cold =
       if new ≠ 0 ∧ current = 0 then STORAGE_SET else COLD_STORAGE_WRITE := by
   have : ¬fork ≥ .istanbul := Nat.not_le_of_lt h
-  simp only [sstoreCost, this, ite_false]
+  have hg : ¬fork ≥ .glamsterdam := fun hg => this (Nat.le_trans (by decide) hg)
+  simp only [sstoreCost, this, hg, ite_false]
 
 /-- Before Berlin, an access to a slot is warm and leaves the frame as it is. -/
 theorem accessStorageKey_of_lt_berlin (h : fork < .berlin) (evm : Evm fork Meter) (a : Address)
@@ -94,6 +162,9 @@ variable [GasMeter Meter]
 theorem sstoreStep_ne_ok_of_isStatic {evm after : Evm fork Meter}
     (static : evm.message.isStatic = true) : sstoreStep evm ≠ .ok after := by
   intro h
+  unfold sstoreStep at h
+  split at h
+  · simp [bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at h
   obtain ⟨⟨k, e1⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨n, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
   have m2 : e2.message = evm.message :=
@@ -107,18 +178,35 @@ theorem sstoreStep_ne_ok_of_isStatic {evm after : Evm fork Meter}
     rw [hpair] at hacc
     simp only [hpair] at h
     obtain ⟨e4, h4, h⟩ := Base.bind_ok_iff.mp h
-    have m4 : e4.message = evm.message := by
+    obtain ⟨e5, h5, h⟩ := Base.bind_ok_iff.mp h
+    have m5 : e5.message = evm.message := by
+      obtain ⟨_, -, h5⟩ := Base.bind_ok_iff.mp h5
+      cases h5
       rw [(chargeGas_sameContext h4).message]
       cases hacc
       exact m2
-    simp [m4, static, throw, throwThe, MonadExceptOf.throw] at h
+    simp [m5, static, throw, throwThe, MonadExceptOf.throw] at h
 
-/-- From Istanbul, SSTORE fails out of gas with 2300 gas left or less. -/
+/-- From Glamsterdam, SSTORE in a static frame fails before it reads the stack. -/
+theorem sstoreStep_of_isStatic (h : fork ≥ .glamsterdam) {evm : Evm fork Meter}
+    (static : evm.message.isStatic = true) : sstoreStep evm = .error .writeInStaticContext := by
+  simp [sstoreStep, h, static, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+
+/-- From Istanbul, SSTORE fails out of gas with 2300 gas left or less.
+
+From Glamsterdam, this holds in a frame that may change the state. -/
 theorem sstoreStep_of_gasLeft_le (h : fork ≥ .istanbul) {evm : Evm fork Meter}
     {key new : U256} {rest : List U256} (hs : evm.stack.val = key :: new :: rest)
-    (low : GasMeter.gasLeft evm.gas ≤ CALL_STIPEND) : sstoreStep evm = .error .outOfGas := by
+    (low : GasMeter.gasLeft evm.gas ≤ CALL_STIPEND)
+    (dynamic : fork < .glamsterdam ∨ evm.message.isStatic = false) :
+    sstoreStep evm = .error .outOfGas := by
   have hstack : evm.stack = ⟨key :: new :: rest, hs ▸ evm.stack.property⟩ := Subtype.ext hs
-  simp [sstoreStep, popWord, hstack, Stack.pop, bind, Except.bind, pure, Except.pure, h, low,
-    throw, throwThe, MonadExceptOf.throw]
+  have first : ¬(fork ≥ .glamsterdam ∧ evm.message.isStatic = true) := by
+    rintro ⟨hg, hst⟩
+    rcases dynamic with hl | hd
+    · exact absurd hg (Nat.not_le_of_lt hl)
+    · simp [hd] at hst
+  simp [sstoreStep, first, popWord, hstack, Stack.pop, bind, Except.bind, pure, Except.pure, h,
+    low, throw, throwThe, MonadExceptOf.throw]
 
 end EthLib.Execution.Evm

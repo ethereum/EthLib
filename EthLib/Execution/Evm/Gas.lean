@@ -105,6 +105,9 @@ def STORAGE_SET : Nat := 20000
 From Berlin, it includes the price of a cold access to the slot, by EIP-2929. -/
 def COLD_STORAGE_WRITE : Nat := 5000
 
+/-- The price of a write that moves a slot away from its original value, by EIP-8038. -/
+def STORAGE_WRITE : Nat := 10000
+
 /-- The gas that a call with value gives the callee on top of the gas it passes. -/
 def CALL_STIPEND : Nat := 2300
 /-- The price to send value with a call. -/
@@ -362,8 +365,9 @@ def gasSchedule (fork : Fork) : GasSchedule where
   TX_ACCESS_LIST_STORAGE_KEY := if fork ≥ .glamsterdam then 2000 else 1900
   -- EIP-2929 sets the price at 2600, and EIP-8038 raises it to 3000.
   COLD_ACCOUNT_ACCESS := if fork ≥ .glamsterdam then 3000 else 2600
-  -- EIP-3529 lowers the refund from 15000, the value in EIP-2200, to 4800.
-  REFUND_STORAGE_CLEAR := if fork ≥ .london then 4800 else 15000
+  -- EIP-3529 lowers the refund from 15000 (EIP-2200) to 4800, and EIP-8038 raises it to 11616.
+  REFUND_STORAGE_CLEAR :=
+    if fork ≥ .glamsterdam then 11616 else if fork ≥ .london then 4800 else 15000
   -- EIP-3529 removes the refund, which is 24000 in the Berlin version of the Yellow Paper.
   REFUND_SELF_DESTRUCT := if fork ≥ .london then 0 else 24000
 

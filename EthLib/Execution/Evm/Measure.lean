@@ -127,6 +127,18 @@ theorem chargeGas_pays [LawfulGasMeter Meter] {evm after : Evm fork Meter} {amou
   cases h
   exact ⟨LawfulGasMeter.gasHeld_charge hc, rfl⟩
 
+/-- A charge of state gas pays nothing, and raises no gas held. -/
+theorem chargeStateGas_pays [LawfulGasMeter Meter] {evm after : Evm fork Meter} {amount : Nat}
+    (h : chargeStateGas evm amount = .ok after) : Pays 0 evm after := by
+  obtain ⟨_, hc, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  exact ⟨LawfulGasMeter.gasHeld_chargeState hc, rfl⟩
+
+/-- A refill of state gas pays nothing, and raises no gas held. -/
+theorem refillStateGas_pays [LawfulGasMeter Meter] (evm : Evm fork Meter) (amount : Nat) :
+    Pays 0 evm (refillStateGas evm amount) :=
+  ⟨LawfulGasMeter.gasHeld_refill _ _, rfl⟩
+
 /-- A charge of a price and of the growth of memory pays at least the price. -/
 theorem chargeGasAndMemory_pays [LawfulGasMeter Meter] {evm after : Evm fork Meter}
     {cost : Nat} {ranges : List (U256 × U256)}
@@ -191,7 +203,8 @@ theorem one_le_sstoreCost (fork : Fork) (original current new : U256) (cold : Bo
     1 ≤ sstoreCost fork original current new cold := by
   unfold sstoreCost sstoreReadCost sstoreResetCost sloadCost
   repeat' split
-  all_goals simp only [COLD_STORAGE_ACCESS, STORAGE_SET, COLD_STORAGE_WRITE, WARM_ACCESS]
+  all_goals simp only [COLD_STORAGE_ACCESS, STORAGE_SET, COLD_STORAGE_WRITE, WARM_ACCESS,
+    STORAGE_WRITE]
   all_goals omega
 
 variable [LawfulGasMeter Meter]
@@ -671,16 +684,21 @@ theorem sloadStep_pays {evm after : Evm fork Meter} (h : sloadStep evm = .ok aft
 /-- SSTORE pays at least 1 gas. -/
 theorem sstoreStep_pays {evm after : Evm fork Meter} (h : sstoreStep evm = .ok after) :
     Pays 1 evm after := by
+  unfold sstoreStep at h
+  split at h
+  · cases h
   obtain ⟨⟨word, _⟩, h1, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨new, e2⟩, h2, h⟩ := Base.bind_ok_iff.mp h
   dsimp only at h
   split at h <;> try (cases h; done)
   obtain ⟨_, h3, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, h4, h⟩ := Base.bind_ok_iff.mp h
   split at h <;> try (cases h; done)
   obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
   cases h
-  exact (((((popWord_pays h1).trans (popWord_pays h2)).trans
-    (accessStorageKey_pays _ _ _)).trans (chargeGas_pays h3)).mono (m := 1)
+  exact (((((((popWord_pays h1).trans (popWord_pays h2)).trans
+    (accessStorageKey_pays _ _ _)).trans (refillStateGas_pays _ _)).trans
+    (chargeGas_pays h3)).trans (chargeStateGas_pays h4)).mono (m := 1)
     (by simp only [Nat.zero_add, Nat.add_zero]; exact one_le_sstoreCost _ _ _ _ _)).congr rfl rfl
 
 /-- SLOAD and SSTORE lower the measure. -/
