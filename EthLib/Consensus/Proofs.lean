@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Constants
 public import EthLib.Consensus.Proofs.Containers.Attestation
 public import EthLib.Consensus.Proofs.Containers.Block
