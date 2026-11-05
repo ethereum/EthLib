@@ -158,6 +158,10 @@ Definitions that derive a secret take the derivation function as an argument too
   Key generation, signing and verification commute with every map of monads that keeps `pure` and `bind` (`keyGenWith_map_monad`, `signWith_map_monad`).
   Outside the derivations from the seed, every call hashes at an address of another type, with a payload of at least 16 bytes (`signDerived_isQueryBoundP_zero`, `publicKeyOf_isQueryBoundP_zero`, `verifyWith_isQueryBoundP_zero`).
   So in the game, the honest algorithms query a 43-byte input only to grow the scheme seed (`keyGenWith_H_isQueryBoundP_seedLength`, `signWith_H_isQueryBoundP_seedLength`, `size_seedInput`).
+- The two seeds are hidden (`Unforgeability/HiddenSeed.lean`, `Unforgeability/SeedHops.lean`).
+  In the ideal game, the public parameter, every secret and every randomizer is an independent uniform answer.
+  The forging advantage is at most the chance of a forgery there, plus `qH / 2^256` for each of the two seeds, where `qH` counts the adversary's hash queries (`forgeAdvantage_le_hiddenSeed`).
+  The first hop replaces the scheme seed, and the second replaces every derivation from it.
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
 
