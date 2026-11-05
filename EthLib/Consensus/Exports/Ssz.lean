@@ -160,7 +160,9 @@ def specifiedFromGlamsterdam : List String := [
   "IndexedPayloadAttestation"]
 
 /-- The containers whose form EthLib holds at Gloas but not yet at Heze, which changes them. -/
-def specifiedAtGloasOnly : List String := ["ExecutionPayloadBid", "SignedExecutionPayloadBid"]
+def specifiedAtGloasOnly : List String :=
+  ["ExecutionPayloadBid", "SignedExecutionPayloadBid", "BeaconBlockBody", "BeaconBlock",
+    "SignedBeaconBlock"]
 
 /-- Whether EthLib holds the form of a container at a fork. -/
 def specifiedAt (fork : Fork) (type : String) : Bool :=

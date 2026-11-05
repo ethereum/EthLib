@@ -112,10 +112,10 @@ def blobKzgCommitmentInclusionProof {preset : Preset} {fork : Fork}
     return ⟨nodes.toArray, exact⟩
   else throw (.count preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat nodes.length)
 
-/-- The sidecars of the blobs of a signed block, from Deneb on.
+/-- The sidecars of the blobs of a signed block, from Deneb until Gloas, whose body has no blobs.
 
 Each blob takes the commitment and the proof at its index. -/
-def getBlobSidecars {preset : Preset} {fork : Fork} (deneb : .dencun ≤ fork)
+def getBlobSidecars {preset : Preset} {fork : Fork} (deneb : .dencun ≤ fork ∧ fork < .glamsterdam)
     (signed : SignedBeaconBlock preset fork) (blobs : List Blob) (proofs : List KZGProof) :
     Except Err (List (BlobSidecar preset)) := do
   let header ← signed.signedHeader

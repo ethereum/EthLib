@@ -244,4 +244,13 @@ Before `f`, the field holds one value of `α`.
 From `f` on, no such proof exists, so the field has one value and holds nothing. -/
 def Until (f fork : Fork) (α : Type) : Type := fork < f → α
 
+/-- A field that fork `f` adds and a later fork `l` removes, in a type at fork `fork`.
+
+It maps a proof of `f ≤ fork ∧ fork < l` to a value.
+
+From `f` until `l`, the field holds one value of `α`.
+
+Elsewhere no such proof exists, so the field has one value and holds nothing. -/
+def During (f l fork : Fork) (α : Type) : Type := f ≤ fork ∧ fork < l → α
+
 end EthLib.Base
