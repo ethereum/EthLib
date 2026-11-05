@@ -4,11 +4,16 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Statem
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme.Domains
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme.LandedDigest
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme.VerificationCost
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Base.SplitCert
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Base.VirtualMono
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Seed.Coupling
 
 /-!
 # Proofs: the model of the leanSPHINCS security proof
 
 A model of leanSPHINCS in the random oracle model, with its lemmas.
+
+Generic probability bounds, and the coupling that moves the hidden key seed out of the game.
 
 The model is generic over the height, the layers, the FORS forest and the cap on signatures.
 
