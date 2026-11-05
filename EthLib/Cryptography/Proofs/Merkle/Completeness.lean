@@ -154,6 +154,18 @@ theorem node_rec (P : ∀ {β : Type}, m β → Prop)
     exact bind (node_rec P bind leaves hleaves hhash level _) fun _ =>
       bind (node_rec P bind leaves hleaves hhash level _) fun _ => hhash _ _ _ _
 
+/-- A property kept by `pure` and `bind`, and true of the leaves and the hash, holds of siblings. -/
+theorem siblings_rec (P : ∀ {β : Type}, m β → Prop) (hpure : ∀ {β : Type} (b : β), P (pure b))
+    (hbind : ∀ {β γ : Type} {x : m β} {f : β → m γ}, P x → (∀ b, P (f b)) → P (x >>= f))
+    (leaves : Nat → m α) (hleaves : ∀ j, P (leaves j))
+    (hhash : ∀ level j left right, P (hash level j left right)) :
+    ∀ (level j n : Nat), P (siblings hash leaves level j n)
+  | _, _, 0 => hpure _
+  | level, j, n + 1 =>
+    hbind (node_rec hash P hbind leaves hleaves hhash level _) fun _ =>
+      hbind (siblings_rec P hpure hbind leaves hleaves hhash (level + 1) (j / 2) n) fun _ =>
+        hpure _
+
 section Map
 
 variable {n : Type → Type} [Monad n] (φ : ∀ {β : Type}, m β → n β)
@@ -169,6 +181,23 @@ theorem node_map (leaves : Nat → m α) :
   | 0, _ => rfl
   | level + 1, j => by
     simp only [node_succ, map_bind, node_map leaves level]
+
+include map_pure in
+/-- A map of monads that keeps `pure` and `bind` sends the siblings to those of the mapped tree. -/
+theorem siblings_map (leaves : Nat → m α) :
+    ∀ (level j n : Nat), φ (siblings hash leaves level j n) =
+      siblings (fun level j left right => φ (hash level j left right)) (fun j => φ (leaves j))
+        level j n
+  | _, _, 0 => map_pure _
+  | level, j, n + 1 => by
+    simp only [siblings, map_bind, map_pure, node_map hash φ map_bind leaves, siblings_map leaves]
+
+include map_pure in
+/-- A map of monads that keeps `pure` and `bind` sends a path to the path of the mapped tree. -/
+theorem path_map (leaves : Nat → m α) (h j : Nat) :
+    φ (path hash leaves h j) =
+      path (fun level j left right => φ (hash level j left right)) (fun j => φ (leaves j)) h j :=
+  siblings_map hash φ map_pure map_bind leaves 0 j h
 
 include map_pure in
 /-- A map of monads that keeps `pure` and `bind` sends a climb to the climb of the mapped hash. -/
