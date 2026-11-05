@@ -71,17 +71,20 @@ The vote joins the votes of the period.
 
 It wins once more than half the slots of the period cast it.
 
-A vote past the limit of the list is an error. -/
-def processEth1Data (state : BeaconState preset fork) (body : BeaconBlockBody preset fork) :
-    Except TransitionError (BeaconState preset fork) := do
-  let votes := state.eth1DataVotes.data.push body.eth1Data
+A vote past the limit of the list is an error.
+
+The step exists only before Heze, which removes the vote. -/
+def processEth1Data (before : fork < .hegota) (state : BeaconState preset fork)
+    (body : BeaconBlockBody preset fork) : Except TransitionError (BeaconState preset fork) := do
+  let vote := body.eth1Data before
+  let votes := (state.eth1DataVotes before).data.push vote
   if bound : votes.size ≤ preset.EPOCHS_PER_ETH1_VOTING_PERIOD.toNat * preset.SLOTS_PER_EPOCH.toNat
   then
     let slots ← liftAccessor (liftArith
       (mulChecked preset.EPOCHS_PER_ETH1_VOTING_PERIOD preset.SLOTS_PER_EPOCH))
-    let state := { state with eth1DataVotes := ⟨votes, bound⟩ }
-    if slots.toNat < votes.count body.eth1Data * 2 then
-      return { state with eth1Data := body.eth1Data }
+    let state := { state with eth1DataVotes := fun _ => ⟨votes, bound⟩ }
+    if slots.toNat < votes.count vote * 2 then
+      return { state with eth1Data := fun _ => vote }
     else return state
   else throw .tooManyEth1Votes
 

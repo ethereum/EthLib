@@ -218,6 +218,7 @@ theorem blobKzgCommitmentGindex_depth (named : preset = .mainnet ∨ preset = .m
 
 variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
   [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
+  [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
 
 /-- The generic branch of commitment `index` of a body climbs from its root to that of the body. -/
 private theorem inclusion_branch (deneb : .dencun ≤ fork ∧ fork < .glamsterdam)
