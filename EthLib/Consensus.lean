@@ -34,6 +34,7 @@ public import EthLib.Consensus.PqKeys.Containers
 public import EthLib.Consensus.PqKeys.Gossip
 public import EthLib.Consensus.PqKeys.Possession
 public import EthLib.Consensus.Preset
+public import EthLib.Consensus.Proposers
 public import EthLib.Consensus.ReqResp.Messages
 public import EthLib.Consensus.Shuffle
 public import EthLib.Consensus.Signing

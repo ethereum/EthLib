@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Exports.Ssz
 public import EthLib.Consensus.PayloadTimeliness
+public import EthLib.Consensus.Proposers
 public import EthLib.Consensus.Transition.Block
 public import EthLib.Consensus.Transition.BuilderRequests
 public import EthLib.Consensus.Transition.Payload
@@ -93,6 +94,10 @@ def runEpochStep {preset : Preset} {fork : Fork} (handler : String)
   | "ptc_window" =>
     if gloas : .glamsterdam ≤ fork then runTransition (liftAccessor (processPtcWindow state gloas))
     else throw (0, s!"no epoch step ptc_window at {fork.name}")
+  | "proposer_lookahead" =>
+    if fulu : .fusaka ≤ fork then
+      runTransition (liftAccessor (processProposerLookahead state fulu))
+    else throw (0, s!"no epoch step proposer_lookahead at {fork.name}")
   | handler => throw (0, s!"no epoch step {handler}")
 
 /-- The state after a block operation of a handler of the vectors, as SSZ bytes.

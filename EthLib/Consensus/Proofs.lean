@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Builders
 public import EthLib.Consensus.Proofs.Mutators
 public import EthLib.Consensus.Proofs.PayloadTimeliness
+public import EthLib.Consensus.Proofs.Proposers
 public import EthLib.Consensus.Proofs.Constants
 public import EthLib.Consensus.Proofs.Containers.Attestation
 public import EthLib.Consensus.Proofs.Containers.Bid
