@@ -4,6 +4,7 @@ public import EthLib.Consensus.Accessors
 public import EthLib.Consensus.Builders
 public import EthLib.Consensus.Churn
 public import EthLib.Consensus.Mutators
+public import EthLib.Consensus.Participation
 public import EthLib.Consensus.PayloadTimeliness
 public import EthLib.Consensus.Config
 public import EthLib.Consensus.Constants
@@ -42,6 +43,7 @@ public import EthLib.Consensus.Proposers
 public import EthLib.Consensus.ReqResp.Messages
 public import EthLib.Consensus.Shuffle
 public import EthLib.Consensus.Signing
+public import EthLib.Consensus.SyncCommittee
 public import EthLib.Consensus.Time
 public import EthLib.Consensus.Transition.Basic
 public import EthLib.Consensus.Transition.Block

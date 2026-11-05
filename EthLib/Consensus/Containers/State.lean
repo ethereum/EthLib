@@ -81,7 +81,7 @@ Heze removes the deposit contract data, its votes and the two deposit indices of
 
 On 2026-11-03 EIP-8015 was a Draft that EIP-8081 only considers for Hegotá.
 
-[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
 [EIP-6110]: https://eips.ethereum.org/EIPS/eip-6110#consensus-layer
 [EIP-7917]: https://eips.ethereum.org/EIPS/eip-7917#specification
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#modified-containers

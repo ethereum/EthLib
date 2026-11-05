@@ -5,13 +5,19 @@ public import EthLib.Consensus.Transition.Basic
 /-!
 # `Consensus.PayloadTimeliness`
 
-From Gloas: the balance-weighted selection, and the payload timeliness committee.
+The balance-weighted selection, and from Gloas the payload timeliness committee.
 
 A balance-weighted selection draws candidates with a chance that grows with their balance.
 
 It walks the candidates in turn, in their order or in shuffled order, and may draw one twice.
 
-Each draw is the draw of a proposer from Electra, on two random bytes.
+Each draw is the draw of a proposer at the fork of the state.
+
+From Electra, that draw reads two random bytes.
+
+Gloas selects the proposers and the payload timeliness committee this way.
+
+From Altair, the sync committee is a selection of this kind too.
 
 The payload timeliness committee of a slot votes on whether the payload of its block arrived.
 
@@ -47,19 +53,19 @@ Draw `i` reads the candidate at position `order (i mod n)`, among `n` candidates
 The draw counter is a 64-bit integer, so the search fails when it would reach `2^64`.
 
 The default candidate is never read when each position of the order is in range. -/
-def balanceWeightedSearch (preset : Preset) (indices : Array ValidatorIndex)
+def balanceWeightedSearch (preset : Preset) (fork : Base.Fork) (indices : Array ValidatorIndex)
     (balances : Array Gwei) (order : Nat → Nat) (seed : Bytes32) (size : Nat)
     (selected : Array ValidatorIndex) (bound : selected.size ≤ size) (i : Nat) :
     Except AccessorError (Vector ValidatorIndex size) :=
   if full : selected.size = size then .ok ⟨selected, full⟩
   else do
     let position := order (i % indices.size)
-    let accepted ← proposerDraw preset .glamsterdam seed i (balances.getD position 0)
+    let accepted ← proposerDraw preset fork seed i (balances.getD position 0)
     let next : { next : Array ValidatorIndex // next.size ≤ size } :=
       if accepted then ⟨selected.push (indices.getD position 0), by simp; omega⟩
       else ⟨selected, bound⟩
     if i + 1 < 2 ^ 64 then
-      balanceWeightedSearch preset indices balances order seed size next.1 next.2 (i + 1)
+      balanceWeightedSearch preset fork indices balances order seed size next.1 next.2 (i + 1)
     else throw (.arith .overflow)
 termination_by 2 ^ 64 - i
 
@@ -81,7 +87,7 @@ def computeBalanceWeightedSelection (state : BeaconState preset fork)
       let shuffled := computeShuffledPermutation preset indices.size.toUInt64 seed
       fun position => (shuffled.getD position 0).toNat
     else id
-  balanceWeightedSearch preset indices balances order seed size.toNat #[] (Nat.zero_le _) 0
+  balanceWeightedSearch preset fork indices balances order seed size.toNat #[] (Nat.zero_le _) 0
 
 /-- The members of the attestation committees of a slot, committee after committee. -/
 def slotCommitteeMembers (state : BeaconState preset fork) (slot : Slot) :

@@ -42,7 +42,7 @@ theorem mem_of_balanceWeightedSearch {indices : Array ValidatorIndex} {balances 
     (positions : ∀ place < indices.size, order place < indices.size) :
     ∀ {selected : Array ValidatorIndex} {bound : selected.size ≤ size} {i : Nat}
       {result : Vector ValidatorIndex size}, (∀ index ∈ selected, index ∈ indices) →
-      balanceWeightedSearch preset indices balances order seed size selected bound i =
+      balanceWeightedSearch preset fork indices balances order seed size selected bound i =
         .ok result →
       ∀ index ∈ result.toList, index ∈ indices := by
   -- The candidate of every draw is one of the indices.

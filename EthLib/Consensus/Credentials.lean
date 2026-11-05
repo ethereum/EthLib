@@ -15,7 +15,7 @@ From Electra, compounding credentials also name an address, as [EIP-7251] specif
 
 Their effective balance may grow past the activation balance.
 
-[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
 -/
 
 @[expose] public section

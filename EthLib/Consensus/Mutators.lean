@@ -93,7 +93,7 @@ Before Electra the queue counts validators, and the state stays the same.
 
 From Electra the queue counts balance, as [EIP-7251] specifies, so the exit spends churn.
 
-[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
 -/
 def exitQueue (config : Config) (state : BeaconState preset fork) (exitBalance : Gwei) :
     Except AccessorError (BeaconState preset fork × Epoch) :=
