@@ -75,6 +75,24 @@ The start `T = Q` and `f = 1` consume the leading bit of `s`. -/
 noncomputable def loop (s : ℕ) (Q : W.Point) (xp yp : F) : F :=
   steps W s Q xp yp s.log2 Q 1
 
+/-- The bits of `s` from `n` up are twice those from `n + 1` up, plus bit `n`. -/
+theorem shiftRight_split (s n : ℕ) :
+    s >>> n = 2 * (s >>> (n + 1)) + if s.testBit n then 1 else 0 := by
+  have h1 : s >>> (n + 1) = (s >>> n) / 2 := Nat.shiftRight_succ s n
+  have h2 : s.testBit n = true ↔ (s >>> n) % 2 = 1 := by
+    rw [Nat.testBit_eq_decide_div_mod_eq, Nat.shiftRight_eq_div_pow, decide_eq_true_iff]
+  split_ifs with h
+  · have := h2.mp h
+    omega
+  · have : ¬(s >>> n % 2 = 1) := fun e => h (h2.mpr e)
+    omega
+
+/-- The leading bit of a nonzero `s` is 1: the loop starts from it. -/
+theorem shiftRight_log2 {s : ℕ} (hs : s ≠ 0) : s >>> s.log2 = 1 := by
+  rw [Nat.shiftRight_eq_div_pow]
+  exact Nat.div_eq_of_lt_le (by simpa using Nat.log2_self_le hs)
+    (by simpa [pow_succ, mul_comm] using Nat.lt_log2_self (n := s))
+
 /-- With no bit left, the loop returns `f`. -/
 theorem steps_zero (s : ℕ) (Q T : W.Point) (xp yp f : F) : steps W s Q xp yp 0 T f = f := rfl
 

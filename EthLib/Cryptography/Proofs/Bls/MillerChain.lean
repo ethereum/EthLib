@@ -262,17 +262,6 @@ private theorem bit_iff (s n : ℕ) : (s >>> n) &&& 1 = 1 ↔ s.testBit n = true
   rw [Nat.and_one_is_mod, Nat.testBit_eq_decide_div_mod_eq, Nat.shiftRight_eq_div_pow,
     decide_eq_true_iff]
 
-private theorem shiftRight_split (s n : ℕ) :
-    s >>> n = 2 * (s >>> (n + 1)) + if s.testBit n then 1 else 0 := by
-  have h1 : s >>> (n + 1) = (s >>> n) / 2 := Nat.shiftRight_succ s n
-  have h2 := (bit_iff s n).symm
-  rw [Nat.and_one_is_mod] at h2
-  split_ifs with h
-  · have := h2.mp h
-    omega
-  · have : ¬(s >>> n % 2 = 1) := fun e => h (h2.mpr e)
-    omega
-
 /-- Let `T` represent `j Q`, and let `(j - 1) Q` and `(j + 1) Q` be nonzero.
 
 Then `T` and `Q` have different `x`. -/
@@ -318,7 +307,7 @@ theorem finalExponentiation_millerSteps {s : ℕ} (hs : s < Fr.modulus) {xq yq :
     intro T f f' hT hk hpos hf
     set Q1 : G2 := ⟨xq, yq, Fp2.one⟩
     set k := s >>> (n + 1)
-    have hsplit := shiftRight_split s n
+    have hsplit := Miller.shiftRight_split s n
     have hle : s >>> n ≤ s := Nat.shiftRight_le s n
     have hne : ∀ j, 0 < j → j ≤ s → j • G2.toPoint Q1 ≠ 0 :=
       fun j hj0 hjs => nsmul_ne_zero_of_lt hord hj0 (by omega)
@@ -366,11 +355,6 @@ theorem finalExponentiation_millerSteps {s : ℕ} (hs : s < Fr.modulus) {xq yq :
       rw [← hg2]
       exact ih T.double _ _ hT2 (by rw [hk2, hsplit, add_zero]) (by omega) hD
 
-private theorem shiftRight_log2 {s : ℕ} (hs : s ≠ 0) : s >>> s.log2 = 1 := by
-  rw [Nat.shiftRight_eq_div_pow]
-  exact Nat.div_eq_of_lt_le (by simpa using Nat.log2_self_le hs)
-    (by simpa [pow_succ, mul_comm] using Nat.lt_log2_self (n := s))
-
 private theorem finalExponentiation_conjugate_congr {a b : Fp12}
     (h : finalExponentiation a = finalExponentiation b) :
     finalExponentiation a.conjugate = finalExponentiation b.conjugate := by
@@ -404,7 +388,7 @@ theorem pairing_eq_finalExponentiation_loop {P : G1} {Q : G2} (hQ : G2.Valid Q)
     rw [he1]
     exact addOrderOf_eq_prime ((G2.inSubgroup_iff_modulus_smul_eq_zero hQ).mp hQr)
       (fun h0 => hQi ((G2.isInfinity_eq_true_iff_toPoint_eq_zero hQ).mpr h0))
-  have hlog : blsX >>> blsX.log2 = 1 := shiftRight_log2 (by decide)
+  have hlog : blsX >>> blsX.log2 = 1 := Miller.shiftRight_log2 (by decide)
   have hmain := finalExponentiation_millerSteps (s := blsX) (by decide) hQ1 hord P.toAffine.1
     P.toAffine.2 blsX.log2 Q1 1 1 hQ1 (by rw [hlog, one_nsmul]) (by rw [hlog]; omega) rfl
   rw [← he1]
