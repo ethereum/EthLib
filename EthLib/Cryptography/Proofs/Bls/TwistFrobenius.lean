@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Proofs.Bls.Fp12
 public import EthLib.Cryptography.Proofs.Bls.G2Equiv
 public import EthLib.Cryptography.Proofs.Bls.G2Order
 public import EthLib.Cryptography.Proofs.Bls.HashToCurveValidity
+public import EthLib.Cryptography.Proofs.ScaledCurve
 public import Mathlib.FieldTheory.Finite.Basic
 public import Mathlib.Tactic.FieldSimp
 
@@ -163,178 +164,21 @@ theorem twist_coefficient : fp2ToFp12 G2.bTwist * (w⁻¹) ^ 6 = 4 := by
   rw [hb, map_mul, map_ofNat, inv_pow, ← w_sixth]
   field_simp [w_ne_zero]
 
-/-! ## Ambient curve `y^2 = x^3 + 4` over `Fp12` and short-curve scaling homomorphisms -/
+/-! ## The ambient curve `y^2 = x^3 + 4` over `Fp12` -/
 
-/-- The ambient short Weierstrass curve `y^2 = x^3 + 4` over `Fp12`. -/
-def ambientCurve : WeierstrassCurve.Affine Fp12 :=
-  { a₁ := 0, a₂ := 0, a₃ := 0, a₄ := 0, a₆ := 4 }
-
-@[simp] theorem ambient_equation (x y : Fp12) :
-    ambientCurve.Equation x y ↔ y ^ 2 = x ^ 3 + 4 := by
-  simp [equation_iff, ambientCurve]
-
-/-- Every point of `y^2 = x^3 + 4` over `Fp12` is nonsingular, since `2` and `3` are nonzero mod `p`. -/
-theorem ambient_nonsingular {x y : Fp12} (h : y ^ 2 = x ^ 3 + 4) :
-    ambientCurve.Nonsingular x y := by
-  rw [nonsingular_iff', ambient_equation]
-  refine ⟨h, ?_⟩
-  simp only [ambientCurve, zero_mul, mul_zero, add_zero, zero_sub, neg_ne_zero]
-  have h2 : (2 : Fp12) ≠ 0 := by decide
-  have h3 : (3 : Fp12) ≠ 0 := by decide
-  by_cases hy : y = 0
-  · left
-    apply mul_ne_zero h3
-    apply pow_ne_zero
-    intro hx
-    have hf : (0 : Fp12) = 4 := by simpa [hx, hy] using h
-    exact (by decide : (0 : Fp12) ≠ 4) hf
-  · exact Or.inr (mul_ne_zero h2 hy)
-
-/-- Short Weierstrass curve `y^2 = x^3 + c` over an arbitrary field `F`. -/
-def shortCurve {F : Type*} [Field F] (c : F) : WeierstrassCurve.Affine F :=
-  { a₁ := 0, a₂ := 0, a₃ := 0, a₄ := 0, a₆ := c }
-
-@[simp] theorem short_equation {F : Type*} [Field F] (c x y : F) :
-    (shortCurve c).Equation x y ↔ y ^ 2 = x ^ 3 + c := by
-  simp [equation_iff, shortCurve]
-
-@[simp] theorem short_negY {F : Type*} [Field F] (c x y : F) :
-    (shortCurve c).negY x y = -y := by
-  simp [negY, shortCurve]
-
-section ScaledHom
-
-variable {F : Type*} [Field F] (f : F →+* Fp12) (u : Fp12) (hu : u ≠ 0)
-
-theorem scaled_equation {c x y : F} (hc : f c * u ^ 6 = 4)
-    (h : (shortCurve c).Equation x y) :
-    (f y * u ^ 3) ^ 2 = (f x * u ^ 2) ^ 3 + 4 := by
-  have he := congrArg f ((short_equation c x y).mp h)
-  simp only [map_pow, map_add] at he
-  linear_combination u ^ 6 * he + hc
-
-include hu in
-theorem scaled_x_eq_iff (x t : F) : f x * u ^ 2 = f t * u ^ 2 ↔ x = t := by
-  rw [mul_left_inj' (pow_ne_zero 2 hu), f.injective.eq_iff]
-
-include hu in
-theorem scaled_y_neg_eq_iff (y z : F) : f y * u ^ 3 = -(f z * u ^ 3) ↔ y = -z := by
-  rw [← neg_mul, ← map_neg, mul_left_inj' (pow_ne_zero 3 hu), f.injective.eq_iff]
-
-variable [DecidableEq F]
-
-include hu in
-/-- Chord and tangent slopes both scale by `u` across every branch. -/
-theorem scaled_slope (c x t y z : F) :
-    ambientCurve.slope (f x * u ^ 2) (f t * u ^ 2) (f y * u ^ 3) (f z * u ^ 3) =
-      f ((shortCurve c).slope x t y z) * u := by
-  simp only [slope, negY, ambientCurve, shortCurve, zero_mul, mul_zero, add_zero, sub_zero,
-    scaled_x_eq_iff f u hu, scaled_y_neg_eq_iff f u hu]
-  by_cases hx : x = t
-  · subst t
-    rw [ite_eq_left rfl, ite_eq_left rfl]
-    by_cases hy : y = -z
-    · rw [ite_eq_left hy, ite_eq_left hy, map_zero, zero_mul]
-    · rw [ite_eq_right hy, ite_eq_right hy]
-      simp only [map_div₀, map_mul, map_pow, map_ofNat, map_sub, map_neg]
-      rw [show 3 * (f x * u ^ 2) ^ 2 = (3 * f x ^ 2) * u ^ 4 by ring,
-        show f y * u ^ 3 - -(f y * u ^ 3) = (f y - -f y) * u ^ 3 by ring,
-        mul_div_mul_comm]
-      have hs : u ^ 4 / u ^ 3 = u := by field_simp [hu]
-      rw [hs]
-  · rw [ite_eq_right hx, ite_eq_right hx]
-    simp only [map_div₀, map_sub]
-    rw [← sub_mul, ← sub_mul, mul_div_mul_comm]
-    have hs : u ^ 3 / u ^ 2 = u := by field_simp [hu]
-    rw [hs]
-
-omit [DecidableEq F] in
-theorem scaled_addX (c x t m : F) :
-    ambientCurve.addX (f x * u ^ 2) (f t * u ^ 2) (f m * u) =
-      f ((shortCurve c).addX x t m) * u ^ 2 := by
-  simp only [addX, ambientCurve, shortCurve, zero_mul, add_zero, sub_zero,
-    map_sub, map_pow]
-  ring
-
-omit [DecidableEq F] in
-theorem scaled_addY (c x t y m : F) :
-    ambientCurve.addY (f x * u ^ 2) (f t * u ^ 2) (f y * u ^ 3) (f m * u) =
-      f ((shortCurve c).addY x t y m) * u ^ 3 := by
-  simp only [addY, negY, negAddY, addX, ambientCurve, shortCurve, zero_mul, add_zero,
-    sub_zero, map_neg, map_add, map_mul, map_sub, map_pow]
-  ring
-
-variable {c : F} (hc : f c * u ^ 6 = 4)
-
-noncomputable def scaledPoint : (shortCurve c).Point → ambientCurve.Point
-  | .zero => 0
-  | .some x y h => .some (f x * u ^ 2) (f y * u ^ 3)
-      (ambient_nonsingular (scaled_equation f u hc h.1))
-
-include hu in
-theorem scaledPoint_add (P Q : (shortCurve c).Point) :
-    scaledPoint f u hc (P + Q) = scaledPoint f u hc P + scaledPoint f u hc Q := by
-  cases P with
-  | zero => rfl
-  | some x y hp =>
-    cases Q with
-    | zero => rfl
-    | some t z hq =>
-      by_cases hxy : x = t ∧ y = (shortCurve c).negY t z
-      · rw [Point.add_of_Y_eq hxy.1 hxy.2]
-        simp only [scaledPoint]
-        have hsy : f y * u ^ 3 = ambientCurve.negY (f t * u ^ 2) (f z * u ^ 3) := by
-          simp only [negY, ambientCurve, zero_mul, sub_zero]
-          exact (scaled_y_neg_eq_iff f u hu y z).mpr (by simpa only [short_negY] using hxy.2)
-        rw [Point.add_of_Y_eq (congrArg (fun x => f x * u ^ 2) hxy.1) hsy]
-      · have hscaled : ¬(f x * u ^ 2 = f t * u ^ 2 ∧
-            f y * u ^ 3 = ambientCurve.negY (f t * u ^ 2) (f z * u ^ 3)) := by
-          simp only [negY, ambientCurve, zero_mul, sub_zero,
-            scaled_x_eq_iff f u hu, scaled_y_neg_eq_iff f u hu]
-          simpa only [short_negY] using hxy
-        rw [Point.add_some hxy]
-        simp only [scaledPoint]
-        rw [Point.add_some hscaled, Point.some.injEq]
-        simp only [scaled_slope f u hu c, scaled_addX f u c, scaled_addY f u c, and_self]
-
-/-- Short-Weierstrass coordinate scaling `(x, y) -> (f x * u^2, f y * u^3)` as a group homomorphism. -/
-noncomputable def scaledHom : (shortCurve c).Point →+ ambientCurve.Point where
-  toFun := scaledPoint f u hc
-  map_zero' := rfl
-  map_add' := scaledPoint_add f u hu hc
-
-@[simp] theorem scaledHom_apply (P : (shortCurve c).Point) :
-    scaledHom f u hu hc P = scaledPoint f u hc P := rfl
-
-include hu in
-theorem scaledHom_injective : Function.Injective (scaledHom f u hu hc) := by
-  intro P Q h
-  cases P with
-  | zero =>
-    cases Q with
-    | zero => rfl
-    | some _ _ _ => cases h
-  | some x y hp =>
-    cases Q with
-    | zero => cases h
-    | some t z hq =>
-      have hs : f x * u ^ 2 = f t * u ^ 2 ∧ f y * u ^ 3 = f z * u ^ 3 := Point.some.inj h
-      have hx := (scaled_x_eq_iff f u hu x t).mp hs.1
-      have hy : y = z := f.injective ((mul_left_inj' (pow_ne_zero 3 hu)).mp hs.2)
-      subst t; subst z
-      rfl
-
-end ScaledHom
+/-- The curve `y^2 = x^3 + 4` over `Fp12`. -/
+abbrev ambientCurve : WeierstrassCurve.Affine Fp12 := ShortWeierstrass.curve 0 4
 
 /-- Injective sextic untwist homomorphism from `G2.curve.toAffine.Point` into `E(Fp12)`. -/
 noncomputable def g2Hom : G2.curve.toAffine.Point →+ ambientCurve.Point :=
-  scaledHom fp2ToFp12 w⁻¹ (inv_ne_zero w_ne_zero) twist_coefficient
+  ShortWeierstrass.scaledHom fp2ToFp12 (inv_ne_zero w_ne_zero) twist_coefficient
 
 @[simp] theorem g2Hom_apply (P : G2.curve.toAffine.Point) :
-    g2Hom P = scaledPoint fp2ToFp12 w⁻¹ twist_coefficient P := rfl
+    g2Hom P = ShortWeierstrass.scaledPoint fp2ToFp12 (inv_ne_zero w_ne_zero) twist_coefficient P :=
+  rfl
 
 theorem g2Hom_injective : Function.Injective g2Hom :=
-  scaledHom_injective _ _ _ _
+  ShortWeierstrass.scaledHom_injective _ _ _
 
 /-! ## The `p`-Frobenius on `Fp12` and its commutation with the sextic untwist -/
 
@@ -414,10 +258,10 @@ theorem primeFrobenius_wInv3 :
 
 /-- `p`-power Frobenius group endomorphism `(X, Y) -> (X^p, Y^p)` on `E(Fp12)`. -/
 noncomputable def primeFrobeniusHom : ambientCurve.Point →+ ambientCurve.Point :=
-  scaledHom primeFrobenius 1 one_ne_zero (by rw [one_pow, mul_one, map_ofNat])
+  ShortWeierstrass.scaledHom primeFrobenius one_ne_zero (by rw [one_pow, mul_one, map_ofNat])
 
 theorem primeFrobeniusHom_apply (P : ambientCurve.Point) :
-    primeFrobeniusHom P = scaledPoint primeFrobenius 1
+    primeFrobeniusHom P = ShortWeierstrass.scaledPoint primeFrobenius (one_ne_zero (α := Fp12))
       (by rw [one_pow, mul_one, map_ofNat]) P := rfl
 
 /-! ## Additivity of `psi` and its eigenvalue on `G2.generator` -/
@@ -442,8 +286,8 @@ noncomputable def mapPoint : G2.curve.toAffine.Point → G2.curve.toAffine.Point
   | .zero => 0
   | .some x y h => .some (psiAlpha * x.conjugate) (psiBeta * y.conjugate)
       -- The curve-membership proof can depend on private lemmas.
-      (by exact twist_nonsingular (twist_frob_equation
-        ((short_equation G2.bTwist x y).mp h.1)))
+      (by exact twist_nonsingular (twist_frob_equation (by
+        linear_combination (ShortWeierstrass.equation_iff (a := 0) (b := G2.bTwist) x y).mp h.1)))
 
 /-- Untwisting `mapPoint` yields the `p`-power Frobenius on `E(Fp12)`. -/
 theorem untwist_mapPoint (P : G2.curve.toAffine.Point) :
@@ -451,7 +295,7 @@ theorem untwist_mapPoint (P : G2.curve.toAffine.Point) :
   cases P with
   | zero => rfl
   | some x y h =>
-    simp only [mapPoint, g2Hom_apply, scaledPoint, primeFrobeniusHom_apply,
+    simp only [mapPoint, g2Hom_apply, ShortWeierstrass.scaledPoint, primeFrobeniusHom_apply,
       one_pow, mul_one, Point.some.injEq, map_mul, primeFrobenius_fp2]
     rw [primeFrobenius_wInv2, primeFrobenius_wInv3]
     constructor <;> ring

@@ -139,14 +139,14 @@ theorem line_tangent_eq {X Y : Fp12} (h : ambientCurve.Nonsingular X Y) (hY : Y 
     (xp yp : Fp) :
     Miller.line ambientCurve (.some X Y h) (.some X Y h) (fpToFp12 xp) (fpToFp12 yp) =
       -lineAt X Y (3 * X ^ 2 / (2 * Y)) xp yp := by
-  have hneg : ambientCurve.negY X Y = -Y := by simp [negY, ambientCurve]
+  have hneg : ambientCurve.negY X Y = -Y := ShortWeierstrass.negY_eq X Y
   have hxy : ¬(X = X ∧ Y = ambientCurve.negY X Y) := by
     rw [hneg]
     rintro ⟨-, h2⟩
     have h2Y : 2 * Y = 0 := by linear_combination h2
     exact hY ((mul_eq_zero.mp h2Y).resolve_left two_ne_zero_fp12)
   rw [Miller.line_some_some _ h h hxy, slope_of_Y_ne rfl (fun h => hxy ⟨rfl, h⟩), hneg]
-  simp only [ambientCurve, lineAt]
+  simp only [ambientCurve, ShortWeierstrass.curve, lineAt]
   have h2 := two_ne_zero_fp12
   have h22 : (2 : Fp12)⁻¹ * 2 = 1 := inv_mul_cancel₀ h2
   field_simp
@@ -190,7 +190,7 @@ theorem line_chord {T : G2} {xq yq : Fp2} (hT : G2.Valid T) (hz : T.z ≠ 0)
   obtain ⟨h', hg'⟩ := g2Hom_toPoint_affine hQ
   rw [hg, hg']
   refine line_chord_eq h h' (fun hX => hx ?_) xp yp
-  have hX' := (scaled_x_eq_iff fp2ToFp12 w⁻¹ (inv_ne_zero w_ne_zero) _ _).mp hX
+  have hX' := (ShortWeierstrass.scaled_x_eq_iff fp2ToFp12 (inv_ne_zero w_ne_zero) _ _).mp hX
   rw [← hX', div_mul_cancel₀ _ (pow_ne_zero 2 hz), sub_self]
 
 private theorem two_ne_zero_fp2 : (2 : Fp2) ≠ 0 := by decide
