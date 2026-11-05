@@ -32,6 +32,7 @@ public import EthLib.Execution.Proofs.Evm.ControlFlow
 public import EthLib.Execution.Proofs.Evm.Interpreter
 public import EthLib.Execution.Proofs.Evm.MessageCall
 public import EthLib.Execution.Proofs.Evm.SelfDestruct
+public import EthLib.Execution.Proofs.Evm.TransferLog
 
 /-!
 # `EthLib.Execution.Proofs.Evm`

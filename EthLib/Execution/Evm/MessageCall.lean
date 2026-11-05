@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Evm.Interpreter
 public import EthLib.Execution.Evm.JumpDest
 public import EthLib.Execution.Evm.Precompiles.Table
+public import EthLib.Execution.Evm.TransferLog
 
 /-!
 # `Evm.MessageCall`
@@ -16,6 +17,10 @@ Only the record of the accounts that the transaction created stays.
 An exceptional halt also leaves no gas, while a revert keeps it.
 
 From Glamsterdam, both roll the state gas of the frame back, by [EIP-8037][eip8037].
+
+From Glamsterdam, a message that moves ether to another account starts with a transfer log.
+
+That is the first log of the frame, by [EIP-7708][eip7708].
 
 A message starts with the reservoir that its caller passes on.
 
@@ -66,6 +71,7 @@ Source: [`Paper.tex` at `efc5f9a`][yp] of the Yellow Paper.
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
 [eip170]: https://eips.ethereum.org/EIPS/eip-170#specification
 [eip3541]: https://eips.ethereum.org/EIPS/eip-3541#specification
+[eip7708]: https://eips.ethereum.org/EIPS/eip-7708#specification
 [eip8037]: https://eips.ethereum.org/EIPS/eip-8037#gas-accounting-for-halts-and-reverts
 [eip8037-code]: https://eips.ethereum.org/EIPS/eip-8037#parameter-changes
 -/
@@ -279,10 +285,17 @@ def processMessage [LawfulGasMeter Meter] (fork : Fork) (message : Message fork)
       · exact ended.property⟩
   Except.map rollback do
     let state := if fork < .paris then state.touchAccount message.currentTarget else state
+    let transfers := message.shouldTransferValue ∧ message.value ≠ 0
     let state ←
-      if message.shouldTransferValue ∧ message.value ≠ 0 then
+      if transfers then
         (state.moveEther fork message.caller message.currentTarget message.value).mapError .state
       else pure state
+    let substate :=
+      if transfers then
+        { substate with
+          logs := pushTransferLog fork substate.logs message.caller message.currentTarget
+            message.value }
+      else substate
     let evm : Evm fork Meter := startFrame message state substate
     have start : GasMeter.gasHeld evm.gas = message.gas := LawfulGasMeter.gasHeld_start _ _
     match precompileAddress fork message with
