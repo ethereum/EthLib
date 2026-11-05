@@ -5,6 +5,7 @@ import pytest
 import archives
 
 from consensus.test_epoch_processing import HANDLERS as EPOCH_STEPS
+from consensus.test_epoch_processing import MINIMAL_ONLY as EPOCH_MINIMAL_ONLY
 from consensus.test_operations import HANDLERS as OPERATIONS
 from consensus.test_rewards import HANDLERS as REWARDS
 from consensus.test_rewards import SPECIFIED as REWARDS_FORKS
@@ -48,7 +49,7 @@ NOT_VENDORED = {f"mainnet/{fork}/ssz_static/BeaconState" for fork in
     f"mainnet/{fork}/operations/{handler}" for handler, (_, forks) in OPERATIONS.items()
     for fork in forks} | {
     f"mainnet/{fork}/epoch_processing/{handler}" for handler, forks in EPOCH_STEPS.items()
-    for fork in forks} | {
+    if handler not in EPOCH_MINIMAL_ONLY for fork in forks} | {
     f"mainnet/{fork}/rewards/{handler}" for handler in REWARDS for fork in REWARDS_FORKS
     if fork != "phase0" or handler != "inactivity_scores"} | {
     f"mainnet/{fork}/{group}" for group, forks in TRANSITION_GROUPS.items()
