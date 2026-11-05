@@ -3629,6 +3629,28 @@
    "docstring":
    "Check a transaction alone on the chain `chainId`.\n\nIt returns 28 bytes: the 20-byte sender, then the intrinsic gas as 8 big-endian bytes."},
   {"summary":
+   "Check that a transaction may enter its block at `fork`, on the chain `chainId`.",
+   "signature":
+   "(fork: str, chain_id: int, tx: bytes, state: bytes, gas_limit: bytes, gas_used: bytes, blob_gas_used: bytes, base_fee: bytes, excess_blob_gas: bytes) -> bytes",
+   "operation": "EthLib.Execution.Transactions.checkInclusion",
+   "method": "tx_check_in_block",
+   "errors":
+   [{"type": "EthLib.Execution.Transactions.InclusionError",
+     "codes":
+     [{"constructor": "transaction", "code": null},
+      {"constructor": "gasAllowanceExceeded", "code": 201},
+      {"constructor": "blobGasLimitExceeded", "code": 202},
+      {"constructor": "insufficientMaxFeePerGas", "code": 203},
+      {"constructor": "insufficientMaxFeePerBlobGas", "code": 204},
+      {"constructor": "nonceTooLow", "code": 205},
+      {"constructor": "nonceTooHigh", "code": 206},
+      {"constructor": "insufficientBalance", "code": 207},
+      {"constructor": "senderNotEoa", "code": 208},
+      {"constructor": "missingCode", "code": 209}]}],
+   "error_class": "TransactionError",
+   "docstring":
+   "Check that a transaction may enter its block at `fork`, on the chain `chainId`.\n\nThe block has used `gasUsed` gas and `blobGasUsed` blob gas before it, and `state` is the state.\n\nThe chain and the sender come first, then the rules that need no state.\n\nThen come the rules of the block, and last those of the sender."},
+  {"summary":
    "Settle the gas of a transaction that passes the gas, nonce and fee rules.",
    "signature":
    "(fork: str, tx: bytes, base_fee: bytes, gas_left: bytes, refund_counter: bytes) -> bytes",

@@ -53,18 +53,20 @@ def _address(value: str) -> bytes:
     return bytes.fromhex(value.removeprefix("0x"))
 
 
-def _plain(fixture: dict, block: dict) -> bool:
-    """Whether a valid block of one block has transactions, and none of them runs code."""
-    if "expectException" in block or not block["transactions"]:
+def runs_no_code(fixture: dict, tx: dict) -> bool:
+    """Whether a transaction calls an account without code, which is no precompile."""
+    to = _address(tx.get("to") or "0x")
+    if not to or _int(tx["type"]) == 4 or to in _PRECOMPILES:
         return False
     code = {_address(a): account["code"] for a, account in fixture["pre"].items()}
-    for tx in block["transactions"]:
-        to = _address(tx.get("to") or "0x")
-        if not to or _int(tx["type"]) == 4 or to in _PRECOMPILES:
-            return False
-        if code.get(to, "0x") not in ("", "0x"):
-            return False
-    return True
+    return code.get(to, "0x") in ("", "0x")
+
+
+def _plain(fixture: dict, block: dict) -> bool:
+    """Whether a valid block has transactions, and none of them runs code."""
+    if "expectException" in block or not block["transactions"]:
+        return False
+    return all(runs_no_code(fixture, tx) for tx in block["transactions"])
 
 
 def _price(tx: dict, base_fee: int) -> int:

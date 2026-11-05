@@ -546,6 +546,10 @@ def bindings : List Binding := [
   ⟨"tx_check", `EthLib.Execution.Transactions.Exports.checkExport,
     "(fork: str, chain_id: int, tx: bytes) -> bytes",
     [`EthLib.Execution.Transactions.TransactionError], some "TransactionError"⟩,
+  ⟨"tx_check_in_block", `EthLib.Execution.Transactions.checkInclusion,
+    "(fork: str, chain_id: int, tx: bytes, state: bytes, gas_limit: bytes, gas_used: bytes, " ++
+      "blob_gas_used: bytes, base_fee: bytes, excess_blob_gas: bytes) -> bytes",
+    [`EthLib.Execution.Transactions.InclusionError], some "TransactionError"⟩,
   ⟨"tx_settle", `EthLib.Execution.Transactions.Exports.settleExport,
     "(fork: str, tx: bytes, base_fee: bytes, gas_left: bytes, refund_counter: bytes) -> bytes",
     [`EthLib.Execution.Transactions.TransactionError], some "TransactionError"⟩,
