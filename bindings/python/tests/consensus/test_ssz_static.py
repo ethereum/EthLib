@@ -66,12 +66,11 @@ def test_no_container_outside_its_forks(container):
             consensus.ssz_static("minimal", FORKS[fork], container, b"")
 
 
-@pytest.mark.parametrize("fork", ["glamsterdam", "hegota"])
-def test_no_container_at_gloas_or_heze_yet(fork):
-    # The containers of Gloas and Heze are not specified yet, so no Fulu form stands in for them.
+def test_no_container_at_heze_yet():
+    # The containers of Heze are not specified yet, so no Gloas form stands in for them.
     for container in CONTAINERS:
         with pytest.raises(SszError):
-            consensus.ssz_static("minimal", fork, container, b"")
+            consensus.ssz_static("minimal", "hegota", container, b"")
 
 
 def test_every_fork_of_a_container_has_cases():

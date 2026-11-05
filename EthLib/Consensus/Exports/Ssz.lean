@@ -2,8 +2,10 @@ module
 
 public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Block
+public import EthLib.Consensus.Containers.Builder
 public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.Operations
+public import EthLib.Consensus.Containers.PayloadAttestation
 public import EthLib.Consensus.Containers.Requests
 public import EthLib.Consensus.Containers.Signing
 public import EthLib.Consensus.Containers.State
@@ -22,7 +24,9 @@ The export decodes the bytes, then returns the root of the value and its bytes e
 
 A name with no container at the fork comes back as code 0, since no error type covers it.
 
-The containers of Gloas and Heze are not yet specified, so Glamsterdam and Hegotá fail too.
+From Glamsterdam on, a container whose Gloas form EthLib does not hold yet fails with code 0 too.
+
+The containers of Heze are not yet specified, so Hegotá fails too.
 -/
 
 public section
@@ -102,8 +106,34 @@ def containerOf (preset : Preset) (fork : Fork) : String → Option Container
   | "ExecutionPayload" =>
     if .bellatrix ≤ fork then some ⟨ExecutionPayload preset fork⟩ else none
   | "ExecutionPayloadHeader" =>
-    if .bellatrix ≤ fork then some ⟨ExecutionPayloadHeader preset fork⟩ else none
+    if .bellatrix ≤ fork ∧ fork < .glamsterdam then some ⟨ExecutionPayloadHeader preset fork⟩
+    else none
+  | "Builder" => if .glamsterdam ≤ fork then some ⟨Builder⟩ else none
+  | "BuilderPendingPayment" => if .glamsterdam ≤ fork then some ⟨BuilderPendingPayment⟩ else none
+  | "BuilderPendingWithdrawal" =>
+    if .glamsterdam ≤ fork then some ⟨BuilderPendingWithdrawal⟩ else none
+  | "BuilderDepositRequest" => if .glamsterdam ≤ fork then some ⟨BuilderDepositRequest⟩ else none
+  | "BuilderExitRequest" => if .glamsterdam ≤ fork then some ⟨BuilderExitRequest⟩ else none
+  | "PayloadAttestationData" =>
+    if .glamsterdam ≤ fork then some ⟨PayloadAttestationData⟩ else none
+  | "PayloadAttestationMessage" =>
+    if .glamsterdam ≤ fork then some ⟨PayloadAttestationMessage⟩ else none
   | _ => none
+
+/-- The containers whose form EthLib holds from Glamsterdam on.
+
+Gloas changes some containers, and EthLib holds those forms only as they are specified. -/
+def specifiedFromGlamsterdam : List String := [
+  "Fork", "ForkData", "SigningData", "Checkpoint", "Validator", "AttestationData", "Eth1Data",
+  "DepositMessage", "DepositData", "BeaconBlockHeader", "SignedBeaconBlockHeader", "Eth1Block",
+  "ProposerSlashing", "Deposit", "VoluntaryExit", "SignedVoluntaryExit", "SingleAttestation",
+  "SyncCommittee", "SyncAggregate", "SyncCommitteeMessage", "SyncCommitteeContribution",
+  "ContributionAndProof", "SignedContributionAndProof", "SyncAggregatorSelectionData",
+  "HistoricalSummary", "BLSToExecutionChange", "SignedBLSToExecutionChange", "PendingDeposit",
+  "PendingPartialWithdrawal", "PendingConsolidation", "DepositRequest", "WithdrawalRequest",
+  "ConsolidationRequest", "Withdrawal", "Builder", "BuilderPendingPayment",
+  "BuilderPendingWithdrawal", "BuilderDepositRequest", "BuilderExitRequest",
+  "PayloadAttestationData", "PayloadAttestationMessage"]
 
 /-- The root of the value that the bytes encode, then the bytes of that value.
 
@@ -112,10 +142,12 @@ The preset, the fork and the container are named in UTF-8. -/
 def sszStaticExport (name fork type data : ByteArray) : Result ByteArray := do
   let preset ← presetOf (← nameOf name)
   let fork ← forkOf fork
-  if .glamsterdam ≤ fork then throw (0, s!"fork {fork.name} not yet specified")
+  if .hegota ≤ fork then throw (0, s!"fork {fork.name} not yet specified")
   let type ← nameOf type
   let some container := containerOf preset fork type
     | throw (0, s!"no container {type} at {fork.name}")
+  if .glamsterdam ≤ fork ∧ type ∉ specifiedFromGlamsterdam then
+    throw (0, s!"{type} not yet specified at {fork.name}")
   let value ← runSsz "input rejected" (SszType.deserialize container.type data)
   let root ← runSsz "root rejected" (SszType.hashTreeRoot value)
   let bytes ← runSsz "value rejected" (SszType.serialize value)

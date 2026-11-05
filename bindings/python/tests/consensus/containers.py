@@ -1,6 +1,6 @@
 """The beacon containers that EthLib defines, and the forks that have each."""
 
-# Each fork of the beacon chain up to Fulu, as consensus-specs names it, with its name in Lean.
+# Each fork of the beacon chain up to Gloas, as consensus-specs names it, with its name in Lean.
 FORKS = {
     "phase0": "phase0",
     "altair": "altair",
@@ -9,9 +9,11 @@ FORKS = {
     "deneb": "dencun",
     "electra": "pectra",
     "fulu": "fusaka",
+    "gloas": "glamsterdam",
 }
 
-# Each container that EthLib defines, with the first fork that has it and the first that drops it.
+# Each container that EthLib defines, with the first fork at which EthLib holds it, and the first
+# at which it does not: the fork drops it, or EthLib does not hold its form at that fork yet.
 CONTAINERS = {
     "Fork": ("phase0", None),
     "ForkData": ("phase0", None),
@@ -31,11 +33,11 @@ CONTAINERS = {
     "Deposit": ("phase0", None),
     "VoluntaryExit": ("phase0", None),
     "SignedVoluntaryExit": ("phase0", None),
-    "Attestation": ("phase0", None),
-    "IndexedAttestation": ("phase0", None),
-    "AttesterSlashing": ("phase0", None),
-    "AggregateAndProof": ("phase0", None),
-    "SignedAggregateAndProof": ("phase0", None),
+    "Attestation": ("phase0", "gloas"),
+    "IndexedAttestation": ("phase0", "gloas"),
+    "AttesterSlashing": ("phase0", "gloas"),
+    "AggregateAndProof": ("phase0", "gloas"),
+    "SignedAggregateAndProof": ("phase0", "gloas"),
     "SingleAttestation": ("electra", None),
     "SyncCommittee": ("altair", None),
     "SyncAggregate": ("altair", None),
@@ -53,13 +55,20 @@ CONTAINERS = {
     "DepositRequest": ("electra", None),
     "WithdrawalRequest": ("electra", None),
     "ConsolidationRequest": ("electra", None),
-    "ExecutionRequests": ("electra", None),
-    "BeaconBlockBody": ("phase0", None),
-    "BeaconBlock": ("phase0", None),
-    "SignedBeaconBlock": ("phase0", None),
-    "BeaconState": ("phase0", None),
+    "ExecutionRequests": ("electra", "gloas"),
+    "BeaconBlockBody": ("phase0", "gloas"),
+    "BeaconBlock": ("phase0", "gloas"),
+    "SignedBeaconBlock": ("phase0", "gloas"),
+    "BeaconState": ("phase0", "gloas"),
     "Withdrawal": ("capella", None),
-    "ExecutionPayload": ("bellatrix", None),
-    "ExecutionPayloadHeader": ("bellatrix", None),
+    "ExecutionPayload": ("bellatrix", "gloas"),
+    "ExecutionPayloadHeader": ("bellatrix", "gloas"),
+    "Builder": ("gloas", None),
+    "BuilderPendingPayment": ("gloas", None),
+    "BuilderPendingWithdrawal": ("gloas", None),
+    "BuilderDepositRequest": ("gloas", None),
+    "BuilderExitRequest": ("gloas", None),
+    "PayloadAttestationData": ("gloas", None),
+    "PayloadAttestationMessage": ("gloas", None),
 }
 

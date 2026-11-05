@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Constants
 public import EthLib.Consensus.Proofs.Containers.Attestation
 public import EthLib.Consensus.Proofs.Containers.Block
+public import EthLib.Consensus.Proofs.Containers.Builder
 public import EthLib.Consensus.Proofs.Containers.Execution
 public import EthLib.Consensus.Proofs.Containers.Misc
 public import EthLib.Consensus.Proofs.Containers.Requests
