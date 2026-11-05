@@ -753,6 +753,8 @@ static PyMethodDef methods[] = {
   {"mainnet_active_fork", py_mainnet_active_fork, METH_VARARGS, DOC_mainnet_active_fork},
   {"hoodi_active_fork", py_hoodi_active_fork, METH_VARARGS, DOC_hoodi_active_fork},
   {"engine_new_payload", py_engine_new_payload, METH_VARARGS, DOC_engine_new_payload},
+  {"engine_new_payload_on_chain", py_engine_new_payload_on_chain, METH_VARARGS,
+   DOC_engine_new_payload_on_chain},
   {"engine_forkchoice_updated", py_engine_forkchoice_updated, METH_VARARGS,
    DOC_engine_forkchoice_updated},
   {NULL, NULL, 0, NULL},

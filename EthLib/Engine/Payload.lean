@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Blocks.Validate
 public import EthLib.Execution.Blocks.Withdrawal
 public import EthLib.Execution.Transactions.Types
 
@@ -139,7 +140,7 @@ def EngineError.code : EngineError → UInt32
   | .unsupportedFork => 38005
   | .invalidForkchoiceState => 38002
 
-/-- Why a payload is not valid, before its transactions run. -/
+/-- Why a payload is not valid, before its transactions run or when they run. -/
 inductive PayloadError where
   /-- The transaction at an index, from 0, does not decode at the fork of the payload. -/
   | invalidTransaction (index : Nat) (error : TransactionError)
@@ -149,6 +150,8 @@ inductive PayloadError where
   | wrongBlockHash (expected computed : Hash32)
   /-- The expected versioned hashes are not those of the blob transactions, in order. -/
   | wrongVersionedHashes
+  /-- The block of the payload fails the state transition, with `error`. -/
+  | invalidBlock (error : Execution.Blocks.BlockError)
   deriving DecidableEq, Repr
 
 /-- The stable code of a reason, one per constructor, for the C exports.
@@ -161,5 +164,6 @@ def PayloadError.code : PayloadError → UInt32
   | .noEncoding => 402
   | .wrongBlockHash .. => 403
   | .wrongVersionedHashes => 404
+  | .invalidBlock _ => 405
 
 end EthLib.Engine

@@ -429,6 +429,7 @@ PyObject* py_mainnet_active_fork                          (PyObject* self, PyObj
 PyObject* py_hoodi_active_fork                            (PyObject* self, PyObject* args);
 
 PyObject* py_engine_new_payload                          (PyObject* self, PyObject* args);
+PyObject* py_engine_new_payload_on_chain                 (PyObject* self, PyObject* args);
 PyObject* py_engine_forkchoice_updated                   (PyObject* self, PyObject* args);
 
 #endif /* ETHCS_WRAPPERS_H */

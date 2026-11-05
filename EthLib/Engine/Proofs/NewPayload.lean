@@ -9,6 +9,14 @@ public import EthLib.Engine.Proofs.Block
 Each fork from Paris to BPO5 has a version of the method, and no other fork has one.
 
 Request lists that pass the checks have distinct types, in increasing order.
+
+If the last block of a chain is not the parent, a payload that passes the checks is syncing.
+
+If it is the parent, a payload whose block passes the state transition is valid.
+
+A block that fails it without an abort makes the payload invalid, with the block error.
+
+A block and a state come back only for a valid payload.
 -/
 
 public section
@@ -16,6 +24,7 @@ public section
 namespace EthLib.Engine
 
 open EthLib.Base
+open EthLib.Execution.Blocks (BlockChain RecentBlock stateTransition)
 
 /-- Two errors with one code come from one constructor. -/
 theorem EngineError.code_injective (e₁ e₂ : EngineError) (h : e₁.code = e₂.code) :
@@ -68,5 +77,91 @@ theorem pairwise_of_validRequests {requests : List ByteArray}
 theorem nodup_types_of_validRequests {requests : List ByteArray}
     (h : validRequests requests = true) : (requests.map fun r => r[0]!).Nodup :=
   List.Pairwise.map _ (fun _ _ hlt => UInt8.ne_of_lt hlt) (pairwise_of_validRequests h)
+
+/-! ## The status on a chain that holds the parent -/
+
+/-- A payload that gives back a block and a state is valid.
+
+It passed the checks before execution, and its block passed the transition to that state. -/
+theorem of_newPayloadOnChain_some {chain : BlockChain} {version : Nat} {params : Lean.Json}
+    {status : PayloadStatus} {reason : Option PayloadError} {block : RecentBlock}
+    {post : Execution.State.State}
+    (h : newPayloadOnChain chain version params = .ok (status, reason, some (block, post))) :
+    status.status = .valid ∧ ∃ checked, checkNewPayload chain.config version params =
+      .ok (.ok checked) ∧ stateTransition chain checked.block false = .ok post ∧
+        block = ⟨checked.fork, checked.block.header, []⟩ := by
+  unfold newPayloadOnChain at h
+  cases hC : checkNewPayload chain.config version params with
+  | error e => simp [hC, bind, Except.bind] at h
+  | ok r =>
+    cases r with
+    | error p => simp [hC, bind, Except.bind, pure, Except.pure] at h
+    | ok checked =>
+      simp only [hC, bind, Except.bind] at h
+      split at h
+      · split at h
+        · split at h
+          · rename_i post' hRun
+            simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq, Option.some.injEq] at h
+            obtain ⟨rfl, -, rfl, rfl⟩ := h
+            exact ⟨rfl, checked, rfl, hRun, rfl⟩
+          · simp [pure, Except.pure] at h
+          · simp [pure, Except.pure] at h
+        · simp [pure, Except.pure] at h
+      · simp [pure, Except.pure] at h
+
+/-- A payload that passes the checks before execution is syncing without its parent.
+
+The chain lacks the parent when its last block is another block, or when it has no block. -/
+theorem newPayloadOnChain_of_not_parent {chain : BlockChain} {version : Nat} {params : Lean.Json}
+    {checked : CheckedBlock version}
+    (hCheck : checkNewPayload chain.config version params = .ok (.ok checked))
+    (hParent : ∀ parent, chain.recent.getLast? = some parent →
+      parent.header.hash ≠ .ok checked.block.header.parentHash) :
+    newPayloadOnChain chain version params = .ok (⟨.syncing, none⟩, none, none) := by
+  cases hLast : chain.recent.getLast? with
+  | none => simp [newPayloadOnChain, hCheck, hLast, bind, Except.bind, pure, Except.pure]
+  | some parent =>
+    have hHash := hParent parent hLast
+    cases hP : parent.header.hash <;>
+      simp_all [newPayloadOnChain, bind, Except.bind, pure, Except.pure, Except.toOption]
+
+/-- A payload that passes the checks on its parent, and whose block passes the transition, is valid.
+
+Its latest valid hash is its own block hash. -/
+theorem newPayloadOnChain_of_stateTransition_ok {chain : BlockChain} {version : Nat}
+    {params : Lean.Json} {checked : CheckedBlock version} {parent : RecentBlock}
+    {post : Execution.State.State}
+    (hCheck : checkNewPayload chain.config version params = .ok (.ok checked))
+    (hParent : chain.recent.getLast? = some parent)
+    (hHash : parent.header.hash = .ok checked.block.header.parentHash)
+    (hRun : stateTransition chain checked.block false = .ok post) :
+    newPayloadOnChain chain version params =
+      .ok (⟨.valid, checked.block.header.hash.toOption⟩, none,
+        some (⟨checked.fork, checked.block.header, []⟩, post)) := by
+  simp [newPayloadOnChain, hCheck, hParent, hHash, hRun, bind, Except.bind, pure, Except.pure,
+    Except.toOption]
+
+/-- A payload that passes the checks on its parent is invalid when its block fails the transition.
+
+The failure is not an abort, and the reason of the status carries its error.
+
+Its latest valid hash is its parent's hash, or zero for a parent before Paris. -/
+theorem newPayloadOnChain_of_stateTransition_error {chain : BlockChain} {version : Nat}
+    {params : Lean.Json} {checked : CheckedBlock version} {parent : RecentBlock}
+    {e : Execution.Blocks.BlockError}
+    (hCheck : checkNewPayload chain.config version params = .ok (.ok checked))
+    (hParent : chain.recent.getLast? = some parent)
+    (hHash : parent.header.hash = .ok checked.block.header.parentHash)
+    (hRun : stateTransition chain checked.block false = .error e)
+    (hAbort : ∀ cause, e ≠ .aborted cause) :
+    newPayloadOnChain chain version params =
+      .ok (⟨.invalid, some (if parent.fork < .paris then 0 else checked.block.header.parentHash)⟩,
+        some (.invalidBlock e), none) := by
+  cases e with
+  | aborted cause => exact absurd rfl (hAbort cause)
+  | _ =>
+    simp [newPayloadOnChain, hCheck, hParent, hHash, hRun, bind, Except.bind, pure, Except.pure,
+      Except.toOption]
 
 end EthLib.Engine

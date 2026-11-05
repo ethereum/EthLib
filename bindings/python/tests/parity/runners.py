@@ -2,6 +2,7 @@
 
 import json
 import re
+from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from consensus.test_light_client_data_collection import runs_data_collection
 from consensus.test_light_client_sync import SPECIFIED as LIGHT_CLIENT_FORKS
 from consensus.test_light_client_sync import runs_sync
 from consensus.test_operations import runs as runs_operation
+from engine.cases import EXCEPTIONS as ENGINE_EXCEPTIONS
 from transactions.test_inclusion_archive import names_in_block
 from transactions.test_transactions import CHAIN_ID, FORK_OF_NETWORK, names
 
@@ -28,8 +30,6 @@ from .catalogue import CONSENSUS_FORKS, EXECUTION_FORKS, Case
 # A key is a runner, or a runner and a handler, of consensus-spec-tests, or a format of
 # execution-spec-tests.
 NOT_YET = {
-    "blockchain_test_engine": "the Engine API on the Engine layer (T26), after E36",
-    "blockchain_test_engine_x": "the Engine API on the Engine layer (T26), after E36",
     "epoch_processing": "beacon state transition (consensus track C13 to C40)",
     "finality": "beacon state transition (consensus track C13 to C40)",
     "fork": "beacon state transition (consensus track C13 to C40)",
@@ -252,14 +252,15 @@ _BLOCK_EXCEPTIONS = {
 }
 
 
-def _names_block_error(exception: str, message: str) -> bool:
+def names_block_error(exception: str, message: str) -> bool:
+    """Whether an error message of the state transition names a fixture exception."""
     kind, _, name = exception.partition(".")
     if kind == "BlockException":
         return name in _BLOCK_EXCEPTIONS and re.search(_BLOCK_EXCEPTIONS[name], message) is not None
     return names_in_block(exception, message)
 
 
-def _chain(fixture: dict) -> tuple[dict, list]:
+def chain_of(fixture: dict) -> tuple[dict, list]:
     """The chain configuration of a blockchain test, and its activations as tuples."""
     before, _, after = fixture["network"].removesuffix("AtTime15k").partition("To")
     first = _NETWORK_FORK[before]
@@ -282,7 +283,7 @@ def _chain(fixture: dict) -> tuple[dict, list]:
     return config, activations
 
 
-def _active_fork(activations: list, header: list) -> str:
+def active_fork(activations: list, header: list) -> str:
     """The fork of a header: the last one whose activation its number or its time reached."""
     number, timestamp = int.from_bytes(header[8], "big"), int.from_bytes(header[11], "big")
     reached = [fork for fork, kind, n in activations
@@ -296,17 +297,17 @@ def _blockchain_test(root: Path, case: Case) -> None:
     from ethlib.serialization import rlp
 
     fixture = _fixtures(root / case.path)[case.id]
-    config, activations = _chain(fixture)
+    config, activations = chain_of(fixture)
     seal = fixture.get("sealEngine", "NoProof") != "NoProof"
     genesis = rlp.decode(_hex(fixture["genesisRLP"]))[0]
-    recent = [(_active_fork(activations, genesis), rlp.encode(genesis), [])]
+    recent = [(active_fork(activations, genesis), rlp.encode(genesis), [])]
     state = _pre_state(fixture["pre"])
     for block in fixture["blocks"]:
         raw = _hex(block["rlp"])
         expected = block.get("expectException")
         try:
             item = rlp.decode(raw)
-            fork = _active_fork(activations, item[0])
+            fork = active_fork(activations, item[0])
         except Exception:
             # A block that is not even an RLP list of headers is invalid.
             assert expected, block
@@ -315,13 +316,97 @@ def _blockchain_test(root: Path, case: Case) -> None:
             with pytest.raises(ValueError) as error:
                 blocks.state_transition(config, state, recent, fork, raw, seal)
             names = expected.split("|")
-            assert any(_names_block_error(e, str(error.value)) for e in names), \
+            assert any(names_block_error(e, str(error.value)) for e in names), \
                 (names, str(error.value))
             continue
         _, accounts = blocks.state_transition(config, state, recent, fork, raw, seal)
         state = rlp.encode(accounts)
         recent = (recent + [(fork, rlp.encode(item[0]), [rlp.encode(o) for o in item[2]])])[-256:]
     assert "0x" + keccak256(recent[-1][1]).hex() == fixture["lastblockhash"]
+
+
+# The fields of a header in the order of its RLP form; a header holds those of its fork.
+HEADER_FIELDS = ["parentHash", "uncleHash", "coinbase", "stateRoot", "transactionsTrie",
+                 "receiptTrie", "bloom", "difficulty", "number", "gasLimit", "gasUsed",
+                 "timestamp", "extraData", "mixHash", "nonce", "baseFeePerGas", "withdrawalsRoot",
+                 "blobGasUsed", "excessBlobGas", "parentBeaconBlockRoot", "requestsHash"]
+
+# The fields that are numbers, which RLP writes without leading zeros.
+NUMBERS = {"difficulty", "number", "gasLimit", "gasUsed", "timestamp", "baseFeePerGas",
+           "blobGasUsed", "excessBlobGas"}
+
+
+def _header_of_json(fields: dict) -> bytes:
+    """The RLP form of a header given as the JSON of a fixture."""
+    from ethlib.serialization import rlp
+
+    items = []
+    for name in HEADER_FIELDS:
+        if name in fields:
+            raw = bytes.fromhex(fields[name].removeprefix("0x"))
+            items.append(raw.lstrip(b"\0") if name in NUMBERS else raw)
+    return rlp.encode(items)
+
+
+def _engine_payload(fixture: dict, payload: dict, state: bytes, recent: list) -> tuple:
+    """Run one payload on the chain; return its kind, and the next state and recent blocks."""
+    from ethlib.serialization import rlp
+
+    from ethlib import engine
+
+    config, _ = chain_of(fixture)
+    method = f"engine_newPayloadV{payload['newPayloadVersion']}"
+    if "errorCode" in payload:
+        with pytest.raises(engine.EngineError) as error:
+            engine.new_payload_on_chain(config, state, recent, method, payload["params"])
+        assert -error.value.code == int(payload["errorCode"])
+        return "error", state, recent
+    status, header, accounts = engine.new_payload_on_chain(config, state, recent, method,
+                                                           payload["params"])
+    expected = payload.get("validationError")
+    if not expected:
+        assert status["status"] == "VALID", status
+        assert status["latestValidHash"] == payload["params"][0]["blockHash"]
+        fork = active_fork(chain_of(fixture)[1], rlp.decode(header))
+        return "valid", rlp.encode(accounts), (recent + [(fork, header, [])])[-256:]
+    names = expected.split("|")
+    code, _, message = status["validationError"].partition(": ")
+    if int(code) == 405:
+        assert status["status"] == "INVALID", status
+        assert any(names_block_error(e, message) for e in names), (status, names)
+        return "execution", state, recent
+    assert ENGINE_EXCEPTIONS[int(code)] & set(names), (status, names)
+    return "invalid", state, recent
+
+
+def run_engine_chain(fixture: dict, pre: dict, genesis: dict) -> Counter:
+    """Run every payload of an engine fixture on its chain; return the kind of each outcome."""
+    from ethlib.cryptography.keccak import keccak256
+    from ethlib.serialization import rlp
+
+    header = _header_of_json(genesis)
+    assert "0x" + keccak256(header).hex() == genesis["hash"]
+    state = _pre_state(pre)
+    recent = [(active_fork(chain_of(fixture)[1], rlp.decode(header)), header, [])]
+    kinds = Counter()
+    for payload in fixture["engineNewPayloads"]:
+        kind, state, recent = _engine_payload(fixture, payload, state, recent)
+        kinds[kind] += 1
+    assert "0x" + keccak256(recent[-1][1]).hex() == fixture["lastblockhash"]
+    return kinds
+
+
+def _blockchain_test_engine(root: Path, case: Case) -> None:
+    fixture = _fixtures(root / case.path)[case.id]
+    run_engine_chain(fixture, fixture["pre"], fixture["genesisBlockHeader"])
+
+
+def _blockchain_test_engine_x(root: Path, case: Case) -> None:
+    # The fixtures of one group share their state and genesis in a file named by its hash.
+    fixture = _fixtures(root / case.path)[case.id]
+    directory = root.joinpath(*case.path.split("/")[:2])
+    shared = _fixtures(directory / "pre_alloc" / f"{fixture['preHash']}.json")
+    run_engine_chain(fixture, shared["pre"], shared["genesis"])
 
 
 def _shuffle(root: Path, case: Case) -> None:
@@ -439,6 +524,8 @@ RUNNERS = {
     "transaction_test": _transaction,
     "state_test": _state_test,
     "blockchain_test": _blockchain_test,
+    "blockchain_test_engine": _blockchain_test_engine,
+    "blockchain_test_engine_x": _blockchain_test_engine_x,
     "shuffling/core": _shuffle,
     "networking/get_custody_groups": _custody_groups,
     "networking/compute_columns_for_custody_group": _custody_columns,
@@ -468,6 +555,8 @@ RUNNERS = {
 _STOPS = {
     "state_test": "BPO2ToAmsterdamAtTime15k",
     "blockchain_test": "BPO2ToAmsterdamAtTime15k",
+    "blockchain_test_engine": "BPO2ToAmsterdamAtTime15k",
+    "blockchain_test_engine_x": "BPO2ToAmsterdamAtTime15k",
     "light_client/single_merkle_proof": "gloas",
     "networking/gossip_partial_data_column_sidecar": "gloas",
 }

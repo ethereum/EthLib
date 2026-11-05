@@ -879,6 +879,10 @@ def engine_new_payload(config: bytes, request: bytes) -> bytes:
     """The payload status of an `engine_newPayload` request, without the parent's state."""
     ...
 
+def engine_new_payload_on_chain(config: bytes, state: bytes, recent: bytes, request: bytes) -> bytes:
+    """The payload status of an `engine_newPayload` request, on a chain that holds the parent."""
+    ...
+
 def engine_forkchoice_updated(tree: bytes, request: bytes) -> bytes:
     """The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."""
     ...
