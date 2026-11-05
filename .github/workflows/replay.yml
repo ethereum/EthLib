@@ -50,7 +50,7 @@ jobs:
         run: lake build --wfail
 
       # Each module replays in its own process, which loads all its imports, Mathlib included.
-      # The largest measured 5.4 GB with GNU time, so two at a time fit the 16 GB runner.
+      # The largest measured 5.6 GB with GNU time, so two at a time fit the 16 GB runner.
       - name: replay with leanchecker
         env:
           REPLAY_JOBS: "2"

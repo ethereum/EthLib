@@ -10,6 +10,8 @@ public import EthLib.Cryptography.Proofs.AltBn128.Lines
 public import EthLib.Cryptography.Proofs.AltBn128.Twist
 public import EthLib.Cryptography.Proofs.AltBn128.G2Order
 public import EthLib.Cryptography.Proofs.AltBn128.PairingLaws
+public import EthLib.Cryptography.Proofs.AltBn128.Nondegenerate
+public import EthLib.Cryptography.Proofs.AltBn128.PairingBilinear
 
 /-!
 # `EthLib.Cryptography.Proofs.AltBn128`
