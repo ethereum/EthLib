@@ -86,13 +86,20 @@ Each validator in turn may join the activation queue, and may be ejected.
 
 Then the first validators of the queue are activated, as many as the churn limit allows.
 
-Deneb caps the activations by a separate limit, which EthLib does not yet have. -/
+From Deneb the activations have their own limit, as [EIP-7514] specifies.
+
+Electra changes the rule, which EthLib does not yet have here.
+
+[EIP-7514]: https://eips.ethereum.org/EIPS/eip-7514#specification
+-/
 def processRegistryUpdates (config : Config) (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) :=
-  if .dencun ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
   else do
     let state ← (List.range state.validators.data.size).foldlM (updateRegistryEntry config) state
-    let activated := (activationQueue state).take (getValidatorChurnLimit config state).toNat
+    let limit := if .dencun ≤ fork then getValidatorActivationChurnLimit config state
+      else getValidatorChurnLimit config state
+    let activated := (activationQueue state).take limit.toNat
     activated.foldlM activateValidator state
 
 /-! ## Slashings -/

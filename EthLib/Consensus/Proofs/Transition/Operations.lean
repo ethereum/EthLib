@@ -420,33 +420,51 @@ theorem balancesMatch_processDeposit {before : fork < .hegota} {deposit : Deposi
 
 /-! ## Voluntary exits -/
 
-/-- A valid voluntary exit is before Deneb, from an active validator that has not started to exit.
+/-- Before Deneb, the domain of a voluntary exit is that of the fork at the epoch of the exit. -/
+theorem voluntaryExitDomain_of_lt {epoch : Epoch} (before : fork < .dencun) :
+    voluntaryExitDomain config state epoch =
+      liftAccessor (getDomain config state DOMAIN_VOLUNTARY_EXIT (some epoch)) := by
+  have notDeneb : ¬Fork.dencun ≤ fork := Nat.not_le.mpr before
+  simp only [voluntaryExitDomain, notDeneb, ↓reduceIte]
+
+/-- From Deneb, the domain of a voluntary exit is that of the fork version of Capella.
+
+It depends on neither the epoch of the exit nor the fork of the state. -/
+theorem voluntaryExitDomain_of_dencun {epoch : Epoch} (dencun : .dencun ≤ fork) :
+    voluntaryExitDomain config state epoch =
+      liftSsz (computeDomain config DOMAIN_VOLUNTARY_EXIT config.CAPELLA_FORK_VERSION
+        state.genesisValidatorsRoot) := by
+  simp only [voluntaryExitDomain, dencun, ↓reduceIte]
+
+/-- A valid voluntary exit is before Electra.
+
+It is from an active validator that has not started to exit.
 
 The exit is not for a later epoch, and the validator has been active for long enough.
 
-The validator signs the exit, under the fork version of the epoch of the exit. -/
+The validator signs the exit, under the domain of a voluntary exit. -/
 theorem processVoluntaryExit_checks {signed : SignedVoluntaryExit}
     (computed : processVoluntaryExit config checks state signed = .ok after) :
-    fork < .dencun ∧ ∃ validator, getValidator state signed.message.validatorIndex = .ok validator ∧
+    fork < .pectra ∧ ∃ validator, getValidator state signed.message.validatorIndex = .ok validator ∧
       isActiveValidator validator (getCurrentEpoch state) = true ∧
       validator.exitEpoch = FAR_FUTURE_EPOCH ∧
       signed.message.epoch ≤ getCurrentEpoch state ∧
       validator.activationEpoch.toNat + config.SHARD_COMMITTEE_PERIOD.toNat ≤
         (getCurrentEpoch state).toNat ∧
       ∃ domain signingRoot,
-        getDomain config state DOMAIN_VOLUNTARY_EXIT (some signed.message.epoch) = .ok domain ∧
+        voluntaryExitDomain config state signed.message.epoch = .ok domain ∧
         computeSigningRoot signed.message domain = .ok signingRoot ∧
         checks.verify (packBytes validator.pubkey) (packBytes signingRoot)
           (packBytes signed.signature) = true := by
   unfold processVoluntaryExit at computed
   split at computed
   · cases computed
-  rename_i deneb
+  rename_i electra
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff] at computed
   obtain ⟨validator, found, _, active, _, notExiting, _, notLater, eligible, ⟨_, summed⟩, _,
     longEnough, domain, domainOk, signingRoot, rootOk, _, verified, _⟩ := computed
-  refine ⟨Nat.lt_of_not_le deneb, validator, found, active, notExiting, notLater, ?_, domain,
+  refine ⟨Nat.lt_of_not_le electra, validator, found, active, notExiting, notLater, ?_, domain,
     signingRoot, domainOk, rootOk, verified⟩
   rw [← summed]
   exact UInt64.le_iff_toNat_le.mp longEnough
