@@ -31,7 +31,7 @@ The churn of an epoch is a natural number of Gwei, so a churn of zero gives no l
 
 An amount that needs a later epoch then fails, since the number of epochs divides by zero.
 
-[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
 [EIP-8061]: https://eips.ethereum.org/EIPS/eip-8061#churn-computations
 -/
 
@@ -105,7 +105,9 @@ If that first epoch is past the earliest open one, the queue opens it with a ful
 
 An amount that does not fit there takes the fewest later epochs whose churn covers the rest.
 
-A sum of epochs that reaches `2^64` is an error, and so is a churn of zero for such an amount. -/
+An epoch, a product or a sum of churn that reaches `2^64` is an error.
+
+So is a churn of zero for an amount that needs a later epoch. -/
 def churnQueue (earliestEpoch firstEpoch perEpochChurn churnLeft amount : UInt64) :
     Except ArithError (Epoch × Gwei) := do
   let epoch := max earliestEpoch firstEpoch

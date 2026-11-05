@@ -68,6 +68,11 @@ inductive AccessorError where
   | listFull (limit : Nat)
   /-- The epoch is neither the previous nor the current epoch. -/
   | epochNotRecent (epoch previous current : Epoch)
+  /-- From Altair: the public keys to aggregate are none, or one of them is not valid. -/
+  | invalidPubkeys
+  /-- From Altair: the source of an attestation is not the justified checkpoint it should vote for.
+  -/
+  | wrongSource
   deriving DecidableEq, Repr
 
 /-- Whether a validator is active in an epoch: from its activation epoch, before its exit epoch. -/

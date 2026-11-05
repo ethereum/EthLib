@@ -11,7 +11,9 @@ The proposer of a slot is one of the candidates it is drawn from.
 
 From Gloas each candidate is active and unslashed, so each proposer is too.
 
-From Electra, the Gloas selection of one proposer draws the same proposer as the earlier draw.
+A balance-weighted selection of one proposer draws the same proposer as the proposer search.
+
+So from Electra, the Gloas selection of a proposer agrees with the earlier draw.
 
 Moving the lookahead shifts every proposer back by one epoch, and fills the last epoch anew.
 -/
@@ -72,7 +74,7 @@ theorem proposerDraw_of_pectra {fork' : Base.Fork} (electra : .pectra ≤ fork)
 The two walk the candidates in the same shuffled order, and draw on the same random bytes.
 
 Each candidate must name a validator, whose effective balance the selection reads. -/
-theorem proposerSearch_of_balanceWeightedSearch (electra : .pectra ≤ fork)
+theorem proposerSearch_of_balanceWeightedSearch
     {validators : Array Validator} {indices : Array ValidatorIndex} {balances : Array Gwei}
     {shuffled : Array UInt64} {seed : Bytes32} (nonempty : 0 < indices.size)
     (positions : ∀ place < indices.size, (shuffled.getD place 0).toNat < indices.size)
@@ -81,7 +83,8 @@ theorem proposerSearch_of_balanceWeightedSearch (electra : .pectra ≤ fork)
         balances.getD k 0 = validator.effectiveBalance) :
     ∀ {bound : (#[] : Array ValidatorIndex).size ≤ 1} {i : Nat}
       {result : Vector ValidatorIndex 1},
-      balanceWeightedSearch preset indices balances (fun place => (shuffled.getD place 0).toNat)
+      balanceWeightedSearch preset fork indices balances
+          (fun place => (shuffled.getD place 0).toNat)
           seed 1 #[] bound i = .ok result →
         proposerSearch preset fork validators indices shuffled seed i = .ok result[0] := by
   intro bound i result found
@@ -99,10 +102,8 @@ theorem proposerSearch_of_balanceWeightedSearch (electra : .pectra ≤ fork)
       rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem inside, Option.getD_some]
     rw [weight] at found
     rw [proposerSearch, candidate, registered]
-    have same := proposerDraw_of_pectra (preset := preset) (fork := fork)
-      (fork' := .glamsterdam) electra (by decide) seed i validator.effectiveBalance
-    simp only [same, bind, Except.bind]
-    cases draw : proposerDraw preset .glamsterdam seed i validator.effectiveBalance with
+    simp only [bind, Except.bind]
+    cases draw : proposerDraw preset fork seed i validator.effectiveBalance with
     | error e => simp [draw] at found
     | ok accepted =>
       simp only [draw] at found ⊢
@@ -119,10 +120,10 @@ theorem proposerSearch_of_balanceWeightedSearch (electra : .pectra ≤ fork)
           rfl
       · simp [throw, throwThe, MonadExcept.throw, MonadExceptOf.throw] at found
 
-/-- From Electra, a selection of one proposer that succeeds draws the proposer of the draw.
+/-- A selection of one proposer that succeeds draws the proposer of the draw at the same fork.
 
 So the Gloas proposer of a slot is the one that the Fulu rule draws from the same candidates. -/
-theorem computeProposerIndex_of_computeBalanceWeightedSelection (electra : .pectra ≤ fork)
+theorem computeProposerIndex_of_computeBalanceWeightedSelection
     {indices : Array ValidatorIndex} {seed : Bytes32} {selected : Vector ValidatorIndex 1}
     (computed : computeBalanceWeightedSelection state indices seed 1 true = .ok selected) :
     computeProposerIndex state indices seed = .ok selected[0] := by
@@ -144,7 +145,7 @@ theorem computeProposerIndex_of_computeBalanceWeightedSelection (electra : .pect
       simpa using mapM_ok_length onList
     unfold computeProposerIndex
     simp only [empty, fits, ↓reduceIte]
-    refine proposerSearch_of_balanceWeightedSearch electra (Nat.pos_of_ne_zero empty)
+    refine proposerSearch_of_balanceWeightedSearch (Nat.pos_of_ne_zero empty)
       (fun place lt => ?_) (fun k lt => ?_) computed
     · have entry := computeShuffledPermutation_getD_lt (preset := preset) (seed := seed)
         (count := indices.size.toUInt64) (place := place) (by rw [sizeEq]; exact lt)

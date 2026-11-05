@@ -1,0 +1,149 @@
+module
+
+public import EthLib.Consensus.Mutators
+
+/-!
+# `Consensus.Participation`
+
+From Altair: the participation flags of the validators, and the base reward.
+
+The state keeps one byte of flags for each validator, for the previous and the current epochs.
+
+Each flag records one timely vote of an attestation: its source, its target or its head.
+
+Bit `i` of the byte holds flag `i`, so only an index below 8 names a flag.
+
+The rule uses the indices 0, 1 and 2.
+
+The base reward of a validator is the reward of one epoch of timely votes on average.
+
+Before Altair it grows with the effective balance over the square root of the total active balance.
+
+From Altair it counts the effective balance in increments.
+
+A sum, a product or a division that has no 64-bit result is an error.
+
+A read past the end of a list is an error too.
+
+Deneb rewards a timely target at any inclusion delay, as [EIP-7045] specifies.
+
+Gloas also checks the payload of the head, which is not yet in EthLib, so the flags fail there.
+
+[EIP-7045]: https://eips.ethereum.org/EIPS/eip-7045#specification
+-/
+
+@[expose] public section
+
+namespace EthLib.Consensus
+
+open Base Uint64 Serialization.Ssz
+
+variable {preset : Preset} {fork : Base.Fork}
+
+/-- The byte that holds only the flag at an index below 8. -/
+def flagBit (flagIndex : UInt64) : ParticipationFlags :=
+  1 <<< flagIndex.toUInt8
+
+/-- From Altair: the flags with the flag at an index set. -/
+def addFlag (flags : ParticipationFlags) (flagIndex : UInt64) : ParticipationFlags :=
+  flags ||| flagBit flagIndex
+
+/-- From Altair: whether the flag at an index is set. -/
+def hasFlag (flags : ParticipationFlags) (flagIndex : UInt64) : Bool :=
+  flags &&& flagBit flagIndex == flagBit flagIndex
+
+/-- From Altair: the index of the next validator to join the registry, the size of the registry. -/
+def getIndexForNewValidator (state : BeaconState preset fork) : ValidatorIndex :=
+  state.validators.data.size.toUInt64
+
+/-- From Altair: a list with the entry at an index set.
+
+When the index is the size of the list, the entry is added at its end.
+
+An index past the size is an error, and so is an append to a full list. -/
+def setOrAppendList {switch : Base.Fork} {α : Type} {limit : Nat}
+    (list : ForkList switch fork α limit) (index : UInt64) (value : α) :
+    Except AccessorError (ForkList switch fork α limit) :=
+  if index.toNat = list.data.size then appendWithinLimit list value
+  else if index.toNat < list.data.size then
+    .ok ⟨list.data.set! index.toNat value, fun before => by simpa using list.bound before⟩
+  else .error (.indexOutOfRange index)
+
+/-- From Altair: the base reward of one increment of effective balance.
+
+It is a fixed factor of the increment over the square root of the total active balance. -/
+def getBaseRewardPerIncrement (state : BeaconState preset fork) : Except AccessorError Gwei := do
+  let total ← getTotalActiveBalance state
+  liftArith do
+    divChecked (← mulChecked preset.EFFECTIVE_BALANCE_INCREMENT preset.BASE_REWARD_FACTOR)
+      (integerSquareroot total)
+
+/-- The base reward of a validator.
+
+Before Altair it is a fixed factor of its effective balance over the square root of the total.
+
+The total is the total active balance, and the result is shared among the parts of an epoch reward.
+
+From Altair it is the base reward of one increment, for each whole increment of effective balance.
+-/
+def getBaseReward (state : BeaconState preset fork) (index : ValidatorIndex) :
+    Except AccessorError Gwei := do
+  let effectiveBalance := (← getValidator state index).effectiveBalance
+  if .altair ≤ fork then
+    let increments := effectiveBalance / preset.EFFECTIVE_BALANCE_INCREMENT
+    liftArith (mulChecked increments (← getBaseRewardPerIncrement state))
+  else
+    let total ← getTotalActiveBalance state
+    let reward ← liftArith do
+      divChecked (← mulChecked effectiveBalance preset.BASE_REWARD_FACTOR) (integerSquareroot total)
+    return reward / BASE_REWARDS_PER_EPOCH
+
+/-- From Altair: the validators active in a recent epoch, not slashed, with a flag set for it.
+
+The epoch must be the previous or the current epoch.
+
+The validators come as a set, in increasing order. -/
+def getUnslashedParticipatingIndices (state : BeaconState preset fork) (altair : .altair ≤ fork)
+    (flagIndex : UInt64) (epoch : Epoch) : Except AccessorError (List ValidatorIndex) := do
+  let current := getCurrentEpoch state
+  let previous := getPreviousEpoch state
+  if epoch = previous ∨ epoch = current then
+    let participation :=
+      if epoch = current then (state.currentEpochParticipation altair).data
+      else (state.previousEpochParticipation altair).data
+    let read ← (getActiveValidatorIndices state epoch).mapM fun index => do
+      let some flags := participation[index.toNat]? | throw (.indexOutOfRange index)
+      return (index, hasFlag flags flagIndex && !(← getValidator state index).slashed)
+    return (read.filter (·.2)).map (·.1)
+  else throw (.epochNotRecent epoch previous current)
+
+/-- From Altair: the flags that an attestation earns, from the source, target and head it votes for.
+
+The source must be the justified checkpoint of the epoch of its target.
+
+A timely source needs an inclusion delay of at most the square root of the slots of an epoch.
+
+A target counts when the source counts too, and before Deneb only within one epoch of delay.
+
+A head counts when the target counts too, and only at the least inclusion delay. -/
+def getAttestationParticipationFlagIndices (state : BeaconState preset fork)
+    (data : AttestationData) (inclusionDelay : UInt64) : Except AccessorError (List UInt64) := do
+  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
+  else
+    let justified := if data.target.epoch = getCurrentEpoch state then
+      state.currentJustifiedCheckpoint else state.previousJustifiedCheckpoint
+    let matchingSource := data.source == justified
+    let matchingTarget :=
+      matchingSource && data.target.root == (← getBlockRoot state data.target.epoch)
+    let matchingHead :=
+      matchingTarget && data.beaconBlockRoot == (← getBlockRootAtSlot state data.slot)
+    if data.source = justified then
+      return (if inclusionDelay ≤ integerSquareroot preset.SLOTS_PER_EPOCH then
+          [TIMELY_SOURCE_FLAG_INDEX] else []) ++
+        (if matchingTarget && (.dencun ≤ fork || inclusionDelay ≤ preset.SLOTS_PER_EPOCH) then
+          [TIMELY_TARGET_FLAG_INDEX] else []) ++
+        (if matchingHead && inclusionDelay == preset.MIN_ATTESTATION_INCLUSION_DELAY then
+          [TIMELY_HEAD_FLAG_INDEX] else [])
+    else throw .wrongSource
+
+end EthLib.Consensus

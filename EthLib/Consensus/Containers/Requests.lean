@@ -24,7 +24,7 @@ The beacon chain asks the execution layer to check a payload with a new payload 
 [EIP-7685]: https://eips.ethereum.org/EIPS/eip-7685#consensus-layer
 [EIP-6110]: https://eips.ethereum.org/EIPS/eip-6110#consensus-layer
 [EIP-7002]: https://eips.ethereum.org/EIPS/eip-7002#consensus-layer
-[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer
+[EIP-7251]: https://eips.ethereum.org/EIPS/eip-7251#consensus-layer-1
 [EIP-7688]: https://eips.ethereum.org/EIPS/eip-7688#converted-types
 [EIP-8282]: https://eips.ethereum.org/EIPS/eip-8282#consensus-layer-processing
 -/
