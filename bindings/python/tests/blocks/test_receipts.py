@@ -41,7 +41,7 @@ def test_typed_receipt_rejected_before_its_fork() -> None:
 
 def test_state_root_receipt_rejected_from_byzantium() -> None:
     # From Byzantium the outcome is a status, and a 32-byte state root is no status.
-    with pytest.raises(ValueError, match=r"\.decoding\b"):
+    with pytest.raises(ValueError, match=r"\.decoding\b[\s\S]*\.scalarTooLarge\b"):
         blocks.receipt_reencode("byzantium", _first("Frontier", "0x00"))
 
 
