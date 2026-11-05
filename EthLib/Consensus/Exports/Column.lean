@@ -11,6 +11,10 @@ C-ABI exports of the data column sidecars and of the matrix of cells, from Fulu.
 
 A sidecar, a block and a matrix entry arrive in their SSZ encoding.
 
+From Gloas a sidecar names its block by root, and the checks read the commitments of its bid.
+
+So the checks of a sidecar take the bytes of its signed block too, which are empty before Gloas.
+
 Blobs, entries and rows of cells arrive one after another in one byte string.
 
 A row of cells holds the 128 cells of an extended blob, then their 128 proofs.
@@ -36,28 +40,56 @@ def pieces (n : Nat) (bytes : ByteArray) : Option (Array (Vector UInt8 n)) :=
     let piece := bytes.extract (i * n) ((i + 1) * n)
     if h : piece.size = n then some ⟨piece.data, h⟩ else none
 
+/-- The preset and a fork from Fulu on, which the names name. -/
+def columnPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
+  let preset ← presetOf (← nameOf name)
+  let fork ← forkOf fork
+  if fork < .fusaka then throw (0, s!"no data column sidecar at {fork.name}")
+  return (preset, fork)
+
 /-- The preset and a fork from Fulu up to Gloas, which the names name, with the fork's bound. -/
 def fuluPresetAndFork (name fork : ByteArray) :
     Result (Preset × (fork : Fork) ×' fork < .glamsterdam) := do
-  let (preset, fork) ← presetAndFork name fork
-  if fork < .fusaka then throw (0, s!"no data column sidecar at {fork.name}")
+  let (preset, fork) ← columnPresetAndFork name fork
   if beforeGloas : fork < .glamsterdam then return (preset, ⟨fork, beforeGloas⟩)
-  else throw (0, s!"fork {fork.name} not yet specified")
+  else throw (0, s!"no inclusion proof in a sidecar at {fork.name}")
 
 /-- Read a sidecar, with the code of a decoding error. -/
 def readSidecar (preset : Preset) (fork : Fork) (data : ByteArray) :
     Result (DataColumnSidecar preset fork) :=
   runSsz "input rejected" (SszType.deserialize (DataColumnSidecar preset fork) data)
 
-/-- Whether a sidecar, given as bytes, has a valid shape under the blob limit of its epoch.
+/-- From Gloas, the commitments in the bid of the block of a sidecar, from the signed block.
+
+Before Gloas the sidecar carries its commitments, so the block must be empty.
+
+From Gloas a block whose root is not the root that the sidecar names fails with code 0. -/
+def bidCommitmentsOf {preset : Preset} {fork : Fork} (sidecar : DataColumnSidecar preset fork)
+    (block : ByteArray) : Result (Since .glamsterdam fork (BlobKZGCommitments preset fork)) := do
+  if beforeGloas : fork < .glamsterdam then
+    if !block.isEmpty then throw (0, s!"no block for a sidecar at {fork.name}")
+    return (absurd · (not_glamsterdam_le beforeGloas))
+  else
+    let gloas := not_lt_glamsterdam beforeGloas
+    let signed ← runSsz "block rejected"
+      (SszType.deserialize (SignedBeaconBlock preset fork) block)
+    let root ← runSsz "block rejected" (SszType.hashTreeRoot signed.message)
+    if root ≠ sidecar.beaconBlockRoot gloas then
+      throw (0, "the block is not the block of the sidecar")
+    return signed.message.bidCommitments
+
+/-- Whether a sidecar, given as bytes, has a valid shape.
+
+Before Gloas the count of its commitments stays within the blob limit of its epoch.
 
 The configuration of the name holds, with the replacements that the JSON object gives. -/
 @[export eth_consensus_verify_data_column_sidecar]
-def verifyDataColumnSidecarExport (name fork data replacements : ByteArray) : Result Bool := do
-  let (preset, ⟨fork, beforeGloas⟩) ← fuluPresetAndFork name fork
+def verifyDataColumnSidecarExport (name fork data block replacements : ByteArray) :
+    Result Bool := do
+  let (preset, fork) ← columnPresetAndFork name fork
   let config ← configWith name replacements
-  return verifyDataColumnSidecar preset config (← readSidecar preset fork data)
-    (absurd · (not_glamsterdam_le beforeGloas))
+  let sidecar ← readSidecar preset fork data
+  return verifyDataColumnSidecar preset config sidecar (← bidCommitmentsOf sidecar block)
 
 /-- Whether the branch of a sidecar, given as bytes, climbs to the body root of its header. -/
 @[export eth_consensus_verify_data_column_sidecar_inclusion_proof]
@@ -67,14 +99,16 @@ def verifyDataColumnSidecarInclusionProofExport (name fork data : ByteArray) : R
 
 /-- Whether the cells of a sidecar, given as bytes, match its commitments by their proofs.
 
-A sidecar that does not decode has code 0. -/
+From Gloas the commitments come from the bid of the signed block.
+
+A sidecar or a block that does not decode has code 0. -/
 @[export eth_consensus_verify_data_column_sidecar_kzg_proofs]
-def verifyDataColumnSidecarKzgProofsExport (name fork data : ByteArray) : Result Bool := do
-  let (preset, ⟨fork, beforeGloas⟩) ← fuluPresetAndFork name fork
+def verifyDataColumnSidecarKzgProofsExport (name fork data block : ByteArray) : Result Bool := do
+  let (preset, fork) ← columnPresetAndFork name fork
   let sidecar ← (SszType.deserialize (DataColumnSidecar preset fork) data).mapError
     fun e => (0, s!"input rejected: {reprStr e}")
-  runKzgWithSetup fun setup => verifyDataColumnSidecarKzgProofs setup sidecar
-    (absurd · (not_glamsterdam_le beforeGloas))
+  let commitments ← (bidCommitmentsOf sidecar block).mapError fun (_, message) => (0, message)
+  runKzgWithSetup fun setup => verifyDataColumnSidecarKzgProofs setup sidecar commitments
 
 /-- The bytes of the entries of a matrix, one after another. -/
 def matrixBytes (entries : List MatrixEntry) : Result ByteArray :=
@@ -123,7 +157,7 @@ def sidecarsBytes {preset : Preset} {fork : Fork}
 @[export eth_consensus_get_data_column_sidecars_from_block]
 def getDataColumnSidecarsFromBlockExport (name fork block rows : ByteArray) :
     Result ByteArray := do
-  let (preset, ⟨fork, _⟩) ← fuluPresetAndFork name fork
+  let (preset, fork) ← columnPresetAndFork name fork
   let signed ← runSsz "input rejected"
     (SszType.deserialize (SignedBeaconBlock preset fork) block)
   if deneb : .dencun ≤ fork then
@@ -135,7 +169,7 @@ def getDataColumnSidecarsFromBlockExport (name fork block rows : ByteArray) :
 @[export eth_consensus_get_data_column_sidecars_from_column_sidecar]
 def getDataColumnSidecarsFromColumnSidecarExport (name fork sidecar rows : ByteArray) :
     Result ByteArray := do
-  let (preset, ⟨fork, _⟩) ← fuluPresetAndFork name fork
+  let (preset, fork) ← columnPresetAndFork name fork
   sidecarsBytes (← runSsz "sidecars rejected"
     (getDataColumnSidecarsFromColumnSidecar (← readSidecar preset fork sidecar) (← readRows rows)))
 

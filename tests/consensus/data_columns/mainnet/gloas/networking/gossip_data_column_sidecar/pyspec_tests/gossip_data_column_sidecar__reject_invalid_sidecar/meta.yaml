@@ -1,0 +1,10 @@
+topic: data_column_sidecar
+blocks:
+- {block: 
+    block_0xebac5acc92dd93a165d245cffb5838299e70e47813fad4947b8121605c928b7b}
+- {block: 
+    block_0x9ea479a1691988c6c2795b858b8749b9d8eebe6086a1fdd59952b41aa1d460ba}
+messages:
+- {subnet_id: 0, current_time_ms: 12500, message: 
+    data_column_sidecar_0x838ccc4fa8d9926e208540a9957b290a2f299c1c4bb322216f2ca76fa8664180,
+  expected: reject, reason: invalid sidecar}

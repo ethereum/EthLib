@@ -312,7 +312,7 @@
   "Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."
 
 #define DOC_consensus_verify_data_column_sidecar \
-  "Whether a sidecar, given as bytes, has a valid shape under the blob limit of its epoch."
+  "Whether a sidecar, given as bytes, has a valid shape."
 
 #define DOC_consensus_verify_data_column_sidecar_inclusion_proof \
   "Whether the branch of a sidecar, given as bytes, climbs to the body root of its header."

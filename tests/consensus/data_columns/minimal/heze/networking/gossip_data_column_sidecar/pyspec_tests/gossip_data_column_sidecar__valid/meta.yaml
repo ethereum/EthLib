@@ -1,0 +1,10 @@
+topic: data_column_sidecar
+blocks:
+- {block: 
+    block_0xda6ee95f7984394ded4f5a66c0233a5cbb0d7bb429e1a00d00c24fd269f09199}
+- {block: 
+    block_0x373878be697c8fb8690cce8af2c8e5c8d8966ca5fc6ef79e801a33aec1d608e7}
+messages:
+- {subnet_id: 0, current_time_ms: 6500, message: 
+    data_column_sidecar_0x67f7db8135ce3025c4540a450fdd63790a88c45c4841b6ee03710ae2b0781f66,
+  expected: valid}

@@ -183,11 +183,12 @@ eth_consensus_verify_blob_sidecar_inclusion_proof(
 );
 
 extern lean_object* eth_consensus_verify_data_column_sidecar(
-  lean_object* name, lean_object* fork, lean_object* data, lean_object* config);
+  lean_object* name, lean_object* fork, lean_object* data, lean_object* block,
+  lean_object* config);
 extern lean_object* eth_consensus_verify_data_column_sidecar_inclusion_proof(
   lean_object* name, lean_object* fork, lean_object* data);
 extern lean_object* eth_consensus_verify_data_column_sidecar_kzg_proofs(
-  lean_object* name, lean_object* fork, lean_object* data);
+  lean_object* name, lean_object* fork, lean_object* data, lean_object* block);
 extern lean_object* eth_consensus_compute_matrix(lean_object* blobs);
 extern lean_object* eth_consensus_recover_matrix(lean_object* entries, uint64_t blob_count);
 extern lean_object* eth_consensus_get_data_column_sidecars_from_block(
@@ -654,30 +655,29 @@ bytes_arg(
   return mk_bytearray((const uint8_t*) PyBytes_AS_STRING(obj), PyBytes_GET_SIZE(obj));
 }
 
-/* Read a preset name, a fork name and `count` byte strings, or set an error and return 0. */
+/* Read a preset name, a fork name and `count` byte strings (one to three) into `data`,
+   or set an error and return 0. */
 static int
 name_fork_bytes_args(
   PyObject* args,
   int count,
   lean_object** name,
   lean_object** fork,
-  lean_object** first,
-  lean_object** second
+  lean_object** data
 ) {
-  PyObject *name_obj, *fork_obj, *first_obj, *second_obj = NULL;
-  if (count == 1) {
-    if (!PyArg_ParseTuple(args, "OOO", &name_obj, &fork_obj, &first_obj)) return 0;
-  } else if (!PyArg_ParseTuple(args, "OOOO", &name_obj, &fork_obj, &first_obj, &second_obj)) {
-    return 0;
-  }
+  PyObject *name_obj, *fork_obj, *data_obj[3] = {NULL, NULL, NULL};
+  if (!PyArg_UnpackTuple(args, "args", 2 + count, 2 + count, &name_obj, &fork_obj,
+                         &data_obj[0], &data_obj[1], &data_obj[2])) return 0;
   /* Check every argument before any Lean object exists, so a failure leaks nothing. */
   if (!PyUnicode_Check(name_obj) || !PyUnicode_Check(fork_obj)) {
     PyErr_SetString(PyExc_TypeError, "name and fork must be str");
     return 0;
   }
-  if (!PyBytes_Check(first_obj) || (second_obj && !PyBytes_Check(second_obj))) {
-    PyErr_SetString(PyExc_TypeError, "the data must be bytes");
-    return 0;
+  for (int i = 0; i < count; i++) {
+    if (!PyBytes_Check(data_obj[i])) {
+      PyErr_SetString(PyExc_TypeError, "the data must be bytes");
+      return 0;
+    }
   }
   *name = str_arg(name_obj, "name");
   if (!*name) return 0;
@@ -686,8 +686,7 @@ name_fork_bytes_args(
     lean_dec(*name);
     return 0;
   }
-  *first = bytes_arg(first_obj);
-  if (second_obj) *second = bytes_arg(second_obj);
+  for (int i = 0; i < count; i++) data[i] = bytes_arg(data_obj[i]);
   return 1;
 }
 
@@ -696,10 +695,10 @@ py_consensus_verify_data_column_sidecar(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object *name, *fork, *data, *config;
-  if (!name_fork_bytes_args(args, 2, &name, &fork, &data, &config)) return NULL;
+  lean_object *name, *fork, *data[3];
+  if (!name_fork_bytes_args(args, 3, &name, &fork, data)) return NULL;
   return except_into_pybool(
-    eth_consensus_verify_data_column_sidecar(name, fork, data, config), SSZ_ERROR);
+    eth_consensus_verify_data_column_sidecar(name, fork, data[0], data[1], data[2]), SSZ_ERROR);
 }
 
 PyObject*
@@ -708,7 +707,7 @@ py_consensus_verify_data_column_sidecar_inclusion_proof(
   PyObject* args
 ) {
   lean_object *name, *fork, *data;
-  if (!name_fork_bytes_args(args, 1, &name, &fork, &data, NULL)) return NULL;
+  if (!name_fork_bytes_args(args, 1, &name, &fork, &data)) return NULL;
   return except_into_pybool(
     eth_consensus_verify_data_column_sidecar_inclusion_proof(name, fork, data), SSZ_ERROR);
 }
@@ -718,10 +717,10 @@ py_consensus_verify_data_column_sidecar_kzg_proofs(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object *name, *fork, *data;
-  if (!name_fork_bytes_args(args, 1, &name, &fork, &data, NULL)) return NULL;
+  lean_object *name, *fork, *data[2];
+  if (!name_fork_bytes_args(args, 2, &name, &fork, data)) return NULL;
   return except_into_pybool(
-    eth_consensus_verify_data_column_sidecar_kzg_proofs(name, fork, data), KZG_ERROR);
+    eth_consensus_verify_data_column_sidecar_kzg_proofs(name, fork, data[0], data[1]), KZG_ERROR);
 }
 
 PyObject*
@@ -761,10 +760,10 @@ py_consensus_get_data_column_sidecars_from_block(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object *name, *fork, *block, *rows;
-  if (!name_fork_bytes_args(args, 2, &name, &fork, &block, &rows)) return NULL;
+  lean_object *name, *fork, *data[2];
+  if (!name_fork_bytes_args(args, 2, &name, &fork, data)) return NULL;
   return except_into_pybytes(
-    eth_consensus_get_data_column_sidecars_from_block(name, fork, block, rows), SSZ_ERROR);
+    eth_consensus_get_data_column_sidecars_from_block(name, fork, data[0], data[1]), SSZ_ERROR);
 }
 
 PyObject*
@@ -772,10 +771,10 @@ py_consensus_get_data_column_sidecars_from_column_sidecar(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object *name, *fork, *sidecar, *rows;
-  if (!name_fork_bytes_args(args, 2, &name, &fork, &sidecar, &rows)) return NULL;
+  lean_object *name, *fork, *data[2];
+  if (!name_fork_bytes_args(args, 2, &name, &fork, data)) return NULL;
   return except_into_pybytes(
-    eth_consensus_get_data_column_sidecars_from_column_sidecar(name, fork, sidecar, rows),
+    eth_consensus_get_data_column_sidecars_from_column_sidecar(name, fork, data[0], data[1]),
     SSZ_ERROR);
 }
 
@@ -892,10 +891,10 @@ py_consensus_is_better_update(
   PyObject* self,
   PyObject* args
 ) {
-  lean_object *name, *fork, *new_update, *old_update;
-  if (!name_fork_bytes_args(args, 2, &name, &fork, &new_update, &old_update)) return NULL;
+  lean_object *name, *fork, *updates[2];
+  if (!name_fork_bytes_args(args, 2, &name, &fork, updates)) return NULL;
   return except_into_pybool(
-    eth_consensus_is_better_update(name, fork, new_update, old_update), LIGHT_CLIENT_ERROR);
+    eth_consensus_is_better_update(name, fork, updates[0], updates[1]), LIGHT_CLIENT_ERROR);
 }
 
 PyObject*

@@ -1,0 +1,10 @@
+topic: data_column_sidecar
+blocks:
+- {block: 
+    block_0x145e890b76c2dceda51d95c60002772b9246660612c5bb44dfbe1d6914d50f03}
+- {block: 
+    block_0x6eaa3b30166405ab3d538bb94e040a1141dda999e64689cb4af0656114e14732}
+messages:
+- {subnet_id: 0, current_time_ms: 24500, message: 
+    data_column_sidecar_0x8bfd3bde30329ce6f5426100c18031097435edb20c29ee21bfe975a33c96caa8,
+  expected: reject, reason: sidecar's slot does not match block's slot}
