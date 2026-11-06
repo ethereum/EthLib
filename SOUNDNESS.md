@@ -753,6 +753,31 @@ Two transactions, or two withdrawals, with the same bytes are equal, so `transac
 `receiptsRoot_binding` does so for receipts whose types are 0 or types that the fork has, as the receipt decoder requires.
 No theorem bounds the probability of finding a collision.
 
+### Weak subjectivity
+
+A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.
+`Consensus/WeakSubjectivity.lean` computes the period with the rule of each fork: Phase 0 counts validators, Electra the churn of the balance, and Gloas three weighted churns.
+The theorems in `Consensus/Proofs/WeakSubjectivity.lean` say what the 64-bit computation returns.
+
+From Electra, `balanceChurnPeriod_eq_ok_iff` gives the period in closed form, the withdrawal delay plus `10 t / (200 c)` epochs for a total active balance `t` and a churn `c`.
+It succeeds exactly when no product or sum reaches `2^64` and the churn is not zero.
+In Phase 0, `phase0PeriodEpochs_eq_ok` shows that a computed period is one of the two expressions of the rule, on natural numbers.
+`min_le_computeWeakSubjectivityPeriod` shows that, at every fork, the period is at least the withdrawal delay.
+
+`computeWeakSubjectivityPeriodElectra_le` bounds the Electra period by a function of the parameters alone.
+It assumes a positive churn quotient, and a minimum churn that is a positive whole number of increments.
+At the mainnet parameters, `computeWeakSubjectivityPeriodElectra_le_mainnet` gives at most 3558 epochs, for every state.
+No theorem bounds the Phase 0 or the Gloas period.
+
+`isWithinWeakSubjectivityPeriod_eq_ok_iff` states when the check of a checkpoint succeeds and what it answers.
+The state must hold the root of the checkpoint at its epoch and be at that epoch.
+The answer is then whether the current epoch is at most the epoch of the checkpoint plus the period.
+By `isWithinWeakSubjectivityPeriod_of_slot_le`, a checkpoint within its period at some slot is within it at every earlier slot.
+
+No theorem says that the period gives the safety margin that the rule intends.
+That margin is the claim of the analysis behind the rule, and EthLib does not model it.
+The Python suite checks the periods against the three tables of the rule, except for the rows whose states take minutes to build.
+
 ### Light client
 
 A light client accepts an update that the sync committee signed, and moves its store by it.
