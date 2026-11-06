@@ -13,6 +13,8 @@ The dropped blocks are exactly the known blocks that descend from one known bloc
 So a block that stays never has a dropped parent.
 
 A linked store therefore stays linked, and its head is still the head of LMD-GHOST.
+
+The latest valid hash decides where the removal starts.
 -/
 
 @[expose] public section
@@ -61,6 +63,35 @@ theorem mem_filterMapM_ok {α β ε : Type} {f : α → Except ε (Option β)} :
           exact .inl ok.symm
         · exact .inr ⟨x', mem, ok⟩
 
+/-- Outside the forks with a payload in the block body, the zero hash names every block.
+
+Another hash names none. -/
+theorem marksLatestValid_of_not_range {hash : Hash32} {block : BeaconBlock preset fork}
+    (range : ¬ (.bellatrix ≤ fork ∧ fork < .glamsterdam)) :
+    marksLatestValid hash block = true ↔ hash = Vector.replicate 32 0 := by
+  simp [marksLatestValid, range]
+
+/-- In the forks with a payload, the zero hash names exactly the blocks with the empty payload. -/
+theorem marksLatestValid_zero {block : BeaconBlock preset fork}
+    (range : .bellatrix ≤ fork ∧ fork < .glamsterdam) :
+    marksLatestValid (Vector.replicate 32 0) block = true ↔
+      block.body.executionPayload range = .empty preset fork := by
+  simp [marksLatestValid, range]
+
+/-- In the forks with a payload, a nonzero hash names the blocks whose payload has that hash. -/
+theorem marksLatestValid_of_ne_zero {hash : Hash32} {block : BeaconBlock preset fork}
+    (range : .bellatrix ≤ fork ∧ fork < .glamsterdam) (nonzero : hash ≠ Vector.replicate 32 0) :
+    marksLatestValid hash block = true ↔
+      (block.body.executionPayload range).blockHash = hash := by
+  simp only [marksLatestValid, range, and_self, ↓reduceDIte, nonzero, ↓reduceIte,
+    Bool.and_eq_true, bne_iff_ne, beq_iff_eq]
+  constructor
+  · exact fun named => named.2
+  · -- The empty payload has the zero hash, so a payload with another hash is not empty.
+    refine fun same => ⟨fun empty => nonzero ?_, same⟩
+    rw [← same, empty]
+    rfl
+
 namespace Store
 
 variable {store : Store preset fork}
@@ -78,6 +109,47 @@ theorem removeBlocks_blockStates (roots : List Root) (root : Root) :
       if roots.contains root then none else store.blockStates[root]? := by
   simp only [removeBlocks, Std.TreeMap.getElem?_filter']
   cases store.blockStates[root]? <;> by_cases removed : root ∈ roots <;> simp [removed]
+
+/-- The timeliness of a block stays after a removal unless its root is removed. -/
+theorem removeBlocks_blockTimeliness (roots : List Root) (root : Root) :
+    (store.removeBlocks roots).blockTimeliness[root]? =
+      if roots.contains root then none else store.blockTimeliness[root]? := by
+  simp only [removeBlocks, Std.TreeMap.getElem?_filter']
+  cases store.blockTimeliness[root]? <;> by_cases removed : root ∈ roots <;> simp [removed]
+
+/-- The unrealized justification of a block stays after a removal unless its root is removed. -/
+theorem removeBlocks_unrealizedJustifications (roots : List Root) (root : Root) :
+    (store.removeBlocks roots).unrealizedJustifications[root]? =
+      if roots.contains root then none else store.unrealizedJustifications[root]? := by
+  simp only [removeBlocks, Std.TreeMap.getElem?_filter']
+  cases store.unrealizedJustifications[root]? <;> by_cases removed : root ∈ roots <;> simp [removed]
+
+/-- A vote stays after a removal unless it is for a removed block. -/
+theorem removeBlocks_latestMessages (roots : List Root) (validator : ValidatorIndex) :
+    (store.removeBlocks roots).latestMessages[validator]? =
+      store.latestMessages[validator]?.filter fun message => !roots.contains message.root := by
+  simp only [removeBlocks, Std.TreeMap.getElem?_filter']
+
+/-- The boost stays after a removal unless it is for a removed block. -/
+theorem removeBlocks_proposerBoostRoot (roots : List Root) :
+    (store.removeBlocks roots).proposerBoostRoot =
+      if roots.contains store.proposerBoostRoot then Vector.replicate 32 0
+      else store.proposerBoostRoot := by
+  simp [removeBlocks]
+
+/-- A removal keeps the clock, the checkpoints, their states and the equivocators. -/
+theorem removeBlocks_frame (roots : List Root) :
+    (store.removeBlocks roots).timeMs = store.timeMs ∧
+      (store.removeBlocks roots).genesisTimeMs = store.genesisTimeMs ∧
+      (store.removeBlocks roots).justifiedCheckpoint = store.justifiedCheckpoint ∧
+      (store.removeBlocks roots).finalizedCheckpoint = store.finalizedCheckpoint ∧
+      (store.removeBlocks roots).unrealizedJustifiedCheckpoint =
+        store.unrealizedJustifiedCheckpoint ∧
+      (store.removeBlocks roots).unrealizedFinalizedCheckpoint =
+        store.unrealizedFinalizedCheckpoint ∧
+      (store.removeBlocks roots).checkpointStates = store.checkpointStates ∧
+      (store.removeBlocks roots).equivocatingIndices = store.equivocatingIndices :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- The blocks that a removal of descendants drops are the known descendants of its root.
 
@@ -210,6 +282,270 @@ theorem Linked.getHead_eq_ghost_of_onInvalidPayload {config : Config} {orphanPar
       (view (linked.onInvalidPayload invalidated).parentsBelow nodes) rootValue
       (some after.justifiedCheckpoint.root) = some head.root :=
   Store.getHead_eq_ghost _ before noBoost justifiedState tree found
+
+/-- A known block sits in the chain of a root only when that root is known. -/
+theorem known_of_ancestor {first root : Root} {firstBlock : BeaconBlock preset fork}
+    (lower : store.ParentsBelow) (firstFound : store.blocks[first]? = some firstBlock)
+    (descends : (blockTree lower).Ancestor (some first) (some root)) :
+    ∃ block, store.blocks[root]? = some block := by
+  cases found : store.blocks[root]? with
+  | some block => exact ⟨block, rfl⟩
+  | none =>
+    -- An unknown root sits at height 1, and a known block at its slot plus 2.
+    have height := descends.height_le
+    rw [blockTree_height_of firstFound] at height
+    simp [blockTree, treeHeight, found] at height
+
+/-- A block in the chain of the parent of a known block is in the chain of that block. -/
+theorem ancestor_of_parent {x : Option Root} {root : Root} {block : BeaconBlock preset fork}
+    (lower : store.ParentsBelow) (found : store.blocks[root]? = some block)
+    (above : (blockTree lower).Ancestor x (some block.parentRoot)) :
+    (blockTree lower).Ancestor x (some root) := by
+  rw [← blockTree_parent_of (lower := lower) found] at above
+  exact above.trans ⟨1, rfl⟩
+
+/-- The walk stops at once when the hash names the block. -/
+theorem firstInvalidBlock_of_named {hash : Hash32} {child root : Root}
+    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
+    (named : marksLatestValid hash block = true) :
+    store.firstInvalidBlock hash child root = .ok (some child) := by
+  rw [firstInvalidBlock]
+  split
+  · simp_all
+  · rename_i b same
+    rw [found, Option.some.injEq] at same
+    subst same
+    simp [named, pure, Except.pure]
+
+/-- The walk ends when it reaches an unknown root. -/
+theorem firstInvalidBlock_of_unknown {hash : Hash32} {child root : Root}
+    (found : store.blocks[root]? = none) :
+    store.firstInvalidBlock hash child root = .ok none := by
+  rw [firstInvalidBlock]
+  split
+  · rfl
+  · simp_all
+
+/-- The walk ends at a block with an unknown parent that the hash does not name. -/
+theorem firstInvalidBlock_of_orphan {hash : Hash32} {child root : Root}
+    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
+    (unnamed : marksLatestValid hash block = false)
+    (parentFound : store.blocks[block.parentRoot]? = none) :
+    store.firstInvalidBlock hash child root = .ok none := by
+  rw [firstInvalidBlock]
+  split
+  · rfl
+  · rename_i b same
+    rw [found, Option.some.injEq] at same
+    subst same
+    simp only [unnamed, Bool.false_eq_true, ↓reduceIte]
+    split
+    · rfl
+    · simp_all
+
+/-- The walk moves to a known parent at a lower slot when the hash does not name the block. -/
+theorem firstInvalidBlock_of_parent {hash : Hash32} {child root : Root}
+    {block parent : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
+    (unnamed : marksLatestValid hash block = false)
+    (parentFound : store.blocks[block.parentRoot]? = some parent)
+    (parentLower : parent.slot < block.slot) :
+    store.firstInvalidBlock hash child root =
+      store.firstInvalidBlock hash root block.parentRoot := by
+  conv => lhs; rw [firstInvalidBlock]
+  split
+  · simp_all
+  · rename_i b same
+    rw [found, Option.some.injEq] at same
+    subst same
+    simp only [unnamed, Bool.false_eq_true, ↓reduceIte]
+    split
+    · simp_all
+    · rename_i p same
+      rw [parentFound, Option.some.injEq] at same
+      subst same
+      simp [parentLower]
+
+/-- The walk fails at a known parent not at a lower slot when the hash does not name the block. -/
+theorem firstInvalidBlock_of_not_lower {hash : Hash32} {child root : Root}
+    {block parent : BeaconBlock preset fork} (found : store.blocks[root]? = some block)
+    (unnamed : marksLatestValid hash block = false)
+    (parentFound : store.blocks[block.parentRoot]? = some parent)
+    (notLower : ¬ parent.slot < block.slot) :
+    store.firstInvalidBlock hash child root = .error (.parentSlotNotLower root) := by
+  rw [firstInvalidBlock]
+  split
+  · simp_all
+  · rename_i b same
+    rw [found, Option.some.injEq] at same
+    subst same
+    simp only [unnamed, Bool.false_eq_true, ↓reduceIte]
+    split
+    · simp_all
+    · rename_i p same
+      rw [parentFound, Option.some.injEq] at same
+      subst same
+      simp only [notLower, ↓reduceDIte]
+      rfl
+
+/-- The walk leaves the store when the hash names no block of the chain.
+
+That needs each known parent at a lower slot, or the walk can fail. -/
+theorem firstInvalidBlock_of_absent {hash : Hash32} {child root : Root}
+    (lower : store.ParentsBelow)
+    (absent : ∀ x block, store.blocks[x]? = some block →
+      (blockTree lower).Ancestor (some x) (some root) → marksLatestValid hash block = false) :
+    store.firstInvalidBlock hash child root = .ok none := by
+  induction child, root using firstInvalidBlock.induct (store := store)
+    (latestValidHash := hash) with
+  | case1 child root found => exact firstInvalidBlock_of_unknown found
+  | case2 child root block found named =>
+    have := absent root block found (.refl _)
+    simp_all
+  | case3 child root block found unnamed parentFound =>
+    exact firstInvalidBlock_of_orphan found (by simpa using unnamed) parentFound
+  | case4 child root block found unnamed parent parentFound parentLower ih =>
+    rw [firstInvalidBlock_of_parent found (by simpa using unnamed) parentFound parentLower]
+    exact ih fun x known stored above =>
+      absent x known stored (ancestor_of_parent lower found above)
+  | case5 child root block found unnamed parent parentFound notLower =>
+    exact absurd (lower root block parent found parentFound) notLower
+
+/-- The walk finds the child on the chain of the nearest block that the hash names.
+
+No block from that child to the start of the walk may be named.
+
+That needs each known parent at a lower slot. -/
+theorem firstInvalidBlock_of_chain {hash : Hash32} {child root first : Root}
+    {firstBlock namedBlock : BeaconBlock preset fork} (lower : store.ParentsBelow)
+    (firstFound : store.blocks[first]? = some firstBlock)
+    (namedFound : store.blocks[firstBlock.parentRoot]? = some namedBlock)
+    (names : marksLatestValid hash namedBlock = true)
+    (descends : (blockTree lower).Ancestor (some first) (some root))
+    (between : ∀ x block, store.blocks[x]? = some block →
+      (blockTree lower).Ancestor (some first) (some x) →
+      (blockTree lower).Ancestor (some x) (some root) → marksLatestValid hash block = false) :
+    store.firstInvalidBlock hash child root = .ok (some first) := by
+  induction child, root using firstInvalidBlock.induct (store := store)
+    (latestValidHash := hash) with
+  | case1 child root rootFound =>
+    -- The chain of an unknown root holds no known block.
+    obtain ⟨_, known⟩ := known_of_ancestor lower firstFound descends
+    simp_all
+  | case2 child root block rootFound named =>
+    have := between root block rootFound descends (.refl _)
+    simp_all
+  | case3 child root block rootFound unnamed parentFound =>
+    rcases descends.eq_or_parent with same | above
+    · -- The first block has a known parent, so it is not this block.
+      rw [Option.some.injEq] at same
+      subst same
+      rw [rootFound, Option.some.injEq] at firstFound
+      subst firstFound
+      simp_all
+    · -- The chain of an unknown parent holds no known block.
+      rw [blockTree_parent_of rootFound] at above
+      obtain ⟨_, known⟩ := known_of_ancestor lower firstFound above
+      simp_all
+  | case4 child root block rootFound unnamed parent parentFound parentLower ih =>
+    rw [firstInvalidBlock_of_parent rootFound (by simpa using unnamed) parentFound parentLower]
+    rcases descends.eq_or_parent with same | above
+    · -- The walk has reached the first block, and the next step reaches the named block.
+      rw [Option.some.injEq] at same
+      subst same
+      rw [rootFound, Option.some.injEq] at firstFound
+      subst firstFound
+      exact firstInvalidBlock_of_named namedFound names
+    · rw [blockTree_parent_of rootFound] at above
+      exact ih above fun x known stored below onChain =>
+        between x known stored below (ancestor_of_parent lower rootFound onChain)
+  | case5 child root block rootFound unnamed parent parentFound notLower =>
+    exact absurd (lower root block parent rootFound parentFound) notLower
+
+/-- A removal from an unknown root changes nothing. -/
+theorem removeDescendants_of_unknown {first : Root} (unknown : store.blocks[first]? = none) :
+    store.removeDescendants first = .ok store := by
+  have absent : store.blocks.contains first = false := by
+    rw [Std.TreeMap.contains_eq_isSome_getElem?, unknown]
+    rfl
+  simp [removeDescendants, absent, pure, Except.pure]
+
+/-- Before Gloas and without a hash, the first invalid block is the block itself. -/
+theorem onInvalidPayload_of_none {block : BeaconBlock preset fork} {root : Root}
+    (before : fork < .glamsterdam) (rooted : SszType.hashTreeRoot block = .ok root) :
+    store.onInvalidPayload block none = store.removeDescendants root := by
+  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp [onInvalidPayload, later, rooted, bind, Except.bind, Except.mapError, pure, Except.pure]
+
+/-- Before Gloas, when the hash names the block itself, no block is invalid. -/
+theorem onInvalidPayload_of_self {hash : Hash32} {block : BeaconBlock preset fork} {root : Root}
+    (before : fork < .glamsterdam) (rooted : SszType.hashTreeRoot block = .ok root)
+    (named : marksLatestValid hash block = true) :
+    store.onInvalidPayload block (some hash) = .ok store := by
+  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp [onInvalidPayload, later, rooted, named, bind, Except.bind, Except.mapError, pure,
+    Except.pure]
+
+/-- Before Gloas, when the hash does not name the block, the walk from its parent decides. -/
+theorem onInvalidPayload_of_unnamed {hash : Hash32} {block : BeaconBlock preset fork} {root : Root}
+    (before : fork < .glamsterdam) (rooted : SszType.hashTreeRoot block = .ok root)
+    (unnamed : marksLatestValid hash block = false) :
+    store.onInvalidPayload block (some hash) = (do
+      let found ← store.firstInvalidBlock hash root block.parentRoot
+      store.removeDescendants (found.getD root)) := by
+  have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  cases walk : store.firstInvalidBlock hash root block.parentRoot <;>
+    simp [onInvalidPayload, later, rooted, unnamed, walk, bind, Except.bind, Except.mapError, pure,
+      Except.pure]
+
+/-- Before Gloas, the block is the first invalid one when the hash names no block of its chain.
+
+The chain here holds the block and its known ancestors.
+
+That needs each known parent at a lower slot, or the walk can fail. -/
+theorem onInvalidPayload_of_absent {hash : Hash32} {block : BeaconBlock preset fork} {root : Root}
+    (before : fork < .glamsterdam) (lower : store.ParentsBelow)
+    (rooted : SszType.hashTreeRoot block = .ok root)
+    (unnamed : marksLatestValid hash block = false)
+    (absent : ∀ x found, store.blocks[x]? = some found →
+      (blockTree lower).Ancestor (some x) (some block.parentRoot) →
+        marksLatestValid hash found = false) :
+    store.onInvalidPayload block (some hash) = store.removeDescendants root := by
+  rw [onInvalidPayload_of_unnamed before rooted unnamed, firstInvalidBlock_of_absent lower absent]
+  rfl
+
+/-- Before Gloas, the block is the first invalid one if the hash names its parent but not it. -/
+theorem onInvalidPayload_of_parent {hash : Hash32} {block parent : BeaconBlock preset fork}
+    {root : Root} (before : fork < .glamsterdam) (rooted : SszType.hashTreeRoot block = .ok root)
+    (unnamed : marksLatestValid hash block = false)
+    (parentFound : store.blocks[block.parentRoot]? = some parent)
+    (names : marksLatestValid hash parent = true) :
+    store.onInvalidPayload block (some hash) = store.removeDescendants root := by
+  rw [onInvalidPayload_of_unnamed before rooted unnamed,
+    firstInvalidBlock_of_named parentFound names]
+  rfl
+
+/-- Before Gloas, if the hash names an older block, its child on the chain is the first invalid one.
+
+No block from that child to the block itself may be named.
+
+That needs each known parent at a lower slot. -/
+theorem onInvalidPayload_of_chain {hash : Hash32}
+    {block firstBlock namedBlock : BeaconBlock preset fork} {root first : Root}
+    (before : fork < .glamsterdam) (lower : store.ParentsBelow)
+    (rooted : SszType.hashTreeRoot block = .ok root)
+    (unnamed : marksLatestValid hash block = false)
+    (firstFound : store.blocks[first]? = some firstBlock)
+    (namedFound : store.blocks[firstBlock.parentRoot]? = some namedBlock)
+    (names : marksLatestValid hash namedBlock = true)
+    (descends : (blockTree lower).Ancestor (some first) (some block.parentRoot))
+    (between : ∀ x found, store.blocks[x]? = some found →
+      (blockTree lower).Ancestor (some first) (some x) →
+      (blockTree lower).Ancestor (some x) (some block.parentRoot) →
+      marksLatestValid hash found = false) :
+    store.onInvalidPayload block (some hash) = store.removeDescendants first := by
+  rw [onInvalidPayload_of_unnamed before rooted unnamed,
+    firstInvalidBlock_of_chain lower firstFound namedFound names descends between]
+  rfl
 
 end Store
 
