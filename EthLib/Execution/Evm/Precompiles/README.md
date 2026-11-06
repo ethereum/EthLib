@@ -444,6 +444,8 @@ The decoder of a point of `G_1` accepts 64 bytes exactly when they encode a poin
 (`bytesToG1_eq_ok_iff`, from `bytesToG1_g1ToBytes` and `g1ToBytes_of_bytesToG1`).
 `Group.lean` shows that ECADD returns the sum of its points in the group of the curve, and ECMUL
 the product of its point by its scalar (`ecadd_toPoint`, `ecmul_toPoint`).
+The output of each, read back as a point, is that sum or that product (`bytesToG1_ecadd`,
+`bytesToG1_ecmul`), so a later call can take it as its input.
 
 ### Test vectors
 
