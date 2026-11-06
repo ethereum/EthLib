@@ -3,7 +3,7 @@ module
 public import EthLib.Base.BigEndian
 public import EthLib.Base.Except
 public import EthLib.Execution.Evm.Machine.Frame
-public import EthLib.Execution.Evm.Gas
+public import EthLib.Execution.Evm.Gas.Memory
 public import EthLib.Execution.Evm.Machine.Memory
 
 /-!

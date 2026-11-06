@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Call.MessageCall
-public import EthLib.Execution.Proofs.Evm.Call
+public import EthLib.Execution.Proofs.Evm.Call.Instructions
 public import EthLib.Execution.Proofs.Evm.Gas.StateGas
 
 /-!

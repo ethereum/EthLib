@@ -3,7 +3,7 @@ module
 public import EthLib.Base.Bytes
 public import EthLib.Base.Exports
 public import EthLib.Execution.Evm.Call.ContractAddress
-public import EthLib.Execution.Evm.Gas
+public import EthLib.Execution.Evm.Gas.Memory
 public import EthLib.Execution.Evm.Op
 public import EthLib.Execution.Evm.Instructions.StackN
 public import EthLib.Execution.Evm.Instructions.Arithmetic

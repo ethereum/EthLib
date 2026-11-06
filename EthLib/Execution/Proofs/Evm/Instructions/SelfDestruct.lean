@@ -26,6 +26,8 @@ From Glamsterdam, a new beneficiary costs 9000 execution gas and 183600 state ga
 No SELFDESTRUCT pays state gas before Glamsterdam.
 
 SELFDESTRUCT keeps memory.
+
+From Glamsterdam, it writes the transfer log of the balance it moves, and none before.
 -/
 
 @[expose] public section
@@ -180,5 +182,18 @@ theorem memory_selfdestructOpStep {op : Op}
     rw [memory_finishSelfdestruct h, memory_chargeStateGas h4, memory_chargeGas h3]
     exact m2
   · exact m2
+
+/-- SELFDESTRUCT writes the transfer log of the balance it moves, none before Glamsterdam. -/
+theorem finishSelfdestruct_logs {beneficiary : Address} {refund : Nat} {Meter : Type}
+    {evm after : Evm fork Meter} (h : finishSelfdestruct fork beneficiary refund evm = .ok after) :
+    after.substate.logs =
+      pushTransferLog fork evm.substate.logs evm.message.currentTarget beneficiary
+        (evm.state.getAccount evm.message.currentTarget).balance := by
+  unfold finishSelfdestruct at h
+  split at h
+  · cases h
+  · obtain ⟨state, -, h⟩ := Base.bind_ok_iff.mp h
+    cases h
+    rfl
 
 end EthLib.Execution.Evm
