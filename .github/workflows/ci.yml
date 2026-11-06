@@ -208,12 +208,21 @@ jobs:
           key: ethlib-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
 
   # The vector suites run the library through the bindings, so they do not wait for the proofs.
+  # They run on each Python version that the wheels support, so a feature that an older version
+  # lacks fails here and not first in the wheel test of a release.
   suites:
+    name: suites (Python ${{ matrix.python }})
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     env:
       BUILD_TIMING_SOURCE_SHA: ${{ github.sha }}
       BUILD_TIMING_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
+      # uv sync and uv run use this Python instead of the one in .python-version.
+      UV_PYTHON: ${{ matrix.python }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -275,7 +284,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ethlib-suites-timing
+          name: ethlib-suites-timing-python-${{ matrix.python }}
           path: ${{ runner.temp }}/ethlib-suites-timing
           if-no-files-found: warn
           retention-days: 30
