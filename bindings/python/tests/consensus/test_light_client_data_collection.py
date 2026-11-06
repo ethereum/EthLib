@@ -19,7 +19,7 @@ BEACON = 112
 # The forks whose blocks the state transition of EthLib processes.
 # A case whose forks are all among them runs every block, across the fork boundaries, and its
 # served data is checked against what the full node functions give from the post states.
-TRANSITION = ("altair", "bellatrix", "capella", "deneb")
+TRANSITION = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu")
 
 
 def runs_data_collection(fork: str, name: str) -> bool:

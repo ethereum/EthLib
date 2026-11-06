@@ -97,8 +97,11 @@ The directory `operations/` holds block operation cases of `minimal.tar.gz`, cop
 A case gives a state before the operation, the operation, and the state after it when the operation is valid.
 A case without a state after it must be rejected.
 The directory keeps two cases of each handler that EthLib runs, at each fork where it runs.
-These are the block header and the proposer and attester slashings from Phase 0 to Fulu.
-They are also the attestation and the deposit from Phase 0 to Deneb, and the voluntary exit from Phase 0 to Capella.
+These are the block header from Phase 0 to Fulu, and the proposer and attester slashings from Phase 0 to Gloas.
+They are also the attestation from Phase 0 to Fulu, the deposit from Phase 0 to Electra, and the voluntary exit from Phase 0 to Gloas.
+The attestation at Electra and Fulu and the voluntary exit at Electra, Fulu and Gloas keep one case each.
+The deposit request runs at Electra and Fulu, and the withdrawal and consolidation requests from Electra to Gloas.
+After Electra the requests keep one case each.
 The sync aggregate runs from Altair to Fulu.
 The execution payload runs from Bellatrix to Fulu.
 Its cases also fix the answer of the execution layer, in `execution.yaml`.
@@ -118,7 +121,8 @@ The directory keeps two cases of each step that EthLib runs, at each fork where 
 These are justification and finalization, and the rewards and penalties, from Phase 0 to Gloas.
 The inactivity scores, the rotation of the flags and the sync committee update run from Altair to Gloas.
 The historical summaries run from Capella to Gloas.
-The registry updates run from Phase 0 to Capella, and the slashings and effective balances to Deneb.
+The registry updates, the slashings and the effective balances run from Phase 0 to Gloas.
+They keep one case each at Electra, Fulu and Gloas.
 The resets of the deposit votes, the slashings and the RANDAO mixes run from Phase 0 to Gloas.
 The historical roots run from Phase 0 to Bellatrix, and the rotation of pending attestations at Phase 0.
 They are also the proposer lookahead at Fulu and Gloas.
@@ -141,6 +145,7 @@ A `sanity/slots` case advances a state by some slots.
 A `sanity/blocks`, `finality` or `random` case runs a list of signed blocks, and must be rejected when it has no state after it.
 The directory keeps two cases of each group at each fork whose whole transition EthLib holds.
 These forks are Phase 0, Altair, Bellatrix, Capella and Deneb.
+Electra and Fulu run too, with one case of each group at each of them.
 `bindings/python/tests/consensus/test_transition.py` runs each case through the Lean transition and compares the state after it.
 
 The directory `fork/` holds upgrade cases from `minimal.tar.gz` in the same way.

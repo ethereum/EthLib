@@ -206,16 +206,16 @@ The RANDAO reveal, the vote on the deposit contract and the operations follow.
 
 The sync aggregate comes last.
 
-Electra changes the operations, which EthLib does not yet have here.
+Gloas moves the payload out of the block, which EthLib does not yet have here.
 
 So it fails as not yet specified. -/
 def processBlockAltair (config : Config) (checks : SignatureChecks)
     (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
     (block : BeaconBlock preset fork) (altair : .altair ≤ fork) :
     Except TransitionError (BeaconState preset fork) :=
-  if electra : .pectra ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if gloas : .glamsterdam ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
   else do
-    have before : fork < .glamsterdam := Nat.lt_trans (Nat.lt_of_not_le electra) (by decide)
+    have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
     let state ← processBlockHeader state block
     let state ← if bellatrix : .bellatrix ≤ fork then
         processBlockExecution config engine state block.body ⟨bellatrix, before⟩

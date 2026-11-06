@@ -160,6 +160,12 @@ inductive TransitionError where
   | unknownSyncCommitteeMember
   /-- A block is of another fork than the state at its slot. -/
   | blockForkMismatch (block state : Fork)
+  /-- From Electra: an attestation has a committee index other than zero. -/
+  | attestationIndexNotZero (index : CommitteeIndex)
+  /-- From Electra: a committee of an attestation has no attester. -/
+  | noCommitteeAttester (index : CommitteeIndex)
+  /-- From Electra: the validator of a voluntary exit has a pending partial withdrawal. -/
+  | exitPendingWithdrawal (index : ValidatorIndex)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -237,6 +243,9 @@ def TransitionError.code : TransitionError → UInt32
   | .invalidSyncCommitteeKey => 72
   | .unknownSyncCommitteeMember => 73
   | .blockForkMismatch .. => 74
+  | .attestationIndexNotZero _ => 75
+  | .noCommitteeAttester _ => 76
+  | .exitPendingWithdrawal _ => 77
 
 /-- An error of a state accessor, as an error of the transition. -/
 def liftAccessor {α : Type} (result : Except AccessorError α) : Except TransitionError α :=

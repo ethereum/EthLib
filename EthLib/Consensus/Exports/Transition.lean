@@ -151,7 +151,7 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
 def gloasOperations : List String :=
   ["payload_attestation", "execution_payload_bid", "builder_deposit_request",
     "builder_exit_request", "withdrawals", "proposer_slashing", "attester_slashing",
-    "withdrawal_request", "consolidation_request"]
+    "withdrawal_request", "consolidation_request", "voluntary_exit"]
 
 /-- The preset and the fork that UTF-8 names name, at a fork up to Gloas. -/
 def transitionPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do

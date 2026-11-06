@@ -1,0 +1,6 @@
+preset: minimal
+fork: electra
+runner: sanity
+handler: blocks
+suite: pyspec_tests
+case: invalid_is_execution_enabled_false

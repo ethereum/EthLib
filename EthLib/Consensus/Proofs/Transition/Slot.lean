@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.Execution
 public import EthLib.Consensus.Proofs.Transition.Invariants
+public import EthLib.Consensus.Proofs.Transition.Requests
 public import EthLib.Consensus.Proofs.Transition.SyncAggregate
 public import EthLib.Consensus.Proofs.Transition.Withdrawals
 
@@ -149,7 +150,7 @@ theorem processAttestation_slot {attestation : Attestation preset fork}
     · cases computed
     simp only [bind_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, _, _, _, _, raised⟩ := computed
+      _, _, raised⟩ := computed
     rw [(frame_increaseBalance raised).slot]
     unfold setEpochParticipation
     split <;> rfl
@@ -218,6 +219,93 @@ theorem processDeposit_slot {before : fork < .hegota} {deposit : Deposit}
   obtain ⟨_, _, _, _, applied⟩ := processDeposit_ok computed
   exact (applyDeposit_slot applied :)
 
+/-! ## Requests of the execution layer -/
+
+theorem computeExitEpochAndUpdateChurn_slot {electra : .pectra ≤ fork} {exitBalance : Gwei}
+    {epoch : Epoch}
+    (computed :
+      computeExitEpochAndUpdateChurn config state electra exitBalance = .ok (after, epoch)) :
+    after.slot = state.slot := by
+  simp only [computeExitEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨_, _, _, _, _, _, computed⟩ := computed
+  cases computed
+  rfl
+
+theorem computeConsolidationEpochAndUpdateChurn_slot {electra : .pectra ≤ fork} {balance : Gwei}
+    {epoch : Epoch}
+    (computed :
+      computeConsolidationEpochAndUpdateChurn config state electra balance = .ok (after, epoch)) :
+    after.slot = state.slot := by
+  simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨_, _, _, _, _, _, computed⟩ := computed
+  cases computed
+  rfl
+
+theorem switchToCompoundingValidator_slot {electra : .pectra ≤ fork} {index : ValidatorIndex}
+    (computed : switchToCompoundingValidator state electra index = .ok after) :
+    after.slot = state.slot := by
+  simp only [switchToCompoundingValidator, queueExcessActiveBalance, bind_ok_iff] at computed
+  obtain ⟨_, _, _, _, computed⟩ := computed
+  split at computed
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, rfl⟩ := computed
+    rfl
+  · cases computed
+    rfl
+
+theorem processDepositRequest_slot {electra : .pectra ≤ fork} {request : DepositRequest}
+    (computed : processDepositRequest state electra request = .ok after) :
+    after.slot = state.slot := by
+  obtain ⟨start, recorded⟩ :=
+    recordDepositRequestsStart_eq (state := state) (index := request.index)
+  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit, bind_ok_iff,
+    pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, _, rfl⟩ := computed
+  rfl
+
+theorem processWithdrawalRequest_slot {electra : .pectra ≤ fork} {request : WithdrawalRequest}
+    (computed : processWithdrawalRequest config state electra request = .ok after) :
+    after.slot = state.slot := by
+  unfold processWithdrawalRequest requestPartialWithdrawal at computed
+  simp only [bind, Except.bind, pure, Except.pure] at computed
+  repeat' split at computed
+  all_goals first
+    | (cases computed; done)
+    | (cases computed; rfl)
+    | exact (frame_initiateValidatorExit (liftAccessor_ok.mp computed)).slot
+    | skip
+  all_goals
+    rename_i pair churned _ _ _ _ _ _
+    cases computed
+    exact computeExitEpochAndUpdateChurn_slot (after := pair.1) (epoch := pair.2)
+      (liftAccessor_ok.mp churned)
+
+theorem queueConsolidation_slot {electra : .pectra ≤ fork} {sourcePosition : Nat}
+    {source : Validator} {targetIndex : ValidatorIndex}
+    (computed :
+      queueConsolidation config state electra sourcePosition source targetIndex = .ok after) :
+    after.slot = state.slot := by
+  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure] at computed
+  obtain ⟨⟨_, _⟩, churned, computed⟩ := computed
+  simp only [Except.ok.injEq] at computed
+  obtain ⟨_, _, _, _, rfl⟩ := computed
+  exact (computeConsolidationEpochAndUpdateChurn_slot churned :)
+
+theorem processConsolidationRequest_slot {electra : .pectra ≤ fork}
+    {request : ConsolidationRequest}
+    (computed : processConsolidationRequest config state electra request = .ok after) :
+    after.slot = state.slot := by
+  unfold processConsolidationRequest at computed
+  simp only [bind, Except.bind, pure, Except.pure] at computed
+  repeat' split at computed
+  all_goals first
+    | (cases computed; done)
+    | (cases computed; rfl)
+    | exact switchToCompoundingValidator_slot (liftAccessor_ok.mp computed)
+    | exact queueConsolidation_slot computed
+
 theorem processOperations_slot {body : BeaconBlockBody preset fork}
     (computed : processOperations config checks state body = .ok after) :
     after.slot = state.slot := by
@@ -226,19 +314,30 @@ theorem processOperations_slot {body : BeaconBlockBody preset fork}
   · cases computed
   simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨_, _, _, _, proposers, proposersOk, attesters, attestersOk, attested, attestedOk,
-    deposited, depositedOk, exited, exitsOk, changesOk⟩ := computed
+    deposited, depositedOk, exited, exitsOk, changed, changesOk, requestsOk⟩ := computed
   have fold {α : Type} {step : BeaconState preset fork → α → Except TransitionError _}
       (keeps : ∀ s x s', step s x = .ok s' → s'.slot = s.slot) {items : List α}
       {start finish : BeaconState preset fork} (folded : items.foldlM step start = .ok finish) :
       finish.slot = start.slot :=
     foldlM_ok_invariant (fun s : BeaconState preset fork => s.slot = start.slot)
       (fun _ _ _ same ok => (keeps _ _ _ ok).trans same) rfl folded
-  have last : after.slot = exited.slot := by
+  have last : after.slot = changed.slot := by
+    split at requestsOk
+    · simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at requestsOk
+      obtain ⟨_, depositsOk, _, withdrawalsOk, consolidationsOk⟩ := requestsOk
+      rw [fold (fun _ _ _ ok => processConsolidationRequest_slot ok) consolidationsOk,
+        fold (fun _ _ _ ok => processWithdrawalRequest_slot ok) withdrawalsOk,
+        fold (fun _ _ _ ok => processDepositRequest_slot ok) depositsOk]
+    · simp only [pure, Except.pure, Except.ok.injEq] at requestsOk
+      rw [requestsOk]
+  have changes : changed.slot = exited.slot := by
+    unfold processBlsToExecutionChanges at changesOk
     split at changesOk
-    · exact fold (fun _ _ _ ok => processBlsToExecutionChange_slot ok) changesOk
+    · rw [← Array.foldlM_toList] at changesOk
+      exact fold (fun _ _ _ ok => processBlsToExecutionChange_slot ok) changesOk
     · simp only [pure, Except.pure, Except.ok.injEq] at changesOk
       rw [changesOk]
-  rw [last, fold (fun _ _ _ ok => (frame_processVoluntaryExit ok).slot) exitsOk,
+  rw [last, changes, fold (fun _ _ _ ok => (frame_processVoluntaryExit ok).slot) exitsOk,
     fold (fun _ _ _ ok => processDeposit_slot ok) depositedOk,
     fold (fun _ _ _ ok => processAttestation_slot ok) attestedOk,
     fold (fun _ _ _ ok => (frame_processAttesterSlashing ok).slot) attestersOk,
@@ -271,10 +370,10 @@ theorem processBlock_slot {block : BeaconBlock preset fork}
   by_cases altair : Fork.altair ≤ fork
   · simp only [processBlock, altair, ↓reduceDIte] at computed
     unfold processBlockAltair at computed
-    by_cases electra : Fork.pectra ≤ fork
-    · simp only [electra, ↓reduceDIte] at computed
+    by_cases gloas : Fork.glamsterdam ≤ fork
+    · simp only [gloas, ↓reduceDIte] at computed
       cases computed
-    simp only [electra, ↓reduceDIte, bind_ok_iff] at computed
+    simp only [gloas, ↓reduceDIte, bind_ok_iff] at computed
     obtain ⟨headed, headedOk, computed⟩ := computed
     -- From Bellatrix the execution part runs between the header and the RANDAO reveal.
     obtain ⟨executed, executedOk, revealed, revealedOk, voted, votedOk, operated, operatedOk,
