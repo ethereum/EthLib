@@ -62,10 +62,7 @@ instance : SszType UInt64 where
   toValue a := .uint a.toNat
   ofValue := ofUint 8 UInt64.ofNat
 
-/-- `uint128`, the 16-byte unsigned integer.
-
-See `src/ssz/uint.py` of `ethereum/ssz-specs`, in `Uint128` and `BaseUint.encode_bytes`.
--/
+/-- `uint128`, held as a `BitVec 128`, since Lean has no 128-bit machine integer. -/
 instance : SszType (BitVec 128) where
   desc := Desc.uint128
   toValue a := .uint a.toNat
