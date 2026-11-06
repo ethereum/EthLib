@@ -39,7 +39,9 @@ The files in `SphincsSecurity/Seed/` prepare the step that removes the hidden ke
 The other directories hold the first files of the later steps.
 `Classification/` starts the description of what an accepted forgery must contain.
 `ScanSigner/`, `GraphView/` and `LazyRun/` start the analysis of the signer's hash calls, their cost, and a run whose hidden values are sampled only when read.
-`Reduction/` starts to move the oracle and the seed out of the game.
+`Reduction/` moves the oracle and the seeds out of the game.
+`Reduction/SeedElimination.lean` bounds the advantage by any bound on the win probability of a game without seeds, plus `3 q / 2^256`.
+The extra term covers a hash call that names a hidden seed.
 `CoverBound/` and `CoverPotential/` start the bound on the chance that a forgery covers every FORS tree.
 `Configurations.lean` proves, for the configuration of the proof, the size of a serialized signature and the cost of a verification.
 
@@ -68,23 +70,27 @@ The changes that follow from this are:
   The lemmas about uniform samples, events and sums of point masses use the new names of VCVio.
 - VCVio's query cache is now a structure, not a function, so a cache is built and read through its constructor and its lookup.
 - The modules use Lean's module system, as all of EthLib does.
-  VCVio's tracing handler is not exposed to importers.
-  So two statements about the hash trace of a computation are proved by simplification, not by definitional unfolding.
+  VCVio's tracing, logging and cost-writer handlers are not exposed to importers.
+  So the statements that leanVM proves by unfolding these handlers are proved by simplification here.
+  These are two statements about the hash trace of a computation, and seven about hash calls and costs in `GraphView/HashCalls.lean`, `GraphView/CountedGame.lean` and `Reduction/PreparedSample.lean`.
 - On Lean v4.35.0 the simplifier does not read the length of a byte encoding of a fixed-width digest through the width's arithmetic.
   `Scheme/Bytes.lean` gains lemmas for the lengths of the byte widths that the model uses.
   Some files set the option that lets definitional unfolding cross reducibility boundaries, each with a comment that says why.
 - `Scheme/Uniform.lean` gains a lemma: the first coordinate of a uniform pair is uniform.
 - The Mathlib that EthLib uses has no uniform probability mass function of a finite type.
-  So `Base/Prelude.lean` states its lemmas about uniform products and uniform tables for uniform samples, as equalities in distribution.
+  So `Base/Prelude.lean` and `LazyRun/Resample.lean` state their lemmas about uniform products, pairs and tables for uniform samples, as equalities in distribution.
 - The fixed-function worlds of the reduction answer hash queries from a fixed function and make private draws.
   leanVM runs them in Mathlib's probability mass functions, and the Mathlib that EthLib uses has no uniform one of a finite type.
   Here they are probabilistic computations, and a private draw is a query to the uniform oracle.
-  Two of their lemmas then hold as equalities of computations, which is stronger than the equalities of distributions of the source.
+  Three of their lemmas then hold as equalities of computations, which is stronger than the equalities of distributions of the source.
+  The third is in `Reduction/SeedElimination.lean`.
+  A lemma says that handlers with equal distributions give simulations with equal distributions.
+  It now takes only handlers into probabilistic computations, the only handlers that the proof uses.
 - `Base/Prelude.lean` gains a lemma: two independent draws have the same joint distribution in either order.
 - `Base/Domination.lean` and `Base/Virtual.lean` import the parts of Mathlib that they use instead of all of Mathlib.
   A file that imports all of Mathlib needs more memory than EthLib's limit per file.
 - `LazyRun/Reveal.lean` states that revealing a coordinate commutes with sampling the rest of a uniform table as an equality in distribution.
-- `lake exe check-decls` rejects `opaque` declarations, so the sampling instance of `Seed/Model.lean` is an irreducible definition instead.
+- `lake exe check-decls` rejects `opaque` declarations, so the sampling instances of `Seed/Model.lean`, `GraphView/Sampling.lean` and `LazyRun/GraphSampling.lean` are irreducible definitions instead.
 - No file raises the heartbeat limit.
 - Arguments that the simplifier does not use, deprecated lemma names and unused section variables are removed, so the files build without warnings.
 
