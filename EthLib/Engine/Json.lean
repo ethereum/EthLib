@@ -72,6 +72,7 @@ def bytesOf (what : String) (upper : Bool) (j : Json) : Decode ByteArray := do
       match hexValue upper c, hexValue upper d with
       | some high, some low => out := out.push (16 * high + low)
       | _, _ => invalid s!"{what}: not a hex digit"
+    -- The count is even, so both digits of each byte exist and this case never happens.
     | _, _ => invalid s!"{what}: odd number of hex digits"
   return out
 
