@@ -67,7 +67,7 @@ def padG2 (raw : List UInt8) : List UInt8 :=
 /-- The big-endian integer of the bytes, if it is below the field modulus. -/
 def bytesToFieldElement (raw : List UInt8) : Except Bls12381Error Fp :=
   let value := bytesToNat raw
-  if h : value < Fp.modulus then .ok ⟨value, h⟩ else .error .invalidFieldElement
+  if value < Fp.modulus then .ok (Fp.ofNat value) else .error .invalidFieldElement
 
 /-- An element of `Fp2`: `c0` from the first 48 bytes, then `c1` from the next 48. -/
 def bytesToFq2 (raw : List UInt8) : Except Bls12381Error Fp2 := do

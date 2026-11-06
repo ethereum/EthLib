@@ -122,8 +122,9 @@ theorem unpadFp_bytesToFieldElement_isOk {padded : List UInt8} (hlength : padded
 /-- The 48 bytes of a field element decode back to it. -/
 theorem bytesToFieldElement_natToBytes (x : Fp) :
     bytesToFieldElement (natToBytes 48 x.val) = .ok x := by
-  have hlt : x.val < 256 ^ 48 := Nat.lt_trans x.isLt (by decide)
-  simp [bytesToFieldElement, EthLib.Base.bytesToNat_natToBytes_of_lt hlt, x.isLt]
+  have hlt : x.val < 256 ^ 48 := Nat.lt_trans (Fp.val_lt x) (by decide)
+  have hx : Fp.ofNat x.val = x := Fp.ext (Fp.val_ofNat_of_lt (Fp.val_lt x))
+  simp [bytesToFieldElement, EthLib.Base.bytesToNat_natToBytes_of_lt hlt, Fp.val_lt x, hx]
 
 /-- A padded field element decodes back to it. -/
 theorem unpadFp_bytesToFieldElement_pad (x : Fp) :
@@ -135,8 +136,9 @@ theorem natToBytes_bytesToFieldElement {raw : List UInt8} (hlength : raw.length 
     (h : bytesToFieldElement raw = .ok x) : natToBytes 48 x.val = raw := by
   simp only [bytesToFieldElement] at h
   split at h
-  · cases h
-    rw [← hlength]
+  next hlt =>
+    cases h
+    rw [Fp.val_ofNat_of_lt hlt, ← hlength]
     exact EthLib.Base.natToBytes_bytesToNat raw
   · cases h
 
