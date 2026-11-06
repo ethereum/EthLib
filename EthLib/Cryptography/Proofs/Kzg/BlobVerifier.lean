@@ -624,13 +624,9 @@ theorem verifyBlobKzgProofBatch_of_blobOpeningValid (laws : Bls.PairingLaws) {s 
     exact heq
   have hroot := (verifyBlobKzgProofBatch_ok_iff_root laws hs y
     (fun i hi _ hu => represents_scalarOf
-      (hcs y.commitments[i]! (by
-        rw [getElem!_pos y.commitments i hi]
-        exact Array.getElem_mem hi)) hu)
+      (hcs y.commitments[i]! (getElem!_pos y.commitments i hi ▸ Array.getElem_mem hi)) hu)
     (fun i hi _ hu => represents_scalarOf
-      (hps y.proofs[i]! (by
-        rw [getElem!_pos y.proofs i hi]
-        exact Array.getElem_mem hi)) hu) hb).mpr
+      (hps y.proofs[i]! (getElem!_pos y.proofs i hi ▸ Array.getElem_mem hi)) hu) hb).mpr
     (by rw [hzero, Polynomial.eval_zero])
   rw [hb, hroot]
 

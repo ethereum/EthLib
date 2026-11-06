@@ -20,7 +20,6 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - Output `i` is the image of input `i`, for a list, an array or a vector.
 - A failed map fails on some input, and succeeds on every input before it.
 - A property that each step keeps holds after a successful fold.
-- An entry of an array, read in range, is a member of the array.
 
 A mapped error leaves a success unchanged.
 -/

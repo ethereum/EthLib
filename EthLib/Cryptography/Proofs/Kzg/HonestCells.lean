@@ -268,12 +268,8 @@ theorem cellOpeningValid_of_errorPoly_eq_zero {s : TrustedSetup} {τ : Fr} {y : 
   obtain ⟨hvc, hvp⟩ := validates_of_verifyCellKzgProofBatch h
   obtain ⟨-, hdidx, -⟩ := dedupCommitments_spec y.commitments
   obtain ⟨hesz, hevk⟩ := array_mapM_ok hev
-  have hvck := hvc y.commitments[k]! (by
-    rw [getElem!_pos y.commitments k hk]
-    exact Array.getElem_mem hk)
-  have hvpk := hvp y.proofs[k]! (by
-    rw [getElem!_pos y.proofs k (h₂ ▸ hk)]
-    exact Array.getElem_mem (h₂ ▸ hk))
+  have hvck := hvc y.commitments[k]! (getElem!_pos y.commitments k hk ▸ Array.getElem_mem hk)
+  have hvpk := hvp y.proofs[k]! (getElem!_pos y.proofs k (h₂ ▸ hk) ▸ Array.getElem_mem (h₂ ▸ hk))
   obtain ⟨C, hC⟩ := exists_validateKzgG1Point_of_validateKzgG1 hvck
   obtain ⟨P, hP⟩ := exists_validateKzgG1Point_of_validateKzgG1 hvpk
   have hv := (cellErrorPoly_eq_zero_iff τ _ _ _ _ _).mp hz k (by
@@ -350,13 +346,9 @@ theorem verifyCellKzgProofBatch_of_cellOpeningValid (laws : Bls.PairingLaws) {s 
     errorPoly_eq_zero_of_cellOpeningValid h₁ h₃ hv
   have hroot := (verifyCellKzgProofBatch_ok_iff_root laws hs y
     (fun k hk _ hu => represents_scalarOf
-      (hbs y.commitments[k]! (by
-        rw [getElem!_pos y.commitments k hk]
-        exact Array.getElem_mem hk)) hu)
+      (hbs y.commitments[k]! (getElem!_pos y.commitments k hk ▸ Array.getElem_mem hk)) hu)
     (fun k hk _ hu => represents_scalarOf
-      (hps y.proofs[k]! (by
-        rw [getElem!_pos y.proofs k hk]
-        exact Array.getElem_mem hk)) hu) hb).mpr
+      (hps y.proofs[k]! (getElem!_pos y.proofs k hk ▸ Array.getElem_mem hk)) hu) hb).mpr
     (by rw [hz, Polynomial.eval_zero])
   rw [hb, hroot]
 
