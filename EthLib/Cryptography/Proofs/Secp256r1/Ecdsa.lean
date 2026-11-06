@@ -85,6 +85,14 @@ theorem verify_of_not_isOnCurve {q : Point} (hq : q.isOnCurve = false) (e r s : 
     · rfl
   · rfl
 
+/-- A key that verifies is never `(0, 0)`, since that point is off the curve. -/
+theorem verify_affine_ne_zero {qx qy : Fp} {e r s : Nat}
+    (h : verify (.affine qx qy) e r s = true) : ¬(qx.val = 0 ∧ qy.val = 0) := by
+  rintro ⟨hx, hy⟩
+  rw [show qx = 0 from Fin.ext hx, show qy = 0 from Fin.ext hy,
+    verify_of_not_isOnCurve isOnCurve_affine_zero_zero] at h
+  cases h
+
 /-- Completeness: a signature from the signing operation of SEC 1 v2 §4.1.3 verifies.
 
 The signer has a nonzero private key `d` and the nonce `k`.

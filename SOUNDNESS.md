@@ -658,14 +658,16 @@ No theorem relates the module to the execution-specs code it follows, which call
 ### P256VERIFY
 
 The P256VERIFY theorems rest on the secp256r1 ones, and are in `Execution/Proofs/Evm/Precompiles/P256Verify.lean`.
-`isValid_callData` proves that 160 bytes of a public key read back as that key.
-`p256Verify_callData_sign` proves that a signature from the signing operation of SEC 1 returns the word 1 under its public key, when the call has 6900 gas.
-`p256Verify_callData_neg_s` proves that `(r, s)` and `(r, n - s)` give the same result at every gas limit.
-EIP-7951 accepts both, and the call does not choose the low one.
+`isValid_callData` proves that, on the 160-byte call data of EIP-7951 with an affine public key, the input check gives the result of ECDSA verification.
+`p256Verify_callData_sign` proves that a signature from the signing operation of SEC 1 returns the word 1 under its public key, when the call has at least 6900 gas.
+`p256Verify_callData_neg_s` proves that, for `s` in `(0, n)`, `(r, s)` and `(r, n - s)` give the same result at every gas limit.
+Either both signatures are valid or neither is, so the call does not require a low `s`.
 `exists_p256Verify_eq_ok_valid` proves that the valid output is reachable.
-The witness uses the private key 1 and the nonce 1 on the hash 0, so the rebuilt point is the base point.
+The witness signs the hash 0 with the private key 1 and the nonce 1.
+So the public key and the point `R = k G` are both the base point.
 
-No theorem relates the module to the execution-specs code it follows.
+No theorem checks the module against the EIP-7951 pseudocode line by line.
+The Python test `bindings/python/tests/precompile/test_p256verify.py` runs it on the 781 test vectors of EIP-7951, which the EIP derives from Wycheproof.
 
 ### EIP-2537 precompiles
 

@@ -10,7 +10,7 @@ import EthLib.Cryptography.Proofs.Secp256r1.Ecdsa
 - The call fails exactly when the gas is below 6900.
 - With enough gas, a wrong length gives empty output, and every output is the word 1 or empty.
 - With enough gas, the call returns the word 1 on 160 valid bytes, and empty output otherwise.
-- The 160-byte call data of EIP-7951 reads back as its hash, signature and public key.
+- On the 160-byte call data of EIP-7951, the input check gives the result of ECDSA verification.
 - A valid signature under an affine public key returns the word 1, and so does a SEC 1 signature.
 - `(r, s)` and `(r, n - s)` give the same result at every gas limit.
 - A signature component outside `(0, n)` never verifies.
@@ -68,7 +68,9 @@ theorem verify_of_s_out (q : Point) (e r : Nat) {s : Nat} (hs : ¬(0 < s ∧ s <
 
 /-- The 160-byte call data of EIP-7951, Input.
 
-It concatenates `e`, `r`, `s`, `qx` and `qy` as 32-byte big-endian words. -/
+It concatenates `e`, `r`, `s`, `qx` and `qy` as 32-byte big-endian words.
+
+Each value is written modulo 2^256. -/
 def callData (e r s qx qy : Nat) : ByteArray :=
   ⟨(natToBytes 32 e ++ natToBytes 32 r ++ natToBytes 32 s ++ natToBytes 32 qx
     ++ natToBytes 32 qy).toArray⟩
@@ -77,25 +79,18 @@ def callData (e r s qx qy : Nat) : ByteArray :=
 theorem callData_size (e r s qx qy : Nat) : (callData e r s qx qy).size = INPUT_BYTES := by
   simp [callData, INPUT_BYTES, ByteArray.size, natToBytes_length]
 
-/-- `(0, 0)` does not lie on secp256r1, so EIP-7951 uses it for the point at infinity. -/
-theorem isOnCurve_zero : (Point.affine 0 0).isOnCurve = false := by
-  decide
+/-- A key that verifies passes the check of the input against `(0, 0)`. -/
+private theorem not_zero_of_verify {qx qy : Fp} {e r s : Nat}
+    (hv : verify (.affine qx qy) e r s = true) : (!decide (qx.val = 0 ∧ qy.val = 0)) = true := by
+  simpa only [Bool.not_eq_true', decide_eq_false_iff_not] using verify_affine_ne_zero hv
 
-/-- `(0, 0)` verifies no signature, since it does not lie on the curve. -/
-theorem verify_ne_zero {qx qy : Fp} {e r s : Nat} (h : verify (.affine qx qy) e r s = true) :
-    ¬(qx.val = 0 ∧ qy.val = 0) := by
-  rintro ⟨hx, hy⟩
-  have hqx : qx = 0 := Fin.ext hx
-  have hqy : qy = 0 := Fin.ext hy
-  have h0 : (Point.affine qx qy).isOnCurve = false := by
-    rw [hqx, hqy]
-    exact isOnCurve_zero
-  rw [verify_of_not_isOnCurve h0] at h
-  cases h
+/-- The input check of EIP-7951 accepts the bytes exactly when two conditions hold.
 
-/-- The input check of EIP-7951, Signature Verification Algorithm, accepts valid keys.
+Both coordinates of the key lie below `p`.
 
-The coordinates of the key lie below `p`, are not both 0, and pass `verify`. -/
+The signature verifies under that key.
+
+A key that verifies is never `(0, 0)`, since that point is off the curve. -/
 theorem isValid_eq_true_iff (bytes : List UInt8) :
     isValid bytes = true ↔
       ∃ (hx : bytesToNat ((bytes.drop 96).take 32) < Fp.modulus)
@@ -112,7 +107,7 @@ theorem isValid_eq_true_iff (bytes : List UInt8) :
       exact ⟨hx, hy, h.2⟩
     · rintro ⟨hx', hy', hv⟩
       rw [Bool.and_eq_true]
-      exact ⟨decide_eq_false_iff_not.mpr (verify_ne_zero hv) ▸ rfl, hv⟩
+      exact ⟨not_zero_of_verify hv, hv⟩
   · constructor
     · intro h
       cases h
@@ -127,7 +122,9 @@ theorem isValid_eq_true_iff (bytes : List UInt8) :
 private theorem valid_ne_empty : VALID ≠ ByteArray.empty := by
   decide
 
-/-- A call returns the word 1 on 160 valid bytes with 6900 gas, from EIP-7951, Gas Schedule. -/
+/-- A call returns the word 1 exactly when three conditions hold.
+
+It has at least 6900 gas, its input has 160 bytes, and the input check accepts them. -/
 theorem p256Verify_eq_ok_valid_iff (data : ByteArray) (gas : Nat) :
     p256Verify data gas = .ok VALID ↔
       GAS_P256VERIFY ≤ gas ∧ data.size = INPUT_BYTES ∧ isValid data.data.toList = true := by
@@ -142,7 +139,9 @@ theorem p256Verify_eq_ok_valid_iff (data : ByteArray) (gas : Nat) :
       · simp [hv, valid_ne_empty.symm]
     · simp [hsize, valid_ne_empty.symm]
 
-/-- With enough gas, a call returns empty output when the length is not 160 or the check fails. -/
+/-- A call returns empty output exactly when it has at least 6900 gas and rejects its input.
+
+It rejects the input when its length is not 160 or the input check fails. -/
 theorem p256Verify_eq_ok_empty_iff (data : ByteArray) (gas : Nat) :
     p256Verify data gas = .ok .empty ↔
       GAS_P256VERIFY ≤ gas ∧ (data.size ≠ INPUT_BYTES ∨ isValid data.data.toList = false) := by
@@ -172,38 +171,13 @@ private theorem isValid_callData_mod (e r s qx qy : Nat) :
               (e % 2 ^ 256) (r % 2 ^ 256) (s % 2 ^ 256)
         else false
       else false := by
-  have h32 : ∀ n, (natToBytes 32 n).length = 32 := natToBytes_length 32
-  have hp256 : (256 : Nat) ^ 32 = 2 ^ 256 := by decide
   rw [callData_list]
   unfold isValid
-  have ht0 : (natToBytes 32 e ++ (natToBytes 32 r ++ (natToBytes 32 s ++
-      (natToBytes 32 qx ++ natToBytes 32 qy)))).take 32 = natToBytes 32 e :=
-    List.take_left' (h32 e)
-  have hd32 : (natToBytes 32 e ++ (natToBytes 32 r ++ (natToBytes 32 s ++
-      (natToBytes 32 qx ++ natToBytes 32 qy)))).drop 32 =
-      natToBytes 32 r ++ (natToBytes 32 s ++ (natToBytes 32 qx ++ natToBytes 32 qy)) :=
-    List.drop_left' (h32 e)
-  have hd64 : (natToBytes 32 e ++ (natToBytes 32 r ++ (natToBytes 32 s ++
-      (natToBytes 32 qx ++ natToBytes 32 qy)))).drop 64 =
-      natToBytes 32 s ++ (natToBytes 32 qx ++ natToBytes 32 qy) := by
-    rw [show (64 : Nat) = 32 + 32 from rfl, ← List.drop_drop, hd32, List.drop_left' (h32 r)]
-  have hd96 : (natToBytes 32 e ++ (natToBytes 32 r ++ (natToBytes 32 s ++
-      (natToBytes 32 qx ++ natToBytes 32 qy)))).drop 96 =
-      natToBytes 32 qx ++ natToBytes 32 qy := by
-    rw [show (96 : Nat) = 64 + 32 from rfl, ← List.drop_drop, hd64, List.drop_left' (h32 s)]
-  have hd128 : (natToBytes 32 e ++ (natToBytes 32 r ++ (natToBytes 32 s ++
-      (natToBytes 32 qx ++ natToBytes 32 qy)))).drop 128 = natToBytes 32 qy := by
-    rw [show (128 : Nat) = 96 + 32 from rfl, ← List.drop_drop, hd96, List.drop_left' (h32 qx)]
-  rw [ht0, hd32, hd64, hd96, hd128, List.take_left' (h32 r), List.take_left' (h32 s),
-    List.take_left' (h32 qx)]
-  dsimp only
-  simp only [bytesToNat_natToBytes, hp256]
+  simp [List.drop_append, natToBytes_length, List.drop_eq_nil_of_le, bytesToNat_natToBytes]
 
-/-- On the 160 bytes of a public key, `isValid` runs `verify`, from EIP-7951, Input.
+/-- On call data with an affine key, the input check gives the result of ECDSA verification.
 
-The hash and the signature fit in 32 bytes.
-
-The key `(0, 0)` fails both sides, since it does not lie on the curve. -/
+The hash, `r` and `s` each fit in 32 bytes. -/
 theorem isValid_callData {e r s : Nat} (he : e < 2 ^ 256) (hr : r < 2 ^ 256) (hs : s < 2 ^ 256)
     (qx qy : Fp) :
     isValid (callData e r s qx.val qy.val).data.toList = verify (.affine qx qy) e r s := by
@@ -217,11 +191,18 @@ theorem isValid_callData {e r s : Nat} (he : e < 2 ^ 256) (hr : r < 2 ^ 256) (hs
   simp only [Fin.eta]
   cases hv : verify (.affine qx qy) e r s
   · simp
-  · exact decide_eq_false_iff_not.mpr (verify_ne_zero hv) ▸ rfl
+  · rw [Bool.and_true]
+    exact not_zero_of_verify hv
 
-/-- A call of five 32-byte words returns the word 1 with 6900 gas when `verify` accepts the key.
+/-- A call on five words returns the word 1 exactly when three conditions hold.
 
-The words are the hash, the signature and the two coordinates, from EIP-7951, Input. -/
+The call has at least 6900 gas.
+
+Both coordinates of the key lie below `p`.
+
+The signature verifies under that key.
+
+The hash, `r`, `s` and the two coordinates each fit in 32 bytes, from EIP-7951, Input. -/
 theorem p256Verify_callData_eq_ok_valid_iff {e r s qx qy : Nat} (he : e < 2 ^ 256)
     (hr : r < 2 ^ 256) (hs : s < 2 ^ 256) (hqx : qx < 2 ^ 256) (hqy : qy < 2 ^ 256) (gas : Nat) :
     p256Verify (callData e r s qx qy) gas = .ok VALID ↔
@@ -244,9 +225,9 @@ theorem p256Verify_callData_eq_ok_valid_iff {e r s qx qy : Nat} (he : e < 2 ^ 25
       cases h
   · rintro ⟨hx, hy, hv⟩
     rw [dite_eq_left hx, dite_eq_left hy, Bool.and_eq_true]
-    exact ⟨decide_eq_false_iff_not.mpr (verify_ne_zero hv) ▸ rfl, hv⟩
+    exact ⟨not_zero_of_verify hv, hv⟩
 
-/-- A call returns the word 1 when `verify` accepts the public key, from EIP-7951, Input.
+/-- A call returns the word 1 when the signature verifies under an affine key.
 
 The hash fits in 32 bytes, and the call has at least 6900 gas.
 
@@ -261,27 +242,15 @@ theorem p256Verify_callData_of_verify {qx qy : Fp} {e r s gas : Nat} (he : e < 2
     (Nat.lt_trans qy.isLt (by decide))]
   exact ⟨hgas, qx.isLt, qy.isLt, by simpa [Fin.eta] using hv⟩
 
-/-- A nonzero scalar gives an affine public key: `d G` is not the point at infinity. -/
-theorem exists_mul_generator_eq_affine {d : Fn} (hd : d ≠ 0) :
-    ∃ qx qy : Fp, Point.mul d Point.generator = .affine qx qy := by
-  have hne : Point.mul d Point.generator ≠ .infinity := by
-    intro h
-    have h0 := congrArg Point.toPoint h
-    rw [Point.toPoint_mul' d Point.isOnCurve_generator, Point.toPoint_infinity, smul_eq_zero] at h0
-    rcases h0 with h0 | h0
-    · exact hd (Fn.toZMod.injective (h0.trans (map_zero _).symm))
-    · exact Point.toPoint_generator_ne_zero h0
-  cases hq : Point.mul d Point.generator with
-  | infinity => exact absurd hq hne
-  | affine qx qy => exact ⟨qx, qy, rfl⟩
-
 /-- A signature from SEC 1 v2 §4.1.3 returns the word 1 under its public key.
 
-The private key `d` and the nonce `k` are nonzero, and the hash `e` fits in 32 bytes.
+`d` is nonzero, and `k G` is an affine point with x-coordinate `rx`, so `k` is nonzero.
 
-`R = k G` has coordinate `rx`, `r = rx mod n`, and `s = k^(-1) (e + r d)`.
+The hash `e` fits in 32 bytes, `r = rx mod n`, and `s = k^(-1) (e + r d)`.
 
-Neither `r` nor `s` is zero, `Q = d G` is the affine key `(qx, qy)`, and the call has 6900 gas. -/
+Neither `r` nor `s` is zero, and `Q = d G` is the affine key `(qx, qy)`.
+
+The call has at least 6900 gas. -/
 theorem p256Verify_callData_sign (d k : Fn) {e : Nat} (he : e < 2 ^ 256) (hd : d ≠ 0)
     {rx ry qx qy : Fp} (hR : Point.mul k Point.generator = .affine rx ry)
     (hr : rx.val % Fn.modulus ≠ 0)
@@ -292,9 +261,11 @@ theorem p256Verify_callData_sign (d k : Fn) {e : Nat} (he : e < 2 ^ 256) (hd : d
       qx.val qy.val) gas = .ok VALID :=
   p256Verify_callData_of_verify he hgas (hQ ▸ verify_sign d k e hd hR hr hs)
 
-/-- `(r, s)` and `(r, n - s)` give the same result at every gas limit, from EIP-7951, Malleability.
+/-- For `s` in `(0, n)`, `(r, s)` and `(r, n - s)` give the same result at every gas limit.
 
-Both signatures are valid together, so the call does not choose the low one. -/
+EIP-7951 states this in its Malleability section.
+
+Either both signatures are valid or neither is, so the call does not require a low `s`. -/
 theorem p256Verify_callData_neg_s (e r qx qy : Nat) {s : Nat} (hs : 0 < s ∧ s < Fn.modulus)
     (gas : Nat) :
     p256Verify (callData e r (Fn.modulus - s) qx qy) gas =
@@ -316,11 +287,11 @@ theorem p256Verify_callData_neg_s (e r qx qy : Nat) {s : Nat} (hs : 0 < s ∧ s 
     · rw [dite_eq_left hx, dite_eq_right hy, dite_eq_left hx, dite_eq_right hy]
   · rw [dite_eq_right hx, dite_eq_right hx]
 
-/-- The hypotheses of a valid call are reachable: `d = k = 1` and `e = 0` sign `G` under `G`.
+/-- Some call data returns the word 1 with 6900 gas.
 
-`1 • G = G`, so the witness does not run the 256-step scalar multiplication.
+The witness signs the hash 0 with the private key 1 and the nonce 1.
 
-The call returns the word 1, so the valid branch is not vacuous. -/
+So the key and `R` are both the base point. -/
 theorem exists_p256Verify_eq_ok_valid :
     ∃ data : ByteArray, p256Verify data GAS_P256VERIFY = .ok VALID := by
   let d : Fn := 1
@@ -328,6 +299,7 @@ theorem exists_p256Verify_eq_ok_valid :
   let gx : Fp := match Point.generator with | .affine x _ => x | .infinity => 0
   let gy : Fp := match Point.generator with | .affine _ y => y | .infinity => 0
   have hG : Point.generator = .affine gx gy := rfl
+  -- `1 G = G` in the group, so the proof does not run the 256-step scalar multiplication.
   have hmul : Point.mul k Point.generator = Point.generator := by
     apply (Point.toPoint_inj (Point.isOnCurve_mul k Point.isOnCurve_generator)
       Point.isOnCurve_generator).mp
@@ -353,7 +325,7 @@ theorem exists_p256Verify_eq_ok_valid :
 /-- Two errors with one code come from one constructor. -/
 theorem P256VerifyError.code_injective (e₁ e₂ : P256VerifyError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by
-  -- The only constructor is `outOfGas`, so both errors have its index.
+  -- The error type has one constructor, so both errors have its index.
   cases e₁
   cases e₂
   rfl
