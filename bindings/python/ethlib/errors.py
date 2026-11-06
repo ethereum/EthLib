@@ -201,6 +201,10 @@ class EngineError(EthLibError, ValueError):
     """An Engine API method returned a JSON-RPC error, whose code is the negative of this code."""
 
 
+class ChainError(EthLibError, ValueError):
+    """A chain configuration was malformed, with code 0."""
+
+
 __all__ = [
     "EthLibError",
     "KzgError",
@@ -241,4 +245,5 @@ __all__ = [
     "EvmError",
     "FeesError",
     "EngineError",
+    "ChainError",
 ]

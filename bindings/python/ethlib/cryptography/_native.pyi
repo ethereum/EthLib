@@ -927,6 +927,10 @@ def hoodi_active_fork(number: int, timestamp: int) -> bytes:
     """The name of the active fork of Hoodi at a block, or no bytes when no fork is active."""
     ...
 
+def active_fork(config: bytes, number: int, timestamp: int) -> bytes:
+    """The name of the active fork of a configured chain at a block, or no bytes when none is active."""
+    ...
+
 def engine_new_payload(config: bytes, request: bytes) -> bytes:
     """The payload status of an `engine_newPayload` request, without the parent's state."""
     ...

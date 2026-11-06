@@ -62,6 +62,7 @@ PyObject* AES_ERROR;
 PyObject* CONCAT_KDF_ERROR;
 PyObject* BLOCK_ERROR;
 PyObject* ENGINE_ERROR;
+PyObject* CHAIN_ERROR;
 PyObject* RLP_ERROR;
 PyObject* SSZ_ERROR;
 PyObject* SNAPPY_ERROR;
@@ -776,6 +777,7 @@ static PyMethodDef methods[] = {
   {"state_rewards_root", py_state_rewards_root, METH_VARARGS, DOC_state_rewards_root},
   {"mainnet_active_fork", py_mainnet_active_fork, METH_VARARGS, DOC_mainnet_active_fork},
   {"hoodi_active_fork", py_hoodi_active_fork, METH_VARARGS, DOC_hoodi_active_fork},
+  {"active_fork", py_active_fork, METH_VARARGS, DOC_active_fork},
   {"engine_new_payload", py_engine_new_payload, METH_VARARGS, DOC_engine_new_payload},
   {"engine_new_payload_on_chain", py_engine_new_payload_on_chain, METH_VARARGS,
    DOC_engine_new_payload_on_chain},
@@ -841,6 +843,7 @@ PyInit__native(void) {
     TRANSITION_ERROR = PyObject_GetAttrString(errors, "TransitionError");
     LIGHT_CLIENT_ERROR = PyObject_GetAttrString(errors, "LightClientError");
     FORK_CHOICE_ERROR = PyObject_GetAttrString(errors, "ForkChoiceError");
+    CHAIN_ERROR = PyObject_GetAttrString(errors, "ChainError");
     Py_DECREF(errors);
     if (PyErr_Occurred()) return NULL;
 

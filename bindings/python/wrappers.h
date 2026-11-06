@@ -170,6 +170,7 @@ extern PyObject* ENGINE_ERROR;
 extern PyObject* TRANSITION_ERROR;
 extern PyObject* LIGHT_CLIENT_ERROR;
 extern PyObject* FORK_CHOICE_ERROR;
+extern PyObject* CHAIN_ERROR;
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
@@ -441,6 +442,7 @@ PyObject* py_state_rewards_root                           (PyObject* self, PyObj
 
 PyObject* py_mainnet_active_fork                          (PyObject* self, PyObject* args);
 PyObject* py_hoodi_active_fork                            (PyObject* self, PyObject* args);
+PyObject* py_active_fork                                  (PyObject* self, PyObject* args);
 
 PyObject* py_engine_new_payload                          (PyObject* self, PyObject* args);
 PyObject* py_engine_new_payload_on_chain                 (PyObject* self, PyObject* args);
