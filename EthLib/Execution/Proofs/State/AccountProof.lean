@@ -19,13 +19,15 @@ Or it finds two keys of the trie with one hash.
 
 The same holds for each slot, against the storage trie.
 
+A slot that the check reports absent also has the word `0` in the answer.
+
 Completeness: the proof that the trie builds for the address passes the check.
 
 It passes with the fields of the account that the trie holds.
 
 It reports an address without a value as absent.
 
-The same holds for each slot.
+The same holds for each slot, when the answer gives the word `0` to a slot without a value.
 
 The state and storage tries of a state have distinct keys, so soundness holds for them as stated.
 
@@ -80,7 +82,7 @@ theorem verifySlot_eq_ok {storageRoot : Hash32} {index : Nat} {s : StorageProof}
     ∃ value, verifyProof hash storageRoot true ⟨s.key.toArray⟩ s.proof = .ok value ∧
       match value with
       | some bytes => (Codec.decode bytes : Except RlpError U256) = .ok s.value ∧ outcome = .set
-      | none => outcome = .absent := by
+      | none => s.value = 0 ∧ outcome = .absent := by
   unfold verifySlot at h
   cases hv : verifyProof hash storageRoot true ⟨s.key.toArray⟩ s.proof with
   | error e => simp [hv, Except.mapError, bind, Except.bind] at h
@@ -89,8 +91,12 @@ theorem verifySlot_eq_ok {storageRoot : Hash32} {index : Nat} {s : StorageProof}
     simp only [hv, Except.mapError, bind, Except.bind] at h
     cases value with
     | none =>
-      simp only [pure, Except.pure, Except.ok.injEq] at h
-      exact h.symm
+      by_cases hz : s.value = 0
+      · simp [hz, pure, Except.pure] at h
+        exact ⟨hz, h.symm⟩
+      · -- The simp set writes the literal of the definition as `0#256`.
+        have hz' : ¬s.value = 0#256 := hz
+        simp [hz', throw, throwThe, MonadExceptOf.throw] at h
     | some bytes =>
       cases hd : (Codec.decode bytes : Except RlpError U256) with
       | error e => simp [hd] at h
@@ -186,7 +192,7 @@ theorem verifyAccount_sound {trie : Trie} {stateRoot : Hash32} {honest : List By
 
 When the check passes, the trie gives the slot the encoding of the word of the answer.
 
-When it reports the slot absent, the trie gives the slot no value.
+When it reports the slot absent, the trie gives the slot no value, and the answer gives it `0`.
 
 Otherwise a search finds a collision with the trie's own proof, or two keys with one hash. -/
 theorem verifySlot_sound {trie : Trie} {storageRoot : Hash32} {honest : List ByteArray}
@@ -197,7 +203,7 @@ theorem verifySlot_sound {trie : Trie} {storageRoot : Hash32} {honest : List Byt
     (h : verifySlot hash storageRoot index s = .ok outcome) :
     (match valueAt hash trie ⟨s.key.toArray⟩ with
       | some bytes => (Codec.decode bytes : Except RlpError U256) = .ok s.value ∧ outcome = .set
-      | none => outcome = .absent) ∨
+      | none => s.value = 0 ∧ outcome = .absent) ∨
       (∃ pair, findProofCollision hash s.proof honest = some pair ∧ IsCollision hash pair) ∨
       ∃ pair, findPathCollision hash trie = some pair ∧ IsCollision hash pair := by
   obtain ⟨value, hverify, hvalue⟩ := verifySlot_eq_ok h
@@ -232,7 +238,7 @@ theorem verifySlot_sound_storage {storage : Std.ExtTreeMap Bytes32 U256}
     (h : verifySlot hash storageRoot index s = .ok outcome) :
     (match valueAt hash ⟨true, entries⟩ ⟨s.key.toArray⟩ with
       | some bytes => (Codec.decode bytes : Except RlpError U256) = .ok s.value ∧ outcome = .set
-      | none => outcome = .absent) ∨
+      | none => s.value = 0 ∧ outcome = .absent) ∨
       (∃ pair, findProofCollision hash s.proof honest = some pair ∧ IsCollision hash pair) ∨
       ∃ pair, findPathCollision hash ⟨true, entries⟩ = some pair ∧ IsCollision hash pair :=
   verifySlot_sound hroot rfl hhonest (storageEntries_nodup hentries) h
@@ -269,7 +275,7 @@ theorem verifyAccount_getProof {trie : Trie} {stateRoot : Hash32} {p : AccountPr
 
 It passes when the answer has the word that the trie holds.
 
-It reports a slot without a value as absent, whatever the word of the answer.
+It reports a slot without a value as absent, when the answer gives it the word `0`.
 
 The keys of the trie must have distinct paths. -/
 theorem verifySlot_getProof {trie : Trie} {storageRoot : Hash32} {index : Nat} {s : StorageProof}
@@ -280,13 +286,14 @@ theorem verifySlot_getProof {trie : Trie} {storageRoot : Hash32} {index : Nat} {
     | some bytes =>
       (Codec.decode bytes : Except RlpError U256) = .ok s.value →
         verifySlot hash storageRoot index s = .ok .set
-    | none => verifySlot hash storageRoot index s = .ok .absent := by
+    | none => s.value = 0 → verifySlot hash storageRoot index s = .ok .absent := by
   have hverify := verifyProof_getProof hash hroot hhonest hpaths
   rw [hsecured] at hverify
   unfold verifySlot
   cases hv : valueAt hash trie ⟨s.key.toArray⟩ with
   | none =>
-    simp [hverify, hv, Except.mapError, bind, Except.bind, pure, Except.pure]
+    intro hz
+    simp [hverify, hv, hz, Except.mapError, bind, Except.bind, pure, Except.pure]
   | some bytes =>
     intro hd
     simp [hverify, hv, hd, Except.mapError, bind, Except.bind, pure, Except.pure]

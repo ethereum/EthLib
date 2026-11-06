@@ -69,7 +69,7 @@ def verify_account_proof(state_root: bytes, answer: dict) -> list[bool] | None:
     # and an answer that does not hold raises TrieError.
     # None means that the proof shows no account at the address: no field or slot is judged.
     # Otherwise the fields hold, and each slot is True when it is set and holds its value, or
-    # False when its proof shows that it is not set, and then its value is not judged.
+    # False when its proof shows that it is not set and its value is 0.
     slots = [
         [
             # A storage key is read as a number, which the trie writes on 32 bytes.

@@ -67,13 +67,25 @@ def test_wrong_slot_value() -> None:
         trie.verify_account_proof(STATE_ROOT, answer)
 
 
-def test_absent_slot() -> None:
-    """A slot whose proof shows it is not set is absent, and its value is not judged."""
+def _with_unset_slot(value: str) -> dict:
     # The path of slot 6 leaves the storage trie at the root node, an empty child of its branch.
     root_node = _WITH_STORAGE["storageProof"][0]["proof"][0]
-    slot = {"key": "0x6", "value": "0x5", "proof": [root_node]}
-    answer = dict(_WITH_STORAGE, storageProof=[_WITH_STORAGE["storageProof"][0], slot])
-    assert trie.verify_account_proof(STATE_ROOT, answer) == [True, False]
+    slot = {"key": "0x6", "value": value, "proof": [root_node]}
+    return dict(_WITH_STORAGE, storageProof=[_WITH_STORAGE["storageProof"][0], slot])
+
+
+def test_absent_slot() -> None:
+    """A slot whose proof shows it is not set is absent, with the value 0."""
+    assert trie.verify_account_proof(STATE_ROOT, _with_unset_slot("0x0")) == [True, False]
+
+
+def test_absent_slot_nonzero() -> None:
+    """A slot that is not set holds 0, so another value does not hold."""
+    with raises(
+        TrieError, "answer does not hold: EthLib.Execution.State.AccountProofError.slotMismatch 1"
+    ) as error:
+        trie.verify_account_proof(STATE_ROOT, _with_unset_slot("0x5"))
+    assert error.value.code == 506
 
 
 def test_slot_proof_fails() -> None:

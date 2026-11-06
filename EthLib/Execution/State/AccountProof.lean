@@ -18,7 +18,7 @@ The client then checks every claim against the state root alone.
 
 [EIP-1186][eip-1186] defines the answer.
 
-The `AccountProof` schema in `src/eth/state.yaml` of execution-apis, at `3284ee8`, gives its fields.
+The [`AccountProof` schema][schema] of execution-apis gives its fields.
 
 The account proof is a proof in the secured state trie, under the bytes of the address.
 
@@ -30,15 +30,16 @@ Its value is the RLP form of the word.
 
 A proof can also show that the address has no account, or that the slot is not set.
 
-EIP-1186, at `7622abc`, does not say which fields the answer then holds.
+The word of a slot that is not set is the storage value `0`, so the answer must give `0`.
+
+EIP-1186 does not say which fields the answer holds for an address without an account.
 
 So the check judges no field of an absent account, and checks no slot of it.
 
-It judges no word of a slot that is not set either.
+It reports the absence instead, and leaves the meaning of those fields to the caller.
 
-It reports each absence instead, and leaves the meaning of those fields to the caller.
-
-[eip-1186]: https://github.com/ethereum/EIPs/blob/7622abc1c6569b7e7ade9ed957dde4ed2271cc40/EIPS/eip-1186.md
+[eip-1186]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-1186.md
+[schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/state.yaml
 -/
 
 @[expose] public section
@@ -88,7 +89,7 @@ inductive AccountProofError where
   | slot (index : Nat) (error : ProofError)
   /-- The value under the slot at an index is not the RLP form of a word. -/
   | slotEncoding (index : Nat)
-  /-- The word of the slot at an index is not the one that its proof shows. -/
+  /-- The word that the answer gives for the slot at an index is not the one its proof shows. -/
   | slotMismatch (index : Nat)
   deriving DecidableEq, Repr
 
@@ -109,7 +110,7 @@ def AccountProofError.code : AccountProofError → UInt32
 inductive SlotOutcome where
   /-- The slot is set, and holds the word that the answer gives. -/
   | set
-  /-- The slot is not set; the check judges no word. -/
+  /-- The slot is not set, and the answer gives it the word `0`. -/
   | absent
   deriving DecidableEq, Repr
 
@@ -146,7 +147,9 @@ def verifyAccount (hash : ByteArray → Hash32) (stateRoot : Hash32) (p : Accoun
 
 /-- Check the slot at an index against the storage root.
 
-A set slot must hold the word of the answer, and a slot that is not set is absent. -/
+A set slot must hold the word of the answer.
+
+A slot that is not set is absent, and the answer must give it the word `0`. -/
 def verifySlot (hash : ByteArray → Hash32) (storageRoot : Hash32) (index : Nat)
     (s : StorageProof) : Except AccountProofError SlotOutcome := do
   let value ← (verifyProof hash storageRoot true ⟨s.key.toArray⟩ s.proof).mapError
@@ -156,7 +159,9 @@ def verifySlot (hash : ByteArray → Hash32) (storageRoot : Hash32) (index : Nat
     let word ← (Codec.decode bytes : Except RlpError U256).mapError fun _ => .slotEncoding index
     unless word = s.value do throw (.slotMismatch index)
     return .set
-  | none => return .absent
+  | none =>
+    unless s.value = 0 do throw (.slotMismatch index)
+    return .absent
 
 /-- Check each slot of the answer against its storage root, in order. -/
 def verifySlots (hash : ByteArray → Hash32) (storageRoot : Hash32) :

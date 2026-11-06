@@ -760,12 +760,14 @@ It checks the account proof, then each slot proof against the storage root of th
 Take a secured trie with distinct keys and its root.
 When a check passes, the trie's value under the key decodes to the fields of the answer.
 When the check reports absence, the trie holds no value under the key.
+A slot reported absent also has the word 0 in the answer.
 Otherwise a search returns a collision with the trie's own proof, or two keys with one hash.
 `verifyAccount_sound_state` and `verifySlot_sound_storage` apply them to the tries of a state, whose keys are distinct.
 `verifyAccount_getProof` and `verifySlot_getProof` prove that the trie's own proofs pass, with the fields that the trie holds.
 A proof can show that the address has no account, or that a slot is not set.
-EIP-1186 does not say which fields the answer then holds.
-So the check then judges no field and reports the absence.
+The storage value of a slot that is not set is 0, so the answer must give that word.
+EIP-1186 does not say which fields the answer holds for an address without an account.
+So the check judges no field of an absent account, and reports the absence.
 
 ### Weak subjectivity
 
