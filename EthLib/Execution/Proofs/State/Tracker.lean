@@ -845,6 +845,22 @@ theorem moveEther_self_isOk_iff {fork : Fork} {tx : TransactionState} {address :
     simp only [reduceCtorEq, exists_false, false_iff, Classical.not_not]
     exact (moveEther_self_eq_error.mp hm).1
 
+/-- Creating ether at an address succeeds exactly when its balance stays below 2^256. -/
+theorem createEther_isOk_iff {fork : Fork} {tx : TransactionState} {address : Address}
+    {amount : U256} :
+    (∃ tx', tx.createEther fork address amount = .ok tx') ↔
+      (tx.getAccount address).balance.toNat + amount.toNat < 2 ^ 256 := by
+  unfold createEther
+  constructor
+  · rintro ⟨tx', h⟩
+    obtain ⟨account, hf, -⟩ := modifyState_eq_ok h
+    unfold Account.credit at hf
+    split at hf
+    · assumption
+    · cases hf
+  · intro hfit
+    exact modifyState_isOk (by simp only [Account.credit, hfit, ↓reduceIte]; rfl)
+
 /-- Moving ether keeps every code. -/
 theorem getCode_moveEther {fork : Fork} {tx tx' : TransactionState}
     {sender recipient : Address} {amount : U256}
