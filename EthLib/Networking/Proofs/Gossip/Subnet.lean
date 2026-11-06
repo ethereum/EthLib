@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Uint64
 public import EthLib.Networking.Gossip.Subnet
+public import Mathlib.Data.Nat.ModEq
 
 /-!
 # `Networking.Proofs.Gossip.Subnet`
@@ -11,6 +12,8 @@ What the choice of attestation subnets returns.
 
 - A node gets as many subnets as the subnets per node, each below the number of subnets.
 - The choice succeeds when the parameters are nonzero and small enough, and the shuffle succeeds.
+- The subnets of a node are its shuffled prefix plus each index, modulo the number of subnets.
+- So they are distinct when a node takes no more subnets than there are.
 
 These facts hold for every shuffle, so they do not depend on how the consensus layer shuffles.
 -/
@@ -155,5 +158,118 @@ theorem computeSubscribedSubnets_exists
       have := config.SUBNETS_PER_NODE.toNat_lt
       rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
       omega)
+
+/-! ## Distinct subnets -/
+
+/-- The shuffled prefix of a node in an epoch, the part of the choice that every index shares.
+
+It repeats the steps of the choice before the index, so the proofs can name their result. -/
+private def permutedPrefix (config : SubnetParameters)
+    (shuffle : UInt64 → UInt64 → Base.Bytes32 → Except ε UInt64)
+    (nodeId : NodeID) (epoch : UInt64) : Except (SubnetError ε) UInt64 := do
+  let bits ← computeAttestationSubnetPrefixBits config
+  let nodePrefix := nodeId.toNat >>> (NODE_ID_BITS - bits)
+  if config.EPOCHS_PER_SUBNET_SUBSCRIPTION = 0 then throw .zeroEpochsPerSubscription
+  let nodeOffset := (nodeId.toNat % config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat).toUInt64
+  let shifted ← (Base.Uint64.addChecked epoch nodeOffset).mapError fun _ => .epochOverflow
+  let period := shifted / config.EPOCHS_PER_SUBNET_SUBSCRIPTION
+  let seed := Cryptography.Hash.Sha256.hash32 ⟨(Base.uintToBytes 8 period.toNat).toArray⟩
+  if 64 ≤ bits then throw (.prefixBitsTooLarge bits)
+  (shuffle nodePrefix.toUInt64 (2 ^ bits).toUInt64 seed).mapError .shuffle
+
+/-- The subnet of an index is the shared shuffled prefix plus the index, modulo the count. -/
+private theorem computeSubscribedSubnet_eq_bind (index : UInt64) :
+    computeSubscribedSubnet config shuffle nodeId epoch index =
+      permutedPrefix config shuffle nodeId epoch >>= fun permuted => do
+        let subnet ← (Base.Uint64.addChecked permuted index).mapError fun _ => .subnetOverflow
+        return subnet % config.ATTESTATION_SUBNET_COUNT := by
+  simp only [computeSubscribedSubnet, permutedPrefix, bind_assoc]
+  -- Both sides make the same checks, so the bind moves inside each branch.
+  congr 1
+  funext bits
+  by_cases epochs : config.EPOCHS_PER_SUBNET_SUBSCRIPTION = 0 <;>
+    by_cases wide : 64 ≤ bits <;> simp only [epochs, wide, ↓reduceIte, bind_assoc]
+
+/-- The choice returns a subnet exactly when the shared prefix plus the index fits in 64 bits.
+
+The subnet is then that sum modulo the count. -/
+private theorem computeSubscribedSubnet_eq_ok_iff {index : UInt64} {subnet : SubnetID} :
+    computeSubscribedSubnet config shuffle nodeId epoch index = .ok subnet ↔
+      ∃ permuted, permutedPrefix config shuffle nodeId epoch = .ok permuted ∧
+        permuted.toNat + index.toNat < 2 ^ 64 ∧
+        subnet.toNat = (permuted.toNat + index.toNat) % config.ATTESTATION_SUBNET_COUNT.toNat := by
+  rw [computeSubscribedSubnet_eq_bind, Base.bind_ok_iff]
+  apply exists_congr
+  intro permuted
+  apply and_congr_right
+  intro _
+  have mapError_ok {sum : UInt64} :
+      (Base.Uint64.addChecked permuted index).mapError (fun _ => SubnetError.subnetOverflow)
+        = (.ok sum : Except (SubnetError ε) UInt64) ↔
+        Base.Uint64.addChecked permuted index = .ok sum := by
+    cases Base.Uint64.addChecked permuted index <;> simp [Except.mapError]
+  simp only [Base.bind_ok_iff, mapError_ok, Base.Uint64.addChecked_ok_iff, pure, Except.pure,
+    Except.ok.injEq]
+  constructor
+  · rintro ⟨sum, ⟨fits, hsum⟩, rfl⟩
+    exact ⟨fits, by rw [UInt64.toNat_mod, hsum]⟩
+  · rintro ⟨fits, hsubnet⟩
+    refine ⟨permuted + index, ⟨fits, Base.Uint64.toNat_add_of_lt fits⟩, ?_⟩
+    apply UInt64.toNat_inj.mp
+    rw [UInt64.toNat_mod, Base.Uint64.toNat_add_of_lt fits, hsubnet]
+
+/-- Once the choice returns a subnet for one index, every index shares one shuffled prefix.
+
+For each index, the choice returns a subnet exactly when the prefix plus the index is below 2^64.
+
+The subnet is then that sum modulo the count. -/
+theorem exists_prefix_of_computeSubscribedSubnet_eq_ok {index : UInt64} {subnet : SubnetID}
+    (h : computeSubscribedSubnet config shuffle nodeId epoch index = .ok subnet) :
+    ∃ permuted : UInt64, ∀ (index' : UInt64) (subnet' : SubnetID),
+      computeSubscribedSubnet config shuffle nodeId epoch index' = .ok subnet' ↔
+        permuted.toNat + index'.toNat < 2 ^ 64 ∧
+        subnet'.toNat =
+          (permuted.toNat + index'.toNat) % config.ATTESTATION_SUBNET_COUNT.toNat := by
+  obtain ⟨permuted, hp, -⟩ := computeSubscribedSubnet_eq_ok_iff.mp h
+  refine ⟨permuted, fun index' subnet' => ?_⟩
+  rw [computeSubscribedSubnet_eq_ok_iff]
+  constructor
+  · rintro ⟨q, hq, rest⟩
+    rw [hp] at hq
+    cases hq
+    exact rest
+  · exact fun rest => ⟨permuted, hp, rest⟩
+
+/-- A node gets distinct subnets when it takes no more subnets than there are. -/
+theorem computeSubscribedSubnets_nodup {subnets : List SubnetID}
+    (h : computeSubscribedSubnets config shuffle nodeId epoch = .ok subnets)
+    (few : config.SUBNETS_PER_NODE ≤ config.ATTESTATION_SUBNET_COUNT) : subnets.Nodup := by
+  have length := Base.mapM_ok_length h
+  simp only [List.length_range] at length
+  have perNode := config.SUBNETS_PER_NODE.toNat_lt
+  have hfew := UInt64.le_iff_toNat_le.mp few
+  unfold List.Nodup
+  rw [List.pairwise_iff_getElem]
+  intro i j hi hj hij equal
+  -- Both subnets come from the one shared prefix, at the indices `i` and `j`.
+  have hi' : i < config.SUBNETS_PER_NODE.toNat := length ▸ hi
+  have hj' : j < config.SUBNETS_PER_NODE.toNat := length ▸ hj
+  have atI := Base.mapM_ok_getElem h i (by simpa using hi')
+  have atJ := Base.mapM_ok_getElem h j (by simpa using hj')
+  simp only [List.getElem_range] at atI atJ
+  obtain ⟨p, hp, -, eqI⟩ := computeSubscribedSubnet_eq_ok_iff.mp atI
+  obtain ⟨q, hq, -, eqJ⟩ := computeSubscribedSubnet_eq_ok_iff.mp atJ
+  rw [hp] at hq
+  cases hq
+  have small {k : Nat} (hk : k < config.SUBNETS_PER_NODE.toNat) : k.toUInt64.toNat = k := by
+    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (by omega)]
+  rw [small hi'] at eqI
+  rw [small hj'] at eqJ
+  -- Two indices below the count with one remainder are equal.
+  have modEq : p.toNat + i ≡ p.toNat + j [MOD config.ATTESTATION_SUBNET_COUNT.toNat] := by
+    unfold Nat.ModEq
+    rw [← eqI, ← eqJ, equal]
+  have := (Nat.ModEq.add_left_cancel' _ modEq).eq_of_lt_of_lt (by omega) (by omega)
+  omega
 
 end EthLib.Networking.Proofs.Gossip.Subnet
