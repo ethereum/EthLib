@@ -1,0 +1,6 @@
+preset: minimal
+fork: electra
+runner: operations
+handler: withdrawal_request
+suite: pyspec_tests
+case: full_exit_request_has_partial_withdrawal

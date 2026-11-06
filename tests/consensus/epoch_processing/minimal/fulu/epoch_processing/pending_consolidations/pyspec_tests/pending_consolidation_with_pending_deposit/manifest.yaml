@@ -1,0 +1,6 @@
+preset: minimal
+fork: fulu
+runner: epoch_processing
+handler: pending_consolidations
+suite: pyspec_tests
+case: pending_consolidation_with_pending_deposit

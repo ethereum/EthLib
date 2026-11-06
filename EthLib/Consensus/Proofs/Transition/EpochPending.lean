@@ -68,14 +68,25 @@ theorem balancesMatch_passPendingDeposits {stop : PendingDeposit → Bool} {next
 
 /-- The pending deposits of an epoch end with a pass over the queue from its front.
 
+The pass reads the next epoch and the churn available.
+
+That churn is the churn left from the last epoch and the activation churn.
+
+It stops at a deposit that waits for the first slot of the finalized epoch.
+
 The registry and the balances are those of the pass.
 
 The queue holds the deposits that the pass did not reach, then those it postponed. -/
 theorem processPendingDeposits_pass {electra : .pectra ≤ fork}
     (computed : processPendingDeposits config checks state electra = .ok after) :
-    ∃ stop nextEpoch available pass,
-      passPendingDeposits config checks stop nextEpoch available state 0 0 #[]
-          (state.pendingDeposits electra).data.toList = .ok pass ∧
+    ∃ nextEpoch churn available finalizedSlot pass,
+      liftArith (addChecked (getCurrentEpoch state) 1) = .ok nextEpoch ∧
+      getActivationExitChurnLimit config state = .ok churn ∧
+      liftArith (addChecked (state.depositBalanceToConsume electra) churn) = .ok available ∧
+      liftArith (computeStartSlotAtEpoch preset state.finalizedCheckpoint.epoch) =
+        .ok finalizedSlot ∧
+      passPendingDeposits config checks (depositWaits state finalizedSlot) nextEpoch available
+          state 0 0 #[] (state.pendingDeposits electra).data.toList = .ok pass ∧
         after.validators = pass.1.state.validators ∧ after.balances = pass.1.state.balances ∧
         (after.pendingDeposits electra).data = pass.1.rest.toArray ++ pass.1.postponed := by
   unfold processPendingDeposits at computed
@@ -83,13 +94,15 @@ theorem processPendingDeposits_pass {electra : .pectra ≤ fork}
   split at computed
   · cases computed
   repeat' (split at computed <;> try cases computed)
-  all_goals exact ⟨_, _, _, _, ‹_›, rfl, rfl, rfl⟩
+  all_goals exact ⟨_, _, _, _, _, liftAccessor_ok.mp ‹_›, liftAccessor_ok.mp ‹_›,
+    liftAccessor_ok.mp ‹_›, liftAccessor_ok.mp ‹_›, ‹_›, rfl, rfl, rfl⟩
 
 /-- The pending deposits of an epoch keep one balance for each validator. -/
 theorem balancesMatch_processPendingDeposits {electra : .pectra ≤ fork}
     (computed : processPendingDeposits config checks state electra = .ok after)
     (holds : BalancesMatch state) : BalancesMatch after := by
-  obtain ⟨_, _, _, pass, passed, validators, balances, _⟩ := processPendingDeposits_pass computed
+  obtain ⟨_, _, _, _, pass, _, _, _, _, passed, validators, balances, _⟩ :=
+    processPendingDeposits_pass computed
   have kept := balancesMatch_passPendingDeposits passed holds
   unfold BalancesMatch at kept ⊢
   rw [validators, balances]
@@ -99,7 +112,7 @@ theorem balancesMatch_processPendingDeposits {electra : .pectra ≤ fork}
 theorem processPendingDeposits_size_le {electra : .pectra ≤ fork}
     (computed : processPendingDeposits config checks state electra = .ok after) :
     (after.pendingDeposits electra).data.size ≤ (state.pendingDeposits electra).data.size := by
-  obtain ⟨_, _, _, pass, passed, _, _, queue⟩ := processPendingDeposits_pass computed
+  obtain ⟨_, _, _, _, pass, _, _, _, _, passed, _, _, queue⟩ := processPendingDeposits_pass computed
   have fits := pass.2
   simp only [Array.size_empty, Nat.add_zero, Array.length_toList] at fits
   rw [queue, Array.size_append, List.size_toArray]

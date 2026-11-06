@@ -14,6 +14,7 @@ public import EthLib.Consensus.Transition.Execution
 public import EthLib.Consensus.Transition.ForkBoundary
 public import EthLib.Consensus.Transition.Operations
 public import EthLib.Consensus.Transition.Payload
+public import EthLib.Consensus.Transition.Requests
 public import EthLib.Consensus.Transition.SyncAggregate
 public import EthLib.Consensus.Transition.StateTransition
 public import EthLib.Consensus.Transition.Upgrade
@@ -114,6 +115,16 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
     if electra : .pectra ≤ fork then do
       runTransition (processDepositRequest state electra (← decodeInput DepositRequest operation))
     else throw (0, s!"no operation deposit_request at {fork.name}")
+  | "withdrawal_request" =>
+    if electra : .pectra ≤ fork then do
+      runTransition (processWithdrawalRequest config state electra
+        (← decodeInput WithdrawalRequest operation))
+    else throw (0, s!"no operation withdrawal_request at {fork.name}")
+  | "consolidation_request" =>
+    if electra : .pectra ≤ fork then do
+      runTransition (processConsolidationRequest config state electra
+        (← decodeInput ConsolidationRequest operation))
+    else throw (0, s!"no operation consolidation_request at {fork.name}")
   | "payload_attestation" =>
     if gloas : .glamsterdam ≤ fork then do
       runTransition (processPayloadAttestation config checks state gloas
@@ -139,7 +150,8 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
 /-- The operations whose Gloas rule EthLib holds. -/
 def gloasOperations : List String :=
   ["payload_attestation", "execution_payload_bid", "builder_deposit_request",
-    "builder_exit_request", "withdrawals", "proposer_slashing", "attester_slashing"]
+    "builder_exit_request", "withdrawals", "proposer_slashing", "attester_slashing",
+    "withdrawal_request", "consolidation_request"]
 
 /-- The preset and the fork that UTF-8 names name, at a fork up to Gloas. -/
 def transitionPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do
@@ -190,6 +202,9 @@ def runEpochStep {preset : Preset} {fork : Fork} (config : Config) (handler : St
     if electra : .pectra ≤ fork then
       runTransition (processPendingDeposits config .bls state electra)
     else throw (0, s!"no epoch step pending_deposits at {fork.name}")
+  | "pending_consolidations" =>
+    if electra : .pectra ≤ fork then runTransition (processPendingConsolidations state electra)
+    else throw (0, s!"no epoch step pending_consolidations at {fork.name}")
   | "proposer_lookahead" =>
     if fulu : .fusaka ≤ fork then
       runTransition (liftAccessor (processProposerLookahead state fulu))

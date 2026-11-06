@@ -1,0 +1,6 @@
+preset: minimal
+fork: electra
+runner: operations
+handler: consolidation_request
+suite: pyspec_tests
+case: basic_consolidation_in_new_consolidation_epoch

@@ -1,0 +1,6 @@
+preset: minimal
+fork: fulu
+runner: operations
+handler: withdrawal_request
+suite: pyspec_tests
+case: basic_withdrawal_request
