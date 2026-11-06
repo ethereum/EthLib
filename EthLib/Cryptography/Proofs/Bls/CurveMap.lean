@@ -195,7 +195,8 @@ def map (f : Hom F G) (p : G2 F) : G2 G := ⟨p.x.map f, p.y.map f, p.z.map f⟩
 @[simp] private theorem map_y (f : Hom F G) (p : G2 F) : (map f p).y = p.y.map f := rfl
 @[simp] private theorem map_z (f : Hom F G) (p : G2 F) : (map f p).z = p.z.map f := rfl
 
-private theorem map_mk (f : Hom F G) (x y z : Fp2 F) :
+/-- The map of a point given by its coordinates. -/
+theorem map_mk (f : Hom F G) (x y z : Fp2 F) :
     map f ⟨x, y, z⟩ = ⟨x.map f, y.map f, z.map f⟩ := rfl
 
 theorem map_generator (f : Hom F G) : map f generator = generator := by

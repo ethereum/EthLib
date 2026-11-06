@@ -21,12 +21,12 @@ namespace EthLib.Cryptography.Bls.G2
 open WeierstrassCurve.Jacobian
 
 /-- Cross-multiplied Jacobian equivalence test, defined separately so structural `BEq G2` stays untouched. -/
-def projectiveEq (p q : G2) : Bool :=
+def projectiveEq {F : Type} [BaseField F] (p q : G2 F) : Bool :=
   if p.z.isZero then q.z.isZero
   else if q.z.isZero then false
   else
-    p.x * (q.z * q.z) == q.x * (p.z * p.z) &&
-    p.y * ((q.z * q.z) * q.z) == q.y * ((p.z * p.z) * p.z)
+    (p.x * (q.z * q.z)).beq (q.x * (p.z * p.z)) &&
+    (p.y * ((q.z * q.z) * q.z)).beq (q.y * ((p.z * p.z) * p.z))
 
 theorem toPoint_eq_iff_rep_equiv {p q : G2} (hp : Valid p) (hq : Valid q) :
     toPoint p = toPoint q ↔ rep p ≈ rep q := by
@@ -58,7 +58,7 @@ theorem projectiveEq_eq_true_iff_rep_equiv {p q : G2} (hp : Valid p) (hq : Valid
         (not_equiv_of_Z_eq_zero_right (fun h => hpz (Fp2.isZero_iff.mpr h))
           (Fp2.isZero_iff.mp hqz))
     -- Both points finite: cross-multiplied X and Y equations characterize Jacobian equivalence.
-    · rw [ite_eq_right hqz, Bool.and_eq_true, _root_.beq_iff_eq, _root_.beq_iff_eq]
+    · rw [ite_eq_right hqz, Bool.and_eq_true, Fp2.beq_iff_eq, Fp2.beq_iff_eq]
       constructor
       · rintro ⟨hx, hy⟩
         apply equiv_of_X_eq_of_Y_eq (fun h => hpz (Fp2.isZero_iff.mpr h))

@@ -20,8 +20,10 @@ theorem q11953_nonzero : G2.toPoint q11953 ≠ 0 := by
   exact Bool.noConfusion h
 
 theorem q11953_annihilator : 11953 • G2.toPoint q11953 = 0 :=
-  nsmul_zero_cert q11953 q11953_valid 11953 15 (by decide +kernel) (by decide +kernel)
+  nsmul_zero_cert q11953 q11953_valid 11953 15 (by decide +kernel)
+    (by decide_g2_at_model [q11953])
 
-theorem q11953_clear_zero : (clearAux q11953).isInfinity = true := by decide +kernel
+theorem q11953_clear_zero : (clearAux q11953).isInfinity = true := by
+  decide_g2_at_model [q11953, map_clearAux]
 
 end EthLib.Cryptography.Bls.CofactorCertificate

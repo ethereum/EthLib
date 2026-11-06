@@ -20,8 +20,10 @@ theorem q23_nonzero : G2.toPoint q23 ≠ 0 := by
   exact Bool.noConfusion h
 
 theorem q23_annihilator : 23 • G2.toPoint q23 = 0 :=
-  nsmul_zero_cert q23 q23_valid 23 6 (by decide +kernel) (by decide +kernel)
+  nsmul_zero_cert q23 q23_valid 23 6 (by decide +kernel)
+    (by decide_g2_at_model [q23])
 
-theorem q23_clear_zero : (clearAux q23).isInfinity = true := by decide +kernel
+theorem q23_clear_zero : (clearAux q23).isInfinity = true := by
+  decide_g2_at_model [q23, map_clearAux]
 
 end EthLib.Cryptography.Bls.CofactorCertificate

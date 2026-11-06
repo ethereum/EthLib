@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Proofs.Bls.Fp12
 public import EthLib.Cryptography.Proofs.Bls.G2Equiv
 public import EthLib.Cryptography.Proofs.Bls.G2Order
 public import EthLib.Cryptography.Proofs.Bls.HashToCurveValidity
+public import EthLib.Cryptography.Proofs.Bls.HashToCurveMap
 public import EthLib.Cryptography.Proofs.ScaledCurve
 public import Mathlib.FieldTheory.Finite.Basic
 public import Mathlib.Tactic.FieldSimp
@@ -357,38 +358,12 @@ theorem toPoint_psi_mulNat {P : G2} (hP : G2.Valid P) (n : Nat) :
     G2.toPoint (psi (G2.mulNat P n)) = n • G2.toPoint (psi P) := by
   rw [toPoint_psi (G2.valid_mulNat hP n), G2.toPoint_mulNat hP, map_nsmul, toPoint_psi hP]
 
-/-- Structural double-and-add ladder so the kernel evaluates `[blsAbsX] * g_2` directly. -/
-private def mulNatAux : Nat → G2 → Nat → G2
-  | 0, _, _ => G2.zero
-  | fuel + 1, p, k =>
-    if k = 0 then G2.zero
-    else
-      let half := mulNatAux fuel (G2.double p) (k / 2)
-      if k % 2 = 1 then G2.add p half else half
-
-private theorem mulNatAux_eq (fuel : Nat) (p : G2) (k : Nat)
-    (hk : k < 2 ^ fuel) : mulNatAux fuel p k = G2.mulNat p k := by
-  induction fuel generalizing p k with
-  | zero =>
-    have : k = 0 := by simpa using hk
-    subst this
-    rw [mulNatAux, G2.mulNat_def]
-    simp
-  | succ fuel ih =>
-    rw [mulNatAux, G2.mulNat_def]
-    by_cases h0 : k = 0
-    · simp [h0]
-    · have h2 : k / 2 < 2 ^ fuel := by
-        rw [Nat.pow_succ] at hk
-        omega
-      rw [ite_eq_right h0, ite_eq_right h0, ih (G2.double p) (k / 2) h2]
-
-/-- `psi(g_2) = [x] * g_2` for the BLS parameter `x`, checked in the kernel. -/
+/-- `psi(g_2) = [x] * g_2` for the BLS parameter `x`, checked in the kernel in the model of `Fp`. -/
 theorem psi_generator_projectiveEq :
-    G2.projectiveEq (psi G2.generator) (mulNegX G2.generator) = true := by
+    G2.projectiveEq (psi (G2.generator : G2)) (mulNegX G2.generator) = true := by
   unfold mulNegX
-  rw [← mulNatAux_eq 65 G2.generator blsAbsX (by decide)]
-  decide +kernel
+  rw [← G2.mulNatAux_eq 65 G2.generator blsAbsX (by decide)]
+  decide_g2_at_model [map_psi]
 
 /-- The `psi` eigenvalue on `G2.generator` equals the signed BLS parameter `x = -blsAbsX`. -/
 theorem hom_generator :

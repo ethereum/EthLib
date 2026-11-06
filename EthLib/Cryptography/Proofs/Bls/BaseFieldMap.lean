@@ -26,6 +26,9 @@ namespace Fp2
 /-- The map of base fields, applied to both coordinates. -/
 def map (f : Hom F G) (a : Fp2 F) : Fp2 G := ⟨f a.c0, f a.c1⟩
 
+/-- The map of an element given by its two coordinates. -/
+theorem map_mk (f : Hom F G) (c0 c1 : F) : map f ⟨c0, c1⟩ = ⟨f c0, f c1⟩ := rfl
+
 theorem map_zero (f : Hom F G) : map f zero = zero := by
   simp only [map, zero, f.map_zero]
 
