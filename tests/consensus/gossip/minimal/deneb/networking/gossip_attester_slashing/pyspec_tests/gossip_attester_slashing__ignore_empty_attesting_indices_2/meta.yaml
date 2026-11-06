@@ -1,0 +1,8 @@
+topic: attester_slashing
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {message: 
+    attester_slashing_0x0ba74a27706013603501b8caf4e4f75500622f8c6f6d6699a6e4833b3a2f847e,
+  expected: ignore, reason: all attester slashing indices already seen}

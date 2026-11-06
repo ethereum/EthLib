@@ -1,0 +1,8 @@
+topic: proposer_slashing
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {message: 
+    proposer_slashing_0x6d16a6f81acbfab417dafacb6d63e58282c764274f26957311553a10356d9d52,
+  expected: reject, reason: header slots do not match}

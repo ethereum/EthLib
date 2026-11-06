@@ -33,6 +33,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.ProposerHead
 public import EthLib.Consensus.Proofs.ForkChoice.Reachable
 public import EthLib.Consensus.Proofs.ForkChoice.Store
 public import EthLib.Consensus.Proofs.ForkSchedule
+public import EthLib.Consensus.Proofs.Gossip.Operations
 public import EthLib.Consensus.Proofs.Gossip.Topics
 public import EthLib.Consensus.Proofs.InclusionList
 public import EthLib.Consensus.Proofs.HonestBuilder

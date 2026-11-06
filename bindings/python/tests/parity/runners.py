@@ -19,6 +19,7 @@ from consensus.test_fork_choice import (
     runs as runs_fork_choice,
 )
 from consensus.test_genesis import HANDLERS as GENESIS, runs as runs_genesis
+from consensus.test_gossip_validation import TOPICS as GOSSIP_TOPICS, runs as runs_gossip
 from consensus.test_light_client_data_collection import runs_data_collection
 from consensus.test_light_client_sync import SPECIFIED as LIGHT_CLIENT_FORKS, runs_sync
 from consensus.test_operations import HANDLERS as OPERATIONS, runs as runs_operation
@@ -48,7 +49,7 @@ NOT_YET = {
     "fork_choice": "the Electra and Fulu blocks in the state transition (C35 to C40)",
     "fast_confirmation": "the Electra and Fulu blocks in the state transition (C35 to C40)",
     "sync": "the Electra and Fulu blocks in the state transition (C35 to C40)",
-    "networking": "gossip validation (consensus track C63 and C64)",
+    "networking": "gossip validation of blocks, votes and sidecars (consensus track C63, C64)",
     "ssz_static": "the remaining beacon containers (consensus track C2, C6 to C12)",
 }
 
@@ -616,6 +617,12 @@ def _gossip_partial_data_column_sidecar(root: Path, case: Case) -> None:
     run_partial_gossip_case(root / case.path, case.preset)
 
 
+def _gossip(root: Path, case: Case) -> None:
+    from consensus.test_gossip_validation import run_case
+
+    run_case(case.preset, case.fork, root / case.path)
+
+
 def _ssz_static(root: Path, case: Case) -> None:
     from ethlib import consensus
     from ethlib.networking import snappy
@@ -731,6 +738,7 @@ RUNNERS = {
     "networking/gossip_data_column_sidecar": _gossip_data_column_sidecar,
     # The checks of a partial message that read no store; the others wait for C63.
     "networking/gossip_partial_data_column_sidecar": _gossip_partial_data_column_sidecar,
+    **{f"networking/gossip_{topic}": _gossip for topic in GOSSIP_TOPICS},
     **{f"ssz_static/{container}": _ssz_static for container in CONTAINERS},
     "light_client/single_merkle_proof": _single_merkle_proof,
     "merkle_proof/single_merkle_proof": _merkle_proof,
@@ -800,6 +808,8 @@ def runner(case: Case):
     if run is _transition and not runs_transition(case.fork, case.group):
         return None
     if run is _genesis and not runs_genesis(case.fork, case.group.split("/")[1]):
+        return None
+    if run is _gossip and not runs_gossip(case.fork, case.group.split("/")[1]):
         return None
     return run
 

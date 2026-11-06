@@ -1,0 +1,9 @@
+topic: attester_slashing
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {message: 
+    attester_slashing_0xab86614a1a4847818c94169ddee142a1146abfb42aaa0e6fa4f449d0c5b99439,
+  expected: reject, reason: validator index out of range in indexed attestation 
+    2}

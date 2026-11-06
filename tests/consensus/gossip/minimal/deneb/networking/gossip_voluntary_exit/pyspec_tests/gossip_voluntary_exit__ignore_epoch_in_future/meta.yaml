@@ -1,0 +1,8 @@
+topic: voluntary_exit
+blocks:
+- {block: 
+    block_0xb810e64c756e3c2d82cca7dab8d500e46067b897ceee07a16e6980d4adb1cf4b}
+messages:
+- {current_time_ms: 3072000, message: 
+    voluntary_exit_0x790017ac219f44427e3605039da7b3cd1e1ed6ed1c5f6bfd054658f022f93edb,
+  expected: ignore, reason: voluntary exit epoch is in the future}

@@ -1,0 +1,8 @@
+topic: voluntary_exit
+blocks:
+- {block: 
+    block_0xb678f7b3f82ca80e50686a56b10aa92eac743ef55ae85900daba34653ef0316d}
+messages:
+- {current_time_ms: 3072000, message: 
+    voluntary_exit_0x346c896759fc650ee16ce71836c7ebc0a3871f35ef87628f2a1c6bb05cf6c730,
+  expected: reject, reason: validator index out of range}

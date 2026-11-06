@@ -1,0 +1,8 @@
+topic: proposer_slashing
+blocks:
+- {block: 
+    block_0xffdfd066abbc748064f0e892dbfbfa6e3a755bfdd59b75642e367c68dd2a4bec}
+messages:
+- {message: 
+    proposer_slashing_0xfd95251d0a580f68bcb05c85124ab2b4aeb775908835f9603e24734485362e09,
+  expected: reject, reason: proposer is not slashable}

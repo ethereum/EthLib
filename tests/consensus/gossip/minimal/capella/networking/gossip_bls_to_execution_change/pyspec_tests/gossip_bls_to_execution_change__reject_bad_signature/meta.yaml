@@ -1,0 +1,9 @@
+topic: bls_to_execution_change
+blocks:
+- {block: 
+    block_0x63b2597628536690d23830a4c8a1c5ccbccb6c49a0b2e1d043cf0a029863e681}
+messages:
+- {current_time_ms: 0, message: 
+    bls_to_execution_change_0x03e7f2f45865b9f68cb756041bae63087d80e69e29946cea8c5cd0233d192bdc,
+  expected: reject, reason: invalid BLS to execution change signature}
+bls_setting: 1

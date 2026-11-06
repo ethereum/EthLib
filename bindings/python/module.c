@@ -619,6 +619,8 @@ static PyMethodDef methods[] = {
   {"consensus_state_transition_across", py_consensus_state_transition_across, METH_VARARGS,
    DOC_consensus_state_transition_across},
   {"consensus_fork_choice", py_consensus_fork_choice, METH_VARARGS, DOC_consensus_fork_choice},
+  {"consensus_gossip_validation", py_consensus_gossip_validation, METH_VARARGS,
+    DOC_consensus_gossip_validation},
   {"consensus_initialize_genesis", py_consensus_initialize_genesis, METH_VARARGS,
    DOC_consensus_initialize_genesis},
   {"consensus_is_valid_genesis_state", py_consensus_is_valid_genesis_state, METH_VARARGS,

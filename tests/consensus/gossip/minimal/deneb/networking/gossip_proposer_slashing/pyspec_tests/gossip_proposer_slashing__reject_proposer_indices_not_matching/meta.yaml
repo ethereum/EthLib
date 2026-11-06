@@ -1,0 +1,8 @@
+topic: proposer_slashing
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {message: 
+    proposer_slashing_0xde5ff25638cdb3395bf3284724d4d7d5c51e90d957c50ccd69515e6096369b04,
+  expected: reject, reason: header proposer indices do not match}

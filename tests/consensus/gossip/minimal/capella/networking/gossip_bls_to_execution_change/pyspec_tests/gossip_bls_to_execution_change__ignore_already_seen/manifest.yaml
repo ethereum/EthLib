@@ -1,0 +1,6 @@
+preset: minimal
+fork: capella
+runner: networking
+handler: gossip_bls_to_execution_change
+suite: pyspec_tests
+case: gossip_bls_to_execution_change__ignore_already_seen

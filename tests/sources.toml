@@ -27,6 +27,7 @@ directories = [
   "tests/consensus/fork",
   "tests/consensus/fork_choice",
   "tests/consensus/genesis",
+  "tests/consensus/gossip",
   "tests/consensus/light_client",
   "tests/consensus/merkle_proof", "tests/consensus/networking", "tests/consensus/operations",
   "tests/consensus/parameters",

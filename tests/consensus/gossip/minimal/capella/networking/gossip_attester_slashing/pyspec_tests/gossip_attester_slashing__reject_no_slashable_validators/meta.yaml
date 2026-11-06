@@ -1,0 +1,8 @@
+topic: attester_slashing
+blocks:
+- {block: 
+    block_0x87d11d3e45ca46f379d659fb139b2d3a38ad884d8ec62c1b311ee3dba4871b73}
+messages:
+- {message: 
+    attester_slashing_0x102980269cca36c9e93adad49941f0cbc62126b17cd6d437bfb07d6357a0f9f2,
+  expected: reject, reason: no slashable validators in intersection}

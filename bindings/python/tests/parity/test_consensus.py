@@ -8,6 +8,7 @@ from consensus.test_epoch_processing import (
     MINIMAL_ONLY as EPOCH_MINIMAL_ONLY,
 )
 from consensus.test_fork_choice import HANDLERS as FORK_CHOICE, SPECIFIED as FORK_CHOICE_FORKS
+from consensus.test_gossip_validation import SPECIFIED as GOSSIP_FORKS, TOPICS as GOSSIP_TOPICS
 from consensus.test_operations import HANDLERS as OPERATIONS
 from consensus.test_rewards import HANDLERS as REWARDS, SPECIFIED as REWARDS_FORKS
 from consensus.test_transition import GROUPS as TRANSITION_GROUPS
@@ -49,6 +50,7 @@ def test_every_group_has_a_runner_or_a_plan() -> None:
 # kilobytes, for the same reason, and a mainnet rewards case holds one.
 # A mainnet fork choice or optimistic sync case holds an anchor state of that size too; the
 # mainnet archive has no reorg or withholding case, and merge blocks only at Bellatrix.
+# A mainnet gossip case holds an anchor state of a few hundred kilobytes too.
 # The custody cases of Gloas and Heze repeat those of Fulu, and only the fork name in their
 # manifest differs, so only the Fulu cases are vendored.
 NOT_VENDORED = (
@@ -96,6 +98,11 @@ NOT_VENDORED = (
         and (handler != "on_merge_block" or fork == "bellatrix")
     }
     | {f"mainnet/{fork}/sync/optimistic" for fork in FORK_CHOICE_FORKS if fork != "altair"}
+    | {
+        f"mainnet/{fork}/networking/gossip_{topic}"
+        for topic, first in GOSSIP_TOPICS.items()
+        for fork in GOSSIP_FORKS[GOSSIP_FORKS.index(first) :]
+    }
     | {
         f"{preset}/{fork}/networking/{handler}"
         for preset in ("mainnet", "minimal")

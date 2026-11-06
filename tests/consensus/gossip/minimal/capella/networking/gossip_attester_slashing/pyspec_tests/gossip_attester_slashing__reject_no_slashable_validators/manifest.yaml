@@ -1,0 +1,6 @@
+preset: minimal
+fork: capella
+runner: networking
+handler: gossip_attester_slashing
+suite: pyspec_tests
+case: gossip_attester_slashing__reject_no_slashable_validators
