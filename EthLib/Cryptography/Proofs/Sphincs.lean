@@ -42,6 +42,7 @@ public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Digest
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Signature
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Inverse
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Sign
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Win
 
 /-!
 # Proofs: leanSPHINCS
