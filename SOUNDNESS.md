@@ -110,6 +110,11 @@ It bounds every run, including the unlucky ones, so the bound is weaker than `2^
 - An adversary that requests a signature at each of the `2^32` leaf indices has `q > 2^65`.
   So over the key's lifetime, the bound is above `2^-62`, about 62 bits, not 127.
 
+`Unforgeability.unforgeable_queries` (`Proofs/Xmss/Unforgeability/Queries.lean`) restates the bound with the adversary's own hash queries `qH` and its signing requests `qS` as separate terms, as an exact-security statement does.
+An adversary with at most `qH` hash queries and `qS` signing requests forges with probability at most `(qH + 8,630,239,199 * qS + 13,435,265) / 2^127`.
+The coefficient of `qS` is the most hash calls one signing request can make, `2^32` randomizer trials on each layer included, about `2^33.007`.
+The restatement follows from the bound above, so it changes the form of the statement, not its strength.
+
 The bound is classical: the adversary queries the oracle as a classical algorithm.
 The statement is written with VCVio's oracle computations and probabilities, so their definitions are part of what it says.
 
