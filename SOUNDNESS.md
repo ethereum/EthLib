@@ -601,12 +601,15 @@ With the subgroup check, the same holds for a point of the subgroup.
 The same file proves the round trips of a field element, an element of `Fp2` and the padding.
 
 `bytesToG1_valid` and `bytesToG2_valid` (`Execution/Proofs/Evm/Precompiles/Bls12381/Group.lean`) prove that every decoded point is valid, and lies in the subgroup when checked.
-`bls12G1Add_toPoint` and `bls12G2Add_toPoint` prove that G1ADD and G2ADD return the group sum of their two decoded points.
-`exists_bls12G1Add_ok` and `exists_bls12G2Add_ok` show that both succeed on inputs from the curve generators.
+`bls12G1Add_toPoint` and `bls12G2Add_toPoint` prove that G1ADD and G2ADD return the encoding of the sum of their two decoded points, and that this sum is valid.
+`bls12G1Add_g1ToBytes` and `bls12G2Add_g2ToBytes` prove the converse: on the encodings of two valid points, with enough gas, both return the encoding of their sum.
+Neither precompile checks that its inputs lie in the subgroup, as EIP-2537 specifies.
+So the sum is taken in the full group of points of each curve.
+`exists_bls12G1Add_ok` and `exists_bls12G2Add_ok` apply this to two copies of each generator.
 
-The group-operation proofs cover only addition, not MSM, pairing or curve maps.
-For those operations, proofs cover input lengths, gas errors and output sizes, as well as MSM discount bounds.
-No theorem links `bls12Pairing` to the pairing law, or `bls12MapFpToG1` and `bls12MapFp2ToG2` to the curve maps.
+For G1MSM, G2MSM, the pairing check and the two map precompiles, the proofs cover only input lengths, gas errors and output sizes (`Execution/Proofs/Evm/Precompiles/Bls12381/G1.lean`, `G2.lean` and `Pairing.lean`).
+`G1.lean` and `G2.lean` also bound the MSM discounts, so an MSM never costs more than its separate multiplications.
+No theorem relates the MSM precompiles to a sum of scalar multiples, `bls12Pairing` to the pairing law, or `bls12MapFpToG1` and `bls12MapFp2ToG2` to the curve maps.
 No theorem relates the module to the execution-specs code it follows.
 
 ### Merkle Patricia Trie
