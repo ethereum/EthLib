@@ -1,0 +1,215 @@
+module
+
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.WinRefined
+
+/-!
+# Proofs: the refined classification with a valid transcript
+
+The bounds on FORS contacts need the finished outcome of a winning run.
+
+They also need its transcript to be valid.
+
+This module keeps both on the way from the stopped experiment to the interpreted run.
+-/
+
+@[expose] public section
+
+open OracleComp OracleSpec ENNReal
+
+namespace SphincsSecurity.Security.HiddenBridge
+
+variable [Params]
+
+open Concrete HiddenGraph
+
+
+/-- The refined bad event of a finished run whose transcript is valid. -/
+def badAV (parameterOutput : HashOutput) (fixed : HiddenGraph.Table) (highs : CoordinateHighs)
+    (remaining : RemainingOutputs) (results : OtsKey → Option (Counter × Encoding))
+    (table : Coordinate → Digest)
+    (v : ((Option HiddenBridge.Outcome × List Coordinate) × List (HiddenCost.Entry HashInput)) ×
+        QueryCache HashSpec) :
+    Prop :=
+  badA parameterOutput fixed highs remaining results table v ∧
+    ∃ outcome, v.1.1.1 = some outcome ∧ SigningTranscript.Valid outcome.2.1
+
+end SphincsSecurity.Security.HiddenBridge
+
+namespace SphincsSecurity.Security.ForsPotential
+
+variable [Params]
+
+open Concrete HiddenGraph HiddenCost HiddenDebt GraphView Domination ForsPrice ForsSigner
+    HiddenReveal SphincsSecurity.Base.Domination
+open HiddenBridge Completeness SeedModel Graph Assembly Reduce Internalize
+
+set_option maxRecDepth 10000
+set_option linter.constructorNameAsVariable false
+attribute [local instance] Classical.propDecidable
+
+
+attribute [local instance] sampleCellFintypeInst sampleCellDecEq hiddenTableSampleable
+    highsSampleable
+  remainingSampleable
+
+set_option maxRecDepth 100000 in
+/-- Fix one table that agrees with the knowledge.
+
+A stop or a win is then at most as likely as a correct guess or the refined bad event.
+
+That bad event keeps the valid transcript. -/
+theorem stopped_table_leV (hb : 0 < keptHeight topLayer) (adversary : Adversary) (q : ℕ)
+    (hq : q < 2 ^ 256)
+    (parameterOutput : HashOutput) (fixed : HiddenGraph.Table) (highs : CoordinateHighs)
+    (remaining : RemainingOutputs) (steps : Message → Randomness)
+    (prepared : (OtsKey → Option (Counter × Encoding)) × QueryCache HashSpec)
+    (hprepared : prepared ∈ support (preparation parameterOutput fixed highs remaining))
+    (known : Knowledge Coordinate)
+    (hknownOf : ∀ c v, knownOf (truncateHash parameterOutput) fixed c = some v → known c = some v)
+    (hknown : ∀ c v, known c = some v →
+      knownOf (truncateHash parameterOutput) fixed c = some v ∨ AboveWord
+          (truncateHash parameterOutput) prepared.1 c)
+    (table : Coordinate → Digest) (hagree : Agrees known table) :
+    Pr{let x ← (HiddenOutside.stopped (sampleModel parameterOutput highs) table
+        (erase (trace (richProgram (internalize adversary) q (truncateHash parameterOutput)
+          (sampleData parameterOutput fixed highs remaining steps))))
+        known prepared.2)}[(HiddenReveal.StopOr RichWin) x] ≤
+      Pr{let r ← (fixedRun (sampleModel parameterOutput highs) table
+          (erase (trace (richProgram (internalize adversary) q (truncateHash parameterOutput)
+            (sampleData parameterOutput fixed highs remaining steps))))
+          (DebtState.start prepared.2 known))}[CorrectGuess table r.2 ∨
+          badAV parameterOutput fixed highs remaining prepared.1 table (r.1, r.2.cache)] := by
+  have htable := (agrees_iff_extending _ table).1 hagree
+  refine le_trans (prEvent_mono_of_support _ _ _ fun r hr hwin => ?_)
+    (stopped_le_fixedRun (sampleModel parameterOutput highs) table _ _
+      (DebtState.start prepared.2 known) hagree)
+  rcases r with _ | ⟨⟨⟨res, reveals⟩, entries⟩, cacheF⟩
+  · trivial
+  · obtain ⟨outcome, hres, hw⟩ := hwin
+    simp only at hres
+    subst hres
+    refine ⟨win_implies_badA hb adversary q hq parameterOutput fixed highs remaining steps prepared
+        hprepared known
+      hknownOf hknown table htable outcome reveals entries cacheF hr hw, outcome, rfl, ?_⟩
+    simp only [outcomeWins, Bool.and_eq_true, decide_eq_true_eq] at hw
+    exact hw.1.1
+
+set_option maxRecDepth 100000 in
+/-- The interpreted run with a completed table bounds the stopped experiment.
+
+A stop or a win is at most as likely as a correct guess or the refined bad event.
+
+The knowledge holds the fixed values, and otherwise only chain values above the word. -/
+theorem stopped_le_interpV (hb : 0 < keptHeight topLayer) (adversary : Adversary) (q : ℕ)
+    (hq : q < 2 ^ 256)
+    (parameterOutput : HashOutput) (fixed : HiddenGraph.Table) (highs : CoordinateHighs)
+    (remaining : RemainingOutputs) (steps : Message → Randomness)
+    (prepared : (OtsKey → Option (Counter × Encoding)) × QueryCache HashSpec)
+    (hprepared : prepared ∈ support (preparation parameterOutput fixed highs remaining))
+    (tg : Targeting HashInput HashOutput Coordinate)
+    (known : Knowledge Coordinate)
+    (hknownOf : ∀ c v, knownOf (truncateHash parameterOutput) fixed c = some v → known c = some v)
+    (hknown : ∀ c v, known c = some v →
+      knownOf (truncateHash parameterOutput) fixed c = some v ∨ AboveWord
+          (truncateHash parameterOutput) prepared.1 c) :
+    Pr{let x ← (HiddenOutside.stoppedExperiment (sampleModel parameterOutput highs)
+        (erase (trace (richProgram (internalize adversary) q (truncateHash parameterOutput)
+          (sampleData parameterOutput fixed highs remaining steps))))
+        known prepared.2)}[(HiddenReveal.StopOr RichWin) x] ≤
+      Pr{let x ← (interp tg prepared.2 (sampleModel parameterOutput highs)
+          (costGameX (truncateHash parameterOutput)
+              (sampleData parameterOutput fixed highs remaining steps)
+            (internalize adversary)) q (DebtState.start prepared.2 known) >>=
+          fun result => (fun table => (table, result)) <$>
+                          completion result.2.known)}[CorrectGuess x.1 x.2.2 ∨
+          badAV parameterOutput fixed highs remaining prepared.1 x.1
+            (((x.2.1.1, x.2.1.2.1), x.2.1.2.2.1), x.2.2.cache)] := by
+  unfold HiddenOutside.stoppedExperiment
+  rw [OracleComp.prEvent_bind_eq_tsum]
+  calc _ ≤ ∑' table, Pr{let x ← completion known}[x = table] *
+        Pr{let r ← (fixedRun (sampleModel parameterOutput highs) table
+            (erase (trace (richProgram (internalize adversary) q (truncateHash parameterOutput)
+              (sampleData parameterOutput fixed highs remaining steps))))
+            (DebtState.start prepared.2 known))}[CorrectGuess table r.2 ∨
+            badAV parameterOutput fixed highs remaining prepared.1 table (r.1, r.2.cache)] := by
+        refine ENNReal.tsum_le_tsum fun table => ?_
+        by_cases htab : table ∈ support (completion known)
+        · have hag : Agrees known table := by
+            unfold completion at htab
+            rw [support_map] at htab
+            obtain ⟨t, _, rfl⟩ := htab
+            exact fun c v hc => completion_known _ c v hc t
+          have := stopped_table_leV hb adversary q hq parameterOutput fixed highs remaining steps
+              prepared
+            hprepared known hknownOf hknown table hag
+          exact mul_le_mul_right this _
+        · rw [(prEvent_eq_zero_of_not_mem_support _) htab, zero_mul, zero_mul]
+    _ = Pr{let x ← (withTable (fun table => fixedRun (sampleModel parameterOutput highs) table
+            (erase (trace (richProgram (internalize adversary) q (truncateHash parameterOutput)
+              (sampleData parameterOutput fixed highs remaining steps))))
+            (DebtState.start prepared.2 known)) known)}[CorrectGuess x.1 x.2.2 ∨
+            badAV parameterOutput fixed highs remaining prepared.1 x.1 (x.2.1, x.2.2.cache)] := by
+        unfold withTable
+        rw [OracleComp.prEvent_bind_eq_tsum]
+        refine tsum_congr fun table => ?_
+        rw [prEvent_map]
+    _ = Pr{let x ← (lazyRun (sampleModel parameterOutput highs)
+            (erase (trace (richProgram (internalize adversary) q (truncateHash parameterOutput)
+              (sampleData parameterOutput fixed highs remaining steps))))
+            (DebtState.start prepared.2 known) >>= fun result =>
+              (fun table => (table, result)) <$>
+                  completion result.2.known)}[CorrectGuess x.1 x.2.2 ∨
+            badAV parameterOutput fixed highs remaining prepared.1 x.1 (x.2.1, x.2.2.cache)] :=
+        (withTable_fixedRun _ _ _).prEvent_eq _
+    _ = _ := by
+        unfold richProgram
+        rw [lazyRun_wrapped tg prepared.2]
+        have hcomp : ((fun out : Run HashInput Coordinate HiddenBridge.Outcome × State =>
+              (((out.1.1, out.1.2.1), out.1.2.2.1), out.2)) <$>
+            interp tg prepared.2 (sampleModel parameterOutput highs)
+              (costGameX (truncateHash parameterOutput)
+                  (sampleData parameterOutput fixed highs remaining steps)
+                (internalize adversary)) q (DebtState.start prepared.2 known)) >>=
+              (fun result => (fun table => (table, result)) <$> completion result.2.known) =
+            (fun x : (Coordinate → Digest) ×
+                (Run HashInput Coordinate HiddenBridge.Outcome × State) =>
+              (x.1, (((x.2.1.1, x.2.1.2.1), x.2.1.2.2.1), x.2.2))) <$>
+            (interp tg prepared.2 (sampleModel parameterOutput highs)
+              (costGameX (truncateHash parameterOutput)
+                  (sampleData parameterOutput fixed highs remaining steps)
+                (internalize adversary)) q (DebtState.start prepared.2 known) >>=
+              fun result => (fun table => (table, result)) <$> completion result.2.known) := by
+          rw [bind_map_left, map_bind]
+          refine bind_congr fun out => ?_
+          rw [Functor.map_map]
+        rw [hcomp, prEvent_map]
+
+set_option maxRecDepth 100000 in
+/-- The same bound holds for knowledge drawn by the above-word exposure. -/
+theorem stopped_le_interp_exposeV (hb : 0 < keptHeight topLayer) (adversary : Adversary) (q : ℕ)
+    (hq : q < 2 ^ 256)
+    (parameterOutput : HashOutput) (fixed : HiddenGraph.Table) (highs : CoordinateHighs)
+    (remaining : RemainingOutputs) (steps : Message → Randomness)
+    (prepared : (OtsKey → Option (Counter × Encoding)) × QueryCache HashSpec)
+    (hprepared : prepared ∈ support (preparation parameterOutput fixed highs remaining))
+    (tg : Targeting HashInput HashOutput Coordinate) (known : Knowledge Coordinate)
+    (hk : known ∈ support (exposeR (aboveList (truncateHash parameterOutput) prepared.1)
+      (knownOf (truncateHash parameterOutput) fixed))) :
+    Pr{let x ← (HiddenOutside.stoppedExperiment (sampleModel parameterOutput highs)
+        (erase (trace (richProgram (internalize adversary) q (truncateHash parameterOutput)
+          (sampleData parameterOutput fixed highs remaining steps))))
+        known prepared.2)}[(HiddenReveal.StopOr RichWin) x] ≤
+      Pr{let x ← (interp tg prepared.2 (sampleModel parameterOutput highs)
+          (costGameX (truncateHash parameterOutput)
+              (sampleData parameterOutput fixed highs remaining steps)
+            (internalize adversary)) q (DebtState.start prepared.2 known) >>=
+          fun result => (fun table => (table, result)) <$>
+                          completion result.2.known)}[CorrectGuess x.1 x.2.2 ∨
+          badAV parameterOutput fixed highs remaining prepared.1 x.1
+            (((x.2.1.1, x.2.1.2.1), x.2.1.2.2.1), x.2.2.cache)] :=
+  stopped_le_interpV hb adversary q hq parameterOutput fixed highs remaining steps prepared
+      hprepared tg known
+    (expose_known_support _ fixed prepared.1 known hk).1
+        (expose_known_support _ fixed prepared.1 known hk).2
+
+end SphincsSecurity.Security.ForsPotential
