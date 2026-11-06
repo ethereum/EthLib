@@ -5,8 +5,10 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Errors
 public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.G1
 public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.G2
 public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Group
+public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Map
 public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Msm
 public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Pairing
+public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.PairingProduct
 public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.RoundTrip
 
 /-!

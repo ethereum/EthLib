@@ -12,13 +12,14 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 - G2MSM rejects an empty input or a length that is not a whole number of 288-byte pairs.
 - Its discount never raises the price above that of `k` separate products.
 - MAP_FP2_TO_G2 rejects any length other than 128 bytes before it charges gas, and every output has 256 bytes.
+- With enough gas, it succeeds exactly when the element of `Fp2` decodes and its map succeeds.
 -/
 
 @[expose] public section
 
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
-open EthLib.Base (bind_ok_iff natToBytes_length)
+open EthLib.Base (bind_ok_iff mapError_ok_iff natToBytes_length)
 open EthLib.Cryptography.Bls (G2)
 
 /-- The raw bytes of a G2 point have 192 bytes, and its padded encoding 256. -/
@@ -185,6 +186,39 @@ theorem bls12MapFp2ToG2_outOfGas {data : ByteArray} (hsize : data.size = 128) {g
   unfold bls12MapFp2ToG2
   rw [ite_eq_right_of_eq_false _ _ (eq_false (by omega)), ite_eq_left_of_eq_true _ _ (eq_true hgas)]
   rfl
+
+/-- MAP_FP2_TO_G2 succeeds exactly on 128 bytes, with at least its price in gas.
+
+Both paddings must be zero, and both field elements must be below the modulus.
+
+The map of that element of `Fp2` to the twist must succeed.
+
+The output is the padded encoding of the mapped point. -/
+theorem bls12MapFp2ToG2_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
+    bls12MapFp2ToG2 data gas = .ok out ↔
+      data.size = 128 ∧ GAS_G2MAP ≤ gas ∧
+        ∃ c0 c1 u P, unpadFp (data.data.toList.take 64) = .ok c0 ∧
+          unpadFp (data.data.toList.drop 64) = .ok c1 ∧ bytesToFq2 (c0 ++ c1) = .ok u ∧
+          Cryptography.Bls.MapToCurve.mapToG2 u = .ok P ∧
+          out = ⟨(padG2 (g2ToBytes P)).toArray⟩ := by
+  by_cases hsize : data.size ≠ 128
+  · rw [bls12MapFp2ToG2_invalidInputLength hsize gas]
+    exact iff_of_false (by simp) fun h => hsize h.1
+  · have hsize' : data.size = 128 := Decidable.not_not.mp hsize
+    by_cases hgas : gas < GAS_G2MAP
+    · rw [bls12MapFp2ToG2_outOfGas hsize' hgas]
+      exact iff_of_false (by simp) fun h => absurd h.2.1 (Nat.not_le.mpr hgas)
+    · simp only [bls12MapFp2ToG2, hgas, ↓reduceIte, hsize', Nat.not_lt.mp hgas, true_and]
+      constructor
+      · intro h
+        obtain ⟨c0, h0, h⟩ := bind_ok_iff.mp h
+        obtain ⟨c1, h1, h⟩ := bind_ok_iff.mp h
+        obtain ⟨u, hu, h⟩ := bind_ok_iff.mp h
+        obtain ⟨P, hp, h⟩ := bind_ok_iff.mp h
+        exact ⟨c0, c1, u, P, h0, h1, hu, mapError_ok_iff.mp hp, (Except.ok.inj h).symm⟩
+      · rintro ⟨c0, c1, u, P, h0, h1, hu, hp, rfl⟩
+        exact bind_ok_iff.mpr ⟨c0, h0, bind_ok_iff.mpr ⟨c1, h1, bind_ok_iff.mpr ⟨u, hu,
+          bind_ok_iff.mpr ⟨P, mapError_ok_iff.mpr hp, rfl⟩⟩⟩⟩
 
 /-- Every output of MAP_FP2_TO_G2 has 256 bytes. -/
 theorem bls12MapFp2ToG2_size {data : ByteArray} {gas : Nat} {out : ByteArray} (h : bls12MapFp2ToG2 data gas = .ok out) :
