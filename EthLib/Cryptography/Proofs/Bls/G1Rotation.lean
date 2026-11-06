@@ -64,7 +64,7 @@ theorem rotate_toPoint {x y x' : F} (hv : Valid ⟨x, y, Fp.one⟩) (hv' : Valid
   have e2 : toPoint ⟨x', y, Fp.one⟩ = _ := Jacobian.Point.toAffine_some (W := curve) (X := x') hv'
   rw [e1, e2]
   show Affine.Point.some _ _ _ = Affine.Point.some _ _ _
-  rw [Affine.Point.some.injEq, hx, map_mul, one_pow, one_pow, mul_one, mul_one]
+  rw [Affine.Point.some.injEq, hx, _root_.map_mul, one_pow, one_pow, mul_one, mul_one]
   constructor
   · linear_combination fpToFp12 x * fpToFp12 beta * hb
   · linear_combination fpToFp12 y * (fpToFp12 beta ^ 3 + 1) * hb
