@@ -564,4 +564,312 @@ theorem sameSizes_processWithdrawals {state after : BeaconState preset fork}
     obtain ⟨_, _, _, _, applied⟩ := computed
     exact (applyExpectedWithdrawals_frame applied).1
 
+/-! ## The balances that the withdrawals lower -/
+
+/-- The total amount that some withdrawals take from one validator. -/
+def withdrawnFrom (withdrawals : Array Withdrawal) (index : ValidatorIndex) : Nat :=
+  ((withdrawals.toList.filter fun withdrawal => withdrawal.validatorIndex = index).map
+    fun withdrawal => withdrawal.amount.toNat).sum
+
+/-- A withdrawal appended at the end adds its amount to the total of its validator only. -/
+theorem withdrawnFrom_push (withdrawals : Array Withdrawal) (withdrawal : Withdrawal)
+    (index : ValidatorIndex) :
+    withdrawnFrom (withdrawals.push withdrawal) index = withdrawnFrom withdrawals index +
+      if withdrawal.validatorIndex = index then withdrawal.amount.toNat else 0 := by
+  unfold withdrawnFrom
+  simp [Array.toList_push, List.filter_append]
+  by_cases h : withdrawal.validatorIndex = index <;> simp [h]
+
+/-- The balance left after some withdrawals, plus what they take, is the balance. -/
+theorem getBalanceAfterWithdrawals_ok {state : BeaconState preset fork} {index : ValidatorIndex}
+    {withdrawals : Array Withdrawal} {left : Gwei}
+    (computed : getBalanceAfterWithdrawals state index withdrawals = .ok left) :
+    ∃ balance, state.balances.data[index.toNat]? = some balance ∧
+      withdrawnFrom withdrawals index + left.toNat = balance.toNat := by
+  unfold getBalanceAfterWithdrawals at computed
+  simp only [bind_ok_iff] at computed
+  obtain ⟨balance, found, withdrawn, folded, last⟩ := computed
+  rw [← Array.foldlM_toList] at folded
+  have sum : ∀ (l : List Withdrawal) (start total : Gwei),
+      l.foldlM (fun sum withdrawal => if withdrawal.validatorIndex = index then
+        liftArith (addChecked sum withdrawal.amount) else pure sum) start = .ok total →
+      total.toNat = start.toNat +
+        ((l.filter fun w => w.validatorIndex = index).map fun w => w.amount.toNat).sum := by
+    intro l
+    induction l with
+    | nil =>
+      intro start total h
+      simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at h
+      simp [h]
+    | cons w rest ih =>
+      intro start total h
+      rw [List.foldlM_cons, bind_ok_iff] at h
+      obtain ⟨mid, step, h⟩ := h
+      have := ih _ _ h
+      by_cases same : w.validatorIndex = index
+      · simp only [same, ↓reduceIte, liftArith, mapError_ok_iff, addChecked_ok_iff] at step
+        simp [same]
+        omega
+      · simp only [same, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at step
+        subst step
+        simp [same]
+        omega
+  have total := sum _ _ _ folded
+  unfold getBalance at found
+  split at found
+  · rename_i read
+    simp only [Except.ok.injEq] at found
+    subst found
+    simp only [liftArith, mapError_ok_iff, subChecked_ok_iff] at last
+    refine ⟨_, read, ?_⟩
+    unfold withdrawnFrom
+    simp at total
+    omega
+  · cases found
+
+/-- An amount within the balance left keeps the total of a validator within its balance. -/
+theorem appendWithdrawal_withdrawnFrom {state : BeaconState preset fork} {index : ValidatorIndex}
+    {balance : Gwei} (found : state.balances.data[index.toNat]? = some balance)
+    {prior withdrawals after : Array Withdrawal} {next next' : WithdrawalIndex}
+    {target : ValidatorIndex} {address : ExecutionAddress} {amount left : Gwei}
+    (bounded : withdrawnFrom (prior ++ withdrawals) index ≤ balance.toNat)
+    (leftOk : getBalanceAfterWithdrawals state target (prior ++ withdrawals) = .ok left)
+    (small : amount.toNat ≤ left.toNat)
+    (computed : appendWithdrawal withdrawals next target address amount = .ok (after, next')) :
+    withdrawnFrom (prior ++ after) index ≤ balance.toNat := by
+  simp only [appendWithdrawal, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
+    Prod.mk.injEq] at computed
+  obtain ⟨_, _, rfl, rfl⟩ := computed
+  rw [Array.append_push, withdrawnFrom_push]
+  split
+  · rename_i same
+    subst same
+    obtain ⟨_, read, sum⟩ := getBalanceAfterWithdrawals_ok leftOk
+    rw [found, Option.some.injEq] at read
+    subst read
+    dsimp only
+    omega
+  · simpa using bounded
+
+/-- A difference that does not wrap is at most the first operand. -/
+theorem toNat_sub_le_self {a b : UInt64} (le : b ≤ a) : (a - b).toNat ≤ a.toNat := by
+  rw [UInt64.toNat_sub_of_le _ _ le]
+  omega
+
+/-- The minimum of a difference that does not wrap and any value is at most the first operand. -/
+theorem toNat_min_sub_le_self {a b c : UInt64} (lt : b < a) : (min (a - b) c).toNat ≤ a.toNat := by
+  have := toNat_sub_le_self (UInt64.le_of_lt lt)
+  rw [UInt64.min_def]
+  split
+  · exact this
+  · have := UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp ‹_›)
+    omega
+
+/-- The loop of the queued partial withdrawals keeps the total of a validator within its balance. -/
+theorem getPendingPartialWithdrawals_loop_withdrawnFrom {state : BeaconState preset fork}
+    {prior : Array Withdrawal} {epoch : Epoch} {limit : Nat} {index : ValidatorIndex}
+    {balance : Gwei} (found : state.balances.data[index.toNat]? = some balance) :
+    ∀ (queue : List PendingPartialWithdrawal) (withdrawals : Array Withdrawal)
+      (next : WithdrawalIndex) (processed : Nat)
+      {result : Array Withdrawal × WithdrawalIndex × Nat},
+    withdrawnFrom (prior ++ withdrawals) index ≤ balance.toNat →
+    getPendingPartialWithdrawals.loop state prior epoch limit queue withdrawals next processed =
+      .ok result →
+    withdrawnFrom (prior ++ result.1) index ≤ balance.toNat
+  | [], _, _, _, _, bounded, computed => by
+    simp only [getPendingPartialWithdrawals.loop, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact bounded
+  | pending :: rest, _, _, _, _, bounded, computed => by
+    simp only [getPendingPartialWithdrawals.loop] at computed
+    split at computed
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      exact bounded
+    · simp only [bind_ok_iff] at computed
+      obtain ⟨_, _, left, leftOk, computed⟩ := computed
+      split at computed
+      · rename_i eligible
+        simp only [bind_ok_iff, liftAccessor_ok] at computed
+        obtain ⟨⟨appended, following⟩, appendedOk, rest'⟩ := computed
+        simp only [isEligibleForPartialWithdrawals, Bool.and_eq_true, decide_eq_true_eq]
+          at eligible
+        exact getPendingPartialWithdrawals_loop_withdrawnFrom found rest _ _ _
+          (appendWithdrawal_withdrawnFrom found bounded (liftAccessor_ok.mp leftOk)
+            (toNat_min_sub_le_self eligible.2)
+            appendedOk) rest'
+      · exact getPendingPartialWithdrawals_loop_withdrawnFrom found rest _ _ _ bounded computed
+
+/-- The loop of the sweep keeps the total of a validator within its balance. -/
+theorem getValidatorsSweepWithdrawals_loop_withdrawnFrom {state : BeaconState preset fork}
+    {prior : Array Withdrawal} {epoch : Epoch} {count limit : Nat} {index : ValidatorIndex}
+    {balance : Gwei} (found : state.balances.data[index.toNat]? = some balance) :
+    ∀ (visits : Nat) (withdrawals : Array Withdrawal) (next : WithdrawalIndex)
+      (target : ValidatorIndex) (processed : Nat)
+      {result : Array Withdrawal × WithdrawalIndex × Nat},
+    withdrawnFrom (prior ++ withdrawals) index ≤ balance.toNat →
+    getValidatorsSweepWithdrawals.loop state prior epoch count limit visits withdrawals next target
+      processed = .ok result →
+    withdrawnFrom (prior ++ result.1) index ≤ balance.toNat
+  | 0, _, _, _, _, _, bounded, computed => by
+    simp only [getValidatorsSweepWithdrawals.loop, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact bounded
+  | visits + 1, _, _, _, _, _, bounded, computed => by
+    simp only [getValidatorsSweepWithdrawals.loop] at computed
+    split at computed
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      subst computed
+      exact bounded
+    · simp only [bind_ok_iff] at computed
+      obtain ⟨_, _, left, leftOk, computed⟩ := computed
+      have leftOk := liftAccessor_ok.mp leftOk
+      split at computed
+      · simp only [bind_ok_iff, liftAccessor_ok] at computed
+        obtain ⟨⟨appended, following⟩, appendedOk, _, _, rest⟩ := computed
+        exact getValidatorsSweepWithdrawals_loop_withdrawnFrom found visits _ _ _ _
+          (appendWithdrawal_withdrawnFrom found bounded leftOk (Nat.le_refl _) appendedOk) rest
+      · split at computed
+        · rename_i excess
+          simp only [isPartiallyWithdrawableValidator, Bool.and_eq_true, decide_eq_true_eq]
+            at excess
+          simp only [bind_ok_iff, liftAccessor_ok] at computed
+          obtain ⟨⟨appended, following⟩, appendedOk, _, _, rest⟩ := computed
+          exact getValidatorsSweepWithdrawals_loop_withdrawnFrom found visits _ _ _ _
+            (appendWithdrawal_withdrawnFrom found bounded leftOk
+              (toNat_sub_le_self (UInt64.le_of_lt excess.2)) appendedOk) rest
+        · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, exists_eq_left']
+            at computed
+          obtain ⟨_, _, rest⟩ := computed
+          exact getValidatorsSweepWithdrawals_loop_withdrawnFrom found visits _ _ _ _ bounded rest
+
+/-- A withdrawal at the front adds its amount to the total of its validator only. -/
+theorem withdrawnFrom_cons (withdrawal : Withdrawal) (rest : List Withdrawal)
+    (index : ValidatorIndex) :
+    withdrawnFrom (withdrawal :: rest).toArray index =
+      (if withdrawal.validatorIndex = index then withdrawal.amount.toNat else 0) +
+        withdrawnFrom rest.toArray index := by
+  unfold withdrawnFrom
+  by_cases h : withdrawal.validatorIndex = index <;> simp [h]
+
+/-- Before Gloas, withdrawals within a balance lower it by exactly their total. -/
+theorem applyWithdrawals_balance {index : ValidatorIndex} (before : fork < .glamsterdam) :
+    ∀ (withdrawals : List Withdrawal) (state after : BeaconState preset fork) (balance : Gwei),
+    withdrawals.foldlM applyWithdrawal state = .ok after →
+    state.balances.data[index.toNat]? = some balance →
+    withdrawnFrom withdrawals.toArray index ≤ balance.toNat →
+    (after.balances.data[index.toNat]?).map UInt64.toNat =
+      some (balance.toNat - withdrawnFrom withdrawals.toArray index)
+  | [], state, after, balance, computed, found, _ => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    simp [found, withdrawnFrom]
+  | withdrawal :: rest, state, after, balance, computed, found, bounded => by
+    rw [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨middle, step, computed⟩ := computed
+    have noGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+    unfold applyWithdrawal at step
+    simp only [noGloas, false_and, ↓reduceDIte] at step
+    simp only [decreaseBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at step
+    obtain ⟨old, oldOk, rfl⟩ := step
+    rw [withdrawnFrom_cons] at bounded ⊢
+    by_cases same : withdrawal.validatorIndex = index
+    · simp only [same, ↓reduceIte] at bounded ⊢
+      subst same
+      simp only [getBalance, found, Except.ok.injEq] at oldOk
+      subst oldOk
+      have inRange := (Array.getElem?_eq_some_iff.mp found).1
+      rw [applyWithdrawals_balance before rest _ after (saturatingSub balance withdrawal.amount)
+        computed (by simp [BeaconState.setBalance, inRange])
+        (by rw [toNat_saturatingSub]; omega), toNat_saturatingSub]
+      congr 1
+      omega
+    · simp only [same, ↓reduceIte, Nat.zero_add] at bounded ⊢
+      have apart : withdrawal.validatorIndex.toNat ≠ index.toNat :=
+        fun h => same (UInt64.toNat_inj.mp h)
+      exact applyWithdrawals_balance before rest _ after balance computed
+        (by simp [BeaconState.setBalance, apart, found]) bounded
+
+/-- Before Gloas, only the withdrawals themselves change the balances. -/
+theorem applyExpectedWithdrawals_balances {state after : BeaconState preset fork}
+    {capella : .shapella ≤ fork} {expected : ExpectedWithdrawals} (before : fork < .glamsterdam)
+    (computed : applyExpectedWithdrawals state capella expected = .ok after) :
+    ∃ applied, applyWithdrawals state expected.withdrawals = .ok applied ∧
+      after.balances = applied.balances := by
+  have noGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  unfold applyExpectedWithdrawals at computed
+  simp only [noGloas, ↓reduceDIte, bind_ok_iff] at computed
+  obtain ⟨applied, appliedOk, indexed, indexedOk, swept, sweptOk, last⟩ := computed
+  refine ⟨applied, appliedOk, ?_⟩
+  have one : indexed.balances = applied.balances := by
+    unfold updateNextWithdrawalIndex at indexedOk
+    split at indexedOk
+    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at indexedOk
+      obtain ⟨_, _, rfl⟩ := indexedOk
+      rfl
+    · cases indexedOk
+      rfl
+  have two : swept.balances = indexed.balances := by
+    simp only [pure, Except.pure, Except.ok.injEq] at sweptOk
+    subst sweptOk
+    split <;> rfl
+  unfold updateNextWithdrawalValidatorIndex at last
+  simp only [bind_ok_iff] at last
+  obtain ⟨_, _, last⟩ := last
+  split at last
+  · cases last
+  · cases last
+    rw [← one, ← two]
+
+/-- Before Gloas, the expected withdrawals take from a validator at most its balance. -/
+theorem getExpectedWithdrawals_withdrawnFrom {state : BeaconState preset fork}
+    {capella : .shapella ≤ fork} {expected : ExpectedWithdrawals} (before : fork < .glamsterdam)
+    (computed : getExpectedWithdrawals state capella = .ok expected) {index : ValidatorIndex}
+    {balance : Gwei} (found : state.balances.data[index.toNat]? = some balance) :
+    withdrawnFrom expected.withdrawals index ≤ balance.toNat := by
+  unfold getExpectedWithdrawals at computed
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨⟨builders, index1, _⟩, buildersOk, ⟨partials, index2, _⟩, partialsOk,
+    ⟨buildersSweep, index3, _⟩, buildersSweepOk, ⟨sweep, index4, _⟩, sweepOk, rfl⟩ := computed
+  have noGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+  simp only [noGloas, ↓reduceDIte, Except.ok.injEq, Prod.mk.injEq] at buildersOk buildersSweepOk
+  obtain ⟨rfl, rfl, _⟩ := buildersOk
+  obtain ⟨rfl, rfl, _⟩ := buildersSweepOk
+  have two : withdrawnFrom (#[] ++ partials) index ≤ balance.toNat := by
+    split at partialsOk
+    · unfold getPendingPartialWithdrawals at partialsOk
+      simp only [bind_ok_iff, ensure_ok_iff] at partialsOk
+      obtain ⟨_, _, _, _, loopOk⟩ := partialsOk
+      exact getPendingPartialWithdrawals_loop_withdrawnFrom found _ _ _ _
+        (by simp [withdrawnFrom]) loopOk
+    · simp only [Except.ok.injEq, Prod.mk.injEq] at partialsOk
+      obtain ⟨rfl, rfl, rfl⟩ := partialsOk
+      simp [withdrawnFrom]
+  unfold getValidatorsSweepWithdrawals at sweepOk
+  simp only [bind_ok_iff, ensure_ok_iff] at sweepOk
+  obtain ⟨_, _, loopOk⟩ := sweepOk
+  exact getValidatorsSweepWithdrawals_loop_withdrawnFrom found _ _ _ _ _ (by simpa using two)
+    loopOk
+
+/-- Before Gloas, the withdrawal step lowers each balance by exactly what the payload takes from it.
+
+The payload never takes more than the balance. -/
+theorem processWithdrawals_balance {state after : BeaconState preset fork}
+    {capella : .shapella ≤ fork} {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
+    (before : fork < .glamsterdam)
+    (computed : processWithdrawals state capella payload = .ok after) {index : ValidatorIndex}
+    {balance : Gwei} (found : state.balances.data[index.toNat]? = some balance) :
+    withdrawnFrom ((payload before).withdrawals capella).data index ≤ balance.toNat ∧
+      (after.balances.data[index.toNat]?).map UInt64.toNat =
+        some (balance.toNat - withdrawnFrom ((payload before).withdrawals capella).data index) := by
+  obtain ⟨expected, expectedOk, carried, appliedOk⟩ := processWithdrawals_expected before computed
+  have bounded := getExpectedWithdrawals_withdrawnFrom before expectedOk found
+  obtain ⟨applied, appliedOk, same⟩ := applyExpectedWithdrawals_balances before appliedOk
+  unfold applyWithdrawals at appliedOk
+  rw [← Array.foldlM_toList] at appliedOk
+  have lowered := applyWithdrawals_balance before _ _ _ _ appliedOk found
+    (by simpa using bounded)
+  rw [carried, same]
+  exact ⟨bounded, by simpa using lowered⟩
+
 end EthLib.Consensus
