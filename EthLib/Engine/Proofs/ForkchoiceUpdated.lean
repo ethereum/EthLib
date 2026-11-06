@@ -16,6 +16,12 @@ Its safe and finalized blocks are then zero, or the head or one of its known anc
 
 An invalid head names as latest valid hash a valid block of its own chain.
 
+That block is the valid block nearest the head.
+
+There is none when no block of the chain is valid.
+
+Each block of a chain after the first is the parent of the block before it.
+
 The parameters decode exactly when they are a JSON array of two values.
 
 The first value must also decode as a forkchoice state.
@@ -61,6 +67,60 @@ theorem latestValid_spec {h v : Hash32} (hv : latestValid tree h = some v) :
   unfold latestValid at hv
   have hValid := List.find?_some hv
   exact ⟨List.mem_of_find?_eq_some hv, hValid⟩
+
+/-- The latest valid block of a chain is its valid block nearest the head.
+
+Every block between the head and it is invalid. -/
+theorem latestValid_eq_some_iff {h v : Hash32} :
+    latestValid tree h = some v ↔
+      ∃ (i : Nat) (hi : i < (chainOf tree h).length), (chainOf tree h)[i] = v ∧
+        (tree.lookup v).any (·.valid) = true ∧
+        ∀ (j : Nat) (hj : j < i), (tree.lookup (chainOf tree h)[j]).any (·.valid) = false := by
+  unfold latestValid
+  rw [List.find?_eq_some_iff_getElem]
+  constructor
+  · rintro ⟨hv, i, hi, rfl, hj⟩
+    exact ⟨i, hi, rfl, hv, fun j hj' => by simpa using hj j hj'⟩
+  · rintro ⟨i, hi, rfl, hv, hj⟩
+    exact ⟨hv, i, hi, rfl, fun j hj' => by simpa using hj j hj'⟩
+
+/-- A chain has no latest valid block exactly when none of its blocks is valid. -/
+theorem latestValid_eq_none_iff {h : Hash32} :
+    latestValid tree h = none ↔ ∀ x ∈ chainOf tree h, (tree.lookup x).any (·.valid) = false := by
+  unfold latestValid
+  simp [List.find?_eq_none]
+
+/-- Each block of the ancestors of a block, after the first, is the parent of the one before. -/
+theorem parent_of_ancestors {fuel : Nat} {start b : Hash32} {i : Nat}
+    (h : (ancestors tree fuel start)[i + 1]? = some b) :
+    ∃ a p, (ancestors tree fuel start)[i]? = some a ∧ tree.lookup a = some p ∧
+      b = p.parentHash := by
+  induction fuel generalizing start i with
+  | zero => simp [ancestors] at h
+  | succ fuel ih =>
+    cases hp : tree.lookup start with
+    | none => simp [ancestors, hp] at h
+    | some p =>
+      simp only [ancestors, hp, List.getElem?_cons_succ] at h ⊢
+      cases i with
+      | zero =>
+        -- The second block is the first of the ancestors of the parent, so it is the parent.
+        refine ⟨start, p, rfl, hp, ?_⟩
+        cases hf : fuel with
+        | zero => simp [hf, ancestors] at h
+        | succ fuel' =>
+          rw [hf] at h
+          cases hq : tree.lookup p.parentHash with
+          | none => simp [ancestors, hq] at h
+          | some q => simp [ancestors, hq] at h; exact h.symm
+      | succ i =>
+        simp only [List.getElem?_cons_succ]
+        exact ih h
+
+/-- Each block of the chain of a block, after the first, is the parent of the one before. -/
+theorem parent_of_chainOf {h b : Hash32} {i : Nat} (hb : (chainOf tree h)[i + 1]? = some b) :
+    ∃ a p, (chainOf tree h)[i]? = some a ∧ tree.lookup a = some p ∧ b = p.parentHash :=
+  parent_of_ancestors hb
 
 /-- The update is syncing exactly when the tree does not hold the head. -/
 theorem forkchoiceUpdated_syncing_iff {result : PayloadStatus × Option Hash32}
