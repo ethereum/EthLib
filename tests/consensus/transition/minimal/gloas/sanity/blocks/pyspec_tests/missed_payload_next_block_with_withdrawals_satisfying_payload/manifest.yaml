@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: sanity
+handler: blocks
+suite: pyspec_tests
+case: missed_payload_next_block_with_withdrawals_satisfying_payload

@@ -1,7 +1,10 @@
 module
 
+public import EthLib.Consensus.Proofs.Transition.BuilderRequests
 public import EthLib.Consensus.Proofs.Transition.Execution
 public import EthLib.Consensus.Proofs.Transition.Invariants
+public import EthLib.Consensus.Proofs.Transition.ParentPayload
+public import EthLib.Consensus.Proofs.Transition.Payload
 public import EthLib.Consensus.Proofs.Transition.Requests
 public import EthLib.Consensus.Proofs.Transition.SyncAggregate
 public import EthLib.Consensus.Proofs.Transition.Withdrawals
@@ -123,20 +126,6 @@ theorem processExecutionPayload_slot {body : BeaconBlockBody preset fork}
     after.slot = state.slot := by
   obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok computed
   rfl
-
-theorem processBlockExecution_slot {body : BeaconBlockBody preset fork}
-    {bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam}
-    (computed : processBlockExecution config engine state body bellatrix = .ok after) :
-    after.slot = state.slot := by
-  unfold processBlockExecution at computed
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨withdrawn, withdrawnOk, paid⟩ := computed
-    exact (processExecutionPayload_slot paid).trans (processWithdrawals_slot withdrawnOk)
-  · split at computed
-    · exact processExecutionPayload_slot computed
-    · cases computed
-      rfl
 
 /-! ## Operations -/
 
@@ -355,6 +344,107 @@ theorem processOperations_slot {body : BeaconBlockBody preset fork} {parentSlot 
     fold (fun _ _ _ ok => (frame_processAttesterSlashing ok).slot) attestersOk,
     fold (fun _ _ _ ok => (frame_processProposerSlashing ok).slot) proposersOk]
 
+/-! ## The parent payload and the execution part of a block -/
+
+theorem processBuilderDepositRequest_slot {gloas : .glamsterdam ≤ fork}
+    {request : BuilderDepositRequest}
+    (computed : processBuilderDepositRequest config checks state gloas request = .ok after) :
+    after.slot = state.slot := by
+  unfold processBuilderDepositRequest addBuilderToRegistry BeaconState.setBuilder at computed
+  simp only [bind, Except.bind, pure, Except.pure] at computed
+  repeat' split at computed
+  all_goals first | (cases computed; done) | (cases computed; rfl)
+
+theorem processBuilderExitRequest_slot {gloas : .glamsterdam ≤ fork}
+    {request : BuilderExitRequest}
+    (computed : processBuilderExitRequest config state gloas request = .ok after) :
+    after.slot = state.slot := by
+  rcases processBuilderExitRequest_cases computed with rfl | ⟨_, _, _, _, _, exited⟩
+  · rfl
+  · unfold initiateBuilderExit BeaconState.setBuilder at exited
+    simp only [bind, Except.bind, pure, Except.pure] at exited
+    repeat' split at exited
+    all_goals first | (cases exited; done) | (cases exited; rfl)
+
+theorem settleParentPayment_slot {gloas : .glamsterdam ≤ fork}
+    (computed : settleParentPayment state gloas = .ok after) : after.slot = state.slot := by
+  unfold settleParentPayment at computed
+  split at computed
+  · have settled := liftAccessor_ok.mp computed
+    unfold settleBuilderPayment at settled
+    split at settled
+    · cases settled
+      rfl
+    · cases settled
+  · simp only at computed
+    split at computed <;> cases computed <;> rfl
+
+theorem processParentExecutionPayload_slot {gloas : .glamsterdam ≤ fork}
+    {body : BeaconBlockBody preset fork}
+    (computed : processParentExecutionPayload config checks state gloas body = .ok after) :
+    after.slot = state.slot := by
+  have fold {α : Type} {step : BeaconState preset fork → α → Except TransitionError _}
+      (keeps : ∀ s x s', step s x = .ok s' → s'.slot = s.slot) {items : List α}
+      {start finish : BeaconState preset fork} (folded : items.foldlM step start = .ok finish) :
+      finish.slot = start.slot :=
+    foldlM_ok_invariant (fun s : BeaconState preset fork => s.slot = start.slot)
+      (fun _ _ _ same ok => (keeps _ _ _ ok).trans same) rfl folded
+  unfold processParentExecutionPayload at computed
+  dsimp only at computed
+  split at computed
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, rfl⟩ := computed
+    rfl
+  simp only [bind_ok_iff] at computed
+  obtain ⟨_, _, _, _, applied⟩ := computed
+  unfold applyParentExecutionPayload at applied
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at applied
+  obtain ⟨_, _, _, _, _, _, _, _, settled, settledOk, requested, requestedOk, _, _, rfl⟩ :=
+    applied
+  unfold processParentRequests at requestedOk
+  simp only [bind_ok_iff, ← Array.foldlM_toList] at requestedOk
+  obtain ⟨_, depositsOk, _, withdrawalsOk, _, consolidationsOk, _, builderDepositsOk, exitsOk⟩ :=
+    requestedOk
+  change requested.slot = state.slot
+  rw [fold (fun _ _ _ ok => processBuilderExitRequest_slot ok) exitsOk,
+    fold (fun _ _ _ ok => processBuilderDepositRequest_slot ok) builderDepositsOk,
+    fold (fun _ _ _ ok => processConsolidationRequest_slot ok) consolidationsOk,
+    fold (fun _ _ _ ok => processWithdrawalRequest_slot ok) withdrawalsOk,
+    fold (fun _ _ _ ok => processDepositRequest_slot ok) depositsOk,
+    settleParentPayment_slot settledOk]
+
+theorem processExecutionPayloadBid_slot {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadBid preset fork}
+    (computed : processExecutionPayloadBid config checks state gloas signed = .ok after) :
+    after.slot = state.slot := by
+  obtain ⟨_, recorded, recordedOk, rfl⟩ := processExecutionPayloadBid_ok computed
+  by_cases paid : 0 < signed.message.value
+  · obtain ⟨_, _, _, _, rfl⟩ := recordBidPayment_of_pos paid recordedOk
+    rfl
+  · simp only [recordBidPayment, paid, ↓reduceIte, pure, Except.pure, Except.ok.injEq]
+      at recordedOk
+    subst recordedOk
+    rfl
+
+theorem processBlockExecution_slot {body : BeaconBlockBody preset fork}
+    {bellatrix : .bellatrix ≤ fork}
+    (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
+    after.slot = state.slot := by
+  unfold processBlockExecution at computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨withdrawn, withdrawnOk, bid⟩ := computed
+    exact (processExecutionPayloadBid_slot bid).trans (processWithdrawals_slot withdrawnOk)
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨withdrawn, withdrawnOk, paid⟩ := computed
+    exact (processExecutionPayload_slot paid).trans (processWithdrawals_slot withdrawnOk)
+  · dsimp only at computed
+    split at computed
+    · exact processExecutionPayload_slot computed
+    · cases computed
+      rfl
+
 /-! ## The sync aggregate -/
 
 theorem processSyncAggregate_slot {altair : .altair ≤ fork} {aggregate : SyncAggregate preset}
@@ -382,29 +472,28 @@ theorem processBlock_slot {block : BeaconBlock preset fork}
   by_cases altair : Fork.altair ≤ fork
   · simp only [processBlock, altair, ↓reduceDIte] at computed
     unfold processBlockAltair at computed
-    by_cases gloas : Fork.glamsterdam ≤ fork
-    · simp only [gloas, ↓reduceDIte] at computed
+    by_cases heze : Fork.hegota ≤ fork
+    · simp only [heze, ↓reduceDIte] at computed
       cases computed
-    simp only [gloas, ↓reduceDIte, bind_ok_iff] at computed
-    obtain ⟨headed, headedOk, computed⟩ := computed
-    -- From Bellatrix the execution part runs between the header and the RANDAO reveal.
+    simp only [heze, ↓reduceDIte, bind_ok_iff] at computed
+    obtain ⟨paid, paidOk, headed, headedOk, computed⟩ := computed
+    -- From Gloas the payload of the parent runs before the header.
+    have paidSlot : paid.slot = state.slot := by
+      split at paidOk
+      · exact processParentExecutionPayload_slot paidOk
+      · cases paidOk
+        rfl
     obtain ⟨executed, executedOk, revealed, revealedOk, voted, votedOk, operated, operatedOk,
-        synced⟩ : ∃ executed, executed.slot = headed.slot ∧ ∃ revealed,
-        processRandao config checks executed block.body = .ok revealed ∧ ∃ voted,
-        processEth1Data _ revealed block.body = .ok voted ∧ ∃ operated,
-        processOperations config checks voted block.body state.latestBlockHeader.slot =
-          .ok operated ∧
-        processSyncAggregate config checks operated altair (block.body.syncAggregate altair) =
-          .ok after := by
-      by_cases bellatrix : Fork.bellatrix ≤ fork
-      · simp only [bellatrix, ↓reduceDIte, bind_ok_iff] at computed
-        obtain ⟨executed, executedOk, rest⟩ := computed
-        exact ⟨executed, processBlockExecution_slot executedOk, rest⟩
-      · simp only [bellatrix, ↓reduceDIte, bind_ok_iff, pure_bind] at computed
-        exact ⟨headed, rfl, computed⟩
+      synced⟩ := computed
+    -- From Bellatrix the execution part runs between the header and the RANDAO reveal.
+    have executedSlot : executed.slot = headed.slot := by
+      split at executedOk
+      · exact processBlockExecution_slot executedOk
+      · cases executedOk
+        rfl
     rw [processSyncAggregate_slot synced, processOperations_slot operatedOk,
-      (frame_processEth1Data votedOk).slot, (frame_processRandao revealedOk).slot, executedOk,
-      (frame_processBlockHeader headedOk).slot]
+      (frame_processEth1Data votedOk).slot, (frame_processRandao revealedOk).slot, executedSlot,
+      (frame_processBlockHeader headedOk).slot, paidSlot]
   · simp only [processBlock, altair, ↓reduceDIte, bind_ok_iff] at computed
     obtain ⟨headed, headedOk, revealed, revealedOk, voted, votedOk, operated⟩ := computed
     rw [processOperations_slot operated, (frame_processEth1Data votedOk).slot,

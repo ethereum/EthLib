@@ -144,7 +144,8 @@ A `sanity/slots` case advances a state by some slots.
 A `sanity/blocks`, `finality` or `random` case runs a list of signed blocks, and must be rejected when it has no state after it.
 The directory keeps two cases of each group at each fork whose whole transition EthLib holds.
 These forks are Phase 0, Altair, Bellatrix, Capella and Deneb.
-Electra and Fulu run too, with one case of each group at each of them.
+Electra, Fulu and Gloas run too, with one case of each group at each of them.
+Gloas keeps three `sanity/slots` cases: two reset the availability of a payload, and one crosses an epoch.
 `bindings/python/tests/consensus/test_transition.py` runs each case through the Lean transition and compares the state after it.
 
 The directory `fork/` holds upgrade cases from `minimal.tar.gz` in the same way.

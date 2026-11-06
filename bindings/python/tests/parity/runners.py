@@ -54,10 +54,7 @@ NOT_YET = {
 # and Hegotá. A key is a runner, a runner and a handler, or a format, as in NOT_YET.
 # At these forks an entry here comes before the entry of NOT_YET.
 _GLOAS = {
-    "finality": "the Gloas block processing and state transition (G52)",
-    "random": "the Gloas block processing and state transition (G52)",
-    "sanity": "the Gloas block processing and state transition (G52)",
-    "transition": "the upgrade to Gloas (G53) and the Gloas state transition (G52)",
+    "transition": "the upgrade to Gloas (G53)",
     "fork_choice": "the Gloas block and payload handlers (G70)",
     "fast_confirmation": "the Gloas fast confirmation (G73)",
     "networking": "the Gloas data columns and unchanged topics (G77)",
@@ -78,7 +75,7 @@ _HEZE = {
     "random": "Heze blocks and epochs (G84)",
     "sanity": "Heze blocks and epochs (G84)",
     "operations": "Heze blocks and epochs (G84)",
-    "transition": "the Gloas state transition (G52) and Heze blocks and epochs (G84)",
+    "transition": "Heze blocks and epochs (G84)",
     "fork_choice": "inclusion lists in the Heze fork choice (G86)",
     "fast_confirmation": "the Gloas fast confirmation (G73) on the Heze fork choice (G86)",
     "networking": "the Heze gossip and req/resp rules (G87)",
