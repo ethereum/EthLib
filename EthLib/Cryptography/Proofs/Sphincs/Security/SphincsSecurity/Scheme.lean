@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.HashSig.Oracle
 public import VCVio.OracleComp.QueryTracking.LoggingOracle.Core
 public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 public import VCVio.OracleComp.Constructions.SampleableType.Measure
@@ -80,10 +81,11 @@ open OracleComp OracleSpec ENNReal
 
 namespace SphincsSecurity
 
+export EthLib.Cryptography.HashSig
+  (digestBits hashOutputBits HashInput HashOutput HashSpec OracleWorld truncateHash)
+
 /-! ## The instance: parameters, types, and hash-input layout -/
 
-def digestBits : Nat := 128
-def hashOutputBits : Nat := 256
 def messageBits : Nat := 256
 def publicParameterBits : Nat := 128
 def counterBits : Nat := 32
@@ -199,7 +201,6 @@ def maxLayerHeight : Nat := totalHeight - lowerHeight * (numLayers - 1)
 abbrev MasterSeed := BitVec 256
 
 abbrev Digest := BitVec digestBits
-abbrev HashOutput := BitVec hashOutputBits
 abbrev Message := BitVec messageBits
 abbrev PublicParameter := BitVec publicParameterBits
 abbrev Randomness := Digest
@@ -222,7 +223,6 @@ abbrev ChainPair := Fin 32
 abbrev Digit := Fin chainLength
 abbrev ChainStep := Fin (chainLength - 1)
 abbrev Encoding := ChainIndex → Digit
-abbrev HashInput := List UInt8
 
 /-! ### FORS types -/
 
@@ -245,10 +245,6 @@ def topLayer : Layer := ⟨0, Params.numLayers_pos⟩
 
 /-- The number of index bits below a layer: the sum of the heights of the layers under it. -/
 def heightBelow (lay : Layer) : Nat := lowerHeight * (numLayers - 1 - lay.val)
-
-/-- The first 16 bytes of a hash output: the low 128 bits of the little-endian bit vector. -/
-def truncateHash (output : HashOutput) : Digest :=
-  output.extractLsb' 0 digestBits
 
 /-- The second 16 bytes of a hash output, bytes 16 to 31.
 
@@ -532,15 +528,9 @@ The hash and verification routines come first, then key generation and signing.
 The hashing routines work in any monad that can query the hash.
 -/
 
-/-- A hash query takes an arbitrary byte string and returns 32 bytes. -/
-abbrev HashSpec := HashInput →ₒ HashOutput
-
-/-- Private uniform sampling and the shared hash oracle.
-
-Only hash calls count toward the query bound. -/
-abbrev OracleWorld := unifSpec + HashSpec
-
 namespace Concrete
+
+export EthLib.Cryptography.HashSig (oracleHash)
 
 /-- Run the `n` computations in index order and collect their results. -/
 def sequenceFin {m : Type → Type} [Monad m] {α : Type} {n : Nat}
@@ -553,10 +543,6 @@ def sequenceFin {m : Type → Type} [Monad m] {α : Type} {n : Nat}
       return Fin.cases head tail
 
 variable {m : Type → Type} [Monad m] [HasQuery HashSpec m]
-
-/-- One query to the random oracle `H`. -/
-def oracleHash (input : HashInput) : m HashOutput :=
-  HasQuery.query (spec := HashSpec) (m := m) input
 
 /-- The tweakable hash `Th(P, A, M)`: the first 16 bytes of `H(P || A || M)`. -/
 def tweakableHash (parameter : PublicParameter) (domain : HashDomain) (payload : HashInput) :
