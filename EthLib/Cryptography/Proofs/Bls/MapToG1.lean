@@ -30,7 +30,7 @@ open scoped EthLib.Cryptography.Bls.Fp
 local notation "F" => ZMod Fp.modulus
 
 /-- A field element of the specification, seen in Mathlib's `ZMod p`. -/
-private def toF (a : Fp) : F := a
+private def toF (a : Fp) : F := Fp.toZMod a
 
 /-! ## The SSWU map onto `E'` -/
 
@@ -50,12 +50,14 @@ private def sqrtNegZ : Fp :=
     0x366d601f33f3946e3ed39794735c38315d874bc1d70637c3)
 
 private theorem sqrtNegZ_sq : toF sqrtNegZ * toF sqrtNegZ = -toF Z := by
-  show sqrtNegZ * sqrtNegZ = -Z
-  decide_eq_at_model [sqrtNegZ, Z]
+  have h : sqrtNegZ * sqrtNegZ = -Z := by decide_eq_at_model [sqrtNegZ, Z]
+  have h' := congrArg Fp.toZMod h
+  push_toZMod at h'
+  exact h'
 
-private theorem aprime_ne_zero : toF Aprime ≠ 0 := by
-  show Aprime ≠ (0 : Fp)
-  decide_eq_at_model [Aprime]
+private theorem aprime_ne_zero : toF Aprime ≠ 0 := fun h =>
+  (show Aprime ≠ (0 : Fp) by decide_eq_at_model [Aprime])
+    (Fp.toZMod_inj.mp (h.trans Fp.toZMod_zero.symm))
 
 -- At the exceptional `u`, the map takes `x1 = B' / (Z * A')`, and `g(x1)` is a square.
 private theorem sqrt_exceptional_ok :
@@ -101,23 +103,35 @@ private theorem sqrt_ok (u : Fp) :
   rcases HashToCurve.sq_or_neg_sq (g (x1 u)) with hs | hs
   · exact absurd (by rw [Fp.sqrt_complete hs]; rfl) hok
   have hne : toF (Z * (u * u)) * toF (Z * (u * u)) + toF (Z * (u * u)) ≠ 0 := fun h => by
-    have h' : BaseField.isZero (Z * (u * u) * (Z * (u * u)) + Z * (u * u)) = true :=
-      (G1.isZero_iff (a := Z * (u * u) * (Z * (u * u)) + Z * (u * u))).mpr h
+    have h' : BaseField.isZero (Z * (u * u) * (Z * (u * u)) + Z * (u * u)) = true := by
+      rw [Fp.baseField_isZero, G1.isZero_iff]
+      simp only [toF] at h
+      push_toZMod
+      exact h
     rw [hden] at h'
     cases h'
   have hx1 : x1 u = (-Bprime * (Aprime : Fp).inverse) *
       (Fp.one + (Z * (u * u) * (Z * (u * u)) + Z * (u * u)).inverse) := by
-    rw [x1, ite_eq_right (by rw [hden]; decide)]
-    rfl
+    rw [x1, ite_eq_right (Bool.ne_true_of_eq_false hden), Fp.baseField_inverse,
+      Fp.baseField_inverse, Fp.baseField_one, Fp.one_def]
   have hg : toF (g (Z * (u * u) * x1 u)) =
       toF (Z * (u * u)) * toF (Z * (u * u)) * toF (Z * (u * u)) * toF (g (x1 u)) := by
-    rw [hx1, Fp.inverse_eq_inv, Fp.inverse_eq_inv]
-    exact g_mul (toF (Z * (u * u))) hne
+    have h := g_mul (toF (Z * (u * u))) hne
+    rw [hx1]
+    simp only [toF, g, Fp.toZMod_add, Fp.toZMod_mul, Fp.toZMod_neg, Fp.toZMod_inverse,
+      Fp.one_def, Fp.toZMod_one] at h ⊢
+    linear_combination h
   refine ⟨_, Fp.sqrt_complete (b := sqrtNegZ * Z * (u * u * u) *
     Fp.powNat (g (x1 u)) ((Fp.modulus + 1) / 4)) ?_⟩
-  exact (sq_witness (c := toF sqrtNegZ) (z := toF Z) (u := toF u)
+  have hs' := congrArg Fp.toZMod hs
+  push_toZMod at hs'
+  have h := (sq_witness (c := toF sqrtNegZ) (z := toF Z) (u := toF u)
     (s := toF (Fp.powNat (g (x1 u)) ((Fp.modulus + 1) / 4))) (gx := toF (g (x1 u)))
-    sqrtNegZ_sq hs).trans hg.symm
+    sqrtNegZ_sq hs').trans hg.symm
+  apply Fp.toZMod.injective
+  simp only [toF] at h
+  push_toZMod at h ⊢
+  linear_combination h
 
 /-- The SSWU map succeeds on every input (RFC 9380 §6.6.2). -/
 theorem simpleSwuG1_ok (u : Fp) : ∃ p, simpleSwuG1 u = .ok p := by
@@ -219,6 +233,18 @@ private def toFs (l : List Fp) : List F := l.map toF
 /-- A constant of the specification is the cast of its integer. -/
 private theorem toF_ofNat (n : Nat) : toF (BaseField.ofNat n) = (n : F) := Fp.toZMod_ofNat n
 
+-- The map to `ZMod p` sends the Horner value of a coefficient list to that of the mapped list.
+private theorem toZMod_evaluate (l : List Fp) (x : Fp) :
+    Fp.toZMod (evaluate l x) = eval (toFs l) (Fp.toZMod x) := by
+  induction l with
+  | nil => simp only [evaluate, toFs, List.foldr_nil, List.map_nil, eval_nil,
+      Fp.baseField_zero, Fp.toZMod_zero]
+  | cons a l ih =>
+    simp only [evaluate, toFs, List.foldr_cons, List.map_cons, eval_cons, Fp.toZMod_add,
+      Fp.toZMod_mul] at ih ⊢
+    rw [ih]
+    rfl
+
 -- The kernel multiplies the coefficient lists: about 5 s and 1.5 GB.
 private theorem coefficients_eq :
     mul [toF Bprime, toF Aprime, 0, 1]
@@ -273,8 +299,7 @@ private theorem image_equation {x y : F}
 /-- The isogeny sends every point of `E' : y^2 = x^3 + A' * x + B'` to a valid point of `G1`. -/
 theorem isoMapG1_valid {x y : Fp} (h : y * y = x * x * x + Aprime * x + Bprime) :
     G1.Valid (isoMapG1 x y) := by
-  unfold isoMapG1
-  dsimp only
+  rw [isoMapG1]
   simp only [Fp.baseField_isZero, Fp.baseField_powNat, Fp.baseField_inverse, Fp.baseField_one]
   by_cases hd : ((evaluate K2 x + Fp.powNat x 10).isZero ||
       (evaluate K4 x + Fp.powNat x 15).isZero) = true
@@ -282,15 +307,16 @@ theorem isoMapG1_valid {x y : Fp} (h : y * y = x * x * x + Aprime * x + Bprime) 
     exact G1.valid_zero
   · rw [ite_eq_right hd]
     simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hd
-    have hxd : evaluate K2 x + Fp.powNat x 10 ≠ 0 := fun h0 => by
-      rw [Fp.isZero_iff.mpr h0] at hd
-      exact Bool.noConfusion hd.1
-    have hyd : evaluate K4 x + Fp.powNat x 15 ≠ 0 := fun h0 => by
-      rw [Fp.isZero_iff.mpr h0] at hd
-      exact Bool.noConfusion hd.2
-    rw [Fp.powNat_eq_pow] at hxd hyd
+    have hne {a : Fp} (ha : a.isZero = false) : Fp.toZMod a ≠ 0 := fun h0 => by
+      rw [G1.isZero_iff.mpr h0] at ha
+      exact Bool.noConfusion ha
+    have hxd := hne hd.1
+    have hyd := hne hd.2
+    have hc := congrArg Fp.toZMod h
     apply G1.valid_of_affine_eq
-    rw [Fp.inverse_eq_inv, Fp.inverse_eq_inv, Fp.powNat_eq_pow, Fp.powNat_eq_pow]
-    exact image_equation h hxd hyd
+    apply Fp.toZMod.injective
+    push_toZMod at hxd hyd hc ⊢
+    simp only [Fp.toZMod_inverse, Fp.toZMod_add, Fp.toZMod_powNat, toZMod_evaluate] at hxd hyd ⊢
+    exact image_equation hc hxd hyd
 
 end EthLib.Cryptography.Bls.MapToCurve

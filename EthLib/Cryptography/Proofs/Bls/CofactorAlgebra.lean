@@ -30,7 +30,9 @@ private theorem toAffine_one (x y : Fp2) :
     G2.toAffine ⟨x, y, Fp2.one⟩ = (x, y) := by
   unfold G2.toAffine
   have hz : (Fp2.one : Fp2).isZero = false := Fp2.one_isZero
-  have hi : (Fp2.one : Fp2).inverse = (1 : Fp2) := inv_one
+  have hi : (Fp2.one : Fp2).inverse = (1 : Fp2) := by
+    rw [Fp2.one_eq_one, ← one_mul (1 : Fp2).inverse]
+    exact Fp2.mul_inverse_cancel one_ne_zero
   simp only [hz, Bool.false_eq_true, ↓reduceIte, hi, mul_one]
 
 private theorem psi_noninf (P : G2) (hz : P.z.isZero = false) :
@@ -51,18 +53,18 @@ theorem psi_psi_eq_psi2 (P : G2) : psi (psi P) = psi2 P := by
   | true => simp [psi, psi2, hz]
   | false =>
     rw [psi_noninf P hz]
-    rw [psi_noninf _ rfl, psi2_noninf P hz, toAffine_one]
+    rw [psi_noninf _ Fp2.one_isZero, psi2_noninf P hz, toAffine_one]
     simp only [Fp2.conjugate_mul, Fp2.conjugate_conjugate]
-    congr 1
+    refine congrArg₂ (fun a b => (⟨a, b, Fp2.one⟩ : G2)) ?_ ?_
     · rw [← mul_assoc, c1Psi_norm]
     · rw [← mul_assoc, c2Psi_norm, neg_one_mul]
 
 /-- Three applications of `psi2` on a finite representative normalize to affine negation. -/
 theorem psi2_cube_noninf (P : G2) (hz : P.z.isZero = false) :
     psi2 (psi2 (psi2 P)) = ⟨P.toAffine.1, -P.toAffine.2, Fp2.one⟩ := by
-  rw [psi2_noninf P hz, psi2_noninf _ rfl, psi2_noninf _ rfl]
+  rw [psi2_noninf P hz, psi2_noninf _ Fp2.one_isZero, psi2_noninf _ Fp2.one_isZero]
   simp only [toAffine_one, neg_neg]
-  congr 1
+  refine congrArg₂ (fun a b => (⟨a, b, Fp2.one⟩ : G2)) ?_ rfl
   have h := congrArg (fun c : Fp2 => c * P.toAffine.1) c1Psi2_cube
   simpa only [pow_succ, pow_zero, one_mul, mul_assoc] using h
 

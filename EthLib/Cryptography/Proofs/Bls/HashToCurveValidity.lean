@@ -134,9 +134,9 @@ private theorem ok_bind {α β : Type} (a : α) (f : α → Except BlsError β) 
 
 -- The pair matcher is named on purpose: its equation selects the branch without evaluation.
 set_option linter.auxLemma false in
-/-- Every successful `hashToG2` output is a nonsingular point on the BLS12-381 twist. -/
-theorem hashToG2_valid {msg dst : ByteArray} {P : G2}
-    (h : hashToG2 msg dst = .ok P) : G2.Valid P := by
+/-- Every successful `hashToG2` output clears the cofactor of a nonsingular point on the twist. -/
+theorem hashToG2_eq_clearCofactor {msg dst : ByteArray} {P : G2}
+    (h : hashToG2 msg dst = .ok P) : ∃ Q : G2, G2.Valid Q ∧ P = clearCofactor Q := by
   -- Each step is rewritten, never reduced, so the kernel never evaluates field arithmetic.
   rw [hashToG2] at h
   cases hf : (hashToFieldFp2 msg dst 2 : Except BlsError (Array Fp2)) with
@@ -154,9 +154,15 @@ theorem hashToG2_valid {msg dst : ByteArray} {P : G2}
         rw [← Prod.mk.eta (p := p0), ← Prod.mk.eta (p := p1)] at h
         simp (config := { zeta := false, iota := false }) only
           [psi.match_1.eq_1, ok_bind, pure, Except.pure, Except.ok.injEq] at h
-        subst h
-        exact clearCofactor_valid (G2.valid_add
-          (simpleSwu_isoMapG2_valid h0) (simpleSwu_isoMapG2_valid h1))
+        refine ⟨_, ?_, h.symm⟩
+        exact G2.valid_add (simpleSwu_isoMapG2_valid h0) (simpleSwu_isoMapG2_valid h1)
+
+/-- Every successful `hashToG2` output is a nonsingular point on the BLS12-381 twist. -/
+theorem hashToG2_valid {msg dst : ByteArray} {P : G2}
+    (h : hashToG2 msg dst = .ok P) : G2.Valid P := by
+  obtain ⟨Q, hQ, hP⟩ := hashToG2_eq_clearCofactor h
+  rw [hP]
+  exact clearCofactor_valid hQ
 
 private theorem expandMessageXmd_256_ok (msg dst : ByteArray) :
     ∃ uniform, expandMessageXmd msg dst 256 = .ok uniform := by

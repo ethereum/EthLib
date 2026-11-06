@@ -51,9 +51,9 @@ theorem finalExponentiation_fp6 {c : Fp6} (hc : c ≠ 0) :
 /-- At `x = a`, the vertical through the untwist of a point of the twist with `x = b` lies in `Fp6`.
 -/
 theorem vertical_eq (a : Fp) (b : Fp2) :
-    fpToFp12 a - fp2ToFp12 b * w⁻¹ ^ 2 =
+    fpToFp12 (Fp.toZMod a) - fp2ToFp12 b * w⁻¹ ^ 2 =
       fp6ToFp12 (fp2ToFp6 (Fp2.ofFp a) - fp2ToFp6 b * Fp6.v⁻¹) := by
-  rw [inv_pow, w_squared, ← map_inv₀, map_sub, map_mul]
+  rw [inv_pow, w_squared, ← map_inv₀, map_sub, map_mul, ← fpToFp2_apply]
   rfl
 
 /-- That element of `Fp6` is not zero when the point of the twist has `x ≠ 0`. -/
@@ -122,7 +122,7 @@ theorem g2Hom_toPoint_affine {xq yq : Fp2} (hQ : G2.Valid ⟨xq, yq, Fp2.one⟩)
 theorem finalExponentiation_vertical {T : G2} (hT : G2.Valid T) (hz : T.z ≠ 0) (xp yp : Fp) :
     finalExponentiation
       (Miller.line ambientCurve (g2Hom (G2.toPoint T)) (-g2Hom (G2.toPoint T))
-        (fpToFp12 xp) (fpToFp12 yp)) = 1 := by
+        (fpToFp12 (Fp.toZMod xp)) (fpToFp12 (Fp.toZMod yp))) = 1 := by
   obtain ⟨h, hT'⟩ := toPoint_eq_some hT hz
   obtain ⟨h', hg⟩ := g2Hom_toPoint hT hz
   rw [hg, Miller.line_neg_self, untwist, vertical_eq]
@@ -139,7 +139,8 @@ private theorem two_ne_zero_fp12 : (2 : Fp12) ≠ 0 := by
 -/
 theorem line_tangent_eq {X Y : Fp12} (h : ambientCurve.Nonsingular X Y) (hY : Y ≠ 0)
     (xp yp : Fp) :
-    Miller.line ambientCurve (.some X Y h) (.some X Y h) (fpToFp12 xp) (fpToFp12 yp) =
+    Miller.line ambientCurve (.some X Y h) (.some X Y h) (fpToFp12 (Fp.toZMod xp))
+        (fpToFp12 (Fp.toZMod yp)) =
       -lineAt X Y (3 * X ^ 2 / (2 * Y)) xp yp := by
   have hneg : ambientCurve.negY X Y = -Y := ShortWeierstrass.negY_eq X Y
   have hxy : ¬(X = X ∧ Y = ambientCurve.negY X Y) := by
@@ -152,12 +153,12 @@ theorem line_tangent_eq {X Y : Fp12} (h : ambientCurve.Nonsingular X Y) (hY : Y 
   have h2 := two_ne_zero_fp12
   have h22 : (2 : Fp12)⁻¹ * 2 = 1 := inv_mul_cancel₀ h2
   field_simp
-  linear_combination (3 * X ^ 2 * fpToFp12 xp - 3 * X ^ 3) * h22
+  linear_combination (3 * X ^ 2 * fpToFp12 (Fp.toZMod xp) - 3 * X ^ 3) * h22
 
 /-- The same holds at the untwist of a finite point of `G2` with `Y ≠ 0`. -/
 theorem line_tangent {T : G2} (hT : G2.Valid T) (hz : T.z ≠ 0) (hy : T.y ≠ 0) (xp yp : Fp) :
     Miller.line ambientCurve (g2Hom (G2.toPoint T)) (g2Hom (G2.toPoint T))
-        (fpToFp12 xp) (fpToFp12 yp) =
+        (fpToFp12 (Fp.toZMod xp)) (fpToFp12 (Fp.toZMod yp)) =
       -lineAt (untwist (T.x / T.z ^ 2) (T.y / T.z ^ 3)).1
         (untwist (T.x / T.z ^ 2) (T.y / T.z ^ 3)).2
         (3 * (untwist (T.x / T.z ^ 2) (T.y / T.z ^ 3)).1 ^ 2 /
@@ -170,7 +171,8 @@ theorem line_tangent {T : G2} (hT : G2.Valid T) (hz : T.z ≠ 0) (hy : T.y ≠ 0
 /-- Through two points with different `x`, the chord is the opposite of the loop's line. -/
 theorem line_chord_eq {X Y X' Y' : Fp12} (h : ambientCurve.Nonsingular X Y)
     (h' : ambientCurve.Nonsingular X' Y') (hX : X ≠ X') (xp yp : Fp) :
-    Miller.line ambientCurve (.some X Y h) (.some X' Y' h') (fpToFp12 xp) (fpToFp12 yp) =
+    Miller.line ambientCurve (.some X Y h) (.some X' Y' h') (fpToFp12 (Fp.toZMod xp))
+        (fpToFp12 (Fp.toZMod yp)) =
       -lineAt X Y ((Y' - Y) / (X' - X)) xp yp := by
   rw [Miller.line_some_some _ h h' (fun hxy => hX hxy.1), slope_of_X_ne hX]
   simp only [lineAt]
@@ -183,7 +185,7 @@ theorem line_chord_eq {X Y X' Y' : Fp12} (h : ambientCurve.Nonsingular X Y)
 theorem line_chord {T : G2} {xq yq : Fp2} (hT : G2.Valid T) (hz : T.z ≠ 0)
     (hQ : G2.Valid ⟨xq, yq, Fp2.one⟩) (hx : xq * T.z ^ 2 - T.x ≠ 0) (xp yp : Fp) :
     Miller.line ambientCurve (g2Hom (G2.toPoint T)) (g2Hom (G2.toPoint ⟨xq, yq, Fp2.one⟩))
-        (fpToFp12 xp) (fpToFp12 yp) =
+        (fpToFp12 (Fp.toZMod xp)) (fpToFp12 (Fp.toZMod yp)) =
       -lineAt (untwist (T.x / T.z ^ 2) (T.y / T.z ^ 3)).1
         (untwist (T.x / T.z ^ 2) (T.y / T.z ^ 3)).2
         (((untwist xq yq).2 - (untwist (T.x / T.z ^ 2) (T.y / T.z ^ 3)).2) /
@@ -203,7 +205,7 @@ theorem finalExponentiation_millerDouble {T : G2} (hT : G2.Valid T) (hz : T.z �
     (hf : finalExponentiation f = finalExponentiation f') :
     finalExponentiation (millerDouble T xp yp f).2 =
       finalExponentiation (f' ^ 2 * Miller.lineRatio ambientCurve (g2Hom (G2.toPoint T))
-        (g2Hom (G2.toPoint T)) (fpToFp12 xp) (fpToFp12 yp)) := by
+        (g2Hom (G2.toPoint T)) (fpToFp12 (Fp.toZMod xp)) (fpToFp12 (Fp.toZMod yp))) := by
   have hd := millerDouble_snd hz hy xp yp f
   have hc : 2 * T.y * T.z ^ 3 ≠ 0 :=
     mul_ne_zero (mul_ne_zero two_ne_zero_fp2 hy) (pow_ne_zero 3 hz)
@@ -222,7 +224,8 @@ theorem finalExponentiation_millerAdd {T : G2} {xq yq : Fp2} (hT : G2.Valid T)
     (hf : finalExponentiation f = finalExponentiation f') :
     finalExponentiation (millerAdd T xq yq xp yp f).2 =
       finalExponentiation (f' * Miller.lineRatio ambientCurve (g2Hom (G2.toPoint T))
-        (g2Hom (G2.toPoint ⟨xq, yq, Fp2.one⟩)) (fpToFp12 xp) (fpToFp12 yp)) := by
+        (g2Hom (G2.toPoint ⟨xq, yq, Fp2.one⟩)) (fpToFp12 (Fp.toZMod xp))
+        (fpToFp12 (Fp.toZMod yp))) := by
   have hd := millerAdd_snd (yq := yq) hz hx xp yp f
   have hc : (xq * T.z ^ 2 - T.x) * T.z ≠ 0 := mul_ne_zero hx hz
   simp only at hd
@@ -301,7 +304,7 @@ theorem finalExponentiation_millerSteps {s : ℕ} (hs : s < Fr.modulus) {xq yq :
       finalExponentiation f = finalExponentiation f' →
       finalExponentiation (millerSteps s xq yq xp yp n T f) =
         finalExponentiation (Miller.steps ambientCurve s (g2Hom (G2.toPoint ⟨xq, yq, Fp2.one⟩))
-          (fpToFp12 xp) (fpToFp12 yp) n (g2Hom (G2.toPoint T)) f') := by
+          (fpToFp12 (Fp.toZMod xp)) (fpToFp12 (Fp.toZMod yp)) n (g2Hom (G2.toPoint T)) f') := by
   intro n
   induction n with
   | zero => intro T f f' _ _ _ hf; exact hf
@@ -372,7 +375,7 @@ The algorithm runs on `|x|`, on the untwist of `Q` in `E(Fp12)`, at the point `P
 theorem pairing_eq_finalExponentiation_loop {P : G1} {Q : G2} (hQ : G2.Valid Q)
     (hQr : G2.inSubgroup Q = true) (hP : P.isInfinity = false) :
     pairing P Q = finalExponentiation (Miller.loop ambientCurve blsX (g2Hom (G2.toPoint Q))
-      (fpToFp12 P.toAffine.1) (fpToFp12 P.toAffine.2)).conjugate := by
+      (fpToFp12 (Fp.toZMod P.toAffine.1)) (fpToFp12 (Fp.toZMod P.toAffine.2))).conjugate := by
   by_cases hQi : Q.isInfinity = true
   · have h1 : (1 : Fp12).conjugate = 1 := by apply Fp12.ext <;> simp
     rw [(G2.isInfinity_eq_true_iff_toPoint_eq_zero hQ).mp hQi, map_zero, Miller.loop_zero,

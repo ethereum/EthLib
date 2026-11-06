@@ -484,6 +484,10 @@ def toZMod : Fp ≃+* ZMod modulus := RingEquiv.refl _
 theorem toZMod_inj {a b : Fp} : toZMod a = toZMod b ↔ a = b :=
   toZMod.injective.eq_iff
 
+/-- `Fp` has `p` elements. -/
+theorem card_eq : Fintype.card Fp = modulus :=
+  (Fintype.card_congr toZMod.toEquiv).trans (ZMod.card modulus)
+
 /-! ## The integer of an element
 
 These lemmas give the integer of each result, so a proof does not need the representation of `Fp`.

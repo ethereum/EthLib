@@ -116,42 +116,28 @@ theorem coords_of_encodes {s : String} {b : ByteArray} {q : G1} {x y : Nat}
   subst hx
   -- The branches of decompression.
   have hhead : (⟨((h :: t).map UInt8.ofNat).toArray⟩ : ByteArray).get! 0 = UInt8.ofNat h := rfl
-  unfold G1.uncompress at hq
-  rw [hhead] at hq
-  split at hq
-  · cases hq
-  dsimp only at hq
-  split at hq
-  · cases hq
-  split at hq
-  · rename_i hi
-    exact absurd hinf ((flag40 h).mp hi)
-  split at hq
-  · cases hq
-  rename_i xf hx
-  split at hq
-  · cases hq
-  rename_i yPos hsqrt
-  cases hq
-  have hxv : xf.val = xOf (h :: t) := SetupTorsion.fromBytesBE_eq (by rw [hhead]; exact hx)
+  obtain ⟨-, -, ⟨hc0, -, -⟩ | ⟨-, xf, yPos, hx, hsqrt, rfl⟩⟩ := G1.uncompress_ok_cases hq
+  · rw [hhead] at hc0
+    exact absurd hinf ((flag40 h).mp (by rw [hc0]; decide))
+  have hxv : xf.val = xOf (h :: t) := SetupTorsion.fromBytesBE_eq hx
   -- Decompression starts from `y` or from its negation.
-  let y₀ : Fp := Fp.ofNat y
-  have hyv : y₀.val = y := Fp.val_ofNat_of_lt hy
-  have hy₀ : (y₀ : ZMod Fp.modulus) * y₀ = xf * xf * xf + Fp.ofNat 4 := by
+  obtain ⟨y₀, hyv⟩ : ∃ y₀ : Fp, y₀.val = y := ⟨_, Fp.val_ofNat_of_lt hy⟩
+  have hy₀ : y₀ * y₀ = xf * xf * xf + Fp.ofNat 4 := by
     apply Fp.ext
     rw [Fp.val_mul, Fp.val_add, Fp.val_mul, Fp.val_mul, hxv, hyv, Fp.val_ofNat]
     exact hsq
-  have hpm := sqrt_pm ((Fp.sqrt_ok hsqrt).trans hy₀.symm)
-  rw [select_eq hpm]
-  simp only [coords, hxv]
-  refine Prod.ext rfl (Prod.ext ?_ rfl)
+  have hz : Fp.toZMod yPos * Fp.toZMod yPos = Fp.toZMod y₀ * Fp.toZMod y₀ := by
+    rw [← Fp.toZMod_mul, ← Fp.toZMod_mul, Fp.sqrt_ok hsqrt, hy₀]
+  have hpm : yPos = y₀ ∨ yPos = -y₀ := (sqrt_pm hz).imp (fun h => Fp.toZMod.injective h)
+    (fun h => Fp.toZMod.injective (h.trans (Fp.toZMod_neg y₀).symm))
+  rw [hhead, select_eq hpm]
+  simp only [coords, hxv, Fp.one_def, Fp.val_one, Prod.mk.injEq, true_and, and_true]
   -- The sign of `y` is the sign flag, so decompression keeps `y`.
   have hc : (Fp.signBit y₀ = true) = ((UInt8.ofNat h &&& 0x20) ≠ 0) := by
     have hsb : Fp.signBit y₀ = signBit y := by rw [Fp.signBit, hyv, signBit]
     rw [hsb, hsign]
     exact propext ⟨fun h' => (flag20 h).mpr (bne_iff_ne.mp h'),
       fun h' => bne_iff_ne.mpr ((flag20 h).mp h')⟩
-  show (if (Fp.signBit y₀ = true) = _ then y₀ else -y₀).val = y
   rw [ite_eq_left hc, hyv]
 
 /-! ## Points with `z = 1` -/
@@ -193,10 +179,12 @@ theorem toPoint_eq_of_sameAffine {P Q : G1} {x y : Nat} (hQ : coords Q = (x, y, 
   obtain ⟨⟨hz, hx⟩, hy⟩ := h
   simp only [coords, Prod.mk.injEq] at hQ
   obtain ⟨hqx, hqy, hqz⟩ := hQ
+  -- Read each value through the map to `ZMod p`, as the vector entries do.
+  simp only [Fp.val_eq] at hz hx hy hqx hqy hqz
   -- Each coordinate is the cast of its value, and the values are those of the comparison.
   have cast (a : ZMod Fp.modulus) : a = ((a.val : Nat) : ZMod Fp.modulus) :=
     (ZMod.natCast_zmod_val a).symm
-  have hzne : rep P 2 ≠ 0 := fun h0 => hz (by rw [show P.z.val = (rep P 2).val from rfl, h0]; rfl)
+  have hzne : rep P 2 ≠ 0 := fun h0 => hz (by rw [← rep_z, h0, ZMod.val_zero])
   have hqz' : rep Q 2 = 1 := by rw [cast (rep Q 2), show (rep Q 2).val = 1 from hqz, Nat.cast_one]
   have hP2 : rep P 2 = (((rep P 2).val : Nat) : ZMod Fp.modulus) := cast _
   refine Point.toAffine_of_equiv (equiv_of_X_eq_of_Y_eq hzne (by rw [hqz']; exact one_ne_zero)
