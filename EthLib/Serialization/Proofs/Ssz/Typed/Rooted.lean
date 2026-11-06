@@ -98,14 +98,6 @@ variable {α : Type} [SszType α] {length : Nat}
     (inside : index < length) : (v.set index a inside).elements = v.elements.set index a inside :=
   rfl
 
-/-- The elements after a write at any index are the elements written the same way. -/
-@[simp] theorem elements_set! (v : RootedVector α length) (index : Nat) (a : α) :
-    (v.set! index a).elements = v.elements.set! index a := by
-  unfold set!
-  split
-  · next inside => simp [Vector.set!, Vector.set, Array.set!, Array.setIfInBounds, inside]
-  · next outside => simp [Vector.set!, Array.set!, Array.setIfInBounds, outside]
-
 /-- Reading the element just written gives it back. -/
 @[simp] theorem getElem_set_self (v : RootedVector α length) (index : Nat) (a : α)
     (inside : index < length) : (v.set index a inside)[index] = a := by
@@ -145,7 +137,7 @@ theorem mapM_hashTreeRoot_toValue (items : List α) :
 theorem hashTreeRoot_vector_leafRoots {length : Nat} (composite : (desc α).isBasic = false)
     (elements : Vector α length) :
     Ssz.hashTreeRoot (.vector (desc α) length) (.seq (elements.toList.map toValue))
-      = .ok (subtreeAt (leafRoots elements) (depthFor length) 0) := by
+      = .ok (subtreeAt (leafRoots elements.toArray) (depthFor length) 0) := by
   have rooted := mapM_hashTreeRoot_toValue elements.toList
   rw [hashTreeRoot_unfold]
   simp [merkleLayout, sequenceLayout, composite, MerkleLayout.nesting, leafChunks,

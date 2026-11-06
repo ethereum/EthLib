@@ -88,7 +88,7 @@ def emptyGenesisState (config : Config) (before : fork < .altair) (genesisTime :
   eth1Data := fun _ => ⟨Vector.replicate 32 0, depositCount, eth1BlockHash⟩
   eth1DataVotes := fun _ => ⟨#[], by simp⟩
   eth1DepositIndex := fun _ => 0
-  validators := ⟨#[], fun _ => by simp⟩
+  validators := .ofData #[] fun _ => by simp
   balances := ⟨#[], fun _ => by simp⟩
   randaoMixes := .ofVector (Vector.replicate _ eth1BlockHash)
   slashings := Vector.replicate _ 0

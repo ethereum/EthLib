@@ -5,6 +5,7 @@ public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.Mutators
 public import EthLib.Consensus.Proofs.Churn
 public import EthLib.Consensus.Credentials
+public import EthLib.Serialization.Proofs.Ssz.Typed.RootedList
 
 /-!
 # Proofs: state mutators

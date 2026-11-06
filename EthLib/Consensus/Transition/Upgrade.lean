@@ -82,9 +82,14 @@ def carryList {fork post : Fork} {α : Type} {limit : Nat} (upgrade : fork < pos
     (list : ForkList .glamsterdam fork α limit) : ForkList .glamsterdam post α limit :=
   ⟨list.data, fun before => list.bound (Nat.lt_trans upgrade before)⟩
 
+/-- A rooted list of a state as the same list at a later fork, with its tree built again. -/
+def carryRooted {fork post : Fork} {α : Type} [SszType α] {limit : Nat} (upgrade : fork < post)
+    (list : RootedForkList .glamsterdam fork α limit) : RootedForkList .glamsterdam post α limit :=
+  .ofData list.data fun before => list.bound (Nat.lt_trans upgrade before)
+
 /-- A list with one zero for each validator of a state, at a later fork before Gloas. -/
 def zeroPerValidator {fork post : Fork} {α : Type} [OfNat α 0] {limit : Nat}
-    (upgrade : fork < post) (validators : ForkList .glamsterdam fork Validator limit) :
+    (upgrade : fork < post) (validators : RootedForkList .glamsterdam fork Validator limit) :
     ForkList .glamsterdam post α limit :=
   ⟨Array.replicate validators.data.size 0, fun before => by
     simpa using validators.bound (Nat.lt_trans upgrade before)⟩
@@ -122,7 +127,7 @@ def carryFields (config : Config) (post : Fork) {fork : Fork} (pre : BeaconState
     eth1Data := fun _ => pre.eth1Data beforeHeze
     eth1DataVotes := fun _ => pre.eth1DataVotes beforeHeze
     eth1DepositIndex := fun _ => pre.eth1DepositIndex beforeHeze
-    validators := carryList upgrade pre.validators
+    validators := carryRooted upgrade pre.validators
     balances := carryList upgrade pre.balances
     randaoMixes := pre.randaoMixes
     slashings := pre.slashings
@@ -422,7 +427,7 @@ def upgradeFields (config : Config) (pre : BeaconState preset .fusaka) (requests
     eth1Data := fun _ => pre.eth1Data (by decide)
     eth1DataVotes := fun _ => pre.eth1DataVotes (by decide)
     eth1DepositIndex := fun _ => pre.eth1DepositIndex (by decide)
-    validators := toGloasList pre.validators
+    validators := carryRooted (by decide) pre.validators
     balances := toGloasList pre.balances
     randaoMixes := pre.randaoMixes
     slashings := pre.slashings
@@ -514,7 +519,7 @@ def upgradeHezeFields (config : Config) (pre : BeaconState preset .glamsterdam) 
     eth1Data := fun before => absurd before (by decide)
     eth1DataVotes := fun before => absurd before (by decide)
     eth1DepositIndex := fun before => absurd before (by decide)
-    validators := toHezeList pre.validators
+    validators := carryRooted (by decide) pre.validators
     balances := toHezeList pre.balances
     randaoMixes := pre.randaoMixes
     slashings := pre.slashings

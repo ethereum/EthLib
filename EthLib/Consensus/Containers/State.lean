@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Containers.Block
 public import EthLib.Consensus.Containers.Builder
+public import EthLib.Serialization.Ssz.Typed.RootedList
 public import EthLib.Serialization.Ssz.Typed.Since
 
 /-!
@@ -32,9 +33,9 @@ namespace EthLib.Consensus
 
 open Base Cryptography.Bls Serialization.Ssz
 
-/-- The registry of validators. -/
+/-- The registry of validators, with its Merkle tree before Gloas. -/
 abbrev Validators (preset : Preset) (fork : Fork) :=
-  ForkList .glamsterdam fork Validator preset.VALIDATOR_REGISTRY_LIMIT.toNat
+  RootedForkList .glamsterdam fork Validator preset.VALIDATOR_REGISTRY_LIMIT.toNat
 
 /-- The balance of each validator, in the order of the registry. -/
 abbrev Balances (preset : Preset) (fork : Fork) :=
