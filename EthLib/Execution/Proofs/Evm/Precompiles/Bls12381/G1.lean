@@ -12,13 +12,14 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.Encoding
 - G1MSM rejects an empty input or a length that is not a whole number of 160-byte pairs.
 - Its discount never raises the price above that of `k` separate products.
 - MAP_FP_TO_G1 rejects any length other than 64 bytes before it charges gas, and every output has 128 bytes.
+- With enough gas, it succeeds exactly when the field element decodes and its map succeeds.
 -/
 
 @[expose] public section
 
 namespace EthLib.Execution.Evm.Precompiles.Bls12381
 
-open EthLib.Base (bind_ok_iff natToBytes_length)
+open EthLib.Base (bind_ok_iff mapError_ok_iff natToBytes_length)
 open EthLib.Cryptography.Bls (G1)
 
 /-- The raw bytes of a G1 point have 96 bytes, and its padded encoding 128. -/
@@ -185,6 +186,37 @@ theorem bls12MapFpToG1_outOfGas {data : ByteArray} (hsize : data.size = 64) {gas
   unfold bls12MapFpToG1
   rw [ite_eq_right_of_eq_false _ _ (eq_false (by omega)), ite_eq_left_of_eq_true _ _ (eq_true hgas)]
   rfl
+
+/-- MAP_FP_TO_G1 succeeds exactly on 64 bytes, with at least its price in gas.
+
+The padding must be zero, and the field element must be below the modulus.
+
+The map of that element to the curve must succeed.
+
+The output is the padded encoding of the mapped point. -/
+theorem bls12MapFpToG1_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
+    bls12MapFpToG1 data gas = .ok out ↔
+      data.size = 64 ∧ GAS_G1MAP ≤ gas ∧
+        ∃ raw u P, unpadFp data.data.toList = .ok raw ∧ bytesToFieldElement raw = .ok u ∧
+          Cryptography.Bls.MapToCurve.mapToG1 u = .ok P ∧
+          out = ⟨(padG1 (g1ToBytes P)).toArray⟩ := by
+  by_cases hsize : data.size ≠ 64
+  · rw [bls12MapFpToG1_invalidInputLength hsize gas]
+    exact iff_of_false (by simp) fun h => hsize h.1
+  · have hsize' : data.size = 64 := Decidable.not_not.mp hsize
+    by_cases hgas : gas < GAS_G1MAP
+    · rw [bls12MapFpToG1_outOfGas hsize' hgas]
+      exact iff_of_false (by simp) fun h => absurd h.2.1 (Nat.not_le.mpr hgas)
+    · simp only [bls12MapFpToG1, hgas, ↓reduceIte, hsize', Nat.not_lt.mp hgas, true_and]
+      constructor
+      · intro h
+        obtain ⟨raw, hr, h⟩ := bind_ok_iff.mp h
+        obtain ⟨u, hu, h⟩ := bind_ok_iff.mp h
+        obtain ⟨P, hp, h⟩ := bind_ok_iff.mp h
+        exact ⟨raw, u, P, hr, hu, mapError_ok_iff.mp hp, (Except.ok.inj h).symm⟩
+      · rintro ⟨raw, u, P, hr, hu, hp, rfl⟩
+        exact bind_ok_iff.mpr ⟨raw, hr, bind_ok_iff.mpr ⟨u, hu,
+          bind_ok_iff.mpr ⟨P, mapError_ok_iff.mpr hp, rfl⟩⟩⟩
 
 /-- Every output of MAP_FP_TO_G1 has 128 bytes. -/
 theorem bls12MapFpToG1_size {data : ByteArray} {gas : Nat} {out : ByteArray} (h : bls12MapFpToG1 data gas = .ok out) :

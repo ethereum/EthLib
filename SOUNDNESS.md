@@ -621,8 +621,21 @@ Each scalar `m_i` is the integer of its 32 bytes, not reduced modulo the subgrou
 `toPoint_g1Msm_generator` and `toPoint_g2Msm_generator` apply this to the generator with any scalar.
 `G1.lean` and `G2.lean` also bound the MSM discounts, so an MSM never costs more than its separate multiplications.
 
-For the pairing check and the two map precompiles, the proofs cover only input lengths, gas errors and output sizes (`G1.lean`, `G2.lean` and `Pairing.lean`).
-No theorem relates `bls12Pairing` to the pairing law, or `bls12MapFpToG1` and `bls12MapFp2ToG2` to the curve maps.
+`bls12Pairing_eq_ok_iff` (`Pairing.lean` in the same directory) proves that the pairing check succeeds exactly when every padding is zero and every point decodes with the subgroup check.
+It then returns the word of `pairingCheck` on the decoded pairs.
+`exists_represents_of_decodePairs` (`PairingProduct.lean`) proves that each decoded `P_i` represents some `a_i • g_1`, and each `Q_i` some `b_i • g_2`.
+`bls12Pairing_eq_one_iff` proves that the output is the word 1 exactly when `sum_i a_i * b_i = 0`, that is, when the product of the pairings is 1.
+It assumes `PairingLaws`, which EthLib states but does not prove for its Miller loop.
+`bls12Pairing_encodePairs` computes the output on the encodings of any represented pairs.
+`bls12Pairing_generators` and `bls12Pairing_generator_neg` apply it to reach both outputs: 0 for `(g_1, g_2)`, and 1 for `(g_1, g_2)` with `(-g_1, g_2)`.
+
+`bls12MapFpToG1_eq_ok_iff` and `bls12MapFp2ToG2_eq_ok_iff` (`G1.lean` and `G2.lean`) prove that the two map precompiles return the encoding of the curve map of their decoded field element.
+The curve maps of RFC 9380 never fail.
+So `bls12MapFpToG1_isOk_iff` and `bls12MapFp2ToG2_isOk_iff` (`Map.lean`) prove that each map precompile succeeds exactly when the length and gas checks pass and its padded field element decodes.
+`inSubgroup_of_bls12MapFpToG1_eq_ok` and `inSubgroup_of_bls12MapFp2ToG2_eq_ok` prove that every output encodes a valid point of the subgroup.
+`bytesToG1_of_bls12MapFpToG1_eq_ok` and `bytesToG2_of_bls12MapFp2ToG2_eq_ok` prove that the point decoder, with the subgroup check, accepts that output.
+`bls12MapFpToG1_pad` and `bls12MapFp2ToG2_pad` prove that the padded encoding of every field element succeeds with enough gas.
+
 No theorem relates the module to the execution-specs code it follows.
 
 ### Merkle Patricia Trie
