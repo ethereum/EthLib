@@ -1,4 +1,4 @@
-"""Snappy blocks against 50 ssz_snappy files of consensus-spec-tests."""
+"""Snappy blocks and framed streams against 50 ssz_snappy files of consensus-spec-tests."""
 
 # The size and sha256 of the data of each file come from cramjam 2.11.0, an independent Snappy
 # implementation, run once with `cramjam.snappy.decompress_raw`.
@@ -30,3 +30,12 @@ def test_decompress(case: dict) -> None:
     data = snappy.decompress((FILES / case["file"]).read_bytes())
     assert len(data) == case["size"]
     assert hashlib.sha256(data).hexdigest() == case["sha256"]
+
+
+@pytest.mark.parametrize("case", CASES, ids=[case["file"] for case in CASES])
+def test_encode_frames_round_trip(case: dict) -> None:
+    # The data of each file, framed by the encoder that compresses, decodes back to itself.
+    data = snappy.decompress((FILES / case["file"]).read_bytes())
+    stream = snappy.encode_frames(data)
+    assert snappy.decode_frames(stream) == data
+    assert len(stream) <= len(snappy.encode_frames_literal(data))

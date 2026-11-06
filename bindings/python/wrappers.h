@@ -378,6 +378,7 @@ PyObject* py_snappy_decompress                            (PyObject* self, PyObj
 PyObject* py_snappy_compress                              (PyObject* self, PyObject* args);
 PyObject* py_snappy_decode_frames                         (PyObject* self, PyObject* args);
 PyObject* py_snappy_encode_frames_literal                 (PyObject* self, PyObject* args);
+PyObject* py_snappy_encode_frames                         (PyObject* self, PyObject* args);
 PyObject* py_snappy_masked_crc                            (PyObject* self, PyObject* args);
 PyObject* py_varint_encode                                (PyObject* self, PyObject* args);
 PyObject* py_varint_decode                                (PyObject* self, PyObject* args);

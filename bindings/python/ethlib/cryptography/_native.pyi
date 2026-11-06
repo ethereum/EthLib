@@ -779,6 +779,10 @@ def snappy_encode_frames_literal(data: bytes) -> bytes:
     """A framed stream that decodes to `data`: the stream identifier, then uncompressed chunks."""
     ...
 
+def snappy_encode_frames(data: bytes) -> bytes:
+    """A framed stream that decodes to `data`: the stream identifier, then its chunks."""
+    ...
+
 def snappy_masked_crc(data: bytes) -> int:
     """The masked CRC-32C that a data chunk stores (§3)."""
     ...

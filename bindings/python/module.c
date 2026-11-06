@@ -738,6 +738,7 @@ static PyMethodDef methods[] = {
   {"snappy_compress", py_snappy_compress, METH_VARARGS, DOC_snappy_compress},
   {"snappy_decode_frames", py_snappy_decode_frames, METH_VARARGS, DOC_snappy_decode_frames},
   {"snappy_encode_frames_literal", py_snappy_encode_frames_literal, METH_VARARGS, DOC_snappy_encode_frames_literal},
+  {"snappy_encode_frames", py_snappy_encode_frames, METH_VARARGS, DOC_snappy_encode_frames},
   {"snappy_masked_crc", py_snappy_masked_crc, METH_VARARGS, DOC_snappy_masked_crc},
   {"varint_encode", py_varint_encode, METH_VARARGS, DOC_varint_encode},
   {"varint_decode", py_varint_decode, METH_VARARGS, DOC_varint_decode},

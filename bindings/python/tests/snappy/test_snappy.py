@@ -154,11 +154,13 @@ def test_framed_digits() -> None:
     assert snappy.encode_frames_literal(b"123456789") == FRAMED_DIGITS
 
 
+# 32 zero bytes in one compressed chunk, as python-snappy frames them.
+# The block is the length 32, a literal of one zero byte, and a copy of 31 bytes from 1 back.
+FRAMED_ZEROS = STREAM_IDENTIFIER + bytes.fromhex("000a0000faffd70f2000007a0100")
+
+
 def test_framed_zeros() -> None:
-    # 32 zero bytes in one compressed chunk, as python-snappy frames them.
-    # The block is the length 32, a literal of one zero byte, and a copy of 31 bytes from 1 back.
-    stream = STREAM_IDENTIFIER + bytes.fromhex("000a0000faffd70f2000007a0100")
-    assert snappy.decode_frames(stream) == bytes(32)
+    assert snappy.decode_frames(FRAMED_ZEROS) == bytes(32)
 
 
 def test_framed_empty() -> None:
@@ -171,6 +173,60 @@ def test_skipped_chunks() -> None:
     # A second stream identifier, then a padding chunk and a reserved skippable chunk, add nothing.
     stream = STREAM_IDENTIFIER * 2 + bytes.fromhex("fe02000000008001000041")
     assert snappy.decode_frames(stream) == b""
+
+
+def test_encode_frames_python_snappy() -> None:
+    # The encoder that compresses writes both python-snappy streams, byte for byte.
+    # The digits do not compress, so their chunk stays uncompressed.
+    assert snappy.encode_frames(b"123456789") == FRAMED_DIGITS
+    assert snappy.encode_frames(bytes(32)) == FRAMED_ZEROS
+
+
+def _chunks(stream: bytes) -> list[tuple[int, bytes]]:
+    # The type and body of each chunk after the stream identifier (framing_format.txt §1).
+    assert stream.startswith(STREAM_IDENTIFIER)
+    chunks, at = [], len(STREAM_IDENTIFIER)
+    while at < len(stream):
+        length = int.from_bytes(stream[at + 1 : at + 4], "little")
+        chunks.append((stream[at], stream[at + 4 : at + 4 + length]))
+        at += 4 + length
+    assert at == len(stream)
+    return chunks
+
+
+# Each input of the encoder that compresses, and the type of each of its chunks.
+# Type 0 is a compressed chunk (§4.2), and type 1 an uncompressed chunk (§4.3).
+ENCODE_FRAMES_INPUTS = [
+    pytest.param(b"", [], id="empty"),
+    pytest.param(b"\x5a", [1], id="1 byte"),
+    pytest.param(bytes(100), [0], id="100 zero bytes"),
+    pytest.param(_noise(1000), [1], id="incompressible"),
+    pytest.param(bytes(65536), [0], id="one full chunk"),
+    # The data is cut after 65536 bytes, and the last byte alone does not compress.
+    pytest.param(bytes(65537), [0, 1], id="cut after 65536 bytes"),
+    pytest.param(_noise(65536) + bytes(70_000), [1, 0, 0], id="three chunks"),
+]
+
+
+@pytest.mark.parametrize(("data", "types"), ENCODE_FRAMES_INPUTS)
+def test_encode_frames(data: bytes, types: list[int]) -> None:
+    stream = snappy.encode_frames(data)
+    assert snappy.decode_frames(stream) == data
+    assert len(stream) <= len(snappy.encode_frames_literal(data))
+    chunks = _chunks(stream)
+    assert [kind for kind, _ in chunks] == types
+    for i, (kind, body) in enumerate(chunks):
+        piece = data[65536 * i : 65536 * (i + 1)]
+        # Each chunk stores the masked CRC-32C of its uncompressed bytes, little-endian (§3).
+        assert body[:4] == snappy.masked_crc(piece).to_bytes(4, "little")
+        block = snappy.compress(piece)
+        if kind == 0:
+            # A compressed chunk is chosen only when its block is shorter than the bytes.
+            assert body[4:] == block
+            assert len(block) < len(piece)
+        else:
+            assert body[4:] == piece
+            assert len(block) >= len(piece)
 
 
 # Each rejected stream and the fault that rejects it.

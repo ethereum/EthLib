@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Exports
 public import EthLib.Networking.Snappy.Compress
 public import EthLib.Networking.Snappy.Frame
+public import EthLib.Networking.Snappy.FrameEncode
 
 /-!
 # `Exports.Snappy`
@@ -44,6 +45,11 @@ def decodeFramesExport (stream : ByteArray) : Result ByteArray :=
 @[export eth_snappy_encode_frames_literal]
 def encodeFramesLiteralExport (data : ByteArray) : Result ByteArray :=
   pure (encodeFramesLiteral data)
+
+/-- The framed stream that holds the data, each chunk compressed when that makes it shorter. -/
+@[export eth_snappy_encode_frames]
+def encodeFramesExport (data : ByteArray) : Result ByteArray :=
+  pure (encodeFrames data)
 
 /-- The masked CRC-32C that a data chunk stores for the data. -/
 @[export eth_snappy_masked_crc]

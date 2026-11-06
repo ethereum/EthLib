@@ -5275,6 +5275,15 @@
    "error_class": null,
    "docstring":
    "A framed stream that decodes to `data`: the stream identifier, then uncompressed chunks.\n\nIt is the inverse that proofs, tests and bindings use, not a compressor."},
+  {"summary":
+   "A framed stream that decodes to `data`: the stream identifier, then its chunks.",
+   "signature": "(data: bytes) -> bytes",
+   "operation": "EthLib.Networking.Snappy.encodeFrames",
+   "method": "snappy_encode_frames",
+   "errors": [],
+   "error_class": null,
+   "docstring":
+   "A framed stream that decodes to `data`: the stream identifier, then its chunks.\n\nA chunk is compressed when that makes it shorter."},
   {"summary": "The masked CRC-32C that a data chunk stores (§3).",
    "signature": "(data: bytes) -> int",
    "operation": "EthLib.Networking.Snappy.maskedCrc",
