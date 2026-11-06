@@ -56,6 +56,11 @@ theorem encode_decode {b : ByteArray} {x : α} (h : decode b = .ok x) : encode x
     rw [encode, LawfulCodec.toItem_of_ofItem h]
     exact Rlp.encode_decode b item hItem
 
+/-- Two values with one encoding are equal. -/
+theorem encode_injective {x y : α} {b : ByteArray} (hx : encode x = .ok b) (hy : encode y = .ok b) :
+    x = y :=
+  toItem_injective (Rlp.encode_injective _ _ _ hx hy)
+
 /-- A typed decoder accepts exactly the encoding of each value. -/
 theorem decode_eq_ok_iff (b : ByteArray) (x : α) : decode b = .ok x ↔ encode x = .ok b :=
   ⟨encode_decode, decode_encode⟩

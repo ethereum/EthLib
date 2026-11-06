@@ -668,7 +668,7 @@ Later entries replace earlier values of the same key, and an empty value removes
 `nodup_keys_foldl_trieSet` proves that this construction gives distinct keys, as the trie of Yellow Paper Appendix D (Shanghai version) assumes, so callers need no distinctness hypothesis.
 This construction is the path of Python `trie.root`, through `Execution/Exports/Trie.lean`.
 The state and storage roots in `Execution/State/Root.lean` build tries directly, and `stateEntries_nodup` and `storageEntries_nodup` supply their distinct keys.
-The indexed roots in `Execution/Blocks/Roots.lean` also build tries directly, and no theorem yet supplies their distinct keys.
+The indexed roots in `Execution/Blocks/Roots.lean` also build tries directly, and `indexedEntries_nodup` supplies their distinct keys.
 No theorem bounds the probability of finding a collision.
 
 ### Light client
