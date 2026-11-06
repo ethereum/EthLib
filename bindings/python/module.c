@@ -543,6 +543,7 @@ static PyMethodDef methods[] = {
   {"trie_root", py_trie_root, METH_VARARGS, DOC_trie_root},
   {"trie_verify_proof", py_trie_verify_proof, METH_VARARGS, DOC_trie_verify_proof},
   {"trie_hex_prefix", py_trie_hex_prefix, METH_VARARGS, DOC_trie_hex_prefix},
+  {"trie_verify_account_proof", py_trie_verify_account_proof, METH_VARARGS, DOC_trie_verify_account_proof},
   {"vrf_verify", py_vrf_verify, METH_VARARGS, DOC_vrf_verify},
   {"vrf_secret", py_vrf_secret, METH_VARARGS, DOC_vrf_secret},
   {"vrf_evaluate", py_vrf_evaluate, METH_VARARGS, DOC_vrf_evaluate},
