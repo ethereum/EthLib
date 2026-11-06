@@ -124,22 +124,23 @@ theorem sequenceDep_spec : ∀ {n : Nat} {α : Fin n → Type}
   | 0, _, _, _, _ => fun i => Fin.elim0 i
   | n + 1, α, computation, results, h => by
       simp only [sequenceDep, evalWithAnswerFn_bind] at h
-      cases hhead : evalWithAnswerFn f (computation 0) with
+      cases hhead : evalWithAnswerFn f (computation (Fin.last n)) with
       | none => rw [hhead] at h; simp at h
       | some head =>
           rw [hhead] at h
           simp only [evalWithAnswerFn_bind] at h
           cases htail : evalWithAnswerFn f
-              (sequenceDep (α := fun i => α i.succ) fun i => computation i.succ) with
+              (sequenceDep (α := fun i => α i.castSucc) fun i => computation i.castSucc) with
           | none => rw [htail] at h; simp at h
           | some tail =>
               rw [htail] at h
               simp only [evalWithAnswerFn_pure, Option.some.injEq] at h
               subst h
               intro i
-              refine Fin.cases ?_ (fun j => ?_) i
+              refine Fin.lastCases ?_ (fun j => ?_) i
               · simpa using hhead
-              · simpa using sequenceDep_spec (α := fun i => α i.succ) (fun i => computation i.succ)
+              · simpa using sequenceDep_spec (α := fun i => α i.castSucc)
+                  (fun i => computation i.castSucc)
                   htail j
 
 /-- All the values if every one is present, and `none` otherwise. -/
@@ -175,29 +176,29 @@ theorem eval_sequenceDep : ∀ {n : Nat} {α : Fin n → Type}
       exact Fin.elim0 i
   | n + 1, α, computation => by
       simp only [sequenceDep, evalWithAnswerFn_bind]
-      have ih := eval_sequenceDep (α := fun i => α i.succ) fun i => computation i.succ
-      cases hhead : evalWithAnswerFn f (computation 0) with
+      have ih := eval_sequenceDep (α := fun i => α i.castSucc) fun i => computation i.castSucc
+      cases hhead : evalWithAnswerFn f (computation (Fin.last n)) with
       | none =>
           simp only [evalWithAnswerFn_pure, allSome]
-          rw [dite_eq_right (fun h => by simpa [hhead] using h 0)]
+          rw [dite_eq_right (fun h => by simpa [hhead] using h (Fin.last n))]
       | some head =>
           simp only [evalWithAnswerFn_bind, ih, allSome]
-          by_cases hall : ∀ i : Fin n, (evalWithAnswerFn f (computation i.succ)).isSome
+          by_cases hall : ∀ i : Fin n, (evalWithAnswerFn f (computation i.castSucc)).isSome
           · rw [dite_eq_left hall]
             simp only [evalWithAnswerFn_pure]
             have hall' : ∀ i : Fin (n + 1), (evalWithAnswerFn f (computation i)).isSome := by
               intro i
-              refine Fin.cases ?_ (fun j => hall j) i
+              refine Fin.lastCases ?_ (fun j => hall j) i
               simp [hhead]
             rw [dite_eq_left hall']
             congr 1
             funext i
-            refine Fin.cases ?_ (fun j => ?_) i
+            refine Fin.lastCases ?_ (fun j => ?_) i
             · simp [hhead]
             · simp
           · rw [dite_eq_right hall]
             simp only [evalWithAnswerFn_pure]
-            rw [dite_eq_right (fun h => hall fun i => h i.succ)]
+            rw [dite_eq_right (fun h => hall fun i => h i.castSucc)]
 
 theorem sequenceLayers_spec {α : Layer → Type}
     (computation : (lay : Layer) → OracleComp HashSpec (Option (α lay)))

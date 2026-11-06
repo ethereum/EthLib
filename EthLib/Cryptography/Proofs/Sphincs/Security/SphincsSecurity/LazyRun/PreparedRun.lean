@@ -400,16 +400,16 @@ theorem interp_sequenceDep_none (Inv : State → Prop) : ∀ {n : ℕ} {α : Fin
       rcases h1 with ⟨_, hn, _⟩ | ⟨v, hv, o2, ho2, hres2, _, _⟩
       · rw [hnone] at hn; cases hn
       rcases v with _ | head
-      · exact ⟨0, hbad 0 budget s hs o1 ho1 hv⟩
+      · exact ⟨Fin.last _, hbad (Fin.last _) budget s hs o1 ho1 hv⟩
       obtain ⟨o3, ho3, h3⟩ := interp_bind_mem tg initial model _ _ _ _ o2 ho2
       rcases h3 with ⟨_, hn, _⟩ | ⟨w, hw, o4, ho4, hres4, _, _⟩
       · rw [hres2, hn] at hnone; cases hnone
       rcases w with _ | tail
       · obtain ⟨i, hi⟩ :=
-          interp_sequenceDep_none Inv (α := fun i => α i.succ) (fun i => computation i.succ)
-          (fun i => Bad i.succ) (fun i => hinv i.succ) (fun i => hbad i.succ) _ o1.2
-          (hinv 0 budget s hs o1 ho1) o3 ho3 hw
-        exact ⟨i.succ, hi⟩
+          interp_sequenceDep_none Inv (α := fun i => α i.castSucc) (fun i => computation i.castSucc)
+          (fun i => Bad i.castSucc) (fun i => hinv i.castSucc) (fun i => hbad i.castSucc) _ o1.2
+          (hinv (Fin.last _) budget s hs o1 ho1) o3 ho3 hw
+        exact ⟨i.castSucc, hi⟩
       · change o4 ∈ support (interp tg initial model (pure _) _ _) at ho4
         rw [interp_pure, support_pure, Set.mem_singleton_iff] at ho4
         rw [hres2, hres4, ho4] at hnone

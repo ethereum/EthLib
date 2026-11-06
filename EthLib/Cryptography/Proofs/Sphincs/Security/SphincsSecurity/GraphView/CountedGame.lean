@@ -213,28 +213,29 @@ theorem fixed_sequenceDep (f : QueryImpl HashSpec Id) (table : HiddenGraph.Table
       funext i
       exact i.elim0
   | n + 1, α, computation, results, cost, h => by
-      have h0 := h 0
-      have ih := fixed_sequenceDep f table (α := fun i => α i.succ) (fun i => computation i.succ)
-        (fun i => results i.succ) (fun i => cost i.succ) (fun i => h i.succ)
+      have h0 := h (Fin.last _)
+      have ih := fixed_sequenceDep f table (α := fun i => α i.castSucc)
+        (fun i => computation i.castSucc)
+        (fun i => results i.castSucc) (fun i => cost i.castSucc) (fun i => h i.castSucc)
       apply WriterT.ext
       rw [sequenceDep, simulateQ_bind, h0]
-      cases hhead : results 0 with
+      cases hhead : results (Fin.last _) with
       | none =>
           simp only [WriterT.run_bind, WriterT.run_mk, pure_bind,
             simulateQ_pure, WriterT.run_pure, map_pure, seqCost, hhead, Option.isSome_none,
             Bool.false_eq_true, ↓reduceIte, Nat.add_zero, mul_one]
           congr 2
           unfold Completeness.allSome
-          rw [dite_eq_right (fun hall => by simpa [hhead] using hall 0)]
+          rw [dite_eq_right (fun hall => by simpa [hhead] using hall (Fin.last _))]
       | some head =>
           simp only [WriterT.run_bind, WriterT.run_mk, pure_bind,
             simulateQ_bind, ih, seqCost, hhead, Option.isSome_some, ↓reduceIte]
-          by_cases hall : ∀ i : Fin n, (results i.succ).isSome
-          · have hsome : Completeness.allSome (fun i : Fin n => results i.succ) =
-                some fun i => (results i.succ).get (hall i) := dite_eq_left hall
+          by_cases hall : ∀ i : Fin n, (results i.castSucc).isSome
+          · have hsome : Completeness.allSome (fun i : Fin n => results i.castSucc) =
+                some fun i => (results i.castSucc).get (hall i) := dite_eq_left hall
             have hall' : ∀ i : Fin (n + 1), (results i).isSome := by
               intro i
-              refine Fin.cases ?_ (fun j => hall j) i
+              refine Fin.lastCases ?_ (fun j => hall j) i
               simp [hhead]
             have hsome' : Completeness.allSome results = some fun i => (results i).get (hall' i) :=
               dite_eq_left hall'
@@ -242,13 +243,13 @@ theorem fixed_sequenceDep (f : QueryImpl HashSpec Id) (table : HiddenGraph.Table
               ← ofAdd_add]
             congr 3
             funext i
-            refine Fin.cases ?_ (fun j => ?_) i
+            refine Fin.lastCases ?_ (fun j => ?_) i
             · simp [hhead]
             · simp
-          · have hnone : Completeness.allSome (fun i : Fin n => results i.succ) = none :=
+          · have hnone : Completeness.allSome (fun i : Fin n => results i.castSucc) = none :=
               dite_eq_right hall
             have hnone' : Completeness.allSome results = none :=
-              dite_eq_right (fun hall' => hall fun i => hall' i.succ)
+              dite_eq_right (fun hall' => hall fun i => hall' i.castSucc)
             simp only [hnone, hnone', simulateQ_pure, WriterT.run_pure, map_pure, mul_one,
               ← ofAdd_add]
 

@@ -172,11 +172,12 @@ theorem hashCalls_encode (f : QueryImpl HashSpec Id) (parameter : PublicParamete
       OracleComp HashSpec (Option Encoding)) = 1 := by
   simp only [encode, hashCalls_bind, hashCalls_tweakableHash, hashCalls_pure, Nat.add_zero]
 
-/-- The cost of running the computations from index `0` up, stopping after the first failure. -/
+/-- The cost of running the computations from the last index down, up to the first failure. -/
 def seqCost : {n : Nat} → (Fin n → Bool) → (Fin n → Nat) → Nat
   | 0, _, _ => 0
   | _ + 1, ok, cost =>
-      cost 0 + if ok 0 then seqCost (fun i => ok i.succ) (fun i => cost i.succ) else 0
+      cost (Fin.last _) + if ok (Fin.last _) then
+        seqCost (fun i => ok i.castSucc) (fun i => cost i.castSucc) else 0
 
 omit [Params] in
 theorem hashCalls_sequenceDep (f : QueryImpl HashSpec Id) : ∀ {n : Nat} {α : Fin n → Type}
@@ -187,13 +188,13 @@ theorem hashCalls_sequenceDep (f : QueryImpl HashSpec Id) : ∀ {n : Nat} {α : 
   | 0, _, _ => rfl
   | n + 1, α, computation => by
       simp only [sequenceDep, hashCalls_bind, seqCost]
-      cases hhead : evalWithAnswerFn f (computation 0) with
+      cases hhead : evalWithAnswerFn f (computation (Fin.last n)) with
       | none => simp only [hashCalls_pure, Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
       | some head =>
           simp only [hashCalls_bind, Option.isSome_some, ↓reduceIte,
-            hashCalls_sequenceDep f (α := fun i => α i.succ) fun i => computation i.succ]
+            hashCalls_sequenceDep f (α := fun i => α i.castSucc) fun i => computation i.castSucc]
           cases evalWithAnswerFn f
-              (sequenceDep (α := fun i => α i.succ) fun i => computation i.succ) <;>
+              (sequenceDep (α := fun i => α i.castSucc) fun i => computation i.castSucc) <;>
             simp only [hashCalls_pure, Nat.add_zero]
 
 theorem hashCalls_sequenceLayers {α : Layer → Type} (f : QueryImpl HashSpec Id)

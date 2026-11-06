@@ -11,7 +11,7 @@ Both signers compute the randomizer, the digest, the FORS openings and one signa
 
 They make different calls.
 
-EthLib signs the layers from the bottom up, and the model from the top down.
+Both sign the layers from the bottom up.
 
 The model makes one more digest call, for its randomizer search.
 

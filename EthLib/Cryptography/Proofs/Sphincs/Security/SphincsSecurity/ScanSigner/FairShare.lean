@@ -281,10 +281,11 @@ theorem avoids_sequenceDep (avoid : HashInput → Prop) : ∀ {n : Nat} {α : Fi
   | 0, _, _, _ => avoids_pure _ _
   | _ + 1, α, computation, h => by
       unfold sequenceDep
-      refine avoids_bind _ (h 0) fun head => ?_
+      refine avoids_bind _ (h (Fin.last _)) fun head => ?_
       rcases head with _ | head
       · exact avoids_pure _ _
-      · refine avoids_bind _ (avoids_sequenceDep avoid (α := fun i => α i.succ) fun i => h i.succ)
+      · refine avoids_bind _
+          (avoids_sequenceDep avoid (α := fun i => α i.castSucc) fun i => h i.castSucc)
           fun tail => ?_
         rcases tail with _ | tail <;> exact avoids_pure _ _
 

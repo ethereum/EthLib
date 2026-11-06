@@ -173,11 +173,11 @@ theorem Only.sequenceDep : ∀ {n : Nat} {α : Fin n → Type}
   | 0, _, _, _ => Only.pure' _
   | _ + 1, α, computation, h => by
       unfold SphincsSecurity.Concrete.sequenceDep
-      refine Only.bind (h 0) (fun head => ?_)
+      refine Only.bind (h (Fin.last _)) (fun head => ?_)
       rcases head with _ | head
       · exact Only.pure' _
-      · refine Only.bind (Only.sequenceDep (α := fun i => α i.succ) fun i => h
-          i.succ) (fun tail => ?_)
+      · refine Only.bind (Only.sequenceDep (α := fun i => α i.castSucc) fun i => h
+          i.castSucc) (fun tail => ?_)
         rcases tail with _ | tail <;> exact Only.pure' _
 
 theorem Only.leafHash (parameter : PublicParameter) (lay : Layer) (tree : TreeIndex)

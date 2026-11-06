@@ -48,6 +48,8 @@ That message is the FORS key at the bottom layer, and above it the 16-byte root 
 
 The layers are numbered from the top, so layer 0 is the top layer.
 
+The signer signs them from the bottom up, and stops at the first layer whose counter search fails.
+
 ## Hash inputs
 
 Key generation first hashes the seed `S0` into the scheme seed `S = H(leanSPHINCS || S0)`.
@@ -799,16 +801,17 @@ def verify (publicKey : PublicKey) (message : Message) (signature : Signature) :
 /-- The top layer holds one tree, at index `0`. -/
 def rootTree : TreeIndex := ⟨0, Nat.two_pow_pos _⟩
 
-/-- Run the `n` computations from index `0` up, stopping on the first failure. -/
+/-- Run the `n` computations from the last index down, stopping on the first failure. -/
 def sequenceDep : {n : Nat} → {α : Fin n → Type} →
     ((i : Fin n) → m (Option (α i))) → m (Option ((i : Fin n) → α i))
   | 0, _, _ => pure (some fun i => Fin.elim0 i)
   | _ + 1, α, computation => do
-      let some head ← computation 0 | return none
-      let some tail ← sequenceDep (α := fun i => α i.succ) fun i => computation i.succ | return none
-      return some (Fin.cases head tail)
+      let some last ← computation (Fin.last _) | return none
+      let some init ← sequenceDep (α := fun i => α i.castSucc) fun i => computation i.castSucc
+        | return none
+      return some (Fin.lastCases last init)
 
-/-- Run the layers from the top down, stopping on failure. -/
+/-- Run the layers from the bottom up, stopping on failure. -/
 def sequenceLayers {α : Layer → Type}
     (computation : (lay : Layer) → m (Option (α lay))) : m (Option ((lay : Layer) → α lay)) :=
   sequenceDep computation
