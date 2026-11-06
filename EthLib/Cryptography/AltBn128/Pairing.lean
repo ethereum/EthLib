@@ -240,10 +240,12 @@ def frobeniusGamma : Fp2 := Fp2.powBits 256 ⟨9, 1⟩ ((Fp.modulus - 1) / 6)
 
 /-- The powers `(w^p)^k` for `k < 12`, which are also `(w^k)^p`.
 
-`6` divides `p - 1`, so `w^p = w (w^6)^((p - 1) / 6)` is `w` times an element of `Fp2`. -/
-def frobeniusCoefficients : Array Fp12 :=
+`6` divides `p - 1`, so `w^p = w (w^6)^((p - 1) / 6)` is `w` times an element of `Fp2`.
+
+Each exponent `k` is below `2^4`, so four bits of square and multiply reach it. -/
+def frobeniusCoefficients : Vector Fp12 12 :=
   let wp := wPow 1 * ofFp2 frobeniusGamma
-  (List.range 11).foldl (fun powers _ => powers.push (powers.back! * wp)) #[one]
+  Vector.ofFn fun k => powBits 4 wp k.val
 
 /-- The `p`-th power.
 
@@ -251,7 +253,7 @@ Each coefficient `a_k` lies in `Fp`, so `a_k^p = a_k`.
 
 So `(sum_k a_k w^k)^p = sum_k a_k (w^p)^k`. -/
 def frobenius (a : Fp12) : Fp12 :=
-  (List.range 12).foldl (fun acc k => acc + scale a[k]! frobeniusCoefficients[k]!) (ofFp 0)
+  Fin.foldl 12 (fun acc k => acc + scale a[k] frobeniusCoefficients[k]) (ofFp 0)
 
 /-- The `p^n`-th power, by `n` applications of the `p`-th power. -/
 def frobeniusPow : Nat → Fp12 → Fp12
