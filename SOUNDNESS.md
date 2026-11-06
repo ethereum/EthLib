@@ -414,6 +414,8 @@ The AES theorems are correctness statements, and none states a security property
 `invCipher_cipher` and `ciphInv_ciph` (`Proofs/Aes/Block.lean`) prove that the inverse cipher of FIPS 197 undoes the cipher, for every key schedule and so for every key.
 `sbox_eq` proves that each entry of the S-box table equals the inverse in GF(2^8) followed by the affine map of FIPS 197 §5.1.1.
 `ctr_ctr` (`Proofs/Aes/Ctr.lean`) proves that CTR decryption of SP 800-38A returns the plaintext, for every forward cipher and initial counter.
+`repeat_inc_injOn` proves that, for `m <= 128`, the counters of the first `2^m` blocks of a message are distinct, as Appendix B.1 states.
+`repeat_inc_two_pow` proves that the counter after `2^m` increments is the first one again.
 The Python tests (`bindings/python/tests/aes/test_aes.py`) check FIPS 197 Appendix B and the AES-128 and AES-256 vectors of its 2001 Appendix C.
 They also check the CTR examples F.5.1, F.5.2, F.5.5 and F.5.6 of SP 800-38A.
 

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Aes.Ctr
+public import EthLib.Base.Proofs.BigEndian
 
 /-!
 # Proofs: `Aes.Ctr`
@@ -8,11 +9,54 @@ public import EthLib.Cryptography.Aes.Ctr
 CTR decryption returns the plaintext, for every cipher, counter and message.
 
 The output has the length of the input.
+
+With `m <= 128`, the standard increment gives `2^m` distinct counters before it repeats the first.
 -/
 
 @[expose] public section
 
 namespace EthLib.Cryptography.Aes
+
+/-! ## Blocks as integers -/
+
+/-- A block is worth less than `2^128`. -/
+theorem blockToNat_lt (A : Block) : blockToNat A < 2 ^ 128 := by
+  have h := Base.bytesToNat_lt A.toList
+  rw [Vector.length_toList] at h
+  exact lt_of_lt_of_eq h (by decide)
+
+/-- Two blocks with the same integer are equal. -/
+theorem blockToNat_injective : Function.Injective blockToNat := by
+  intro A B h
+  exact Vector.toList_inj.mp (Base.bytesToNat_inj (by simp) h)
+
+/-- The bytes `z / 256^(n - 1 - i)`, for `i < n`, are `z` written on `n` bytes. -/
+private theorem ofFn_toUInt8_eq_natToBytes (n z : Nat) :
+    List.ofFn (fun i : Fin n => (z / 256 ^ (n - 1 - i.val)).toUInt8) = Base.natToBytes n z := by
+  induction n generalizing z with
+  | zero => rfl
+  | succ n ih =>
+    -- The last byte is `z mod 256`, and the bytes before it write `z / 256`.
+    rw [List.ofFn_succ_last, Base.natToBytes_succ, ← ih (z / 256)]
+    congr 1
+    · congr 1
+      funext i
+      rw [Nat.div_div_eq_div_mul, ← Nat.pow_succ']
+      congr 3
+      simp only [Fin.val_castSucc]
+      omega
+    · simp only [Fin.val_last, List.cons.injEq, and_true]
+      apply UInt8.toNat_inj.mp
+      simp [Nat.toUInt8_eq]
+
+/-- An integer below `2^128` survives the round trip through a block. -/
+theorem blockToNat_blockOfNat {z : Nat} (hz : z < 2 ^ 128) : blockToNat (blockOfNat z) = z := by
+  have h := ofFn_toUInt8_eq_natToBytes 16 z
+  simp only [show ∀ i : Fin 16, 16 - 1 - i.val = 15 - i.val from fun _ => rfl] at h
+  rw [blockToNat, blockOfNat, Vector.toList_ofFn, h]
+  exact Base.bytesToNat_natToBytes_of_lt (lt_of_lt_of_eq hz (by decide))
+
+/-! ## The mode -/
 
 /-- XOR with a key stream twice gives back the data, when the stream is long enough. -/
 theorem zipWith_xor_xor (a k : List UInt8) (h : a.length ≤ k.length) :
@@ -111,5 +155,71 @@ theorem ctr_ctr (ciph : Block → Block) (m : Nat) (T : Block) (data : ByteArray
   rw [size_ctr]
   simp only [ctr, List.toList_toArray]
   rw [xorKeystream_xorKeystream _ _ _ _ _ (by rw [Array.length_toList]; show data.size ≤ _; omega)]
+
+/-! ## Distinct counters
+
+SP 800-38A Appendix B.1: the standard increment gives distinct counters to `n <= 2^m` blocks.
+
+The mode moves to the next counter with one increment per block.
+
+So block `j` of a message, counted from 0, uses the first counter incremented `j` times. -/
+
+/-- The bits of a block above `m`, with any `m` low bits, stay below `2^128`. -/
+private theorem div_mul_add_lt {x m r : Nat} (hx : x < 2 ^ 128) (hm : m ≤ 128) (hr : r < 2 ^ m) :
+    x / 2 ^ m * 2 ^ m + r < 2 ^ 128 := by
+  have hsplit : 2 ^ 128 = 2 ^ (128 - m) * 2 ^ m := by rw [← Nat.pow_add, Nat.sub_add_cancel hm]
+  -- The high part counts fewer than `2^(128 - m)` steps of `2^m`.
+  have hq : x / 2 ^ m < 2 ^ (128 - m) :=
+    Nat.div_lt_of_lt_mul (by rw [Nat.mul_comm, ← hsplit]; exact hx)
+  calc x / 2 ^ m * 2 ^ m + r < x / 2 ^ m * 2 ^ m + 2 ^ m := Nat.add_lt_add_left hr _
+    _ = (x / 2 ^ m + 1) * 2 ^ m := by rw [Nat.succ_mul]
+    _ ≤ 2 ^ (128 - m) * 2 ^ m := Nat.mul_le_mul_right _ hq
+    _ = 2 ^ 128 := hsplit.symm
+
+/-- After `k` increments, the low `m` bits hold `x + k mod 2^m`, and the bits above stay. -/
+theorem blockToNat_repeat_inc {m : Nat} (hm : m ≤ 128) (T : Block) (k : Nat) :
+    blockToNat (Nat.repeat (inc m) k T)
+      = blockToNat T / 2 ^ m * 2 ^ m + (blockToNat T % 2 ^ m + k) % 2 ^ m := by
+  have hpos : 0 < 2 ^ m := Nat.two_pow_pos m
+  induction k with
+  | zero =>
+    rw [Nat.repeat, Nat.add_zero, Nat.mod_mod, Nat.div_add_mod']
+  | succ k ih =>
+    rw [Nat.repeat, inc, ih]
+    -- The low part is below `2^m`, so it is the remainder and the high part is the quotient.
+    have hr : (blockToNat T % 2 ^ m + k) % 2 ^ m < 2 ^ m := Nat.mod_lt _ hpos
+    have hdiv : (blockToNat T / 2 ^ m * 2 ^ m + (blockToNat T % 2 ^ m + k) % 2 ^ m) / 2 ^ m
+        = blockToNat T / 2 ^ m := by
+      rw [Nat.add_comm, Nat.add_mul_div_right _ _ hpos, Nat.div_eq_of_lt hr, Nat.zero_add]
+    have hmod : (blockToNat T / 2 ^ m * 2 ^ m + (blockToNat T % 2 ^ m + k) % 2 ^ m) % 2 ^ m
+        = (blockToNat T % 2 ^ m + k) % 2 ^ m := by
+      rw [Nat.add_comm, Nat.add_mul_mod_self_right, Nat.mod_mod]
+    have hnext : ((blockToNat T % 2 ^ m + k) % 2 ^ m + 1) % 2 ^ m
+        = (blockToNat T % 2 ^ m + (k + 1)) % 2 ^ m := by
+      rw [Nat.mod_add_mod, Nat.add_assoc]
+    rw [hdiv, hmod, hnext,
+      blockToNat_blockOfNat (div_mul_add_lt (blockToNat_lt T) hm (Nat.mod_lt _ hpos))]
+
+/-- The counters `i` and `j` increments after `T` differ, for `i != j` below `2^m`.
+
+So a message of `n <= 2^m` blocks never repeats a counter block, SP 800-38A Appendix B.1. -/
+theorem repeat_inc_injOn {m : Nat} (hm : m ≤ 128) (T : Block) {i j : Nat} (hi : i < 2 ^ m)
+    (hj : j < 2 ^ m) (h : Nat.repeat (inc m) i T = Nat.repeat (inc m) j T) : i = j := by
+  have hv := congrArg blockToNat h
+  rw [blockToNat_repeat_inc hm, blockToNat_repeat_inc hm] at hv
+  have hlow := Nat.add_left_cancel hv
+  -- Adding `2^m - x mod 2^m` turns `x mod 2^m + i` into `i`, modulo `2^m`.
+  have ha : blockToNat T % 2 ^ m < 2 ^ m := Nat.mod_lt _ (Nat.two_pow_pos m)
+  have hshift := Nat.add_mod_eq_add_mod_right (2 ^ m - blockToNat T % 2 ^ m) hlow
+  rw [show blockToNat T % 2 ^ m + i + (2 ^ m - blockToNat T % 2 ^ m) = i + 2 ^ m by omega,
+    show blockToNat T % 2 ^ m + j + (2 ^ m - blockToNat T % 2 ^ m) = j + 2 ^ m by omega,
+    Nat.add_mod_right, Nat.add_mod_right, Nat.mod_eq_of_lt hi, Nat.mod_eq_of_lt hj] at hshift
+  exact hshift
+
+/-- `2^m` increments give back the first counter, so the bound `n <= 2^m` cannot grow. -/
+theorem repeat_inc_two_pow {m : Nat} (hm : m ≤ 128) (T : Block) :
+    Nat.repeat (inc m) (2 ^ m) T = T := by
+  apply blockToNat_injective
+  rw [blockToNat_repeat_inc hm, Nat.add_mod_right, Nat.mod_mod, Nat.div_add_mod']
 
 end EthLib.Cryptography.Aes

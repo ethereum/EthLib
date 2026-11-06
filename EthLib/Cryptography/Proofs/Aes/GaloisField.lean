@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Aes.Gcm
-public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Cryptography.Proofs.Aes.Ctr
 public import Mathlib.RingTheory.AdjoinRoot
 public import Mathlib.Algebra.Field.ZMod
 public import Mathlib.Algebra.CharP.Two
@@ -163,43 +163,6 @@ theorem mk_polyOfNat_step {v : Nat} (hv : v < 2 ^ 128) :
   · simp [hbit, show v % 2 = 1 by omega, polyOfNat_xor, map_add, mk_X_pow_128]
 
 /-! ## Blocks as integers -/
-
-/-- A block is worth less than `2^128`. -/
-theorem blockToNat_lt (A : Block) : blockToNat A < 2 ^ 128 := by
-  have h := Base.bytesToNat_lt A.toList
-  rw [Vector.length_toList] at h
-  exact lt_of_lt_of_eq h (by norm_num)
-
-/-- Two blocks with the same integer are equal. -/
-theorem blockToNat_injective : Function.Injective blockToNat := by
-  intro A B h
-  exact Vector.toList_inj.mp (Base.bytesToNat_inj (by simp) h)
-
-/-- The bytes `z / 256^(n - 1 - i)`, for `i < n`, are `z` written on `n` bytes. -/
-private theorem ofFn_toUInt8_eq_natToBytes (n z : Nat) :
-    List.ofFn (fun i : Fin n => (z / 256 ^ (n - 1 - i.val)).toUInt8) = Base.natToBytes n z := by
-  induction n generalizing z with
-  | zero => rfl
-  | succ n ih =>
-    -- The last byte is `z mod 256`, and the bytes before it write `z / 256`.
-    rw [List.ofFn_succ_last, Base.natToBytes_succ, ← ih (z / 256)]
-    congr 1
-    · apply List.ofFn_inj.mpr
-      funext i
-      rw [Nat.div_div_eq_div_mul, ← Nat.pow_succ']
-      congr 3
-      simp only [Fin.val_castSucc]
-      omega
-    · simp only [Fin.val_last, List.cons.injEq, and_true]
-      apply UInt8.toNat_inj.mp
-      simp [Nat.toUInt8_eq]
-
-/-- An integer below `2^128` survives the round trip through a block. -/
-theorem blockToNat_blockOfNat {z : Nat} (hz : z < 2 ^ 128) : blockToNat (blockOfNat z) = z := by
-  have h := ofFn_toUInt8_eq_natToBytes 16 z
-  simp only [show ∀ i : Fin 16, 16 - 1 - i.val = 15 - i.val from fun _ => rfl] at h
-  rw [blockToNat, blockOfNat, Vector.toList_ofFn, h]
-  exact Base.bytesToNat_natToBytes_of_lt (lt_of_lt_of_eq hz (by norm_num))
 
 /-- The XOR of two numbers, each split at bit `k`, is the XOR of each part. -/
 private theorem xor_two_pow_mul_add {p q r s k : Nat} (hr : r < 2 ^ k) (hs : s < 2 ^ k) :
