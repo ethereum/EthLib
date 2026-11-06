@@ -754,6 +754,19 @@ Two transactions, or two withdrawals, with the same bytes are equal, so `transac
 `receiptsRoot_binding` does so for receipts whose types are 0 or types that the fork has, as the receipt decoder requires.
 No theorem bounds the probability of finding a collision.
 
+An answer of `eth_getProof` (EIP-1186) is checked against a state root by `AccountProof.verify` (`Execution/State/AccountProof.lean`).
+It checks the account proof, then each slot proof against the storage root of the answer.
+`verifyAccount_sound` and `verifySlot_sound` (`Execution/Proofs/State/AccountProof.lean`) carry `verifyProof_sound` over to the fields of the answer.
+Take a secured trie with distinct keys and its root.
+When a check passes, the trie's value under the key decodes to the fields of the answer.
+When the check reports absence, the trie holds no value under the key.
+Otherwise a search returns a collision with the trie's own proof, or two keys with one hash.
+`verifyAccount_sound_state` and `verifySlot_sound_storage` apply them to the tries of a state, whose keys are distinct.
+`verifyAccount_getProof` and `verifySlot_getProof` prove that the trie's own proofs pass, with the fields that the trie holds.
+A proof can show that the address has no account, or that a slot is not set.
+EIP-1186 does not say which fields the answer then holds.
+So the check then judges no field and reports the absence.
+
 ### Weak subjectivity
 
 A node that starts from a recent checkpoint trusts it only for a limited time, the weak subjectivity period.
