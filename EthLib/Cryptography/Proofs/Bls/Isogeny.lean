@@ -108,12 +108,12 @@ private theorem sq_ne_two (z : ZMod Fp.modulus) : z * z ≠ 2 := by
 private theorem pole_not_on_curve (y : Fp2) : y * y ≠ 4 + 4 * I := by
   intro hy
   have hn := congrArg Fp2.norm hy
-  rw [Fp2.norm_mul, show Fp2.norm (4 + 4 * I) = (32 : Fp) by
+  rw [Fp2.norm_mul, show Fp2.norm (4 + 4 * I) = Fp.ofNat 32 by
     decide_eq_at_model [Fp2.norm, Fp2.add_c0, Fp2.add_c1, Fp2.mul_c0, Fp2.mul_c1, Fp2.i_c0,
       Fp2.i_c1]] at hn
-  let z : ZMod Fp.modulus := Fp2.norm y
-  have hz : z * z = 32 := hn
-  apply sq_ne_two (z / 4)
+  have hz := congrArg Fp.toZMod hn
+  push_toZMod at hz
+  apply sq_ne_two (Fp.toZMod (Fp2.norm y) / 4)
   have h4 : (4 : ZMod Fp.modulus) ≠ 0 := by decide
   field_simp [h4]
   linear_combination hz

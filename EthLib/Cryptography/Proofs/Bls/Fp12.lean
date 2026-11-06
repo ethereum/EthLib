@@ -233,9 +233,15 @@ private theorem sq_eq_v_mul_sq {x y : Fp6} (h : x * x = y * y * Fp6.v) : y = 0 :
   have hnorm : Fp2.norm (Fp6.norm (x * x)) = Fp2.norm (Fp6.norm (y * y * Fp6.v)) :=
     congrArg (fun z => Fp2.norm (Fp6.norm z)) h
   simp only [Fp6.norm_mul, Fp6.norm_v, Fp2.norm_mul] at hnorm
-  have hy0 : Fp2.norm (Fp6.norm y) = 0 :=
-    sq_eq_two_mul_sq_zmod (u := Fp2.norm (Fp6.norm x)) (w := Fp2.norm (Fp6.norm y))
-      (nxi := Fp2.norm Fp2.xi) rfl hnorm
+  have hy0 : Fp2.norm (Fp6.norm y) = 0 := by
+    have h' := congrArg Fp.toZMod hnorm
+    push_toZMod at h'
+    -- The norm of `xi = 1 + i` is `1 + 1 = 2`.
+    have hnxi : Fp.toZMod (Fp2.norm Fp2.xi) = 2 := by
+      simp only [Fp2.norm, Fp2.xi]
+      push_toZMod
+      norm_num
+    exact Fp.toZMod.injective ((sq_eq_two_mul_sq_zmod hnxi h').trans Fp.toZMod_zero.symm)
   exact (Fp6.norm_eq_zero_iff y).mp ((Fp2.norm_eq_zero_iff (Fp6.norm y)).mp hy0)
 
 /-- The norm is zero only at zero. -/

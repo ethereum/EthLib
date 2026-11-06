@@ -119,11 +119,15 @@ The kernel runs the ladder in the model, 255 doublings and additions on 381-bit 
 theorem modulus_smul_generator :
     Fr.modulus • toPoint generator = 0 := by
   rw [← toPoint_mulNat valid_generator]
-  refine Point.toAffine_of_Z_eq_zero (isZero_iff.mp ?_)
+  refine Point.toAffine_of_Z_eq_zero ?_
+  rw [rep_z]
+  apply (isZero_iff (a := (generator.mulNat Fr.modulus).z)).mp
   rw [← mulNatAux_eq 256 generator Fr.modulus (by decide)]
   have h : (mulNatAux 256 (generator : G2 Fp.Model) Fr.modulus).isInfinity = true := by
     decide +kernel
-  rwa [← map_generator Fp.toModel, ← map_mulNatAux, map_isInfinity] at h
+  rw [← map_generator Fp.toModel, ← map_mulNatAux, map_isInfinity,
+    show ∀ p : G2, p.isInfinity = p.z.isZero from fun _ => rfl] at h
+  exact h
 
 theorem toPoint_generator_ne_zero : toPoint generator ≠ 0 := by
   -- Because `z = 1 != 0`, `generator` maps to `Point.some ...`, which cannot equal `Point.zero`.

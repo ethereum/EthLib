@@ -75,7 +75,7 @@ theorem isInfinity_eq_true_iff_toPoint_eq_zero {P : G1} (hP : Valid P) :
   · intro h
     -- A finite nonsingular representative maps to `Point.some`, never `0`.
     by_contra hne
-    have hz : (P.z : ZMod Fp.modulus) ≠ 0 := fun hz0 => hne (isZero_iff.mpr hz0)
+    have hz : Fp.toZMod P.z ≠ 0 := fun hz0 => hne (isZero_iff.mpr hz0)
     rw [toPoint, Point.toAffine_of_Z_ne_zero hP hz] at h
     cases h
 

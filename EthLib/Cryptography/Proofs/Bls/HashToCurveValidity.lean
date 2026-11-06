@@ -128,21 +128,33 @@ theorem psi2_neg (P : G2) : psi2 (G2.neg P) = G2.neg (psi2 P) := by
   · simp [hp]
   · simp [hp, neg_mul]
 
+/-- Binding a success passes its value to the continuation. -/
+private theorem ok_bind {α β : Type} (a : α) (f : α → Except BlsError β) :
+    (Except.ok a >>= f) = f a := rfl
+
+-- The pair matcher is named on purpose: its equation selects the branch without evaluation.
+set_option linter.auxLemma false in
 /-- Every successful `hashToG2` output is a nonsingular point on the BLS12-381 twist. -/
 theorem hashToG2_valid {msg dst : ByteArray} {P : G2}
     (h : hashToG2 msg dst = .ok P) : G2.Valid P := by
-  unfold hashToG2 at h
+  -- Each step is rewritten, never reduced, so the kernel never evaluates field arithmetic.
+  rw [hashToG2] at h
   cases hf : (hashToFieldFp2 msg dst 2 : Except BlsError (Array Fp2)) with
-  | error e => simp [hf, bind, Except.bind] at h
+  | error e => rw [hf] at h; cases h
   | ok us =>
+    rw [hf, ok_bind] at h
     cases h0 : simpleSwu us[0]! with
-    | error e => simp [hf, h0, bind, Except.bind] at h
+    | error e => rw [h0] at h; cases h
     | ok p0 =>
+      rw [h0, ok_bind] at h
       cases h1 : simpleSwu us[1]! with
-      | error e => simp [hf, h0, h1, bind, Except.bind] at h
+      | error e => rw [h1] at h; cases h
       | ok p1 =>
-        simp [hf, h0, h1, bind, Except.bind, pure, Except.pure] at h
-        subst P
+        rw [h1] at h
+        rw [← Prod.mk.eta (p := p0), ← Prod.mk.eta (p := p1)] at h
+        simp (config := { zeta := false, iota := false }) only
+          [psi.match_1.eq_1, ok_bind, pure, Except.pure, Except.ok.injEq] at h
+        subst h
         exact clearCofactor_valid (G2.valid_add
           (simpleSwu_isoMapG2_valid h0) (simpleSwu_isoMapG2_valid h1))
 
@@ -164,6 +176,8 @@ private theorem hashToFieldFp2_two_ok (msg dst : ByteArray) :
   rw [Std.Legacy.Range.forIn_eq_forIn_range']
   exact ⟨_, rfl⟩
 
+-- The pair matcher is named on purpose: its equation selects the branch without evaluation.
+set_option linter.auxLemma false in
 /-- `hashToG2 msg dst` succeeds for all `msg` and `dst` and returns a `G2.Valid` point. -/
 theorem hashToG2_total (msg dst : ByteArray) :
     ∃ P : G2, hashToG2 msg dst = .ok P ∧ G2.Valid P := by
@@ -171,12 +185,9 @@ theorem hashToG2_total (msg dst : ByteArray) :
   obtain ⟨p0, h0⟩ := simpleSwu_ok us[0]!
   obtain ⟨p1, h1⟩ := simpleSwu_ok us[1]!
   have hok : ∃ P : G2, hashToG2 msg dst = .ok P := by
-    unfold hashToG2
-    rw [hus]
-    dsimp only [bind, Except.bind]
-    rw [h0]
-    dsimp only
-    rw [h1]
+    rw [hashToG2, hus, ok_bind, h0, ok_bind, h1]
+    rw [← Prod.mk.eta (p := p0), ← Prod.mk.eta (p := p1)]
+    simp (config := { zeta := false, iota := false }) only [psi.match_1.eq_1, ok_bind]
     exact ⟨_, rfl⟩
   rcases hok with ⟨P, hP⟩
   exact ⟨P, hP, hashToG2_valid hP⟩
