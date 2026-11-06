@@ -25,7 +25,9 @@ The position found is an ancestor of the starting node.
 
 So a hash tweaked by its position collides under one tweak.
 
-The statements hold for every node hash, run in the identity monad.
+The searches run in any monad, so an oracle can answer their hash calls.
+
+The statements here hold for every node hash, run in the identity monad.
 -/
 
 @[expose] public section
@@ -55,16 +57,31 @@ def Collision.Valid (c : Collision α) : Prop :=
 
 On each level, both climbs hash their held node with their sibling, in the order the index gives.
 
-A level where the two pairs differ but the parents agree is a collision. -/
-def findCollision [DecidableEq α] : (level j : Nat) → (a b : α) → (p q : List α) → Option (Collision α)
-  | level, j, a, b, s :: p, t :: q =>
+A level where the two pairs differ but the parents agree is a collision.
+
+The search runs in any monad, so an oracle can answer its two hash calls per level. -/
+def findCollision {m : Type → Type} [Monad m] [DecidableEq α]
+    (hash : Nat → Nat → α → α → m α) :
+    (level j : Nat) → (a b : α) → (p q : List α) → m (Option (Collision α))
+  | level, j, a, b, s :: p, t :: q => do
     let x := ordered j a s
     let y := ordered j b t
-    let parentA := (hash (level + 1) (j / 2) x.1 x.2).run
-    let parentB := (hash (level + 1) (j / 2) y.1 y.2).run
-    if x ≠ y ∧ parentA = parentB then some ⟨level + 1, j / 2, x, y⟩
-    else findCollision (level + 1) (j / 2) parentA parentB p q
-  | _, _, _, _, _, _ => none
+    let parentA ← hash (level + 1) (j / 2) x.1 x.2
+    let parentB ← hash (level + 1) (j / 2) y.1 y.2
+    if x ≠ y ∧ parentA = parentB then return some ⟨level + 1, j / 2, x, y⟩
+    else findCollision hash (level + 1) (j / 2) parentA parentB p q
+  | _, _, _, _, _, _ => pure none
+
+/-- In the identity monad, one level of the search compares the two pairs it hashes there. -/
+theorem findCollision_cons [DecidableEq α] (level j : Nat) (a b s t : α) (p q : List α) :
+    findCollision hash level j a b (s :: p) (t :: q) =
+      (let x := ordered j a s
+       let y := ordered j b t
+       let parentA := (hash (level + 1) (j / 2) x.1 x.2).run
+       let parentB := (hash (level + 1) (j / 2) y.1 y.2).run
+       if x ≠ y ∧ parentA = parentB then some ⟨level + 1, j / 2, x, y⟩
+       else findCollision hash (level + 1) (j / 2) parentA parentB p q : Option (Collision α)) :=
+  rfl
 
 /-- Every collision the search returns is valid, at an ancestor of `(level, j)`.
 
@@ -86,7 +103,7 @@ theorem findCollision_valid [DecidableEq α] :
     cases q with
     | nil => simp [findCollision] at h
     | cons t rest' =>
-      simp only [findCollision] at h
+      simp only [findCollision_cons] at h
       split at h
       · -- This level is the collision.
         rename_i hfound
@@ -104,7 +121,7 @@ theorem findCollision_self [DecidableEq α] :
   | [], _, _, _ => rfl
   | s :: rest, level, j, a => by
     -- The two pairs at each level are the same pair.
-    simp only [findCollision, ne_eq, not_true_eq_false, false_and, ↓reduceIte,
+    simp only [findCollision_cons, ne_eq, not_true_eq_false, false_and, ↓reduceIte,
       findCollision_self rest]
 
 /-- Binding: two climbs from `(level, j)` over equally many siblings that meet are equal.
@@ -127,7 +144,7 @@ theorem climb_binding [DecidableEq α] :
     | nil => simp at hl
     | cons t rest' =>
       rw [climb_cons, climb_cons] at heq
-      simp only [findCollision]
+      simp only [findCollision_cons]
       -- When this level is a collision, the search stops here.
       by_cases hfound : ordered j a s ≠ ordered j b t ∧
           (hash (level + 1) (j / 2) (ordered j a s).1 (ordered j a s).2).run
@@ -240,17 +257,37 @@ def SecondPreimage.Valid (leaves : Nat → Id α) (w : SecondPreimage α) : Prop
 
 On each level, the climb hashes its held node with its sibling, in the order the index gives.
 
-A level where that pair is not the honest one but the parent is honest is a second preimage. -/
-def findSecondPreimage [DecidableEq α] (leaves : Nat → Id α) :
-    (level j : Nat) → (b : α) → (q : List α) → Option (SecondPreimage α)
-  | level, j, b, t :: q =>
+A level where that pair is not the honest one but the parent is honest is a second preimage.
+
+The search runs in any monad, so an oracle can answer its hash calls.
+
+On each level it hashes the climb's pair, then computes the two honest children and their parent. -/
+def findSecondPreimage {m : Type → Type} [Monad m] [DecidableEq α]
+    (hash : Nat → Nat → α → α → m α) (leaves : Nat → m α) :
+    (level j : Nat) → (b : α) → (q : List α) → m (Option (SecondPreimage α))
+  | level, j, b, t :: q => do
     let y := ordered j b t
-    let parent := (hash (level + 1) (j / 2) y.1 y.2).run
-    if y ≠ ((node hash leaves level (2 * (j / 2))).run, (node hash leaves level (2 * (j / 2) + 1)).run) ∧
-        parent = (node hash leaves (level + 1) (j / 2)).run then
-      some ⟨level, j / 2, y⟩
-    else findSecondPreimage leaves (level + 1) (j / 2) parent q
-  | _, _, _, [] => none
+    let parent ← hash (level + 1) (j / 2) y.1 y.2
+    let left ← node hash leaves level (2 * (j / 2))
+    let right ← node hash leaves level (2 * (j / 2) + 1)
+    let honest ← node hash leaves (level + 1) (j / 2)
+    if y ≠ (left, right) ∧ parent = honest then return some ⟨level, j / 2, y⟩
+    else findSecondPreimage hash leaves (level + 1) (j / 2) parent q
+  | _, _, _, [] => pure none
+
+/-- In the identity monad, one level of the search compares its pair with the honest children. -/
+theorem findSecondPreimage_cons [DecidableEq α] (leaves : Nat → Id α) (level j : Nat) (b t : α)
+    (q : List α) :
+    findSecondPreimage hash leaves level j b (t :: q) =
+      (let y := ordered j b t
+       let parent := (hash (level + 1) (j / 2) y.1 y.2).run
+       if y ≠ ((node hash leaves level (2 * (j / 2))).run,
+             (node hash leaves level (2 * (j / 2) + 1)).run) ∧
+           parent = (node hash leaves (level + 1) (j / 2)).run then
+         some ⟨level, j / 2, y⟩
+       else findSecondPreimage hash leaves (level + 1) (j / 2) parent q :
+         Option (SecondPreimage α)) :=
+  rfl
 
 /-- Every second preimage `findSecondPreimage` returns is valid, for an ancestor of `(level, j)`.
 
@@ -264,7 +301,7 @@ theorem findSecondPreimage_valid [DecidableEq α] (leaves : Nat → Id α) :
   | nil => intro level j b w h; simp [findSecondPreimage] at h
   | cons t rest ih =>
     intro level j b w h
-    simp only [findSecondPreimage] at h
+    simp only [findSecondPreimage_cons] at h
     split at h
     · -- This level is the second preimage.
       rename_i hfound
@@ -281,11 +318,11 @@ theorem findSecondPreimage_honest [DecidableEq α] (leaves : Nat → Id α) :
       (siblings hash leaves level j n).run.toList = none := by
   intro n
   induction n with
-  | zero => intro level j; simp [siblings, findSecondPreimage]
+  | zero => intro level j; simp [siblings, findSecondPreimage]; rfl
   | succ n ih =>
     intro level j
     rw [siblings_succ_toList]
-    simp only [findSecondPreimage]
+    simp only [findSecondPreimage_cons]
     -- On each level the climb hashes the honest children, so the first condition fails.
     rw [ordered_sibling (fun i => (node hash leaves level i).run) j]
     simp only [ne_eq, not_true_eq_false, false_and, ↓reduceIte]
@@ -314,7 +351,7 @@ theorem climb_binding_node [DecidableEq α] (leaves : Nat → Id α) :
     | nil => simp at hl
     | cons t rest =>
       rw [climb_cons, ← div_two_div_pow, show level + (n + 1) = level + 1 + n by omega] at heq
-      simp only [findSecondPreimage]
+      simp only [findSecondPreimage_cons]
       -- The honest children, in order, are the honest node and its sibling.
       have honest := ordered_sibling (fun i => (node hash leaves level i).run) j
       -- When this level is a second preimage, the search stops here.
