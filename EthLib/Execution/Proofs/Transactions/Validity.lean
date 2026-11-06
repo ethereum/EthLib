@@ -16,6 +16,10 @@ A transaction that passes the rules has a gas limit that covers its least gas li
 Its nonce is below `2^64 - 1`, and from Fusaka to BPO5 its gas limit is at most `2^24`.
 
 From Glamsterdam its gas limit is at most `2^32 - 1`, and its least gas limit at most `2^24`.
+
+A transaction passes the rules exactly when it meets these bounds and its fees are not inverted.
+
+Its fees are inverted when its priority fee per gas is above its maximum fee per gas.
 -/
 
 @[expose] public section
@@ -127,6 +131,89 @@ theorem calldataFloor_le_minimumGas {fork : Fork} (hFork : fork ≥ .pectra) (se
 
 /-! ## A valid transaction -/
 
+/-- A transaction passes the gas, nonce and fee rules exactly when it satisfies each of them.
+
+It then returns its intrinsic gas.
+
+Its gas limit covers the least gas limit of the fork, and its nonce is below `2^64 - 1`.
+
+From Shapella its init code has at most the size that the fork allows.
+
+From Fusaka to BPO5 its gas limit is at most `2^24`.
+
+From Glamsterdam its gas limit is at most `2^32 - 1`, and its least gas limit at most `2^24`.
+
+Its priority fee per gas is at most its maximum fee per gas. -/
+theorem validateTransaction_eq_ok_iff {fork : Fork} {sender : Address} {tx : Transaction}
+    {gas : Nat} :
+    validateTransaction fork sender tx = .ok gas ↔
+      gas = intrinsicGas fork sender tx ∧ minimumGas fork sender tx ≤ tx.gas.toNat ∧
+        tx.nonce.toNat < 2 ^ 64 - 1 ∧
+        (fork ≥ .shapella → tx.to = none → tx.data.size ≤ maxInitCodeSize fork) ∧
+        (fork ≥ .fusaka → fork < .glamsterdam → tx.gas.toNat ≤ TX_MAX_GAS_LIMIT) ∧
+        (fork ≥ .glamsterdam →
+          tx.gas.toNat ≤ TX_MAX_TOTAL_GAS_LIMIT ∧ minimumGas fork sender tx ≤ TX_MAX_GAS_LIMIT) ∧
+        validateTransaction.feesInverted tx = false := by
+  unfold validateTransaction
+  constructor
+  · intro h
+    split at h
+    · cases h
+    rename_i hGas
+    split at h
+    · cases h
+    rename_i hInit
+    split at h
+    · cases h
+    rename_i hTotal
+    split at h
+    · cases h
+    rename_i hIntrinsic
+    split at h
+    · cases h
+    rename_i hCap
+    split at h
+    · cases h
+    rename_i hNonce
+    split at h
+    · cases h
+    rename_i hFees
+    cases h
+    refine ⟨rfl, by omega, by omega, ?_, ?_, ?_, by simpa using hFees⟩
+    · intro hShapella hTo
+      simp only [hTo, Option.isNone_none, true_and] at hInit
+      exact Nat.not_lt.mp fun hlt => hInit ⟨hShapella, hlt⟩
+    · intro hFusaka hBefore
+      exact Nat.not_lt.mp fun hlt => hCap ⟨hFusaka, hBefore, hlt⟩
+    · intro hAfter
+      exact ⟨Nat.not_lt.mp fun hlt => hTotal ⟨hAfter, hlt⟩,
+        Nat.not_lt.mp fun hlt => hIntrinsic ⟨hAfter, hlt⟩⟩
+  · rintro ⟨rfl, hMin, hNonce, hInit, hCap, hAfter, hFees⟩
+    split
+    · omega
+    split
+    · rename_i hbad
+      obtain ⟨hShapella, hTo, hlt⟩ := hbad
+      have := hInit hShapella (Option.isNone_iff_eq_none.mp hTo)
+      omega
+    split
+    · rename_i hbad
+      have := (hAfter hbad.1).1
+      omega
+    split
+    · rename_i hbad
+      have := (hAfter hbad.1).2
+      omega
+    split
+    · rename_i hbad
+      have := hCap hbad.1 hbad.2.1
+      omega
+    split
+    · omega
+    split
+    · simp_all
+    rfl
+
 /-- What a transaction that passes the gas, nonce and fee rules satisfies.
 
 It returns its intrinsic gas, and its gas limit covers the least gas limit of the fork.
@@ -146,37 +233,8 @@ theorem validateTransaction_ok {fork : Fork} {sender : Address} {tx : Transactio
       (fork ≥ .fusaka → fork < .glamsterdam → tx.gas.toNat ≤ TX_MAX_GAS_LIMIT) ∧
       (fork ≥ .glamsterdam →
         tx.gas.toNat ≤ TX_MAX_TOTAL_GAS_LIMIT ∧ minimumGas fork sender tx ≤ TX_MAX_GAS_LIMIT) := by
-  unfold validateTransaction at h
-  split at h
-  · cases h
-  rename_i hGas
-  split at h
-  · cases h
-  rename_i hInit
-  split at h
-  · cases h
-  rename_i hTotal
-  split at h
-  · cases h
-  rename_i hIntrinsic
-  split at h
-  · cases h
-  rename_i hCap
-  split at h
-  · cases h
-  rename_i hNonce
-  split at h
-  · cases h
-  cases h
-  refine ⟨rfl, by omega, by omega, ?_, ?_, ?_⟩
-  · intro hShapella hTo
-    simp only [hTo, Option.isNone_none, true_and] at hInit
-    exact Nat.not_lt.mp fun hlt => hInit ⟨hShapella, hlt⟩
-  · intro hFusaka hBefore
-    exact Nat.not_lt.mp fun hlt => hCap ⟨hFusaka, hBefore, hlt⟩
-  · intro hAfter
-    exact ⟨Nat.not_lt.mp fun hlt => hTotal ⟨hAfter, hlt⟩,
-      Nat.not_lt.mp fun hlt => hIntrinsic ⟨hAfter, hlt⟩⟩
+  obtain ⟨hGas, hMin, hNonce, hInit, hCap, hAfter, -⟩ := validateTransaction_eq_ok_iff.mp h
+  exact ⟨hGas, hMin, hNonce, hInit, hCap, hAfter⟩
 
 /-- A valid transaction has a gas limit of at least 12000, the price of its sender. -/
 theorem validateTransaction_gas_ge {fork : Fork} {sender : Address} {tx : Transaction} {gas : Nat}
