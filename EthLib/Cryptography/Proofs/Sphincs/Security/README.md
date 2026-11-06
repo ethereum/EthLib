@@ -49,11 +49,10 @@ It also holds the closing argument that turns them into the theorem.
 `Configurations.lean` proves, for the configuration of the proof, the size of a serialized signature and the cost of a verification.
 
 A later part will bridge the model to EthLib's leanSPHINCS, in `EthLib/Cryptography/Sphincs/`.
-The model's signer signs the top layer of the hypertree first, and EthLib's signer signs the bottom layer first.
-So when a layer's signature fails, the two signers have made different numbers of hash calls.
-The bridge must account for that difference in the budget.
+The model's signer signs the layers of the hypertree from the bottom up, as EthLib's signer does.
+Both stop at the first layer whose counter search fails, so they reach the same layers.
 Some hash calls are made by EthLib and not by the model, or the other way round.
-The bridge will treat them as calls answered from the oracle's cache.
+The bridge compares the two signers under each fixed answer function, where every call is a value.
 
 ## Source
 
@@ -100,6 +99,13 @@ The changes that follow from this are:
 - leanXMSS uses the same random oracle, and neither scheme imports the other.
   So the oracle, its inputs and answers and the truncation of an answer come from `Proofs/HashSig/Oracle.lean`.
   `Scheme.lean` exports them under their old names, so the proof keeps them.
+- The signer signs the layers from the bottom up, where leanVM's model signs them from the top down.
+  The change is in the sequencing of the layers, which now runs from the last index down.
+  A signature is unchanged, and so is the verifier.
+  The analyses of the signer's hash calls keep their statements.
+  Only their inductions change, from the first index and its successors to the last index and its predecessors.
+  The reason is the bridge to EthLib, which signs from the bottom up.
+  With one order, both signers reach the same layers, so the bridge can compare their hash calls request by request.
 - No file raises the heartbeat limit.
 - Arguments that the simplifier does not use, deprecated lemma names and unused section variables are removed, so the files build without warnings.
 

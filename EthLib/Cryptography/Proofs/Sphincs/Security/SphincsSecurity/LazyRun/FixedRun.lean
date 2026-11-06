@@ -364,47 +364,47 @@ theorem costRun_withReveals_sequenceDep_quiet : ∀ {n : Nat} {α : Fin n → Ty
   | n + 1, α, comp, v, h, result, hresult => by
       rw [Concrete.sequenceDep] at hresult
       obtain ⟨r1, h1, r2, h2, rfl⟩ := costRun_withReveals_bind f table _ _ result hresult
-      have hv1 := h 0 r1 h1
+      have hv1 := h (Fin.last _) r1 h1
       obtain ⟨⟨x1, L1⟩, E1⟩ := r1
       simp only [Prod.mk.injEq] at hv1
       obtain ⟨rfl, rfl⟩ := hv1
       dsimp only at h2 ⊢
-      cases hhead : v 0 with
+      cases hhead : v (Fin.last _) with
       | none =>
           rw [hhead] at h2
           rw [costRun_withReveals_pure, support_pure, Set.mem_singleton_iff] at h2
           subst r2
           simp only [List.nil_append, Prod.mk.injEq, and_true]
           unfold Completeness.allSome
-          rw [dite_eq_right (fun hall => by simpa [hhead] using hall 0)]
+          rw [dite_eq_right (fun hall => by simpa [hhead] using hall (Fin.last _))]
       | some head =>
           rw [hhead] at h2
           obtain ⟨r3, h3, r4, h4, rfl⟩ := costRun_withReveals_bind f table _ _ r2 h2
-          have hv3 := costRun_withReveals_sequenceDep_quiet (α := fun i => α i.succ)
-            (fun i => comp i.succ) (fun i => v i.succ) (fun i => h i.succ) r3 h3
+          have hv3 := costRun_withReveals_sequenceDep_quiet (α := fun i => α i.castSucc)
+            (fun i => comp i.castSucc) (fun i => v i.castSucc) (fun i => h i.castSucc) r3 h3
           obtain ⟨⟨x3, L3⟩, E3⟩ := r3
           simp only [Prod.mk.injEq] at hv3
           obtain ⟨rfl, rfl⟩ := hv3
           dsimp only at h4 ⊢
-          by_cases hall : ∀ i : Fin n, (v i.succ).isSome
-          · have hsome : Completeness.allSome (fun i : Fin n => v i.succ) =
-                some fun i => (v i.succ).get (hall i) := dite_eq_left hall
+          by_cases hall : ∀ i : Fin n, (v i.castSucc).isSome
+          · have hsome : Completeness.allSome (fun i : Fin n => v i.castSucc) =
+                some fun i => (v i.castSucc).get (hall i) := dite_eq_left hall
             rw [hsome] at h4
             rw [costRun_withReveals_pure, support_pure, Set.mem_singleton_iff] at h4
             subst r4
             have hall' : ∀ i : Fin (n + 1), (v i).isSome := by
               intro i
-              refine Fin.cases ?_ (fun j => hall j) i
+              refine Fin.lastCases ?_ (fun j => hall j) i
               simp [hhead]
             have hsome' : Completeness.allSome v = some fun i => (v i).get (hall' i) :=
                 dite_eq_left hall'
             simp only [List.nil_append, Prod.mk.injEq, and_true, hsome']
             congr 1
             funext i
-            refine Fin.cases ?_ (fun j => ?_) i
+            refine Fin.lastCases ?_ (fun j => ?_) i
             · simp [hhead]
             · simp
-          · have hnone : Completeness.allSome (fun i : Fin n => v i.succ) = none :=
+          · have hnone : Completeness.allSome (fun i : Fin n => v i.castSucc) = none :=
               dite_eq_right hall
             rw [hnone] at h4
             rw [costRun_withReveals_pure, support_pure, Set.mem_singleton_iff] at h4
@@ -412,7 +412,7 @@ theorem costRun_withReveals_sequenceDep_quiet : ∀ {n : Nat} {α : Fin n → Ty
             simp only [List.nil_append, Prod.mk.injEq, and_true]
             have hnone' : Completeness.allSome v = none :=
               dite_eq_right (fun hall' : ∀ i : Fin (n + 1), (v i).isSome => hall fun i =>
-                  hall' i.succ)
+                  hall' i.castSucc)
             exact hnone'.symm
 
 theorem finish_support (parameter : PublicParameter) (data : PublicData) (message : Message)

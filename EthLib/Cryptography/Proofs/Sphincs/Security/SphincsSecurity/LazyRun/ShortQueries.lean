@@ -188,10 +188,10 @@ theorem OnlyC.sequenceDep : ∀ {n : Nat} {α : Fin n → Type}
   | 0, _, _, _ => OnlyC.pure' _
   | _ + 1, α, computation, h => by
       unfold Concrete.sequenceDep
-      refine OnlyC.bind (h 0) (fun head => ?_)
+      refine OnlyC.bind (h (Fin.last _)) (fun head => ?_)
       rcases head with _ | head
       · exact OnlyC.pure' _
-      · refine OnlyC.bind (OnlyC.sequenceDep (α := fun i => α i.succ) fun i => h i.succ)
+      · refine OnlyC.bind (OnlyC.sequenceDep (α := fun i => α i.castSucc) fun i => h i.castSucc)
           (fun tail => ?_)
         rcases tail with _ | tail <;> exact OnlyC.pure' _
 
