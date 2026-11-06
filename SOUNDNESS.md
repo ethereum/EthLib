@@ -681,7 +681,12 @@ That root is the root of the finalized beacon header, or zero at the genesis slo
 Otherwise the search `findBranchCollision` over the two climbs returns two different messages with one SHA-256 hash.
 `validateLightClientUpdate_nextSyncCommittee` states the same for the root of the next committee.
 `lightClientGindices_eq` shows that each index is the generalized index of the path of its field in the type of the beacon state, at every fork from Altair.
-No theorem yet reads the node at that index of a beacon state as the value of the field.
+At Altair, `BeaconState.nodeRoot_finalized_root_altair` reads the finality node as the hash tree root of `state.finalizedCheckpoint.root`.
+`BeaconState.nodeRoot_next_sync_committee_altair` and `BeaconState.nodeRoot_current_sync_committee_altair` read the committee nodes as the hash tree roots of those fields.
+`light_client_gindices_altair_eq` proves the three Altair type indices for every preset.
+The node results retain this generality and assume a lawful SSZ state type and a successful root computation for the field.
+They do not assume a successful node read.
+The field-to-node results for later forks and the field-level statements of the update validators remain open.
 
 The signature theorems assume `SignatureChecks.AggregateSound`, listed in A4.
 Under it, `validateLightClientUpdate_signed` shows that every member whose bit is set signed the signing root.
