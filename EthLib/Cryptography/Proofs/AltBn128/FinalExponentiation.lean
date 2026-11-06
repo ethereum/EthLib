@@ -55,8 +55,8 @@ theorem ofFpHom_pow_modulus (c : Fp) : ofFpHom c ^ Fp.modulus = ofFpHom c := by
   congr 1
   exact ZMod.pow_card (p := Fp.modulus) c
 
-theorem frobeniusCoefficients_getElem {k : ℕ} (hk : k < 12) :
-    frobeniusCoefficients[k]! = (wPow 1 ^ Fp.modulus) ^ k := by
+theorem frobeniusCoefficients_getElem (k : Fin 12) :
+    frobeniusCoefficients[k] = (wPow 1 ^ Fp.modulus) ^ k.val := by
   -- `w^p = w (w^6)^((p - 1) / 6)`, and `w^6 = 9 + i`.
   have hwp : wPow 1 * ofFp2 frobeniusGamma = wPow 1 ^ Fp.modulus := by
     have hγ : frobeniusGamma = (⟨9, 1⟩ : Fp2) ^ ((Fp.modulus - 1) / 6) :=
@@ -66,50 +66,25 @@ theorem frobeniusCoefficients_getElem {k : ℕ} (hk : k < 12) :
     rw [hγ, show ofFp2 ((⟨9, 1⟩ : Fp2) ^ ((Fp.modulus - 1) / 6)) =
       ofFp2Hom ((⟨9, 1⟩ : Fp2) ^ ((Fp.modulus - 1) / 6)) from rfl, map_pow, ← w_pow_six,
       ← pow_mul, pow_succ, mul_comm]
-  unfold frobeniusCoefficients
-  rw [hwp]
-  generalize wPow 1 ^ Fp.modulus = wp
-  -- After `s` steps, the array holds `wp^0, ..., wp^s`.
-  have key (s : ℕ) : ∀ c : Array Fp12, c.size = 1 → c[0]! = 1 →
-      ((List.range s).foldl (fun powers _ => powers.push (powers.back! * wp)) c).size = s + 1 ∧
-      ∀ i ≤ s, ((List.range s).foldl (fun powers _ => powers.push (powers.back! * wp)) c)[i]! =
-        wp ^ i := by
-    intro c hc hc0
-    induction s with
-    | zero =>
-      simp only [List.range_zero, List.foldl_nil]
-      refine ⟨hc, fun i hi => ?_⟩
-      obtain rfl : i = 0 := by omega
-      rw [hc0, pow_zero]
-    | succ s ih =>
-      obtain ⟨hsize, hval⟩ := ih
-      rw [List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil]
-      set d := (List.range s).foldl (fun powers _ => powers.push (powers.back! * wp)) c
-      refine ⟨by simp [hsize], fun i hi => ?_⟩
-      have hback : d.back! = wp ^ s := by
-        rw [Array.back!, hsize, Nat.add_sub_cancel, hval s le_rfl]
-      rcases Nat.lt_or_ge i (s + 1) with h | h
-      · rw [getElem!_pos _ i (by simp; omega), Array.getElem_push_lt (by omega),
-          ← getElem!_pos d i (by omega), hval i (by omega)]
-      · obtain rfl : i = s + 1 := by omega
-        rw [getElem!_pos _ _ (by simp [hsize]), Array.getElem_push]
-        simp only [hsize, lt_irrefl, ↓reduceDIte, hback, pow_succ]
-  exact (key 11 #[1] rfl rfl).2 k (by omega)
+  simp only [frobeniusCoefficients, Fin.getElem_fin, Vector.getElem_ofFn, hwp]
+  exact powBits_eq_pow 4 _ _ (by omega)
+
+/-- A sum by a left fold over `Fin n` is the sum over `Fin n`. -/
+private theorem foldl_add_eq_sum {n : ℕ} (g : Fin n → Fp12) (x : Fp12) :
+    Fin.foldl n (fun acc k => acc + g k) x = x + ∑ k, g k := by
+  induction n generalizing x with
+  | zero => simp
+  | succ n ih =>
+    rw [Fin.foldl_succ_last, ih (fun k => g k.castSucc), Fin.sum_univ_castSucc, add_assoc]
 
 /-- The Frobenius map of the specification is the `p`-th power. -/
 theorem frobenius_eq_pow (a : Fp12) : frobenius a = a ^ Fp.modulus := by
   have hsum : frobenius a =
       ∑ k ∈ Finset.range 12, ofFpHom a[k]! * (wPow 1 ^ Fp.modulus) ^ k := by
-    unfold frobenius
-    have h (n : ℕ) (hn : n ≤ 12) (x : Fp12) :
-        (List.range n).foldl (fun acc k => acc + scale a[k]! frobeniusCoefficients[k]!) x =
-          x + ∑ k ∈ Finset.range n, ofFpHom a[k]! * (wPow 1 ^ Fp.modulus) ^ k := by
-      induction n generalizing x with
-      | zero => simp
-      | succ n ih =>
-        rw [List.range_succ, List.foldl_append, ih (by omega), List.foldl_cons, List.foldl_nil,
-          Finset.sum_range_succ, scale_eq, frobeniusCoefficients_getElem (by omega), add_assoc]
-    rw [h 12 le_rfl, show ofFp 0 = ofFpHom 0 from rfl, map_zero, zero_add]
+    rw [frobenius, foldl_add_eq_sum, show ofFp 0 = ofFpHom 0 from rfl, map_zero, zero_add,
+      ← Fin.sum_univ_eq_sum_range]
+    refine Finset.sum_congr rfl fun k _ => ?_
+    rw [scale_eq, frobeniusCoefficients_getElem, Fin.getElem_fin, getElem!_pos a k.val k.isLt]
   rw [hsum]
   conv_rhs => rw [eq_sum a, ← primeFrobenius_apply, map_sum]
   refine Finset.sum_congr rfl fun k _ => ?_
