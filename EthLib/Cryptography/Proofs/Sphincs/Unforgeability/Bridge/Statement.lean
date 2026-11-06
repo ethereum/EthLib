@@ -12,9 +12,9 @@ The algorithms are EthLib's own key generation, signing and verification.
 
 Their hash is a query to the random oracle, which is sampled lazily from an empty cache.
 
-The adversary requests signatures of messages of its choice, at most `2^30` of them.
+The adversary requests signatures of messages of its choice.
 
-It wins with a pair that verifies and that no request returned.
+It wins with a pair that verifies and that no request returned, after at most `2^30` requests.
 
 The budget `q` counts every hash call of the experiment, repeated inputs included.
 
