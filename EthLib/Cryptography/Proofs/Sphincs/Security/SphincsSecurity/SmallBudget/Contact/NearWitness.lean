@@ -1,0 +1,166 @@
+module
+
+public import
+    EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.GenericWitness
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.NearMoment
+
+/-!
+# The near witness
+
+A target is near covered at tree `κ` when a view disclosed at its index covers every other tree.
+
+A view covers a tree when it discloses the leaf that the target selects there.
+
+The witness counts the trees at which the target is near covered.
+
+It is monotone and finite, and at least one on a target covered at every tree but one.
+
+Its fresh-digest price is a sum over the indices of `κ E` times the near value of their marks.
+-/
+
+@[expose] public section
+
+open OracleComp OracleSpec ENNReal
+
+namespace SphincsSecurity.Security.ForsPotential
+
+variable [Params]
+
+open SphincsSecurity.Base
+open Concrete HiddenGraph HiddenCost HiddenDebt GraphView Domination ForsPrice ForsSigner
+    SphincsSecurity.Base.Domination
+
+set_option backward.isDefEq.respectTransparency false
+set_option maxRecDepth 10000
+attribute [local instance] Classical.propDecidable
+
+
+/-- Every tree of the target but `κ` is covered. -/
+def NearSub (target : View) (κ : FTree) (D : Multiset View) : Prop :=
+  ∀ κ', κ' ≠ κ → TreeCovered target κ' D
+
+/-- The near witness: the number of trees at which the target is near covered. -/
+noncomputable def witnessNear (target : View) (D : Multiset View) : ℝ≥0∞ :=
+  ∑ κ, if NearSub target κ D then 1 else 0
+
+theorem nearSub_mono {target : View} {κ : FTree} {small large : Multiset View} (hle : small ≤ large)
+    (h : NearSub target κ small) : NearSub target κ large :=
+  fun κ' hκ => treeCovered_mono hle (h κ' hκ)
+
+theorem witnessNear_le (target : View) (D : Multiset View) : witnessNear target D ≤ forsTrees := by
+  unfold witnessNear
+  calc ∑ κ, (if NearSub target κ D then (1 : ℝ≥0∞) else 0) ≤ ∑ _κ : FTree, (1 : ℝ≥0∞) :=
+        Finset.sum_le_sum fun κ _ => by split_ifs <;> simp
+    _ = forsTrees := by simp
+
+theorem witnessNear_props : WitnessProps witnessNear := by
+  intro v
+  refine ⟨fun small large hle => ?_, fun D => ne_top_of_le_ne_top (ENNReal.natCast_ne_top _)
+      (witnessNear_le v D)⟩
+  unfold witnessNear
+  refine Finset.sum_le_sum fun κ _ => ?_
+  by_cases h : NearSub v κ small
+  · rw [ite_eq_left h, ite_eq_left (nearSub_mono hle h)]
+  · rw [ite_eq_right h]; exact zero_le
+
+/-- A tree covered by the reveals is covered by disclosed views accounting for the reveals. -/
+theorem treeCovered_of_treeCov {R : List Coordinate} {d : Multiset View} (hD : DInv R d)
+    (digest : MessageDigest)
+    (κ : FTree) (hcov : TreeCov (HiddenBridge.revealedSet R) (fullDigestView digest) κ) :
+    TreeCovered (Lifetime.localDigestView digest) κ d := by
+  unfold TreeCov at hcov
+  simp only [fullDigestView, HiddenBridge.revealedSet, Finset.mem_filter, Finset.mem_univ,
+      true_and] at hcov
+  obtain ⟨v, hv, h1, h2⟩ := hD _ _ _ _ hcov
+  exact ⟨v, hv, by rw [localDigestView_fst]; exact h1, by rw [localDigestView_snd]; exact h2⟩
+
+/-- A near-covered digest has a positive near witness. -/
+theorem nearWitness_pos {R : List Coordinate} {d : Multiset View} (hD : DInv R d)
+    (digest : MessageDigest)
+    (κ : FTree) (hnear : ∀ κ', κ' ≠ κ → TreeCov (HiddenBridge.revealedSet R)
+        (fullDigestView digest) κ') :
+    1 ≤ witnessNear (Lifetime.localDigestView digest) d := by
+  have hsub : NearSub (Lifetime.localDigestView digest) κ d :=
+    fun κ' hκ => treeCovered_of_treeCov hD digest κ' (hnear κ' hκ)
+  unfold witnessNear
+  refine le_trans ?_ (Finset.single_le_sum
+      (f := fun κ => if NearSub (Lifetime.localDigestView digest) κ d
+    then (1 : ℝ≥0∞) else 0) (fun _ _ => zero_le) (Finset.mem_univ κ))
+  rw [ite_eq_left hsub]
+
+end SphincsSecurity.Security.ForsPotential
+
+namespace SphincsSecurity.Security.H0
+
+variable [Params]
+
+open Concrete ForsPrice SphincsSecurity.Base.Domination H0Avg ForsPotential
+
+
+omit [Params] in
+theorem freshAvg_sum' {V β : Type} (U : Finset V) (s : Finset β) (g : β → V → ℝ≥0∞) :
+    freshAvg U (fun u => ∑ b ∈ s, g b u) = ∑ b ∈ s, freshAvg U (g b) := by
+  unfold freshAvg
+  rw [Finset.sum_comm, Finset.mul_sum]
+
+theorem nearSub_iff (l : Fin (2 ^ subtreeHeight)) (τ : FTree → FLeaf) (κ : FTree)
+    (d : Multiset View) :
+    NearSub (l, τ) κ d ↔ ∀ κ', κ' = κ ∨ CoverF (τ κ') ((marksAt l d).map fun m => m κ') := by
+  unfold NearSub TreeCovered CoverF
+  simp only [mem_marks_map]
+  constructor
+  · intro h κ'
+    by_cases hκ : κ' = κ
+    · exact Or.inl hκ
+    · exact Or.inr (h κ' hκ)
+  · intro h κ' hκ
+    rcases h κ' with h0 | h1
+    · exact absurd h0 hκ
+    · exact h1
+
+/-- The near price is a sum over the indices of a constant times the near value of their marks. -/
+theorem priceNear_decomp (d : Multiset View) :
+    priceW witnessNear d = ∑ l : Fin (2 ^ subtreeHeight), κE * yN (marksAt l d) := by
+  classical
+  unfold priceW
+  rw [show (Finset.univ : Finset View) =
+      (Finset.univ : Finset (Fin (2 ^ subtreeHeight) × (FTree → FLeaf)))
+    from rfl, freshAvg_prod]
+  have hw : ∀ (l : Fin (2 ^ subtreeHeight)) (τ : FTree → FLeaf), witnessNear (l, τ) d =
+      ∑ κ, ∏ κ', (fun κ' (t : FLeaf) => if κ' = κ ∨ CoverF t ((marksAt l d).map fun m => m κ')
+        then (1 : ℝ≥0∞) else 0) κ' (τ κ') := by
+    intro l τ
+    unfold witnessNear
+    refine Finset.sum_congr rfl fun κ _ => ?_
+    by_cases h : NearSub (l, τ) κ d
+    · rw [ite_eq_left h]
+      exact (Finset.prod_eq_one fun κ' _ => ite_eq_left ((nearSub_iff l τ κ d).1 h κ')).symm
+    · rw [ite_eq_right h]
+      rw [nearSub_iff] at h
+      push Not at h
+      obtain ⟨κ', hκ'⟩ := h
+      exact (Finset.prod_eq_zero (Finset.mem_univ κ') (ite_eq_right (by
+        rintro (h1 | h1)
+        · exact hκ'.1 h1
+        · exact hκ'.2 h1))).symm
+  simp only [hw]
+  have hy : ∀ l : Fin (2 ^ subtreeHeight), (freshAvg Finset.univ fun τ : FTree → FLeaf =>
+      ∑ κ, ∏ κ', (fun κ' (t : FLeaf) => if κ' = κ ∨ CoverF t ((marksAt l d).map fun m => m κ')
+        then (1 : ℝ≥0∞) else 0) κ' (τ κ')) = yN (marksAt l d) := by
+    intro l
+    unfold yN
+    rw [freshAvg_sum']
+    refine Finset.sum_congr rfl fun κ _ => ?_
+    rw [freshAvg_pi_prod (fun κ' (t : FLeaf) => if κ' = κ ∨ CoverF t
+        ((marksAt l d).map fun m => m κ')
+        then (1 : ℝ≥0∞) else 0)]
+    refine Finset.prod_congr rfl fun κ' _ => ?_
+    unfold nearFactor
+    rfl
+  simp only [hy]
+  unfold freshAvg κE
+  rw [Finset.mul_sum, Finset.mul_sum, Finset.card_univ]
+  refine Finset.sum_congr rfl fun l _ => ?_
+  ring
+
+end SphincsSecurity.Security.H0
