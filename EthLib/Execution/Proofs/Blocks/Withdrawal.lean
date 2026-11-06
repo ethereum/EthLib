@@ -61,61 +61,6 @@ private theorem toNat_wei (amount : UInt64) :
   have hle : 2 ^ 64 * GWEI_TO_WEI ≤ 2 ^ 256 := by decide
   rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (Nat.lt_of_lt_of_le hlt hle)]
 
-/-- Creating ether at one address adds it to that balance, and leaves nonces and code. -/
-private theorem getAccount_createEther {fork : Fork} {tx tx' : TransactionState}
-    {target : Address} {amount : U256} (h : tx.createEther fork target amount = .ok tx')
-    (address : Address) :
-    (tx'.getAccount address).balance.toNat = (tx.getAccount address).balance.toNat +
-        (if target = address then amount.toNat else 0) ∧
-      (tx'.getAccount address).nonce = (tx.getAccount address).nonce ∧
-      (tx'.getAccount address).codeHash = (tx.getAccount address).codeHash := by
-  obtain ⟨account, hf, hread, hother⟩ := TransactionState.modifyState_eq_ok h
-  by_cases hsame : target = address
-  · subst hsame
-    rw [hread]
-    unfold Account.credit at hf
-    split at hf
-    · rename_i hfit
-      cases hf
-      simp only [↓reduceIte, BitVec.toNat_add, Nat.mod_eq_of_lt hfit, and_self]
-    · cases hf
-  · rw [hother address (Ne.symm hsame)]
-    simp [hsame]
-
-/-- Each step of the withdrawals adds the wei of its address, and leaves nonce and code. -/
-private theorem getAccount_foldlM_createEther (fork : Fork) {wei : Withdrawal → U256}
-    (hwei : ∀ w, (wei w).toNat = w.amount.toNat * GWEI_TO_WEI) (withdrawals : List Withdrawal) :
-    ∀ {tx tx' : TransactionState},
-      withdrawals.foldlM (fun tx w => tx.createEther fork w.address (wei w)) tx = .ok tx' →
-      ∀ address, (tx'.getAccount address).balance.toNat =
-          (tx.getAccount address).balance.toNat + withdrawnTo withdrawals address ∧
-        (tx'.getAccount address).nonce = (tx.getAccount address).nonce ∧
-        (tx'.getAccount address).codeHash = (tx.getAccount address).codeHash := by
-  induction withdrawals with
-  | nil =>
-    intro tx tx' h address
-    cases h
-    simp [withdrawnTo]
-  | cons w rest ih =>
-    intro tx tx' h address
-    rw [List.foldlM_cons] at h
-    cases hmid : tx.createEther fork w.address (wei w) with
-    | error e =>
-      rw [hmid] at h
-      cases h
-    | ok mid =>
-      rw [hmid] at h
-      obtain ⟨hb, hn, hc⟩ := getAccount_createEther hmid address
-      obtain ⟨hb', hn', hc'⟩ := ih h address
-      refine ⟨?_, hn'.trans hn, hc'.trans hc⟩
-      rw [hb', hb, hwei]
-      by_cases hsame : w.address = address
-      · simp only [withdrawnTo, hsame, ↓reduceIte, List.filter_cons, decide_true,
-          List.map_cons, List.sum_cons, Nat.add_mul]
-        omega
-      · simp only [withdrawnTo, hsame, ↓reduceIte, List.filter_cons, decide_false,
-          Bool.false_eq_true, Nat.add_zero]
-
 /-- The wei of a list with one more withdrawal in front. -/
 theorem withdrawnTo_cons (w : Withdrawal) (rest : List Withdrawal) (address : Address) :
     withdrawnTo (w :: rest) address =
@@ -124,42 +69,19 @@ theorem withdrawnTo_cons (w : Withdrawal) (rest : List Withdrawal) (address : Ad
   by_cases hsame : w.address = address <;>
     simp [withdrawnTo, hsame, Nat.add_mul]
 
-/-- The steps of the withdrawals succeed exactly when no balance would reach `2^256`. -/
-private theorem foldlM_createEther_isOk_iff (fork : Fork) {wei : Withdrawal → U256}
-    (hwei : ∀ w, (wei w).toNat = w.amount.toNat * GWEI_TO_WEI) (withdrawals : List Withdrawal) :
-    ∀ {tx : TransactionState},
-      (∃ tx', withdrawals.foldlM (fun tx w => tx.createEther fork w.address (wei w)) tx = .ok tx') ↔
-        ∀ address,
-          (tx.getAccount address).balance.toNat + withdrawnTo withdrawals address < 2 ^ 256 := by
+/-- The wei that the withdrawals give an address is the sum of the wei of each withdrawal. -/
+private theorem withdrawnTo_eq_sum (withdrawals : List Withdrawal) (address : Address) :
+    withdrawnTo withdrawals address =
+      ((withdrawals.filter (·.address = address)).map
+        fun w => (BitVec.ofNat 256 (w.amount.toNat * GWEI_TO_WEI)).toNat).sum := by
   induction withdrawals with
-  | nil =>
-    intro tx
-    simp only [List.foldlM_nil, withdrawnTo, List.filter_nil, List.map_nil, List.sum_nil,
-      Nat.zero_mul, Nat.add_zero]
-    exact ⟨fun _ address => (tx.getAccount address).balance.isLt, fun _ => ⟨tx, rfl⟩⟩
+  | nil => simp [withdrawnTo]
   | cons w rest ih =>
-    intro tx
-    rw [List.foldlM_cons]
-    cases hmid : tx.createEther fork w.address (wei w) with
-    | error e =>
-      simp only [bind, Except.bind, reduceCtorEq, exists_false, false_iff, Classical.not_forall,
-        Nat.not_lt]
-      -- The first withdrawal already overflows the balance of its address.
-      have hover : ¬ (tx.getAccount w.address).balance.toNat + (wei w).toNat < 2 ^ 256 :=
-        fun hfit => by
-          obtain ⟨tx', h⟩ := TransactionState.createEther_isOk_iff.mpr hfit
-          rw [hmid] at h
-          cases h
-      refine ⟨w.address, ?_⟩
-      rw [withdrawnTo_cons, ← hwei]
-      simp only [↓reduceIte]
-      omega
-    | ok mid =>
-      simp only [bind, Except.bind]
-      rw [ih]
-      refine forall_congr' fun address => ?_
-      rw [(getAccount_createEther hmid address).1, withdrawnTo_cons, hwei]
-      by_cases hsame : w.address = address <;> simp only [hsame, ↓reduceIte] <;> omega
+    rw [withdrawnTo_cons, ih]
+    by_cases hsame : w.address = address
+    · simp only [hsame, ↓reduceIte, List.filter_cons, decide_true, List.map_cons, List.sum_cons,
+        toNat_wei]
+    · simp [hsame]
 
 /-- After the withdrawals of a block, each account holds its balance plus its withdrawn wei.
 
@@ -185,8 +107,8 @@ theorem getAccount_processWithdrawals {fork : Fork} {block block' : BlockState}
       unfold TransactionState.getAccount
       rw [← TransactionState.getAccountOptional_incorporateTxIntoBlock tx address]
       rfl
-    rw [hread]
-    exact getAccount_foldlM_createEther fork (fun w => toNat_wei w.amount) withdrawals htx address
+    rw [hread, withdrawnTo_eq_sum]
+    exact TransactionState.getAccount_foldlM_createEther _ _ withdrawals htx address
 
 /-- The withdrawals of a block succeed exactly when each balance stays below `2^256`.
 
@@ -196,7 +118,9 @@ theorem processWithdrawals_isOk_iff {fork : Fork} {block : BlockState}
     (∃ block', processWithdrawals fork block withdrawals = .ok block') ↔
       ∀ address, ((TransactionState.ofBlock block).getAccount address).balance.toNat +
         withdrawnTo withdrawals address < 2 ^ 256 := by
-  rw [← foldlM_createEther_isOk_iff fork (fun w => toNat_wei w.amount) withdrawals]
+  simp only [withdrawnTo_eq_sum]
+  rw [← TransactionState.foldlM_createEther_isOk_iff (fork := fork) (·.address)
+    (fun w => BitVec.ofNat 256 (w.amount.toNat * GWEI_TO_WEI)) withdrawals]
   simp only [processWithdrawals, withdrawalState, bind, Except.bind, pure, Except.pure]
   split <;> simp_all
 

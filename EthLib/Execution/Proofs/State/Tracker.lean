@@ -861,6 +861,95 @@ theorem createEther_isOk_iff {fork : Fork} {tx : TransactionState} {address : Ad
   · intro hfit
     exact modifyState_isOk (by simp only [Account.credit, hfit, ↓reduceIte]; rfl)
 
+/-- Creating ether at one address adds it to that balance, and leaves every nonce and code. -/
+theorem getAccount_createEther {fork : Fork} {tx tx' : TransactionState}
+    {target : Address} {amount : U256} (h : tx.createEther fork target amount = .ok tx')
+    (address : Address) :
+    (tx'.getAccount address).balance.toNat = (tx.getAccount address).balance.toNat +
+        (if target = address then amount.toNat else 0) ∧
+      (tx'.getAccount address).nonce = (tx.getAccount address).nonce ∧
+      (tx'.getAccount address).codeHash = (tx.getAccount address).codeHash := by
+  obtain ⟨account, hf, hread, hother⟩ := modifyState_eq_ok h
+  by_cases hsame : target = address
+  · subst hsame
+    rw [hread]
+    unfold Account.credit at hf
+    split at hf
+    · rename_i hfit
+      cases hf
+      simp only [↓reduceIte, BitVec.toNat_add, Nat.mod_eq_of_lt hfit, and_self]
+    · cases hf
+  · rw [hother address (Ne.symm hsame)]
+    simp [hsame]
+
+/-- Creating ether for each item of a list, in order, adds to each balance the amounts of its items.
+
+Every nonce and every code hash stays the same. -/
+theorem getAccount_foldlM_createEther {α : Type} {fork : Fork} (target : α → Address)
+    (amount : α → U256) (items : List α) :
+    ∀ {tx tx' : TransactionState},
+      items.foldlM (fun tx x => tx.createEther fork (target x) (amount x)) tx = .ok tx' →
+      ∀ address, (tx'.getAccount address).balance.toNat = (tx.getAccount address).balance.toNat +
+          ((items.filter (target · = address)).map fun x => (amount x).toNat).sum ∧
+        (tx'.getAccount address).nonce = (tx.getAccount address).nonce ∧
+        (tx'.getAccount address).codeHash = (tx.getAccount address).codeHash := by
+  induction items with
+  | nil =>
+    intro tx tx' h address
+    cases h
+    simp
+  | cons x rest ih =>
+    intro tx tx' h address
+    rw [List.foldlM_cons] at h
+    cases hmid : tx.createEther fork (target x) (amount x) with
+    | error e =>
+      rw [hmid] at h
+      cases h
+    | ok mid =>
+      rw [hmid] at h
+      obtain ⟨hb, hn, hc⟩ := getAccount_createEther hmid address
+      obtain ⟨hb', hn', hc'⟩ := ih h address
+      refine ⟨?_, hn'.trans hn, hc'.trans hc⟩
+      rw [hb', hb]
+      by_cases hsame : target x = address <;> simp [hsame] <;> omega
+
+/-- Creating ether for each item of a list succeeds exactly when no balance would reach 2^256.
+
+The balance of an address counts the amounts of all its items. -/
+theorem foldlM_createEther_isOk_iff {α : Type} {fork : Fork} (target : α → Address)
+    (amount : α → U256) (items : List α) :
+    ∀ {tx : TransactionState},
+      (∃ tx', items.foldlM (fun tx x => tx.createEther fork (target x) (amount x)) tx = .ok tx') ↔
+        ∀ address, (tx.getAccount address).balance.toNat +
+          ((items.filter (target · = address)).map fun x => (amount x).toNat).sum < 2 ^ 256 := by
+  induction items with
+  | nil =>
+    intro tx
+    simp only [List.foldlM_nil, List.filter_nil, List.map_nil, List.sum_nil, Nat.add_zero]
+    exact ⟨fun _ address => (tx.getAccount address).balance.isLt, fun _ => ⟨tx, rfl⟩⟩
+  | cons x rest ih =>
+    intro tx
+    rw [List.foldlM_cons]
+    cases hmid : tx.createEther fork (target x) (amount x) with
+    | error e =>
+      simp only [bind, Except.bind, reduceCtorEq, exists_false, false_iff, Classical.not_forall,
+        Nat.not_lt]
+      -- The first item already overflows the balance of its address.
+      have hover : ¬ (tx.getAccount (target x)).balance.toNat + (amount x).toNat < 2 ^ 256 :=
+        fun hfit => by
+          obtain ⟨tx', h⟩ := createEther_isOk_iff.mpr hfit
+          rw [hmid] at h
+          cases h
+      refine ⟨target x, ?_⟩
+      simp only [List.filter_cons, decide_true, ↓reduceIte, List.map_cons, List.sum_cons]
+      omega
+    | ok mid =>
+      simp only [bind, Except.bind]
+      rw [ih]
+      refine forall_congr' fun address => ?_
+      rw [(getAccount_createEther hmid address).1]
+      by_cases hsame : target x = address <;> simp [hsame] <;> omega
+
 /-- Moving ether keeps every code. -/
 theorem getCode_moveEther {fork : Fork} {tx tx' : TransactionState}
     {sender recipient : Address} {amount : U256}
