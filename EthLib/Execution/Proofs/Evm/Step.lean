@@ -132,7 +132,7 @@ structure SameContext {Meter : Type} (before after : Evm fork Meter) : Prop wher
   code : after.code = before.code
 
 omit [GasMeter Meter] in
-/-- A frame has its own message, state and substate. -/
+/-- A frame has its own message, state, substate and code. -/
 theorem SameContext.refl (evm : Evm fork Meter) : SameContext evm evm := ⟨rfl, rfl, rfl, rfl⟩
 
 omit [GasMeter Meter] in
