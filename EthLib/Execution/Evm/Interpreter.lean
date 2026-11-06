@@ -80,7 +80,7 @@ def step (fork : Fork) (evm : Evm fork Meter) : Except EvmError (StepResult fork
   else .next <$> stopStep evm
 
 /-- A choice among two instructions gives one of them. -/
-private theorem orElse_eq_some {α : Type} {a b : Option α} {x : α}
+theorem orElse_eq_some {α : Type} {a b : Option α} {x : α}
     (h : (a <|> b) = some x) : a = some x ∨ b = some x := by
   cases a <;> simp_all [HOrElse.hOrElse, OrElse.orElse, Option.orElse]
 

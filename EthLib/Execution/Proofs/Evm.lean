@@ -28,6 +28,7 @@ public import EthLib.Execution.Proofs.Evm.Instructions.ControlFlow
 public import EthLib.Execution.Proofs.Evm.Interpreter
 public import EthLib.Execution.Proofs.Evm.MemorySize
 public import EthLib.Execution.Proofs.Evm.Instructions.SelfDestruct
+public import EthLib.Execution.Proofs.Evm.Instructions.Static
 
 /-!
 # `EthLib.Execution.Proofs.Evm`
