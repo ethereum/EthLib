@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Proofs.PayloadTimeliness
 public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Transition.Requests
 
@@ -162,14 +163,39 @@ theorem sameSizes_processExecutionRequests {body : BeaconBlockBody preset fork}
     (keep (fun _ _ _ ok => sameSizes_processWithdrawalRequest ok) withdrawnOk).trans
       (keep (fun _ _ _ ok => sameSizes_processConsolidationRequest ok) consolidated)
 
+/-- From Gloas, the operations of a block keep the sizes of the registry and the balances.
+
+No deposit runs there, and a payload attestation changes nothing. -/
+theorem sameSizes_processOperationsGloas {body : BeaconBlockBody preset fork}
+    {gloas : .glamsterdam ≤ fork} {parentSlot : Slot}
+    (computed : processOperationsGloas config checks state body gloas parentSlot = .ok after) :
+    SameSizes state after := by
+  unfold processOperationsGloas at computed
+  simp only [bind_ok_iff, ← Array.foldlM_toList] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, proposers, proposersOk, attesters,
+    attestersOk, attested, attestedOk, exited, exitsOk, changed, changesOk, paid⟩ := computed
+  have keep {α : Type} {step : BeaconState preset fork → α → Except TransitionError _}
+      (sizes : ∀ s x s', step s x = .ok s' → SameSizes s s') {items : List α}
+      {start finish : BeaconState preset fork} (folded : items.foldlM step start = .ok finish) :
+      SameSizes start finish :=
+    foldlM_ok_invariant (SameSizes start) (fun _ _ _ same ok => same.trans (sizes _ _ _ ok))
+      (SameSizes.refl _) folded
+  exact (keep (fun _ _ _ ok => sameSizes_processProposerSlashing ok) proposersOk).trans <|
+    (keep (fun _ _ _ ok => sameSizes_processAttesterSlashing ok) attestersOk).trans <|
+    (keep (fun _ _ _ ok => sameSizes_processAttestation ok) attestedOk).trans <|
+    (keep (fun _ _ _ ok => sameSizes_processVoluntaryExit ok) exitsOk).trans <|
+    (keep (fun _ _ _ ok => sameSizes_processBlsToExecutionChange ok) changesOk).trans <|
+    keep (fun _ _ _ ok => processPayloadAttestation_eq ok ▸ SameSizes.refl _) paid
+
 /-- The operations of a block keep one balance for each validator. -/
 theorem balancesMatch_processOperations {checks : SignatureChecks}
     {body : BeaconBlockBody preset fork}
-    (computed : processOperations config checks state body = .ok after)
+    {parentSlot : Slot}
+    (computed : processOperations config checks state body parentSlot = .ok after)
     (holds : BalancesMatch state) : BalancesMatch after := by
   unfold processOperations at computed
   split at computed
-  · cases computed
+  · exact balancesMatch_of_sameSizes (sameSizes_processOperationsGloas computed) holds
   simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨_, _, _, _, proposers, proposersOk, attesters, attestersOk, attested, attestedOk,
     deposited, depositedOk, exited, exitsOk, changed, changesOk, requestsOk⟩ := computed

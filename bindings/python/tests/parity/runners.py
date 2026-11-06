@@ -59,7 +59,6 @@ _GLOAS = {
     "random": "the Gloas block processing and state transition (G52)",
     "sanity": "the Gloas block processing and state transition (G52)",
     "transition": "the upgrade to Gloas (G53) and the Gloas state transition (G52)",
-    "operations": "the Gloas attestations, slashings and operations (G50)",
     "fork_choice": "the Gloas block and payload handlers (G70)",
     "fast_confirmation": "the Gloas fast confirmation (G73)",
     "networking": "the Gloas data columns and unchanged topics (G77)",

@@ -216,13 +216,14 @@ def processBlockAltair (config : Config) (checks : SignatureChecks)
   if gloas : .glamsterdam ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
   else do
     have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
+    let parentSlot := state.latestBlockHeader.slot
     let state ← processBlockHeader state block
     let state ← if bellatrix : .bellatrix ≤ fork then
         processBlockExecution config engine state block.body ⟨bellatrix, before⟩
       else pure state
     let state ← processRandao config checks state block.body
     let state ← processEth1Data (Nat.lt_trans before (by decide)) state block.body
-    let state ← processOperations config checks state block.body
+    let state ← processOperations config checks state block.body parentSlot
     processSyncAggregate config checks state altair (block.body.syncAggregate altair)
 
 /-- The state after a block.
@@ -238,10 +239,11 @@ def processBlock (config : Config) (checks : SignatureChecks)
   if altair : .altair ≤ fork then processBlockAltair config checks engine state block altair
   else do
     have before : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le altair) (by decide)
+    let parentSlot := state.latestBlockHeader.slot
     let state ← processBlockHeader state block
     let state ← processRandao config checks state block.body
     let state ← processEth1Data before state block.body
-    processOperations config checks state block.body
+    processOperations config checks state block.body parentSlot
 
 /-- The check, when the result is validated, that a block carries its proposer's signature. -/
 def checkBlockSignature (validateResult : Bool) (config : Config) (checks : SignatureChecks)

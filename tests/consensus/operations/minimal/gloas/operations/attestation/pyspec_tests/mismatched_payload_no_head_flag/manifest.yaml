@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: operations
+handler: attestation
+suite: pyspec_tests
+case: mismatched_payload_no_head_flag

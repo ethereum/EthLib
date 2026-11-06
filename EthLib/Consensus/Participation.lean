@@ -121,6 +121,38 @@ def getUnslashedParticipatingIndices (state : BeaconState preset fork) (altair :
     return (read.filter (·.2)).map (·.1)
   else throw (.epochNotRecent epoch previous current)
 
+/-- From Gloas: whether an attestation votes for the block proposed at its own slot.
+
+A vote at slot zero always does.
+
+Otherwise its block root must be the root at its slot, and not the root at the slot before.
+
+So a vote for a block of an earlier slot, at a slot with no block, does not. -/
+def isAttestationSameSlot (state : BeaconState preset fork) (data : AttestationData) :
+    Except AccessorError Bool := do
+  if data.slot = 0 then return true
+  let slotRoot ← getBlockRootAtSlot state data.slot
+  let previousRoot ← getBlockRootAtSlot state (data.slot - 1)
+  return data.beaconBlockRoot == slotRoot && data.beaconBlockRoot != previousRoot
+
+/-- From Gloas: whether the payload vote of an attestation matches the chain.
+
+A vote for the block of its own slot cannot see a payload, so its index must be zero.
+
+Any other vote names by its index whether the payload of its block is available.
+
+The bit read is that of the parent slot of the block being processed.
+
+A vote that can earn the head flag names the head at its slot, which is that parent. -/
+def payloadMatches (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
+    (data : AttestationData) (parentSlot : Slot) : Except AccessorError Bool := do
+  if ← isAttestationSameSlot state data then
+    if data.index = 0 then return true else throw (.sameSlotIndexNotZero data.index)
+  let position := (parentSlot % preset.SLOTS_PER_HISTORICAL_ROOT).toNat
+  let some available := (state.executionPayloadAvailability gloas).bits[position]?
+    | throw (.bitOutOfRange position)
+  return data.index == if available then 1 else 0
+
 /-- From Altair: the flags that an attestation earns, from the source, target and head it votes for.
 
 The source must be the justified checkpoint of the epoch of its target.
@@ -129,25 +161,28 @@ A timely source needs an inclusion delay of at most the square root of the slots
 
 A target counts when the source counts too, and before Deneb only within one epoch of delay.
 
-A head counts when the target counts too, and only at the least inclusion delay. -/
+A head counts when the target counts too, and only at the least inclusion delay.
+
+From Gloas a head also needs its payload vote to match, read at the slot of the parent block. -/
 def getAttestationParticipationFlagIndices (state : BeaconState preset fork)
-    (data : AttestationData) (inclusionDelay : UInt64) : Except AccessorError (List UInt64) := do
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
-  else
-    let justified := if data.target.epoch = getCurrentEpoch state then
-      state.currentJustifiedCheckpoint else state.previousJustifiedCheckpoint
-    let matchingSource := data.source == justified
-    let matchingTarget :=
-      matchingSource && data.target.root == (← getBlockRoot state data.target.epoch)
-    let matchingHead :=
-      matchingTarget && data.beaconBlockRoot == (← getBlockRootAtSlot state data.slot)
-    if data.source = justified then
-      return (if inclusionDelay ≤ integerSquareroot preset.SLOTS_PER_EPOCH then
-          [TIMELY_SOURCE_FLAG_INDEX] else []) ++
-        (if matchingTarget && (.dencun ≤ fork || inclusionDelay ≤ preset.SLOTS_PER_EPOCH) then
-          [TIMELY_TARGET_FLAG_INDEX] else []) ++
-        (if matchingHead && inclusionDelay == preset.MIN_ATTESTATION_INCLUSION_DELAY then
-          [TIMELY_HEAD_FLAG_INDEX] else [])
-    else throw .wrongSource
+    (data : AttestationData) (inclusionDelay : UInt64) (parentSlot : Slot) :
+    Except AccessorError (List UInt64) := do
+  let justified := if data.target.epoch = getCurrentEpoch state then
+    state.currentJustifiedCheckpoint else state.previousJustifiedCheckpoint
+  let matchingSource := data.source == justified
+  let matchingTarget :=
+    matchingSource && data.target.root == (← getBlockRoot state data.target.epoch)
+  let payload ← (if gloas : .glamsterdam ≤ fork then payloadMatches state gloas data parentSlot
+    else pure true)
+  let matchingHead :=
+    matchingTarget && data.beaconBlockRoot == (← getBlockRootAtSlot state data.slot) && payload
+  if data.source = justified then
+    return (if inclusionDelay ≤ integerSquareroot preset.SLOTS_PER_EPOCH then
+        [TIMELY_SOURCE_FLAG_INDEX] else []) ++
+      (if matchingTarget && (.dencun ≤ fork || inclusionDelay ≤ preset.SLOTS_PER_EPOCH) then
+        [TIMELY_TARGET_FLAG_INDEX] else []) ++
+      (if matchingHead && inclusionDelay == preset.MIN_ATTESTATION_INCLUSION_DELAY then
+        [TIMELY_HEAD_FLAG_INDEX] else [])
+  else throw .wrongSource
 
 end EthLib.Consensus

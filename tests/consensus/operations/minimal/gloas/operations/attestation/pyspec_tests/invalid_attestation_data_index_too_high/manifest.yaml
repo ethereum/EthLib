@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: operations
+handler: attestation
+suite: pyspec_tests
+case: invalid_attestation_data_index_too_high

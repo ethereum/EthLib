@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Participation
+public import EthLib.Consensus.PayloadTimeliness
 public import EthLib.Consensus.Transition.Block
 public import EthLib.Consensus.Transition.BuilderRequests
 public import EthLib.Consensus.Transition.Requests
@@ -150,6 +151,8 @@ From Electra its index must be zero, and its committee bits name the committees,
 
 Each of them must then have an attester.
 
+From Gloas its index is its vote on the payload, so it may also be one.
+
 [EIP-7549]: https://eips.ethereum.org/EIPS/eip-7549#consensus-layer
 -/
 def checkAttestationCommittees (state : BeaconState preset fork)
@@ -157,7 +160,8 @@ def checkAttestationCommittees (state : BeaconState preset fork)
   let data := attestation.data
   let bits := attestation.aggregationBits.bits
   if electra : .pectra ≤ fork then
-    ensure (data.index = 0) (.attestationIndexNotZero data.index)
+    if .glamsterdam ≤ fork then ensure (data.index < 2) (.attestationIndexAboveOne data.index)
+    else ensure (data.index = 0) (.attestationIndexNotZero data.index)
     let size ← attestationCommitteesSize state data bits
       (getCommitteeIndices (attestation.committeeBits electra)) 0
     ensure (bits.size = size) (.aggregationBitsLength bits.size size)
@@ -167,7 +171,48 @@ def checkAttestationCommittees (state : BeaconState preset fork)
     let committee ← liftAccessor (getBeaconCommittee state data.slot data.index)
     ensure (bits.size = committee.size) (.aggregationBitsLength bits.size committee.size)
 
-/-- From Altair to Fulu: the state after an attestation.
+/-- From Gloas: the position of the pending payment of the block at a slot.
+
+A slot of the current epoch pays in the second half, and a slot of the previous epoch in the first.
+-/
+def attestationPaymentPosition (preset : Preset) (current : Bool) (slot : Slot) : Nat :=
+  ((if current then preset.SLOTS_PER_EPOCH else 0) + slot % preset.SLOTS_PER_EPOCH).toNat
+
+/-- From Gloas: the weight of a payment after the attesters of an attestation.
+
+An attester adds its effective balance if it had no flag in the epoch and now has one.
+
+A sum that reaches `2^64` is an error. -/
+def addPaymentWeight (state : BeaconState preset fork)
+    (before after : EpochParticipation preset fork) (weight : Gwei) (index : ValidatorIndex) :
+    Except TransitionError Gwei := do
+  let some old := before.data[index.toNat]? | throw (.accessor (.indexOutOfRange index))
+  let some new := after.data[index.toNat]? | throw (.accessor (.indexOutOfRange index))
+  if old = 0 ∧ new ≠ old then
+    let validator ← liftAccessor (getValidator state index)
+    liftAccessor (liftArith (addChecked weight validator.effectiveBalance))
+  else return weight
+
+/-- From Gloas: the state with the payment of an attested block weighed by its new attesters.
+
+Only an attestation for the block of its own slot weighs, and only a payment of a positive amount.
+
+Otherwise the payment is written back unchanged. -/
+def recordPaymentWeight (state : BeaconState preset fork) (gloas : .glamsterdam ≤ fork)
+    (data : AttestationData) (current : Bool) (before after : EpochParticipation preset fork)
+    (attesters : List ValidatorIndex) : Except TransitionError (BeaconState preset fork) := do
+  let position := attestationPaymentPosition preset current data.slot
+  let payments := state.builderPendingPayments gloas
+  let some payment := payments[position]?
+    | throw (.accessor (.paymentIndexOutOfRange position.toUInt64))
+  let sameSlot ← liftAccessor (isAttestationSameSlot state data)
+  let weight ← (if sameSlot ∧ 0 < payment.withdrawal.amount then
+      attesters.foldlM (addPaymentWeight state before after) payment.weight
+    else pure payment.weight)
+  let payments := payments.set! position { payment with weight }
+  return { state with builderPendingPayments := fun _ => payments }
+
+/-- From Altair: the state after an attestation.
 
 Its target must be the current or the previous epoch, and the epoch of its slot.
 
@@ -185,15 +230,19 @@ Each attester gets the flags it earned in the epoch of the target.
 
 The proposer earns a share of the base rewards of the flags newly set.
 
-Gloas changes the rule, which EthLib does not yet have here.
+From Gloas the head flag also needs the payload vote to match, at the slot of the parent block.
+
+The new attesters of a vote for the block of its own slot add weight to the payment of its builder.
+
+Both rules are from [EIP-7732].
 
 [EIP-7045]: https://eips.ethereum.org/EIPS/eip-7045#specification
+[EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#beacon-chain-changes
 -/
 def processAttestationAltair (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (attestation : Attestation preset fork)
-    (altair : .altair ≤ fork) : Except TransitionError (BeaconState preset fork) :=
-  if .glamsterdam ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
-  else do
+    (altair : .altair ≤ fork) (parentSlot : Slot) :
+    Except TransitionError (BeaconState preset fork) := do
     let data := attestation.data
     let currentEpoch := getCurrentEpoch state
     ensure (data.target.epoch = getPreviousEpoch state ∨ data.target.epoch = currentEpoch)
@@ -206,7 +255,7 @@ def processAttestationAltair (config : Config) (checks : SignatureChecks)
     checkInclusionDeadline state data.slot
     checkAttestationCommittees state attestation
     let earned ← liftAccessor
-      (getAttestationParticipationFlagIndices state data (state.slot - data.slot))
+      (getAttestationParticipationFlagIndices state data (state.slot - data.slot) parentSlot)
     let indexed ← liftAccessor (getIndexedAttestation state attestation)
     let valid ← isValidIndexedAttestation config checks state indexed
     ensure (valid = true) .invalidAttestation
@@ -215,12 +264,15 @@ def processAttestationAltair (config : Config) (checks : SignatureChecks)
       else state.previousEpochParticipation altair
     let total ← liftAccessor (getTotalActiveBalance state)
     let attesters ← liftAccessor (getAttestingIndices state attestation)
-    let (participation, numerator) ←
+    let (updated, numerator) ←
       attesters.foldlM (addAttesterFlags state total earned) (participation, 0)
-    let state := setEpochParticipation state current participation
+    let state := setEpochParticipation state current updated
     let denominator := (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR / PROPOSER_WEIGHT
     let proposer ← liftAccessor (getBeaconProposerIndex state)
-    liftAccessor (increaseBalance state proposer (numerator / denominator))
+    let state ← liftAccessor (increaseBalance state proposer (numerator / denominator))
+    if gloas : .glamsterdam ≤ fork then
+      recordPaymentWeight state gloas data current participation updated attesters
+    else pure state
 
 /-- The state after an attestation.
 
@@ -238,11 +290,14 @@ Its signature must be the aggregate signature of the members whose bit is set.
 
 A 64-bit overflow is an error.
 
-From Altair the rule records participation flags instead. -/
+From Altair the rule records participation flags instead.
+
+From Gloas the slot of the parent block decides the payload vote. -/
 def processAttestation (config : Config) (checks : SignatureChecks)
-    (state : BeaconState preset fork) (attestation : Attestation preset fork) :
+    (state : BeaconState preset fork) (parentSlot : Slot) (attestation : Attestation preset fork) :
     Except TransitionError (BeaconState preset fork) :=
-  if altair : .altair ≤ fork then processAttestationAltair config checks state attestation altair
+  if altair : .altair ≤ fork then
+    processAttestationAltair config checks state attestation altair parentSlot
   else do
     have before : fork < .altair := Nat.lt_of_not_le altair
     let data := attestation.data
@@ -565,6 +620,43 @@ def processBlsToExecutionChanges (config : Config) (checks : SignatureChecks)
       state
   else pure state
 
+/-- From Gloas: the state after the operations of a block.
+
+Each list of operations must hold no more than its most per block, since it has no type bound.
+
+Before Heze the block must hold no deposit.
+
+The proposer slashings run first, then the attester slashings and the attestations.
+
+The attestations read the slot of the parent block, for their payload vote.
+
+The voluntary exits and the changes of BLS credentials follow, and the payload attestations last.
+
+The requests of the execution layer run with the parent payload instead. -/
+def processOperationsGloas (config : Config) (checks : SignatureChecks)
+    (state : BeaconState preset fork) (body : BeaconBlockBody preset fork)
+    (gloas : .glamsterdam ≤ fork) (parentSlot : Slot) :
+    Except TransitionError (BeaconState preset fork) := do
+  (if before : fork < .hegota then
+      ensure ((body.deposits before).data.size = 0)
+        (.wrongDepositCount (body.deposits before).data.size 0)
+    else pure ())
+  have capella : .shapella ≤ fork := Nat.le_trans (by decide) gloas
+  let changes := (body.blsToExecutionChanges capella).data
+  let payloadAttestations := (body.payloadAttestations gloas).data
+  checkCount body.proposerSlashings.data.size preset.MAX_PROPOSER_SLASHINGS
+  checkCount body.attesterSlashings.data.size preset.MAX_ATTESTER_SLASHINGS_ELECTRA
+  checkCount body.attestations.data.size preset.MAX_ATTESTATIONS_ELECTRA
+  checkCount body.voluntaryExits.data.size preset.MAX_VOLUNTARY_EXITS
+  checkCount changes.size preset.MAX_BLS_TO_EXECUTION_CHANGES
+  checkCount payloadAttestations.size preset.MAX_PAYLOAD_ATTESTATIONS
+  let state ← body.proposerSlashings.data.foldlM (processProposerSlashing config checks) state
+  let state ← body.attesterSlashings.data.foldlM (processAttesterSlashing config checks) state
+  let state ← body.attestations.data.foldlM (processAttestation config checks · parentSlot ·) state
+  let state ← body.voluntaryExits.data.foldlM (processVoluntaryExit config checks) state
+  let state ← changes.foldlM (processBlsToExecutionChange config checks) state
+  payloadAttestations.foldlM (processPayloadAttestation config checks · gloas ·) state
+
 /-- The state after the operations of a block.
 
 The block must hold the number of deposits that the state expects.
@@ -577,11 +669,12 @@ From Electra the requests of the execution layer run last.
 
 From Fulu a block holds no deposit, so no deposit runs.
 
-Gloas moves the requests out of the block, which EthLib does not yet have here. -/
+From Gloas the operations change, and the attestations read the slot of the parent block. -/
 def processOperations (config : Config) (checks : SignatureChecks)
-    (state : BeaconState preset fork) (body : BeaconBlockBody preset fork) :
+    (state : BeaconState preset fork) (body : BeaconBlockBody preset fork) (parentSlot : Slot) :
     Except TransitionError (BeaconState preset fork) :=
-  if gloas : .glamsterdam ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
+  if gloas : .glamsterdam ≤ fork then
+    processOperationsGloas config checks state body gloas parentSlot
   else do
     have before : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le gloas) (by decide)
     let expected ← expectedDepositCount state before
@@ -589,7 +682,8 @@ def processOperations (config : Config) (checks : SignatureChecks)
     ensure (deposits.size = expected) (.wrongDepositCount deposits.size expected)
     let state ← body.proposerSlashings.data.foldlM (processProposerSlashing config checks) state
     let state ← body.attesterSlashings.data.foldlM (processAttesterSlashing config checks) state
-    let state ← body.attestations.data.foldlM (processAttestation config checks) state
+    let state ←
+      body.attestations.data.foldlM (processAttestation config checks · parentSlot ·) state
     let state ← deposits.foldlM (processDeposit config checks before) state
     let state ← body.voluntaryExits.data.foldlM (processVoluntaryExit config checks) state
     let state ← processBlsToExecutionChanges config checks state body
