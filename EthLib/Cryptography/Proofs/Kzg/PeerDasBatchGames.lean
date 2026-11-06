@@ -46,8 +46,6 @@ The game does not model that shape; another file states the games with such colu
 
 namespace EthLib.Cryptography.Kzg
 
-open EthLib.Base (getElem!_mem_of_lt)
-
 open EthLib.Cryptography.Bls (G1 G2 Fr TargetGroup)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
@@ -85,8 +83,10 @@ theorem CellBatchInput.acceptsAt_challenge_iff (laws : Bls.PairingLaws) {s : Tru
           0) := fun {b} hb => by
     obtain ⟨hvc, hvp⟩ := validates_of_verifyCellKzgProofBatch hb
     exact verifyCellKzgProofBatch_ok_iff_root laws hs y
-      (fun k hk _ hP => represents_scalarOf (hvc _ (getElem!_mem_of_lt hk)) hP)
-      (fun k hk _ hP => represents_scalarOf (hvp _ (getElem!_mem_of_lt hk)) hP) hb
+      (fun k hk _ hP => represents_scalarOf
+        (hvc y.commitments[k]! (getElem!_pos y.commitments k hk ▸ Array.getElem_mem hk)) hP)
+      (fun k hk _ hP => represents_scalarOf
+        (hvp y.proofs[k]! (getElem!_pos y.proofs k hk ▸ Array.getElem_mem hk)) hP) hb
   constructor
   · rintro ⟨⟨b, hb⟩, hr⟩
     rw [hb, (key hb).mpr hr]

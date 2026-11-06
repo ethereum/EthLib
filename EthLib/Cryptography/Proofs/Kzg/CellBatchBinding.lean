@@ -349,7 +349,8 @@ theorem verifyCellKzgProofBatchImpl_ok_iff_root (laws : Bls.PairingLaws) {s : Tr
       cellIndices[k]! < CELLS_PER_EXT_BLOB ∧ shifts[k]! = cellShift cellIndices[k]! := by
     obtain ⟨hsz, hk⟩ := array_mapM_ok hshifts
     refine ⟨hsz.trans h₁, fun k hk' => ?_⟩
-    have hf := hk k (by omega)
+    have hf := hk k (by omega) (by omega)
+    rw [← getElem!_pos cellIndices k (by omega), ← getElem!_pos shifts k (by omega)] at hf
     have h64 : FIELD_ELEMENTS_PER_CELL = 64 := rfl
     have h8192 : FIELD_ELEMENTS_PER_EXT_BLOB = 8192 := rfl
     have h128 : CELLS_PER_EXT_BLOB = 128 := rfl

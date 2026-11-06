@@ -180,12 +180,12 @@ private theorem foldlM_validates {ε : Type}
 private theorem zipIdx_mapM_validates {ε : Type} {g : Bytes48 × Nat → Except ε Bytes48}
     (hg : ∀ p r, g p = .ok r → validateKzgG1 p.1 = true) {ps qs : Array Bytes48}
     (h : ps.zipIdx.mapM g = .ok qs) : ∀ p ∈ ps, validateKzgG1 p = true := by
-  obtain ⟨-, hk⟩ := array_mapM_ok h
+  obtain ⟨hsz, hk⟩ := array_mapM_ok h
   intro p hp
   obtain ⟨i, hi, rfl⟩ := Array.getElem_of_mem hp
   have hi' : i < ps.zipIdx.size := by rw [Array.size_zipIdx]; exact hi
-  have := hg _ _ (hk i hi')
-  rwa [getElem!_pos _ i hi', Array.getElem_zipIdx] at this
+  have := hg _ _ (hk i hi' (by omega))
+  rwa [Array.getElem_zipIdx] at this
 
 /-- A batch of cells that returns validates every commitment and every proof.
 
@@ -288,10 +288,16 @@ theorem CellOpening.Verifies.valid (laws : Bls.PairingLaws) {s : TrustedSetup} {
   have hd : dedupCommitments #[commitment] = (#[commitment], #[0]) := by
     simp [dedupCommitments, dedupStep]
   rw [hd] at hG
-  have hC := (array_mapM_ok hG).2 0 (by simp)
-  have hP := (array_mapM_ok hQ).2 0 (by simp)
-  have he := (array_mapM_ok hev).2 0 (by simp)
-  simp only [List.getElem!_toArray, List.getElem!_cons_zero] at hC hP he
+  obtain ⟨hGsz, hGk⟩ := array_mapM_ok hG
+  obtain ⟨hQsz, hQk⟩ := array_mapM_ok hQ
+  obtain ⟨hesz, hek⟩ := array_mapM_ok hev
+  have hC := hGk 0 (by simp) (by simp [hGsz])
+  have hP := hQk 0 (by simp) (by simp [hQsz])
+  have he := hek 0 (by simp) (by simp [hesz])
+  rw [← getElem!_pos G 0 (by simp [hGsz])] at hC
+  rw [← getElem!_pos Q 0 (by simp [hQsz])] at hP
+  rw [← getElem!_pos evals 0 (by simp [hesz])] at he
+  simp only [List.getElem_toArray, List.getElem_cons_zero] at hC hP he
   obtain ⟨c, hc⟩ := represents_of_validateKzgG1 hvc hC
   obtain ⟨w, hw⟩ := represents_of_validateKzgG1 hvp hP
   let y : CellBatchInput := ⟨#[commitment], #[o.cellIndex], #[o.cell], #[o.proof]⟩
