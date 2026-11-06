@@ -292,9 +292,17 @@ Under the pairing law, the test is sound (`blsScheme_sound`).
 There `H(m)` is the hash to G2 of `m` under the message tag.
 Aggregation and proofs of possession lie outside the game.
 
-The game's adversary receives and returns group elements, not their encodings.
-Every signature that EthLib accepts decodes to a group element.
-No theorem turns a forger on bytes into a forger on group elements, so that last step is argued, not proved.
+`byteForgeAdvantage_le` (`Proofs/Bls/Security/Refinement.lean`) turns a forger on byte encodings into a named group-element forger with at least the same advantage.
+The byte forger receives a compressed key and compressed hash and signing answers, and returns arbitrary message and signature bytes.
+The game runs EthLib's signature decoder, subgroup check and key validation before the pairing check.
+`encode_publicKey`, `encode_signature` with `sign_eq`, and `byteVerify_hashPoint` connect these operations to EthLib's public key, signing and verification when the oracle uses EthLib's hash.
+The bound still models that hash as a random oracle, not as the concrete hash function.
+
+Freshness is by message: a message submitted to signing cannot win with any signature bytes.
+`decodeSignature_encode` and `encode_eq_of_decodeSignature` prove both encoding round trips, so two accepted encodings of the same subgroup element cannot differ.
+The byte game keeps the group game's uniform scalar distribution, including zero, whose key validation rejects.
+It does not claim a bound for key generation conditioned on a nonzero scalar.
+Under the pairing law and the hash-call bound on the decoded forger, `byteForgeAdvantage_le_coCdhAdvantage` gives the same `q`-factor co-CDH bound.
 
 ### secp256k1
 
