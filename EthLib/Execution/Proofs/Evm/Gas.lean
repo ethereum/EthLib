@@ -24,7 +24,7 @@ The token prices of EIP-7623 and the refund of EIP-3529 agree with the prices th
 
 The prices that EIP-8038 derives from other prices have the values of its table.
 
-The limit of init code is twice the limit of code, as EIP-3860 defines it.
+From Shapella on, the limit of init code is twice the limit of code, as EIP-3860 defines it.
 -/
 
 @[expose] public section
@@ -219,7 +219,11 @@ theorem gasSchedule_of_glamsterdam_le {fork : Fork} (h : fork ≥ .glamsterdam) 
 theorem createAccess_eq : CREATE_ACCESS = 12000 := by
   decide
 
-/-- At every fork with a limit of code, the limit of init code is twice that limit, by EIP-3860. -/
+/-- At every fork with a limit of code, the limit of init code is twice that limit.
+
+EIP-3860 sets that ratio from Shapella on.
+
+Before Shapella the value has the same ratio, but no rule reads it. -/
 theorem maxInitCodeSize_eq_two_mul {fork : Fork} {n : Nat} (h : maxCodeSize fork = some n) :
     maxInitCodeSize fork = 2 * n := by
   unfold maxCodeSize at h

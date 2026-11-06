@@ -305,8 +305,8 @@ omit [GasMeter Meter] in
 /-- The access to an address keeps the message of the frame. -/
 theorem accessAddress_message (evm : Evm fork Meter) (address : Base.Address) :
     (accessAddress evm address).2.message = evm.message := by
-  unfold accessAddress
-  split <;> rfl
+  obtain ⟨_, h⟩ := accessAddress_snd evm address
+  rw [h]
 
 /-- The rest of an instruction that keeps its reads fails only with an error that aborts the run.
 
