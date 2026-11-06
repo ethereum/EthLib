@@ -283,10 +283,10 @@ theorem isoMapG1_valid {x y : Fp} (h : y * y = x * x * x + Aprime * x + Bprime) 
   · rw [ite_eq_right hd]
     simp only [Bool.or_eq_true, not_or, Bool.not_eq_true] at hd
     have hxd : evaluate K2 x + Fp.powNat x 10 ≠ 0 := fun h0 => by
-      rw [G1.isZero_iff.mpr h0] at hd
+      rw [Fp.isZero_iff.mpr h0] at hd
       exact Bool.noConfusion hd.1
     have hyd : evaluate K4 x + Fp.powNat x 15 ≠ 0 := fun h0 => by
-      rw [G1.isZero_iff.mpr h0] at hd
+      rw [Fp.isZero_iff.mpr h0] at hd
       exact Bool.noConfusion hd.2
     rw [Fp.powNat_eq_pow] at hxd hyd
     apply G1.valid_of_affine_eq

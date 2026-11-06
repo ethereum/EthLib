@@ -340,7 +340,6 @@ theorem modulus_smul_eq_zero {x y : Fp} (hc : check x.val = true)
   have hr : Fr.modulus • toPoint ⟨x, y₀, Fp.one⟩ = 0 := by
     rw [← toPoint_mulModulusChain hv]
     refine Point.toAffine_of_Z_eq_zero (isZero_iff.mp ?_)
-    rw [rep_z]
     have hc : coords ⟨x, y₀, Fp.one⟩ = (x.val, rootCandidate x.val, 1) := rfl
     have h := congrArg (fun c : Coords => c.2.2) (coords_mulModulusChain ⟨x, y₀, Fp.one⟩)
     rw [hc, hz] at h
