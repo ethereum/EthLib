@@ -192,23 +192,23 @@ def uncompressedChunk (data : List UInt8) : List UInt8 :=
   uncompressedType :: (uintToBytes 3 (data.length + 4)).toList ++
     (uintToBytes 4 (maskedCrc ⟨data.toArray⟩).toNat).toList ++ data
 
-/-- The data cut into uncompressed chunks of 65536 bytes, the last one shorter.
+/-- The data cut into pieces of 65536 bytes, the last one shorter, each written by `chunk`.
 
 The fuel bounds the number of chunks, and the data length is enough.
 -/
-def encodeChunksLiteral : List UInt8 → Nat → List UInt8
+def encodeChunks (chunk : List UInt8 → List UInt8) : List UInt8 → Nat → List UInt8
   | [], _ => []
   -- Out of fuel: unreachable when the fuel is at least the data length.
   | _ :: _, 0 => []
   | b :: bs, fuel + 1 =>
-      uncompressedChunk ((b :: bs).take maxChunkLength) ++
-        encodeChunksLiteral ((b :: bs).drop maxChunkLength) fuel
+      chunk ((b :: bs).take maxChunkLength) ++
+        encodeChunks chunk ((b :: bs).drop maxChunkLength) fuel
 
 /-- A framed stream that decodes to `data`: the stream identifier, then uncompressed chunks.
 
 It is the inverse that proofs, tests and bindings use, not a compressor.
 -/
 def encodeFramesLiteral (data : ByteArray) : ByteArray :=
-  ⟨(streamIdentifier ++ encodeChunksLiteral data.data.toList data.size).toArray⟩
+  ⟨(streamIdentifier ++ encodeChunks uncompressedChunk data.data.toList data.size).toArray⟩
 
 end EthLib.Networking.Snappy

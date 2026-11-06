@@ -10,7 +10,8 @@ Properties of the Snappy framing format, against `framing_format.txt` of `google
 
 <https://github.com/google/snappy/blob/7406111ac4ae539ea0db8b7ea2dc76730cd957f4/framing_format.txt>
 
-- The stream of the encoder decodes back to its data.
+- Chunks that each decode to their piece of the data decode back to the data.
+- The stream of uncompressed chunks decodes back to its data.
 - A stream that decodes starts with the stream identifier (§4.1).
 - After the identifier, one bad chunk rejects the whole stream.
 - A wrong checksum, more than 65536 bytes or a reserved unskippable type makes a chunk bad.
@@ -107,10 +108,30 @@ theorem uncompressedChunk_eq (data : List UInt8) :
       uncompressedType :: (uintToBytes 3 body.length).toList ++ body := by
   simp [uncompressedChunk, Nat.add_comm]
 
-/-- The chunks the encoder writes decode back to the data, given enough fuel on both sides. -/
-theorem decodeChunks_encodeChunksLiteral (data : List UInt8) {n fuel : Nat}
-    (hn : data.length ≤ n) (hfuel : (encodeChunksLiteral data n).length ≤ fuel) :
-    decodeChunks (encodeChunksLiteral data n) fuel = .ok data := by
+/-- An uncompressed chunk of at most 65536 bytes is a header and a body that decodes to its data.
+-/
+theorem uncompressedChunk_spec {data : List UInt8} (h : data.length ≤ maxChunkLength) :
+    ∃ (type : UInt8) (body : List UInt8), body.length < 2 ^ 24 ∧
+      uncompressedChunk data = type :: (uintToBytes 3 body.length).toList ++ body ∧
+      decodeChunk type body = .ok data := by
+  refine ⟨uncompressedType, _, ?_, ?_, decodeChunk_uncompressed h⟩
+  · simp only [maxChunkLength] at h
+    simp only [List.length_append, Vector.length_toList]
+    omega
+  · rw [uncompressedChunk_eq]
+
+/-- The chunks of the encoder decode back to the data, given enough fuel on both sides.
+
+Each chunk of at most 65536 bytes must be a header and a body that decodes to that piece.
+-/
+theorem decodeChunks_encodeChunks {chunk : List UInt8 → List UInt8}
+    (hchunk : ∀ piece : List UInt8, piece.length ≤ maxChunkLength →
+      ∃ (type : UInt8) (body : List UInt8), body.length < 2 ^ 24 ∧
+        chunk piece = type :: (uintToBytes 3 body.length).toList ++ body ∧
+        decodeChunk type body = .ok piece)
+    (data : List UInt8) {n fuel : Nat}
+    (hn : data.length ≤ n) (hfuel : (encodeChunks chunk data n).length ≤ fuel) :
+    decodeChunks (encodeChunks chunk data n) fuel = .ok data := by
   induction n generalizing data fuel with
   | zero =>
       cases data with
@@ -121,17 +142,16 @@ theorem decodeChunks_encodeChunksLiteral (data : List UInt8) {n fuel : Nat}
       | nil => cases fuel <;> rfl
       | cons b bs =>
           -- One chunk of the first 65536 bytes, then the rest.
-          let chunk := (b :: bs).take maxChunkLength
-          let tail := encodeChunksLiteral ((b :: bs).drop maxChunkLength) n
-          have henc : encodeChunksLiteral (b :: bs) (n + 1) = uncompressedChunk chunk ++ tail := rfl
-          have hchunk : chunk.length ≤ maxChunkLength := List.length_take_le _ _
-          rw [henc, uncompressedChunk_eq] at hfuel ⊢
-          simp only [List.length_cons, List.length_append, Vector.length_toList] at hfuel
+          let piece := (b :: bs).take maxChunkLength
+          let tail := encodeChunks chunk ((b :: bs).drop maxChunkLength) n
+          have henc : encodeChunks chunk (b :: bs) (n + 1) = chunk piece ++ tail := rfl
+          obtain ⟨type, body, hbl, hdc, hdec⟩ := hchunk piece (List.length_take_le _ _)
+          rw [henc, hdc] at hfuel ⊢
+          simp only [List.length_append, List.length_cons, Vector.length_toList] at hfuel
           obtain ⟨fuel, rfl⟩ : ∃ f, fuel = f + 1 := ⟨fuel - 1, by omega⟩
-          rw [decodeChunks_chunk_ok tail fuel (by simp [maxChunkLength] at hchunk ⊢; omega)
-            (decodeChunk_uncompressed hchunk)]
+          rw [decodeChunks_chunk_ok tail fuel hbl hdec]
           rw [ih _ (by simp [maxChunkLength] at hn ⊢; omega) (show tail.length ≤ fuel by omega)]
-          simp [Except.map, chunk]
+          simp [Except.map, piece]
 
 /-- A stream that starts with the stream identifier decodes as the chunks after it. -/
 theorem decodeFramesList_streamIdentifier (rest : List UInt8) :
@@ -152,7 +172,8 @@ theorem decodeFrames_encodeFramesLiteral (d : ByteArray) :
   simp only [decodeFrames, encodeFramesLiteral, decodeFramesList_streamIdentifier]
   -- The data length is the byte array's size.
   have hn : d.data.toList.length ≤ d.size := Nat.le_of_eq Array.length_toList
-  rw [decodeChunks_encodeChunksLiteral _ hn (by omega)]
+  rw [decodeChunks_encodeChunks (chunk := uncompressedChunk) (fun _ h => uncompressedChunk_spec h) _
+    hn (by omega)]
   rfl
 
 /-! ## Rejected streams -/

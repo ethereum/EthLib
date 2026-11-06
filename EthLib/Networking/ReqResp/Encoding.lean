@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Uint64
 public import EthLib.Networking.Encoding.Varint
 public import EthLib.Networking.Snappy.Frame
+public import EthLib.Networking.Snappy.FrameEncode
 
 /-!
 # `Networking.ReqResp.Encoding`
@@ -175,6 +176,12 @@ def decodePayload (typeMin typeBound : UInt64) (bs : ByteArray) :
 It is the inverse that proofs, tests and bindings use, not a compressor. -/
 def encodePayloadLiteral (data : ByteArray) : ByteArray :=
   ⟨(Varint.encode (UInt64.ofNat data.size)).toArray⟩ ++ Snappy.encodeFramesLiteral data
+
+/-- A payload that decodes to `data`: its length as a varint, then a stream that compresses.
+
+A chunk of the stream is compressed when that makes it shorter. -/
+def encodePayload (data : ByteArray) : ByteArray :=
+  ⟨(Varint.encode (UInt64.ofNat data.size)).toArray⟩ ++ Snappy.encodeFrames data
 
 /-- One chunk of a response: its code, its context bytes and its SSZ bytes.
 

@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.ReqResp.Encoding
 public import EthLib.Networking.Proofs.Encoding.Varint
 public import EthLib.Networking.Proofs.Snappy.Frame
+public import EthLib.Networking.Proofs.Snappy.FrameEncode
 
 /-!
 # `Networking.Proofs.ReqResp.Encoding`
@@ -18,6 +19,8 @@ Those bytes are within the bound for that length, and they decompress to the pay
 More compressed bytes than the bound for the declared length reject the payload.
 
 The literal encoder writes payloads and response chunks that decode back.
+
+The encoder that compresses writes payloads that decode back.
 
 Two errors with one code come from one constructor, and no error has code 0.
 -/
@@ -250,17 +253,17 @@ theorem decodePayload_lengthBelowMinimum {typeMin typeBound declared : UInt64}
 /-! ## The literal encoder -/
 
 /-- Uncompressed chunks add eight bytes to each block of up to 65536 bytes. -/
-theorem length_encodeChunksLiteral_le (data : List UInt8) (fuel : Nat) :
-    (Snappy.encodeChunksLiteral data fuel).length ≤
+theorem length_encodeChunks_uncompressedChunk_le (data : List UInt8) (fuel : Nat) :
+    (Snappy.encodeChunks Snappy.uncompressedChunk data fuel).length ≤
       data.length + 8 * ((data.length + 65535) / 65536) := by
   induction fuel generalizing data with
-  | zero => cases data <;> simp [Snappy.encodeChunksLiteral]
+  | zero => cases data <;> simp [Snappy.encodeChunks]
   | succ fuel ih =>
     cases data with
-    | nil => simp [Snappy.encodeChunksLiteral]
+    | nil => simp [Snappy.encodeChunks]
     | cons b bs =>
       have := ih ((b :: bs).drop Snappy.maxChunkLength)
-      simp only [Snappy.encodeChunksLiteral, Snappy.uncompressedChunk, List.length_append,
+      simp only [Snappy.encodeChunks, Snappy.uncompressedChunk, List.length_append,
         List.length_cons, Vector.length_toList, List.length_take, List.length_drop,
         Snappy.maxChunkLength] at this ⊢
       omega
@@ -268,7 +271,7 @@ theorem length_encodeChunksLiteral_le (data : List UInt8) (fuel : Nat) :
 /-- The literal frames of `n` bytes fit in the bound `32 + n + n / 6`. -/
 theorem size_encodeFramesLiteral_le (d : ByteArray) :
     (Snappy.encodeFramesLiteral d).size ≤ 32 + d.size + d.size / 6 := by
-  have := length_encodeChunksLiteral_le d.data.toList d.data.size
+  have := length_encodeChunks_uncompressedChunk_le d.data.toList d.data.size
   simp only [Array.length_toList] at this
   simp only [Snappy.encodeFramesLiteral, ByteArray.size, List.size_toArray, List.length_append,
     Snappy.streamIdentifier, List.length_cons, List.length_nil]
@@ -287,6 +290,20 @@ theorem decodePayload_encodePayloadLiteral {typeMin typeBound : UInt64} {d : Byt
   · rw [Array.length_toList]
     exact size_encodeFramesLiteral_le d
   · simpa using Snappy.Frame.decodeFrames_encodeFramesLiteral d
+
+/-- A payload of the encoder that compresses decodes back, when it fits the bounds. -/
+theorem decodePayload_encodePayload {typeMin typeBound : UInt64} {d : ByteArray}
+    (hp : d.size ≤ MAX_PAYLOAD_SIZE.toNat) (ht : d.size ≤ typeBound.toNat)
+    (hm : typeMin.toNat ≤ d.size) :
+    decodePayload typeMin typeBound (encodePayload d) = .ok d := by
+  refine decodePayload_eq_ok_iff.mpr
+    ⟨?_, hm, (Snappy.encodeFrames d).data.toList, ?_, ?_, ?_⟩
+  · rw [UInt64.min_def]
+    split <;> omega
+  · simp [encodePayload]
+  · rw [Array.length_toList]
+    exact Nat.le_trans (Snappy.FrameEncode.size_encodeFrames_le d) (size_encodeFramesLiteral_le d)
+  · simpa using Snappy.FrameEncode.decodeFrames_encodeFrames d
 
 /-! ## Response codes and chunks -/
 
