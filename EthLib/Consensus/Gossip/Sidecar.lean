@@ -29,6 +29,12 @@ Its branch must climb from its commitments to the body root of its header.
 Its KZG proofs must match its commitments.
 
 A proof that the KZG checks cannot read is an error, since the rule raises there.
+
+At Fulu a partial column sidecar carries some cells of a column, its header, or both.
+
+Its header passes the same checks once, and the node records it for its block.
+
+Later cells of that block are checked against the recorded header.
 -/
 
 @[expose] public section
@@ -160,5 +166,114 @@ def Seen.recordDataColumnSidecar (seen : Seen) (before : fork < .glamsterdam)
     (sidecar : DataColumnSidecar preset fork) : Seen :=
   { seen with
     dataColumnSidecarTuples := dataColumnSidecarKey before sidecar :: seen.dataColumnSidecarTuples }
+
+/-- At Fulu: the partial headers that passed their checks, each with the root of its block.
+
+The header type depends on the preset and the fork, so these keys stay apart from the others. -/
+abbrev PartialHeaders (preset : Preset) (fork : Fork) :=
+  List (Root × PartialDataColumnHeader preset fork)
+
+/-- The header recorded for the block with a root, if any. -/
+def PartialHeaders.find? (headers : PartialHeaders preset fork) (root : Root) :
+    Option (PartialDataColumnHeader preset fork) :=
+  (List.find? (·.1 == root) headers).map (·.2)
+
+/-- The headers after a valid header of the block with a root: it replaces any earlier one. -/
+def PartialHeaders.record (headers : PartialHeaders preset fork) (root : Root)
+    (header : PartialDataColumnHeader preset fork) : PartialHeaders preset fork :=
+  (root, header) :: headers.filter (·.1 != root)
+
+/-- The checks of the header of a partial sidecar, for the block with a root.
+
+The header must equal any header recorded for that block, and must have that root.
+
+It must carry commitments, no more than the blob schedule allows at the epoch of its slot.
+
+It must then pass the checks of a block header with its own branch. -/
+def partialHeaderOutcome (config : Config) (checks : SignatureChecks)
+    (headers : PartialHeaders preset fork) (store : Store preset fork) (root : Root)
+    (header : PartialDataColumnHeader preset fork) (currentTimeMs : UInt64) :
+    Except ForkChoiceError ValidationResult :=
+  (rejectUnless ((headers.find? root).all (· == header))
+    "header differs from previously validated header").andThenM fun _ => do
+  let blockRoot ←
+    (Serialization.Ssz.SszType.hashTreeRoot header.signedBlockHeader.message).mapError .ssz
+  (rejectUnless (blockRoot == root)
+    "header's block root does not match group id's block root").andThenM fun _ =>
+  (rejectUnless (header.kzgCommitments.data.size != 0)
+    "header's kzg_commitments is empty").andThenM fun _ =>
+  (rejectUnless (header.kzgCommitments.data.size ≤ (config.getBlobParameters
+      (computeEpochAtSlot preset header.signedBlockHeader.message.slot)).maxBlobsPerBlock.toNat)
+    "header's kzg_commitments is too long").andThenM fun _ =>
+  validateSidecarHeader config checks store "header" "header" header.signedBlockHeader
+    currentTimeMs fun _ =>
+  pure (rejectUnless (verifyPartialDataColumnHeaderInclusionProof preset header)
+    "invalid header inclusion proof")
+
+/-- The checks of the cells of a partial sidecar, against the header recorded for their block.
+
+The header must be known, not early, and after the finalized slot.
+
+It must have one commitment per bit of the bitmap, and the cells must match their commitments. -/
+def partialCellsOutcome (config : Config) (setup : TrustedSetup)
+    (headers : PartialHeaders preset fork) (store : Store preset fork) (root : Root)
+    (sidecar : PartialDataColumnSidecar preset fork) (currentTimeMs : UInt64)
+    (columnIndex : DataAvailability.ColumnIndex) : Except ForkChoiceError ValidationResult :=
+  match headers.find? root with
+  | none => return .ignore "valid corresponding header has not been seen"
+  | some header => do
+  let slot := header.signedBlockHeader.message.slot
+  let future ← store.isFutureSlot config slot currentTimeMs
+  (ignoreUnless (!future) "corresponding header is from a future slot").andThenM fun _ => do
+  let finalizedSlot ←
+    (computeStartSlotAtEpoch preset store.finalizedCheckpoint.epoch).mapError .arith
+  (ignoreUnless (finalizedSlot < slot)
+    "corresponding header is not from a slot greater than the latest finalized slot").andThenM
+    fun _ =>
+  (rejectUnless (sidecar.cellsPresentBitmap.bits.size == header.kzgCommitments.data.size)
+    "bitmap length does not match commitments length").andThenM fun _ => do
+  let valid ← (verifyPartialDataColumnSidecarKzgProofs setup sidecar header.kzgCommitments
+    columnIndex).mapError .kzg
+  return rejectUnless valid "invalid sidecar kzg proofs"
+
+/-- The checks of the counts of a partial sidecar, which read nothing else.
+
+The sidecar must carry a header or a cell, and one cell and one proof per set bit. -/
+def partialCountsOutcome (sidecar : PartialDataColumnSidecar preset fork) : ValidationResult :=
+  let count := sidecar.cellsPresentBitmap.bits.count true
+  (rejectUnless (sidecar.header.data.size == 1 || count != 0)
+    "partial message is semantically empty").andThen fun _ =>
+  (rejectUnless (sidecar.partialColumn.data.size == count)
+    "number of cells does not match number of set bits").andThen fun _ =>
+  rejectUnless (sidecar.kzgProofs.data.size == count)
+    "number of proofs does not match number of set bits"
+
+/-- At Fulu: the checks of a partial sidecar of a group and a column, at a time in milliseconds.
+
+The outcome comes with the headers after the message.
+
+A valid header is recorded before its cells are checked, so it stays recorded when they fail. -/
+def validatePartialDataColumnSidecar (config : Config) (checks : SignatureChecks)
+    (setup : TrustedSetup) (headers : PartialHeaders preset fork) (store : Store preset fork)
+    (_fulu : .fusaka ≤ fork ∧ fork < .glamsterdam) (sidecar : PartialDataColumnSidecar preset fork)
+    (currentTimeMs : UInt64) (group : PartialDataColumnGroupID)
+    (columnIndex : DataAvailability.ColumnIndex) :
+    Except ForkChoiceError (ValidationResult × PartialHeaders preset fork) := do
+  let root := group.beaconBlockRoot
+  match partialCountsOutcome sidecar with
+  | .accept =>
+    let (outcome, headers) ← match sidecar.header.data[0]? with
+      | none => pure (ValidationResult.accept, headers)
+      | some header => do
+        match ← partialHeaderOutcome config checks headers store root header currentTimeMs with
+        | .accept => pure (.accept, headers.record root header)
+        | other => pure (other, headers)
+    match outcome with
+    | .accept =>
+      if sidecar.cellsPresentBitmap.bits.count true = 0 then return (.accept, headers)
+      return (← partialCellsOutcome config setup headers store root sidecar currentTimeMs
+        columnIndex, headers)
+    | other => return (other, headers)
+  | other => return (other, headers)
 
 end EthLib.Consensus

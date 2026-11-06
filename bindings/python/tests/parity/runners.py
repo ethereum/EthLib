@@ -618,12 +618,6 @@ def _gossip_data_column_sidecar(root: Path, case: Case) -> None:
         run_gossip_case(root / case.path, case.preset)
 
 
-def _gossip_partial_data_column_sidecar(root: Path, case: Case) -> None:
-    from consensus.test_partial_data_column import run_partial_gossip_case
-
-    run_partial_gossip_case(root / case.path, case.preset)
-
-
 def _gossip(root: Path, case: Case) -> None:
     from consensus.test_gossip_validation import run_case
 
@@ -743,8 +737,6 @@ RUNNERS = {
     "networking/compute_columns_for_custody_group": _custody_columns,
     # The whole validation before Gloas; from Gloas the checks of the sidecar alone.
     "networking/gossip_data_column_sidecar": _gossip_data_column_sidecar,
-    # The checks of a partial message that read no store; the others wait for C63.
-    "networking/gossip_partial_data_column_sidecar": _gossip_partial_data_column_sidecar,
     **{
         f"networking/gossip_{topic}": _gossip
         for topic in GOSSIP_TOPICS
@@ -777,11 +769,9 @@ RUNNERS = {
 
 # The runners that stop before a fork, with the first fork that they do not run.
 # The Engine runners do not yet run Amsterdam payloads (G39).
-# The partial column checks read the forms of Fulu.
 _STOPS = {
     "blockchain_test_engine": "BPO2ToAmsterdamAtTime15k",
     "blockchain_test_engine_x": "BPO2ToAmsterdamAtTime15k",
-    "networking/gossip_partial_data_column_sidecar": "gloas",
 }
 
 

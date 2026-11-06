@@ -82,16 +82,6 @@ The same file rebuilds every sidecar of a block from one sidecar, and from the b
 From Gloas it rebuilds each valid sidecar from its block, and from itself.
 It also builds the matrix of two blobs of the KZG vectors under `tests/cryptography/kzg/`, and recovers it from half of its columns.
 
-The directory `data_columns/` also holds the Fulu cases of the gossip handler `gossip_partial_data_column_sidecar`, in both archives, again without the state.
-A partial message carries some cells of one column and a bitmap of the blobs that they belong to.
-On the first push it also carries the header of its block.
-A case gives a group ID with each message, and may list headers that the node has already validated.
-`bindings/python/tests/consensus/test_partial_data_column.py` runs the checks of gossip validation that read no store, in their order.
-They count the cells and the proofs, compare the header with an earlier one and with the group ID, and check its commitments and its branch.
-For the cells they also need a header that passed, the length of the bitmap and the cell proofs.
-A message rejected or ignored for one of these checks fails it first.
-Every other message passes the checks that gossip validation reaches before it stops for its reason.
-The Gloas and Heze cases change the containers, and wait for the Gloas form of partial columns.
 
 The directory `operations/` holds block operation cases of `minimal.tar.gz`, copied byte for byte under their path in the archive.
 A case gives a state before the operation, the operation, and the state after it when the operation is valid.
@@ -187,6 +177,10 @@ Deneb changes the window of time of a vote, and Electra moves the committee out 
 At Bellatrix, Capella and Fulu it keeps the case with one valid message of each of these topics.
 It keeps every blob sidecar case at Deneb, and at Electra the valid case and the case of an index past the limit.
 It keeps every Fulu case of the column sidecar topic, with its state.
+It keeps every Fulu case of the partial column topic too.
+A partial message carries some cells of one column and a bitmap of the blobs that they belong to.
+On the first push it also carries the header of its block.
+A case gives a group ID with each message, and may list headers that the node has already validated.
 `bindings/python/tests/consensus/test_gossip_validation.py` validates each message in Lean and compares the outcome and the reason with the case.
 
 The directory `genesis/` holds every genesis case of `minimal.tar.gz` in the same way.

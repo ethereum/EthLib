@@ -1,6 +1,0 @@
-preset: mainnet
-fork: fulu
-runner: networking
-handler: gossip_partial_data_column_sidecar
-suite: pyspec_tests
-case: gossip_partial_data_column_sidecar__ignore_cells_with_cached_header_not_later_than_finalized_slot
