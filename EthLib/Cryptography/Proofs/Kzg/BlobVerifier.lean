@@ -20,6 +20,7 @@ Each root below is a root of the error polynomial of the batch.
 - Every entry of an accepted batch satisfies the opening equation, or the batch challenge is a root.
 - With the hash a random oracle, the root case has probability at most `(q + 1) (n - 1) / r`.
   Here `q` bounds the queries, `n` the commitments, and `r` is the order of `Fr`.
+- The bound is tight at `q = 0` and `n = 2`, where a batch of two blobs reaches it.
 - Every batch of valid blob openings is accepted, including honestly computed proofs.
 -/
 
@@ -643,64 +644,101 @@ theorem exists_honest_blob_batch (laws : Bls.PairingLaws) (τ : Fr) :
     wellFormed_ofPowers τ, Nat.zero_lt_one, hhonest,
     verifyBlobKzgProofBatch_computeBlobKzgProof laws (wellFormed_ofPowers τ) rfl rfl hhonest⟩
 
-/-- **A zero-query blob-batch adversary exists whose batch has a nonzero error polynomial.**
+/-- Both entries of an array of two equal elements are that element. -/
+private theorem getElem!_pair {α : Type} [Inhabited α] (a : α) {i : Nat} (hi : i < 2) :
+    (#[a, a])[i]! = a := by
+  interval_cases i <;> rfl
 
-The adversary outputs one all-zero blob with `[1]_1` as the commitment and `[0]_1` as the proof.
+/-- For an adversary that outputs a fixed batch, the batch challenge is uniform. -/
+private theorem prEvent_blobInputRomExperiment_pure (y : BlobBatchInput)
+    (E : BlobBatchInput × Fr → Prop) :
+    Pr{let p ← (simulateQ OracleSpec.randomOracle (blobInputRomExperiment (pure y))).run' ∅}[
+        E p] = Pr{let u ← $ᵗ Fr}[E (y, u)] := by
+  simp only [blobInputRomExperiment, pure_bind, simulateQ_bind, simulateQ_pure, simulateQ_query,
+    StateT.run'_eq, StateT.run_bind, StateT.run_map, randomOracle.run_eq,
+    OracleSpec.QueryCache.empty_apply]
+  simp only [map_bind, bind_assoc, pure_bind, StateT.run_pure, map_pure]
+  rfl
 
-With each scalar the scalar of its bytes, its error polynomial is the constant `1 - 0 - 0 = 1`.
+/-- **A zero-query adversary reaches the root case, and the bound is tight there.**
 
-That polynomial is not zero, but it has no root, so the event of the bound does not occur here. -/
-theorem exists_blobInput_adversary_nonzero_errorPoly (τ : Fr) :
+The adversary outputs two all-zero blobs.
+
+Each has `[1]_1` as its commitment and `[0]_1` as its proof.
+
+With each scalar the scalar of its bytes, each entry has the error `1 - 0 - 0 = 1`.
+
+So the error polynomial of the batch is `1 + X`, which is not zero and has the root `-1`.
+
+The batch challenge is uniform, so the event of the bound has probability exactly `1 / r`.
+
+That is the bound at `q = 0` and `n = 2`, which is `(0 + 1) (2 - 1) / r`. -/
+theorem exists_blobInput_adversary_prEvent_root_eq (τ : Fr) :
     ∃ (adversary : OracleComp (OpeningBatch →ₒ Fr) BlobBatchInput) (y : BlobBatchInput),
       adversary = pure y ∧
       OracleComp.IsTotalQueryBound adversary 0 ∧
-      y.commitments.size ≤ 1 ∧
+      y.commitments.size = 2 ∧
       (∀ i < y.commitments.size, ∀ P, uncompressG1 y.commitments[i]! = .ok P →
         G1.Represents P (scalarOf y.commitments[i]!)) ∧
       (∀ i < y.proofs.size, ∀ P, uncompressG1 y.proofs[i]! = .ok P →
         G1.Represents P (scalarOf y.proofs[i]!)) ∧
-      y.errorPoly τ scalarOf scalarOf ≠ 0 := by
-  let y : BlobBatchInput :=
-    ⟨#[zeroBlob], #[compressG1 G1.generator], #[compressG1 (G1.mul G1.generator 0)]⟩
+      y.errorPoly τ scalarOf scalarOf ≠ 0 ∧
+      Pr{let p ← (simulateQ OracleSpec.randomOracle (blobInputRomExperiment adversary)).run' ∅}[
+          p.1.commitments.size ≤ 2 ∧ p.1.errorPoly τ scalarOf scalarOf ≠ 0 ∧
+          (p.1.errorPoly τ scalarOf scalarOf).eval p.2 = 0] =
+        1 / Fr.modulus := by
   obtain ⟨Cg, hCg, hrCg⟩ := validateKzgG1Point_compressG1 G1.represents_generator
   obtain ⟨Cz, hCz, hrCz⟩ := validateKzgG1Point_compressG1 (G1.represents_mul_generator 0)
+  let y : BlobBatchInput :=
+    ⟨#[zeroBlob, zeroBlob], #[compressG1 G1.generator, compressG1 G1.generator],
+      #[compressG1 (G1.mul G1.generator 0), compressG1 (G1.mul G1.generator 0)]⟩
   have hC : ∀ i < y.commitments.size, ∀ P, uncompressG1 y.commitments[i]! = .ok P →
       G1.Represents P (scalarOf y.commitments[i]!) := fun i hi P hP => by
-    obtain rfl : i = 0 := Nat.lt_one_iff.mp hi
-    rw [getElem!_pos y.commitments 0 (by simp [y])] at hP ⊢
+    rw [getElem!_pair _ hi] at hP ⊢
     exact represents_scalarOf (validateKzgG1_of_validateKzgG1Point hCg) hP
   have hP : ∀ i < y.proofs.size, ∀ P, uncompressG1 y.proofs[i]! = .ok P →
       G1.Represents P (scalarOf y.proofs[i]!) := fun i hi P hP => by
-    obtain rfl : i = 0 := Nat.lt_one_iff.mp hi
-    rw [getElem!_pos y.proofs 0 (by simp [y])] at hP ⊢
+    rw [getElem!_pair _ hi] at hP ⊢
     exact represents_scalarOf (validateKzgG1_of_validateKzgG1Point hCz) hP
-  refine ⟨pure y, y, rfl, trivial, Nat.le_refl 1, hC, hP, ?_⟩
+  -- Each blob decodes to zeros, so each value at its evaluation challenge is zero.
   obtain ⟨ps, hpsM⟩ := array_mapM_exists_ok (f := blobToPolynomial) (xs := y.blobs) fun bl hbl => by
     obtain rfl : bl = zeroBlob := by simpa [y] using hbl
     exact ⟨_, blobToPolynomial_zeroBlob⟩
   obtain ⟨-, hpsk⟩ := array_mapM_ok hpsM
   have hdec : decodeBlobPolys y.blobs = ps := decodeBlobPolys_of_ok hpsM
-  have hps0 : ps[0]! = Array.ofFn fun _ : Fin FIELD_ELEMENTS_PER_BLOB => Fr.zero := by
-    have h0 := hpsk 0 (by simp [y])
-    rw [getElem!_pos y.blobs 0 (by simp [y])] at h0
-    exact Except.ok.inj (h0.symm.trans blobToPolynomial_zeroBlob)
-  have hinterp : interpolant ps[0]! = 0 := by
-    rw [interpolant, Lagrange.interpolate_apply]
-    refine Finset.sum_eq_zero fun i _ => ?_
-    rw [hps0, getElem!_pos _ i.val (by simp [i.isLt])]
-    simp
-  have heval : y.evals[0]! = 0 := by
-    rw [getElem!_pos y.evals 0 (by simp [y, BlobBatchInput.evals])]
+  have heval : ∀ i < 2, y.evals[i]! = 0 := fun i hi => by
+    have hpsi : ps[i]! = Array.ofFn fun _ : Fin FIELD_ELEMENTS_PER_BLOB => Fr.zero := by
+      have h0 := hpsk i hi
+      rw [getElem!_pair _ hi] at h0
+      exact Except.ok.inj (h0.symm.trans blobToPolynomial_zeroBlob)
+    have hinterp : interpolant ps[i]! = 0 := by
+      rw [interpolant, Lagrange.interpolate_apply]
+      refine Finset.sum_eq_zero fun j _ => ?_
+      rw [hpsi, getElem!_pos _ j.val (by simp [j.isLt])]
+      simp
+    rw [getElem!_pos y.evals i (by simpa [y, BlobBatchInput.evals] using hi)]
     simp [BlobBatchInput.evals, hdec, hinterp]
-  have hc0 : scalarOf y.commitments[0]! = 1 := by
-    rw [getElem!_pos y.commitments 0 (by simp [y])]
-    exact scalarOf_eq hCg hrCg
-  have hw0 : scalarOf y.proofs[0]! = 0 := by
-    rw [getElem!_pos y.proofs 0 (by simp [y])]
-    exact scalarOf_eq hCz hrCz
-  intro hzero
-  have h0 := (batchErrorPoly_eq_zero_iff τ _ _ _ _ _).mp hzero 0 (by simp [y])
-  rw [hc0, hw0, heval, sub_zero, zero_mul] at h0
-  exact one_ne_zero h0
+  -- Each entry has the error `1`, so the error polynomial takes the value `1 + r` at `r`.
+  have herr : ∀ r : Fr, (y.errorPoly τ scalarOf scalarOf).eval r = 1 + r := fun r => by
+    have hent : ∀ i < 2, openingError τ (scalarOf y.commitments[i]!) y.evals[i]!
+        (scalarOf y.proofs[i]!) y.challenges[i]! = 1 := fun i hi => by
+      rw [getElem!_pair _ hi, getElem!_pair _ hi, heval i hi, scalarOf_eq hCg hrCg,
+        scalarOf_eq hCz hrCz, openingError, sub_zero, zero_mul, sub_zero]
+    rw [BlobBatchInput.errorPoly, eval_batchErrorPoly, show y.commitments.size = 2 from rfl,
+      Finset.sum_range_succ, Finset.sum_range_one, hent 0 (by decide), hent 1 (by decide)]
+    ring
+  have hne : y.errorPoly τ scalarOf scalarOf ≠ 0 := fun h0 => by
+    simpa [h0] using herr 0
+  refine ⟨pure y, y, rfl, trivial, rfl, hC, hP, hne, ?_⟩
+  -- The single query of the verifier is fresh, so the batch challenge is uniform.
+  have hsize : y.commitments.size = 2 := rfl
+  clear_value y
+  have hiff : ∀ u : Fr, (y.commitments.size ≤ 2 ∧ y.errorPoly τ scalarOf scalarOf ≠ 0 ∧
+      (y.errorPoly τ scalarOf scalarOf).eval u = 0) ↔ u = -1 := fun u => by
+    rw [herr, hsize, add_eq_zero_iff_neg_eq, eq_comm]
+    exact ⟨fun h => h.2.2, fun h => ⟨le_refl 2, hne, h⟩⟩
+  rw [prEvent_blobInputRomExperiment_pure]
+  simp only [hiff]
+  rw [SampleableType.prEvent_uniformSample_eq_singleton, Bls.Fr.card_eq, one_div]
 
 end EthLib.Cryptography.Kzg
