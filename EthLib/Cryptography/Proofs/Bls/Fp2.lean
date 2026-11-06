@@ -93,50 +93,49 @@ instance : DecidableEq Fp2 := fun a b =>
 
 /-! ## Ring axioms and `CommRing Fp2` -/
 
-section FinRing
-open scoped Fin.CommRing
+section RingLaws
 
 protected theorem add_comm (a b : Fp2) : a + b = b + a := by
-  apply ext <;> simp <;> ring
+  apply ext <;> apply Fp.toZMod.injective <;> simp <;> ring
 
 protected theorem add_assoc (a b c : Fp2) : a + b + c = a + (b + c) := by
-  apply ext <;> simp <;> ring
+  apply ext <;> apply Fp.toZMod.injective <;> simp <;> ring
 
 protected theorem zero_add (a : Fp2) : 0 + a = a := by
-  apply ext <;> simp
+  apply ext <;> apply Fp.toZMod.injective <;> simp
 
 protected theorem add_zero (a : Fp2) : a + 0 = a := by
-  apply ext <;> simp
+  apply ext <;> apply Fp.toZMod.injective <;> simp
 
 protected theorem neg_add_cancel (a : Fp2) : -a + a = 0 := by
-  apply ext <;> simp
+  apply ext <;> apply Fp.toZMod.injective <;> simp
 
 protected theorem sub_eq_add_neg (a b : Fp2) : a - b = a + -b := by
-  apply ext <;> simp [_root_.sub_eq_add_neg]
+  apply ext <;> apply Fp.toZMod.injective <;> simp [_root_.sub_eq_add_neg]
 
 protected theorem mul_comm (a b : Fp2) : a * b = b * a := by
-  apply ext <;> simp <;> ring
+  apply ext <;> apply Fp.toZMod.injective <;> simp <;> ring
 
 protected theorem mul_assoc (a b c : Fp2) : a * b * c = a * (b * c) := by
-  apply ext <;> simp <;> ring
+  apply ext <;> apply Fp.toZMod.injective <;> simp <;> ring
 
 protected theorem one_mul (a : Fp2) : 1 * a = a := by
-  apply ext <;> simp
+  apply ext <;> apply Fp.toZMod.injective <;> simp
 
 protected theorem mul_one (a : Fp2) : a * 1 = a := by
-  apply ext <;> simp
+  apply ext <;> apply Fp.toZMod.injective <;> simp
 
 protected theorem zero_mul (a : Fp2) : 0 * a = 0 := by
-  apply ext <;> simp
+  apply ext <;> apply Fp.toZMod.injective <;> simp
 
 protected theorem mul_zero (a : Fp2) : a * 0 = 0 := by
-  apply ext <;> simp
+  apply ext <;> apply Fp.toZMod.injective <;> simp
 
 protected theorem left_distrib (a b c : Fp2) : a * (b + c) = a * b + a * c := by
-  apply ext <;> simp <;> ring
+  apply ext <;> apply Fp.toZMod.injective <;> simp <;> ring
 
 protected theorem right_distrib (a b c : Fp2) : (a + b) * c = a * c + b * c := by
-  apply ext <;> simp <;> ring
+  apply ext <;> apply Fp.toZMod.injective <;> simp <;> ring
 
 instance : AddCommGroup Fp2 where
   add_assoc := Fp2.add_assoc
@@ -161,7 +160,7 @@ instance : CommRing Fp2 where
 /-! ## Basis, non-residue, conjugation, and norm -/
 
 theorem i_sq : (i : Fp2) * i = -1 := by
-  apply ext <;> simp
+  apply ext <;> apply Fp.toZMod.injective <;> simp
 
 /-- The element `xi = 1 + i`.
 
@@ -171,29 +170,29 @@ def xi : Fp2 := ⟨1, 1⟩
 
 @[simp]
 theorem mulByOnePlusI_eq (a : Fp2) : a.mulByOnePlusI = a * xi := by
-  apply ext <;> simp [mulByOnePlusI, xi]
+  apply ext <;> apply Fp.toZMod.injective <;> simp [mulByOnePlusI, xi]
 
 theorem conjugate_add (a b : Fp2) : (a + b).conjugate = a.conjugate + b.conjugate := by
-  apply ext
+  apply ext <;> apply Fp.toZMod.injective
   · simp
   · simp; ring
 
 theorem conjugate_sub (a b : Fp2) : (a - b).conjugate = a.conjugate - b.conjugate := by
-  apply ext
+  apply ext <;> apply Fp.toZMod.injective
   · simp
   · simp; ring
 
 theorem conjugate_neg (a : Fp2) : (-a).conjugate = -a.conjugate := by
-  apply ext <;> simp
+  apply ext <;> apply Fp.toZMod.injective <;> simp
 
 theorem conjugate_mul (a b : Fp2) : (a * b).conjugate = a.conjugate * b.conjugate := by
-  apply ext
+  apply ext <;> apply Fp.toZMod.injective
   · simp
   · simp; ring
 
 @[simp]
 theorem conjugate_conjugate (a : Fp2) : a.conjugate.conjugate = a := by
-  apply ext <;> simp
+  apply ext <;> apply Fp.toZMod.injective <;> simp
 
 /-- The norm `N(c0 + c1*i) = c0^2 + c1^2`, an element of `Fp`.
 
@@ -202,7 +201,7 @@ It equals `a * conjugate a`, and it is multiplicative.
 def norm (a : Fp2) : Fp := a.c0 * a.c0 + a.c1 * a.c1
 
 theorem mul_conjugate_eq_norm (a : Fp2) : a * a.conjugate = ofFp (norm a) := by
-  apply ext
+  apply ext <;> apply Fp.toZMod.injective
   · simp [norm]
   · simp; ring
 
@@ -210,17 +209,22 @@ theorem conjugate_mul_eq_norm (a : Fp2) : a.conjugate * a = ofFp (norm a) := by
   rw [Fp2.mul_comm, mul_conjugate_eq_norm]
 
 theorem norm_mul (a b : Fp2) : norm (a * b) = norm a * norm b := by
+  apply Fp.toZMod.injective
   simp only [norm, mul_c0, mul_c1]
+  push_toZMod
   ring
 
-@[simp] theorem norm_zero : norm 0 = 0 := by simp [norm]
-@[simp] theorem norm_one : norm 1 = 1 := by simp [norm]
+@[simp] theorem norm_zero : norm 0 = 0 := by
+  apply Fp.toZMod.injective
+  simp [norm]
+@[simp] theorem norm_one : norm 1 = 1 := by
+  apply Fp.toZMod.injective
+  simp [norm]
 @[simp] theorem norm_conjugate (a : Fp2) : norm a.conjugate = norm a := by
+  apply Fp.toZMod.injective
   simp [norm]
 
-end FinRing
-
-open scoped EthLib.Cryptography.Bls.Fp
+end RingLaws
 
 /-! ## Non-squareness of `-1` in `Fp` and `Fp2.inverse` correctness -/
 
@@ -246,8 +250,8 @@ private theorem sq_ne_neg_one_zmod (y : ZMod Fp.modulus) : y * y ≠ -1 := by
     (by decide) (by decide) hfermat
 
 /-- `-1` is not a square in `Fp`, because `p = 3 mod 4`. -/
-theorem sq_ne_neg_one (y : Fp) : y * y ≠ -1 :=
-  sq_ne_neg_one_zmod y
+theorem sq_ne_neg_one (y : Fp) : y * y ≠ -1 := fun h =>
+  sq_ne_neg_one_zmod (Fp.toZMod y) (by rw [← Fp.toZMod_mul, h, Fp.toZMod_neg, Fp.toZMod_one])
 
 private theorem norm_eq_zero_zmod {c0 c1 : ZMod Fp.modulus}
     (h : c0 * c0 + c1 * c1 = 0) : c0 = 0 ∧ c1 = 0 := by
@@ -265,8 +269,10 @@ private theorem norm_eq_zero_zmod {c0 c1 : ZMod Fp.modulus}
 theorem norm_eq_zero_iff (a : Fp2) : norm a = 0 ↔ a = 0 := by
   constructor
   · intro h
-    obtain ⟨h0, h1⟩ := norm_eq_zero_zmod (c0 := a.c0) (c1 := a.c1) h
-    exact ext h0 h1
+    have h' := congrArg Fp.toZMod h
+    simp only [norm, Fp.toZMod_add, Fp.toZMod_mul, Fp.toZMod_zero] at h'
+    obtain ⟨h0, h1⟩ := norm_eq_zero_zmod h'
+    apply ext <;> apply Fp.toZMod.injective <;> simp [h0, h1]
   · rintro rfl
     exact norm_zero
 
@@ -282,17 +288,22 @@ private theorem mul_inv_c1_zmod (c0 c1 w : ZMod Fp.modulus) :
     c0 * -(c1 * w) + c1 * (c0 * w) = 0 := by
   ring
 
-open scoped EthLib.Cryptography.Bls.Fp in
 private theorem fp_mul_inverse {x : Fp} (hx : x ≠ 0) :
-    (x : ZMod Fp.modulus) * (x.inverse : ZMod Fp.modulus) = 1 := by
-  rw [Fp.inverse_eq_inv]
-  exact mul_inv_cancel₀ hx
+    Fp.toZMod x * Fp.toZMod x.inverse = 1 := by
+  rw [Fp.toZMod_inverse]
+  exact mul_inv_cancel₀ fun h => hx (Fp.toZMod_inj.mp (h.trans Fp.toZMod_zero.symm))
 
 theorem mul_inverse_of_norm_ne_zero {a : Fp2} (h : norm a ≠ 0) :
     a * a.inverse = 1 := by
   have hinv := fp_mul_inverse h
-  exact ext (mul_inv_c0_zmod a.c0 a.c1 (norm a).inverse hinv)
-    (mul_inv_c1_zmod a.c0 a.c1 (norm a).inverse)
+  simp only [norm, Fp.toZMod_add, Fp.toZMod_mul] at hinv
+  apply ext <;> apply Fp.toZMod.injective
+  · simp only [Fp2.inverse, mul_c0, one_c0, Fp.baseField_inverse, Fp.toZMod_sub,
+      Fp.toZMod_mul, Fp.toZMod_neg, Fp.toZMod_one]
+    exact mul_inv_c0_zmod _ _ _ hinv
+  · simp only [Fp2.inverse, mul_c1, one_c1, Fp.baseField_inverse, Fp.toZMod_add,
+      Fp.toZMod_mul, Fp.toZMod_neg, Fp.toZMod_zero]
+    exact mul_inv_c1_zmod _ _ _
 
 theorem mul_inverse_cancel {a : Fp2} (h : a ≠ 0) : a * a.inverse = 1 :=
   mul_inverse_of_norm_ne_zero ((norm_ne_zero_iff a).mpr h)
@@ -302,7 +313,7 @@ theorem inverse_mul_cancel {a : Fp2} (h : a ≠ 0) : a.inverse * a = 1 := by
 
 @[simp]
 theorem inverse_zero : (0 : Fp2).inverse = 0 := by
-  apply ext <;> simp [inverse, Fin.zero_mul]
+  apply ext <;> apply Fp.toZMod.injective <;> simp [inverse]
 
 instance : Field Fp2 where
   inv := inverse
@@ -382,10 +393,6 @@ private theorem sqrt_c1_zmod {a1 c0 w : ZMod Fp.modulus}
     (h2c0_inv : (2 * c0) * w = 1) :
     c0 * (a1 * w) + (a1 * w) * c0 = a1 := by
   linear_combination a1 * h2c0_inv
-
-private theorem neg_sq_eq_zero_sub {s a0 : ZMod Fp.modulus}
-    (h : s * s = -a0) : (0 : ZMod Fp.modulus) * 0 - s * s = a0 := by
-  linear_combination -h
 
 private theorem sqrt_c0_sub_zmod {a0 a1 s' c0 w inv2 : ZMod Fp.modulus}
     (hs : s' * s' = a0 * a0 + a1 * a1)
@@ -521,56 +528,71 @@ theorem sqrt_isOk_of_c1_ne {F : Type} [BaseField F] {a : Fp2 F} {s : F}
       rw [hr]
       exact ⟨_, rfl⟩
 
-private theorem sqrtOrError_ok {a c : Fp} (h : sqrtOrError a = .ok c) :
-    (c : ZMod Fp.modulus) * c = a :=
+private theorem sqrtOrError_ok {a c : Fp} (h : sqrtOrError a = .ok c) : c * c = a :=
   Fp.sqrt_ok ((Fp.sqrtOrError_eq a).symm.trans h)
 
-private theorem sqrtOrError_complete {a b : Fp} (h : (b : ZMod Fp.modulus) * b = a) :
+private theorem sqrtOrError_complete {a b : Fp} (h : b * b = a) :
     sqrtOrError a = .ok (Fp.powNat a ((Fp.modulus + 1) / 4)) :=
   (Fp.sqrtOrError_eq a).trans (Fp.sqrt_complete h)
 
-private theorem two_mul_inverse :
-    (Fp.ofNat 2 : ZMod Fp.modulus) * ((Fp.ofNat 2).inverse : ZMod Fp.modulus) = 1 :=
-  fp_mul_inverse (Fp.ne_of_model (by
+private theorem two_mul_inverse : (2 : ZMod Fp.modulus) * Fp.toZMod (Fp.ofNat 2).inverse = 1 := by
+  have h := fp_mul_inverse (x := Fp.ofNat 2) (Fp.ne_of_model (by
     simp only [Fp.toModel_ofNat, Fp.toModel_zero']
     decide +kernel))
+  push_toZMod at h
+  exact h
 
 private theorem sqrt_branch_gen_aux {invFn : Fp → Fp}
-    (hinv : ∀ x : Fp, x ≠ 0 → (x : ZMod Fp.modulus) * (invFn x : ZMod Fp.modulus) = 1)
+    (hinv : ∀ x : Fp, x ≠ 0 → Fp.toZMod x * Fp.toZMod (invFn x) = 1)
     {a0 a1 s' c0 inv2 : Fp}
     (ha1 : a1 ≠ 0)
-    (hs : (s' : ZMod Fp.modulus) * s' = a0 * a0 + a1 * a1)
-    (h2inv : (Fp.ofNat 2 : ZMod Fp.modulus) * (inv2 : ZMod Fp.modulus) = 1)
-    (hc0 : (c0 : ZMod Fp.modulus) * c0 = (a0 + s') * inv2) :
+    (hs : s' * s' = a0 * a0 + a1 * a1)
+    (h2inv : (2 : ZMod Fp.modulus) * Fp.toZMod inv2 = 1)
+    (hc0 : c0 * c0 = (a0 + s') * inv2) :
     let w := invFn (Fp.ofNat 2 * c0)
     (⟨c0, a1 * w⟩ : Fp2) * ⟨c0, a1 * w⟩ = ⟨a0, a1⟩ := by
   intro w
-  have h2c0_ne : (Fp.ofNat 2 * c0 : Fp) ≠ 0 :=
-    c0_ne_zero_zmod ha1 hs h2inv hc0
-  have h2c0_inv : ((Fp.ofNat 2 * c0 : Fp) : ZMod Fp.modulus) * (w : ZMod Fp.modulus) = 1 :=
-    hinv (Fp.ofNat 2 * c0) h2c0_ne
-  exact ext (sqrt_c0_zmod hs h2inv hc0 h2c0_inv) (sqrt_c1_zmod h2c0_inv)
+  have hs' := congrArg Fp.toZMod hs
+  have hc0' := congrArg Fp.toZMod hc0
+  push_toZMod at hs' hc0'
+  have ha1' : Fp.toZMod a1 ≠ 0 := fun h => ha1 (Fp.toZMod_inj.mp (h.trans Fp.toZMod_zero.symm))
+  have h2c0_ne : (Fp.ofNat 2 * c0 : Fp) ≠ 0 := fun h => by
+    have h' := congrArg Fp.toZMod h
+    push_toZMod at h'
+    exact c0_ne_zero_zmod ha1' hs' h2inv hc0' h'
+  have h2c0_inv := hinv (Fp.ofNat 2 * c0) h2c0_ne
+  push_toZMod at h2c0_inv
+  apply ext <;> apply Fp.toZMod.injective <;> simp only [mul_c0, mul_c1] <;> push_toZMod
+  · exact sqrt_c0_zmod hs' h2inv hc0' h2c0_inv
+  · exact sqrt_c1_zmod h2c0_inv
 
 private theorem sqrt_branch_sub_gen_aux {invFn : Fp → Fp}
-    (hinv : ∀ x : Fp, x ≠ 0 → (x : ZMod Fp.modulus) * (invFn x : ZMod Fp.modulus) = 1)
+    (hinv : ∀ x : Fp, x ≠ 0 → Fp.toZMod x * Fp.toZMod (invFn x) = 1)
     {a0 a1 s' c0 inv2 : Fp}
     (ha1 : a1 ≠ 0)
-    (hs : (s' : ZMod Fp.modulus) * s' = a0 * a0 + a1 * a1)
-    (h2inv : (Fp.ofNat 2 : ZMod Fp.modulus) * (inv2 : ZMod Fp.modulus) = 1)
-    (hc0 : (c0 : ZMod Fp.modulus) * c0 = (a0 - s') * inv2) :
+    (hs : s' * s' = a0 * a0 + a1 * a1)
+    (h2inv : (2 : ZMod Fp.modulus) * Fp.toZMod inv2 = 1)
+    (hc0 : c0 * c0 = (a0 - s') * inv2) :
     let w := invFn (Fp.ofNat 2 * c0)
     (⟨c0, a1 * w⟩ : Fp2) * ⟨c0, a1 * w⟩ = ⟨a0, a1⟩ := by
   intro w
-  have h2c0_ne : (Fp.ofNat 2 * c0 : Fp) ≠ 0 :=
-    c0_ne_zero_sub_zmod ha1 hs h2inv hc0
-  have h2c0_inv : ((Fp.ofNat 2 * c0 : Fp) : ZMod Fp.modulus) * (w : ZMod Fp.modulus) = 1 :=
-    hinv (Fp.ofNat 2 * c0) h2c0_ne
-  exact ext (sqrt_c0_sub_zmod hs h2inv hc0 h2c0_inv) (sqrt_c1_zmod h2c0_inv)
+  have hs' := congrArg Fp.toZMod hs
+  have hc0' := congrArg Fp.toZMod hc0
+  push_toZMod at hs' hc0'
+  have ha1' : Fp.toZMod a1 ≠ 0 := fun h => ha1 (Fp.toZMod_inj.mp (h.trans Fp.toZMod_zero.symm))
+  have h2c0_ne : (Fp.ofNat 2 * c0 : Fp) ≠ 0 := fun h => by
+    have h' := congrArg Fp.toZMod h
+    push_toZMod at h'
+    exact c0_ne_zero_sub_zmod ha1' hs' h2inv hc0' h'
+  have h2c0_inv := hinv (Fp.ofNat 2 * c0) h2c0_ne
+  push_toZMod at h2c0_inv
+  apply ext <;> apply Fp.toZMod.injective <;> simp only [mul_c0, mul_c1] <;> push_toZMod
+  · exact sqrt_c0_sub_zmod hs' h2inv hc0' h2c0_inv
+  · exact sqrt_c1_zmod h2c0_inv
 
 /-- Soundness of `Fp2.sqrt`: if `Fp2.sqrt a = .ok c`, then `c * c = a`. -/
 theorem sqrt_ok {a c : Fp2} (h : Fp2.sqrt a = .ok c) : c * c = a := by
-  have hinv : ∀ x : Fp, x ≠ 0 →
-      (x : ZMod Fp.modulus) * ((BaseField.inverse x : Fp) : ZMod Fp.modulus) = 1 :=
+  have hinv : ∀ x : Fp, x ≠ 0 → Fp.toZMod x * Fp.toZMod (BaseField.inverse x) = 1 :=
     fun _ hx => fp_mul_inverse hx
   obtain ⟨c0, c1⟩ := c
   rcases sqrt_eq_ok_cases h with ⟨hz, ⟨hs, h1⟩ | ⟨hs, h0⟩⟩ | ⟨hz, s, hs, htry, h1⟩
@@ -580,26 +602,37 @@ theorem sqrt_ok {a c : Fp2} (h : Fp2.sqrt a = .ok c) : c * c = a := by
     have hsq : c0 * c0 = a.c0 := sqrtOrError_ok hs
     refine ext ?_ ?_
     · show c0 * c0 - 0 * 0 = a.c0
-      rw [Fin.mul_zero, sub_zero, hsq]
+      rw [← hsq]
+      apply Fp.toZMod.injective
+      push_toZMod
+      ring
     · show c0 * 0 + 0 * c0 = a.c1
-      rw [Fin.mul_zero, Fin.zero_mul, hc1]
-      rfl
+      rw [hc1]
+      apply Fp.toZMod.injective
+      push_toZMod
+      ring
   · have hc1 : a.c1 = 0 := Fp.isZero_iff.mp hz
     dsimp only at hs h0
     subst h0
-    have hsq : (c1 : ZMod Fp.modulus) * c1 = -a.c0 := sqrtOrError_ok hs
+    have hsq : c1 * c1 = -a.c0 := sqrtOrError_ok hs
     refine ext ?_ ?_
-    · exact neg_sq_eq_zero_sub hsq
+    · show (0 : Fp) * 0 - c1 * c1 = a.c0
+      rw [hsq]
+      apply Fp.toZMod.injective
+      push_toZMod
+      ring
     · show (0 : Fp) * c1 + c1 * 0 = a.c1
-      rw [Fin.zero_mul, Fin.mul_zero, hc1]
-      rfl
+      rw [hc1]
+      apply Fp.toZMod.injective
+      push_toZMod
+      ring
   · have hc1 : a.c1 ≠ 0 := fun h0 => by
       have hz' : BaseField.isZero a.c1 = true := Fp.isZero_iff.mpr h0
       rw [hz] at hz'
       cases hz'
     dsimp only at htry h1
     subst h1
-    have hnsq : (s : ZMod Fp.modulus) * s = a.c0 * a.c0 + a.c1 * a.c1 := sqrtOrError_ok hs
+    have hnsq : s * s = a.c0 * a.c0 + a.c1 * a.c1 := sqrtOrError_ok hs
     rcases htry with htry1 | htry2
     · exact sqrt_branch_gen_aux hinv hc1 hnsq two_mul_inverse (sqrtOrError_ok htry1)
     · exact sqrt_branch_sub_gen_aux hinv hc1 hnsq two_mul_inverse (sqrtOrError_ok htry2)
@@ -680,33 +713,55 @@ private theorem half_sub_norm_zmod {a0 b0 b1 s twoInv : ZMod Fp.modulus}
 /-- Completeness of `Fp2.sqrt`: if `b * b = a`, then `Fp2.sqrt a` returns a root. -/
 theorem sqrt_complete {a b : Fp2} (hb : b * b = a) :
     ∃ c, Fp2.sqrt a = .ok c := by
-  have ha0 : (a.c0 : ZMod Fp.modulus) = b.c0 * b.c0 - b.c1 * b.c1 := by rw [← hb]; rfl
-  have ha1 : (a.c1 : ZMod Fp.modulus) = b.c0 * b.c1 + b.c1 * b.c0 := by rw [← hb]; rfl
+  have ha0 : Fp.toZMod a.c0 =
+      Fp.toZMod b.c0 * Fp.toZMod b.c0 - Fp.toZMod b.c1 * Fp.toZMod b.c1 := by
+    rw [← hb, mul_c0]
+    push_toZMod
+  have ha1 : Fp.toZMod a.c1 =
+      Fp.toZMod b.c0 * Fp.toZMod b.c1 + Fp.toZMod b.c1 * Fp.toZMod b.c0 := by
+    rw [← hb, mul_c1]
+    push_toZMod
   cases hz : BaseField.isZero a.c1
   · -- When a.c1 != 0, N(b) = b0^2 + b1^2 is a square root of N(a) = a0^2 + a1^2.
-    have hnsq : ((b.c0 * b.c0 + b.c1 * b.c1 : Fp) : ZMod Fp.modulus) *
-        (b.c0 * b.c0 + b.c1 * b.c1 : Fp) = a.c0 * a.c0 + a.c1 * a.c1 := by
+    have hnsq : (b.c0 * b.c0 + b.c1 * b.c1) * (b.c0 * b.c0 + b.c1 * b.c1) =
+        a.c0 * a.c0 + a.c1 * a.c1 := by
+      apply Fp.toZMod.injective
+      push_toZMod
       rw [ha0, ha1]
-      exact norm_sq_zmod b.c0 b.c1
+      exact norm_sq_zmod _ _
     have hsqrt_n := sqrtOrError_complete hnsq
     refine sqrt_isOk_of_c1_ne hz hsqrt_n ?_
     -- The norm root s is +(b0^2 + b1^2) or -(b0^2 + b1^2), so (a0 + s)/2 or (a0 - s)/2 is b0^2.
-    have hs_sq : (Fp.powNat (a.c0 * a.c0 + a.c1 * a.c1) ((Fp.modulus + 1) / 4) : ZMod Fp.modulus) *
-        Fp.powNat (a.c0 * a.c0 + a.c1 * a.c1) ((Fp.modulus + 1) / 4) =
-        ((b.c0 * b.c0 + b.c1 * b.c1 : Fp) : ZMod Fp.modulus) * (b.c0 * b.c0 + b.c1 * b.c1 : Fp) := by
-      rw [sqrtOrError_ok hsqrt_n, ← hnsq]
+    have hs_sq : Fp.toZMod (Fp.powNat (a.c0 * a.c0 + a.c1 * a.c1) ((Fp.modulus + 1) / 4)) *
+        Fp.toZMod (Fp.powNat (a.c0 * a.c0 + a.c1 * a.c1) ((Fp.modulus + 1) / 4)) =
+        Fp.toZMod (b.c0 * b.c0 + b.c1 * b.c1) * Fp.toZMod (b.c0 * b.c0 + b.c1 * b.c1) := by
+      rw [← Fp.toZMod_mul, ← Fp.toZMod_mul, sqrtOrError_ok hsqrt_n, ← hnsq]
     rcases sq_pm_zmod hs_sq with hs_pos | hs_neg
-    · exact Or.inl ⟨_, sqrtOrError_complete (half_add_norm_zmod two_mul_inverse ha0 hs_pos)⟩
-    · exact Or.inr ⟨_, sqrtOrError_complete (half_sub_norm_zmod two_mul_inverse ha0 hs_neg)⟩
+    · refine Or.inl ⟨_, sqrtOrError_complete (b := b.c0) ?_⟩
+      apply Fp.toZMod.injective
+      simp only [Fp.baseField_inverse, Fp.baseField_ofNat]
+      push_toZMod
+      exact half_add_norm_zmod two_mul_inverse ha0 (by rw [hs_pos]; push_toZMod)
+    · refine Or.inr ⟨_, sqrtOrError_complete (b := b.c0) ?_⟩
+      apply Fp.toZMod.injective
+      simp only [Fp.baseField_inverse, Fp.baseField_ofNat]
+      push_toZMod
+      exact half_sub_norm_zmod two_mul_inverse ha0 (by rw [hs_neg]; push_toZMod)
   · -- When a.c1 = 0, we have 2 * b0 * b1 = 0, so either b0 = 0 or b1 = 0.
-    have hc1 : (a.c1 : ZMod Fp.modulus) = 0 := G1.isZero_iff.mp hz
+    have hc1 : Fp.toZMod a.c1 = 0 := by rw [Fp.isZero_iff.mp hz, Fp.toZMod_zero]
     rw [ha1] at hc1
     refine sqrt_isOk_of_c1_zero hz ?_
     rcases c1_zero_factors_zmod hc1 with hb0 | hb1
     -- Purely imaginary root: b1^2 = -a0.
-    · exact Or.inr ⟨_, sqrtOrError_complete (neg_sub_zero_mul_zmod ha0 hb0)⟩
+    · refine Or.inr ⟨_, sqrtOrError_complete (b := b.c1) ?_⟩
+      apply Fp.toZMod.injective
+      push_toZMod
+      exact neg_sub_zero_mul_zmod ha0 hb0
     -- Purely real root: b0^2 = a0.
-    · exact Or.inl ⟨_, sqrtOrError_complete (sub_zero_mul_zmod ha0 hb1)⟩
+    · refine Or.inl ⟨_, sqrtOrError_complete (b := b.c0) ?_⟩
+      apply Fp.toZMod.injective
+      push_toZMod
+      exact sub_zero_mul_zmod ha0 hb1
 
 /-! ## Equations decided in the model -/
 
