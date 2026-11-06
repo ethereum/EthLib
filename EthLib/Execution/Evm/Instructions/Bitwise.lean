@@ -23,7 +23,7 @@ Each function takes the operands in the order the instruction pops them.
 
 @[expose] public section
 
-namespace EthLib.Execution.Evm.Instructions
+namespace EthLib.Execution.Evm
 
 open EthLib.Base
 
@@ -76,4 +76,4 @@ def bitLength (n : Nat) : Nat := if n = 0 then 0 else n.log2 + 1
 EIP-7939 defines it as 256 minus the bit length of `x`. -/
 def countLeadingZeros (x : U256) : U256 := BitVec.ofNat 256 (256 - bitLength x.toNat)
 
-end EthLib.Execution.Evm.Instructions
+end EthLib.Execution.Evm

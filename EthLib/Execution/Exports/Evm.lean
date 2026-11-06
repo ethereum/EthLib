@@ -32,7 +32,6 @@ namespace EthLib.Execution.Evm.Exports
 
 open EthLib.Base (Address U256 bytesToNat natToBytes readBytes)
 open EthLib.Exports (Result)
-open EthLib.Execution.Evm.Instructions
 
 /-- Why an export rejects an argument: the argument has the wrong length. -/
 inductive ArgumentError where

@@ -11,7 +11,7 @@ The signed comparisons agree with the signed order on bit vectors of Lean.
 
 @[expose] public section
 
-namespace EthLib.Execution.Evm.Instructions
+namespace EthLib.Execution.Evm
 
 open EthLib.Base
 
@@ -25,4 +25,4 @@ theorem signedGreaterThan_eq (left right : U256) :
     signedGreaterThan left right = if right.slt left then 1 else 0 := by
   simp only [signedGreaterThan, U256.toSigned_eq_toInt, BitVec.slt_iff_toInt_lt, gt_iff_lt]
 
-end EthLib.Execution.Evm.Instructions
+end EthLib.Execution.Evm
