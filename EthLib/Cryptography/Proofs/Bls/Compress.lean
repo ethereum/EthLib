@@ -71,9 +71,11 @@ theorem sqrt_complete {a b : Fp} (h : b * b = a) :
 
 /-! ## Big-endian bytes
 
-The spec decodes bytes with a fold over the byte list, the shape of the KZG decoder. -/
+The byte decoder of `Fp` folds over the bytes, from the most significant.
 
-/-- The spec's byte decoder is a fold over the byte list. -/
+The KZG decoder computes the same fold, so its round trip gives that of a field element. -/
+
+/-- The byte decoder of `Fp` is a left fold over the bytes, by definition. -/
 theorem bytesBEToNat_eq_list (b : ByteArray) :
     Fp.bytesBEToNat b
       = b.data.toList.foldl (fun acc u => (acc <<< 8) ||| u.toNat) 0 :=
