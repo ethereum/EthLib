@@ -32,6 +32,20 @@ namespace Fp.Model
 /-- The integer below `p` that an element of the model stands for. -/
 def val (a : Model) : Nat := Fin.val (n := modulus) a
 
+/-- Square-and-multiply exponentiation in the model. -/
+def powNat (base : Fin modulus) (e : Nat) : Fin modulus :=
+  if e = 0 then ⟨1, by decide⟩
+  else
+    let half := powNat (base * base) (e / 2)
+    if e % 2 = 1 then base * half else half
+termination_by e
+decreasing_by omega
+
+/-- The square root in the model, `a ^ ((p + 1) / 4)` when its square is `a`. -/
+def sqrt (a : Fin modulus) : Option (Fin modulus) :=
+  let cand := powNat a ((modulus + 1) / 4)
+  if (cand * cand).val == a.val then some cand else none
+
 /-- The operations of `Fin p`: the sum, difference, product and negation reduce mod `p`.
 
 The inverse is the extended Euclidean algorithm, and the square root is `a ^ ((p + 1) / 4)`. -/
@@ -46,32 +60,84 @@ instance : BaseField Model where
   beq a b := a.val == b.val
   isZero a := a.val == 0
   inverse a := Fin.inverse (a : Fin modulus)
-  powNat := Fp.powNat
-  sqrt a := match Fp.sqrt a with
-    | .ok s => some s
-    | .error _ => none
+  powNat := powNat
+  sqrt := sqrt
   sgn0 a := a.val % 2 == 1
 
 end Fp.Model
 
+/-- The element of the model with the integer of `a`. -/
+def Fp.toModelFun (a : Fp) : Fin Fp.modulus := ⟨a.val, Fp.val_lt a⟩
+
+/-- The model's product of two images is the image of the product. -/
+theorem Fp.toModelFun_mul (x y : Fp) :
+    Fp.toModelFun x * Fp.toModelFun y = Fp.toModelFun (x * y) :=
+  Fin.ext (Fp.val_mul x y).symm
+
+/-- Two elements have equal integers exactly when they pass the test of `Fp`. -/
+theorem Fp.val_beq_val (a b : Fp) : (a.val == b.val) = a.beq b := by
+  rw [Bool.eq_iff_iff, beq_iff_eq, Fp.beq_iff]
+  exact ⟨Fp.ext, fun h => h ▸ rfl⟩
+
+open scoped EthLib.Cryptography.Bls.Fp in
+/-- The model's power of an image is the image of the power. -/
+theorem Fp.powNat_toModelFun (a : Fp) (n : Nat) :
+    Fp.Model.powNat (Fp.toModelFun a) n = Fp.toModelFun (a.powNat n) := by
+  induction n using Nat.strongRecOn generalizing a with
+  | _ n ih =>
+    rw [Fp.Model.powNat.eq_1]
+    by_cases h0 : n = 0
+    · subst h0
+      rw [ite_eq_left rfl, Fp.powNat_eq_pow, pow_zero]
+      exact Fin.ext Fp.val_one.symm
+    rw [ite_eq_right h0]
+    dsimp only
+    rw [Fp.toModelFun_mul, ih (n / 2) (by omega), Fp.powNat_eq_pow, Fp.powNat_eq_pow,
+      show a * a = a ^ 2 from (sq a).symm]
+    by_cases h2 : n % 2 = 1
+    · rw [ite_eq_left h2, Fp.toModelFun_mul, ← pow_mul,
+        show a * a ^ (2 * (n / 2)) = a ^ (2 * (n / 2) + 1) from (pow_succ' a _).symm]
+      congr 2
+      omega
+    · rw [ite_eq_right h2, ← pow_mul]
+      congr 2
+      omega
+
 /-- The map from `Fp` to the model of the kernel checks. -/
 def Fp.toModel : BaseField.Hom Fp Fp.Model where
-  toFun a := a
-  map_add _ _ := rfl
-  map_sub _ _ := rfl
-  map_mul _ _ := rfl
-  map_neg _ := rfl
-  map_zero := rfl
-  map_one := rfl
-  map_ofNat _ := rfl
-  map_beq _ _ := rfl
-  map_isZero _ := rfl
-  map_inverse _ := rfl
-  map_powNat _ _ := rfl
+  toFun := Fp.toModelFun
+  map_add a b := Fin.ext (Fp.val_add a b)
+  map_sub a b := Fin.ext (Fp.val_sub a b)
+  map_mul a b := Fin.ext (Fp.val_mul a b)
+  map_neg a := Fin.ext (Fp.val_neg a)
+  map_zero := Fin.ext Fp.val_zero
+  map_one := Fin.ext Fp.val_one
+  map_ofNat n := Fin.ext (Fp.val_ofNat n)
+  map_beq a b := Fp.val_beq_val a b
+  map_isZero a := (Fp.isZero_eq a).symm
+  map_inverse a := by
+    -- Both integers are below `p`, and both stand for the inverse of `a` in `ZMod p`.
+    apply Fin.ext
+    change a.inverse.val = (Fin.inverse (Fp.toModelFun a)).val
+    rw [← ZMod.val_natCast_of_lt (Fp.val_lt a.inverse),
+      ← ZMod.val_natCast_of_lt (Fin.inverse (Fp.toModelFun a)).isLt, Fin.inverse_val,
+      Fp.val_eq, ZMod.natCast_zmod_val, Fp.toZMod_inverse]
+    change _ = ((a.val : ZMod Fp.modulus)⁻¹).val
+    rw [Fp.val_eq, ZMod.natCast_zmod_val]
+  map_powNat a n := (Fp.powNat_toModelFun a n).symm
   map_sqrt a := by
-    change (match Fp.sqrt a with | .ok s => some s | .error _ => none) =
-      (match Fp.sqrt a with | .ok s => some s | .error _ => none).map id
-    cases Fp.sqrt a <;> rfl
+    change Fp.Model.sqrt (Fp.toModelFun a) = (Fp.sqrt a).toOption.map Fp.toModelFun
+    rw [Fp.Model.sqrt, Fp.sqrt, Fp.powNat_toModelFun]
+    generalize Fp.powNat a ((modulus + 1) / 4) = c
+    rw [Fp.toModelFun_mul]
+    change (if ((c * c).val == a.val) = true then _ else _) = _
+    rw [Fp.val_beq_val]
+    -- Splitting on the test itself would make the kernel compute it.
+    by_cases h : (c * c).beq a = true
+    · rw [ite_eq_left h, ite_eq_left h]
+      rfl
+    · rw [ite_eq_right h, ite_eq_right h]
+      rfl
   map_sgn0 _ := rfl
 
 namespace Fp
@@ -95,7 +161,7 @@ theorem toModel_zero' : toModel (0 : Fp) = BaseField.zero := toModel.map_zero
 theorem toModel_one' : toModel (1 : Fp) = BaseField.one := toModel.map_one
 
 /-- The image of a numeral is the element of the same integer in the model. -/
-theorem toModel_numeral (n : Nat) :
+theorem toModel_numeral (n : Nat) [n.AtLeastTwo] :
     toModel (no_index (OfNat.ofNat n : Fp)) = BaseField.ofNat n :=
   toModel.map_ofNat n
 
@@ -122,8 +188,8 @@ theorem toModel_powNat (a : Fp) (n : Nat) :
 
 /-- Two elements are equal when their images in the model are. -/
 theorem eq_of_model {a b : Fp} (h : BaseField.beq (toModel a) (toModel b) = true) : a = b := by
-  rw [toModel.map_beq, baseField_beq, beq, beq_iff_eq] at h
-  exact ext h
+  rw [toModel.map_beq, baseField_beq] at h
+  exact Fp.beq_iff.mp h
 
 /-- Two elements differ when their images in the model do. -/
 theorem ne_of_model {a b : Fp} (h : BaseField.beq (toModel a) (toModel b) = false) : a ≠ b := by
@@ -133,8 +199,7 @@ theorem ne_of_model {a b : Fp} (h : BaseField.beq (toModel a) (toModel b) = fals
 
 /-- The square root succeeds in `Fp` exactly when it succeeds in the model. -/
 theorem sqrt_isOk_eq (a : Fp) : (Fp.sqrt a).isOk = (BaseField.sqrt (toModel a)).isSome := by
-  rw [toModel.map_sqrt, Option.isSome_map]
-  show _ = (match Fp.sqrt a with | .ok s => some s | .error _ => none).isSome
+  rw [toModel.map_sqrt, Option.isSome_map, baseField_sqrt]
   cases Fp.sqrt a <;> rfl
 
 end Fp

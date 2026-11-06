@@ -456,10 +456,41 @@ instance : Fact (Nat.Prime modulus) := ⟨modulus_prime⟩
 /-- `Fp` is (definitionally) Mathlib's `ZMod Fp.modulus`, as rings. -/
 def toZMod : Fp ≃+* ZMod modulus := RingEquiv.refl _
 
+/-- The map to `ZMod p` sends a sum to the sum. -/
+@[simp] theorem toZMod_add (a b : Fp) : toZMod (a + b) = toZMod a + toZMod b :=
+  map_add toZMod a b
+
+/-- The map to `ZMod p` sends a product to the product. -/
+@[simp] theorem toZMod_mul (a b : Fp) : toZMod (a * b) = toZMod a * toZMod b :=
+  map_mul toZMod a b
+
+/-- The map to `ZMod p` sends a difference to the difference. -/
+@[simp] theorem toZMod_sub (a b : Fp) : toZMod (a - b) = toZMod a - toZMod b :=
+  map_sub toZMod a b
+
+/-- The map to `ZMod p` sends a negation to the negation. -/
+@[simp] theorem toZMod_neg (a : Fp) : toZMod (-a) = -toZMod a :=
+  map_neg toZMod a
+
+/-- The map to `ZMod p` sends zero to zero. -/
+@[simp] theorem toZMod_zero : toZMod (0 : Fp) = 0 :=
+  map_zero toZMod
+
+/-- The map to `ZMod p` sends one to one. -/
+@[simp] theorem toZMod_one : toZMod (1 : Fp) = 1 :=
+  map_one toZMod
+
+/-- Two elements with the same image in `ZMod p` are equal. -/
+theorem toZMod_inj {a b : Fp} : toZMod a = toZMod b ↔ a = b :=
+  toZMod.injective.eq_iff
+
 /-! ## The integer of an element
 
 These lemmas give the integer of each result, so a proof does not need the representation of `Fp`.
 -/
+
+/-- The integer of an element is its value in `ZMod p`. -/
+theorem val_eq (a : Fp) : a.val = (toZMod a).val := rfl
 
 /-- The integer of an element is below `p`. -/
 theorem val_lt (a : Fp) : a.val < modulus := a.isLt
@@ -488,6 +519,20 @@ theorem val_mul (a b : Fp) : (a * b).val = a.val * b.val % modulus := rfl
 
 /-- The integer of a negation is `p` minus the integer, mod `p`. -/
 theorem val_neg (a : Fp) : (-a).val = (modulus - a.val) % modulus := rfl
+
+/-- The integer of a difference is `p` minus the second integer, plus the first, mod `p`. -/
+theorem val_sub (a b : Fp) : (a - b).val = (modulus - b.val + a.val) % modulus := by
+  have h : a - b = a + -b :=
+    toZMod.injective (by rw [toZMod_sub, toZMod_add, toZMod_neg, sub_eq_add_neg])
+  rw [h, val_add, val_neg, Nat.add_mod_mod, Nat.add_comm]
+
+/-- The Boolean equality of `Fp` is equality.
+
+Proofs use it instead of unifying with the Boolean equality, which would compute its arguments. -/
+theorem beq_iff {a b : Fp} : a.beq b = true ↔ a = b := by
+  unfold beq
+  rw [beq_iff_eq]
+  exact ⟨ext, congrArg _⟩
 
 /-- The zero test reads the integer. -/
 theorem isZero_eq (a : Fp) : a.isZero = (a.val == 0) := rfl
@@ -526,18 +571,24 @@ theorem one_isZero : Fp.one.isZero = false :=
 /-- The sign of an `Fp` element is the parity of its value. -/
 @[simp] theorem baseField_sgn0 (a : Fp) : BaseField.sgn0 a = (a.val % 2 == 1) := rfl
 
+/-- The square root that the extensions read from `Fp` is its own square root, as an option. -/
+theorem baseField_sqrt (a : Fp) : BaseField.sqrt a = (Fp.sqrt a).toOption := rfl
+
 /-- The square root that the extensions read from `Fp` is its own square root.
 
 The square root of `Fp` fails only with the error for a non-square, so the two agree on errors too.
 -/
 theorem sqrtOrError_eq (a : Fp) : sqrtOrError a = Fp.sqrt a := by
+  -- The test is left as a Boolean variable, so no proof step evaluates the power.
   have hs : Fp.sqrt a = .error .notASquare ∨ ∃ s, Fp.sqrt a = .ok s := by
     unfold Fp.sqrt
-    dsimp only
-    split <;> simp
-  unfold sqrtOrError
-  dsimp only [BaseField.sqrt]
-  rcases hs with h | ⟨s, h⟩ <;> rw [h]
+    generalize powNat a ((modulus + 1) / 4) = c
+    by_cases h : (c * c).beq a = true
+    · exact Or.inr ⟨c, ite_eq_left h⟩
+    · exact Or.inl (ite_eq_right h)
+  -- `unfold` would reduce the match on the root, and so evaluate the power: rewrite instead.
+  rw [sqrtOrError, baseField_sqrt]
+  rcases hs with h | ⟨s, h⟩ <;> rw [h] <;> rfl
 
 /-! ## Bridge: spec operations = Mathlib operations -/
 
@@ -581,6 +632,14 @@ It is stated over `ZMod p`, which the field instance below needs. -/
 private theorem inverse_eq_zmod_inv (a : ZMod modulus) :
     Fp.inverse a = a⁻¹ :=
   Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
+
+/-- The map to `ZMod p` sends a power to the power. -/
+theorem toZMod_powNat (a : Fp) (n : Nat) : toZMod (a.powNat n) = toZMod a ^ n :=
+  powNat_eq_zmod_pow a n
+
+/-- The Euclidean inverse is the inverse of `ZMod p`, and both send `0` to `0`. -/
+theorem toZMod_inverse (a : Fp) : toZMod a.inverse = (toZMod a)⁻¹ :=
+  inverse_eq_zmod_inv a
 
 /-- The Mathlib field structure on `ZMod Fp.modulus`, named so it can be
 used as the source of the structure update in `instField` below. -/
@@ -640,6 +699,13 @@ over core's `Fin` Nat-division) is field division. -/
 theorem div_eq_mul_inv' (a b : Fp) : a / b = a * b⁻¹ := by
   show a * b.inverse = a * b⁻¹
   rw [inverse_eq_inv]
+
+/-- Push the map to `ZMod p` through the ring operations and the numerals.
+
+The algebra then runs in `ZMod p`. -/
+macro "push_toZMod" loc:(Lean.Parser.Tactic.location)? : tactic =>
+  `(tactic| simp only [Fp.toZMod_add, Fp.toZMod_mul, Fp.toZMod_sub, Fp.toZMod_neg,
+    Fp.toZMod_ofNat, Fp.toZMod_one, Fp.toZMod_zero, Nat.cast_ofNat] $[$loc]?)
 
 -- Smoke tests: the scoped field structure interoperates with the
 -- globally available `Fin` instances the executable spec uses.

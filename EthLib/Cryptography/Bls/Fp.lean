@@ -154,9 +154,7 @@ instance : BaseField Fp where
   isZero := isZero
   inverse := inverse
   powNat := powNat
-  sqrt a := match Fp.sqrt a with
-    | .ok s => some s
-    | .error _ => none
+  sqrt a := (Fp.sqrt a).toOption
   sgn0 a := a.val % 2 == 1
 
 /-- Decode big-endian bytes as a `Nat`. -/
