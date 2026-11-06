@@ -62,6 +62,15 @@ instance : SszType UInt64 where
   toValue a := .uint a.toNat
   ofValue := ofUint 8 UInt64.ofNat
 
+/-- `uint128`, the 16-byte unsigned integer.
+
+See `src/ssz/uint.py` of `ethereum/ssz-specs`, in `Uint128` and `BaseUint.encode_bytes`.
+-/
+instance : SszType (BitVec 128) where
+  desc := Desc.uint128
+  toValue a := .uint a.toNat
+  ofValue := ofUint 16 (BitVec.ofNat 128)
+
 /-- `uint256`. -/
 instance : SszType Base.U256 where
   desc := Desc.uint256
