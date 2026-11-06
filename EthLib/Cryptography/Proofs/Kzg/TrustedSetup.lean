@@ -24,26 +24,13 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (G1 G2)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
+open EthLib.Base (array_mapM_ok_mem)
 
 /-- Each point of the setup is a point of its curve. -/
 structure TrustedSetup.Valid (s : TrustedSetup) : Prop where
   g1LagrangeBrp : ∀ i : Fin FIELD_ELEMENTS_PER_BLOB, G1.Valid s.g1LagrangeBrp[i]
   g1Monomial : ∀ i : Fin FIELD_ELEMENTS_PER_BLOB, G1.Valid s.g1Monomial[i]
   g2Monomial : ∀ i : Fin KZG_SETUP_G2_LENGTH, G2.Valid s.g2Monomial[i]
-
-/-- Every output of a successful map over an array is the image of some input. -/
-theorem mem_of_mapM_ok {ε α β : Type} {f : α → Except ε β} {xs : Array α}
-    {ys : Array β} (h : xs.mapM f = .ok ys) : ∀ y ∈ ys, ∃ x ∈ xs, f x = .ok y := by
-  rw [Array.mapM_eq_mapM_toList] at h
-  cases hl : xs.toList.mapM f with
-  | error e => rw [hl] at h; cases h
-  | ok zs =>
-    rw [hl] at h
-    have hys : zs.toArray = ys := Except.ok.inj h
-    subst hys
-    intro y hy
-    obtain ⟨x, hmem, hx⟩ := Base.mapM_ok_mem hl y (List.mem_toArray.mp hy)
-    exact ⟨x, Array.mem_toList_iff.mp hmem, hx⟩
 
 /-- A point that decodes to a G1 point of the setup is valid. -/
 private theorem valid_of_toG1 {b : ByteArray} {p : G1}
@@ -109,14 +96,14 @@ theorem TrustedSetup.ofBytes_valid {g1LagrangeBytes g1MonomialBytes g2MonomialBy
               rw [hsz]
               exact reverseBits_lt_two_pow _ _
             rw [getElem!_pos lagrange _ hr]
-            obtain ⟨b, -, hb⟩ := mem_of_mapM_ok h₁ _ (Array.getElem_mem hr)
+            obtain ⟨b, -, hb⟩ := array_mapM_ok_mem h₁ _ (Array.getElem_mem hr)
             exact valid_of_toG1 hb
           exact key i.val (by rw [size_bitReversalPermutation, hl]; exact i.isLt)
         · have hi : i.val < monomial.size := by rw [hm]; exact i.isLt
-          obtain ⟨b, -, hb⟩ := mem_of_mapM_ok h₂ _ (Array.getElem_mem hi)
+          obtain ⟨b, -, hb⟩ := array_mapM_ok_mem h₂ _ (Array.getElem_mem hi)
           exact valid_of_toG1 hb
         · have hi : i.val < monomial2.size := by rw [hm2]; exact i.isLt
-          obtain ⟨b, -, hb⟩ := mem_of_mapM_ok h₃ _ (Array.getElem_mem hi)
+          obtain ⟨b, -, hb⟩ := array_mapM_ok_mem h₃ _ (Array.getElem_mem hi)
           exact valid_of_toG2 hb
       · cases h
     · cases h
@@ -150,7 +137,7 @@ theorem TrustedSetup.ofBytes_g1Monomial_mem
       split at h
       · cases h
         have hi : i.val < monomial.size := by rw [hm]; exact i.isLt
-        obtain ⟨b, hmem, hb⟩ := mem_of_mapM_ok h₂ _ (Array.getElem_mem hi)
+        obtain ⟨b, hmem, hb⟩ := array_mapM_ok_mem h₂ _ (Array.getElem_mem hi)
         refine ⟨b, hmem, ?_⟩
         cases hu : Bls.G1.uncompress b with
         | error e => rw [hu] at hb; cases hb

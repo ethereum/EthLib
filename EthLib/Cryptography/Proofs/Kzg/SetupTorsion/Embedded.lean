@@ -39,6 +39,7 @@ namespace EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Bls (G1 Fr)
 open EthLib.Cryptography.Kzg.Constants
 open SetupTorsion
+open EthLib.Base (array_mapM_ok_mem)
 
 /-- Every monomial point of `G1` in the embedded data passes the kernel check. -/
 theorem SetupTorsion.g1MonomialHex_check :
@@ -309,7 +310,7 @@ theorem TrustedSetup.hexListToBytes_mem {hex : Array String} {bytes : Array Byte
     (h : TrustedSetup.hexListToBytes hex = .ok bytes) :
     ∀ b ∈ bytes, ∃ str ∈ hex, TrustedSetup.hexToBytes? str = some b := by
   intro b hb
-  obtain ⟨str, hmem, hstr⟩ := mem_of_mapM_ok h b hb
+  obtain ⟨str, hmem, hstr⟩ := array_mapM_ok_mem h b hb
   refine ⟨str, hmem, ?_⟩
   split at hstr
   · rename_i b' hb'
