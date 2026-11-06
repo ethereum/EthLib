@@ -54,7 +54,6 @@ NOT_YET = {
 # and Hegotá. A key is a runner, a runner and a handler, or a format, as in NOT_YET.
 # At these forks an entry here comes before the entry of NOT_YET.
 _GLOAS = {
-    "transition": "the upgrade to Gloas (G53)",
     "fork_choice": "the Gloas block and payload handlers (G70)",
     "fast_confirmation": "the Gloas fast confirmation (G73)",
     "networking": "the Gloas data columns and unchanged topics (G77)",
