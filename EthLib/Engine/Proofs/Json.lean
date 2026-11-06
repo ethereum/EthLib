@@ -20,6 +20,10 @@ So the 64-bit decoder returns the decoded number itself, without wrapping.
 A byte string decoded with a limit on its size has at most that many bytes.
 
 Both decoders succeed exactly when the decoder without the bound succeeds within it.
+
+A decoded payload has version 1, 2 or 3 of the structure.
+
+It holds the withdrawals exactly from version 2, and the two blob gas fields exactly in version 3.
 -/
 
 public section
@@ -92,5 +96,21 @@ theorem bytesMax_eq_ok_iff {what : String} {n : Nat} {j : Lean.Json} {b : ByteAr
   · rintro ⟨h, hn⟩
     rw [h]
     simp [bind, Except.bind, hn, pure, Except.pure]
+
+/-- A decoded payload has version 1, 2 or 3, and holds the fields of exactly that version. -/
+theorem shape_of_anyPayload {j : Lean.Json} {p : AnyPayload} (h : anyPayload j = .ok p) :
+    (p.version = 1 ∨ p.version = 2 ∨ p.version = 3) ∧ (p.withdrawals.isSome ↔ 2 ≤ p.version) ∧
+      (p.blobGasUsed.isSome ↔ 3 ≤ p.version) ∧ (p.excessBlobGas.isSome ↔ 3 ≤ p.version) := by
+  unfold anyPayload at h
+  -- Inline the steps that the decoder shares between its branches.
+  dsimp only at h
+  -- Walk every step: a failure cannot be the success, and each value read is kept.
+  repeat' (first
+    | (simp only [invalid, throw, throwThe, MonadExceptOf.throw] at h; cases h; done)
+    | (obtain ⟨_, step, h⟩ := bind_ok_iff.mp h
+       first | cases step | obtain ⟨_, -, rfl⟩ := map_ok_iff.mp step | skip)
+    | split at h)
+  -- Each success fixes the version and the fields, and a branch that disagrees is impossible.
+  all_goals (cases h; first | (exfalso; omega) | simp)
 
 end EthLib.Engine.Json
