@@ -14,7 +14,7 @@ Properties of the discv5 packet encoding.
 - The mask of a prefix is the prefix of the mask.
 - The authdata of each flag decodes back from its bytes.
 - A packet that the encoder writes, within the size limits, decodes back.
-- The additional data of a message is the masking IV and the unmasked header of the packet.
+- The additional data of a message is the masking IV and the unmasked bytes up to the message.
 - A message that the encryption writes decrypts back.
 -/
 
@@ -233,9 +233,9 @@ theorem Packet.decode_encode {destId : NodeId} {p : Packet} {bytes : ByteArray}
     simp only [ite_true, Array.toArray_toList]
     rfl
 
-/-- The additional data of a message is the IV, then the header as the destination reads it.
+/-- The additional data of a message is the masking IV, then the unmasked bytes that follow it.
 
-The header is the unmasked bytes after the IV, and it ends where the additional data ends. -/
+The unmasked part has the length of the additional data minus the 16 bytes of the masking IV. -/
 theorem Packet.messageAd_eq {destId : NodeId} {p : Packet} {bytes ad : ByteArray}
     (he : p.encode destId = .ok bytes) (ha : p.messageAd = .ok ad) :
     ad.data.toList = bytes.data.toList.take 16 ++
@@ -255,6 +255,23 @@ theorem Packet.messageAd_eq {destId : NodeId} {p : Packet} {bytes ad : ByteArray
     simp only [hsize]
     rw [List.append_assoc, List.take_left' hiv, List.drop_left' hiv, List.take_left' hlen,
       mask_mask]
+
+/-- The additional data of a message and the message fill the whole packet.
+
+So the unmasked part of the additional data ends where the message starts. -/
+theorem Packet.size_messageAd_add {destId : NodeId} {p : Packet} {bytes ad : ByteArray}
+    (he : p.encode destId = .ok bytes) (ha : p.messageAd = .ok ad) :
+    ad.size + p.message.size = bytes.size := by
+  obtain ⟨iv, header, msg⟩ := p
+  simp only [Packet.encode] at he
+  simp only [Packet.messageAd] at ha
+  cases hh : header.encode with
+  | error e => simp [hh, bind, Except.bind] at ha
+  | ok hb =>
+    simp only [hh, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at he ha
+    subst he ha
+    simp only [ByteArray.size, List.size_toArray, List.length_append, length_mask,
+      Array.length_toList]
 
 /-! ## Messages -/
 
