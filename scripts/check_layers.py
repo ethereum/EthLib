@@ -1,33 +1,4 @@
-"""
-Check the import rules of ARCHITECTURE.md on the header of every Lean module under `EthLib/`.
-
-The check fails on each of these, with the module and the import:
-
-- an import into a higher layer, by the order Base, Cryptography, Serialization, Networking,
-  then Execution and Consensus side by side, then Engine;
-- an import between Execution and Consensus, which only Engine imports together;
-- an import of a property (a module with a `Proofs` component) or of a C export (a module with
-  an `Exports` component) from a specification;
-- an import of anything outside `EthLib` and the Lean toolchain (`Init`, `Std` and `Lean`) from
-  a specification or a C export;
-- a module with an `Xmss` component that reaches a module with a `Sphincs` component through
-  its imports, or the reverse, with the first import on the path;
-- a module that no library root of `lakefile.lean` reaches through its imports;
-- a file under `EthLib/` outside a layer, other than the aggregators `EthLib.lean`,
-  `EthLib/Proofs.lean` and `EthLib/Exports.lean`.
-
-The order of the layers also keeps Serialization out of every cryptographic module.
-The aggregators import every layer, so the layer order does not apply to them.
-It also fails when the layer table of ARCHITECTURE.md names other layers than this check.
-
-A pull request that must break an import rule lists the import in
-`scripts/check_layers_baseline.txt`, and says why in its description.
-An entry that no longer matches an import fails the check too.
-
-    uv run --no-project --python 3.12 python scripts/check_layers.py
-
-Only the standard library is used, so the check needs no Lean and no build.
-"""
+"""Check the import rules of ARCHITECTURE.md on the header of every Lean module under `EthLib/`."""
 
 import importlib.util
 import re
@@ -56,8 +27,11 @@ LAYERS = {
     "Consensus": 4,
     "Engine": 5,
 }
+# The aggregators import every layer, so the layer order does not apply to them.
 AGGREGATORS = {"EthLib", "EthLib.Proofs", "EthLib.Exports"}
+# The packages of the Lean toolchain, which a specification and a C export may import.
 TOOLCHAIN = {"Init", "Std", "Lean"}
+# The two hash-based signatures, whose modules never reach each other through their imports.
 SCHEMES = ("Xmss", "Sphincs")
 KIND_NAMES = {"specification": "a specification", "property": "a property", "export": "a C export"}
 
@@ -133,11 +107,7 @@ def scheme_problems(graph: dict[str, list[str]]) -> list[tuple[str, str, str]]:
 
 
 def library_roots(lakefile: str) -> list[str]:
-    """
-    The root modules of each `lean_lib` of the lakefile.
-
-    A library without `roots` has one root, named after the library.
-    """
+    """The root modules of each `lean_lib` of the lakefile; without `roots`, the library itself."""
     roots = []
     for name, body in LIBRARY.findall(lakefile):
         if listed := ROOTS.search(body):

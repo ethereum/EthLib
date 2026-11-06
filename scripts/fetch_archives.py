@@ -1,15 +1,4 @@
-"""
-Download the release archives of `tests/sources.toml` into a cache, and unpack parts of them.
-
-    uv run --no-project --python 3.12 python scripts/fetch_archives.py --list
-    uv run --no-project --python 3.12 python scripts/fetch_archives.py --cache DIR NAME \
-        [--path PATH ...]
-
-An archive is a tar file, compressed or not, or a zip file when its URL ends in `.zip`.
-
-The cache is the directory that `ETHLIB_ARCHIVES` names.
-Without it, the cache is `ethlib/archives` in the user's cache directory, such as `~/.cache`.
-"""
+"""Download the release archives of `tests/sources.toml` into a cache, and unpack parts of them."""
 
 import argparse
 import contextlib
@@ -87,6 +76,7 @@ def _digest(path: Path) -> str:
 
 
 def _is_zip(archive: Archive) -> bool:
+    # Any other archive is a tar file, compressed or not.
     return archive.url.endswith(".zip")
 
 

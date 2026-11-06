@@ -1,10 +1,4 @@
-"""
-Check `check_fixture_pins.py` itself, on small repositories built in a temporary directory.
-
-    uv run --no-project --python 3.12 python -m unittest scripts/test_check_fixture_pins.py
-
-Only the standard library is used, like the script.
-"""
+"""Tests of `check_fixture_pins.py` on small repositories in a temporary directory."""
 
 import importlib.util
 import tempfile

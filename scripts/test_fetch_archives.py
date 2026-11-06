@@ -1,10 +1,4 @@
-"""
-Check `fetch_archives.py` itself, on small archives built in a temporary directory.
-
-    uv run --no-project --python 3.12 python -m unittest scripts/test_fetch_archives.py
-
-Only the standard library is used, like the script.
-"""
+"""Tests of `fetch_archives.py` on small archives in a temporary directory."""
 
 import hashlib
 import importlib.util

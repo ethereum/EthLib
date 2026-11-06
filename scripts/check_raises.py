@@ -1,8 +1,4 @@
-"""
-Check that every Python test expects an exception through the helper that matches its whole message.
-
-uv run --no-project --python 3.12 python scripts/check_raises.py
-"""
+"""Check that every Python test expects an exception by its whole message, through one helper."""
 
 import ast
 import os

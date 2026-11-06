@@ -1,11 +1,4 @@
-"""
-Check `soundness_facts.py` itself, on a small repository built in a temporary
-directory.
-
-    uv run --no-project --python 3.12 python -m unittest scripts/test_soundness_facts.py
-
-Only the standard library is used, like the script.
-"""
+"""Tests of `soundness_facts.py` on a small repository in a temporary directory."""
 
 import importlib.util
 import json

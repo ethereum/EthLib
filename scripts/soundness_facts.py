@@ -1,28 +1,4 @@
-"""
-Keep the facts in SOUNDNESS.md that the repository can state for itself.
-
-SOUNDNESS.md has two kinds of content.
-
-The prose is reviewed by hand, for one package version: the document names
-the version in `pyproject.toml`, and this script fails when that version
-changes, so every version bump reviews the document again. The script never
-edits that line.
-
-The facts that change with the code, such as the theorems that still use
-`native_decide`, are generated between markers:
-
-    <!-- generated: NAME -->
-    ...
-    <!-- end generated -->
-
-    # Rewrite the generated blocks.
-    uv run --no-project --python 3.12 python scripts/soundness_facts.py
-    # Fail if any is out of date, or the version differs.
-    uv run --no-project --python 3.12 python scripts/soundness_facts.py --check
-
-Only the standard library is used, and Python 3.10 is enough, so the check
-needs no Lean, no build and no install step.
-"""
+"""Keep the facts in SOUNDNESS.md that the repository can state for itself."""
 
 import argparse
 import json
@@ -32,7 +8,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# A generated fact sits between `<!-- generated: NAME -->` and `<!-- end generated -->`.
 BLOCK = re.compile(r"(<!-- generated: (\S+) -->\n)(.*?)(<!-- end generated -->)", re.S)
+# The prose is reviewed by hand for the package version that this line names.
+# The check fails when the version changes, so each version bump reviews the document again.
+# The script never edits this line.
 VERSION_LINE = re.compile(
     r"^This document describes the development tree that declares package version "
     r"`([^`]+)` in `pyproject.toml`\.$",
@@ -44,9 +24,9 @@ def baseline(root: Path) -> list[tuple[str, str]]:
     """
     The declaration-check baseline, as (kind, declaration) pairs.
 
-    `lake exe check-decls` fails on a stale entry as well as on a missing
-    one, so in a tree that passes CI the baseline is the exact list of
-    findings.
+    `lake exe check-decls` fails on a stale entry and on a missing one.
+
+    So in a tree that passes CI, the baseline lists exactly the findings.
     """
     out = []
     for line in (root / "scripts" / "check_decls_baseline.txt").read_text().splitlines():
@@ -59,6 +39,7 @@ def baseline(root: Path) -> list[tuple[str, str]]:
 def readable(decl: str) -> str:
     """
     A declaration name as a reader would write it.
+
     A private name, `_private.<module>.0.<name>`, becomes `<name>` marked private.
     """
     if decl.startswith("_private."):
@@ -97,17 +78,10 @@ def is_ident(c: str) -> bool:
 
 
 def strip_lean(text: str) -> str:
-    r"""
-    Lean source with its comments and string and character literals blanked out.
-
-    Block comments `/- … -/` nest, so a depth is kept; a line comment runs from
-    `--` to the end of the line. A string `"…"` honours backslash escapes, and a
-    raw string `r#"…"#` ends at the quote followed by as many `#` as it opened
-    with. A character literal is `'c'` or an escape such as `'\n'`, where the `'` does not end an
-    identifier such as `x'`.
-    """
+    """Lean source with its comments and string and character literals blanked out."""
     out, i, n = [], 0, len(text)
     while i < n:
+        # Block comments nest, so a depth is kept.
         if text.startswith("/-", i):
             j, depth = i + 2, 1
             while j < n and depth:
@@ -117,18 +91,22 @@ def strip_lean(text: str) -> str:
                     depth, j = depth - 1, j + 2
                 else:
                     j += 1
+        # A line comment runs to the end of the line.
         elif text.startswith("--", i):
             j = text.find("\n", i)
             j = n if j < 0 else j
+        # A raw string `r#"…"#` ends at a quote followed by as many `#` as it opened with.
         elif (m := re.compile(r'r(#*)"').match(text, i)) and (i == 0 or not is_ident(text[i - 1])):
             close = '"' + m.group(1)
             j = text.find(close, m.end())
             j = n if j < 0 else j + len(close)
+        # A string honours backslash escapes.
         elif text[i] == '"':
             j = i + 1
             while j < n and text[j] != '"':
                 j += 2 if text[j] == "\\" else 1
             j = min(j + 1, n)
+        # A character literal is `'c'` or an escape, and a `'` that ends an identifier is not one.
         elif (m := re.compile(r"'(\\.[^']*|[^\\'])'").match(text, i)) and (
             i == 0 or not is_ident(text[i - 1])
         ):
@@ -143,12 +121,12 @@ def strip_lean(text: str) -> str:
 
 
 def lean_exports(root: Path) -> set[str]:
-    r"""
+    """
     Every `@[export name]` symbol in an export module.
 
-    An attribute list may span lines and hold other attributes, as in
-    `@[inline,\n  export eth_foo]`, and `attribute [export eth_foo] decl` is
-    the other way to write one.
+    An attribute list may span lines and hold other attributes.
+
+    The attribute command `attribute [export eth_foo] decl` declares an export too.
     """
     symbols = set()
     for path in (root / "EthLib").rglob("*.lean"):
@@ -164,8 +142,9 @@ def strip_c(text: str) -> str:
     """
     C source with its comments and string and character literals blanked out.
 
-    Block comments `/* … */` do not nest in C. A string `"…"` and a character
-    `'…'` honour backslash escapes.
+    Block comments do not nest in C.
+
+    Strings and characters honour backslash escapes.
     """
     out, i, n = [], 0, len(text)
     while i < n:
@@ -194,8 +173,8 @@ def c_calls(root: Path, symbols: set[str]) -> set[str]:
     The members of `symbols` that the C sources call, not merely declare.
 
     A declaration is an `extern` statement, `extern <type> name(<params>);`.
-    Once those are removed, any remaining `name(` is a call: the C sources
-    define none of these functions themselves.
+
+    The C sources define none of these functions, so any other `name(` is a call.
     """
     called = set()
     for path in sorted((root / "bindings" / "python").glob("*.c")):
@@ -245,6 +224,7 @@ PACKAGE_NAMES = {"mathlib": "Mathlib"}
 def pins(root: Path) -> str:
     """
     The pinned dependencies: the commit each resolved to, and the tag or branch requested.
+
     Only the packages the lakefile requires itself are named, not the ones they require.
     """
     packages = json.loads((root / "lake-manifest.json").read_text())["packages"]
@@ -302,7 +282,8 @@ def regenerate(root: Path, doc: str) -> tuple[str, list[str]]:
 def package_version(root: Path) -> str | None:
     """
     The `version` in the `[project]` table of `pyproject.toml`.
-    Read with a pattern rather than `tomllib`, which needs Python 3.11.
+
+    It is read with a pattern: `tomllib` needs Python 3.11, and the script supports 3.10.
     """
     text = (root / "pyproject.toml").read_text()
     project = re.search(r"^\[project\]\n(.*?)(?=^\[|\Z)", text, re.M | re.S)

@@ -1,10 +1,4 @@
-"""
-Check `check_lean_layout.py` itself, on planted Lean text and on a small git repository.
-
-    uv run --no-project --python 3.12 python -m unittest scripts/test_check_lean_layout.py
-
-Only the standard library is used, like the script.
-"""
+"""Tests of `check_lean_layout.py` on planted Lean text and on a small git repository."""
 
 import contextlib
 import importlib.util

@@ -1,10 +1,4 @@
-"""
-Check `check_layers.py` itself, on small repositories built in a temporary directory.
-
-    uv run --no-project --python 3.12 python -m unittest scripts/test_check_layers.py
-
-Only the standard library is used, like the script.
-"""
+"""Tests of `check_layers.py` on small repositories in a temporary directory."""
 
 import importlib.util
 import tempfile
