@@ -11,9 +11,11 @@ A valid signature has `r` and `s` in `[1, n - 1]`, under a key on the curve othe
 
 `(r, s)` and `(r, n - s)` are valid together.
 
-When `p <= r + n`, they are the only valid signatures with that `r`.
+When `p <= r + n`, they are the only valid signatures with that `r`, key and message.
 
-Below that bound, the rebuilt point may have `x = r + n`, and nothing ties two such signatures.
+The verifier rebuilds the point `R = (e / s) G + (r / s) Q`, and checks that `x_R mod n = r`.
+
+Below that bound, `R` may also have `x = r + n`, and up to four values of `s` may verify.
 -/
 
 @[expose] public section
@@ -186,10 +188,9 @@ theorem verify_neg_s (q : Point) (e r : Nat) {s : Nat} (hs : 0 < s ∧ s < Fn.mo
       · rw [verify_of_not_isOnCurve hq', verify_of_not_isOnCurve hq']
   · simp only [verify, dite_eq_right hr]
 
+/-- A valid signature has `r` and `s` in `[1, n - 1]`, under a key on the curve other than `O`.
 
-/-- What a valid signature gives: the ranges, a valid key, and the rebuilt point `R`.
-
-That point has `x_R mod n = r`. -/
+Its rebuilt point `R` is affine, with `x_R mod n = r`. -/
 theorem verify_rebuilt {q : Point} {e r s : Nat} (hv : verify q e r s = true) :
     ∃ (hr : 0 < r ∧ r < Fn.modulus) (hs : 0 < s ∧ s < Fn.modulus),
       q ≠ .infinity ∧ q.isOnCurve = true ∧
@@ -222,7 +223,7 @@ private theorem val_eq_of_mod_eq {x : Fp} {r : Nat} (hx : x.val % Fn.modulus = r
   · have := Nat.le_mul_of_pos_right Fn.modulus (Nat.pos_of_ne_zero h0)
     omega
 
-/-- Two signatures with the same `r` verify only if their `s` agree up to sign mod `n`.
+/-- Two signatures with the same `r`, key and message verify only if their `s` agree up to sign.
 
 The bound `p <= r + n` makes both rebuilt points have `x = r`, so they are equal or opposite. -/
 theorem verify_s_eq_or_neg {q : Point} {e r s s' : Nat}
@@ -251,18 +252,16 @@ theorem verify_s_eq_or_neg {q : Point} {e r s s' : Nat}
   -- The two `y` square to the same value, so they agree up to sign.
   have hsq : Fp.toZMod y' * Fp.toZMod y' = Fp.toZMod y * Fp.toZMod y :=
     ((isOnCurve_affine _ _).mp hc').trans ((isOnCurve_affine _ _).mp hc).symm
-  have hfac : (Fp.toZMod y' - Fp.toZMod y) * (Fp.toZMod y' + Fp.toZMod y) = 0 := by
-    linear_combination hsq
-  rcases mul_eq_zero.mp hfac with h | h
+  rcases mul_self_eq_mul_self_iff.mp hsq with h | h
   · -- The same point: `s'^(-1) X = s^(-1) X`, so `s' = s`.
-    obtain rfl : y' = y := Fp.toZMod.injective (sub_eq_zero.mp h)
+    obtain rfl : y' = y := Fp.toZMod.injective h
     have h0 : ((Fn.toZMod ⟨s', hs'.2⟩)⁻¹ - (Fn.toZMod ⟨s, hs.2⟩)⁻¹) • X = 0 := by
       rw [sub_smul, ← hP, ← hP', sub_self]
     have heq := inv_injective (sub_eq_zero.mp ((smul_eq_zero.mp h0).resolve_right hX))
     exact Or.inl (congrArg Fin.val (Fn.toZMod.injective heq))
   · -- Opposite points: `s'^(-1) X = -(s^(-1) X)`, so `s' = -s`.
     have hy : y' = -y :=
-      Fp.toZMod.injective ((eq_neg_of_add_eq_zero_left h).trans (Fp.toZMod_neg y).symm)
+      Fp.toZMod.injective (h.trans (Fp.toZMod_neg y).symm)
     subst hy
     have hneg : toPoint (affine x' (-y)) = -toPoint (affine x' y) :=
       toPoint_negPoint (p := affine x' y) hc
@@ -275,9 +274,9 @@ theorem verify_s_eq_or_neg {q : Point} {e r s s' : Nat}
     simp only [Fin.neg_def] at hv
     exact Or.inr (hv.trans (Nat.mod_eq_of_lt (by omega)))
 
-/-- Let `(r, s)` be a valid signature, with `p <= r + n`.
+/-- Let `(r, s)` be a valid signature under a key and a message, with `p <= r + n`.
 
-Then `(r, s')` is valid exactly when `s'` is `s` or `n - s`. -/
+Then `(r, s')` is valid under the same key and message exactly when `s'` is `s` or `n - s`. -/
 theorem verify_iff_of_verify {q : Point} {e r s s' : Nat} (hv : verify q e r s = true)
     (hp : Fp.modulus ≤ r + Fn.modulus) :
     verify q e r s' = true ↔ s' = s ∨ s' = Fn.modulus - s := by
