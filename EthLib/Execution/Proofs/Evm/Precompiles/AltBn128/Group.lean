@@ -11,7 +11,9 @@ ECADD returns the sum of its two points in the group of the curve.
 
 ECMUL returns its point times its scalar, read as a 32-byte integer and not reduced.
 
-Each output decodes back to the point it encodes, so a call can pass it on as a point of `G_1`.
+The output of each call decodes to that sum or that product.
+
+So a later call accepts it as a point of `G_1`.
 
 The group is the one of Mathlib on `y^2 = x^3 + 3`, so this file imports Mathlib.
 -/
@@ -50,16 +52,9 @@ theorem ecmul_toPoint {fork : EthLib.Base.Fork} {data : ByteArray} {gas : Nat} {
 /-! ## Each output is a point of `G_1` -/
 
 /-- A read of the whole of a byte string from its start gives its bytes. -/
-theorem bufferRead_toArray (bytes : List UInt8) :
+private theorem bufferRead_toArray (bytes : List UInt8) :
     bufferRead ⟨bytes.toArray⟩ 0 bytes.length = bytes := by
-  apply List.ext_getElem (bufferRead_length _ _ _)
-  intro i hi _
-  rw [bufferRead_length] at hi
-  have hsize : i < (⟨bytes.toArray⟩ : ByteArray).size := by simpa [ByteArray.size] using hi
-  simp only [bufferRead, List.getElem_map, List.getElem_range, Nat.zero_add]
-  unfold Base.byteAt
-  rw [dite_eq_left hsize, ByteArray.getElem_eq_getElem_data]
-  simp
+  simpa [ByteArray.size] using bufferRead_zero_size ⟨bytes.toArray⟩
 
 /-- The output of a call of ECADD that succeeds, read as a point, is the sum of its two points. -/
 theorem bytesToG1_ecadd {fork : EthLib.Base.Fork} {data : ByteArray} {gas : Nat} {out : ByteArray}

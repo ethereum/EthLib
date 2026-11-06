@@ -25,6 +25,16 @@ theorem bufferRead_length (data : ByteArray) (start size : Nat) :
     (bufferRead data start size).length = size := by
   simp [bufferRead]
 
+/-- A read of a whole buffer from its start gives its bytes. -/
+theorem bufferRead_zero_size (data : ByteArray) :
+    bufferRead data 0 data.size = data.data.toList := by
+  apply List.ext_getElem
+  · simp [bufferRead]
+  · intro i _ h
+    have hi : i < data.data.size := by simpa using h
+    simp [bufferRead, EthLib.Base.byteAt_eq_getD, Array.getD_eq_getD_getElem?,
+      Array.getElem?_eq_getElem hi]
+
 /-- A write within memory keeps its size. -/
 theorem size_memoryWrite {memory value : ByteArray} {start : Nat}
     (h : start + value.size ≤ memory.size) :
