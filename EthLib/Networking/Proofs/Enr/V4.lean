@@ -128,4 +128,44 @@ theorem verifyV4_of_sign {r : Enr} {sk rr ss : Fn} {odd : Bool} {content : ByteA
     verifyV4 r = true :=
   verifyV4_of_verify hid hkey hc hsig (Ecdsa.verify_sign_rfc6979 hsign)
 
+/-! ## Node ID -/
+
+/-- The node ID of a record is the Keccak-256 hash of the `x` and `y` of its public key. -/
+theorem nodeId_of_publicKeyV4 {r : Enr} {x y : Fp} (h : r.publicKeyV4 = .ok (.affine x y)) :
+    nodeId r = .ok (Hash.Keccak.keccak256 (publicKeyBytes x y)) := by
+  simp [nodeId, h, bind, Except.bind, pure, Except.pure]
+  rfl
+
+/-- A record without a public key has no node ID, and it fails with the same error. -/
+theorem nodeId_of_publicKeyV4_error {r : Enr} {e : EnrError} (h : r.publicKeyV4 = .error e) :
+    nodeId r = .error e := by
+  simp [nodeId, h, bind, Except.bind]
+
+/-- The public key of a record is never the point at infinity. -/
+theorem publicKeyV4_ne_infinity {r : Enr} {q : Point} (h : r.publicKeyV4 = .ok q) :
+    q ≠ .infinity := by
+  unfold Enr.publicKeyV4 at h
+  split at h
+  · cases h
+  · split at h
+    · split at h
+      · split at h
+        · rename_i key _ _
+          cases hdec : Point.decode key with
+          | error e => simp [Except.mapError, hdec] at h
+          | ok p =>
+            simp only [Except.mapError, hdec, Except.ok.injEq] at h
+            subst h
+            exact (Point.decode_eq_ok_iff _ _ |>.mp hdec).2.1
+        · cases h
+      · cases h
+    · cases h
+
+/-- A record that verifies has a node ID. -/
+theorem nodeId_ok_of_verifyV4 {r : Enr} (h : verifyV4 r = true) : ∃ id, nodeId r = .ok id := by
+  obtain ⟨q, hq⟩ := publicKeyV4_ok_of_verifyV4 h
+  cases q with
+  | infinity => exact absurd rfl (publicKeyV4_ne_infinity hq)
+  | affine x y => exact ⟨_, nodeId_of_publicKeyV4 hq⟩
+
 end EthLib.Networking.Enr
