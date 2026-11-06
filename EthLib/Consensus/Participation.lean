@@ -65,8 +65,8 @@ def setOrAppendList {switch : Base.Fork} {α : Type} {limit : Nat}
     (list : ForkList switch fork α limit) (index : UInt64) (value : α) :
     Except AccessorError (ForkList switch fork α limit) :=
   if index.toNat = list.data.size then appendWithinLimit list value
-  else if index.toNat < list.data.size then
-    .ok ⟨list.data.set! index.toNat value, fun before => by simpa using list.bound before⟩
+  else if inside : index.toNat < list.data.size then
+    .ok ⟨list.data.set index.toNat value inside, fun before => by simpa using list.bound before⟩
   else .error (.indexOutOfRange index)
 
 /-- From Altair: the base reward of one increment of effective balance.

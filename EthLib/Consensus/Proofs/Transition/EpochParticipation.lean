@@ -79,11 +79,13 @@ theorem sameSizes_processSyncCommitteeUpdates {altair : .altair ≤ fork}
     exact SameSizes.refl _
 
 /-- One score update keeps the number of scores. -/
-theorem updateInactivityScore_size {config : Config} {hit : Array Bool} {leaking : Bool}
-    {scores scores' : InactivityScores preset fork} {index : ValidatorIndex}
+theorem updateInactivityScore_size {config : Config} {hit : Except TransitionError (Array Bool)}
+    {leaking : Except TransitionError Bool} {scores scores' : InactivityScores preset fork}
+    {index : ValidatorIndex}
     (computed : updateInactivityScore config hit leaking scores index = .ok scores') :
     scores'.data.size = scores.data.size := by
-  unfold updateInactivityScore at computed
+  simp only [updateInactivityScore, bind_ok_iff] at computed
+  obtain ⟨_, _, computed⟩ := computed
   split at computed
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, _, same⟩ := computed
@@ -109,8 +111,8 @@ theorem processInactivityUpdates_sizes {config : Config} {altair : .altair ≤ f
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     subst computed
     exact ⟨SameSizes.refl _, rfl⟩
-  · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, _, _, scores, folded, same⟩ := computed
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, scores, folded, same⟩ := computed
     subst same
     refine ⟨SameSizes.refl _, ?_⟩
     exact foldlM_ok_invariant (fun s : InactivityScores preset fork =>
