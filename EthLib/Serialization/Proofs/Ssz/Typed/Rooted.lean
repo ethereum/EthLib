@@ -6,6 +6,7 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.Root
 public import EthLib.Serialization.Proofs.Ssz.Codec.RootUnfold
 public import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingPacking
 
 /-!
 # Proofs: rooted vectors are lawful
@@ -149,6 +150,144 @@ theorem hashTreeRoot_vector_leafRoots {length : Nat} (composite : (desc α).isBa
   · intro index _ _
     simp [leafRoots]
 
+/-- Taking whole parts out of parts of one width takes the same bytes out of their run. -/
+theorem extract_concatParts_run {width : Nat} :
+    ∀ (parts : List Bytes), (∀ part ∈ parts, part.size = width) → ∀ skip take : Nat,
+      (concatParts parts).extract (skip * width) ((skip + take) * width)
+        = concatParts ((parts.drop skip).take take)
+  | [], _, skip, take => by simp [concatParts]
+  | part :: rest, widths, skip, take => by
+    have sized : part.size = width := widths part (by simp)
+    have restWidths : ∀ other ∈ rest, other.size = width := fun other member =>
+      widths other (by simp [member])
+    simp only [concatParts, Array.extract_append, sized]
+    cases skip with
+    | succ skip =>
+      -- The first part lies wholly before the run, so the run starts in the rest.
+      rw [Array.extract_eq_empty_of_le (by rw [Nat.succ_mul]; omega), Array.empty_append,
+        show (skip + 1) * width - width = skip * width by rw [Nat.succ_mul]; omega,
+        show (skip + 1 + take) * width - width = (skip + take) * width by
+          rw [show skip + 1 + take = (skip + take) + 1 by omega, Nat.succ_mul]; omega,
+        extract_concatParts_run rest restWidths skip take]
+      simp
+    | zero =>
+      cases take with
+      | zero => simp [concatParts]
+      | succ take =>
+        -- The run starts with the first part, whole, then takes the rest from the next one.
+        have ih := extract_concatParts_run rest restWidths 0 take
+        simp only [Nat.zero_mul, Nat.zero_add, Nat.zero_sub, List.drop_zero] at ih ⊢
+        rw [show (take + 1) * width - width = take * width by rw [Nat.succ_mul]; omega, ih,
+          Array.extract_eq_self_of_le (by rw [sized, Nat.succ_mul]; omega)]
+        simp [concatParts]
+
+section Packed
+
+/-- A basic element encodes to the bytes of its leaf, of the width of its type. -/
+theorem serialize_elementBytes (basic : (desc α).isBasic = true) (a : α) :
+    Ssz.serialize (desc α) (toValue a) = .ok (elementBytes a)
+      ∧ (elementBytes a).size = (desc α).itemLength := by
+  have fits := LawfulSszType.fits a
+  unfold elementBytes
+  generalize desc α = shape at fits basic ⊢
+  generalize toValue a = value at fits ⊢
+  cases fits <;> simp [Desc.isBasic] at basic
+  case bool b => simp [Ssz.serialize, Desc.itemLength]
+  case uint width n bound => simp [Ssz.serialize, bound, Desc.itemLength, uintBytes_size]
+
+/-- Encoding basic elements one by one gives the bytes of their leaves. -/
+theorem serializeEach_elementBytes (basic : (desc α).isBasic = true) :
+    ∀ items : List α,
+      serializeEach (desc α) (items.map toValue) = .ok (items.map elementBytes)
+  | [] => by simp [serializeEach_nil]
+  | a :: items => by
+    simp [serializeEach_cons, (serialize_elementBytes basic a).1,
+      serializeEach_elementBytes basic items, bind, Except.bind, pure, Except.pure]
+
+/-- A basic type of a well-formed shape fills a node with a whole number of elements. -/
+theorem itemLength_mul_perChunk (basic : (desc α).isBasic = true) :
+    (desc α).itemLength * perChunk α = bytesPerChunk := by
+  have sound := LawfulSszType.wellFormed (α := α)
+  unfold perChunk
+  generalize desc α = shape at sound basic ⊢
+  cases shape <;> simp [Desc.isBasic] at basic
+  · simp [Desc.itemLength, bytesPerChunk]
+  · rename_i width
+    simp only [Desc.wellFormed] at sound
+    split at sound
+    · rename_i listed
+      have member : width ∈ [1, 2, 4, 8, 16, 32] := List.contains_iff_mem.mp listed
+      simp only [Desc.itemLength, bytesPerChunk]
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at member
+      rcases member with rfl | rfl | rfl | rfl | rfl | rfl <;> rfl
+    · cases sound
+
+/-- Basic elements pack into the leaves that a rooted sequence keeps for them. -/
+theorem packElements_elementBytes (basic : (desc α).isBasic = true) (elements : Array α) :
+    packElements (elements.toList.map elementBytes) = packedChunks elements := by
+  have filled := itemLength_mul_perChunk (α := α) basic
+  have widths : ∀ part ∈ elements.toList.map elementBytes, part.size = (desc α).itemLength := by
+    intro part member
+    obtain ⟨a, -, rfl⟩ := List.mem_map.mp member
+    exact (serialize_elementBytes basic a).2
+  have size := concatParts_size _ _ widths
+  simp only [List.length_map, Array.length_toList] at size
+  generalize hw : (desc α).itemLength = width at filled widths size
+  have positive := perChunk_pos α
+  generalize hk : perChunk α = per at filled positive
+  rw [bytesPerChunk] at filled
+  have wide : 0 < width := Nat.pos_of_ne_zero (by rintro rfl; simp at filled)
+  rw [packElements, fold_parts_eq_concat, Array.empty_append]
+  apply Array.ext
+  · -- The bytes fill whole nodes of `per` elements each, the last one perhaps in part.
+    simp only [packBytes_size, size, packedChunks, Array.size_ofFn, hk, bytesPerChunk]
+    rw [← filled, ← Nat.div_div_eq_div_mul]
+    congr 1
+    have expand : elements.size * width + width * per - 1
+        = width * (elements.size + per - 1) + (width - 1) := by
+      rw [Nat.mul_sub, Nat.mul_add, Nat.mul_one, Nat.mul_comm elements.size width]
+      have : width ≤ width * per := Nat.le_mul_of_pos_right width positive
+      omega
+    rw [expand, Nat.mul_add_div wide, Nat.div_eq_of_lt (by omega), Nat.add_zero]
+  · intro chunk _ _
+    simp only [packBytes, packedChunks, packedChunk, Array.getElem_ofFn, hk, bytesPerChunk]
+    -- Leaf `chunk` holds the bytes of elements `chunk * per` to `chunk * per + per`.
+    have run : (concatParts (elements.toList.map elementBytes)).extract (chunk * 32)
+          (chunk * 32 + 32)
+        = (elements.extract (chunk * per) (chunk * per + per)).foldl
+            (fun bytes a => bytes ++ elementBytes a) #[] := by
+      rw [show chunk * 32 + 32 = (chunk * per + per) * width by
+          rw [← filled, Nat.add_mul]; ac_rfl,
+        show chunk * 32 = (chunk * per) * width by rw [← filled]; ac_rfl,
+        extract_concatParts_run _ widths, ← Array.foldl_toList, Array.toList_extract,
+        List.extract_eq_take_drop, ← List.foldl_map, fold_parts_eq_concat, Array.empty_append,
+        List.map_take, List.map_drop]
+      congr 2
+      omega
+    rw [run]
+
+/-- A vector of basic elements has the bounded root of its packed leaves. -/
+theorem hashTreeRoot_vector_packed {length : Nat} (basic : (desc α).isBasic = true)
+    (elements : Vector α length) :
+    Ssz.hashTreeRoot (.vector (desc α) length) (.seq (elements.toList.map toValue))
+      = .ok (subtreeAt (packedChunks elements.toArray)
+          (depthFor (chunksForBytes (length * (desc α).itemLength))) 0) := by
+  rw [hashTreeRoot_unfold]
+  have packed : packElements (elements.toList.map elementBytes) = packedChunks elements.toArray :=
+    packElements_elementBytes basic elements.toArray
+  have fit : ¬chunksForBytes (length * (desc α).itemLength) < (packedChunks elements.toArray).size
+      := by
+    rw [← packed, packElements, fold_parts_eq_concat, Array.empty_append, packBytes_size,
+      concatParts_size _ _ (fun part member => by
+        obtain ⟨a, -, rfl⟩ := List.mem_map.mp member
+        exact (serialize_elementBytes basic a).2)]
+    simp [chunksForBytes]
+  simp [merkleLayout, sequenceLayout, basic, MerkleLayout.packing, leafChunks,
+    serializeEach_elementBytes basic, finishLayout, merkleizeBoundedUnchecked,
+    bind, Except.bind, pure, Except.pure, packed, fit]
+
+end Packed
+
 namespace RootedVector
 
 variable {length : Nat}
@@ -156,10 +295,12 @@ variable {length : Nat}
 /-- The root of a rooted vector is the root of its elements as a vector. -/
 theorem root_eq (v : RootedVector α length) :
     root v = Ssz.hashTreeRoot (desc (RootedVector α length)) (toValue v) := by
+  simp only [root, desc, toValue]
+  rw [v.built, topOfLevels_eq, sequenceLeaves, leafCapacity]
   by_cases basic : (desc α).isBasic
-  · simp [root, basic, desc, toValue]
-  · simp only [root, basic, desc, toValue, Bool.false_eq_true, ite_false]
-    rw [hashTreeRoot_vector_leafRoots (by simpa using basic), v.built, topOfLevels_eq]
+  · rw [ite_eq_left basic, ite_eq_left basic, hashTreeRoot_vector_packed basic]
+  · rw [ite_eq_right basic, ite_eq_right basic,
+      hashTreeRoot_vector_leafRoots (by simpa using basic)]
 
 end RootedVector
 

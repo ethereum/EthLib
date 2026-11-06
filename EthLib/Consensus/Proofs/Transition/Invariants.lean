@@ -154,7 +154,7 @@ theorem frame_initiateValidatorExit {index : ValidatorIndex}
     have sum := (addChecked_ok_iff.mp summed).2
     exact UInt64.le_iff_toNat_le.mpr (by simp only at sum ⊢; omega)
 
-theorem frame_slashings (state : BeaconState preset fork) (slashings : Vector Gwei _) :
+theorem frame_slashings (state : BeaconState preset fork) (slashings : RootedVector Gwei _) :
     Frame state { state with slashings } :=
   Frame.of_validators ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl
 

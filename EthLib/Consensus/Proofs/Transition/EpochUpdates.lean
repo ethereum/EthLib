@@ -237,9 +237,9 @@ theorem sameSizes_processSlashings (computed : processSlashings state = .ok afte
 
 /-- The slashings reset clears the slashed balance of the next epoch, and nothing else. -/
 theorem processSlashingsReset_eq (computed : processSlashingsReset state = .ok after) :
-    ∃ (nextEpoch : Epoch) (slashings : Vector Gwei preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat),
+    ∃ (nextEpoch : Epoch) (slashings : RootedVector Gwei preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat),
       nextEpoch.toNat = (getCurrentEpoch state).toNat + 1 ∧
-      writeCircular state.slashings nextEpoch 0 = .ok slashings ∧
+      writeCircularRooted state.slashings nextEpoch 0 = .ok slashings ∧
       after = { state with slashings } := by
   simp only [processSlashingsReset, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed

@@ -91,7 +91,7 @@ def emptyGenesisState (config : Config) (before : fork < .altair) (genesisTime :
   validators := .ofData #[] fun _ => by simp
   balances := ⟨#[], fun _ => by simp⟩
   randaoMixes := .ofVector (Vector.replicate _ eth1BlockHash)
-  slashings := Vector.replicate _ 0
+  slashings := .ofVector (Vector.replicate _ 0)
   previousEpochAttestations := fun _ => ⟨#[], by simp⟩
   currentEpochAttestations := fun _ => ⟨#[], by simp⟩
   previousEpochParticipation := fun since =>
