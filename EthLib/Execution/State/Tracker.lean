@@ -17,9 +17,9 @@ When the transaction ends, its writes move into its block.
 
 A snapshot of the writes of a transaction restores them when a call fails.
 
-A contract deploys only at an address with no nonce, no code and no word in its storage.
+A contract deploys only at an address with nonce 0, no code and only zeros in its storage.
 
-[EIP-7610][eip7610] adds the storage to the conditions of EIP-684.
+[EIP-7610][eip7610] adds empty storage to the conditions of [EIP-684][eip684].
 
 Transient storage lives for one transaction, as [EIP-1153][eip1153] specifies.
 
@@ -46,6 +46,7 @@ That clear keeps the balance.
 [eip1153]: https://eips.ethereum.org/EIPS/eip-1153#specification
 [eip7523]: https://eips.ethereum.org/EIPS/eip-7523#specification
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
+[eip684]: https://eips.ethereum.org/EIPS/eip-684#specification
 [eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
 [eip7928]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
 [eip8246]: https://eips.ethereum.org/EIPS/eip-8246#specification
@@ -250,24 +251,24 @@ def accountExists (tx : TransactionState) (address : Address) : Bool :=
 
 /-- Whether the storage of the address holds a word other than zero.
 
-A key can only hold a word if some layer that the address's storage shows has it.
+Only a key in a layer that no clear hides can read a nonzero word.
 
-A wipe of the storage in a layer hides the layers below. -/
+A clear of the storage in a layer hides the layers below it. -/
 def accountHasStorage (tx : TransactionState) (address : Address) : Bool :=
-  let keys (storage : StorageMap) := (storage.getD address ∅).keys
-  let preKeys := keys tx.parent.preState.storage
-  let parentKeys := keys tx.parent.storageWrites ++
-    if address ∈ tx.parent.storageClears then [] else preKeys
-  let txKeys := keys tx.storageWrites ++ if address ∈ tx.storageClears then [] else parentKeys
-  txKeys.any fun key => tx.getStorage address key != 0
+  let nonzero (storage : StorageMap) :=
+    (storage.getD address ∅).keys.any fun key => tx.getStorage address key != 0
+  -- A layer is read only when the layers above it hold no nonzero word and no clear.
+  nonzero tx.storageWrites || (decide (address ∉ tx.storageClears) &&
+    (nonzero tx.parent.storageWrites || (decide (address ∉ tx.parent.storageClears) &&
+      nonzero tx.parent.preState.storage)))
 
 /-- Whether a contract may be deployed at the address.
 
 Its account must have nonce 0 and no code, and its storage must hold only zeros.
 
-[EIP-684](https://eips.ethereum.org/EIPS/eip-684#specification) asks for the nonce and the code.
+[EIP-684][eip684] asks for the nonce and the code.
 
-[EIP-7610][eip7610] asks for the storage, at every fork. -/
+[EIP-7610][eip7610] asks for the empty storage, at every fork. -/
 def accountDeployable (tx : TransactionState) (address : Address) : Bool :=
   let account := tx.getAccount address
   account.nonce = 0 && account.codeHash = EMPTY_CODE_HASH && !tx.accountHasStorage address

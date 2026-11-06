@@ -172,7 +172,7 @@ theorem getStorage_destroyStorage_of_ne (tx : TransactionState) {address other :
 
 /-! ## Deployable addresses -/
 
-/-- A word that a storage map holds at a key has the key among the keys of the address. -/
+/-- A key at which a storage map holds a word for an address is among the keys of that address. -/
 theorem mem_keys_of_slot {storage : StorageMap} {address : Address} {key : Bytes32}
     {value : U256} (h : storage.slot address key = some value) :
     key ∈ (storage.getD address ∅).keys := by
@@ -181,33 +181,38 @@ theorem mem_keys_of_slot {storage : StorageMap} {address : Address} {key : Bytes
   rw [Std.ExtTreeMap.getD_eq_getD_getElem?, hs, Option.getD_some]
   exact Std.ExtTreeMap.mem_keys.mpr (Std.ExtTreeMap.mem_iff_isSome_getElem?.mpr (by simp [hk]))
 
-/-- The storage of an address holds a word other than zero exactly when some key reads nonzero. -/
+/-- The scan of the listed keys finds a nonzero word exactly when some key reads nonzero. -/
 theorem accountHasStorage_iff (tx : TransactionState) (address : Address) :
     tx.accountHasStorage address = true ↔ ∃ key, tx.getStorage address key ≠ 0 := by
   constructor
   · intro h
-    obtain ⟨key, -, hk⟩ := List.any_eq_true.mp h
-    exact ⟨key, by simpa using hk⟩
+    simp only [accountHasStorage, Bool.or_eq_true, Bool.and_eq_true, List.any_eq_true,
+      bne_iff_ne, ne_eq] at h
+    rcases h with ⟨key, -, hk⟩ | ⟨-, ⟨key, -, hk⟩ | ⟨-, key, -, hk⟩⟩ <;> exact ⟨key, hk⟩
   · rintro ⟨key, hk⟩
-    refine List.any_eq_true.mpr ⟨key, ?_, by simpa using hk⟩
-    unfold getStorage at hk
-    split at hk
+    have found {storage : StorageMap} (h : key ∈ (storage.getD address ∅).keys) :
+        ((storage.getD address ∅).keys.any fun key => tx.getStorage address key != 0) = true :=
+      List.any_eq_true.mpr ⟨key, h, by simpa using hk⟩
+    have hk' := hk
+    unfold getStorage at hk'
+    simp only [accountHasStorage, Bool.or_eq_true, Bool.and_eq_true, decide_eq_true_eq]
+    split at hk'
     · rename_i value h
-      simp [mem_keys_of_slot h]
-    · split at hk
-      · exact absurd rfl hk
+      exact Or.inl (found (mem_keys_of_slot h))
+    · split at hk'
+      · exact absurd rfl hk'
       · rename_i hc
-        split at hk
+        split at hk'
         · rename_i value h
-          simp [mem_keys_of_slot h, hc]
-        · split at hk
-          · exact absurd rfl hk
+          exact Or.inr ⟨hc, Or.inl (found (mem_keys_of_slot h))⟩
+        · split at hk'
+          · exact absurd rfl hk'
           · rename_i hc'
             cases hp : StorageMap.slot tx.parent.preState.storage address key with
-            | some value => simp [mem_keys_of_slot hp, hc, hc']
-            | none => simp [State.getStorage, hp] at hk
+            | some value => exact Or.inr ⟨hc, Or.inr ⟨hc', found (mem_keys_of_slot hp)⟩⟩
+            | none => simp [State.getStorage, hp] at hk'
 
-/-- A contract deploys at an address exactly when it has no nonce, no code and no word of storage.
+/-- An address takes a contract exactly when its nonce is 0, it has no code and every key reads 0.
 
 An address with storage and nothing else is not deployable, as EIP-7610 asks. -/
 theorem accountDeployable_iff (tx : TransactionState) (address : Address) :
