@@ -25,7 +25,13 @@ open EthLib.Cryptography.Kzg.Constants
 /-- The encoding of the point at infinity decodes to the zero triple. -/
 theorem uncompress_G1_POINT_AT_INFINITY :
     G1.uncompress ⟨G1_POINT_AT_INFINITY.toArray⟩ = .ok G1.zero := by
-  decide +kernel
+  have hsz : (⟨G1_POINT_AT_INFINITY.toArray⟩ : ByteArray).size = 48 := by decide
+  have hhead : (⟨G1_POINT_AT_INFINITY.toArray⟩ : ByteArray).get! 0 = 0xc0 := by decide
+  have htail : Bls.tailAllZero ⟨G1_POINT_AT_INFINITY.toArray⟩ 1 = true := by decide +kernel
+  rw [G1.uncompress, ite_eq_right (by rw [hsz]; decide)]
+  dsimp only
+  rw [hhead, htail]
+  rfl
 
 /-- KZG validation accepts exactly the decodable points of order dividing `r`. -/
 theorem validateKzgG1Point_eq_ok_iff {b : Bytes48} {P : G1} :

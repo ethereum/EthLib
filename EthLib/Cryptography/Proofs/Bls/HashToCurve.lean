@@ -40,9 +40,7 @@ def swuX2 (u : Fp2) : Fp2 :=
   Z * (u * u) * swuX1 u
 
 private theorem aprime_ne_zero : Aprime ≠ (0 : Fp2) := by
-  intro h
-  have := congrArg Fp2.c1 h
-  revert this; decide
+  decide_eq_at_model [Aprime]
 
 private theorem swuG_x2_aux (t A B invA invD : Fp2)
     (hd_inv : (t * t + t) * invD = 1) (ha_inv : A * invA = 1) :
@@ -199,12 +197,10 @@ private def zaInv : Fp2 :=
    Fp.ofNat 0x35652f067ce47d581f5781541cf4220c3146df554288b5daef310ca6ac085fcf4938369a54386d397715d70a3d6ff4a⟩
 
 private theorem za_mul_zaInv : (Z * Aprime) * zaInv = 1 := by
-  decide
+  decide_eq_at_model [Z, Aprime, zaInv]
 
 private theorem za_ne_zero : (Z : Fp2) * Aprime ≠ 0 := by
-  intro h
-  have := congrArg Fp2.c0 h
-  revert this; decide
+  decide_eq_at_model [Z, Aprime]
 
 private theorem za_inverse_eq : ((Z : Fp2) * Aprime).inverse = zaInv := by
   have h1 : ((Z : Fp2) * Aprime) * ((Z : Fp2) * Aprime).inverse = 1 :=

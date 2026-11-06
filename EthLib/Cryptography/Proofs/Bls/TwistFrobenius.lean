@@ -229,33 +229,29 @@ theorem primeFrobenius_fp2 (a : Fp2) :
     primeFrobenius (fp2ToFp12 a) = fp2ToFp12 a.conjugate := by
   rw [primeFrobenius_apply, ← map_pow, fp2_pow_p_eq_conjugate]
 
-/-- Definitionally identical to `c1Psi` in `HashToCurve.psi`. -/
-def psiAlpha : Fp2 := (Fp2.powNat ⟨Fp.one, Fp.one⟩ ((Fp.modulus - 1) / 3)).inverse
-
-/-- Definitionally identical to `c2Psi` in `HashToCurve.psi`. -/
-def psiBeta : Fp2 := (Fp2.powNat ⟨Fp.one, Fp.one⟩ ((Fp.modulus - 1) / 2)).inverse
-
-theorem psiAlpha_eq : psiAlpha = (Fp2.xi ^ ((Fp.modulus - 1) / 3))⁻¹ := by
-  unfold psiAlpha
+theorem c1Psi_eq : (c1Psi : Fp2) = (Fp2.xi ^ ((Fp.modulus - 1) / 3))⁻¹ := by
+  unfold c1Psi
+  dsimp only
   rw [Fp2.powNat_eq_pow]
   rfl
 
-theorem psiBeta_eq : psiBeta = (Fp2.xi ^ ((Fp.modulus - 1) / 2))⁻¹ := by
-  unfold psiBeta
+theorem c2Psi_eq : (c2Psi : Fp2) = (Fp2.xi ^ ((Fp.modulus - 1) / 2))⁻¹ := by
+  unfold c2Psi
+  dsimp only
   rw [Fp2.powNat_eq_pow]
   rfl
 
 theorem primeFrobenius_wInv2 :
-    primeFrobenius ((w⁻¹) ^ 2) = fp2ToFp12 psiAlpha * (w⁻¹) ^ 2 := by
+    primeFrobenius ((w⁻¹) ^ 2) = fp2ToFp12 (c1Psi : Fp2) * (w⁻¹) ^ 2 := by
   rw [primeFrobenius_apply, inv_pow, ← inv_pow, ← pow_mul,
     show 2 * Fp.modulus = 6 * ((Fp.modulus - 1) / 3) + 2 by decide,
-    pow_add, pow_mul, inv_pow, w_sixth, inv_pow, ← map_pow, psiAlpha_eq, map_inv₀]
+    pow_add, pow_mul, inv_pow, w_sixth, inv_pow, ← map_pow, c1Psi_eq, map_inv₀]
 
 theorem primeFrobenius_wInv3 :
-    primeFrobenius ((w⁻¹) ^ 3) = fp2ToFp12 psiBeta * (w⁻¹) ^ 3 := by
+    primeFrobenius ((w⁻¹) ^ 3) = fp2ToFp12 (c2Psi : Fp2) * (w⁻¹) ^ 3 := by
   rw [primeFrobenius_apply, inv_pow, ← inv_pow, ← pow_mul,
     show 3 * Fp.modulus = 6 * ((Fp.modulus - 1) / 2) + 3 by decide,
-    pow_add, pow_mul, inv_pow, w_sixth, inv_pow, ← map_pow, psiBeta_eq, map_inv₀]
+    pow_add, pow_mul, inv_pow, w_sixth, inv_pow, ← map_pow, c2Psi_eq, map_inv₀]
 
 /-- `p`-power Frobenius group endomorphism `(X, Y) -> (X^p, Y^p)` on `E(Fp12)`. -/
 noncomputable def primeFrobeniusHom : ambientCurve.Point →+ ambientCurve.Point :=
@@ -267,16 +263,12 @@ theorem primeFrobeniusHom_apply (P : ambientCurve.Point) :
 
 /-! ## Additivity of `psi` and its eigenvalue on `G2.generator` -/
 
-private theorem alpha_cube : psiAlpha ^ 3 = psiBeta ^ 2 := HashToCurve.c1Psi_cube
-private theorem beta_twist : psiBeta ^ 2 * G2.bTwist.conjugate = G2.bTwist :=
-  HashToCurve.c2Psi_twist
-
 private theorem twist_frob_equation {x y : Fp2}
     (h : y ^ 2 = x ^ 3 + G2.bTwist) :
-    (psiBeta * y.conjugate) ^ 2 = (psiAlpha * x.conjugate) ^ 3 + G2.bTwist := by
+    ((c2Psi : Fp2) * y.conjugate) ^ 2 = ((c1Psi : Fp2) * x.conjugate) ^ 3 + G2.bTwist := by
   have he := congrArg primeFrobenius2 h
   simp only [map_pow, map_add, primeFrobenius2_apply, fp2_pow_p_eq_conjugate] at he
-  linear_combination psiBeta ^ 2 * he - x.conjugate ^ 3 * alpha_cube + beta_twist
+  linear_combination (c2Psi : Fp2) ^ 2 * he - x.conjugate ^ 3 * c1Psi_cube + c2Psi_twist
 
 private theorem twist_nonsingular {x y : Fp2}
     (h : y ^ 2 = x ^ 3 + G2.bTwist) : G2.curve.toAffine.Nonsingular x y := by
@@ -286,7 +278,7 @@ private theorem twist_nonsingular {x y : Fp2}
 /-- Action of the `RFC 9380 Appendix G.3` twist endomorphism on `G2.curve.toAffine.Point`. -/
 noncomputable def mapPoint : G2.curve.toAffine.Point → G2.curve.toAffine.Point
   | .zero => 0
-  | .some x y h => .some (psiAlpha * x.conjugate) (psiBeta * y.conjugate)
+  | .some x y h => .some ((c1Psi : Fp2) * x.conjugate) ((c2Psi : Fp2) * y.conjugate)
       -- The curve-membership proof can depend on private lemmas.
       (by exact twist_nonsingular (twist_frob_equation (by
         linear_combination (ShortWeierstrass.equation_iff (a := 0) (b := G2.bTwist) x y).mp h.1)))
@@ -336,8 +328,8 @@ theorem toPoint_psi {P : G2} (hP : G2.Valid P) :
     change G2.toPoint P = _ at hnorm
     rw [hnorm, hom_apply]
     have hv := psi_valid hP
-    have he : psi P = ⟨psiAlpha * P.toAffine.1.conjugate,
-        psiBeta * P.toAffine.2.conjugate, Fp2.one⟩ := by
+    have he : psi P = ⟨(c1Psi : Fp2) * P.toAffine.1.conjugate,
+        (c2Psi : Fp2) * P.toAffine.2.conjugate, Fp2.one⟩ := by
       unfold psi
       rw [hf]
       rfl

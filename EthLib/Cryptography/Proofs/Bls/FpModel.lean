@@ -131,6 +131,12 @@ theorem ne_of_model {a b : Fp} (h : BaseField.beq (toModel a) (toModel b) = fals
   rw [toModel.map_beq, baseField_beq, beq, beq_self_eq_true] at h
   exact Bool.noConfusion h
 
+/-- The square root succeeds in `Fp` exactly when it succeeds in the model. -/
+theorem sqrt_isOk_eq (a : Fp) : (Fp.sqrt a).isOk = (BaseField.sqrt (toModel a)).isSome := by
+  rw [toModel.map_sqrt, Option.isSome_map]
+  show _ = (match Fp.sqrt a with | .ok s => some s | .error _ => none).isSome
+  cases Fp.sqrt a <;> rfl
+
 end Fp
 
 end EthLib.Cryptography.Bls
