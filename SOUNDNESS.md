@@ -709,6 +709,7 @@ The indexed roots in `Execution/Blocks/Roots.lean` also build tries directly, wi
 `indexedEntries_nodup` (`Execution/Proofs/Blocks/Roots.lean`) supplies their distinct keys, since the RLP decoder reads each index back from its encoding.
 With these distinct keys, `indexedRoot_binding_key` shows that two lists with one root give every key one value.
 Otherwise `findCollision` returns a collision in the proofs of that key.
+`indexedRoot_binding` concludes that the two lists are equal, or `findIndexedCollision` returns a collision in the proofs of one index.
 No theorem bounds the probability of finding a collision.
 
 ### Light client
