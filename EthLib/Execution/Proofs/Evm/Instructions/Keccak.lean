@@ -12,7 +12,7 @@ public import EthLib.Base.Proofs.U256
 
 @[expose] public section
 
-namespace EthLib.Execution.Evm.Instructions
+namespace EthLib.Execution.Evm
 
 open EthLib.Base
 open EthLib.Cryptography.Hash.Keccak (keccak256)
@@ -27,4 +27,4 @@ theorem keccak256_eq_of_keccak_eq {a b : ByteArray} (h : keccak a = keccak b) :
     keccak256 a = keccak256 b :=
   U256.fromBeBytes_injective h
 
-end EthLib.Execution.Evm.Instructions
+end EthLib.Execution.Evm

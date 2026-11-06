@@ -17,7 +17,7 @@ Each pushes 1 when its condition holds, and 0 otherwise.
 
 @[expose] public section
 
-namespace EthLib.Execution.Evm.Instructions
+namespace EthLib.Execution.Evm
 
 open EthLib.Base
 
@@ -41,4 +41,4 @@ def equal (left right : U256) : U256 := if left = right then 1 else 0
 /-- Whether `x = 0`. -/
 def isZero (x : U256) : U256 := if x = 0 then 1 else 0
 
-end EthLib.Execution.Evm.Instructions
+end EthLib.Execution.Evm

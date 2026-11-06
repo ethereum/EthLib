@@ -81,7 +81,7 @@ def swapN (n : Fin 16) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter)
 
 /-- The number of bytes that the exponent of EXP takes, without leading zero bytes. -/
 def exponentBytes (exponent : U256) : Nat :=
-  (Instructions.bitLength exponent.toNat + 7) / 8
+  (bitLength exponent.toNat + 7) / 8
 
 /-- EXP: the base price, plus a price per byte of the exponent that depends on the fork. -/
 def expStep (fork : Fork) (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := do
@@ -89,7 +89,7 @@ def expStep (fork : Fork) (evm : Evm fork Meter) : Except EvmError (Evm fork Met
   let (exponent, evm) ← popWord evm
   let cost := OPCODE_EXP_BASE + (gasSchedule fork).OPCODE_EXP_PER_BYTE * exponentBytes exponent
   let evm ← chargeGas evm cost
-  let evm ← pushWord evm (Instructions.exp base exponent)
+  let evm ← pushWord evm (exp base exponent)
   return advance evm
 
 /-- KECCAK256: hash `size` bytes of memory from `start`, after the memory grows to hold them. -/
@@ -99,7 +99,7 @@ def keccak256Step (evm : Evm fork Meter) : Except EvmError (Evm fork Meter) := d
   let cost := OPCODE_KECCAK256_BASE + OPCODE_KECCAK256_PER_WORD * wordCount size.toNat
   let evm ← chargeGasAndMemory evm cost [(start, size)]
   let data := memoryReadBytes evm.memory start.toNat size.toNat
-  let evm ← pushWord evm (Instructions.keccak data)
+  let evm ← pushWord evm (keccak data)
   return advance evm
 
 /-- The instruction of an opcode that reads and writes only the stack, or KECCAK256.
@@ -108,32 +108,32 @@ Other opcodes give none.
 
 The fork sets the price of EXP, and DUPN, SWAPN and EXCHANGE exist from Glamsterdam. -/
 def stackOnlyStep (fork : Fork) : Op → Option (Evm fork Meter → Except EvmError (Evm fork Meter))
-  | .add => some (binaryOp OPCODE_ADD Instructions.add)
-  | .mul => some (binaryOp OPCODE_MUL Instructions.mul)
-  | .sub => some (binaryOp OPCODE_SUB Instructions.sub)
-  | .div => some (binaryOp OPCODE_DIV Instructions.div)
-  | .sdiv => some (binaryOp OPCODE_SDIV Instructions.sdiv)
-  | .mod => some (binaryOp OPCODE_MOD Instructions.mod)
-  | .smod => some (binaryOp OPCODE_SMOD Instructions.smod)
-  | .addmod => some (ternaryOp OPCODE_ADDMOD Instructions.addmod)
-  | .mulmod => some (ternaryOp OPCODE_MULMOD Instructions.mulmod)
+  | .add => some (binaryOp OPCODE_ADD add)
+  | .mul => some (binaryOp OPCODE_MUL mul)
+  | .sub => some (binaryOp OPCODE_SUB sub)
+  | .div => some (binaryOp OPCODE_DIV div)
+  | .sdiv => some (binaryOp OPCODE_SDIV sdiv)
+  | .mod => some (binaryOp OPCODE_MOD mod)
+  | .smod => some (binaryOp OPCODE_SMOD smod)
+  | .addmod => some (ternaryOp OPCODE_ADDMOD addmod)
+  | .mulmod => some (ternaryOp OPCODE_MULMOD mulmod)
   | .exp => some (expStep fork)
-  | .signextend => some (binaryOp OPCODE_SIGNEXTEND Instructions.signextend)
-  | .lt => some (binaryOp OPCODE_LT Instructions.lessThan)
-  | .gt => some (binaryOp OPCODE_GT Instructions.greaterThan)
-  | .slt => some (binaryOp OPCODE_SLT Instructions.signedLessThan)
-  | .sgt => some (binaryOp OPCODE_SGT Instructions.signedGreaterThan)
-  | .eq => some (binaryOp OPCODE_EQ Instructions.equal)
-  | .iszero => some (unaryOp OPCODE_ISZERO Instructions.isZero)
-  | .and => some (binaryOp OPCODE_AND Instructions.bitwiseAnd)
-  | .or => some (binaryOp OPCODE_OR Instructions.bitwiseOr)
-  | .xor => some (binaryOp OPCODE_XOR Instructions.bitwiseXor)
-  | .not => some (unaryOp OPCODE_NOT Instructions.bitwiseNot)
-  | .byte => some (binaryOp OPCODE_BYTE Instructions.getByte)
-  | .shl => some (binaryOp OPCODE_SHL Instructions.bitwiseShl)
-  | .shr => some (binaryOp OPCODE_SHR Instructions.bitwiseShr)
-  | .sar => some (binaryOp OPCODE_SAR Instructions.bitwiseSar)
-  | .clz => some (unaryOp OPCODE_CLZ Instructions.countLeadingZeros)
+  | .signextend => some (binaryOp OPCODE_SIGNEXTEND signextend)
+  | .lt => some (binaryOp OPCODE_LT lessThan)
+  | .gt => some (binaryOp OPCODE_GT greaterThan)
+  | .slt => some (binaryOp OPCODE_SLT signedLessThan)
+  | .sgt => some (binaryOp OPCODE_SGT signedGreaterThan)
+  | .eq => some (binaryOp OPCODE_EQ equal)
+  | .iszero => some (unaryOp OPCODE_ISZERO isZero)
+  | .and => some (binaryOp OPCODE_AND bitwiseAnd)
+  | .or => some (binaryOp OPCODE_OR bitwiseOr)
+  | .xor => some (binaryOp OPCODE_XOR bitwiseXor)
+  | .not => some (unaryOp OPCODE_NOT bitwiseNot)
+  | .byte => some (binaryOp OPCODE_BYTE getByte)
+  | .shl => some (binaryOp OPCODE_SHL bitwiseShl)
+  | .shr => some (binaryOp OPCODE_SHR bitwiseShr)
+  | .sar => some (binaryOp OPCODE_SAR bitwiseSar)
+  | .clz => some (unaryOp OPCODE_CLZ countLeadingZeros)
   | .keccak256 => some keccak256Step
   | .pop => some popStep
   | .push n => some (pushN n)

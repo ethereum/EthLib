@@ -14,7 +14,7 @@ public import EthLib.Execution.Proofs.Evm.PowMod
 
 @[expose] public section
 
-namespace EthLib.Execution.Evm.Instructions
+namespace EthLib.Execution.Evm
 
 open EthLib.Base
 
@@ -144,4 +144,4 @@ theorem signextend_eq (byteNum value : U256) (h : byteNum.toNat ≤ 31) :
     rw [Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt (by omega)]
     omega
 
-end EthLib.Execution.Evm.Instructions
+end EthLib.Execution.Evm

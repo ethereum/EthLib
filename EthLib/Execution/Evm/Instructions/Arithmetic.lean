@@ -18,7 +18,7 @@ Each function takes the operands in the order the instruction pops them.
 
 @[expose] public section
 
-namespace EthLib.Execution.Evm.Instructions
+namespace EthLib.Execution.Evm
 
 open EthLib.Base
 
@@ -100,4 +100,4 @@ def signextend (byteNum value : U256) : U256 :=
       -- Every bit above the sign bit copies it, so the high bytes are all `0xff`.
       BitVec.ofNat 256 (2 ^ 256 - 2 ^ width + low)
 
-end EthLib.Execution.Evm.Instructions
+end EthLib.Execution.Evm

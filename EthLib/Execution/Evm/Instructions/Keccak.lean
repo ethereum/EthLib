@@ -20,7 +20,7 @@ Only that last step is here, as a function of the bytes read.
 
 @[expose] public section
 
-namespace EthLib.Execution.Evm.Instructions
+namespace EthLib.Execution.Evm
 
 open EthLib.Base
 open EthLib.Cryptography.Hash.Keccak (keccak256)
@@ -30,4 +30,4 @@ open EthLib.Cryptography.Hash.Keccak (keccak256)
 The digest has exactly 32 bytes, so it fits in one word with nothing cut. -/
 def keccak (data : ByteArray) : U256 := U256.fromBeBytes (keccak256 data)
 
-end EthLib.Execution.Evm.Instructions
+end EthLib.Execution.Evm

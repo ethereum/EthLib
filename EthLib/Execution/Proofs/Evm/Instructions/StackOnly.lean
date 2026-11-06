@@ -68,7 +68,7 @@ theorem expStep_cons {fork : Fork} (hfork : fork ≥ .spuriousDragon) {evm : Evm
     {base exponent : U256} {rest : List U256} (h : evm.stack.val = base :: exponent :: rest) :
     expStep fork evm = (GasMeter.charge evm.gas (10 + 50 * exponentBytes exponent)).map fun gas =>
       { evm with
-        stack := ⟨Instructions.exp base exponent :: rest,
+        stack := ⟨exp base exponent :: rest,
           length_cons_le (dropped := [base, exponent]) h (by simp)⟩,
         gas, pc := evm.pc + 1 } := by
   have hstack : evm.stack = ⟨base :: exponent :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h
@@ -95,7 +95,7 @@ theorem keccak256Step_cons {evm : Evm fork Meter} {start size : U256} {rest : Li
         let memory :=
           memoryExtend evm.memory (extendMemory evm.memory.size [(start, size)]).expandBy
         { evm with
-          stack := ⟨Instructions.keccak (memoryReadBytes memory start.toNat size.toNat) :: rest,
+          stack := ⟨keccak (memoryReadBytes memory start.toNat size.toNat) :: rest,
             length_cons_le (dropped := [start, size]) h (by simp)⟩,
           memory, gas, pc := evm.pc + 1 } := by
   have hstack : evm.stack = ⟨start :: size :: rest, h ▸ evm.stack.property⟩ := Subtype.ext h

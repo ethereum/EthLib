@@ -12,7 +12,7 @@ public import EthLib.Base.Proofs.U256
 
 @[expose] public section
 
-namespace EthLib.Execution.Evm.Instructions
+namespace EthLib.Execution.Evm
 
 open EthLib.Base
 
@@ -98,4 +98,4 @@ theorem toNat_countLeadingZeros (x : U256) :
     simp only [countLeadingZeros, bitLength, hx0, ite_false, hx, BitVec.toNat_ofNat]
     omega
 
-end EthLib.Execution.Evm.Instructions
+end EthLib.Execution.Evm
