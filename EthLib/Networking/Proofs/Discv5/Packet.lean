@@ -14,6 +14,7 @@ Properties of the discv5 packet encoding.
 - The mask of a prefix is the prefix of the mask.
 - The authdata of each flag decodes back from its bytes.
 - A packet that the encoder writes, within the size limits, decodes back.
+- The additional data of a message is the masking IV and the unmasked bytes up to the message.
 - A message that the encryption writes decrypts back.
 -/
 
@@ -231,6 +232,46 @@ theorem Packet.decode_encode {destId : NodeId} {p : Packet} {bytes : ByteArray}
       hplain, h8, hflag, hnonce, hsize, hnbv, hauth, hdec, hrest, hmsg, hwho]
     simp only [ite_true, Array.toArray_toList]
     rfl
+
+/-- The additional data of a message is the masking IV, then the unmasked bytes that follow it.
+
+The unmasked part has the length of the additional data minus the 16 bytes of the masking IV. -/
+theorem Packet.messageAd_eq {destId : NodeId} {p : Packet} {bytes ad : ByteArray}
+    (he : p.encode destId = .ok bytes) (ha : p.messageAd = .ok ad) :
+    ad.data.toList = bytes.data.toList.take 16 ++
+      mask destId p.maskingIv ((bytes.data.toList.drop 16).take (ad.size - 16)) := by
+  obtain ⟨iv, header, msg⟩ := p
+  simp only [Packet.encode] at he
+  simp only [Packet.messageAd] at ha
+  cases hh : header.encode with
+  | error e => simp [hh, bind, Except.bind] at ha
+  | ok hb =>
+    simp only [hh, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at he ha
+    subst he ha
+    have hlen := length_mask destId iv hb
+    have hiv : iv.toList.length = 16 := by simp
+    have hsize : (⟨(iv.toList ++ hb).toArray⟩ : ByteArray).size - 16 = hb.length := by
+      simp [ByteArray.size, hiv]
+    simp only [hsize]
+    rw [List.append_assoc, List.take_left' hiv, List.drop_left' hiv, List.take_left' hlen,
+      mask_mask]
+
+/-- The additional data of a message and the message fill the whole packet.
+
+So the unmasked part of the additional data ends where the message starts. -/
+theorem Packet.size_messageAd_add {destId : NodeId} {p : Packet} {bytes ad : ByteArray}
+    (he : p.encode destId = .ok bytes) (ha : p.messageAd = .ok ad) :
+    ad.size + p.message.size = bytes.size := by
+  obtain ⟨iv, header, msg⟩ := p
+  simp only [Packet.encode] at he
+  simp only [Packet.messageAd] at ha
+  cases hh : header.encode with
+  | error e => simp [hh, bind, Except.bind] at ha
+  | ok hb =>
+    simp only [hh, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at he ha
+    subst he ha
+    simp only [ByteArray.size, List.size_toArray, List.length_append, length_mask,
+      Array.length_toList]
 
 /-! ## Messages -/
 
