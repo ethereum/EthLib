@@ -8,6 +8,7 @@ public import EthLib.Cryptography.Proofs.EvalDistEq
 public import EthLib.Cryptography.Proofs.HashSig
 public import EthLib.Cryptography.Proofs.HashSig.Oracle
 public import EthLib.Cryptography.Proofs.HashSig.Bytes
+public import EthLib.Cryptography.Proofs.HashSig.Commute
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Wots.Binding
 public import EthLib.Cryptography.Proofs.Wots.TargetSum

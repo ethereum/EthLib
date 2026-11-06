@@ -12,16 +12,14 @@ Their outputs and the final cache have the same joint distribution in both order
 
 No independence is needed: a query that both make is answered from the cache in the second run.
 
-The signer of the model signs the hypertree from the top layer and EthLib from the bottom layer.
-
-This fact lets the bridge reorder the layers.
+So a proof may reorder the steps of a signer, as when a model signs its layers in another order.
 
 A computation whose output is discarded then changes no other output.
 -/
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Sphincs.Unforgeability.Bridge
+namespace EthLib.Cryptography.HashSig
 
 open OracleComp OracleSpec MeasureTheory
 
@@ -59,4 +57,4 @@ theorem evalDist_simulateQ_run_bind_discard {α β γ : Type} [MeasurableSpace �
   exact evalDist_bind_congr_of_support _ _ _ fun v _ ↦
     (OracleComp.EvalDistEq.bind_const _ _).evalDist_eq
 
-end EthLib.Cryptography.Sphincs.Unforgeability.Bridge
+end EthLib.Cryptography.HashSig
