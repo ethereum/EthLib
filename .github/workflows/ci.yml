@@ -1,7 +1,7 @@
 # Build the specs and their proofs, check their compiled declarations, run the
 # test-vector suites, and check the pinned test vectors.
 #
-# The suites need only the library, so they run before the proofs, in the same job.
+# The suites need only the library, so they run in a job of their own, beside the proofs.
 # Checking the vectors' digests needs no build, so it has a job of its own.
 
 name: ci
@@ -93,7 +93,7 @@ jobs:
           restore-keys: |
             ethlib-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
-      # The library alone comes first, so the vector suites run before the proofs.
+      # The library alone comes first, so a broken specification fails before the proofs.
       # An unfinished proof only warns, so warnings have to be fatal.
       - name: library
         run: bash scripts/build_timing_report.sh run library_build "$BUILD_TIMING_RESULTS" -- lake build --wfail EthLib
@@ -107,19 +107,11 @@ jobs:
       - name: binding contract
         run: lake exe gen-bindings --check
 
+      # The build pipeline regressions below run in this Python environment.
       - name: bindings
         run: bash scripts/build_timing_report.sh run bindings_build "$BUILD_TIMING_RESULTS" -- uv sync --frozen --extra test
 
-      # One test process per core, and the 25 slowest tests in the log.
-      # An idle process takes queued tests from a busy one, so a few long consensus cases do not run alone at the end.
-      - name: vector suites
-        run: bash scripts/build_timing_report.sh run test_path "$BUILD_TIMING_RESULTS" -- uv run --no-sync pytest -n auto --dist worksteal --durations=25
-
-      # The generators rewrite every case, so a changed vector shows up as a diff.
-      - name: unchanged vectors
-        run: git diff --exit-code -- tests/cryptography
-
-      # The steps below run even after a failed suite, so every result is reported.
+      # The steps below run even after a failed step above, so every result is reported.
       - name: proofs
         if: ${{ !cancelled() }}
         run: bash scripts/build_timing_report.sh run proofs_build "$BUILD_TIMING_RESULTS" -- lake build --wfail
@@ -214,6 +206,79 @@ jobs:
             .lake/packages/PolyFun/.lake/build
             .lake/packages/cslib/.lake/build
           key: ethlib-deps-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+  # The vector suites run the library through the bindings, so they do not wait for the proofs.
+  suites:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      BUILD_TIMING_SOURCE_SHA: ${{ github.sha }}
+      BUILD_TIMING_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.13.6"
+          enable-cache: false
+
+      - name: initialize timing paths
+        run: |
+          echo "BUILD_TIMING_RESULTS=$RUNNER_TEMP/ethlib-suites-timing/results.jsonl" >> "$GITHUB_ENV"
+          echo "BUILD_TIMING_LOG_DIR=$RUNNER_TEMP/ethlib-suites-timing" >> "$GITHUB_ENV"
+
+      # This job only reads the cache. The build job saves it.
+      - name: restore EthLib build
+        if: inputs.clean_build != true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lake/build
+          key: ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ethlib-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
+      - uses: leanprover/lean-action@fe408643ea7367d8c0404a8be3975bb145f5fb64 # v1.7.0
+        with:
+          auto-config: false
+          use-mathlib-cache: true
+          use-github-cache: false
+
+      - name: library
+        run: bash scripts/build_timing_report.sh run library_build "$BUILD_TIMING_RESULTS" -- lake build --wfail EthLib
+
+      - name: exports
+        run: bash scripts/build_timing_report.sh run exports_build "$BUILD_TIMING_RESULTS" -- lake build --wfail Exports
+
+      - name: bindings
+        run: bash scripts/build_timing_report.sh run bindings_build "$BUILD_TIMING_RESULTS" -- uv sync --frozen --extra test
+
+      # One test process per core, and the 25 slowest tests in the log.
+      # An idle process takes queued tests from a busy one, so a few long consensus cases do not run alone at the end.
+      - name: vector suites
+        run: bash scripts/build_timing_report.sh run test_path "$BUILD_TIMING_RESULTS" -- uv run --no-sync pytest -n auto --dist worksteal --durations=25
+
+      # The generators rewrite every case, so a changed vector shows up as a diff.
+      - name: unchanged vectors
+        run: git diff --exit-code -- tests/cryptography
+
+      - name: suites timing report
+        if: ${{ always() }}
+        run: |
+          mkdir -p "$BUILD_TIMING_LOG_DIR"
+          bash scripts/build_timing_report.sh render "$BUILD_TIMING_RESULTS" \
+            > "$BUILD_TIMING_LOG_DIR/report.md"
+          cat "$BUILD_TIMING_LOG_DIR/report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: upload suites timing
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ethlib-suites-timing
+          path: ${{ runner.temp }}/ethlib-suites-timing
+          if-no-files-found: warn
+          retention-days: 30
 
   vectors:
     runs-on: ubuntu-latest
