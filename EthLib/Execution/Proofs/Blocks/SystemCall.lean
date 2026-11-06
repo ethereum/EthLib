@@ -102,7 +102,7 @@ theorem checkedSystemCall_ok {out : SystemCallOutput}
 
 /-- A list made by `requestList` holds its type byte first, then at least one byte. -/
 theorem mem_requestList {type : UInt8} {r : ByteArray} (h : r ∈ requestList type data) :
-    1 < r.size ∧ r[0]! = type := by
+    1 < r.size ∧ r.data.getD 0 0 = type := by
   unfold requestList at h
   split at h
   · simp at h
@@ -125,7 +125,7 @@ theorem foldlM_requests {contracts : List (UInt8 × Address)} {start : BodyState
         return (body, acc.2 ++ requestList contract.1 out.output))
       start = .ok result) :
     ∃ added, result.2 = start.2 ++ added ∧ (∀ r ∈ added, 1 < r.size) ∧
-      (added.map (·[0]!)).Sublist (contracts.map Prod.fst) := by
+      (added.map (·.data.getD 0 0)).Sublist (contracts.map Prod.fst) := by
   induction contracts generalizing start with
   | nil =>
     simp only [List.foldlM_nil] at h
@@ -148,7 +148,7 @@ theorem foldlM_requests {contracts : List (UInt8 × Address)} {start : BodyState
       split
       · exact hSub.cons _
       · simp only [List.map_cons, List.map_nil, List.singleton_append]
-        have : (⟨#[contract.1]⟩ ++ out.output : ByteArray)[0]! = contract.1 := rfl
+        have : (⟨#[contract.1]⟩ ++ out.output : ByteArray).data.getD 0 0 = contract.1 := rfl
         rw [this]
         exact hSub.cons_cons _
 
@@ -171,7 +171,7 @@ Each type comes at most once, and before Glamsterdam no builder type comes.
 theorem readRequests_requests {body : BodyState} {result : BodyState × List ByteArray}
     (h : readRequests env body = .ok result) :
     (∀ r ∈ result.2, 1 < r.size) ∧
-      (result.2.map (·[0]!)).Sublist ((requestContracts fork).map Prod.fst) := by
+      (result.2.map (·.data.getD 0 0)).Sublist ((requestContracts fork).map Prod.fst) := by
   unfold readRequests at h
   split at h
   · obtain ⟨added, hAdded, hSize, hSub⟩ := foldlM_requests h
