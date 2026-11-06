@@ -106,7 +106,7 @@ The proof selects its signer when that number is a multiple of a modulus.
 The modulus aims at a fixed number of aggregators in each committee, and is at least 1. -/
 def isAggregator (committeeSize : Nat) (selectionProof : BLSSignature) : Bool :=
   let modulo := max 1 (committeeSize.toUInt64 / TARGET_AGGREGATORS_PER_COMMITTEE)
-  let hash := sha256Bytes32 (packBytes selectionProof)
+  let hash := Cryptography.Hash.Sha256.hash32 (packBytes selectionProof)
   bytesToUint64 (Vector.ofFn fun i : Fin 8 => hash[i.val]) % modulo == 0
 
 /-! ## Attestations -/

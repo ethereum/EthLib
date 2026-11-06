@@ -100,7 +100,7 @@ The seed is the SHA-256 hash of the period as eight little-endian bytes.
 The subnet is the shuffled prefix plus the index, modulo the number of subnets.
 -/
 def computeSubscribedSubnet (config : SubnetParameters)
-    (shuffle : UInt64 → UInt64 → ByteArray → Except ε UInt64)
+    (shuffle : UInt64 → UInt64 → Base.Bytes32 → Except ε UInt64)
     (nodeId : NodeID) (epoch index : UInt64) : Except (SubnetError ε) SubnetID := do
   let bits ← computeAttestationSubnetPrefixBits config
   let nodePrefix := nodeId.toNat >>> (NODE_ID_BITS - bits)
@@ -108,7 +108,7 @@ def computeSubscribedSubnet (config : SubnetParameters)
   let nodeOffset := (nodeId.toNat % config.EPOCHS_PER_SUBNET_SUBSCRIPTION.toNat).toUInt64
   let shifted ← (Base.Uint64.addChecked epoch nodeOffset).mapError fun _ => .epochOverflow
   let period := shifted / config.EPOCHS_PER_SUBNET_SUBSCRIPTION
-  let seed := Cryptography.Hash.sha256 ⟨(Base.uintToBytes 8 period.toNat).toArray⟩
+  let seed := Cryptography.Hash.Sha256.hash32 ⟨(Base.uintToBytes 8 period.toNat).toArray⟩
   if 64 ≤ bits then throw (.prefixBitsTooLarge bits)
   let permuted ← (shuffle nodePrefix.toUInt64 (2 ^ bits).toUInt64 seed).mapError .shuffle
   let subnet ← (Base.Uint64.addChecked permuted index).mapError fun _ => .subnetOverflow
@@ -116,7 +116,7 @@ def computeSubscribedSubnet (config : SubnetParameters)
 
 /-- The subnets of a node in an epoch, one for each index below the subnets per node. -/
 def computeSubscribedSubnets (config : SubnetParameters)
-    (shuffle : UInt64 → UInt64 → ByteArray → Except ε UInt64)
+    (shuffle : UInt64 → UInt64 → Base.Bytes32 → Except ε UInt64)
     (nodeId : NodeID) (epoch : UInt64) : Except (SubnetError ε) (List SubnetID) :=
   (List.range config.SUBNETS_PER_NODE.toNat).mapM fun index =>
     computeSubscribedSubnet config shuffle nodeId epoch index.toUInt64

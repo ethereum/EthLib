@@ -126,11 +126,6 @@ def getTotalActiveBalance (state : BeaconState preset fork) : Except AccessorErr
 def liftArith {α : Type} (result : Except ArithError α) : Except AccessorError α :=
   result.mapError .arith
 
-/-- The SHA-256 digest of some bytes, as 32 bytes. -/
-def sha256Bytes32 (data : ByteArray) : Bytes32 :=
-  let digest := Cryptography.Hash.Sha256.hash data
-  Vector.ofFn fun i => digest.data.getD i.val 0
-
 /-- The position `i mod n` is below `n`, for `n ≠ 0`. -/
 theorem toNat_mod_lt {i n : UInt64} (nonzero : n ≠ 0) : (i % n).toNat < n.toNat := by
   rw [UInt64.toNat_mod]
@@ -268,7 +263,8 @@ def getSeed (state : BeaconState preset fork) (epoch : Epoch) (domainType : Doma
     subChecked (← subChecked (← addChecked epoch preset.EPOCHS_PER_HISTORICAL_VECTOR)
       preset.MIN_SEED_LOOKAHEAD) 1
   let mix ← getRandaoMix state shifted
-  return sha256Bytes32 ⟨domainType.toArray ++ (uintToBytes 8 epoch.toNat).toArray ++ mix.toArray⟩
+  return Cryptography.Hash.Sha256.hash32
+    ⟨domainType.toArray ++ (uintToBytes 8 epoch.toNat).toArray ++ mix.toArray⟩
 
 /-- The number of committees in each slot of an epoch.
 
@@ -306,14 +302,14 @@ def proposerDraw (preset : Preset) (fork : Base.Fork) (seed : Bytes32) (i : Nat)
     (effectiveBalance : Gwei) : Except AccessorError Bool := liftArith do
   if .pectra ≤ fork then
     -- One hash gives 16 random values of two bytes.
-    let random := sha256Bytes32 ⟨seed.toArray ++ (uintToBytes 8 (i / 16)).toArray⟩
+    let random := Cryptography.Hash.Sha256.hash32 ⟨seed.toArray ++ (uintToBytes 8 (i / 16)).toArray⟩
     have small : i % 16 * 2 + 1 < 32 := by have := Nat.mod_lt i (show 16 > 0 by decide); omega
     let value := random[i % 16 * 2].toUInt64 + 256 * random[i % 16 * 2 + 1].toUInt64
     return (← mulChecked preset.MAX_EFFECTIVE_BALANCE_ELECTRA value) ≤
       (← mulChecked effectiveBalance (2 ^ 16 - 1))
   else
     -- One hash gives 32 random bytes.
-    let random := sha256Bytes32 ⟨seed.toArray ++ (uintToBytes 8 (i / 32)).toArray⟩
+    let random := Cryptography.Hash.Sha256.hash32 ⟨seed.toArray ++ (uintToBytes 8 (i / 32)).toArray⟩
     let value := (random[i % 32]'(Nat.mod_lt i (by decide))).toUInt64
     return (← mulChecked preset.MAX_EFFECTIVE_BALANCE value) ≤
       (← mulChecked effectiveBalance (2 ^ 8 - 1))
@@ -365,7 +361,8 @@ def getBeaconProposerIndex (state : BeaconState preset fork) :
   else
     let epoch := getCurrentEpoch state
     let epochSeed ← getSeed state epoch DOMAIN_BEACON_PROPOSER
-    let seed := sha256Bytes32 ⟨epochSeed.toArray ++ (uintToBytes 8 state.slot.toNat).toArray⟩
+    let seed := Cryptography.Hash.Sha256.hash32
+      ⟨epochSeed.toArray ++ (uintToBytes 8 state.slot.toNat).toArray⟩
     computeProposerIndex state (getActiveValidatorIndices state epoch).toArray seed
 
 /-- The signature domain of a kind of message in an epoch, by default the epoch of the state.

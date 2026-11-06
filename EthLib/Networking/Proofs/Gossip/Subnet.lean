@@ -22,7 +22,7 @@ namespace EthLib.Networking.Proofs.Gossip.Subnet
 open EthLib.Networking.Gossip
 
 variable {ε : Type} {config : SubnetParameters}
-  {shuffle : UInt64 → UInt64 → ByteArray → Except ε UInt64} {nodeId : NodeID} {epoch : UInt64}
+  {shuffle : UInt64 → UInt64 → Base.Bytes32 → Except ε UInt64} {nodeId : NodeID} {epoch : UInt64}
 
 /-- Two errors with one code come from one constructor. -/
 theorem _root_.EthLib.Networking.Gossip.SubnetError.code_injective

@@ -175,12 +175,12 @@ theorem computeSubnetForDataColumnSidecar_lt {config : Config} {columnIndex : UI
 
 /-- The shuffle of the preset places every index below the count at a position below it. -/
 theorem computeShuffledIndex_bounded (preset : Preset) :
-    ∀ i n (seed : ByteArray), i < n → ∃ p,
-      computeShuffledIndex preset i n (seedOfDigest seed) = .ok p ∧ p < n := by
+    ∀ i n (seed : Bytes32), i < n → ∃ p,
+      computeShuffledIndex preset i n seed = .ok p ∧ p < n := by
   intro i n seed lt
   refine ⟨_, computeShuffledIndex_eq lt, ?_⟩
   have bound := Shuffle.shuffledIndex_lt (rounds := preset.SHUFFLE_ROUND_COUNT.toNat)
-    (seed := seedOfDigest seed) (UInt64.lt_iff_toNat_lt.mp lt)
+    (seed := seed) (UInt64.lt_iff_toNat_lt.mp lt)
   rw [UInt64.lt_iff_toNat_lt, UInt64.toNat_ofNat', Nat.mod_eq_of_lt (Nat.lt_trans bound n.toNat_lt)]
   exact bound
 

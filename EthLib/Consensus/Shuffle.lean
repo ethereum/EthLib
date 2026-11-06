@@ -54,8 +54,7 @@ def roundInput (seed : Bytes32) (round : Nat) : ByteArray :=
 
 /-- The pivot of a round: the first eight bytes of a hash, little-endian, modulo the count. -/
 def pivot (seed : Bytes32) (round count : Nat) : Nat :=
-  let digest := Cryptography.Hash.Sha256.hash (roundInput seed round)
-  bytesToUint (Vector.ofFn fun i : Fin 8 => digest.data.getD i.val 0) % count
+  bytesToUint ((Cryptography.Hash.Sha256.hash32 (roundInput seed round)).take 8) % count
 
 /-- The 256 bits of a round that decide the positions of one bucket of 256 positions. -/
 def bucketBits (seed : Bytes32) (round bucket : Nat) : ByteArray :=

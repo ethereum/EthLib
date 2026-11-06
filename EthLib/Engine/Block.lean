@@ -109,7 +109,7 @@ def toHeader (p : ExecutionPayload fork) (transactionsRoot : Hash32)
     blobGasUsed := p.blobGasUsed
     excessBlobGas := p.excessBlobGas
     parentBeaconBlockRoot
-    requestsHash := fun h => requestsCommitment (requests h)
+    requestsHash := fun h => requestsHash (requests h)
     blockAccessListHash
     slotNumber }
 

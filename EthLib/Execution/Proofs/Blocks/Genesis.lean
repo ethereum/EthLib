@@ -55,7 +55,7 @@ theorem of_genesisHeader_since {root : Hash32} {header : Header fork}
       (∀ hf, header.excessBlobGas hf = params.excessBlobGas) ∧
       (∀ hf, header.slotNumber hf = params.slotNumber) ∧ (∀ hf, header.blobGasUsed hf = 0) ∧
       (∀ hf, header.parentBeaconBlockRoot hf = 0) ∧
-      (∀ hf, header.requestsHash hf = requestsCommitment []) := by
+      (∀ hf, header.requestsHash hf = requestsHash []) := by
   unfold genesisHeader at h
   obtain ⟨_, _, h⟩ := bind_ok_iff.mp h
   obtain ⟨_, _, h⟩ := bind_ok_iff.mp h

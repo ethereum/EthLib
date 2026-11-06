@@ -194,6 +194,10 @@ def hash (message : ByteArray) : ByteArray :=
   digest (chain compress padded (padded.size / 64) 0
     (by have := Nat.mul_div_le padded.size 64; omega) initial)
 
+/-- SHA-256 of a message, as its 32 bytes. -/
+def hash32 (message : ByteArray) : Vector UInt8 32 :=
+  ⟨(hash message).data, by simp [hash, digest]⟩
+
 end EthLib.Cryptography.Hash.Sha256
 
 namespace EthLib.Cryptography.Hash

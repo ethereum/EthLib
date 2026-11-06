@@ -192,10 +192,6 @@ def computeSubnetForDataColumnSidecar (config : Config) (columnIndex : UInt64) :
   if config.DATA_COLUMN_SIDECAR_SUBNET_COUNT = 0 then throw .zeroSubnetCount
   return columnIndex % config.DATA_COLUMN_SIDECAR_SUBNET_COUNT
 
-/-- The 32 bytes of a SHA-256 digest, as a seed of the shuffle. -/
-def seedOfDigest (digest : ByteArray) : Bytes32 :=
-  Vector.ofFn fun i => digest.data.getD i.val 0
-
 /--
 The attestation subnets that a node subscribes to in an epoch.
 
@@ -205,7 +201,7 @@ def computeSubscribedSubnets (preset : Preset) (config : Config)
     (nodeId : Networking.Gossip.NodeID) (epoch : Epoch) :
     Except (SubnetError ShuffleError) (List SubnetID) :=
   Networking.Gossip.computeSubscribedSubnets config.toSubnetParameters
-    (fun index count seed => computeShuffledIndex preset index count (seedOfDigest seed))
+    (computeShuffledIndex preset)
     nodeId epoch
 
 end EthLib.Consensus

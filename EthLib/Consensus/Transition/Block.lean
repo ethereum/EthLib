@@ -61,7 +61,8 @@ def processRandao (config : Config) (checks : SignatureChecks) (state : BeaconSt
   ensure (checks.verify (packBytes proposer.pubkey) (packBytes signingRoot)
     (packBytes body.randaoReveal) = true) .invalidRandaoReveal
   let mix ← liftAccessor (getRandaoMix state epoch)
-  let mix := Vector.zipWith (· ^^^ ·) mix (sha256Bytes32 (packBytes body.randaoReveal))
+  let mix :=
+    Vector.zipWith (· ^^^ ·) mix (Cryptography.Hash.Sha256.hash32 (packBytes body.randaoReveal))
   let randaoMixes ← liftAccessor (writeCircularRooted state.randaoMixes epoch mix)
   return { state with randaoMixes }
 

@@ -128,7 +128,7 @@ theorem hashesMatch_iff {hashes : List Bytes32} {commitments : List KZGCommitmen
     (hlen : hashes.length = commitments.length) :
     hashesMatch hashes commitments = true ↔
       ∀ (i : Nat) (hi : i < hashes.length),
-        versionedHash (commitments[i]'(hlen ▸ hi)) = ⟨hashes[i].toArray⟩ := by
+        versionedHash (commitments[i]'(hlen ▸ hi)) = hashes[i] := by
   simp only [hashesMatch, List.all_eq_true, decide_eq_true_eq, Prod.forall]
   constructor
   · intro H i hi

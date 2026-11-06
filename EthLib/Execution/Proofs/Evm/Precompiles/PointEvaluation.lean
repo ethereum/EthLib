@@ -31,7 +31,7 @@ theorem pointEvaluation_outOfGas {data : ByteArray} (hsize : data.size = INPUT_B
 theorem pointEvaluation_eq_ok_iff (data : ByteArray) (gas : Nat) (out : ByteArray) :
     pointEvaluation data gas = .ok out ↔
       data.size = INPUT_BYTES ∧ GAS_POINT_EVALUATION ≤ gas ∧
-      (kzgCommitmentToVersionedHash (data.extract 96 144)).data.toList = (data.extract 0 32).data.toList ∧
+      (kzgCommitmentToVersionedHash (data.extract 96 144)).toArray = (data.extract 0 32).data ∧
       verifyKzgProof (data.extract 96 144) (data.extract 32 64) (data.extract 64 96) (data.extract 144 192)
         = .ok true ∧
       out = output := by
