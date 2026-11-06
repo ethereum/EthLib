@@ -279,6 +279,7 @@ test = [
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "ruamel-yaml" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 
 [package.dev-dependencies]
@@ -294,6 +295,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'test'", specifier = "==9.2.0" },
     { name = "pytest-xdist", marker = "extra == 'test'", specifier = "==3.8.0" },
     { name = "ruamel-yaml", marker = "extra == 'test'", specifier = "==0.19.1" },
+    { name = "tomli", marker = "python_full_version < '3.11' and extra == 'test'", specifier = "==2.5.0" },
 ]
 provides-extras = ["test"]
 

@@ -14,6 +14,13 @@ trap 'rm -rf "$work_dir"' EXIT
 mkdir -p "$work_dir/bindings/python"
 cp -R "$project/tests" "$work_dir/tests"
 cp -R "$project/bindings/python/tests" "$work_dir/bindings/python/tests"
+# The other files that the suites and the vector check read: the binding contract and the C
+# sources that it describes, the KZG trusted setup, and the archive fetcher.
+cp -R "$project/bindings/contract" "$work_dir/bindings/contract"
+cp "$project"/bindings/python/*.c "$work_dir/bindings/python/"
+mkdir -p "$work_dir/EthLib/Cryptography/Kzg" "$work_dir/scripts"
+cp "$project/EthLib/Cryptography/Kzg/TrustedSetupData.lean" "$work_dir/EthLib/Cryptography/Kzg/"
+cp "$project/scripts/fetch_archives.py" "$work_dir/scripts/"
 # The pytest settings of the project are in pyproject.toml.
 cp "$project/pyproject.toml" "$work_dir/pyproject.toml"
 

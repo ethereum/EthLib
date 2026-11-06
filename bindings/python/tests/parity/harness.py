@@ -1,7 +1,7 @@
 """What the parity tests share: the runnable cases, the disagreements and the catalogue."""
 
 import json
-import tomllib
+import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -12,6 +12,12 @@ import archives
 
 from .catalogue import Case
 from .runners import RUNNERS, plan, runner
+
+# The test of each wheel runs the suites on Python 3.10 too.
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 DISAGREEMENTS_FILE = archives.REPO / "tests" / "parity" / "disagreements.toml"
 

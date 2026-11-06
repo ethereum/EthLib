@@ -19,11 +19,16 @@ import os
 import shutil
 import sys
 import tarfile
-import tomllib
 import urllib.request
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+
+# The test of each wheel runs the suites, and so this module, on Python 3.10 too.
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
 

@@ -1,14 +1,18 @@
 """How a suite expects an exception: by its class and its whole message."""
 
 import re
+from typing import TypeVar
 
 import pytest
 
 # The mark of a number in a message template.
 NUMBER = "{n}"
 
+# A type variable, since the test of each wheel runs the suites on Python 3.10 too.
+E = TypeVar("E", bound=BaseException)
 
-def raises[E: BaseException](exception: type[E], message: str) -> pytest.RaisesExc[E]:
+
+def raises(exception: type[E], message: str) -> pytest.RaisesExc[E]:
     """Expect an exception of the class, or of a subclass, whose message is exactly the text."""
     return pytest.raises(exception, match=rf"\A{re.escape(message)}\Z")
 
@@ -23,6 +27,6 @@ def shape_pattern(template: str) -> str:
     return rf"\A{pattern}\Z"
 
 
-def raises_shape[E: BaseException](exception: type[E], template: str) -> pytest.RaisesExc[E]:
+def raises_shape(exception: type[E], template: str) -> pytest.RaisesExc[E]:
     """Expect a message equal to the template, with any number at each {n} of the template."""
     return pytest.raises(exception, match=shape_pattern(template))

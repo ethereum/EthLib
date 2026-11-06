@@ -18,6 +18,8 @@ test = [
   "pytest-xdist==3.8.0",
   "ruamel.yaml==0.19.1",
   "py_ecc==8.0.0",
+  # The suites read TOML, and tomllib is in the standard library from Python 3.11.
+  "tomli==2.5.0; python_version < '3.11'",
 ]
 
 [dependency-groups]
@@ -58,15 +60,22 @@ markers = [
 line-length = 100
 # The modules of these directories are first-party, as for the type checker.
 src = ["bindings/python", "bindings/python/tests", "scripts"]
-# The scripts and the suites run on Python 3.12, and the package supports Python 3.10.
+# The scripts run on Python 3.12. The package supports Python 3.10, and the test of each wheel
+# runs the suites, the vector check and the archive fetcher on the Python of the wheel.
 target-version = "py312"
-per-file-target-version = { "bindings/python/ethlib/**" = "py310", "setup.py" = "py310" }
 # `lake exe gen-bindings` writes the stub, and its check compares it byte for byte.
 # tests/consensus/pq_keys/SHA256SUMS pins the key generator by its digest.
 extend-exclude = [
   "bindings/python/ethlib/cryptography/_native.pyi",
   "tests/consensus/pq_keys/generate.py",
 ]
+
+[tool.ruff.per-file-target-version]
+"bindings/python/ethlib/**" = "py310"
+"setup.py" = "py310"
+"bindings/python/tests/**" = "py310"
+"tests/**" = "py310"
+"scripts/fetch_archives.py" = "py310"
 
 [tool.ruff.format]
 docstring-code-format = true
