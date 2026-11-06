@@ -8,8 +8,9 @@ public import EthLib.Base.Proofs.U256
 
 The comparisons agree with the orders on bit vectors of Lean.
 
-- LT and GT push 1 exactly when the unsigned order holds.
-- EQ and ISZERO push 1 exactly when their test holds.
+- LT and GT give 1 exactly when the unsigned order holds, and 0 otherwise.
+- SLT and SGT do the same for the signed order.
+- EQ gives 1 exactly when the operands are equal, and ISZERO exactly when its operand is 0.
 -/
 
 @[expose] public section

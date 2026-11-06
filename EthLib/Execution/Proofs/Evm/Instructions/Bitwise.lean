@@ -6,7 +6,8 @@ public import EthLib.Base.Proofs.U256
 /-!
 # Proofs: `Evm.Instructions.Bitwise`
 
-- AND, OR, XOR and NOT act on the bits of the integer.
+- AND, OR and XOR act on the bits of the integers, and NOT gives `2^256 - 1 - x`.
+- SHL multiplies the integer by `2^shift` modulo 2^256, and SHR divides it by `2^shift`.
 - BYTE reads one base-256 digit of the word.
 - SHL, SHR and SAR agree with the bit vector shifts, for every shift up to 2^256 - 1.
 -/

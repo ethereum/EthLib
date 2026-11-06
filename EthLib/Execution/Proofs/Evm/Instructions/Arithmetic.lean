@@ -7,7 +7,7 @@ public import EthLib.Execution.Proofs.Evm.PowMod
 /-!
 # Proofs: `Evm.Instructions.Arithmetic`
 
-- ADD, SUB and MUL are the integer result reduced modulo 2^256.
+- ADD, SUB and MUL give the sum, the difference and the product, reduced modulo 2^256.
 - Each division and remainder agrees with the bit vector operation, apart from the divisor 0.
 - ADDMOD, MULMOD and EXP return the exact value, reduced once.
 - SIGNEXTEND is the sign extension of the low bytes, as a bit vector.
