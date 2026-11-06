@@ -9,15 +9,19 @@ EIP-196 encodes a point as its two coordinates, each a 32-byte big-endian number
 
 The point at infinity is `(0, 0)`.
 
+The point `(0, 0)` is not on the curve, so this encoding of infinity encodes no point on the curve.
+
 The decoder reads back every point on the curve from its 64 bytes.
 
 Each 64 bytes that it accepts are the encoding of the point that it returns.
 
 So the decoder accepts 64 bytes exactly when they encode a point on the curve.
 
-The point `(0, 0)` is not on the curve, so it cannot be confused with the point at infinity.
+The decoder splits its input at byte 32 and reads an input of any length.
 
-Source: [EIP-196][eip196], section Encoding.
+So the theorems take 64 bytes, the length that each precompile reads.
+
+Source: [EIP-196][eip196], sections Encoding and Exact semantics.
 
 [eip196]: https://eips.ethereum.org/EIPS/eip-196#encoding
 -/
@@ -31,7 +35,7 @@ open EthLib.Base (bytesToNat natToBytes natToBytes_length bytesToNat_natToBytes
   bytesToNat_natToBytes_of_lt natToBytes_bytesToNat)
 
 /-- Zero on `len` bytes is `len` zero bytes. -/
-theorem natToBytes_zero (len : Nat) : natToBytes len 0 = List.replicate len 0 := by
+private theorem natToBytes_zero (len : Nat) : natToBytes len 0 = List.replicate len 0 := by
   induction len with
   | zero => rfl
   | succ len ih => rw [natToBytes, Nat.zero_div, ih, List.replicate_succ']; rfl
@@ -40,7 +44,7 @@ theorem natToBytes_zero (len : Nat) : natToBytes len 0 = List.replicate len 0 :=
 theorem isOnCurve_affine_zero : (Point.affine 0 0).isOnCurve = false := by decide
 
 /-- A coordinate fits in 32 bytes, since `p < 2^256`. -/
-theorem val_lt_two_pow (x : Fp) : x.val < 256 ^ 32 :=
+private theorem val_lt_two_pow (x : Fp) : x.val < 256 ^ 32 :=
   Nat.lt_trans x.isLt (by decide)
 
 /-- The decoder reads back each point on the curve from its 64 bytes. -/
