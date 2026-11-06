@@ -79,7 +79,8 @@ The KDF of SP 800-56A takes no other input here, so its `FixedInfo` is empty.
 -/
 def deriveKeys (secret : Vector UInt8 32) : Except EciesError (Aes.Key .aes128 × ByteArray) := do
   let keys ← (Hash.ConcatKdf.concatKdf ⟨secret.toArray⟩ .empty 32).mapError .keyDerivation
-  return (Vector.ofFn fun i => keys[i.val]!, keys.extract 16 32)
+  -- The output has 32 bytes, so the default byte is never read.
+  return (Vector.ofFn fun i => keys.data.getD i.val 0, keys.extract 16 32)
 
 /--
 The encryption `c = AES(k_E, iv, m)`: AES-128 in counter mode, from the counter block `iv`.

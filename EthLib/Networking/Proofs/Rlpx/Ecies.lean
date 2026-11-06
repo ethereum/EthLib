@@ -2,6 +2,7 @@ module
 
 public import EthLib.Networking.Rlpx.Ecies
 public import EthLib.Cryptography.Proofs.Aes.Ctr
+public import EthLib.Cryptography.Proofs.Hash.ConcatKdf
 public import EthLib.Cryptography.Proofs.Hash.Hmac
 public import EthLib.Cryptography.Proofs.Secp256k1.Ecdh
 public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
@@ -104,6 +105,41 @@ theorem exists_deriveKeys_eq_ok (secret : Vector UInt8 32) :
   have hsize : (ByteArray.mk secret.toArray).size = 32 := by simp [ByteArray.size]
   simp [deriveKeys, Hash.ConcatKdf.concatKdf, Hash.ConcatKdf.HASH_LEN, hsize, Except.mapError,
     bind, Except.bind, pure, Except.pure]
+
+/-- The derived keys are the two halves of the 32-byte KDF output.
+
+`k_E` is the first 16 bytes, and `k_M` is the last 16. -/
+theorem deriveKeys_eq_ok_iff (secret : Vector UInt8 32) (encKey : Aes.Key .aes128)
+    (macKey : ByteArray) :
+    deriveKeys secret = .ok (encKey, macKey) ↔
+      ∃ keys, Hash.ConcatKdf.concatKdf ⟨secret.toArray⟩ .empty 32 = .ok keys ∧
+        ByteArray.mk encKey.toArray = keys.extract 0 16 ∧ macKey = keys.extract 16 32 := by
+  cases hk : Hash.ConcatKdf.concatKdf ⟨secret.toArray⟩ .empty 32 with
+  | error e => simp [deriveKeys, hk, Except.mapError, bind, Except.bind]
+  | ok keys =>
+    have hsize := Hash.ConcatKdf.concatKdf_size hk
+    -- The first 16 bytes, read one at a time, are the first 16 bytes of the output.
+    have hfirst : ByteArray.mk (Vector.ofFn fun i : Fin 16 => keys.data.getD i.val 0).toArray =
+        keys.extract 0 16 := by
+      apply ByteArray.ext
+      apply Array.ext
+      · simp [ByteArray.data_extract, hsize]
+      · intro i h₁ h₂
+        simp only [Vector.toArray_ofFn, Array.size_ofFn] at h₁
+        have hi : i < keys.data.size := by
+          change i < keys.size
+          omega
+        simp only [Vector.toArray_ofFn, Array.getElem_ofFn, ByteArray.data_extract,
+          Array.getElem_extract, Nat.zero_add, Array.getD_eq_getD_getElem?,
+          Array.getElem?_eq_getElem hi, Option.getD_some]
+    simp only [deriveKeys, hk, Except.mapError, bind, Except.bind, pure, Except.pure,
+      Except.ok.injEq, Prod.mk.injEq, exists_eq_left', ← hfirst]
+    constructor
+    · rintro ⟨rfl, rfl⟩
+      exact ⟨rfl, rfl⟩
+    · rintro ⟨h₁, rfl⟩
+      refine ⟨Vector.toArray_inj.mp ?_, rfl⟩
+      exact (congrArg ByteArray.data h₁).symm
 
 /-- Encryption to a nonzero private key succeeds for every nonzero ephemeral key. -/
 theorem exists_encrypt_eq_ok {key ephemeral : Fn} (hk : key ≠ 0) (hr : ephemeral ≠ 0)
