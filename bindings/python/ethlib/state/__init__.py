@@ -1,11 +1,4 @@
-"""
-The state of the execution layer, and the root that commits to it.
-
-A state is given as RLP bytes: a list of accounts.
-Each account is the list `[address, nonce, balance, code, storage]`.
-The storage is a list of pairs `[key, value]`, with a 32-byte key and a word.
-The code hash of an account is the Keccak-256 hash of its code.
-"""
+"""The state of the execution layer, and the root that commits to it."""
 
 from collections.abc import Sequence
 
@@ -14,6 +7,11 @@ from collections.abc import Sequence
 from ethlib.cryptography import _native
 from ethlib.errors import StateError
 from ethlib.execution.pow import chain_forks
+
+# A state is given as RLP bytes: a list of accounts.
+# Each account is the list `[address, nonce, balance, code, storage]`.
+# The storage is a list of pairs `[key, value]`, with a 32-byte key and a word.
+# The code hash of an account is the Keccak-256 hash of its code.
 
 
 def state_root(state: bytes) -> bytes:

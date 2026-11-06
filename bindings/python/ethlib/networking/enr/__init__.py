@@ -1,13 +1,4 @@
-"""
-Ethereum Node Records, from EIP-778, with the "v4" identity scheme.
-
-- A record is its RLP bytes, at most MAX_RECORD_SIZE bytes long.
-- Its text form is "enr:", then the unpadded URL-safe base64 of those bytes.
-
-Each function decodes the record first.
-A record that the decoder rejects raises EnrError, and so does a malformed text.
-EnrError is a ValueError, with the code of the Lean error.
-"""
+"""Ethereum Node Records, from EIP-778, with the "v4" identity scheme."""
 
 from typing import NamedTuple
 
@@ -19,6 +10,11 @@ from ethlib.cryptography import _native
 from ethlib.errors import EnrError
 from ethlib.serialization import rlp
 
+# A record is its RLP bytes, at most this many bytes long.
+# Its text form is "enr:", then the unpadded URL-safe base64 of those bytes.
+#
+# Each function decodes the record first.
+# A rejected record or a malformed text raises `EnrError`, a `ValueError` with the code.
 MAX_RECORD_SIZE = _native.ENR_MAX_RECORD_SIZE
 
 
@@ -63,6 +59,7 @@ class ConsensusEntries(NamedTuple):
     The consensus entries of a record, as a node at one fork reads them.
 
     attnets and syncnets are the SSZ bytes of their bitvectors, or None when absent.
+
     A node before Altair does not read syncnets, and a node before Fulu does not read cgc or nfd.
     """
 

@@ -1,13 +1,4 @@
-"""
-secp256k1 ECDSA, as Ethereum uses it.
-
-- A public key is either SEC 1 encoding: 33 bytes compressed, or 65 bytes uncompressed.
-- A hash is 32 bytes.
-- A signature is 64 bytes: r then s, each a 32-byte big-endian integer.
-
-Arguments that are not bytes raise TypeError.
-Inputs the spec rejects raise Secp256k1Error, a ValueError with the code of the Lean error.
-"""
+"""secp256k1 ECDSA, as Ethereum uses it."""
 
 from ethlib.cryptography._native import (
     SECP256K1_HASH_LEN as HASH_LEN,
@@ -20,6 +11,13 @@ from ethlib.cryptography._native import (
     secp256k1_verify,
 )
 from ethlib.errors import Secp256k1Error
+
+# A public key is a SEC 1 encoding: 33 bytes compressed, or 65 bytes uncompressed.
+# A hash is 32 bytes.
+# A signature is 64 bytes: r then s, each a 32-byte big-endian integer.
+#
+# An argument that is not bytes raises `TypeError`.
+# An input that the specification rejects raises `Secp256k1Error`, a `ValueError` with a code.
 
 
 def verify(public_key: bytes, msg_hash: bytes, signature: bytes) -> bool:
@@ -41,6 +39,7 @@ def recover(msg_hash: bytes, signature: bytes, recovery_id: int) -> bytes:
     The public key that signed the hash, by SEC 1 v2 §4.1.6, as 65 uncompressed bytes.
 
     The recovery id is 0 or 1: the parity of the y of the signer's point R.
+
     A signature with no key for that id raises Secp256k1Error.
     """
     return secp256k1_recover(msg_hash, signature, recovery_id)

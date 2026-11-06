@@ -1,10 +1,4 @@
-"""
-Key derivation with SHA-256: HKDF of RFC 5869 and the Concatenation KDF of SP 800-56C.
-
-The input keying material and the shared secret are secret.
-
-EthLib makes no constant-time claim.
-"""
+"""Key derivation with SHA-256: HKDF of RFC 5869 and the Concatenation KDF of SP 800-56C."""
 
 from ethlib.cryptography._native import (
     concat_kdf_sha256 as native_concat_kdf_sha256,
@@ -12,6 +6,9 @@ from ethlib.cryptography._native import (
     hmac_sha256 as native_hmac_sha256,
 )
 from ethlib.errors import ConcatKdfError, HkdfError
+
+# The input keying material and the shared secret are secret.
+# EthLib makes no constant-time claim.
 
 
 def hkdf_extract(salt: bytes, ikm: bytes) -> bytes:

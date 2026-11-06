@@ -1,12 +1,4 @@
-"""
-The ssz_snappy encoding of consensus-layer requests and responses.
-
-- A payload is a varint of the SSZ length, then a Snappy framed stream of the SSZ bytes.
-- A response chunk is a response code, then context bytes, then a payload.
-
-Each function takes the whole message.
-A message that the decoder rejects raises ReqRespError, a ValueError with a code.
-"""
+"""The ssz_snappy encoding of consensus-layer requests and responses."""
 
 from typing import NamedTuple
 
@@ -15,6 +7,11 @@ from typing import NamedTuple
 from ethlib.cryptography import _native
 from ethlib.errors import ReqRespError
 
+# A payload is a varint of the SSZ length, then a Snappy framed stream of the SSZ bytes.
+# A response chunk is a response code, then context bytes, then a payload.
+#
+# Each function takes the whole message.
+# A message that the decoder rejects raises `ReqRespError`, a `ValueError` with a code.
 MAX_PAYLOAD_SIZE = _native.REQRESP_MAX_PAYLOAD_SIZE
 MAX_ERROR_MESSAGE_SIZE = _native.REQRESP_MAX_ERROR_MESSAGE_SIZE
 

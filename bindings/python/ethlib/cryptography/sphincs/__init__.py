@@ -1,9 +1,4 @@
-"""
-leanSPHINCS signatures: key generation, signing and verification.
-
-- Malformed arguments raise TypeError or ValueError.
-- Inputs the spec rejects raise SphincsError, with the code and the message of the Lean error.
-"""
+"""leanSPHINCS signatures: key generation, signing and verification."""
 
 from ethlib.cryptography._native import (
     SPHINCS_MESSAGE_LEN as MESSAGE_LEN,
@@ -15,6 +10,9 @@ from ethlib.cryptography._native import (
     sphincs_verify,
 )
 from ethlib.errors import SphincsError
+
+# A malformed argument raises `TypeError` or `ValueError`.
+# A rejected input raises `SphincsError`, with the code and the message of the Lean error.
 
 
 def key_gen(seed: bytes) -> bytes:
@@ -32,8 +30,9 @@ def sign(seed: bytes, message: bytes) -> bytes:
 
     The message digest picks the FORS instance, so signing needs no index and keeps no state.
 
-    Never sign more than 2^30 messages with one key:
-    each signature weakens the FORS instance it uses.
+    Never sign more than 2^30 messages with one key.
+
+    Each signature weakens the FORS instance it uses.
     """
     return sphincs_sign(seed, message)
 

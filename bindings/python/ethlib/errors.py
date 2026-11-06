@@ -1,25 +1,21 @@
-"""
-The exceptions that the specification raises through the bindings.
-
-Each primitive has one exception class.
-An instance carries the code and the message of the Lean error.
-The Lean type of the error defines the code, one for each constructor.
-A new constructor takes a new code, so that each code keeps its meaning.
-
-Each class also derives from `RuntimeError`, `ValueError` or both.
-So a caller can catch a failure with `except ValueError` or `except RuntimeError`.
-
-Code 0 means a failure that the export reports without a Lean error code.
-Examples are an unknown name, and an input that the export reads before the specification runs.
-No Lean error type uses code 0.
-
-The bindings check the type, the length and the range of some arguments before Lean runs.
-A wrong type raises `TypeError`, and a wrong length `ValueError`.
-An integer out of its range raises `OverflowError`.
-None of them carries a code.
-"""
+"""The exceptions that the specification raises through the bindings."""
 
 
+# Each primitive has one exception class.
+# Each class also derives from `RuntimeError`, `ValueError` or both.
+# So a caller can catch a failure with `except ValueError` or `except RuntimeError`.
+#
+# The Lean type of the error defines the code, one for each constructor.
+# A new constructor takes a new code, so that each code keeps its meaning.
+#
+# Code 0 is a failure that the export reports without a Lean error code.
+# Examples are an unknown name, and an input that the export reads before the specification runs.
+# No Lean error type uses code 0.
+#
+# The bindings check the type, the length and the range of some arguments before Lean runs.
+# A wrong type raises `TypeError`, and a wrong length `ValueError`.
+# An integer out of its range raises `OverflowError`.
+# None of them carries a code.
 class EthLibError(Exception):
     """An error of the specification, with its code and its message."""
 
@@ -153,8 +149,10 @@ class EthWireError(EthLibError, ValueError):
     """
     An eth message, a Status or an answer of headers was rejected.
 
-    Message errors have codes from 1, Status errors from 101, header errors from 201, and
-    transaction errors from 301.
+    Message errors have codes from 1, and Status errors codes from 101.
+
+    Header errors have codes from 201, and transaction errors codes from 301.
+
     A bad argument has code 0.
     """
 
