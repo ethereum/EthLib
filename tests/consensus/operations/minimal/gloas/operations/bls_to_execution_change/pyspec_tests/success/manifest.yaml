@@ -1,0 +1,6 @@
+preset: minimal
+fork: gloas
+runner: operations
+handler: bls_to_execution_change
+suite: pyspec_tests
+case: success
