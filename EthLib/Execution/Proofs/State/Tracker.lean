@@ -170,6 +170,65 @@ theorem getStorage_destroyStorage_of_ne (tx : TransactionState) {address other :
   -- The two sides differ only in hidden arguments of the match, which `rfl` unfolds.
   rfl
 
+/-! ## Deployable addresses -/
+
+/-- A word that a storage map holds at a key has the key among the keys of the address. -/
+theorem mem_keys_of_slot {storage : StorageMap} {address : Address} {key : Bytes32}
+    {value : U256} (h : storage.slot address key = some value) :
+    key ∈ (storage.getD address ∅).keys := by
+  simp only [StorageMap.slot, Option.bind_eq_some_iff] at h
+  obtain ⟨slots, hs, hk⟩ := h
+  rw [Std.ExtTreeMap.getD_eq_getD_getElem?, hs, Option.getD_some]
+  exact Std.ExtTreeMap.mem_keys.mpr (Std.ExtTreeMap.mem_iff_isSome_getElem?.mpr (by simp [hk]))
+
+/-- The storage of an address holds a word other than zero exactly when some key reads nonzero. -/
+theorem accountHasStorage_iff (tx : TransactionState) (address : Address) :
+    tx.accountHasStorage address = true ↔ ∃ key, tx.getStorage address key ≠ 0 := by
+  constructor
+  · intro h
+    obtain ⟨key, -, hk⟩ := List.any_eq_true.mp h
+    exact ⟨key, by simpa using hk⟩
+  · rintro ⟨key, hk⟩
+    refine List.any_eq_true.mpr ⟨key, ?_, by simpa using hk⟩
+    unfold getStorage at hk
+    split at hk
+    · rename_i value h
+      simp [mem_keys_of_slot h]
+    · split at hk
+      · exact absurd rfl hk
+      · rename_i hc
+        split at hk
+        · rename_i value h
+          simp [mem_keys_of_slot h, hc]
+        · split at hk
+          · exact absurd rfl hk
+          · rename_i hc'
+            cases hp : StorageMap.slot tx.parent.preState.storage address key with
+            | some value => simp [mem_keys_of_slot hp, hc, hc']
+            | none => simp [State.getStorage, hp] at hk
+
+/-- A contract deploys at an address exactly when it has no nonce, no code and no word of storage.
+
+An address with storage and nothing else is not deployable, as EIP-7610 asks. -/
+theorem accountDeployable_iff (tx : TransactionState) (address : Address) :
+    tx.accountDeployable address = true ↔ (tx.getAccount address).nonce = 0 ∧
+      (tx.getAccount address).codeHash = EMPTY_CODE_HASH ∧
+        ∀ key, tx.getStorage address key = 0 := by
+  have h := accountHasStorage_iff tx address
+  simp only [accountDeployable, Bool.and_eq_true, decide_eq_true_eq, Bool.not_eq_true']
+  constructor
+  · rintro ⟨⟨hn, hc⟩, hs⟩
+    refine ⟨hn, hc, fun key => ?_⟩
+    refine Decidable.byContradiction fun hk => ?_
+    rw [h.mpr ⟨key, hk⟩] at hs
+    cases hs
+  · rintro ⟨hn, hc, hs⟩
+    refine ⟨⟨hn, hc⟩, ?_⟩
+    cases hb : tx.accountHasStorage address
+    · rfl
+    · obtain ⟨key, hk⟩ := h.mp hb
+      exact absurd (hs key) hk
+
 /-! ## Transient storage -/
 
 /-- Reading the transient word just written gives it. -/

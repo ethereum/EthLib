@@ -20,7 +20,7 @@ A call runs the code of its recipient, and a creation runs the data as init code
 
 A creation goes to the address that the sender and its nonce before the transaction give.
 
-It fails at once, with no gas left, when that address has code or a nonce.
+It fails at once, with no gas left, when that address has code, a nonce or storage.
 
 From Berlin, the transaction starts with some addresses and storage keys accessed:
 
@@ -251,7 +251,7 @@ def FirstFrame.ofMeter {fork : Fork} (message : Message fork) (state : Transacti
 
 The meter starts with the gas and the reservoir of the message.
 
-A creation fails at an address with code or a nonce.
+A creation fails at an address with code, a nonce or storage.
 
 From Glamsterdam, it pays the state gas of a new account when the address had none before.
 

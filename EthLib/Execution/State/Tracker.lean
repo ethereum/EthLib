@@ -17,6 +17,10 @@ When the transaction ends, its writes move into its block.
 
 A snapshot of the writes of a transaction restores them when a call fails.
 
+A contract deploys only at an address with no nonce, no code and no word in its storage.
+
+[EIP-7610][eip7610] adds the storage to the conditions of EIP-684.
+
 Transient storage lives for one transaction, as [EIP-1153][eip1153] specifies.
 
 From Paris, a change that leaves an account empty deletes it.
@@ -42,6 +46,7 @@ That clear keeps the balance.
 [eip1153]: https://eips.ethereum.org/EIPS/eip-1153#specification
 [eip7523]: https://eips.ethereum.org/EIPS/eip-7523#specification
 [eip161]: https://eips.ethereum.org/EIPS/eip-161#specification
+[eip7610]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-7610.md#specification
 [eip7928]: https://eips.ethereum.org/EIPS/eip-7928#scope-and-inclusion
 [eip8246]: https://eips.ethereum.org/EIPS/eip-8246#specification
 -/
@@ -243,10 +248,29 @@ def getTransientStorage (tx : TransactionState) (address : Address) (key : Bytes
 def accountExists (tx : TransactionState) (address : Address) : Bool :=
   (tx.getAccountOptional address).isSome
 
-/-- Whether a contract may be deployed at the address: its account has nonce 0 and no code. -/
+/-- Whether the storage of the address holds a word other than zero.
+
+A key can only hold a word if some layer that the address's storage shows has it.
+
+A wipe of the storage in a layer hides the layers below. -/
+def accountHasStorage (tx : TransactionState) (address : Address) : Bool :=
+  let keys (storage : StorageMap) := (storage.getD address ∅).keys
+  let preKeys := keys tx.parent.preState.storage
+  let parentKeys := keys tx.parent.storageWrites ++
+    if address ∈ tx.parent.storageClears then [] else preKeys
+  let txKeys := keys tx.storageWrites ++ if address ∈ tx.storageClears then [] else parentKeys
+  txKeys.any fun key => tx.getStorage address key != 0
+
+/-- Whether a contract may be deployed at the address.
+
+Its account must have nonce 0 and no code, and its storage must hold only zeros.
+
+[EIP-684](https://eips.ethereum.org/EIPS/eip-684#specification) asks for the nonce and the code.
+
+[EIP-7610][eip7610] asks for the storage, at every fork. -/
 def accountDeployable (tx : TransactionState) (address : Address) : Bool :=
   let account := tx.getAccount address
-  account.nonce = 0 && account.codeHash = EMPTY_CODE_HASH
+  account.nonce = 0 && account.codeHash = EMPTY_CODE_HASH && !tx.accountHasStorage address
 
 /-- Whether the address has an account with nonce 0, no code and balance 0. -/
 def accountExistsAndIsEmpty (tx : TransactionState) (address : Address) : Bool :=

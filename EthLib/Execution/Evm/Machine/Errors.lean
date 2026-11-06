@@ -51,7 +51,7 @@ inductive EvmError where
   | invalidParameter
   /-- The code that a creation deploys starts with the byte `0xef`. -/
   | invalidContractPrefix
-  /-- A creation targets an address that already has code or a nonce. -/
+  /-- A creation targets an address that already has code, a nonce or storage. -/
   | addressCollision
   /-- A precompiled contract rejects its input, or lacks gas. -/
   | precompile
