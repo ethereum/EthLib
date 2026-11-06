@@ -17,11 +17,9 @@ A payload whose block decodes holds no transaction of no bytes.
 
 The beacon chain calls a version of the method at each fork from Bellatrix to Fulu.
 
-A field from a fork decodes exactly when it is present at the forks that have it.
+A field from a fork decodes exactly when it is present from that fork on and absent before.
 
-Its value, read back, is the value that was decoded.
-
-Decoding the value of a field gives back the field.
+A field decodes from an option exactly when reading the field back gives that option.
 -/
 
 public section
@@ -183,7 +181,7 @@ theorem payloadBlock_of_glamsterdam (h : .glamsterdam ≤ fork) {config : ChainC
 
 /-! ## A field from a fork -/
 
-/-- A field from fork `f` decodes exactly when it is present just when the fork has it. -/
+/-- A field from fork `f` decodes exactly when its presence agrees with `f ≤ fork`. -/
 theorem exists_since_iff {α : Type} {f : Fork} {what : String} {o : Option α} :
     (∃ x : Since f fork α, Json.since what o = .ok x) ↔ (o.isSome ↔ f ≤ fork) := by
   -- Each of the four cases either succeeds or fails with an invalid parameter.
@@ -191,7 +189,7 @@ theorem exists_since_iff {α : Type} {f : Fork} {what : String} {o : Option α} 
     simp [h, Json.invalid, throw, throwThe, MonadExceptOf.throw, pure, Except.pure] <;>
     exact ⟨_, rfl⟩
 
-/-- The value of a decoded field from a fork is the value that was decoded. -/
+/-- Reading back a decoded field from a fork gives the option it was decoded from. -/
 theorem sinceValue_of_since {α : Type} {f : Fork} {what : String} {o : Option α}
     {x : Since f fork α} (h : Json.since what o = .ok x) : sinceValue x = o := by
   -- The two cases that fail cannot give the field, and the other two give back the option.
@@ -210,5 +208,10 @@ theorem since_sinceValue {α : Type} {f : Fork} {what : String} (x : Since f for
     rfl
   · simp only [hf, dite_false]
     exact congrArg Except.ok (funext fun h => absurd h hf)
+
+/-- A field from a fork decodes from an option exactly when reading it back gives that option. -/
+theorem since_eq_ok_iff {α : Type} {f : Fork} {what : String} {o : Option α}
+    {x : Since f fork α} : Json.since what o = .ok x ↔ sinceValue x = o :=
+  ⟨sinceValue_of_since, fun h => h ▸ since_sinceValue x⟩
 
 end EthLib.Engine
