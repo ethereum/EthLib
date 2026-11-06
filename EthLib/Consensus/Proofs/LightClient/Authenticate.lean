@@ -1,9 +1,7 @@
 module
 
-public import EthLib.Consensus.Proofs.LightClient.Containers
 public import EthLib.Consensus.Proofs.LightClient.FullNode
 public import EthLib.Consensus.Proofs.LightClient.Sync
-public import EthLib.Serialization.Proofs.Ssz.Codec.PathValues
 
 /-!
 # Proofs: what an accepted light client update authenticates
@@ -60,112 +58,6 @@ theorem isValidNormalizedMerkleBranch_value {α : Type} [SszType α] [LawfulSszT
     exact .inr ⟨honest, a, b, built, rest⟩
 
 variable {preset : Preset} {fork : Fork}
-
-/-- Altair's light client indices depend on field positions, not preset parameters.
-
-The finalized root is the second field of the checkpoint at ordinal 20.
-
-The current and next committees occupy ordinals 22 and 23 of the 24-field state. -/
-theorem light_client_gindices_altair_eq :
-    getGeneralizedIndex (SszType.desc (BeaconState preset .altair))
-        [.position 20, .position 1] = .ok (finalizedRootGindex .altair) ∧
-      getGeneralizedIndex (SszType.desc (BeaconState preset .altair))
-        [.position 22] = .ok (currentSyncCommitteeGindex .altair) ∧
-      getGeneralizedIndex (SszType.desc (BeaconState preset .altair))
-        [.position 23] = .ok (nextSyncCommitteeGindex .altair) := by
-  -- Field widths affect child trees but not the container's arity or field positions.
-  unfold SszType.desc
-  simp +decide [BeaconState.instSszType, SszType.forkContainer, SszType.container,
-    getGeneralizedIndex, Desc.resolveStep, Desc.chunkPosition, Desc.elementType,
-    Desc.chunkCount, SszType.desc, SszFields.descs, BeaconState.names,
-    Bind.bind, Except.bind, Pure.pure, Except.pure, nextPow2, finalizedRootGindex,
-    currentSyncCommitteeGindex, nextSyncCommitteeGindex]
-  simp [gindexConcat, gindexDepth, depthFor, Bind.bind, Except.bind, Pure.pure, Except.pure]
-
-/-- At Altair, the next committee node is the hash tree root of the state's next committee.
-
-The next committee branch opens this field against the attested state root.
-
-The claim holds for every state, not only states with an accepted light client update. -/
-theorem BeaconState.nodeRoot_next_sync_committee_altair
-    [LawfulSszType (BeaconState preset .altair)]
-    (state : BeaconState preset .altair) {root : Bytes32}
-    (rooted : SszType.hashTreeRoot (state.nextSyncCommittee (by decide)) = .ok root) :
-    nodeRoot (SszType.desc (BeaconState preset .altair)) (SszType.toValue state)
-      (nextSyncCommitteeGindex .altair) = .ok root.toArray := by
-  -- The container's ordinal 23 carries the actual next committee value.
-  have selected : PathSelects (SszType.desc (BeaconState preset .altair))
-      (SszType.toValue state) [.position 23] root.toArray := by
-    apply PathSelects.containerField
-      (LawfulSszType.wellFormed (α := BeaconState preset .altair))
-      (LawfulSszType.fits state) (ordinal := 23)
-      (child := SszType.desc (SyncCommittee preset))
-      (inner := SszType.toValue (state.nextSyncCommittee (by decide)))
-    · rfl
-    · rfl
-    · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
-  -- The value path and the type path share the Altair branch index.
-  obtain ⟨index, indexed, read⟩ := selected.reads
-  have index_eq : index = nextSyncCommitteeGindex .altair := by
-    exact Except.ok.inj (indexed.symm.trans light_client_gindices_altair_eq.2.2)
-  simpa [index_eq] using read
-
-/-- At Altair, the bootstrap committee node is the root of the state's current committee.
-
-The bootstrap branch opens this field against the state root of its beacon header. -/
-theorem BeaconState.nodeRoot_current_sync_committee_altair
-    [LawfulSszType (BeaconState preset .altair)]
-    (state : BeaconState preset .altair) {root : Bytes32}
-    (rooted : SszType.hashTreeRoot (state.currentSyncCommittee (by decide)) = .ok root) :
-    nodeRoot (SszType.desc (BeaconState preset .altair)) (SszType.toValue state)
-      (currentSyncCommitteeGindex .altair) = .ok root.toArray := by
-  -- The container's ordinal 22 carries the actual current committee value.
-  have selected : PathSelects (SszType.desc (BeaconState preset .altair))
-      (SszType.toValue state) [.position 22] root.toArray := by
-    apply PathSelects.containerField
-      (LawfulSszType.wellFormed (α := BeaconState preset .altair))
-      (LawfulSszType.fits state) (ordinal := 22)
-      (child := SszType.desc (SyncCommittee preset))
-      (inner := SszType.toValue (state.currentSyncCommittee (by decide)))
-    · rfl
-    · rfl
-    · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
-  -- The value path and the type path share the Altair bootstrap index.
-  obtain ⟨index, indexed, read⟩ := selected.reads
-  have index_eq : index = currentSyncCommitteeGindex .altair := by
-    exact Except.ok.inj (indexed.symm.trans light_client_gindices_altair_eq.2.1)
-  simpa [index_eq] using read
-
-/-- At Altair, the finality node is the root of the finalized checkpoint's root field.
-
-The finality branch opens this nested field against the attested state root. -/
-theorem BeaconState.nodeRoot_finalized_root_altair
-    [LawfulSszType (BeaconState preset .altair)]
-    (state : BeaconState preset .altair) {root : Bytes32}
-    (rooted : SszType.hashTreeRoot state.finalizedCheckpoint.root = .ok root) :
-    nodeRoot (SszType.desc (BeaconState preset .altair)) (SszType.toValue state)
-      (finalizedRootGindex .altair) = .ok root.toArray := by
-  -- Finality descends through the checkpoint at ordinal 20, then its root at ordinal 1.
-  have selected : PathSelects (SszType.desc (BeaconState preset .altair))
-      (SszType.toValue state) [.position 20, .position 1] root.toArray := by
-    apply PathSelects.containerField
-      (LawfulSszType.wellFormed (α := BeaconState preset .altair))
-      (LawfulSszType.fits state) (ordinal := 20)
-      (child := SszType.desc Checkpoint) (inner := SszType.toValue state.finalizedCheckpoint)
-    · rfl
-    · rfl
-    · apply PathSelects.containerField
-        (LawfulSszType.wellFormed (α := Checkpoint))
-        (LawfulSszType.fits state.finalizedCheckpoint) (ordinal := 1)
-        (child := SszType.desc Root) (inner := SszType.toValue state.finalizedCheckpoint.root)
-      · rfl
-      · rfl
-      · exact .root (SszType.hashTreeRoot_ok_iff.mp rooted)
-  -- The joined path is the finality branch index, not the checkpoint container's index.
-  obtain ⟨index, indexed, read⟩ := selected.reads
-  have index_eq : index = finalizedRootGindex .altair := by
-    exact Except.ok.inj (indexed.symm.trans light_client_gindices_altair_eq.1)
-  simpa [index_eq] using read
 
 /-- An accepted finality check of an update that proves finality verifies its finality branch.
 
