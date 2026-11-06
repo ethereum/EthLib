@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Exports.ForkChoice
 public import EthLib.Consensus.Gossip.Operations
+public import EthLib.Consensus.Gossip.SyncCommittee
 
 /-!
 # `Exports.GossipValidation`
@@ -74,9 +75,10 @@ def outcomeRecord : ValidationResult → ByteArray
 
 /-- Whether gossip validation of a topic is specified here at a fork.
 
-Changes of BLS credentials have a topic from Capella. -/
+The sync committee has topics from Altair, and changes of BLS credentials from Capella. -/
 def gossipValidationSpecified (fork : Fork) : String → Bool
   | "attester_slashing" | "proposer_slashing" | "voluntary_exit" => true
+  | "sync_committee" | "sync_committee_contribution_and_proof" => .altair ≤ fork
   | "bls_to_execution_change" => .shapella ≤ fork
   | _ => false
 
@@ -107,6 +109,20 @@ def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
     let outcome ← runForkChoice
       (validateBlsToExecutionChange config checks seen store signed input.currentTimeMs)
     return record outcome (·.recordBlsToExecutionChange signed)
+  | "sync_committee" =>
+    let message ← decodeInput SyncCommitteeMessage input.data
+    if altair : .altair ≤ fork then
+      let outcome ← runForkChoice (validateSyncCommitteeMessage config checks seen store altair
+        message input.currentTimeMs input.subnetId)
+      return record outcome (·.recordSyncCommitteeMessage message input.subnetId)
+    else throw (0, "the sync committee has no topic before Altair")
+  | "sync_committee_contribution_and_proof" =>
+    let signed ← decodeInput (SignedContributionAndProof preset) input.data
+    if altair : .altair ≤ fork then
+      let outcome ← runForkChoice
+        (validateContributionAndProof config checks seen store altair signed input.currentTimeMs)
+      return record outcome (·.recordContributionAndProof signed)
+    else throw (0, "the sync committee has no topic before Altair")
   | _ => throw (0, s!"gossip validation of the topic {topic} is not yet specified")
 
 /-- Validate the messages of a topic in turn, against the store of an anchor.

@@ -1,0 +1,8 @@
+topic: sync_committee_contribution_and_proof
+blocks:
+- {block: 
+    block_0x33570af1c055639caaff25701b98e8468cde61cb8c8d38531f51aa3971a97605}
+messages:
+- {current_time_ms: 500, message: 
+    contribution_0x496166824b992355a5ec18359b78397a4a0a3d2939fd89c9b2baaf51bf2a3c2d,
+  expected: reject, reason: aggregator is not a member of the committee}

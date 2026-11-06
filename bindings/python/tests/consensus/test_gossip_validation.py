@@ -21,6 +21,8 @@ TOPICS = {
     "attester_slashing": "altair",
     "proposer_slashing": "altair",
     "voluntary_exit": "altair",
+    "sync_committee_message": "altair",
+    "sync_committee_contribution_and_proof": "altair",
     "bls_to_execution_change": "capella",
 }
 SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu")

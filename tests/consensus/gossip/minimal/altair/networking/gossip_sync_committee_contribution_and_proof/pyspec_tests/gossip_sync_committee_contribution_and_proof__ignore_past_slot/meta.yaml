@@ -1,0 +1,8 @@
+topic: sync_committee_contribution_and_proof
+blocks:
+- {block: 
+    block_0x33570af1c055639caaff25701b98e8468cde61cb8c8d38531f51aa3971a97605}
+messages:
+- {current_time_ms: 18000, message: 
+    contribution_0xd6355d09d289c2baaa8b0eb3375b3f990cf19460d2609a7e25a17a13b0382113,
+  expected: ignore, reason: contribution is not for the current slot}

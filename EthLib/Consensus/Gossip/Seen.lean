@@ -39,6 +39,14 @@ structure Seen where
   attesterSlashingIndices : Std.TreeSet ValidatorIndex := ∅
   /-- From Capella: the validators whose change of BLS credentials was valid. -/
   blsToExecutionChangeIndices : Std.TreeSet ValidatorIndex := ∅
+  /-- From Altair: the slot, the validator and the subnet of each valid sync committee message. -/
+  syncMessageKeys : List (Slot × ValidatorIndex × UInt64) := []
+  /-- From Altair: the slot, the aggregator and the subcommittee of each valid contribution. -/
+  syncContributionAggregatorKeys : List (Slot × ValidatorIndex × UInt64) := []
+  /-- From Altair: the slot, the block root and the subcommittee of each valid contribution.
+
+  Each key comes with the bits of the members that the contribution aggregates. -/
+  syncContributionBits : List ((Slot × Root × UInt64) × List Bool) := []
   deriving Inhabited
 
 namespace Store
@@ -54,6 +62,27 @@ def isFutureEpoch (epoch : Epoch) (currentTimeMs : UInt64) : Except ForkChoiceEr
   let latest ← (addChecked currentTimeMs config.MAXIMUM_GOSSIP_CLOCK_DISPARITY).mapError .arith
   let slot ← (computeSlotAtTimeMs config store.genesisTimeMs latest).mapError .arith
   return computeEpochAtSlot preset slot < epoch
+
+/-- Whether the clock is in a range of slots: from a slot to a given count of slots after it.
+
+The range ends with the end of its last slot.
+
+The clock may run ahead or behind by the maximum gossip clock disparity, at both ends.
+
+A time or a slot that leaves the 64-bit range is an error. -/
+def isWithinSlotRange (slot : Slot) (slotRange currentTimeMs : UInt64) :
+    Except ForkChoiceError Bool := do
+  let start ← (computeTimeAtSlotMs config store.genesisTimeMs slot).mapError .arith
+  let latest ← (addChecked currentTimeMs config.MAXIMUM_GOSSIP_CLOCK_DISPARITY).mapError .arith
+  if latest < start then return false
+  let after ← (addChecked slot slotRange >>= (addChecked · 1)).mapError .arith
+  let stop ← (computeTimeAtSlotMs config store.genesisTimeMs after).mapError .arith
+  let earliest ← (addChecked stop config.MAXIMUM_GOSSIP_CLOCK_DISPARITY).mapError .arith
+  return !(earliest < currentTimeMs)
+
+/-- Whether the clock is in a slot, with the maximum gossip clock disparity at both ends. -/
+def isCurrentSlot (slot : Slot) (currentTimeMs : UInt64) : Except ForkChoiceError Bool :=
+  store.isWithinSlotRange config slot 0 currentTimeMs
 
 /-- The state after the head of the fork choice. -/
 def headState : Except ForkChoiceError (BeaconState preset fork) := do

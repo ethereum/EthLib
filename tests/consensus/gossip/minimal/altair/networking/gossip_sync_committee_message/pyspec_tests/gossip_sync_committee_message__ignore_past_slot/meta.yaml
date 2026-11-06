@@ -1,0 +1,8 @@
+topic: sync_committee
+blocks:
+- {block: 
+    block_0x33570af1c055639caaff25701b98e8468cde61cb8c8d38531f51aa3971a97605}
+messages:
+- {current_time_ms: 18000, subnet_id: 3, message: 
+    sync_committee_message_0x4fd6a74d83e2fae53156153c92688dbe81dfa8e0bbb1b9a7473ecd32e74a5a64,
+  expected: ignore, reason: message is not for the current slot}
