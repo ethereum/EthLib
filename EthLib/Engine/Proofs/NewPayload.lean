@@ -6,7 +6,9 @@ public import EthLib.Engine.Proofs.Block
 /-!
 # Proofs: the checks of `engine_newPayload`
 
-Each fork from Paris to BPO5 has a version of the method, and no other fork has one.
+Each fork from Paris to Glamsterdam has a version of the method, and no other fork has one.
+
+Version 5 takes Glamsterdam alone.
 
 Request lists that pass the checks have distinct types, in increasing order.
 
@@ -40,9 +42,9 @@ theorem PayloadError.code_injective (e₁ e₂ : PayloadError) (h : e₁.code = 
   cases e₁ <;> cases e₂ <;>
     first | rfl | (simp only [PayloadError.code] at h; exact absurd h (by decide))
 
-/-- Some version of the method takes a fork exactly when the fork is from Paris to BPO5. -/
+/-- Some version of the method takes a fork exactly when the fork is from Paris to Glamsterdam. -/
 theorem exists_acceptsFork_iff (fork : Fork) :
-    (∃ version, acceptsFork version fork = true) ↔ .paris ≤ fork ∧ fork < .glamsterdam := by
+    (∃ version, acceptsFork version fork = true) ↔ .paris ≤ fork ∧ fork < .hegota := by
   constructor
   · rintro ⟨version, h⟩
     revert h
@@ -56,6 +58,11 @@ theorem exists_acceptsFork_iff (fork : Fork) :
       | exact ⟨2, rfl⟩
       | exact ⟨3, rfl⟩
       | exact ⟨4, rfl⟩
+      | exact ⟨5, rfl⟩
+
+/-- Version 5 of the method takes exactly Glamsterdam. -/
+theorem acceptsFork_five_iff (fork : Fork) : acceptsFork 5 fork = true ↔ fork = .glamsterdam := by
+  simp [acceptsFork]
 
 /-- Request lists that pass the check have strictly increasing types. -/
 theorem pairwise_of_validRequests {requests : List ByteArray}

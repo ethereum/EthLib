@@ -111,7 +111,9 @@ def payloadBlock (config : ChainConfig) (p : Consensus.ExecutionPayload preset f
     let beacon ← (Json.since (f := .dencun) "parentBeaconBlockRoot"
       (sinceValue parentBeaconBlockRoot)).toOption
     let lists ← (Json.since (f := .pectra) "executionRequests" (sinceValue requests)).toOption
-    let block ← (payload.toBlock beacon lists accepted.2).toOption
+    let absent {α : Type} : Since .glamsterdam executionFork α :=
+      fun h => absurd (Nat.lt_of_lt_of_le accepted.2 h) (Nat.lt_irrefl _)
+    let block ← (payload.toBlock beacon lists absent absent).toOption
     return ⟨executionFork, block⟩
   else none
 

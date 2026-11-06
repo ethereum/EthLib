@@ -8,13 +8,15 @@ public import EthLib.Execution.Blocks.Transition
 /-!
 # `Engine.NewPayload`
 
-The checks of `engine_newPayload`, versions 1 to 4, that come before the transactions run.
+The checks of `engine_newPayload`, versions 1 to 5, that come before the transactions run.
 
 Each version takes payloads of some forks only.
 
 The fork of a payload is the active fork at its number and its timestamp.
 
 Version 1 takes Paris, version 2 Paris and Shapella, version 3 Dencun, version 4 Pectra to BPO5.
+
+Version 5 takes Glamsterdam, which the Engine API calls Amsterdam on the execution side.
 
 A payload of any other fork is an unsupported fork, with JSON-RPC code `-38005`.
 
@@ -34,6 +36,10 @@ Version 4 also takes the request lists.
 
 Each list must have more than one byte, and their types must strictly increase.
 
+Version 5 takes version 4 of the payload structure, with the block access list and the slot number.
+
+A list that is not the RLP form of a block access list makes the payload invalid.
+
 Then the block of the payload must decode, and its hash must be the block hash of the payload.
 
 A payload that fails these checks is invalid.
@@ -48,6 +54,7 @@ The method specifications state these rules, at commit `3284ee8` of execution-ap
 - [`engine_newPayloadV2`][v2], with the structure by fork
 - [`engine_newPayloadV3`][v3], and its update by Pectra in [`prague.md`][v3-prague]
 - [`engine_newPayloadV4`][v4], and its update by Amsterdam in [`amsterdam.md`][v4-amsterdam]
+- [`engine_newPayloadV5`][v5]
 
 [v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#engine_newpayloadv1
 [v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#engine_newpayloadv2
@@ -55,6 +62,7 @@ The method specifications state these rules, at commit `3284ee8` of execution-ap
 [v3-prague]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#update-the-methods-of-previous-forks
 [v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/prague.md#engine_newpayloadv4
 [v4-amsterdam]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#update-the-methods-of-previous-forks
+[v5]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#engine_newpayloadv5
 -/
 
 @[expose] public section
@@ -74,18 +82,33 @@ def acceptsFork (version : Nat) (fork : Fork) : Bool :=
   | 2 => fork == .paris || fork == .shapella
   | 3 => fork == .dencun
   | 4 => decide (.pectra ≤ fork) && decide (fork < .glamsterdam)
+  | 5 => fork == .glamsterdam
   | _ => false
 
 /-- The number of parameters of a version of the method. -/
 def paramCount (version : Nat) : Nat :=
   if version ≥ 4 then 4 else if version = 3 then 3 else 1
 
-/-- Whether a version of the method takes a version of the payload structure. -/
+/-- Whether a version of the method takes a version of the payload structure.
+
+Version 5 reads its structure, version 4, with its own decoder. -/
 def acceptsStructure (version layout : Nat) : Bool :=
   match version with
   | 1 => layout == 1
   | 2 => layout == 1 || layout == 2
   | _ => layout == 3
+
+/-- The payload of a version of the method, with its access list and its slot from version 5. -/
+def payloadParam (version : Nat) (j : Json) :
+    Decode (AnyPayload × Option (ByteArray × UInt64)) := do
+  if version ≥ 5 then
+    let (any, blockAccessList, slotNumber) ← payloadV4 j
+    return (any, some (blockAccessList, slotNumber))
+  else
+    let any ← anyPayload j
+    unless acceptsStructure version any.version do
+      invalid s!"payload: version {any.version} of the structure"
+    return (any, none)
 
 /-- Whether request lists have more than one byte each, with strictly increasing types. -/
 def validRequests : List ByteArray → Bool
@@ -122,9 +145,7 @@ def checkNewPayload (config : ChainConfig) (version : Nat) (params : Json) :
     match params[i]? with
     | some j => pure j
     | none => invalid s!"params: no value {i}"
-  let any ← anyPayload (← param 0)
-  unless acceptsStructure version any.version do
-    invalid s!"payload: version {any.version} of the structure"
+  let (any, amsterdam) ← payloadParam version (← param 0)
   let hashes ← if version ≥ 3 then
     some <$> array "expectedBlobVersionedHashes" (fixed "versioned hash" 32) (← param 1)
     else pure none
@@ -138,24 +159,25 @@ def checkNewPayload (config : ChainConfig) (version : Nat) (params : Json) :
   let number := any.common.blockNumber.toNat
   let timestamp := any.common.timestamp.toNat
   let some fork := config.activeFork number timestamp | throw .unsupportedFork
-  if hAccepted : acceptsFork version fork = true ∧ fork < .glamsterdam then
-    let hFork := hAccepted.2
+  if hAccepted : acceptsFork version fork = true then
     let payload ← any.atFork fork
     let beacon ← since (f := .dencun) "parentBeaconBlockRoot" beaconRoot
     let requests ← since (f := .pectra) "executionRequests" requests
+    let accessList ← since (f := .glamsterdam) "blockAccessList" (amsterdam.map (·.1))
+    let slot ← since (f := .glamsterdam) "slotNumber" (amsterdam.map (·.2))
     -- The checks of the payload alone.
     let invalidStatus (e : PayloadError) : PayloadStatus × PayloadError :=
       match e with
       | .wrongBlockHash .. =>
         (⟨if version = 1 then .invalidBlockHash else .invalid, none⟩, e)
       | _ => (⟨.invalid, none⟩, e)
-    match payload.toBlock beacon requests hFork with
+    match payload.toBlock beacon requests accessList slot with
     | .error e => return .error (invalidStatus e)
     | .ok block =>
       if let some hashes := hashes then
         if ExecutionPayload.blobVersionedHashes block.transactions ≠ hashes then
           return .error (invalidStatus .wrongVersionedHashes)
-      return .ok ⟨fork, hAccepted.1, block⟩
+      return .ok ⟨fork, hAccepted, block⟩
   else throw .unsupportedFork
 
 /-- The status of `engine_newPayload` from an execution layer without the parent's state.

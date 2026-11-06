@@ -22,7 +22,6 @@ namespace EthLib.Engine
 open EthLib.Base
 open EthLib.Execution.Blocks
 open EthLib.Execution.Transactions
-
 variable {fork : Fork}
 
 /-! ## Pieces -/
@@ -118,15 +117,17 @@ namespace ExecutionPayload
 /-- The block of a payload has the payload's block hash, no ommers, and the fields of EIP-3675.
 
 Its mix digest is the RANDAO mix of the payload, as EIP-4399 asks. -/
-theorem toBlock_shape {hFork : fork < .glamsterdam} {p : ExecutionPayload fork}
+theorem toBlock_shape {p : ExecutionPayload fork}
     {beacon : Since .dencun fork Hash32} {requests : Since .pectra fork (List ByteArray)}
-    {b : Block fork Transaction} (h : p.toBlock beacon requests hFork = .ok b) :
+    {accessList : Since .glamsterdam fork ByteArray} {slot : Since .glamsterdam fork UInt64}
+    {b : Block fork Transaction} (h : p.toBlock beacon requests accessList slot = .ok b) :
     b.header.hash = .ok p.blockHash ∧ b.ommers = [] ∧ b.header.ommersHash = EMPTY_OMMER_HASH ∧
       b.header.difficulty = 0 ∧ b.header.nonce = Vector.replicate 8 0 ∧
       b.header.prevRandao = p.prevRandao := by
   simp only [toBlock, toBlockUnchecked, toHeader, checkBlockHash, bind_ok_iff, pure_eq_ok,
     mapError_ok_iff] at h
-  obtain ⟨_, ⟨txs, -, root, -, _, ⟨wr, -, rfl⟩, rfl⟩, _, ⟨computed, hHash, hCheck⟩, rfl⟩ := h
+  obtain ⟨_, ⟨txs, -, root, -, _, -, _, ⟨wr, -, rfl⟩, rfl⟩, _, ⟨computed, hHash, hCheck⟩, rfl⟩ :=
+    h
   have hComputed : computed = p.blockHash := by
     split at hCheck
     · assumption
@@ -135,13 +136,16 @@ theorem toBlock_shape {hFork : fork < .glamsterdam} {p : ExecutionPayload fork}
   exact ⟨hHash, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- A payload whose block hash is the hash of its header is the payload of its block. -/
-theorem ofBlock_toBlock (hParis : .paris ≤ fork) {hFork : fork < .glamsterdam}
+theorem ofBlock_toBlock (hParis : .paris ≤ fork)
     {p : ExecutionPayload fork} {beacon : Since .dencun fork Hash32}
-    {requests : Since .pectra fork (List ByteArray)} {b : Block fork Transaction}
-    (h : p.toBlock beacon requests hFork = .ok b) : ofBlock hParis b = some p := by
+    {requests : Since .pectra fork (List ByteArray)}
+    {accessList : Since .glamsterdam fork ByteArray} {slot : Since .glamsterdam fork UInt64}
+    {b : Block fork Transaction}
+    (h : p.toBlock beacon requests accessList slot = .ok b) : ofBlock hParis b = some p := by
   simp only [toBlock, toBlockUnchecked, toHeader, checkBlockHash, bind_ok_iff, pure_eq_ok,
     mapError_ok_iff] at h
-  obtain ⟨_, ⟨txs, hTxs, root, -, _, ⟨wr, -, rfl⟩, rfl⟩, _, ⟨computed, hHash, hCheck⟩, rfl⟩ := h
+  obtain ⟨_, ⟨txs, hTxs, root, -, _, -, _, ⟨wr, -, rfl⟩, rfl⟩, _, ⟨computed, hHash, hCheck⟩, rfl⟩ :=
+    h
   have hComputed : computed = p.blockHash := by
     split at hCheck
     · assumption
@@ -163,18 +167,25 @@ It has no ommers, and the ommers hash, the difficulty and the nonce of EIP-3675.
 
 Its fork has the kind of each transaction.
 
-Its roots are those of its lists, and its requests hash is that of the request lists given. -/
-theorem toBlock_ofBlock (hParis : .paris ≤ fork) (hFork : fork < .glamsterdam)
+Its roots are those of its lists, and its requests hash is that of the request lists given.
+
+From Glamsterdam, its access list hash is that of the bytes given, and so is its slot number. -/
+theorem toBlock_ofBlock (hParis : .paris ≤ fork)
     {b : Block fork Transaction} {p : ExecutionPayload fork}
-    (requests : Since .pectra fork (List ByteArray)) (h : ofBlock hParis b = some p)
+    (requests : Since .pectra fork (List ByteArray))
+    (accessList : Since .glamsterdam fork ByteArray) (slot : Since .glamsterdam fork UInt64)
+    (h : ofBlock hParis b = some p)
     (hOmmers : b.ommers = []) (hOmmersHash : b.header.ommersHash = EMPTY_OMMER_HASH)
     (hDifficulty : b.header.difficulty = 0) (hNonce : b.header.nonce = Vector.replicate 8 0)
     (hForks : ∀ tx ∈ b.transactions, tx.fork ≤ fork)
     (hTransactionsRoot : transactionsRoot b.transactions = .ok b.header.transactionsRoot)
     (hWithdrawalsRoot :
       ∀ hf, withdrawalsRoot (b.withdrawals hf) = .ok (b.header.withdrawalsRoot hf))
-    (hRequests : ∀ hf, b.header.requestsHash hf = requestsCommitment (requests hf)) :
-    p.toBlock b.header.parentBeaconBlockRoot requests hFork = .ok b := by
+    (hRequests : ∀ hf, b.header.requestsHash hf = requestsCommitment (requests hf))
+    (hAccessList :
+      ∀ hf, blockAccessListHashOf (accessList hf) = .ok (b.header.blockAccessListHash hf))
+    (hSlot : ∀ hf, slot hf = b.header.slotNumber hf) :
+    p.toBlock b.header.parentBeaconBlockRoot requests accessList slot = .ok b := by
   simp only [ofBlock, Except.toOption, Option.bind_eq_bind] at h
   cases hBytes : b.transactions.mapM encodeTransaction with
   | error => simp [hBytes] at h
@@ -195,8 +206,12 @@ theorem toBlock_ofBlock (hParis : .paris ≤ fork) (hFork : fork < .glamsterdam)
         fun _ => PayloadError.noEncoding) = .ok b.header.withdrawalsRoot :=
       sinceM_eq_ok fun hf => by simp [hWithdrawalsRoot hf, Except.mapError]
     simp only [Except.mapError] at hWr
+    have hAl : sinceM (fork := fork) (fun hf => blockAccessListHashOf (accessList hf)) =
+        .ok b.header.blockAccessListHash := sinceM_eq_ok hAccessList
+    have hSl : slot = b.header.slotNumber := funext hSlot
+    subst hSl
     simp only [toBlock, toBlockUnchecked, toHeader, checkBlockHash, hDec, hRoot, bind,
-      Except.bind, Except.mapError, pure, Except.pure, hWr]
+      Except.bind, Except.mapError, pure, Except.pure, hWr, hAl]
     have hTime :
         BitVec.ofNat 256 b.header.timestamp.toNat.toUInt64.toNat = b.header.timestamp := by
       apply BitVec.eq_of_toNat_eq
@@ -212,23 +227,14 @@ theorem toBlock_ofBlock (hParis : .paris ≤ fork) (hFork : fork < .glamsterdam)
         timestamp := BitVec.ofNat 256 b.header.timestamp.toNat.toUInt64.toNat,
         nonce := Vector.replicate 8 0,
         baseFeePerGas := fun x => (BitVec.ofNat 256 (b.header.baseFeePerGas x)).toNat,
-        requestsHash := fun hf => requestsCommitment (requests hf),
-        blockAccessListHash := fun hf => absurd (Nat.lt_of_lt_of_le hFork hf) (Nat.lt_irrefl _),
-        slotNumber := fun hf => absurd (Nat.lt_of_lt_of_le hFork hf) (Nat.lt_irrefl _) } :
+        requestsHash := fun hf => requestsCommitment (requests hf) } :
         Header fork) = b.header := by
-      obtain ⟨⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, access, slot⟩,
+      obtain ⟨⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _⟩,
         txs, ommers, ws⟩ := b
       dsimp only at *
       subst hOmmersHash hDifficulty hNonce
       simp only [toNat_toUInt64 hN, toNat_toUInt64 hG, toNat_toUInt64 hU, hTime, hBase,
         ← hRequests]
-      have hGlam : ¬Fork.glamsterdam ≤ fork := fun hf =>
-        Nat.lt_irrefl _ (Nat.lt_of_lt_of_le hFork hf)
-      obtain rfl := Since.eq_of_not_le hGlam access
-        fun hf => absurd (Nat.lt_of_lt_of_le hFork hf) (Nat.lt_irrefl _)
-      obtain rfl := Since.eq_of_not_le hGlam slot
-        fun hf => absurd (Nat.lt_of_lt_of_le hFork hf) (Nat.lt_irrefl _)
-      rfl
     dsimp only at hHeader
     rw [hHeader]
     simp only [hHash, ite_true]

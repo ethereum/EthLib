@@ -28,8 +28,15 @@ So the extra data of a payload has at most 32 bytes, as its type `bytesMax32` sa
 
 Step 1 of [`engine_newPayloadV3`][v3] asks for exactly the expected fields, with `null` as absent.
 
+Version 4 of the payload holds the fields of version 3, the block access list and the slot number.
+
+The list is a byte string, and the slot number a 64-bit number, as [`amsterdam.md`][v4] writes.
+
+A payload without the list is an invalid parameter, by step 2 of `engine_newPayloadV5`.
+
 [types]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/base-types.yaml
 [v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#specification
+[v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#executionpayloadv4
 -/
 
 @[expose] public section
@@ -200,6 +207,23 @@ def anyPayload (j : Json) : Decode AnyPayload := do
   let excessBlobGas ← if version ≥ 3 then
     some <$> uint64 "excessBlobGas" (← get "excessBlobGas") else pure none
   return ⟨version, common, withdrawals, blobGasUsed, excessBlobGas⟩
+
+/-- The two fields that version 4 of an execution payload appends to version 3. -/
+def amsterdamFields : List String := ["blockAccessList", "slotNumber"]
+
+/-- The fields of version 4: version 3, the block access list and the slot number. -/
+def payloadFieldsV4 : List String := payloadFieldsV3 ++ amsterdamFields
+
+/-- An execution payload of version 4: the payload of version 3, its access list and its slot.
+
+The fields of version 3 decode as they do in version 3. -/
+def payloadV4 (j : Json) : Decode (AnyPayload × ByteArray × UInt64) := do
+  let fs ← fields "payload" j
+  unless hasExactly fs payloadFieldsV4 do invalid "payload: not the fields of version 4"
+  let any ← anyPayload (Json.mkObj (fs.filter fun (name, _) => !amsterdamFields.contains name))
+  let blockAccessList ← bytes "blockAccessList" (← field "payload" fs "blockAccessList")
+  let slotNumber ← uint64 "slotNumber" (← field "payload" fs "slotNumber")
+  return (any, blockAccessList, slotNumber)
 
 /-- A field from fork `f`, which must be present exactly when the fork has it. -/
 def since {α : Type} {f fork : Fork} (what : String) : Option α → Decode (Since f fork α)

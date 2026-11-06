@@ -11,9 +11,17 @@ The structures that the Engine API passes between the consensus and the executio
 
 An execution payload carries the fields of an execution block that the consensus layer keeps.
 
-Its version follows the fork: version 1 at Paris, 2 at Shapella, and 3 from Dencun to BPO5.
+Its version follows the fork: 1 at Paris, 2 at Shapella, 3 from Dencun to BPO5, 4 at Glamsterdam.
 
-Each version appends fields to the one before, so one type with fields by fork holds all three.
+The Engine API calls the execution side of Glamsterdam Amsterdam.
+
+Versions 2 and 3 append fields to the one before, so one type with fields by fork holds the three.
+
+Version 4 appends the block access list of EIP-7928 and the slot number of EIP-7843.
+
+The header holds the hash of the list and the slot number, and the body holds neither.
+
+So the type keeps these two fields apart, and the method passes them beside the payload.
 
 A withdrawal of the Engine API has the four fields of a withdrawal of the execution layer.
 
@@ -22,6 +30,7 @@ The Engine API specification defines each structure, at commit `3284ee8` of exec
 - [`ExecutionPayloadV1`][v1], [`ForkchoiceStateV1`][fcs] and [`PayloadStatusV1`][status]
 - [`WithdrawalV1`][withdrawal] and [`ExecutionPayloadV2`][v2]
 - [`ExecutionPayloadV3`][v3]
+- [`ExecutionPayloadV4`][v4]
 - the error codes, in [Errors][errors]
 
 [v1]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#executionpayloadv1
@@ -30,6 +39,7 @@ The Engine API specification defines each structure, at commit `3284ee8` of exec
 [withdrawal]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#withdrawalv1
 [v2]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/shanghai.md#executionpayloadv2
 [v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#executionpayloadv3
+[v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#executionpayloadv4
 [errors]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/common.md#errors
 -/
 
@@ -152,6 +162,8 @@ inductive PayloadError where
   | wrongVersionedHashes
   /-- The block of the payload fails the state transition, with `error`. -/
   | invalidBlock (error : Execution.Blocks.BlockError)
+  /-- The block access list is not the RLP encoding of a block access list. -/
+  | invalidBlockAccessList
   deriving DecidableEq, Repr
 
 /-- The stable code of a reason, one per constructor, for the C exports.
@@ -165,5 +177,6 @@ def PayloadError.code : PayloadError → UInt32
   | .wrongBlockHash .. => 403
   | .wrongVersionedHashes => 404
   | .invalidBlock _ => 405
+  | .invalidBlockAccessList => 406
 
 end EthLib.Engine
