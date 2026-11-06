@@ -27,6 +27,7 @@ public import EthLib.Networking.Snappy.Block
 public import EthLib.Networking.Snappy.Compress
 public import EthLib.Networking.Snappy.Encode
 public import EthLib.Networking.Snappy.Frame
+public import EthLib.Networking.Snappy.FrameEncode
 
 /-!
 # `EthLib.Networking`

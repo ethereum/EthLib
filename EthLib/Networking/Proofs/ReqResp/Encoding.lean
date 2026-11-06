@@ -3,6 +3,7 @@ module
 public import EthLib.Networking.ReqResp.Encoding
 public import EthLib.Networking.Proofs.Encoding.Varint
 public import EthLib.Networking.Proofs.Snappy.Frame
+public import EthLib.Networking.Proofs.Snappy.FrameEncode
 
 /-!
 # `Networking.Proofs.ReqResp.Encoding`
@@ -18,6 +19,8 @@ Those bytes are within the bound for that length, and they decompress to the pay
 More compressed bytes than the bound for the declared length reject the payload.
 
 The literal encoder writes payloads and response chunks that decode back.
+
+The encoder that compresses writes payloads that decode back.
 
 Two errors with one code come from one constructor, and no error has code 0.
 -/
@@ -287,6 +290,20 @@ theorem decodePayload_encodePayloadLiteral {typeMin typeBound : UInt64} {d : Byt
   · rw [Array.length_toList]
     exact size_encodeFramesLiteral_le d
   · simpa using Snappy.Frame.decodeFrames_encodeFramesLiteral d
+
+/-- A payload of the encoder that compresses decodes back, when it fits the bounds. -/
+theorem decodePayload_encodePayload {typeMin typeBound : UInt64} {d : ByteArray}
+    (hp : d.size ≤ MAX_PAYLOAD_SIZE.toNat) (ht : d.size ≤ typeBound.toNat)
+    (hm : typeMin.toNat ≤ d.size) :
+    decodePayload typeMin typeBound (encodePayload d) = .ok d := by
+  refine decodePayload_eq_ok_iff.mpr
+    ⟨?_, hm, (Snappy.encodeFrames d).data.toList, ?_, ?_, ?_⟩
+  · rw [UInt64.min_def]
+    split <;> omega
+  · simp [encodePayload]
+  · rw [Array.length_toList]
+    exact Nat.le_trans (Snappy.FrameEncode.size_encodeFrames_le d) (size_encodeFramesLiteral_le d)
+  · simpa using Snappy.FrameEncode.decodeFrames_encodeFrames d
 
 /-! ## Response codes and chunks -/
 

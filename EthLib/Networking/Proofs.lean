@@ -26,6 +26,7 @@ public import EthLib.Networking.Proofs.Snappy.Compress
 public import EthLib.Networking.Proofs.Snappy.CompressSize
 public import EthLib.Networking.Proofs.Snappy.Encode
 public import EthLib.Networking.Proofs.Snappy.Frame
+public import EthLib.Networking.Proofs.Snappy.FrameEncode
 
 /-!
 # `EthLib.Networking.Proofs`
