@@ -364,6 +364,25 @@ theorem verifyProof_sound (hash : ByteArray → Hash32) {trie : Trie} {key : Byt
     · exact .inl hhonest
     · exact .inr (.inl hfound)
 
+/-- Soundness for the map built by setting pairs in order, as in the trie root export.
+
+Later entries replace earlier values, and an empty value removes its key.
+
+The construction gives distinct keys, which the trie of Yellow Paper Appendix D assumes. -/
+theorem verifyProof_sound_foldl_trieSet (hash : ByteArray → Hash32) (secured : Bool)
+    (pairs : List (ByteArray × ByteArray)) :
+    let trie := pairs.foldl (fun trie (key, value) => trieSet trie key value) ⟨secured, []⟩
+    ∀ {key : ByteArray} {root' : Hash32} {honestProof proof : List ByteArray}
+      {result : Option ByteArray},
+      root hash trie = .ok root' → getProof hash trie key = .ok honestProof →
+      verifyProof hash root' trie.secured key proof = .ok result →
+      (proof = honestProof ∧ result = valueAt hash trie key) ∨
+        (∃ pair, findProofCollision hash proof honestProof = some pair ∧ IsCollision hash pair) ∨
+        ∃ pair, findPathCollision hash trie = some pair ∧ IsCollision hash pair := by
+  intro trie key root' honestProof proof result hroot hhonest hverify
+  exact verifyProof_sound hash hroot hhonest
+    (nodup_keys_foldl_trieSet secured pairs) hverify
+
 /-! ## Two tries with one root -/
 
 /-- The first collision in the proofs of one key in two tries, if any. -/
@@ -427,6 +446,28 @@ theorem root_binding (hash : ByteArray → Hash32) {trie₁ trie₂ : Trie} {roo
   rcases verifyProof_binding hash hverify₁ hverify₂ with ⟨-, hvalue⟩ | ⟨pair, hfind, hvalid⟩
   · exact .inl hvalue
   · exact .inr (.inl ⟨pair, by simp [findCollision, hp, hq, hfind], hvalid⟩)
+
+/-- Binding for maps built by setting pairs in order, as in the trie root export.
+
+The lists may repeat keys or remove them with empty values.
+
+Each construction gives distinct keys, which the trie of Yellow Paper Appendix D assumes. -/
+theorem root_binding_foldl_trieSet (hash : ByteArray → Hash32) (secured : Bool)
+    (pairs₁ pairs₂ : List (ByteArray × ByteArray)) :
+    let trie₁ := pairs₁.foldl (fun trie (key, value) => trieSet trie key value) ⟨secured, []⟩
+    let trie₂ := pairs₂.foldl (fun trie (key, value) => trieSet trie key value) ⟨secured, []⟩
+    ∀ {root' : Hash32}, root hash trie₁ = .ok root' → root hash trie₂ = .ok root' →
+      ∀ key : ByteArray, valueAt hash trie₁ key = valueAt hash trie₂ key ∨
+        (∃ pair, findCollision hash trie₁ trie₂ key = some pair ∧ IsCollision hash pair) ∨
+        (∃ pair, findPathCollision hash trie₁ = some pair ∧ IsCollision hash pair) ∨
+        ∃ pair, findPathCollision hash trie₂ = some pair ∧ IsCollision hash pair := by
+  intro trie₁ trie₂ root' hroot₁ hroot₂ key
+  -- Both maps retain the same choice of plain or hashed paths through every update.
+  have hsecured : trie₁.secured = trie₂.secured := by
+    dsimp [trie₁, trie₂]
+    rw [secured_foldl_trieSet, secured_foldl_trieSet]
+  exact root_binding hash hsecured hroot₁ hroot₂
+    (nodup_keys_foldl_trieSet secured pairs₁) (nodup_keys_foldl_trieSet secured pairs₂) key
 
 /-- Order of a secured trie: any order of its entries gives one root.
 

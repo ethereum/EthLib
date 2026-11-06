@@ -270,6 +270,63 @@ theorem trieGet_trieSet_of_ne (trie : Trie) {key other : ByteArray} (value : Byt
         Bool.eq_false_iff.mpr fun hother => h ((sameBytes_iff key other).mp hother).symm
       simp [List.find?_append, hkey]
 
+/-- Setting or removing a key keeps the keys distinct, as Yellow Paper Appendix D assumes. -/
+theorem nodup_keys_trieSet {trie : Trie} (hkeys : (trie.data.map Prod.fst).Nodup)
+    (key value : ByteArray) : ((trieSet trie key value).data.map Prod.fst).Nodup := by
+  unfold trieSet
+  split
+  · -- Removing entries takes a sublist of the distinct keys.
+    exact (List.Sublist.map Prod.fst List.filter_sublist).nodup hkeys
+  · split
+    · -- Replacing a value leaves every key in its place.
+      have unchanged : (trie.data.map (fun (k, v) =>
+          if sameBytes k key then (k, value) else (k, v))).map Prod.fst
+          = trie.data.map Prod.fst := by
+        simp only [List.map_map, Function.comp_def, apply_ite Prod.fst, ite_self]
+      rw [unchanged]
+      exact hkeys
+    · -- A new key is absent from the old keys, so appending it preserves uniqueness.
+      rename_i habsent
+      simp only [List.map_append, List.map_cons, List.map_nil, List.nodup_append]
+      refine ⟨hkeys, by simp, ?_⟩
+      intro old hold new hnew heq
+      simp only [List.mem_singleton] at hnew
+      obtain ⟨entry, hentry, hkey⟩ := List.mem_map.mp hold
+      exact habsent (List.any_eq_true.mpr
+        ⟨entry, hentry, (sameBytes_iff _ _).mpr (hkey.trans (heq.trans hnew))⟩)
+
+/-- Setting any list of pairs from an empty trie gives distinct keys.
+
+Yellow Paper Appendix D assumes distinct keys.
+
+This is the construction used by the trie root export, including repeated keys and deletions. -/
+theorem nodup_keys_foldl_trieSet (secured : Bool) (pairs : List (ByteArray × ByteArray)) :
+    ((pairs.foldl (fun trie (key, value) => trieSet trie key value)
+      ⟨secured, []⟩).data.map Prod.fst).Nodup := by
+  -- Each update preserves uniqueness, regardless of the keys still to be set.
+  have preserve : ∀ (rest : List (ByteArray × ByteArray)) (trie : Trie),
+      (trie.data.map Prod.fst).Nodup →
+      ((rest.foldl (fun trie (key, value) => trieSet trie key value) trie).data.map
+        Prod.fst).Nodup := by
+    intro rest
+    induction rest with
+    | nil => intro trie hkeys; exact hkeys
+    | cons entry rest ih =>
+      intro trie hkeys
+      exact ih _ (nodup_keys_trieSet hkeys entry.1 entry.2)
+  exact preserve pairs ⟨secured, []⟩ List.nodup_nil
+
+/-- Setting pairs does not change whether the trie hashes its keys. -/
+theorem secured_foldl_trieSet (pairs : List (ByteArray × ByteArray)) (trie : Trie) :
+    (pairs.foldl (fun trie (key, value) => trieSet trie key value) trie).secured
+      = trie.secured := by
+  induction pairs generalizing trie with
+  | nil => rfl
+  | cons entry rest ih =>
+    rw [List.foldl_cons, ih]
+    simp only [trieSet]
+    split <;> first | rfl | (split <;> rfl)
+
 /-! ## Error codes -/
 
 /-- Two errors with one code come from one constructor. -/
