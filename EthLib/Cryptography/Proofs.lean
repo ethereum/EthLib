@@ -13,6 +13,7 @@ public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Wots.Binding
 public import EthLib.Cryptography.Proofs.Wots.TargetSum
 public import EthLib.Cryptography.Proofs.QueryAvoidance
+public import EthLib.Cryptography.Proofs.LoggedUntilBad
 public import EthLib.Cryptography.Proofs.DerivationTable
 public import EthLib.Cryptography.Proofs.Xmss
 public import EthLib.Cryptography.Proofs.Sphincs
