@@ -284,6 +284,10 @@ def verifyBlobKzgProof (setup : TrustedSetup)
 
 /-- Verify a batch of triples of a blob, a commitment and a proof.
 
+Each triple checks its commitment, then decodes its blob, then checks its proof.
+
+The first failure gives the error.
+
 The empty batch verifies. -/
 def verifyBlobKzgProofBatch (setup : TrustedSetup)
     (blobs : Array Blob)
@@ -304,13 +308,12 @@ def verifyBlobKzgProofBatch (setup : TrustedSetup)
         let commitmentG1 ← match validateKzgG1Point cb with
                            | .ok c    => pure c
                            | .error _ => throw (.invalidCommitment (some i))
-        let proofG1 ← match validateKzgG1Point pb with
-                      | .ok p    => pure p
-                      | .error _ => throw (.invalidProof (some i))
-
         let polynomial ← blobToPolynomial blob
         let challenge := computeChallenge blob cb
         let y ← evaluatePolynomialInEvaluationForm polynomial challenge
+        let proofG1 ← match validateKzgG1Point pb with
+                      | .ok p    => pure p
+                      | .error _ => throw (.invalidProof (some i))
 
         pure (commitments.push cb, commitmentsG1.push commitmentG1,
               challenges.push challenge, ys.push y, proofs.push pb, proofsG1.push proofG1)

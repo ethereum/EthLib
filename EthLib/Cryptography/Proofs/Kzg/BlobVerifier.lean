@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Cryptography.Proofs.Bls.FinalExponentiation
+public import EthLib.Cryptography.Proofs.Bls.PairingCongr
 public import EthLib.Cryptography.Proofs.Kzg.BatchChallenge
 
 /-!
@@ -7,7 +9,7 @@ public import EthLib.Cryptography.Proofs.Kzg.BatchChallenge
 
 The batch check of blobs takes triples of a blob, a commitment and a proof, as bytes.
 
-It validates each commitment and each proof, and decodes each blob.
+For each triple in turn, it validates the commitment, decodes the blob and validates the proof.
 
 It evaluates each decoded blob at its evaluation challenge.
 
@@ -16,6 +18,7 @@ It then runs the batch check of openings on these points, evaluation challenges 
 Each root below is a root of the error polynomial of the batch.
 
 - On well-formed inputs of one size, the batch check of blobs returns a verdict, with no error.
+- The empty batch verifies, for every setup.
 - Under the pairing law, the verdict is true exactly when the batch challenge is a root.
 - Every entry of an accepted batch satisfies the opening equation, or the batch challenge is a root.
 - With the hash a random oracle, the root case has probability at most `(q + 1) (n - 1) / r`.
@@ -141,12 +144,12 @@ private theorem blobLoopStep_of_ok (acc : BlobBatchAcc) (blob : Blob) (cb pb : B
        let commitmentG1 ← match validateKzgG1Point cb with
          | .ok c => pure c
          | .error _ => throw (KzgError.invalidCommitment (some i))
-       let proofG1 ← match validateKzgG1Point pb with
-         | .ok p => pure p
-         | .error _ => throw (KzgError.invalidProof (some i))
        let polynomial ← blobToPolynomial blob
        let challenge := computeChallenge blob cb
        let y ← evaluatePolynomialInEvaluationForm polynomial challenge
+       let proofG1 ← match validateKzgG1Point pb with
+         | .ok p => pure p
+         | .error _ => throw (KzgError.invalidProof (some i))
        pure (commitments.push cb, commitmentsG1.push commitmentG1,
          challenges.push challenge, ys.push y, proofs.push pb, proofsG1.push proofG1)) =
       .ok (blobPureStep acc (blob, cb, pb, c, p, poly)) := by
@@ -164,12 +167,12 @@ private theorem blobLoopStep_valid (acc r : BlobBatchAcc) (blob : Blob) (cb pb :
              let commitmentG1 ← match validateKzgG1Point cb with
                | .ok c => pure c
                | .error _ => throw (KzgError.invalidCommitment (some i))
-             let proofG1 ← match validateKzgG1Point pb with
-               | .ok p => pure p
-               | .error _ => throw (KzgError.invalidProof (some i))
              let polynomial ← blobToPolynomial blob
              let challenge := computeChallenge blob cb
              let y ← evaluatePolynomialInEvaluationForm polynomial challenge
+             let proofG1 ← match validateKzgG1Point pb with
+               | .ok p => pure p
+               | .error _ => throw (KzgError.invalidProof (some i))
              pure (commitments.push cb, commitmentsG1.push commitmentG1,
                challenges.push challenge, ys.push y, proofs.push pb, proofsG1.push proofG1)) =
       .ok r) :
@@ -183,16 +186,19 @@ private theorem blobLoopStep_valid (acc r : BlobBatchAcc) (blob : Blob) (cb pb :
     rw [hcb] at hr
     cases hr
   | ok c =>
-    cases hpb : validateKzgG1Point pb with
+    cases hbl : blobToPolynomial blob with
     | error err =>
-      rw [hcb, hpb] at hr
+      rw [hcb, hbl] at hr
       cases hr
-    | ok p =>
-      cases hbl : blobToPolynomial blob with
+    | ok poly =>
+      cases hpb : validateKzgG1Point pb with
       | error err =>
-        rw [hcb, hpb, hbl] at hr
+        rw [hcb, hbl, hpb] at hr
+        simp only [bind, Except.bind, pure, Except.pure,
+          evaluatePolynomialInEvaluationForm_eq_interpolate poly _
+            (size_blobToPolynomial blob poly hbl)] at hr
         cases hr
-      | ok poly => exact ⟨⟨c, rfl⟩, ⟨p, rfl⟩, ⟨poly, rfl⟩⟩
+      | ok p => exact ⟨⟨c, rfl⟩, ⟨p, rfl⟩, ⟨poly, rfl⟩⟩
 
 /-- The pure fold over raw entries produces the six arrays of their mapped components. -/
 private theorem list_foldl_blobPureStep
@@ -234,12 +240,12 @@ private theorem blobLoop_eq_ok {blobs : Array Blob} {commitmentsBytes proofsByte
         let commitmentG1 ← match validateKzgG1Point cb with
           | .ok c => pure c
           | .error _ => throw (KzgError.invalidCommitment (some i))
-        let proofG1 ← match validateKzgG1Point pb with
-          | .ok p => pure p
-          | .error _ => throw (KzgError.invalidProof (some i))
         let polynomial ← blobToPolynomial blob
         let challenge := computeChallenge blob cb
         let y ← evaluatePolynomialInEvaluationForm polynomial challenge
+        let proofG1 ← match validateKzgG1Point pb with
+          | .ok p => pure p
+          | .error _ => throw (KzgError.invalidProof (some i))
         pure (commitments.push cb, commitmentsG1.push commitmentG1,
           challenges.push challenge, ys.push y, proofs.push pb, proofsG1.push proofG1)) =
       .ok (commitmentsBytes, csG1, y.challenges, y.evals, proofsBytes, psG1) := by
@@ -394,6 +400,29 @@ theorem verifyBlobKzgProofBatch_exists_ok (s : TrustedSetup) {blobs : Array Blob
     (by simp [BlobBatchInput.challenges, hc]) (by simp [BlobBatchInput.evals, hc])
     (hp.trans hc.symm) (array_mapM_ok hcsG1).1 ((array_mapM_ok hpsG1).1.trans (hp.trans hc.symm))
   exact ⟨b, EthLib.Base.bind_ok_iff.mpr ⟨_, blobLoop_eq_ok hc hp hpsM hcsG1 hpsG1, hb⟩⟩
+
+/-- **The empty batch verifies.**
+
+With no blob, no commitment and no proof, the batch check of blobs returns true.
+
+It holds for every setup, with no assumption on the pairing. -/
+theorem verifyBlobKzgProofBatch_empty (s : TrustedSetup) :
+    verifyBlobKzgProofBatch s #[] #[] #[] = .ok true := by
+  have hpowers : computePowers (computeVerifyKzgProofBatchChallenge #[] #[] #[] #[]) 0 = #[] :=
+    Array.eq_empty_of_size_eq_zero (size_computePowers _ 0)
+  -- The loop over no entry leaves six empty arrays, and every sum over them is the identity.
+  simp [verifyBlobKzgProofBatch, Array.foldlM, verifyKzgProofBatch, hpowers,
+    g1LincombPoints_empty]
+  -- Both pairs hold the point at infinity, so the pairing check sees an empty product.
+  have hinf : ∀ pq ∈ #[((G1.zero : G1), (s.g2Monomial[1]'(by decide)).neg),
+      ((G1.zero : G1).add G1.zero, (G2.generator : G2))],
+      (pq.1.isInfinity || pq.2.isInfinity) = true := by
+    simp [Bls.G1.add, Bls.G1.isInfinity, Bls.G1.zero, Bls.Fp.isZero]
+  rw [← Array.empty_append (xs := #[_, _]), Bls.pairingCheck_append_infinity _ _ hinf,
+    Bls.pairingCheck_eq_finalExp_prod]
+  simp only [List.filterMap_nil, List.foldl_nil, Bls.finalExponentiation_eq_pow,
+    Bls.Fp12.one_eq_one, one_pow]
+  exact congrArg Except.ok (Bls.Fp12.isOne_iff.mpr rfl)
 
 /-! ## Root characterization and soundness dichotomy -/
 
