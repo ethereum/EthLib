@@ -158,11 +158,8 @@ instance : BaseField Fp where
   sgn0 a := a.val % 2 == 1
 
 /-- Decode big-endian bytes as a `Nat`. -/
-def bytesBEToNat (b : ByteArray) : Nat := Id.run do
-  let mut acc : Nat := 0
-  for i in [:b.size] do
-    acc := (acc <<< 8) ||| b[i]!.toNat
-  return acc
+def bytesBEToNat (b : ByteArray) : Nat :=
+  b.data.toList.foldl (fun acc u => (acc <<< 8) ||| u.toNat) 0
 
 /-- Decode a 48-byte big-endian integer as an element of `Fp`.
 
