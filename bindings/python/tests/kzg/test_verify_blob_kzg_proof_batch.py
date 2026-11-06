@@ -4,6 +4,7 @@ import pytest
 
 from dumper import hex_list, write_case
 from ethlib.cryptography import kzg
+from raising import raises
 
 from . import fixtures
 
@@ -122,6 +123,15 @@ def test_invalid_proof(i: int) -> None:
     _emit(
         f"{HANDLER}_case_invalid_proof_{i}", blobs, commitments, proofs, expected=None, valid=False
     )
+
+
+def test_invalid_blob_before_proof() -> None:
+    """An entry with an invalid blob and an invalid proof fails on the blob, decoded first."""
+    blobs, commitments, proofs = _all()
+    blobs = [fixtures.BLOB_INVALID] + blobs[1:]
+    proofs = [fixtures.G1_INVALID_P1_NOT_ON_CURVE] + proofs[1:]
+    with raises(kzg.KzgError, fixtures.INVALID_BLOB_MESSAGES[0]):
+        kzg.verify_blob_kzg_proof_batch(blobs, commitments, proofs)
 
 
 def test_blob_length_different() -> None:

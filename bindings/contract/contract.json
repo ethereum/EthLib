@@ -627,7 +627,7 @@
       {"constructor": "invalidTrustedSetup", "code": 23}]}],
    "error_class": "KzgError",
    "docstring":
-   "Verify a batch of triples of a blob, a commitment and a proof.\n\nThe empty batch verifies."},
+   "Verify a batch of triples of a blob, a commitment and a proof.\n\nEach triple checks its commitment, then decodes its blob, then checks its proof.\n\nThe first failure gives the error.\n\nThe empty batch verifies."},
   {"summary": "Reed-Solomon-extend `blob` and return its cells.",
    "signature": "(blob: bytes) -> list[bytes]",
    "operation": "EthLib.Cryptography.Kzg.computeCells",
