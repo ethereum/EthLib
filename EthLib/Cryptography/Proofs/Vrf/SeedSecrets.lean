@@ -290,7 +290,7 @@ theorem natCard_seed : Nat.card Seed = 2 ^ 256 := by
 /-- A given input is a secret input of a uniform seed with probability at most `2^-256`. -/
 theorem prEvent_mem_range_secretInput_le (t : ByteArray) :
     Pr{let s ← $ᵗ Seed}[t ∈ Set.range (secretEncoding.enc s)] ≤ (2 ^ 256 : ℝ≥0∞)⁻¹ := by
-  have h := Sphincs.Unforgeability.prEvent_mem_range_enc_le secretEncoding
+  have h := Cryptography.prEvent_mem_range_enc_le secretEncoding
     (fun _ _ _ _ h => (secretInput_inj.mp h).1) t
   rwa [natCard_seed, Nat.cast_pow, Nat.cast_ofNat] at h
 
@@ -319,7 +319,7 @@ theorem prEvent_seedGame_le (adversary : AdaptiveAdversary) {qh qo : ℕ}
       ≤ 2 ^ 32 * ((2 ^ 256 : ℝ≥0∞)⁻¹ +
           ((qh + (qo + 1) * 2 ^ 33 : ℕ) : ℝ≥0∞) * (2 * (2 ^ 256 : ℝ≥0∞)⁻¹)) +
         ((qh + (qo + 1) * 2 ^ 33 : ℕ) : ℝ≥0∞) * (2 ^ 256 : ℝ≥0∞)⁻¹ := by
-  have hop := Sphincs.Unforgeability.prEvent_romImpl_deriveImpl_le secretEncoding
+  have hop := Cryptography.prEvent_romImpl_deriveImpl_le secretEncoding
     (ms := $ᵗ Seed) prEvent_mem_range_secretInput_le (p := IsHashS) (fun _ _ => trivial)
     (isQueryBoundP_seedGameD adversary hh ho) fun _ w => w = true
   have hideal : Pr{

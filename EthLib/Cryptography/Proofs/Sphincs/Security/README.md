@@ -1,16 +1,16 @@
 # leanSPHINCS security proof
 
-This directory will hold a proof that leanSPHINCS is strongly unforgeable in the random oracle model.
-Its target is about 127 bits of classical security for up to `2^30` signatures with one key.
+This directory holds a proof that leanSPHINCS is strongly unforgeable in the random oracle model.
+It gives 127 bits of classical security for up to `2^30` signatures with one key.
 Strong unforgeability means that an adversary who sees signatures of messages of its choice cannot produce a new valid pair of message and signature.
 This includes a second signature of a message already signed.
 The random oracle model treats the hash as an ideal random function that everyone, the adversary included, can only query.
 
-The proof is a port, and it lands in parts.
-This directory now holds the whole proof about the model of the scheme.
+The proof is a port.
+This directory holds the whole proof about the model of the scheme.
 `SphincsSecurity/Main.lean` states its theorem: in the model's game, an adversary whose runs make at most `q >= 1` hash calls forges with probability at most `q / 2^127`.
 The model's game allows up to 1,182,000,000 signing requests.
-Nothing in this directory is a security claim about EthLib's leanSPHINCS until a later part connects the model to EthLib's algorithms.
+The bridge in `Proofs/Sphincs/Unforgeability/Bridge/` carries the theorem over to EthLib's leanSPHINCS, in `Proofs/Sphincs/Unforgeability.lean`.
 
 ## The model
 
@@ -48,11 +48,13 @@ The extra term covers a hash call that names a hidden seed.
 It also holds the closing argument that turns them into the theorem.
 `Configurations.lean` proves, for the configuration of the proof, the size of a serialized signature and the cost of a verification.
 
-A later part will bridge the model to EthLib's leanSPHINCS, in `EthLib/Cryptography/Sphincs/`.
+The bridge in `Proofs/Sphincs/Unforgeability/Bridge/` connects the model to EthLib's leanSPHINCS, in `EthLib/Cryptography/Sphincs/`.
 The model's signer signs the layers of the hypertree from the bottom up, as EthLib's signer does.
 Both stop at the first layer whose counter search fails, so they reach the same layers.
 Some hash calls are made by EthLib and not by the model, or the other way round.
 The bridge compares the two signers under each fixed answer function, where every call is a value.
+Under each such function, a signing request costs the model at most what it costs EthLib.
+So a budget of `q` hash calls against EthLib is a budget of `q` against the model, and the bound `q / 2^127` holds for EthLib.
 
 ## Source
 
@@ -100,6 +102,8 @@ The changes that follow from this are:
   So the oracle, its inputs and answers and the truncation of an answer come from `Proofs/HashSig/Oracle.lean`.
   `Scheme.lean` exports them under their old names, so the proof keeps them.
 - The signer signs the layers from the bottom up, where leanVM's model signs them from the top down.
+  leanVM's Rust signer signs from the bottom up.
+  The model's author confirmed in [leanVM#720](https://github.com/leanEthereum/leanVM/issues/720) that the top-down order is a bug.
   The change is in the sequencing of the layers, which now runs from the last index down.
   A signature is unchanged, and so is the verifier.
   The analyses of the signer's hash calls keep their statements.
