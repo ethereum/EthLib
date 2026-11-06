@@ -71,29 +71,15 @@ theorem sqrt_complete {a b : Fp} (h : b * b = a) :
 
 /-! ## Big-endian bytes
 
-The spec's decoding loop `Fp.bytesBEToNat` is a fold over the byte list. -/
+The byte decoder of `Fp` folds over the bytes, from the most significant.
 
-private theorem byteArray_getElem! (b : ByteArray) (i : Nat) :
-    b[i]! = b.data[i]! := by
-  by_cases h : i < b.size
-  · rw [getElem!_pos b i h, getElem!_pos b.data i h]
-    rfl
-  · rw [getElem!_neg b i h, getElem!_neg b.data i h]
+The KZG decoder computes the same fold, so its round trip gives that of a field element. -/
 
-open EthLib.Cryptography.IdLoops in
-/-- The spec's byte-decoding loop, as a fold over the byte list. -/
+/-- The byte decoder of `Fp` is a left fold over the bytes, by definition. -/
 theorem bytesBEToNat_eq_list (b : ByteArray) :
     Fp.bytesBEToNat b
-      = b.data.toList.foldl (fun acc u => (acc <<< 8) ||| u.toNat) 0 := by
-  unfold Fp.bytesBEToNat
-  dsimp only [Id.run, id_pure, id_bind]
-  rw [forIn_range_yield]
-  rw [show (fun (acc : Nat) (i : Nat) => (acc <<< 8) ||| b[i]!.toNat)
-      = fun acc i => (acc <<< 8) ||| b.data[i]!.toNat from
-      funext fun acc => funext fun i => by rw [byteArray_getElem!]]
-  show (List.range' 0 b.data.size).foldl
-      (fun acc i => (acc <<< 8) ||| b.data[i]!.toNat) 0 = _
-  exact foldl_range'_getElem! b.data (fun acc u => (acc <<< 8) ||| u.toNat) 0
+      = b.data.toList.foldl (fun acc u => (acc <<< 8) ||| u.toNat) 0 :=
+  rfl
 
 /-- The KZG list-fold decoder agrees with `List.foldl`. -/
 private theorem kzgAux_eq_foldl (l : List UInt8) (acc : Nat) :
@@ -149,9 +135,7 @@ theorem toBytesBE_head_lt (x : Fp) : ((Fp.toBytesBE x).get! 0).toNat < 0x20 := b
 theorem fromBytesBE_toBytesBE (x : Fp) : Fp.fromBytesBE x.toBytesBE = .ok x := by
   rw [Fp.fromBytesBE, ite_eq_right (by rw [size_toBytesBE]; decide),
     dite_eq_left (by rw [bytesBEToNat_toBytesBE]; exact x.isLt)]
-  congr 1
-  apply Fin.ext
-  exact bytesBEToNat_toBytesBE x
+  simp only [bytesBEToNat_toBytesBE]
 
 /-! ## Canonical byte encoding
 

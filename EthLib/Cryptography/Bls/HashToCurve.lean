@@ -75,12 +75,7 @@ expand-message output. -/
 
 def fpFromBytesL (b : ByteArray) : F :=
   -- OS2IP into a Nat, then reduce mod p.
-  let n := Id.run do
-    let mut acc : Nat := 0
-    for i in [:b.size] do
-      acc := (acc <<< 8) ||| b[i]!.toNat
-    return acc
-  BaseField.ofNat n
+  BaseField.ofNat (Fp.bytesBEToNat b)
 
 def hashToFieldFp2
     (msg : ByteArray) (dst : ByteArray) (count : Nat)
