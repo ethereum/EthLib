@@ -82,7 +82,7 @@ The signature is deterministic, with the nonces of RFC 6979, and its `s` is at m
 def idSign (sk : Fn) (challengeData ephemeralPubkey : ByteArray) (nodeIdB : NodeId) :
     Except Secp256k1Error ByteArray := do
   let (r, s, _) ← Ecdsa.sign sk (idSignatureHash challengeData ephemeralPubkey nodeIdB)
-  return ⟨(toBytesBE 32 r.val ++ toBytesBE 32 s.val).toArray⟩
+  return ⟨(Base.natToBytes 32 r.val ++ Base.natToBytes 32 s.val).toArray⟩
 
 /-- Whether an ID signature of 64 bytes `r || s` verifies under the public key of node A. -/
 def idVerify (pk : Point) (challengeData ephemeralPubkey : ByteArray) (nodeIdB : NodeId)

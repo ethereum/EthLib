@@ -47,14 +47,14 @@ theorem recoverSigner_signatureBytes {sk : Fn} {hash : Vector UInt8 32} {sig : F
     recoverSigner hash (signatureBytes sig) = .ok (mul sk generator) := by
   obtain ⟨r, s, odd⟩ := sig
   have hrec := Ecdsa.recover_sign_rfc6979 h
-  have hlr := length_toBytesBE 32 r.val
-  have hls := length_toBytesBE 32 s.val
+  have hlr := Base.natToBytes_length 32 r.val
+  have hls := Base.natToBytes_length 32 s.val
   have hmod (x : Fn) : x.val % 256 ^ 32 = x.val :=
     Nat.mod_eq_of_lt (lt_trans x.isLt (by decide : Fn.modulus < 256 ^ 32))
   unfold recoverSigner signatureBytes
   cases odd <;>
     simp only [Vector.toList, List.take_left' hlr, List.append_assoc,
-      List.drop_left' hlr, List.take_left' hls, bytesToNat_toBytesBE, hmod] <;>
+      List.drop_left' hlr, List.take_left' hls, Base.bytesToNat_natToBytes, hmod] <;>
     (simp only [Bool.false_eq_true, ite_false, ite_true] at hrec
      simp [hlr, hls, Except.mapError, hrec])
 

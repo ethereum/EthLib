@@ -25,26 +25,11 @@ It also rejects an `x` with no point, and `O`.
 
 namespace EthLib.Cryptography.Secp256k1
 
-/-! ## Big-endian bytes -/
-
-/-- The bytes of `v` are its `k` big-endian bytes in the Base encoding. -/
-theorem toBytesBE_eq_natToBytes (k v : Nat) : toBytesBE k v = Base.natToBytes k v := by
-  induction k generalizing v with
-  | zero => rfl
-  | succ k ih => simp [toBytesBE, Base.natToBytes, ih]
-
-/-- Reading the bytes of `v` gives `v mod 256^k`. -/
-theorem bytesToNat_toBytesBE (k v : Nat) : Base.bytesToNat (toBytesBE k v) = v % 256 ^ k := by
-  rw [toBytesBE_eq_natToBytes, Base.bytesToNat_natToBytes]
-
-/-- Bytes read as an integer and written back are unchanged. -/
-theorem toBytesBE_bytesToNat (l : List UInt8) :
-    toBytesBE l.length (Base.bytesToNat l) = l := by
-  rw [toBytesBE_eq_natToBytes, Base.natToBytes_bytesToNat]
+/-! ## Coordinates -/
 
 theorem Fp.ofBytes_toBytes (x : Fp) : Fp.ofBytes x.toBytes = .ok x := by
   have h : Base.bytesToNat x.toBytes = x.val := by
-    rw [Fp.toBytes, bytesToNat_toBytesBE, Nat.mod_eq_of_lt (Nat.lt_trans x.isLt (by decide))]
+    rw [Fp.toBytes, Base.bytesToNat_natToBytes, Nat.mod_eq_of_lt (Nat.lt_trans x.isLt (by decide))]
   simp only [Fp.ofBytes, h, x.isLt, dite_true]
 
 /-- 32 bytes that read as a coordinate are that coordinate's bytes. -/
@@ -54,7 +39,7 @@ theorem Fp.toBytes_of_ofBytes {l : List UInt8} {x : Fp} (hl : l.length = 32) (h 
   split at h
   · cases h
     rw [Fp.toBytes, ← hl]
-    exact toBytesBE_bytesToNat l
+    exact Base.natToBytes_bytesToNat l
   · cases h
 
 /-! ## Decompression -/

@@ -24,7 +24,7 @@ namespace Ecdsa
 open Point Hash.Hmac
 
 /-- An integer as 32 big-endian bytes, `int2octets` of RFC 6979 §2.3.3 with `rlen = 256`. -/
-def int2octets (x : Nat) : ByteArray := ⟨(toBytesBE 32 x).toArray⟩
+def int2octets (x : Nat) : ByteArray := ⟨(Base.natToBytes 32 x).toArray⟩
 
 /-- The state `(K, V)` of the nonce generator of RFC 6979 §3.2. -/
 structure NonceState where
