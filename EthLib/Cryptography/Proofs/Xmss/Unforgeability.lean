@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Game
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Reasons
 
 /-!
 # Proofs: leanXMSS as EthLib computes it is unforgeable
@@ -41,6 +42,10 @@ EthLib's signer gets the seed `S_0` and re-derives `S` and `P` with two hash cal
 Key generation made those calls first, so they return cached answers and change nothing.
 
 They still count toward the budget `q`, so the bound holds as stated.
+
+A variant game has a signer that replies with its error, which tells which layer failed.
+
+There the bound gains the probability that some signing request fails.
 -/
 
 @[expose] public section
@@ -53,3 +58,11 @@ info: 'EthLib.Cryptography.Xmss.Unforgeability.unforgeable' depends on axioms:
 -/
 #guard_msgs (whitespace := lax) in
 #print axioms EthLib.Cryptography.Xmss.Unforgeability.unforgeable
+
+/--
+info: 'EthLib.Cryptography.Xmss.Unforgeability.reasonForgeAdvantage_le_add' depends on axioms:
+
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms EthLib.Cryptography.Xmss.Unforgeability.reasonForgeAdvantage_le_add
