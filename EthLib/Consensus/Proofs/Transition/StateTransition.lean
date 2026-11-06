@@ -49,7 +49,7 @@ theorem unsetNextPayloadAvailability_ok {gloas : .glamsterdam ≤ fork}
 
 The result is the state with those fields replaced. -/
 theorem processSlot_ok (computed : processSlot state = .ok after) :
-    ∃ (stateRoots blockRoots : Vector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    ∃ (stateRoots blockRoots : RootedVector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
       (header : BeaconBlockHeader)
       (availability : Since .glamsterdam fork (ExecutionPayloadAvailability preset)),
       after = { state with

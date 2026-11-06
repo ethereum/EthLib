@@ -82,15 +82,15 @@ def emptyGenesisState (config : Config) (before : fork < .altair) (genesisTime :
   slot := GENESIS_SLOT
   forkVersions := ⟨config.GENESIS_FORK_VERSION, config.GENESIS_FORK_VERSION, GENESIS_EPOCH⟩
   latestBlockHeader := ⟨0, 0, Vector.replicate 32 0, Vector.replicate 32 0, bodyRoot⟩
-  blockRoots := Vector.replicate _ (Vector.replicate 32 0)
-  stateRoots := Vector.replicate _ (Vector.replicate 32 0)
+  blockRoots := .ofVector (Vector.replicate _ (Vector.replicate 32 0))
+  stateRoots := .ofVector (Vector.replicate _ (Vector.replicate 32 0))
   historicalRoots := ⟨#[], by simp⟩
   eth1Data := fun _ => ⟨Vector.replicate 32 0, depositCount, eth1BlockHash⟩
   eth1DataVotes := fun _ => ⟨#[], by simp⟩
   eth1DepositIndex := fun _ => 0
   validators := ⟨#[], fun _ => by simp⟩
   balances := ⟨#[], fun _ => by simp⟩
-  randaoMixes := Vector.replicate _ eth1BlockHash
+  randaoMixes := .ofVector (Vector.replicate _ eth1BlockHash)
   slashings := Vector.replicate _ 0
   previousEpochAttestations := fun _ => ⟨#[], by simp⟩
   currentEpochAttestations := fun _ => ⟨#[], by simp⟩

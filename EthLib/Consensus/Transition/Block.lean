@@ -62,7 +62,7 @@ def processRandao (config : Config) (checks : SignatureChecks) (state : BeaconSt
     (packBytes body.randaoReveal) = true) .invalidRandaoReveal
   let mix ← liftAccessor (getRandaoMix state epoch)
   let mix := Vector.zipWith (· ^^^ ·) mix (sha256Bytes32 (packBytes body.randaoReveal))
-  let randaoMixes ← liftAccessor (writeCircular state.randaoMixes epoch mix)
+  let randaoMixes ← liftAccessor (writeCircularRooted state.randaoMixes epoch mix)
   return { state with randaoMixes }
 
 /-- The state after the vote of a block on the deposit contract.

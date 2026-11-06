@@ -152,6 +152,14 @@ def writeCircular {α : Type} {n : UInt64} (buffer : Vector α n.toNat) (i : UIn
   if nonzero : n = 0 then .error (.arith .divisionByZero)
   else .ok (buffer.set (i % n).toNat value (toNat_mod_lt nonzero))
 
+/-- A circular buffer of length `n` that keeps its Merkle tree, with entry `i mod n` replaced.
+
+It writes the entry as the plain buffer does, then rehashes the path above it. -/
+def writeCircularRooted {α : Type} [SszType α] {n : UInt64} (buffer : RootedVector α n.toNat)
+    (i : UInt64) (value : α) : Except AccessorError (RootedVector α n.toNat) :=
+  if nonzero : n = 0 then .error (.arith .divisionByZero)
+  else .ok (buffer.set (i % n).toNat value (toNat_mod_lt nonzero))
+
 /-- One step of the pass that drops repeats: keep an index unless it repeats the last one. -/
 def keepNew (kept : List ValidatorIndex) (index : ValidatorIndex) : List ValidatorIndex :=
   match kept with
@@ -204,7 +212,7 @@ def getBlockRootAtSlot (state : BeaconState preset fork) (slot : Slot) :
   unless slot < state.slot do throw (.slotOutOfRange slot state.slot)
   unless state.slot ≤ (← liftArith (addChecked slot preset.SLOTS_PER_HISTORICAL_ROOT)) do
     throw (.slotOutOfRange slot state.slot)
-  readCircular state.blockRoots slot
+  readCircular state.blockRoots.elements slot
 
 /-- The root of the block at the first slot of a recent epoch. -/
 def getBlockRoot (state : BeaconState preset fork) (epoch : Epoch) :
@@ -214,7 +222,7 @@ def getBlockRoot (state : BeaconState preset fork) (epoch : Epoch) :
 /-- The RANDAO mix of a recent epoch. -/
 def getRandaoMix (state : BeaconState preset fork) (epoch : Epoch) :
     Except AccessorError Bytes32 :=
-  readCircular state.randaoMixes epoch
+  readCircular state.randaoMixes.elements epoch
 
 /-- The most validators that may join, or leave, the active validators in one epoch.
 

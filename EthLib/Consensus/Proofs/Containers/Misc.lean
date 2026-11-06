@@ -4,6 +4,7 @@ public import EthLib.Consensus.Containers.Operations
 public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
 public import EthLib.Serialization.Proofs.Ssz.Typed.Container
+public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
 
 /-!
 # Proofs: the shared containers of the beacon chain are lawful

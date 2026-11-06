@@ -114,7 +114,8 @@ def leafRoot {α : Type} [SszType α] (a : α) : Bytes :=
 
 /-- The leaves of a rooted vector: the roots of its elements. -/
 def leafRoots {α : Type} [SszType α] {length : Nat} (elements : Vector α length) : Array Bytes :=
-  elements.toArray.map leafRoot
+  -- A loop over the indices: a map over a generic element type keeps one stack frame per element.
+  Array.ofFn fun index : Fin length => leafRoot elements[index]
 
 /-- `Vector[α, length]`, with every level of its Merkle tree. -/
 structure RootedVector (α : Type) [SszType α] (length : Nat) where
@@ -147,7 +148,12 @@ def set (v : RootedVector α length) (index : Nat) (a : α)
   ⟨v.elements.set index a inside, updateLevels 0 index (leafRoot a) v.levels, by
     have leaf : index < (leafRoots v.elements).size := by simp [leafRoots, inside]
     rw [v.built, updateLevels_buildLevels _ 0 _ leaf]
-    simp [leafRoots, Vector.toArray_set, Array.map_set]⟩
+    congr 1
+    apply Array.ext
+    · simp [leafRoots]
+    · intro other _ _
+      simp only [leafRoots, Array.getElem_ofFn, Array.getElem_set]
+      split <;> simp_all⟩
 
 /-- The vector with the element at an index replaced, or the same vector past its end. -/
 def set! (v : RootedVector α length) (index : Nat) (a : α) : RootedVector α length :=
@@ -159,6 +165,9 @@ theorem ext {v w : RootedVector α length} (same : v.elements = w.elements) : v 
   cases w
   subst same
   simp_all
+
+instance [Repr α] : Repr (RootedVector α length) where
+  reprPrec v := reprPrec v.elements
 
 instance [DecidableEq α] : DecidableEq (RootedVector α length) := fun v w =>
   if same : v.elements = w.elements then isTrue (ext same)
