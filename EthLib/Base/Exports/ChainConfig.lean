@@ -7,7 +7,9 @@ public import Lean.Data.Json
 /-!
 # Exports: the active fork of a network
 
-The C exports of the active fork of mainnet and of Hoodi, for the Python bindings.
+The C exports of the active fork of a chain, for the Python bindings.
+
+Mainnet and Hoodi have an export each, and any other chain passes its configuration.
 
 A block number and a timestamp cross the boundary as 64-bit integers, as EIP-6122 reads them.
 
@@ -87,5 +89,15 @@ def configOfJson (j : Json) : Result ChainConfig := do
     | .null => pure []
     | _ => throw (0, "config: blobSchedules is not an array")
   return { chainId := BitVec.ofNat 256 chainId, activations, blobSchedules := schedules }
+
+/-- The name of the active fork of a configured chain at a block, or no bytes when none is active.
+
+The configuration is JSON text in UTF-8, as the other exports that run on a chain read it. -/
+@[export eth_active_fork]
+def activeForkExport (config : ByteArray) (number timestamp : UInt64) : Result ByteArray := do
+  let config ← configOfJson (← parseJson "config" config)
+  return match config.activeFork number.toNat timestamp.toNat with
+    | some fork => fork.name.toUTF8
+    | none => .empty
 
 end EthLib.Base.ChainConfig.Exports
