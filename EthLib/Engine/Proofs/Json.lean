@@ -256,7 +256,9 @@ private def highDigit (b : UInt8) : Fin 16 := ⟨b.toNat / 16, by have := b.toNa
 /-- The low digit of a byte. -/
 private def lowDigit (b : UInt8) : Fin 16 := ⟨b.toNat % 16, by omega⟩
 
-/-- The decoder reads back the bytes of their hex encoding, with or without uppercase digits. -/
+/-- The decoder reads back the bytes of their hex encoding.
+
+This holds whether or not it accepts uppercase digits. -/
 theorem bytesOf_hexString (what : String) (upper : Bool) (data : List UInt8) :
     bytesOf what upper (.str (hexString data)) = .ok data.toByteArray := by
   unfold bytesOf
