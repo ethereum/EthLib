@@ -37,6 +37,12 @@ A storage write and a change to an account record a read of the account.
 
 A move of ether records a read of the sender and of the recipient.
 
+A write of an account, a touch, a write of transient storage and a record of creation read nothing.
+
+A change of the nonce never deletes the account, so it keeps every storage read.
+
+The deletion of the touched empty accounts reads no account and keeps every storage read.
+
 From Paris, a change that deletes an account also reads each key that the transaction wrote there.
 
 The next transaction starts with an empty record of reads.
@@ -1005,6 +1011,154 @@ theorem reads_moveEther {fork : Fork} {tx tx' : TransactionState} {sender recipi
         getElem?_storageReads_modifyState_of_ne hs hmid]
     · rw [storageReads_modifyState_of_lt_paris hfork h,
         storageReads_modifyState_of_lt_paris hfork hmid]
+
+/-- A write of an account keeps the account reads and the storage reads. -/
+theorem reads_setAccount (tx : TransactionState) (address : Address) (account : Option Account) :
+    (tx.setAccount address account).accountReads = tx.accountReads ∧
+      (tx.setAccount address account).storageReads = tx.storageReads :=
+  ⟨rfl, rfl⟩
+
+/-- A record of a created account keeps the account reads and the storage reads. -/
+theorem reads_markAccountCreated (tx : TransactionState) (address : Address) :
+    (tx.markAccountCreated address).accountReads = tx.accountReads ∧
+      (tx.markAccountCreated address).storageReads = tx.storageReads :=
+  ⟨rfl, rfl⟩
+
+/-- A write of transient storage keeps the account reads and the storage reads. -/
+theorem reads_setTransientStorage (tx : TransactionState) (address : Address) (key : Bytes32)
+    (value : U256) :
+    (tx.setTransientStorage address key value).accountReads = tx.accountReads ∧
+      (tx.setTransientStorage address key value).storageReads = tx.storageReads :=
+  ⟨rfl, rfl⟩
+
+/-- A touch of an account keeps the account reads and the storage reads. -/
+theorem reads_touchAccount (tx : TransactionState) (address : Address) :
+    (tx.touchAccount address).accountReads = tx.accountReads ∧
+      (tx.touchAccount address).storageReads = tx.storageReads := by
+  unfold touchAccount
+  split <;> exact ⟨rfl, rfl⟩
+
+/-- A change by `f` that succeeds adds the address to the account reads.
+
+It keeps the storage reads of every other address.
+
+Before Paris, it keeps every storage read. -/
+theorem reads_modifyState_eq_insert {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
+    tx'.accountReads = tx.accountReads.insert address ∧
+      (∀ other, other ≠ address → tx'.storageReads[other]? = tx.storageReads[other]?) ∧
+      (fork < .paris → tx'.storageReads = tx.storageReads) := by
+  obtain ⟨_, _, hreads, _⟩ := reads_modifyState h
+  exact ⟨hreads, fun _ hne => getElem?_storageReads_modifyState_of_ne hne h,
+    fun hfork => storageReads_modifyState_of_lt_paris hfork h⟩
+
+/-- A credit of ether that succeeds adds the address to the account reads.
+
+It keeps the storage reads of every other address.
+
+Before Paris, it keeps every storage read. -/
+theorem reads_createEther {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {amount : U256} (h : tx.createEther fork address amount = .ok tx') :
+    tx'.accountReads = tx.accountReads.insert address ∧
+      (∀ other, other ≠ address → tx'.storageReads[other]? = tx.storageReads[other]?) ∧
+      (fork < .paris → tx'.storageReads = tx.storageReads) :=
+  reads_modifyState_eq_insert h
+
+/-- A change of the balance adds the address to the account reads.
+
+It keeps the storage reads of every other address.
+
+Before Paris, it keeps every storage read. -/
+theorem reads_setAccountBalance {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {amount : U256} (h : tx.setAccountBalance fork address amount = .ok tx') :
+    tx'.accountReads = tx.accountReads.insert address ∧
+      (∀ other, other ≠ address → tx'.storageReads[other]? = tx.storageReads[other]?) ∧
+      (fork < .paris → tx'.storageReads = tx.storageReads) :=
+  reads_modifyState_eq_insert h
+
+/-- A change of the nonce adds the address to the account reads, and keeps the storage reads.
+
+The account it leaves has a nonce that is not zero, so it is never deleted. -/
+theorem reads_incrementNonce {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    (h : tx.incrementNonce fork address = .ok tx') :
+    tx'.accountReads = tx.accountReads.insert address ∧ tx'.storageReads = tx.storageReads := by
+  obtain ⟨account, hf, hacc, hst⟩ := reads_modifyState h
+  cases hf
+  refine ⟨hacc, ?_⟩
+  rw [hst, ite_eq_right_of_eq_false _ _ (eq_false fun hc => ?_)]
+  have := congrArg Account.nonce hc.2
+  simp [EMPTY_ACCOUNT] at this
+
+/-- A write of code adds the address to the account reads.
+
+It keeps the storage reads of every other address.
+
+Before Paris, it keeps every storage read. -/
+theorem reads_setCode {fork : Fork} {tx tx' : TransactionState} {address : Address}
+    {code : ByteArray} (h : tx.setCode fork address code = .ok tx') :
+    tx'.accountReads = tx.accountReads.insert address ∧
+      (∀ other, other ≠ address → tx'.storageReads[other]? = tx.storageReads[other]?) ∧
+      (fork < .paris → tx'.storageReads = tx.storageReads) := by
+  unfold setCode at h
+  dsimp only at h
+  have := reads_modifyState_eq_insert h
+  -- The code goes into the store of codes, which holds no read.
+  split at this <;> exact this
+
+/-- A second wipe of the storage of an address records no new read. -/
+theorem storageReads_destroyStorage_destroyStorage (tx : TransactionState) (address : Address) :
+    ((tx.destroyStorage address).destroyStorage address).storageReads =
+      (tx.destroyStorage address).storageReads := by
+  apply Std.ExtTreeMap.ext_getElem?
+  intro other
+  by_cases hother : other = address
+  · subst hother
+    simp [destroyStorage, Std.ExtTreeMap.keys_eq_nil_iff.mpr rfl, Std.ExtTreeSet.insertMany_nil]
+  · simp [destroyStorage, Std.ExtTreeMap.getElem?_insert, Ne.symm hother]
+
+/-- Clearing an account adds the address to the account reads.
+
+Its storage reads are those of the wipe of the storage of the address. -/
+theorem reads_clearAccountPreservingBalance {fork : Fork} {tx tx' : TransactionState}
+    {address : Address} (h : tx.clearAccountPreservingBalance fork address = .ok tx') :
+    tx'.accountReads = tx.accountReads.insert address ∧
+      tx'.storageReads = (tx.destroyStorage address).storageReads := by
+  obtain ⟨_, _, hacc, hst⟩ := reads_modifyState h
+  refine ⟨hacc, ?_⟩
+  rw [hst]
+  split
+  · exact storageReads_destroyStorage_destroyStorage tx address
+  · rfl
+
+/-- The deletion of the touched empty accounts keeps the account reads and every storage read.
+
+It keeps the storage reads of every address that is not touched. -/
+theorem reads_destroyTouchedEmptyAccounts (fork : Fork) (tx : TransactionState)
+    (touched : List Address) :
+    (tx.destroyTouchedEmptyAccounts fork touched).accountReads = tx.accountReads ∧
+      (∀ other, other ∉ touched →
+        (tx.destroyTouchedEmptyAccounts fork touched).storageReads[other]? =
+          tx.storageReads[other]?) ∧
+      (∀ other key, key ∈ tx.storageReads.getD other ∅ →
+        key ∈ (tx.destroyTouchedEmptyAccounts fork touched).storageReads.getD other ∅) := by
+  unfold destroyTouchedEmptyAccounts
+  split
+  · exact ⟨rfl, fun _ _ => rfl, fun _ _ h => h⟩
+  induction touched generalizing tx with
+  | nil => exact ⟨rfl, fun _ _ => rfl, fun _ _ h => h⟩
+  | cons address rest ih =>
+    by_cases he : tx.accountExistsAndIsEmpty address = true
+    · simp only [List.foldl_cons, he, ite_true]
+      obtain ⟨hacc, hother, hmem⟩ := ih (tx.destroyAccount address)
+      refine ⟨hacc, fun other hn => ?_, fun other key hk => hmem other key
+        (mem_storageReads_destroyStorage_of_mem hk)⟩
+      rw [hother other (fun hm => hn (List.mem_cons_of_mem _ hm))]
+      have hne : address ≠ other := fun he => hn (he ▸ List.mem_cons_self)
+      simp [destroyAccount, setAccount, destroyStorage, Std.ExtTreeMap.getElem?_insert, hne]
+    · simp only [List.foldl_cons, he, Bool.false_eq_true, ite_false]
+      obtain ⟨hacc, hother, hmem⟩ := ih tx
+      exact ⟨hacc, fun other hn => hother other (fun hm => hn (List.mem_cons_of_mem _ hm)),
+        hmem⟩
 
 /-- The next transaction starts with no account read and no storage read. -/
 theorem reads_incorporateTxIntoBlock (tx : TransactionState) :
