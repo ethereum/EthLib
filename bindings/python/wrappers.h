@@ -172,6 +172,7 @@ extern PyObject* LIGHT_CLIENT_ERROR;
 extern PyObject* FORK_CHOICE_ERROR;
 extern PyObject* CHAIN_ERROR;
 extern PyObject* WEAK_SUBJECTIVITY_ERROR;
+extern PyObject* VALIDATOR_DUTY_ERROR;
 
 /* ---- Argument parsing helpers ---------------------------------------- */
 
@@ -319,6 +320,11 @@ PyObject* py_consensus_initialize_genesis (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_valid_genesis_state (PyObject* self, PyObject* args);
 PyObject* py_consensus_compute_weak_subjectivity_period (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_within_weak_subjectivity_period (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_committee_assignment (PyObject* self, PyObject* args);
+PyObject* py_consensus_is_proposer (PyObject* self, PyObject* args);
+PyObject* py_consensus_is_assigned_to_sync_committee (PyObject* self, PyObject* args);
+PyObject* py_consensus_compute_subnets_for_sync_committee (PyObject* self, PyObject* args);
+PyObject* py_consensus_get_validator_signature (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_ssz                                  (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_possession_signing_root              (PyObject* self, PyObject* args);
 PyObject* py_pq_keys_is_valid_possession_proof            (PyObject* self, PyObject* args);

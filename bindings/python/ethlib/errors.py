@@ -81,6 +81,10 @@ class WeakSubjectivityError(EthLibError, ValueError):
     """The weak subjectivity period or the staleness check of a checkpoint has no answer."""
 
 
+class ValidatorDutyError(EthLibError, ValueError):
+    """A duty of an honest validator has no result for its state or its input."""
+
+
 class LightClientError(EthLibError, ValueError):
     """A light client rejected a bootstrap or an update."""
 
@@ -226,6 +230,7 @@ __all__ = [
     "ConsensusError",
     "TransitionError",
     "WeakSubjectivityError",
+    "ValidatorDutyError",
     "LightClientError",
     "ForkChoiceError",
     "HkdfError",

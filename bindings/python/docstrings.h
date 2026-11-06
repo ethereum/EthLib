@@ -329,6 +329,21 @@
 #define DOC_consensus_is_within_weak_subjectivity_period \
   "Whether a checkpoint is within the weak subjectivity period of its state, at a time."
 
+#define DOC_consensus_get_committee_assignment \
+  "The committee assignment of a validator in an epoch, as JSON."
+
+#define DOC_consensus_is_proposer \
+  "Whether a validator proposes the block of the slot of a state."
+
+#define DOC_consensus_is_assigned_to_sync_committee \
+  "From Altair: whether a validator serves on the sync committee of the period of an epoch."
+
+#define DOC_consensus_compute_subnets_for_sync_committee \
+  "From Altair: the sync committee subnets of a validator for the next slot, as a JSON list."
+
+#define DOC_consensus_get_validator_signature \
+  "The signature of the object of a duty, by a secret key of 32 big-endian bytes."
+
 #define DOC_consensus_upgrade_state \
   "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."
 

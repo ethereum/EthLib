@@ -439,6 +439,26 @@ def consensus_is_within_weak_subjectivity_period(name: str, fork: str, state: by
     """Whether a checkpoint is within the weak subjectivity period of its state, at a time."""
     ...
 
+def consensus_get_committee_assignment(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bytes:
+    """The committee assignment of a validator in an epoch, as JSON."""
+    ...
+
+def consensus_is_proposer(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bool:
+    """Whether a validator proposes the block of the slot of a state."""
+    ...
+
+def consensus_is_assigned_to_sync_committee(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bool:
+    """From Altair: whether a validator serves on the sync committee of the period of an epoch."""
+    ...
+
+def consensus_compute_subnets_for_sync_committee(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes:
+    """From Altair: the sync committee subnets of a validator for the next slot, as a JSON list."""
+    ...
+
+def consensus_get_validator_signature(name: str, fork: str, state: bytes, config: bytes, duty: str, object: bytes, secret_key: bytes) -> bytes:
+    """The signature of the object of a duty, by a secret key of 32 big-endian bytes."""
+    ...
+
 def consensus_upgrade_state(name: str, fork: str, pre: bytes, config: bytes, verify: bool) -> bytes:
     """The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."""
     ...

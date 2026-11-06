@@ -2798,6 +2798,94 @@
    "error_class": "WeakSubjectivityError",
    "docstring":
    "Whether a checkpoint is within the weak subjectivity period of its state, at a time.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe checkpoint comes as its SSZ bytes, and the state as the state at the checkpoint.\n\nThe two times are those of a store, in milliseconds since the Unix epoch."},
+  {"summary": "The committee assignment of a validator in an epoch, as JSON.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bytes",
+   "operation": "EthLib.Consensus.Exports.getCommitteeAssignmentExport",
+   "method": "consensus_get_committee_assignment",
+   "errors":
+   [{"type": "EthLib.Consensus.ValidatorDutyError",
+     "codes":
+     [{"constructor": "accessor", "code": 1},
+      {"constructor": "ssz", "code": 2},
+      {"constructor": "bls", "code": 3},
+      {"constructor": "arith", "code": 4},
+      {"constructor": "epochTooFar", "code": 5},
+      {"constructor": "periodOutOfRange", "code": 6}]}],
+   "error_class": "ValidatorDutyError",
+   "docstring":
+   "The committee assignment of a validator in an epoch, as JSON.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nIt is `null` without an assignment, or the committee, its index and its slot."},
+  {"summary": "Whether a validator proposes the block of the slot of a state.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bool",
+   "operation": "EthLib.Consensus.Exports.isProposerExport",
+   "method": "consensus_is_proposer",
+   "errors":
+   [{"type": "EthLib.Consensus.ValidatorDutyError",
+     "codes":
+     [{"constructor": "accessor", "code": 1},
+      {"constructor": "ssz", "code": 2},
+      {"constructor": "bls", "code": 3},
+      {"constructor": "arith", "code": 4},
+      {"constructor": "epochTooFar", "code": 5},
+      {"constructor": "periodOutOfRange", "code": 6}]}],
+   "error_class": "ValidatorDutyError",
+   "docstring":
+   "Whether a validator proposes the block of the slot of a state.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+  {"summary":
+   "From Altair: whether a validator serves on the sync committee of the period of an epoch.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: bytes, epoch: int, validator_index: int) -> bool",
+   "operation": "EthLib.Consensus.Exports.isAssignedToSyncCommitteeExport",
+   "method": "consensus_is_assigned_to_sync_committee",
+   "errors":
+   [{"type": "EthLib.Consensus.ValidatorDutyError",
+     "codes":
+     [{"constructor": "accessor", "code": 1},
+      {"constructor": "ssz", "code": 2},
+      {"constructor": "bls", "code": 3},
+      {"constructor": "arith", "code": 4},
+      {"constructor": "epochTooFar", "code": 5},
+      {"constructor": "periodOutOfRange", "code": 6}]}],
+   "error_class": "ValidatorDutyError",
+   "docstring":
+   "From Altair: whether a validator serves on the sync committee of the period of an epoch.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+  {"summary":
+   "From Altair: the sync committee subnets of a validator for the next slot, as a JSON list.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: bytes, validator_index: int) -> bytes",
+   "operation": "EthLib.Consensus.Exports.computeSubnetsForSyncCommitteeExport",
+   "method": "consensus_compute_subnets_for_sync_committee",
+   "errors":
+   [{"type": "EthLib.Consensus.ValidatorDutyError",
+     "codes":
+     [{"constructor": "accessor", "code": 1},
+      {"constructor": "ssz", "code": 2},
+      {"constructor": "bls", "code": 3},
+      {"constructor": "arith", "code": 4},
+      {"constructor": "epochTooFar", "code": 5},
+      {"constructor": "periodOutOfRange", "code": 6}]}],
+   "error_class": "ValidatorDutyError",
+   "docstring":
+   "From Altair: the sync committee subnets of a validator for the next slot, as a JSON list.\n\nThe preset, the configuration and the fork are named in UTF-8."},
+  {"summary":
+   "The signature of the object of a duty, by a secret key of 32 big-endian bytes.",
+   "signature":
+   "(name: str, fork: str, state: bytes, config: bytes, duty: str, object: bytes, secret_key: bytes) -> bytes",
+   "operation": "EthLib.Consensus.Exports.getValidatorSignatureExport",
+   "method": "consensus_get_validator_signature",
+   "errors":
+   [{"type": "EthLib.Consensus.ValidatorDutyError",
+     "codes":
+     [{"constructor": "accessor", "code": 1},
+      {"constructor": "ssz", "code": 2},
+      {"constructor": "bls", "code": 3},
+      {"constructor": "arith", "code": 4},
+      {"constructor": "epochTooFar", "code": 5},
+      {"constructor": "periodOutOfRange", "code": 6}]}],
+   "error_class": "ValidatorDutyError",
+   "docstring":
+   "The signature of the object of a duty, by a secret key of 32 big-endian bytes.\n\nThe preset, the configuration, the fork and the duty are named in UTF-8.\n\nThe object comes as SSZ bytes, by duty:\n\n- `randao` and `block`: a block.\n- `attestation`: attestation data.\n- `slot`: a slot.\n- `aggregate_and_proof`: an aggregate and proof.\n- `sync_committee_message`: a block root.\n- `sync_committee_selection_proof`: sync aggregator selection data.\n- `contribution_and_proof`: a contribution and proof."},
   {"summary":
    "The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes.",
    "signature":
