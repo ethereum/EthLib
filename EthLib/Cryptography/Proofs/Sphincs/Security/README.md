@@ -64,7 +64,7 @@ The changes that follow from this are:
 
 - VCVio now gives the distribution of a computation as a Mathlib measure, not as a sub-probability mass function.
   So a statement that two computations have the same distribution now says that they are equal in distribution.
-This means that every event has the same probability under both.
+  This means that every event has the same probability under both.
   The lemmas about uniform samples, events and sums of point masses use the new names of VCVio.
 - VCVio's query cache is now a structure, not a function, so a cache is built and read through its constructor and its lookup.
 - The modules use Lean's module system, as all of EthLib does.
@@ -76,6 +76,11 @@ This means that every event has the same probability under both.
 - `Scheme/Uniform.lean` gains a lemma: the first coordinate of a uniform pair is uniform.
 - The Mathlib that EthLib uses has no uniform probability mass function of a finite type.
   So `Base/Prelude.lean` states its lemmas about uniform products and uniform tables for uniform samples, as equalities in distribution.
+- The fixed-function worlds of the reduction answer hash queries from a fixed function and make private draws.
+  leanVM runs them in Mathlib's probability mass functions, and the Mathlib that EthLib uses has no uniform one of a finite type.
+  Here they are probabilistic computations, and a private draw is a query to the uniform oracle.
+  Two of their lemmas then hold as equalities of computations, which is stronger than the equalities of distributions of the source.
+- `Base/Prelude.lean` gains a lemma: two independent draws have the same joint distribution in either order.
 - `Base/Domination.lean` and `Base/Virtual.lean` import the parts of Mathlib that they use instead of all of Mathlib.
   A file that imports all of Mathlib needs more memory than EthLib's limit per file.
 - `LazyRun/Reveal.lean` states that revealing a coordinate commutes with sampling the rest of a uniform table as an equality in distribution.

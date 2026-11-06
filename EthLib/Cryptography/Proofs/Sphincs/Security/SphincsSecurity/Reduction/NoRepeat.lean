@@ -31,7 +31,7 @@ theorem noRepeat_sign {α : Type} (m : Message)
   Iff.rfl
 
 /-- For every public key, the adversary never requests two signatures on one message. -/
-def _root_.FORS.Security.Adversary.NoRepeat (adversary : Adversary) : Prop :=
+def _root_.SphincsSecurity.Security.Adversary.NoRepeat (adversary : Adversary) : Prop :=
   ∀ pk, ForsPotential.NoRepeat (adversary.main pk) []
 
 end SphincsSecurity.Security.ForsPotential
