@@ -42,7 +42,7 @@ theorem addDelta_getD_of_ne {deltas result : Array Gwei} {index : ValidatorIndex
   split at computed
   · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, _, rfl⟩ := computed
-    simp [Array.getD_eq_getD_getElem?, Array.set!_eq_setIfInBounds, Ne.symm other]
+    simp [Array.getD_eq_getD_getElem?, Ne.symm other]
   · cases computed
 
 /-- Adding nothing keeps the deltas. -/
@@ -50,14 +50,13 @@ theorem addDelta_zero {deltas result : Array Gwei} {index : ValidatorIndex}
     (computed : addDelta deltas index 0 = .ok result) : result = deltas := by
   unfold addDelta at computed
   split at computed
-  · rename_i old read
+  · rename_i inside
     simp only [bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff, addChecked_ok_iff,
       pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨sum, ⟨_, value⟩, rfl⟩ := computed
-    have same : sum = old := UInt64.toNat_inj.mp (by simpa using value)
+    have same : sum = deltas[index.toNat] := UInt64.toNat_inj.mp (by simpa using value)
     subst same
-    obtain ⟨inside, rfl⟩ := Array.getElem?_eq_some_iff.mp read
-    simp [Array.set!_eq_setIfInBounds, Array.setIfInBounds, inside]
+    simp
   · cases computed
 
 /-- A validator whose vote does not match earns nothing for that kind of vote.

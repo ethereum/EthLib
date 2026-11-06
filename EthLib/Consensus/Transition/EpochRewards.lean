@@ -81,10 +81,10 @@ def getEligibleValidatorIndices (state : BeaconState preset fork) :
 An index past the end is an error, and so is a 64-bit overflow. -/
 def addDelta (deltas : Array Gwei) (index : ValidatorIndex) (amount : Gwei) :
     Except TransitionError (Array Gwei) :=
-  match deltas[index.toNat]? with
-  | some old => do
-    return deltas.set! index.toNat (← liftAccessor (liftArith (addChecked old amount)))
-  | none => throw (.accessor (.indexOutOfRange index))
+  if inside : index.toNat < deltas.size then do
+    let sum ← liftAccessor (liftArith (addChecked deltas[index.toNat] amount))
+    return deltas.set index.toNat sum inside
+  else throw (.accessor (.indexOutOfRange index))
 
 /-- The reward and the penalty of one eligible validator for one kind of vote.
 
