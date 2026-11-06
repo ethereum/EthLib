@@ -36,14 +36,14 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 Their bit at the slot after the state's slot, in the circular buffer, is then false. -/
 theorem unsetNextPayloadAvailability_ok {gloas : .glamsterdam ≤ fork}
     (computed : unsetNextPayloadAvailability state gloas = .ok after) :
-    ∃ next : Slot, next.toNat = state.slot.toNat + 1 ∧
-      after = { state with executionPayloadAvailability := fun _ =>
-        ⟨(state.executionPayloadAvailability gloas).bits.set!
-          (next % preset.SLOTS_PER_HISTORICAL_ROOT).toNat false⟩ } := by
+    ∃ (next : Slot) (bits : Vector Bool preset.SLOTS_PER_HISTORICAL_ROOT.toNat),
+      next.toNat = state.slot.toNat + 1 ∧
+      writeCircular (state.executionPayloadAvailability gloas).bits next false = .ok bits ∧
+      after = { state with executionPayloadAvailability := fun _ => ⟨bits⟩ } := by
   simp only [unsetNextPayloadAvailability, bind_ok_iff, liftArith, mapError_ok_iff,
     addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨next, ⟨_, sum⟩, rfl⟩ := computed
-  exact ⟨next, by simpa using sum, rfl⟩
+  obtain ⟨next, ⟨_, sum⟩, bits, written, rfl⟩ := computed
+  exact ⟨next, bits, by simpa using sum, written, rfl⟩
 
 /-- The caching of a slot keeps every field but the roots and, from Gloas, the availability bits.
 
@@ -58,10 +58,10 @@ theorem processSlot_ok (computed : processSlot state = .ok after) :
         latestBlockHeader := header
         executionPayloadAvailability := availability } := by
   unfold processSlot at computed
-  simp only [bind_ok_iff, liftSsz_ok] at computed
-  obtain ⟨_, _, _, _, computed⟩ := computed
+  simp only [bind_ok_iff, liftSsz_ok, liftAccessor_ok] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, computed⟩ := computed
   split at computed
-  · obtain ⟨_, _, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
+  · obtain ⟨_, _, _, _, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
     exact ⟨_, _, _, _, rfl⟩
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     subst computed
@@ -81,11 +81,15 @@ theorem processSlot_nextPayloadUnavailable (gloas : .glamsterdam ≤ fork)
     (after.executionPayloadAvailability gloas).bits[(state.slot.toNat + 1) %
       preset.SLOTS_PER_HISTORICAL_ROOT.toNat]'(Nat.mod_lt _ positive) = false := by
   unfold processSlot at computed
-  simp only [bind_ok_iff, liftSsz_ok] at computed
-  obtain ⟨_, _, _, _, computed⟩ := computed
+  simp only [bind_ok_iff, liftSsz_ok, liftAccessor_ok] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, computed⟩ := computed
   split at computed
-  · obtain ⟨next, sum, rfl⟩ := unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
-    simp [UInt64.toNat_mod, sum]
+  · obtain ⟨next, bits, sum, written, rfl⟩ :=
+      unsetNextPayloadAvailability_ok (liftAccessor_ok.mp computed)
+    have nonzero : preset.SLOTS_PER_HISTORICAL_ROOT ≠ 0 := fun zero => by simp [zero] at positive
+    have read := readCircular_writeCircular written
+    simp only [readCircular, nonzero, ↓reduceDIte, Except.ok.injEq] at read
+    simpa [UInt64.toNat_mod, sum] using read
   · contradiction
 
 /-- One slot step moves the slot on by exactly one. -/
