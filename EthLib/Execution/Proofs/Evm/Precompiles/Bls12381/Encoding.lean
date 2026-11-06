@@ -4,6 +4,7 @@ public import EthLib.Execution.Evm.Precompiles.Bls12381.Encoding
 public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Cryptography.Proofs.Inverse
+public import EthLib.Cryptography.Proofs.Bls.Fp2
 
 /-!
 # Proofs: `Evm.Precompiles.Bls12381.Encoding`
@@ -166,9 +167,11 @@ theorem natToBytes_bytesToFq2 {raw : List UInt8} (hlength : raw.length = 96) {a 
 /-- The affine form of a point with `z = 1` is its `x` and `y`. -/
 theorem g1_toAffine_one (x y : Fp) : G1.toAffine ⟨x, y, Fp.one⟩ = (x, y) := by
   have hinv : Cryptography.BaseField.inverse Fp.one = Fp.one := Cryptography.Fin.inverse_one
-  have hz : Cryptography.BaseField.isZero Fp.one = false := by decide
+  have hz : Cryptography.BaseField.isZero Fp.one = false := Fp.one_isZero
   simp only [G1.toAffine, hz, hinv, Bool.false_eq_true, ↓reduceIte]
-  have hone : Fp.one * Fp.one = Fp.one := by decide
+  have hone : Fp.one * Fp.one = Fp.one := by
+    rw [Fp.one_def]
+    exact Fp.ext (by rw [Fp.val_mul, Fp.val_one, Nat.one_mul]; exact Nat.mod_eq_of_lt (by decide))
   rw [hone, hone]
   exact Prod.ext (Fin.mul_one x) (Fin.mul_one y)
 
@@ -220,7 +223,8 @@ theorem bytesToG1_eq_ok_iff {raw : List UInt8} {subgroupCheck : Bool} {p : G1} :
           have hx0 : x = 0 := Fin.ext hz.1
           have hy0 : y = 0 := Fin.ext hz.2
           subst hx0 hy0
-          exact absurd hon (by decide)
+          rw [onCurveG1, beq_eq_false_iff_ne.mpr (by decide_eq_at_model [])] at hon
+          cases hon
       · rename_i hz
         have hnot : ¬(x.val = 0 ∧ y.val = 0 ∧ p = G1.zero) := fun h => hz ⟨h.1, h.2.1⟩
         simp only [hnot, false_or]
@@ -245,7 +249,7 @@ theorem g1ToBytes_bytesToG1 {raw : List UInt8} (hlength : raw.length = 96) {subg
   have hyb := natToBytes_bytesToFieldElement (by simp [hlength]) hy
   rcases hcase with ⟨hx0, hy0, rfl⟩ | ⟨-, -, rfl⟩
   · -- Both coordinates are zero: the point at infinity, and the bytes are all zero.
-    rw [g1ToBytes_of_isZero (by decide), ← List.take_append_drop 48 raw, ← hxb, ← hyb]
+    rw [g1ToBytes_of_isZero G1.isInfinity_zero, ← List.take_append_drop 48 raw, ← hxb, ← hyb]
     have hx0' : x = 0 := Fin.ext hx0
     have hy0' : y = 0 := Fin.ext hy0
     subst hx0' hy0'
@@ -306,7 +310,8 @@ theorem bytesToG2_eq_ok_iff {raw : List UInt8} {subgroupCheck : Bool} {p : G2} :
           have hy0 : y = ⟨0, 0⟩ := by
             cases y; simp only [Fp2.mk.injEq]; exact ⟨Fin.ext h2, Fin.ext h3⟩
           subst hx0 hy0
-          exact absurd hon (by decide)
+          rw [onCurveG2, beq_eq_false_iff_ne.mpr (by decide_eq_at_model [G2.bTwist])] at hon
+          cases hon
       · rename_i hz
         have hnot : ¬(x.c0.val = 0 ∧ x.c1.val = 0 ∧ y.c0.val = 0 ∧ y.c1.val = 0 ∧ p = G2.zero) :=
           fun h => hz ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.1⟩

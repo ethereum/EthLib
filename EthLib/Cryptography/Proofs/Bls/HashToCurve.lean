@@ -167,7 +167,9 @@ theorem sqrt_of_norm_sq {a : Fp2} {sn : Fp}
     have h2inv : (Fp.ofNat 2 : ZMod Fp.modulus) * (twoInv : ZMod Fp.modulus) = 1 := by
       subst htwo
       rw [Fp.baseField_inverse, Fp.baseField_ofNat, Fp.inverse_eq_inv]
-      exact mul_inv_cancel₀ (by decide)
+      -- The prime `p` does not divide 2, since `p > 2`.
+      exact mul_inv_cancel₀ ((Fp.toZMod_ofNat 2).trans_ne fun h =>
+        absurd (Nat.le_of_dvd two_pos ((ZMod.natCast_eq_zero_iff 2 _).mp h)) (by simp [Fp.modulus]))
     set s := Fp.powNat (a.c0 * a.c0 + a.c1 * a.c1) ((Fp.modulus + 1) / 4)
     have hs : (s : ZMod Fp.modulus) * s = a.c0 * a.c0 + a.c1 * a.c1 :=
       Fp.sqrt_ok (Fp.sqrt_complete hsn)
@@ -188,9 +190,8 @@ theorem sqrt_of_norm_sq {a : Fp2} {sn : Fp}
 private def sqrtNegNormZ : Fp :=
   Fp.ofNat 0x186417302d5a65347a88b0f999ab2b504614aa5e2eebdeb1a014c40bceb7d2306c12a6d436befcf94d39c9db7b263cd4
 
-private theorem sqrtNegNormZ_sq :
-    (sqrtNegNormZ : ZMod Fp.modulus) * sqrtNegNormZ = (-Fp2.norm Z : Fp) := by
-  decide
+private theorem sqrtNegNormZ_sq : sqrtNegNormZ * sqrtNegNormZ = -Fp2.norm Z := by
+  decide_eq_at_model [sqrtNegNormZ, Z]
 
 private def zaInv : Fp2 :=
   ⟨Fp.ofNat 0x1ab297833e723eac0fabc0aa0e7a110618a36faaa1445aed7798865356042fe7a49c1b4d2a1c369cbb8aeb851eb7fa5,
@@ -211,8 +212,8 @@ private def sqrtNormGx1Zero : Fp :=
   Fp.ofNat 0x14bc2d072749c399567308a4ea62f9640737884f167efe5f0485541babeb2042e44ddf51fdf7a7164c1d372558051161
 
 private theorem sqrtNormGx1Zero_sq :
-    (sqrtNormGx1Zero : ZMod Fp.modulus) * sqrtNormGx1Zero = Fp2.norm (swuG (Bprime * zaInv)) := by
-  decide
+    sqrtNormGx1Zero * sqrtNormGx1Zero = Fp2.norm (swuG (Bprime * zaInv)) := by
+  decide_eq_at_model [sqrtNormGx1Zero, swuG, Aprime, Bprime, zaInv]
 
 private theorem norm_gx2_sq_zmod {nz nu ng sz sg : ZMod Fp.modulus}
     (hsz : sz * sz = -nz) (hsg : sg * sg = -ng) :

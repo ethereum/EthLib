@@ -27,7 +27,8 @@ set_option maxRecDepth 8000
 /-- The point `(0, 2)`, of order `3`. -/
 def p3 : G1 := ⟨Fp.zero, Fp.ofNat 2, Fp.one⟩
 
-theorem p3_valid : Valid p3 := valid_of_affine_eq (by decide)
+theorem p3_valid : Valid p3 :=
+  valid_of_affine_eq (by decide_eq_at_model [])
 
 theorem p3_torsion : 3 • toPoint p3 = 0 :=
   nsmul_zero_cert p3_valid 3 2 (by decide) (by decide_at_model [p3])
@@ -57,11 +58,14 @@ def r11 : G1 :=
     Fp.ofNat (0x66ad6e999f120eab9207d5d1e434f360b68c699084f3e86 * 2 ^ 192 +
       0x80006e10211952be0d5ce9d52dbc224d61fefd7765c8e669), Fp.one⟩
 
-theorem p11_valid : Valid p11 := valid_of_affine_eq (by decide)
+theorem p11_valid : Valid p11 :=
+  valid_of_affine_eq (by decide_eq_at_model [])
 
-theorem q11_valid : Valid q11 := valid_of_affine_eq (by decide)
+theorem q11_valid : Valid q11 :=
+  valid_of_affine_eq (by decide_eq_at_model [])
 
-private theorem r11_valid : Valid r11 := valid_of_affine_eq (by decide)
+private theorem r11_valid : Valid r11 :=
+  valid_of_affine_eq (by decide_eq_at_model [])
 
 theorem p11_torsion : 11 • toPoint p11 = 0 :=
   nsmul_zero_cert p11_valid 11 4 (by decide) (by decide_at_model [p11, q11, r11])
@@ -102,11 +106,14 @@ def r10177 : G1 :=
     Fp.ofNat (0xfb6c6bc741ce191f849ef07e10deae221513c7e76791dbb * 2 ^ 192 +
       0x38190d88079be8d30cc117ff129051c902b90fee55abae0b), Fp.one⟩
 
-theorem p10177_valid : Valid p10177 := valid_of_affine_eq (by decide)
+theorem p10177_valid : Valid p10177 :=
+  valid_of_affine_eq (by decide_eq_at_model [])
 
-theorem q10177_valid : Valid q10177 := valid_of_affine_eq (by decide)
+theorem q10177_valid : Valid q10177 :=
+  valid_of_affine_eq (by decide_eq_at_model [])
 
-private theorem r10177_valid : Valid r10177 := valid_of_affine_eq (by decide)
+private theorem r10177_valid : Valid r10177 :=
+  valid_of_affine_eq (by decide_eq_at_model [])
 
 theorem p10177_torsion : 10177 • toPoint p10177 = 0 :=
   nsmul_zero_cert p10177_valid 10177 14 (by decide) (by decide_at_model [p10177, q10177, r10177])
@@ -153,11 +160,14 @@ def r859267 : G1 :=
     Fp.ofNat (0x1615dac9c1350255f9fe5f24d9124d0939b802da057165aa * 2 ^ 192 +
       0x7d76505e764422598049883c86f7068c5b9b7e57e19245e0), Fp.one⟩
 
-theorem p859267_valid : Valid p859267 := valid_of_affine_eq (by decide)
+theorem p859267_valid : Valid p859267 :=
+  valid_of_affine_eq (by decide_eq_at_model [])
 
-theorem q859267_valid : Valid q859267 := valid_of_affine_eq (by decide)
+theorem q859267_valid : Valid q859267 :=
+  valid_of_affine_eq (by decide_eq_at_model [])
 
-private theorem r859267_valid : Valid r859267 := valid_of_affine_eq (by decide)
+private theorem r859267_valid : Valid r859267 :=
+  valid_of_affine_eq (by decide_eq_at_model [])
 
 theorem p859267_torsion : 859267 • toPoint p859267 = 0 :=
   nsmul_zero_cert p859267_valid 859267 20 (by decide)
@@ -206,11 +216,14 @@ def r52437899 : G1 :=
     Fp.ofNat (0x137d0f9322d15d4f815a42f1cf1f72e3e8dc540c109d81a3 * 2 ^ 192 +
       0xf83589c754f0630921fe40a30bac497306d460537f490049), Fp.one⟩
 
-theorem p52437899_valid : Valid p52437899 := valid_of_affine_eq (by decide)
+theorem p52437899_valid : Valid p52437899 :=
+  valid_of_affine_eq (by decide_eq_at_model [])
 
-theorem q52437899_valid : Valid q52437899 := valid_of_affine_eq (by decide)
+theorem q52437899_valid : Valid q52437899 :=
+  valid_of_affine_eq (by decide_eq_at_model [])
 
-private theorem r52437899_valid : Valid r52437899 := valid_of_affine_eq (by decide)
+private theorem r52437899_valid : Valid r52437899 :=
+  valid_of_affine_eq (by decide_eq_at_model [])
 
 theorem p52437899_torsion : 52437899 • toPoint p52437899 = 0 :=
   nsmul_zero_cert p52437899_valid 52437899 26 (by decide)

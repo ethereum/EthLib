@@ -622,6 +622,11 @@ theorem ofNat_eq_natCast (n : Nat) : Fp.ofNat n = (n : Fp) := by
   rw [ofNat, Fin.val_ofNat]
   exact (ZMod.val_natCast modulus n).symm
 
+/-- The map to `ZMod p` sends the element of `n` to the cast of `n`. -/
+theorem toZMod_ofNat (n : Nat) : toZMod (Fp.ofNat n) = n := by
+  rw [← ZMod.natCast_zmod_val (toZMod (Fp.ofNat n)), show (toZMod (Fp.ofNat n)).val = n % modulus
+    from val_ofNat n, ZMod.natCast_mod]
+
 /-- The spec's `Fp.powNat` is Mathlib's monoid power. -/
 theorem powNat_eq_pow (a : Fp) (n : Nat) : a.powNat n = a ^ n :=
   powNat_eq_zmod_pow a n

@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Proofs.Bls.G1Group
 public import EthLib.Cryptography.Proofs.Bls.FrZMod
 public import EthLib.Cryptography.Proofs.Bls.FpModel
 public import EthLib.Cryptography.Proofs.Bls.CurveMap
+public import EthLib.Cryptography.Proofs.Bls.Fp2
 
 /-!
 # Proofs: the order of the `G1` generator and the action of `Fr`
@@ -32,10 +33,8 @@ set_option maxRecDepth 8000
 /-! ## Generator validity -/
 
 /-- The spec's generator is a nonsingular point of the curve. -/
-theorem valid_generator : Valid generator := by
-  show curve.Nonsingular (rep generator)
-  rw [nonsingular_iff, equation_iff]
-  exact ⟨by decide, Or.inr (Or.inl (by decide))⟩
+theorem valid_generator : Valid generator :=
+  valid_of_affine_eq (by decide_eq_at_model [])
 
 /-! ## `[r]g₁ = 0` -/
 
