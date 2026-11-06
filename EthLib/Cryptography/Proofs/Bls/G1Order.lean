@@ -2,6 +2,8 @@ module
 
 public import EthLib.Cryptography.Proofs.Bls.G1Group
 public import EthLib.Cryptography.Proofs.Bls.FrZMod
+public import EthLib.Cryptography.Proofs.Bls.FpModel
+public import EthLib.Cryptography.Proofs.Bls.CurveMap
 
 /-!
 # Proofs: the order of the `G1` generator and the action of `Fr`
@@ -40,7 +42,7 @@ theorem valid_generator : Valid generator := by
 /-- Fuel-based double-and-add, structurally recursive so the kernel
 can evaluate it (the spec's `mulNat` is well-founded recursion, which
 does not reduce definitionally). Correctness: `mulNatAux_eq`. -/
-def mulNatAux : Nat → G1 → Nat → G1
+def mulNatAux {F : Type} [BaseField F] : Nat → G1 F → Nat → G1 F
   | 0, _, _ => zero
   | fuel + 1, p, k =>
     if k = 0 then zero
@@ -65,14 +67,58 @@ theorem mulNatAux_eq (fuel : Nat) (p : G1) (k : Nat)
         omega
       rw [ite_eq_right h0, ite_eq_right h0, ih (double p) (k / 2) h2]
 
-/-- `[r]g₁` is the point at infinity, checked by the kernel through
-the fuel-based ladder: 255 doublings/additions of 381-bit arithmetic. -/
+/-- A map of base fields commutes with the ladder. -/
+theorem map_mulNatAux {F G : Type} [BaseField F] [BaseField G] (f : BaseField.Hom F G)
+    (fuel : Nat) (p : G1 F) (k : Nat) :
+    map f (mulNatAux fuel p k) = mulNatAux fuel (map f p) k := by
+  induction fuel generalizing p k with
+  | zero => exact map_zero f
+  | succ fuel ih =>
+    rw [mulNatAux, mulNatAux]
+    split
+    · exact map_zero f
+    · dsimp only
+      rw [← map_double, ← ih]
+      split
+      · exact map_add f _ _
+      · rfl
+
+/-- The test for the point at infinity reads the same on the image in the model. -/
+theorem isInfinity_model (p : G1) : p.isInfinity = (map Fp.toModel p).isInfinity :=
+  (map_isInfinity Fp.toModel p).symm
+
+/-- A map of base fields commutes with the sum, written as a function. -/
+theorem map_add_fn {F G : Type} [BaseField F] [BaseField G] (f : BaseField.Hom F G)
+    (p q : G1 F) : map f (add p q) = add (map f p) (map f q) :=
+  map_add f p q
+
+/-- A map of base fields commutes with the negation, written as a function. -/
+theorem map_neg_fn {F G : Type} [BaseField F] [BaseField G] (f : BaseField.Hom F G)
+    (p : G1 F) : map f (neg p) = neg (map f p) :=
+  map_neg f p
+
+/-- Decides a test for the point at infinity on points of `Fp` in the model.
+
+The listed definitions of points are unfolded, and the map is pushed down to their coordinates.
+
+So the kernel computes in the model, on natural numbers. -/
+macro "decide_at_model" "[" ids:Lean.Parser.Tactic.simpLemma,* "]" : tactic =>
+  `(tactic| (rw [isInfinity_model]
+             simp only [map_mulNatAux, map_add_fn, map_neg_fn, map_mk, Fp.toModel_ofNat,
+               Fp.toModel_zero, Fp.toModel_one, $ids,*]
+             decide +kernel))
+
+/-- `[r]g₁` is the point at infinity.
+
+The kernel runs the ladder in the model, 255 doublings and additions on 381-bit integers. -/
 theorem modulus_smul_generator :
     Fr.modulus • toPoint generator = 0 := by
   rw [← toPoint_mulNat valid_generator]
   refine Point.toAffine_of_Z_eq_zero (isZero_iff.mp ?_)
   rw [← mulNatAux_eq 256 generator Fr.modulus (by decide)]
-  decide
+  have h : (mulNatAux 256 (generator : G1 Fp.Model) Fr.modulus).isInfinity = true := by
+    decide +kernel
+  rwa [← map_generator Fp.toModel, ← map_mulNatAux, map_isInfinity] at h
 
 /-- The generator is not the identity (its representative has
 `z = 1 ≠ 0`, so it maps to an affine point). -/

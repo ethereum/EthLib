@@ -52,7 +52,7 @@ private theorem prime_sq_dvd_card_of_independent {G : Type*} [AddCommGroup G] [F
   -- The image of `Q` in `G / S` is a nonzero `q`-torsion element, so `q` divides `Nat.card (G / S)`.
   have hquot : q • (QuotientAddGroup.mk Q : G ⧸ S) = 0 := by
     change q • (QuotientAddGroup.mk' S Q) = 0
-    rw [← map_nsmul, hQ, map_zero]
+    rw [← map_nsmul, hQ, _root_.map_zero]
   have hquotne : (QuotientAddGroup.mk Q : G ⧸ S) ≠ 0 := by
     intro h
     exact hnotmem ((QuotientAddGroup.eq_zero_iff Q).mp h)

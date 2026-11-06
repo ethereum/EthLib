@@ -78,6 +78,15 @@ namespace Fp
 /-- The image of an element in the model stands for the same integer. -/
 theorem val_toModel (a : Fp) : (toModel a).val = a.val := rfl
 
+/-- The image of the element of `n` is the element of `n` in the model. -/
+theorem toModel_ofNat (n : Nat) : toModel (Fp.ofNat n) = BaseField.ofNat n := toModel.map_ofNat n
+
+/-- The image of zero is the zero of the model. -/
+theorem toModel_zero : toModel Fp.zero = BaseField.zero := toModel.map_zero
+
+/-- The image of one is the one of the model. -/
+theorem toModel_one : toModel Fp.one = BaseField.one := toModel.map_one
+
 end Fp
 
 end EthLib.Cryptography.Bls
