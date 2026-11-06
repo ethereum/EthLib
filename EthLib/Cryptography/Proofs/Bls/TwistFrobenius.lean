@@ -72,8 +72,7 @@ noncomputable instance instFintypeFp12 : Fintype Fp12 :=
 
 /-- `Fp2` has `p^2` elements because it is a pair of `Fp` coordinates. -/
 theorem card_fp2 : Fintype.card Fp2 = Fp.modulus ^ 2 := by
-  rw [Fintype.card_congr fp2Equiv, Fintype.card_prod]
-  rw [show Fintype.card Fp = Fp.modulus from Fintype.card_fin _]
+  rw [Fintype.card_congr fp2Equiv, Fintype.card_prod, Fp.card_eq]
   exact (pow_two _).symm
 
 /-- `Fp6` has `p^6` elements because it is a triple of `Fp2` coordinates. -/
@@ -90,25 +89,29 @@ theorem card_fp12 : Fintype.card Fp12 = Fp.modulus ^ 12 := by
 
 /-- Constant inclusion from `ZMod Fp.modulus` into `Fp2`. -/
 def fpToFp2 : ZMod Fp.modulus →+* Fp2 where
-  toFun := (Fp2.ofFp : Fp → Fp2)
-  map_zero' := rfl
-  map_one' := rfl
+  toFun a := Fp2.ofFp (Fp.toZMod.symm a)
+  map_zero' := by
+    apply Fp2.ext <;> apply Fp.toZMod.injective <;>
+      simp only [Fp2.ofFp_c0, Fp2.ofFp_c1, Fp2.zero_c0, Fp2.zero_c1, RingEquiv.apply_symm_apply,
+        Fp.toZMod_zero]
+  map_one' := by
+    apply Fp2.ext <;> apply Fp.toZMod.injective <;>
+      simp only [Fp2.ofFp_c0, Fp2.ofFp_c1, Fp2.one_c0, Fp2.one_c1, RingEquiv.apply_symm_apply,
+        Fp.toZMod_one, Fp.toZMod_zero]
   map_add' a b := by
-    let aa : Fp := a
-    let bb : Fp := b
-    open scoped Fin.CommRing in
-    apply Fp2.ext
-    · exact rfl
-    · show (0 : Fp) = 0 + 0; ring
+    rw [map_add]
+    apply Fp2.ext <;> apply Fp.toZMod.injective <;>
+      simp only [Fp2.add_c0, Fp2.add_c1, Fp2.ofFp_c0, Fp2.ofFp_c1]
+    push_toZMod
+    ring
   map_mul' a b := by
-    let aa : Fp := a
-    let bb : Fp := b
-    open scoped Fin.CommRing in
-    apply Fp2.ext
-    · show aa * bb = aa * bb - 0 * 0; ring
-    · show (0 : Fp) = aa * 0 + 0 * bb; ring
+    rw [map_mul]
+    apply Fp2.ext <;> apply Fp.toZMod.injective <;>
+      simp only [Fp2.mul_c0, Fp2.mul_c1, Fp2.ofFp_c0, Fp2.ofFp_c1] <;> push_toZMod <;> ring
 
-@[simp] theorem fpToFp2_apply (a : Fp) : fpToFp2 a = Fp2.ofFp a := rfl
+@[simp] theorem fpToFp2_apply (a : Fp) : fpToFp2 (Fp.toZMod a) = Fp2.ofFp a := by
+  show Fp2.ofFp (Fp.toZMod.symm (Fp.toZMod a)) = _
+  rw [RingEquiv.symm_apply_apply]
 
 /-- Constant inclusion from `Fp2` into `Fp6`. -/
 def fp2ToFp6 : Fp2 →+* Fp6 where
@@ -137,7 +140,10 @@ def fp2ToFp12 : Fp2 →+* Fp12 := fp6ToFp12.comp fp2ToFp6
 def fpToFp12 : ZMod Fp.modulus →+* Fp12 := fp2ToFp12.comp fpToFp2
 
 @[simp] theorem fpToFp12_apply (a : Fp) :
-    fpToFp12 a = ⟨Fp6.ofFp2 (Fp2.ofFp a), Fp6.zero⟩ := rfl
+    fpToFp12 (Fp.toZMod a) = ⟨Fp6.ofFp2 (Fp2.ofFp a), Fp6.zero⟩ := by
+  show fp2ToFp12 (fpToFp2 (Fp.toZMod a)) = _
+  rw [fpToFp2_apply]
+  rfl
 
 @[simp] theorem fp2ToFp12_apply (a : Fp2) :
     fp2ToFp12 a = ⟨Fp6.ofFp2 a, Fp6.zero⟩ := rfl
@@ -213,17 +219,17 @@ theorem fp2_pow_p_eq_conjugate (a : Fp2) : a ^ Fp.modulus = a.conjugate := by
       pow_add, pow_mul, hi4, one_pow, one_mul, hi3]
   have hf (b : ZMod Fp.modulus) : primeFrobenius2 (fpToFp2 b) = fpToFp2 b := by
     rw [primeFrobenius2_apply, ← map_pow, ZMod.pow_card]
-  have hd : a = fpToFp2 a.c0 + fpToFp2 a.c1 * Fp2.i := by
-    open scoped Fin.CommRing in
-    apply Fp2.ext
-    · show a.c0 = a.c0 + (a.c1 * 0 - 0 * 1); ring
-    · show a.c1 = 0 + (a.c1 * 1 + 0 * 0); ring
+  have hd : a = fpToFp2 (Fp.toZMod a.c0) + fpToFp2 (Fp.toZMod a.c1) * Fp2.i := by
+    rw [fpToFp2_apply, fpToFp2_apply]
+    apply Fp2.ext <;> apply Fp.toZMod.injective <;>
+      simp only [Fp2.add_c0, Fp2.add_c1, Fp2.mul_c0, Fp2.mul_c1, Fp2.ofFp_c0, Fp2.ofFp_c1,
+        Fp2.i_c0, Fp2.i_c1] <;> push_toZMod <;> ring
   rw [← primeFrobenius2_apply]
-  conv_lhs => rw [hd, map_add, map_mul, hf a.c0, hf a.c1, hip]
-  open scoped Fin.CommRing in
-  apply Fp2.ext
-  · show a.c0 + (a.c1 * -0 - 0 * -1) = a.c0; ring
-  · show 0 + (a.c1 * -1 + 0 * -0) = -a.c1; ring
+  conv_lhs => rw [hd, map_add, map_mul, hf, hf, hip, fpToFp2_apply, fpToFp2_apply]
+  apply Fp2.ext <;> apply Fp.toZMod.injective <;>
+    simp only [Fp2.add_c0, Fp2.add_c1, Fp2.mul_c0, Fp2.mul_c1, Fp2.ofFp_c0, Fp2.ofFp_c1,
+      Fp2.neg_c0, Fp2.neg_c1, Fp2.i_c0, Fp2.i_c1, Fp2.conjugate_c0, Fp2.conjugate_c1] <;>
+    push_toZMod <;> ring
 
 theorem primeFrobenius_fp2 (a : Fp2) :
     primeFrobenius (fp2ToFp12 a) = fp2ToFp12 a.conjugate := by

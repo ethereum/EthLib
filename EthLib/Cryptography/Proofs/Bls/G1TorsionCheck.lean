@@ -235,10 +235,7 @@ theorem coords_add (p q : G1) : coords (G1.add p q) = add (coords p) (coords q) 
     (G1.map Fp.toModel q) from h, modelCoords_add, ← coords_eq, ← coords_eq]
 
 private theorem coords_neg (q : G1) : coords (G1.neg q) = neg (coords q) := by
-  have h := G1.map_neg Fp.toModel q
-  rw [coords_eq, show G1.map Fp.toModel (G1.neg q) = G1.neg (G1.map Fp.toModel q) from h,
-    coords_eq]
-  rfl
+  simp only [coords, neg, G1.neg, Fp.val_neg]
 
 private theorem coords_zero : coords (G1.zero : G1) = zero := by
   rw [coords_eq, G1.map_zero]
@@ -329,26 +326,38 @@ private theorem toPoint_mulModulusChain {q : G1} (h : Valid q) :
 
 /-- A point `(x, y, 1)` of the curve whose `x` passes the check has order dividing `r`. -/
 theorem modulus_smul_eq_zero {x y : Fp} (hc : check x.val = true)
-    (hy : (y : ZMod Fp.modulus) * y = x * x * x + Fp.ofNat 4) :
+    (hy : y * y = x * x * x + Fp.ofNat 4) :
     Fr.modulus • toPoint ⟨x, y, Fp.one⟩ = 0 := by
   simp only [check, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq, fadd_eq, fmul_eq] at hc
   obtain ⟨⟨-, hsq⟩, hz⟩ := hc
-  let y₀ : Fp := ⟨rootCandidate x.val, Nat.mod_lt _ Fp.modulus_pos⟩
-  have hy₀ : (y₀ : ZMod Fp.modulus) * y₀ = x * x * x + Fp.ofNat 4 := Fin.ext hsq
+  -- The candidate root, as an element of `Fp`.
+  obtain ⟨y₀, hy₀v⟩ : ∃ y₀ : Fp, y₀.val = rootCandidate x.val :=
+    ⟨_, Fp.val_ofNat_of_lt (Nat.mod_lt _ Fp.modulus_pos)⟩
+  have hy₀ : y₀ * y₀ = x * x * x + Fp.ofNat 4 := by
+    apply Fp.ext
+    rw [Fp.val_mul, Fp.val_add, Fp.val_mul, Fp.val_mul, Fp.val_ofNat, hy₀v]
+    exact hsq
   have hv : Valid ⟨x, y₀, Fp.one⟩ := valid_of_affine_eq hy₀
   -- The chain reaches the point at infinity, so `[r] (x, y₀, 1) = 0`.
   have hr : Fr.modulus • toPoint ⟨x, y₀, Fp.one⟩ = 0 := by
     rw [← toPoint_mulModulusChain hv]
-    refine Point.toAffine_of_Z_eq_zero (isZero_iff.mp ?_)
-    have hc : coords ⟨x, y₀, Fp.one⟩ = (x.val, rootCandidate x.val, 1) := rfl
+    have hc : coords ⟨x, y₀, Fp.one⟩ = (x.val, rootCandidate x.val, 1) := by
+      simp only [coords, hy₀v, Fp.one_def, Fp.val_one]
     have h := congrArg (fun c : Coords => c.2.2) (coords_mulModulusChain ⟨x, y₀, Fp.one⟩)
     rw [hc, hz] at h
     generalize mulModulusChain ⟨x, y₀, Fp.one⟩ = X at h ⊢
+    apply Point.toAffine_of_Z_eq_zero
+    rw [rep_z]
+    apply (isZero_iff (a := X.z)).mp
+    rw [Fp.isZero_eq]
     exact beq_iff_eq.mpr h
-  rcases sqrt_pm (hy.trans hy₀.symm) with h | h
-  · rw [show y = y₀ from h]
+  have hsq' : Fp.toZMod y * Fp.toZMod y = Fp.toZMod y₀ * Fp.toZMod y₀ := by
+    rw [← Fp.toZMod_mul, ← Fp.toZMod_mul, hy, hy₀]
+  rcases sqrt_pm hsq' with h | h
+  · rw [Fp.toZMod_inj.mp h]
     exact hr
-  · rw [show (⟨x, y, Fp.one⟩ : G1) = G1.neg ⟨x, y₀, Fp.one⟩ by rw [show y = -y₀ from h]; rfl,
+  · have hn : y = -y₀ := Fp.toZMod.injective (by rw [h, Fp.toZMod_neg])
+    rw [show (⟨x, y, Fp.one⟩ : G1) = G1.neg ⟨x, y₀, Fp.one⟩ by rw [hn]; rfl,
       toPoint_neg hv, neg_nsmul, hr, neg_zero]
 
 end EthLib.Cryptography.Bls.G1.TorsionCheck

@@ -63,8 +63,8 @@ private theorem mul_inverse_cube (y z w : ZMod Fp.modulus) (hw : z * w = 1) :
   ring
 
 private theorem z_mul_inverse {P : G1} (hz : ¬P.z.isZero = true) :
-    (P.z : ZMod Fp.modulus) * (P.z.inverse : ZMod Fp.modulus) = 1 := by
-  rw [Fp.inverse_eq_inv]
+    Fp.toZMod P.z * Fp.toZMod P.z.inverse = 1 := by
+  rw [Fp.toZMod_inverse]
   exact mul_inv_cancel₀ (fun h => hz (isZero_iff.mpr h))
 
 /-- Two valid points with the same group element have the same affine coordinates. -/
@@ -80,11 +80,12 @@ theorem toAffine_congr {P Q : G1} (hP : Valid P) (hQ : Valid Q) (h : toPoint P =
       (fun h => hPz (isZero_iff.mpr h)) (fun h => hQz (isZero_iff.mpr h))
     simp only [G1.toAffine, Fp.baseField_isZero, Fp.baseField_inverse, ite_eq_right hPz,
       ite_eq_right hQz]
-    exact Prod.ext
-      ((mul_inverse_sq _ _ _ (z_mul_inverse hPz)).trans
-        (hx.trans (mul_inverse_sq _ _ _ (z_mul_inverse hQz)).symm))
-      ((mul_inverse_cube _ _ _ (z_mul_inverse hPz)).trans
-        (hy.trans (mul_inverse_cube _ _ _ (z_mul_inverse hQz)).symm))
+    simp only [rep_x, rep_y, rep_z] at hx hy
+    refine Prod.ext (Fp.toZMod.injective ?_) (Fp.toZMod.injective ?_) <;> push_toZMod
+    · exact (mul_inverse_sq _ _ _ (z_mul_inverse hPz)).trans
+        (hx.trans (mul_inverse_sq _ _ _ (z_mul_inverse hQz)).symm)
+    · exact (mul_inverse_cube _ _ _ (z_mul_inverse hPz)).trans
+        (hy.trans (mul_inverse_cube _ _ _ (z_mul_inverse hQz)).symm)
 
 end G1
 

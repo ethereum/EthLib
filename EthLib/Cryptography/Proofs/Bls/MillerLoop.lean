@@ -24,7 +24,7 @@ open TwistFrobenius
 
 /-- The line through `(X, Y)` with slope `m`, at the point `(xp, yp)` of `G1`. -/
 noncomputable def lineAt (X Y m : Fp12) (xp yp : Fp) : Fp12 :=
-  (fpToFp12 yp - Y) - m * (fpToFp12 xp - X)
+  (fpToFp12 (Fp.toZMod yp) - Y) - m * (fpToFp12 (Fp.toZMod xp) - X)
 
 /-- The untwist of the affine point `(x, y)` of the twist: `(x w^(-2), y w^(-3))`. -/
 noncomputable def untwist (x y : Fp2) : Fp12 × Fp12 :=

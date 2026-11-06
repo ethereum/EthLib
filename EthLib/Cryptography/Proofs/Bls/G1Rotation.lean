@@ -56,19 +56,23 @@ theorem embed_injective : Function.Injective embed :=
   ShortWeierstrass.scaledHom_injective _ _ _
 
 /-- The rotation of an affine point is the inclusion of the point `(β * x, y)`. -/
-theorem rotate_toPoint {x y x' : F} (hv : Valid ⟨x, y, Fp.one⟩) (hv' : Valid ⟨x', y, Fp.one⟩)
-    (hx : x' = beta * x) :
+theorem rotate_toPoint {x y x' : Fp} (hv : Valid ⟨x, y, Fp.one⟩) (hv' : Valid ⟨x', y, Fp.one⟩)
+    (hx : Fp.toZMod x' = beta * Fp.toZMod x) :
     rotate (toPoint ⟨x, y, Fp.one⟩) = embed (toPoint ⟨x', y, Fp.one⟩) := by
   have hb : fpToFp12 beta ^ 3 = 1 := by rw [← map_pow, beta_cube, map_one]
-  have e1 : toPoint ⟨x, y, Fp.one⟩ = _ := Jacobian.Point.toAffine_some (W := curve) (X := x) hv
-  have e2 : toPoint ⟨x', y, Fp.one⟩ = _ := Jacobian.Point.toAffine_some (W := curve) (X := x') hv'
+  have hr (a : Fp) : rep ⟨a, y, Fp.one⟩ = ![Fp.toZMod a, Fp.toZMod y, 1] := by
+    rw [rep, Fp.one_def, Fp.toZMod_one]
+  rw [Valid, hr] at hv hv'
+  have e1 : toPoint ⟨x, y, Fp.one⟩ = _ :=
+    (congrArg (Jacobian.Point.toAffine curve) (hr x)).trans (Jacobian.Point.toAffine_some hv)
+  have e2 : toPoint ⟨x', y, Fp.one⟩ = _ :=
+    (congrArg (Jacobian.Point.toAffine curve) (hr x')).trans (Jacobian.Point.toAffine_some hv')
   rw [e1, e2]
   show Affine.Point.some _ _ _ = Affine.Point.some _ _ _
   rw [Affine.Point.some.injEq, hx, _root_.map_mul, one_pow, one_pow, mul_one, mul_one]
   constructor
-  · linear_combination fpToFp12 x * fpToFp12 beta * hb
-  · dsimp only
-    linear_combination fpToFp12 (Fp.toZMod y) * (fpToFp12 beta ^ 3 + 1) * hb
+  · linear_combination fpToFp12 (Fp.toZMod x) * fpToFp12 beta * hb
+  · linear_combination fpToFp12 (Fp.toZMod y) * (fpToFp12 beta ^ 3 + 1) * hb
 
 /-- An equation of `Fp` elements, decided by comparing their values. -/
 theorem eq_of_decide {a b : F} (h : @decide (a = b) (instDecidableEqFin _ a b) = true) : a = b :=
@@ -173,9 +177,9 @@ theorem toPoint_ne_zero {x y : Fp} (hv : Valid ⟨x, y, Fp.one⟩) : toPoint ⟨
 /-- A point `P` of prime order `q` and its rotation `Q` are independent.
 
 The hypothesis says that no `i` below `q` both is a root of `1 + i + i^2` and has `Q = [i] P`. -/
-theorem not_nsmul_of_rotation {q : Nat} (hq : q.Prime) {x y bx bbx : F}
+theorem not_nsmul_of_rotation {q : Nat} (hq : q.Prime) {x y bx bbx : Fp}
     (hp : Valid ⟨x, y, Fp.one⟩) (hq' : Valid ⟨bx, y, Fp.one⟩) (hr : Valid ⟨bbx, y, Fp.one⟩)
-    (hbx : bx = beta * x) (hbbx : bbx = beta * bx)
+    (hbx : Fp.toZMod bx = beta * Fp.toZMod x) (hbbx : Fp.toZMod bbx = beta * Fp.toZMod bx)
     (hP : q • toPoint ⟨x, y, Fp.one⟩ = 0)
     (hsum : toPoint ⟨x, y, Fp.one⟩ + toPoint ⟨bx, y, Fp.one⟩ + toPoint ⟨bbx, y, Fp.one⟩ = 0)
     (hroots : ∀ i < q, q ∣ 1 + i + i * i →

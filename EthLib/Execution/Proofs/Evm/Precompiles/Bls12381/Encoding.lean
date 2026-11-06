@@ -128,8 +128,8 @@ theorem bytesToFieldElement_natToBytes (x : Fp) :
 
 /-- A padded field element decodes back to it. -/
 theorem unpadFp_bytesToFieldElement_pad (x : Fp) :
-    (unpadFp (zeroPad ++ natToBytes 48 x.val) >>= bytesToFieldElement) = .ok x := by
-  simp only [unpadFp_pad, bind, Except.bind, bytesToFieldElement_natToBytes]
+    (unpadFp (zeroPad ++ natToBytes 48 x.val) >>= bytesToFieldElement) = .ok x :=
+  EthLib.Base.bind_ok_iff.mpr ⟨_, unpadFp_pad _, bytesToFieldElement_natToBytes x⟩
 
 /-- A decoded field element encodes back to the 48 bytes it came from. -/
 theorem natToBytes_bytesToFieldElement {raw : List UInt8} (hlength : raw.length = 48) {x : Fp}
@@ -146,8 +146,9 @@ theorem natToBytes_bytesToFieldElement {raw : List UInt8} (hlength : raw.length 
 theorem bytesToFq2_natToBytes (a : Fp2) :
     bytesToFq2 (natToBytes 48 a.c0.val ++ natToBytes 48 a.c1.val) = .ok a := by
   have hlen := EthLib.Base.natToBytes_length 48 a.c0.val
-  simp [bytesToFq2, List.take_left' hlen, List.drop_left' hlen, bytesToFieldElement_natToBytes,
-    bind, Except.bind, pure, Except.pure]
+  rw [bytesToFq2, List.take_left' hlen, List.drop_left' hlen, bytesToFieldElement_natToBytes,
+    bytesToFieldElement_natToBytes]
+  rfl
 
 /-- A decoded element of `Fp2` encodes back to the 96 bytes it came from. -/
 theorem natToBytes_bytesToFq2 {raw : List UInt8} (hlength : raw.length = 96) {a : Fp2}
@@ -168,28 +169,20 @@ theorem natToBytes_bytesToFq2 {raw : List UInt8} (hlength : raw.length = 96) {a 
 
 /-- The affine form of a point with `z = 1` is its `x` and `y`. -/
 theorem g1_toAffine_one (x y : Fp) : G1.toAffine ⟨x, y, Fp.one⟩ = (x, y) := by
-  have hinv : Cryptography.BaseField.inverse Fp.one = Fp.one := Cryptography.Fin.inverse_one
+  have hinv : Cryptography.BaseField.inverse Fp.one = Fp.one := Fp.toZMod.injective (by
+    rw [Fp.baseField_inverse, Fp.toZMod_inverse, Fp.one_def, Fp.toZMod_one, inv_one])
   have hz : Cryptography.BaseField.isZero Fp.one = false := Fp.one_isZero
   simp only [G1.toAffine, hz, hinv, Bool.false_eq_true, ↓reduceIte]
-  have hone : Fp.one * Fp.one = Fp.one := by
-    rw [Fp.one_def]
-    exact Fp.ext (by rw [Fp.val_mul, Fp.val_one, Nat.one_mul]; exact Nat.mod_eq_of_lt (by decide))
-  rw [hone, hone]
-  exact Prod.ext (Fin.mul_one x) (Fin.mul_one y)
+  have hone (a : Fp) : a * Fp.one = a := Fp.toZMod.injective (by
+    rw [Fp.toZMod_mul, Fp.one_def, Fp.toZMod_one, mul_one])
+  rw [hone, hone, hone, hone]
 
 /-- The point at infinity encodes as 96 zero bytes. -/
 theorem g1ToBytes_of_isZero {p : G1} (h : p.z.isZero = true) :
     g1ToBytes p = List.replicate 96 0 := by
   have h' : Cryptography.BaseField.isZero p.z = true := h
-  simp only [g1ToBytes, G1.toAffine, h', ↓reduceIte]
+  simp only [g1ToBytes, G1.toAffine, h', ↓reduceIte, Fp.baseField_zero, Fp.val_zero]
   rfl
-
--- The kernel reads 96 bytes one by one, deeper than the default recursion limit.
-set_option maxRecDepth 4000 in
-/-- 96 zero bytes decode as the point at infinity. -/
-theorem bytesToG1_zeros (subgroupCheck : Bool) :
-    bytesToG1 (List.replicate 96 0) subgroupCheck = .ok G1.zero := by
-  cases subgroupCheck <;> rfl
 
 /-- The G1 decoder reads two field elements `x` and `y`, and succeeds in exactly two cases.
 
@@ -222,8 +215,8 @@ theorem bytesToG1_eq_ok_iff {raw : List UInt8} {subgroupCheck : Bool} {p : G1} :
         rintro (h | ⟨hon, -, -⟩)
         · exact h
         · -- `(0, 0)` is not on the curve, so the second case cannot hold.
-          have hx0 : x = 0 := Fin.ext hz.1
-          have hy0 : y = 0 := Fin.ext hz.2
+          have hx0 : x = 0 := Fp.ext (hz.1.trans Fp.val_zero.symm)
+          have hy0 : y = 0 := Fp.ext (hz.2.trans Fp.val_zero.symm)
           subst hx0 hy0
           rw [onCurveG1, beq_eq_false_iff_ne.mpr (by decide_eq_at_model [])] at hon
           cases hon
@@ -232,6 +225,22 @@ theorem bytesToG1_eq_ok_iff {raw : List UInt8} {subgroupCheck : Bool} {p : G1} :
         simp only [hnot, false_or]
         cases hon : onCurveG1 x y <;> cases subgroupCheck <;>
           cases hs : G1.inSubgroup ⟨x, y, Fp.one⟩ <;> simp [eq_comm]
+
+-- The kernel compares 96 bytes one by one, deeper than the default recursion limit.
+set_option maxRecDepth 4000 in
+/-- 96 zero bytes decode as the point at infinity. -/
+theorem bytesToG1_zeros (subgroupCheck : Bool) :
+    bytesToG1 (List.replicate 96 0) subgroupCheck = .ok G1.zero := by
+  have hb : List.replicate 96 (0 : UInt8) =
+      natToBytes 48 (0 : Fp).val ++ natToBytes 48 (0 : Fp).val := by
+    rw [Fp.val_zero]
+    rfl
+  have hlen := EthLib.Base.natToBytes_length 48 (0 : Fp).val
+  rw [hb]
+  exact bytesToG1_eq_ok_iff.mpr ⟨0, 0,
+    by rw [List.take_left' hlen]; exact bytesToFieldElement_natToBytes 0,
+    by rw [List.drop_left' hlen]; exact bytesToFieldElement_natToBytes 0,
+    .inl ⟨Fp.val_zero, Fp.val_zero, rfl⟩⟩
 
 /-- An affine point on the curve decodes back to itself, with `z = 1`.
 
@@ -252,8 +261,8 @@ theorem g1ToBytes_bytesToG1 {raw : List UInt8} (hlength : raw.length = 96) {subg
   rcases hcase with ⟨hx0, hy0, rfl⟩ | ⟨-, -, rfl⟩
   · -- Both coordinates are zero: the point at infinity, and the bytes are all zero.
     rw [g1ToBytes_of_isZero G1.isInfinity_zero, ← List.take_append_drop 48 raw, ← hxb, ← hyb]
-    have hx0' : x = 0 := Fin.ext hx0
-    have hy0' : y = 0 := Fin.ext hy0
+    have hx0' : x = 0 := Fp.ext (hx0.trans Fp.val_zero.symm)
+    have hy0' : y = 0 := Fp.ext (hy0.trans Fp.val_zero.symm)
     subst hx0' hy0'
     rfl
   · simp only [g1ToBytes, g1_toAffine_one]
@@ -268,13 +277,6 @@ theorem g2ToBytes_of_isZero {p : G2} (h : p.z.isZero = true) :
     g2ToBytes p = List.replicate 192 0 := by
   simp only [g2ToBytes, G2.toAffine, h, ↓reduceIte]
   rfl
-
--- The kernel reads 192 bytes one by one, deeper than the default recursion limit.
-set_option maxRecDepth 8000 in
-/-- 192 zero bytes decode as the point at infinity. -/
-theorem bytesToG2_zeros (subgroupCheck : Bool) :
-    bytesToG2 (List.replicate 192 0) subgroupCheck = .ok G2.zero := by
-  cases subgroupCheck <;> rfl
 
 /-- The G2 decoder reads two elements `x` and `y` of `Fp2`, and succeeds in exactly two cases.
 
@@ -308,9 +310,11 @@ theorem bytesToG2_eq_ok_iff {raw : List UInt8} {subgroupCheck : Bool} {p : G2} :
         · -- `(0, 0)` is not on the twist, so the second case cannot hold.
           obtain ⟨h0, h1, h2, h3⟩ := hz
           have hx0 : x = ⟨0, 0⟩ := by
-            cases x; simp only [Fp2.mk.injEq]; exact ⟨Fin.ext h0, Fin.ext h1⟩
+            cases x; simp only [Fp2.mk.injEq]
+            exact ⟨Fp.ext (h0.trans Fp.val_zero.symm), Fp.ext (h1.trans Fp.val_zero.symm)⟩
           have hy0 : y = ⟨0, 0⟩ := by
-            cases y; simp only [Fp2.mk.injEq]; exact ⟨Fin.ext h2, Fin.ext h3⟩
+            cases y; simp only [Fp2.mk.injEq]
+            exact ⟨Fp.ext (h2.trans Fp.val_zero.symm), Fp.ext (h3.trans Fp.val_zero.symm)⟩
           subst hx0 hy0
           rw [onCurveG2, beq_eq_false_iff_ne.mpr (by decide_eq_at_model [G2.bTwist])] at hon
           cases hon
@@ -320,6 +324,26 @@ theorem bytesToG2_eq_ok_iff {raw : List UInt8} {subgroupCheck : Bool} {p : G2} :
         simp only [hnot, false_or]
         cases hon : onCurveG2 x y <;> cases subgroupCheck <;>
           cases hs : G2.inSubgroup ⟨x, y, Fp2.one⟩ <;> simp [eq_comm]
+
+-- The kernel compares 192 bytes one by one, deeper than the default recursion limit.
+set_option maxRecDepth 8000 in
+/-- 192 zero bytes decode as the point at infinity. -/
+theorem bytesToG2_zeros (subgroupCheck : Bool) :
+    bytesToG2 (List.replicate 192 0) subgroupCheck = .ok G2.zero := by
+  have hb : List.replicate 192 (0 : UInt8) =
+      (natToBytes 48 (0 : Fp2).c0.val ++ natToBytes 48 (0 : Fp2).c1.val) ++
+        (natToBytes 48 (0 : Fp2).c0.val ++ natToBytes 48 (0 : Fp2).c1.val) := by
+    rw [Fp2.zero_c0, Fp2.zero_c1, Fp.val_zero]
+    rfl
+  have hlen : (natToBytes 48 (0 : Fp2).c0.val ++ natToBytes 48 (0 : Fp2).c1.val).length = 96 := by
+    simp only [List.length_append, EthLib.Base.natToBytes_length]
+  have h0 : (0 : Fp2).c0.val = 0 := by rw [Fp2.zero_c0, Fp.val_zero]
+  have h1 : (0 : Fp2).c1.val = 0 := by rw [Fp2.zero_c1, Fp.val_zero]
+  rw [hb]
+  exact bytesToG2_eq_ok_iff.mpr ⟨0, 0,
+    by rw [List.take_left' hlen]; exact bytesToFq2_natToBytes 0,
+    by rw [List.drop_left' hlen]; exact bytesToFq2_natToBytes 0,
+    .inl ⟨h0, h1, h0, h1, rfl⟩⟩
 
 /-- An affine point on the twist decodes back to itself, with `z = 1`.
 

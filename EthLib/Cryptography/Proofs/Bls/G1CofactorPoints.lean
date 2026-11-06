@@ -78,7 +78,8 @@ theorem p11_ne_zero : toPoint p11 ≠ 0 := toPoint_ne_zero p11_valid
 /-- The point of order `11` and its rotation are independent. -/
 theorem q11_not_nsmul (i : Fin 11) : toPoint q11 ≠ i.val • toPoint p11 :=
   not_nsmul_of_rotation (by norm_num) p11_valid q11_valid r11_valid
-    (eq_of_decide (by decide)) (eq_of_decide (by decide)) p11_torsion
+    (by simp only [Fp.toZMod_ofNat]; exact eq_of_decide (by decide))
+    (by simp only [Fp.toZMod_ofNat]; exact eq_of_decide (by decide)) p11_torsion
     (sum_zero_cert p11_valid q11_valid r11_valid (by decide_at_model [p11, q11, r11]))
     (fun i _ hd => absurd hd (not_dvd_of_nonresidue (by norm_num) (by decide) (by decide)
       (fuel := 4) (by decide) (by decide +kernel) i)) i
@@ -126,7 +127,8 @@ theorem p10177_ne_zero : toPoint p10177 ≠ 0 := toPoint_ne_zero p10177_valid
 /-- The point of order `10177` and its rotation are independent. -/
 theorem q10177_not_nsmul (i : Fin 10177) : toPoint q10177 ≠ i.val • toPoint p10177 :=
   not_nsmul_of_rotation (by norm_num) p10177_valid q10177_valid r10177_valid
-    (eq_of_decide (by decide)) (eq_of_decide (by decide)) p10177_torsion
+    (by simp only [Fp.toZMod_ofNat]; exact eq_of_decide (by decide))
+    (by simp only [Fp.toZMod_ofNat]; exact eq_of_decide (by decide)) p10177_torsion
     (sum_zero_cert p10177_valid q10177_valid r10177_valid
       (by decide_at_model [p10177, q10177, r10177]))
     (fun i hi hd => by
@@ -182,7 +184,8 @@ theorem p859267_ne_zero : toPoint p859267 ≠ 0 := toPoint_ne_zero p859267_valid
 /-- The point of order `859267` and its rotation are independent. -/
 theorem q859267_not_nsmul (i : Fin 859267) : toPoint q859267 ≠ i.val • toPoint p859267 :=
   not_nsmul_of_rotation (by norm_num) p859267_valid q859267_valid r859267_valid
-    (eq_of_decide (by decide)) (eq_of_decide (by decide)) p859267_torsion
+    (by simp only [Fp.toZMod_ofNat]; exact eq_of_decide (by decide))
+    (by simp only [Fp.toZMod_ofNat]; exact eq_of_decide (by decide)) p859267_torsion
     (sum_zero_cert p859267_valid q859267_valid r859267_valid
       (by decide_at_model [p859267, q859267, r859267]))
     (fun i hi hd => by
@@ -238,7 +241,8 @@ theorem p52437899_ne_zero : toPoint p52437899 ≠ 0 := toPoint_ne_zero p52437899
 /-- The point of order `52437899` and its rotation are independent. -/
 theorem q52437899_not_nsmul (i : Fin 52437899) : toPoint q52437899 ≠ i.val • toPoint p52437899 :=
   not_nsmul_of_rotation (by norm_num) p52437899_valid q52437899_valid r52437899_valid
-    (eq_of_decide (by decide)) (eq_of_decide (by decide)) p52437899_torsion
+    (by simp only [Fp.toZMod_ofNat]; exact eq_of_decide (by decide))
+    (by simp only [Fp.toZMod_ofNat]; exact eq_of_decide (by decide)) p52437899_torsion
     (sum_zero_cert p52437899_valid q52437899_valid r52437899_valid
       (by decide_at_model [p52437899, q52437899, r52437899]))
     (fun i _ hd => absurd hd (not_dvd_of_nonresidue (by norm_num) (by decide) (by decide)

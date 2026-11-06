@@ -145,6 +145,11 @@ theorem toBytesBE_fromBytesBE {b : ByteArray} {x : Fp}
     -- A value at or above p is rejected.
     · cases h
 
+/-- A decoded field element has the integer of the input bytes. -/
+theorem val_of_fromBytesBE {b : ByteArray} {x : Fp} (h : Fp.fromBytesBE b = .ok x) :
+    x.val = Base.bytesToNat b.data.toList := by
+  rw [← toBytesBE_fromBytesBE h, bytesToNat_toBytesBE]
+
 end EthLib.Cryptography.Bls.Fp
 
 
@@ -616,7 +621,7 @@ Here `x` decodes from the input without its three flag bits.
 
 The square root of `x^3 + 4` succeeds, and `y` is its root with the sign that the flag selects.
 -/
-private theorem uncompress_ok_cases {b : ByteArray} {q : G1} (h : uncompress b = .ok q) :
+theorem uncompress_ok_cases {b : ByteArray} {q : G1} (h : uncompress b = .ok q) :
     b.size = 48 ∧ (b.get! 0 &&& 0x80) ≠ 0 ∧
       ((b.get! 0 = 0xc0 ∧ tailAllZero b 1 = true ∧ q = zero) ∨
         ((b.get! 0 &&& 0x40) = 0 ∧ ∃ x yPos : Fp,
