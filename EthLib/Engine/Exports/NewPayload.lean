@@ -40,7 +40,8 @@ open EthLib.Base.ChainConfig.Exports (configOfJson parseJson)
 /-- Bytes as lowercase hex behind `0x`. -/
 def hex (bytes : List UInt8) : String :=
   bytes.foldl (init := "0x") fun s b =>
-    (s.push hexAlphabet[b.toNat >>> 4]!).push hexAlphabet[b.toNat &&& 15]!
+    (s.push (hexDigitChar ⟨b.toNat / 16, by have := b.toNat_lt; omega⟩)).push
+      (hexDigitChar ⟨b.toNat % 16, by omega⟩)
 
 /-- A message for the reason of an invalid payload, on one line. -/
 def reasonMessage : PayloadError → String
