@@ -66,6 +66,10 @@ instance : LawfulSszType UInt64 :=
   .ofUint UInt64.toNat UInt64.ofNat rfl rfl (fun _ => rfl) rfl UInt64.toNat_lt
     (fun _ => UInt64.ofNat_toNat) (fun _ below => UInt64.toNat_ofNat_of_lt' below)
 
+instance : LawfulSszType (BitVec 128) :=
+  .ofUint BitVec.toNat (BitVec.ofNat 128) rfl rfl (fun _ => rfl) rfl BitVec.isLt
+    (fun _ => by simp) (fun _ below => Nat.mod_eq_of_lt below)
+
 instance : LawfulSszType Base.U256 :=
   .ofUint BitVec.toNat (BitVec.ofNat 256) rfl rfl (fun _ => rfl) rfl BitVec.isLt
     (fun _ => by simp) (fun _ below => Nat.mod_eq_of_lt below)
