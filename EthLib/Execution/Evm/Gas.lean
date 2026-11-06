@@ -592,15 +592,15 @@ def maxCodeSize (fork : Fork) : Option Nat :=
   else if fork ≥ .spuriousDragon then some 24576
   else none
 
-/-- The most bytes of init code at `fork`, twice the most bytes of code.
+/-- The most bytes of init code at `fork`, from Shapella on.
 
 [EIP-3860](https://eips.ethereum.org/EIPS/eip-3860#parameters) sets it at 49152 at Shapella.
 
-[EIP-7954][eip-7954] raises it to 131072 at Glamsterdam.
+It defines the limit as twice the code limit, and only from Shapella on.
 
-From Shapella, EIP-3860 defines it as twice the code limit, and EIP-7954 keeps that ratio.
+[EIP-7954][eip-7954] raises it to 131072 at Glamsterdam, and keeps that ratio.
 
-A proof checks that ratio at every fork that has a code limit.
+No limit of init code exists before Shapella, so each rule that reads this one checks the fork.
 
 The definition keeps its own numbers, since no code limit exists before Spurious Dragon.
 
