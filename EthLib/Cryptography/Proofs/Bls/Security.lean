@@ -11,5 +11,7 @@ A forger within `q` hash calls wins at most `q` times as often as that solver.
 
 Under the pairing law, EthLib's signing and verification compute the scheme of that game.
 
-The game's adversary works on group elements, not on encoded bytes.
+The byte game reduces a forger on compressed encodings to a group-element forger.
+
+Freshness excludes every message submitted to signing, regardless of signature bytes.
 -/
