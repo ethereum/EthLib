@@ -20,6 +20,7 @@ The reduction modulus is `1 + u + u^2 + u^7 + u^128`, the polynomial of `R || 1`
 - The XOR of two blocks is the sum of their residues.
 - Two different blocks have two different residues.
 - One step of GHASH, §6.4, adds a block and multiplies by `H` in the same ring.
+- So GHASH of `X_1 ... X_m` is `X_1 H^m + ... + X_m H` on residues, as §6.4 states.
 
 The section calls this ring the field of `2^128` elements.
 
@@ -320,5 +321,41 @@ theorem residue_ghash_append (H : Block) (blocks : List Block) (B : Block) :
     residue (ghash H (blocks ++ [B])) = (residue (ghash H blocks) + residue B) * residue H := by
   rw [ghash, List.foldl_append, List.foldl_cons, List.foldl_nil, residue_mul, residue_xorBlock]
   rfl
+
+/-- The zero block has residue 0. -/
+theorem residue_zeroBlock : residue zeroBlock = 0 := by
+  have h : blockToNat zeroBlock = 0 := rfl
+  have h0 : polyOfNat 0 = 0 := by simp [polyOfNat]
+  rw [residue, h, h0, map_zero]
+
+/-- The closed form over the indices below the length, with a default past the end. -/
+private theorem residue_ghash_range (H : Block) (blocks : List Block) :
+    residue (ghash H blocks) = ∑ i ∈ Finset.range blocks.length,
+      residue (blocks.getD i zeroBlock) * residue H ^ (blocks.length - i) := by
+  induction blocks using List.reverseRecOn with
+  | nil => simp [ghash, residue_zeroBlock]
+  | append_singleton blocks B ih =>
+    -- The last block takes `H^1`, and every earlier power gains one factor of `H`.
+    rw [residue_ghash_append, ih, List.length_append, List.length_singleton,
+      Finset.sum_range_succ, add_mul, Finset.sum_mul]
+    refine congrArg₂ (· + ·) ?_ ?_
+    · refine Finset.sum_congr rfl fun i hi => ?_
+      have hi : i < blocks.length := Finset.mem_range.mp hi
+      simp only [List.getD_eq_getElem?_getD, List.getElem?_append_left hi]
+      rw [mul_assoc, ← pow_succ,
+        show blocks.length + 1 - i = blocks.length - i + 1 by omega]
+    · rw [List.getD_eq_getElem?_getD, List.getElem?_concat_length, Option.getD_some,
+        Nat.add_sub_cancel_left, pow_one]
+
+/-- GHASH of `X_1 ... X_m` is `X_1 H^m + X_2 H^(m-1) + ... + X_m H` on residues, SP 800-38D §6.4.
+
+Block `X_(i+1)` is `blocks[i]`, and it takes the power `H^(m - i)`. -/
+theorem residue_ghash (H : Block) (blocks : List Block) :
+    residue (ghash H blocks)
+      = ∑ i : Fin blocks.length, residue blocks[i] * residue H ^ (blocks.length - i.val) := by
+  rw [residue_ghash_range, ← Fin.sum_univ_eq_sum_range]
+  refine Finset.sum_congr rfl fun i _ => ?_
+  rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem i.isLt, Option.getD_some,
+    Fin.getElem_fin]
 
 end EthLib.Cryptography.Aes.Gcm
