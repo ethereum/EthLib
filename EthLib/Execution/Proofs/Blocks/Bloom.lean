@@ -34,9 +34,8 @@ theorem getLsbD_foldr_or {n : Nat} (l : List (BitVec n)) (k : Nat) :
 
 /-- Each bit of an entry is below 2048. -/
 theorem lt_of_mem_bits {entry : ByteArray} {k : Nat} (hk : k ∈ bits entry) : k < 2048 := by
-  unfold bits at hk
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
-  rcases hk with rfl | rfl | rfl <;> exact Nat.mod_lt _ (by decide)
+  simp only [bits, List.mem_cons, List.not_mem_nil, or_false] at hk
+  omega
 
 /-- A fold that sets some bits below 2048 sets each of them. -/
 theorem getLsbD_foldr_twoPow {l : List Nat} {k : Nat} (hk : k ∈ l) (hlt : k < 2048) :
