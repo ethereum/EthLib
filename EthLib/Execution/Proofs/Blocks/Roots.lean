@@ -162,7 +162,7 @@ theorem valueAt_of_indexedEntries {values : List ByteArray}
     · intro entry hmem hsame
       exact hi (hunique entry hmem ((sameBytes_iff _ _).mp hsame)).1
 
-/-- The first index, below the longer length, whose proofs in the tries of two lists collide. -/
+/-- The collision in the proofs of the first index, below the longer length, of two lists. -/
 def findIndexedCollision (values₁ values₂ : List ByteArray) : Option (ByteArray × ByteArray) :=
   match indexedEntries values₁, indexedEntries values₂ with
   | .ok entries₁, .ok entries₂ =>
