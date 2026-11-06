@@ -48,6 +48,8 @@ EXCEPTIONS = {
     403: {"BlockException.INVALID_BLOCK_HASH"},
     # The expected versioned hashes are not those of the block.
     404: {"BlockException.INVALID_VERSIONED_HASHES"},
+    # The block access list is not the RLP form of a block access list.
+    406: {"BlockException.INVALID_BLOCK_ACCESS_LIST"},
 }
 
 

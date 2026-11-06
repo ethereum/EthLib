@@ -32,7 +32,7 @@ from transactions.test_inclusion_archive import names_in_block
 from transactions.test_transactions import CHAIN_ID, FORK_OF_NETWORK
 
 from . import legacy
-from .catalogue import CONSENSUS_FORKS, EXECUTION_FORKS, Case
+from .catalogue import Case
 
 # The groups that no runner covers yet, with the pull requests of the plan that bring them.
 # A key is a runner, or a runner and a handler, of consensus-spec-tests, or a format of
@@ -50,7 +50,7 @@ NOT_YET = {
     "ssz_static": "the remaining beacon containers (consensus track C2, C6 to C12)",
 }
 
-# The plan at Gloas, Heze and the Amsterdam networks, by the steps of the track for Glamsterdam
+# The plan at Gloas and Heze, by the steps of the track for Glamsterdam
 # and Hegotá. A key is a runner, a runner and a handler, or a format, as in NOT_YET.
 # At these forks an entry here comes before the entry of NOT_YET.
 _GLOAS = {
@@ -73,10 +73,6 @@ _HEZE = {
     "networking": "the Heze gossip and req/resp rules (G87)",
     "ssz_static": "the Heze containers (G80, G81)",
 }
-_AMSTERDAM = {
-    "blockchain_test_engine": "the Amsterdam payload on the Engine layer (G39), after G23",
-    "blockchain_test_engine_x": "the Amsterdam payload on the Engine layer (G39), after G23",
-}
 NOT_YET_AT = {
     **{
         fork: {"networking/gossip_beacon_block": "the Electra and Fulu blocks (C35 to C40)"}
@@ -84,17 +80,6 @@ NOT_YET_AT = {
     },
     "gloas": _GLOAS,
     "heze": _HEZE,
-    **{
-        network: _AMSTERDAM
-        for network in (
-            "BPO2ToAmsterdamAtTime15k",
-            "Amsterdam",
-            "AmsterdamToBPOIncreaseAtTime15k",
-            "AmsterdamBPOIncrease",
-            "AmsterdamToBPODecreaseAtTime15k",
-            "AmsterdamBPODecrease",
-        )
-    },
 }
 
 _YAML = YAML(typ="safe")
@@ -467,6 +452,8 @@ HEADER_FIELDS = [
     "excessBlobGas",
     "parentBeaconBlockRoot",
     "requestsHash",
+    "blockAccessListHash",
+    "slotNumber",
 ]
 
 # The fields that are numbers, which RLP writes without leading zeros.
@@ -479,6 +466,7 @@ NUMBERS = {
     "baseFeePerGas",
     "blobGasUsed",
     "excessBlobGas",
+    "slotNumber",
 }
 
 
@@ -750,26 +738,8 @@ RUNNERS = {
 }
 
 
-# The runners that stop before a fork, with the first fork that they do not run.
-# The Engine runners do not yet run Amsterdam payloads (G39).
-_STOPS = {
-    "blockchain_test_engine": "BPO2ToAmsterdamAtTime15k",
-    "blockchain_test_engine_x": "BPO2ToAmsterdamAtTime15k",
-}
-
-
-def _stopped(case: Case) -> bool:
-    stop = _STOPS.get(case.group)
-    if stop is None:
-        return False
-    forks = EXECUTION_FORKS if case.suite == "execution-spec-tests" else CONSENSUS_FORKS
-    return case.rank >= forks.index(stop)
-
-
 def runner(case: Case):
     """The runner of a case, or `None` if EthLib cannot run it yet."""
-    if _stopped(case):
-        return None
     run = RUNNERS.get(case.group)
     if run is _ssz_static and case.fork not in _container_forks(case.group.split("/")[1]):
         return None
