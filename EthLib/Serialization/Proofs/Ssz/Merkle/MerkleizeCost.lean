@@ -110,11 +110,6 @@ private theorem two_pow_depthFor_lt (count : Nat) (nonempty : 0 < count) :
     rw [Nat.pow_succ]
     omega
 
-/-- A larger capacity never asks for a shallower tree. -/
-private theorem depthFor_le_depthFor {count capacity : Nat} (room : count ≤ capacity) :
-    depthFor count ≤ depthFor capacity :=
-  depthFor_le_of_le_two_pow (Nat.le_trans room (le_two_pow_depthFor capacity))
-
 /--
 Merkleizing nonempty data costs under twice the chunk count plus the logarithm of the width.
 

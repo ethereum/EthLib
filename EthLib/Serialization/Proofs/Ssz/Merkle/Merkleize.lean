@@ -33,39 +33,6 @@ theorem subtreeRoot_halves (combine : α → α → α) (depth : Nat) (leaves : 
   simp only [Nat.zero_mul, Nat.zero_add, Nat.one_mul, Nat.add_comm (2 ^ depth)]
   rfl
 
-/--
-The chosen depth really does hold the requested number of leaves.
-
-Without this the capacity check names a number unrelated to the tree built.
--/
-theorem le_two_pow_depthFor (leafCount : Nat) : leafCount ≤ 2 ^ depthFor leafCount := by
-  -- Recursing the proof the way the definition recurses keeps the two in step.
-  -- Widths double one level up, and the halved count already fits the level below.
-  induction leafCount using depthFor.induct with
-  | case1 leafCount small => simp [depthFor, small]
-  | case2 leafCount large ih => rw [depthFor, ite_eq_right large, Nat.pow_succ]; omega
-
-/--
-No shallower tree holds them, so the depth chosen is the least one that does.
-
-Together with the bound above this pins the depth exactly.
-That is what ties it to the specification's next power of two.
--/
-theorem depthFor_le_of_le_two_pow {leafCount depth : Nat} (holds : leafCount ≤ 2 ^ depth) :
-    depthFor leafCount ≤ depth := by
-  induction leafCount using depthFor.induct generalizing depth with
-  | case1 leafCount small =>
-    -- A depth-zero tree is already the shallowest there is.
-    simp [depthFor, small]
-  | case2 leafCount large ih =>
-    -- Two or more leaves need a level, so the bound must have come from one too.
-    rw [depthFor, ite_eq_right large]
-    cases depth with
-    | zero => simp at holds; omega
-    | succ shallower =>
-      have := @ih shallower (by rw [Nat.pow_succ] at holds; omega)
-      omega
-
 /-- A leaf count that is already a power of two needs exactly the depth it names. -/
 theorem depthFor_pow (depth : Nat) : depthFor (2 ^ depth) = depth := by
   -- No shallower tree holds that many leaves, and no deeper one is chosen.
