@@ -7,6 +7,15 @@ public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Base.SplitCert
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Base.VirtualMono
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Seed.Coupling
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Configurations
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.Price
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Reduction.NoRepeat
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ScanSigner.SignatureLaw
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Signature
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.Outside
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Reduction.ShortInputs
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.Correctness
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.MomentTable
 
 /-!
 # Proofs: the model of the leanSPHINCS security proof

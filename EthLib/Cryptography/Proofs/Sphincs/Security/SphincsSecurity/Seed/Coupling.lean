@@ -221,7 +221,7 @@ namespace SphincsSecurity.Security.SeedCoupling
 variable [Params]
 open SeedModel Completeness
 
--- The last proof needs `Multiplicative ℕ`, the cost type of the counted oracle, to unify with `ℕ`.
+-- For this section: its last proof unifies `ℕ` with `Multiplicative ℕ`, the counted cost type.
 set_option backward.isDefEq.respectTransparency false
 
 noncomputable local instance : SampleableType SecretOutputs := secretOutputsSampleableType

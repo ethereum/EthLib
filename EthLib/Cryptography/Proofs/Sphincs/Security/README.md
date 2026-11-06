@@ -7,7 +7,8 @@ This includes a second signature of a message already signed.
 The random oracle model treats the hash as an ideal random function that everyone, the adversary included, can only query.
 
 The proof is a port, and it lands in parts.
-So far it holds the model of the scheme and its lemmas, generic probability bounds, and the first step of the game hops.
+So far it holds the model of the scheme and its lemmas, generic probability bounds and the first step of the game hops.
+It also holds the first lemmas of the later steps.
 The theorem itself is not stated here yet.
 Nothing in this directory is a security claim about EthLib's leanSPHINCS until the last part connects the model to EthLib's algorithms.
 
@@ -34,6 +35,13 @@ They bound potentials of independent disclosures, and they bound tails with Cher
 The files in `SphincsSecurity/Seed/` prepare the step that removes the hidden key seed from the game.
 `Seed/Model.lean` describes the hash outputs that key generation derives from the seed, and the cache that programs them.
 `Seed/Coupling.lean` proves that sampling these outputs and programming them into the cache before a computation leaves its distribution unchanged.
+
+The other directories hold the first files of the later steps.
+`Classification/` starts the description of what an accepted forgery must contain.
+`ScanSigner/`, `GraphView/` and `LazyRun/` start the analysis of the signer's hash calls, their cost, and a run whose hidden values are sampled only when read.
+`Reduction/` starts to move the oracle and the seed out of the game.
+`CoverBound/` and `CoverPotential/` start the bound on the chance that a forgery covers every FORS tree.
+`Configurations.lean` proves, for the configuration of the proof, the size of a serialized signature and the cost of a verification.
 
 A later part will bridge the model to EthLib's leanSPHINCS, in `EthLib/Cryptography/Sphincs/`.
 Some hash calls are made by EthLib and not by the model, or the other way round.
@@ -64,12 +72,13 @@ This means that every event has the same probability under both.
   So two statements about the hash trace of a computation are proved by simplification, not by definitional unfolding.
 - On Lean v4.35.0 the simplifier does not read the length of a byte encoding of a fixed-width digest through the width's arithmetic.
   `Scheme/Bytes.lean` gains lemmas for the lengths of the byte widths that the model uses.
-  Two files set the option that lets definitional unfolding cross reducibility boundaries.
+  Some files set the option that lets definitional unfolding cross reducibility boundaries, each with a comment that says why.
 - `Scheme/Uniform.lean` gains a lemma: the first coordinate of a uniform pair is uniform.
 - The Mathlib that EthLib uses has no uniform probability mass function of a finite type.
   So `Base/Prelude.lean` states its lemmas about uniform products and uniform tables for uniform samples, as equalities in distribution.
 - `Base/Domination.lean` and `Base/Virtual.lean` import the parts of Mathlib that they use instead of all of Mathlib.
   A file that imports all of Mathlib needs more memory than EthLib's limit per file.
+- `LazyRun/Reveal.lean` states that revealing a coordinate commutes with sampling the rest of a uniform table as an equality in distribution.
 - `lake exe check-decls` rejects `opaque` declarations, so the sampling instance of `Seed/Model.lean` is an irreducible definition instead.
 - No file raises the heartbeat limit.
 - Arguments that the simplifier does not use, deprecated lemma names and unused section variables are removed, so the files build without warnings.

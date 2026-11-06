@@ -1,0 +1,245 @@
+module
+
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Chain
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Encoding
+
+/-!
+# Extraction from a one-time signature
+
+Take a one-time signature from which the verifier recovers the honest leaf.
+
+Then the verifier read the reference word and honest chain values, or its trace has an exception.
+
+The exceptions are:
+
+- A leaf hit
+- A chain hit at or above the reference position
+- Two linked chain steps below the reference position
+- Contacts on two different chains
+- A unit-neighbor encoding together with one contact
+-/
+
+@[expose] public section
+
+-- The byte-length lemma must see the counter width as `8 * 4` to match.
+set_option backward.isDefEq.respectTransparency false
+
+open OracleComp OracleSpec
+
+namespace SphincsSecurity.Security.Wots
+
+variable [Params]
+
+open Concrete Chain
+
+attribute [local irreducible] chainWalk
+
+omit [Params] in
+theorem leafPayload_injective {endpoints endpoints' : ChainIndex → Digest}
+    (h : leafPayload endpoints = leafPayload endpoints') : endpoints = endpoints' :=
+  flatMap_ofFn_injective (bytesLE 16) 16 (bytesLE_length 16)
+    (fun _ _ => bytesLE_injective) h
+
+variable (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
+    (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)
+
+/--
+The input of the encoding hash: the message, then the counter.
+
+The message is the FORS key, or the root of the tree below.
+-/
+def encodingInput (message : HashInput) (counter : Counter) : HashInput :=
+  tweakableHashInput parameter (.encoding lay tree leaf) (message ++ bytesLE 4 counter)
+
+theorem encodingInput_injective {message message' : HashInput} {counter counter' : Counter}
+    (h : encodingInput parameter lay tree leaf message counter =
+      encodingInput parameter lay tree leaf message' counter') :
+    message = message' ∧ counter = counter' := by
+  have hpayload := List.append_cancel_left h
+  obtain ⟨hm, hc⟩ := List.append_inj' hpayload (by rw [bytesLE_length, bytesLE_length])
+  exact ⟨hm, bytesLE_injective hc⟩
+
+theorem encode_query_mem (message : HashInput) (counter : Counter) :
+    encodingInput parameter lay tree leaf message counter ∈
+      queriedInputs f (encode parameter lay tree leaf message counter) := by
+  simp only [encode, queriedInputs_bind, queriedInputs_tweakableHash, queriedInputs_pure,
+    List.append_nil, List.mem_singleton, encodingInput]
+
+theorem decode_of_encode (message : HashInput) (counter : Counter) (candidate : Encoding)
+    (hencode : evalWithAnswerFn f (encode parameter lay tree leaf message counter
+      : OracleComp HashSpec (Option Encoding)) = some candidate) :
+    TargetSum.decodeDigest
+        (truncateHash (f (encodingInput parameter lay tree leaf message counter))) =
+      some candidate := by
+  simpa only [encode, evalWithAnswerFn_bind, Completeness.eval_tweakableHash,
+    evalWithAnswerFn_pure, encodingInput] using hencode
+
+theorem otsLeaf_chain_run (message : HashInput) (counter : Counter) (values : ChainIndex → Digest)
+    (candidate : Encoding) (trace : List HashInput)
+    (hencode : evalWithAnswerFn f (encode parameter lay tree leaf message counter
+      : OracleComp HashSpec (Option Encoding)) = some candidate)
+    (hrun : ContainsRun f trace (otsLeaf parameter lay tree leaf message counter values))
+    (index : ChainIndex) :
+    ContainsRun f trace (recoverChain parameter lay tree leaf index (candidate index)
+        (values index)) := by
+  have htail := hrun.bind_right
+  rw [hencode] at htail
+  exact ContainsRun.sequenceFin_component _ htail.bind_left index
+
+theorem otsLeaf_leaf_query_mem (message : HashInput) (counter : Counter)
+    (values : ChainIndex → Digest) (candidate : Encoding)
+    (hencode : evalWithAnswerFn f (encode parameter lay tree leaf message counter
+      : OracleComp HashSpec (Option Encoding)) = some candidate) :
+    tweakableHashInput parameter (.leaf lay tree leaf)
+      (leafPayload fun index => evalWithAnswerFn f
+        (recoverChain parameter lay tree leaf index (candidate index) (values index))) ∈
+      queriedInputs f (otsLeaf parameter lay tree leaf message counter values) := by
+  rw [otsLeaf]
+  apply queriedInputs_mono_bind_right
+  rw [hencode]
+  apply queriedInputs_mono_bind_right
+  apply queriedInputs_mono_bind_left
+  simp only [Completeness.eval_sequenceFin, leafHash, queriedInputs_tweakableHash,
+    List.mem_singleton]
+
+/-- A queried encoding output that decodes to a unit neighbor of the reference word. -/
+def EncodingMarker (reference : Encoding) (lowered : ChainIndex) (trace : List HashInput) : Prop :=
+  ∃ message counter candidate,
+    encodingInput parameter lay tree leaf message counter ∈ trace ∧
+    TargetSum.decodeDigest
+      (truncateHash (f (encodingInput parameter lay tree leaf message counter))) = some candidate ∧
+    EncodingCode.UnitNeighborAt reference candidate lowered
+
+theorem otsLeaf_marker (reference : Encoding) (message : HashInput) (counter : Counter)
+    (values : ChainIndex → Digest) (candidate : Encoding) (trace : List HashInput)
+    (hencode : evalWithAnswerFn f (encode parameter lay tree leaf message counter
+      : OracleComp HashSpec (Option Encoding)) = some candidate)
+    (hrun : ContainsRun f trace (otsLeaf parameter lay tree leaf message counter values))
+    (index : ChainIndex) (hneighbor : EncodingCode.UnitNeighborAt reference candidate index) :
+    EncodingMarker f parameter lay tree leaf reference index trace :=
+  ⟨message, counter, candidate,
+    hrun.bind_left _ (encode_query_mem f parameter lay tree leaf message counter),
+    decode_of_encode f parameter lay tree leaf message counter candidate hencode, hneighbor⟩
+
+variable (reference : Encoding) (secret : ChainIndex → Digest)
+
+/-- The honest value of a chain at the digit of the reference word. -/
+def frontier (index : ChainIndex) : Digest :=
+  honestChain f parameter lay tree leaf index (secret index) (reference index).val
+
+/-- A forward match, two linked steps, contacts on two chains, or a marker with a contact. -/
+def ChainException (trace : List HashInput) : Prop :=
+  (∃ index, ForwardMatch f parameter lay tree leaf index (secret index) (reference index) trace) ∨
+  (∃ index, TwoEdge f parameter lay tree leaf index (reference index)
+    (frontier f parameter lay tree leaf reference secret index) trace) ∨
+  (∃ left right, left ≠ right ∧
+    Contact f parameter lay tree leaf left (reference left)
+      (frontier f parameter lay tree leaf reference secret left) trace ∧
+    Contact f parameter lay tree leaf right (reference right)
+      (frontier f parameter lay tree leaf reference secret right) trace) ∨
+  (∃ index, EncodingMarker f parameter lay tree leaf reference index trace ∧
+    Contact f parameter lay tree leaf index (reference index)
+      (frontier f parameter lay tree leaf reference secret index) trace)
+
+theorem otsLeaf_chain_classification (message : HashInput) (counter : Counter)
+    (values : ChainIndex → Digest) (candidate : Encoding) (trace : List HashInput)
+    (hvalid : TargetSum.Valid reference)
+    (hencode : evalWithAnswerFn f (encode parameter lay tree leaf message counter
+      : OracleComp HashSpec (Option Encoding)) = some candidate)
+    (hrun : ContainsRun f trace (otsLeaf parameter lay tree leaf message counter values))
+    (hendpoints : ∀ index, evalWithAnswerFn f
+      (recoverChain parameter lay tree leaf index (candidate index) (values index)) =
+        honestChain f parameter lay tree leaf index (secret index) (chainLength - 1)) :
+    (candidate = reference ∧ ∀ index,
+      values index = frontier f parameter lay tree leaf reference secret index) ∨
+      ChainException f parameter lay tree leaf reference secret trace := by
+  by_cases hforward : ∃ index,
+      ForwardMatch f parameter lay tree leaf index (secret index) (reference index) trace
+  · exact Or.inr (Or.inl hforward)
+  have hn (index : ChainIndex) :
+      ¬ForwardMatch f parameter lay tree leaf index (secret index) (reference index) trace :=
+    fun h => hforward ⟨index, h⟩
+  have hc (index : ChainIndex) :=
+    otsLeaf_chain_run f parameter lay tree leaf message counter values candidate trace
+      hencode hrun index
+  have hf (index : ChainIndex) (hb : (candidate index).val ≤ (reference index).val) :
+      walkValue f parameter lay tree leaf index (candidate index).val (values index)
+        ((reference index).val - (candidate index).val) =
+          frontier f parameter lay tree leaf reference secret index :=
+    recover_frontier f parameter lay tree leaf index (secret index) (reference index)
+      (candidate index) (values index) trace hb (hendpoints index) (hc index) (hn index)
+  have hcontact (index : ChainIndex) (hb : (candidate index).val < (reference index).val) :
+      Contact f parameter lay tree leaf index (reference index)
+        (frontier f parameter lay tree leaf reference secret index) trace :=
+    recover_contact f parameter lay tree leaf index (reference index) (candidate index)
+      (values index) _ trace hb (hf index (Nat.le_of_lt hb)) (hc index)
+  have hcandidate := EncodingCode.decode_valid
+    (decode_of_encode f parameter lay tree leaf message counter candidate hencode)
+  rcases EncodingCode.valid_encoding_classification hvalid hcandidate with
+    heq | ⟨index, hneighbor⟩ | ⟨index, hlarge⟩ | ⟨left, right, hne, hl, hr⟩
+  · refine Or.inl ⟨heq.symm, ?_⟩
+    intro index
+    have hd := congrArg (fun word : Encoding => word index) heq
+    simpa only [frontier, hd] using recover_value f parameter lay tree leaf index (secret index)
+      (reference index) (candidate index) (values index) trace (by rw [hd])
+      (hendpoints index) (hc index) (hn index)
+  · refine Or.inr (Or.inr (Or.inr (Or.inr ⟨index,
+      otsLeaf_marker f parameter lay tree leaf reference message counter values candidate trace
+        hencode hrun index hneighbor, ?_⟩)))
+    have hd := hneighbor.2.2.1
+    exact hcontact index (by omega)
+  · exact Or.inr (Or.inr (Or.inl ⟨index,
+      recover_twoEdge f parameter lay tree leaf index (reference index) (candidate index)
+        (values index) _ trace hlarge (hf index (by omega)) (hc index)⟩))
+  · exact Or.inr (Or.inr (Or.inr (Or.inl
+      ⟨left, right, hne, hcontact left hl, hcontact right hr⟩)))
+
+/-- The honest one-time leaf. -/
+def canonicalLeaf : Digest := evalWithAnswerFn f (leafHash parameter lay tree leaf
+  (fun index => honestChain f parameter lay tree leaf index (secret index) (chainLength - 1)))
+
+/-- A queried leaf input other than the honest one that hashes to the honest leaf. -/
+def LeafOutputMatch (trace : List HashInput) : Prop :=
+  ∃ endpoints : ChainIndex → Digest,
+    leafPayload endpoints ≠ leafPayload
+      (fun index => honestChain f parameter lay tree leaf index (secret index) (chainLength - 1)) ∧
+    tweakableHashInput parameter (.leaf lay tree leaf) (leafPayload endpoints) ∈ trace ∧
+    truncateHash (f (tweakableHashInput parameter (.leaf lay tree leaf) (leafPayload endpoints))) =
+      canonicalLeaf f parameter lay tree leaf secret
+
+/--
+A verifier that recovers the honest leaf read the reference word with the honest chain values.
+
+Otherwise its trace holds a leaf match or a chain exception.
+-/
+theorem otsLeaf_classification (message : HashInput) (counter : Counter)
+    (values : ChainIndex → Digest) (candidate : Encoding) (trace : List HashInput)
+    (hvalid : TargetSum.Valid reference)
+    (hencode : evalWithAnswerFn f (encode parameter lay tree leaf message counter
+      : OracleComp HashSpec (Option Encoding)) = some candidate)
+    (hrun : ContainsRun f trace (otsLeaf parameter lay tree leaf message counter values))
+    (hleaf : evalWithAnswerFn f (otsLeaf parameter lay tree leaf message counter values
+      : OracleComp HashSpec (Option Digest)) =
+        some (canonicalLeaf f parameter lay tree leaf secret)) :
+    (candidate = reference ∧ ∀ index,
+      values index = frontier f parameter lay tree leaf reference secret index) ∨
+      LeafOutputMatch f parameter lay tree leaf secret trace ∨
+      ChainException f parameter lay tree leaf reference secret trace := by
+  let endpoints := fun index => evalWithAnswerFn f
+    (recoverChain parameter lay tree leaf index (candidate index) (values index))
+  have heval : evalWithAnswerFn f (leafHash parameter lay tree leaf endpoints) =
+      canonicalLeaf f parameter lay tree leaf secret := by
+    simpa only [otsLeaf, evalWithAnswerFn_bind, hencode, Completeness.eval_sequenceFin,
+      evalWithAnswerFn_pure, Option.some.injEq, endpoints] using hleaf
+  by_cases hp : leafPayload endpoints = leafPayload
+      (fun index => honestChain f parameter lay tree leaf index (secret index) (chainLength - 1))
+  · have hs := otsLeaf_chain_classification f parameter lay tree leaf reference secret message
+      counter values candidate trace hvalid hencode hrun
+      (fun index => congrFun (leafPayload_injective hp) index)
+    exact hs.imp_right Or.inr
+  · refine Or.inr (Or.inl ⟨endpoints, hp, ?_, ?_⟩)
+    · exact hrun _ (otsLeaf_leaf_query_mem f parameter lay tree leaf message counter
+        values candidate hencode)
+    · simpa only [leafHash, Completeness.eval_tweakableHash] using heval
+
+end SphincsSecurity.Security.Wots
