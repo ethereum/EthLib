@@ -121,10 +121,14 @@ private theorem sq_or_neg_sq_zmod (x : ZMod Fp.modulus) :
 /-- Because `p = 3 mod 4`, the candidate root squares to `a` or to `-a`. -/
 theorem sq_or_neg_sq (a : Fp) :
     let s := Fp.powNat a ((Fp.modulus + 1) / 4)
-    (s : ZMod Fp.modulus) * s = a ∨ (s : ZMod Fp.modulus) * s = (-a : Fp) := by
+    s * s = a ∨ s * s = -a := by
   dsimp only
-  erw [Fp.powNat_eq_zmod_pow (a : ZMod Fp.modulus) ((Fp.modulus + 1) / 4)]
-  exact sq_or_neg_sq_zmod (a : ZMod Fp.modulus)
+  have h := sq_or_neg_sq_zmod (Fp.toZMod a)
+  dsimp only at h
+  rw [← Fp.toZMod_powNat] at h
+  rcases h with h | h
+  · exact Or.inl (Fp.toZMod.injective (by rw [Fp.toZMod_mul]; exact h))
+  · exact Or.inr (Fp.toZMod.injective (by rw [Fp.toZMod_mul, Fp.toZMod_neg]; exact h))
 
 private theorem try_sub_sq_zmod {a0 a1 s twoInv r rInv : ZMod Fp.modulus}
     (hs : s * s = a0 * a0 + a1 * a1)
@@ -149,14 +153,13 @@ private theorem r_ne_zero_of_neg_try1 {a0 a1 s twoInv r : ZMod Fp.modulus}
   exact mul_ne_zero ha1 h2ne (mul_self_eq_zero.mp hprod)
 
 /-- Any `a : Fp2` whose `Fp` norm is a square in `Fp` has a square root returned by `Fp2.sqrt`. -/
-theorem sqrt_of_norm_sq {a : Fp2} {sn : Fp}
-    (hsn : (sn : ZMod Fp.modulus) * sn = Fp2.norm a) :
+theorem sqrt_of_norm_sq {a : Fp2} {sn : Fp} (hsn : sn * sn = Fp2.norm a) :
     ∃ c, Fp2.sqrt a = .ok c := by
-  have hsqrt : ∀ {x b : Fp}, (b : ZMod Fp.modulus) * b = x →
+  have hsqrt : ∀ {x b : Fp}, b * b = x →
       sqrtOrError x = .ok (Fp.powNat x ((Fp.modulus + 1) / 4)) :=
     fun hb => (Fp.sqrtOrError_eq _).trans (Fp.sqrt_complete hb)
   cases hz : BaseField.isZero a.c1
-  · have ha1 : (a.c1 : ZMod Fp.modulus) ≠ 0 := fun h0 => by
+  · have ha1 : Fp.toZMod a.c1 ≠ 0 := fun h0 => by
       have h' : BaseField.isZero a.c1 = true := G1.isZero_iff.mpr h0
       rw [hz] at h'
       cases h'
@@ -164,24 +167,32 @@ theorem sqrt_of_norm_sq {a : Fp2} {sn : Fp}
     refine Fp2.sqrt_isOk_of_c1_ne hz hsqrt_n ?_
     -- The inverse of 2 becomes a variable, so the kernel never evaluates it.
     generalize htwo : BaseField.inverse (BaseField.ofNat 2 : Fp) = twoInv
-    have h2inv : (Fp.ofNat 2 : ZMod Fp.modulus) * (twoInv : ZMod Fp.modulus) = 1 := by
+    -- The prime `p` does not divide 2, since `p > 2`.
+    have h2ne : (2 : ZMod Fp.modulus) ≠ 0 := fun h =>
+      absurd (Nat.le_of_dvd two_pos ((ZMod.natCast_eq_zero_iff 2 _).mp (by exact_mod_cast h)))
+        (by simp [Fp.modulus])
+    have h2inv : (2 : ZMod Fp.modulus) * Fp.toZMod twoInv = 1 := by
       subst htwo
-      rw [Fp.baseField_inverse, Fp.baseField_ofNat, Fp.inverse_eq_inv]
-      -- The prime `p` does not divide 2, since `p > 2`.
-      exact mul_inv_cancel₀ ((Fp.toZMod_ofNat 2).trans_ne fun h =>
-        absurd (Nat.le_of_dvd two_pos ((ZMod.natCast_eq_zero_iff 2 _).mp h)) (by simp [Fp.modulus]))
+      rw [Fp.baseField_inverse, Fp.baseField_ofNat, Fp.toZMod_inverse, Fp.toZMod_ofNat,
+        Nat.cast_ofNat]
+      exact mul_inv_cancel₀ h2ne
     set s := Fp.powNat (a.c0 * a.c0 + a.c1 * a.c1) ((Fp.modulus + 1) / 4)
-    have hs : (s : ZMod Fp.modulus) * s = a.c0 * a.c0 + a.c1 * a.c1 :=
-      Fp.sqrt_ok (Fp.sqrt_complete hsn)
+    have hs : s * s = a.c0 * a.c0 + a.c1 * a.c1 := Fp.sqrt_ok (Fp.sqrt_complete hsn)
+    have hsZ := congrArg Fp.toZMod hs
+    push_toZMod at hsZ
     rcases sq_or_neg_sq ((a.c0 + s) * twoInv) with htry1 | hneg1
     · exact Or.inl ⟨_, hsqrt htry1⟩
     · set r := Fp.powNat ((a.c0 + s) * twoInv) ((Fp.modulus + 1) / 4)
-      have hr_ne : (r : ZMod Fp.modulus) ≠ 0 :=
-        r_ne_zero_of_neg_try1 ha1 h2inv hs hneg1
-      have hrInv : (r : ZMod Fp.modulus) * (r.inverse : ZMod Fp.modulus) = 1 := by
-        rw [Fp.inverse_eq_inv]
+      have hrZ := congrArg Fp.toZMod hneg1
+      push_toZMod at hrZ
+      have hr_ne : Fp.toZMod r ≠ 0 := r_ne_zero_of_neg_try1 ha1 h2inv hsZ hrZ
+      have hrInv : Fp.toZMod r * Fp.toZMod r.inverse = 1 := by
+        rw [Fp.toZMod_inverse]
         exact mul_inv_cancel₀ hr_ne
-      exact Or.inr ⟨_, hsqrt (try_sub_sq_zmod hs hneg1 hrInv)⟩
+      refine Or.inr ⟨_, hsqrt (b := a.c1 * twoInv * r.inverse) ?_⟩
+      apply Fp.toZMod.injective
+      push_toZMod
+      exact try_sub_sq_zmod hsZ hrZ hrInv
   · refine Fp2.sqrt_isOk_of_c1_zero hz ?_
     rcases sq_or_neg_sq a.c0 with hs1 | hs2
     · exact Or.inl ⟨_, hsqrt hs1⟩
@@ -246,7 +257,6 @@ theorem simpleSwu_sqrt_complete (u : Fp2) :
       exact sqrt_of_norm_sq hs1
     · right
       set s1 := Fp.powNat (Fp2.norm (swuG (swuX1 u))) ((Fp.modulus + 1) / 4)
-      set w : Fp := sqrtNegNormZ * (Fp2.norm Z * (Fp2.norm u * Fp2.norm u * Fp2.norm u)) * s1
       have hnorm2 : Fp2.norm (swuG (swuX2 u)) =
           ((Fp2.norm Z * (Fp2.norm u * Fp2.norm u)) *
            (Fp2.norm Z * (Fp2.norm u * Fp2.norm u)) *
@@ -254,46 +264,66 @@ theorem simpleSwu_sqrt_complete (u : Fp2) :
           Fp2.norm (swuG (swuX1 u)) := by
         rw [swuG_x2_eq u hdenom_f]
         simp only [Fp2.norm_mul]
-      have hw_sq : (w : ZMod Fp.modulus) * w = Fp2.norm (swuG (swuX2 u)) := by
+      have hw_sq :
+          (sqrtNegNormZ * (Fp2.norm Z * (Fp2.norm u * Fp2.norm u * Fp2.norm u)) * s1) *
+            (sqrtNegNormZ * (Fp2.norm Z * (Fp2.norm u * Fp2.norm u * Fp2.norm u)) * s1) =
+          Fp2.norm (swuG (swuX2 u)) := by
         rw [hnorm2]
-        exact norm_gx2_sq_zmod sqrtNegNormZ_sq hs2
+        apply Fp.toZMod.injective
+        have hsz := congrArg Fp.toZMod sqrtNegNormZ_sq
+        have hsg := congrArg Fp.toZMod hs2
+        push_toZMod at hsz hsg ⊢
+        exact norm_gx2_sq_zmod hsz hsg
       exact sqrt_of_norm_sq hw_sq
 
+-- The matcher of the map is named on purpose: its equations select a branch without evaluation.
+set_option linter.auxLemma false in
 /-- The SSWU map succeeds on every `u` (RFC 9380 §6.6.2). -/
 theorem simpleSwu_ok (u : Fp2) : ∃ p, simpleSwu u = .ok p := by
   have hor := simpleSwu_sqrt_complete u
   revert hor
-  unfold simpleSwu swuG swuX2 swuX1
+  -- `unfold` and `delta` make the kernel time out here when `Fp` is in Montgomery form.
+  rw [simpleSwu]
+  unfold swuG swuX2 swuX1
   generalize (Fp2.sqrt : Fp2 → Except BlsError Fp2) = sqrtFn
   rintro (⟨y1, hy1⟩ | ⟨y2, hy2⟩)
-  · dsimp only
+  · dsimp only at hy1
     rw [hy1]
     exact ⟨_, rfl⟩
-  · dsimp only
+  · dsimp only at hy2
     cases sqrtFn _ with
     | ok y1 => exact ⟨_, rfl⟩
     | error _ =>
-      dsimp only
-      rw [hy2]
+      simp (config := { zeta := false, iota := false, beta := false }) only
+        [simpleSwu.match_1.eq_2]
+      extract_lets x2
+      rw [show sqrtFn (x2 * x2 * x2 + Aprime * x2 + Bprime) = .ok y2 from hy2]
       exact ⟨_, rfl⟩
 
+-- The matcher of the map is named on purpose: its equations select a branch without evaluation.
+set_option linter.auxLemma false in
 /-- Every output of the SSWU map lies on `E' : y^2 = x^3 + A' * x + B'`. -/
 theorem simpleSwu_curve_eq {u : Fp2} {p : Fp2 × Fp2} (h : simpleSwu u = .ok p) :
     p.2 * p.2 = swuG p.1 := by
   have hsqrt : ∀ {a c : Fp2}, Fp2.sqrt a = .ok c → c * c = a := fun hs => Fp2.sqrt_ok hs
   revert h
-  unfold simpleSwu swuG
+  -- `unfold` and `delta` make the kernel time out here when `Fp` is in Montgomery form.
+  rw [simpleSwu]
+  unfold swuG
   generalize (Fp2.sqrt : Fp2 → Except BlsError Fp2) = sqrtFn at hsqrt ⊢
-  dsimp only
   cases h1 : sqrtFn _ with
   | ok y1 =>
+    simp (config := { zeta := false, iota := false, beta := false }) only
+      [simpleSwu.match_1.eq_1]
     rintro ⟨⟩
     dsimp only
     rw [sq_ite_neg (sgn0Fp2 u = sgn0Fp2 y1) y1]
     exact hsqrt h1
   | error _ =>
-    dsimp only
-    cases h2 : sqrtFn _ with
+    simp (config := { zeta := false, iota := false, beta := false }) only
+      [simpleSwu.match_1.eq_2]
+    extract_lets x2
+    cases h2 : sqrtFn (x2 * x2 * x2 + Aprime * x2 + Bprime) with
     | error _ => rintro ⟨⟩
     | ok y2 =>
       rintro ⟨⟩

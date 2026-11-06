@@ -131,7 +131,7 @@ theorem isInfinity_eq_true_iff_toPoint_eq_zero {p : G1} (hp : G1.Valid p) :
     exact WeierstrassCurve.Jacobian.Point.toAffine_of_Z_eq_zero (G1.isZero_iff.mp h)
   · intro h
     by_contra hne
-    have hz : (p.z : ZMod Bls.Fp.modulus) ≠ 0 :=
+    have hz : Bls.Fp.toZMod p.z ≠ 0 :=
       fun hz0 => hne (G1.isZero_iff.mpr hz0)
     rw [G1.toPoint, WeierstrassCurve.Jacobian.Point.toAffine_of_Z_ne_zero hp hz] at h
     cases h

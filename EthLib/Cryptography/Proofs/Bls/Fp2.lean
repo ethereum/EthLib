@@ -793,7 +793,12 @@ theorem one_isZero : (one : Fp2).isZero = false :=
 /-- A natural number is the element with that real part and a zero imaginary part. -/
 theorem natCast_eq (n : Nat) : (n : Fp2) = ⟨Fp.ofNat n, Fp.zero⟩ := by
   induction n with
-  | zero => rfl
+  | zero =>
+    rw [Nat.cast_zero, Fp.zero_def]
+    apply ext
+    · show (0 : Fp2).c0 = Fp.ofNat 0
+      exact Fp.ext (by rw [zero_c0, Fp.val_zero, Fp.val_ofNat, Nat.zero_mod])
+    · exact zero_c1
   | succ n ih =>
     rw [Nat.cast_succ, ih]
     apply ext

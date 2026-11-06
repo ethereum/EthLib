@@ -89,48 +89,35 @@ theorem compress_eq_of_toPoint_eq {p₁ p₂ : G1}
   -- Extract the canonical z = 1 representatives produced by `uncompress`.
   have hrep : q₁ = q₂ := by
     have hpt : G1.toPoint q₁ = G1.toPoint q₂ := hpt₁.trans (heq.trans hpt₂.symm)
-    -- Unfold `uncompress` on both sides to see either `zero` or `(x, y, 1)`.
+    -- Decompression returns either `zero` or a point `(x, y, 1)`.
     have hshape (b : ByteArray) (q : G1) (hu : G1.uncompress b = .ok q) :
         q = G1.zero ∨ (q.z = Bls.Fp.one ∧ ¬ q.isInfinity = true) := by
-      rw [G1.uncompress] at hu
-      split at hu
-      · cases hu
-      · dsimp only at hu
-        split at hu
-        · cases hu
-        · split at hu
-          · split at hu
-            · cases hu
-            · cases hu
-              exact Or.inl rfl
-          · split at hu
-            · cases hu
-            · split at hu
-              · cases hu
-              · cases hu
-                refine Or.inr ⟨rfl, ?_⟩
-                change ¬ Bls.Fp.one.isZero = true
-                decide
+      obtain rfl | ⟨x, y, -, -, rfl⟩ := G1.uncompress_eq_zero_or hu
+      · exact Or.inl rfl
+      · refine Or.inr ⟨rfl, ?_⟩
+        change ¬ Bls.Fp.one.isZero = true
+        rw [Bls.Fp.one_isZero]
+        decide
     rcases hshape _ _ hunc₁ with rfl | ⟨hz₁, hni₁⟩ <;>
       rcases hshape _ _ hunc₂ with rfl | ⟨hz₂, hni₂⟩
     · rfl
     · exfalso
       rw [G1.toPoint_zero] at hpt
-      have hz2 : (q₂.z : ZMod Bls.Fp.modulus) ≠ 0 :=
+      have hz2 : Bls.Fp.toZMod q₂.z ≠ 0 :=
         fun h0 => hni₂ (G1.isZero_iff.mpr h0)
       have hvq₂ : G1.Valid q₂ := G1.uncompress_valid hunc₂
       rw [G1.toPoint, WeierstrassCurve.Jacobian.Point.toAffine_of_Z_ne_zero hvq₂ hz2] at hpt
       cases hpt
     · exfalso
       rw [G1.toPoint_zero] at hpt
-      have hz1 : (q₁.z : ZMod Bls.Fp.modulus) ≠ 0 :=
+      have hz1 : Bls.Fp.toZMod q₁.z ≠ 0 :=
         fun h0 => hni₁ (G1.isZero_iff.mpr h0)
       have hvq₁ : G1.Valid q₁ := G1.uncompress_valid hunc₁
       rw [G1.toPoint, WeierstrassCurve.Jacobian.Point.toAffine_of_Z_ne_zero hvq₁ hz1] at hpt
       cases hpt
-    · have hz1 : (q₁.z : ZMod Bls.Fp.modulus) ≠ 0 :=
+    · have hz1 : Bls.Fp.toZMod q₁.z ≠ 0 :=
         fun h0 => hni₁ (G1.isZero_iff.mpr h0)
-      have hz2 : (q₂.z : ZMod Bls.Fp.modulus) ≠ 0 :=
+      have hz2 : Bls.Fp.toZMod q₂.z ≠ 0 :=
         fun h0 => hni₂ (G1.isZero_iff.mpr h0)
       have hvq₁ : G1.Valid q₁ := G1.uncompress_valid hunc₁
       have hvq₂ : G1.Valid q₂ := G1.uncompress_valid hunc₂
@@ -141,14 +128,18 @@ theorem compress_eq_of_toPoint_eq {p₁ p₂ : G1}
       have hdiv1 (a : ZMod Bls.Fp.modulus) (m : Nat) :
           a / (1 : ZMod Bls.Fp.modulus) ^ m = a := by
         rw [one_pow, div_one]
-      have hx' : (q₁.x : ZMod Bls.Fp.modulus) = (q₂.x : ZMod Bls.Fp.modulus) := by
+      have hx' : q₁.x = q₂.x := by
         have h := hx
-        rw [G1.rep_x, G1.rep_z, G1.rep_x, G1.rep_z, hz₁, hz₂] at h
-        exact (hdiv1 q₁.x 2).symm.trans (h.trans (hdiv1 q₂.x 2))
-      have hy' : (q₁.y : ZMod Bls.Fp.modulus) = (q₂.y : ZMod Bls.Fp.modulus) := by
+        rw [G1.rep_x, G1.rep_z, G1.rep_x, G1.rep_z, hz₁, hz₂, Bls.Fp.one_def,
+          Bls.Fp.toZMod_one] at h
+        exact Bls.Fp.toZMod.injective
+          ((hdiv1 _ 2).symm.trans (h.trans (hdiv1 _ 2)))
+      have hy' : q₁.y = q₂.y := by
         have h := hy
-        rw [G1.rep_y, G1.rep_z, G1.rep_y, G1.rep_z, hz₁, hz₂] at h
-        exact (hdiv1 q₁.y 3).symm.trans (h.trans (hdiv1 q₂.y 3))
+        rw [G1.rep_y, G1.rep_z, G1.rep_y, G1.rep_z, hz₁, hz₂, Bls.Fp.one_def,
+          Bls.Fp.toZMod_one] at h
+        exact Bls.Fp.toZMod.injective
+          ((hdiv1 _ 3).symm.trans (h.trans (hdiv1 _ 3)))
       cases q₁; cases q₂
       dsimp only at hz₁ hz₂ hx' hy'
       rw [G1.mk.injEq]
