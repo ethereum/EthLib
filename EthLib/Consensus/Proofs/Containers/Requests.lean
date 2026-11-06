@@ -17,6 +17,8 @@ The request types are distinct bytes, so a request list names its type without d
 
 The list that the execution layer receives keeps the nonempty lists, in increasing order of type.
 
+Each of its entries has at least one byte, so its first byte exists.
+
 At Gloas, with no builder request, it is the list of Electra for the same requests.
 -/
 
@@ -124,13 +126,32 @@ theorem getExecutionRequestsList_length {preset : Preset} {fork : Fork}
     out.length = (requests.typedLists.filter (·.count != 0)).length :=
   (getExecutionRequestsList_spec made).length_eq.symm
 
+/-- In the list that the execution layer receives, every entry has at least one byte. -/
+theorem getExecutionRequestsList_size_pos {preset : Preset} {fork : Fork}
+    {requests : ExecutionRequests preset fork} {out : List ByteArray}
+    (made : getExecutionRequestsList requests = .ok out) :
+    ∀ b ∈ out, 0 < b.size := by
+  have spec := getExecutionRequestsList_spec made
+  clear made
+  generalize requests.typedLists.filter (·.count != 0) = lists at spec
+  induction spec with
+  | nil => simp
+  | @cons list _ _ _ head _ rest =>
+    obtain ⟨data, -, rfl⟩ := head
+    intro b hb
+    rcases List.mem_cons.mp hb with rfl | hb
+    · simp only [ByteArray.size_append]
+      have : (⟨list.type.toArray⟩ : ByteArray).size = 1 := by simp [ByteArray.size]
+      omega
+    · exact rest b hb
+
 /-- In the list that the execution layer receives, the type bytes strictly increase. -/
 theorem getExecutionRequestsList_increasing {preset : Preset} {fork : Fork}
     {requests : ExecutionRequests preset fork} {out : List ByteArray}
     (made : getExecutionRequestsList requests = .ok out) :
-    (out.map (·.data[0]!)).Pairwise (· < ·) := by
+    (out.map (·.data.getD 0 0)).Pairwise (· < ·) := by
   have first : (requests.typedLists.filter (·.count != 0)).map (·.type[0]) =
-      out.map (·.data[0]!) := by
+      out.map (·.data.getD 0 0) := by
     have spec := getExecutionRequestsList_spec made
     clear made
     generalize requests.typedLists.filter (·.count != 0) = lists at spec ⊢
@@ -140,9 +161,9 @@ theorem getExecutionRequestsList_increasing {preset : Preset} {fork : Fork}
       obtain ⟨data, -, bytes⟩ := head
       subst bytes
       simp only [List.map_cons, rest, List.cons.injEq, and_true]
-      rw [ByteArray.data_append, getElem!_pos _ _ (by simp; omega),
-        Array.getElem_append_left (by simp)]
-      rfl
+      rw [ByteArray.data_append, Array.getD_eq_getD_getElem?,
+        Array.getElem?_append_left (by simp)]
+      simp
   rw [← first]
   exact (ExecutionRequests.typedLists_increasing requests).sublist
     ((List.filter_sublist).map _)
