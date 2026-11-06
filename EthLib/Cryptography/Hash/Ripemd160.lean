@@ -136,8 +136,8 @@ def pad (message : ByteArray) : ByteArray :=
 /-- Four bytes from `start`, read as one little-endian word, `X[i][j]` of the pseudo-code. -/
 @[inline] def little32 (block : ByteArray) (start : Nat) (within : start + 4 ≤ block.size) :
     UInt32 :=
-  (block[start]'(by omega)).toUInt32 ||| (block[start + 1]'(by omega)).toUInt32 <<< 8 |||
-    (block[start + 2]'(by omega)).toUInt32 <<< 16 ||| (block[start + 3]'(by omega)).toUInt32 <<< 24
+  block[start].toUInt32 ||| block[start + 1].toUInt32 <<< 8 |||
+    block[start + 2].toUInt32 <<< 16 ||| block[start + 3].toUInt32 <<< 24
 
 /--
 One step of a line on the variables (A, B, C, D, E).
@@ -183,7 +183,7 @@ Their results are mixed with it in a rotated order:
 def compress (h : Vector UInt32 5) (block : ByteArray) (start : Nat)
     (whole : start + 64 ≤ block.size) : Vector UInt32 5 :=
   let X : Vector UInt32 16 :=
-    Vector.ofFn fun j => little32 block (start + 4 * j.val) (by have := j.isLt; omega)
+    Vector.ofFn fun j => little32 block (start + 4 * j.val) (by omega)
   let left := line X h K r s false
   let right := line X h K' r' s' true
   #v[h[1] + left[2] + right[3], h[2] + left[3] + right[4], h[3] + left[4] + right[0],
@@ -198,8 +198,8 @@ def digest (state : Vector UInt32 5) : ByteArray :=
 /-- RIPEMD-160 of a message: every block of the padded message, in order, from the initial value. -/
 def hash (message : ByteArray) : ByteArray :=
   let padded := pad message
-  digest ((List.finRange (padded.size / 64)).foldl
-    (fun state i => compress state padded (64 * i.val) (by have := i.isLt; omega)) IV)
+  digest (Fin.foldl (padded.size / 64)
+    (fun state i => compress state padded (64 * i.val) (by omega)) IV)
 
 end EthLib.Cryptography.Hash.Ripemd160
 
