@@ -1,0 +1,8 @@
+topic: beacon_aggregate_and_proof
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {current_time_ms: 6500, message: 
+    aggregate_0xb7fd0609516dbd3d9b141865c4d881013393945910efcd3f5b1d81dada1e1e72,
+  expected: reject, reason: committee index out of range}

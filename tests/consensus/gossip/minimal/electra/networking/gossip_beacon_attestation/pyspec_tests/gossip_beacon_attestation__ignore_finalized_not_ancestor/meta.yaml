@@ -1,0 +1,13 @@
+topic: beacon_attestation
+blocks:
+- {block: 
+    block_0x7be303c94a52d4652667fae459f1c5f2744e523ffc2e5abab45bac690feaa714}
+- {block: 
+    block_0xf35cdd5d68dcfb0988831221b5e8dad41ef9a041f11a441c228c1aafa950f648}
+finalized_checkpoint:
+  epoch: 0
+  root: '0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef'
+messages:
+- {subnet_id: 4, current_time_ms: 12500, message: 
+    single_attestation_0x306d818adfc7e20ada4181846ebf4e1212aade0633c43521b6415829bc051a30,
+  expected: ignore, reason: finalized checkpoint is not an ancestor of block}

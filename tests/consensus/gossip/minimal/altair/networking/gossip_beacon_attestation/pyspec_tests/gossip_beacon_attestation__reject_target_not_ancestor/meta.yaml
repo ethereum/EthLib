@@ -1,0 +1,8 @@
+topic: beacon_attestation
+blocks:
+- {block: 
+    block_0x33570af1c055639caaff25701b98e8468cde61cb8c8d38531f51aa3971a97605}
+messages:
+- {subnet_id: 2, current_time_ms: 6500, message: 
+    attestation_0xd1ab2768f9113a540f39034da030724cde3a619791013a52a6479e0134bb5e4c,
+  expected: reject, reason: target block is not an ancestor of LMD vote block}

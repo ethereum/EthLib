@@ -1,0 +1,8 @@
+topic: beacon_attestation
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {subnet_id: 3, current_time_ms: 6500, message: 
+    attestation_0xbafbb787792389cf5fe5cf31bf86ac583d64cdd326dbb758e3374958b2396d10,
+  expected: reject, reason: attestation is for wrong subnet}

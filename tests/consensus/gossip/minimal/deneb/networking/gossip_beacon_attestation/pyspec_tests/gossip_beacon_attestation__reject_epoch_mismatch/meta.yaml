@@ -1,0 +1,8 @@
+topic: beacon_attestation
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {subnet_id: 2, current_time_ms: 6500, message: 
+    attestation_0x51a186fea998c1ed517dcf49c0af875c7ec1749cb4d23d81eec645f534a0868f,
+  expected: reject, reason: attestation epoch does not match target epoch}

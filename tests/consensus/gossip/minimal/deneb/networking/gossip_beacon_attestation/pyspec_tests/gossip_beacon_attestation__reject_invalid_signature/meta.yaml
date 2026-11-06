@@ -1,0 +1,9 @@
+topic: beacon_attestation
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {subnet_id: 2, current_time_ms: 6500, message: 
+    attestation_0xf2f1c85b0e2c7a20c7d6530176f337890ee5ee237cd55ff01c0b6aa2354c020f,
+  expected: reject, reason: invalid attestation signature}
+bls_setting: 1

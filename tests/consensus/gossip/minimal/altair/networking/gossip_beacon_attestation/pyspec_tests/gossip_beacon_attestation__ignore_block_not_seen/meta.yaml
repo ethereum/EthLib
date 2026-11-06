@@ -1,0 +1,8 @@
+topic: beacon_attestation
+blocks:
+- {block: 
+    block_0x33570af1c055639caaff25701b98e8468cde61cb8c8d38531f51aa3971a97605}
+messages:
+- {subnet_id: 4, current_time_ms: 12500, message: 
+    attestation_0xcae25a7012b6f15b710f2161af4281fcac5b54275e6e3bb4859d5b4681fde717,
+  expected: ignore, reason: block being voted for has not been seen}

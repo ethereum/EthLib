@@ -1,0 +1,6 @@
+preset: minimal
+fork: electra
+runner: networking
+handler: gossip_beacon_aggregate_and_proof
+suite: pyspec_tests
+case: gossip_beacon_aggregate_and_proof__accepts_one_millisecond_before_slot_start

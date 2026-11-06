@@ -49,6 +49,14 @@ structure Seen where
   syncContributionBits : List ((Slot × Root × UInt64) × List Bool) := []
   /-- The slot and the proposer of each valid block. -/
   proposerSlots : List (Slot × ValidatorIndex) := []
+  /-- The target epoch and the attester of each valid attestation. -/
+  attestationValidatorEpochs : List (Epoch × ValidatorIndex) := []
+  /-- The target epoch and the aggregator of each valid aggregate. -/
+  aggregatorEpochs : List (Epoch × ValidatorIndex) := []
+  /-- The root of the data and the committee of each valid aggregate, with its bits.
+
+  Before Electra the root alone is the key, so the committee there is 0. -/
+  aggregateBits : List ((Root × CommitteeIndex) × List Bool) := []
   deriving Inhabited
 
 namespace Store
@@ -94,6 +102,24 @@ def isFutureSlot (slot : Slot) (currentTimeMs : UInt64) : Except ForkChoiceError
   let latest ← (addChecked currentTimeMs config.MAXIMUM_GOSSIP_CLOCK_DISPARITY).mapError .arith
   return latest < start
 
+/-- From Deneb: whether the clock is in an epoch, with the maximum gossip disparity at both ends.
+
+A slot or a time that leaves the 64-bit range is an error. -/
+def isWithinEpoch (epoch : Epoch) (currentTimeMs : UInt64) : Except ForkChoiceError Bool := do
+  let start ← (computeStartSlotAtEpoch preset epoch).mapError .arith
+  let range ← (subChecked preset.SLOTS_PER_EPOCH 1).mapError .arith
+  store.isWithinSlotRange config start range currentTimeMs
+
+/-- From Deneb: whether the clock is in an epoch or in the epoch after it.
+
+Both tests run, so an error of either one is an error. -/
+def isCurrentOrPreviousEpoch (epoch : Epoch) (currentTimeMs : UInt64) :
+    Except ForkChoiceError Bool := do
+  let current ← store.isWithinEpoch config epoch currentTimeMs
+  let next ← (addChecked epoch 1).mapError .arith
+  let previous ← store.isWithinEpoch config next currentTimeMs
+  return current || previous
+
 /-- The state after the head of the fork choice. -/
 def headState : Except ForkChoiceError (BeaconState preset fork) := do
   store.blockState (← store.getHead config).root
@@ -102,14 +128,30 @@ end Store
 
 variable {preset : Preset} {fork : Fork}
 
+/-- Whether a key signed an object under a domain type, at an epoch. -/
+def isValidSignatureAtEpoch {α : Type} [Serialization.Ssz.SszType α] (config : Config)
+    (checks : SignatureChecks) (state : BeaconState preset fork) (domainType : DomainType)
+    (epoch : Epoch) (object : α) (pubkey : Cryptography.Bls.BLSPubkey)
+    (signature : Cryptography.Bls.BLSSignature) : Except ForkChoiceError Bool := do
+  let domain ← (getDomain config state domainType (some epoch)).mapError .accessor
+  let signingRoot ← (computeSigningRoot object domain).mapError .ssz
+  return checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signature)
+
 /-- Whether a key signed an object under a domain type, at the epoch of a slot. -/
 def isValidSignatureAtSlot {α : Type} [Serialization.Ssz.SszType α] (config : Config)
     (checks : SignatureChecks) (state : BeaconState preset fork) (domainType : DomainType)
     (slot : Slot) (object : α) (pubkey : Cryptography.Bls.BLSPubkey)
-    (signature : Cryptography.Bls.BLSSignature) : Except ForkChoiceError Bool := do
-  let domain ← (getDomain config state domainType
-    (some (computeEpochAtSlot preset slot))).mapError .accessor
-  let signingRoot ← (computeSigningRoot object domain).mapError .ssz
-  return checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signature)
+    (signature : Cryptography.Bls.BLSSignature) : Except ForkChoiceError Bool :=
+  isValidSignatureAtEpoch config checks state domainType (computeEpochAtSlot preset slot) object
+    pubkey signature
+
+/-- Whether earlier bits cover new bits: one of them sets every bit that the new bits set.
+
+Earlier bits of another length cover nothing, since they belong to a committee of another size.
+
+So new bits of a wrong length are not ignored here, and a later check rejects them. -/
+def isNonStrictSuperset (seenBits : List (List Bool)) (newBits : List Bool) : Bool :=
+  seenBits.any fun prior =>
+    prior.length == newBits.length && (prior.zip newBits).all fun (bit, newBit) => !newBit || bit
 
 end EthLib.Consensus

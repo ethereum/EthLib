@@ -1,0 +1,11 @@
+topic: beacon_aggregate_and_proof
+blocks:
+- {block: 
+    block_0x7be303c94a52d4652667fae459f1c5f2744e523ffc2e5abab45bac690feaa714}
+finalized_checkpoint:
+  epoch: 0
+  root: '0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef'
+messages:
+- {current_time_ms: 6500, message: 
+    aggregate_0x3777c60117a23c7024087d356d990d9940f345590a211a45f148e5d4e3588188,
+  expected: ignore, reason: finalized checkpoint is not an ancestor of block}

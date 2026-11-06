@@ -1,0 +1,8 @@
+topic: beacon_aggregate_and_proof
+blocks:
+- {block: 
+    block_0x33570af1c055639caaff25701b98e8468cde61cb8c8d38531f51aa3971a97605}
+messages:
+- {current_time_ms: 5499, message: 
+    aggregate_0x67edb637bc6cf09b5357b803ca539181e484d285713d199d0a4f60c2dc68e784,
+  expected: ignore, reason: attestation slot not within propagation range}

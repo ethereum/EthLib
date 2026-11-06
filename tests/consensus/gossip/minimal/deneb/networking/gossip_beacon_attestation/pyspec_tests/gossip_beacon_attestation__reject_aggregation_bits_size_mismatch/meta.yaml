@@ -1,0 +1,9 @@
+topic: beacon_attestation
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {subnet_id: 2, current_time_ms: 6500, message: 
+    attestation_0xe70e85e48033aa25847c5a19a7b3cf6d394c5921bce966d3de3fa38bafdfe6d9,
+  expected: reject, reason: aggregation bits length does not match committee 
+    size}

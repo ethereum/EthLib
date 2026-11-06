@@ -1,0 +1,9 @@
+topic: beacon_aggregate_and_proof
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {current_time_ms: 6500, message: 
+    aggregate_0xb5c530c818b9781491609f8304ded171f5394c23e69e87f8ac079fe6d04991f4,
+  expected: reject, reason: invalid selection proof signature}
+bls_setting: 1

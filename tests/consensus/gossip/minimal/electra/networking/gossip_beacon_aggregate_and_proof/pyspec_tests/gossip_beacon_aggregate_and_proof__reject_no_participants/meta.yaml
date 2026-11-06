@@ -1,0 +1,8 @@
+topic: beacon_aggregate_and_proof
+blocks:
+- {block: 
+    block_0x7be303c94a52d4652667fae459f1c5f2744e523ffc2e5abab45bac690feaa714}
+messages:
+- {current_time_ms: 6500, message: 
+    aggregate_0x903c708e8b207bc7b01ae7359dcdfc7f0eb6c85197b3ebc9cd37e6bdb5cb0ce3,
+  expected: reject, reason: aggregate has no participants}

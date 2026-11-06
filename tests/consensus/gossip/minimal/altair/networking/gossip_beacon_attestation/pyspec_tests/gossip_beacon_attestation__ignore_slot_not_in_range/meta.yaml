@@ -1,0 +1,8 @@
+topic: beacon_attestation
+blocks:
+- {block: 
+    block_0x33570af1c055639caaff25701b98e8468cde61cb8c8d38531f51aa3971a97605}
+messages:
+- {subnet_id: 2, current_time_ms: 5499, message: 
+    attestation_0x2bb87c9abeb78eeab85f219fd1d3cd3d630339d3b6d7cfda8bd6f55a528a2e0d,
+  expected: ignore, reason: attestation slot not within propagation range}
