@@ -10,11 +10,15 @@ A version and its number determine each other.
 So the number that a node announces in Hello or in Status names at most one version.
 
 The order of the versions is the order of their numbers.
+
+RLPx gives message IDs to a capability exactly when it is an eth version.
 -/
 
 @[expose] public section
 
-namespace EthLib.Execution.Network.EthVersion
+namespace EthLib.Execution.Network
+
+namespace EthVersion
 
 /-- The number of a version reads back to that version. -/
 theorem ofNumber?_number (v : EthVersion) : ofNumber? v.number = some v := by
@@ -42,4 +46,32 @@ theorem le_iff_number_le {a b : EthVersion} : a ≤ b ↔ a.number ≤ b.number 
 theorem lt_iff_number_lt {a b : EthVersion} : a < b ↔ a.number < b.number := by
   cases a <;> cases b <;> decide
 
-end EthLib.Execution.Network.EthVersion
+/-- Every version has at least one message ID. -/
+theorem messageCount_pos (v : EthVersion) : 0 < v.messageCount := by
+  cases v <;> decide
+
+end EthVersion
+
+/-- A capability has message IDs exactly when it is the capability of an eth version. -/
+theorem ethLength_ne_zero_iff {c : Networking.Devp2p.Capability} :
+    ethLength c ≠ 0 ↔ ∃ v : EthVersion, v.capability = c := by
+  constructor
+  · intro h
+    unfold ethLength at h
+    split at h
+    next hname =>
+      cases hv : EthVersion.ofNumber? c.version with
+      | none => simp [hv] at h
+      | some v =>
+        refine ⟨v, ?_⟩
+        cases c
+        simp only [EthVersion.capability, Networking.Devp2p.Capability.mk.injEq]
+        exact ⟨hname.symm, EthVersion.ofNumber?_eq_some_iff.mp hv⟩
+    · exact absurd rfl h
+  · rintro ⟨v, rfl⟩
+    unfold ethLength
+    simp only [EthVersion.capability, ↓reduceIte, EthVersion.ofNumber?_number, Option.map_some,
+      Option.getD_some]
+    exact Nat.pos_iff_ne_zero.mp (EthVersion.messageCount_pos v)
+
+end EthLib.Execution.Network
