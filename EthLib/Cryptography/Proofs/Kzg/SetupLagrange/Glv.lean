@@ -101,7 +101,7 @@ private theorem toAffine_endo {P : Fin 3 → F} (h : curve.Nonsingular P) :
     Point.toAffine curve ![cubeRoot * P 0, P 1, P 2] = endoHom (Point.toAffine curve P) := by
   by_cases hz : P 2 = 0
   · rw [Point.toAffine_of_Z_eq_zero (show (![cubeRoot * P 0, P 1, P 2] : Fin 3 → F) 2 = 0 from hz),
-      Point.toAffine_of_Z_eq_zero hz, map_zero]
+      Point.toAffine_of_Z_eq_zero hz, _root_.map_zero]
   · have hz' : (![cubeRoot * P 0, P 1, P 2] : Fin 3 → F) 2 ≠ 0 := hz
     rw [Point.toAffine_of_Z_ne_zero h hz, Point.toAffine_of_Z_ne_zero (nonsingular_endo h) hz']
     refine some_eq_endoHom ?_ ?_

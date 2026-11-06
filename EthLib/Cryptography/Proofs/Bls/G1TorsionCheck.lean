@@ -2,6 +2,8 @@ module
 
 public import EthLib.Cryptography.Proofs.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.G1Order
+public import EthLib.Cryptography.Proofs.Bls.FpModel
+public import EthLib.Cryptography.Proofs.Bls.CurveMap
 
 /-!
 # Proofs: a kernel check that a point of `G1` has order dividing `r`
@@ -149,73 +151,109 @@ def mulNatAux : Nat → Coords → Nat → Coords
 private theorem beq_eq (a b : Nat) : Nat.beq a b = (a == b) :=
   Bool.eq_iff_iff.mpr (by simp)
 
-theorem coords_double (q : G1) : coords (G1.double q) = double (coords q) := by
+/-- The coordinates of a point over the model of the kernel, as naturals below `p`. -/
+private def modelCoords (q : G1 Fp.Model) : Coords := (q.x.val, q.y.val, q.z.val)
+
+/-- A point and its image in the model have the same coordinates. -/
+private theorem coords_eq (q : G1) : coords q = modelCoords (G1.map Fp.toModel q) := by
+  simp only [coords, modelCoords, G1.map, Fp.val_toModel]
+
+private theorem modelCoords_double (q : G1 Fp.Model) :
+    modelCoords (G1.double q) = double (modelCoords q) := by
   unfold G1.double double
-  simp only [beq_eq, Bool.cond_eq_ite, Fp.baseField_isZero]
-  rw [show ((coords q).2.2 == 0) = q.z.isZero from rfl]
-  by_cases h : q.z.isZero = true <;> simp only [h, ↓reduceIte]
+  simp only [beq_eq, Bool.cond_eq_ite]
+  rw [show ((modelCoords q).2.2 == 0) = BaseField.isZero q.z from rfl]
+  by_cases h : BaseField.isZero q.z = true <;> simp only [h, ↓reduceIte]
   rfl
 
-theorem coords_addMixed (p q : G1) : coords (G1.addMixed p q) = addMixed (coords p) (coords q) := by
+private theorem modelCoords_addMixed (p q : G1 Fp.Model) :
+    modelCoords (G1.addMixed p q) = addMixed (modelCoords p) (modelCoords q) := by
   unfold G1.addMixed addMixed
-  simp only [beq_eq, Bool.cond_eq_ite, Fp.baseField_beq]
-  rw [show ((coords p).1 == fmul (coords q).1 (fmul (coords p).2.2 (coords p).2.2)) =
-      p.x.beq (q.x * (p.z * p.z)) from rfl,
-    show ((coords p).2.1 == fmul (fmul (coords q).2.1 (coords p).2.2)
-      (fmul (coords p).2.2 (coords p).2.2)) = p.y.beq (q.y * p.z * (p.z * p.z)) from rfl]
-  by_cases h₁ : p.x.beq (q.x * (p.z * p.z)) = true
-  · by_cases h₂ : p.y.beq (q.y * p.z * (p.z * p.z)) = true
-    · simp only [h₁, h₂, ↓reduceIte, coords_double]
+  simp only [beq_eq, Bool.cond_eq_ite]
+  rw [show ((modelCoords p).1 == fmul (modelCoords q).1
+      (fmul (modelCoords p).2.2 (modelCoords p).2.2)) =
+      BaseField.beq p.x (q.x * (p.z * p.z)) from rfl,
+    show ((modelCoords p).2.1 == fmul (fmul (modelCoords q).2.1 (modelCoords p).2.2)
+      (fmul (modelCoords p).2.2 (modelCoords p).2.2)) =
+      BaseField.beq p.y (q.y * p.z * (p.z * p.z)) from rfl]
+  by_cases h₁ : BaseField.beq p.x (q.x * (p.z * p.z)) = true
+  · by_cases h₂ : BaseField.beq p.y (q.y * p.z * (p.z * p.z)) = true
+    · simp only [h₁, h₂, ↓reduceIte, modelCoords_double]
     · simp only [h₁, h₂, ↓reduceIte, Bool.false_eq_true]
       rfl
   · simp only [h₁, ↓reduceIte, Bool.false_eq_true]
     rfl
+
+private theorem modelCoords_addGeneral (p q : G1 Fp.Model) :
+    modelCoords (G1.addGeneral p q) = addGeneral (modelCoords p) (modelCoords q) := by
+  unfold G1.addGeneral addGeneral
+  simp only [beq_eq, Bool.cond_eq_ite]
+  rw [show (fmul (modelCoords p).1 (fmul (modelCoords q).2.2 (modelCoords q).2.2) ==
+      fmul (modelCoords q).1 (fmul (modelCoords p).2.2 (modelCoords p).2.2)) =
+      BaseField.beq (p.x * (q.z * q.z)) (q.x * (p.z * p.z)) from rfl,
+    show (fmul (fmul (modelCoords p).2.1 (modelCoords q).2.2)
+      (fmul (modelCoords q).2.2 (modelCoords q).2.2) ==
+      fmul (fmul (modelCoords q).2.1 (modelCoords p).2.2)
+        (fmul (modelCoords p).2.2 (modelCoords p).2.2)) =
+      BaseField.beq (p.y * q.z * (q.z * q.z)) (q.y * p.z * (p.z * p.z)) from rfl]
+  by_cases h₁ : BaseField.beq (p.x * (q.z * q.z)) (q.x * (p.z * p.z)) = true
+  · by_cases h₂ : BaseField.beq (p.y * q.z * (q.z * q.z)) (q.y * p.z * (p.z * p.z)) = true
+    · simp only [h₁, h₂, ↓reduceIte, modelCoords_double]
+    · simp only [h₁, h₂, ↓reduceIte, Bool.false_eq_true]
+      rfl
+  · simp only [h₁, ↓reduceIte, Bool.false_eq_true]
+    rfl
+
+private theorem modelCoords_add (p q : G1 Fp.Model) :
+    modelCoords (G1.add p q) = add (modelCoords p) (modelCoords q) := by
+  unfold G1.add add
+  simp only [beq_eq, Bool.cond_eq_ite]
+  rw [show ((modelCoords p).2.2 == 0) = BaseField.isZero p.z from rfl,
+    show ((modelCoords q).2.2 == 0) = BaseField.isZero q.z from rfl,
+    show ((modelCoords q).2.2 == 1) = BaseField.beq q.z BaseField.one from rfl]
+  by_cases h₁ : BaseField.isZero p.z = true
+  · simp only [h₁, ↓reduceIte]
+  by_cases h₂ : BaseField.isZero q.z = true
+  · simp only [h₁, h₂, ↓reduceIte, Bool.false_eq_true]
+  by_cases h₃ : BaseField.beq q.z BaseField.one = true
+  · simp only [h₁, h₂, h₃, ↓reduceIte, Bool.false_eq_true, modelCoords_addMixed]
+  · simp only [h₁, h₂, h₃, ↓reduceIte, Bool.false_eq_true, modelCoords_addGeneral]
+
+theorem coords_double (q : G1) : coords (G1.double q) = double (coords q) := by
+  rw [coords_eq, G1.map_double, modelCoords_double, ← coords_eq]
+
+theorem coords_addMixed (p q : G1) : coords (G1.addMixed p q) = addMixed (coords p) (coords q) := by
+  rw [coords_eq, G1.map_addMixed, modelCoords_addMixed, ← coords_eq, ← coords_eq]
 
 theorem coords_addGeneral (p q : G1) :
     coords (G1.addGeneral p q) = addGeneral (coords p) (coords q) := by
-  unfold G1.addGeneral addGeneral
-  simp only [beq_eq, Bool.cond_eq_ite, Fp.baseField_beq]
-  rw [show (fmul (coords p).1 (fmul (coords q).2.2 (coords q).2.2) ==
-      fmul (coords q).1 (fmul (coords p).2.2 (coords p).2.2)) =
-      (p.x * (q.z * q.z)).beq (q.x * (p.z * p.z)) from rfl,
-    show (fmul (fmul (coords p).2.1 (coords q).2.2) (fmul (coords q).2.2 (coords q).2.2) ==
-      fmul (fmul (coords q).2.1 (coords p).2.2) (fmul (coords p).2.2 (coords p).2.2)) =
-      (p.y * q.z * (q.z * q.z)).beq (q.y * p.z * (p.z * p.z)) from rfl]
-  by_cases h₁ : (p.x * (q.z * q.z)).beq (q.x * (p.z * p.z)) = true
-  · by_cases h₂ : (p.y * q.z * (q.z * q.z)).beq (q.y * p.z * (p.z * p.z)) = true
-    · simp only [h₁, h₂, ↓reduceIte, coords_double]
-    · simp only [h₁, h₂, ↓reduceIte, Bool.false_eq_true]
-      rfl
-  · simp only [h₁, ↓reduceIte, Bool.false_eq_true]
-    rfl
+  rw [coords_eq, G1.map_addGeneral, modelCoords_addGeneral, ← coords_eq, ← coords_eq]
 
 theorem coords_add (p q : G1) : coords (G1.add p q) = add (coords p) (coords q) := by
-  unfold G1.add add
-  simp only [beq_eq, Bool.cond_eq_ite, Fp.baseField_isZero, Fp.baseField_beq,
-    show (BaseField.one : Fp) = Fp.one from rfl]
-  rw [show ((coords p).2.2 == 0) = p.z.isZero from rfl,
-    show ((coords q).2.2 == 0) = q.z.isZero from rfl,
-    show ((coords q).2.2 == 1) = q.z.beq Fp.one from rfl]
-  by_cases h₁ : p.z.isZero = true
-  · simp only [h₁, ↓reduceIte]
-  by_cases h₂ : q.z.isZero = true
-  · simp only [h₁, h₂, ↓reduceIte, Bool.false_eq_true]
-  by_cases h₃ : q.z.beq Fp.one = true
-  · simp only [h₁, h₂, h₃, ↓reduceIte, Bool.false_eq_true, coords_addMixed]
-  · simp only [h₁, h₂, h₃, ↓reduceIte, Bool.false_eq_true, coords_addGeneral]
+  have h := G1.map_add Fp.toModel p q
+  rw [coords_eq, show G1.map Fp.toModel (G1.add p q) = G1.add (G1.map Fp.toModel p)
+    (G1.map Fp.toModel q) from h, modelCoords_add, ← coords_eq, ← coords_eq]
 
-private theorem coords_neg (q : G1) : coords (G1.neg q) = neg (coords q) := rfl
+private theorem coords_neg (q : G1) : coords (G1.neg q) = neg (coords q) := by
+  have h := G1.map_neg Fp.toModel q
+  rw [coords_eq, show G1.map Fp.toModel (G1.neg q) = G1.neg (G1.map Fp.toModel q) from h,
+    coords_eq]
+  rfl
+
+private theorem coords_zero : coords (G1.zero : G1) = zero := by
+  rw [coords_eq, G1.map_zero]
+  rfl
 
 theorem coords_mulNatAux (fuel : Nat) (q : G1) (k : Nat) :
     coords (G1.mulNatAux fuel q k) = mulNatAux fuel (coords q) k := by
   induction fuel generalizing q k with
-  | zero => rfl
+  | zero => exact coords_zero
   | succ fuel ih =>
     rw [G1.mulNatAux, mulNatAux]
     simp only [beq_eq, Bool.cond_eq_ite, beq_iff_eq]
     by_cases h0 : k = 0
     · simp only [h0, ↓reduceIte]
-      rfl
+      exact coords_zero
     simp only [h0, ↓reduceIte]
     by_cases h1 : k % 2 = 1
     · simp only [h1, ↓reduceIte, coords_add, ih, coords_double]
