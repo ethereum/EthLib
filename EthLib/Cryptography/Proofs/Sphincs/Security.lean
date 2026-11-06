@@ -5,12 +5,17 @@ public import
   EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.RecoveredFors
 public import
   EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.SignedReveals
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Win
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Targeting
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Configurations
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.MomentTable
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.Price
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.Interpreter
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.PerIndex
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.Game
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.Groups
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LargeBudget.WeightedScan
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.ExposedUniform
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.Replay
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Reduction.SeedElimination
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ScanSigner.ScanReveals
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ScanSigner.SignatureLaw
 
 /-!
