@@ -975,4 +975,12 @@ theorem readCircular_writeCircular_of_ne {α : Type} {n : UInt64}
       exact fun same => other (UInt64.toNat_inj.mp same)
     simp [readCircular, nonzero, differ]
 
+/-- A write to a circular buffer that keeps its tree writes its elements as a plain buffer. -/
+theorem writeCircularRooted_elements {α : Type} [SszType α] {n : UInt64}
+    (buffer : RootedVector α n.toNat) (i : UInt64) (value : α) :
+    RootedVector.elements <$> writeCircularRooted buffer i value
+      = writeCircular buffer.elements i value := by
+  unfold writeCircularRooted writeCircular
+  split <;> rfl
+
 end EthLib.Consensus

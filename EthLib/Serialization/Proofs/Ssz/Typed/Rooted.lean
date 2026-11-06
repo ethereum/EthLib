@@ -150,8 +150,12 @@ theorem hashTreeRoot_vector_leafRoots {length : Nat} (composite : (desc α).isBa
   rw [hashTreeRoot_unfold]
   simp [merkleLayout, sequenceLayout, composite, MerkleLayout.nesting, leafChunks,
     slotRoot, List.mapM_map, Function.comp_def, rooted, finishLayout, merkleizeBoundedUnchecked,
-    leafRoots, bind, Except.bind, pure, Except.pure]
-  rw [← Vector.toList_toArray, ← Array.toList_map]
+    bind, Except.bind, pure, Except.pure]
+  congr 1
+  apply Array.ext
+  · simp [leafRoots]
+  · intro index _ _
+    simp [leafRoots]
 
 namespace RootedVector
 

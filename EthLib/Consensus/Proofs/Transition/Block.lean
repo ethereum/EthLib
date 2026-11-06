@@ -180,7 +180,7 @@ theorem processRandao_eq {config : Config} {checks : SignatureChecks}
       checks.verify (packBytes proposer.pubkey) (packBytes signingRoot)
         (packBytes body.randaoReveal) = true ∧
       getRandaoMix state (getCurrentEpoch state) = .ok mix ∧
-      writeCircular state.randaoMixes (getCurrentEpoch state)
+      writeCircularRooted state.randaoMixes (getCurrentEpoch state)
         (Vector.zipWith (· ^^^ ·) mix (sha256Bytes32 (packBytes body.randaoReveal))) =
           .ok randaoMixes ∧
       after = { state with randaoMixes } := by

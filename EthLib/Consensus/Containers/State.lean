@@ -99,9 +99,9 @@ structure BeaconState (preset : Preset) (fork : Fork) where
   /-- The header of the latest block, with an empty state root until the next slot. -/
   latestBlockHeader : BeaconBlockHeader
   /-- The roots of the recent blocks, one for each slot, in a circular buffer. -/
-  blockRoots : Vector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat
+  blockRoots : RootedVector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat
   /-- The roots of the recent states, one for each slot, in a circular buffer. -/
-  stateRoots : Vector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat
+  stateRoots : RootedVector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat
   /-- The roots of the historical batches, frozen from Capella. -/
   historicalRoots : SszList Root preset.HISTORICAL_ROOTS_LIMIT.toNat
   /-- Before Heze: the deposit contract data that the chain has agreed on. -/
@@ -118,7 +118,7 @@ structure BeaconState (preset : Preset) (fork : Fork) where
   /-- The balance of each validator, in the order of the registry. -/
   balances : Balances preset fork
   /-- The RANDAO mixes of the recent epochs, in a circular buffer. -/
-  randaoMixes : Vector Bytes32 preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
+  randaoMixes : RootedVector Bytes32 preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat
   /-- The slashed balances of the recent epochs, in a circular buffer. -/
   slashings : Vector Gwei preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat
   /-- Before Altair: the attestations that the previous epoch's blocks included. -/

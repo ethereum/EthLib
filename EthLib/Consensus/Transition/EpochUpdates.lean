@@ -291,7 +291,7 @@ def processRandaoMixesReset (state : BeaconState preset fork) :
   let currentEpoch := getCurrentEpoch state
   let nextEpoch ← liftAccessor (liftArith (addChecked currentEpoch 1))
   let mix ← liftAccessor (getRandaoMix state currentEpoch)
-  let randaoMixes ← liftAccessor (writeCircular state.randaoMixes nextEpoch mix)
+  let randaoMixes ← liftAccessor (writeCircularRooted state.randaoMixes nextEpoch mix)
   return { state with randaoMixes }
 
 /-- The historical roots with one more root, or an error when the list is full. -/

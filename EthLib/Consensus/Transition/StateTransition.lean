@@ -61,14 +61,14 @@ From Gloas the payload of the next slot is then marked as not yet available. -/
 def processSlot (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) := do
   let stateRoot ← liftSsz (hashTreeRoot state)
-  let stateRoots ← liftAccessor (writeCircular state.stateRoots state.slot stateRoot)
+  let stateRoots ← liftAccessor (writeCircularRooted state.stateRoots state.slot stateRoot)
   let state := { state with stateRoots }
   let header := state.latestBlockHeader
   let header :=
     if header.stateRoot = Vector.replicate 32 0 then { header with stateRoot } else header
   let state := { state with latestBlockHeader := header }
   let blockRoot ← liftSsz (hashTreeRoot header)
-  let blockRoots ← liftAccessor (writeCircular state.blockRoots state.slot blockRoot)
+  let blockRoots ← liftAccessor (writeCircularRooted state.blockRoots state.slot blockRoot)
   let state := { state with blockRoots }
   if gloas : .glamsterdam ≤ fork then liftAccessor (unsetNextPayloadAvailability state gloas)
   else return state

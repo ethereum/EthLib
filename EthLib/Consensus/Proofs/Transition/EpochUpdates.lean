@@ -251,10 +251,10 @@ theorem processSlashingsReset_eq (computed : processSlashingsReset state = .ok a
 /-- The RANDAO reset copies the mix of the current epoch to the next epoch, and nothing else. -/
 theorem processRandaoMixesReset_eq (computed : processRandaoMixesReset state = .ok after) :
     ∃ (nextEpoch : Epoch) (mix : Bytes32)
-      (randaoMixes : Vector Bytes32 preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat),
+      (randaoMixes : RootedVector Bytes32 preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat),
       nextEpoch.toNat = (getCurrentEpoch state).toNat + 1 ∧
       getRandaoMix state (getCurrentEpoch state) = .ok mix ∧
-      writeCircular state.randaoMixes nextEpoch mix = .ok randaoMixes ∧
+      writeCircularRooted state.randaoMixes nextEpoch mix = .ok randaoMixes ∧
       after = { state with randaoMixes } := by
   simp only [processRandaoMixesReset, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
     addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed

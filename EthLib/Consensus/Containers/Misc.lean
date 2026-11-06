@@ -7,6 +7,7 @@ public import EthLib.Cryptography.Bls.Signatures
 public import EthLib.Serialization.Ssz.Typed.Basic
 public import EthLib.Serialization.Ssz.Typed.Collections
 public import EthLib.Serialization.Ssz.Typed.Container
+public import EthLib.Serialization.Ssz.Typed.Rooted
 
 /-!
 # `Consensus.Containers.Misc`
@@ -141,9 +142,9 @@ instance : SszType Eth1Data :=
 /-- The block roots and state roots of one span of slots, as the history keeps them. -/
 structure HistoricalBatch (preset : Preset) where
   /-- The roots of the blocks, one for each slot of the span. -/
-  blockRoots : Vector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat
+  blockRoots : RootedVector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat
   /-- The roots of the states, one for each slot of the span. -/
-  stateRoots : Vector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat
+  stateRoots : RootedVector Root preset.SLOTS_PER_HISTORICAL_ROOT.toNat
   deriving DecidableEq, Repr
 
 instance {preset : Preset} : SszType (HistoricalBatch preset) :=
