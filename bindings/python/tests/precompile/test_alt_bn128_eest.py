@@ -140,8 +140,8 @@ def invalid_variant(address: int, data: bytes) -> str:
     if address in (0x06, 0x07):
         padded = data.ljust(128, b"\0")
         for offset in (0, 64) if address == 0x06 else (0,):
-            x = int.from_bytes(padded[offset : offset + 32])
-            y = int.from_bytes(padded[offset + 32 : offset + 64])
+            x = int.from_bytes(padded[offset : offset + 32], "big")
+            y = int.from_bytes(padded[offset + 32 : offset + 64], "big")
             if variant := g1_variant(x, y):
                 return variant
         raise AssertionError("an invalid case with a valid ECADD or ECMUL input")
@@ -151,7 +151,9 @@ def invalid_variant(address: int, data: bytes) -> str:
     if len(data) % 192 != 0:
         return f"invalidInputLength {len(data)}"
     for offset in range(0, len(data), 192):
-        words = [int.from_bytes(data[offset + i : offset + i + 32]) for i in range(0, 192, 32)]
+        words = [
+            int.from_bytes(data[offset + i : offset + i + 32], "big") for i in range(0, 192, 32)
+        ]
         if variant := g1_variant(words[0], words[1]):
             return variant
         if any(word >= P for word in words[2:]):
