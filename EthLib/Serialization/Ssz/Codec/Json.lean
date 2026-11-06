@@ -49,7 +49,8 @@ def Spelling.isByte : Spelling → Bool
 /-- Bytes as the mapping writes them: lowercase hex behind a two-character marker. -/
 def toHex (data : Bytes) : String :=
   data.foldl (init := "0x") fun text byte =>
-    (text.push Base.hexAlphabet[byte.toNat >>> 4]!).push Base.hexAlphabet[byte.toNat &&& 0xF]!
+    (text.push (Base.hexDigitChar ⟨byte.toNat / 16, by have := byte.toNat_lt; omega⟩)).push
+      (Base.hexDigitChar ⟨byte.toNat % 16, by omega⟩)
 
 /-- The value of one hex digit, in either letter case. -/
 def hexDigit (character : Char) : Except Err Nat :=
