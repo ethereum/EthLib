@@ -1,16 +1,17 @@
 module
 
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Configurations
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Base.SplitCert
+public import
+  EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.RecoveredFors
+public import
+  EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.SignedReveals
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Win
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Configurations
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.MomentTable
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.Price
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.Interpreter
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Reduction.SeedElimination
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ScanSigner.SignatureLaw
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.Outside
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.GraphSampling
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Hidden
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Reduction.Memo
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Reduction.CostProgram
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Reduction.SeedFreeGame
 
 /-!
 # Proofs: the model of the leanSPHINCS security proof
@@ -24,6 +25,10 @@ The model is generic over the height, the layers, the FORS forest and the cap on
 The first game hops of the security proof are here too.
 
 They internalize long hash inputs, sample short ones as one table, and count the hash calls of runs.
+
+They also remove the key's seed and the scheme seed from the game.
+
+A lazy run samples the hidden values only when a hash call reads them.
 
 The rest of the proof lands in later parts.
 

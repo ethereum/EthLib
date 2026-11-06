@@ -1,0 +1,146 @@
+module
+
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.RunSupport
+
+/-!
+# Preparing the encoding searches before the run
+
+An independent table, sampled in advance, answers every canonical input of a WOTS encoding search.
+
+That table sits in the initial cache of the lazy outside oracle.
+
+So the encoding targets are fixed before the run.
+-/
+
+@[expose] public section
+
+open OracleComp OracleSpec ENNReal
+
+namespace SphincsSecurity.Security.HiddenBridge
+
+variable [Params]
+
+open Eager Short HiddenCost Concrete
+
+set_option maxRecDepth 10000
+attribute [local instance] Classical.propDecidable
+
+/-- The canonical WOTS encoding search of every key on its message, run in order. -/
+def searchAll (parameter : PublicParameter) (message : OtsKey → HashInput) :
+    OracleComp HashSpec (OtsKey → Option (Counter × Encoding)) := do
+  let found ← Concrete.sequenceFin fun lay : Layer => Concrete.sequenceFin fun tree : TreeIndex =>
+    Concrete.sequenceFin fun leaf : LeafIndex =>
+      ReferenceChoice.search parameter lay tree leaf
+          (message (lay, tree, leaf)) encodingAttemptLimit 0
+  return fun key => found key.1 key.2.1 key.2.2
+
+theorem Only.searchAll (parameter : PublicParameter) (message : OtsKey → HashInput)
+    (hmsg : ∀ key, Short.ShortMessage (message key)) :
+    Short.Only (searchAll parameter message) :=
+  Short.Only.bind (Short.Only.sequenceFin _ fun _ => Short.Only.sequenceFin _ fun _ =>
+    Short.Only.sequenceFin _ fun _ => Only.search _ _ _ _ _ (hmsg _) _ _)
+        (fun _ => Short.Only.pure' _)
+
+/-- The public message of every key. -/
+def keyMessages (data : GraphView.PublicData) : OtsKey → HashInput := fun key =>
+  data.keyMessage key.1 key.2.1 key.2.2
+
+omit [Params] in
+/-- Run a short hash computation on the lazy oracle first, and then sample the rest of the table.
+
+This keeps only the resulting cache, and it has the law of the eager table itself. -/
+theorem evalDist_eager_prefix {β γ : Type} (computation : OracleComp HashSpec γ)
+    (hshort : Short.Only computation) (cache : QueryCache HashSpec)
+    (next : (HashInput → HashOutput) → ProbComp β) :
+    (($ᵗ Eager.Table) >>= fun outside => next (extend cache outside)) =ᵈ
+      ((simulateQ randomOracle computation).run cache >>= fun result =>
+        ($ᵗ Eager.Table) >>= fun outside => next (extend result.2 outside)) := by
+  induction computation using OracleComp.inductionOn generalizing cache with
+  | pure value =>
+      simp only [simulateQ_pure, StateT.run_pure, pure_bind]
+      rfl
+  | query_bind input next' ih =>
+      rw [Short.Only, isQueryBoundP_query_bind_iff] at hshort
+      have hnext : ∀ answer, Short.Only (next' answer) := fun answer => by
+        have := hshort.2 answer
+        split at this <;> simpa [Short.Only] using this
+      have hinput : IsShort input := by
+        rcases hshort.1 with hnot | hzero
+        · exact Classical.not_not.mp hnot
+        · omega
+      rw [simulateQ_bind, simulateQ_spec_query, StateT.run_bind, bind_assoc]
+      change _ =ᵈ (randomOracle (spec := HashSpec) input).run cache >>= _
+      cases hc : cache input with
+      | some answer =>
+          rw [QueryImpl.withCaching_run_some _ hc, pure_bind]
+          exact ih answer (hnext answer) cache
+      | none =>
+          rw [QueryImpl.withCaching_run_none _ hc, bind_map_left]
+          have hupdate : ∀ (answer : HashOutput) (outside : Eager.Table),
+              next (extend (cache.cacheQuery input answer) outside) =
+                (fun table => next (extend cache table))
+                    (Function.update outside ⟨input, hinput⟩ answer) := by
+            intro answer outside
+            simp only [extend_cacheQuery cache outside hinput hc answer]
+          have hsplit : (($ᵗ HashOutput : ProbComp HashOutput) >>= fun answer =>
+              ($ᵗ Eager.Table) >>=
+              fun outside => pure (Function.update outside ⟨input, hinput⟩ answer)) =ᵈ
+              ($ᵗ Eager.Table : ProbComp Eager.Table) := by
+            let : MeasurableSpace HashOutput := ⊤
+            refine EvalDistEq.of_evalDist_eq ?_
+            simpa only [id_eq, bind_pure] using evalDist_uniformSample_bind_update_map
+              (SampleableType.evalDist_uniformSample (β := HashOutput))
+              (SampleableType.evalDist_uniformSample (β := Eager.Table)) ⟨input, hinput⟩ id
+          have hstep : ((($ᵗ HashOutput : ProbComp HashOutput) >>= fun answer =>
+              ($ᵗ Eager.Table) >>=
+              fun outside => pure (Function.update outside ⟨input, hinput⟩ answer)) >>=
+                fun outside => next (extend cache outside)) =
+              (($ᵗ HashOutput : ProbComp HashOutput) >>= fun answer => ($ᵗ Eager.Table) >>=
+                  fun outside =>
+                next (extend (cache.cacheQuery input answer) outside)) := by
+            simp only [bind_assoc, pure_bind, hupdate]
+          refine (hsplit.symm.bind_left _).trans ?_
+          rw [hstep]
+          change _ =ᵈ uniformSampleImpl (spec := HashSpec) input >>= _
+          exact EvalDistEq.bind_right _ fun answer => ih answer (hnext answer) _
+
+theorem evalDist_stoppedExperiment_prep {A α : Type}
+    (model : HiddenRows.Model HashInput HashOutput A HiddenGraph.Coordinate)
+    (base : QueryCache HashSpec) (parameter : PublicParameter) (data : GraphView.PublicData)
+    (computation : OracleComp (HiddenRows.SourceSpec HashInput HashOutput HiddenGraph.Coordinate) α)
+    (hshort : OnlyShort computation) (known : HiddenReveal.Knowledge HiddenGraph.Coordinate) :
+    (($ᵗ Eager.Table) >>= fun outside =>
+        HiddenRows.stoppedExperiment model (extend base outside) computation known) =ᵈ
+      ((simulateQ randomOracle (searchAll parameter (keyMessages data))).run base >>=
+          fun prepared =>
+        Option.map Prod.fst <$> HiddenOutside.stoppedExperiment model computation known
+            prepared.2) := by
+  refine (evalDist_eager_prefix (searchAll parameter (keyMessages data))
+    (Only.searchAll parameter _ fun key => shortMessage_keyMessage data _ _ _) base
+    (fun outside => HiddenRows.stoppedExperiment model outside computation known)).trans ?_
+  exact EvalDistEq.bind_right _ fun prepared =>
+    evalDist_stoppedExperiment_lazy model _ computation hshort known
+
+section Game
+
+open Completeness SeedModel Graph Assembly Reduce HiddenGraph Internalize GraphView
+
+
+attribute [local instance] sampleCellFintypeInst sampleCellDecEq hiddenTableSampleable
+    highsSampleable
+  remainingSampleable
+
+/-- The preparation run of one sample.
+
+It runs every canonical encoding search, from the structural cache. -/
+noncomputable def preparation (parameterOutput : HashOutput) (fixed : HiddenGraph.Table)
+    (highs : CoordinateHighs) (remaining : RemainingOutputs) :
+    ProbComp ((OtsKey → Option (Counter × Encoding)) × QueryCache HashSpec) :=
+  (simulateQ randomOracle (searchAll (truncateHash parameterOutput)
+    (keyMessages (sampleData parameterOutput fixed highs remaining)))).run
+    (structCache (splitMaterial parameterOutput highs remaining fixed)
+        (splitAnswers highs remaining fixed))
+
+end Game
+
+end SphincsSecurity.Security.HiddenBridge
