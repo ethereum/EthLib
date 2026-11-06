@@ -915,19 +915,21 @@ The setup raises three separate assumptions, and each use of KZG relies on a dif
 - Provenance: the embedded bytes are the ceremony's output.
   They match consensus-specs `presets/mainnet/trusted_setups/trusted_setup_4096.json` byte for byte, and `Kzg/TrustedSetupData.lean` records that source, the commit it comes from and its sha256.
 - Algebraic consistency: the bytes decode to valid points, the monomial points are powers of one secret, and the Lagrange points are the matching basis.
-  For the embedded bytes, the first and the third parts are proved if the bytes decode, and the second is not.
+  For the embedded bytes, the first part is proved only in part, the third is proved if the bytes decode, and the second is not.
   `TrustedSetup.ofHex_valid` (`Proofs/Kzg/TrustedSetup.lean`) proves that, if they decode, each point is on its curve.
   No theorem says that they decode.
   If they decode, `TrustedSetup.ofHex_torsion` proves that each monomial point of `G1` has an order that divides `r`.
   No theorem says this of the Lagrange points or of the points of `G2`.
   If they decode, `TrustedSetup.ofHex_lagrangeOfMonomial` (`Proofs/Kzg/SetupLagrange/Embedded.lean`) proves that each Lagrange point of `G1` is the sum of the monomial points times the coefficients of its basis polynomial.
   So the Lagrange points are the matching basis of whatever secret the monomial points hold.
-  The kernel checks this on the embedded data: it decodes all 8192 points of `G1` and runs 768 transforms of size 16, in three rounds.
+  The kernel checks this on the embedded data, in three rounds of 256 transforms of size 16.
+  It also checks that each of the 8192 strings of `G1` encodes its table point, so decompression gives that point.
+  The kernel computes no square root: each table point is a certificate that it checks with three products.
   Compiled code computes two tables of intermediate points when the files are built, and the repository holds no copy of them.
   A wrong table only makes a kernel check fail.
   This is a second recorded exception to the rule of a few seconds for concrete facts in [CONTRIBUTING.md](CONTRIBUTING.md#known-answers).
-  It costs about 21 CPU-minutes per replay, measured one module at a time, in 56 modules, and about as much per build.
-  Each module takes 13 to 43 seconds and at most 3.3 GB to replay.
+  It costs about 20 CPU-minutes per replay, measured one module at a time, in 56 modules, and about as much per build.
+  Each module takes 14 to 29 seconds and at most 3.3 GB to replay.
   The Python suite checks for every point that it decodes and lies in the subgroup (`bindings/python/tests/kzg/test_trusted_setup.py`).
   `checksSufficient` covers the ceremony's monomial points, under its hypotheses.
   `TrustedSetup.WellFormed s τ` (`Proofs/Kzg/Commitment.lean`) states the consistency of a setup `s` with a secret `τ`.

@@ -64,7 +64,7 @@ The embedded setup holds 4096 monomial points and 4096 Lagrange points of `G1`.
 
 The kernel checks that the Lagrange points are the inverse transform of the monomial points.
 
-The check decodes every point and runs 768 transforms of size 16, in three rounds.
+The check tests that each string encodes its table point, and runs 768 transforms of size 16.
 
 So if the embedded setup decodes, each Lagrange point is a sum of the monomial points.
 

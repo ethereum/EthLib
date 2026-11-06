@@ -15,8 +15,9 @@ Here the coordinates are naturals below `p`, with the field operations of the to
 
 So the check computes the same values as `Fp`, without reducing its representation.
 
-- A string of 96 hexadecimal digits decodes to `(x, y)`, as decompression computes it.
-  The sign flag picks the candidate root of `x^3 + 4` or its negation.
+- A string of 96 hexadecimal digits encodes `(x, y)` if `x` is its value, `y^2 = x^3 + 4`, and
+  the sign flag is the sign of `y`.
+  Decompression of the string then gives `(x, y)`, since only one root of `x^3 + 4` has that sign.
 - A pair `(x, y)` below `p` with `y^2 = x^3 + 4` is a valid point with `z = 1`.
 - A point `(X, Y, Z)` with `Z ≠ 0`, `X = x Z^2` and `Y = y Z^3` is the point `(x, y, 1)`.
 -/
@@ -27,7 +28,7 @@ namespace EthLib.Cryptography.Kzg.SetupLagrange
 
 open EthLib.Cryptography.Bls
 open EthLib.Cryptography.Bls.G1
-open EthLib.Cryptography.Bls.G1.TorsionCheck (Coords coords fadd fmul rootCandidate)
+open EthLib.Cryptography.Bls.G1.TorsionCheck (Coords coords fadd fmul)
 open EthLib.Cryptography.Kzg.SetupTorsion (hexBytes xOf codes)
 open WeierstrassCurve.Jacobian
 
@@ -39,23 +40,22 @@ def rhs (x : Nat) : Nat := fadd (fmul (fmul x x) x) (4 % Fp.modulus)
 /-- The sign of `y`, as the encoding defines it: `y` is greater than `p - y`. -/
 def signBit (y : Nat) : Bool := y > Fp.modulus - y
 
-/-- The affine point that 48 bytes encode.
+/-- The bytes encode the affine point `(x, y)`.
 
-The infinity flag, or an `x^3 + 4` that is not a square, gives `none`.
+The infinity flag is clear, `x` is the value of the bytes, and `y` is below `p`.
 
-The sign flag picks the candidate root or its negation, as decompression does. -/
-def decodeBytes : List Nat → Option (Nat × Nat)
-  | [] => none
+The pair satisfies the curve equation, and the sign flag is the sign of `y`. -/
+def encodesBytes (x y : Nat) : List Nat → Bool
+  | [] => false
   | h :: t =>
-    let x := xOf (h :: t)
-    let y := rootCandidate x
-    bif Nat.land (h % 256) 0x40 == 0 && fmul y y == rhs x then
-      some (x, bif signBit y == (Nat.land (h % 256) 0x20 != 0) then y
-        else (Fp.modulus - y) % Fp.modulus)
-    else none
+    Nat.land (h % 256) 0x40 == 0 && xOf (h :: t) == x && Nat.blt y Fp.modulus &&
+      fmul y y == rhs x && signBit y == (Nat.land (h % 256) 0x20 != 0)
 
-/-- The affine point that a list of digit codes encodes. -/
-def decodeCodes (ns : List Nat) : Option (Nat × Nat) := (hexBytes ns).bind decodeBytes
+/-- The list of digit codes encodes the affine point `(x, y)`. -/
+def encodes (ns : List Nat) (x y : Nat) : Bool :=
+  match hexBytes ns with
+  | some l => encodesBytes x y l
+  | none => false
 
 /-- The infinity flag reads the same on the byte and on its value mod 256. -/
 private theorem flag40_aux :
@@ -92,19 +92,16 @@ private theorem select_eq {y₀ yPos : Fp} (hy : yPos = y₀ ∨ yPos = -y₀) (
   rw [signBit_neg h0]
   by_cases hP : P <;> cases Fp.signBit y₀ <;> simp [hP]
 
-/-- The value of the negation in `Fp`, as the decoder computes it. -/
-private theorem val_neg (y : Fp) : (-y).val = (Fp.modulus - y.val) % Fp.modulus := Fin.val_neg' y
-
-/-- Decompression returns `(x, y, 1)` from the bytes of a string that decodes to `(x, y)`. -/
-theorem coords_of_decodeCodes {s : String} {b : ByteArray} {q : G1} {x y : Nat}
-    (hd : decodeCodes (codes s) = some (x, y)) (hb : TrustedSetup.hexToBytes? s = some b)
+/-- Decompression returns `(x, y, 1)` from the bytes of a string that encodes `(x, y)`. -/
+theorem coords_of_encodes {s : String} {b : ByteArray} {q : G1} {x y : Nat}
+    (hd : encodes (codes s) x y = true) (hb : TrustedSetup.hexToBytes? s = some b)
     (hq : G1.uncompress b = .ok q) : coords q = (x, y, 1) := by
-  unfold decodeCodes codes at hd
+  unfold encodes codes at hd
   rw [TrustedSetup.hexToBytes?, SetupTorsion.hexToBytesAux_eq] at hb
   cases hl : hexBytes (s.toList.map Char.toNat) with
   | none => rw [hl] at hd; cases hd
   | some l =>
-  rw [hl, Option.bind_some] at hd
+  rw [hl] at hd
   rw [hl, Option.map_some, Option.some.injEq] at hb
   subst hb
   have he : ByteArray.empty.data ++ (l.map UInt8.ofNat).toArray = (l.map UInt8.ofNat).toArray :=
@@ -113,60 +110,48 @@ theorem coords_of_decodeCodes {s : String} {b : ByteArray} {q : G1} {x y : Nat}
   cases l with
   | nil => cases hd
   | cons h t =>
-  -- The checks of the decoder, and its result.
-  simp only [decodeBytes, Bool.cond_eq_ite, Bool.and_eq_true, beq_iff_eq] at hd
-  split at hd
-  · rename_i hc
-    obtain ⟨hinf, hsq⟩ := hc
-    cases hd
-    -- The branches of decompression.
-    have hhead : (⟨((h :: t).map UInt8.ofNat).toArray⟩ : ByteArray).get! 0 = UInt8.ofNat h := rfl
-    unfold G1.uncompress at hq
-    rw [hhead] at hq
-    split at hq
-    · cases hq
-    dsimp only at hq
-    split at hq
-    · cases hq
-    split at hq
-    · rename_i hi
-      exact absurd hinf ((flag40 h).mp hi)
-    split at hq
-    · cases hq
-    rename_i xf hx
-    split at hq
-    · cases hq
-    rename_i yPos hsqrt
-    cases hq
-    have hxv : xf.val = xOf (h :: t) := SetupTorsion.fromBytesBE_eq (by rw [hhead]; exact hx)
-    -- Decompression starts from the root of the decoder or from its negation.
-    let y₀ : Fp := ⟨rootCandidate (xOf (h :: t)), Nat.mod_lt _ Fp.modulus_pos⟩
-    have hy₀ : (y₀ : ZMod Fp.modulus) * y₀ = xf * xf * xf + Fp.ofNat 4 := by
-      apply Fin.ext
-      rw [Fin.val_mul, Fin.val_add, Fin.val_mul, Fin.val_mul, hxv]
-      exact hsq
-    have hpm := sqrt_pm ((Fp.sqrt_ok hsqrt).trans hy₀.symm)
-    rw [select_eq hpm]
-    simp only [coords, hxv]
-    refine Prod.ext rfl (Prod.ext ?_ rfl)
-    -- The sign test of decompression is the sign test of the decoder.
-    have hsb : Fp.signBit y₀ = signBit y₀.val := rfl
-    have hf := flag20 h
-    show (if (Fp.signBit y₀ = true) = _ then y₀ else -y₀).val =
-      if signBit y₀.val = (Nat.land (h % 256) 0x20 != 0) then y₀.val
-      else (Fp.modulus - y₀.val) % Fp.modulus
-    by_cases hs : signBit y₀.val = (Nat.land (h % 256) 0x20 != 0)
-    · have hc : (Fp.signBit y₀ = true) = ((UInt8.ofNat h &&& 0x20) ≠ 0) := by
-        rw [hsb, hs]
-        exact propext ⟨fun h' => hf.mpr (bne_iff_ne.mp h'), fun h' => bne_iff_ne.mpr (hf.mp h')⟩
-      rw [ite_eq_left hs, ite_eq_left hc]
-    · have hc : ¬ (Fp.signBit y₀ = true) = ((UInt8.ofNat h &&& 0x20) ≠ 0) := by
-        intro he
-        apply hs
-        rw [← hsb]
-        exact Bool.eq_iff_iff.mpr (he.to_iff.trans (hf.trans bne_iff_ne.symm))
-      rw [ite_eq_right hs, ite_eq_right hc, val_neg]
-  · cases hd
+  -- The checks of the certificate.
+  simp only [encodesBytes, Bool.and_eq_true, beq_iff_eq, Nat.blt_eq] at hd
+  obtain ⟨⟨⟨⟨hinf, hx⟩, hy⟩, hsq⟩, hsign⟩ := hd
+  subst hx
+  -- The branches of decompression.
+  have hhead : (⟨((h :: t).map UInt8.ofNat).toArray⟩ : ByteArray).get! 0 = UInt8.ofNat h := rfl
+  unfold G1.uncompress at hq
+  rw [hhead] at hq
+  split at hq
+  · cases hq
+  dsimp only at hq
+  split at hq
+  · cases hq
+  split at hq
+  · rename_i hi
+    exact absurd hinf ((flag40 h).mp hi)
+  split at hq
+  · cases hq
+  rename_i xf hx
+  split at hq
+  · cases hq
+  rename_i yPos hsqrt
+  cases hq
+  have hxv : xf.val = xOf (h :: t) := SetupTorsion.fromBytesBE_eq (by rw [hhead]; exact hx)
+  -- Decompression starts from `y` or from its negation.
+  let y₀ : Fp := ⟨y, hy⟩
+  have hy₀ : (y₀ : ZMod Fp.modulus) * y₀ = xf * xf * xf + Fp.ofNat 4 := by
+    apply Fin.ext
+    rw [Fin.val_mul, Fin.val_add, Fin.val_mul, Fin.val_mul, hxv]
+    exact hsq
+  have hpm := sqrt_pm ((Fp.sqrt_ok hsqrt).trans hy₀.symm)
+  rw [select_eq hpm]
+  simp only [coords, hxv]
+  refine Prod.ext rfl (Prod.ext ?_ rfl)
+  -- The sign of `y` is the sign flag, so decompression keeps `y`.
+  have hc : (Fp.signBit y₀ = true) = ((UInt8.ofNat h &&& 0x20) ≠ 0) := by
+    have hsb : Fp.signBit y₀ = signBit y := rfl
+    rw [hsb, hsign]
+    exact propext ⟨fun h' => (flag20 h).mpr (bne_iff_ne.mp h'),
+      fun h' => bne_iff_ne.mpr ((flag20 h).mp h')⟩
+  show (if (Fp.signBit y₀ = true) = _ then y₀ else -y₀).val = y
+  rw [ite_eq_left hc]
 
 /-! ## Points with `z = 1` -/
 
