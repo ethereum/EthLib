@@ -14,8 +14,8 @@ namespace EthLib.Base
 def hexAlphabet : Array Char :=
   #['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
 
-/-- The hex digit of a value below sixteen. -/
+/-- The lowercase hex digit of a value below sixteen. -/
 def hexDigitChar (n : Fin 16) : Char :=
-  hexAlphabet[n.val]'(by have : hexAlphabet.size = 16 := rfl; omega)
+  hexAlphabet[n]
 
 end EthLib.Base
