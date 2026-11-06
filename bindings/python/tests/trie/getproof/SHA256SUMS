@@ -1,2 +1,6 @@
 # Source: ethereum/execution-apis at 3284ee80c3da3e516c53782dde75157cccf1ebdc
+5c578689783cf4f5ecbc2bda089585a71813e878e8455572ec6fd6a20c8766c3  get-account-proof-block-hash-object.io
+518d937077d5c7763d28d97d860c30ed9ef00255017cd53e6f668df103003370  get-account-proof-blockhash.io
+ad5b84fd445fad5325ab2cf595f5fba5de3b5d7e0e8b69f6991632c09e0d19c2  get-account-proof-default-block.io
+ee7cd151abe169a4d833966ca7e20f7586faf6543a3a1c0cf262b24227739ab4  get-account-proof-latest.io
 94ca21b7b5c53dee0a34e5b5478818520ecf43076f01614d23da84c5075edbc2  get-account-proof-with-storage.io
