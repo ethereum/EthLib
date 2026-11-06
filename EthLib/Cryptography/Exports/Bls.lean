@@ -142,7 +142,7 @@ def expandMessageXmdExport (msg dst : ByteArray) (len : UInt64) : Result ByteArr
 The point at infinity has no affine form, so it is an error. -/
 @[export eth_bls_hash_to_g2]
 def hashToG2Export (msg dst : ByteArray) : Result ByteArray := do
-  let p ← runBls (HashToCurve.hashToG2 msg dst)
+  let p ← runBls (HashToCurve.hashToG2 (F := Fp) msg dst)
   if p.isInfinity then runBls (.error .pointAtInfinity)
   let (x, y) := p.toAffine
   return x.c0.toBytesBE ++ x.c1.toBytesBE ++ y.c0.toBytesBE ++ y.c1.toBytesBE

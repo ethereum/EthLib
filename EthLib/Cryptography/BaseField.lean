@@ -37,5 +37,13 @@ class BaseField (F : Type) extends Add F, Sub F, Mul F, Neg F where
 
   Each instance states its value at zero. -/
   inverse : F → F
+  /-- The power by a natural number. -/
+  powNat : F → Nat → F
+  /-- A square root, or `none` when the element is not a square.
+
+  Each instance states which of the two roots it returns. -/
+  sqrt : F → Option F
+  /-- The sign `sgn0` of RFC 9380, §4.1: whether the canonical integer of the element is odd. -/
+  sgn0 : F → Bool
 
 end EthLib.Cryptography

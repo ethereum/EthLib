@@ -476,6 +476,25 @@ def toZMod : Fp ≃+* ZMod modulus := RingEquiv.refl _
 /-- The curves read the natural numbers in `Fp` through its own map. -/
 @[simp] theorem baseField_ofNat (n : Nat) : (BaseField.ofNat n : Fp) = Fp.ofNat n := rfl
 
+/-- Hash-to-curve raises `Fp` to a natural power through its own map. -/
+@[simp] theorem baseField_powNat (a : Fp) (n : Nat) : BaseField.powNat a n = Fp.powNat a n := rfl
+
+/-- The sign of an `Fp` element is the parity of its value. -/
+@[simp] theorem baseField_sgn0 (a : Fp) : BaseField.sgn0 a = (a.val % 2 == 1) := rfl
+
+/-- The square root that the extensions read from `Fp` is its own square root.
+
+The square root of `Fp` fails only with the error for a non-square, so the two agree on errors too.
+-/
+theorem sqrtOrError_eq (a : Fp) : sqrtOrError a = Fp.sqrt a := by
+  have hs : Fp.sqrt a = .error .notASquare ∨ ∃ s, Fp.sqrt a = .ok s := by
+    unfold Fp.sqrt
+    dsimp only
+    split <;> simp
+  unfold sqrtOrError
+  dsimp only [BaseField.sqrt]
+  rcases hs with h | ⟨s, h⟩ <;> rw [h]
+
 /-! ## Bridge: spec operations = Mathlib operations -/
 
 /-- `Fp.powNat` is monoid power, phrased over `ZMod Fp.modulus`

@@ -368,7 +368,7 @@ theorem uncompress_valid {bytes : ByteArray} {p : G2}
           · cases h
           · rename_i c0
             dsimp only at h
-            cases hsqrt : Fp2.sqrt (⟨c0, c1⟩ * ⟨c0, c1⟩ * ⟨c0, c1⟩ + bTwist) <;>
+            cases hsqrt : Fp2.sqrt ((⟨c0, c1⟩ : Fp2) * ⟨c0, c1⟩ * ⟨c0, c1⟩ + bTwist) <;>
                 rw [hsqrt] at h
             · cases h
             · rename_i yPos
@@ -812,7 +812,7 @@ theorem compress_uncompress {b : ByteArray} {q : G2}
           · cases h
           · rename_i c0
             dsimp only at h
-            cases hsqrt : Fp2.sqrt (⟨c0, c1⟩ * ⟨c0, c1⟩ * ⟨c0, c1⟩ + bTwist) <;>
+            cases hsqrt : Fp2.sqrt ((⟨c0, c1⟩ : Fp2) * ⟨c0, c1⟩ * ⟨c0, c1⟩ + bTwist) <;>
                 rw [hsqrt] at h
             · cases h
             · rename_i yPos
