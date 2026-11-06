@@ -404,16 +404,26 @@ A deposit to a new key with an invalid signature changes nothing.
 
 A key that a validator has adds the amount to the balance of the first such validator.
 
-Before Electra a deposit is credited at once; from Electra it waits in the pending deposits. -/
+Before Electra a deposit is credited at once; from Electra it waits in the pending deposits.
+
+From Heze a deposit to a new key with BLS withdrawal credentials changes nothing.
+
+It is not refunded, as [EIP-8365] specifies.
+
+[EIP-8365]: https://eips.ethereum.org/EIPS/eip-8365#deposit-processing
+-/
 def applyPendingDeposit (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (deposit : PendingDeposit) :
     Except TransitionError (BeaconState preset fork) :=
   match state.validators.data.findIdx? (·.pubkey == deposit.pubkey) with
-  | none => do
-    if ← isValidDepositSignature config checks deposit.pubkey deposit.withdrawalCredentials
-        deposit.amount deposit.signature then
-      addValidatorToRegistry state deposit.pubkey deposit.withdrawalCredentials deposit.amount
-    else return state
+  | none =>
+    if .hegota ≤ fork ∧ deposit.withdrawalCredentials[0] = BLS_WITHDRAWAL_PREFIX[0] then
+      pure state
+    else do
+      if ← isValidDepositSignature config checks deposit.pubkey deposit.withdrawalCredentials
+          deposit.amount deposit.signature then
+        addValidatorToRegistry state deposit.pubkey deposit.withdrawalCredentials deposit.amount
+      else return state
   | some index => liftAccessor (increaseBalance state index.toUInt64 deposit.amount)
 
 /-- From Electra: the state after the deposit of an amount to a key, as [EIP-7251] specifies.

@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: epoch_processing
+handler: registry_updates
+suite: pyspec_tests
+case: invalid_large_withdrawable_epoch

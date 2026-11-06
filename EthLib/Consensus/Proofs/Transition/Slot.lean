@@ -168,7 +168,10 @@ theorem applyPendingDeposit_slot {deposit : PendingDeposit}
     after.slot = state.slot := by
   unfold applyPendingDeposit at computed
   split at computed
-  · simp only [bind_ok_iff] at computed
+  · split at computed
+    · cases computed
+      rfl
+    simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
     · exact addValidatorToRegistry_slot computed
@@ -472,10 +475,7 @@ theorem processBlock_slot {block : BeaconBlock preset fork}
   by_cases altair : Fork.altair ≤ fork
   · simp only [processBlock, altair, ↓reduceDIte] at computed
     unfold processBlockAltair at computed
-    by_cases heze : Fork.hegota ≤ fork
-    · simp only [heze, ↓reduceDIte] at computed
-      cases computed
-    simp only [heze, ↓reduceDIte, bind_ok_iff] at computed
+    simp only [bind_ok_iff] at computed
     obtain ⟨paid, paidOk, headed, headedOk, computed⟩ := computed
     -- From Gloas the payload of the parent runs before the header.
     have paidSlot : paid.slot = state.slot := by
@@ -491,9 +491,15 @@ theorem processBlock_slot {block : BeaconBlock preset fork}
       · exact processBlockExecution_slot executedOk
       · cases executedOk
         rfl
-    rw [processSyncAggregate_slot synced, processOperations_slot operatedOk,
-      (frame_processEth1Data votedOk).slot, (frame_processRandao revealedOk).slot, executedSlot,
-      (frame_processBlockHeader headedOk).slot, paidSlot]
+    -- Heze drops the vote on the deposit contract.
+    have votedSlot : voted.slot = revealed.slot := by
+      split at votedOk
+      · exact (frame_processEth1Data votedOk).slot
+      · cases votedOk
+        rfl
+    rw [processSyncAggregate_slot synced, processOperations_slot operatedOk, votedSlot,
+      (frame_processRandao revealedOk).slot, executedSlot, (frame_processBlockHeader headedOk).slot,
+      paidSlot]
   · simp only [processBlock, altair, ↓reduceDIte, bind_ok_iff] at computed
     obtain ⟨headed, headedOk, revealed, revealedOk, voted, votedOk, operated⟩ := computed
     rw [processOperations_slot operated, (frame_processEth1Data votedOk).slot,

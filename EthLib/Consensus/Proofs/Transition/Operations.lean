@@ -379,6 +379,24 @@ theorem setOrAppendList_size {switch : Base.Fork} {α : Type} {limit : Nat}
       simp [notEnd]
     · cases computed
 
+/-- A set or an append puts the value at the index, and keeps every other entry. -/
+theorem setOrAppendList_getElem? {switch : Base.Fork} {α : Type} {limit : Nat}
+    {list list' : ForkList switch fork α limit} {index : UInt64} {value : α}
+    (computed : setOrAppendList list index value = .ok list') (i : Nat) :
+    list'.data[i]? = if i = index.toNat then some value else list.data[i]? := by
+  unfold setOrAppendList at computed
+  split at computed
+  · rename_i atEnd
+    unfold appendWithinLimit at computed
+    split at computed
+    · cases computed
+      simp only [Array.getElem?_push, atEnd]
+    · cases computed
+  · split at computed
+    · cases computed
+      simp only [Array.getElem?_set, eq_comm]
+    · cases computed
+
 /-- From Altair, a new validator keeps the deposit data and the next deposit index. -/
 theorem addValidatorToRegistryAltair_eth1 {altair : .altair ≤ fork} {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
@@ -443,8 +461,10 @@ theorem applyDeposit_new_valid {pubkey : BLSPubkey} {withdrawalCredentials : Byt
   have notElectra : ¬Fork.pectra ≤ fork := fun le =>
     Nat.lt_irrefl _ (Nat.lt_of_lt_of_le (Nat.lt_trans before (by decide)) le)
   have notAltair : ¬Fork.altair ≤ fork := fun le => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le before le)
+  have notHeze : ¬Fork.hegota ≤ fork := fun le =>
+    Nat.lt_irrefl _ (Nat.lt_of_lt_of_le (Nat.lt_trans before (by decide)) le)
   simp only [applyDeposit, notElectra, ↓reduceDIte, applyPendingDeposit, new, valid, bind,
-    Except.bind, ↓reduceIte, addValidatorToRegistry, notAltair] at computed
+    Except.bind, ↓reduceIte, addValidatorToRegistry, notAltair, notHeze, false_and] at computed
   split at computed
   · cases computed
     exact ⟨rfl, rfl⟩
@@ -468,7 +488,10 @@ theorem applyPendingDeposit_kept {deposit : PendingDeposit}
       after.eth1DepositIndex = state.eth1DepositIndex ∧ after.eth1Data = state.eth1Data := by
   unfold applyPendingDeposit at computed
   split at computed
-  · simp only [bind, Except.bind] at computed
+  · split at computed
+    · cases computed
+      exact ⟨id, rfl, rfl⟩
+    simp only [bind, Except.bind] at computed
     split at computed
     · cases computed
     split at computed
@@ -480,6 +503,68 @@ theorem applyPendingDeposit_kept {deposit : PendingDeposit}
     simp only [increaseBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, _, _, _, rfl⟩ := computed
     exact ⟨rfl, rfl⟩
+
+/-- A new validator is the only change to the registry.
+
+Each validator after is the validator at the same index before, or the validator of the deposit.
+-/
+theorem addValidatorToRegistry_validator {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
+    {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
+    {i : Nat} {validator : Validator} (found : after.validators.data[i]? = some validator) :
+    state.validators.data[i]? = some validator ∨
+      validator = getValidatorFromDeposit preset fork pubkey withdrawalCredentials amount := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · unfold addValidatorToRegistryAltair at computed
+    simp only [liftAccessor_ok, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨validators, validatorsOk, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    rw [setOrAppendList_getElem? validatorsOk] at found
+    split at found
+    · exact .inr (Option.some.inj found).symm
+    · exact .inl found
+  · split at computed
+    · cases computed
+      rw [Array.getElem?_push] at found
+      split at found
+      · exact .inr (Option.some.inj found).symm
+      · exact .inl found
+    · cases computed
+
+/-- From Heze, a deposit to a new key with BLS withdrawal credentials changes nothing. -/
+theorem applyPendingDeposit_of_blsCredentials {deposit : PendingDeposit} (heze : .hegota ≤ fork)
+    (new : state.validators.data.findIdx? (·.pubkey == deposit.pubkey) = none)
+    (bls : deposit.withdrawalCredentials[0] = BLS_WITHDRAWAL_PREFIX[0]) :
+    applyPendingDeposit config checks state deposit = .ok state := by
+  simp only [applyPendingDeposit, new, heze, bls, and_self, ↓reduceIte, pure, Except.pure]
+
+/-- From Heze, a credited deposit creates no validator with BLS withdrawal credentials.
+
+Each validator after with BLS credentials is the validator at the same index before. -/
+theorem applyPendingDeposit_blsValidator {deposit : PendingDeposit} (heze : .hegota ≤ fork)
+    (computed : applyPendingDeposit config checks state deposit = .ok after) {i : Nat}
+    {validator : Validator} (found : after.validators.data[i]? = some validator)
+    (bls : validator.withdrawalCredentials[0] = BLS_WITHDRAWAL_PREFIX[0]) :
+    state.validators.data[i]? = some validator := by
+  unfold applyPendingDeposit at computed
+  split at computed
+  · split at computed
+    · cases computed
+      exact found
+    rename_i notBls
+    simp only [bind, Except.bind] at computed
+    split at computed
+    · cases computed
+    split at computed
+    · refine (addValidatorToRegistry_validator computed found).resolve_right fun added => ?_
+      subst added
+      exact notBls ⟨heze, bls⟩
+    · cases computed
+      exact found
+  · rw [liftAccessor_ok] at computed
+    simp only [increaseBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, rfl⟩ := computed
+    exact found
 
 /-- From Electra, a deposit keeps one balance for each validator, and the deposit data. -/
 theorem applyDepositElectra_kept {electra : .pectra ≤ fork} {pubkey : BLSPubkey}

@@ -88,6 +88,8 @@ Justification and finalization come first, then the inactivity scores, rewards a
 
 The registry updates, the slashings and the reset of the deposit votes follow.
 
+Heze drops the reset of the deposit votes, as [EIP-8015] specifies.
+
 From Electra the pending deposits and the pending consolidations come next.
 
 Then come the effective balances, the slashings and RANDAO resets, and the history.
@@ -102,38 +104,34 @@ From Gloas [EIP-7732] adds two steps: the builder payments and the window of pay
 
 The builder payments settle after the pending consolidations, and the window moves on last.
 
-Heze changes the epoch, which EthLib does not yet have here, so it fails as not yet specified.
-
 [EIP-7917]: https://eips.ethereum.org/EIPS/eip-7917#specification
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#state-transition
+[EIP-8015]: https://eips.ethereum.org/EIPS/eip-8015#validation-changes
 -/
 def processEpochAltair (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (altair : .altair ≤ fork) :
-    Except TransitionError (BeaconState preset fork) :=
-  if heze : .hegota ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
-  else do
-    have before : fork < .hegota := Nat.lt_of_not_le heze
-    let state ← processJustificationAndFinalization state
-    let state ← processInactivityUpdates config state altair
-    let state ← processRewardsAndPenalties config state
-    let state ← processRegistryUpdates config state
-    let state ← processSlashings state
-    let state ← processEth1DataReset before state
-    let state ← processPendingBalances config checks state
-    let state ← (if gloas : .glamsterdam ≤ fork then
-        liftAccessor (processBuilderPendingPayments state gloas)
-      else pure state)
-    let state ← processEffectiveBalanceUpdates state
-    let state ← processSlashingsReset state
-    let state ← processRandaoMixesReset state
-    let state ← if capella : .shapella ≤ fork then processHistoricalSummariesUpdate state capella
-      else processHistoricalRootsUpdate state
-    let state := processParticipationFlagUpdates state altair
-    let state ← processSyncCommitteeUpdates state altair
-    let state ← (if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead state fulu)
-      else pure state)
-    if gloas : .glamsterdam ≤ fork then liftAccessor (processPtcWindow state gloas)
-    else pure state
+    Except TransitionError (BeaconState preset fork) := do
+  let state ← processJustificationAndFinalization state
+  let state ← processInactivityUpdates config state altair
+  let state ← processRewardsAndPenalties config state
+  let state ← processRegistryUpdates config state
+  let state ← processSlashings state
+  let state ← (if before : fork < .hegota then processEth1DataReset before state else pure state)
+  let state ← processPendingBalances config checks state
+  let state ← (if gloas : .glamsterdam ≤ fork then
+      liftAccessor (processBuilderPendingPayments state gloas)
+    else pure state)
+  let state ← processEffectiveBalanceUpdates state
+  let state ← processSlashingsReset state
+  let state ← processRandaoMixesReset state
+  let state ← if capella : .shapella ≤ fork then processHistoricalSummariesUpdate state capella
+    else processHistoricalRootsUpdate state
+  let state := processParticipationFlagUpdates state altair
+  let state ← processSyncCommitteeUpdates state altair
+  let state ← (if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead state fulu)
+    else pure state)
+  if gloas : .glamsterdam ≤ fork then liftAccessor (processPtcWindow state gloas)
+  else pure state
 
 /-- The state after the epoch transition.
 
@@ -230,32 +228,31 @@ The header runs next, then from Bellatrix the execution part of the block.
 
 The RANDAO reveal, the vote on the deposit contract and the operations follow.
 
+Heze drops the vote on the deposit contract, as [EIP-8015] specifies.
+
 From Gloas the attestations of the operations read the slot of the parent block.
 
 The sync aggregate comes last.
 
-Heze changes the epoch and the block, which EthLib does not yet have here.
-
-So it fails as not yet specified. -/
+[EIP-8015]: https://eips.ethereum.org/EIPS/eip-8015#validation-changes
+-/
 def processBlockAltair (config : Config) (checks : SignatureChecks)
     (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
     (block : BeaconBlock preset fork) (altair : .altair ≤ fork) :
-    Except TransitionError (BeaconState preset fork) :=
-  if heze : .hegota ≤ fork then throw (.accessor (.forkNotYetSpecified fork))
-  else do
-    have before : fork < .hegota := Nat.lt_of_not_le heze
-    let parentSlot := state.latestBlockHeader.slot
-    let state ← (if gloas : .glamsterdam ≤ fork then
-        processParentExecutionPayload config checks state gloas block.body
-      else pure state)
-    let state ← processBlockHeader state block
-    let state ← (if bellatrix : .bellatrix ≤ fork then
-        processBlockExecution config checks engine state block.body bellatrix
-      else pure state)
-    let state ← processRandao config checks state block.body
-    let state ← processEth1Data before state block.body
-    let state ← processOperations config checks state block.body parentSlot
-    processSyncAggregate config checks state altair (block.body.syncAggregate altair)
+    Except TransitionError (BeaconState preset fork) := do
+  let parentSlot := state.latestBlockHeader.slot
+  let state ← (if gloas : .glamsterdam ≤ fork then
+      processParentExecutionPayload config checks state gloas block.body
+    else pure state)
+  let state ← processBlockHeader state block
+  let state ← (if bellatrix : .bellatrix ≤ fork then
+      processBlockExecution config checks engine state block.body bellatrix
+    else pure state)
+  let state ← processRandao config checks state block.body
+  let state ← (if before : fork < .hegota then processEth1Data before state block.body
+    else pure state)
+  let state ← processOperations config checks state block.body parentSlot
+  processSyncAggregate config checks state altair (block.body.syncAggregate altair)
 
 /-- The state after a block.
 

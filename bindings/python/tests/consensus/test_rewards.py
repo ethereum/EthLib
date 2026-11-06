@@ -15,7 +15,17 @@ from .containers import FORKS
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "rewards"
 
 # The forks at which EthLib runs the cases.
-SPECIFIED = ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas")
+SPECIFIED = (
+    "phase0",
+    "altair",
+    "bellatrix",
+    "capella",
+    "deneb",
+    "electra",
+    "fulu",
+    "gloas",
+    "heze",
+)
 
 # The groups of cases of the vectors.
 HANDLERS = ("basic", "leak", "inactivity_scores", "random")

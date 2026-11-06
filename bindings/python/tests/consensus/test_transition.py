@@ -27,6 +27,7 @@ GROUPS = {
         "electra",
         "fulu",
         "gloas",
+        "heze",
     ),
     "sanity/blocks": (
         "phase0",
@@ -37,6 +38,7 @@ GROUPS = {
         "electra",
         "fulu",
         "gloas",
+        "heze",
     ),
     "finality/finality": (
         "phase0",
@@ -47,6 +49,7 @@ GROUPS = {
         "electra",
         "fulu",
         "gloas",
+        "heze",
     ),
     "random/random": (
         "phase0",
@@ -57,6 +60,7 @@ GROUPS = {
         "electra",
         "fulu",
         "gloas",
+        "heze",
     ),
     # A transition case lies under the fork after its fork epoch.
     "transition/core": (
@@ -67,6 +71,7 @@ GROUPS = {
         "electra",
         "fulu",
         "gloas",
+        "heze",
     ),
 }
 

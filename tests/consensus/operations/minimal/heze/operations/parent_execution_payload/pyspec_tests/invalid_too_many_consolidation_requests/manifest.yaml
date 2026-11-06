@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: operations
+handler: parent_execution_payload
+suite: pyspec_tests
+case: invalid_too_many_consolidation_requests

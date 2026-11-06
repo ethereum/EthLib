@@ -68,13 +68,6 @@ _GLOAS = {
     "ssz_static": "the remaining Gloas containers (G36 to G41, G65)",
 }
 _HEZE = {
-    "epoch_processing": "Heze blocks and epochs (G84)",
-    "rewards": "Heze blocks and epochs (G84)",
-    "finality": "Heze blocks and epochs (G84)",
-    "random": "Heze blocks and epochs (G84)",
-    "sanity": "Heze blocks and epochs (G84)",
-    "operations": "Heze blocks and epochs (G84)",
-    "transition": "Heze blocks and epochs (G84)",
     "fork_choice": "inclusion lists in the Heze fork choice (G86)",
     "fast_confirmation": "the Gloas fast confirmation (G73) on the Heze fork choice (G86)",
     "networking": "the Heze gossip and req/resp rules (G87)",

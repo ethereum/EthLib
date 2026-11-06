@@ -1,0 +1,6 @@
+preset: minimal
+fork: heze
+runner: rewards
+handler: inactivity_scores
+suite: pyspec_tests
+case: half_zero_half_random_inactivity_scores
