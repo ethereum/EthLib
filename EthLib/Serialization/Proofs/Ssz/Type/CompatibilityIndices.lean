@@ -24,14 +24,15 @@ theorem optionsCompatible_pairwise : ∀ (selectors : List Nat) (options : List 
     intro checked left leftIn right rightIn
     rw [Desc.optionsCompatible] at checked
     -- A clash with any later option would have been found, and the search found none.
-    cases searched : (List.range rest.length).find? (fun slot => !isCompatible option rest[slot]!)
+    cases searched : (List.range rest.length).find?
+        (fun slot => !(rest[slot]?.all (isCompatible option)))
       <;> simp only [searched, Bind.bind, Except.bind, reduceCtorEq] at checked
     -- Each later option is compatible with this one, read off the empty search.
     have later : ∀ other ∈ rest, isCompatible option other = true := by
       intro other member
       obtain ⟨slot, bounded, held⟩ := List.mem_iff_getElem.mp member
       have missed := List.find?_eq_none.mp searched slot (List.mem_range.mpr bounded)
-      rw [getElem!_pos rest slot bounded, held] at missed
+      rw [List.getElem?_eq_getElem bounded, held] at missed
       simpa using missed
     -- The four ways two options can be drawn from this list.
     rcases List.mem_cons.mp leftIn with rfl | leftLater <;>

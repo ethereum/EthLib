@@ -3,6 +3,7 @@ module
 public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.RoundTripSlices
 public import EthLib.Serialization.Proofs.Ssz.Codec.StructOrder
+public import EthLib.Serialization.Proofs.Ssz.Type.Legality
 
 /-! Round trips, widths, and encoder injectivity for every well-formed type. -/
 
@@ -340,8 +341,8 @@ theorem recovers_of_wellFormed : ∀ (shape : Desc), shape.wellFormed = .ok () �
     -- Gaps change tree positions but do not contribute serialized fields.
     have nonempty : ¬ fields.isEmpty = true := by
       intro empty
-      simp [Desc.wellFormed, empty, Bind.bind, Except.bind] at sound
-      repeat' split at sound <;> simp_all
+      exact (wellFormed_progressiveContainer_iff active names fields |>.mp sound).2.2.2.1
+        (List.isEmpty_iff.mp empty)
     exact ⟨.progressiveContainer (fun field member => (facts field member).1),
       fun width fixed => fieldsFixedSize_pos fields width nonempty
         (fun field member => (facts field member).2) fixed⟩

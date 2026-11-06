@@ -443,7 +443,8 @@ theorem extract_append_shift (front back : Bytes) (start stop : Nat) :
 theorem extract_concatParts (width : Nat) :
     ∀ (parts : List Bytes), (∀ part ∈ parts, part.size = width) →
       ∀ index, index < parts.length →
-        (concatParts parts).extract (index * width) ((index + 1) * width) = parts[index]! := by
+        (concatParts parts).extract (index * width) ((index + 1) * width)
+          = parts[index]?.getD #[] := by
   intro parts
   induction parts with
   | nil => intro _ _ inside; simp at inside
@@ -514,7 +515,7 @@ theorem map_extract_concatParts (width : Nat) (parts : List Bytes)
   · intro index inRange inParts
     simp only [List.getElem_map, List.getElem_range]
     rw [extract_concatParts width parts widths index inParts]
-    simp [getElem!_pos, inParts]
+    simp [inParts]
 
 /-- Slots for a sequence of variable elements, each reached through an offset. -/
 abbrev offsetSlots (parts : List Bytes) : List (Bool × Bytes) :=
@@ -552,7 +553,7 @@ theorem readUint_headOf_offset : ∀ (parts : List Bytes) (start : Nat) (front b
     start + bodyWidth (offsetSlots parts) < 2 ^ (8 * bytesPerOffset) →
     readUint (front ++ (headOf start (offsetSlots parts) ++ bodies))
         (front.size + index * bytesPerOffset) bytesPerOffset
-      = (runningOffsets start parts)[index]! := by
+      = (runningOffsets start parts)[index]?.getD 0 := by
   intro parts
   induction parts with
   | nil => intro _ _ _ index inside _; simp at inside
@@ -594,7 +595,7 @@ theorem readOffsets_headOf (parts : List Bytes) (start : Nat) (bodies : Bytes)
     have read := readUint_headOf_offset parts start #[] bodies index inParts nameable
     simp only [Array.size_empty, Array.empty_append, Nat.zero_add] at read
     rw [read]
-    simp [getElem!_pos, runningOffsets_length, inParts]
+    simp [runningOffsets_length, inParts]
 
 /-- The spans between those offsets are the widths of the elements. -/
 theorem offsetSpans_runningOffsets : ∀ (parts : List Bytes) (start : Nat),
@@ -650,9 +651,9 @@ theorem offset_encoding_size (parts : List Bytes) :
 
 /-- The first offset names where the bodies begin. -/
 theorem runningOffsets_head (start : Nat) (part : Bytes) (rest : List Bytes) :
-    (runningOffsets start (part :: rest))[0]! = start := by
+    (runningOffsets start (part :: rest)).headD 0 = start := by
   -- The first body begins at the initial cursor before any payload length is added.
-  simp [runningOffsets, getElem!_pos]
+  simp [runningOffsets]
 
 /-- A struct of fields that each take a byte takes one itself. -/
 theorem fieldsFixedSize_pos : ∀ (fields : List Desc) (width : Nat),

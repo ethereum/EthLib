@@ -85,7 +85,8 @@ theorem serialize_byteList_alias (data : Bytes) (limit : Nat) :
 /-- One-byte slices decode to the integers their bytes hold. -/
 private theorem deserializeEach_bytes :
     ∀ (slices : List Bytes), (∀ slice ∈ slices, slice.size = 1) →
-      deserializeEach (.uint 1) slices = .ok (slices.map fun slice => .uint (slice[0]!).toNat)
+      deserializeEach (.uint 1) slices =
+        .ok (slices.map fun slice => .uint (slice[0]?.getD 0).toNat)
   | [], _ => by simp [deserializeEach_nil]
   | slice :: rest, single => by
     -- Each slice passes the width check and reads back as its only byte.
@@ -106,7 +107,7 @@ private theorem deserializeEach_byteSlices (data : Bytes) :
   · intro i inside _
     simp only [List.length_map, List.length_range] at inside
     simp only [List.getElem_map, List.getElem_range, byteValues, Array.getElem_toList]
-    rw [getElem!_pos _ 0 (by simp; omega)]
+    rw [Array.getElem?_eq_getElem (by simp; omega), Option.getD_some]
     simp
 
 /-- Both fixed-byte spellings decode the same input alike, every refusal included. -/

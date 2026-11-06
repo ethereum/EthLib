@@ -104,11 +104,11 @@ theorem canonical_option : ∀ selectors options selector data value,
 
 /-- A nonempty byte sequence is its first byte followed by its remaining bytes. -/
 theorem firstByte_append_tail (data : Bytes) (nonempty : 0 < data.size) :
-    #[data[0]!] ++ data.extract 1 data.size = data := by
+    #[data[0]?.getD 0] ++ data.extract 1 data.size = data := by
   -- The first one-byte slice contains exactly the selector byte.
-  have first : data.extract 0 1 = #[data[0]!] := by
+  have first : data.extract 0 1 = #[data[0]?.getD 0] := by
     have encoded := uintBytes_readUint_slice data 0 1 (by omega)
-    simpa [uintBytes_zero, uintBytes_succ, readUint_zero, readUint_succ, getElem!_pos, nonempty,
+    simpa [uintBytes_zero, uintBytes_succ, readUint_zero, readUint_succ, nonempty,
       Array.getElem?_eq_getElem nonempty]
       using encoded.symm
   -- The selector slice and payload slice are adjacent and cover the whole message.

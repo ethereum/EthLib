@@ -74,12 +74,13 @@ theorem merkleizeBoundedUnchecked_size {chunks : Array Bytes} {limit : Option Na
 /-- Each bit of the layout word records its corresponding active field, with absent positions clear. -/
 theorem activeFieldsWord_bit (active : List Bool) (position : Nat)
     (inside : position < bitsPerChunk) :
-    (((activeFieldsWord active)[position / 8]! >>> UInt8.ofNat (position % 8)) &&& 1 == 1) =
+    (((activeFieldsWord active)[position / 8]?.getD 0 >>> UInt8.ofNat (position % 8)) &&& 1 == 1) =
       active[position]?.getD false := by
   -- Whole bytes choose the node offset, and the remainder chooses the bit inside that byte.
   have byteInside : position / 8 < bytesPerChunk := by simp only [bitsPerChunk, bytesPerChunk] at inside ⊢; omega
-  have lookup : (activeFieldsWord active)[position / 8]! = packByte active.toArray (position / 8) := by
-    simp [activeFieldsWord, packBits, getElem!_pos, byteInside]
+  have lookup : (activeFieldsWord active)[position / 8]?.getD 0
+      = packByte active.toArray (position / 8) := by
+    simp [activeFieldsWord, packBits, byteInside]
   rw [lookup]
   have same : position / 8 * 8 + position % 8 = position := by omega
   simpa only [same, List.getElem?_toArray] using

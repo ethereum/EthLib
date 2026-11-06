@@ -202,7 +202,7 @@ def Desc.wellFormed : Desc → Except Err Unit
   | .progressiveContainer active names fields => do
     -- A layout holds at least one position, and never ends on a gap.
     if active.isEmpty then throw .layoutWidth
-    if active.getLast! == false then throw .layoutTrailingGap
+    if active.getLast? == some false then throw .layoutTrailingGap
     if active.length > maxActiveFields then
       throw (.layoutTooWide active.length maxActiveFields)
     if fields.isEmpty then throw .containerEmpty
@@ -243,7 +243,7 @@ def Desc.optionsCompatible : List Nat → List Desc → Except Err Unit
   | _, [] => .ok ()
   | selectors, option :: rest => do
     -- This option is checked against every later one, so each pair is checked once.
-    match (List.range rest.length).find? (fun slot => !isCompatible option rest[slot]!) with
+    match (List.range rest.length).find? (fun slot => !(rest[slot]?.all (isCompatible option))) with
     | some slot => throw (.unionIncompatible (selectors.headD 0) (selectors.getD (slot + 1) 0))
     | none => pure ()
     Desc.optionsCompatible (selectors.drop 1) rest

@@ -242,7 +242,7 @@ def valueOf (shape : Desc) (spelling : Spelling) (document : Json) : Except Err 
       let .str text := document | throw .typeMismatch
       let data ← ofHex text
       if data.size != 1 then throw (.hexLength 1 data.size)
-      return .uint data[0]!.toNat
+      return .uint (data[0]?.getD 0).toNat
     let n ← readNat document
     if n ≥ 2 ^ (8 * width) then throw (.uintRange (2 ^ (8 * width)) n)
     return .uint n

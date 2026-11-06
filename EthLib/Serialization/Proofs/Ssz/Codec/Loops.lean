@@ -307,7 +307,8 @@ theorem vectorSlices_eq (element : Desc) (length : Nat) (data : Bytes) :
         if data.size < expectedFirst then throw (.scopeTooSmall expectedFirst data.size)
         if length == 0 then return []
         let offsets := readOffsets data length
-        if offsets[0]! != expectedFirst then throw (.firstOffset expectedFirst offsets[0]!)
+        if offsets.headD 0 != expectedFirst then
+          throw (.firstOffset expectedFirst (offsets.headD 0))
         let spans ← offsetSpans offsets data.size
         return (offsets.zip spans).map fun (start, span) => data.extract start (start + span)) := by
   simp only [vectorSlices, List.map_zip_eq_zipWith]

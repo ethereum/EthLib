@@ -178,7 +178,7 @@ theorem assemble_fixed_slices (data : Bytes) (width count : Nat)
 /-- An ordered offset table and its bodies reassemble to their exact original bytes. -/
 theorem assemble_offset_slices (data : Bytes) (count : Nat) (spans : List Nat)
     (positive : 0 < count) (room : count * bytesPerOffset ≤ data.size)
-    (first : (readOffsets data count)[0]! = count * bytesPerOffset)
+    (first : (readOffsets data count).headD 0 = count * bytesPerOffset)
     (read : offsetSpans (readOffsets data count) data.size = .ok spans)
     (bounded : data.size < 2 ^ (8 * bytesPerOffset)) :
   -- Pair every start offset with the span ending at the next offset or end of input.
@@ -240,7 +240,7 @@ theorem vectorSlices_assemble {element : Desc} {count : Nat} {data : Bytes}
     apply assemble_offset_slices <;> first | assumption | omega | simp_all
 
 private theorem readOffsets_first (data : Bytes) (count : Nat) (positive : 0 < count) :
-    (readOffsets data count)[0]! = readUint data 0 bytesPerOffset := by
+    (readOffsets data count).headD 0 = readUint data 0 bytesPerOffset := by
   -- A nonempty table starts with the four-byte integer at the beginning of the input.
   cases count with
   | zero => omega

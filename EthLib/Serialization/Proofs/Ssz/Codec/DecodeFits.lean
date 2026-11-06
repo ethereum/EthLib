@@ -335,8 +335,8 @@ theorem listSlices_overflow (element : Desc) (limit : Option Nat) (data : Bytes)
 /-- Decoding a delimited bit list finds a nonzero last byte, and the bits below its highest set bit. -/
 theorem unpackDelimited_ok {limit : Option Nat} {data : Bytes} {bits : Array Bool}
     (read : unpackDelimited limit data = .ok bits) :
-    data.size ≠ 0 ∧ data[data.size - 1]! ≠ 0 ∧
-      bits = unpackBits data (8 * (data.size - 1) + highestBit data[data.size - 1]!) := by
+    data.size ≠ 0 ∧ data[data.size - 1]?.getD 0 ≠ 0 ∧
+      bits = unpackBits data (8 * (data.size - 1) + highestBit (data[data.size - 1]?.getD 0)) := by
   -- Decoding refuses an empty encoding and a zero last byte, and then counts the bits below the closing one.
   simp only [unpackDelimited, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind, pure,
     Except.pure] at read
