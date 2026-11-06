@@ -142,7 +142,28 @@ Then `findSecondPreimage` returns a second preimage of an honest ancestor.
 Both searches are explicit algorithms, proved to return valid answers.
 Each can return nothing: on one climb compared with itself (`findCollision_self`), and on the honest climb (`findSecondPreimage_honest`).
 So the statements say something, even though every compressing hash has collisions.
-No theorem bounds the probability of finding a collision or a second preimage.
+
+`Proofs/Merkle/RandomOracle.lean` bounds classical searches against an ideal random oracle with `N` outputs and an empty initial cache.
+`prEvent_collision_le` bounds a collision among queried inputs by `q^2 / N` for at most `q` hash calls, with private randomness free.
+`prEvent_secondPreimage_le` bounds a second preimage of one fixed honest input by `q / N`.
+It conditions on the honest digest and excludes that input from the remaining query domain.
+The remaining oracle cells are independent and uniform.
+
+The Merkle applications model the tuple `(level, position, left, right)` as the oracle input.
+They require an injective encoding of that tuple, not a hash that ignores the position.
+The oracle searches agree with `findCollision` and `findSecondPreimage` for every complete answer table.
+`prEvent_findCollisionM_le` bounds the first search by `(2h)^2 / N`, where `h` is the shorter path length.
+`prEvent_findSecondPreimageM_le` bounds the second by `Q^2 / N`, with fixed honest leaves and `Q = secondPreimageQueries level path.length`.
+Its budget counts every hash call, including repeated honest-node computations:
+
+```text
+Q(l, 0) = 0
+Q(l, n+1) = 1 + 2*(2^l - 1) + (2^(l+1) - 1) + Q(l+1, n)
+```
+
+The honest ancestors depend on oracle answers, so this search uses the birthday bound, not the bound for one fixed target.
+The covered-event theorems also allow adaptive surrounding clients, provided their total budget includes the witness queries and honest-tree construction.
+These statements do not bound attacks on a concrete hash or quantum queries.
 
 The VRF's `verify_unique`, SSZ's `verifyMerkleProof_binding` and the leanXMSS unforgeability proof use `climb_binding`.
 leanXMSS also states `fold_binding` with `climb_binding_node`, which its unforgeability proof does not use.
@@ -801,6 +822,11 @@ The two theorems of Casper FFG share one bullet, as do the signature theorems of
   The theorem says nothing about an attack that uses the structure of Keccak.
   The binding of an EIP-8450 proof of possession rests on the same oracle.
   So do the failure bounds of the codeword searches of leanXMSS and leanSPHINCS.
+- Merkle search bounds: each new `(level, position, left, right)` input receives an independent uniform answer from a finite nonempty range.
+  Repeated inputs receive the same answer, and the initial cache is empty.
+  The fixed-target bound conditions on one honest digest and excludes its input from the remaining oracle domain.
+  Only classical queries are counted.
+  No SHA-256, Keccak or quantum security claim follows from this model.
 - VRF unpredictability: Keccak-256 is a random oracle on byte strings, as for leanXMSS.
   The bound says nothing about an attack that uses the structure of Keccak.
   It counts classical queries only, so it says nothing about a quantum adversary.

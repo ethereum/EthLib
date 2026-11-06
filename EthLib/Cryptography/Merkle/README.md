@@ -19,7 +19,7 @@ The children of node `(level + 1, j)` are `(level, 2j)` and `(level, 2j + 1)`, a
 The node hash receives the position of the node it computes.
 A hash-based signature reads it, to hash every node under its own address.
 SSZ and the VRF tree ignore it, and hash every node alike.
-So one definition serves both kinds of tree, and every theorem holds for both.
+So one definition serves both kinds of tree, and the completeness and binding theorems hold for both.
 
 The tree never hashes on its own.
 The primitive that passes the node hash also chooses its domain separation.
@@ -31,7 +31,8 @@ The hypertree and the FORS trees of leanSPHINCS do the same, with addresses that
 The VRF tree prefixes every node input with the 11 bytes `PQ_VRF_NODE`.
 Its proofs show that no node input is also a leaf, secret or output input.
 SSZ hashes the 64 bytes of the two children with SHA-256 and no prefix, as the SSZ specification fixes every root.
-A new primitive chooses its own separation in its node hash, and the theorems here hold whatever it chooses.
+A new primitive chooses its own separation in its node hash.
+The completeness and binding theorems hold whatever it chooses.
 
 Every definition runs in a monad, so that the hash may be an oracle whose calls a security proof counts.
 The order of the calls is fixed.
@@ -55,7 +56,8 @@ Index 1 is odd, so the held node is the right child, and the climb computes the 
 
 ## What is proved
 
-The proofs are in `EthLib/Cryptography/Proofs/Merkle/`, and they hold for every node hash.
+The proofs are in `EthLib/Cryptography/Proofs/Merkle/`.
+The completeness and binding theorems hold for every node hash.
 Completeness says that a climb from a leaf with its path reaches the leaf's ancestor on the top level (`climb_path`).
 For a leaf below `2^h`, that ancestor is the root (`climb_path_root`).
 In a tree that ignores the position, each node is the root of the subtree of leaves below it (`node_const_shift`).
@@ -84,5 +86,25 @@ On the honest climb the search returns nothing (`findSecondPreimage_honest`), so
 
 Both searches take one step per level of the climb, and each step hashes the pairs it compares.
 `findSecondPreimage` also computes the honest node that it compares against on each level.
-No theorem counts these hash calls.
-The cost is read from the definitions, and is not proved.
+
+`RandomOracle.lean` proves query budgets and probability bounds for oracle versions of both searches.
+These versions agree with the existing searches for every complete answer table.
+The oracle assigns independent uniform answers to distinct `(level, position, left, right)` tuples and remembers repeated inputs.
+The bounds exclude position-ignoring hashes, including those of SSZ and the VRF tree.
+They make no security claim about a concrete hash or quantum queries.
+
+With an empty initial cache and `N` possible answers, `prEvent_collision_le` bounds collision probability by `q^2 / N` for at most `q` classical hash calls.
+`prEvent_secondPreimage_le` bounds a second preimage of one fixed honest input by `q / N`.
+It conditions on the honest digest and excludes that input from the remaining query domain.
+
+`findCollisionM_queryBound` gives at most `2h` calls, where `h` is the shorter path length.
+`prEvent_findCollisionM_le` bounds its success probability by `(2h)^2 / N`.
+For fixed honest leaves, `findSecondPreimageM_queryBound` counts all calls, including repeated honest-node computations:
+
+```text
+Q(l, 0) = 0
+Q(l, n+1) = 1 + 2*(2^l - 1) + (2^(l+1) - 1) + Q(l+1, n)
+```
+
+`prEvent_findSecondPreimageM_le` bounds its success probability by `Q(l, n)^2 / N` for a path of length `n` starting at level `l`.
+Its honest ancestors depend on oracle answers, so this search uses the birthday bound rather than the bound for one fixed target.
