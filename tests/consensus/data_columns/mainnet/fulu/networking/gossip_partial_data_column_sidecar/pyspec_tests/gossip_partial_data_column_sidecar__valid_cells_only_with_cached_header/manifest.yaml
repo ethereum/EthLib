@@ -1,6 +1,0 @@
-preset: mainnet
-fork: fulu
-runner: networking
-handler: gossip_partial_data_column_sidecar
-suite: pyspec_tests
-case: gossip_partial_data_column_sidecar__valid_cells_only_with_cached_header

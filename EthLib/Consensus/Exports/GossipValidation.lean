@@ -145,7 +145,7 @@ def gossipValidationSpecified (fork : Fork) : String → Bool
   | "sync_committee" | "sync_committee_contribution_and_proof" => .altair ≤ fork
   | "bls_to_execution_change" => .shapella ≤ fork
   | "blob_sidecar" => .dencun ≤ fork && fork < .fusaka
-  | "data_column_sidecar" => .fusaka ≤ fork && fork < .glamsterdam
+  | "data_column_sidecar" | "partial_data_column_sidecar" => .fusaka ≤ fork && fork < .glamsterdam
   | _ => false
 
 /-- The outcome of one message of a topic, and the keys seen after it.
@@ -235,6 +235,37 @@ def validateGossipInput {preset : Preset} {fork : Fork} (config : Config)
     else throw (0, "column sidecars travel only from Fulu, before Gloas")
   | _ => throw (0, s!"gossip validation of the topic {topic} is not yet specified")
 
+/-- At Fulu: the outcomes of the partial sidecars of a case, after the headers it records first.
+
+The bytes of a message start with a kind byte, then the root of its group.
+
+Kind 1 is a header that the node validated before the case, and gives no outcome.
+
+Kind 0 is a partial sidecar, whose column is the subnet field of the message. -/
+def validatePartialInputs {preset : Preset} {fork : Fork} (config : Config)
+    (checks : SignatureChecks) (store : Store preset fork) (inputs : List GossipInput) :
+    Result ByteArray := do
+  if fulu : .fusaka ≤ fork ∧ fork < .glamsterdam then
+    let setup ← runForkChoice (embeddedSetup.mapError .kzg)
+    let mut headers : PartialHeaders preset fork := []
+    let mut out := ByteArray.empty
+    for input in inputs do
+      if input.data.size < 33 then throw (0, "a partial message is cut short")
+      let root ← decodeInput Root (input.data.extract 1 33)
+      let rest := input.data.extract 33 input.data.size
+      match (input.data.data[0]? : Option UInt8) with
+      | some 1 =>
+        headers := headers.record root (← decodeInput (PartialDataColumnHeader preset fork) rest)
+      | some 0 =>
+        let sidecar ← decodeInput (PartialDataColumnSidecar preset fork) rest
+        let (outcome, next) ← runForkChoice (validatePartialDataColumnSidecar config checks setup
+          headers store fulu sidecar input.currentTimeMs ⟨root⟩ input.subnetId)
+        headers := next
+        out := out ++ outcomeRecord outcome
+      | _ => throw (0, "the kind of a partial message is 0 or 1")
+    return out
+  else throw (0, "partial column sidecars travel only at Fulu")
+
 /-- Validate the messages of a topic in turn, against the store of an anchor and later blocks.
 
 From Gloas the store is not specified here. -/
@@ -259,9 +290,12 @@ def gossipValidationExport
   if finalized.size = 40 then
     store := { store with finalizedCheckpoint := ← decodeInput Checkpoint finalized }
   else if finalized.size ≠ 0 then throw (0, "the finalized checkpoint is not 40 bytes")
+  let inputs ← readGossipInputs (messages.size + 1) messages 0
+  if topic = "partial_data_column_sidecar" then
+    return ← validatePartialInputs config checks store inputs
   let mut seen : Seen := {}
   let mut out := ByteArray.empty
-  for input in ← readGossipInputs (messages.size + 1) messages 0 do
+  for input in inputs do
     let (outcome, next) ← validateGossipInput config checks store statuses topic seen input
     seen := next
     out := out ++ outcomeRecord outcome

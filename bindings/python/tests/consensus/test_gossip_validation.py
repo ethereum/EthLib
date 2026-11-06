@@ -29,6 +29,7 @@ TOPICS = {
     "bls_to_execution_change": "capella",
     "blob_sidecar": "deneb",
     "data_column_sidecar": "fulu",
+    "partial_data_column_sidecar": "fulu",
 }
 SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu")
 # The topics whose cases stop at an earlier fork, with their last fork.
@@ -59,9 +60,34 @@ def runs(fork: str, handler: str) -> bool:
     )
 
 
+def _hex(value: str) -> bytes:
+    return bytes.fromhex(value.removeprefix("0x"))
+
+
 def _read(case: Path, name: str) -> bytes:
     """The bytes of an SSZ file of a case, without the Snappy framing."""
     return snappy.decompress((case / f"{name}.ssz_snappy").read_bytes())
+
+
+def _partial_messages(case: Path, meta: dict) -> list:
+    """The partial messages of a case, after the headers that the node validated before it.
+
+    Each message starts with its kind, 1 for such a header and 0 for a sidecar, then the root of
+    its block; the column of a sidecar takes the place of the subnet.
+    """
+    headers = [
+        (0, 0, b"\x01" + _hex(entry["block_root"]) + _read(case, entry["header"]))
+        for entry in meta.get("seen_partial_data_column_headers", [])
+    ]
+    sidecars = [
+        (
+            message.get("current_time_ms", 0),
+            message["column_index"],
+            b"\x00" + _read(case, message["group_id"]) + _read(case, message["message"]),
+        )
+        for message in meta["messages"]
+    ]
+    return headers + sidecars
 
 
 def run_case(preset: str, fork: str, case: Path) -> None:
@@ -93,14 +119,17 @@ def run_case(preset: str, fork: str, case: Path) -> None:
     config = (
         replacements(_YAML.load(config_file.read_text()), preset) if config_file.exists() else None
     )
-    messages = [
-        (
-            message.get("current_time_ms", 0),
-            message.get("subnet_id", 0),
-            _read(case, message["message"]),
-        )
-        for message in meta["messages"]
-    ]
+    if meta["topic"] == "partial_data_column_sidecar":
+        messages = _partial_messages(case, meta)
+    else:
+        messages = [
+            (
+                message.get("current_time_ms", 0),
+                message.get("subnet_id", 0),
+                _read(case, message["message"]),
+            )
+            for message in meta["messages"]
+        ]
     outcomes = consensus.gossip_validation(
         preset,
         FORKS[fork],
