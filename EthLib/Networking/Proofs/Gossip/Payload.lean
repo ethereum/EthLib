@@ -14,8 +14,7 @@ Properties of the size limits on gossip, and of the gossipsub parameters.
 - The payload decoder accepts exactly the data within that length which decompresses to a
   payload within the cap and the bound of its type.
 - It rejects data above either bound.
-- It accepts the block that the compressor writes for a payload within the cap and the bound of
-  its type.
+- It accepts the block of the compressor for a payload within the cap and its type bound.
 - It rejects a payload length above the bounds from the preamble alone, before it decompresses.
 - The mesh bounds and the message cache windows are ordered.
 -/
@@ -66,13 +65,9 @@ theorem decodePayload_eq_ok_iff {typeBound : UInt64} {data payload : ByteArray} 
         · rintro ⟨rfl, _⟩
           rfl
 
-/-- The decoder accepts the block that the compressor writes for a payload within both bounds.
+/-- The decoder accepts the block of the compressor for a payload within the cap and its type bound.
 
-The payload must be at most the payload cap and the bound of its type, which the decoder checks.
-
-Its block is within the worst-case compression of the cap.
-
-A block takes at most `32 + n + n / 6` bytes for a payload of `n` bytes.
+That block takes at most `32 + n + n / 6` bytes, within the worst-case compression of the cap.
 -/
 theorem decodePayload_compress {typeBound : UInt64} {payload : ByteArray}
     (within : payload.size ≤ (min typeBound MAX_PAYLOAD_SIZE).toNat) :

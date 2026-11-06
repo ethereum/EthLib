@@ -6,26 +6,16 @@ public import EthLib.Networking.Proofs.Encoding.Varint
 /-!
 # `Networking.Proofs.Snappy.CompressSize`
 
-The block that the compressor writes takes at most `32 + n + n / 6` bytes for `n` input bytes.
+The block that the compressor writes for `n` bytes takes at most `32 + n + n / 6` bytes.
 
-Source: `max_compressed_len` of the Phase 0 networking specification.
+The input has at most 2^32 - 1 bytes.
 
-The commit is the one of `tests/sources.toml`:
+The proof bounds six times the output by seven times the input, plus 10:
 
-<https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/phase0/p2p-interface.md#max_compressed_len>
-
-The function there is `32 + n + n // 6`.
-
-It cites `snappy.cc` of `google/snappy` as the worst case of the reference compressor.
-
-The proof counts bytes, with six times the output at most seven times the input read so far:
-
-- A literal of `m` bytes takes `m` plus a header of 1 to 5 bytes.
-- Copies of `L` bytes, with `L` at least four, take at most `3 L / 4` bytes.
-- Each element copies at least four bytes and takes at most three.
-- Six times a header is at most `m + 10`, and the copies after a literal pay for the 10.
-- The last literal has no copy after it, so it pays 10 itself.
-- The preamble takes at most five bytes.
+- A copy element copies at least 4 bytes and takes at most 3 bytes.
+- Six times a literal header is at most `m + 10` for a literal of `m` bytes.
+- The copies after a literal cover its 10: six times a copy of `L ≥ 4` bytes is at most `7 L - 10`.
+- The last literal adds its 10 once, and the preamble adds at most 5 bytes.
 -/
 
 @[expose] public section
@@ -38,16 +28,16 @@ open EthLib.Networking.Proofs.Snappy.Compress
 /-! ## Elements -/
 
 /-- A byte array made of a list has the length of the list. -/
-theorem size_mk_toArray (l : List UInt8) : (⟨l.toArray⟩ : ByteArray).size = l.length := by
+private theorem size_mk_toArray (l : List UInt8) : (⟨l.toArray⟩ : ByteArray).size = l.length := by
   simp [ByteArray.size]
 
 /-- A copy element takes at most three bytes. -/
-theorem length_copyElement_le (offset len : Nat) : (copyElement offset len).length ≤ 3 := by
+private theorem length_copyElement_le (offset len : Nat) : (copyElement offset len).length ≤ 3 := by
   unfold copyElement
   split <;> simp [copyOne, copyTwo]
 
 /-- Copies of one offset take at most three bytes for each four bytes that they copy. -/
-theorem size_emitCopies_le (offset : Nat) :
+private theorem size_emitCopies_le (offset : Nat) :
     ∀ (len : Nat) (out : ByteArray), (len = 0 ∨ 4 ≤ len) →
       4 * (emitCopies offset out len).size ≤ 4 * out.size + 3 * len := by
   intro len
@@ -70,7 +60,7 @@ theorem size_emitCopies_le (offset : Nat) :
         omega
 
 /-- Six times the header of a literal of `n` bytes is at most `n + 10`. -/
-theorem length_literalHeader_le {n : Nat} (h1 : 1 ≤ n) (h2 : n ≤ 2 ^ 32) :
+private theorem length_literalHeader_le {n : Nat} (h1 : 1 ≤ n) (h2 : n ≤ 2 ^ 32) :
     6 * (literalHeader n).length ≤ n + 10 := by
   unfold literalHeader
   split
@@ -82,11 +72,9 @@ theorem length_literalHeader_le {n : Nat} (h1 : 1 ≤ n) (h2 : n ≤ 2 ^ 32) :
     simp
     omega
 
-/-- A literal over a range adds its header and the range, and six times the sum has a bound.
-
-The bound is seven times the length of the range, plus ten.
+/-- After a literal over a range, six times the output grows by at most 7 times the range plus 10.
 -/
-theorem size_emitLiteral_le (out src : ByteArray) {lo hi : Nat}
+private theorem size_emitLiteral_le (out src : ByteArray) {lo hi : Nat}
     (hhi : hi ≤ src.size) (hlen : hi - lo ≤ 2 ^ 32) :
     6 * (emitLiteral out src lo hi).size ≤ 6 * out.size + 7 * (hi - lo) + 10 := by
   unfold emitLiteral
@@ -100,11 +88,11 @@ theorem size_emitLiteral_le (out src : ByteArray) {lo hi : Nat}
 
 /-! ## The scan -/
 
-/-- Six times the bytes that the scan writes is at most seven times the input, plus ten.
+/-- Six times the bytes that the scan writes is at most seven times the input, plus 10.
 
 The invariant is that six times the bytes written so far is at most seven times `lit`.
 -/
-theorem size_compressLoop_le (src : ByteArray) (hsz : src.size ≤ maxUncompressedLength)
+private theorem size_compressLoop_le (src : ByteArray) (hsz : src.size ≤ maxUncompressedLength)
     (table : Array Nat) (i lit : Nat) (out : ByteArray) (hli : lit ≤ i) (his : i ≤ src.size)
     (hout : 6 * out.size ≤ 7 * lit) :
     6 * (compressLoop src table i lit out).size ≤ 7 * src.size + 10 := by
@@ -125,7 +113,8 @@ theorem size_compressLoop_le (src : ByteArray) (hsz : src.size ≤ maxUncompress
 
 /-! ## The bound -/
 
-/-- The block of an input of at most 2^32 - 1 bytes takes at most `32 + n + n / 6` bytes. -/
+/-- An input of `n` bytes, with `n` at most 2^32 - 1, compresses to at most `32 + n + n / 6` bytes.
+-/
 theorem size_compress_le {src : ByteArray} (h : src.size ≤ maxUncompressedLength) :
     (compress src).size ≤ src.size + src.size / 6 + 32 := by
   have hloop := size_compressLoop_le src h (Array.replicate (2 ^ tableBits) 0) 0 0
