@@ -1,0 +1,13 @@
+topic: beacon_block
+blocks:
+- {block: 
+    block_0x63b2597628536690d23830a4c8a1c5ccbccb6c49a0b2e1d043cf0a029863e681}
+- {block: 
+    block_0xa1fc865a9ff918fb2245ee67e9b8e0ac4d3db0a5cdd38e525238fecd58464d34}
+finalized_checkpoint:
+  epoch: 0
+  root: '0xabababababababababababababababababababababababababababababababab'
+messages:
+- {current_time_ms: 12500, message: 
+    block_0xc6ba2c199059ac70f864860e491bd8d73cd5508b59c4381d773d796c0d19b1a8, 
+    expected: reject, reason: finalized checkpoint is not an ancestor of block}

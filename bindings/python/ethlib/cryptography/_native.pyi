@@ -411,8 +411,8 @@ def consensus_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_bloc
     """The outcome of each step of a fork choice case, from an anchor state and an anchor block."""
     ...
 
-def consensus_gossip_validation(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, topic: bytes, messages: bytes, config: bytes, verify: bool) -> bytes:
-    """Validate the messages of a topic in turn, against the store of an anchor."""
+def consensus_gossip_validation(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: bytes, finalized: bytes, topic: bytes, messages: bytes, config: bytes, verify: bool) -> bytes:
+    """Validate the messages of a topic in turn, against the store of an anchor and later blocks."""
     ...
 
 def consensus_light_client_sync(name: str, fork: str, bootstrap_fork: str, config: bytes, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: bytes) -> bytes:

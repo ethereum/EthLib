@@ -21,11 +21,15 @@ TOPICS = {
     "attester_slashing": "altair",
     "proposer_slashing": "altair",
     "voluntary_exit": "altair",
+    "beacon_block": "altair",
     "sync_committee_message": "altair",
     "sync_committee_contribution_and_proof": "altair",
     "bls_to_execution_change": "capella",
 }
 SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu")
+# The topics whose cases stop at an earlier fork, with their last fork.
+# The Electra and Fulu block cases import blocks or cross an epoch, which waits for C35-C40.
+LAST = {"beacon_block": "deneb"}
 
 # The release archives that hold the cases.
 ARCHIVES = {
@@ -35,6 +39,9 @@ ARCHIVES = {
 
 _YAML = YAML(typ="safe")
 
+# The statuses of a payload, as the specification numbers them.
+_STATUSES = {"VALID": 0, "INVALIDATED": 1, "NOT_VALIDATED": 2}
+
 
 def runs(fork: str, handler: str) -> bool:
     """Whether EthLib runs the cases of a gossip handler at a fork."""
@@ -42,7 +49,9 @@ def runs(fork: str, handler: str) -> bool:
     return (
         fork in SPECIFIED
         and topic in TOPICS
-        and SPECIFIED.index(fork) >= SPECIFIED.index(TOPICS[topic])
+        and SPECIFIED.index(TOPICS[topic])
+        <= SPECIFIED.index(fork)
+        <= SPECIFIED.index(LAST.get(topic, SPECIFIED[-1]))
     )
 
 
@@ -54,8 +63,26 @@ def _read(case: Path, name: str) -> bytes:
 def run_case(preset: str, fork: str, case: Path) -> None:
     """Validate the messages of a case in turn, and compare each outcome and reason."""
     meta = _YAML.load((case / "meta.yaml").read_text())
-    # The cases of these topics start from their anchor alone.
-    assert len(meta["blocks"]) == 1 and "finalized_checkpoint" not in meta, meta
+    blocks = [
+        (
+            1 if entry.get("failed") else 2 if entry.get("pending") else 0,
+            _STATUSES.get(entry.get("payload_status")),
+            _read(case, entry["block"]),
+        )
+        for entry in meta["blocks"][1:]
+    ]
+    finalized = meta.get("finalized_checkpoint")
+    if finalized is not None:
+        # A checkpoint names its root, or the signed block whose message has the root.
+        # The message of a signed block starts after its 4-byte offset and its signature.
+        root = (
+            bytes.fromhex(finalized["root"][2:])
+            if "root" in finalized
+            else consensus.ssz_static(
+                preset, FORKS[fork], "BeaconBlock", _read(case, finalized["block"])[100:]
+            )[0]
+        )
+        finalized = (finalized["epoch"], root)
     # Setting 2 marks placeholder signatures, which the case must not check.
     verify = meta.get("bls_setting", 0) != 2
     config_file = case / "config.yaml"
@@ -79,6 +106,8 @@ def run_case(preset: str, fork: str, case: Path) -> None:
         messages,
         verify,
         config,
+        blocks,
+        finalized,
     )
     expected = [(message["expected"], message.get("reason")) for message in meta["messages"]]
     assert outcomes == expected
@@ -162,10 +191,10 @@ def test_unknown_topic():
     case = _valid_case("gossip_voluntary_exit")
     with raises(
         consensus.ForkChoiceError,
-        "gossip validation of the topic beacon_block at shapella is not yet specified",
+        "gossip validation of the topic beacon_attestation at shapella is not yet specified",
     ) as info:
         consensus.gossip_validation(
-            "minimal", "shapella", _read(case, "state"), b"", "beacon_block", []
+            "minimal", "shapella", _read(case, "state"), b"", "beacon_attestation", []
         )
     assert info.value.code == 0
 

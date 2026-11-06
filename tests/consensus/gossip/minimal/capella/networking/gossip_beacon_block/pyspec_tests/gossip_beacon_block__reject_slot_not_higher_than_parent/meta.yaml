@@ -1,0 +1,10 @@
+topic: beacon_block
+blocks:
+- {block: 
+    block_0x63b2597628536690d23830a4c8a1c5ccbccb6c49a0b2e1d043cf0a029863e681}
+- {block: 
+    block_0xa1fc865a9ff918fb2245ee67e9b8e0ac4d3db0a5cdd38e525238fecd58464d34}
+messages:
+- {current_time_ms: 6500, message: 
+    block_0x79f7903e82477c8ef5a8e0d0238e5b4708258690f27fc756d0b62c4c630f4169, 
+    expected: reject, reason: block is not from a higher slot than its parent}

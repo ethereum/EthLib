@@ -1,0 +1,8 @@
+topic: beacon_block
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {current_time_ms: 6500, message: 
+    block_0x8c38d26a3ef4a29591441bffc3ecdd42e125ee7f78cb23e4ac11006ac0a7d1c4, 
+    expected: reject, reason: proposer index out of range}

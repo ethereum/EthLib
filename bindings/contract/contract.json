@@ -2664,9 +2664,9 @@
    "docstring":
    "The outcome of each step of a fork choice case, from an anchor state and an anchor block.\n\nThe preset, the configuration and the fork are named in UTF-8.\n\nThe signature checks run unless the last argument is false.\n\nFrom Electra the state transition does not yet take a block.\n\nFrom Gloas the store is not specified here."},
   {"summary":
-   "Validate the messages of a topic in turn, against the store of an anchor.",
+   "Validate the messages of a topic in turn, against the store of an anchor and later blocks.",
    "signature":
-   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, topic: bytes, messages: bytes, config: bytes, verify: bool) -> bytes",
+   "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: bytes, finalized: bytes, topic: bytes, messages: bytes, config: bytes, verify: bool) -> bytes",
    "operation": "EthLib.Consensus.Exports.gossipValidationExport",
    "method": "consensus_gossip_validation",
    "errors":
@@ -2707,7 +2707,7 @@
       {"constructor": "invalidColumns", "code": 33}]}],
    "error_class": "ForkChoiceError",
    "docstring":
-   "Validate the messages of a topic in turn, against the store of an anchor.\n\nFrom Gloas the store is not specified here."},
+   "Validate the messages of a topic in turn, against the store of an anchor and later blocks.\n\nFrom Gloas the store is not specified here."},
   {"summary":
    "The headers of a sync, step by step, from a bootstrap for a trusted block root.",
    "signature":

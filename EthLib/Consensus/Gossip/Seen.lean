@@ -47,6 +47,8 @@ structure Seen where
 
   Each key comes with the bits of the members that the contribution aggregates. -/
   syncContributionBits : List ((Slot × Root × UInt64) × List Bool) := []
+  /-- The slot and the proposer of each valid block. -/
+  proposerSlots : List (Slot × ValidatorIndex) := []
   deriving Inhabited
 
 namespace Store
@@ -84,10 +86,30 @@ def isWithinSlotRange (slot : Slot) (slotRange currentTimeMs : UInt64) :
 def isCurrentSlot (slot : Slot) (currentTimeMs : UInt64) : Except ForkChoiceError Bool :=
   store.isWithinSlotRange config slot 0 currentTimeMs
 
+/-- Whether a slot starts after the clock, which may run ahead by the maximum gossip disparity.
+
+A time or a slot that leaves the 64-bit range is an error. -/
+def isFutureSlot (slot : Slot) (currentTimeMs : UInt64) : Except ForkChoiceError Bool := do
+  let start ← (computeTimeAtSlotMs config store.genesisTimeMs slot).mapError .arith
+  let latest ← (addChecked currentTimeMs config.MAXIMUM_GOSSIP_CLOCK_DISPARITY).mapError .arith
+  return latest < start
+
 /-- The state after the head of the fork choice. -/
 def headState : Except ForkChoiceError (BeaconState preset fork) := do
   store.blockState (← store.getHead config).root
 
 end Store
+
+variable {preset : Preset} {fork : Fork}
+
+/-- Whether a key signed an object under a domain type, at the epoch of a slot. -/
+def isValidSignatureAtSlot {α : Type} [Serialization.Ssz.SszType α] (config : Config)
+    (checks : SignatureChecks) (state : BeaconState preset fork) (domainType : DomainType)
+    (slot : Slot) (object : α) (pubkey : Cryptography.Bls.BLSPubkey)
+    (signature : Cryptography.Bls.BLSSignature) : Except ForkChoiceError Bool := do
+  let domain ← (getDomain config state domainType
+    (some (computeEpochAtSlot preset slot))).mapError .accessor
+  let signingRoot ← (computeSigningRoot object domain).mapError .ssz
+  return checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signature)
 
 end EthLib.Consensus

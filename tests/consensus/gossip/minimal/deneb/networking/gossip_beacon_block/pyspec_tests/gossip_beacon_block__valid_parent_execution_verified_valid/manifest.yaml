@@ -1,0 +1,6 @@
+preset: minimal
+fork: deneb
+runner: networking
+handler: gossip_beacon_block
+suite: pyspec_tests
+case: gossip_beacon_block__valid_parent_execution_verified_valid

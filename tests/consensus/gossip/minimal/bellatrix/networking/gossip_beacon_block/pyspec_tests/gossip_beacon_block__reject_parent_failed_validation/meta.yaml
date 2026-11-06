@@ -1,0 +1,12 @@
+topic: beacon_block
+blocks:
+- {block: 
+    block_0xa38f00f389824d5a65ebe69f867d7fe06347bb83dc8677b7a2a2bf228f46e9b9}
+- {block: 
+    block_0xed76b966b318e68fb0ab66a89ffe0840a2e5febcce231b450b8fb4da1273f26c, 
+    failed: true}
+messages:
+- {current_time_ms: 12500, message: 
+    block_0x15de27b7e908f1ad208f4e3050c0684af76405b1b8aa8ff50343d08baace30b2, 
+    expected: reject, reason: block's parent is invalid and execution is not 
+    enabled}

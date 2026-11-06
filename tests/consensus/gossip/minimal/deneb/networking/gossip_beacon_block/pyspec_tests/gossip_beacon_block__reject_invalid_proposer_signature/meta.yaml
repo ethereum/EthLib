@@ -1,0 +1,9 @@
+topic: beacon_block
+blocks:
+- {block: 
+    block_0x4ec4291b4093239db1cc3f54141579def42012be60398989d24f0884685a6942}
+messages:
+- {current_time_ms: 6500, message: 
+    block_0x4f0adf2c62bb254d6d77f7a2c0d79953b414fb9b69cfce642b90a113bbdae9f8, 
+    expected: reject, reason: invalid proposer signature}
+bls_setting: 1

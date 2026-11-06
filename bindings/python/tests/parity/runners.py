@@ -98,6 +98,10 @@ _AMSTERDAM = {
     "blockchain_test_engine_x": "the Amsterdam payload on the Engine layer (G39), after G23",
 }
 NOT_YET_AT = {
+    **{
+        fork: {"networking/gossip_beacon_block": "the Electra and Fulu blocks (C35 to C40)"}
+        for fork in ("electra", "fulu")
+    },
     "gloas": _GLOAS,
     "heze": _HEZE,
     **{

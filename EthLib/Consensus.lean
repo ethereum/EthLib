@@ -32,6 +32,7 @@ public import EthLib.Consensus.ForkChoice.Optimistic
 public import EthLib.Consensus.ForkChoice.ProposerHead
 public import EthLib.Consensus.ForkChoice.Store
 public import EthLib.Consensus.ForkSchedule
+public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Gossip.Operations
 public import EthLib.Consensus.Gossip.Seen
 public import EthLib.Consensus.Gossip.SyncCommittee

@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: networking
+handler: gossip_beacon_block
+suite: pyspec_tests
+case: gossip_beacon_block__ignore_already_seen_proposer_slot

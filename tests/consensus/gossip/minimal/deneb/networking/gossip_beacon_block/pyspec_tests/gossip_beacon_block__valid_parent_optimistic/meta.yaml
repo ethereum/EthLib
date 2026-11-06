@@ -1,0 +1,11 @@
+topic: beacon_block
+blocks:
+- {block: 
+    block_0x1a3e9c9f0125cf7f621a4e4ab41478ec6a40b033b31b5aef3e145d056c892fd6}
+- {block: 
+    block_0xa5930d0dd608cdccdceb4ed18b983ddee08fa0cc2cfca621a4d02eb009c59757, 
+    payload_status: NOT_VALIDATED}
+messages:
+- {current_time_ms: 12500, message: 
+    block_0xc0b078bc7af4178ae0497f3b248026c60ca31683db2e1c4d570bfef58640aa23, 
+    expected: valid}

@@ -91,15 +91,6 @@ def Seen.contributionBits (seen : Seen) (key : Slot × Root × UInt64) : List (L
 
 /-! ## Signatures -/
 
-/-- Whether a key signed an object under a domain type, at the epoch of a slot. -/
-def isValidSignatureAtSlot {α : Type} [SszType α] (config : Config) (checks : SignatureChecks)
-    (state : BeaconState preset fork) (domainType : DomainType) (slot : Slot) (object : α)
-    (pubkey : BLSPubkey) (signature : BLSSignature) : Except ForkChoiceError Bool := do
-  let domain ← (getDomain config state domainType
-    (some (computeEpochAtSlot preset slot))).mapError .accessor
-  let signingRoot ← (computeSigningRoot object domain).mapError .ssz
-  return checks.verify (packBytes pubkey) (packBytes signingRoot) (packBytes signature)
-
 /-- From Altair: whether the members whose bit is set signed the block root of a contribution.
 
 The keys are those of the subcommittee, in order, and the bits pick the members that signed. -/

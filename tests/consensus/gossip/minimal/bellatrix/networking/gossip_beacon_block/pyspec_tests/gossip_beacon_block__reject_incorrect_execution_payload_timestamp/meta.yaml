@@ -1,0 +1,8 @@
+topic: beacon_block
+blocks:
+- {block: 
+    block_0xeba15b527c336e6a4861b7afc1d0270fd25f0f9553cbec90c0e1f3e32039faf4}
+messages:
+- {current_time_ms: 6500, message: 
+    block_0xb25d8cc01b2e7706f28b86e24c726a82260636989660d38eb903bab9bd194124, 
+    expected: reject, reason: incorrect execution payload timestamp}
