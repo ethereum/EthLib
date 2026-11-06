@@ -74,9 +74,12 @@ def blobScheduleOfJson (j : Json) : Result (Activation × BlobSchedule) := do
     return (← activationOf kind n, ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩)
   else throw (0, "a blob schedule needs target ≤ max, 0 < max and 0 < update fraction")
 
-/-- A chain configuration given as JSON, with no blob schedule of its own when none is given. -/
+/-- A chain configuration given as JSON, with no blob schedule of its own when none is given.
+
+The chain ID is a 256-bit number, so a larger one is rejected rather than reduced. -/
 def configOfJson (j : Json) : Result ChainConfig := do
   let some chainId := (j.getObjValAs? Nat "chainId").toOption | throw (0, "config: no chainId")
+  unless chainId < 2 ^ 256 do throw (0, "config: chainId is not below 2^256")
   let .arr activations := j.getObjValD "activations" | throw (0, "config: no activations")
   let activations ← activations.toList.mapM activationOfJson
   let schedules ← match j.getObjValD "blobSchedules" with
