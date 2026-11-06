@@ -241,7 +241,7 @@ private theorem beq_eq (a b : Nat) : Nat.beq a b = (a == b) :=
 theorem coords_endo (q : G1) : coords (endo q) = endoNat (coords q) := by
   simp only [coords, endo, endoNat, fmul, Prod.mk.injEq, and_true]
   rw [← cubeRoot_val]
-  exact ZMod.val_mul cubeRoot q.x
+  exact Fp.val_mul cubeRoot q.x
 
 theorem coords_jointMul (fuel : Nat) (p q t : G1) (a b : Nat) :
     coords (jointMul fuel p q t a b) =

@@ -132,11 +132,11 @@ theorem eq_affinePoint {q : G1} {x y : Nat}
   obtain ⟨qx, qy, qz⟩ := q
   simp only [G1.TorsionCheck.coords, Prod.mk.injEq] at h
   obtain ⟨hx, hy, hz⟩ := h
-  have ex : qx = Bls.Fp.ofNat x := Fin.ext (by
-    rw [Bls.Fp.ofNat, Fin.val_ofNat, ← hx, Nat.mod_eq_of_lt qx.isLt])
-  have ey : qy = Bls.Fp.ofNat y := Fin.ext (by
-    rw [Bls.Fp.ofNat, Fin.val_ofNat, ← hy, Nat.mod_eq_of_lt qy.isLt])
-  have ez : qz = Bls.Fp.one := Fin.ext (by rw [hz]; rfl)
+  have ex : qx = Bls.Fp.ofNat x := Bls.Fp.ext (by
+    rw [Bls.Fp.val_ofNat, ← hx, Nat.mod_eq_of_lt (Bls.Fp.val_lt qx)])
+  have ey : qy = Bls.Fp.ofNat y := Bls.Fp.ext (by
+    rw [Bls.Fp.val_ofNat, ← hy, Nat.mod_eq_of_lt (Bls.Fp.val_lt qy)])
+  have ez : qz = Bls.Fp.one := Bls.Fp.ext (by rw [hz, Bls.Fp.one_def, Bls.Fp.val_one])
   rw [ex, ey, ez]
   rfl
 

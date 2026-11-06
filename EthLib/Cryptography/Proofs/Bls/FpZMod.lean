@@ -456,6 +456,39 @@ instance : Fact (Nat.Prime modulus) := ⟨modulus_prime⟩
 /-- `Fp` is (definitionally) Mathlib's `ZMod Fp.modulus`, as rings. -/
 def toZMod : Fp ≃+* ZMod modulus := RingEquiv.refl _
 
+/-! ## The integer of an element
+
+These lemmas give the integer of each result, so a proof does not need the representation of `Fp`.
+-/
+
+/-- The integer of an element is below `p`. -/
+theorem val_lt (a : Fp) : a.val < modulus := a.isLt
+
+/-- Two elements with the same integer are equal. -/
+theorem ext {a b : Fp} (h : a.val = b.val) : a = b := Fin.ext h
+
+/-- The element of `n` has the integer `n mod p`. -/
+theorem val_ofNat (n : Nat) : (ofNat n).val = n % modulus := rfl
+
+/-- The element of an integer below `p` has that integer. -/
+theorem val_ofNat_of_lt {n : Nat} (h : n < modulus) : (ofNat n).val = n := by
+  rw [val_ofNat, Nat.mod_eq_of_lt h]
+
+/-- Zero has the integer `0`. -/
+@[simp] theorem val_zero : (0 : Fp).val = 0 := rfl
+
+/-- One has the integer `1`. -/
+@[simp] theorem val_one : (1 : Fp).val = 1 := rfl
+
+/-- The integer of a sum is the sum mod `p`. -/
+theorem val_add (a b : Fp) : (a + b).val = (a.val + b.val) % modulus := rfl
+
+/-- The integer of a product is the product mod `p`. -/
+theorem val_mul (a b : Fp) : (a * b).val = a.val * b.val % modulus := rfl
+
+/-- The integer of a negation is `p` minus the integer, mod `p`. -/
+theorem val_neg (a : Fp) : (-a).val = (modulus - a.val) % modulus := rfl
+
 /-! ## The base-field operations of `Fp` -/
 
 /-- The extensions read the equality of `Fp` as its boolean equality. -/
