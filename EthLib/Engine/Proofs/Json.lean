@@ -19,11 +19,15 @@ So the 64-bit decoder returns the decoded number itself, without wrapping.
 
 A byte string decoded with a limit on its size has at most that many bytes.
 
-Both decoders succeed exactly when the decoder without the bound succeeds within it.
+The 64-bit decoder returns a number exactly when the decoder with the bound `2^64` returns it.
+
+The bounded byte decoder succeeds exactly when the byte decoder succeeds within the limit.
 
 A decoded payload has version 1, 2 or 3 of the structure.
 
-It holds the withdrawals exactly from version 2, and the two blob gas fields exactly in version 3.
+It holds the withdrawals exactly from version 2.
+
+It holds the two blob gas fields exactly in version 3.
 -/
 
 public section
@@ -97,20 +101,47 @@ theorem bytesMax_eq_ok_iff {what : String} {n : Nat} {j : Lean.Json} {b : ByteAr
     rw [h]
     simp [bind, Except.bind, hn, pure, Except.pure]
 
-/-- A decoded payload has version 1, 2 or 3, and holds the fields of exactly that version. -/
-theorem shape_of_anyPayload {j : Lean.Json} {p : AnyPayload} (h : anyPayload j = .ok p) :
+/-- The version and the optional fields of a decoded payload, in one walk of the decoder. -/
+private theorem anyPayload_walk {j : Lean.Json} {p : AnyPayload} (h : anyPayload j = .ok p) :
     (p.version = 1 ∨ p.version = 2 ∨ p.version = 3) ∧ (p.withdrawals.isSome ↔ 2 ≤ p.version) ∧
       (p.blobGasUsed.isSome ↔ 3 ≤ p.version) ∧ (p.excessBlobGas.isSome ↔ 3 ≤ p.version) := by
   unfold anyPayload at h
   -- Inline the steps that the decoder shares between its branches.
   dsimp only at h
-  -- Walk every step: a failure cannot be the success, and each value read is kept.
+  -- Split each step of the decoder: a failing step contradicts the success, and a read value stays.
   repeat' (first
     | (simp only [invalid, throw, throwThe, MonadExceptOf.throw] at h; cases h; done)
     | (obtain ⟨_, step, h⟩ := bind_ok_iff.mp h
        first | cases step | obtain ⟨_, -, rfl⟩ := map_ok_iff.mp step | skip)
     | split at h)
-  -- Each success fixes the version and the fields, and a branch that disagrees is impossible.
-  all_goals (cases h; first | (exfalso; omega) | simp)
+  -- Each success fixes the version and the fields.
+  all_goals (cases h; simp)
+
+/-- A decoded payload has version 1, 2 or 3. -/
+theorem version_of_anyPayload {j : Lean.Json} {p : AnyPayload} (h : anyPayload j = .ok p) :
+    p.version = 1 ∨ p.version = 2 ∨ p.version = 3 :=
+  (anyPayload_walk h).1
+
+/-- A decoded payload holds the withdrawals exactly from version 2. -/
+theorem withdrawals_isSome_iff_of_anyPayload {j : Lean.Json} {p : AnyPayload}
+    (h : anyPayload j = .ok p) : p.withdrawals.isSome ↔ 2 ≤ p.version :=
+  (anyPayload_walk h).2.1
+
+/-- A decoded payload holds the blob gas used exactly in version 3. -/
+theorem blobGasUsed_isSome_iff_of_anyPayload {j : Lean.Json} {p : AnyPayload}
+    (h : anyPayload j = .ok p) : p.blobGasUsed.isSome ↔ 3 ≤ p.version :=
+  (anyPayload_walk h).2.2.1
+
+/-- A decoded payload holds the excess blob gas exactly in version 3. -/
+theorem excessBlobGas_isSome_iff_of_anyPayload {j : Lean.Json} {p : AnyPayload}
+    (h : anyPayload j = .ok p) : p.excessBlobGas.isSome ↔ 3 ≤ p.version :=
+  (anyPayload_walk h).2.2.2
+
+/-- A decoded payload has version 1, 2 or 3, and its optional fields match that version. -/
+theorem shape_of_anyPayload {j : Lean.Json} {p : AnyPayload} (h : anyPayload j = .ok p) :
+    (p.version = 1 ∨ p.version = 2 ∨ p.version = 3) ∧ (p.withdrawals.isSome ↔ 2 ≤ p.version) ∧
+      (p.blobGasUsed.isSome ↔ 3 ≤ p.version) ∧ (p.excessBlobGas.isSome ↔ 3 ≤ p.version) :=
+  ⟨version_of_anyPayload h, withdrawals_isSome_iff_of_anyPayload h,
+    blobGasUsed_isSome_iff_of_anyPayload h, excessBlobGas_isSome_iff_of_anyPayload h⟩
 
 end EthLib.Engine.Json
