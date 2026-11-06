@@ -11,26 +11,24 @@ namespace EthLib.Serialization.Ssz
 
 open Lean
 
-/-- The two digits one byte is written as, high half first. -/
-private def hexPair (byte : UInt8) : List Char :=
-  [Base.hexDigitChar ⟨byte.toNat / 16, by have := byte.toNat_lt; omega⟩,
-    Base.hexDigitChar ⟨byte.toNat % 16, by omega⟩]
-
 /-- The digits a byte string is written as, behind no marker. -/
 private def hexDigitsOf (data : Bytes) : List Char :=
-  data.toList.flatMap hexPair
+  data.toList.flatMap Base.byteHexDigits
 
 /-- Writing appends the digits of each byte in turn. -/
 private theorem toHex_eq (data : Bytes) :
     (toHex data).toList = '0' :: 'x' :: hexDigitsOf data := by
   -- The fold starts from the marker and pushes two characters per byte.
   have general : ∀ (bytes : List UInt8) (text : String),
-      (bytes.foldl (fun text byte =>
-        (text.push (Base.hexDigitChar ⟨byte.toNat / 16, by have := byte.toNat_lt; omega⟩)).push
-          (Base.hexDigitChar ⟨byte.toNat % 16, by omega⟩)) text).toList
-        = text.toList ++ bytes.flatMap hexPair := by
+      (bytes.foldl (fun text byte => (Base.byteHexDigits byte).foldl String.push text)
+        text).toList = text.toList ++ bytes.flatMap Base.byteHexDigits := by
     intro bytes
-    induction bytes <;> simp [*, hexPair]
+    induction bytes with
+    | nil => simp
+    | cons byte rest ih =>
+      intro text
+      rw [List.foldl_cons, ih]
+      simp [Base.byteHexDigits]
   simpa [toHex, hexDigitsOf, Array.foldl_toList] using general data.toList "0x"
 
 /-- Each of the sixteen digits reads back as its own value. -/
@@ -45,13 +43,13 @@ private theorem hexDigit_hexDigitChar (digit : Fin 16) :
 private theorem hexBytes_digits (data : Bytes) : hexBytes (hexDigitsOf data) = .ok data := by
   -- Two digits at a time rebuild one byte, and the rest of the string follows.
   have general : ∀ (bytes : List UInt8),
-      hexBytes (bytes.flatMap hexPair) = .ok bytes.toArray := by
+      hexBytes (bytes.flatMap Base.byteHexDigits) = .ok bytes.toArray := by
     intro bytes
     induction bytes with
     | nil => simp [hexBytes_nil]
     | cons byte rest ih =>
-      simp [hexPair, hexBytes_cons, hexDigit_hexDigitChar, Nat.div_add_mod, ih, Bind.bind,
-        Except.bind, pure, Except.pure, UInt8.ofNat_toNat]
+      simp [Base.byteHexDigits, hexBytes_cons, hexDigit_hexDigitChar, Nat.div_add_mod, ih,
+        Bind.bind, Except.bind, pure, Except.pure, UInt8.ofNat_toNat]
   simpa [hexDigitsOf] using general data.toList
 
 /-- A hex string the mapping wrote reads back as the bytes it was written from. -/
