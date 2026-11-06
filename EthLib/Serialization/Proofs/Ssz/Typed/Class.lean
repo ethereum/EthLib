@@ -32,6 +32,8 @@ class LawfulSszType (α : Type) [SszType α] : Prop where
   ofValue_toValue : ∀ a : α, ofValue (toValue a) = .ok a
   /-- An untyped value that reads back is the one its typed value stands for. -/
   toValue_of_ofValue : ∀ {value : Value} {a : α}, ofValue value = .ok a → toValue a = value
+  /-- The root that the type gives a value is the root of its untyped value. -/
+  root_eq : ∀ a : α, root a = Ssz.hashTreeRoot (desc α) (toValue a) := by intro; rfl
 
 namespace SszType
 
@@ -45,6 +47,11 @@ theorem serialize_ok_iff {a : α} {data : ByteArray} :
     simp [bind, Except.bind, pure, Except.pure, ByteArray.ext_iff, eq_comm]
 
 variable [LawfulSszType α]
+
+/-- The typed root is the root of the untyped value, cut to one 32-byte node. -/
+theorem hashTreeRoot_eq (a : α) :
+    hashTreeRoot a = (do toChunk (← Ssz.hashTreeRoot (desc α) (toValue a))) := by
+  rw [hashTreeRoot, LawfulSszType.root_eq]
 
 /-- Deserializing the bytes of a value gives that value. -/
 theorem deserialize_serialize {a : α} {data : ByteArray} (wrote : serialize a = .ok data) :

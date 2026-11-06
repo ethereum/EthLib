@@ -23,6 +23,12 @@ class SszType (α : Type) where
   toValue : α → Value
   /-- The typed value that an untyped value stands for, or why it stands for none. -/
   ofValue : Value → Except Err α
+  /--
+  The Merkle root of a value, which is the root of its untyped value.
+
+  A type that keeps the tree of its values reads the root there instead of hashing again.
+  -/
+  root : α → Except Err Bytes := fun a => Ssz.hashTreeRoot desc (toValue a)
 
 namespace SszType
 
@@ -42,7 +48,7 @@ The 32-byte Merkle root of a value.
 The width check never fails on a well-formed type, since every root there is one node.
 -/
 def hashTreeRoot (a : α) : Except Err (Vector UInt8 32) := do
-  toChunk (← Ssz.hashTreeRoot (desc α) (toValue a))
+  toChunk (← root a)
 
 end SszType
 

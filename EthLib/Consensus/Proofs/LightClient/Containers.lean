@@ -62,9 +62,9 @@ theorem lightClientGindices_altair_eq :
 
 The next committee branch of an update opens this node against the attested state root.
 
-It holds for every state with a lawful type, with or without an accepted update. -/
+It holds for every state of a lawful type with a nonempty committee, whatever the update. -/
 theorem BeaconState.nodeRoot_nextSyncCommittee_altair
-    [LawfulSszType (BeaconState preset .altair)]
+    [LawfulSszType (BeaconState preset .altair)] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
     (state : BeaconState preset .altair) {root : Bytes32}
     (rooted : SszType.hashTreeRoot (state.nextSyncCommittee (by decide)) = .ok root) :
     nodeRoot (SszType.desc (BeaconState preset .altair)) (SszType.toValue state)
@@ -88,9 +88,11 @@ theorem BeaconState.nodeRoot_nextSyncCommittee_altair
 
 /-- In an Altair state, the current committee node is the root of the state's current committee.
 
-The branch of a bootstrap opens this node against the state root of its beacon header. -/
+The branch of a bootstrap opens this node against the state root of its beacon header.
+
+It holds for every state with a lawful type and a nonempty committee. -/
 theorem BeaconState.nodeRoot_currentSyncCommittee_altair
-    [LawfulSszType (BeaconState preset .altair)]
+    [LawfulSszType (BeaconState preset .altair)] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
     (state : BeaconState preset .altair) {root : Bytes32}
     (rooted : SszType.hashTreeRoot (state.currentSyncCommittee (by decide)) = .ok root) :
     nodeRoot (SszType.desc (BeaconState preset .altair)) (SszType.toValue state)

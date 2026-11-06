@@ -50,6 +50,9 @@ abbrev presentFieldsProd (p : Prop) [Decidable p] (α β : Type) [SszType α] [S
     else do
       -- An absent field has one value, so it reads nothing.
       return (fun later => absurd later present, ← SszFields.ofValues values)
+  roots pair :=
+    if present : p then return (← root (pair.1 present)) :: (← SszFields.roots pair.2)
+    else SszFields.roots pair.2
 
 /-- A field present when `p` holds, as the last field of a container. -/
 abbrev presentFields (p : Prop) [Decidable p] (α : Type) [SszType α] : SszFields (p → α) where
@@ -64,6 +67,7 @@ abbrev presentFields (p : Prop) [Decidable p] (α : Type) [SszType α] : SszFiel
       match values with
       | [] => .ok fun later => absurd later present
       | values => .error (.count 0 values.length)
+  roots field := if present : p then return [← root (field present)] else return []
 
 /-- A field that appears at a fork, in front of the fields that follow it. -/
 instance {first fork : Fork} {α β : Type} [SszType α] [SszFields β] :

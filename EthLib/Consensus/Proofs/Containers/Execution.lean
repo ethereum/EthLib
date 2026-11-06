@@ -108,13 +108,6 @@ theorem serialize_eq (payload : ExecutionPayload preset fork) :
         (.seq (fieldValues payload))⟩) := by
   rw [SszType.serialize, desc_eq, toValue_eq]
 
-/-- At every fork, the root of a payload is the root of the plain list of its fields. -/
-theorem hashTreeRoot_eq (payload : ExecutionPayload preset fork) :
-    SszType.hashTreeRoot payload = (do
-      toChunk (← Serialization.Ssz.hashTreeRoot (fieldsDesc preset fork)
-        (.seq (fieldValues payload)))) := by
-  rw [SszType.hashTreeRoot, desc_eq, toValue_eq]
-
 /-- The field names of a payload are distinct at every fork. -/
 theorem names_nodup : (names fork).Nodup := by
   have all : (["parent_hash", "fee_recipient", "state_root", "receipts_root", "logs_bloom",
@@ -141,6 +134,18 @@ instance [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] :
      by simp [names],
      firstDuplicate_of_nodup _ names_nodup⟩
     (fun _ => rfl) (fun _ => rfl)
+
+/--
+At every fork, the root of a payload is the root of the plain list of its fields.
+
+The logs bloom must have a byte, as for the payload's laws.
+-/
+theorem hashTreeRoot_eq [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
+    (payload : ExecutionPayload preset fork) :
+    SszType.hashTreeRoot payload = (do
+      toChunk (← Serialization.Ssz.hashTreeRoot (fieldsDesc preset fork)
+        (.seq (fieldValues payload)))) := by
+  rw [SszType.hashTreeRoot_eq, desc_eq, toValue_eq]
 
 /-- At every fork, the bytes of a payload decode back to it. -/
 theorem deserialize_serialize [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
@@ -205,9 +210,11 @@ theorem ExecutionPayload.header_total {preset : Preset} {fork : Fork}
 
 /-- Before Gloas, the header of a payload has the root of the payload.
 
-Each list of the payload gives way to its root, which leaves the root of the payload unchanged. -/
+Each list of the payload gives way to its root, which leaves the root of the payload unchanged.
+
+The logs bloom must have a byte, as for the payload's laws. -/
 theorem ExecutionPayload.hashTreeRoot_header {preset : Preset} {fork : Fork}
-    (before : fork < .glamsterdam)
+    [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] (before : fork < .glamsterdam)
     {payload : ExecutionPayload preset fork} {header : ExecutionPayloadHeader preset fork}
     (made : payload.header = .ok header) :
     SszType.hashTreeRoot header = SszType.hashTreeRoot payload := by
@@ -225,7 +232,7 @@ theorem ExecutionPayload.hashTreeRoot_header {preset : Preset} {fork : Fork}
     simp [ExecutionPayload.header, tx, w, capella, bind, Except.bind, pure, Except.pure] at made
     subst made
     rw [SszType.hashTreeRoot_ok_iff] at tx w
-    simp only [SszType.hashTreeRoot]
+    rw [SszType.hashTreeRoot_eq, SszType.hashTreeRoot_eq]
     rw [ExecutionPayload.desc_eq, ExecutionPayload.fieldsDesc_of_lt before,
       ExecutionPayload.toValue_eq]
     have one := hashTreeRoot_summary (names := ExecutionPayload.names fork) (position := 13)
@@ -255,7 +262,7 @@ theorem ExecutionPayload.hashTreeRoot_header {preset : Preset} {fork : Fork}
     simp [ExecutionPayload.header, tx, capella, bind, Except.bind, pure, Except.pure] at made
     subst made
     rw [SszType.hashTreeRoot_ok_iff] at tx
-    simp only [SszType.hashTreeRoot]
+    rw [SszType.hashTreeRoot_eq, SszType.hashTreeRoot_eq]
     rw [ExecutionPayload.desc_eq, ExecutionPayload.fieldsDesc_of_lt before,
       ExecutionPayload.toValue_eq]
     have one := hashTreeRoot_summary (names := ExecutionPayload.names fork) (position := 13)

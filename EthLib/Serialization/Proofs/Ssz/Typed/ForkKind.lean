@@ -51,8 +51,9 @@ theorem serialize_forkList_ofSszList (before : fork < switch) (l : SszList α li
       SszType.hashTreeRoot (ForkList.ofSszList (switch := switch) (fork := fork) l) =
         SszType.hashTreeRoot l := by
   constructor <;>
-    simp only [SszType.serialize, SszType.hashTreeRoot, desc_forkList before,
+    simp only [SszType.serialize, SszType.hashTreeRoot, SszType.root, desc_forkList before,
       toValue_forkList_ofSszList]
+  all_goals simp [not_switch_of_lt before, ForkList.ofSszList]
 
 /-- A list with the same elements has the same bytes after the switch as before it.
 
@@ -119,8 +120,9 @@ theorem serialize_forkList_uint8 (before : fork < switch) (l : SszList UInt8 lim
       SszType.hashTreeRoot (ForkList.ofSszList (switch := switch) (fork := fork) l) =
         SszType.hashTreeRoot l := by
   constructor <;>
-    simp only [SszType.serialize, SszType.hashTreeRoot, desc_forkList_uint8 before,
+    simp only [SszType.serialize, SszType.hashTreeRoot, SszType.root, desc_forkList_uint8 before,
       toValue_forkList_uint8 before]
+  all_goals simp [not_switch_of_lt before, ForkList.ofSszList]
 
 instance : LawfulSszType (ForkList switch fork UInt8 limit) where
   wellFormed := by
@@ -189,8 +191,9 @@ theorem serialize_forkBitlist_ofBitlist (before : fork < switch) (b : Bitlist li
       SszType.hashTreeRoot (ForkBitlist.ofBitlist (switch := switch) (fork := fork) b) =
         SszType.hashTreeRoot b := by
   constructor <;>
-    simp only [SszType.serialize, SszType.hashTreeRoot, desc_forkBitlist before,
+    simp only [SszType.serialize, SszType.hashTreeRoot, SszType.root, desc_forkBitlist before,
       toValue_forkBitlist_ofBitlist]
+  all_goals simp [not_switch_of_lt before, ForkBitlist.ofBitlist]
 
 instance : LawfulSszType (ForkBitlist switch fork limit) where
   wellFormed := by

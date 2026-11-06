@@ -23,7 +23,12 @@ theorem lawful_presentFieldsProd (p : Prop) [Decidable p] (α β : Type) [SszTyp
     [LawfulSszType α] [SszFields β] [LawfulSszFields β] :
     @LawfulSszFields ((p → α) × β) (presentFieldsProd p α β) := by
   refine @LawfulSszFields.mk _ (presentFieldsProd p α β) ?allWellFormed ?fits ?ofValues_toValues
-    ?toValues_of_ofValues
+    ?toValues_of_ofValues ?roots_eq
+  case roots_eq =>
+    intro pair
+    by_cases present : p <;>
+      simp [roots, descs, toValues, present, LawfulSszType.root_eq,
+        LawfulSszFields.roots_eq (β := β)]
   case allWellFormed =>
     by_cases present : p <;>
       simp [descs, present, Desc.allWellFormed,
@@ -75,7 +80,14 @@ theorem lawful_presentFieldsProd (p : Prop) [Decidable p] (α β : Type) [SszTyp
 theorem lawful_presentFields (p : Prop) [Decidable p] (α : Type) [SszType α]
     [LawfulSszType α] : @LawfulSszFields (p → α) (presentFields p α) := by
   refine @LawfulSszFields.mk _ (presentFields p α) ?allWellFormed ?fits ?ofValues_toValues
-    ?toValues_of_ofValues
+    ?toValues_of_ofValues ?roots_eq
+  case roots_eq =>
+    intro field
+    by_cases present : p
+    · simp only [roots, descs, toValues, present, dite_true, ite_true, LawfulSszType.root_eq,
+        List.zip_cons_cons, List.zip_nil_right, List.mapM_cons, List.mapM_nil]
+      cases Ssz.hashTreeRoot (desc α) (toValue (field present)) <;> rfl
+    · simp [roots, descs, toValues, present, pure, Except.pure]
   case allWellFormed =>
     by_cases present : p <;>
       simp [descs, present, Desc.allWellFormed,

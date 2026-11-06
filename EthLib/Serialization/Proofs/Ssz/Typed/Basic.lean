@@ -27,14 +27,16 @@ theorem SszType.ofUint_ok {α : Type} {width : Nat} {make : Nat → α} {value :
 /--
 An integer type is lawful when its numbers are exactly those below the bound of its width.
 
-The width must be one of the six that SSZ defines.
+The width must be one of the six that SSZ defines, and the root must be the untyped one.
 -/
 theorem LawfulSszType.ofUint {α : Type} [SszType α] {width : Nat} (toNat : α → Nat)
     (ofNat : Nat → α) (declared : desc α = .uint width)
     (sized : [1, 2, 4, 8, 16, 32].contains width = true)
     (written : ∀ a, toValue a = .uint (toNat a)) (read : ofValue (α := α) = ofUint width ofNat)
     (bounded : ∀ a, toNat a < 2 ^ (8 * width)) (left : ∀ a, ofNat (toNat a) = a)
-    (right : ∀ n, n < 2 ^ (8 * width) → toNat (ofNat n) = n) : LawfulSszType α where
+    (right : ∀ n, n < 2 ^ (8 * width) → toNat (ofNat n) = n)
+    (rooted : ∀ a : α, SszType.root a = Ssz.hashTreeRoot (desc α) (toValue a) := by intro; rfl) :
+    LawfulSszType α where
   wellFormed := by simp only [declared, Desc.wellFormed, sized, ↓reduceIte]
   fits a := by rw [declared, written]; exact .uint (bounded a)
   ofValue_toValue a := by rw [read, written, ofUint_ok]; exact ⟨_, rfl, bounded a, left a⟩
@@ -42,6 +44,7 @@ theorem LawfulSszType.ofUint {α : Type} [SszType α] {width : Nat} (toNat : α 
     rw [read, ofUint_ok] at made
     obtain ⟨n, rfl, below, rfl⟩ := made
     rw [written, right n below]
+  root_eq := rooted
 
 instance : LawfulSszType Bool where
   wellFormed := rfl

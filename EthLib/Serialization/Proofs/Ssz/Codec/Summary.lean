@@ -240,6 +240,94 @@ theorem hashTreeRoot_progressiveContainer_congr {active : List Bool} {names : Li
     all_goals simp [merkleLayout, layoutSlots, paired, paired ▸ counted, Bind.bind, Except.bind,
       throw, throwThe, MonadExceptOf.throw]
 
+/-- Fields rooted one by one give leaves with the same roots as those roots held as nodes. -/
+private theorem summary_fields :
+    ∀ {fields : List (Desc × Value)} {roots : List Bytes},
+      fields.mapM (fun field => hashTreeRoot field.1 field.2) = .ok roots →
+      (roots.map fun root => (Desc.byteVector bytesPerChunk, Value.bytes root)).map
+          (fun field => slotRoot (some field))
+        = fields.map (fun field => slotRoot (some field)) ∧
+      roots.length = fields.length
+  | [], roots, rooted => by
+    simp_all [pure, Except.pure]
+  | field :: fields, roots, rooted => by
+    cases first : hashTreeRoot field.1 field.2 with
+    | error => simp [first, Bind.bind, Except.bind] at rooted
+    | ok root =>
+      cases rest : fields.mapM (fun field => hashTreeRoot field.1 field.2) with
+      | error => simp [first, rest, Bind.bind, Except.bind] at rooted
+      | ok tail =>
+        simp only [List.mapM_cons, first, rest, Bind.bind, Except.bind, pure, Except.pure,
+          Except.ok.injEq] at rooted
+        subst rooted
+        have := summary_fields rest
+        simp_all [slotRoot, hashTreeRoot_chunk (hashTreeRoot_size _ _ _ first)]
+
+/--
+A container has the root of the container of its field roots.
+
+Each field is declared there as one 32-byte node, which holds that field's root.
+-/
+theorem hashTreeRoot_container_roots {names : List String} {fields : List Desc}
+    {values : List Value} {roots : List Bytes} (paired : fields.length = values.length)
+    (rooted : (fields.zip values).mapM (fun field => hashTreeRoot field.1 field.2) = .ok roots) :
+    hashTreeRoot (.container names (roots.map fun _ => .byteVector bytesPerChunk))
+        (.seq (roots.map .bytes))
+      = hashTreeRoot (.container names fields) (.seq values) := by
+  obtain ⟨same, counted⟩ := summary_fields rooted
+  rw [List.length_zip, paired, Nat.min_self] at counted
+  apply hashTreeRoot_slots (limit := some fields.length) (mixin := none)
+    (leftSlots := ((roots.map fun _ => Desc.byteVector bytesPerChunk).zip
+      (roots.map Value.bytes)).map some)
+    (rightSlots := (fields.zip values).map some)
+    (by simp [merkleLayout, counted, paired, MerkleLayout.nesting, pure, Except.pure])
+    (by simp [merkleLayout, paired, MerkleLayout.nesting, pure, Except.pure])
+  simpa [List.zip_map', List.map_map, Function.comp_def] using same
+
+/--
+A progressive container has the root of the progressive container of its field roots.
+
+Each field is declared there as one 32-byte node, which holds that field's root.
+-/
+theorem hashTreeRoot_progressiveContainer_roots {active : List Bool} {names : List String}
+    {fields : List Desc} {values : List Value} {roots : List Bytes}
+    (paired : fields.length = values.length)
+    (rooted : (fields.zip values).mapM (fun field => hashTreeRoot field.1 field.2) = .ok roots) :
+    hashTreeRoot (.progressiveContainer active names (roots.map fun _ => .byteVector bytesPerChunk))
+        (.seq (roots.map .bytes))
+      = hashTreeRoot (.progressiveContainer active names fields) (.seq values) := by
+  obtain ⟨same, counted⟩ := summary_fields rooted
+  rw [List.length_zip, paired, Nat.min_self] at counted
+  have leaves : ((roots.map fun _ => Desc.byteVector bytesPerChunk).zip
+      (roots.map Value.bytes)).map (fun field => slotRoot (some field))
+      = (fields.zip values).map (fun field => slotRoot (some field)) := by
+    simpa [List.zip_map', List.map_map, Function.comp_def] using same
+  by_cases fitted : active.countP id = fields.length
+  · cases placed : placeSlots active (fields.zip values) with
+    | ok slots =>
+      obtain ⟨others, placedLeft, agree⟩ := placeSlots_congr active leaves.symm placed
+      exact hashTreeRoot_slots (leftSlots := others) (rightSlots := slots) (limit := none)
+        (mixin := some (activeFieldsWord active))
+        (by simp [merkleLayout, layoutSlots, counted, paired, fitted, placedLeft,
+          MerkleLayout.nesting, Bind.bind, Except.bind, pure, Except.pure])
+        (by simp [merkleLayout, layoutSlots, paired, fitted, placed, MerkleLayout.nesting,
+          Bind.bind, Except.bind, pure, Except.pure]) agree.symm
+    | error fault =>
+      cases placedLeft : placeSlots active ((roots.map fun _ => Desc.byteVector bytesPerChunk).zip
+          (roots.map Value.bytes)) with
+      | ok others =>
+        obtain ⟨_, refused, _⟩ := placeSlots_congr active leaves placedLeft
+        simp [placed] at refused
+      | error other =>
+        rw [hashTreeRoot_refused (fault := other), hashTreeRoot_refused (fault := fault),
+          placeSlots_refused placed, placeSlots_refused placedLeft]
+        all_goals simp [merkleLayout, layoutSlots, counted, paired, fitted, placed, placedLeft,
+          Bind.bind, Except.bind]
+  · rw [hashTreeRoot_refused (fault := .layoutFieldCount (active.countP id) fields.length),
+      hashTreeRoot_refused (fault := .layoutFieldCount (active.countP id) fields.length)]
+    all_goals simp [merkleLayout, layoutSlots, counted, paired, paired ▸ fitted, Bind.bind,
+      Except.bind, throw, throwThe, MonadExceptOf.throw]
+
 /-- A selector picks the option at the position of its first declaration. -/
 private theorem lookupOption_at {selector : Nat} :
     ∀ {selectors : List Nat} {options : List Desc} {slot : Nat} {option : Desc},

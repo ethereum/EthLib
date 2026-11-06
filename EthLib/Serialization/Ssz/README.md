@@ -175,11 +175,14 @@ A *typed value* bridges the two.
 Its Lean type names a declaration, and each value converts to an untyped value and back.
 A length or a limit is part of the Lean type, so every typed value fits its declaration.
 Serialization, deserialization and the root then run the codec above, with no second codec.
+A container takes its root over its summary: the container of its field roots, each held as one 32-byte node.
+So a field type may keep the tree of its values and give its root without hashing them again.
 
 The basic types, byte vectors, byte lists, bitfields, vectors, lists, progressive lists and progressive bitlists have typed values.
 A container gets them from the types of its fields.
 A progressive container does too, and also places its fields on a layout of active positions and gaps.
 A typed value is *lawful* when its declaration is well formed, every value fits it, and the two conversions undo each other.
+Its root method must also give the root of its untyped value.
 Collections and containers are lawful when their parts are, and fixed counts are positive.
 A progressive container also needs a layout that ends on a set bit and sets one bit per field.
 The layout has at most 256 bits.
