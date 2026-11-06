@@ -36,11 +36,12 @@ def new_payload_on_chain(
     return json.loads(status), rlp.encode(header), accounts
 
 
-def forkchoice_updated(tree: list, method: str, params: list) -> dict:
+def forkchoice_updated(tree: list, method: str, params: list, finalized: str | None = None) -> dict:
     """The response to an `engine_forkchoiceUpdated` call, against a tree of known payloads."""
+    # The execution layer may know a finalized block, the latest one an earlier update named.
     request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
     response = _native.engine_forkchoice_updated(
-        json.dumps(tree).encode(), json.dumps(request).encode()
+        json.dumps(tree).encode(), json.dumps(finalized).encode(), json.dumps(request).encode()
     )
     return json.loads(response)
 

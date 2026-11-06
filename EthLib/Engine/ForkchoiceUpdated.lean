@@ -6,7 +6,7 @@ public import EthLib.Execution.Blocks.Withdrawal
 /-!
 # `Engine.ForkchoiceUpdated`
 
-The choice of the head in `engine_forkchoiceUpdated`, versions 1 to 3, without payload attributes.
+The choice of the head in `engine_forkchoiceUpdated`, versions 1 to 3, without a payload build.
 
 The consensus layer names a head, a safe block and a finalized block.
 
@@ -15,6 +15,14 @@ The execution layer knows a tree of payloads, each with its parent and its valid
 A head that the tree does not hold is syncing.
 
 A head that is invalid stays invalid, with the latest valid ancestor as the latest valid hash.
+
+The execution layer may also know a finalized block, the latest one that an earlier update named.
+
+A valid head below that block is valid, and the forkchoice state is neither checked nor applied.
+
+The source allows the update to be skipped there, and this model skips it.
+
+A head equal to that block follows the steps below, as for any other valid head.
 
 A valid head becomes the head of the canonical chain.
 
@@ -28,11 +36,15 @@ Otherwise the state is invalid, with JSON-RPC code `-38002`.
 
 The parameters are the forkchoice state, with exactly its three fields, and the payload attributes.
 
-Payload attributes start a payload build, which is not specified here, so they must be `null`.
+Payload attributes start a payload build only when the update selects a new valid head.
+
+That build is not specified here, so such a request is refused.
+
+With any other answer no build begins, so the payload attributes change nothing.
 
 The method specifications state these rules, at commit `3284ee8` of execution-apis:
 
-- [`engine_forkchoiceUpdatedV1`][v1], steps 4, 5, 7 and 9
+- [`engine_forkchoiceUpdatedV1`][v1], steps 2, 4, 5, 7, 8 and 9
 - [`engine_forkchoiceUpdatedV2`][v2] and [`engine_forkchoiceUpdatedV3`][v3]
 
 Each version has its payload attributes: [version 1][a1], [version 2][a2] and [version 3][a3].
@@ -108,13 +120,27 @@ def latestValid (tree : PayloadTree) (hash : Hash32) : Option Hash32 :=
 def onChain (tree : PayloadTree) (head hash : Hash32) : Bool :=
   hash == ZERO_HASH || (chainOf tree head).contains hash
 
-/-- The status of a forkchoice update, and the new head when it changes. -/
-def forkchoiceUpdated (tree : PayloadTree) (state : ForkchoiceState) :
+/-- Whether a block is a strict ancestor of the finalized block that the execution layer knows.
+
+It is not when the execution layer knows no finalized block. -/
+def belowFinalized (tree : PayloadTree) (finalized : Option Hash32) (hash : Hash32) : Bool :=
+  match finalized with
+  | some f => hash != f && (chainOf tree f).contains hash
+  | none => false
+
+/-- The status of a forkchoice update, and the new head when it changes.
+
+The execution layer knows the payloads of the tree, and the finalized block of an earlier update.
+-/
+def forkchoiceUpdated (tree : PayloadTree) (finalized : Option Hash32) (state : ForkchoiceState) :
     Except EngineError (PayloadStatus × Option Hash32) :=
   match tree.lookup state.headBlockHash with
   | none => pure (⟨.syncing, none⟩, none)
   | some head =>
     if !head.valid then pure (⟨.invalid, latestValid tree state.headBlockHash⟩, none)
+    -- Step 2: a valid head below the known finalized block is valid, and the update is skipped.
+    else if belowFinalized tree finalized state.headBlockHash then
+      pure (⟨.valid, some state.headBlockHash⟩, none)
     else if onChain tree state.headBlockHash state.safeBlockHash &&
         onChain tree state.headBlockHash state.finalizedBlockHash then
       pure (⟨.valid, some state.headBlockHash⟩, some state.headBlockHash)
@@ -131,13 +157,13 @@ def forkchoiceStateOfJson (j : Json) : Decode ForkchoiceState := do
     safeBlockHash := ← fixed "safeBlockHash" 32 (← get "safeBlockHash")
     finalizedBlockHash := ← fixed "finalizedBlockHash" 32 (← get "finalizedBlockHash") }
 
-/-- The parameters of a version of the method: the forkchoice state, then `null` attributes.
+/-- The parameters of a version of the method: the forkchoice state, then the payload attributes.
 
-It has none when the attributes are not `null`, since building a payload is not specified here. -/
-def forkchoiceUpdatedParams (params : Json) : Decode (Option ForkchoiceState) := do
+It returns the state, and whether the attributes are not `null`. -/
+def forkchoiceUpdatedParams (params : Json) : Decode (ForkchoiceState × Bool) := do
   let .arr items := params | invalid "params: not an array"
   let [state, attributes] := items.toList | invalid "params: not 2 values"
   let state ← forkchoiceStateOfJson state
-  return if attributes.isNull then some state else none
+  return (state, !attributes.isNull)
 
 end EthLib.Engine

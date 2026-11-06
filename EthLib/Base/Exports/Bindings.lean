@@ -784,7 +784,7 @@ def bindings : List Binding := [
     "(config: bytes, state: bytes, recent: bytes, request: bytes) -> bytes",
     [`EthLib.Engine.EngineError], some "EngineError"⟩,
   ⟨"engine_forkchoice_updated", `EthLib.Engine.Exports.forkchoiceUpdatedExport,
-    "(tree: bytes, request: bytes) -> bytes",
+    "(tree: bytes, finalized: bytes, request: bytes) -> bytes",
     [`EthLib.Engine.EngineError], some "EngineError"⟩
 ]
 
