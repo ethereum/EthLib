@@ -503,12 +503,12 @@ theorem frame_processEffectiveBalanceUpdates
 
 theorem frame_processSlashingsReset (computed : processSlashingsReset state = .ok after) :
     Frame state after := by
-  obtain ⟨_, _, rfl⟩ := processSlashingsReset_eq computed
+  obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq computed
   exact frame_slashings _ _
 
 theorem frame_processRandaoMixesReset (computed : processRandaoMixesReset state = .ok after) :
     Frame state after := by
-  obtain ⟨_, _, _, _, rfl⟩ := processRandaoMixesReset_eq computed
+  obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq computed
   exact Frame.of_validators ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl
 
 theorem frame_processHistoricalRootsUpdate

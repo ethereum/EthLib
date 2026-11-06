@@ -144,6 +144,14 @@ def readCircular {α : Type} {n : UInt64} (buffer : Vector α n.toNat) (i : UInt
   if nonzero : n = 0 then .error (.arith .divisionByZero)
   else .ok (buffer[(i % n).toNat]'(toNat_mod_lt nonzero))
 
+/-- A circular buffer of length `n` with the entry at position `i mod n` replaced.
+
+A buffer of length zero has no entry, since the position divides by zero. -/
+def writeCircular {α : Type} {n : UInt64} (buffer : Vector α n.toNat) (i : UInt64) (value : α) :
+    Except AccessorError (Vector α n.toNat) :=
+  if nonzero : n = 0 then .error (.arith .divisionByZero)
+  else .ok (buffer.set (i % n).toNat value (toNat_mod_lt nonzero))
+
 /-- One step of the pass that drops repeats: keep an index unless it repeats the last one. -/
 def keepNew (kept : List ValidatorIndex) (index : ValidatorIndex) : List ValidatorIndex :=
   match kept with

@@ -274,21 +274,25 @@ def processEffectiveBalanceUpdates (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) :=
   (List.range state.validators.data.size).foldlM updateEffectiveBalance state
 
-/-- The state with the slashed balance of the next epoch cleared. -/
+/-- The state with the slashed balance of the next epoch cleared.
+
+A buffer of slashed balances of length zero has no entry, and is an error. -/
 def processSlashingsReset (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) := do
   let nextEpoch ← liftAccessor (liftArith (addChecked (getCurrentEpoch state) 1))
-  return { state with
-    slashings := state.slashings.set! (nextEpoch % preset.EPOCHS_PER_SLASHINGS_VECTOR).toNat 0 }
+  let slashings ← liftAccessor (writeCircular state.slashings nextEpoch 0)
+  return { state with slashings }
 
-/-- The state with the RANDAO mix of the next epoch set to that of the current epoch. -/
+/-- The state with the RANDAO mix of the next epoch set to that of the current epoch.
+
+A buffer of mixes of length zero has no entry, and is an error. -/
 def processRandaoMixesReset (state : BeaconState preset fork) :
     Except TransitionError (BeaconState preset fork) := do
   let currentEpoch := getCurrentEpoch state
   let nextEpoch ← liftAccessor (liftArith (addChecked currentEpoch 1))
   let mix ← liftAccessor (getRandaoMix state currentEpoch)
-  let slot := (nextEpoch % preset.EPOCHS_PER_HISTORICAL_VECTOR).toNat
-  return { state with randaoMixes := state.randaoMixes.set! slot mix }
+  let randaoMixes ← liftAccessor (writeCircular state.randaoMixes nextEpoch mix)
+  return { state with randaoMixes }
 
 /-- The historical roots with one more root, or an error when the list is full. -/
 def appendHistoricalRoot (roots : SszList Root preset.HISTORICAL_ROOTS_LIMIT.toNat)
