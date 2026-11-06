@@ -17,6 +17,7 @@ public import EthLib.Cryptography.Proofs.Xmss.SignCallbacks
 public import EthLib.Cryptography.Proofs.Xmss.Correctness
 public import EthLib.Cryptography.Proofs.Xmss.Security
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.Model
 public import EthLib.Cryptography.Proofs.Xmss.Errors
 
 /-!
