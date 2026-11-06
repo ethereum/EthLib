@@ -66,7 +66,7 @@ theorem not_mem_of_lt_nextOpcode {code : ByteArray} {fuel pc p q : Nat}
         exact ⟨by omega, ih hp⟩
     · simp at hp
 
-/-- The scan that marks the flags sets exactly the JUMPDEST bytes of the positions it lists. -/
+/-- After the scan, a flag is true exactly when it was before or the scan finds JUMPDEST there. -/
 theorem getD_markJumpDestsFrom {code : ByteArray} (fuel pc : Nat) (flags : Vector Bool code.size)
     (i : Nat) :
     (markJumpDestsFrom code fuel pc flags).toArray.getD i false = true ↔
