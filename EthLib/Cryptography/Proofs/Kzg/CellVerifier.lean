@@ -27,7 +27,7 @@ The theorems of the core check then hold for the outer check, each cell with its
 
 namespace EthLib.Cryptography.Kzg
 
-open EthLib.Base (array_mapM_ok array_mapM_exists_ok)
+open EthLib.Base (array_mapM_ok array_mapM_exists_ok array_mapM_ne_error)
 open EthLib.Cryptography.Bls (G1 G2 Fr TargetGroup)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
@@ -266,13 +266,6 @@ theorem verifyCellKzgProofBatchImpl_decodes {s : TrustedSetup}
       all_goals cases h
 
 /-! ## The core check returns a verdict -/
-
-/-- A map over an array that succeeds on every entry returns no error. -/
-theorem array_mapM_ne_error {ε α β : Type} {f : α → Except ε β} {xs : Array α} {e : ε}
-    (h : ∀ x ∈ xs, ∃ y, f x = .ok y) : xs.mapM f ≠ .error e := by
-  obtain ⟨ys, hys⟩ := array_mapM_exists_ok h
-  rw [hys]
-  exact fun h => nomatch h
 
 /-- The interpolation of 64 values on a coset succeeds. -/
 theorem interpolateCosetEvals_ok {h : Fr} {evals : CosetEvals}

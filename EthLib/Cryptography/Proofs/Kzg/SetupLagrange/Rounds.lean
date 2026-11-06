@@ -37,26 +37,10 @@ open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.SetupTorsion (codes)
 open EthLib.Cryptography.Kzg.BitReversal
 open Finset
+open EthLib.Base (array_mapM_ok_getElem)
 
 /-! ## Points by position -/
 
-/-- Output `i` of a successful map over an array is the image of input `i`. -/
-theorem array_mapM_ok_getElem {ε α β : Type} [Inhabited β] {f : α → Except ε β} {xs : Array α}
-    {ys : Array β} (h : xs.mapM f = .ok ys) :
-    ys.size = xs.size ∧ ∀ (i : Nat) (hi : i < xs.size), f xs[i] = .ok ys[i]! := by
-  rw [Array.mapM_eq_mapM_toList] at h
-  cases hl : xs.toList.mapM f with
-  | error e => rw [hl] at h; cases h
-  | ok zs =>
-    rw [hl] at h
-    have hzs : zs.toArray = ys := Except.ok.inj h
-    subst hzs
-    have hlen := Base.mapM_ok_length hl
-    refine ⟨by simpa using hlen, fun i hi => ?_⟩
-    have hi' : i < xs.toList.length := by simpa using hi
-    have he := Base.mapM_ok_getElem hl i hi'
-    rw [getElem!_pos zs.toArray i (by simpa [hlen] using hi)]
-    simpa using he
 
 /-- Each string of a decoded list gives the byte string at its position. -/
 theorem hexListToBytes_getElem {hex : Array String} {bytes : Array ByteArray}
