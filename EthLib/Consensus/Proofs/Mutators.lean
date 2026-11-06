@@ -406,6 +406,14 @@ theorem appendWithinLimit_data {switch : Base.Fork} {α : Type} {limit : Nat}
     rfl
   · cases computed
 
+/-- A pending deposit added to the queue changes no other field of the state. -/
+theorem addPendingDeposit_eq {state after : BeaconState preset fork} {electra : .pectra ≤ fork}
+    {deposit : PendingDeposit} (computed : addPendingDeposit state electra deposit = .ok after) :
+    ∃ pending, after = { state with pendingDeposits := fun _ => pending } := by
+  simp only [addPendingDeposit, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨pending, _, rfl⟩ := computed
+  exact ⟨pending, rfl⟩
+
 /-- The balance above the activation balance moves to the end of the pending deposits.
 
 The balance keeps at most the activation balance.

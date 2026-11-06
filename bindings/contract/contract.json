@@ -2124,7 +2124,7 @@
       {"constructor": "blockForkMismatch", "code": 74}]}],
    "error_class": "TransitionError",
    "docstring":
-   "The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8, and the handler too."},
+   "The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes.\n\nThe preset, the configuration and the fork are named in UTF-8, and the handler too.\n\nThe signature of a pending deposit to a new key is always checked."},
   {"summary":
    "The rewards and the penalties of each validator for one kind of vote, as SSZ bytes.",
    "signature":

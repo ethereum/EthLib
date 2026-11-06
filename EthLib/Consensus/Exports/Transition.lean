@@ -7,6 +7,7 @@ public import EthLib.Consensus.Transition.Block
 public import EthLib.Consensus.Transition.BuilderPayments
 public import EthLib.Consensus.Transition.BuilderRequests
 public import EthLib.Consensus.Transition.EpochJustification
+public import EthLib.Consensus.Transition.EpochPending
 public import EthLib.Consensus.Transition.EpochRewards
 public import EthLib.Consensus.Transition.EpochUpdates
 public import EthLib.Consensus.Transition.Execution
@@ -109,6 +110,10 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
       runTransition (processBlsToExecutionChange config checks state
         (← decodeInput SignedBLSToExecutionChange operation))
     else throw (0, s!"no operation bls_to_execution_change at {fork.name}")
+  | "deposit_request" =>
+    if electra : .pectra ≤ fork then do
+      runTransition (processDepositRequest state electra (← decodeInput DepositRequest operation))
+    else throw (0, s!"no operation deposit_request at {fork.name}")
   | "payload_attestation" =>
     if gloas : .glamsterdam ≤ fork then do
       runTransition (processPayloadAttestation config checks state gloas
@@ -180,6 +185,11 @@ def runEpochStep {preset : Preset} {fork : Fork} (config : Config) (handler : St
     if gloas : .glamsterdam ≤ fork then
       runTransition (liftAccessor (processBuilderPendingPayments state gloas))
     else throw (0, s!"no epoch step builder_pending_payments at {fork.name}")
+  | "pending_deposits" =>
+    -- The deposits to new keys are checked with BLS, as the vectors expect.
+    if electra : .pectra ≤ fork then
+      runTransition (processPendingDeposits config .bls state electra)
+    else throw (0, s!"no epoch step pending_deposits at {fork.name}")
   | "proposer_lookahead" =>
     if fulu : .fusaka ≤ fork then
       runTransition (liftAccessor (processProposerLookahead state fulu))
@@ -209,7 +219,9 @@ def processOperationExport (name fork handler pre operation replacements : ByteA
 
 /-- The state after one step of the epoch transition of a handler of the vectors, as SSZ bytes.
 
-The preset, the configuration and the fork are named in UTF-8, and the handler too. -/
+The preset, the configuration and the fork are named in UTF-8, and the handler too.
+
+The signature of a pending deposit to a new key is always checked. -/
 @[export eth_consensus_process_epoch]
 def processEpochExport (name fork handler pre replacements : ByteArray) : Result ByteArray := do
   let (preset, fork) ← transitionPresetAndFork name fork

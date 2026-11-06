@@ -57,6 +57,7 @@ public import EthLib.Consensus.Transition.BuilderPayments
 public import EthLib.Consensus.Transition.BuilderRequests
 public import EthLib.Consensus.Transition.EpochJustification
 public import EthLib.Consensus.Transition.EpochParticipation
+public import EthLib.Consensus.Transition.EpochPending
 public import EthLib.Consensus.Transition.EpochRewards
 public import EthLib.Consensus.Transition.EpochUpdates
 public import EthLib.Consensus.Transition.Execution

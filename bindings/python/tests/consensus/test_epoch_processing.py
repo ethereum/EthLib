@@ -96,6 +96,7 @@ HANDLERS = {
     "ptc_window": ("gloas",),
     "builder_pending_payments": ("gloas",),
     "proposer_lookahead": ("fulu", "gloas"),
+    "pending_deposits": ("electra", "fulu"),
 }
 
 # A mainnet sync committee period is 256 epochs, so the release has no mainnet case of its update.

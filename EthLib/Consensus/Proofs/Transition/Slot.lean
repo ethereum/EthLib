@@ -155,30 +155,62 @@ theorem processAttestation_slot {attestation : Attestation preset fork}
     split <;> rfl
   · exact (frame_processAttestation (Nat.lt_of_not_le altair) computed).slot
 
+theorem addValidatorToRegistry_slot {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
+    {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
+    after.slot = state.slot := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · unfold addValidatorToRegistryAltair at computed
+    simp only [liftAccessor_ok, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    rfl
+  · split at computed
+    · cases computed
+      rfl
+    · cases computed
+
+theorem applyPendingDeposit_slot {deposit : PendingDeposit}
+    (computed : applyPendingDeposit config checks state deposit = .ok after) :
+    after.slot = state.slot := by
+  unfold applyPendingDeposit at computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · exact addValidatorToRegistry_slot computed
+    · cases computed
+      rfl
+  · exact (frame_increaseBalance (liftAccessor_ok.mp computed)).slot
+
+theorem applyDepositElectra_slot {electra : .pectra ≤ fork} {pubkey : BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei} {signature : BLSSignature}
+    (computed : applyDepositElectra config checks state electra pubkey withdrawalCredentials
+      amount signature = .ok after) :
+    after.slot = state.slot := by
+  unfold applyDepositElectra at computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · simp only [bind_ok_iff, liftAccessor_ok] at computed
+      obtain ⟨_, added, pushed⟩ := computed
+      obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
+      exact (addValidatorToRegistry_slot added :)
+    · cases computed
+      rfl
+  · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp computed)
+    rfl
+
 theorem applyDeposit_slot {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
     {amount : Gwei} {signature : BLSSignature}
     (computed :
       applyDeposit config checks state pubkey withdrawalCredentials amount signature = .ok after) :
     after.slot = state.slot := by
-  by_cases altair : Fork.altair ≤ fork
-  · unfold applyDeposit at computed
-    split at computed
-    · cases computed
-    split at computed
-    · simp only [bind_ok_iff] at computed
-      obtain ⟨valid, _, computed⟩ := computed
-      split at computed
-      · simp only [addValidatorToRegistry, altair, ↓reduceDIte] at computed
-        unfold addValidatorToRegistryAltair at computed
-        split at computed
-        · cases computed
-        simp only [liftAccessor_ok, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-        obtain ⟨_, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
-        rfl
-      · cases computed
-        rfl
-    · exact (frame_increaseBalance (liftAccessor_ok.mp computed)).slot
-  · exact (frame_applyDeposit (Nat.lt_of_not_le altair) computed).slot
+  unfold applyDeposit at computed
+  split at computed
+  · exact applyDepositElectra_slot computed
+  · exact applyPendingDeposit_slot computed
 
 theorem processDeposit_slot {before : fork < .hegota} {deposit : Deposit}
     (computed : processDeposit config checks before state deposit = .ok after) :

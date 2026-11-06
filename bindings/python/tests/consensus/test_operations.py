@@ -17,7 +17,7 @@ from .test_data_column import replacements
 FILES = Path(__file__).resolve().parents[4] / "tests" / "consensus" / "operations"
 
 # The file of the operation of each handler, and the forks whose rule EthLib holds.
-# Electra changes attestations and new validators, and Deneb the signature of exits.
+# Electra changes attestations and exits, and Deneb the signature of exits.
 # Gloas moves the execution payload out of the block.
 # From Gloas the withdrawals take no payload, so their cases have no operation file.
 HANDLERS = {
@@ -34,7 +34,8 @@ HANDLERS = {
         ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas"),
     ),
     "attestation": ("attestation", ("phase0", "altair", "bellatrix", "capella", "deneb")),
-    "deposit": ("deposit", ("phase0", "altair", "bellatrix", "capella", "deneb")),
+    "deposit": ("deposit", ("phase0", "altair", "bellatrix", "capella", "deneb", "electra")),
+    "deposit_request": ("deposit_request", ("electra", "fulu")),
     "sync_aggregate": (
         "sync_aggregate",
         ("altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
@@ -54,7 +55,7 @@ ARCHIVES = {
     "minimal": "consensus-specs/v1.7.0-beta.4/minimal",
     "mainnet": "consensus-specs/v1.7.0-beta.4/mainnet",
 }
-ARCHIVE_FORKS = ("gloas",)
+ARCHIVE_FORKS = ("electra", "fulu", "gloas")
 
 
 def runs(fork: str, handler: str) -> bool:

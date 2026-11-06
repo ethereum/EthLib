@@ -22,6 +22,8 @@ A valid deposit to a new key adds one validator and its balance.
 
 An invalid deposit to a new key changes nothing.
 
+From Electra a deposit request joins the end of the pending deposits.
+
 A voluntary exit is signed by an active validator, which then has an exit epoch.
 
 The operations of a block hold every outstanding deposit, up to the most per block.
@@ -225,20 +227,29 @@ theorem sameSizes_processAttestation {attestation : Attestation preset fork}
 
 /-! ## Deposits -/
 
+/-- A deposit credited to a key that a validator has adds the amount to its balance.
+
+The sum of the balances grows by the amount, and the registry stays. -/
+theorem applyPendingDeposit_known {deposit : PendingDeposit} {index : Nat}
+    (known : state.validators.data.findIdx? (·.pubkey == deposit.pubkey) = some index)
+    (computed : applyPendingDeposit config checks state deposit = .ok after) :
+    balanceSum after = balanceSum state + deposit.amount.toNat ∧
+      after.validators = state.validators := by
+  simp only [applyPendingDeposit, known, liftAccessor_ok] at computed
+  exact ⟨balanceSum_increaseBalance computed, increaseBalance_validators computed⟩
+
 /-- Before Electra, a deposit to a key that a validator has adds the amount to its balance.
 
 The sum of the balances grows by the amount, and the registry stays. -/
 theorem applyDeposit_known {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
-    {amount : Gwei} {signature : BLSSignature} {index : Nat}
+    {amount : Gwei} {signature : BLSSignature} {index : Nat} (before : fork < .pectra)
     (known : state.validators.data.findIdx? (·.pubkey == pubkey) = some index)
     (computed :
       applyDeposit config checks state pubkey withdrawalCredentials amount signature = .ok after) :
     balanceSum after = balanceSum state + amount.toNat ∧ after.validators = state.validators := by
-  unfold applyDeposit at computed
-  split at computed
-  · cases computed
-  simp only [known, liftAccessor_ok] at computed
-  exact ⟨balanceSum_increaseBalance computed, increaseBalance_validators computed⟩
+  have notElectra : ¬Fork.pectra ≤ fork := fun le => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le before le)
+  simp only [applyDeposit, notElectra, ↓reduceDIte] at computed
+  exact applyPendingDeposit_known known computed
 
 /-- A set or an append adds one entry exactly when the index is the size of the list. -/
 theorem setOrAppendList_size {switch : Base.Fork} {α : Type} {limit : Nat}
@@ -267,8 +278,6 @@ theorem addValidatorToRegistryAltair_eth1 {altair : .altair ≤ fork} {pubkey : 
       .ok after) :
     after.eth1DepositIndex = state.eth1DepositIndex ∧ after.eth1Data = state.eth1Data := by
   unfold addValidatorToRegistryAltair at computed
-  split at computed
-  · cases computed
   simp only [liftAccessor_ok, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
   exact ⟨rfl, rfl⟩
@@ -279,12 +288,37 @@ theorem balancesMatch_addValidatorToRegistryAltair {altair : .altair ≤ fork} {
     (computed : addValidatorToRegistryAltair state altair pubkey withdrawalCredentials amount =
       .ok after) (holds : BalancesMatch state) : BalancesMatch after := by
   unfold addValidatorToRegistryAltair at computed
-  split at computed
-  · cases computed
   simp only [liftAccessor_ok, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨validators, validatorsOk, balances, balancesOk, _, _, _, _, _, _, rfl⟩ := computed
   unfold BalancesMatch at holds ⊢
   rw [setOrAppendList_size validatorsOk, setOrAppendList_size balancesOk, holds]
+
+/-- A new validator keeps one balance for each validator. -/
+theorem balancesMatch_addValidatorToRegistry {pubkey : BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
+    (holds : BalancesMatch state) : BalancesMatch after := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · exact balancesMatch_addValidatorToRegistryAltair computed holds
+  · split at computed
+    · cases computed
+      unfold BalancesMatch at holds ⊢
+      simp only [Array.size_push, holds]
+    · cases computed
+
+/-- A new validator keeps the deposit data and the next deposit index. -/
+theorem addValidatorToRegistry_eth1 {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
+    {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
+    after.eth1DepositIndex = state.eth1DepositIndex ∧ after.eth1Data = state.eth1Data := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · exact addValidatorToRegistryAltair_eth1 computed
+  · split at computed
+    · cases computed
+      exact ⟨rfl, rfl⟩
+    · cases computed
 
 /-- Before Altair, a deposit to a new key with a valid signature adds a validator and its balance.
 -/
@@ -296,15 +330,13 @@ theorem applyDeposit_new_valid {pubkey : BLSPubkey} {withdrawalCredentials : Byt
     (computed :
       applyDeposit config checks state pubkey withdrawalCredentials amount signature = .ok after) :
     after.validators.data = state.validators.data.push
-        (getValidatorFromDeposit preset pubkey withdrawalCredentials amount) ∧
+        (getValidatorFromDeposit preset fork pubkey withdrawalCredentials amount) ∧
       after.balances.data = state.balances.data.push amount := by
-  unfold applyDeposit at computed
-  split at computed
-  · cases computed
-  simp only [new, valid, bind, Except.bind, ↓reduceIte] at computed
-  unfold addValidatorToRegistry at computed
-  split at computed
-  · exact absurd ‹_› (Nat.not_le_of_lt before)
+  have notElectra : ¬Fork.pectra ≤ fork := fun le =>
+    Nat.lt_irrefl _ (Nat.lt_of_lt_of_le (Nat.lt_trans before (by decide)) le)
+  have notAltair : ¬Fork.altair ≤ fork := fun le => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le before le)
+  simp only [applyDeposit, notElectra, ↓reduceDIte, applyPendingDeposit, new, valid, bind,
+    Except.bind, ↓reduceIte, addValidatorToRegistry, notAltair] at computed
   split at computed
   · cases computed
     exact ⟨rfl, rfl⟩
@@ -318,7 +350,53 @@ theorem applyDeposit_new_invalid {pubkey : BLSPubkey} {withdrawalCredentials : B
       .ok false) :
     applyDeposit config checks state pubkey withdrawalCredentials amount signature = .ok state := by
   have notElectra : ¬Fork.pectra ≤ fork := fun le => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le before le)
-  simp [applyDeposit, notElectra, new, invalid, bind, Except.bind, pure, Except.pure]
+  simp [applyDeposit, applyPendingDeposit, notElectra, new, invalid, bind, Except.bind, pure,
+    Except.pure]
+
+/-- A credited deposit keeps one balance for each validator, and the deposit data. -/
+theorem applyPendingDeposit_kept {deposit : PendingDeposit}
+    (computed : applyPendingDeposit config checks state deposit = .ok after) :
+    (BalancesMatch state → BalancesMatch after) ∧
+      after.eth1DepositIndex = state.eth1DepositIndex ∧ after.eth1Data = state.eth1Data := by
+  unfold applyPendingDeposit at computed
+  split at computed
+  · simp only [bind, Except.bind] at computed
+    split at computed
+    · cases computed
+    split at computed
+    · exact ⟨balancesMatch_addValidatorToRegistry computed, addValidatorToRegistry_eth1 computed⟩
+    · cases computed
+      exact ⟨id, rfl, rfl⟩
+  · rw [liftAccessor_ok] at computed
+    refine ⟨balancesMatch_of_sameSizes (sameSizes_increaseBalance computed), ?_⟩
+    simp only [increaseBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, rfl⟩ := computed
+    exact ⟨rfl, rfl⟩
+
+/-- From Electra, a deposit keeps one balance for each validator, and the deposit data. -/
+theorem applyDepositElectra_kept {electra : .pectra ≤ fork} {pubkey : BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei} {signature : BLSSignature}
+    (computed : applyDepositElectra config checks state electra pubkey withdrawalCredentials amount
+      signature = .ok after) :
+    (BalancesMatch state → BalancesMatch after) ∧
+      after.eth1DepositIndex = state.eth1DepositIndex ∧ after.eth1Data = state.eth1Data := by
+  unfold applyDepositElectra at computed
+  split at computed
+  · simp only [bind, Except.bind] at computed
+    split at computed
+    · cases computed
+    split at computed
+    · split at computed
+      · cases computed
+      rename_i added
+      have matched := balancesMatch_addValidatorToRegistry added
+      have kept := addValidatorToRegistry_eth1 added
+      obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp computed)
+      exact ⟨matched, kept⟩
+    · cases computed
+      exact ⟨id, rfl, rfl⟩
+  · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp computed)
+    exact ⟨id, rfl, rfl⟩
 
 /-- A deposit keeps one balance for each validator. -/
 theorem balancesMatch_applyDeposit {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
@@ -326,42 +404,10 @@ theorem balancesMatch_applyDeposit {pubkey : BLSPubkey} {withdrawalCredentials :
     (computed :
       applyDeposit config checks state pubkey withdrawalCredentials amount signature = .ok after)
     (holds : BalancesMatch state) : BalancesMatch after := by
-  cases found : state.validators.data.findIdx? (·.pubkey == pubkey) with
-  | some index =>
-    unfold applyDeposit at computed
-    split at computed
-    · cases computed
-    simp only [found, liftAccessor_ok] at computed
-    exact balancesMatch_of_sameSizes (sameSizes_increaseBalance computed) holds
-  | none =>
-    cases signed : isValidDepositSignature config checks pubkey withdrawalCredentials amount
-        signature with
-    | error e =>
-      unfold applyDeposit at computed
-      split at computed
-      · cases computed
-      simp [found, signed, bind, Except.bind] at computed
-    | ok valid =>
-      cases valid with
-      | true =>
-        by_cases altair : Fork.altair ≤ fork
-        · unfold applyDeposit at computed
-          split at computed
-          · cases computed
-          simp only [found, signed, bind, Except.bind, ↓reduceIte, addValidatorToRegistry,
-            altair, ↓reduceDIte] at computed
-          exact balancesMatch_addValidatorToRegistryAltair computed holds
-        · obtain ⟨validators, balances⟩ :=
-            applyDeposit_new_valid (Nat.lt_of_not_le altair) found signed computed
-          unfold BalancesMatch at holds ⊢
-          rw [validators, balances, Array.size_push, Array.size_push, holds]
-      | false =>
-        unfold applyDeposit at computed
-        split at computed
-        · cases computed
-        simp only [found, signed, bind, Except.bind, Bool.false_eq_true, ↓reduceIte, pure,
-          Except.pure, Except.ok.injEq] at computed
-        exact computed ▸ holds
+  unfold applyDeposit at computed
+  split at computed
+  · exact (applyDepositElectra_kept computed).1 holds
+  · exact (applyPendingDeposit_kept computed).1 holds
 
 /-- A deposit keeps the deposit data and the next deposit index. -/
 theorem applyDeposit_eth1 {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
@@ -371,25 +417,35 @@ theorem applyDeposit_eth1 {pubkey : BLSPubkey} {withdrawalCredentials : Bytes32}
     after.eth1DepositIndex = state.eth1DepositIndex ∧ after.eth1Data = state.eth1Data := by
   unfold applyDeposit at computed
   split at computed
-  · cases computed
-  split at computed
-  · simp only [bind, Except.bind] at computed
-    split at computed
-    · cases computed
-    split at computed
-    · unfold addValidatorToRegistry at computed
-      split at computed
-      · exact addValidatorToRegistryAltair_eth1 computed
-      split at computed
-      · cases computed
-        exact ⟨rfl, rfl⟩
-      · cases computed
-    · cases computed
-      exact ⟨rfl, rfl⟩
-  · simp only [liftAccessor_ok, increaseBalance, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, rfl⟩ := computed
-    exact ⟨rfl, rfl⟩
+  · exact (applyDepositElectra_kept computed).2
+  · exact (applyPendingDeposit_kept computed).2
+
+/-- Recording the start of the deposit requests changes no other field of the state. -/
+theorem recordDepositRequestsStart_eq {index : UInt64} :
+    ∃ start, recordDepositRequestsStart state index =
+      { state with depositRequestsStartIndex := start } := by
+  unfold recordDepositRequestsStart
+  split
+  · split
+    · exact ⟨_, rfl⟩
+    · exact ⟨state.depositRequestsStartIndex, rfl⟩
+  · exact ⟨state.depositRequestsStartIndex, rfl⟩
+
+/-- From Electra, a deposit request joins the end of the pending deposits, at the current slot.
+
+The registry and the balances stay. -/
+theorem processDepositRequest_ok {electra : .pectra ≤ fork} {request : DepositRequest}
+    (computed : processDepositRequest state electra request = .ok after) :
+    (after.pendingDeposits electra).data = (state.pendingDeposits electra).data.push
+        ⟨request.pubkey, request.withdrawalCredentials, request.amount, request.signature,
+          state.slot⟩ ∧
+      after.validators = state.validators ∧ after.balances = state.balances := by
+  obtain ⟨start, recorded⟩ :=
+    recordDepositRequestsStart_eq (state := state) (index := request.index)
+  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit, bind_ok_iff,
+    pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨pending, appended, rfl⟩ := computed
+  exact ⟨appendWithinLimit_data appended, rfl, rfl⟩
 
 /-- A valid deposit lies in the deposit tree, at the next deposit index.
 
