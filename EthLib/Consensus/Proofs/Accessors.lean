@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.Accessors
 public import EthLib.Consensus.Proofs.ShufflePermutation
 public import EthLib.Consensus.Proofs.Signing
@@ -24,6 +25,8 @@ The previous epoch is the current one minus one, or the genesis epoch at genesis
 Each slot has from one committee up to the most committees of the preset.
 
 Each member of a committee, and each validator that an attestation shows, is active in its epoch.
+
+No validator is in two committees of one epoch.
 
 The indices of an attestation increase strictly, as the check of an indexed attestation asks.
 
@@ -300,6 +303,130 @@ theorem mem_getActiveValidatorIndices_of_getBeaconCommittee {state : BeaconState
   split at computed
   · cases computed
   simpa using mem_of_computeCommittee (mapError_ok_iff.mp computed) mem
+
+/-- A committee that has a value comes from a positive count. -/
+theorem count_ne_zero_of_computeCommittee {indices : Array ValidatorIndex} {seed : Bytes32}
+    {index count : UInt64} {committee : Array ValidatorIndex}
+    (computed : computeCommittee preset indices seed index count = .ok committee) : count ≠ 0 := by
+  intro zero
+  simp [computeCommittee, zero, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+    at computed
+
+/-- A beacon committee that has a value is one committee cut from the active indices.
+
+Its position counts the committees of the earlier slots of the epoch, then its index.
+
+The count is the number of committees in the whole epoch. -/
+theorem getBeaconCommittee_ok {state : BeaconState preset fork} {slot : Slot}
+    {index : CommitteeIndex} {committee : Array ValidatorIndex}
+    (computed : getBeaconCommittee state slot index = .ok committee) :
+    ∃ seed position count,
+      getSeed state (computeEpochAtSlot preset slot) DOMAIN_BEACON_ATTESTER = .ok seed ∧
+      position.toNat = (slot % preset.SLOTS_PER_EPOCH).toNat *
+        (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat + index.toNat ∧
+      count.toNat = (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat *
+        preset.SLOTS_PER_EPOCH.toNat ∧
+      computeCommittee preset
+        (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).toArray seed position
+        count = .ok committee := by
+  simp only [getBeaconCommittee, bind_ok_iff, liftArith, mapError_ok_iff,
+    Base.Uint64.mulChecked_ok_iff, Base.Uint64.addChecked_ok_iff] at computed
+  obtain ⟨seed, seedOk, position, ⟨product, ⟨_, productEq⟩, _, positionEq⟩, count, ⟨_, countEq⟩,
+    committeeOk⟩ := computed
+  exact ⟨seed, position, count, seedOk, by rw [positionEq, productEq], countEq, committeeOk⟩
+
+/-- No validator is in two committees of one epoch.
+
+Take two committees of slots of one epoch, each with an index below the committees of a slot.
+
+If both hold one validator, their slots are equal and their indices are equal.
+
+The registry must stay within its limit.
+
+The number of active validators times the number of committees of the epoch must fit in 64 bits.
+-/
+theorem eq_of_mem_getBeaconCommittee {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) {firstSlot secondSlot : Slot}
+    {firstIndex secondIndex : CommitteeIndex}
+    (sameEpoch : computeEpochAtSlot preset firstSlot = computeEpochAtSlot preset secondSlot)
+    (firstLt : firstIndex < getCommitteeCountPerSlot state (computeEpochAtSlot preset firstSlot))
+    (secondLt :
+      secondIndex < getCommitteeCountPerSlot state (computeEpochAtSlot preset secondSlot))
+    (fits : (getActiveValidatorIndices state (computeEpochAtSlot preset firstSlot)).length *
+      ((getCommitteeCountPerSlot state (computeEpochAtSlot preset firstSlot)).toNat *
+        preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64)
+    {firstCommittee secondCommittee : Array ValidatorIndex}
+    (first : getBeaconCommittee state firstSlot firstIndex = .ok firstCommittee)
+    (second : getBeaconCommittee state secondSlot secondIndex = .ok secondCommittee)
+    {member : ValidatorIndex} (firstMem : member ∈ firstCommittee)
+    (secondMem : member ∈ secondCommittee) :
+    firstSlot = secondSlot ∧ firstIndex = secondIndex := by
+  obtain ⟨firstSeed, firstPosition, firstCount, firstSeedOk, firstPositionEq, firstCountEq,
+    firstOk⟩ := getBeaconCommittee_ok first
+  obtain ⟨secondSeed, secondPosition, secondCount, secondSeedOk, secondPositionEq,
+    secondCountEq, secondOk⟩ := getBeaconCommittee_ok second
+  rw [← sameEpoch] at secondSeedOk secondPositionEq secondCountEq secondOk secondLt
+  rw [firstSeedOk, Except.ok.injEq] at secondSeedOk
+  subst secondSeedOk
+  have sameCount : firstCount = secondCount :=
+    UInt64.toNat_inj.mp (firstCountEq.trans secondCountEq.symm)
+  subst sameCount
+  -- The names of the epoch's numbers, on natural numbers.
+  generalize perSlotEq : (getCommitteeCountPerSlot state
+    (computeEpochAtSlot preset firstSlot)).toNat = perSlot at *
+  generalize epochLength : preset.SLOTS_PER_EPOCH.toNat = length at *
+  have firstIndexLt : firstIndex.toNat < perSlot := perSlotEq ▸ UInt64.lt_iff_toNat_lt.mp firstLt
+  have secondIndexLt : secondIndex.toNat < perSlot :=
+    perSlotEq ▸ UInt64.lt_iff_toNat_lt.mp secondLt
+  have lengthPos : 0 < length := by
+    have nonzero := count_ne_zero_of_computeCommittee firstOk
+    refine Nat.pos_of_ne_zero fun zero => nonzero (UInt64.toNat_inj.mp ?_)
+    rw [firstCountEq, zero, Nat.mul_zero]
+    rfl
+  have firstModLt : (firstSlot % preset.SLOTS_PER_EPOCH).toNat < length := by
+    rw [UInt64.toNat_mod, epochLength]
+    exact Nat.mod_lt _ lengthPos
+  have secondModLt : (secondSlot % preset.SLOTS_PER_EPOCH).toNat < length := by
+    rw [UInt64.toNat_mod, epochLength]
+    exact Nat.mod_lt _ lengthPos
+  -- A position below the count: the earlier slots, then the index, stay below the epoch.
+  have positionLt : ∀ slotPart indexPart, slotPart < length → indexPart < perSlot →
+      slotPart * perSlot + indexPart < perSlot * length := by
+    intro slotPart indexPart slotLt indexLt
+    calc slotPart * perSlot + indexPart < slotPart * perSlot + perSlot := by omega
+      _ = (slotPart + 1) * perSlot := (Nat.succ_mul _ _).symm
+      _ ≤ length * perSlot := Nat.mul_le_mul_right _ slotLt
+      _ = perSlot * length := Nat.mul_comm _ _
+  have nodup : (getActiveValidatorIndices state
+      (computeEpochAtSlot preset firstSlot)).toArray.toList.Nodup := by
+    simpa [List.Nodup] using (getActiveValidatorIndices_sorted within _).imp UInt64.ne_of_lt
+  have samePosition := eq_of_mem_computeCommittee (count := firstCount) nodup
+    (by simpa [firstCountEq] using fits)
+    (first := firstPosition.toNat) (second := secondPosition.toNat)
+    (by rw [firstPositionEq, firstCountEq]; exact positionLt _ _ firstModLt firstIndexLt)
+    (by rw [secondPositionEq, firstCountEq]; exact positionLt _ _ secondModLt secondIndexLt)
+    (by simpa using firstOk) (by simpa using secondOk) firstMem secondMem
+  rw [firstPositionEq, secondPositionEq] at samePosition
+  -- The slot part and the index part of one position are equal.
+  have perSlotPos : 0 < perSlot := Nat.zero_lt_of_lt firstIndexLt
+  have split : ∀ a b c d, b < perSlot → d < perSlot → a * perSlot + b = c * perSlot + d →
+      a = c ∧ b = d := by
+    intro a b c d bLt dLt equal
+    have divided := congrArg (· / perSlot) equal
+    have reduced := congrArg (· % perSlot) equal
+    simp only [Nat.mul_comm _ perSlot, Nat.mul_add_div perSlotPos, Nat.div_eq_of_lt bLt,
+      Nat.div_eq_of_lt dLt, Nat.add_zero, Nat.mul_add_mod, Nat.mod_eq_of_lt bLt,
+      Nat.mod_eq_of_lt dLt] at divided reduced
+    exact ⟨divided, reduced⟩
+  obtain ⟨sameMod, sameIndex⟩ := split _ _ _ _ firstIndexLt secondIndexLt samePosition
+  refine ⟨?_, UInt64.toNat_inj.mp sameIndex⟩
+  -- A slot is its epoch times the length of an epoch, plus its place in the epoch.
+  have epochNat := congrArg UInt64.toNat sameEpoch
+  simp only [computeEpochAtSlot, UInt64.toNat_div, epochLength] at epochNat
+  rw [UInt64.toNat_mod, UInt64.toNat_mod, epochLength] at sameMod
+  apply UInt64.toNat_inj.mp
+  rw [← Nat.div_add_mod firstSlot.toNat length, ← Nat.div_add_mod secondSlot.toNat length,
+    epochNat, sameMod]
 
 /-- One step of the pass that drops repeats keeps its list decreasing, below the rest. -/
 theorem keepNew_step {kept rest : List ValidatorIndex} {first : ValidatorIndex}
