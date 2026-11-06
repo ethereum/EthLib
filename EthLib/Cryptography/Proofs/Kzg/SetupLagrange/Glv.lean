@@ -61,11 +61,26 @@ noncomputable def endoHom : curve.toAffine.Point →+ curve.toAffine.Point :=
   ShortWeierstrass.scaledHom (RingHom.id F) beta_ne_zero four_mul_beta_pow_six
 
 /-- The map `(x, y) ↦ (β' x, y)`, in Jacobian coordinates. -/
-def endo (q : G1) : G1 := ⟨cubeRoot * rep q 0, q.y, q.z⟩
+def endo (q : G1) : G1 := ⟨Fp.toZMod.symm cubeRoot * q.x, q.y, q.z⟩
+
+-- Proofs rewrite with this equation, so that no check compares `endo q` with `q` by eta.
+private theorem endo_eq (q : G1) : endo q = ⟨Fp.toZMod.symm cubeRoot * q.x, q.y, q.z⟩ := rfl
 
 private theorem rep_endo (q : G1) : rep (endo q) = ![cubeRoot * rep q 0, rep q 1, rep q 2] := by
+  rw [endo_eq]
   funext i
-  fin_cases i <;> rfl
+  -- Each entry is compared alone: comparing whole vectors would unify the first entries.
+  fin_cases i
+  · show Fp.toZMod (Fp.toZMod.symm cubeRoot * q.x) = cubeRoot * Fp.toZMod q.x
+    rw [Fp.toZMod_mul, RingEquiv.apply_symm_apply]
+  · show Fp.toZMod q.y = Fp.toZMod q.y
+    rfl
+  · show Fp.toZMod q.z = Fp.toZMod q.z
+    rfl
+
+/-- The integer of `β'` in `Fp`. -/
+private theorem val_cubeRoot : (Fp.toZMod.symm cubeRoot).val = cubeRootNat := by
+  rw [Fp.val_eq, RingEquiv.apply_symm_apply, cubeRoot_val]
 
 private theorem nonsingular_endo {P : Fin 3 → F} (h : curve.Nonsingular P) :
     curve.Nonsingular ![cubeRoot * P 0, P 1, P 2] := by
@@ -129,10 +144,11 @@ private theorem coords_endo_generator :
     TorsionCheck.coords (endo generator) =
       (TorsionCheck.fmul cubeRootNat (TorsionCheck.coords generator).1,
         (TorsionCheck.coords generator).2.1, 1) := by
+  rw [endo_eq]
   refine Prod.ext ?_ (Prod.ext rfl Fp.val_one)
-  show (cubeRoot * rep generator 0 : Fp).val = _
-  rw [← cubeRoot_val]
-  exact Fp.val_mul cubeRoot _
+  show (Fp.toZMod.symm cubeRoot * generator.x).val = _
+  rw [Fp.val_mul, val_cubeRoot]
+  rfl
 
 theorem eigenvalue_lt : eigenvalue < 2 ^ 128 := by decide +kernel
 
@@ -247,22 +263,24 @@ def glvNat (p : Coords) (s : Nat) : Coords :=
 private theorem beq_eq (a b : Nat) : Nat.beq a b = (a == b) :=
   Bool.eq_iff_iff.mpr (by simp)
 
+private theorem fmul_def (a b : Nat) : fmul a b = a * b % Fp.modulus := rfl
+
 theorem coords_endo (q : G1) : coords (endo q) = endoNat (coords q) := by
-  simp only [coords, endo, endoNat, fmul, Prod.mk.injEq, and_true]
-  rw [← cubeRoot_val]
-  exact Fp.val_mul cubeRoot q.x
+  rw [endo_eq]
+  simp only [coords, endoNat, Prod.mk.injEq, and_true]
+  rw [fmul_def, Fp.val_mul, val_cubeRoot]
 
 theorem coords_jointMul (fuel : Nat) (p q t : G1) (a b : Nat) :
     coords (jointMul fuel p q t a b) =
       jointNat fuel (coords p) (coords q) (coords t) a b := by
   induction fuel generalizing a b with
-  | zero => rfl
+  | zero => exact TorsionCheck.coords_zero
   | succ fuel ih =>
     rw [jointMul, jointNat]
     simp only [beq_eq, Bool.cond_eq_ite, Bool.and_eq_true, beq_iff_eq]
     by_cases h0 : a = 0 ∧ b = 0
     · simp only [h0, and_self, ↓reduceIte]
-      rfl
+      exact TorsionCheck.coords_zero
     simp only [h0, ↓reduceIte]
     split <;> split <;> simp only [TorsionCheck.coords_add, TorsionCheck.coords_double, ih]
 

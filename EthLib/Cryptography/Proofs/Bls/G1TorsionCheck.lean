@@ -234,10 +234,10 @@ theorem coords_add (p q : G1) : coords (G1.add p q) = add (coords p) (coords q) 
   rw [coords_eq, show G1.map Fp.toModel (G1.add p q) = G1.add (G1.map Fp.toModel p)
     (G1.map Fp.toModel q) from h, modelCoords_add, ← coords_eq, ← coords_eq]
 
-private theorem coords_neg (q : G1) : coords (G1.neg q) = neg (coords q) := by
+theorem coords_neg (q : G1) : coords (G1.neg q) = neg (coords q) := by
   simp only [coords, neg, G1.neg, Fp.val_neg]
 
-private theorem coords_zero : coords (G1.zero : G1) = zero := by
+theorem coords_zero : coords (G1.zero : G1) = zero := by
   rw [coords_eq, G1.map_zero]
   rfl
 
