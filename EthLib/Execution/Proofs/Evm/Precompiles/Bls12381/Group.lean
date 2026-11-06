@@ -11,7 +11,7 @@ public import EthLib.Execution.Proofs.Evm.Precompiles.Bls12381.RoundTrip
 # Proofs: G1ADD and G2ADD of EIP-2537 compute group addition
 
 - Every decoded point is on its curve, and passes the subgroup check when requested.
-- G1ADD and G2ADD return the encoding of the sum of their two decoded points.
+- The sum of two decoded points maps to the sum of their points on the curve.
 - Both succeed on the encodings of every two points on the curve, with enough gas.
 
 The sum is taken in the full group of points of each curve, as Mathlib defines it.
