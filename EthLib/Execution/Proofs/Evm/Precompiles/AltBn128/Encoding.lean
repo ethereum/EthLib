@@ -9,7 +9,7 @@ EIP-196 encodes a point as its two coordinates, each a 32-byte big-endian number
 
 The point at infinity is `(0, 0)`.
 
-The point `(0, 0)` is not on the curve, so this encoding of infinity encodes no point on the curve.
+The point `(0, 0)` is not on the curve, so no affine point on the curve has the bytes of infinity.
 
 The decoder reads back every point on the curve from its 64 bytes.
 
