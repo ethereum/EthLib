@@ -74,6 +74,8 @@ That theorem is the security of PeerDAS as data-availability sampling.
 
 namespace EthLib.Cryptography.Kzg
 
+open EthLib.Base (array_mapM_ok)
+
 open EthLib.Cryptography.Bls (G1 G2 Fr TargetGroup)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
@@ -118,59 +120,6 @@ theorem prEvent_le_add_of_reductions {S I O A B : Type} (sample : ProbComp S) (i
   rw [prEvent_map, prEvent_map]
   exact (prEvent_mono _ _ _ (h s)).trans (prEvent_or_le _ _ _)
 
-/-! ## The setup of a secret -/
-
-/-- The input of every adversary: points of `G1` and of `G2`.
-
-In the games they are `[τ^i]_1` for `i ≤ 4095` and `[τ^i]_2` for `i ≤ 64`. -/
-abbrev SetupPowers : Type := Vector G1 FIELD_ELEMENTS_PER_BLOB × Vector G2 KZG_SETUP_G2_LENGTH
-
-/-- The powers of the secret `τ` in `G1` and in `G2`. -/
-def setupPowers (τ : Fr) : SetupPowers :=
-  (Vector.ofFn fun i => G1.mul G1.generator (τ ^ i.val),
-    Vector.ofFn fun i => G2.mul G2.generator (τ ^ i.val))
-
-/-- The full setup that the verifier builds from the powers.
-
-Lagrange point `i` is the commitment to basis polynomial `i` of the blob domain.
-
-So anyone who holds the powers can compute it. -/
-noncomputable def TrustedSetup.ofPowers (pw : SetupPowers) : TrustedSetup where
-  g1LagrangeBrp := Vector.ofFn fun i =>
-    G1.msm pw.1.toArray (Array.ofFn fun k : Fin FIELD_ELEMENTS_PER_BLOB =>
-      (Lagrange.basis Finset.univ evalDomain i).coeff k)
-  g1Monomial := pw.1
-  g2Monomial := pw.2
-
-/-- Monomial point `i` of `G1` from the secret `τ`. -/
-theorem setupPowers_g1 (τ : Fr) (i : Fin FIELD_ELEMENTS_PER_BLOB) :
-    (setupPowers τ).1[i] = G1.mul G1.generator (τ ^ i.val) :=
-  Vector.getElem_ofFn _
-
-/-- Monomial point `i` of `G2` from the secret `τ`. -/
-theorem setupPowers_g2 (τ : Fr) (i : Fin KZG_SETUP_G2_LENGTH) :
-    (setupPowers τ).2[i] = G2.mul G2.generator (τ ^ i.val) :=
-  Vector.getElem_ofFn _
-
-/-- Lagrange point `i` of the setup built from the powers. -/
-theorem ofPowers_g1LagrangeBrp (pw : SetupPowers) (i : Fin FIELD_ELEMENTS_PER_BLOB) :
-    (TrustedSetup.ofPowers pw).g1LagrangeBrp[i] =
-      commitPoly (TrustedSetup.ofPowers pw) (Lagrange.basis Finset.univ evalDomain i) :=
-  by simp only [TrustedSetup.ofPowers, commitPoly, Fin.getElem_fin, Vector.getElem_ofFn]
-
-/-- The setup built from the powers of `τ` is a well-formed setup of `τ`. -/
-theorem wellFormed_ofPowers (τ : Fr) : (TrustedSetup.ofPowers (setupPowers τ)).WellFormed τ := by
-  have hm : ∀ i : Fin FIELD_ELEMENTS_PER_BLOB,
-      G1.Represents (TrustedSetup.ofPowers (setupPowers τ)).g1Monomial[i] (τ ^ i.val) :=
-    fun i => (setupPowers_g1 τ i).symm ▸ G1.represents_mul_generator _
-  refine ⟨fun i => ?_, hm, fun i => (setupPowers_g2 τ i).symm ▸ G2.represents_mul_generator _⟩
-  have hdeg : (Lagrange.basis Finset.univ evalDomain i).natDegree < FIELD_ELEMENTS_PER_BLOB := by
-    rw [Lagrange.natDegree_basis evalDomain_injective.injOn (Finset.mem_univ i),
-      Finset.card_univ, Fintype.card_fin]
-    decide
-  rw [ofPowers_g1LagrangeBrp]
-  exact represents_commitPoly_of_monomial hm hdeg
-
 /-! ## The assumptions -/
 
 /-- **The advantage against `(4095, 64)`-BSDH, Definition 1 of ePrint 2025/1683.**
@@ -207,14 +156,6 @@ structure CellOpening where
 /-- The verifier accepts the opening for the commitment, as a batch of one cell. -/
 def CellOpening.Verifies (s : TrustedSetup) (commitment : Bytes48) (o : CellOpening) : Prop :=
   verifyCellKzgProofBatch s #[commitment] #[o.cellIndex] #[o.cell] #[o.proof] = .ok true
-
-/-- Bytes that pass KZG validation decode to a point that represents some scalar. -/
-theorem represents_of_validateKzgG1 {b : Bytes48} (h : validateKzgG1 b = true) {P : G1}
-    (hP : uncompressG1 b = .ok P) : ∃ a, G1.Represents P a := by
-  obtain ⟨Q, hQ⟩ := exists_validateKzgG1Point_of_validateKzgG1 h
-  rw [uncompressG1_of_validateKzgG1Point hQ] at hP
-  cases hP
-  exact represents_of_validateKzgG1Point hQ
 
 /-- A fold whose steps fail on an invalid commitment validates every commitment it reads. -/
 private theorem foldlM_validates {ε : Type}

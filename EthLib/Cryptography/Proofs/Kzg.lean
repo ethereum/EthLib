@@ -38,8 +38,8 @@ public import EthLib.Cryptography.Proofs.Kzg.Errors
 public import EthLib.Cryptography.Proofs.Kzg.Binding
 public import EthLib.Cryptography.Proofs.Kzg.VersionedHash
 public import EthLib.Cryptography.Proofs.Kzg.BatchBinding
-public import EthLib.Cryptography.Proofs.Kzg.BlobVerifier
 public import EthLib.Cryptography.Proofs.Kzg.BatchChallenge
+public import EthLib.Cryptography.Proofs.Kzg.BlobVerifier
 public import EthLib.Cryptography.Proofs.Kzg.CellBatchBinding
 public import EthLib.Cryptography.Proofs.Kzg.CellBinding
 public import EthLib.Cryptography.Proofs.Kzg.CellVerifier

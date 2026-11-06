@@ -34,6 +34,7 @@ The binding of cells, with a bilinear variant of strong Diffie–Hellman, is in 
 
 namespace EthLib.Cryptography.Kzg
 
+open EthLib.Base (array_mapM_ok)
 open EthLib.Cryptography.Bls (G1 G2 Fr)
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Cryptography.Kzg.BitReversal
@@ -118,24 +119,6 @@ theorem evalPolyAt_interpolateCosetEvals {cellIndex : Nat} (hci : cellIndex < CE
     exact hqeval m hm'
 
 /-! ## Folds and maps of the check -/
-
-/-- A successful map over an array keeps its size, and output `i` is the image of input `i`. -/
-theorem array_mapM_ok {ε α β : Type} [Inhabited α] [Inhabited β] {f : α → Except ε β}
-    {xs : Array α} {ys : Array β} (h : xs.mapM f = .ok ys) :
-    ys.size = xs.size ∧ ∀ i < xs.size, f xs[i]! = .ok ys[i]! := by
-  rw [Array.mapM_eq_mapM_toList] at h
-  cases hl : xs.toList.mapM f with
-  | error e => rw [hl] at h; cases h
-  | ok zs =>
-    rw [hl] at h
-    have hys : zs.toArray = ys := Except.ok.inj h
-    subst hys
-    have hlen := Base.mapM_ok_length hl
-    refine ⟨by simpa using hlen, fun i hi => ?_⟩
-    have hi' : i < xs.toList.length := by simpa using hi
-    have := Base.mapM_ok_getElem hl i hi'
-    rw [getElem!_pos xs i hi, getElem!_pos zs.toArray i (by simp; omega)]
-    simpa using this
 
 /-- A sum over the pairs of two arrays of one size, as a sum over the indices. -/
 theorem sum_zip_toList {α β M : Type} [Inhabited α] [Inhabited β] [AddCommMonoid M]

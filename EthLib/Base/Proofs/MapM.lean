@@ -16,7 +16,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - The map succeeds when the function succeeds on every input.
 - A function that returns a known value on every input maps to the list of those values.
 - A part of each output that its input fixes comes out in the order of the inputs.
-- Output `i` is the image of input `i`, for a list or a vector.
+- Output `i` is the image of input `i`, for a list, an array or a vector.
 - A failed map fails on some input, and succeeds on every input before it.
 - A property that each step keeps holds after a successful fold.
 
@@ -137,6 +137,39 @@ theorem vector_mapM_ok_getElem {n : Nat} {xs : Vector α n} {ys : Vector β n}
     rfl
   have := mapM_ok_getElem onList i (by simpa using hi)
   simpa using this
+
+/-- A successful map over an array keeps its size, and output `i` is the image of input `i`. -/
+theorem array_mapM_ok [Inhabited α] [Inhabited β] {xs : Array α} {ys : Array β}
+    (h : xs.mapM f = .ok ys) :
+    ys.size = xs.size ∧ ∀ i < xs.size, f xs[i]! = .ok ys[i]! := by
+  rw [Array.mapM_eq_mapM_toList] at h
+  cases hl : xs.toList.mapM f with
+  | error e => rw [hl] at h; cases h
+  | ok zs =>
+    rw [hl] at h
+    have hys : zs.toArray = ys := Except.ok.inj h
+    subst hys
+    have hlen := mapM_ok_length hl
+    refine ⟨by simpa using hlen, fun i hi => ?_⟩
+    have hi' : i < xs.toList.length := by simpa using hi
+    have := mapM_ok_getElem hl i hi'
+    rw [getElem!_pos xs i hi, getElem!_pos zs.toArray i (by simp; omega)]
+    simpa using this
+
+/-- A map over an array succeeds when the function succeeds on every entry. -/
+theorem array_mapM_exists_ok {xs : Array α} (h : ∀ x ∈ xs, ∃ y, f x = .ok y) :
+    ∃ ys, xs.mapM f = .ok ys := by
+  obtain ⟨ys, hys⟩ := mapM_exists_ok (f := f) (xs := xs.toList)
+    fun x hx => h x (Array.mem_toList_iff.mp hx)
+  refine ⟨ys.toArray, ?_⟩
+  rw [Array.mapM_eq_mapM_toList, hys]
+  rfl
+
+/-- An entry of an array, read in range, is a member of the array. -/
+theorem getElem!_mem_of_lt [Inhabited α] {xs : Array α} {k : Nat} (hk : k < xs.size) :
+    xs[k]! ∈ xs := by
+  rw [getElem!_pos xs k hk]
+  exact Array.getElem_mem hk
 
 /-- A failed map fails with its error on some input, and succeeds on every input before it. -/
 theorem mapM_error {xs : List α} {e : ε} (h : xs.mapM f = .error e) :

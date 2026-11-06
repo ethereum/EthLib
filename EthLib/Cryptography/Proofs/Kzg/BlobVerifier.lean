@@ -1,7 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Kzg.BatchBinding
-public import EthLib.Cryptography.Proofs.Kzg.HonestCells
+public import EthLib.Cryptography.Proofs.Kzg.BatchChallenge
 
 /-!
 # Proofs: the batch check of blob openings
@@ -19,6 +18,7 @@ Each root below is a root of the error polynomial of the batch.
 - On well-formed inputs of one size, the batch check of blobs returns a verdict, with no error.
 - Under the pairing law, the verdict is true exactly when the batch challenge is a root.
 - Every entry of an accepted batch satisfies the opening equation, or the batch challenge is a root.
+- With the hash a random oracle, the root case has probability at most `(q + 1) (n - 1) / r`.
 - Every batch of valid blob openings is accepted, including honestly computed proofs.
 -/
 
@@ -26,6 +26,7 @@ Each root below is a root of the error polynomial of the batch.
 
 namespace EthLib.Cryptography.Kzg
 
+open EthLib.Base (array_mapM_ok array_mapM_exists_ok getElem!_mem_of_lt)
 open EthLib.Cryptography.Bls (G1 G2 Fr)
 open EthLib.Cryptography.Kzg.Constants
 open scoped EthLib.Cryptography.Bls.Fr
@@ -64,6 +65,13 @@ noncomputable def BlobBatchInput.evals (y : BlobBatchInput) : Array Fr :=
 /-- The batch challenge: the Fiat-Shamir challenge of the batch check of openings on blobs. -/
 noncomputable def BlobBatchInput.challenge (y : BlobBatchInput) : Fr :=
   computeVerifyKzgProofBatchChallenge y.commitments y.challenges y.evals y.proofs
+
+/-- The inputs that the batch check of openings hashes for a blob batch. -/
+noncomputable def BlobBatchInput.toOpeningBatch (y : BlobBatchInput) : OpeningBatch where
+  commitments := y.commitments
+  zs := y.challenges
+  ys := y.evals
+  proofs := y.proofs
 
 /-- The error polynomial of a blob batch, where `c` and `w` map the bytes of points to scalars. -/
 noncomputable def BlobBatchInput.errorPoly (y : BlobBatchInput) (τ : Fr)
@@ -468,6 +476,51 @@ theorem verifyBlobKzgProofBatch_valid_or_root (laws : Bls.PairingLaws) {s : Trus
     exact heq
   · exact Or.inr ⟨hzero, (verifyBlobKzgProofBatch_ok_iff_root laws hs y hC hP h).mp rfl⟩
 
+/-! ## The batch challenge from a random oracle -/
+
+/-- The game of the batch challenge for the batch check of blobs.
+
+The adversary queries the oracle as it likes, then outputs the inputs of a blob batch.
+
+The verifier hashes the batch of openings that the batch check of blobs builds. -/
+noncomputable def blobInputRomExperiment
+    (adversary : OracleComp (OpeningBatch →ₒ Fr) BlobBatchInput) :
+    OracleComp (OpeningBatch →ₒ Fr) (BlobBatchInput × Fr) := do
+  let y ← adversary
+  let r ← liftM ((OpeningBatch →ₒ Fr).query y.toOpeningBatch)
+  return (y, r)
+
+/-- **The bound for batches of at most `n` blobs.**
+
+The hash of the batch check is a random oracle on the batch of openings that the check builds.
+
+The adversary makes `q` queries, then outputs a batch with at most `n` commitments.
+
+The event is that the batch challenge is a root of a nonzero error polynomial of the batch.
+
+Its probability is at most `(q + 1) (n - 1) / r`.
+
+An accepted batch runs on inputs of one size, so `n` bounds the number of blobs as well.
+
+An accepted batch with an invalid entry lies in this event, by the theorem on accepted batches. -/
+theorem prEvent_blobInput_root_le (τ : Fr) (c w : Bytes48 → Fr) {n : Nat}
+    (adversary : OracleComp (OpeningBatch →ₒ Fr) BlobBatchInput) {q : Nat}
+    (hq : OracleComp.IsTotalQueryBound adversary q) :
+    Pr{let p ← (simulateQ OracleSpec.randomOracle (blobInputRomExperiment adversary)).run' ∅}[
+        p.1.commitments.size ≤ n ∧ p.1.errorPoly τ c w ≠ 0 ∧
+        (p.1.errorPoly τ c w).eval p.2 = 0] ≤
+      (q + 1) * ((n - 1 : Nat) / Fr.modulus) := by
+  have hq' : OracleComp.IsTotalQueryBound (BlobBatchInput.toOpeningBatch <$> adversary) q := by
+    rw [map_eq_bind_pure_comp, ← Nat.add_zero q]
+    exact OracleComp.isTotalQueryBound_bind hq fun _ => trivial
+  have hexp : batchRomExperiment (BlobBatchInput.toOpeningBatch <$> adversary) =
+      Prod.map BlobBatchInput.toOpeningBatch id <$> blobInputRomExperiment adversary := by
+    simp [batchRomExperiment, blobInputRomExperiment]
+  have h := prEvent_batchErrorPoly_root_le τ (fun x i => c x.commitments[i]!)
+    (fun x i => w x.proofs[i]!) (n := n) _ hq'
+  rw [hexp, simulateQ_map, StateT.run'_map', prEvent_map] at h
+  exact h
+
 /-! ## Valid blob openings and completeness -/
 
 /-- **The blob batch check accepts every batch of valid blob openings.**
@@ -582,5 +635,63 @@ theorem exists_honest_blob_batch (laws : Bls.PairingLaws) (τ : Fr) :
   exact ⟨TrustedSetup.ofPowers (setupPowers τ), ⟨#[zeroBlob], #[C], #[P]⟩,
     wellFormed_ofPowers τ, Nat.zero_lt_one, hhonest,
     verifyBlobKzgProofBatch_computeBlobKzgProof laws (wellFormed_ofPowers τ) rfl rfl hhonest⟩
+
+/-- **A zero-query blob-batch adversary exists whose batch has a nonzero error polynomial.**
+
+The adversary outputs one all-zero blob with `[1]_1` as the commitment and `[0]_1` as the proof.
+
+Under `scalarOf`, its error polynomial is the constant `1 - 0 - 0 = 1`, which is not zero. -/
+theorem exists_blobInput_adversary_nonzero_errorPoly (τ : Fr) :
+    ∃ (adversary : OracleComp (OpeningBatch →ₒ Fr) BlobBatchInput) (y : BlobBatchInput),
+      adversary = pure y ∧
+      OracleComp.IsTotalQueryBound adversary 0 ∧
+      y.commitments.size ≤ 1 ∧
+      (∀ i < y.commitments.size, ∀ P, uncompressG1 y.commitments[i]! = .ok P →
+        G1.Represents P (scalarOf y.commitments[i]!)) ∧
+      (∀ i < y.proofs.size, ∀ P, uncompressG1 y.proofs[i]! = .ok P →
+        G1.Represents P (scalarOf y.proofs[i]!)) ∧
+      y.errorPoly τ scalarOf scalarOf ≠ 0 := by
+  let y : BlobBatchInput :=
+    ⟨#[zeroBlob], #[compressG1 G1.generator], #[compressG1 (G1.mul G1.generator 0)]⟩
+  obtain ⟨Cg, hCg, hrCg⟩ := validateKzgG1Point_compressG1 G1.represents_generator
+  obtain ⟨Cz, hCz, hrCz⟩ := validateKzgG1Point_compressG1 (G1.represents_mul_generator 0)
+  have hC : ∀ i < y.commitments.size, ∀ P, uncompressG1 y.commitments[i]! = .ok P →
+      G1.Represents P (scalarOf y.commitments[i]!) := fun i hi P hP => by
+    obtain rfl : i = 0 := Nat.lt_one_iff.mp hi
+    rw [getElem!_pos y.commitments 0 (by simp [y])] at hP ⊢
+    exact represents_scalarOf (validateKzgG1_of_validateKzgG1Point hCg) hP
+  have hP : ∀ i < y.proofs.size, ∀ P, uncompressG1 y.proofs[i]! = .ok P →
+      G1.Represents P (scalarOf y.proofs[i]!) := fun i hi P hP => by
+    obtain rfl : i = 0 := Nat.lt_one_iff.mp hi
+    rw [getElem!_pos y.proofs 0 (by simp [y])] at hP ⊢
+    exact represents_scalarOf (validateKzgG1_of_validateKzgG1Point hCz) hP
+  refine ⟨pure y, y, rfl, trivial, Nat.le_refl 1, hC, hP, ?_⟩
+  obtain ⟨ps, hpsM⟩ := array_mapM_exists_ok (f := blobToPolynomial) (xs := y.blobs) fun bl hbl => by
+    obtain rfl : bl = zeroBlob := by simpa [y] using hbl
+    exact ⟨_, blobToPolynomial_zeroBlob⟩
+  obtain ⟨-, hpsk⟩ := array_mapM_ok hpsM
+  have hdec : decodeBlobPolys y.blobs = ps := decodeBlobPolys_of_ok hpsM
+  have hps0 : ps[0]! = Array.ofFn fun _ : Fin FIELD_ELEMENTS_PER_BLOB => Fr.zero := by
+    have h0 := hpsk 0 (by simp [y])
+    rw [getElem!_pos y.blobs 0 (by simp [y])] at h0
+    exact Except.ok.inj (h0.symm.trans blobToPolynomial_zeroBlob)
+  have hinterp : interpolant ps[0]! = 0 := by
+    rw [interpolant, Lagrange.interpolate_apply]
+    refine Finset.sum_eq_zero fun i _ => ?_
+    rw [hps0, getElem!_pos _ i.val (by simp [i.isLt])]
+    simp
+  have heval : y.evals[0]! = 0 := by
+    rw [getElem!_pos y.evals 0 (by simp [y, BlobBatchInput.evals])]
+    simp [BlobBatchInput.evals, hdec, hinterp]
+  have hc0 : scalarOf y.commitments[0]! = 1 := by
+    rw [getElem!_pos y.commitments 0 (by simp [y])]
+    exact scalarOf_eq hCg hrCg
+  have hw0 : scalarOf y.proofs[0]! = 0 := by
+    rw [getElem!_pos y.proofs 0 (by simp [y])]
+    exact scalarOf_eq hCz hrCz
+  intro hzero
+  have h0 := (batchErrorPoly_eq_zero_iff τ _ _ _ _ _).mp hzero 0 (by simp [y])
+  rw [hc0, hw0, heval, sub_zero, zero_mul] at h0
+  exact one_ne_zero h0
 
 end EthLib.Cryptography.Kzg

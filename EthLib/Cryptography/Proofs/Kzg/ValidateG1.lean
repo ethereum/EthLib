@@ -58,4 +58,38 @@ theorem validateKzgG1Point_eq_ok_iff {b : Bytes48} {P : G1} :
     | error e => exact iff_of_false (fun h => by cases h) (fun h => by cases h)
     | ok q => exact ⟨fun h => by cases h; rfl, fun h => by cases h; rfl⟩
 
+/-- Bytes that pass KZG validation decode to a point of the subgroup. -/
+theorem exists_validateKzgG1Point_of_validateKzgG1 {b : Bytes48} (h : validateKzgG1 b = true) :
+    ∃ P, validateKzgG1Point b = .ok P := by
+  unfold validateKzgG1 at h
+  unfold validateKzgG1Point
+  by_cases hb : (b == G1_POINT_AT_INFINITY) = true
+  · exact ⟨_, ite_eq_left hb⟩
+  · rw [ite_eq_right hb] at h ⊢
+    cases hk : G1.keyValidatePoint ⟨b.toArray⟩ with
+    | error e =>
+      simp [G1.keyValidate, hk, bind, Except.bind, Except.isOk, Except.toBool] at h
+    | ok q => exact ⟨q, rfl⟩
+
+/-- Bytes that decode to a point of the subgroup pass KZG validation. -/
+theorem validateKzgG1_of_validateKzgG1Point {b : Bytes48} {P : G1}
+    (h : validateKzgG1Point b = .ok P) : validateKzgG1 b = true := by
+  unfold validateKzgG1Point at h
+  unfold validateKzgG1
+  by_cases hb : (b == G1_POINT_AT_INFINITY) = true
+  · rw [ite_eq_left hb]
+  · rw [ite_eq_right hb] at h ⊢
+    cases hk : G1.keyValidatePoint ⟨b.toArray⟩ with
+    | error e => rw [hk] at h; cases h
+    | ok q =>
+      simp only [G1.keyValidate, hk, bind, Except.bind, Except.isOk, Except.toBool]
+      rfl
+
+/-- Bytes that decode to a point of the subgroup decompress to that point. -/
+theorem uncompressG1_of_validateKzgG1Point {b : Bytes48} {P : G1}
+    (h : validateKzgG1Point b = .ok P) : uncompressG1 b = .ok P := by
+  unfold uncompressG1
+  rw [(validateKzgG1Point_eq_ok_iff.mp h).1]
+  rfl
+
 end EthLib.Cryptography.Kzg

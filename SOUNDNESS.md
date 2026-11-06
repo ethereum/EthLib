@@ -445,8 +445,10 @@ Assume `PairingLaws`, a well-formed setup, and decoded points that represent the
 Then `verifyBlobKzgProofBatch_ok_iff_root` states that this verdict is true exactly when the batch challenge is a root of the error polynomial of the blob batch.
 `verifyBlobKzgProofBatch_valid_or_root` assumes the same and splits an accepted batch into two cases.
 Every entry satisfies `c_i - y_i = w_i (τ - z_i)` and passes `verifyBlobKzgProof`, or the batch challenge is a root of a nonzero error polynomial.
-`prEvent_batchErrorPoly_root_le` (`Proofs/Kzg/BatchChallenge.lean`) bounds the root case by `(q + 1) (n - 1) / r` for the batch of openings that the check builds.
-No theorem states that bound for an adversary that outputs blobs, commitments and proofs.
+`prEvent_blobInput_root_le` bounds the root case by `(q + 1) (n - 1) / r`, where the adversary outputs blobs, commitments and proofs.
+Its game takes the hash of the batch challenge as a random oracle on the batch of openings that the check builds.
+The adversary makes at most `q` queries, and its batch has at most `n` commitments.
+In `verifyBlobKzgProofBatch_ok_iff_root`, `verifyBlobKzgProofBatch_valid_or_root` and `prEvent_blobInput_root_le`, the scalar of a commitment or a proof is a function of its bytes.
 `verifyBlobKzgProofBatch_of_blobOpeningValid` proves that the check accepts every batch of valid blob openings.
 So it accepts the commitments and proofs that `blobToKzgCommitment` and `computeBlobKzgProof` return (`verifyBlobKzgProofBatch_computeBlobKzgProof`).
 

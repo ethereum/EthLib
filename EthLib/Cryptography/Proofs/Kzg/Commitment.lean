@@ -115,4 +115,86 @@ theorem blobToKzgCommitment_represents {s : TrustedSetup} {τ : Fr} (hs : s.Well
   ⟨blobToKzgCommitment_eq_ok s hblob,
     represents_lagrange_msm hs (size_blobToPolynomial blob poly hblob)⟩
 
+/-! ## Commitments from monomial points and the setup of a secret -/
+
+/-- The commitment to a polynomial: its first 4096 coefficients times the monomial points. -/
+def commitPoly (s : TrustedSetup) (p : _root_.Polynomial Fr) : G1 :=
+  G1.msm s.g1Monomial.toArray (Array.ofFn fun k : Fin FIELD_ELEMENTS_PER_BLOB => p.coeff k)
+
+/-- The commitment to a polynomial of degree below 4096 represents its value at the secret.
+
+Only the monomial points of `G1` must represent the powers of the secret. -/
+theorem represents_commitPoly_of_monomial {s : TrustedSetup} {τ : Fr}
+    (hm : ∀ i : Fin FIELD_ELEMENTS_PER_BLOB, G1.Represents s.g1Monomial[i] (τ ^ i.val))
+    {p : _root_.Polynomial Fr} (hp : p.natDegree < FIELD_ELEMENTS_PER_BLOB) :
+    G1.Represents (commitPoly s p) (p.eval τ) := by
+  have h := G1.represents_msm (points := s.g1Monomial.toArray)
+    (scalars := Array.ofFn fun k : Fin FIELD_ELEMENTS_PER_BLOB => p.coeff k)
+    (a := fun j => τ ^ j) (by simp) fun j hj => by
+      have hj' : j < FIELD_ELEMENTS_PER_BLOB := by simpa using hj
+      rw [getElem!_pos _ j hj, Vector.getElem_toArray]
+      exact hm ⟨j, hj'⟩
+  rw [commitPoly]
+  convert h using 1
+  rw [eval_eq_sum_range' hp, Vector.size_toArray]
+  refine Finset.sum_congr rfl fun j hj => ?_
+  rw [getElem!_pos _ j (by simpa using hj), Array.getElem_ofFn]
+
+/-- The commitment to a polynomial of degree below 4096 represents its value at the secret. -/
+theorem represents_commitPoly {s : TrustedSetup} {τ : Fr} (hs : s.WellFormed τ)
+    {p : _root_.Polynomial Fr} (hp : p.natDegree < FIELD_ELEMENTS_PER_BLOB) :
+    G1.Represents (commitPoly s p) (p.eval τ) :=
+  represents_commitPoly_of_monomial hs.monomial_g1 hp
+
+/-- The powers of the secret: 4096 points in `G1` and 65 points in `G2`.
+
+In security games they are `[τ^i]_1` for `i ≤ 4095` and `[τ^i]_2` for `i ≤ 64`. -/
+abbrev SetupPowers : Type := Vector G1 FIELD_ELEMENTS_PER_BLOB × Vector G2 KZG_SETUP_G2_LENGTH
+
+/-- The powers of the secret `τ` in `G1` and in `G2`. -/
+def setupPowers (τ : Fr) : SetupPowers :=
+  (Vector.ofFn fun i => G1.mul G1.generator (τ ^ i.val),
+    Vector.ofFn fun i => G2.mul G2.generator (τ ^ i.val))
+
+/-- The full setup built from the powers.
+
+Lagrange point `i` is the commitment to basis polynomial `i` of the blob domain.
+
+So anyone who holds the powers can compute it. -/
+noncomputable def TrustedSetup.ofPowers (pw : SetupPowers) : TrustedSetup where
+  g1LagrangeBrp := Vector.ofFn fun i =>
+    G1.msm pw.1.toArray (Array.ofFn fun k : Fin FIELD_ELEMENTS_PER_BLOB =>
+      (Lagrange.basis Finset.univ evalDomain i).coeff k)
+  g1Monomial := pw.1
+  g2Monomial := pw.2
+
+/-- Monomial point `i` of `G1` from the secret `τ`. -/
+theorem setupPowers_g1 (τ : Fr) (i : Fin FIELD_ELEMENTS_PER_BLOB) :
+    (setupPowers τ).1[i] = G1.mul G1.generator (τ ^ i.val) :=
+  Vector.getElem_ofFn _
+
+/-- Monomial point `i` of `G2` from the secret `τ`. -/
+theorem setupPowers_g2 (τ : Fr) (i : Fin KZG_SETUP_G2_LENGTH) :
+    (setupPowers τ).2[i] = G2.mul G2.generator (τ ^ i.val) :=
+  Vector.getElem_ofFn _
+
+/-- Lagrange point `i` of the setup built from the powers. -/
+theorem ofPowers_g1LagrangeBrp (pw : SetupPowers) (i : Fin FIELD_ELEMENTS_PER_BLOB) :
+    (TrustedSetup.ofPowers pw).g1LagrangeBrp[i] =
+      commitPoly (TrustedSetup.ofPowers pw) (Lagrange.basis Finset.univ evalDomain i) :=
+  by simp only [TrustedSetup.ofPowers, commitPoly, Fin.getElem_fin, Vector.getElem_ofFn]
+
+/-- The setup built from the powers of `τ` is a well-formed setup of `τ`. -/
+theorem wellFormed_ofPowers (τ : Fr) : (TrustedSetup.ofPowers (setupPowers τ)).WellFormed τ := by
+  have hm : ∀ i : Fin FIELD_ELEMENTS_PER_BLOB,
+      G1.Represents (TrustedSetup.ofPowers (setupPowers τ)).g1Monomial[i] (τ ^ i.val) :=
+    fun i => (setupPowers_g1 τ i).symm ▸ G1.represents_mul_generator _
+  refine ⟨fun i => ?_, hm, fun i => (setupPowers_g2 τ i).symm ▸ G2.represents_mul_generator _⟩
+  have hdeg : (Lagrange.basis Finset.univ evalDomain i).natDegree < FIELD_ELEMENTS_PER_BLOB := by
+    rw [Lagrange.natDegree_basis evalDomain_injective.injOn (Finset.mem_univ i),
+      Finset.card_univ, Fintype.card_fin]
+    decide
+  rw [ofPowers_g1LagrangeBrp]
+  exact represents_commitPoly_of_monomial hm hdeg
+
 end EthLib.Cryptography.Kzg
