@@ -5,19 +5,21 @@ public import EthLib.Execution.Proofs.State.Tracker
 /-!
 # Proofs: the addresses that a write of the transaction state touches
 
-A write of the transaction state names the addresses it changes.
+Each write of a transaction's state names the addresses it changes.
 
 It leaves the account, the storage and the transient storage of every other address as they were.
 
-So a run of writes changes nothing outside the addresses that its writes name.
+Two runs of writes compose, so a run changes nothing outside the union of the addresses it names.
 
-A rollback to a snapshot makes every address read as in the snapshot.
+A rollback to a snapshot of the same block gives back the snapshot's accounts and storage.
 
-The statements are about the writes of the state alone.
+The statements cover the account, the storage and the transient storage only.
 
-They say nothing about the opcodes, the messages or the records of reads.
+They say nothing about the original words of storage, the created accounts or the records of reads.
 
-Code is kept under its hash and not under an address, so they leave it out.
+The end of a transaction clears the transient storage of every address, so it is left out.
+
+Code is kept under its hash and not under an address, so the statements leave it out.
 -/
 
 @[expose] public section
@@ -42,7 +44,7 @@ theorem SameOutside.refl (touched : List Address) (tx : TransactionState) :
     SameOutside touched tx tx :=
   fun _ _ => ⟨rfl, fun _ => rfl, fun _ => rfl⟩
 
-/-- Two runs of writes change nothing outside the addresses that either names. -/
+/-- The relation composes, over the union of the two lists. -/
 theorem SameOutside.trans {first second : List Address} {tx tx' tx'' : TransactionState}
     (h : SameOutside first tx tx') (h' : SameOutside second tx' tx'') :
     SameOutside (first ++ second) tx tx'' := by
@@ -52,7 +54,7 @@ theorem SameOutside.trans {first second : List Address} {tx tx' tx'' : Transacti
   obtain ⟨a', s', t'⟩ := h' address hmem.2
   exact ⟨a'.trans a, fun key => (s' key).trans (s key), fun key => (t' key).trans (t key)⟩
 
-/-- A longer list of addresses says less. -/
+/-- The relation still holds for a list that contains the first one. -/
 theorem SameOutside.mono {first second : List Address} {tx tx' : TransactionState}
     (h : SameOutside first tx tx') (sub : ∀ address, address ∈ first → address ∈ second) :
     SameOutside second tx tx' :=
@@ -72,6 +74,16 @@ theorem sameOutside_recordAccountRead (tx : TransactionState) (address : Address
     SameOutside [] tx (tx.recordAccountRead address) :=
   fun _ _ => ⟨rfl, fun _ => rfl, fun _ => rfl⟩
 
+/-- A record of a storage read touches no address. -/
+theorem sameOutside_recordStorageRead (tx : TransactionState) (address : Address)
+    (key : Bytes32) : SameOutside [] tx (tx.recordStorageRead address key) :=
+  fun _ _ => ⟨rfl, fun _ => rfl, fun _ => rfl⟩
+
+/-- Taking the records of reads of another state touches no address. -/
+theorem sameOutside_withReadsOf (tx other : TransactionState) :
+    SameOutside [] tx (tx.withReadsOf other) :=
+  fun _ _ => ⟨rfl, fun _ => rfl, fun _ => rfl⟩
+
 /-- Wiping the storage of an address touches that address only. -/
 theorem sameOutside_destroyStorage (tx : TransactionState) (address : Address) :
     SameOutside [address] tx (tx.destroyStorage address) :=
@@ -84,7 +96,9 @@ theorem sameOutside_destroyAccount (tx : TransactionState) (address : Address) :
   ((sameOutside_destroyStorage tx address).trans
     (sameOutside_setAccount _ address none)).mono (by simp)
 
-/-- A record of the creation of an account touches no address. -/
+/-- A record of the creation of an account touches no address.
+
+It changes the original words of storage at that address, which the relation leaves out. -/
 theorem sameOutside_markAccountCreated (tx : TransactionState) (address : Address) :
     SameOutside [] tx (tx.markAccountCreated address) :=
   fun _ _ => ⟨rfl, fun _ => rfl, fun _ => rfl⟩
@@ -105,7 +119,7 @@ theorem sameOutside_setTransientStorage (tx : TransactionState) (address : Addre
     ⟨rfl, fun _ => rfl, fun otherKey =>
       getTransientStorage_setTransientStorage_of_ne tx value (Or.inl (by simpa using hmem))⟩
 
-/-- A write of storage touches the address it names only. -/
+/-- A successful write of storage touches the address it names only. -/
 theorem sameOutside_setStorage {tx tx' : TransactionState} {address : Address} {key : Bytes32}
     {value : U256} (h : tx.setStorage address key value = .ok tx') :
     SameOutside [address] tx tx' := by
@@ -120,7 +134,7 @@ theorem sameOutside_setStorage {tx tx' : TransactionState} {address : Address} {
     · cases h
       rfl
 
-/-- A change of an account touches that address only. -/
+/-- A successful change of an account touches that address only. -/
 theorem sameOutside_modifyState {fork : Fork} {tx tx' : TransactionState} {address : Address}
     {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
     SameOutside [address] tx tx' := by
@@ -133,24 +147,24 @@ theorem sameOutside_modifyState {fork : Fork} {tx tx' : TransactionState} {addre
   · exact (base.trans (sameOutside_destroyAccount _ address)).mono (by simp)
   · exact base
 
-/-- Adding one to a nonce touches that address only. -/
+/-- A successful increment of a nonce touches that address only. -/
 theorem sameOutside_incrementNonce {fork : Fork} {tx tx' : TransactionState} {address : Address}
     (h : tx.incrementNonce fork address = .ok tx') : SameOutside [address] tx tx' :=
   sameOutside_modifyState h
 
-/-- Setting a balance touches that address only. -/
+/-- A successful write of a balance touches that address only. -/
 theorem sameOutside_setAccountBalance {fork : Fork} {tx tx' : TransactionState}
     {address : Address} {amount : U256} (h : tx.setAccountBalance fork address amount = .ok tx') :
     SameOutside [address] tx tx' :=
   sameOutside_modifyState h
 
-/-- Creating ether at an address touches that address only. -/
+/-- A successful creation of ether at an address touches that address only. -/
 theorem sameOutside_createEther {fork : Fork} {tx tx' : TransactionState} {address : Address}
     {amount : U256} (h : tx.createEther fork address amount = .ok tx') :
     SameOutside [address] tx tx' :=
   sameOutside_modifyState h
 
-/-- Setting the code of an address touches that address only.
+/-- A successful write of the code of an address touches that address only.
 
 The code itself is kept under its hash, so the statement leaves it out. -/
 theorem sameOutside_setCode {fork : Fork} {tx tx' : TransactionState} {address : Address}
@@ -164,13 +178,13 @@ theorem sameOutside_setCode {fork : Fork} {tx tx' : TransactionState} {address :
       fun _ _ _ => ⟨rfl, fun _ => rfl, fun _ => rfl⟩
     exact (base _ |>.trans (sameOutside_modifyState h)).mono (by simp)
 
-/-- Clearing an account touches that address only. -/
+/-- A successful clear of an account touches that address only. -/
 theorem sameOutside_clearAccountPreservingBalance {fork : Fork} {tx tx' : TransactionState}
     {address : Address} (h : tx.clearAccountPreservingBalance fork address = .ok tx') :
     SameOutside [address] tx tx' :=
   ((sameOutside_destroyStorage tx address).trans (sameOutside_modifyState h)).mono (by simp)
 
-/-- A move of ether touches the sender and the recipient only. -/
+/-- A successful move of ether touches the sender and the recipient only. -/
 theorem sameOutside_moveEther {fork : Fork} {tx tx' : TransactionState}
     {sender recipient : Address} {amount : U256}
     (h : tx.moveEther fork sender recipient amount = .ok tx') :
@@ -210,13 +224,15 @@ theorem sameOutside_destroyTouchedEmptyAccounts (fork : Fork) (tx : TransactionS
 
 /-! ## A rollback -/
 
-/-- After a rollback, every address reads as in the snapshot. -/
+/-- A rollback to a snapshot of the same block gives back the snapshot's accounts and storage.
+
+That holds for the account, the storage and the transient storage at every address. -/
 theorem sameOutside_restoreTxState {tx snapshot : TransactionState}
     (hparent : tx.parent = snapshot.parent) :
     SameOutside [] snapshot (tx.restoreTxState snapshot) :=
   fun address _ =>
-    ⟨getAccountOptional_restoreTxState hparent address ▸ rfl,
-      fun key => getStorage_restoreTxState hparent address key,
-      fun key => getTransientStorage_restoreTxState tx snapshot address key⟩
+    ⟨getAccountOptional_restoreTxState hparent address,
+      getStorage_restoreTxState hparent address,
+      getTransientStorage_restoreTxState tx snapshot address⟩
 
 end EthLib.Execution.State.TransactionState
