@@ -26,7 +26,9 @@ require "leanprover-community" / "mathlib" @ git "v4.35.0"
 --
 -- The library code never imports it.
 --
--- An unmerged VCVio commit, from its draft pull request #1009, built against the same Mathlib.
+-- An unmerged VCVio commit, from its draft pull requests #1009 and #1035.
+--
+-- It is built against the same Mathlib.
 require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @
   "7d5df99445c90aa0aaa77a902d8f587f3581bc4f"
 

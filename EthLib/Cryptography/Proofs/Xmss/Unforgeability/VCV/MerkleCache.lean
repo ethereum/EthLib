@@ -13,13 +13,11 @@ The selected leaf and its climb then retain the full root's result and complete 
 
 The cache may contain other entries, and node indices retain their global offsets.
 
-Physical query counts and capped executions are outside this equality.
+The equality says nothing about query counts.
 
-Source: the leanXMSS draft, section "Trees", at the pinned revision below.
+Source: the leanXMSS specification draft, section "Trees".
 
-The draft gives the sibling indices, leaf-to-root path order and left/right child order.
-
-<https://github.com/leanEthereum/leanVM/blob/4af2cdddd7cd41b9df2cc7e123e314a91b0b4462/doc/lean_xmss/main.tex>
+The draft gives the sibling indices, the leaf-to-root path order and the left/right child order.
 -/
 
 public section
@@ -80,7 +78,7 @@ private theorem intrinsicAuthPathM_eq_ofFnM [LawfulMonad m]
   | n + 1 => by
     rw [PerfectMerkleTree.intrinsicAuthPathM, Vector.ofFnM_succ,
       intrinsicAuthPathM_eq_ofFnM hash leaf j n]
-    -- The last vector index is the new level; earlier indices retain their values.
+    -- The last vector index is the new level, and earlier indices keep their values.
     rfl
 
 /-- The actual path and generic path retain every callback in leaf-to-root order. -/
@@ -104,7 +102,7 @@ The premise evaluates the actual path program through the known partial cache.
 
 The initial live cache may extend that cache.
 
-All runtime index casts and global subtree offsets are retained.
+Node indices keep their global subtree offsets.
 
 The miss handler is arbitrary, and its target monad is lawful.
 
