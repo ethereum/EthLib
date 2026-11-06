@@ -27,8 +27,13 @@ TOPICS = {
     "sync_committee_message": "altair",
     "sync_committee_contribution_and_proof": "altair",
     "bls_to_execution_change": "capella",
+    "blob_sidecar": "deneb",
+    "data_column_sidecar": "fulu",
 }
 SPECIFIED = ("altair", "bellatrix", "capella", "deneb", "electra", "fulu")
+# The topics whose cases stop at an earlier fork, with their last fork.
+# Blob sidecars travel only at Deneb and Electra.
+LAST = {"blob_sidecar": "electra"}
 
 # The release archives that hold the cases.
 ARCHIVES = {
@@ -48,7 +53,9 @@ def runs(fork: str, handler: str) -> bool:
     return (
         fork in SPECIFIED
         and topic in TOPICS
-        and SPECIFIED.index(TOPICS[topic]) <= SPECIFIED.index(fork)
+        and SPECIFIED.index(TOPICS[topic])
+        <= SPECIFIED.index(fork)
+        <= SPECIFIED.index(LAST.get(topic, SPECIFIED[-1]))
     )
 
 

@@ -77,7 +77,7 @@ A sidecar rejected for one of them fails that check, and every other sidecar pas
 From Gloas a sidecar has no branch, and its commitments are in the bid of the block whose root it names.
 So from Gloas the file finds that block among the blocks of the case, and runs the two other checks against it.
 A sidecar whose block the case does not give must be rejected before gossip validation reads the block.
-The rest of gossip validation reads the store of the fork choice, which EthLib does not hold yet.
+From Gloas the rest of gossip validation waits for the Gloas store; the Fulu cases run in full from `gossip/`.
 The same file rebuilds every sidecar of a block from one sidecar, and from the bodies of `merkle_proof/` for Fulu.
 From Gloas it rebuilds each valid sidecar from its block, and from itself.
 It also builds the matrix of two blobs of the KZG vectors under `tests/cryptography/kzg/`, and recovers it from half of its columns.
@@ -185,6 +185,8 @@ At Electra and Fulu it keeps the case with one valid block.
 It keeps every case of the attestation and aggregate topics at Altair, Deneb and Electra.
 Deneb changes the window of time of a vote, and Electra moves the committee out of the attestation data.
 At Bellatrix, Capella and Fulu it keeps the case with one valid message of each of these topics.
+It keeps every blob sidecar case at Deneb, and at Electra the valid case and the case of an index past the limit.
+It keeps every Fulu case of the column sidecar topic, with its state.
 `bindings/python/tests/consensus/test_gossip_validation.py` validates each message in Lean and compares the outcome and the reason with the case.
 
 The directory `genesis/` holds every genesis case of `minimal.tar.gz` in the same way.

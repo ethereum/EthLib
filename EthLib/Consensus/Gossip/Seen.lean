@@ -57,6 +57,10 @@ structure Seen where
 
   Before Electra the root alone is the key, so the committee there is 0. -/
   aggregateBits : List ((Root × CommitteeIndex) × List Bool) := []
+  /-- At Deneb and Electra: the slot, the proposer and the index of each valid blob sidecar. -/
+  blobSidecarTuples : List (Slot × ValidatorIndex × BlobIndex) := []
+  /-- From Fulu: the slot, the proposer and the column index of each valid column sidecar. -/
+  dataColumnSidecarTuples : List (Slot × ValidatorIndex × DataAvailability.ColumnIndex) := []
   deriving Inhabited
 
 namespace Store

@@ -36,6 +36,7 @@ public import EthLib.Consensus.Gossip.Attestation
 public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Gossip.Operations
 public import EthLib.Consensus.Gossip.Seen
+public import EthLib.Consensus.Gossip.Sidecar
 public import EthLib.Consensus.Gossip.SyncCommittee
 public import EthLib.Consensus.Gossip.Topics
 public import EthLib.Consensus.InclusionList

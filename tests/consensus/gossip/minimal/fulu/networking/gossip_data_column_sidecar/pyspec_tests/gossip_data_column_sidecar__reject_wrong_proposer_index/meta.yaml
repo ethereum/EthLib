@@ -1,0 +1,9 @@
+topic: data_column_sidecar
+blocks:
+- {block: 
+    block_0x7f2b248e1a15c9c4da4508b784f4b8c38b5eeaa0095b6894f9b8144ef743cd21}
+messages:
+- {subnet_id: 0, current_time_ms: 6500, message: 
+    data_column_sidecar_0xefaeaeff1f973e5abd4514973517411076c99c3f23cbdb2c318edfe379ce185a,
+  expected: reject, reason: sidecar proposer_index does not match expected 
+    proposer}
