@@ -36,7 +36,7 @@ def i2osp (n : Nat) (len : Nat) : ByteArray :=
     UInt8.ofNat ((n >>> ((len - 1 - i.val) * 8)) &&& 0xff)
 
 def strxor (a b : ByteArray) : ByteArray :=
-  ByteArray.mk <| Array.ofFn (n := a.size) fun i => a[i.val]! ^^^ b[i.val]!
+  ⟨Array.zipWith (· ^^^ ·) a.data b.data⟩
 
 /-- Expand `msg` into `lenInBytes` pseudo-random bytes via XMD with
 SHA-256. Follows RFC 9380 §5.3.1 and §5.3.3: oversized DSTs are first
@@ -62,10 +62,11 @@ def expandMessageXmd
   let mut bs : Array ByteArray := Array.mkEmpty ell
   let b1 := Hash.Sha256.hash (b0 ++ i2osp 1 1 ++ dstPrime)
   bs := bs.push b1
+  let mut prev := b1
   for i in [2:ell+1] do
-    let prev := bs[bs.size - 1]!
     let bi := Hash.Sha256.hash (strxor b0 prev ++ i2osp i 1 ++ dstPrime)
     bs := bs.push bi
+    prev := bi
   let mut out := bs.foldl (· ++ ·) ByteArray.empty
   return out.extract 0 lenInBytes
 
