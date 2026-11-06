@@ -440,10 +440,12 @@ ECADD and ECMUL fail exactly when the gas is below the price or a point does not
 ECPAIRING succeeds exactly when the gas covers the price and every pair decodes
 (`ecpairing_eq_ok_iff`), and it returns the word 0 or 1 (`ecpairing_ok`).
 Every decoded point is on its curve (`bytesToG1_isOnCurve`, `bytesToG2_isOnCurve`).
-A pair of ECPAIRING decodes exactly when both points decode and `q Q = O` holds in the group of
+
+Let `q` be the order of `G_1` and `O` the point at infinity.
+A pair of ECPAIRING decodes exactly when both points decode and `q Q = O` for its point `Q` of
 the twist (`decodePair_eq_ok_iff`).
-The check `q P = O` on the point of `G_1` never fails, because the curve over `Fp` has `q` points,
-as EIP-197 says.
+The same check on its point of `G_1` always passes, because the curve over `Fp` has `q` points.
+So the curve equation is enough for `G_1`, as EIP-197 says.
 
 The decoder of a point of `G_1` accepts 64 bytes exactly when they encode a point on the curve
 (`bytesToG1_eq_ok_iff`, from `bytesToG1_g1ToBytes` and `g1ToBytes_of_bytesToG1`).
