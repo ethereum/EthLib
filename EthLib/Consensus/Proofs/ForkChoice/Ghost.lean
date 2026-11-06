@@ -25,7 +25,9 @@ A tie between two children goes to the greater root, read as a big-endian number
 
 That order is the order of roots as strings of bytes.
 
-The head is a viable leaf, unless no leaf is viable, and then it is the justified block.
+The head descends from the justified block.
+
+It is a viable leaf, unless no leaf is viable, and then it is the justified block.
 
 So when some leaf is viable, the chain of the head holds the finalized block.
 
@@ -130,6 +132,35 @@ theorem getAncestor_of_gt {node : ForkChoiceNode} {slot : Slot}
       rw [parentFound, Option.some.injEq] at same
       subst same
       simp [parentLower]
+
+/-- Before Gloas, a block whose parent descends from a node descends from it too.
+
+That needs the parent at an earlier slot than the block. -/
+theorem isAncestor_of_parent {root : Root} {block parent : BeaconBlock preset fork}
+    {ancestor : ForkChoiceNode} (before : fork < .glamsterdam)
+    (found : store.blocks[root]? = some block)
+    (parentFound : store.blocks[block.parentRoot]? = some parent)
+    (lower : parent.slot < block.slot)
+    (descends : store.isAncestor ⟨block.parentRoot, .pending⟩ ancestor = .ok true) :
+    store.isAncestor ⟨root, .pending⟩ ancestor = .ok true := by
+  simp only [isAncestor, bind, Except.bind] at descends ⊢
+  cases known : store.block ancestor.root with
+  | error e => simp [known] at descends
+  | ok ancestorBlock =>
+    simp only [known] at descends ⊢
+    -- The ancestor sits at or below the parent, so the walk from the block passes the parent.
+    have below : ancestorBlock.slot < block.slot := by
+      by_cases le : parent.slot ≤ ancestorBlock.slot
+      · rw [getAncestor_of_le before parentFound le] at descends
+        simp only [pure, Except.pure, Except.ok.injEq, beq_iff_eq] at descends
+        have same : ancestor.root = block.parentRoot := by rw [← descends]
+        simp only [Store.block, same, parentFound, pure, Except.pure, Except.ok.injEq] at known
+        exact known ▸ lower
+      · exact UInt64.lt_trans (UInt64.lt_iff_toNat_lt.mpr (by
+          have := UInt64.le_iff_toNat_le.not.mp le; omega)) lower
+    rw [getAncestor_of_gt before found (fun le => absurd (UInt64.lt_of_lt_of_le below le)
+      (UInt64.lt_irrefl _)) parentFound lower]
+    exact descends
 
 /-- The ancestor walk climbs the tree of the store.
 
@@ -472,6 +503,31 @@ theorem filterNodeTree_ancestor {config : Config} {node : ForkChoiceNode}
   · rw [step] at above
     exact between a below above
 
+/-- A node whose viable subtree can be computed is a known block.
+
+An unknown node has no voting source, and no child can rank below it. -/
+theorem filterNodeTree_known {config : Config} {node : ForkChoiceNode}
+    {nodes : List ForkChoiceNode} (walk : store.filterNodeTree config node = .ok nodes) :
+    ∃ block, store.blocks[node.root]? = some block := by
+  cases found : store.blocks[node.root]? with
+  | some block => exact ⟨block, rfl⟩
+  | none =>
+  exfalso
+  rw [filterNodeTree, bind_ok_iff] at walk
+  obtain ⟨children, -, walk⟩ := walk
+  cases children with
+  | nil =>
+    simp only [List.isEmpty_nil, ↓reduceIte, bind_ok_iff] at walk
+    obtain ⟨_, viable, -⟩ := walk
+    simp only [isViableLeaf, getVotingSource, Store.block, found, bind_ok_iff] at viable
+    simp [throw, throwThe, MonadExceptOf.throw] at viable
+  | cons child rest =>
+    simp only [List.isEmpty_cons, Bool.false_eq_true, ↓reduceIte, bind_ok_iff] at walk
+    obtain ⟨_, viable, -⟩ := walk
+    rw [List.flatMapM_cons, bind_ok_iff] at viable
+    obtain ⟨_, below, -⟩ := viable
+    simp [nodeRank, found, throw, throwThe, MonadExceptOf.throw] at below
+
 /-- A viable node with no viable child is a viable leaf. -/
 theorem filterNodeTree_leaf {config : Config} :
     ∀ {node : ForkChoiceNode} {nodes : List ForkChoiceNode},
@@ -769,6 +825,74 @@ theorem getHead_pending {head : ForkChoiceNode} (found : store.getHead config = 
     · rcases (filterNodeTree_parent rfl tree head mem).2 with rfl | ⟨pending, -⟩
       · rfl
       · exact pending
+
+/-- Before Gloas, the walk from a pending node ends at a node that descends from what it does. -/
+theorem getHeadFrom_descends {nodes : List ForkChoiceNode} {ancestor : ForkChoiceNode}
+    (before : fork < .glamsterdam) :
+    ∀ {start head : ForkChoiceNode}, start.payloadStatus = .pending →
+      store.isAncestor start ancestor = .ok true →
+      store.getHeadFrom config nodes start = .ok head →
+      store.isAncestor head ancestor = .ok true := by
+  intro start
+  induction start using getHeadFrom.induct store with
+  | _ start ih =>
+  intro head pending descends walk
+  rw [getHeadFrom] at walk
+  cases found : store.heaviestChild config nodes start with
+  | error e => simp [found, bind, Except.bind] at walk
+  | ok result =>
+  cases result with
+  | none =>
+    simp only [found, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at walk
+    exact walk ▸ descends
+  | some child =>
+    simp only [found, bind, Except.bind] at walk
+    split at walk
+    swap
+    · cases walk
+    rename_i lowerRank
+    obtain ⟨children, weighted, childrenOk, weightedOk, choice⟩ := heaviestChild_eq found
+    obtain ⟨_, chosen, -⟩ := chooseHeaviest_some choice
+    obtain ⟨source, sourceMem, sourceOk⟩ := mapM_ok_mem weightedOk _ chosen
+    obtain rfl : source = child := by
+      cases weighed : store.getWeight config source <;>
+        simp [weighed, Functor.map, Except.map] at sourceOk
+      exact sourceOk.1
+    obtain ⟨childPending, block, childFound, parent⟩ :=
+      (mem_getNodeChildren childrenOk).mp (List.mem_filter.mp sourceMem).1
+    -- A node that has a child of lower rank is a known block below that child.
+    cases startFound : store.blocks[start.root]? with
+    | none => simp [nodeRank, startFound] at lowerRank
+    | some startBlock =>
+    have lower : startBlock.slot < block.slot := by
+      simp only [nodeRank, childFound, startFound, childPending, pending, ↓reduceIte] at lowerRank
+      have := block.slot.toNat_lt
+      have := startBlock.slot.toNat_lt
+      exact UInt64.lt_iff_toNat_lt.mpr (by omega)
+    have startNode : start = ⟨block.parentRoot, .pending⟩ := by
+      rw [parent, ← pending]
+    have childNode : source = ⟨source.root, .pending⟩ := by
+      rw [← childPending]
+    have parentFound : store.blocks[block.parentRoot]? = some startBlock := by
+      rw [parent]
+      exact startFound
+    have step := isAncestor_of_parent before childFound parentFound lower (startNode ▸ descends)
+    exact ih source lowerRank childPending (childNode ▸ step) walk
+
+/-- The head descends from the justified block, which counts as its own descendant. -/
+theorem getHead_descends {head : ForkChoiceNode} (found : store.getHead config = .ok head) :
+    store.isAncestor head ⟨store.justifiedCheckpoint.root, .pending⟩ = .ok true := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · rw [getHead_of_gloas gloas] at found
+    cases found
+  have before := Nat.lt_of_not_le gloas
+  simp only [getHead, gloas, ↓reduceIte, bind, Except.bind] at found
+  cases tree : store.getFilteredNodeTree config with
+  | error e => simp [tree] at found
+  | ok nodes =>
+    simp only [tree] at found
+    obtain ⟨_, known⟩ := filterNodeTree_known tree
+    exact getHeadFrom_descends before rfl (isAncestor_self before known) found
 
 /-- The head is a viable leaf, or no leaf is viable and the head is the justified block. -/
 theorem getHead_viable {head : ForkChoiceNode} (found : store.getHead config = .ok head) :

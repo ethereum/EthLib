@@ -79,35 +79,6 @@ theorem removeBlocks_blockStates (roots : List Root) (root : Root) :
   simp only [removeBlocks, Std.TreeMap.getElem?_filter']
   cases store.blockStates[root]? <;> by_cases removed : root ∈ roots <;> simp [removed]
 
-/-- Before Gloas, a block whose parent descends from a node descends from it too.
-
-That needs the parent at an earlier slot than the block. -/
-theorem isAncestor_of_parent {root : Root} {block parent : BeaconBlock preset fork}
-    {ancestor : ForkChoiceNode} (before : fork < .glamsterdam)
-    (found : store.blocks[root]? = some block)
-    (parentFound : store.blocks[block.parentRoot]? = some parent)
-    (lower : parent.slot < block.slot)
-    (descends : store.isAncestor ⟨block.parentRoot, .pending⟩ ancestor = .ok true) :
-    store.isAncestor ⟨root, .pending⟩ ancestor = .ok true := by
-  simp only [isAncestor, bind, Except.bind] at descends ⊢
-  cases known : store.block ancestor.root with
-  | error e => simp [known] at descends
-  | ok ancestorBlock =>
-    simp only [known] at descends ⊢
-    -- The ancestor sits at or below the parent, so the walk from the block passes the parent.
-    have below : ancestorBlock.slot < block.slot := by
-      by_cases le : parent.slot ≤ ancestorBlock.slot
-      · rw [getAncestor_of_le before parentFound le] at descends
-        simp only [pure, Except.pure, Except.ok.injEq, beq_iff_eq] at descends
-        have same : ancestor.root = block.parentRoot := by rw [← descends]
-        simp only [Store.block, same, parentFound, pure, Except.pure, Except.ok.injEq] at known
-        exact known ▸ lower
-      · exact UInt64.lt_trans (UInt64.lt_iff_toNat_lt.mpr (by
-          have := UInt64.le_iff_toNat_le.not.mp le; omega)) lower
-    rw [getAncestor_of_gt before found (fun le => absurd (UInt64.lt_of_lt_of_le below le)
-      (UInt64.lt_irrefl _)) parentFound lower]
-    exact descends
-
 /-- The blocks that a removal of descendants drops are the known descendants of its root.
 
 An unknown root leaves the store as it was. -/
