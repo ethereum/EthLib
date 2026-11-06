@@ -18,6 +18,10 @@ An amount that needs later epochs takes the fewest, so less than one churn is le
 
 An amount that fits the churn available always finds its place in the current epoch.
 
+Amounts queued in turn spend exactly their sum, with one full churn for each added epoch.
+
+So the amounts placed up to an epoch take at most the churn left, then a full churn per epoch.
+
 In Electra, the churns of consolidations and of activations and exits add up to the whole churn.
 
 So their difference does not wrap.
@@ -123,6 +127,103 @@ theorem churnQueue_of_le {earliestEpoch firstEpoch perEpochChurn churnLeft amoun
         (if earliestEpoch < max earliestEpoch firstEpoch then perEpochChurn else churnLeft) -
           amount) := by
   simp only [churnQueue, fits, ↓reduceIte, pure, Except.pure]
+
+/-- The queue reads its state only through the first open epoch and the churn available there.
+
+So it places an amount as it would from that epoch, with that churn left. -/
+theorem churnQueue_normalize {earliestEpoch firstEpoch perEpochChurn churnLeft amount : UInt64} :
+    churnQueue earliestEpoch firstEpoch perEpochChurn churnLeft amount =
+      churnQueue (max earliestEpoch firstEpoch) firstEpoch perEpochChurn
+        (if earliestEpoch < max earliestEpoch firstEpoch then perEpochChurn else churnLeft)
+        amount := by
+  have same : max (max earliestEpoch firstEpoch) firstEpoch = max earliestEpoch firstEpoch := by
+    by_cases order : earliestEpoch ≤ firstEpoch
+    · simp only [UInt64.max_def, order, ↓reduceIte, UInt64.le_refl]
+    · simp only [UInt64.max_def, order, ↓reduceIte]
+  simp only [churnQueue, same, UInt64.lt_irrefl, ↓reduceIte]
+
+/-- Amounts queued in turn, from an open epoch no earlier than the first epoch allowed.
+
+The queue never moves back, and it spends exactly the amounts, one full churn per added epoch. -/
+private theorem churnQueue_foldlM {firstEpoch perEpochChurn : UInt64} :
+    ∀ {amounts : List UInt64} {earliestEpoch churnLeft epoch left : UInt64},
+      firstEpoch ≤ earliestEpoch →
+      amounts.foldlM (fun (queue : UInt64 × UInt64) amount =>
+          churnQueue queue.1 firstEpoch perEpochChurn queue.2 amount)
+        (earliestEpoch, churnLeft) = .ok (epoch, left) →
+      earliestEpoch ≤ epoch ∧
+        left.toNat + (amounts.map UInt64.toNat).sum =
+          churnLeft.toNat + (epoch.toNat - earliestEpoch.toNat) * perEpochChurn.toNat
+  | [], earliestEpoch, churnLeft, epoch, left, _, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at computed
+    obtain ⟨rfl, rfl⟩ := computed
+    simp
+  | amount :: rest, earliestEpoch, churnLeft, epoch, left, first, computed => by
+    simp only [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨⟨middle, middleLeft⟩, step, folded⟩ := computed
+    have open_ : max earliestEpoch firstEpoch = earliestEpoch := by
+      rw [UInt64.max_def]
+      split
+      · exact UInt64.le_antisymm first ‹_›
+      · rfl
+    obtain ⟨placed, spent, -⟩ := churnQueue_spend step
+    rw [open_] at placed spent
+    simp only [UInt64.lt_irrefl, ↓reduceIte] at spent
+    obtain ⟨later, total⟩ := churnQueue_foldlM (UInt64.le_trans first placed) folded
+    refine ⟨UInt64.le_trans placed later, ?_⟩
+    have placed := UInt64.le_iff_toNat_le.mp placed
+    have later := UInt64.le_iff_toNat_le.mp later
+    have epochs : (middle.toNat - earliestEpoch.toNat) * perEpochChurn.toNat +
+        (epoch.toNat - middle.toNat) * perEpochChurn.toNat =
+          (epoch.toNat - earliestEpoch.toNat) * perEpochChurn.toNat := by
+      rw [← Nat.add_mul]
+      congr 1
+      omega
+    simp only [List.map_cons, List.sum_cons]
+    omega
+
+/-- Amounts queued in turn, from an open epoch no earlier than the first epoch allowed.
+
+The last amount takes an epoch no earlier than the open epoch at the start. -/
+theorem churnQueue_foldlM_epoch {firstEpoch perEpochChurn earliestEpoch churnLeft epoch left :
+    UInt64} {amounts : List UInt64} (first : firstEpoch ≤ earliestEpoch)
+    (computed : amounts.foldlM (fun (queue : UInt64 × UInt64) amount =>
+        churnQueue queue.1 firstEpoch perEpochChurn queue.2 amount)
+      (earliestEpoch, churnLeft) = .ok (epoch, left)) :
+    earliestEpoch ≤ epoch :=
+  (churnQueue_foldlM first computed).1
+
+/-- Amounts queued in turn, from an open epoch no earlier than the first epoch allowed.
+
+The churn left at the end plus the amounts equals the churn left at the start.
+
+Each epoch that the queue moves past adds one full churn to that sum. -/
+theorem churnQueue_foldlM_spend {firstEpoch perEpochChurn earliestEpoch churnLeft epoch left :
+    UInt64} {amounts : List UInt64} (first : firstEpoch ≤ earliestEpoch)
+    (computed : amounts.foldlM (fun (queue : UInt64 × UInt64) amount =>
+        churnQueue queue.1 firstEpoch perEpochChurn queue.2 amount)
+      (earliestEpoch, churnLeft) = .ok (epoch, left)) :
+    left.toNat + (amounts.map UInt64.toNat).sum =
+      churnLeft.toNat + (epoch.toNat - earliestEpoch.toNat) * perEpochChurn.toNat :=
+  (churnQueue_foldlM first computed).2
+
+/-- Amounts queued in turn take at most the churn left at the start of the queue.
+
+Each epoch that the queue moves past allows one more full churn.
+
+The epochs never move back, so the amounts placed up to an epoch are the first ones queued.
+
+So the balance placed up to an epoch is at most the churn left, plus a full churn per later epoch.
+-/
+theorem churnQueue_foldlM_le {firstEpoch perEpochChurn earliestEpoch churnLeft epoch left :
+    UInt64} {amounts : List UInt64} (first : firstEpoch ≤ earliestEpoch)
+    (computed : amounts.foldlM (fun (queue : UInt64 × UInt64) amount =>
+        churnQueue queue.1 firstEpoch perEpochChurn queue.2 amount)
+      (earliestEpoch, churnLeft) = .ok (epoch, left)) :
+    (amounts.map UInt64.toNat).sum ≤
+      churnLeft.toNat + (epoch.toNat - earliestEpoch.toNat) * perEpochChurn.toNat := by
+  have := churnQueue_foldlM_spend first computed
+  omega
 
 /-- In Electra, the churns of consolidations and of activations and exits add up to the whole churn.
 -/
