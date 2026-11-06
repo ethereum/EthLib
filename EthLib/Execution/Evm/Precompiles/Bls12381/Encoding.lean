@@ -77,11 +77,11 @@ def bytesToFq2 (raw : List UInt8) : Except Bls12381Error Fp2 := do
 
 /-- Whether an affine G1 point is on `y^2 = x^3 + 4`. -/
 def onCurveG1 (x y : Fp) : Bool :=
-  y * y == x * x * x + Fp.ofNat 4
+  (y * y).beq (x * x * x + Fp.ofNat 4)
 
 /-- Whether an affine G2 point is on `y^2 = x^3 + 4 * (1 + i)`. -/
 def onCurveG2 (x y : Fp2) : Bool :=
-  y * y == x * x * x + G2.bTwist
+  (y * y).beq (x * x * x + G2.bTwist)
 
 /-- A G1 point from its 96 raw bytes.
 

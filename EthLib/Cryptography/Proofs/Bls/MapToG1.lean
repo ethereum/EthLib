@@ -30,7 +30,7 @@ open scoped EthLib.Cryptography.Bls.Fp
 local notation "F" => ZMod Fp.modulus
 
 /-- A field element of the specification, seen in Mathlib's `ZMod p`. -/
-private def toF (a : Fp) : F := Fp.toZMod a
+private abbrev toF (a : Fp) : F := Fp.toZMod a
 
 /-! ## The SSWU map onto `E'` -/
 
@@ -51,9 +51,8 @@ private def sqrtNegZ : Fp :=
 
 private theorem sqrtNegZ_sq : toF sqrtNegZ * toF sqrtNegZ = -toF Z := by
   have h : sqrtNegZ * sqrtNegZ = -Z := by decide_eq_at_model [sqrtNegZ, Z]
-  have h' := congrArg Fp.toZMod h
-  push_toZMod at h'
-  exact h'
+  unfold toF
+  rw [← Fp.toZMod_mul, ← Fp.toZMod_neg, h]
 
 private theorem aprime_ne_zero : toF Aprime ≠ 0 := fun h =>
   (show Aprime ≠ (0 : Fp) by decide_eq_at_model [Aprime])
@@ -106,7 +105,7 @@ private theorem sqrt_ok (u : Fp) :
     have h' : BaseField.isZero (Z * (u * u) * (Z * (u * u)) + Z * (u * u)) = true := by
       rw [Fp.baseField_isZero, G1.isZero_iff]
       simp only [toF] at h
-      push_toZMod
+      push_toZMod at h ⊢
       exact h
     rw [hden] at h'
     cases h'
@@ -125,13 +124,13 @@ private theorem sqrt_ok (u : Fp) :
     Fp.powNat (g (x1 u)) ((Fp.modulus + 1) / 4)) ?_⟩
   have hs' := congrArg Fp.toZMod hs
   push_toZMod at hs'
-  have h := (sq_witness (c := toF sqrtNegZ) (z := toF Z) (u := toF u)
+  have h := sq_witness (c := toF sqrtNegZ) (z := toF Z) (u := toF u)
     (s := toF (Fp.powNat (g (x1 u)) ((Fp.modulus + 1) / 4))) (gx := toF (g (x1 u)))
-    sqrtNegZ_sq hs').trans hg.symm
+    sqrtNegZ_sq hs'
   apply Fp.toZMod.injective
-  simp only [toF] at h
-  push_toZMod at h ⊢
-  linear_combination h
+  simp only [toF] at h hg
+  push_toZMod at h hg ⊢
+  linear_combination h - hg
 
 /-- The SSWU map succeeds on every input (RFC 9380 §6.6.2). -/
 theorem simpleSwuG1_ok (u : Fp) : ∃ p, simpleSwuG1 u = .ok p := by
@@ -243,7 +242,6 @@ private theorem toZMod_evaluate (l : List Fp) (x : Fp) :
     simp only [evaluate, toFs, List.foldr_cons, List.map_cons, eval_cons, Fp.toZMod_add,
       Fp.toZMod_mul] at ih ⊢
     rw [ih]
-    rfl
 
 -- The kernel multiplies the coefficient lists: about 5 s and 1.5 GB.
 private theorem coefficients_eq :
