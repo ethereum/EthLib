@@ -15,6 +15,8 @@ So any ECDSA signature of the hash of its content, under the key of its pair, ma
 
 The deterministic signer, with the nonce of RFC 6979 and the low-s rule of EIP-2, is one case.
 
+The node ID exists exactly when the public key can be read, and it is the hash of that key.
+
 These are correctness statements: no theorem here states that a signature cannot be forged.
 -/
 
@@ -127,5 +129,74 @@ theorem verifyV4_of_sign {r : Enr} {sk rr ss : Fn} {odd : Bool} {content : ByteA
     (hsig : r.signature = ⟨(toBytesBE 32 rr.val ++ toBytesBE 32 ss.val).toArray⟩) :
     verifyV4 r = true :=
   verifyV4_of_verify hid hkey hc hsig (Ecdsa.verify_sign_rfc6979 hsign)
+
+/-! ## Node ID -/
+
+/-- The public key of a record is a point that the decoder returns for some bytes. -/
+theorem decode_of_publicKeyV4 {r : Enr} {q : Point} (h : r.publicKeyV4 = .ok q) :
+    ∃ key, Point.decode key = .ok q := by
+  unfold Enr.publicKeyV4 at h
+  split at h <;> (try split at h) <;> (try split at h) <;> (try split at h) <;> (try cases h)
+  rename_i key _ _
+  cases hdec : Point.decode key with
+  | error e => simp [Except.mapError, hdec] at h
+  | ok p =>
+    simp only [Except.mapError, hdec, Except.ok.injEq] at h
+    exact ⟨key, h ▸ hdec⟩
+
+/-- The public key of a record lies on the curve. -/
+theorem publicKeyV4_isOnCurve {r : Enr} {q : Point} (h : r.publicKeyV4 = .ok q) :
+    q.isOnCurve = true := by
+  obtain ⟨key, hdec⟩ := decode_of_publicKeyV4 h
+  exact ((Point.decode_eq_ok_iff key q).mp hdec).1
+
+/-- The public key of a record is never the point at infinity.
+
+The decoder never returns that point. -/
+theorem publicKeyV4_ne_infinity {r : Enr} {q : Point} (h : r.publicKeyV4 = .ok q) :
+    q ≠ .infinity := by
+  obtain ⟨key, hdec⟩ := decode_of_publicKeyV4 h
+  exact ((Point.decode_eq_ok_iff key q).mp hdec).2.1
+
+/-- Let the public key of a record be the point `(x, y)`.
+
+Its node ID is the Keccak-256 hash of the 64 bytes of `x` then `y`. -/
+theorem nodeId_of_publicKeyV4 {r : Enr} {x y : Fp} (h : r.publicKeyV4 = .ok (.affine x y)) :
+    nodeId r = .ok (Hash.Keccak.keccak256 (publicKeyBytes x y)) := by
+  rw [nodeId, h]
+  rfl
+
+/-- When the public key of a record cannot be read, the node ID fails with the same error.
+
+The read fails without an `id`, for another scheme, or for a missing or invalid key. -/
+theorem nodeId_of_publicKeyV4_error {r : Enr} {e : EnrError} (h : r.publicKeyV4 = .error e) :
+    nodeId r = .error e := by
+  simp [nodeId, h, bind, Except.bind]
+
+/-- The node ID of a record is `id` exactly when its public key is a point `(x, y)`.
+
+Then `id` is the Keccak-256 hash of the 64 bytes of `x` then `y`. -/
+theorem nodeId_eq_ok_iff {r : Enr} {id : Vector UInt8 32} :
+    nodeId r = .ok id ↔ ∃ x y, r.publicKeyV4 = .ok (.affine x y) ∧
+      id = Hash.Keccak.keccak256 (publicKeyBytes x y) := by
+  constructor
+  · intro h
+    cases hq : r.publicKeyV4 with
+    | error e => rw [nodeId_of_publicKeyV4_error hq] at h; cases h
+    | ok q =>
+      cases q with
+      | infinity => exact absurd rfl (publicKeyV4_ne_infinity hq)
+      | affine x y =>
+        rw [nodeId_of_publicKeyV4 hq] at h
+        exact ⟨x, y, rfl, (Except.ok.inj h).symm⟩
+  · rintro ⟨x, y, hq, rfl⟩
+    exact nodeId_of_publicKeyV4 hq
+
+/-- A record that verifies has a node ID. -/
+theorem nodeId_ok_of_verifyV4 {r : Enr} (h : verifyV4 r = true) : ∃ id, nodeId r = .ok id := by
+  obtain ⟨q, hq⟩ := publicKeyV4_ok_of_verifyV4 h
+  cases q with
+  | infinity => exact absurd rfl (publicKeyV4_ne_infinity hq)
+  | affine x y => exact ⟨_, nodeId_of_publicKeyV4 hq⟩
 
 end EthLib.Networking.Enr
