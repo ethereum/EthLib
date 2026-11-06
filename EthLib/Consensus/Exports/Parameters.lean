@@ -32,8 +32,7 @@ open Lean Base
 
 /-- Bytes in hex, after `0x`. -/
 instance {n : Nat} : ToJson (Vector UInt8 n) where
-  toJson bytes := toString <| bytes.toList.foldl (init := "0x") fun text byte =>
-    (text.push hexAlphabet[byte.toNat / 16]!).push hexAlphabet[byte.toNat % 16]!
+  toJson bytes := hexString bytes.toList
 
 /-- A 256-bit integer as decimal digits. -/
 instance : ToJson U256 where

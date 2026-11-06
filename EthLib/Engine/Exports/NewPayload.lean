@@ -37,25 +37,19 @@ open EthLib.Exports (Result)
 open EthLib.Base
 open EthLib.Base.ChainConfig.Exports (configOfJson parseJson)
 
-/-- Bytes as lowercase hex behind `0x`. -/
-def hex (bytes : List UInt8) : String :=
-  bytes.foldl (init := "0x") fun s b =>
-    (s.push (hexDigitChar ⟨b.toNat / 16, by have := b.toNat_lt; omega⟩)).push
-      (hexDigitChar ⟨b.toNat % 16, by omega⟩)
-
 /-- A message for the reason of an invalid payload, on one line. -/
 def reasonMessage : PayloadError → String
   | .invalidTransaction index e => s!"transaction {index} does not decode: {reprStr e}"
   | .noEncoding => "a field of the block has no RLP encoding"
   | .wrongBlockHash expected computed =>
-    s!"block hash {hex expected.toList}, header hash {hex computed.toList}"
+    s!"block hash {hexString expected.toList}, header hash {hexString computed.toList}"
   | .wrongVersionedHashes => "the expected versioned hashes are not those of the block"
   | .invalidBlock e => s!"{e.code}: {Execution.Blocks.Exports.blockErrorMessage e}"
 
 /-- The JSON of a payload status, with the code of its reason first in the error. -/
 def statusJson (status : PayloadStatus) (reason : Option PayloadError) : Json :=
   let latest := match status.latestValidHash with
-    | some h => Json.str (hex h.toList)
+    | some h => Json.str (hexString h.toList)
     | none => .null
   let error := match reason with
     | some e => Json.str s!"{e.code}: {reasonMessage e}"
