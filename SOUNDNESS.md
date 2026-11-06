@@ -62,9 +62,10 @@ The list covers the main theorems and is not yet complete.
 
 Most of these theorems are about correctness: an honest run gives the expected answer, or malformed input is rejected.
 
-Seven of them state a security property.
+Some of them state a security property.
 The unforgeability of leanXMSS holds for EthLib's own definitions.
 The binding of an EIP-8450 proof of possession follows from it.
+The unforgeability of leanSPHINCS holds for EthLib's own definitions too.
 The unforgeability of BLS signatures holds for a scheme that EthLib's signing and verification compute.
 The accountable safety and the plausible liveness of Casper FFG hold for an abstract model of votes.
 The evaluation binding of single KZG proofs reduces to the strong Diffie–Hellman problem.
@@ -72,7 +73,7 @@ The binding of the batch check of KZG openings reduces to the same problem, or t
 The binding of the batch check of KZG cells reduces to the bilinear variant of that problem, or to such a root.
 That reduction holds in a model of the target group of the pairing.
 
-No theorem states unforgeability for leanSPHINCS, or binding for the batch check of blobs.
+No theorem states binding for the batch check of blobs.
 No theorem covers the code that runs, the C boundary, or timing.
 
 ### XMSS
@@ -213,8 +214,19 @@ The bound covers one signature from such a cache.
 An earlier signature under the same key caches the trial inputs of its keys, and in the unforgeability game the adversary's queries can too.
 So no theorem bounds the failure of a later signature, or of signing inside the game.
 
-The 127-bit unforgeability bound of the configuration is a theorem about the specification's own Lean model, outside EthLib.
-No theorem links that model to this module.
+Unforgeability is `Unforgeability.Bridge.unforgeable` (`Proofs/Sphincs/Unforgeability.lean`).
+Take an adversary whose experiment makes at most `q >= 1` hash calls and at most `2^30` signing requests.
+In the random oracle model, it forges a signature with probability at most `q / 2^127`.
+Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash `H` a query to the random oracle.
+`keyGen`, `sign` and `verify` are the same definitions with Keccak-256 as `H`.
+
+The proof is a port of leanVM's model of the scheme, and `Proofs/Sphincs/Security/README.md` lists what changed here.
+The ported model signs the layers of the hypertree from the bottom up, as EthLib and leanVM's Rust signer do.
+The published model signed them from the top down, and its author confirmed in [leanVM#720](https://github.com/leanEthereum/leanVM/issues/720) that this order is a bug.
+The bridge in `Proofs/Sphincs/Unforgeability/Bridge/` connects the model to EthLib's algorithms.
+An EthLib forgery is a model forgery of a translated adversary (`forgeAdvantage_le`).
+Under every fixed answer of the oracle, a signing request costs the model at most what it costs EthLib (`hashCalls_sign_le`).
+So the adversary's budget of `q` hash calls carries over unchanged, and the model's theorem `h26_layered` gives the bound.
 
 ### VRF tree
 

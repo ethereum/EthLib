@@ -168,71 +168,32 @@ Definitions that derive a secret take the derivation function as an argument too
   Outside the derivations from the seed, every call hashes at an address of another type, with a payload of at least 16 bytes (`signDerived_isQueryBoundP_zero`, `publicKeyOf_isQueryBoundP_zero`, `verifyWith_isQueryBoundP_zero`).
   The lemmas for one layer take each key's encodings as a separate hypothesis, since a key's search queries its own (`EncodingAvoids`).
   So in the game, the honest algorithms query a 43-byte input only to grow the scheme seed (`keyGenWith_H_isQueryBoundP_seedLength`, `signWith_H_isQueryBoundP_seedLength`, `size_seedInput`).
-- The two seeds are hidden (`Unforgeability/HiddenSeed.lean`, `Unforgeability/SeedHops.lean`).
-  In the ideal game, the public parameter, every secret and every randomizer is an independent uniform answer.
-  The forging advantage is at most the chance of a forgery there, plus `qH / 2^256` for each of the two seeds, where `qH` counts the adversary's hash queries (`forgeAdvantage_le_hiddenSeed`).
-  The first hop replaces the scheme seed, and the second replaces every derivation from it.
-- The game asked half by half (`Unforgeability/Halves.lean`, `Unforgeability/HalvedGame.lean`).
-  A uniform 32-byte answer is two independent uniform 16-byte halves, so every query can ask its two halves instead.
-  The ideal game then gives the same output in distribution (`run_simulateQ_halvesImpl_evalDistEq`), and the bound of the seed hops holds for the game of halves (`forgeAdvantage_le_halved`).
-  In that game, every value that feeds a tweakable hash is one answer of the oracle.
-- The canonical graph (`Unforgeability/Graph.lean`).
-  Every tweakable hash of a key with public parameter `P` is a node: a chain step, a key's leaf, a tree node, an encoding at a counter, a FORS leaf or a FORS node.
-  Its children are the derivation halves and nodes that its payload is made of.
-  Distinct nodes, or one node at distinct children values, have distinct points (`pointBytes_inj`), so the graph is an input of VCVio's canonical relabelling (`graph`).
-  A point at a node's address that ends with the node's suffix is at that node's key (`nodeKeys`, `nodeAt_thInput`).
-  Each honest call is at the point of its node, at the values its payload is made of (`pointBytes_chain` and its siblings).
-- What an accepted FORS opening contains (`Unforgeability/ForsForgery.lean`).
-  Under any hash, FORS openings that recover the honest FORS key of their instance are its honest openings at the leaves the digest picked (`forsRecover_binding`).
-  Otherwise an explicit search finds a FORS leaf or a FORS node where verification hashed other children values to the honest value (`findForsPreimage_valid`).
-  The search finds nothing in honest openings (`findForsPreimage_honest`).
-- What an accepted signature contains (`Unforgeability/HypertreeForgery.lean`).
-  Under any hash, a signature accepted under the honest public key is read from the top layer down (`verifyWith_binding`).
-  At each layer, an explicit search finds a tree node, a key's leaf or a chain step where verification left the honest values (`findLayerPreimage_valid`).
-  Otherwise the layer is one of three things (`layerRoot_binding`).
-  It holds a chain value below the one that the key's honest signature reveals, or it encodes another input to that signature's codeword, or it is that signature.
-  Only below an honest bottom layer signature does the proof reach the FORS openings.
-- The game where the scheme skips the halves it throws away (`Unforgeability/Ghost.lean`, `Unforgeability/SkipGame.lean`).
-  A query whose answer is thrown away can be dropped (`run_askGhost_evalDistEq_skipGhost`).
-  A later query at that point then gets a fresh uniform answer instead of an unseen one, which has the same law.
-  The scheme reads a tweakable hash only through half 0 (`signDerived_congrH`, `verifyWith_congrH`), so it can skip half 1 of each one.
-  The ideal game of halves and the game where the scheme skips those halves give a forgery the same chance (`prEvent_halved_eq_skip`).
-  Without this step, a later game would have to ask a point made of values that it keeps hidden.
-- The game with the public parameter fixed (`Unforgeability/FixedParam.lean`).
-  Key generation first draws the two halves of `P`, and the rest of the experiment runs with `P` the first (`skipExperiment_eq`, `prEvent_skip_eq`).
-  From the state holding them, VCVio's canonical relabelling applies to the graph of `P`.
-  The forging advantage is at most the chance of a forgery or a conflict in the relabelled game, plus `qH / 2^256` for each seed (`forgeAdvantage_le_relabel`).
-- Honest and lab steps in the eager game (`Unforgeability/LabSteps.lean`).
-  The eager game adds touches and reads of cells to the relabelled game.
-  At a node whose children are held in their cells, the honest tweakable hash and the read of the node's label are one draw (`th_labTriple`).
-  The honest walk of a chain from its start and the lab chain have one law of output and state (`labChain_labTriple`).
-  The lab chain touches every value below the position it reads, so those values can stay hidden.
-  The same holds for a key's leaf, from the ends of its chains (`otsLeafHash_labTriple`).
-- A key's leaf in the eager game (`Unforgeability/LabLeaf.lean`).
-  In the eager game a derivation reads the cells of its two halves.
-  The lab leaf touches the starts of the key's chains, runs each lab chain to its end and reads the leaf.
-  It leaves the state as the honest leaf does, so the honest leaf and the lab leaf have one law of output and state (`otsPublicLeaf_labTriple`).
-  The lab leaf reads no start and no value inside a chain, so a later game can defer those draws.
-- Trees of the hypertree in the eager game (`Unforgeability/LabTree.lean`).
-  Two Merkle computations whose leaves and parent steps are related have related nodes and paths (`node_eqDistTriple`, `siblings_eqDistTriple`).
-  The lab tree runs each key's lab leaf and reads each parent's cell.
-  Its nodes, roots and paths have the law of the honest ones (`node_labTriple`, `treeRoot_labTriple`, `path_labTriple`).
-- FORS in the eager game (`Unforgeability/LabFors.lean`).
-  The lab leaf of a FORS tree touches both halves of its secret's derivation and reads the leaf.
-  The lab nodes, keys and paths of FORS have the law of the honest ones (`forsNode_labTriple`, `forsKey_labTriple`, `forsPath_labTriple`).
-  The lab opening reads the secret it reveals and touches the other half of the derivation.
-  The honest and lab openings have one law (`treeOpen_labTriple`, `forsSign_labTriple`).
-  The secrets of the leaves that no signature opens are never read, so a later game can defer them.
+- Unforgeability in the random oracle model (`Unforgeability.lean`).
+  Take an adversary that makes at most `2^30` signing requests and whose experiment makes at most `q >= 1` hash calls.
+  The count `q` includes the calls of key generation, of every signing request and of the final verification.
+  The adversary forges with probability at most `q / 2^127` (`unforgeable`).
+  The game is stated in `Unforgeability/Bridge/Statement.lean`.
+- The security proof (`Security/`).
+  It is a ported model of the scheme with its theorem for this configuration (`h26_layered`): 127 bits, up to 1,182,000,000 signatures.
+  Its README gives the provenance and every change to the ported text.
+  The ported model signs its layers from the bottom up, as EthLib and leanVM's Rust signer do.
+  The model as published signed from the top down, and its author confirmed in [leanVM#720](https://github.com/leanEthereum/leanVM/issues/720) that this order is a bug.
+- The bridge to the model (`Unforgeability/Bridge/`).
+  EthLib's bytes, addresses, keys and signatures translate to the model's and back.
+  Key generation and verification make the model's calls, call for call (`keyGenWith_queryH`, `verifyWith_queryH`).
+  The signer gives the model's signature under every fixed answer of the oracle, and both fail together (`signWith_answers`).
+  So an EthLib forgery is a model forgery of a translated adversary (`forgeAdvantage_le`).
+  Under every fixed answer of the oracle, a signing request costs the model at most what it costs EthLib (`hashCalls_sign_le`).
+  Both signers stop at the same failing layer, and EthLib derives more secrets than the model.
+  So a budget of `q` hash calls against EthLib is a budget of `q` against the model (`hasHashQueryBound_translate_self`).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.
 
 ## What is not proved
 
-- Any security property, such as unforgeability.
-  The game of strong unforgeability for one key is stated in `Unforgeability/Game.lean`, with no bound on it yet.
-  The 127-bit bound, up to 1,182,000,000 signatures, is the theorem `h26_layered` of the model's [`FORS/Main.lean`](https://github.com/TomWambsgans/sphincs.art/blob/1538d0a97845c3b771088f09561ddf7607b560a1/formal/sphincs/FORS/Main.lean), about the model, not about this module.
-- That this module and the model compute the same bytes.
-  The definitions follow the model line by line, but no theorem links the two.
+- Security for more than one key, or for more than `2^30` signing requests.
+- A bound for the game of `Unforgeability/Game.lean`.
+  Its budget counts only the adversary's own queries and requests, and it has no signing limit.
 - That a later signature, or a signature inside the unforgeability game, fails with small probability.
   The failure bound assumes a starting cache with no trial input of any key.
   An earlier signature under the same key caches the trial inputs of its keys, and in the game the adversary's queries can too.
