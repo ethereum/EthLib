@@ -193,7 +193,7 @@ theorem frame_processBlockHeader {block : BeaconBlock preset fork}
 
 theorem frame_processRandao {body : BeaconBlockBody preset fork}
     (computed : processRandao config checks state body = .ok after) : Frame state after := by
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq computed
   exact Frame.of_validators ⟨rfl, rfl⟩ rfl rfl rfl rfl rfl
 
 theorem frame_processEth1Data {before : fork < .hegota} {body : BeaconBlockBody preset fork}

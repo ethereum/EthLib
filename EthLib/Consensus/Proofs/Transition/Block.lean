@@ -173,28 +173,28 @@ It then mixes the hash of the reveal into the mix of the epoch, and changes noth
 theorem processRandao_eq {config : Config} {checks : SignatureChecks}
     {state after : BeaconState preset fork} {body : BeaconBlockBody preset fork}
     (computed : processRandao config checks state body = .ok after) :
-    ∃ index proposer domain signingRoot mix,
+    ∃ index proposer domain signingRoot mix randaoMixes,
       getBeaconProposerIndex state = .ok index ∧ getValidator state index = .ok proposer ∧
       getDomain config state DOMAIN_RANDAO = .ok domain ∧
       computeSigningRoot (getCurrentEpoch state) domain = .ok signingRoot ∧
       checks.verify (packBytes proposer.pubkey) (packBytes signingRoot)
         (packBytes body.randaoReveal) = true ∧
       getRandaoMix state (getCurrentEpoch state) = .ok mix ∧
-      after = { state with
-        randaoMixes := state.randaoMixes.set!
-          (getCurrentEpoch state % preset.EPOCHS_PER_HISTORICAL_VECTOR).toNat
-          (Vector.zipWith (· ^^^ ·) mix (sha256Bytes32 (packBytes body.randaoReveal))) } := by
+      writeCircular state.randaoMixes (getCurrentEpoch state)
+        (Vector.zipWith (· ^^^ ·) mix (sha256Bytes32 (packBytes body.randaoReveal))) =
+          .ok randaoMixes ∧
+      after = { state with randaoMixes } := by
   simp only [processRandao, bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok, pure,
     Except.pure, Except.ok.injEq] at computed
   obtain ⟨index, indexOk, proposer, found, domain, domainOk, signingRoot, rootOk, _, verified, mix,
-    mixOk, stored⟩ := computed
-  exact ⟨index, proposer, domain, signingRoot, mix, indexOk, found, domainOk, rootOk, verified,
-    mixOk, stored.symm⟩
+    mixOk, randaoMixes, written, stored⟩ := computed
+  exact ⟨index, proposer, domain, signingRoot, mix, randaoMixes, indexOk, found, domainOk, rootOk,
+    verified, mixOk, written, stored.symm⟩
 
 theorem sameSizes_processRandao {config : Config} {checks : SignatureChecks}
     {state after : BeaconState preset fork} {body : BeaconBlockBody preset fork}
     (computed : processRandao config checks state body = .ok after) : SameSizes state after := by
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq computed
   exact SameSizes.refl state
 
 /-! ## Votes on the deposit contract -/
