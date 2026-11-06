@@ -233,14 +233,15 @@ theorem frame_processAttesterSlashing {slashing : AttesterSlashing preset fork}
     (show Frame state (state, false).1 from Frame.refl state) folded
 
 theorem frame_processAttestation (altair : fork < .altair) {attestation : Attestation preset fork}
-    (computed : processAttestation config checks state attestation = .ok after) :
+    {parentSlot : Slot}
+    (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     Frame state after := by
   unfold processAttestation at computed
   split at computed
   · exact absurd ‹_› (Nat.not_le_of_lt altair)
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, 
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
     _, _, _, _, _, _, _, _, recorded, _, _, _, _, _, _, rfl⟩ := computed
   have kept := recordPendingAttestation_ok recorded
   split at kept
@@ -307,10 +308,13 @@ theorem frame_processVoluntaryExit {signed : SignedVoluntaryExit}
 
 /-- Before Altair, the operations of a block form a frame. -/
 theorem frame_processOperations (altair : fork < .altair) {body : BeaconBlockBody preset fork}
-    (computed : processOperations config checks state body = .ok after) : Frame state after := by
+    {parentSlot : Slot}
+    (computed : processOperations config checks state body parentSlot = .ok after) :
+    Frame state after := by
   unfold processOperations at computed
   split at computed
-  · cases computed
+  · exact absurd ‹_› fun gloas =>
+      Nat.lt_irrefl _ (Nat.lt_of_lt_of_le altair (Nat.le_trans (by decide) gloas))
   simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨_, _, _, _, proposers, proposersOk, attesters, attestersOk, attested, attestedOk,
     deposited, depositedOk, exited, exitsOk, changed, changesOk, requestsOk⟩ := computed

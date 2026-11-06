@@ -48,10 +48,6 @@ def ExecutionRequests.isEmpty (requests : ExecutionRequests preset fork)
     requests.consolidations.data.isEmpty && (requests.builderDeposits gloas).data.isEmpty &&
     (requests.builderExits gloas).data.isEmpty
 
-/-- From Gloas: the check that a list of a payload holds no more entries than the most allowed. -/
-def checkCount (count : Nat) (limit : UInt64) : Except TransitionError Unit :=
-  ensure (count ≤ limit.toNat) (.tooManyOperations count limit.toNat)
-
 /-- From Gloas: the position of the pending payment of the parent's builder, if it has one.
 
 A parent of the current epoch has its payment in the second half of the pending payments.

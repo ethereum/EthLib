@@ -35,7 +35,7 @@ HANDLERS = {
     ),
     "attestation": (
         "attestation",
-        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu"),
+        ("phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas"),
     ),
     "deposit": ("deposit", ("phase0", "altair", "bellatrix", "capella", "deneb", "electra")),
     "deposit_request": ("deposit_request", ("electra", "fulu", "gloas")),
@@ -80,9 +80,14 @@ def run_case(preset: str, fork: str, handler: str, case: Path) -> None:
         operation = b""
     else:
         operation = snappy.decompress((case / f"{HANDLERS[handler][0]}.ssz_snappy").read_bytes())
-    meta = case / "meta.yaml"
+    meta_file = case / "meta.yaml"
+    meta = (YAML(typ="safe").load(meta_file.read_text()) if meta_file.exists() else None) or {}
     # Setting 2 marks placeholder signatures, which the case must not check.
-    setting = YAML(typ="safe").load(meta.read_text()).get("bls_setting", 0) if meta.exists() else 0
+    setting = meta.get("bls_setting", 0)
+    # The export takes the latest block header of the state as the parent block of a Gloas
+    # attestation; the slot of that header starts at byte 64 of the state.
+    if "parent_slot" in meta:
+        assert meta["parent_slot"] == int.from_bytes(pre[64:72], "little")
     config_file = case / "config.yaml"
     config = (
         replacements(YAML(typ="safe").load(config_file.read_text()), preset)

@@ -140,18 +140,21 @@ theorem processBlockExecution_slot {body : BeaconBlockBody preset fork}
 
 /-! ## Operations -/
 
-theorem processAttestation_slot {attestation : Attestation preset fork}
-    (computed : processAttestation config checks state attestation = .ok after) :
+theorem processAttestation_slot {attestation : Attestation preset fork} {parentSlot : Slot}
+    (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     after.slot = state.slot := by
   by_cases altair : Fork.altair ≤ fork
   · simp only [processAttestation, altair, ↓reduceDIte] at computed
     unfold processAttestationAltair at computed
-    split at computed
-    · cases computed
     simp only [bind_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-      _, _, raised⟩ := computed
-    rw [(frame_increaseBalance raised).slot]
+      _, _, raised, raisedOk, final⟩ := computed
+    have last : after.slot = raised.slot := by
+      split at final
+      · rw [recordPaymentWeight_eq final]
+      · cases final
+        rfl
+    rw [last, (frame_increaseBalance raisedOk).slot]
     unfold setEpochParticipation
     split <;> rfl
   · exact (frame_processAttestation (Nat.lt_of_not_le altair) computed).slot
@@ -306,21 +309,30 @@ theorem processConsolidationRequest_slot {electra : .pectra ≤ fork}
     | exact switchToCompoundingValidator_slot (liftAccessor_ok.mp computed)
     | exact queueConsolidation_slot computed
 
-theorem processOperations_slot {body : BeaconBlockBody preset fork}
-    (computed : processOperations config checks state body = .ok after) :
+theorem processOperations_slot {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+    (computed : processOperations config checks state body parentSlot = .ok after) :
     after.slot = state.slot := by
-  unfold processOperations at computed
-  split at computed
-  · cases computed
-  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
-  obtain ⟨_, _, _, _, proposers, proposersOk, attesters, attestersOk, attested, attestedOk,
-    deposited, depositedOk, exited, exitsOk, changed, changesOk, requestsOk⟩ := computed
   have fold {α : Type} {step : BeaconState preset fork → α → Except TransitionError _}
       (keeps : ∀ s x s', step s x = .ok s' → s'.slot = s.slot) {items : List α}
       {start finish : BeaconState preset fork} (folded : items.foldlM step start = .ok finish) :
       finish.slot = start.slot :=
     foldlM_ok_invariant (fun s : BeaconState preset fork => s.slot = start.slot)
       (fun _ _ _ same ok => (keeps _ _ _ ok).trans same) rfl folded
+  unfold processOperations at computed
+  split at computed
+  · unfold processOperationsGloas at computed
+    simp only [bind_ok_iff, ← Array.foldlM_toList] at computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, proposers, proposersOk, attesters,
+      attestersOk, attested, attestedOk, exited, exitsOk, changed, changesOk, paid⟩ := computed
+    rw [fold (fun _ _ _ ok => by rw [processPayloadAttestation_eq ok]) paid,
+      fold (fun _ _ _ ok => processBlsToExecutionChange_slot ok) changesOk,
+      fold (fun _ _ _ ok => (frame_processVoluntaryExit ok).slot) exitsOk,
+      fold (fun _ _ _ ok => processAttestation_slot ok) attestedOk,
+      fold (fun _ _ _ ok => (frame_processAttesterSlashing ok).slot) attestersOk,
+      fold (fun _ _ _ ok => (frame_processProposerSlashing ok).slot) proposersOk]
+  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
+  obtain ⟨_, _, _, _, proposers, proposersOk, attesters, attestersOk, attested, attestedOk,
+    deposited, depositedOk, exited, exitsOk, changed, changesOk, requestsOk⟩ := computed
   have last : after.slot = changed.slot := by
     split at requestsOk
     · simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at requestsOk
@@ -380,7 +392,8 @@ theorem processBlock_slot {block : BeaconBlock preset fork}
         synced⟩ : ∃ executed, executed.slot = headed.slot ∧ ∃ revealed,
         processRandao config checks executed block.body = .ok revealed ∧ ∃ voted,
         processEth1Data _ revealed block.body = .ok voted ∧ ∃ operated,
-        processOperations config checks voted block.body = .ok operated ∧
+        processOperations config checks voted block.body state.latestBlockHeader.slot =
+          .ok operated ∧
         processSyncAggregate config checks operated altair (block.body.syncAggregate altair) =
           .ok after := by
       by_cases bellatrix : Fork.bellatrix ≤ fork

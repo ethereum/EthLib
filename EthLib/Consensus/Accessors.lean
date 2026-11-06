@@ -73,6 +73,8 @@ inductive AccessorError where
   /-- From Altair: the source of an attestation is not the justified checkpoint it should vote for.
   -/
   | wrongSource
+  /-- From Gloas: an attestation for the block of its own slot has a nonzero index. -/
+  | sameSlotIndexNotZero (index : CommitteeIndex)
   deriving DecidableEq, Repr
 
 /-- Whether a validator is active in an epoch: from its activation epoch, before its exit epoch. -/

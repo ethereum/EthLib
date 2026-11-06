@@ -172,6 +172,8 @@ inductive TransitionError where
   | wrongParentRequestsRoot
   /-- From Gloas: a list holds more entries than the most allowed. -/
   | tooManyOperations (count limit : Nat)
+  /-- From Gloas: an attestation has an index other than zero or one. -/
+  | attestationIndexAboveOne (index : CommitteeIndex)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -255,6 +257,7 @@ def TransitionError.code : TransitionError → UInt32
   | .parentRequestsNotEmpty => 78
   | .wrongParentRequestsRoot => 79
   | .tooManyOperations .. => 80
+  | .attestationIndexAboveOne _ => 81
 
 /-- An error of a state accessor, as an error of the transition. -/
 def liftAccessor {α : Type} (result : Except AccessorError α) : Except TransitionError α :=
@@ -284,5 +287,11 @@ The consensus test vectors use them for the cases that carry placeholder signatu
 def SignatureChecks.acceptAll : SignatureChecks where
   verify _ _ _ := true
   fastAggregateVerify _ _ _ := true
+
+/-- From Gloas: the check that a list holds no more entries than the most allowed.
+
+From Gloas the lists of blocks and payloads have no type bound, so each step checks its own. -/
+def checkCount (count : Nat) (limit : UInt64) : Except TransitionError Unit :=
+  ensure (count ≤ limit.toNat) (.tooManyOperations count limit.toNat)
 
 end EthLib.Consensus

@@ -202,8 +202,9 @@ Each member of its committee whose bit is set gets those flags for the previous 
 def translateAttestation {fork : Fork} (state : BeaconState preset fork)
     (altair : .altair ≤ fork) (attestation : PendingAttestation preset) :
     Except TransitionError (BeaconState preset fork) := do
+  -- The slot of the parent block matters only from Gloas.
   let flags ← liftAccessor (getAttestationParticipationFlagIndices state attestation.data
-    attestation.inclusionDelay)
+    attestation.inclusionDelay state.latestBlockHeader.slot)
   let attesters ← liftAccessor (getPendingAttestingIndices state attestation)
   let participation ← attesters.foldlM (init := state.previousEpochParticipation altair)
     fun participation index => do

@@ -38,7 +38,7 @@ namespace EthLib.Consensus
 open Base Uint64 Cryptography.Bls Serialization.Ssz SszType
 
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
-  {state after : BeaconState preset fork}
+  {state after : BeaconState preset fork} {parentSlot : Slot}
 
 /-- The sum of the balances, on natural numbers. -/
 def balanceSum (state : BeaconState preset fork) : Nat :=
@@ -139,7 +139,7 @@ It names a committee of its slot, with one bit for each member.
 Its source is the justified checkpoint that the state holds for its target epoch. -/
 theorem processAttestation_checks {attestation : Attestation preset fork}
     (before : fork < .altair)
-    (computed : processAttestation config checks state attestation = .ok after) :
+    (computed : processAttestation config checks state parentSlot attestation = .ok after) :
       (attestation.data.target.epoch = getPreviousEpoch state ∨
         attestation.data.target.epoch = getCurrentEpoch state) ∧
       attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
@@ -175,7 +175,7 @@ The pending attestation holds its bits and data, its inclusion delay and the cur
 The signature of the attestation is valid on the state that holds it. -/
 theorem processAttestation_records {attestation : Attestation preset fork}
     (before : fork < .altair)
-    (computed : processAttestation config checks state attestation = .ok after) :
+    (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     ∃ pending : PendingAttestation preset,
       pending.aggregationBits.bits = attestation.aggregationBits.bits ∧
       pending.data = attestation.data ∧
@@ -229,21 +229,102 @@ theorem checkInclusionDeadline_of_dencun {slot : Slot} (dencun : .dencun ≤ for
   simp only [checkInclusionDeadline, notBefore, ↓reduceIte]
   rfl
 
+/-- From Gloas, weighing the payment of a block changes only the pending payments of builders. -/
+theorem recordPaymentWeight_eq {gloas : .glamsterdam ≤ fork} {data : AttestationData}
+    {current : Bool} {before updated : EpochParticipation preset fork}
+    {attesters : List ValidatorIndex}
+    (computed : recordPaymentWeight state gloas data current before updated attesters = .ok after) :
+    after = { state with builderPendingPayments := after.builderPendingPayments } := by
+  unfold recordPaymentWeight at computed
+  dsimp only at computed
+  split at computed
+  rotate_left
+  · cases computed
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, _, _, _, rfl⟩ := computed
+  rfl
+
+/-- From Gloas, weighing a payment leaves every payment at another position as it was. -/
+theorem recordPaymentWeight_other {gloas : .glamsterdam ≤ fork} {data : AttestationData}
+    {current : Bool} {before updated : EpochParticipation preset fork}
+    {attesters : List ValidatorIndex} {position : Nat}
+    (computed : recordPaymentWeight state gloas data current before updated attesters = .ok after)
+    (other : position ≠ attestationPaymentPosition preset current data.slot) :
+    (after.builderPendingPayments gloas)[position]? =
+      (state.builderPendingPayments gloas)[position]? := by
+  unfold recordPaymentWeight at computed
+  dsimp only at computed
+  split at computed
+  rotate_left
+  · cases computed
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨_, _, _, _, rfl⟩ := computed
+  simp [Vector.set!, Ne.symm other]
+
+/-- From Gloas, a payment gains no weight unless the vote is for the block of its own slot.
+
+It also gains none when the payment is of no amount.
+
+The state is then unchanged. -/
+theorem recordPaymentWeight_of_noWeight {gloas : .glamsterdam ≤ fork} {data : AttestationData}
+    {current : Bool} {before updated : EpochParticipation preset fork}
+    {attesters : List ValidatorIndex}
+    (computed : recordPaymentWeight state gloas data current before updated attesters = .ok after)
+    (noWeight : isAttestationSameSlot state data = .ok false ∨
+      ∀ payment, (state.builderPendingPayments gloas)[
+        attestationPaymentPosition preset current data.slot]? = some payment →
+          payment.withdrawal.amount = 0) :
+    after = state := by
+  unfold recordPaymentWeight at computed
+  dsimp only at computed
+  split at computed
+  rotate_left
+  · cases computed
+  rename_i payment found
+  simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨sameSlot, sameOk, weight, weightOk, rfl⟩ := computed
+  have notWeighed : ¬(sameSlot = true ∧ 0 < payment.withdrawal.amount) := by
+    rintro ⟨same, positive⟩
+    rcases noWeight with notSame | zero
+    · rw [notSame, same] at sameOk
+      cases sameOk
+    · rw [zero payment found] at positive
+      exact absurd positive (by decide)
+  simp only [notWeighed, ↓reduceIte, Except.ok.injEq] at weightOk
+  subst weightOk
+  have kept : (fun _ => (state.builderPendingPayments gloas).set!
+      (attestationPaymentPosition preset current data.slot)
+        { payment with weight := payment.weight }) = state.builderPendingPayments := by
+    funext gloas'
+    have same : gloas' = gloas := rfl
+    subst same
+    ext index bound
+    by_cases same : index = attestationPaymentPosition preset current data.slot
+    · subst same
+      rw [Vector.getElem_set!_self bound]
+      simp only [Vector.getElem?_eq_getElem bound, Option.some.injEq] at found
+      rw [found]
+    · rw [Vector.getElem_set!_ne bound (Ne.symm same)]
+  simp only [kept]
+
 /-- From Altair, an attestation keeps the sizes of the registry and the balances. -/
 theorem sameSizes_processAttestationAltair {attestation : Attestation preset fork}
     {altair : .altair ≤ fork}
-    (computed : processAttestationAltair config checks state attestation altair = .ok after) :
+    (computed :
+      processAttestationAltair config checks state attestation altair parentSlot = .ok after) :
     SameSizes state after := by
   unfold processAttestationAltair at computed
-  split at computed
-  · cases computed
   simp only [bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-    _, _, raised⟩ := computed
-  exact (sameSizes_setEpochParticipation _ _).trans (sameSizes_increaseBalance raised)
+    _, _, _, raised, final⟩ := computed
+  refine (sameSizes_setEpochParticipation _ _).trans ((sameSizes_increaseBalance raised).trans ?_)
+  split at final
+  · refine ⟨?_, ?_⟩ <;> rw [recordPaymentWeight_eq final]
+  · cases final
+    exact SameSizes.refl _
 
 theorem sameSizes_processAttestation {attestation : Attestation preset fork}
-    (computed : processAttestation config checks state attestation = .ok after) :
+    (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     SameSizes state after := by
   by_cases altair : Fork.altair ≤ fork
   · simp only [processAttestation, altair, ↓reduceDIte] at computed
@@ -588,7 +669,7 @@ theorem sameSizes_processVoluntaryExit {signed : SignedVoluntaryExit}
 /-- Before Electra, a valid block holds every outstanding deposit, up to the most per block. -/
 theorem processOperations_deposits (beforeElectra : fork < .pectra)
     {body : BeaconBlockBody preset fork}
-    (computed : processOperations config checks state body = .ok after) :
+    (computed : processOperations config checks state body parentSlot = .ok after) :
     ∀ before : fork < .hegota,
       (state.eth1DepositIndex before).toNat ≤ (state.eth1Data before).depositCount.toNat ∧
       (body.deposits before).data.size =
@@ -599,7 +680,7 @@ theorem processOperations_deposits (beforeElectra : fork < .pectra)
   have notFulu : ¬Fork.fusaka ≤ fork := fun le => notElectra (Nat.le_trans (by decide) le)
   unfold processOperations at computed
   split at computed
-  · cases computed
+  · exact absurd ‹_› fun gloas => notElectra (Nat.le_trans (by decide) gloas)
   simp only [bind_ok_iff, ensure_ok_iff] at computed
   obtain ⟨expected, expectedOk, _, count, _⟩ := computed
   simp only [expectedDepositCount, notFulu, notElectra, ↓reduceIte, ↓reduceDIte, bind_ok_iff,
@@ -622,14 +703,34 @@ theorem expectedDepositCount_of_fusaka (fulu : .fusaka ≤ fork) {before : fork 
   simp only [expectedDepositCount, fulu, ↓reduceIte]
   rfl
 
+/-- From Gloas, a valid block holds no more operations of each kind than the most per block. -/
+theorem processOperationsGloas_counts {body : BeaconBlockBody preset fork}
+    {gloas : .glamsterdam ≤ fork}
+    (computed : processOperationsGloas config checks state body gloas parentSlot = .ok after) :
+    body.proposerSlashings.data.size ≤ preset.MAX_PROPOSER_SLASHINGS.toNat ∧
+      body.attesterSlashings.data.size ≤ preset.MAX_ATTESTER_SLASHINGS_ELECTRA.toNat ∧
+      body.attestations.data.size ≤ preset.MAX_ATTESTATIONS_ELECTRA.toNat ∧
+      body.voluntaryExits.data.size ≤ preset.MAX_VOLUNTARY_EXITS.toNat ∧
+      (body.blsToExecutionChanges (Nat.le_trans (by decide) gloas)).data.size ≤
+        preset.MAX_BLS_TO_EXECUTION_CHANGES.toNat ∧
+      (body.payloadAttestations gloas).data.size ≤ preset.MAX_PAYLOAD_ATTESTATIONS.toNat := by
+  unfold processOperationsGloas at computed
+  simp only [bind_ok_iff, checkCount, ensure_ok_iff] at computed
+  obtain ⟨_, _, _, proposers, _, attesters, _, attestations, _, exits, _, changes, _, payloads,
+    _⟩ := computed
+  exact ⟨proposers, attesters, attestations, exits, changes, payloads⟩
+
 /-- From Fulu, a valid block holds no deposit. -/
 theorem processOperations_no_deposit (fulu : .fusaka ≤ fork) {body : BeaconBlockBody preset fork}
-    (computed : processOperations config checks state body = .ok after) :
+    (computed : processOperations config checks state body parentSlot = .ok after) :
     ∀ before : fork < .hegota, (body.deposits before).data.size = 0 := by
   intro before
   unfold processOperations at computed
   split at computed
-  · cases computed
+  · unfold processOperationsGloas at computed
+    simp only [before, ↓reduceDIte, bind_ok_iff, ensure_ok_iff] at computed
+    obtain ⟨_, zero, _⟩ := computed
+    exact zero
   simp only [bind_ok_iff, ensure_ok_iff] at computed
   rw [expectedDepositCount_of_fusaka fulu] at computed
   obtain ⟨_, zero, rest⟩ := computed

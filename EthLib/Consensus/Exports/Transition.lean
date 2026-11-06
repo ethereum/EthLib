@@ -78,7 +78,8 @@ def runOperation {preset : Preset} {fork : Fork} (config : Config) (checks : Sig
     runTransition (processAttesterSlashing config checks state
       (← decodeInput (AttesterSlashing preset fork) operation))
   | "attestation" => do
-    runTransition (processAttestation config checks state
+    -- Before a block runs, its parent is the latest block header, as the vectors take it.
+    runTransition (processAttestation config checks state state.latestBlockHeader.slot
       (← decodeInput (Attestation preset fork) operation))
   | "deposit" =>
     if before : fork < .hegota then do
@@ -158,7 +159,7 @@ def gloasOperations : List String :=
   ["payload_attestation", "execution_payload_bid", "builder_deposit_request",
     "builder_exit_request", "withdrawals", "proposer_slashing", "attester_slashing",
     "withdrawal_request", "consolidation_request", "voluntary_exit", "voluntary_exit_churn",
-    "deposit_request", "parent_execution_payload"]
+    "deposit_request", "parent_execution_payload", "attestation"]
 
 /-- The preset and the fork that UTF-8 names name, at a fork up to Gloas. -/
 def transitionPresetAndFork (name fork : ByteArray) : Result (Preset × Fork) := do

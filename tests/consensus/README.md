@@ -88,7 +88,8 @@ A case gives a state before the operation, the operation, and the state after it
 A case without a state after it must be rejected.
 The directory keeps two cases of each handler that EthLib runs, at each fork where it runs.
 These are the block header from Phase 0 to Fulu, and the proposer and attester slashings from Phase 0 to Gloas.
-They are also the attestation from Phase 0 to Fulu, the deposit from Phase 0 to Electra, and the voluntary exit from Phase 0 to Gloas.
+They are also the attestation from Phase 0 to Gloas and the deposit from Phase 0 to Electra.
+The voluntary exit runs from Phase 0 to Gloas too.
 The attestation at Electra and Fulu and the voluntary exit at Electra, Fulu and Gloas keep one case each.
 The deposit, withdrawal and consolidation requests run from Electra to Gloas.
 After Electra the requests keep one case each.
@@ -100,6 +101,9 @@ The withdrawals and the changes of BLS credentials run from Capella to Fulu.
 At Gloas they are the payload attestation, the execution payload bid, and the builder deposit and exit requests.
 The parent execution payload also runs at Gloas, from a block whose payload is in its parent.
 From Gloas a slashing also removes the pending builder payments of the slashed proposer.
+At Gloas the attestation keeps four cases.
+In the two valid cases, a builder payment gains weight, and a payload vote that does not match earns no head flag.
+The two invalid cases have an index above one, and index one in a vote for the block of its own slot.
 The exit churn cases of Gloas run as voluntary exits, and the directory keeps one of them.
 Where the handler has both, one case is valid and one invalid.
 Every builder deposit or exit request case of the release has a state after it.

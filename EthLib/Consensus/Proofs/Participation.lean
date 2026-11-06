@@ -16,6 +16,12 @@ Its flag is set in the participation of that epoch.
 An attestation earns flags only when its source is the justified checkpoint of its target epoch.
 
 Its flags are the source, target and head flags, each at most once and in that order.
+
+From Gloas a vote for the block of its own slot matches its payload exactly when its index is zero.
+
+A vote for an earlier block matches when its index is the availability bit of the parent slot.
+
+A head flag from Gloas needs a matching payload vote.
 -/
 
 @[expose] public section
@@ -72,17 +78,16 @@ It is the current one for a target in the current epoch, and the previous one ot
 
 Its flags are the source, target and head flags, each at most once and in that order. -/
 theorem getAttestationParticipationFlagIndices_spec {state : BeaconState preset fork}
-    {data : AttestationData} {inclusionDelay : UInt64} {flags : List UInt64}
-    (computed : getAttestationParticipationFlagIndices state data inclusionDelay = .ok flags) :
+    {data : AttestationData} {inclusionDelay : UInt64} {parentSlot : Slot} {flags : List UInt64}
+    (computed :
+      getAttestationParticipationFlagIndices state data inclusionDelay parentSlot = .ok flags) :
     data.source = (if data.target.epoch = getCurrentEpoch state then
         state.currentJustifiedCheckpoint else state.previousJustifiedCheckpoint) ∧
       flags.Sublist
         [TIMELY_SOURCE_FLAG_INDEX, TIMELY_TARGET_FLAG_INDEX, TIMELY_HEAD_FLAG_INDEX] := by
   unfold getAttestationParticipationFlagIndices at computed
-  split at computed
-  · cases computed
   simp only [bind_ok_iff] at computed
-  obtain ⟨_, _, _, _, computed⟩ := computed
+  obtain ⟨_, _, _, _, _, _, computed⟩ := computed
   by_cases matching : data.source = (if data.target.epoch = getCurrentEpoch state then
       state.currentJustifiedCheckpoint else state.previousJustifiedCheckpoint)
   · rw [ite_eq_left_of_eq_true _ _ (eq_true matching)] at computed
@@ -95,6 +100,56 @@ theorem getAttestationParticipationFlagIndices_spec {state : BeaconState preset 
       intro condition _ flag
       split <;> simp
     exact ((single _ _).append (single _ _)).append (single _ _)
+  · rw [ite_eq_right_of_eq_false _ _ (eq_false matching)] at computed
+    cases computed
+
+/-- From Gloas, a vote for the block of its own slot matches its payload when its index is zero.
+
+Any other index is an error. -/
+theorem payloadMatches_of_sameSlot {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {data : AttestationData} {parentSlot : Slot}
+    (same : isAttestationSameSlot state data = .ok true) :
+    payloadMatches state gloas data parentSlot =
+      if data.index = 0 then .ok true else .error (.sameSlotIndexNotZero data.index) := by
+  unfold payloadMatches
+  simp only [same, bind, Except.bind, ↓reduceIte]
+  split <;> rfl
+
+/-- From Gloas, a vote for an earlier block matches its payload when its index is the bit.
+
+The bit is the availability of the payload at the parent slot. -/
+theorem payloadMatches_of_not_sameSlot {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {data : AttestationData} {parentSlot : Slot} {available : Bool}
+    (notSame : isAttestationSameSlot state data = .ok false)
+    (bit : (state.executionPayloadAvailability gloas).bits[
+      (parentSlot % preset.SLOTS_PER_HISTORICAL_ROOT).toNat]? = some available) :
+    payloadMatches state gloas data parentSlot =
+      .ok (data.index == if available then 1 else 0) := by
+  unfold payloadMatches
+  simp only [notSame, bind, Except.bind, Bool.false_eq_true, ↓reduceIte, bit]
+  rfl
+
+/-- From Gloas, an attestation earns the head flag only when its payload vote matches. -/
+theorem payloadMatches_of_head {state : BeaconState preset fork} (gloas : .glamsterdam ≤ fork)
+    {data : AttestationData} {inclusionDelay : UInt64} {parentSlot : Slot} {flags : List UInt64}
+    (computed :
+      getAttestationParticipationFlagIndices state data inclusionDelay parentSlot = .ok flags)
+    (head : TIMELY_HEAD_FLAG_INDEX ∈ flags) :
+    payloadMatches state gloas data parentSlot = .ok true := by
+  unfold getAttestationParticipationFlagIndices at computed
+  simp only [gloas, ↓reduceDIte, bind_ok_iff] at computed
+  obtain ⟨_, _, payload, payloadOk, _, _, computed⟩ := computed
+  by_cases matching : data.source = (if data.target.epoch = getCurrentEpoch state then
+      state.currentJustifiedCheckpoint else state.previousJustifiedCheckpoint)
+  · rw [ite_eq_left_of_eq_true _ _ (eq_true matching)] at computed
+    cases computed
+    simp only [List.mem_append] at head
+    rcases head with (source | target) | head
+    · split at source <;> simp_all [TIMELY_SOURCE_FLAG_INDEX, TIMELY_HEAD_FLAG_INDEX]
+    · split at target <;> simp_all [TIMELY_TARGET_FLAG_INDEX, TIMELY_HEAD_FLAG_INDEX]
+    · cases payload
+      · simp at head
+      · exact payloadOk
   · rw [ite_eq_right_of_eq_false _ _ (eq_false matching)] at computed
     cases computed
 
