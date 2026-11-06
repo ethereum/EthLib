@@ -769,7 +769,6 @@ Otherwise the search `findBranchCollision` over the two climbs returns two diffe
 From Altair to the forks before Gloas, `lightClientGindices_eq_of_lt` shows the same three indices for every preset.
 On a state of such a fork, `BeaconState.nodeRoot_finalizedCheckpoint_root_of_lt` reads the finality node as the root of `state.finalizedCheckpoint.root`.
 `BeaconState.nodeRoot_nextSyncCommittee_of_lt` and `BeaconState.nodeRoot_currentSyncCommittee_of_lt` read the committee nodes as the roots of those fields.
-The theorems ending in `_altair` state the same at Altair.
 These theorems take the lawful SSZ type of the state as an argument, and they name the root of the field, which always exists.
 Instance search does not yet find that lawful type at the mainnet or minimal preset, so a caller supplies it.
 From Gloas the state is a progressive container, and the node results there remain open.
